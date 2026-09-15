@@ -6,7 +6,7 @@ Trois couches distinctes. Ne pas les mélanger.
 |---|---|---|
 | **Prototype qui tourne** | [mohhdy_us.md](mohhdy_us.md) + [docs/ETAT_REEL.md](../docs/ETAT_REEL.md) | AOS-001 à AOS-026 vérifiés ; FAT16/FAT32 avec LFN racine et un sous-répertoire 8.3 mutable via VFS ; réseau local `ai-acquire` ; pas de client OpenAI public |
 | **Vision MOHHDY** | fichiers `mohhdy_*.md` + [individual_us/](individual_us/INDEX.md) | Spécifications, sauf incrément Foundation IPC documenté |
-| **Track Agent Support** | [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Spec `ASSIST-xxx`. ASSIST-050/010/011/012/020/021/022/030/031/040/041 = runtime HTTP (`agent/`) : embed, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock, stub local. LLM de production et Chromium **non livrés** |
+| **Track Agent Support** | [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Spec `ASSIST-xxx`. ASSIST-050/010/011/012/020/021/022/030/031/040/041 = runtime HTTP (`agent/`) : embed, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock, stub local. ASSIST-051/052/053 = packaging (install PC, recette hyperviseur, scaffold hosted). LLM de production, Chromium et billing **non livrés** |
 
 En cas de contradiction, **ETAT_REEL** et **mohhdy_us.md** priment.
 
@@ -58,7 +58,7 @@ Les autres fichiers MOHHDY restent des **specifications**. Le recouvrement avec 
 | [../docs/mohhdy_foundation_increment_21_vfs_stat.md](../docs/mohhdy_foundation_increment_21_vfs_stat.md) | Métadonnées VFS corrélées et source-spécifiques par montage |
 | [../docs/mohhdy_foundation_increment_32_vfs_backend_status.md](../docs/mohhdy_foundation_increment_32_vfs_backend_status.md) | Consultation médiée d'un masque backend VFS par le propriétaire public |
 | [../docs/mohhdy_foundation_increment_33_vfs_backend_list.md](../docs/mohhdy_foundation_increment_33_vfs_backend_list.md) | Inventaire médié, corrélé et borné des délégations backend VFS actives |
-| [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`) : embed, admin, droits, simulateur DOM, MCP demo, Docker / cloud. ASSIST-010..022/030/031/040/041 livrés (stub local, pas Chromium) |
+| [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`) : embed, admin, droits, simulateur DOM, MCP demo, Docker / PC / hyperviseur / cloud scaffold. ASSIST-010..022/030/031/040/041/051/052/053 livrés avec limites (stub, pas Chromium, pas de billing) |
 | [mohhdy_us_phase2_ai_core.md](mohhdy_us_phase2_ai_core.md) | Phase 2 (TensorFlow Lite, NLU, fédéré) - non livrée ; l'IA réelle est GPT-2 freestanding |
 | [mohhdy_us_phase3_web_runtime.md](mohhdy_us_phase3_web_runtime.md) | Phase 3 navigateur-OS - absente ; tranche produit Agent Support : ASSIST-060 / ASSIST-061 |
 | [mohhdy_us_phases_4_8_synthese.md](mohhdy_us_phases_4_8_synthese.md) | Phases 4-8 (PromptMessage, P2P, etc.) - absentes |

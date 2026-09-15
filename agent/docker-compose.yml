@@ -20,6 +20,8 @@ services:
       MOHHDY_AGENT_CONFIG: "${MOHHDY_AGENT_CONFIG:-}"
       MOHHDY_AGENT_KB: "${MOHHDY_AGENT_KB:-}"
       MOHHDY_AGENT_DATA: "${MOHHDY_AGENT_DATA:-}"
+      MOHHDY_AGENT_MODE: "${MOHHDY_AGENT_MODE:-self_host}"
+      MOHHDY_AGENT_SITE_ID: "${MOHHDY_AGENT_SITE_ID:-}"
     # Pas de env_file. Ne pas copier de secret dans le build.
     # Pour la demo KB + outils : MOHHDY_AGENT_CONFIG=/app/config.example.json
 
@@ -42,3 +44,5 @@ services:
       ADMIN_TOKEN: "${ADMIN_TOKEN:-}"
       MOHHDY_AGENT_CONFIG: "${MOHHDY_AGENT_CONFIG:-/app/config.example.json}"
       MOHHDY_AGENT_HARNESS: "dom_simulator"
+      MOHHDY_AGENT_MODE: "${MOHHDY_AGENT_MODE:-self_host}"
+      MOHHDY_AGENT_SITE_ID: "${MOHHDY_AGENT_SITE_ID:-}"

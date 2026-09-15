@@ -4,7 +4,7 @@
 **Statut :** plan de travail, pas une livraison
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document ordonne les prochaines tranches. Les **tranches 0-4** reprennent le backlog prototype déjà défini (CI, ACL, GGUF, stockage). Le **track Agent Support** est une piste produit **nouvelle**, spécifiée dans [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) : le runtime HTTP (`agent/`) sert embed, sessions, KB locale, droits, escalade, handoff, admin à jeton, gestes simulateur et facture mock (stub local). Le produit complet (LLM de production, Chromium) n'est **pas** livré. Ce track ne modifie pas le périmètre AOS vérifié. En cas de contradiction sur ce qui tourne, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment.
+Ce document ordonne les prochaines tranches. Les **tranches 0-4** reprennent le backlog prototype déjà défini (CI, ACL, GGUF, stockage). Le **track Agent Support** est une piste produit **nouvelle**, spécifiée dans [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) : le runtime HTTP (`agent/`) sert embed, sessions, KB locale, droits, escalade, handoff, admin à jeton, gestes simulateur et facture mock (stub local). Packaging PC / hyperviseur / mode hosted : scaffold ([assist051_052_053_deploy.md](assist051_052_053_deploy.md)), pas un SaaS payant. Le produit complet (LLM de production, Chromium) n'est **pas** livré. Ce track ne modifie pas le périmètre AOS vérifié. En cas de contradiction sur ce qui tourne, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment.
 
 ## Sources lues (sans les réécrire)
 
@@ -246,7 +246,7 @@ Ordre détaillé et critères : le fichier `ASSIST-xxx`. Ici l'ordre de **build*
 3. **ASSIST-010 / 011 / 013 / 040** : snippet d'embed, session isolée, console de revue à jeton. Livré avec stub local (pas un LLM de production). Guide : [assist010_sessions_admin.md](assist010_sessions_admin.md). CSP documentée ; refus d'origine automatique encore ouvert.
 4. **ASSIST-012 / 030 / 031 / 041** : expliquer la plateforme (KB locale), masque de droits par site/session, escalade, handoff humain dans la **même** conversation. Livré (stub). Guide : [assist012_droits_handoff.md](assist012_droits_handoff.md).
 5. **ASSIST-020 / 021 / 022** : gestes allowlistés (simulateur DOM, pas Chromium), outils MCP déclarés, facture demo dans `/demo-app`. Livré. Guide : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
-6. **ASSIST-051 / 052 / 053** : install PC, image hyperviseur (distincte de l'ISO GRUB AOS), abonnement cloud.
+6. **ASSIST-051 / 052 / 053** : install PC (`install.sh`), recette hyperviseur distincte de l'ISO GRUB AOS (cloud-init + QEMU x86_64, dry-run), scaffold cloud (`MOHHDY_AGENT_MODE`, quotas placeholder, **pas** de facturation). Guide : [assist051_052_053_deploy.md](assist051_052_053_deploy.md).
 7. **ASSIST-060 / 061** : accès navigateur une fois déployé ; si lancement direct, exposer le FS navigateur. Ne pas mettre à jour ETAT_REEL tant que ce n'est pas observable.
 8. **ASSIST-090** : hors sprint. Réutiliser plus tard le même modèle de capacités.
 
@@ -300,7 +300,7 @@ Le track Agent Support **n'est pas** "implémenter la phase 3". C'est une piste 
 | P | ASSIST-050 Docker runtime agent | Track Agent Support | Image HTTP livrée (`agent/`) |
 | P+ | ASSIST-010..041 embed, sessions, KB, droits, escalade, handoff | Track Agent Support | Livré (stub local, jeton `ADMIN_TOKEN`) |
 | P+ | ASSIST-020..022 gestes simulateur, MCP, facture mock | Track Agent Support | Livré (pas Chromium ; [assist020_gestes_mcp.md](assist020_gestes_mcp.md)) |
-| ensuite | ASSIST-051..053 PC, hyperviseur, cloud | Track Agent Support | Après 050 amorçable |
+| P+ | ASSIST-051..053 PC, hyperviseur, cloud scaffold | Track Agent Support | Install native + dry-run QEMU/cloud-init ; hosted **non-billing** ([assist051_052_053_deploy.md](assist051_052_053_deploy.md)) |
 | ensuite | ASSIST-060..061 navigateur / FS | Track Agent Support | Tranche produit phase 3, non livrée |
 | futur | ASSIST-090 corps physique | Track Agent Support | Hors livraison proche |
 

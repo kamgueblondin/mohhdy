@@ -81,6 +81,8 @@ Le service écoute `0.0.0.0:8080`. Surcharge possible :
 - `MOHHDY_AGENT_DATA` (optionnel : répertoire JSON des sessions)
 - `MOHHDY_AGENT_CONFIG` (optionnel : JSON KB + allowlist)
 - `MOHHDY_AGENT_KB` (optionnel : fichier texte / Markdown / JSON d'extraits)
+- `MOHHDY_AGENT_MODE` (optionnel : `self_host` ou `hosted`, scaffold ASSIST-053)
+- `MOHHDY_AGENT_SITE_ID` (optionnel : identifiant d'instance)
 
 Ne pas passer de jeton OpenAI, de `.env` ou de `env_file` dans le **build**.
 L'image est construite utilisateur non-root `mohhdy` (uid 10001).
@@ -132,3 +134,5 @@ Ce runtime ne remplace pas QEMU, ne s'ajoute pas aux sept contrats
 d'intégration, et ne doit pas faire grandir le job `integration-qemu`.
 Le job CI optionnel `agent-http-smoke` (Python stdlib, sans Docker) tourne
 en parallèle ; il ne `needs` pas le build i386.
+
+Install PC, hyperviseur et mode hosted : [assist051_052_053_deploy.md](assist051_052_053_deploy.md).

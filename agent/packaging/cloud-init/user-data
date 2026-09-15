@@ -1,0 +1,38 @@
+#cloud-config
+# ASSIST-052 : stub cloud-init pour une VM Linux x86_64 du runtime agent.
+# Distinct de make iso / build/mohhdy.bin (prototype i386 Multiboot).
+# Aucun secret. ADMIN_TOKEN se pose a l'execution, pas ici.
+
+hostname: mohhdy-agent
+manage_etc_hosts: true
+package_update: true
+packages:
+  - python3
+  - ca-certificates
+
+write_files:
+  - path: /etc/mohhdy-agent.env
+    permissions: "0600"
+    content: |
+      MOHHDY_AGENT_HOST=0.0.0.0
+      MOHHDY_AGENT_PORT=8080
+      MOHHDY_AGENT_MODE=self_host
+      # ADMIN_TOKEN=
+  - path: /usr/local/sbin/mohhdy-agent-bootstrap.sh
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -eu
+      PREFIX=/opt/mohhdy-agent
+      if [ ! -f "$PREFIX/server.py" ]; then
+        echo "mohhdy-agent: copier le repertoire agent/ vers $PREFIX" >&2
+        echo "puis : python3 $PREFIX/server.py" >&2
+        exit 0
+      fi
+      . /etc/mohhdy-agent.env
+      cd "$PREFIX"
+      exec python3 server.py
+
+runcmd:
+  - mkdir -p /opt/mohhdy-agent /var/lib/mohhdy-agent
+  - echo "ASSIST-052 bootstrap : deposer agent/ dans /opt/mohhdy-agent"
