@@ -135,6 +135,8 @@ Les lots 113-154 sont **faits** au sens caller-owned / Unity / smoke NIC. Les lo
 
 La vision MOHHDY (microkernel, P2P, économie, multi-plateforme, etc.) reste une collection de spécifications dans `US/`. Elle ne doit pas être utilisée comme indicateur d'implémentation du prototype.
 
+Plan ordonné des prochaines tranches : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
+
 ## Références
 
 [1] [QEMU, *Network emulation*](https://www.qemu.org/docs/master/system/devices/net.html)

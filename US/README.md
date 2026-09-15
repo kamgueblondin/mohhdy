@@ -17,6 +17,7 @@ Hobby OS i386 32-bit - pas une distribution Linux : boot QEMU, shell Ring 3, ove
 - Runtime : [docs/ETAT_REEL.md](../docs/ETAT_REEL.md)
 - Volumes FAT16/FAT32 (LFN racine et mutations 8.3 à un niveau via VFS) : [docs/aos_fat_volume.md](../docs/aos_fat_volume.md)
 - Roadmap courte : [README.md](../README.md)
+- Suite d'implémentation : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md)
 
 Ce n'est **pas** TensorFlow Lite, pas un microkernel, pas `fake_ai` comme moteur principal (`fake_ai` est un binaire historique ; `ai <texte>` appelle `SYS_GPT2_GENERATE`).
 
