@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fumee HTTP ASSIST-010..022/030/031/040/041/051/053/060/061 (stdlib, sans Docker, hors make ci)."""
+"""Fumee HTTP ASSIST-010..022/030/031/040/041/051/053/060/061 + 013 (stdlib, sans Docker, hors make ci)."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import server  # noqa: E402
+import tools as agent_tools  # noqa: E402
 
 SECRET_MARKERS = (
     "api_key",
@@ -43,6 +44,73 @@ def _wait_ready(base: str) -> None:
             last_error = exc
             time.sleep(0.05)
     raise RuntimeError("serveur agent injoignable: %s" % last_error)
+
+
+class OriginHelpers(unittest.TestCase):
+    def test_extract_document_origin_prefers_header(self) -> None:
+        got = agent_tools.extract_document_origin(
+            "https://shop.example",
+            "https://evil.example/page",
+            "http://127.0.0.1:8080",
+            "http://127.0.0.1:8080",
+        )
+        self.assertEqual(got, "https://shop.example")
+
+    def test_extract_document_origin_referer_then_self(self) -> None:
+        from_referer = agent_tools.extract_document_origin(
+            "",
+            "https://shop.example/panier?x=1",
+            "",
+            "http://127.0.0.1:8080",
+        )
+        self.assertEqual(from_referer, "https://shop.example")
+        from_self = agent_tools.extract_document_origin(
+            "", "", "", "http://127.0.0.1:8080"
+        )
+        self.assertEqual(from_self, "http://127.0.0.1:8080")
+
+    def test_extract_null_origin_is_empty(self) -> None:
+        self.assertEqual(
+            agent_tools.extract_document_origin("null", "", "", "http://127.0.0.1:8"),
+            "",
+        )
+
+    def test_self_origin_allowed_and_foreign_denied(self) -> None:
+        self.assertTrue(
+            agent_tools.origin_allowed(
+                "http://127.0.0.1:8080", ["self"], "http://127.0.0.1:8080"
+            )
+        )
+        self.assertFalse(
+            agent_tools.origin_allowed(
+                "https://evil.example", ["self"], "http://127.0.0.1:8080"
+            )
+        )
+        self.assertTrue(
+            agent_tools.origin_allowed(
+                "https://shop.example",
+                ["https://shop.example"],
+                "http://127.0.0.1:8080",
+            )
+        )
+
+    def test_origin_binding_token_self_vs_url(self) -> None:
+        self.assertEqual(
+            agent_tools.origin_binding_token(
+                "http://127.0.0.1:8080",
+                "http://127.0.0.1:8080",
+                ["self"],
+            ),
+            "self",
+        )
+        self.assertEqual(
+            agent_tools.origin_binding_token(
+                "https://shop.example",
+                "http://127.0.0.1:8080",
+                ["https://shop.example"],
+            ),
+            "https://shop.example",
+        )
 
 
 class AgentHttpSmoke(unittest.TestCase):
@@ -173,6 +241,8 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertIn("Parler a un humain", script)
         self.assertIn("/escalate", script)
         self.assertIn("human_active", script)
+        self.assertIn("window.location.origin", script)
+        self.assertIn("origin_denied", script)
         self.assertNotIn("admin.takeover", script)
         self.assertNotIn("acl.", script)
         lowered = script.lower()
@@ -335,6 +405,8 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertEqual(body["status"], "open")
         self.assertEqual(body["messages"], [])
         self.assertEqual(body["llm"], "stub_echo")
+        self.assertEqual(body["document_origin"], self.base)
+        self.assertEqual(body["origin_binding"], "self")
         self.assertIn("chat.reply", body["capabilities"])
         self.assertIn("site.explain", body["capabilities"])
         self.assertIn("session.escalate", body["capabilities"])
@@ -571,6 +643,146 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertEqual(fetched["status"], "waiting_human")
         joined = " ".join(item["content"] for item in fetched["messages"])
         self.assertIn(denied["request_id"], joined)
+
+    def test_same_origin_header_creates_session(self) -> None:
+        body, code = self._post_status(
+            "/api/sessions",
+            {"site_id": "origin_same"},
+            headers={"Origin": self.base},
+        )
+        self.assertEqual(code, 201)
+        uuid.UUID(body["session_id"])
+        self.assertEqual(body["document_origin"], self.base)
+        self.assertEqual(body["origin_binding"], "self")
+        dumped = json.dumps(body).lower()
+        self.assertNotIn("api_key", dumped)
+        self.assertNotIn("admin.takeover", dumped)
+
+    def test_foreign_origin_header_refuses_session_create(self) -> None:
+        before, _, _ = self._get_json("/api/admin/sessions")
+        before_ids = {row["session_id"] for row in before["sessions"]}
+        denied, code = self._post_status(
+            "/api/sessions",
+            {"site_id": "origin_create_denied"},
+            headers={"Origin": "https://evil.example"},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "origin_denied")
+        self.assertEqual(denied["origin"], "https://evil.example")
+        self.assertTrue(denied["request_id"])
+        uuid.UUID(denied["request_id"])
+        self.assertNotIn("session_id", denied)
+        dumped = json.dumps(denied).lower()
+        self.assertNotIn("api_key", dumped)
+        self.assertNotIn("admin_token", dumped)
+        after, _, _ = self._get_json("/api/admin/sessions")
+        after_ids = {row["session_id"] for row in after["sessions"]}
+        self.assertEqual(after_ids, before_ids)
+        journal, _, _ = self._get_json("/api/admin/journal")
+        match = [
+            row
+            for row in journal["journal"]
+            if row["request_id"] == denied["request_id"]
+        ]
+        self.assertEqual(len(match), 1)
+        self.assertEqual(match[0]["outcome"], "origin_denied")
+        self.assertEqual(match[0]["tool"], "session.create")
+
+    def test_foreign_referer_refuses_session_create(self) -> None:
+        denied, code = self._post_status(
+            "/api/sessions",
+            {"site_id": "origin_referer"},
+            headers={"Referer": "https://evil.example/embed"},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "origin_denied")
+        self.assertEqual(denied["origin"], "https://evil.example")
+        self.assertTrue(denied["request_id"])
+
+    def test_opaque_origin_null_refused(self) -> None:
+        denied, code = self._post_status(
+            "/api/sessions",
+            {"site_id": "origin_null"},
+            headers={"Origin": "null"},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "origin_denied")
+        self.assertTrue(denied["request_id"])
+
+    def test_foreign_origin_message_does_not_store_secret(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "origin_msg"})
+        sid = created["session_id"]
+        secret = "secret-origin-gamma"
+        denied, code = self._post_status(
+            "/api/sessions/%s/messages" % sid,
+            {"content": secret},
+            headers={"Origin": "https://evil.example"},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "origin_denied")
+        self.assertTrue(denied["request_id"])
+        dumped = json.dumps(denied)
+        self.assertNotIn(secret, dumped)
+        fetched, _, _ = self._get_json("/api/sessions/" + sid)
+        self.assertEqual(fetched["status"], "open")
+        joined = " ".join(item["content"] for item in fetched["messages"])
+        self.assertNotIn(secret, joined)
+        self.assertEqual(fetched["messages"], [])
+
+    def test_foreign_origin_get_session_hides_messages(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "origin_get"})
+        sid = created["session_id"]
+        self._post_json(
+            "/api/sessions/%s/messages" % sid,
+            {"content": "secret-origin-delta"},
+        )
+        denied, code = self._get_status(
+            "/api/sessions/" + sid,
+            headers={"Origin": "https://evil.example"},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "origin_denied")
+        dumped = json.dumps(denied)
+        self.assertNotIn("secret-origin-delta", dumped)
+        self.assertNotIn("messages", denied)
+        fetched, _, _ = self._get_json("/api/sessions/" + sid)
+        self.assertIn("secret-origin-delta", json.dumps(fetched))
+
+    def test_foreign_origin_header_refuses_tool_without_act(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "origin_hdr_tool"})
+        sid = created["session_id"]
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"grant": ["dom.click"]},
+        )
+        before, _, _ = self._get_json("/api/demo-app/state")
+        denied, code = self._post_status(
+            "/api/sessions/%s/tools" % sid,
+            {
+                "tool": "dom.click",
+                "origin": self.base,
+                "args": {"selector": "#menu-toggle"},
+            },
+            headers={"Origin": "https://evil.example"},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "origin_denied")
+        self.assertTrue(denied["request_id"])
+        after, _, _ = self._get_json("/api/demo-app/state")
+        self.assertEqual(after["menu_open"], before["menu_open"])
+        fetched, _, _ = self._get_json("/api/sessions/" + sid)
+        self.assertEqual(fetched["status"], "open")
+
+    def test_admin_lists_despite_foreign_origin_header(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "origin_admin"})
+        sid = created["session_id"]
+        listing, code = self._get_status(
+            "/api/admin/sessions",
+            headers={"Origin": "https://evil.example"},
+        )
+        self.assertEqual(code, 200)
+        ids = [row["session_id"] for row in listing["sessions"]]
+        self.assertIn(sid, ids)
 
     def test_invoice_create_same_session_then_revoke(self) -> None:
         created, _, _ = self._post_json("/api/sessions", {"site_id": "invoice_site"})
@@ -969,6 +1181,28 @@ class AgentAdminToken(unittest.TestCase):
             listing = json.loads(resp.read().decode("utf-8"))
         ids = [row["session_id"] for row in listing["sessions"]]
         self.assertIn(created["session_id"], ids)
+
+    def test_admin_token_still_required_with_origin_header(self) -> None:
+        req = urllib.request.Request(
+            self.base + "/api/admin/sessions",
+            headers={"Origin": self.base},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req, timeout=2)
+        self.assertEqual(ctx.exception.code, 401)
+        created = self._post_json("/api/sessions", {"site_id": "token_origin"})
+        req_ok = urllib.request.Request(
+            self.base + "/api/admin/sessions",
+            headers={
+                "Authorization": "Bearer " + self.TOKEN,
+                "Origin": "https://evil.example",
+            },
+        )
+        with urllib.request.urlopen(req_ok, timeout=2) as resp:
+            listing = json.loads(resp.read().decode("utf-8"))
+        ids = [row["session_id"] for row in listing["sessions"]]
+        self.assertIn(created["session_id"], ids)
+        self.assertNotIn(self.TOKEN, json.dumps(listing))
 
     def test_admin_status_does_not_require_token(self) -> None:
         with urllib.request.urlopen(self.base + "/api/admin/status", timeout=2) as resp:
@@ -1422,6 +1656,164 @@ class AgentBrowserFsIsolation(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 405)
         payload = json.loads(ctx.exception.read().decode("utf-8"))
         self.assertEqual(payload["error"], "fs_read_only")
+
+
+class AgentConfiguredOrigins(unittest.TestCase):
+    """ASSIST-013 : allowlist par site dans MOHHDY_AGENT_CONFIG."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        cfg = Path(cls._tmp.name) / "origins.json"
+        cfg.write_text(
+            json.dumps(
+                {
+                    "allowed_origins": ["self"],
+                    "sites": {
+                        "site_public_demo": {
+                            "capabilities": [
+                                "chat.reply",
+                                "site.explain",
+                                "session.escalate",
+                            ],
+                            "allowed_origins": ["self"],
+                        },
+                        "site_shop_example": {
+                            "capabilities": [
+                                "chat.reply",
+                                "site.explain",
+                                "session.escalate",
+                            ],
+                            "allowed_origins": ["https://shop.example"],
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        cls._prev = {
+            "MOHHDY_AGENT_CONFIG": os.environ.get("MOHHDY_AGENT_CONFIG"),
+            "ADMIN_TOKEN": os.environ.get("ADMIN_TOKEN"),
+            "MOHHDY_AGENT_DATA": os.environ.get("MOHHDY_AGENT_DATA"),
+            "MOHHDY_AGENT_KB": os.environ.get("MOHHDY_AGENT_KB"),
+            "MOHHDY_AGENT_MODE": os.environ.get("MOHHDY_AGENT_MODE"),
+            "MOHHDY_AGENT_SITE_ID": os.environ.get("MOHHDY_AGENT_SITE_ID"),
+            "MOHHDY_AGENT_RUNTIME": os.environ.get("MOHHDY_AGENT_RUNTIME"),
+        }
+        os.environ["MOHHDY_AGENT_CONFIG"] = str(cfg)
+        os.environ.pop("ADMIN_TOKEN", None)
+        os.environ.pop("MOHHDY_AGENT_DATA", None)
+        os.environ.pop("MOHHDY_AGENT_KB", None)
+        os.environ.pop("MOHHDY_AGENT_MODE", None)
+        os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
+        os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
+        cls.httpd = server.make_server("127.0.0.1", 0)
+        cls.base = "http://127.0.0.1:%d" % cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+        _wait_ready(cls.base)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.thread.join(timeout=2)
+        for key, value in cls._prev.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        cls._tmp.cleanup()
+
+    def setUp(self) -> None:
+        self.httpd.reset_runtime()
+
+    def _post_status(self, path: str, payload: dict, headers: dict | None = None):
+        data = json.dumps(payload).encode("utf-8")
+        hdrs = {"Content-Type": "application/json"}
+        if headers:
+            hdrs.update(headers)
+        req = urllib.request.Request(
+            self.base + path,
+            data=data,
+            method="POST",
+            headers=hdrs,
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                return json.loads(resp.read().decode("utf-8")), resp.status
+        except urllib.error.HTTPError as err:
+            return json.loads(err.read().decode("utf-8")), err.code
+
+    def test_declared_shop_origin_accepted(self) -> None:
+        body, code = self._post_status(
+            "/api/sessions",
+            {"site_id": "site_shop_example"},
+            headers={"Origin": "https://shop.example"},
+        )
+        self.assertEqual(code, 201)
+        self.assertEqual(body["document_origin"], "https://shop.example")
+        self.assertEqual(body["origin_binding"], "https://shop.example")
+        self.assertEqual(body["site_id"], "site_shop_example")
+        dumped = json.dumps(body).lower()
+        self.assertNotIn("api_key", dumped)
+        self.assertNotIn("admin.takeover", dumped)
+
+    def test_shop_site_rejects_self_and_foreign(self) -> None:
+        denied_self, code = self._post_status(
+            "/api/sessions",
+            {"site_id": "site_shop_example"},
+            headers={"Origin": self.base},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied_self["error"], "origin_denied")
+        denied_evil, code = self._post_status(
+            "/api/sessions",
+            {"site_id": "site_shop_example"},
+            headers={"Origin": "https://evil.example"},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied_evil["error"], "origin_denied")
+        self.assertTrue(denied_evil["request_id"])
+
+    def test_demo_site_self_still_works_shop_does_not(self) -> None:
+        ok, code = self._post_status(
+            "/api/sessions",
+            {"site_id": "site_public_demo"},
+            headers={"Origin": self.base},
+        )
+        self.assertEqual(code, 201)
+        self.assertEqual(ok["document_origin"], self.base)
+        denied, code = self._post_status(
+            "/api/sessions",
+            {"site_id": "site_public_demo"},
+            headers={"Origin": "https://shop.example"},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "origin_denied")
+        posted, code = self._post_status(
+            "/api/sessions/%s/messages" % ok["session_id"],
+            {"content": "secret-shop-cross"},
+            headers={"Origin": "https://shop.example"},
+        )
+        self.assertEqual(code, 403)
+        self.assertNotIn("secret-shop-cross", json.dumps(posted))
+
+    def test_shop_session_rejects_self_messages(self) -> None:
+        created, code = self._post_status(
+            "/api/sessions",
+            {"site_id": "site_shop_example"},
+            headers={"Origin": "https://shop.example"},
+        )
+        self.assertEqual(code, 201)
+        denied, code = self._post_status(
+            "/api/sessions/%s/messages" % created["session_id"],
+            {"content": "secret-self-cross"},
+            headers={"Origin": self.base},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "origin_denied")
+        self.assertNotIn("secret-self-cross", json.dumps(denied))
 
 
 if __name__ == "__main__":
