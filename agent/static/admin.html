@@ -113,8 +113,8 @@
     <div id="mohhdy-banner" class="banner">
       Console ASSIST-040 / 041. Authentification : jeton partage <code>ADMIN_TOKEN</code>
       (variable d'environnement, jamais dans l'image). Escalade, file d'attente,
-      prise de main et reponse humaine dans la meme session. Les reponses agent
-      sont un stub local (echo ou base autorisee).
+      prise de main et reponse humaine dans la meme session. Journal d'actes
+      (gestes simulateur / MCP). Les reponses agent sont un stub local.
     </div>
     <div class="row" id="mohhdy-auth-row">
       <label for="mohhdy-token">Jeton admin</label>
@@ -163,9 +163,27 @@
         </div>
       </form>
     </section>
+    <h2>Journal d'actes</h2>
+    <p class="hint">Simulateur DOM in-process, pas Chromium. Chaque refus d'origine porte un request_id.</p>
+    <table id="mohhdy-journal">
+      <thead>
+        <tr>
+          <th>request_id</th>
+          <th>outil</th>
+          <th>origine</th>
+          <th>resultat</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="empty" colspan="4">Chargement...</td>
+        </tr>
+      </tbody>
+    </table>
     <p class="hint">
       Un jeton unique protege toute l'instance. Ce n'est pas encore une auth
-      par site ni des comptes operateurs. Actes navigateur (ASSIST-020) non livrés.
+      par site ni des comptes operateurs. Gestes : simulateur /demo-app
+      (ASSIST-020), pas un navigateur reel.
     </p>
   </main>
   <script>
@@ -175,6 +193,7 @@
       var banner = document.getElementById("mohhdy-banner");
       var note = document.getElementById("mohhdy-auth-note");
       var tbody = document.querySelector("#mohhdy-sessions tbody");
+      var journalBody = document.querySelector("#mohhdy-journal tbody");
       var detail = document.getElementById("mohhdy-detail");
       var detailMeta = document.getElementById("mohhdy-detail-meta");
       var detailCaps = document.getElementById("mohhdy-detail-caps");
@@ -245,6 +264,29 @@
         tbody.appendChild(tr);
       }
 
+      function renderJournal(entries) {
+        journalBody.innerHTML = "";
+        if (!entries.length) {
+          var tr = document.createElement("tr");
+          var td = document.createElement("td");
+          td.className = "empty";
+          td.colSpan = 4;
+          td.textContent = "Aucun acte";
+          tr.appendChild(td);
+          journalBody.appendChild(tr);
+          return;
+        }
+        entries.slice(0, 20).forEach(function (row) {
+          var tr = document.createElement("tr");
+          ["request_id", "tool", "origin", "outcome"].forEach(function (key) {
+            var td = document.createElement("td");
+            td.textContent = row[key] == null ? "" : String(row[key]);
+            tr.appendChild(td);
+          });
+          journalBody.appendChild(tr);
+        });
+      }
+
       function renderList(sessions) {
         tbody.innerHTML = "";
         if (!sessions.length) {
@@ -311,6 +353,11 @@
             ? "Mode stub ouvert : ADMIN_TOKEN absent. Ne pas exposer sur Internet."
             : "Jeton accepte. Liste de l'instance (pas encore d'auth par site).";
           renderList(data.sessions || []);
+          return api("/api/admin/journal").then(function (journal) {
+            renderJournal(journal.journal || []);
+          }).catch(function () {
+            renderJournal([]);
+          });
         }).catch(function (err) {
           if (err.status === 401) {
             setEmpty("Jeton requis ou invalide");

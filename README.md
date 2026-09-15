@@ -64,7 +64,7 @@ make run
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
 | `make iso` | Produit l'ISO BIOS/GRUB bootable |
 | `make run` / `make run-gui` | Session QEMU interactive curses ou GTK |
-| `make agent-smoke` | Fumée HTTP agent (sessions, isolation, admin). Hors `make ci` / hors QEMU |
+| `make agent-smoke` | Fumée HTTP agent (simulateur DOM, MCP, facture). Hors `make ci` / hors QEMU |
 | `make agent-docker` | Construit l'image `mohhdy-agent`. Voir [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md) |
 
 Pour construire l'ISO, installez également GRUB et xorriso.
@@ -75,9 +75,9 @@ make iso
 make run-iso
 ```
 
-## Runtime agent (ASSIST-050 + sessions + droits)
+## Runtime agent (ASSIST-050 + sessions + droits + simulateur)
 
-Arborescence parallèle `agent/`. Ce n'est **pas** le noyau i386. Les réponses chat sont un stub local (echo ou KB), **pas** un LLM de production.
+Arborescence parallèle `agent/`. Ce n'est **pas** le noyau i386. Les réponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium.
 
 ```bash
 make agent-smoke
@@ -90,7 +90,7 @@ docker run --rm -p 8080:8080 \
   mohhdy-agent
 ```
 
-Guides : [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md), [docs/assist010_sessions_admin.md](docs/assist010_sessions_admin.md), [docs/assist012_droits_handoff.md](docs/assist012_droits_handoff.md). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md).
+Guides : [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md), [docs/assist010_sessions_admin.md](docs/assist010_sessions_admin.md), [docs/assist012_droits_handoff.md](docs/assist012_droits_handoff.md), [docs/assist020_gestes_mcp.md](docs/assist020_gestes_mcp.md). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md).
 
 ## GPT-2 local, sans réseau au démarrage
 
@@ -130,7 +130,7 @@ Une ISO BIOS/GRUB peut être produite avec l'initrd. Lorsque les poids GPT-2 son
 
 Le backlog courant est [US/mohhdy_us.md](US/mohhdy_us.md). La vision MOHHDY est conservée séparément dans [US/README.md](US/README.md). L'ordre des prochaines tranches AOS (0-4) et la piste Agent Support sont dans [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md).
 
-Piste produit Agent Support : spec [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md) (`ASSIST-xxx`). `agent/` sert embed, sessions isolées et admin à jeton ([docs/assist010_sessions_admin.md](docs/assist010_sessions_admin.md)). Les réponses sont un echo stub, **pas** un LLM de production, **pas** des actes navigateur, **pas** une fonction du prototype i386 vérifié. Ces items n'apparaissent pas dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md).
+Piste produit Agent Support : spec [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md) (`ASSIST-xxx`). `agent/` sert embed, sessions isolées, admin à jeton, simulateur de gestes et facture mock ([docs/assist020_gestes_mcp.md](docs/assist020_gestes_mcp.md)). Les réponses sont un stub local, **pas** un LLM de production, **pas** Chromium, **pas** une fonction du prototype i386 vérifié. Ces items n'apparaissent pas dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md).
 
 - [x] GPT-2 local, cache KV, SSE2 et top-k borné
 - [x] Tokenizer BPE UTF-8 avec couverture de lettres Unicode ciblée

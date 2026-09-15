@@ -29,9 +29,11 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 | Fichier | Contenu |
 |---|---|
 | [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Prochaines tranches : prototype AOS 0-4, puis track Agent Support |
-| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`). Embed / sessions / admin livrés (echo stub) |
+| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo livrés (stub local, pas Chromium) |
 | [assist050_docker_runtime.md](assist050_docker_runtime.md) | Image Docker / HTTP agent : build, `docker run`, fumée |
 | [assist010_sessions_admin.md](assist010_sessions_admin.md) | Sessions visiteur, embed, admin `ADMIN_TOKEN`, snippet CSP |
+| [assist012_droits_handoff.md](assist012_droits_handoff.md) | KB locale, droits, escalade, handoff |
+| [assist020_gestes_mcp.md](assist020_gestes_mcp.md) | Gestes simulateur, outils MCP, facture mock |
 | [ETAT_REEL.md](ETAT_REEL.md) | État fonctionnel, GPT-2 local et limites vérifiées |
 | [vocabulaire.md](vocabulaire.md) | Lexique du hobby OS ; distance volontaire d'une identité Linux |
 | [../US/mohhdy_us.md](../US/mohhdy_us.md) | Backlog du prototype, AOS-001...026, FAT16 mutate, sockets, `ai-acquire` et TLS/HTTP local |

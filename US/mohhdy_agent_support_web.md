@@ -1,11 +1,11 @@
 # Track Agent Support - assistant web agentique
 
 **Date :** 15 septembre 2026
-**Statut :** spec produit. ASSIST-050/010/011/012/030/031/040/041 = runtime HTTP livré (stub local, sessions, KB, droits, escalade, handoff, admin a jeton) ; actes navigateur et LLM de production **pas** livrés
+**Statut :** spec produit. ASSIST-050/010/011/012/020/021/022/030/031/040/041 = runtime HTTP livré (stub local, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock) ; LLM de production et Chromium **pas** livrés
 **IDs :** `ASSIST-xxx` (ne collident ni avec `AOS-xxx` ni avec `US-xxx`)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document décrit une **nouvelle piste produit** : MOHHDY comme assistant IA agentique (OS / agent) capable de tenir un support client sur un site web, d'agir dans le périmètre autorisé, et de céder la main à un humain. Il n'annule pas le prototype i386. `agent/` sert une origine HTTP : widget `embed.js`, sessions visiteur isolées, base de connaissance locale optionnelle, masque de droits, escalade, handoff dans la même session, console `/admin` (jeton `ADMIN_TOKEN` optionnel). Les réponses sont un **stub local** (echo ou extraits de KB), pas un LLM de production, pas d'automatisation navigateur.
+Ce document décrit une **nouvelle piste produit** : MOHHDY comme assistant IA agentique (OS / agent) capable de tenir un support client sur un site web, d'agir dans le périmètre autorisé, et de céder la main à un humain. Il n'annule pas le prototype i386. `agent/` sert une origine HTTP : widget `embed.js`, sessions visiteur isolées, base de connaissance locale optionnelle, masque de droits, escalade, handoff dans la même session, console `/admin` (jeton `ADMIN_TOKEN` optionnel), simulateur de gestes sur `/demo-app`, outil MCP demo et facture mock. Les réponses sont un **stub local** (echo ou extraits de KB), pas un LLM de production, pas Chromium.
 
 En cas de contradiction sur ce qui **tourne aujourd'hui**, [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md) et [mohhdy_us.md](mohhdy_us.md) priment.
 
@@ -64,7 +64,7 @@ Si, plus tard, MOHHDY a un corps physique, les mêmes droits pourront gouverner 
 
 ## Non-objectifs (explicites)
 
-- Ne pas déclarer livrés le produit complet : LLM de production, hyperviseur, abonnement cloud, agent souris / clics, MCP site, facture en session. Le runtime HTTP (`agent/`) n'est pas ce produit.
+- Ne pas déclarer livrés le produit complet : LLM de production, hyperviseur, abonnement cloud, Chromium réel, ERP. Le runtime HTTP (`agent/`) n'est pas ce produit. Les gestes sont un simulateur DOM local.
 - Ne pas déplacer le backlog AOS (CI 25 min, ACL préfixe, GGUF, stockage hors noyau) vers ce track.
 - Ne pas héberger l'embed public **dans** le noyau Multiboot i386 actuel.
 - Ne pas ouvrir TensorFlow Lite, NLU fédéré, P2P, économie de points, ou US-001 "d'un coup".
@@ -77,7 +77,7 @@ Si, plus tard, MOHHDY a un corps physique, les mêmes droits pourront gouverner 
 | Cible | Rôle | Runtime supposé | Statut |
 |---|---|---|---|
 | OS autonome existant | Prototype pédagogique i386, boot QEMU / ISO | Multiboot, shell Ring 3, GPT-2 / GGUF local, NE2000 local | **Vérifié** (AOS). N'héberge pas le widget |
-| Conteneur Docker | Véhicule principal du runtime agent + origine de l'embed + admin | Userspace Linux (ou équivalent) avec HTTP(S), navigateur outillé, file de sessions | Runtime HTTP `agent/` : embed, sessions, KB locale, droits, escalade, handoff, admin a jeton. Pas de LLM de production ni d'actes navigateur |
+| Conteneur Docker | Véhicule principal du runtime agent + origine de l'embed + admin | Userspace Linux (ou équivalent) avec HTTP(S), file de sessions, simulateur DOM | Runtime HTTP `agent/` : embed, sessions, KB locale, droits, escalade, handoff, admin a jeton, `/demo-app`, MCP demo. Pas de LLM de production ni de Chromium |
 | Installation PC | Même runtime, package natif | Identique à Docker sur le fond, installateur en plus | Spec ASSIST-051 |
 | Hyperviseur | Image VM (QEMU/KVM, autre) du runtime agent, pas du seul hobby kernel | Identique à Docker, disque / réseau de VM | Spec ASSIST-052 |
 | Abonnement cloud hébergé | Instance opérée pour le client, même API d'embed | Multi-tenant ou instance dédiée, facturation | Spec ASSIST-053, optionnelle |
@@ -130,11 +130,11 @@ UX visée : bulle de chat en coin de page, comme tawk.to, **sans** prétendre à
 </script>
 ```
 
-Comportement (ASSIST-010 livré, actes navigateur non) :
+Comportement (ASSIST-010 livré, gestes = simulateur ASSIST-020) :
 
 1. Le script dessine un lanceur, puis un panneau de conversation.
 2. Il ouvre une session visiteur vers l'origine de l'instance.
-3. Les messages transitent en HTTP(S) vers `/api/sessions`. Les actes (clics, MCP) **ne sont pas** encore exécutés.
+3. Les messages transitent en HTTP(S) vers `/api/sessions`. Les actes (clics, MCP) passent par `POST /api/sessions/{id}/tools` **si** le droit et l'origine sont accordés (simulateur DOM, pas Chromium).
 4. Les réponses sont un stub local (echo ou KB), pas un LLM de production.
 5. Un bouton "Parler a un humain" demande l'escalade (ASSIST-031). Après takeover, les messages humains apparaissent et l'agent ne répond plus tout seul.
 
@@ -146,7 +146,7 @@ La console n'est pas le shell VGA. C'est une UI web de l'instance.
 
 Livré (ASSIST-040 lecture + ASSIST-041 écriture) : liste des sessions, filtre file humain, détail du fil, jeton `ADMIN_TOKEN` optionnel, takeover et réponse humaine dans la même session.
 
-Encore spec : comptes opérateurs, auth par site, actes et refus navigateur (ASSIST-020).
+Encore spec : comptes opérateurs, auth par site. Gestes et refus d'origine : ASSIST-020 (simulateur).
 
 - Reprise : l'humain écrit **dans la même session** ; l'agent se tait ou passe en observateur selon la politique.
 - Interdit : fusionner des sessions de sites distincts, exporter un secret, agir sans `admin.takeover`.
@@ -162,6 +162,7 @@ Limites :
 - Pas d'acte hors origine / hors allowlist.
 - Pas d'acte irréversible (paiement, suppression massive) sans politique explicite ou humain.
 - L'automatisation navigateur vit dans le runtime Docker / PC / cloud, pas dans le guest i386 AOS.
+- Tranche actuelle : **simulateur DOM** local (`/demo-app`), pas un Chromium. Détail : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md).
 
 ## Accès navigateur une fois déployé
 
@@ -244,6 +245,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Un scénario de démo (ouvrir un menu, remplir un champ) réussit sur l'origine allowlistée et échoue hors origine, avec journal `request_id`.
 
+**Progrès.** Simulateur DOM in-process (`harness=dom_simulator`), page `/demo-app`, allowlist d'origines (`self` ou URL). `dom.click` / `dom.type` / `pointer.move` mutent `GET /api/demo-app/state`. Origine étrangère : 403 `origin_denied` + `request_id` au journal. **Pas** Playwright, **pas** Chromium. Guide : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md).
+
 ### ASSIST-021 - Outils MCP / outils du site
 
 **En tant que** opérateur, **je veux** déclarer les outils du site (MCP ou équivalent) que l'agent a le droit d'appeler, **afin de** brancher MOHHDY sur mon appli sans lui donner la clef de tout.
@@ -251,6 +254,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 **Dépendances.** ASSIST-030. Voisinage US-034, sans livrer un connecteur ERP générique.
 
 **Critère.** Allowlist nominative. Un outil absent est refusé. La révocation empêche l'appel suivant.
+
+**Progrès.** Clé `tools` du JSON config. `mcp.invoice.create` déclaré. `mcp.not_registered` : 403 `tool_undeclared`. Révocation : l'appel suivant est 403.
 
 ### ASSIST-022 - Acte métier en session (exemple : facture)
 
@@ -260,6 +265,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Une facture de démo apparaît côté appli hôte quand le droit est là ; sinon message de refus + offre d'escalade. Même `session_id`.
 
+**Progrès.** `mcp.invoice.create` écrit dans le mock `/demo-app` (mémoire ou `MOHHDY_AGENT_DATA/invoices.json`). Même `session_id`. Sans droit : 403 + escalade, aucune facture.
+
 ### ASSIST-030 - Droits par site et par session
 
 **En tant que** opérateur, **je veux** accorder, limiter et révoquer des capacités par site et par session, **afin que** l'agent n'agisse que dans le périmètre voulu.
@@ -268,7 +275,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Masque de droits visible côté admin. Diagnostic public du widget sans secret ni borne interne. Preuves négatives (outil retiré, origine étrangère).
 
-**Progrès.** Allowlist par site et par session (`grant` / `revoke` / `set`). Placeholders `dom.*` / `mcp.*` refusés à l'exécution. Widget : capacités publiques seulement (pas `admin.*`, pas `acl.`). Outil révoqué : 403, pas d'acte. Le refus automatique d'origine document vs site déclaré **reste ouvert**.
+**Progrès.** Allowlist par site et par session (`grant` / `revoke` / `set`). Gestes et MCP demo exécutés s'ils sont accordés (simulateur). Widget : capacités publiques seulement (pas `admin.*`, pas `acl.`). Outil révoqué : 403, pas d'acte. Origine étrangère : 403 `origin_denied`. Le refus automatique d'origine **document embed** vs site déclaré **reste ouvert**.
 
 ### ASSIST-031 - Escalade humaine
 
@@ -308,7 +315,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** `docker run` documenté : santé HTTP, page admin, origine d'embed. Pas de secret dans l'image. Hors cible : faire booter le noyau Multiboot **dans** ce conteneur comme substitut du widget.
 
-**Progrès.** Arborescence `agent/` : Python 3 stdlib, `Dockerfile` utilisateur non-root, `docker-compose.yml`, `make agent-smoke` (hors `make ci` / hors QEMU). Sert embed, sessions, KB, droits, escalade, handoff, admin. Guide image : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md). **Non livré dans l'image :** secret, LLM de production, MCP exécuté, actes navigateur, noyau i386.
+**Progrès.** Arborescence `agent/` : Python 3 stdlib, `Dockerfile` utilisateur non-root, `docker-compose.yml`, `make agent-smoke` (hors `make ci` / hors QEMU). Sert embed, sessions, KB, droits, escalade, handoff, admin, `/demo-app`, MCP demo. Guide image : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md). Gestes : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md). **Non livré dans l'image :** secret, LLM de production, Chromium, noyau i386.
 
 ### ASSIST-051 - Installation PC
 
@@ -365,8 +372,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 | 1 | ASSIST-000 | Tout de suite (docs) | Rien |
 | 2 | ASSIST-050 | Image Docker / HTTP livrée ; parallèle aux tranches AOS 0-4 | Interdit d'allonger la CI QEMU |
 | 3 | ASSIST-010, 011, 013, 040 | Embed + sessions + admin a jeton livrés (stub local ; CSP docs ; pas d'auth par site) | Runtime plus large que i386 |
-| 4 | ASSIST-012, 030, 031, 041 | KB locale, masque de droits, escalade, handoff dans la même conversation : livrés (stub ; pas d'actes navigateur) | Politique de droits |
-| 5 | ASSIST-020, 021, 022 | Après droits + navigateur outillé | Allowlist, pas AOS-025 public |
+| 4 | ASSIST-012, 030, 031, 041 | KB locale, masque de droits, escalade, handoff dans la même conversation : livrés (stub) | Politique de droits |
+| 5 | ASSIST-020, 021, 022 | Gestes simulateur, MCP déclaré, facture mock : livrés (pas Chromium) | Allowlist, pas AOS-025 public |
 | 6 | ASSIST-051, 052, 053 | Après 050 amorçable | 053 : opérateur cloud |
 | 7 | ASSIST-060, 061 | Après 050 | Phase 3 reste spec |
 | 8 | ASSIST-090 | Jamais en "prochain sprint" | Corps physique inexistant |
@@ -380,6 +387,7 @@ OpenAI / LLM hébergé : l'agent peut d'abord s'appuyer sur un modèle **local �
 - Scaffold Docker ASSIST-050 : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md)
 - Sessions / embed / admin : [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md)
 - KB, droits, escalade, handoff : [../docs/assist012_droits_handoff.md](../docs/assist012_droits_handoff.md)
+- Gestes simulateur, MCP, facture : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md)
 - Phase 1 droits : [mohhdy_us_phase1_foundation.md](mohhdy_us_phase1_foundation.md)
 - Phase 2 assistant : [mohhdy_us_phase2_ai_core.md](mohhdy_us_phase2_ai_core.md), [individual_us/US-021_Assistant_IA_Integre.md](individual_us/US-021_Assistant_IA_Integre.md), [individual_us/US-028_Module_Intelligence_Conversationnelle.md](individual_us/US-028_Module_Intelligence_Conversationnelle.md)
 - Phase 3 navigateur : [mohhdy_us_phase3_web_runtime.md](mohhdy_us_phase3_web_runtime.md)

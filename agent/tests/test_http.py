@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fumee HTTP ASSIST-010/011/012/030/031/040/041 (stdlib, sans Docker, hors make ci)."""
+"""Fumee HTTP ASSIST-010/011/012/020/021/022/030/031/040/041 (stdlib, sans Docker, hors make ci)."""
 
 from __future__ import annotations
 
@@ -65,8 +65,7 @@ class AgentHttpSmoke(unittest.TestCase):
         cls.thread.join(timeout=2)
 
     def setUp(self) -> None:
-        self.httpd.store.clear()
-        self.httpd.policy.reset_runtime()
+        self.httpd.reset_runtime()
 
     def _get(self, path: str, headers: dict | None = None):
         req = urllib.request.Request(self.base + path, headers=headers or {})
@@ -109,6 +108,14 @@ class AgentHttpSmoke(unittest.TestCase):
         except urllib.error.HTTPError as err:
             return json.loads(err.read().decode("utf-8")), err.code
 
+    def test_no_playwright_dependency(self) -> None:
+        self.assertNotIn("playwright", sys.modules)
+        source = (ROOT / "server.py").read_text(encoding="utf-8")
+        self.assertNotIn("playwright", source.lower())
+        tools_src = (ROOT / "tools.py").read_text(encoding="utf-8")
+        self.assertNotIn("from playwright", tools_src)
+        self.assertNotIn("import playwright", tools_src)
+
     def test_health_json(self) -> None:
         body, status, headers = self._get_json("/health")
         self.assertEqual(status, 200)
@@ -118,6 +125,7 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertEqual(body["llm"], "stub_echo")
         self.assertEqual(body["admin_auth"], "open_stub")
         self.assertFalse(body["kb_loaded"])
+        self.assertEqual(body["harness"], "dom_simulator")
         self.assertNotIn("ADMIN_TOKEN", json.dumps(body))
         self.assertNotIn("acl.", json.dumps(body))
 
@@ -169,6 +177,7 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertIn("/admin", html)
         self.assertIn("/embed.js", html)
         self.assertIn("/demo", html)
+        self.assertIn("/demo-app", html)
         self.assertIn("/api/sessions", html)
 
     def test_unknown_is_json_404(self) -> None:
@@ -330,27 +339,236 @@ class AgentHttpSmoke(unittest.TestCase):
         ids = [row["session_id"] for row in listing["sessions"]]
         self.assertIn(sid, ids)
 
-    def test_grant_then_revoke_placeholder_tool(self) -> None:
+    def test_grant_then_revoke_gesture_tool(self) -> None:
         created, _, _ = self._post_json("/api/sessions", {"site_id": "grant_revoke"})
         sid = created["session_id"]
         self._post_json(
             "/api/admin/sessions/%s/capabilities" % sid,
             {"grant": ["dom.click"]},
         )
-        placeholder, code = self._post_status(
-            "/api/sessions/%s/tools" % sid, {"tool": "dom.click"}
+        origin = self.base
+        clicked, code = self._post_status(
+            "/api/sessions/%s/tools" % sid,
+            {"tool": "dom.click", "origin": origin, "args": {"selector": "#menu-toggle"}},
         )
-        self.assertEqual(code, 501)
-        self.assertEqual(placeholder["error"], "tool_not_implemented")
+        self.assertEqual(code, 200)
+        self.assertTrue(clicked["ok"])
+        self.assertEqual(clicked["harness"], "dom_simulator")
+        self.assertTrue(clicked["result"]["dom"]["menu_open"])
         self._post_json(
             "/api/admin/sessions/%s/capabilities" % sid,
             {"revoke": ["dom.click"]},
         )
         denied, code = self._post_status(
-            "/api/sessions/%s/tools" % sid, {"tool": "dom.click"}
+            "/api/sessions/%s/tools" % sid,
+            {"tool": "dom.click", "origin": origin, "args": {"selector": "#menu-toggle"}},
         )
         self.assertEqual(code, 403)
         self.assertEqual(denied["error"], "capability_denied")
+        self.assertTrue(denied["escalate"])
+
+    def test_demo_app_page_has_menu_and_form(self) -> None:
+        with self._get("/demo-app") as resp:
+            self.assertEqual(resp.status, 200)
+            html = resp.read().decode("utf-8")
+        self.assertIn("id=\"menu-toggle\"", html)
+        self.assertIn("id=\"invoice-customer\"", html)
+        self.assertIn("simulateur DOM", html)
+        self.assertIn("Pas Chromium", html)
+        self.assertIn("mcp.invoice.create", html)
+        lowered = html.lower()
+        self.assertNotIn("api_key", lowered)
+
+    def test_gesture_updates_demo_state(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "gesture_site"})
+        sid = created["session_id"]
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"grant": ["dom.click", "dom.type", "pointer.move"]},
+        )
+        origin = self.base
+        self._post_json(
+            "/api/sessions/%s/tools" % sid,
+            {"tool": "dom.click", "origin": origin, "args": {"selector": "#menu-toggle"}},
+        )
+        state, status, _ = self._get_json("/api/demo-app/state")
+        self.assertEqual(status, 200)
+        self.assertEqual(state["harness"], "dom_simulator")
+        self.assertTrue(state["menu_open"])
+        self._post_json(
+            "/api/sessions/%s/tools" % sid,
+            {
+                "tool": "dom.type",
+                "origin": origin,
+                "args": {"selector": "#invoice-customer", "text": "Ada Lovelace"},
+            },
+        )
+        self._post_json(
+            "/api/sessions/%s/tools" % sid,
+            {"tool": "pointer.move", "origin": origin, "args": {"x": 40, "y": 80}},
+        )
+        state, _, _ = self._get_json("/api/demo-app/state")
+        self.assertEqual(state["form"]["customer"], "Ada Lovelace")
+        self.assertEqual(state["pointer"]["x"], 40)
+        self.assertEqual(state["pointer"]["y"], 80)
+        self.assertTrue(state["last_request_id"])
+
+    def test_foreign_origin_refused_with_request_id(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "origin_site"})
+        sid = created["session_id"]
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"grant": ["dom.click"]},
+        )
+        before, _, _ = self._get_json("/api/demo-app/state")
+        denied, code = self._post_status(
+            "/api/sessions/%s/tools" % sid,
+            {
+                "tool": "dom.click",
+                "origin": "https://evil.example",
+                "args": {"selector": "#menu-toggle"},
+            },
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "origin_denied")
+        self.assertEqual(denied["origin"], "https://evil.example")
+        self.assertTrue(denied["request_id"])
+        uuid.UUID(denied["request_id"])
+        after, _, _ = self._get_json("/api/demo-app/state")
+        self.assertEqual(after["menu_open"], before["menu_open"])
+        journal, _, _ = self._get_json("/api/admin/journal")
+        ids = [row["request_id"] for row in journal["journal"]]
+        self.assertIn(denied["request_id"], ids)
+        match = [row for row in journal["journal"] if row["request_id"] == denied["request_id"]]
+        self.assertEqual(match[0]["outcome"], "origin_denied")
+        fetched, _, _ = self._get_json("/api/sessions/" + sid)
+        self.assertEqual(fetched["status"], "waiting_human")
+        joined = " ".join(item["content"] for item in fetched["messages"])
+        self.assertIn(denied["request_id"], joined)
+
+    def test_invoice_create_same_session_then_revoke(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "invoice_site"})
+        sid = created["session_id"]
+        denied, code = self._post_status(
+            "/api/sessions/%s/tools" % sid,
+            {
+                "tool": "mcp.invoice.create",
+                "origin": self.base,
+                "args": {"customer": "Ada", "amount": "42.00"},
+            },
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "capability_denied")
+        self.assertTrue(denied["escalate"])
+        self.assertEqual(denied["session_status"], "waiting_human")
+        listing, _, _ = self._get_json("/api/demo-app/invoices")
+        self.assertEqual(listing["invoices"], [])
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"grant": ["mcp.invoice.create"]},
+        )
+        created_inv, code = self._post_status(
+            "/api/sessions/%s/tools" % sid,
+            {
+                "tool": "mcp.invoice.create",
+                "origin": self.base,
+                "args": {"customer": "Ada", "amount": "42.00"},
+            },
+        )
+        self.assertEqual(code, 200)
+        invoice = created_inv["result"]["invoice"]
+        self.assertEqual(invoice["session_id"], sid)
+        self.assertEqual(invoice["customer"], "Ada")
+        self.assertEqual(invoice["amount"], "42.00")
+        listed, _, _ = self._get_json("/api/demo-app/invoices?session_id=" + sid)
+        ids = [row["invoice_id"] for row in listed["invoices"]]
+        self.assertIn(invoice["invoice_id"], ids)
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"revoke": ["mcp.invoice.create"]},
+        )
+        again, code = self._post_status(
+            "/api/sessions/%s/tools" % sid,
+            {
+                "tool": "mcp.invoice.create",
+                "origin": self.base,
+                "args": {"customer": "Ada", "amount": "99.00"},
+            },
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(again["error"], "capability_denied")
+        listed2, _, _ = self._get_json("/api/demo-app/invoices?session_id=" + sid)
+        self.assertEqual(len(listed2["invoices"]), 1)
+
+    def test_undeclared_mcp_tool_refused(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "mcp_absent"})
+        sid = created["session_id"]
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"grant": ["mcp.not_registered"]},
+        )
+        denied, code = self._post_status(
+            "/api/sessions/%s/tools" % sid,
+            {"tool": "mcp.not_registered", "origin": self.base},
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "tool_undeclared")
+        self.assertTrue(denied["request_id"])
+        self.assertTrue(denied["escalate"])
+
+    def test_invoice_from_form_state(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "form_inv"})
+        sid = created["session_id"]
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"grant": ["dom.type", "mcp.invoice.create"]},
+        )
+        origin = self.base
+        self._post_json(
+            "/api/sessions/%s/tools" % sid,
+            {
+                "tool": "dom.type",
+                "origin": origin,
+                "args": {"selector": "#invoice-customer", "text": "Grace Hopper"},
+            },
+        )
+        self._post_json(
+            "/api/sessions/%s/tools" % sid,
+            {
+                "tool": "dom.type",
+                "origin": origin,
+                "args": {"selector": "#invoice-amount", "text": "12.50"},
+            },
+        )
+        created_inv, code = self._post_status(
+            "/api/sessions/%s/tools" % sid,
+            {"tool": "mcp.invoice.create", "origin": origin, "args": {}},
+        )
+        self.assertEqual(code, 200)
+        invoice = created_inv["result"]["invoice"]
+        self.assertEqual(invoice["session_id"], sid)
+        self.assertEqual(invoice["customer"], "Grace Hopper")
+        self.assertEqual(invoice["amount"], "12.50")
+
+    def test_admin_catalog_lists_gestures_and_invoice(self) -> None:
+        body, status, _ = self._get_json("/api/admin/capabilities")
+        self.assertEqual(status, 200)
+        names = [row["name"] for row in body["capabilities"]]
+        self.assertIn("dom.click", names)
+        self.assertIn("mcp.invoice.create", names)
+        kinds = {row["name"]: row["kind"] for row in body["capabilities"]}
+        self.assertEqual(kinds["dom.click"], "gesture")
+        self.assertEqual(kinds["mcp.invoice.create"], "mcp")
+        self.assertEqual(body["harness"], "dom_simulator")
+        self.assertIn("mcp.invoice.create", body["declared_tools"])
+
+    def test_admin_shell_has_queue_and_takeover(self) -> None:
+        with self._get("/admin") as resp:
+            html = resp.read().decode("utf-8")
+        self.assertIn("File humain", html)
+        self.assertIn("Prendre la main", html)
+        self.assertIn("/takeover", html)
+        self.assertIn("mohhdy-journal", html)
 
     def test_internal_acl_prefix_rejected(self) -> None:
         created, _, _ = self._post_json("/api/sessions", {"site_id": "acl_site"})
@@ -457,13 +675,6 @@ class AgentHttpSmoke(unittest.TestCase):
         created, _, _ = self._post_json("/api/sessions", {"site_id": "limited_site"})
         self.assertNotIn("site.explain", created["capabilities"])
 
-    def test_admin_shell_has_queue_and_takeover(self) -> None:
-        with self._get("/admin") as resp:
-            html = resp.read().decode("utf-8")
-        self.assertIn("File humain", html)
-        self.assertIn("Prendre la main", html)
-        self.assertIn("/takeover", html)
-
     def test_unknown_session_404(self) -> None:
         missing = str(uuid.uuid4())
         with self.assertRaises(urllib.error.HTTPError) as ctx:
@@ -505,6 +716,29 @@ class AgentHttpSmoke(unittest.TestCase):
                 with urllib.request.urlopen(req, timeout=2) as resp:
                     created = json.loads(resp.read().decode("utf-8"))
                 session_id = created["session_id"]
+                grant = urllib.request.Request(
+                    base + "/api/admin/sessions/%s/capabilities" % session_id,
+                    data=json.dumps({"grant": ["mcp.invoice.create"]}).encode("utf-8"),
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(grant, timeout=2):
+                    pass
+                inv_req = urllib.request.Request(
+                    base + "/api/sessions/%s/tools" % session_id,
+                    data=json.dumps(
+                        {
+                            "tool": "mcp.invoice.create",
+                            "origin": base,
+                            "args": {"customer": "Persist", "amount": "7.00"},
+                        }
+                    ).encode("utf-8"),
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(inv_req, timeout=2) as resp:
+                    created_inv = json.loads(resp.read().decode("utf-8"))
+                invoice_id = created_inv["result"]["invoice"]["invoice_id"]
                 httpd.shutdown()
                 httpd.server_close()
                 thread.join(timeout=2)
@@ -519,6 +753,13 @@ class AgentHttpSmoke(unittest.TestCase):
                     restored = json.loads(resp.read().decode("utf-8"))
                 self.assertEqual(restored["session_id"], session_id)
                 self.assertEqual(restored["site_id"], "persist_site")
+                with urllib.request.urlopen(
+                    base2 + "/api/demo-app/invoices?session_id=" + session_id,
+                    timeout=2,
+                ) as resp:
+                    invoices = json.loads(resp.read().decode("utf-8"))
+                ids = [row["invoice_id"] for row in invoices["invoices"]]
+                self.assertIn(invoice_id, ids)
         finally:
             if previous is None:
                 os.environ.pop("MOHHDY_AGENT_DATA", None)

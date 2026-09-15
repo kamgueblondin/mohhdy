@@ -144,6 +144,6 @@ Ouvrir `http://127.0.0.1:8080/admin` : la session apparaît.
 ## Non livré
 
 - LLM de production, GGUF, fournisseur public
-- Gestes navigateur et outils MCP exécutés (ASSIST-020 / 021 / 022)
+- Playwright / Chromium (gestes = simulateur : [assist020_gestes_mcp.md](assist020_gestes_mcp.md))
 - Auth par site, comptes opérateurs, HTTPS terminé dans l'image
 - Noyau Multiboot dans le conteneur

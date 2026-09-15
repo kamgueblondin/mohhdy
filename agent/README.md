@@ -1,16 +1,18 @@
-# Runtime agent MOHHDY (ASSIST-050 + sessions + droits)
+# Runtime agent MOHHDY (ASSIST-050 + sessions + droits + simulateur)
 
 Arborescence parallèle au prototype i386. Origine HTTP, widget d'embed,
 sessions visiteur isolees, base autorisee locale, masque de droits,
-escalade et handoff humain. Les reponses sont un **stub local** (echo
-ou extraits de KB), pas un LLM de production. Pas d'appel OpenAI. Pas
-le noyau Multiboot.
+escalade, handoff humain, simulateur de gestes DOM et facture mock.
+Les reponses sont un **stub local** (echo ou extraits de KB), pas un
+LLM de production. Pas d'appel OpenAI. Pas Chromium. Pas le noyau
+Multiboot.
 
 Guides :
 
 - [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md)
 - [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md)
 - [../docs/assist012_droits_handoff.md](../docs/assist012_droits_handoff.md)
+- [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md)
 
 Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
 

@@ -13,7 +13,8 @@ Spec produit : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_we
 
 Ce n'est **pas** un LLM de production. Ce n'est **pas** le noyau i386.
 Aucun appel OpenAI public. Aucun secret dans l'image ni dans `embed.js`.
-Les actes navigateur (ASSIST-020) ne sont **pas** exécutés.
+Les actes navigateur de cette tranche sont un **simulateur DOM**
+(ASSIST-020), pas Chromium. Détail : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
 
 ## Configuration (KB + allowlist)
 
@@ -59,8 +60,7 @@ admin.observe
 admin.takeover
 ```
 
-Placeholders (accordables, **non exécutés**) : `dom.click`, `dom.type`,
-`pointer.move`, `mcp.*`.
+Placeholders restants : un `mcp.*` déclaré mais sans runner.
 
 ## Droits (ASSIST-030)
 
@@ -68,14 +68,14 @@ Grant / limit / revoke via l'API admin (jeton `ADMIN_TOKEN` si défini) :
 
 | Route | Rôle |
 |---|---|
-| `GET /api/admin/capabilities` | Catalogue (session / admin / placeholder) |
+| `GET /api/admin/capabilities` | Catalogue (session / admin / gesture / mcp) |
 | `GET /api/admin/sites/{site_id}/capabilities` | Allowlist du site (nouvelles sessions) |
 | `POST /api/admin/sites/{site_id}/capabilities` | `{grant, revoke, set}` |
 | `POST /api/admin/sessions/{id}/capabilities` | Même contrat, **cette** session |
 | `POST /api/sessions/{id}/tools` | Tentative d'outil visiteur |
 
 Le widget (`GET /api/sessions/{id}`) reçoit un diagnostic public :
-`chat.reply`, `site.explain`, `session.escalate`, et les placeholders
+`chat.reply`, `site.explain`, `session.escalate`, et les gestes / MCP
 accordés. Il **ne** reçoit **pas** `admin.observe`, `admin.takeover`,
 ni de préfixe interne `acl.` / `internal.`. Accorder `acl.*` est rejeté
 (400).
@@ -83,7 +83,8 @@ ni de préfixe interne `acl.` / `internal.`. Accorder `acl.*` est rejeté
 Preuves négatives :
 
 - Outil absent ou révoqué : `403 capability_denied`, acte non exécuté.
-- Placeholder accordé : `501 tool_not_implemented`, aucun geste.
+- Origine étrangère : `403 origin_denied` + `request_id` (simulateur).
+- MCP non déclaré : `403 tool_undeclared`.
 - `chat.reply` révoqué : l'agent refuse de répondre, sans inventer un droit.
 
 Une tentative hors allowlist place la session en `waiting_human`
@@ -144,9 +145,9 @@ make agent-smoke
 ```
 
 Couvre isolation de deux sessions, refus KB vide, ancrage KB, révocation
-d'outil, escalade, handoff sur le même `session_id`, absence de secret et
-de préfixe ACL dans `embed.js`. Hors `make ci` AOS QEMU : job parallèle
-`agent-http-smoke`.
+d'outil, gestes simulateur, origine étrangère, facture, escalade, handoff
+sur le même `session_id`, absence de secret et de préfixe ACL dans
+`embed.js`. Hors `make ci` AOS QEMU : job parallèle `agent-http-smoke`.
 
 Contre une origine déjà lancée :
 
@@ -161,7 +162,7 @@ Ouvrir `http://127.0.0.1:8080/admin` : file, takeover, réponse.
 ## Non livré
 
 - LLM de production, GGUF, fournisseur public
-- Gestes navigateur et outils MCP exécutés (ASSIST-020 / 021 / 022)
+- Playwright / Chromium (les gestes sont un simulateur : [assist020_gestes_mcp.md](assist020_gestes_mcp.md))
 - Auth par site, comptes opérateurs, HTTPS terminé dans l'image
 - Refus automatique d'origine document vs site déclaré (reste ouvert)
 - Noyau Multiboot dans le conteneur
