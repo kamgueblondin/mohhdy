@@ -29,8 +29,9 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 | Fichier | Contenu |
 |---|---|
 | [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Prochaines tranches : prototype AOS 0-4, puis track Agent Support |
-| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo livrés (stub local, pas Chromium) |
+| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo livrés (stub local, pas Chromium). Packaging 051-053 : scaffold |
 | [assist050_docker_runtime.md](assist050_docker_runtime.md) | Image Docker / HTTP agent : build, `docker run`, fumée |
+| [assist051_052_053_deploy.md](assist051_052_053_deploy.md) | Install PC, hyperviseur QEMU/cloud-init, mode hosted non-billing |
 | [assist010_sessions_admin.md](assist010_sessions_admin.md) | Sessions visiteur, embed, admin `ADMIN_TOKEN`, snippet CSP |
 | [assist012_droits_handoff.md](assist012_droits_handoff.md) | KB locale, droits, escalade, handoff |
 | [assist020_gestes_mcp.md](assist020_gestes_mcp.md) | Gestes simulateur, outils MCP, facture mock |

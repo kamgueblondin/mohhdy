@@ -51,6 +51,8 @@ class AgentHttpSmoke(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_DATA", None)
         os.environ.pop("MOHHDY_AGENT_CONFIG", None)
         os.environ.pop("MOHHDY_AGENT_KB", None)
+        os.environ.pop("MOHHDY_AGENT_MODE", None)
+        os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.port = cls.httpd.server_address[1]
         cls.base = "http://127.0.0.1:%d" % cls.port
@@ -126,6 +128,12 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertEqual(body["admin_auth"], "open_stub")
         self.assertFalse(body["kb_loaded"])
         self.assertEqual(body["harness"], "dom_simulator")
+        self.assertEqual(body["deployment_mode"], "self_host")
+        self.assertEqual(body["billing"], "none")
+        self.assertEqual(body["default_site_id"], "unspecified")
+        self.assertFalse(body["quota"]["billing"])
+        self.assertFalse(body["quota"]["enforced"])
+        self.assertEqual(body["quota"]["max_sessions"], 500)
         self.assertNotIn("ADMIN_TOKEN", json.dumps(body))
         self.assertNotIn("acl.", json.dumps(body))
 
@@ -782,6 +790,8 @@ class AgentAdminToken(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_DATA", None)
         os.environ.pop("MOHHDY_AGENT_CONFIG", None)
         os.environ.pop("MOHHDY_AGENT_KB", None)
+        os.environ.pop("MOHHDY_AGENT_MODE", None)
+        os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.port = cls.httpd.server_address[1]
         cls.base = "http://127.0.0.1:%d" % cls.port
@@ -906,6 +916,8 @@ class AgentKbGrounding(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_KB", None)
         os.environ.pop("ADMIN_TOKEN", None)
         os.environ.pop("MOHHDY_AGENT_DATA", None)
+        os.environ.pop("MOHHDY_AGENT_MODE", None)
+        os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.base = "http://127.0.0.1:%d" % cls.httpd.server_address[1]
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
@@ -994,6 +1006,126 @@ class AgentKbGrounding(unittest.TestCase):
         self.assertEqual(posted["llm"], "stub_refusal")
         self.assertIn("site.explain", posted["agent_message"]["content"])
         self.assertNotIn("support de demonstration", posted["agent_message"]["content"])
+
+
+class AgentDeployScaffold(unittest.TestCase):
+    """ASSIST-053 : mode hosted / quotas, sans facturation ni appel payant."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        cfg = Path(cls._tmp.name) / "hosted.json"
+        cfg.write_text(
+            json.dumps(
+                {
+                    "deployment": {"mode": "hosted", "billing": "stripe-ignored"},
+                    "instance": {"site_id": "tenant_alpha"},
+                    "quota": {
+                        "billing": True,
+                        "enforced": True,
+                        "max_sessions": 12,
+                        "max_sites": 3,
+                        "max_messages_per_session": 9,
+                    },
+                    "sites": {
+                        "tenant_alpha": {
+                            "capabilities": [
+                                "chat.reply",
+                                "site.explain",
+                                "session.escalate",
+                            ]
+                        },
+                        "tenant_beta": {
+                            "capabilities": ["chat.reply", "session.escalate"]
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        cls._prev = {
+            "MOHHDY_AGENT_CONFIG": os.environ.get("MOHHDY_AGENT_CONFIG"),
+            "MOHHDY_AGENT_KB": os.environ.get("MOHHDY_AGENT_KB"),
+            "MOHHDY_AGENT_MODE": os.environ.get("MOHHDY_AGENT_MODE"),
+            "MOHHDY_AGENT_SITE_ID": os.environ.get("MOHHDY_AGENT_SITE_ID"),
+            "ADMIN_TOKEN": os.environ.get("ADMIN_TOKEN"),
+            "MOHHDY_AGENT_DATA": os.environ.get("MOHHDY_AGENT_DATA"),
+        }
+        os.environ["MOHHDY_AGENT_CONFIG"] = str(cfg)
+        os.environ.pop("MOHHDY_AGENT_KB", None)
+        os.environ.pop("MOHHDY_AGENT_MODE", None)
+        os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
+        os.environ.pop("ADMIN_TOKEN", None)
+        os.environ.pop("MOHHDY_AGENT_DATA", None)
+        cls.httpd = server.make_server("127.0.0.1", 0)
+        cls.base = "http://127.0.0.1:%d" % cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+        _wait_ready(cls.base)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.thread.join(timeout=2)
+        for key, value in cls._prev.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        cls._tmp.cleanup()
+
+    def test_hosted_mode_is_non_billing(self) -> None:
+        with urllib.request.urlopen(self.base + "/health", timeout=2) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+        self.assertEqual(body["deployment_mode"], "hosted")
+        self.assertEqual(body["billing"], "none")
+        self.assertEqual(body["default_site_id"], "tenant_alpha")
+        self.assertFalse(body["quota"]["billing"])
+        self.assertFalse(body["quota"]["enforced"])
+        self.assertEqual(body["quota"]["max_sessions"], 12)
+        self.assertEqual(body["quota"]["max_sites"], 3)
+        self.assertIn("pas une facturation", body["quota"]["note"])
+        dumped = json.dumps(body).lower()
+        self.assertNotIn("stripe", dumped)
+        self.assertNotIn("sk_live", dumped)
+
+    def test_admin_status_lists_tenants(self) -> None:
+        with urllib.request.urlopen(self.base + "/api/admin/status", timeout=2) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+        ids = [row["site_id"] for row in body["tenants"]]
+        self.assertIn("tenant_alpha", ids)
+        self.assertIn("tenant_beta", ids)
+        self.assertEqual(body["billing"], "none")
+        self.assertEqual(body["deployment_mode"], "hosted")
+
+    def test_env_overrides_mode_and_site(self) -> None:
+        os.environ["MOHHDY_AGENT_MODE"] = "self_host"
+        os.environ["MOHHDY_AGENT_SITE_ID"] = "from_env"
+        self.httpd.reset_runtime()
+        try:
+            with urllib.request.urlopen(self.base + "/health", timeout=2) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(body["deployment_mode"], "self_host")
+            self.assertEqual(body["default_site_id"], "from_env")
+        finally:
+            os.environ.pop("MOHHDY_AGENT_MODE", None)
+            os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
+            self.httpd.reset_runtime()
+
+    def test_no_paid_network_helpers(self) -> None:
+        source = (ROOT / "server.py").read_text(encoding="utf-8")
+        lowered = source.lower()
+        self.assertNotIn("stripe", lowered)
+        self.assertNotIn("paypal", lowered)
+        self.assertNotIn("openai.com", lowered)
+        packaging = ROOT / "packaging"
+        for path in packaging.rglob("*"):
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("sk_live", text)
+            self.assertNotIn("BEGIN PRIVATE KEY", text)
 
 
 if __name__ == "__main__":

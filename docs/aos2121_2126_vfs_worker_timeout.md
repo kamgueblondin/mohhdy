@@ -31,7 +31,7 @@ Le contrat `make qemu-vfs-service` suspend explicitement le worker tout en conse
 | Preuve | Signification |
 |---|---|
 | `vfsserver delegated vfs-info` | La transaction privée a bien été soumise. |
-| `vfsserver virtual worker timeout local` | Le budget de huit tours a expiré malgré un PID toujours publié. |
+| `vfsserver virtual worker timeout local` | Le budget de huit tours a expiré malgré un PID toujours publié. Le médiateur émet ce marqueur **avant** `ipc_send`, car l'envoi peut céder le processeur au client. |
 | `vfsflight local reply ok` | La réponse locale corrélée atteint le client en attente. |
 | `ready pid=<PID> recoveries=0 timeouts=1` | Le worker est toujours enregistré et seul le compteur de silence a augmenté. |
 | `task-resume` puis nouvelle lecture déléguée | La reprise du worker permet de revenir au chemin IPC normal. |

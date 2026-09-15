@@ -640,7 +640,7 @@ ci: all test-all qemu-smoke qemu-ne2k-tls-multipair
 	@echo "=== CI locale OK (build + tests + smokes QEMU locaux) ==="
 
 # Runtime HTTP agent (stdlib). Hors ci / integration-qemu.
-.PHONY: agent-smoke agent-docker
+.PHONY: agent-smoke agent-docker agent-install-check agent-hypervisor-dry-run agent-deploy-check
 agent-smoke:
 	@python3 agent/tests/test_http.py
 
@@ -654,6 +654,15 @@ agent-docker:
 	@echo "Image mohhdy-agent prete."
 	@echo "Lancer : docker run --rm -p 8080:8080 mohhdy-agent"
 	@echo "Admin :  docker run --rm -p 8080:8080 -e ADMIN_TOKEN=... mohhdy-agent"
+
+agent-install-check:
+	@bash agent/scripts/install.sh --check
+
+agent-hypervisor-dry-run:
+	@bash agent/scripts/hypervisor-dry-run.sh
+
+agent-deploy-check: agent-install-check agent-hypervisor-dry-run
+	@echo "=== Packaging agent OK (install native + dry-run hyperviseur, hors ci) ==="
 
 # Cible pour afficher l'aide
 help:
@@ -703,6 +712,9 @@ help:
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
 	@echo "  agent-smoke     - Fumee HTTP agent (gestes simulateur, MCP, facture ; hors ci / QEMU)"
 	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent (optionnel, hors ci)"
+	@echo "  agent-install-check - Install native temporaire + /health (ASSIST-051, hors ci)"
+	@echo "  agent-hypervisor-dry-run - Valide cloud-init/QEMU agent, sans boot (ASSIST-052, hors ci)"
+	@echo "  agent-deploy-check - install-check + hypervisor-dry-run (hors ci)"
 	@echo "  test-performance - Benchmarks et tests de performance"
 	@echo "  test-valgrind   - Tests avec détection fuites mémoire"
 	@echo "  pre-commit-tests - Tests rapides avant commit"

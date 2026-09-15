@@ -47,7 +47,7 @@ def wait_for(proc, needle, timeout, start=0):
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             raise RuntimeError("QEMU stopped unexpectedly; log tail:\n%s" % log_text()[-2000:])
-        if needle in log_text()[start:]:
+        if needle in normalized_log(log_text()[start:]):
             # Let the shell reach the next SYS_GETS before the next command.
             time.sleep(0.35)
             return
@@ -99,7 +99,21 @@ def normalized_log(output):
     output = re.sub(r"TIMER_ALIVE: tick=\d+\+?\r?\n(?=\w)", "", output)
     output = re.sub(r"TIMER_ALIVE: tick=\d+\+?\r?\n(?=\s+\w)", "", output)
     output = re.sub(r"TIMER_ALIVE: tick=\d+\+?", "", output)
+    # [SCHED] peut couper un marqueur metier (ex. FAT16 fixture OK).
+    output = re.sub(r"\[SCHED\] switching to task \d+\r?\n?", "", output)
     return output
+
+
+def _self_check_normalized_log():
+    sample = (
+        "vfs-read ok 17 request 2 data F[SCHED] switching to task 4\n"
+        "[SCHED] switching to task 5\n"
+        "[SCHED] switching to task 1\n"
+        "AT16 fixture OK\n"
+    )
+    joined = normalized_log(sample)
+    if "FAT16 fixture OK" not in joined:
+        raise AssertionError("normalized_log doit recoller FAT16 fixture OK, obtenu %r" % joined)
 
 
 def send_key(client, key):
@@ -181,6 +195,7 @@ def terminate(proc):
 
 
 def main():
+    _self_check_normalized_log()
     if not os.path.isfile(KERNEL) or not os.path.isfile(INITRD):
         raise RuntimeError("missing build artefacts; run make all first")
     os.makedirs(LOG_DIR, exist_ok=True)

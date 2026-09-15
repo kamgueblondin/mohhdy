@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Runtime HTTP agent MOHHDY (ASSIST-050 + 010..022/030/031/040/041).
+"""Runtime HTTP agent MOHHDY (ASSIST-050 + 010..022/030/031/040/041 + 051/053).
 
 Sert l'origine d'embed, des sessions visiteur isolees, une KB locale, un
 masque de droits, l'escalade, le handoff, un simulateur de gestes DOM sur
 une origine allowlistee, des outils MCP declares et une appli hote mock
-(facture). Ce n'est pas un LLM de production, pas d'appel OpenAI, pas
-Chromium, et ce n'est pas le noyau Multiboot i386.
+(facture). Modes self-host / hosted (scaffold, pas de facturation).
+Ce n'est pas un LLM de production, pas d'appel OpenAI, pas Chromium,
+et ce n'est pas le noyau Multiboot i386.
 """
 
 from __future__ import annotations
@@ -40,6 +41,11 @@ MAX_BODY_BYTES = 16384
 MAX_CONTENT_CHARS = 4000
 MAX_MESSAGES = 100
 MAX_SESSIONS = 500
+MAX_SITES_PLACEHOLDER = 32
+MODE_SELF_HOST = "self_host"
+MODE_HOSTED = "hosted"
+VALID_DEPLOYMENT_MODES = (MODE_SELF_HOST, MODE_HOSTED)
+BILLING_NONE = "none"
 SITE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 SESSION_ID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -182,6 +188,62 @@ def env_port() -> int:
 
 def env_admin_token() -> str:
     return os.environ.get("ADMIN_TOKEN") or ""
+
+
+def normalize_deployment_mode(raw: Any) -> Optional[str]:
+    """self_host | hosted. Toute autre valeur est ignoree (pas de SaaS implicite)."""
+    if raw is None:
+        return None
+    text = str(raw).strip().lower().replace("-", "_")
+    if not text:
+        return None
+    if text in ("self_host", "selfhost"):
+        return MODE_SELF_HOST
+    if text in ("hosted", "cloud", "cloud_hosted"):
+        return MODE_HOSTED
+    return None
+
+
+def env_deployment_mode() -> Optional[str]:
+    return normalize_deployment_mode(os.environ.get("MOHHDY_AGENT_MODE"))
+
+
+def env_instance_site_id() -> Optional[str]:
+    raw = (os.environ.get("MOHHDY_AGENT_SITE_ID") or "").strip()
+    if not raw:
+        return None
+    try:
+        return normalize_site_id(raw)
+    except ValueError:
+        return None
+
+
+def default_quota() -> dict[str, Any]:
+    return {
+        "billing": False,
+        "enforced": False,
+        "max_sessions": MAX_SESSIONS,
+        "max_sites": MAX_SITES_PLACEHOLDER,
+        "max_messages_per_session": MAX_MESSAGES,
+        "note": "placeholder ASSIST-053, pas une facturation",
+    }
+
+
+def parse_quota_payload(raw: Any) -> dict[str, Any]:
+    quota = default_quota()
+    if not isinstance(raw, dict):
+        return quota
+    for key in ("max_sessions", "max_sites", "max_messages_per_session"):
+        value = raw.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int) and value > 0:
+            quota[key] = value
+    # Jamais True : ce n'est pas un moteur de billing.
+    quota["billing"] = False
+    quota["enforced"] = False
+    quota["note"] = "placeholder ASSIST-053, pas une facturation"
+    return quota
 
 
 def env_data_dir() -> Optional[Path]:
@@ -448,6 +510,10 @@ class PolicyStore:
         )
         self.config_loaded = False
         self.kb_loaded = False
+        self.deployment_mode = MODE_SELF_HOST
+        self.billing = BILLING_NONE
+        self.default_site_id = "unspecified"
+        self.quota = default_quota()
         self._config_path = ""
         self._kb_path = ""
 
@@ -460,6 +526,17 @@ class PolicyStore:
             self.apply_config_file(Path(config_raw))
         if kb_raw:
             self.apply_kb_file(Path(kb_raw))
+        self.apply_env_overrides()
+
+    def apply_env_overrides(self) -> None:
+        """MOHHDY_AGENT_MODE / MOHHDY_AGENT_SITE_ID priment sur le JSON."""
+        mode_env = env_deployment_mode()
+        site_env = env_instance_site_id()
+        with self._lock:
+            if mode_env:
+                self.deployment_mode = mode_env
+            if site_env:
+                self.default_site_id = site_env
 
     def reset_runtime(self) -> None:
         with self._lock:
@@ -472,6 +549,10 @@ class PolicyStore:
             self._declared_tools = dict(agent_tools.DEFAULT_DECLARED_TOOLS)
             self.config_loaded = False
             self.kb_loaded = False
+            self.deployment_mode = MODE_SELF_HOST
+            self.billing = BILLING_NONE
+            self.default_site_id = "unspecified"
+            self.quota = default_quota()
         self.load_from_env()
 
     def apply_config_file(self, path: Path) -> None:
@@ -539,6 +620,28 @@ class PolicyStore:
             if top_kb:
                 self._default_kb = top_kb
                 self.kb_loaded = True
+            deployment = payload.get("deployment")
+            if isinstance(deployment, dict):
+                mode = normalize_deployment_mode(deployment.get("mode"))
+                if mode:
+                    self.deployment_mode = mode
+            instance = payload.get("instance")
+            if isinstance(instance, dict):
+                try:
+                    site = normalize_site_id(instance.get("site_id"))
+                except ValueError:
+                    site = "unspecified"
+                if site != "unspecified":
+                    self.default_site_id = site
+            elif isinstance(payload.get("site_id"), str):
+                try:
+                    site = normalize_site_id(payload.get("site_id"))
+                except ValueError:
+                    site = "unspecified"
+                if site != "unspecified":
+                    self.default_site_id = site
+            self.quota = parse_quota_payload(payload.get("quota"))
+            self.billing = BILLING_NONE
             self.config_loaded = True
 
     def apply_kb_file(self, path: Path) -> None:
@@ -629,6 +732,13 @@ class PolicyStore:
                 "declared_tools": sorted(self._declared_tools),
                 "allowed_origins": list(self.allowed_origins),
                 "harness": HARNESS_KIND,
+                "deployment_mode": self.deployment_mode,
+                "billing": self.billing,
+                "default_site_id": self.default_site_id,
+                "quota": dict(self.quota),
+                "tenants": [
+                    {"site_id": site_id, "kind": "config_site"} for site_id in sites
+                ],
             }
 
 
@@ -1233,7 +1343,7 @@ class AgentHTTPServer(ThreadingHTTPServer):
 
 
 class AgentHandler(BaseHTTPRequestHandler):
-    server_version = "MOHHDY-Agent/0.4"
+    server_version = "MOHHDY-Agent/0.5"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write(
@@ -1291,6 +1401,10 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "admin_auth": admin_auth_mode(),
                     "kb_loaded": policy_status["kb_loaded"],
                     "harness": HARNESS_KIND,
+                    "deployment_mode": policy_status["deployment_mode"],
+                    "billing": policy_status["billing"],
+                    "default_site_id": policy_status["default_site_id"],
+                    "quota": policy_status["quota"],
                 },
                 send_body=send_body,
             )
@@ -1338,6 +1452,11 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "auth": admin_auth_mode(),
                     "service": SERVICE_NAME,
                     "kb_loaded": policy_status["kb_loaded"],
+                    "deployment_mode": policy_status["deployment_mode"],
+                    "billing": policy_status["billing"],
+                    "default_site_id": policy_status["default_site_id"],
+                    "quota": policy_status["quota"],
+                    "tenants": policy_status["tenants"],
                 },
                 send_body=send_body,
             )
@@ -2126,9 +2245,10 @@ def main() -> None:
     host, port = httpd.server_address[:2]
     policy_status = httpd.policy.public_status()
     sys.stderr.write(
-        "mohhdy-agent ASSIST-020/021/022 sur http://%s:%s "
+        "mohhdy-agent ASSIST-051/052/053 sur http://%s:%s "
         "(health=/health admin=/admin embed=/embed.js demo=/demo "
-        "demo-app=/demo-app llm=%s harness=%s admin_auth=%s kb_loaded=%s)\n"
+        "demo-app=/demo-app llm=%s harness=%s admin_auth=%s kb_loaded=%s "
+        "mode=%s billing=%s)\n"
         % (
             host,
             port,
@@ -2136,6 +2256,8 @@ def main() -> None:
             HARNESS_KIND,
             admin_auth_mode(),
             "oui" if policy_status["kb_loaded"] else "non",
+            policy_status["deployment_mode"],
+            policy_status["billing"],
         )
     )
     try:

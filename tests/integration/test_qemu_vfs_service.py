@@ -957,7 +957,6 @@ def main():
             send_command(monitor, "yield", proc)
             wait_for("vfsflight waiting vfs-info", proc, before_flight_spawn)
             wait_for("vfsserver delegated vfs-info", proc, before_flight_spawn)
-            before_worker_timeout = len(log_text())
             send_command(monitor, "yield", proc)
             send_command(monitor, "yield", proc)
             send_command(monitor, "yield", proc)
@@ -967,8 +966,8 @@ def main():
             send_command(monitor, "yield", proc)
             send_command(monitor, "yield", proc)
             send_command(monitor, "yield", proc)
-            wait_for("vfsserver virtual worker timeout local", proc, before_worker_timeout, timeout=35)
-            wait_for("vfsflight local reply ok", proc, before_worker_timeout)
+            wait_for("vfsserver virtual worker timeout local", proc, before_flight_spawn, timeout=35)
+            wait_for("vfsflight local reply ok", proc, before_flight_spawn)
             before_worker_timeout_health = len(log_text())
             send_command_until(monitor, "vfs-read vfs-worker", "vfsserver virtual vfs-worker local", proc)
             wait_for("vfsvirtual ready pid=%s recoveries=0 timeouts=1" % worker_pid,

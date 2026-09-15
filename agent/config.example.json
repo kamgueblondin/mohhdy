@@ -1,4 +1,18 @@
 {
+  "deployment": {
+    "mode": "self_host",
+    "billing": "none"
+  },
+  "instance": {
+    "site_id": "site_public_demo"
+  },
+  "quota": {
+    "billing": false,
+    "enforced": false,
+    "max_sessions": 500,
+    "max_sites": 32,
+    "max_messages_per_session": 100
+  },
   "default_capabilities": [
     "chat.reply",
     "site.explain",

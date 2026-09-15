@@ -1,7 +1,7 @@
 # Track Agent Support - assistant web agentique
 
 **Date :** 15 septembre 2026
-**Statut :** spec produit. ASSIST-050/010/011/012/020/021/022/030/031/040/041 = runtime HTTP livré (stub local, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock) ; LLM de production et Chromium **pas** livrés
+**Statut :** spec produit. ASSIST-050/010/011/012/020/021/022/030/031/040/041 = runtime HTTP livré (stub local, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock). ASSIST-051/052/053 = packaging operateur (install PC, recette hyperviseur, scaffold cloud non-billing). LLM de production, Chromium et SaaS de paiement **pas** livrés
 **IDs :** `ASSIST-xxx` (ne collident ni avec `AOS-xxx` ni avec `US-xxx`)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
@@ -64,7 +64,7 @@ Si, plus tard, MOHHDY a un corps physique, les mêmes droits pourront gouverner 
 
 ## Non-objectifs (explicites)
 
-- Ne pas déclarer livrés le produit complet : LLM de production, hyperviseur, abonnement cloud, Chromium réel, ERP. Le runtime HTTP (`agent/`) n'est pas ce produit. Les gestes sont un simulateur DOM local.
+- Ne pas déclarer livrés le produit complet : LLM de production, Chromium réel, ERP, marketplace SaaS payante. Le runtime HTTP (`agent/`) n'est pas ce produit. Les gestes sont un simulateur DOM local. L'install PC / la recette hyperviseur / le mode `hosted` sont un **scaffold** de packaging, pas un abonnement facturé.
 - Ne pas déplacer le backlog AOS (CI 25 min, ACL préfixe, GGUF, stockage hors noyau) vers ce track.
 - Ne pas héberger l'embed public **dans** le noyau Multiboot i386 actuel.
 - Ne pas ouvrir TensorFlow Lite, NLU fédéré, P2P, économie de points, ou US-001 "d'un coup".
@@ -78,9 +78,9 @@ Si, plus tard, MOHHDY a un corps physique, les mêmes droits pourront gouverner 
 |---|---|---|---|
 | OS autonome existant | Prototype pédagogique i386, boot QEMU / ISO | Multiboot, shell Ring 3, GPT-2 / GGUF local, NE2000 local | **Vérifié** (AOS). N'héberge pas le widget |
 | Conteneur Docker | Véhicule principal du runtime agent + origine de l'embed + admin | Userspace Linux (ou équivalent) avec HTTP(S), file de sessions, simulateur DOM | Runtime HTTP `agent/` : embed, sessions, KB locale, droits, escalade, handoff, admin a jeton, `/demo-app`, MCP demo. Pas de LLM de production ni de Chromium |
-| Installation PC | Même runtime, package natif | Identique à Docker sur le fond, installateur en plus | Spec ASSIST-051 |
-| Hyperviseur | Image VM (QEMU/KVM, autre) du runtime agent, pas du seul hobby kernel | Identique à Docker, disque / réseau de VM | Spec ASSIST-052 |
-| Abonnement cloud hébergé | Instance opérée pour le client, même API d'embed | Multi-tenant ou instance dédiée, facturation | Spec ASSIST-053, optionnelle |
+| Installation PC | Même runtime, package natif | Identique à Docker sur le fond, installateur en plus | ASSIST-051 : `agent/scripts/install.sh`, unit systemd d'exemple |
+| Hyperviseur | Image VM (QEMU/KVM, autre) du runtime agent, pas du seul hobby kernel | Identique à Docker, disque / réseau de VM | ASSIST-052 : cloud-init + QEMU x86_64 documentés ; pas `make iso` |
+| Abonnement cloud hébergé | Instance opérée pour le client, même API d'embed | Multi-tenant ou instance dédiée, facturation | ASSIST-053 scaffold : `MOHHDY_AGENT_MODE`, `SITE_ID`, quotas placeholder. **Pas** de paiement |
 
 L'utilisateur choisit : **son** Docker / cloud, ou l'offre hébergée. Les deux exposent le même contrat d'embed et de droits. L'OS i386 reste une cible autonome distincte : il peut, plus tard, dialoguer avec une instance agent, mais ce n'est pas le chemin pour coller un script sur un site marchand.
 
@@ -325,6 +325,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Paquet ou installateur documenté, même API d'embed que Docker.
 
+**Progrès.** Script `agent/scripts/install.sh` (Linux, Python stdlib, mêmes variables que Docker). Unit systemd d'exemple. `make agent-install-check` démarre un serveur et vérifie `/health`. Notes macOS / Windows courtes. Guide : [../docs/assist051_052_053_deploy.md](../docs/assist051_052_053_deploy.md). Pas d'installateur MSI. Pas de paquet distro officiel.
+
 ### ASSIST-052 - Image hyperviseur
 
 **En tant que** opérateur, **je veux** une image VM du runtime agent, **afin de** l'isoler sur un hyperviseur.
@@ -333,6 +335,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Image démarre, expose HTTP(S) admin / embed. Ne pas confondre avec `make iso` i386.
 
+**Progrès.** Recette documentée : compose dans une VM Linux, ou QEMU/KVM x86_64 + stub cloud-init (`agent/packaging/cloud-init/`). `make agent-hypervisor-dry-run` valide les fichiers et imprime la commande, **sans** télécharger d'image et **sans** booter `mohhdy.bin`. Pas d'artefact qcow2 dans Git. Pas de Packer obligatoire.
+
 ### ASSIST-053 - Abonnement cloud hébergé
 
 **En tant que** client, **je veux** une instance hébergée par abonnement, **afin d'**utiliser le support agent sans opérer le runtime.
@@ -340,6 +344,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 **Dépendances.** ASSIST-050 au moins amorçable. OpenAI public toujours sous condition.
 
 **Critère.** Provision d'une origine, snippet d'embed, quota documenté. Self-host reste possible. Hors CI publique : pas d'appel réseau payant.
+
+**Progrès.** Scaffold, **pas** un SaaS de facturation. `MOHHDY_AGENT_MODE=self_host|hosted`, `MOHHDY_AGENT_SITE_ID`, bloc `quota` (toujours `billing=false`, `enforced=false`). `/health` et `/api/admin/status` exposent le mode, les locataires de config (`sites`) et le placeholder de quota. Self-host inchangé. Aucun Stripe / OpenAI public.
 
 ### ASSIST-060 - Accès navigateur après déploiement
 
@@ -374,7 +380,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 | 3 | ASSIST-010, 011, 013, 040 | Embed + sessions + admin a jeton livrés (stub local ; CSP docs ; pas d'auth par site) | Runtime plus large que i386 |
 | 4 | ASSIST-012, 030, 031, 041 | KB locale, masque de droits, escalade, handoff dans la même conversation : livrés (stub) | Politique de droits |
 | 5 | ASSIST-020, 021, 022 | Gestes simulateur, MCP déclaré, facture mock : livrés (pas Chromium) | Allowlist, pas AOS-025 public |
-| 6 | ASSIST-051, 052, 053 | Après 050 amorçable | 053 : opérateur cloud |
+| 6 | ASSIST-051, 052, 053 | Après 050 amorçable | 051/052 docs+scripts livrés ; 053 scaffold non-billing |
 | 7 | ASSIST-060, 061 | Après 050 | Phase 3 reste spec |
 | 8 | ASSIST-090 | Jamais en "prochain sprint" | Corps physique inexistant |
 
@@ -385,6 +391,7 @@ OpenAI / LLM hébergé : l'agent peut d'abord s'appuyer sur un modèle **local �
 - Prototype vérifié : [mohhdy_us.md](mohhdy_us.md), [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md)
 - Suite AOS + ce track : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md)
 - Scaffold Docker ASSIST-050 : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md)
+- Packaging PC / hyperviseur / cloud : [../docs/assist051_052_053_deploy.md](../docs/assist051_052_053_deploy.md)
 - Sessions / embed / admin : [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md)
 - KB, droits, escalade, handoff : [../docs/assist012_droits_handoff.md](../docs/assist012_droits_handoff.md)
 - Gestes simulateur, MCP, facture : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md)
