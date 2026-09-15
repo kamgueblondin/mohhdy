@@ -84,6 +84,11 @@
   background: #fff;
   border: 1px solid #d5dbe0;
 }
+#mohhdy-panel .mohhdy-msg.human {
+  margin-right: auto;
+  background: #e8f1ff;
+  border: 1px solid #8aa4c8;
+}
 #mohhdy-panel .mohhdy-msg.system {
   margin: 0 auto 8px;
   background: transparent;
@@ -93,6 +98,7 @@
 }
 #mohhdy-panel .mohhdy-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid #e4e8ec;
@@ -117,7 +123,18 @@
   font: 600 13px/1 ui-sans-serif, system-ui, sans-serif;
   cursor: pointer;
 }
+#mohhdy-panel .mohhdy-human {
+  flex: 1 1 100%;
+  background: #fff;
+  color: #1b4332;
+  border: 1px solid #1b4332;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: 600 13px/1 ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
 #mohhdy-panel .mohhdy-send:disabled,
+#mohhdy-panel .mohhdy-human:disabled,
 #mohhdy-panel .mohhdy-input:disabled {
   opacity: 0.6;
   cursor: not-allowed;

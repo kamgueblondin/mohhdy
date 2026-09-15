@@ -701,7 +701,7 @@ help:
 	@echo "  gpt2-benchmark  - Modèle requis : mesure de latence QEMU SSE2"
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
-	@echo "  agent-smoke     - Fumee HTTP agent (sessions, isolation, admin ; hors ci / QEMU)"
+	@echo "  agent-smoke     - Fumee HTTP agent (KB, droits, escalade, handoff ; hors ci / QEMU)"
 	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent (optionnel, hors ci)"
 	@echo "  test-performance - Benchmarks et tests de performance"
 	@echo "  test-valgrind   - Tests avec détection fuites mémoire"

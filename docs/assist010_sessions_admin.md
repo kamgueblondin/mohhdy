@@ -1,7 +1,7 @@
 # ASSIST-010 / 011 / 040 - sessions, embed et admin
 
 **Date :** 15 septembre 2026
-**Statut :** livré dans `agent/`, avec limites honnêtes (echo stub, auth admin basique)
+**Statut :** livré dans `agent/` (echo stub de base) ; KB / droits / escalade / handoff = [assist012_droits_handoff.md](assist012_droits_handoff.md)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
 Ce document décrit le contrat HTTP des sessions visiteur, du widget
@@ -44,7 +44,8 @@ Connaître l'UUID vaut capability à ce stade (pas encore de cookie httpOnly).
 
 Filtre admin `site_id` : l'admin d'instance peut restreindre l'affichage.
 Il n'y a **pas** encore d'authentification par site (un seul jeton
-d'instance). C'est un stub honnête, pas ASSIST-030.
+d'instance). Le masque de droits par site/session est ASSIST-030 :
+[assist012_droits_handoff.md](assist012_droits_handoff.md).
 
 ## Jeton admin (ASSIST-040)
 
@@ -62,8 +63,8 @@ Avec variable : `Authorization: Bearer ...` ou `X-Admin-Token`. Jeton
 absent ou faux = 401. Le jeton n'est pas dans l'image, pas dans
 `embed.js`, pas dans `/health`.
 
-Ce n'est pas une auth par compte, pas de MFA, pas de handoff humain
-(ASSIST-041). Lecture seule.
+Ce n'est pas une auth par compte, pas de MFA. La reprise humaine dans
+la même session est ASSIST-041 : [assist012_droits_handoff.md](assist012_droits_handoff.md).
 
 ## Snippet d'attache (ASSIST-013)
 
@@ -109,9 +110,9 @@ aux trois directives. Ne pas élargir `default-src` à `*`.
 Le runtime accepte aujourd'hui n'importe quelle page qui charge
 `embed.js` (CORS visiteur `Access-Control-Allow-Origin: *` sur
 `/api/sessions*`). Un refus automatique si l'origine du document ne
-matche pas le site déclaré **n'est pas** encore en place (ASSIST-030).
-En attendant : ne coller le snippet que sur des sites que vous
-contrôlez, et ne pas publier une instance ouverte sans `ADMIN_TOKEN`.
+matche pas le site déclaré **n'est pas** encore en place. En attendant :
+ne coller le snippet que sur des sites que vous contrôlez, et ne pas
+publier une instance ouverte sans `ADMIN_TOKEN`.
 
 ## Vérifier
 
@@ -119,9 +120,9 @@ contrôlez, et ne pas publier une instance ouverte sans `ADMIN_TOKEN`.
 make agent-smoke
 ```
 
-Couvre santé, isolation de deux sessions, liste admin, jeton admin, et
-l'absence de marqueurs de secret dans `embed.js`. Hors `make ci` AOS
-QEMU : job GitHub parallèle `agent-http-smoke`.
+Couvre santé, isolation de deux sessions, liste admin, jeton admin, KB,
+révocation, escalade, handoff, et l'absence de marqueurs de secret dans
+`embed.js`. Hors `make ci` AOS QEMU : job GitHub parallèle `agent-http-smoke`.
 
 Contre une origine déjà lancée :
 
@@ -143,7 +144,6 @@ Ouvrir `http://127.0.0.1:8080/admin` : la session apparaît.
 ## Non livré
 
 - LLM de production, GGUF, fournisseur public
-- Escalade et handoff humain (ASSIST-031 / 041)
-- Droits par outil / MCP / clics (ASSIST-020..030)
+- Gestes navigateur et outils MCP exécutés (ASSIST-020 / 021 / 022)
 - Auth par site, comptes opérateurs, HTTPS terminé dans l'image
 - Noyau Multiboot dans le conteneur

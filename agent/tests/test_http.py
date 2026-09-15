@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fumee HTTP ASSIST-010/011/040 (stdlib, sans Docker, hors make ci)."""
+"""Fumee HTTP ASSIST-010/011/012/030/031/040/041 (stdlib, sans Docker, hors make ci)."""
 
 from __future__ import annotations
 
@@ -49,6 +49,8 @@ class AgentHttpSmoke(unittest.TestCase):
     def setUpClass(cls) -> None:
         os.environ.pop("ADMIN_TOKEN", None)
         os.environ.pop("MOHHDY_AGENT_DATA", None)
+        os.environ.pop("MOHHDY_AGENT_CONFIG", None)
+        os.environ.pop("MOHHDY_AGENT_KB", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.port = cls.httpd.server_address[1]
         cls.base = "http://127.0.0.1:%d" % cls.port
@@ -64,6 +66,7 @@ class AgentHttpSmoke(unittest.TestCase):
 
     def setUp(self) -> None:
         self.httpd.store.clear()
+        self.httpd.policy.reset_runtime()
 
     def _get(self, path: str, headers: dict | None = None):
         req = urllib.request.Request(self.base + path, headers=headers or {})
@@ -74,17 +77,37 @@ class AgentHttpSmoke(unittest.TestCase):
             body = json.loads(resp.read().decode("utf-8"))
             return body, resp.status, resp.headers
 
-    def _post_json(self, path: str, payload: dict):
+    def _post_json(self, path: str, payload: dict, headers: dict | None = None):
         data = json.dumps(payload).encode("utf-8")
+        hdrs = {"Content-Type": "application/json"}
+        if headers:
+            hdrs.update(headers)
         req = urllib.request.Request(
             self.base + path,
             data=data,
             method="POST",
-            headers={"Content-Type": "application/json"},
+            headers=hdrs,
         )
         with urllib.request.urlopen(req, timeout=2) as resp:
             body = json.loads(resp.read().decode("utf-8"))
             return body, resp.status, resp.headers
+
+    def _post_status(self, path: str, payload: dict, headers: dict | None = None):
+        data = json.dumps(payload).encode("utf-8")
+        hdrs = {"Content-Type": "application/json"}
+        if headers:
+            hdrs.update(headers)
+        req = urllib.request.Request(
+            self.base + path,
+            data=data,
+            method="POST",
+            headers=hdrs,
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                return json.loads(resp.read().decode("utf-8")), resp.status
+        except urllib.error.HTTPError as err:
+            return json.loads(err.read().decode("utf-8")), err.code
 
     def test_health_json(self) -> None:
         body, status, headers = self._get_json("/health")
@@ -94,6 +117,9 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertEqual(body["service"], "mohhdy-agent")
         self.assertEqual(body["llm"], "stub_echo")
         self.assertEqual(body["admin_auth"], "open_stub")
+        self.assertFalse(body["kb_loaded"])
+        self.assertNotIn("ADMIN_TOKEN", json.dumps(body))
+        self.assertNotIn("acl.", json.dumps(body))
 
     def test_admin_shell(self) -> None:
         with self._get("/admin") as resp:
@@ -111,6 +137,11 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertIn("mohhdy-launcher", script)
         self.assertIn("data-mohhdy-site", script)
         self.assertIn("/api/sessions", script)
+        self.assertIn("Parler a un humain", script)
+        self.assertIn("/escalate", script)
+        self.assertIn("human_active", script)
+        self.assertNotIn("admin.takeover", script)
+        self.assertNotIn("acl.", script)
         lowered = script.lower()
         for marker in SECRET_MARKERS:
             self.assertNotIn(marker.lower(), lowered)
@@ -169,6 +200,14 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertEqual(body["status"], "open")
         self.assertEqual(body["messages"], [])
         self.assertEqual(body["llm"], "stub_echo")
+        self.assertIn("chat.reply", body["capabilities"])
+        self.assertIn("site.explain", body["capabilities"])
+        self.assertIn("session.escalate", body["capabilities"])
+        dumped = json.dumps(body)
+        self.assertNotIn("admin.observe", dumped)
+        self.assertNotIn("admin.takeover", dumped)
+        self.assertNotIn("acl.", dumped)
+        self.assertNotIn("internal.", dumped)
 
     def test_visitor_message_echo_stub(self) -> None:
         created, _, _ = self._post_json("/api/sessions", {"site_id": "echo_site"})
@@ -234,6 +273,196 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertEqual(detail["session_id"], created["session_id"])
         joined = " ".join(item["content"] for item in detail["messages"])
         self.assertIn("vu par admin", joined)
+        self.assertIn("admin.takeover", detail["capabilities"])
+
+    def test_explain_without_kb_refuses_honestly(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "empty_kb"})
+        posted, status, _ = self._post_json(
+            "/api/sessions/%s/messages" % created["session_id"],
+            {"content": "comment ca marche ?"},
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(posted["llm"], "stub_refusal")
+        self.assertIn("Aucune base de connaissance autorisee", posted["agent_message"]["content"])
+        self.assertNotIn("Vous avez dit", posted["agent_message"]["content"])
+
+    def test_public_session_hides_admin_caps_and_acl(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "caps_site"})
+        fetched, _, _ = self._get_json("/api/sessions/" + created["session_id"])
+        dumped = json.dumps(fetched)
+        self.assertNotIn("admin.observe", dumped)
+        self.assertNotIn("admin.takeover", dumped)
+        self.assertNotIn("acl.", dumped)
+        self.assertNotIn("/etc/", dumped)
+
+    def test_revoke_chat_reply_refuses(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "revoke_chat"})
+        sid = created["session_id"]
+        patched, status, _ = self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"revoke": ["chat.reply"]},
+        )
+        self.assertEqual(status, 200)
+        self.assertNotIn("chat.reply", patched["capabilities"])
+        posted, _, _ = self._post_json(
+            "/api/sessions/%s/messages" % sid,
+            {"content": "bonjour quand meme"},
+        )
+        self.assertEqual(posted["llm"], "stub_refusal")
+        self.assertIn("chat.reply", posted["agent_message"]["content"])
+        self.assertNotIn("bonjour quand meme", posted["agent_message"]["content"])
+
+    def test_revoked_tool_refused_and_escalates(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "tools_site"})
+        sid = created["session_id"]
+        denied, code = self._post_status(
+            "/api/sessions/%s/tools" % sid, {"tool": "dom.click"}
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "capability_denied")
+        self.assertEqual(denied["tool"], "dom.click")
+        self.assertEqual(denied["session_status"], "waiting_human")
+        fetched, _, _ = self._get_json("/api/sessions/" + sid)
+        self.assertEqual(fetched["status"], "waiting_human")
+        joined = " ".join(item["content"] for item in fetched["messages"])
+        self.assertIn("absent de l'allowlist", joined)
+        listing, _, _ = self._get_json("/api/admin/sessions?status=waiting_human")
+        ids = [row["session_id"] for row in listing["sessions"]]
+        self.assertIn(sid, ids)
+
+    def test_grant_then_revoke_placeholder_tool(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "grant_revoke"})
+        sid = created["session_id"]
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"grant": ["dom.click"]},
+        )
+        placeholder, code = self._post_status(
+            "/api/sessions/%s/tools" % sid, {"tool": "dom.click"}
+        )
+        self.assertEqual(code, 501)
+        self.assertEqual(placeholder["error"], "tool_not_implemented")
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"revoke": ["dom.click"]},
+        )
+        denied, code = self._post_status(
+            "/api/sessions/%s/tools" % sid, {"tool": "dom.click"}
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(denied["error"], "capability_denied")
+
+    def test_internal_acl_prefix_rejected(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "acl_site"})
+        body, code = self._post_status(
+            "/api/admin/sessions/%s/capabilities" % created["session_id"],
+            {"grant": ["acl.internal.read"]},
+        )
+        self.assertEqual(code, 400)
+        self.assertEqual(body["error"], "bad_request")
+
+    def test_visitor_escalate_waiting_human(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "esc_site"})
+        sid = created["session_id"]
+        result, status, _ = self._post_json(
+            "/api/sessions/%s/escalate" % sid, {"reason": "je veux un humain"}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(result["status"], "waiting_human")
+        self.assertNotIn("admin.takeover", json.dumps(result))
+        queue, _, _ = self._get_json("/api/admin/sessions?status=waiting_human")
+        ids = [row["session_id"] for row in queue["sessions"]]
+        self.assertIn(sid, ids)
+
+    def test_escalate_revoked_is_denied(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "no_esc"})
+        sid = created["session_id"]
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"revoke": ["session.escalate"]},
+        )
+        body, code = self._post_status("/api/sessions/%s/escalate" % sid, {})
+        self.assertEqual(code, 403)
+        self.assertEqual(body["capability"], "session.escalate")
+        fetched, _, _ = self._get_json("/api/sessions/" + sid)
+        self.assertEqual(fetched["status"], "open")
+
+    def test_handoff_same_session_stops_auto_reply(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "handoff_site"})
+        sid = created["session_id"]
+        self._post_json(
+            "/api/sessions/%s/messages" % sid,
+            {"content": "bonjour avant humain"},
+        )
+        self._post_json("/api/sessions/%s/escalate" % sid, {})
+        taken, status, _ = self._post_json(
+            "/api/admin/sessions/%s/takeover" % sid, {}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(taken["session_id"], sid)
+        self.assertEqual(taken["status"], "human_active")
+        self.assertTrue(taken["handoff"])
+        human, hstatus, _ = self._post_json(
+            "/api/admin/sessions/%s/messages" % sid,
+            {"content": "Bonjour, je suis un humain."},
+        )
+        self.assertEqual(hstatus, 201)
+        self.assertEqual(human["human_message"]["role"], "human")
+        self.assertEqual(human["human_message"]["speaker"], "human")
+        visitor_view, _, _ = self._get_json("/api/sessions/" + sid)
+        self.assertEqual(visitor_view["session_id"], sid)
+        self.assertEqual(visitor_view["status"], "human_active")
+        speakers = [item["speaker"] for item in visitor_view["messages"]]
+        self.assertIn("visitor", speakers)
+        self.assertIn("human", speakers)
+        texts = [item["content"] for item in visitor_view["messages"]]
+        self.assertIn("Bonjour, je suis un humain.", texts)
+        dumped = json.dumps(visitor_view)
+        self.assertNotIn("admin.takeover", dumped)
+        after, status, _ = self._post_json(
+            "/api/sessions/%s/messages" % sid,
+            {"content": "merci humain"},
+        )
+        self.assertEqual(status, 201)
+        self.assertFalse(after["auto_reply"])
+        self.assertIsNone(after["agent_message"])
+        self.assertEqual(after["visitor_message"]["content"], "merci humain")
+        refetch, _, _ = self._get_json("/api/sessions/" + sid)
+        agent_after = [
+            item
+            for item in refetch["messages"]
+            if item["role"] == "agent"
+            and item["request_id"] == after["request_id"]
+        ]
+        self.assertEqual(agent_after, [])
+
+    def test_takeover_revoked_is_denied(self) -> None:
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "no_take"})
+        sid = created["session_id"]
+        self._post_json(
+            "/api/admin/sessions/%s/capabilities" % sid,
+            {"revoke": ["admin.takeover"]},
+        )
+        body, code = self._post_status(
+            "/api/admin/sessions/%s/takeover" % sid, {}
+        )
+        self.assertEqual(code, 403)
+        self.assertEqual(body["capability"], "admin.takeover")
+
+    def test_site_capability_limit_applies_to_new_session(self) -> None:
+        self._post_json(
+            "/api/admin/sites/limited_site/capabilities",
+            {"revoke": ["site.explain"]},
+        )
+        created, _, _ = self._post_json("/api/sessions", {"site_id": "limited_site"})
+        self.assertNotIn("site.explain", created["capabilities"])
+
+    def test_admin_shell_has_queue_and_takeover(self) -> None:
+        with self._get("/admin") as resp:
+            html = resp.read().decode("utf-8")
+        self.assertIn("File humain", html)
+        self.assertIn("Prendre la main", html)
+        self.assertIn("/takeover", html)
 
     def test_unknown_session_404(self) -> None:
         missing = str(uuid.uuid4())
@@ -310,6 +539,8 @@ class AgentAdminToken(unittest.TestCase):
         cls._previous = os.environ.get("ADMIN_TOKEN")
         os.environ["ADMIN_TOKEN"] = cls.TOKEN
         os.environ.pop("MOHHDY_AGENT_DATA", None)
+        os.environ.pop("MOHHDY_AGENT_CONFIG", None)
+        os.environ.pop("MOHHDY_AGENT_KB", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.port = cls.httpd.server_address[1]
         cls.base = "http://127.0.0.1:%d" % cls.port
@@ -380,6 +611,148 @@ class AgentAdminToken(unittest.TestCase):
             with urllib.request.urlopen(self.base + path, timeout=2) as resp:
                 body = resp.read().decode("utf-8")
             self.assertNotIn(self.TOKEN, body)
+
+    def test_takeover_requires_token(self) -> None:
+        created = self._post_json("/api/sessions", {"site_id": "token_take"})
+        req = urllib.request.Request(
+            self.base + "/api/admin/sessions/%s/takeover" % created["session_id"],
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req, timeout=2)
+        self.assertEqual(ctx.exception.code, 401)
+
+
+class AgentKbGrounding(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        cfg = Path(cls._tmp.name) / "config.json"
+        cfg.write_text(
+            json.dumps(
+                {
+                    "default_capabilities": [
+                        "chat.reply",
+                        "site.explain",
+                        "session.escalate",
+                        "admin.observe",
+                        "admin.takeover",
+                    ],
+                    "sites": {
+                        "kb_shop": {
+                            "kb": [
+                                {
+                                    "id": "parcours",
+                                    "title": "Parcours boutique",
+                                    "text": (
+                                        "Comment ca marche : ouvrez la bulle, "
+                                        "l'offre est un support de demonstration "
+                                        "sans paiement. Limites : pas d'actes navigateur."
+                                    ),
+                                }
+                            ]
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        cls._prev_cfg = os.environ.get("MOHHDY_AGENT_CONFIG")
+        cls._prev_kb = os.environ.get("MOHHDY_AGENT_KB")
+        os.environ["MOHHDY_AGENT_CONFIG"] = str(cfg)
+        os.environ.pop("MOHHDY_AGENT_KB", None)
+        os.environ.pop("ADMIN_TOKEN", None)
+        os.environ.pop("MOHHDY_AGENT_DATA", None)
+        cls.httpd = server.make_server("127.0.0.1", 0)
+        cls.base = "http://127.0.0.1:%d" % cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+        _wait_ready(cls.base)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.thread.join(timeout=2)
+        if cls._prev_cfg is None:
+            os.environ.pop("MOHHDY_AGENT_CONFIG", None)
+        else:
+            os.environ["MOHHDY_AGENT_CONFIG"] = cls._prev_cfg
+        if cls._prev_kb is None:
+            os.environ.pop("MOHHDY_AGENT_KB", None)
+        else:
+            os.environ["MOHHDY_AGENT_KB"] = cls._prev_kb
+        cls._tmp.cleanup()
+
+    def setUp(self) -> None:
+        self.httpd.store.clear()
+
+    def _post_json(self, path: str, payload: dict):
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            self.base + path,
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            return json.loads(resp.read().decode("utf-8")), resp.status
+
+    def test_health_reports_kb_loaded(self) -> None:
+        with urllib.request.urlopen(self.base + "/health", timeout=2) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+        self.assertTrue(body["kb_loaded"])
+        dumped = json.dumps(body)
+        self.assertNotIn(self._tmp.name, dumped)
+        self.assertNotIn("MOHHDY_AGENT_CONFIG", dumped)
+
+    def test_explain_is_grounded_in_kb(self) -> None:
+        created, _ = self._post_json("/api/sessions", {"site_id": "kb_shop"})
+        posted, status = self._post_json(
+            "/api/sessions/%s/messages" % created["session_id"],
+            {"content": "comment ca marche ?"},
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(posted["llm"], "stub_kb")
+        text = posted["agent_message"]["content"]
+        self.assertIn("base autorisee", text)
+        self.assertIn("support de demonstration", text)
+        self.assertIn("pas d'actes navigateur", text)
+        self.assertNotIn("Vous avez dit : comment ca marche", text)
+
+    def test_unrelated_question_still_uses_kb(self) -> None:
+        created, _ = self._post_json("/api/sessions", {"site_id": "kb_shop"})
+        posted, _ = self._post_json(
+            "/api/sessions/%s/messages" % created["session_id"],
+            {"content": "quel est le tarif secret invente ?"},
+        )
+        self.assertEqual(posted["llm"], "stub_kb")
+        text = posted["agent_message"]["content"]
+        self.assertIn("base autorisee", text)
+        self.assertNotIn("tarif secret invente", text)
+        self.assertNotIn("Vous avez dit", text)
+
+    def test_revoke_explain_does_not_leak_kb(self) -> None:
+        created, _ = self._post_json("/api/sessions", {"site_id": "kb_shop"})
+        sid = created["session_id"]
+        data = json.dumps({"revoke": ["site.explain"]}).encode("utf-8")
+        req = urllib.request.Request(
+            self.base + "/api/admin/sessions/%s/capabilities" % sid,
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=2):
+            pass
+        posted, _ = self._post_json(
+            "/api/sessions/%s/messages" % sid,
+            {"content": "comment ca marche ?"},
+        )
+        self.assertEqual(posted["llm"], "stub_refusal")
+        self.assertIn("site.explain", posted["agent_message"]["content"])
+        self.assertNotIn("support de demonstration", posted["agent_message"]["content"])
 
 
 if __name__ == "__main__":

@@ -16,7 +16,24 @@ fetch() {
   curl -fsS "${BASE_URL}${path}"
 }
 
-echo "ASSIST-010/011/040 smoke contre ${BASE_URL}"
+http_code() {
+  local method="$1"
+  local path="$2"
+  local data="${3:-}"
+  if [ -n "${data}" ]; then
+    curl -sS -o /tmp/mohhdy-smoke-body -w "%{http_code}" -X "${method}" \
+      -H 'Content-Type: application/json' \
+      "${admin_hdr[@]}" \
+      -d "${data}" \
+      "${BASE_URL}${path}"
+  else
+    curl -sS -o /tmp/mohhdy-smoke-body -w "%{http_code}" -X "${method}" \
+      "${admin_hdr[@]}" \
+      "${BASE_URL}${path}"
+  fi
+}
+
+echo "ASSIST-012/030/031/041 smoke contre ${BASE_URL}"
 
 health="$(fetch /health)"
 echo "${health}" | grep -q 'mohhdy-agent' || fail "health service"
@@ -25,15 +42,25 @@ echo "${health}" | grep -q '"status":"ok"' || echo "${health}" | grep -q '"statu
 admin="$(fetch /admin)"
 echo "${admin}" | grep -q 'mohhdy-sessions' || fail "admin sessions"
 echo "${admin}" | grep -q 'ADMIN_TOKEN' || fail "admin token mention"
+echo "${admin}" | grep -q 'File humain' || fail "admin file humain"
+echo "${admin}" | grep -q 'Prendre la main' || fail "admin takeover"
 
 embed="$(fetch /embed.js)"
 echo "${embed}" | grep -q 'mohhdy-launcher' || fail "embed launcher"
 echo "${embed}" | grep -q '/api/sessions' || fail "embed talks to sessions"
+echo "${embed}" | grep -q 'Parler a un humain' || fail "embed escalate button"
+echo "${embed}" | grep -q 'human_active' || fail "embed handoff status"
 if echo "${embed}" | grep -qi 'api_key'; then
   fail "embed ne doit pas contenir api_key"
 fi
 if echo "${embed}" | grep -q 'BEGIN PRIVATE KEY'; then
   fail "embed ne doit pas contenir de cle"
+fi
+if echo "${embed}" | grep -q 'admin.takeover'; then
+  fail "embed ne doit pas exposer admin.takeover"
+fi
+if echo "${embed}" | grep -q 'acl\.'; then
+  fail "embed ne doit pas exposer un prefixe acl"
 fi
 
 demo="$(fetch /demo)"
@@ -47,6 +74,9 @@ sid_a="$(printf '%s' "${create_a}" | python3 -c 'import json,sys; print(json.loa
 sid_b="$(printf '%s' "${create_b}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])')"
 [ -n "${sid_a}" ] && [ -n "${sid_b}" ] || fail "session_id manquant"
 [ "${sid_a}" != "${sid_b}" ] || fail "session_id identiques"
+
+printf '%s' "${create_a}" | grep -q 'admin.takeover' && fail "widget session A expose admin.takeover"
+printf '%s' "${create_a}" | grep -q 'acl\.' && fail "widget session A expose acl"
 
 curl -fsS -X POST -H 'Content-Type: application/json' \
   -d '{"content":"secret-alpha"}' \
@@ -74,4 +104,50 @@ listing="$(curl -fsS "${admin_hdr[@]}" "${BASE_URL}/api/admin/sessions")"
 echo "${listing}" | grep -q "${sid_a}" || fail "admin liste A"
 echo "${listing}" | grep -q "${sid_b}" || fail "admin liste B"
 
-echo "OK health admin embed.js demo sessions isolation"
+code="$(http_code POST "/api/sessions/${sid_a}/tools" '{"tool":"dom.click"}')"
+[ "${code}" = "403" ] || fail "outil revoque/absent doit etre 403 (got ${code})"
+grep -q 'capability_denied' /tmp/mohhdy-smoke-body || fail "outil refuse sans capability_denied"
+
+curl -fsS "${admin_hdr[@]}" -X POST -H 'Content-Type: application/json' \
+  -d '{"revoke":["dom.click"]}' \
+  "${BASE_URL}/api/admin/sessions/${sid_b}/capabilities" >/dev/null
+code="$(http_code POST "/api/sessions/${sid_b}/tools" '{"tool":"dom.click"}')"
+[ "${code}" = "403" ] || fail "revoke dom.click doit rester 403"
+
+curl -fsS -X POST -H 'Content-Type: application/json' \
+  -d '{"reason":"smoke humain"}' \
+  "${BASE_URL}/api/sessions/${sid_a}/escalate" >/dev/null
+got_a="$(fetch "/api/sessions/${sid_a}")"
+echo "${got_a}" | grep -q 'waiting_human' || fail "session A pas waiting_human"
+
+queue="$(curl -fsS "${admin_hdr[@]}" "${BASE_URL}/api/admin/sessions?status=waiting_human")"
+echo "${queue}" | grep -q "${sid_a}" || fail "file humain sans session A"
+if echo "${queue}" | grep -q "${sid_b}"; then
+  # B a aussi ete force-escaladee par l'outil refuse
+  true
+fi
+
+taken="$(curl -fsS "${admin_hdr[@]}" -X POST -H 'Content-Type: application/json' \
+  -d '{}' "${BASE_URL}/api/admin/sessions/${sid_a}/takeover")"
+echo "${taken}" | grep -q "${sid_a}" || fail "takeover session_id"
+echo "${taken}" | grep -q 'human_active' || fail "takeover human_active"
+
+human="$(curl -fsS "${admin_hdr[@]}" -X POST -H 'Content-Type: application/json' \
+  -d '{"content":"reponse humaine smoke"}' \
+  "${BASE_URL}/api/admin/sessions/${sid_a}/messages")"
+echo "${human}" | grep -q 'reponse humaine smoke' || fail "message humain absente"
+
+visitor="$(fetch "/api/sessions/${sid_a}")"
+echo "${visitor}" | grep -q 'reponse humaine smoke' || fail "widget ne voit pas l'humain"
+echo "${visitor}" | grep -q "${sid_a}" || fail "handoff doit garder le meme session_id"
+echo "${visitor}" | grep -q 'human_active' || fail "visitor status human_active"
+
+after="$(curl -fsS -X POST -H 'Content-Type: application/json' \
+  -d '{"content":"merci smoke"}' \
+  "${BASE_URL}/api/sessions/${sid_a}/messages")"
+echo "${after}" | grep -q '"auto_reply":false' || echo "${after}" | grep -q '"auto_reply": false' || fail "auto_reply encore vrai"
+if echo "${after}" | grep -q '"agent_message":{'; then
+  fail "agent a repondu apres takeover"
+fi
+
+echo "OK health admin embed.js demo isolation revoke escalate handoff"
