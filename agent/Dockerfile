@@ -1,4 +1,5 @@
-# Image ASSIST-050 : runtime HTTP agent. Aucun secret, aucun .env, aucun noyau i386.
+# Image runtime HTTP agent. Aucun secret, aucun .env, aucun noyau i386.
+# ADMIN_TOKEN se passe au run (-e), jamais ici.
 FROM python:3.12-slim-bookworm
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin mohhdy

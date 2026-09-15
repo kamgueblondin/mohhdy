@@ -1,12 +1,13 @@
-# Compose local du scaffold ASSIST-050.
-# Aucun secret n'est injecte : pas de env_file, pas de .env.
+# Compose local du runtime agent.
+# ADMIN_TOKEN optionnel via l'environnement hote, jamais cuit dans l'image.
+# Exemple : ADMIN_TOKEN=change-me docker compose up --build
 
 services:
   mohhdy-agent:
     build:
       context: .
       dockerfile: Dockerfile
-    image: mohhdy-agent:scaffold
+    image: mohhdy-agent:local
     ports:
       - "8080:8080"
     read_only: true
@@ -15,4 +16,5 @@ services:
     environment:
       MOHHDY_AGENT_HOST: "0.0.0.0"
       MOHHDY_AGENT_PORT: "8080"
-    # Intentionnellement pas de env_file / secrets Docker.
+      ADMIN_TOKEN: "${ADMIN_TOKEN:-}"
+    # Pas de env_file. Ne pas copier de secret dans le build.
