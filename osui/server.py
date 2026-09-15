@@ -2,10 +2,12 @@
 """Shell graphique du SE Mohhdy (OS-UI-0 / OS-UI-1 / OS-UI-2).
 
 L'entree produit est le chrome OS : chat central (prompts / slash),
-puis panes (browser, shell UI, admin, support, statut, fs). Le backend
-HTTP reste le scaffold temporaire agent/ (parite comportementale). Ce
-n'est pas un LLM de production, pas US-031, pas Chromium de session, pas
-le guest i386 Multiboot. Aucun secret n'est cuit dans l'image.
+scene IA plein ecran (#ai-stage), puis panes (browser, shell Multiboot,
+admin, support, statut, fs). Le backend HTTP reste le scaffold temporaire
+agent/ (parite comportementale). Ce n'est pas un LLM de production, pas
+US-031, pas Chromium de session. osui est le bootstrap graphique du
+meme SE Multiboot ; le guest i386 n'est pas dans ce processus. Aucun
+secret n'est cuit dans l'image.
 """
 
 from __future__ import annotations
@@ -16,6 +18,9 @@ import sys
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
+
+import multiboot_shell
+import stage
 
 OSUI_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = OSUI_ROOT.parent
@@ -32,7 +37,7 @@ OSUI_STATIC_RE = __import__("re").compile(r"^[A-Za-z0-9._-]{1,64}$")
 OS_COMMANDS = [
     {"slash": "/help", "summary": "Liste les raccourcis du SE"},
     {"slash": "/browser", "summary": "Ouvre Browser-OS (simulateur DOM)"},
-    {"slash": "/shell", "summary": "Ouvre le shell UI de l'instance (pas un root Linux)"},
+    {"slash": "/shell", "summary": "Ouvre le shell Multiboot (vocabulaire guest Ring 3)"},
     {"slash": "/admin", "summary": "Ouvre Admin (grant/revoke, takeover)"},
     {"slash": "/support", "summary": "Ouvre Support (sessions, escalade)"},
     {"slash": "/status", "summary": "Ouvre Statut instance"},
@@ -125,19 +130,39 @@ def os_identity(httpd) -> dict:
             "floating_chat": True,
             "chat_drag": True,
             "chat_pos_key": "mohhdy.os.chat.pos",
+            "ai_stage": True,
+            "multiboot_shell": True,
         },
+        "stage": stage.public_stage_meta(),
+        "multiboot_shell": httpd.os_shell.public_meta()
+        if getattr(httpd, "os_shell", None)
+        else multiboot_shell.MultibootShell().public_meta(),
         "notes": {
             "llm": "stub_echo: echo / KB locale, pas un LLM de production",
             "browser": "simulateur DOM; Playwright optionnel, pas US-031",
             "guest": "le noyau i386 QEMU n'est pas boote dans ce conteneur",
-            "shell": "shell UI de l'instance, pas un root Linux",
+            "shell": "shell Multiboot bootstrap (userspace/shell.c), pas un bash Linux, pas un TTY live",
             "chat": "chat central = surface de commande; flottant si un programme est ouvert",
+            "stage": "bureau = scene IA HTML (#ai-stage). Guest VGA n'a pas cette scene",
+            "product": "un SE Multiboot Mohhdy ; osui = bootstrap graphique du meme OS",
         },
     }
 
 
+class OsHTTPServer(agent_server.AgentHTTPServer):
+    def __init__(self, server_address, RequestHandlerClass):
+        super().__init__(server_address, RequestHandlerClass)
+        self.os_stage = stage.StageState()
+        self.os_shell = multiboot_shell.MultibootShell()
+
+    def reset_runtime(self) -> None:
+        super().reset_runtime()
+        self.os_stage.reset()
+        self.os_shell.reset()
+
+
 class OsHandler(agent_server.AgentHandler):
-    server_version = "MOHHDY-OS/0.8"
+    server_version = "MOHHDY-OS/0.9"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write(
@@ -181,7 +206,80 @@ class OsHandler(agent_server.AgentHandler):
             self._send_json(os_identity(self.server), send_body=send_body)
             return
 
+        if path == "/api/os/stage":
+            self._handle_stage(method, send_body)
+            return
+
+        if path == "/api/os/shell":
+            self._handle_shell(method, send_body)
+            return
+
         return super()._dispatch(method, send_body)
+
+    def _handle_stage(self, method: str, send_body: bool) -> None:
+        store = self.server.os_stage
+        if method in ("GET", "HEAD"):
+            self._send_json(store.snapshot(), send_body=send_body)
+            return
+        if method != "POST":
+            self._send_json_status(
+                405, {"status": "error", "error": "method_not_allowed"}
+            )
+            return
+        payload, error = self._read_json_object()
+        if error is not None:
+            status, body = error
+            self._send_json_status(status, body)
+            return
+        prompt = payload.get("prompt")
+        if prompt is None:
+            prompt = payload.get("content") or ""
+        if not isinstance(prompt, str):
+            self._send_json_status(
+                400,
+                {
+                    "status": "error",
+                    "error": "bad_request",
+                    "message": "prompt texte requis",
+                },
+            )
+            return
+        result = store.apply_prompt(prompt)
+        self._send_json(result, send_body=True, status=200)
+
+    def _handle_shell(self, method: str, send_body: bool) -> None:
+        shell = self.server.os_shell
+        if method in ("GET", "HEAD"):
+            self._send_json(shell.public_meta(), send_body=send_body)
+            return
+        if method != "POST":
+            self._send_json_status(
+                405, {"status": "error", "error": "method_not_allowed"}
+            )
+            return
+        payload, error = self._read_json_object()
+        if error is not None:
+            status, body = error
+            self._send_json_status(status, body)
+            return
+        line = payload.get("line")
+        if line is None:
+            line = payload.get("command") or ""
+        if not isinstance(line, str):
+            self._send_json_status(
+                400,
+                {
+                    "status": "error",
+                    "error": "bad_request",
+                    "message": "line texte requise",
+                },
+            )
+            return
+        result = shell.execute(line)
+        stage_payload = result.get("stage")
+        if stage_payload:
+            self.server.os_stage.current = dict(stage_payload)
+        self._send_json(result, send_body=True, status=200)
 
     def _send_osui_named(self, name: str, send_body: bool) -> None:
         path = safe_osui_static(name)
@@ -217,10 +315,10 @@ class OsHandler(agent_server.AgentHandler):
 
 def make_server(
     host: Optional[str] = None, port: Optional[int] = None
-) -> agent_server.AgentHTTPServer:
+) -> OsHTTPServer:
     bind_host = agent_server.env_host() if host is None else host
     bind_port = agent_server.env_port() if port is None else port
-    httpd = agent_server.AgentHTTPServer((bind_host, bind_port), OsHandler)
+    httpd = OsHTTPServer((bind_host, bind_port), OsHandler)
     httpd.daemon_threads = True
     return httpd
 

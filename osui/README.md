@@ -1,15 +1,16 @@
 # Scaffold du shell graphique Mohhdy (OS-UI-0/1/2)
 
-`osui/` est l'**entree produit** de l'instance Docker : un chrome OS dont
-la surface primaire est le **chat central** (prompts / slash). Les
-programmes (Browser-OS, Shell OS, Admin, Support, Statut, FS) s'ouvrent
-depuis le chat ; celui-ci passe alors en panneau flottant draggable.
-Le backend HTTP reste le scaffold temporaire `agent/` (parite
-ASSIST). Ce n'est **pas** US-031, **pas** un LLM de production, **pas**
-un moteur Chromium de session.
+`osui/` est le **bootstrap graphique** du **meme** SE Multiboot Mohhdy :
+chat central (prompts / slash), **scene IA** plein ecran (`#ai-stage`),
+programmes (Browser-OS, Shell Multiboot, Admin, Support, Statut, FS).
+`/shell` reprend le vocabulaire guest Ring 3 (`userspace/shell.c`) ;
+QEMU n'est pas attache dans ce processus. Le backend HTTP reste le
+scaffold temporaire `agent/` (parite ASSIST). Ce n'est **pas** US-031,
+**pas** un LLM de production, **pas** un moteur Chromium de session.
 
 Guide : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md).
 Interaction : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md).
+Scene IA : [../docs/osui_ai_stage.md](../docs/osui_ai_stage.md).
 Plan : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md).
 
 ```text

@@ -13,7 +13,7 @@
   var COMMANDS = [
     { name: "help", aliases: ["?", "aide"], summary: "Liste les raccourcis du SE" },
     { name: "browser", aliases: ["nav", "browser-os"], summary: "Ouvre Browser-OS (simulateur DOM)", pane: "browser" },
-    { name: "shell", aliases: ["sh", "terminal"], summary: "Ouvre le shell UI de l'instance (pas un root Linux)", pane: "shell" },
+    { name: "shell", aliases: ["sh", "terminal", "multiboot"], summary: "Ouvre le shell Multiboot (vocabulaire guest Ring 3)", pane: "shell" },
     { name: "admin", aliases: ["console"], summary: "Ouvre Admin (grant/revoke, takeover)", pane: "admin" },
     { name: "support", aliases: ["sessions"], summary: "Ouvre Support (sessions, escalade)", pane: "support" },
     { name: "status", aliases: ["sante", "health"], summary: "Ouvre Statut instance", pane: "status" },
@@ -363,6 +363,7 @@
       lines.push("/" + cmd.name + "  " + cmd.summary);
     });
     lines.push("Equivalent : \"ouvre le navigateur\", \"open shell\".");
+    lines.push("Un prompt hors slash met a jour #ai-stage (llm=stub_echo).");
     return lines.join("\n");
   }
 
@@ -474,9 +475,9 @@
     meta.textContent = "os · llm=stub_echo";
     var body = document.createElement("div");
     body.textContent =
-      "Mohhdy OS — SE dirige par prompts.\n" +
+      "Mohhdy OS — SE Multiboot dirige par prompts.\n" +
       "llm=stub_echo (pas un LLM de production). phase3_complete=false. us031_complete=false.\n" +
-      "Tapez /help, /browser, /shell, ou un prompt.";
+      "Le bureau est la scene IA. Tapez /help, /shell, ou un prompt.";
     wrap.appendChild(meta);
     wrap.appendChild(body);
     container.appendChild(wrap);
@@ -554,6 +555,16 @@
   function sendOsPrompt(text) {
     appendChat("human", text, "vous");
     $("os-chat-error").hidden = true;
+    setStageMode("reflecting");
+    var stageReq = api("/api/os/stage", {
+      method: "POST",
+      body: { prompt: text },
+    }).then(function (payload) {
+      applyStage(payload);
+      return payload;
+    }).catch(function (err) {
+      appendChat("sys", "scene IA: " + formatError(err), "os stage");
+    });
     return ensureSession().then(function (session) {
       if (!session) {
         throw new Error("session indisponible");
@@ -571,6 +582,7 @@
         appendChat("sys", "Pas de reponse auto (session prise par un humain).", "os · llm=" + llm);
       }
       refreshSupport();
+      return stageReq;
     }).catch(function (err) {
       $("os-chat-error").hidden = false;
       $("os-chat-error").textContent = formatError(err);
@@ -790,6 +802,81 @@
     });
   }
 
+  var STAGE_ALLOWED_TAGS = {
+    DIV: 1, SPAN: 1, P: 1, H1: 1, H2: 1, H3: 1, UL: 1, OL: 1, LI: 1,
+    STRONG: 1, EM: 1, SECTION: 1, ARTICLE: 1, HEADER: 1, SVG: 1, RECT: 1,
+    CIRCLE: 1, LINE: 1, PATH: 1, TEXT: 1, G: 1, POLYLINE: 1, POLYGON: 1,
+    ELLIPSE: 1
+  };
+  var STAGE_ALLOWED_ATTR = {
+    "class": 1, id: 1, role: 1, "aria-label": 1, "data-mode": 1, "data-kind": 1,
+    viewBox: 1, viewbox: 1, width: 1, height: 1, x: 1, y: 1, cx: 1, cy: 1, r: 1,
+    rx: 1, ry: 1, d: 1, fill: 1, stroke: 1, "stroke-width": 1, transform: 1,
+    points: 1, x1: 1, y1: 1, x2: 1, y2: 1, "text-anchor": 1, opacity: 1
+  };
+
+  function setStageMode(mode) {
+    var stage = $("ai-stage");
+    var next = mode === "acting" || mode === "presenting" ? mode : "reflecting";
+    if (!stage) {
+      return next;
+    }
+    stage.setAttribute("data-mode", next);
+    var label = $("ai-stage-mode");
+    if (label) {
+      label.textContent = next;
+    }
+    return next;
+  }
+
+  function sanitizeStageHtml(html) {
+    var parser = new window.DOMParser();
+    var doc = parser.parseFromString("<div id=\"mh-wrap\">" + String(html || "") + "</div>", "text/html");
+    var wrap = doc.getElementById("mh-wrap") || doc.body;
+    function clean(node) {
+      var children = Array.prototype.slice.call(node.childNodes);
+      children.forEach(function (child) {
+        if (child.nodeType === 8 || (child.nodeType !== 1 && child.nodeType !== 3)) {
+          node.removeChild(child);
+          return;
+        }
+        if (child.nodeType === 3) {
+          return;
+        }
+        var tag = child.tagName;
+        if (!STAGE_ALLOWED_TAGS[tag]) {
+          node.removeChild(child);
+          return;
+        }
+        Array.prototype.slice.call(child.attributes || []).forEach(function (attr) {
+          var name = attr.name;
+          if (name.slice(0, 2).toLowerCase() === "on" || !STAGE_ALLOWED_ATTR[name]) {
+            child.removeAttribute(name);
+            return;
+          }
+          if (/^\s*(javascript:|data:text\/html|vbscript:)/i.test(attr.value) || /expression\s*\(/i.test(attr.value)) {
+            child.removeAttribute(name);
+          }
+        });
+        clean(child);
+      });
+    }
+    clean(wrap);
+    return wrap.innerHTML;
+  }
+
+  function applyStage(payload) {
+    if (!payload) {
+      return;
+    }
+    setStageMode(payload.mode || "presenting");
+    var host = $("ai-stage-content");
+    if (!host) {
+      return;
+    }
+    host.innerHTML = sanitizeStageHtml(payload.html || "");
+  }
+
   var shellReady = false;
 
   function shellPrint(text) {
@@ -804,86 +891,49 @@
     }
     shellReady = true;
     $("shell-out").textContent = "";
-    shellPrint("mohhdy-os shell UI");
+    shellPrint("MOHHDY Shell v6.0 — Multiboot Ring 3 (bootstrap osui)");
     shellPrint("llm=stub_echo  phase3_complete=false  us031_complete=false");
-    shellPrint("Pas un root Linux, pas le guest i386. Tapez help.");
+    shellPrint("attachment=bootstrap  live_guest=false  qemu_serial=false");
+    shellPrint("Vocabulaire guest : help, ai, vfs-list, ls. Pas un bash Linux.");
     shellPrint("");
   }
 
   function runShellLine(line) {
     ensureShellWelcome();
-    var raw = String(line || "").trim();
-    shellPrint("mohhdy$ " + raw);
-    if (!raw) {
+    var raw = String(line || "");
+    shellPrint("MOHHDY> " + raw.trim());
+    if (!raw.trim()) {
       return;
     }
-    var parts = raw.split(/\s+/);
-    var cmd = parts[0].replace(/^\//, "").toLowerCase();
-    if (cmd === "help" || cmd === "?") {
-      shellPrint("help     cette aide");
-      shellPrint("status   sante instance (/health)");
-      shellPrint("open X   ouvre browser|shell|admin|support|status|fs");
-      shellPrint("panes    fenetres ouvertes");
-      shellPrint("llm      rappel honnete stub");
-      shellPrint("whoami   operateur de l'instance osui");
-      shellPrint("clear    efface l'ecran");
-      shellPrint("/browser /admin ...  memes raccourcis que le chat");
-      return;
-    }
-    if (cmd === "clear") {
-      shellReady = false;
-      ensureShellWelcome();
-      return;
-    }
-    if (cmd === "llm") {
-      shellPrint("llm=stub_echo (echo / KB locale, pas un LLM de production)");
-      return;
-    }
-    if (cmd === "whoami") {
-      shellPrint("instance=mohhdy-os shell=osui user=operator");
-      return;
-    }
-    if (cmd === "panes") {
-      var open = visiblePrograms();
-      shellPrint(open.length ? open.join(", ") : "(aucun programme)");
-      return;
-    }
-    if (cmd === "status") {
-      api("/health").then(function (health) {
-        shellPrint(JSON.stringify({
-          service: health.service,
-          llm: health.llm,
-          phase3_complete: health.phase3_complete,
-          us031_complete: health.us031_complete,
-          harness: health.harness,
-        }));
-      }).catch(function (err) {
-        shellPrint(formatError(err));
-      });
-      return;
-    }
-    if (cmd === "open") {
-      var target = (parts[1] || "").toLowerCase();
-      if (PROGRAM_PANES.indexOf(target) === -1) {
-        shellPrint("usage: open browser|shell|admin|support|status|fs");
+    api("/api/os/shell", { method: "POST", body: { line: raw } }).then(function (data) {
+      if (data && data.clear) {
+        shellReady = false;
+        ensureShellWelcome();
         return;
       }
-      openPane(target);
-      shellPrint("ouvert: " + target);
-      return;
-    }
-    var mapped = findCommand(cmd);
-    if (mapped && mapped.pane) {
-      openPane(mapped.pane);
-      shellPrint("ouvert: /" + mapped.name);
-      return;
-    }
-    if (mapped && (mapped.name === "center" || mapped.name === "close" || mapped.name === "help")) {
-      runCommand(mapped);
-      shellPrint("ok /" + mapped.name);
-      return;
-    }
-    shellPrint("commande inconnue. help pour la liste (shell UI, pas un bash).");
+      if (data && data.output) {
+        var text = String(data.output);
+        if (text.charAt(text.length - 1) === "\n") {
+          text = text.slice(0, -1);
+        }
+        shellPrint(text);
+      }
+      if (data && data.open_pane) {
+        openPane(data.open_pane);
+      }
+      if (data && data.stage) {
+        applyStage(data.stage);
+      }
+      var attach = $("shell-attach");
+      if (attach && data) {
+        attach.textContent =
+          "attachment=" + (data.attachment || "bootstrap") +
+          " live_guest=" + String(!!data.live_guest) +
+          " qemu_serial=false prompt=" + (data.prompt || "MOHHDY>");
+      }
+    }).catch(function (err) {
+      shellPrint(formatError(err));
+    });
   }
 
   function boot() {
@@ -990,7 +1040,7 @@
   }
 
   window.MohhdyOS = {
-    version: "chat-desktop",
+    version: "chat-desktop-stage",
     commands: COMMANDS.map(function (cmd) { return "/" + cmd.name; }),
     parseLine: parseLine,
     openPane: openPane,
@@ -998,6 +1048,9 @@
     getChatMode: getChatMode,
     closeAllPrograms: closeAllPrograms,
     chatPosKey: CHAT_POS_KEY,
+    setStageMode: setStageMode,
+    applyStage: applyStage,
+    sanitizeStageHtml: sanitizeStageHtml,
   };
 
   boot();
