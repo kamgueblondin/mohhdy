@@ -7,10 +7,10 @@ Deux **niveaux de maturite runtime** (ingenierie, pas deux produits), plus des a
 | Niveau | Document | Statut |
 |---|---|---|
 | **Prototype guest** | [mohhdy_us.md](mohhdy_us.md) + [docs/ETAT_REEL.md](../docs/ETAT_REEL.md) | Tranche noyau i386 Multiboot **mesuree** : AOS-001 a AOS-026 verifies ; FAT16/FAT32 ; reseau local `ai-acquire` ; pas de client OpenAI public |
-| **Instance OS autonome** | [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) + [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md) | Backlog de **capacites OS** (`ASSIST-xxx`) portees dans le chrome `osui/` (OS-UI-0/1/2 premieres tranches) avec scaffold `agent/` temporaire. Stub local. Playwright = profil optionnel. LLM de production, US-031 et billing **non livres**. Prochain : OS-UI-3 |
+| **Instance OS autonome** | [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) + [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md) | Backlog de **capacites OS** (`ASSIST-xxx`) portees dans le chrome `osui/` (chat central, slash, panes ; OS-UI-0/1/2 premieres tranches) avec scaffold `agent/` temporaire. Stub local. Playwright = profil optionnel. LLM de production, US-031 et billing **non livres**. Prochain : OS-UI-3 |
 | **Specs historiques** | fichiers `mohhdy_*.md` + [individual_us/](individual_us/INDEX.md) | Archives de conception (phases 1-8). Un `[OK]` = fichier present, **pas** "implemente" |
 
-En cas de contradiction sur ce qui **tourne dans le guest**, **ETAT_REEL** et **mohhdy_us.md** priment. L'intention produit et le **catalogue complet** sont dans [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) (premieres tranches OS-UI-0/1/2 : [docs/osui_0_1_2.md](../docs/osui_0_1_2.md)). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Portage ASSIST vers OS graphique : [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md).
+En cas de contradiction sur ce qui **tourne dans le guest**, **ETAT_REEL** et **mohhdy_us.md** priment. L'intention produit et le **catalogue complet** sont dans [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) (premieres tranches OS-UI-0/1/2 : [docs/osui_0_1_2.md](../docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md)). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Portage ASSIST vers OS graphique : [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md).
 
 ## Prototype guest (tranche noyau verifiee)
 
@@ -85,7 +85,7 @@ La migration complete de US-001 reste une refonte a haut risque : les increments
 
 ## Instance OS autonome (backlog de capacites OS)
 
-Le SE Mohhdy doit offrir le support sur le web, agir dans le navigateur-OS du SE, et rester autonome. Spec fonctionnelle : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) (`ASSIST-000` a `ASSIST-090`). Ordre de **portage dans l'OS graphique** : [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md) et [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Premieres tranches OS-UI-0/1/2 : [docs/osui_0_1_2.md](../docs/osui_0_1_2.md). Prochain : **OS-UI-3**.
+Le SE Mohhdy doit offrir le support sur le web, agir dans le navigateur-OS du SE, et rester autonome. Spec fonctionnelle : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) (`ASSIST-000` a `ASSIST-090`). Ordre de **portage dans l'OS graphique** : [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md) et [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Premieres tranches OS-UI-0/1/2 : [docs/osui_0_1_2.md](../docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md). Prochain : **OS-UI-3**.
 
 Docker lance l'instance **comme une machine vierge**. `agent/` est le scaffold userspace **temporaire**. Le navigateur-OS est un **devoir du SE**. US-031 n'est **pas** livre.
 

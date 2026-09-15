@@ -6,6 +6,30 @@
   var selectedAdminId = null;
   var statusFilter = "";
   var drag = null;
+  var chatDrag = null;
+  var CHAT_POS_KEY = "mohhdy.os.chat.pos";
+  var PROGRAM_PANES = ["browser", "shell", "support", "admin", "status", "fs"];
+
+  var COMMANDS = [
+    { name: "help", aliases: ["?", "aide"], summary: "Liste les raccourcis du SE" },
+    { name: "browser", aliases: ["nav", "browser-os"], summary: "Ouvre Browser-OS (simulateur DOM)", pane: "browser" },
+    { name: "shell", aliases: ["sh", "terminal"], summary: "Ouvre le shell UI de l'instance (pas un root Linux)", pane: "shell" },
+    { name: "admin", aliases: ["console"], summary: "Ouvre Admin (grant/revoke, takeover)", pane: "admin" },
+    { name: "support", aliases: ["sessions"], summary: "Ouvre Support (sessions, escalade)", pane: "support" },
+    { name: "status", aliases: ["sante", "health"], summary: "Ouvre Statut instance", pane: "status" },
+    { name: "fs", aliases: ["files", "fichiers"], summary: "Ouvre le FS sandbox lecture", pane: "fs" },
+    { name: "center", aliases: ["centre", "desktop"], summary: "Ferme les programmes et ramene le chat au centre" },
+    { name: "close", aliases: ["fermer"], summary: "Ferme les programmes" },
+  ];
+
+  var PROMPT_OPEN = [
+    { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(browser|navigateur|browser-os)\b/i, pane: "browser" },
+    { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(shell|terminal)\b/i, pane: "shell" },
+    { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(admin|console)\b/i, pane: "admin" },
+    { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(support|sessions)\b/i, pane: "support" },
+    { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(status|statut|sante)\b/i, pane: "status" },
+    { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(fs|fichiers|files|sandbox)\b/i, pane: "fs" },
+  ];
 
   function $(id) {
     return document.getElementById(id);
@@ -13,6 +37,94 @@
 
   function paneWindow(name) {
     return document.querySelector('.os-window[data-pane="' + name + '"]');
+  }
+
+  function chatEl() {
+    return $("os-chat");
+  }
+
+  function getChatMode() {
+    return chatEl().getAttribute("data-mode") || "center";
+  }
+
+  function storedChatPos() {
+    try {
+      var raw = window.sessionStorage.getItem(CHAT_POS_KEY);
+      if (!raw) {
+        return null;
+      }
+      var pos = JSON.parse(raw);
+      if (typeof pos.left === "number" && typeof pos.top === "number") {
+        return pos;
+      }
+    } catch (err) {
+      return null;
+    }
+    return null;
+  }
+
+  function saveChatPos(left, top) {
+    try {
+      window.sessionStorage.setItem(CHAT_POS_KEY, JSON.stringify({ left: left, top: top }));
+    } catch (err) {
+      /* ignore */
+    }
+  }
+
+  function applyFloatPosition() {
+    var chat = chatEl();
+    var pos = storedChatPos();
+    if (pos) {
+      chat.style.left = pos.left + "px";
+      chat.style.top = pos.top + "px";
+      chat.style.right = "auto";
+      chat.style.bottom = "auto";
+    } else {
+      chat.style.left = "";
+      chat.style.top = "";
+      chat.style.right = "";
+      chat.style.bottom = "";
+    }
+    chat.style.transform = "";
+  }
+
+  function setChatMode(mode) {
+    var chat = chatEl();
+    var next = mode === "float" ? "float" : "center";
+    chat.setAttribute("data-mode", next);
+    if (next === "float") {
+      applyFloatPosition();
+    } else {
+      chat.style.left = "";
+      chat.style.top = "";
+      chat.style.right = "";
+      chat.style.bottom = "";
+      chat.style.transform = "";
+    }
+  }
+
+  function visiblePrograms() {
+    return PROGRAM_PANES.filter(function (name) {
+      var win = paneWindow(name);
+      return win && !win.classList.contains("hidden");
+    });
+  }
+
+  function restoreChatIfIdle() {
+    if (!visiblePrograms().length) {
+      setChatMode("center");
+    }
+  }
+
+  function closeAllPrograms() {
+    PROGRAM_PANES.forEach(function (name) {
+      var win = paneWindow(name);
+      if (win) {
+        win.classList.add("hidden");
+        win.classList.remove("active");
+      }
+    });
+    setChatMode("center");
   }
 
   function focusWindow(win) {
@@ -28,7 +140,19 @@
   }
 
   function openPane(name) {
-    focusWindow(paneWindow(name));
+    if (name === "chat") {
+      if (!visiblePrograms().length) {
+        setChatMode("center");
+      }
+      $("os-chat-input").focus();
+      return;
+    }
+    var win = paneWindow(name);
+    if (!win) {
+      return;
+    }
+    setChatMode("float");
+    focusWindow(win);
     if (name === "status") {
       loadStatus();
     }
@@ -36,6 +160,12 @@
       loadAdmin();
     }
     if (name === "browser") {
+      refreshBrowserLabel();
+    }
+    if (name === "shell") {
+      ensureShellWelcome();
+    }
+    if (name === "fs") {
       refreshBrowserLabel();
     }
   }
@@ -119,6 +249,8 @@
         closer.addEventListener("click", function (event) {
           event.stopPropagation();
           win.classList.add("hidden");
+          win.classList.remove("active");
+          restoreChatIfIdle();
         });
       }
       bar.addEventListener("mousedown", function (event) {
@@ -135,6 +267,22 @@
       });
     });
     document.addEventListener("mousemove", function (event) {
+      if (chatDrag) {
+        var desk = $("os-desktop").getBoundingClientRect();
+        var left = Math.max(0, event.clientX - chatDrag.dx - desk.left);
+        var top = Math.max(0, event.clientY - chatDrag.dy - desk.top);
+        var chat = chatEl();
+        var maxL = Math.max(0, desk.width - chat.offsetWidth);
+        var maxT = Math.max(0, desk.height - chat.offsetHeight);
+        left = Math.min(left, maxL);
+        top = Math.min(top, maxT);
+        chat.style.left = left + "px";
+        chat.style.top = top + "px";
+        chat.style.right = "auto";
+        chat.style.bottom = "auto";
+        chat.style.transform = "none";
+        return;
+      }
       if (!drag) {
         return;
       }
@@ -142,6 +290,12 @@
       drag.win.style.top = Math.max(0, event.clientY - drag.dy) + "px";
     });
     document.addEventListener("mouseup", function () {
+      if (chatDrag) {
+        var chat = chatEl();
+        $("os-chat-header").style.cursor = "grab";
+        saveChatPos(parseInt(chat.style.left, 10) || 0, parseInt(chat.style.top, 10) || 0);
+        chatDrag = null;
+      }
       if (drag) {
         var bar = drag.win.querySelector(".os-titlebar");
         bar.style.cursor = "grab";
@@ -153,6 +307,179 @@
         openPane(btn.getAttribute("data-open"));
       });
     });
+  }
+
+  function bindChatDrag() {
+    var header = $("os-chat-header");
+    header.addEventListener("mousedown", function (event) {
+      if (getChatMode() !== "float") {
+        return;
+      }
+      if (event.target && (event.target.id === "os-chat-center" || event.target.getAttribute("data-chat-center") !== null)) {
+        return;
+      }
+      var rect = chatEl().getBoundingClientRect();
+      chatDrag = {
+        dx: event.clientX - rect.left,
+        dy: event.clientY - rect.top,
+      };
+      header.style.cursor = "grabbing";
+      event.preventDefault();
+    });
+    $("os-chat-center").addEventListener("click", function (event) {
+      event.stopPropagation();
+      closeAllPrograms();
+    });
+    var closer = header.querySelector("[data-chat-center]");
+    if (closer) {
+      closer.addEventListener("click", function (event) {
+        event.stopPropagation();
+        closeAllPrograms();
+      });
+    }
+  }
+
+  function appendChat(role, text, meta) {
+    var container = $("os-chat-log");
+    var wrap = document.createElement("div");
+    wrap.className = "msg" + (role === "human" ? " human" : role === "sys" ? " sys" : "");
+    var metaEl = document.createElement("div");
+    metaEl.className = "meta";
+    metaEl.textContent = meta || role;
+    var body = document.createElement("div");
+    body.textContent = text;
+    wrap.appendChild(metaEl);
+    wrap.appendChild(body);
+    container.appendChild(wrap);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function helpText() {
+    var lines = [
+      "Raccourcis du SE (chat central). llm=stub_echo.",
+      "Un programme ouvert deplace le chat en panneau flottant (coin, draggable).",
+    ];
+    COMMANDS.forEach(function (cmd) {
+      lines.push("/" + cmd.name + "  " + cmd.summary);
+    });
+    lines.push("Equivalent : \"ouvre le navigateur\", \"open shell\".");
+    return lines.join("\n");
+  }
+
+  function findCommand(token) {
+    var name = String(token || "").replace(/^\//, "").toLowerCase();
+    var i;
+    for (i = 0; i < COMMANDS.length; i += 1) {
+      if (COMMANDS[i].name === name) {
+        return COMMANDS[i];
+      }
+      if ((COMMANDS[i].aliases || []).indexOf(name) !== -1) {
+        return COMMANDS[i];
+      }
+    }
+    return null;
+  }
+
+  function runCommand(cmd) {
+    if (cmd.name === "help") {
+      appendChat("sys", helpText(), "os /help · llm=stub_echo");
+      return true;
+    }
+    if (cmd.name === "center") {
+      closeAllPrograms();
+      appendChat("sys", "Chat au centre. Programmes fermes.", "os /center");
+      return true;
+    }
+    if (cmd.name === "close") {
+      closeAllPrograms();
+      appendChat("sys", "Programmes fermes. Chat au centre.", "os /close");
+      return true;
+    }
+    if (cmd.pane) {
+      openPane(cmd.pane);
+      appendChat("sys", "Programme ouvert : /" + cmd.name + " (" + cmd.summary + ")", "os /" + cmd.name);
+      return true;
+    }
+    return false;
+  }
+
+  function parseLine(text) {
+    var trimmed = String(text || "").trim();
+    if (!trimmed) {
+      return { kind: "empty" };
+    }
+    if (trimmed.charAt(0) === "/") {
+      var token = trimmed.split(/\s+/)[0];
+      var cmd = findCommand(token);
+      if (!cmd) {
+        return { kind: "unknown_slash", token: token };
+      }
+      return { kind: "slash", command: cmd };
+    }
+    var i;
+    for (i = 0; i < PROMPT_OPEN.length; i += 1) {
+      if (PROMPT_OPEN[i].re.test(trimmed)) {
+        return { kind: "prompt_open", pane: PROMPT_OPEN[i].pane };
+      }
+    }
+    return { kind: "prompt", text: trimmed };
+  }
+
+  function handleChatLine(text) {
+    var parsed = parseLine(text);
+    if (parsed.kind === "empty") {
+      return Promise.resolve();
+    }
+    if (parsed.kind === "unknown_slash") {
+      appendChat("human", text, "vous");
+      appendChat("sys", "Commande inconnue " + parsed.token + ". Tapez /help.", "os");
+      return Promise.resolve();
+    }
+    if (parsed.kind === "slash") {
+      appendChat("human", text, "vous");
+      runCommand(parsed.command);
+      return Promise.resolve();
+    }
+    if (parsed.kind === "prompt_open") {
+      appendChat("human", text, "vous");
+      openPane(parsed.pane);
+      appendChat("sys", "Programme ouvert via prompt : " + parsed.pane, "os");
+      return Promise.resolve();
+    }
+    return sendOsPrompt(parsed.text);
+  }
+
+  function showSupportSession(session) {
+    visitorSession = session;
+    $("support-error").hidden = true;
+    $("os-chat-error").hidden = true;
+    $("support-meta").textContent =
+      "session_id=" + session.session_id +
+      " / llm=" + (session.llm || "stub_echo") +
+      " / status=" + session.status +
+      " / origin=" + (session.document_origin || "") +
+      " / binding=" + (session.origin_binding || "");
+    $("support-caps").textContent = "Droits : " + ((session.capabilities || []).join(", ") || "(aucun)");
+    $("os-chat-hint").textContent =
+      "session=" + session.session_id.slice(0, 8) + " llm=" + (session.llm || "stub_echo");
+    renderMessages($("support-log"), session);
+    refreshBrowserLabel();
+  }
+
+  function seedWelcome(container) {
+    var wrap = document.createElement("div");
+    wrap.className = "msg sys welcome";
+    var meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = "os · llm=stub_echo";
+    var body = document.createElement("div");
+    body.textContent =
+      "Mohhdy OS — SE dirige par prompts.\n" +
+      "llm=stub_echo (pas un LLM de production). phase3_complete=false. us031_complete=false.\n" +
+      "Tapez /help, /browser, /shell, ou un prompt.";
+    wrap.appendChild(meta);
+    wrap.appendChild(body);
+    container.appendChild(wrap);
   }
 
   function renderMessages(container, session) {
@@ -172,20 +499,6 @@
     container.scrollTop = container.scrollHeight;
   }
 
-  function showSupportSession(session) {
-    visitorSession = session;
-    $("support-error").hidden = true;
-    $("support-meta").textContent =
-      "session_id=" + session.session_id +
-      " / llm=" + (session.llm || "stub_echo") +
-      " / status=" + session.status +
-      " / origin=" + (session.document_origin || "") +
-      " / binding=" + (session.origin_binding || "");
-    $("support-caps").textContent = "Droits : " + ((session.capabilities || []).join(", ") || "(aucun)");
-    renderMessages($("support-log"), session);
-    refreshBrowserLabel();
-  }
-
   function refreshSupport() {
     if (!visitorSession) {
       return;
@@ -198,9 +511,21 @@
 
   function createSupportSession() {
     var site = ($("support-site").value || "osui_demo").trim();
-    api("/api/sessions", { method: "POST", body: { site_id: site } }).then(showSupportSession).catch(function (err) {
+    return api("/api/sessions", { method: "POST", body: { site_id: site } }).then(showSupportSession).catch(function (err) {
       $("support-error").hidden = false;
       $("support-error").textContent = formatError(err);
+      $("os-chat-error").hidden = false;
+      $("os-chat-error").textContent = formatError(err);
+      throw err;
+    });
+  }
+
+  function ensureSession() {
+    if (visitorSession) {
+      return Promise.resolve(visitorSession);
+    }
+    return createSupportSession().then(function () {
+      return visitorSession;
     });
   }
 
@@ -223,6 +548,33 @@
     }).catch(function (err) {
       $("support-error").hidden = false;
       $("support-error").textContent = formatError(err);
+    });
+  }
+
+  function sendOsPrompt(text) {
+    appendChat("human", text, "vous");
+    $("os-chat-error").hidden = true;
+    return ensureSession().then(function (session) {
+      if (!session) {
+        throw new Error("session indisponible");
+      }
+      return api("/api/sessions/" + encodeURIComponent(session.session_id) + "/messages", {
+        method: "POST",
+        body: { content: text },
+      });
+    }).then(function (data) {
+      $("os-chat-input").value = "";
+      var llm = (data && data.llm) || "stub_echo";
+      if (data && data.agent_message && data.agent_message.content) {
+        appendChat("assistant", data.agent_message.content, "assistant · llm=" + llm);
+      } else if (data && data.auto_reply === false) {
+        appendChat("sys", "Pas de reponse auto (session prise par un humain).", "os · llm=" + llm);
+      }
+      refreshSupport();
+    }).catch(function (err) {
+      $("os-chat-error").hidden = false;
+      $("os-chat-error").textContent = formatError(err);
+      appendChat("sys", formatError(err), "os erreur");
     });
   }
 
@@ -357,7 +709,7 @@
 
   function runTool(tool, args) {
     if (!visitorSession) {
-      $("browser-act").textContent = "Ouvrez d'abord une session dans Support.";
+      $("browser-act").textContent = "Envoyez d'abord un prompt dans le chat, ou ouvrez Support.";
       return Promise.resolve();
     }
     return api("/api/sessions/" + encodeURIComponent(visitorSession.session_id) + "/tools", {
@@ -382,15 +734,15 @@
   function refreshBrowserLabel() {
     $("browser-session-label").textContent = visitorSession
       ? "Session : " + visitorSession.session_id
-      : "Session : (utiliser Support d'abord)";
+      : "Session : (prompt dans le chat ou Support)";
   }
 
-  function fsQuery(which) {
-    var path = ($("fs-path").value || "demo").trim();
+  function fsQuery(pathId, outId) {
+    var path = ($(pathId).value || "demo").trim();
     api("/api/browser/fs?path=" + encodeURIComponent(path), { admin: true }).then(function (data) {
-      $("fs-out").textContent = JSON.stringify(data, null, 2);
+      $(outId).textContent = JSON.stringify(data, null, 2);
     }).catch(function (err) {
-      $("fs-out").textContent = formatError(err);
+      $(outId).textContent = formatError(err);
     });
   }
 
@@ -422,6 +774,7 @@
         ["us031_complete", String(health.us031_complete)],
         ["chromium_session_engine", String(health.chromium_session_engine)],
         ["browser_engine", health.browser_engine],
+        ["primary", (os.interaction && os.interaction.primary) || "center_chat"],
         ["panes", (os.panes || []).join(", ")],
       ].forEach(function (row) {
         var dt = document.createElement("dt");
@@ -437,20 +790,139 @@
     });
   }
 
+  var shellReady = false;
+
+  function shellPrint(text) {
+    var out = $("shell-out");
+    out.textContent += text + "\n";
+    out.scrollTop = out.scrollHeight;
+  }
+
+  function ensureShellWelcome() {
+    if (shellReady) {
+      return;
+    }
+    shellReady = true;
+    $("shell-out").textContent = "";
+    shellPrint("mohhdy-os shell UI");
+    shellPrint("llm=stub_echo  phase3_complete=false  us031_complete=false");
+    shellPrint("Pas un root Linux, pas le guest i386. Tapez help.");
+    shellPrint("");
+  }
+
+  function runShellLine(line) {
+    ensureShellWelcome();
+    var raw = String(line || "").trim();
+    shellPrint("mohhdy$ " + raw);
+    if (!raw) {
+      return;
+    }
+    var parts = raw.split(/\s+/);
+    var cmd = parts[0].replace(/^\//, "").toLowerCase();
+    if (cmd === "help" || cmd === "?") {
+      shellPrint("help     cette aide");
+      shellPrint("status   sante instance (/health)");
+      shellPrint("open X   ouvre browser|shell|admin|support|status|fs");
+      shellPrint("panes    fenetres ouvertes");
+      shellPrint("llm      rappel honnete stub");
+      shellPrint("whoami   operateur de l'instance osui");
+      shellPrint("clear    efface l'ecran");
+      shellPrint("/browser /admin ...  memes raccourcis que le chat");
+      return;
+    }
+    if (cmd === "clear") {
+      shellReady = false;
+      ensureShellWelcome();
+      return;
+    }
+    if (cmd === "llm") {
+      shellPrint("llm=stub_echo (echo / KB locale, pas un LLM de production)");
+      return;
+    }
+    if (cmd === "whoami") {
+      shellPrint("instance=mohhdy-os shell=osui user=operator");
+      return;
+    }
+    if (cmd === "panes") {
+      var open = visiblePrograms();
+      shellPrint(open.length ? open.join(", ") : "(aucun programme)");
+      return;
+    }
+    if (cmd === "status") {
+      api("/health").then(function (health) {
+        shellPrint(JSON.stringify({
+          service: health.service,
+          llm: health.llm,
+          phase3_complete: health.phase3_complete,
+          us031_complete: health.us031_complete,
+          harness: health.harness,
+        }));
+      }).catch(function (err) {
+        shellPrint(formatError(err));
+      });
+      return;
+    }
+    if (cmd === "open") {
+      var target = (parts[1] || "").toLowerCase();
+      if (PROGRAM_PANES.indexOf(target) === -1) {
+        shellPrint("usage: open browser|shell|admin|support|status|fs");
+        return;
+      }
+      openPane(target);
+      shellPrint("ouvert: " + target);
+      return;
+    }
+    var mapped = findCommand(cmd);
+    if (mapped && mapped.pane) {
+      openPane(mapped.pane);
+      shellPrint("ouvert: /" + mapped.name);
+      return;
+    }
+    if (mapped && (mapped.name === "center" || mapped.name === "close" || mapped.name === "help")) {
+      runCommand(mapped);
+      shellPrint("ok /" + mapped.name);
+      return;
+    }
+    shellPrint("commande inconnue. help pour la liste (shell UI, pas un bash).");
+  }
+
   function boot() {
     bindWindowChrome();
+    bindChatDrag();
     tickClock();
     setInterval(tickClock, 1000);
+    setChatMode("center");
+    seedWelcome($("os-chat-log"));
     var existing = storedToken();
     if (existing) {
       $("admin-token").value = existing;
     }
-    $("support-create").addEventListener("click", createSupportSession);
+    $("support-create").addEventListener("click", function () {
+      createSupportSession().catch(function () { /* deja affiche */ });
+    });
     $("support-form").addEventListener("submit", function (event) {
       event.preventDefault();
       sendVisitor();
     });
     $("support-escalate").addEventListener("click", escalateVisitor);
+    $("os-chat-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var text = ($("os-chat-input").value || "").trim();
+      $("os-chat-input").value = "";
+      handleChatLine(text);
+    });
+    $("os-chat-input").addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        $("os-chat-form").dispatchEvent(new Event("submit", { cancelable: true }));
+      }
+    });
+    $("shell-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var line = $("shell-input").value;
+      $("shell-input").value = "";
+      runShellLine(line);
+    });
     $("admin-load").addEventListener("click", function () {
       saveToken($("admin-token").value.trim());
       loadAdmin();
@@ -510,12 +982,23 @@
       runTool("mcp.invoice.create", { customer: "OSUI", amount: "12.00" });
     });
     $("browser-navigate").addEventListener("click", tryNavigate);
-    $("fs-list").addEventListener("click", function () { fsQuery("list"); });
-    $("fs-read").addEventListener("click", function () { fsQuery("read"); });
-    openPane("support");
-    openPane("status");
+    $("fs-list").addEventListener("click", function () { fsQuery("fs-path", "fs-out"); });
+    $("fs-read").addEventListener("click", function () { fsQuery("fs-path", "fs-out"); });
+    $("fs-pane-list").addEventListener("click", function () { fsQuery("fs-pane-path", "fs-pane-out"); });
+    $("fs-pane-read").addEventListener("click", function () { fsQuery("fs-pane-path", "fs-pane-out"); });
     loadStatus();
   }
+
+  window.MohhdyOS = {
+    version: "chat-desktop",
+    commands: COMMANDS.map(function (cmd) { return "/" + cmd.name; }),
+    parseLine: parseLine,
+    openPane: openPane,
+    setChatMode: setChatMode,
+    getChatMode: getChatMode,
+    closeAllPrograms: closeAllPrograms,
+    chatPosKey: CHAT_POS_KEY,
+  };
 
   boot();
 })();

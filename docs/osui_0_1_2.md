@@ -4,14 +4,17 @@
 **Statut :** premieres tranches livrees dans `osui/`. Backend temporaire = `agent/`
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
-L'instance Docker presente un **shell graphique du SE Mohhdy** (barre,
-fenetres, panes). Ce n'est **pas** US-031, **pas** un LLM de production,
+L'instance Docker presente un **shell graphique du SE Mohhdy**. Surface
+primaire : **chat central** (prompts et slash). Les programmes
+(Browser-OS, Shell OS, Admin, Support, Statut, FS) s'ouvrent depuis le
+chat. Ce n'est **pas** US-031, **pas** un LLM de production,
 **pas** un moteur Chromium de session, **pas** le guest i386 QEMU.
 `agent/` n'est **pas** retire (OS-UI-3). `make integration-qemu` et
 `make ci` (QEMU) ne sont pas allonges.
 
 Plan maitre : [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md).
 Epiques : [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md).
+Interaction : [osui_chat_desktop.md](osui_chat_desktop.md).
 
 ## Ce que `docker run` ouvre
 
@@ -27,9 +30,10 @@ python3 osui/server.py
 make osui-smoke
 ```
 
-Ouvrir `http://127.0.0.1:8080/` : chrome (top bar, bureau, dock) et panes
-Support, Admin, Browser-OS, Statut. Sante : `GET /health` (JSON, pas de
-secret). Identite shell : `GET /api/os`.
+Ouvrir `http://127.0.0.1:8080/` : chat central (surface de commande),
+puis panes ouverts par `/browser`, `/shell`, `/admin`, `/support`,
+`/status`, `/fs`. Sante : `GET /health` (JSON, pas de secret). Identite
+shell : `GET /api/os` (`commands`, `interaction.primary=center_chat`).
 
 Compose depuis `osui/` (contexte = racine du depot). Jeton uniquement a
 l'execution. Pas de `.env` dans le build. Utilisateur non-root uid 10001.
@@ -43,7 +47,7 @@ docker run mohhdy-os
         +-- osui/          chrome OS (HTML/CSS/JS desktop)
         |     GET /        bureau
         |     GET /health  service=mohhdy-os shell=osui llm=stub_echo
-        |     GET /api/os  panes + drapeaux honnetes
+        |     GET /api/os  panes + commands slash + drapeaux honnetes
         |
         +-- agent/         backend temporaire (APIs ASSIST)
               /api/sessions  chat, origine, escalade
@@ -57,10 +61,16 @@ retirera la facade Python une fois la parite mesuree.
 
 ## OS-UI-0 - chrome
 
-- Fenetre, barre haute, dock, icones, quatre panes
+- Chat central par defaut, barre haute, dock, icones, panes programmes
+- Slash `/help` `/browser` `/shell` `/admin` `/support` `/status` `/fs`
+- Chat flottant draggable des qu'un programme s'ouvre (position
+  `sessionStorage`)
+- Shell OS = UI d'instance, pas un root Linux
 - Boot Docker = cette surface, pas une page marketing
 - `phase3_complete=false`, `us031_complete=false`, `llm=stub_echo`
 - `chromium_session_engine=false`
+
+Detail : [osui_chat_desktop.md](osui_chat_desktop.md).
 
 ## OS-UI-1 - Support + Admin (natives)
 
@@ -72,7 +82,9 @@ Parite comportementale avec le scaffold (preuves `make osui-smoke`) :
 - Escalade, file humain, takeover meme `session_id` (ASSIST-031/040/041)
 
 Le widget `embed.js` reste disponible sur le backend (`/embed.js`) pour
-les sites tiers. L'operateur travaille dans le pane Support / Admin.
+les sites tiers. Le visiteur parle dans le **chat central**. Le pane
+Support reste la console detaillee (session, escalade). Admin = grant /
+revoke / takeover.
 
 ## OS-UI-2 - Browser-OS (premiere tranche)
 

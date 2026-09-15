@@ -1,7 +1,7 @@
 # Plan maitre du SE Mohhdy
 
 **Date :** 15 septembre 2026
-**Statut :** plan produit. OS-UI-000 docs livres. Premieres tranches OS-UI-0/1/2 dans `osui/` (chrome + panes, backend `agent/` temporaire). Prochain : OS-UI-3 apres parite. Pas US-031, pas LLM de production
+**Statut :** plan produit. OS-UI-000 docs livres. Premieres tranches OS-UI-0/1/2 dans `osui/` (chat central / slash / panes, backend `agent/` temporaire). Prochain : OS-UI-3 apres parite. Pas US-031, pas LLM de production
 **Ponctuation :** ASCII usuel et accents francais uniquement
 **Public :** chef de produit, mainteneur, contributeur. Une page pour **toutes** les capacites visees
 
@@ -97,10 +97,10 @@ Present dans `agent/` (stub, pas production) :
 
 Present dans `osui/` (premieres tranches OS-UI-0/1/2, pas production) :
 
-- Shell graphique HTML du SE (barre, fenetres, panes Support / Admin / Browser-OS / Statut)
+- Shell graphique HTML du SE : **chat central** (prompts / slash), panes programmes, chat flottant draggable
 - Entree Docker `mohhdy-os` = ce chrome (`GET /`), sante `GET /health`
 - UI native chat / sessions / droits / escalade / takeover, branchee sur les APIs `agent/`
-- Gestes simulateur, facture MCP demo, vue demo-app et FS sandbox dans le pane Browser-OS
+- Gestes simulateur, facture MCP demo, vue demo-app et FS sandbox ; shell UI d'instance (`/shell`, pas un root Linux)
 
 Absent (ne pas marquer livre) :
 
@@ -202,7 +202,7 @@ Le **US-031 cite ici** est celui de [../US/mohhdy_us_phase3_web_runtime.md](../U
 
 | Sujet | Visee | Statut | Tranche |
 |---|---|---|---|
-| Shell graphique minimal | Fenetres, chrome OS, vue operateur | **premiere tranche** `osui/` | **OS-UI-0** |
+| Shell graphique minimal | Chat central, slash, fenetres, chrome OS | **premiere tranche** `osui/` | **OS-UI-0** |
 | Surface navigateur de l'instance | L'OS agit dans son navigateur-OS | pane Browser-OS + bootstrap `/browser` (miroir) | OS-UI-2 (1re tranche) |
 | FS-as-web | Explorateur web du FS de l'instance | pane Browser-OS + sandbox lecture | OS-UI-2 (1re tranche) |
 | Vue operateur | Admin + ce que l'agent voit | panes Admin / Statut + bootstrap `/admin` | OS-UI-0/1 |
@@ -376,7 +376,7 @@ Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. OS-UI-
 
 ### 6.2 OS-UI-0. Shell graphique minimal dans l'instance Docker
 
-**Statut.** Premiere tranche livree : `osui/`, image `mohhdy-os`, `GET /` = bureau. Guide : [osui_0_1_2.md](osui_0_1_2.md).
+**Statut.** Premiere tranche livree : `osui/`, image `mohhdy-os`, `GET /` = bureau a chat central. Guides : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md).
 
 **But.** L'instance Docker presente un **shell graphique du SE** (chrome fenetre, vue operateur), pas seulement des pages HTML du sidecar comme identite produit.
 
@@ -395,7 +395,7 @@ Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. OS-UI-
 
 ### 6.3 OS-UI-1. Portage sessions / chat / admin / droits en UI native
 
-**Statut.** Premiere tranche livree dans les panes Support et Admin du shell (`osui/`), APIs `agent/` inchangees.
+**Statut.** Premiere tranche livree : chat central + panes Support et Admin du shell (`osui/`), APIs `agent/` inchangees.
 
 **But.** Les devoirs ASSIST-010..013, 030, 031, 040, 041, 012 vivent dans l'UI du SE.
 
@@ -519,7 +519,7 @@ Ce n'est **pas** la sortie de OS-UI-0.
 | Tranche | DoD court |
 |---|---|
 | OS-UI-000 | Plan maitre + liens ; pas de code `agent/` |
-| OS-UI-0 | Chrome OS visible au `docker run` (`osui/`) ; hors QEMU CI ; pas US-031 |
+| OS-UI-0 | Chrome OS a chat central au `docker run` (`osui/`) ; hors QEMU CI ; pas US-031 |
 | OS-UI-1 | Parite chat/admin/droits/escalade/handoff/origine dans le shell ; stub honnete |
 | OS-UI-2 | Premiere tranche : actes + FS dans le pane Browser-OS ; preuves negatives ; pas Chromium |
 | OS-UI-3 | Facade Python retiree apres parite mesuree |
