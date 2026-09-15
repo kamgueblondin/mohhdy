@@ -122,7 +122,7 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertIn("llm=stub_echo", html)
         self.assertIn("phase3_complete=false", html)
         self.assertIn("us031_complete=false", html)
-        self.assertIn("simulateur DOM", html)
+        self.assertIn("Simulateur DOM", html)
         self.assertIn("origin_denied", html)
         self.assertIn("Pas US-031", html)
         self.assertIn("Pas un LLM de production", html)
