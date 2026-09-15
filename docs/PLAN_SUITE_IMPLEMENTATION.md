@@ -4,34 +4,36 @@
 **Statut :** plan de travail, pas une livraison
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document ordonne les prochaines tranches. Les **tranches 0-4** reprennent le backlog prototype déjà défini (CI, ACL, GGUF, stockage). Le **track Agent Support** est une piste produit **nouvelle**, spécifiée dans [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) : le runtime HTTP (`agent/`) sert embed, sessions, KB locale, droits, escalade, handoff, admin à jeton, gestes simulateur, facture mock, vue `/browser` et FS sandbox (stub local). Packaging PC / hyperviseur / mode hosted : scaffold ([assist051_052_053_deploy.md](assist051_052_053_deploy.md)), pas un SaaS payant. Le produit complet (LLM de production, Chromium, US-031) n'est **pas** livré. Ce track ne modifie pas le périmètre AOS vérifié. En cas de contradiction sur ce qui tourne, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment.
+Ce document ordonne les prochaines tranches d'**un seul produit** : le SE Mohhdy, OS agentique autonome. Docker / PC / hyperviseur = **comment on boot cette instance** sur metal nu ou VM, pas un sidecar.
+
+Les **tranches 0-4** gardent le guest i386 mesuré (CI, ACL, GGUF, stockage). Les tickets `ASSIST-xxx` ([../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)) sont des **capacites du SE** : embed, sessions, KB, droits, escalade, handoff, admin, gestes, `/browser`, FS sandbox. `agent/` est le scaffold userspace actuel. Packaging : [assist051_052_053_deploy.md](assist051_052_053_deploy.md), pas un SaaS payant. LLM de production, Chromium de session et US-031 **ne sont pas** livres. En cas de contradiction sur le **guest**, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment.
 
 ## Sources lues (sans les réécrire)
 
 - [../US/mohhdy_us.md](../US/mohhdy_us.md), section "Prochaines tranches, hors livraison actuelle"
-- [../README.md](../README.md), section "Roadmap du prototype" (items ouverts ou partiels)
-- [../US/README.md](../US/README.md), couches prototype vs vision vs Agent Support
-- [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md), piste assistant web agentique (`ASSIST-xxx`)
-- [../US/mohhdy_us_phase3_web_runtime.md](../US/mohhdy_us_phase3_web_runtime.md), navigateur-OS (spec, absente)
+- [../README.md](../README.md), section "Roadmap du SE (un produit)" (items ouverts ou partiels)
+- [../US/README.md](../US/README.md), un produit, deux niveaux de maturite
+- [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md), backlog de capacites OS (`ASSIST-xxx`)
+- [../US/mohhdy_us_phase3_web_runtime.md](../US/mohhdy_us_phase3_web_runtime.md), navigateur-OS du SE (devoir produit, US-031 non livre)
 - [ETAT_REEL.md](ETAT_REEL.md), état vérifié et prochaines tranches priorisées
 - [todo.md](todo.md), journal de livraison (compteurs historiques)
 - [BILAN_MASTER.md](BILAN_MASTER.md), snapshot `9078d5f` / 13 septembre 2026
 
-## Trois couches distinctes
+## Un produit, deux niveaux de maturite
 
-Ne pas les mélanger. Un item de la vision n'est pas un ticket de build du prototype. Un epic `ASSIST-xxx` n'est pas un `AOS-xxx`.
+Ne pas vendre trois produits. Un item de spec historique n'est pas un ticket de build du guest. Un epic `ASSIST-xxx` n'est pas un `AOS-xxx`, mais c'est **la meme instance Mohhdy**.
 
-| Couche | Périmètre | Rôle dans ce plan |
+| Niveau | Perimetre | Role dans ce plan |
 |---|---|---|
-| **Prototype AOS** | Hobby OS i386 Multiboot, QEMU, shell Ring 3, FAT, NE2000 local, GPT-2 / GGUF local | Tranches 0-4. Seule couche **vérifiée** |
-| **Vision MOHHDY** | Specs `US/mohhdy_*.md` et `US/individual_us/` (US-001, US-016 TFLite, P2P, etc.) | Specs. Pas des cibles de build courantes du guest i386 |
-| **Track Agent Support** | Embed JS, admin, agent d'actions, Docker / PC / hyperviseur / cloud | Piste **parallèle** (epics `ASSIST-xxx`). Runtime plus large que Multiboot nu |
+| **Prototype guest** | i386 Multiboot, QEMU, shell Ring 3, FAT, NE2000 local, GPT-2 / GGUF local | Tranches 0-4. Seule tranche **verifiee** dans ETAT_REEL |
+| **Instance OS autonome** | Docker / PC / hyperviseur / machine vierge ; scaffold `agent/` | Capacites OS (`ASSIST-xxx`). Meme produit. Runtime plus large que Multiboot nu |
+| **Specs historiques** | `US/mohhdy_*.md` et `US/individual_us/` (US-001, US-016 TFLite, P2P, etc.) | Archives. Pas des cibles de build courantes du guest |
 
-Le prototype vérifie AOS-001 à AOS-026, plus les lots réseau / VFS / GGUF documentés dans ETAT_REEL. Ce n'est pas TensorFlow Lite, pas un microkernel abouti, pas un client OpenAI public, pas Internet, **pas** un widget de support, **pas** une image Docker d'agent.
+Le guest verifie AOS-001 a AOS-026, plus les lots reseau / VFS / GGUF documentes dans ETAT_REEL. Ce n'est pas TensorFlow Lite, pas un microkernel abouti, pas un client OpenAI public, pas Internet. Ce n'est **pas** non plus "le SE autonome deja complet" : widget, Docker et navigateur-OS ne tournent pas dans QEMU i386.
 
-La vision continue seulement par de **petits incréments Foundation déjà entamés** (identité vérifiée, capabilities, pilote de stockage hors noyau). Elle ne doit **pas** être lue comme "implémenter US-016 TFLite" ni comme "migrer US-001 d'un coup".
+Les specs historiques continuent seulement par de **petits increments Foundation deja entames** (identite verifiee, capabilities, pilote de stockage hors noyau). Elles ne doivent **pas** etre lues comme "implementer US-016 TFLite" ni comme "migrer US-001 d'un coup".
 
-Le track Agent Support **réutilise** le vocabulaire Foundation (droits, grant, révocation) et phase 2 (assistant), et une **tranche produit** de la phase 3 (accès navigateur / FS navigateur). Il ne réécrit pas ces phases comme livrées.
+Les capacites `ASSIST-xxx` **reprennent** le vocabulaire Foundation (droits, grant, revocation) et phase 2 (assistant). Le navigateur-OS (phase 3) est un **devoir du SE**, pas une vision boltee. US-031 n'est **pas** livre.
 
 ## État de départ (déjà livré, à ne pas réouvrir sans régression)
 
@@ -46,7 +48,7 @@ Constat courant (ETAT_REEL, 27 août 2026, complété par BILAN_MASTER) :
 
 Limites FAT déjà énoncées et **hors** la table de priorité AOS : écrasement, LFN enfant, renommage inter-répertoire, remplacement atomique. Elles restent des limites du contrat livré. Elles ne deviennent des cibles que si `mohhdy_us.md` les ajoute explicitement.
 
-## Ordre des prochaines tranches (couche prototype AOS)
+## Ordre des prochaines tranches (prototype guest)
 
 Ordre imposé par `mohhdy_us.md` (priorités 0 à 3), puis items README encore ouverts ou partiels.
 
@@ -217,48 +219,48 @@ ETAT_REEL liste un ordre 3 "Réseau public optionnel". `mohhdy_us.md` place à l
 
 **Commandes** (seulement si le préalable humain est écrit) : les mêmes cibles locales `qemu-ne2k-*` plus une campagne hors CI. `make ci` ne doit pas appeler un hôte public.
 
-## Track Agent Support (après ou en parallèle des tranches AOS)
+## Capacites OS de l'instance autonome (meme produit)
 
-Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md). IDs `ASSIST-xxx`. **Rien de ce track n'est vérifié dans ETAT_REEL.**
+Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md). IDs `ASSIST-xxx`. **Rien de ce backlog n'est un fait guest dans ETAT_REEL.** Ce sont des devoirs du SE, portes aujourd'hui par le scaffold `agent/`.
 
-Le widget JS, la console admin, l'agent souris / clics / MCP et l'origine HTTPS de l'embed ne tiennent **pas** dans le guest Multiboot i386 actuel. Ils exigent un runtime userspace (HTTP, navigateur outillé, file de sessions). Le véhicule prévu est Docker (puis PC, hyperviseur, cloud), **pas** une réécriture du noyau AOS.
+Le widget JS, la console admin, les actes navigateur / MCP et l'origine HTTPS de l'embed ne tiennent **pas** dans le guest Multiboot i386 actuel. Ils exigent un userspace (HTTP, navigateur-OS du SE, file de sessions). Docker **boot l'instance Mohhdy** (puis PC, hyperviseur, machine vierge), **pas** un produit de support a cote du noyau.
 
 ### Gates (ne pas inverser)
 
 | Gate | Règle |
 |---|---|
-| Tranches AOS 0-4 | Restent la priorité du prototype. Ce track **ne doit pas** allonger `make integration-qemu` ni relâcher l'ACL préfixée |
-| Docker ASSIST-050 | **Peut commencer avant** un microkernel US-001 complet, et **avant** la fin de la tranche 4 stockage. Interdit d'attendre que ATA/FAT quittent le noyau pour coller un embed |
-| Embed + admin (ASSIST-010, 040) | Après une origine HTTP (050 ou 053). Pas dans QEMU i386 |
-| Droits de session (ASSIST-030) | Vocabulaire Foundation (grant / revoke / scope) réutilisé. Pas besoin de l'identité vérifiée Foundation pour un premier Docker |
-| Actions navigateur / MCP / facture (ASSIST-020..022) | Simulateur DOM + MCP demo livrés. Pas AOS-025 public. Playwright = profil optionnel operateur, pas le harness de session |
-| OpenAI public | **Toujours sous condition**, comme le prototype : accord explicite, secret hors image, hors CI |
-| Accès navigateur / FS (ASSIST-060, 061) | Tranche produit de la phase 3. Vue instance + FS sandbox dans `agent/`. Profil Playwright optionnel (pas US-031). La phase 3 / US-031 restent spec |
+| Tranches guest 0-4 | Restent les gardes du noyau mesure. Ce backlog OS **ne doit pas** allonger `make integration-qemu` ni relacher l'ACL prefixee |
+| Docker ASSIST-050 | **Peut commencer avant** un microkernel US-001 complet, et **avant** la fin de la tranche 4 stockage. Interdit d'attendre que ATA/FAT quittent le noyau pour coller un embed. Docker = boot de l'instance |
+| Embed + admin (ASSIST-010, 040) | Apres une origine HTTP (050 ou 053). Pas dans QEMU i386 |
+| Droits de session (ASSIST-030) | Vocabulaire Foundation (grant / revoke / scope) reutilise. Pas besoin de l'identite verifiee Foundation pour un premier Docker |
+| Actions navigateur / MCP / facture (ASSIST-020..022) | Simulateur DOM + MCP demo livres. Pas AOS-025 public. Playwright = profil optionnel operateur, pas le harness de session |
+| OpenAI public | **Toujours sous condition**, comme le guest : accord explicite, secret hors image, hors CI |
+| Acces navigateur / FS (ASSIST-060, 061) | **Devoir du SE** (navigateur-OS). Vue instance + FS sandbox dans `agent/`. Profil Playwright optionnel. US-031 **non livre** |
 | Corps physique (ASSIST-090) | Piste future. Pas une livraison proche |
-| Cloud abonnement (ASSIST-053) | Après 050 amorçable. Optionnel. Self-host reste possible |
+| Cloud abonnement (ASSIST-053) | Apres 050 amorcable. Optionnel. Self-host reste possible |
 
 ### Épiques ordonnées
 
 Ordre détaillé et critères : le fichier `ASSIST-xxx`. Ici l'ordre de **build** seulement.
 
-1. **ASSIST-000** (docs) : déjà ce plan et la spec. Distinguer prototype et piste agent.
-2. **ASSIST-050** Docker : image HTTP livrée dans `agent/` (`docker run` documenté, `/health`, `/admin`, `/embed.js`, `/demo`). Guide : [assist050_docker_runtime.md](assist050_docker_runtime.md). Ne pas bootstraper le widget via `make iso`. `make ci` et `make integration-qemu` inchangés.
-3. **ASSIST-010 / 011 / 013 / 040** : snippet d'embed, session isolée, console de revue à jeton, refus d'origine document vs site déclaré. Livré avec stub local (pas un LLM de production). Guides : [assist010_sessions_admin.md](assist010_sessions_admin.md), [assist013_origine_embed.md](assist013_origine_embed.md).
-4. **ASSIST-012 / 030 / 031 / 041** : expliquer la plateforme (KB locale), masque de droits par site/session, escalade, handoff humain dans la **même** conversation. Livré (stub). Guide : [assist012_droits_handoff.md](assist012_droits_handoff.md).
-5. **ASSIST-020 / 021 / 022** : gestes allowlistés (simulateur DOM, pas Chromium), outils MCP déclarés, facture demo dans `/demo-app`. Livré. Guide : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
-6. **ASSIST-051 / 052 / 053** : install PC (`install.sh`), recette hyperviseur distincte de l'ISO GRUB AOS (cloud-init + QEMU x86_64, dry-run), scaffold cloud (`MOHHDY_AGENT_MODE`, quotas placeholder, **pas** de facturation). Guide : [assist051_052_053_deploy.md](assist051_052_053_deploy.md).
-7. **ASSIST-060 / 061** : `/browser` (miroir simulateur) et FS sandbox `/api/browser/fs` livrés dans `agent/`. Profil Playwright optionnel pour l'operateur (`MOHHDY_AGENT_BROWSER_ENGINE`), **pas** US-031. `phase3_complete=false`, `us031_complete=false`. ETAT_REEL inchangé. Guides : [assist060_061_browser.md](assist060_061_browser.md), [assist_playwright_optional.md](assist_playwright_optional.md).
-8. **ASSIST-090** : hors sprint. Réutiliser plus tard le même modèle de capacités.
+1. **ASSIST-000** (docs) : deja ce plan et la spec. Un produit, deux niveaux de maturite.
+2. **ASSIST-050** Docker : boot de l'instance (`agent/`, `docker run` documente, `/health`, `/admin`, `/embed.js`, `/demo`). Guide : [assist050_docker_runtime.md](assist050_docker_runtime.md). Ne pas bootstraper le widget via `make iso`. `make ci` et `make integration-qemu` inchanges.
+3. **ASSIST-010 / 011 / 013 / 040** : snippet d'embed, session isolee, console de revue a jeton, refus d'origine document vs site declare. Livre avec stub local (pas un LLM de production). Guides : [assist010_sessions_admin.md](assist010_sessions_admin.md), [assist013_origine_embed.md](assist013_origine_embed.md).
+4. **ASSIST-012 / 030 / 031 / 041** : expliquer la plateforme (KB locale), masque de droits par site/session, escalade, handoff humain dans la **meme** conversation. Livre (stub). Guide : [assist012_droits_handoff.md](assist012_droits_handoff.md).
+5. **ASSIST-020 / 021 / 022** : gestes allowlistes (simulateur DOM, pas Chromium de session), outils MCP declares, facture demo dans `/demo-app`. Livre. Guide : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
+6. **ASSIST-051 / 052 / 053** : install PC (`install.sh`), recette hyperviseur distincte de l'ISO GRUB guest (cloud-init + QEMU x86_64, dry-run), scaffold cloud (`MOHHDY_AGENT_MODE`, quotas placeholder, **pas** de facturation). Guide : [assist051_052_053_deploy.md](assist051_052_053_deploy.md).
+7. **ASSIST-060 / 061** : `/browser` (miroir simulateur) et FS sandbox `/api/browser/fs` livres dans `agent/`. Profil Playwright optionnel (`MOHHDY_AGENT_BROWSER_ENGINE`), **pas** US-031. `phase3_complete=false`, `us031_complete=false`. ETAT_REEL guest inchange. Guides : [assist060_061_browser.md](assist060_061_browser.md), [assist_playwright_optional.md](assist_playwright_optional.md).
+8. **ASSIST-090** : hors sprint. Reutiliser plus tard le meme modele de capacites.
 
 ### Relation aux phases 1-8 (sans réécrire l'histoire)
 
-- Phase 1 Foundation : droits / capacités. Le track reprend grant, révocation, moindre privilège, `request_id`. Il n'affirme pas US-001 terminé.
-- Phase 2 AI Core / US-021 / US-028 : assistant qui parle et agit. Le prototype n'a que `ai <texte>` (AOS-010). Le track produitise cet assistant pour le support. Pas TFLite (US-016).
-- Phase 3 Web Runtime : navigateur-OS et FS web **absents**. ASSIST-060/061 en sont une tranche produit, pas US-031 livré. Un profil Playwright optionnel n'équivaut pas à US-031.
-- US-015 / phase 6 / phase 8 : déploiement et production. Docker / cloud ici = packaging d'agent, pas l'orchestrateur microkernel.
-- US-034 : connecteurs. Les outils MCP du site en sont un voisinage borné (allowlist), pas un ERP générique.
+- Phase 1 Foundation : droits / capacites. L'instance reprend grant, revocation, moindre privilege, `request_id`. Elle n'affirme pas US-001 termine.
+- Phase 2 AI Core / US-021 / US-028 : assistant qui parle et agit. Le guest n'a que `ai <texte>` (AOS-010). L'instance porte cet assistant pour le support. Pas TFLite (US-016).
+- Phase 3 Web Runtime : **navigateur-OS du SE**, devoir produit. ASSIST-060/061 en sont le bootstrap userspace, pas US-031 livre. Un profil Playwright optionnel n'equivaut pas a US-031.
+- US-015 / phase 6 / phase 8 : deploiement. Docker / cloud ici = boot de l'instance Mohhdy, pas l'orchestrateur microkernel.
+- US-034 : connecteurs. Les outils MCP du site en sont un voisinage borne (allowlist), pas un ERP generique.
 
-## Couche vision MOHHDY (specs, hors build courant du guest i386)
+## Specs historiques (hors build courant du guest i386)
 
 Fichiers de spec : [../US/README.md](../US/README.md), [../US/mohhdy_us_phase1_foundation.md](../US/mohhdy_us_phase1_foundation.md), [../US/mohhdy_us_phase2_ai_core.md](../US/mohhdy_us_phase2_ai_core.md), [../US/individual_us/INDEX.md](../US/individual_us/INDEX.md).
 
@@ -282,33 +284,33 @@ Ces pas restent des **incréments** du prototype i386. Ils préparent US-001 / U
 - Phase 2 complète, phase 3 navigateur-OS entier, phases 4 à 8 (PromptMessage, P2P, économie, multi-plateforme) comme sprint unique
 - Client OpenAI public, DHCP sur réseau public, TLS vers un hôte réel, tant que la tranche sous condition n'est pas autorisée
 - Annoncer que stockage, pilotes ou NIC sont "déjà hors du noyau"
-- Annoncer qu'un LLM de production ou un Chromium outillé tournent déjà. Le stub, la KB, l'escalade, le handoff et le **simulateur DOM** d'`agent/` ne sont pas ce produit.
+- Annoncer qu'un LLM de production ou un Chromium de session tournent deja. Le stub, la KB, l'escalade, le handoff et le **simulateur DOM** d'`agent/` ne sont pas cette livraison.
 
-Le track Agent Support **n'est pas** "implémenter la phase 3". C'est une piste parallèle, avec ses propres IDs.
+ASSIST-060/061 **n'est pas** "US-031 livre". C'est le bootstrap du navigateur-OS du SE, avec ses propres IDs.
 
 ## Ordre récapitulatif
 
-| Rang | Tranche | Couche | Nature |
+| Rang | Tranche | Niveau | Nature |
 |---:|---|---|---|
-| 0 | Budget CI QEMU | Prototype AOS | Garder, ne pas relâcher |
-| 1 | ACL préfixée | Prototype AOS | Garder les preuves négatives |
-| 2 | Topologie locale partagée | Prototype AOS | Optionnel, bloqué par PS/2 simultané |
-| 3 | Latence GGUF matériel / KVM | Prototype AOS | Item ouvert README + priorité 3 `mohhdy_us.md` |
-| 4 | Pilote de stockage hors noyau | Prototype AOS, incrément US-001 | Item partiel README `[~]` |
-| - | Réseau public | Prototype AOS | Sous condition, hors CI |
-| - | Identité / capabilities | Incrément Foundation | Petits pas, pas US-016, pas US-001 total |
-| P | ASSIST-050 Docker runtime agent | Track Agent Support | Image HTTP livrée (`agent/`) |
-| P+ | ASSIST-010..041 embed, sessions, KB, droits, escalade, handoff | Track Agent Support | Livré (stub local, jeton `ADMIN_TOKEN`) |
-| P+ | ASSIST-020..022 gestes simulateur, MCP, facture mock | Track Agent Support | Livré (pas Chromium ; [assist020_gestes_mcp.md](assist020_gestes_mcp.md)) |
-| P+ | ASSIST-051..053 PC, hyperviseur, cloud scaffold | Track Agent Support | Install native + dry-run QEMU/cloud-init ; hosted **non-billing** ([assist051_052_053_deploy.md](assist051_052_053_deploy.md)) |
-| ensuite | ASSIST-060..061 navigateur / FS | Track Agent Support | Vue `/browser` + FS sandbox livrés ; **pas** US-031 ([assist060_061_browser.md](assist060_061_browser.md)) |
-| futur | ASSIST-090 corps physique | Track Agent Support | Hors livraison proche |
+| 0 | Budget CI QEMU | Prototype guest | Garder, ne pas relacher |
+| 1 | ACL prefixee | Prototype guest | Garder les preuves negatives |
+| 2 | Topologie locale partagee | Prototype guest | Optionnel, bloque par PS/2 simultane |
+| 3 | Latence GGUF materiel / KVM | Prototype guest | Item ouvert README + priorite 3 `mohhdy_us.md` |
+| 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | Item partiel README `[~]` |
+| - | Reseau public | Prototype guest | Sous condition, hors CI |
+| - | Identite / capabilities | Increment Foundation | Petits pas, pas US-016, pas US-001 total |
+| P | ASSIST-050 Docker (boot instance) | Capacite OS | Image HTTP livree (`agent/`) |
+| P+ | ASSIST-010..041 embed, sessions, KB, droits, escalade, handoff | Capacite OS | Livre (stub local, jeton `ADMIN_TOKEN`) |
+| P+ | ASSIST-020..022 gestes simulateur, MCP, facture mock | Capacite OS | Livre (pas Chromium de session ; [assist020_gestes_mcp.md](assist020_gestes_mcp.md)) |
+| P+ | ASSIST-051..053 PC, hyperviseur, cloud scaffold | Capacite OS (deploiement du SE) | Install native + dry-run QEMU/cloud-init ; hosted **non-billing** ([assist051_052_053_deploy.md](assist051_052_053_deploy.md)) |
+| ensuite | ASSIST-060..061 navigateur-OS / FS | Capacite OS (coeur, pas option) | Vue `/browser` + FS sandbox livres ; **pas** US-031 ([assist060_061_browser.md](assist060_061_browser.md)) |
+| futur | ASSIST-090 corps physique | Capacite OS | Hors livraison proche |
 
-Une PR = une tranche visible par `make ci` (code) ou un alignement de documentation. Nouveaux tickets prototype : préfixe `AOS-` dans `US/mohhdy_us.md`. Nouveaux tickets agent support : préfixe `ASSIST-` dans `US/mohhdy_agent_support_web.md`. Ne pas renuméroter la vision `US-xxx`.
+Une PR = une tranche visible par `make ci` (code) ou un alignement de documentation. Nouveaux tickets guest : prefixe `AOS-` dans `US/mohhdy_us.md`. Nouveaux tickets capacites OS : prefixe `ASSIST-` dans `US/mohhdy_agent_support_web.md`. Ne pas renumeroter les specs `US-xxx`.
 
 ## Hors périmètre de ce plan
 
 - Changement de logique C / ABI / make, sauf si une tranche ultérieure l'exige
 - Renommage de tickets `AOS-*`, de cibles `make`, de chemins `docs/aos*.md`
 - Rebrand restant, magique `AIOV`, commandes `ai` / `ai-continue` / `ai-next`
-- Faire passer le support web pour une fonction du prototype i386 vérifié
+- Faire passer le support web pour une fonction **deja mesuree** du guest i386

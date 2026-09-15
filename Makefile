@@ -639,7 +639,7 @@ gpt2-tests: gpt2-recovery gpt2-benchmark
 ci: all test-all qemu-smoke qemu-ne2k-tls-multipair
 	@echo "=== CI locale OK (build + tests + smokes QEMU locaux) ==="
 
-# Runtime HTTP agent (stdlib). Hors ci / integration-qemu.
+# Scaffold userspace HTTP de l'instance Mohhdy (stdlib). Hors ci / integration-qemu.
 .PHONY: agent-smoke agent-docker agent-install-check agent-hypervisor-dry-run agent-deploy-check
 agent-smoke:
 	@python3 agent/tests/test_http.py
@@ -710,8 +710,8 @@ help:
 	@echo "  gpt2-benchmark  - Modèle requis : mesure de latence QEMU SSE2"
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
-	@echo "  agent-smoke     - Fumee HTTP agent (gestes, MCP, origine embed, /browser, FS sandbox, 501 Playwright absent ; hors ci / QEMU)"
-	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent slim (optionnel, hors ci, sans Chromium)"
+	@echo "  agent-smoke     - Fumee HTTP instance (gestes, MCP, origine embed, /browser, FS sandbox, 501 Playwright absent ; hors ci / QEMU)"
+	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent slim (boot instance, hors ci, sans Chromium)"
 	@echo "  agent-install-check - Install native temporaire + /health (ASSIST-051, hors ci)"
 	@echo "  agent-hypervisor-dry-run - Valide cloud-init/QEMU agent, sans boot (ASSIST-052, hors ci)"
 	@echo "  agent-deploy-check - install-check + hypervisor-dry-run (hors ci)"

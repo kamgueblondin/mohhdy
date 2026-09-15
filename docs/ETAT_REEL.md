@@ -1,10 +1,12 @@
 # État réel de MOHHDY
 
-**Date de constat :** 27 août 2026
+**Date de constat :** 27 aout 2026
 
-**Référence :** hobby OS pédagogique i386 32-bit, BIOS/Multiboot, QEMU et Ring 3. Ce n'est pas une distribution Linux.
+**Reference :** prototype guest i386 32-bit, BIOS/Multiboot, QEMU et Ring 3. Ce n'est pas une distribution Linux.
 
-**Rôle :** cette page décrit uniquement les fonctions observables dans le code et les tests. Elle prévaut sur les diagnostics historiques et sur la vision MOHHDY. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadré ci-dessous décrit l'état courant. Lexique : [vocabulaire.md](vocabulaire.md).
+**Produit.** Mohhdy est **un seul** SE agentique autonome. Cette page mesure uniquement la **tranche guest i386** (chemin pedagogique sous QEMU). Elle ne decrit pas le navigateur-OS, le LLM de production, ni le scaffold userspace `agent/`. L'intention produit est unitaire ; les faits mesures ici restent ceux du guest. Docker / PC / hyperviseur bootent l'instance autonome, ce n'est pas un second produit.
+
+**Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
 ## État courant vérifié
 
@@ -17,7 +19,7 @@
 | Validation | La suite complète passe **522/522**. Le contrat QEMU VFS valide les fixtures FAT16 et FAT32 sur deux disques IDE, les cycles 8.3 et LFN de racine, puis pour chaque volume `mkdir`, refus de doublon, écriture enfant, `stat`, liste, lecture, renommage, refus `rmdir` non vide, suppression et `rmdir` final. Il prouve la délégation corrélée des ajouts/retraits et des I/O d'alias vers `vfsvirtual`, les pages et l'observation, ainsi que le diagnostic, pendant une lecture d'alias enfant suspendue, de l'unique scope `read initrd` : la ligne publique n'admet que droits, sources et identifiant de requête corrélé, sans préfixe ; puis la révocation complète de la capacité worker après expiration. Les tests unitaires prouvent qu'un droit `read` sur `initrd` n'autorise ni `overlay`, ni FAT, ni une primitive générique ; un droit `mutate` sur FAT32 reste aussi isolé. Le smoke CI ajoute les deux paires TLS locales ; le smoke cœur conserve sa confirmation caractère par caractère tandis que les contrats VFS et IRQ0 réconcilient la ligne entière, retirent localement les divergences avant `ret` et ne rejouent aucune ligne ou requête après soumission. `make integration-qemu` conserve ses sept contrats, est séquentiel par défaut pour éviter la contention PS/2 et doit rester sous le budget de 25 minutes. |
 | Mémoire | Les lots concernés n'introduisent aucune allocation dynamique ; les buffers restent statiques ou caller-owned. |
 
-MOHHDY démarre sans OS préinstallé dans QEMU, charge une archive initrd TAR, lance un shell ELF en Ring 3 et peut exécuter localement GPT-2 124M si les deux actifs binaires sont intégrés à l'image. Il demeure un **prototype de noyau**, non un système d'exploitation généraliste.
+MOHHDY demarre sans OS preinstalle dans QEMU, charge une archive initrd TAR, lance un shell ELF en Ring 3 et peut executer localement GPT-2 124M si les deux actifs binaires sont integres a l'image. Il demeure un **prototype de noyau guest**, non un systeme d'exploitation generaliste, non le SE autonome complet (navigateur-OS, LLM de production, `agent/`).
 
 ### Maintenance des gates - 25 août 2026
 

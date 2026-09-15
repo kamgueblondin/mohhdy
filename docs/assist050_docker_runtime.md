@@ -1,20 +1,22 @@
-# ASSIST-050 - image Docker du runtime agent
+# ASSIST-050 - image Docker de l'instance Mohhdy
 
 **Date :** 15 septembre 2026
 **Statut :** image HTTP livrée ; sessions et admin = [assist010_sessions_admin.md](assist010_sessions_admin.md)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document décrit comment construire, lancer et vérifier le conteneur
-HTTP du track Agent Support. Il n'héberge pas le noyau Multiboot i386.
-Il n'allonge pas `make integration-qemu`. Il n'entre pas dans `make ci`.
+Ce document décrit comment construire, lancer et verifier le conteneur
+HTTP de l'**instance Mohhdy** (scaffold userspace `agent/`). Docker boot
+cette instance comme sur une machine vierge. Il n'heberge pas le noyau
+Multiboot i386. Il n'allonge pas `make integration-qemu`. Il n'entre
+pas dans `make ci`.
 
-Spec produit : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)
+Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)
 (ASSIST-050). Sessions / embed / admin : ASSIST-010, 011, 040.
-Plan : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
+Plan (un produit) : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
 
 ## Ce que l'image sert
 
-Arborescence parallèle `agent/` (Python 3, bibliothèque standard uniquement) :
+Arborescence `agent/` (Python 3, bibliotheque standard uniquement) : scaffold userspace de l'instance, **pas** un produit a cote.
 
 | Route | Réponse |
 |---|---|
@@ -133,13 +135,14 @@ session et accepte un message. L'echo stub s'affiche dans le panneau.
 - Dépendance pip, Node, navigateur outillé (Chromium n'est pas dans l'image slim ; extra : `Dockerfile.playwright` cible `playwright`)
 - Modèle GPT-2 / GGUF
 
-## Relation au prototype AOS
+## Relation au prototype guest
 
-Le hobby OS i386 reste la couche vérifiée ([ETAT_REEL.md](ETAT_REEL.md)).
-Ce runtime ne remplace pas QEMU, ne s'ajoute pas aux sept contrats
-d'intégration, et ne doit pas faire grandir le job `integration-qemu`.
+Le guest i386 reste la tranche **mesuree** ([ETAT_REEL.md](ETAT_REEL.md)).
+Ce scaffold ne remplace pas QEMU, ne s'ajoute pas aux sept contrats
+d'integration, et ne doit pas faire grandir le job `integration-qemu`.
 Le job CI optionnel `agent-http-smoke` (Python stdlib, sans Docker) tourne
-en parallèle ; il ne `needs` pas le build i386.
+en parallele ; il ne `needs` pas le build i386. C'est le meme produit :
+l'instance autonome, pas un sidecar.
 
 Install PC, hyperviseur et mode hosted : [assist051_052_053_deploy.md](assist051_052_053_deploy.md).
 Vue navigateur et FS sandbox : [assist060_061_browser.md](assist060_061_browser.md).

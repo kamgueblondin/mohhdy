@@ -7,9 +7,9 @@
 Ce document décrit le contrat HTTP des sessions visiteur, du widget
 `embed.js`, et de la console `/admin`. L'image Docker reste celle
 d'ASSIST-050 : [assist050_docker_runtime.md](assist050_docker_runtime.md).
-Spec produit : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
+Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
 
-Ce n'est **pas** un LLM de production. Ce n'est **pas** le noyau i386.
+Ce n'est **pas** un LLM de production. Ce n'est **pas** le noyau i386 du guest.
 Aucun appel OpenAI public. Aucun secret dans l'image ni dans `embed.js`.
 
 ## Ce qui est livré

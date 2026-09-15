@@ -10,9 +10,10 @@ sessions, simulateur DOM. FS sandbox : [assist060_061_browser.md](assist060_061_
 Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
 Plan : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
 
-Ce n'est **pas** `make iso` ni `build/mohhdy.bin` (prototype i386 Multiboot).
+Ce n'est **pas** `make iso` ni `build/mohhdy.bin` (prototype guest i386 Multiboot).
 Ce n'est **pas** un LLM de production. Aucun secret dans le depot.
 `make ci` et `make integration-qemu` ne sont pas allonges.
+Docker / PC / hyperviseur = **deploiement du SE**, pas un sidecar.
 
 ## Chemins de lancement
 
@@ -139,7 +140,7 @@ Redirection utilisateur : hote `8080` vers invite `8080`. Verifier
 Interdit :
 
 - `qemu-system-i386 -kernel build/mohhdy.bin`
-- `make iso` GRUB du prototype comme substitut du runtime agent
+- `make iso` GRUB du prototype guest comme substitut de l'instance Docker
 - secret dans `user-data` versionne
 - Packer n'est pas requis (stub cloud-init suffit)
 

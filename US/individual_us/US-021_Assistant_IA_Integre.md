@@ -1,6 +1,6 @@
 # US-021 : Assistant IA Intégré au Système
 
-> **MOHHDY :** builtin shell `ai <texte>` synchrone et borné, pas un assistant proactif système. Voir AOS-010 dans [../mohhdy_us.md](../mohhdy_us.md).
+> **MOHHDY :** builtin shell `ai <texte>` synchrone et borne (guest). L'assistant de support / actes web est une **capacite du SE** (backlog ASSIST, scaffold `agent/`), pas un produit a cote. Voir AOS-010 dans [../mohhdy_us.md](../mohhdy_us.md) et [../mohhdy_agent_support_web.md](../mohhdy_agent_support_web.md).
 
 ## Informations Générales
 

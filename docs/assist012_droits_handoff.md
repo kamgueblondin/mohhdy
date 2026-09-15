@@ -9,9 +9,9 @@ par site et par session, l'escalade humaine et la reprise de la **même**
 conversation. L'image Docker reste celle d'ASSIST-050 :
 [assist050_docker_runtime.md](assist050_docker_runtime.md).
 Sessions / embed / admin de base : [assist010_sessions_admin.md](assist010_sessions_admin.md).
-Spec produit : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
+Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
 
-Ce n'est **pas** un LLM de production. Ce n'est **pas** le noyau i386.
+Ce n'est **pas** un LLM de production. Ce n'est **pas** le noyau i386 du guest.
 Aucun appel OpenAI public. Aucun secret dans l'image ni dans `embed.js`.
 Les actes navigateur de cette tranche sont un **simulateur DOM**
 (ASSIST-020), pas Chromium. Détail : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).

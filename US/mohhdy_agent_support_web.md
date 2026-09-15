@@ -1,45 +1,45 @@
-# Track Agent Support - assistant web agentique
+# Capacites OS de l'instance Mohhdy (backlog ASSIST-xxx)
 
 **Date :** 15 septembre 2026
-**Statut :** spec produit. ASSIST-050/010/011/012/013/020/021/022/030/031/040/041 = runtime HTTP livré (stub local, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock, refus d'origine). ASSIST-051/052/053 = packaging operateur (install PC, recette hyperviseur, scaffold cloud non-billing). ASSIST-060/061 = vue `/browser` et FS sandbox `/api/browser/fs` (pas US-031). Playwright / Chromium = **profil optionnel** operateur, pas US-031. LLM de production, navigateur-OS et SaaS de paiement **pas** livrés
+**Statut :** backlog de **capacites du SE**, pas un produit distinct. ASSIST-050/010/011/012/013/020/021/022/030/031/040/041 = scaffold userspace HTTP livre (stub local, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock, refus d'origine). ASSIST-051/052/053 = packaging operateur (install PC, recette hyperviseur, scaffold cloud non-billing). ASSIST-060/061 = vue `/browser` et FS sandbox `/api/browser/fs` (pas US-031). Playwright / Chromium = **profil optionnel** operateur, pas US-031. LLM de production, navigateur-OS complet et SaaS de paiement **pas** livres
 **IDs :** `ASSIST-xxx` (ne collident ni avec `AOS-xxx` ni avec `US-xxx`)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document décrit une **nouvelle piste produit** : MOHHDY comme assistant IA agentique (OS / agent) capable de tenir un support client sur un site web, d'agir dans le périmètre autorisé, et de céder la main à un humain. Il n'annule pas le prototype i386. `agent/` sert une origine HTTP : widget `embed.js`, sessions visiteur isolées, base de connaissance locale optionnelle, masque de droits, escalade, handoff dans la même session, console `/admin` (jeton `ADMIN_TOKEN` optionnel), simulateur de gestes sur `/demo-app`, outil MCP demo, facture mock, vue `/browser` (miroir du simulateur + controle Playwright optionnel) et FS sandbox `/browser/fs`. Les réponses sont un **stub local** (echo ou extraits de KB), pas un LLM de production. Playwright n'est **pas** une dépendance du slim. **Pas** US-031.
+Ce document decrit les **devoirs du SE Mohhdy** : tenir un support client sur le web, agir dans le **navigateur-OS du SE**, rester autonome, et ceder la main a un humain. Ce n'est **pas** une piste parallele, pas un widget SaaS a cote du noyau. `agent/` est le **scaffold userspace actuel** de l'instance jusqu'a ce que davantage vive dans le guest : widget `embed.js`, sessions visiteur isolees, base de connaissance locale optionnelle, masque de droits, escalade, handoff dans la meme session, console `/admin` (jeton `ADMIN_TOKEN` optionnel), simulateur de gestes sur `/demo-app`, outil MCP demo, facture mock, vue `/browser` (miroir du simulateur + controle Playwright optionnel) et FS sandbox `/browser/fs`. Les reponses sont un **stub local** (echo ou extraits de KB), pas un LLM de production. Playwright n'est **pas** une dependance du slim. **Pas** US-031.
 
 En cas de contradiction sur ce qui **tourne aujourd'hui**, [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md) et [mohhdy_us.md](mohhdy_us.md) priment.
 
-Plan d'ordre : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Index des couches : [README.md](README.md).
+Plan d'ordre : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Index : [README.md](README.md).
 
-## Positionnement (sans réécrire l'histoire)
+## Positionnement (un produit, deux niveaux de maturite)
 
-MOHHDY a deux couches déjà documentées, plus cette piste :
+Mohhdy est **un seul** SE agentique autonome. Deux niveaux de runtime, pas trois produits :
 
-| Couche | Ce qu'elle dit | Ce qu'elle n'est pas |
+| Niveau | Ce qu'il dit | Ce qu'il n'est pas |
 |---|---|---|
-| Prototype AOS | Hobby OS i386 Multiboot sous QEMU (AOS-001 à AOS-026 vérifiés) | Un runtime web, un widget JS, une image Docker |
-| Vision phases 1-8 | Specs historiques (Foundation, AI Core, Web Runtime, etc.) | Un backlog de build du prototype |
-| **Track Agent Support** | Produit "assistant qui agit" pour le support de site, avec déploiement Docker / PC / hyperviseur / cloud | Une fonction déjà livrée dans le noyau i386 |
+| Prototype guest | Chemin noyau i386 Multiboot sous QEMU (AOS-001 a AOS-026 verifies) | Un runtime web, un widget JS, une image Docker, le SE autonome complet |
+| Specs historiques | Phases 1-8 (Foundation, AI Core, Web Runtime, etc.) | Un second produit, un backlog de build du guest |
+| **Instance OS autonome** | Capacites du SE : support sur le web, navigateur-OS, admin, outils, Docker / PC / hyperviseur / machine vierge | Un produit "Agent Support" a cote, une fonction deja livree dans le noyau i386 |
 
-Le widget JS, la console admin, l'agent d'actions navigateur et l'emballage Docker exigent un **runtime plus large** qu'un noyau Multiboot i386 nu. Cette piste ne prétend pas les faire tourner dans le shell Ring 3 actuel.
+Le widget JS, la console admin, les actes navigateur et Docker exigent un **userspace plus large** qu'un noyau Multiboot i386 nu. Ce backlog ne pretend pas les faire tourner dans le shell Ring 3 actuel. Docker **boot l'instance** comme sur une machine vierge.
 
-Vocabulaire **réutilisé**, sans nouveaux IDs vision :
+Vocabulaire **reutilise**, sans nouveaux IDs vision :
 
-- **Capacités / droits** : même idée que Foundation (grant, revoke, scope, moindre privilège). Les capabilities AOS actuelles sont locales, volatiles et liées à un PID Ring 3. Le track Agent Support a besoin d'un modèle équivalent **par site, par session et par outil**, pas d'un renumérotage de US-001 / US-003.
-- **Assistant / IA** : voisinage de US-021 (assistant intégré) et US-028 (intelligence conversationnelle). Le prototype n'offre que `ai <texte>` synchrone et borné (AOS-010). Ce track produitise l'assistant pour le support client. Ce n'est **pas** TensorFlow Lite (US-016).
-- **Navigateur comme FS** : voisinage de la phase 3 (US-031 à US-033 dans [mohhdy_us_phase3_web_runtime.md](mohhdy_us_phase3_web_runtime.md)). L'accès navigateur et l'exposition du système de fichiers navigateur sont une **tranche produit** de cette vision. La phase 3 reste **non implémentée**.
-- **Déploiement** : voisinage de US-015 (framework de déploiement) et de la phase 6 / phase 8. Docker / cloud ici sont des cibles de **packaging d'agent**, pas l'orchestration microkernel complète.
-- **Actions dans l'appli cliente** : voisinage de US-034 (connecteurs entreprise) et d'outils MCP / allowlist, pas un ERP livré.
+- **Capacites / droits** : meme idee que Foundation (grant, revoke, scope, moindre privilege). Les capabilities AOS actuelles sont locales, volatiles et liees a un PID Ring 3. L'instance a besoin d'un modele equivalent **par site, par session et par outil**, pas d'un renumerotage de US-001 / US-003.
+- **Assistant / IA** : voisinage de US-021 (assistant integre) et US-028 (intelligence conversationnelle). Le guest n'offre que `ai <texte>` synchrone et borne (AOS-010). L'instance porte l'assistant pour le support. Ce n'est **pas** TensorFlow Lite (US-016).
+- **Navigateur-OS du SE** : **coeur produit**, voisinage de la phase 3 (US-031 a US-033 dans [mohhdy_us_phase3_web_runtime.md](mohhdy_us_phase3_web_runtime.md)). ASSIST-060/061 en sont le bootstrap. US-031 **n'est pas** livre.
+- **Deploiement** : voisinage de US-015 et de la phase 6 / phase 8. Docker / PC / hyperviseur = **deploiement du SE**, pas un packaging d'un sidecar.
+- **Actions dans l'appli cliente** : voisinage de US-034 (connecteurs entreprise) et d'outils MCP / allowlist, pas un ERP livre.
 
-Dépendances honnêtes vers le prototype :
+Dependances honnetes vers le guest :
 
-- Les priorités AOS proches (budget CI, ACL préfixe, latence GGUF, migration stockage) **restent** les tranches 0-4. Ce track ne les remplace pas.
-- OpenAI public reste **sous condition** (accord explicite, secret hors image, hors CI), y compris pour l'agent de support.
-- Docker peut **commencer avant** un microkernel US-001 complet : le runtime agent n'a pas à attendre que ATA / FAT quittent le noyau i386.
+- Les priorites AOS proches (budget CI, ACL prefixe, latence GGUF, migration stockage) **restent** les tranches 0-4. Ce backlog ne les remplace pas.
+- OpenAI public reste **sous condition** (accord explicite, secret hors image, hors CI).
+- Docker peut **commencer avant** un microkernel US-001 complet : l'instance n'a pas a attendre que ATA / FAT quittent le noyau i386.
 
 ## Vision
 
-MOHHDY n'est plus seulement un prototype pédagogique i386. Il évolue en **assistant OS / agent** : une instance que l'opérateur déploie (Docker, PC, hyperviseur, ou abonnement cloud), que le visiteur d'un site rencontre via un embed JavaScript (UX proche de tawk.to), et qui **agit** au lieu de seulement discuter.
+Mohhdy n'est plus seulement un prototype pedagogique i386. C'est le **SE agentique autonome** : une instance que l'operateur deploie (Docker, PC, hyperviseur, machine vierge), que le visiteur d'un site rencontre via un embed JavaScript (UX proche de tawk.to), et qui **agit** au lieu de seulement discuter.
 
 L'agent :
 
@@ -65,28 +65,29 @@ Si, plus tard, MOHHDY a un corps physique, les mêmes droits pourront gouverner 
 ## Non-objectifs (explicites)
 
 - Ne pas déclarer livrés le produit complet : LLM de production, Chromium réel, ERP, marketplace SaaS payante. Le runtime HTTP (`agent/`) n'est pas ce produit. Les gestes sont un simulateur DOM local. L'install PC / la recette hyperviseur / le mode `hosted` sont un **scaffold** de packaging, pas un abonnement facturé.
-- Ne pas déplacer le backlog AOS (CI 25 min, ACL préfixe, GGUF, stockage hors noyau) vers ce track.
-- Ne pas héberger l'embed public **dans** le noyau Multiboot i386 actuel.
-- Ne pas ouvrir TensorFlow Lite, NLU fédéré, P2P, économie de points, ou US-001 "d'un coup".
-- Ne pas appeler un hôte OpenAI public depuis la CI, ni placer un secret dans le JS d'embed.
-- Ne pas livrer un corps physique, ni un robot, dans les épiques proches.
-- Ne pas inventer une troisième numérotation `US-xxx` ni recycler `AOS-xxx` pour le web.
+- Ne pas deplacer le backlog AOS (CI 25 min, ACL prefixe, GGUF, stockage hors noyau) hors du guest.
+- Ne pas heberger l'embed public **dans** le noyau Multiboot i386 actuel.
+- Ne pas ouvrir TensorFlow Lite, NLU federé, P2P, economie de points, ou US-001 "d'un coup".
+- Ne pas appeler un hote OpenAI public depuis la CI, ni placer un secret dans le JS d'embed.
+- Ne pas livrer un corps physique, ni un robot, dans les epiques proches.
+- Ne pas inventer une troisieme numerotation `US-xxx` ni recycler `AOS-xxx` pour le web.
+- Ne pas vendre `agent/` comme un produit "Agent Support" distinct.
 
 ## Matrice de déploiement
 
 | Cible | Rôle | Runtime supposé | Statut |
 |---|---|---|---|
-| OS autonome existant | Prototype pédagogique i386, boot QEMU / ISO | Multiboot, shell Ring 3, GPT-2 / GGUF local, NE2000 local | **Vérifié** (AOS). N'héberge pas le widget |
-| Conteneur Docker | Véhicule principal du runtime agent + origine de l'embed + admin | Userspace Linux (ou équivalent) avec HTTP(S), file de sessions, simulateur DOM | Runtime HTTP `agent/` : embed, sessions, KB locale, droits, escalade, handoff, admin a jeton, `/demo-app`, `/browser`, FS sandbox, MCP demo. Pas de LLM de production ni de Chromium. Pas US-031 |
-| Installation PC | Même runtime, package natif | Identique à Docker sur le fond, installateur en plus | ASSIST-051 : `agent/scripts/install.sh`, unit systemd d'exemple |
-| Hyperviseur | Image VM (QEMU/KVM, autre) du runtime agent, pas du seul hobby kernel | Identique à Docker, disque / réseau de VM | ASSIST-052 : cloud-init + QEMU x86_64 documentés ; pas `make iso` |
-| Abonnement cloud hébergé | Instance opérée pour le client, même API d'embed | Multi-tenant ou instance dédiée, facturation | ASSIST-053 scaffold : `MOHHDY_AGENT_MODE`, `SITE_ID`, quotas placeholder. **Pas** de paiement |
+| Prototype guest i386 | Chemin pedagogique Multiboot, boot QEMU / ISO | Multiboot, shell Ring 3, GPT-2 / GGUF local, NE2000 local | **Verifie** (ETAT_REEL). N'heberge pas le widget |
+| Conteneur Docker | **Boot de l'instance Mohhdy** + origine de l'embed + admin | Userspace avec HTTP(S), file de sessions, simulateur DOM | Scaffold `agent/` : embed, sessions, KB locale, droits, escalade, handoff, admin a jeton, `/demo-app`, `/browser`, FS sandbox, MCP demo. Pas de LLM de production ni de Chromium de session. Pas US-031 |
+| Installation PC | Meme instance, package natif | Identique a Docker sur le fond, installateur en plus | ASSIST-051 : `agent/scripts/install.sh`, unit systemd d'exemple |
+| Hyperviseur | Image VM (QEMU/KVM, autre) de l'instance, pas du seul hobby kernel | Identique a Docker, disque / reseau de VM | ASSIST-052 : cloud-init + QEMU x86_64 documentes ; pas `make iso` |
+| Abonnement cloud heberge | Instance operee pour le client, meme API d'embed | Multi-tenant ou instance dediee, facturation | ASSIST-053 scaffold : `MOHHDY_AGENT_MODE`, `SITE_ID`, quotas placeholder. **Pas** de paiement |
 
-L'utilisateur choisit : **son** Docker / cloud, ou l'offre hébergée. Les deux exposent le même contrat d'embed et de droits. L'OS i386 reste une cible autonome distincte : il peut, plus tard, dialoguer avec une instance agent, mais ce n'est pas le chemin pour coller un script sur un site marchand.
+L'utilisateur choisit : **son** Docker / cloud, ou l'offre hebergee. Les deux exposent le meme contrat d'embed et de droits. Le guest i386 reste le chemin noyau pedagogique mesure : il peut, plus tard, dialoguer avec la meme instance, mais ce n'est pas le chemin pour coller un script sur un site marchand.
 
 ## Modèle de droits et de sécurité
 
-Le prototype Foundation accorde déjà des droits backend VFS (`read` / `mutate` / `full`), un masque de sources, un préfixe interne, une révocation et un inventaire borné. Le track Agent Support **reprend cette discipline**, à une autre échelle.
+Le prototype Foundation accorde deja des droits backend VFS (`read` / `mutate` / `full`), un masque de sources, un prefixe interne, une revocation et un inventaire borne. L'instance Mohhdy **reprend cette discipline**, a une autre echelle.
 
 ### Acteurs d'une session
 
@@ -161,7 +162,7 @@ Limites :
 
 - Pas d'acte hors origine / hors allowlist.
 - Pas d'acte irréversible (paiement, suppression massive) sans politique explicite ou humain.
-- L'automatisation navigateur vit dans le runtime Docker / PC / cloud, pas dans le guest i386 AOS.
+- L'automatisation navigateur vit dans l'instance Docker / PC / hyperviseur, pas dans le guest i386.
 - Tranche actuelle : **simulateur DOM** local (`/demo-app`), pas un Chromium. Détail : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md).
 
 ## Accès navigateur une fois déployé
@@ -169,7 +170,7 @@ Limites :
 Après déploiement de l'instance :
 
 - L'opérateur ouvre l'admin et, s'il le souhaite, un navigateur de l'instance (ASSIST-060 : `/browser`, miroir du simulateur `/demo-app`).
-- Si MOHHDY est lancé "directement" comme runtime navigateur (`MOHHDY_AGENT_RUNTIME=browser`), il expose **son** système de fichiers navigateur sandbox (ASSIST-061 : `/api/browser/fs`). C'est le vocabulaire phase 3 "le navigateur devient le FS", **sans** déclarer US-031 livré. [ETAT_REEL.md](../docs/ETAT_REEL.md) n'est pas mis a jour.
+- Si Mohhdy est lance "directement" comme runtime navigateur (`MOHHDY_AGENT_RUNTIME=browser`), il expose **son** systeme de fichiers navigateur sandbox (ASSIST-061 : `/api/browser/fs`). C'est le vocabulaire "le navigateur-OS du SE", **sans** declarer US-031 livre. [ETAT_REEL.md](../docs/ETAT_REEL.md) n'est pas mis a jour (mesure guest seulement).
 - Les scripts d'attache (ASSIST-013) relient ce runtime à un site tiers pour le support.
 
 ## Modèle d'abonnement
@@ -181,7 +182,7 @@ Deux modes commerciaux, un contrat technique :
 | Self-host | Le client (Docker, PC, hyperviseur) | Le client |
 | Cloud hébergé | L'offre MOHHDY (abonnement) | Le client, vers l'origine hébergée |
 
-L'abonnement ne remplace pas le self-host. Il ne rend pas le prototype i386 "SaaS". La facturation, le multi-tenant et le quota sont ASSIST-053. Ils dépendent d'un runtime Docker déjà amorçable, pas du microkernel.
+L'abonnement ne remplace pas le self-host. Il ne rend pas le guest i386 "SaaS". La facturation, le multi-tenant et le quota sont ASSIST-053. Ils dependent d'une instance Docker deja amorcable, pas du microkernel.
 
 ## Corps physique (piste future)
 
@@ -193,9 +194,9 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 ### ASSIST-000 - Intent agentique (cadrage)
 
-**En tant que** propriétaire produit, **je veux** que MOHHDY soit spécifié comme assistant OS / agent et pas seulement comme hobby i386, **afin de** pouvoir prioriser un runtime de support sans falsifier l'état AOS.
+**En tant que** proprietaire produit, **je veux** que Mohhdy soit specifie comme SE agentique autonome et pas seulement comme hobby i386, **afin de** prioriser les capacites OS sans falsifier l'etat guest.
 
-**Critère.** Ce fichier, [README.md](README.md) et [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md) distinguent prototype vérifié et piste agent. Aucune phrase ne dit que l'embed tourne dans QEMU i386.
+**Critere.** Ce fichier, [README.md](README.md) et [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md) presentent un produit unique et deux niveaux de maturite. Aucune phrase ne dit que l'embed tourne dans QEMU i386. Aucune phrase ne vend un produit "Agent Support" distinct.
 
 ### ASSIST-010 - Widget d'embed JavaScript
 
@@ -307,13 +308,13 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Progrès.** `POST /api/admin/sessions/{id}/takeover` puis `.../messages`. Même `session_id`. Widget : messages `human`, plus de réponse agent automatique. Journal `speaker` = visitor / agent / human / system.
 
-### ASSIST-050 - Image Docker du runtime agent
+### ASSIST-050 - Image Docker de l'instance Mohhdy
 
-**En tant que** opérateur d'instance, **je veux** un conteneur qui sert l'embed, l'admin et l'agent, **afin de** déployer MOHHDY sans attendre un microkernel i386.
+**En tant que** operateur d'instance, **je veux** un conteneur qui sert l'embed, l'admin et le SE, **afin de** deployer Mohhdy sur une machine vierge sans attendre un microkernel i386.
 
-**Dépendances.** Aucune tranche AOS 0-4 bloquante. **Peut commencer en parallèle.** Ne pas alourdir `make integration-qemu`.
+**Dependances.** Aucune tranche AOS 0-4 bloquante. **Peut commencer en parallele des gardes guest.** Ne pas alourdir `make integration-qemu`.
 
-**Critère.** `docker run` documenté : santé HTTP, page admin, origine d'embed. Pas de secret dans l'image. Hors cible : faire booter le noyau Multiboot **dans** ce conteneur comme substitut du widget.
+**Critere.** `docker run` documente : sante HTTP, page admin, origine d'embed. Pas de secret dans l'image. Hors cible : faire booter le noyau Multiboot **dans** ce conteneur comme substitut du widget.
 
 **Progrès.** Arborescence `agent/` : Python 3 stdlib, `Dockerfile` utilisateur non-root, `docker-compose.yml`, `make agent-smoke` (hors `make ci` / hors QEMU). Sert embed, sessions, KB, droits, escalade, handoff, admin, `/demo-app`, MCP demo. Guide image : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md). Gestes : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md). **Non livré dans l'image :** secret, LLM de production, Chromium, noyau i386.
 
@@ -329,9 +330,9 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 ### ASSIST-052 - Image hyperviseur
 
-**En tant que** opérateur, **je veux** une image VM du runtime agent, **afin de** l'isoler sur un hyperviseur.
+**En tant que** operateur, **je veux** une image VM de l'instance Mohhdy, **afin de** l'isoler sur un hyperviseur.
 
-**Dépendances.** ASSIST-050. Distincte de l'ISO GRUB du prototype AOS.
+**Dependances.** ASSIST-050. Distincte de l'ISO GRUB du prototype guest.
 
 **Critère.** Image démarre, expose HTTP(S) admin / embed. Ne pas confondre avec `make iso` i386.
 
@@ -351,7 +352,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **En tant que** opérateur, **je veux** ouvrir un navigateur sur l'instance déployée, **afin de** voir ce que l'agent voit et d'administrer hors du seul panneau.
 
-**Dépendances.** ASSIST-050. Voisinage phase 3, **non livré**.
+**Dependances.** ASSIST-050. Voisinage phase 3. US-031 **non livre**. Le navigateur-OS est un devoir du SE, pas une option lointaine.
 
 **Critère.** URL documentée vers un navigateur de l'instance ou un équivalent. Pas de "navigateur-OS" complet (US-031).
 
@@ -359,9 +360,9 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 ### ASSIST-061 - FS navigateur si lancement direct
 
-**En tant que** opérateur, **je veux** que, lancé comme runtime navigateur, MOHHDY expose son système de fichiers navigateur, **afin d'**aligner le produit sur la vision "le web est le FS" sans réécrire la phase 3 comme faite.
+**En tant que** operateur, **je veux** que, lance comme runtime navigateur, Mohhdy expose son systeme de fichiers navigateur, **afin d'**aligner l'instance sur le navigateur-OS du SE sans declarer US-031 livre.
 
-**Dépendances.** ASSIST-060. Spec phase 3 conservée.
+**Dependances.** ASSIST-060. Spec phase 3 conservee comme cible, pas comme fait.
 
 **Critère.** Spec + prototype **hors** guest AOS. ETAT_REEL ne doit pas être mis à jour tant que ce n'est pas observable.
 
@@ -392,8 +393,8 @@ OpenAI / LLM hébergé : l'agent peut d'abord s'appuyer sur un modèle **local �
 
 ## Liens
 
-- Prototype vérifié : [mohhdy_us.md](mohhdy_us.md), [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md)
-- Suite AOS + ce track : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md)
+- Prototype guest verifie : [mohhdy_us.md](mohhdy_us.md), [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md)
+- Suite guest + capacites OS : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md)
 - Scaffold Docker ASSIST-050 : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md)
 - Packaging PC / hyperviseur / cloud : [../docs/assist051_052_053_deploy.md](../docs/assist051_052_053_deploy.md)
 - Sessions / embed / admin : [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md)

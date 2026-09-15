@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installation native du runtime agent (ASSIST-051).
+# Installation native de l'instance Mohhdy (ASSIST-051, scaffold userspace).
 # Linux primaire. Meme contrat HTTP que Docker ASSIST-050.
 # Aucun secret. Hors make ci / hors QEMU i386.
 #

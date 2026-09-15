@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Demarre le runtime agent copie par install.sh (premier plan).
+# Demarre l'instance Mohhdy copiee par install.sh (premier plan).
 # Meme variables d'environnement que Docker ASSIST-050.
 set -euo pipefail
 

@@ -1,12 +1,12 @@
 # MOHHDY - Phase 3 Web Runtime - User Stories Détaillées
 
-> **État réel (août 2026).** Phase **non implémentée** (pas de navigateur-OS). Hors suite proche du prototype ([mohhdy_us.md](mohhdy_us.md)). Specs conservées. Runtime : [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Une tranche produit parallèle existe dans `agent/` (ASSIST-060/061 : `/browser` et FS sandbox, profil Playwright optionnel) ; elle **ne livre pas** US-031 (`phase3_complete=false`, `us031_complete=false`).
+> **Etat reel (aout 2026).** Le navigateur-OS est un **devoir du SE Mohhdy**, pas une vision lointaine boltee. US-031 **n'est pas livre** (pas de Chromium-OS dans le guest, `phase3_complete=false`, `us031_complete=false`). Le bootstrap userspace ASSIST-060/061 vit dans `agent/` (`/browser`, FS sandbox, profil Playwright optionnel). Specs conservees. Guest mesure : [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Suite : [mohhdy_us.md](mohhdy_us.md).
 
 ## Vue d'Ensemble de la Phase 3
 
-La Phase Web Runtime transforme MOHHDY en un système d'exploitation basé sur un navigateur amélioré, réalisant la vision d'un OS où toutes les applications sont des applications web et où le navigateur devient le système de fichiers et l'explorateur principal. Cette phase implémente l'idée révolutionnaire que "le web c'est l'avenir" et que MOHHDY doit exploiter l'écosystème existant d'applications web.
+La Phase Web Runtime fait du **navigateur-OS du SE** le coeur de l'experience Mohhdy : applications web comme surface native, navigateur comme systeme de fichiers et explorateur principal. Ce n'est pas une option distante ni un produit a cote. C'est une **capacite du SE autonome**.
 
-L'objectif principal est de créer un navigateur-OS intégré qui peut gérer les fichiers, exécuter des applications web comme des applications natives, et fournir une interface responsive qui s'adapte automatiquement à toutes les plateformes. Cette phase établit MOHHDY comme un concurrent direct des OS traditionnels en exploitant la puissance et la flexibilité du web.
+L'objectif est un navigateur-OS integre qui gere les fichiers, execute des applications web, et s'adapte aux plateformes. US-031 decrit cette cible. Le scaffold `agent/` (ASSIST-060/061) en est le bootstrap actuel, **sans** declarer US-031 livre.
 
 ---
 

@@ -4,7 +4,7 @@
 > - **Spec** = fichier rédigé, **pas** livré dans le noyau.
 > - **Chevauchement** = le prototype MOHHDY a un voisinage technique (souvent une fraction du besoin).
 > - **Livraison partielle** = mécanisme réellement compilé et testé, sans satisfaire tous les critères de la spec.
-> - Backlog du code réel : [../mohhdy_us.md](../mohhdy_us.md). Runtime : [../../docs/ETAT_REEL.md](../../docs/ETAT_REEL.md).
+> - Backlog du code guest : [../mohhdy_us.md](../mohhdy_us.md). Capacites OS : [../mohhdy_agent_support_web.md](../mohhdy_agent_support_web.md). Runtime guest : [../../docs/ETAT_REEL.md](../../docs/ETAT_REEL.md). Un produit : le SE Mohhdy.
 
 Les titres du [document maître](../mohhdy_user_stories_master.md) **ne correspondent pas toujours** aux noms de fichiers ci-dessous (ex. maître US-008 = " mise à jour automatique ", fichier = tests automatisés). **Le fichier individuel fait foi** pour le texte de la spec. Les IDs **US-023, US-024 et US-025 existent en double**.
 

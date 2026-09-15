@@ -1,15 +1,26 @@
-# MOHHDY - noyau pédagogique i386
+# Mohhdy - SE agentique autonome
 
 [![Version](https://img.shields.io/badge/version-7-blue.svg)](https://github.com/kamgueblondin/mohhdy)
 [![Statut](https://img.shields.io/badge/statut-prototype-yellow.svg)](https://github.com/kamgueblondin/mohhdy)
 [![CI](https://github.com/kamgueblondin/mohhdy/actions/workflows/ci.yml/badge.svg)](https://github.com/kamgueblondin/mohhdy/actions/workflows/ci.yml)
 [![Licence](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
-MOHHDY est un **prototype de hobby OS i386 32-bit** démarrant par Multiboot. Ce n'est **pas** une distribution Linux, ni un clone Unix : noyau freestanding, ABI propre, pas de userland GNU. Il démarre sous QEMU, sépare Ring 0 et Ring 3, charge une archive initrd TAR et lance un shell ELF. Le noyau fournit des syscalls, un overlay AIOV persistant via ATA PIO, un volume FAT16 et des primitives FAT32 d'écriture/chaînage ainsi qu'un chemin d'inférence GPT-2 local optionnel. Le volume disque hors overlay est **FAT**, pas ext2.
+**Mohhdy** est **un seul produit** : le systeme d'exploitation agentique autonome. Il n'y a pas de produit "Agent Support" a cote du noyau, ni trois couches produit (Prototype AOS / Vision MOHHDY / Track Agent Support). Docker, un PC, un hyperviseur ou une machine vierge **demarrent cette instance Mohhdy**, comme sur un metal nu.
 
-> La source de vérité des fonctions réellement livrées est [docs/ETAT_REEL.md](docs/ETAT_REEL.md). Lexique : [docs/vocabulaire.md](docs/vocabulaire.md). Bilan de `master` au 13 septembre 2026 : [docs/BILAN_MASTER.md](docs/BILAN_MASTER.md). La branche par défaut est `master`. Le dépôt GitHub canonique est `kamgueblondin/mohhdy`.
+Deux **niveaux de maturite runtime** (ingenierie honnete, pas deux produits) :
 
-## Capacités vérifiées
+| Niveau | Role | Honnêteté |
+|---|---|---|
+| **Prototype guest** | Chemin noyau i386 Multiboot sous QEMU deja mesure | Pedagogique / early kernel. Source de verite : [docs/ETAT_REEL.md](docs/ETAT_REEL.md) |
+| **Instance OS autonome** | Le meme SE, avec un userspace capable du navigateur-OS du SE, du support, de l'admin et des outils | `agent/` est le **scaffold userspace actuel** (bootstrap), pas un SaaS de support tiers |
+
+Le guest verifie n'est **pas** une distribution Linux, ni un clone Unix : noyau freestanding, ABI propre, pas de userland GNU. Il demarre sous QEMU, separe Ring 0 et Ring 3, charge une archive initrd TAR et lance un shell ELF. Le noyau fournit des syscalls, un overlay AIOV persistant via ATA PIO, un volume FAT16 et des primitives FAT32 d'ecriture/chainage ainsi qu'un chemin d'inference GPT-2 local optionnel. Le volume disque hors overlay est **FAT**, pas ext2.
+
+**Intention, pas livraison guest.** Le navigateur-OS (US-031), un LLM de production et un Chromium de session **ne tournent pas** dans le guest i386 mesure. Ce sont des **devoirs du SE**. Le scaffold `agent/` en porte une premiere surface (stub local, simulateur DOM, Playwright optionnel).
+
+> La source de verite des fonctions **guest** reellement livrees est [docs/ETAT_REEL.md](docs/ETAT_REEL.md). Lexique : [docs/vocabulaire.md](docs/vocabulaire.md). Bilan de `master` au 13 septembre 2026 : [docs/BILAN_MASTER.md](docs/BILAN_MASTER.md). La branche par defaut est `master`. Le depot GitHub canonique est `kamgueblondin/mohhdy`.
+
+## Capacites verifiees (prototype guest)
 
 | Domaine | Fonction réellement disponible |
 |---|---|
@@ -77,9 +88,9 @@ make iso
 make run-iso
 ```
 
-## Runtime agent (ASSIST-050 + sessions + droits + packaging)
+## Instance autonome (scaffold userspace `agent/`)
 
-Arborescence parallèle `agent/`. Ce n'est **pas** le noyau i386. Les réponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes de session sont un simulateur DOM. Playwright / Chromium est un **profil optionnel** (pas US-031). Install PC / hyperviseur / mode hosted : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
+`agent/` est le **bootstrap userspace** de l'instance Mohhdy (embed, sessions, KB, droits, escalade, handoff, admin, simulateur DOM, MCP demo, `/browser`, FS sandbox, packaging Docker / PC / hyperviseur). Ce n'est **pas** un produit a cote. Ce n'est **pas** le noyau i386 du guest. Les reponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes de session sont un simulateur DOM. Playwright / Chromium est un **profil optionnel** (pas US-031). Docker / PC / hyperviseur = **deploiement du SE** sur machine vierge ou VM : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
 
 ```bash
 make agent-smoke
@@ -131,11 +142,11 @@ Le profil `ai-provider openai` est activable de façon contrôlée : la session 
 
 Une ISO BIOS/GRUB peut être produite avec l'initrd. Lorsque les poids GPT-2 sont fournis, ils sont bien incorporés à l'ISO pour un fonctionnement local sur une machine vierge ; ils restent ignorés par Git.
 
-## Roadmap du prototype
+## Roadmap du SE (un produit)
 
-Le backlog courant est [US/mohhdy_us.md](US/mohhdy_us.md). La vision MOHHDY est conservée séparément dans [US/README.md](US/README.md). L'ordre des prochaines tranches AOS (0-4) et la piste Agent Support sont dans [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md).
+Un seul plan : [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md). Backlog guest (AOS-xxx) : [US/mohhdy_us.md](US/mohhdy_us.md). Backlog de **capacites OS** (ASSIST-xxx, support web, navigateur-OS du SE, autonomie) : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md). Specs historiques : [US/README.md](US/README.md).
 
-Piste produit Agent Support : spec [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md) (`ASSIST-xxx`). `agent/` sert embed, sessions isolées, admin à jeton, simulateur de gestes, facture mock, vue `/browser` et FS sandbox ([docs/assist060_061_browser.md](docs/assist060_061_browser.md)). Les réponses sont un stub local, **pas** un LLM de production, **pas** Chromium, **pas** US-031, **pas** une fonction du prototype i386 vérifié. Ces items n'apparaissent pas dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md).
+Les items ASSIST (embed, sessions, admin, simulateur, `/browser`, FS sandbox) sont des **devoirs du SE**. Ils vivent aujourd'hui dans le scaffold `agent/` ([docs/assist060_061_browser.md](docs/assist060_061_browser.md)). Stub local, **pas** LLM de production, **pas** Chromium de session, **pas** US-031. Ils n'apparaissent pas comme faits mesures dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md) (cette page mesure le guest).
 
 - [x] GPT-2 local, cache KV, SSE2 et top-k borné
 - [x] Tokenizer BPE UTF-8 avec couverture de lettres Unicode ciblée
@@ -199,7 +210,7 @@ Piste produit Agent Support : spec [US/mohhdy_agent_support_web.md](US/mohhdy_ag
 
 ```text
 mohhdy/
-├── agent/                # runtime HTTP agent (embed / sessions / admin / Docker)
+├── agent/                # scaffold userspace de l'instance Mohhdy (bootstrap, pas un produit a cote)
 ├── boot/                 # Multiboot et stubs ISR
 ├── kernel/               # mémoire, interruptions, tâches, syscalls et LLM
 ├── fs/                   # archive initrd TAR et overlay AIOV (ATA)
@@ -207,7 +218,7 @@ mohhdy/
 ├── tests/                # Unity, robustesse et contrats QEMU
 ├── models/               # actifs locaux ignorés par Git
 ├── docs/                 # état réel et guides
-└── US/                   # backlog prototype, vision et Agent Support
+└── US/                   # backlog guest (AOS), capacites OS (ASSIST), specs historiques
 ```
 
 ## Contribution

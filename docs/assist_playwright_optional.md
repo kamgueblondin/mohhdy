@@ -5,14 +5,14 @@
 **Ponctuation :** ASCII usuel et accents français uniquement
 
 Ce document décrit comment **activer** un moteur Playwright / Chromium
-sur le runtime agent. Le chemin par defaut reste le **simulateur DOM**
+sur l'instance Mohhdy. Le chemin par defaut reste le **simulateur DOM**
 stdlib. Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
 Gestes de session : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
 Vue `/browser` : [assist060_061_browser.md](assist060_061_browser.md).
 Plan : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
 
 Ce n'est **pas** US-031. `phase3_complete` et `us031_complete` restent
-**false**. Ce n'est **pas** un navigateur-OS. Les outils de session
+**false**. Ce n'est **pas** le navigateur-OS complet. Les outils de session
 (`POST /api/sessions/{id}/tools`) restent le simulateur DOM, même si
 Playwright est installe. Aucun secret. Aucun OpenAI. `make agent-smoke`
 et l'image Docker slim **n'installent pas** Chromium. `make ci` et

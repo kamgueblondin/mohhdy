@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lance (ou imprime) QEMU x86_64 pour le runtime agent (ASSIST-052).
+# Lance (ou imprime) QEMU x86_64 pour l'instance Mohhdy (ASSIST-052, deploiement du SE).
 # Distinct du prototype : jamais build/mohhdy.bin, jamais qemu-system-i386.
 #
 # Defaut : --dry-run (aucune image, aucun reseau payant).
