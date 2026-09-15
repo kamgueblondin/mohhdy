@@ -21,6 +21,7 @@ static int fat16_lfn_name_equals_folded(const uint16_t* units, const char* name)
 static uint8_t fat_sector_cache[FAT16_SECTOR_SIZE];
 static uint32_t fat_sector_cache_lba;
 static uint8_t fat_sector_cache_valid;
+static uint8_t write_scratch[FAT16_SECTOR_SIZE];
 static const char* status_text = "FAT16: non monte";
 static fat16_volume_t root_volume;
 
@@ -248,7 +249,34 @@ int fat16_attach_read_window(fat16_volume_t* v, fat16_read_sectors_fn read_secto
 }
 
 int fat16_attach_writer(fat16_volume_t* v, fat16_write_sector_fn write_sector){if(!v||!fat16_is_mounted(v)||!write_sector)return OS_FAT16_CORRUPT;v->write_sector=write_sector;status_text="FAT16: volume lecture/ecriture monte";return 0;}
-int fat16_write_sector(const fat16_volume_t* v,uint32_t lba,const uint8_t* buffer){if(!v||!buffer||!fat16_is_mounted(v)||!v->write_sector)return OS_FAT16_NOT_MOUNTED;if(lba<v->base_lba||lba-v->base_lba>=v->total_sectors)return OS_FAT16_CORRUPT;((fat16_volume_t*)v)->read_window_valid=0U;fat_sector_cache_valid=0U;return v->write_sector(lba,buffer)==0?0:OS_FAT16_CORRUPT;}
+
+/* L’invalidation *avant* l’écriture ATA laissait IRQ0 remplir la fenêtre avec
+ * l’ancien secteur racine. Le contrat QEMU voyait alors vfs-write ok puis
+ * vfs-read: lecture refusee ou fichier absent. On écrit d’abord, puis on
+ * met à jour le cache pour que la lecture suivante voie la mutation. */
+int fat16_write_sector(const fat16_volume_t* v, uint32_t lba, const uint8_t* buffer) {
+    fat16_volume_t* mutable;
+    uint32_t i;
+    int rc;
+    if (!v || !buffer || !fat16_is_mounted(v) || !v->write_sector) return OS_FAT16_NOT_MOUNTED;
+    if (lba < v->base_lba || lba - v->base_lba >= v->total_sectors) return OS_FAT16_CORRUPT;
+    for (i = 0U; i < FAT16_SECTOR_SIZE; i++) write_scratch[i] = buffer[i];
+    rc = v->write_sector(lba, write_scratch);
+    mutable = (fat16_volume_t*)v;
+    if (fat_sector_cache_valid && fat_sector_cache_lba == lba) fat_sector_cache_valid = 0U;
+    if (mutable->read_window_valid && lba >= mutable->read_window_lba &&
+        lba - mutable->read_window_lba < mutable->read_window_sectors) {
+        if (rc == 0) {
+            uint32_t index = lba - mutable->read_window_lba;
+            for (i = 0U; i < FAT16_SECTOR_SIZE; i++) {
+                mutable->read_window[index * FAT16_SECTOR_SIZE + i] = write_scratch[i];
+            }
+        } else {
+            mutable->read_window_valid = 0U;
+        }
+    }
+    return rc == 0 ? 0 : OS_FAT16_CORRUPT;
+}
 int fat16_write_cluster_range(const fat16_volume_t* v,uint16_t cluster,uint32_t offset,const uint8_t* buffer,uint32_t length){uint32_t cluster_bytes,absolute,lba,sector_offset,chunk,i;if(!v||!fat16_is_mounted(v)||!v->write_sector)return OS_FAT16_NOT_MOUNTED;if((uint32_t)cluster<2U||(uint32_t)cluster>(v->cluster_count+1U))return OS_FAT16_CORRUPT;if(length!=0U&&!buffer)return OS_FAT16_BAD_PATH;cluster_bytes=(uint32_t)v->bytes_per_sector*v->sectors_per_cluster;if(offset>cluster_bytes||length>cluster_bytes-offset)return OS_FAT16_BUFFER_SMALL;while(length){absolute=((uint32_t)cluster-2U)*cluster_bytes+offset;lba=v->data_lba+(absolute/v->bytes_per_sector);sector_offset=absolute%v->bytes_per_sector;chunk=(uint32_t)v->bytes_per_sector-sector_offset;if(chunk>length)chunk=length;if(read_at(v,lba,sector)!=0)return OS_FAT16_CORRUPT;for(i=0U;i<chunk;i++)sector[sector_offset+i]=buffer[i];if(fat16_write_sector(v,lba,sector)!=0)return OS_FAT16_CORRUPT;buffer+=chunk;offset+=chunk;length-=chunk;}return 0;}
 int fat16_allocate_cluster(const fat16_volume_t* v,uint16_t* out_cluster){uint32_t cluster,fat,byte_offset,lba,offset;uint16_t value;if(!v||!out_cluster||!fat16_is_mounted(v)||!v->write_sector)return OS_FAT16_NOT_MOUNTED;for(cluster=2U;cluster<=v->cluster_count+1U;cluster++){if(read_fat_entry(v,(uint16_t)cluster,&value)!=0)return OS_FAT16_CORRUPT;if(value!=0U)continue;byte_offset=cluster*2U;offset=byte_offset&511U;for(fat=0U;fat<v->fat_count;fat++){lba=v->fat_lba+fat*v->fat_sectors+(byte_offset>>9U);if(read_at(v,lba,sector)!=0)return OS_FAT16_CORRUPT;for(value=0U;value<512U;value++)sector2[value]=sector[value];sector[offset]=(uint8_t)FAT16_EOC_MIN;sector[offset+1U]=(uint8_t)(FAT16_EOC_MIN>>8U);if(fat16_write_sector(v,lba,sector)!=0){(void)v->write_sector(lba,sector2);return OS_FAT16_CORRUPT;}}*out_cluster=(uint16_t)cluster;return 0;}return OS_FAT16_NOT_FOUND;}
 int fat16_link_clusters(const fat16_volume_t* v,uint16_t source,uint16_t target){uint32_t fat,byte_offset,lba,offset,i;uint16_t next,target_next;if(!v||!fat16_is_mounted(v)||!v->write_sector)return OS_FAT16_NOT_MOUNTED;if(source<2U||target<2U||(uint32_t)source>v->cluster_count+1U||(uint32_t)target>v->cluster_count+1U||source==target)return OS_FAT16_CORRUPT;if(read_fat_entry(v,source,&next)!=0||read_fat_entry(v,target,&target_next)!=0)return OS_FAT16_CORRUPT;if(next<FAT16_EOC_MIN||next==FAT16_BAD_CLUSTER||target_next==0U||target_next==FAT16_BAD_CLUSTER)return OS_FAT16_CORRUPT;byte_offset=(uint32_t)source*2U;offset=byte_offset&511U;for(fat=0U;fat<v->fat_count;fat++){lba=v->fat_lba+fat*v->fat_sectors+(byte_offset>>9U);if(read_at(v,lba,sector)!=0)return OS_FAT16_CORRUPT;for(i=0U;i<512U;i++)sector2[i]=sector[i];sector[offset]=(uint8_t)target;sector[offset+1U]=(uint8_t)(target>>8U);if(fat16_write_sector(v,lba,sector)!=0){(void)v->write_sector(lba,sector2);return OS_FAT16_CORRUPT;}}return 0;}
