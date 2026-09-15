@@ -1,11 +1,11 @@
 # Track Agent Support - assistant web agentique
 
 **Date :** 15 septembre 2026
-**Statut :** spec produit. ASSIST-050/010/011/040 = runtime HTTP livré (echo stub, sessions, admin a jeton) ; le reste du track n'est **pas** livré
+**Statut :** spec produit. ASSIST-050/010/011/012/030/031/040/041 = runtime HTTP livré (stub local, sessions, KB, droits, escalade, handoff, admin a jeton) ; actes navigateur et LLM de production **pas** livrés
 **IDs :** `ASSIST-xxx` (ne collident ni avec `AOS-xxx` ni avec `US-xxx`)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document décrit une **nouvelle piste produit** : MOHHDY comme assistant IA agentique (OS / agent) capable de tenir un support client sur un site web, d'agir dans le périmètre autorisé, et de céder la main à un humain. Il n'annule pas le prototype i386. `agent/` sert une origine HTTP : widget `embed.js`, sessions visiteur isolées, console `/admin` (jeton `ADMIN_TOKEN` optionnel). Les réponses sont un **echo stub local**, pas un LLM de production, pas d'automatisation navigateur.
+Ce document décrit une **nouvelle piste produit** : MOHHDY comme assistant IA agentique (OS / agent) capable de tenir un support client sur un site web, d'agir dans le périmètre autorisé, et de céder la main à un humain. Il n'annule pas le prototype i386. `agent/` sert une origine HTTP : widget `embed.js`, sessions visiteur isolées, base de connaissance locale optionnelle, masque de droits, escalade, handoff dans la même session, console `/admin` (jeton `ADMIN_TOKEN` optionnel). Les réponses sont un **stub local** (echo ou extraits de KB), pas un LLM de production, pas d'automatisation navigateur.
 
 En cas de contradiction sur ce qui **tourne aujourd'hui**, [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md) et [mohhdy_us.md](mohhdy_us.md) priment.
 
@@ -64,7 +64,7 @@ Si, plus tard, MOHHDY a un corps physique, les mêmes droits pourront gouverner 
 
 ## Non-objectifs (explicites)
 
-- Ne pas déclarer livrés le produit complet : LLM de production, hyperviseur, abonnement cloud, agent souris / clics, MCP site, facture en session, handoff humain. Le runtime HTTP (`agent/`) n'est pas ce produit.
+- Ne pas déclarer livrés le produit complet : LLM de production, hyperviseur, abonnement cloud, agent souris / clics, MCP site, facture en session. Le runtime HTTP (`agent/`) n'est pas ce produit.
 - Ne pas déplacer le backlog AOS (CI 25 min, ACL préfixe, GGUF, stockage hors noyau) vers ce track.
 - Ne pas héberger l'embed public **dans** le noyau Multiboot i386 actuel.
 - Ne pas ouvrir TensorFlow Lite, NLU fédéré, P2P, économie de points, ou US-001 "d'un coup".
@@ -77,7 +77,7 @@ Si, plus tard, MOHHDY a un corps physique, les mêmes droits pourront gouverner 
 | Cible | Rôle | Runtime supposé | Statut |
 |---|---|---|---|
 | OS autonome existant | Prototype pédagogique i386, boot QEMU / ISO | Multiboot, shell Ring 3, GPT-2 / GGUF local, NE2000 local | **Vérifié** (AOS). N'héberge pas le widget |
-| Conteneur Docker | Véhicule principal du runtime agent + origine de l'embed + admin | Userspace Linux (ou équivalent) avec HTTP(S), navigateur outillé, file de sessions | Runtime HTTP `agent/` : embed, sessions, admin a jeton. Pas de LLM de production ni d'actes navigateur |
+| Conteneur Docker | Véhicule principal du runtime agent + origine de l'embed + admin | Userspace Linux (ou équivalent) avec HTTP(S), navigateur outillé, file de sessions | Runtime HTTP `agent/` : embed, sessions, KB locale, droits, escalade, handoff, admin a jeton. Pas de LLM de production ni d'actes navigateur |
 | Installation PC | Même runtime, package natif | Identique à Docker sur le fond, installateur en plus | Spec ASSIST-051 |
 | Hyperviseur | Image VM (QEMU/KVM, autre) du runtime agent, pas du seul hobby kernel | Identique à Docker, disque / réseau de VM | Spec ASSIST-052 |
 | Abonnement cloud hébergé | Instance opérée pour le client, même API d'embed | Multi-tenant ou instance dédiée, facturation | Spec ASSIST-053, optionnelle |
@@ -135,8 +135,8 @@ Comportement (ASSIST-010 livré, actes navigateur non) :
 1. Le script dessine un lanceur, puis un panneau de conversation.
 2. Il ouvre une session visiteur vers l'origine de l'instance.
 3. Les messages transitent en HTTP(S) vers `/api/sessions`. Les actes (clics, MCP) **ne sont pas** encore exécutés.
-4. Les réponses sont un echo stub local, pas un LLM de production.
-5. Un bouton "parler à un humain" n'existe pas encore (ASSIST-031).
+4. Les réponses sont un stub local (echo ou KB), pas un LLM de production.
+5. Un bouton "Parler a un humain" demande l'escalade (ASSIST-031). Après takeover, les messages humains apparaissent et l'agent ne répond plus tout seul.
 
 Scripts d'intégration (ASSIST-013) : snippet et CSP dans [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md). Le refus automatique d'origine document vs site déclaré reste ouvert (ASSIST-030).
 
@@ -144,9 +144,9 @@ Scripts d'intégration (ASSIST-013) : snippet et CSP dans [../docs/assist010_ses
 
 La console n'est pas le shell VGA. C'est une UI web de l'instance.
 
-Livré (ASSIST-040, lecture) : liste des sessions, détail du fil, jeton `ADMIN_TOKEN` optionnel.
+Livré (ASSIST-040 lecture + ASSIST-041 écriture) : liste des sessions, filtre file humain, détail du fil, jeton `ADMIN_TOKEN` optionnel, takeover et réponse humaine dans la même session.
 
-Encore spec : filtres escalade / clos, actes et refus, reprise humaine (ASSIST-041).
+Encore spec : comptes opérateurs, auth par site, actes et refus navigateur (ASSIST-020).
 
 - Reprise : l'humain écrit **dans la même session** ; l'agent se tait ou passe en observateur selon la politique.
 - Interdit : fusionner des sessions de sites distincts, exporter un secret, agir sans `admin.takeover`.
@@ -224,6 +224,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Une question "comment ça marche ?" reçoit une réponse ancrée dans la base autorisée, ou un refus honnête si la base est vide.
 
+**Progrès.** `MOHHDY_AGENT_CONFIG` / `MOHHDY_AGENT_KB` : JSON ou fichier texte monté. Réponse `stub_kb` ancrée, ou `stub_refusal` si la base est vide. Pas un LLM de production. Guide : [../docs/assist012_droits_handoff.md](../docs/assist012_droits_handoff.md).
+
 ### ASSIST-013 - Scripts d'attache à un site tiers
 
 **En tant que** opérateur, **je veux** un snippet et une checklist CSP / origine, **afin d'**attacher MOHHDY à n'importe quel site que je contrôle.
@@ -232,7 +234,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Documentation plus snippet. Refus explicite si l'origine du document ne matche pas le site déclaré.
 
-**Progrès (partiel).** Snippet et notes CSP dans [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md). Pas de refus automatique d'origine (ASSIST-030).
+**Progrès (partiel).** Snippet et notes CSP dans [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md). Pas de refus automatique d'origine (reste ouvert).
 
 ### ASSIST-020 - Gestes navigateur autorisés
 
@@ -266,6 +268,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Masque de droits visible côté admin. Diagnostic public du widget sans secret ni borne interne. Preuves négatives (outil retiré, origine étrangère).
 
+**Progrès.** Allowlist par site et par session (`grant` / `revoke` / `set`). Placeholders `dom.*` / `mcp.*` refusés à l'exécution. Widget : capacités publiques seulement (pas `admin.*`, pas `acl.`). Outil révoqué : 403, pas d'acte. Le refus automatique d'origine document vs site déclaré **reste ouvert**.
+
 ### ASSIST-031 - Escalade humaine
 
 **En tant que** visiteur, **je veux** un humain quand je le demande, ou quand la politique l'impose, **afin de** ne pas rester bloqué face à un agent.
@@ -273,6 +277,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 **Dépendances.** ASSIST-011, ASSIST-040.
 
 **Critère.** Demande visiteur : file admin. Tentative d'acte hors politique : file admin, sans exécution. L'agent n'invente pas un droit pour "aider quand même".
+
+**Progrès.** `POST /api/sessions/{id}/escalate`, statut `waiting_human`, bouton widget. Outil hors allowlist : 403 + file, sans exécution. `session.escalate` révoqué : 403 visiteur.
 
 ### ASSIST-040 - Console d'administration des sessions
 
@@ -282,7 +288,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Liste, filtre ouvert / escalade / clos, détail d'une session, actes et refus. Authentification opérateur.
 
-**Progrès (basique).** `/admin` liste et relit les fils. Si `ADMIN_TOKEN` est défini à l'exécution, `/api/admin/*` exige `Authorization: Bearer` (jamais cuit dans l'image). Sans variable : mode stub ouvert, bandeau d'avertissement. Pas de comptes, pas de filtres escalade/clos, pas de handoff (ASSIST-041).
+**Progrès.** `/admin` liste, filtre file / ouvertes / prises de main, et relit les fils. Si `ADMIN_TOKEN` est défini à l'exécution, `/api/admin/*` exige `Authorization: Bearer` (jamais cuit dans l'image). Sans variable : mode stub ouvert, bandeau d'avertissement. Pas de comptes. Handoff : ASSIST-041.
 
 ### ASSIST-041 - Handoff : l'humain continue
 
@@ -292,6 +298,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Après takeover, les messages humains apparaissent dans le widget. L'agent ne répond plus (ou seulement en observateur, selon politique). Journal de qui parle.
 
+**Progrès.** `POST /api/admin/sessions/{id}/takeover` puis `.../messages`. Même `session_id`. Widget : messages `human`, plus de réponse agent automatique. Journal `speaker` = visitor / agent / human / system.
+
 ### ASSIST-050 - Image Docker du runtime agent
 
 **En tant que** opérateur d'instance, **je veux** un conteneur qui sert l'embed, l'admin et l'agent, **afin de** déployer MOHHDY sans attendre un microkernel i386.
@@ -300,7 +308,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** `docker run` documenté : santé HTTP, page admin, origine d'embed. Pas de secret dans l'image. Hors cible : faire booter le noyau Multiboot **dans** ce conteneur comme substitut du widget.
 
-**Progrès.** Arborescence `agent/` : Python 3 stdlib, `Dockerfile` utilisateur non-root, `docker-compose.yml`, `make agent-smoke` (hors `make ci` / hors QEMU). Sert embed, sessions, admin. Guide image : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md). **Non livré dans l'image :** secret, LLM de production, MCP, actes navigateur, noyau i386.
+**Progrès.** Arborescence `agent/` : Python 3 stdlib, `Dockerfile` utilisateur non-root, `docker-compose.yml`, `make agent-smoke` (hors `make ci` / hors QEMU). Sert embed, sessions, KB, droits, escalade, handoff, admin. Guide image : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md). **Non livré dans l'image :** secret, LLM de production, MCP exécuté, actes navigateur, noyau i386.
 
 ### ASSIST-051 - Installation PC
 
@@ -356,8 +364,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 |---:|---|---|---|
 | 1 | ASSIST-000 | Tout de suite (docs) | Rien |
 | 2 | ASSIST-050 | Image Docker / HTTP livrée ; parallèle aux tranches AOS 0-4 | Interdit d'allonger la CI QEMU |
-| 3 | ASSIST-010, 011, 013, 040 | Embed + sessions + admin a jeton livrés (echo stub ; CSP docs ; pas d'auth par site) | Runtime plus large que i386 |
-| 4 | ASSIST-012, 030, 031, 041 | Après session + admin | Politique de droits |
+| 3 | ASSIST-010, 011, 013, 040 | Embed + sessions + admin a jeton livrés (stub local ; CSP docs ; pas d'auth par site) | Runtime plus large que i386 |
+| 4 | ASSIST-012, 030, 031, 041 | KB locale, masque de droits, escalade, handoff dans la même conversation : livrés (stub ; pas d'actes navigateur) | Politique de droits |
 | 5 | ASSIST-020, 021, 022 | Après droits + navigateur outillé | Allowlist, pas AOS-025 public |
 | 6 | ASSIST-051, 052, 053 | Après 050 amorçable | 053 : opérateur cloud |
 | 7 | ASSIST-060, 061 | Après 050 | Phase 3 reste spec |
@@ -371,6 +379,7 @@ OpenAI / LLM hébergé : l'agent peut d'abord s'appuyer sur un modèle **local �
 - Suite AOS + ce track : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md)
 - Scaffold Docker ASSIST-050 : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md)
 - Sessions / embed / admin : [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md)
+- KB, droits, escalade, handoff : [../docs/assist012_droits_handoff.md](../docs/assist012_droits_handoff.md)
 - Phase 1 droits : [mohhdy_us_phase1_foundation.md](mohhdy_us_phase1_foundation.md)
 - Phase 2 assistant : [mohhdy_us_phase2_ai_core.md](mohhdy_us_phase2_ai_core.md), [individual_us/US-021_Assistant_IA_Integre.md](individual_us/US-021_Assistant_IA_Integre.md), [individual_us/US-028_Module_Intelligence_Conversationnelle.md](individual_us/US-028_Module_Intelligence_Conversationnelle.md)
 - Phase 3 navigateur : [mohhdy_us_phase3_web_runtime.md](mohhdy_us_phase3_web_runtime.md)

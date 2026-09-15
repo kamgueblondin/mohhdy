@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin MOHHDY - sessions ASSIST-040</title>
+  <title>Admin MOHHDY - sessions ASSIST-040/041</title>
   <style>
     :root {
       --bg: #0f1419;
@@ -31,6 +31,7 @@
     }
     header a { color: var(--accent); text-decoration: none; }
     h1 { font-size: 1.15rem; margin: 0; }
+    h2 { font-size: 1.05rem; }
     main { max-width: 64rem; margin: 1.5rem auto; padding: 0 1.5rem 3rem; }
     .banner {
       background: #2a2410;
@@ -49,7 +50,7 @@
       margin-bottom: 1rem;
     }
     label { color: var(--muted); font-size: 0.9rem; }
-    input, button {
+    input, button, textarea, select {
       font: inherit;
       padding: 0.45rem 0.7rem;
       border-radius: 6px;
@@ -57,6 +58,7 @@
       background: var(--card);
       color: var(--fg);
     }
+    textarea { width: 100%; min-height: 4.5rem; box-sizing: border-box; }
     button {
       background: var(--accent);
       color: #0f1419;
@@ -64,6 +66,12 @@
       font-weight: 600;
       cursor: pointer;
     }
+    button.secondary {
+      background: transparent;
+      color: var(--fg);
+      border: 1px solid var(--line);
+    }
+    button.active-filter { background: var(--accent); color: #0f1419; border: 0; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -90,8 +98,10 @@
     }
     .msg { padding: 0.45rem 0; border-bottom: 1px solid var(--line); }
     .msg .meta { color: var(--muted); font-size: 0.8rem; }
+    .msg.human { background: #152033; margin: 0 -1.1rem; padding: 0.45rem 1.1rem; }
     .error { color: #f3c0c0; }
     code { font-family: ui-monospace, monospace; font-size: 0.85em; }
+    .caps { color: var(--muted); font-size: 0.85rem; }
   </style>
 </head>
 <body>
@@ -101,9 +111,10 @@
   </header>
   <main>
     <div id="mohhdy-banner" class="banner">
-      Console ASSIST-040. Authentification : jeton partage <code>ADMIN_TOKEN</code>
-      (variable d'environnement, jamais dans l'image). Lecture seule : pas de
-      handoff humain (ASSIST-041). Les reponses agent sont un echo stub local.
+      Console ASSIST-040 / 041. Authentification : jeton partage <code>ADMIN_TOKEN</code>
+      (variable d'environnement, jamais dans l'image). Escalade, file d'attente,
+      prise de main et reponse humaine dans la meme session. Les reponses agent
+      sont un stub local (echo ou base autorisee).
     </div>
     <div class="row" id="mohhdy-auth-row">
       <label for="mohhdy-token">Jeton admin</label>
@@ -111,6 +122,12 @@
       <button type="button" id="mohhdy-connect">Charger</button>
       <label for="mohhdy-site-filter">Filtre site_id</label>
       <input id="mohhdy-site-filter" type="text" placeholder="optionnel">
+    </div>
+    <div class="row" id="mohhdy-status-filters">
+      <button type="button" class="secondary active-filter" data-status="">Toutes</button>
+      <button type="button" class="secondary" data-status="waiting_human">File humain</button>
+      <button type="button" class="secondary" data-status="human_active">Prises de main</button>
+      <button type="button" class="secondary" data-status="open">Ouvertes</button>
     </div>
     <p id="mohhdy-auth-note" class="hint"></p>
     <h2>Sessions</h2>
@@ -133,11 +150,22 @@
     <section id="mohhdy-detail">
       <h2>Detail</h2>
       <p id="mohhdy-detail-meta" class="hint"></p>
+      <p id="mohhdy-detail-caps" class="caps"></p>
+      <div class="row">
+        <button type="button" id="mohhdy-takeover">Prendre la main</button>
+      </div>
       <div id="mohhdy-detail-log"></div>
+      <form id="mohhdy-human-form" style="margin-top:1rem;">
+        <label for="mohhdy-human-input">Reponse humaine (meme session)</label>
+        <textarea id="mohhdy-human-input" maxlength="4000" placeholder="Ecrire au visiteur"></textarea>
+        <div class="row" style="margin-top:0.6rem;">
+          <button type="submit">Envoyer</button>
+        </div>
+      </form>
     </section>
     <p class="hint">
       Un jeton unique protege toute l'instance. Ce n'est pas encore une auth
-      par site ni des comptes operateurs. ASSIST-012 / 030 / 031 / 041 restent ouverts.
+      par site ni des comptes operateurs. Actes navigateur (ASSIST-020) non livrés.
     </p>
   </main>
   <script>
@@ -149,8 +177,11 @@
       var tbody = document.querySelector("#mohhdy-sessions tbody");
       var detail = document.getElementById("mohhdy-detail");
       var detailMeta = document.getElementById("mohhdy-detail-meta");
+      var detailCaps = document.getElementById("mohhdy-detail-caps");
       var detailLog = document.getElementById("mohhdy-detail-log");
+      var humanInput = document.getElementById("mohhdy-human-input");
       var selectedId = null;
+      var statusFilter = "";
 
       function storedToken() {
         try {
@@ -174,14 +205,24 @@
 
       function headers() {
         var token = (tokenInput.value || storedToken()).trim();
-        if (!token) {
-          return {};
+        var out = {};
+        if (token) {
+          out.Authorization = "Bearer " + token;
         }
-        return { Authorization: "Bearer " + token };
+        return out;
       }
 
-      function api(path) {
-        return fetch(path, { headers: headers() }).then(function (resp) {
+      function api(path, options) {
+        options = options || {};
+        var hdrs = headers();
+        if (options.body) {
+          hdrs["Content-Type"] = "application/json";
+        }
+        return fetch(path, {
+          method: options.method || "GET",
+          headers: hdrs,
+          body: options.body ? JSON.stringify(options.body) : undefined,
+        }).then(function (resp) {
           return resp.json().then(function (data) {
             if (!resp.ok) {
               var err = new Error((data && data.message) || "http " + resp.status);
@@ -232,14 +273,18 @@
       function renderDetail(session) {
         detail.style.display = "block";
         detailMeta.textContent =
-          session.session_id + " / site " + session.site_id + " / " + session.status;
+          session.session_id + " / site " + session.site_id + " / " + session.status +
+          (session.handoff ? " / handoff" : "") +
+          (session.escalate_reason ? " / escalade=" + session.escalate_reason : "");
+        detailCaps.textContent = "Droits : " + ((session.capabilities || []).join(", ") || "(aucun)");
         detailLog.innerHTML = "";
         (session.messages || []).forEach(function (msg) {
           var wrap = document.createElement("div");
-          wrap.className = "msg";
+          wrap.className = "msg" + (msg.role === "human" ? " human" : "");
           var meta = document.createElement("div");
           meta.className = "meta";
-          meta.textContent = msg.role + " · " + msg.kind + " · " + msg.created_at;
+          meta.textContent =
+            (msg.speaker || msg.role) + " · " + msg.kind + " · " + msg.created_at;
           var body = document.createElement("div");
           body.textContent = msg.content || "";
           wrap.appendChild(meta);
@@ -251,8 +296,15 @@
       function loadList() {
         var site = (siteFilter.value || "").trim();
         var path = "/api/admin/sessions";
+        var params = [];
         if (site) {
-          path += "?site_id=" + encodeURIComponent(site);
+          params.push("site_id=" + encodeURIComponent(site));
+        }
+        if (statusFilter) {
+          params.push("status=" + encodeURIComponent(statusFilter));
+        }
+        if (params.length) {
+          path += "?" + params.join("&");
         }
         return api(path).then(function (data) {
           note.textContent = data.auth === "open_stub"
@@ -302,6 +354,52 @@
         loadList();
       });
       siteFilter.addEventListener("change", loadList);
+      Array.prototype.forEach.call(
+        document.querySelectorAll("#mohhdy-status-filters button"),
+        function (btn) {
+          btn.addEventListener("click", function () {
+            statusFilter = btn.getAttribute("data-status") || "";
+            Array.prototype.forEach.call(btn.parentNode.children, function (other) {
+              other.classList.toggle("active-filter", other === btn);
+            });
+            loadList();
+          });
+        }
+      );
+      document.getElementById("mohhdy-takeover").addEventListener("click", function () {
+        if (!selectedId) {
+          return;
+        }
+        api("/api/admin/sessions/" + encodeURIComponent(selectedId) + "/takeover", {
+          method: "POST",
+          body: {},
+        }).then(function (session) {
+          renderDetail(session);
+          loadList();
+        }).catch(function (err) {
+          detailMeta.textContent = err.message || "prise de main impossible";
+        });
+      });
+      document.getElementById("mohhdy-human-form").addEventListener("submit", function (event) {
+        event.preventDefault();
+        if (!selectedId) {
+          return;
+        }
+        var text = (humanInput.value || "").trim();
+        if (!text) {
+          return;
+        }
+        api("/api/admin/sessions/" + encodeURIComponent(selectedId) + "/messages", {
+          method: "POST",
+          body: { content: text },
+        }).then(function () {
+          humanInput.value = "";
+          loadDetail(selectedId);
+          loadList();
+        }).catch(function (err) {
+          detailMeta.textContent = err.message || "envoi humain impossible";
+        });
+      });
       boot();
     })();
   </script>

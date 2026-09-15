@@ -27,8 +27,9 @@ Arborescence parallèle `agent/` (Python 3, bibliothèque standard uniquement) :
 
 Honnêteté produit :
 
-- Les réponses chat sont un **echo stub local**, pas un LLM de production.
-- Aucun geste navigateur ni outil MCP (ASSIST-020..022).
+- Les réponses chat sont un **stub local** (echo ou extraits de KB), pas un LLM de production.
+- Aucun geste navigateur ni outil MCP exécuté (ASSIST-020..022). Placeholders de droits seulement.
+- Escalade et handoff : [assist012_droits_handoff.md](assist012_droits_handoff.md).
 - Le noyau Multiboot **n'est pas** booté dans ce conteneur.
 - `ADMIN_TOKEN` se passe au `docker run`, jamais dans l'image.
 
@@ -76,6 +77,8 @@ Le service écoute `0.0.0.0:8080`. Surcharge possible :
 - `MOHHDY_AGENT_PORT` (défaut `8080`)
 - `ADMIN_TOKEN` (optionnel, runtime seulement)
 - `MOHHDY_AGENT_DATA` (optionnel : répertoire JSON des sessions)
+- `MOHHDY_AGENT_CONFIG` (optionnel : JSON KB + allowlist)
+- `MOHHDY_AGENT_KB` (optionnel : fichier texte / Markdown / JSON d'extraits)
 
 Ne pas passer de jeton OpenAI, de `.env` ou de `env_file` dans le **build**.
 L'image est construite utilisateur non-root `mohhdy` (uid 10001).
@@ -89,8 +92,9 @@ Fumée stdlib, **sans Docker**, hors gate AOS :
 make agent-smoke
 ```
 
-Santé, isolation de deux sessions, liste admin, jeton. N'est **pas**
-appelée par `make ci` ni par `make integration-qemu`.
+Santé, isolation de deux sessions, liste admin, jeton, révocation,
+escalade, handoff. N'est **pas** appelée par `make ci` ni par
+`make integration-qemu`.
 
 Fumée contre une origine déjà lancée :
 

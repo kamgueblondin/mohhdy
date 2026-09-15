@@ -1,0 +1,32 @@
+{
+  "default_capabilities": [
+    "chat.reply",
+    "site.explain",
+    "session.escalate",
+    "admin.observe",
+    "admin.takeover"
+  ],
+  "sites": {
+    "site_public_demo": {
+      "capabilities": [
+        "chat.reply",
+        "site.explain",
+        "session.escalate",
+        "admin.observe",
+        "admin.takeover"
+      ],
+      "kb": [
+        {
+          "id": "parcours",
+          "title": "Parcours boutique demo",
+          "text": "Comment ca marche : ouvrez la bulle de chat, ecrivez une question, l'agent repond depuis cette base autorisee. L'offre est un support de demonstration, sans paiement ni compte. Limites : pas d'actes navigateur, pas de LLM de production."
+        },
+        {
+          "id": "humain",
+          "title": "Parler a un humain",
+          "text": "Si la base ne suffit pas, le visiteur peut demander un humain. Un operateur reprend alors la meme session depuis /admin."
+        }
+      ]
+    }
+  }
+}

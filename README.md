@@ -75,18 +75,22 @@ make iso
 make run-iso
 ```
 
-## Runtime agent (ASSIST-050 + sessions)
+## Runtime agent (ASSIST-050 + sessions + droits)
 
-Arborescence parallèle `agent/`. Ce n'est **pas** le noyau i386. Les réponses chat sont un echo stub local, **pas** un LLM de production.
+Arborescence parallèle `agent/`. Ce n'est **pas** le noyau i386. Les réponses chat sont un stub local (echo ou KB), **pas** un LLM de production.
 
 ```bash
 make agent-smoke
 docker build -t mohhdy-agent ./agent
 docker run --rm -p 8080:8080 mohhdy-agent
 docker run --rm -p 8080:8080 -e ADMIN_TOKEN=change-me-at-runtime mohhdy-agent
+docker run --rm -p 8080:8080 \
+  -e ADMIN_TOKEN=change-me-at-runtime \
+  -e MOHHDY_AGENT_CONFIG=/app/config.example.json \
+  mohhdy-agent
 ```
 
-Guides : [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md), [docs/assist010_sessions_admin.md](docs/assist010_sessions_admin.md). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md).
+Guides : [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md), [docs/assist010_sessions_admin.md](docs/assist010_sessions_admin.md), [docs/assist012_droits_handoff.md](docs/assist012_droits_handoff.md). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md).
 
 ## GPT-2 local, sans réseau au démarrage
 

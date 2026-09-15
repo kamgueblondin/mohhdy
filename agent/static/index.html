@@ -46,8 +46,9 @@
     <h1>MOHHDY agent runtime</h1>
     <p class="muted">Origine HTTP Agent Support. Pas le noyau i386. LLM = echo stub local.</p>
     <div class="banner">
-      Sessions visiteur et console admin sont en place (ASSIST-010 / 011 / 040).
-      Les reponses agent sont un echo local, <strong>pas</strong> un LLM de production.
+      Sessions visiteur, base autorisee, droits, escalade et handoff
+      (ASSIST-010 / 011 / 012 / 030 / 031 / 040 / 041). Les reponses agent
+      sont un stub local, <strong>pas</strong> un LLM de production.
       Pas d'actes navigateur, pas d'appel reseau payant. Proteger l'admin avec
       <code>ADMIN_TOKEN</code> a l'execution, jamais dans l'image.
     </div>
@@ -55,11 +56,12 @@
       <p>Routes :</p>
       <ul>
         <li><a href="/health"><code>GET /health</code></a> - JSON de sante</li>
-        <li><a href="/admin"><code>GET /admin</code></a> - console (liste / detail)</li>
+        <li><a href="/admin"><code>GET /admin</code></a> - console (liste, file, takeover)</li>
         <li><a href="/embed.js"><code>GET /embed.js</code></a> - widget public</li>
         <li><a href="/demo"><code>GET /demo</code></a> - page hote qui charge embed.js</li>
         <li><code>POST /api/sessions</code> - ouvrir une session visiteur</li>
         <li><code>POST /api/sessions/{id}/messages</code> - deposer un message</li>
+        <li><code>POST /api/sessions/{id}/escalate</code> - demander un humain</li>
       </ul>
     </div>
   </main>

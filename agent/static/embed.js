@@ -1,7 +1,7 @@
-/* MOHHDY embed.js - widget ASSIST-010
+/* MOHHDY embed.js - widget ASSIST-010 + 012/031/041
  * Snippet public : bulle de chat, session visiteur, sondage HTTP.
- * Aucun secret, aucune cle, aucun jeton admin.
- * Les reponses sont un echo stub local, pas un LLM de production.
+ * Aucun secret, aucune cle, aucun jeton admin, aucun prefixe ACL interne.
+ * Les reponses sont un stub local (echo ou base autorisee), pas un LLM de production.
  */
 (function () {
   "use strict";
@@ -28,6 +28,7 @@
   var sessionId = null;
   var knownMessageIds = {};
   var pollTimer = null;
+  var sessionStatus = "open";
 
   function ready(fn) {
     if (document.readyState === "loading") {
@@ -77,6 +78,7 @@
         if (!resp.ok) {
           var err = new Error((data && data.message) || "http " + resp.status);
           err.status = resp.status;
+          err.payload = data;
           throw err;
         }
         return data;
@@ -106,9 +108,11 @@
 
     var header = document.createElement("header");
     header.appendChild(el("strong", { text: "MOHHDY" }));
-    header.appendChild(
-      el("span", { text: "site " + siteId + " - echo stub local" })
-    );
+    var headerMeta = el("span", {
+      id: "mohhdy-header-meta",
+      text: "site " + siteId + " - stub local",
+    });
+    header.appendChild(headerMeta);
 
     var stub = el("p", {
       class: "mohhdy-stub",
@@ -137,8 +141,15 @@
       type: "submit",
       text: "Envoyer",
     });
+    var humanBtn = el("button", {
+      class: "mohhdy-human",
+      id: "mohhdy-human",
+      type: "button",
+      text: "Parler a un humain",
+    });
     form.appendChild(input);
     form.appendChild(send);
+    form.appendChild(humanBtn);
 
     panel.appendChild(header);
     panel.appendChild(stub);
@@ -150,13 +161,47 @@
       log.scrollTop = log.scrollHeight;
     }
 
+    function roleClass(role) {
+      if (role === "visitor") {
+        return "visitor";
+      }
+      if (role === "human") {
+        return "human";
+      }
+      if (role === "system") {
+        return "system";
+      }
+      return "agent";
+    }
+
+    function applyStatus(status) {
+      if (!status) {
+        return;
+      }
+      sessionStatus = status;
+      var label = "stub local";
+      if (status === "waiting_human") {
+        label = "en attente d'un humain";
+        humanBtn.disabled = true;
+      } else if (status === "human_active") {
+        label = "humain en ligne";
+        humanBtn.disabled = true;
+      } else {
+        humanBtn.disabled = false;
+      }
+      headerMeta.textContent = "site " + siteId + " - " + label;
+    }
+
     function renderMessage(msg) {
       if (!msg || !msg.id || knownMessageIds[msg.id]) {
         return;
       }
       knownMessageIds[msg.id] = true;
-      var role = msg.role === "visitor" ? "visitor" : "agent";
+      var role = roleClass(msg.role || msg.speaker);
       var node = el("div", { class: "mohhdy-msg " + role, text: msg.content || "" });
+      if (role === "human") {
+        node.setAttribute("data-speaker", "human");
+      }
       log.appendChild(node);
       log.scrollTop = log.scrollHeight;
     }
@@ -167,6 +212,14 @@
       for (i = 0; i < messages.length; i += 1) {
         renderMessage(messages[i]);
       }
+    }
+
+    function applySession(data) {
+      if (!data) {
+        return;
+      }
+      applyStatus(data.status);
+      renderMessages(data.messages);
     }
 
     function ensureSession() {
@@ -181,7 +234,7 @@
       if (sessionId) {
         return api("/api/sessions/" + encodeURIComponent(sessionId)).then(
           function (data) {
-            renderMessages(data.messages);
+            applySession(data);
             return sessionId;
           },
           function () {
@@ -209,6 +262,7 @@
         } catch (err) {
           /* ignore */
         }
+        applyStatus(data.status || "open");
         addSystem("Session " + sessionId.slice(0, 8) + "... ouverte");
         return sessionId;
       });
@@ -219,7 +273,7 @@
         return;
       }
       api("/api/sessions/" + encodeURIComponent(sessionId)).then(function (data) {
-        renderMessages(data.messages);
+        applySession(data);
       }).catch(function () {
         /* sondage silencieux */
       });
@@ -275,7 +329,12 @@
         .then(function (data) {
           input.value = "";
           renderMessage(data.visitor_message);
-          renderMessage(data.agent_message);
+          applyStatus(data.status);
+          if (data.agent_message) {
+            renderMessage(data.agent_message);
+          } else if (data.status === "human_active" || data.status === "waiting_human") {
+            addSystem("Message transmis. L'agent ne repond plus automatiquement.");
+          }
         })
         .catch(function () {
           addSystem("Envoi impossible. Reessayez.");
@@ -284,6 +343,25 @@
           send.disabled = false;
           input.disabled = false;
           input.focus();
+        });
+    });
+
+    humanBtn.addEventListener("click", function () {
+      humanBtn.disabled = true;
+      ensureSession()
+        .then(function (id) {
+          return api("/api/sessions/" + encodeURIComponent(id) + "/escalate", {
+            method: "POST",
+            body: {},
+          });
+        })
+        .then(function (data) {
+          applySession(data);
+          addSystem("Demande transmise a un humain.");
+        })
+        .catch(function (err) {
+          humanBtn.disabled = sessionStatus === "waiting_human" || sessionStatus === "human_active";
+          addSystem((err && err.message) || "Escalade impossible.");
         });
     });
 
