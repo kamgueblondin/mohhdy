@@ -1,7 +1,7 @@
 # Plan maitre du SE Mohhdy
 
 **Date :** 15 septembre 2026
-**Statut :** plan produit, pas une livraison. OS-UI-000 = ce document et ses liens. Prochain build = OS-UI-0
+**Statut :** plan produit. OS-UI-000 docs livres. Premieres tranches OS-UI-0/1/2 dans `osui/` (chrome + panes, backend `agent/` temporaire). Prochain : OS-UI-3 apres parite. Pas US-031, pas LLM de production
 **Ponctuation :** ASCII usuel et accents francais uniquement
 **Public :** chef de produit, mainteneur, contributeur. Une page pour **toutes** les capacites visees
 
@@ -84,7 +84,7 @@ Le guest **n'heberge pas** : widget, admin web, sessions visiteur, simulateur DO
 
 Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md). Guides `docs/assist*.md`.
 
-`docker run mohhdy-agent` demarre aujourd'hui un **serveur HTTP Python** (stdlib), pas le noyau Multiboot. C'est honnete comme bootstrap. Ce n'est **pas** encore "Docker boot le SE comme une machine vierge".
+`docker run mohhdy-os` demarre le **shell graphique** (`osui/`, port 8080). Le backend HTTP reste le scaffold `agent/` (stdlib), pas le noyau Multiboot. C'est honnete comme instance OS+UI v1. Ce n'est **pas** encore un Chromium de session ni un LLM de production. `docker run mohhdy-agent` reste le bootstrap HTTP seul (dette OS-UI-3).
 
 Present dans `agent/` (stub, pas production) :
 
@@ -95,15 +95,21 @@ Present dans `agent/` (stub, pas production) :
 - Vue `/browser` (miroir simulateur) et FS sandbox lecture ; Playwright **optionnel**
 - Drapeaux honnetes : `llm=stub_echo`, `phase3_complete=false`, `us031_complete=false`
 
+Present dans `osui/` (premieres tranches OS-UI-0/1/2, pas production) :
+
+- Shell graphique HTML du SE (barre, fenetres, panes Support / Admin / Browser-OS / Statut)
+- Entree Docker `mohhdy-os` = ce chrome (`GET /`), sante `GET /health`
+- UI native chat / sessions / droits / escalade / takeover, branchee sur les APIs `agent/`
+- Gestes simulateur, facture MCP demo, vue demo-app et FS sandbox dans le pane Browser-OS
+
 Absent (ne pas marquer livre) :
 
-- Shell graphique du SE (fenetrage, barre, surfaces natives)
-- Navigateur-OS (US-031 phase 3)
-- LLM de production (ni dans le guest `ai`, ni dans `agent/`)
-- Chromium comme harness de session
+- Navigateur-OS (US-031 phase 3) ; `us031_complete=false`, `chromium_session_engine=false`
+- LLM de production (ni dans le guest `ai`, ni dans `osui/` / `agent/`)
+- Chromium comme harness de session (simulateur DOM ; Playwright optionnel)
 - Auth par comptes / par site
 - Facturation SaaS
-- Retrait de la facade Python
+- Retrait de la facade Python (OS-UI-3)
 
 ### 2.3 Specs historiques
 
@@ -196,10 +202,10 @@ Le **US-031 cite ici** est celui de [../US/mohhdy_us_phase3_web_runtime.md](../U
 
 | Sujet | Visee | Statut | Tranche |
 |---|---|---|---|
-| Shell graphique minimal | Fenetres, chrome OS, vue operateur | **absent** | **OS-UI-0** |
-| Surface navigateur de l'instance | L'OS agit dans son navigateur-OS | bootstrap `/browser` (miroir) | OS-UI-2 |
-| FS-as-web | Explorateur web du FS de l'instance | bootstrap lecture sandbox | OS-UI-2 |
-| Vue operateur | Admin + ce que l'agent voit | bootstrap `/admin` + `/browser` | OS-UI-0/1 |
+| Shell graphique minimal | Fenetres, chrome OS, vue operateur | **premiere tranche** `osui/` | **OS-UI-0** |
+| Surface navigateur de l'instance | L'OS agit dans son navigateur-OS | pane Browser-OS + bootstrap `/browser` (miroir) | OS-UI-2 (1re tranche) |
+| FS-as-web | Explorateur web du FS de l'instance | pane Browser-OS + sandbox lecture | OS-UI-2 (1re tranche) |
+| Vue operateur | Admin + ce que l'agent voit | panes Admin / Statut + bootstrap `/admin` | OS-UI-0/1 |
 | Windowing / onglets comme taches | US-031 criteres | **non livre** | OS-UI-2 puis suite |
 | US-031 navigateur-OS Chromium/WebKit | Moteur web moderne, isolation | **non livre** (`us031_complete=false`) | pas OS-UI-0 |
 | US-032 apps web natives / PWA | Spec phase 3 | spec / apres OS-UI-2 | futur proche seulement si 2 sorti |
@@ -330,8 +336,8 @@ Le SE **agit dans son propre navigateur-OS**. L'embed public est une fenetre du 
 
 | | Aujourd'hui | Cible |
 |---|---|---|
-| `docker run` | Processus Python HTTP `agent/` | Boot de l'instance OS (shell graphique) |
-| Surface | `/admin`, `/embed.js`, `/browser` HTML | UI native du SE (puis embed comme fenetre) |
+| `docker run` | Processus Python + chrome `osui/` (`mohhdy-os`) | Boot de l'instance OS (shell graphique) |
+| Surface | Bureau OS (`/`) + APIs `agent/` derriere | UI native du SE (puis embed comme fenetre) |
 | Noyau i386 | Non boote dans le conteneur | Reste le laboratoire QEMU ; pas un Chromium-dans-QEMU |
 | Secret | `ADMIN_TOKEN` au run | inchange |
 
@@ -358,7 +364,7 @@ Interdit : fusionner les deux chemins en "on met Chromium dans QEMU TCG i386 dem
 
 ## 6. Roadmap ordonnee par tranches
 
-Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. Apres fusion de cette PR docs, le prochain code = **OS-UI-0**.
+Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. OS-UI-000 est docs. OS-UI-0/1/2 premieres tranches : `osui/` + `make osui-smoke`. Prochain retrait facade = **OS-UI-3** (parite d'abord).
 
 ### 6.1 OS-UI-000. Spec de migration (cette PR)
 
@@ -369,6 +375,8 @@ Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. Apres 
 **Critere de sortie.** Un PM trouve toutes les capacites visees, le prochain pas (OS-UI-0), et les interdits. ETAT_REEL inchange.
 
 ### 6.2 OS-UI-0. Shell graphique minimal dans l'instance Docker
+
+**Statut.** Premiere tranche livree : `osui/`, image `mohhdy-os`, `GET /` = bureau. Guide : [osui_0_1_2.md](osui_0_1_2.md).
 
 **But.** L'instance Docker presente un **shell graphique du SE** (chrome fenetre, vue operateur), pas seulement des pages HTML du sidecar comme identite produit.
 
@@ -387,6 +395,8 @@ Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. Apres 
 
 ### 6.3 OS-UI-1. Portage sessions / chat / admin / droits en UI native
 
+**Statut.** Premiere tranche livree dans les panes Support et Admin du shell (`osui/`), APIs `agent/` inchangees.
+
 **But.** Les devoirs ASSIST-010..013, 030, 031, 040, 041, 012 vivent dans l'UI du SE.
 
 **Inclut.** Embed ou equivalent OS, sessions isolees, KB honnete, origine binding, masque de droits, escalade, handoff, console native, stub LLM visible.
@@ -398,6 +408,8 @@ Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. Apres 
 **Definition of done.** Parite fonctionnelle chat/admin/droits dans l'UI OS ; `agent/` encore autorise comme moteur, plus comme unique facade produit.
 
 ### 6.4 OS-UI-2. Actes navigateur-OS
+
+**Statut.** Premiere tranche livree dans le pane Browser-OS (simulateur etiquete, FS lecture, facture mock). `phase3_complete=false`, `us031_complete=false`.
 
 **But.** L'OS agit dans **son** navigateur-OS : gestes allowlistes, MCP, facture demo, vue instance, FS-as-web. Playwright n'est plus le recit ; il peut rester passerelle temporaire.
 
@@ -506,10 +518,10 @@ Ce n'est **pas** la sortie de OS-UI-0.
 
 | Tranche | DoD court |
 |---|---|
-| OS-UI-000 | Plan maitre + liens ; prochain pas = OS-UI-0 ; pas de code `agent/` |
-| OS-UI-0 | Chrome OS visible au `docker run` ; hors QEMU CI ; pas US-031 |
-| OS-UI-1 | Parite chat/admin/droits/escalade/handoff/origine ; stub honnete |
-| OS-UI-2 | Actes + FS dans le navigateur-OS instance ; preuves negatives |
+| OS-UI-000 | Plan maitre + liens ; pas de code `agent/` |
+| OS-UI-0 | Chrome OS visible au `docker run` (`osui/`) ; hors QEMU CI ; pas US-031 |
+| OS-UI-1 | Parite chat/admin/droits/escalade/handoff/origine dans le shell ; stub honnete |
+| OS-UI-2 | Premiere tranche : actes + FS dans le pane Browser-OS ; preuves negatives ; pas Chromium |
 | OS-UI-3 | Facade Python retiree apres parite mesuree |
 | Garde 0 | 7 contrats, < 25 min, smoke multi-pairs CI |
 | Garde 1 | Preuves ACL prefixe, diagnostic sans prefixe |

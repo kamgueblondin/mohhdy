@@ -117,5 +117,8 @@ jobs:
       - name: HTTP smoke (Python stdlib, no Docker)
         run: make agent-smoke
 
+      - name: OS-UI shell smoke (Python stdlib, no Docker)
+        run: make osui-smoke
+
       - name: Native install + hypervisor dry-run (no QEMU boot)
         run: make agent-deploy-check

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mohhdy OS</title>
+  <link rel="stylesheet" href="/os/os.css">
+</head>
+<body>
+  <div id="os-shell" class="os-shell">
+    <header id="os-topbar" class="os-topbar">
+      <div class="os-brand">
+        <span class="os-logo" aria-hidden="true"></span>
+        <strong>Mohhdy OS</strong>
+        <span class="os-edition">instance agentique</span>
+      </div>
+      <nav class="os-menubar" aria-label="Menus">
+        <button type="button" data-open="support">Support</button>
+        <button type="button" data-open="browser">Browser-OS</button>
+        <button type="button" data-open="admin">Admin</button>
+        <button type="button" data-open="status">Statut</button>
+      </nav>
+      <div id="os-flags" class="os-flags" title="Drapeaux honnetes">
+        <span>llm=stub_echo</span>
+        <span>phase3_complete=false</span>
+        <span>us031_complete=false</span>
+      </div>
+      <time id="os-clock" class="os-clock" datetime="">--:--:--</time>
+    </header>
+
+    <main id="os-desktop" class="os-desktop">
+      <p id="os-wallpaper-label" class="os-wallpaper-label">
+        Bureau Mohhdy. Pas un LLM de production. Pas US-031.
+        Simulateur DOM, pas Chromium de session. Backend temporaire agent/.
+      </p>
+      <aside class="os-icons" aria-label="Icones du bureau">
+        <button type="button" class="os-icon" data-open="support">
+          <span class="os-icon-glyph support"></span>
+          Support
+        </button>
+        <button type="button" class="os-icon" data-open="browser">
+          <span class="os-icon-glyph browser"></span>
+          Browser-OS
+        </button>
+        <button type="button" class="os-icon" data-open="admin">
+          <span class="os-icon-glyph admin"></span>
+          Admin
+        </button>
+        <button type="button" class="os-icon" data-open="status">
+          <span class="os-icon-glyph status"></span>
+          Statut
+        </button>
+      </aside>
+
+      <section id="win-support" class="os-window" data-pane="support" style="left:24px;top:28px;width:420px;height:520px;">
+        <header class="os-titlebar">
+          <span class="os-traffic"><i></i><i></i><i data-close></i></span>
+          <h2>Support</h2>
+        </header>
+        <div class="os-pane">
+          <p class="os-banner">Chat visiteur (ASSIST-010/011/012). LLM = stub local, pas un moteur de production. Origine binding (ASSIST-013) : refus origin_denied + request_id.</p>
+          <div class="os-row">
+            <label for="support-site">site_id</label>
+            <input id="support-site" value="osui_demo" maxlength="64">
+            <button type="button" id="support-create">Nouvelle session</button>
+          </div>
+          <p id="support-meta" class="os-hint">Aucune session. Creer pour parler.</p>
+          <p id="support-caps" class="os-hint"></p>
+          <div id="support-log" class="os-log" aria-live="polite"></div>
+          <form id="support-form" class="os-composer">
+            <textarea id="support-input" maxlength="4000" placeholder="Message visiteur"></textarea>
+            <div class="os-row">
+              <button type="submit">Envoyer</button>
+              <button type="button" id="support-escalate" class="secondary">Escalader</button>
+            </div>
+          </form>
+          <p id="support-error" class="os-error" hidden></p>
+        </div>
+      </section>
+
+      <section id="win-admin" class="os-window hidden" data-pane="admin" style="left:460px;top:36px;width:520px;height:560px;">
+        <header class="os-titlebar">
+          <span class="os-traffic"><i></i><i></i><i data-close></i></span>
+          <h2>Admin</h2>
+        </header>
+        <div class="os-pane">
+          <p class="os-banner">Console native (ASSIST-030/031/040/041). Jeton ADMIN_TOKEN a l'execution, jamais dans l'image. Grant / revoke visibles. Takeover dans la meme session.</p>
+          <div class="os-row">
+            <label for="admin-token">Jeton</label>
+            <input id="admin-token" type="password" autocomplete="off" placeholder="ADMIN_TOKEN">
+            <button type="button" id="admin-load">Charger</button>
+          </div>
+          <div class="os-row" id="admin-filters">
+            <button type="button" class="secondary active-filter" data-status="">Toutes</button>
+            <button type="button" class="secondary" data-status="waiting_human">File humain</button>
+            <button type="button" class="secondary" data-status="human_active">Prises de main</button>
+          </div>
+          <p id="admin-note" class="os-hint"></p>
+          <table id="admin-sessions">
+            <thead>
+              <tr><th>session_id</th><th>site</th><th>etat</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="empty" colspan="3">Charger la liste</td></tr>
+            </tbody>
+          </table>
+          <div id="admin-detail" hidden>
+            <p id="admin-detail-meta" class="os-hint"></p>
+            <p id="admin-detail-caps" class="os-hint"></p>
+            <div class="os-row">
+              <input id="admin-cap-name" placeholder="dom.click ou mcp.invoice.create" maxlength="64">
+              <button type="button" id="admin-grant">Accorder</button>
+              <button type="button" id="admin-revoke" class="secondary">Revoquer</button>
+            </div>
+            <div class="os-row">
+              <button type="button" id="admin-takeover">Prendre la main</button>
+            </div>
+            <div id="admin-log" class="os-log"></div>
+            <form id="admin-human-form">
+              <textarea id="admin-human-input" maxlength="4000" placeholder="Reponse humaine, meme session"></textarea>
+              <div class="os-row">
+                <button type="submit">Envoyer humain</button>
+              </div>
+            </form>
+          </div>
+          <h3>Journal (request_id)</h3>
+          <table id="admin-journal">
+            <thead>
+              <tr><th>request_id</th><th>outil</th><th>resultat</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="empty" colspan="3">Aucun acte</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="win-browser" class="os-window hidden" data-pane="browser" style="left:80px;top:20px;width:720px;height:580px;">
+        <header class="os-titlebar">
+          <span class="os-traffic"><i></i><i></i><i data-close></i></span>
+          <h2>Browser-OS</h2>
+        </header>
+        <div class="os-pane browser-pane">
+          <p class="os-banner">Surface navigateur de l'instance (ASSIST-020/021/022/060/061). Simulateur DOM, pas Chromium de session. phase3_complete=false. us031_complete=false. Playwright optionnel = 501 si absent.</p>
+          <div class="os-row">
+            <span id="browser-session-label" class="os-hint">Session : (utiliser Support d'abord)</span>
+            <button type="button" id="browser-click">Geste menu</button>
+            <button type="button" id="browser-invoice">Facture MCP</button>
+            <button type="button" id="browser-navigate" class="secondary">Navigate (Playwright)</button>
+          </div>
+          <p id="browser-act" class="os-hint"></p>
+          <iframe id="browser-frame" title="demo-app simulateur" src="/demo-app"></iframe>
+          <h3>FS sandbox (lecture)</h3>
+          <div class="os-row">
+            <input id="fs-path" value="demo" maxlength="200">
+            <button type="button" id="fs-list">Lister</button>
+            <button type="button" id="fs-read" class="secondary">Lire</button>
+          </div>
+          <pre id="fs-out" class="os-pre">Sandbox lecture. Traversal refuse. Pas d'ecriture.</pre>
+        </div>
+      </section>
+
+      <section id="win-status" class="os-window" data-pane="status" style="left:470px;top:64px;width:400px;height:420px;">
+        <header class="os-titlebar">
+          <span class="os-traffic"><i></i><i></i><i data-close></i></span>
+          <h2>Statut</h2>
+        </header>
+        <div class="os-pane">
+          <p class="os-banner">Sante de l'instance. Docker boot ce shell, pas "un serveur Flask de demo". Le guest QEMU i386 n'est pas dans ce conteneur.</p>
+          <dl id="status-dl" class="os-dl">
+            <dt>service</dt><dd>mohhdy-os</dd>
+            <dt>shell</dt><dd>osui</dd>
+            <dt>llm</dt><dd>stub_echo</dd>
+            <dt>phase3_complete</dt><dd>false</dd>
+            <dt>us031_complete</dt><dd>false</dd>
+            <dt>chromium_session_engine</dt><dd>false</dd>
+          </dl>
+          <pre id="status-json" class="os-pre">Chargement /health ...</pre>
+        </div>
+      </section>
+    </main>
+
+    <nav id="os-dock" class="os-dock" aria-label="Dock">
+      <button type="button" data-open="support" title="Support">S</button>
+      <button type="button" data-open="browser" title="Browser-OS">B</button>
+      <button type="button" data-open="admin" title="Admin">A</button>
+      <button type="button" data-open="status" title="Statut">i</button>
+    </nav>
+  </div>
+  <script src="/os/os.js"></script>
+</body>
+</html>

@@ -10,7 +10,7 @@ Depuis la racine du dépôt : `make deps` (script [`scripts/bootstrap-dev.sh`](.
 2. [BILAN_MASTER.md](BILAN_MASTER.md) - bilan de `origin/master` au 13 septembre 2026 (`9078d5f`)
 3. [vocabulaire.md](vocabulaire.md) - termes du SE (guest vs instance, pas une identite Linux)
 4. [../US/mohhdy_us.md](../US/mohhdy_us.md) - user stories du prototype (fait + suite, dont FAT16 mutate 8.3 et réseau local)
-5. [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) - **roadmap produit** : catalogue des capacites, OS-UI-0..3, gates. Prochain build = OS-UI-0
+5. [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) - **roadmap produit** : catalogue des capacites, OS-UI-0..3, gates. Premieres tranches OS-UI-0/1/2 : [osui_0_1_2.md](osui_0_1_2.md)
 6. [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) - gardes guest 0-4 (CI, ACL, GGUF, stockage)
 7. [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md) - epiques de portage ASSIST vers l'OS graphique
 8. [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/` a migrer
@@ -30,7 +30,8 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 
 | Fichier | Contenu |
 |---|---|
-| [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) | **Roadmap produit** : toutes les capacites visees, OS-UI-0..3, checklist par PR. Prochain build = OS-UI-0 |
+| [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) | **Roadmap produit** : toutes les capacites visees, OS-UI-0..3, checklist par PR. Premieres tranches OS-UI-0/1/2 livrees |
+| [osui_0_1_2.md](osui_0_1_2.md) | Shell graphique `osui/` : Docker `mohhdy-os`, panes, smoke, drapeaux honnetes |
 | [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Gardes guest 0-4 ; pointe vers le plan maitre pour le portage OS+UI |
 | [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md) | Epiques OS-UI : chrome graphique, portage chat/admin/droits, actes navigateur-OS, retrait Python |
 | [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Capacites OS (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo / `/browser` / FS sandbox dans `agent/` (stub local, Playwright optionnel, pas US-031). A porter dans l'OS+UI. Packaging 051-053 : scaffold |

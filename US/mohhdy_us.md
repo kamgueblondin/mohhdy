@@ -133,7 +133,7 @@ Les lots 113-154 sont **faits** au sens caller-owned / Unity / smoke NIC. Les lo
 | 2 | Topologie réseau locale partagée optionnelle | Seulement après une injection PS/2 démontrée avec plusieurs QEMU simultanés ; sans TAP, clé, Internet public ni OpenAI |
 | 3 | Latence locale | Mesure sous matériel/KVM sur une plateforme de référence ; QEMU TCG reste ~48 s / ~23 s |
 
-La vision historique (microkernel, P2P, economie, multi-plateforme, etc.) reste une collection de specifications dans `US/`. Elle ne doit pas etre lue comme un second produit ni comme indicateur d'implementation du guest. Capacites OS de l'instance : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Roadmap produit : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) (prochain build OS-UI-0). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
+La vision historique (microkernel, P2P, economie, multi-plateforme, etc.) reste une collection de specifications dans `US/`. Elle ne doit pas etre lue comme un second produit ni comme indicateur d'implementation du guest. Capacites OS de l'instance : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Roadmap produit : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) (premieres tranches OS-UI-0/1/2, prochain OS-UI-3). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
 
 ## Références
 

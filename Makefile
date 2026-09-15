@@ -640,9 +640,23 @@ ci: all test-all qemu-smoke qemu-ne2k-tls-multipair
 	@echo "=== CI locale OK (build + tests + smokes QEMU locaux) ==="
 
 # Scaffold userspace HTTP de l'instance Mohhdy (stdlib). Hors ci / integration-qemu.
-.PHONY: agent-smoke agent-docker agent-install-check agent-hypervisor-dry-run agent-deploy-check
+.PHONY: agent-smoke agent-docker agent-install-check agent-hypervisor-dry-run agent-deploy-check osui-smoke osui-docker
 agent-smoke:
 	@python3 agent/tests/test_http.py
+
+osui-smoke:
+	@python3 osui/tests/test_http.py
+
+osui-docker:
+	@command -v docker >/dev/null 2>&1 || { \
+		echo "ERROR: 'docker' introuvable. Installez Docker pour construire l'image."; \
+		echo "       La fumee sans conteneur reste : make osui-smoke"; \
+		exit 1; \
+	}
+	docker build -t mohhdy-os -f osui/Dockerfile .
+	@echo "Image mohhdy-os prete (shell graphique OS-UI-0/1/2)."
+	@echo "Lancer : docker run --rm -p 8080:8080 mohhdy-os"
+	@echo "Admin :  docker run --rm -p 8080:8080 -e ADMIN_TOKEN=... mohhdy-os"
 
 agent-docker:
 	@command -v docker >/dev/null 2>&1 || { \
@@ -711,7 +725,9 @@ help:
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
 	@echo "  agent-smoke     - Fumee HTTP instance (gestes, MCP, origine embed, /browser, FS sandbox, 501 Playwright absent ; hors ci / QEMU)"
-	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent slim (boot instance, hors ci, sans Chromium)"
+	@echo "  osui-smoke      - Fumee shell graphique OS-UI-0/1/2 (chrome, session, origine, admin, geste ; hors ci / QEMU)"
+	@echo "  osui-docker     - Construit l'image Docker mohhdy-os (entree produit, shell graphique, hors ci)"
+	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent slim (backend temporaire, hors ci, sans Chromium)"
 	@echo "  agent-install-check - Install native temporaire + /health (ASSIST-051, hors ci)"
 	@echo "  agent-hypervisor-dry-run - Valide cloud-init/QEMU agent, sans boot (ASSIST-052, hors ci)"
 	@echo "  agent-deploy-check - install-check + hypervisor-dry-run (hors ci)"
