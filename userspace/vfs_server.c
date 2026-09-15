@@ -1130,6 +1130,8 @@ static int vfs_virtual_reply_local(os_ipc_payload_t* reply_payload) {
  * celui de la transaction, le médiateur termine localement la réponse bornée. */
 static int vfs_virtual_recover_if_worker_missing(os_ipc_payload_t* reply_payload) {
     if (!vfs_virtual_pending.active || vfs_virtual_lookup() == vfs_virtual_pending.worker_pid) return 0;
+    /* Diagnostic avant ipc_send : l'envoi peut ceder le processeur au client. */
+    puts("vfsserver virtual worker fallback local\n");
     if (vfs_virtual_reply_local(reply_payload)) {
         vfs_virtual_recoveries++;
         return 1;
@@ -1140,6 +1142,7 @@ static int vfs_virtual_recover_if_worker_missing(os_ipc_payload_t* reply_payload
 static int vfs_virtual_recover_if_timed_out(os_ipc_payload_t* reply_payload) {
     if (!vfs_virtual_pending.active ||
         vfs_virtual_pending.turns < VFS_VIRTUAL_PENDING_TURNS_MAX) return 0;
+    puts("vfsserver virtual worker timeout local\n");
     if (vfs_virtual_reply_local(reply_payload)) {
         vfs_virtual_timeouts++;
         return 1;
@@ -1751,13 +1754,9 @@ void main(void) {
             yield();
             continue;
         }
-        if (vfs_virtual_recover_if_worker_missing(&reply_payload)) {
-            puts("vfsserver virtual worker fallback local\n");
-        } else {
+        if (!vfs_virtual_recover_if_worker_missing(&reply_payload)) {
             vfs_virtual_advance_turn();
-            if (vfs_virtual_recover_if_timed_out(&reply_payload)) {
-                puts("vfsserver virtual worker timeout local\n");
-            }
+            (void)vfs_virtual_recover_if_timed_out(&reply_payload);
         }
         if (received == 0 && message.type == OS_IPC_VFS_LIST) {
             int status;
