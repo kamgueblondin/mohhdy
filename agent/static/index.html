@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MOHHDY agent - scaffold ASSIST-050</title>
+  <title>MOHHDY agent - sessions ASSIST-010</title>
   <style>
     :root {
       --bg: #0f1419;
@@ -44,19 +44,22 @@
 <body>
   <main>
     <h1>MOHHDY agent runtime</h1>
-    <p class="muted">Scaffold ASSIST-050 - origine HTTP, pas le noyau i386.</p>
+    <p class="muted">Origine HTTP Agent Support. Pas le noyau i386. LLM = echo stub local.</p>
     <div class="banner">
-      Scaffold uniquement. Le chat IA, les sessions persistantes, l'authentification
-      admin et les actions navigateur ne sont <strong>pas</strong> implementes.
-      Aucun secret n'est servi par cette origine.
+      Sessions visiteur et console admin sont en place (ASSIST-010 / 011 / 040).
+      Les reponses agent sont un echo local, <strong>pas</strong> un LLM de production.
+      Pas d'actes navigateur, pas d'appel reseau payant. Proteger l'admin avec
+      <code>ADMIN_TOKEN</code> a l'execution, jamais dans l'image.
     </div>
     <div class="card">
-      <p>Routes de fumée :</p>
+      <p>Routes :</p>
       <ul>
         <li><a href="/health"><code>GET /health</code></a> - JSON de sante</li>
-        <li><a href="/admin"><code>GET /admin</code></a> - coquille admin (liste vide)</li>
-        <li><a href="/embed.js"><code>GET /embed.js</code></a> - snippet public (bulle stub)</li>
-        <li><a href="/demo"><code>GET /demo</code></a> - page statique qui charge embed.js</li>
+        <li><a href="/admin"><code>GET /admin</code></a> - console (liste / detail)</li>
+        <li><a href="/embed.js"><code>GET /embed.js</code></a> - widget public</li>
+        <li><a href="/demo"><code>GET /demo</code></a> - page hote qui charge embed.js</li>
+        <li><code>POST /api/sessions</code> - ouvrir une session visiteur</li>
+        <li><code>POST /api/sessions/{id}/messages</code> - deposer un message</li>
       </ul>
     </div>
   </main>

@@ -1,7 +1,7 @@
-# ASSIST-050 - image Docker du runtime agent (scaffold)
+# ASSIST-050 - image Docker du runtime agent
 
 **Date :** 15 septembre 2026
-**Statut :** scaffold livré, **pas** le produit Agent Support complet
+**Statut :** image HTTP livrée ; sessions et admin = [assist010_sessions_admin.md](assist010_sessions_admin.md)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
 Ce document décrit comment construire, lancer et vérifier le conteneur
@@ -9,27 +9,30 @@ HTTP du track Agent Support. Il n'héberge pas le noyau Multiboot i386.
 Il n'allonge pas `make integration-qemu`. Il n'entre pas dans `make ci`.
 
 Spec produit : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)
-(ASSIST-050). Plan : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
+(ASSIST-050). Sessions / embed / admin : ASSIST-010, 011, 040.
+Plan : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
 
-## Ce qui est livré (scaffold)
+## Ce que l'image sert
 
 Arborescence parallèle `agent/` (Python 3, bibliothèque standard uniquement) :
 
 | Route | Réponse |
 |---|---|
-| `GET /health` | 200 JSON `{"status":"ok","service":"mohhdy-agent"}` |
-| `GET /admin` | Coquille HTML admin, liste de sessions **vide** |
-| `GET /embed.js` | Snippet public : bulle de chat (stub), **sans secret** |
-| `GET /demo` | Page statique hote qui charge `embed.js` |
-| `GET /` | Index des routes, bandeau scaffold |
+| `GET /health` | 200 JSON `status=ok`, `service=mohhdy-agent`, `llm=stub_echo` |
+| `GET /admin` | Console HTML : liste et détail des sessions |
+| `GET /embed.js` | Widget public (bulle + session HTTP), **sans secret** |
+| `GET /demo` | Page hôte qui charge `embed.js` |
+| `GET /` | Index des routes |
+| `POST /api/sessions` | Ouvre une session visiteur |
 
 Honnêteté produit :
 
-- Le chat IA ne répond pas.
-- Aucune session visiteur n'est ouverte (ASSIST-011 reste ouvert).
-- L'admin n'authentifie personne et n'affiche aucune file (ASSIST-040 / 041).
+- Les réponses chat sont un **echo stub local**, pas un LLM de production.
 - Aucun geste navigateur ni outil MCP (ASSIST-020..022).
 - Le noyau Multiboot **n'est pas** booté dans ce conteneur.
+- `ADMIN_TOKEN` se passe au `docker run`, jamais dans l'image.
+
+Détail sessions / CSP / snippet : [assist010_sessions_admin.md](assist010_sessions_admin.md).
 
 ## Prérequis
 
@@ -47,28 +50,36 @@ docker build -t mohhdy-agent ./agent
 docker run --rm -p 8080:8080 mohhdy-agent
 ```
 
+Admin protégé (jeton **uniquement** à l'exécution) :
+
+```text
+docker run --rm -p 8080:8080 -e ADMIN_TOKEN=change-me-at-runtime mohhdy-agent
+```
+
 Cible Make equivalente (ne touche pas QEMU) :
 
 ```text
 make agent-docker
-docker run --rm -p 8080:8080 mohhdy-agent
+docker run --rm -p 8080:8080 -e ADMIN_TOKEN=change-me-at-runtime mohhdy-agent
 ```
 
 Compose local, depuis `agent/` :
 
 ```text
 cd agent
-docker compose up --build
+ADMIN_TOKEN=change-me-at-runtime docker compose up --build
 ```
 
-Le service écoute `0.0.0.0:8080`. Surcharge possible, sans secret :
+Le service écoute `0.0.0.0:8080`. Surcharge possible :
 
 - `MOHHDY_AGENT_HOST` (défaut `0.0.0.0`)
 - `MOHHDY_AGENT_PORT` (défaut `8080`)
+- `ADMIN_TOKEN` (optionnel, runtime seulement)
+- `MOHHDY_AGENT_DATA` (optionnel : répertoire JSON des sessions)
 
-Ne pas passer de jeton OpenAI, de `.env` ou de `env_file`. L'image est
-construite utilisateur non-root `mohhdy` (uid 10001). `.dockerignore`
-exclut `.env`, clés et tests.
+Ne pas passer de jeton OpenAI, de `.env` ou de `env_file` dans le **build**.
+L'image est construite utilisateur non-root `mohhdy` (uid 10001).
+`.dockerignore` exclut `.env`, clés et tests.
 
 ## Vérifier
 
@@ -78,11 +89,10 @@ Fumée stdlib, **sans Docker**, hors gate AOS :
 make agent-smoke
 ```
 
-Cette cible démarre le serveur sur un port éphémère et contrôle health,
-admin, `embed.js` (absence de marqueurs de secret) et `/demo`. Elle n'est
-**pas** appelée par `make ci` ni par `make integration-qemu`.
+Santé, isolation de deux sessions, liste admin, jeton. N'est **pas**
+appelée par `make ci` ni par `make integration-qemu`.
 
-Fumée contre une origine déjà lancée (conteneur ou `python3 agent/server.py`) :
+Fumée contre une origine déjà lancée :
 
 ```text
 python3 agent/server.py
@@ -98,12 +108,12 @@ curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/embed.js
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/demo
 ```
 
-Ouvrir `http://127.0.0.1:8080/demo` : la bulle en bas à droite s'affiche.
-Le champ de saisie est désactivé (stub).
+Ouvrir `http://127.0.0.1:8080/demo` : la bulle en bas à droite ouvre une
+session et accepte un message. L'echo stub s'affiche dans le panneau.
 
 ## Ce que l'image ne contient pas
 
-- Secret, `.env`, clé API, certificat privé
+- Secret, `.env`, clé API, certificat privé, `ADMIN_TOKEN` cuit
 - Binaire noyau `build/mohhdy.bin`, initrd, ISO GRUB
 - Dépendance pip, Node, navigateur outillé
 - Modèle GPT-2 / GGUF
@@ -111,7 +121,7 @@ Le champ de saisie est désactivé (stub).
 ## Relation au prototype AOS
 
 Le hobby OS i386 reste la couche vérifiée ([ETAT_REEL.md](ETAT_REEL.md)).
-Ce scaffold ne remplace pas QEMU, ne s'ajoute pas aux sept contrats
+Ce runtime ne remplace pas QEMU, ne s'ajoute pas aux sept contrats
 d'intégration, et ne doit pas faire grandir le job `integration-qemu`.
-Un job CI optionnel `agent-http-smoke` (Python stdlib, sans Docker) peut
-tourner en parallèle ; il ne `needs` pas le build i386.
+Le job CI optionnel `agent-http-smoke` (Python stdlib, sans Docker) tourne
+en parallèle ; il ne `needs` pas le build i386.

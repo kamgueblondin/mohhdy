@@ -4,7 +4,7 @@
 **Statut :** plan de travail, pas une livraison
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document ordonne les prochaines tranches. Les **tranches 0-4** reprennent le backlog prototype déjà défini (CI, ACL, GGUF, stockage). Le **track Agent Support** est une piste produit **nouvelle**, spécifiée dans [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) : elle n'est **pas** livrée, et elle ne modifie pas le périmètre AOS vérifié. En cas de contradiction sur ce qui tourne, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment.
+Ce document ordonne les prochaines tranches. Les **tranches 0-4** reprennent le backlog prototype déjà défini (CI, ACL, GGUF, stockage). Le **track Agent Support** est une piste produit **nouvelle**, spécifiée dans [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) : le runtime HTTP (`agent/`) sert embed, sessions et admin à jeton (echo stub). Le produit complet (LLM, actes navigateur, handoff) n'est **pas** livré. Ce track ne modifie pas le périmètre AOS vérifié. En cas de contradiction sur ce qui tourne, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment.
 
 ## Sources lues (sans les réécrire)
 
@@ -242,8 +242,8 @@ Le widget JS, la console admin, l'agent souris / clics / MCP et l'origine HTTPS 
 Ordre détaillé et critères : le fichier `ASSIST-xxx`. Ici l'ordre de **build** seulement.
 
 1. **ASSIST-000** (docs) : déjà ce plan et la spec. Distinguer prototype et piste agent.
-2. **ASSIST-050** Docker : scaffold HTTP livré dans `agent/` (`docker run` documenté, `/health`, `/admin` vide, `/embed.js` stub, `/demo`). Guide : [assist050_docker_runtime.md](assist050_docker_runtime.md). **Pas** le produit (pas de chat IA, pas de sessions). Ne pas bootstraper le widget via `make iso`. `make ci` et `make integration-qemu` inchangés.
-3. **ASSIST-010 / 011 / 013 / 040** : snippet d'embed (UX type tawk.to), session isolée, scripts d'attache, console de revue. Dépend d'une origine HTTP.
+2. **ASSIST-050** Docker : image HTTP livrée dans `agent/` (`docker run` documenté, `/health`, `/admin`, `/embed.js`, `/demo`). Guide : [assist050_docker_runtime.md](assist050_docker_runtime.md). Ne pas bootstraper le widget via `make iso`. `make ci` et `make integration-qemu` inchangés.
+3. **ASSIST-010 / 011 / 013 / 040** : snippet d'embed, session isolée, console de revue à jeton. Livré avec echo stub (pas un LLM de production). Guide : [assist010_sessions_admin.md](assist010_sessions_admin.md). CSP documentée ; refus d'origine automatique encore ouvert.
 4. **ASSIST-012 / 030 / 031 / 041** : expliquer la plateforme, masque de droits par site/session, escalade, handoff humain dans la **même** conversation.
 5. **ASSIST-020 / 021 / 022** : gestes navigateur allowlistés, outils MCP du site, acte métier en session (exemple : créer une facture dans l'appli cliente déjà là).
 6. **ASSIST-051 / 052 / 053** : install PC, image hyperviseur (distincte de l'ISO GRUB AOS), abonnement cloud.
@@ -282,7 +282,7 @@ Ces pas restent des **incréments** du prototype i386. Ils préparent US-001 / U
 - Phase 2 complète, phase 3 navigateur-OS entier, phases 4 à 8 (PromptMessage, P2P, économie, multi-plateforme) comme sprint unique
 - Client OpenAI public, DHCP sur réseau public, TLS vers un hôte réel, tant que la tranche sous condition n'est pas autorisée
 - Annoncer que stockage, pilotes ou NIC sont "déjà hors du noyau"
-- Annoncer que le chat IA, les sessions, la console opérationnelle ou les clics navigateur tournent déjà. Le scaffold ASSIST-050 (HTTP / Docker) n'est pas ce produit.
+- Annoncer qu'un LLM de production, le handoff humain ou les clics navigateur tournent déjà. L'echo stub et l'admin à jeton d'`agent/` ne sont pas ce produit.
 
 Le track Agent Support **n'est pas** "implémenter la phase 3". C'est une piste parallèle, avec ses propres IDs.
 
@@ -297,8 +297,8 @@ Le track Agent Support **n'est pas** "implémenter la phase 3". C'est une piste 
 | 4 | Pilote de stockage hors noyau | Prototype AOS, incrément US-001 | Item partiel README `[~]` |
 | - | Réseau public | Prototype AOS | Sous condition, hors CI |
 | - | Identité / capabilities | Incrément Foundation | Petits pas, pas US-016, pas US-001 total |
-| P | ASSIST-050 Docker runtime agent | Track Agent Support | Scaffold HTTP livré (`agent/`). Pas le produit complet |
-| P+ | ASSIST-010..041 embed, droits, admin, handoff | Track Agent Support | Après origine HTTP |
+| P | ASSIST-050 Docker runtime agent | Track Agent Support | Image HTTP livrée (`agent/`) |
+| P+ | ASSIST-010..040 embed, sessions, admin | Track Agent Support | Livré (echo stub, jeton `ADMIN_TOKEN`) ; 012/030/031/041 ouverts |
 | ensuite | ASSIST-020..022 actions site / MCP / facture | Track Agent Support | Après droits + navigateur outillé |
 | ensuite | ASSIST-051..053 PC, hyperviseur, cloud | Track Agent Support | Après 050 amorçable |
 | ensuite | ASSIST-060..061 navigateur / FS | Track Agent Support | Tranche produit phase 3, non livrée |

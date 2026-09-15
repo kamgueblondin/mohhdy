@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Demo embed MOHHDY - scaffold ASSIST-050</title>
+  <title>Demo embed MOHHDY - ASSIST-010</title>
   <style>
     :root {
       --bg: #f4f1ea;
@@ -45,18 +45,18 @@
 <body>
   <header>
     <h1>Boutique demo</h1>
-    <p>Page statique hote pour fumer <code>embed.js</code> en local.</p>
+    <p>Page hote pour coller <code>embed.js</code> et ouvrir une session visiteur.</p>
   </header>
   <main>
     <div class="notice">
-      Fumee ASSIST-050 : la bulle en bas a droite est un stub. Elle n'ouvre
-      pas de session, n'appelle pas d'API et ne contient aucun secret.
-      Le chat IA et les clics navigateur ne fonctionnent pas encore.
+      ASSIST-010 / 011 : la bulle en bas a droite ouvre une session isolee et
+      echange des messages. Les reponses sont un <strong>echo stub local</strong>,
+      pas un LLM de production. Aucun secret dans le script public.
     </div>
     <div class="card">
       <p>
-        Imaginez ici le site marchand. L'operateur collera plus tard un snippet
-        du type <code>&lt;script src="https://INSTANCE/embed.js" data-mohhdy-site="..." async&gt;</code>.
+        Snippet operateur :
+        <code>&lt;script src="/embed.js" data-mohhdy-site="site_public_demo" async&gt;&lt;/script&gt;</code>
       </p>
       <p>
         Liens runtime :
