@@ -15,6 +15,7 @@ Guides :
 - [../docs/assist051_052_053_deploy.md](../docs/assist051_052_053_deploy.md)
 - [../docs/assist060_061_browser.md](../docs/assist060_061_browser.md)
 - [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md)
+- [../docs/assist013_origine_embed.md](../docs/assist013_origine_embed.md)
 - [../docs/assist012_droits_handoff.md](../docs/assist012_droits_handoff.md)
 - [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md)
 

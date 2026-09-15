@@ -6,7 +6,7 @@ Trois couches distinctes. Ne pas les mélanger.
 |---|---|---|
 | **Prototype qui tourne** | [mohhdy_us.md](mohhdy_us.md) + [docs/ETAT_REEL.md](../docs/ETAT_REEL.md) | AOS-001 à AOS-026 vérifiés ; FAT16/FAT32 avec LFN racine et un sous-répertoire 8.3 mutable via VFS ; réseau local `ai-acquire` ; pas de client OpenAI public |
 | **Vision MOHHDY** | fichiers `mohhdy_*.md` + [individual_us/](individual_us/INDEX.md) | Spécifications, sauf incrément Foundation IPC documenté |
-| **Track Agent Support** | [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Spec `ASSIST-xxx`. ASSIST-050/010/011/012/020/021/022/030/031/040/041 = runtime HTTP (`agent/`) : embed, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock, stub local. ASSIST-051/052/053 = packaging. ASSIST-060/061 = `/browser` + FS sandbox (pas US-031). LLM de production, Chromium et billing **non livrés** |
+| **Track Agent Support** | [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Spec `ASSIST-xxx`. ASSIST-050/010/011/012/013/020/021/022/030/031/040/041 = runtime HTTP (`agent/`) : embed, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock, refus d'origine document, stub local. ASSIST-051/052/053 = packaging. ASSIST-060/061 = `/browser` + FS sandbox (pas US-031). LLM de production, Chromium et billing **non livrés** |
 
 En cas de contradiction, **ETAT_REEL** et **mohhdy_us.md** priment.
 

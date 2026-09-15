@@ -138,7 +138,7 @@ Comportement (ASSIST-010 livré, gestes = simulateur ASSIST-020) :
 4. Les réponses sont un stub local (echo ou KB), pas un LLM de production.
 5. Un bouton "Parler a un humain" demande l'escalade (ASSIST-031). Après takeover, les messages humains apparaissent et l'agent ne répond plus tout seul.
 
-Scripts d'intégration (ASSIST-013) : snippet et CSP dans [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md). Le refus automatique d'origine document vs site déclaré reste ouvert (ASSIST-030).
+Scripts d'intégration (ASSIST-013) : snippet, CSP et refus d'origine document dans [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md) et [../docs/assist013_origine_embed.md](../docs/assist013_origine_embed.md).
 
 ## Console admin et handoff
 
@@ -146,7 +146,7 @@ La console n'est pas le shell VGA. C'est une UI web de l'instance.
 
 Livré (ASSIST-040 lecture + ASSIST-041 écriture) : liste des sessions, filtre file humain, détail du fil, jeton `ADMIN_TOKEN` optionnel, takeover et réponse humaine dans la même session.
 
-Encore spec : comptes opérateurs, auth par site. Gestes et refus d'origine : ASSIST-020 (simulateur).
+Encore spec : comptes opérateurs, auth par site. Gestes et refus d'origine document : ASSIST-020 (simulateur) et ASSIST-013 (embed).
 
 - Reprise : l'humain écrit **dans la même session** ; l'agent se tait ou passe en observateur selon la politique.
 - Interdit : fusionner des sessions de sites distincts, exporter un secret, agir sans `admin.takeover`.
@@ -235,7 +235,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Documentation plus snippet. Refus explicite si l'origine du document ne matche pas le site déclaré.
 
-**Progrès (partiel).** Snippet et notes CSP dans [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md). Pas de refus automatique d'origine (reste ouvert).
+**Progrès.** Snippet, notes CSP et refus automatique d'origine document vs site déclaré : `403 origin_denied` + `request_id` sur create / messages / outils. Allowlist `allowed_origins` (global ou par site) dans `MOHHDY_AGENT_CONFIG`. `/demo` et `self` restent acceptés. Guide : [../docs/assist013_origine_embed.md](../docs/assist013_origine_embed.md). Ce n'est pas une auth par comptes, pas Chromium.
 
 ### ASSIST-020 - Gestes navigateur autorisés
 
@@ -275,7 +275,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Masque de droits visible côté admin. Diagnostic public du widget sans secret ni borne interne. Preuves négatives (outil retiré, origine étrangère).
 
-**Progrès.** Allowlist par site et par session (`grant` / `revoke` / `set`). Gestes et MCP demo exécutés s'ils sont accordés (simulateur). Widget : capacités publiques seulement (pas `admin.*`, pas `acl.`). Outil révoqué : 403, pas d'acte. Origine étrangère : 403 `origin_denied`. Le refus automatique d'origine **document embed** vs site déclaré **reste ouvert**.
+**Progrès.** Allowlist par site et par session (`grant` / `revoke` / `set`). Gestes et MCP demo exécutés s'ils sont accordés (simulateur). Widget : capacités publiques seulement (pas `admin.*`, pas `acl.`). Outil révoqué : 403, pas d'acte. Origine étrangère : 403 `origin_denied`. Le refus d'origine **document embed** vs site déclaré est livré (ASSIST-013).
 
 ### ASSIST-031 - Escalade humaine
 
@@ -381,7 +381,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 |---:|---|---|---|
 | 1 | ASSIST-000 | Tout de suite (docs) | Rien |
 | 2 | ASSIST-050 | Image Docker / HTTP livrée ; parallèle aux tranches AOS 0-4 | Interdit d'allonger la CI QEMU |
-| 3 | ASSIST-010, 011, 013, 040 | Embed + sessions + admin a jeton livrés (stub local ; CSP docs ; pas d'auth par site) | Runtime plus large que i386 |
+| 3 | ASSIST-010, 011, 013, 040 | Embed + sessions + admin a jeton + refus d'origine document : livrés (stub local ; pas d'auth par site) | Runtime plus large que i386 |
 | 4 | ASSIST-012, 030, 031, 041 | KB locale, masque de droits, escalade, handoff dans la même conversation : livrés (stub) | Politique de droits |
 | 5 | ASSIST-020, 021, 022 | Gestes simulateur, MCP déclaré, facture mock : livrés (pas Chromium) | Allowlist, pas AOS-025 public |
 | 6 | ASSIST-051, 052, 053 | Après 050 amorçable | 051/052 docs+scripts livrés ; 053 scaffold non-billing |
@@ -397,6 +397,7 @@ OpenAI / LLM hébergé : l'agent peut d'abord s'appuyer sur un modèle **local �
 - Scaffold Docker ASSIST-050 : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md)
 - Packaging PC / hyperviseur / cloud : [../docs/assist051_052_053_deploy.md](../docs/assist051_052_053_deploy.md)
 - Sessions / embed / admin : [../docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md)
+- Origine document embed : [../docs/assist013_origine_embed.md](../docs/assist013_origine_embed.md)
 - KB, droits, escalade, handoff : [../docs/assist012_droits_handoff.md](../docs/assist012_droits_handoff.md)
 - Gestes simulateur, MCP, facture : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md)
 - Vue navigateur et FS sandbox : [../docs/assist060_061_browser.md](../docs/assist060_061_browser.md)

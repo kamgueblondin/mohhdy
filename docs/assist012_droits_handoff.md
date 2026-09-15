@@ -83,7 +83,8 @@ ni de préfixe interne `acl.` / `internal.`. Accorder `acl.*` est rejeté
 Preuves négatives :
 
 - Outil absent ou révoqué : `403 capability_denied`, acte non exécuté.
-- Origine étrangère : `403 origin_denied` + `request_id` (simulateur).
+- Origine étrangère (document embed ou geste) : `403 origin_denied` + `request_id`.
+  Liaison d'origine : [assist013_origine_embed.md](assist013_origine_embed.md).
 - MCP non déclaré : `403 tool_undeclared`.
 - `chat.reply` révoqué : l'agent refuse de répondre, sans inventer un droit.
 
@@ -164,5 +165,4 @@ Ouvrir `http://127.0.0.1:8080/admin` : file, takeover, réponse.
 - LLM de production, GGUF, fournisseur public
 - Playwright / Chromium (les gestes sont un simulateur : [assist020_gestes_mcp.md](assist020_gestes_mcp.md))
 - Auth par site, comptes opérateurs, HTTPS terminé dans l'image
-- Refus automatique d'origine document vs site déclaré (reste ouvert)
 - Noyau Multiboot dans le conteneur
