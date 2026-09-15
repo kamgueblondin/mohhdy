@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Appli hote demo - ASSIST-020/022</title>
+  <style>
+    :root {
+      --bg: #f4f1ea;
+      --fg: #1b1f24;
+      --muted: #5c6570;
+      --card: #fff;
+      --green: #1b4332;
+      --accent: #2d6a4f;
+    }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.5;
+    }
+    header {
+      background: var(--green);
+      color: #f4f1ea;
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+    header h1 { font-size: 1.15rem; margin: 0; }
+    header p { margin: 0; font-size: 0.85rem; opacity: 0.85; }
+    #menu-toggle {
+      background: #d8f3dc;
+      color: var(--green);
+      border: 0;
+      border-radius: 6px;
+      padding: 0.45rem 0.8rem;
+      font: inherit;
+      cursor: pointer;
+    }
+    nav#menu {
+      display: none;
+      background: #081c15;
+      color: #d8f3dc;
+      padding: 0.6rem 1.25rem;
+    }
+    nav#menu.open { display: block; }
+    nav#menu a {
+      color: #d8f3dc;
+      margin-right: 1.25rem;
+    }
+    main { max-width: 44rem; margin: 1.5rem auto; padding: 0 1.25rem 5rem; }
+    .notice {
+      background: #fff6d6;
+      border: 1px solid #e0c35a;
+      padding: 0.8rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.25rem;
+      font-size: 0.95rem;
+    }
+    .card {
+      background: var(--card);
+      padding: 1.15rem 1.25rem;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      margin-bottom: 1rem;
+    }
+    label { display: block; margin: 0.6rem 0 0.2rem; color: var(--muted); }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.45rem 0.6rem;
+      font: inherit;
+      border: 1px solid #c5c0b5;
+      border-radius: 6px;
+    }
+    input:focus { outline: 2px solid var(--accent); }
+    button#invoice-submit {
+      margin-top: 0.9rem;
+      background: var(--accent);
+      color: #fff;
+      border: 0;
+      border-radius: 6px;
+      padding: 0.5rem 0.9rem;
+      font: inherit;
+      cursor: pointer;
+    }
+    #pointer {
+      position: fixed;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #e63946;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 40;
+      box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.25);
+    }
+    code, pre { font-family: ui-monospace, monospace; font-size: 0.85em; }
+    pre {
+      background: #1b1f24;
+      color: #e8eef4;
+      padding: 0.75rem 0.9rem;
+      border-radius: 8px;
+      overflow: auto;
+    }
+    a { color: var(--accent); }
+    .muted { color: var(--muted); }
+    ul.invoices { padding-left: 1.2rem; }
+  </style>
+</head>
+<body>
+  <div id="pointer" aria-hidden="true"></div>
+  <header>
+    <div>
+      <h1>Boutique demo (appli hote mock)</h1>
+      <p>Page locale /demo-app : menu, formulaire facture. Pas Chromium.</p>
+    </div>
+    <button type="button" id="menu-toggle">Menu</button>
+  </header>
+  <nav id="menu">
+    <a href="#facture" id="menu-invoices">Factures</a>
+    <a href="/demo">Embed chat</a>
+    <a href="/admin">Admin</a>
+  </nav>
+  <main>
+    <div class="notice">
+      ASSIST-020 / 021 / 022 : les gestes agent (<code>dom.click</code>,
+      <code>dom.type</code>, <code>pointer.move</code>) passent par un
+      <strong>simulateur DOM in-process</strong> (HTTP vers cette origine).
+      Ce n'est <strong>pas</strong> Playwright ni un vrai moteur de rendu.
+      L'outil <code>mcp.invoice.create</code> cree une facture dans ce mock,
+      rattachee au <code>session_id</code>, si le droit est accorde.
+    </div>
+    <div class="card" id="facture">
+      <h2>Nouvelle facture</h2>
+      <p class="muted">Champs synchronises avec l'etat du simulateur (sondage HTTP).</p>
+      <form id="invoice-form" action="#" method="post">
+        <label for="invoice-customer">Client</label>
+        <input id="invoice-customer" name="customer" maxlength="120" readonly>
+        <label for="invoice-amount">Montant</label>
+        <input id="invoice-amount" name="amount" maxlength="32" readonly>
+        <button type="button" id="invoice-submit">Enregistrer (UI)</button>
+      </form>
+      <p id="form-status" class="muted"></p>
+    </div>
+    <div class="card">
+      <h2>Factures en memoire</h2>
+      <ul class="invoices" id="invoice-list">
+        <li class="muted">Aucune facture</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>Etat simulateur</h2>
+      <pre id="state-json">{}</pre>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var menu = document.getElementById("menu");
+      var pointer = document.getElementById("pointer");
+      var customer = document.getElementById("invoice-customer");
+      var amount = document.getElementById("invoice-amount");
+      var status = document.getElementById("form-status");
+      var stateJson = document.getElementById("state-json");
+      var list = document.getElementById("invoice-list");
+
+      function applyState(state) {
+        if (!state) {
+          return;
+        }
+        if (state.menu_open) {
+          menu.classList.add("open");
+        } else {
+          menu.classList.remove("open");
+        }
+        if (state.form) {
+          customer.value = state.form.customer || "";
+          amount.value = state.form.amount || "";
+          status.textContent = state.form.submitted
+            ? "Formulaire marque soumis (UI). La facture metier passe par mcp.invoice.create."
+            : "";
+        }
+        if (state.pointer) {
+          pointer.style.left = (40 + (state.pointer.x || 0)) + "px";
+          pointer.style.top = (80 + (state.pointer.y || 0)) + "px";
+        }
+        stateJson.textContent = JSON.stringify(state, null, 2);
+      }
+
+      function applyInvoices(payload) {
+        var rows = (payload && payload.invoices) || [];
+        list.innerHTML = "";
+        if (!rows.length) {
+          var empty = document.createElement("li");
+          empty.className = "muted";
+          empty.textContent = "Aucune facture";
+          list.appendChild(empty);
+          return;
+        }
+        rows.forEach(function (row) {
+          var li = document.createElement("li");
+          li.textContent =
+            row.invoice_id + " / " + row.customer + " / " + row.amount + " EUR / session " +
+            row.session_id;
+          list.appendChild(li);
+        });
+      }
+
+      function poll() {
+        fetch("/api/demo-app/state").then(function (resp) { return resp.json(); }).then(applyState).catch(function () {});
+        fetch("/api/demo-app/invoices").then(function (resp) { return resp.json(); }).then(applyInvoices).catch(function () {});
+      }
+      poll();
+      setInterval(poll, 800);
+    })();
+  </script>
+</body>
+</html>

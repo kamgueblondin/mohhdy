@@ -6,7 +6,7 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin mohhdy
 
 WORKDIR /app
 
-COPY --chown=mohhdy:mohhdy server.py ./
+COPY --chown=mohhdy:mohhdy *.py ./
 COPY --chown=mohhdy:mohhdy config.example.json ./
 COPY --chown=mohhdy:mohhdy static ./static
 

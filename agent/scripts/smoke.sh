@@ -33,11 +33,12 @@ http_code() {
   fi
 }
 
-echo "ASSIST-012/030/031/041 smoke contre ${BASE_URL}"
+echo "ASSIST-020/021/022 smoke contre ${BASE_URL}"
 
 health="$(fetch /health)"
 echo "${health}" | grep -q 'mohhdy-agent' || fail "health service"
 echo "${health}" | grep -q '"status":"ok"' || echo "${health}" | grep -q '"status": "ok"' || fail "health status"
+echo "${health}" | grep -q 'dom_simulator' || fail "health harness"
 
 admin="$(fetch /admin)"
 echo "${admin}" | grep -q 'mohhdy-sessions' || fail "admin sessions"
@@ -65,6 +66,11 @@ fi
 
 demo="$(fetch /demo)"
 echo "${demo}" | grep -q '/embed.js' || fail "demo charge embed.js"
+
+demo_app="$(fetch /demo-app)"
+echo "${demo_app}" | grep -q 'menu-toggle' || fail "demo-app menu"
+echo "${demo_app}" | grep -q 'invoice-customer' || fail "demo-app formulaire"
+echo "${demo_app}" | grep -q 'simulateur DOM' || fail "demo-app doit dire simulateur"
 
 create_a="$(curl -fsS -X POST -H 'Content-Type: application/json' \
   -d '{"site_id":"smoke_a"}' "${BASE_URL}/api/sessions")"
@@ -107,12 +113,43 @@ echo "${listing}" | grep -q "${sid_b}" || fail "admin liste B"
 code="$(http_code POST "/api/sessions/${sid_a}/tools" '{"tool":"dom.click"}')"
 [ "${code}" = "403" ] || fail "outil revoque/absent doit etre 403 (got ${code})"
 grep -q 'capability_denied' /tmp/mohhdy-smoke-body || fail "outil refuse sans capability_denied"
+grep -q 'request_id' /tmp/mohhdy-smoke-body || fail "refus sans request_id"
 
 curl -fsS "${admin_hdr[@]}" -X POST -H 'Content-Type: application/json' \
-  -d '{"revoke":["dom.click"]}' \
+  -d '{"grant":["dom.click","mcp.invoice.create"]}' \
   "${BASE_URL}/api/admin/sessions/${sid_b}/capabilities" >/dev/null
-code="$(http_code POST "/api/sessions/${sid_b}/tools" '{"tool":"dom.click"}')"
-[ "${code}" = "403" ] || fail "revoke dom.click doit rester 403"
+
+origin_payload="$(printf '{"tool":"dom.click","origin":"%s","args":{"selector":"#menu-toggle"}}' "${BASE_URL}")"
+code="$(http_code POST "/api/sessions/${sid_b}/tools" "${origin_payload}")"
+[ "${code}" = "200" ] || fail "geste allowliste doit etre 200 (got ${code})"
+grep -q 'dom_simulator' /tmp/mohhdy-smoke-body || fail "geste sans harness simulateur"
+
+state="$(fetch /api/demo-app/state)"
+echo "${state}" | grep -q '"menu_open":true' || echo "${state}" | grep -q '"menu_open": true' || fail "menu pas ouvert"
+
+evil_payload='{"tool":"dom.click","origin":"https://evil.example","args":{"selector":"#menu-toggle"}}'
+code="$(http_code POST "/api/sessions/${sid_b}/tools" "${evil_payload}")"
+[ "${code}" = "403" ] || fail "origine etrangere doit etre 403 (got ${code})"
+grep -q 'origin_denied' /tmp/mohhdy-smoke-body || fail "origine etrangere sans origin_denied"
+grep -q 'request_id' /tmp/mohhdy-smoke-body || fail "origine etrangere sans request_id"
+
+inv_payload="$(printf '{"tool":"mcp.invoice.create","origin":"%s","args":{"customer":"Smoke","amount":"10.00"}}' "${BASE_URL}")"
+code="$(http_code POST "/api/sessions/${sid_b}/tools" "${inv_payload}")"
+[ "${code}" = "200" ] || fail "facture accordee doit etre 200 (got ${code})"
+grep -q "${sid_b}" /tmp/mohhdy-smoke-body || fail "facture sans session_id"
+
+invoices="$(fetch "/api/demo-app/invoices?session_id=${sid_b}")"
+echo "${invoices}" | grep -q "${sid_b}" || fail "liste factures sans session B"
+
+curl -fsS "${admin_hdr[@]}" -X POST -H 'Content-Type: application/json' \
+  -d '{"revoke":["mcp.invoice.create","dom.click"]}' \
+  "${BASE_URL}/api/admin/sessions/${sid_b}/capabilities" >/dev/null
+code="$(http_code POST "/api/sessions/${sid_b}/tools" "${inv_payload}")"
+[ "${code}" = "403" ] || fail "revoke mcp.invoice.create doit etre 403"
+grep -q 'capability_denied' /tmp/mohhdy-smoke-body || fail "revoke sans capability_denied"
+
+journal="$(curl -fsS "${admin_hdr[@]}" "${BASE_URL}/api/admin/journal")"
+echo "${journal}" | grep -q 'origin_denied' || fail "journal sans origin_denied"
 
 curl -fsS -X POST -H 'Content-Type: application/json' \
   -d '{"reason":"smoke humain"}' \
@@ -150,4 +187,4 @@ if echo "${after}" | grep -q '"agent_message":{'; then
   fail "agent a repondu apres takeover"
 fi
 
-echo "OK health admin embed.js demo isolation revoke escalate handoff"
+echo "OK health admin embed.js demo demo-app isolation revoke origin invoice escalate handoff"

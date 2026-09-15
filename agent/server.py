@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Runtime HTTP agent MOHHDY (ASSIST-050 + 010/011/012/030/031/040/041).
+"""Runtime HTTP agent MOHHDY (ASSIST-050 + 010..022/030/031/040/041).
 
-Sert l'origine d'embed, des sessions visiteur isolees en memoire, une base
-de connaissance locale optionnelle, un masque de droits, l'escalade et le
-handoff humain. Ce n'est pas un LLM de production, pas d'appel OpenAI, pas
-d'actes navigateur, et ce n'est pas le noyau Multiboot i386.
+Sert l'origine d'embed, des sessions visiteur isolees, une KB locale, un
+masque de droits, l'escalade, le handoff, un simulateur de gestes DOM sur
+une origine allowlistee, des outils MCP declares et une appli hote mock
+(facture). Ce n'est pas un LLM de production, pas d'appel OpenAI, pas
+Chromium, et ce n'est pas le noyau Multiboot i386.
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, unquote, urlparse
+
+import tools as agent_tools
 
 SERVICE_NAME = "mohhdy-agent"
 DEFAULT_HOST = "0.0.0.0"
@@ -55,16 +58,18 @@ CAP_EXPLAIN = "site.explain"
 CAP_ESCALATE = "session.escalate"
 CAP_OBSERVE = "admin.observe"
 CAP_TAKEOVER = "admin.takeover"
-CAP_DOM_CLICK = "dom.click"
-CAP_DOM_TYPE = "dom.type"
-CAP_POINTER = "pointer.move"
+CAP_DOM_CLICK = agent_tools.CAP_DOM_CLICK
+CAP_DOM_TYPE = agent_tools.CAP_DOM_TYPE
+CAP_POINTER = agent_tools.CAP_POINTER
+CAP_INVOICE = agent_tools.CAP_INVOICE
 
 VISITOR_CAPABILITIES = (CAP_CHAT, CAP_EXPLAIN, CAP_ESCALATE)
 ADMIN_CAPABILITIES = (CAP_OBSERVE, CAP_TAKEOVER)
-PLACEHOLDER_CAPABILITIES = (CAP_DOM_CLICK, CAP_DOM_TYPE, CAP_POINTER)
+GESTURE_CAPABILITIES = agent_tools.GESTURE_TOOLS
 KNOWN_CAPABILITIES = (
-    VISITOR_CAPABILITIES + ADMIN_CAPABILITIES + PLACEHOLDER_CAPABILITIES
+    VISITOR_CAPABILITIES + ADMIN_CAPABILITIES + GESTURE_CAPABILITIES
 )
+HARNESS_KIND = agent_tools.HARNESS_KIND
 INTERNAL_PREFIXES = ("acl.", "internal.")
 
 DEFAULT_CAPABILITIES = [
@@ -141,10 +146,13 @@ VISITOR_API_HEADERS = {
 
 
 class CapabilityDenied(PermissionError):
-    def __init__(self, capability: str, tool: Optional[str] = None) -> None:
+    def __init__(
+        self, capability: str, tool: Optional[str] = None, request_id: str = ""
+    ) -> None:
         super().__init__("capability_denied")
         self.capability = capability
         self.tool = tool
+        self.request_id = request_id
 
 
 class SessionConflict(PermissionError):
@@ -176,7 +184,7 @@ def env_admin_token() -> str:
     return os.environ.get("ADMIN_TOKEN") or ""
 
 
-def env_data_path() -> Optional[Path]:
+def env_data_dir() -> Optional[Path]:
     raw = (os.environ.get("MOHHDY_AGENT_DATA") or "").strip()
     if not raw:
         return None
@@ -185,7 +193,14 @@ def env_data_path() -> Optional[Path]:
         path.mkdir(parents=True, exist_ok=True)
     except OSError:
         return None
-    return path / "sessions.json"
+    return path
+
+
+def env_data_path() -> Optional[Path]:
+    directory = env_data_dir()
+    if directory is None:
+        return None
+    return directory / "sessions.json"
 
 
 def admin_auth_mode() -> str:
@@ -209,9 +224,10 @@ def is_internal_capability(name: str) -> bool:
 
 
 def is_placeholder_tool(name: str) -> bool:
-    return name in PLACEHOLDER_CAPABILITIES or name.startswith("mcp.") or name.startswith(
-        "dom."
-    )
+    """Outil accorde mais sans runner (MCP non declare/implemente hors demo)."""
+    if name in GESTURE_CAPABILITIES or name == CAP_INVOICE:
+        return False
+    return name.startswith("mcp.") or name.startswith("dom.")
 
 
 def validate_capability_name(name: Any) -> str:
@@ -236,17 +252,30 @@ def public_capabilities(caps: list[str]) -> list[str]:
     return visible
 
 
-def capability_catalog() -> list[dict[str, str]]:
+def capability_catalog(policy: Optional["PolicyStore"] = None) -> list[dict[str, str]]:
     rows = []
     for name in KNOWN_CAPABILITIES:
-        if name in PLACEHOLDER_CAPABILITIES:
-            kind = "placeholder"
+        if name in GESTURE_CAPABILITIES:
+            kind = "gesture"
         elif name in ADMIN_CAPABILITIES:
             kind = "admin"
         else:
             kind = "session"
         rows.append({"name": name, "kind": kind})
-    rows.append({"name": "mcp.*", "kind": "placeholder"})
+    declared = (
+        policy.declared_tools_public()
+        if policy is not None
+        else dict(agent_tools.DEFAULT_DECLARED_TOOLS)
+    )
+    for name, spec in declared.items():
+        rows.append(
+            {
+                "name": name,
+                "kind": spec.get("kind") or "mcp",
+                "description": spec.get("description") or "",
+            }
+        )
+    rows.append({"name": "mcp.*", "kind": "allowlist"})
     return rows
 
 
@@ -412,6 +441,11 @@ class PolicyStore:
         self._site_capabilities: dict[str, list[str]] = {}
         self._site_kb: dict[str, list[dict[str, str]]] = {}
         self._default_kb: list[dict[str, str]] = []
+        self.allowed_origins = list(agent_tools.DEFAULT_ORIGINS)
+        self._site_origins: dict[str, list[str]] = {}
+        self._declared_tools: dict[str, dict[str, str]] = dict(
+            agent_tools.DEFAULT_DECLARED_TOOLS
+        )
         self.config_loaded = False
         self.kb_loaded = False
         self._config_path = ""
@@ -433,6 +467,9 @@ class PolicyStore:
             self._site_capabilities = {}
             self._site_kb = {}
             self._default_kb = []
+            self.allowed_origins = list(agent_tools.DEFAULT_ORIGINS)
+            self._site_origins = {}
+            self._declared_tools = dict(agent_tools.DEFAULT_DECLARED_TOOLS)
             self.config_loaded = False
             self.kb_loaded = False
         self.load_from_env()
@@ -457,6 +494,13 @@ class PolicyStore:
                         continue
                 if parsed:
                     self.default_capabilities = parsed
+            origins = agent_tools.parse_origin_list(payload.get("allowed_origins"))
+            if origins:
+                self.allowed_origins = origins
+            if "tools" in payload:
+                self._declared_tools = agent_tools.parse_declared_tools(
+                    payload.get("tools")
+                )
             sites = payload.get("sites")
             if isinstance(sites, dict):
                 for site_id, spec in sites.items():
@@ -486,6 +530,11 @@ class PolicyStore:
                     if kb_entries:
                         self._site_kb[norm] = kb_entries
                         self.kb_loaded = True
+                    site_origins = agent_tools.parse_origin_list(
+                        spec.get("allowed_origins")
+                    )
+                    if site_origins:
+                        self._site_origins[norm] = site_origins
             top_kb = parse_kb_payload(payload.get("kb"))
             if top_kb:
                 self._default_kb = top_kb
@@ -544,6 +593,28 @@ class PolicyStore:
             self._site_capabilities[site_id] = current
             return list(current)
 
+    def origins_for(self, site_id: str) -> list[str]:
+        with self._lock:
+            site_origins = self._site_origins.get(site_id)
+            if site_origins:
+                return list(site_origins)
+            return list(self.allowed_origins)
+
+    def origin_allowed(self, site_id: str, origin: str, self_origin: str) -> bool:
+        return agent_tools.origin_allowed(
+            origin, self.origins_for(site_id), self_origin
+        )
+
+    def tool_declared(self, name: str) -> bool:
+        with self._lock:
+            return name in self._declared_tools
+
+    def declared_tools_public(self) -> dict[str, dict[str, str]]:
+        with self._lock:
+            return {
+                name: dict(spec) for name, spec in self._declared_tools.items()
+            }
+
     def public_status(self) -> dict[str, Any]:
         with self._lock:
             sites = sorted(set(self._site_capabilities) | set(self._site_kb))
@@ -555,6 +626,9 @@ class PolicyStore:
                 ),
                 "default_kb": bool(self._default_kb),
                 "sites": sites,
+                "declared_tools": sorted(self._declared_tools),
+                "allowed_origins": list(self.allowed_origins),
+                "harness": HARNESS_KIND,
             }
 
 
@@ -626,11 +700,18 @@ class SessionStore:
         self,
         persist_path: Optional[Path] = None,
         policy: Optional[PolicyStore] = None,
+        harness: Optional[agent_tools.DemoHarness] = None,
+        invoices: Optional[agent_tools.InvoiceStore] = None,
+        journal: Optional[agent_tools.AuditJournal] = None,
     ) -> None:
         self._lock = threading.Lock()
         self._sessions: dict[str, dict[str, Any]] = {}
         self._persist_path = persist_path
         self.policy = policy if policy is not None else PolicyStore()
+        self.harness = harness if harness is not None else agent_tools.DemoHarness()
+        self.invoices = invoices if invoices is not None else agent_tools.InvoiceStore()
+        self.journal = journal if journal is not None else agent_tools.AuditJournal()
+        self.runner = agent_tools.ToolRunner(self.harness, self.invoices)
         if persist_path is not None:
             self._load_unlocked()
 
@@ -769,29 +850,34 @@ class SessionStore:
             self._persist_unlocked()
             return self._public_session(record, include_messages=True, admin=True)
 
-    def invoke_tool(self, session_id: str, tool: str) -> dict[str, Any]:
+    def invoke_tool(
+        self,
+        session_id: str,
+        tool: str,
+        origin: str = "",
+        args: Optional[dict[str, Any]] = None,
+        self_origin: str = "",
+    ) -> dict[str, Any]:
         tool = validate_capability_name(tool)
+        payload_args = args if isinstance(args, dict) else {}
         with self._lock:
             record = self._require(session_id)
             if record["status"] == STATUS_CLOSED:
                 raise SessionConflict("session_closed")
             caps = list(record.get("capabilities") or [])
             request_id = str(uuid.uuid4())
-            if tool not in caps:
+            site_id = record["site_id"]
+
+            def deny_message(text: str, kind: str) -> None:
                 if len(record["messages"]) + 1 > MAX_MESSAGES:
                     raise OverflowError("trop de messages")
-                text = (
-                    "Outil refuse (%s) : absent de l'allowlist. "
-                    "L'agent n'invente pas ce droit. Escalade vers un humain."
-                    % tool
-                )
                 record["messages"].append(
                     _message(
                         "system",
                         text,
                         request_id,
-                        "tool_denied",
-                        extra={"tool": tool},
+                        kind,
+                        extra={"tool": tool, "origin": origin},
                     )
                 )
                 if record["status"] == STATUS_OPEN:
@@ -800,14 +886,67 @@ class SessionStore:
                     record["escalated_at"] = utc_now()
                 record["updated_at"] = utc_now()
                 self._persist_unlocked()
-                raise CapabilityDenied(tool, tool=tool)
+
+            if tool not in caps:
+                self.journal.record(
+                    request_id, session_id, site_id, tool, origin, "capability_denied"
+                )
+                deny_message(
+                    "Outil refuse (%s) : absent de l'allowlist. "
+                    "L'agent n'invente pas ce droit. Aucun acte execute. "
+                    "Escalade vers un humain. request_id=%s"
+                    % (tool, request_id),
+                    "tool_denied",
+                )
+                raise CapabilityDenied(tool, tool=tool, request_id=request_id)
+
+            if agent_tools.is_mcp_tool(tool) and not self.policy.tool_declared(tool):
+                self.journal.record(
+                    request_id, session_id, site_id, tool, origin, "undeclared"
+                )
+                deny_message(
+                    "Outil %s non declare dans la config operateur. "
+                    "Appel refuse. Escalade vers un humain. request_id=%s"
+                    % (tool, request_id),
+                    "tool_undeclared",
+                )
+                raise agent_tools.ToolUndeclared(tool, request_id)
+
+            needs_origin = agent_tools.is_gesture_tool(tool) or agent_tools.is_mcp_tool(
+                tool
+            )
+            if needs_origin:
+                if not origin:
+                    origin = self_origin
+                if not origin or not self.policy.origin_allowed(
+                    site_id, origin, self_origin
+                ):
+                    self.journal.record(
+                        request_id,
+                        session_id,
+                        site_id,
+                        tool,
+                        origin,
+                        "origin_denied",
+                    )
+                    deny_message(
+                        "Origine refusee (%s) pour %s. Hors allowlist. "
+                        "Aucun acte execute. request_id=%s"
+                        % (origin or "(vide)", tool, request_id),
+                        "origin_denied",
+                    )
+                    raise agent_tools.OriginDenied(origin, request_id)
+
             if is_placeholder_tool(tool):
+                self.journal.record(
+                    request_id, session_id, site_id, tool, origin, "not_implemented"
+                )
                 if len(record["messages"]) + 1 > MAX_MESSAGES:
                     raise OverflowError("trop de messages")
                 text = (
-                    "Outil %s accorde mais non implemente (placeholder ASSIST-020/021). "
-                    "Aucun acte n'a ete execute."
-                    % tool
+                    "Outil %s accorde mais non implemente. "
+                    "Aucun acte n'a ete execute. request_id=%s"
+                    % (tool, request_id)
                 )
                 record["messages"].append(
                     _message(
@@ -821,7 +960,81 @@ class SessionStore:
                 record["updated_at"] = utc_now()
                 self._persist_unlocked()
                 raise SessionConflict("tool_not_implemented")
-            raise SessionConflict("tool_not_implemented")
+
+            try:
+                executed = self.runner.execute(
+                    tool, payload_args, request_id, session_id, site_id
+                )
+            except agent_tools.ToolArgsError as exc:
+                if not exc.request_id:
+                    exc.request_id = request_id
+                self.journal.record(
+                    request_id,
+                    session_id,
+                    site_id,
+                    tool,
+                    origin,
+                    "bad_args",
+                    extra={"message": str(exc)},
+                )
+                if len(record["messages"]) + 1 > MAX_MESSAGES:
+                    raise OverflowError("trop de messages")
+                record["messages"].append(
+                    _message(
+                        "system",
+                        "Outil %s refuse (arguments invalides). request_id=%s"
+                        % (tool, request_id),
+                        request_id,
+                        "tool_bad_args",
+                        extra={"tool": tool},
+                    )
+                )
+                record["updated_at"] = utc_now()
+                self._persist_unlocked()
+                raise
+            except OverflowError:
+                raise
+
+            self.journal.record(
+                request_id, session_id, site_id, tool, origin, "ok"
+            )
+            if len(record["messages"]) + 1 > MAX_MESSAGES:
+                raise OverflowError("trop de messages")
+            if agent_tools.is_gesture_tool(tool):
+                summary = (
+                    "Geste %s execute (%s) sur %s. request_id=%s"
+                    % (tool, HARNESS_KIND, origin, request_id)
+                )
+            elif tool == CAP_INVOICE:
+                invoice = executed.get("invoice") or {}
+                summary = (
+                    "Facture %s creee dans l'appli hote mock. "
+                    "session_id=%s request_id=%s"
+                    % (invoice.get("invoice_id"), session_id, request_id)
+                )
+            else:
+                summary = "Outil %s execute. request_id=%s" % (tool, request_id)
+            record["messages"].append(
+                _message(
+                    "system",
+                    summary,
+                    request_id,
+                    "tool_ok",
+                    extra={"tool": tool, "origin": origin},
+                )
+            )
+            record["updated_at"] = utc_now()
+            self._persist_unlocked()
+            return {
+                "ok": True,
+                "request_id": request_id,
+                "session_id": session_id,
+                "site_id": site_id,
+                "tool": tool,
+                "origin": origin,
+                "harness": HARNESS_KIND,
+                "result": executed,
+            }
 
     def takeover(self, session_id: str) -> dict[str, Any]:
         with self._lock:
@@ -997,11 +1210,30 @@ class AgentHTTPServer(ThreadingHTTPServer):
         policy = PolicyStore()
         policy.load_from_env()
         self.policy = policy
-        self.store = SessionStore(env_data_path(), policy=policy)
+        data_dir = env_data_dir()
+        invoices_path = data_dir / "invoices.json" if data_dir is not None else None
+        journal_path = data_dir / "journal.json" if data_dir is not None else None
+        self.harness = agent_tools.DemoHarness()
+        self.invoices = agent_tools.InvoiceStore(invoices_path)
+        self.journal = agent_tools.AuditJournal(journal_path)
+        self.store = SessionStore(
+            env_data_path(),
+            policy=policy,
+            harness=self.harness,
+            invoices=self.invoices,
+            journal=self.journal,
+        )
+
+    def reset_runtime(self) -> None:
+        self.store.clear()
+        self.policy.reset_runtime()
+        self.harness.reset()
+        self.invoices.clear()
+        self.journal.clear()
 
 
 class AgentHandler(BaseHTTPRequestHandler):
-    server_version = "MOHHDY-Agent/0.3"
+    server_version = "MOHHDY-Agent/0.4"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write(
@@ -1020,9 +1252,9 @@ class AgentHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         parsed = urlparse(self.path)
         path = self._normalize(parsed.path)
-        if path in ("/embed.js", "/embed.css") or path.startswith("/api/sessions"):
+        if path in ("/embed.js", "/embed.css") or path.startswith("/api/sessions") or path.startswith("/api/demo-app"):
             self.send_response(204)
-            if path.startswith("/api/sessions"):
+            if path.startswith("/api/sessions") or path.startswith("/api/demo-app"):
                 self._write_headers(VISITOR_API_HEADERS)
             elif path == "/embed.css":
                 self._write_headers(PUBLIC_CSS_HEADERS)
@@ -1058,6 +1290,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "llm": LLM_KIND,
                     "admin_auth": admin_auth_mode(),
                     "kb_loaded": policy_status["kb_loaded"],
+                    "harness": HARNESS_KIND,
                 },
                 send_body=send_body,
             )
@@ -1070,6 +1303,9 @@ class AgentHandler(BaseHTTPRequestHandler):
             return
         if path in ("/demo", "/demo/"):
             self._send_static("demo.html", "text/html; charset=utf-8", send_body)
+            return
+        if path in ("/demo-app", "/demo-app/"):
+            self._send_static("demo-app.html", "text/html; charset=utf-8", send_body)
             return
         if path == "/embed.js":
             self._send_static(
@@ -1109,6 +1345,10 @@ class AgentHandler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/admin/"):
             self._dispatch_admin(method, path, query, send_body)
+            return
+
+        if path.startswith("/api/demo-app"):
+            self._dispatch_demo_app(method, path, query, send_body)
             return
 
         if path == "/api/sessions":
@@ -1176,8 +1416,36 @@ class AgentHandler(BaseHTTPRequestHandler):
                 return
             self._send_json(
                 {
-                    "capabilities": capability_catalog(),
+                    "capabilities": capability_catalog(self.server.policy),
                     "default_capabilities": list(self.server.policy.default_capabilities),
+                    "declared_tools": self.server.policy.declared_tools_public(),
+                    "allowed_origins": list(self.server.policy.allowed_origins),
+                    "harness": HARNESS_KIND,
+                    "auth": admin_auth_mode(),
+                },
+                send_body=send_body,
+            )
+            return
+
+        if path == "/api/admin/journal":
+            if method not in ("GET", "HEAD"):
+                self._send_json_status(405, {"status": "error", "error": "method_not_allowed"})
+                return
+            session_raw = query.get("session_id", [None])[0]
+            session_id = None
+            if session_raw:
+                if not SESSION_ID_RE.match(session_raw):
+                    self._send_json_status(
+                        400,
+                        {"status": "error", "error": "bad_request", "message": "session_id invalide"},
+                    )
+                    return
+                session_id = session_raw
+            entries = self.server.journal.list_entries(session_id=session_id)
+            self._send_json(
+                {
+                    "journal": entries,
+                    "harness": HARNESS_KIND,
                     "auth": admin_auth_mode(),
                 },
                 send_body=send_body,
@@ -1406,8 +1674,26 @@ class AgentHandler(BaseHTTPRequestHandler):
                 extra_headers=VISITOR_API_HEADERS,
             )
             return
+        origin = ""
+        raw_origin = payload.get("origin") if payload else None
+        if isinstance(raw_origin, str):
+            origin = raw_origin.strip()
+        args = payload.get("args") if payload else None
+        if args is not None and not isinstance(args, dict):
+            self._send_json_status(
+                400,
+                {"status": "error", "error": "bad_request", "message": "args objet requis"},
+                extra_headers=VISITOR_API_HEADERS,
+            )
+            return
         try:
-            self.server.store.invoke_tool(session_id, str(tool))
+            result = self.server.store.invoke_tool(
+                session_id,
+                str(tool),
+                origin=origin,
+                args=args if isinstance(args, dict) else {},
+                self_origin=self._self_origin(),
+            )
         except KeyError:
             self._send_json_status(
                 404,
@@ -1423,12 +1709,72 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "error": "capability_denied",
                     "capability": exc.capability,
                     "tool": exc.tool or exc.capability,
-                    "message": "Outil refuse : absent de l'allowlist.",
+                    "request_id": exc.request_id,
+                    "message": (
+                        "Outil refuse : absent de l'allowlist. "
+                        "Aucun acte execute. Vous pouvez demander un humain."
+                    ),
+                    "escalate": True,
                     "session_id": session_id,
                     "session_status": (public or {}).get("status"),
                 },
                 send_body=True,
                 status=403,
+                extra_headers=VISITOR_API_HEADERS,
+            )
+            return
+        except agent_tools.OriginDenied as exc:
+            public = self.server.store.get(session_id, include_messages=False, admin=False)
+            self._send_json(
+                {
+                    "status": "error",
+                    "error": "origin_denied",
+                    "origin": exc.origin,
+                    "request_id": exc.request_id,
+                    "tool": str(tool),
+                    "message": "Origine hors allowlist. Aucun acte execute.",
+                    "escalate": True,
+                    "session_id": session_id,
+                    "session_status": (public or {}).get("status"),
+                    "harness": HARNESS_KIND,
+                },
+                send_body=True,
+                status=403,
+                extra_headers=VISITOR_API_HEADERS,
+            )
+            return
+        except agent_tools.ToolUndeclared as exc:
+            public = self.server.store.get(session_id, include_messages=False, admin=False)
+            self._send_json(
+                {
+                    "status": "error",
+                    "error": "tool_undeclared",
+                    "tool": exc.tool,
+                    "request_id": exc.request_id,
+                    "message": (
+                        "Outil absent de la config operateur. "
+                        "Vous pouvez demander un humain."
+                    ),
+                    "escalate": True,
+                    "session_id": session_id,
+                    "session_status": (public or {}).get("status"),
+                },
+                send_body=True,
+                status=403,
+                extra_headers=VISITOR_API_HEADERS,
+            )
+            return
+        except agent_tools.ToolArgsError as exc:
+            self._send_json(
+                {
+                    "status": "error",
+                    "error": "bad_request",
+                    "message": str(exc),
+                    "request_id": exc.request_id,
+                    "tool": str(tool),
+                },
+                send_body=True,
+                status=400,
                 extra_headers=VISITOR_API_HEADERS,
             )
             return
@@ -1447,9 +1793,63 @@ class AgentHandler(BaseHTTPRequestHandler):
                 extra_headers=VISITOR_API_HEADERS,
             )
             return
+        self._send_json(result, send_body=True, status=200, extra_headers=VISITOR_API_HEADERS)
+
+    def _self_origin(self) -> str:
+        host = (self.headers.get("Host") or "").strip()
+        if not host:
+            address = self.server.server_address
+            host = "%s:%s" % (address[0], address[1])
+        if host.startswith("http://") or host.startswith("https://"):
+            return agent_tools.normalize_origin(host)
+        return agent_tools.normalize_origin("http://%s" % host)
+
+    def _dispatch_demo_app(
+        self, method: str, path: str, query: dict, send_body: bool
+    ) -> None:
+        if path == "/api/demo-app/state":
+            if method not in ("GET", "HEAD"):
+                self._send_json_status(
+                    405,
+                    {"status": "error", "error": "method_not_allowed"},
+                    extra_headers=VISITOR_API_HEADERS,
+                )
+                return
+            self._send_json(
+                self.server.harness.snapshot(),
+                send_body=send_body,
+                extra_headers=VISITOR_API_HEADERS,
+            )
+            return
+        if path == "/api/demo-app/invoices":
+            if method not in ("GET", "HEAD"):
+                self._send_json_status(
+                    405,
+                    {"status": "error", "error": "method_not_allowed"},
+                    extra_headers=VISITOR_API_HEADERS,
+                )
+                return
+            session_raw = query.get("session_id", [None])[0]
+            session_id = None
+            if session_raw:
+                if not SESSION_ID_RE.match(session_raw):
+                    self._send_json_status(
+                        400,
+                        {"status": "error", "error": "bad_request", "message": "session_id invalide"},
+                        extra_headers=VISITOR_API_HEADERS,
+                    )
+                    return
+                session_id = session_raw
+            rows = self.server.invoices.list_invoices(session_id=session_id)
+            self._send_json(
+                {"invoices": rows, "harness": HARNESS_KIND},
+                send_body=send_body,
+                extra_headers=VISITOR_API_HEADERS,
+            )
+            return
         self._send_json_status(
-            501,
-            {"status": "error", "error": "tool_not_implemented", "tool": str(tool)},
+            404,
+            {"status": "not_found", "service": SERVICE_NAME},
             extra_headers=VISITOR_API_HEADERS,
         )
 
@@ -1597,6 +1997,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                 "error": "capability_denied",
                 "capability": exc.capability,
                 "tool": exc.tool or exc.capability,
+                "request_id": getattr(exc, "request_id", "") or "",
                 "message": "Droit absent ou revoque.",
             },
             send_body=True,
@@ -1725,13 +2126,14 @@ def main() -> None:
     host, port = httpd.server_address[:2]
     policy_status = httpd.policy.public_status()
     sys.stderr.write(
-        "mohhdy-agent ASSIST-012/030/031/041 sur http://%s:%s "
+        "mohhdy-agent ASSIST-020/021/022 sur http://%s:%s "
         "(health=/health admin=/admin embed=/embed.js demo=/demo "
-        "llm=%s admin_auth=%s kb_loaded=%s)\n"
+        "demo-app=/demo-app llm=%s harness=%s admin_auth=%s kb_loaded=%s)\n"
         % (
             host,
             port,
             LLM_KIND,
+            HARNESS_KIND,
             admin_auth_mode(),
             "oui" if policy_status["kb_loaded"] else "non",
         )

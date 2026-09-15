@@ -22,13 +22,15 @@ Arborescence parallèle `agent/` (Python 3, bibliothèque standard uniquement) :
 | `GET /admin` | Console HTML : liste et détail des sessions |
 | `GET /embed.js` | Widget public (bulle + session HTTP), **sans secret** |
 | `GET /demo` | Page hôte qui charge `embed.js` |
+| `GET /demo-app` | Appli hôte mock (menu, formulaire facture, simulateur DOM) |
 | `GET /` | Index des routes |
 | `POST /api/sessions` | Ouvre une session visiteur |
+| `POST /api/sessions/{id}/tools` | Geste ou outil MCP allowliste |
 
 Honnêteté produit :
 
 - Les réponses chat sont un **stub local** (echo ou extraits de KB), pas un LLM de production.
-- Aucun geste navigateur ni outil MCP exécuté (ASSIST-020..022). Placeholders de droits seulement.
+- Gestes navigateur : **simulateur DOM** in-process, pas Chromium / Playwright. Guide : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
 - Escalade et handoff : [assist012_droits_handoff.md](assist012_droits_handoff.md).
 - Le noyau Multiboot **n'est pas** booté dans ce conteneur.
 - `ADMIN_TOKEN` se passe au `docker run`, jamais dans l'image.
@@ -110,6 +112,7 @@ curl -fsS http://127.0.0.1:8080/health
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/admin
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/embed.js
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/demo
+curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/demo-app
 ```
 
 Ouvrir `http://127.0.0.1:8080/demo` : la bulle en bas à droite ouvre une
@@ -119,7 +122,7 @@ session et accepte un message. L'echo stub s'affiche dans le panneau.
 
 - Secret, `.env`, clé API, certificat privé, `ADMIN_TOKEN` cuit
 - Binaire noyau `build/mohhdy.bin`, initrd, ISO GRUB
-- Dépendance pip, Node, navigateur outillé
+- Dépendance pip, Node, navigateur outillé (Chromium n'est pas dans l'image slim)
 - Modèle GPT-2 / GGUF
 
 ## Relation au prototype AOS

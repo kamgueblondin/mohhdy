@@ -19,5 +19,26 @@ services:
       ADMIN_TOKEN: "${ADMIN_TOKEN:-}"
       MOHHDY_AGENT_CONFIG: "${MOHHDY_AGENT_CONFIG:-}"
       MOHHDY_AGENT_KB: "${MOHHDY_AGENT_KB:-}"
+      MOHHDY_AGENT_DATA: "${MOHHDY_AGENT_DATA:-}"
     # Pas de env_file. Ne pas copier de secret dans le build.
-    # Pour la demo KB : MOHHDY_AGENT_CONFIG=/app/config.example.json
+    # Pour la demo KB + outils : MOHHDY_AGENT_CONFIG=/app/config.example.json
+
+  # Profil optionnel : meme runtime slim. Chromium n'est PAS installe.
+  # Les gestes restent le simulateur DOM (make agent-smoke sans ce profil).
+  mohhdy-agent-browser:
+    profiles: ["browser"]
+    build:
+      context: .
+      dockerfile: Dockerfile.playwright
+    image: mohhdy-agent:browser
+    ports:
+      - "8081:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      MOHHDY_AGENT_HOST: "0.0.0.0"
+      MOHHDY_AGENT_PORT: "8080"
+      ADMIN_TOKEN: "${ADMIN_TOKEN:-}"
+      MOHHDY_AGENT_CONFIG: "${MOHHDY_AGENT_CONFIG:-/app/config.example.json}"
+      MOHHDY_AGENT_HARNESS: "dom_simulator"
