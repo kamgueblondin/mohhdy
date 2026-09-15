@@ -101,3 +101,17 @@ jobs:
           path: |
             test_logs/
             ci-serial.log
+
+  # Scaffold ASSIST-050 : HTTP stdlib, parallele, sans Docker et sans QEMU.
+  # Ne needs pas build-and-test : n'allonge pas integration-qemu.
+  agent-http-smoke:
+    name: Agent HTTP smoke (ASSIST-050)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: HTTP smoke (Python stdlib, no Docker)
+        run: make agent-smoke

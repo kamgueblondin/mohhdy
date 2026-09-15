@@ -1,11 +1,11 @@
 # Track Agent Support - assistant web agentique
 
 **Date :** 15 septembre 2026
-**Statut :** spec produit, **pas** une livraison
+**Statut :** spec produit. ASSIST-050 = scaffold HTTP / Docker livré ; le reste du track n'est **pas** livré
 **IDs :** `ASSIST-xxx` (ne collident ni avec `AOS-xxx` ni avec `US-xxx`)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document décrit une **nouvelle piste produit** : MOHHDY comme assistant IA agentique (OS / agent) capable de tenir un support client sur un site web, d'agir dans le périmètre autorisé, et de céder la main à un humain. Il n'annule pas le prototype i386. Il n'affirme pas que le widget, Docker, la console admin ou l'automatisation navigateur existent déjà.
+Ce document décrit une **nouvelle piste produit** : MOHHDY comme assistant IA agentique (OS / agent) capable de tenir un support client sur un site web, d'agir dans le périmètre autorisé, et de céder la main à un humain. Il n'annule pas le prototype i386. ASSIST-050 livre un **scaffold** HTTP / Docker (santé, admin vide, `embed.js` stub, page démo). Ce n'est **pas** un chat IA, **pas** des sessions, **pas** une console opérationnelle, **pas** d'automatisation navigateur.
 
 En cas de contradiction sur ce qui **tourne aujourd'hui**, [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md) et [mohhdy_us.md](mohhdy_us.md) priment.
 
@@ -64,7 +64,7 @@ Si, plus tard, MOHHDY a un corps physique, les mêmes droits pourront gouverner 
 
 ## Non-objectifs (explicites)
 
-- Ne pas déclarer livrés : widget JS, console admin, Docker, hyperviseur, abonnement cloud, agent souris / clics, MCP site, facture en session.
+- Ne pas déclarer livrés le produit : widget conversationnel, console opérationnelle, Docker d'agent complet, hyperviseur, abonnement cloud, agent souris / clics, MCP site, facture en session. Le scaffold ASSIST-050 (HTTP) n'est pas ce produit.
 - Ne pas déplacer le backlog AOS (CI 25 min, ACL préfixe, GGUF, stockage hors noyau) vers ce track.
 - Ne pas héberger l'embed public **dans** le noyau Multiboot i386 actuel.
 - Ne pas ouvrir TensorFlow Lite, NLU fédéré, P2P, économie de points, ou US-001 "d'un coup".
@@ -77,7 +77,7 @@ Si, plus tard, MOHHDY a un corps physique, les mêmes droits pourront gouverner 
 | Cible | Rôle | Runtime supposé | Statut |
 |---|---|---|---|
 | OS autonome existant | Prototype pédagogique i386, boot QEMU / ISO | Multiboot, shell Ring 3, GPT-2 / GGUF local, NE2000 local | **Vérifié** (AOS). N'héberge pas le widget |
-| Conteneur Docker | Véhicule principal du runtime agent + origine de l'embed + admin | Userspace Linux (ou équivalent) avec HTTP(S), navigateur outillé, file de sessions | Spec ASSIST-050. Peut démarrer **avant** le microkernel |
+| Conteneur Docker | Véhicule principal du runtime agent + origine de l'embed + admin | Userspace Linux (ou équivalent) avec HTTP(S), navigateur outillé, file de sessions | Scaffold ASSIST-050 (`agent/`). Origine HTTP seulement ; pas le produit complet |
 | Installation PC | Même runtime, package natif | Identique à Docker sur le fond, installateur en plus | Spec ASSIST-051 |
 | Hyperviseur | Image VM (QEMU/KVM, autre) du runtime agent, pas du seul hobby kernel | Identique à Docker, disque / réseau de VM | Spec ASSIST-052 |
 | Abonnement cloud hébergé | Instance opérée pour le client, même API d'embed | Multi-tenant ou instance dédiée, facturation | Spec ASSIST-053, optionnelle |
@@ -264,7 +264,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Dépendances.** ASSIST-011, ASSIST-040.
 
-**Critère.** Demande visiteur -> file admin. Tentative d'acte hors politique -> file admin, sans exécution. L'agent n'invente pas un droit pour "aider quand même".
+**Critère.** Demande visiteur : file admin. Tentative d'acte hors politique : file admin, sans exécution. L'agent n'invente pas un droit pour "aider quand même".
 
 ### ASSIST-040 - Console d'administration des sessions
 
@@ -289,6 +289,8 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 **Dépendances.** Aucune tranche AOS 0-4 bloquante. **Peut commencer en parallèle.** Ne pas alourdir `make integration-qemu`.
 
 **Critère.** `docker run` documenté : santé HTTP, page admin, origine d'embed. Pas de secret dans l'image. Hors cible : faire booter le noyau Multiboot **dans** ce conteneur comme substitut du widget.
+
+**Progrès (scaffold, pas le produit).** Arborescence `agent/` : Python 3 stdlib, `Dockerfile` utilisateur non-root, `docker-compose.yml`, `make agent-smoke` (hors `make ci` / hors QEMU). Routes : `GET /health`, `GET /admin` (liste vide), `GET /embed.js` (bulle stub), `GET /demo`. Guide : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md). **Non livré :** chat IA, sessions, authentification admin, MCP, actes navigateur, noyau i386 dans l'image.
 
 ### ASSIST-051 - Installation PC
 
@@ -343,7 +345,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 | Rang | IDs | Peut démarrer | Bloque par |
 |---:|---|---|---|
 | 1 | ASSIST-000 | Tout de suite (docs) | Rien |
-| 2 | ASSIST-050 | **Parallèle** aux tranches AOS 0-4 | Interdit d'allonger la CI QEMU |
+| 2 | ASSIST-050 | Scaffold HTTP / Docker livré ; parallèle aux tranches AOS 0-4 | Interdit d'allonger la CI QEMU |
 | 3 | ASSIST-010, 011, 013, 040 | Après une origine HTTP (050 ou 053) | Runtime plus large que i386 |
 | 4 | ASSIST-012, 030, 031, 041 | Après session + admin | Politique de droits |
 | 5 | ASSIST-020, 021, 022 | Après droits + navigateur outillé | Allowlist, pas AOS-025 public |
@@ -357,6 +359,7 @@ OpenAI / LLM hébergé : l'agent peut d'abord s'appuyer sur un modèle **local �
 
 - Prototype vérifié : [mohhdy_us.md](mohhdy_us.md), [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md)
 - Suite AOS + ce track : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md)
+- Scaffold Docker ASSIST-050 : [../docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md)
 - Phase 1 droits : [mohhdy_us_phase1_foundation.md](mohhdy_us_phase1_foundation.md)
 - Phase 2 assistant : [mohhdy_us_phase2_ai_core.md](mohhdy_us_phase2_ai_core.md), [individual_us/US-021_Assistant_IA_Integre.md](individual_us/US-021_Assistant_IA_Integre.md), [individual_us/US-028_Module_Intelligence_Conversationnelle.md](individual_us/US-028_Module_Intelligence_Conversationnelle.md)
 - Phase 3 navigateur : [mohhdy_us_phase3_web_runtime.md](mohhdy_us_phase3_web_runtime.md)
