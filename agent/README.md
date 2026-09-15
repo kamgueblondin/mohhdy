@@ -1,14 +1,16 @@
-# Runtime agent MOHHDY (ASSIST-050 a 061)
+# Scaffold userspace de l'instance Mohhdy (ASSIST-050 a 061)
 
-Arborescence parallèle au prototype i386. Origine HTTP, widget d'embed,
+`agent/` est le **bootstrap userspace** du SE Mohhdy, pas un produit
+"Agent Support" a cote du noyau. Origine HTTP, widget d'embed,
 sessions visiteur isolees, base autorisee locale, masque de droits,
 escalade, handoff humain, simulateur de gestes DOM, facture mock,
 vue navigateur d'instance (`/browser`) et FS sandbox (`/browser/fs`).
-Install native, recette hyperviseur et mode hosted (scaffold, pas de
-facturation). Les reponses sont un **stub local** (echo ou extraits de
-KB), pas un LLM de production. Pas d'appel OpenAI. Playwright / Chromium
-est un **profil optionnel** (controle operateur, pas les gestes de
-session). Pas US-031. Pas le noyau Multiboot.
+Docker / PC / hyperviseur = deploiement de cette instance (machine
+vierge ou VM). Mode hosted : scaffold, pas de facturation. Les reponses
+sont un **stub local** (echo ou extraits de KB), pas un LLM de
+production. Pas d'appel OpenAI. Playwright / Chromium est un **profil
+optionnel** (controle operateur, pas les gestes de session). Pas US-031.
+Pas le noyau Multiboot du guest.
 
 Guides :
 

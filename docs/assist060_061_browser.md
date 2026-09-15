@@ -4,21 +4,23 @@
 **Statut :** premiere tranche livree dans `agent/` (simulateur DOM, profil Playwright optionnel, pas US-031)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document décrit comment, une fois l'instance déployée, un opérateur
-ouvre une **vue navigateur locale** et, si le runtime est orienté
-navigateur, consulte un **système de fichiers virtuel** borné.
+Ce document décrit comment, une fois l'**instance Mohhdy** déployée, un
+opérateur ouvre une **vue navigateur locale** (navigateur-OS du SE,
+bootstrap) et, si le runtime est oriente navigateur, consulte un
+**systeme de fichiers virtuel** borne.
 Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
 Image : [assist050_docker_runtime.md](assist050_docker_runtime.md).
 Gestes : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
 Plan : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
 
-Ce n'est **pas** un navigateur-OS (US-031). La phase 3 reste **non
-implementee**. Playwright / Chromium est un **profil optionnel** :
-absent du chemin slim (`make agent-smoke`, `Dockerfile`). Guide :
+Ce n'est **pas** US-031 livre. Le navigateur-OS est un **devoir du SE**.
+La phase 3 / US-031 restent **non implementes**. Playwright / Chromium
+est un **profil optionnel** : absent du chemin slim (`make agent-smoke`,
+`Dockerfile`). Guide :
 [assist_playwright_optional.md](assist_playwright_optional.md). Aucun
 Internet public hors allowlist. Aucun secret dans l'image.
-`docs/ETAT_REEL.md` n'est **pas** mis a jour : le guest AOS n'a pas
-gagne ce FS.
+`docs/ETAT_REEL.md` n'est **pas** mis a jour : le guest n'a pas gagne
+ce FS.
 
 ## ASSIST-060 : URLs de la vue instance
 

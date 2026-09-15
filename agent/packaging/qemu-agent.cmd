@@ -1,4 +1,4 @@
-# Commande QEMU/KVM documentee (ASSIST-052). Pas le prototype AOS.
+# Commande QEMU/KVM documentee (ASSIST-052). Deploiement de l'instance, pas le guest i386.
 # Ne pas utiliser build/mohhdy.bin ni make iso (GRUB i386 Multiboot).
 # Image disque : une cloud image Linux x86_64 (Ubuntu/Debian cloud).
 # Seed NoCloud : agent/packaging/cloud-init/{user-data,meta-data}.

@@ -1,4 +1,5 @@
-# Compose local du runtime agent.
+# Compose local de l'instance Mohhdy (scaffold userspace).
+# Docker boot le SE comme sur une machine vierge. Pas un produit a cote.
 # ADMIN_TOKEN optionnel via l'environnement hote, jamais cuit dans l'image.
 # Exemple : ADMIN_TOKEN=change-me docker compose up --build
 

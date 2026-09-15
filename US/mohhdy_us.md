@@ -1,8 +1,8 @@
-# User stories MOHHDY - backlog du prototype i386
+# User stories Mohhdy - backlog du prototype guest i386
 
-**Date :** 26 août 2026
-**Source de verite runtime :** [docs/ETAT_REEL.md](../docs/ETAT_REEL.md)
-**Perimetre :** hobby OS i386 Multiboot, QEMU, shell Ring 3 et IA locale - pas une distribution Linux. Ce document ne constitue pas le plan MOHHDY a long terme. Lexique : [docs/vocabulaire.md](../docs/vocabulaire.md).
+**Date :** 26 aout 2026
+**Source de verite runtime (guest) :** [docs/ETAT_REEL.md](../docs/ETAT_REEL.md)
+**Perimetre :** prototype guest i386 Multiboot, QEMU, shell Ring 3 et IA locale - pas une distribution Linux. Ce document mesure le chemin noyau. Le produit unique (SE agentique autonome) et les capacites OS (`ASSIST-xxx`) sont dans [README.md](README.md) et [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Lexique : [docs/vocabulaire.md](../docs/vocabulaire.md).
 
 La mention **fait** signifie que le comportement est observable dans le code et couvert par une commande de verification. Les limites explicitement indiquees font partie du resultat : elles ne doivent pas etre confondues avec des fonctionnalites livrees.
 
@@ -133,9 +133,7 @@ Les lots 113-154 sont **faits** au sens caller-owned / Unity / smoke NIC. Les lo
 | 2 | Topologie réseau locale partagée optionnelle | Seulement après une injection PS/2 démontrée avec plusieurs QEMU simultanés ; sans TAP, clé, Internet public ni OpenAI |
 | 3 | Latence locale | Mesure sous matériel/KVM sur une plateforme de référence ; QEMU TCG reste ~48 s / ~23 s |
 
-La vision MOHHDY (microkernel, P2P, économie, multi-plateforme, etc.) reste une collection de spécifications dans `US/`. Elle ne doit pas être utilisée comme indicateur d'implémentation du prototype.
-
-Plan ordonné des prochaines tranches : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
+La vision historique (microkernel, P2P, economie, multi-plateforme, etc.) reste une collection de specifications dans `US/`. Elle ne doit pas etre lue comme un second produit ni comme indicateur d'implementation du guest. Capacites OS de l'instance : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Plan : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
 
 ## Références
 

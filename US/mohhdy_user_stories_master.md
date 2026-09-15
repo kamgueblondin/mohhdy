@@ -5,7 +5,7 @@
 
 ## Vue d'Ensemble du Projet
 
-**MOHHDY** est le nom produit unique de ce hobby OS. Ce document conserve le plan de vision historique (user stories) du prototype, sans second nom de projet. Il ne décrit pas l'état livré : voir [mohhdy_us.md](mohhdy_us.md) et [docs/ETAT_REEL.md](../docs/ETAT_REEL.md).
+**Mohhdy** est le nom produit unique : le SE agentique autonome. Ce document conserve le plan de vision historique (user stories) du prototype guest, sans second nom de projet et sans piste "Agent Support" distincte. Il ne decrit pas l'etat livre : voir [mohhdy_us.md](mohhdy_us.md) (guest) et [docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Capacites OS : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md).
 
 ### Vision MOHHDY
 

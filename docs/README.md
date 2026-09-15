@@ -1,4 +1,4 @@
-# Documentation MOHHDY
+# Documentation Mohhdy
 
 ## Pour démarrer
 
@@ -8,10 +8,10 @@ Depuis la racine du dépôt : `make deps` (script [`scripts/bootstrap-dev.sh`](.
 
 1. [ETAT_REEL.md](ETAT_REEL.md) - **état actuel du code**, y compris GPT-2 local et limites vérifiées
 2. [BILAN_MASTER.md](BILAN_MASTER.md) - bilan de `origin/master` au 13 septembre 2026 (`9078d5f`)
-3. [vocabulaire.md](vocabulaire.md) - termes du hobby OS (pas une identité Linux)
+3. [vocabulaire.md](vocabulaire.md) - termes du SE (guest vs instance, pas une identite Linux)
 4. [../US/mohhdy_us.md](../US/mohhdy_us.md) - user stories du prototype (fait + suite, dont FAT16 mutate 8.3 et réseau local)
-5. [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) - prochaines tranches AOS 0-4, puis track Agent Support
-6. [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - Agent Support (`ASSIST-xxx`) ; runtime HTTP `agent/`
+5. [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) - un produit : gardes guest 0-4, puis capacites OS de l'instance
+6. [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/`
 7. [aos_fat_volume.md](aos_fat_volume.md) - volume FAT16 (lecture + create/remove/rename 8.3 racine) et FAT32 lecture VFS ; pas ext2
 8. [mohhdy_foundation_increment_01_ipc.md](mohhdy_foundation_increment_01_ipc.md) - IPC Foundation MOHHDY, limites et contrat QEMU
 9. [aos020_gguf_quantization_design.md](aos020_gguf_quantization_design.md) - sonde GGUF v3 et quantification préparatoire
@@ -28,8 +28,8 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 
 | Fichier | Contenu |
 |---|---|
-| [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Prochaines tranches : prototype AOS 0-4, puis track Agent Support |
-| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo / `/browser` / FS sandbox livrés (stub local, Playwright optionnel, pas US-031). Packaging 051-053 : scaffold |
+| [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Un produit : gardes guest 0-4, puis capacites OS (Docker = boot de l'instance) |
+| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Capacites OS (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo / `/browser` / FS sandbox livres (stub local, Playwright optionnel, pas US-031). Packaging 051-053 : scaffold |
 | [assist050_docker_runtime.md](assist050_docker_runtime.md) | Image Docker / HTTP agent : build, `docker run`, fumée |
 | [assist051_052_053_deploy.md](assist051_052_053_deploy.md) | Install PC, hyperviseur QEMU/cloud-init, mode hosted non-billing |
 | [assist060_061_browser.md](assist060_061_browser.md) | Vue `/browser` et FS sandbox (ASSIST-060/061, pas US-031) |
@@ -39,7 +39,7 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 | [assist012_droits_handoff.md](assist012_droits_handoff.md) | KB locale, droits, escalade, handoff |
 | [assist020_gestes_mcp.md](assist020_gestes_mcp.md) | Gestes simulateur, outils MCP, facture mock |
 | [ETAT_REEL.md](ETAT_REEL.md) | État fonctionnel, GPT-2 local et limites vérifiées |
-| [vocabulaire.md](vocabulaire.md) | Lexique du hobby OS ; distance volontaire d'une identité Linux |
+| [vocabulaire.md](vocabulaire.md) | Lexique du SE : un produit, deux niveaux de maturite, distance d'une identite Linux |
 | [../US/mohhdy_us.md](../US/mohhdy_us.md) | Backlog du prototype, AOS-001...026, FAT16 mutate, sockets, `ai-acquire` et TLS/HTTP local |
 | [aos_fat_volume.md](aos_fat_volume.md) | FAT16 lecture + mutations 8.3 racine ; FAT32 lecture VFS ; LFN FAT16 hors perimetre |
 | [aos025_network_stub.md](aos025_network_stub.md) | Stub OpenAI initial ; voir ETAT_REEL pour `ai-acquire` et TLS/HTTP local |
@@ -111,13 +111,13 @@ Les captures QEMU et les exports Word ont été retirés du dépôt (la source r
 
 ## User stories
 
-- [../US/mohhdy_us.md](../US/mohhdy_us.md) - backlog du **prototype** (AOS-001...026 livres ; FAT16 mutate 8.3 ; `ai-acquire` local, pas client OpenAI public)
-- [../US/README.md](../US/README.md) - trois couches : hobby OS, vision MOHHDY, track Agent Support
-- [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - spec Agent Support (`ASSIST-xxx`) ; runtime HTTP `agent/`
+- [../US/mohhdy_us.md](../US/mohhdy_us.md) - backlog du **prototype guest** (AOS-001...026 livres ; FAT16 mutate 8.3 ; `ai-acquire` local, pas client OpenAI public)
+- [../US/README.md](../US/README.md) - un produit, deux niveaux de maturite (guest vs instance autonome)
+- [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/`
 - [assist050_docker_runtime.md](assist050_docker_runtime.md) - `docker run` et fumée de l'image agent
 - [assist060_061_browser.md](assist060_061_browser.md) - vue navigateur d'instance et FS sandbox
 - [assist010_sessions_admin.md](assist010_sessions_admin.md) - sessions, embed, admin, snippet CSP
 - [assist013_origine_embed.md](assist013_origine_embed.md) - origine document vs site déclaré
 - [../US/individual_us/INDEX.md](../US/individual_us/INDEX.md) - specs MOHHDY, chevauchements, IDs dupliqués
 
-Les phases MOHHDY restent majoritairement des **specifications**. Le track Agent Support est une piste produit parallèle, pas une fonction du prototype i386. Les increments Foundation 01-64 (IPC, mediateur de chemins, registre, supervision de taches) sont compiles et testes ; ils ne transforment pas le noyau monolithique en microkernel et n'implementent pas les autres phases. FAT16 et FAT32 8.3 racine sont mutables via VFS ; le client OpenAI public reste hors perimetre.
+Les phases historiques restent majoritairement des **specifications**. Les tickets ASSIST sont des **capacites du SE**, portees par le scaffold `agent/`, pas un produit a cote du guest i386. Les increments Foundation 01-64 (IPC, mediateur de chemins, registre, supervision de taches) sont compiles et testes ; ils ne transforment pas le noyau monolithique en microkernel et n'implementent pas les autres phases. FAT16 et FAT32 8.3 racine sont mutables via VFS ; le client OpenAI public reste hors perimetre.

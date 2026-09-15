@@ -1,5 +1,5 @@
 [Unit]
-Description=MOHHDY agent runtime HTTP (ASSIST-051)
+Description=Instance Mohhdy (scaffold userspace HTTP, ASSIST-051)
 Documentation=https://github.com/kamgueblondin/mohhdy
 After=network-online.target
 Wants=network-online.target
