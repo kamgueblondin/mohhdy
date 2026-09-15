@@ -7,10 +7,10 @@ Deux **niveaux de maturite runtime** (ingenierie, pas deux produits), plus des a
 | Niveau | Document | Statut |
 |---|---|---|
 | **Prototype guest** | [mohhdy_us.md](mohhdy_us.md) + [docs/ETAT_REEL.md](../docs/ETAT_REEL.md) | Tranche noyau i386 Multiboot **mesuree** : AOS-001 a AOS-026 verifies ; FAT16/FAT32 ; reseau local `ai-acquire` ; pas de client OpenAI public |
-| **Instance OS autonome** | [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Backlog de **capacites OS** (`ASSIST-xxx`). Scaffold userspace `agent/` : embed, sessions, KB, droits, escalade, handoff, admin, simulateur DOM, MCP demo, `/browser`, FS sandbox, packaging Docker / PC / hyperviseur. Stub local. Playwright = profil optionnel. LLM de production, US-031 et billing **non livres** |
+| **Instance OS autonome** | [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) + [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md) | Backlog de **capacites OS** (`ASSIST-xxx`) a porter dans l'OS+UI (`OS-UI-xxx`). Scaffold `agent/` : embed, sessions, KB, droits, escalade, handoff, admin, simulateur DOM, MCP demo, `/browser`, FS sandbox, packaging. Stub local. Playwright = profil optionnel. LLM de production, US-031 et billing **non livres**. Prochain build : OS-UI-0 |
 | **Specs historiques** | fichiers `mohhdy_*.md` + [individual_us/](individual_us/INDEX.md) | Archives de conception (phases 1-8). Un `[OK]` = fichier present, **pas** "implemente" |
 
-En cas de contradiction sur ce qui **tourne dans le guest**, **ETAT_REEL** et **mohhdy_us.md** priment. L'intention produit (SE unitaire, autonome, navigateur-OS du SE) est dans ce dossier et dans [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
+En cas de contradiction sur ce qui **tourne dans le guest**, **ETAT_REEL** et **mohhdy_us.md** priment. L'intention produit et le **catalogue complet** sont dans [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) (prochain build : OS-UI-0). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Portage ASSIST vers OS graphique : [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md).
 
 ## Prototype guest (tranche noyau verifiee)
 
@@ -20,7 +20,7 @@ Chemin pedagogique i386 32-bit sous QEMU : pas une distribution Linux, boot Mult
 - Runtime mesure : [docs/ETAT_REEL.md](../docs/ETAT_REEL.md)
 - Volumes FAT16/FAT32 : [docs/aos_fat_volume.md](../docs/aos_fat_volume.md)
 - Roadmap produit : [README.md](../README.md)
-- Suite d'implementation : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md) (gardes guest 0-4, puis capacites OS de l'instance)
+- Suite d'implementation : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) (roadmap produit) et [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md) (gardes guest 0-4)
 
 Ce n'est **pas** TensorFlow Lite, pas un microkernel, pas `fake_ai` comme moteur principal (`fake_ai` est un binaire historique ; `ai <texte>` appelle `SYS_GPT2_GENERATE`).
 
@@ -60,7 +60,8 @@ Les autres fichiers MOHHDY restent des **specifications**. Le recouvrement avec 
 | [../docs/mohhdy_foundation_increment_21_vfs_stat.md](../docs/mohhdy_foundation_increment_21_vfs_stat.md) | Métadonnées VFS corrélées et source-spécifiques par montage |
 | [../docs/mohhdy_foundation_increment_32_vfs_backend_status.md](../docs/mohhdy_foundation_increment_32_vfs_backend_status.md) | Consultation médiée d'un masque backend VFS par le propriétaire public |
 | [../docs/mohhdy_foundation_increment_33_vfs_backend_list.md](../docs/mohhdy_foundation_increment_33_vfs_backend_list.md) | Inventaire médié, corrélé et borné des délégations backend VFS actives |
-| [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Capacites OS (`ASSIST-xxx`) : support sur le web, navigateur-OS du SE, autonomie. Scaffold `agent/`. ASSIST-010..022/030/031/040/041/051/052/053/060/061 livres avec limites (stub, Playwright optionnel, pas US-031, pas de billing) |
+| [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md) | Epiques `OS-UI-xxx` : chrome graphique (OS-UI-0), portage chat/admin/droits (1), actes navigateur-OS (2), retrait Python (3) |
+| [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Capacites OS (`ASSIST-xxx`) : support sur le web, navigateur-OS du SE, autonomie. Scaffold `agent/` a migrer. ASSIST-010..022/030/031/040/041/051/052/053/060/061 livres **dans le bootstrap** avec limites (stub, Playwright optionnel, pas US-031, pas de billing) |
 | [mohhdy_us_phase2_ai_core.md](mohhdy_us_phase2_ai_core.md) | Phase 2 (TensorFlow Lite, NLU, federé) - non livree ; l'IA reelle du guest est GPT-2 freestanding |
 | [mohhdy_us_phase3_web_runtime.md](mohhdy_us_phase3_web_runtime.md) | Navigateur-OS du SE : **devoir du produit**, pas une vision lointaine. US-031 **non livre**. Bootstrap ASSIST-060/061 dans `agent/` (Playwright optionnel) |
 | [mohhdy_us_phases_4_8_synthese.md](mohhdy_us_phases_4_8_synthese.md) | Phases 4-8 (PromptMessage, P2P, etc.) - absentes |
@@ -84,9 +85,9 @@ La migration complete de US-001 reste une refonte a haut risque : les increments
 
 ## Instance OS autonome (backlog de capacites OS)
 
-Le SE Mohhdy doit offrir le support sur le web, agir dans le navigateur-OS du SE, et rester autonome. Le backlog est [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) (`ASSIST-000` a `ASSIST-090`).
+Le SE Mohhdy doit offrir le support sur le web, agir dans le navigateur-OS du SE, et rester autonome. Spec fonctionnelle : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) (`ASSIST-000` a `ASSIST-090`). Ordre de **portage dans l'OS graphique** : [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md) et [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Prochain build : **OS-UI-0**.
 
-Docker lance l'instance **comme une machine vierge**. `agent/` est le scaffold userspace actuel jusqu'a ce que davantage vive dans le guest : embed JavaScript, actes allowlistes (clics, MCP), console admin, FS sandbox, packaging PC / hyperviseur. Le navigateur-OS est un **devoir du SE**, pas une option lointaine. US-031 n'est **pas** livre.
+Docker lance l'instance **comme une machine vierge**. `agent/` est le scaffold userspace **temporaire**. Le navigateur-OS est un **devoir du SE**. US-031 n'est **pas** livre.
 
 **Honnêteté runtime.** Le guest i386 verifie n'heberge ni widget, ni Docker, ni admin, ni automatisation navigateur. Ils ne tiennent pas dans un noyau Multiboot nu. Le scaffold HTTP / Docker ([docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md), [docs/assist010_sessions_admin.md](../docs/assist010_sessions_admin.md)) porte ces capacites hors guest : sante, sessions isolees, `embed.js`, admin a jeton. Les reponses sont un echo stub, pas un LLM de production. `make ci` et `make integration-qemu` restent inchanges. OpenAI public reste sous condition.
 
@@ -97,4 +98,4 @@ Docker lance l'instance **comme une machine vierge**. `agent/` est le scaffold u
 1. Une PR = une tranche visible par `make ci` (code) **ou** un alignement doc (ce dossier).
 2. Nouvelles user stories du **guest** : les ajouter dans `mohhdy_us.md` (prefixe `AOS-`), pas en renumerotant les specs historiques.
 3. Les specs historiques peuvent rester ; mettre a jour seulement la banniere "etat reel" si le recouvrement change.
-4. Nouvelles **capacites OS** : les ajouter dans `mohhdy_agent_support_web.md` (prefixe `ASSIST-`), sans `AOS-` et sans renumeroter `US-xxx`.
+4. Nouvelles **capacites OS** : spec dans `mohhdy_agent_support_web.md` (prefixe `ASSIST-`) ; portage dans `mohhdy_os_ui_migration.md` (prefixe `OS-UI-`), sans `AOS-` et sans renumeroter `US-xxx`.

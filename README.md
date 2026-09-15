@@ -144,9 +144,11 @@ Une ISO BIOS/GRUB peut être produite avec l'initrd. Lorsque les poids GPT-2 son
 
 ## Roadmap du SE (un produit)
 
-Un seul plan : [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md). Backlog guest (AOS-xxx) : [US/mohhdy_us.md](US/mohhdy_us.md). Backlog de **capacites OS** (ASSIST-xxx, support web, navigateur-OS du SE, autonomie) : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md). Specs historiques : [US/README.md](US/README.md).
+**Plan maitre (toutes les capacites visees, OS-UI, gates) :** [docs/PLAN_SE_MOHHDY_COMPLET.md](docs/PLAN_SE_MOHHDY_COMPLET.md). Prochain build produit : **OS-UI-0** (shell graphique minimal dans l'instance Docker).
 
-Les items ASSIST (embed, sessions, admin, simulateur, `/browser`, FS sandbox) sont des **devoirs du SE**. Ils vivent aujourd'hui dans le scaffold `agent/` ([docs/assist060_061_browser.md](docs/assist060_061_browser.md)). Stub local, **pas** LLM de production, **pas** Chromium de session, **pas** US-031. Ils n'apparaissent pas comme faits mesures dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md) (cette page mesure le guest).
+Gardes guest 0-4 : [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md). Backlog guest (AOS-xxx) : [US/mohhdy_us.md](US/mohhdy_us.md). Capacites OS a porter (`ASSIST-xxx`) : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md). Epiques de portage : [US/mohhdy_os_ui_migration.md](US/mohhdy_os_ui_migration.md). Specs historiques : [US/README.md](US/README.md).
+
+Les items ASSIST (embed, sessions, admin, simulateur, `/browser`, FS sandbox) sont des **devoirs du SE**. Ils vivent aujourd'hui dans le scaffold `agent/` ([docs/assist060_061_browser.md](docs/assist060_061_browser.md)), **a migrer** dans l'OS+UI. Stub local, **pas** LLM de production, **pas** Chromium de session, **pas** US-031. Ils n'apparaissent pas comme faits mesures dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md) (cette page mesure le guest).
 
 - [x] GPT-2 local, cache KV, SSE2 et top-k borné
 - [x] Tokenizer BPE UTF-8 avec couverture de lettres Unicode ciblée
