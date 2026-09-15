@@ -1,4 +1,4 @@
-# AOS-1809…1816 — Renouvellement DHCP dans le contexte réseau LLM
+# AOS-1809...1816 - Renouvellement DHCP dans le contexte réseau LLM
 
 ## Objet
 
@@ -13,13 +13,13 @@ Ce macro-lot relie le renouvellement DHCP existant au contexte réseau LLM calle
 
 ## Contrat
 
-La façade ne conserve aucun buffer ni état d’E/S. Les trames TX/RX restent caller-owned. Elle copie d’abord le bail du contexte, appelle `ne2k_dhcp_renew_if_due()` sur cette copie, puis ne remplace `context.lease` qu’en cas de succès complet.
+La façade ne conserve aucun buffer ni état d'E/S. Les trames TX/RX restent caller-owned. Elle copie d'abord le bail du contexte, appelle `ne2k_dhcp_renew_if_due()` sur cette copie, puis ne remplace `context.lease` qu'en cas de succès complet.
 
 > Le contexte réseau LLM peut ainsi renouveler son bail DHCP avant les connexions DNS/TCP/TLS et les reprises SSE sans exposer de demi-bail aux couches applicatives.
 
 ## Tests
 
-Le test de contexte couvre l’attente avant l’échéance de renouvellement, un échec d’émission à échéance, l’expiration du bail et un pointeur de contexte nul. Chaque erreur vérifie l’égalité mémoire du bail conservé.
+Le test de contexte couvre l'attente avant l'échéance de renouvellement, un échec d'émission à échéance, l'expiration du bail et un pointeur de contexte nul. Chaque erreur vérifie l'égalité mémoire du bail conservé.
 
 | Vérification | Résultat |
 |---|---|
@@ -31,6 +31,6 @@ Le test de contexte couvre l’attente avant l’échéance de renouvellement, u
 
 ## Références
 
-[1] [AOS-1481 à AOS-1488 — réacquisition DHCP](aos1481_1488_dhcp_reacquisition.md)  
-[2] [AOS-609 à AOS-616 — bail DHCP, route et DNS](aos609_616_dhcp_route_dns.md)  
-[3] [RFC 2131 — Dynamic Host Configuration Protocol](https://www.rfc-editor.org/rfc/rfc2131)
+[1] [AOS-1481 à AOS-1488 - réacquisition DHCP](aos1481_1488_dhcp_reacquisition.md)
+[2] [AOS-609 à AOS-616 - bail DHCP, route et DNS](aos609_616_dhcp_route_dns.md)
+[3] [RFC 2131 - Dynamic Host Configuration Protocol](https://www.rfc-editor.org/rfc/rfc2131)

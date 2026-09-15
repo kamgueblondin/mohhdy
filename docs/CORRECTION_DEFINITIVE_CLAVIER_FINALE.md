@@ -58,7 +58,7 @@ asm volatile("sti");
 === MOHHDY v6.0 - Force le premier changement de contexte ===
 Declencher immediatement le planificateur...
 ═══════════════════════════════════════════════════════════
-    🤖 MOHHDY v6.0 - Intelligence Artificielle Intégrée    
+    🤖 MOHHDY v6.0 - Intelligence Artificielle Intégrée
 ═══════════════════════════════════════════════════════════
 💻 Shell Avancé | 🧠 IA Intelligente | ⚡ Haute Performance
 
@@ -81,7 +81,7 @@ Declencher immediatement le planificateur...
 - Le shell utilisateur s'exécute maintenant dans l'espace utilisateur Ring 3
 - L'interface graphique complète s'affiche correctement
 - Le système attend les entrées clavier (état `GETC_START`)
-- La transition kernel → userspace fonctionne parfaitement
+- La transition kernel -> userspace fonctionne parfaitement
 
 ## 📋 Architecture Technique Validée
 
@@ -106,7 +106,7 @@ Declencher immediatement le planificateur...
 3. 📋 Test utilisateur final avec QEMU GUI recommandé
 
 ---
-**Auteur** : MiniMax Agent  
-**Date** : $(date)  
-**Version** : MOHHDY v6.0 - Correction Définitive  
+**Auteur** : MiniMax Agent
+**Date** : $(date)
+**Version** : MOHHDY v6.0 - Correction Définitive
 **Statut** : ✅ **PROBLÈME RÉSOLU AVEC SUCCÈS**

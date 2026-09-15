@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-025  
-**Titre** : Développement du framework d'explicabilité IA pour transparence et confiance  
-**Phase** : 2 - AI Core  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 15 jours-homme  
-**Risque** : Moyen  
+**ID** : US-025
+**Titre** : Développement du framework d'explicabilité IA pour transparence et confiance
+**Phase** : 2 - AI Core
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 15 jours-homme
+**Risque** : Moyen
 
 ## Description Utilisateur
 
-**En tant que** utilisateur MOHHDY  
-**Je veux** comprendre pourquoi et comment l'IA prend ses décisions  
+**En tant que** utilisateur MOHHDY
+**Je veux** comprendre pourquoi et comment l'IA prend ses décisions
 **Afin de** faire confiance au système et contrôler son comportement
 
 ## Contexte Technique Détaillé
@@ -367,8 +367,8 @@ int validation_user_study(explanation_t* explanations,
 6. **Test d'Interactivité** : Interface de débogage fonctionnelle
 
 ### Estimation
-**Complexité** : Élevée  
-**Effort** : 15 jours-homme  
+**Complexité** : Élevée
+**Effort** : 15 jours-homme
 **Risque** : Moyen
 
 ### Notes d'Implémentation

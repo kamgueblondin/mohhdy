@@ -4,18 +4,18 @@
 
 ## Informations Générales
 
-**ID** : US-012  
-**Titre** : Framework d'APIs unifiées et interfaces cohérentes  
-**Phase** : 1 - Foundation  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 18 jours-homme  
-**Risque** : Moyen  
+**ID** : US-012
+**Titre** : Framework d'APIs unifiées et interfaces cohérentes
+**Phase** : 1 - Foundation
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 18 jours-homme
+**Risque** : Moyen
 
 ## Description Utilisateur
 
-**En tant que** développeur d'applications MOHHDY  
-**Je veux** un framework d'APIs unifiées qui offre des interfaces cohérentes pour tous les services système  
+**En tant que** développeur d'applications MOHHDY
+**Je veux** un framework d'APIs unifiées qui offre des interfaces cohérentes pour tous les services système
 **Afin de** développer efficacement des applications avec une courbe d'apprentissage réduite et une intégration simplifiée
 
 ## Contexte Technique Détaillé
@@ -93,7 +93,7 @@ typedef struct {
 #### API de Découverte
 ```c
 // Découverte et enregistrement
-int api_discover_services(service_filter_t* filter, service_info_t* services, 
+int api_discover_services(service_filter_t* filter, service_info_t* services,
                          int max_services);
 int api_register_service(service_info_t* service_info);
 int api_unregister_service(const char* service_name);
@@ -103,7 +103,7 @@ int api_update_service_health(const char* service_name, health_status_t health);
 int api_resolve_service(const char* service_name, endpoint_info_t* endpoint);
 int api_connect_to_service(const char* service_name, connection_handle_t* handle);
 int api_disconnect_from_service(connection_handle_t handle);
-int api_get_service_capabilities(const char* service_name, 
+int api_get_service_capabilities(const char* service_name,
                                capability_list_t* capabilities);
 ```
 
@@ -143,10 +143,10 @@ typedef struct {
 int api_register_schema(api_schema_t* schema);
 int api_validate_data(const char* schema_id, const void* data, size_t data_size,
                      validation_result_t* result);
-int api_serialize_data(const char* schema_id, const void* data, 
-                      serialization_format_t format, 
+int api_serialize_data(const char* schema_id, const void* data,
+                      serialization_format_t format,
                       void* output_buffer, size_t* output_size);
-int api_deserialize_data(const char* schema_id, const void* input_data, 
+int api_deserialize_data(const char* schema_id, const void* input_data,
                         size_t input_size, void* output_data);
 
 // Génération de code
@@ -191,14 +191,14 @@ typedef enum {
 int api_register_version(api_version_info_t* version_info);
 int api_check_compatibility(const char* api_name, semantic_version_t* client_version,
                            compatibility_result_t* result);
-int api_negotiate_version(const char* api_name, 
+int api_negotiate_version(const char* api_name,
                          semantic_version_t* preferred_versions, int count,
                          semantic_version_t* negotiated_version);
 int api_get_deprecated_apis(deprecated_api_info_t* apis, int max_count);
 
 // Migration et adaptation
 int api_migrate_call(const char* api_name, semantic_version_t* from_version,
-                    semantic_version_t* to_version, 
+                    semantic_version_t* to_version,
                     api_call_t* call, api_call_t* migrated_call);
 int api_adapt_response(const char* api_name, semantic_version_t* from_version,
                       semantic_version_t* to_version,
@@ -233,7 +233,7 @@ int api_profile_performance(const char* api_name, const char* method_name,
 int api_optimize_call_pattern(performance_profile_t* profiles, int count,
                              call_optimization_t* optimizations);
 int api_apply_optimization(const char* api_name, call_optimization_t* optimization);
-int api_benchmark_performance(benchmark_config_t* config, 
+int api_benchmark_performance(benchmark_config_t* config,
                              benchmark_result_t* result);
 ```
 
@@ -262,7 +262,7 @@ typedef struct {
 } code_generation_config_t;
 
 // API de génération
-int api_generate_client_library(const char* api_name, 
+int api_generate_client_library(const char* api_name,
                                code_generation_config_t* config,
                                const char* output_directory);
 int api_generate_server_stub(const char* api_name,
@@ -305,10 +305,10 @@ int mohhdy_ai_unload_model(ai_model_handle_t handle);
 int mohhdy_ai_get_model_info(ai_model_handle_t handle, ai_model_info_t* info);
 
 // Inférence
-int mohhdy_ai_infer(ai_model_handle_t handle, const void* input, 
+int mohhdy_ai_infer(ai_model_handle_t handle, const void* input,
                    ai_inference_config_t* config, void* output);
 int mohhdy_ai_infer_async(ai_model_handle_t handle, const void* input,
-                         ai_inference_config_t* config, 
+                         ai_inference_config_t* config,
                          ai_callback_t callback, void* user_data);
 int mohhdy_ai_batch_infer(ai_model_handle_t handle, const void** inputs, int count,
                          ai_inference_config_t* config, void** outputs);
@@ -325,13 +325,13 @@ int mohhdy_nlu_generate_response(nlu_result_t* nlu_result, response_config_t* co
 int mohhdy_p2p_connect(const char* peer_id, connection_config_t* config,
                       connection_handle_t* handle);
 int mohhdy_p2p_send_message(connection_handle_t handle, const void* data, size_t size);
-int mohhdy_p2p_receive_message(connection_handle_t handle, void* buffer, 
+int mohhdy_p2p_receive_message(connection_handle_t handle, void* buffer,
                               size_t buffer_size, size_t* received_size);
 
 // Services réseau
 int mohhdy_network_create_server(server_config_t* config, server_handle_t* handle);
 int mohhdy_network_create_client(client_config_t* config, client_handle_t* handle);
-int mohhdy_network_send_request(client_handle_t handle, request_t* request, 
+int mohhdy_network_send_request(client_handle_t handle, request_t* request,
                                response_t* response);
 ```
 
@@ -367,7 +367,7 @@ int mohhdy_network_send_request(client_handle_t handle, request_t* request,
 ### Critères de Performance
 1. **Latence Minimale** : < 1ms d'overhead pour appels locaux
 2. **Découverte Rapide** : < 100ms pour découverte de service
-3. **Validation Efficace** : < 10µs pour validation de schéma
+3. **Validation Efficace** : < 10us pour validation de schéma
 4. **Génération Rapide** : < 30s pour générer client complet
 
 ### Critères de Qualité

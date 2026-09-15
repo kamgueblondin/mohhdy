@@ -1,8 +1,8 @@
-# AOS-1561 à AOS-1568 — pas de génération GPT-2 GGUF, token vers logits
+# AOS-1561 à AOS-1568 - pas de génération GPT-2 GGUF, token vers logits
 
 ## Objectif
 
-Ce lot raccorde le contexte GPT-2 GGUF précédemment préparé à un pas local complet sur FAT16. La nouvelle primitive `gpt2_gguf_generation_token_fat16` reçoit un token, sa position, le cache KV et un workspace intégralement fourni par l’appelant. Elle lit les embeddings, traverse les blocs transformeur préparés, applique la normalisation finale et produit les logits de la tête quantifiée.
+Ce lot raccorde le contexte GPT-2 GGUF précédemment préparé à un pas local complet sur FAT16. La nouvelle primitive `gpt2_gguf_generation_token_fat16` reçoit un token, sa position, le cache KV et un workspace intégralement fourni par l'appelant. Elle lit les embeddings, traverse les blocs transformeur préparés, applique la normalisation finale et produit les logits de la tête quantifiée.
 
 ## Exécution bornée
 
@@ -18,8 +18,8 @@ Le lot rend aussi explicite un point de contrat important : les capacités publi
 
 ## Validation ciblée
 
-La fixture FAT16/GGUF contient cinq tenseurs globaux et les dix tenseurs d’une couche GPT-2 à 256 canaux avec un MLP `4C`. Elle exécute deux positions successives, vérifie la progression du cache KV, les logits produits et le rejet d’un token hors vocabulaire.
+La fixture FAT16/GGUF contient cinq tenseurs globaux et les dix tenseurs d'une couche GPT-2 à 256 canaux avec un MLP `4C`. Elle exécute deux positions successives, vérifie la progression du cache KV, les logits produits et le rejet d'un token hors vocabulaire.
 
 ## Limites restantes
 
-Le runtime exécute désormais un pas token-vers-logits, mais il n’est pas encore raccordé au shell `ai`, au tokenizer GGUF ni à l’échantillonneur top-k local. Le prochain lot devra fournir cet adaptateur utilisateur et mesurer la latence sur les modèles compatibles.
+Le runtime exécute désormais un pas token-vers-logits, mais il n'est pas encore raccordé au shell `ai`, au tokenizer GGUF ni à l'échantillonneur top-k local. Le prochain lot devra fournir cet adaptateur utilisateur et mesurer la latence sur les modèles compatibles.

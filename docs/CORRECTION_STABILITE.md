@@ -5,9 +5,9 @@
 
 ### 📋 Résumé Exécutif
 
-**Projet :** MOHHDY v5.0 - Correction de Stabilité  
-**Date :** Août 2025  
-**Problème Initial :** Redémarrages en boucle lors de l'exécution en espace utilisateur  
+**Projet :** MOHHDY v5.0 - Correction de Stabilité
+**Date :** Août 2025
+**Problème Initial :** Redémarrages en boucle lors de l'exécution en espace utilisateur
 **Statut Final :** ✅ **PROBLÈMES RÉSOLUS - SYSTÈME STABLE**
 
 Ce rapport documente la résolution complète des problèmes de stabilité de MOHHDY v5.0, transformant un système instable avec redémarrages en boucle en une plateforme stable et fonctionnelle.
@@ -16,7 +16,7 @@ Ce rapport documente la résolution complète des problèmes de stabilité de MO
 
 #### 1. Système de Tâches Utilisateur Défaillant
 
-**Symptôme :** create_user_task() retournait NULL  
+**Symptôme :** create_user_task() retournait NULL
 **Cause Racine :** Le Makefile compilait task_stable.c (stubs) au lieu de task.c (implémentation complète)
 
 ```c
@@ -40,7 +40,7 @@ task_t* create_user_task(uint32_t entry_point) {
 
 #### 2. Point d'Entrée ELF Incorrect
 
-**Symptôme :** Warnings "undefined reference to `_start`" lors de la compilation  
+**Symptôme :** Warnings "undefined reference to `_start`" lors de la compilation
 **Cause Racine :** Les programmes utilisateur utilisaient main() comme point d'entrée, mais l'ELF s'attendait à _start
 
 ```assembly
@@ -51,15 +51,15 @@ task_t* create_user_task(uint32_t entry_point) {
 _start:
     # Initialiser la pile utilisateur
     movl $0x50000000, %esp
-    
+
     # Appeler main()
     call main
-    
+
     # Si main() retourne, appeler exit
     movl %eax, %ebx         # Code de retour
     movl $0, %eax           # SYS_EXIT
     int $0x80               # Appel système
-    
+
     jmp .                   # Boucle infinie de sécurité
 ```
 
@@ -67,7 +67,7 @@ _start:
 
 #### 3. Chargement ELF Défaillant
 
-**Symptôme :** Crash lors de la copie mémoire vers 0x40000000  
+**Symptôme :** Crash lors de la copie mémoire vers 0x40000000
 **Cause Racine :** Tentative d'écriture directe à une adresse virtuelle utilisateur depuis le noyau
 
 ```c
@@ -90,7 +90,7 @@ for (uint32_t b = copy_start; b < copy_end; b++) {
 
 #### 4. Permissions Mémoire Incorrectes
 
-**Symptôme :** Pages mappées sans permissions utilisateur  
+**Symptôme :** Pages mappées sans permissions utilisateur
 **Cause Racine :** Flag PAGE_USER manquant lors du mapping des pages
 
 ```c
@@ -105,7 +105,7 @@ uint32_t flags = PAGE_PRESENT | PAGE_WRITE | PAGE_USER;
 
 #### 5. Numéros d'Appels Système Incorrects
 
-**Symptôme :** Appels système non reconnus  
+**Symptôme :** Appels système non reconnus
 **Cause Racine :** Décalage dans la numérotation des syscalls
 
 ```c
@@ -122,7 +122,7 @@ uint32_t flags = PAGE_PRESENT | PAGE_WRITE | PAGE_USER;
 
 #### Correction 1 : Activation du Système de Tâches Complet
 
-**Fichier :** `Makefile`  
+**Fichier :** `Makefile`
 **Modification :**
 ```makefile
 # Avant
@@ -152,7 +152,7 @@ shell: shell.c start.o
 
 #### Correction 3 : Chargement ELF Sécurisé
 
-**Fichier :** `kernel/elf.c`  
+**Fichier :** `kernel/elf.c`
 **Modification :** Méthode de copie via adresses physiques
 
 ```c
@@ -160,7 +160,7 @@ shell: shell.c start.o
 for (uint32_t page = 0; page < pages_needed; page++) {
     uint32_t virt_addr = ph->p_vaddr + page_offset;
     void* phys_addr = vmm_get_physical_address((void*)virt_addr);
-    
+
     if (phys_addr) {
         uint8_t* dst = (uint8_t*)phys_addr;
         // Copie sécurisée vers l'adresse physique
@@ -175,7 +175,7 @@ for (uint32_t page = 0; page < pages_needed; page++) {
 
 #### Correction 4 : Permissions Utilisateur
 
-**Fichier :** `kernel/elf.c`  
+**Fichier :** `kernel/elf.c`
 **Modification :**
 ```c
 uint32_t flags = PAGE_PRESENT | PAGE_WRITE | PAGE_USER;
@@ -186,12 +186,12 @@ vmm_map_page(phys_page, (void*)virt_addr, flags);
 
 #### Correction 5 : Appels Système Cohérents
 
-**Fichiers :** `userspace/shell.c`  
+**Fichiers :** `userspace/shell.c`
 **Modification :**
 ```c
 // SYS_GETS corrigé
-void gets(char* buffer, int size) { 
-    asm volatile("int $0x80" : : "a"(5), "b"(buffer), "c"(size)); 
+void gets(char* buffer, int size) {
+    asm volatile("int $0x80" : : "a"(5), "b"(buffer), "c"(size));
 }
 
 // SYS_EXEC corrigé
@@ -355,7 +355,7 @@ MOHHDY v5.0 est maintenant **STABLE, FONCTIONNEL et PRÊT** pour l'interaction u
 
 ---
 
-**Rapport de Correction de Stabilité - MOHHDY v5.0**  
+**Rapport de Correction de Stabilité - MOHHDY v5.0**
 *Transformation d'un système instable en plateforme stable et fonctionnelle* ✅
 
 **Mission Accomplie avec Excellence** 🚀

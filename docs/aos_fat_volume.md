@@ -30,10 +30,10 @@ L'overlay occupe les **64 premiers secteurs** (LBA 0-63). Un volume FAT ne doit 
 
 - `fat16-list` et `fat16-cat <8.3>` : lecture directe du volume FAT16.
 - `vfs-list fat16/`, `vfs-read fat16/<8.3>`, `vfs-stat fat16/<8.3>` : lecture mediee.
-- `vfs-write fat16/<nom> <texte>` : crée un fichier racine 8.3 ou LFN, refuse l’écrasement.
+- `vfs-write fat16/<nom> <texte>` : crée un fichier racine 8.3 ou LFN, refuse l'écrasement.
 - `vfs-mkdir fat16/<dir>` puis `vfs-write fat16/<dir>/<8.3> <texte>` : crée un répertoire et son enfant 8.3 unique ; le worker Ring 3 reçoit seulement `mutate`.
-- `vfs-stat`, `vfs-list` et `vfs-list-page` couvrent l’enfant ; `vfs-rename` et `vfs-remove` refusent une cible existante et libèrent la chaîne.
-- `vfs-rmdir fat16/<dir>` refuse un répertoire non vide ; après envoi d’une mutation, disparition ou expiration du worker renvoie un échec sans rejeu local.
+- `vfs-stat`, `vfs-list` et `vfs-list-page` couvrent l'enfant ; `vfs-rename` et `vfs-remove` refusent une cible existante et libèrent la chaîne.
+- `vfs-rmdir fat16/<dir>` refuse un répertoire non vide ; après envoi d'une mutation, disparition ou expiration du worker renvoie un échec sans rejeu local.
 - `vfs-mount-add media32/ fat32` applique le même contrat FAT32.
 
 Hors contrat actuel : écrasement, remplacement transactionnel, second niveau, LFN enfant et renommage entre répertoires.

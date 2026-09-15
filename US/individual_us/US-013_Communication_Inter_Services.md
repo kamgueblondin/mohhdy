@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-013  
-**Titre** : Système de communication inter-services haute performance et tolérant aux pannes  
-**Phase** : 1 - Foundation  
-**Priorité** : Critique  
-**Complexité** : Très Élevée  
-**Effort Estimé** : 28 jours-homme  
-**Risque** : Très Élevé  
+**ID** : US-013
+**Titre** : Système de communication inter-services haute performance et tolérant aux pannes
+**Phase** : 1 - Foundation
+**Priorité** : Critique
+**Complexité** : Très Élevée
+**Effort Estimé** : 28 jours-homme
+**Risque** : Très Élevé
 
 ## Description Utilisateur
 
-**En tant que** architecte système MOHHDY  
-**Je veux** un système de communication inter-services (IPC) ultra-performant, sécurisé et intelligent  
+**En tant que** architecte système MOHHDY
+**Je veux** un système de communication inter-services (IPC) ultra-performant, sécurisé et intelligent
 **Afin de** permettre une coordination efficace entre tous les composants du microkernel et supporter la scalabilité future
 
 ## Contexte Technique Détaillé
@@ -175,7 +175,7 @@ int ipc_trigger_failover(service_id_t failed_service, service_id_t backup);
 ### Métriques de Performance
 
 #### Objectifs de Performance
-- **Latence** : < 0.5 µs pour appels locaux
+- **Latence** : < 0.5 us pour appels locaux
 - **Débit** : > 1M messages/seconde
 - **Overhead** : < 2% CPU pour gestion IPC
 - **Mémoire** : < 64MB pour 1000 services
@@ -193,7 +193,7 @@ int ipc_trigger_failover(service_id_t failed_service, service_id_t backup);
 - US-002 (Gestionnaire de ressources)
 
 ### Tests d'Acceptation
-1. **Test de Latence** : Latence moyenne < 0.5µs pour 95% des appels
+1. **Test de Latence** : Latence moyenne < 0.5us pour 95% des appels
 2. **Test de Débit** : Soutenir 1M+ messages/seconde en continu
 3. **Test de Failover** : Basculement < 10ms sans perte de messages
 4. **Test de Sécurité** : Résistance aux attaques IPC courantes
@@ -201,8 +201,8 @@ int ipc_trigger_failover(service_id_t failed_service, service_id_t backup);
 6. **Test de Stress** : Stabilité sous charge extrême (24h)
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 28 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 28 jours-homme
 **Risque** : Très Élevé
 
 ### Notes d'Implémentation

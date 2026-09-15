@@ -23,7 +23,7 @@ En tant qu'administrateur sécurité MOHHDY, je veux implémenter un système de
   - SSL/TLS inspection avec certificate pinning
   - Bandwidth throttling par service/utilisateur
 
-### Couche Réseau (Layer 2) 
+### Couche Réseau (Layer 2)
 - [ ] Micro-segmentation avec Zero Trust Network Access (ZTNA)
   - Software-Defined Perimeter (SDP) implementation
   - Network access control (NAC) avec device fingerprinting
@@ -101,7 +101,7 @@ rule = {
 
 ### Métriques de Sécurité (KPIs)
 - **Mean Time to Detection (MTTD)** : < 5 minutes
-- **Mean Time to Response (MTTR)** : < 15 minutes  
+- **Mean Time to Response (MTTR)** : < 15 minutes
 - **False Positive Rate** : < 2% pour alertes HIGH/CRITICAL
 - **Security Coverage** : 100% des assets inventoriés et monitorés
 - **Patch Compliance** : > 95% des systèmes avec patches < 30 jours
@@ -114,12 +114,12 @@ Compliance Framework:
     - 114 controls implementés et audités
     - Risk assessment annuel + quarterly reviews
     - Incident response plan testé semestriellement
-  
+
   SOC_2_Type_II:
     - Trust services criteria (Security, Availability, Confidentiality)
     - 12 mois d'evidence collection continue
     - Third-party audit certification
-  
+
   GDPR:
     - Privacy by design implementation
     - Data breach notification < 72h
@@ -135,14 +135,14 @@ Compliance Framework:
 ## Analyse des Risques
 
 ### Risques Critiques (Probabilité: Faible, Impact: Catastrophique)
-- **Zero-day exploit sur composant core** → Virtual patching + behavioral detection
-- **Insider threat privilegié** → Zero trust + continuous monitoring
-- **Supply chain compromise** → Code signing + SCA scanning
+- **Zero-day exploit sur composant core** -> Virtual patching + behavioral detection
+- **Insider threat privilegié** -> Zero trust + continuous monitoring
+- **Supply chain compromise** -> Code signing + SCA scanning
 
 ### Risques Élevés (Probabilité: Moyenne, Impact: Élevé)
-- **Advanced Persistent Threat (APT)** → Threat hunting + IOC feeds
-- **Ransomware attack** → Immutable backups + network segmentation  
-- **Data exfiltration** → DLP + encryption + monitoring
+- **Advanced Persistent Threat (APT)** -> Threat hunting + IOC feeds
+- **Ransomware attack** -> Immutable backups + network segmentation
+- **Data exfiltration** -> DLP + encryption + monitoring
 
 ## Dépendances Critiques
 - Infrastructure réseau avec QoS garanti pour trafic sécurité

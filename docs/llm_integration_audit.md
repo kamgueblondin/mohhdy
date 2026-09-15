@@ -16,7 +16,7 @@
 
 ## Conclusion
 
-L'objectif « inférence locale sur une machine sans OS préinstallé » se tient uniquement par un **moteur porté dans MOHHDY** (GPT-2 aujourd'hui, GGUF quantifié ensuite). Embarquer MOHHDY dans une distribution Linux pour y lancer Ollama est **rejeté** : cela ferait de MOHHDY un invité d'un autre OS, pas un hobby OS autonome.
+L'objectif " inférence locale sur une machine sans OS préinstallé " se tient uniquement par un **moteur porté dans MOHHDY** (GPT-2 aujourd'hui, GGUF quantifié ensuite). Embarquer MOHHDY dans une distribution Linux pour y lancer Ollama est **rejeté** : cela ferait de MOHHDY un invité d'un autre OS, pas un hobby OS autonome.
 
 Un modèle trop grand pour l'initrd se lira plus tard depuis un **volume FAT** sur disque IDE, pas depuis un système à inodes. Conception : [aos_fat_volume.md](aos_fat_volume.md).
 

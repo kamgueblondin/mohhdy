@@ -1,10 +1,10 @@
-# AOS-769 à AOS-776 — Chaînes X.509 ECDSA P-256 à intermédiaire
+# AOS-769 à AOS-776 - Chaînes X.509 ECDSA P-256 à intermédiaire
 
-**Statut : implémenté et validé.** Ce macro-lot démontre et sécurise la validation d’une chaîne X.509 ECDSA/SHA-256 de trois certificats — racine, intermédiaire, feuille serveur — dans la pile bare-metal i386. Il rend également le workspace cryptographique statique du chemin noyau DHCP→TLS→LLM compatible avec le vérificateur P-256 précédemment intégré.
+**Statut : implémenté et validé.** Ce macro-lot démontre et sécurise la validation d'une chaîne X.509 ECDSA/SHA-256 de trois certificats - racine, intermédiaire, feuille serveur - dans la pile bare-metal i386. Il rend également le workspace cryptographique statique du chemin noyau DHCP -> TLS -> LLM compatible avec le vérificateur P-256 précédemment intégré.
 
-La spécification ECC TLS distingue le mécanisme d’authentification de l’échange éphémère et n’impose pas que les signatures de la chaîne soient du même type que la signature du `ServerKeyExchange` [1]. La pile sélectionne donc explicitement l’algorithme de signature de chaque certificat X.509 puis utilise RSA ou ECDSA selon l’émetteur réellement déclaré par la chaîne.
+La spécification ECC TLS distingue le mécanisme d'authentification de l'échange éphémère et n'impose pas que les signatures de la chaîne soient du même type que la signature du `ServerKeyExchange` [1]. La pile sélectionne donc explicitement l'algorithme de signature de chaque certificat X.509 puis utilise RSA ou ECDSA selon l'émetteur réellement déclaré par la chaîne.
 
-> **Garantie du lot.** Une chaîne ECDSA racine–intermédiaire–feuille n’est acceptée que si chacune des deux signatures `ecdsa-with-SHA256`, les liaisons issuer/subject et AKI/SKI, les contraintes CA et de longueur de chemin, l’identité TLS et les dates sont toutes valides.
+> **Garantie du lot.** Une chaîne ECDSA racine-intermédiaire-feuille n'est acceptée que si chacune des deux signatures `ecdsa-with-SHA256`, les liaisons issuer/subject et AKI/SKI, les contraintes CA et de longueur de chemin, l'identité TLS et les dates sont toutes valides.
 
 ## Périmètre livré
 
@@ -19,34 +19,34 @@ La spécification ECC TLS distingue le mécanisme d’authentification de l’é
 
 ## Chaîne et séquence de contrôle
 
-La feuille est signée par l’intermédiaire, puis l’intermédiaire par la racine. La validation suit la relation ci-dessous, en utilisant uniquement des vues DER contenues dans les buffers détenus par l’appelant.
+La feuille est signée par l'intermédiaire, puis l'intermédiaire par la racine. La validation suit la relation ci-dessous, en utilisant uniquement des vues DER contenues dans les buffers détenus par l'appelant.
 
 ```text
 Feuille P-256 (SAN api.example.test)
        │  ECDSA/SHA-256, issuer/AKI
-       ▼
+       v
 Intermédiaire P-256 (CA, pathLen=0)
        │  ECDSA/SHA-256, issuer/AKI
-       ▼
+       v
 Racine P-256 (ancre immuable)
 ```
 
-L’implémentation existante de `ne2k_tls_client_poll_internal` garde une copie transactionnelle du client et de la connexion. Lorsque le certificat TLS est reçu, elle parse les certificats intermédiaires, appelle le validateur de chaîne et ne pose `peer_identity_validated = 1` qu’après succès. Tout rejet restaure le client, la connexion, le transcript et les compteurs de consommation.
+L'implémentation existante de `ne2k_tls_client_poll_internal` garde une copie transactionnelle du client et de la connexion. Lorsque le certificat TLS est reçu, elle parse les certificats intermédiaires, appelle le validateur de chaîne et ne pose `peer_identity_validated = 1` qu'après succès. Tout rejet restaure le client, la connexion, le transcript et les compteurs de consommation.
 
 ## Workspace cryptographique borné
 
-L’ancien buffer statique de 224 mots couvrait les vérifications RSA de test mais ne permettait pas l’inversion modulaire P-256. Le contexte noyau emploie désormais 2 048 mots, la capacité définie par le contrat `ecdsa_p256.h`. Les deux tableaux historiques — nommé `rsa_workspace` par compatibilité d’ABI et le workspace X25519 distinct — restent des objets statiques noyau effacés lors de la purge de session.
+L'ancien buffer statique de 224 mots couvrait les vérifications RSA de test mais ne permettait pas l'inversion modulaire P-256. Le contexte noyau emploie désormais 2 048 mots, la capacité définie par le contrat `ecdsa_p256.h`. Les deux tableaux historiques - nommé `rsa_workspace` par compatibilité d'ABI et le workspace X25519 distinct - restent des objets statiques noyau effacés lors de la purge de session.
 
 | Ressource | Taille | Propriété |
 |---|---:|---|
-| Workspace de validation RSA/ECDSA | 2 048 × 32 bits | Statique noyau, caller-owned au niveau des API TLS/NE2000. |
-| Workspace X25519 | 2 048 × 32 bits | Statique noyau existant, séparé du validateur de signature. |
+| Workspace de validation RSA/ECDSA | 2 048 x 32 bits | Statique noyau, caller-owned au niveau des API TLS/NE2000. |
+| Workspace X25519 | 2 048 x 32 bits | Statique noyau existant, séparé du validateur de signature. |
 | Certificats DER | 427, 435 et 477 octets dans les fixtures | Vues bornées, sans allocation. |
 | Signature ECDSA | DER, au plus 72 octets | Vérifiée par `ecdsa_p256_sha256_verify`. |
 
 ## Régressions ajoutées
 
-Le nouveau scénario Unity parse les trois certificats DER générés et vérifiés localement avec OpenSSL, valide chacune de leurs clés P-256, vérifie la chaîne puis l’identité TLS de `api.example.test`. Il rejette explicitement les cas suivants : workspace inférieur à 2 048 mots, signature de feuille altérée, intermédiaire non-CA et contrainte de chemin de la racine réduite à zéro.
+Le nouveau scénario Unity parse les trois certificats DER générés et vérifiés localement avec OpenSSL, valide chacune de leurs clés P-256, vérifie la chaîne puis l'identité TLS de `api.example.test`. Il rejette explicitement les cas suivants : workspace inférieur à 2 048 mots, signature de feuille altérée, intermédiaire non-CA et contrainte de chemin de la racine réduite à zéro.
 
 | Vérification | Résultat |
 |---|---|
@@ -70,6 +70,6 @@ Le lot couvre une chaîne à un intermédiaire, déjà représentée par les fa�
 
 ## Références
 
-[1] [IETF, *RFC 8422 — Elliptic Curve Cryptography (ECC) Cipher Suites for TLS Versions 1.2 and Earlier*](https://www.rfc-editor.org/rfc/rfc8422.html)
+[1] [IETF, *RFC 8422 - Elliptic Curve Cryptography (ECC) Cipher Suites for TLS Versions 1.2 and Earlier*](https://www.rfc-editor.org/rfc/rfc8422.html)
 
-[2] [NIST, *FIPS 186-5 — Digital Signature Standard (DSS)*](https://csrc.nist.gov/pubs/fips/186-5/final)
+[2] [NIST, *FIPS 186-5 - Digital Signature Standard (DSS)*](https://csrc.nist.gov/pubs/fips/186-5/final)

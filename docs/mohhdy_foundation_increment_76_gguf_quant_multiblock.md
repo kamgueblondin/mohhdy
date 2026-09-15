@@ -1,18 +1,18 @@
-# MOHHDY Foundation — Incrément 76 : accumulation GGUF multi-blocs
+# MOHHDY Foundation - Incrément 76 : accumulation GGUF multi-blocs
 
 **État :** implémenté sur la branche de travail du lot 76.
 
 ## Objectif
 
-Le lot 76 ajoute `gpt2_gguf_dot_quant_tensor_fat16`, qui accumule plusieurs super-blocs quantifiés d’un tenseur GGUF sans charger le tenseur complet. L’API conserve un scratch caller-owned, lit chaque bloc avec le contrat du lot 75 et appelle le kernel Q3_K, Q4_K ou Q6_K sur la tranche d’activations correspondante.
+Le lot 76 ajoute `gpt2_gguf_dot_quant_tensor_fat16`, qui accumule plusieurs super-blocs quantifiés d'un tenseur GGUF sans charger le tenseur complet. L'API conserve un scratch caller-owned, lit chaque bloc avec le contrat du lot 75 et appelle le kernel Q3_K, Q4_K ou Q6_K sur la tranche d'activations correspondante.
 
-La longueur d’activation doit être un multiple non nul de 256. Chaque bloc est validé séparément par l’API mono-bloc, ce qui maintient les contrôles de type, de taille, d’offset et de capacité. L’accumulation FP32 est réalisée dans un scalaire fourni par l’implémentation; aucune allocation dynamique ni modification de l’ABI noyau n’est introduite.
+La longueur d'activation doit être un multiple non nul de 256. Chaque bloc est validé séparément par l'API mono-bloc, ce qui maintient les contrôles de type, de taille, d'offset et de capacité. L'accumulation FP32 est réalisée dans un scalaire fourni par l'implémentation; aucune allocation dynamique ni modification de l'ABI noyau n'est introduite.
 
 | Contrôle | Garantie |
 | --- | --- |
 | dimensions | `count` strictement positif et multiple de 256 |
-| mémoire | un seul scratch fourni par l’appelant |
-| stockage | lecture FAT16 d’un bloc à la fois |
+| mémoire | un seul scratch fourni par l'appelant |
+| stockage | lecture FAT16 d'un bloc à la fois |
 | calcul | dispatch vers le kernel quantifié correspondant |
 | résultat | somme FP32 des produits partiels |
 

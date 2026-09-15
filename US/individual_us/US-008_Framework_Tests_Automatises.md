@@ -1,21 +1,21 @@
 # US-008 : Framework de Tests Automatisés
 
-> **MOHHDY :** chevauchement Unity 144 + `make qemu-smoke` + GitHub Actions. Pas de tests integration/system/performance/robustness, pas de framework « intelligent ». Voir AOS-012 dans [../mohhdy_us.md](../mohhdy_us.md).
+> **MOHHDY :** chevauchement Unity 144 + `make qemu-smoke` + GitHub Actions. Pas de tests integration/system/performance/robustness, pas de framework " intelligent ". Voir AOS-012 dans [../mohhdy_us.md](../mohhdy_us.md).
 
 ## Informations Générales
 
-**ID** : US-008  
-**Titre** : Framework de tests automatisés pour MOHHDY  
-**Phase** : 1 - Foundation  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 16 jours-homme  
-**Risque** : Moyen  
+**ID** : US-008
+**Titre** : Framework de tests automatisés pour MOHHDY
+**Phase** : 1 - Foundation
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 16 jours-homme
+**Risque** : Moyen
 
 ## Description Utilisateur
 
-**En tant que** équipe de développement MOHHDY  
-**Je veux** un framework de tests automatisés complet et intelligent  
+**En tant que** équipe de développement MOHHDY
+**Je veux** un framework de tests automatisés complet et intelligent
 **Afin de** garantir la qualité, la stabilité et la fiabilité du système à travers toutes les phases de développement
 
 ## Contexte Technique Détaillé
@@ -252,7 +252,7 @@ typedef struct {
 
 // API d'analyse
 int test_analyze_results(test_result_t* results, int count, test_analysis_t* analysis);
-int test_generate_report(test_analysis_t* analysis, report_format_t format, 
+int test_generate_report(test_analysis_t* analysis, report_format_t format,
                         const char* output_path);
 int test_identify_flaky_tests(test_history_t* history, flaky_test_list_t* flaky);
 int test_recommend_improvements(test_analysis_t* analysis, improvement_suggestions_t* suggestions);

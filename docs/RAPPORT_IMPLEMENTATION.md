@@ -1,6 +1,6 @@
 # Rapport d'Implémentation - Gestion des Interruptions et Clavier
 
-> **Complément août 2026.** L’IRQ clavier n’était pleinement livrée au shell qu’après l’EOI timer avant `schedule()`. Voir [ETAT_REEL.md](ETAT_REEL.md).
+> **Complément août 2026.** L'IRQ clavier n'était pleinement livrée au shell qu'après l'EOI timer avant `schedule()`. Voir [ETAT_REEL.md](ETAT_REEL.md).
 
 ## Résumé
 
@@ -29,7 +29,7 @@ L'implémentation de la gestion des interruptions et de l'interaction avec le cl
 - **Description**: Pilote pour gérer les interruptions du clavier et traduire les scancodes
 - **Fonctionnalités**:
   - Lecture des scancodes depuis le port 0x60
-  - Table de correspondance scancode → ASCII pour clavier US QWERTY
+  - Table de correspondance scancode -> ASCII pour clavier US QWERTY
   - Gestion des caractères spéciaux (retour à la ligne, backspace)
   - Affichage sur VGA et port série
 

@@ -1,4 +1,4 @@
-# MOHHDY Foundation — Incrément 72 : curseur FAT16 réutilisable
+# MOHHDY Foundation - Incrément 72 : curseur FAT16 réutilisable
 
 **État :** implémenté sur la branche de travail du lot 72.
 
@@ -10,11 +10,11 @@ Le curseur ne possède aucune mémoire dynamique et reste invalide après une ou
 
 ## Usage GGUF
 
-Le curseur constitue la base d’une lecture progressive des métadonnées et des données de tenseurs GGUF depuis FAT16. Le loader complet du lot 70 reste adapté aux petits profils, tandis que le futur runtime pourra conserver un curseur par fichier et demander les fenêtres correspondant aux offsets des tenseurs indexés.
+Le curseur constitue la base d'une lecture progressive des métadonnées et des données de tenseurs GGUF depuis FAT16. Le loader complet du lot 70 reste adapté aux petits profils, tandis que le futur runtime pourra conserver un curseur par fichier et demander les fenêtres correspondant aux offsets des tenseurs indexés.
 
 | Élément | Garantie |
 | --- | --- |
-| état | entièrement fourni par l’appelant dans `fat16_file_t` |
+| état | entièrement fourni par l'appelant dans `fat16_file_t` |
 | progression | `position` et `cluster_offset` avancent après chaque lecture |
 | FAT | lecture du prochain cluster uniquement à la frontière nécessaire |
 | mémoire | aucune allocation ni copie du fichier complet |
@@ -26,4 +26,4 @@ Le test ouvre `FATOK.TXT`, lit successivement `hel`, puis `lo`, puis vérifie la
 
 ## Limites et suite
 
-Le curseur est séquentiel et ne propose pas encore de seek; un accès aléatoire continue d’utiliser `fat16_read_file_range`. La prochaine étape pourra associer un curseur à un descripteur de tenseur GGUF et exposer une lecture vérifiée par type, offset et taille de bloc quantifié, avant tout branchement au forward GPT-2.
+Le curseur est séquentiel et ne propose pas encore de seek; un accès aléatoire continue d'utiliser `fat16_read_file_range`. La prochaine étape pourra associer un curseur à un descripteur de tenseur GGUF et exposer une lecture vérifiée par type, offset et taille de bloc quantifié, avant tout branchement au forward GPT-2.

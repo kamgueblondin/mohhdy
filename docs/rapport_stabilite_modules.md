@@ -41,9 +41,9 @@ Valider la stabilité, la robustesse et les performances de tous les modules cri
 |----------|-------|--------|
 | `vmm_init()` | Initialise paging et tables | ✅ STABLE |
 | `vmm_get_page()` | Récupère/crée page virtuelle | ✅ STABLE |
-| `vmm_map_page()` | Mappe phys → virt | ✅ STABLE |
+| `vmm_map_page()` | Mappe phys -> virt | ✅ STABLE |
 | `vmm_unmap_page()` | Démappe page virtuelle | ✅ STABLE |
-| `vmm_get_physical_address()` | Traduction virt → phys | ✅ STABLE |
+| `vmm_get_physical_address()` | Traduction virt -> phys | ✅ STABLE |
 
 #### **Protection Mémoire :**
 - ✅ Isolation Ring 0/Ring 3
@@ -95,7 +95,7 @@ Valider la stabilité, la robustesse et les performances de tous les modules cri
 
 #### **Sécurité Fichiers :**
 - ✅ Validation checksum TAR
-- ✅ Gestion préfixes "./" 
+- ✅ Gestion préfixes "./"
 - ✅ Limite fichiers (64 max)
 - ✅ Gestion files corrompus
 
@@ -112,7 +112,7 @@ Valider la stabilité, la robustesse et les performances de tous les modules cri
 |-----------|----------|--------|
 | **PIC Remap** | Évite conflits exceptions | ✅ STABLE |
 | **Timer Handler** | Interruptions 100Hz | ✅ STABLE |
-| **Keyboard Handler** | Scancode → ASCII | ✅ STABLE |
+| **Keyboard Handler** | Scancode -> ASCII | ✅ STABLE |
 | **Syscall Handler** | Appels système Ring 3 | ✅ STABLE |
 | **EOI Management** | Fin d'interruption | ✅ STABLE |
 
@@ -142,7 +142,7 @@ Valider la stabilité, la robustesse et les performances de tous les modules cri
 - **Initialisation** : Tous modules démarrent correctement
 - **Mémoire init** : 128MB détectés et alloués
 
-### **Test 3: Shell Intensif** 
+### **Test 3: Shell Intensif**
 - **Commandes répétées** : help, ls, ps, mem testés
 - **Gestion IA** : Réponses cohérentes maintenues
 - **Buffer management** : Aucun overflow détecté
@@ -212,5 +212,5 @@ L'architecture est saine, les performances sont optimales, et la sécurité est 
 **Score de Stabilité : 95/100** ⭐️⭐️⭐️⭐️⭐️
 
 ---
-*Rapport généré le 2025-08-21 par MiniMax Agent*  
+*Rapport généré le 2025-08-21 par MiniMax Agent*
 *Tests effectués sur MOHHDY v5.0 - Environnement QEMU i386*

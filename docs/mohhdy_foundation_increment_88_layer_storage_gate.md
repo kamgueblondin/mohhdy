@@ -1,10 +1,10 @@
-# MOHHDY Foundation — Incrément 88 : barrière de stockage du forward
+# MOHHDY Foundation - Incrément 88 : barrière de stockage du forward
 
 **État :** implémenté sur la branche de travail du lot 88.
 
 ## Objectif
 
-Le lot 87 vérifiait individuellement la cohérence de `byte_size` avec les axes et le type d’un tenseur. Le lot 88 compose cette vérification avec la validation GPT-2 d’une couche complète via `gpt2_gguf_validate_gpt2_layer_storage`.
+Le lot 87 vérifiait individuellement la cohérence de `byte_size` avec les axes et le type d'un tenseur. Le lot 88 compose cette vérification avec la validation GPT-2 d'une couche complète via `gpt2_gguf_validate_gpt2_layer_storage`.
 
 Le contexte `gpt2_gguf_forward_context_init` appelle désormais cette barrière après la résolution des dix rôles. Une couche ne peut donc pas être retenue dans le contexte de forward si ses formes `[C]`, `[C,3C]`, `[C,C]`, `[C,4C]`, `[4C,C]` ou ses tailles physiques quantifiées sont incohérentes.
 

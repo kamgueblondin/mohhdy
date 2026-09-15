@@ -1,10 +1,10 @@
-# AOS-1437 à AOS-1448 — Session LLM unifiée sur API socket
+# AOS-1437 à AOS-1448 - Session LLM unifiée sur API socket
 
 ## Objectif
 
-Ce macro-lot introduit un contexte caller-owned de session LLM fondé sur un identifiant de socket. Il rassemble les transitions depuis un SYN socket déjà transmis vers le ClientHello, le polling TLS authentifié, l’émission LLM, le polling HTTP/SSE et le réarmement d’un nouveau tour. La session ne conserve aucune copie de connexion TCP, de clé, de secret, de hostname ni de buffer applicatif.
+Ce macro-lot introduit un contexte caller-owned de session LLM fondé sur un identifiant de socket. Il rassemble les transitions depuis un SYN socket déjà transmis vers le ClientHello, le polling TLS authentifié, l'émission LLM, le polling HTTP/SSE et le réarmement d'un nouveau tour. La session ne conserve aucune copie de connexion TCP, de clé, de secret, de hostname ni de buffer applicatif.
 
-> `ne2k_llm_socket_session_t` contient uniquement une adresse IPv4 distante, une phase et un identifiant de slot. Le registre socket statique reste l’unique autorité sur l’état et les séquences TCP.
+> `ne2k_llm_socket_session_t` contient uniquement une adresse IPv4 distante, une phase et un identifiant de slot. Le registre socket statique reste l'unique autorité sur l'état et les séquences TCP.
 
 ## Contrat livré
 
@@ -21,28 +21,28 @@ Ce macro-lot introduit un contexte caller-owned de session LLM fondé sur un ide
 
 ## Comportement transactionnel
 
-Chaque façade vérifie d’abord sa phase et l’existence de l’identifiant socket. Les transitions n’écrivent l’état de session qu’après le retour non négatif de la primitive inférieure. Pour le démarrage TLS et le polling TLS, la session et le client TLS sont snapshottés avant l’appel ; une erreur restaure les deux objets. Les façades HTTP et SSE actives maintiennent leurs propres snapshots du slot TCP, de la session AEAD et des accumulateurs, puis la couche de session refuse de publier toute nouvelle phase si elles échouent.
+Chaque façade vérifie d'abord sa phase et l'existence de l'identifiant socket. Les transitions n'écrivent l'état de session qu'après le retour non négatif de la primitive inférieure. Pour le démarrage TLS et le polling TLS, la session et le client TLS sont snapshottés avant l'appel ; une erreur restaure les deux objets. Les façades HTTP et SSE actives maintiennent leurs propres snapshots du slot TCP, de la session AEAD et des accumulateurs, puis la couche de session refuse de publier toute nouvelle phase si elles échouent.
 
-Une réception NE2000 vide conserve les phases `SYN_SENT`, `TLS_STARTED` ou `REQUEST_SENT` quand le chemin inférieur retourne `1`. Dans le cas SSE, un progrès non terminal publie explicitement `STREAMING`, sans masquer le caractère non bloquant de l’opération.
+Une réception NE2000 vide conserve les phases `SYN_SENT`, `TLS_STARTED` ou `REQUEST_SENT` quand le chemin inférieur retourne `1`. Dans le cas SSE, un progrès non terminal publie explicitement `STREAMING`, sans masquer le caractère non bloquant de l'opération.
 
-## Périmètre de l’unification
+## Périmètre de l'unification
 
-La session commence volontairement après l’émission du SYN. L’acquisition DHCP, la résolution DNS, le choix du prochain saut et la création socket restent actuellement dans les façades réseau précédentes, qui demeurent compatibles. Cette frontière évite de dupliquer les contrats DHCP/DNS déjà validés tout en supprimant, du SYN-ACK à la réponse applicative, l’exposition d’une connexion TCP caller-owned.
+La session commence volontairement après l'émission du SYN. L'acquisition DHCP, la résolution DNS, le choix du prochain saut et la création socket restent actuellement dans les façades réseau précédentes, qui demeurent compatibles. Cette frontière évite de dupliquer les contrats DHCP/DNS déjà validés tout en supprimant, du SYN-ACK à la réponse applicative, l'exposition d'une connexion TCP caller-owned.
 
 ## Validation
 
-Le vecteur Unity associé contrôle l’initialisation, le rejet d’un attachement invalide, l’attachement au slot `SYN_SENT`, la garde de requête avant TLS, l’émission réussie depuis `TLS_COMPLETE`, le polling HTTP vide, le passage SSE à `STREAMING` et le réarmement `RESPONSE_READY → TLS_COMPLETE`.
+Le vecteur Unity associé contrôle l'initialisation, le rejet d'un attachement invalide, l'attachement au slot `SYN_SENT`, la garde de requête avant TLS, l'émission réussie depuis `TLS_COMPLETE`, le polling HTTP vide, le passage SSE à `STREAMING` et le réarmement `RESPONSE_READY -> TLS_COMPLETE`.
 
 | Contrôle | Résultat |
 |---|---|
 | Compilation i386 `make all` | Réussie |
 | Suite complète `make test-all` | 442/442 tests verts |
 | `git diff --check` | Propre |
-| Recherche d’allocation dynamique dans les chemins modifiés | Aucune occurrence |
+| Recherche d'allocation dynamique dans les chemins modifiés | Aucune occurrence |
 
 ## Limites restantes
 
-Le prochain incrément doit déplacer également le bootstrap DHCP/DNS/ARP/SYN vers un contexte socket unique, en créant le slot et le SYN après la résolution d’hôte puis en l’attachant transactionnellement à cette session. La planification périodique du renouvellement DHCP, les timeouts/backoff, la fermeture TLS `close_notify`, le provisionnement sécurisé d’identifiants OpenAI et la mise à disposition de l’ensemble au shell restent à compléter.
+Le prochain incrément doit déplacer également le bootstrap DHCP/DNS/ARP/SYN vers un contexte socket unique, en créant le slot et le SYN après la résolution d'hôte puis en l'attachant transactionnellement à cette session. La planification périodique du renouvellement DHCP, les timeouts/backoff, la fermeture TLS `close_notify`, le provisionnement sécurisé d'identifiants OpenAI et la mise à disposition de l'ensemble au shell restent à compléter.
 
 ## Références
 

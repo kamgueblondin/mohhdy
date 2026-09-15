@@ -25,10 +25,10 @@ Après analyse approfondie des logs et du code, le problème clavier principal �
 char keyboard_getc(void) {
     // 1. Essayer le buffer d'interruptions
     if (kbd_get_char_nonblock(&c)) return c;
-    
-    // 2. Polling de secours automatique  
+
+    // 2. Polling de secours automatique
     keyboard_poll_check();
-    
+
     // 3. Vérifier à nouveau le buffer
     if (kbd_get_char_nonblock(&c)) return c;
 }
@@ -96,7 +96,7 @@ qemu-system-i386 -kernel build/mohhdy.bin -initrd my_initrd.tar \
 ## Garanties de la Solution
 
 1. **Compatibilité** : Fonctionne avec et sans interruptions
-2. **Robustesse** : Mécanismes de secours automatiques  
+2. **Robustesse** : Mécanismes de secours automatiques
 3. **Performance** : Mode interruption privilégié, polling seulement si nécessaire
 4. **Diagnostic** : Identification automatique des problèmes
 5. **QEMU Ready** : Optimisé spécifiquement pour l'émulation QEMU

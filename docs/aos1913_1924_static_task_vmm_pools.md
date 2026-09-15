@@ -1,4 +1,4 @@
-# AOS-1913…1924 — Pools statiques pour tâches Ring 3, piles noyau et VMM
+# AOS-1913...1924 - Pools statiques pour tâches Ring 3, piles noyau et VMM
 
 ## Objet
 
@@ -13,7 +13,7 @@ Ce macro-lot supprime les allocations de tas du cycle de vie des tâches Ring 3.
 
 ## Sémantique
 
-Le pool partage la borne déjà exposée par le système : `OS_TASK_GLOBAL_CAPACITY = 16`. L’acquisition initialise le slot entièrement ; la libération intervient seulement après la destruction réussie du VMM utilisateur, puis réinitialise le slot pour une réutilisation ultérieure.
+Le pool partage la borne déjà exposée par le système : `OS_TASK_GLOBAL_CAPACITY = 16`. L'acquisition initialise le slot entièrement ; la libération intervient seulement après la destruction réussie du VMM utilisateur, puis réinitialise le slot pour une réutilisation ultérieure.
 
 Les conteneurs VMM statiques portent un marqueur explicite. `vmm_destroy_user_directory()` continue de restituer les pages utilisateur et les tables privées fournies par le PMM, mais ne passe jamais les conteneurs statiques à `kfree()`.
 
@@ -36,9 +36,9 @@ Les conteneurs VMM statiques portent un marqueur explicite. `vmm_destroy_user_di
 | `make -s test-kernel` | 38/38 suites réussies |
 | `make -s test-all` | 479/479 tests réussis |
 | `make -s kernel-only` | Réussi |
-| Recherche d’allocations dans `kernel/task/task.c` | Aucun appel `kmalloc`, `kfree`, `malloc`, `calloc` ou `realloc` |
+| Recherche d'allocations dans `kernel/task/task.c` | Aucun appel `kmalloc`, `kfree`, `malloc`, `calloc` ou `realloc` |
 | `git diff --check` | Réussi |
 
 ## Référence
 
-[1] [Intel 64 and IA-32 Architectures Software Developer’s Manual — Paging and Task Switching](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html)
+[1] [Intel 64 and IA-32 Architectures Software Developer's Manual - Paging and Task Switching](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html)

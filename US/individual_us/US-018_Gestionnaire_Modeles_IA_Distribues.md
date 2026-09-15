@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-018  
-**Titre** : Création du gestionnaire de modèles IA distribués et sélection intelligente  
-**Phase** : 2 - AI Core  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 18 jours-homme  
-**Risque** : Moyen  
+**ID** : US-018
+**Titre** : Création du gestionnaire de modèles IA distribués et sélection intelligente
+**Phase** : 2 - AI Core
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 18 jours-homme
+**Risque** : Moyen
 
 ## Description Utilisateur
 
-**En tant que** système MOHHDY  
-**Je veux** gérer intelligemment une collection de modèles IA locaux et distants  
+**En tant que** système MOHHDY
+**Je veux** gérer intelligemment une collection de modèles IA locaux et distants
 **Afin de** optimiser les performances et la disponibilité des services IA
 
 ## Contexte Technique Détaillé
@@ -107,7 +107,7 @@ int model_unregister(const char* model_id);
 // Recherche et filtrage
 int model_search(model_search_criteria_t* criteria, model_metadata_t* results, int max_count);
 int model_filter_by_type(model_type_t type, model_metadata_t* models, int* count);
-int model_filter_by_requirements(model_requirements_t* requirements, 
+int model_filter_by_requirements(model_requirements_t* requirements,
                                 model_metadata_t* models, int* count);
 ```
 
@@ -132,7 +132,7 @@ typedef enum {
 } privacy_level_t;
 
 // Sélection et utilisation de modèles
-int model_select_best(model_type_t type, model_requirements_t* requirements, 
+int model_select_best(model_type_t type, model_requirements_t* requirements,
                      model_metadata_t* selected);
 int model_select_ensemble(model_type_t type, model_requirements_t* requirements,
                          model_metadata_t* models, int max_models);
@@ -147,37 +147,37 @@ int model_get_load_status(const char* model_id, model_load_status_t* status);
 float model_calculate_score(model_metadata_t* model, model_requirements_t* requirements) {
     float score = 0.0f;
     float weights[6] = {0.25f, 0.20f, 0.20f, 0.15f, 0.10f, 0.10f}; // Configurable
-    
+
     // Facteur de latence (inversé)
     if (model->latency_ms <= requirements->max_latency_ms) {
         score += weights[0] * (1.0f - (float)model->latency_ms / requirements->max_latency_ms);
     }
-    
+
     // Facteur de précision
     if (model->accuracy >= requirements->min_accuracy) {
         score += weights[1] * model->accuracy;
     }
-    
+
     // Facteur de mémoire (inversé)
     if (model->memory_mb <= requirements->max_memory_mb) {
         score += weights[2] * (1.0f - (float)model->memory_mb / requirements->max_memory_mb);
     }
-    
+
     // Facteur de disponibilité
     if (model->location == MODEL_LOCAL || !requirements->offline_capable) {
         score += weights[3];
     }
-    
+
     // Facteur de confidentialité
     if (model->privacy_level >= requirements->privacy_requirement) {
         score += weights[4];
     }
-    
+
     // Facteur de coût (inversé)
     if (model->cost_per_request <= requirements->max_cost_per_request) {
         score += weights[5] * (1.0f - model->cost_per_request / requirements->max_cost_per_request);
     }
-    
+
     return score;
 }
 ```
@@ -307,8 +307,8 @@ int model_optimize_ensemble_weights(ensemble_id_t ensemble_id, optimization_data
 6. **Test de Resilience** : Fonctionnement en mode dégradé
 
 ### Estimation
-**Complexité** : Élevée  
-**Effort** : 18 jours-homme  
+**Complexité** : Élevée
+**Effort** : 18 jours-homme
 **Risque** : Moyen
 
 ### Notes d'Implémentation

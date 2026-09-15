@@ -28,7 +28,7 @@ Tester et valider les fonctionnalités interactives du shell MOHHDY et du simula
 | `exit/quit` | Quitter le shell | ✅ OPÉRATIONNEL |
 
 #### **Intégration IA :**
-- **Détection automatique** : Questions non-commandes → IA
+- **Détection automatique** : Questions non-commandes -> IA
 - **Exécution dynamique** : Syscall `SYS_EXEC` vers `fake_ai`
 - **Arguments** : Passage de la question utilisateur
 - **Réponse** : Retour formaté avec préfixe `[IA]`
@@ -70,7 +70,7 @@ Tester et valider les fonctionnalités interactives du shell MOHHDY et du simula
 
 ### **Fichiers de Données :**
 - `test.txt` - Fichier de test
-- `hello.txt` - Fichier de démonstration  
+- `hello.txt` - Fichier de démonstration
 - `config.cfg` - Configuration système
 - `startup.sh` - Script de démarrage
 - `ai_data.txt` - Données IA
@@ -112,7 +112,7 @@ Tester et valider les fonctionnalités interactives du shell MOHHDY et du simula
 
 ## 📈 **Conclusion**
 
-**MOHHDY v5.0 démontre un shell interactif robuste et un simulateur IA fonctionnel.** 
+**MOHHDY v5.0 démontre un shell interactif robuste et un simulateur IA fonctionnel.**
 
 L'intégration entre les composants est excellente, les fonctionnalités sont complètes, et l'expérience utilisateur est fluide. Le système répond parfaitement aux spécifications d'un OS expérimental avec IA intégrée.
 

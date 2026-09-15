@@ -81,7 +81,7 @@ Après cette correction :
 - Vérification du statut avant lecture des données
 - Gestion explicite des codes PS/2 spéciaux (0xFA, 0xFE, 0xAA)
 - Réduction du debug spam pour éviter la surcharge
-- Amélioration de la conversion scancode → ASCII
+- Amélioration de la conversion scancode -> ASCII
 
 ### Initialisation PS/2 Robuste
 

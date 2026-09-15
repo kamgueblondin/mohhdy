@@ -33,7 +33,7 @@ L'implémentation des étapes 5 et 6 du projet MOHHDY représente une transforma
 
 **Appels Système (`kernel/syscall/`)**
 - `syscall.h/c` : Dispatcher des syscalls
-- Interface sécurisée Ring 3 → Ring 0
+- Interface sécurisée Ring 3 -> Ring 0
 - Validation des paramètres
 - Buffer d'entrée pour communication
 
@@ -100,7 +100,7 @@ mov [eax + 36], ecx
 
 #### Appels Système Sécurisés
 ```c
-// Transition Ring 3 → Ring 0 via INT 0x80
+// Transition Ring 3 -> Ring 0 via INT 0x80
 void putc(char c) {
     asm volatile("int $0x80" : : "a"(1), "b"(c));
 }
@@ -161,7 +161,7 @@ task_t* user_task = create_user_task(entry_point);
 **Solution** : Assembleur optimisé avec gestion segments
 
 #### Appels Système
-**Défi** : Transition sécurisée Ring 3 → Ring 0
+**Défi** : Transition sécurisée Ring 3 -> Ring 0
 **Solution** : INT 0x80 avec validation paramètres
 
 #### Chargement ELF
@@ -203,10 +203,10 @@ task_t* user_task = create_user_task(entry_point);
 ### 🏆 Impact du Projet
 
 #### Transformation Architecturale
-- **Noyau monolithique** → **Système modulaire**
-- **Exécution séquentielle** → **Multitâche préemptif**
-- **Code kernel uniquement** → **Support programmes externes**
-- **Sécurité basique** → **Isolation complète**
+- **Noyau monolithique** -> **Système modulaire**
+- **Exécution séquentielle** -> **Multitâche préemptif**
+- **Code kernel uniquement** -> **Support programmes externes**
+- **Sécurité basique** -> **Isolation complète**
 
 #### Valeur Technique
 - **Apprentissage** : Concepts OS avancés maîtrisés
@@ -246,7 +246,7 @@ task_t* user_task = create_user_task(entry_point);
 
 ### ✅ Conclusion
 
-L'implémentation des étapes 5 et 6 transforme MOHHDY en un système d'exploitation moderne et fonctionnel, prêt à héberger des applications d'intelligence artificielle complexes. 
+L'implémentation des étapes 5 et 6 transforme MOHHDY en un système d'exploitation moderne et fonctionnel, prêt à héberger des applications d'intelligence artificielle complexes.
 
 **Points Forts Majeurs :**
 - Architecture multitâche robuste et performante
@@ -265,8 +265,8 @@ Cette version représente un bond qualitatif majeur, positionnant MOHHDY comme u
 
 **Statut Final : ✅ SUCCÈS COMPLET - OBJECTIFS DÉPASSÉS**
 
-**Repository GitHub :** https://github.com/kamgueblondin/mohhdy.git  
-**Version :** MOHHDY v4.0 - Multitâche et Espace Utilisateur  
-**Date :** Août 2025  
+**Repository GitHub :** https://github.com/kamgueblondin/mohhdy.git
+**Version :** MOHHDY v4.0 - Multitâche et Espace Utilisateur
+**Date :** Août 2025
 **Prêt pour :** Intégration Intelligence Artificielle 🤖
 

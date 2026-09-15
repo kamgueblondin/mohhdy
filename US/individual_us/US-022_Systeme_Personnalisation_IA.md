@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-022  
-**Titre** : Création du système de personnalisation IA adaptative et intelligente  
-**Phase** : 2 - AI Core  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 16 jours-homme  
-**Risque** : Moyen  
+**ID** : US-022
+**Titre** : Création du système de personnalisation IA adaptative et intelligente
+**Phase** : 2 - AI Core
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 16 jours-homme
+**Risque** : Moyen
 
 ## Description Utilisateur
 
-**En tant que** utilisateur MOHHDY  
-**Je veux** que le système s'adapte automatiquement à mes préférences et habitudes  
+**En tant que** utilisateur MOHHDY
+**Je veux** que le système s'adapte automatiquement à mes préférences et habitudes
 **Afin de** bénéficier d'une expérience personnalisée et optimisée en permanence
 
 ## Contexte Technique Détaillé
@@ -109,7 +109,7 @@ typedef enum {
 
 // Analyse comportementale
 int behavior_track_action(user_id_t user_id, user_action_event_t* action);
-int behavior_analyze_patterns(user_id_t user_id, time_range_t range, 
+int behavior_analyze_patterns(user_id_t user_id, time_range_t range,
                              behavioral_pattern_t* patterns, int max_patterns);
 int behavior_detect_changes(user_id_t user_id, behavior_change_t* changes, int max_changes);
 int behavior_predict_next_action(user_id_t user_id, current_context_t* context,
@@ -373,8 +373,8 @@ int privacy_export_user_data(user_id_t user_id, export_request_t* request,
 6. **Test de Granularité** : Personnalisation fine et précise
 
 ### Estimation
-**Complexité** : Élevée  
-**Effort** : 16 jours-homme  
+**Complexité** : Élevée
+**Effort** : 16 jours-homme
 **Risque** : Moyen
 
 ### Notes d'Implémentation

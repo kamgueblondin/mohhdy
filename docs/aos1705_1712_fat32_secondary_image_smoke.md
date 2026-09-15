@@ -1,10 +1,10 @@
-# AOS-1705 à AOS-1712 — image FAT32 secondaire et smoke QEMU multi-disque
+# AOS-1705 à AOS-1712 - image FAT32 secondaire et smoke QEMU multi-disque
 
-Ce macro-lot ajoute `scripts/make_fat32_secondary_image.py` et la cible `make fat32-secondary-disk`. L’image constitue un disque ATA esclave distinct, avec un BPB FAT32 valide, une racine au cluster 2 et la fixture `FAT32OK.TXT`.
+Ce macro-lot ajoute `scripts/make_fat32_secondary_image.py` et la cible `make fat32-secondary-disk`. L'image constitue un disque ATA esclave distinct, avec un BPB FAT32 valide, une racine au cluster 2 et la fixture `FAT32OK.TXT`.
 
-La géométrie comporte 70 000 secteurs avec un secteur par cluster et deux FAT de 600 secteurs. Elle dépasse donc le seuil de 65 525 clusters exigé par le monteur FAT32 du noyau. Cette contrainte distingue explicitement une image FAT32 réelle d’une petite image qui serait classée FAT16 par la géométrie.
+La géométrie comporte 70 000 secteurs avec un secteur par cluster et deux FAT de 600 secteurs. Elle dépasse donc le seuil de 65 525 clusters exigé par le monteur FAT32 du noyau. Cette contrainte distingue explicitement une image FAT32 réelle d'une petite image qui serait classée FAT16 par la géométrie.
 
-Le smoke QEMU attache l’overlay sur le maître et l’image FAT32 sur l’esclave. La trace de démarrage confirme successivement :
+Le smoke QEMU attache l'overlay sur le maître et l'image FAT32 sur l'esclave. La trace de démarrage confirme successivement :
 
 > `FAT32 secondaire monte.`
 >

@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-003  
-**Titre** : Implémentation du système de sécurité adaptatif  
-**Phase** : 1 - Foundation  
-**Priorité** : Critique  
-**Complexité** : Très Élevée  
-**Effort Estimé** : 22 jours-homme  
-**Risque** : Élevé  
+**ID** : US-003
+**Titre** : Implémentation du système de sécurité adaptatif
+**Phase** : 1 - Foundation
+**Priorité** : Critique
+**Complexité** : Très Élevée
+**Effort Estimé** : 22 jours-homme
+**Risque** : Élevé
 
 ## Description Utilisateur
 
-**En tant que** système MOHHDY  
-**Je veux** un système de sécurité adaptatif qui apprend et s'ajuste automatiquement aux menaces  
+**En tant que** système MOHHDY
+**Je veux** un système de sécurité adaptatif qui apprend et s'ajuste automatiquement aux menaces
 **Afin de** protéger efficacement le système et les données utilisateur contre les cyberattaques évolutives
 
 ## Contexte Technique Détaillé
@@ -329,19 +329,19 @@ typedef struct {
 
 float calculate_anomaly_score(isolation_forest_t* forest, feature_vector_t* sample) {
     float total_path_length = 0.0f;
-    
+
     // Calcul de la longueur moyenne du chemin dans tous les arbres
     for (int i = 0; i < FOREST_SIZE; i++) {
         float path_length = traverse_isolation_tree(&forest->trees[i], sample);
         total_path_length += path_length;
     }
-    
+
     float average_path_length = total_path_length / FOREST_SIZE;
-    
+
     // Normalisation du score d'anomalie
     float expected_path_length = calculate_expected_path_length(FOREST_SIZE);
     float anomaly_score = pow(2.0f, -average_path_length / expected_path_length);
-    
+
     return anomaly_score;
 }
 
@@ -351,7 +351,7 @@ void update_anomaly_model(isolation_forest_t* forest, feature_vector_t* new_samp
     if (should_rebuild_forest(forest, sample_count)) {
         rebuild_isolation_forest(forest, new_samples, sample_count);
     }
-    
+
     // Mise à jour des statistiques des features
     update_feature_statistics(&forest->feature_stats, new_samples, sample_count);
 }
@@ -369,28 +369,28 @@ typedef struct {
 
 threat_type_t classify_threat(ensemble_classifier_t* classifier, feature_vector_t* features) {
     float class_scores[THREAT_TYPE_COUNT] = {0};
-    
+
     // Prédiction avec chaque modèle de l'ensemble
     for (int i = 0; i < ENSEMBLE_SIZE; i++) {
         threat_prediction_t prediction = predict_with_model(&classifier->models[i], features);
-        
+
         // Pondération des votes selon la performance du modèle
         for (int j = 0; j < THREAT_TYPE_COUNT; j++) {
             class_scores[j] += prediction.class_probabilities[j] * classifier->model_weights[i];
         }
     }
-    
+
     // Sélection de la classe avec le score le plus élevé
     threat_type_t predicted_class = THREAT_UNKNOWN;
     float max_score = 0.0f;
-    
+
     for (int i = 0; i < THREAT_TYPE_COUNT; i++) {
         if (class_scores[i] > max_score) {
             max_score = class_scores[i];
             predicted_class = (threat_type_t)i;
         }
     }
-    
+
     return predicted_class;
 }
 ```
@@ -477,11 +477,11 @@ threat_type_t classify_threat(ensemble_classifier_t* classifier, feature_vector_
 void test_malware_detection() {
     // Simulation d'un malware connu
     malware_sample_t sample = load_malware_sample("test_trojan.bin");
-    
+
     // Exécution du scan
     threat_detection_t threats[10];
     int threat_count = threat_scan_system(NULL, threats, 10);
-    
+
     // Vérification de la détection
     assert(threat_count > 0);
     assert(threats[0].type == THREAT_MALWARE);
@@ -491,17 +491,17 @@ void test_malware_detection() {
 // Test de détection d'anomalie comportementale
 void test_behavioral_anomaly() {
     process_id_t test_pid = create_test_process();
-    
+
     // Établissement de la baseline
     behavior_establish_baseline(test_pid, 1);
-    
+
     // Simulation d'un comportement anormal
     simulate_abnormal_behavior(test_pid);
-    
+
     // Analyse comportementale
     behavior_analysis_t analysis;
     behavior_analyze_behavior(test_pid, &analysis);
-    
+
     // Vérification de la détection d'anomalie
     assert(analysis.anomaly_score.overall_score > 0.8);
 }
@@ -517,15 +517,15 @@ void test_automatic_response() {
         .severity = SEVERITY_CRITICAL,
         .confidence = 0.95f
     };
-    
+
     // Planification de la réponse
     security_response_t responses[5];
     int response_count = response_plan_mitigation(&threat, responses, 5);
-    
+
     // Vérification de la planification
     assert(response_count > 0);
     assert(responses[0].action == RESPONSE_ISOLATE_PROCESS);
-    
+
     // Exécution de la réponse
     int result = response_execute_countermeasure(&responses[0]);
     assert(result == 0);

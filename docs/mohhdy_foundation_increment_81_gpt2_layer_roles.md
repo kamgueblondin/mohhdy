@@ -1,4 +1,4 @@
-# MOHHDY Foundation — Incrément 81 : rôles GPT-2 par couche
+# MOHHDY Foundation - Incrément 81 : rôles GPT-2 par couche
 
 **État :** implémenté sur la branche de travail du lot 81.
 
@@ -21,10 +21,10 @@ Les cinq rôles globaux historiques restent inchangés et `gpt2_gguf_map_role` c
 
 ## Tests
 
-La fixture GGUF caller-owned contient désormais sept tenseurs: les cinq tenseurs globaux historiques, `blk.0.attn_norm.weight` et `blk.0.attn_qkv.weight`. Les tests vérifient la construction exacte des deux noms, leur résolution dans l’index, le rejet de `blk.1` absent et le rejet d’une capacité de huit octets.
+La fixture GGUF caller-owned contient désormais sept tenseurs: les cinq tenseurs globaux historiques, `blk.0.attn_norm.weight` et `blk.0.attn_qkv.weight`. Les tests vérifient la construction exacte des deux noms, leur résolution dans l'index, le rejet de `blk.1` absent et le rejet d'une capacité de huit octets.
 
-La suite `make test-all` passe avec **265 tests réussis, 0 échec et 0 test ignoré**. Les taux de couverture rapportés restent de 85 % pour le noyau, 72 % pour l’espace utilisateur et 78 % global; l’avertissement de cible 70–79 % est inchangé.
+La suite `make test-all` passe avec **265 tests réussis, 0 échec et 0 test ignoré**. Les taux de couverture rapportés restent de 85 % pour le noyau, 72 % pour l'espace utilisateur et 78 % global; l'avertissement de cible 70-79 % est inchangé.
 
 ## Limites et suite
 
-Ce lot établit le mapping sémantique des familles par couche, mais ne parcourt pas encore les `n_layer` couches d’un checkpoint réel, ne valide pas les formes propres à chaque matrice et ne branche pas encore ces descripteurs au forward quantifié. Les biais ne disposent pas encore d’une primitive de lecture/dot dédiée, et le forward autoregressif complet reste hors périmètre.
+Ce lot établit le mapping sémantique des familles par couche, mais ne parcourt pas encore les `n_layer` couches d'un checkpoint réel, ne valide pas les formes propres à chaque matrice et ne branche pas encore ces descripteurs au forward quantifié. Les biais ne disposent pas encore d'une primitive de lecture/dot dédiée, et le forward autoregressif complet reste hors périmètre.

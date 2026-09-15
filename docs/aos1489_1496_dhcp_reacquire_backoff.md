@@ -1,4 +1,4 @@
-# AOS-1489 à AOS-1496 — Backoff borné de réacquisition DHCP
+# AOS-1489 à AOS-1496 - Backoff borné de réacquisition DHCP
 
 ## Objectif
 
@@ -11,15 +11,15 @@ Ce macro-lot empêche une réacquisition DHCP échouée de relancer DHCP/DNS/ARP
 | Délai initial | 100 ticks | Première attente après un échec de réacquisition. |
 | Délai maximal | 10 000 ticks | Plafond qui évite tout dépassement ou attente non bornée. |
 | Tentatives maximales | 5 | Stoppe les nouvelles émissions après échecs répétés. |
-| Réinitialisation | Bootstrap réussi | Efface compteur et échéance lors de la publication d’un nouveau bail. |
+| Réinitialisation | Bootstrap réussi | Efface compteur et échéance lors de la publication d'un nouveau bail. |
 
-La maintenance retourne immédiatement si l’horloge n’a pas atteint `next_retry_tick`. Lorsqu’une tentative est autorisée, elle utilise un XID dérivé de la requête mémorisée et du nombre de tentatives déjà consommées. En cas d’échec, le délai est doublé jusqu’au plafond ; en cas de réussite, `kernel_llm_acquire_start` réarme la maintenance avec un compteur nul.
+La maintenance retourne immédiatement si l'horloge n'a pas atteint `next_retry_tick`. Lorsqu'une tentative est autorisée, elle utilise un XID dérivé de la requête mémorisée et du nombre de tentatives déjà consommées. En cas d'échec, le délai est doublé jusqu'au plafond ; en cas de réussite, `kernel_llm_acquire_start` réarme la maintenance avec un compteur nul.
 
-> Le backoff ne dort jamais et ne bloque jamais. Il est évalué à l’entrée syscall, hors IRQ0, exactement comme le renouvellement et la réacquisition DHCP.
+> Le backoff ne dort jamais et ne bloque jamais. Il est évalué à l'entrée syscall, hors IRQ0, exactement comme le renouvellement et la réacquisition DHCP.
 
 ## Invariants
 
-Aucun slot socket n’est conservé entre un bail expiré et une tentative différée : la session est fermée avant la première réacquisition. Les erreurs de bootstrap restent transactionnelles et ne publient ni bail, ni socket, ni phase LLM intermédiaire. Lorsque le plafond est atteint, les appels ultérieurs ne transmettent plus de trames DHCP.
+Aucun slot socket n'est conservé entre un bail expiré et une tentative différée : la session est fermée avant la première réacquisition. Les erreurs de bootstrap restent transactionnelles et ne publient ni bail, ni socket, ni phase LLM intermédiaire. Lorsque le plafond est atteint, les appels ultérieurs ne transmettent plus de trames DHCP.
 
 ## Validation
 
@@ -33,7 +33,7 @@ Aucun slot socket n’est conservé entre un bail expiré et une tentative diff�
 
 ## Limites restantes
 
-Le backoff couvre désormais les réacquisitions de bail. La conservation sécurisée des identifiants OpenAI lors d’une fermeture automatique, une politique de reprise TLS/HTTP/SSE plus complète et des tests QEMU avec serveur DHCP réel restent à effectuer.
+Le backoff couvre désormais les réacquisitions de bail. La conservation sécurisée des identifiants OpenAI lors d'une fermeture automatique, une politique de reprise TLS/HTTP/SSE plus complète et des tests QEMU avec serveur DHCP réel restent à effectuer.
 
 ## Références
 

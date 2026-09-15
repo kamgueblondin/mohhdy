@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-006  
-**Titre** : Gestionnaire de configuration dynamique intelligent pour MOHHDY  
-**Phase** : 1 - Foundation  
-**Priorité** : Moyenne  
-**Complexité** : Moyenne  
-**Effort Estimé** : 15 jours-homme  
-**Risque** : Faible  
+**ID** : US-006
+**Titre** : Gestionnaire de configuration dynamique intelligent pour MOHHDY
+**Phase** : 1 - Foundation
+**Priorité** : Moyenne
+**Complexité** : Moyenne
+**Effort Estimé** : 15 jours-homme
+**Risque** : Faible
 
 ## Description Utilisateur
 
-**En tant que** système MOHHDY  
-**Je veux** un gestionnaire de configuration centralisé, dynamique et intelligent  
+**En tant que** système MOHHDY
+**Je veux** un gestionnaire de configuration centralisé, dynamique et intelligent
 **Afin de** adapter automatiquement les paramètres système selon les conditions d'usage et permettre l'optimisation continue par l'IA
 
 ## Contexte Technique Détaillé
@@ -373,7 +373,7 @@ void test_dynamic_configuration() {
     config_value_t value = {.type = CONFIG_INTEGER, .integer_value = 42};
     int result = config_set("test.parameter", &value, SCOPE_SYSTEM);
     assert(result == 0);
-    
+
     config_value_t retrieved;
     result = config_get("test.parameter", SCOPE_SYSTEM, &retrieved);
     assert(result == 0);
@@ -387,7 +387,7 @@ void test_configuration_validation() {
         .expression = "1-100"
     };
     validation_add_rule("test.*", &rule);
-    
+
     config_value_t invalid_value = {.type = CONFIG_INTEGER, .integer_value = 150};
     validation_result_t result;
     validation_validate_config("test.parameter", &invalid_value, &result);
@@ -415,12 +415,12 @@ void test_configuration_validation() {
 
 ## Estimation Détaillée
 
-**Complexité** : Moyenne  
-**Effort Total** : 15 jours-homme  
+**Complexité** : Moyenne
+**Effort Total** : 15 jours-homme
 
 ### Répartition des Tâches
 - **Gestionnaire central** : 4 j-h
-- **Système de validation** : 3 j-h  
+- **Système de validation** : 3 j-h
 - **Optimiseur IA** : 3 j-h
 - **Distribution P2P** : 3 j-h
 - **Tests et sécurité** : 2 j-h

@@ -2,8 +2,8 @@
 
 ## 📊 ÉTAT DU DIAGNOSTIC
 
-**Date**: 27 août 2025 22:22  
-**Version**: MOHHDY v7.0 + Mode Debug Complet  
+**Date**: 27 août 2025 22:22
+**Version**: MOHHDY v7.0 + Mode Debug Complet
 **Statut**: Analyse approfondie en cours
 
 ---
@@ -11,14 +11,14 @@
 ## ✅ ÉLÉMENTS VALIDÉS
 
 ### 1. Chaîne d'Appels Système ✅
-- **Shell utilisateur** : `sys_getchar()` → `int $0x80` avec `eax=2`
-- **Syscall handler** : `SYS_GETC` (case 2) → `keyboard_getc()`
-- **Driver kernel** : `keyboard_getc()` → `kbd_get_nonblock()`
+- **Shell utilisateur** : `sys_getchar()` -> `int $0x80` avec `eax=2`
+- **Syscall handler** : `SYS_GETC` (case 2) -> `keyboard_getc()`
+- **Driver kernel** : `keyboard_getc()` -> `kbd_get_nonblock()`
 - **Buffer circulaire** : Gestion head/tail thread-safe
 
 ### 2. Architecture Hybride Implémentée ✅
 - Buffer circulaire 256 caractères ASCII
-- Gestionnaire d'interruption IRQ1 optimisé  
+- Gestionnaire d'interruption IRQ1 optimisé
 - Fonction `keyboard_getc()` avec timeout
 - Initialisation PS/2 complète et robuste
 
@@ -33,13 +33,13 @@
 
 ### Hypothèses Principales
 
-1. **IRQ1 Non Reçues** 
+1. **IRQ1 Non Reçues**
    - Les interruptions clavier n'arrivent pas réellement au kernel
    - Problème de configuration PIC ou PS/2
 
 2. **Scancodes Ignorés**
    - Interruptions reçues mais scancodes mal interprétés
-   - Problème de conversion scancode → ASCII
+   - Problème de conversion scancode -> ASCII
 
 3. **Buffer Vide**
    - Caractères non mis dans le buffer circulaire
@@ -55,7 +55,7 @@
 
 ### Version Debug Ultra-Détaillée
 Nouveau fichier `kernel/keyboard_debug.c` avec :
-- **Traces IRQ1** : `IRQ1_START`, `IRQ1_SCAN`, `IRQ1_PUT`  
+- **Traces IRQ1** : `IRQ1_START`, `IRQ1_SCAN`, `IRQ1_PUT`
 - **Traces Buffer** : `BUFFER_PUT`, `BUFFER_GET`, `BUFFER_EMPTY`
 - **Traces GETC** : `GETC_START`, `GETC_WAIT`, `GETC_SUCCESS`, `GETC_TIMEOUT`
 - **Stats Temps Réel** : Compteurs d'interruptions, puts, gets
@@ -87,10 +87,10 @@ bash test_debug_temps_reel.sh
 
 ### Phase 2: Diagnostic Ciblé 📊
 Selon les résultats du test :
-- **Si 0 IRQ1** → Problème PS/2/PIC
-- **Si IRQ1 OK mais 0 BUFFER_PUT** → Problème conversion
-- **Si BUFFER_PUT OK mais 0 GETC_SUCCESS** → Problème lecture
-- **Si tout OK** → Problème dans le shell
+- **Si 0 IRQ1** -> Problème PS/2/PIC
+- **Si IRQ1 OK mais 0 BUFFER_PUT** -> Problème conversion
+- **Si BUFFER_PUT OK mais 0 GETC_SUCCESS** -> Problème lecture
+- **Si tout OK** -> Problème dans le shell
 
 ### Phase 3: Correction Définitive ⚡
 - Appliquer le fix ciblé identifié
@@ -103,7 +103,7 @@ Selon les résultats du test :
 ## 📈 MÉTRIQUES D'ANALYSE
 
 Le système debug va mesurer :
-- **Interruptions IRQ1** reçues 
+- **Interruptions IRQ1** reçues
 - **Scancodes** détectés
 - **Caractères** mis en buffer
 - **Appels** à keyboard_getc()
@@ -116,11 +116,11 @@ Le système debug va mesurer :
 
 **EXÉCUTION DU TEST DEBUG EN TEMPS RÉEL**
 
-Le système est maintenant équipé pour identifier précisément où le blocage se produit dans la chaîne complète **Shell → Syscall → Kernel → Driver → PS/2**.
+Le système est maintenant équipé pour identifier précisément où le blocage se produit dans la chaîne complète **Shell -> Syscall -> Kernel -> Driver -> PS/2**.
 
 Une fois le test effectué, nous aurons les données exactes pour **corriger définitivement** le problème.
 
 ---
-**Auteur** : MiniMax Agent  
-**Système** : MOHHDY v7.0 Debug Mode  
+**Auteur** : MiniMax Agent
+**Système** : MOHHDY v7.0 Debug Mode
 **Objectif** : Résolution définitive problème clavier

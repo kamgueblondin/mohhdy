@@ -27,11 +27,11 @@ print_string("Timer desactive pour la stabilite...\n");
 
 ### Chaîne de Causalité
 
-1. **Timer désactivé** → Pas d'interruptions périodiques
-2. **Pas d'interruptions timer** → `schedule()` n'est jamais appelé automatiquement
-3. **Shell appelle `gets()`** → Fonction `sys_gets()` attend une ligne complète
+1. **Timer désactivé** -> Pas d'interruptions périodiques
+2. **Pas d'interruptions timer** -> `schedule()` n'est jamais appelé automatiquement
+3. **Shell appelle `gets()`** -> Fonction `sys_gets()` attend une ligne complète
 4. **`sys_gets()` fait `schedule()`** en boucle d'attente infinie
-5. **Blocage total** → Le shell reste dans la boucle sans pouvoir continuer
+5. **Blocage total** -> Le shell reste dans la boucle sans pouvoir continuer
 
 ## 🛠️ Solutions Testées
 
@@ -67,30 +67,30 @@ void sys_gets(char* buffer, uint32_t size) {
     if (!buffer || size == 0) {
         return;
     }
-    
+
     print_string_serial("SYS_GETS: Attente d'entree utilisateur...\n");
-    
+
     // Attendre qu'une ligne soit prête (version sans timer)
     while (!line_ready) {
         // Attendre une interruption (clavier principalement)
         asm volatile("hlt");
     }
-    
+
     // Copier la ligne dans le buffer utilisateur
     int copy_len = strlen_kernel(line_buffer);
     if (copy_len >= size) {
         copy_len = size - 1;
     }
-    
+
     for (int i = 0; i < copy_len; i++) {
         buffer[i] = line_buffer[i];
     }
     buffer[copy_len] = '\0';
-    
+
     // Réinitialiser pour la prochaine ligne
     line_ready = 0;
     line_position = 0;
-    
+
     print_string_serial("SYS_GETS: ligne lue: ");
     print_string_serial(buffer);
     print_string_serial("\n");

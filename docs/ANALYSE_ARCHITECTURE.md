@@ -1,6 +1,6 @@
 # Analyse de l'Architecture MOHHDY
 
-> **État réel (août 2026).** Le passage au shell Ring 3 fonctionne (`create_task_from_initrd_file` + `jump_to_task`). Les sections « Problèmes identifiés » et « Flux actuel (problématique) » ci-dessous sont un **diagnostic historique** conservé. Voir [ETAT_REEL.md](ETAT_REEL.md).
+> **État réel (août 2026).** Le passage au shell Ring 3 fonctionne (`create_task_from_initrd_file` + `jump_to_task`). Les sections " Problèmes identifiés " et " Flux actuel (problématique) " ci-dessous sont un **diagnostic historique** conservé. Voir [ETAT_REEL.md](ETAT_REEL.md).
 
 ## Vue d'ensemble du système
 
@@ -43,18 +43,18 @@ MOHHDY est un système d'exploitation expérimental en 32-bit avec les composant
 8. **Programmes utilisateur (userspace/)**
    - `shell.c` : Shell interactif (sous-ensemble de commandes réellement branché ; `ls`/`ps` encore simulés)
    - `fake_ai.c` : Simulateur d'intelligence artificielle (mots-clés)
-   - `ai_assistant.c` : Assistant empaqueté dans l’initrd
+   - `ai_assistant.c` : Assistant empaqueté dans l'initrd
    - `test_program.c` : Programme de test
 
 ## État actuel du passage au mode utilisateur (août 2026)
 
 1. `kmain()` initialise IDT/PIC/clavier/mémoire/initrd/tâches/syscalls
-2. Charge `bin/shell` depuis l’initrd (`create_task_from_initrd_file`)
+2. Charge `bin/shell` depuis l'initrd (`create_task_from_initrd_file`)
 3. `timer_init(100)` puis `g_reschedule_needed = 1`
-4. IRQ0 : EOI immédiat, puis `schedule()` → `jump_to_task()` (iret Ring 3)
-5. Le shell ELF s’exécute ; le clavier IRQ1 n’est plus masqué par un EOI manquant
+4. IRQ0 : EOI immédiat, puis `schedule()` -> `jump_to_task()` (iret Ring 3)
+5. Le shell ELF s'exécute ; le clavier IRQ1 n'est plus masqué par un EOI manquant
 
-Le changement de contexte n’utilise plus le `switch_task` commenté cité plus bas : `schedule()` appelle `jump_to_task()`. Un répertoire de pages utilisateur est créé (`create_user_vmm_directory`).
+Le changement de contexte n'utilise plus le `switch_task` commenté cité plus bas : `schedule()` appelle `jump_to_task()`. Un répertoire de pages utilisateur est créé (`create_user_vmm_directory`).
 
 ## Problèmes identifiés (diagnostic historique)
 

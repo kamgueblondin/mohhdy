@@ -1,4 +1,4 @@
-# MOHHDY Foundation — Incrément 109 : reset O(1) du cache KV
+# MOHHDY Foundation - Incrément 109 : reset O(1) du cache KV
 
 **État :** implémenté et testé.
 
@@ -8,11 +8,11 @@ Le lot 109 ajoute `gpt2_gguf_kv_cache_reset`. Le cache KV peut être réarmé en
 
 ## Contrat
 
-La primitive exige un pointeur de cache non nul, remet `count` à zéro et renvoie `0`. Elle renvoie `-1` pour un pointeur nul. Les valeurs résiduelles dans le stockage ne sont pas promises comme effacées; elles deviennent simplement inaccessibles tant qu’une nouvelle séquence ne les réécrit pas.
+La primitive exige un pointeur de cache non nul, remet `count` à zéro et renvoie `0`. Elle renvoie `-1` pour un pointeur nul. Les valeurs résiduelles dans le stockage ne sont pas promises comme effacées; elles deviennent simplement inaccessibles tant qu'une nouvelle séquence ne les réécrit pas.
 
 ## Validation
 
-Le test remet à zéro le cache d’intégration, vérifie `count == 0`, puis contrôle le rejet du pointeur nul. `make test-all` passe avec **265 tests réussis, 0 échec et 0 test ignoré**.
+Le test remet à zéro le cache d'intégration, vérifie `count == 0`, puis contrôle le rejet du pointeur nul. `make test-all` passe avec **265 tests réussis, 0 échec et 0 test ignoré**.
 
 ## Suite
 

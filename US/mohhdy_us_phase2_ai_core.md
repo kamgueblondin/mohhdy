@@ -13,8 +13,8 @@ L'objectif principal est d'intégrer des capacités d'IA avancées directement d
 ## US-016 : Intégration du moteur IA local TensorFlow Lite
 
 ### Description
-**En tant que** système MOHHDY  
-**Je veux** un moteur d'IA local performant intégré au niveau système  
+**En tant que** système MOHHDY
+**Je veux** un moteur d'IA local performant intégré au niveau système
 **Afin de** traiter les requêtes utilisateur et optimiser le système sans dépendre du cloud
 
 ### Contexte Technique
@@ -155,8 +155,8 @@ int ai_get_accelerator_usage(hardware_accelerator_t type, float* utilization);
 4. **Test d'Accélération** : Utilisation effective des accélérateurs hardware
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 22 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 22 jours-homme
 **Risque** : Élevé
 
 ---
@@ -164,8 +164,8 @@ int ai_get_accelerator_usage(hardware_accelerator_t type, float* utilization);
 ## US-017 : Développement du système de compréhension du langage naturel
 
 ### Description
-**En tant que** utilisateur MOHHDY  
-**Je veux** communiquer avec le système en langage naturel  
+**En tant que** utilisateur MOHHDY
+**Je veux** communiquer avec le système en langage naturel
 **Afin de** contrôler le système intuitivement sans apprendre de commandes complexes
 
 ### Contexte Technique
@@ -281,7 +281,7 @@ typedef struct {
     char action_data[256];
 } nlu_response_t;
 
-int nlu_generate_response(nlu_result_t* nlu_result, system_action_result_t* action_result, 
+int nlu_generate_response(nlu_result_t* nlu_result, system_action_result_t* action_result,
                          nlu_response_t* response);
 ```
 
@@ -311,8 +311,8 @@ int nlu_validate_action_permissions(nlu_result_t* nlu_result, user_context_t* us
 4. **Test de Performance** : Traitement d'une requête en < 500ms
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 25 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 25 jours-homme
 **Risque** : Élevé
 
 ---
@@ -320,8 +320,8 @@ int nlu_validate_action_permissions(nlu_result_t* nlu_result, user_context_t* us
 ## US-018 : Création du gestionnaire de modèles IA distribués
 
 ### Description
-**En tant que** système MOHHDY  
-**Je veux** gérer intelligemment une collection de modèles IA locaux et distants  
+**En tant que** système MOHHDY
+**Je veux** gérer intelligemment une collection de modèles IA locaux et distants
 **Afin de** optimiser les performances et la disponibilité des services IA
 
 ### Contexte Technique
@@ -404,7 +404,7 @@ int model_discover_p2p(model_metadata_t* models, int max_count);
 int model_register(model_metadata_t* metadata);
 
 // Sélection et utilisation de modèles
-int model_select_best(model_type_t type, model_requirements_t* requirements, 
+int model_select_best(model_type_t type, model_requirements_t* requirements,
                      model_metadata_t* selected);
 int model_load(const char* model_id, ai_model_t** model);
 int model_unload(const char* model_id);
@@ -435,27 +435,27 @@ typedef enum {
 // Algorithme de sélection de modèle
 float model_calculate_score(model_metadata_t* model, model_requirements_t* requirements) {
     float score = 0.0f;
-    
+
     // Facteur de latence
     if (model->latency_ms <= requirements->max_latency_ms) {
         score += 0.3f * (1.0f - (float)model->latency_ms / requirements->max_latency_ms);
     }
-    
+
     // Facteur de précision
     if (model->accuracy >= requirements->min_accuracy) {
         score += 0.4f * model->accuracy;
     }
-    
+
     // Facteur de mémoire
     if (model->memory_mb <= requirements->max_memory_mb) {
         score += 0.2f * (1.0f - (float)model->memory_mb / requirements->max_memory_mb);
     }
-    
+
     // Facteur de disponibilité
     if (model->location == MODEL_LOCAL || !requirements->offline_capable) {
         score += 0.1f;
     }
-    
+
     return score;
 }
 ```
@@ -495,8 +495,8 @@ int model_schedule_sync(const char* model_id, sync_priority_t priority);
 4. **Test de Synchronisation** : Mise à jour automatique des modèles
 
 ### Estimation
-**Complexité** : Élevée  
-**Effort** : 18 jours-homme  
+**Complexité** : Élevée
+**Effort** : 18 jours-homme
 **Risque** : Moyen
 
 ---
@@ -504,8 +504,8 @@ int model_schedule_sync(const char* model_id, sync_priority_t priority);
 ## US-019 : Implémentation du système d'apprentissage fédéré
 
 ### Description
-**En tant que** instance MOHHDY dans la communauté  
-**Je veux** participer à l'apprentissage fédéré pour améliorer les modèles IA collectivement  
+**En tant que** instance MOHHDY dans la communauté
+**Je veux** participer à l'apprentissage fédéré pour améliorer les modèles IA collectivement
 **Afin de** bénéficier d'une intelligence collective tout en préservant la confidentialité des données
 
 ### Contexte Technique
@@ -589,10 +589,10 @@ typedef enum {
 } noise_mechanism_t;
 
 // Ajout de bruit pour la confidentialité
-int privacy_add_noise(float* gradients, size_t gradient_count, 
+int privacy_add_noise(float* gradients, size_t gradient_count,
                      privacy_parameters_t* privacy_params);
 int privacy_validate_parameters(privacy_parameters_t* params);
-float privacy_calculate_privacy_loss(privacy_parameters_t* params, 
+float privacy_calculate_privacy_loss(privacy_parameters_t* params,
                                    uint32_t query_count);
 ```
 
@@ -604,7 +604,7 @@ int federated_leave_session(const char* session_id);
 int federated_get_active_sessions(federated_session_t* sessions, int max_count);
 
 // Entraînement local
-int federated_train_local(const char* session_id, training_data_t* data, 
+int federated_train_local(const char* session_id, training_data_t* data,
                          model_updates_t* updates);
 int federated_submit_updates(const char* session_id, model_updates_t* updates);
 int federated_receive_global_model(const char* session_id, ai_model_t** model);
@@ -634,9 +634,9 @@ typedef enum {
 } reward_type_t;
 
 // Calcul des récompenses
-float calculate_contribution_reward(training_metrics_t* metrics, 
+float calculate_contribution_reward(training_metrics_t* metrics,
                                   session_statistics_t* session_stats);
-int distribute_rewards(const char* session_id, participant_profile_t* participants, 
+int distribute_rewards(const char* session_id, participant_profile_t* participants,
                       int participant_count);
 ```
 
@@ -658,10 +658,10 @@ typedef enum {
 } validation_result_t;
 
 // Validation des mises à jour
-int validate_model_updates(model_updates_t* updates, ai_model_t* base_model, 
+int validate_model_updates(model_updates_t* updates, ai_model_t* base_model,
                           update_validation_t* validation);
 int detect_poisoning_attack(model_updates_t* updates, attack_detection_t* detection);
-int aggregate_secure_updates(model_updates_t* updates[], int update_count, 
+int aggregate_secure_updates(model_updates_t* updates[], int update_count,
                            ai_model_t* aggregated_model);
 ```
 
@@ -676,8 +676,8 @@ int aggregate_secure_updates(model_updates_t* updates[], int update_count,
 4. **Test de Performance** : Impact local < 10% pendant l'entraînement
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 28 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 28 jours-homme
 **Risque** : Très Élevé
 
 ---
@@ -685,8 +685,8 @@ int aggregate_secure_updates(model_updates_t* updates[], int update_count,
 ## US-020 : Développement de l'orchestrateur cloud-edge
 
 ### Description
-**En tant que** système MOHHDY  
-**Je veux** un orchestrateur intelligent qui répartit optimalement les tâches entre local et cloud  
+**En tant que** système MOHHDY
+**Je veux** un orchestrateur intelligent qui répartit optimalement les tâches entre local et cloud
 **Afin de** maximiser les performances tout en respectant les contraintes de confidentialité et de coût
 
 ### Contexte Technique
@@ -756,25 +756,25 @@ typedef enum {
 
 #### Algorithme de Décision
 ```c
-float calculate_execution_score(task_requirements_t* task, 
+float calculate_execution_score(task_requirements_t* task,
                               execution_option_t* option,
                               orchestration_policy_t* policy) {
     float score = 0.0f;
-    
+
     // Score de performance (latence inversée)
     float performance_score = 1.0f / (1.0f + option->expected_latency / 1000.0f);
     score += policy->performance_weight * performance_score;
-    
+
     // Score de coût (coût inversé)
     float cost_score = 1.0f / (1.0f + option->expected_cost);
     score += policy->cost_weight * cost_score;
-    
+
     // Score de confidentialité
     score += policy->privacy_weight * option->privacy_score;
-    
+
     // Score de disponibilité
     score += policy->availability_weight * option->availability_score;
-    
+
     return score;
 }
 
@@ -783,18 +783,18 @@ execution_environment_t select_optimal_environment(task_requirements_t* task,
     execution_option_t options[5];
     float best_score = 0.0f;
     execution_environment_t best_env = ENV_LOCAL;
-    
+
     // Évaluer chaque option
     for (int i = 0; i < 5; i++) {
         evaluate_execution_option(task, (execution_environment_t)i, &options[i]);
         float score = calculate_execution_score(task, &options[i], policy);
-        
+
         if (score > best_score) {
             best_score = score;
             best_env = (execution_environment_t)i;
         }
     }
-    
+
     return best_env;
 }
 ```
@@ -813,7 +813,7 @@ int orchestrator_add_custom_rule(orchestration_rule_t* rule);
 
 // Monitoring et métriques
 int orchestrator_get_metrics(orchestration_metrics_t* metrics);
-int orchestrator_get_environment_stats(execution_environment_t env, 
+int orchestrator_get_environment_stats(execution_environment_t env,
                                       environment_stats_t* stats);
 ```
 
@@ -835,9 +835,9 @@ typedef enum {
 } confidence_level_t;
 
 // Prédiction de charge
-int orchestrator_predict_load(uint32_t time_horizon_minutes, 
+int orchestrator_predict_load(uint32_t time_horizon_minutes,
                              load_prediction_t* prediction);
-int orchestrator_optimize_placement(task_description_t* tasks, 
+int orchestrator_optimize_placement(task_description_t* tasks,
                                    int task_count,
                                    placement_plan_t* plan);
 ```
@@ -860,9 +860,9 @@ typedef enum {
 } failover_trigger_t;
 
 // Gestion des pannes
-int orchestrator_configure_failover(execution_environment_t env, 
+int orchestrator_configure_failover(execution_environment_t env,
                                    failover_config_t* config);
-int orchestrator_trigger_failover(task_handle_t handle, 
+int orchestrator_trigger_failover(task_handle_t handle,
                                  execution_environment_t target_env);
 int orchestrator_get_failover_stats(failover_stats_t* stats);
 ```
@@ -879,8 +879,8 @@ int orchestrator_get_failover_stats(failover_stats_t* stats);
 4. **Test de Prédiction** : Précision de prédiction > 80%
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 24 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 24 jours-homme
 **Risque** : Élevé
 
 ---

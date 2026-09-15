@@ -47,18 +47,18 @@ else {
 
 ### Flux de Données Clavier
 ```
-Clavier PS/2 → i8042 → IRQ1 → keyboard_interrupt_handler() 
-    ↓
-Buffer ASCII Unifié (kbd_buf) 
-    ↓  
-SYS_GETC → keyboard_getc() → shell sys_getchar()
+Clavier PS/2 -> i8042 -> IRQ1 -> keyboard_interrupt_handler()
+    v
+Buffer ASCII Unifié (kbd_buf)
+    v
+SYS_GETC -> keyboard_getc() -> shell sys_getchar()
 ```
 
 ### Composants Vérifiés
-✅ **Initialisation PS/2** : Complète et fonctionnelle  
-✅ **Configuration IRQ1** : Correctement démasquée dans le PIC  
-✅ **Handler d'interruption** : Enregistré sur INT 33  
-✅ **Buffer circulaire** : Architecture unifiée opérationnelle  
+✅ **Initialisation PS/2** : Complète et fonctionnelle
+✅ **Configuration IRQ1** : Correctement démasquée dans le PIC
+✅ **Handler d'interruption** : Enregistré sur INT 33
+✅ **Buffer circulaire** : Architecture unifiée opérationnelle
 ✅ **Interface utilisateur** : Shell prêt pour interaction
 
 ## 🧪 Tests et Validation
@@ -86,9 +86,9 @@ run-kbd-test:    # Test avec monitoring détaillé
 
 ## 🚀 État Final
 
-**Système clavier :** ✅ **FONCTIONNEL**  
-**Corrections appliquées :** ✅ **SUCCÈS**  
-**Tests de base :** ✅ **RÉUSSIS**  
+**Système clavier :** ✅ **FONCTIONNEL**
+**Corrections appliquées :** ✅ **SUCCÈS**
+**Tests de base :** ✅ **RÉUSSIS**
 **Documentation :** ✅ **COMPLÈTE**
 
 ### Instructions de Test Final
@@ -110,5 +110,5 @@ Le problème du clavier non-réactif dans MOHHDY a été **entièrement résolu*
 **Le système MOHHDY v6.0 est maintenant prêt pour une interaction clavier complète.**
 
 ---
-*Correction effectuée le 27 août 2025*  
+*Correction effectuée le 27 août 2025*
 *MiniMax Agent - Système MOHHDY*

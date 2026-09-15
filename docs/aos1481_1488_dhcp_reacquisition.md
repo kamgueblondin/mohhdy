@@ -1,10 +1,10 @@
-# AOS-1481 à AOS-1488 — Réacquisition DHCP après expiration
+# AOS-1481 à AOS-1488 - Réacquisition DHCP après expiration
 
 ## Objectif
 
-Ce macro-lot complète la maintenance DHCP différée par une réacquisition automatique. Lorsque la primitive de renouvellement constate qu’un bail n’est plus valide à l’instant courant, le noyau ferme la session LLM socket, efface le bail, incrémente l’identifiant de transaction DHCP et relance le bootstrap DHCP/DNS/ARP/SYN à partir de la requête statique validée lors de l’acquisition initiale.
+Ce macro-lot complète la maintenance DHCP différée par une réacquisition automatique. Lorsque la primitive de renouvellement constate qu'un bail n'est plus valide à l'instant courant, le noyau ferme la session LLM socket, efface le bail, incrémente l'identifiant de transaction DHCP et relance le bootstrap DHCP/DNS/ARP/SYN à partir de la requête statique validée lors de l'acquisition initiale.
 
-> La réacquisition est exécutée depuis l’entrée syscall, jamais depuis IRQ0. Le gestionnaire d’horloge conserve ainsi ses garanties de faible latence et ne réalise aucune E/S réseau.
+> La réacquisition est exécutée depuis l'entrée syscall, jamais depuis IRQ0. Le gestionnaire d'horloge conserve ainsi ses garanties de faible latence et ne réalise aucune E/S réseau.
 
 ## Séquence
 
@@ -12,7 +12,7 @@ Ce macro-lot complète la maintenance DHCP différée par une réacquisition aut
 |---|---|---|
 | 1 | `ne2k_dhcp_renew_if_due` détecte un bail expiré. | Aucune mutation partielle du bail. |
 | 2 | `kernel_llm_close` tente FIN+ACK, puis libère le slot. | La session devient `IDLE`. |
-| 3 | Le bail est effacé et le XID DHCP est incrémenté. | L’ancien bail ne peut plus être réutilisé. |
+| 3 | Le bail est effacé et le XID DHCP est incrémenté. | L'ancien bail ne peut plus être réutilisé. |
 | 4 | `kernel_llm_acquire_start` rejoue DHCP/DNS/ARP/SYN. | La nouvelle session est publiée seulement après bootstrap complet. |
 
 ## Invariants

@@ -1,8 +1,8 @@
-# AOS-1857…1864 — Parsing de `close_notify` distant
+# AOS-1857...1864 - Parsing de `close_notify` distant
 
 ## Objet
 
-`net_tls_close_notify_parse()` valide un record TLS déjà déchiffré afin de reconnaître exclusivement l’alerte de fermeture propre `warning/close_notify` reçue du pair.
+`net_tls_close_notify_parse()` valide un record TLS déjà déchiffré afin de reconnaître exclusivement l'alerte de fermeture propre `warning/close_notify` reçue du pair.
 
 | Contrôle | Résultat |
 |---|---:|
@@ -17,4 +17,4 @@ Le vecteur TLS couvre la fermeture distante valide, un niveau fatal, une descrip
 
 ## Référence
 
-[1] [RFC 5246 — TLS 1.2, §7.2.1](https://www.rfc-editor.org/rfc/rfc5246#section-7.2.1)
+[1] [RFC 5246 - TLS 1.2, paragraphe 7.2.1](https://www.rfc-editor.org/rfc/rfc5246#section-7.2.1)

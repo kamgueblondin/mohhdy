@@ -21,7 +21,7 @@ Malgré les interruptions clavier fonctionnelles (IRQ1 générées correctement)
 ## 🔧 Corrections Appliquées
 
 ### 1. Unification du Système de Buffer
-- ✅ **Supprimé** l'utilisation du buffer scancodes redondant 
+- ✅ **Supprimé** l'utilisation du buffer scancodes redondant
 - ✅ **Unifié** sur le buffer ASCII de `keyboard.c` uniquement
 - ✅ L'interruption clavier ne stocke plus que dans le buffer ASCII
 
@@ -32,7 +32,7 @@ Malgré les interruptions clavier fonctionnelles (IRQ1 générées correctement)
 kbd_push_scancode(scancode);  // ❌ Redondant
 kbd_put(c);                   // ✅ Buffer ASCII
 
-// Après - Stockage unifié  
+// Après - Stockage unifié
 // kbd_push_scancode supprimé  // ❌ Supprimé
 kbd_put(c);                   // ✅ Buffer ASCII uniquement
 ```
@@ -67,7 +67,7 @@ print_char(c, -1, -1, 0x0F); // Affiche immédiatement à l'écran
 - ✅ **Buffer unifié** : Pas de conflit entre systèmes de buffer
 - ✅ **Interruptions stables** : Gestion cohérente des IRQ1
 
-### Performances  
+### Performances
 - ✅ **Moins de complexité** : Code simplifié et plus maintenable
 - ✅ **Moins de polling** : Utilise efficacement les interruptions
 - ✅ **Cohérence** : Un seul point de vérité pour les caractères
@@ -78,8 +78,8 @@ print_char(c, -1, -1, 0x0F); // Affiche immédiatement à l'écran
    - Supprimé l'appel redondant `kbd_push_scancode()`
    - Nettoyé les includes inutiles
 
-2. **`kernel/syscall/syscall.c`** 
-   - Refonte complète de `sys_gets()` 
+2. **`kernel/syscall/syscall.c`**
+   - Refonte complète de `sys_gets()`
    - Ajout de l'affichage temps réel
    - Supprimé la logique de timeout défaillante
 
@@ -87,7 +87,7 @@ print_char(c, -1, -1, 0x0F); // Affiche immédiatement à l'écran
 
 Après ces corrections :
 - ✅ **Saisie visible** : Tous les caractères tapés s'affichent à l'écran
-- ✅ **Commandes fonctionnelles** : `help`, `ls`, `ps`, etc. marchent correctement  
+- ✅ **Commandes fonctionnelles** : `help`, `ls`, `ps`, etc. marchent correctement
 - ✅ **Shell interactif** : Expérience utilisateur fluide et responsive
 - ✅ **Cohérence** : Pas de caractères perdus ou dupliqués
 
@@ -99,7 +99,7 @@ cd mohhdy
 make clean && make all
 make run
 # Taper au clavier - les caractères doivent s'afficher
-# Taper 'help' et ENTRÉE - la commande doit s'exécuter  
+# Taper 'help' et ENTRÉE - la commande doit s'exécuter
 ```
 
 ---

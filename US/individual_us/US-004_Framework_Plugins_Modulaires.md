@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-004  
-**Titre** : Framework de plugins modulaires pour MOHHDY  
-**Phase** : 1 - Foundation  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 20 jours-homme  
-**Risque** : Moyen  
+**ID** : US-004
+**Titre** : Framework de plugins modulaires pour MOHHDY
+**Phase** : 1 - Foundation
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 20 jours-homme
+**Risque** : Moyen
 
 ## Description Utilisateur
 
-**En tant que** développeur système MOHHDY  
-**Je veux** un framework de plugins modulaires sécurisé et performant  
+**En tant que** développeur système MOHHDY
+**Je veux** un framework de plugins modulaires sécurisé et performant
 **Afin de** étendre dynamiquement les fonctionnalités du système sans recompilation et préparer l'intégration de modules IA spécialisés
 
 ## Contexte Technique Détaillé
@@ -312,12 +312,12 @@ void test_plugin_ipc() {
 
 ## Estimation Détaillée
 
-**Complexité** : Élevée  
-**Effort Total** : 20 jours-homme  
+**Complexité** : Élevée
+**Effort Total** : 20 jours-homme
 
 ### Répartition des Tâches
 - **Gestionnaire de plugins** : 6 j-h
-- **Système de sécurité** : 5 j-h  
+- **Système de sécurité** : 5 j-h
 - **Communication IPC** : 4 j-h
 - **Registre de plugins** : 3 j-h
 - **Tests et validation** : 2 j-h

@@ -1,6 +1,6 @@
 # Analyse des Problèmes - MOHHDY Mode Utilisateur
 
-> **État réel (août 2026).** Le kernel n’est plus coincé dans une boucle shell simulée : le programme `userspace/shell.c` s’exécute en Ring 3. Ce fichier reste une analyse utile de l’ancien flux. Voir [ETAT_REEL.md](ETAT_REEL.md).
+> **État réel (août 2026).** Le kernel n'est plus coincé dans une boucle shell simulée : le programme `userspace/shell.c` s'exécute en Ring 3. Ce fichier reste une analyse utile de l'ancien flux. Voir [ETAT_REEL.md](ETAT_REEL.md).
 
 ## Problèmes Identifiés
 
@@ -8,7 +8,7 @@
 
 **Localisation**: `kernel/kernel.c` lignes 377-520
 
-**Description**: 
+**Description**:
 - Le kernel crée une tâche utilisateur avec `create_user_task()` mais n'effectue jamais le vrai passage au mode utilisateur
 - Au lieu de cela, il reste dans le kernel et simule le shell avec une boucle intégrée
 - La fonction `schedule()` n'est jamais appelée pour effectuer le changement de contexte
@@ -124,7 +124,7 @@ Initialisation de l'interface shell...
 Bienvenue dans MOHHDY ! Tapez 'help' pour l'aide.
 Shell base sur userspace/shell.c avec IA fake_ai.c
 
-MOHHDY> 
+MOHHDY>
 ```
 
 **Problème confirmé** : Le message "Passage en mode utilisateur..." est trompeur. Le système reste dans le kernel et utilise une simulation de shell au lieu du vrai shell utilisateur.

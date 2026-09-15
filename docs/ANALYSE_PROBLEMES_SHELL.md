@@ -1,6 +1,6 @@
 # Analyse des Problèmes - Shell Utilisateur MOHHDY
 
-> **État réel (août 2026).** L’interface n’est plus figée au passage userspace ; le shell ELF démarre. Contenu historique conservé. Voir [ETAT_REEL.md](ETAT_REEL.md).
+> **État réel (août 2026).** L'interface n'est plus figée au passage userspace ; le shell ELF démarre. Contenu historique conservé. Voir [ETAT_REEL.md](ETAT_REEL.md).
 
 ## Problème Principal Identifié
 
@@ -10,7 +10,7 @@
 
 ## Analyse Détaillée
 
-### 1. Problème de Transition Kernel → Userspace
+### 1. Problème de Transition Kernel -> Userspace
 
 **Code problématique dans kernel.c (lignes 370-405)**:
 - Le système crée correctement la tâche shell avec `create_task_from_initrd_file("shell")`
@@ -62,7 +62,7 @@ while (!line_ready) {
 ## Solutions Proposées
 
 ### 1. Implémenter la Transition Userspace
-- Ajouter une fonction `switch_to_userspace()` 
+- Ajouter une fonction `switch_to_userspace()`
 - Configurer correctement les registres de segment
 - Effectuer un `iret` vers l'espace utilisateur
 

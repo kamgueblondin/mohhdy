@@ -27,7 +27,7 @@ En tant qu'architecte performance système, je veux implémenter une plateforme 
 ### Optimisation Application Layer
 - [ ] Code-level optimization avec profiling continu
   - **Hot path analysis** : identification top 20% code consuming 80% resources
-  - **Algorithmic optimization** : O(n²) → O(n log n) automatic suggestions
+  - **Algorithmic optimization** : O(n2) -> O(n log n) automatic suggestions
   - **Memory allocation** : pool reuse, object lifecycle optimization
   - **Compilation optimization** : JIT hints, inline expansion, loop unrolling
 - [ ] Caching intelligent multi-niveau avec hit ratio > 95%
@@ -99,12 +99,12 @@ class PerformanceAnomalyDetector:
             keras.layers.LSTM(50),
             keras.layers.Dense(1)
         ])
-    
+
     def detect_anomalies(self, metrics_batch):
         # Real-time anomaly scoring
         anomaly_scores = self.model.decision_function(metrics_batch)
         return anomaly_scores < -0.5  # Threshold tunable
-    
+
     def predict_load(self, historical_data, horizon_minutes=15):
         # Forecast load pour proactive scaling
         return self.lstm_predictor.predict(historical_data)
@@ -130,7 +130,7 @@ DECLARE
     partition_date DATE := CURRENT_DATE;
     partition_name TEXT := 'performance_metrics_' || TO_CHAR(partition_date, 'YYYY_MM_DD');
 BEGIN
-    EXECUTE format('CREATE TABLE IF NOT EXISTS %I PARTITION OF performance_metrics 
+    EXECUTE format('CREATE TABLE IF NOT EXISTS %I PARTITION OF performance_metrics
                    FOR VALUES FROM (%L) TO (%L)',
                    partition_name, partition_date, partition_date + 1);
 END;
@@ -157,12 +157,12 @@ Business Impact Metrics:
   Revenue_Impact:
     - Page_load_time: "100ms delay = 1% revenue loss"
     - Conversion_rate: "1s delay = 7% conversion drop"
-  
+
   User_Experience:
     - Bounce_rate: "< 3s load time target"
     - Session_duration: "correlate avec performance"
     - NPS_score: "track performance satisfaction"
-  
+
   Operational_Efficiency:
     - Infrastructure_cost_per_transaction: "optimize $/TPS"
     - Developer_productivity: "deploy frequency impact"
@@ -180,7 +180,7 @@ class JVMTuner:
             'gc_algorithm': {'options': ['G1GC', 'ParallelGC', 'ZGC'], 'current': 'G1GC'},
             'gc_threads': {'min': 4, 'max': 16, 'current': 8}
         }
-    
+
     def optimize(self, performance_metrics):
         # Bayesian optimization pour parameter tuning
         if performance_metrics['gc_pause_time'] > 100:  # ms
@@ -197,13 +197,13 @@ from fbprophet import Prophet
 def predict_resource_needs(historical_metrics, days_ahead=7):
     model = Prophet()
     model.fit(historical_metrics[['ds', 'y']])  # timestamp, value
-    
+
     future = model.make_future_dataframe(periods=days_ahead)
     forecast = model.predict(future)
-    
+
     return {
         'predicted_peak': forecast['yhat'].max(),
-        'confidence_interval': (forecast['yhat_lower'].max(), 
+        'confidence_interval': (forecast['yhat_lower'].max(),
                                forecast['yhat_upper'].max()),
         'recommended_capacity': forecast['yhat'].max() * 1.2  # 20% buffer
     }
@@ -218,18 +218,18 @@ def predict_resource_needs(historical_metrics, days_ahead=7):
 ## Analyse des Risques et Mitigations
 
 ### Risques Critiques
-- **Optimisation counter-productive** → A/B testing + rollback automatique
-- **Over-optimization complexity** → Circuit breakers + manuel override
-- **Monitoring overhead** → Sampling adaptatif + resource limits
+- **Optimisation counter-productive** -> A/B testing + rollback automatique
+- **Over-optimization complexity** -> Circuit breakers + manuel override
+- **Monitoring overhead** -> Sampling adaptatif + resource limits
 
 ### Risques Élevés
-- **False positive alerts** → ML-based noise reduction + alert correlation
-- **Prediction model drift** → Continuous retraining + model versioning
-- **Cascading performance degradation** → Isolation boundaries + graceful degradation
+- **False positive alerts** -> ML-based noise reduction + alert correlation
+- **Prediction model drift** -> Continuous retraining + model versioning
+- **Cascading performance degradation** -> Isolation boundaries + graceful degradation
 
 ## Dépendances Critiques
 - US-025 (Système Prédiction Maintenance) - ML inference infrastructure
-- US-029 (Framework Optimisation Automatique) - Base optimization framework  
+- US-029 (Framework Optimisation Automatique) - Base optimization framework
 - US-069 (Monitoring Performance Temps Réel) - Métriques et alertes
 - Infrastructure Kubernetes avec resource quotas et limits
 - Data pipeline pour ML training (Apache Kafka + Apache Spark)

@@ -4,18 +4,18 @@
 
 ## Informations Générales
 
-**ID** : US-001  
-**Titre** : Migration vers architecture microkernel modulaire  
-**Phase** : 1 - Foundation  
-**Priorité** : Critique  
-**Complexité** : Très Élevée  
-**Effort Estimé** : 25 jours-homme  
-**Risque** : Très Élevé  
+**ID** : US-001
+**Titre** : Migration vers architecture microkernel modulaire
+**Phase** : 1 - Foundation
+**Priorité** : Critique
+**Complexité** : Très Élevée
+**Effort Estimé** : 25 jours-homme
+**Risque** : Très Élevé
 
 ## Description Utilisateur
 
-**En tant que** système MOHHDY  
-**Je veux** une architecture microkernel modulaire et sécurisée  
+**En tant que** système MOHHDY
+**Je veux** une architecture microkernel modulaire et sécurisée
 **Afin de** permettre l'évolutivité, la stabilité et l'intégration de l'IA au niveau système
 
 ## Contexte Technique Détaillé
@@ -142,12 +142,12 @@ typedef enum {
 } memory_protection_t;
 
 // API de gestion mémoire
-int memory_allocate_region(size_t size, memory_protection_t protection, 
+int memory_allocate_region(size_t size, memory_protection_t protection,
                           virtual_address_t* address);
 int memory_deallocate_region(virtual_address_t address);
-int memory_map_shared(process_id_t target_process, virtual_address_t address, 
+int memory_map_shared(process_id_t target_process, virtual_address_t address,
                      size_t size);
-int memory_protect_region(virtual_address_t address, size_t size, 
+int memory_protect_region(virtual_address_t address, size_t size,
                          memory_protection_t new_protection);
 ```
 
@@ -247,7 +247,7 @@ int ai_service_train_model(training_data_t* data, training_config_t* config);
 1. **Latence IPC** : < 1ms pour messages de 4KB
 2. **Overhead Mémoire** : < 10% par rapport à l'architecture actuelle
 3. **Temps de Démarrage** : < 3 secondes pour le système complet
-4. **Throughput** : Maintien des performances actuelles ±5%
+4. **Throughput** : Maintien des performances actuelles +/-5%
 
 ### Critères de Qualité
 1. **Modularité** : Ajout/suppression de services sans recompilation
@@ -302,10 +302,10 @@ void test_ipc_communication() {
         .data_size = 100,
         .data = test_data
     };
-    
+
     int result = ipc_send_message(target_pid, &message);
     assert(result == 0);
-    
+
     ipc_message_t received;
     result = ipc_receive_message(&received, 1000);
     assert(result == 0);

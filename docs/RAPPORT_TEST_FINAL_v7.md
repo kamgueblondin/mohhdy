@@ -1,7 +1,7 @@
 # Rapport de Test Final - MOHHDY v7.0 Système Hybride Clavier
 
 ## Vue d'ensemble
-- **Date**: $(date)  
+- **Date**: $(date)
 - **Version**: v7.0 - Système Hybride
 - **Objectif**: Validation finale du système hybride clavier après correction du problème d'entrée non-responsive
 
@@ -14,7 +14,7 @@
 
 ### 2. Gestionnaire d'Interruption Optimisé
 - Traitement minimal dans l'IRQ handler
-- Conversion scancode → ASCII immédiate
+- Conversion scancode -> ASCII immédiate
 - Debug concis pour éviter la saturation des logs
 
 ### 3. Fonction `keyboard_getc()` Améliorée
@@ -22,7 +22,7 @@
 - Interruptions activées pendant l'attente
 - Yielding CPU périodique pour le multitâche
 
-## Corrections Apportées (v6.1 → v7.0)
+## Corrections Apportées (v6.1 -> v7.0)
 
 ### Problèmes Identifiés v6.1
 1. Clavier non-responsif malgré les interruptions détectées
@@ -37,7 +37,7 @@
 
 ## Fonctionnalités Testées
 - [x] Compilation sans erreurs
-- [x] Initialisation PS/2 complète  
+- [x] Initialisation PS/2 complète
 - [x] Détection des interruptions clavier (IRQ1)
 - [x] Conversion scancode vers ASCII
 - [x] Buffer circulaire fonctionnel
@@ -58,7 +58,7 @@ make gui-captures
 ## Statut Final
 ✅ **SYSTÈME READY** - Le système hybride clavier est implémenté et compilé avec succès.
 
-✅ **Validation GUI automatisée :** `make gui-captures` a été exécuté avec succès. Le scénario a généré 22 captures QEMU GTK, incluant le shell prêt, les opérations FAT16 et overlay, l’état IA/OpenAI et `net-status json` avec NE2000 détectée.
+✅ **Validation GUI automatisée :** `make gui-captures` a été exécuté avec succès. Le scénario a généré 22 captures QEMU GTK, incluant le shell prêt, les opérations FAT16 et overlay, l'état IA/OpenAI et `net-status json` avec NE2000 détectée.
 
 ## Prochaines Étapes
 1. Maintenir `make gui-captures` comme contrôle visuel reproductible.
@@ -66,6 +66,6 @@ make gui-captures
 3. Poursuivre les validations fonctionnelles complètes du système.
 
 ---
-**Auteur**: MiniMax Agent  
-**Repository**: https://github.com/kamgueblondin/mohhdy.git  
+**Auteur**: MiniMax Agent
+**Repository**: https://github.com/kamgueblondin/mohhdy.git
 **Version**: v7.0 - Système Hybride Final

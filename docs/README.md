@@ -9,14 +9,15 @@ Depuis la racine du dépôt : `make deps` (script [`scripts/bootstrap-dev.sh`](.
 1. [ETAT_REEL.md](ETAT_REEL.md) - **état actuel du code**, y compris GPT-2 local et limites vérifiées
 2. [BILAN_MASTER.md](BILAN_MASTER.md) - bilan de `origin/master` au 13 septembre 2026 (`9078d5f`)
 3. [vocabulaire.md](vocabulaire.md) - termes du hobby OS (pas une identité Linux)
-4. [../US/mohhdy_us.md](../US/mohhdy_us.md) - user stories du prototype (fait + suite, dont FAT16 mutate 8.3 et reseau local)
-5. [aos_fat_volume.md](aos_fat_volume.md) - volume FAT16 (lecture + create/remove/rename 8.3 racine) et FAT32 lecture VFS ; pas ext2
-6. [mohhdy_foundation_increment_01_ipc.md](mohhdy_foundation_increment_01_ipc.md) - IPC Foundation MOHHDY, limites et contrat QEMU
-7. [aos020_gguf_quantization_design.md](aos020_gguf_quantization_design.md) - sonde GGUF v3 et quantification préparatoire
-8. [aos025_network_stub.md](aos025_network_stub.md) - stub OpenAI initial ; voir ETAT_REEL pour `ai-acquire`
-9. [gpt2_baremetal_deployment.md](gpt2_baremetal_deployment.md) - préparation des poids et construction d'une ISO autonome
-10. [GUIDE_EXECUTION.md](GUIDE_EXECUTION.md) - lancement QEMU (console / GUI / nographic / NE2000)
-11. [../README.md](../README.md) - compilation, tests, architecture des sources
+4. [../US/mohhdy_us.md](../US/mohhdy_us.md) - user stories du prototype (fait + suite, dont FAT16 mutate 8.3 et réseau local)
+5. [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) - prochaines tranches d'implémentation (prototype AOS vs vision)
+6. [aos_fat_volume.md](aos_fat_volume.md) - volume FAT16 (lecture + create/remove/rename 8.3 racine) et FAT32 lecture VFS ; pas ext2
+7. [mohhdy_foundation_increment_01_ipc.md](mohhdy_foundation_increment_01_ipc.md) - IPC Foundation MOHHDY, limites et contrat QEMU
+8. [aos020_gguf_quantization_design.md](aos020_gguf_quantization_design.md) - sonde GGUF v3 et quantification préparatoire
+9. [aos025_network_stub.md](aos025_network_stub.md) - stub OpenAI initial ; voir ETAT_REEL pour `ai-acquire`
+10. [gpt2_baremetal_deployment.md](gpt2_baremetal_deployment.md) - préparation des poids et construction d'une ISO autonome
+11. [GUIDE_EXECUTION.md](GUIDE_EXECUTION.md) - lancement QEMU (console / GUI / nographic / NE2000)
+12. [../README.md](../README.md) - compilation, tests, architecture des sources
 
 Les increments Foundation 02 a 64 restent dans le tableau ci-dessous ; ils decrivent des tranches deja livrees, pas l'identite du systeme. Le nombre de tests Unity cite dans un increment est le **constat a la livraison** de cette tranche ; le chiffre courant est dans [ETAT_REEL.md](ETAT_REEL.md) (**489**).
 
@@ -26,8 +27,9 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 
 | Fichier | Contenu |
 |---|---|
+| [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Prochaines tranches d'implémentation : prototype AOS vs vision |
 | [ETAT_REEL.md](ETAT_REEL.md) | État fonctionnel, GPT-2 local et limites vérifiées |
-| [vocabulaire.md](vocabulaire.md) | Lexique du hobby OS ; distance volontaire d’une identité Linux |
+| [vocabulaire.md](vocabulaire.md) | Lexique du hobby OS ; distance volontaire d'une identité Linux |
 | [../US/mohhdy_us.md](../US/mohhdy_us.md) | Backlog du prototype, AOS-001...026, FAT16 mutate, sockets, `ai-acquire` et TLS/HTTP local |
 | [aos_fat_volume.md](aos_fat_volume.md) | FAT16 lecture + mutations 8.3 racine ; FAT32 lecture VFS ; LFN FAT16 hors perimetre |
 | [aos025_network_stub.md](aos025_network_stub.md) | Stub OpenAI initial ; voir ETAT_REEL pour `ai-acquire` et TLS/HTTP local |
@@ -38,8 +40,8 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 | [mohhdy_foundation_increment_03_service_registry.md](mohhdy_foundation_increment_03_service_registry.md) | Registre nommé, découverte `vfs` et absence de capabilities |
 | [mohhdy_foundation_increment_04_service_lifecycle.md](mohhdy_foundation_increment_04_service_lifecycle.md) | Retrait propriétaire et nettoyage du registre à la terminaison |
 | [mohhdy_foundation_increment_05_ipc_correlation.md](mohhdy_foundation_increment_05_ipc_correlation.md) | Identifiant de corrélation IPC, filtre VFS et limites non bloquantes |
-| [mohhdy_foundation_increment_06_service_grant.md](mohhdy_foundation_increment_06_service_grant.md) | Transfert de propriété d’un nom, handoff et limites sans capabilities |
-| [aos020_gguf_quantization_design.md](aos020_gguf_quantization_design.md) | Sonde GGUF v3, primitives Q8_0/K-quants et limites de l’inférence quantifiée |
+| [mohhdy_foundation_increment_06_service_grant.md](mohhdy_foundation_increment_06_service_grant.md) | Transfert de propriété d'un nom, handoff et limites sans capabilities |
+| [aos020_gguf_quantization_design.md](aos020_gguf_quantization_design.md) | Sonde GGUF v3, primitives Q8_0/K-quants et limites de l'inférence quantifiée |
 | [gpt2_baremetal_deployment.md](gpt2_baremetal_deployment.md) | Préparation des artefacts, construction et démarrage d'une ISO GPT-2 hors ligne |
 | [kv_cache_performance_report.md](kv_cache_performance_report.md) | Cache KV, SSE2, test de reprise du shell et mesures de latence |
 | [baremetal_llm_architecture.md](baremetal_llm_architecture.md) | Architecture de référence et évolutions envisagées pour un LLM bare-metal |
@@ -100,7 +102,7 @@ Les captures QEMU et les exports Word ont été retirés du dépôt (la source r
 ## User stories
 
 - [../US/mohhdy_us.md](../US/mohhdy_us.md) - backlog du **prototype** (AOS-001...026 livres ; FAT16 mutate 8.3 ; `ai-acquire` local, pas client OpenAI public)
-- [../US/README.md](../US/README.md) — deux couches : hobby OS MOHHDY vs vision MOHHDY
-- [../US/individual_us/INDEX.md](../US/individual_us/INDEX.md) — specs MOHHDY, chevauchements, IDs dupliqués
+- [../US/README.md](../US/README.md) - deux couches : hobby OS MOHHDY vs vision MOHHDY
+- [../US/individual_us/INDEX.md](../US/individual_us/INDEX.md) - specs MOHHDY, chevauchements, IDs dupliqués
 
 Les phases MOHHDY restent majoritairement des **specifications**. Les increments Foundation 01-64 (IPC, mediateur de chemins, registre, supervision de taches) sont compiles et testes ; ils ne transforment pas le noyau monolithique en microkernel et n'implementent pas les autres phases. FAT16 et FAT32 8.3 racine sont mutables via VFS ; le client OpenAI public reste hors perimetre.

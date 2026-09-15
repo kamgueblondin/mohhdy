@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-005  
-**Titre** : Système de logging distribué intelligent pour MOHHDY  
-**Phase** : 1 - Foundation  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 18 jours-homme  
-**Risque** : Moyen  
+**ID** : US-005
+**Titre** : Système de logging distribué intelligent pour MOHHDY
+**Phase** : 1 - Foundation
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 18 jours-homme
+**Risque** : Moyen
 
 ## Description Utilisateur
 
-**En tant que** système MOHHDY  
-**Je veux** un système de logging distribué intelligent et performant  
+**En tant que** système MOHHDY
+**Je veux** un système de logging distribué intelligent et performant
 **Afin de** collecter, analyser et corréler les événements système pour l'optimisation IA et la détection proactive de problèmes
 
 ## Contexte Technique Détaillé
@@ -346,12 +346,12 @@ void test_anomaly_detection() {
 
 ## Estimation Détaillée
 
-**Complexité** : Élevée  
-**Effort Total** : 18 jours-homme  
+**Complexité** : Élevée
+**Effort Total** : 18 jours-homme
 
 ### Répartition des Tâches
 - **Collecteur universel** : 4 j-h
-- **Moteur de traitement** : 5 j-h  
+- **Moteur de traitement** : 5 j-h
 - **Système de stockage** : 4 j-h
 - **Interface de requêtes** : 3 j-h
 - **Tests et optimisation** : 2 j-h

@@ -1,17 +1,17 @@
-# MOHHDY Foundation — Incrément 102 : connexion résiduelle d’attention
+# MOHHDY Foundation - Incrément 102 : connexion résiduelle d'attention
 
 **État :** implémenté et testé.
 
 ## Objectif
 
-Le lot 102 ajoute `gpt2_gguf_add_residual`, primitive caller-owned qui ajoute in-place la sortie de la projection d’attention au résiduel d’entrée. Elle complète le chemin attention multi-têtes sans introduire de buffer interne ni d’allocation dynamique.
+Le lot 102 ajoute `gpt2_gguf_add_residual`, primitive caller-owned qui ajoute in-place la sortie de la projection d'attention au résiduel d'entrée. Elle complète le chemin attention multi-têtes sans introduire de buffer interne ni d'allocation dynamique.
 
 ## Contrat
 
 | Paramètre | Contrat |
 | --- | --- |
 | `residual` | destination mutable, conservée en place |
-| `attention` | sortie d’attention en lecture seule |
+| `attention` | sortie d'attention en lecture seule |
 | `attention_count` | nombre de canaux à additionner |
 | `residual_capacity` | capacité exprimée en floats |
 | résultat | `residual[i] += attention[i]` pour chaque canal |

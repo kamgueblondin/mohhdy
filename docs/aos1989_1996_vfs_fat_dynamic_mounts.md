@@ -1,4 +1,4 @@
-# AOS-1989 à AOS-1996 — Montages FAT dynamiques dans le VFS
+# AOS-1989 à AOS-1996 - Montages FAT dynamiques dans le VFS
 
 ## Objet
 
@@ -11,11 +11,11 @@ Ce macro-lot rend les sources **FAT16** et **FAT32** disponibles dans `vfs-mount
 | `fat16` | lecture, listage, statut | refusée |
 | `fat32` | lecture, listage, statut | refusée |
 
-> Les mutations restent strictement limitées aux montages `overlay`. L’ouverture des alias FAT ne crée aucun chemin d’écriture sur les volumes FAT.
+> Les mutations restent strictement limitées aux montages `overlay`. L'ouverture des alias FAT ne crée aucun chemin d'écriture sur les volumes FAT.
 
 ## Contrat de mise en œuvre
 
-Le serveur VFS possède quatre montages protégés au démarrage : `initrd/`, `overlay/`, `fat16/` et `fat32/`. Sa table statique contient désormais huit entrées, ce qui conserve **quatre alias dynamiques** après ces montages de base et permet de tester FAT16 et FAT32 simultanément. Aucune allocation dynamique n’est introduite.
+Le serveur VFS possède quatre montages protégés au démarrage : `initrd/`, `overlay/`, `fat16/` et `fat32/`. Sa table statique contient désormais huit entrées, ce qui conserve **quatre alias dynamiques** après ces montages de base et permet de tester FAT16 et FAT32 simultanément. Aucune allocation dynamique n'est introduite.
 
 Les opérations de lecture, listage et statut routent le suffixe du montage vers les syscalls FAT existants. La recherche de métadonnées FAT compare les noms 8.3 sans casse ASCII, de manière cohérente avec la lecture depuis le shell où les frappes HMP sont normalisées en minuscules.
 
@@ -28,9 +28,9 @@ Les opérations de lecture, listage et statut routent le suffixe du montage vers
 
 ## Validation QEMU
 
-Le scénario `test_qemu_vfs_service.py` initialise désormais son disque avec `make_fat16_image.py`, qui conserve l’overlay en tête de disque et place une fixture FAT16 à LBA 64. Il crée `media/` par `vfs-mount-add media/ fat16`, puis vérifie le listage des deux entrées, la lecture de `FATOK.TXT` et son statut de fichier de 17 octets.
+Le scénario `test_qemu_vfs_service.py` initialise désormais son disque avec `make_fat16_image.py`, qui conserve l'overlay en tête de disque et place une fixture FAT16 à LBA 64. Il crée `media/` par `vfs-mount-add media/ fat16`, puis vérifie le listage des deux entrées, la lecture de `FATOK.TXT` et son statut de fichier de 17 octets.
 
-Le harnais HMP est accéléré et vérifie l’écho `SYS_GETS: ligne lue:` avant toute assertion métier. Les diagnostics timer asynchrones sont retirés uniquement de la comparaison textuelle. Les reprises sont bornées et les cessions explicites après les créations de tâches rendent l’ordonnancement coopératif déterministe.
+Le harnais HMP est accéléré et vérifie l'écho `SYS_GETS: ligne lue:` avant toute assertion métier. Les diagnostics timer asynchrones sont retirés uniquement de la comparaison textuelle. Les reprises sont bornées et les cessions explicites après les créations de tâches rendent l'ordonnancement coopératif déterministe.
 
 ## Références
 

@@ -1,6 +1,6 @@
 # MOHHDY avec GPT-2 local bare-metal
 
-**Auteur : Manus AI**  
+**Auteur : Manus AI**
 **Cible validée : PC i386/BIOS via GRUB Multiboot, CPU seul, 1 Gio de RAM QEMU**
 
 ## Résumé du livrable

@@ -1,6 +1,6 @@
-# AOS-2121…2126 — Expiration d’un worker VFS vivant mais bloqué
+# AOS-2121...2126 - Expiration d'un worker VFS vivant mais bloqué
 
-**Statut : livré localement, validation complète en cours.** Ce macro-lot traite une panne différente de la disparition du worker : `vfsvirtual` reste publié dans le registre mais ne traite plus sa boîte IPC, par exemple parce qu’il est suspendu. Le médiateur ne doit pas conserver indéfiniment la transaction privée ni laisser le client attendre jusqu’à l’épuisement de son propre budget.
+**Statut : livré localement, validation complète en cours.** Ce macro-lot traite une panne différente de la disparition du worker : `vfsvirtual` reste publié dans le registre mais ne traite plus sa boîte IPC, par exemple parce qu'il est suspendu. Le médiateur ne doit pas conserver indéfiniment la transaction privée ni laisser le client attendre jusqu'à l'épuisement de son propre budget.
 
 > Une transaction privée active expire après **huit tours coopératifs du médiateur** sans réponse du worker. Elle est alors terminée par la même réponse locale corrélée que le repli après retrait du service.
 
@@ -10,9 +10,9 @@
 |---|---|---|
 | Retrait ou remplacement du PID publié | Le registre ne retourne plus le PID mémorisé par la transaction. | Repli local immédiat au tour courant ; `recoveries` augmente. |
 | Worker toujours publié mais silencieux | Huit passages coopératifs de `vfsserver` sans réponse privée correspondante. | Repli local ; `timeouts` augmente. |
-| Réponse privée corrélée reçue avant la borne | PID, type et `request_id` attendus. | Chemin worker normal ; aucun compteur de repli n’augmente. |
+| Réponse privée corrélée reçue avant la borne | PID, type et `request_id` attendus. | Chemin worker normal ; aucun compteur de repli n'augmente. |
 
-Le budget est un compteur saturé dans l’état transactionnel statique. Il ne dépend ni d’une horloge hôte, ni de la fréquence réelle QEMU, ni d’une allocation dynamique. Huit tours restent volontairement inférieurs aux 24 tours que le shell réserve aux réponses de lecture VFS : le médiateur peut donc répondre localement avant que le client n’abandonne.
+Le budget est un compteur saturé dans l'état transactionnel statique. Il ne dépend ni d'une horloge hôte, ni de la fréquence réelle QEMU, ni d'une allocation dynamique. Huit tours restent volontairement inférieurs aux 24 tours que le shell réserve aux réponses de lecture VFS : le médiateur peut donc répondre localement avant que le client n'abandonne.
 
 ## Observabilité
 
@@ -38,9 +38,9 @@ Le contrat `make qemu-vfs-service` suspend explicitement le worker tout en conse
 
 ## Limites explicites
 
-Cette expiration ne tue pas, ne suspend pas et ne redémarre pas le worker. Elle ne vide pas son message privé potentiellement encore en attente : si le worker reprend tardivement, le médiateur reconnaît le PID/type mais écarte la réponse dont le `request_id` ne correspond plus à la transaction active. Elle ne peut donc pas devenir une erreur pour le client suivant. Le mécanisme fournit une terminaison publique locale, pas un protocole d’annulation distribué ou une supervision de processus.
+Cette expiration ne tue pas, ne suspend pas et ne redémarre pas le worker. Elle ne vide pas son message privé potentiellement encore en attente : si le worker reprend tardivement, le médiateur reconnaît le PID/type mais écarte la réponse dont le `request_id` ne correspond plus à la transaction active. Elle ne peut donc pas devenir une erreur pour le client suivant. Le mécanisme fournit une terminaison publique locale, pas un protocole d'annulation distribué ou une supervision de processus.
 
-Les backends ATA, FAT16, FAT32 et overlay restent noyau. Aucune capability, ABI publique ou allocation dynamique n’est ajoutée.
+Les backends ATA, FAT16, FAT32 et overlay restent noyau. Aucune capability, ABI publique ou allocation dynamique n'est ajoutée.
 
 ## Validation
 
@@ -49,14 +49,14 @@ make -s -C userspace vfsserver
 make -s qemu-vfs-service
 ```
 
-Le contrat QEMU complet passe avec l’expiration du worker suspendu, les récupérations après retrait, la vue de santé et les scénarios VFS historiques.
+Le contrat QEMU complet passe avec l'expiration du worker suspendu, les récupérations après retrait, la vue de santé et les scénarios VFS historiques.
 
 ## Références internes
 
 - [Médiateur VFS](../userspace/vfs_server.c)
 - [Contrat QEMU VFS](../tests/integration/test_qemu_vfs_service.py)
-- [Santé observable AOS-2115…2120](aos2115_2120_vfs_worker_health.md)
-- [Récupération en vol AOS-2109…2114](aos2109_2114_vfs_worker_inflight_recovery.md)
+- [Santé observable AOS-2115...2120](aos2115_2120_vfs_worker_health.md)
+- [Récupération en vol AOS-2109...2114](aos2109_2114_vfs_worker_inflight_recovery.md)
 
 ---
 

@@ -182,7 +182,7 @@ Protection: Ring 0/3
 
 ---
 
-**MOHHDY v5.0** - *Shell enrichi avec affichage optimisé*  
+**MOHHDY v5.0** - *Shell enrichi avec affichage optimisé*
 *Prêt pour une expérience utilisateur avancée* 🚀
 
 **Développé avec ❤️ pour l'avenir de l'IA**

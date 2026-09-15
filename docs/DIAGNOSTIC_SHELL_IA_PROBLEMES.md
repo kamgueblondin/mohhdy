@@ -1,6 +1,6 @@
 # Diagnostic Complet - Problèmes Shell Utilisateur et IA
 
-> **État réel (août 2026).** Le système **utilise** le shell utilisateur (`userspace/shell.c` en Ring 3). L’affirmation « faux shell kernel » ci-dessous décrit un état antérieur. Voir [ETAT_REEL.md](ETAT_REEL.md).
+> **État réel (août 2026).** Le système **utilise** le shell utilisateur (`userspace/shell.c` en Ring 3). L'affirmation " faux shell kernel " ci-dessous décrit un état antérieur. Voir [ETAT_REEL.md](ETAT_REEL.md).
 
 ## 🚨 **PROBLÈME PRINCIPAL IDENTIFIÉ**
 
@@ -28,7 +28,7 @@ while (1) {
 }
 ```
 
-**Impact :** 
+**Impact :**
 - Le vrai shell utilisateur (`userspace/shell.c`) n'est jamais exécuté
 - Pas de passage réel au mode Ring 3
 - Fonctionnalités limitées car codées en dur dans le kernel
@@ -111,7 +111,7 @@ int sys_exec(const char* path, char* argv[]);
 ### **Cause #1: Désactivation Sécuritaire**
 Le système a été volontairement bridé pour éviter les crashes, au détriment de la fonctionnalité.
 
-### **Cause #2: Chargement ELF Défaillant** 
+### **Cause #2: Chargement ELF Défaillant**
 Des problèmes antérieurs avec le chargement ELF ont conduit à utiliser une simulation.
 
 ### **Cause #3: Contexte Switching Instable**
@@ -144,7 +144,7 @@ L'IA n'a jamais été développée au-delà du stade prototype.
 2. Corriger les problèmes de stabilité
 3. Tester le passage kernel/user
 
-### **Phase 2: Vrai Shell Utilisateur**  
+### **Phase 2: Vrai Shell Utilisateur**
 1. Implémenter le chargement ELF réel
 2. Charger et exécuter `shell.c` en Ring 3
 3. Connecter avec les appels système
@@ -155,7 +155,7 @@ L'IA n'a jamais été développée au-delà du stade prototype.
 3. Implémenter des réponses dynamiques
 
 ### **Phase 4: Intégration Complète**
-1. Shell → IA via appels système
+1. Shell -> IA via appels système
 2. Tests de stabilité complets
 3. Optimisations de performance
 
@@ -165,7 +165,7 @@ L'IA n'a jamais été développée au-delà du stade prototype.
 
 - ✅ **Fonctionnalité Réelle**: Vrai shell utilisateur en Ring 3
 - ✅ **IA Intelligente**: Logique avancée de traitement
-- ✅ **Multitâche Fonctionnel**: Changement de contexte stable  
+- ✅ **Multitâche Fonctionnel**: Changement de contexte stable
 - ✅ **Performance Optimisée**: Système fluide et réactif
 - ✅ **Interface Moderne**: Commandes avancées et assistance IA
 

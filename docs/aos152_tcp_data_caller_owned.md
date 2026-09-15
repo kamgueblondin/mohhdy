@@ -1,6 +1,6 @@
-# AOS-152 — Données TCP caller-owned
+# AOS-152 - Données TCP caller-owned
 
-AOS-152 ajoute la construction bornée d’un segment TCP `ACK+payload` dans `net_tcp_build_data` et son émission Ethernet/IPv4 via `ne2k_tcp_data`. Le buffer de segment, le payload, le cache ARP et l’état de connexion restent fournis par l’appelant. Le constructeur ne modifie pas `local_sequence` : l’appelant conserve la responsabilité de confirmer l’émission et de faire évoluer son état selon la politique de retransmission future.
+AOS-152 ajoute la construction bornée d'un segment TCP `ACK+payload` dans `net_tcp_build_data` et son émission Ethernet/IPv4 via `ne2k_tcp_data`. Le buffer de segment, le payload, le cache ARP et l'état de connexion restent fournis par l'appelant. Le constructeur ne modifie pas `local_sequence` : l'appelant conserve la responsabilité de confirmer l'émission et de faire évoluer son état selon la politique de retransmission future.
 
 La voie NE2000 construit une trame IPv4 de longueur exacte, calcule le checksum TCP sur pseudo-en-tête IPv4, calcule le checksum IPv4 et transmet par `ne2k_tx_submit`. Les contrôles rejettent les ports ou pointeurs invalides, les capacités insuffisantes, les payloads incohérents et les MAC distantes absentes du cache ARP.
 

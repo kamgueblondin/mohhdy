@@ -1,10 +1,10 @@
-# AOS-1449 à AOS-1460 — Bootstrap DHCP/DNS/ARP/SYN vers session LLM socket
+# AOS-1449 à AOS-1460 - Bootstrap DHCP/DNS/ARP/SYN vers session LLM socket
 
 ## Objectif
 
-Ce macro-lot raccorde la phase amont du flux LLM à la session socket introduite précédemment. Les appels publics déclenchent désormais le bootstrap DNS/ARP/SYN tout en préparant un slot du registre socket statique, puis attachent ce slot à `ne2k_llm_socket_session_t` uniquement si l’intégralité du bootstrap aboutit.
+Ce macro-lot raccorde la phase amont du flux LLM à la session socket introduite précédemment. Les appels publics déclenchent désormais le bootstrap DNS/ARP/SYN tout en préparant un slot du registre socket statique, puis attachent ce slot à `ne2k_llm_socket_session_t` uniquement si l'intégralité du bootstrap aboutit.
 
-> Une session LLM socket ne publie jamais un identifiant de slot partiellement initialisé : en cas d’erreur DHCP, DNS, ARP, SYN ou attachement, le slot créé est fermé et la session reste `IDLE` avec `socket_id == -1`.
+> Une session LLM socket ne publie jamais un identifiant de slot partiellement initialisé : en cas d'erreur DHCP, DNS, ARP, SYN ou attachement, le slot créé est fermé et la session reste `IDLE` avec `socket_id == -1`.
 
 ## API livrée
 
@@ -16,13 +16,13 @@ Ce macro-lot raccorde la phase amont du flux LLM à la session socket introduite
 
 ## Transaction et compatibilité
 
-Le slot socket est ouvert avant le bootstrap afin que le registre possède les ports et la séquence qui correspondent au SYN envoyé. Les codecs DNS/ARP/SYN historiques sont exécutés dans une connexion de travail locale, non publiée. Après résolution et transmission réussies, l’attachement vérifie que le slot est bien en `SYN_SENT`, recopie l’IPv4 résolue et passe la session à cette même phase.
+Le slot socket est ouvert avant le bootstrap afin que le registre possède les ports et la séquence qui correspondent au SYN envoyé. Les codecs DNS/ARP/SYN historiques sont exécutés dans une connexion de travail locale, non publiée. Après résolution et transmission réussies, l'attachement vérifie que le slot est bien en `SYN_SENT`, recopie l'IPv4 résolue et passe la session à cette même phase.
 
-Un échec sur un chemin inférieur ferme immédiatement le slot. Ni le bail appelant, ni la session, ni ses quatre octets d’IPv4 ne sont publiés. Les anciennes façades à `net_tcp_connection_t` restent intactes : la nouvelle API est une voie socket parallèle et compatible qui retire progressivement le transport privé du chemin LLM.
+Un échec sur un chemin inférieur ferme immédiatement le slot. Ni le bail appelant, ni la session, ni ses quatre octets d'IPv4 ne sont publiés. Les anciennes façades à `net_tcp_connection_t` restent intactes : la nouvelle API est une voie socket parallèle et compatible qui retire progressivement le transport privé du chemin LLM.
 
 ## Validation
 
-Le test Unity introduit force un échec DNS sans réponse et une variante DHCP avec bail invalide. Il confirme alors que la session demeure `IDLE`, que son identifiant reste `-1`, et que les quatre slots du registre peuvent toujours être ouverts puis fermés. Cette dernière vérification contrôle directement l’absence de fuite de capacité dans le rollback.
+Le test Unity introduit force un échec DNS sans réponse et une variante DHCP avec bail invalide. Il confirme alors que la session demeure `IDLE`, que son identifiant reste `-1`, et que les quatre slots du registre peuvent toujours être ouverts puis fermés. Cette dernière vérification contrôle directement l'absence de fuite de capacité dans le rollback.
 
 | Contrôle | Résultat |
 |---|---|
@@ -33,7 +33,7 @@ Le test Unity introduit force un échec DNS sans réponse et une variante DHCP a
 
 ## Limites restantes
 
-La session socket peut maintenant être préparée de DHCP/DNS/ARP/SYN à HTTP/SSE, mais le noyau conserve encore l’ancien contexte de connexion pour son orchestration boot actuelle. Le raccordement de `kernel.c` au nouveau contexte socket, la planification périodique du renouvellement DHCP, la reprise après expiration de bail, les délais/backoff et le client OpenAI effectif restent à livrer.
+La session socket peut maintenant être préparée de DHCP/DNS/ARP/SYN à HTTP/SSE, mais le noyau conserve encore l'ancien contexte de connexion pour son orchestration boot actuelle. Le raccordement de `kernel.c` au nouveau contexte socket, la planification périodique du renouvellement DHCP, la reprise après expiration de bail, les délais/backoff et le client OpenAI effectif restent à livrer.
 
 ## Références
 

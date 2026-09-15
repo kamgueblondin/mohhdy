@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-024  
-**Titre** : Implémentation du système d'optimisation automatique basé sur l'IA  
-**Phase** : 2 - AI Core  
-**Priorité** : Élevée  
-**Complexité** : Très Élevée  
-**Effort Estimé** : 24 jours-homme  
-**Risque** : Élevé  
+**ID** : US-024
+**Titre** : Implémentation du système d'optimisation automatique basé sur l'IA
+**Phase** : 2 - AI Core
+**Priorité** : Élevée
+**Complexité** : Très Élevée
+**Effort Estimé** : 24 jours-homme
+**Risque** : Élevé
 
 ## Description Utilisateur
 
-**En tant que** utilisateur MOHHDY  
-**Je veux** que le système optimise automatiquement ses performances et ma productivité  
+**En tant que** utilisateur MOHHDY
+**Je veux** que le système optimise automatiquement ses performances et ma productivité
 **Afin de** bénéficier en permanence des meilleures performances sans intervention manuelle
 
 ## Contexte Technique Détaillé
@@ -390,8 +390,8 @@ int metrics_track_long_term_impact(optimization_id_t optimization_id,
 6. **Test d'Apprentissage** : Amélioration continue des décisions
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 24 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 24 jours-homme
 **Risque** : Élevé
 
 ### Notes d'Implémentation

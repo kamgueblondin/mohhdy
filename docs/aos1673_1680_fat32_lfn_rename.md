@@ -1,8 +1,8 @@
-# AOS-1673 à AOS-1680 — renommage FAT32 LFN sans déplacement de données
+# AOS-1673 à AOS-1680 - renommage FAT32 LFN sans déplacement de données
 
-Ce lot ajoute `fat32_rename_lfn_file`. L’opération valide l’alias ou le LFN source par ordinaux et checksum, conserve strictement la chaîne de données existante, puis publie les nouveaux fragments LFN et l’alias court associé. Aucun cluster n’est alloué, déplacé ou libéré.
+Ce lot ajoute `fat32_rename_lfn_file`. L'opération valide l'alias ou le LFN source par ordinaux et checksum, conserve strictement la chaîne de données existante, puis publie les nouveaux fragments LFN et l'alias court associé. Aucun cluster n'est alloué, déplacé ou libéré.
 
-Le contrat est volontairement borné : le nouveau nom long doit utiliser le même nombre d’entrées LFN que l’ancien. Cette règle évite tout déplacement de répertoire et garantit que la publication s’effectue dans les slots existants. Les noms restent ASCII, de longueur bornée et sans séparateur.
+Le contrat est volontairement borné : le nouveau nom long doit utiliser le même nombre d'entrées LFN que l'ancien. Cette règle évite tout déplacement de répertoire et garantit que la publication s'effectue dans les slots existants. Les noms restent ASCII, de longueur bornée et sans séparateur.
 
 | Garantie | Comportement |
 |---|---|

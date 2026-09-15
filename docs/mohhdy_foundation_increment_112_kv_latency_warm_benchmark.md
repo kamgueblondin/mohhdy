@@ -1,4 +1,4 @@
-# MOHHDY Foundation — Incrément 112 : benchmark latence froide et chaude
+# MOHHDY Foundation - Incrément 112 : benchmark latence froide et chaude
 
 **État :** implémenté et vérifié syntaxiquement.
 
@@ -12,7 +12,7 @@ Le script émet `COLD_LATENCY_SECONDS`, `WARM_LATENCY_SECONDS` et `KV_REUSE=1`. 
 
 ## Portée
 
-Cette évolution ne prétend pas atteindre l’objectif inférieur à une seconde sous QEMU TCG. Elle rend la comparaison reproductible et sépare explicitement le coût d’amorçage du coût d’une requête chaude. Le benchmark complet nécessite les assets GPT-2 locaux et un environnement QEMU disponible.
+Cette évolution ne prétend pas atteindre l'objectif inférieur à une seconde sous QEMU TCG. Elle rend la comparaison reproductible et sépare explicitement le coût d'amorçage du coût d'une requête chaude. Le benchmark complet nécessite les assets GPT-2 locaux et un environnement QEMU disponible.
 
 ## Validation
 

@@ -1,13 +1,13 @@
-# AOS-2053 à AOS-2060 — Quantification de la latence GGUF locale sous QEMU
+# AOS-2053 à AOS-2060 - Quantification de la latence GGUF locale sous QEMU
 
 ## Objet
 
-Le runtime GPT-2 GGUF local sur FAT16 disposait d’un smoke fonctionnel qui affichait deux durées, sans protocole de répétition ni artefact structuré. Ce macro-lot livre un **benchmark QEMU TCG reproductible** qui mesure séparément le premier token et la continuation d’une session locale, puis produit une synthèse JSON exploitable.
+Le runtime GPT-2 GGUF local sur FAT16 disposait d'un smoke fonctionnel qui affichait deux durées, sans protocole de répétition ni artefact structuré. Ce macro-lot livre un **benchmark QEMU TCG reproductible** qui mesure séparément le premier token et la continuation d'une session locale, puis produit une synthèse JSON exploitable.
 
 | Élément | Contrat livré |
 |---|---|
 | Scénario mesuré | Boot, sélection `ai-model use gpt2.gguf`, premier token `ai bonjour`, puis `ai-continue`. |
-| Horloge | Temps monotone hôte, démarrant immédiatement avant l’injection de chaque commande Ring 3. Le boot et la sélection sont exclus. |
+| Horloge | Temps monotone hôte, démarrant immédiatement avant l'injection de chaque commande Ring 3. Le boot et la sélection sont exclus. |
 | Répétitions | `GGUF_BENCH_RUNS`, borné de 1 à 9 ; la valeur par défaut est 3. |
 | Synthèse | Minimum, médiane, maximum, dispersion absolue et dispersion relative pour chacune des deux phases. |
 | Artefact | `test_logs/gguf-qemu-latency.json`, avec les échantillons, les logs associés et le schéma versionné. |
@@ -24,7 +24,7 @@ La campagne locale a exécuté trois itérations sur le même profil GPT-2 Q3_K,
 | Premier token `ai bonjour` | 48,739 ; 49,639 ; 46,182 | **48,739** | 46,182 | 49,639 | 3,457 s ; 7,09 % |
 | Continuation `ai-continue` | 22,482 ; 22,781 ; 23,233 | **22,781** | 22,482 | 23,233 | 0,751 s ; 3,30 % |
 
-La continuation médiane est d’environ **53,3 % plus courte** que le premier token médian dans cet environnement. Cette différence est compatible avec la réutilisation de la session GGUF locale ; elle reste une observation de cette campagne, pas une garantie de performance.
+La continuation médiane est d'environ **53,3 % plus courte** que le premier token médian dans cet environnement. Cette différence est compatible avec la réutilisation de la session GGUF locale ; elle reste une observation de cette campagne, pas une garantie de performance.
 
 ## Utilisation
 
@@ -45,7 +45,7 @@ Le benchmark est délibérément indépendant de la CI obligatoire : une campagn
 
 | Niveau | Vérification | Résultat |
 |---|---|---|
-| Protocole | `make -s gguf-benchmark-check` vérifie médiane, bornes, dispersion et rejet de l’échantillon vide. | Réussi. |
+| Protocole | `make -s gguf-benchmark-check` vérifie médiane, bornes, dispersion et rejet de l'échantillon vide. | Réussi. |
 | Mesure réelle | `GGUF_BENCH_RUNS=3 GGUF_BENCH_MAX_SPREAD_RATIO=1.0 make -s gguf-benchmark`. | Réussi ; alerte de variance inactive. |
 | Suite complète | `make -s test-all`. | 483/483 réussis. |
 | Noyau i386 | `make -s kernel-only`. | Réussi. |

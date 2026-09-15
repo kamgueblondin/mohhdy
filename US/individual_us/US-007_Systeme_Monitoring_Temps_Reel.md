@@ -4,18 +4,18 @@
 
 ## Informations Générales
 
-**ID** : US-007  
-**Titre** : Système de monitoring et métriques temps réel  
-**Phase** : 1 - Foundation  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 18 jours-homme  
-**Risque** : Moyen  
+**ID** : US-007
+**Titre** : Système de monitoring et métriques temps réel
+**Phase** : 1 - Foundation
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 18 jours-homme
+**Risque** : Moyen
 
 ## Description Utilisateur
 
-**En tant que** administrateur système MOHHDY  
-**Je veux** un système de monitoring temps réel qui surveille toutes les métriques système et services  
+**En tant que** administrateur système MOHHDY
+**Je veux** un système de monitoring temps réel qui surveille toutes les métriques système et services
 **Afin de** détecter rapidement les problèmes, optimiser les performances et maintenir la stabilité du système
 
 ## Contexte Technique Détaillé
@@ -162,7 +162,7 @@ typedef enum {
 } prediction_horizon_t;
 
 // API de prédiction
-int monitoring_predict_metric(const char* metric_name, prediction_horizon_t horizon, 
+int monitoring_predict_metric(const char* metric_name, prediction_horizon_t horizon,
                              prediction_t* prediction);
 int monitoring_get_trend_analysis(const char* metric_name, trend_analysis_t* analysis);
 ```
@@ -223,7 +223,7 @@ typedef enum {
 // API de dashboard
 int monitoring_create_dashboard(const char* name, dashboard_config_t* config);
 int monitoring_add_widget(const char* dashboard_name, dashboard_widget_t* widget);
-int monitoring_update_widget(const char* dashboard_name, const char* widget_id, 
+int monitoring_update_widget(const char* dashboard_name, const char* widget_id,
                             dashboard_widget_t* widget);
 int monitoring_get_dashboard_data(const char* dashboard_name, dashboard_data_t* data);
 ```
