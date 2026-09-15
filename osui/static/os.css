@@ -138,9 +138,9 @@ html, body {
 .ai-stage-note { opacity: 0.8; }
 .ai-stage-content {
   flex: 1;
-  padding: 1.4rem 8.5rem 5.5rem 1.4rem;
+  padding: 4.2rem 9rem 6.2rem 2.2rem;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
 }
 .ai-scene {
@@ -207,6 +207,7 @@ html, body {
   display: block;
   max-width: 100%;
   height: auto;
+  min-height: 120px;
 }
 
 .os-wallpaper-label {

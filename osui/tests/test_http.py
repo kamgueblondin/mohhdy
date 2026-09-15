@@ -177,6 +177,7 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertIn("/api/os/shell", js)
         self.assertIn("sanitizeStageHtml", js)
         self.assertIn("applyStage", js)
+        self.assertIn("toUpperCase", js)
         self.assertIn("MOHHDY>", js)
         self.assertIn("Pas un bash Linux", js)
         lowered = js.lower()

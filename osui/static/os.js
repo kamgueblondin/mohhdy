@@ -843,7 +843,7 @@
         if (child.nodeType === 3) {
           return;
         }
-        var tag = child.tagName;
+        var tag = (child.tagName || "").toUpperCase();
         if (!STAGE_ALLOWED_TAGS[tag]) {
           node.removeChild(child);
           return;
