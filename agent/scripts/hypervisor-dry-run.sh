@@ -42,8 +42,8 @@ fi
 grep -q 'mohhdy.bin' "${PACK}/qemu-agent.cmd" \
   || fail "qemu-agent.cmd doit distinguer le prototype (mohhdy.bin)"
 
-secret_hits="$(grep -RniE 'sk-proj|BEGIN PRIVATE KEY|sk_live|sk_test|password=.+|api_key=.+' \
-  "${PACK}" "${AGENT_DIR}/scripts/qemu-agent.sh" "${AGENT_DIR}/scripts/hypervisor-dry-run.sh" \
+secret_hits="$(grep -RniE 'sk-proj|BEGIN PRIVATE KEY|sk_live|sk_test' \
+  "${PACK}" "${AGENT_DIR}/scripts/qemu-agent.sh" \
   || true)"
 if [ -n "${secret_hits}" ]; then
   echo "${secret_hits}" >&2

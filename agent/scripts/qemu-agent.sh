@@ -52,18 +52,16 @@ done
 build_cmd() {
   local image="${1:-DISK.qcow2}"
   local seed="${2:-}"
-  set -- qemu-system-x86_64 \
-    -machine q35,accel=kvm:tcg \
-    -m "${MEM}" -smp "${CPUS}" \
-    -drive "if=virtio,file=${image},format=qcow2" \
-    -netdev "user,id=net0,hostfwd=tcp::${HTTP_FWD}-:8080,hostfwd=tcp::${SSH_FWD}-:22" \
-    -device virtio-net-pci,netdev=net0 \
-    -nographic
+  echo "qemu-system-x86_64 \\"
+  echo "  -machine q35,accel=kvm:tcg \\"
+  echo "  -m ${MEM} -smp ${CPUS} \\"
+  echo "  -drive if=virtio,file=${image},format=qcow2 \\"
   if [ -n "${seed}" ]; then
-    set -- "$@" -drive "if=virtio,file=${seed},format=raw,readonly=on"
+    echo "  -drive if=virtio,file=${seed},format=raw,readonly=on \\"
   fi
-  printf '%q ' "$@"
-  printf '\n'
+  echo "  -netdev user,id=net0,hostfwd=tcp::${HTTP_FWD}-:8080,hostfwd=tcp::${SSH_FWD}-:22 \\"
+  echo "  -device virtio-net-pci,netdev=net0 \\"
+  echo "  -nographic"
 }
 
 echo "ASSIST-052 QEMU agent (x86_64 Linux). Pas mohhdy.bin."
