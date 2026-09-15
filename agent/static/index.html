@@ -50,7 +50,9 @@
       gestes simulateur, facture mock, vue navigateur d'instance et FS sandbox
       (ASSIST-010 a 022 / 030 / 031 / 040 / 041 / 060 / 061).
       Les reponses agent sont un stub local, <strong>pas</strong> un LLM de production.
-      Les gestes sont un <strong>simulateur DOM</strong>, pas Chromium.
+      Les gestes sont un <strong>simulateur DOM</strong>, pas Chromium
+      par defaut. Playwright est un <strong>profil optionnel</strong>
+      (controle <code>/browser</code>, pas US-031).
       <code>/browser</code> n'est <strong>pas</strong> US-031 (phase 3 absente).
       Pas d'appel reseau payant. Proteger l'admin et le FS avec
       <code>ADMIN_TOKEN</code> a l'execution, jamais dans l'image.
@@ -63,8 +65,9 @@
         <li><a href="/embed.js"><code>GET /embed.js</code></a> - widget public</li>
         <li><a href="/demo"><code>GET /demo</code></a> - page hote qui charge embed.js</li>
         <li><a href="/demo-app"><code>GET /demo-app</code></a> - appli hote mock (menu, facture)</li>
-        <li><a href="/browser"><code>GET /browser</code></a> - vue navigateur d'instance (simulateur, pas US-031)</li>
+        <li><a href="/browser"><code>GET /browser</code></a> - vue navigateur d'instance (simulateur, profil Playwright optionnel, pas US-031)</li>
         <li><a href="/browser/fs"><code>GET /browser/fs</code></a> - explorateur FS sandbox</li>
+        <li><code>POST /api/browser/navigate</code> - ouvrir une URL allowlistee (501 si Playwright absent)</li>
         <li><code>POST /api/sessions</code> - ouvrir une session visiteur</li>
         <li><code>POST /api/sessions/{id}/messages</code> - deposer un message</li>
         <li><code>POST /api/sessions/{id}/escalate</code> - demander un humain</li>

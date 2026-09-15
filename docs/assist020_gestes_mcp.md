@@ -19,9 +19,13 @@ Aucun secret dans `embed.js`. `make integration-qemu` n'est pas allongé.
 | Chemin | Ce qui tourne | Ce qui ne tourne pas |
 |---|---|---|
 | Défaut (`Dockerfile`, `make agent-smoke`) | Simulateur DOM in-process. Les gestes mutent un état serveur. `/demo-app` l'affiche par sondage HTTP | Chromium, Playwright, souris OS, JS du site tiers |
-| Profil compose `browser` (`Dockerfile.playwright`) | **Le même** runtime slim. Fichier de réserve pour un Chromium futur | Playwright n'est pas installé, `MOHHDY_AGENT_HARNESS=playwright` n'est pas implémenté |
+| Profil compose `browser` (`Dockerfile.playwright` slim) | **Le même** runtime slim, `runtime=browser` | Playwright n'est pas installé |
+| Profil compose `playwright` (extra) | Chromium pour le **controle operateur** `/browser` | Les gestes de session restent le simulateur. Pas US-031 |
 
 `/health` publie `"harness":"dom_simulator"`. Chaque acte réussi le répète.
+Le champ `browser_engine` vaut `optional_not_installed` sur le slim, ou
+`playwright` / `chromium` si le profil optionnel est réellement chargé.
+Guide : [assist_playwright_optional.md](assist_playwright_optional.md).
 
 La page `/demo-app` est une **appli hôte mock locale** (menu + formulaire
 facture). Les tests observent `GET /api/demo-app/state` et
@@ -138,9 +142,9 @@ make agent-smoke
 
 Couvre : geste sur origine allowlistee, refus d'origine étrangère avec
 `request_id`, facture avec grant / refuse + revoke, outil MCP absent,
-pas de Playwright, isolation et handoff déjà livrés. Hors `make ci` AOS
+pas de Playwright **dans le slim**, isolation et handoff déjà livrés. Hors `make ci` AOS
 QEMU : job parallèle `agent-http-smoke` (stdlib, sans Docker, sans
-Chromium).
+téléchargement Chromium).
 
 Contre une origine déjà lancée :
 
@@ -152,16 +156,19 @@ BASE_URL=http://127.0.0.1:8080 agent/scripts/smoke.sh
 Ouvrir `http://127.0.0.1:8080/demo-app` : menu, formulaire, état JSON.
 Ouvrir `http://127.0.0.1:8080/demo` : bulle de chat.
 
-Image optionnelle (identique au slim, sans Chromium) :
+Image optionnelle slim (toujours sans Chromium) :
 
 ```text
 docker compose --profile browser up --build
 ```
 
+Profil extra Playwright (gros, hors CI) :
+[assist_playwright_optional.md](assist_playwright_optional.md).
+
 ## Non livré
 
-- Playwright / Chromium réellement branché
-- Gestes sur un site tiers public
+- Routage des gestes de session via Playwright (reste le simulateur)
+- Gestes sur un site tiers public hors allowlist
 - LLM de production, GGUF, fournisseur public
 - Auth par site, comptes opérateurs, HTTPS terminé dans l'image
 - Noyau Multiboot dans le conteneur

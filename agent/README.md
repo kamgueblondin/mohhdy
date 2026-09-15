@@ -6,8 +6,9 @@ escalade, handoff humain, simulateur de gestes DOM, facture mock,
 vue navigateur d'instance (`/browser`) et FS sandbox (`/browser/fs`).
 Install native, recette hyperviseur et mode hosted (scaffold, pas de
 facturation). Les reponses sont un **stub local** (echo ou extraits de
-KB), pas un LLM de production. Pas d'appel OpenAI. Pas Chromium. Pas
-US-031. Pas le noyau Multiboot.
+KB), pas un LLM de production. Pas d'appel OpenAI. Playwright / Chromium
+est un **profil optionnel** (controle operateur, pas les gestes de
+session). Pas US-031. Pas le noyau Multiboot.
 
 Guides :
 
@@ -18,6 +19,7 @@ Guides :
 - [../docs/assist013_origine_embed.md](../docs/assist013_origine_embed.md)
 - [../docs/assist012_droits_handoff.md](../docs/assist012_droits_handoff.md)
 - [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md)
+- [../docs/assist_playwright_optional.md](../docs/assist_playwright_optional.md)
 
 Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
 

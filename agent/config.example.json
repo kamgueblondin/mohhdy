@@ -49,7 +49,7 @@
         {
           "id": "parcours",
           "title": "Parcours boutique demo",
-          "text": "Comment ca marche : ouvrez la bulle de chat, ecrivez une question, l'agent repond depuis cette base autorisee. L'offre est un support de demonstration, sans paiement ni compte. Limites : LLM stub local. Gestes uniquement sur l'origine allowlistee via le simulateur DOM (/demo-app), pas Chromium."
+          "text": "Comment ca marche : ouvrez la bulle de chat, ecrivez une question, l'agent repond depuis cette base autorisee. L'offre est un support de demonstration, sans paiement ni compte. Limites : LLM stub local. Gestes uniquement sur l'origine allowlistee via le simulateur DOM (/demo-app). Playwright est un profil optionnel d'operateur, pas US-031."
         },
         {
           "id": "humain",

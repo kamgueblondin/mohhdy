@@ -47,6 +47,7 @@ health="$(fetch /health)"
 echo "${health}" | grep -q 'mohhdy-agent' || fail "health service"
 echo "${health}" | grep -q '"status":"ok"' || echo "${health}" | grep -q '"status": "ok"' || fail "health status"
 echo "${health}" | grep -q 'dom_simulator' || fail "health harness"
+echo "${health}" | grep -q 'optional_not_installed' || fail "health browser_engine slim"
 
 admin="$(fetch /admin)"
 echo "${admin}" | grep -q 'mohhdy-sessions' || fail "admin sessions"
@@ -97,6 +98,8 @@ echo "${api_browser}" | grep -q '"harness":"dom_simulator"' || echo "${api_brows
 echo "${api_browser}" | grep -q '"phase3_complete":false' || echo "${api_browser}" | grep -q '"phase3_complete": false' || fail "phase3 doit rester false"
 echo "${api_browser}" | grep -q '"us031_complete":false' || echo "${api_browser}" | grep -q '"us031_complete": false' || fail "us031 doit rester false"
 echo "${api_browser}" | grep -q '/browser/fs' || fail "api browser urls fs"
+echo "${api_browser}" | grep -q 'optional_not_installed' || fail "api browser engine slim"
+echo "${api_browser}" | grep -q '/api/browser/navigate' || fail "api browser urls navigate"
 
 create_a="$(curl -fsS -X POST -H 'Content-Type: application/json' \
   -d '{"site_id":"smoke_a"}' "${BASE_URL}/api/sessions")"
@@ -135,6 +138,10 @@ fi
 listing="$(curl -fsS "${admin_hdr[@]}" "${BASE_URL}/api/admin/sessions")"
 echo "${listing}" | grep -q "${sid_a}" || fail "admin liste A"
 echo "${listing}" | grep -q "${sid_b}" || fail "admin liste B"
+
+code="$(http_code POST "/api/browser/navigate" '{"url":"/demo-app"}')"
+[ "${code}" = "501" ] || fail "navigate sans Playwright doit etre 501 (got ${code})"
+grep -q 'optional_not_installed' /tmp/mohhdy-smoke-body || fail "navigate 501 sans optional_not_installed"
 
 REQ_ORIGIN="${BASE_URL}"
 code="$(http_code POST "/api/sessions" '{"site_id":"smoke_same_origin"}')"
@@ -262,4 +269,4 @@ if echo "${after}" | grep -q '"agent_message":{'; then
   fail "agent a repondu apres takeover"
 fi
 
-echo "OK health admin embed.js demo demo-app browser fs isolation revoke origin invoice escalate handoff origin-bind"
+echo "OK health admin embed.js demo demo-app browser fs isolation revoke origin invoice escalate handoff origin-bind engine-501"

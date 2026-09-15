@@ -64,7 +64,7 @@ make run
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
 | `make iso` | Produit l'ISO BIOS/GRUB bootable |
 | `make run` / `make run-gui` | Session QEMU interactive curses ou GTK |
-| `make agent-smoke` | Fumée HTTP agent (simulateur DOM, MCP, facture). Hors `make ci` / hors QEMU |
+| `make agent-smoke` | Fumée HTTP agent (simulateur DOM, MCP, facture, 501 si Playwright absent). Hors `make ci` / hors QEMU |
 | `make agent-docker` | Construit l'image `mohhdy-agent`. Voir [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md) |
 | `make agent-install-check` | Install native temporaire et `/health` (ASSIST-051). Hors `make ci` |
 | `make agent-hypervisor-dry-run` | Valide cloud-init / QEMU agent sans boot (ASSIST-052). Hors `make ci` |
@@ -79,7 +79,7 @@ make run-iso
 
 ## Runtime agent (ASSIST-050 + sessions + droits + packaging)
 
-Arborescence parallèle `agent/`. Ce n'est **pas** le noyau i386. Les réponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium. Install PC / hyperviseur / mode hosted : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
+Arborescence parallèle `agent/`. Ce n'est **pas** le noyau i386. Les réponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes de session sont un simulateur DOM. Playwright / Chromium est un **profil optionnel** (pas US-031). Install PC / hyperviseur / mode hosted : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
 
 ```bash
 make agent-smoke
@@ -95,7 +95,7 @@ docker run --rm -p 8080:8080 \
   mohhdy-agent
 ```
 
-Guides : [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md), [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md), [docs/assist010_sessions_admin.md](docs/assist010_sessions_admin.md), [docs/assist012_droits_handoff.md](docs/assist012_droits_handoff.md), [docs/assist020_gestes_mcp.md](docs/assist020_gestes_mcp.md). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md).
+Guides : [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md), [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md), [docs/assist010_sessions_admin.md](docs/assist010_sessions_admin.md), [docs/assist012_droits_handoff.md](docs/assist012_droits_handoff.md), [docs/assist020_gestes_mcp.md](docs/assist020_gestes_mcp.md), [docs/assist_playwright_optional.md](docs/assist_playwright_optional.md). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md).
 
 ## GPT-2 local, sans réseau au démarrage
 

@@ -104,6 +104,7 @@ jobs:
 
   # Runtime agent : HTTP stdlib, parallele, sans Docker et sans QEMU.
   # Ne needs pas build-and-test : n'allonge pas integration-qemu.
+  # Playwright / Chromium ne sont PAS installes ici (501 optional_not_installed).
   agent-http-smoke:
     name: Agent HTTP smoke
     runs-on: ubuntu-latest

@@ -32,6 +32,7 @@ Variables identiques sur tous les chemins :
 - `MOHHDY_AGENT_CONFIG` / `MOHHDY_AGENT_KB` / `MOHHDY_AGENT_DATA`
 - `MOHHDY_AGENT_MODE` : `self_host` (defaut) ou `hosted`
 - `MOHHDY_AGENT_RUNTIME` : `docker` (defaut) ou `browser` (ASSIST-061)
+- `MOHHDY_AGENT_BROWSER_ENGINE` : `off` (defaut), `playwright` ou `chromium` (optionnel, hors slim)
 - `MOHHDY_AGENT_SITE_ID` : identifiant d'instance / locataire (optionnel)
 
 `GET /health` publie `deployment_mode`, `billing=none`, `quota.enforced=false`.
@@ -49,8 +50,10 @@ make agent-install-check
 agent/scripts/install.sh --prefix /tmp/mohhdy-agent --start --port 18080
 ```
 
-`--check` copie vers un prefixe temporaire, demarre `server.py`, verifie
-`/health`, puis arrete le processus. C'est la fumee d'installateur.
+`--check` copie vers un prefixe temporaire **tous** les `agent/*.py`
+(y compris `browser_engine.py`, profil Playwright optionnel), demarre
+`server.py`, verifie `/health`, puis arrete le processus. C'est la
+fumee d'installateur. Aucun paquet pip.
 
 Installation persistante, exemple :
 

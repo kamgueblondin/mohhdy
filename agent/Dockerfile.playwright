@@ -1,17 +1,19 @@
 # Image optionnelle "navigateur". PAS le chemin par defaut.
-# make agent-smoke et le Dockerfile slim n'installent pas Chromium.
-# Les gestes de cette tranche passent par le simulateur DOM in-process
-# (voir docs/assist020_gestes_mcp.md). Playwright n'est PAS branche.
+# Cible `default` (derniere, `docker build -f Dockerfile.playwright`) :
+#   meme runtime slim stdlib, MOHHDY_AGENT_RUNTIME=browser, PAS Chromium.
+# Cible `playwright` : extras pip + Chromium (gros, hors CI AOS, hors make ci).
 #
-# Build (hors CI AOS, hors make integration-qemu) :
 #   docker build -f Dockerfile.playwright -t mohhdy-agent-browser ./agent
+#   docker build -f Dockerfile.playwright --target playwright \
+#     -t mohhdy-agent-playwright ./agent
 #   docker compose --profile browser up --build
+#   docker compose --profile playwright up --build
 #
-# Pour ajouter Chromium plus tard (gros, reseau, jamais dans la CI QEMU) :
-#   pip install playwright && playwright install --with-deps chromium
-# et poser MOHHDY_AGENT_HARNESS=playwright (reserve, non implemente).
+# make agent-smoke et Dockerfile slim n'installent pas Chromium.
+# Gestes de session : simulateur DOM (docs/assist020_gestes_mcp.md).
+# Profil Playwright : docs/assist_playwright_optional.md (pas US-031).
 
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm AS slim
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin mohhdy
 
@@ -29,6 +31,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV MOHHDY_AGENT_HARNESS=dom_simulator
 ENV MOHHDY_AGENT_RUNTIME=browser
+ENV MOHHDY_AGENT_BROWSER_ENGINE=off
 
 EXPOSE 8080
 
@@ -36,3 +39,20 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"
 
 CMD ["python3", "-u", "server.py"]
+
+FROM slim AS playwright
+
+USER root
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+COPY requirements-playwright.txt /tmp/requirements-playwright.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-playwright.txt \
+    && python3 -m playwright install --with-deps chromium \
+    && rm -f /tmp/requirements-playwright.txt \
+    && chmod -R a+rX /ms-playwright
+USER mohhdy
+ENV MOHHDY_AGENT_BROWSER_ENGINE=playwright
+ENV MOHHDY_AGENT_PLAYWRIGHT_NO_SANDBOX=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Derniere cible = slim par defaut (compose profil browser, pas Chromium).
+FROM slim AS default

@@ -4,7 +4,8 @@
 HARNESS : simulateur DOM in-process, pas Chromium / Playwright. Les gestes
 mutent un etat observable via /api/demo-app et la page /demo-app (meme
 conteneur, sans Internet). Le chemin slim (make agent-smoke) n'installe
-aucun navigateur.
+aucun navigateur. Un profil Playwright optionnel peut exister pour
+l'operateur /browser ; il ne remplace pas ce harness de session.
 """
 
 from __future__ import annotations

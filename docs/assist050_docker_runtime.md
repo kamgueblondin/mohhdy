@@ -32,7 +32,7 @@ Arborescence parallèle `agent/` (Python 3, bibliothèque standard uniquement) :
 Honnêteté produit :
 
 - Les réponses chat sont un **stub local** (echo ou extraits de KB), pas un LLM de production.
-- Gestes navigateur : **simulateur DOM** in-process, pas Chromium / Playwright. Guide : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
+- Gestes navigateur : **simulateur DOM** in-process pour les sessions. Playwright / Chromium : profil **optionnel** hors image slim. Guide : [assist_playwright_optional.md](assist_playwright_optional.md).
 - Escalade et handoff : [assist012_droits_handoff.md](assist012_droits_handoff.md).
 - Le noyau Multiboot **n'est pas** booté dans ce conteneur.
 - `ADMIN_TOKEN` se passe au `docker run`, jamais dans l'image.
@@ -85,6 +85,7 @@ Le service écoute `0.0.0.0:8080`. Surcharge possible :
 - `MOHHDY_AGENT_KB` (optionnel : fichier texte / Markdown / JSON d'extraits)
 - `MOHHDY_AGENT_MODE` (optionnel : `self_host` ou `hosted`, scaffold ASSIST-053)
 - `MOHHDY_AGENT_RUNTIME` (optionnel : `docker` ou `browser`, ASSIST-061)
+- `MOHHDY_AGENT_BROWSER_ENGINE` (optionnel : `off`, `playwright` ou `chromium` ; voir [assist_playwright_optional.md](assist_playwright_optional.md))
 - `MOHHDY_AGENT_SITE_ID` (optionnel : identifiant d'instance)
 
 Ne pas passer de jeton OpenAI, de `.env` ou de `env_file` dans le **build**.
@@ -129,7 +130,7 @@ session et accepte un message. L'echo stub s'affiche dans le panneau.
 
 - Secret, `.env`, clé API, certificat privé, `ADMIN_TOKEN` cuit
 - Binaire noyau `build/mohhdy.bin`, initrd, ISO GRUB
-- Dépendance pip, Node, navigateur outillé (Chromium n'est pas dans l'image slim)
+- Dépendance pip, Node, navigateur outillé (Chromium n'est pas dans l'image slim ; extra : `Dockerfile.playwright` cible `playwright`)
 - Modèle GPT-2 / GGUF
 
 ## Relation au prototype AOS
@@ -142,3 +143,4 @@ en parallèle ; il ne `needs` pas le build i386.
 
 Install PC, hyperviseur et mode hosted : [assist051_052_053_deploy.md](assist051_052_053_deploy.md).
 Vue navigateur et FS sandbox : [assist060_061_browser.md](assist060_061_browser.md).
+Profil Playwright optionnel : [assist_playwright_optional.md](assist_playwright_optional.md).

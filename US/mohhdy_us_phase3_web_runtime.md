@@ -1,6 +1,6 @@
 # MOHHDY - Phase 3 Web Runtime - User Stories Détaillées
 
-> **État réel (août 2026).** Phase **non implémentée** (pas de navigateur-OS). Hors suite proche du prototype ([mohhdy_us.md](mohhdy_us.md)). Specs conservées. Runtime : [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Une tranche produit parallèle existe dans `agent/` (ASSIST-060/061 : `/browser` et FS sandbox) ; elle **ne livre pas** US-031.
+> **État réel (août 2026).** Phase **non implémentée** (pas de navigateur-OS). Hors suite proche du prototype ([mohhdy_us.md](mohhdy_us.md)). Specs conservées. Runtime : [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Une tranche produit parallèle existe dans `agent/` (ASSIST-060/061 : `/browser` et FS sandbox, profil Playwright optionnel) ; elle **ne livre pas** US-031 (`phase3_complete=false`, `us031_complete=false`).
 
 ## Vue d'Ensemble de la Phase 3
 
