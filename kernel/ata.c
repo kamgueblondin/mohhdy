@@ -124,42 +124,66 @@ int ata_init(void) {
     return 0;
 }
 
+/* IRQ0 peut planifier une autre tâche au milieu d’un transfert PIO : le
+ * contrôleur ATA primaire n’accepte qu’une commande à la fois. */
+static uint32_t ata_irq_save(void) {
+    uint32_t flags;
+    asm volatile("pushfl; popl %0; cli" : "=r"(flags) :: "memory");
+    return flags;
+}
+
+static void ata_irq_restore(uint32_t flags) {
+    if ((flags & (1U << 9)) != 0U) asm volatile("sti" ::: "memory");
+}
+
 int ata_read_sectors_drive(uint8_t drive, uint32_t lba, uint32_t count, void* buf) {
     uint8_t* out = (uint8_t*)buf;
     uint32_t s;
+    uint32_t flags;
+    int rc = -1;
 
     if (drive > ATA_DRIVE_SLAVE || !g_ata_drive_present[drive] || !buf || count == 0 || count > 256) return -1;
     if (lba + count < lba) return -1;
 
+    flags = ata_irq_save();
     ata_select_lba(drive, lba, (uint8_t)count);
     outb(ATA_CMD, ATA_CMD_READ_PIO);
 
     for (s = 0; s < count; s++) {
-        if (ata_wait_drq() < 0) return -1;
+        if (ata_wait_drq() < 0) goto done;
         ata_insw(out, 256U);
         out += 512U;
-        if (ata_wait_not_busy() < 0) return -1;
+        if (ata_wait_not_busy() < 0) goto done;
     }
-    return 0;
+    rc = 0;
+done:
+    ata_irq_restore(flags);
+    return rc;
 }
 
 int ata_write_sectors_drive(uint8_t drive, uint32_t lba, uint32_t count, const void* buf) {
     const uint8_t* in = (const uint8_t*)buf;
     uint32_t s;
+    uint32_t flags;
+    int rc = -1;
 
     if (drive > ATA_DRIVE_SLAVE || !g_ata_drive_present[drive] || !buf || count == 0 || count > 256) return -1;
     if (lba + count < lba) return -1;
 
+    flags = ata_irq_save();
     ata_select_lba(drive, lba, (uint8_t)count);
     outb(ATA_CMD, ATA_CMD_WRITE_PIO);
 
     for (s = 0; s < count; s++) {
-        if (ata_wait_drq() < 0) return -1;
+        if (ata_wait_drq() < 0) goto done;
         ata_outsw(in, 256U);
         in += 512U;
-        if (ata_wait_not_busy() < 0) return -1;
+        if (ata_wait_not_busy() < 0) goto done;
     }
-    return 0;
+    rc = 0;
+done:
+    ata_irq_restore(flags);
+    return rc;
 }
 
 int ata_read_sectors(uint32_t lba, uint32_t count, void* buf) {

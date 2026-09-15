@@ -25,7 +25,9 @@ Aucun secret dans `embed.js`. `make integration-qemu` n'est pas allongé.
 
 La page `/demo-app` est une **appli hôte mock locale** (menu + formulaire
 facture). Les tests observent `GET /api/demo-app/state` et
-`GET /api/demo-app/invoices`. Pas d'Internet public.
+`GET /api/demo-app/invoices`. Pas d'Internet public. L'opérateur peut
+voir le meme etat sur `/browser` (ASSIST-060, pas US-031) :
+[assist060_061_browser.md](assist060_061_browser.md).
 
 ## Configuration (origines + outils)
 

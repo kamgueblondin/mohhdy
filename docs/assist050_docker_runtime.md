@@ -23,6 +23,8 @@ Arborescence parallèle `agent/` (Python 3, bibliothèque standard uniquement) :
 | `GET /embed.js` | Widget public (bulle + session HTTP), **sans secret** |
 | `GET /demo` | Page hôte qui charge `embed.js` |
 | `GET /demo-app` | Appli hôte mock (menu, formulaire facture, simulateur DOM) |
+| `GET /browser` | Vue navigateur d'instance : miroir du simulateur (ASSIST-060, pas US-031) |
+| `GET /browser/fs` | Explorateur du FS sandbox (ASSIST-061) |
 | `GET /` | Index des routes |
 | `POST /api/sessions` | Ouvre une session visiteur |
 | `POST /api/sessions/{id}/tools` | Geste ou outil MCP allowliste |
@@ -82,6 +84,7 @@ Le service écoute `0.0.0.0:8080`. Surcharge possible :
 - `MOHHDY_AGENT_CONFIG` (optionnel : JSON KB + allowlist)
 - `MOHHDY_AGENT_KB` (optionnel : fichier texte / Markdown / JSON d'extraits)
 - `MOHHDY_AGENT_MODE` (optionnel : `self_host` ou `hosted`, scaffold ASSIST-053)
+- `MOHHDY_AGENT_RUNTIME` (optionnel : `docker` ou `browser`, ASSIST-061)
 - `MOHHDY_AGENT_SITE_ID` (optionnel : identifiant d'instance)
 
 Ne pas passer de jeton OpenAI, de `.env` ou de `env_file` dans le **build**.
@@ -115,6 +118,8 @@ curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/admin
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/embed.js
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/demo
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/demo-app
+curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/browser
+curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/browser/fs
 ```
 
 Ouvrir `http://127.0.0.1:8080/demo` : la bulle en bas à droite ouvre une
@@ -136,3 +141,4 @@ Le job CI optionnel `agent-http-smoke` (Python stdlib, sans Docker) tourne
 en parallèle ; il ne `needs` pas le build i386.
 
 Install PC, hyperviseur et mode hosted : [assist051_052_053_deploy.md](assist051_052_053_deploy.md).
+Vue navigateur et FS sandbox : [assist060_061_browser.md](assist060_061_browser.md).

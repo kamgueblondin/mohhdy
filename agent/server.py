@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Runtime HTTP agent MOHHDY (ASSIST-050 + 010..022/030/031/040/041 + 051/053).
+"""Runtime HTTP agent MOHHDY (ASSIST-050 + 010..022/030/031/040/041 + 051/053 + 060/061).
 
 Sert l'origine d'embed, des sessions visiteur isolees, une KB locale, un
 masque de droits, l'escalade, le handoff, un simulateur de gestes DOM sur
-une origine allowlistee, des outils MCP declares et une appli hote mock
-(facture). Modes self-host / hosted (scaffold, pas de facturation).
-Ce n'est pas un LLM de production, pas d'appel OpenAI, pas Chromium,
-et ce n'est pas le noyau Multiboot i386.
+une origine allowlistee, des outils MCP declares, une appli hote mock
+(facture), une vue navigateur d'instance (/browser) et un FS sandbox
+(/api/browser/fs). Modes self-host / hosted (scaffold, pas de facturation)
+et runtime docker | browser. Ce n'est pas un LLM de production, pas
+d'appel OpenAI, pas Chromium, pas US-031, et ce n'est pas le noyau
+Multiboot i386.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, unquote, urlparse
 
+import browser_fs as agent_fs
 import tools as agent_tools
 
 SERVICE_NAME = "mohhdy-agent"
@@ -45,7 +48,11 @@ MAX_SITES_PLACEHOLDER = 32
 MODE_SELF_HOST = "self_host"
 MODE_HOSTED = "hosted"
 VALID_DEPLOYMENT_MODES = (MODE_SELF_HOST, MODE_HOSTED)
+RUNTIME_DOCKER = "docker"
+RUNTIME_BROWSER = "browser"
+VALID_RUNTIMES = (RUNTIME_DOCKER, RUNTIME_BROWSER)
 BILLING_NONE = "none"
+BROWSER_ENGINE_STATUS = "optional_not_installed"
 SITE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 SESSION_ID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -206,6 +213,10 @@ def normalize_deployment_mode(raw: Any) -> Optional[str]:
 
 def env_deployment_mode() -> Optional[str]:
     return normalize_deployment_mode(os.environ.get("MOHHDY_AGENT_MODE"))
+
+
+def env_runtime_kind() -> Optional[str]:
+    return agent_fs.env_runtime()
 
 
 def env_instance_site_id() -> Optional[str]:
@@ -511,6 +522,7 @@ class PolicyStore:
         self.config_loaded = False
         self.kb_loaded = False
         self.deployment_mode = MODE_SELF_HOST
+        self.runtime_kind = RUNTIME_DOCKER
         self.billing = BILLING_NONE
         self.default_site_id = "unspecified"
         self.quota = default_quota()
@@ -529,14 +541,17 @@ class PolicyStore:
         self.apply_env_overrides()
 
     def apply_env_overrides(self) -> None:
-        """MOHHDY_AGENT_MODE / MOHHDY_AGENT_SITE_ID priment sur le JSON."""
+        """MOHHDY_AGENT_MODE / SITE_ID / RUNTIME priment sur le JSON."""
         mode_env = env_deployment_mode()
         site_env = env_instance_site_id()
+        runtime_env = env_runtime_kind()
         with self._lock:
             if mode_env:
                 self.deployment_mode = mode_env
             if site_env:
                 self.default_site_id = site_env
+            if runtime_env:
+                self.runtime_kind = runtime_env
 
     def reset_runtime(self) -> None:
         with self._lock:
@@ -550,6 +565,7 @@ class PolicyStore:
             self.config_loaded = False
             self.kb_loaded = False
             self.deployment_mode = MODE_SELF_HOST
+            self.runtime_kind = RUNTIME_DOCKER
             self.billing = BILLING_NONE
             self.default_site_id = "unspecified"
             self.quota = default_quota()
@@ -625,6 +641,15 @@ class PolicyStore:
                 mode = normalize_deployment_mode(deployment.get("mode"))
                 if mode:
                     self.deployment_mode = mode
+            runtime_block = payload.get("runtime")
+            if isinstance(runtime_block, dict):
+                kind = agent_fs.normalize_runtime(runtime_block.get("kind"))
+                if kind:
+                    self.runtime_kind = kind
+            elif isinstance(runtime_block, str):
+                kind = agent_fs.normalize_runtime(runtime_block)
+                if kind:
+                    self.runtime_kind = kind
             instance = payload.get("instance")
             if isinstance(instance, dict):
                 try:
@@ -733,6 +758,11 @@ class PolicyStore:
                 "allowed_origins": list(self.allowed_origins),
                 "harness": HARNESS_KIND,
                 "deployment_mode": self.deployment_mode,
+                "runtime": self.runtime_kind,
+                "browser_engine": BROWSER_ENGINE_STATUS,
+                "phase3_complete": False,
+                "us031_complete": False,
+                "browser_fs": True,
                 "billing": self.billing,
                 "default_site_id": self.default_site_id,
                 "quota": dict(self.quota),
@@ -1326,6 +1356,7 @@ class AgentHTTPServer(ThreadingHTTPServer):
         self.harness = agent_tools.DemoHarness()
         self.invoices = agent_tools.InvoiceStore(invoices_path)
         self.journal = agent_tools.AuditJournal(journal_path)
+        self.sandbox = agent_fs.BrowserSandbox(STATIC_DIR, data_dir)
         self.store = SessionStore(
             env_data_path(),
             policy=policy,
@@ -1340,10 +1371,11 @@ class AgentHTTPServer(ThreadingHTTPServer):
         self.harness.reset()
         self.invoices.clear()
         self.journal.clear()
+        self.sandbox = agent_fs.BrowserSandbox(STATIC_DIR, env_data_dir())
 
 
 class AgentHandler(BaseHTTPRequestHandler):
-    server_version = "MOHHDY-Agent/0.5"
+    server_version = "MOHHDY-Agent/0.6"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write(
@@ -1358,6 +1390,12 @@ class AgentHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         self._dispatch(method="POST", send_body=True)
+
+    def do_PUT(self) -> None:
+        self._dispatch(method="PUT", send_body=True)
+
+    def do_DELETE(self) -> None:
+        self._dispatch(method="DELETE", send_body=True)
 
     def do_OPTIONS(self) -> None:
         parsed = urlparse(self.path)
@@ -1402,6 +1440,11 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "kb_loaded": policy_status["kb_loaded"],
                     "harness": HARNESS_KIND,
                     "deployment_mode": policy_status["deployment_mode"],
+                    "runtime": policy_status["runtime"],
+                    "browser_engine": policy_status["browser_engine"],
+                    "phase3_complete": False,
+                    "us031_complete": False,
+                    "browser_fs": True,
                     "billing": policy_status["billing"],
                     "default_site_id": policy_status["default_site_id"],
                     "quota": policy_status["quota"],
@@ -1420,6 +1463,12 @@ class AgentHandler(BaseHTTPRequestHandler):
             return
         if path in ("/demo-app", "/demo-app/"):
             self._send_static("demo-app.html", "text/html; charset=utf-8", send_body)
+            return
+        if path in ("/browser",):
+            self._send_static("browser.html", "text/html; charset=utf-8", send_body)
+            return
+        if path in ("/browser/fs",):
+            self._send_static("browser-fs.html", "text/html; charset=utf-8", send_body)
             return
         if path == "/embed.js":
             self._send_static(
@@ -1453,6 +1502,11 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "service": SERVICE_NAME,
                     "kb_loaded": policy_status["kb_loaded"],
                     "deployment_mode": policy_status["deployment_mode"],
+                    "runtime": policy_status["runtime"],
+                    "browser_engine": policy_status["browser_engine"],
+                    "phase3_complete": False,
+                    "us031_complete": False,
+                    "browser_fs": True,
                     "billing": policy_status["billing"],
                     "default_site_id": policy_status["default_site_id"],
                     "quota": policy_status["quota"],
@@ -1468,6 +1522,10 @@ class AgentHandler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/demo-app"):
             self._dispatch_demo_app(method, path, query, send_body)
+            return
+
+        if path == "/api/browser" or path.startswith("/api/browser/"):
+            self._dispatch_browser(method, path, query, send_body)
             return
 
         if path == "/api/sessions":
@@ -1923,6 +1981,104 @@ class AgentHandler(BaseHTTPRequestHandler):
             return agent_tools.normalize_origin(host)
         return agent_tools.normalize_origin("http://%s" % host)
 
+    def _dispatch_browser(
+        self, method: str, path: str, query: dict, send_body: bool
+    ) -> None:
+        if path == "/api/browser":
+            if method not in ("GET", "HEAD"):
+                self._send_json_status(
+                    405, {"status": "error", "error": "method_not_allowed"}
+                )
+                return
+            policy_status = self.server.policy.public_status()
+            self._send_json(
+                {
+                    "status": "ok",
+                    "service": SERVICE_NAME,
+                    "runtime": policy_status["runtime"],
+                    "deployment_mode": policy_status["deployment_mode"],
+                    "harness": HARNESS_KIND,
+                    "browser_engine": BROWSER_ENGINE_STATUS,
+                    "phase3_complete": False,
+                    "us031_complete": False,
+                    "browser_fs": True,
+                    "browser_fs_note": (
+                        "sandbox de l'instance (demo assets + MOHHDY_AGENT_DATA), "
+                        "pas le FS du guest AOS, pas US-031"
+                    ),
+                    "urls": {
+                        "view": "/browser",
+                        "fs": "/browser/fs",
+                        "demo_app": "/demo-app",
+                        "admin": "/admin",
+                    },
+                    "roots": self.server.sandbox.public_roots(),
+                    "dom": self.server.harness.snapshot(),
+                },
+                send_body=send_body,
+            )
+            return
+
+        if path in (
+            "/api/browser/fs",
+            "/api/browser/fs/list",
+            "/api/browser/fs/read",
+        ):
+            if method not in ("GET", "HEAD", "POST", "PUT", "DELETE"):
+                self._send_json_status(
+                    405, {"status": "error", "error": "method_not_allowed"}
+                )
+                return
+            if not self._admin_authorized():
+                self._send_json_status(
+                    401,
+                    {
+                        "status": "unauthorized",
+                        "error": "admin_token_required",
+                        "message": "Jeton admin manquant ou invalide.",
+                    },
+                )
+                return
+            if method in ("POST", "PUT", "DELETE"):
+                self._send_json_status(
+                    405,
+                    {
+                        "status": "error",
+                        "error": "fs_read_only",
+                        "message": (
+                            "Le FS sandbox est en lecture seule. "
+                            "Aucune mutation n'est exposee."
+                        ),
+                    },
+                )
+                return
+            op = query.get("op", [None])[0]
+            if path.endswith("/list"):
+                op = op or "list"
+            elif path.endswith("/read"):
+                op = op or "read"
+            raw_path = query.get("path", [""])[0]
+            try:
+                payload = self.server.sandbox.inspect(raw_path, op=op)
+            except agent_fs.FsError as exc:
+                self._send_json_status(
+                    exc.http_status,
+                    {
+                        "status": "error",
+                        "error": exc.code,
+                        "message": exc.message,
+                    },
+                )
+                return
+            payload["runtime"] = self.server.policy.public_status()["runtime"]
+            payload["phase3_complete"] = False
+            payload["us031_complete"] = False
+            payload["auth"] = admin_auth_mode()
+            self._send_json(payload, send_body=send_body)
+            return
+
+        self._send_json_status(404, {"status": "not_found", "service": SERVICE_NAME})
+
     def _dispatch_demo_app(
         self, method: str, path: str, query: dict, send_body: bool
     ) -> None:
@@ -2245,10 +2401,11 @@ def main() -> None:
     host, port = httpd.server_address[:2]
     policy_status = httpd.policy.public_status()
     sys.stderr.write(
-        "mohhdy-agent ASSIST-051/052/053 sur http://%s:%s "
+        "mohhdy-agent ASSIST-060/061 sur http://%s:%s "
         "(health=/health admin=/admin embed=/embed.js demo=/demo "
-        "demo-app=/demo-app llm=%s harness=%s admin_auth=%s kb_loaded=%s "
-        "mode=%s billing=%s)\n"
+        "demo-app=/demo-app browser=/browser fs=/browser/fs "
+        "llm=%s harness=%s admin_auth=%s kb_loaded=%s "
+        "mode=%s runtime=%s billing=%s phase3=non)\n"
         % (
             host,
             port,
@@ -2257,6 +2414,7 @@ def main() -> None:
             admin_auth_mode(),
             "oui" if policy_status["kb_loaded"] else "non",
             policy_status["deployment_mode"],
+            policy_status["runtime"],
             policy_status["billing"],
         )
     )

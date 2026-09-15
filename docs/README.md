@@ -29,9 +29,10 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 | Fichier | Contenu |
 |---|---|
 | [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Prochaines tranches : prototype AOS 0-4, puis track Agent Support |
-| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo livrés (stub local, pas Chromium). Packaging 051-053 : scaffold |
+| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo / `/browser` / FS sandbox livrés (stub local, pas Chromium, pas US-031). Packaging 051-053 : scaffold |
 | [assist050_docker_runtime.md](assist050_docker_runtime.md) | Image Docker / HTTP agent : build, `docker run`, fumée |
 | [assist051_052_053_deploy.md](assist051_052_053_deploy.md) | Install PC, hyperviseur QEMU/cloud-init, mode hosted non-billing |
+| [assist060_061_browser.md](assist060_061_browser.md) | Vue `/browser` et FS sandbox (ASSIST-060/061, pas US-031) |
 | [assist010_sessions_admin.md](assist010_sessions_admin.md) | Sessions visiteur, embed, admin `ADMIN_TOKEN`, snippet CSP |
 | [assist012_droits_handoff.md](assist012_droits_handoff.md) | KB locale, droits, escalade, handoff |
 | [assist020_gestes_mcp.md](assist020_gestes_mcp.md) | Gestes simulateur, outils MCP, facture mock |
@@ -112,6 +113,7 @@ Les captures QEMU et les exports Word ont été retirés du dépôt (la source r
 - [../US/README.md](../US/README.md) - trois couches : hobby OS, vision MOHHDY, track Agent Support
 - [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - spec Agent Support (`ASSIST-xxx`) ; runtime HTTP `agent/`
 - [assist050_docker_runtime.md](assist050_docker_runtime.md) - `docker run` et fumée de l'image agent
+- [assist060_061_browser.md](assist060_061_browser.md) - vue navigateur d'instance et FS sandbox
 - [assist010_sessions_admin.md](assist010_sessions_admin.md) - sessions, embed, admin, snippet CSP
 - [../US/individual_us/INDEX.md](../US/individual_us/INDEX.md) - specs MOHHDY, chevauchements, IDs dupliqués
 

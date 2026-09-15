@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Navigateur d'instance ASSIST-060</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --fg: #e8eef4;
+      --muted: #9aa8b5;
+      --accent: #3d9a8a;
+      --warn: #c9a227;
+      --card: #1a222c;
+      --line: #2a3542;
+    }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.5;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--line);
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    header a { color: var(--accent); text-decoration: none; }
+    nav a { margin-left: 0.9rem; }
+    h1 { font-size: 1.15rem; margin: 0; }
+    h2 { font-size: 1.05rem; margin: 0 0 0.6rem; }
+    main { max-width: 72rem; margin: 1.25rem auto; padding: 0 1.25rem 3rem; }
+    .banner {
+      background: #2a2410;
+      border: 1px solid var(--warn);
+      color: #f3e6b0;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.1rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(16rem, 22rem) 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+    }
+    p.muted, .muted { color: var(--muted); }
+    code, pre { font-family: ui-monospace, monospace; font-size: 0.85em; }
+    pre {
+      background: #0b1014;
+      padding: 0.7rem 0.8rem;
+      border-radius: 6px;
+      overflow: auto;
+      max-height: 22rem;
+    }
+    iframe {
+      width: 100%;
+      min-height: 34rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    dl { margin: 0; }
+    dt { color: var(--muted); font-size: 0.85rem; margin-top: 0.55rem; }
+    dd { margin: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Vue navigateur d'instance</h1>
+    <nav>
+      <a href="/">Origine</a>
+      <a href="/admin">Admin</a>
+      <a href="/demo-app">Demo-app</a>
+      <a href="/browser/fs">FS sandbox</a>
+    </nav>
+  </header>
+  <main>
+    <div class="banner" id="mohhdy-banner">
+      ASSIST-060 : page locale qui montre ce que l'agent voit sur le
+      <strong>simulateur DOM</strong> (<code>/demo-app</code>), sans Internet public.
+      Ce n'est <strong>pas</strong> un navigateur-OS (US-031 / phase 3 restent
+      non implementes). Le profil Playwright / Chromium est
+      <strong>optionnel et non installe</strong> sur le chemin slim.
+    </div>
+    <div class="grid">
+      <aside class="card">
+        <h2>Etat runtime</h2>
+        <p class="muted">Sondage local de <code>/api/browser</code> et du harness.</p>
+        <dl id="mohhdy-meta">
+          <dt>Chargement</dt>
+          <dd>en cours</dd>
+        </dl>
+        <h2 style="margin-top:1.1rem;">Harness</h2>
+        <pre id="mohhdy-state">{}</pre>
+      </aside>
+      <section class="card">
+        <h2>Miroir demo-app</h2>
+        <p class="muted">
+          Iframe locale, meme origine. Les gestes agent mutent cet etat
+          (simulateur, pas Chromium).
+        </p>
+        <iframe id="mohhdy-frame" title="demo-app locale" src="/demo-app"></iframe>
+      </section>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var meta = document.getElementById("mohhdy-meta");
+      var statePre = document.getElementById("mohhdy-state");
+
+      function row(label, value) {
+        var dt = document.createElement("dt");
+        dt.textContent = label;
+        var dd = document.createElement("dd");
+        dd.textContent = value;
+        meta.appendChild(dt);
+        meta.appendChild(dd);
+      }
+
+      function applyBrowser(info) {
+        meta.innerHTML = "";
+        row("runtime", info.runtime || "?");
+        row("harness", info.harness || "?");
+        row("moteur", info.browser_engine || "optional_not_installed");
+        row("phase3", info.phase3_complete ? "complete" : "non implementee");
+        row("US-031", info.us031_complete ? "livre" : "non livre");
+        row("FS sandbox", info.browser_fs ? "actif (instance)" : "absent");
+        row("vue", (info.urls && info.urls.view) || "/browser");
+        row("fs", (info.urls && info.urls.fs) || "/browser/fs");
+      }
+
+      function poll() {
+        fetch("/api/browser").then(function (resp) { return resp.json(); }).then(function (info) {
+          applyBrowser(info);
+          if (info.dom) {
+            statePre.textContent = JSON.stringify(info.dom, null, 2);
+          }
+        }).catch(function () {});
+      }
+      poll();
+      setInterval(poll, 1000);
+    })();
+  </script>
+</body>
+</html>

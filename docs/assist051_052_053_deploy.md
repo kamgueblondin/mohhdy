@@ -5,7 +5,8 @@
 **Ponctuation :** ASCII usuel et accents français uniquement
 
 Meme contrat HTTP que Docker ([assist050_docker_runtime.md](assist050_docker_runtime.md)) :
-`/health`, `/embed.js`, `/admin`, `/demo`, `/demo-app`, sessions, simulateur DOM.
+`/health`, `/embed.js`, `/admin`, `/demo`, `/demo-app`, `/browser`, `/browser/fs`,
+sessions, simulateur DOM. FS sandbox : [assist060_061_browser.md](assist060_061_browser.md).
 Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
 Plan : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
 
@@ -30,6 +31,7 @@ Variables identiques sur tous les chemins :
 - `ADMIN_TOKEN` (optionnel, execution seulement)
 - `MOHHDY_AGENT_CONFIG` / `MOHHDY_AGENT_KB` / `MOHHDY_AGENT_DATA`
 - `MOHHDY_AGENT_MODE` : `self_host` (defaut) ou `hosted`
+- `MOHHDY_AGENT_RUNTIME` : `docker` (defaut) ou `browser` (ASSIST-061)
 - `MOHHDY_AGENT_SITE_ID` : identifiant d'instance / locataire (optionnel)
 
 `GET /health` publie `deployment_mode`, `billing=none`, `quota.enforced=false`.

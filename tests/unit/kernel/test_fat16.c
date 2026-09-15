@@ -1034,6 +1034,33 @@ static void test_creates_persistent_file(void) {
     TEST_ASSERT_EQUAL(OS_FAT16_BAD_PATH, fat16_create_file(&volume, "PERSIST.BIN", 0x20U,
                                                             data, sizeof(data), &first));
 }
+
+static void test_create_is_visible_after_populated_read_window(void) {
+    fat16_volume_t volume;
+    os_fat16_dirent_t entries[4];
+    uint8_t window[16U * 512U];
+    uint8_t payload[] = "qemu-fat16";
+    char readback[16];
+    uint16_t first = 0U;
+    uint32_t i;
+    make_volume();
+    TEST_ASSERT_EQUAL(0, fat16_mount(&volume, read_sector, 0U));
+    TEST_ASSERT_EQUAL(0, fat16_attach_read_window(&volume, read_sectors, window, sizeof(window)));
+    TEST_ASSERT_EQUAL(0, fat16_attach_writer(&volume, write_sector));
+    TEST_ASSERT_EQUAL(1, fat16_list_root(&volume, entries, 4U));
+    TEST_ASSERT_EQUAL_STRING("FATOK.TXT", entries[0].name);
+    TEST_ASSERT_TRUE(volume.read_window_valid);
+    TEST_ASSERT_EQUAL(0, fat16_create_file(&volume, "new.txt", 0x20U,
+                                           payload, sizeof(payload) - 1U, &first));
+    TEST_ASSERT_TRUE(first >= 2U);
+    for (i = 0U; i < sizeof(readback); i++) readback[i] = 0;
+    TEST_ASSERT_EQUAL((int)(sizeof(payload) - 1U),
+                      fat16_read_file(&volume, "new.txt", readback, sizeof(readback)));
+    TEST_ASSERT_EQUAL_MEMORY(payload, readback, sizeof(payload) - 1U);
+    TEST_ASSERT_EQUAL(2, fat16_list_root(&volume, entries, 4U));
+    TEST_ASSERT_EQUAL_STRING("NEW.TXT", entries[1].name);
+}
+
 static void test_unlinks_persistent_file_and_reuses_cluster(void) {
     fat16_volume_t volume;
     os_fat16_dirent_t entries[4];
@@ -1444,6 +1471,7 @@ int main(void) {
     RUN_TEST(test_rejects_bad_name_and_small_buffer);
     RUN_TEST(test_writes_only_with_explicit_writer);
     RUN_TEST(test_creates_persistent_file);
+    RUN_TEST(test_create_is_visible_after_populated_read_window);
     RUN_TEST(test_unlinks_persistent_file_and_reuses_cluster);
     RUN_TEST(test_renames_persistent_file_without_moving_chain);
     RUN_TEST(test_creates_lfn_file);

@@ -4,7 +4,7 @@
 **Statut :** plan de travail, pas une livraison
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document ordonne les prochaines tranches. Les **tranches 0-4** reprennent le backlog prototype déjà défini (CI, ACL, GGUF, stockage). Le **track Agent Support** est une piste produit **nouvelle**, spécifiée dans [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) : le runtime HTTP (`agent/`) sert embed, sessions, KB locale, droits, escalade, handoff, admin à jeton, gestes simulateur et facture mock (stub local). Packaging PC / hyperviseur / mode hosted : scaffold ([assist051_052_053_deploy.md](assist051_052_053_deploy.md)), pas un SaaS payant. Le produit complet (LLM de production, Chromium) n'est **pas** livré. Ce track ne modifie pas le périmètre AOS vérifié. En cas de contradiction sur ce qui tourne, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment.
+Ce document ordonne les prochaines tranches. Les **tranches 0-4** reprennent le backlog prototype déjà défini (CI, ACL, GGUF, stockage). Le **track Agent Support** est une piste produit **nouvelle**, spécifiée dans [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) : le runtime HTTP (`agent/`) sert embed, sessions, KB locale, droits, escalade, handoff, admin à jeton, gestes simulateur, facture mock, vue `/browser` et FS sandbox (stub local). Packaging PC / hyperviseur / mode hosted : scaffold ([assist051_052_053_deploy.md](assist051_052_053_deploy.md)), pas un SaaS payant. Le produit complet (LLM de production, Chromium, US-031) n'est **pas** livré. Ce track ne modifie pas le périmètre AOS vérifié. En cas de contradiction sur ce qui tourne, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment.
 
 ## Sources lues (sans les réécrire)
 
@@ -233,7 +233,7 @@ Le widget JS, la console admin, l'agent souris / clics / MCP et l'origine HTTPS 
 | Droits de session (ASSIST-030) | Vocabulaire Foundation (grant / revoke / scope) réutilisé. Pas besoin de l'identité vérifiée Foundation pour un premier Docker |
 | Actions navigateur / MCP / facture (ASSIST-020..022) | Simulateur DOM + MCP demo livrés. Pas AOS-025 public. Pas Chromium |
 | OpenAI public | **Toujours sous condition**, comme le prototype : accord explicite, secret hors image, hors CI |
-| Accès navigateur / FS (ASSIST-060, 061) | Tranche produit de la phase 3. La phase 3 reste spec |
+| Accès navigateur / FS (ASSIST-060, 061) | Tranche produit de la phase 3. Vue instance + FS sandbox dans `agent/`. La phase 3 / US-031 restent spec |
 | Corps physique (ASSIST-090) | Piste future. Pas une livraison proche |
 | Cloud abonnement (ASSIST-053) | Après 050 amorçable. Optionnel. Self-host reste possible |
 
@@ -247,7 +247,7 @@ Ordre détaillé et critères : le fichier `ASSIST-xxx`. Ici l'ordre de **build*
 4. **ASSIST-012 / 030 / 031 / 041** : expliquer la plateforme (KB locale), masque de droits par site/session, escalade, handoff humain dans la **même** conversation. Livré (stub). Guide : [assist012_droits_handoff.md](assist012_droits_handoff.md).
 5. **ASSIST-020 / 021 / 022** : gestes allowlistés (simulateur DOM, pas Chromium), outils MCP déclarés, facture demo dans `/demo-app`. Livré. Guide : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
 6. **ASSIST-051 / 052 / 053** : install PC (`install.sh`), recette hyperviseur distincte de l'ISO GRUB AOS (cloud-init + QEMU x86_64, dry-run), scaffold cloud (`MOHHDY_AGENT_MODE`, quotas placeholder, **pas** de facturation). Guide : [assist051_052_053_deploy.md](assist051_052_053_deploy.md).
-7. **ASSIST-060 / 061** : accès navigateur une fois déployé ; si lancement direct, exposer le FS navigateur. Ne pas mettre à jour ETAT_REEL tant que ce n'est pas observable.
+7. **ASSIST-060 / 061** : `/browser` (miroir simulateur) et FS sandbox `/api/browser/fs` livrés dans `agent/`. Ce n'est **pas** US-031. ETAT_REEL inchangé. Guide : [assist060_061_browser.md](assist060_061_browser.md).
 8. **ASSIST-090** : hors sprint. Réutiliser plus tard le même modèle de capacités.
 
 ### Relation aux phases 1-8 (sans réécrire l'histoire)
@@ -301,7 +301,7 @@ Le track Agent Support **n'est pas** "implémenter la phase 3". C'est une piste 
 | P+ | ASSIST-010..041 embed, sessions, KB, droits, escalade, handoff | Track Agent Support | Livré (stub local, jeton `ADMIN_TOKEN`) |
 | P+ | ASSIST-020..022 gestes simulateur, MCP, facture mock | Track Agent Support | Livré (pas Chromium ; [assist020_gestes_mcp.md](assist020_gestes_mcp.md)) |
 | P+ | ASSIST-051..053 PC, hyperviseur, cloud scaffold | Track Agent Support | Install native + dry-run QEMU/cloud-init ; hosted **non-billing** ([assist051_052_053_deploy.md](assist051_052_053_deploy.md)) |
-| ensuite | ASSIST-060..061 navigateur / FS | Track Agent Support | Tranche produit phase 3, non livrée |
+| ensuite | ASSIST-060..061 navigateur / FS | Track Agent Support | Vue `/browser` + FS sandbox livrés ; **pas** US-031 ([assist060_061_browser.md](assist060_061_browser.md)) |
 | futur | ASSIST-090 corps physique | Track Agent Support | Hors livraison proche |
 
 Une PR = une tranche visible par `make ci` (code) ou un alignement de documentation. Nouveaux tickets prototype : préfixe `AOS-` dans `US/mohhdy_us.md`. Nouveaux tickets agent support : préfixe `ASSIST-` dans `US/mohhdy_agent_support_web.md`. Ne pas renuméroter la vision `US-xxx`.
