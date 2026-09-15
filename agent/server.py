@@ -5,10 +5,11 @@ Sert l'origine d'embed, des sessions visiteur isolees, une KB locale, un
 masque de droits, l'escalade, le handoff, un simulateur de gestes DOM sur
 une origine allowlistee, des outils MCP declares, une appli hote mock
 (facture), une vue navigateur d'instance (/browser) et un FS sandbox
-(/api/browser/fs). Modes self-host / hosted (scaffold, pas de facturation)
-et runtime docker | browser. Ce n'est pas un LLM de production, pas
-d'appel OpenAI, pas Chromium, pas US-031, et ce n'est pas le noyau
-Multiboot i386.
+(/api/browser/fs). L'origine du document (Origin / Referer) est refusee
+si elle ne matche pas l'allowlist du site declare (ASSIST-013). Modes
+self-host / hosted (scaffold, pas de facturation) et runtime docker |
+browser. Ce n'est pas un LLM de production, pas d'appel OpenAI, pas
+Chromium, pas US-031, et ce n'est pas le noyau Multiboot i386.
 """
 
 from __future__ import annotations
@@ -860,12 +861,17 @@ class SessionStore:
             self._sessions = {}
             self._persist_unlocked()
 
-    def create(self, site_id: str) -> dict[str, Any]:
+    def create(
+        self, site_id: str, document_origin: str = "", self_origin: str = ""
+    ) -> dict[str, Any]:
         with self._lock:
             if len(self._sessions) >= MAX_SESSIONS:
                 raise OverflowError("trop de sessions")
             session_id = str(uuid.uuid4())
             now = utc_now()
+            binding = agent_tools.origin_binding_token(
+                document_origin, self_origin, self.policy.origins_for(site_id)
+            )
             record = {
                 "session_id": session_id,
                 "site_id": site_id,
@@ -878,6 +884,8 @@ class SessionStore:
                 "escalate_reason": None,
                 "escalated_at": None,
                 "taken_over_at": None,
+                "document_origin": document_origin,
+                "origin_binding": binding,
             }
             self._sessions[session_id] = record
             self._persist_unlocked()
@@ -1286,6 +1294,8 @@ class SessionStore:
         record.setdefault("escalate_reason", None)
         record.setdefault("escalated_at", None)
         record.setdefault("taken_over_at", None)
+        record.setdefault("document_origin", "")
+        record.setdefault("origin_binding", record.get("document_origin") or "")
 
     def _public_session(
         self, record: dict[str, Any], include_messages: bool, admin: bool
@@ -1303,6 +1313,8 @@ class SessionStore:
             "escalate_reason": record.get("escalate_reason"),
             "capabilities": caps if admin else public_capabilities(caps),
             "kb_available": self.policy.kb_present(record["site_id"]),
+            "document_origin": record.get("document_origin") or "",
+            "origin_binding": record.get("origin_binding") or "",
         }
         if include_messages:
             payload["messages"] = [dict(item) for item in record["messages"]]
@@ -1375,7 +1387,7 @@ class AgentHTTPServer(ThreadingHTTPServer):
 
 
 class AgentHandler(BaseHTTPRequestHandler):
-    server_version = "MOHHDY-Agent/0.6"
+    server_version = "MOHHDY-Agent/0.7"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write(
@@ -1735,8 +1747,19 @@ class AgentHandler(BaseHTTPRequestHandler):
                 extra_headers=VISITOR_API_HEADERS,
             )
             return
+        document_origin = self._reject_visitor_origin(
+            site_id,
+            body_origin=self._payload_origin(payload),
+            tool="session.create",
+        )
+        if document_origin is None:
+            return
         try:
-            session = self.server.store.create(site_id)
+            session = self.server.store.create(
+                site_id,
+                document_origin=document_origin,
+                self_origin=self._self_origin(),
+            )
         except OverflowError:
             self._send_json_status(
                 503,
@@ -1756,6 +1779,15 @@ class AgentHandler(BaseHTTPRequestHandler):
                 extra_headers=VISITOR_API_HEADERS,
             )
             return
+        if (
+            self._reject_visitor_origin(
+                session["site_id"],
+                session=session,
+                tool="session.read",
+            )
+            is None
+        ):
+            return
         session["llm"] = LLM_KIND
         self._send_json(session, send_body=send_body, extra_headers=VISITOR_API_HEADERS)
 
@@ -1767,6 +1799,26 @@ class AgentHandler(BaseHTTPRequestHandler):
         content, cerr = self._require_content(payload)
         if cerr is not None:
             self._send_json_status(cerr[0], cerr[1], extra_headers=VISITOR_API_HEADERS)
+            return
+        existing = self.server.store.get(
+            session_id, include_messages=False, admin=False
+        )
+        if existing is None:
+            self._send_json_status(
+                404,
+                {"status": "not_found", "error": "unknown_session"},
+                extra_headers=VISITOR_API_HEADERS,
+            )
+            return
+        if (
+            self._reject_visitor_origin(
+                existing["site_id"],
+                session=existing,
+                body_origin=self._payload_origin(payload),
+                tool="session.message",
+            )
+            is None
+        ):
             return
         try:
             result = self.server.store.add_visitor_message(session_id, content)
@@ -1803,6 +1855,26 @@ class AgentHandler(BaseHTTPRequestHandler):
             raw = payload.get("reason") or payload.get("content") or ""
             if isinstance(raw, str):
                 reason = raw.strip()[:MAX_CONTENT_CHARS]
+        existing = self.server.store.get(
+            session_id, include_messages=False, admin=False
+        )
+        if existing is None:
+            self._send_json_status(
+                404,
+                {"status": "not_found", "error": "unknown_session"},
+                extra_headers=VISITOR_API_HEADERS,
+            )
+            return
+        if (
+            self._reject_visitor_origin(
+                existing["site_id"],
+                session=existing,
+                body_origin=self._payload_origin(payload),
+                tool="session.escalate",
+            )
+            is None
+        ):
+            return
         try:
             session = self.server.store.escalate(
                 session_id, reason=reason, actor="visitor"
@@ -1851,10 +1923,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                 extra_headers=VISITOR_API_HEADERS,
             )
             return
-        origin = ""
-        raw_origin = payload.get("origin") if payload else None
-        if isinstance(raw_origin, str):
-            origin = raw_origin.strip()
+        origin = self._payload_origin(payload)
         args = payload.get("args") if payload else None
         if args is not None and not isinstance(args, dict):
             self._send_json_status(
@@ -1862,6 +1931,25 @@ class AgentHandler(BaseHTTPRequestHandler):
                 {"status": "error", "error": "bad_request", "message": "args objet requis"},
                 extra_headers=VISITOR_API_HEADERS,
             )
+            return
+        existing = self.server.store.get(
+            session_id, include_messages=False, admin=False
+        )
+        if existing is None:
+            self._send_json_status(
+                404,
+                {"status": "not_found", "error": "unknown_session"},
+                extra_headers=VISITOR_API_HEADERS,
+            )
+            return
+        if (
+            self._reject_visitor_origin(
+                existing["site_id"],
+                session=existing,
+                tool=str(tool),
+            )
+            is None
+        ):
             return
         try:
             result = self.server.store.invoke_tool(
@@ -1980,6 +2068,100 @@ class AgentHandler(BaseHTTPRequestHandler):
         if host.startswith("http://") or host.startswith("https://"):
             return agent_tools.normalize_origin(host)
         return agent_tools.normalize_origin("http://%s" % host)
+
+    @staticmethod
+    def _payload_origin(payload: Optional[dict]) -> str:
+        if not isinstance(payload, dict):
+            return ""
+        raw = payload.get("origin")
+        if isinstance(raw, str):
+            return raw.strip()
+        return ""
+
+    def _visitor_document_origin(self, body_origin: str = "") -> str:
+        return agent_tools.extract_document_origin(
+            self.headers.get("Origin") or "",
+            self.headers.get("Referer") or "",
+            body_origin,
+            self._self_origin(),
+        )
+
+    def _send_origin_denied(
+        self,
+        origin: str,
+        site_id: str,
+        session_id: str = "",
+        tool: str = "embed",
+    ) -> None:
+        request_id = str(uuid.uuid4())
+        self.server.journal.record(
+            request_id, session_id, site_id, tool, origin, "origin_denied"
+        )
+        self.log_message(
+            "origin_denied request_id=%s site_id=%s origin=%s tool=%s session=%s",
+            request_id,
+            site_id,
+            origin or "(vide)",
+            tool,
+            session_id or "-",
+        )
+        self._send_json_status(
+            403,
+            {
+                "status": "error",
+                "error": "origin_denied",
+                "origin": origin,
+                "request_id": request_id,
+                "message": (
+                    "Origine du document hors allowlist du site declare. "
+                    "Aucun acte execute."
+                ),
+            },
+            extra_headers=VISITOR_API_HEADERS,
+        )
+
+    def _reject_visitor_origin(
+        self,
+        site_id: str,
+        session: Optional[dict[str, Any]] = None,
+        body_origin: str = "",
+        tool: str = "embed",
+    ) -> Optional[str]:
+        """Retourne l'origine document si elle est autorisee, sinon envoie 403."""
+        document_origin = self._visitor_document_origin(body_origin)
+        self_origin = self._self_origin()
+        session_id = ""
+        if session is not None:
+            session_id = str(session.get("session_id") or "")
+            binding = str(session.get("origin_binding") or "")
+            if binding == "self":
+                if not agent_tools.origin_allowed(
+                    document_origin, ["self"], self_origin
+                ):
+                    self._send_origin_denied(
+                        document_origin or binding,
+                        site_id,
+                        session_id=session_id,
+                        tool=tool,
+                    )
+                    return None
+            elif binding and not agent_tools.same_origin(binding, document_origin):
+                self._send_origin_denied(
+                    document_origin or binding,
+                    site_id,
+                    session_id=session_id,
+                    tool=tool,
+                )
+                return None
+        if not self.server.policy.origin_allowed(site_id, document_origin, self_origin):
+            self._send_origin_denied(
+                document_origin,
+                site_id,
+                session_id=session_id,
+                tool=tool,
+            )
+            return None
+        return document_origin
 
     def _dispatch_browser(
         self, method: str, path: str, query: dict, send_body: bool

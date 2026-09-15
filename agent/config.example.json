@@ -62,6 +62,14 @@
           "text": "Si le droit mcp.invoice.create est accorde, l'agent peut creer une facture dans l'appli hote mock (/demo-app). Sinon il refuse et propose l'escalade."
         }
       ]
+    },
+    "site_shop_example": {
+      "capabilities": [
+        "chat.reply",
+        "site.explain",
+        "session.escalate"
+      ],
+      "allowed_origins": ["https://shop.example"]
     }
   }
 }
