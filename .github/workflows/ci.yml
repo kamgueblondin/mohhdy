@@ -1,0 +1,103 @@
+# MOHHDY CI — build, unit tests, QEMU smoke boot
+# Default branch is master (main is listed so a rename would still work).
+
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  build-and-test:
+    name: Build, tests, QEMU smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc-multilib \
+            libc6-dev-i386 \
+            nasm \
+            qemu-system-x86
+
+      - name: Build OS image
+        run: make all
+
+      - name: Verify build artifacts
+        run: |
+          test -s build/mohhdy.bin
+          test -s my_initrd.tar
+          ls -lh build/mohhdy.bin my_initrd.tar
+          file build/mohhdy.bin
+
+      - name: Run unit tests (make test-all)
+        run: make test-all
+
+      - name: QEMU smokes (système + topologie NE2000 locale)
+        run: make qemu-smoke qemu-ne2k-tls-multipair
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+            ci-serial.log
+
+  integration-qemu:
+    name: QEMU integration contracts
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc-multilib \
+            libc6-dev-i386 \
+            nasm \
+            qemu-system-x86
+
+      - name: Build OS image
+        run: make all
+
+      - name: Run QEMU integration contracts
+        run: make integration-qemu
+
+      - name: Upload integration logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-qemu-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+            ci-serial.log

@@ -1,0 +1,47 @@
+# Userspace / initrd binaries (rebuilt by pack-initrd; committed ELFs go stale)
+userspace/shell
+userspace/fake_ai
+userspace/test_program
+userspace/ai_assistant
+userspace/idle
+userspace/spin
+userspace/ipcserver
+userspace/vfsserver
+userspace/vfsvirtual
+userspace/vfsflight
+userspace/vfsaliasflight
+userspace/serviceclaim
+userspace/vfsclaim
+userspace/vfscapclaim
+userspace/vfsreleaseclaim
+userspace/vfsreadclaim
+userspace/vfsmutateclaim
+userspace/waitchild
+userspace/ok
+userspace/*.o
+userspace/*.bin
+initrd_content/bin/*
+
+# Build and QEMU artefacts
+/build/
+/my_initrd.tar
+/test_logs/
+*.iso
+
+# Host leftovers from old keyboard debug sessions
+/test_segfault
+/test_shell_minimal
+
+# Python
+tests/scripts/__pycache__/
+*.pyc
+
+# GPT-2 weights (release gpt2-124m-assets, not Git)
+/models/
+/initrd_content/models/
+*.gguf
+
+# QEMU / Word dumps (source of truth is the .md files)
+docs/*.log
+docs/*.docx
+docs/*.pdf
