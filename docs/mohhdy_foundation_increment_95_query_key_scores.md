@@ -1,12 +1,12 @@
-# MOHHDY Foundation — Incrément 95 : scores query-key
+# MOHHDY Foundation - Incrément 95 : scores query-key
 
 **État :** implémenté sur la branche de travail du lot 95.
 
 ## Objectif
 
-Le lot 95 ajoute `gpt2_gguf_kv_cache_query_scores`, qui calcule les produits scalaires entre une query caller-owned et les clés historiques d’une couche du cache KV.
+Le lot 95 ajoute `gpt2_gguf_kv_cache_query_scores`, qui calcule les produits scalaires entre une query caller-owned et les clés historiques d'une couche du cache KV.
 
-La primitive retourne les scores bruts, dans l’ordre compact de l’intervalle demandé. Elle ne réalise volontairement ni mise à l’échelle par `sqrt(head_size)`, ni softmax: ces opérations appartiennent à l’étape d’attention suivante. Le segment K est lu directement depuis la disposition contrôlée du cache, avec un scratch caller-owned réutilisé à chaque position.
+La primitive retourne les scores bruts, dans l'ordre compact de l'intervalle demandé. Elle ne réalise volontairement ni mise à l'échelle par `sqrt(head_size)`, ni softmax: ces opérations appartiennent à l'étape d'attention suivante. Le segment K est lu directement depuis la disposition contrôlée du cache, avec un scratch caller-owned réutilisé à chaque position.
 
 ## Contrat
 
@@ -26,4 +26,4 @@ La fixture contient les clés `[1,2,3,4]`, `[9,2,3,4]` et `[1,2,3,4]`. Une query
 
 ## Suite
 
-Le prochain incrément pourra appliquer la normalisation de tête puis accumuler les valeurs historiques pondérées par les probabilités d’attention.
+Le prochain incrément pourra appliquer la normalisation de tête puis accumuler les valeurs historiques pondérées par les probabilités d'attention.

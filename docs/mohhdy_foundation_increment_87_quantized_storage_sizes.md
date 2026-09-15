@@ -1,4 +1,4 @@
-# MOHHDY Foundation — Incrément 87 : tailles de stockage quantifiées
+# MOHHDY Foundation - Incrément 87 : tailles de stockage quantifiées
 
 **État :** implémenté sur la branche de travail du lot 87.
 
@@ -14,13 +14,13 @@ Les tailles de super-blocs sont celles utilisées par les kernels locaux:
 | Q4_K | 256 | 144 |
 | Q6_K | 256 | 210 |
 
-Les tenseurs F32 et F16 utilisent respectivement quatre et deux octets par élément. Les produits d’axes sont contrôlés contre les dépassements 32 bits et les types inconnus sont rejetés.
+Les tenseurs F32 et F16 utilisent respectivement quatre et deux octets par élément. Les produits d'axes sont contrôlés contre les dépassements 32 bits et les types inconnus sont rejetés.
 
 ## Contrat
 
 La fonction retourne `0` uniquement si les axes sont non nuls, compatibles avec le type et si la taille calculée correspond exactement à `tensor->byte_size`. Une forme quantifiée non multiple de 256, une taille tronquée ou un produit trop grand retourne `-9`; un type non supporté retourne `-4`.
 
-La validation ne prend pas possession du tenseur, ne lit pas le blob et n’alloue aucune mémoire. Elle est donc utilisable avant `gpt2_gguf_read_tensor_fat16` ou les primitives `gpt2_gguf_dot_quant_*_fat16`.
+La validation ne prend pas possession du tenseur, ne lit pas le blob et n'alloue aucune mémoire. Elle est donc utilisable avant `gpt2_gguf_read_tensor_fat16` ou les primitives `gpt2_gguf_dot_quant_*_fat16`.
 
 ## Tests
 

@@ -11,16 +11,16 @@
 Le système utilise une architecture à plusieurs niveaux :
 
 ```
-Hardware (Clavier PS/2) 
-    ↓
-Contrôleur i8042 → IRQ1
-    ↓
+Hardware (Clavier PS/2)
+    v
+Contrôleur i8042 -> IRQ1
+    v
 keyboard_interrupt_handler() (ISR)
-    ↓
+    v
 Buffer ASCII unifié (kbd_buf)
-    ↓
+    v
 keyboard_getc() (via SYS_GETC)
-    ↓
+    v
 Shell utilisateur (sys_getchar())
 ```
 
@@ -61,11 +61,11 @@ Le système utilise un buffer ring unifié :
 
 ### 3. État de l'Initialisation
 
-✅ **Contrôleur PS/2** : Fonctionnel (self-test OK)  
-✅ **Port 1** : Fonctionnel (test OK)  
-✅ **Configuration** : Scancode set 1, interruptions activées  
-✅ **PIC IRQ1** : Correctement configuré et démasqué  
-✅ **Handler d'interruption** : Correctement enregistré (INT 33)  
+✅ **Contrôleur PS/2** : Fonctionnel (self-test OK)
+✅ **Port 1** : Fonctionnel (test OK)
+✅ **Configuration** : Scancode set 1, interruptions activées
+✅ **PIC IRQ1** : Correctement configuré et démasqué
+✅ **Handler d'interruption** : Correctement enregistré (INT 33)
 ✅ **Communication PS/2** : Fonctionnelle (réception ACK 0xFA)
 
 ### 4. Tests et Diagnostics
@@ -74,7 +74,7 @@ Le système utilise un buffer ring unifié :
 ```
 === INITIALISATION CLAVIER PS/2 ===
 KBD: Contrôleur PS/2 OK
-KBD: Port 1 OK  
+KBD: Port 1 OK
 KBD: Scanning désactivé (ACK)
 KBD: Scancode set 1 configuré
 KBD: Scanning réactivé (ACK)

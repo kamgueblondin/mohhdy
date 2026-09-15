@@ -1,6 +1,6 @@
-# AOS-2095…2102 — Table de montages VFS formatée séquentiellement en Ring 3
+# AOS-2095...2102 - Table de montages VFS formatée séquentiellement en Ring 3
 
-**Statut : livré localement, en validation de non-régression.** Ce macro-lot étend le worker `vfsvirtual` à la troisième vue virtuelle du médiateur : `vfs-mounts`. Le médiateur reste propriétaire de la table de montages et de ses règles ; le worker ne reçoit qu’une entrée de montage à la fois et produit une ligne textuelle bornée.
+**Statut : livré localement, en validation de non-régression.** Ce macro-lot étend le worker `vfsvirtual` à la troisième vue virtuelle du médiateur : `vfs-mounts`. Le médiateur reste propriétaire de la table de montages et de ses règles ; le worker ne reçoit qu'une entrée de montage à la fois et produit une ligne textuelle bornée.
 
 > La délégation est séquentielle : une seule requête worker demeure en vol. `vfsserver` accumule les lignes validées dans 80 octets, puis publie une réponse VFS unique corrélée au client initial.
 
@@ -8,10 +8,10 @@
 
 | Élément | Responsabilité | Limite explicite |
 |---|---|---|
-| `vfsserver` | Lit la table locale, soumet une entrée, accumule les réponses et conserve l’API publique. | Pas de parallélisme ni de transfert de backend physique. |
+| `vfsserver` | Lit la table locale, soumet une entrée, accumule les réponses et conserve l'API publique. | Pas de parallélisme ni de transfert de backend physique. |
 | `vfsvirtual` | Valide le préfixe et le bit de mutabilité, produit `<prefix> ro` ou `<prefix> rw`. | Ne reçoit ni table globale ni capacité ATA/FAT/overlay. |
-| Shell Ring 3 | Attend une réponse de lecture VFS jusqu’à 24 tours coopératifs, au lieu du budget IPC général de 8 tours. | L’attente reste strictement bornée et s’applique aux seules lectures VFS. |
-| Client VFS | Reçoit une seule réponse `OS_IPC_VFS_READ_REPLY`, comme avant la délégation. | Aucun changement de l’ABI publique. |
+| Shell Ring 3 | Attend une réponse de lecture VFS jusqu'à 24 tours coopératifs, au lieu du budget IPC général de 8 tours. | L'attente reste strictement bornée et s'applique aux seules lectures VFS. |
+| Client VFS | Reçoit une seule réponse `OS_IPC_VFS_READ_REPLY`, comme avant la délégation. | Aucun changement de l'ABI publique. |
 
 ## ABI privée et assemblage
 
@@ -39,7 +39,7 @@ La campagne locale exécute **29/29** tests du protocole VFS, dont la validation
 
 ## Limites explicites
 
-Les pilotes ATA, FAT16, FAT32 et overlay restent noyau. La transaction de montages est séquentielle, volatile et sans reprise si le worker disparaît après soumission. Aucun partage de pages, DMA utilisateur, transfert de propriété de buffer ou exécution concurrente n’est introduit. Cette livraison externalise le formatage de vues virtuelles, non les opérations de stockage physique.
+Les pilotes ATA, FAT16, FAT32 et overlay restent noyau. La transaction de montages est séquentielle, volatile et sans reprise si le worker disparaît après soumission. Aucun partage de pages, DMA utilisateur, transfert de propriété de buffer ou exécution concurrente n'est introduit. Cette livraison externalise le formatage de vues virtuelles, non les opérations de stockage physique.
 
 ## Références internes
 
@@ -49,8 +49,8 @@ Les pilotes ATA, FAT16, FAT32 et overlay restent noyau. La transaction de montag
 - [ABI VFS et IPC](../include/os_vfs_service.h)
 - [Contrat QEMU VFS](../tests/integration/test_qemu_vfs_service.py)
 - [Régressions Unity VFS](../tests/unit/kernel/test_vfs_service.c)
-- [Worker VFS AOS-2081…2088](aos2081_2088_vfs_ring3_virtual_worker.md)
-- [Statistiques worker AOS-2089…2094](aos2089_2094_vfs_ring3_stats_worker.md)
+- [Worker VFS AOS-2081...2088](aos2081_2088_vfs_ring3_virtual_worker.md)
+- [Statistiques worker AOS-2089...2094](aos2089_2094_vfs_ring3_stats_worker.md)
 
 ---
 

@@ -69,13 +69,13 @@ Zero Trust Control Plane:
     - Risk scoring engine avec ML-based assessment
     - Context collection engine (user, device, location, time)
     - Policy management interface avec GitOps integration
-  
+
   Policy Enforcement Points (PEP):
     - Network gateways avec SDP implementation
     - Application proxies avec L7 inspection
     - Endpoint agents avec local policy enforcement
     - API gateways avec OAuth 2.0 + fine-grained RBAC
-  
+
   Policy Information Points (PIP):
     - Identity providers (Active Directory, Okta, Auth0)
     - Device management systems (Intune, Jamf, CrowdStrike)
@@ -108,17 +108,17 @@ class ZeroTrustAccessDecision:
             'time_context': 0.1
         }
         self.ml_model = self.load_risk_model()
-    
+
     def evaluate_access(self, request: AccessRequest) -> Dict[str, any]:
         # Multi-factor risk assessment
         risk_score = self.calculate_risk_score(request)
-        
+
         # Policy evaluation
         policy_result = self.evaluate_policies(request, risk_score)
-        
+
         # Dynamic MFA requirement
         mfa_required = risk_score > 0.6 or policy_result['requires_mfa']
-        
+
         # Access decision avec conditions
         decision = {
             'access_granted': policy_result['allow'] and risk_score < 0.8,
@@ -128,9 +128,9 @@ class ZeroTrustAccessDecision:
             'monitoring_level': 'HIGH' if risk_score > 0.5 else 'NORMAL',
             'additional_controls': self.get_additional_controls(request, risk_score)
         }
-        
+
         return decision
-    
+
     def calculate_risk_score(self, request: AccessRequest) -> float:
         # ML-based risk assessment combining multiple factors
         features = self.extract_risk_features(request)
@@ -145,13 +145,13 @@ SDP Configuration:
     - All network traffic blocked by default
     - Explicit allow rules required pour communication
     - Time-limited access grants avec auto-expiration
-  
+
   Identity_Based_Networking:
     - User identity mapped to network segments
     - Device identity avec hardware attestation
     - Service identity avec mutual TLS
     - Dynamic VLAN assignment based on identity
-  
+
   Encrypted_Overlay:
     - WireGuard VPN pour user-to-resource access
     - IPSec tunnels pour site-to-site connectivity
@@ -176,7 +176,7 @@ Risk Metrics:
     - Medium_Risk (0.3-0.6): "15-20% avec monitoring accru"
     - High_Risk (0.6-0.8): "<5% avec strong authentication"
     - Critical_Risk (>0.8): "<1% blocked ou heavily restricted"
-  
+
   Threat_Detection:
     - Anomaly_Detection_Rate: "95%+ des behavioral anomalies détectées"
     - False_Positive_Rate: "<3% pour high-severity alerts"
@@ -199,7 +199,7 @@ Access Policies:
       - session_duration: "2 hours"
       - monitoring: "FULL_RECORDING"
       - network_isolation: "DEDICATED_SEGMENT"
-  
+
   Standard_Business_Resources:
     conditions:
       - resource.classification == "INTERNAL"
@@ -221,7 +221,7 @@ Foundation Phase:
     - Deploy centralized identity provider
     - Implement MFA pour all users
     - Device enrollment et compliance baselines
-  
+
   Network_Preparation:
     - Network visibility deployment
     - Micro-segmentation planning
@@ -235,7 +235,7 @@ Enforcement Phase:
     - JIT/JEA implementation pour privileged access
     - Application-level authorization
     - API security enforcement
-  
+
   Monitoring_Analytics:
     - SIEM integration et tuning
     - Behavioral analytics deployment
@@ -249,7 +249,7 @@ Optimization Phase:
     - Policy automation avec machine learning
     - Incident response automation
     - Continuous compliance monitoring
-  
+
   Advanced_Capabilities:
     - Threat intelligence integration
     - Advanced persistent threat detection
@@ -265,14 +265,14 @@ Optimization Phase:
 ## Analyse des Risques
 
 ### Risques Critiques
-- **Disruption opérationnelle pendant migration** → Phased rollout + extensive testing
-- **Policy conflicts causant access denials** → Policy simulation + gradual enforcement
-- **Performance impact de l'inspection continue** → Hardware acceleration + optimization
+- **Disruption opérationnelle pendant migration** -> Phased rollout + extensive testing
+- **Policy conflicts causant access denials** -> Policy simulation + gradual enforcement
+- **Performance impact de l'inspection continue** -> Hardware acceleration + optimization
 
 ### Risques Élevés
-- **User experience dégradée par friction** → Adaptive authentication + UX optimization
-- **Complexity management à long terme** → Automation + policy as code
-- **Vendor lock-in avec solutions propriétaires** → Open standards + multi-vendor approach
+- **User experience dégradée par friction** -> Adaptive authentication + UX optimization
+- **Complexity management à long terme** -> Automation + policy as code
+- **Vendor lock-in avec solutions propriétaires** -> Open standards + multi-vendor approach
 
 ## Dépendances Critiques
 - US-046 (Sécurité Multi-Couches) - Security infrastructure foundation

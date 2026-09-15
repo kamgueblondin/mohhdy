@@ -1,12 +1,12 @@
-# AOS-1633 à AOS-1640 — décodage Q3_K sans branche
+# AOS-1633 à AOS-1640 - décodage Q3_K sans branche
 
-> **Statut : livré et mesuré.** Le kernel Q3_K reconstruit les mêmes codes quantifiés signés sans branche conditionnelle par valeur. Les formats GGUF, l’ordre d’accumulation, les logits, le top-k et l’état RNG restent inchangés ; aucune allocation dynamique n’est introduite.
+> **Statut : livré et mesuré.** Le kernel Q3_K reconstruit les mêmes codes quantifiés signés sans branche conditionnelle par valeur. Les formats GGUF, l'ordre d'accumulation, les logits, le top-k et l'état RNG restent inchangés ; aucune allocation dynamique n'est introduite.
 
 ## Optimisation
 
 Le produit scalaire Q3_K parcourt 256 valeurs par super-bloc. Pour chaque paire, le chemin précédent testait séparément le bit de masque afin de soustraire quatre lorsque le code devait être négatif. Cette forme produit deux branches conditionnelles par paire de valeurs.
 
-La nouvelle forme conserve le même code bas sur deux bits et applique arithmétiquement la correction de signe : la condition produit zéro ou un, puis multiplie implicitement la correction fixe de quatre. Les valeurs reconstruites demeurent strictement dans l’intervalle `−4…3`.
+La nouvelle forme conserve le même code bas sur deux bits et applique arithmétiquement la correction de signe : la condition produit zéro ou un, puis multiplie implicitement la correction fixe de quatre. Les valeurs reconstruites demeurent strictement dans l'intervalle `-4...3`.
 
 | Propriété | Avant | Après |
 |---|---|---|
@@ -35,14 +35,14 @@ La comparaison utilise le modèle GPT-2 Q3_K réel, le disque FAT16 de déploiem
 
 | Mesure | Référence inter-clusters | Décodage sans branche | Gain |
 |---|---:|---:|---:|
-| Premier token Q3_K réel | 48,89 s | 45,43 s | −3,46 s (−7,07 %) |
-| Continuation `ai-continue` | 21,73 s | 20,83 s | −0,90 s (−4,14 %) |
+| Premier token Q3_K réel | 48,89 s | 45,43 s | -3,46 s (-7,07 %) |
+| Continuation `ai-continue` | 21,73 s | 20,83 s | -0,90 s (-4,14 %) |
 
-Ces chronométrages sont propres à QEMU TCG et ne constituent pas une prédiction de performance sur matériel physique. Une répétition ultérieure de la référence a produit 49,04 s puis 22,48 s, ce qui confirme une variabilité de plusieurs secondes dans l’émulation. Le changement est conservé pour son équivalence fonctionnelle et l’élimination déterministe de branches, mais la différence de latence QEMU doit être lue comme une observation de comparaison, non comme une garantie reproductible.
+Ces chronométrages sont propres à QEMU TCG et ne constituent pas une prédiction de performance sur matériel physique. Une répétition ultérieure de la référence a produit 49,04 s puis 22,48 s, ce qui confirme une variabilité de plusieurs secondes dans l'émulation. Le changement est conservé pour son équivalence fonctionnelle et l'élimination déterministe de branches, mais la différence de latence QEMU doit être lue comme une observation de comparaison, non comme une garantie reproductible.
 
 ## Limites et suite
 
-Cette optimisation ne modifie pas le nombre de lignes de vocabulaire projetées : tous les logits sont toujours calculés afin de préserver le top-k exact. Les optimisations qui ont augmenté le buffer de lignes ou vectorisé ce kernel sans gain mesurable ont été volontairement écartées. Le prochain axe reste l’amortissement des lectures et calculs de projection sans approximation ni allocation dynamique.
+Cette optimisation ne modifie pas le nombre de lignes de vocabulaire projetées : tous les logits sont toujours calculés afin de préserver le top-k exact. Les optimisations qui ont augmenté le buffer de lignes ou vectorisé ce kernel sans gain mesurable ont été volontairement écartées. Le prochain axe reste l'amortissement des lectures et calculs de projection sans approximation ni allocation dynamique.
 
 ## Références
 

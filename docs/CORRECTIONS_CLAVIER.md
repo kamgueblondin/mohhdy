@@ -7,7 +7,7 @@ Le clavier ne réagissait pas dans l'espace utilisateur (Shell) à cause de plus
 
 ### 1. Amélioration de syscall_add_input_char() (kernel/syscall/syscall.c)
 - **Problème** : Race conditions possibles lors de l'ajout de caractères au buffer
-- **Solution** : 
+- **Solution** :
   - Ajout de sections critiques avec `cli`/`sti`
   - Feedback visuel immédiat pour les caractères tapés
   - Meilleure gestion des caractères spéciaux (backspace, enter)

@@ -1,7 +1,7 @@
 # MOHHDY - Plan de Développement par User Stories
 
-> **État réel (août 2026).** Document de **vision / planification MOHHDY**, pas le backlog du prototype. Le code i386 (shell Ring 3, overlay ATA, GPT-2 optionnel) est décrit dans [mohhdy_us.md](mohhdy_us.md) et [docs/ETAT_REEL.md](../docs/ETAT_REEL.md).  
-> Les titres US-001…US-120 ci-dessous **divergent** souvent des fichiers `individual_us/` (numéros 023-025 en double ; US-031+ des fichiers ≠ navigateur-OS du maître). Ne pas traiter cette liste comme un sprint board.
+> **État réel (août 2026).** Document de **vision / planification MOHHDY**, pas le backlog du prototype. Le code i386 (shell Ring 3, overlay ATA, GPT-2 optionnel) est décrit dans [mohhdy_us.md](mohhdy_us.md) et [docs/ETAT_REEL.md](../docs/ETAT_REEL.md).
+> Les titres US-001...US-120 ci-dessous **divergent** souvent des fichiers `individual_us/` (numéros 023-025 en double ; US-031+ des fichiers != navigateur-OS du maître). Ne pas traiter cette liste comme un sprint board.
 
 ## Vue d'Ensemble du Projet
 
@@ -198,7 +198,7 @@ Le développement MOHHDY est organisé en 8 phases principales :
 - **Phase 7 - Collaborative** : 200 jours-homme
 - **Phase 8 - Production** : 160 jours-homme
 
-**Total Estimé** : 1,640 jours-homme (≈ 6.5 années avec une équipe de 10 développeurs)
+**Total Estimé** : 1,640 jours-homme (~= 6.5 années avec une équipe de 10 développeurs)
 
 ### Ressources Recommandées
 - **Architectes Système** : 2-3 experts

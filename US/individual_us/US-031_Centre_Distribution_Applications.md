@@ -106,13 +106,13 @@ GET /api/v1/applications/{id}/dependencies
 ## Risques et Mitigations
 
 ### Risques Élevés
-- **Sécurité applications malveillantes** → Sandbox mandatory + automated scanning
-- **Conflits de dépendances** → Dependency resolver + virtual environments
-- **Performance à grande échelle** → CDN + caching layers + horizontal scaling
+- **Sécurité applications malveillantes** -> Sandbox mandatory + automated scanning
+- **Conflits de dépendances** -> Dependency resolver + virtual environments
+- **Performance à grande échelle** -> CDN + caching layers + horizontal scaling
 
-### Risques Moyens  
-- **Adoption développeurs** → Program incentives + documentation complète
-- **Qualité du catalogue** → Certification process + community moderation
+### Risques Moyens
+- **Adoption développeurs** -> Program incentives + documentation complète
+- **Qualité du catalogue** -> Certification process + community moderation
 
 ## Dépendances Techniques
 - US-015 (Framework Déploiement Orchestration) - Système de déploiement

@@ -9,7 +9,7 @@
 ### 1. **Protection Anti-Spam** (`keyboard_stable.c`)
 
 **Mécanismes de filtrage :**
-- **Compteur anti-spam** : Ignore les caractères générés trop rapidement  
+- **Compteur anti-spam** : Ignore les caractères générés trop rapidement
 - **Protection anti-doublons** : Détecte et filtre les répétitions de caractères identiques
 - **Protection scancode** : Évite les traitements multiples du même scancode
 - **Timeout adaptatif** : Timeouts plus courts pour éviter les blocages
@@ -18,13 +18,13 @@
 
 **Fréquence adaptive :**
 ```c
-// Si interruptions fonctionnent : polling très rare (1 fois sur 50000 cycles)  
+// Si interruptions fonctionnent : polling très rare (1 fois sur 50000 cycles)
 if (interrupt_count > 0) {
     if (poll_counter % 50000 != 0) return;
 }
 // Sinon : polling modéré (1 fois sur 5000 cycles)
 else {
-    if (poll_counter % 5000 != 0) return; 
+    if (poll_counter % 5000 != 0) return;
 }
 ```
 
@@ -39,7 +39,7 @@ else {
 
 **Fonctionnalités ajoutées :**
 - **Délais optimisés** : `stable_delay()` et `long_delay()` calibrés pour QEMU
-- **Nettoyage intelligent** : Flush limité pour éviter les boucles infinies  
+- **Nettoyage intelligent** : Flush limité pour éviter les boucles infinies
 - **Debug contrôlé** : Messages limités pour éviter le spam de logs
 - **Fallback transparent** : Bascule automatique polling/interruption sans impact utilisateur
 
@@ -56,8 +56,8 @@ else {
 make run-gui    # Interface graphique (recommandé)
 ```
 
-### Test Console  
-```bash  
+### Test Console
+```bash
 make run        # Mode console série
 ```
 

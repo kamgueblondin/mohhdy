@@ -4,7 +4,7 @@
 
 - **Problème résolu**: Clavier non-réactif définitivement corrigé
 - **Solution hybride**: Interruptions + Polling de fallback
-- **Compatibilité**: Fonctionne sur tous les environnements  
+- **Compatibilité**: Fonctionne sur tous les environnements
 - **Date**: 27 août 2025
 - **Développeur**: MiniMax Agent
 
@@ -22,7 +22,7 @@
 
 ## Complément août 2026 (EOI PIC)
 
-La v6.1 laissait encore IRQ1 bloquée une fois le shell lancé : `schedule()` ne revient pas dans le stub IRQ0, l’EOI placé après n’était pas envoyé, le 8259 gardait IRQ0 in-service.
+La v6.1 laissait encore IRQ1 bloquée une fois le shell lancé : `schedule()` ne revient pas dans le stub IRQ0, l'EOI placé après n'était pas envoyé, le 8259 gardait IRQ0 in-service.
 
 - `boot/isr_stubs.s` : EOI IRQ0 **avant** `timer_handler`
 - `kernel/timer.c` : `schedule()` seulement si `g_reschedule_needed`

@@ -1,10 +1,10 @@
-# AOS-1497 à AOS-1504 — Conservation fournisseur lors de reprise automatique
+# AOS-1497 à AOS-1504 - Conservation fournisseur lors de reprise automatique
 
 ## Objectif
 
-La réacquisition DHCP automatique devait pouvoir restaurer la session réseau sans obliger l’utilisateur à reconfigurer le fournisseur après chaque expiration de bail. Ce lot distingue donc la fermeture explicite, qui efface le Bearer OpenAI, de la fermeture interne de reprise, qui préserve ce seul élément de configuration dans le noyau.
+La réacquisition DHCP automatique devait pouvoir restaurer la session réseau sans obliger l'utilisateur à reconfigurer le fournisseur après chaque expiration de bail. Ce lot distingue donc la fermeture explicite, qui efface le Bearer OpenAI, de la fermeture interne de reprise, qui préserve ce seul élément de configuration dans le noyau.
 
-> Une fermeture demandée explicitement par l’utilisateur efface toujours le Bearer. Seule la fermeture transitoire déclenchée par une expiration DHCP peut conserver la configuration fournisseur jusqu’au bootstrap suivant.
+> Une fermeture demandée explicitement par l'utilisateur efface toujours le Bearer. Seule la fermeture transitoire déclenchée par une expiration DHCP peut conserver la configuration fournisseur jusqu'au bootstrap suivant.
 
 ## API interne
 
@@ -17,9 +17,9 @@ La routine de nettoyage conserve toujours les règles existantes pour les matér
 
 ## Garanties
 
-La reprise automatique exécute une fermeture interne puis un bootstrap DHCP/DNS/ARP/SYN hors IRQ0. Le slot TCP reste libéré avant toute tentative suivante. L’utilisateur peut toujours invalider immédiatement la configuration sensible par une fermeture explicite.
+La reprise automatique exécute une fermeture interne puis un bootstrap DHCP/DNS/ARP/SYN hors IRQ0. Le slot TCP reste libéré avant toute tentative suivante. L'utilisateur peut toujours invalider immédiatement la configuration sensible par une fermeture explicite.
 
-Aucune copie vers l’espace utilisateur, allocation dynamique ou exposition d’un secret dans le diagnostic réseau n’est ajoutée.
+Aucune copie vers l'espace utilisateur, allocation dynamique ou exposition d'un secret dans le diagnostic réseau n'est ajoutée.
 
 ## Validation
 
@@ -33,7 +33,7 @@ Aucune copie vers l’espace utilisateur, allocation dynamique ou exposition d�
 
 ## Limites restantes
 
-La session transport est désormais récupérable avec sa configuration fournisseur. La reprise d’une requête HTTP ou d’un flux SSE interrompu, avec conservation du prompt, du modèle et des identifiants d’événement, reste à concevoir. Le client OpenAI effectif nécessite encore une campagne d’intégration live distincte.
+La session transport est désormais récupérable avec sa configuration fournisseur. La reprise d'une requête HTTP ou d'un flux SSE interrompu, avec conservation du prompt, du modèle et des identifiants d'événement, reste à concevoir. Le client OpenAI effectif nécessite encore une campagne d'intégration live distincte.
 
 ## Références
 

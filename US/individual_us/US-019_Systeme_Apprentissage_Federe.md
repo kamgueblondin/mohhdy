@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-019  
-**Titre** : Implémentation du système d'apprentissage fédéré collaboratif et sécurisé  
-**Phase** : 2 - AI Core  
-**Priorité** : Élevée  
-**Complexité** : Très Élevée  
-**Effort Estimé** : 28 jours-homme  
-**Risque** : Très Élevé  
+**ID** : US-019
+**Titre** : Implémentation du système d'apprentissage fédéré collaboratif et sécurisé
+**Phase** : 2 - AI Core
+**Priorité** : Élevée
+**Complexité** : Très Élevée
+**Effort Estimé** : 28 jours-homme
+**Risque** : Très Élevé
 
 ## Description Utilisateur
 
-**En tant que** instance MOHHDY dans la communauté  
-**Je veux** participer à l'apprentissage fédéré pour améliorer les modèles IA collectivement  
+**En tant que** instance MOHHDY dans la communauté
+**Je veux** participer à l'apprentissage fédéré pour améliorer les modèles IA collectivement
 **Afin de** bénéficier d'une intelligence collective tout en préservant la confidentialité des données
 
 ## Contexte Technique Détaillé
@@ -115,14 +115,14 @@ typedef struct {
 } clipping_params_t;
 
 // Protection de la confidentialité
-int privacy_add_noise(float* gradients, size_t gradient_count, 
+int privacy_add_noise(float* gradients, size_t gradient_count,
                      privacy_parameters_t* privacy_params);
-int privacy_clip_gradients(float* gradients, size_t gradient_count, 
+int privacy_clip_gradients(float* gradients, size_t gradient_count,
                           clipping_params_t* clipping);
 int privacy_validate_parameters(privacy_parameters_t* params);
-float privacy_calculate_privacy_loss(privacy_parameters_t* params, 
+float privacy_calculate_privacy_loss(privacy_parameters_t* params,
                                    uint32_t query_count);
-int privacy_secure_aggregation(gradient_share_t* shares, int share_count, 
+int privacy_secure_aggregation(gradient_share_t* shares, int share_count,
                               float* aggregated_gradients);
 ```
 
@@ -138,7 +138,7 @@ int federated_get_session_status(const char* session_id, session_status_t* statu
 
 // Entraînement local
 int federated_prepare_training_data(const char* session_id, data_selection_criteria_t* criteria);
-int federated_train_local(const char* session_id, training_data_t* data, 
+int federated_train_local(const char* session_id, training_data_t* data,
                          model_updates_t* updates);
 int federated_validate_local_model(const char* session_id, validation_data_t* data,
                                   validation_result_t* result);
@@ -182,12 +182,12 @@ typedef struct {
 } reward_config_t;
 
 // Calcul des récompenses
-float calculate_contribution_reward(training_metrics_t* metrics, 
+float calculate_contribution_reward(training_metrics_t* metrics,
                                   session_statistics_t* session_stats);
 float calculate_data_quality_reward(data_quality_metrics_t* metrics);
-float calculate_model_improvement_reward(model_performance_t* before, 
+float calculate_model_improvement_reward(model_performance_t* before,
                                        model_performance_t* after);
-int distribute_rewards(const char* session_id, participant_profile_t* participants, 
+int distribute_rewards(const char* session_id, participant_profile_t* participants,
                       int participant_count);
 int update_reputation_scores(participant_profile_t* participants, int count);
 ```
@@ -227,12 +227,12 @@ typedef enum {
 } attack_type_t;
 
 // Validation des mises à jour
-int validate_model_updates(model_updates_t* updates, ai_model_t* base_model, 
+int validate_model_updates(model_updates_t* updates, ai_model_t* base_model,
                           update_validation_t* validation);
 int detect_poisoning_attack(model_updates_t* updates, attack_detection_t* detection);
-int detect_byzantine_behavior(participant_behavior_t* behavior, 
+int detect_byzantine_behavior(participant_behavior_t* behavior,
                              byzantine_detection_t* detection);
-int aggregate_secure_updates(model_updates_t* updates[], int update_count, 
+int aggregate_secure_updates(model_updates_t* updates[], int update_count,
                            validation_result_t* validations,
                            ai_model_t* aggregated_model);
 int implement_robust_aggregation(model_updates_t* updates[], int update_count,
@@ -260,7 +260,7 @@ typedef enum {
 
 // Consensus distribué
 int consensus_propose_decision(const char* session_id, decision_proposal_t* proposal);
-int consensus_submit_vote(const char* session_id, const char* proposal_id, 
+int consensus_submit_vote(const char* session_id, const char* proposal_id,
                          signed_vote_t* vote);
 int consensus_get_decision(const char* session_id, consensus_decision_t* decision);
 int consensus_verify_decision(consensus_decision_t* decision, verification_result_t* result);
@@ -285,14 +285,14 @@ typedef enum {
 } compression_algorithm_t;
 
 // Optimisation de la communication
-int compress_gradients(float* gradients, size_t count, 
+int compress_gradients(float* gradients, size_t count,
                       communication_optimization_t* config,
                       compressed_data_t* compressed);
-int decompress_gradients(compressed_data_t* compressed, 
+int decompress_gradients(compressed_data_t* compressed,
                         float* gradients, size_t* count);
-int quantize_parameters(float* parameters, size_t count, 
+int quantize_parameters(float* parameters, size_t count,
                        int bits, quantized_data_t* quantized);
-int sparsify_gradients(float* gradients, size_t count, 
+int sparsify_gradients(float* gradients, size_t count,
                       float threshold, sparse_gradient_t* sparse);
 ```
 
@@ -319,8 +319,8 @@ int sparsify_gradients(float* gradients, size_t count,
 6. **Test de Scalabilité** : Support de 1000+ participants simultanés
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 28 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 28 jours-homme
 **Risque** : Très Élevé
 
 ### Notes d'Implémentation

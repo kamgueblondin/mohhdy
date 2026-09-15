@@ -4,18 +4,18 @@
 
 ## Informations Générales
 
-**ID** : US-016  
-**Titre** : Intégration du moteur IA local TensorFlow Lite  
-**Phase** : 2 - AI Core  
-**Priorité** : Critique  
-**Complexité** : Très Élevée  
-**Effort Estimé** : 22 jours-homme  
-**Risque** : Élevé  
+**ID** : US-016
+**Titre** : Intégration du moteur IA local TensorFlow Lite
+**Phase** : 2 - AI Core
+**Priorité** : Critique
+**Complexité** : Très Élevée
+**Effort Estimé** : 22 jours-homme
+**Risque** : Élevé
 
 ## Description Utilisateur
 
-**En tant que** système MOHHDY  
-**Je veux** un moteur d'IA local performant intégré au niveau système  
+**En tant que** système MOHHDY
+**Je veux** un moteur d'IA local performant intégré au niveau système
 **Afin de** traiter les requêtes utilisateur et optimiser le système sans dépendre du cloud
 
 ## Contexte Technique Détaillé
@@ -471,17 +471,17 @@ void test_inference_latency() {
     ai_model_t* model;
     int result = ai_load_model("/models/nlp_base.tflite", &model);
     assert(result == 0);
-    
+
     char input_text[] = "Bonjour MOHHDY";
     nlp_output_t output;
-    
+
     uint64_t start_time = get_timestamp_ms();
     result = ai_nlp_process_text(input_text, &output);
     uint64_t end_time = get_timestamp_ms();
-    
+
     assert(result == 0);
     assert((end_time - start_time) < 100); // < 100ms
-    
+
     ai_unload_model(model);
 }
 
@@ -489,23 +489,23 @@ void test_inference_latency() {
 void test_concurrent_inference() {
     ai_model_t* model;
     ai_load_model("/models/test_model.tflite", &model);
-    
+
     // Lancement de 10 inférences simultanées
     pthread_t threads[10];
     inference_params_t params[10];
-    
+
     for (int i = 0; i < 10; i++) {
         params[i].model = model;
         params[i].input = generate_test_input(i);
         pthread_create(&threads[i], NULL, run_inference_thread, &params[i]);
     }
-    
+
     // Attente de completion
     for (int i = 0; i < 10; i++) {
         pthread_join(threads[i], NULL);
         assert(params[i].result == 0);
     }
-    
+
     ai_unload_model(model);
 }
 ```
@@ -516,27 +516,27 @@ void test_concurrent_inference() {
 void test_cache_efficiency() {
     ai_model_t* model;
     ai_load_model("/models/cache_test.tflite", &model);
-    
+
     char test_input[] = "test input for cache";
     nlp_output_t output1, output2;
-    
+
     // Première inférence (cache miss)
     uint64_t time1_start = get_timestamp_ms();
     ai_nlp_process_text(test_input, &output1);
     uint64_t time1_end = get_timestamp_ms();
-    
+
     // Deuxième inférence (cache hit)
     uint64_t time2_start = get_timestamp_ms();
     ai_nlp_process_text(test_input, &output2);
     uint64_t time2_end = get_timestamp_ms();
-    
+
     // Vérification de l'amélioration de performance
     uint64_t time1 = time1_end - time1_start;
     uint64_t time2 = time2_end - time2_start;
-    
+
     assert(time2 < time1 / 2); // Au moins 50% plus rapide
     assert(memcmp(&output1, &output2, sizeof(nlp_output_t)) == 0); // Résultats identiques
-    
+
     ai_unload_model(model);
 }
 ```

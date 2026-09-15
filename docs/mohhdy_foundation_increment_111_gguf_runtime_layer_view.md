@@ -1,10 +1,10 @@
-# MOHHDY Foundation — Incrément 111 : vue runtime d’une couche GGUF
+# MOHHDY Foundation - Incrément 111 : vue runtime d'une couche GGUF
 
 **État :** implémenté et testé.
 
 ## Objectif
 
-Le lot 111 ajoute `gpt2_gguf_runtime_get_layer`, qui fournit au forward une copie contrôlée du descripteur d’une couche déjà préparée par `gpt2_gguf_runtime_prepare`. Le blob GGUF n’est pas rescanné et aucun pointeur interne n’est transféré à l’appelant.
+Le lot 111 ajoute `gpt2_gguf_runtime_get_layer`, qui fournit au forward une copie contrôlée du descripteur d'une couche déjà préparée par `gpt2_gguf_runtime_prepare`. Le blob GGUF n'est pas rescanné et aucun pointeur interne n'est transféré à l'appelant.
 
 ## Contrat
 

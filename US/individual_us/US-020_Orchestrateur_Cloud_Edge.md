@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-020  
-**Titre** : Développement de l'orchestrateur cloud-edge pour optimisation des charges IA  
-**Phase** : 2 - AI Core  
-**Priorité** : Élevée  
-**Complexité** : Très Élevée  
-**Effort Estimé** : 22 jours-homme  
-**Risque** : Élevé  
+**ID** : US-020
+**Titre** : Développement de l'orchestrateur cloud-edge pour optimisation des charges IA
+**Phase** : 2 - AI Core
+**Priorité** : Élevée
+**Complexité** : Très Élevée
+**Effort Estimé** : 22 jours-homme
+**Risque** : Élevé
 
 ## Description Utilisateur
 
-**En tant que** système MOHHDY  
-**Je veux** un orchestrateur intelligent qui répartit optimalement les tâches entre local et cloud  
+**En tant que** système MOHHDY
+**Je veux** un orchestrateur intelligent qui répartit optimalement les tâches entre local et cloud
 **Afin de** maximiser les performances tout en respectant les contraintes de confidentialité et de coût
 
 ## Contexte Technique Détaillé
@@ -123,34 +123,34 @@ typedef enum {
 #### Algorithme de Décision Intelligent
 
 ```c
-float calculate_execution_score(task_requirements_t* task, 
+float calculate_execution_score(task_requirements_t* task,
                               execution_option_t* option,
                               orchestration_policy_t* policy,
                               system_context_t* context) {
     float score = 0.0f;
-    
+
     // Score de performance (latence inversée)
     float performance_score = calculate_performance_score(option->expected_latency, task->max_latency_ms);
     score += policy->performance_weight * performance_score;
-    
+
     // Score de coût (coût inversé)
     float cost_score = calculate_cost_score(option->expected_cost, task->max_cost_per_request);
     score += policy->cost_weight * cost_score;
-    
+
     // Score de confidentialité
     float privacy_score = calculate_privacy_score(option->privacy_score, task->privacy_requirement);
     score += policy->privacy_weight * privacy_score;
-    
+
     // Score de disponibilité
     score += policy->availability_weight * option->availability_score;
-    
+
     // Score énergétique
     float energy_score = calculate_energy_score(option->energy_consumption, context->battery_level);
     score += policy->energy_weight * energy_score;
-    
+
     // Ajustements contextuels
     score = apply_contextual_adjustments(score, context);
-    
+
     return score;
 }
 
@@ -160,18 +160,18 @@ execution_environment_t select_optimal_environment(task_requirements_t* task,
     execution_option_t options[6];
     float best_score = 0.0f;
     execution_environment_t best_env = ENV_LOCAL;
-    
+
     // Évaluer chaque option
     for (int i = 0; i < 6; i++) {
         evaluate_execution_option(task, (execution_environment_t)i, &options[i], context);
         float score = calculate_execution_score(task, &options[i], policy, context);
-        
+
         if (score > best_score && is_environment_available((execution_environment_t)i)) {
             best_score = score;
             best_env = (execution_environment_t)i;
         }
     }
-    
+
     return best_env;
 }
 ```
@@ -181,7 +181,7 @@ execution_environment_t select_optimal_environment(task_requirements_t* task,
 ```c
 // Soumission et exécution de tâches
 int orchestrator_submit_task(task_description_t* task, task_handle_t* handle);
-int orchestrator_submit_batch_tasks(task_description_t* tasks, int task_count, 
+int orchestrator_submit_batch_tasks(task_description_t* tasks, int task_count,
                                    batch_handle_t* handle);
 int orchestrator_get_task_status(task_handle_t handle, task_status_t* status);
 int orchestrator_cancel_task(task_handle_t handle);
@@ -195,7 +195,7 @@ int orchestrator_set_user_preferences(user_preferences_t* preferences);
 
 // Monitoring et métriques
 int orchestrator_get_metrics(orchestration_metrics_t* metrics);
-int orchestrator_get_environment_stats(execution_environment_t env, 
+int orchestrator_get_environment_stats(execution_environment_t env,
                                       environment_stats_t* stats);
 int orchestrator_get_cost_breakdown(cost_breakdown_t* breakdown);
 ```
@@ -272,10 +272,10 @@ typedef enum {
 } power_mode_t;
 
 // Optimisation énergétique
-int energy_calculate_consumption(task_requirements_t* task, 
+int energy_calculate_consumption(task_requirements_t* task,
                                execution_environment_t env,
                                float* estimated_consumption);
-int energy_optimize_for_battery_life(float remaining_battery, 
+int energy_optimize_for_battery_life(float remaining_battery,
                                     time_duration_t target_duration,
                                     optimization_strategy_t* strategy);
 int energy_monitor_thermal_state(thermal_monitoring_t* monitoring);
@@ -355,8 +355,8 @@ int preferences_explain_decision(decision_context_t* context, explanation_t* exp
 6. **Test d'Adaptation** : Adaptation aux préférences utilisateur
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 22 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 22 jours-homme
 **Risque** : Élevé
 
 ### Notes d'Implémentation

@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-009  
-**Titre** : Système de mise à jour incrémentale et rollback automatique  
-**Phase** : 1 - Foundation  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 20 jours-homme  
-**Risque** : Élevé  
+**ID** : US-009
+**Titre** : Système de mise à jour incrémentale et rollback automatique
+**Phase** : 1 - Foundation
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 20 jours-homme
+**Risque** : Élevé
 
 ## Description Utilisateur
 
-**En tant que** utilisateur et administrateur MOHHDY  
-**Je veux** un système de mise à jour intelligent qui applique les updates de manière incrémentale et sécurisée  
+**En tant que** utilisateur et administrateur MOHHDY
+**Je veux** un système de mise à jour intelligent qui applique les updates de manière incrémentale et sécurisée
 **Afin de** maintenir le système à jour sans interruption de service et avec possibilité de retour en arrière automatique
 
 ## Contexte Technique Détaillé
@@ -128,7 +128,7 @@ typedef struct {
 } deployment_config_t;
 
 // API d'orchestration
-int deployment_create_plan(update_package_t* updates, int count, 
+int deployment_create_plan(update_package_t* updates, int count,
                           deployment_plan_t* plan);
 int deployment_validate_plan(deployment_plan_t* plan, validation_result_t* result);
 int deployment_execute_plan(deployment_plan_t* plan, execution_context_t* context);
@@ -146,11 +146,11 @@ typedef struct {
 } service_deployment_t;
 
 // API zero-downtime
-int deployment_prepare_service_update(const char* service_name, 
+int deployment_prepare_service_update(const char* service_name,
                                      const char* new_version);
-int deployment_switch_traffic(const char* service_name, 
+int deployment_switch_traffic(const char* service_name,
                              traffic_switch_config_t* config);
-int deployment_validate_service_health(const char* service_name, 
+int deployment_validate_service_health(const char* service_name,
                                       health_status_t* status);
 int deployment_finalize_service_update(const char* service_name);
 ```
@@ -175,11 +175,11 @@ typedef struct {
 } rollback_policy_t;
 
 // API de rollback
-int rollback_register_triggers(const char* deployment_id, 
+int rollback_register_triggers(const char* deployment_id,
                               rollback_trigger_t* triggers, int count);
-int rollback_evaluate_health(const char* deployment_id, 
+int rollback_evaluate_health(const char* deployment_id,
                             health_evaluation_t* evaluation);
-int rollback_execute_automatic(const char* deployment_id, 
+int rollback_execute_automatic(const char* deployment_id,
                               rollback_reason_t* reason);
 int rollback_to_version(const char* component, const char* target_version);
 ```
@@ -225,11 +225,11 @@ typedef enum {
 
 // API de mise à jour IA
 int ai_update_prepare_model(ai_model_update_t* update);
-int ai_update_validate_model(const char* model_id, const char* version, 
+int ai_update_validate_model(const char* model_id, const char* version,
                             validation_result_t* result);
-int ai_update_deploy_model(ai_model_update_t* update, 
+int ai_update_deploy_model(ai_model_update_t* update,
                           deployment_progress_t* progress);
-int ai_update_monitor_performance(const char* model_id, 
+int ai_update_monitor_performance(const char* model_id,
                                  performance_metrics_t* metrics);
 ```
 
@@ -256,11 +256,11 @@ typedef struct {
 } health_report_t;
 
 // API de monitoring santé
-int health_register_component(const char* component_name, 
+int health_register_component(const char* component_name,
                              health_check_config_t* config);
 int health_check_component(const char* component_name, health_report_t* report);
 int health_get_system_status(system_health_t* status);
-int health_set_alert_thresholds(const char* component_name, 
+int health_set_alert_thresholds(const char* component_name,
                                alert_thresholds_t* thresholds);
 ```
 

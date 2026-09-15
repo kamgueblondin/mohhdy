@@ -1,6 +1,6 @@
 # Analyse de la Logique du Projet MOHHDY
 
-> **État réel (août 2026).** Ce fichier décrit la logique des étapes 1–7 d’origine. L’ABI courante, GPT-2 local et l’overlay AIOV sont dans [ETAT_REEL.md](ETAT_REEL.md). MOHHDY n’est pas une distribution Linux. Lexique : [vocabulaire.md](vocabulaire.md).
+> **État réel (août 2026).** Ce fichier décrit la logique des étapes 1-7 d'origine. L'ABI courante, GPT-2 local et l'overlay AIOV sont dans [ETAT_REEL.md](ETAT_REEL.md). MOHHDY n'est pas une distribution Linux. Lexique : [vocabulaire.md](vocabulaire.md).
 
 ## Vue d'Ensemble du Projet
 
@@ -26,7 +26,7 @@ MOHHDY est un système d'exploitation spécialement conçu pour héberger et ex�
 - **Système de tâches** : Multitâche préemptif avec ordonnanceur Round-Robin
 - **Changement de contexte** : Optimisé en assembleur
 - **Séparation Ring 0/3** : Isolation kernel/utilisateur
-- **Appels système** : Interface sécurisée (**15** syscalls : exit, putc, getc, puts, yield, gets, exec, spawn, listdir, readfile, getpid, ps, kill, ticks, meminfo ; le chiffre 5 ci-dessous est l’état à l’étape 5–6 d’origine)
+- **Appels système** : Interface sécurisée (**15** syscalls : exit, putc, getc, puts, yield, gets, exec, spawn, listdir, readfile, getpid, ps, kill, ticks, meminfo ; le chiffre 5 ci-dessous est l'état à l'étape 5-6 d'origine)
 - **Chargeur ELF** : Exécution de programmes externes
 
 ## Logique Technique Détaillée
@@ -34,8 +34,8 @@ MOHHDY est un système d'exploitation spécialement conçu pour héberger et ex�
 ### 1. Architecture Mémoire
 ```
 Adresses Virtuelles    Adresses Physiques
-0x00000000-0x003FFFFF → 0x00000000-0x003FFFFF (4 Mo, mapping 1:1)
-0x00400000+           → Gestion dynamique
+0x00000000-0x003FFFFF -> 0x00000000-0x003FFFFF (4 Mo, mapping 1:1)
+0x00400000+ -> Gestion dynamique
 ```
 
 ### 2. Structure des Tâches
@@ -46,7 +46,7 @@ Adresses Virtuelles    Adresses Physiques
 
 ### 3. Appels Système
 - **Mécanisme** : Interruption INT 0x80
-- **Transition** : Ring 3 → Ring 0 automatique
+- **Transition** : Ring 3 -> Ring 0 automatique
 - **Syscalls disponibles** :
   - SYS_EXIT (0) : Termine le processus
   - SYS_PUTC (1) : Affiche un caractère
@@ -55,18 +55,18 @@ Adresses Virtuelles    Adresses Physiques
   - SYS_YIELD (4) : Cède le CPU
 
 ### 4. Système de Fichiers
-- **Format** : archive TAR (ustar) pour simplicité — ce n’est pas un volume disque ni une identité POSIX
+- **Format** : archive TAR (ustar) pour simplicité - ce n'est pas un volume disque ni une identité POSIX
 - **Localisation** : Initrd chargé par Multiboot
 - **Fonctionnalités** : Lecture, listage, validation checksums
 
 ## Logique de Développement
 
 ### Approche Progressive
-1. **Démarrage minimal** → Affichage de base
-2. **Gestion mémoire** → Allocation dynamique
-3. **Système de fichiers** → Accès aux données
-4. **Multitâche** → Exécution parallèle
-5. **Espace utilisateur** → Sécurité et isolation
+1. **Démarrage minimal** -> Affichage de base
+2. **Gestion mémoire** -> Allocation dynamique
+3. **Système de fichiers** -> Accès aux données
+4. **Multitâche** -> Exécution parallèle
+5. **Espace utilisateur** -> Sécurité et isolation
 
 ### Modularité
 - **Séparation claire** : Chaque module a une responsabilité précise

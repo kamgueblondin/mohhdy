@@ -2,8 +2,8 @@
 
 > **Complément août 2026.** Les correctifs PS/2 de ce diagnostic restent dans le code. Un blocage PIC (EOI IRQ0 après `schedule()`) a encore dû être traité ensuite. Voir [ETAT_REEL.md](ETAT_REEL.md) et [CHANGELOG_v6.1.md](CHANGELOG_v6.1.md).
 
-**Date:** 27 août 2025  
-**Status:** ✅ **PROBLÈME IDENTIFIÉ ET RÉSOLU**  
+**Date:** 27 août 2025
+**Status:** ✅ **PROBLÈME IDENTIFIÉ ET RÉSOLU**
 **Auteur:** MiniMax Agent
 
 ---
@@ -61,7 +61,7 @@ bash test_clavier_gui_final.sh
 
 **Instructions de test :**
 1. Une fenêtre QEMU s'ouvre
-2. Cliquer dans la fenêtre pour capturer le clavier  
+2. Cliquer dans la fenêtre pour capturer le clavier
 3. Taper des touches pour tester les interruptions
 4. Les logs s'affichent dans le terminal
 5. Ctrl+Alt+G pour libérer la souris
@@ -102,7 +102,7 @@ cd mohhdy
 git add .
 git commit -m "FIX: Correction clavier - Scheduler réactivé + diagnostics complets
 
-- Décommenté schedule() dans drivers/timer.c  
+- Décommenté schedule() dans drivers/timer.c
 - Ajouté diagnostics interruptions dans keyboard.c et timer.c
 - Confirmé : interruptions IRQ1 fonctionnent parfaitement
 - Problème identifié : QEMU console vs GUI pour saisie réelle"
@@ -117,7 +117,7 @@ git push origin main
 **STATUS : MISSION ACCOMPLIE ✅**
 
 Le système MOHHDY fonctionne parfaitement :
-- ✅ Mode utilisateur opérationnel  
+- ✅ Mode utilisateur opérationnel
 - ✅ Interruptions clavier fonctionnelles
 - ✅ Shell utilisateur réactif
 - ✅ Diagnostic complet disponible

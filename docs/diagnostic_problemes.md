@@ -1,6 +1,6 @@
 # Diagnostic des Problèmes MOHHDY
 
-> **État réel (août 2026).** Le crash/redémarrage après activation du timer n’est plus le comportement observé : le système atteint le prompt shell. Analyse d’origine conservée ci-dessous. Voir [ETAT_REEL.md](ETAT_REEL.md).
+> **État réel (août 2026).** Le crash/redémarrage après activation du timer n'est plus le comportement observé : le système atteint le prompt shell. Analyse d'origine conservée ci-dessous. Voir [ETAT_REEL.md](ETAT_REEL.md).
 
 ## Problème Principal Identifié
 

@@ -1,14 +1,14 @@
 # MOHHDY Étape 7 : Shell Interactif et Simulateur d'IA
 ## Implémentation Complète de l'Interface Conversationnelle
 
-> **État réel (août 2026).** L’étape 7 est en place (shell ELF + `fake_ai`). Ce n’est pas une « plateforme conversationnelle » au sens ML : simulateur par mots-clés. Liste des commandes réellement branchées : [ETAT_REEL.md](ETAT_REEL.md).
+> **État réel (août 2026).** L'étape 7 est en place (shell ELF + `fake_ai`). Ce n'est pas une " plateforme conversationnelle " au sens ML : simulateur par mots-clés. Liste des commandes réellement branchées : [ETAT_REEL.md](ETAT_REEL.md).
 
 ### 📋 Vue d'Ensemble
 
 L'étape 7 représente l'aboutissement du projet MOHHDY avec l'implémentation d'un shell interactif complet intégrant un simulateur d'intelligence artificielle. Cette version transforme MOHHDY d'un système d'exploitation expérimental en une plateforme conversationnelle fonctionnelle.
 
-**Version :** MOHHDY v5.0  
-**Date d'implémentation :** Août 2025  
+**Version :** MOHHDY v5.0
+**Date d'implémentation :** Août 2025
 **Objectif :** Interface utilisateur conversationnelle avec IA simulée
 
 ### 🚀 Nouvelles Fonctionnalités Implémentées
@@ -31,9 +31,9 @@ L'étape 7 représente l'aboutissement du projet MOHHDY avec l'implémentation d
 - IA : `ai`, `ai-mode`, `ai-help`, `ai-test`, `ai-stats`
 - Contrôle : `exit`/`quit`/`logout` ; `reboot`/`shutdown` (messages simulés)
 
-`ls`/`cat`/`mkdir` opèrent sur un VFS en mémoire, pas sur l’initrd ni un disque. `ps`/`kill` ne parlent pas au scheduler. Détail : [ETAT_REEL.md](ETAT_REEL.md).
+`ls`/`cat`/`mkdir` opèrent sur un VFS en mémoire, pas sur l'initrd ni un disque. `ps`/`kill` ne parlent pas au scheduler. Détail : [ETAT_REEL.md](ETAT_REEL.md).
 
-**Commandes internes supportées (liste d’origine du document, v5) :**
+**Commandes internes supportées (liste d'origine du document, v5) :**
 - `exit/quit` : Quitter le shell
 - `clear/cls` : Effacer l'écran
 - `about/version` : Informations sur MOHHDY
@@ -52,11 +52,11 @@ void shell_loop() {
     while (1) {
         print_string("MOHHDY> ");
         gets(input_buffer, 255);
-        
+
         if (handle_internal_command(input_buffer)) {
             continue;
         }
-        
+
         execute_ai(input_buffer);
     }
 }
@@ -111,7 +111,7 @@ void sys_gets(char* buffer, uint32_t size) {
     while (!line_ready) {
         schedule();
     }
-    
+
     // Copier la ligne dans le buffer utilisateur
     // ...
 }
@@ -129,12 +129,12 @@ int sys_exec(const char* path, char* argv[]) {
     uint8_t* program_data = initrd_read_file(path);
     uint32_t entry_point = elf_load(program_data, 0);
     task_t* new_task = create_user_task(entry_point);
-    
+
     // Attendre la terminaison
     while (new_task->state != TASK_TERMINATED) {
         schedule();
     }
-    
+
     return 0;
 }
 ```
@@ -217,12 +217,12 @@ Programmes exécutables :
 4. **Interface utilisateur**
    ```
    ========================================
-       MOHHDY Shell v1.0 - Bienvenue !     
+       MOHHDY Shell v1.0 - Bienvenue !
    ========================================
    Systeme d'exploitation avec IA integree
    Tapez vos questions et l'IA repondra.
    ========================================
-   
+
    MOHHDY> _
    ```
 
@@ -341,11 +341,11 @@ Programmes exécutables :
 
 L'étape 7 de MOHHDY représente un succès technique majeur. Le système dispose maintenant d'une interface utilisateur conversationnelle complète avec un simulateur d'IA fonctionnel. L'infrastructure est en place pour l'intégration future d'une véritable intelligence artificielle.
 
-**Statut :** ✅ **IMPLÉMENTATION RÉUSSIE**  
+**Statut :** ✅ **IMPLÉMENTATION RÉUSSIE**
 **Prêt pour :** Stabilisation et intégration d'IA véritable
 
 ---
 
-*MOHHDY v5.0 - Shell Interactif avec Simulateur d'IA*  
+*MOHHDY v5.0 - Shell Interactif avec Simulateur d'IA*
 *L'avenir de l'interaction homme-machine* 🤖
 

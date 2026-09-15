@@ -4,18 +4,18 @@
 
 ## Informations Générales
 
-**ID** : US-017  
-**Titre** : Développement du système de compréhension du langage naturel intégré  
-**Phase** : 2 - AI Core  
-**Priorité** : Critique  
-**Complexité** : Très Élevée  
-**Effort Estimé** : 25 jours-homme  
-**Risque** : Élevé  
+**ID** : US-017
+**Titre** : Développement du système de compréhension du langage naturel intégré
+**Phase** : 2 - AI Core
+**Priorité** : Critique
+**Complexité** : Très Élevée
+**Effort Estimé** : 25 jours-homme
+**Risque** : Élevé
 
 ## Description Utilisateur
 
-**En tant que** utilisateur MOHHDY  
-**Je veux** communiquer avec le système en langage naturel  
+**En tant que** utilisateur MOHHDY
+**Je veux** communiquer avec le système en langage naturel
 **Afin de** contrôler le système intuitivement sans apprendre de commandes complexes
 
 ## Contexte Technique Détaillé
@@ -108,7 +108,7 @@ typedef struct {
 // Traitement d'une requête utilisateur
 int nlu_process_text(const char* input_text, nlu_result_t* result);
 int nlu_process_speech(const void* audio_data, size_t audio_size, nlu_result_t* result);
-int nlu_process_multimodal(const char* text, const void* audio, size_t audio_size, 
+int nlu_process_multimodal(const char* text, const void* audio, size_t audio_size,
                           nlu_result_t* result);
 
 // Gestion du contexte conversationnel
@@ -145,7 +145,7 @@ typedef struct {
     personalization_level_t personalization;
 } nlu_response_t;
 
-int nlu_generate_response(nlu_result_t* nlu_result, system_action_result_t* action_result, 
+int nlu_generate_response(nlu_result_t* nlu_result, system_action_result_t* action_result,
                          nlu_response_t* response);
 int nlu_personalize_response(nlu_response_t* response, user_profile_t* user);
 ```
@@ -221,8 +221,8 @@ int nlu_suggest_shortcuts(user_id_t user_id, shortcut_suggestion_t* suggestions,
 6. **Test de Personnalisation** : Adaptation aux préférences utilisateur
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 25 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 25 jours-homme
 **Risque** : Élevé
 
 ### Notes d'Implémentation

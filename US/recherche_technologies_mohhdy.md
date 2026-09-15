@@ -1,6 +1,6 @@
 # Recherche Approfondie - Technologies pour MOHHDY
 
-> **État réel (août 2026).** Veille / spécification MOHHDY. TFLite, P2P, navigateur-OS, etc. **ne sont pas** dans le dépôt. Prototype : [mohhdy_us.md](mohhdy_us.md) et [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Les mentions de distributions Linux (ex. Ubuntu AI) sont de la veille, **pas** l’identité de MOHHDY.
+> **État réel (août 2026).** Veille / spécification MOHHDY. TFLite, P2P, navigateur-OS, etc. **ne sont pas** dans le dépôt. Prototype : [mohhdy_us.md](mohhdy_us.md) et [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Les mentions de distributions Linux (ex. Ubuntu AI) sont de la veille, **pas** l'identité de MOHHDY.
 
 ## Vue d'Ensemble du Projet MOHHDY
 

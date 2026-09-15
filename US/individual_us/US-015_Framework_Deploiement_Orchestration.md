@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-015  
-**Titre** : Framework de déploiement automatisé et orchestration intelligente des services  
-**Phase** : 1 - Foundation  
-**Priorité** : Élevée  
-**Complexité** : Très Élevée  
-**Effort Estimé** : 24 jours-homme  
-**Risque** : Élevé  
+**ID** : US-015
+**Titre** : Framework de déploiement automatisé et orchestration intelligente des services
+**Phase** : 1 - Foundation
+**Priorité** : Élevée
+**Complexité** : Très Élevée
+**Effort Estimé** : 24 jours-homme
+**Risque** : Élevé
 
 ## Description Utilisateur
 
-**En tant que** administrateur système et développeur MOHHDY  
-**Je veux** un framework de déploiement intelligent qui automatise la gestion du cycle de vie des services  
+**En tant que** administrateur système et développeur MOHHDY
+**Je veux** un framework de déploiement intelligent qui automatise la gestion du cycle de vie des services
 **Afin de** simplifier les déploiements, garantir la haute disponibilité, et permettre la mise à l'échelle automatique
 
 ## Contexte Technique Détaillé
@@ -85,7 +85,7 @@ spec:
     repository: mohhdy/ai-inference
     tag: "2.1.0"
     pullPolicy: IfNotPresent
-  
+
   resources:
     requests:
       cpu: "2000m"
@@ -95,7 +95,7 @@ spec:
       cpu: "4000m"
       memory: "8Gi"
       gpu: "1"
-  
+
   scaling:
     min_replicas: 2
     max_replicas: 10
@@ -106,7 +106,7 @@ spec:
       - type: Percent
         value: 100
         period: "60s"
-  
+
   health_checks:
     liveness_probe:
       http_get:
@@ -120,7 +120,7 @@ spec:
         port: 8080
       initial_delay: 5
       period: 5
-  
+
   security:
     run_as_user: 1001
     capabilities:
@@ -128,7 +128,7 @@ spec:
       add: ["NET_BIND_SERVICE"]
     security_context:
       read_only_root_filesystem: true
-  
+
   networking:
     ports:
     - name: http
@@ -137,7 +137,7 @@ spec:
     - name: grpc
       port: 9090
       protocol: TCP
-    
+
   dependencies:
   - name: data-store
     type: service
@@ -145,7 +145,7 @@ spec:
   - name: config-service
     type: service
     required: false
-  
+
   configuration:
     config_maps:
     - ai-model-config
@@ -213,13 +213,13 @@ typedef struct {
 } node_suitability_t;
 
 // Orchestration IA
-int orchestrator_optimize_placement(service_definition_t* services, 
+int orchestrator_optimize_placement(service_definition_t* services,
                                     size_t service_count,
                                     placement_result_t** results);
-int orchestrator_predict_resource_needs(deployment_id_t id, 
+int orchestrator_predict_resource_needs(deployment_id_t id,
                                          time_range_t range,
                                          resource_prediction_t* prediction);
-int orchestrator_suggest_scaling(deployment_id_t id, 
+int orchestrator_suggest_scaling(deployment_id_t id,
                                  scaling_recommendation_t* recommendation);
 ```
 
@@ -273,7 +273,7 @@ typedef struct {
 int autoscaler_create_policy(deployment_id_t id, autoscaling_policy_t* policy);
 int autoscaler_trigger_scale_event(deployment_id_t id, scale_direction_t direction,
                                    uint32_t target_replicas);
-int autoscaler_get_recommendations(deployment_id_t id, 
+int autoscaler_get_recommendations(deployment_id_t id,
                                    scaling_recommendation_t** recommendations,
                                    size_t* count);
 ```
@@ -379,8 +379,8 @@ int config_validate_changes(const char* map_name, config_map_t* new_config,
 6. **Test de Performance** : Overhead de management < 3% des ressources
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 24 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 24 jours-homme
 **Risque** : Élevé
 
 ### Notes d'Implémentation

@@ -1,8 +1,8 @@
-# Lot Foundation 46 — Résultat de terminaison d’enfant
+# Lot Foundation 46 - Résultat de terminaison d'enfant
 
 ## Objet
 
-Ce lot complète la supervision directe par un résultat de terminaison consultable après le départ d’un enfant. Le parent conserve un **unique dernier résultat local** : PID enfant, code de sortie, raison et tick de terminaison. La consultation ne crée ni zombie, ni file d’historique, ni capacité d’attente rétrospective.
+Ce lot complète la supervision directe par un résultat de terminaison consultable après le départ d'un enfant. Le parent conserve un **unique dernier résultat local** : PID enfant, code de sortie, raison et tick de terminaison. La consultation ne crée ni zombie, ni file d'historique, ni capacité d'attente rétrospective.
 
 | Élément | Contrat livré |
 |---|---|
@@ -12,26 +12,26 @@ Ce lot complète la supervision directe par un résultat de terminaison consulta
 | Retrait autorisé | code synthétique `OS_TASK_EXIT_KILLED = -128` |
 | Raison | `OS_TASK_EVENT_EXITED = 1` ou `OS_TASK_EVENT_KILLED = 2` |
 | Absence de résultat | `OS_TASK_NO_CHILD_RESULT = -69` |
-| Conservation | un seul résultat, remplacé au prochain départ d’enfant direct |
+| Conservation | un seul résultat, remplacé au prochain départ d'enfant direct |
 
 ## Chemin de terminaison
 
-Lors d’un `SYS_EXIT`, le noyau lit le code placé dans `EBX` par le programme Ring 3. Avant de réveiller un waiter ou de réattribuer les descendants, il enregistre ce code chez le parent direct encore actif, puis émet l’événement IPC best-effort livré par le lot 45. Lors d’un `kill` autorisé, le même chemin enregistre `-128` et la raison `killed`.
+Lors d'un `SYS_EXIT`, le noyau lit le code placé dans `EBX` par le programme Ring 3. Avant de réveiller un waiter ou de réattribuer les descendants, il enregistre ce code chez le parent direct encore actif, puis émet l'événement IPC best-effort livré par le lot 45. Lors d'un `kill` autorisé, le même chemin enregistre `-128` et la raison `killed`.
 
-L’enregistrement précède la réattribution, ce qui garantit qu’il est associé au parent direct qui détenait la relation au moment du départ. Il ne dépend pas de l’espace disponible dans la boîte IPC : l’événement peut être perdu, mais le dernier résultat reste consultable tant qu’il n’est pas remplacé et que le parent vit.
+L'enregistrement précède la réattribution, ce qui garantit qu'il est associé au parent direct qui détenait la relation au moment du départ. Il ne dépend pas de l'espace disponible dans la boîte IPC : l'événement peut être perdu, mais le dernier résultat reste consultable tant qu'il n'est pas remplacé et que le parent vit.
 
-> Le résultat est un instantané local du **dernier** enfant direct sorti. Il n’est ni un journal, ni une réservation, ni une preuve d’identité et ne restitue pas un enfant plus ancien après l’arrivée d’un nouveau résultat.
+> Le résultat est un instantané local du **dernier** enfant direct sorti. Il n'est ni un journal, ni une réservation, ni une preuve d'identité et ne restitue pas un enfant plus ancien après l'arrivée d'un nouveau résultat.
 
 ## Consultation
 
-`SYS_TASK_CHILD_RESULT` reçoit le PID enfant dans `EBX` et un `os_task_exit_result_t*` dans `ECX`. Il ne lit que l’enregistrement de l’appelant. Si le PID demandé ne correspond pas au dernier enfant mémorisé, il retourne `OS_TASK_NO_CHILD_RESULT` sans divulguer d’état de tâche tiers.
+`SYS_TASK_CHILD_RESULT` reçoit le PID enfant dans `EBX` et un `os_task_exit_result_t*` dans `ECX`. Il ne lit que l'enregistrement de l'appelant. Si le PID demandé ne correspond pas au dernier enfant mémorisé, il retourne `OS_TASK_NO_CHILD_RESULT` sans divulguer d'état de tâche tiers.
 
 | Champ | Sens |
 |---|---|
-| `child_pid` | PID de l’enfant direct terminé |
+| `child_pid` | PID de l'enfant direct terminé |
 | `exit_code` | code `SYS_EXIT` ou `OS_TASK_EXIT_KILLED` |
 | `reason` | `exited` ou `killed` |
-| `finished_ticks` | tick PIT local non atomique à l’enregistrement |
+| `finished_ticks` | tick PIT local non atomique à l'enregistrement |
 
 Le shell affiche une forme stable, par exemple `child-result ok 3 0 1` après le retour normal de `waitchild`, ou `child-result ok 2 -128 2` après un `kill` autorisé.
 
@@ -47,9 +47,9 @@ Le shell affiche une forme stable, par exemple `child-result ok 3 0 1` après le
 
 ## Limites
 
-Le mécanisme ne conserve qu’un résultat par parent ; il écrase donc celui d’un enfant précédent. Il n’offre pas de zombie, de table de plusieurs résultats, de collecte destructive, de code de signal, de groupe de processus, de timeout, de blocage jusqu’à disponibilité d’un résultat, de droits d’ancêtre ou d’historique durable.
+Le mécanisme ne conserve qu'un résultat par parent ; il écrase donc celui d'un enfant précédent. Il n'offre pas de zombie, de table de plusieurs résultats, de collecte destructive, de code de signal, de groupe de processus, de timeout, de blocage jusqu'à disponibilité d'un résultat, de droits d'ancêtre ou d'historique durable.
 
-`wait` reste une attente prospective : il exige qu’un enfant direct soit encore présent. `child-result` est une consultation rétrospective très limitée du dernier départ seulement. Les ticks et la structure sont volatils, non atomiques et non persistants. Les erreurs de chargement d’ELF, les exceptions noyau et les arrêts matériels ne produisent pas de résultat de sortie fiable.
+`wait` reste une attente prospective : il exige qu'un enfant direct soit encore présent. `child-result` est une consultation rétrospective très limitée du dernier départ seulement. Les ticks et la structure sont volatils, non atomiques et non persistants. Les erreurs de chargement d'ELF, les exceptions noyau et les arrêts matériels ne produisent pas de résultat de sortie fiable.
 
 ## Fichiers concernés
 
@@ -67,4 +67,4 @@ Le mécanisme ne conserve qu’un résultat par parent ; il écrase donc celui d
 ## Références
 
 [1] [État réel de MOHHDY](ETAT_REEL.md)
-[2] [Gouvernance observable des tâches — lot Foundation 45](mohhdy_foundation_increment_45_task_governance.md)
+[2] [Gouvernance observable des tâches - lot Foundation 45](mohhdy_foundation_increment_45_task_governance.md)

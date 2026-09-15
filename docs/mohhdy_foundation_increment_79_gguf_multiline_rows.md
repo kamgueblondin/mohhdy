@@ -1,12 +1,12 @@
-# MOHHDY Foundation — Incrément 79 : matrice GGUF multi-lignes
+# MOHHDY Foundation - Incrément 79 : matrice GGUF multi-lignes
 
 **État :** implémenté sur la branche de travail du lot 79.
 
 ## Objectif
 
-Le lot 79 transforme la fixture GGUF en matrice quantifiée Q4_K réellement multi-lignes. `output.weight` possède maintenant la forme `256 × 2`: chaque ligne contient un super-bloc de 256 valeurs et les deux lignes occupent deux blocs Q4_K consécutifs dans le fichier FAT16.
+Le lot 79 transforme la fixture GGUF en matrice quantifiée Q4_K réellement multi-lignes. `output.weight` possède maintenant la forme `256 x 2`: chaque ligne contient un super-bloc de 256 valeurs et les deux lignes occupent deux blocs Q4_K consécutifs dans le fichier FAT16.
 
-Cette fixture vérifie que la façade `gpt2_gguf_dot_quant_row_fat16` sélectionne correctement la ligne zéro et la ligne un, tandis qu’une demande de ligne deux est rejetée. L’accumulation tensorielle sur 512 activations reste également testée, ce qui couvre le parcours des deux blocs depuis le stockage disque.
+Cette fixture vérifie que la façade `gpt2_gguf_dot_quant_row_fat16` sélectionne correctement la ligne zéro et la ligne un, tandis qu'une demande de ligne deux est rejetée. L'accumulation tensorielle sur 512 activations reste également testée, ce qui couvre le parcours des deux blocs depuis le stockage disque.
 
 | Élément | Valeur de test |
 | --- | --- |

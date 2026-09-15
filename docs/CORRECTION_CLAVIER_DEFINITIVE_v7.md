@@ -8,7 +8,7 @@
 
 **Cause identifiée :** Multiple conflits dans la gestion des interruptions clavier :
 1. **Logging excessif** dans le handler d'interruption causant des délais critiques
-2. **Double polling** dans `keyboard_getc()` interférant avec les interruptions  
+2. **Double polling** dans `keyboard_getc()` interférant avec les interruptions
 3. **Conflits de timing** entre les différentes méthodes d'accès au clavier
 
 ## ✅ Solution Implémentée
@@ -20,7 +20,7 @@
 void keyboard_interrupt_handler() {
     print_string_serial("=== INTERRUPTION CLAVIER RECUE ===\n");
     uint8_t scancode = inb(0x60);
-    
+
     // Debug détaillé sur port série (PROBLÉMATIQUE)
     print_string_serial("KBD sc=0x");
     [... logging excessif ...]
@@ -32,21 +32,21 @@ void keyboard_interrupt_handler() {
 ```c
 void keyboard_interrupt_handler() {
     uint8_t scancode = inb(0x60);
-    
+
     // Traitement minimal et efficace
-    if (scancode == 0xFA || scancode == 0xFE || scancode == 0x00 || 
+    if (scancode == 0xFA || scancode == 0xFE || scancode == 0x00 ||
         scancode == 0xFF || (scancode & 0x80)) {
         asm volatile("sti");
         return;
     }
-    
+
     char c = scancode_to_ascii(scancode);
     if (c) {
         kbd_put(c);
         extern volatile int g_reschedule_needed;
         g_reschedule_needed = 1;
     }
-    
+
     asm volatile("sti");
 }
 ```
@@ -70,15 +70,15 @@ char keyboard_getc(void) {
 ```c
 char keyboard_getc(void) {
     asm volatile("sti"); // Interruptions activées
-    
+
     int timeout = 0;
     const int MAX_TIMEOUT = 50000;
-    
+
     while (timeout < MAX_TIMEOUT) {
         if (kbd_get_nonblock(&c) == 0) {
             return c; // Caractère du buffer (via interruptions)
         }
-        
+
         // Pause + yield CPU périodique
         for (volatile int i = 0; i < 50; i++) asm volatile("nop");
         if (timeout % 500 == 0) asm volatile("int $0x30");
@@ -99,7 +99,7 @@ char keyboard_getc(void) {
 ### Métriques de Réussite
 ```
 ✅ Initialisation clavier : 1/1
-✅ IRQ1 activé : 1/1  
+✅ IRQ1 activé : 1/1
 ✅ Shell lancé : 2/1
 ✅ Compilation sans erreurs
 ✅ Démarrage système complet
@@ -138,11 +138,11 @@ char keyboard_getc(void) {
 
 ### Flux de Données Optimisé
 ```
-Touche Physique → PS/2 i8042 → IRQ1 → Handler Optimisé 
-    ↓
+Touche Physique -> PS/2 i8042 -> IRQ1 -> Handler Optimisé
+    v
 Buffer ASCII Unifié (thread-safe)
-    ↓  
-SYS_GETC → keyboard_getc() optimisé → Shell utilisateur
+    v
+SYS_GETC -> keyboard_getc() optimisé -> Shell utilisateur
 ```
 
 ### Instructions d'Utilisation
@@ -164,5 +164,5 @@ Les corrections apportées ont **définitivement résolu** le problème du clavi
 **MOHHDY v6.1 - Clavier Définitivement Corrigé** ✅
 
 ---
-*Correction effectuée le 27 août 2025*  
+*Correction effectuée le 27 août 2025*
 *MiniMax Agent - Expert Assembleur & C*

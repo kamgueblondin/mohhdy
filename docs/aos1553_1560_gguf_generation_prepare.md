@@ -1,8 +1,8 @@
-# AOS-1553 à AOS-1560 — préparation statique d’un contexte de génération GGUF
+# AOS-1553 à AOS-1560 - préparation statique d'un contexte de génération GGUF
 
 ## Objectif
 
-Ce lot prépare un modèle GPT-2 GGUF pour le futur chemin de génération locale sans interpréter de métadonnées de configuration non fiables ni réserver de mémoire. Il introduit `gpt2_gguf_generation_prepare`, qui produit un contexte de génération composé de descripteurs de tenseurs et d’une table de couches détenue par l’appelant.
+Ce lot prépare un modèle GPT-2 GGUF pour le futur chemin de génération locale sans interpréter de métadonnées de configuration non fiables ni réserver de mémoire. Il introduit `gpt2_gguf_generation_prepare`, qui produit un contexte de génération composé de descripteurs de tenseurs et d'une table de couches détenue par l'appelant.
 
 ## Contrat préparé
 
@@ -20,10 +20,10 @@ Les dimensions **C** (canaux), **V** (vocabulaire) et **T** (contexte maximal) s
 
 ## Validation
 
-La suite `test_gpt2_gguf` construit maintenant un index synthétique complet de quinze tenseurs : cinq rôles globaux et les dix rôles de `blk.0`. Elle confirme la préparation d’un modèle de 256 canaux, quatre tokens et deux positions, ainsi que le rejet déterministe d’un format invalide pour un tenseur dense global.
+La suite `test_gpt2_gguf` construit maintenant un index synthétique complet de quinze tenseurs : cinq rôles globaux et les dix rôles de `blk.0`. Elle confirme la préparation d'un modèle de 256 canaux, quatre tokens et deux positions, ainsi que le rejet déterministe d'un format invalide pour un tenseur dense global.
 
-La règle de build de cette suite lie désormais le loader réel, FAT16 et les kernels quantifiés : la couverture s’exécute donc contre l’implémentation de production du contrat de préparation.
+La règle de build de cette suite lie désormais le loader réel, FAT16 et les kernels quantifiés : la couverture s'exécute donc contre l'implémentation de production du contrat de préparation.
 
 ## Limites restantes
 
-La préparation résout et valide tous les descripteurs nécessaires, mais elle ne lit pas encore les embeddings et paramètres denses depuis FAT16 pour exécuter une séquence de tokens. Le prochain lot raccordera l’état préparé au chemin `embeddings → blocs transformeur → normalisation finale → logits → échantillonnage`.
+La préparation résout et valide tous les descripteurs nécessaires, mais elle ne lit pas encore les embeddings et paramètres denses depuis FAT16 pour exécuter une séquence de tokens. Le prochain lot raccordera l'état préparé au chemin `embeddings -> blocs transformeur -> normalisation finale -> logits -> échantillonnage`.

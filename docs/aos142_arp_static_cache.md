@@ -1,13 +1,13 @@
-# AOS-142 — Cache ARP statique caller-owned
+# AOS-142 - Cache ARP statique caller-owned
 
-Le lot AOS-142 ajoute un cache ARP de capacité fixe (`NET_ARP_CACHE_CAPACITY`), stocké par l’appelant. Chaque entrée contient une IPv4, une MAC et un indicateur de validité. Les opérations d’initialisation, insertion, mise à jour, recherche et invalidation n’utilisent aucune allocation dynamique.
+Le lot AOS-142 ajoute un cache ARP de capacité fixe (`NET_ARP_CACHE_CAPACITY`), stocké par l'appelant. Chaque entrée contient une IPv4, une MAC et un indicateur de validité. Les opérations d'initialisation, insertion, mise à jour, recherche et invalidation n'utilisent aucune allocation dynamique.
 
-Une insertion met à jour l’entrée existante lorsque l’IPv4 est déjà présente ; sinon, elle utilise la première entrée libre. Lorsque le cache est plein, l’insertion échoue explicitement au lieu d’évincer silencieusement une entrée. Cette politique rend la consommation mémoire et le comportement déterministes dans le chemin réseau bare-metal.
+Une insertion met à jour l'entrée existante lorsque l'IPv4 est déjà présente ; sinon, elle utilise la première entrée libre. Lorsque le cache est plein, l'insertion échoue explicitement au lieu d'évincer silencieusement une entrée. Cette politique rend la consommation mémoire et le comportement déterministes dans le chemin réseau bare-metal.
 
 | Élément | État AOS-142 |
 |---|---|
 | Cache à capacité fixe | Implémenté. |
-| Lookup IPv4 → MAC | Implémenté. |
+| Lookup IPv4 -> MAC | Implémenté. |
 | Mise à jour et invalidation | Implémentées. |
 | Allocation dynamique | Aucune. |
 | Requête ARP et attente RX | Prochain sous-lot. |

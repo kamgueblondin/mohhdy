@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-011  
-**Titre** : Système de virtualisation léger et containers sécurisés  
-**Phase** : 1 - Foundation  
-**Priorité** : Élevée  
-**Complexité** : Très Élevée  
-**Effort Estimé** : 25 jours-homme  
-**Risque** : Élevé  
+**ID** : US-011
+**Titre** : Système de virtualisation léger et containers sécurisés
+**Phase** : 1 - Foundation
+**Priorité** : Élevée
+**Complexité** : Très Élevée
+**Effort Estimé** : 25 jours-homme
+**Risque** : Élevé
 
 ## Description Utilisateur
 
-**En tant que** développeur et utilisateur MOHHDY  
-**Je veux** un système de virtualisation léger qui permet d'exécuter des applications isolées et des environnements sécurisés  
+**En tant que** développeur et utilisateur MOHHDY
+**Je veux** un système de virtualisation léger qui permet d'exécuter des applications isolées et des environnements sécurisés
 **Afin de** garantir la sécurité, la portabilité et l'isolation des charges de travail
 
 ## Contexte Technique Détaillé
@@ -103,11 +103,11 @@ int container_destroy(container_id_t container_id);
 int container_list_all(container_info_t* containers, int max_count);
 int container_get_info(container_id_t container_id, container_info_t* info);
 int container_get_stats(container_id_t container_id, container_stats_t* stats);
-int container_get_logs(container_id_t container_id, log_options_t* options, 
+int container_get_logs(container_id_t container_id, log_options_t* options,
                       char* log_buffer, size_t buffer_size);
 
 // Exécution de commandes
-int container_exec(container_id_t container_id, exec_config_t* config, 
+int container_exec(container_id_t container_id, exec_config_t* config,
                   exec_result_t* result);
 int container_attach(container_id_t container_id, attach_config_t* config);
 ```
@@ -133,13 +133,13 @@ typedef enum {
 } isolation_level_t;
 
 // API de sécurité
-int container_security_configure(container_id_t container_id, 
+int container_security_configure(container_id_t container_id,
                                 hardware_security_t* security);
-int container_security_scan(container_id_t container_id, 
+int container_security_scan(container_id_t container_id,
                            security_scan_result_t* result);
-int container_security_apply_policy(container_id_t container_id, 
+int container_security_apply_policy(container_id_t container_id,
                                    security_policy_t* policy);
-int container_security_audit(container_id_t container_id, 
+int container_security_audit(container_id_t container_id,
                             audit_report_t* report);
 ```
 
@@ -156,7 +156,7 @@ typedef struct {
 
 // API de sandbox
 int sandbox_create(sandbox_config_t* config, sandbox_id_t* sandbox_id);
-int sandbox_execute(sandbox_id_t sandbox_id, const char* executable, 
+int sandbox_execute(sandbox_id_t sandbox_id, const char* executable,
                    char* const argv[], execution_result_t* result);
 int sandbox_monitor(sandbox_id_t sandbox_id, monitoring_config_t* config);
 int sandbox_destroy(sandbox_id_t sandbox_id);
@@ -183,10 +183,10 @@ typedef struct {
 } cpu_allocation_t;
 
 // API de planification
-int scheduler_allocate_resources(container_id_t container_id, 
+int scheduler_allocate_resources(container_id_t container_id,
                                resource_requirements_t* requirements,
                                resource_allocation_t* allocation);
-int scheduler_update_allocation(container_id_t container_id, 
+int scheduler_update_allocation(container_id_t container_id,
                               resource_allocation_t* new_allocation);
 int scheduler_optimize_placement(placement_optimization_t* optimization);
 int scheduler_balance_load(load_balancing_config_t* config);
@@ -209,9 +209,9 @@ typedef struct {
 } optimization_result_t;
 
 // API d'optimisation IA
-int scheduler_ai_analyze_workload(container_id_t container_id, 
+int scheduler_ai_analyze_workload(container_id_t container_id,
                                 workload_analysis_t* analysis);
-int scheduler_ai_optimize(optimization_context_t* context, 
+int scheduler_ai_optimize(optimization_context_t* context,
                          optimization_result_t* result);
 int scheduler_ai_predict_resources(workload_prediction_t* prediction);
 int scheduler_ai_recommend_scaling(scaling_recommendation_t* recommendation);
@@ -240,11 +240,11 @@ typedef enum {
 } image_format_t;
 
 // API de gestion d'images
-int image_pull(const char* image_name, const char* tag, 
+int image_pull(const char* image_name, const char* tag,
               pull_options_t* options);
-int image_push(const char* image_name, const char* tag, 
+int image_push(const char* image_name, const char* tag,
               push_options_t* options);
-int image_build(build_context_t* context, build_options_t* options, 
+int image_build(build_context_t* context, build_options_t* options,
                char* image_id);
 int image_list(image_info_t* images, int max_count);
 int image_remove(const char* image_id, remove_options_t* options);

@@ -1,8 +1,8 @@
-# AOS-175 — Parsing ServerHello TLS caller-owned
+# AOS-175 - Parsing ServerHello TLS caller-owned
 
 AOS-175 ajoute `net_tls_server_hello_parse`, une vue sans copie du ServerHello TLS minimal. Le parseur vérifie le type Handshake, la longueur 24 bits, la version TLS 1.2, le random de 32 octets, le session ID borné, la suite cryptographique et la compression nulle.
 
-Les pointeurs retournés désignent le buffer fourni par l’appelant. Aucun état global, buffer interne ou mécanisme d’allocation n’est utilisé. Les messages comportant des extensions ou une structure différente du profil minimal sont volontairement rejetés à ce stade afin de ne pas publier une vue partiellement interprétée.
+Les pointeurs retournés désignent le buffer fourni par l'appelant. Aucun état global, buffer interne ou mécanisme d'allocation n'est utilisé. Les messages comportant des extensions ou une structure différente du profil minimal sont volontairement rejetés à ce stade afin de ne pas publier une vue partiellement interprétée.
 
 | Élément | Statut |
 |---|---|

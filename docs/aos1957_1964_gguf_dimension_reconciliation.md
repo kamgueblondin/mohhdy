@@ -1,8 +1,8 @@
-# AOS-1957…1964 — Réconciliation de la validation dimensionnelle GGUF
+# AOS-1957...1964 - Réconciliation de la validation dimensionnelle GGUF
 
 ## Objet
 
-L’état historique du lot GGUF indiquait que la validation sémantique des dimensions restait à faire avant le branchement aux kernels quantifiés. Cette limite est désormais obsolète.
+L'état historique du lot GGUF indiquait que la validation sémantique des dimensions restait à faire avant le branchement aux kernels quantifiés. Cette limite est désormais obsolète.
 
 | Contrat actuel | Validation appliquée |
 |---|---|
@@ -14,7 +14,7 @@ L’état historique du lot GGUF indiquait que la validation sémantique des dim
 
 ## Garanties
 
-La réconciliation ne change ni les formats GGUF ni les contrats de mémoire. Les buffers de noms, couches, espaces de travail et cache KV restent intégralement caller-owned ; aucune allocation dynamique n’est introduite.
+La réconciliation ne change ni les formats GGUF ni les contrats de mémoire. Les buffers de noms, couches, espaces de travail et cache KV restent intégralement caller-owned ; aucune allocation dynamique n'est introduite.
 
 ## Validation
 

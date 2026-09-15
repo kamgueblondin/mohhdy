@@ -33,8 +33,8 @@ Le VMM implémente le paging, créant une couche d'abstraction entre les adresse
 
 ```
 Adresses Virtuelles    Adresses Physiques
-0x00000000-0x003FFFFF → 0x00000000-0x003FFFFF (4 Mo, mapping 1:1)
-0x00400000+           → Gestion dynamique future
+0x00000000-0x003FFFFF -> 0x00000000-0x003FFFFF (4 Mo, mapping 1:1)
+0x00400000+ -> Gestion dynamique future
 ```
 
 ### Registres CPU Utilisés
@@ -103,7 +103,7 @@ typedef struct {
 #### Gestion Mémoire
 - `kernel/mem/pmm.h` - Interface du Physical Memory Manager
 - `kernel/mem/pmm.c` - Implémentation du PMM
-- `kernel/mem/vmm.h` - Interface du Virtual Memory Manager  
+- `kernel/mem/vmm.h` - Interface du Virtual Memory Manager
 - `kernel/mem/vmm.c` - Implémentation du VMM
 - `boot/paging.s` - Fonctions assembleur pour le paging
 

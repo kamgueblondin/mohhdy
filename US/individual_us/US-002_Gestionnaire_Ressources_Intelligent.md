@@ -1,21 +1,21 @@
 # US-002 : Gestionnaire de Ressources Intelligent
 
-> **MOHHDY :** chevauchement PMM / VMM / heap / `SYS_MEMINFO` seulement — pas de gestionnaire IA. Voir [../mohhdy_us.md](../mohhdy_us.md) AOS-002.
+> **MOHHDY :** chevauchement PMM / VMM / heap / `SYS_MEMINFO` seulement - pas de gestionnaire IA. Voir [../mohhdy_us.md](../mohhdy_us.md) AOS-002.
 
 ## Informations Générales
 
-**ID** : US-002  
-**Titre** : Développement du gestionnaire de ressources intelligent  
-**Phase** : 1 - Foundation  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 20 jours-homme  
-**Risque** : Moyen  
+**ID** : US-002
+**Titre** : Développement du gestionnaire de ressources intelligent
+**Phase** : 1 - Foundation
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 20 jours-homme
+**Risque** : Moyen
 
 ## Description Utilisateur
 
-**En tant que** système MOHHDY  
-**Je veux** un gestionnaire de ressources intelligent qui optimise automatiquement l'allocation des ressources  
+**En tant que** système MOHHDY
+**Je veux** un gestionnaire de ressources intelligent qui optimise automatiquement l'allocation des ressources
 **Afin de** maximiser les performances et l'efficacité énergétique selon les patterns d'usage
 
 ## Contexte Technique Détaillé
@@ -144,7 +144,7 @@ typedef enum {
 } access_pattern_t;
 
 // API d'allocation intelligente
-int memory_smart_allocate(size_t size, allocation_priority_t priority, 
+int memory_smart_allocate(size_t size, allocation_priority_t priority,
                          smart_allocation_t** allocation);
 int memory_predict_allocation_needs(process_id_t pid, size_t* predicted_size);
 int memory_optimize_layout(process_id_t pid);
@@ -168,7 +168,7 @@ typedef enum {
 } compression_algorithm_t;
 
 // API de compression intelligente
-int memory_compress_pages(virtual_address_t start, size_t page_count, 
+int memory_compress_pages(virtual_address_t start, size_t page_count,
                          compression_profile_t* profile);
 int memory_predict_swap_candidates(virtual_address_t* candidates, int max_count);
 int memory_smart_prefetch(process_id_t pid, virtual_address_t* addresses, int count);
@@ -226,7 +226,7 @@ typedef enum {
 } core_type_t;
 
 // API de gestion des cœurs
-int scheduler_get_optimal_core(task_requirements_t* requirements, 
+int scheduler_get_optimal_core(task_requirements_t* requirements,
                               cpu_core_id_t* optimal_core);
 int scheduler_migrate_task(process_id_t pid, cpu_core_id_t target_core);
 int scheduler_balance_cores(core_balancing_strategy_t strategy);
@@ -277,7 +277,7 @@ typedef enum {
 
 // API d'états d'énergie
 int power_transition_to_state(adaptive_power_state_t* target_state);
-int power_predict_optimal_state(usage_prediction_t* prediction, 
+int power_predict_optimal_state(usage_prediction_t* prediction,
                                adaptive_power_state_t* optimal_state);
 int power_configure_wake_triggers(wake_trigger_t* triggers, int trigger_count);
 ```
@@ -296,17 +296,17 @@ typedef struct {
 } neural_predictor_t;
 
 // Prédiction des besoins en ressources
-float predict_resource_usage(neural_predictor_t* model, 
+float predict_resource_usage(neural_predictor_t* model,
                             historical_data_t* history,
                             current_context_t* context) {
     float input_vector[INPUT_SIZE];
-    
+
     // Préparation des données d'entrée
     prepare_input_vector(history, context, input_vector);
-    
+
     // Propagation avant dans le réseau
     float prediction = forward_propagation(model, input_vector);
-    
+
     // Application de la fonction d'activation
     return apply_activation(prediction, model->activation);
 }
@@ -316,10 +316,10 @@ void update_prediction_model(neural_predictor_t* model,
                            float actual_usage,
                            float predicted_usage) {
     float error = actual_usage - predicted_usage;
-    
+
     // Rétropropagation pour ajuster les poids
     backpropagation(model, error);
-    
+
     // Mise à jour des poids avec le taux d'apprentissage
     update_weights(model, model->learning_rate);
 }
@@ -341,21 +341,21 @@ int find_pareto_optimal_allocation(resource_constraints_t* constraints,
                                   optimization_solution_t* solutions,
                                   int max_solutions) {
     int solution_count = 0;
-    
+
     // Génération de solutions candidates
     for (int i = 0; i < CANDIDATE_COUNT; i++) {
         optimization_solution_t candidate;
         generate_candidate_solution(&candidate, constraints);
-        
+
         // Vérification de la dominance Pareto
         if (is_pareto_optimal(&candidate, solutions, solution_count)) {
             solutions[solution_count++] = candidate;
-            
+
             // Suppression des solutions dominées
             remove_dominated_solutions(solutions, &solution_count);
         }
     }
-    
+
     return solution_count;
 }
 ```
@@ -441,18 +441,18 @@ int find_pareto_optimal_allocation(resource_constraints_t* constraints,
 void test_prediction_accuracy() {
     resource_prediction_t prediction;
     usage_history_t history;
-    
+
     // Collecte de données historiques
     collect_usage_history(&history, 7 * 24); // 7 jours
-    
+
     // Génération de prédiction
     int result = prediction_get_resource_forecast(1, &prediction);
     assert(result == 0);
-    
+
     // Attente et mesure de l'usage réel
     sleep(3600); // 1 heure
     float actual_usage = measure_actual_usage();
-    
+
     // Vérification de la précision
     float error = fabs(prediction.cpu_usage_prediction[0] - actual_usage);
     assert(error < 0.15); // Erreur < 15%
@@ -464,18 +464,18 @@ void test_prediction_accuracy() {
 // Test d'optimisation mémoire
 void test_memory_optimization() {
     memory_stats_t stats_before, stats_after;
-    
+
     // Mesure avant optimisation
     get_memory_stats(&stats_before);
-    
+
     // Déclenchement de l'optimisation
     memory_optimize_layout(current_process_id);
-    
+
     // Mesure après optimisation
     get_memory_stats(&stats_after);
-    
+
     // Vérification de l'amélioration
-    float improvement = (stats_before.fragmentation - stats_after.fragmentation) 
+    float improvement = (stats_before.fragmentation - stats_after.fragmentation)
                        / stats_before.fragmentation;
     assert(improvement > 0.10); // Amélioration > 10%
 }

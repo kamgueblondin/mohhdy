@@ -1,4 +1,4 @@
-# MOHHDY Foundation — Incrément 08 : politique VFS virtuelle Ring 3
+# MOHHDY Foundation - Incrément 08 : politique VFS virtuelle Ring 3
 
 ## But
 
@@ -18,4 +18,4 @@ Le contrat QEMU VFS lance le serveur, conserve un message IPC concurrent, lit `h
 
 > Cette tranche externalise **une politique et une source virtuelle**, non pas le backend de stockage général.
 
-Les sélections initrd/overlay, ATA PIO, la copie des données de fichier et `SYS_READFILE` restent dans le noyau. La source virtuelle n’est ni un point de montage général, ni un pilote, ni une isolation mémoire renforcée. L’étape suivante réaliste consiste à définir un protocole de backend distinct et une liste de chemins ou de montages détenue par le service, sans prétendre que le VFS noyau a déjà disparu.
+Les sélections initrd/overlay, ATA PIO, la copie des données de fichier et `SYS_READFILE` restent dans le noyau. La source virtuelle n'est ni un point de montage général, ni un pilote, ni une isolation mémoire renforcée. L'étape suivante réaliste consiste à définir un protocole de backend distinct et une liste de chemins ou de montages détenue par le service, sans prétendre que le VFS noyau a déjà disparu.

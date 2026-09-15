@@ -13,8 +13,8 @@ L'objectif principal est de créer un navigateur-OS intégré qui peut gérer le
 ## US-031 : Développement du navigateur-OS intégré
 
 ### Description
-**En tant que** utilisateur MOHHDY  
-**Je veux** un navigateur intégré qui fonctionne comme mon système d'exploitation principal  
+**En tant que** utilisateur MOHHDY
+**Je veux** un navigateur intégré qui fonctionne comme mon système d'exploitation principal
 **Afin de** accéder à toutes mes applications et fichiers via une interface web unifiée
 
 ### Contexte Technique
@@ -118,8 +118,8 @@ int browser_get_installed_apps(web_app_t* apps, int max_count);
 4. **Test de Sécurité** : Isolation complète entre onglets
 
 ### Estimation
-**Complexité** : Très Élevée  
-**Effort** : 30 jours-homme  
+**Complexité** : Très Élevée
+**Effort** : 30 jours-homme
 **Risque** : Élevé
 
 ---
@@ -127,8 +127,8 @@ int browser_get_installed_apps(web_app_t* apps, int max_count);
 ## US-032 : Création du gestionnaire d'applications web natives
 
 ### Description
-**En tant que** utilisateur MOHHDY  
-**Je veux** que les applications web se comportent comme des applications natives  
+**En tant que** utilisateur MOHHDY
+**Je veux** que les applications web se comportent comme des applications natives
 **Afin de** avoir une expérience utilisateur fluide et intégrée
 
 ### Contexte Technique
@@ -178,8 +178,8 @@ Le gestionnaire d'applications web natives transforme les Progressive Web Apps (
 4. **Test de Permissions** : Contrôle sécurisé des accès
 
 ### Estimation
-**Complexité** : Élevée  
-**Effort** : 18 jours-homme  
+**Complexité** : Élevée
+**Effort** : 18 jours-homme
 **Risque** : Moyen
 
 ---
@@ -187,8 +187,8 @@ Le gestionnaire d'applications web natives transforme les Progressive Web Apps (
 ## US-033 : Implémentation du système de fichiers web
 
 ### Description
-**En tant que** utilisateur MOHHDY  
-**Je veux** gérer mes fichiers via une interface web moderne et intuitive  
+**En tant que** utilisateur MOHHDY
+**Je veux** gérer mes fichiers via une interface web moderne et intuitive
 **Afin de** avoir une expérience unifiée pour tous mes contenus
 
 ### Contexte Technique
@@ -239,8 +239,8 @@ Le système de fichiers web remplace l'explorateur de fichiers traditionnel par 
 4. **Test de Synchronisation** : Sync en temps réel
 
 ### Estimation
-**Complexité** : Élevée  
-**Effort** : 22 jours-homme  
+**Complexité** : Élevée
+**Effort** : 22 jours-homme
 **Risque** : Moyen
 
 ---
@@ -250,7 +250,7 @@ Le système de fichiers web remplace l'explorateur de fichiers traditionnel par 
 ### Phase 4 - PromptMessage (US-046 à US-060)
 Création du langage universel PromptMessage pour programmer et communiquer avec MOHHDY.
 
-### Phase 5 - P2P Network (US-061 à US-075)  
+### Phase 5 - P2P Network (US-061 à US-075)
 Implémentation du réseau distribué P2P pour l'interconnexion des instances MOHHDY.
 
 ### Phase 6 - Multi-Platform (US-076 à US-090)

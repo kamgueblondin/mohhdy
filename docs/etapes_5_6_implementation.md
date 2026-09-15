@@ -263,7 +263,7 @@ Timer configure pour 100 Hz
 - Synchronisation avec l'ordonnanceur
 
 **Appels Système**
-- Transition sécurisée Ring 3 → Ring 0
+- Transition sécurisée Ring 3 -> Ring 0
 - Passage de paramètres via registres
 - Gestion des erreurs et validation
 
@@ -331,7 +331,7 @@ Timer configure pour 100 Hz
 
 ### 🎯 Conclusion
 
-L'implémentation des étapes 5 et 6 représente une évolution majeure de MOHHDY, le transformant d'un noyau de démonstration en un système d'exploitation fonctionnel et sécurisé. 
+L'implémentation des étapes 5 et 6 représente une évolution majeure de MOHHDY, le transformant d'un noyau de démonstration en un système d'exploitation fonctionnel et sécurisé.
 
 **Réalisations Clés**
 - Architecture multitâche robuste et performante
@@ -347,6 +347,6 @@ Le système dispose maintenant de toutes les fondations nécessaires pour héber
 
 ---
 
-*MOHHDY v4.0 - Système d'exploitation multitâche avec espace utilisateur*  
+*MOHHDY v4.0 - Système d'exploitation multitâche avec espace utilisateur*
 *Développé pour l'hébergement sécurisé d'intelligence artificielle*
 

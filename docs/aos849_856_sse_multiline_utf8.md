@@ -1,10 +1,10 @@
-# AOS-849 à AOS-856 — SSE multi-ligne et UTF-8 fragmenté
+# AOS-849 à AOS-856 - SSE multi-ligne et UTF-8 fragmenté
 
 ## Objectif
 
-Ce macro-lot durcit le streaming LLM SSE sans allocation dynamique. L’accumulateur accepte désormais un événement composé de plusieurs lignes `data:` valides et concatène leurs charges utiles dans le buffer caller-owned avant d’appeler l’extracteur JSON fournisseur.
+Ce macro-lot durcit le streaming LLM SSE sans allocation dynamique. L'accumulateur accepte désormais un événement composé de plusieurs lignes `data:` valides et concatène leurs charges utiles dans le buffer caller-owned avant d'appeler l'extracteur JSON fournisseur.
 
-Le même chemin accepte une séquence UTF-8 dont les octets sont répartis entre deux appels `net_llm_sse_accumulator_feed`. L’extraction reste différée jusqu’à la fin de l’événement SSE ; aucun caractère partiel n’est publié.
+Le même chemin accepte une séquence UTF-8 dont les octets sont répartis entre deux appels `net_llm_sse_accumulator_feed`. L'extraction reste différée jusqu'à la fin de l'événement SSE ; aucun caractère partiel n'est publié.
 
 ## Contrat
 
@@ -21,7 +21,7 @@ Les commentaires SSE, champs `id`, `retry` et événements autres que `data:` re
 
 ## Validation
 
-Le scénario ajouté vérifie une réponse Ollama dont l’emoji UTF-8 est coupé entre deux appels `feed`, puis un événement `data:` multi-ligne reconstruit en `bonjour`. La suite HTTP/TLS atteint **17/17 tests verts** ; la suite globale et les smokes QEMU doivent confirmer la non-régression du reste du noyau i386.
+Le scénario ajouté vérifie une réponse Ollama dont l'emoji UTF-8 est coupé entre deux appels `feed`, puis un événement `data:` multi-ligne reconstruit en `bonjour`. La suite HTTP/TLS atteint **17/17 tests verts** ; la suite globale et les smokes QEMU doivent confirmer la non-régression du reste du noyau i386.
 
 ## Limites restantes
 

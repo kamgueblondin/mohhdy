@@ -2,18 +2,18 @@
 
 ## Informations Générales
 
-**ID** : US-014  
-**Titre** : Gestionnaire de performance et collecte de métriques intelligentes temps réel  
-**Phase** : 1 - Foundation  
-**Priorité** : Élevée  
-**Complexité** : Élevée  
-**Effort Estimé** : 20 jours-homme  
-**Risque** : Moyen  
+**ID** : US-014
+**Titre** : Gestionnaire de performance et collecte de métriques intelligentes temps réel
+**Phase** : 1 - Foundation
+**Priorité** : Élevée
+**Complexité** : Élevée
+**Effort Estimé** : 20 jours-homme
+**Risque** : Moyen
 
 ## Description Utilisateur
 
-**En tant que** administrateur système et développeur MOHHDY  
-**Je veux** un système de monitoring intelligent qui collecte, analyse et optimise automatiquement les performances  
+**En tant que** administrateur système et développeur MOHHDY
+**Je veux** un système de monitoring intelligent qui collecte, analyse et optimise automatiquement les performances
 **Afin de** maintenir des performances optimales, détecter les problèmes avant qu'ils impactent les utilisateurs, et fournir des insights actionnables
 
 ## Contexte Technique Détaillé
@@ -114,7 +114,7 @@ int metrics_register_source(const char* source_name, source_id_t* id);
 int metrics_publish_counter(source_id_t source, const char* name, int64_t value);
 int metrics_publish_gauge(source_id_t source, const char* name, double value);
 int metrics_publish_timer(source_id_t source, const char* name, uint64_t duration_ns);
-int metrics_publish_histogram(source_id_t source, const char* name, 
+int metrics_publish_histogram(source_id_t source, const char* name,
                               double* values, size_t count);
 
 // Macros de convenance
@@ -156,11 +156,11 @@ typedef enum {
 } prediction_type_t;
 
 // API de prédiction
-int ai_predict_performance_issues(time_range_t range, 
+int ai_predict_performance_issues(time_range_t range,
                                   performance_prediction_t** predictions,
                                   size_t* count);
 int ai_analyze_trends(const char* metric_name, trend_analysis_t* analysis);
-int ai_suggest_optimizations(component_id_t component, 
+int ai_suggest_optimizations(component_id_t component,
                              optimization_suggestion_t** suggestions,
                              size_t* count);
 ```
@@ -254,7 +254,7 @@ int report_generate_performance(time_range_t range, report_config_t* config,
 
 #### Stratégie de Rétention
 - **Temps Réel** : 1 seconde de résolution, conservé 1 heure
-- **Court Terme** : 1 minute de résolution, conservé 24 heures  
+- **Court Terme** : 1 minute de résolution, conservé 24 heures
 - **Moyen Terme** : 5 minutes de résolution, conservé 7 jours
 - **Long Terme** : 1 heure de résolution, conservé 1 an
 - **Archivage** : Compression et archivage automatique
@@ -268,7 +268,7 @@ int report_generate_performance(time_range_t range, report_config_t* config,
 ### Métriques de Performance du Système
 
 #### Objectifs de Performance
-- **Collecte** : < 100µs par métrique
+- **Collecte** : < 100us par métrique
 - **Stockage** : < 1ms pour écriture
 - **Requête** : < 100ms pour 90% des requêtes
 - **Overhead** : < 1% CPU/mémoire système
@@ -289,8 +289,8 @@ int report_generate_performance(time_range_t range, report_config_t* config,
 6. **Test de Stress** : Stabilité sous charge continue pendant 72h
 
 ### Estimation
-**Complexité** : Élevée  
-**Effort** : 20 jours-homme  
+**Complexité** : Élevée
+**Effort** : 20 jours-homme
 **Risque** : Moyen
 
 ### Notes d'Implémentation

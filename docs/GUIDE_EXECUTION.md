@@ -18,7 +18,7 @@ make run
 ```
 - **Affichage** : Mode texte dans le terminal avec curses
 - **Clavier** : Pleinement fonctionnel avec interruptions PS/2
-- **Hôte de l’émulateur** : Linux, macOS ou Windows avec QEMU (l’invité reste MOHHDY, pas une distribution Linux)
+- **Hôte de l'émulateur** : Linux, macOS ou Windows avec QEMU (l'invité reste MOHHDY, pas une distribution Linux)
 - **Avantages** : Pas de fenêtre séparée, performance optimale
 
 ### 2. Mode Interface Graphique

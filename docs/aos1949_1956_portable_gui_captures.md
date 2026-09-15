@@ -1,4 +1,4 @@
-# AOS-1949…1956 — Captures QEMU GUI portables et validation graphique
+# AOS-1949...1956 - Captures QEMU GUI portables et validation graphique
 
 ## Objet
 
@@ -8,7 +8,7 @@ Le test GUI historique nécessitait une fenêtre QEMU et une intervention manuel
 |---|---|
 | Répertoire de captures | Local au dépôt par défaut, sans écriture dans `/opt`. |
 | Pilotage QEMU | Monitor Unix, injections `sendkey` et captures `screendump`. |
-| Saisie robuste | Contrôle de la ligne lue ; jusqu’à trois essais en cas de duplication transitoire de caractères. |
+| Saisie robuste | Contrôle de la ligne lue ; jusqu'à trois essais en cas de duplication transitoire de caractères. |
 | Preuves | 22 captures PNG : shell, aide, FAT16, overlay, IA/OpenAI et NE2000. |
 
 ## Exécution validée
@@ -30,4 +30,4 @@ Les artefacts de test restent ignorés par Git sous `test_logs/`, afin de ne pas
 
 ## Référence
 
-[1] [QEMU Monitor Protocol — Human Monitor Commands](https://www.qemu.org/docs/master/system/monitor.html)
+[1] [QEMU Monitor Protocol - Human Monitor Commands](https://www.qemu.org/docs/master/system/monitor.html)

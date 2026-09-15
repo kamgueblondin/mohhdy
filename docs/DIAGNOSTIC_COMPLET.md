@@ -1,6 +1,6 @@
 # Diagnostic Complet - Projet MOHHDY
 
-> **État réel (août 2026).** Le projet boote jusqu’au shell userspace. Ce rapport de campagne reste valable comme chronologie. Synthèse à jour : [ETAT_REEL.md](ETAT_REEL.md).
+> **État réel (août 2026).** Le projet boote jusqu'au shell userspace. Ce rapport de campagne reste valable comme chronologie. Synthèse à jour : [ETAT_REEL.md](ETAT_REEL.md).
 
 ## 📋 Résumé Exécutif
 
@@ -185,7 +185,7 @@ Le système MOHHDY constitue une excellente base pour le développement d'un sys
 
 ---
 
-**Diagnostic réalisé le :** 16 août 2025  
-**Version analysée :** MOHHDY v4.0  
+**Diagnostic réalisé le :** 16 août 2025
+**Version analysée :** MOHHDY v4.0
 **Statut :** ✅ FONCTIONNEL ET STABLE
 
