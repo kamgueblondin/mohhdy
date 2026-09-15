@@ -3,6 +3,10 @@
     "mode": "self_host",
     "billing": "none"
   },
+  "runtime": {
+    "kind": "docker",
+    "note": "docker = agent conteneur; browser = lancement oriente navigateur (meme HTTP, FS sandbox)"
+  },
   "instance": {
     "site_id": "site_public_demo"
   },

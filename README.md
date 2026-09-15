@@ -135,7 +135,7 @@ Une ISO BIOS/GRUB peut être produite avec l'initrd. Lorsque les poids GPT-2 son
 
 Le backlog courant est [US/mohhdy_us.md](US/mohhdy_us.md). La vision MOHHDY est conservée séparément dans [US/README.md](US/README.md). L'ordre des prochaines tranches AOS (0-4) et la piste Agent Support sont dans [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md).
 
-Piste produit Agent Support : spec [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md) (`ASSIST-xxx`). `agent/` sert embed, sessions isolées, admin à jeton, simulateur de gestes et facture mock ([docs/assist020_gestes_mcp.md](docs/assist020_gestes_mcp.md)). Les réponses sont un stub local, **pas** un LLM de production, **pas** Chromium, **pas** une fonction du prototype i386 vérifié. Ces items n'apparaissent pas dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md).
+Piste produit Agent Support : spec [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md) (`ASSIST-xxx`). `agent/` sert embed, sessions isolées, admin à jeton, simulateur de gestes, facture mock, vue `/browser` et FS sandbox ([docs/assist060_061_browser.md](docs/assist060_061_browser.md)). Les réponses sont un stub local, **pas** un LLM de production, **pas** Chromium, **pas** US-031, **pas** une fonction du prototype i386 vérifié. Ces items n'apparaissent pas dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md).
 
 - [x] GPT-2 local, cache KV, SSE2 et top-k borné
 - [x] Tokenizer BPE UTF-8 avec couverture de lettres Unicode ciblée

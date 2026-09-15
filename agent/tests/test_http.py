@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fumee HTTP ASSIST-010/011/012/020/021/022/030/031/040/041 (stdlib, sans Docker, hors make ci)."""
+"""Fumee HTTP ASSIST-010..022/030/031/040/041/051/053/060/061 (stdlib, sans Docker, hors make ci)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import time
 import unittest
 import uuid
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -53,6 +54,7 @@ class AgentHttpSmoke(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_KB", None)
         os.environ.pop("MOHHDY_AGENT_MODE", None)
         os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
+        os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.port = cls.httpd.server_address[1]
         cls.base = "http://127.0.0.1:%d" % cls.port
@@ -110,6 +112,14 @@ class AgentHttpSmoke(unittest.TestCase):
         except urllib.error.HTTPError as err:
             return json.loads(err.read().decode("utf-8")), err.code
 
+    def _get_status(self, path: str, headers: dict | None = None):
+        req = urllib.request.Request(self.base + path, headers=headers or {})
+        try:
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                return json.loads(resp.read().decode("utf-8")), resp.status
+        except urllib.error.HTTPError as err:
+            return json.loads(err.read().decode("utf-8")), err.code
+
     def test_no_playwright_dependency(self) -> None:
         self.assertNotIn("playwright", sys.modules)
         source = (ROOT / "server.py").read_text(encoding="utf-8")
@@ -117,6 +127,8 @@ class AgentHttpSmoke(unittest.TestCase):
         tools_src = (ROOT / "tools.py").read_text(encoding="utf-8")
         self.assertNotIn("from playwright", tools_src)
         self.assertNotIn("import playwright", tools_src)
+        fs_src = (ROOT / "browser_fs.py").read_text(encoding="utf-8")
+        self.assertNotIn("playwright", fs_src.lower())
 
     def test_health_json(self) -> None:
         body, status, headers = self._get_json("/health")
@@ -129,6 +141,11 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertFalse(body["kb_loaded"])
         self.assertEqual(body["harness"], "dom_simulator")
         self.assertEqual(body["deployment_mode"], "self_host")
+        self.assertEqual(body["runtime"], "docker")
+        self.assertEqual(body["browser_engine"], "optional_not_installed")
+        self.assertFalse(body["phase3_complete"])
+        self.assertFalse(body["us031_complete"])
+        self.assertTrue(body["browser_fs"])
         self.assertEqual(body["billing"], "none")
         self.assertEqual(body["default_site_id"], "unspecified")
         self.assertFalse(body["quota"]["billing"])
@@ -186,7 +203,108 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertIn("/embed.js", html)
         self.assertIn("/demo", html)
         self.assertIn("/demo-app", html)
+        self.assertIn("/browser", html)
+        self.assertIn("/browser/fs", html)
         self.assertIn("/api/sessions", html)
+
+    def test_browser_view_page(self) -> None:
+        with self._get("/browser") as resp:
+            self.assertEqual(resp.status, 200)
+            html = resp.read().decode("utf-8")
+        self.assertIn("ASSIST-060", html)
+        self.assertIn("simulateur DOM", html)
+        self.assertIn("US-031", html)
+        self.assertIn("Playwright", html)
+        self.assertIn("/demo-app", html)
+        self.assertIn("/browser/fs", html)
+        lowered = html.lower()
+        self.assertNotIn("api_key", lowered)
+
+    def test_browser_fs_page(self) -> None:
+        with self._get("/browser/fs") as resp:
+            self.assertEqual(resp.status, 200)
+            html = resp.read().decode("utf-8")
+        self.assertIn("ASSIST-061", html)
+        self.assertIn("/api/browser/fs", html)
+        self.assertIn("MOHHDY_AGENT_RUNTIME", html)
+        self.assertIn("US-031", html)
+        self.assertIn("ADMIN_TOKEN", html)
+
+    def test_api_browser_status_not_us031(self) -> None:
+        body, status, _ = self._get_json("/api/browser")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["runtime"], "docker")
+        self.assertEqual(body["harness"], "dom_simulator")
+        self.assertEqual(body["browser_engine"], "optional_not_installed")
+        self.assertFalse(body["phase3_complete"])
+        self.assertFalse(body["us031_complete"])
+        self.assertTrue(body["browser_fs"])
+        self.assertEqual(body["urls"]["view"], "/browser")
+        self.assertEqual(body["urls"]["fs"], "/browser/fs")
+        self.assertIn("dom", body)
+        self.assertEqual(body["dom"]["harness"], "dom_simulator")
+        names = [row["name"] for row in body["roots"]]
+        self.assertIn("demo", names)
+        self.assertNotIn("acl.", json.dumps(body))
+
+    def test_browser_fs_list_and_read_demo(self) -> None:
+        roots, status = self._get_status("/api/browser/fs")
+        self.assertEqual(status, 200)
+        names = [row["name"] for row in roots["entries"]]
+        self.assertIn("demo", names)
+        listing, status = self._get_status("/api/browser/fs?path=demo")
+        self.assertEqual(status, 200)
+        self.assertEqual(listing["type"], "dir")
+        files = [row["name"] for row in listing["entries"]]
+        self.assertIn("demo-app.html", files)
+        self.assertIn("browser.html", files)
+        self.assertNotIn("server.py", files)
+        read, status = self._get_status("/api/browser/fs?path=demo/demo-app.html")
+        self.assertEqual(status, 200)
+        self.assertEqual(read["type"], "file")
+        self.assertIn("simulateur DOM", read["content"])
+        listed_read, status = self._get_status(
+            "/api/browser/fs/read?path=demo/browser.html"
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("ASSIST-060", listed_read["content"])
+
+    def test_browser_fs_traversal_refused(self) -> None:
+        cases = (
+            "../server.py",
+            "demo/../server.py",
+            "demo/../../server.py",
+            "/etc/passwd",
+            "demo/../../../etc/passwd",
+            "..%2fserver.py",
+            "demo/./../tools.py",
+        )
+        for raw in cases:
+            body, status = self._get_status(
+                "/api/browser/fs?path=" + urllib.parse.quote(raw, safe="")
+            )
+            self.assertEqual(status, 403, msg="attendu 403 pour %s (got %s %s)" % (raw, status, body))
+            self.assertEqual(body["error"], "path_denied")
+            dumped = json.dumps(body)
+            self.assertNotIn("ADMIN_TOKEN", dumped)
+            if "passwd" in raw:
+                self.assertNotIn("root:", dumped)
+
+    def test_browser_fs_python_source_not_in_sandbox(self) -> None:
+        body, status = self._get_status("/api/browser/fs?path=demo/server.py")
+        self.assertIn(status, (403, 404))
+        self.assertIn(body["error"], ("path_denied", "not_found"))
+        body, status = self._get_status("/api/browser/fs?path=server.py")
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "path_denied")
+
+    def test_browser_fs_write_is_read_only(self) -> None:
+        body, status = self._post_status(
+            "/api/browser/fs?path=demo/new.txt",
+            {"content": "should-not-write"},
+        )
+        self.assertEqual(status, 405)
+        self.assertEqual(body["error"], "fs_read_only")
 
     def test_unknown_is_json_404(self) -> None:
         with self.assertRaises(urllib.error.HTTPError) as ctx:
@@ -792,6 +910,7 @@ class AgentAdminToken(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_KB", None)
         os.environ.pop("MOHHDY_AGENT_MODE", None)
         os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
+        os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.port = cls.httpd.server_address[1]
         cls.base = "http://127.0.0.1:%d" % cls.port
@@ -858,10 +977,37 @@ class AgentAdminToken(unittest.TestCase):
         self.assertNotIn(self.TOKEN, json.dumps(body))
 
     def test_token_not_leaked_in_public_pages(self) -> None:
-        for path in ("/embed.js", "/admin", "/health", "/demo", "/"):
+        for path in ("/embed.js", "/admin", "/health", "/demo", "/", "/browser", "/browser/fs"):
             with urllib.request.urlopen(self.base + path, timeout=2) as resp:
                 body = resp.read().decode("utf-8")
             self.assertNotIn(self.TOKEN, body)
+
+    def test_browser_fs_requires_token(self) -> None:
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(self.base + "/api/browser/fs", timeout=2)
+        self.assertEqual(ctx.exception.code, 401)
+        payload = json.loads(ctx.exception.read().decode("utf-8"))
+        self.assertEqual(payload["error"], "admin_token_required")
+        self.assertNotIn(self.TOKEN, json.dumps(payload))
+
+    def test_browser_fs_authorized_lists_demo(self) -> None:
+        req = urllib.request.Request(
+            self.base + "/api/browser/fs?path=demo",
+            headers={"Authorization": "Bearer " + self.TOKEN},
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            listing = json.loads(resp.read().decode("utf-8"))
+        names = [row["name"] for row in listing["entries"]]
+        self.assertIn("demo-app.html", names)
+
+    def test_browser_fs_wrong_token_rejected(self) -> None:
+        req = urllib.request.Request(
+            self.base + "/api/browser/fs?path=demo",
+            headers={"Authorization": "Bearer wrong-token-not-for-image"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req, timeout=2)
+        self.assertEqual(ctx.exception.code, 401)
 
     def test_takeover_requires_token(self) -> None:
         created = self._post_json("/api/sessions", {"site_id": "token_take"})
@@ -918,6 +1064,7 @@ class AgentKbGrounding(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_DATA", None)
         os.environ.pop("MOHHDY_AGENT_MODE", None)
         os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
+        os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.base = "http://127.0.0.1:%d" % cls.httpd.server_address[1]
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
@@ -1048,6 +1195,7 @@ class AgentDeployScaffold(unittest.TestCase):
             "MOHHDY_AGENT_KB": os.environ.get("MOHHDY_AGENT_KB"),
             "MOHHDY_AGENT_MODE": os.environ.get("MOHHDY_AGENT_MODE"),
             "MOHHDY_AGENT_SITE_ID": os.environ.get("MOHHDY_AGENT_SITE_ID"),
+            "MOHHDY_AGENT_RUNTIME": os.environ.get("MOHHDY_AGENT_RUNTIME"),
             "ADMIN_TOKEN": os.environ.get("ADMIN_TOKEN"),
             "MOHHDY_AGENT_DATA": os.environ.get("MOHHDY_AGENT_DATA"),
         }
@@ -1055,6 +1203,7 @@ class AgentDeployScaffold(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_KB", None)
         os.environ.pop("MOHHDY_AGENT_MODE", None)
         os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
+        os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
         os.environ.pop("ADMIN_TOKEN", None)
         os.environ.pop("MOHHDY_AGENT_DATA", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
@@ -1102,15 +1251,20 @@ class AgentDeployScaffold(unittest.TestCase):
     def test_env_overrides_mode_and_site(self) -> None:
         os.environ["MOHHDY_AGENT_MODE"] = "self_host"
         os.environ["MOHHDY_AGENT_SITE_ID"] = "from_env"
+        os.environ["MOHHDY_AGENT_RUNTIME"] = "browser"
         self.httpd.reset_runtime()
         try:
             with urllib.request.urlopen(self.base + "/health", timeout=2) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
             self.assertEqual(body["deployment_mode"], "self_host")
             self.assertEqual(body["default_site_id"], "from_env")
+            self.assertEqual(body["runtime"], "browser")
+            self.assertFalse(body["phase3_complete"])
+            self.assertFalse(body["us031_complete"])
         finally:
             os.environ.pop("MOHHDY_AGENT_MODE", None)
             os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
+            os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
             self.httpd.reset_runtime()
 
     def test_no_paid_network_helpers(self) -> None:
@@ -1126,6 +1280,148 @@ class AgentDeployScaffold(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("sk_live", text)
             self.assertNotIn("BEGIN PRIVATE KEY", text)
+
+
+class AgentBrowserFsIsolation(unittest.TestCase):
+    """ASSIST-061 : isolation du sandbox data/ et auth, sans US-031."""
+
+    TOKEN = "fs-token-not-for-image"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        base = Path(cls._tmp.name)
+        data = base / "data"
+        data.mkdir()
+        (data / "ok.txt").write_text("sandbox-visible\n", encoding="utf-8")
+        (data / "secret.key").write_text("BEGIN PRIVATE KEY fake\n", encoding="utf-8")
+        outside = base / "outside.txt"
+        outside.write_text("leaked-outside\n", encoding="utf-8")
+        leak = data / "leak.txt"
+        try:
+            leak.symlink_to(outside)
+        except OSError:
+            leak = None
+        cls.outside = outside
+        cls.leak = leak
+        cls._prev = {
+            "ADMIN_TOKEN": os.environ.get("ADMIN_TOKEN"),
+            "MOHHDY_AGENT_DATA": os.environ.get("MOHHDY_AGENT_DATA"),
+            "MOHHDY_AGENT_CONFIG": os.environ.get("MOHHDY_AGENT_CONFIG"),
+            "MOHHDY_AGENT_KB": os.environ.get("MOHHDY_AGENT_KB"),
+            "MOHHDY_AGENT_MODE": os.environ.get("MOHHDY_AGENT_MODE"),
+            "MOHHDY_AGENT_SITE_ID": os.environ.get("MOHHDY_AGENT_SITE_ID"),
+            "MOHHDY_AGENT_RUNTIME": os.environ.get("MOHHDY_AGENT_RUNTIME"),
+        }
+        os.environ["ADMIN_TOKEN"] = cls.TOKEN
+        os.environ["MOHHDY_AGENT_DATA"] = str(data)
+        os.environ["MOHHDY_AGENT_RUNTIME"] = "browser"
+        os.environ.pop("MOHHDY_AGENT_CONFIG", None)
+        os.environ.pop("MOHHDY_AGENT_KB", None)
+        os.environ.pop("MOHHDY_AGENT_MODE", None)
+        os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
+        cls.httpd = server.make_server("127.0.0.1", 0)
+        cls.base = "http://127.0.0.1:%d" % cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+        _wait_ready(cls.base)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.thread.join(timeout=2)
+        for key, value in cls._prev.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        cls._tmp.cleanup()
+
+    def _get(self, path: str, token: str | None = None):
+        headers = {}
+        if token:
+            headers["Authorization"] = "Bearer " + token
+        req = urllib.request.Request(self.base + path, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                return json.loads(resp.read().decode("utf-8")), resp.status
+        except urllib.error.HTTPError as err:
+            return json.loads(err.read().decode("utf-8")), err.code
+
+    def test_runtime_browser_on_health(self) -> None:
+        body, status = self._get("/health")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["runtime"], "browser")
+        self.assertFalse(body["phase3_complete"])
+        self.assertFalse(body["us031_complete"])
+        self.assertEqual(body["browser_engine"], "optional_not_installed")
+        self.assertNotIn(self.TOKEN, json.dumps(body))
+
+    def test_data_root_listed_and_readable_with_token(self) -> None:
+        denied, status = self._get("/api/browser/fs?path=data")
+        self.assertEqual(status, 401)
+        body, status = self._get("/api/browser/fs?path=data", token=self.TOKEN)
+        self.assertEqual(status, 200)
+        names = [row["name"] for row in body["entries"]]
+        self.assertIn("ok.txt", names)
+        self.assertNotIn("secret.key", names)
+        if self.leak is not None:
+            self.assertNotIn("leak.txt", names)
+        read, status = self._get(
+            "/api/browser/fs?path=data/ok.txt", token=self.TOKEN
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("sandbox-visible", read["content"])
+        self.assertNotIn("leaked-outside", read["content"])
+
+    def test_symlink_and_outside_paths_denied(self) -> None:
+        if self.leak is not None:
+            body, status = self._get(
+                "/api/browser/fs?path=data/leak.txt", token=self.TOKEN
+            )
+            self.assertEqual(status, 403)
+            self.assertEqual(body["error"], "path_denied")
+            self.assertNotIn("leaked-outside", json.dumps(body))
+        body, status = self._get(
+            "/api/browser/fs?path=" + urllib.parse.quote("../outside.txt", safe=""),
+            token=self.TOKEN,
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "path_denied")
+        self.assertNotIn("leaked-outside", json.dumps(body))
+        body, status = self._get(
+            "/api/browser/fs?path=" + urllib.parse.quote("data/../outside.txt", safe=""),
+            token=self.TOKEN,
+        )
+        self.assertEqual(status, 403)
+        self.assertNotIn("leaked-outside", json.dumps(body))
+
+    def test_key_file_not_served(self) -> None:
+        body, status = self._get(
+            "/api/browser/fs?path=data/secret.key", token=self.TOKEN
+        )
+        self.assertIn(status, (403, 415))
+        dumped = json.dumps(body)
+        self.assertNotIn("BEGIN PRIVATE KEY", dumped)
+        self.assertNotIn(self.TOKEN, dumped)
+
+    def test_write_still_read_only_with_token(self) -> None:
+        data = json.dumps({"content": "nope"}).encode("utf-8")
+        req = urllib.request.Request(
+            self.base + "/api/browser/fs?path=data/ok.txt",
+            data=data,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + self.TOKEN,
+            },
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req, timeout=2)
+        self.assertEqual(ctx.exception.code, 405)
+        payload = json.loads(ctx.exception.read().decode("utf-8"))
+        self.assertEqual(payload["error"], "fs_read_only")
 
 
 if __name__ == "__main__":

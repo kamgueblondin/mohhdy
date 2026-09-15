@@ -33,7 +33,7 @@ http_code() {
   fi
 }
 
-echo "ASSIST-020/021/022 smoke contre ${BASE_URL}"
+echo "ASSIST-020/021/022/060/061 smoke contre ${BASE_URL}"
 
 health="$(fetch /health)"
 echo "${health}" | grep -q 'mohhdy-agent' || fail "health service"
@@ -72,6 +72,22 @@ echo "${demo_app}" | grep -q 'menu-toggle' || fail "demo-app menu"
 echo "${demo_app}" | grep -q 'invoice-customer' || fail "demo-app formulaire"
 echo "${demo_app}" | grep -q 'simulateur DOM' || fail "demo-app doit dire simulateur"
 
+browser="$(fetch /browser)"
+echo "${browser}" | grep -q 'ASSIST-060' || fail "page /browser"
+echo "${browser}" | grep -q 'simulateur DOM' || fail "browser doit dire simulateur"
+echo "${browser}" | grep -q 'US-031' || fail "browser doit citer US-031"
+echo "${browser}" | grep -q 'Playwright' || fail "browser doit qualifier Playwright"
+
+browser_fs_page="$(fetch /browser/fs)"
+echo "${browser_fs_page}" | grep -q 'ASSIST-061' || fail "page /browser/fs"
+echo "${browser_fs_page}" | grep -q 'ADMIN_TOKEN' || fail "fs UI sans ADMIN_TOKEN"
+
+api_browser="$(fetch /api/browser)"
+echo "${api_browser}" | grep -q '"harness":"dom_simulator"' || echo "${api_browser}" | grep -q '"harness": "dom_simulator"' || fail "api browser harness"
+echo "${api_browser}" | grep -q '"phase3_complete":false' || echo "${api_browser}" | grep -q '"phase3_complete": false' || fail "phase3 doit rester false"
+echo "${api_browser}" | grep -q '"us031_complete":false' || echo "${api_browser}" | grep -q '"us031_complete": false' || fail "us031 doit rester false"
+echo "${api_browser}" | grep -q '/browser/fs' || fail "api browser urls fs"
+
 create_a="$(curl -fsS -X POST -H 'Content-Type: application/json' \
   -d '{"site_id":"smoke_a"}' "${BASE_URL}/api/sessions")"
 create_b="$(curl -fsS -X POST -H 'Content-Type: application/json' \
@@ -109,6 +125,15 @@ fi
 listing="$(curl -fsS "${admin_hdr[@]}" "${BASE_URL}/api/admin/sessions")"
 echo "${listing}" | grep -q "${sid_a}" || fail "admin liste A"
 echo "${listing}" | grep -q "${sid_b}" || fail "admin liste B"
+
+fs_demo="$(curl -fsS "${admin_hdr[@]}" "${BASE_URL}/api/browser/fs?path=demo")"
+echo "${fs_demo}" | grep -q 'demo-app.html' || fail "fs demo sans demo-app.html"
+fs_file="$(curl -fsS "${admin_hdr[@]}" "${BASE_URL}/api/browser/fs?path=demo/fs-sandbox.txt")"
+echo "${fs_file}" | grep -q 'ASSIST-061' || fail "lecture fs-sandbox.txt"
+trav="$(curl -sS -o /tmp/mohhdy-smoke-body -w "%{http_code}" "${admin_hdr[@]}" \
+  "${BASE_URL}/api/browser/fs?path=../server.py")"
+[ "${trav}" = "403" ] || fail "traversal ../server.py doit etre 403 (got ${trav})"
+grep -q 'path_denied' /tmp/mohhdy-smoke-body || fail "traversal sans path_denied"
 
 code="$(http_code POST "/api/sessions/${sid_a}/tools" '{"tool":"dom.click"}')"
 [ "${code}" = "403" ] || fail "outil revoque/absent doit etre 403 (got ${code})"
@@ -187,4 +212,4 @@ if echo "${after}" | grep -q '"agent_message":{'; then
   fail "agent a repondu apres takeover"
 fi
 
-echo "OK health admin embed.js demo demo-app isolation revoke origin invoice escalate handoff"
+echo "OK health admin embed.js demo demo-app browser fs isolation revoke origin invoice escalate handoff"
