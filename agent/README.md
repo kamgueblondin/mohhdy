@@ -24,6 +24,7 @@ Guides :
 - [../docs/assist_playwright_optional.md](../docs/assist_playwright_optional.md)
 
 Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md).
+Portage vers l'OS graphique (bootstrap temporaire) : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md).
 
 ```text
 python3 agent/server.py

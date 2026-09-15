@@ -9,7 +9,7 @@ Ce document decrit les **devoirs du SE Mohhdy** : tenir un support client sur le
 
 En cas de contradiction sur ce qui **tourne aujourd'hui**, [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md) et [mohhdy_us.md](mohhdy_us.md) priment.
 
-Plan d'ordre : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Index : [README.md](README.md).
+Plan d'ordre produit : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) (portage OS-UI, prochain build OS-UI-0). Gardes guest : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Epiques de portage : [mohhdy_os_ui_migration.md](mohhdy_os_ui_migration.md). Index : [README.md](README.md).
 
 ## Positionnement (un produit, deux niveaux de maturite)
 

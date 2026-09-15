@@ -10,15 +10,17 @@ Depuis la racine du dépôt : `make deps` (script [`scripts/bootstrap-dev.sh`](.
 2. [BILAN_MASTER.md](BILAN_MASTER.md) - bilan de `origin/master` au 13 septembre 2026 (`9078d5f`)
 3. [vocabulaire.md](vocabulaire.md) - termes du SE (guest vs instance, pas une identite Linux)
 4. [../US/mohhdy_us.md](../US/mohhdy_us.md) - user stories du prototype (fait + suite, dont FAT16 mutate 8.3 et réseau local)
-5. [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) - un produit : gardes guest 0-4, puis capacites OS de l'instance
-6. [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/`
-7. [aos_fat_volume.md](aos_fat_volume.md) - volume FAT16 (lecture + create/remove/rename 8.3 racine) et FAT32 lecture VFS ; pas ext2
-8. [mohhdy_foundation_increment_01_ipc.md](mohhdy_foundation_increment_01_ipc.md) - IPC Foundation MOHHDY, limites et contrat QEMU
-9. [aos020_gguf_quantization_design.md](aos020_gguf_quantization_design.md) - sonde GGUF v3 et quantification préparatoire
-10. [aos025_network_stub.md](aos025_network_stub.md) - stub OpenAI initial ; voir ETAT_REEL pour `ai-acquire`
-11. [gpt2_baremetal_deployment.md](gpt2_baremetal_deployment.md) - préparation des poids et construction d'une ISO autonome
-12. [GUIDE_EXECUTION.md](GUIDE_EXECUTION.md) - lancement QEMU (console / GUI / nographic / NE2000)
-13. [../README.md](../README.md) - compilation, tests, architecture des sources
+5. [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) - **roadmap produit** : catalogue des capacites, OS-UI-0..3, gates. Prochain build = OS-UI-0
+6. [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) - gardes guest 0-4 (CI, ACL, GGUF, stockage)
+7. [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md) - epiques de portage ASSIST vers l'OS graphique
+8. [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/` a migrer
+9. [aos_fat_volume.md](aos_fat_volume.md) - volume FAT16 (lecture + create/remove/rename 8.3 racine) et FAT32 lecture VFS ; pas ext2
+10. [mohhdy_foundation_increment_01_ipc.md](mohhdy_foundation_increment_01_ipc.md) - IPC Foundation MOHHDY, limites et contrat QEMU
+11. [aos020_gguf_quantization_design.md](aos020_gguf_quantization_design.md) - sonde GGUF v3 et quantification préparatoire
+12. [aos025_network_stub.md](aos025_network_stub.md) - stub OpenAI initial ; voir ETAT_REEL pour `ai-acquire`
+13. [gpt2_baremetal_deployment.md](gpt2_baremetal_deployment.md) - préparation des poids et construction d'une ISO autonome
+14. [GUIDE_EXECUTION.md](GUIDE_EXECUTION.md) - lancement QEMU (console / GUI / nographic / NE2000)
+15. [../README.md](../README.md) - compilation, tests, architecture des sources
 
 Les increments Foundation 02 a 64 restent dans le tableau ci-dessous ; ils decrivent des tranches deja livrees, pas l'identite du systeme. Le nombre de tests Unity cite dans un increment est le **constat a la livraison** de cette tranche ; le chiffre courant est dans [ETAT_REEL.md](ETAT_REEL.md) (**489**).
 
@@ -28,8 +30,10 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 
 | Fichier | Contenu |
 |---|---|
-| [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Un produit : gardes guest 0-4, puis capacites OS (Docker = boot de l'instance) |
-| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Capacites OS (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo / `/browser` / FS sandbox livres (stub local, Playwright optionnel, pas US-031). Packaging 051-053 : scaffold |
+| [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) | **Roadmap produit** : toutes les capacites visees, OS-UI-0..3, checklist par PR. Prochain build = OS-UI-0 |
+| [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Gardes guest 0-4 ; pointe vers le plan maitre pour le portage OS+UI |
+| [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md) | Epiques OS-UI : chrome graphique, portage chat/admin/droits, actes navigateur-OS, retrait Python |
+| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Capacites OS (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo / `/browser` / FS sandbox dans `agent/` (stub local, Playwright optionnel, pas US-031). A porter dans l'OS+UI. Packaging 051-053 : scaffold |
 | [assist050_docker_runtime.md](assist050_docker_runtime.md) | Image Docker / HTTP agent : build, `docker run`, fumée |
 | [assist051_052_053_deploy.md](assist051_052_053_deploy.md) | Install PC, hyperviseur QEMU/cloud-init, mode hosted non-billing |
 | [assist060_061_browser.md](assist060_061_browser.md) | Vue `/browser` et FS sandbox (ASSIST-060/061, pas US-031) |
@@ -113,11 +117,13 @@ Les captures QEMU et les exports Word ont été retirés du dépôt (la source r
 
 - [../US/mohhdy_us.md](../US/mohhdy_us.md) - backlog du **prototype guest** (AOS-001...026 livres ; FAT16 mutate 8.3 ; `ai-acquire` local, pas client OpenAI public)
 - [../US/README.md](../US/README.md) - un produit, deux niveaux de maturite (guest vs instance autonome)
-- [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/`
+- [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) - roadmap produit et catalogue des capacites visees
+- [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md) - portage ASSIST vers OS+UI (`OS-UI-xxx`)
+- [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/` (bootstrap a migrer)
 - [assist050_docker_runtime.md](assist050_docker_runtime.md) - `docker run` et fumée de l'image agent
 - [assist060_061_browser.md](assist060_061_browser.md) - vue navigateur d'instance et FS sandbox
 - [assist010_sessions_admin.md](assist010_sessions_admin.md) - sessions, embed, admin, snippet CSP
 - [assist013_origine_embed.md](assist013_origine_embed.md) - origine document vs site déclaré
 - [../US/individual_us/INDEX.md](../US/individual_us/INDEX.md) - specs MOHHDY, chevauchements, IDs dupliqués
 
-Les phases historiques restent majoritairement des **specifications**. Les tickets ASSIST sont des **capacites du SE**, portees par le scaffold `agent/`, pas un produit a cote du guest i386. Les increments Foundation 01-64 (IPC, mediateur de chemins, registre, supervision de taches) sont compiles et testes ; ils ne transforment pas le noyau monolithique en microkernel et n'implementent pas les autres phases. FAT16 et FAT32 8.3 racine sont mutables via VFS ; le client OpenAI public reste hors perimetre.
+Les phases historiques restent majoritairement des **specifications**. Les tickets ASSIST sont des **capacites du SE**, aujourd'hui dans le scaffold `agent/`, a porter dans l'OS graphique ([PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md)). Les increments Foundation 01-64 (IPC, mediateur de chemins, registre, supervision de taches) sont compiles et testes ; ils ne transforment pas le noyau monolithique en microkernel et n'implementent pas les autres phases. FAT16 et FAT32 8.3 racine sont mutables via VFS ; le client OpenAI public reste hors perimetre.

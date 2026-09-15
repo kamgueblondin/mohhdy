@@ -14,8 +14,9 @@ En cas de doute sur le **guest i386**, [ETAT_REEL.md](ETAT_REEL.md) decrit le co
 | `agent/` = scaffold userspace actuel (bootstrap) | `agent/` = produit Agent Support, SaaS tiers |
 | Prototype guest (tranche noyau verifiee sous QEMU) | "Le SE autonome complet tourne deja dans le guest i386" |
 | Capacites OS (`ASSIST-xxx`) | Piste parallele, 9e phase, produit distinct |
+| Portage OS-UI (`OS-UI-xxx`) | Etendre `agent/` comme produit durable |
 
-Deux **niveaux de maturite runtime** (ingenierie, pas deux produits) : le prototype guest i386 mesure dans ETAT_REEL, et l'instance OS autonome (Docker / PC / hyperviseur / metal nu) dont `agent/` est le bootstrap userspace.
+Deux **niveaux de maturite runtime** (ingenierie, pas deux produits) : le prototype guest i386 mesure dans ETAT_REEL, et l'instance OS autonome (Docker / PC / hyperviseur / metal nu) dont `agent/` est le bootstrap userspace temporaire (portage OS-UI).
 
 ## Identite du guest i386
 
