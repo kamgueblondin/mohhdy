@@ -710,7 +710,7 @@ help:
 	@echo "  gpt2-benchmark  - Modèle requis : mesure de latence QEMU SSE2"
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
-  @echo "  agent-smoke     - Fumee HTTP agent (gestes, MCP, origine embed, /browser, FS sandbox ; hors ci / QEMU)"
+	@echo "  agent-smoke     - Fumee HTTP agent (gestes, MCP, origine embed, /browser, FS sandbox ; hors ci / QEMU)"
 	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent (optionnel, hors ci)"
 	@echo "  agent-install-check - Install native temporaire + /health (ASSIST-051, hors ci)"
 	@echo "  agent-hypervisor-dry-run - Valide cloud-init/QEMU agent, sans boot (ASSIST-052, hors ci)"
