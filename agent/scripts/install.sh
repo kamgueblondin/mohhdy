@@ -38,7 +38,8 @@ install.sh : copie le runtime Python agent et optionnellement le demarre.
   -h, --help       cette aide
 
 Variables : ADMIN_TOKEN, MOHHDY_AGENT_CONFIG, MOHHDY_AGENT_SITE_ID,
-MOHHDY_AGENT_MODE, MOHHDY_AGENT_RUNTIME, MOHHDY_AGENT_DATA, MOHHDY_AGENT_KB (identiques a Docker).
+MOHHDY_AGENT_MODE, MOHHDY_AGENT_RUNTIME, MOHHDY_AGENT_BROWSER_ENGINE,
+MOHHDY_AGENT_DATA, MOHHDY_AGENT_KB (identiques a Docker).
 EOF
 }
 
@@ -77,6 +78,7 @@ python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)
 [ -f "${AGENT_DIR}/server.py" ] || fail "server.py introuvable dans ${AGENT_DIR}"
 [ -f "${AGENT_DIR}/tools.py" ] || fail "tools.py introuvable"
 [ -f "${AGENT_DIR}/browser_fs.py" ] || fail "browser_fs.py introuvable"
+[ -f "${AGENT_DIR}/browser_engine.py" ] || fail "browser_engine.py introuvable"
 [ -d "${AGENT_DIR}/static" ] || fail "static/ introuvable"
 [ -f "${AGENT_DIR}/config.example.json" ] || fail "config.example.json introuvable"
 
@@ -101,10 +103,11 @@ PREFIX="$(cd "${PREFIX}" && pwd)"
 
 copy_runtime() {
   local dest="$1"
+  local py
   mkdir -p "${dest}/static"
-  cp -f "${AGENT_DIR}/server.py" "${dest}/server.py"
-  cp -f "${AGENT_DIR}/tools.py" "${dest}/tools.py"
-  cp -f "${AGENT_DIR}/browser_fs.py" "${dest}/browser_fs.py"
+  for py in "${AGENT_DIR}"/*.py; do
+    cp -f "${py}" "${dest}/"
+  done
   cp -f "${AGENT_DIR}/config.example.json" "${dest}/config.example.json"
   cp -a "${AGENT_DIR}/static/." "${dest}/static/"
   mkdir -p "${dest}/packaging"
@@ -114,6 +117,7 @@ copy_runtime() {
   if [ -f "${AGENT_DIR}/packaging/mohhdy-agent.env.example" ]; then
     cp -f "${AGENT_DIR}/packaging/mohhdy-agent.env.example" "${dest}/packaging/"
   fi
+  [ -f "${dest}/browser_engine.py" ] || fail "copie incomplete: browser_engine.py"
 }
 
 copy_runtime "${PREFIX}"

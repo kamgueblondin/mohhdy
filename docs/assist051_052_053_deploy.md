@@ -50,8 +50,10 @@ make agent-install-check
 agent/scripts/install.sh --prefix /tmp/mohhdy-agent --start --port 18080
 ```
 
-`--check` copie vers un prefixe temporaire, demarre `server.py`, verifie
-`/health`, puis arrete le processus. C'est la fumee d'installateur.
+`--check` copie vers un prefixe temporaire **tous** les `agent/*.py`
+(y compris `browser_engine.py`, profil Playwright optionnel), demarre
+`server.py`, verifie `/health`, puis arrete le processus. C'est la
+fumee d'installateur. Aucun paquet pip.
 
 Installation persistante, exemple :
 

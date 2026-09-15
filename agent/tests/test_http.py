@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -203,6 +205,35 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertNotIn("import playwright", header)
         self.assertEqual(agent_browser.engine_label(), "optional_not_installed")
         self.assertNotIn("playwright", sys.modules)
+
+    def test_install_script_copies_browser_engine(self) -> None:
+        script = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+        self.assertIn("browser_engine.py", script)
+        self.assertIn('"${AGENT_DIR}"/*.py', script)
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp)
+            for py in ROOT.glob("*.py"):
+                shutil.copy(py, dest / py.name)
+            self.assertTrue((dest / "browser_engine.py").is_file())
+            self.assertTrue((dest / "browser_fs.py").is_file())
+            env = dict(os.environ)
+            env.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
+            code = (
+                "import importlib.util, sys\n"
+                "spec = importlib.util.spec_from_file_location('server', 'server.py')\n"
+                "mod = importlib.util.module_from_spec(spec)\n"
+                "spec.loader.exec_module(mod)\n"
+                "assert 'playwright' not in sys.modules\n"
+            )
+            proc = subprocess.run(
+                [sys.executable, "-c", code],
+                cwd=str(dest),
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=8,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
 
     def test_health_json(self) -> None:
         body, status, headers = self._get_json("/health")
