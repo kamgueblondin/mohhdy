@@ -639,6 +639,20 @@ gpt2-tests: gpt2-recovery gpt2-benchmark
 ci: all test-all qemu-smoke qemu-ne2k-tls-multipair
 	@echo "=== CI locale OK (build + tests + smokes QEMU locaux) ==="
 
+# Scaffold ASSIST-050 : HTTP agent (stdlib). Hors ci / integration-qemu.
+.PHONY: agent-smoke agent-docker
+agent-smoke:
+	@python3 agent/tests/test_http.py
+
+agent-docker:
+	@command -v docker >/dev/null 2>&1 || { \
+		echo "ERROR: 'docker' introuvable. Installez Docker pour construire l'image."; \
+		echo "       La fumee sans conteneur reste : make agent-smoke"; \
+		exit 1; \
+	}
+	docker build -t mohhdy-agent ./agent
+	@echo "Image mohhdy-agent prete. Lancer : docker run --rm -p 8080:8080 mohhdy-agent"
+
 # Cible pour afficher l'aide
 help:
 	@echo "=== MOHHDY v7 - Cibles de compilation ==="
@@ -685,6 +699,8 @@ help:
 	@echo "  gpt2-benchmark  - Modèle requis : mesure de latence QEMU SSE2"
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
+	@echo "  agent-smoke     - Fumee HTTP ASSIST-050 (Python stdlib, hors ci / QEMU)"
+	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent (optionnel, hors ci)"
 	@echo "  test-performance - Benchmarks et tests de performance"
 	@echo "  test-valgrind   - Tests avec détection fuites mémoire"
 	@echo "  pre-commit-tests - Tests rapides avant commit"

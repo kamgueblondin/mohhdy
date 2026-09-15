@@ -64,6 +64,8 @@ make run
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
 | `make iso` | Produit l'ISO BIOS/GRUB bootable |
 | `make run` / `make run-gui` | Session QEMU interactive curses ou GTK |
+| `make agent-smoke` | Fumée HTTP ASSIST-050 (Python stdlib). Hors `make ci` / hors QEMU |
+| `make agent-docker` | Construit l'image `mohhdy-agent`. Voir [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md) |
 
 Pour construire l'ISO, installez également GRUB et xorriso.
 
@@ -72,6 +74,18 @@ sudo apt-get install -y grub-pc-bin xorriso
 make iso
 make run-iso
 ```
+
+## Runtime agent (scaffold ASSIST-050)
+
+Arborescence parallèle `agent/`. Ce n'est **pas** le noyau i386, **pas** un chat IA, **pas** des sessions persistantes.
+
+```bash
+make agent-smoke
+docker build -t mohhdy-agent ./agent
+docker run --rm -p 8080:8080 mohhdy-agent
+```
+
+Guide : [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md).
 
 ## GPT-2 local, sans réseau au démarrage
 
@@ -111,7 +125,7 @@ Une ISO BIOS/GRUB peut être produite avec l'initrd. Lorsque les poids GPT-2 son
 
 Le backlog courant est [US/mohhdy_us.md](US/mohhdy_us.md). La vision MOHHDY est conservée séparément dans [US/README.md](US/README.md). L'ordre des prochaines tranches AOS (0-4) et la piste Agent Support sont dans [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md).
 
-Piste produit **non livrée** : MOHHDY comme assistant agentique (embed JavaScript de support, console d'admin, actions sur le site, Docker / PC / hyperviseur / cloud). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md) (`ASSIST-xxx`). Ce n'est **pas** une fonction du prototype i386 vérifié ci-dessus. Le widget, Docker agent et l'automatisation navigateur n'apparaissent pas dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md).
+Piste produit Agent Support : spec [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md) (`ASSIST-xxx`). ASSIST-050 livre un **scaffold** HTTP / Docker (`agent/`, [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md)) : santé, admin vide, `embed.js` stub, page démo. Ce n'est **pas** le chat IA, **pas** des sessions, **pas** des actes navigateur, **pas** une fonction du prototype i386 vérifié. Ces items n'apparaissent pas dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md).
 
 - [x] GPT-2 local, cache KV, SSE2 et top-k borné
 - [x] Tokenizer BPE UTF-8 avec couverture de lettres Unicode ciblée
@@ -175,6 +189,7 @@ Piste produit **non livrée** : MOHHDY comme assistant agentique (embed JavaScri
 
 ```text
 mohhdy/
+├── agent/                # scaffold HTTP ASSIST-050 (embed / admin / Docker)
 ├── boot/                 # Multiboot et stubs ISR
 ├── kernel/               # mémoire, interruptions, tâches, syscalls et LLM
 ├── fs/                   # archive initrd TAR et overlay AIOV (ATA)
@@ -182,7 +197,7 @@ mohhdy/
 ├── tests/                # Unity, robustesse et contrats QEMU
 ├── models/               # actifs locaux ignorés par Git
 ├── docs/                 # état réel et guides
-└── US/                   # backlog prototype et archives MOHHDY
+└── US/                   # backlog prototype, vision et Agent Support
 ```
 
 ## Contribution

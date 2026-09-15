@@ -1,0 +1,18 @@
+# Compose local du scaffold ASSIST-050.
+# Aucun secret n'est injecte : pas de env_file, pas de .env.
+
+services:
+  mohhdy-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mohhdy-agent:scaffold
+    ports:
+      - "8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      MOHHDY_AGENT_HOST: "0.0.0.0"
+      MOHHDY_AGENT_PORT: "8080"
+    # Intentionnellement pas de env_file / secrets Docker.

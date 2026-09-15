@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin MOHHDY - scaffold ASSIST-050</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --fg: #e8eef4;
+      --muted: #9aa8b5;
+      --accent: #3d9a8a;
+      --warn: #c9a227;
+      --card: #1a222c;
+      --line: #2a3542;
+    }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.5;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--line);
+    }
+    header a { color: var(--accent); text-decoration: none; }
+    h1 { font-size: 1.15rem; margin: 0; }
+    main { max-width: 52rem; margin: 1.5rem auto; padding: 0 1.5rem 3rem; }
+    .banner {
+      background: #2a2410;
+      border: 1px solid var(--warn);
+      color: #f3e6b0;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.25rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.7rem 0.9rem;
+      border-bottom: 1px solid var(--line);
+    }
+    th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+    .empty { color: var(--muted); font-style: italic; }
+    p.hint { color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Administration MOHHDY</h1>
+    <a href="/">Origine</a>
+  </header>
+  <main>
+    <div class="banner">
+      Scaffold ASSIST-050. Cette page est une coquille : pas d'authentification,
+      pas de file de sessions, pas de reprise humaine. Le chat IA n'existe pas encore.
+    </div>
+    <h2>Sessions</h2>
+    <table id="mohhdy-sessions">
+      <thead>
+        <tr>
+          <th>session_id</th>
+          <th>site</th>
+          <th>etat</th>
+          <th>derniere activite</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="empty" colspan="4">Aucune session (placeholder vide)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">
+      ASSIST-011 / ASSIST-040 / ASSIST-041 restent a implementer. Cette liste
+      restera vide tant que le runtime n'ouvre pas de sessions visiteurs.
+    </p>
+  </main>
+</body>
+</html>

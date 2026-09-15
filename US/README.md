@@ -6,7 +6,7 @@ Trois couches distinctes. Ne pas les mélanger.
 |---|---|---|
 | **Prototype qui tourne** | [mohhdy_us.md](mohhdy_us.md) + [docs/ETAT_REEL.md](../docs/ETAT_REEL.md) | AOS-001 à AOS-026 vérifiés ; FAT16/FAT32 avec LFN racine et un sous-répertoire 8.3 mutable via VFS ; réseau local `ai-acquire` ; pas de client OpenAI public |
 | **Vision MOHHDY** | fichiers `mohhdy_*.md` + [individual_us/](individual_us/INDEX.md) | Spécifications, sauf incrément Foundation IPC documenté |
-| **Track Agent Support** | [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Spec produit `ASSIST-xxx` : embed JS, admin, agent d'actions, Docker / PC / hyperviseur / cloud. **Non livré**. Runtime plus large que le guest i386 |
+| **Track Agent Support** | [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Spec `ASSIST-xxx`. ASSIST-050 = scaffold HTTP / Docker (`agent/`) ; chat IA, sessions, actes navigateur **non livrés**. Runtime plus large que le guest i386 |
 
 En cas de contradiction, **ETAT_REEL** et **mohhdy_us.md** priment.
 
@@ -58,7 +58,7 @@ Les autres fichiers MOHHDY restent des **specifications**. Le recouvrement avec 
 | [../docs/mohhdy_foundation_increment_21_vfs_stat.md](../docs/mohhdy_foundation_increment_21_vfs_stat.md) | Métadonnées VFS corrélées et source-spécifiques par montage |
 | [../docs/mohhdy_foundation_increment_32_vfs_backend_status.md](../docs/mohhdy_foundation_increment_32_vfs_backend_status.md) | Consultation médiée d'un masque backend VFS par le propriétaire public |
 | [../docs/mohhdy_foundation_increment_33_vfs_backend_list.md](../docs/mohhdy_foundation_increment_33_vfs_backend_list.md) | Inventaire médié, corrélé et borné des délégations backend VFS actives |
-| [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`) : embed, admin, droits de session, Docker / cloud, actions site. Spec, pas livraison |
+| [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) | Track Agent Support (`ASSIST-xxx`) : embed, admin, droits de session, Docker / cloud. ASSIST-050 scaffold HTTP ; reste spec |
 | [mohhdy_us_phase2_ai_core.md](mohhdy_us_phase2_ai_core.md) | Phase 2 (TensorFlow Lite, NLU, fédéré) - non livrée ; l'IA réelle est GPT-2 freestanding |
 | [mohhdy_us_phase3_web_runtime.md](mohhdy_us_phase3_web_runtime.md) | Phase 3 navigateur-OS - absente ; tranche produit Agent Support : ASSIST-060 / ASSIST-061 |
 | [mohhdy_us_phases_4_8_synthese.md](mohhdy_us_phases_4_8_synthese.md) | Phases 4-8 (PromptMessage, P2P, etc.) - absentes |
@@ -86,7 +86,7 @@ MOHHDY doit évoluer en assistant OS / agent, pas seulement le hobby i386. La pi
 
 Elle vise un support client par embed JavaScript (UX proche de tawk.to) qui **agit** (clics, souris, outils / MCP du site), une console d'admin pour relire et reprendre les sessions, et un déploiement Docker / PC / hyperviseur / abonnement cloud. L'accès navigateur une fois déployé, et le FS navigateur si lancement direct, sont une **tranche produit** de la phase 3. Un corps physique est une piste **future**.
 
-**Honnêteté runtime.** Widget, Docker agent, admin et automatisation navigateur **n'existent pas** dans le prototype vérifié. Ils ne tiennent pas dans un noyau Multiboot nu. Docker (ASSIST-050) peut démarrer **en parallèle** des tranches AOS 0-4, sans attendre US-001 complet, et **sans** allonger `make integration-qemu`. OpenAI public reste sous condition.
+**Honnêteté runtime.** Le prototype i386 vérifié n'héberge ni widget, ni Docker agent, ni admin, ni automatisation navigateur. Ils ne tiennent pas dans un noyau Multiboot nu. ASSIST-050 livre un **scaffold** HTTP / Docker (`agent/`, [docs/assist050_docker_runtime.md](../docs/assist050_docker_runtime.md)) : santé, admin vide, `embed.js` stub, page démo. Ce n'est **pas** le chat IA ni les sessions. `make ci` et `make integration-qemu` restent inchangés. OpenAI public reste sous condition.
 
 **Relation aux phases 1-8.** Réutilise capacités / droits (phase 1 Foundation), assistant (phase 2, US-021 / US-028), navigateur comme FS (phase 3, non implémentée), déploiement (US-015, phases 6 et 8) et connecteurs bornés (US-034). Ne renumérote pas `US-xxx`. Ne recycle pas `AOS-xxx`.
 
