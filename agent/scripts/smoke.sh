@@ -5,6 +5,7 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
+admin_hdr=()
 
 fail() {
   echo "FAIL: $*" >&2
@@ -20,15 +21,22 @@ http_code() {
   local method="$1"
   local path="$2"
   local data="${3:-}"
+  local extra=("${admin_hdr[@]}")
+  if [ -n "${REQ_ORIGIN:-}" ]; then
+    extra+=(-H "Origin: ${REQ_ORIGIN}")
+  fi
+  if [ -n "${REQ_REFERER:-}" ]; then
+    extra+=(-H "Referer: ${REQ_REFERER}")
+  fi
   if [ -n "${data}" ]; then
     curl -sS -o /tmp/mohhdy-smoke-body -w "%{http_code}" -X "${method}" \
       -H 'Content-Type: application/json' \
-      "${admin_hdr[@]}" \
+      "${extra[@]}" \
       -d "${data}" \
       "${BASE_URL}${path}"
   else
     curl -sS -o /tmp/mohhdy-smoke-body -w "%{http_code}" -X "${method}" \
-      "${admin_hdr[@]}" \
+      "${extra[@]}" \
       "${BASE_URL}${path}"
   fi
 }
@@ -51,6 +59,8 @@ echo "${embed}" | grep -q 'mohhdy-launcher' || fail "embed launcher"
 echo "${embed}" | grep -q '/api/sessions' || fail "embed talks to sessions"
 echo "${embed}" | grep -q 'Parler a un humain' || fail "embed escalate button"
 echo "${embed}" | grep -q 'human_active' || fail "embed handoff status"
+echo "${embed}" | grep -q 'origin_denied' || fail "embed sans origin_denied"
+echo "${embed}" | grep -q 'location.origin' || fail "embed sans origin document"
 if echo "${embed}" | grep -qi 'api_key'; then
   fail "embed ne doit pas contenir api_key"
 fi
@@ -126,6 +136,40 @@ listing="$(curl -fsS "${admin_hdr[@]}" "${BASE_URL}/api/admin/sessions")"
 echo "${listing}" | grep -q "${sid_a}" || fail "admin liste A"
 echo "${listing}" | grep -q "${sid_b}" || fail "admin liste B"
 
+REQ_ORIGIN="${BASE_URL}"
+code="$(http_code POST "/api/sessions" '{"site_id":"smoke_same_origin"}')"
+unset REQ_ORIGIN
+[ "${code}" = "201" ] || fail "meme origine doit creer une session (got ${code})"
+grep -q 'session_id' /tmp/mohhdy-smoke-body || fail "session same-origin sans session_id"
+sid_same="$(python3 -c 'import json; print(json.load(open("/tmp/mohhdy-smoke-body"))["session_id"])')"
+[ -n "${sid_same}" ] || fail "session_id same-origin vide"
+
+REQ_ORIGIN="https://evil.example"
+code="$(http_code POST "/api/sessions" '{"site_id":"smoke_same_origin"}')"
+unset REQ_ORIGIN
+[ "${code}" = "403" ] || fail "origine etrangere en create doit etre 403 (got ${code})"
+grep -q 'origin_denied' /tmp/mohhdy-smoke-body || fail "create etrangere sans origin_denied"
+grep -q 'request_id' /tmp/mohhdy-smoke-body || fail "create etrangere sans request_id"
+if grep -q '"session_id"' /tmp/mohhdy-smoke-body; then
+  fail "create refusee ne doit pas renvoyer session_id"
+fi
+if grep -qi 'api_key' /tmp/mohhdy-smoke-body; then
+  fail "refus origin ne doit pas fuiter api_key"
+fi
+
+REQ_ORIGIN="https://evil.example"
+code="$(http_code POST "/api/sessions/${sid_same}/messages" '{"content":"secret-origin-gamma"}')"
+unset REQ_ORIGIN
+[ "${code}" = "403" ] || fail "message origine etrangere doit etre 403 (got ${code})"
+grep -q 'origin_denied' /tmp/mohhdy-smoke-body || fail "message etranger sans origin_denied"
+if grep -q 'secret-origin-gamma' /tmp/mohhdy-smoke-body; then
+  fail "refus message ne doit pas renvoyer le secret"
+fi
+got_same="$(fetch "/api/sessions/${sid_same}")"
+if echo "${got_same}" | grep -q 'secret-origin-gamma'; then
+  fail "message etranger stocke malgre origin_denied"
+fi
+
 fs_demo="$(curl -fsS "${admin_hdr[@]}" "${BASE_URL}/api/browser/fs?path=demo")"
 echo "${fs_demo}" | grep -q 'demo-app.html' || fail "fs demo sans demo-app.html"
 fs_file="$(curl -fsS "${admin_hdr[@]}" "${BASE_URL}/api/browser/fs?path=demo/fs-sandbox.txt")"
@@ -157,6 +201,12 @@ code="$(http_code POST "/api/sessions/${sid_b}/tools" "${evil_payload}")"
 [ "${code}" = "403" ] || fail "origine etrangere doit etre 403 (got ${code})"
 grep -q 'origin_denied' /tmp/mohhdy-smoke-body || fail "origine etrangere sans origin_denied"
 grep -q 'request_id' /tmp/mohhdy-smoke-body || fail "origine etrangere sans request_id"
+
+REQ_ORIGIN="https://evil.example"
+code="$(http_code POST "/api/sessions/${sid_b}/tools" "${origin_payload}")"
+unset REQ_ORIGIN
+[ "${code}" = "403" ] || fail "en-tete Origin etranger sur outil doit etre 403 (got ${code})"
+grep -q 'origin_denied' /tmp/mohhdy-smoke-body || fail "outil Origin etranger sans origin_denied"
 
 inv_payload="$(printf '{"tool":"mcp.invoice.create","origin":"%s","args":{"customer":"Smoke","amount":"10.00"}}' "${BASE_URL}")"
 code="$(http_code POST "/api/sessions/${sid_b}/tools" "${inv_payload}")"
@@ -212,4 +262,4 @@ if echo "${after}" | grep -q '"agent_message":{'; then
   fail "agent a repondu apres takeover"
 fi
 
-echo "OK health admin embed.js demo demo-app browser fs isolation revoke origin invoice escalate handoff"
+echo "OK health admin embed.js demo demo-app browser fs isolation revoke origin invoice escalate handoff origin-bind"

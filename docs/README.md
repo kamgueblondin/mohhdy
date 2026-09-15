@@ -34,6 +34,7 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 | [assist051_052_053_deploy.md](assist051_052_053_deploy.md) | Install PC, hyperviseur QEMU/cloud-init, mode hosted non-billing |
 | [assist060_061_browser.md](assist060_061_browser.md) | Vue `/browser` et FS sandbox (ASSIST-060/061, pas US-031) |
 | [assist010_sessions_admin.md](assist010_sessions_admin.md) | Sessions visiteur, embed, admin `ADMIN_TOKEN`, snippet CSP |
+| [assist013_origine_embed.md](assist013_origine_embed.md) | Refus d'origine document vs site déclaré (ASSIST-013) |
 | [assist012_droits_handoff.md](assist012_droits_handoff.md) | KB locale, droits, escalade, handoff |
 | [assist020_gestes_mcp.md](assist020_gestes_mcp.md) | Gestes simulateur, outils MCP, facture mock |
 | [ETAT_REEL.md](ETAT_REEL.md) | État fonctionnel, GPT-2 local et limites vérifiées |
@@ -115,6 +116,7 @@ Les captures QEMU et les exports Word ont été retirés du dépôt (la source r
 - [assist050_docker_runtime.md](assist050_docker_runtime.md) - `docker run` et fumée de l'image agent
 - [assist060_061_browser.md](assist060_061_browser.md) - vue navigateur d'instance et FS sandbox
 - [assist010_sessions_admin.md](assist010_sessions_admin.md) - sessions, embed, admin, snippet CSP
+- [assist013_origine_embed.md](assist013_origine_embed.md) - origine document vs site déclaré
 - [../US/individual_us/INDEX.md](../US/individual_us/INDEX.md) - specs MOHHDY, chevauchements, IDs dupliqués
 
 Les phases MOHHDY restent majoritairement des **specifications**. Le track Agent Support est une piste produit parallèle, pas une fonction du prototype i386. Les increments Foundation 01-64 (IPC, mediateur de chemins, registre, supervision de taches) sont compiles et testes ; ils ne transforment pas le noyau monolithique en microkernel et n'implementent pas les autres phases. FAT16 et FAT32 8.3 racine sont mutables via VFS ; le client OpenAI public reste hors perimetre.

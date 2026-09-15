@@ -251,10 +251,18 @@
       return createSession();
     }
 
+    function documentOrigin() {
+      try {
+        return window.location.origin || "";
+      } catch (err) {
+        return "";
+      }
+    }
+
     function createSession() {
       return api("/api/sessions", {
         method: "POST",
-        body: { site_id: siteId },
+        body: { site_id: siteId, origin: documentOrigin() },
       }).then(function (data) {
         sessionId = data.session_id;
         try {
@@ -303,7 +311,14 @@
             startPoll();
             input.focus();
           })
-          .catch(function () {
+          .catch(function (err) {
+            var payload = err && err.payload;
+            if (payload && payload.error === "origin_denied") {
+              addSystem(
+                "Origine refusee : ce document n'est pas dans l'allowlist du site."
+              );
+              return;
+            }
             addSystem("Impossible d'ouvrir une session.");
           });
       } else {
@@ -323,7 +338,7 @@
         .then(function (id) {
           return api("/api/sessions/" + encodeURIComponent(id) + "/messages", {
             method: "POST",
-            body: { content: text },
+            body: { content: text, origin: documentOrigin() },
           });
         })
         .then(function (data) {
@@ -336,7 +351,14 @@
             addSystem("Message transmis. L'agent ne repond plus automatiquement.");
           }
         })
-        .catch(function () {
+        .catch(function (err) {
+          var payload = err && err.payload;
+          if (payload && payload.error === "origin_denied") {
+            addSystem(
+              "Origine refusee : message non transmis hors allowlist."
+            );
+            return;
+          }
           addSystem("Envoi impossible. Reessayez.");
         })
         .then(function () {
@@ -352,7 +374,7 @@
         .then(function (id) {
           return api("/api/sessions/" + encodeURIComponent(id) + "/escalate", {
             method: "POST",
-            body: {},
+            body: { origin: documentOrigin() },
           });
         })
         .then(function (data) {

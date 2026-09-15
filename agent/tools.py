@@ -142,6 +142,60 @@ def origin_allowed(origin: str, allowlist: list[str], self_origin: str) -> bool:
     return False
 
 
+def same_origin(left: str, right: str) -> bool:
+    a = normalize_origin(left)
+    b = normalize_origin(right)
+    return bool(a) and a == b
+
+
+def allowlist_has_self(allowlist: list[str]) -> bool:
+    for item in allowlist:
+        if (item or "").strip().lower() == "self":
+            return True
+    return False
+
+
+def origin_binding_token(
+    document_origin: str, self_origin: str, allowlist: list[str]
+) -> str:
+    """self si le document est l'instance ; sinon l'URL normalisee."""
+    if allowlist_has_self(allowlist) and origin_allowed(
+        document_origin, ["self"], self_origin
+    ):
+        return "self"
+    return normalize_origin(document_origin)
+
+
+def extract_document_origin(
+    origin_header: str,
+    referer_header: str = "",
+    body_origin: str = "",
+    self_origin: str = "",
+) -> str:
+    """Origine du document embed : Origin, sinon Referer, sinon body, sinon self.
+
+    Origin: null (iframe opaque) reste vide et sera refuse. Une requete sans
+    en-tete (curl, fumee) retombe sur l'origine HTTP de l'instance (self).
+    Ce n'est pas une authentification cryptographique de site.
+    """
+    header = (origin_header or "").strip()
+    if header:
+        if header.lower() == "null":
+            return ""
+        return normalize_origin(header)
+    referer = (referer_header or "").strip()
+    if referer:
+        parsed = urlparse(referer)
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            return normalize_origin("%s://%s" % (parsed.scheme, parsed.netloc))
+    claimed = (body_origin or "").strip()
+    if claimed:
+        if claimed.lower() == "null":
+            return ""
+        return normalize_origin(claimed)
+    return normalize_origin(self_origin)
+
+
 def parse_origin_list(raw: Any) -> list[str]:
     if not isinstance(raw, list):
         return []

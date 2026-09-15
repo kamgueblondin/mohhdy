@@ -107,12 +107,14 @@ aux trois directives. Ne pas élargir `default-src` à `*`.
 
 ### Origine du document
 
-Le runtime accepte aujourd'hui n'importe quelle page qui charge
-`embed.js` (CORS visiteur `Access-Control-Allow-Origin: *` sur
-`/api/sessions*`). Un refus automatique si l'origine du document ne
-matche pas le site déclaré **n'est pas** encore en place. En attendant :
-ne coller le snippet que sur des sites que vous contrôlez, et ne pas
-publier une instance ouverte sans `ADMIN_TOKEN`.
+Le runtime refuse une page dont l'origine (`Origin` / `Referer`, ou le
+champ JSON `origin` du widget) n'est pas dans `allowed_origins` du
+`site_id` déclaré. Echec : `403 origin_denied` + `request_id`, **sans**
+ouvrir de session ni enregistrer le message. `/demo` et `self` restent
+acceptés. Détail : [assist013_origine_embed.md](assist013_origine_embed.md).
+
+Ce n'est pas une auth par comptes. L'opérateur déclare les origines dans
+`MOHHDY_AGENT_CONFIG` (`allowed_origins` global ou par site).
 
 ## Vérifier
 
@@ -121,8 +123,9 @@ make agent-smoke
 ```
 
 Couvre santé, isolation de deux sessions, liste admin, jeton admin, KB,
-révocation, escalade, handoff, et l'absence de marqueurs de secret dans
-`embed.js`. Hors `make ci` AOS QEMU : job GitHub parallèle `agent-http-smoke`.
+révocation, escalade, handoff, liaison d'origine document (ASSIST-013),
+et l'absence de marqueurs de secret dans `embed.js`. Hors `make ci` AOS
+QEMU : job GitHub parallèle `agent-http-smoke`.
 
 Contre une origine déjà lancée :
 

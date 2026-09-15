@@ -44,6 +44,8 @@ sites.{id}.allowed_origins     # surcharge par site
 `self` désigne l'origine HTTP de l'instance (Host de la requête).
 Une entrée `http://127.0.0.1` sans port accepte n'importe quel port de
 ce hôte. Une origine étrangère (`https://evil.example`) est refusée.
+La même allowlist lie aussi le document embed (ASSIST-013) :
+[assist013_origine_embed.md](assist013_origine_embed.md).
 
 Outil MCP **absent** de `tools` : refusé même s'il a été accordé à la
 session. `mcp.invoice.create` est le démonstrateur enregistré par défaut
@@ -162,5 +164,4 @@ docker compose --profile browser up --build
 - Gestes sur un site tiers public
 - LLM de production, GGUF, fournisseur public
 - Auth par site, comptes opérateurs, HTTPS terminé dans l'image
-- Refus automatique d'origine document vs site déclaré (embed)
 - Noyau Multiboot dans le conteneur
