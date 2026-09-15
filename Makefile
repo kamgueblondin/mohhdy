@@ -654,7 +654,7 @@ osui-docker:
 		exit 1; \
 	}
 	docker build -t mohhdy-os -f osui/Dockerfile .
-	@echo "Image mohhdy-os prete (shell graphique OS-UI-0/1/2)."
+	@echo "Image mohhdy-os prete (shell graphique OS-UI, chat central)."
 	@echo "Lancer : docker run --rm -p 8080:8080 mohhdy-os"
 	@echo "Admin :  docker run --rm -p 8080:8080 -e ADMIN_TOKEN=... mohhdy-os"
 
@@ -725,7 +725,7 @@ help:
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
 	@echo "  agent-smoke     - Fumee HTTP instance (gestes, MCP, origine embed, /browser, FS sandbox, 501 Playwright absent ; hors ci / QEMU)"
-	@echo "  osui-smoke      - Fumee shell graphique OS-UI-0/1/2 (chrome, session, origine, admin, geste ; hors ci / QEMU)"
+	@echo "  osui-smoke      - Fumee shell graphique OS-UI (chat central, slash, session, origine, admin, geste ; hors ci / QEMU)"
 	@echo "  osui-docker     - Construit l'image Docker mohhdy-os (entree produit, shell graphique, hors ci)"
 	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent slim (backend temporaire, hors ci, sans Chromium)"
 	@echo "  agent-install-check - Install native temporaire + /health (ASSIST-051, hors ci)"

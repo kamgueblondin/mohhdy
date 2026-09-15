@@ -16,7 +16,7 @@ En cas de doute sur le **guest i386**, [ETAT_REEL.md](ETAT_REEL.md) decrit le co
 | Capacites OS (`ASSIST-xxx`) | Piste parallele, 9e phase, produit distinct |
 | Portage OS-UI (`OS-UI-xxx`) | Etendre `agent/` comme produit durable |
 
-Deux **niveaux de maturite runtime** (ingenierie, pas deux produits) : le prototype guest i386 mesure dans ETAT_REEL, et l'instance OS autonome (Docker / PC / hyperviseur / metal nu) dont `osui/` est le chrome graphique (premieres tranches OS-UI-0/1/2) et `agent/` le backend temporaire (OS-UI-3).
+Deux **niveaux de maturite runtime** (ingenierie, pas deux produits) : le prototype guest i386 mesure dans ETAT_REEL, et l'instance OS autonome (Docker / PC / hyperviseur / metal nu) dont `osui/` est le chrome graphique a **chat central** (premieres tranches OS-UI-0/1/2) et `agent/` le backend temporaire (OS-UI-3).
 
 ## Identite du guest i386
 

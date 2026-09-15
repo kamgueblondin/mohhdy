@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Shell graphique du SE Mohhdy (OS-UI-0 / OS-UI-1 / OS-UI-2).
 
-L'entree produit est le chrome OS (fenetre, barre, bureaux). Le backend
+L'entree produit est le chrome OS : chat central (prompts / slash),
+puis panes (browser, shell UI, admin, support, statut, fs). Le backend
 HTTP reste le scaffold temporaire agent/ (parite comportementale). Ce
 n'est pas un LLM de production, pas US-031, pas Chromium de session, pas
 le guest i386 Multiboot. Aucun secret n'est cuit dans l'image.
@@ -27,6 +28,18 @@ SERVICE_NAME = "mohhdy-os"
 SHELL_KIND = "osui"
 BACKEND_NAME = "mohhdy-agent"
 OSUI_STATIC_RE = __import__("re").compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+OS_COMMANDS = [
+    {"slash": "/help", "summary": "Liste les raccourcis du SE"},
+    {"slash": "/browser", "summary": "Ouvre Browser-OS (simulateur DOM)"},
+    {"slash": "/shell", "summary": "Ouvre le shell UI de l'instance (pas un root Linux)"},
+    {"slash": "/admin", "summary": "Ouvre Admin (grant/revoke, takeover)"},
+    {"slash": "/support", "summary": "Ouvre Support (sessions, escalade)"},
+    {"slash": "/status", "summary": "Ouvre Statut instance"},
+    {"slash": "/fs", "summary": "Ouvre le FS sandbox lecture"},
+    {"slash": "/center", "summary": "Ferme les programmes et ramene le chat au centre"},
+    {"slash": "/close", "summary": "Ferme les programmes"},
+]
 
 MIME_BY_SUFFIX = {
     ".css": "text/css; charset=utf-8",
@@ -96,11 +109,29 @@ def os_identity(httpd) -> dict:
         "billing": policy_status["billing"],
         "default_site_id": policy_status["default_site_id"],
         "quota": policy_status["quota"],
-        "panes": ["browser-os", "support", "admin", "status"],
+        "panes": [
+            "chat",
+            "browser-os",
+            "shell",
+            "support",
+            "admin",
+            "status",
+            "fs",
+        ],
+        "commands": list(OS_COMMANDS),
+        "interaction": {
+            "primary": "center_chat",
+            "slash": True,
+            "floating_chat": True,
+            "chat_drag": True,
+            "chat_pos_key": "mohhdy.os.chat.pos",
+        },
         "notes": {
             "llm": "stub_echo: echo / KB locale, pas un LLM de production",
             "browser": "simulateur DOM; Playwright optionnel, pas US-031",
             "guest": "le noyau i386 QEMU n'est pas boote dans ce conteneur",
+            "shell": "shell UI de l'instance, pas un root Linux",
+            "chat": "chat central = surface de commande; flottant si un programme est ouvert",
         },
     }
 

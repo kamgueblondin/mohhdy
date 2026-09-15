@@ -12,13 +12,16 @@
       <div class="os-brand">
         <span class="os-logo" aria-hidden="true"></span>
         <strong>Mohhdy OS</strong>
-        <span class="os-edition">instance agentique</span>
+        <span class="os-edition">SE dirige par prompts</span>
       </div>
       <nav class="os-menubar" aria-label="Menus">
-        <button type="button" data-open="support">Support</button>
+        <button type="button" data-open="chat">Chat</button>
         <button type="button" data-open="browser">Browser-OS</button>
+        <button type="button" data-open="shell">Shell</button>
         <button type="button" data-open="admin">Admin</button>
+        <button type="button" data-open="support">Support</button>
         <button type="button" data-open="status">Statut</button>
+        <button type="button" data-open="fs">FS</button>
       </nav>
       <div id="os-flags" class="os-flags" title="Drapeaux honnetes">
         <span>llm=stub_echo</span>
@@ -30,41 +33,83 @@
 
     <main id="os-desktop" class="os-desktop">
       <p id="os-wallpaper-label" class="os-wallpaper-label">
-        Bureau Mohhdy. Pas un LLM de production. Pas US-031.
-        Simulateur DOM, pas Chromium de session. Backend temporaire agent/.
+        Bureau Mohhdy. Chat central = surface de commande.
+        Pas un LLM de production. Pas US-031. Simulateur DOM.
+        Backend temporaire agent/.
       </p>
       <aside class="os-icons" aria-label="Icones du bureau">
-        <button type="button" class="os-icon" data-open="support">
-          <span class="os-icon-glyph support"></span>
-          Support
-        </button>
         <button type="button" class="os-icon" data-open="browser">
           <span class="os-icon-glyph browser"></span>
           Browser-OS
+        </button>
+        <button type="button" class="os-icon" data-open="shell">
+          <span class="os-icon-glyph shell"></span>
+          Shell OS
         </button>
         <button type="button" class="os-icon" data-open="admin">
           <span class="os-icon-glyph admin"></span>
           Admin
         </button>
+        <button type="button" class="os-icon" data-open="support">
+          <span class="os-icon-glyph support"></span>
+          Support
+        </button>
         <button type="button" class="os-icon" data-open="status">
           <span class="os-icon-glyph status"></span>
           Statut
         </button>
+        <button type="button" class="os-icon" data-open="fs">
+          <span class="os-icon-glyph fs"></span>
+          Fichiers
+        </button>
       </aside>
 
-      <section id="win-support" class="os-window" data-pane="support" style="left:24px;top:28px;width:420px;height:520px;">
+      <section id="os-chat" class="os-chat" data-mode="center" data-testid="os-chat">
+        <header id="os-chat-header" class="os-chat-header" data-drag="chat">
+          <span class="os-traffic"><i></i><i></i><i data-chat-center></i></span>
+          <h2>Mohhdy</h2>
+          <span class="os-chat-llm">llm=stub_echo</span>
+          <button type="button" id="os-chat-center" class="secondary os-chat-center-btn">Centrer</button>
+        </header>
+        <p class="os-banner os-chat-banner">
+          Surface de commande du SE. llm=stub_echo (echo / KB locale, pas un moteur de production).
+          Raccourcis : /help /browser /shell /admin /support /status /fs.
+        </p>
+        <ul id="os-slash-registry" class="os-slash-registry" hidden>
+          <li data-slash="/help">Liste les raccourcis</li>
+          <li data-slash="/browser">Ouvre Browser-OS</li>
+          <li data-slash="/shell">Ouvre le shell UI de l'instance</li>
+          <li data-slash="/admin">Ouvre Admin</li>
+          <li data-slash="/support">Ouvre Support</li>
+          <li data-slash="/status">Ouvre Statut</li>
+          <li data-slash="/fs">Ouvre le FS sandbox</li>
+          <li data-slash="/center">Ferme les programmes et ramene le chat au centre</li>
+          <li data-slash="/close">Ferme les programmes</li>
+        </ul>
+        <div id="os-chat-log" class="os-log os-chat-log" aria-live="polite"></div>
+        <form id="os-chat-form" class="os-composer">
+          <textarea id="os-chat-input" maxlength="4000" placeholder="Prompt ou /help, /browser, /shell ..."></textarea>
+          <div class="os-row">
+            <button type="submit">Envoyer</button>
+            <span id="os-chat-hint" class="os-hint">session locale, stub</span>
+          </div>
+        </form>
+        <p id="os-chat-error" class="os-error" hidden></p>
+      </section>
+
+      <section id="win-support" class="os-window hidden" data-pane="support" style="left:24px;top:28px;width:420px;height:520px;">
         <header class="os-titlebar">
           <span class="os-traffic"><i></i><i></i><i data-close></i></span>
           <h2>Support</h2>
         </header>
         <div class="os-pane">
-          <p class="os-banner">Chat visiteur (ASSIST-010/011/012). LLM = stub local, pas un moteur de production. Origine binding (ASSIST-013) : refus origin_denied + request_id.</p>
+          <p class="os-banner">Chat visiteur detaille (ASSIST-010/011/012). LLM = stub local, pas un moteur de production. Origine binding (ASSIST-013) : refus origin_denied + request_id. Le chat central reste la surface de commande.</p>
           <div class="os-row">
             <label for="support-site">site_id</label>
             <input id="support-site" value="osui_demo" maxlength="64">
             <button type="button" id="support-create">Nouvelle session</button>
           </div>
-          <p id="support-meta" class="os-hint">Aucune session. Creer pour parler.</p>
+          <p id="support-meta" class="os-hint">Aucune session. Creer pour parler, ou envoyer un prompt dans le chat central.</p>
           <p id="support-caps" class="os-hint"></p>
           <div id="support-log" class="os-log" aria-live="polite"></div>
           <form id="support-form" class="os-composer">
@@ -135,7 +180,7 @@
         </div>
       </section>
 
-      <section id="win-browser" class="os-window hidden" data-pane="browser" style="left:80px;top:20px;width:720px;height:580px;">
+      <section id="win-browser" class="os-window hidden" data-pane="browser" style="left:48px;top:20px;width:720px;height:580px;">
         <header class="os-titlebar">
           <span class="os-traffic"><i></i><i></i><i data-close></i></span>
           <h2>Browser-OS</h2>
@@ -143,14 +188,14 @@
         <div class="os-pane browser-pane">
           <p class="os-banner">Surface navigateur de l'instance (ASSIST-020/021/022/060/061). Simulateur DOM, pas Chromium de session. phase3_complete=false. us031_complete=false. Playwright optionnel = 501 si absent.</p>
           <div class="os-row">
-            <span id="browser-session-label" class="os-hint">Session : (utiliser Support d'abord)</span>
+            <span id="browser-session-label" class="os-hint">Session : (prompt dans le chat ou Support)</span>
             <button type="button" id="browser-click">Geste menu</button>
             <button type="button" id="browser-invoice">Facture MCP</button>
             <button type="button" id="browser-navigate" class="secondary">Navigate (Playwright)</button>
           </div>
           <p id="browser-act" class="os-hint"></p>
           <iframe id="browser-frame" title="demo-app simulateur" src="/demo-app"></iframe>
-          <h3>FS sandbox (lecture)</h3>
+          <p class="os-hint">FS sandbox : programme /fs, ou les controles ci-dessous.</p>
           <div class="os-row">
             <input id="fs-path" value="demo" maxlength="200">
             <button type="button" id="fs-list">Lister</button>
@@ -160,7 +205,39 @@
         </div>
       </section>
 
-      <section id="win-status" class="os-window" data-pane="status" style="left:470px;top:64px;width:400px;height:420px;">
+      <section id="win-shell" class="os-window hidden" data-pane="shell" style="left:56px;top:28px;width:640px;height:440px;">
+        <header class="os-titlebar">
+          <span class="os-traffic"><i></i><i></i><i data-close></i></span>
+          <h2>Shell OS</h2>
+        </header>
+        <div class="os-pane shell-pane">
+          <p class="os-banner">Shell UI de l'instance Mohhdy. Pas un root Linux, pas un TTY guest i386. Commandes locales : help, status, open, panes, llm, whoami, clear.</p>
+          <pre id="shell-out" class="os-pre os-term" aria-live="polite"></pre>
+          <form id="shell-form" class="shell-form">
+            <label for="shell-input">mohhdy$</label>
+            <input id="shell-input" autocomplete="off" maxlength="400" placeholder="help">
+            <button type="submit">Executer</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="win-fs" class="os-window hidden" data-pane="fs" style="left:88px;top:40px;width:520px;height:420px;">
+        <header class="os-titlebar">
+          <span class="os-traffic"><i></i><i></i><i data-close></i></span>
+          <h2>Fichiers</h2>
+        </header>
+        <div class="os-pane">
+          <p class="os-banner">FS sandbox lecture (ASSIST-061). Traversal refuse. Pas d'ecriture sauf politique. Ce n'est pas le VFS guest i386.</p>
+          <div class="os-row">
+            <input id="fs-pane-path" value="demo" maxlength="200">
+            <button type="button" id="fs-pane-list">Lister</button>
+            <button type="button" id="fs-pane-read" class="secondary">Lire</button>
+          </div>
+          <pre id="fs-pane-out" class="os-pre">Sandbox lecture. Traversal refuse. Pas d'ecriture.</pre>
+        </div>
+      </section>
+
+      <section id="win-status" class="os-window hidden" data-pane="status" style="left:470px;top:64px;width:400px;height:420px;">
         <header class="os-titlebar">
           <span class="os-traffic"><i></i><i></i><i data-close></i></span>
           <h2>Statut</h2>
@@ -181,10 +258,13 @@
     </main>
 
     <nav id="os-dock" class="os-dock" aria-label="Dock">
-      <button type="button" data-open="support" title="Support">S</button>
+      <button type="button" data-open="chat" title="Chat">C</button>
       <button type="button" data-open="browser" title="Browser-OS">B</button>
+      <button type="button" data-open="shell" title="Shell OS">$</button>
       <button type="button" data-open="admin" title="Admin">A</button>
+      <button type="button" data-open="support" title="Support">S</button>
       <button type="button" data-open="status" title="Statut">i</button>
+      <button type="button" data-open="fs" title="Fichiers">F</button>
     </nav>
   </div>
   <script src="/os/os.js"></script>

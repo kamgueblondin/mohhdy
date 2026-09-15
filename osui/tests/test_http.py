@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fumee OS-UI-0/1/2 : shell graphique + parite agent (stdlib, hors make ci)."""
+"""Fumee OS-UI : chat central, slash, shell UI + parite agent (stdlib, hors make ci)."""
 
 from __future__ import annotations
 
@@ -115,10 +115,21 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertIn('id="os-topbar"', html)
         self.assertIn('id="os-desktop"', html)
         self.assertIn('id="os-dock"', html)
+        self.assertIn('id="os-chat"', html)
+        self.assertIn('data-mode="center"', html)
+        self.assertIn('id="os-slash-registry"', html)
+        self.assertIn('data-slash="/help"', html)
+        self.assertIn('data-slash="/browser"', html)
+        self.assertIn('data-slash="/shell"', html)
+        self.assertIn('data-slash="/admin"', html)
+        self.assertIn('data-slash="/fs"', html)
+        self.assertIn('data-drag="chat"', html)
         self.assertIn('data-pane="support"', html)
         self.assertIn('data-pane="admin"', html)
         self.assertIn('data-pane="browser"', html)
         self.assertIn('data-pane="status"', html)
+        self.assertIn('data-pane="shell"', html)
+        self.assertIn('data-pane="fs"', html)
         self.assertIn("llm=stub_echo", html)
         self.assertIn("phase3_complete=false", html)
         self.assertIn("us031_complete=false", html)
@@ -126,6 +137,9 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertIn("origin_denied", html)
         self.assertIn("Pas US-031", html)
         self.assertIn("Pas un LLM de production", html)
+        self.assertIn("SE dirige par prompts", html)
+        self.assertIn("Shell UI de l'instance Mohhdy", html)
+        self.assertIn("Pas un root Linux", html)
         lowered = html.lower()
         for marker in SECRET_MARKERS:
             self.assertNotIn(marker.lower(), lowered)
@@ -135,14 +149,42 @@ class OsuiHttpSmoke(unittest.TestCase):
         css = self._read("/os/os.css")
         self.assertIn(".os-topbar", css)
         self.assertIn(".os-window", css)
+        self.assertIn('.os-chat[data-mode="center"]', css)
+        self.assertIn('.os-chat[data-mode="float"]', css)
+        self.assertIn("--os-chat-z: 1100", css)
+        self.assertIn("cursor: grab", css)
         js = self._read("/os/os.js")
         self.assertIn("/api/sessions", js)
         self.assertIn("request_id", js)
         self.assertIn("mcp.invoice.create", js)
         self.assertIn("dom.click", js)
+        self.assertIn('setChatMode("float")', js)
+        self.assertIn("mohhdy.os.chat.pos", js)
+        self.assertIn("window.MohhdyOS", js)
+        self.assertIn("parseLine", js)
+        self.assertIn('name: "help"', js)
+        self.assertIn('name: "browser"', js)
+        self.assertIn('name: "shell"', js)
+        self.assertIn("Pas un root Linux", js)
         lowered = js.lower()
         self.assertNotIn("api_key", lowered)
         self.assertNotIn("sk-proj", lowered)
+
+    def test_slash_registry_matches_api(self) -> None:
+        html = self._read("/")
+        os_json, _, _ = self._get_json("/api/os")
+        slashes = [row["slash"] for row in os_json["commands"]]
+        self.assertEqual(os_json["interaction"]["primary"], "center_chat")
+        self.assertTrue(os_json["interaction"]["slash"])
+        self.assertTrue(os_json["interaction"]["floating_chat"])
+        self.assertTrue(os_json["interaction"]["chat_drag"])
+        self.assertEqual(os_json["interaction"]["chat_pos_key"], "mohhdy.os.chat.pos")
+        for slash in ("/help", "/browser", "/shell", "/admin", "/support", "/status", "/fs"):
+            self.assertIn(slash, slashes)
+            self.assertIn('data-slash="%s"' % slash, html)
+        self.assertIn("shell", os_json["panes"])
+        self.assertIn("chat", os_json["panes"])
+        self.assertIn("fs", os_json["panes"])
 
     def test_os_static_traversal_rejected(self) -> None:
         with self.assertRaises(urllib.error.HTTPError) as ctx:
@@ -162,10 +204,14 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertFalse(health["chromium_session_engine"])
         self.assertEqual(health["harness"], "dom_simulator")
         self.assertIn("browser-os", health["panes"])
+        self.assertIn("chat", health["panes"])
+        self.assertIn("shell", health["panes"])
+        self.assertEqual(health["interaction"]["primary"], "center_chat")
         os_json, _, _ = self._get_json("/api/os")
         self.assertEqual(os_json["service"], "mohhdy-os")
         self.assertFalse(os_json["phase3_complete"])
         self.assertFalse(os_json["us031_complete"])
+        self.assertEqual(os_json["commands"], osui_server.OS_COMMANDS)
         dumped = json.dumps(health).lower()
         self.assertNotIn("api_key", dumped)
         self.assertNotIn("sk-proj", dumped)

@@ -75,7 +75,7 @@ make run
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
 | `make iso` | Produit l'ISO BIOS/GRUB bootable |
 | `make run` / `make run-gui` | Session QEMU interactive curses ou GTK |
-| `make osui-smoke` | Fumée shell graphique OS-UI-0/1/2 (chrome, session, origine, admin, geste). Hors `make ci` / hors QEMU |
+| `make osui-smoke` | Fumée shell graphique OS-UI (chat central, slash, session, origine, admin, geste). Hors `make ci` / hors QEMU |
 | `make osui-docker` | Construit l'image `mohhdy-os`. Voir [docs/osui_0_1_2.md](docs/osui_0_1_2.md) |
 | `make agent-smoke` | Fumée HTTP agent (simulateur DOM, MCP, facture, 501 si Playwright absent). Hors `make ci` / hors QEMU |
 | `make agent-docker` | Construit l'image `mohhdy-agent` (backend temporaire). Voir [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md) |
@@ -92,7 +92,7 @@ make run-iso
 
 ## Instance autonome (shell graphique `osui/` + backend `agent/`)
 
-`osui/` est l'**entree produit** : `docker run` ouvre le chrome du SE (barre, fenetres, panes Support / Admin / Browser-OS / Statut). `agent/` reste le **backend temporaire** (APIs ASSIST). Ce n'est **pas** le noyau i386 du guest. Les reponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium de session, **pas** US-031. Guide : [docs/osui_0_1_2.md](docs/osui_0_1_2.md). Packaging PC / hyperviseur : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
+`osui/` est l'**entree produit** : `docker run` ouvre le chrome du SE. Surface primaire : **chat central** (prompts / `/help` `/browser` `/shell`). Un programme ouvert deplace le chat en panneau flottant draggable. `agent/` reste le **backend temporaire** (APIs ASSIST). Ce n'est **pas** le noyau i386 du guest. Les reponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium de session, **pas** US-031. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md). Packaging PC / hyperviseur : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
 
 ```bash
 make osui-smoke
@@ -144,7 +144,7 @@ Une ISO BIOS/GRUB peut être produite avec l'initrd. Lorsque les poids GPT-2 son
 
 ## Roadmap du SE (un produit)
 
-**Plan maitre (toutes les capacites visees, OS-UI, gates) :** [docs/PLAN_SE_MOHHDY_COMPLET.md](docs/PLAN_SE_MOHHDY_COMPLET.md). Premieres tranches OS-UI-0/1/2 : [docs/osui_0_1_2.md](docs/osui_0_1_2.md). Prochain build produit : **OS-UI-3** (retrait facade Python apres parite).
+**Plan maitre (toutes les capacites visees, OS-UI, gates) :** [docs/PLAN_SE_MOHHDY_COMPLET.md](docs/PLAN_SE_MOHHDY_COMPLET.md). Premieres tranches OS-UI-0/1/2 : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md). Prochain build produit : **OS-UI-3** (retrait facade Python apres parite).
 
 Gardes guest 0-4 : [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md). Backlog guest (AOS-xxx) : [US/mohhdy_us.md](US/mohhdy_us.md). Capacites OS a porter (`ASSIST-xxx`) : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md). Epiques de portage : [US/mohhdy_os_ui_migration.md](US/mohhdy_os_ui_migration.md). Specs historiques : [US/README.md](US/README.md).
 
