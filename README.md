@@ -109,7 +109,9 @@ Une ISO BIOS/GRUB peut être produite avec l'initrd. Lorsque les poids GPT-2 son
 
 ## Roadmap du prototype
 
-Le backlog courant est [US/mohhdy_us.md](US/mohhdy_us.md). La vision MOHHDY est conservée séparément dans [US/README.md](US/README.md).
+Le backlog courant est [US/mohhdy_us.md](US/mohhdy_us.md). La vision MOHHDY est conservée séparément dans [US/README.md](US/README.md). L'ordre des prochaines tranches AOS (0-4) et la piste Agent Support sont dans [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md).
+
+Piste produit **non livrée** : MOHHDY comme assistant agentique (embed JavaScript de support, console d'admin, actions sur le site, Docker / PC / hyperviseur / cloud). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md) (`ASSIST-xxx`). Ce n'est **pas** une fonction du prototype i386 vérifié ci-dessus. Le widget, Docker agent et l'automatisation navigateur n'apparaissent pas dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md).
 
 - [x] GPT-2 local, cache KV, SSE2 et top-k borné
 - [x] Tokenizer BPE UTF-8 avec couverture de lettres Unicode ciblée
