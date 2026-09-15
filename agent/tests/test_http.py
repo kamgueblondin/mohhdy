@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 
 import server  # noqa: E402
 import tools as agent_tools  # noqa: E402
+import browser_engine as agent_browser  # noqa: E402
 
 SECRET_MARKERS = (
     "api_key",
@@ -123,6 +124,7 @@ class AgentHttpSmoke(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_MODE", None)
         os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
         os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
+        os.environ.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.port = cls.httpd.server_address[1]
         cls.base = "http://127.0.0.1:%d" % cls.port
@@ -190,13 +192,17 @@ class AgentHttpSmoke(unittest.TestCase):
 
     def test_no_playwright_dependency(self) -> None:
         self.assertNotIn("playwright", sys.modules)
-        source = (ROOT / "server.py").read_text(encoding="utf-8")
-        self.assertNotIn("playwright", source.lower())
-        tools_src = (ROOT / "tools.py").read_text(encoding="utf-8")
-        self.assertNotIn("from playwright", tools_src)
-        self.assertNotIn("import playwright", tools_src)
-        fs_src = (ROOT / "browser_fs.py").read_text(encoding="utf-8")
-        self.assertNotIn("playwright", fs_src.lower())
+        for name in ("server.py", "tools.py", "browser_fs.py"):
+            source = (ROOT / name).read_text(encoding="utf-8")
+            self.assertNotIn("from playwright", source)
+            self.assertNotIn("import playwright", source)
+        engine_src = (ROOT / "browser_engine.py").read_text(encoding="utf-8")
+        header, _sep, _tail = engine_src.partition("def _load_sync_playwright")
+        self.assertTrue(_sep)
+        self.assertNotIn("from playwright", header)
+        self.assertNotIn("import playwright", header)
+        self.assertEqual(agent_browser.engine_label(), "optional_not_installed")
+        self.assertNotIn("playwright", sys.modules)
 
     def test_health_json(self) -> None:
         body, status, headers = self._get_json("/health")
@@ -285,6 +291,8 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertIn("simulateur DOM", html)
         self.assertIn("US-031", html)
         self.assertIn("Playwright", html)
+        self.assertIn("profil optionnel", html)
+        self.assertIn("/api/browser/navigate", html)
         self.assertIn("/demo-app", html)
         self.assertIn("/browser/fs", html)
         lowered = html.lower()
@@ -311,11 +319,31 @@ class AgentHttpSmoke(unittest.TestCase):
         self.assertTrue(body["browser_fs"])
         self.assertEqual(body["urls"]["view"], "/browser")
         self.assertEqual(body["urls"]["fs"], "/browser/fs")
+        self.assertEqual(body["urls"]["navigate"], "/api/browser/navigate")
+        self.assertEqual(body["urls"]["screenshot"], "/api/browser/screenshot")
+        self.assertEqual(body["session_tools_harness"], "dom_simulator")
+        self.assertEqual(body["page"]["url"], "")
         self.assertIn("dom", body)
         self.assertEqual(body["dom"]["harness"], "dom_simulator")
         names = [row["name"] for row in body["roots"]]
         self.assertIn("demo", names)
         self.assertNotIn("acl.", json.dumps(body))
+
+    def test_browser_navigate_without_engine_is_501(self) -> None:
+        body, status = self._post_status(
+            "/api/browser/navigate", {"url": "/demo-app"}
+        )
+        self.assertEqual(status, 501)
+        self.assertEqual(body["error"], "optional_not_installed")
+        self.assertEqual(body["browser_engine"], "optional_not_installed")
+        self.assertFalse(body["phase3_complete"])
+        self.assertFalse(body["us031_complete"])
+        self.assertNotIn("acl.", json.dumps(body))
+
+    def test_browser_screenshot_without_engine_is_501(self) -> None:
+        body, status = self._get_status("/api/browser/screenshot")
+        self.assertEqual(status, 501)
+        self.assertEqual(body["error"], "optional_not_installed")
 
     def test_browser_fs_list_and_read_demo(self) -> None:
         roots, status = self._get_status("/api/browser/fs")
@@ -1123,6 +1151,7 @@ class AgentAdminToken(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_MODE", None)
         os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
         os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
+        os.environ.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.port = cls.httpd.server_address[1]
         cls.base = "http://127.0.0.1:%d" % cls.port
@@ -1255,6 +1284,39 @@ class AgentAdminToken(unittest.TestCase):
             urllib.request.urlopen(req, timeout=2)
         self.assertEqual(ctx.exception.code, 401)
 
+    def test_browser_navigate_and_screenshot_require_token(self) -> None:
+        data = json.dumps({"url": "/demo-app"}).encode("utf-8")
+        req = urllib.request.Request(
+            self.base + "/api/browser/navigate",
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req, timeout=2)
+        self.assertEqual(ctx.exception.code, 401)
+        payload = json.loads(ctx.exception.read().decode("utf-8"))
+        self.assertEqual(payload["error"], "admin_token_required")
+        self.assertNotIn(self.TOKEN, json.dumps(payload))
+        with self.assertRaises(urllib.error.HTTPError) as shot:
+            urllib.request.urlopen(self.base + "/api/browser/screenshot", timeout=2)
+        self.assertEqual(shot.exception.code, 401)
+        req_ok = urllib.request.Request(
+            self.base + "/api/browser/navigate",
+            data=data,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + self.TOKEN,
+            },
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx_ok:
+            urllib.request.urlopen(req_ok, timeout=2)
+        self.assertEqual(ctx_ok.exception.code, 501)
+        body = json.loads(ctx_ok.exception.read().decode("utf-8"))
+        self.assertEqual(body["error"], "optional_not_installed")
+        self.assertNotIn(self.TOKEN, json.dumps(body))
+
 
 class AgentKbGrounding(unittest.TestCase):
     @classmethod
@@ -1299,6 +1361,7 @@ class AgentKbGrounding(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_MODE", None)
         os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
         os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
+        os.environ.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.base = "http://127.0.0.1:%d" % cls.httpd.server_address[1]
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
@@ -1438,6 +1501,7 @@ class AgentDeployScaffold(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_MODE", None)
         os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
         os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
+        os.environ.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
         os.environ.pop("ADMIN_TOKEN", None)
         os.environ.pop("MOHHDY_AGENT_DATA", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
@@ -1499,6 +1563,7 @@ class AgentDeployScaffold(unittest.TestCase):
             os.environ.pop("MOHHDY_AGENT_MODE", None)
             os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
             os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
+            os.environ.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
             self.httpd.reset_runtime()
 
     def test_no_paid_network_helpers(self) -> None:
@@ -1707,6 +1772,7 @@ class AgentConfiguredOrigins(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_MODE", None)
         os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
         os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
+        os.environ.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
         cls.httpd = server.make_server("127.0.0.1", 0)
         cls.base = "http://127.0.0.1:%d" % cls.httpd.server_address[1]
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
@@ -1814,6 +1880,323 @@ class AgentConfiguredOrigins(unittest.TestCase):
         self.assertEqual(code, 403)
         self.assertEqual(denied["error"], "origin_denied")
         self.assertNotIn("secret-self-cross", json.dumps(denied))
+
+
+TINY_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
+    b"\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+class FakePage:
+    def __init__(self) -> None:
+        self.url = "about:blank"
+        self._title = ""
+
+    def goto(self, url, wait_until=None, timeout=None):
+        self.url = url
+        parsed = urllib.parse.urlparse(url)
+        self._title = parsed.path.strip("/") or parsed.netloc or "page"
+
+    def title(self) -> str:
+        return self._title
+
+    def screenshot(self, type="png", timeout=None):
+        return TINY_PNG
+
+
+class FakeBrowser:
+    def __init__(self) -> None:
+        self.page = FakePage()
+        self.closed = False
+
+    def new_page(self) -> FakePage:
+        return self.page
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakePlaywright:
+    def __init__(self) -> None:
+        self.chromium = self
+        self.stopped = False
+        self.browser = FakeBrowser()
+
+    def launch(self, headless=True, args=None):
+        return self.browser
+
+    def stop(self) -> None:
+        self.stopped = True
+
+
+def fake_playwright_launcher():
+    session = FakePlaywright()
+
+    class Handle:
+        def start(self):
+            return session
+
+        def stop(self):
+            session.stop()
+
+    return Handle()
+
+
+def _playwright_chromium_launchable() -> bool:
+    if agent_browser.playwright_package_present() is False:
+        return False
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        return False
+    try:
+        pw = sync_playwright().start()
+    except Exception:
+        return False
+    try:
+        browser = pw.chromium.launch(headless=True)
+        browser.close()
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            pw.stop()
+        except Exception:
+            pass
+
+
+class BrowserEngineHelpers(unittest.TestCase):
+    def test_resolve_local_and_deny_file(self) -> None:
+        self.assertEqual(
+            agent_browser.resolve_target_url("/demo-app", "http://127.0.0.1:8080"),
+            "http://127.0.0.1:8080/demo-app",
+        )
+        with self.assertRaises(agent_browser.UrlDenied):
+            agent_browser.resolve_target_url("file:///etc/passwd", "http://127.0.0.1:8080")
+        with self.assertRaises(agent_browser.UrlDenied):
+            agent_browser.resolve_target_url("javascript:alert(1)", "http://127.0.0.1:8080")
+        with self.assertRaises(agent_browser.UrlError):
+            agent_browser.resolve_target_url("", "http://127.0.0.1:8080")
+
+    def test_url_allowed_self_and_foreign(self) -> None:
+        self.assertTrue(
+            agent_browser.url_allowed(
+                "http://127.0.0.1:8080/demo-app",
+                ["self"],
+                "http://127.0.0.1:8080",
+            )
+        )
+        self.assertFalse(
+            agent_browser.url_allowed(
+                "https://evil.example/",
+                ["self"],
+                "http://127.0.0.1:8080",
+            )
+        )
+
+    def test_import_does_not_load_playwright(self) -> None:
+        self.assertNotIn("playwright", sys.modules)
+        self.assertEqual(agent_browser.engine_label(""), "optional_not_installed")
+        self.assertEqual(agent_browser.engine_label("playwright"), "optional_not_installed")
+        self.assertNotIn("playwright", sys.modules)
+
+
+class AgentBrowserEngineMock(unittest.TestCase):
+    TOKEN = "engine-token-not-for-image"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._prev_token = os.environ.get("ADMIN_TOKEN")
+        cls._prev_engine = os.environ.get("MOHHDY_AGENT_BROWSER_ENGINE")
+        os.environ.pop("ADMIN_TOKEN", None)
+        os.environ.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
+        os.environ.pop("MOHHDY_AGENT_CONFIG", None)
+        os.environ.pop("MOHHDY_AGENT_DATA", None)
+        cls.httpd = server.make_server("127.0.0.1", 0)
+        cls.base = "http://127.0.0.1:%d" % cls.httpd.server_address[1]
+        cls.httpd.browser = agent_browser.OptionalBrowser(
+            launcher=fake_playwright_launcher,
+            requested="playwright",
+        )
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+        _wait_ready(cls.base)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.thread.join(timeout=2)
+        if cls._prev_token is None:
+            os.environ.pop("ADMIN_TOKEN", None)
+        else:
+            os.environ["ADMIN_TOKEN"] = cls._prev_token
+        if cls._prev_engine is None:
+            os.environ.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
+        else:
+            os.environ["MOHHDY_AGENT_BROWSER_ENGINE"] = cls._prev_engine
+
+    def setUp(self) -> None:
+        os.environ.pop("ADMIN_TOKEN", None)
+        self.httpd.reset_runtime()
+        self.httpd.browser = agent_browser.OptionalBrowser(
+            launcher=fake_playwright_launcher,
+            requested="playwright",
+        )
+
+    def _get(self, path: str, headers: dict | None = None):
+        req = urllib.request.Request(self.base + path, headers=headers or {})
+        try:
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                return json.loads(resp.read().decode("utf-8")), resp.status, resp
+        except urllib.error.HTTPError as err:
+            return json.loads(err.read().decode("utf-8")), err.code, err
+
+    def _post(self, path: str, payload: dict, headers: dict | None = None):
+        data = json.dumps(payload).encode("utf-8")
+        hdrs = {"Content-Type": "application/json"}
+        if headers:
+            hdrs.update(headers)
+        req = urllib.request.Request(
+            self.base + path, data=data, method="POST", headers=hdrs
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                return json.loads(resp.read().decode("utf-8")), resp.status
+        except urllib.error.HTTPError as err:
+            return json.loads(err.read().decode("utf-8")), err.code
+
+    def test_health_reports_playwright_when_mocked(self) -> None:
+        body, status, _ = self._get("/health")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["browser_engine"], "playwright")
+        self.assertEqual(body["harness"], "dom_simulator")
+        self.assertFalse(body["phase3_complete"])
+        self.assertFalse(body["us031_complete"])
+
+    def test_navigate_local_and_screenshot(self) -> None:
+        opened, status = self._post("/api/browser/navigate", {"url": "/demo-app"})
+        self.assertEqual(status, 200, msg=opened)
+        self.assertTrue(opened["ok"])
+        self.assertIn("/demo-app", opened["url"])
+        self.assertEqual(opened["browser_engine"], "playwright")
+        self.assertEqual(opened["harness"], "dom_simulator")
+        self.assertTrue(opened["screenshot_available"])
+        self.assertFalse(opened["phase3_complete"])
+        req = urllib.request.Request(self.base + "/api/browser/screenshot")
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            self.assertEqual(resp.status, 200)
+            self.assertIn("image/png", resp.headers.get("Content-Type", ""))
+            blob = resp.read()
+        self.assertEqual(blob[:8], b"\x89PNG\r\n\x1a\n")
+        info, status, _ = self._get("/api/browser")
+        self.assertEqual(status, 200)
+        self.assertIn("/demo-app", info["page"]["url"])
+        self.assertTrue(info["page"]["screenshot_available"])
+
+    def test_navigate_foreign_origin_denied(self) -> None:
+        denied, status = self._post(
+            "/api/browser/navigate", {"url": "https://evil.example/leak"}
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(denied["error"], "origin_denied")
+        self.assertIn("request_id", denied)
+        self.assertFalse(denied["us031_complete"])
+        info, _, _ = self._get("/api/browser")
+        self.assertEqual(info["page"]["url"], "")
+
+    def test_session_tools_stay_on_simulator(self) -> None:
+        created, status = self._post("/api/sessions", {"site_id": "engine_site"})
+        self.assertEqual(status, 201)
+        sid = created["session_id"]
+        req = urllib.request.Request(
+            self.base + "/api/admin/sessions/%s/capabilities" % sid,
+            data=json.dumps({"grant": ["dom.click"]}).encode("utf-8"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=2):
+            pass
+        tool, status = self._post(
+            "/api/sessions/%s/tools" % sid,
+            {
+                "tool": "dom.click",
+                "origin": self.base,
+                "args": {"selector": "#menu-toggle"},
+            },
+        )
+        self.assertEqual(status, 200, msg=tool)
+        self.assertEqual(tool["harness"], "dom_simulator")
+        self.assertNotEqual(tool.get("browser_engine"), "playwright")
+
+    def test_navigate_requires_admin_token_when_set(self) -> None:
+        os.environ["ADMIN_TOKEN"] = self.TOKEN
+        try:
+            denied, status = self._post("/api/browser/navigate", {"url": "/demo-app"})
+            self.assertEqual(status, 401)
+            self.assertEqual(denied["error"], "admin_token_required")
+            self.assertNotIn(self.TOKEN, json.dumps(denied))
+            opened, status = self._post(
+                "/api/browser/navigate",
+                {"url": "/demo-app"},
+                headers={"Authorization": "Bearer " + self.TOKEN},
+            )
+            self.assertEqual(status, 200, msg=opened)
+            req = urllib.request.Request(self.base + "/api/browser/screenshot")
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(req, timeout=2)
+            self.assertEqual(ctx.exception.code, 401)
+        finally:
+            os.environ.pop("ADMIN_TOKEN", None)
+
+
+@unittest.skipUnless(
+    _playwright_chromium_launchable(),
+    "fumee Playwright optionnelle : paquet et Chromium absents",
+)
+class AgentPlaywrightOptional(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        os.environ.pop("ADMIN_TOKEN", None)
+        os.environ["MOHHDY_AGENT_BROWSER_ENGINE"] = "playwright"
+        cls.httpd = server.make_server("127.0.0.1", 0)
+        cls.base = "http://127.0.0.1:%d" % cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+        _wait_ready(cls.base)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.thread.join(timeout=2)
+        os.environ.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
+
+    def test_live_navigate_demo_app(self) -> None:
+        with urllib.request.urlopen(self.base + "/health", timeout=2) as resp:
+            health = json.loads(resp.read().decode("utf-8"))
+        self.assertEqual(health["browser_engine"], "playwright")
+        self.assertFalse(health["us031_complete"])
+        data = json.dumps({"url": "/demo-app"}).encode("utf-8")
+        req = urllib.request.Request(
+            self.base + "/api/browser/navigate",
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(resp.status, 200)
+        self.assertIn("/demo-app", body["url"])
+        self.assertTrue(body["title"] or body["url"])
+        shot = urllib.request.Request(self.base + "/api/browser/screenshot")
+        with urllib.request.urlopen(shot, timeout=5) as resp:
+            payload = resp.read()
+        self.assertGreater(len(payload), 20)
+        self.assertEqual(payload[:8], b"\x89PNG\r\n\x1a\n")
 
 
 if __name__ == "__main__":

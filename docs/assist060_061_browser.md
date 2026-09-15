@@ -1,7 +1,7 @@
 # ASSIST-060 / 061 - vue navigateur d'instance et FS sandbox
 
 **Date :** 15 septembre 2026
-**Statut :** premiere tranche livree dans `agent/` (simulateur DOM, pas US-031)
+**Statut :** premiere tranche livree dans `agent/` (simulateur DOM, profil Playwright optionnel, pas US-031)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
 Ce document décrit comment, une fois l'instance déployée, un opérateur
@@ -13,9 +13,10 @@ Gestes : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
 Plan : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
 
 Ce n'est **pas** un navigateur-OS (US-031). La phase 3 reste **non
-implementee**. Ce n'est **pas** Chromium. Le profil Playwright est
-**optionnel et non installe** sur le chemin slim (`make agent-smoke`,
-`Dockerfile`). Aucun Internet public. Aucun secret dans l'image.
+implementee**. Playwright / Chromium est un **profil optionnel** :
+absent du chemin slim (`make agent-smoke`, `Dockerfile`). Guide :
+[assist_playwright_optional.md](assist_playwright_optional.md). Aucun
+Internet public hors allowlist. Aucun secret dans l'image.
 `docs/ETAT_REEL.md` n'est **pas** mis a jour : le guest AOS n'a pas
 gagne ce FS.
 
@@ -26,7 +27,9 @@ Apres `python3 agent/server.py` ou `docker run -p 8080:8080 mohhdy-agent` :
 | URL | Role |
 |---|---|
 | `GET /browser` | Page operateur : miroir du simulateur `/demo-app` (iframe locale) et etat harness |
-| `GET /api/browser` | JSON : runtime, harness, drapeaux phase 3 / US-031 a false, snapshot DOM |
+| `GET /api/browser` | JSON : runtime, harness, `browser_engine`, drapeaux phase 3 / US-031 a false, snapshot DOM, etat page optionnel |
+| `POST /api/browser/navigate` | Operateur : ouvrir une URL locale ou allowlistee (501 si Playwright absent) |
+| `GET /api/browser/screenshot` | Capture PNG si une page optionnelle est ouverte (501 sinon) |
 | `GET /demo-app` | Appli hote mock deja livree (ASSIST-020) |
 | `GET /admin` | Console sessions (autre surface, pas un navigateur) |
 
@@ -36,7 +39,7 @@ sans reseau public.
 
 Honnêteté :
 
-- Harness = `dom_simulator`. Chromium / moteur optionnel : non branche (`browser_engine=optional_not_installed`).
+- Harness session = `dom_simulator`. Moteur optionnel : `browser_engine=optional_not_installed` tant que Playwright n'est pas installe.
 - `phase3_complete=false`, `us031_complete=false` dans `/health` et `/api/browser`.
 - Administrer hors du seul panneau : `/browser` plus `/demo-app` et `/admin`.
 
@@ -82,7 +85,8 @@ Isolation :
 | Valeur | Comment | Sens |
 |---|---|---|
 | `docker` (defaut) | `MOHHDY_AGENT_RUNTIME=docker` ou JSON `runtime.kind` | Agent conteneur / install PC. Meme HTTP. FS sandbox d'instance quand meme disponible |
-| `browser` | `MOHHDY_AGENT_RUNTIME=browser`, profil compose `browser`, `Dockerfile.playwright` | Lancement oriente navigateur (vision "le web est le FS"). Toujours le simulateur, pas Chromium |
+| `browser` | `MOHHDY_AGENT_RUNTIME=browser`, profil compose `browser`, `Dockerfile.playwright` (cible slim) | Lancement oriente navigateur (vision "le web est le FS"). Simulateur, pas Chromium |
+| `playwright` (extra) | `MOHHDY_AGENT_BROWSER_ENGINE=playwright`, profil compose `playwright` | Controle operateur /browser. Gros. Pas US-031. Gestes de session = simulateur |
 
 `GET /health` publie `runtime`. L'environnement prime sur le JSON.
 
@@ -97,8 +101,8 @@ cd agent
 docker compose --profile browser up --build
 ```
 
-Chromium n'est **pas** installe. `MOHHDY_AGENT_HARNESS=playwright` n'est
-pas implemente.
+Chromium n'est **pas** dans l'image slim. Pour le profil optionnel :
+[assist_playwright_optional.md](assist_playwright_optional.md).
 
 ## Verifier (hors QEMU, hors make ci)
 
@@ -120,7 +124,8 @@ curl -fsS -H 'Authorization: Bearer change-me-at-runtime' \
 
 ## Hors perimetre (cette tranche)
 
-- Navigateur-OS US-031, onglets-processus, moteur Chromium/WebKit
-- Mise a jour de [ETAT_REEL.md](ETAT_REEL.md) (le prototype i386 n'a pas ce FS)
-- Ecriture dans le sandbox, Internet public, OpenAI, secret dans l'image
+- Navigateur-OS US-031, onglets-processus, phase 3 complete
+- Gestes de session routes via Playwright (reste le simulateur)
+- Ecriture dans le sandbox, Internet public hors allowlist, OpenAI, secret dans l'image
+- Chromium dans `Dockerfile` slim / `make agent-docker`
 - Allonger `make integration-qemu`

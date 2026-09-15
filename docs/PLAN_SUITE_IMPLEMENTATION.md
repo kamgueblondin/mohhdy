@@ -231,9 +231,9 @@ Le widget JS, la console admin, l'agent souris / clics / MCP et l'origine HTTPS 
 | Docker ASSIST-050 | **Peut commencer avant** un microkernel US-001 complet, et **avant** la fin de la tranche 4 stockage. Interdit d'attendre que ATA/FAT quittent le noyau pour coller un embed |
 | Embed + admin (ASSIST-010, 040) | Après une origine HTTP (050 ou 053). Pas dans QEMU i386 |
 | Droits de session (ASSIST-030) | Vocabulaire Foundation (grant / revoke / scope) réutilisé. Pas besoin de l'identité vérifiée Foundation pour un premier Docker |
-| Actions navigateur / MCP / facture (ASSIST-020..022) | Simulateur DOM + MCP demo livrés. Pas AOS-025 public. Pas Chromium |
+| Actions navigateur / MCP / facture (ASSIST-020..022) | Simulateur DOM + MCP demo livrés. Pas AOS-025 public. Playwright = profil optionnel operateur, pas le harness de session |
 | OpenAI public | **Toujours sous condition**, comme le prototype : accord explicite, secret hors image, hors CI |
-| Accès navigateur / FS (ASSIST-060, 061) | Tranche produit de la phase 3. Vue instance + FS sandbox dans `agent/`. La phase 3 / US-031 restent spec |
+| Accès navigateur / FS (ASSIST-060, 061) | Tranche produit de la phase 3. Vue instance + FS sandbox dans `agent/`. Profil Playwright optionnel (pas US-031). La phase 3 / US-031 restent spec |
 | Corps physique (ASSIST-090) | Piste future. Pas une livraison proche |
 | Cloud abonnement (ASSIST-053) | Après 050 amorçable. Optionnel. Self-host reste possible |
 
@@ -247,14 +247,14 @@ Ordre détaillé et critères : le fichier `ASSIST-xxx`. Ici l'ordre de **build*
 4. **ASSIST-012 / 030 / 031 / 041** : expliquer la plateforme (KB locale), masque de droits par site/session, escalade, handoff humain dans la **même** conversation. Livré (stub). Guide : [assist012_droits_handoff.md](assist012_droits_handoff.md).
 5. **ASSIST-020 / 021 / 022** : gestes allowlistés (simulateur DOM, pas Chromium), outils MCP déclarés, facture demo dans `/demo-app`. Livré. Guide : [assist020_gestes_mcp.md](assist020_gestes_mcp.md).
 6. **ASSIST-051 / 052 / 053** : install PC (`install.sh`), recette hyperviseur distincte de l'ISO GRUB AOS (cloud-init + QEMU x86_64, dry-run), scaffold cloud (`MOHHDY_AGENT_MODE`, quotas placeholder, **pas** de facturation). Guide : [assist051_052_053_deploy.md](assist051_052_053_deploy.md).
-7. **ASSIST-060 / 061** : `/browser` (miroir simulateur) et FS sandbox `/api/browser/fs` livrés dans `agent/`. Ce n'est **pas** US-031. ETAT_REEL inchangé. Guide : [assist060_061_browser.md](assist060_061_browser.md).
+7. **ASSIST-060 / 061** : `/browser` (miroir simulateur) et FS sandbox `/api/browser/fs` livrés dans `agent/`. Profil Playwright optionnel pour l'operateur (`MOHHDY_AGENT_BROWSER_ENGINE`), **pas** US-031. `phase3_complete=false`, `us031_complete=false`. ETAT_REEL inchangé. Guides : [assist060_061_browser.md](assist060_061_browser.md), [assist_playwright_optional.md](assist_playwright_optional.md).
 8. **ASSIST-090** : hors sprint. Réutiliser plus tard le même modèle de capacités.
 
 ### Relation aux phases 1-8 (sans réécrire l'histoire)
 
 - Phase 1 Foundation : droits / capacités. Le track reprend grant, révocation, moindre privilège, `request_id`. Il n'affirme pas US-001 terminé.
 - Phase 2 AI Core / US-021 / US-028 : assistant qui parle et agit. Le prototype n'a que `ai <texte>` (AOS-010). Le track produitise cet assistant pour le support. Pas TFLite (US-016).
-- Phase 3 Web Runtime : navigateur-OS et FS web **absents**. ASSIST-060/061 en sont une tranche produit, pas US-031 livré.
+- Phase 3 Web Runtime : navigateur-OS et FS web **absents**. ASSIST-060/061 en sont une tranche produit, pas US-031 livré. Un profil Playwright optionnel n'équivaut pas à US-031.
 - US-015 / phase 6 / phase 8 : déploiement et production. Docker / cloud ici = packaging d'agent, pas l'orchestrateur microkernel.
 - US-034 : connecteurs. Les outils MCP du site en sont un voisinage borné (allowlist), pas un ERP générique.
 

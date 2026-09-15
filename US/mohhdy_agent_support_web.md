@@ -1,11 +1,11 @@
 # Track Agent Support - assistant web agentique
 
 **Date :** 15 septembre 2026
-**Statut :** spec produit. ASSIST-050/010/011/012/020/021/022/030/031/040/041 = runtime HTTP livré (stub local, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock). ASSIST-051/052/053 = packaging operateur (install PC, recette hyperviseur, scaffold cloud non-billing). ASSIST-060/061 = vue `/browser` et FS sandbox `/api/browser/fs` (pas US-031, pas Chromium). LLM de production, Chromium, navigateur-OS et SaaS de paiement **pas** livrés
+**Statut :** spec produit. ASSIST-050/010/011/012/013/020/021/022/030/031/040/041 = runtime HTTP livré (stub local, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock, refus d'origine). ASSIST-051/052/053 = packaging operateur (install PC, recette hyperviseur, scaffold cloud non-billing). ASSIST-060/061 = vue `/browser` et FS sandbox `/api/browser/fs` (pas US-031). Playwright / Chromium = **profil optionnel** operateur, pas US-031. LLM de production, navigateur-OS et SaaS de paiement **pas** livrés
 **IDs :** `ASSIST-xxx` (ne collident ni avec `AOS-xxx` ni avec `US-xxx`)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document décrit une **nouvelle piste produit** : MOHHDY comme assistant IA agentique (OS / agent) capable de tenir un support client sur un site web, d'agir dans le périmètre autorisé, et de céder la main à un humain. Il n'annule pas le prototype i386. `agent/` sert une origine HTTP : widget `embed.js`, sessions visiteur isolées, base de connaissance locale optionnelle, masque de droits, escalade, handoff dans la même session, console `/admin` (jeton `ADMIN_TOKEN` optionnel), simulateur de gestes sur `/demo-app`, outil MCP demo, facture mock, vue `/browser` (miroir du simulateur) et FS sandbox `/browser/fs`. Les réponses sont un **stub local** (echo ou extraits de KB), pas un LLM de production, pas Chromium, **pas** US-031.
+Ce document décrit une **nouvelle piste produit** : MOHHDY comme assistant IA agentique (OS / agent) capable de tenir un support client sur un site web, d'agir dans le périmètre autorisé, et de céder la main à un humain. Il n'annule pas le prototype i386. `agent/` sert une origine HTTP : widget `embed.js`, sessions visiteur isolées, base de connaissance locale optionnelle, masque de droits, escalade, handoff dans la même session, console `/admin` (jeton `ADMIN_TOKEN` optionnel), simulateur de gestes sur `/demo-app`, outil MCP demo, facture mock, vue `/browser` (miroir du simulateur + controle Playwright optionnel) et FS sandbox `/browser/fs`. Les réponses sont un **stub local** (echo ou extraits de KB), pas un LLM de production. Playwright n'est **pas** une dépendance du slim. **Pas** US-031.
 
 En cas de contradiction sur ce qui **tourne aujourd'hui**, [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md) et [mohhdy_us.md](mohhdy_us.md) priment.
 
@@ -245,7 +245,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** Un scénario de démo (ouvrir un menu, remplir un champ) réussit sur l'origine allowlistée et échoue hors origine, avec journal `request_id`.
 
-**Progrès.** Simulateur DOM in-process (`harness=dom_simulator`), page `/demo-app`, allowlist d'origines (`self` ou URL). `dom.click` / `dom.type` / `pointer.move` mutent `GET /api/demo-app/state`. Origine étrangère : 403 `origin_denied` + `request_id` au journal. **Pas** Playwright, **pas** Chromium. Guide : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md).
+**Progrès.** Simulateur DOM in-process (`harness=dom_simulator`), page `/demo-app`, allowlist d'origines (`self` ou URL). `dom.click` / `dom.type` / `pointer.move` mutent `GET /api/demo-app/state`. Origine étrangère : 403 `origin_denied` + `request_id` au journal. Playwright n'est **pas** le harness de session (profil optionnel operateur seulement). Guide : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md).
 
 ### ASSIST-021 - Outils MCP / outils du site
 
@@ -355,7 +355,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 
 **Critère.** URL documentée vers un navigateur de l'instance ou un équivalent. Pas de "navigateur-OS" complet (US-031).
 
-**Progrès.** `GET /browser` : page locale qui iframe `/demo-app` et sonde `/api/browser` (etat harness, `browser_engine=optional_not_installed`, `phase3_complete=false`, `us031_complete=false`). Pas d'Internet public. Guide : [../docs/assist060_061_browser.md](../docs/assist060_061_browser.md). **Pas** US-031.
+**Progrès.** `GET /browser` : page locale qui iframe `/demo-app` et sonde `/api/browser` (etat harness, `browser_engine=optional_not_installed` sur le slim, `phase3_complete=false`, `us031_complete=false`). Controle operateur optionnel : `POST /api/browser/navigate` (501 si Playwright absent). Pas d'Internet public hors allowlist. Guides : [../docs/assist060_061_browser.md](../docs/assist060_061_browser.md), [../docs/assist_playwright_optional.md](../docs/assist_playwright_optional.md). **Pas** US-031.
 
 ### ASSIST-061 - FS navigateur si lancement direct
 
@@ -385,7 +385,7 @@ Convention : **En tant que** / **je veux** / **afin de**. Critère de sortie = o
 | 4 | ASSIST-012, 030, 031, 041 | KB locale, masque de droits, escalade, handoff dans la même conversation : livrés (stub) | Politique de droits |
 | 5 | ASSIST-020, 021, 022 | Gestes simulateur, MCP déclaré, facture mock : livrés (pas Chromium) | Allowlist, pas AOS-025 public |
 | 6 | ASSIST-051, 052, 053 | Après 050 amorçable | 051/052 docs+scripts livrés ; 053 scaffold non-billing |
-| 7 | ASSIST-060, 061 | Apres 050 : `/browser` + FS sandbox livrés (pas US-031) | Phase 3 reste spec |
+| 7 | ASSIST-060, 061 | Apres 050 : `/browser` + FS sandbox livrés (pas US-031). Playwright = extra optionnel | Phase 3 reste spec |
 | 8 | ASSIST-090 | Jamais en "prochain sprint" | Corps physique inexistant |
 
 OpenAI / LLM hébergé : l'agent peut d'abord s'appuyer sur un modèle **local à l'instance** (voisinage AOS-010 / GGUF, autre runtime userspace). Un fournisseur public reste sous la **même** condition que le prototype : accord, secret hors image, hors CI.
@@ -401,6 +401,7 @@ OpenAI / LLM hébergé : l'agent peut d'abord s'appuyer sur un modèle **local �
 - KB, droits, escalade, handoff : [../docs/assist012_droits_handoff.md](../docs/assist012_droits_handoff.md)
 - Gestes simulateur, MCP, facture : [../docs/assist020_gestes_mcp.md](../docs/assist020_gestes_mcp.md)
 - Vue navigateur et FS sandbox : [../docs/assist060_061_browser.md](../docs/assist060_061_browser.md)
+- Profil Playwright optionnel : [../docs/assist_playwright_optional.md](../docs/assist_playwright_optional.md)
 - Phase 1 droits : [mohhdy_us_phase1_foundation.md](mohhdy_us_phase1_foundation.md)
 - Phase 2 assistant : [mohhdy_us_phase2_ai_core.md](mohhdy_us_phase2_ai_core.md), [individual_us/US-021_Assistant_IA_Integre.md](individual_us/US-021_Assistant_IA_Integre.md), [individual_us/US-028_Module_Intelligence_Conversationnelle.md](individual_us/US-028_Module_Intelligence_Conversationnelle.md)
 - Phase 3 navigateur : [mohhdy_us_phase3_web_runtime.md](mohhdy_us_phase3_web_runtime.md)

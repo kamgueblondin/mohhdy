@@ -1,0 +1,9 @@
+# Extra optionnel. PAS une dependance du runtime slim.
+# make agent-smoke et Dockerfile (defaut) n'installent PAS ce fichier.
+#
+#   pip install -r agent/requirements-playwright.txt
+#   python3 -m playwright install chromium
+#
+# Puis : MOHHDY_AGENT_BROWSER_ENGINE=playwright python3 agent/server.py
+# Image extra (gros, hors CI AOS) : voir Dockerfile.playwright cible playwright.
+playwright>=1.48.0,<2

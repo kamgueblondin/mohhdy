@@ -57,6 +57,7 @@
       padding: 1rem 1.1rem;
     }
     p.muted, .muted { color: var(--muted); }
+    .error { color: #f3c0c0; }
     code, pre { font-family: ui-monospace, monospace; font-size: 0.85em; }
     pre {
       background: #0b1014;
@@ -65,16 +66,41 @@
       overflow: auto;
       max-height: 22rem;
     }
-    iframe {
+    iframe, img.shot {
       width: 100%;
-      min-height: 34rem;
+      min-height: 18rem;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #fff;
     }
+    iframe { min-height: 34rem; }
     dl { margin: 0; }
     dt { color: var(--muted); font-size: 0.85rem; margin-top: 0.55rem; }
     dd { margin: 0; }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin: 0.6rem 0;
+    }
+    label { color: var(--muted); font-size: 0.85rem; }
+    input, button {
+      font: inherit;
+      padding: 0.4rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: #0b1014;
+      color: var(--fg);
+    }
+    input[type="url"], input[type="text"] { min-width: 16rem; flex: 1; }
+    button {
+      background: var(--accent);
+      color: #0f1419;
+      border: 0;
+      font-weight: 600;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -92,8 +118,9 @@
       ASSIST-060 : page locale qui montre ce que l'agent voit sur le
       <strong>simulateur DOM</strong> (<code>/demo-app</code>), sans Internet public.
       Ce n'est <strong>pas</strong> un navigateur-OS (US-031 / phase 3 restent
-      non implementes). Le profil Playwright / Chromium est
-      <strong>optionnel et non installe</strong> sur le chemin slim.
+      non implementes). Playwright / Chromium est un
+      <strong>profil optionnel</strong> (controle operateur, pas les gestes
+      de session).
     </div>
     <div class="grid">
       <aside class="card">
@@ -115,11 +142,43 @@
         <iframe id="mohhdy-frame" title="demo-app locale" src="/demo-app"></iframe>
       </section>
     </div>
+    <section class="card" style="margin-top:1rem;" id="mohhdy-engine-panel">
+      <h2>Profil Playwright optionnel</h2>
+      <p class="muted" id="mohhdy-engine-help">
+        Controle operateur : ouvrir une URL locale ou allowlistee.
+        Les outils de session restent le simulateur DOM.
+      </p>
+      <div class="row">
+        <label for="mohhdy-token">Jeton admin</label>
+        <input id="mohhdy-token" type="password" autocomplete="off" placeholder="ADMIN_TOKEN">
+      </div>
+      <div class="row">
+        <label for="mohhdy-url">URL</label>
+        <input id="mohhdy-url" type="text" value="/demo-app" placeholder="/demo-app">
+        <button type="button" id="mohhdy-open">Ouvrir</button>
+      </div>
+      <p id="mohhdy-engine-note" class="muted"></p>
+      <p class="muted">Capture (si le moteur est actif) :</p>
+      <img id="mohhdy-shot" class="shot" alt="capture Playwright absente" hidden>
+    </section>
   </main>
   <script>
     (function () {
       var meta = document.getElementById("mohhdy-meta");
       var statePre = document.getElementById("mohhdy-state");
+      var note = document.getElementById("mohhdy-engine-note");
+      var shot = document.getElementById("mohhdy-shot");
+      var tokenInput = document.getElementById("mohhdy-token");
+      var urlInput = document.getElementById("mohhdy-url");
+
+      function headers() {
+        var token = tokenInput.value.trim();
+        var hdrs = { "Content-Type": "application/json" };
+        if (token) {
+          hdrs.Authorization = "Bearer " + token;
+        }
+        return hdrs;
+      }
 
       function row(label, value) {
         var dt = document.createElement("dt");
@@ -140,16 +199,75 @@
         row("FS sandbox", info.browser_fs ? "actif (instance)" : "absent");
         row("vue", (info.urls && info.urls.view) || "/browser");
         row("fs", (info.urls && info.urls.fs) || "/browser/fs");
+        if (info.page) {
+          row("page url", info.page.url || "(aucune)");
+          row("page titre", info.page.title || "(aucun)");
+        }
+        if (info.dom) {
+          statePre.textContent = JSON.stringify(info.dom, null, 2);
+        }
+        if (info.browser_engine && info.browser_engine !== "optional_not_installed") {
+          note.textContent = info.engine_note || "moteur optionnel actif";
+          note.className = "muted";
+          if (info.page && info.page.screenshot_available) {
+            loadShot();
+          }
+        } else {
+          note.textContent = "501 optional_not_installed tant que Playwright n'est pas installe.";
+          note.className = "muted";
+          shot.hidden = true;
+        }
+      }
+
+      function loadShot() {
+        fetch("/api/browser/screenshot", { headers: headers() }).then(function (resp) {
+          if (!resp.ok) {
+            shot.hidden = true;
+            return;
+          }
+          return resp.blob();
+        }).then(function (blob) {
+          if (!blob) {
+            return;
+          }
+          shot.src = URL.createObjectURL(blob);
+          shot.hidden = false;
+        }).catch(function () {
+          shot.hidden = true;
+        });
       }
 
       function poll() {
         fetch("/api/browser").then(function (resp) { return resp.json(); }).then(function (info) {
           applyBrowser(info);
-          if (info.dom) {
-            statePre.textContent = JSON.stringify(info.dom, null, 2);
-          }
         }).catch(function () {});
       }
+
+      document.getElementById("mohhdy-open").addEventListener("click", function () {
+        fetch("/api/browser/navigate", {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ url: urlInput.value || "/demo-app" })
+        }).then(function (resp) {
+          return resp.json().then(function (body) {
+            if (!resp.ok) {
+              note.textContent = (resp.status + " " + (body.error || "") + " " + (body.message || "")).trim();
+              note.className = "error";
+              return;
+            }
+            note.textContent = (body.title || "") + " " + (body.url || "");
+            note.className = "muted";
+            poll();
+            if (body.screenshot_available) {
+              loadShot();
+            }
+          });
+        }).catch(function (err) {
+          note.textContent = String(err);
+          note.className = "error";
+        });
+      });
+
       poll();
       setInterval(poll, 1000);
     })();

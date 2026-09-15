@@ -79,5 +79,6 @@ refusés sans fuite de secret. Hors `make ci` / hors QEMU.
 
 - Comptes opérateurs, auth par site, cookies httpOnly
 - Liaison cryptographique (l'en-tête Origin n'est pas une signature)
-- Playwright / Chromium, LLM de production
+- Playwright / Chromium dans le slim (profil optionnel : [assist_playwright_optional.md](assist_playwright_optional.md))
+- LLM de production
 - Noyau Multiboot dans le conteneur

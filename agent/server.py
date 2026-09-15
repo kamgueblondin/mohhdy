@@ -8,8 +8,9 @@ une origine allowlistee, des outils MCP declares, une appli hote mock
 (/api/browser/fs). L'origine du document (Origin / Referer) est refusee
 si elle ne matche pas l'allowlist du site declare (ASSIST-013). Modes
 self-host / hosted (scaffold, pas de facturation) et runtime docker |
-browser. Ce n'est pas un LLM de production, pas d'appel OpenAI, pas
-Chromium, pas US-031, et ce n'est pas le noyau Multiboot i386.
+browser. Playwright / Chromium est un profil optionnel (operateur
+/browser), pas une dependance du slim, pas US-031. Ce n'est pas un LLM
+de production, pas d'appel OpenAI, et ce n'est pas le noyau Multiboot i386.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, unquote, urlparse
 
+import browser_engine as agent_browser
 import browser_fs as agent_fs
 import tools as agent_tools
 
@@ -53,7 +55,7 @@ RUNTIME_DOCKER = "docker"
 RUNTIME_BROWSER = "browser"
 VALID_RUNTIMES = (RUNTIME_DOCKER, RUNTIME_BROWSER)
 BILLING_NONE = "none"
-BROWSER_ENGINE_STATUS = "optional_not_installed"
+BROWSER_ENGINE_STATUS = agent_browser.ENGINE_NONE
 SITE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 SESSION_ID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -760,7 +762,7 @@ class PolicyStore:
                 "harness": HARNESS_KIND,
                 "deployment_mode": self.deployment_mode,
                 "runtime": self.runtime_kind,
-                "browser_engine": BROWSER_ENGINE_STATUS,
+                "browser_engine": agent_browser.engine_label(),
                 "phase3_complete": False,
                 "us031_complete": False,
                 "browser_fs": True,
@@ -1369,6 +1371,7 @@ class AgentHTTPServer(ThreadingHTTPServer):
         self.invoices = agent_tools.InvoiceStore(invoices_path)
         self.journal = agent_tools.AuditJournal(journal_path)
         self.sandbox = agent_fs.BrowserSandbox(STATIC_DIR, data_dir)
+        self.browser = agent_browser.OptionalBrowser()
         self.store = SessionStore(
             env_data_path(),
             policy=policy,
@@ -1384,6 +1387,16 @@ class AgentHTTPServer(ThreadingHTTPServer):
         self.invoices.clear()
         self.journal.clear()
         self.sandbox = agent_fs.BrowserSandbox(STATIC_DIR, env_data_dir())
+        self.browser.reset()
+
+    def server_close(self) -> None:
+        browser = getattr(self, "browser", None)
+        if browser is not None:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        super().server_close()
 
 
 class AgentHandler(BaseHTTPRequestHandler):
@@ -1453,7 +1466,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "harness": HARNESS_KIND,
                     "deployment_mode": policy_status["deployment_mode"],
                     "runtime": policy_status["runtime"],
-                    "browser_engine": policy_status["browser_engine"],
+                    "browser_engine": self.server.browser.label(),
                     "phase3_complete": False,
                     "us031_complete": False,
                     "browser_fs": True,
@@ -1515,7 +1528,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "kb_loaded": policy_status["kb_loaded"],
                     "deployment_mode": policy_status["deployment_mode"],
                     "runtime": policy_status["runtime"],
-                    "browser_engine": policy_status["browser_engine"],
+                    "browser_engine": self.server.browser.label(),
                     "phase3_complete": False,
                     "us031_complete": False,
                     "browser_fs": True,
@@ -2163,9 +2176,85 @@ class AgentHandler(BaseHTTPRequestHandler):
             return None
         return document_origin
 
+    def _operator_allowlist(self) -> list[str]:
+        policy = self.server.policy
+        origins = list(policy.allowed_origins)
+        for site_id in policy.public_status().get("sites") or []:
+            origins.extend(policy.origins_for(site_id))
+        unique: list[str] = []
+        for item in origins:
+            token = (item or "").strip()
+            if token and token not in unique:
+                unique.append(token)
+        if not unique:
+            unique = list(agent_tools.DEFAULT_ORIGINS)
+        return unique
+
+    def _engine_unavailable_payload(self) -> dict[str, Any]:
+        engine = self.server.browser.public_status()
+        return {
+            "status": "error",
+            "error": agent_browser.ENGINE_NONE,
+            "browser_engine": engine["browser_engine"],
+            "browser_engine_requested": engine["browser_engine_requested"],
+            "harness": HARNESS_KIND,
+            "phase3_complete": False,
+            "us031_complete": False,
+            "message": (
+                "Playwright / Chromium n'est pas installe. "
+                "Les gestes de session restent le simulateur DOM. "
+                "Ce n'est pas US-031."
+            ),
+        }
+
     def _dispatch_browser(
         self, method: str, path: str, query: dict, send_body: bool
     ) -> None:
+        if path == "/api/browser/navigate":
+            if method != "POST":
+                self._send_json_status(
+                    405, {"status": "error", "error": "method_not_allowed"}
+                )
+                return
+            if not self._admin_authorized():
+                self._send_json_status(
+                    401,
+                    {
+                        "status": "unauthorized",
+                        "error": "admin_token_required",
+                        "message": "Jeton admin manquant ou invalide.",
+                    },
+                )
+                return
+            payload, error = self._read_json_object()
+            if error is not None:
+                self._send_json_status(error[0], error[1])
+                return
+            raw_url = payload.get("url")
+            if not isinstance(raw_url, str):
+                raw_url = ""
+            self._browser_navigate(raw_url)
+            return
+
+        if path == "/api/browser/screenshot":
+            if method not in ("GET", "HEAD"):
+                self._send_json_status(
+                    405, {"status": "error", "error": "method_not_allowed"}
+                )
+                return
+            if not self._admin_authorized():
+                self._send_json_status(
+                    401,
+                    {
+                        "status": "unauthorized",
+                        "error": "admin_token_required",
+                        "message": "Jeton admin manquant ou invalide.",
+                    },
+                )
+                return
+            self._browser_screenshot(send_body=send_body)
+            return
+
         if path == "/api/browser":
             if method not in ("GET", "HEAD"):
                 self._send_json_status(
@@ -2173,6 +2262,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                 )
                 return
             policy_status = self.server.policy.public_status()
+            engine = self.server.browser.public_status()
             self._send_json(
                 {
                     "status": "ok",
@@ -2180,7 +2270,11 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "runtime": policy_status["runtime"],
                     "deployment_mode": policy_status["deployment_mode"],
                     "harness": HARNESS_KIND,
-                    "browser_engine": BROWSER_ENGINE_STATUS,
+                    "browser_engine": engine["browser_engine"],
+                    "browser_engine_requested": engine["browser_engine_requested"],
+                    "session_tools_harness": engine["session_tools_harness"],
+                    "engine_note": engine["engine_note"],
+                    "page": engine["page"],
                     "phase3_complete": False,
                     "us031_complete": False,
                     "browser_fs": True,
@@ -2193,6 +2287,8 @@ class AgentHandler(BaseHTTPRequestHandler):
                         "fs": "/browser/fs",
                         "demo_app": "/demo-app",
                         "admin": "/admin",
+                        "navigate": "/api/browser/navigate",
+                        "screenshot": "/api/browser/screenshot",
                     },
                     "roots": self.server.sandbox.public_roots(),
                     "dom": self.server.harness.snapshot(),
@@ -2260,6 +2356,89 @@ class AgentHandler(BaseHTTPRequestHandler):
             return
 
         self._send_json_status(404, {"status": "not_found", "service": SERVICE_NAME})
+
+    def _browser_navigate(self, raw_url: str) -> None:
+        request_id = str(uuid.uuid4())
+        self_origin = self._self_origin()
+        allowlist = self._operator_allowlist()
+        try:
+            result = self.server.browser.navigate(raw_url, allowlist, self_origin)
+        except agent_browser.EngineUnavailable:
+            self._send_json_status(501, self._engine_unavailable_payload())
+            return
+        except agent_browser.UrlError as exc:
+            self._send_json_status(
+                400,
+                {
+                    "status": "error",
+                    "error": "bad_request",
+                    "message": str(exc),
+                    "request_id": request_id,
+                },
+            )
+            return
+        except agent_browser.UrlDenied as exc:
+            self.server.journal.record(
+                request_id,
+                "",
+                self.server.policy.default_site_id,
+                "browser.navigate",
+                exc.origin or exc.url,
+                "origin_denied",
+            )
+            self.log_message(
+                "origin_denied request_id=%s site_id=%s origin=%s tool=browser.navigate session=-",
+                request_id,
+                self.server.policy.default_site_id,
+                exc.origin or exc.url,
+            )
+            self._send_json_status(
+                403,
+                {
+                    "status": "error",
+                    "error": "origin_denied",
+                    "origin": exc.origin,
+                    "url": exc.url,
+                    "request_id": request_id,
+                    "message": (
+                        "URL hors allowlist de l'instance. "
+                        "Aucune navigation executee."
+                    ),
+                    "phase3_complete": False,
+                    "us031_complete": False,
+                    "browser_engine": self.server.browser.label(),
+                },
+            )
+            return
+        result["request_id"] = request_id
+        result["status"] = "ok"
+        self._send_json(result, send_body=True, status=200)
+
+    def _browser_screenshot(self, send_body: bool) -> None:
+        try:
+            data = self.server.browser.screenshot_bytes()
+        except agent_browser.EngineUnavailable:
+            self._send_json_status(501, self._engine_unavailable_payload())
+            return
+        except LookupError:
+            self._send_json_status(
+                404,
+                {
+                    "status": "error",
+                    "error": "page_not_open",
+                    "message": "Aucune page ouverte. POST /api/browser/navigate d'abord.",
+                    "browser_engine": self.server.browser.label(),
+                    "phase3_complete": False,
+                    "us031_complete": False,
+                },
+            )
+            return
+        self._send_bytes(
+            200,
+            bytes(data),
+            "image/png",
+            send_body=send_body,
+        )
 
     def _dispatch_demo_app(
         self, method: str, path: str, query: dict, send_body: bool
@@ -2524,6 +2703,23 @@ class AgentHandler(BaseHTTPRequestHandler):
         if send_body:
             self.wfile.write(raw)
 
+    def _send_bytes(
+        self,
+        status: int,
+        data: bytes,
+        content_type: str,
+        send_body: bool,
+        extra_headers: Optional[dict] = None,
+    ) -> None:
+        self.send_response(status)
+        headers = extra_headers or TEXT_HEADERS
+        self._write_headers(headers)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        if send_body:
+            self.wfile.write(data)
+
     def _send_json_status(
         self, status: int, payload: dict, extra_headers: Optional[dict] = None
     ) -> None:
@@ -2586,13 +2782,14 @@ def main() -> None:
         "mohhdy-agent ASSIST-060/061 sur http://%s:%s "
         "(health=/health admin=/admin embed=/embed.js demo=/demo "
         "demo-app=/demo-app browser=/browser fs=/browser/fs "
-        "llm=%s harness=%s admin_auth=%s kb_loaded=%s "
-        "mode=%s runtime=%s billing=%s phase3=non)\n"
+        "llm=%s harness=%s engine=%s admin_auth=%s kb_loaded=%s "
+        "mode=%s runtime=%s billing=%s phase3=non us031=non)\n"
         % (
             host,
             port,
             LLM_KIND,
             HARNESS_KIND,
+            httpd.browser.label(),
             admin_auth_mode(),
             "oui" if policy_status["kb_loaded"] else "non",
             policy_status["deployment_mode"],
