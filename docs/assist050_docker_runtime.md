@@ -1,14 +1,13 @@
 # ASSIST-050 - image Docker de l'instance Mohhdy
 
 **Date :** 15 septembre 2026
-**Statut :** image HTTP livrée ; sessions et admin = [assist010_sessions_admin.md](assist010_sessions_admin.md)
+**Statut :** image HTTP bootstrap `mohhdy-agent` livree ; entree produit = `mohhdy-os` ([osui_0_1_2.md](osui_0_1_2.md))
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document décrit comment construire, lancer et verifier le conteneur
-HTTP de l'**instance Mohhdy** (scaffold userspace `agent/`). Docker boot
-cette instance comme sur une machine vierge. Il n'heberge pas le noyau
-Multiboot i386. Il n'allonge pas `make integration-qemu`. Il n'entre
-pas dans `make ci`.
+L'entree produit Docker est le shell graphique `osui/` (`docker run mohhdy-os`,
+port 8080, `GET /`). Ce document decrit encore le conteneur bootstrap
+`mohhdy-agent` (APIs). Docker n'heberge pas le noyau Multiboot i386. Il
+n'allonge pas `make integration-qemu`. Il n'entre pas dans `make ci`.
 
 Spec : [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)
 (ASSIST-050). Sessions / embed / admin : ASSIST-010, 011, 040.

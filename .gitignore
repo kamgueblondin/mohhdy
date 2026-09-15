@@ -35,6 +35,7 @@ initrd_content/bin/*
 # Python
 tests/scripts/__pycache__/
 agent/**/__pycache__/
+osui/**/__pycache__/
 *.pyc
 
 # Agent runtime (ASSIST-050) : secrets d'instance hors Git et hors image

@@ -75,8 +75,10 @@ make run
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
 | `make iso` | Produit l'ISO BIOS/GRUB bootable |
 | `make run` / `make run-gui` | Session QEMU interactive curses ou GTK |
+| `make osui-smoke` | Fumée shell graphique OS-UI-0/1/2 (chrome, session, origine, admin, geste). Hors `make ci` / hors QEMU |
+| `make osui-docker` | Construit l'image `mohhdy-os`. Voir [docs/osui_0_1_2.md](docs/osui_0_1_2.md) |
 | `make agent-smoke` | Fumée HTTP agent (simulateur DOM, MCP, facture, 501 si Playwright absent). Hors `make ci` / hors QEMU |
-| `make agent-docker` | Construit l'image `mohhdy-agent`. Voir [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md) |
+| `make agent-docker` | Construit l'image `mohhdy-agent` (backend temporaire). Voir [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md) |
 | `make agent-install-check` | Install native temporaire et `/health` (ASSIST-051). Hors `make ci` |
 | `make agent-hypervisor-dry-run` | Valide cloud-init / QEMU agent sans boot (ASSIST-052). Hors `make ci` |
 
@@ -88,25 +90,23 @@ make iso
 make run-iso
 ```
 
-## Instance autonome (scaffold userspace `agent/`)
+## Instance autonome (shell graphique `osui/` + backend `agent/`)
 
-`agent/` est le **bootstrap userspace** de l'instance Mohhdy (embed, sessions, KB, droits, escalade, handoff, admin, simulateur DOM, MCP demo, `/browser`, FS sandbox, packaging Docker / PC / hyperviseur). Ce n'est **pas** un produit a cote. Ce n'est **pas** le noyau i386 du guest. Les reponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes de session sont un simulateur DOM. Playwright / Chromium est un **profil optionnel** (pas US-031). Docker / PC / hyperviseur = **deploiement du SE** sur machine vierge ou VM : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
+`osui/` est l'**entree produit** : `docker run` ouvre le chrome du SE (barre, fenetres, panes Support / Admin / Browser-OS / Statut). `agent/` reste le **backend temporaire** (APIs ASSIST). Ce n'est **pas** le noyau i386 du guest. Les reponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium de session, **pas** US-031. Guide : [docs/osui_0_1_2.md](docs/osui_0_1_2.md). Packaging PC / hyperviseur : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
 
 ```bash
+make osui-smoke
+make osui-docker
+docker build -t mohhdy-os -f osui/Dockerfile .
+docker run --rm -p 8080:8080 mohhdy-os
+docker run --rm -p 8080:8080 -e ADMIN_TOKEN=change-me-at-runtime mohhdy-os
+python3 osui/server.py
 make agent-smoke
-make agent-install-check
-make agent-hypervisor-dry-run
-docker build -t mohhdy-agent ./agent
-docker run --rm -p 8080:8080 mohhdy-agent
-docker run --rm -p 8080:8080 -e ADMIN_TOKEN=change-me-at-runtime mohhdy-agent
-docker run --rm -p 8080:8080 \
-  -e ADMIN_TOKEN=change-me-at-runtime \
-  -e MOHHDY_AGENT_CONFIG=/app/config.example.json \
-  -e MOHHDY_AGENT_MODE=self_host \
-  mohhdy-agent
 ```
 
-Guides : [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md), [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md), [docs/assist010_sessions_admin.md](docs/assist010_sessions_admin.md), [docs/assist012_droits_handoff.md](docs/assist012_droits_handoff.md), [docs/assist020_gestes_mcp.md](docs/assist020_gestes_mcp.md), [docs/assist_playwright_optional.md](docs/assist_playwright_optional.md). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md).
+Backend bootstrap seul (dette OS-UI-3) : `docker run --rm -p 8080:8080 mohhdy-agent`. Spec capacites : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md). Portage : [US/mohhdy_os_ui_migration.md](US/mohhdy_os_ui_migration.md).
+
+Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md), [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md), [docs/assist010_sessions_admin.md](docs/assist010_sessions_admin.md), [docs/assist012_droits_handoff.md](docs/assist012_droits_handoff.md), [docs/assist020_gestes_mcp.md](docs/assist020_gestes_mcp.md), [docs/assist_playwright_optional.md](docs/assist_playwright_optional.md). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md).
 
 ## GPT-2 local, sans réseau au démarrage
 
@@ -144,11 +144,11 @@ Une ISO BIOS/GRUB peut être produite avec l'initrd. Lorsque les poids GPT-2 son
 
 ## Roadmap du SE (un produit)
 
-**Plan maitre (toutes les capacites visees, OS-UI, gates) :** [docs/PLAN_SE_MOHHDY_COMPLET.md](docs/PLAN_SE_MOHHDY_COMPLET.md). Prochain build produit : **OS-UI-0** (shell graphique minimal dans l'instance Docker).
+**Plan maitre (toutes les capacites visees, OS-UI, gates) :** [docs/PLAN_SE_MOHHDY_COMPLET.md](docs/PLAN_SE_MOHHDY_COMPLET.md). Premieres tranches OS-UI-0/1/2 : [docs/osui_0_1_2.md](docs/osui_0_1_2.md). Prochain build produit : **OS-UI-3** (retrait facade Python apres parite).
 
 Gardes guest 0-4 : [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md). Backlog guest (AOS-xxx) : [US/mohhdy_us.md](US/mohhdy_us.md). Capacites OS a porter (`ASSIST-xxx`) : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md). Epiques de portage : [US/mohhdy_os_ui_migration.md](US/mohhdy_os_ui_migration.md). Specs historiques : [US/README.md](US/README.md).
 
-Les items ASSIST (embed, sessions, admin, simulateur, `/browser`, FS sandbox) sont des **devoirs du SE**. Ils vivent aujourd'hui dans le scaffold `agent/` ([docs/assist060_061_browser.md](docs/assist060_061_browser.md)), **a migrer** dans l'OS+UI. Stub local, **pas** LLM de production, **pas** Chromium de session, **pas** US-031. Ils n'apparaissent pas comme faits mesures dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md) (cette page mesure le guest).
+Les items ASSIST (embed, sessions, admin, simulateur, `/browser`, FS sandbox) sont des **devoirs du SE**. Ils vivent dans le shell `osui/` (premieres tranches) avec backend temporaire `agent/` ([docs/osui_0_1_2.md](docs/osui_0_1_2.md)), **a retirer** en OS-UI-3. Stub local, **pas** LLM de production, **pas** Chromium de session, **pas** US-031. Ils n'apparaissent pas comme faits mesures dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md) (cette page mesure le guest).
 
 - [x] GPT-2 local, cache KV, SSE2 et top-k borné
 - [x] Tokenizer BPE UTF-8 avec couverture de lettres Unicode ciblée

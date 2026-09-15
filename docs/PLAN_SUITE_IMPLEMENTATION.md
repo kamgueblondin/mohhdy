@@ -8,7 +8,7 @@
 
 Ce document **ne** remplace **pas** le plan maitre. Il detaille seulement les **tranches 0-4** : gardes du guest i386 mesure (CI, ACL, GGUF, stockage). Un seul produit : le SE Mohhdy. Docker / PC / hyperviseur = boot de l'instance, pas un sidecar. `agent/` est un bootstrap **temporaire** a porter dans l'OS graphique (OS-UI-0 puis 1-3). Les tickets `ASSIST-xxx` restent la spec fonctionnelle ([../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)) ; leur ordre de **portage** est OS-UI, pas "etendre Python". LLM de production, Chromium de session et US-031 **ne sont pas** livres. En cas de contradiction sur le **guest**, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment. En cas de contradiction sur l'ordre **produit**, le plan maitre prime.
 
-**Prochain build produit apres le plan maitre :** OS-UI-0 (shell graphique minimal dans l'instance Docker). Les gardes 0-4 continuent en parallele.
+**Prochain build produit :** OS-UI-3 (retrait facade Python apres parite). Premieres tranches OS-UI-0/1/2 : [osui_0_1_2.md](osui_0_1_2.md). Les gardes 0-4 continuent en parallele.
 
 ## Sources lues (sans les réécrire)
 
@@ -229,17 +229,17 @@ Detail, catalogue et DoD : [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md
 
 Les tickets `ASSIST-xxx` sont des **devoirs du SE**. **Rien** de ce backlog n'est un fait guest dans ETAT_REEL. Le scaffold `agent/` en porte une premiere surface (stub, simulateur DOM). Ce n'est **pas** le SE graphique. On ne les etend plus comme sidecar Python : on les **porte** dans le shell graphique et le navigateur-OS.
 
-Docker **doit** booter l'instance comme une machine vierge. Aujourd'hui `docker run mohhdy-agent` lance un HTTP Python. Cible : chrome du SE (OS-UI-0), puis services natifs, puis retrait de la facade (OS-UI-3).
+Docker **doit** booter l'instance comme une machine vierge. `docker run mohhdy-os` ouvre le chrome `osui/` (premieres tranches OS-UI-0/1/2). `docker run mohhdy-agent` reste le bootstrap HTTP. Cible : retrait de la facade (OS-UI-3).
 
 ### Gates (ne pas inverser)
 
 | Gate | Règle |
 |---|---|
 | Tranches guest 0-4 | Gardes du noyau mesure. Le portage OS-UI **ne doit pas** allonger `make integration-qemu` ni relacher l'ACL prefixee |
-| OS-UI-0 (prochain code) | Shell graphique minimal dans l'instance Docker. Peut commencer avant US-001 complet et avant la garde 4 stockage. Pas QEMU i386, pas US-031 |
-| OS-UI-1 | Portage sessions / chat / admin / droits / escalade / handoff / origine dans l'UI native. Stub honnete. Vocabulaire grant/revoke |
-| OS-UI-2 | Actes navigateur-OS (gestes, MCP, facture, vue, FS). Playwright = profil a absorber, pas le recit. US-031 **non livre** |
-| OS-UI-3 | Retrait progressif de `agent/` **apres** parite 1+2. Pas de big-bang |
+| OS-UI-0 | Shell graphique minimal dans l'instance Docker (`osui/`). Premiere tranche livree. Pas QEMU i386, pas US-031 |
+| OS-UI-1 | Portage sessions / chat / admin / droits / escalade / handoff / origine dans l'UI native. Premiere tranche livree. Stub honnete |
+| OS-UI-2 | Actes navigateur-OS (gestes, MCP, facture, vue, FS). Premiere tranche pane Browser-OS. Playwright = profil a absorber. US-031 **non livre** |
+| OS-UI-3 | Retrait progressif de `agent/` **apres** parite 1+2. **Prochain build produit**. Pas de big-bang |
 | OpenAI public | **Toujours sous condition** : accord, secret hors image, hors CI |
 | ASSIST-053 | Scaffold non-billing seulement |
 | ASSIST-090 | Futur. Pas une livraison proche |
@@ -253,7 +253,7 @@ Docker **doit** booter l'instance comme une machine vierge. Aujourd'hui `docker 
 5. **OS-UI-3** : retrait facade Python apres checklist de parite.
 6. **ASSIST-090** / billing reel / TFLite / phases 4-8 : hors proche.
 
-Le simulateur DOM, le stub et `/browser` dans `agent/` restent la **reference comportementale** jusqu'au portage. Ils ne sont pas "ASSIST deja dans l'OS graphique".
+Le simulateur DOM, le stub et `/browser` dans `agent/` restent la **reference comportementale**. Le chrome `osui/` (premieres tranches) les appelle ; ce n'est pas encore OS-UI-3 (facade Python retiree).
 
 ### Relation aux phases 1-8 (sans réécrire l'histoire)
 
@@ -305,10 +305,10 @@ Les rangs 0-4 sont **ce fichier**. Les rangs OS-UI sont le [plan maitre](PLAN_SE
 | - | Reseau public | Prototype guest | Sous condition, hors CI |
 | - | Identite / capabilities | Increment Foundation | Petits pas, pas US-016, pas US-001 total |
 | OS-UI-000 | Spec migration | Docs | Plan maitre (fait dans cette vague) |
-| OS-UI-0 | Shell graphique Docker | Instance OS | **Prochain build produit** |
-| OS-UI-1 | Chat / admin / droits natifs | Instance OS | Portage ASSIST-010..041 |
-| OS-UI-2 | Actes navigateur-OS | Instance OS | Portage ASSIST-020..022, 060, 061 ; **pas** US-031 |
-| OS-UI-3 | Retrait facade Python | Instance OS | Apres parite seulement |
+| OS-UI-0 | Shell graphique Docker | Instance OS | Premiere tranche `osui/` |
+| OS-UI-1 | Chat / admin / droits natifs | Instance OS | Premiere tranche panes Support/Admin |
+| OS-UI-2 | Actes navigateur-OS | Instance OS | Premiere tranche pane Browser-OS ; **pas** US-031 |
+| OS-UI-3 | Retrait facade Python | Instance OS | **Prochain** ; apres parite seulement |
 | bootstrap | ASSIST dans `agent/` | Reference comportementale | Stub / simulateur ; a porter, pas a etendre |
 | futur | ASSIST-090, billing, TFLite, phases 4-8 | Hors proche | Voir catalogue du plan maitre |
 

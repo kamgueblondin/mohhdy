@@ -1,15 +1,15 @@
 # Migration OS-UI : capacites ASSIST dans le SE graphique
 
 **Date :** 15 septembre 2026
-**Statut :** cadrage d'epiques. Pas une livraison. Spec de portage, pas de runtime
+**Statut :** OS-UI-000 docs. Premieres tranches OS-UI-0/1/2 livrees dans `osui/` (backend `agent/` temporaire). OS-UI-3 ouvert
 **IDs :** `OS-UI-xxx` (ordonnancement). Les tickets `ASSIST-xxx` restent la spec fonctionnelle
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
-Mohhdy est un seul SE. Les tickets `ASSIST-xxx` de [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) sont des **devoirs du SE**, aujourd'hui portes par le scaffold `agent/`. Ce fichier les range dans des epiques **OS-UI** pour les faire vivre dans le shell graphique et le navigateur-OS, puis retirer la facade Python.
+Mohhdy est un seul SE. Les tickets `ASSIST-xxx` de [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) sont des **devoirs du SE**, aujourd'hui portes par le scaffold `agent/` derriere le chrome `osui/`. Ce fichier les range dans des epiques **OS-UI** pour les faire vivre dans le shell graphique et le navigateur-OS, puis retirer la facade Python.
 
-Plan maitre : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Guest mesure : [mohhdy_us.md](mohhdy_us.md) et [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md).
+Plan maitre : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Guest mesure : [mohhdy_us.md](mohhdy_us.md) et [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Guide runtime : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md).
 
-**Prochain build apres OS-UI-000 :** OS-UI-0. Ne pas etendre `agent/` comme produit. Ne pas marquer US-031 ni un LLM de production comme livres.
+**Prochain build :** OS-UI-3 (retrait facade Python) apres checklist de parite. Ne pas etendre `agent/` comme produit. Ne pas marquer US-031 ni un LLM de production comme livres.
 
 ## Convention
 
@@ -27,7 +27,7 @@ Gates de chaque epique : moindre privilege, grant/revoke, `request_id`, pas de s
 
 **ASSIST couverts.** ASSIST-000 (cadrage).
 
-**Statut.** Cette PR docs.
+**Statut.** Docs livrees (OS-UI-000).
 
 ## OS-UI-0 - Shell graphique minimal (instance Docker)
 
@@ -44,7 +44,9 @@ Gates de chaque epique : moindre privilege, grant/revoke, `request_id`, pas de s
 
 **ASSIST couverts.** Debut de ASSIST-050 / 051 / 052 (boot d'instance, pas encore parite ni retrait Python).
 
-**Hors perimetre.** Portage chat/admin, gestes, retrait de `agent/`.
+**Statut.** Premiere tranche livree : `osui/`, `docker run mohhdy-os` ouvre le chrome. Pas US-031.
+
+**Hors perimetre.** Retrait de `agent/`. Chromium de session.
 
 ## OS-UI-1 - Sessions, chat, admin, droits en UI native
 
@@ -56,7 +58,9 @@ Gates de chaque epique : moindre privilege, grant/revoke, `request_id`, pas de s
 
 **ASSIST couverts.** 010, 011, 012, 013, 030, 031, 040, 041.
 
-**Hors perimetre.** Gestes DOM reels, MCP, US-031, OpenAI.
+**Statut.** Premiere tranche livree dans les panes Support et Admin. APIs `agent/` conservees.
+
+**Hors perimetre.** Gestes DOM reels Chromium, US-031, comptes multi-tenant, OpenAI.
 
 ## OS-UI-2 - Actes dans le navigateur-OS du SE
 
@@ -67,6 +71,8 @@ Gates de chaque epique : moindre privilege, grant/revoke, `request_id`, pas de s
 **Critere.** Un geste allowliste et `mcp.invoice.create` (ou equivalent) reussissent dans la surface OS, meme `session_id`, journal `request_id`. Origine etrangere et outil non declare : 403, pas d'execution. FS : list+read sandbox, traversal refuse, pas d'ecriture sauf politique. `phase3_complete=false`, `us031_complete=false` tant que le moteur n'est pas un navigateur-OS reel. ETAT_REEL guest inchange.
 
 **ASSIST couverts.** 020, 021, 022, 060, 061. Playwright optionnel : a absorber, pas a etendre.
+
+**Statut.** Premiere tranche livree dans le pane Browser-OS (simulateur etiquete, FS lecture, facture mock). `phase3_complete=false`.
 
 **Hors perimetre.** Declarer US-031 livre. PWA / FS web unifie (US-032 / US-033 maitre).
 
@@ -96,11 +102,11 @@ Gates de chaque epique : moindre privilege, grant/revoke, `request_id`, pas de s
 
 | Rang | Epic | Build ? | ASSIST |
 |---:|---|---|---|
-| 0 | OS-UI-000 | docs (cette vague) | 000 |
-| 1 | OS-UI-0 | **prochain code** | 050/051/052 (boot) |
-| 2 | OS-UI-1 | apres 0 | 010-013, 030, 031, 040, 041 |
-| 3 | OS-UI-2 | apres 1 | 020-022, 060, 061 |
-| 4 | OS-UI-3 | apres parite 1+2 | fin 050-052 |
+| 0 | OS-UI-000 | docs livres | 000 |
+| 1 | OS-UI-0 | **premiere tranche** `osui/` | 050/051/052 (boot) |
+| 2 | OS-UI-1 | **premiere tranche** panes Support/Admin | 010-013, 030, 031, 040, 041 |
+| 3 | OS-UI-2 | **premiere tranche** pane Browser-OS | 020-022, 060, 061 |
+| 4 | OS-UI-3 | **prochain** apres parite 1+2 | fin 050-052 |
 | - | Gardes guest 0-4 | parallele | (AOS, pas ASSIST) |
 
 Nouveaux tickets de portage : les ajouter ici (`OS-UI-xxx`) **ou** comme sous-taches ASSIST, sans `AOS-` et sans renumeroter `US-xxx`.
