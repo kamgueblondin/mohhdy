@@ -8,7 +8,7 @@
 
 Ce document **ne** remplace **pas** le plan maitre. Il detaille seulement les **tranches 0-4** : gardes du guest i386 mesure (CI, ACL, GGUF, stockage). Un seul produit : le SE Mohhdy. Docker / PC / hyperviseur = boot de l'instance, pas un sidecar. `agent/` est un bootstrap **temporaire** a porter dans l'OS graphique (OS-UI-0 puis 1-3). Les tickets `ASSIST-xxx` restent la spec fonctionnelle ([../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)) ; leur ordre de **portage** est OS-UI, pas "etendre Python". LLM de production, Chromium de session et US-031 **ne sont pas** livres. En cas de contradiction sur le **guest**, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment. En cas de contradiction sur l'ordre **produit**, le plan maitre prime.
 
-**Prochain build produit :** OS-UI-3 (retrait facade Python apres parite). Premieres tranches OS-UI-0/1/2 : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md). Les gardes 0-4 continuent en parallele.
+**Prochain build produit :** OS-UI-3 (retrait facade Python apres parite). Premieres tranches OS-UI-0/1/2 : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md). Les gardes 0-4 continuent en parallele. `osui/` est le bootstrap graphique du **meme** SE Multiboot ; le guest n'heberge pas `#ai-stage`.
 
 ## Sources lues (sans les réécrire)
 

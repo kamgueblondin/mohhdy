@@ -4,17 +4,22 @@
 **Statut :** premieres tranches livrees dans `osui/`. Backend temporaire = `agent/`
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
-L'instance Docker presente un **shell graphique du SE Mohhdy**. Surface
-primaire : **chat central** (prompts et slash). Les programmes
-(Browser-OS, Shell OS, Admin, Support, Statut, FS) s'ouvrent depuis le
-chat. Ce n'est **pas** US-031, **pas** un LLM de production,
-**pas** un moteur Chromium de session, **pas** le guest i386 QEMU.
-`agent/` n'est **pas** retire (OS-UI-3). `make integration-qemu` et
-`make ci` (QEMU) ne sont pas allonges.
+L'instance Docker presente le **bootstrap graphique du SE Multiboot
+Mohhdy**. Produit final = **ce meme OS** (chat dirige par prompts,
+scene IA, slash, shell Ring 3, navigateur-OS), pas un second systeme.
+Surface primaire : **chat central**. Fond du bureau : **scene IA**
+(`#ai-stage`). Les programmes (Browser-OS, Shell Multiboot, Admin,
+Support, Statut, FS) s'ouvrent depuis le chat. Ce n'est **pas** US-031,
+**pas** un LLM de production, **pas** un moteur Chromium de session,
+**pas** le guest i386 QEMU dans le conteneur. `agent/` n'est **pas**
+retire (OS-UI-3). `make integration-qemu` et `make ci` (QEMU) ne sont
+pas allonges.
 
 Plan maitre : [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md).
 Epiques : [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md).
 Interaction : [osui_chat_desktop.md](osui_chat_desktop.md).
+Scene IA : [osui_ai_stage.md](osui_ai_stage.md).
+Guest mesure : [ETAT_REEL.md](ETAT_REEL.md) (pas de scene HTML guest).
 
 ## Ce que `docker run` ouvre
 
@@ -30,10 +35,12 @@ python3 osui/server.py
 make osui-smoke
 ```
 
-Ouvrir `http://127.0.0.1:8080/` : chat central (surface de commande),
+Ouvrir `http://127.0.0.1:8080/` : chat central, scene IA plein ecran,
 puis panes ouverts par `/browser`, `/shell`, `/admin`, `/support`,
 `/status`, `/fs`. Sante : `GET /health` (JSON, pas de secret). Identite
-shell : `GET /api/os` (`commands`, `interaction.primary=center_chat`).
+shell : `GET /api/os` (`commands`, `interaction.primary=center_chat`,
+`stage`, `multiboot_shell`). Scene : `POST /api/os/stage`. Shell :
+`POST /api/os/shell`.
 
 Compose depuis `osui/` (contexte = racine du depot). Jeton uniquement a
 l'execution. Pas de `.env` dans le build. Utilisateur non-root uid 10001.
@@ -44,10 +51,12 @@ Le noyau Multiboot, l'initrd et les modeles GPT-2 ne sont pas dans l'image.
 ```text
 docker run mohhdy-os
         |
-        +-- osui/          chrome OS (HTML/CSS/JS desktop)
-        |     GET /        bureau
+        +-- osui/          chrome OS (HTML/CSS/JS desktop) = bootstrap du SE Multiboot
+        |     GET /        bureau + #ai-stage
         |     GET /health  service=mohhdy-os shell=osui llm=stub_echo
-        |     GET /api/os  panes + commands slash + drapeaux honnetes
+        |     GET /api/os  panes + commands slash + stage + shell Multiboot
+        |     POST /api/os/stage   HTML stub (allowlist, pas de script)
+        |     POST /api/os/shell   vocabulaire userspace/shell.c (bootstrap)
         |
         +-- agent/         backend temporaire (APIs ASSIST)
               /api/sessions  chat, origine, escalade
@@ -62,15 +71,18 @@ retirera la facade Python une fois la parite mesuree.
 ## OS-UI-0 - chrome
 
 - Chat central par defaut, barre haute, dock, icones, panes programmes
+- Fond du bureau = scene IA (`#ai-stage`, modes reflecting / acting / presenting)
 - Slash `/help` `/browser` `/shell` `/admin` `/support` `/status` `/fs`
 - Chat flottant draggable des qu'un programme s'ouvre (position
   `sessionStorage`)
-- Shell OS = UI d'instance, pas un root Linux
+- `/shell` = shell Multiboot (vocabulaire guest Ring 3), etat bootstrap,
+  pas un bash Linux, pas un TTY QEMU attache
 - Boot Docker = cette surface, pas une page marketing
 - `phase3_complete=false`, `us031_complete=false`, `llm=stub_echo`
 - `chromium_session_engine=false`
 
-Detail : [osui_chat_desktop.md](osui_chat_desktop.md).
+Detail : [osui_chat_desktop.md](osui_chat_desktop.md),
+[osui_ai_stage.md](osui_ai_stage.md).
 
 ## OS-UI-1 - Support + Admin (natives)
 
@@ -139,10 +151,12 @@ BASE_URL=http://127.0.0.1:8080 osui/scripts/smoke.sh
 - LLM de production
 - Retrait de `agent/` (OS-UI-3)
 - Facturation SaaS
-- Guest i386 dans le conteneur
+- Guest i386 dans le conteneur / TTY QEMU attache a `/shell`
+- Scene HTML `#ai-stage` dans le VGA guest (ETAT_REEL inchange)
 - Auth par comptes / par site
 
 ## Relation au guest
 
 [ETAT_REEL.md](ETAT_REEL.md) reste borne au guest i386. Cette page ne s'y
-ajoute pas. Gardes 0-4 : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
+ajoute pas : le guest n'a pas de scene HTML `#ai-stage`. Gardes 0-4 :
+[PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md).
