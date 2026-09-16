@@ -64,9 +64,7 @@ def qemu_window_size():
             height = int(line.split(":", 1)[1])
     if not width or not height:
         return None
-    # GTK menu bar is hidden; keep a small hysteresis for WM chrome.
-    if height > 40:
-        height -= 28
+    # xwininfo reports the GTK client area; menubar is already hidden.
     return clamp_size(width, height)
 
 
