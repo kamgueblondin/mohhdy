@@ -238,7 +238,7 @@
 #define SYS_SERVICE_BACKEND_SCOPE_STATUS 125
 /* EBX = service, ECX = PID, EDX = droits, ESI = sources, EDI = préfixe relatif NUL-termine ; réservé au propriétaire. */
 #define SYS_SERVICE_BACKEND_GRANT_SCOPED_SOURCE_PREFIX 126
-/* EBX = os_vga_frame_t* pour blitter le bureau ; EBX = 0 pour quitter le desktop VGA. */
+/* EBX = os_fb_scene_t* (magic OS_FB_MAGIC) pour le bureau VBE ; EBX = 0 pour quitter. */
 #define SYS_VGA_BLIT 127
 #define MAX_SYSCALLS 128
 
@@ -250,9 +250,49 @@
 #define OS_VGA_KEY_UP 30
 #define OS_VGA_KEY_DOWN 31
 
+#define OS_FB_MAGIC 0x4F534642u /* 'OSFB' */
+#define OS_FB_CHAT_CENTER 0
+#define OS_FB_CHAT_FLOAT 1
+#define OS_FB_PANE_NONE 0
+#define OS_FB_PANE_BROWSER 1
+#define OS_FB_PANE_SHELL 2
+#define OS_FB_PANE_ADMIN 3
+#define OS_FB_PANE_SUPPORT 4
+#define OS_FB_PANE_STATUS 5
+#define OS_FB_PANE_FS 6
+#define OS_FB_STAGE_REFLECTING 0
+#define OS_FB_STAGE_ACTING 1
+#define OS_FB_STAGE_PRESENTING 2
+#define OS_FB_KIND_PLAN 0
+#define OS_FB_KIND_CIRCLE 1
+#define OS_FB_KIND_BOXES 2
+#define OS_FB_KIND_GRAPH 3
+#define OS_FB_KIND_TREE 4
+#define OS_FB_KIND_CLOCK 5
+#define OS_FB_KIND_SIM 6
+#define OS_FB_MSG_MAX 6
+#define OS_FB_MSG_LEN 120
+#define OS_FB_INPUT_LEN 96
+
 typedef struct {
     uint16_t cells[OS_VGA_ROWS * OS_VGA_COLS];
 } os_vga_frame_t;
+
+typedef struct {
+    uint32_t magic;
+    uint16_t version;
+    uint8_t chat_mode;
+    uint8_t pane;
+    uint8_t stage_mode;
+    uint8_t stage_kind;
+    uint16_t chat_x;
+    uint16_t chat_y;
+    uint16_t nmsg;
+    uint16_t reserved;
+    char session[12];
+    char input[OS_FB_INPUT_LEN];
+    char messages[OS_FB_MSG_MAX][OS_FB_MSG_LEN];
+} os_fb_scene_t;
 
 typedef struct {
     uint16_t source_port;

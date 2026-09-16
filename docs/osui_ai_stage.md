@@ -1,17 +1,17 @@
 # OS-UI : scene IA
 
 **Date :** 16 septembre 2026
-**Statut :** etat scene dans le guest Ring 3 ; rendu HTML hote (kind/mode)
+**Statut :** etat scene dans le guest Ring 3 ; rendu VBE QEMU (kind/mode)
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
 Le **produit final** est un seul SE : le **Multiboot Mohhdy OS**. La
 scene IA est un **devoir de cet OS**. L'etat (`stage_mode`, `stage_kind`,
 prompt) vit dans `osui_runtime.c`. Le rendu glassmorphic (panneau
-Scene IA, reflexion / action / resultats, constructions SVG/CSS) est
-la surface `osui/static`, pas un second cerveau.
+Scene IA, reflexion / action / resultats, constructions pixel) est
+`kernel/gfx_desktop.c` dans la fenetre QEMU.
 
 [ETAT_REEL.md](ETAT_REEL.md) mesure le guest. Le guest **n'execute pas**
-HTML : `MOHHDY_OSUI_GUEST_HTML_STAGE 0`, `MOHHDY_OSUI_DISPLAY_HOST 1`.
+HTML : `MOHHDY_OSUI_GUEST_HTML_STAGE 0`, `MOHHDY_OSUI_DISPLAY_HOST 0`.
 
 ## Modele
 

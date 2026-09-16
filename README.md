@@ -74,8 +74,8 @@ make run
 | `make qemu-vfs-service` | Lance `vfsvirtual` puis `vfsserver`, vérifie l'autorité Ring 3 corrélée des alias add/remove et I/O (`read`, `stat`, liste, pages et observation), la révocation complète de la capacité mono-source après chaque transaction, la purge du miroir après remplacement worker, l'échec `INVALID` sans rejeu d'une lecture d'alias expirée, deux volumes IDE FAT16/FAT32, les capacités et refus, les mutations overlay et les cycles FAT racine/LFN ainsi que `mkdir`, écriture, `stat`, liste, renommage, refus `rmdir` non vide, suppression et `rmdir` d'un sous-répertoire 8.3 ; un renommage tenté vers son voisin hors préfixe est refusé par le backend avant mutation, sans divulguer la borne interne |
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
 | `make iso` | Produit l'ISO BIOS/GRUB bootable |
-| `make run` / `make run-gui` | `make run` = QEMU curses. `make run-gui` = bureau HTML hote (`http://127.0.0.1:18080`) + guest C. Apres boot, `gui` est envoye tout seul. `console` / ESC revient au texte |
-| `make osui-smoke` | Registre guest + facade Python absente + fumee HTML desktop. Inclus dans `make test-all` |
+| `make run` / `make run-gui` | `make run` = QEMU curses. `make run-gui` = fenetre graphique QEMU (VBE 1024x768). Apres `MOHHDY>`, tapez `gui`. `console` / ESC revient au texte |
+| `make osui-smoke` | Registre guest + facade Python absente. Inclus dans `make test-all` |
 | `make qemu-osui-runtime` | Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene, `gui-status`). Hors `make integration-qemu` |
 | `make qemu-osui-gui` | Fumee QEMU : `gui`, snap `OSUI-SNAP`, chat flottant `/browser`, `/center`, `console`. Hors `make integration-qemu` |
 | `make osui-docker` | Construit l'image `mohhdy-os` (boot QEMU nographic par defaut). Voir [docs/osui_0_1_2.md](docs/osui_0_1_2.md) |
@@ -90,13 +90,13 @@ make run-iso
 
 ## Instance autonome (guest C + boot QEMU)
 
-La surface OS-UI vit dans le shell Ring 3 : `userspace/osui_runtime.c` (cerveau) + `osui/static` (HTML glassmorphic). `make run-gui` lance le helper mince `osui/display_host.py` : fichiers statiques + proxy serie vers QEMU. Prompt `MOHHDY>`, commande canonique `gui` (aliases `graphics`, `desktop`). Slash `/help` `/browser` `/shell` `/admin` `/support` `/status` `/fs` `/plan` `/center`. Quand un programme s'ouvre, le chat passe en `chat_mode=float` ; `/center` le ramene au centre. Pont : `shared/multiboot_shell_commands.json`. Les reponses chat sont un stub local (`llm=stub_echo`), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium, **pas** US-031. `agent/` et le serveur metier Python `osui/server.py` sont **retires**. Le helper HTML n'implemente pas sessions/MCP/FS. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md), [docs/osui_ai_stage.md](docs/osui_ai_stage.md), [docs/osui_shell_live.md](docs/osui_shell_live.md), [docs/osui_convergence.md](docs/osui_convergence.md).
+La surface OS-UI vit dans le shell Ring 3 : `userspace/osui_runtime.c` (cerveau) + `kernel/gfx_desktop.c` (bureau VBE 1024x768 dans la fenetre QEMU). `make run-gui` lance QEMU GTK. Apres `MOHHDY>`, tapez `gui` (aliases `graphics`, `desktop`). Slash `/help` `/browser` `/shell` `/admin` `/support` `/status` `/fs` `/plan` `/center`. Quand un programme s'ouvre, le chat passe en `chat_mode=float` ; `/center` le ramene au centre. Pont : `shared/multiboot_shell_commands.json`. Les reponses chat sont un stub local (`llm=stub_echo`), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium, **pas** US-031. `agent/` et le serveur metier Python `osui/server.py` sont **retires**. Ce n'est **pas** une fenetre HTML hote. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md), [docs/osui_ai_stage.md](docs/osui_ai_stage.md), [docs/osui_shell_live.md](docs/osui_shell_live.md), [docs/osui_convergence.md](docs/osui_convergence.md).
 
 ```bash
 make osui-smoke
 make qemu-osui-runtime
 make qemu-osui-gui
-make run-gui          # http://127.0.0.1:18080  bureau HTML (cerveau guest C)
+make run-gui          # QEMU GTK, bureau VBE ; tapez gui apres MOHHDY>
 make osui-docker
 docker build -t mohhdy-os .
 docker run --rm -it mohhdy-os                    # nographic (CI)

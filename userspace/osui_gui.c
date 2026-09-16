@@ -1,6 +1,5 @@
 /* osui_gui.c - Boucle gui guest. Cerveau = osui_runtime.c.
- * Surface produit = HTML hote (osui/static) via instantanes serie OSUI-SNAP.
- * Le blit VGA est un pointeur honnete, pas un bureau ASCII 80x25.
+ * Surface produit = framebuffer VBE QEMU (fenetre graphique, pas HTML).
  * Pas Chromium. Pas un LLM de production. Pas agent/.
  */
 
@@ -72,12 +71,9 @@ static void put_text(uint16_t *cells, int x, int y, const char *s, unsigned char
 }
 
 #ifndef KERNEL_TEST
-static void sys_vga_blit_frame(const uint16_t *cells) {
-    os_vga_frame_t frame;
-    int i;
+static void sys_vga_blit_scene(const os_fb_scene_t *scene) {
     int rc;
-    for (i = 0; i < ROWS * COLS; i++) frame.cells[i] = cells[i];
-    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_VGA_BLIT), "b"(&frame));
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_VGA_BLIT), "b"(scene));
     (void)rc;
 }
 
@@ -105,7 +101,7 @@ static void yield_gui(void) {
     asm volatile("int $0x80" : : "a"(SYS_YIELD));
 }
 #else
-static void sys_vga_blit_frame(const uint16_t *cells) { (void)cells; }
+static void sys_vga_blit_scene(const os_fb_scene_t *scene) { (void)scene; }
 static void sys_vga_leave(void) {}
 static int sys_getc_gui(void) { return 0; }
 static void serial_puts(const char *s) { (void)s; }
@@ -165,7 +161,7 @@ void osui_gui_write_snap(char *dst, int max) {
     if (!dst || max <= 0) return;
     dst[0] = 0;
     snap_add(dst, max, &p,
-        "OSUI-SNAP chrome=html_host display_surface=html_host llm=stub_echo "
+        "OSUI-SNAP chrome=qemu_fb display_surface=vbe_lfb llm=stub_echo "
         "us031=false python=false phase3=false guest_html_stage=false chat_mode=");
     snap_add(dst, max, &p, osui_get_chat_mode());
     snap_add(dst, max, &p, " pane=");
@@ -198,54 +194,68 @@ void osui_gui_write_snap(char *dst, int max) {
     snap_add(dst, max, &p, "OSUI-END\n");
 }
 
-void osui_gui_render(uint16_t *cells) {
-    char line[96];
+void osui_gui_fill_scene(os_fb_scene_t *scene) {
+    int i, n;
     const char *mode = osui_get_chat_mode();
     const char *pane = osui_get_pane();
     const char *kind = osui_get_stage_kind();
     const char *stmode = osui_get_stage_mode();
-    int p;
+    const char *sid;
+    int k;
+    if (!scene) return;
+    for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
+    scene->magic = OS_FB_MAGIC;
+    scene->version = 1;
+    scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
+    scene->pane = OS_FB_PANE_NONE;
+    if (pane) {
+        if (scmp(pane, "browser") == 0) scene->pane = OS_FB_PANE_BROWSER;
+        else if (scmp(pane, "shell") == 0) scene->pane = OS_FB_PANE_SHELL;
+        else if (scmp(pane, "admin") == 0) scene->pane = OS_FB_PANE_ADMIN;
+        else if (scmp(pane, "support") == 0) scene->pane = OS_FB_PANE_SUPPORT;
+        else if (scmp(pane, "status") == 0) scene->pane = OS_FB_PANE_STATUS;
+        else if (scmp(pane, "fs") == 0) scene->pane = OS_FB_PANE_FS;
+    }
+    scene->stage_mode = OS_FB_STAGE_REFLECTING;
+    if (stmode && stmode[0] == 'a') scene->stage_mode = OS_FB_STAGE_ACTING;
+    if (stmode && stmode[0] == 'p') scene->stage_mode = OS_FB_STAGE_PRESENTING;
+    scene->stage_kind = OS_FB_KIND_PLAN;
+    if (kind) {
+        if (scmp(kind, "circle") == 0) scene->stage_kind = OS_FB_KIND_CIRCLE;
+        else if (scmp(kind, "boxes") == 0) scene->stage_kind = OS_FB_KIND_BOXES;
+        else if (scmp(kind, "graph") == 0) scene->stage_kind = OS_FB_KIND_GRAPH;
+        else if (scmp(kind, "tree") == 0) scene->stage_kind = OS_FB_KIND_TREE;
+        else if (scmp(kind, "clock") == 0) scene->stage_kind = OS_FB_KIND_CLOCK;
+        else if (scmp(kind, "sim") == 0) scene->stage_kind = OS_FB_KIND_SIM;
+    }
+    scene->chat_x = (uint16_t)osui_get_chat_x();
+    scene->chat_y = (uint16_t)osui_get_chat_y();
+    sid = osui_get_session_id();
+    scpy(scene->session, 12, sid ? sid : "s0001");
+    scpy(scene->input, OS_FB_INPUT_LEN, g_input);
+    n = osui_msg_count();
+    if (n > OS_FB_MSG_MAX) n = OS_FB_MSG_MAX;
+    scene->nmsg = (uint16_t)n;
+    for (i = 0; i < n; i++) osui_msg_at(i, scene->messages[i], OS_FB_MSG_LEN);
+}
 
+void osui_gui_render(uint16_t *cells) {
     fill_rect(cells, 0, 0, COLS, ROWS, ' ', ATTR_HINT);
     put_text(cells, 0, 0,
-        " MOHHDY OS  gui  display=html_host  llm=stub_echo  us031=false ",
+        " MOHHDY OS  gui  chrome=qemu_fb  vbe_lfb  llm=stub_echo  us031=false ",
         ATTR_TITLE);
     put_text(cells, 0, 2,
-        " Bureau produit = surface HTML hote (osui/static + display_host).",
+        " Bureau produit = fenetre graphique QEMU (VBE 1024x768), pas HTML.",
         ATTR_HINT);
     put_text(cells, 0, 3,
         " Cerveau = osui_runtime.c. Pas un bureau ASCII. Pas Chromium.",
         ATTR_HINT);
     put_text(cells, 0, 5,
-        " make run-gui  ouvre  http://127.0.0.1:18080",
+        " make run-gui  ouvre QEMU GTK ; tapez gui apres MOHHDY>",
         ATTR_HINT);
     put_text(cells, 0, 7,
-        " guest_html_stage=false  python_facade=false  phase3_complete=false",
+        " guest_html_stage=false  python_facade=false  display_host=false",
         ATTR_DIM);
-
-    scpy(line, 96, " chat_mode=");
-    p = slen(line);
-    scpy(line + p, 96 - p, mode);
-    p = slen(line);
-    scpy(line + p, 96 - p, " pane=");
-    p = slen(line);
-    scpy(line + p, 96 - p, pane && pane[0] ? pane : "none");
-    p = slen(line);
-    scpy(line + p, 96 - p, " stage=");
-    p = slen(line);
-    scpy(line + p, 96 - p, stmode);
-    p = slen(line);
-    scpy(line + p, 96 - p, " kind=");
-    p = slen(line);
-    scpy(line + p, 96 - p, kind);
-    put_text(cells, 0, 21, line, ATTR_DIM);
-    put_text(cells, 0, 22,
-        " [Browser] [Shell] [Admin] [Support] [Statut] [Fichiers]  /help /center ",
-        ATTR_DOCK);
-    put_text(cells, 0, 24,
-        " ESC ou console = retour MOHHDY>     input> ",
-        ATTR_DOCK);
-    put_text(cells, 44, 24, g_input, ATTR_TITLE);
 }
 
 int osui_gui_feed_key(int key, char *out, int out_max) {
@@ -256,7 +266,7 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
     }
     if (key == OS_VGA_KEY_ESC) {
         g_leave = 1;
-        if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=html_host\n");
+        if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=qemu_fb\n");
         return 1;
     }
     if (key == OS_VGA_KEY_LEFT) {
@@ -289,7 +299,7 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             g_leave = 1;
             g_ilen = 0;
             g_input[0] = 0;
-            if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=html_host\n");
+            if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=qemu_fb\n");
             return 1;
         }
         osui_dispatch_line(g_input, out, out_max);
@@ -321,7 +331,7 @@ static void emit_snap(void) {
 }
 
 void osui_gui_run(void) {
-    static uint16_t frame[ROWS * COLS];
+    static os_fb_scene_t scene;
     char out[OSUI_OUT_MAX];
     int key;
     int stop;
@@ -331,9 +341,9 @@ void osui_gui_run(void) {
     g_idle = 0;
     g_input[0] = 0;
     osui_gui_ack_enter();
-    serial_puts("osui gui live chrome=html_host display_surface=html_host us031_complete=false\n");
-    osui_gui_render(frame);
-    sys_vga_blit_frame(frame);
+    serial_puts("osui gui live chrome=qemu_fb display_surface=vbe_lfb us031_complete=false\n");
+    osui_gui_fill_scene(&scene);
+    sys_vga_blit_scene(&scene);
     emit_snap();
 
     while (!g_leave) {
@@ -346,8 +356,8 @@ void osui_gui_run(void) {
         }
         stop = osui_gui_feed_key(key, out, OSUI_OUT_MAX);
         if (out[0]) serial_puts(out);
-        osui_gui_render(frame);
-        sys_vga_blit_frame(frame);
+        osui_gui_fill_scene(&scene);
+        sys_vga_blit_scene(&scene);
         if (key != 0 || (g_idle++ % 8) == 0) emit_snap();
         if (stop) break;
         if (key == 0) yield_gui();

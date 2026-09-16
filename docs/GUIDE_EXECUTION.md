@@ -2,7 +2,7 @@
 
 Prérequis (Debian/Ubuntu, même ensemble que la CI) : `build-essential`, `gcc-multilib`, `libc6-dev-i386`, `nasm`, `qemu-system-x86` (binaire `qemu-system-i386`). Ajouter `qemu-system-gui` pour GTK. Installation : `make deps` ou `bash scripts/bootstrap-dev.sh`. État du système : [ETAT_REEL.md](ETAT_REEL.md).
 
-Le shell lit le **clavier emulé PS/2** et, en mode gui, aussi le **port série** (helper HTML). En nographic sans display_host, la saisie du terminal hôte n'atteint souvent pas le guest ; préférer `make run` (curses) ou `make run-gui`.
+Le shell lit le **clavier emulé PS/2**. En nographic, la saisie du terminal hôte n'atteint souvent pas le guest ; préférer `make run` (curses) ou `make run-gui` (fenetre QEMU).
 
 Le curseur de saisie est un **bloc clignotant** à la position VGA. Après une longue sortie (`help`), **Page Up** ou **flèche haut** remonte dans l'historique d'écran (80 lignes) ; **Page Down** ou **flèche bas** redescend. Toute nouvelle frappe imprimable ramène à la ligne de saisie.
 
@@ -25,13 +25,11 @@ make run
 ```bash
 make run-gui
 ```
-- **Affichage** : bureau HTML glassmorphic sur `http://127.0.0.1:18080`
-- **Helper** : `osui/display_host.py` (static + proxy serie). Cerveau = guest C
-- **Bureau** : `gui` est envoye apres le boot (`MOHHDY>`)
+- **Affichage** : fenetre graphique QEMU (VBE 1024x768 glassmorphic)
+- **Bureau** : tapez `gui` apres `MOHHDY>` (aliases `graphics`, `desktop`)
 - **Quitter le bureau** : `console`, `gui-exit` ou ESC
 - **Nographic / CI** : `gui-status` et `make qemu-osui-gui` (hors integration-qemu)
-- **Honnêteté** : `llm=stub_echo`, `us031_complete=false`, `python_facade=false`
-- **Fallback GTK** : `make run-qemu-gtk` (pointeur VGA, pas le bureau produit)
+- **Honnêteté** : `llm=stub_echo`, `us031_complete=false`, `python_facade=false`, `chrome=qemu_fb`
 
 Pour tester la sonde NE2000 (optionnel, hors `make run-gui`) :
 
@@ -72,11 +70,10 @@ make run-nographic
 - **Scancode** : PS/2 Set 1 avec translation activée
 
 ### Mode GUI (`make run-gui`)
-- **Display** : HTML hote `:18080` + QEMU `-display none` (serie TCP)
-- **VGA** : pointeur honnete, pas un bureau ASCII
-- **Série** : pont display_host <-> guest
+- **Display** : QEMU GTK, framebuffer VBE 1024x768
+- **VGA** : bureau pixel glassmorphic, pas un bureau ASCII 80x25
+- **Série** : `-serial mon:stdio` (debug)
 - **Interruptions** : PS/2 conservees
-- **Fallback** : `make run-qemu-gtk`
 
 ## 🔍 Messages de Debug
 

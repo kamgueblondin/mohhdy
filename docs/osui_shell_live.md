@@ -19,10 +19,9 @@ make run-nographic
 docker run --rm -it mohhdy-os
 ```
 
-Apres `MOHHDY>`, `gui` entre le mode graphique (instantanes serie vers
-le display_host HTML). `make run-gui` ouvre http://127.0.0.1:18080 et
-envoie `gui` tout seul. En nographic Docker, preferer `gui-status`.
-`console` / ESC quitte le bureau.
+Apres `MOHHDY>`, `gui` entre le bureau graphique QEMU (VBE 1024x768).
+`make run-gui` ouvre la fenetre GTK. En nographic Docker, preferer
+`gui-status`. `console` / ESC quitte le bureau.
 
 Le harness de test (`make qemu-osui-runtime`, `make qemu-osui-gui`,
 `make qemu-smoke`) injecte des scancodes via **HMP sendkey**. La serie

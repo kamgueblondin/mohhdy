@@ -23,7 +23,7 @@ Gates : moindre privilege, grant/revoke, `request_id`, pas de secret image, orig
 
 ## OS-UI-0 - Instance Docker = boot Multiboot
 
-**Statut.** Livre : `docker run -it mohhdy-os` lance QEMU nographic. `make run-gui` ouvre le bureau HTML. Slash, scene, vocabulaire Ring 3. Pas US-031.
+**Statut.** Livre : `docker run -it mohhdy-os` lance QEMU nographic. `make run-gui` ouvre le bureau VBE QEMU. Slash, scene, vocabulaire Ring 3. Pas US-031.
 
 ## OS-UI-1 - Sessions, chat, admin, droits
 
@@ -49,7 +49,7 @@ Gates : moindre privilege, grant/revoke, `request_id`, pas de secret image, orig
 
 **En tant que** operateur, **je veux** taper `gui` au prompt, **afin d'**entrer le bureau VGA du meme SE.
 
-**Statut.** Livre. Commande canonique `gui` (aliases `graphics`, `desktop`). Cerveau `osui_runtime.c`. Surface HTML `osui/static` via `display_host.py`. Chat central, panes slash, chat flottant, Scene IA. `console` / ESC revient a `MOHHDY>`. `us031_complete=false`. Le VGA ASCII 80x25 n'est plus le recit produit.
+**Statut.** Livre. Commande canonique `gui` (aliases `graphics`, `desktop`). Cerveau `osui_runtime.c`. Bureau VBE QEMU 1024x768 (`kernel/gfx_desktop.c`). Chat central, panes slash, chat flottant, Scene IA. `console` / ESC revient a `MOHHDY>`. `us031_complete=false`. Le VGA ASCII 80x25 n'est plus le recit produit.
 
 ## Table recap
 
@@ -61,5 +61,5 @@ Gates : moindre privilege, grant/revoke, `request_id`, pas de secret image, orig
 | 3 | OS-UI-2 | **livre** simulateur | 020-022, 060, 061 |
 | 3b | OS-UI-C | **livre** registre + VGA | pont Multiboot |
 | 4 | OS-UI-3 | **livre** Python retire | fin 050 |
-| 4b | OS-UI-G | **livre** `gui` + HTML host | chrome produit |
+| 4b | OS-UI-G | **livre** `gui` + VBE QEMU | chrome produit |
 | - | Gardes guest 0-4 | parallele | (AOS, pas ASSIST) |

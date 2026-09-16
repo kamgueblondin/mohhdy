@@ -37,7 +37,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/userspace_switch.o \
           build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/gdt.o build/idt.o build/vmm.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/interrupts.o \
-          build/keyboard.o build/timer.o build/ipc.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_http_tls.o
+          build/keyboard.o build/timer.o build/ipc.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_http_tls.o
 
 # L'ABI partagée influence notamment la taille de task_t et des messages IPC.
 # Une évolution de structure doit donc reconstruire toute l'image, pas seulement ipc.o.
@@ -91,6 +91,14 @@ build/kernel.o: kernel/kernel.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/vga_console.o: kernel/vga_console.c kernel/vga_console.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/gfx_desktop.o: kernel/gfx_desktop.c kernel/gfx_desktop.h kernel/gfx_font8.h include/os_syscalls.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/gfx_fb.o: kernel/gfx_fb.c kernel/gfx_fb.h kernel/gfx_desktop.h kernel/vga_console.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -437,20 +445,19 @@ run: $(OS_IMAGE) pack-initrd disk
 		-m $(GPT2_RAM) -cpu pentium3 \
 		-no-reboot -no-shutdown $(QEMU_DISK_OPTS)
 
-# Bureau HTML hote (surface osui/static) + QEMU guest C. Ouvre http://127.0.0.1:18080
+# Bureau graphique QEMU (VBE 1024x768, fenetre GTK). Tapez gui apres MOHHDY>.
 run-gui: $(OS_IMAGE) pack-initrd disk
-	@echo "Mohhdy desktop HTML : http://127.0.0.1:18080"
-	@echo "Cerveau = guest C (osui_runtime.c). Helper = osui/display_host.py (static + proxy)."
+	@echo "Mohhdy desktop QEMU VBE : fenetre graphique (pas HTML)"
+	@echo "Cerveau = guest C (osui_runtime.c). chrome=qemu_fb display_surface=vbe_lfb"
 	@echo "llm=stub_echo us031_complete=false python_facade=false guest_html_stage=false"
-	python3 osui/display_host.py --port 18080 --open \
-		--kernel $(OS_IMAGE) --initrd $(INITRD_IMAGE) --disk $(DISK_IMAGE) --ram $(GPT2_RAM)
-
-# Fallback QEMU GTK (pointeur VGA, pas le bureau produit)
-run-qemu-gtk: $(OS_IMAGE) pack-initrd disk
 	qemu-system-i386 -kernel $(OS_IMAGE) -initrd $(INITRD_IMAGE) \
 		-m $(GPT2_RAM) -cpu pentium3 -vga std \
 		-display gtk \
+		-serial mon:stdio \
 		-no-reboot -no-shutdown $(QEMU_DISK_OPTS)
+
+# Alias explicite (meme chose que run-gui)
+run-qemu-gtk: run-gui
 
 # Alternative nographic (si curses ne fonctionne pas)
 run-nographic: $(OS_IMAGE) pack-initrd disk
@@ -552,7 +559,6 @@ test-all:
 	@$(MAKE) -C tests test
 	@python3 scripts/extract_guest_commands.py --check
 	@python3 tests/scripts/test_python_facade_removed.py
-	@python3 tests/scripts/test_osui_display_host.py
 
 test-performance:
 	@echo "=== Tests de performance et benchmarks ==="
@@ -664,8 +670,7 @@ ci: all test-all qemu-smoke qemu-ne2k-tls-multipair
 .PHONY: osui-smoke osui-docker
 osui-smoke: osui-registry-check
 	@python3 tests/scripts/test_python_facade_removed.py
-	@python3 tests/scripts/test_osui_display_host.py
-	@echo "=== OS-UI smoke hote OK (registre + facade Python absente + HTML desktop) ==="
+	@echo "=== OS-UI smoke hote OK (registre + facade Python absente + bureau VBE) ==="
 
 osui-docker:
 	@command -v docker >/dev/null 2>&1 || { \
@@ -686,7 +691,7 @@ help:
 	@echo "  all          - Compile le système complet (noyau + initrd + disque overlay)"
 	@echo "  kernel-only  - Compile seulement le noyau"
 	@echo "  run          - Compile et exécute avec QEMU (mode texte)"
-	@echo "  run-gui      - Bureau HTML hote (display_host + QEMU guest C, :18080)"
+	@echo "  run-gui      - Bureau graphique QEMU GTK (VBE, tapez gui apres MOHHDY>)"
 	@echo "  iso          - Image GRUB Multiboot (grub-pc-bin + xorriso)"
 	@echo ""
 	@echo "Cibles de développement:"

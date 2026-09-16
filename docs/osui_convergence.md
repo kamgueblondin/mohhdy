@@ -14,11 +14,11 @@ dans **ce** SE. Docker boot QEMU. Il n'y a plus de sidecar HTTP.
 |---|---|
 | `userspace/shell.c` | Source de verite des builtins Ring 3 |
 | `userspace/osui_runtime.c` | Runtime OS-UI (chat, scene VGA, sessions, MCP, FS, commande `gui`) |
-| `userspace/osui_gui.c` | Boucle gui + instantanes `OSUI-SNAP` (meme etat que le runtime) |
-| `osui/static` | Surface HTML/CSS/JS (chrome glassmorphic) |
-| `osui/display_host.py` | Helper mince : static + proxy serie, pas de logique metier |
+| `userspace/osui_gui.c` | Boucle gui + scene VBE (`os_fb_scene_t`) |
+| `kernel/gfx_desktop.c` | Compositor pixel glassmorphic (1024x768) |
+| `kernel/gfx_fb.c` | Bochs/QEMU VBE LFB |
 | `shared/multiboot_shell_commands.json` | Registre genere (191 noms) |
-| `userspace/mohhdy_osui_bridge.h` | `GUEST_HTML_STAGE 0`, `DISPLAY_HOST 1`, `GUI_COMMAND "gui"`, `PYTHON_FACADE 0` |
+| `userspace/mohhdy_osui_bridge.h` | `GUEST_HTML_STAGE 0`, `DISPLAY_HOST 0`, `GUI_COMMAND "gui"`, `PYTHON_FACADE 0` |
 | `scripts/extract_guest_commands.py` | Regenere JSON + header ; `--check` dans `make test-all` |
 
 Ne pas editer JSON/header a la main.
@@ -33,14 +33,14 @@ make osui-registry-check
 - Chat / prompt stub, slash, pieges Linux
 - Scene kind/mode (reflecting / acting / presenting)
 - Commande `gui` / `graphics` / `desktop` ; `console` pour quitter
-- Surface HTML hote (display_host), cerveau C
+- Bureau VBE QEMU (fenetre graphique), cerveau C
 - Sessions `s0001+`, grant/revoke, escalate/takeover
 - Origine, gestes simulateur, MCP declare, FS lecture
 - `live_guest=true` : on **est** le guest (plus d'attache hote Python)
 
 ## Ce qui reste hors C freestanding
 
-- Framebuffer execute **dans** le guest i386 (`guest_html_stage=false`)
+- Framebuffer pixel **dans** le guest i386 (`chrome=qemu_fb`, `guest_html_stage=false`)
 - Navigateur-OS Chromium (US-031, `us031_complete=false`)
 - LLM de production (`llm=stub_echo` ; GPT-2 local = autre chemin `ai`)
 - Widget embed HTTP pour un site tiers

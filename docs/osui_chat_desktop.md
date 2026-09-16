@@ -1,7 +1,7 @@
 # OS-UI : chat, scene IA, shell Multiboot
 
 **Date :** 16 septembre 2026
-**Statut :** modele d'interaction du guest Ring 3 (`osui_runtime.c`) + surface HTML hote
+**Statut :** modele d'interaction du guest Ring 3 (`osui_runtime.c`) + bureau VBE QEMU
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
 Mohhdy est **un seul SE Multiboot**. Le boot reste le **prompt
@@ -9,12 +9,10 @@ Mohhdy est **un seul SE Multiboot**. Le boot reste le **prompt
 `desktop`) entre le mode graphique. `console` / `gui-exit` / ESC
 revient au texte.
 
-Le bureau **produit** est la surface HTML/CSS/JS (`osui/static`), rendue
-par le helper mince `osui/display_host.py` (`make run-gui` ->
-http://127.0.0.1:18080). L'etat (chat central/flottant, panes slash,
-scene IA, sessions) vient du guest C via des instantanes `OSUI-SNAP`.
-Le blit VGA n'est plus un bureau ASCII 80x25 ; c'est un pointeur
-honnete vers la surface HTML.
+Le bureau **produit** est le framebuffer VBE 1024x768 dans la fenetre
+QEMU (`kernel/gfx_desktop.c`, `make run-gui`). L'etat (chat
+central/flottant, panes slash, scene IA, sessions) vient du guest C.
+Ce n'est **pas** une fenetre HTML, **pas** un bureau ASCII 80x25.
 
 Chrome : [osui_0_1_2.md](osui_0_1_2.md). Scene :
 [osui_ai_stage.md](osui_ai_stage.md). Attache :
@@ -33,8 +31,9 @@ un sidecar `agent/`.
 | `phase3_complete` | `false` |
 | `python_facade` | `false` |
 | `guest_html_stage` | `false` (le guest n'execute pas HTML) |
-| `display_surface` | `html_host` |
-| `display_host` | `true` (static + proxy serie, pas de logique metier) |
+| `display_surface` | `vbe_lfb` |
+| `chrome` | `qemu_fb` |
+| `display_host` | `false` |
 
 ## Etat par defaut
 

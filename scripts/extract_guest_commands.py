@@ -138,8 +138,8 @@ def manifest(parsed: dict) -> dict:
             "Registre partage genere depuis userspace/shell.c. "
             "Les noms OS-UI (sessions, MCP, scene, gui) sont des builtins Ring 3. "
             "Commande canonique du bureau : gui (aliases graphics, desktop). "
-            "Pas un bash Linux. Surface produit = HTML hote (display_host), cerveau = C. "
-            "guest_html_stage=false python_facade=false display_host=true."
+            "Pas un bash Linux. Surface produit = bureau VBE QEMU, cerveau = C. "
+            "guest_html_stage=false python_facade=false display_host=false."
         ),
     }
 
@@ -148,7 +148,7 @@ def header_text(data: dict) -> str:
     lines = [
         "/* mohhdy_osui_bridge.h - contrat OS-UI <-> guest Ring 3.",
         " * Genere par scripts/extract_guest_commands.py depuis userspace/shell.c.",
-        " * Ne pas editer a la main. Surface produit = HTML hote ; cerveau guest = C.",
+        " * Ne pas editer a la main. Surface produit = bureau VBE QEMU ; cerveau guest = C.",
         " */",
         "#ifndef MOHHDY_OSUI_BRIDGE_H",
         "#define MOHHDY_OSUI_BRIDGE_H",
@@ -157,7 +157,7 @@ def header_text(data: dict) -> str:
         "#define MOHHDY_OSUI_LIVE_ATTACH_HOST 0",
         "#define MOHHDY_OSUI_STAGE_VGA 1",
         "#define MOHHDY_OSUI_VGA_DESKTOP 1",
-        "#define MOHHDY_OSUI_DISPLAY_HOST 1",
+        "#define MOHHDY_OSUI_DISPLAY_HOST 0",
         '#define MOHHDY_OSUI_GUI_COMMAND "gui"',
         "#define MOHHDY_OSUI_PYTHON_FACADE 0",
         '#define MOHHDY_OSUI_LLM_KIND "stub_echo"',

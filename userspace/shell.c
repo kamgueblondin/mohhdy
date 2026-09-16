@@ -1083,14 +1083,14 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     
     print_colored("\nCOMMANDES OS-UI (Ring 3, llm=stub_echo) :\n", COLOR_YELLOW);
     print_string("  /help /browser /shell /admin /support /status /fs /center\n");
-    print_string("  gui | graphics | desktop  - Entrer le bureau HTML hote (display_host)\n");
+    print_string("  gui | graphics | desktop  - Entrer le bureau graphique QEMU (VBE)\n");
     print_string("  gui-status          - Instantane etat + canvas (nographic OK)\n");
     print_string("  console | gui-exit  - Quitter le bureau, retour MOHHDY>\n");
     print_string("  prompt <texte>     - Chat + scene VGA structuree\n");
     print_string("  session-new/list/use/status  grant/revoke  escalate  takeover\n");
     print_string("  origin-check  browser-click  mcp-invoice  mcp-invoke  fs-list/read\n");
     print_string("  stage  stage-prompt  guest-status  os-status\n");
-    print_string("  Pas un bash Linux. Surface HTML hote, cerveau C. Pas Chromium. Pas US-031.\n");
+    print_string("  Pas un bash Linux. Bureau QEMU VBE, cerveau C. Pas Chromium. Pas US-031.\n");
 
     print_colored("\nTIP: ls/cat/mkdir/rm/cp/mv/write/append parlent au noyau (initrd + overlay RAM).\n", COLOR_GREEN);
     print_colored("    Si le mode IA est activé, posez des questions sans 'ai'.\n\n", COLOR_GREEN);

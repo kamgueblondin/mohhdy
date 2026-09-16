@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""QEMU smoke: commande canonique `gui` entre le bureau HTML host.
+"""QEMU smoke: commande canonique `gui` entre le bureau VBE QEMU.
 
 Hors make integration-qemu. Complements test_qemu_osui_runtime.py.
 """
@@ -213,8 +213,39 @@ def main():
             send_command_until(monitor, "gui-status", "canonical=gui", proc)
             say("typing gui ...")
             send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
-            wait_for(proc, "chrome=html_host", CMD_TIMEOUT)
+            wait_for(proc, "chrome=qemu_fb", CMD_TIMEOUT)
             wait_for(proc, "OSUI-SNAP", CMD_TIMEOUT)
+            wait_for(proc, "1024x768", CMD_TIMEOUT)
+            dump = os.path.join(LOG_DIR, "qemu-osui-gui-desktop.ppm")
+            try:
+                os.remove(dump)
+            except OSError:
+                pass
+            monitor.sendall(("screendump %s\n" % dump).encode("ascii"))
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                if os.path.isfile(dump) and os.path.getsize(dump) > 10000:
+                    break
+                time.sleep(0.2)
+            if not os.path.isfile(dump) or os.path.getsize(dump) < 10000:
+                raise RuntimeError("QEMU screendump missing after gui")
+            with open(dump, "rb") as handle:
+                magic = handle.readline().strip()
+                dims = handle.readline()
+                while dims.startswith(b"#"):
+                    dims = handle.readline()
+                _maxv = handle.readline()
+                parts = dims.split()
+                width = int(parts[0])
+                height = int(parts[1])
+                rgb = handle.read(3)
+            say("screendump %s %dx%d" % (magic.decode("ascii", "replace"), width, height))
+            if width < 1000 or height < 700:
+                raise RuntimeError("expected VBE 1024x768, got %sx%s" % (width, height))
+            if magic not in (b"P6", b"P3"):
+                raise RuntimeError("unexpected ppm magic")
+            if len(rgb) == 3 and rgb == b"\x00\x00\x00":
+                say("corner pixel black (ok if top-left landscape is dark)")
             say("typing /browser in gui ...")
             send_command_until(
                 monitor, "/browser", "chat_mode=float", proc, mode="getc", wait_prompt=False
