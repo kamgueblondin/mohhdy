@@ -628,7 +628,7 @@ qemu-vfs-service: $(OS_IMAGE) pack-initrd disk
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
 
-.PHONY: qemu-osui-runtime qemu-osui-gui osui-registry-check
+.PHONY: qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit osui-registry-check
 osui-registry-check:
 	@python3 scripts/extract_guest_commands.py --check
 
@@ -637,6 +637,10 @@ qemu-osui-runtime: $(OS_IMAGE) pack-initrd disk
 
 qemu-osui-gui: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_osui_gui.py
+
+# GTK + COM2 : le bureau suit la fenetre. Hors integration-qemu (besoin DISPLAY).
+qemu-osui-gui-fit: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_fit.py
 
 # Les sept contrats restent inchangés ; l’ordonnanceur les exécute dans un pool borne
 # a deux QEMU par defaut. QEMU_INTEGRATION_JOBS=1 conserve le mode strictement sequentiel.
@@ -725,6 +729,7 @@ help:
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  qemu-osui-runtime - Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA ; hors integration-qemu)"
 	@echo "  qemu-osui-gui   - Fumee QEMU : commande gui, screendump VBE, console (hors integration-qemu)"
+	@echo "  qemu-osui-gui-fit - GTK : VBE suit la fenetre (DISPLAY, hors integration-qemu)"
 	@echo "  osui-registry-check - Verifie JSON/header vs userspace/shell.c"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
 	@echo "  osui-smoke      - Registre guest + facade Python absente + bureau VBE (hors QEMU)"
