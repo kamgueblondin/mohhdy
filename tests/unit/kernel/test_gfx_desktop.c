@@ -85,6 +85,20 @@ static void test_float_chat_and_browser_pane(void) {
     TEST_ASSERT(count_near(640, 200, 1000, 620, 11, 16, 20, 20) > 40);
 }
 
+static void test_shell_pane_shows_prompt(void) {
+    blank_scene();
+    g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+    g_scene.pane = OS_FB_PANE_SHELL;
+    g_scene.chat_x = 51;
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    /* Title bar of Shell Multiboot. */
+    TEST_ASSERT(count_near(40, 70, 400, 110, 28, 44, 56, 40) > 30);
+    /* Terminal body is near-black, not the landscape. */
+    TEST_ASSERT(count_near(50, 140, 400, 400, 8, 12, 16, 12) > 80);
+    /* Prompt accent (teal cursor or text). */
+    TEST_ASSERT(count_near(50, 140, 520, 420, 61, 154, 138, 50) > 8);
+}
+
 static void test_circle_kind_paints_ring(void) {
     blank_scene();
     g_scene.stage_kind = OS_FB_KIND_CIRCLE;
@@ -98,6 +112,7 @@ int main(void) {
     RUN_TEST(test_center_desktop_not_text_mode);
     RUN_TEST(test_chat_and_dock_and_stage);
     RUN_TEST(test_float_chat_and_browser_pane);
+    RUN_TEST(test_shell_pane_shows_prompt);
     RUN_TEST(test_circle_kind_paints_ring);
     unity_print_results();
     unity_cleanup();

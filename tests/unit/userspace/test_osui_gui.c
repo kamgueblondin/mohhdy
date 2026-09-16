@@ -67,6 +67,13 @@ static void test_scene_center_and_float(void) {
     TEST_ASSERT_EQUAL(0, run_line("/center"));
     osui_gui_fill_scene(&g_scene);
     TEST_ASSERT_EQUAL(OS_FB_CHAT_CENTER, g_scene.chat_mode);
+
+    TEST_ASSERT_EQUAL(0, run_line("/shell"));
+    TEST_ASSERT_EQUAL_STRING("float", osui_get_chat_mode());
+    TEST_ASSERT_EQUAL_STRING("shell", osui_get_pane());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_CHAT_FLOAT, g_scene.chat_mode);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_SHELL, g_scene.pane);
 }
 
 static void test_snap_center_and_float(void) {
