@@ -12,7 +12,7 @@
       <div class="os-brand">
         <span class="os-logo" aria-hidden="true"></span>
         <strong>Mohhdy OS</strong>
-        <span class="os-edition">SE dirige par prompts</span>
+        <span class="os-edition">SE Multiboot dirige par prompts</span>
       </div>
       <nav class="os-menubar" aria-label="Menus">
         <button type="button" data-open="chat">Chat</button>
@@ -32,10 +32,27 @@
     </header>
 
     <main id="os-desktop" class="os-desktop">
+      <section id="ai-stage" class="ai-stage" data-mode="reflecting" data-testid="ai-stage" aria-label="Scene IA">
+        <header class="ai-stage-chrome">
+          <span id="ai-stage-mode" class="ai-stage-mode">reflecting</span>
+          <span class="ai-stage-llm">llm=stub_echo</span>
+          <span class="ai-stage-note">bootstrap graphique ; pas le VGA guest i386</span>
+        </header>
+        <div id="ai-stage-content" class="ai-stage-content">
+          <div class="ai-scene" data-mode="reflecting" data-kind="idle">
+            <h2 class="ai-scene-title">Scene IA</h2>
+            <p class="ai-scene-caption">llm=stub_echo · en attente d'un prompt</p>
+            <div class="ai-row">
+              <div class="ai-box muted">reflexion</div>
+              <div class="ai-box muted">action</div>
+              <div class="ai-box muted">resultats</div>
+            </div>
+          </div>
+        </div>
+      </section>
       <p id="os-wallpaper-label" class="os-wallpaper-label">
-        Bureau Mohhdy. Chat central = surface de commande.
-        Pas un LLM de production. Pas US-031. Simulateur DOM.
-        Backend temporaire agent/.
+        Bureau = scene IA (reflexion / action / resultats). Chat = commande.
+        Pas un LLM de production. Pas US-031. Un SE Multiboot.
       </p>
       <aside class="os-icons" aria-label="Icones du bureau">
         <button type="button" class="os-icon" data-open="browser">
@@ -44,7 +61,7 @@
         </button>
         <button type="button" class="os-icon" data-open="shell">
           <span class="os-icon-glyph shell"></span>
-          Shell OS
+          Shell Multiboot
         </button>
         <button type="button" class="os-icon" data-open="admin">
           <span class="os-icon-glyph admin"></span>
@@ -72,13 +89,13 @@
           <button type="button" id="os-chat-center" class="secondary os-chat-center-btn">Centrer</button>
         </header>
         <p class="os-banner os-chat-banner">
-          Surface de commande du SE. llm=stub_echo (echo / KB locale, pas un moteur de production).
-          Raccourcis : /help /browser /shell /admin /support /status /fs.
+          Surface de commande du SE Multiboot. llm=stub_echo (echo / KB locale, pas un moteur de production).
+          Un prompt hors slash met a jour la scene IA. Raccourcis : /help /browser /shell /admin /support /status /fs.
         </p>
         <ul id="os-slash-registry" class="os-slash-registry" hidden>
           <li data-slash="/help">Liste les raccourcis</li>
           <li data-slash="/browser">Ouvre Browser-OS</li>
-          <li data-slash="/shell">Ouvre le shell UI de l'instance</li>
+          <li data-slash="/shell">Ouvre le shell Multiboot (vocabulaire guest Ring 3)</li>
           <li data-slash="/admin">Ouvre Admin</li>
           <li data-slash="/support">Ouvre Support</li>
           <li data-slash="/status">Ouvre Statut</li>
@@ -208,13 +225,18 @@
       <section id="win-shell" class="os-window hidden" data-pane="shell" style="left:56px;top:28px;width:640px;height:440px;">
         <header class="os-titlebar">
           <span class="os-traffic"><i></i><i></i><i data-close></i></span>
-          <h2>Shell OS</h2>
+          <h2>Shell Multiboot</h2>
         </header>
         <div class="os-pane shell-pane">
-          <p class="os-banner">Shell UI de l'instance Mohhdy. Pas un root Linux, pas un TTY guest i386. Commandes locales : help, status, open, panes, llm, whoami, clear.</p>
+          <p class="os-banner">
+            Meme shell que le guest Multiboot Ring 3 (<code>userspace/shell.c</code>).
+            Etat : <strong>bootstrap osui</strong>. Attache live QEMU/serial : <strong>non</strong>.
+            Vocabulaire : help, ai, vfs-list, ls, sysinfo. Pas un bash Linux.
+          </p>
+          <p id="shell-attach" class="os-hint">attachment=bootstrap live_guest=false qemu_serial=false prompt=MOHHDY&gt;</p>
           <pre id="shell-out" class="os-pre os-term" aria-live="polite"></pre>
           <form id="shell-form" class="shell-form">
-            <label for="shell-input">mohhdy$</label>
+            <label for="shell-input">MOHHDY&gt;</label>
             <input id="shell-input" autocomplete="off" maxlength="400" placeholder="help">
             <button type="submit">Executer</button>
           </form>
@@ -243,7 +265,7 @@
           <h2>Statut</h2>
         </header>
         <div class="os-pane">
-          <p class="os-banner">Sante de l'instance. Docker boot ce shell, pas "un serveur Flask de demo". Le guest QEMU i386 n'est pas dans ce conteneur.</p>
+          <p class="os-banner">Sante de l'instance. Docker boot le bootstrap graphique du SE Multiboot. Le guest QEMU i386 n'est pas dans ce conteneur (pas de scene HTML guest).</p>
           <dl id="status-dl" class="os-dl">
             <dt>service</dt><dd>mohhdy-os</dd>
             <dt>shell</dt><dd>osui</dd>
@@ -260,7 +282,7 @@
     <nav id="os-dock" class="os-dock" aria-label="Dock">
       <button type="button" data-open="chat" title="Chat">C</button>
       <button type="button" data-open="browser" title="Browser-OS">B</button>
-      <button type="button" data-open="shell" title="Shell OS">$</button>
+      <button type="button" data-open="shell" title="Shell Multiboot">$</button>
       <button type="button" data-open="admin" title="Admin">A</button>
       <button type="button" data-open="support" title="Support">S</button>
       <button type="button" data-open="status" title="Statut">i</button>

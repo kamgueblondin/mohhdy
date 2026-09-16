@@ -7,7 +7,7 @@
 
 Mohhdy est un seul SE. Les tickets `ASSIST-xxx` de [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) sont des **devoirs du SE**, aujourd'hui portes par le scaffold `agent/` derriere le chrome `osui/`. Ce fichier les range dans des epiques **OS-UI** pour les faire vivre dans le shell graphique et le navigateur-OS, puis retirer la facade Python.
 
-Plan maitre : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Guest mesure : [mohhdy_us.md](mohhdy_us.md) et [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Guide runtime : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md). Interaction : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md).
+Plan maitre : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Guest mesure : [mohhdy_us.md](mohhdy_us.md) et [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Guide runtime : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md). Interaction : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md). Scene IA : [../docs/osui_ai_stage.md](../docs/osui_ai_stage.md).
 
 **Prochain build :** OS-UI-3 (retrait facade Python) apres checklist de parite. Ne pas etendre `agent/` comme produit. Ne pas marquer US-031 ni un LLM de production comme livres.
 
@@ -44,24 +44,26 @@ Gates de chaque epique : moindre privilege, grant/revoke, `request_id`, pas de s
 
 **ASSIST couverts.** Debut de ASSIST-050 / 051 / 052 (boot d'instance, pas encore parite ni retrait Python).
 
-**Statut.** Premiere tranche livree : `osui/`, `docker run mohhdy-os` ouvre le chrome a **chat central**. Slash `/help` `/browser` `/shell` etc. Chat flottant si un programme s'ouvre. Pas US-031.
+**Statut.** Premiere tranche livree : `osui/`, `docker run mohhdy-os` ouvre le chrome a **chat central** + **scene IA**. Slash `/help` `/browser` `/shell` etc. `/shell` = vocabulaire Multiboot Ring 3 (bootstrap). Chat flottant si un programme s'ouvre. Pas US-031. Guest sans `#ai-stage` (ETAT_REEL).
 
 **Hors perimetre.** Retrait de `agent/`. Chromium de session.
 
 ## Modele d'interaction (shell courant)
 
-**En tant qu'**utilisateur de l'instance, **je veux** commander le SE par prompts dans un chat central, **afin que** l'OS soit manipule en langage naturel, pas seulement par icones.
+**En tant qu'**utilisateur de l'instance, **je veux** commander le SE Multiboot par prompts dans un chat central, avec une scene IA derriere les fenetres, **afin que** l'OS pense et presente en HTML, pas seulement par icones.
 
 **Critere.**
 
-- Etat par defaut : chat large au centre, `llm=stub_echo` visible
+- Etat par defaut : chat large au centre, `llm=stub_echo` visible, `#ai-stage` en fond (mode `reflecting`)
+- Un prompt hors slash met a jour la scene (HTML/SVG stub, allowlist, pas de script) ; modes `reflecting` / `acting` / `presenting`
 - `/help` liste le registre ; `/browser` `/shell` `/admin` `/support` `/status` `/fs` ouvrent le programme
+- `/shell` est le vocabulaire guest Ring 3 (`userspace/shell.c`, prompt `MOHHDY>`), surface bootstrap ; live QEMU/serial non branche
 - A l'ouverture d'un programme, le chat quitte le centre et devient un panneau flottant draggable (coin, z-index au-dessus des fenetres, position `sessionStorage`)
 - Fermer tous les programmes ou `/center` ramene le chat au centre
-- `/shell` est une UI d'instance, pas un root Linux
 - APIs `agent/` inchangees (sessions, admin, tools, FS). Origine binding inchangee. `phase3_complete=false`, `us031_complete=false`
+- ETAT_REEL guest inchange : pas de scene HTML dans le VGA i386
 
-Guide : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md).
+Guides : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md), [../docs/osui_ai_stage.md](../docs/osui_ai_stage.md).
 
 ## OS-UI-1 - Sessions, chat, admin, droits en UI native
 
@@ -118,7 +120,7 @@ Guide : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md).
 | Rang | Epic | Build ? | ASSIST |
 |---:|---|---|---|
 | 0 | OS-UI-000 | docs livres | 000 |
-| 1 | OS-UI-0 | **premiere tranche** `osui/` chat central | 050/051/052 (boot) |
+| 1 | OS-UI-0 | **premiere tranche** `osui/` chat + scene IA + shell Multiboot | 050/051/052 (boot) |
 | 2 | OS-UI-1 | **premiere tranche** chat + panes Support/Admin | 010-013, 030, 031, 040, 041 |
 | 3 | OS-UI-2 | **premiere tranche** pane Browser-OS | 020-022, 060, 061 |
 | 4 | OS-UI-3 | **prochain** apres parite 1+2 | fin 050-052 |

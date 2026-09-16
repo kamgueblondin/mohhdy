@@ -75,7 +75,7 @@ make run
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
 | `make iso` | Produit l'ISO BIOS/GRUB bootable |
 | `make run` / `make run-gui` | Session QEMU interactive curses ou GTK |
-| `make osui-smoke` | Fumée shell graphique OS-UI (chat central, slash, session, origine, admin, geste). Hors `make ci` / hors QEMU |
+| `make osui-smoke` | Fumée shell graphique OS-UI (chat, scene IA, shell Multiboot, session, origine, admin, geste). Hors `make ci` / hors QEMU |
 | `make osui-docker` | Construit l'image `mohhdy-os`. Voir [docs/osui_0_1_2.md](docs/osui_0_1_2.md) |
 | `make agent-smoke` | Fumée HTTP agent (simulateur DOM, MCP, facture, 501 si Playwright absent). Hors `make ci` / hors QEMU |
 | `make agent-docker` | Construit l'image `mohhdy-agent` (backend temporaire). Voir [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md) |
@@ -92,7 +92,7 @@ make run-iso
 
 ## Instance autonome (shell graphique `osui/` + backend `agent/`)
 
-`osui/` est l'**entree produit** : `docker run` ouvre le chrome du SE. Surface primaire : **chat central** (prompts / `/help` `/browser` `/shell`). Un programme ouvert deplace le chat en panneau flottant draggable. `agent/` reste le **backend temporaire** (APIs ASSIST). Ce n'est **pas** le noyau i386 du guest. Les reponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium de session, **pas** US-031. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md). Packaging PC / hyperviseur : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
+`osui/` est le **bootstrap graphique** du SE Multiboot : `docker run` ouvre le chrome. Surface primaire : **chat central** (prompts / `/help` `/browser` `/shell`). Fond du bureau : **scene IA** (`#ai-stage`, stub HTML). `/shell` = vocabulaire guest Ring 3, etat bootstrap (pas un TTY QEMU). Un programme ouvert deplace le chat en panneau flottant draggable. `agent/` reste le **backend temporaire** (APIs ASSIST). Ce n'est **pas** le noyau i386 du guest. Les reponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium de session, **pas** US-031. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md), [docs/osui_ai_stage.md](docs/osui_ai_stage.md). Packaging PC / hyperviseur : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
 
 ```bash
 make osui-smoke

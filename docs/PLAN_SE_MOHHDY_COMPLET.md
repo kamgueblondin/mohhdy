@@ -1,11 +1,19 @@
 # Plan maitre du SE Mohhdy
 
 **Date :** 15 septembre 2026
-**Statut :** plan produit. OS-UI-000 docs livres. Premieres tranches OS-UI-0/1/2 dans `osui/` (chat central / slash / panes, backend `agent/` temporaire). Prochain : OS-UI-3 apres parite. Pas US-031, pas LLM de production
+**Statut :** plan produit. OS-UI-000 docs livres. Premieres tranches OS-UI-0/1/2 dans `osui/` (chat central, scene IA, shell Multiboot, backend `agent/` temporaire). Prochain : OS-UI-3 apres parite. Pas US-031, pas LLM de production
 **Ponctuation :** ASCII usuel et accents francais uniquement
 **Public :** chef de produit, mainteneur, contributeur. Une page pour **toutes** les capacites visees
 
-Mohhdy est **un seul produit** : le systeme d'exploitation agentique autonome. Toutes les capacites d'agent et l'interface graphique vivent **dans le SE**, pas dans un sidecar Python. `agent/` est un bootstrap userspace **temporaire**, a migrer puis retirer. Docker, un PC, un hyperviseur ou une machine vierge **bootent le SE** comme un metal nu. Le SE agit dans **son** navigateur-OS.
+Mohhdy est **un seul produit** : le systeme d'exploitation agentique
+autonome **Multiboot**. Toutes les capacites d'agent et l'interface
+graphique vivent **dans le SE**, pas dans un sidecar Python. Le produit
+final qui portera chat, scene IA, slash, shell Ring 3 et navigateur-OS
+est **ce** SE Multiboot. `osui/` / Docker sont le **bootstrap graphique
+actuel** de ce meme OS, pas un second systeme pour toujours. `agent/`
+est un bootstrap userspace **temporaire**, a migrer puis retirer.
+Docker, un PC, un hyperviseur ou une machine vierge **bootent le SE**
+comme un metal nu. Le SE agit dans **son** navigateur-OS.
 
 Ce fichier est la **feuille de route produit**. Les gardes noyau guest (tranches 0-4) restent detaillees dans [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md). Les faits guest mesurables restent dans [ETAT_REEL.md](ETAT_REEL.md). Ce plan ne reecrit pas le runtime `agent/` et n'invente aucune livraison.
 
@@ -78,7 +86,7 @@ Observable aujourd'hui :
 - `make test-all` 522/522 documentes, 523/523 au rejeu du 13 septembre 2026
 - `make integration-qemu` : sept contrats sequentiels, 760,9 s local, budget 25 min
 
-Le guest **n'heberge pas** : widget, admin web, sessions visiteur, simulateur DOM, MCP demo, `/browser`, FS sandbox, image Docker du SE graphique.
+Le guest **n'heberge pas** : widget, admin web, sessions visiteur, simulateur DOM, MCP demo, `/browser`, FS sandbox, image Docker du SE graphique, scene HTML `#ai-stage`.
 
 ### 2.2 Scaffold `agent/` (bootstrap, pas le SE graphique)
 
@@ -97,10 +105,12 @@ Present dans `agent/` (stub, pas production) :
 
 Present dans `osui/` (premieres tranches OS-UI-0/1/2, pas production) :
 
-- Shell graphique HTML du SE : **chat central** (prompts / slash), panes programmes, chat flottant draggable
+- Shell graphique HTML du SE : **chat central** (prompts / slash), **scene IA** plein ecran (`#ai-stage`), panes programmes, chat flottant draggable
 - Entree Docker `mohhdy-os` = ce chrome (`GET /`), sante `GET /health`
 - UI native chat / sessions / droits / escalade / takeover, branchee sur les APIs `agent/`
-- Gestes simulateur, facture MCP demo, vue demo-app et FS sandbox ; shell UI d'instance (`/shell`, pas un root Linux)
+- Gestes simulateur, facture MCP demo, vue demo-app et FS sandbox
+- `/shell` = vocabulaire Multiboot Ring 3 (`userspace/shell.c`), surface **bootstrap** (pas un bash Linux, pas un TTY QEMU attache)
+- Prompts hors slash : stub session + HTML/SVG dans `#ai-stage` (`llm=stub_echo`, allowlist, pas de script)
 
 Absent (ne pas marquer livre) :
 
@@ -202,7 +212,9 @@ Le **US-031 cite ici** est celui de [../US/mohhdy_us_phase3_web_runtime.md](../U
 
 | Sujet | Visee | Statut | Tranche |
 |---|---|---|---|
-| Shell graphique minimal | Chat central, slash, fenetres, chrome OS | **premiere tranche** `osui/` | **OS-UI-0** |
+| Shell graphique minimal | Chat central, slash, scene IA, fenetres, chrome OS | **premiere tranche** `osui/` | **OS-UI-0** |
+| Scene IA `#ai-stage` | Bureau = reflexion / action / resultats HTML (stub) | **premiere tranche** bootstrap | **OS-UI-0** |
+| Shell Multiboot `/shell` | Vocabulaire Ring 3 (`ai`, `vfs-list`, `help`) | **premiere tranche** bootstrap, pas TTY live | **OS-UI-0** |
 | Surface navigateur de l'instance | L'OS agit dans son navigateur-OS | pane Browser-OS + bootstrap `/browser` (miroir) | OS-UI-2 (1re tranche) |
 | FS-as-web | Explorateur web du FS de l'instance | pane Browser-OS + sandbox lecture | OS-UI-2 (1re tranche) |
 | Vue operateur | Admin + ce que l'agent voit | panes Admin / Statut + bootstrap `/admin` | OS-UI-0/1 |
@@ -376,16 +388,18 @@ Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. OS-UI-
 
 ### 6.2 OS-UI-0. Shell graphique minimal dans l'instance Docker
 
-**Statut.** Premiere tranche livree : `osui/`, image `mohhdy-os`, `GET /` = bureau a chat central. Guides : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md).
+**Statut.** Premiere tranche livree : `osui/`, image `mohhdy-os`, `GET /` = bureau a chat central + scene IA. Guides : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md).
 
 **But.** L'instance Docker presente un **shell graphique du SE** (chrome fenetre, vue operateur), pas seulement des pages HTML du sidecar comme identite produit.
 
 **Inclut.**
 
 - Surface GUI minimale de l'instance (fenetre operateur, cadre OS)
+- Scene IA plein ecran (`#ai-stage`) : reflexion / action / resultats HTML stub
+- `/shell` aligne sur le vocabulaire guest Ring 3 (bootstrap, pas TTY live)
 - Boot Docker = entree dans cette surface (meme si le backend reste `agent/` un temps)
 - Sante, pas de secret dans l'image, self-host
-- Documenter clairement : ce n'est pas US-031, pas un LLM, pas le guest QEMU
+- Documenter clairement : ce n'est pas US-031, pas un LLM, pas le guest QEMU, pas de scene HTML dans ETAT_REEL
 
 **N'inclut pas.** Portage complet chat/admin, Chromium de session, retrait de Python, ISO i386 dans Docker.
 
@@ -519,7 +533,7 @@ Ce n'est **pas** la sortie de OS-UI-0.
 | Tranche | DoD court |
 |---|---|
 | OS-UI-000 | Plan maitre + liens ; pas de code `agent/` |
-| OS-UI-0 | Chrome OS a chat central au `docker run` (`osui/`) ; hors QEMU CI ; pas US-031 |
+| OS-UI-0 | Chrome OS a chat central, scene IA et shell Multiboot (`osui/`) ; hors QEMU CI ; pas US-031 |
 | OS-UI-1 | Parite chat/admin/droits/escalade/handoff/origine dans le shell ; stub honnete |
 | OS-UI-2 | Premiere tranche : actes + FS dans le pane Browser-OS ; preuves negatives ; pas Chromium |
 | OS-UI-3 | Facade Python retiree apres parite mesuree |
@@ -573,5 +587,6 @@ Minimum a cocher, comportement contre comportement :
 - [../US/mohhdy_user_stories_master.md](../US/mohhdy_user_stories_master.md)
 - [../US/individual_us/INDEX.md](../US/individual_us/INDEX.md)
 - Guides `assist010` ... `assist060`, `assist_playwright_optional.md`, `assist051_052_053_deploy.md`
+- [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md)
 
 En cas de contradiction sur le **guest**, ETAT_REEL et `mohhdy_us.md` priment. En cas de contradiction sur l'**ordre produit**, ce plan prime sur les recits "track Agent Support" anterieurs.

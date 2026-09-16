@@ -12,11 +12,11 @@ En cas de doute sur le **guest i386**, [ETAT_REEL.md](ETAT_REEL.md) decrit le co
 | Navigateur-OS du SE | Widget SaaS a cote du noyau, vision boltee optionnelle |
 | Docker / PC / hyperviseur = deploiement du SE (machine vierge) | Docker = sidecar Python, produit de support a cote |
 | `agent/` = scaffold userspace actuel (bootstrap) | `agent/` = produit Agent Support, SaaS tiers |
-| Prototype guest (tranche noyau verifiee sous QEMU) | "Le SE autonome complet tourne deja dans le guest i386" |
+| Prototype guest (tranche noyau verifiee sous QEMU) | "Le SE autonome complet tourne deja dans le guest i386" ; "le guest a deja une scene HTML `#ai-stage`" |
 | Capacites OS (`ASSIST-xxx`) | Piste parallele, 9e phase, produit distinct |
 | Portage OS-UI (`OS-UI-xxx`) | Etendre `agent/` comme produit durable |
 
-Deux **niveaux de maturite runtime** (ingenierie, pas deux produits) : le prototype guest i386 mesure dans ETAT_REEL, et l'instance OS autonome (Docker / PC / hyperviseur / metal nu) dont `osui/` est le chrome graphique a **chat central** (premieres tranches OS-UI-0/1/2) et `agent/` le backend temporaire (OS-UI-3).
+Deux **niveaux de maturite runtime** (ingenierie, pas deux produits) : le prototype guest i386 mesure dans ETAT_REEL, et l'instance OS autonome (Docker / PC / hyperviseur / metal nu) dont `osui/` est le **bootstrap graphique** du meme SE Multiboot (chat central, scene IA, shell Ring 3 ; premieres tranches OS-UI-0/1/2) et `agent/` le backend temporaire (OS-UI-3). Le guest n'heberge pas `#ai-stage`.
 
 ## Identite du guest i386
 

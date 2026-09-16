@@ -4,7 +4,7 @@
 
 **Reference :** prototype guest i386 32-bit, BIOS/Multiboot, QEMU et Ring 3. Ce n'est pas une distribution Linux.
 
-**Produit.** Mohhdy est **un seul** SE agentique autonome. Cette page mesure uniquement la **tranche guest i386** (chemin pedagogique sous QEMU). Elle ne decrit pas le navigateur-OS, le LLM de production, ni le scaffold userspace `agent/`. L'intention produit est unitaire ; les faits mesures ici restent ceux du guest. Docker / PC / hyperviseur bootent l'instance autonome, ce n'est pas un second produit.
+**Produit.** Mohhdy est **un seul** SE agentique autonome Multiboot. Cette page mesure uniquement la **tranche guest i386** (chemin pedagogique sous QEMU). Elle ne decrit pas le navigateur-OS, le LLM de production, le scaffold userspace `agent/`, ni le chrome `osui/` (chat, scene HTML `#ai-stage`, shell bootstrap). Ces surfaces graphiques sont le bootstrap du **meme** SE ; elles **n'existent pas** dans le VGA guest. L'intention produit est unitaire ; les faits mesures ici restent ceux du guest. Docker / PC / hyperviseur bootent l'instance autonome, ce n'est pas un second produit.
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 

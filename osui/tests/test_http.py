@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fumee OS-UI : chat central, slash, shell UI + parite agent (stdlib, hors make ci)."""
+"""Fumee OS-UI : chat central, scene IA, shell Multiboot + parite agent (stdlib, hors make ci)."""
 
 from __future__ import annotations
 
@@ -137,9 +137,14 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertIn("origin_denied", html)
         self.assertIn("Pas US-031", html)
         self.assertIn("Pas un LLM de production", html)
-        self.assertIn("SE dirige par prompts", html)
-        self.assertIn("Shell UI de l'instance Mohhdy", html)
-        self.assertIn("Pas un root Linux", html)
+        self.assertIn("SE Multiboot dirige par prompts", html)
+        self.assertIn("Shell Multiboot", html)
+        self.assertIn("userspace/shell.c", html)
+        self.assertIn("Pas un bash Linux", html)
+        self.assertIn('id="ai-stage"', html)
+        self.assertIn('data-testid="ai-stage"', html)
+        self.assertIn("Scene IA", html)
+        self.assertIn("live_guest=false", html)
         lowered = html.lower()
         for marker in SECRET_MARKERS:
             self.assertNotIn(marker.lower(), lowered)
@@ -153,6 +158,9 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertIn('.os-chat[data-mode="float"]', css)
         self.assertIn("--os-chat-z: 1100", css)
         self.assertIn("cursor: grab", css)
+        self.assertIn(".ai-stage", css)
+        self.assertIn('data-mode="reflecting"', css)
+        self.assertIn("ai-sim-move", css)
         js = self._read("/os/os.js")
         self.assertIn("/api/sessions", js)
         self.assertIn("request_id", js)
@@ -165,7 +173,13 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertIn('name: "help"', js)
         self.assertIn('name: "browser"', js)
         self.assertIn('name: "shell"', js)
-        self.assertIn("Pas un root Linux", js)
+        self.assertIn("/api/os/stage", js)
+        self.assertIn("/api/os/shell", js)
+        self.assertIn("sanitizeStageHtml", js)
+        self.assertIn("applyStage", js)
+        self.assertIn("toUpperCase", js)
+        self.assertIn("MOHHDY>", js)
+        self.assertIn("Pas un bash Linux", js)
         lowered = js.lower()
         self.assertNotIn("api_key", lowered)
         self.assertNotIn("sk-proj", lowered)
@@ -178,7 +192,14 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertTrue(os_json["interaction"]["slash"])
         self.assertTrue(os_json["interaction"]["floating_chat"])
         self.assertTrue(os_json["interaction"]["chat_drag"])
+        self.assertTrue(os_json["interaction"]["ai_stage"])
+        self.assertTrue(os_json["interaction"]["multiboot_shell"])
         self.assertEqual(os_json["interaction"]["chat_pos_key"], "mohhdy.os.chat.pos")
+        self.assertEqual(os_json["stage"]["id"], "ai-stage")
+        self.assertFalse(os_json["stage"]["guest_html_stage"])
+        self.assertEqual(os_json["multiboot_shell"]["prompt"], "MOHHDY>")
+        self.assertFalse(os_json["multiboot_shell"]["live_guest"])
+        self.assertFalse(os_json["multiboot_shell"]["qemu_serial"])
         for slash in ("/help", "/browser", "/shell", "/admin", "/support", "/status", "/fs"):
             self.assertIn(slash, slashes)
             self.assertIn('data-slash="%s"' % slash, html)
@@ -207,6 +228,9 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertIn("chat", health["panes"])
         self.assertIn("shell", health["panes"])
         self.assertEqual(health["interaction"]["primary"], "center_chat")
+        self.assertTrue(health["interaction"]["ai_stage"])
+        self.assertIn("ai-stage", health["stage"]["id"])
+        self.assertEqual(health["multiboot_shell"]["source"], "userspace/shell.c")
         os_json, _, _ = self._get_json("/api/os")
         self.assertEqual(os_json["service"], "mohhdy-os")
         self.assertFalse(os_json["phase3_complete"])
@@ -306,6 +330,66 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(taken["session_id"], sid)
         self.assertEqual(taken["status"], "human_active")
+
+    def test_stage_prompt_fills_html_and_strips_script(self) -> None:
+        presenting, status, _ = self._post_json(
+            "/api/os/stage", {"prompt": "dessine trois boites"}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(presenting["llm"], "stub_echo")
+        self.assertEqual(presenting["mode"], "presenting")
+        self.assertIn("ai-scene", presenting["html"])
+        self.assertIn("<svg", presenting["html"])
+        self.assertIn("<rect", presenting["html"])
+        self.assertNotIn("<script", presenting["html"].lower())
+        current, _, _ = self._get_json("/api/os/stage")
+        self.assertEqual(current["mode"], "presenting")
+        self.assertIn("dessine trois boites", current["html"])
+        acting, _, _ = self._post_json(
+            "/api/os/stage", {"prompt": "simule un acte overlay"}
+        )
+        self.assertEqual(acting["mode"], "acting")
+        self.assertIn("ai-sim", acting["html"])
+        injected, _, _ = self._post_json(
+            "/api/os/stage",
+            {"prompt": '<script>alert(1)</script> dessine une scene'},
+        )
+        self.assertNotIn("<script", injected["html"].lower())
+        self.assertIn("&lt;script&gt;", injected["html"])
+        dumped = json.dumps(presenting).lower()
+        self.assertNotIn("api_key", dumped)
+        self.assertNotIn("openai", dumped)
+
+    def test_multiboot_shell_http(self) -> None:
+        meta, _, _ = self._get_json("/api/os/shell")
+        self.assertEqual(meta["prompt"], "MOHHDY>")
+        self.assertEqual(meta["attachment"], "bootstrap")
+        self.assertFalse(meta["live_guest"])
+        self.assertIn("ai", meta["commands"])
+        self.assertIn("vfs-list", meta["commands"])
+        help_body, status, _ = self._post_json("/api/os/shell", {"line": "help"})
+        self.assertEqual(status, 200)
+        self.assertEqual(help_body["rc"], 0)
+        self.assertIn("vfs-list", help_body["output"])
+        self.assertIn("ai <question>", help_body["output"])
+        vfs, _, _ = self._post_json(
+            "/api/os/shell", {"line": "vfs-list initrd/bin/"}
+        )
+        self.assertEqual(vfs["rc"], 0)
+        self.assertIn("shell", vfs["output"])
+        trap, _, _ = self._post_json("/api/os/shell", {"line": "apt install nginx"})
+        self.assertEqual(trap["rc"], 1)
+        self.assertIn("Pas un bash Linux", trap["output"])
+        attach, _, _ = self._post_json("/api/os/shell", {"line": "attach"})
+        self.assertEqual(attach["rc"], 1)
+        self.assertIn("bootstrap", attach["output"])
+        ai, _, _ = self._post_json(
+            "/api/os/shell", {"line": "ai dessine trois boites"}
+        )
+        self.assertEqual(ai["rc"], 0)
+        self.assertEqual(ai["stage"]["mode"], "presenting")
+        stage_now, _, _ = self._get_json("/api/os/stage")
+        self.assertEqual(stage_now["mode"], "presenting")
 
     def test_legacy_agent_pages_still_available(self) -> None:
         demo = self._read("/demo-app")
