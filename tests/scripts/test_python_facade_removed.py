@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Focused host check: product Python facade is gone (OS-UI-3).
 
-Hors make integration-qemu. Python hote (tests/scripts, extracteur) reste autorise.
+HTML/CSS/JS in osui/static + osui/display_host.py are a display surface,
+not a reintroduction of agent/ business logic.
 """
 from __future__ import print_function
 
@@ -19,8 +20,6 @@ FORBIDDEN = [
     "osui/prompt_os.py",
     "osui/guest_attach.py",
     "osui/command_registry.py",
-    "osui/static/index.html",
-    "osui/static/os.js",
     "osui/Dockerfile",
     "osui/docker-compose.yml",
 ]
@@ -34,6 +33,10 @@ REQUIRED = [
     "userspace/mohhdy_osui_bridge.h",
     "shared/multiboot_shell_commands.json",
     "scripts/extract_guest_commands.py",
+    "osui/display_host.py",
+    "osui/static/index.html",
+    "osui/static/os.css",
+    "osui/static/os.js",
     "Dockerfile",
     "docker/qemu-nographic.sh",
     "docker/qemu-gui.sh",
@@ -63,15 +66,22 @@ def main():
         fail("MOHHDY_OSUI_STAGE_VGA must be 1")
     if "#define MOHHDY_OSUI_VGA_DESKTOP 1" not in header:
         fail("MOHHDY_OSUI_VGA_DESKTOP must be 1")
+    if "#define MOHHDY_OSUI_DISPLAY_HOST 1" not in header:
+        fail("MOHHDY_OSUI_DISPLAY_HOST must be 1")
     if '#define MOHHDY_OSUI_GUI_COMMAND "gui"' not in header:
         fail("MOHHDY_OSUI_GUI_COMMAND must be gui")
+    host = open(os.path.join(ROOT, "osui/display_host.py"), "r").read()
+    if "osui_runtime" in host and "dispatch" in host:
+        fail("display_host.py must not reimplement osui_runtime dispatch")
+    if "/api/sessions" in host:
+        fail("display_host.py must not expose agent session APIs")
     dockerfile = open(os.path.join(ROOT, "Dockerfile"), "r").read()
     if "python3" in dockerfile.lower() and "CMD" in dockerfile:
         if "server.py" in dockerfile:
             fail("Dockerfile still launches a Python server")
     if "qemu-system-i386" not in open(os.path.join(ROOT, "docker/qemu-nographic.sh")).read():
         fail("docker entrypoint must boot qemu-system-i386")
-    print("OK python facade removed; guest C + QEMU docker remain")
+    print("OK python facade removed; guest C + thin HTML display host remain")
     return 0
 
 

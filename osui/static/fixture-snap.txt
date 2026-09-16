@@ -1,0 +1,3 @@
+OSUI-SNAP chrome=html_host display_surface=html_host llm=stub_echo us031=false python=false phase3=false guest_html_stage=false chat_mode=center pane=none stage=reflecting kind=plan session=s0001 chat_x=16 chat_y=5 nmsg=1 input=
+OSUI-MSG 0 Mohhdy OS — SE Multiboot dirige par prompts. llm=stub_echo (pas un LLM de production). phase3_complete=false, us031_complete=false.
+OSUI-END

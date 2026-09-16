@@ -1,36 +1,23 @@
-# OS-UI (retire)
+# OS-UI : surface HTML hote + cerveau guest C
 
-Le chrome Python `osui/` (HTTP, HTML `#ai-stage`) et le scaffold `agent/`
-sont **retires** (OS-UI-3).
+Le chrome produit est `osui/static` (HTML/CSS/JS glassmorphic). Le
+**cerveau** reste `userspace/osui_runtime.c`. `osui/display_host.py` est
+un helper mince : fichiers statiques + proxy serie vers QEMU.
 
-La surface vit dans le guest Ring 3 Multiboot :
-
-- `userspace/osui_runtime.c` : chat, scene VGA, sessions, droits, MCP, FS
-- `userspace/osui_gui.c` : bureau VGA 80x25 (commande canonique `gui`)
-- `userspace/shell.c` : vocabulaire `MOHHDY>`
-- `shared/multiboot_shell_commands.json` : registre genere
-- `userspace/mohhdy_osui_bridge.h` : contrat C (`PYTHON_FACADE 0`, `VGA_DESKTOP 1`)
-
-Extracteur hote (pas un runtime produit) :
+Ce n'est **pas** le sidecar `agent/` (retire, OS-UI-3). Pas de sessions
+HTTP, pas de MCP Python, pas de Prompt OS. `python_facade=false`.
+`display_host=true`. `guest_html_stage=false` (le guest n'execute pas
+HTML). `llm=stub_echo`. `us031_complete=false`.
 
 ```text
-python3 scripts/extract_guest_commands.py
-python3 scripts/extract_guest_commands.py --check
+make all
+make run-gui          # http://127.0.0.1:18080  (envoie gui tout seul)
+make qemu-osui-gui    # contrat nographic, hors integration-qemu
+make osui-smoke       # registre + facade absente + fumee HTML
 ```
 
-Boot instance :
-
-```text
-make all && make run-gui
-make qemu-osui-runtime
-make qemu-osui-gui
-docker build -t mohhdy-os .
-docker run --rm -it mohhdy-os
-```
-
-Au prompt `MOHHDY>` : `gui`. Nographic : `gui-status`. Ce n'est **pas**
-US-031, **pas** un LLM de production, **pas** un bash Linux.
-Le VGA n'heberge pas `#ai-stage` HTML : scene structuree + canvas desktop.
+Dans le guest, apres `MOHHDY>` : `gui` / `graphics` / `desktop`.
+Quitter : `console` / ESC. Docker reste nographic par defaut.
 
 Guides : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md),
-[../docs/osui_convergence.md](../docs/osui_convergence.md).
+[../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md).

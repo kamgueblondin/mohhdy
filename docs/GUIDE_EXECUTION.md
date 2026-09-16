@@ -2,7 +2,7 @@
 
 Prérequis (Debian/Ubuntu, même ensemble que la CI) : `build-essential`, `gcc-multilib`, `libc6-dev-i386`, `nasm`, `qemu-system-x86` (binaire `qemu-system-i386`). Ajouter `qemu-system-gui` pour GTK. Installation : `make deps` ou `bash scripts/bootstrap-dev.sh`. État du système : [ETAT_REEL.md](ETAT_REEL.md).
 
-Le shell lit le **clavier emulé PS/2**, pas le port série. En nographic, la saisie du terminal hôte n'atteint souvent pas le guest ; préférer `make run` (curses) ou `make run-gui`.
+Le shell lit le **clavier emulé PS/2** et, en mode gui, aussi le **port série** (helper HTML). En nographic sans display_host, la saisie du terminal hôte n'atteint souvent pas le guest ; préférer `make run` (curses) ou `make run-gui`.
 
 Le curseur de saisie est un **bloc clignotant** à la position VGA. Après une longue sortie (`help`), **Page Up** ou **flèche haut** remonte dans l'historique d'écran (80 lignes) ; **Page Down** ou **flèche bas** redescend. Toute nouvelle frappe imprimable ramène à la ligne de saisie.
 
@@ -25,12 +25,13 @@ make run
 ```bash
 make run-gui
 ```
-- **Affichage** : Fenetre QEMU GTK (`-vga std -display gtk`)
-- **Clavier** : PS/2, pleinement fonctionnel
-- **Bureau** : au prompt `MOHHDY>`, tapez `gui` (aliases `graphics`, `desktop`)
+- **Affichage** : bureau HTML glassmorphic sur `http://127.0.0.1:18080`
+- **Helper** : `osui/display_host.py` (static + proxy serie). Cerveau = guest C
+- **Bureau** : `gui` est envoye apres le boot (`MOHHDY>`)
 - **Quitter le bureau** : `console`, `gui-exit` ou ESC
-- **Nographic / CI** : `gui-status` dump le canvas ASCII sans boucle GETC
-- **Avantages** : chrome OS-UI (chat central / flottant, scene, panes)
+- **Nographic / CI** : `gui-status` et `make qemu-osui-gui` (hors integration-qemu)
+- **Honnêteté** : `llm=stub_echo`, `us031_complete=false`, `python_facade=false`
+- **Fallback GTK** : `make run-qemu-gtk` (pointeur VGA, pas le bureau produit)
 
 Pour tester la sonde NE2000 (optionnel, hors `make run-gui`) :
 
@@ -71,10 +72,11 @@ make run-nographic
 - **Scancode** : PS/2 Set 1 avec translation activée
 
 ### Mode GUI (`make run-gui`)
-- **Display** : `-display gtk`
-- **VGA** : Support graphique standard
-- **Série** : Configuration distincte
-- **Interruptions** : Optimales
+- **Display** : HTML hote `:18080` + QEMU `-display none` (serie TCP)
+- **VGA** : pointeur honnete, pas un bureau ASCII
+- **Série** : pont display_host <-> guest
+- **Interruptions** : PS/2 conservees
+- **Fallback** : `make run-qemu-gtk`
 
 ## 🔍 Messages de Debug
 

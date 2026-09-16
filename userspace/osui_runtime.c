@@ -697,9 +697,9 @@ static int cmd_os_help(char *out, int max) {
     int p = 0;
     out_add(out, max, &p,
         "osui help llm=stub_echo live_guest=true python_facade=false\n"
-        "prompt=MOHHDY>  Pas un bash Linux. Scene=VGA structuree, pas #ai-stage.\n"
+        "prompt=MOHHDY>  Pas un bash Linux. Scene guest = etat C, surface HTML hote.\n"
         "slash: /help /browser /shell /admin /support /status /fs /center /close /plan /draw\n"
-        "gui (aliases graphics, desktop) : entre le bureau VGA. console : retour texte.\n"
+        "gui (aliases graphics, desktop) : entre le bureau HTML hote. console : retour texte.\n"
         "session-new [site]  session-use <id>  session-list  session-status\n"
         "chat <texte>  prompt <texte>  grant/revoke <cap>  escalate  takeover\n"
         "origin-check <origine>  browser-click|type|pointer  browser-status\n"
@@ -715,7 +715,7 @@ static int cmd_os_status(char *out, int max) {
     int p = 0;
     out_add(out, max, &p,
         "osui os-status service=mohhdy-os llm=stub_echo harness=dom_simulator\n"
-        "live_guest=true chrome=vga_text python_facade=false guest_html_stage=false\n"
+        "live_guest=true chrome=html_host display_surface=html_host python_facade=false guest_html_stage=false\n"
         "gui_cmd=gui aliases=graphics,desktop leave=console\n"
         "phase3_complete=false us031_complete=false billing=false kb_loaded=");
     out_add(out, max, &p, G.kb_loaded ? "true" : "false");
@@ -1440,10 +1440,10 @@ static int cmd_gui(char *out, int max) {
     G.gui_enter = 1;
     G.gui_leave = 0;
     out_add(out, max, &p,
-        "osui gui ok chrome=vga_desktop canonical=gui aliases=graphics,desktop\n"
+        "osui gui ok chrome=html_host display_surface=html_host canonical=gui aliases=graphics,desktop\n"
         "leave=console chat_mode=");
     out_add(out, max, &p, G.chat_mode);
-    out_add(out, max, &p, " llm=stub_echo us031_complete=false guest_html_stage=false\n");
+    out_add(out, max, &p, " llm=stub_echo us031_complete=false guest_html_stage=false python_facade=false\n");
     return OSUI_OK;
 }
 
@@ -1453,13 +1453,13 @@ static int cmd_gui_exit(char *out, int max) {
     G.gui_enter = 0;
     s_cpy(G.chat_mode, 12, "center");
     G.pane[0] = 0;
-    out_add(out, max, &p, "osui gui exit chat_mode=center chrome=vga_text prompt=MOHHDY>\n");
+    out_add(out, max, &p, "osui gui exit chat_mode=center chrome=text prompt=MOHHDY>\n");
     return OSUI_OK;
 }
 
 static int cmd_gui_status(char *out, int max) {
     int p = 0, r;
-    out_add(out, max, &p, "osui gui-status chrome=vga_desktop canonical=gui chat_mode=");
+    out_add(out, max, &p, "osui gui-status chrome=html_host display_surface=html_host canonical=gui chat_mode=");
     out_add(out, max, &p, G.chat_mode);
     out_add(out, max, &p, " pane=");
     out_add(out, max, &p, G.pane[0] ? G.pane : "none");
@@ -1467,7 +1467,7 @@ static int cmd_gui_status(char *out, int max) {
     out_add(out, max, &p, G.stage_kind);
     out_add(out, max, &p, " mode=");
     out_add(out, max, &p, G.stage_mode);
-    out_add(out, max, &p, " us031_complete=false guest_html_stage=false\n");
+    out_add(out, max, &p, " us031_complete=false guest_html_stage=false python_facade=false\n");
     for (r = 0; r < 8 && r < OSUI_CANVAS_ROWS; r++) {
         out_add(out, max, &p, "|");
         out_add(out, max, &p, G.canvas[r]);

@@ -287,7 +287,7 @@ make test-all                # 522/522 tests C Unity et robustesse
 make integration-qemu        # contrats AOS-022/AOS-024/AOS-025, NE2000, IPC, VFS avec montages dynamiques, révocation, transfert et notifications Foundation
 make iso                     # ISO BIOS/GRUB bootable
 make run                     # console curses
-make run-gui                 # fenêtre GTK
+make run-gui                 # bureau HTML http://127.0.0.1:18080
 ```
 
 La suite C exécute **512** tests : PMM, syscall, tâches, overlay, FAT16/FAT32, pagination de sous-répertoire, protocole worker `mkdir`/`rmdir`, ACL backend droit-source-préfixe, tokenizer, GGUF, quantification, IPC, VFS, services, shell, RAMFS, console, PCI, réseau, TLS et robustesse GGUF. `make integration-qemu` démarre sept machines QEMU séparées : le contrat cœur AOS-022, le smoke NE2000 (`make qemu-ne2k-status` avec `-device ne2k_isa`), le contrat IRQ0 AOS-024, le smoke AOS-025 (profil OpenAI bloqué), le contrat Foundation IPC, le contrat VFS et le contrat de transfert de service. Le contrat cœur utilise une image overlay de test isolée. Les cadences du smoke cœur, extras, VFS, service et persistance sont respectivement 0,65 s, 0,80 s, 1,10 s, 0,55 s et 0,65 s pour limiter les doubles frappes PS/2 sous QEMU TCG ; les contrats VFS, service et persistance relancent au plus trois commandes longues jusqu'à leur marqueur fonctionnel, sans assouplir les assertions.

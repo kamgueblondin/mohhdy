@@ -1,7 +1,10 @@
 #!/bin/sh
 # Boot Multiboot Mohhdy OS under QEMU with a graphical display.
 # Canonical guest command after MOHHDY> : gui  (aliases: graphics, desktop).
-# Leave with: console  (or ESC). Default Docker image stays nographic for CI.
+# Leave with: console  (or ESC).
+# Produit visuel : make run-gui sur l'hote (HTML display_host :18080).
+# Ce script GTK reste un fallback VGA (pointeur, pas le bureau glassmorphic).
+# Default Docker image stays nographic for CI.
 set -eu
 
 KERNEL="${MOHHDY_KERNEL:-/os/mohhdy.bin}"

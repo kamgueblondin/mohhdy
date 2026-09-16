@@ -464,6 +464,16 @@ char keyboard_getc(void) {
             }
         }
         
+        // 1.5 Pont display hote : caracteres COM1 (helper HTML / nographic).
+        {
+            char sc = read_serial();
+            if ((sc >= 32 && sc <= 126) || sc == '\n' || sc == '\r' || sc == '\t' || sc == '\b'
+                || sc == (char)OS_VGA_KEY_ESC) {
+                consecutive_empty_returns = 0;
+                return sc;
+            }
+        }
+
         // 2. Polling de secours (actif même avec interruptions)
         keyboard_poll_check();
         

@@ -437,8 +437,16 @@ run: $(OS_IMAGE) pack-initrd disk
 		-m $(GPT2_RAM) -cpu pentium3 \
 		-no-reboot -no-shutdown $(QEMU_DISK_OPTS)
 
-# Cible pour exécuter l'OS dans QEMU avec interface graphique améliorée
+# Bureau HTML hote (surface osui/static) + QEMU guest C. Ouvre http://127.0.0.1:18080
 run-gui: $(OS_IMAGE) pack-initrd disk
+	@echo "Mohhdy desktop HTML : http://127.0.0.1:18080"
+	@echo "Cerveau = guest C (osui_runtime.c). Helper = osui/display_host.py (static + proxy)."
+	@echo "llm=stub_echo us031_complete=false python_facade=false guest_html_stage=false"
+	python3 osui/display_host.py --port 18080 --open \
+		--kernel $(OS_IMAGE) --initrd $(INITRD_IMAGE) --disk $(DISK_IMAGE) --ram $(GPT2_RAM)
+
+# Fallback QEMU GTK (pointeur VGA, pas le bureau produit)
+run-qemu-gtk: $(OS_IMAGE) pack-initrd disk
 	qemu-system-i386 -kernel $(OS_IMAGE) -initrd $(INITRD_IMAGE) \
 		-m $(GPT2_RAM) -cpu pentium3 -vga std \
 		-display gtk \
@@ -544,6 +552,7 @@ test-all:
 	@$(MAKE) -C tests test
 	@python3 scripts/extract_guest_commands.py --check
 	@python3 tests/scripts/test_python_facade_removed.py
+	@python3 tests/scripts/test_osui_display_host.py
 
 test-performance:
 	@echo "=== Tests de performance et benchmarks ==="
@@ -655,7 +664,8 @@ ci: all test-all qemu-smoke qemu-ne2k-tls-multipair
 .PHONY: osui-smoke osui-docker
 osui-smoke: osui-registry-check
 	@python3 tests/scripts/test_python_facade_removed.py
-	@echo "=== OS-UI smoke hote OK (registre + facade Python absente) ==="
+	@python3 tests/scripts/test_osui_display_host.py
+	@echo "=== OS-UI smoke hote OK (registre + facade Python absente + HTML desktop) ==="
 
 osui-docker:
 	@command -v docker >/dev/null 2>&1 || { \
@@ -676,7 +686,7 @@ help:
 	@echo "  all          - Compile le système complet (noyau + initrd + disque overlay)"
 	@echo "  kernel-only  - Compile seulement le noyau"
 	@echo "  run          - Compile et exécute avec QEMU (mode texte)"
-	@echo "  run-gui      - Compile et exécute avec QEMU (mode graphique)"
+	@echo "  run-gui      - Bureau HTML hote (display_host + QEMU guest C, :18080)"
 	@echo "  iso          - Image GRUB Multiboot (grub-pc-bin + xorriso)"
 	@echo ""
 	@echo "Cibles de développement:"
@@ -713,10 +723,10 @@ help:
 	@echo "  gpt2-benchmark  - Modèle requis : mesure de latence QEMU SSE2"
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  qemu-osui-runtime - Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA ; hors integration-qemu)"
-	@echo "  qemu-osui-gui   - Fumee QEMU : commande gui, chat flottant, console (hors integration-qemu)"
+	@echo "  qemu-osui-gui   - Fumee QEMU : commande gui, snap HTML, console (hors integration-qemu)"
 	@echo "  osui-registry-check - Verifie JSON/header vs userspace/shell.c"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
-	@echo "  osui-smoke      - Registre guest + preuve que la facade Python est retiree (hors QEMU)"
+	@echo "  osui-smoke      - Registre guest + facade Python absente + HTML desktop (hors QEMU)"
 	@echo "  osui-docker     - Construit l'image Docker mohhdy-os (boot QEMU Multiboot, hors ci)"
 	@echo "  test-performance - Benchmarks et tests de performance"
 	@echo "  test-valgrind   - Tests avec détection fuites mémoire"
@@ -741,7 +751,7 @@ help:
 	@echo "  make test-quick           # Tests pendant développement"
 	@echo "  make test-all             # 497 tests de non-régression avant push"
 
-.PHONY: all kernel-only run run-gui test-build info-initrd info-user user-program userspace-all clean distclean help pack-initrd test-setup test-quick test-kernel test-userspace test-all test-performance test-valgrind test-clean pre-commit-tests ci-tests qemu-smoke qemu-ne2k-acquire qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-close qemu-ne2k-tls-next qemu-ne2k-tls-multipair gpt2-recovery gpt2-benchmark gpt2-tests qemu-gguf-smoke gguf-benchmark gguf-benchmark-check ci deps disk gui-captures gui-record
+.PHONY: all kernel-only run run-gui run-qemu-gtk test-build info-initrd info-user user-program userspace-all clean distclean help pack-initrd test-setup test-quick test-kernel test-userspace test-all test-performance test-valgrind test-clean pre-commit-tests ci-tests qemu-smoke qemu-ne2k-acquire qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-close qemu-ne2k-tls-next qemu-ne2k-tls-multipair gpt2-recovery gpt2-benchmark gpt2-tests qemu-gguf-smoke gguf-benchmark gguf-benchmark-check ci deps disk gui-captures gui-record
 
 
 gguf-disk:

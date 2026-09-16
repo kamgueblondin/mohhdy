@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""QEMU smoke: commande canonique `gui` entre le bureau VGA.
+"""QEMU smoke: commande canonique `gui` entre le bureau HTML host.
 
 Hors make integration-qemu. Complements test_qemu_osui_runtime.py.
 """
@@ -213,6 +213,8 @@ def main():
             send_command_until(monitor, "gui-status", "canonical=gui", proc)
             say("typing gui ...")
             send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
+            wait_for(proc, "chrome=html_host", CMD_TIMEOUT)
+            wait_for(proc, "OSUI-SNAP", CMD_TIMEOUT)
             say("typing /browser in gui ...")
             send_command_until(
                 monitor, "/browser", "chat_mode=float", proc, mode="getc", wait_prompt=False
@@ -223,7 +225,7 @@ def main():
             )
             say("typing console ...")
             send_command_until(
-                monitor, "console", "chrome=vga_text", proc, mode="getc", wait_prompt=True
+                monitor, "console", "chrome=text", proc, mode="getc", wait_prompt=True
             )
         say("QEMU OS-UI GUI contract passed.")
         return 0
