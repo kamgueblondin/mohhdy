@@ -49,6 +49,8 @@ def test_assets():
         "us031_complete=false",
         "data-testid=\"os-chat\"",
         "os-dock",
+        "bootstrap graphique",
+        "os-icon-glyph",
     ):
         if needle not in html:
             fail("index.html missing %r" % needle)
@@ -56,6 +58,8 @@ def test_assets():
         fail("os.css missing glassmorphic backdrop-filter")
     if ".os-chat" not in css or ".os-icons" not in css:
         fail("os.css missing chat/dock chrome")
+    if "inset: 0" not in css and "inset:0" not in css:
+        fail("os.css ai-stage must cover the desktop (inset 0)")
     if "/api/sessions" in js:
         fail("os.js must not call retired agent session APIs")
     if "/api/line" not in js or "/api/state" not in js:

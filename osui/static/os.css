@@ -24,6 +24,7 @@ html, body {
 }
 
 .os-shell {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -97,20 +98,14 @@ html, body {
 
 .ai-stage {
   position: absolute;
-  left: 50%;
-  bottom: 5.2rem;
-  transform: translateX(-50%);
-  width: min(520px, 86vw);
-  z-index: 15;
-  pointer-events: auto;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
   display: flex;
   flex-direction: column;
-  background: rgba(11, 16, 20, 0.55);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(61, 154, 138, 0.35);
-  border-radius: 16px;
-  box-shadow: var(--os-shadow);
+  background:
+    radial-gradient(900px 420px at 18% 8%, rgba(61, 154, 138, 0.22), transparent 58%),
+    radial-gradient(700px 480px at 88% 78%, rgba(40, 80, 120, 0.28), transparent 52%);
 }
 .ai-stage-chrome {
   display: flex;
@@ -151,18 +146,21 @@ html, body {
 .ai-stage-note { opacity: 0.8; }
 .ai-stage-content {
   flex: 1;
-  padding: 0.2rem 1rem 1rem;
+  padding: 4.2rem 9rem 6.2rem 2.2rem;
   display: flex;
-  align-items: stretch;
+  align-items: flex-end;
   justify-content: center;
 }
 .ai-scene {
-  width: 100%;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  box-shadow: none;
+  width: min(640px, 92%);
+  pointer-events: auto;
+  background: rgba(11, 16, 20, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(61, 154, 138, 0.35);
+  border-radius: 16px;
+  padding: 1rem 1.15rem 1.15rem;
+  box-shadow: var(--os-shadow);
 }
 .ai-scene-title {
   margin: 0 0 0.35rem;
@@ -466,10 +464,10 @@ tbody tr.active { background: #22303c; }
 
 .os-chat[data-mode="center"] {
   left: 50%;
-  top: 38%;
+  top: 42%;
   transform: translate(-50%, -50%);
   width: min(640px, 90vw);
-  height: min(420px, 52vh);
+  height: min(440px, 54vh);
   z-index: 20;
 }
 
