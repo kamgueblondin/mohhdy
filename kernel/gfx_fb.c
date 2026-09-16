@@ -178,18 +178,28 @@ static void com2_init(void) {
 
 static int com2_poll_size(int *w, int *h) {
     int got = 0;
+    int nread = 0;
+    unsigned char lsr;
     com2_init();
-    while (inb(COM2_BASE + 5) & 0x01) {
+    lsr = inb(COM2_BASE + 5);
+    if (lsr == 0xff) return 0;
+    while ((lsr & 0x01) && nread < 64) {
         char c = (char)inb(COM2_BASE);
-        if (c == '\r') continue;
+        nread++;
+        if (c == '\r') {
+            lsr = inb(COM2_BASE + 5);
+            continue;
+        }
         if (c == '\n') {
             g_fit_buf[g_fit_n] = 0;
             g_fit_n = 0;
             if (gfx_fb_parse_fit_line(g_fit_buf, w, h)) got = 1;
+            lsr = inb(COM2_BASE + 5);
             continue;
         }
         if (g_fit_n < (int)sizeof(g_fit_buf) - 1) g_fit_buf[g_fit_n++] = c;
         else g_fit_n = 0;
+        lsr = inb(COM2_BASE + 5);
     }
     return got;
 }
