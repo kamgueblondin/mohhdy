@@ -419,6 +419,12 @@ class OsuiHttpSmoke(unittest.TestCase):
         )
         self.assertEqual(help_route["kind"], "shell")
         self.assertIn("vfs-list", help_route["shell"]["output"])
+        trap_prompt, _, _ = self._post_json(
+            "/api/os/prompt", {"text": "apt install nginx"}
+        )
+        self.assertEqual(trap_prompt["kind"], "shell")
+        self.assertTrue(trap_prompt.get("refused_linux"))
+        self.assertIn("Pas un bash Linux", trap_prompt["shell"]["output"])
         commands, _, _ = self._get_json("/api/os/commands")
         self.assertIn("vfs-list", commands["commands"])
         attach, _, _ = self._get_json("/api/os/attach")

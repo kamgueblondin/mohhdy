@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from command_registry import REGISTRY
+
 PANES = ("browser", "shell", "admin", "support", "status", "fs")
 
 SLASH_COMMANDS = (
@@ -173,6 +175,16 @@ def route_prompt(text: str) -> dict:
         if pattern.search(trimmed):
             return {"kind": "open_pane", "pane": pane, "slash": False, "text": trimmed}
 
+    first = trimmed.split()[0].lower()
+    if REGISTRY.is_linux_trap(first):
+        return {
+            "kind": "shell",
+            "line": trimmed,
+            "open_shell": True,
+            "refused_linux": True,
+            "text": trimmed,
+        }
+
     if _PLAN_RE.search(trimmed):
         return {"kind": "stage_plan", "autonomous": True, "prompt": trimmed, "text": trimmed}
 
@@ -191,7 +203,6 @@ def route_prompt(text: str) -> dict:
             line = trimmed
         return {"kind": "shell", "line": line, "open_shell": True, "text": trimmed}
 
-    first = trimmed.split()[0].lower()
     if first in _SAFE_SHELL and (
         first in ("help", "ai-help", "aihelp", "guest-status", "sysinfo", "whoami")
         or trimmed.lower().startswith("vfs-list")

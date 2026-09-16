@@ -48,6 +48,14 @@ class PromptOsRoutes(unittest.TestCase):
         unknown = prompt_os.route_prompt("/nope")
         self.assertEqual(unknown["kind"], "unknown_slash")
 
+    def test_linux_trap_from_chat(self) -> None:
+        apt = prompt_os.route_prompt("apt install nginx")
+        self.assertEqual(apt["kind"], "shell")
+        self.assertTrue(apt.get("refused_linux"))
+        sudo = prompt_os.route_prompt("sudo bash")
+        self.assertEqual(sudo["kind"], "shell")
+        self.assertTrue(sudo.get("refused_linux"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
