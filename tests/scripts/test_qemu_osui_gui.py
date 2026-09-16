@@ -250,6 +250,18 @@ def main():
             send_command_until(
                 monitor, "/browser", "chat_mode=float", proc, mode="getc", wait_prompt=False
             )
+            say("typing /shell in gui ...")
+            send_command_until(
+                monitor, "/shell", "live_eval=true", proc, mode="getc", wait_prompt=False
+            )
+            say("typing whoami in gui shell ...")
+            send_command_until(
+                monitor, "whoami", "whoami ok", proc, mode="getc", wait_prompt=False
+            )
+            say("typing ai hello in gui shell ...")
+            send_command_until(
+                monitor, "ai hello", "[IA]", proc, mode="getc", wait_prompt=False
+            )
             say("typing /center in gui ...")
             send_command_until(
                 monitor, "/center", "chat_mode=center", proc, mode="getc", wait_prompt=False
