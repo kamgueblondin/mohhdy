@@ -1,15 +1,15 @@
 # Migration OS-UI : capacites ASSIST dans le SE graphique
 
 **Date :** 15 septembre 2026
-**Statut :** OS-UI-000 docs. Premieres tranches OS-UI-0/1/2 livrees dans `osui/` (backend `agent/` temporaire). OS-UI-3 ouvert
+**Statut :** OS-UI-000 docs. Premieres tranches OS-UI-0/1/2 livrees dans `osui/` (backend `agent/` temporaire). OS-UI-C (convergence Multiboot) en cours. OS-UI-3 ouvert
 **IDs :** `OS-UI-xxx` (ordonnancement). Les tickets `ASSIST-xxx` restent la spec fonctionnelle
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
 Mohhdy est un seul SE. Les tickets `ASSIST-xxx` de [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) sont des **devoirs du SE**, aujourd'hui portes par le scaffold `agent/` derriere le chrome `osui/`. Ce fichier les range dans des epiques **OS-UI** pour les faire vivre dans le shell graphique et le navigateur-OS, puis retirer la facade Python.
 
-Plan maitre : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Guest mesure : [mohhdy_us.md](mohhdy_us.md) et [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Guide runtime : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md). Interaction : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md). Scene IA : [../docs/osui_ai_stage.md](../docs/osui_ai_stage.md).
+Plan maitre : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Guest mesure : [mohhdy_us.md](mohhdy_us.md) et [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Guide runtime : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md). Interaction : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md). Scene IA : [../docs/osui_ai_stage.md](../docs/osui_ai_stage.md). Live : [../docs/osui_shell_live.md](../docs/osui_shell_live.md). Convergence : [../docs/osui_convergence.md](../docs/osui_convergence.md).
 
-**Prochain build :** OS-UI-3 (retrait facade Python) apres checklist de parite. Ne pas etendre `agent/` comme produit. Ne pas marquer US-031 ni un LLM de production comme livres.
+**Prochain build :** OS-UI-3 (retrait facade Python) apres checklist de parite. OS-UI-C (registre, hook live, scene IA) avance en parallele. Ne pas etendre `agent/` comme produit. Ne pas marquer US-031 ni un LLM de production comme livres.
 
 ## Convention
 
@@ -56,14 +56,14 @@ Gates de chaque epique : moindre privilege, grant/revoke, `request_id`, pas de s
 
 - Etat par defaut : chat large au centre, `llm=stub_echo` visible, `#ai-stage` en fond (mode `reflecting`)
 - Un prompt hors slash met a jour la scene (HTML/SVG stub, allowlist, pas de script) ; modes `reflecting` / `acting` / `presenting`
-- `/help` liste le registre ; `/browser` `/shell` `/admin` `/support` `/status` `/fs` ouvrent le programme
-- `/shell` est le vocabulaire guest Ring 3 (`userspace/shell.c`, prompt `MOHHDY>`), surface bootstrap ; live QEMU/serial non branche
+- `/help` liste le registre ; `/browser` `/shell` `/admin` `/support` `/status` `/fs` `/plan` `/draw` `/guest` ouvrent le programme ou la scene
+- `/shell` est le vocabulaire guest Ring 3 (`userspace/shell.c`, prompt `MOHHDY>`), surface bootstrap ; live QEMU/serial via hook documente
 - A l'ouverture d'un programme, le chat quitte le centre et devient un panneau flottant draggable (coin, z-index au-dessus des fenetres, position `sessionStorage`)
 - Fermer tous les programmes ou `/center` ramene le chat au centre
 - APIs `agent/` inchangees (sessions, admin, tools, FS). Origine binding inchangee. `phase3_complete=false`, `us031_complete=false`
 - ETAT_REEL guest inchange : pas de scene HTML dans le VGA i386
 
-Guides : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md), [../docs/osui_ai_stage.md](../docs/osui_ai_stage.md).
+Guides : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md), [../docs/osui_ai_stage.md](../docs/osui_ai_stage.md), [../docs/osui_shell_live.md](../docs/osui_shell_live.md), [../docs/osui_convergence.md](../docs/osui_convergence.md).
 
 ## OS-UI-1 - Sessions, chat, admin, droits en UI native
 
@@ -92,6 +92,26 @@ Guides : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md), [../docs/
 **Statut.** Premiere tranche livree dans le pane Browser-OS (simulateur etiquete, FS lecture, facture mock). `phase3_complete=false`.
 
 **Hors perimetre.** Declarer US-031 livre. PWA / FS web unifie (US-032 / US-033 maitre).
+
+## OS-UI-C - Convergence vers le SE Multiboot
+
+**En tant que** mainteneur, **je veux** un pont de code entre `osui/` et le guest Ring 3, **afin que** les features atterrissent dans le **meme** SE Multiboot, pas dans un second produit.
+
+**Dependances.** OS-UI-0/1/2 premieres tranches. Gardes guest 0-1 tenues. Pas OS-UI-3 (parite Python d'abord).
+
+**Critere.**
+
+- Un registre partage est genere depuis `userspace/shell.c` (`shared/multiboot_shell_commands.json`)
+- Un header guest declare `MOHHDY_OSUI_GUEST_HTML_STAGE 0`
+- `/shell` peut s'attacher en live (serie/HMP) quand c'est configure ; sinon `live_guest=false` et vocabulaire bootstrap
+- Scene IA : mini-plans stub, dessins SVG, pas de script
+- Prompt OS : ouvrir shell/browser/admin, dessiner, help/ai-help
+- `make osui-smoke` vert ; `make osui-shell-live-smoke` skip QEMU si absent
+- ETAT_REEL inchange : pas de `#ai-stage` guest. `phase3_complete=false`
+
+**Statut.** Premiere tranche livree dans cette epique.
+
+**Hors perimetre.** Framebuffer HTML guest. US-031. Retrait de `agent/`.
 
 ## OS-UI-3 - Retrait de la facade Python
 
@@ -123,6 +143,7 @@ Guides : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md), [../docs/
 | 1 | OS-UI-0 | **premiere tranche** `osui/` chat + scene IA + shell Multiboot | 050/051/052 (boot) |
 | 2 | OS-UI-1 | **premiere tranche** chat + panes Support/Admin | 010-013, 030, 031, 040, 041 |
 | 3 | OS-UI-2 | **premiere tranche** pane Browser-OS | 020-022, 060, 061 |
+| 3b | OS-UI-C | **premiere tranche** registre guest + hook live + scene IA | pont Multiboot |
 | 4 | OS-UI-3 | **prochain** apres parite 1+2 | fin 050-052 |
 | - | Gardes guest 0-4 | parallele | (AOS, pas ASSIST) |
 

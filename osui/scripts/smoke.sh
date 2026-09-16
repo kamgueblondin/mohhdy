@@ -77,6 +77,10 @@ echo "${health}" | grep -q '"chromium_session_engine":false' || echo "${health}"
 echo "${health}" | grep -q 'center_chat' || fail "interaction center_chat"
 echo "${health}" | grep -q 'ai_stage' || fail "interaction ai_stage"
 echo "${health}" | grep -q 'multiboot_shell' || fail "interaction multiboot_shell"
+echo "${health}" | grep -q 'prompt_os' || fail "interaction prompt_os"
+echo "${health}" | grep -q 'autonomous_stage' || fail "interaction autonomous_stage"
+echo "${health}" | grep -q 'shared/multiboot_shell_commands.json' || fail "registre guest"
+echo "${health}" | grep -q '"slash":"/plan"' || echo "${health}" | grep -q '"slash": "/plan"' || fail "commands /plan"
 echo "${health}" | grep -q '"slash":"/help"' || echo "${health}" | grep -q '"slash": "/help"' || fail "commands /help"
 echo "${health}" | grep -q '"slash":"/browser"' || echo "${health}" | grep -q '"slash": "/browser"' || fail "commands /browser"
 echo "${health}" | grep -q 'MOHHDY>' || fail "prompt Multiboot health"
@@ -87,6 +91,8 @@ grep -q 'setChatMode("float")' /tmp/mohhdy-osui-smoke-js || fail "js float on op
 grep -q 'mohhdy.os.chat.pos' /tmp/mohhdy-osui-smoke-js || fail "js persist position"
 grep -q 'window.MohhdyOS' /tmp/mohhdy-osui-smoke-js || fail "js API MohhdyOS"
 grep -q '/api/os/stage' /tmp/mohhdy-osui-smoke-js || fail "js stage API"
+grep -q '/api/os/prompt' /tmp/mohhdy-osui-smoke-js || fail "js prompt OS"
+grep -q 'playPlan' /tmp/mohhdy-osui-smoke-js || fail "js playPlan"
 grep -q 'sanitizeStageHtml' /tmp/mohhdy-osui-smoke-js || fail "js sanitizer"
 
 curl -fsS "${BASE_URL}/os/os.css" -o /tmp/mohhdy-osui-smoke-css
@@ -104,6 +110,23 @@ echo "${stage}" | grep -q '<rect' || fail "stage rect"
 if echo "${stage}" | grep -qi '<script'; then
   fail "stage ne doit pas contenir de script"
 fi
+
+plan="$(curl -fsS -X POST -H 'Content-Type: application/json' \
+  -d '{"prompt":"mini-plan autonome dessine un cercle","autonomous":true}' \
+  "${BASE_URL}/api/os/stage")"
+echo "${plan}" | grep -q '"kind":"plan"' || echo "${plan}" | grep -q '"kind": "plan"' || fail "plan kind"
+echo "${plan}" | grep -q 'reflecting' || fail "plan reflecting"
+tick="$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{}' \
+  "${BASE_URL}/api/os/stage/tick")"
+echo "${tick}" | grep -q 'acting' || fail "plan tick acting"
+
+prompt_os="$(curl -fsS -X POST -H 'Content-Type: application/json' \
+  -d '{"text":"ouvre le shell"}' "${BASE_URL}/api/os/prompt")"
+echo "${prompt_os}" | grep -q 'open_pane' || fail "prompt OS open shell"
+
+cmds="$(fetch /api/os/commands)"
+echo "${cmds}" | grep -q 'vfs-list' || fail "commands vfs-list"
+echo "${cmds}" | grep -q 'guest_html_stage' || fail "commands guest_html_stage flag"
 
 shell_help="$(curl -fsS -X POST -H 'Content-Type: application/json' \
   -d '{"line":"help"}' "${BASE_URL}/api/os/shell")"
@@ -146,4 +169,4 @@ inv_payload="$(printf '{"tool":"mcp.invoice.create","origin":"%s","args":{"custo
 code="$(http_code POST "/api/sessions/${sid}/tools" "${inv_payload}")"
 [ "${code}" = "200" ] || fail "facture accordee doit etre 200 (got ${code})"
 
-echo "OK osui chat-center ai-stage slash-registry multiboot-shell float-drag session origin-deny admin-list gesture invoice"
+echo "OK osui chat-center ai-stage plan prompt-os registry live-attach-path slash-registry multiboot-shell float-drag session origin-deny admin-list gesture invoice"

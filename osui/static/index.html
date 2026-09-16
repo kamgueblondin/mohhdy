@@ -36,6 +36,7 @@
         <header class="ai-stage-chrome">
           <span id="ai-stage-mode" class="ai-stage-mode">reflecting</span>
           <span class="ai-stage-llm">llm=stub_echo</span>
+          <span id="ai-stage-plan" class="ai-stage-plan" hidden></span>
           <span class="ai-stage-note">bootstrap graphique ; pas le VGA guest i386</span>
         </header>
         <div id="ai-stage-content" class="ai-stage-content">
@@ -90,7 +91,7 @@
         </header>
         <p class="os-banner os-chat-banner">
           Surface de commande du SE Multiboot. llm=stub_echo (echo / KB locale, pas un moteur de production).
-          Un prompt hors slash met a jour la scene IA. Raccourcis : /help /browser /shell /admin /support /status /fs.
+          Un prompt hors slash met a jour la scene IA. Raccourcis : /help /browser /shell /admin /support /status /fs /plan /draw /guest.
         </p>
         <ul id="os-slash-registry" class="os-slash-registry" hidden>
           <li data-slash="/help">Liste les raccourcis</li>
@@ -102,6 +103,11 @@
           <li data-slash="/fs">Ouvre le FS sandbox</li>
           <li data-slash="/center">Ferme les programmes et ramene le chat au centre</li>
           <li data-slash="/close">Ferme les programmes</li>
+          <li data-slash="/plan">Mini-plan autonome stub sur la scene IA</li>
+          <li data-slash="/draw">Dessine sur la scene IA</li>
+          <li data-slash="/stage">Met a jour la scene IA</li>
+          <li data-slash="/guest">Statut d'attache guest</li>
+          <li data-slash="/ai-help">Aide IA Multiboot (stub)</li>
         </ul>
         <div id="os-chat-log" class="os-log os-chat-log" aria-live="polite"></div>
         <form id="os-chat-form" class="os-composer">
@@ -230,8 +236,9 @@
         <div class="os-pane shell-pane">
           <p class="os-banner">
             Meme shell que le guest Multiboot Ring 3 (<code>userspace/shell.c</code>).
-            Etat : <strong>bootstrap osui</strong>. Attache live QEMU/serial : <strong>non</strong>.
-            Vocabulaire : help, ai, vfs-list, ls, sysinfo. Pas un bash Linux.
+            Registre partage : <code>shared/multiboot_shell_commands.json</code>.
+            Etat par defaut : <strong>bootstrap osui</strong>. Live : <code>MOHHDY_SHELL_ATTACH=live</code>
+            + serie/HMP. Vocabulaire : help, ai, vfs-list, ls, sysinfo. Pas un bash Linux.
           </p>
           <p id="shell-attach" class="os-hint">attachment=bootstrap live_guest=false qemu_serial=false prompt=MOHHDY&gt;</p>
           <pre id="shell-out" class="os-pre os-term" aria-live="polite"></pre>

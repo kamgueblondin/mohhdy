@@ -1,6 +1,6 @@
 # OS-UI : scene IA du bureau (`#ai-stage`)
 
-**Date :** 15 septembre 2026
+**Date :** 16 septembre 2026
 **Statut :** bootstrap graphique du SE Multiboot Mohhdy (`osui/`)
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
@@ -25,9 +25,14 @@ Modes visibles (etiquette `#ai-stage-mode`) :
 
 | Mode | Role |
 |---|---|
-| `reflecting` | Le stub lit le prompt et expose un plan (boites) |
+| `reflecting` | Le stub lit le prompt et expose un plan (liste + boites) |
 | `acting` | Simulation courte (CSS, pas de JS modele) |
-| `presenting` | Resultat structure (HTML / SVG) |
+| `presenting` | Resultat structure (HTML / SVG : boites, cercle, graphe, arbre, horloge) |
+
+Mini-plan autonome **etiquete stub** : un prompt du type `mini-plan autonome`,
+`etape par etape`, `/plan`, ou `POST` avec `"autonomous": true` enchaine
+reflecting -> acting -> presenting. Le client appelle
+`POST /api/os/stage/tick` (timer). Ce n'est pas un agent de production.
 
 `llm=stub_echo` tant qu'aucun modele reel n'est attache. Ne pas presenter
 le stub comme un LLM de production.
@@ -36,12 +41,15 @@ le stub comme un LLM de production.
 
 ```text
 POST /api/os/stage   {"prompt":"..."}
+POST /api/os/stage   {"prompt":"...","autonomous":true}
+POST /api/os/stage/tick
 GET  /api/os/stage
 ```
 
 JSON : `html`, `mode`, `llm=stub_echo`, `sanitizer=allowlist`,
-`scripts_stripped`. Identite : `GET /api/os` champ `stage`
-(`guest_html_stage=false`).
+`scripts_stripped`, `kind` (`scene` / `plan`), `autonomous`, `label=stub`,
+`step_index`, `done`. Identite : `GET /api/os` champ `stage`
+(`guest_html_stage=false`, `autonomous_plans=true`).
 
 Le client (`os.js`) repeint `#ai-stage-content` apres une **seconde**
 allowlist DOM (pas d'execution de script, pas d'attribut `on*`).
@@ -52,7 +60,8 @@ Allowlist serveur (`osui/stage.py`) et cliente : `div`, `span`, `p`,
 titres, listes, `svg`/`rect`/`circle`/`path`/`text`/`g`, etc. Interdit :
 `script`, `iframe`, `style`, gestionnaires, `javascript:`.
 
-Le stub n'emet que des scenes simples (boites, SVG, simulation CSS).
+Le stub n'emet que des scenes simples (boites, SVG, simulation CSS, arbre
+VFS, graphe, horloge). Un prompt `dessine un cercle` rend un `<circle>`.
 
 ## Preuves
 
@@ -61,4 +70,5 @@ make osui-smoke
 ```
 
 Un prompt `dessine trois boites` remplit la scene (`presenting` + SVG).
-Hors `make ci` QEMU, hors `make integration-qemu`. Pas d'OpenAI.
+Un mini-plan avance via `/api/os/stage/tick`. Hors `make ci` QEMU, hors
+`make integration-qemu`. Pas d'OpenAI.

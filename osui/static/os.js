@@ -20,15 +20,23 @@
     { name: "fs", aliases: ["files", "fichiers"], summary: "Ouvre le FS sandbox lecture", pane: "fs" },
     { name: "center", aliases: ["centre", "desktop"], summary: "Ferme les programmes et ramene le chat au centre" },
     { name: "close", aliases: ["fermer"], summary: "Ferme les programmes" },
+    { name: "plan", aliases: ["mini-plan"], summary: "Mini-plan autonome stub sur #ai-stage" },
+    { name: "draw", aliases: ["dessine"], summary: "Dessine sur la scene IA (stub HTML/SVG)" },
+    { name: "stage", aliases: ["scene"], summary: "Met a jour la scene IA sans ouvrir de pane" },
+    { name: "guest", aliases: ["guest-status"], summary: "Statut d'attache guest (bootstrap/live)" },
+    { name: "ai-help", aliases: ["aihelp"], summary: "Aide IA Multiboot (stub llm=stub_echo)" }
   ];
 
   var PROMPT_OPEN = [
     { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(browser|navigateur|browser-os)\b/i, pane: "browser" },
-    { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(shell|terminal)\b/i, pane: "shell" },
+    { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(shell|terminal|multiboot)\b/i, pane: "shell" },
     { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(admin|console)\b/i, pane: "admin" },
     { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(support|sessions)\b/i, pane: "support" },
     { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(status|statut|sante)\b/i, pane: "status" },
     { re: /\b(open|ouvre|lance|start|ouvrir)\b[\s\S]*\b(fs|fichiers|files|sandbox)\b/i, pane: "fs" },
+    { re: /\b(montre|afficher|affiche)\b[\s\S]*\b(navigateur|browser)\b/i, pane: "browser" },
+    { re: /\b(montre|afficher|affiche)\b[\s\S]*\b(shell|terminal)\b/i, pane: "shell" },
+    { re: /\b(montre|afficher|affiche)\b[\s\S]*\b(admin)\b/i, pane: "admin" }
   ];
 
   function $(id) {
@@ -362,7 +370,8 @@
     COMMANDS.forEach(function (cmd) {
       lines.push("/" + cmd.name + "  " + cmd.summary);
     });
-    lines.push("Equivalent : \"ouvre le navigateur\", \"open shell\".");
+    lines.push("Equivalent : \"ouvre le navigateur\", \"open shell\", \"dessine un cercle\".");
+    lines.push("/plan lance un mini-plan autonome stub (reflecting -> acting -> presenting).");
     lines.push("Un prompt hors slash met a jour #ai-stage (llm=stub_echo).");
     return lines.join("\n");
   }
@@ -396,6 +405,21 @@
       appendChat("sys", "Programmes fermes. Chat au centre.", "os /close");
       return true;
     }
+    if (cmd.name === "plan") {
+      return sendRoutedPrompt("/plan " + (cmd.rest || "mini-plan autonome stub"));
+    }
+    if (cmd.name === "draw") {
+      return sendRoutedPrompt("/draw " + (cmd.rest || "dessine trois boites"));
+    }
+    if (cmd.name === "stage") {
+      return sendRoutedPrompt("/stage " + (cmd.rest || ""));
+    }
+    if (cmd.name === "guest") {
+      return sendRoutedPrompt("/guest");
+    }
+    if (cmd.name === "ai-help") {
+      return sendRoutedPrompt("/ai-help");
+    }
     if (cmd.pane) {
       openPane(cmd.pane);
       appendChat("sys", "Programme ouvert : /" + cmd.name + " (" + cmd.summary + ")", "os /" + cmd.name);
@@ -410,11 +434,19 @@
       return { kind: "empty" };
     }
     if (trimmed.charAt(0) === "/") {
-      var token = trimmed.split(/\s+/)[0];
+      var parts = trimmed.split(/\s+/);
+      var token = parts[0];
       var cmd = findCommand(token);
       if (!cmd) {
         return { kind: "unknown_slash", token: token };
       }
+      cmd = {
+        name: cmd.name,
+        aliases: cmd.aliases,
+        summary: cmd.summary,
+        pane: cmd.pane,
+        rest: parts.slice(1).join(" ")
+      };
       return { kind: "slash", command: cmd };
     }
     var i;
@@ -438,8 +470,7 @@
     }
     if (parsed.kind === "slash") {
       appendChat("human", text, "vous");
-      runCommand(parsed.command);
-      return Promise.resolve();
+      return Promise.resolve(runCommand(parsed.command));
     }
     if (parsed.kind === "prompt_open") {
       appendChat("human", text, "vous");
@@ -447,7 +478,7 @@
       appendChat("sys", "Programme ouvert via prompt : " + parsed.pane, "os");
       return Promise.resolve();
     }
-    return sendOsPrompt(parsed.text);
+    return sendRoutedPrompt(parsed.text);
   }
 
   function showSupportSession(session) {
@@ -553,36 +584,106 @@
   }
 
   function sendOsPrompt(text) {
-    appendChat("human", text, "vous");
+    return sendRoutedPrompt(text);
+  }
+
+  var planTimer = null;
+
+  function stopPlanTimer() {
+    if (planTimer) {
+      window.clearInterval(planTimer);
+      planTimer = null;
+    }
+  }
+
+  function setPlanLabel(payload) {
+    var el = $("ai-stage-plan");
+    if (!el) {
+      return;
+    }
+    if (payload && payload.autonomous) {
+      var idx = (payload.step_index || 0) + 1;
+      var total = payload.step_count || 3;
+      el.textContent = "plan stub " + idx + "/" + total;
+      el.hidden = false;
+    } else {
+      el.textContent = "";
+      el.hidden = true;
+    }
+  }
+
+  function playPlan(payload) {
+    applyStage(payload);
+    stopPlanTimer();
+    if (!payload || !payload.autonomous || payload.done) {
+      return;
+    }
+    var delay = payload.delay_ms || 450;
+    planTimer = window.setInterval(function () {
+      api("/api/os/stage/tick", { method: "POST", body: {} }).then(function (next) {
+        applyStage(next);
+        if (next && next.done) {
+          stopPlanTimer();
+        }
+      }).catch(function () {
+        stopPlanTimer();
+      });
+    }, delay);
+  }
+
+  function sendRoutedPrompt(text) {
+    var trimmed = String(text || "").trim();
+    if (!trimmed) {
+      return Promise.resolve();
+    }
+    if (trimmed.charAt(0) !== "/") {
+      appendChat("human", trimmed, "vous");
+    }
     $("os-chat-error").hidden = true;
     setStageMode("reflecting");
-    var stageReq = api("/api/os/stage", {
+    return api("/api/os/prompt", {
       method: "POST",
-      body: { prompt: text },
-    }).then(function (payload) {
-      applyStage(payload);
-      return payload;
-    }).catch(function (err) {
-      appendChat("sys", "scene IA: " + formatError(err), "os stage");
-    });
-    return ensureSession().then(function (session) {
-      if (!session) {
-        throw new Error("session indisponible");
+      body: { text: trimmed },
+    }).then(function (routed) {
+      if (routed.kind === "open_pane" && routed.pane) {
+        openPane(routed.pane);
+        appendChat("sys", "Programme ouvert via prompt : " + routed.pane, "os");
+        return routed;
       }
-      return api("/api/sessions/" + encodeURIComponent(session.session_id) + "/messages", {
-        method: "POST",
-        body: { content: text },
+      if (routed.kind === "shell") {
+        if (routed.open_shell) {
+          openPane("shell");
+        }
+        if (routed.shell && routed.shell.output) {
+          appendChat("sys", String(routed.shell.output).replace(/\s+$/, ""), "os shell · llm=stub_echo");
+        }
+        if (routed.stage) {
+          playPlan(routed.stage);
+        }
+        return routed;
+      }
+      if (routed.stage) {
+        playPlan(routed.stage);
+      }
+      return ensureSession().then(function (session) {
+        if (!session) {
+          throw new Error("session indisponible");
+        }
+        return api("/api/sessions/" + encodeURIComponent(session.session_id) + "/messages", {
+          method: "POST",
+          body: { content: trimmed },
+        });
+      }).then(function (data) {
+        $("os-chat-input").value = "";
+        var llm = (data && data.llm) || "stub_echo";
+        if (data && data.agent_message && data.agent_message.content) {
+          appendChat("assistant", data.agent_message.content, "assistant · llm=" + llm);
+        } else if (data && data.auto_reply === false) {
+          appendChat("sys", "Pas de reponse auto (session prise par un humain).", "os · llm=" + llm);
+        }
+        refreshSupport();
+        return routed;
       });
-    }).then(function (data) {
-      $("os-chat-input").value = "";
-      var llm = (data && data.llm) || "stub_echo";
-      if (data && data.agent_message && data.agent_message.content) {
-        appendChat("assistant", data.agent_message.content, "assistant · llm=" + llm);
-      } else if (data && data.auto_reply === false) {
-        appendChat("sys", "Pas de reponse auto (session prise par un humain).", "os · llm=" + llm);
-      }
-      refreshSupport();
-      return stageReq;
     }).catch(function (err) {
       $("os-chat-error").hidden = false;
       $("os-chat-error").textContent = formatError(err);
@@ -806,13 +907,14 @@
     DIV: 1, SPAN: 1, P: 1, H1: 1, H2: 1, H3: 1, UL: 1, OL: 1, LI: 1,
     STRONG: 1, EM: 1, SECTION: 1, ARTICLE: 1, HEADER: 1, SVG: 1, RECT: 1,
     CIRCLE: 1, LINE: 1, PATH: 1, TEXT: 1, G: 1, POLYLINE: 1, POLYGON: 1,
-    ELLIPSE: 1
+    ELLIPSE: 1, SMALL: 1, CODE: 1, PRE: 1, BR: 1
   };
   var STAGE_ALLOWED_ATTR = {
     "class": 1, id: 1, role: 1, "aria-label": 1, "data-mode": 1, "data-kind": 1,
     viewBox: 1, viewbox: 1, width: 1, height: 1, x: 1, y: 1, cx: 1, cy: 1, r: 1,
     rx: 1, ry: 1, d: 1, fill: 1, stroke: 1, "stroke-width": 1, transform: 1,
-    points: 1, x1: 1, y1: 1, x2: 1, y2: 1, "text-anchor": 1, opacity: 1
+    points: 1, x1: 1, y1: 1, x2: 1, y2: 1, "text-anchor": 1, opacity: 1,
+    "font-size": 1
   };
 
   function setStageMode(mode) {
@@ -870,6 +972,7 @@
       return;
     }
     setStageMode(payload.mode || "presenting");
+    setPlanLabel(payload);
     var host = $("ai-stage-content");
     if (!host) {
       return;
@@ -895,6 +998,7 @@
     shellPrint("llm=stub_echo  phase3_complete=false  us031_complete=false");
     shellPrint("attachment=bootstrap  live_guest=false  qemu_serial=false");
     shellPrint("Vocabulaire guest : help, ai, vfs-list, ls. Pas un bash Linux.");
+    shellPrint("Live : MOHHDY_SHELL_ATTACH=live + serie/HMP (voir docs/osui_shell_live.md).");
     shellPrint("");
   }
 
@@ -929,7 +1033,8 @@
         attach.textContent =
           "attachment=" + (data.attachment || "bootstrap") +
           " live_guest=" + String(!!data.live_guest) +
-          " qemu_serial=false prompt=" + (data.prompt || "MOHHDY>");
+          " qemu_serial=" + String(!!data.qemu_serial) +
+          " prompt=" + (data.prompt || "MOHHDY>");
       }
     }).catch(function (err) {
       shellPrint(formatError(err));
@@ -1040,7 +1145,7 @@
   }
 
   window.MohhdyOS = {
-    version: "chat-desktop-stage",
+    version: "chat-desktop-stage-live",
     commands: COMMANDS.map(function (cmd) { return "/" + cmd.name; }),
     parseLine: parseLine,
     openPane: openPane,
@@ -1051,6 +1156,7 @@
     setStageMode: setStageMode,
     applyStage: applyStage,
     sanitizeStageHtml: sanitizeStageHtml,
+    playPlan: playPlan,
   };
 
   boot();

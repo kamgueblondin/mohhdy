@@ -135,6 +135,12 @@ html, body {
   border-color: #7ad4c4;
 }
 .ai-stage-llm { color: #f3e6b0; }
+.ai-stage-plan {
+  color: #7ad4c4;
+  border: 1px dashed #3d9a8a;
+  border-radius: 999px;
+  padding: 0.08rem 0.45rem;
+}
 .ai-stage-note { opacity: 0.8; }
 .ai-stage-content {
   flex: 1;
@@ -199,9 +205,27 @@ html, body {
 }
 .ai-sim-box.delay { left: 8.2rem; animation-delay: 0.35s; background: #c9a227; }
 .ai-sim-box.delay2 { left: 15.4rem; animation-delay: 0.7s; background: #7ad4c4; }
+.ai-sim-box.delay3 { left: 22.6rem; animation-delay: 1.05s; background: #6aa0d4; }
 @keyframes ai-sim-move {
   from { transform: translateY(0); }
   to { transform: translateY(1.4rem); }
+}
+.ai-plan, .ai-tree {
+  margin: 0 0 0.85rem 1.1rem;
+  color: var(--os-fg);
+  font-size: 0.88rem;
+}
+.ai-clock-hour {
+  transform-origin: 80px 80px;
+  animation: ai-clock-spin 12s linear infinite;
+}
+.ai-clock-min {
+  transform-origin: 80px 80px;
+  animation: ai-clock-spin 3s linear infinite;
+}
+@keyframes ai-clock-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 .ai-scene svg {
   display: block;

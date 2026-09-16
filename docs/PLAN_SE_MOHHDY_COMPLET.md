@@ -1,7 +1,7 @@
 # Plan maitre du SE Mohhdy
 
 **Date :** 15 septembre 2026
-**Statut :** plan produit. OS-UI-000 docs livres. Premieres tranches OS-UI-0/1/2 dans `osui/` (chat central, scene IA, shell Multiboot, backend `agent/` temporaire). Prochain : OS-UI-3 apres parite. Pas US-031, pas LLM de production
+**Statut :** plan produit. OS-UI-000 docs livres. Premieres tranches OS-UI-0/1/2 dans `osui/` (chat central, scene IA, shell Multiboot, pont registre guest, hook live). OS-UI-C en cours. Prochain retrait facade : OS-UI-3 apres parite. Pas US-031, pas LLM de production
 **Ponctuation :** ASCII usuel et accents francais uniquement
 **Public :** chef de produit, mainteneur, contributeur. Une page pour **toutes** les capacites visees
 
@@ -109,8 +109,9 @@ Present dans `osui/` (premieres tranches OS-UI-0/1/2, pas production) :
 - Entree Docker `mohhdy-os` = ce chrome (`GET /`), sante `GET /health`
 - UI native chat / sessions / droits / escalade / takeover, branchee sur les APIs `agent/`
 - Gestes simulateur, facture MCP demo, vue demo-app et FS sandbox
-- `/shell` = vocabulaire Multiboot Ring 3 (`userspace/shell.c`), surface **bootstrap** (pas un bash Linux, pas un TTY QEMU attache)
-- Prompts hors slash : stub session + HTML/SVG dans `#ai-stage` (`llm=stub_echo`, allowlist, pas de script)
+- `/shell` = vocabulaire Multiboot Ring 3 (`userspace/shell.c`), surface **bootstrap** par defaut, hook live serie/HMP documente (pas un bash Linux)
+- Prompts hors slash : stub session + HTML/SVG dans `#ai-stage` (`llm=stub_echo`, allowlist, mini-plans stub)
+- Pont de convergence : `shared/multiboot_shell_commands.json` + `userspace/mohhdy_osui_bridge.h`
 
 Absent (ne pas marquer livre) :
 
@@ -376,7 +377,7 @@ Interdit : fusionner les deux chemins en "on met Chromium dans QEMU TCG i386 dem
 
 ## 6. Roadmap ordonnee par tranches
 
-Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. OS-UI-000 est docs. OS-UI-0/1/2 premieres tranches : `osui/` + `make osui-smoke`. Prochain retrait facade = **OS-UI-3** (parite d'abord).
+Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. OS-UI-000 est docs. OS-UI-0/1/2 premieres tranches : `osui/` + `make osui-smoke`. Pont convergence (registre guest, hook live, scene IA enrichie) : [osui_convergence.md](osui_convergence.md). Prochain retrait facade = **OS-UI-3** (parite d'abord).
 
 ### 6.1 OS-UI-000. Spec de migration (cette PR)
 
@@ -434,6 +435,27 @@ Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. OS-UI-
 **Verification.** Smoke actes + FS, drapeaux `phase3_complete=false` tant que le moteur web n'est pas un navigateur-OS reel. ETAT_REEL guest inchange.
 
 **Definition of done.** Un acte demo (facture) et un geste allowliste passent par le navigateur-OS de l'instance, journal `request_id`, meme session.
+
+### 6.4bis OS-UI-C. Convergence vers le SE Multiboot
+
+**Statut.** Premiere tranche livree : registre partage, header guest, hook live `/shell`, scene IA multi-etapes, Prompt OS elargi.
+
+**But.** Les features **land in Multiboot SE**. `osui/` reste bootstrap. Un artefact de code aligne osui et `userspace/shell.c`.
+
+**Inclut.**
+
+- `shared/multiboot_shell_commands.json` genere depuis `userspace/shell.c`
+- `userspace/mohhdy_osui_bridge.h` (`MOHHDY_OSUI_GUEST_HTML_STAGE 0`)
+- Hook live `MOHHDY_SHELL_ATTACH=live` + serie/HMP, defaut bootstrap
+- Scene IA : dessins SVG, simulations, mini-plans stub (`/plan`, tick)
+- Routes NL : ouvrir shell/browser/admin, dessiner, help/ai-help guest
+- `make osui-shell-live-smoke` optionnel, skip si pas de QEMU
+
+**N'inclut pas.** Scene HTML dans le VGA guest. US-031. LLM de production. Retrait de `agent/`. Allonger `make integration-qemu`.
+
+**Verification.** `make osui-smoke` (registre `--check`). Live : faux guest serie ; QEMU skip. Guides : [osui_convergence.md](osui_convergence.md), [osui_shell_live.md](osui_shell_live.md).
+
+**Definition of done.** Un PM voit le pont de code, le hook live honnete, et ce qui reste a porter dans le guest.
 
 ### 6.5 OS-UI-3. Retrait progressif de la facade Python
 
@@ -536,6 +558,7 @@ Ce n'est **pas** la sortie de OS-UI-0.
 | OS-UI-0 | Chrome OS a chat central, scene IA et shell Multiboot (`osui/`) ; hors QEMU CI ; pas US-031 |
 | OS-UI-1 | Parite chat/admin/droits/escalade/handoff/origine dans le shell ; stub honnete |
 | OS-UI-2 | Premiere tranche : actes + FS dans le pane Browser-OS ; preuves negatives ; pas Chromium |
+| OS-UI-C | Registre guest + hook live honnete + scene IA multi-etapes ; pas VGA HTML guest |
 | OS-UI-3 | Facade Python retiree apres parite mesuree |
 | Garde 0 | 7 contrats, < 25 min, smoke multi-pairs CI |
 | Garde 1 | Preuves ACL prefixe, diagnostic sans prefixe |
@@ -587,6 +610,6 @@ Minimum a cocher, comportement contre comportement :
 - [../US/mohhdy_user_stories_master.md](../US/mohhdy_user_stories_master.md)
 - [../US/individual_us/INDEX.md](../US/individual_us/INDEX.md)
 - Guides `assist010` ... `assist060`, `assist_playwright_optional.md`, `assist051_052_053_deploy.md`
-- [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md)
+- [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md), [osui_shell_live.md](osui_shell_live.md), [osui_convergence.md](osui_convergence.md)
 
 En cas de contradiction sur le **guest**, ETAT_REEL et `mohhdy_us.md` priment. En cas de contradiction sur l'**ordre produit**, ce plan prime sur les recits "track Agent Support" anterieurs.

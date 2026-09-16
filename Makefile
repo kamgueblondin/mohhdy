@@ -640,12 +640,16 @@ ci: all test-all qemu-smoke qemu-ne2k-tls-multipair
 	@echo "=== CI locale OK (build + tests + smokes QEMU locaux) ==="
 
 # Scaffold userspace HTTP de l'instance Mohhdy (stdlib). Hors ci / integration-qemu.
-.PHONY: agent-smoke agent-docker agent-install-check agent-hypervisor-dry-run agent-deploy-check osui-smoke osui-docker
+.PHONY: agent-smoke agent-docker agent-install-check agent-hypervisor-dry-run agent-deploy-check osui-smoke osui-docker osui-shell-live-smoke
 agent-smoke:
 	@python3 agent/tests/test_http.py
 
 osui-smoke:
+	@python3 osui/scripts/extract_guest_commands.py --check
 	@python3 -m unittest discover -s osui/tests -p 'test_*.py'
+
+osui-shell-live-smoke:
+	@python3 osui/scripts/live_smoke.py
 
 osui-docker:
 	@command -v docker >/dev/null 2>&1 || { \
@@ -725,7 +729,8 @@ help:
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
 	@echo "  agent-smoke     - Fumee HTTP instance (gestes, MCP, origine embed, /browser, FS sandbox, 501 Playwright absent ; hors ci / QEMU)"
-	@echo "  osui-smoke      - Fumee shell graphique OS-UI (chat, scene IA, shell Multiboot, session, origine, admin, geste ; hors ci / QEMU)"
+	@echo "  osui-smoke      - Fumee shell graphique OS-UI (chat, scene IA, shell Multiboot, registre guest, session, origine, admin, geste ; hors ci / QEMU)"
+	@echo "  osui-shell-live-smoke - Attache live best-effort (faux guest serie ; skip QEMU si absent ; hors ci)"
 	@echo "  osui-docker     - Construit l'image Docker mohhdy-os (entree produit, shell graphique, hors ci)"
 	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent slim (backend temporaire, hors ci, sans Chromium)"
 	@echo "  agent-install-check - Install native temporaire + /health (ASSIST-051, hors ci)"

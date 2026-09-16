@@ -4,7 +4,9 @@
 pas un produit "Agent Support" a cote du noyau. L'entree produit Docker
 est le shell graphique `osui/` ([../docs/osui_0_1_2.md](../docs/osui_0_1_2.md),
 [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md),
-[../docs/osui_ai_stage.md](../docs/osui_ai_stage.md)).
+[../docs/osui_ai_stage.md](../docs/osui_ai_stage.md),
+[../docs/osui_shell_live.md](../docs/osui_shell_live.md),
+[../docs/osui_convergence.md](../docs/osui_convergence.md)).
 Origine HTTP, widget d'embed, sessions visiteur isolees, base autorisee
 locale, masque de droits, escalade, handoff humain, simulateur de gestes
 DOM, facture mock, vue navigateur d'instance (`/browser`) et FS sandbox

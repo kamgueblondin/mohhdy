@@ -62,6 +62,33 @@ class StageReasoner(unittest.TestCase):
         self.assertIn("<svg", presenting["html"])
         self.assertIn("<rect", presenting["html"])
 
+        circle = stage.reason_stage("dessine un cercle")
+        self.assertEqual(circle["mode"], "presenting")
+        self.assertIn("<circle", circle["html"])
+
+        graph = stage.reason_stage("dessine un graphe")
+        self.assertIn("<line", graph["html"])
+
+    def test_autonomous_plan_and_tick(self) -> None:
+        plan = stage.reason_stage("mini-plan autonome puis presente")
+        self.assertTrue(plan["autonomous"])
+        self.assertEqual(plan["kind"], "plan")
+        self.assertEqual(plan["label"], "stub")
+        self.assertEqual(plan["mode"], "reflecting")
+        self.assertEqual(plan["step_count"], 3)
+        self.assertFalse(plan["done"])
+        store = stage.StageState()
+        first = store.apply_prompt("etape par etape dessine un cercle", autonomous=True)
+        self.assertTrue(first["autonomous"])
+        second = store.tick()
+        self.assertEqual(second["mode"], "acting")
+        third = store.tick()
+        self.assertEqual(third["mode"], "presenting")
+        self.assertTrue(third["done"])
+        self.assertIn("<circle", third["html"])
+        fourth = store.tick()
+        self.assertTrue(fourth["done"])
+
     def test_prompt_script_is_escaped_caption(self) -> None:
         payload = stage.reason_stage('<script>alert(1)</script> dessine')
         self.assertEqual(payload["mode"], "presenting")

@@ -54,6 +54,9 @@ class OsuiHttpSmoke(unittest.TestCase):
         os.environ.pop("MOHHDY_AGENT_SITE_ID", None)
         os.environ.pop("MOHHDY_AGENT_RUNTIME", None)
         os.environ.pop("MOHHDY_AGENT_BROWSER_ENGINE", None)
+        os.environ.pop("MOHHDY_SHELL_ATTACH", None)
+        os.environ.pop("MOHHDY_GUEST_SERIAL", None)
+        os.environ.pop("MOHHDY_GUEST_MONITOR", None)
         cls.httpd = osui_server.make_server("127.0.0.1", 0)
         cls.port = cls.httpd.server_address[1]
         cls.base = "http://127.0.0.1:%d" % cls.port
@@ -144,7 +147,12 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertIn('id="ai-stage"', html)
         self.assertIn('data-testid="ai-stage"', html)
         self.assertIn("Scene IA", html)
-        self.assertIn("live_guest=false", html)
+        self.assertIn('data-slash="/plan"', html)
+        self.assertIn('data-slash="/draw"', html)
+        self.assertIn('data-slash="/guest"', html)
+        self.assertIn('id="ai-stage-plan"', html)
+        self.assertIn("shared/multiboot_shell_commands.json", html)
+        self.assertIn("MOHHDY_SHELL_ATTACH", html)
         lowered = html.lower()
         for marker in SECRET_MARKERS:
             self.assertNotIn(marker.lower(), lowered)
@@ -176,7 +184,11 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertIn("/api/os/stage", js)
         self.assertIn("/api/os/shell", js)
         self.assertIn("sanitizeStageHtml", js)
-        self.assertIn("applyStage", js)
+        self.assertIn("playPlan", js)
+        self.assertIn("/api/os/prompt", js)
+        self.assertIn("/api/os/stage/tick", js)
+        self.assertIn('name: "plan"', js)
+        self.assertIn('name: "draw"', js)
         self.assertIn("toUpperCase", js)
         self.assertIn("MOHHDY>", js)
         self.assertIn("Pas un bash Linux", js)
@@ -193,14 +205,31 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertTrue(os_json["interaction"]["floating_chat"])
         self.assertTrue(os_json["interaction"]["chat_drag"])
         self.assertTrue(os_json["interaction"]["ai_stage"])
-        self.assertTrue(os_json["interaction"]["multiboot_shell"])
-        self.assertEqual(os_json["interaction"]["chat_pos_key"], "mohhdy.os.chat.pos")
+        self.assertTrue(os_json["interaction"]["prompt_os"])
+        self.assertTrue(os_json["interaction"]["autonomous_stage"])
+        self.assertTrue(os_json["interaction"]["live_attach"])
+        self.assertGreaterEqual(os_json["registry"]["count"], 100)
+        self.assertIn("vfs-list", os_json["registry"]["commands"])
+        self.assertFalse(os_json["registry"]["guest_html_stage"])
+        self.assertEqual(os_json["attach"]["requested"], "bootstrap")
         self.assertEqual(os_json["stage"]["id"], "ai-stage")
         self.assertFalse(os_json["stage"]["guest_html_stage"])
+        self.assertTrue(os_json["stage"]["autonomous_plans"])
         self.assertEqual(os_json["multiboot_shell"]["prompt"], "MOHHDY>")
         self.assertFalse(os_json["multiboot_shell"]["live_guest"])
         self.assertFalse(os_json["multiboot_shell"]["qemu_serial"])
-        for slash in ("/help", "/browser", "/shell", "/admin", "/support", "/status", "/fs"):
+        for slash in (
+            "/help",
+            "/browser",
+            "/shell",
+            "/admin",
+            "/support",
+            "/status",
+            "/fs",
+            "/plan",
+            "/draw",
+            "/guest",
+        ):
             self.assertIn(slash, slashes)
             self.assertIn('data-slash="%s"' % slash, html)
         self.assertIn("shell", os_json["panes"])
@@ -360,6 +389,50 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertNotIn("api_key", dumped)
         self.assertNotIn("openai", dumped)
 
+    def test_autonomous_plan_tick_and_prompt_os(self) -> None:
+        plan, status, _ = self._post_json(
+            "/api/os/stage",
+            {"prompt": "mini-plan autonome dessine un cercle", "autonomous": True},
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(plan["autonomous"])
+        self.assertEqual(plan["kind"], "plan")
+        self.assertEqual(plan["mode"], "reflecting")
+        tick, _, _ = self._post_json("/api/os/stage/tick", {})
+        self.assertEqual(tick["mode"], "acting")
+        tick2, _, _ = self._post_json("/api/os/stage/tick", {})
+        self.assertEqual(tick2["mode"], "presenting")
+        self.assertTrue(tick2["done"])
+        self.assertIn("<circle", tick2["html"])
+        routed, _, _ = self._post_json(
+            "/api/os/prompt", {"text": "ouvre le shell"}
+        )
+        self.assertEqual(routed["kind"], "open_pane")
+        self.assertEqual(routed["pane"], "shell")
+        draw, _, _ = self._post_json(
+            "/api/os/prompt", {"text": "dessine un cercle"}
+        )
+        self.assertEqual(draw["kind"], "stage")
+        self.assertIn("<circle", draw["stage"]["html"])
+        help_route, _, _ = self._post_json(
+            "/api/os/prompt", {"text": "liste les commandes guest"}
+        )
+        self.assertEqual(help_route["kind"], "shell")
+        self.assertIn("vfs-list", help_route["shell"]["output"])
+        trap_prompt, _, _ = self._post_json(
+            "/api/os/prompt", {"text": "apt install nginx"}
+        )
+        self.assertEqual(trap_prompt["kind"], "shell")
+        self.assertTrue(trap_prompt.get("refused_linux"))
+        self.assertIn("Pas un bash Linux", trap_prompt["shell"]["output"])
+        commands, _, _ = self._get_json("/api/os/commands")
+        self.assertIn("vfs-list", commands["commands"])
+        attach, _, _ = self._get_json("/api/os/attach")
+        self.assertFalse(attach["live_guest"])
+        attach_post, _, _ = self._post_json("/api/os/attach", {"action": "attach"})
+        self.assertFalse(attach_post["live_guest"])
+        self.assertEqual(attach_post["rc"], 1)
+
     def test_multiboot_shell_http(self) -> None:
         meta, _, _ = self._get_json("/api/os/shell")
         self.assertEqual(meta["prompt"], "MOHHDY>")
@@ -367,6 +440,8 @@ class OsuiHttpSmoke(unittest.TestCase):
         self.assertFalse(meta["live_guest"])
         self.assertIn("ai", meta["commands"])
         self.assertIn("vfs-list", meta["commands"])
+        self.assertGreaterEqual(len(meta["commands"]), 100)
+        self.assertIn("shared/multiboot_shell_commands.json", meta["registry"])
         help_body, status, _ = self._post_json("/api/os/shell", {"line": "help"})
         self.assertEqual(status, 200)
         self.assertEqual(help_body["rc"], 0)

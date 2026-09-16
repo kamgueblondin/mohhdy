@@ -1,120 +1,41 @@
 #!/usr/bin/env python3
 """Shell Multiboot du SE (meme vocabulaire que userspace/shell.c Ring 3).
 
-Surface bootstrap osui : les commandes portent les noms du guest
-(ai, vfs-list, help, ...). QEMU n'est pas dans ce processus ; l'attache
-live (serie / HMP) n'est pas branchee. Ne pas inventer un bash Linux.
+Surface bootstrap osui par defaut. Attache live optionnelle via
+osui/guest_attach.py (MOHHDY_SHELL_ATTACH=live + serie/HMP).
+Ne pas inventer un bash Linux. Le guest n'heberge pas #ai-stage.
 """
 
 from __future__ import annotations
 
+from command_registry import REGISTRY
+from guest_attach import (
+    ATTACH_BOOTSTRAP,
+    ATTACH_LIVE,
+    AttachConfig,
+    GuestLink,
+)
 from stage import LLM_KIND, reason_stage
 
-PROMPT = "MOHHDY>"
-SOURCE = "userspace/shell.c"
-ATTACHMENT_BOOTSTRAP = "bootstrap"
-ATTACHMENT_LIVE = "live_guest"
-
-GUEST_COMMANDS = (
-    "help",
-    "ls",
-    "dir",
-    "pwd",
-    "whoami",
-    "sysinfo",
-    "info",
-    "ps",
-    "mem",
-    "memory",
-    "echo",
-    "clear",
-    "cls",
-    "which",
-    "rc",
-    "date",
-    "uptime",
-    "getpid",
-    "history",
-    "env",
-    "ai",
-    "ai-help",
-    "aihelp",
-    "ai-mode",
-    "aimode",
-    "ai-stats",
-    "aistats",
-    "ai-provider",
-    "ai-runtime",
-    "ai-model",
-    "ai-continue",
-    "ai-test",
-    "aitest",
-    "vfs-list",
-    "vfs-read",
-    "vfs-stat",
-    "vfs-stats",
-    "vfs-write",
-    "vfs-remove",
-    "vfs-rename",
-    "vfs-mkdir",
-    "vfs-rmdir",
-    "vfs-mount-add",
-    "vfs-mount-remove",
-    "fat16-list",
-    "fat16-cat",
-    "net-status",
-    "spawn",
-    "yield",
-    "ipc-send",
-    "ipc-recv",
-    "service-find",
-    "service-status",
-    "cat",
-    "stat",
-    "mkdir",
-    "rmdir",
-    "rm",
-    "touch",
-    "write",
-    "append",
-    "attach",
-    "detach",
-    "guest-status",
-)
-
-LINUX_TRAPS = frozenset(
-    {
-        "bash",
-        "sh",
-        "zsh",
-        "apt",
-        "apt-get",
-        "yum",
-        "dnf",
-        "dpkg",
-        "sudo",
-        "systemctl",
-        "chmod",
-        "chown",
-        "uname",
-        "docker",
-        "systemd",
-    }
-)
-
+PROMPT = REGISTRY.prompt
+SOURCE = REGISTRY.source
+GUEST_COMMANDS = REGISTRY.guest_commands
+LINUX_TRAPS = REGISTRY.linux_traps
 OSUI_PANES = ("browser", "shell", "admin", "support", "status", "fs")
+LOCAL_ONLY = frozenset({"attach", "detach", "guest-status", "open", "clear", "cls"})
 
 HELP_TEXT = """=== MOHHDY Shell (Multiboot Ring 3) ===
-Surface : bootstrap osui. Attache guest live : non.
-Source guest : userspace/shell.c  prompt guest : MOHHDY>
-Pas un bash Linux. Pas un TTY QEMU attache.
+Surface : bootstrap osui sauf attache live reussie.
+Source guest : %s  prompt guest : %s
+Registre partage : shared/multiboot_shell_commands.json (%d noms).
+Pas un bash Linux. Live : MOHHDY_SHELL_ATTACH=live + serie/HMP.
 
 COMMANDES SYSTEME :
   ls [path]          - Lister initrd + overlay (miroir bootstrap)
   cat <file>         - Afficher un fichier du miroir
   pwd                - Repertoire courant
   whoami             - Identite shell Multiboot
-  sysinfo            - Informations systeme (bootstrap)
+  sysinfo            - Informations systeme (bootstrap ou guest live)
   ps                 - Taches (miroir, pas le scheduler guest)
   mem                - Memoire (diagnostic bootstrap)
   which <cmd>        - Builtin guest ou bin/
@@ -125,8 +46,8 @@ COMMANDES IA (guest : SYS_GPT2_GENERATE / GGUF) :
   ai-mode [on|off]   - Mode IA local (stub)
   ai-stats           - Stats stub
   ai-provider        - local (openai refuse ici comme au guest)
-  ai-runtime         - Etat honnete stub / pas de live QEMU
-  ai-continue        - Continuation : non attachee au runtime GGUF
+  ai-runtime         - Etat honnete stub / attache
+  ai-continue        - Continuation : non attachee au runtime GGUF hors live
 
 COMMANDES VFS (guest : vfsserver / vfsvirtual) :
   vfs-list <repertoire/>
@@ -138,18 +59,18 @@ COMMANDES VFS (guest : vfsserver / vfsvirtual) :
   fat16-list / fat16-cat
 
 RESEAU :
-  net-status         - nic=absent (pas de NE2000 dans osui)
+  net-status         - nic=absent hors live (pas de NE2000 dans osui)
 
 ATTACHE :
   guest-status       - bootstrap vs live
-  attach             - refuse : QEMU/serial non branche
-  detach             - reste bootstrap
+  attach             - tente QEMU serial/HMP si configure
+  detach             - revient au bootstrap
 
 OS-UI (hors guest, fenetres du chrome) :
   open browser|shell|admin|support|status|fs
 
 Tapez help. llm=%s. phase3_complete=false. us031_complete=false.
-""" % LLM_KIND
+""" % (SOURCE, PROMPT, len(GUEST_COMMANDS), LLM_KIND)
 
 AI_HELP_TEXT = """=== Guide IA (mapping guest ai-help) ===
 Guest Ring 3 : ai <texte> appelle SYS_GPT2_GENERATE ou GGUF.
@@ -205,11 +126,16 @@ def _join_cwd(cwd: str, path: str) -> str:
 class MultibootShell:
     """Interpreteur bootstrap aligne sur le shell ELF Ring 3."""
 
-    def __init__(self) -> None:
+    def __init__(self, attach_config: AttachConfig | None = None) -> None:
+        self.attach_config = attach_config or AttachConfig.from_env()
+        self.guest_link = GuestLink(self.attach_config)
         self.reset()
+        if self.attach_config.mode == ATTACH_LIVE:
+            self.try_attach()
 
     def reset(self) -> None:
-        self.attachment = ATTACHMENT_BOOTSTRAP
+        self.guest_link.close()
+        self.attachment = ATTACH_BOOTSTRAP
         self.cwd = "initrd/"
         self.last_rc = 0
         self.ai_mode = True
@@ -217,21 +143,30 @@ class MultibootShell:
         self.env = {
             "SHELL": SOURCE,
             "LLM": LLM_KIND,
-            "ATTACHMENT": ATTACHMENT_BOOTSTRAP,
+            "ATTACHMENT": ATTACH_BOOTSTRAP,
         }
 
+    def _is_live(self) -> bool:
+        return self.attachment == ATTACH_LIVE and self.guest_link.live
+
     def public_meta(self) -> dict:
+        live = self._is_live()
         return {
             "prompt": PROMPT,
             "attachment": self.attachment,
-            "live_guest": self.attachment == ATTACHMENT_LIVE,
-            "qemu_serial": False,
+            "live_guest": live,
+            "qemu_serial": bool(self.guest_link.serial),
+            "qemu_monitor": bool(self.guest_link.hmp),
             "source": SOURCE,
             "commands": list(GUEST_COMMANDS),
+            "command_count": len(GUEST_COMMANDS),
             "linux_bash": False,
+            "registry": "shared/multiboot_shell_commands.json",
+            "attach": self.attach_config.public_dict(),
+            "transport": self.guest_link.transport_used or None,
             "note": (
                 "Meme vocabulaire que le shell Multiboot Ring 3. "
-                "Live QEMU/serial non branche dans osui."
+                "Live QEMU/serial seulement si attache reussi."
             ),
         }
 
@@ -260,8 +195,25 @@ class MultibootShell:
                 1,
             )
 
+        if cmd not in LOCAL_ONLY and self._is_live():
+            output, rc = self.guest_link.execute(trimmed)
+            extra = None
+            if cmd == "ai":
+                question = " ".join(args).strip()
+                if question:
+                    extra = {"stage": reason_stage(question)}
+            self.last_rc = rc
+            payload = self._result(output, rc)
+            if extra:
+                payload.update(extra)
+            return payload
+
         handler = self._handlers().get(cmd)
         if handler is None:
+            if cmd in GUEST_COMMANDS:
+                output, rc, extra = self._cmd_not_live(args)
+                self.last_rc = rc
+                return self._result(output, rc)
             self.last_rc = 1
             return self._result(
                 "commande inconnue. help pour la liste (Multiboot Ring 3, pas un bash).\n",
@@ -281,7 +233,9 @@ class MultibootShell:
             "rc": rc,
             "prompt": PROMPT,
             "attachment": self.attachment,
-            "live_guest": False,
+            "live_guest": self._is_live(),
+            "qemu_serial": bool(self.guest_link.serial),
+            "transport": self.guest_link.transport_used or None,
             "llm": LLM_KIND,
             "cwd": self.cwd,
         }
@@ -358,7 +312,15 @@ class MultibootShell:
         }
 
     def _banner_line(self) -> str:
-        return "attachment=%s live_guest=false qemu_serial=false\n" % self.attachment
+        return (
+            "attachment=%s live_guest=%s qemu_serial=%s transport=%s\n"
+            % (
+                self.attachment,
+                "true" if self._is_live() else "false",
+                "true" if self.guest_link.serial else "false",
+                self.guest_link.transport_used or "none",
+            )
+        )
 
     def _cmd_help(self, args: list[str]):
         return HELP_TEXT if HELP_TEXT.endswith("\n") else HELP_TEXT + "\n", 0, None
@@ -520,11 +482,15 @@ class MultibootShell:
             "ai-runtime\n"
             "  llm=%s\n"
             "  guest_mapping=SYS_GPT2_GENERATE / GGUF session ai / ai-continue\n"
-            "  live_guest=false\n"
-            "  qemu_serial=false\n"
+            "  live_guest=%s\n"
+            "  qemu_serial=%s\n"
             "  phase3_complete=false\n"
             "  us031_complete=false\n"
-        ) % LLM_KIND
+        ) % (
+            LLM_KIND,
+            "true" if self._is_live() else "false",
+            "true" if self.guest_link.serial else "false",
+        )
         return text, 0, None
 
     def _cmd_ai_model(self, args: list[str]):
@@ -615,27 +581,80 @@ class MultibootShell:
     def _cmd_not_live(self, args: list[str]):
         return (
             "commande guest connue, non executee : live QEMU/serial "
-            "non branche (attachment=bootstrap).\n"
-        ), 1, None
+            "non branche (attachment=%s). "
+            "Configurer MOHHDY_SHELL_ATTACH=live et MOHHDY_GUEST_SERIAL "
+            "ou MOHHDY_GUEST_MONITOR, puis attach.\n"
+        ) % self.attachment, 1, None
+
+    def try_attach(self) -> tuple[str, int]:
+        cfg = self.attach_config
+        if not cfg.serial and not cfg.monitor:
+            self.attachment = ATTACH_BOOTSTRAP
+            self.env["ATTACHMENT"] = ATTACH_BOOTSTRAP
+            return (
+                "attach: live indisponible (MOHHDY_GUEST_SERIAL / "
+                "MOHHDY_GUEST_MONITOR absents). "
+                "Etat: bootstrap live_guest=false. "
+                "Voir docs/osui_shell_live.md.\n"
+            ), 1
+        ok = self.guest_link.connect()
+        if not ok:
+            self.attachment = ATTACH_BOOTSTRAP
+            self.env["ATTACHMENT"] = ATTACH_BOOTSTRAP
+            return (
+                "attach: echec (%s). "
+                "Reste bootstrap. live_guest=false. "
+                "Le guest Multiboot n'est pas attache.\n"
+            ) % (self.guest_link.last_error or "connexion refusee"), 1
+        self.attachment = ATTACH_LIVE
+        self.env["ATTACHMENT"] = ATTACH_LIVE
+        return (
+            "attach ok live_guest=true transport=%s prompt=%s\n"
+            "Scene HTML #ai-stage reste osui (pas le VGA guest).\n"
+        ) % (self.guest_link.transport_used or "unknown", PROMPT), 0
 
     def _cmd_attach(self, args: list[str]):
-        return (
-            "attach: live QEMU/serial n'est pas branche dans ce processus osui.\n"
-            "Etat: bootstrap. Le guest Multiboot (%s) n'est pas attache.\n"
-            "Futur: attache serie/HMP sans pretendre que c'est deja le cas.\n"
-        ) % SOURCE, 1, None
+        if args:
+            kind = args[0]
+            if kind.startswith("unix:") or kind.startswith("tcp:") or kind.startswith("/"):
+                self.attach_config.serial = kind
+                self.attach_config.mode = ATTACH_LIVE
+        output, rc = self.try_attach()
+        return output, rc, None
 
     def _cmd_detach(self, args: list[str]):
-        self.attachment = ATTACHMENT_BOOTSTRAP
-        self.env["ATTACHMENT"] = ATTACHMENT_BOOTSTRAP
+        was_live = self._is_live()
+        self.guest_link.close()
+        self.attachment = ATTACH_BOOTSTRAP
+        self.env["ATTACHMENT"] = ATTACH_BOOTSTRAP
+        if was_live:
+            return "detach: bootstrap. live_guest=false\n", 0, None
         return "detach: deja bootstrap. live_guest=false\n", 0, None
 
     def _cmd_guest_status(self, args: list[str]):
+        live = self._is_live()
         return (
-            "guest-status attachment=%s live_guest=false qemu_serial=false\n"
-            "source=%s prompt=%s\n"
+            "guest-status attachment=%s live_guest=%s qemu_serial=%s "
+            "transport=%s\n"
+            "source=%s prompt=%s registry=shared/multiboot_shell_commands.json\n"
             "scene_html=#ai-stage (osui seulement, pas le guest VGA)\n"
-        ) % (self.attachment, SOURCE, PROMPT), 0, None
+            "%s"
+        ) % (
+            self.attachment,
+            "true" if live else "false",
+            "true" if self.guest_link.serial else "false",
+            self.guest_link.transport_used or "none",
+            SOURCE,
+            PROMPT,
+            self.attach_config.public_dict()["env"]
+            and (
+                "env MOHHDY_SHELL_ATTACH=%s MOHHDY_GUEST_SERIAL=%s\n"
+                % (
+                    self.attach_config.mode,
+                    self.attach_config.serial or "(vide)",
+                )
+            ),
+        ), 0, None
 
     def _cmd_open(self, args: list[str]):
         target = (args[0] if args else "").lower()

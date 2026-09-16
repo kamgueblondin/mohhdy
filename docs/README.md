@@ -10,7 +10,7 @@ Depuis la racine du dépôt : `make deps` (script [`scripts/bootstrap-dev.sh`](.
 2. [BILAN_MASTER.md](BILAN_MASTER.md) - bilan de `origin/master` au 13 septembre 2026 (`9078d5f`)
 3. [vocabulaire.md](vocabulaire.md) - termes du SE (guest vs instance, pas une identite Linux)
 4. [../US/mohhdy_us.md](../US/mohhdy_us.md) - user stories du prototype (fait + suite, dont FAT16 mutate 8.3 et réseau local)
-5. [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) - **roadmap produit** : catalogue des capacites, OS-UI-0..3, gates. Premieres tranches OS-UI-0/1/2 : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md)
+5. [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) - **roadmap produit** : catalogue des capacites, OS-UI-0..3 + OS-UI-C, gates. Premieres tranches OS-UI-0/1/2 : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md), [osui_shell_live.md](osui_shell_live.md), [osui_convergence.md](osui_convergence.md)
 6. [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) - gardes guest 0-4 (CI, ACL, GGUF, stockage)
 7. [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md) - epiques de portage ASSIST vers l'OS graphique
 8. [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/` a migrer
@@ -33,7 +33,9 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 | [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) | **Roadmap produit** : toutes les capacites visees, OS-UI-0..3, checklist par PR. Premieres tranches OS-UI-0/1/2 livrees |
 | [osui_0_1_2.md](osui_0_1_2.md) | Shell graphique `osui/` : Docker `mohhdy-os`, scene IA, shell Multiboot, smoke, drapeaux honnetes |
 | [osui_chat_desktop.md](osui_chat_desktop.md) | Interaction : chat central, raccourcis slash, chat flottant, `/shell` guest |
-| [osui_ai_stage.md](osui_ai_stage.md) | Bureau = scene IA HTML (stub, allowlist, pas le VGA guest) |
+| [osui_ai_stage.md](osui_ai_stage.md) | Bureau = scene IA HTML (stub, mini-plans, pas le VGA guest) |
+| [osui_shell_live.md](osui_shell_live.md) | Hook live `/shell` QEMU serial/HMP, defaut bootstrap |
+| [osui_convergence.md](osui_convergence.md) | Pont registre guest / header ; features land in Multiboot SE |
 | [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Gardes guest 0-4 ; pointe vers le plan maitre pour le portage OS+UI |
 | [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md) | Epiques OS-UI : chrome graphique, portage chat/admin/droits, actes navigateur-OS, retrait Python |
 | [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Capacites OS (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo / `/browser` / FS sandbox dans `agent/` (stub local, Playwright optionnel, pas US-031). A porter dans l'OS+UI. Packaging 051-053 : scaffold |
@@ -122,7 +124,9 @@ Les captures QEMU et les exports Word ont été retirés du dépôt (la source r
 - [../US/README.md](../US/README.md) - un produit, deux niveaux de maturite (guest vs instance autonome)
 - [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) - roadmap produit et catalogue des capacites visees
 - [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md) - portage ASSIST vers OS+UI (`OS-UI-xxx`)
-- [osui_ai_stage.md](osui_ai_stage.md) - scene IA du bureau (stub HTML, pas le guest)
+- [osui_ai_stage.md](osui_ai_stage.md) - scene IA du bureau (stub HTML, mini-plans, pas le guest)
+- [osui_shell_live.md](osui_shell_live.md) - attache live /shell (best-effort)
+- [osui_convergence.md](osui_convergence.md) - pont registre Multiboot
 - [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/` (bootstrap a migrer)
 - [assist050_docker_runtime.md](assist050_docker_runtime.md) - `docker run` et fumée de l'image agent
 - [assist060_061_browser.md](assist060_061_browser.md) - vue navigateur d'instance et FS sandbox

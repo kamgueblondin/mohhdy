@@ -306,6 +306,33 @@ def wait_for_single_io_delivery(client, proc, needle, start, rounds=4):
         raise error or caught
 
 
+def wait_for_write_delivery(client, proc, path, start):
+    """Attendu worker + delegation + ok public, sans rejouer la mutation."""
+    wait_for("vfs-write ok request", proc, start)
+    wait_for("vfsserver delegated write", proc, start)
+    wait_for("vfsvirtual write %s" % path, proc, start)
+
+
+def read_until_payload(client, proc, path, payload, attempts=4):
+    """Relit un backend FAT sans rejouer l'ecriture.
+
+    Apres vfs-write delegue au worker, vfsserver relit localement SYS_FAT16_READ.
+    Sur runner CI, la premiere lecture peut renvoyer la taille exacte mais une
+    charge nulle ; un second vfs-read (pas un second vfs-write) voit les clusters.
+    """
+    error = None
+    for _ in range(attempts):
+        before = len(log_text())
+        send_command_until(client, "vfs-read %s" % path, "vfs-read ok", proc)
+        try:
+            wait_for(payload, proc, before, timeout=4)
+            return
+        except RuntimeError as caught:
+            error = caught
+        send_command_until(client, "yield", "yield ok", proc)
+    raise error or RuntimeError("sortie manquante : %s" % payload)
+
+
 def assert_lfn_lifecycle(client, proc, mount, name, renamed, payload):
     """Valide les mutations LFN racine via le VFS, sans écrasement implicite."""
     path = "%s/%s" % (mount, name)
@@ -320,9 +347,7 @@ def assert_lfn_lifecycle(client, proc, mount, name, renamed, payload):
     send_command_until(client, "vfs-write %s collision" % path,
                        "vfsserver write request", proc)
     wait_for("vfs-write: ecriture refusee", proc, before_collision)
-    before_read = len(log_text())
-    send_command_until(client, "vfs-read %s" % path, "vfs-read ok", proc)
-    wait_for(payload, proc, before_read)
+    read_until_payload(client, proc, path, payload)
     before_rename = len(log_text())
     send_command_until(client, "vfs-rename %s %s" % (path, renamed_path),
                        "vfsserver rename request", proc)
@@ -332,9 +357,7 @@ def assert_lfn_lifecycle(client, proc, mount, name, renamed, payload):
     before_old_read = len(log_text())
     send_command_until(client, "vfs-read %s" % path, "vfsserver read request", proc)
     wait_for("vfs-read: lecture refusee ou fichier absent", proc, before_old_read)
-    before_renamed_read = len(log_text())
-    send_command_until(client, "vfs-read %s" % renamed_path, "vfs-read ok", proc)
-    wait_for(payload, proc, before_renamed_read)
+    read_until_payload(client, proc, renamed_path, payload)
     before_remove = len(log_text())
     send_command_until(client, "vfs-remove %s" % renamed_path,
                        "vfsserver remove request", proc)
@@ -377,9 +400,7 @@ def assert_fat_subdirectory_lifecycle(client, proc, mount, payload):
     send_command_until(client, "vfs-list %s/" % directory, "vfsserver list request", proc)
     wait_for("vfs-list ok count 1", proc, before_list)
     wait_for("CHILD.TXT", proc, before_list)
-    before_read = len(log_text())
-    send_command_until(client, "vfs-read %s" % path, "vfs-read ok", proc)
-    wait_for(payload, proc, before_read)
+    read_until_payload(client, proc, path, payload)
     before_rename = len(log_text())
     send_command_until(client, "vfs-rename %s %s" % (path, renamed),
                        "vfsserver rename request", proc)
@@ -392,9 +413,7 @@ def assert_fat_subdirectory_lifecycle(client, proc, mount, payload):
     wait_for("vfsvirtual rename %s -> %s" % (renamed, escaped), proc, before_escape)
     wait_for("vfsserver backend prefix denied", proc, before_escape)
     wait_for("vfs-rename: chemins hors montage ecriture", proc, before_escape)
-    before_source_intact = len(log_text())
-    send_command_until(client, "vfs-read %s" % renamed, "vfs-read ok", proc)
-    wait_for(payload, proc, before_source_intact)
+    read_until_payload(client, proc, renamed, payload)
     before_escape_absent = len(log_text())
     send_command_until(client, "vfs-read %s" % escaped, "vfsserver read request", proc)
     wait_for("vfs-read: lecture refusee ou fichier absent", proc, before_escape_absent)
@@ -789,10 +808,8 @@ def main():
             before_fat16_write = len(log_text())
             send_command_until(monitor, "vfs-write fat16/new.txt qemu-fat16",
                                "vfsserver write request", proc)
-            wait_for("vfs-write ok request", proc, before_fat16_write)
-            before_fat16_new_read = len(log_text())
-            send_command_until(monitor, "vfs-read fat16/new.txt", "vfs-read ok", proc)
-            wait_for("qemu-fat16", proc, before_fat16_new_read)
+            wait_for_write_delivery(monitor, proc, "fat16/new.txt", before_fat16_write)
+            read_until_payload(monitor, proc, "fat16/new.txt", "qemu-fat16")
             before_fat16_rename = len(log_text())
             send_command_until(monitor, "vfs-rename fat16/new.txt fat16/renamed.txt",
                                "vfsserver rename request", proc)
@@ -800,9 +817,7 @@ def main():
             before_fat16_old_read = len(log_text())
             send_command_until(monitor, "vfs-read fat16/new.txt", "vfsserver read request", proc)
             wait_for("vfs-read: lecture refusee ou fichier absent", proc, before_fat16_old_read)
-            before_fat16_renamed_read = len(log_text())
-            send_command_until(monitor, "vfs-read fat16/renamed.txt", "vfs-read ok", proc)
-            wait_for("qemu-fat16", proc, before_fat16_renamed_read)
+            read_until_payload(monitor, proc, "fat16/renamed.txt", "qemu-fat16")
             before_fat16_new_list = len(log_text())
             send_command_until(monitor, "vfs-list fat16/", "vfsserver list request", proc)
             wait_for("vfs-list ok count 3", proc, before_fat16_new_list)
@@ -835,10 +850,8 @@ def main():
             before_fat32_write = len(log_text())
             send_command_until(monitor, "vfs-write fat32/new.txt qemu-fat32",
                                "vfsserver write request", proc)
-            wait_for("vfs-write ok request", proc, before_fat32_write)
-            before_fat32_new_read = len(log_text())
-            send_command_until(monitor, "vfs-read fat32/new.txt", "vfs-read ok", proc)
-            wait_for("qemu-fat32", proc, before_fat32_new_read)
+            wait_for_write_delivery(monitor, proc, "fat32/new.txt", before_fat32_write)
+            read_until_payload(monitor, proc, "fat32/new.txt", "qemu-fat32")
             before_fat32_rename = len(log_text())
             send_command_until(monitor, "vfs-rename fat32/new.txt fat32/renamed.txt",
                                "vfsserver rename request", proc)
@@ -846,9 +859,7 @@ def main():
             before_fat32_old_read = len(log_text())
             send_command_until(monitor, "vfs-read fat32/new.txt", "vfsserver read request", proc)
             wait_for("vfs-read: lecture refusee ou fichier absent", proc, before_fat32_old_read)
-            before_fat32_renamed_read = len(log_text())
-            send_command_until(monitor, "vfs-read fat32/renamed.txt", "vfs-read ok", proc)
-            wait_for("qemu-fat32", proc, before_fat32_renamed_read)
+            read_until_payload(monitor, proc, "fat32/renamed.txt", "qemu-fat32")
             before_fat32_new_list = len(log_text())
             send_command_until(monitor, "vfs-list fat32/", "vfsserver list request", proc)
             wait_for("vfs-list ok count 2", proc, before_fat32_new_list)

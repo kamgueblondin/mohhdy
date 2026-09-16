@@ -20,7 +20,10 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import multiboot_shell
+import prompt_os
 import stage
+from command_registry import REGISTRY
+from guest_attach import AttachConfig
 
 OSUI_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = OSUI_ROOT.parent
@@ -34,17 +37,7 @@ SHELL_KIND = "osui"
 BACKEND_NAME = "mohhdy-agent"
 OSUI_STATIC_RE = __import__("re").compile(r"^[A-Za-z0-9._-]{1,64}$")
 
-OS_COMMANDS = [
-    {"slash": "/help", "summary": "Liste les raccourcis du SE"},
-    {"slash": "/browser", "summary": "Ouvre Browser-OS (simulateur DOM)"},
-    {"slash": "/shell", "summary": "Ouvre le shell Multiboot (vocabulaire guest Ring 3)"},
-    {"slash": "/admin", "summary": "Ouvre Admin (grant/revoke, takeover)"},
-    {"slash": "/support", "summary": "Ouvre Support (sessions, escalade)"},
-    {"slash": "/status", "summary": "Ouvre Statut instance"},
-    {"slash": "/fs", "summary": "Ouvre le FS sandbox lecture"},
-    {"slash": "/center", "summary": "Ferme les programmes et ramene le chat au centre"},
-    {"slash": "/close", "summary": "Ferme les programmes"},
-]
+OS_COMMANDS = list(prompt_os.SLASH_COMMANDS)
 
 MIME_BY_SUFFIX = {
     ".css": "text/css; charset=utf-8",
@@ -132,19 +125,29 @@ def os_identity(httpd) -> dict:
             "chat_pos_key": "mohhdy.os.chat.pos",
             "ai_stage": True,
             "multiboot_shell": True,
+            "prompt_os": True,
+            "autonomous_stage": True,
+            "live_attach": True,
         },
         "stage": stage.public_stage_meta(),
         "multiboot_shell": httpd.os_shell.public_meta()
         if getattr(httpd, "os_shell", None)
         else multiboot_shell.MultibootShell().public_meta(),
+        "registry": REGISTRY.public_dict(),
+        "attach": (
+            httpd.os_shell.attach_config.public_dict()
+            if getattr(httpd, "os_shell", None)
+            else AttachConfig.from_env().public_dict()
+        ),
         "notes": {
             "llm": "stub_echo: echo / KB locale, pas un LLM de production",
             "browser": "simulateur DOM; Playwright optionnel, pas US-031",
             "guest": "le noyau i386 QEMU n'est pas boote dans ce conteneur",
-            "shell": "shell Multiboot bootstrap (userspace/shell.c), pas un bash Linux, pas un TTY live",
+            "shell": "shell Multiboot (userspace/shell.c). bootstrap par defaut, live si attache",
             "chat": "chat central = surface de commande; flottant si un programme est ouvert",
             "stage": "bureau = scene IA HTML (#ai-stage). Guest VGA n'a pas cette scene",
             "product": "un SE Multiboot Mohhdy ; osui = bootstrap graphique du meme OS",
+            "convergence": "registre shared/multiboot_shell_commands.json ; features land in Multiboot SE",
         },
     }
 
@@ -210,6 +213,27 @@ class OsHandler(agent_server.AgentHandler):
             self._handle_stage(method, send_body)
             return
 
+        if path == "/api/os/stage/tick":
+            self._handle_stage_tick(method, send_body)
+            return
+
+        if path == "/api/os/prompt":
+            self._handle_prompt(method, send_body)
+            return
+
+        if path == "/api/os/commands":
+            if method not in ("GET", "HEAD"):
+                self._send_json_status(
+                    405, {"status": "error", "error": "method_not_allowed"}
+                )
+                return
+            self._send_json(REGISTRY.public_dict(), send_body=send_body)
+            return
+
+        if path == "/api/os/attach":
+            self._handle_attach(method, send_body)
+            return
+
         if path == "/api/os/shell":
             self._handle_shell(method, send_body)
             return
@@ -244,8 +268,93 @@ class OsHandler(agent_server.AgentHandler):
                 },
             )
             return
-        result = store.apply_prompt(prompt)
+        autonomous = payload.get("autonomous")
+        if autonomous is not None and not isinstance(autonomous, bool):
+            autonomous = bool(autonomous)
+        result = store.apply_prompt(prompt, autonomous=autonomous)
         self._send_json(result, send_body=True, status=200)
+
+    def _handle_stage_tick(self, method: str, send_body: bool) -> None:
+        if method != "POST":
+            if method in ("GET", "HEAD"):
+                self._send_json(self.server.os_stage.snapshot(), send_body=send_body)
+                return
+            self._send_json_status(
+                405, {"status": "error", "error": "method_not_allowed"}
+            )
+            return
+        self._send_json(self.server.os_stage.tick(), send_body=True, status=200)
+
+    def _handle_prompt(self, method: str, send_body: bool) -> None:
+        if method != "POST":
+            self._send_json_status(
+                405, {"status": "error", "error": "method_not_allowed"}
+            )
+            return
+        payload, error = self._read_json_object()
+        if error is not None:
+            status, body = error
+            self._send_json_status(status, body)
+            return
+        text = payload.get("text")
+        if text is None:
+            text = payload.get("prompt") or payload.get("content") or ""
+        if not isinstance(text, str):
+            self._send_json_status(
+                400,
+                {
+                    "status": "error",
+                    "error": "bad_request",
+                    "message": "text requis",
+                },
+            )
+            return
+        routed = prompt_os.route_prompt(text)
+        routed["status"] = "ok"
+        routed["llm"] = agent_server.LLM_KIND
+        if routed.get("kind") in ("stage", "stage_plan", "chat") and routed.get(
+            "prompt"
+        ) is not None:
+            autonomous = routed.get("kind") == "stage_plan"
+            routed["stage"] = self.server.os_stage.apply_prompt(
+                routed["prompt"], autonomous=autonomous
+            )
+        if routed.get("kind") == "shell":
+            line = routed.get("line") or ""
+            routed["shell"] = self.server.os_shell.execute(line)
+            stage_payload = routed["shell"].get("stage")
+            if stage_payload:
+                self.server.os_stage.current = dict(stage_payload)
+                routed["stage"] = stage_payload
+        self._send_json(routed, send_body=True, status=200)
+
+    def _handle_attach(self, method: str, send_body: bool) -> None:
+        shell = self.server.os_shell
+        if method in ("GET", "HEAD"):
+            meta = shell.public_meta()
+            self._send_json(meta, send_body=send_body)
+            return
+        if method != "POST":
+            self._send_json_status(
+                405, {"status": "error", "error": "method_not_allowed"}
+            )
+            return
+        payload, error = self._read_json_object()
+        if error is not None:
+            status, body = error
+            self._send_json_status(status, body)
+            return
+        action = str(payload.get("action") or "status").lower()
+        if action == "attach":
+            output, rc = shell.try_attach()
+            body = shell._result(output, rc)
+            self._send_json(body, send_body=True, status=200)
+            return
+        if action == "detach":
+            result = shell.execute("detach")
+            self._send_json(result, send_body=True, status=200)
+            return
+        self._send_json(shell.public_meta(), send_body=True, status=200)
 
     def _handle_shell(self, method: str, send_body: bool) -> None:
         shell = self.server.os_shell
