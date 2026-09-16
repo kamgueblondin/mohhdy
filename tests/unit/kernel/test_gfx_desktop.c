@@ -2,6 +2,7 @@
 
 #include "../../framework/unity.h"
 #include "../../../kernel/gfx_desktop.h"
+#include "../../../kernel/gfx_fb.h"
 #include <string.h>
 
 #define W 1024
@@ -21,14 +22,19 @@ static int near_rgb(uint32_t c, unsigned r, unsigned g, unsigned b, unsigned tol
     return dr <= tol && dg <= tol && db <= tol;
 }
 
-static int count_near(int x0, int y0, int x1, int y1, unsigned r, unsigned g, unsigned b, unsigned tol) {
+static int count_near_buf(uint32_t *fb, int w, int h, int x0, int y0, int x1, int y1,
+                          unsigned r, unsigned g, unsigned b, unsigned tol) {
     int x, y, n = 0;
     for (y = y0; y < y1; y++) {
         for (x = x0; x < x1; x++) {
-            if (near_rgb(gfx_desktop_pixel(g_fb, W, H, x, y), r, g, b, tol)) n++;
+            if (near_rgb(gfx_desktop_pixel(fb, w, h, x, y), r, g, b, tol)) n++;
         }
     }
     return n;
+}
+
+static int count_near(int x0, int y0, int x1, int y1, unsigned r, unsigned g, unsigned b, unsigned tol) {
+    return count_near_buf(g_fb, W, H, x0, y0, x1, y1, r, g, b, tol);
 }
 
 static void blank_scene(void) {
@@ -107,6 +113,32 @@ static void test_circle_kind_paints_ring(void) {
     TEST_ASSERT(count_near(430, 560, 620, 700, 100, 180, 170, 80) > 10);
 }
 
+static void test_layout_scales_with_framebuffer(void) {
+    static uint32_t small[800 * 600];
+    uint32_t a;
+    int saved_w = W;
+    (void)saved_w;
+    blank_scene();
+    gfx_desktop_draw(&g_scene, small, 800, 600);
+    a = gfx_desktop_pixel(small, 800, 600, 12, 12);
+    TEST_ASSERT(red(a) < 80);
+    TEST_ASSERT(count_near_buf(small, 800, 600, 200, 540, 600, 598, 61, 154, 138, 40) > 40);
+}
+
+static void test_parse_fit_line(void) {
+    int w = 0, h = 0;
+    TEST_ASSERT(gfx_fb_parse_fit_line("1280 720", &w, &h));
+    TEST_ASSERT_EQUAL(1280, w);
+    TEST_ASSERT_EQUAL(720, h);
+    TEST_ASSERT(gfx_fb_parse_fit_line("800x600\n", &w, &h));
+    TEST_ASSERT_EQUAL(800, w);
+    TEST_ASSERT_EQUAL(600, h);
+    TEST_ASSERT(gfx_fb_parse_fit_line("240 180", &w, &h));
+    TEST_ASSERT_EQUAL(GFX_FB_MIN_WIDTH, w);
+    TEST_ASSERT_EQUAL(GFX_FB_MIN_HEIGHT, h);
+    TEST_ASSERT(!gfx_fb_parse_fit_line("nope", &w, &h));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -114,6 +146,8 @@ int main(void) {
     RUN_TEST(test_float_chat_and_browser_pane);
     RUN_TEST(test_shell_pane_shows_prompt);
     RUN_TEST(test_circle_kind_paints_ring);
+    RUN_TEST(test_layout_scales_with_framebuffer);
+    RUN_TEST(test_parse_fit_line);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

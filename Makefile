@@ -445,16 +445,12 @@ run: $(OS_IMAGE) pack-initrd disk
 		-m $(GPT2_RAM) -cpu pentium3 \
 		-no-reboot -no-shutdown $(QEMU_DISK_OPTS)
 
-# Bureau graphique QEMU (VBE 1024x768, fenetre GTK). Tapez gui apres MOHHDY>.
+# Bureau graphique QEMU : le VBE epouse la fenetre GTK (zoom-to-fit + resize COM2).
 run-gui: $(OS_IMAGE) pack-initrd disk
 	@echo "Mohhdy desktop QEMU VBE : fenetre graphique (pas HTML)"
 	@echo "Cerveau = guest C (osui_runtime.c). chrome=qemu_fb display_surface=vbe_lfb"
 	@echo "llm=stub_echo us031_complete=false python_facade=false guest_html_stage=false"
-	qemu-system-i386 -kernel $(OS_IMAGE) -initrd $(INITRD_IMAGE) \
-		-m $(GPT2_RAM) -cpu pentium3 -vga std \
-		-display gtk \
-		-serial mon:stdio \
-		-no-reboot -no-shutdown $(QEMU_DISK_OPTS)
+	python3 scripts/qemu_gui_fit.py
 
 # Alias explicite (meme chose que run-gui)
 run-qemu-gtk: run-gui
@@ -691,7 +687,7 @@ help:
 	@echo "  all          - Compile le système complet (noyau + initrd + disque overlay)"
 	@echo "  kernel-only  - Compile seulement le noyau"
 	@echo "  run          - Compile et exécute avec QEMU (mode texte)"
-	@echo "  run-gui      - Bureau graphique QEMU GTK (VBE, tapez gui apres MOHHDY>)"
+	@echo "  run-gui      - Bureau graphique QEMU GTK (VBE suit la fenetre, tapez gui)"
 	@echo "  iso          - Image GRUB Multiboot (grub-pc-bin + xorriso)"
 	@echo ""
 	@echo "Cibles de développement:"

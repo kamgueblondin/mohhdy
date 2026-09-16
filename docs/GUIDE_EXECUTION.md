@@ -25,7 +25,7 @@ make run
 ```bash
 make run-gui
 ```
-- **Affichage** : fenetre graphique QEMU (VBE 1024x768 glassmorphic)
+- **Affichage** : fenetre graphique QEMU (VBE glassmorphic, suit la taille de la fenetre)
 - **Bureau** : tapez `gui` apres `MOHHDY>` (aliases `graphics`, `desktop`)
 - **Quitter le bureau** : `console`, `gui-exit` ou ESC
 - **Nographic / CI** : `gui-status` et `make qemu-osui-gui` (hors integration-qemu)
@@ -70,7 +70,7 @@ make run-nographic
 - **Scancode** : PS/2 Set 1 avec translation activée
 
 ### Mode GUI (`make run-gui`)
-- **Display** : QEMU GTK, framebuffer VBE 1024x768
+- **Display** : QEMU GTK, framebuffer VBE (zoom-to-fit + resize)
 - **VGA** : bureau pixel glassmorphic, pas un bureau ASCII 80x25
 - **Série** : `-serial mon:stdio` (debug)
 - **Interruptions** : PS/2 conservees
