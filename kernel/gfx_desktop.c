@@ -127,7 +127,7 @@ static void stroke_round(uint32_t *fb, int w, int h, int x, int y, int rw, int r
     }
 }
 
-static void draw_char(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
+static void draw_char_bits(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
     int gy, gx;
     unsigned idx;
     const uint8_t *g;
@@ -140,6 +140,11 @@ static void draw_char(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_
             if (bits & (1u << gx)) put(fb, w, h, x + gx, y + gy, c);
         }
     }
+}
+
+static void draw_char(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
+    draw_char_bits(fb, w, h, x + 1, y + 1, ch, RGB(8, 12, 16));
+    draw_char_bits(fb, w, h, x, y, ch, c);
 }
 
 static void draw_text(uint32_t *fb, int w, int h, int x, int y, const char *s, uint32_t c) {
@@ -419,7 +424,7 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
         { RGB(138, 160, 180), RGB(61, 77, 92), "Statut" },
         { RGB(196, 160, 106), RGB(106, 77, 47), "Fichiers" },
     };
-    const char *dock[7] = { "C", "B", "$", "A", "S", "i", "F" };
+    const char *dock[7] = { "C", "B", "sh", "A", "S", "i", "F" };
     const char *mode_s;
     const char *caption;
 
@@ -479,9 +484,6 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
         icon_tile(fb, w, h, w - 86, bar_h + 16 + i * 72, icons[i].c0, icons[i].c1, icons[i].label);
     }
 
-    draw_text(fb, w, h, 16, h - 88, "Bureau = scene IA (reflexion / action / resultats).", RGB(154, 168, 181));
-    draw_text(fb, w, h, 16, h - 76, "Pas un LLM de production. Pas US-031. Un SE Multiboot.", RGB(154, 168, 181));
-
     scene_w = clampi(w / 2, 360, 640);
     scene_h = 150;
     scene_x = (w - scene_w) / 2 - 20;
@@ -505,7 +507,7 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     }
 
     chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? 360 : clampi(w / 2, 420, 640);
-    chat_h = sc->chat_mode == OS_FB_CHAT_FLOAT ? 440 : clampi(h / 2, 320, 440);
+    chat_h = sc->chat_mode == OS_FB_CHAT_FLOAT ? 400 : clampi((h * 5) / 12, 280, 360);
     if (sc->chat_mode == OS_FB_CHAT_FLOAT) {
         chat_x = w - chat_w - 110;
         chat_y = h - chat_h - 70;
@@ -527,6 +529,10 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     round_rect_a(fb, w, h, dock_x, dock_y, dock_w, 40, 16, RGB(16, 26, 34), 220);
     for (i = 0; i < 7; i++) {
         round_rect(fb, w, h, dock_x + 8 + i * 44, dock_y + 4, 36, 32, 10, RGB(61, 154, 138));
-        draw_text(fb, w, h, dock_x + 8 + i * 44 + 14, dock_y + 14, dock[i], RGB(15, 20, 25));
+        {
+            int n = 0;
+            while (dock[i][n]) n++;
+            draw_text(fb, w, h, dock_x + 8 + i * 44 + (36 - n * 8) / 2, dock_y + 14, dock[i], RGB(15, 20, 25));
+        }
     }
 }

@@ -21,6 +21,10 @@ FORBIDDEN = [
     "osui/command_registry.py",
     "osui/Dockerfile",
     "osui/docker-compose.yml",
+    "osui/display_host.py",
+    "osui/static/index.html",
+    "osui/static/os.css",
+    "osui/static/os.js",
 ]
 
 REQUIRED = [
