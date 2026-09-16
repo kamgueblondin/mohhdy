@@ -75,7 +75,8 @@ make run
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
 | `make iso` | Produit l'ISO BIOS/GRUB bootable |
 | `make run` / `make run-gui` | Session QEMU interactive curses ou GTK |
-| `make osui-smoke` | Fumée shell graphique OS-UI (chat, scene IA, shell Multiboot, session, origine, admin, geste). Hors `make ci` / hors QEMU |
+| `make osui-smoke` | Fumée shell graphique OS-UI (chat, scene IA, plan stub, registre guest, session, origine, admin, geste). Hors `make ci` / hors QEMU |
+| `make osui-shell-live-smoke` | Attache live best-effort (faux guest serie ; skip QEMU si absent). Hors `make ci` |
 | `make osui-docker` | Construit l'image `mohhdy-os`. Voir [docs/osui_0_1_2.md](docs/osui_0_1_2.md) |
 | `make agent-smoke` | Fumée HTTP agent (simulateur DOM, MCP, facture, 501 si Playwright absent). Hors `make ci` / hors QEMU |
 | `make agent-docker` | Construit l'image `mohhdy-agent` (backend temporaire). Voir [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md) |
@@ -92,10 +93,11 @@ make run-iso
 
 ## Instance autonome (shell graphique `osui/` + backend `agent/`)
 
-`osui/` est le **bootstrap graphique** du SE Multiboot : `docker run` ouvre le chrome. Surface primaire : **chat central** (prompts / `/help` `/browser` `/shell`). Fond du bureau : **scene IA** (`#ai-stage`, stub HTML). `/shell` = vocabulaire guest Ring 3, etat bootstrap (pas un TTY QEMU). Un programme ouvert deplace le chat en panneau flottant draggable. `agent/` reste le **backend temporaire** (APIs ASSIST). Ce n'est **pas** le noyau i386 du guest. Les reponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium de session, **pas** US-031. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md), [docs/osui_ai_stage.md](docs/osui_ai_stage.md). Packaging PC / hyperviseur : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
+`osui/` est le **bootstrap graphique** du SE Multiboot : `docker run` ouvre le chrome. Surface primaire : **chat central** (prompts / `/help` `/browser` `/shell` `/plan`). Fond du bureau : **scene IA** (`#ai-stage`, stub HTML, mini-plans). `/shell` = vocabulaire guest Ring 3, bootstrap par defaut, hook live optionnel. Un programme ouvert deplace le chat en panneau flottant draggable. Pont : `shared/multiboot_shell_commands.json`. `agent/` reste le **backend temporaire** (APIs ASSIST). Ce n'est **pas** le noyau i386 du guest. Les reponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium de session, **pas** US-031. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md), [docs/osui_ai_stage.md](docs/osui_ai_stage.md), [docs/osui_shell_live.md](docs/osui_shell_live.md), [docs/osui_convergence.md](docs/osui_convergence.md). Packaging PC / hyperviseur : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
 
 ```bash
 make osui-smoke
+make osui-shell-live-smoke
 make osui-docker
 docker build -t mohhdy-os -f osui/Dockerfile .
 docker run --rm -p 8080:8080 mohhdy-os

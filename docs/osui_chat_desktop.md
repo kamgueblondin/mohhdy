@@ -15,7 +15,9 @@ que le shell guest Ring 3 (`userspace/shell.c`), en surface bootstrap
 tant que QEMU n'est pas attache.
 
 Chrome et APIs : [osui_0_1_2.md](osui_0_1_2.md). Scene IA :
-[osui_ai_stage.md](osui_ai_stage.md). Plan :
+[osui_ai_stage.md](osui_ai_stage.md). Attache live :
+[osui_shell_live.md](osui_shell_live.md). Convergence :
+[osui_convergence.md](osui_convergence.md). Plan :
 [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md). Ce n'est **pas**
 US-031, **pas** un LLM de production, **pas** un bash Linux. Le guest
 mesure : [ETAT_REEL.md](ETAT_REEL.md) (pas de scene HTML guest).
@@ -52,9 +54,16 @@ Registre HTML : `#os-slash-registry`. JSON : `GET /api/os` champ
 | `/fs` | Ouvre le FS sandbox lecture |
 | `/center` | Ferme les programmes, chat au centre |
 | `/close` | Ferme les programmes, chat au centre |
+| `/plan` | Mini-plan autonome stub sur `#ai-stage` |
+| `/draw` | Dessine sur la scene IA |
+| `/stage` | Met a jour la scene sans ouvrir de pane |
+| `/guest` | Statut d'attache guest (`guest-status`) |
+| `/ai-help` | Aide IA Multiboot (stub) |
 
-Equivalents de prompt : "ouvre le navigateur", "open shell", etc.
-Inconnu : message systeme, pas d'execution.
+Equivalents de prompt : "ouvre le navigateur", "open shell", "affiche
+l'admin", "dessine un cercle", "mini-plan autonome", "liste les
+commandes guest", "ai-help". `POST /api/os/prompt`. Inconnu : message
+systeme, pas d'execution. Slash conserves.
 
 ## Chat flottant
 
@@ -89,18 +98,23 @@ shell que le guest Multiboot (Ring 3, `userspace/shell.c`, prompt
 | `vfs-list` / `vfs-read` / `vfs-stat` | `vfsserver` | miroir lecture, mutations refusees |
 | `ls` / `pwd` / `cat` | syscalls fichiers | miroir `initrd/` `overlay/` `fat16/` |
 | `net-status` | `SYS_NET_STATUS` | `nic=absent` |
-| `attach` | futur TTY QEMU/serial | **refuse** : non branche |
+| `attach` | TTY QEMU serial / HMP | **tente** si configure, sinon bootstrap |
+| `guest-status` | honnete live_guest | `true` seulement si handshake `MOHHDY>` |
 
-Etat visible : `attachment=bootstrap live_guest=false qemu_serial=false`.
+Etat visible : `attachment=bootstrap live_guest=false` par defaut.
+Live : [osui_shell_live.md](osui_shell_live.md). Registre :
+`shared/multiboot_shell_commands.json` (extrait de `shell.c`).
 `POST /api/os/shell` `{"line":"..."}`. `GET /api/os/shell` : registre.
+`GET /api/os/commands`. `POST /api/os/attach`.
 
 Ne pas pretendre qu'un TTY QEMU tourne dans Docker. Ne pas inventer
-`apt` / `sudo`. Future attache live : meme vocabulaire, autre transport.
+`apt` / `sudo`. Attache live : meme vocabulaire, autre transport.
 
 ## Preuves
 
 ```text
 make osui-smoke
+make osui-shell-live-smoke
 ```
 
 Hors `make ci` QEMU, hors `make integration-qemu`. Pas d'OpenAI. Pas de

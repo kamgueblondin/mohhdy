@@ -19,6 +19,8 @@ Plan maitre : [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md).
 Epiques : [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md).
 Interaction : [osui_chat_desktop.md](osui_chat_desktop.md).
 Scene IA : [osui_ai_stage.md](osui_ai_stage.md).
+Attache live : [osui_shell_live.md](osui_shell_live.md).
+Convergence : [osui_convergence.md](osui_convergence.md).
 Guest mesure : [ETAT_REEL.md](ETAT_REEL.md) (pas de scene HTML guest).
 
 ## Ce que `docker run` ouvre
@@ -54,9 +56,13 @@ docker run mohhdy-os
         +-- osui/          chrome OS (HTML/CSS/JS desktop) = bootstrap du SE Multiboot
         |     GET /        bureau + #ai-stage
         |     GET /health  service=mohhdy-os shell=osui llm=stub_echo
-        |     GET /api/os  panes + commands slash + stage + shell Multiboot
-        |     POST /api/os/stage   HTML stub (allowlist, pas de script)
-        |     POST /api/os/shell   vocabulaire userspace/shell.c (bootstrap)
+        |     GET /api/os  panes + slash + stage + shell + registre guest + attach
+        |     POST /api/os/stage   HTML stub (allowlist, mini-plans)
+        |     POST /api/os/stage/tick
+        |     POST /api/os/prompt  Prompt OS (NL -> pane / scene / shell sur)
+        |     POST /api/os/shell   vocabulaire userspace/shell.c (bootstrap ou live)
+        |     GET  /api/os/commands  shared/multiboot_shell_commands.json
+        |     POST /api/os/attach  hook live QEMU serial/HMP
         |
         +-- agent/         backend temporaire (APIs ASSIST)
               /api/sessions  chat, origine, escalade
@@ -72,17 +78,20 @@ retirera la facade Python une fois la parite mesuree.
 
 - Chat central par defaut, barre haute, dock, icones, panes programmes
 - Fond du bureau = scene IA (`#ai-stage`, modes reflecting / acting / presenting)
-- Slash `/help` `/browser` `/shell` `/admin` `/support` `/status` `/fs`
+- Slash `/help` `/browser` `/shell` `/admin` `/support` `/status` `/fs` `/plan` `/draw` `/guest`
 - Chat flottant draggable des qu'un programme s'ouvre (position
   `sessionStorage`)
-- `/shell` = shell Multiboot (vocabulaire guest Ring 3), etat bootstrap,
-  pas un bash Linux, pas un TTY QEMU attache
+- `/shell` = shell Multiboot (vocabulaire guest Ring 3), bootstrap par
+  defaut, hook live documente, pas un bash Linux
+- Scene IA : mini-plans autonomes stub (`/plan`, tick)
 - Boot Docker = cette surface, pas une page marketing
 - `phase3_complete=false`, `us031_complete=false`, `llm=stub_echo`
 - `chromium_session_engine=false`
 
 Detail : [osui_chat_desktop.md](osui_chat_desktop.md),
-[osui_ai_stage.md](osui_ai_stage.md).
+[osui_ai_stage.md](osui_ai_stage.md),
+[osui_shell_live.md](osui_shell_live.md),
+[osui_convergence.md](osui_convergence.md).
 
 ## OS-UI-1 - Support + Admin (natives)
 
@@ -132,6 +141,7 @@ Hors `make ci` QEMU, hors `make integration-qemu` :
 
 ```text
 make osui-smoke
+make osui-shell-live-smoke
 make agent-smoke
 ```
 
@@ -151,7 +161,7 @@ BASE_URL=http://127.0.0.1:8080 osui/scripts/smoke.sh
 - LLM de production
 - Retrait de `agent/` (OS-UI-3)
 - Facturation SaaS
-- Guest i386 dans le conteneur / TTY QEMU attache a `/shell`
+- Guest i386 dans le conteneur par defaut (hook live optionnel : [osui_shell_live.md](osui_shell_live.md))
 - Scene HTML `#ai-stage` dans le VGA guest (ETAT_REEL inchange)
 - Auth par comptes / par site
 
