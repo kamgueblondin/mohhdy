@@ -490,18 +490,22 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
         int i;
         const int gap = 14;
         int lens[7];
+        int flag_w = (w >= 920) ? (8 * 36 + 12) : ((w >= 720) ? (8 * 16 + 12) : 8);
         for (i = 0; i < 7; i++) {
             int n = 0;
             while (menus[i][n]) n++;
             lens[i] = n;
         }
         for (i = 0; i < 7; i++) {
-            if (mx + lens[i] * 8 > w - 300) break;
+            if (mx + lens[i] * 8 > w - flag_w - 8) break;
             draw_text(fb, w, h, mx, ty, menus[i], RGB(232, 238, 244));
             mx += lens[i] * 8 + gap;
         }
+        if (w >= 920)
+            draw_text(fb, w, h, w - 8 * 36 - 12, ty, "llm=stub_echo us031=false", RGB(243, 230, 176));
+        else if (w >= 720)
+            draw_text(fb, w, h, w - 8 * 16 - 8, ty, "us031=false", RGB(243, 230, 176));
     }
-    draw_text(fb, w, h, w - 8 * 36 - 12, (bar_h - 8) / 2, "llm=stub_echo us031=false", RGB(243, 230, 176));
 
     mode_s = "reflecting";
     if (sc->stage_mode == OS_FB_STAGE_ACTING) mode_s = "acting";
@@ -509,17 +513,27 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     round_rect_a(fb, w, h, 12, bar_h + 8, 96, 18, 9, RGB(11, 16, 20), 160);
     stroke_round(fb, w, h, 12, bar_h + 8, 96, 18, 9, RGB(61, 154, 138), 1);
     draw_text(fb, w, h, 22, bar_h + 13, mode_s, RGB(122, 212, 196));
-    draw_text(fb, w, h, 118, bar_h + 13, "llm=stub_echo", RGB(243, 230, 176));
-    draw_text(fb, w, h, 118 + 15 * 8, bar_h + 13, "bootstrap graphique : pas VGA ASCII", RGB(154, 168, 181));
-
-    for (i = 0; i < 6; i++) {
-        icon_tile(fb, w, h, w - 86, bar_h + 16 + i * 72, icons[i].c0, icons[i].c1, icons[i].label);
+    if (w >= 700) {
+        draw_text(fb, w, h, 118, bar_h + 13, "llm=stub_echo", RGB(243, 230, 176));
+        if (w >= 980)
+            draw_text(fb, w, h, 118 + 15 * 8, bar_h + 13, "bootstrap graphique : pas VGA ASCII", RGB(154, 168, 181));
     }
 
-    scene_w = clampi(w / 2, 360, 640);
-    scene_h = 150;
-    scene_x = (w - scene_w) / 2 - 20;
+    if (w >= 780 && h >= 520) {
+        int gap = (h >= 700) ? 72 : 56;
+        for (i = 0; i < 6; i++) {
+            if (bar_h + 16 + i * gap + 58 > h - 52) break;
+            icon_tile(fb, w, h, w - 86, bar_h + 16 + i * gap, icons[i].c0, icons[i].c1, icons[i].label);
+        }
+    }
+
+    scene_w = clampi(w / 2, 200, w - 40);
+    if (scene_w > 640) scene_w = 640;
+    scene_h = clampi(h / 5, 90, 150);
+    scene_x = (w - scene_w) / 2 - (w >= 780 ? 20 : 0);
+    if (scene_x < 8) scene_x = 8;
     scene_y = h - scene_h - 64;
+    if (scene_y < bar_h + 40) scene_y = bar_h + 40;
     round_rect_a(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(11, 16, 20), 150);
     stroke_round(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(61, 154, 138), 1);
     draw_text(fb, w, h, scene_x + 16, scene_y + 12, "Scene IA", RGB(232, 238, 244));
@@ -533,7 +547,8 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     ptitle = pane_title(pane);
     if (ptitle) {
         int wx = 36, wy = bar_h + 28;
-        int ww = clampi(w - 420, 420, 720), wh = clampi(h - 220, 280, 520);
+        int ww = clampi(w - (w >= 780 ? 420 : 48), 240, w - 48);
+        int wh = clampi(h - 220, 160, h - bar_h - 80);
         if (pane == OS_FB_PANE_SHELL)
             draw_shell(fb, w, h, wx, wy, ww, wh, sc);
         else
@@ -542,12 +557,16 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
                         : "Cerveau = osui_runtime.c. Pas Chromium.");
     }
 
-    chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? 360 : clampi(w / 2, 420, 640);
-    chat_h = sc->chat_mode == OS_FB_CHAT_FLOAT ? 400 : clampi((h * 5) / 12, 280, 360);
+    chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(w / 3, 220, 360) : clampi(w / 2, 240, 640);
+    if (chat_w > w - 24) chat_w = w - 24;
+    chat_h = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(h / 2, 180, 400) : clampi((h * 5) / 12, 160, 360);
+    if (chat_h > h - bar_h - 56) chat_h = h - bar_h - 56;
+    if (chat_h < 120) chat_h = 120;
     if (sc->chat_mode == OS_FB_CHAT_FLOAT) {
-        int pane_right = ptitle ? (36 + clampi(w - 420, 420, 720) + 12) : 8;
+        int pane_w = ptitle ? clampi(w - (w >= 780 ? 420 : 48), 240, w - 48) : 0;
+        int pane_right = ptitle ? (36 + pane_w + 12) : 8;
         int max_x = w - chat_w - 8;
-        chat_x = w - chat_w - 110;
+        chat_x = w - chat_w - 16;
         chat_y = h - chat_h - 70;
         if (sc->chat_x || sc->chat_y) {
             chat_x = (int)sc->chat_x * w / 80;
@@ -561,12 +580,15 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     } else {
         chat_x = (w - chat_w) / 2;
         chat_y = bar_h + (h / 14);
+        if (chat_y + chat_h > h - 52) chat_y = bar_h + 8;
     }
     draw_chat(fb, w, h, chat_x, chat_y, chat_w, chat_h, sc);
 
     dock_w = 7 * 44 + 16;
+    if (dock_w > w - 16) dock_w = w - 16;
     dock_x = (w - dock_w) / 2;
     dock_y = h - 48;
+    if (dock_y < bar_h + 8) dock_y = h - 36;
     round_rect_a(fb, w, h, dock_x, dock_y, dock_w, 40, 16, RGB(16, 26, 34), 220);
     for (i = 0; i < 7; i++) {
         round_rect(fb, w, h, dock_x + 8 + i * 44, dock_y + 4, 36, 32, 10, RGB(61, 154, 138));

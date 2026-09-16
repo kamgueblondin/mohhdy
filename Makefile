@@ -445,16 +445,12 @@ run: $(OS_IMAGE) pack-initrd disk
 		-m $(GPT2_RAM) -cpu pentium3 \
 		-no-reboot -no-shutdown $(QEMU_DISK_OPTS)
 
-# Bureau graphique QEMU (VBE 1024x768, fenetre GTK). Tapez gui apres MOHHDY>.
+# Bureau graphique QEMU : le VBE epouse la fenetre GTK (zoom-to-fit + resize COM2).
 run-gui: $(OS_IMAGE) pack-initrd disk
 	@echo "Mohhdy desktop QEMU VBE : fenetre graphique (pas HTML)"
 	@echo "Cerveau = guest C (osui_runtime.c). chrome=qemu_fb display_surface=vbe_lfb"
 	@echo "llm=stub_echo us031_complete=false python_facade=false guest_html_stage=false"
-	qemu-system-i386 -kernel $(OS_IMAGE) -initrd $(INITRD_IMAGE) \
-		-m $(GPT2_RAM) -cpu pentium3 -vga std \
-		-display gtk \
-		-serial mon:stdio \
-		-no-reboot -no-shutdown $(QEMU_DISK_OPTS)
+	python3 scripts/qemu_gui_fit.py
 
 # Alias explicite (meme chose que run-gui)
 run-qemu-gtk: run-gui
@@ -632,7 +628,7 @@ qemu-vfs-service: $(OS_IMAGE) pack-initrd disk
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
 
-.PHONY: qemu-osui-runtime qemu-osui-gui osui-registry-check
+.PHONY: qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit osui-registry-check
 osui-registry-check:
 	@python3 scripts/extract_guest_commands.py --check
 
@@ -641,6 +637,10 @@ qemu-osui-runtime: $(OS_IMAGE) pack-initrd disk
 
 qemu-osui-gui: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_osui_gui.py
+
+# GTK + COM2 : le bureau suit la fenetre. Hors integration-qemu (besoin DISPLAY).
+qemu-osui-gui-fit: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_fit.py
 
 # Les sept contrats restent inchangés ; l’ordonnanceur les exécute dans un pool borne
 # a deux QEMU par defaut. QEMU_INTEGRATION_JOBS=1 conserve le mode strictement sequentiel.
@@ -691,7 +691,7 @@ help:
 	@echo "  all          - Compile le système complet (noyau + initrd + disque overlay)"
 	@echo "  kernel-only  - Compile seulement le noyau"
 	@echo "  run          - Compile et exécute avec QEMU (mode texte)"
-	@echo "  run-gui      - Bureau graphique QEMU GTK (VBE, tapez gui apres MOHHDY>)"
+	@echo "  run-gui      - Bureau graphique QEMU GTK (VBE suit la fenetre, tapez gui)"
 	@echo "  iso          - Image GRUB Multiboot (grub-pc-bin + xorriso)"
 	@echo ""
 	@echo "Cibles de développement:"
@@ -729,6 +729,7 @@ help:
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  qemu-osui-runtime - Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA ; hors integration-qemu)"
 	@echo "  qemu-osui-gui   - Fumee QEMU : commande gui, screendump VBE, console (hors integration-qemu)"
+	@echo "  qemu-osui-gui-fit - GTK : VBE suit la fenetre (DISPLAY, hors integration-qemu)"
 	@echo "  osui-registry-check - Verifie JSON/header vs userspace/shell.c"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
 	@echo "  osui-smoke      - Registre guest + facade Python absente + bureau VBE (hors QEMU)"

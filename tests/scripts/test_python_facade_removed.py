@@ -38,6 +38,7 @@ REQUIRED = [
     "kernel/gfx_fb.c",
     "shared/multiboot_shell_commands.json",
     "scripts/extract_guest_commands.py",
+    "scripts/qemu_gui_fit.py",
     "Dockerfile",
     "docker/qemu-nographic.sh",
     "docker/qemu-gui.sh",
@@ -74,8 +75,13 @@ def main():
     makefile = open(os.path.join(ROOT, "Makefile"), "r").read()
     if "display_host.py --port 18080" in makefile.split("run-gui", 1)[-1].split("run-nographic", 1)[0]:
         fail("make run-gui must not launch an HTML display host")
-    if "-display gtk" not in makefile:
+    if "-display gtk" not in makefile and "qemu_gui_fit.py" not in makefile:
         fail("make run-gui must use QEMU graphical display")
+    fit = open(os.path.join(ROOT, "scripts/qemu_gui_fit.py"), "r").read()
+    if "zoom-to-fit=on" not in fit:
+        fail("qemu_gui_fit.py must scale the VBE desktop to the QEMU window")
+    if "18080" in fit or "html_host" in fit:
+        fail("qemu_gui_fit.py must not launch an HTML host")
     dockerfile = open(os.path.join(ROOT, "Dockerfile"), "r").read()
     if "python3" in dockerfile.lower() and "CMD" in dockerfile:
         if "server.py" in dockerfile:

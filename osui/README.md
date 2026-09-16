@@ -1,7 +1,7 @@
 # OS-UI : bureau graphique QEMU + cerveau guest C
 
 Le chrome produit est le **framebuffer VBE** dans la fenetre QEMU
-(`kernel/gfx_desktop.c`, 1024x768x32). Le **cerveau** reste
+(`kernel/gfx_desktop.c`, VBE suit la fenetre QEMU). Le **cerveau** reste
 `userspace/osui_runtime.c`. `gui` / `graphics` / `desktop` entre ce mode ;
 `console` / ESC revient au texte.
 

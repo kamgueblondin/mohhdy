@@ -1,13 +1,15 @@
-/* gfx_fb.c - Bochs/QEMU VBE linear framebuffer. Surface produit = fenetre QEMU. */
+/* gfx_fb.c - Bochs/QEMU VBE linear framebuffer. Surface produit = fenetre QEMU.
+ * La resolution suit la fenetre hote (COM2 WxH) ; sinon 1024x768 + zoom-to-fit.
+ */
 #include "gfx_fb.h"
+
+#ifndef KERNEL_TEST
 #include "gfx_desktop.h"
 #include "vga_console.h"
 #include "mem/vmm.h"
 #include "mem/heap.h"
 #include "mem/string.h"
 #include "pci.h"
-
-#ifndef KERNEL_TEST
 #include "kernel.h"
 #endif
 
@@ -29,16 +31,79 @@
 #define VBE_DISPI_ID4 0xB0C4
 #define VBE_DISPI_ID5 0xB0C5
 
+#define COM2_BASE 0x2F8
+#define GFX_LFB_MAP_BYTES (16u * 1024u * 1024u)
+#define GFX_BACK_MAX_BYTES ((uint32_t)GFX_FB_MAX_WIDTH * (uint32_t)GFX_FB_MAX_HEIGHT * 4u)
+
+#ifndef KERNEL_TEST
 static int g_on;
 static int g_w = GFX_FB_WIDTH;
 static int g_h = GFX_FB_HEIGHT;
 static volatile uint32_t *g_lfb;
 static uint32_t *g_back;
+static uint32_t g_back_bytes;
 static uint32_t g_lfb_phys;
-static uint32_t g_lfb_bytes;
+static uint32_t g_mapped;
 static int g_logged;
+static int g_fit_n;
+static char g_fit_buf[28];
+static int g_com2_ready;
+#endif
+
+int gfx_fb_parse_fit_line(const char *s, int *w, int *h) {
+    unsigned vw = 0, vh = 0;
+    int seen_w = 0;
+    if (!s || !w || !h) return 0;
+    while (*s == ' ' || *s == '\t') s++;
+    if (*s < '0' || *s > '9') return 0;
+    while (*s >= '0' && *s <= '9') {
+        vw = vw * 10u + (unsigned)(*s - '0');
+        s++;
+        seen_w = 1;
+    }
+    while (*s == ' ' || *s == '\t' || *s == 'x' || *s == 'X' || *s == ',') s++;
+    if (*s < '0' || *s > '9') return 0;
+    while (*s >= '0' && *s <= '9') {
+        vh = vh * 10u + (unsigned)(*s - '0');
+        s++;
+    }
+    if (!seen_w || vh == 0 || vw == 0) return 0;
+    if (vw > GFX_FB_MAX_WIDTH) vw = GFX_FB_MAX_WIDTH;
+    if (vh > GFX_FB_MAX_HEIGHT) vh = GFX_FB_MAX_HEIGHT;
+    if (vw < GFX_FB_MIN_WIDTH) vw = GFX_FB_MIN_WIDTH;
+    if (vh < GFX_FB_MIN_HEIGHT) vh = GFX_FB_MIN_HEIGHT;
+    vw &= ~1u;
+    vh &= ~1u;
+    *w = (int)vw;
+    *h = (int)vh;
+    return 1;
+}
 
 #ifndef KERNEL_TEST
+extern void write_serial(char c);
+
+static void serial_uint(unsigned v) {
+    char buf[12];
+    int n = 0;
+    if (v == 0) {
+        write_serial('0');
+        return;
+    }
+    while (v && n < 11) {
+        buf[n++] = (char)('0' + (v % 10u));
+        v /= 10u;
+    }
+    while (n--) write_serial(buf[n]);
+}
+
+static void log_fb_size(const char *tag, int width, int height) {
+    print_string_serial(tag);
+    serial_uint((unsigned)width);
+    write_serial('x');
+    serial_uint((unsigned)height);
+    print_string_serial(" chrome=qemu_fb display_surface=vbe_lfb\n");
+}
+
 static void outw(unsigned short port, unsigned short val) {
     asm volatile("outw %0, %1" : : "a"(val), "Nd"(port));
 }
@@ -99,10 +164,65 @@ static uint32_t pci_vga_bar(void) {
     return 0;
 }
 
-static int vbe_enable(int width, int height) {
+static void com2_init(void) {
+    if (g_com2_ready) return;
+    outb(COM2_BASE + 1, 0x00);
+    outb(COM2_BASE + 3, 0x80);
+    outb(COM2_BASE + 0, 0x03);
+    outb(COM2_BASE + 1, 0x00);
+    outb(COM2_BASE + 3, 0x03);
+    outb(COM2_BASE + 2, 0xC7);
+    outb(COM2_BASE + 4, 0x0B);
+    g_com2_ready = 1;
+}
+
+static int com2_poll_size(int *w, int *h) {
+    int got = 0;
+    int nread = 0;
+    unsigned char lsr;
+    com2_init();
+    lsr = inb(COM2_BASE + 5);
+    if (lsr == 0xff) return 0;
+    while ((lsr & 0x01) && nread < 64) {
+        char c = (char)inb(COM2_BASE);
+        nread++;
+        if (c == '\r') {
+            lsr = inb(COM2_BASE + 5);
+            continue;
+        }
+        if (c == '\n') {
+            g_fit_buf[g_fit_n] = 0;
+            g_fit_n = 0;
+            if (gfx_fb_parse_fit_line(g_fit_buf, w, h)) got = 1;
+            lsr = inb(COM2_BASE + 5);
+            continue;
+        }
+        if (g_fit_n < (int)sizeof(g_fit_buf) - 1) g_fit_buf[g_fit_n++] = c;
+        else g_fit_n = 0;
+        lsr = inb(COM2_BASE + 5);
+    }
+    return got;
+}
+
+static int vbe_set_mode(int width, int height) {
     unsigned short id;
     uint32_t bar;
-    uint32_t bytes = (uint32_t)width * (uint32_t)height * 4u;
+    uint32_t bytes;
+
+    if (!g_back) {
+        g_back = (uint32_t *)kmalloc(GFX_BACK_MAX_BYTES);
+        if (g_back) g_back_bytes = GFX_BACK_MAX_BYTES;
+        else {
+            g_back = (uint32_t *)kmalloc((uint32_t)GFX_FB_WIDTH * (uint32_t)GFX_FB_HEIGHT * 4u);
+            if (g_back) g_back_bytes = (uint32_t)GFX_FB_WIDTH * (uint32_t)GFX_FB_HEIGHT * 4u;
+        }
+    }
+    bytes = (uint32_t)width * (uint32_t)height * 4u;
+    if (g_back && bytes > g_back_bytes) {
+        width = GFX_FB_WIDTH;
+        height = GFX_FB_HEIGHT;
+        bytes = (uint32_t)width * (uint32_t)height * 4u;
+    }
 
     dispi_write(VBE_DISPI_INDEX_ID, VBE_DISPI_ID5);
     id = dispi_read(VBE_DISPI_INDEX_ID);
@@ -122,28 +242,28 @@ static int vbe_enable(int width, int height) {
     dispi_write(VBE_DISPI_INDEX_Y_OFFSET, 0);
     dispi_write(VBE_DISPI_INDEX_ENABLE, (unsigned short)(VBE_DISPI_ENABLED | VBE_DISPI_LFB_ENABLED));
 
-    bar = pci_vga_bar();
-    if (!bar) bar = 0xE0000000u;
-    if (map_range(bar, bytes) != 0) {
-        if (bar != 0xE0000000u) {
-            bar = 0xE0000000u;
-            if (map_range(bar, bytes) != 0) return -3;
-        } else {
-            return -3;
+    if (!g_lfb) {
+        bar = pci_vga_bar();
+        if (!bar) bar = 0xE0000000u;
+        if (map_range(bar, GFX_LFB_MAP_BYTES) != 0) {
+            if (bar != 0xE0000000u) {
+                bar = 0xE0000000u;
+                if (map_range(bar, GFX_LFB_MAP_BYTES) != 0) return -3;
+            } else {
+                return -3;
+            }
         }
+        g_lfb_phys = bar;
+        g_mapped = GFX_LFB_MAP_BYTES;
+        g_lfb = (volatile uint32_t *)bar;
     }
-    g_lfb_phys = bar;
-    g_lfb_bytes = bytes;
-    g_lfb = (volatile uint32_t *)bar;
     g_w = width;
     g_h = height;
-    if (!g_back) g_back = (uint32_t *)kmalloc(bytes);
     return 0;
 }
 
 static void vga_text_restore(void) {
     dispi_write(VBE_DISPI_INDEX_ENABLE, VBE_DISPI_DISABLED);
-    /* Mode texte VGA 80x25 : sequencer + misc. QEMU revient au plan 0xB8000. */
     outb(0x3C2, 0x67);
     outb(0x3C4, 0x00); outb(0x3C5, 0x03);
     outb(0x3C4, 0x01); outb(0x3C5, 0x00);
@@ -156,15 +276,26 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
     uint32_t *dst;
     uint32_t n, i;
     os_fb_scene_t local;
+    int nw, nh;
 
     if (!scene || scene->magic != OS_FB_MAGIC) return -1;
     memcpy(&local, scene, sizeof(local));
+    if (com2_poll_size(&nw, &nh)) {
+        if (!g_on || nw != g_w || nh != g_h) {
+            if (vbe_set_mode(nw, nh) == 0) {
+                g_on = 1;
+                vga_desktop_set(1);
+                log_fb_size(g_logged ? "osui gui fb resize " : "osui gui fb ", nw, nh);
+                g_logged = 1;
+            }
+        }
+    }
     if (!g_on) {
-        if (vbe_enable(GFX_FB_WIDTH, GFX_FB_HEIGHT) != 0) return -2;
+        if (vbe_set_mode(GFX_FB_WIDTH, GFX_FB_HEIGHT) != 0) return -2;
         g_on = 1;
         vga_desktop_set(1);
         if (!g_logged) {
-            print_string_serial("osui gui fb 1024x768 chrome=qemu_fb display_surface=vbe_lfb\n");
+            log_fb_size("osui gui fb ", g_w, g_h);
             g_logged = 1;
         }
     }
@@ -185,7 +316,9 @@ void gfx_fb_leave(void) {
     vga_text_restore();
     g_on = 0;
     g_lfb = 0;
+    g_mapped = 0;
     g_logged = 0;
+    g_fit_n = 0;
     vga_desktop_set(0);
 }
 
