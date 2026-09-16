@@ -615,6 +615,13 @@ qemu-vfs-service: $(OS_IMAGE) pack-initrd disk
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
 
+.PHONY: qemu-osui-runtime osui-registry-check
+osui-registry-check:
+	@python3 osui/scripts/extract_guest_commands.py --check
+
+qemu-osui-runtime: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_osui_runtime.py
+
 # Les sept contrats restent inchangés ; l’ordonnanceur les exécute dans un pool borne
 # a deux QEMU par defaut. QEMU_INTEGRATION_JOBS=1 conserve le mode strictement sequentiel.
 integration-qemu: $(OS_IMAGE) pack-initrd disk
@@ -727,6 +734,8 @@ help:
 	@echo "  gpt2-recovery   - Modèle requis : réponse GPT-2 puis reprise shell (rc)"
 	@echo "  gpt2-benchmark  - Modèle requis : mesure de latence QEMU SSE2"
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
+	@echo "  qemu-osui-runtime - Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA ; hors integration-qemu)"
+	@echo "  osui-registry-check - Verifie JSON/header vs userspace/shell.c"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
 	@echo "  agent-smoke     - Fumee HTTP instance (gestes, MCP, origine embed, /browser, FS sandbox, 501 Playwright absent ; hors ci / QEMU)"
 	@echo "  osui-smoke      - Fumee shell graphique OS-UI (chat, scene IA, shell Multiboot, registre guest, session, origine, admin, geste ; hors ci / QEMU)"

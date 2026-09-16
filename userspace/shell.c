@@ -8,6 +8,7 @@
 #include "os_syscalls.h"
 #include "os_vfs_service.h"
 #include "os_ipc_deferred.h"
+#include "osui_runtime.h"
 
 // ==============================================================================
 // STRUCTURES ET DÉFINITIONS
@@ -826,6 +827,7 @@ void init_shell_context(shell_context_t* ctx) {
 
     ramfs_init();
     procsim_init();
+    osui_runtime_init();
 }
 
 void add_to_history(shell_context_t* ctx, const char* command) {
@@ -1078,6 +1080,14 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  reboot             - Redémarrer le système\n");
     print_string("  shutdown           - Arrêter le système\n");
     
+    print_colored("\nCOMMANDES OS-UI (Ring 3, llm=stub_echo) :\n", COLOR_YELLOW);
+    print_string("  /help /browser /shell /admin /support /status /fs /center\n");
+    print_string("  prompt <texte>     - Chat + scene VGA structuree\n");
+    print_string("  session-new/list/use/status  grant/revoke  escalate  takeover\n");
+    print_string("  origin-check  browser-click  mcp-invoice  mcp-invoke  fs-list/read\n");
+    print_string("  stage  stage-prompt  guest-status  os-status\n");
+    print_string("  Pas un bash Linux. Scene VGA, pas HTML #ai-stage. Pas Chromium.\n");
+
     print_colored("\nTIP: ls/cat/mkdir/rm/cp/mv/write/append parlent au noyau (initrd + overlay RAM).\n", COLOR_GREEN);
     print_colored("    Si le mode IA est activé, posez des questions sans 'ai'.\n\n", COLOR_GREEN);
 }
@@ -2592,6 +2602,13 @@ static int is_builtin(const char* cmd) {
         "grep", "wc", "sort", "head", "tail",
         "logout", "reboot", "shutdown",
         "aistats", "aimode", "aihelp", "aitest",
+        "session-new", "session-use", "session-status", "session-list",
+        "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
+        "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
+        "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
+        "stage", "stage-prompt", "os-help", "os-status", "os-browser", "os-shell",
+        "os-admin", "os-support", "os-fs", "os-center", "os-close",
+        "guest-status", "attach", "detach", "open",
         0
     };
     for (int i = 0; names[i]; i++) {
@@ -5459,14 +5476,34 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
     else
         add_to_history(ctx, input_buffer);
 
-    // Vérifier si c'est une question en mode IA
-    if (ctx->ai_mode && is_question(input_buffer)) {
-        call_ai_assistant(ctx, input_buffer);
+    if (input_buffer[0] == '/') {
+        char osui_out[OSUI_OUT_MAX];
+        ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
+        print_string(osui_out);
         return;
     }
 
     // Parser la commande
     if (!parse_command(input_buffer, command, args, &arg_count)) {
+        return;
+    }
+
+    if (osui_is_linux_trap(command)) {
+        print_string("Pas un bash Linux. Shell Multiboot (userspace/shell.c). Tapez help.\n");
+        ctx->last_rc = 1;
+        return;
+    }
+
+    if (osui_is_command(command)) {
+        char osui_out[OSUI_OUT_MAX];
+        ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
+        print_string(osui_out);
+        return;
+    }
+
+    // Vérifier si c'est une question en mode IA
+    if (ctx->ai_mode && is_question(input_buffer)) {
+        call_ai_assistant(ctx, input_buffer);
         return;
     }
 

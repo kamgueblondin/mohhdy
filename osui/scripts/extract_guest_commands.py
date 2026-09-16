@@ -48,7 +48,44 @@ LINUX_TRAPS = [
     "docker",
     "systemd",
 ]
-OSUI_EXTRA = ["attach", "detach", "guest-status", "open"]
+OSUI_EXTRA = [
+    "session-new",
+    "session-use",
+    "session-status",
+    "session-list",
+    "chat",
+    "prompt",
+    "grant",
+    "revoke",
+    "escalate",
+    "takeover",
+    "admin-status",
+    "origin-check",
+    "browser-click",
+    "browser-type",
+    "browser-pointer",
+    "browser-status",
+    "mcp-invoice",
+    "mcp-invoke",
+    "fs-list",
+    "fs-read",
+    "fs-write",
+    "stage",
+    "stage-prompt",
+    "os-help",
+    "os-status",
+    "os-browser",
+    "os-shell",
+    "os-admin",
+    "os-support",
+    "os-fs",
+    "os-center",
+    "os-close",
+    "guest-status",
+    "attach",
+    "detach",
+    "open",
+]
 
 
 def extract_commands(source: str) -> dict:
@@ -91,10 +128,10 @@ def manifest(parsed: dict) -> dict:
         "osui_extra": list(OSUI_EXTRA),
         "linux_traps": list(LINUX_TRAPS),
         "note": (
-            "Registre partage osui <-> guest Ring 3. "
-            "Les noms viennent de userspace/shell.c. "
-            "osui extra = attach live bootstrap. "
-            "Pas un bash Linux. Guest VGA n'heberge pas #ai-stage."
+            "Registre partage genere depuis userspace/shell.c. "
+            "Les noms OS-UI (sessions, MCP, scene VGA) sont des builtins Ring 3. "
+            "Pas un bash Linux. Guest VGA = scene structuree, pas #ai-stage HTML. "
+            "python_facade=false."
         ),
     }
 
@@ -103,13 +140,16 @@ def header_text(data: dict) -> str:
     lines = [
         "/* mohhdy_osui_bridge.h - contrat bootstrap osui <-> guest Ring 3.",
         " * Genere par osui/scripts/extract_guest_commands.py depuis userspace/shell.c.",
-        " * Ne pas editer a la main. Ne pas declarer une scene HTML #ai-stage dans le VGA.",
+        " * Ne pas editer a la main. Scene guest = VGA structuree, pas HTML #ai-stage.",
         " */",
         "#ifndef MOHHDY_OSUI_BRIDGE_H",
         "#define MOHHDY_OSUI_BRIDGE_H",
         "",
         "#define MOHHDY_OSUI_GUEST_HTML_STAGE 0",
-        "#define MOHHDY_OSUI_LIVE_ATTACH_HOST 1",
+        "#define MOHHDY_OSUI_LIVE_ATTACH_HOST 0",
+        "#define MOHHDY_OSUI_STAGE_VGA 1",
+        "#define MOHHDY_OSUI_PYTHON_FACADE 0",
+        '#define MOHHDY_OSUI_LLM_KIND "stub_echo"',
         '#define MOHHDY_SHELL_PROMPT "MOHHDY>"',
         "#define MOHHDY_SHELL_COMMAND_COUNT %d" % len(data["commands"]),
         "",
