@@ -11,6 +11,8 @@ COPY --chown=mohhdy:mohhdy agent/*.py agent/config.example.json ./agent/
 COPY --chown=mohhdy:mohhdy agent/static ./agent/static
 COPY --chown=mohhdy:mohhdy osui/*.py ./osui/
 COPY --chown=mohhdy:mohhdy osui/static ./osui/static
+COPY --chown=mohhdy:mohhdy shared ./shared
+COPY --chown=mohhdy:mohhdy userspace/mohhdy_osui_bridge.h ./userspace/mohhdy_osui_bridge.h
 
 USER mohhdy
 

@@ -28,7 +28,7 @@ class MultibootShellVocab(unittest.TestCase):
         self.assertIn("vfs-list", text)
         self.assertIn("userspace/shell.c", text)
         self.assertIn("Pas un bash Linux", text)
-        self.assertIn("QEMU/serial", text)
+        self.assertIn("MOHHDY_SHELL_ATTACH", text)
 
     def test_vfs_list_mirror(self) -> None:
         out = self.shell.execute("vfs-list initrd/bin/")
@@ -51,8 +51,22 @@ class MultibootShellVocab(unittest.TestCase):
         self.assertIn("Pas un bash Linux", apt["output"])
         attach = self.shell.execute("attach")
         self.assertEqual(attach["rc"], 1)
-        self.assertIn("n'est pas branche", attach["output"])
+        self.assertFalse(attach["live_guest"])
         self.assertIn("bootstrap", attach["output"])
+        self.assertIn("MOHHDY_GUEST_SERIAL", attach["output"])
+
+    def test_registry_names_include_vfs_list(self) -> None:
+        meta = self.shell.public_meta()
+        self.assertIn("vfs-list", meta["commands"])
+        self.assertIn("ai-acquire", meta["commands"])
+        self.assertGreaterEqual(meta["command_count"], 100)
+        self.assertEqual(meta["registry"], "shared/multiboot_shell_commands.json")
+
+    def test_unknown_guest_command_is_honest_not_live(self) -> None:
+        out = self.shell.execute("ai-acquire 127.0.0.1")
+        self.assertEqual(out["rc"], 1)
+        self.assertIn("live QEMU/serial", out["output"])
+        self.assertFalse(out["live_guest"])
 
     def test_openai_provider_refused(self) -> None:
         out = self.shell.execute("ai-provider openai")
