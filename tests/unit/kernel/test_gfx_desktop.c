@@ -74,11 +74,15 @@ static void test_float_chat_and_browser_pane(void) {
     blank_scene();
     g_scene.chat_mode = OS_FB_CHAT_FLOAT;
     g_scene.pane = OS_FB_PANE_BROWSER;
+    g_scene.chat_x = 16; /* leftover center VGA column must not cover the pane */
+    g_scene.chat_y = 5;
     gfx_desktop_draw(&g_scene, g_fb, W, H);
     center = gfx_desktop_pixel(g_fb, W, H, 200, 200);
     right = gfx_desktop_pixel(g_fb, W, H, 900, 500);
     TEST_ASSERT(center != right);
     TEST_ASSERT(count_near(40, 70, 400, 200, 28, 44, 56, 40) > 30);
+    /* Floating chat stays on the right of the Browser-OS window. */
+    TEST_ASSERT(count_near(640, 200, 1000, 620, 11, 16, 20, 20) > 40);
 }
 
 static void test_circle_kind_paints_ring(void) {

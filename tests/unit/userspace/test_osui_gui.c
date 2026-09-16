@@ -80,6 +80,7 @@ static void test_snap_center_and_float(void) {
     TEST_ASSERT_EQUAL(0, run_line("/browser"));
     TEST_ASSERT_EQUAL_STRING("float", osui_get_chat_mode());
     TEST_ASSERT_EQUAL_STRING("browser", osui_get_pane());
+    TEST_ASSERT(osui_get_chat_x() >= 40);
     osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
     TEST_ASSERT(strstr(g_snap, "chat_mode=float") != NULL);
     TEST_ASSERT(strstr(g_snap, "pane=browser") != NULL);

@@ -1415,10 +1415,9 @@ static int cmd_open(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
     }
     s_cpy(G.chat_mode, 12, "float");
     s_cpy(G.pane, OSUI_PANE, pane);
-    if (G.chat_x == 0 && G.chat_y == 0) {
-        G.chat_x = 51;
-        G.chat_y = 14;
-    }
+    /* Park the floating chat on the right so it does not cover the program pane. */
+    G.chat_x = 51;
+    G.chat_y = 14;
     out_add(out, max, &p, "osui open ok pane=");
     out_add(out, max, &p, pane);
     out_add(out, max, &p, " chat_mode=float live_guest=true\n");

@@ -509,14 +509,19 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? 360 : clampi(w / 2, 420, 640);
     chat_h = sc->chat_mode == OS_FB_CHAT_FLOAT ? 400 : clampi((h * 5) / 12, 280, 360);
     if (sc->chat_mode == OS_FB_CHAT_FLOAT) {
+        int pane_right = ptitle ? (36 + clampi(w - 420, 420, 720) + 12) : 8;
+        int max_x = w - chat_w - 8;
         chat_x = w - chat_w - 110;
         chat_y = h - chat_h - 70;
-        chat_x = clampi(chat_x, 8, w - chat_w - 8);
-        chat_y = clampi(chat_y, bar_h + 8, h - chat_h - 8);
         if (sc->chat_x || sc->chat_y) {
-            chat_x = clampi((int)sc->chat_x * w / 80, 8, w - chat_w - 8);
-            chat_y = clampi((int)sc->chat_y * h / 25, bar_h + 8, h - chat_h - 8);
+            chat_x = (int)sc->chat_x * w / 80;
+            chat_y = (int)sc->chat_y * h / 25;
         }
+        if (max_x < 8) max_x = 8;
+        if (pane_right > max_x) pane_right = max_x;
+        if (chat_x < pane_right) chat_x = pane_right;
+        chat_x = clampi(chat_x, pane_right, max_x);
+        chat_y = clampi(chat_y, bar_h + 8, h - chat_h - 8);
     } else {
         chat_x = (w - chat_w) / 2;
         chat_y = bar_h + (h / 14);
