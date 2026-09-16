@@ -290,8 +290,10 @@ def main():
             if not wid:
                 raise RuntimeError("QEMU window missing after gui")
 
-            subprocess.check_call(["xdotool", "windowsize", "--usehints", wid, "1480", "920"])
+            subprocess.check_call(["xdotool", "windowsize", wid, "1480", "920"])
             time.sleep(0.5)
+            geom = window_geom(wid)
+            say("grow window geom %dx%d at %d,%d" % (geom[2], geom[3], geom[0], geom[1]))
             large = wait_fb_change(qemu, first, 12)
             say("after grow VBE %sx%s" % (large[0], large[1]))
             if not large[0] or large[0] < 1100 or large[1] < 700:
@@ -306,7 +308,7 @@ def main():
             if abs(w1 - dw) > 48 or abs(h1 - dh) > 48:
                 raise RuntimeError("large VBE does not fill window: fb %dx%d window %dx%d" % (dw, dh, w1, h1))
 
-            subprocess.check_call(["xdotool", "windowsize", "--usehints", wid, "800", "600"])
+            subprocess.check_call(["xdotool", "windowsize", wid, "800", "600"])
             time.sleep(0.5)
             small = wait_fb_change(qemu, large, 12)
             say("after shrink VBE %sx%s" % (small[0], small[1]))
