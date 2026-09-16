@@ -458,5 +458,5 @@
     "docker",
     "systemd"
   ],
-  "note": "Registre partage genere depuis userspace/shell.c. Les noms OS-UI (sessions, MCP, scene VGA, gui) sont des builtins Ring 3. Commande canonique du bureau : gui (aliases graphics, desktop). Pas un bash Linux. Guest VGA = bureau 80x25 + scene structuree, pas #ai-stage HTML. python_facade=false."
+  "note": "Registre partage genere depuis userspace/shell.c. Les noms OS-UI (sessions, MCP, scene, gui) sont des builtins Ring 3. Commande canonique du bureau : gui (aliases graphics, desktop). Pas un bash Linux. Surface produit = bureau VBE QEMU, cerveau = C. guest_html_stage=false python_facade=false display_host=false."
 }

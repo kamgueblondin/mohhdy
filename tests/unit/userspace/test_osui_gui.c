@@ -1,4 +1,4 @@
-/* test_osui_gui.c - Bureau VGA 80x25 (chat central/flottant, scene). */
+/* test_osui_gui.c - Commande gui, bureau VBE QEMU, chat float. */
 
 #include "../../framework/unity.h"
 #include "../../framework/test_kernel.h"
@@ -10,6 +10,8 @@
 static uint16_t g_cells[OS_VGA_ROWS * OS_VGA_COLS];
 static char g_out[OSUI_OUT_MAX];
 static char g_row[96];
+static char g_snap[OSUI_SNAP_MAX];
+static os_fb_scene_t g_scene;
 
 static int run_line(const char *line) {
     memset(g_out, 0, sizeof(g_out));
@@ -25,72 +27,85 @@ static void test_gui_command_canonical(void) {
     setup();
     TEST_ASSERT_EQUAL(0, run_line("gui"));
     TEST_ASSERT(strstr(g_out, "canonical=gui") != NULL);
-    TEST_ASSERT(strstr(g_out, "chrome=vga_desktop") != NULL);
+    TEST_ASSERT(strstr(g_out, "chrome=qemu_fb") != NULL);
+    TEST_ASSERT(strstr(g_out, "display_surface=vbe_lfb") != NULL);
     TEST_ASSERT(strstr(g_out, "us031_complete=false") != NULL);
     TEST_ASSERT(osui_gui_should_enter());
     osui_gui_ack_enter();
     TEST_ASSERT_EQUAL(0, run_line("graphics"));
     TEST_ASSERT(strstr(g_out, "canonical=gui") != NULL);
     TEST_ASSERT_EQUAL(0, run_line("desktop"));
-    TEST_ASSERT(strstr(g_out, "chrome=vga_desktop") != NULL);
+    TEST_ASSERT(strstr(g_out, "chrome=qemu_fb") != NULL);
 }
 
-static void test_center_chat_layout(void) {
+static void test_vga_pointer_not_ascii_desktop(void) {
     setup();
     osui_gui_render(g_cells);
     osui_gui_ascii_row(g_cells, 0, g_row, (int)sizeof(g_row));
     TEST_ASSERT(strstr(g_row, "MOHHDY OS") != NULL);
+    TEST_ASSERT(strstr(g_row, "qemu_fb") != NULL);
     TEST_ASSERT(strstr(g_row, "us031=false") != NULL);
     osui_gui_ascii_row(g_cells, 5, g_row, (int)sizeof(g_row));
-    TEST_ASSERT(strstr(g_row, "CHAT central") != NULL);
+    TEST_ASSERT(strstr(g_row, "CHAT central") == NULL);
+    osui_gui_ascii_row(g_cells, 3, g_row, (int)sizeof(g_row));
+    TEST_ASSERT(strstr(g_row, "ASCII") != NULL);
 }
 
-static void test_float_chat_when_program_opens(void) {
+static void test_scene_center_and_float(void) {
     setup();
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_MAGIC, g_scene.magic);
+    TEST_ASSERT_EQUAL(OS_FB_CHAT_CENTER, g_scene.chat_mode);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_NONE, g_scene.pane);
+
     TEST_ASSERT_EQUAL(0, run_line("/browser"));
-    TEST_ASSERT(strstr(g_out, "chat_mode=float") != NULL || strstr(g_out, "pane=browser") != NULL);
     TEST_ASSERT_EQUAL_STRING("float", osui_get_chat_mode());
-    TEST_ASSERT_EQUAL_STRING("browser", osui_get_pane());
-    osui_gui_render(g_cells);
-    osui_gui_ascii_row(g_cells, osui_get_chat_y(), g_row, (int)sizeof(g_row));
-    TEST_ASSERT(strstr(g_row, "CHAT float") != NULL);
-    osui_gui_ascii_row(g_cells, 2, g_row, (int)sizeof(g_row));
-    TEST_ASSERT(strstr(g_row, "browser") != NULL);
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_CHAT_FLOAT, g_scene.chat_mode);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_BROWSER, g_scene.pane);
 
     TEST_ASSERT_EQUAL(0, run_line("/center"));
-    TEST_ASSERT(strstr(g_out, "chat_mode=center") != NULL);
-    TEST_ASSERT_EQUAL_STRING("center", osui_get_chat_mode());
-    osui_gui_render(g_cells);
-    osui_gui_ascii_row(g_cells, 5, g_row, (int)sizeof(g_row));
-    TEST_ASSERT(strstr(g_row, "CHAT central") != NULL);
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_CHAT_CENTER, g_scene.chat_mode);
 }
 
-static void test_stage_constructions_not_tiny_dump(void) {
+static void test_snap_center_and_float(void) {
+    setup();
+    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
+    TEST_ASSERT(strstr(g_snap, "OSUI-SNAP") != NULL);
+    TEST_ASSERT(strstr(g_snap, "chrome=qemu_fb") != NULL);
+    TEST_ASSERT(strstr(g_snap, "chat_mode=center") != NULL);
+    TEST_ASSERT(strstr(g_snap, "OSUI-END") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("/browser"));
+    TEST_ASSERT_EQUAL_STRING("float", osui_get_chat_mode());
+    TEST_ASSERT_EQUAL_STRING("browser", osui_get_pane());
+    TEST_ASSERT(osui_get_chat_x() >= 40);
+    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
+    TEST_ASSERT(strstr(g_snap, "chat_mode=float") != NULL);
+    TEST_ASSERT(strstr(g_snap, "pane=browser") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("/center"));
+    TEST_ASSERT_EQUAL_STRING("center", osui_get_chat_mode());
+    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
+    TEST_ASSERT(strstr(g_snap, "chat_mode=center") != NULL);
+}
+
+static void test_snap_stage_kind(void) {
     setup();
     run_line("stage-prompt dessine un cercle");
     TEST_ASSERT(strstr(g_out, "kind=circle") != NULL);
-    TEST_ASSERT(strstr(g_out, "canvas=vga_desktop") != NULL);
     TEST_ASSERT_EQUAL_STRING("circle", osui_get_stage_kind());
-    osui_gui_render(g_cells);
-    {
-        int y;
-        int stars = 0;
-        for (y = 1; y < 20; y++) {
-            int x;
-            osui_gui_ascii_row(g_cells, y, g_row, (int)sizeof(g_row));
-            for (x = 0; g_row[x]; x++) {
-                if (g_row[x] == '*') stars++;
-            }
-        }
-        TEST_ASSERT(stars >= 8);
-    }
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_KIND_CIRCLE, g_scene.stage_kind);
+    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
+    TEST_ASSERT(strstr(g_snap, "kind=circle") != NULL);
+    TEST_ASSERT(strstr(g_snap, "stage=presenting") != NULL);
 
     run_line("stage-prompt dessine trois boites");
-    TEST_ASSERT(strstr(g_out, "[A] [B] [C]") != NULL);
     TEST_ASSERT(strstr(g_out, "kind=boxes") != NULL);
-    osui_gui_render(g_cells);
-    osui_gui_ascii_row(g_cells, 4, g_row, (int)sizeof(g_row));
-    TEST_ASSERT(strchr(g_row, '+') != NULL);
+    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
+    TEST_ASSERT(strstr(g_snap, "kind=boxes") != NULL);
 }
 
 static void test_gui_feed_slash_and_esc(void) {
@@ -120,9 +135,10 @@ static void test_gui_feed_slash_and_esc(void) {
 int main(void) {
     unity_init();
     RUN_TEST(test_gui_command_canonical);
-    RUN_TEST(test_center_chat_layout);
-    RUN_TEST(test_float_chat_when_program_opens);
-    RUN_TEST(test_stage_constructions_not_tiny_dump);
+    RUN_TEST(test_vga_pointer_not_ascii_desktop);
+    RUN_TEST(test_scene_center_and_float);
+    RUN_TEST(test_snap_center_and_float);
+    RUN_TEST(test_snap_stage_kind);
     RUN_TEST(test_gui_feed_slash_and_esc);
     unity_print_results();
     unity_cleanup();

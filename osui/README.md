@@ -1,36 +1,23 @@
-# OS-UI (retire)
+# OS-UI : bureau graphique QEMU + cerveau guest C
 
-Le chrome Python `osui/` (HTTP, HTML `#ai-stage`) et le scaffold `agent/`
-sont **retires** (OS-UI-3).
+Le chrome produit est le **framebuffer VBE** dans la fenetre QEMU
+(`kernel/gfx_desktop.c`, 1024x768x32). Le **cerveau** reste
+`userspace/osui_runtime.c`. `gui` / `graphics` / `desktop` entre ce mode ;
+`console` / ESC revient au texte.
 
-La surface vit dans le guest Ring 3 Multiboot :
-
-- `userspace/osui_runtime.c` : chat, scene VGA, sessions, droits, MCP, FS
-- `userspace/osui_gui.c` : bureau VGA 80x25 (commande canonique `gui`)
-- `userspace/shell.c` : vocabulaire `MOHHDY>`
-- `shared/multiboot_shell_commands.json` : registre genere
-- `userspace/mohhdy_osui_bridge.h` : contrat C (`PYTHON_FACADE 0`, `VGA_DESKTOP 1`)
-
-Extracteur hote (pas un runtime produit) :
+Ce n'est **pas** une fenetre HTML hote, **pas** le sidecar `agent/`
+(retire, OS-UI-3). `python_facade=false`. `display_host=false`.
+`guest_html_stage=false`. `llm=stub_echo`. `us031_complete=false`.
+`chrome=qemu_fb`. `display_surface=vbe_lfb`.
 
 ```text
-python3 scripts/extract_guest_commands.py
-python3 scripts/extract_guest_commands.py --check
+make all
+make run-gui          # QEMU GTK ; tapez gui apres MOHHDY>
+make qemu-osui-gui    # contrat nographic + screendump, hors integration-qemu
+make osui-smoke       # registre + facade absente
 ```
 
-Boot instance :
-
-```text
-make all && make run-gui
-make qemu-osui-runtime
-make qemu-osui-gui
-docker build -t mohhdy-os .
-docker run --rm -it mohhdy-os
-```
-
-Au prompt `MOHHDY>` : `gui`. Nographic : `gui-status`. Ce n'est **pas**
-US-031, **pas** un LLM de production, **pas** un bash Linux.
-Le VGA n'heberge pas `#ai-stage` HTML : scene structuree + canvas desktop.
+Docker reste nographic par defaut.
 
 Guides : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md),
-[../docs/osui_convergence.md](../docs/osui_convergence.md).
+[../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md).

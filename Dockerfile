@@ -1,7 +1,6 @@
 # Image produit Mohhdy : boot du SE Multiboot sous QEMU.
-# Pas de serveur Python, pas de chrome HTML, pas de port HTTP 8080.
-# Construire depuis la racine du depot : docker build -t mohhdy-os .
-# Lancer : docker run --rm -it mohhdy-os
+# Pas de sidecar agent/. Le bureau HTML vit sur l'hote (make run-gui).
+# Docker par defaut = nographic (CI). Construire : docker build -t mohhdy-os .
 
 FROM debian:bookworm-slim AS build
 
@@ -45,6 +44,6 @@ ENV MOHHDY_RAM=256M
 STOPSIGNAL SIGTERM
 
 # Serial stdio = console de l'instance. Pas d'EXPOSE HTTP.
-# Defaut nographic (CI). Bureau VGA : make run-gui sur l'hote, ou
-# docker/qemu-gui.sh (DISPLAY + paquet qemu-system-gui). Dans le guest : gui
+# Defaut nographic (CI). Bureau HTML : make run-gui sur l'hote.
+# docker/qemu-gui.sh = fallback GTK. Dans le guest : gui
 CMD ["/os/qemu-nographic.sh"]

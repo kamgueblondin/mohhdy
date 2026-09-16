@@ -6,10 +6,12 @@
 
 Mohhdy est **un seul SE Multiboot**. Chat, scene IA, sessions, droits,
 gestes allowlistes, MCP et FS sandbox vivent dans `userspace/osui_runtime.c`,
-derriere le vocabulaire `MOHHDY>` de `userspace/shell.c`. Le bureau VGA
-est `userspace/osui_gui.c` (commande canonique `gui`). Docker boot
-**cette** instance QEMU. Ce n'est **pas** US-031, **pas** un LLM de
-production, **pas** un bash Linux, **pas** un chrome HTML `#ai-stage`.
+derriere le vocabulaire `MOHHDY>` de `userspace/shell.c`. Le bureau
+produit est le framebuffer VBE 1024x768 dans la **fenetre QEMU**
+(`kernel/gfx_desktop.c`). `gui` entre ce mode. Docker boot **cette**
+instance QEMU (nographic par defaut). Ce n'est **pas** US-031, **pas**
+un LLM de production, **pas** un bash Linux, **pas** un sidecar `agent/`.
+Le guest n'execute pas HTML (`guest_html_stage=false`).
 
 Plan maitre : [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md).
 Epiques : [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md).
@@ -22,8 +24,8 @@ Guest mesure : [ETAT_REEL.md](ETAT_REEL.md).
 ## Ce que `docker run` ouvre
 
 Image produit : `mohhdy-os`. Entree par defaut : QEMU nographic, console
-serie (CI). Bureau VGA : `make run-gui` sur l'hote, ou
-`/os/qemu-gui.sh` si `DISPLAY` est fourni.
+serie (CI). Bureau graphique : `make run-gui` sur l'hote (QEMU GTK).
+`/os/qemu-gui.sh` est le meme chemin VBE.
 
 ```text
 make all
@@ -39,10 +41,9 @@ make run-gui
 Dans le guest, apres `MOHHDY>` : `gui` (aliases `graphics`, `desktop`).
 Quitter : `console` / ESC. Nographic : `gui-status` dump le canvas.
 
-Pas de port 8080. Pas de `GET /health`. Le prompt guest `MOHHDY>` est
-l'instance. Sante honnete : `os-status` et `guest-status`
+Pas de serveur metier. Sante guest : `os-status` et `guest-status`
 (`llm=stub_echo`, `python_facade=false`, `phase3_complete=false`,
-`us031_complete=false`).
+`us031_complete=false`, `display_surface=vbe_lfb`, `chrome=qemu_fb`).
 
 Aucun secret dans l'image. Utilisateur du conteneur = processus QEMU.
 Les poids GPT-2 ne sont pas dans l'image par defaut (`MOHHDY_RAM=256M`).
@@ -58,21 +59,22 @@ docker run -it mohhdy-os
               osui_runtime.c + osui_gui.c
                 chat / prompt / slash
                 commande gui (aliases graphics, desktop)
-                scene VGA 8x48 + canvas desktop 22x78
+                framebuffer VBE 1024x768 (kernel/gfx_desktop.c)
+                scene kind/mode (reflecting / acting / presenting)
                 sessions s0001+ , grant/revoke, escalate/takeover
                 origin-check, browser-* simulateur, mcp-invoice
                 fs-list / fs-read (write et traversal refuses)
 ```
 
-`agent/` et le serveur Python `osui/` n'existent plus. Python hote
-reste pour les tests et `scripts/extract_guest_commands.py`.
+`agent/` et `osui/server.py` n'existent plus. Python hote reste pour
+les tests et `scripts/extract_guest_commands.py`.
 
 ## OS-UI-0 - chrome guest
 
 - Prompt `MOHHDY>`, slash `/help` `/browser` `/shell` `/admin` `/support`
   `/status` `/fs` `/plan` `/center` `/close`
 - Commande canonique `gui` (aliases `graphics`, `desktop`) ; `console` quitte
-- Scene VGA structuree + constructions ASCII du bureau (pas HTML)
+- Bureau VBE QEMU (chat central / flottant, dock, Scene IA)
 - Vocabulaire Multiboot conserve (`ls`, `ai`, `vfs-*`, pieges Linux)
 
 ## OS-UI-1 - sessions / droits
@@ -89,12 +91,12 @@ reste pour les tests et `scripts/extract_guest_commands.py`.
 - `fs-list` / `fs-read` sandbox ; `..` = `traversal_denied` ; write refuse
 - `phase3_complete=false`, `us031_complete=false`
 
-## OS-UI-3 - Python retire
+## OS-UI-3 - Python metier retire
 
 - `agent/` supprime
-- serveur HTML `osui/` supprime
-- Docker = boot QEMU
-- `MOHHDY_OSUI_PYTHON_FACADE 0`
+- serveur metier `osui/server.py` / `prompt_os.py` / `stage.py` supprimes
+- `PYTHON_FACADE 0`
+- Docker = boot QEMU nographic
 
 ## Verification
 
@@ -114,5 +116,5 @@ Le contrat OS-UI est `make qemu-osui-runtime` ; la fumee bureau est
 
 - Chromium / Playwright / US-031
 - LLM de production (stub echo + GPT-2 local deja dans le guest)
-- HTML `#ai-stage`, embed.js HTTP, UUID de session
+- HTML execute **dans** le guest i386 (`guest_html_stage=false`)
 - Install PC / cloud-init de l'ancien sidecar HTTP

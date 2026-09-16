@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
 """Focused host check: product Python facade is gone (OS-UI-3).
 
-Hors make integration-qemu. Python hote (tests/scripts, extracteur) reste autorise.
+The product desktop is the QEMU VBE framebuffer (kernel/gfx_desktop.c),
+not a host HTML window and not agent/ business logic.
 """
 from __future__ import print_function
 
@@ -19,10 +19,12 @@ FORBIDDEN = [
     "osui/prompt_os.py",
     "osui/guest_attach.py",
     "osui/command_registry.py",
-    "osui/static/index.html",
-    "osui/static/os.js",
     "osui/Dockerfile",
     "osui/docker-compose.yml",
+    "osui/display_host.py",
+    "osui/static/index.html",
+    "osui/static/os.css",
+    "osui/static/os.js",
 ]
 
 REQUIRED = [
@@ -32,6 +34,8 @@ REQUIRED = [
     "userspace/osui_gui.h",
     "userspace/shell.c",
     "userspace/mohhdy_osui_bridge.h",
+    "kernel/gfx_desktop.c",
+    "kernel/gfx_fb.c",
     "shared/multiboot_shell_commands.json",
     "scripts/extract_guest_commands.py",
     "Dockerfile",
@@ -63,15 +67,22 @@ def main():
         fail("MOHHDY_OSUI_STAGE_VGA must be 1")
     if "#define MOHHDY_OSUI_VGA_DESKTOP 1" not in header:
         fail("MOHHDY_OSUI_VGA_DESKTOP must be 1")
+    if "#define MOHHDY_OSUI_DISPLAY_HOST 0" not in header:
+        fail("MOHHDY_OSUI_DISPLAY_HOST must be 0")
     if '#define MOHHDY_OSUI_GUI_COMMAND "gui"' not in header:
         fail("MOHHDY_OSUI_GUI_COMMAND must be gui")
+    makefile = open(os.path.join(ROOT, "Makefile"), "r").read()
+    if "display_host.py --port 18080" in makefile.split("run-gui", 1)[-1].split("run-nographic", 1)[0]:
+        fail("make run-gui must not launch an HTML display host")
+    if "-display gtk" not in makefile:
+        fail("make run-gui must use QEMU graphical display")
     dockerfile = open(os.path.join(ROOT, "Dockerfile"), "r").read()
     if "python3" in dockerfile.lower() and "CMD" in dockerfile:
         if "server.py" in dockerfile:
             fail("Dockerfile still launches a Python server")
     if "qemu-system-i386" not in open(os.path.join(ROOT, "docker/qemu-nographic.sh")).read():
         fail("docker entrypoint must boot qemu-system-i386")
-    print("OK python facade removed; guest C + QEMU docker remain")
+    print("OK python facade removed; guest C + QEMU VBE desktop remain")
     return 0
 
 

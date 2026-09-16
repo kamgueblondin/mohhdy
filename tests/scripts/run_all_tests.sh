@@ -131,6 +131,9 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_vga_console.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/vga_console.c"
     fi
+    if [ "$(basename "$test_file")" = "test_gfx_desktop.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c"
+    fi
     if [ "$(basename "$test_file")" = "test_ipc.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/ipc.c"
     fi
