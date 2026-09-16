@@ -1,121 +1,40 @@
-# OS-UI : chat central, scene IA, shell Multiboot
+# OS-UI : chat, scene VGA, shell Multiboot
 
-**Date :** 15 septembre 2026
-**Statut :** modele d'interaction du bootstrap graphique `osui/`
+**Date :** 16 septembre 2026
+**Statut :** modele d'interaction du guest Ring 3 (`osui_runtime.c`)
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
-Mohhdy est **un seul SE Multiboot**. Le bureau n'est pas un Support
-lateral comme identite produit. La surface primaire est le **chat
-central**. Le **fond du bureau** est la **scene IA** (`#ai-stage`) :
-reflexion, action, resultats en HTML. Les programmes s'ouvrent par
-raccourci (`/browser`, `/shell`, ...) ou par un prompt equivalent.
-Quand un programme s'ouvre, le chat **quitte le centre** et devient un
-**panneau flottant, deplacable**. `/shell` ouvre le **meme vocabulaire**
-que le shell guest Ring 3 (`userspace/shell.c`), en surface bootstrap
-tant que QEMU n'est pas attache.
+Mohhdy est **un seul SE Multiboot**. La surface primaire est le **prompt
+`MOHHDY>`** avec commandes chat-like. Le fond est la **scene IA VGA**.
+Les programmes s'ouvrent par slash (`/browser`, `/shell`, `/admin`) ou
+par `prompt ouvre le shell`. Quand un programme s'ouvre, le chat passe
+en `chat_mode=float`. `/center` ramene `chat_mode=center`.
 
-Chrome et APIs : [osui_0_1_2.md](osui_0_1_2.md). Scene IA :
-[osui_ai_stage.md](osui_ai_stage.md). Attache live :
+Chrome : [osui_0_1_2.md](osui_0_1_2.md). Scene :
+[osui_ai_stage.md](osui_ai_stage.md). Attache :
 [osui_shell_live.md](osui_shell_live.md). Convergence :
 [osui_convergence.md](osui_convergence.md). Plan :
 [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md). Ce n'est **pas**
-US-031, **pas** un LLM de production, **pas** un bash Linux. Le guest
-mesure : [ETAT_REEL.md](ETAT_REEL.md) (pas de scene HTML guest).
+US-031, **pas** un LLM de production, **pas** un bash Linux.
 
 ## Etat par defaut
 
-`GET /` ouvre le bureau. Le chat occupe le centre (`#os-chat`,
-`data-mode="center"`). La scene IA occupe tout le fond
-(`#ai-stage`, mode `reflecting`). Accueil honnete : `llm=stub_echo`,
-`phase3_complete=false`, `us031_complete=false`. Les fenetres programmes
-sont fermees.
+Le shell boot. Session `s0001`, caps visiteur (`chat.reply`). Scene
+`reflecting`. Accueil honnete : `llm=stub_echo`, `phase3_complete=false`,
+`us031_complete=false`, `python_facade=false`.
 
-Un prompt hors slash :
+Un prompt hors slash (`chat ...` ou texte non builtin) :
 
-1. parle au stub (echo / KB locale) via `POST /api/sessions/{id}/messages`
-2. met a jour `#ai-stage` via `POST /api/os/stage` (HTML / SVG stub)
+1. repond par stub echo / KB locale
+2. met a jour la scene VGA
 
-Session creee a la demande (`site_id` defaut `osui_demo`). Origine
-binding inchangee (ASSIST-013).
+`session-new` cree `s0002+` isole. Origine binding : `origin-check`
+(ASSIST-013). Grant/revoke avant geste ou MCP.
 
-## Raccourcis (`/help`)
+## Slash (vocabulaire conserve)
 
-Registre HTML : `#os-slash-registry`. JSON : `GET /api/os` champ
-`commands`. JS : `window.MohhdyOS.commands` et `parseLine`.
+`/help` `/browser` `/shell` `/admin` `/support` `/status` `/fs` `/plan`
+`/center` `/close`. Pieges Linux (`apt`, `sudo`, `bash`) refuses **avant**
+le mode question IA.
 
-| Raccourci | Effet |
-|---|---|
-| `/help` | Liste les raccourcis |
-| `/browser` | Ouvre Browser-OS (simulateur DOM) |
-| `/shell` | Ouvre le shell Multiboot (vocabulaire guest Ring 3) |
-| `/admin` | Ouvre Admin |
-| `/support` | Ouvre Support (sessions, escalade) |
-| `/status` | Ouvre Statut |
-| `/fs` | Ouvre le FS sandbox lecture |
-| `/center` | Ferme les programmes, chat au centre |
-| `/close` | Ferme les programmes, chat au centre |
-| `/plan` | Mini-plan autonome stub sur `#ai-stage` |
-| `/draw` | Dessine sur la scene IA |
-| `/stage` | Met a jour la scene sans ouvrir de pane |
-| `/guest` | Statut d'attache guest (`guest-status`) |
-| `/ai-help` | Aide IA Multiboot (stub) |
-
-Equivalents de prompt : "ouvre le navigateur", "open shell", "affiche
-l'admin", "dessine un cercle", "mini-plan autonome", "liste les
-commandes guest", "ai-help". `POST /api/os/prompt`. Inconnu : message
-systeme, pas d'execution. Slash conserves.
-
-## Chat flottant
-
-Des qu'un programme s'ouvre (`openPane` hors `chat`) :
-
-- `#os-chat` passe `data-mode="float"`
-- Coin bas-droit par defaut (au-dessus du dock)
-- Z-index au-dessus des fenetres (`--os-chat-z: 1100`)
-- Drag par l'en-tete (`data-drag="chat"`, cursor grab)
-- Position persistee dans `sessionStorage` (`mohhdy.os.chat.pos`)
-- Les prompts et slash restent disponibles (un prompt continue de
-  mettre a jour la scene IA)
-
-Fermer **toutes** les fenetres, `/center`, `/close`, ou le bouton
-Centrer : le chat revient au centre.
-
-API de test DOM : `window.MohhdyOS.getChatMode()`,
-`openPane("browser")`, `setChatMode`, `closeAllPrograms`,
-`applyStage`, `sanitizeStageHtml`.
-
-## Shell Multiboot (`/shell`)
-
-`/shell` n'est **pas** un jouet bash. C'est la surface du **meme**
-shell que le guest Multiboot (Ring 3, `userspace/shell.c`, prompt
-`MOHHDY>`).
-
-| Commande (extrait) | Mapping guest | Bootstrap osui |
-|---|---|---|
-| `help` | `cmd_help` | Liste alignee (ai, vfs, ls, ...) |
-| `ai <q>` | `SYS_GPT2_GENERATE` / GGUF | stub `llm=stub_echo` + scene IA |
-| `ai-help` / `ai-runtime` | builtins IA | honnete : pas de modele charge |
-| `vfs-list` / `vfs-read` / `vfs-stat` | `vfsserver` | miroir lecture, mutations refusees |
-| `ls` / `pwd` / `cat` | syscalls fichiers | miroir `initrd/` `overlay/` `fat16/` |
-| `net-status` | `SYS_NET_STATUS` | `nic=absent` |
-| `attach` | TTY QEMU serial / HMP | **tente** si configure, sinon bootstrap |
-| `guest-status` | honnete live_guest | `true` seulement si handshake `MOHHDY>` |
-
-Etat visible : `attachment=bootstrap live_guest=false` par defaut.
-Live : [osui_shell_live.md](osui_shell_live.md). Registre :
-`shared/multiboot_shell_commands.json` (extrait de `shell.c`).
-`POST /api/os/shell` `{"line":"..."}`. `GET /api/os/shell` : registre.
-`GET /api/os/commands`. `POST /api/os/attach`.
-
-Ne pas pretendre qu'un TTY QEMU tourne dans Docker. Ne pas inventer
-`apt` / `sudo`. Attache live : meme vocabulaire, autre transport.
-
-## Preuves
-
-```text
-make osui-smoke
-make osui-shell-live-smoke
-```
-
-Hors `make ci` QEMU, hors `make integration-qemu`. Pas d'OpenAI. Pas de
-secret dans l'UI. `agent/` n'est pas retire (OS-UI-3).
+Verification : `make qemu-osui-runtime`, tests Unity `test_osui_runtime.c`.

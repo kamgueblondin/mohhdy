@@ -1,5 +1,7 @@
 # ASSIST-020 / 021 / 022 - gestes, MCP, facture demo
 
+> **Historique.** Runtime Python `agent/` / `osui/` retire (OS-UI-3). Surface actuelle : `userspace/osui_runtime.c` sous QEMU Multiboot. Ce fichier conserve le contrat comportemental d'origine ; il ne decrit plus un serveur HTTP produit.
+
 **Date :** 15 septembre 2026
 **Statut :** livré dans `agent/`, avec limites honnêtes (simulateur DOM, pas Chromium)
 **Ponctuation :** ASCII usuel et accents français uniquement

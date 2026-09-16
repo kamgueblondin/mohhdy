@@ -542,6 +542,8 @@ test-userspace:
 test-all:
 	@echo "=== Suite complète de tests de non-régression ==="
 	@$(MAKE) -C tests test
+	@python3 scripts/extract_guest_commands.py --check
+	@python3 tests/scripts/test_python_facade_removed.py
 
 test-performance:
 	@echo "=== Tests de performance et benchmarks ==="
@@ -617,7 +619,7 @@ qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 
 .PHONY: qemu-osui-runtime osui-registry-check
 osui-registry-check:
-	@python3 osui/scripts/extract_guest_commands.py --check
+	@python3 scripts/extract_guest_commands.py --check
 
 qemu-osui-runtime: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_osui_runtime.py
@@ -646,48 +648,21 @@ gpt2-tests: gpt2-recovery gpt2-benchmark
 ci: all test-all qemu-smoke qemu-ne2k-tls-multipair
 	@echo "=== CI locale OK (build + tests + smokes QEMU locaux) ==="
 
-# Scaffold userspace HTTP de l'instance Mohhdy (stdlib). Hors ci / integration-qemu.
-.PHONY: agent-smoke agent-docker agent-install-check agent-hypervisor-dry-run agent-deploy-check osui-smoke osui-docker osui-shell-live-smoke
-agent-smoke:
-	@python3 agent/tests/test_http.py
-
-osui-smoke:
-	@python3 osui/scripts/extract_guest_commands.py --check
-	@python3 -m unittest discover -s osui/tests -p 'test_*.py'
-
-osui-shell-live-smoke:
-	@python3 osui/scripts/live_smoke.py
+# OS-UI guest C. Hors integration-qemu. Python produit retire (OS-UI-3).
+.PHONY: osui-smoke osui-docker
+osui-smoke: osui-registry-check
+	@python3 tests/scripts/test_python_facade_removed.py
+	@echo "=== OS-UI smoke hote OK (registre + facade Python absente) ==="
 
 osui-docker:
 	@command -v docker >/dev/null 2>&1 || { \
 		echo "ERROR: 'docker' introuvable. Installez Docker pour construire l'image."; \
-		echo "       La fumee sans conteneur reste : make osui-smoke"; \
+		echo "       La fumee guest reste : make qemu-osui-runtime"; \
 		exit 1; \
 	}
-	docker build -t mohhdy-os -f osui/Dockerfile .
-	@echo "Image mohhdy-os prete (shell graphique OS-UI, chat central)."
-	@echo "Lancer : docker run --rm -p 8080:8080 mohhdy-os"
-	@echo "Admin :  docker run --rm -p 8080:8080 -e ADMIN_TOKEN=... mohhdy-os"
-
-agent-docker:
-	@command -v docker >/dev/null 2>&1 || { \
-		echo "ERROR: 'docker' introuvable. Installez Docker pour construire l'image."; \
-		echo "       La fumee sans conteneur reste : make agent-smoke"; \
-		exit 1; \
-	}
-	docker build -t mohhdy-agent ./agent
-	@echo "Image mohhdy-agent prete."
-	@echo "Lancer : docker run --rm -p 8080:8080 mohhdy-agent"
-	@echo "Admin :  docker run --rm -p 8080:8080 -e ADMIN_TOKEN=... mohhdy-agent"
-
-agent-install-check:
-	@bash agent/scripts/install.sh --check
-
-agent-hypervisor-dry-run:
-	@bash agent/scripts/hypervisor-dry-run.sh
-
-agent-deploy-check: agent-install-check agent-hypervisor-dry-run
-	@echo "=== Packaging agent OK (install native + dry-run hyperviseur, hors ci) ==="
+	docker build -t mohhdy-os .
+	@echo "Image mohhdy-os prete (boot QEMU Multiboot, pas un serveur HTTP)."
+	@echo "Lancer : docker run --rm -it mohhdy-os"
 
 # Cible pour afficher l'aide
 help:
@@ -737,14 +712,8 @@ help:
 	@echo "  qemu-osui-runtime - Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA ; hors integration-qemu)"
 	@echo "  osui-registry-check - Verifie JSON/header vs userspace/shell.c"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"
-	@echo "  agent-smoke     - Fumee HTTP instance (gestes, MCP, origine embed, /browser, FS sandbox, 501 Playwright absent ; hors ci / QEMU)"
-	@echo "  osui-smoke      - Fumee shell graphique OS-UI (chat, scene IA, shell Multiboot, registre guest, session, origine, admin, geste ; hors ci / QEMU)"
-	@echo "  osui-shell-live-smoke - Attache live best-effort (faux guest serie ; skip QEMU si absent ; hors ci)"
-	@echo "  osui-docker     - Construit l'image Docker mohhdy-os (entree produit, shell graphique, hors ci)"
-	@echo "  agent-docker    - Construit l'image Docker mohhdy-agent slim (backend temporaire, hors ci, sans Chromium)"
-	@echo "  agent-install-check - Install native temporaire + /health (ASSIST-051, hors ci)"
-	@echo "  agent-hypervisor-dry-run - Valide cloud-init/QEMU agent, sans boot (ASSIST-052, hors ci)"
-	@echo "  agent-deploy-check - install-check + hypervisor-dry-run (hors ci)"
+	@echo "  osui-smoke      - Registre guest + preuve que la facade Python est retiree (hors QEMU)"
+	@echo "  osui-docker     - Construit l'image Docker mohhdy-os (boot QEMU Multiboot, hors ci)"
 	@echo "  test-performance - Benchmarks et tests de performance"
 	@echo "  test-valgrind   - Tests avec détection fuites mémoire"
 	@echo "  pre-commit-tests - Tests rapides avant commit"

@@ -1,3 +1,0 @@
-Sandbox FS ASSIST-061. Assets de demonstration du runtime agent.
-Lecture via /api/browser/fs?path=demo/fs-sandbox.txt
-Ce n'est pas le FS du guest AOS. Ce n'est pas US-031.

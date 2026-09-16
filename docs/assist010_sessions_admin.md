@@ -1,5 +1,7 @@
 # ASSIST-010 / 011 / 040 - sessions, embed et admin
 
+> **Historique.** Runtime Python `agent/` / `osui/` retire (OS-UI-3). Surface actuelle : `userspace/osui_runtime.c` sous QEMU Multiboot. Ce fichier conserve le contrat comportemental d'origine ; il ne decrit plus un serveur HTTP produit.
+
 **Date :** 15 septembre 2026
 **Statut :** livré dans `agent/` (echo stub de base) ; KB / droits / escalade / handoff = [assist012_droits_handoff.md](assist012_droits_handoff.md)
 **Ponctuation :** ASCII usuel et accents français uniquement

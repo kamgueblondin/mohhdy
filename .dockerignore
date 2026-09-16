@@ -1,4 +1,3 @@
-# Contexte = racine du depot (voir osui/Dockerfile).
 .git
 .github
 build/
@@ -14,15 +13,11 @@ my_initrd.tar
 secrets/
 **/__pycache__
 **/*.pyc
-kernel/
-userspace/
-boot/
-initrd_content/
-include/
 docs/
 US/
-tests/
-agent/tests/
-agent/scripts/
-osui/tests/
-osui/scripts/
+tests/unit/
+tests/integration/
+tests/framework/
+tests/robustness/
+*.md
+LICENSE

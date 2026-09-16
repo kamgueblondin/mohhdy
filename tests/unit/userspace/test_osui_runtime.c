@@ -19,6 +19,8 @@ static void setup(void) {
 
 static void test_bridge_flags(void) {
     TEST_ASSERT_EQUAL(0, MOHHDY_OSUI_GUEST_HTML_STAGE);
+    TEST_ASSERT_EQUAL(0, MOHHDY_OSUI_PYTHON_FACADE);
+    TEST_ASSERT_EQUAL(1, MOHHDY_OSUI_STAGE_VGA);
     TEST_ASSERT(MOHHDY_SHELL_COMMAND_COUNT > 100);
     TEST_ASSERT(osui_guest_command_count() == MOHHDY_SHELL_COMMAND_COUNT);
 }

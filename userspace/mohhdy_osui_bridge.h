@@ -1,5 +1,5 @@
-/* mohhdy_osui_bridge.h - contrat bootstrap osui <-> guest Ring 3.
- * Genere par osui/scripts/extract_guest_commands.py depuis userspace/shell.c.
+/* mohhdy_osui_bridge.h - contrat OS-UI <-> guest Ring 3.
+ * Genere par scripts/extract_guest_commands.py depuis userspace/shell.c.
  * Ne pas editer a la main. Scene guest = VGA structuree, pas HTML #ai-stage.
  */
 #ifndef MOHHDY_OSUI_BRIDGE_H

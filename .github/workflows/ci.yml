@@ -102,23 +102,41 @@ jobs:
             test_logs/
             ci-serial.log
 
-  # Fumee HTTP de l'instance (stdlib, parallele, sans Docker et sans QEMU).
-  # Ne needs pas build-and-test : n'allonge pas integration-qemu.
-  # Playwright / Chromium ne sont PAS installes ici (501 optional_not_installed).
-  agent-http-smoke:
-    name: Instance HTTP smoke
+  # OS-UI Ring 3 : registre + contrat QEMU. Ne needs pas integration-qemu.
+  # N'allonge pas les sept contrats. Facade Python retiree (OS-UI-3).
+  osui-guest:
+    name: OS-UI guest C
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: HTTP smoke (Python stdlib, no Docker)
-        run: make agent-smoke
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc-multilib \
+            libc6-dev-i386 \
+            nasm \
+            qemu-system-x86
 
-      - name: OS-UI shell smoke (Python stdlib, no Docker)
+      - name: Build OS image
+        run: make all
+
+      - name: Registry + Python facade removed
         run: make osui-smoke
 
-      - name: Native install + hypervisor dry-run (no QEMU boot)
-        run: make agent-deploy-check
+      - name: QEMU OS-UI contract (hors integration-qemu)
+        run: make qemu-osui-runtime
+
+      - name: Upload OS-UI logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: osui-guest-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/

@@ -1,5 +1,7 @@
 # ASSIST-050 - image Docker de l'instance Mohhdy
 
+> **Historique.** Runtime Python `agent/` / `osui/` retire (OS-UI-3). Surface actuelle : `userspace/osui_runtime.c` sous QEMU Multiboot. Ce fichier conserve le contrat comportemental d'origine ; il ne decrit plus un serveur HTTP produit.
+
 **Date :** 15 septembre 2026
 **Statut :** image HTTP bootstrap `mohhdy-agent` livree ; entree produit = `mohhdy-os` ([osui_0_1_2.md](osui_0_1_2.md))
 **Ponctuation :** ASCII usuel et accents français uniquement

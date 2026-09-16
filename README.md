@@ -12,11 +12,11 @@ Deux **niveaux de maturite runtime** (ingenierie honnete, pas deux produits) :
 | Niveau | Role | Honnêteté |
 |---|---|---|
 | **Prototype guest** | Chemin noyau i386 Multiboot sous QEMU deja mesure | Pedagogique / early kernel. Source de verite : [docs/ETAT_REEL.md](docs/ETAT_REEL.md) |
-| **Instance OS autonome** | Le meme SE, avec un userspace capable du navigateur-OS du SE, du support, de l'admin et des outils | `agent/` est le **scaffold userspace actuel** (bootstrap), pas un SaaS de support tiers |
+| **Instance OS autonome** | Le meme SE, userspace Ring 3 : chat, scene VGA, sessions, droits, MCP, FS sandbox | `userspace/osui_runtime.c`. Docker boot QEMU. Pas de sidecar Python |
 
 Le guest verifie n'est **pas** une distribution Linux, ni un clone Unix : noyau freestanding, ABI propre, pas de userland GNU. Il demarre sous QEMU, separe Ring 0 et Ring 3, charge une archive initrd TAR et lance un shell ELF. Le noyau fournit des syscalls, un overlay AIOV persistant via ATA PIO, un volume FAT16 et des primitives FAT32 d'ecriture/chainage ainsi qu'un chemin d'inference GPT-2 local optionnel. Le volume disque hors overlay est **FAT**, pas ext2.
 
-**Intention, pas livraison guest.** Le navigateur-OS (US-031), un LLM de production et un Chromium de session **ne tournent pas** dans le guest i386 mesure. Ce sont des **devoirs du SE**. Le scaffold `agent/` en porte une premiere surface (stub local, simulateur DOM, Playwright optionnel).
+**Intention, pas livraison complete.** Le navigateur-OS Chromium (US-031), un LLM de production et un moteur de session web **ne tournent pas**. Ce sont des **devoirs du SE**. La premiere surface (stub echo, simulateur DOM, MCP demo, FS lecture) vit dans le guest C. `agent/` et le serveur Python `osui/` sont retires.
 
 > La source de verite des fonctions **guest** reellement livrees est [docs/ETAT_REEL.md](docs/ETAT_REEL.md). Lexique : [docs/vocabulaire.md](docs/vocabulaire.md). Bilan de `master` au 13 septembre 2026 : [docs/BILAN_MASTER.md](docs/BILAN_MASTER.md). La branche par defaut est `master`. Le depot GitHub canonique est `kamgueblondin/mohhdy`.
 
@@ -75,13 +75,9 @@ make run
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
 | `make iso` | Produit l'ISO BIOS/GRUB bootable |
 | `make run` / `make run-gui` | Session QEMU interactive curses ou GTK |
-| `make osui-smoke` | Fumée shell graphique OS-UI (chat, scene IA, plan stub, registre guest, session, origine, admin, geste). Hors `make ci` / hors QEMU |
-| `make osui-shell-live-smoke` | Attache live best-effort (faux guest serie ; skip QEMU si absent). Hors `make ci` |
-| `make osui-docker` | Construit l'image `mohhdy-os`. Voir [docs/osui_0_1_2.md](docs/osui_0_1_2.md) |
-| `make agent-smoke` | Fumée HTTP agent (simulateur DOM, MCP, facture, 501 si Playwright absent). Hors `make ci` / hors QEMU |
-| `make agent-docker` | Construit l'image `mohhdy-agent` (backend temporaire). Voir [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md) |
-| `make agent-install-check` | Install native temporaire et `/health` (ASSIST-051). Hors `make ci` |
-| `make agent-hypervisor-dry-run` | Valide cloud-init / QEMU agent sans boot (ASSIST-052). Hors `make ci` |
+| `make osui-smoke` | Registre guest + preuve que la facade Python est retiree. Inclus dans `make test-all` |
+| `make qemu-osui-runtime` | Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA). Hors `make integration-qemu` |
+| `make osui-docker` | Construit l'image `mohhdy-os` (boot QEMU Multiboot). Voir [docs/osui_0_1_2.md](docs/osui_0_1_2.md) |
 
 Pour construire l'ISO, installez également GRUB et xorriso.
 
@@ -91,24 +87,19 @@ make iso
 make run-iso
 ```
 
-## Instance autonome (shell graphique `osui/` + backend `agent/`)
+## Instance autonome (guest C + boot QEMU)
 
-`osui/` est le **bootstrap graphique** du SE Multiboot : `docker run` ouvre le chrome. Surface primaire : **chat central** (prompts / `/help` `/browser` `/shell` `/plan`). Fond du bureau : **scene IA** (`#ai-stage`, stub HTML, mini-plans). `/shell` = vocabulaire guest Ring 3, bootstrap par defaut, hook live optionnel. Un programme ouvert deplace le chat en panneau flottant draggable. Pont : `shared/multiboot_shell_commands.json`. `agent/` reste le **backend temporaire** (APIs ASSIST). Ce n'est **pas** le noyau i386 du guest. Les reponses chat sont un stub local (echo ou KB), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium de session, **pas** US-031. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md), [docs/osui_ai_stage.md](docs/osui_ai_stage.md), [docs/osui_shell_live.md](docs/osui_shell_live.md), [docs/osui_convergence.md](docs/osui_convergence.md). Packaging PC / hyperviseur : [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md) (scaffold, **pas** de facturation).
+La surface OS-UI vit dans le shell Ring 3 : `userspace/osui_runtime.c`. Prompt `MOHHDY>`, slash `/help` `/browser` `/shell` `/plan`, scene VGA structuree (pas `#ai-stage` HTML), sessions `s0001+`, grant/revoke, escalate/takeover, origine 403, gestes simulateur, MCP demo, FS lecture. Pont : `shared/multiboot_shell_commands.json`. Les reponses chat sont un stub local (`llm=stub_echo`), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium, **pas** US-031. `agent/` et le serveur Python `osui/` sont **retires**. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md), [docs/osui_ai_stage.md](docs/osui_ai_stage.md), [docs/osui_shell_live.md](docs/osui_shell_live.md), [docs/osui_convergence.md](docs/osui_convergence.md).
 
 ```bash
 make osui-smoke
-make osui-shell-live-smoke
+make qemu-osui-runtime
 make osui-docker
-docker build -t mohhdy-os -f osui/Dockerfile .
-docker run --rm -p 8080:8080 mohhdy-os
-docker run --rm -p 8080:8080 -e ADMIN_TOKEN=change-me-at-runtime mohhdy-os
-python3 osui/server.py
-make agent-smoke
+docker build -t mohhdy-os .
+docker run --rm -it mohhdy-os
 ```
 
-Backend bootstrap seul (dette OS-UI-3) : `docker run --rm -p 8080:8080 mohhdy-agent`. Spec capacites : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md). Portage : [US/mohhdy_os_ui_migration.md](US/mohhdy_os_ui_migration.md).
-
-Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/assist050_docker_runtime.md](docs/assist050_docker_runtime.md), [docs/assist051_052_053_deploy.md](docs/assist051_052_053_deploy.md), [docs/assist010_sessions_admin.md](docs/assist010_sessions_admin.md), [docs/assist012_droits_handoff.md](docs/assist012_droits_handoff.md), [docs/assist020_gestes_mcp.md](docs/assist020_gestes_mcp.md), [docs/assist_playwright_optional.md](docs/assist_playwright_optional.md). Spec : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md).
+Spec capacites : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md). Portage : [US/mohhdy_os_ui_migration.md](US/mohhdy_os_ui_migration.md). Guides historiques `docs/assist*.md` (contrats, runtime Python retire).
 
 ## GPT-2 local, sans réseau au démarrage
 
@@ -146,11 +137,11 @@ Une ISO BIOS/GRUB peut être produite avec l'initrd. Lorsque les poids GPT-2 son
 
 ## Roadmap du SE (un produit)
 
-**Plan maitre (toutes les capacites visees, OS-UI, gates) :** [docs/PLAN_SE_MOHHDY_COMPLET.md](docs/PLAN_SE_MOHHDY_COMPLET.md). Premieres tranches OS-UI-0/1/2 : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md). Prochain build produit : **OS-UI-3** (retrait facade Python apres parite).
+**Plan maitre (toutes les capacites visees, OS-UI, gates) :** [docs/PLAN_SE_MOHHDY_COMPLET.md](docs/PLAN_SE_MOHHDY_COMPLET.md). Surface guest : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md). **OS-UI-3 livre** : facade Python retiree, Docker = boot Multiboot.
 
 Gardes guest 0-4 : [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENTATION.md). Backlog guest (AOS-xxx) : [US/mohhdy_us.md](US/mohhdy_us.md). Capacites OS a porter (`ASSIST-xxx`) : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md). Epiques de portage : [US/mohhdy_os_ui_migration.md](US/mohhdy_os_ui_migration.md). Specs historiques : [US/README.md](US/README.md).
 
-Les items ASSIST (embed, sessions, admin, simulateur, `/browser`, FS sandbox) sont des **devoirs du SE**. Ils vivent dans le shell `osui/` (premieres tranches) avec backend temporaire `agent/` ([docs/osui_0_1_2.md](docs/osui_0_1_2.md)), **a retirer** en OS-UI-3. Stub local, **pas** LLM de production, **pas** Chromium de session, **pas** US-031. Ils n'apparaissent pas comme faits mesures dans [docs/ETAT_REEL.md](docs/ETAT_REEL.md) (cette page mesure le guest).
+Les items ASSIST (sessions, admin, simulateur, FS sandbox) sont des **devoirs du SE**. Ils vivent dans `userspace/osui_runtime.c` ([docs/osui_0_1_2.md](docs/osui_0_1_2.md)). Stub local, **pas** LLM de production, **pas** Chromium de session, **pas** US-031. ETAT_REEL mesure aussi cette surface guest C, sans pretendre a un bureau HTML.
 
 - [x] GPT-2 local, cache KV, SSE2 et top-k borné
 - [x] Tokenizer BPE UTF-8 avec couverture de lettres Unicode ciblée
@@ -214,14 +205,15 @@ Les items ASSIST (embed, sessions, admin, simulateur, `/browser`, FS sandbox) so
 
 ```text
 mohhdy/
-├── agent/                # scaffold userspace de l'instance Mohhdy (bootstrap, pas un produit a cote)
 ├── boot/                 # Multiboot et stubs ISR
-├── kernel/               # mémoire, interruptions, tâches, syscalls et LLM
+├── kernel/               # memoire, interruptions, taches, syscalls et LLM
 ├── fs/                   # archive initrd TAR et overlay AIOV (ATA)
-├── userspace/            # shell et programmes Ring 3
+├── userspace/            # shell Ring 3, osui_runtime.c, programmes
+├── docker/               # entree QEMU nographic de l'image mohhdy-os
+├── scripts/              # extracteur de registre et outils hote
 ├── tests/                # Unity, robustesse et contrats QEMU
-├── models/               # actifs locaux ignorés par Git
-├── docs/                 # état réel et guides
+├── models/               # actifs locaux ignores par Git
+├── docs/                 # etat reel et guides
 └── US/                   # backlog guest (AOS), capacites OS (ASSIST), specs historiques
 ```
 

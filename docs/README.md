@@ -13,7 +13,7 @@ Depuis la racine du dépôt : `make deps` (script [`scripts/bootstrap-dev.sh`](.
 5. [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) - **roadmap produit** : catalogue des capacites, OS-UI-0..3 + OS-UI-C, gates. Premieres tranches OS-UI-0/1/2 : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md), [osui_shell_live.md](osui_shell_live.md), [osui_convergence.md](osui_convergence.md)
 6. [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) - gardes guest 0-4 (CI, ACL, GGUF, stockage)
 7. [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md) - epiques de portage ASSIST vers l'OS graphique
-8. [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/` a migrer
+8. [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; surface guest C, Python retire
 9. [aos_fat_volume.md](aos_fat_volume.md) - volume FAT16 (lecture + create/remove/rename 8.3 racine) et FAT32 lecture VFS ; pas ext2
 10. [mohhdy_foundation_increment_01_ipc.md](mohhdy_foundation_increment_01_ipc.md) - IPC Foundation MOHHDY, limites et contrat QEMU
 11. [aos020_gguf_quantization_design.md](aos020_gguf_quantization_design.md) - sonde GGUF v3 et quantification préparatoire
@@ -31,14 +31,14 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 | Fichier | Contenu |
 |---|---|
 | [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) | **Roadmap produit** : toutes les capacites visees, OS-UI-0..3, checklist par PR. Premieres tranches OS-UI-0/1/2 livrees |
-| [osui_0_1_2.md](osui_0_1_2.md) | Shell graphique `osui/` : Docker `mohhdy-os`, scene IA, shell Multiboot, smoke, drapeaux honnetes |
-| [osui_chat_desktop.md](osui_chat_desktop.md) | Interaction : chat central, raccourcis slash, chat flottant, `/shell` guest |
-| [osui_ai_stage.md](osui_ai_stage.md) | Bureau = scene IA HTML (stub, mini-plans, pas le VGA guest) |
-| [osui_shell_live.md](osui_shell_live.md) | Hook live `/shell` QEMU serial/HMP, defaut bootstrap |
-| [osui_convergence.md](osui_convergence.md) | Pont registre guest / header ; features land in Multiboot SE |
+| [osui_0_1_2.md](osui_0_1_2.md) | Surface guest C : Docker QEMU, scene VGA, sessions, MCP, Python retire |
+| [osui_chat_desktop.md](osui_chat_desktop.md) | Interaction : prompt `MOHHDY>`, slash, scene VGA |
+| [osui_ai_stage.md](osui_ai_stage.md) | Scene IA VGA 8x48 (stub, pas HTML `#ai-stage`) |
+| [osui_shell_live.md](osui_shell_live.md) | Instance = guest live ; plus d'attache Python |
+| [osui_convergence.md](osui_convergence.md) | Pont registre guest / header ; Python_facade=0 |
 | [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Gardes guest 0-4 ; pointe vers le plan maitre pour le portage OS+UI |
 | [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md) | Epiques OS-UI : chrome graphique, portage chat/admin/droits, actes navigateur-OS, retrait Python |
-| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Capacites OS (`ASSIST-xxx`). Embed / sessions / admin / simulateur DOM / MCP demo / `/browser` / FS sandbox dans `agent/` (stub local, Playwright optionnel, pas US-031). A porter dans l'OS+UI. Packaging 051-053 : scaffold |
+| [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) | Capacites OS (`ASSIST-xxx`). Sessions / admin / simulateur DOM / MCP / FS dans le guest C (stub, pas US-031). Facade Python retiree. Guides `assist*` = historique |
 | [assist050_docker_runtime.md](assist050_docker_runtime.md) | Image Docker / HTTP agent : build, `docker run`, fumée |
 | [assist051_052_053_deploy.md](assist051_052_053_deploy.md) | Install PC, hyperviseur QEMU/cloud-init, mode hosted non-billing |
 | [assist060_061_browser.md](assist060_061_browser.md) | Vue `/browser` et FS sandbox (ASSIST-060/061, pas US-031) |
@@ -127,11 +127,11 @@ Les captures QEMU et les exports Word ont été retirés du dépôt (la source r
 - [osui_ai_stage.md](osui_ai_stage.md) - scene IA du bureau (stub HTML, mini-plans, pas le guest)
 - [osui_shell_live.md](osui_shell_live.md) - attache live /shell (best-effort)
 - [osui_convergence.md](osui_convergence.md) - pont registre Multiboot
-- [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; scaffold userspace `agent/` (bootstrap a migrer)
+- [../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md) - capacites OS (`ASSIST-xxx`) ; surface guest C, Python retire
 - [assist050_docker_runtime.md](assist050_docker_runtime.md) - `docker run` et fumée de l'image agent
 - [assist060_061_browser.md](assist060_061_browser.md) - vue navigateur d'instance et FS sandbox
 - [assist010_sessions_admin.md](assist010_sessions_admin.md) - sessions, embed, admin, snippet CSP
 - [assist013_origine_embed.md](assist013_origine_embed.md) - origine document vs site déclaré
 - [../US/individual_us/INDEX.md](../US/individual_us/INDEX.md) - specs MOHHDY, chevauchements, IDs dupliqués
 
-Les phases historiques restent majoritairement des **specifications**. Les tickets ASSIST sont des **capacites du SE**, aujourd'hui dans le scaffold `agent/`, a porter dans l'OS graphique ([PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md)). Les increments Foundation 01-64 (IPC, mediateur de chemins, registre, supervision de taches) sont compiles et testes ; ils ne transforment pas le noyau monolithique en microkernel et n'implementent pas les autres phases. FAT16 et FAT32 8.3 racine sont mutables via VFS ; le client OpenAI public reste hors perimetre.
+Les phases historiques restent majoritairement des **specifications**. Les tickets ASSIST sont des **capacites du SE**, portees dans le guest C ([PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md)). Les increments Foundation 01-64 (IPC, mediateur de chemins, registre, supervision de taches) sont compiles et testes ; ils ne transforment pas le noyau monolithique en microkernel et n'implementent pas les autres phases. FAT16 et FAT32 8.3 racine sont mutables via VFS ; le client OpenAI public reste hors perimetre.

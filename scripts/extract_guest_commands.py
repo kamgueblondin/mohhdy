@@ -6,8 +6,8 @@ Source de verite : le C Ring 3. Artefacts :
   userspace/mohhdy_osui_bridge.h
 
 Usage :
-  python3 osui/scripts/extract_guest_commands.py
-  python3 osui/scripts/extract_guest_commands.py --check
+  python3 scripts/extract_guest_commands.py
+  python3 scripts/extract_guest_commands.py --check
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import re
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[1]
 SHELL_C = REPO / "userspace" / "shell.c"
 JSON_OUT = REPO / "shared" / "multiboot_shell_commands.json"
 HEADER_OUT = REPO / "userspace" / "mohhdy_osui_bridge.h"
@@ -138,8 +138,8 @@ def manifest(parsed: dict) -> dict:
 
 def header_text(data: dict) -> str:
     lines = [
-        "/* mohhdy_osui_bridge.h - contrat bootstrap osui <-> guest Ring 3.",
-        " * Genere par osui/scripts/extract_guest_commands.py depuis userspace/shell.c.",
+        "/* mohhdy_osui_bridge.h - contrat OS-UI <-> guest Ring 3.",
+        " * Genere par scripts/extract_guest_commands.py depuis userspace/shell.c.",
         " * Ne pas editer a la main. Scene guest = VGA structuree, pas HTML #ai-stage.",
         " */",
         "#ifndef MOHHDY_OSUI_BRIDGE_H",

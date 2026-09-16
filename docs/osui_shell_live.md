@@ -1,68 +1,32 @@
-# OS-UI : attache live du shell Multiboot
+# OS-UI : instance = guest live
 
 **Date :** 16 septembre 2026
-**Statut :** chemin best-effort, honnete. Defaut = bootstrap
+**Statut :** plus d'attache hote Python. Docker boot QEMU. On est le guest
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
-`/shell` parle le **meme vocabulaire** que `userspace/shell.c` (prompt
-`MOHHDY>`). Par defaut l'interpreteur est **bootstrap osui**
-(`live_guest=false`). Cette page decrit le **hook live** vers un guest
-QEMU deja lance. Ce n'est **pas** un bash Linux. Le guest **n'heberge
-pas** `#ai-stage` (voir [ETAT_REEL.md](ETAT_REEL.md)).
+`/shell` et le prompt `MOHHDY>` **sont** `userspace/shell.c`. Il n'y a
+plus d'interpreteur bootstrap Python (`live_guest=false` hote). Dans le
+guest, `guest-status` publie `live_guest=true` et
+`python_facade=false`. Ce n'est **pas** un bash Linux. Le guest
+**n'heberge pas** `#ai-stage` (voir [ETAT_REEL.md](ETAT_REEL.md)).
 
-## Drapeaux
-
-| Variable | Defaut | Role |
-|---|---|---|
-| `MOHHDY_SHELL_ATTACH` | `bootstrap` | `bootstrap` ou `live` |
-| `MOHHDY_GUEST_SERIAL` | (vide) | `unix:/chemin.sock`, `tcp:127.0.0.1:PORT`, ou PTY |
-| `MOHHDY_GUEST_SERIAL_KIND` | `auto` | `unix` / `tcp` / `pty` |
-| `MOHHDY_GUEST_MONITOR` | (vide) | socket HMP QEMU (`unix:/chemin-mon.sock`) |
-| `MOHHDY_GUEST_TRANSPORT` | `auto` | `serial`, `hmp`, ou les deux |
-| `MOHHDY_GUEST_TIMEOUT` | `2.0` | secondes |
-| `MOHHDY_GUEST_PROMPT` | `MOHHDY>` | handshake |
-
-Sans serie ni moniteur : `attach` refuse, **reste bootstrap**,
-`live_guest=false`. Pas de pretention.
-
-Le guest Ring 3 lit le **clavier PS/2**. Le harness existant
-(`make qemu-smoke`) injecte des scancodes via **HMP sendkey**. La serie
-est surtout un journal (parfois un TTY nographic). L'attache live
-reproduit ce contrat : HMP pour taper, serie pour lire si elle porte le
-prompt.
-
-## Exemple operateur
+## Boot
 
 ```text
-qemu-system-i386 -kernel build/mohhdy.bin -initrd my_initrd.tar \
-  -display none \
-  -serial unix:/tmp/mohhdy-serial.sock,server,nowait \
-  -monitor unix:/tmp/mohhdy-mon.sock,server,nowait \
-  -m 256M -cpu pentium3
-
-MOHHDY_SHELL_ATTACH=live \
-MOHHDY_GUEST_SERIAL=unix:/tmp/mohhdy-serial.sock \
-MOHHDY_GUEST_MONITOR=unix:/tmp/mohhdy-mon.sock \
-python3 osui/server.py
+make run
+make run-nographic
+docker run --rm -it mohhdy-os
 ```
 
-Dans `/shell` : `guest-status`, `attach`, `detach`. Les pieges Linux
-(`apt`, `sudo`, `bash`) sont refuses **avant** tout envoi au guest.
+Le harness de test (`make qemu-osui-runtime`, `make qemu-smoke`) injecte
+des scancodes via **HMP sendkey**. La serie est le journal.
 
-`POST /api/os/attach` `{"action":"attach"}`. `GET /api/os/attach`.
-`GET /api/os` champ `attach` + `multiboot_shell.live_guest`.
+L'ancien hook `MOHHDY_SHELL_ATTACH=live` + `python3 osui/server.py` est
+retire avec la facade.
 
-## Preuves
+## Pieges Linux
 
-```text
-make osui-smoke
-make osui-shell-live-smoke
-```
+`apt`, `sudo`, `bash`, `docker`, `systemctl` sont refuses **avant** tout
+chemin IA. Contrat QEMU : aiguille `apt` dans le serial log.
 
-`osui-smoke` reste court (faux guest serie dans les tests, pas de boot
-QEMU). `osui-shell-live-smoke` prouve le meme chemin, puis **SKIP** si
-`qemu-system-i386` ou le kernel manquent. Ne pas allonger
-`make integration-qemu` ni `make ci`. `MOHHDY_LIVE_QEMU=1` n'est pas le
-defaut.
-
-Pas d'OpenAI. Pas de secret.
+Guides : [osui_0_1_2.md](osui_0_1_2.md), [osui_convergence.md](osui_convergence.md).
