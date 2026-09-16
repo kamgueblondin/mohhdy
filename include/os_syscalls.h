@@ -273,6 +273,8 @@
 #define OS_FB_MSG_MAX 6
 #define OS_FB_MSG_LEN 120
 #define OS_FB_INPUT_LEN 96
+#define OS_FB_TERM_MAX 14
+#define OS_FB_TERM_LEN 64
 
 typedef struct {
     uint16_t cells[OS_VGA_ROWS * OS_VGA_COLS];
@@ -288,10 +290,12 @@ typedef struct {
     uint16_t chat_x;
     uint16_t chat_y;
     uint16_t nmsg;
-    uint16_t reserved;
+    uint8_t nterm;
+    uint8_t reserved;
     char session[12];
     char input[OS_FB_INPUT_LEN];
     char messages[OS_FB_MSG_MAX][OS_FB_MSG_LEN];
+    char term[OS_FB_TERM_MAX][OS_FB_TERM_LEN];
 } os_fb_scene_t;
 
 typedef struct {
