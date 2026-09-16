@@ -447,17 +447,24 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     fill_rect_a(fb, w, h, 0, 0, w, bar_h, RGB(12, 28, 40), 235);
     fill_rect(fb, w, h, 12, (bar_h - 12) / 2, 12, 12, RGB(61, 154, 138));
     draw_text(fb, w, h, 30, (bar_h - 8) / 2, "Mohhdy OS", RGB(232, 238, 244));
-    draw_text(fb, w, h, 30 + 9 * 8 + 8, (bar_h - 8) / 2, "SE Multiboot dirige par prompts", RGB(154, 168, 181));
     {
-        int mx = 30 + 9 * 8 + 8 + 32 * 8;
-        if (mx > w / 3) mx = 320;
+        int mx = 122;
+        int ty = (bar_h - 8) / 2;
+        int i;
+        const int gap = 14;
+        int lens[7];
         for (i = 0; i < 7; i++) {
-            draw_text(fb, w, h, mx, (bar_h - 8) / 2, menus[i], RGB(232, 238, 244));
-            mx += 8 * 12;
-            if (mx > w - 360) break;
+            int n = 0;
+            while (menus[i][n]) n++;
+            lens[i] = n;
+        }
+        for (i = 0; i < 7; i++) {
+            if (mx + lens[i] * 8 > w - 300) break;
+            draw_text(fb, w, h, mx, ty, menus[i], RGB(232, 238, 244));
+            mx += lens[i] * 8 + gap;
         }
     }
-    draw_text(fb, w, h, w - 8 * 48, (bar_h - 8) / 2, "llm=stub_echo  us031_complete=false", RGB(243, 230, 176));
+    draw_text(fb, w, h, w - 8 * 36 - 12, (bar_h - 8) / 2, "llm=stub_echo us031=false", RGB(243, 230, 176));
 
     mode_s = "reflecting";
     if (sc->stage_mode == OS_FB_STAGE_ACTING) mode_s = "acting";
