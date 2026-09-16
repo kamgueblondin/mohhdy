@@ -71,6 +71,8 @@ def qemu_window_size():
 def fit_loop(stop):
     client = None
     last = None
+    pending = None
+    pending_since = 0.0
     while not stop.is_set():
         if client is None:
             try:
@@ -87,13 +89,25 @@ def fit_loop(stop):
                 time.sleep(0.25)
                 continue
         size = qemu_window_size()
-        if size and last is not None:
-            if abs(size[0] - last[0]) < 16 and abs(size[1] - last[1]) < 16:
-                size = None
-        if size and size != last:
+        now = time.time()
+        if size is None:
+            time.sleep(0.08)
+            continue
+        if last is not None and abs(size[0] - last[0]) < 16 and abs(size[1] - last[1]) < 16:
+            time.sleep(0.08)
+            continue
+        if size != pending:
+            pending = size
+            pending_since = now
+        # Wait for the drag to settle so VBE does not rebuild every frame.
+        if last is not None and (now - pending_since) < 0.22:
+            time.sleep(0.08)
+            continue
+        if size != last:
             try:
                 client.sendall(("%d %d\n" % size).encode("ascii"))
                 last = size
+                pending = size
             except OSError:
                 try:
                     client.close()
@@ -101,7 +115,8 @@ def fit_loop(stop):
                     pass
                 client = None
                 last = None
-        time.sleep(0.25)
+                pending = None
+        time.sleep(0.08)
     if client is not None:
         try:
             client.close()
