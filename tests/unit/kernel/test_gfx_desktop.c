@@ -115,14 +115,25 @@ static void test_circle_kind_paints_ring(void) {
 
 static void test_layout_scales_with_framebuffer(void) {
     static uint32_t small[800 * 600];
+    static uint32_t tiny[640 * 400];
+    static uint32_t wide[1280 * 720];
     uint32_t a;
-    int saved_w = W;
-    (void)saved_w;
     blank_scene();
     gfx_desktop_draw(&g_scene, small, 800, 600);
     a = gfx_desktop_pixel(small, 800, 600, 12, 12);
     TEST_ASSERT(red(a) < 80);
     TEST_ASSERT(count_near_buf(small, 800, 600, 200, 540, 600, 598, 61, 154, 138, 40) > 40);
+
+    gfx_desktop_draw(&g_scene, tiny, 640, 400);
+    a = gfx_desktop_pixel(tiny, 640, 400, 12, 12);
+    TEST_ASSERT(red(a) < 80);
+    TEST_ASSERT(count_near_buf(tiny, 640, 400, 140, 350, 500, 398, 61, 154, 138, 40) > 20);
+    TEST_ASSERT(count_near_buf(tiny, 640, 400, 150, 40, 490, 240, 16, 25, 32, 50) > 40);
+
+    gfx_desktop_draw(&g_scene, wide, 1280, 720);
+    a = gfx_desktop_pixel(wide, 1280, 720, 12, 12);
+    TEST_ASSERT(red(a) < 80);
+    TEST_ASSERT(count_near_buf(wide, 1280, 720, 500, 670, 780, 718, 61, 154, 138, 40) > 40);
 }
 
 static void test_parse_fit_line(void) {
