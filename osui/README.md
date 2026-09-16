@@ -1,30 +1,33 @@
-# Scaffold du shell graphique Mohhdy (OS-UI-0/1/2)
+# OS-UI (retire)
 
-`osui/` est le **bootstrap graphique** du **meme** SE Multiboot Mohhdy :
-chat central (prompts / slash), **scene IA** plein ecran (`#ai-stage`),
-programmes (Browser-OS, Shell Multiboot, Admin, Support, Statut, FS).
-`/shell` reprend le vocabulaire guest Ring 3 (`userspace/shell.c`) ;
-bootstrap par defaut, hook live optionnel
-([osui_shell_live.md](../docs/osui_shell_live.md)). Le backend HTTP reste le
-scaffold temporaire `agent/` (parite ASSIST). Ce n'est **pas** US-031,
-**pas** un LLM de production, **pas** un moteur Chromium de session.
+Le chrome Python `osui/` (HTTP, HTML `#ai-stage`) et le scaffold `agent/`
+sont **retires** (OS-UI-3).
 
-Guide : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md).
-Interaction : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md).
-Scene IA : [../docs/osui_ai_stage.md](../docs/osui_ai_stage.md).
-Live : [../docs/osui_shell_live.md](../docs/osui_shell_live.md).
-Convergence : [../docs/osui_convergence.md](../docs/osui_convergence.md).
-Plan : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md).
+La surface vit dans le guest Ring 3 Multiboot :
+
+- `userspace/osui_runtime.c` : chat, scene VGA, sessions, droits, MCP, FS
+- `userspace/shell.c` : vocabulaire `MOHHDY>`
+- `shared/multiboot_shell_commands.json` : registre genere
+- `userspace/mohhdy_osui_bridge.h` : contrat C (`PYTHON_FACADE 0`, `STAGE_VGA 1`)
+
+Extracteur hote (pas un runtime produit) :
 
 ```text
-python3 osui/server.py
-make osui-smoke
-make osui-shell-live-smoke
-make osui-docker
-docker build -t mohhdy-os -f osui/Dockerfile .
-docker run --rm -p 8080:8080 mohhdy-os
-docker run --rm -p 8080:8080 -e ADMIN_TOKEN=change-me-at-runtime mohhdy-os
+python3 scripts/extract_guest_commands.py
+python3 scripts/extract_guest_commands.py --check
 ```
 
-Ouvrir `http://127.0.0.1:8080/` : bureau du SE. Sante : `GET /health`.
-`agent/` n'est pas retire (OS-UI-3 plus tard).
+Boot instance :
+
+```text
+make all && make run
+make qemu-osui-runtime
+docker build -t mohhdy-os .
+docker run --rm -it mohhdy-os
+```
+
+Ce n'est **pas** US-031, **pas** un LLM de production, **pas** un bash Linux.
+Le VGA n'heberge pas `#ai-stage` HTML : scene 8x48 structuree.
+
+Guides : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md),
+[../docs/osui_convergence.md](../docs/osui_convergence.md).

@@ -1,0 +1,14 @@
+# Compose local : boot QEMU du SE Multiboot (OS-UI-3).
+# Contexte = racine du depot. Pas de port HTTP, pas de jeton admin cuit.
+# Lancer : docker compose run --rm mohhdy-os
+
+services:
+  mohhdy-os:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mohhdy-os:local
+    stdin_open: true
+    tty: true
+    environment:
+      MOHHDY_RAM: "${MOHHDY_RAM:-256M}"

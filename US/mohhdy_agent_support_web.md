@@ -1,11 +1,11 @@
 # Capacites OS de l'instance Mohhdy (backlog ASSIST-xxx)
 
 **Date :** 15 septembre 2026
-**Statut :** backlog de **capacites du SE**, pas un produit distinct. ASSIST-050/010/011/012/013/020/021/022/030/031/040/041 = scaffold userspace HTTP livre (stub local, sessions, KB, droits, escalade, handoff, admin a jeton, simulateur DOM, MCP demo, facture mock, refus d'origine). ASSIST-051/052/053 = packaging operateur (install PC, recette hyperviseur, scaffold cloud non-billing). ASSIST-060/061 = vue `/browser` et FS sandbox `/api/browser/fs` (pas US-031). Playwright / Chromium = **profil optionnel** operateur, pas US-031. LLM de production, navigateur-OS complet et SaaS de paiement **pas** livres
+**Statut :** backlog de **capacites du SE**, pas un produit distinct. ASSIST-010..022/030/031/040/041/050/060/061 portes dans le guest C (`userspace/osui_runtime.c`, stub). Facade Python `agent/` retiree (OS-UI-3). Playwright / Chromium **non livres**. LLM de production, navigateur-OS US-031 et SaaS de paiement **pas** livres
 **IDs :** `ASSIST-xxx` (ne collident ni avec `AOS-xxx` ni avec `US-xxx`)
 **Ponctuation :** ASCII usuel et accents français uniquement
 
-Ce document decrit les **devoirs du SE Mohhdy** : tenir un support client sur le web, agir dans le **navigateur-OS du SE**, rester autonome, et ceder la main a un humain. Ce n'est **pas** une piste parallele, pas un widget SaaS a cote du noyau. `agent/` est le **scaffold userspace actuel** de l'instance jusqu'a ce que davantage vive dans le guest : widget `embed.js`, sessions visiteur isolees, base de connaissance locale optionnelle, masque de droits, escalade, handoff dans la meme session, console `/admin` (jeton `ADMIN_TOKEN` optionnel), simulateur de gestes sur `/demo-app`, outil MCP demo, facture mock, vue `/browser` (miroir du simulateur + controle Playwright optionnel) et FS sandbox `/browser/fs`. Les reponses sont un **stub local** (echo ou extraits de KB), pas un LLM de production. Playwright n'est **pas** une dependance du slim. **Pas** US-031.
+Ce document decrit les **devoirs du SE Mohhdy**. Ce n'est **pas** une piste parallele. La surface actuelle est le guest Ring 3 (`chat`, `session-*`, `grant`/`revoke`, `escalate`/`takeover`, `origin-check`, `browser-*`, `mcp-invoice`, `fs-list`/`fs-read`). Les reponses sont un **stub local**, pas un LLM de production. **Pas** US-031. L'ancien scaffold `agent/` est retire.
 
 En cas de contradiction sur ce qui **tourne aujourd'hui**, [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md) et [mohhdy_us.md](mohhdy_us.md) priment.
 

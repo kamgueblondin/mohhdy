@@ -32,17 +32,10 @@ initrd_content/bin/*
 /test_segfault
 /test_shell_minimal
 
-# Python
+# Python (harness hote seulement)
 tests/scripts/__pycache__/
-agent/**/__pycache__/
-osui/**/__pycache__/
+scripts/__pycache__/
 *.pyc
-
-# Agent runtime (ASSIST-050) : secrets d'instance hors Git et hors image
-agent/.env
-agent/.env.*
-agent/**/*.pem
-agent/**/*.key
 
 # GPT-2 weights (release gpt2-124m-assets, not Git)
 /models/

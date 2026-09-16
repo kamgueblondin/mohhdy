@@ -1,5 +1,7 @@
 # Profil Playwright / Chromium optionnel
 
+> **Historique.** Runtime Python `agent/` / `osui/` retire (OS-UI-3). Surface actuelle : `userspace/osui_runtime.c` sous QEMU Multiboot. Ce fichier conserve le contrat comportemental d'origine ; il ne decrit plus un serveur HTTP produit.
+
 **Date :** 15 septembre 2026
 **Statut :** premiere tranche operateur dans `agent/` (optionnel, pas US-031)
 **Ponctuation :** ASCII usuel et accents français uniquement

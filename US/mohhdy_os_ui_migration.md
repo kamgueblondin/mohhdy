@@ -1,150 +1,58 @@
-# Migration OS-UI : capacites ASSIST dans le SE graphique
+# Migration OS-UI : capacites ASSIST dans le SE Multiboot
 
-**Date :** 15 septembre 2026
-**Statut :** OS-UI-000 docs. Premieres tranches OS-UI-0/1/2 livrees dans `osui/` (backend `agent/` temporaire). OS-UI-C (convergence Multiboot) en cours. OS-UI-3 ouvert
+**Date :** 16 septembre 2026
+**Statut :** OS-UI-000 a OS-UI-3 livres dans le guest C. Facade Python retiree
 **IDs :** `OS-UI-xxx` (ordonnancement). Les tickets `ASSIST-xxx` restent la spec fonctionnelle
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
-Mohhdy est un seul SE. Les tickets `ASSIST-xxx` de [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) sont des **devoirs du SE**, aujourd'hui portes par le scaffold `agent/` derriere le chrome `osui/`. Ce fichier les range dans des epiques **OS-UI** pour les faire vivre dans le shell graphique et le navigateur-OS, puis retirer la facade Python.
+Mohhdy est un seul SE. Les tickets `ASSIST-xxx` de [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md) sont des **devoirs du SE**, portes dans `userspace/osui_runtime.c` derriere le vocabulaire `MOHHDY>`. Le sidecar `agent/` et le serveur Python `osui/` sont **retires**.
 
 Plan maitre : [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [../docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md). Guest mesure : [mohhdy_us.md](mohhdy_us.md) et [../docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Guide runtime : [../docs/osui_0_1_2.md](../docs/osui_0_1_2.md). Interaction : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md). Scene IA : [../docs/osui_ai_stage.md](../docs/osui_ai_stage.md). Live : [../docs/osui_shell_live.md](../docs/osui_shell_live.md). Convergence : [../docs/osui_convergence.md](../docs/osui_convergence.md).
 
-**Prochain build :** OS-UI-3 (retrait facade Python) apres checklist de parite. OS-UI-C (registre, hook live, scene IA) avance en parallele. Ne pas etendre `agent/` comme produit. Ne pas marquer US-031 ni un LLM de production comme livres.
+**Prochain build :** gardes AOS 0-4 et US-031 honnete. Ne pas reintroduire Python comme produit. Ne pas marquer US-031 ni un LLM de production comme livres.
 
 ## Convention
 
-**En tant que** / **je veux** / **afin de**. Critere = observable. Statut implicite : **spec de portage**.
+**En tant que** / **je veux** / **afin de**. Critere = observable.
 
-Les IDs `OS-UI-*` n'annulent pas `ASSIST-*`. Mapping : une epique OS-UI couvre plusieurs ASSIST.
-
-Gates de chaque epique : moindre privilege, grant/revoke, `request_id`, pas de secret UI/image, origine binding, pas d'acte irreversible sans politique, pas d'allongement `make integration-qemu` sans compensation mesuree, ponctuation ASCII des docs, honnetete ETAT_REEL, smoke de tranche, PR rollback-friendly, pas d'OpenAI en CI. Detail : section 4 du plan maitre.
+Gates : moindre privilege, grant/revoke, `request_id`, pas de secret image, origine binding, pas d'acte irreversible sans politique, pas d'allongement `make integration-qemu` sans compensation, ponctuation ASCII, honnetete ETAT_REEL.
 
 ## OS-UI-000 - Spec de migration
 
-**En tant que** proprietaire produit, **je veux** un plan unique de toutes les capacites visees et un ordre de portage vers l'OS+UI, **afin de** ne plus traiter `agent/` comme un sidecar durable.
+**Statut.** Docs livrees.
 
-**Critere.** [../docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) existe. README / docs / PLAN_SUITE pointent dessus. Le prochain code est OS-UI-0. Aucune phrase ne dit que US-031 ou un LLM de production sont livres. `agent/` n'est pas reecrit dans cette epique.
+## OS-UI-0 - Instance Docker = boot Multiboot
 
-**ASSIST couverts.** ASSIST-000 (cadrage).
+**Statut.** Livre : `docker run -it mohhdy-os` lance QEMU. Slash, scene VGA, vocabulaire Ring 3. Pas US-031. Pas `#ai-stage` HTML.
 
-**Statut.** Docs livrees (OS-UI-000).
+## OS-UI-1 - Sessions, chat, admin, droits
 
-## OS-UI-0 - Shell graphique minimal (instance Docker)
+**Statut.** Livre dans le guest C (`session-*`, `chat`, `grant`/`revoke`, `escalate`/`takeover`, `origin-check`). `llm=stub_echo`.
 
-**En tant qu'**operateur d'instance, **je veux** que `docker run` ouvre le chrome du SE (fenetre, vue operateur), **afin que** Docker boot l'OS comme une machine vierge, pas un serveur HTTP de support.
+## OS-UI-2 - Actes navigateur-OS allowlistes
 
-**Dependances.** OS-UI-000. Aucune garde AOS 0-4 bloquante. Interdit d'attendre US-001 complet. Interdit de booter Chromium dans QEMU i386.
+**Statut.** Livre : `browser-*` simulateur, `mcp-invoice`, `fs-list`/`fs-read`. `phase3_complete=false`. Pas US-031.
 
-**Critere.**
+## OS-UI-C - Convergence Multiboot
 
-- L'entree Docker presente un shell graphique minimal du SE
-- Sante instance, aucun secret dans l'image
-- Documente : pas US-031, pas LLM de production, `make integration-qemu` inchange
-- PC / hyperviseur : meme contrat d'instance, meme si le packaging reste scaffold
-
-**ASSIST couverts.** Debut de ASSIST-050 / 051 / 052 (boot d'instance, pas encore parite ni retrait Python).
-
-**Statut.** Premiere tranche livree : `osui/`, `docker run mohhdy-os` ouvre le chrome a **chat central** + **scene IA**. Slash `/help` `/browser` `/shell` etc. `/shell` = vocabulaire Multiboot Ring 3 (bootstrap). Chat flottant si un programme s'ouvre. Pas US-031. Guest sans `#ai-stage` (ETAT_REEL).
-
-**Hors perimetre.** Retrait de `agent/`. Chromium de session.
-
-## Modele d'interaction (shell courant)
-
-**En tant qu'**utilisateur de l'instance, **je veux** commander le SE Multiboot par prompts dans un chat central, avec une scene IA derriere les fenetres, **afin que** l'OS pense et presente en HTML, pas seulement par icones.
-
-**Critere.**
-
-- Etat par defaut : chat large au centre, `llm=stub_echo` visible, `#ai-stage` en fond (mode `reflecting`)
-- Un prompt hors slash met a jour la scene (HTML/SVG stub, allowlist, pas de script) ; modes `reflecting` / `acting` / `presenting`
-- `/help` liste le registre ; `/browser` `/shell` `/admin` `/support` `/status` `/fs` `/plan` `/draw` `/guest` ouvrent le programme ou la scene
-- `/shell` est le vocabulaire guest Ring 3 (`userspace/shell.c`, prompt `MOHHDY>`), surface bootstrap ; live QEMU/serial via hook documente
-- A l'ouverture d'un programme, le chat quitte le centre et devient un panneau flottant draggable (coin, z-index au-dessus des fenetres, position `sessionStorage`)
-- Fermer tous les programmes ou `/center` ramene le chat au centre
-- APIs `agent/` inchangees (sessions, admin, tools, FS). Origine binding inchangee. `phase3_complete=false`, `us031_complete=false`
-- ETAT_REEL guest inchange : pas de scene HTML dans le VGA i386
-
-Guides : [../docs/osui_chat_desktop.md](../docs/osui_chat_desktop.md), [../docs/osui_ai_stage.md](../docs/osui_ai_stage.md), [../docs/osui_shell_live.md](../docs/osui_shell_live.md), [../docs/osui_convergence.md](../docs/osui_convergence.md).
-
-## OS-UI-1 - Sessions, chat, admin, droits en UI native
-
-**En tant que** visiteur, operateur de site et humain de support, **je veux** parler, etre isole par session, voir une KB honnete, accorder/revoquer, escalader et reprendre **dans l'UI du SE**, **afin que** le support ne soit plus une facade Python.
-
-**Dependances.** OS-UI-0 (chrome). Vocabulaire Foundation (grant/revoke/scope). Pas US-001 termine.
-
-**Critere.** Parite comportementale avec le scaffold : deux `session_id`, embed ou fenetre sans secret, `origin_denied` + `request_id`, masque de droits, revoke efficace, file d'escalade, takeover dans la meme session, stub LLM visible (`llm=stub` tant que pas de moteur reel). Auth par comptes / par site : pas exigee ici.
-
-**ASSIST couverts.** 010, 011, 012, 013, 030, 031, 040, 041.
-
-**Statut.** Premiere tranche livree dans les panes Support et Admin. APIs `agent/` conservees.
-
-**Hors perimetre.** Gestes DOM reels Chromium, US-031, comptes multi-tenant, OpenAI.
-
-## OS-UI-2 - Actes dans le navigateur-OS du SE
-
-**En tant qu'**utilisateur de l'instance, **je veux** que le SE agisse dans **son** navigateur-OS (gestes allowlistes, outil MCP, facture demo, FS-as-web), **afin que** Playwright ne soit plus le recit produit.
-
-**Dependances.** OS-UI-1 (droits de session). Voisinage phase 3 / US-031 **non livre**.
-
-**Critere.** Un geste allowliste et `mcp.invoice.create` (ou equivalent) reussissent dans la surface OS, meme `session_id`, journal `request_id`. Origine etrangere et outil non declare : 403, pas d'execution. FS : list+read sandbox, traversal refuse, pas d'ecriture sauf politique. `phase3_complete=false`, `us031_complete=false` tant que le moteur n'est pas un navigateur-OS reel. ETAT_REEL guest inchange.
-
-**ASSIST couverts.** 020, 021, 022, 060, 061. Playwright optionnel : a absorber, pas a etendre.
-
-**Statut.** Premiere tranche livree dans le pane Browser-OS (simulateur etiquete, FS lecture, facture mock). `phase3_complete=false`.
-
-**Hors perimetre.** Declarer US-031 livre. PWA / FS web unifie (US-032 / US-033 maitre).
-
-## OS-UI-C - Convergence vers le SE Multiboot
-
-**En tant que** mainteneur, **je veux** un pont de code entre `osui/` et le guest Ring 3, **afin que** les features atterrissent dans le **meme** SE Multiboot, pas dans un second produit.
-
-**Dependances.** OS-UI-0/1/2 premieres tranches. Gardes guest 0-1 tenues. Pas OS-UI-3 (parite Python d'abord).
-
-**Critere.**
-
-- Un registre partage est genere depuis `userspace/shell.c` (`shared/multiboot_shell_commands.json`)
-- Un header guest declare `MOHHDY_OSUI_GUEST_HTML_STAGE 0`
-- `/shell` peut s'attacher en live (serie/HMP) quand c'est configure ; sinon `live_guest=false` et vocabulaire bootstrap
-- Scene IA : mini-plans stub, dessins SVG, pas de script
-- Prompt OS : ouvrir shell/browser/admin, dessiner, help/ai-help
-- `make osui-smoke` vert ; `make osui-shell-live-smoke` skip QEMU si absent
-- ETAT_REEL inchange : pas de `#ai-stage` guest. `phase3_complete=false`
-
-**Statut.** Premiere tranche livree dans cette epique.
-
-**Hors perimetre.** Framebuffer HTML guest. US-031. Retrait de `agent/`.
+**Statut.** Livre : registre `shared/multiboot_shell_commands.json`, header `mohhdy_osui_bridge.h`, scene VGA, runtime C unique.
 
 ## OS-UI-3 - Retrait de la facade Python
 
-**En tant que** mainteneur, **je veux** retirer `agent/` comme facade une fois la parite tenue, **afin qu'il** n'y ait plus deux recits d'instance.
+**En tant que** mainteneur, **je veux** qu'il n'y ait plus deux recits d'instance, **afin que** Docker boot le SE.
 
-**Dependances.** OS-UI-1 et OS-UI-2 sortis. Checklist de parite du plan maitre (section 8.3).
+**Statut.** Livre. `agent/` et `osui/` Python supprimes. Docker/QEMU. Smokes `make osui-smoke` + `make qemu-osui-runtime`. Docs `assist*` historiques.
 
-**Critere.** Packaging Docker/PC/hyperviseur pointe vers l'OS. Smokes de regression verts. Docs `assist*` marquees historiques. Contrats comportementaux conserves. Guest C et `make ci` inchanges sauf besoin prouve.
-
-**ASSIST couverts.** Fin de 050 / 051 / 052 (parite deploiement).
-
-**Hors perimetre.** Big-bang sans parite. Billing ASSIST-053. Corps ASSIST-090.
-
-## Hors epiques proches (rappel)
-
-| ID | Motif |
-|---|---|
-| ASSIST-053 paiement | Scaffold `billing=false` seulement |
-| ASSIST-090 | Corps physique inexistant |
-| US-016 | Pas TFLite proche |
-| US-031 phase 3 complet | Apres un vrai moteur ; pas la DoD d'OS-UI-2 |
-| AOS 0-4 | Gardes paralleles, pas des epiques OS-UI |
+**Hors perimetre reste.** Chromium, billing ASSIST-053, embed HTTP, UUID, LLM de production.
 
 ## Table recap
 
 | Rang | Epic | Build ? | ASSIST |
 |---:|---|---|---|
 | 0 | OS-UI-000 | docs livres | 000 |
-| 1 | OS-UI-0 | **premiere tranche** `osui/` chat + scene IA + shell Multiboot | 050/051/052 (boot) |
-| 2 | OS-UI-1 | **premiere tranche** chat + panes Support/Admin | 010-013, 030, 031, 040, 041 |
-| 3 | OS-UI-2 | **premiere tranche** pane Browser-OS | 020-022, 060, 061 |
-| 3b | OS-UI-C | **premiere tranche** registre guest + hook live + scene IA | pont Multiboot |
-| 4 | OS-UI-3 | **prochain** apres parite 1+2 | fin 050-052 |
+| 1 | OS-UI-0 | **livre** boot QEMU | 050 (boot) |
+| 2 | OS-UI-1 | **livre** guest C | 010-013, 030, 031, 040, 041 |
+| 3 | OS-UI-2 | **livre** simulateur | 020-022, 060, 061 |
+| 3b | OS-UI-C | **livre** registre + VGA | pont Multiboot |
+| 4 | OS-UI-3 | **livre** Python retire | fin 050 |
 | - | Gardes guest 0-4 | parallele | (AOS, pas ASSIST) |
-
-Nouveaux tickets de portage : les ajouter ici (`OS-UI-xxx`) **ou** comme sous-taches ASSIST, sans `AOS-` et sans renumeroter `US-xxx`.

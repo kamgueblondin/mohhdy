@@ -1,17 +1,21 @@
-/* mohhdy_osui_bridge.h - contrat bootstrap osui <-> guest Ring 3.
- * Genere par osui/scripts/extract_guest_commands.py depuis userspace/shell.c.
- * Ne pas editer a la main. Ne pas declarer une scene HTML #ai-stage dans le VGA.
+/* mohhdy_osui_bridge.h - contrat OS-UI <-> guest Ring 3.
+ * Genere par scripts/extract_guest_commands.py depuis userspace/shell.c.
+ * Ne pas editer a la main. Scene guest = VGA structuree, pas HTML #ai-stage.
  */
 #ifndef MOHHDY_OSUI_BRIDGE_H
 #define MOHHDY_OSUI_BRIDGE_H
 
 #define MOHHDY_OSUI_GUEST_HTML_STAGE 0
-#define MOHHDY_OSUI_LIVE_ATTACH_HOST 1
+#define MOHHDY_OSUI_LIVE_ATTACH_HOST 0
+#define MOHHDY_OSUI_STAGE_VGA 1
+#define MOHHDY_OSUI_PYTHON_FACADE 0
+#define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 148
+#define MOHHDY_SHELL_COMMAND_COUNT 184
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
+    "admin-status",
     "ai",
     "ai-acquire",
     "ai-close",
@@ -36,8 +40,14 @@ static const char * const mohhdy_shell_commands[] = {
     "aitest",
     "alias",
     "append",
+    "attach",
+    "browser-click",
+    "browser-pointer",
+    "browser-status",
+    "browser-type",
     "cat",
     "cd",
+    "chat",
     "child-exit-count",
     "child-result",
     "child-result-any",
@@ -50,15 +60,22 @@ static const char * const mohhdy_shell_commands[] = {
     "cls",
     "cp",
     "date",
+    "detach",
     "dir",
     "echo",
     "env",
+    "escalate",
     "exit",
     "export",
     "fat16-cat",
     "fat16-list",
+    "fs-list",
+    "fs-read",
+    "fs-write",
     "getpid",
+    "grant",
     "grep",
+    "guest-status",
     "head",
     "help",
     "history",
@@ -70,16 +87,31 @@ static const char * const mohhdy_shell_commands[] = {
     "kill-children",
     "logout",
     "ls",
+    "mcp-invoice",
+    "mcp-invoke",
     "mem",
     "memory",
     "mkdir",
     "mv",
     "net-status",
+    "open",
+    "origin-check",
+    "os-admin",
+    "os-browser",
+    "os-center",
+    "os-close",
+    "os-fs",
+    "os-help",
+    "os-shell",
+    "os-status",
+    "os-support",
+    "prompt",
     "ps",
     "pwd",
     "quit",
     "rc",
     "reboot",
+    "revoke",
     "rm",
     "rmdir",
     "service-find",
@@ -87,12 +119,19 @@ static const char * const mohhdy_shell_commands[] = {
     "service-publish",
     "service-status",
     "service-watch",
+    "session-list",
+    "session-new",
+    "session-status",
+    "session-use",
     "shutdown",
     "sort",
     "spawn",
+    "stage",
+    "stage-prompt",
     "stat",
     "sysinfo",
     "tail",
+    "takeover",
     "task-capacity",
     "task-delegate",
     "task-event",
