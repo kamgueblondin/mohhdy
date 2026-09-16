@@ -369,6 +369,38 @@ static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh
     if (body) draw_text(fb, w, h, x + 18, y + 96, body, RGB(201, 232, 223));
 }
 
+static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
+    int ty, term_h;
+    round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 16, 20), 240);
+    stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
+    fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
+    traffic(fb, w, h, x + 8, y + 8);
+    draw_text(fb, w, h, x + 56, y + 12, "Shell Multiboot", RGB(232, 238, 244));
+    draw_text(fb, w, h, x + rw - 8 * 18 - 10, y + 12, "prompt=MOHHDY>", RGB(122, 212, 196));
+    term_h = rh - 44;
+    if (term_h < 80) term_h = 80;
+    fill_rect(fb, w, h, x + 10, y + 36, rw - 20, term_h, RGB(8, 12, 16));
+    ty = y + 44;
+    draw_text(fb, w, h, x + 18, ty, "Mohhdy OS  Ring 3  live_guest=true", RGB(122, 212, 196));
+    ty += 14;
+    draw_text(fb, w, h, x + 18, ty, "Pas un bash Linux.  python_facade=false", RGB(154, 168, 181));
+    ty += 14;
+    draw_text(fb, w, h, x + 18, ty, "chrome=qemu_fb  us031_complete=false", RGB(154, 168, 181));
+    ty += 22;
+    draw_text(fb, w, h, x + 18, ty, "MOHHDY> help", RGB(201, 232, 223));
+    ty += 14;
+    draw_text(fb, w, h, x + 18, ty, "  /help /browser /shell /admin /support", RGB(154, 168, 181));
+    ty += 12;
+    draw_text(fb, w, h, x + 18, ty, "  /status /fs /center   gui  console", RGB(154, 168, 181));
+    ty += 22;
+    draw_text(fb, w, h, x + 18, ty, "MOHHDY> ", RGB(201, 232, 223));
+    if (sc && sc->input[0]) {
+        draw_text_n(fb, w, h, x + 18 + 8 * 8, ty, sc->input, (rw - 48) / 8 - 8, RGB(232, 238, 244));
+    } else {
+        fill_rect(fb, w, h, x + 18 + 8 * 8, ty, 8, 10, RGB(61, 154, 138));
+    }
+}
+
 static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
     int log_y, i, n;
     const char *msg;
@@ -500,10 +532,14 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     pane = sc->pane;
     ptitle = pane_title(pane);
     if (ptitle) {
-        draw_window(fb, w, h, 36, bar_h + 28, clampi(w - 420, 420, 720), clampi(h - 220, 280, 520), ptitle,
-                    pane == OS_FB_PANE_SHELL ? "prompt=MOHHDY> live_guest=true python_facade=false"
-                    : pane == OS_FB_PANE_STATUS ? "chrome=qemu_fb display_surface=vbe_lfb"
-                    : "Cerveau = osui_runtime.c. Pas Chromium.");
+        int wx = 36, wy = bar_h + 28;
+        int ww = clampi(w - 420, 420, 720), wh = clampi(h - 220, 280, 520);
+        if (pane == OS_FB_PANE_SHELL)
+            draw_shell(fb, w, h, wx, wy, ww, wh, sc);
+        else
+            draw_window(fb, w, h, wx, wy, ww, wh, ptitle,
+                        pane == OS_FB_PANE_STATUS ? "chrome=qemu_fb display_surface=vbe_lfb"
+                        : "Cerveau = osui_runtime.c. Pas Chromium.");
     }
 
     chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? 360 : clampi(w / 2, 420, 640);
