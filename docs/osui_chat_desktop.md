@@ -1,14 +1,18 @@
 # OS-UI : chat, scene VGA, shell Multiboot
 
 **Date :** 16 septembre 2026
-**Statut :** modele d'interaction du guest Ring 3 (`osui_runtime.c`)
+**Statut :** modele d'interaction du guest Ring 3 (`osui_runtime.c` + `osui_gui.c`)
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
-Mohhdy est **un seul SE Multiboot**. La surface primaire est le **prompt
-`MOHHDY>`** avec commandes chat-like. Le fond est la **scene IA VGA**.
-Les programmes s'ouvrent par slash (`/browser`, `/shell`, `/admin`) ou
-par `prompt ouvre le shell`. Quand un programme s'ouvre, le chat passe
-en `chat_mode=float`. `/center` ramene `chat_mode=center`.
+Mohhdy est **un seul SE Multiboot**. Le boot reste le **prompt
+`MOHHDY>`**. La commande canonique **`gui`** (aliases `graphics`,
+`desktop`) entre le bureau VGA 80x25. `console` / `gui-exit` / ESC
+revient au texte. Le fond est la **scene IA VGA** (canvas 22x78,
+constructions ASCII). Les programmes s'ouvrent par slash (`/browser`,
+`/shell`, `/admin`, `/support`, `/status`, `/fs`) ou par
+`prompt ouvre le shell`. Quand un programme s'ouvre, le chat passe
+en `chat_mode=float` (fenetre deplacable : fleches, `gui-move`).
+`/center` ramene `chat_mode=center`.
 
 Chrome : [osui_0_1_2.md](osui_0_1_2.md). Scene :
 [osui_ai_stage.md](osui_ai_stage.md). Attache :
@@ -37,4 +41,6 @@ Un prompt hors slash (`chat ...` ou texte non builtin) :
 `/center` `/close`. Pieges Linux (`apt`, `sudo`, `bash`) refuses **avant**
 le mode question IA.
 
-Verification : `make qemu-osui-runtime`, tests Unity `test_osui_runtime.c`.
+Verification : `make qemu-osui-runtime`, `make qemu-osui-gui`,
+tests Unity `test_osui_runtime.c` et `test_osui_gui.c`. Bureau live :
+`make run-gui` puis `gui`. Instantane nographic : `gui-status`.

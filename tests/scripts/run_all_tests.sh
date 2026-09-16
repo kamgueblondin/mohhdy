@@ -103,6 +103,10 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
+    if [ "$(basename "$test_file")" = "test_osui_gui.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_runtime.c"
+        cflags="$cflags -I$BASE_DIR/userspace"
+    fi
     if [ "$(basename "$test_file")" = "test_tokenizer.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_tokenizer.c"
     fi

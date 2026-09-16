@@ -32,8 +32,8 @@ Les autres fichiers de ce dossier sont conservés : rapports de debug, chronolog
 |---|---|
 | [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md) | **Roadmap produit** : toutes les capacites visees, OS-UI-0..3, checklist par PR. Premieres tranches OS-UI-0/1/2 livrees |
 | [osui_0_1_2.md](osui_0_1_2.md) | Surface guest C : Docker QEMU, scene VGA, sessions, MCP, Python retire |
-| [osui_chat_desktop.md](osui_chat_desktop.md) | Interaction : prompt `MOHHDY>`, slash, scene VGA |
-| [osui_ai_stage.md](osui_ai_stage.md) | Scene IA VGA 8x48 (stub, pas HTML `#ai-stage`) |
+| [osui_chat_desktop.md](osui_chat_desktop.md) | Interaction : prompt `MOHHDY>`, `gui`, slash, scene VGA |
+| [osui_ai_stage.md](osui_ai_stage.md) | Scene IA VGA 8x48 + canvas desktop (stub, pas HTML `#ai-stage`) |
 | [osui_shell_live.md](osui_shell_live.md) | Instance = guest live ; plus d'attache Python |
 | [osui_convergence.md](osui_convergence.md) | Pont registre guest / header ; Python_facade=0 |
 | [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.md) | Gardes guest 0-4 ; pointe vers le plan maitre pour le portage OS+UI |

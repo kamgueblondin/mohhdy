@@ -18,6 +18,8 @@
 #define OSUI_STAGE_ROWS 8
 #define OSUI_STAGE_COLS 48
 #define OSUI_MAX_ARGS 12
+#define OSUI_KIND 16
+#define OSUI_PANE 16
 
 #define ST_OPEN 0
 #define ST_WAIT 1
@@ -44,6 +46,8 @@ static const char *const k_cmds[] = {
     "os-help", "os-status", "os-browser", "os-shell", "os-admin",
     "os-support", "os-fs", "os-center", "os-close",
     "guest-status", "attach", "detach", "open",
+    "gui", "graphics", "desktop", "console", "gui-status", "gui-exit",
+    "gui-move",
     0
 };
 
@@ -118,8 +122,17 @@ typedef struct {
     int form_submitted;
     char stage_mode[16];
     char stage_prompt[OSUI_TEXT];
+    char stage_kind[OSUI_KIND];
     int scripts_stripped;
     char stage_rows[OSUI_STAGE_ROWS][OSUI_STAGE_COLS];
+    char canvas[OSUI_CANVAS_ROWS][OSUI_CANVAS_COLS];
+    char pane[OSUI_PANE];
+    int chat_x;
+    int chat_y;
+    int gui_enter;
+    int gui_leave;
+    int stage_tick;
+    int stage_autonomous;
     osui_invoice_t invoices[OSUI_MAX_INVOICES];
     int n_invoices;
     osui_journal_t journal[OSUI_MAX_JOURNAL];
@@ -388,6 +401,106 @@ static void stage_clear(void) {
     }
 }
 
+static void canvas_clear(void) {
+    int r, c;
+    for (r = 0; r < OSUI_CANVAS_ROWS; r++) {
+        for (c = 0; c < OSUI_CANVAS_COLS; c++) G.canvas[r][c] = ' ';
+        G.canvas[r][OSUI_CANVAS_COLS - 1] = 0;
+    }
+}
+
+static void canvas_put(int r, int c, char ch) {
+    if (r < 0 || r >= OSUI_CANVAS_ROWS) return;
+    if (c < 0 || c >= OSUI_CANVAS_COLS - 1) return;
+    G.canvas[r][c] = ch;
+}
+
+static void canvas_text(int r, int c, const char *s) {
+    int i = 0;
+    if (!s) return;
+    while (s[i]) {
+        canvas_put(r, c + i, s[i]);
+        i++;
+    }
+}
+
+static void canvas_box(int r, int c, int h, int w) {
+    int i;
+    if (h < 2 || w < 2) return;
+    canvas_put(r, c, '+');
+    canvas_put(r, c + w - 1, '+');
+    canvas_put(r + h - 1, c, '+');
+    canvas_put(r + h - 1, c + w - 1, '+');
+    for (i = 1; i < w - 1; i++) {
+        canvas_put(r, c + i, '-');
+        canvas_put(r + h - 1, c + i, '-');
+    }
+    for (i = 1; i < h - 1; i++) {
+        canvas_put(r + i, c, '|');
+        canvas_put(r + i, c + w - 1, '|');
+    }
+}
+
+static void canvas_circle(int cr, int cc, int rad) {
+    int x, y, p;
+    x = 0;
+    y = rad;
+    p = 1 - rad;
+    while (x <= y) {
+        canvas_put(cr + y, cc + x, '*');
+        canvas_put(cr + y, cc - x, '*');
+        canvas_put(cr - y, cc + x, '*');
+        canvas_put(cr - y, cc - x, '*');
+        canvas_put(cr + x, cc + y, '*');
+        canvas_put(cr + x, cc - y, '*');
+        canvas_put(cr - x, cc + y, '*');
+        canvas_put(cr - x, cc - y, '*');
+        x++;
+        if (p < 0) p += 2 * x + 1;
+        else {
+            y--;
+            p += 2 * (x - y) + 1;
+        }
+    }
+}
+
+static void canvas_graph(void) {
+    static const char *bars = " .:;+=xX#";
+    int c, h;
+    canvas_text(1, 2, "graphe stub (pas un moteur HTML)");
+    for (c = 2; c < 40; c++) {
+        h = 2 + ((c * 3) % 8);
+        canvas_put(12 - h, c, bars[h % 9]);
+        canvas_put(12, c, '_');
+    }
+}
+
+static void canvas_tree(void) {
+    canvas_text(2, 4, "demo/");
+    canvas_text(3, 6, "|-- hello.txt");
+    canvas_text(4, 6, "|-- invoice.txt");
+    canvas_text(5, 4, "data/");
+    canvas_text(6, 6, "`-- notes.txt");
+}
+
+static void canvas_clock(void) {
+    canvas_box(2, 20, 9, 21);
+    canvas_text(4, 24, "  12  ");
+    canvas_text(6, 22, "9   o   3");
+    canvas_text(8, 24, "  6   ");
+    canvas_text(11, 18, "horloge stub llm=stub_echo");
+}
+
+static void canvas_sim(int tick) {
+    int pos = tick % 40;
+    canvas_text(2, 2, "simulation stub  acte1 -> acte2 -> resultat");
+    canvas_text(4, 2, "[");
+    canvas_put(4, 3 + pos, '>');
+    canvas_text(4, 44, "]");
+    canvas_put(8, 8 + (tick % 20), 'o');
+    canvas_text(10, 2, "pas Chromium  us031_complete=false");
+}
+
 static void stage_put(int r, int c, const char *s) {
     int i = 0;
     if (r < 0 || r >= OSUI_STAGE_ROWS) return;
@@ -396,6 +509,21 @@ static void stage_put(int r, int c, const char *s) {
         G.stage_rows[r][c + i] = s[i];
         i++;
     }
+}
+
+static const char *classify_kind(const char *prompt) {
+    if (s_has_ci(prompt, "cercle") || s_has_ci(prompt, "circle")) return "circle";
+    if (s_has_ci(prompt, "graphe") || s_has_ci(prompt, "graph")) return "graph";
+    if (s_has_ci(prompt, "arbre") || s_has_ci(prompt, "tree") || s_has_ci(prompt, "vfs"))
+        return "tree";
+    if (s_has_ci(prompt, "horloge") || s_has_ci(prompt, "clock")) return "clock";
+    if (s_has_ci(prompt, "boite") || s_has_ci(prompt, "box") || s_has_ci(prompt, "dessine")
+        || s_has_ci(prompt, "draw"))
+        return "boxes";
+    if (s_has_ci(prompt, "simule") || s_has_ci(prompt, "simulation")
+        || s_has_ci(prompt, "mini-plan") || s_has_ci(prompt, "acting"))
+        return "sim";
+    return "plan";
 }
 
 static const char *classify_mode(const char *prompt) {
@@ -414,6 +542,7 @@ static const char *classify_mode(const char *prompt) {
 
 static void stage_render(const char *prompt) {
     const char *mode = classify_mode(prompt);
+    const char *kind;
     char cap[64];
     int i, n;
     G.scripts_stripped = 0;
@@ -421,7 +550,12 @@ static void stage_render(const char *prompt) {
     s_cpy(G.stage_prompt, OSUI_TEXT, prompt ? prompt : "");
     if (s_has_ci(prompt, "<script") || s_has_ci(prompt, "javascript:"))
         G.scripts_stripped = 1;
+    kind = classify_kind(prompt);
+    s_cpy(G.stage_kind, OSUI_KIND, kind);
+    G.stage_autonomous = s_has_ci(prompt, "mini-plan") || s_has_ci(prompt, "plan autonome");
+    G.stage_tick = 0;
     stage_clear();
+    canvas_clear();
     n = s_len(prompt);
     if (n > 40) n = 40;
     for (i = 0; i < n; i++) {
@@ -430,21 +564,57 @@ static void stage_render(const char *prompt) {
         cap[i] = c;
     }
     cap[n] = 0;
+    canvas_text(0, 0, "scene VGA desktop  guest_html_stage=false  llm=stub_echo");
+    if (s_cmp(kind, "circle") == 0) {
+        canvas_circle(10, 24, 6);
+        canvas_text(18, 2, "construction=cercle (cellules VGA, pas SVG HTML)");
+    } else if (s_cmp(kind, "boxes") == 0) {
+        canvas_box(3, 4, 6, 12);
+        canvas_text(5, 7, "A");
+        canvas_box(3, 20, 6, 12);
+        canvas_text(5, 23, "B");
+        canvas_box(3, 36, 6, 12);
+        canvas_text(5, 39, "C");
+        canvas_text(11, 4, "trois boites structurees");
+    } else if (s_cmp(kind, "graph") == 0) {
+        canvas_graph();
+    } else if (s_cmp(kind, "tree") == 0) {
+        canvas_tree();
+    } else if (s_cmp(kind, "clock") == 0) {
+        canvas_clock();
+    } else if (s_cmp(kind, "sim") == 0) {
+        canvas_sim(0);
+    } else {
+        canvas_box(3, 2, 5, 22);
+        canvas_text(4, 4, "lire prompt");
+        canvas_box(3, 26, 5, 22);
+        canvas_text(4, 28, "contrat Ring 3");
+        canvas_box(3, 50, 5, 22);
+        canvas_text(4, 52, "plan stub");
+    }
+    canvas_text(20, 0, cap);
     if (s_cmp(mode, "presenting") == 0) {
         stage_put(0, 0, "mode=presenting llm=stub_echo");
         stage_put(1, 0, "[A] [B] [C]  scene VGA structuree");
         stage_put(2, 0, cap);
         stage_put(3, 0, "sanitizer=allowlist guest_html_stage=false");
+        stage_put(4, 0, "kind=");
+        stage_put(4, 5, kind);
+        stage_put(4, 5 + s_len(kind), " canvas=vga_desktop");
     } else if (s_cmp(mode, "acting") == 0) {
         stage_put(0, 0, "mode=acting llm=stub_echo");
         stage_put(1, 0, "acte1 -> acte2 -> resultat");
         stage_put(2, 0, cap);
         stage_put(3, 0, "simulation stub, pas Chromium");
+        stage_put(4, 0, "kind=");
+        stage_put(4, 5, kind);
     } else {
         stage_put(0, 0, "mode=reflecting llm=stub_echo");
         stage_put(1, 0, "lire prompt | contrat Ring 3 | plan");
         stage_put(2, 0, cap);
         stage_put(3, 0, "scene VGA, pas #ai-stage HTML");
+        stage_put(4, 0, "kind=");
+        stage_put(4, 5, kind);
     }
 }
 
@@ -454,7 +624,9 @@ static void emit_stage(char *out, int max, int *pos) {
     out_add(out, max, pos, G.stage_mode);
     out_add(out, max, pos, " llm=stub_echo sanitizer=allowlist scripts_stripped=");
     out_u(out, max, pos, (unsigned)G.scripts_stripped);
-    out_add(out, max, pos, " guest_html_stage=false\n");
+    out_add(out, max, pos, " guest_html_stage=false kind=");
+    out_add(out, max, pos, G.stage_kind[0] ? G.stage_kind : "plan");
+    out_add(out, max, pos, " canvas=vga_desktop\n");
     for (r = 0; r < 4; r++) {
         out_add(out, max, pos, "| ");
         out_add(out, max, pos, G.stage_rows[r]);
@@ -527,6 +699,7 @@ static int cmd_os_help(char *out, int max) {
         "osui help llm=stub_echo live_guest=true python_facade=false\n"
         "prompt=MOHHDY>  Pas un bash Linux. Scene=VGA structuree, pas #ai-stage.\n"
         "slash: /help /browser /shell /admin /support /status /fs /center /close /plan /draw\n"
+        "gui (aliases graphics, desktop) : entre le bureau VGA. console : retour texte.\n"
         "session-new [site]  session-use <id>  session-list  session-status\n"
         "chat <texte>  prompt <texte>  grant/revoke <cap>  escalate  takeover\n"
         "origin-check <origine>  browser-click|type|pointer  browser-status\n"
@@ -543,6 +716,7 @@ static int cmd_os_status(char *out, int max) {
     out_add(out, max, &p,
         "osui os-status service=mohhdy-os llm=stub_echo harness=dom_simulator\n"
         "live_guest=true chrome=vga_text python_facade=false guest_html_stage=false\n"
+        "gui_cmd=gui aliases=graphics,desktop leave=console\n"
         "phase3_complete=false us031_complete=false billing=false kb_loaded=");
     out_add(out, max, &p, G.kb_loaded ? "true" : "false");
     out_add(out, max, &p, " chat_mode=");
@@ -1007,6 +1181,10 @@ static int cmd_browser_status(char *out, int max) {
     out_add(out, max, &p, G.form_amount);
     out_add(out, max, &p, " submitted=");
     out_add(out, max, &p, G.form_submitted ? "true" : "false");
+    out_add(out, max, &p, " chat_mode=");
+    out_add(out, max, &p, G.chat_mode);
+    out_add(out, max, &p, " pane=");
+    out_add(out, max, &p, G.pane[0] ? G.pane : "none");
     out_add(out, max, &p, "\n");
     return OSUI_OK;
 }
@@ -1236,6 +1414,11 @@ static int cmd_open(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
         return OSUI_ERR;
     }
     s_cpy(G.chat_mode, 12, "float");
+    s_cpy(G.pane, OSUI_PANE, pane);
+    if (G.chat_x == 0 && G.chat_y == 0) {
+        G.chat_x = 51;
+        G.chat_y = 14;
+    }
     out_add(out, max, &p, "osui open ok pane=");
     out_add(out, max, &p, pane);
     out_add(out, max, &p, " chat_mode=float live_guest=true\n");
@@ -1245,7 +1428,78 @@ static int cmd_open(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
 static int cmd_center(char *out, int max) {
     int p = 0;
     s_cpy(G.chat_mode, 12, "center");
+    G.pane[0] = 0;
+    G.chat_x = 16;
+    G.chat_y = 5;
     out_add(out, max, &p, "osui center ok chat_mode=center\n");
+    return OSUI_OK;
+}
+
+static int cmd_gui(char *out, int max) {
+    int p = 0;
+    G.gui_enter = 1;
+    G.gui_leave = 0;
+    out_add(out, max, &p,
+        "osui gui ok chrome=vga_desktop canonical=gui aliases=graphics,desktop\n"
+        "leave=console chat_mode=");
+    out_add(out, max, &p, G.chat_mode);
+    out_add(out, max, &p, " llm=stub_echo us031_complete=false guest_html_stage=false\n");
+    return OSUI_OK;
+}
+
+static int cmd_gui_exit(char *out, int max) {
+    int p = 0;
+    G.gui_leave = 1;
+    G.gui_enter = 0;
+    s_cpy(G.chat_mode, 12, "center");
+    G.pane[0] = 0;
+    out_add(out, max, &p, "osui gui exit chat_mode=center chrome=vga_text prompt=MOHHDY>\n");
+    return OSUI_OK;
+}
+
+static int cmd_gui_status(char *out, int max) {
+    int p = 0, r;
+    out_add(out, max, &p, "osui gui-status chrome=vga_desktop canonical=gui chat_mode=");
+    out_add(out, max, &p, G.chat_mode);
+    out_add(out, max, &p, " pane=");
+    out_add(out, max, &p, G.pane[0] ? G.pane : "none");
+    out_add(out, max, &p, " kind=");
+    out_add(out, max, &p, G.stage_kind);
+    out_add(out, max, &p, " mode=");
+    out_add(out, max, &p, G.stage_mode);
+    out_add(out, max, &p, " us031_complete=false guest_html_stage=false\n");
+    for (r = 0; r < 8 && r < OSUI_CANVAS_ROWS; r++) {
+        out_add(out, max, &p, "|");
+        out_add(out, max, &p, G.canvas[r]);
+        out_add(out, max, &p, "\n");
+    }
+    return OSUI_OK;
+}
+
+static int cmd_gui_move(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    const char *dir = narg > 0 ? args[0] : "";
+    int p = 0;
+    if (s_cmp(G.chat_mode, "float") != 0) {
+        out_add(out, max, &p, "osui gui-move error=chat_mode=center (ouvre un programme d'abord)\n");
+        return OSUI_ERR;
+    }
+    if (s_cmp(dir, "left") == 0) G.chat_x -= 2;
+    else if (s_cmp(dir, "right") == 0) G.chat_x += 2;
+    else if (s_cmp(dir, "up") == 0) G.chat_y -= 1;
+    else if (s_cmp(dir, "down") == 0) G.chat_y += 1;
+    else {
+        out_add(out, max, &p, "osui gui-move error=usage gui-move left|right|up|down\n");
+        return OSUI_ERR;
+    }
+    if (G.chat_x < 0) G.chat_x = 0;
+    if (G.chat_y < 1) G.chat_y = 1;
+    if (G.chat_x > 52) G.chat_x = 52;
+    if (G.chat_y > 14) G.chat_y = 14;
+    out_add(out, max, &p, "osui gui-move ok chat_mode=float x=");
+    out_u(out, max, &p, (unsigned)G.chat_x);
+    out_add(out, max, &p, " y=");
+    out_u(out, max, &p, (unsigned)G.chat_y);
+    out_add(out, max, &p, "\n");
     return OSUI_OK;
 }
 
@@ -1255,7 +1509,7 @@ static int map_slash(const char *cmd, char *mapped, int max) {
     if (s_cmp(cmd, "shell") == 0) { s_cpy(mapped, max, "os-shell"); return 1; }
     if (s_cmp(cmd, "admin") == 0) { s_cpy(mapped, max, "os-admin"); return 1; }
     if (s_cmp(cmd, "support") == 0) { s_cpy(mapped, max, "os-support"); return 1; }
-    if (s_cmp(cmd, "status") == 0) { s_cpy(mapped, max, "os-status"); return 1; }
+    if (s_cmp(cmd, "status") == 0) { s_cpy(mapped, max, "os-pane-status"); return 1; }
     if (s_cmp(cmd, "fs") == 0) { s_cpy(mapped, max, "os-fs"); return 1; }
     if (s_cmp(cmd, "center") == 0) { s_cpy(mapped, max, "os-center"); return 1; }
     if (s_cmp(cmd, "close") == 0) { s_cpy(mapped, max, "os-center"); return 1; }
@@ -1263,23 +1517,46 @@ static int map_slash(const char *cmd, char *mapped, int max) {
     if (s_cmp(cmd, "draw") == 0) { s_cpy(mapped, max, "stage-prompt"); return 1; }
     if (s_cmp(cmd, "stage") == 0) { s_cpy(mapped, max, "stage-prompt"); return 1; }
     if (s_cmp(cmd, "guest") == 0) { s_cpy(mapped, max, "guest-status"); return 1; }
+    if (s_cmp(cmd, "gui") == 0 || s_cmp(cmd, "graphics") == 0 || s_cmp(cmd, "desktop") == 0)
+        { s_cpy(mapped, max, "gui"); return 1; }
+    if (s_cmp(cmd, "console") == 0) { s_cpy(mapped, max, "gui-exit"); return 1; }
     return 0;
+}
+
+static int open_then(const char *pane, int (*fn)(char *, int), char *out, int max) {
+    char args[OSUI_MAX_ARGS][96];
+    char unused[64];
+    s_cpy(args[0], 96, pane);
+    cmd_open(args, 1, unused, 64);
+    return fn(out, max);
 }
 
 static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     if (s_cmp(cmd, "os-help") == 0 || s_cmp(cmd, "help") == 0) return cmd_os_help(out, max);
     if (s_cmp(cmd, "os-status") == 0) return cmd_os_status(out, max);
-    if (s_cmp(cmd, "os-browser") == 0) return cmd_browser_status(out, max);
+    if (s_cmp(cmd, "os-browser") == 0) return open_then("browser", cmd_browser_status, out, max);
     if (s_cmp(cmd, "os-shell") == 0) {
+        char dummy[64];
+        char a[OSUI_MAX_ARGS][96];
         int p = 0;
-        out_add(out, max, &p, "osui os-shell ok this_is_multiboot_ring3 prompt=MOHHDY>\n");
+        s_cpy(a[0], 96, "shell");
+        cmd_open(a, 1, dummy, 64);
+        out_add(out, max, &p, "osui os-shell ok this_is_multiboot_ring3 prompt=MOHHDY> chat_mode=float\n");
         return OSUI_OK;
     }
-    if (s_cmp(cmd, "os-admin") == 0) return cmd_admin_status(out, max);
-    if (s_cmp(cmd, "os-support") == 0) return cmd_session_list(out, max);
-    if (s_cmp(cmd, "os-fs") == 0) return cmd_fs_list(args, narg, out, max);
+    if (s_cmp(cmd, "os-admin") == 0) return open_then("admin", cmd_admin_status, out, max);
+    if (s_cmp(cmd, "os-support") == 0) return open_then("support", cmd_session_list, out, max);
+    if (s_cmp(cmd, "os-fs") == 0) {
+        char dummy[64];
+        char a[OSUI_MAX_ARGS][96];
+        s_cpy(a[0], 96, "fs");
+        cmd_open(a, 1, dummy, 64);
+        return cmd_fs_list(args, narg, out, max);
+    }
     if (s_cmp(cmd, "os-center") == 0 || s_cmp(cmd, "os-close") == 0)
         return cmd_center(out, max);
+    if (s_cmp(cmd, "os-pane-status") == 0)
+        return open_then("status", cmd_os_status, out, max);
     if (s_cmp(cmd, "session-new") == 0) return cmd_session_new(args, narg, out, max);
     if (s_cmp(cmd, "session-use") == 0) return cmd_session_use(args, narg, out, max);
     if (s_cmp(cmd, "session-status") == 0) return cmd_session_status(out, max);
@@ -1306,6 +1583,12 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "attach") == 0) return cmd_attach(out, max);
     if (s_cmp(cmd, "detach") == 0) return cmd_detach(out, max);
     if (s_cmp(cmd, "open") == 0) return cmd_open(args, narg, out, max);
+    if (s_cmp(cmd, "gui") == 0 || s_cmp(cmd, "graphics") == 0 || s_cmp(cmd, "desktop") == 0)
+        return cmd_gui(out, max);
+    if (s_cmp(cmd, "console") == 0 || s_cmp(cmd, "gui-exit") == 0)
+        return cmd_gui_exit(out, max);
+    if (s_cmp(cmd, "gui-status") == 0) return cmd_gui_status(out, max);
+    if (s_cmp(cmd, "gui-move") == 0) return cmd_gui_move(args, narg, out, max);
     return -1;
 }
 
@@ -1374,7 +1657,13 @@ void osui_runtime_init(void) {
     G.current = -1;
     s_cpy(G.chat_mode, 12, "center");
     s_cpy(G.stage_mode, 16, "reflecting");
+    s_cpy(G.stage_kind, OSUI_KIND, "plan");
     G.kb_loaded = 1;
+    G.chat_x = 16;
+    G.chat_y = 5;
+    G.pane[0] = 0;
+    G.gui_enter = 0;
+    G.gui_leave = 0;
     fs_seed();
     alloc_session("default");
     stage_render("");
@@ -1431,4 +1720,58 @@ int osui_guest_command_count(void) {
     (void)mohhdy_shell_commands;
     (void)MOHHDY_OSUI_GUEST_HTML_STAGE;
     return MOHHDY_SHELL_COMMAND_COUNT;
+}
+
+const char *osui_get_chat_mode(void) { return G.chat_mode; }
+const char *osui_get_pane(void) { return G.pane[0] ? G.pane : "none"; }
+const char *osui_get_stage_mode(void) { return G.stage_mode; }
+const char *osui_get_stage_kind(void) { return G.stage_kind[0] ? G.stage_kind : "plan"; }
+const char *osui_get_session_id(void) {
+    osui_session_t *s = cur();
+    return s ? s->id : "";
+}
+int osui_get_chat_x(void) { return G.chat_x; }
+int osui_get_chat_y(void) { return G.chat_y; }
+
+int osui_move_chat(int dx, int dy) {
+    if (s_cmp(G.chat_mode, "float") != 0) return 0;
+    G.chat_x += dx;
+    G.chat_y += dy;
+    if (G.chat_x < 0) G.chat_x = 0;
+    if (G.chat_y < 1) G.chat_y = 1;
+    if (G.chat_x > 52) G.chat_x = 52;
+    if (G.chat_y > 14) G.chat_y = 14;
+    return 1;
+}
+
+int osui_msg_count(void) {
+    osui_session_t *s = cur();
+    return s ? s->n_msgs : 0;
+}
+
+void osui_msg_at(int i, char *dst, int max) {
+    osui_session_t *s = cur();
+    dst[0] = 0;
+    if (!s || i < 0 || i >= s->n_msgs) return;
+    s_cpy(dst, max, s->msgs[i]);
+}
+
+void osui_canvas_row(int r, char *dst, int max) {
+    dst[0] = 0;
+    if (r < 0 || r >= OSUI_CANVAS_ROWS) return;
+    s_cpy(dst, max, G.canvas[r]);
+}
+
+int osui_gui_should_enter(void) { return G.gui_enter; }
+void osui_gui_ack_enter(void) { G.gui_enter = 0; }
+int osui_gui_should_leave(void) { return G.gui_leave; }
+void osui_gui_ack_leave(void) { G.gui_leave = 0; }
+
+int osui_stage_tick(char *out, int out_max) {
+    if (out && out_max > 0) out[0] = 0;
+    if (!G.stage_autonomous) return 0;
+    G.stage_tick++;
+    canvas_sim(G.stage_tick);
+    s_cpy(G.stage_mode, 16, G.stage_tick > 4 ? "presenting" : "acting");
+    return 0;
 }

@@ -9,6 +9,7 @@
 #include "os_vfs_service.h"
 #include "os_ipc_deferred.h"
 #include "osui_runtime.h"
+#include "osui_gui.h"
 
 // ==============================================================================
 // STRUCTURES ET DÉFINITIONS
@@ -1082,6 +1083,9 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     
     print_colored("\nCOMMANDES OS-UI (Ring 3, llm=stub_echo) :\n", COLOR_YELLOW);
     print_string("  /help /browser /shell /admin /support /status /fs /center\n");
+    print_string("  gui | graphics | desktop  - Entrer le bureau VGA (QEMU GTK)\n");
+    print_string("  gui-status          - Instantane ASCII du bureau (nographic OK)\n");
+    print_string("  console | gui-exit  - Quitter le bureau, retour MOHHDY>\n");
     print_string("  prompt <texte>     - Chat + scene VGA structuree\n");
     print_string("  session-new/list/use/status  grant/revoke  escalate  takeover\n");
     print_string("  origin-check  browser-click  mcp-invoice  mcp-invoke  fs-list/read\n");
@@ -2609,6 +2613,7 @@ static int is_builtin(const char* cmd) {
         "stage", "stage-prompt", "os-help", "os-status", "os-browser", "os-shell",
         "os-admin", "os-support", "os-fs", "os-center", "os-close",
         "guest-status", "attach", "detach", "open",
+        "gui", "graphics", "desktop", "console", "gui-status", "gui-exit", "gui-move",
         0
     };
     for (int i = 0; names[i]; i++) {
@@ -5480,6 +5485,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         char osui_out[OSUI_OUT_MAX];
         ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
         print_string(osui_out);
+        if (osui_gui_should_enter()) osui_gui_run();
         return;
     }
 
@@ -5498,6 +5504,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         char osui_out[OSUI_OUT_MAX];
         ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
         print_string(osui_out);
+        if (osui_gui_should_enter()) osui_gui_run();
         return;
     }
 

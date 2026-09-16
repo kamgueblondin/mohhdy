@@ -77,7 +77,7 @@ Source de verite : [ETAT_REEL.md](ETAT_REEL.md), backlog [../US/mohhdy_us.md](..
 
 Observable aujourd'hui :
 
-- Boot Multiboot, VGA/serie, shell ELF Ring 3, syscalls 0-126
+- Boot Multiboot, VGA/serie, shell ELF Ring 3, syscalls 0-127
 - VFS Ring 3 (`vfsserver` / `vfsvirtual`), FAT16/FAT32, ACL droit-source-prefixe, diagnostic public sans prefixe
 - IPC, registre de services, grant/revoke backend, `request_id`, evenements best-effort
 - NE2000 local, TLS/HTTP/SSE sur pair `127.0.0.1`, pas Internet public, pas OpenAI
@@ -102,7 +102,7 @@ Present dans le guest C (stub, pas production) :
 - Origine etrangere refusee (`origin_denied`, 403)
 - Gestes simulateur DOM, MCP declare, facture mock
 - FS sandbox lecture ; traversal et write refuses
-- Scene VGA 8x48, `llm=stub_echo`, `phase3_complete=false`, `us031_complete=false`
+- Scene VGA 8x48 + canvas desktop 22x78, commande `gui`, `llm=stub_echo`, `phase3_complete=false`, `us031_complete=false`
 - Pont : `shared/multiboot_shell_commands.json` + `userspace/mohhdy_osui_bridge.h`
 - `python_facade=false`
 
@@ -144,7 +144,7 @@ Une ligne peut cumuler bootstrap et "a porter" : le comportement existe hors OS,
 | AOS-003 | PIT, PS/2, EOI IRQ0 | verifie | garde |
 | AOS-004 | Initrd TAR lecture seule | verifie | garde |
 | AOS-005 | Shell ELF Ring 3 | verifie | garde |
-| AOS-006 | ABI syscalls 0-126 | verifie | garde |
+| AOS-006 | ABI syscalls 0-127 | verifie | garde |
 | AOS-007 / AOS-023 | Overlay AIOV V2 ATA PIO | verifie | garde |
 | AOS-008 / AOS-024 | Taches, preemption IRQ0 | verifie | garde |
 | AOS-009 | `exec`, attente parent | verifie | garde |
@@ -309,7 +309,7 @@ Checklist **obligatoire** pour **chaque** PR (guest, OS-UI, docs). Une case non 
 - [ ] Guest : `make test-all` et, si le noyau est touche, ne pas casser les sept contrats
 - [ ] `make integration-qemu` : ne pas allonger au-dela de 25 min sans compensation **mesuree** (et documentee)
 - [ ] Pas d'OpenAI, pas d'hote public, pas de TAP dans GitHub Actions
-- [ ] OS-UI : `make osui-smoke` + `make qemu-osui-runtime` **hors** `make integration-qemu`
+- [ ] OS-UI : `make osui-smoke` + `make qemu-osui-runtime` + `make qemu-osui-gui` **hors** `make integration-qemu`
 - [ ] Preuves negatives conservees (voisin ACL, origine etrangere, outil non declare)
 
 ### 4.4 Deploiement
@@ -386,7 +386,7 @@ Ordre de **build produit** (OS-UI) en parallele des **gardes guest 0-4**. OS-UI-
 
 ### 6.2 OS-UI-0. Shell graphique minimal dans l'instance Docker
 
-**Statut.** Livre : `userspace/osui_runtime.c`, image `mohhdy-os` = QEMU. Guides : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md).
+**Statut.** Livre : `userspace/osui_runtime.c` + `userspace/osui_gui.c`, image `mohhdy-os` = QEMU. Commande canonique `gui`. Guides : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md).
 
 **But.** L'instance Docker presente un **shell graphique du SE** (chrome fenetre, vue operateur), pas seulement des pages HTML du sidecar comme identite produit.
 
@@ -554,7 +554,7 @@ Ce n'est **pas** la sortie de OS-UI-0.
 | Tranche | DoD court |
 |---|---|
 | OS-UI-000 | Plan maitre + liens ; pas de code `agent/` |
-| OS-UI-0 | Chrome OS a chat central, scene IA et shell Multiboot (`osui/`) ; hors QEMU CI ; pas US-031 |
+| OS-UI-0 | Chrome OS a chat central, scene IA, commande `gui`, shell Multiboot ; hors QEMU CI long ; pas US-031 |
 | OS-UI-1 | Parite chat/admin/droits/escalade/handoff/origine dans le shell ; stub honnete |
 | OS-UI-2 | Premiere tranche : actes + FS dans le pane Browser-OS ; preuves negatives ; pas Chromium |
 | OS-UI-C | Registre guest + hook live honnete + scene IA multi-etapes ; pas VGA HTML guest |

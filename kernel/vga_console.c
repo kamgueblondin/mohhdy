@@ -12,6 +12,7 @@ static int view_off;
 static int cur_x;
 static int cur_y;
 static uint16_t blank_cell;
+static int desktop_on;
 
 #ifdef KERNEL_TEST
 uint16_t vga_test_fb[VGA_ROWS * VGA_COLS];
@@ -90,6 +91,9 @@ static void compose_visible(void) {
     int row;
     int col;
 
+    if (desktop_on) {
+        return;
+    }
     if (start < 0) start = 0;
     for (row = 0; row < VGA_ROWS; row++) {
         for (col = 0; col < VGA_COLS; col++) {
@@ -149,6 +153,9 @@ void vga_console_view_live(void) {
 void vga_console_put_xy(char c, int x, int y, char color) {
     uint16_t cell;
 
+    if (desktop_on) {
+        return;
+    }
     if (x < 0 || y < 0 || x >= VGA_COLS || y >= VGA_ROWS) {
         return;
     }
@@ -202,6 +209,9 @@ void vga_console_set_cursor(int x, int y) {
 int vga_console_view_up(int lines) {
     int max_off;
 
+    if (desktop_on) {
+        return 0;
+    }
     if (lines <= 0) {
         return view_off;
     }
@@ -215,6 +225,9 @@ int vga_console_view_up(int lines) {
 }
 
 int vga_console_view_down(int lines) {
+    if (desktop_on) {
+        return 0;
+    }
     if (lines <= 0) {
         return view_off;
     }
@@ -241,10 +254,50 @@ uint16_t vga_console_visible_cell(int x, int y) {
     if (x < 0 || y < 0 || x >= VGA_COLS || y >= VGA_ROWS) {
         return 0;
     }
+    if (desktop_on) {
+        return live[y][x];
+    }
     combined = hist_count + VGA_ROWS;
     start = combined - VGA_ROWS - view_off;
     if (start < 0) {
         start = 0;
     }
     return combined_cell(start + y, x);
+}
+
+int vga_desktop_active(void) {
+    return desktop_on;
+}
+
+void vga_desktop_set(int on) {
+    if (on) {
+        desktop_on = 1;
+        view_off = 0;
+        hw_cursor(0, 0, 0);
+        return;
+    }
+    desktop_on = 0;
+    vga_console_clear(0x07);
+}
+
+void vga_desktop_blit(const uint16_t *cells) {
+    int row;
+    int col;
+    int index;
+
+    if (!cells) {
+        vga_desktop_set(0);
+        return;
+    }
+    desktop_on = 1;
+    view_off = 0;
+    index = 0;
+    for (row = 0; row < VGA_ROWS; row++) {
+        for (col = 0; col < VGA_COLS; col++) {
+            live[row][col] = cells[index];
+            hw_put(index, cells[index]);
+            index++;
+        }
+    }
+    hw_cursor(0, 0, 0);
 }

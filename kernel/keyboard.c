@@ -1,6 +1,7 @@
 #include "keyboard.h"
 #include "kernel.h"
 #include "vga_console.h"
+#include "os_syscalls.h"
 #include <stdint.h>
 
 // Fonctions externes pour les ports I/O et autres
@@ -142,6 +143,13 @@ static int kbd_handle_extended(uint8_t scancode) {
     if (scancode & 0x80) {
         return 1;
     }
+    if (vga_desktop_active()) {
+        if (key == 0x4B) { kbd_put_char((char)OS_VGA_KEY_LEFT); return 1; }
+        if (key == 0x4D) { kbd_put_char((char)OS_VGA_KEY_RIGHT); return 1; }
+        if (key == 0x48) { kbd_put_char((char)OS_VGA_KEY_UP); return 1; }
+        if (key == 0x50) { kbd_put_char((char)OS_VGA_KEY_DOWN); return 1; }
+        return 1;
+    }
     if (key == 0x49) {
         vga_console_view_up(VGA_ROWS - 1);
         return 1;
@@ -219,6 +227,9 @@ void keyboard_poll_check() {
                 if (c != 0) {
                     kbd_put_char(c);
                     polling_fallback_active = 1;
+                } else if (vga_desktop_active() && scancode == 0x01) {
+                    kbd_put_char((char)OS_VGA_KEY_ESC);
+                    polling_fallback_active = 1;
                 }
             }
         }
@@ -268,6 +279,8 @@ void keyboard_interrupt_handler() {
         char c = map_scancode(scancode);
         if (c != 0) {
             kbd_put_char(c);
+        } else if (vga_desktop_active() && scancode == 0x01) {
+            kbd_put_char((char)OS_VGA_KEY_ESC);
         }
     }
 }
@@ -435,7 +448,10 @@ char keyboard_getc(void) {
         // 1. Essayer d'abord le buffer d'interruptions
         if (kbd_get_char_nonblock(&c)) {
             // Filtrer: uniquement ASCII imprimable + contrôle utiles
-            if ((c >= 32 && c <= 126) || c == '\n' || c == '\r' || c == '\t' || c == '\b') {
+            if ((c >= 32 && c <= 126) || c == '\n' || c == '\r' || c == '\t' || c == '\b'
+                || c == (char)OS_VGA_KEY_ESC
+                || c == (char)OS_VGA_KEY_LEFT || c == (char)OS_VGA_KEY_RIGHT
+                || c == (char)OS_VGA_KEY_UP || c == (char)OS_VGA_KEY_DOWN) {
                 consecutive_empty_returns = 0; // Reset compteur
                 if (getc_calls <= 3) {
                     print_string_serial("GETC: got valid '");
@@ -453,7 +469,10 @@ char keyboard_getc(void) {
         
         // 3. Vérifier à nouveau le buffer
         if (kbd_get_char_nonblock(&c)) {
-            if ((c >= 32 && c <= 126) || c == '\n' || c == '\r' || c == '\t' || c == '\b') {
+            if ((c >= 32 && c <= 126) || c == '\n' || c == '\r' || c == '\t' || c == '\b'
+                || c == (char)OS_VGA_KEY_ESC
+                || c == (char)OS_VGA_KEY_LEFT || c == (char)OS_VGA_KEY_RIGHT
+                || c == (char)OS_VGA_KEY_UP || c == (char)OS_VGA_KEY_DOWN) {
                 consecutive_empty_returns = 0; // Reset compteur
                 if (getc_calls <= 3) {
                     print_string_serial("GETC: got valid '");

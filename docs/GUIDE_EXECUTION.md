@@ -25,10 +25,12 @@ make run
 ```bash
 make run-gui
 ```
-- **Affichage** : Fenêtre QEMU graphique
-- **Clavier** : Pleinement fonctionnel
-- **Compatible** : Environnements avec interface graphique
-- **Avantages** : Interface familière, debugging visuel
+- **Affichage** : Fenetre QEMU GTK (`-vga std -display gtk`)
+- **Clavier** : PS/2, pleinement fonctionnel
+- **Bureau** : au prompt `MOHHDY>`, tapez `gui` (aliases `graphics`, `desktop`)
+- **Quitter le bureau** : `console`, `gui-exit` ou ESC
+- **Nographic / CI** : `gui-status` dump le canvas ASCII sans boucle GETC
+- **Avantages** : chrome OS-UI (chat central / flottant, scene, panes)
 
 Pour tester la sonde NE2000 (optionnel, hors `make run-gui`) :
 

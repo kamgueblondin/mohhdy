@@ -84,6 +84,13 @@ OSUI_EXTRA = [
     "guest-status",
     "attach",
     "detach",
+    "gui",
+    "graphics",
+    "desktop",
+    "console",
+    "gui-status",
+    "gui-exit",
+    "gui-move",
     "open",
 ]
 
@@ -129,8 +136,9 @@ def manifest(parsed: dict) -> dict:
         "linux_traps": list(LINUX_TRAPS),
         "note": (
             "Registre partage genere depuis userspace/shell.c. "
-            "Les noms OS-UI (sessions, MCP, scene VGA) sont des builtins Ring 3. "
-            "Pas un bash Linux. Guest VGA = scene structuree, pas #ai-stage HTML. "
+            "Les noms OS-UI (sessions, MCP, scene VGA, gui) sont des builtins Ring 3. "
+            "Commande canonique du bureau : gui (aliases graphics, desktop). "
+            "Pas un bash Linux. Guest VGA = bureau 80x25 + scene structuree, pas #ai-stage HTML. "
             "python_facade=false."
         ),
     }
@@ -140,7 +148,7 @@ def header_text(data: dict) -> str:
     lines = [
         "/* mohhdy_osui_bridge.h - contrat OS-UI <-> guest Ring 3.",
         " * Genere par scripts/extract_guest_commands.py depuis userspace/shell.c.",
-        " * Ne pas editer a la main. Scene guest = VGA structuree, pas HTML #ai-stage.",
+        " * Ne pas editer a la main. Scene guest = VGA desktop 80x25, pas HTML #ai-stage.",
         " */",
         "#ifndef MOHHDY_OSUI_BRIDGE_H",
         "#define MOHHDY_OSUI_BRIDGE_H",
@@ -148,6 +156,8 @@ def header_text(data: dict) -> str:
         "#define MOHHDY_OSUI_GUEST_HTML_STAGE 0",
         "#define MOHHDY_OSUI_LIVE_ATTACH_HOST 0",
         "#define MOHHDY_OSUI_STAGE_VGA 1",
+        "#define MOHHDY_OSUI_VGA_DESKTOP 1",
+        '#define MOHHDY_OSUI_GUI_COMMAND "gui"',
         "#define MOHHDY_OSUI_PYTHON_FACADE 0",
         '#define MOHHDY_OSUI_LLM_KIND "stub_echo"',
         '#define MOHHDY_SHELL_PROMPT "MOHHDY>"',

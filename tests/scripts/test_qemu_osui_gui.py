@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Focused QEMU contract: OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA).
+"""QEMU smoke: commande canonique `gui` entre le bureau VGA.
 
-Hors make integration-qemu. Ne remplace aucun des sept contrats.
+Hors make integration-qemu. Complements test_qemu_osui_runtime.py.
 """
 from __future__ import print_function
 
@@ -16,10 +16,10 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 KERNEL = os.environ.get("KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
 INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd.tar"))
 LOG_DIR = os.path.join(ROOT, "test_logs")
-LOG = os.environ.get("OSUI_LOG", os.path.join(LOG_DIR, "qemu-osui-runtime-serial.log"))
-QEMU_ERR = os.environ.get("OSUI_ERR", os.path.join(LOG_DIR, "qemu-osui-runtime-stderr.log"))
-MON_SOCK = os.environ.get("OSUI_MON_SOCK", os.path.join(LOG_DIR, "qemu-osui-runtime-monitor.sock"))
-TEST_DISK = os.environ.get("OVERLAY_DISK", os.path.join(LOG_DIR, "qemu-osui-runtime-overlay.img"))
+LOG = os.environ.get("OSUI_GUI_LOG", os.path.join(LOG_DIR, "qemu-osui-gui-serial.log"))
+QEMU_ERR = os.environ.get("OSUI_GUI_ERR", os.path.join(LOG_DIR, "qemu-osui-gui-stderr.log"))
+MON_SOCK = os.environ.get("OSUI_GUI_MON_SOCK", os.path.join(LOG_DIR, "qemu-osui-gui-monitor.sock"))
+TEST_DISK = os.environ.get("OVERLAY_DISK", os.path.join(LOG_DIR, "qemu-osui-gui-overlay.img"))
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "75"))
 CMD_TIMEOUT = float(os.environ.get("CMD_TIMEOUT", "20"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.05"))
@@ -105,12 +105,15 @@ def send_key(client, key):
     client.sendall(("sendkey %s %d\n" % (key, KEY_HOLD_MS)).encode("ascii"))
 
 
-def key_echo_count(output, char):
-    pattern = r"SYS_GETS: caractère ajouté:\s*'%s'" % re.escape(char)
+def key_echo_count(output, char, mode):
+    if mode == "getc":
+        pattern = r"SYS_GETC: caract.re retourn.:\s*'%s'" % re.escape(char)
+    else:
+        pattern = r"SYS_GETS: caract.re ajout.:\s*'%s'" % re.escape(char)
     return len(re.findall(pattern, normalized_log(output)))
 
 
-def send_command_once(client, command, proc):
+def send_command_once(client, command, proc, mode):
     aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash"}
     for char in command:
         count = 0
@@ -122,10 +125,10 @@ def send_command_once(client, command, proc):
                 if proc.poll() is not None:
                     raise RuntimeError("QEMU stopped unexpectedly; log tail:\n%s" % log_text()[-2000:])
                 time.sleep(KEY_DELAY)
-                count = key_echo_count(log_text()[start:], char.lower())
+                count = key_echo_count(log_text()[start:], char.lower(), mode)
                 if count:
                     time.sleep(KEY_DUPLICATE_SETTLE_DELAY)
-                    count = key_echo_count(log_text()[start:], char.lower())
+                    count = key_echo_count(log_text()[start:], char.lower(), mode)
                     break
             if count:
                 break
@@ -137,27 +140,34 @@ def send_command_once(client, command, proc):
     send_key(client, "ret")
 
 
-def command_echoed(output, command):
+def command_echoed(output, command, mode):
     expected = " ".join(command.lower().split())
-    for received in re.findall(r"SYS_GETS: ligne lue: ([^\r\n]+)", normalized_log(output)):
+    text = normalized_log(output)
+    if mode == "getc":
+        for received in re.findall(r"osui gui line=([^\r\n]+)", text):
+            if " ".join(received.lower().split()) == expected:
+                return True
+        return False
+    for received in re.findall(r"SYS_GETS: ligne lue: ([^\r\n]+)", text):
         if " ".join(received.lower().split()) == expected:
             return True
     return False
 
 
-def send_command_until(client, command, marker, proc):
+def send_command_until(client, command, marker, proc, mode="gets", wait_prompt=True):
     start = len(log_text())
-    send_command_once(client, command, proc)
+    send_command_once(client, command, proc, mode)
     deadline = time.monotonic() + CMD_TIMEOUT
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             raise RuntimeError("QEMU stopped unexpectedly; log tail:\n%s" % log_text()[-2000:])
         output = normalized_log(log_text()[start:])
-        if command_echoed(output, command):
+        if command_echoed(output, command, mode):
             wait_for(proc, marker, CMD_TIMEOUT, start)
-            wait_for(proc, "(-.-)", CMD_TIMEOUT, start)
+            if wait_prompt:
+                wait_for(proc, "(-.-)", CMD_TIMEOUT, start)
             return
-        if "SYS_GETS: ligne lue: " in output:
+        if mode == "gets" and "SYS_GETS: ligne lue: " in output:
             raise CommandEchoMismatch("command echo altered: %s" % command)
         time.sleep(0.1)
     raise RuntimeError("timeout waiting for command echo: %s" % command)
@@ -190,7 +200,7 @@ def main():
         with open(QEMU_ERR, "wb") as err:
             proc = subprocess.Popen([
                 "qemu-system-i386", "-cpu", "pentium3", "-kernel", KERNEL,
-                "-initrd", INITRD, "-m", "1024M", "-display", "none", "-vga", "none",
+                "-initrd", INITRD, "-m", "1024M", "-display", "none", "-vga", "std",
                 "-serial", "file:" + LOG, "-monitor", "unix:%s,server,nowait" % MON_SOCK,
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
             ] + qemu_disk_args(), cwd=ROOT, stdout=err, stderr=err)
@@ -199,21 +209,23 @@ def main():
             monitor = monitor_connect()
             time.sleep(0.6)
 
-            commands = (
-                ("os-status", "service=mohhdy-os"),
-                ("chat bonjour", "llm=stub_echo"),
-                ("origin-check evil", "origin_denied"),
-                ("grant mcp.invoice.create", "grant ok"),
-                ("mcp-invoice alice 10", "invoice_id="),
-                ("fs-read ../secret", "traversal_denied"),
-                ("stage-prompt dessine", "mode=presenting"),
-                ("gui-status", "canonical=gui"),
-                ("apt", "Pas un bash Linux"),
+            say("typing gui-status ...")
+            send_command_until(monitor, "gui-status", "canonical=gui", proc)
+            say("typing gui ...")
+            send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
+            say("typing /browser in gui ...")
+            send_command_until(
+                monitor, "/browser", "chat_mode=float", proc, mode="getc", wait_prompt=False
             )
-            for command, marker in commands:
-                say("typing %s ..." % command)
-                send_command_until(monitor, command, marker, proc)
-        say("QEMU OS-UI runtime contract passed.")
+            say("typing /center in gui ...")
+            send_command_until(
+                monitor, "/center", "chat_mode=center", proc, mode="getc", wait_prompt=False
+            )
+            say("typing console ...")
+            send_command_until(
+                monitor, "console", "chrome=vga_text", proc, mode="getc", wait_prompt=True
+            )
+        say("QEMU OS-UI GUI contract passed.")
         return 0
     finally:
         if monitor is not None:
@@ -229,5 +241,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as error:
-        print("QEMU OS-UI runtime failed: %s" % error, file=sys.stderr)
+        print("QEMU OS-UI GUI failed: %s" % error, file=sys.stderr)
         raise SystemExit(1)

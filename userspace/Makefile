@@ -9,11 +9,11 @@ ASFLAGS = --32
 
 # Programmes à compiler
 PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver vfsvirtual vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim waitchild ok
-USER_HEADERS = ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h
+USER_HEADERS = ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h
 
 all: $(PROGRAMS)
 
-shell: shell.o ramfs.o procsim.o osui_runtime.o start.o
+shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o start.o
 	@echo "Linking shell..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 

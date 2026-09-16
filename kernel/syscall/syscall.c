@@ -18,6 +18,7 @@
 #include "../fs/fat16.h"
 #include "../fs/fat32.h"
 #include "../net_socket.h"
+#include "../vga_console.h"
 /* Completions locales : BPE, top-k basse temperature, arret newline/EOT/repetition. */
 #define GPT2_BAREMETAL_GENERATION_STEPS 12U
 
@@ -586,6 +587,18 @@ void syscall_handler(cpu_state_t* cpu) {
             break;
         case SYS_VFS_OVERLAY_RMDIR:
             cpu->eax = (uint32_t)sys_vfs_overlay_rmdir((const char*)cpu->ebx);
+            break;
+        case SYS_VGA_BLIT:
+            {
+                const os_vga_frame_t *frame = (const os_vga_frame_t *)cpu->ebx;
+                if (!frame) {
+                    vga_desktop_set(0);
+                    cpu->eax = 0;
+                    break;
+                }
+                vga_desktop_blit(frame->cells);
+                cpu->eax = 0;
+            }
             break;
         default:
 
