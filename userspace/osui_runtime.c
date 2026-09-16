@@ -700,6 +700,7 @@ static int cmd_os_help(char *out, int max) {
         "prompt=MOHHDY>  Pas un bash Linux. Scene guest = etat C, bureau VBE QEMU.\n"
         "slash: /help /browser /shell /admin /support /status /fs /center /close /plan /draw\n"
         "gui (aliases graphics, desktop) : entre le bureau graphique QEMU. console : retour texte.\n"
+        "/shell : terminal Multiboot live (help ls date whoami ai). !cmd depuis le chat.\n"
         "session-new [site]  session-use <id>  session-list  session-status\n"
         "chat <texte>  prompt <texte>  grant/revoke <cap>  escalate  takeover\n"
         "origin-check <origine>  browser-click|type|pointer  browser-status\n"
@@ -1540,7 +1541,7 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
         int p = 0;
         s_cpy(a[0], 96, "shell");
         cmd_open(a, 1, dummy, 64);
-        out_add(out, max, &p, "osui os-shell ok this_is_multiboot_ring3 prompt=MOHHDY> chat_mode=float\n");
+        out_add(out, max, &p, "osui os-shell ok this_is_multiboot_ring3 live_eval=true prompt=MOHHDY> chat_mode=float\n");
         return OSUI_OK;
     }
     if (s_cmp(cmd, "os-admin") == 0) return open_then("admin", cmd_admin_status, out, max);

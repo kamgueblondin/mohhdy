@@ -15,10 +15,17 @@
 #define ATTR_DIM   0x08
 #define ATTR_DOCK  0x70
 
+#define GUI_TERM_MAX 16
+#define GUI_TERM_LEN 64
+
 static char g_input[96];
 static int g_ilen;
 static int g_leave;
 static int g_idle;
+static osui_program_eval_t g_eval;
+static char g_term[GUI_TERM_MAX][GUI_TERM_LEN];
+static int g_term_i;
+static int g_term_n;
 
 static int slen(const char *s) {
     int n = 0;
@@ -47,6 +54,121 @@ static int scmp(const char *a, const char *b) {
         i++;
     }
     return a[i] - b[i];
+}
+
+void osui_gui_set_program_eval(osui_program_eval_t fn) {
+    g_eval = fn;
+}
+
+void osui_gui_term_reset(void) {
+    g_term_i = 0;
+    g_term_n = 0;
+}
+
+int osui_gui_term_count(void) {
+    return g_term_n;
+}
+
+void osui_gui_term_at(int i, char *dst, int max) {
+    int slot;
+    if (!dst || max <= 0) return;
+    dst[0] = 0;
+    if (i < 0 || i >= g_term_n) return;
+    slot = (g_term_i + i) % GUI_TERM_MAX;
+    scpy(dst, max, g_term[slot]);
+}
+
+void osui_gui_term_push(const char *text) {
+    char line[GUI_TERM_LEN];
+    int n = 0;
+    if (!text) return;
+    while (*text) {
+        if (*text == '\n' || n == GUI_TERM_LEN - 1) {
+            line[n] = 0;
+            if (n > 0 || *text == '\n') {
+                int slot;
+                if (g_term_n < GUI_TERM_MAX) {
+                    slot = (g_term_i + g_term_n) % GUI_TERM_MAX;
+                    g_term_n++;
+                } else {
+                    slot = g_term_i;
+                    g_term_i = (g_term_i + 1) % GUI_TERM_MAX;
+                }
+                scpy(g_term[slot], GUI_TERM_LEN, line);
+            }
+            n = 0;
+            if (*text == '\n') {
+                text++;
+                continue;
+            }
+        }
+        if (*text >= 32 && *text <= 126) line[n++] = *text;
+        if (*text) text++;
+    }
+    if (n > 0) {
+        int slot;
+        line[n] = 0;
+        if (g_term_n < GUI_TERM_MAX) {
+            slot = (g_term_i + g_term_n) % GUI_TERM_MAX;
+            g_term_n++;
+        } else {
+            slot = g_term_i;
+            g_term_i = (g_term_i + 1) % GUI_TERM_MAX;
+        }
+        scpy(g_term[slot], GUI_TERM_LEN, line);
+    }
+}
+
+static void first_token(const char *s, char *d, int max) {
+    int n = 0;
+    if (!d || max <= 0) return;
+    d[0] = 0;
+    if (!s) return;
+    while (*s == ' ' || *s == '\t') s++;
+    while (*s && *s != ' ' && *s != '\t' && n < max - 1) d[n++] = *s++;
+    d[n] = 0;
+}
+
+static int token_ai(const char *s) {
+    while (s && (*s == ' ' || *s == '\t')) s++;
+    if (!s || s[0] != 'a' || s[1] != 'i') return 0;
+    return s[2] == 0 || s[2] == ' ' || s[2] == '\t' || s[2] == '-';
+}
+
+static void seed_shell_term(void) {
+    if (g_term_n > 0) return;
+    osui_gui_term_push("Shell Multiboot live_eval=true");
+    osui_gui_term_push("Pas un bash Linux. help  ls  date  whoami  ai");
+}
+
+static void ensure_shell_pane(char *out, int out_max) {
+    if (scmp(osui_get_pane(), "shell") != 0)
+        osui_dispatch_line("/shell", out, out_max);
+    seed_shell_term();
+}
+
+static int run_program_line(const char *line, char *out, int out_max) {
+    char cap[1024];
+    char shown[88];
+    const char *src = line ? line : "";
+    int n = 0;
+    cap[0] = 0;
+    ensure_shell_pane(out, out_max);
+    scpy(shown, 10, "MOHHDY> ");
+    n = slen(shown);
+    while (*src && n < 86) shown[n++] = *src++;
+    shown[n] = 0;
+    osui_gui_term_push(shown);
+    if (g_eval) {
+        g_eval(line ? line : "", cap, (int)sizeof(cap));
+        if (cap[0]) osui_gui_term_push(cap);
+        if (out && out_max > 0) scpy(out, out_max, cap[0] ? cap : shown);
+    } else {
+        osui_gui_term_push("(eval shell absent de ce binaire)");
+        if (out) scpy(out, out_max, "osui gui shell eval=missing\n");
+        return 1;
+    }
+    return 0;
 }
 
 static void put_cell(uint16_t *cells, int x, int y, char ch, unsigned char attr) {
@@ -179,6 +301,14 @@ void osui_gui_write_snap(char *dst, int max) {
     snap_add(dst, max, &p, " nmsg=");
     n = osui_msg_count();
     snap_u(dst, max, &p, (unsigned)n);
+    snap_add(dst, max, &p, " nterm=");
+    snap_u(dst, max, &p, (unsigned)osui_gui_term_count());
+    if (osui_gui_term_count() > 0) {
+        char last[80];
+        osui_gui_term_at(osui_gui_term_count() - 1, last, (int)sizeof(last));
+        snap_add(dst, max, &p, " term=");
+        snap_add(dst, max, &p, last);
+    }
     snap_add(dst, max, &p, " input=");
     snap_add(dst, max, &p, g_input);
     snap_add(dst, max, &p, "\n");
@@ -205,7 +335,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     if (!scene) return;
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
-    scene->version = 1;
+    scene->version = 2;
     scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
     scene->pane = OS_FB_PANE_NONE;
     if (pane) {
@@ -237,6 +367,16 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     if (n > OS_FB_MSG_MAX) n = OS_FB_MSG_MAX;
     scene->nmsg = (uint16_t)n;
     for (i = 0; i < n; i++) osui_msg_at(i, scene->messages[i], OS_FB_MSG_LEN);
+    n = osui_gui_term_count();
+    if (n > OS_FB_TERM_MAX) {
+        int skip = n - OS_FB_TERM_MAX;
+        for (i = 0; i < OS_FB_TERM_MAX; i++)
+            osui_gui_term_at(skip + i, scene->term[i], OS_FB_TERM_LEN);
+        n = OS_FB_TERM_MAX;
+    } else {
+        for (i = 0; i < n; i++) osui_gui_term_at(i, scene->term[i], OS_FB_TERM_LEN);
+    }
+    scene->nterm = (uint8_t)n;
 }
 
 void osui_gui_render(uint16_t *cells) {
@@ -302,7 +442,28 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=qemu_fb\n");
             return 1;
         }
-        osui_dispatch_line(g_input, out, out_max);
+        {
+            char tok[32];
+            int program = 0;
+            const char *eval_line = g_input;
+            first_token(g_input, tok, (int)sizeof(tok));
+            if (g_input[0] == '!') {
+                eval_line = g_input + 1;
+                while (*eval_line == ' ' || *eval_line == '\t') eval_line++;
+                program = 1;
+            } else if (token_ai(g_input)) {
+                program = 1;
+            } else if (scmp(osui_get_pane(), "shell") == 0
+                       && g_input[0] != '/' && !osui_is_command(tok)) {
+                program = 1;
+            }
+            if (program) {
+                run_program_line(eval_line, out, out_max);
+            } else {
+                osui_dispatch_line(g_input, out, out_max);
+                if (scmp(osui_get_pane(), "shell") == 0) seed_shell_term();
+            }
+        }
         if (osui_gui_should_leave()) {
             osui_gui_ack_leave();
             g_leave = 1;
@@ -340,6 +501,7 @@ void osui_gui_run(void) {
     g_ilen = 0;
     g_idle = 0;
     g_input[0] = 0;
+    osui_gui_term_reset();
     osui_gui_ack_enter();
     serial_puts("osui gui live chrome=qemu_fb display_surface=vbe_lfb us031_complete=false\n");
     osui_gui_fill_scene(&scene);

@@ -80,13 +80,52 @@ typedef struct {
     int last_rc;
 } shell_context_t;
 
+static shell_context_t *g_live_ctx;
+static int g_gui_eval;
+static char g_cap[1536];
+static int g_cap_n;
+
+void handle_line(shell_context_t* ctx, char* input_buffer);
+
 // ==============================================================================
 // APPELS SYSTÈME ET UTILITAIRES DE BASE
 // ==============================================================================
 
 // Wrappers pour les appels système
-void putc(char c) { 
-    asm volatile("int $0x80" : : "a"(1), "b"(c)); 
+void putc(char c) {
+    if (g_gui_eval && g_cap_n < (int)sizeof(g_cap) - 1) {
+        if (c == '\n' || (c >= 32 && c <= 126)) {
+            g_cap[g_cap_n++] = c;
+            g_cap[g_cap_n] = 0;
+        }
+    }
+    asm volatile("int $0x80" : : "a"(1), "b"(c));
+}
+
+static int shell_gui_eval(const char *line, char *captured, int cap_max) {
+    char buf[MAX_COMMAND_LENGTH];
+    int i = 0;
+    if (!g_live_ctx) return 1;
+    if (!line) line = "";
+    while (line[i] && i < MAX_COMMAND_LENGTH - 1) {
+        buf[i] = line[i];
+        i++;
+    }
+    buf[i] = 0;
+    g_cap_n = 0;
+    g_cap[0] = 0;
+    g_gui_eval = 1;
+    handle_line(g_live_ctx, buf);
+    g_gui_eval = 0;
+    if (captured && cap_max > 0) {
+        i = 0;
+        while (g_cap[i] && i < cap_max - 1) {
+            captured[i] = g_cap[i];
+            i++;
+        }
+        captured[i] = 0;
+    }
+    return 0;
 }
 
 void exit_program(int code) { 
@@ -4867,6 +4906,11 @@ void call_ai_assistant(shell_context_t* ctx, const char* query) {
         print_int(generated_len);
         print_colored("); repli de compatibilite.\n", COLOR_YELLOW);
     }
+    if (g_gui_eval) {
+        print_string("[IA] pas de poids GPT-2 dans ce guest. Pas d'exec depuis le bureau VBE.\n");
+        print_string("llm=stub_echo pour le chat. us031_complete=false\n");
+        return;
+    }
     // Lancer le binaire local de compatibilite en tache bloquante pour garantir l'affichage
     char* argv[3];
     argv[0] = "ai_assistant";
@@ -5485,13 +5529,26 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         char osui_out[OSUI_OUT_MAX];
         ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
         print_string(osui_out);
-        if (osui_gui_should_enter()) osui_gui_run();
+        if (osui_gui_should_enter()) {
+            if (!g_gui_eval) osui_gui_run();
+        }
         return;
     }
 
     // Parser la commande
     if (!parse_command(input_buffer, command, args, &arg_count)) {
         return;
+    }
+
+    if (g_gui_eval) {
+        if (strcmp(command, "exit") == 0 || strcmp(command, "quit") == 0
+            || strcmp(command, "logout") == 0
+            || strcmp(command, "reboot") == 0
+            || strcmp(command, "shutdown") == 0) {
+            print_string("console pour quitter le bureau. exit/reboot interdit ici.\n");
+            ctx->last_rc = 1;
+            return;
+        }
     }
 
     if (osui_is_linux_trap(command)) {
@@ -5504,7 +5561,9 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         char osui_out[OSUI_OUT_MAX];
         ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
         print_string(osui_out);
-        if (osui_gui_should_enter()) osui_gui_run();
+        if (osui_gui_should_enter()) {
+            if (!g_gui_eval) osui_gui_run();
+        }
         return;
     }
 
@@ -5599,6 +5658,8 @@ void main() {
     
     // Initialiser le contexte du shell
     init_shell_context(&shell_ctx);
+    g_live_ctx = &shell_ctx;
+    osui_gui_set_program_eval(shell_gui_eval);
     
     // Affichage de bienvenue moderne
     cmd_clear(&shell_ctx, NULL, 0);

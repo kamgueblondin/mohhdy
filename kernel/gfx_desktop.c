@@ -370,7 +370,7 @@ static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh
 }
 
 static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
-    int ty, term_h;
+    int ty, term_h, i, maxc, prompt_y, n;
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 16, 20), 240);
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
@@ -380,24 +380,30 @@ static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh,
     term_h = rh - 44;
     if (term_h < 80) term_h = 80;
     fill_rect(fb, w, h, x + 10, y + 36, rw - 20, term_h, RGB(8, 12, 16));
+    maxc = (rw - 40) / 8;
+    if (maxc < 8) maxc = 8;
+    prompt_y = y + rh - 22;
+    if (prompt_y < y + 48) prompt_y = y + 48;
     ty = y + 44;
-    draw_text(fb, w, h, x + 18, ty, "Mohhdy OS  Ring 3  live_guest=true", RGB(122, 212, 196));
-    ty += 14;
-    draw_text(fb, w, h, x + 18, ty, "Pas un bash Linux.  python_facade=false", RGB(154, 168, 181));
-    ty += 14;
-    draw_text(fb, w, h, x + 18, ty, "chrome=qemu_fb  us031_complete=false", RGB(154, 168, 181));
-    ty += 22;
-    draw_text(fb, w, h, x + 18, ty, "MOHHDY> help", RGB(201, 232, 223));
-    ty += 14;
-    draw_text(fb, w, h, x + 18, ty, "  /help /browser /shell /admin /support", RGB(154, 168, 181));
-    ty += 12;
-    draw_text(fb, w, h, x + 18, ty, "  /status /fs /center   gui  console", RGB(154, 168, 181));
-    ty += 22;
-    draw_text(fb, w, h, x + 18, ty, "MOHHDY> ", RGB(201, 232, 223));
-    if (sc && sc->input[0]) {
-        draw_text_n(fb, w, h, x + 18 + 8 * 8, ty, sc->input, (rw - 48) / 8 - 8, RGB(232, 238, 244));
+    n = sc ? (int)sc->nterm : 0;
+    if (n > OS_FB_TERM_MAX) n = OS_FB_TERM_MAX;
+    if (n <= 0) {
+        draw_text(fb, w, h, x + 18, ty, "Shell Multiboot live_eval=true", RGB(122, 212, 196));
+        ty += 14;
+        draw_text(fb, w, h, x + 18, ty, "Pas un bash Linux. help ls date whoami ai", RGB(154, 168, 181));
+        ty += 14;
     } else {
-        fill_rect(fb, w, h, x + 18 + 8 * 8, ty, 8, 10, RGB(61, 154, 138));
+        for (i = 0; i < n; i++) {
+            if (ty + 14 > prompt_y) break;
+            draw_text_n(fb, w, h, x + 18, ty, sc->term[i], maxc, RGB(201, 232, 223));
+            ty += 12;
+        }
+    }
+    draw_text(fb, w, h, x + 18, prompt_y, "MOHHDY> ", RGB(201, 232, 223));
+    if (sc && sc->input[0]) {
+        draw_text_n(fb, w, h, x + 18 + 8 * 8, prompt_y, sc->input, maxc - 8, RGB(232, 238, 244));
+    } else {
+        fill_rect(fb, w, h, x + 18 + 8 * 8, prompt_y, 8, 10, RGB(61, 154, 138));
     }
 }
 

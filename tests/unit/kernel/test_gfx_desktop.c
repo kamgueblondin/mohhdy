@@ -101,8 +101,8 @@ static void test_shell_pane_shows_prompt(void) {
     TEST_ASSERT(count_near(40, 70, 400, 110, 28, 44, 56, 40) > 30);
     /* Terminal body is near-black, not the landscape. */
     TEST_ASSERT(count_near(50, 140, 400, 400, 8, 12, 16, 12) > 80);
-    /* Prompt accent (teal cursor or text). */
-    TEST_ASSERT(count_near(50, 140, 520, 420, 61, 154, 138, 50) > 8);
+    /* Prompt cursor near the bottom of the pane. */
+    TEST_ASSERT(count_near(50, 540, 200, 640, 61, 154, 138, 50) > 8);
 }
 
 static void test_circle_kind_paints_ring(void) {
