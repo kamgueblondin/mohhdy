@@ -61,14 +61,21 @@ static unsigned short dispi_read(unsigned short index) {
 
 static int map_range(uint32_t phys, uint32_t bytes) {
     uint32_t off;
+    vmm_directory_t *dirs[2];
+    int d, nd = 0;
     if (!kernel_directory) return -1;
+    dirs[nd++] = kernel_directory;
+    if (current_directory && current_directory != kernel_directory)
+        dirs[nd++] = current_directory;
     bytes = (bytes + 4095u) & ~4095u;
-    for (off = 0; off < bytes; off += 4096u) {
-        if (vmm_map_page_in_directory(kernel_directory,
-                                      (void *)(phys + off),
-                                      (void *)(phys + off),
-                                      PAGE_PRESENT | PAGE_WRITE) != 0) {
-            return -2;
+    for (d = 0; d < nd; d++) {
+        for (off = 0; off < bytes; off += 4096u) {
+            if (vmm_map_page_in_directory(dirs[d],
+                                          (void *)(phys + off),
+                                          (void *)(phys + off),
+                                          PAGE_PRESENT | PAGE_WRITE) != 0) {
+                return -2;
+            }
         }
     }
     return 0;
