@@ -13,9 +13,10 @@ dans **ce** SE. Docker boot QEMU. Il n'y a plus de sidecar HTTP.
 | Fichier | Role |
 |---|---|
 | `userspace/shell.c` | Source de verite des builtins Ring 3 |
-| `userspace/osui_runtime.c` | Runtime OS-UI (chat, scene VGA, sessions, MCP, FS) |
-| `shared/multiboot_shell_commands.json` | Registre genere (184 noms) |
-| `userspace/mohhdy_osui_bridge.h` | `GUEST_HTML_STAGE 0`, `STAGE_VGA 1`, `PYTHON_FACADE 0` |
+| `userspace/osui_runtime.c` | Runtime OS-UI (chat, scene VGA, sessions, MCP, FS, commande `gui`) |
+| `userspace/osui_gui.c` | Compositeur VGA 80x25 (meme etat que le runtime) |
+| `shared/multiboot_shell_commands.json` | Registre genere (191 noms) |
+| `userspace/mohhdy_osui_bridge.h` | `GUEST_HTML_STAGE 0`, `STAGE_VGA 1`, `VGA_DESKTOP 1`, `GUI_COMMAND "gui"`, `PYTHON_FACADE 0` |
 | `scripts/extract_guest_commands.py` | Regenere JSON + header ; `--check` dans `make test-all` |
 
 Ne pas editer JSON/header a la main.
@@ -28,7 +29,8 @@ make osui-registry-check
 ## Ce qui est dans le guest
 
 - Chat / prompt stub, slash, pieges Linux
-- Scene VGA 8x48, modes reflecting / acting / presenting
+- Scene VGA 8x48 + canvas desktop 22x78, modes reflecting / acting / presenting
+- Commande `gui` / `graphics` / `desktop` ; `console` pour quitter
 - Sessions `s0001+`, grant/revoke, escalate/takeover
 - Origine, gestes simulateur, MCP declare, FS lecture
 - `live_guest=true` : on **est** le guest (plus d'attache hote Python)

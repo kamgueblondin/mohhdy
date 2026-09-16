@@ -238,7 +238,21 @@
 #define SYS_SERVICE_BACKEND_SCOPE_STATUS 125
 /* EBX = service, ECX = PID, EDX = droits, ESI = sources, EDI = préfixe relatif NUL-termine ; réservé au propriétaire. */
 #define SYS_SERVICE_BACKEND_GRANT_SCOPED_SOURCE_PREFIX 126
-#define MAX_SYSCALLS 127
+/* EBX = os_vga_frame_t* pour blitter le bureau ; EBX = 0 pour quitter le desktop VGA. */
+#define SYS_VGA_BLIT 127
+#define MAX_SYSCALLS 128
+
+#define OS_VGA_COLS 80
+#define OS_VGA_ROWS 25
+#define OS_VGA_KEY_ESC 27
+#define OS_VGA_KEY_LEFT 28
+#define OS_VGA_KEY_RIGHT 29
+#define OS_VGA_KEY_UP 30
+#define OS_VGA_KEY_DOWN 31
+
+typedef struct {
+    uint16_t cells[OS_VGA_ROWS * OS_VGA_COLS];
+} os_vga_frame_t;
 
 typedef struct {
     uint16_t source_port;

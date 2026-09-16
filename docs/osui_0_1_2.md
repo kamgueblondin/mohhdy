@@ -6,7 +6,8 @@
 
 Mohhdy est **un seul SE Multiboot**. Chat, scene IA, sessions, droits,
 gestes allowlistes, MCP et FS sandbox vivent dans `userspace/osui_runtime.c`,
-derriere le vocabulaire `MOHHDY>` de `userspace/shell.c`. Docker boot
+derriere le vocabulaire `MOHHDY>` de `userspace/shell.c`. Le bureau VGA
+est `userspace/osui_gui.c` (commande canonique `gui`). Docker boot
 **cette** instance QEMU. Ce n'est **pas** US-031, **pas** un LLM de
 production, **pas** un bash Linux, **pas** un chrome HTML `#ai-stage`.
 
@@ -20,16 +21,23 @@ Guest mesure : [ETAT_REEL.md](ETAT_REEL.md).
 
 ## Ce que `docker run` ouvre
 
-Image produit : `mohhdy-os`. Entree : QEMU nographic, console serie.
+Image produit : `mohhdy-os`. Entree par defaut : QEMU nographic, console
+serie (CI). Bureau VGA : `make run-gui` sur l'hote, ou
+`/os/qemu-gui.sh` si `DISPLAY` est fourni.
 
 ```text
 make all
 make qemu-osui-runtime
+make qemu-osui-gui
 make osui-smoke
 docker build -t mohhdy-os .
 docker run --rm -it mohhdy-os
 docker compose run --rm mohhdy-os
+make run-gui
 ```
+
+Dans le guest, apres `MOHHDY>` : `gui` (aliases `graphics`, `desktop`).
+Quitter : `console` / ESC. Nographic : `gui-status` dump le canvas.
 
 Pas de port 8080. Pas de `GET /health`. Le prompt guest `MOHHDY>` est
 l'instance. Sante honnete : `os-status` et `guest-status`
@@ -47,9 +55,10 @@ docker run -it mohhdy-os
         +-- qemu-system-i386 (Multiboot)
               kernel + initrd + overlay
               shell ELF Ring 3
-              osui_runtime.c
+              osui_runtime.c + osui_gui.c
                 chat / prompt / slash
-                scene VGA 8x48 (reflecting / acting / presenting)
+                commande gui (aliases graphics, desktop)
+                scene VGA 8x48 + canvas desktop 22x78
                 sessions s0001+ , grant/revoke, escalate/takeover
                 origin-check, browser-* simulateur, mcp-invoice
                 fs-list / fs-read (write et traversal refuses)
@@ -62,7 +71,8 @@ reste pour les tests et `scripts/extract_guest_commands.py`.
 
 - Prompt `MOHHDY>`, slash `/help` `/browser` `/shell` `/admin` `/support`
   `/status` `/fs` `/plan` `/center` `/close`
-- Scene VGA structuree (pas HTML)
+- Commande canonique `gui` (aliases `graphics`, `desktop`) ; `console` quitte
+- Scene VGA structuree + constructions ASCII du bureau (pas HTML)
 - Vocabulaire Multiboot conserve (`ls`, `ai`, `vfs-*`, pieges Linux)
 
 ## OS-UI-1 - sessions / droits
@@ -92,11 +102,13 @@ reste pour les tests et `scripts/extract_guest_commands.py`.
 make test-all
 make osui-smoke
 make qemu-osui-runtime
+make qemu-osui-gui
 make integration-qemu
 ```
 
 `make integration-qemu` reste les sept contrats, sans OS-UI.
-Le contrat OS-UI est `make qemu-osui-runtime` (job CI separe).
+Le contrat OS-UI est `make qemu-osui-runtime` ; la fumee bureau est
+`make qemu-osui-gui` (job CI separe `osui-guest`).
 
 ## Ce qui n'a pas pu atterrir en C freestanding
 

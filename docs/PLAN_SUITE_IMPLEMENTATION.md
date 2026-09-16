@@ -6,7 +6,7 @@
 
 **Roadmap produit (toutes les capacites visees, portage OS+UI) :** [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md). Epiques de migration : [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md).
 
-Ce document **ne** remplace **pas** le plan maitre. Il detaille seulement les **tranches 0-4** : gardes du guest i386 mesure (CI, ACL, GGUF, stockage). Un seul produit : le SE Mohhdy. Docker / PC / hyperviseur = boot de l'instance QEMU, pas un sidecar. La surface OS-UI vit dans `userspace/osui_runtime.c` (OS-UI-0 a 3 livres, facade Python retiree). Les tickets `ASSIST-xxx` restent la spec fonctionnelle ([../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)). LLM de production, Chromium de session et US-031 **ne sont pas** livres. En cas de contradiction sur le **guest**, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment. En cas de contradiction sur l'ordre **produit**, le plan maitre prime.
+Ce document **ne** remplace **pas** le plan maitre. Il detaille seulement les **tranches 0-4** : gardes du guest i386 mesure (CI, ACL, GGUF, stockage). Un seul produit : le SE Mohhdy. Docker / PC / hyperviseur = boot de l'instance QEMU, pas un sidecar. La surface OS-UI vit dans `userspace/osui_runtime.c` (OS-UI-0 a 3 livres, facade Python retiree, commande `gui` pour le bureau VGA). Les tickets `ASSIST-xxx` restent la spec fonctionnelle ([../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)). LLM de production, Chromium de session et US-031 **ne sont pas** livres. En cas de contradiction sur le **guest**, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment. En cas de contradiction sur l'ordre **produit**, le plan maitre prime.
 
 **Prochain build produit :** gardes 0-4 et honnetete US-031. OS-UI-3 (facade Python) est livre. Surface : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md), [osui_ai_stage.md](osui_ai_stage.md), [osui_shell_live.md](osui_shell_live.md), [osui_convergence.md](osui_convergence.md). Les gardes 0-4 continuent en parallele. Le guest heberge une scene VGA structuree, pas `#ai-stage` HTML.
 
@@ -236,7 +236,7 @@ Docker **doit** booter l'instance comme une machine vierge. `docker run -it mohh
 | Gate | Règle |
 |---|---|
 | Tranches guest 0-4 | Gardes du noyau mesure. Le portage OS-UI **ne doit pas** allonger `make integration-qemu` ni relacher l'ACL prefixee |
-| OS-UI-0 | Shell Ring 3 + slash + scene VGA dans l'instance Docker/QEMU. Livre. Pas US-031 |
+| OS-UI-0 | Shell Ring 3 + slash + scene VGA + commande `gui`. Livre. Pas US-031 |
 | OS-UI-1 | Sessions / chat / admin / droits / escalade / takeover / origine. Livre. Stub honnete |
 | OS-UI-2 | Actes simulateur (gestes, MCP, facture, FS). Livre. US-031 **non livre** |
 | OS-UI-3 | Facade Python retiree. Livre |

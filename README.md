@@ -25,7 +25,7 @@ Le guest verifie n'est **pas** une distribution Linux, ni un clone Unix : noyau 
 | Domaine | Fonction réellement disponible |
 |---|---|
 | Démarrage | Multiboot BIOS, VGA/série, GDT, IDT, PIC, PIT, clavier PS/2, curseur bloc et historique d'écran (Page Up/Down) |
-| Utilisateur | Shell ELF Ring 3, ABI de syscalls 0-126 (`MAX_SYSCALLS = 127`), `spawn`, `yield`, `exec`, `ps`, `kill` |
+| Utilisateur | Shell ELF Ring 3, ABI de syscalls 0-127 (`MAX_SYSCALLS = 128`, dont `SYS_VGA_BLIT`), `spawn`, `yield`, `exec`, `ps`, `kill` |
 | Préemption | Quantum IRQ0 de 20 ticks, uniquement entre tâches utilisateur prêtes |
 | IPC Foundation | Boîte aux lettres FIFO entre tâches Ring 3, 4 entrées par tâche, charge de 96 octets, `request_id` opaque, capacité client de 2 messages et instantané de file pour un propriétaire publié, événements best-effort ; pas de capabilities |
 | VFS Foundation | `vfsserver` Ring 3, sources `vfs-info`/`vfs-mounts`/`vfs-stats`, quatre montages protégés (`initrd/`, `overlay/`, `fat16/`, `fat32/`) et quatre alias dynamiques au plus. `vfsvirtual` Ring 3 valide et stocke les ajouts/retraits **ainsi que les I/O** d'alias (`read`, `stat`, liste, pages et observation) sous messages privés corrélés ; `vfsserver` ne conserve qu'un miroir volatile de sélection, purgé à tout changement, disparition ou expiration incertaine du worker. Une transaction worker reçoit exactement une source backend (`initrd`, `overlay`, `fat16` ou `fat32`) avec `read` ou `mutate`, puis la capacité est révoquée ; son préfixe relatif minimal est aussi vérifié par le noyau avant chaque primitive portant un chemin. Les primitives FAT brutes sans chemin restent accessibles seulement sous le préfixe racine. Une lecture générique exige le scope toutes sources et ne contourne pas une délégation réduite. Toute transaction incertaine reçoit `INVALID` sans rejeu. Le préfixe est une borne interne, non exposée par le diagnostic public. FAT16/FAT32 admettent les fichiers et sous-répertoires multi-niveaux (ex. `SUB1/SUB2/FILE.TXT`) avec création, suppression, renommage, `mkdir`/`rmdir` vide, sans écrasement ; octroi cumulatif dynamique des capacités VFS (`rights |= new_rights`, `sources |= new_sources`) ; pas de LFN enfant, de renommage inter-répertoire ni de remplacement atomique ; compteurs volatils, transfert contrôlé de `vfs`, délégation backend révocable avec profils `read`/`mutate`/`full`, consultation unitaire et inventaire borné réservés au propriétaire publié courant |
@@ -74,10 +74,11 @@ make run
 | `make qemu-vfs-service` | Lance `vfsvirtual` puis `vfsserver`, vérifie l'autorité Ring 3 corrélée des alias add/remove et I/O (`read`, `stat`, liste, pages et observation), la révocation complète de la capacité mono-source après chaque transaction, la purge du miroir après remplacement worker, l'échec `INVALID` sans rejeu d'une lecture d'alias expirée, deux volumes IDE FAT16/FAT32, les capacités et refus, les mutations overlay et les cycles FAT racine/LFN ainsi que `mkdir`, écriture, `stat`, liste, renommage, refus `rmdir` non vide, suppression et `rmdir` d'un sous-répertoire 8.3 ; un renommage tenté vers son voisin hors préfixe est refusé par le backend avant mutation, sans divulguer la borne interne |
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
 | `make iso` | Produit l'ISO BIOS/GRUB bootable |
-| `make run` / `make run-gui` | Session QEMU interactive curses ou GTK |
+| `make run` / `make run-gui` | Session QEMU interactive curses ou GTK. Apres `MOHHDY>`, `gui` (aliases `graphics`, `desktop`) entre le bureau VGA ; `console` / ESC revient au texte |
 | `make osui-smoke` | Registre guest + preuve que la facade Python est retiree. Inclus dans `make test-all` |
-| `make qemu-osui-runtime` | Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA). Hors `make integration-qemu` |
-| `make osui-docker` | Construit l'image `mohhdy-os` (boot QEMU Multiboot). Voir [docs/osui_0_1_2.md](docs/osui_0_1_2.md) |
+| `make qemu-osui-runtime` | Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA, `gui-status`). Hors `make integration-qemu` |
+| `make qemu-osui-gui` | Fumee QEMU : `gui`, chat flottant `/browser`, `/center`, `console`. Hors `make integration-qemu` |
+| `make osui-docker` | Construit l'image `mohhdy-os` (boot QEMU nographic par defaut). Voir [docs/osui_0_1_2.md](docs/osui_0_1_2.md) |
 
 Pour construire l'ISO, installez également GRUB et xorriso.
 
@@ -89,14 +90,19 @@ make run-iso
 
 ## Instance autonome (guest C + boot QEMU)
 
-La surface OS-UI vit dans le shell Ring 3 : `userspace/osui_runtime.c`. Prompt `MOHHDY>`, slash `/help` `/browser` `/shell` `/plan`, scene VGA structuree (pas `#ai-stage` HTML), sessions `s0001+`, grant/revoke, escalate/takeover, origine 403, gestes simulateur, MCP demo, FS lecture. Pont : `shared/multiboot_shell_commands.json`. Les reponses chat sont un stub local (`llm=stub_echo`), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium, **pas** US-031. `agent/` et le serveur Python `osui/` sont **retires**. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md), [docs/osui_ai_stage.md](docs/osui_ai_stage.md), [docs/osui_shell_live.md](docs/osui_shell_live.md), [docs/osui_convergence.md](docs/osui_convergence.md).
+La surface OS-UI vit dans le shell Ring 3 : `userspace/osui_runtime.c` + `userspace/osui_gui.c`. Prompt `MOHHDY>`, commande canonique `gui` (aliases `graphics`, `desktop`) pour le bureau VGA 80x25, slash `/help` `/browser` `/shell` `/admin` `/support` `/status` `/fs` `/plan` `/center`, scene VGA structuree (constructions ASCII, pas `#ai-stage` HTML), sessions `s0001+`, grant/revoke, escalate/takeover, origine 403, gestes simulateur, MCP demo, FS lecture. Quand un programme s'ouvre, le chat passe en `chat_mode=float` ; `/center` le ramene au centre. Pont : `shared/multiboot_shell_commands.json`. Les reponses chat sont un stub local (`llm=stub_echo`), **pas** un LLM de production. Les gestes sont un simulateur DOM, **pas** Chromium, **pas** US-031. `agent/` et le serveur Python `osui/` sont **retires**. Guides : [docs/osui_0_1_2.md](docs/osui_0_1_2.md), [docs/osui_chat_desktop.md](docs/osui_chat_desktop.md), [docs/osui_ai_stage.md](docs/osui_ai_stage.md), [docs/osui_shell_live.md](docs/osui_shell_live.md), [docs/osui_convergence.md](docs/osui_convergence.md).
 
 ```bash
 make osui-smoke
 make qemu-osui-runtime
+make qemu-osui-gui
+make run-gui          # fenetre QEMU GTK ; taper gui au prompt MOHHDY>
 make osui-docker
 docker build -t mohhdy-os .
-docker run --rm -it mohhdy-os
+docker run --rm -it mohhdy-os                    # nographic (CI)
+# Bureau VGA dans Docker (DISPLAY de l'hote + qemu-system-gui dans l'image) :
+#   docker run --rm -it -e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix mohhdy-os /os/qemu-gui.sh
+# Puis, dans le guest : gui
 ```
 
 Spec capacites : [US/mohhdy_agent_support_web.md](US/mohhdy_agent_support_web.md). Portage : [US/mohhdy_os_ui_migration.md](US/mohhdy_os_ui_migration.md). Guides historiques `docs/assist*.md` (contrats, runtime Python retire).

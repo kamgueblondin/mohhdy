@@ -132,6 +132,9 @@ jobs:
       - name: QEMU OS-UI contract (hors integration-qemu)
         run: make qemu-osui-runtime
 
+      - name: QEMU OS-UI GUI smoke (hors integration-qemu)
+        run: make qemu-osui-gui
+
       - name: Upload OS-UI logs
         if: always()
         uses: actions/upload-artifact@v4

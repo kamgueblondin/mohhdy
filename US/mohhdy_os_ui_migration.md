@@ -1,7 +1,7 @@
 # Migration OS-UI : capacites ASSIST dans le SE Multiboot
 
 **Date :** 16 septembre 2026
-**Statut :** OS-UI-000 a OS-UI-3 livres dans le guest C. Facade Python retiree
+**Statut :** OS-UI-000 a OS-UI-3 et OS-UI-G livres dans le guest C. Facade Python retiree
 **IDs :** `OS-UI-xxx` (ordonnancement). Les tickets `ASSIST-xxx` restent la spec fonctionnelle
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
@@ -23,7 +23,7 @@ Gates : moindre privilege, grant/revoke, `request_id`, pas de secret image, orig
 
 ## OS-UI-0 - Instance Docker = boot Multiboot
 
-**Statut.** Livre : `docker run -it mohhdy-os` lance QEMU. Slash, scene VGA, vocabulaire Ring 3. Pas US-031. Pas `#ai-stage` HTML.
+**Statut.** Livre : `docker run -it mohhdy-os` lance QEMU nographic. `make run-gui` puis `gui` ouvre le bureau VGA. Slash, scene VGA, vocabulaire Ring 3. Pas US-031. Pas `#ai-stage` HTML.
 
 ## OS-UI-1 - Sessions, chat, admin, droits
 
@@ -41,9 +41,15 @@ Gates : moindre privilege, grant/revoke, `request_id`, pas de secret image, orig
 
 **En tant que** mainteneur, **je veux** qu'il n'y ait plus deux recits d'instance, **afin que** Docker boot le SE.
 
-**Statut.** Livre. `agent/` et `osui/` Python supprimes. Docker/QEMU. Smokes `make osui-smoke` + `make qemu-osui-runtime`. Docs `assist*` historiques.
+**Statut.** Livre. `agent/` et `osui/` Python supprimes. Docker/QEMU. Smokes `make osui-smoke` + `make qemu-osui-runtime` + `make qemu-osui-gui`. Docs `assist*` historiques.
 
 **Hors perimetre reste.** Chromium, billing ASSIST-053, embed HTTP, UUID, LLM de production.
+
+## OS-UI-G - Bureau VGA depuis MOHHDY>
+
+**En tant que** operateur, **je veux** taper `gui` au prompt, **afin d'**entrer le bureau VGA du meme SE.
+
+**Statut.** Livre. Commande canonique `gui` (aliases `graphics`, `desktop`). Compositeur `osui_gui.c` (meme etat que `osui_runtime.c`). Chat central, panes slash, chat flottant, constructions ASCII. `console` / ESC revient a `MOHHDY>`. `us031_complete=false`.
 
 ## Table recap
 
@@ -55,4 +61,5 @@ Gates : moindre privilege, grant/revoke, `request_id`, pas de secret image, orig
 | 3 | OS-UI-2 | **livre** simulateur | 020-022, 060, 061 |
 | 3b | OS-UI-C | **livre** registre + VGA | pont Multiboot |
 | 4 | OS-UI-3 | **livre** Python retire | fin 050 |
+| 4b | OS-UI-G | **livre** `gui` VGA desktop | chrome QEMU |
 | - | Gardes guest 0-4 | parallele | (AOS, pas ASSIST) |

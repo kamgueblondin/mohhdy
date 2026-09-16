@@ -28,12 +28,15 @@ FORBIDDEN = [
 REQUIRED = [
     "userspace/osui_runtime.c",
     "userspace/osui_runtime.h",
+    "userspace/osui_gui.c",
+    "userspace/osui_gui.h",
     "userspace/shell.c",
     "userspace/mohhdy_osui_bridge.h",
     "shared/multiboot_shell_commands.json",
     "scripts/extract_guest_commands.py",
     "Dockerfile",
     "docker/qemu-nographic.sh",
+    "docker/qemu-gui.sh",
 ]
 
 
@@ -58,6 +61,10 @@ def main():
         fail("MOHHDY_OSUI_GUEST_HTML_STAGE must be 0")
     if "#define MOHHDY_OSUI_STAGE_VGA 1" not in header:
         fail("MOHHDY_OSUI_STAGE_VGA must be 1")
+    if "#define MOHHDY_OSUI_VGA_DESKTOP 1" not in header:
+        fail("MOHHDY_OSUI_VGA_DESKTOP must be 1")
+    if '#define MOHHDY_OSUI_GUI_COMMAND "gui"' not in header:
+        fail("MOHHDY_OSUI_GUI_COMMAND must be gui")
     dockerfile = open(os.path.join(ROOT, "Dockerfile"), "r").read()
     if "python3" in dockerfile.lower() and "CMD" in dockerfile:
         if "server.py" in dockerfile:

@@ -1,6 +1,6 @@
 /* mohhdy_osui_bridge.h - contrat OS-UI <-> guest Ring 3.
  * Genere par scripts/extract_guest_commands.py depuis userspace/shell.c.
- * Ne pas editer a la main. Scene guest = VGA structuree, pas HTML #ai-stage.
+ * Ne pas editer a la main. Scene guest = VGA desktop 80x25, pas HTML #ai-stage.
  */
 #ifndef MOHHDY_OSUI_BRIDGE_H
 #define MOHHDY_OSUI_BRIDGE_H
@@ -8,10 +8,12 @@
 #define MOHHDY_OSUI_GUEST_HTML_STAGE 0
 #define MOHHDY_OSUI_LIVE_ATTACH_HOST 0
 #define MOHHDY_OSUI_STAGE_VGA 1
+#define MOHHDY_OSUI_VGA_DESKTOP 1
+#define MOHHDY_OSUI_GUI_COMMAND "gui"
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 184
+#define MOHHDY_SHELL_COMMAND_COUNT 191
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -58,8 +60,10 @@ static const char * const mohhdy_shell_commands[] = {
     "children",
     "clear",
     "cls",
+    "console",
     "cp",
     "date",
+    "desktop",
     "detach",
     "dir",
     "echo",
@@ -74,8 +78,13 @@ static const char * const mohhdy_shell_commands[] = {
     "fs-write",
     "getpid",
     "grant",
+    "graphics",
     "grep",
     "guest-status",
+    "gui",
+    "gui-exit",
+    "gui-move",
+    "gui-status",
     "head",
     "help",
     "history",

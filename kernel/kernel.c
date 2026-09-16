@@ -891,6 +891,9 @@ void print_char(char c, int x, int y, char color) {
         }
 #endif
         if (c != '\x1b') {
+        if (vga_desktop_active() && x == -1 && y == -1) {
+            return;
+        }
         if (x == -1 && y == -1) {
             if (c == '\n') {
                 vga_x = 0; vga_y++;

@@ -21,6 +21,8 @@ static void test_bridge_flags(void) {
     TEST_ASSERT_EQUAL(0, MOHHDY_OSUI_GUEST_HTML_STAGE);
     TEST_ASSERT_EQUAL(0, MOHHDY_OSUI_PYTHON_FACADE);
     TEST_ASSERT_EQUAL(1, MOHHDY_OSUI_STAGE_VGA);
+    TEST_ASSERT_EQUAL(1, MOHHDY_OSUI_VGA_DESKTOP);
+    TEST_ASSERT_EQUAL_STRING("gui", MOHHDY_OSUI_GUI_COMMAND);
     TEST_ASSERT(MOHHDY_SHELL_COMMAND_COUNT > 100);
     TEST_ASSERT(osui_guest_command_count() == MOHHDY_SHELL_COMMAND_COUNT);
 }
@@ -69,6 +71,17 @@ static void test_prompt_chat_and_stage(void) {
     rc = run_line("/center");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "chat_mode=center") != NULL);
+
+    rc = run_line("gui-status");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "canonical=gui") != NULL);
+    TEST_ASSERT(strstr(g_out, "chrome=vga_desktop") != NULL);
+
+    rc = run_line("gui");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "canonical=gui") != NULL);
+    TEST_ASSERT(osui_gui_should_enter());
+    osui_gui_ack_enter();
 }
 
 static void test_sessions_isolated(void) {

@@ -84,6 +84,29 @@ static void test_cursor_inverts_visible_cell(void) {
 #endif
 }
 
+static void test_desktop_blit_and_restore(void) {
+    uint16_t frame[VGA_ROWS * VGA_COLS];
+    int i;
+
+    vga_console_init(0x07);
+    for (i = 0; i < VGA_ROWS * VGA_COLS; i++) {
+        frame[i] = (uint16_t)'#' | ((uint16_t)0x1F << 8);
+    }
+    frame[0] = (uint16_t)'G' | ((uint16_t)0x1F << 8);
+    vga_desktop_blit(frame);
+    TEST_ASSERT_EQUAL(1, vga_desktop_active());
+    TEST_ASSERT_EQUAL('G', glyph_at(0, 0));
+    TEST_ASSERT_EQUAL('#', glyph_at(1, 0));
+#ifdef KERNEL_TEST
+    TEST_ASSERT_EQUAL('G', (char)(vga_test_fb[0] & 0xFF));
+#endif
+    vga_console_put_xy('X', 2, 2, 0x0F);
+    TEST_ASSERT_EQUAL('#', glyph_at(2, 2));
+    vga_desktop_set(0);
+    TEST_ASSERT_EQUAL(0, vga_desktop_active());
+    TEST_ASSERT_EQUAL(' ', glyph_at(0, 0));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_init_blanks_screen);
@@ -94,6 +117,7 @@ int main(void) {
     RUN_TEST(test_put_while_scrolled_returns_live);
     RUN_TEST(test_view_up_clamped_to_history);
     RUN_TEST(test_cursor_inverts_visible_cell);
+    RUN_TEST(test_desktop_blit_and_restore);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -15,7 +15,7 @@ La mention **fait** signifie que le comportement est observable dans le code et 
 | AOS-003 | Recevoir timer et clavier | PIC/PIT 100 Hz/i8042 ; prefixe `0xE0` (Page Up/Down, fleches) ; EOI IRQ0 avant le gestionnaire C |
 | AOS-004 | Lire un initrd | Archive TAR (ustar) en lecture seule, `SYS_LISTDIR`, `SYS_READFILE` |
 | AOS-005 | Executer un shell isole | Shell ELF utilisateur et retour Ring 3 par `iret` |
-| AOS-006 | Exposer une ABI de syscalls | ABI propre `int 0x80` ; aujourd'hui syscalls 0-126, `MAX_SYSCALLS = 127` |
+| AOS-006 | Exposer une ABI de syscalls | ABI propre `int 0x80` ; aujourd'hui syscalls 0-127, `MAX_SYSCALLS = 128` |
 | AOS-007 | Conserver de petits fichiers | Overlay ATA PIO persistant V2 et restauration V1/V2 |
 | AOS-008 | Gerer plusieurs taches | `spawn`, `yield`, `ps`, `kill`, plus preemption IRQ0 sure |
 | AOS-009 | Executer un ELF bloquant | `exec`, parent `TASK_WAITING`, reveil par `SYS_EXIT` |
@@ -121,8 +121,9 @@ Les lots 113-154 sont **faits** au sens caller-owned / Unity / smoke NIC. Les lo
 | 124 | Grant backend VFS source-scopé : droits en EDX, masque de sources en ESI |
 | 125 | Statut interne borné du couple droits-sources backend |
 | 126 | Grant backend VFS droit-source-préfixe relatif : EDX droits, ESI sources, EDI préfixe NUL-terminé |
+| 127 | `SYS_VGA_BLIT` : bureau 80x25 (`os_vga_frame_t*`) ; EBX=0 quitte le desktop |
 
-`MAX_SYSCALLS = 127`.
+`MAX_SYSCALLS = 128`.
 
 ## Prochaines tranches, hors livraison actuelle
 

@@ -1,7 +1,7 @@
 # OS-UI : scene IA VGA structuree
 
 **Date :** 16 septembre 2026
-**Statut :** scene portee dans le guest Ring 3 (VGA 8x48). Pas de HTML `#ai-stage`
+**Statut :** scene portee dans le guest Ring 3 (VGA 8x48 + canvas desktop 22x78). Pas de HTML `#ai-stage`
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
 Le **produit final** est un seul SE : le **Multiboot Mohhdy OS**. La
@@ -9,12 +9,16 @@ scene IA est un **devoir de cet OS**. Elle se rend dans le framebuffer
 texte VGA, pas dans un DOM HTML hote.
 
 [ETAT_REEL.md](ETAT_REEL.md) mesure le guest. Le guest **n'heberge pas**
-`#ai-stage`. `MOHHDY_OSUI_GUEST_HTML_STAGE 0`, `MOHHDY_OSUI_STAGE_VGA 1`.
+`#ai-stage`. `MOHHDY_OSUI_GUEST_HTML_STAGE 0`, `MOHHDY_OSUI_STAGE_VGA 1`,
+`MOHHDY_OSUI_VGA_DESKTOP 1`.
 
 ## Modele
 
-Le fond d'ecran guest est une zone 8 lignes x 48 colonnes. Les prompts
-(`chat`, `prompt`, `stage-prompt`, `/plan`) mettent a jour cette couche.
+Le contrat serie conserve une zone 8 lignes x 48 colonnes. Le bureau
+`gui` compose un canvas 22x78 (cercles, boites, graphe, arbre, horloge,
+simulation stub). Les prompts (`chat`, `prompt`, `stage-prompt`, `/plan`,
+`/draw`) mettent a jour les deux couches. Ce n'est **pas** un moteur
+HTML ni SVG.
 
 | Mode | Role |
 |---|---|
@@ -36,7 +40,8 @@ chat bonjour
 os-status
 ```
 
-Sortie : `mode=`, `guest_html_stage=false`, `llm=stub_echo`.
+Sortie : `mode=`, `kind=`, `canvas=vga_desktop`, `guest_html_stage=false`,
+`llm=stub_echo`. Instantane nographic : `gui-status`.
 
 ## Hygiene
 

@@ -1,6 +1,8 @@
 # Compose local : boot QEMU du SE Multiboot (OS-UI-3).
 # Contexte = racine du depot. Pas de port HTTP, pas de jeton admin cuit.
-# Lancer : docker compose run --rm mohhdy-os
+# Defaut nographic (CI) : docker compose run --rm mohhdy-os
+# Bureau VGA : make run-gui sur l'hote, ou docker/qemu-gui.sh + DISPLAY.
+# Dans le guest, commande canonique : gui (aliases graphics, desktop).
 
 services:
   mohhdy-os:
