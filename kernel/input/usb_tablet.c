@@ -10,22 +10,22 @@ extern void outb(unsigned short port, unsigned char value);
 extern void print_string_serial(const char* str);
 
 static inline void outw(uint16_t port, uint16_t val) {
-    asm volatile ("outw %0, %1" : : "a"(val), "Nd"(port));
+    __asm__ volatile ("outw %0, %1" : : "a"(val), "Nd"(port));
 }
 
 static inline uint16_t inw(uint16_t port) {
     uint16_t val;
-    asm volatile ("inw %1, %0" : "=a"(val) : "Nd"(port));
+    __asm__ volatile ("inw %1, %0" : "=a"(val) : "Nd"(port));
     return val;
 }
 
 static inline void outl(uint16_t port, uint32_t val) {
-    asm volatile ("outl %0, %1" : : "a"(val), "Nd"(port));
+    __asm__ volatile ("outl %0, %1" : : "a"(val), "Nd"(port));
 }
 
 static inline uint32_t inl(uint16_t port) {
     uint32_t val;
-    asm volatile ("inl %1, %0" : "=a"(val) : "Nd"(port));
+    __asm__ volatile ("inl %1, %0" : "=a"(val) : "Nd"(port));
     return val;
 }
 
@@ -80,8 +80,8 @@ static uint8_t g_dev_addr = 2;
 
 static void pci_write32(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, uint32_t val) {
     uint32_t addr = pci_config_address(bus, slot, func, offset);
-    asm volatile ("outl %0, %1" : : "a"(addr), "Nd"((uint16_t)0xCF8));
-    asm volatile ("outl %0, %1" : : "a"(val), "Nd"((uint16_t)0xCFC));
+    __asm__ volatile ("outl %0, %1" : : "a"(addr), "Nd"((uint16_t)0xCF8));
+    __asm__ volatile ("outl %0, %1" : : "a"(val), "Nd"((uint16_t)0xCFC));
 }
 
 static int uhci_control_transfer(uint8_t dev_addr, uint8_t req_type, uint8_t req, uint16_t val, uint16_t idx) {
