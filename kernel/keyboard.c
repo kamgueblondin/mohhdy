@@ -105,6 +105,14 @@ void kbd_put_char(char c) {
     }
 }
 
+void kbd_put_string(const char *s) {
+    if (!s) return;
+    while (*s) {
+        kbd_put_char(*s);
+        s++;
+    }
+}
+
 int kbd_get_char_nonblock(char *out) {
     if (kbd_head == kbd_tail) {
         return 0; // Vide

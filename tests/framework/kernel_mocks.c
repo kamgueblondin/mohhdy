@@ -1728,6 +1728,43 @@ int ata_read_sectors(uint32_t lba, uint32_t count, void* buf) {
     return -1;
 }
 
+static int g_mock_vga_desktop = 0;
+static char g_mock_kbd_buf[256];
+static int g_mock_kbd_head = 0;
+static int g_mock_kbd_tail = 0;
+
+__attribute__((weak)) int vga_desktop_active(void) {
+    return g_mock_vga_desktop;
+}
+
+__attribute__((weak)) void vga_desktop_set(int on) {
+    g_mock_vga_desktop = on;
+}
+
+__attribute__((weak)) void kbd_put_char(char c) {
+    if (c == 0) return;
+    int next = (g_mock_kbd_head + 1) % 256;
+    if (next != g_mock_kbd_tail) {
+        g_mock_kbd_buf[g_mock_kbd_head] = c;
+        g_mock_kbd_head = next;
+    }
+}
+
+__attribute__((weak)) void kbd_put_string(const char *s) {
+    if (!s) return;
+    while (*s) {
+        kbd_put_char(*s);
+        s++;
+    }
+}
+
+__attribute__((weak)) int kbd_get_char_nonblock(char *out) {
+    if (g_mock_kbd_head == g_mock_kbd_tail) return 0;
+    if (out) *out = g_mock_kbd_buf[g_mock_kbd_tail];
+    g_mock_kbd_tail = (g_mock_kbd_tail + 1) % 256;
+    return 1;
+}
+
 int ata_write_sectors(uint32_t lba, uint32_t count, const void* buf) {
     (void)lba;
     (void)count;

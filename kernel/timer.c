@@ -1,5 +1,8 @@
 #include "timer.h"
 #include "task/task.h"
+#include "vga_console.h"
+#include "gfx_fb.h"
+#include "input/usb_tablet.h"
 
 // Fonctions externes
 extern void outb(unsigned short port, unsigned char data);
@@ -65,6 +68,11 @@ void timer_handler(cpu_state_t* cpu) {
         print_string_serial("\n");
     }
     
+    if (vga_desktop_active()) {
+        usb_tablet_poll();
+        gfx_fb_update_cursor();
+    }
+
     // Changement explicite existant (lancement du shell / yield coopératif).
     if (g_reschedule_needed) {
         g_reschedule_needed = 0;

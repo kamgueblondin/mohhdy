@@ -21,6 +21,9 @@ int kbd_get_char_nonblock(char *out);
 // Fonction pour ajouter un caractère au buffer
 void kbd_put_char(char c);
 
+// Fonction pour ajouter une chaîne au buffer
+void kbd_put_string(const char *s);
+
 // Helper function pour afficher un byte en hexadécimal
 void print_hex_byte_serial(uint8_t byte);
 

@@ -3,6 +3,8 @@
 #include "../../framework/unity.h"
 #include "../../../kernel/gfx_desktop.h"
 #include "../../../kernel/gfx_fb.h"
+#include "../../../kernel/vga_console.h"
+#include "../../../kernel/keyboard.h"
 #include <string.h>
 
 #define W 1024
@@ -165,11 +167,11 @@ static void test_mouse_cursor_rendering(void) {
     uint32_t cursor_px = gfx_desktop_pixel(g_fb, W, H, 150, 120);
     TEST_ASSERT(near_rgb(cursor_px, 10, 16, 20, 5));
 
-    /* Move mouse */
+    /* Move mouse (PS/2 relative mode x2 gain when !usb_tablet_present()) */
     gfx_desktop_move_mouse(10, 15, 1);
     gfx_desktop_get_mouse(&mx, &my, &btn);
-    TEST_ASSERT_EQUAL(160, mx);
-    TEST_ASSERT_EQUAL(135, my);
+    TEST_ASSERT_EQUAL(170, mx);
+    TEST_ASSERT_EQUAL(150, my);
     TEST_ASSERT_EQUAL(1, btn);
 }
 
@@ -177,6 +179,36 @@ static void test_fb_present_repeated(void) {
     blank_scene();
     TEST_ASSERT_EQUAL(0, gfx_fb_present(&g_scene));
     TEST_ASSERT_EQUAL(0, gfx_fb_present(&g_scene));
+}
+
+static void test_desktop_layout_and_hit_test(void) {
+    gfx_desktop_layout_t layout;
+    blank_scene();
+    gfx_desktop_get_layout(&g_scene, W, H, &layout);
+
+    /* Verify layout fields calculated properly */
+    TEST_ASSERT(layout.bar_h >= 28 && layout.bar_h <= 40);
+    TEST_ASSERT_EQUAL(7, layout.menu_count);
+    TEST_ASSERT(layout.dock.box.w > 200);
+    TEST_ASSERT(layout.chat_win.send_btn.w > 50);
+    TEST_ASSERT(layout.scene_ia.pills[0].w > 20);
+
+    /* Click on "Envoyer" button when desktop active */
+    vga_desktop_set(1);
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+
+    /* Move mouse over "Envoyer" button and press left button (0 -> 1) */
+    int send_x = layout.chat_win.send_btn.x + 5;
+    int send_y = layout.chat_win.send_btn.y + 5;
+    gfx_desktop_set_mouse(send_x, send_y, 0);
+    gfx_desktop_set_mouse(send_x, send_y, 1); /* Rising edge click */
+
+    /* Verify character was queued in keyboard buffer */
+    char c = 0;
+    TEST_ASSERT(kbd_get_char_nonblock(&c));
+    TEST_ASSERT_EQUAL('\n', c);
+
+    vga_desktop_set(0);
 }
 
 int main(void) {
@@ -190,6 +222,7 @@ int main(void) {
     RUN_TEST(test_parse_fit_line);
     RUN_TEST(test_mouse_cursor_rendering);
     RUN_TEST(test_fb_present_repeated);
+    RUN_TEST(test_desktop_layout_and_hit_test);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
