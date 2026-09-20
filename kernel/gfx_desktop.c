@@ -1,5 +1,6 @@
 /* gfx_desktop.c - Compositor pixel du bureau Mohhdy (QEMU VBE, pas HTML). */
 #include "gfx_desktop.h"
+#include "gfx_fb.h"
 #include "gfx_font8.h"
 
 #define RGB(r, g, b) ((uint32_t)(r) << 16 | (uint32_t)(g) << 8 | (uint32_t)(b))
@@ -12,6 +13,7 @@ void gfx_desktop_set_mouse(int x, int y, uint8_t buttons) {
     g_mouse_x = x;
     g_mouse_y = y;
     g_mouse_buttons = buttons;
+    gfx_fb_update_cursor();
 }
 
 void gfx_desktop_get_mouse(int *x, int *y, uint8_t *buttons) {
@@ -26,6 +28,7 @@ void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons) {
     g_mouse_x += dx;
     g_mouse_y += dy;
     g_mouse_buttons = buttons;
+    gfx_fb_update_cursor();
 }
 
 static uint32_t pix(const uint32_t *fb, int w, int h, int x, int y) {
@@ -42,10 +45,12 @@ static void put(uint32_t *fb, int w, int h, int x, int y, uint32_t c) {
     fb[y * w + x] = c;
 }
 
-static void draw_cursor(uint32_t *fb, int w, int h, int mx, int my, uint8_t buttons) {
+void gfx_desktop_draw_cursor(uint32_t *fb, int w, int h, int pitch, int mx, int my, uint8_t buttons) {
     int cy, cx;
     uint32_t fill_color = (buttons & 1) ? RGB(122, 212, 196) : RGB(245, 248, 250);
     uint32_t border_color = RGB(10, 16, 20);
+    if (!fb) return;
+    if (pitch <= 0) pitch = w;
 
     static const char *shape[18] = {
         "#           ",
@@ -75,9 +80,9 @@ static void draw_cursor(uint32_t *fb, int w, int h, int mx, int my, uint8_t butt
             int py = my + cy;
             if (px >= 0 && px < w && py >= 0 && py < h) {
                 if (p == '#') {
-                    put(fb, w, h, px, py, border_color);
+                    fb[py * pitch + px] = border_color;
                 } else if (p == '.') {
-                    put(fb, w, h, px, py, fill_color);
+                    fb[py * pitch + px] = fill_color;
                 }
             }
         }
@@ -509,7 +514,7 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     draw_text(fb, w, h, x + 170, y + rh - 28, "stub", RGB(154, 168, 181));
 }
 
-void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
+void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     os_fb_scene_t def;
     const os_fb_scene_t *sc = scene;
     int bar_h, chat_w, chat_h, chat_x, chat_y, scene_w, scene_h, scene_x, scene_y;
@@ -671,10 +676,14 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
         }
     }
 
+}
+
+void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
+    gfx_desktop_draw_no_cursor(scene, fb, w, h);
     if (g_mouse_x < 0) g_mouse_x = w / 2;
     if (g_mouse_y < 0) g_mouse_y = h / 2;
     if (g_mouse_x >= w) g_mouse_x = w - 1;
     if (g_mouse_y >= h) g_mouse_y = h - 1;
 
-    draw_cursor(fb, w, h, g_mouse_x, g_mouse_y, g_mouse_buttons);
+    gfx_desktop_draw_cursor(fb, w, h, w, g_mouse_x, g_mouse_y, g_mouse_buttons);
 }

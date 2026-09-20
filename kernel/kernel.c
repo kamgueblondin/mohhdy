@@ -19,6 +19,7 @@
 #include "llm/gpt2_infer.h"
 #include "llm/gpt2_tokenizer.h"
 #include "keyboard.h"
+#include "input/usb_tablet.h"
 #include "service_registry.h"
 #include "vga_console.h"
 #include "ne2k.h"
@@ -1164,6 +1165,7 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     
     print_string("=== Systeme interruptions PRET ===\n");
     ne2k_boot_probe();
+    usb_tablet_init();
     print_string("IRQ0 (timer): OK\n");
     print_string("IRQ1 (keyboard): OK\n");
     print_string("QEMU devrait maintenant generer les interruptions clavier.\n");
