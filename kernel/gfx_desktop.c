@@ -2,17 +2,107 @@
 #include "gfx_desktop.h"
 #include "gfx_fb.h"
 #include "gfx_font8.h"
+#include "input/usb_tablet.h"
+#include "keyboard.h"
+#include "vga_console.h"
 
 #define RGB(r, g, b) ((uint32_t)(r) << 16 | (uint32_t)(g) << 8 | (uint32_t)(b))
 
 static int g_mouse_x = -1;
 static int g_mouse_y = -1;
 static uint8_t g_mouse_buttons = 0;
+static uint8_t g_prev_buttons = 0;
+static os_fb_scene_t g_last_scene;
+static int g_last_scene_valid = 0;
+
+static int in_rect(int px, int py, const gfx_rect_t *r) {
+    if (!r || r->w <= 0 || r->h <= 0) return 0;
+    return px >= r->x && px < r->x + r->w && py >= r->y && py < r->y + r->h;
+}
+
+static void gfx_desktop_handle_click(int x, int y) {
+    gfx_desktop_layout_t layout;
+    int w = gfx_fb_width();
+    int h = gfx_fb_height();
+    int i;
+    const char *cmds[7] = {
+        "/center\n",
+        "/browser\n",
+        "/shell\n",
+        "/admin\n",
+        "/support\n",
+        "/status\n",
+        "/fs\n"
+    };
+
+    gfx_desktop_get_layout(g_last_scene_valid ? &g_last_scene : 0, w, h, &layout);
+
+    /* 1. Chat "Envoyer" button */
+    if (in_rect(x, y, &layout.chat_win.send_btn)) {
+        kbd_put_string("\n");
+        return;
+    }
+
+    /* 2. Window pane close button (traffic light) */
+    if (layout.pane_win.active && in_rect(x, y, &layout.pane_win.traffic)) {
+        kbd_put_string("/center\n");
+        return;
+    }
+
+    /* 3. Dock icons */
+    for (i = 0; i < 7; i++) {
+        if (in_rect(x, y, &layout.dock.icons[i])) {
+            kbd_put_string(cmds[i]);
+            return;
+        }
+    }
+
+    /* 4. Top menu bar items */
+    for (i = 0; i < layout.menu_count; i++) {
+        if (in_rect(x, y, &layout.menu_items[i])) {
+            kbd_put_string(cmds[i]);
+            return;
+        }
+    }
+
+    /* 5. Scene IA Mode Pills */
+    if (in_rect(x, y, &layout.scene_ia.pills[0])) {
+        kbd_put_string("/stage-prompt reflexion\n");
+        return;
+    }
+    if (in_rect(x, y, &layout.scene_ia.pills[1])) {
+        kbd_put_string("/stage-prompt simule action\n");
+        return;
+    }
+    if (in_rect(x, y, &layout.scene_ia.pills[2])) {
+        kbd_put_string("/stage-prompt resultats\n");
+        return;
+    }
+    if (in_rect(x, y, &layout.scene_ia.box)) {
+        kbd_put_string("/plan\n");
+        return;
+    }
+
+    /* 6. Stage mode badge */
+    if (in_rect(x, y, &layout.stage_badge)) {
+        kbd_put_string("/stage\n");
+        return;
+    }
+}
 
 void gfx_desktop_set_mouse(int x, int y, uint8_t buttons) {
+    uint8_t left_now = (buttons & 1);
+    uint8_t left_prev = (g_prev_buttons & 1);
+
     g_mouse_x = x;
     g_mouse_y = y;
     g_mouse_buttons = buttons;
+
+    if (vga_desktop_active() && !left_prev && left_now) {
+        gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
+    }
+    g_prev_buttons = buttons;
+
     gfx_fb_update_cursor();
 }
 
@@ -23,11 +113,25 @@ void gfx_desktop_get_mouse(int *x, int *y, uint8_t *buttons) {
 }
 
 void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons) {
+    if (!usb_tablet_present()) {
+        dx *= 2;
+        dy *= 2;
+    }
     if (g_mouse_x < 0) g_mouse_x = GFX_FB_WIDTH / 2;
     if (g_mouse_y < 0) g_mouse_y = GFX_FB_HEIGHT / 2;
+
+    uint8_t left_now = (buttons & 1);
+    uint8_t left_prev = (g_prev_buttons & 1);
+
     g_mouse_x += dx;
     g_mouse_y += dy;
     g_mouse_buttons = buttons;
+
+    if (vga_desktop_active() && !left_prev && left_now) {
+        gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
+    }
+    g_prev_buttons = buttons;
+
     gfx_fb_update_cursor();
 }
 
@@ -514,6 +618,166 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     draw_text(fb, w, h, x + 170, y + rh - 28, "stub", RGB(154, 168, 181));
 }
 
+void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *out) {
+    os_fb_scene_t def;
+    const os_fb_scene_t *sc = scene;
+    int bar_h, chat_w, chat_h, chat_x, chat_y, scene_w, scene_h, scene_x, scene_y;
+    int dock_w, dock_x, dock_y, bw, i, mx, ty, gap, flag_w;
+    uint8_t pane;
+    const char *menus[7] = { "Chat", "Browser-OS", "Shell", "Admin", "Support", "Statut", "FS" };
+
+    if (!out) return;
+
+    if (w < 160) w = 160;
+    if (h < 120) h = 120;
+
+    if (!sc || sc->magic != OS_FB_MAGIC) {
+        def.magic = OS_FB_MAGIC;
+        def.version = 1;
+        def.chat_mode = OS_FB_CHAT_CENTER;
+        def.pane = OS_FB_PANE_NONE;
+        def.stage_mode = OS_FB_STAGE_REFLECTING;
+        def.stage_kind = OS_FB_KIND_PLAN;
+        def.nmsg = 0;
+        def.input[0] = 0;
+        sc = &def;
+    }
+
+    bar_h = clampi(h / 22, 28, 40);
+    out->bar_h = bar_h;
+
+    mx = 122;
+    ty = (bar_h - 8) / 2;
+    gap = 14;
+    flag_w = (w >= 920) ? (8 * 36 + 12) : ((w >= 720) ? (8 * 16 + 12) : 8);
+
+    for (i = 0; i < 7; i++) {
+        int len = 0;
+        while (menus[i][len]) len++;
+        if (mx + len * 8 > w - flag_w - 8) break;
+        out->menu_items[i].x = mx;
+        out->menu_items[i].y = ty;
+        out->menu_items[i].w = len * 8;
+        out->menu_items[i].h = 8;
+        mx += len * 8 + gap;
+    }
+    out->menu_count = i;
+
+    out->stage_badge.x = 12;
+    out->stage_badge.y = bar_h + 8;
+    out->stage_badge.w = 96;
+    out->stage_badge.h = 18;
+
+    scene_w = clampi(w / 2, 200, w - 40);
+    if (scene_w > 640) scene_w = 640;
+    scene_h = clampi(h / 5, 90, 150);
+    scene_x = (w - scene_w) / 2 - (w >= 780 ? 20 : 0);
+    if (scene_x < 8) scene_x = 8;
+    scene_y = h - scene_h - 64;
+    if (scene_y < bar_h + 40) scene_y = bar_h + 40;
+
+    out->scene_ia.box.x = scene_x;
+    out->scene_ia.box.y = scene_y;
+    out->scene_ia.box.w = scene_w;
+    out->scene_ia.box.h = scene_h;
+
+    bw = (scene_w - 24 - 40) / 3;
+    out->scene_ia.pills[0].x = scene_x + 12 + 8;
+    out->scene_ia.pills[0].y = scene_y + 48 + 8;
+    out->scene_ia.pills[0].w = bw;
+    out->scene_ia.pills[0].h = 40;
+
+    out->scene_ia.pills[1].x = scene_x + 12 + 16 + bw;
+    out->scene_ia.pills[1].y = scene_y + 48 + 8;
+    out->scene_ia.pills[1].w = bw;
+    out->scene_ia.pills[1].h = 40;
+
+    out->scene_ia.pills[2].x = scene_x + 12 + 24 + 2 * bw;
+    out->scene_ia.pills[2].y = scene_y + 48 + 8;
+    out->scene_ia.pills[2].w = bw;
+    out->scene_ia.pills[2].h = 40;
+
+    pane = sc->pane;
+    if (pane != OS_FB_PANE_NONE) {
+        int wx = 36, wy = bar_h + 28;
+        int ww = clampi(w - (w >= 780 ? 420 : 48), 240, w - 48);
+        int wh = clampi(h - 220, 160, h - bar_h - 80);
+
+        out->pane_win.active = 1;
+        out->pane_win.box.x = wx;
+        out->pane_win.box.y = wy;
+        out->pane_win.box.w = ww;
+        out->pane_win.box.h = wh;
+
+        out->pane_win.traffic.x = wx + 8;
+        out->pane_win.traffic.y = wy + 8;
+        out->pane_win.traffic.w = 42;
+        out->pane_win.traffic.h = 16;
+    } else {
+        out->pane_win.active = 0;
+    }
+
+    chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(w / 3, 220, 360) : clampi(w / 2, 240, 640);
+    if (chat_w > w - 24) chat_w = w - 24;
+    chat_h = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(h / 2, 180, 400) : clampi((h * 5) / 12, 160, 360);
+    if (chat_h > h - bar_h - 56) chat_h = h - bar_h - 56;
+    if (chat_h < 120) chat_h = 120;
+
+    if (sc->chat_mode == OS_FB_CHAT_FLOAT) {
+        int pane_w = (pane != OS_FB_PANE_NONE) ? clampi(w - (w >= 780 ? 420 : 48), 240, w - 48) : 0;
+        int pane_right = (pane != OS_FB_PANE_NONE) ? (36 + pane_w + 12) : 8;
+        int max_x = w - chat_w - 8;
+        chat_x = w - chat_w - 16;
+        chat_y = h - chat_h - 70;
+        if (sc->chat_x || sc->chat_y) {
+            chat_x = (int)sc->chat_x * w / 80;
+            chat_y = (int)sc->chat_y * h / 25;
+        }
+        if (max_x < 8) max_x = 8;
+        if (pane_right > max_x) pane_right = max_x;
+        if (chat_x < pane_right) chat_x = pane_right;
+        chat_x = clampi(chat_x, pane_right, max_x);
+        chat_y = clampi(chat_y, bar_h + 8, h - chat_h - 8);
+    } else {
+        chat_x = (w - chat_w) / 2;
+        chat_y = bar_h + (h / 14);
+        if (chat_y + chat_h > h - 52) chat_y = bar_h + 8;
+    }
+
+    out->chat_win.box.x = chat_x;
+    out->chat_win.box.y = chat_y;
+    out->chat_win.box.w = chat_w;
+    out->chat_win.box.h = chat_h;
+
+    out->chat_win.input.x = chat_x + 14;
+    out->chat_win.input.y = chat_y + chat_h - 70;
+    out->chat_win.input.w = chat_w - 28;
+    out->chat_win.input.h = 28;
+
+    out->chat_win.send_btn.x = chat_x + 14;
+    out->chat_win.send_btn.y = chat_y + chat_h - 34;
+    out->chat_win.send_btn.w = 88;
+    out->chat_win.send_btn.h = 22;
+
+    dock_w = 7 * 44 + 16;
+    if (dock_w > w - 16) dock_w = w - 16;
+    dock_x = (w - dock_w) / 2;
+    dock_y = h - 48;
+    if (dock_y < bar_h + 8) dock_y = h - 36;
+
+    out->dock.box.x = dock_x;
+    out->dock.box.y = dock_y;
+    out->dock.box.w = dock_w;
+    out->dock.box.h = 40;
+
+    for (i = 0; i < 7; i++) {
+        out->dock.icons[i].x = dock_x + 8 + i * 44;
+        out->dock.icons[i].y = dock_y + 4;
+        out->dock.icons[i].w = 36;
+        out->dock.icons[i].h = 32;
+    }
+}
+
 void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     os_fb_scene_t def;
     const os_fb_scene_t *sc = scene;
@@ -554,6 +818,9 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         def.session[4] = '1';
         def.session[5] = 0;
         sc = &def;
+    } else {
+        g_last_scene = *sc;
+        g_last_scene_valid = 1;
     }
 
     landscape(fb, w, h);

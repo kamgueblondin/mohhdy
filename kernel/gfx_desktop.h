@@ -11,6 +11,36 @@
 #define GFX_FB_MAX_WIDTH 1920
 #define GFX_FB_MAX_HEIGHT 1200
 
+typedef struct {
+    int x, y, w, h;
+} gfx_rect_t;
+
+typedef struct {
+    int bar_h;
+    gfx_rect_t menu_items[7];
+    int menu_count;
+    gfx_rect_t stage_badge;
+    struct {
+        gfx_rect_t box;
+        gfx_rect_t pills[3];
+    } scene_ia;
+    struct {
+        int active;
+        gfx_rect_t box;
+        gfx_rect_t traffic;
+    } pane_win;
+    struct {
+        gfx_rect_t box;
+        gfx_rect_t input;
+        gfx_rect_t send_btn;
+    } chat_win;
+    struct {
+        gfx_rect_t box;
+        gfx_rect_t icons[7];
+    } dock;
+} gfx_desktop_layout_t;
+
+void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *layout);
 void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h);
 void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w, int h);
 void gfx_desktop_draw_cursor(uint32_t *fb, int w, int h, int pitch, int mx, int my, uint8_t buttons);
