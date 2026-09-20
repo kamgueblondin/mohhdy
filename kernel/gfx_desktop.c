@@ -4,6 +4,30 @@
 
 #define RGB(r, g, b) ((uint32_t)(r) << 16 | (uint32_t)(g) << 8 | (uint32_t)(b))
 
+static int g_mouse_x = -1;
+static int g_mouse_y = -1;
+static uint8_t g_mouse_buttons = 0;
+
+void gfx_desktop_set_mouse(int x, int y, uint8_t buttons) {
+    g_mouse_x = x;
+    g_mouse_y = y;
+    g_mouse_buttons = buttons;
+}
+
+void gfx_desktop_get_mouse(int *x, int *y, uint8_t *buttons) {
+    if (x) *x = g_mouse_x;
+    if (y) *y = g_mouse_y;
+    if (buttons) *buttons = g_mouse_buttons;
+}
+
+void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons) {
+    if (g_mouse_x < 0) g_mouse_x = GFX_FB_WIDTH / 2;
+    if (g_mouse_y < 0) g_mouse_y = GFX_FB_HEIGHT / 2;
+    g_mouse_x += dx;
+    g_mouse_y += dy;
+    g_mouse_buttons = buttons;
+}
+
 static uint32_t pix(const uint32_t *fb, int w, int h, int x, int y) {
     if (!fb || x < 0 || y < 0 || x >= w || y >= h) return 0;
     return fb[y * w + x];
@@ -16,6 +40,48 @@ uint32_t gfx_desktop_pixel(const uint32_t *fb, int w, int h, int x, int y) {
 static void put(uint32_t *fb, int w, int h, int x, int y, uint32_t c) {
     if (!fb || x < 0 || y < 0 || x >= w || y >= h) return;
     fb[y * w + x] = c;
+}
+
+static void draw_cursor(uint32_t *fb, int w, int h, int mx, int my, uint8_t buttons) {
+    int cy, cx;
+    uint32_t fill_color = (buttons & 1) ? RGB(122, 212, 196) : RGB(245, 248, 250);
+    uint32_t border_color = RGB(10, 16, 20);
+
+    static const char *shape[18] = {
+        "#           ",
+        "##          ",
+        "#.#         ",
+        "#..#        ",
+        "#...#       ",
+        "#....#      ",
+        "#.....#     ",
+        "#......#    ",
+        "#.......#   ",
+        "#........#  ",
+        "#.....####  ",
+        "#..##..#    ",
+        "#.#  #..#   ",
+        "##   #..#   ",
+        "#     #..#  ",
+        "      #..#  ",
+        "       ##   ",
+        "            "
+    };
+
+    for (cy = 0; cy < 18; cy++) {
+        for (cx = 0; cx < 12; cx++) {
+            char p = shape[cy][cx];
+            int px = mx + cx;
+            int py = my + cy;
+            if (px >= 0 && px < w && py >= 0 && py < h) {
+                if (p == '#') {
+                    put(fb, w, h, px, py, border_color);
+                } else if (p == '.') {
+                    put(fb, w, h, px, py, fill_color);
+                }
+            }
+        }
+    }
 }
 
 static uint32_t blend(uint32_t dst, uint32_t src, unsigned a) {
@@ -604,4 +670,11 @@ void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
             draw_text(fb, w, h, dock_x + 8 + i * 44 + (36 - n * 8) / 2, dock_y + 14, dock[i], RGB(15, 20, 25));
         }
     }
+
+    if (g_mouse_x < 0) g_mouse_x = w / 2;
+    if (g_mouse_y < 0) g_mouse_y = h / 2;
+    if (g_mouse_x >= w) g_mouse_x = w - 1;
+    if (g_mouse_y >= h) g_mouse_y = h - 1;
+
+    draw_cursor(fb, w, h, g_mouse_x, g_mouse_y, g_mouse_buttons);
 }

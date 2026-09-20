@@ -1,6 +1,7 @@
 #include "keyboard.h"
 #include "kernel.h"
 #include "vga_console.h"
+#include "gfx_desktop.h"
 #include "os_syscalls.h"
 #include <stdint.h>
 
@@ -31,6 +32,28 @@ static volatile int initialization_phase = 0;
 static volatile int g_shift_pressed = 0;
 static volatile int g_caps_lock = 0;
 static volatile int g_e0_prefix = 0;
+
+static uint8_t mouse_cycle = 0;
+static uint8_t mouse_bytes[3];
+
+void mouse_handle_byte(uint8_t b) {
+    if (mouse_cycle == 0) {
+        if ((b & 0x08) == 0) return;
+        mouse_bytes[0] = b;
+        mouse_cycle = 1;
+    } else if (mouse_cycle == 1) {
+        mouse_bytes[1] = b;
+        mouse_cycle = 2;
+    } else if (mouse_cycle == 2) {
+        mouse_bytes[2] = b;
+        mouse_cycle = 0;
+        uint8_t flags = mouse_bytes[0];
+        int dx = (int)(int8_t)mouse_bytes[1];
+        int dy = (int)(int8_t)mouse_bytes[2];
+        uint8_t buttons = flags & 0x07;
+        gfx_desktop_move_mouse(dx, -dy, buttons);
+    }
+}
 
 // Délai optimisé pour QEMU
 void qemu_delay() {
@@ -194,6 +217,11 @@ void keyboard_poll_check() {
         if (status & 0x01) { // Données disponibles
             uint8_t scancode = inb(0x60);
             
+            if (status & 0x20) {
+                mouse_handle_byte(scancode);
+                return;
+            }
+
             debug_polling_count++;
             
             // Filtrer les ACK et codes de contrôle
@@ -251,6 +279,10 @@ void keyboard_interrupt_handler() {
     if (!(status & 0x01)) return; // Pas de données
     
     uint8_t scancode = inb(0x60);
+    if (status & 0x20) {
+        mouse_handle_byte(scancode);
+        return;
+    }
     
     // Debug scancode
     if (debug_interrupt_count <= 5) {
@@ -352,9 +384,10 @@ void keyboard_init() {
             
             // Configuration PS/2 Set 1 compatible renforcée
             config |= 0x01;  // Enable port 1 interrupt
+            config |= 0x02;  // Enable port 2 (mouse) interrupt
             config &= ~0x10; // Enable port 1 clock  
+            config &= ~0x20; // Enable port 2 clock
             config |= 0x40;  // Enable scancode translation (Set 1)
-            config &= ~0x20; // Disable port 2 interrupt (focus sur port 1)
             
             if (wait_kbd_ready(1)) {
                 outb(0x64, 0x60); // Write configuration
@@ -374,11 +407,24 @@ void keyboard_init() {
         }
     }
     
-    // Réactivation du port 1
+    // Réactivation du port 1 et port 2 (souris)
     if (wait_kbd_ready(1)) {
         outb(0x64, 0xAE); // Enable port 1
         qemu_delay();
         print_string_serial("Phase 2: Port 1 réactivé\n");
+    }
+    if (wait_kbd_ready(1)) {
+        outb(0x64, 0xA8); // Enable port 2 (mouse)
+        qemu_delay();
+        print_string_serial("Phase 2: Port 2 (souris) réactivé\n");
+    }
+    if (wait_kbd_ready(1)) {
+        outb(0x64, 0xD4); // Write to aux device
+        qemu_delay();
+        if (wait_kbd_ready(1)) {
+            outb(0x60, 0xF4); // Enable mouse packet streaming
+            qemu_delay();
+        }
     }
     
     // Phase 3: Configuration du périphérique simple

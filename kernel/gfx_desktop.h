@@ -14,4 +14,8 @@
 void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h);
 uint32_t gfx_desktop_pixel(const uint32_t *fb, int w, int h, int x, int y);
 
+void gfx_desktop_set_mouse(int x, int y, uint8_t buttons);
+void gfx_desktop_get_mouse(int *x, int *y, uint8_t *buttons);
+void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons);
+
 #endif

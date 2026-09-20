@@ -93,9 +93,6 @@ def fit_loop(stop):
         if size is None:
             time.sleep(0.08)
             continue
-        if last is not None and abs(size[0] - last[0]) < 16 and abs(size[1] - last[1]) < 16:
-            time.sleep(0.08)
-            continue
         if size != pending:
             pending = size
             pending_since = now
@@ -139,6 +136,7 @@ def main():
         "-initrd", INITRD,
         "-m", RAM,
         "-vga", "std",
+        "-device", "usb-tablet",
         "-display", "gtk,zoom-to-fit=on,show-menubar=off",
         "-serial", "mon:stdio",
         "-serial", "unix:%s,server,nowait" % SOCK,

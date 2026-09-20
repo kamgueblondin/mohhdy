@@ -150,6 +150,35 @@ static void test_parse_fit_line(void) {
     TEST_ASSERT(!gfx_fb_parse_fit_line("nope", &w, &h));
 }
 
+static void test_mouse_cursor_rendering(void) {
+    int mx = 0, my = 0;
+    uint8_t btn = 0;
+    blank_scene();
+    gfx_desktop_set_mouse(150, 120, 0);
+    gfx_desktop_get_mouse(&mx, &my, &btn);
+    TEST_ASSERT_EQUAL(150, mx);
+    TEST_ASSERT_EQUAL(120, my);
+    TEST_ASSERT_EQUAL(0, btn);
+
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    /* Top-left pixel of software cursor at (150, 120) should be border '#' -> RGB(10, 16, 20) */
+    uint32_t cursor_px = gfx_desktop_pixel(g_fb, W, H, 150, 120);
+    TEST_ASSERT(near_rgb(cursor_px, 10, 16, 20, 5));
+
+    /* Move mouse */
+    gfx_desktop_move_mouse(10, 15, 1);
+    gfx_desktop_get_mouse(&mx, &my, &btn);
+    TEST_ASSERT_EQUAL(160, mx);
+    TEST_ASSERT_EQUAL(135, my);
+    TEST_ASSERT_EQUAL(1, btn);
+}
+
+static void test_fb_present_repeated(void) {
+    blank_scene();
+    TEST_ASSERT_EQUAL(0, gfx_fb_present(&g_scene));
+    TEST_ASSERT_EQUAL(0, gfx_fb_present(&g_scene));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -159,6 +188,8 @@ int main(void) {
     RUN_TEST(test_circle_kind_paints_ring);
     RUN_TEST(test_layout_scales_with_framebuffer);
     RUN_TEST(test_parse_fit_line);
+    RUN_TEST(test_mouse_cursor_rendering);
+    RUN_TEST(test_fb_present_repeated);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
