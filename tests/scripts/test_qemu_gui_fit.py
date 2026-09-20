@@ -255,7 +255,7 @@ def main():
                 "-vga", "std",
                 "-usb",
                 "-device", "usb-tablet",
-                "-display", "gtk,zoom-to-fit=on,show-menubar=off,grab-on-hover=off",
+                "-display", "gtk,zoom-to-fit=on,show-menubar=off,grab-on-hover=off,show-cursor=on",
                 "-serial", "file:" + LOG,
                 "-serial", "unix:%s,server,nowait" % FIT_SOCK,
                 "-monitor", "unix:%s,server,nowait" % MON_SOCK,

@@ -1,5 +1,6 @@
 /* unity.c - Implémentation du framework Unity pour MOHHDY */
 
+#include <stdio.h>
 #include "unity.h"
 
 // Variables globales

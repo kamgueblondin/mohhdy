@@ -138,7 +138,7 @@ def main():
         "-vga", "std",
         "-usb",
         "-device", "usb-tablet",
-        "-display", "gtk,zoom-to-fit=on,show-menubar=off,grab-on-hover=off",
+        "-display", "gtk,zoom-to-fit=on,show-menubar=off,grab-on-hover=off,show-cursor=on",
         "-serial", "mon:stdio",
         "-serial", "unix:%s,server,nowait" % SOCK,
         "-no-reboot", "-no-shutdown",

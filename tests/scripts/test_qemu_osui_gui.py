@@ -201,11 +201,13 @@ def main():
             proc = subprocess.Popen([
                 "qemu-system-i386", "-cpu", "pentium3", "-kernel", KERNEL,
                 "-initrd", INITRD, "-m", "1024M", "-display", "none", "-vga", "std",
+                "-usb", "-device", "usb-tablet",
                 "-serial", "file:" + LOG, "-monitor", "unix:%s,server,nowait" % MON_SOCK,
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
             ] + qemu_disk_args(), cwd=ROOT, stdout=err, stderr=err)
             wait_for(proc, "(-.-)", BOOT_TIMEOUT)
             wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
+            wait_for(proc, "USB Tablet:", CMD_TIMEOUT)
             monitor = monitor_connect()
             time.sleep(0.6)
 
