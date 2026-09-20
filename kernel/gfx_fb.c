@@ -39,6 +39,7 @@
 static int g_on;
 static int g_w = GFX_FB_WIDTH;
 static int g_h = GFX_FB_HEIGHT;
+static int g_pitch = GFX_FB_WIDTH;
 static volatile uint32_t *g_lfb;
 static uint32_t *g_back;
 static uint32_t g_back_bytes;
@@ -257,8 +258,16 @@ static int vbe_set_mode(int width, int height) {
         g_mapped = GFX_LFB_MAP_BYTES;
         g_lfb = (volatile uint32_t *)bar;
     }
-    g_w = width;
-    g_h = height;
+    {
+        unsigned short cw = dispi_read(VBE_DISPI_INDEX_XRES);
+        unsigned short ch = dispi_read(VBE_DISPI_INDEX_YRES);
+        unsigned short cvw = dispi_read(VBE_DISPI_INDEX_VIRT_WIDTH);
+        if (cw >= GFX_FB_MIN_WIDTH && cw <= GFX_FB_MAX_WIDTH) width = (int)cw;
+        if (ch >= GFX_FB_MIN_HEIGHT && ch <= GFX_FB_MAX_HEIGHT) height = (int)ch;
+        g_w = width;
+        g_h = height;
+        g_pitch = (cvw >= (unsigned short)width) ? (int)cvw : width;
+    }
     return 0;
 }
 
@@ -302,8 +311,20 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
     dst = g_back ? g_back : (uint32_t *)g_lfb;
     gfx_desktop_draw(&local, dst, g_w, g_h);
     if (g_back && g_lfb) {
-        n = (uint32_t)g_w * (uint32_t)g_h;
-        for (i = 0; i < n; i++) g_lfb[i] = g_back[i];
+        int pitch = (g_pitch > 0) ? g_pitch : g_w;
+        if (pitch == g_w) {
+            n = (uint32_t)g_w * (uint32_t)g_h;
+            for (i = 0; i < n; i++) g_lfb[i] = g_back[i];
+        } else {
+            int y, x;
+            for (y = 0; y < g_h; y++) {
+                uint32_t src_row = (uint32_t)y * (uint32_t)g_w;
+                uint32_t dst_row = (uint32_t)y * (uint32_t)pitch;
+                for (x = 0; x < g_w; x++) {
+                    g_lfb[dst_row + x] = g_back[src_row + x];
+                }
+            }
+        }
     }
     return 0;
 }
