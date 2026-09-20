@@ -36,6 +36,16 @@
 #define GFX_BACK_MAX_BYTES ((uint32_t)GFX_FB_MAX_WIDTH * (uint32_t)GFX_FB_MAX_HEIGHT * 4u)
 
 #ifndef KERNEL_TEST
+static inline uint32_t lock_interrupts(void) {
+    uint32_t flags;
+    asm volatile ("pushfl; pop %0; cli" : "=r"(flags));
+    return flags;
+}
+
+static inline void unlock_interrupts(uint32_t flags) {
+    asm volatile ("push %0; popfl" : : "r"(flags));
+}
+
 static int g_on;
 static int g_w = GFX_FB_WIDTH;
 static int g_h = GFX_FB_HEIGHT;
@@ -49,6 +59,12 @@ static int g_logged;
 static int g_fit_n;
 static char g_fit_buf[28];
 static int g_com2_ready;
+
+static uint32_t g_cursor_saved_bg[18 * 12];
+static int g_saved_cursor_x = -1;
+static int g_saved_cursor_y = -1;
+static uint8_t g_saved_cursor_btn = 0;
+static int g_saved_cursor_valid = 0;
 #endif
 
 int gfx_fb_parse_fit_line(const char *s, int *w, int *h) {
@@ -281,11 +297,80 @@ static void vga_text_restore(void) {
     outb(0x3C4, 0x04); outb(0x3C5, 0x02);
 }
 
+void gfx_fb_update_cursor(void) {
+    int mx = 0, my = 0;
+    uint8_t btn = 0;
+    int pitch;
+    int cx, cy;
+    uint32_t irq_flags;
+
+    if (!g_on || !g_lfb) return;
+
+    irq_flags = lock_interrupts();
+
+    gfx_desktop_get_mouse(&mx, &my, &btn);
+    if (mx < 0) mx = g_w / 2;
+    if (my < 0) my = g_h / 2;
+    if (mx >= g_w) mx = g_w - 1;
+    if (my >= g_h) my = g_h - 1;
+
+    if (g_saved_cursor_valid && mx == g_saved_cursor_x && my == g_saved_cursor_y && btn == g_saved_cursor_btn) {
+        unlock_interrupts(irq_flags);
+        return;
+    }
+
+    pitch = (g_pitch > 0) ? g_pitch : g_w;
+
+    /* 1. Restore old cursor background */
+    if (g_saved_cursor_valid) {
+        for (cy = 0; cy < 18; cy++) {
+            for (cx = 0; cx < 12; cx++) {
+                int px = g_saved_cursor_x + cx;
+                int py = g_saved_cursor_y + cy;
+                if (px >= 0 && px < g_w && py >= 0 && py < g_h) {
+                    uint32_t c = g_cursor_saved_bg[cy * 12 + cx];
+                    if (g_back) g_back[py * g_w + px] = c;
+                    g_lfb[py * pitch + px] = c;
+                }
+            }
+        }
+    }
+
+    /* 2. Save new cursor background */
+    for (cy = 0; cy < 18; cy++) {
+        for (cx = 0; cx < 12; cx++) {
+            int px = mx + cx;
+            int py = my + cy;
+            if (px >= 0 && px < g_w && py >= 0 && py < g_h) {
+                g_cursor_saved_bg[cy * 12 + cx] = g_back ? g_back[py * g_w + px] : g_lfb[py * pitch + px];
+            } else {
+                g_cursor_saved_bg[cy * 12 + cx] = 0;
+            }
+        }
+    }
+
+    /* 3. Draw cursor at new position */
+    if (g_back) {
+        gfx_desktop_draw_cursor(g_back, g_w, g_h, g_w, mx, my, btn);
+    }
+    gfx_desktop_draw_cursor((uint32_t *)g_lfb, g_w, g_h, pitch, mx, my, btn);
+
+    g_saved_cursor_x = mx;
+    g_saved_cursor_y = my;
+    g_saved_cursor_btn = btn;
+    g_saved_cursor_valid = 1;
+
+    unlock_interrupts(irq_flags);
+}
+
 int gfx_fb_present(const os_fb_scene_t *scene) {
     uint32_t *dst;
     uint32_t n, i;
     os_fb_scene_t local;
     int nw, nh;
+    int mx = 0, my = 0;
+    uint8_t btn = 0;
+    int cx, cy;
 
     if (!scene || scene->magic != OS_FB_MAGIC) return -1;
     memcpy(&local, scene, sizeof(local));
@@ -293,6 +378,7 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
         if (!g_on || nw != g_w || nh != g_h) {
             if (vbe_set_mode(nw, nh) == 0) {
                 g_on = 1;
+                g_saved_cursor_valid = 0;
                 vga_desktop_set(1);
                 log_fb_size(g_logged ? "osui gui fb resize " : "osui gui fb ", nw, nh);
                 g_logged = 1;
@@ -302,6 +388,7 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
     if (!g_on) {
         if (vbe_set_mode(GFX_FB_WIDTH, GFX_FB_HEIGHT) != 0) return -2;
         g_on = 1;
+        g_saved_cursor_valid = 0;
         vga_desktop_set(1);
         if (!g_logged) {
             log_fb_size("osui gui fb ", g_w, g_h);
@@ -309,22 +396,52 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
         }
     }
     dst = g_back ? g_back : (uint32_t *)g_lfb;
-    gfx_desktop_draw(&local, dst, g_w, g_h);
-    if (g_back && g_lfb) {
-        int pitch = (g_pitch > 0) ? g_pitch : g_w;
-        if (pitch == g_w) {
-            n = (uint32_t)g_w * (uint32_t)g_h;
-            for (i = 0; i < n; i++) g_lfb[i] = g_back[i];
-        } else {
-            int y, x;
-            for (y = 0; y < g_h; y++) {
-                uint32_t src_row = (uint32_t)y * (uint32_t)g_w;
-                uint32_t dst_row = (uint32_t)y * (uint32_t)pitch;
-                for (x = 0; x < g_w; x++) {
-                    g_lfb[dst_row + x] = g_back[src_row + x];
+    gfx_desktop_draw_no_cursor(&local, dst, g_w, g_h);
+
+    {
+        uint32_t irq_flags = lock_interrupts();
+
+        gfx_desktop_get_mouse(&mx, &my, &btn);
+        if (mx < 0) mx = g_w / 2;
+        if (my < 0) my = g_h / 2;
+        if (mx >= g_w) mx = g_w - 1;
+        if (my >= g_h) my = g_h - 1;
+
+        for (cy = 0; cy < 18; cy++) {
+            for (cx = 0; cx < 12; cx++) {
+                int px = mx + cx;
+                int py = my + cy;
+                if (px >= 0 && px < g_w && py >= 0 && py < g_h) {
+                    g_cursor_saved_bg[cy * 12 + cx] = dst[py * g_w + px];
+                } else {
+                    g_cursor_saved_bg[cy * 12 + cx] = 0;
                 }
             }
         }
+        g_saved_cursor_x = mx;
+        g_saved_cursor_y = my;
+        g_saved_cursor_btn = btn;
+        g_saved_cursor_valid = 1;
+
+        gfx_desktop_draw_cursor(dst, g_w, g_h, g_w, mx, my, btn);
+
+        if (g_back && g_lfb) {
+            int pitch = (g_pitch > 0) ? g_pitch : g_w;
+            if (pitch == g_w) {
+                n = (uint32_t)g_w * (uint32_t)g_h;
+                for (i = 0; i < n; i++) g_lfb[i] = g_back[i];
+            } else {
+                int y, x;
+                for (y = 0; y < g_h; y++) {
+                    uint32_t src_row = (uint32_t)y * (uint32_t)g_w;
+                    uint32_t dst_row = (uint32_t)y * (uint32_t)pitch;
+                    for (x = 0; x < g_w; x++) {
+                        g_lfb[dst_row + x] = g_back[src_row + x];
+                    }
+                }
+            }
+        }
+        unlock_interrupts(irq_flags);
     }
     return 0;
 }
@@ -340,6 +457,7 @@ void gfx_fb_leave(void) {
     g_mapped = 0;
     g_logged = 0;
     g_fit_n = 0;
+    g_saved_cursor_valid = 0;
     vga_desktop_set(0);
 }
 
@@ -357,5 +475,6 @@ void gfx_fb_leave(void) {}
 int gfx_fb_active(void) { return 0; }
 int gfx_fb_width(void) { return GFX_FB_WIDTH; }
 int gfx_fb_height(void) { return GFX_FB_HEIGHT; }
+void gfx_fb_update_cursor(void) {}
 
 #endif

@@ -8,7 +8,7 @@ LD = ld
 # -ffreestanding : Ne pas utiliser la bibliothèque standard C
 # -nostdlib : Ne pas lier avec la bibliothèque standard C
 # -fno-pie : Produire du code indépendant de la position
-CFLAGS = -m32 -ffreestanding -nostdlib -fno-pie -Wall -Wextra -O3 -msse2 -mfpmath=sse -mstackrealign -fomit-frame-pointer -I. -Iinclude -DCONFIG_UTF8_VGA=1
+CFLAGS = -m32 -ffreestanding -nostdlib -fno-pie -Wall -Wextra -O3 -msse2 -mfpmath=sse -mstackrealign -fomit-frame-pointer -I. -Iinclude -Ikernel -DCONFIG_UTF8_VGA=1
 ASFLAGS = -f elf32
 
 # Nom du fichier final de notre OS
@@ -37,7 +37,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/userspace_switch.o \
           build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/gdt.o build/idt.o build/vmm.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/interrupts.o \
-          build/keyboard.o build/timer.o build/ipc.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_http_tls.o
+          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_http_tls.o
 
 # L'ABI partagée influence notamment la taille de task_t et des messages IPC.
 # Une évolution de structure doit donc reconstruire toute l'image, pas seulement ipc.o.
@@ -119,6 +119,10 @@ build/keyboard.o: kernel/keyboard.c kernel/keyboard.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/kbd_buffer.o: kernel/input/kbd_buffer.c kernel/input/kbd_buffer.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/usb_tablet.o: kernel/input/usb_tablet.c kernel/input/usb_tablet.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

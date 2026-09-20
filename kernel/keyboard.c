@@ -2,6 +2,7 @@
 #include "kernel.h"
 #include "vga_console.h"
 #include "gfx_desktop.h"
+#include "input/usb_tablet.h"
 #include "os_syscalls.h"
 #include <stdint.h>
 
@@ -208,6 +209,7 @@ static int kbd_take_extended_prefix(uint8_t scancode) {
 void keyboard_poll_check() {
     static uint32_t poll_counter = 0;
     poll_counter++;
+    usb_tablet_poll();
     
     // Polling plus agressif en console si pas d'IRQ, mais avec moins de pauses
     int poll_freq = (debug_interrupt_count > 0) ? 20000 : 500; // fréquence d'essai
@@ -267,6 +269,7 @@ void keyboard_poll_check() {
 // Handler d'interruption optimisé
 void keyboard_interrupt_handler() {
     debug_interrupt_count++;
+    usb_tablet_poll();
     
     // Debug interruptions
     if (debug_interrupt_count <= 3) {
