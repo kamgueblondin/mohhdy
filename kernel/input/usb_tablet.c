@@ -1,7 +1,7 @@
 #include "usb_tablet.h"
-#include "pci.h"
-#include "gfx_fb.h"
-#include "gfx_desktop.h"
+#include "../pci.h"
+#include "../gfx_fb.h"
+#include "../gfx_desktop.h"
 
 extern unsigned char inb(unsigned short port);
 extern void outb(unsigned short port, unsigned char value);
