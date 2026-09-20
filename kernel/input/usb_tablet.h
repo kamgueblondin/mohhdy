@@ -2,6 +2,7 @@
 #define USB_TABLET_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 void usb_tablet_init(void);
 void usb_tablet_poll(void);
