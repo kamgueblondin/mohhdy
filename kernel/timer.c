@@ -50,23 +50,6 @@ void timer_handler(cpu_state_t* cpu) {
     extern volatile int g_reschedule_needed;
     timer_ticks++;
     
-    // Debug périodique pour tracer l'activité du timer
-    if (timer_ticks % 100 == 0) {
-        print_string_serial("TIMER_ALIVE: tick=");
-        if (timer_ticks < 10000) {
-            int thousands = timer_ticks / 1000;
-            int hundreds = (timer_ticks / 100) % 10;
-            if (thousands > 0) write_serial('0' + thousands);
-            write_serial('0' + hundreds);
-            write_serial('0');
-            write_serial('0');
-        } else {
-            write_serial('9');
-            write_serial('9');
-            write_serial('+');
-        }
-        print_string_serial("\n");
-    }
     
     if (vga_desktop_active()) {
         usb_tablet_poll();
