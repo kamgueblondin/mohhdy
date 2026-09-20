@@ -85,7 +85,7 @@ static int uhci_control_transfer(uint8_t dev_addr, uint8_t req_type, uint8_t req
 
     g_qh.element = (uint32_t)(uintptr_t)&g_ctrl_td[0];
 
-    for (int timeout = 0; timeout < 10000; timeout++) {
+    for (int timeout = 0; timeout < 50; timeout++) {
         if (!(g_ctrl_td[1].status & 0x80000000)) {
             uint32_t err = g_ctrl_td[1].status & 0x007E0000;
             return (err == 0) ? 0 : -1;
@@ -122,7 +122,7 @@ void usb_tablet_init(void) {
     pci_write32(dev.bus, dev.slot, dev.function, 0x04, pci_cmd);
 
     outw(g_io_base + UHCI_CMD, UHCI_CMD_HCRESET);
-    for (volatile int d = 0; d < 10000; d++);
+    for (volatile int d = 0; d < 1000; d++);
     outw(g_io_base + UHCI_CMD, 0);
     outw(g_io_base + UHCI_STS, 0xFFFF);
 
@@ -136,12 +136,12 @@ void usb_tablet_init(void) {
 
     if (p1 & 0x0001) {
         outw(g_io_base + UHCI_PORTSC1, 0x0200);
-        for (volatile int d = 0; d < 20000; d++);
+        for (volatile int d = 0; d < 2000; d++);
         outw(g_io_base + UHCI_PORTSC1, 0x0004);
     }
     if (p2 & 0x0001) {
         outw(g_io_base + UHCI_PORTSC2, 0x0200);
-        for (volatile int d = 0; d < 20000; d++);
+        for (volatile int d = 0; d < 2000; d++);
         outw(g_io_base + UHCI_PORTSC2, 0x0004);
     }
 
@@ -156,9 +156,14 @@ void usb_tablet_init(void) {
     outw(g_io_base + UHCI_FRNUM, 0);
     outw(g_io_base + UHCI_CMD, UHCI_CMD_RUN | UHCI_CMD_MAXP);
 
-    // Enumerate USB Tablet
-    uhci_control_transfer(0, 0x00, 0x05, g_dev_addr, 0); // SET_ADDRESS(2)
-    uhci_control_transfer(g_dev_addr, 0x00, 0x09, 1, 0); // SET_CONFIGURATION(1)
+    // Enumerate USB Tablet with short timeouts
+    int r1 = uhci_control_transfer(0, 0x00, 0x05, g_dev_addr, 0);
+    int r2 = uhci_control_transfer(g_dev_addr, 0x00, 0x09, 1, 0);
+
+    if (r1 != 0 || r2 != 0) {
+        print_string_serial("USB Tablet: Enumeration non terminee, fallback PS/2\n");
+        return;
+    }
 
     for (i = 0; i < 8; i++) g_report_buf[i] = 0;
 

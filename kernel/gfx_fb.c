@@ -396,9 +396,10 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
         }
     }
     dst = g_back ? g_back : (uint32_t *)g_lfb;
+    gfx_desktop_draw_no_cursor(&local, dst, g_w, g_h);
+
     {
         uint32_t irq_flags = lock_interrupts();
-        gfx_desktop_draw_no_cursor(&local, dst, g_w, g_h);
 
         gfx_desktop_get_mouse(&mx, &my, &btn);
         if (mx < 0) mx = g_w / 2;
