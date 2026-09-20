@@ -7,11 +7,27 @@
 
 extern unsigned char inb(unsigned short port);
 extern void outb(unsigned short port, unsigned char value);
-extern unsigned short inw(unsigned short port);
-extern void outw(unsigned short port, unsigned short value);
-extern unsigned int inl(unsigned short port);
-extern void outl(unsigned short port, unsigned int value);
 extern void print_string_serial(const char* str);
+
+static inline void outw(uint16_t port, uint16_t val) {
+    asm volatile ("outw %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline uint16_t inw(uint16_t port) {
+    uint16_t val;
+    asm volatile ("inw %1, %0" : "=a"(val) : "Nd"(port));
+    return val;
+}
+
+static inline void outl(uint16_t port, uint32_t val) {
+    asm volatile ("outl %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline uint32_t inl(uint16_t port) {
+    uint32_t val;
+    asm volatile ("inl %1, %0" : "=a"(val) : "Nd"(port));
+    return val;
+}
 
 #define UHCI_CMD         0x00
 #define UHCI_STS         0x02
