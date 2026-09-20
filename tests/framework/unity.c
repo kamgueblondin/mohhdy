@@ -107,7 +107,7 @@ void unity_test_ignore(const char* message) {
 
 // Fonctions utilitaires d'affichage
 void unity_print_char(char c) {
-    putc(c);
+    putchar(c);
 }
 
 void unity_print_string(const char* str) {

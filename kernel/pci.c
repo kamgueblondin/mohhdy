@@ -40,6 +40,38 @@ uint32_t pci_config_read32(uint8_t bus, uint8_t slot, uint8_t function,
 }
 #endif
 
+int pci_find_class_progif(uint8_t class_code, uint8_t subclass, uint8_t prog_if, pci_device_t* out) {
+    uint32_t bus;
+    uint32_t slot;
+    uint32_t function;
+    if (!out) return -1;
+    for (bus = 0; bus < 256U; ++bus) {
+        for (slot = 0; slot < 32U; ++slot) {
+            for (function = 0; function < 8U; ++function) {
+                uint32_t id = pci_config_read32((uint8_t)bus, (uint8_t)slot,
+                                                (uint8_t)function, 0);
+                uint32_t class_info;
+                if ((id & 0xffffU) == 0xffffU) continue;
+                class_info = pci_config_read32((uint8_t)bus, (uint8_t)slot,
+                                               (uint8_t)function, 8);
+                if ((class_info >> 24) != class_code ||
+                    ((class_info >> 16) & 0xffU) != subclass ||
+                    ((class_info >> 8) & 0xffU) != prog_if)
+                    continue;
+                out->bus = (uint8_t)bus;
+                out->slot = (uint8_t)slot;
+                out->function = (uint8_t)function;
+                pci_decode_id(id, out);
+                out->prog_if = (uint8_t)((class_info >> 8) & 0xffU);
+                out->subclass = (uint8_t)((class_info >> 16) & 0xffU);
+                out->class_code = (uint8_t)(class_info >> 24);
+                return 0;
+            }
+        }
+    }
+    return -2;
+}
+
 int pci_find_class(uint8_t class_code, uint8_t subclass, pci_device_t* out) {
     uint32_t bus;
     uint32_t slot;

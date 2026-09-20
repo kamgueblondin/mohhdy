@@ -121,6 +121,9 @@ void usb_tablet_init(void) {
     g_tablet_present = 0;
     rc = pci_find_device(0x8086, 0x7020, &dev);
     if (rc != 0) {
+        rc = pci_find_class_progif(0x0C, 0x03, 0x00, &dev);
+    }
+    if (rc != 0) {
         rc = pci_find_class(0x0C, 0x03, &dev);
     }
     if (rc != 0) {
