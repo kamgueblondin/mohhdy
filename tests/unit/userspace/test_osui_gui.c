@@ -21,6 +21,8 @@ static int run_line(const char *line) {
 static void setup(void) {
     osui_runtime_init();
     osui_gui_set_input("");
+    osui_gui_term_reset();
+    osui_gui_set_program_eval(0);
 }
 
 static void test_gui_command_canonical(void) {
@@ -139,6 +141,50 @@ static void test_gui_feed_slash_and_esc(void) {
     TEST_ASSERT(strstr(g_out, "gui exit") != NULL);
 }
 
+static int fake_shell_eval(const char *line, char *captured, int cap_max) {
+    const char *msg = "whoami ok root\n";
+    int i = 0;
+    (void)line;
+    if (!captured || cap_max <= 0) return 1;
+    while (msg[i] && i < cap_max - 1) {
+        captured[i] = msg[i];
+        i++;
+    }
+    captured[i] = 0;
+    return 0;
+}
+
+static void test_gui_live_shell_eval(void) {
+    char term[80];
+    int n, rc;
+    setup();
+    osui_gui_term_reset();
+    osui_gui_set_program_eval(fake_shell_eval);
+    TEST_ASSERT_EQUAL(0, run_line("/shell"));
+    osui_gui_set_input("whoami");
+    memset(g_out, 0, sizeof(g_out));
+    rc = osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT_EQUAL_STRING("shell", osui_get_pane());
+    TEST_ASSERT(osui_gui_term_count() >= 3);
+    n = osui_gui_term_count();
+    osui_gui_term_at(n - 1, term, (int)sizeof(term));
+    TEST_ASSERT(strstr(term, "whoami ok") != NULL);
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_SHELL, g_scene.pane);
+    TEST_ASSERT(g_scene.nterm >= 3);
+    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
+    TEST_ASSERT(strstr(g_snap, "nterm=") != NULL);
+    TEST_ASSERT(strstr(g_snap, "term=") != NULL);
+    TEST_ASSERT(strstr(g_snap, "whoami ok") != NULL);
+
+    osui_gui_set_input("!date");
+    memset(g_out, 0, sizeof(g_out));
+    rc = osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, rc);
+    osui_gui_set_program_eval(0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_gui_command_canonical);
@@ -147,6 +193,7 @@ int main(void) {
     RUN_TEST(test_snap_center_and_float);
     RUN_TEST(test_snap_stage_kind);
     RUN_TEST(test_gui_feed_slash_and_esc);
+    RUN_TEST(test_gui_live_shell_eval);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
