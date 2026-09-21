@@ -181,8 +181,39 @@ static void test_fb_present_repeated(void) {
     TEST_ASSERT_EQUAL(0, gfx_fb_present(&g_scene));
 }
 
+static void drain_kbd(void) {
+    char c;
+    while (kbd_get_char_nonblock(&c)) {
+    }
+}
+
+static void read_kbd(char *buf, int max) {
+    int n = 0;
+    char c;
+    if (!buf || max <= 0) return;
+    while (n < max - 1 && kbd_get_char_nonblock(&c)) {
+        buf[n++] = c;
+    }
+    buf[n] = 0;
+}
+
+static void click_at(int x, int y) {
+    gfx_desktop_set_mouse(x, y, 0);
+    gfx_desktop_set_mouse(x, y, 1);
+    gfx_desktop_set_mouse(x, y, 0);
+}
+
+static int rect_center_x(const gfx_rect_t *r) {
+    return r->x + r->w / 2;
+}
+
+static int rect_center_y(const gfx_rect_t *r) {
+    return r->y + r->h / 2;
+}
+
 static void test_desktop_layout_and_hit_test(void) {
     gfx_desktop_layout_t layout;
+    char got[48];
     blank_scene();
     gfx_desktop_get_layout(&g_scene, W, H, &layout);
 
@@ -196,17 +227,59 @@ static void test_desktop_layout_and_hit_test(void) {
     /* Click on "Envoyer" button when desktop active */
     vga_desktop_set(1);
     gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    drain_kbd();
 
-    /* Move mouse over "Envoyer" button and press left button (0 -> 1) */
-    int send_x = layout.chat_win.send_btn.x + 5;
-    int send_y = layout.chat_win.send_btn.y + 5;
-    gfx_desktop_set_mouse(send_x, send_y, 0);
-    gfx_desktop_set_mouse(send_x, send_y, 1); /* Rising edge click */
+    click_at(layout.chat_win.send_btn.x + 5, layout.chat_win.send_btn.y + 5);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\n", got);
 
-    /* Verify character was queued in keyboard buffer */
-    char c = 0;
-    TEST_ASSERT(kbd_get_char_nonblock(&c));
-    TEST_ASSERT_EQUAL('\n', c);
+    vga_desktop_set(0);
+}
+
+static void test_hit_regions_dock_menu_stage_close(void) {
+    gfx_desktop_layout_t layout;
+    char got[48];
+
+    blank_scene();
+    vga_desktop_set(1);
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    gfx_desktop_get_layout(&g_scene, W, H, &layout);
+    drain_kbd();
+
+    /* Dock /shell (index 2) */
+    click_at(rect_center_x(&layout.dock.icons[2]), rect_center_y(&layout.dock.icons[2]));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("/shell\n", got);
+
+    /* Top menu Browser-OS (index 1) */
+    drain_kbd();
+    click_at(rect_center_x(&layout.menu_items[1]), rect_center_y(&layout.menu_items[1]));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("/browser\n", got);
+
+    /* Stage mode badge */
+    drain_kbd();
+    click_at(rect_center_x(&layout.stage_badge), rect_center_y(&layout.stage_badge));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("/stage\n", got);
+
+    /* Scene IA first pill */
+    drain_kbd();
+    click_at(rect_center_x(&layout.scene_ia.pills[0]), rect_center_y(&layout.scene_ia.pills[0]));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("/stage-prompt reflexion\n", got);
+
+    /* Pane close (traffic) requires an active pane in last scene */
+    blank_scene();
+    g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+    g_scene.pane = OS_FB_PANE_SHELL;
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    gfx_desktop_get_layout(&g_scene, W, H, &layout);
+    TEST_ASSERT(layout.pane_win.active);
+    drain_kbd();
+    click_at(rect_center_x(&layout.pane_win.traffic), rect_center_y(&layout.pane_win.traffic));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("/center\n", got);
 
     vga_desktop_set(0);
 }
@@ -223,6 +296,7 @@ int main(void) {
     RUN_TEST(test_mouse_cursor_rendering);
     RUN_TEST(test_fb_present_repeated);
     RUN_TEST(test_desktop_layout_and_hit_test);
+    RUN_TEST(test_hit_regions_dock_menu_stage_close);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
