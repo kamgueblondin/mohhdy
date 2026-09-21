@@ -228,6 +228,53 @@ static int gpt2_gguf_cache_matches(const uint32_t* tokens, uint32_t count) {
     return 1;
 }
 
+uint32_t gpt2_gguf_infer_kv_cache_count(void) {
+    return gguf_cache.count;
+}
+
+int gpt2_gguf_infer_preload_kv_cache(const uint32_t* tokens, uint32_t token_count) {
+    uint32_t i;
+    gpt2_sample_top_k_state_t top_k;
+    int status;
+    if (!tokens || !gguf_ready || (!gguf_volume && !gguf_volume_fat32)) {
+        gguf_status = "GGUF: profil local indisponible";
+        return -1;
+    }
+    if (token_count == 0U || token_count > GPT2_GGUF_INFER_MAX_CONTEXT ||
+        token_count > gguf_generation.max_positions) {
+        gguf_status = "GGUF: taille de contexte non supportee";
+        return -2;
+    }
+    for (i = 0U; i < token_count; i++) {
+        if (tokens[i] >= gguf_generation.vocabulary) {
+            gguf_status = "GGUF: identifiant de jeton invalide";
+            return -3;
+        }
+    }
+    if (!gpt2_gguf_cache_matches(tokens, token_count)) {
+        gpt2_gguf_kv_cache_reset(&gguf_cache);
+        gguf_last_top_k_ready = 0U;
+    }
+    while (gguf_cache.count < token_count) {
+        uint32_t position = gguf_cache.count;
+        gpt2_sample_top_k_init(&top_k, 0, 0);
+        status = gpt2_gguf_generation_token_top_k_fat16(&gguf_generation, &gguf_cache,
+                                                         tokens[position], position,
+                                                         GPT2_GGUF_INFER_HEADS, 0.00001f,
+                                                         gguf_volume, gguf_filename,
+                                                         &gguf_workspace, &top_k);
+        if (status != 0) {
+            gguf_status = "GGUF: echec de lecture ou forward FAT16";
+            return -20 + status;
+        }
+        gguf_cache_tokens[position] = tokens[position];
+        gguf_last_top_k = top_k;
+        gguf_last_top_k_ready = 1U;
+    }
+    gguf_status = "GGUF: pre-chargement cache KV actif";
+    return (int)gguf_cache.count;
+}
+
 int gpt2_gguf_generate_next_sampled(const uint32_t* tokens, uint32_t token_count,
                                     uint32_t generated_count, uint32_t* next_token,
                                     uint32_t* rng_state) {
