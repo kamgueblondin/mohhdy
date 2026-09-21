@@ -453,6 +453,29 @@ static void test_owner_ata_generic_bypass_closes_when_storage_worker_live(void) 
         "vfs", 9, SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_ALL, "hello.txt"));
 }
 
+static void test_ata_overlay_io_only_via_worker_when_live(void) {
+    /* AOS-2175: ATA-backed overlay read/stat slice is worker-mediated when
+     * vfs-virtual is published. Owner grants do not authorize local overlay
+     * exercise; degraded mode without the worker remains open. */
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", 3));
+    /* No worker: any positive pid may exercise (historical local path). */
+    TEST_ASSERT_TRUE(service_registry_ata_overlay_io_via_worker(3));
+    TEST_ASSERT_TRUE(service_registry_ata_overlay_io_via_worker(11));
+    TEST_ASSERT_FALSE(service_registry_ata_overlay_io_via_worker(0));
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs-virtual", 11));
+    /* Worker live: only the published vfs-virtual PID. */
+    TEST_ASSERT_TRUE(service_registry_ata_overlay_io_via_worker(11));
+    TEST_ASSERT_FALSE(service_registry_ata_overlay_io_via_worker(3));
+    TEST_ASSERT_FALSE(service_registry_ata_overlay_io_via_worker(9));
+    /* Owner grant does not change the mediation gate. */
+    TEST_ASSERT_EQUAL(0, service_registry_backend_grant_scoped_source_prefix(
+        "vfs", 3, 3, SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_OVERLAY, ""));
+    TEST_ASSERT_FALSE(service_registry_ata_overlay_io_via_worker(3));
+    TEST_ASSERT_EQUAL(0, service_registry_remove("vfs-virtual", 11));
+    TEST_ASSERT_TRUE(service_registry_ata_overlay_io_via_worker(3));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_registry_rejects_invalid_names);
@@ -482,6 +505,7 @@ int main(void) {
     RUN_TEST(test_owner_fat_bypass_closes_when_storage_worker_live);
     RUN_TEST(test_owner_initrd_overlay_bypass_closes_when_storage_worker_live);
     RUN_TEST(test_owner_ata_generic_bypass_closes_when_storage_worker_live);
+    RUN_TEST(test_ata_overlay_io_only_via_worker_when_live);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

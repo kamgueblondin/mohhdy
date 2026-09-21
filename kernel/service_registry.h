@@ -60,6 +60,8 @@ int service_registry_backend_allowed_for_source_path(const char* name, int32_t p
                                                      uint32_t source, const char* path);
 /* AOS-2172/2173/2174: owner bypass for any valid backend scope only when vfs-virtual absent. */
 int service_registry_owner_bypasses_backend(const char* name, int32_t pid, uint32_t source);
+/* AOS-2175: ATA-backed overlay read/stat only exercisable by live vfs-virtual worker. */
+int service_registry_ata_overlay_io_via_worker(int32_t pid);
 void service_registry_backend_remove_name(const char* name);
 void service_registry_backend_remove_pid(int32_t pid);
 
