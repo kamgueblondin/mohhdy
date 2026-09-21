@@ -22,6 +22,10 @@ int gpt2_gguf_infer_init_fat32(const fat32_volume_t* volume, const char* filenam
 int gpt2_gguf_generate_next_sampled(const uint32_t* tokens, uint32_t token_count,
                                     uint32_t generated_count, uint32_t* next_token,
                                     uint32_t* rng_state);
+/* Pré-charge et réutilise le cache KV pour un contexte multi-tours sans ré-évaluation complète. */
+int gpt2_gguf_infer_preload_kv_cache(const uint32_t* tokens, uint32_t token_count);
+/* Retourne le nombre de jetons actuellement enregistrés dans le cache KV. */
+uint32_t gpt2_gguf_infer_kv_cache_count(void);
 /* Indique la disponibilité du profil GGUF local. */
 int gpt2_gguf_infer_ready(void);
 const char* gpt2_gguf_infer_status(void);

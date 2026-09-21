@@ -275,6 +275,10 @@ static void test_browser_tabs_and_dom_acts(void) {
     TEST_ASSERT(strstr(g_out, "customer=Bob") != NULL);
     TEST_ASSERT(strstr(g_out, "amount=42") != NULL);
 
+    rc = run_line("browser-form-fill Bob invalid_amount");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "validation_failed") != NULL);
+
     rc = run_line("browser-dom-act submit");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "form_submitted=true") != NULL);
@@ -282,6 +286,34 @@ static void test_browser_tabs_and_dom_acts(void) {
     rc = run_line("browser-dom-act reset");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "form_submitted=false") != NULL);
+}
+
+static void test_browser_fetch_and_storage(void) {
+    int rc;
+    setup();
+    rc = run_line("browser-tab-new https://mohhdy.local/app");
+    TEST_ASSERT_EQUAL(0, rc);
+
+    rc = run_line("browser-fetch /api/v1/data origin=self");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "status=200") != NULL);
+    TEST_ASSERT(strstr(g_out, "url=/api/v1/data") != NULL);
+
+    rc = run_line("browser-fetch /api/v1/data origin=http://unauthorized.org");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "origin_denied") != NULL);
+
+    rc = run_line("browser-storage-set theme dark");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "key=theme") != NULL);
+
+    rc = run_line("browser-storage-get theme");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "value=dark") != NULL);
+
+    rc = run_line("browser-storage-get missing_key");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "not_found") != NULL);
 }
 
 static void test_mcp_connectors_extended(void) {
@@ -319,6 +351,7 @@ int main(void) {
     RUN_TEST(test_fs_sandbox);
     RUN_TEST(test_guest_status_honesty);
     RUN_TEST(test_browser_tabs_and_dom_acts);
+    RUN_TEST(test_browser_fetch_and_storage);
     RUN_TEST(test_mcp_connectors_extended);
     unity_print_results();
     unity_cleanup();

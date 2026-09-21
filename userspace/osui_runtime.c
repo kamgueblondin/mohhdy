@@ -42,7 +42,8 @@ static const char *const k_cmds[] = {
     "origin-check",
     "browser-click", "browser-type", "browser-pointer", "browser-status",
     "browser-tab-new", "browser-tab-use", "browser-tab-list", "browser-tab-close",
-    "browser-form-fill", "browser-dom-act",
+    "browser-form-fill", "browser-dom-act", "browser-fetch", "fetch-sim",
+    "browser-storage-set", "browser-storage-get", "tab-storage",
     "mcp-invoice", "mcp-invoke", "mcp-list", "mcp-status",
     "fs-list", "fs-read", "fs-write",
     "stage", "stage-prompt",
@@ -110,11 +111,21 @@ typedef struct {
     char content[96];
 } osui_fs_t;
 
+#define OSUI_MAX_TAB_STORAGE 4
+
+typedef struct {
+    int used;
+    char key[24];
+    char value[64];
+} osui_kv_t;
+
 typedef struct {
     int used;
     char id[OSUI_ID];
     char url[64];
     char title[32];
+    osui_kv_t storage[OSUI_MAX_TAB_STORAGE];
+    int n_storage;
 } osui_tab_t;
 
 typedef struct {
@@ -1275,10 +1286,24 @@ static int cmd_browser_tab_close(char args[OSUI_MAX_ARGS][96], int narg, char *o
     return OSUI_ERR;
 }
 
+static int is_numeric_str(const char *s) {
+    int i = 0;
+    if (!s || !s[0]) return 0;
+    while (s[i]) {
+        if (s[i] < '0' || s[i] > '9') return 0;
+        i++;
+    }
+    return 1;
+}
+
 static int cmd_browser_form_fill(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0;
     if (narg < 2) {
         out_add(out, max, &p, "osui browser-form-fill error=usage <customer> <amount>\n");
+        return OSUI_ERR;
+    }
+    if (!args[0][0] || !is_numeric_str(args[1])) {
+        out_add(out, max, &p, "osui browser-form-fill error=validation_failed\n");
         return OSUI_ERR;
     }
     s_cpy(G.form_customer, 48, args[0]);
@@ -1290,6 +1315,101 @@ static int cmd_browser_form_fill(char args[OSUI_MAX_ARGS][96], int narg, char *o
     out_add(out, max, &p, G.form_amount);
     out_add(out, max, &p, " harness=dom_simulator\n");
     return OSUI_OK;
+}
+
+static int cmd_browser_fetch(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    const char *url = narg > 0 ? args[0] : "";
+    const char *origin = parse_origin_flag(args, narg);
+    unsigned rid = new_rid();
+    if (!url[0]) {
+        out_add(out, max, &p, "osui browser-fetch error=url_missing\n");
+        return OSUI_ERR;
+    }
+    if (!origin_ok(origin)) {
+        journal(cur() ? cur()->id : "", "fetch", "origin_denied", rid);
+        out_add(out, max, &p, "osui origin_denied origin=");
+        out_add(out, max, &p, origin);
+        emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, " status=403\n");
+        return OSUI_ERR;
+    }
+    journal(cur() ? cur()->id : "", "fetch", "ok", rid);
+    out_add(out, max, &p, "osui browser-fetch ok url=");
+    out_add(out, max, &p, url);
+    out_add(out, max, &p, " origin=");
+    out_add(out, max, &p, origin);
+    out_add(out, max, &p, " status=200 harness=dom_simulator\n");
+    return OSUI_OK;
+}
+
+static int cmd_browser_storage_set(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    osui_tab_t *tab;
+    int i;
+    if (G.current_tab < 0 || G.current_tab >= OSUI_MAX_TABS || !G.tabs[G.current_tab].used) {
+        out_add(out, max, &p, "osui browser-storage-set error=no_active_tab\n");
+        return OSUI_ERR;
+    }
+    if (narg < 2) {
+        out_add(out, max, &p, "osui browser-storage-set error=usage <key> <value>\n");
+        return OSUI_ERR;
+    }
+    tab = &G.tabs[G.current_tab];
+    for (i = 0; i < tab->n_storage; i++) {
+        if (s_cmp(tab->storage[i].key, args[0]) == 0) {
+            s_cpy(tab->storage[i].value, 64, args[1]);
+            out_add(out, max, &p, "osui browser-storage-set ok tab_id=");
+            out_add(out, max, &p, tab->id);
+            out_add(out, max, &p, " key=");
+            out_add(out, max, &p, args[0]);
+            out_add(out, max, &p, "\n");
+            return OSUI_OK;
+        }
+    }
+    if (tab->n_storage >= OSUI_MAX_TAB_STORAGE) {
+        out_add(out, max, &p, "osui browser-storage-set error=tab_storage_full\n");
+        return OSUI_ERR;
+    }
+    tab->storage[tab->n_storage].used = 1;
+    s_cpy(tab->storage[tab->n_storage].key, 24, args[0]);
+    s_cpy(tab->storage[tab->n_storage].value, 64, args[1]);
+    tab->n_storage++;
+    out_add(out, max, &p, "osui browser-storage-set ok tab_id=");
+    out_add(out, max, &p, tab->id);
+    out_add(out, max, &p, " key=");
+    out_add(out, max, &p, args[0]);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_browser_storage_get(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    osui_tab_t *tab;
+    int i;
+    if (G.current_tab < 0 || G.current_tab >= OSUI_MAX_TABS || !G.tabs[G.current_tab].used) {
+        out_add(out, max, &p, "osui browser-storage-get error=no_active_tab\n");
+        return OSUI_ERR;
+    }
+    if (narg < 1) {
+        out_add(out, max, &p, "osui browser-storage-get error=usage <key>\n");
+        return OSUI_ERR;
+    }
+    tab = &G.tabs[G.current_tab];
+    for (i = 0; i < tab->n_storage; i++) {
+        if (s_cmp(tab->storage[i].key, args[0]) == 0) {
+            out_add(out, max, &p, "osui browser-storage-get ok tab_id=");
+            out_add(out, max, &p, tab->id);
+            out_add(out, max, &p, " key=");
+            out_add(out, max, &p, args[0]);
+            out_add(out, max, &p, " value=");
+            out_add(out, max, &p, tab->storage[i].value);
+            out_add(out, max, &p, "\n");
+            return OSUI_OK;
+        }
+    }
+    out_add(out, max, &p, "osui browser-storage-get error=not_found\n");
+    return OSUI_ERR;
 }
 
 static int cmd_browser_dom_act(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
@@ -1760,6 +1880,9 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "browser-tab-close") == 0) return cmd_browser_tab_close(args, narg, out, max);
     if (s_cmp(cmd, "browser-form-fill") == 0) return cmd_browser_form_fill(args, narg, out, max);
     if (s_cmp(cmd, "browser-dom-act") == 0) return cmd_browser_dom_act(args, narg, out, max);
+    if (s_cmp(cmd, "browser-fetch") == 0 || s_cmp(cmd, "fetch-sim") == 0) return cmd_browser_fetch(args, narg, out, max);
+    if (s_cmp(cmd, "browser-storage-set") == 0) return cmd_browser_storage_set(args, narg, out, max);
+    if (s_cmp(cmd, "browser-storage-get") == 0 || s_cmp(cmd, "tab-storage") == 0) return cmd_browser_storage_get(args, narg, out, max);
     if (s_cmp(cmd, "mcp-invoice") == 0) return cmd_mcp_invoice(args, narg, out, max);
     if (s_cmp(cmd, "mcp-invoke") == 0) return cmd_mcp_invoke(args, narg, out, max);
     if (s_cmp(cmd, "mcp-list") == 0) return cmd_mcp_list(out, max);
