@@ -60,6 +60,8 @@ make run
 | `make qemu-smoke` | Scénarios QEMU classiques : overlay, persistance, spawn/yield et exec |
 | `make gguf-disk` | Construit un disque FAT16 de déploiement contenant le modèle sous l'alias `GPT2.GGU` |
 | `make qemu-gguf-smoke` | Démarre le disque GGUF, sélectionne `gpt2.gguf`, valide le premier token local réel puis `ai-continue` et affiche les deux latences |
+| `make gguf-benchmark` / `make gguf-benchmark-check` | Campagne TCG répétée + contrôle de synthèse JSON |
+| `make gguf-kvm-benchmark` / `make gguf-kvm-benchmark-check` | Campagne KVM Multiboot (même JSON) ; skip documenté si `/dev/kvm` inutilisable ; voir [docs/aos_gguf_kvm_latency_harness.md](docs/aos_gguf_kvm_latency_harness.md) |
 | `make integration-qemu` | Sept contrats QEMU AOS-022, AOS-024, AOS-025, NE2000, IPC, VFS avec montages dynamiques, I/O d'alias médiées, diagnostic public droit-source-requête corrélée sans préfixe actif, refus backend corrélé d'une mutation hors préfixe, révocation, notifications, cycle de vie et transfert Foundation ; l'ordonnanceur est séquentiel par défaut pour éviter la contention PS/2 ; les smokes cœur, VFS et IRQ0 réconcilient la ligne entière avant `ret`, effacent localement toute divergence et ne rejouent jamais une commande exécutée ; les sept contrats ont été validés en 760,9 s, sans assertion retirée |
 | `make qemu-irq0-preemption` | Lance `spin` puis exige un shell toujours réactif |
 | `make qemu-ai-provider` | Vérifie le diagnostic réseau et le blocage OpenAI |
@@ -197,13 +199,14 @@ Les items ASSIST (sessions, admin, simulateur, FS sandbox) sont des **devoirs du
 - [x] Tenir `make integration-qemu` sous 25 minutes sans relâcher les assertions métier : sept contrats complets séquentiels en 12 min 41 s en validation locale
 - [x] Étendre le VFS aux sous-répertoires FAT à un niveau, sous un contrat de non-écrasement et de non-rejeu des mutations incertaines
 - [x] Externaliser les I/O des alias VFS au worker Ring 3, avec droit-source-préfixe temporaire, corrélation stricte, diagnostic de scope non divulguant et absence de rejeu après issue incertaine
-- [ ] Optimisation supplémentaire de la latence GGUF sur une plateforme de référence stable, distincte de la variabilité QEMU TCG
+- [~] Latence GGUF plateforme de référence (KVM) : harness Multiboot `make gguf-kvm-benchmark` + seuils documentés ([docs/aos_gguf_kvm_latency_harness.md](docs/aos_gguf_kvm_latency_harness.md)) ; campagne chiffrée et optimisation runtime encore ouvertes tant qu'un hôte avec `/dev/kvm` utilisable et poids déployés n'a pas produit le JSON KVM
 - [x] Bootstrap DHCP/OFFER/REQUEST/ACK, ARP, DNS A, SYN/SYN-ACK, ClientHello, ServerHello minimal et ACK LLM observé sur NE2000 QEMU avec pair Ethernet local contrôlé
 - [x] Handshake TLS 1.2 authentifie local et POST HTTP 200 JSON sur pair QEMU (`make qemu-ne2k-tls-http`) ; pas d'hote public ni d'OpenAI
 - [x] Flux SSE chunked Ollama sur le meme pair TLS local (`make qemu-ne2k-tls-sse`) ; deltas incrementaux puis `[DONE]`, sans hote public ni OpenAI
 - [x] Fermeture TLS 1.2 réciproque sur pair QEMU local (`make qemu-ne2k-tls-close`) ; `close_notify` distant, ACK TCP, réponse `close_notify` AES-GCM authentifiée et clôture SSE sans rejeu local
 - [x] Second tour LLM sur la meme session TLS via `ai-next` (`make qemu-ne2k-tls-next`) ; HTTP puis SSE, sans nouveau handshake ni hote public
 - [x] Topologie QEMU multi-pairs strictement locale : deux cycles TLS/HTTP séquentiels sur sockets `127.0.0.1`, MAC et journaux distincts, sans TAP, clé ni hôte Internet
+- [x] Préalable PS/2 multi-QEMU (Garde 2) : `make qemu-ps2-dual` prouve deux invités TCG simultanés avec injection `sendkey` mutexée côté hôte ; la topologie réseau partagée simultanée reste ouverte
 - [x] Validation réseau, TLS 1.2, HTTP/SSE et OpenAI live : pile complète disponible sous `ai-provider openai`, `ai-credential <token>`, `ai-acquire api.openai.com`, `ai-tls-poll`, `ai-request` et `ai-stream-request`
 - [x] FAT16/FAT32 VFS : LFN à la racine et un niveau enfant 8.3 avec `vfs-mkdir` / `vfs-write` / `vfs-stat` / `vfs-list-page` / `vfs-rename` / `vfs-remove` / `vfs-rmdir` ; écrasement, second niveau, LFN enfant, renommage inter-répertoire et remplacement atomique hors contrat - [docs/aos_fat_volume.md](docs/aos_fat_volume.md)
 

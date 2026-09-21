@@ -132,6 +132,7 @@ make integration-qemu
 **Commandes de vérification.**
 
 ```text
+make qemu-ps2-dual
 make qemu-ne2k-status
 make qemu-ne2k-acquire
 make qemu-ne2k-tls-http
@@ -141,6 +142,11 @@ make qemu-ne2k-tls-next
 make qemu-ne2k-tls-multipair
 make qemu-smoke
 ```
+
+`make qemu-ps2-dual` est le préalable PS/2 : deux QEMU TCG vivants en parallèle,
+injection `sendkey` confirmée par écho, verrou hôte (pas de sendkey chevauché).
+La topologie réseau partagée reste hors livrable tant que ce gate n'est pas vert.
+Le multi-pairs TLS séquentiel ne change pas.
 
 **Risques et limites.**
 
@@ -162,6 +168,7 @@ make qemu-smoke
 - Rapport min / médiane / max / dispersion, isolant le temps de commande du boot (même contrat que le benchmark JSON existant)
 - Ne pas déclarer "moins d'une seconde" sans mesure native ou KVM
 - `make qemu-gguf-smoke` et `make test-all` restent verts. Pas de régression du chemin Q3_K réel
+- Harness : `make gguf-kvm-benchmark` / `make gguf-kvm-benchmark-check` (skip CI sans KVM)
 
 **Commandes de vérification.**
 
@@ -171,7 +178,11 @@ make gguf-disk
 make qemu-gguf-smoke
 make gguf-benchmark
 make gguf-benchmark-check
+make gguf-kvm-benchmark-check
+make gguf-kvm-benchmark
 ```
+
+`make gguf-kvm-benchmark` skippe (exit 0) sans `/dev/kvm` utilisable ou sans disque GGUF ; sur un hôte de référence, passer `GGUF_KVM_REQUIRE=1`. Détail : [aos_gguf_kvm_latency_harness.md](aos_gguf_kvm_latency_harness.md).
 
 **Risques et limites.**
 
