@@ -731,6 +731,8 @@ help:
 	@echo "  qemu-vfs-service - Vérifie une lecture via le médiateur VFS Ring 3"
 	@echo "  gguf-benchmark  - Mesure répétée du premier token et de ai-continue GGUF sous QEMU"
 	@echo "  gguf-benchmark-check - Vérifie le protocole de synthèse sans démarrer QEMU"
+	@echo "  gguf-kvm-benchmark - Latence GGUF sous QEMU KVM Multiboot (skip si /dev/kvm absent)"
+	@echo "  gguf-kvm-benchmark-check - Protocole KVM + probe /dev/kvm sans génération"
 	@echo "  gui-captures    - Screendumps QEMU GTK (DISPLAY=:1, artefacts PNG)"
 	@echo "  gui-record      - Video courte QEMU GTK (ffmpeg x11grab)"
 	@echo "  disk            - Cree build/overlay.img (IDE, 32 Kio) si absent"
@@ -767,7 +769,7 @@ help:
 	@echo "  make test-quick           # Tests pendant développement"
 	@echo "  make test-all             # 497 tests de non-régression avant push"
 
-.PHONY: all kernel-only run run-gui run-qemu-gtk test-build info-initrd info-user user-program userspace-all clean distclean help pack-initrd test-setup test-quick test-kernel test-userspace test-all test-performance test-valgrind test-clean pre-commit-tests ci-tests qemu-smoke qemu-ne2k-acquire qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-close qemu-ne2k-tls-next qemu-ne2k-tls-multipair gpt2-recovery gpt2-benchmark gpt2-tests qemu-gguf-smoke gguf-benchmark gguf-benchmark-check ci deps disk gui-captures gui-record
+.PHONY: all kernel-only run run-gui run-qemu-gtk test-build info-initrd info-user user-program userspace-all clean distclean help pack-initrd test-setup test-quick test-kernel test-userspace test-all test-performance test-valgrind test-clean pre-commit-tests ci-tests qemu-smoke qemu-ne2k-acquire qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-close qemu-ne2k-tls-next qemu-ne2k-tls-multipair gpt2-recovery gpt2-benchmark gpt2-tests qemu-gguf-smoke gguf-benchmark gguf-benchmark-check gguf-kvm-benchmark gguf-kvm-benchmark-check ci deps disk gui-captures gui-record
 
 
 gguf-disk:
@@ -776,7 +778,7 @@ gguf-disk:
 fat32-secondary-disk:
 	@python3 scripts/make_fat32_secondary_image.py --image $(FAT32_SECONDARY_IMAGE)
 
-.PHONY: qemu-gguf-smoke gguf-benchmark
+.PHONY: qemu-gguf-smoke gguf-benchmark gguf-kvm-benchmark gguf-kvm-benchmark-check
 qemu-ne2k-acquire: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_ne2k_llm_acquire.py
 
@@ -804,3 +806,14 @@ gguf-benchmark: $(OS_IMAGE) pack-initrd gguf-disk
 
 gguf-benchmark-check:
 	@python3 tests/scripts/test_benchmark_qemu_gguf_latency.py
+
+gguf-kvm-benchmark:
+	@# Pas de dependance dure au noyau : skip CI si /dev/kvm ou artefacts absents.
+	@# Campagne complete : make all && make gguf-disk && make gguf-kvm-benchmark
+	@if [ -f "$(GPT2_GGUF_DEPLOY_MODEL)" ] && [ ! -f "$(GGUF_DISK_IMAGE)" ]; then \
+		$(MAKE) -s gguf-disk; \
+	fi
+	@OVERLAY_DISK="$(abspath $(GGUF_DISK_IMAGE))" python3 tests/scripts/benchmark_qemu_gguf_kvm_latency.py
+
+gguf-kvm-benchmark-check:
+	@python3 tests/scripts/test_benchmark_qemu_gguf_kvm_latency.py
