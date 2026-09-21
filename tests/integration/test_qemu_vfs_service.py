@@ -78,6 +78,27 @@ def rejoin_spawn_preempted_puts(output):
     return "".join(pieces)
 
 
+
+def rejoin_task_resume_ok(output):
+    """Recolle `task-resume ok` + bruit + pid apres preemption IRQ0.
+
+    Exemple local : `task-resume ok` puis `vfsvirtual read ...` puis `8`.
+    """
+    pattern = re.compile(
+        r"(task-resume ok)[ \t]*"
+        r"((?:(?!task-resume ok\s+\d)[\s\S]){0,1200}?)"
+        r"(?<![0-9])(\d{1,4})(?![0-9A-Za-z])"
+    )
+
+    def replacer(match):
+        head, gap, pid = match.group(1), match.group(2), match.group(3)
+        if gap.strip() == "":
+            return match.group(0)
+        return "%s %s\n%s" % (head, pid, gap)
+
+    return pattern.sub(replacer, output, count=4)
+
+
 def normalized_log(output):
     """Retire les diagnostics noyau asynchrones sans recoller les réponses."""
     # Un timer peut couper une réponse au milieu d’un mot ou juste avant une
@@ -94,6 +115,8 @@ def normalized_log(output):
     output = re.sub(r"\[SCHED\] switching to task \d+\s*", "", output)
     # Prefixe puts() + spawn ok + suffixe de la meme ligne (flake CI vfs-service).
     output = rejoin_spawn_preempted_puts(output)
+    # task-resume ok <pid> coupe apres ok (SCHED + trace worker).
+    output = rejoin_task_resume_ok(output)
     return re.sub(r"[ \t]{2,}", " ", output)
 
 def wait_for(needle, proc, offset=0, timeout=25):
@@ -167,6 +190,13 @@ def verify_spawn_preempted_puts_rejoin():
     intact = normalized_log("vfsserver ready vfs\nspawn ok pid 3 vfsserver\n")
     if "vfsserver ready vfs" not in intact:
         raise RuntimeError("sonde spawn-preempt: chemin intact casse")
+    resume = normalized_log(
+        "task-resume ok [SCHED] switching to task 3\n"
+        "vfsvirtual read vfs-info\n"
+        "8\n"
+    )
+    if "task-resume ok 8" not in resume:
+        raise RuntimeError("sonde task-resume: pid non recolle")
 
 
 def verify_pre_ret_reconciliation_parser():
