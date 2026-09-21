@@ -28,9 +28,24 @@ int service_registry_lookup(const char* name);
 int service_registry_remove(const char* name, int32_t pid);
 int service_registry_grant(const char* name, int32_t owner_pid, int32_t grantee_pid);
 int service_registry_remove_pid(int32_t pid);
+#define SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY 8U
+
+typedef struct {
+    uint32_t sequence;
+    int32_t watcher_pid;
+    char name[OS_SERVICE_NAME_MAX];
+    int32_t old_pid;
+    int32_t new_pid;
+    uint32_t reason;
+    uint8_t acked;
+} service_registry_notify_event_t;
+
 int service_registry_subscribe(const char* name, int32_t pid);
 int service_registry_collect_watchers(const char* name, int32_t* out, uint32_t max);
 int service_registry_remove_watcher_pid(int32_t pid);
+int service_registry_notify_record(const char* name, int32_t watcher_pid, int32_t old_pid, int32_t new_pid, uint32_t reason, uint32_t* out_sequence);
+int service_registry_notify_ack(int32_t watcher_pid, uint32_t sequence);
+int service_registry_notify_history_count(int32_t watcher_pid, uint32_t* out_acked, uint32_t* out_unacked);
 int service_registry_collect_owned(int32_t pid, service_registry_entry_t* out, uint32_t max);
 int service_registry_pid_is_owner(int32_t pid);
 int service_registry_name_valid(const char* name);

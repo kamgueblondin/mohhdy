@@ -2,6 +2,8 @@
 
 static service_registry_entry_t service_entries[SERVICE_REGISTRY_CAPACITY];
 static service_registry_watch_t service_watches[SERVICE_REGISTRY_WATCH_CAPACITY];
+static service_registry_notify_event_t service_notify_history[SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY];
+static uint32_t service_notify_seq_counter = 0U;
 typedef struct { int32_t owner_pid; int32_t grantee_pid; uint32_t rights; uint32_t sources; char prefix[OS_SERVICE_BACKEND_PREFIX_MAX]; char name[OS_SERVICE_NAME_MAX]; } service_backend_cap_t;
 static service_backend_cap_t service_backend_caps[SERVICE_REGISTRY_BACKEND_CAPACITY];
 
@@ -122,6 +124,16 @@ void service_registry_init(void) {
         service_watches[i].pid = 0;
         service_watches[i].name[0] = '\0';
     }
+    for (i = 0U; i < SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY; i++) {
+        service_notify_history[i].sequence = 0U;
+        service_notify_history[i].watcher_pid = 0;
+        service_notify_history[i].name[0] = '\0';
+        service_notify_history[i].old_pid = 0;
+        service_notify_history[i].new_pid = 0;
+        service_notify_history[i].reason = 0U;
+        service_notify_history[i].acked = 0U;
+    }
+    service_notify_seq_counter = 0U;
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         service_backend_caps[i].owner_pid = 0;
         service_backend_caps[i].grantee_pid = 0;
@@ -238,7 +250,71 @@ int service_registry_remove_pid(int32_t pid) {
             removed++;
         }
     }
+    for (i = 0U; i < SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY; i++) {
+        if (service_notify_history[i].watcher_pid == pid) {
+            service_notify_history[i].sequence = 0U;
+            service_notify_history[i].watcher_pid = 0;
+            service_notify_history[i].name[0] = '\0';
+            service_notify_history[i].acked = 0U;
+        }
+    }
     return removed > 0 ? 0 : OS_SERVICE_NOT_FOUND;
+}
+
+int service_registry_notify_record(const char* name, int32_t watcher_pid, int32_t old_pid, int32_t new_pid, uint32_t reason, uint32_t* out_sequence) {
+    uint32_t i;
+    int slot = -1;
+    if (!service_registry_name_valid(name) || watcher_pid <= 0) return OS_SERVICE_BAD_NAME;
+    service_notify_seq_counter++;
+    if (service_notify_seq_counter == 0U) service_notify_seq_counter = 1U;
+
+    for (i = 0U; i < SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY; i++) {
+        if (service_notify_history[i].watcher_pid == 0) {
+            slot = (int)i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        slot = (int)(service_notify_seq_counter % SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY);
+    }
+    service_notify_history[slot].sequence = service_notify_seq_counter;
+    service_notify_history[slot].watcher_pid = watcher_pid;
+    copy_name(service_notify_history[slot].name, name);
+    service_notify_history[slot].old_pid = old_pid;
+    service_notify_history[slot].new_pid = new_pid;
+    service_notify_history[slot].reason = reason;
+    service_notify_history[slot].acked = 0U;
+    if (out_sequence) *out_sequence = service_notify_seq_counter;
+    return 0;
+}
+
+int service_registry_notify_ack(int32_t watcher_pid, uint32_t sequence) {
+    uint32_t i;
+    if (watcher_pid <= 0 || sequence == 0U) return OS_SERVICE_BAD_NAME;
+    for (i = 0U; i < SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY; i++) {
+        if (service_notify_history[i].watcher_pid == watcher_pid &&
+            service_notify_history[i].sequence == sequence) {
+            service_notify_history[i].acked = 1U;
+            return 0;
+        }
+    }
+    return OS_SERVICE_NOT_FOUND;
+}
+
+int service_registry_notify_history_count(int32_t watcher_pid, uint32_t* out_acked, uint32_t* out_unacked) {
+    uint32_t i;
+    uint32_t acked = 0U, unacked = 0U;
+    if (watcher_pid <= 0) return OS_SERVICE_BAD_NAME;
+    for (i = 0U; i < SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY; i++) {
+        if (service_notify_history[i].watcher_pid == watcher_pid &&
+            service_notify_history[i].sequence > 0U) {
+            if (service_notify_history[i].acked) acked++;
+            else unacked++;
+        }
+    }
+    if (out_acked) *out_acked = acked;
+    if (out_unacked) *out_unacked = unacked;
+    return 0;
 }
 
 void service_registry_backend_remove_name(const char* name) {
