@@ -612,7 +612,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ipc-foundation qemu-vfs-service qemu-service-grant
+.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ipc-foundation qemu-vfs-service qemu-service-grant
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -623,6 +623,11 @@ qemu-ne2k-status: $(OS_IMAGE) pack-initrd disk
 
 qemu-ne2k-tls-multipair: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_ne2k_tls_multipair.py
+
+# Garde 2 gate: two simultaneous TCG guests + host-mutexed PS/2 inject.
+# Not part of integration-qemu. Shared topology stays blocked until this stays green.
+qemu-ps2-dual: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_ps2_dual_inject.py
 qemu-ipc-foundation: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_ipc_foundation.py
 
@@ -647,7 +652,7 @@ qemu-osui-gui-fit: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_fit.py
 
 # Les sept contrats restent inchangés ; l’ordonnanceur les exécute dans un pool borne
-# a deux QEMU par defaut. QEMU_INTEGRATION_JOBS=1 conserve le mode strictement sequentiel.
+# sequentiel par defaut (evite la contention PS/2). QEMU_INTEGRATION_JOBS=2 pour diagnostic local.
 integration-qemu: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/run_qemu_contracts.py
 
@@ -711,7 +716,7 @@ help:
 	@echo "  test-userspace  - Tests des modules userspace uniquement"  
 	@echo "  test-all        - Suite complète de tests (< 5 min)"
 	@echo "  qemu-smoke      - Boots QEMU : overlay, extras, persist, spawn, exec"
-	@echo "  integration-qemu - Sept contrats QEMU, deux workers bornes (QEMU_INTEGRATION_JOBS=1 pour le mode sequentiel)"
+	@echo "  integration-qemu - Sept contrats QEMU sequentiels par defaut (QEMU_INTEGRATION_JOBS=N pour diagnostic)"
 	@echo "  qemu-integration-plan - Affiche les sept contrats sans demarrer QEMU"
 	@echo "  qemu-irq0-preemption - Prouve la reprise du shell après spawn spin"
 	@echo "  qemu-ai-provider - Vérifie le stub OpenAI/réseau explicite"
@@ -721,6 +726,7 @@ help:
 	@echo "  qemu-ne2k-tls-close - close_notify TLS distant et réponse authentifiée sur pair QEMU"
 	@echo "  qemu-ne2k-tls-next - Second tour LLM sur la meme session TLS via ai-next"
 	@echo "  qemu-ne2k-tls-multipair - Deux liens NE2000/TLS locaux séquentiels, MAC et journaux séparés"
+	@echo "  qemu-ps2-dual - Garde 2: deux QEMU TCG simultanés + injection PS/2 (hors integration-qemu)"
 	@echo "  qemu-ipc-foundation - Vérifie l’IPC entre tâches Ring 3"
 	@echo "  qemu-vfs-service - Vérifie une lecture via le médiateur VFS Ring 3"
 	@echo "  gguf-benchmark  - Mesure répétée du premier token et de ai-continue GGUF sous QEMU"
@@ -734,7 +740,7 @@ help:
 	@echo "  gpt2-benchmark  - Modèle requis : mesure de latence QEMU SSE2"
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  qemu-osui-runtime - Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA ; hors integration-qemu)"
-	@echo "  qemu-osui-gui   - Fumee QEMU : commande gui, screendump VBE, console (hors integration-qemu)"
+	@echo "  qemu-osui-gui   - Fumee QEMU : gui, screendump VBE, tablet click dock, console (hors integration-qemu)"
 	@echo "  qemu-osui-gui-fit - GTK : VBE suit la fenetre (DISPLAY, hors integration-qemu)"
 	@echo "  osui-registry-check - Verifie JSON/header vs userspace/shell.c"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"

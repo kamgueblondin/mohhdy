@@ -1,4 +1,5 @@
 #include "timer.h"
+#include "kernel.h"
 #include "task/task.h"
 #include "vga_console.h"
 #include "gfx_fb.h"

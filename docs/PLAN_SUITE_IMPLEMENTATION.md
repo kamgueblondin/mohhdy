@@ -132,6 +132,7 @@ make integration-qemu
 **Commandes de vérification.**
 
 ```text
+make qemu-ps2-dual
 make qemu-ne2k-status
 make qemu-ne2k-acquire
 make qemu-ne2k-tls-http
@@ -141,6 +142,11 @@ make qemu-ne2k-tls-next
 make qemu-ne2k-tls-multipair
 make qemu-smoke
 ```
+
+`make qemu-ps2-dual` est le préalable PS/2 : deux QEMU TCG vivants en parallèle,
+injection `sendkey` confirmée par écho, verrou hôte (pas de sendkey chevauché).
+La topologie réseau partagée reste hors livrable tant que ce gate n'est pas vert.
+Le multi-pairs TLS séquentiel ne change pas.
 
 **Risques et limites.**
 
