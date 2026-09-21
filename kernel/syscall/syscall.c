@@ -718,6 +718,8 @@ int sys_fat16_read(const char* name, char* buffer, uint32_t max) {
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_READ,
                                              OS_SERVICE_BACKEND_SOURCE_FAT16, name))
         return OS_VFS_BACKEND_DENIED;
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_DENIED;
     if (!name || !buffer || max == 0U) return OS_FAT16_BAD_PATH;
     return fat16_read_path(fat16_root(), name, buffer, max);
 }
@@ -725,12 +727,16 @@ int sys_fat16_read(const char* name, char* buffer, uint32_t max) {
 int sys_fat16_list(os_fat16_dirent_t* out, uint32_t capacity) {
     if (!vfs_backend_allowed_for_source(SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_FAT16))
         return OS_VFS_BACKEND_DENIED;
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_DENIED;
     if (!out || capacity == 0U) return OS_FAT16_BAD_PATH;
     return fat16_list_root(fat16_root(), out, capacity);
 }
 
 int sys_fat16_list_page(os_fat16_dirent_t* out, uint32_t capacity, uint32_t start) {
     if (!vfs_backend_allowed_for_source(SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_FAT16))
+        return OS_VFS_BACKEND_DENIED;
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!out || capacity == 0U) return OS_FAT16_BAD_PATH;
     return fat16_list_root_page(fat16_root(), start, out, capacity);
@@ -741,6 +747,8 @@ int sys_fat16_list_path(const char* path, os_fat16_dirent_t* out, uint32_t capac
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_READ,
                                              OS_SERVICE_BACKEND_SOURCE_FAT16, path))
         return OS_VFS_BACKEND_DENIED;
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_DENIED;
     if (!path || !out || capacity == 0U) return OS_FAT16_BAD_PATH;
     return fat16_list_path_page(fat16_root(), path, start, out, capacity);
 }
@@ -749,6 +757,8 @@ int sys_fat32_read(const char* name, char* buffer, uint32_t max) {
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_READ,
                                              OS_SERVICE_BACKEND_SOURCE_FAT32, name))
         return OS_VFS_BACKEND_DENIED;
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_DENIED;
     if (!name || !buffer || max == 0U) return OS_FAT16_BAD_PATH;
     return fat32_read_path(fat32_root(), name, (uint8_t*)buffer, max);
 }
@@ -756,12 +766,16 @@ int sys_fat32_read(const char* name, char* buffer, uint32_t max) {
 int sys_fat32_list(os_fat16_dirent_t* out, uint32_t capacity) {
     if (!vfs_backend_allowed_for_source(SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_FAT32))
         return OS_VFS_BACKEND_DENIED;
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_DENIED;
     if (!out || capacity == 0U) return OS_FAT16_BAD_PATH;
     return fat32_list_root(fat32_root(), out, capacity);
 }
 
 int sys_fat32_list_page(os_fat16_dirent_t* out, uint32_t capacity, uint32_t start) {
     if (!vfs_backend_allowed_for_source(SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_FAT32))
+        return OS_VFS_BACKEND_DENIED;
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!out || capacity == 0U) return OS_FAT16_BAD_PATH;
     return fat32_list_root_page(fat32_root(), start, out, capacity);
@@ -771,6 +785,8 @@ int sys_fat32_list_path(const char* path, os_fat16_dirent_t* out, uint32_t capac
                         uint32_t start) {
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_READ,
                                              OS_SERVICE_BACKEND_SOURCE_FAT32, path))
+        return OS_VFS_BACKEND_DENIED;
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!path || !out || capacity == 0U) return OS_FAT16_BAD_PATH;
     return fat32_list_path_page(fat32_root(), path, start, out, capacity);
