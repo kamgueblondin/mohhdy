@@ -380,6 +380,7 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
                 g_on = 1;
                 g_saved_cursor_valid = 0;
                 vga_desktop_set(1);
+                gfx_desktop_clamp_mouse();
                 log_fb_size(g_logged ? "osui gui fb resize " : "osui gui fb ", nw, nh);
                 g_logged = 1;
             }

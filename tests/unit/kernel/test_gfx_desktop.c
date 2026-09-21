@@ -236,6 +236,22 @@ static void test_desktop_layout_and_hit_test(void) {
     vga_desktop_set(0);
 }
 
+
+static void test_mouse_clamped_to_fb(void) {
+    int x = 0, y = 0;
+    uint8_t b = 0;
+    vga_desktop_set(0);
+    gfx_desktop_set_mouse(5000, 4000, 0);
+    gfx_desktop_get_mouse(&x, &y, &b);
+    TEST_ASSERT_EQUAL(GFX_FB_WIDTH - 1, x);
+    TEST_ASSERT_EQUAL(GFX_FB_HEIGHT - 1, y);
+    gfx_desktop_set_mouse(10, 20, 0);
+    gfx_desktop_move_mouse(20000, 20000, 0);
+    gfx_desktop_get_mouse(&x, &y, &b);
+    TEST_ASSERT_EQUAL(GFX_FB_WIDTH - 1, x);
+    TEST_ASSERT_EQUAL(GFX_FB_HEIGHT - 1, y);
+}
+
 static void test_hit_regions_dock_menu_stage_close(void) {
     gfx_desktop_layout_t layout;
     char got[48];
@@ -296,6 +312,7 @@ int main(void) {
     RUN_TEST(test_mouse_cursor_rendering);
     RUN_TEST(test_fb_present_repeated);
     RUN_TEST(test_desktop_layout_and_hit_test);
+    RUN_TEST(test_mouse_clamped_to_fb);
     RUN_TEST(test_hit_regions_dock_menu_stage_close);
     unity_print_results();
     unity_cleanup();

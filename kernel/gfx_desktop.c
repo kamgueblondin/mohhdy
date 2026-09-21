@@ -90,6 +90,20 @@ static void gfx_desktop_handle_click(int x, int y) {
     }
 }
 
+static void clamp_mouse_to_fb(void) {
+    int w = gfx_fb_width();
+    int h = gfx_fb_height();
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    if (g_mouse_x < 0 || g_mouse_y < 0) return;
+    if (g_mouse_x >= w) g_mouse_x = w - 1;
+    if (g_mouse_y >= h) g_mouse_y = h - 1;
+}
+
+void gfx_desktop_clamp_mouse(void) {
+    clamp_mouse_to_fb();
+}
+
 void gfx_desktop_set_mouse(int x, int y, uint8_t buttons) {
     uint8_t left_now = (buttons & 1);
     uint8_t left_prev = (g_prev_buttons & 1);
@@ -97,6 +111,7 @@ void gfx_desktop_set_mouse(int x, int y, uint8_t buttons) {
     g_mouse_x = x;
     g_mouse_y = y;
     g_mouse_buttons = buttons;
+    clamp_mouse_to_fb();
 
     if (vga_desktop_active() && !left_prev && left_now) {
         gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
@@ -126,6 +141,7 @@ void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons) {
     g_mouse_x += dx;
     g_mouse_y += dy;
     g_mouse_buttons = buttons;
+    clamp_mouse_to_fb();
 
     if (vga_desktop_active() && !left_prev && left_now) {
         gfx_desktop_handle_click(g_mouse_x, g_mouse_y);

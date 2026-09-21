@@ -38,3 +38,10 @@ This document summarizes findings regarding host and guest mouse input, GTK grab
 - Unit coverage: `tests/unit/kernel/test_gfx_desktop.c` clicks dock/menu/stage/send/close layout centers and checks the keyboard buffer.
 - This proves guest hit-test wiring without a host GTK grab. Interactive `make run-gui` may still require `Ctrl+Alt+G` to release the host pointer grab after clicking inside the GTK window.
 - Keyboard OS-UI path (`/browser`, `/shell`, `whoami`, `ai hello`, `/center`, `console`) remains covered in the same script after the click smoke.
+
+## 6. Resize-safe tablet input (OS-UI-G-2 / AOS-003)
+- `make qemu-osui-gui-fit` still proves VBE follows the GTK window via COM2 WxH (grow then shrink).
+- `make qemu-osui-gui-fit-input` extends that path: after `gui` and UHCI tablet enum, QMP absolute tablet clicks hit dock `/shell` at the boot size, again after grow, and again after shrink. Serial must show `osui gui line=/shell` and `live_eval=true` after each click.
+- Guest mapping uses current `gfx_fb_width`/`gfx_fb_height` in `usb_tablet_poll`. After a COM2-driven VBE resize, `gfx_desktop_clamp_mouse` keeps stored pointer coords inside the new framebuffer so hit-test and cursor stay consistent.
+- Existing `make qemu-osui-gui` hit-test smoke (OS-UI-G-1) is unchanged and does not resize the window.
+- Grow/shrink window sizes default to 1200x750 and 800x600 (override with OSUI_FIT_GROW_W/H and OSUI_FIT_SHRINK_W/H) so the smoke fits common 1280x800 displays.
