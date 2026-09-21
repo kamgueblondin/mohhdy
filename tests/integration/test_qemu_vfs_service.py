@@ -687,7 +687,8 @@ def main():
             send_command_until(monitor, "vfs-backend-grant-mutate %s" % mutate_claim_pid,
                                "vfsserver backend scoped grant request", proc)
             wait_for("vfs-backend-grant-mutate ok request", proc, before_mutate_grant)
-            wait_for("vfsmutateclaim mutate-only enforced", proc, before_mutate_grant)
+            # AOS-2176: worker live => mutate grant does not authorize local overlay I/O.
+            wait_for("vfsmutateclaim mutate-only worker-mediated", proc, before_mutate_grant)
             before_mutate_status = len(log_text())
             send_command_until(monitor, "vfs-backend-status %s" % mutate_claim_pid,
                                "vfsserver backend status request", proc)
@@ -726,11 +727,13 @@ def main():
             before_mkdir = len(log_text())
             send_command_until(monitor, "vfs-mkdir overlay/newdir", "vfsserver mkdir request", proc)
             wait_for("vfs-mkdir ok request", proc, before_mkdir)
+            wait_for("vfsvirtual ata-backed mkdir overlay/newdir", proc, before_mkdir)
             before_overlay_dir_list = len(log_text())
             send_command_until(monitor, "vfs-list overlay/", "vfsserver list request", proc)
             wait_for("newdir", proc, before_overlay_dir_list)
             before_rmdir = len(log_text())
             send_command_until(monitor, "vfs-rmdir overlay/newdir", "vfs-rmdir ok request", proc)
+            wait_for("vfsvirtual ata-backed rmdir overlay/newdir", proc, before_rmdir)
             before_overlay_after_rmdir = len(log_text())
             send_command_until(monitor, "vfs-list overlay/", "vfsserver list request", proc)
             wait_for("vfs-list ok count 0", proc, before_overlay_after_rmdir)
@@ -1198,9 +1201,12 @@ def main():
             send_command_until(monitor, "vfs-write overlay/note.txt vfsok",
                                "vfsserver write request", proc)
             wait_for("vfs-write ok request", proc, before_write)
+            wait_for("vfsvirtual ata-backed write overlay/note.txt", proc, before_write)
             before_overlay_list = len(log_text())
             send_command_until(monitor, "vfs-list overlay/", "vfsserver list request", proc)
             wait_for("vfsserver delegated storage list", proc, before_overlay_list)
+            wait_for("vfsvirtual storage list overlay/", proc, before_overlay_list)
+            wait_for("vfsvirtual ata-backed list overlay/", proc, before_overlay_list)
             wait_for("note.txt", proc, before_overlay_list)
             before_overlay_stat = len(log_text())
             send_command_until(monitor, "vfs-stat overlay/note.txt", "vfsserver stat request", proc)
@@ -1217,6 +1223,7 @@ def main():
             before_rename = len(log_text())
             send_command_until(monitor, "vfs-rename overlay/note.txt overlay/moved.txt",
                                "vfs-rename ok request", proc)
+            wait_for("vfsvirtual ata-backed rename overlay/note.txt", proc, before_rename)
             before_old_read = len(log_text())
             send_command_until(monitor, "vfs-read overlay/note.txt",
                                "vfs-read: lecture refusee ou fichier absent", proc)
@@ -1226,6 +1233,7 @@ def main():
             before_remove = len(log_text())
             send_command_until(monitor, "vfs-remove overlay/moved.txt",
                                "vfs-remove ok request", proc)
+            wait_for("vfsvirtual ata-backed remove overlay/moved.txt", proc, before_remove)
             before_removed_read = len(log_text())
             send_command_until(monitor, "vfs-read overlay/moved.txt",
                                "vfs-read: lecture refusee ou fichier absent", proc)

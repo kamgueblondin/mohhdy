@@ -454,9 +454,9 @@ static void test_owner_ata_generic_bypass_closes_when_storage_worker_live(void) 
 }
 
 static void test_ata_overlay_io_only_via_worker_when_live(void) {
-    /* AOS-2175: ATA-backed overlay read/stat slice is worker-mediated when
-     * vfs-virtual is published. Owner grants do not authorize local overlay
-     * exercise; degraded mode without the worker remains open. */
+    /* AOS-2175/2176: ATA-backed overlay read/stat/list/mutate is worker-
+     * mediated when vfs-virtual is published. Owner grants do not authorize
+     * local overlay exercise; degraded mode without the worker remains open. */
     service_registry_init();
     TEST_ASSERT_EQUAL(0, service_registry_register("vfs", 3));
     /* No worker: any positive pid may exercise (historical local path). */
