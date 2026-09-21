@@ -6,7 +6,7 @@ CFLAGS_BASE = -Wall -Wextra -std=c99 -I. -I.. -I../kernel -I../include -DKERNEL_
 # Les mocks de syscall reproduisent des registres i386 32 bits. Sans cette
 # base non-PIE, des pointeurs hôte PIE 64 bits seraient tronqués dans EBX/ECX.
 CFLAGS_KERNEL = $(CFLAGS_BASE) -DUSE_INLINE_ASM -g -m32 -fno-pie -no-pie
-CFLAGS_USER = $(CFLAGS_BASE) -g
+CFLAGS_USER = $(CFLAGS_BASE) -g -m32 -fno-pie -no-pie
 
 # Répertoires
 TEST_DIR = .
@@ -371,7 +371,7 @@ install-deps:
 # Nettoyage
 clean:
 	@echo "Cleaning test binaries and logs..."
-	@rm -rf $(BUILD_DIR)/$(TEST_DIR)
+	@rm -rf $(BUILD_DIR)/unit $(BUILD_DIR)/integration $(BUILD_DIR)/system $(BUILD_DIR)/performance $(BUILD_DIR)/robustness
 	@rm -f $(LOG_DIR)/test_results_*.log
 	@echo "Clean completed"
 
