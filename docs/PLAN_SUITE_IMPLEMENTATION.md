@@ -162,6 +162,7 @@ make qemu-smoke
 - Rapport min / médiane / max / dispersion, isolant le temps de commande du boot (même contrat que le benchmark JSON existant)
 - Ne pas déclarer "moins d'une seconde" sans mesure native ou KVM
 - `make qemu-gguf-smoke` et `make test-all` restent verts. Pas de régression du chemin Q3_K réel
+- Harness : `make gguf-kvm-benchmark` / `make gguf-kvm-benchmark-check` (skip CI sans KVM)
 
 **Commandes de vérification.**
 
@@ -171,7 +172,11 @@ make gguf-disk
 make qemu-gguf-smoke
 make gguf-benchmark
 make gguf-benchmark-check
+make gguf-kvm-benchmark-check
+make gguf-kvm-benchmark
 ```
+
+`make gguf-kvm-benchmark` skippe (exit 0) sans `/dev/kvm` utilisable ou sans disque GGUF ; sur un hôte de référence, passer `GGUF_KVM_REQUIRE=1`. Détail : [aos_gguf_kvm_latency_harness.md](aos_gguf_kvm_latency_harness.md).
 
 **Risques et limites.**
 
@@ -300,7 +305,7 @@ Les rangs 0-4 sont **ce fichier**. Les rangs OS-UI sont le [plan maitre](PLAN_SE
 | 0 | Budget CI QEMU | Prototype guest | Garder, ne pas relacher |
 | 1 | ACL prefixee | Prototype guest | Garder les preuves negatives |
 | 2 | Topologie locale partagee | Prototype guest | Optionnel, bloque par PS/2 simultane |
-| 3 | Latence GGUF materiel / KVM | Prototype guest | Item ouvert README + priorite 3 `mohhdy_us.md` |
+| 3 | Latence GGUF materiel / KVM | Prototype guest | Harness KVM livré ; campagne chiffrée / optimisation encore ouvertes |
 | 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | Item partiel README `[~]` |
 | - | Reseau public | Prototype guest | Sous condition, hors CI |
 | - | Identite / capabilities | Increment Foundation | Petits pas, pas US-016, pas US-001 total |
