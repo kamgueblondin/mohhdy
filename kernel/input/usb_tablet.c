@@ -92,12 +92,12 @@ static int uhci_control_transfer(uint8_t dev_addr, uint8_t req_type, uint8_t req
     g_setup_pkt.wLength = 0;
 
     g_ctrl_td[0].link = (uint32_t)(uint32_t)&g_ctrl_td[1] | UHCI_TD_LINK_DEPTH;
-    g_ctrl_td[0].status = 0x80000000 | (3 << 27);
+    g_ctrl_td[0].status = 0x00800000 | (3 << 27) | (1 << 26);
     g_ctrl_td[0].token = (7 << 21) | (0x00 << 19) | (0 << 15) | ((uint32_t)dev_addr << 8) | 0x2D;
     g_ctrl_td[0].buffer = (uint32_t)(uint32_t)&g_setup_pkt;
 
     g_ctrl_td[1].link = UHCI_TD_LINK_TERM;
-    g_ctrl_td[1].status = 0x80000000 | (3 << 27);
+    g_ctrl_td[1].status = 0x00800000 | (3 << 27) | (1 << 26);
     g_ctrl_td[1].token = (0x7FF << 21) | (0x01 << 19) | (0 << 15) | ((uint32_t)dev_addr << 8) | 0x69;
     g_ctrl_td[1].buffer = 0;
 
@@ -189,7 +189,7 @@ void usb_tablet_init(void) {
     for (i = 0; i < 8; i++) g_report_buf[i] = 0;
 
     g_td.link = UHCI_TD_LINK_TERM;
-    g_td.status = 0x80000000 | (3 << 27);
+    g_td.status = 0x00800000 | (3 << 27) | (1 << 26);
     g_td.token = (7 << 21) | (0x00 << 19) | (1 << 15) | ((uint32_t)g_dev_addr << 8) | 0x69;
     g_td.buffer = (uint32_t)(uint32_t)g_report_buf;
 
@@ -232,7 +232,7 @@ void usb_tablet_poll(void) {
     }
 
     g_toggle ^= 1;
-    g_td.status = 0x80000000 | (3 << 27);
+    g_td.status = 0x00800000 | (3 << 27) | (1 << 26);
     g_td.token = (7 << 21) | ((uint32_t)g_toggle << 19) | (1 << 15) | ((uint32_t)g_dev_addr << 8) | 0x69;
     g_qh.element = (uint32_t)(uint32_t)&g_td;
 }

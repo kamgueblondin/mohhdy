@@ -207,7 +207,10 @@ def main():
             ] + qemu_disk_args(), cwd=ROOT, stdout=err, stderr=err)
             wait_for(proc, "(-.-)", BOOT_TIMEOUT)
             wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
-            wait_for(proc, "USB Tablet:", CMD_TIMEOUT)
+            wait_for(proc, "USB Tablet: Controller UHCI initialise et enumere", CMD_TIMEOUT)
+            log = log_text()
+            if "Enumeration non terminee" in log or "Controller UHCI non trouve" in log:
+                raise RuntimeError("USB tablet enumeration failed in serial log")
             monitor = monitor_connect()
             time.sleep(0.6)
 
