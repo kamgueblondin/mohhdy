@@ -1017,7 +1017,7 @@ int sys_service_status(const char* name, os_service_status_t* out) {
 
 static int vfs_backend_allowed_for_source_path(uint32_t right, uint32_t source,
                                                    const char* path) {
-    /* AOS-2172: owner FAT bypass closes when vfs-virtual is published. */
+    /* AOS-2172/2173/2174: owner bypass for valid scopes closes when vfs-virtual live. */
     return current_task && current_task->type == TASK_TYPE_USER &&
         (service_registry_owner_bypasses_backend("vfs", current_task->id, source) ||
          service_registry_backend_allowed_for_source_path("vfs", current_task->id, right,
@@ -1263,6 +1263,10 @@ int sys_vfs_overlay_read(const char* path, char* buffer, uint32_t max) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2175: ATA-backed overlay read only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
     if (!path || !buffer || max == 0U) return -1;
     return overlay_read(path, buffer, max);
 }
@@ -1299,6 +1303,10 @@ int sys_vfs_initrd_stat(const char* path, os_dirent_t* out) {
 int sys_vfs_overlay_stat(const char* path, os_dirent_t* out) {
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_READ,
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
+    /* AOS-2175: ATA-backed overlay stat only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!path || !out) return -1;

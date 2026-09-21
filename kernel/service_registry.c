@@ -187,6 +187,14 @@ int service_registry_grant(const char* name, int32_t owner_pid, int32_t grantee_
             if (service_entries[i].pid != owner_pid) return OS_SERVICE_NOT_OWNER;
             service_entries[i].pid = grantee_pid;
             service_registry_backend_remove_name(name);
+            /* AOS-2174: with vfs-virtual live, vfs name handoff keeps the
+             * ATA-backed generic backend behind an explicit SOURCE_ALL grant
+             * (owner bypass for SOURCE_ALL is closed). */
+            if (name_equal(name, "vfs") && service_registry_lookup("vfs-virtual") > 0) {
+                (void)service_registry_backend_grant_scoped_source(
+                    name, grantee_pid, grantee_pid, SERVICE_BACKEND_RIGHT_ALL,
+                    OS_SERVICE_BACKEND_SOURCE_ALL);
+            }
             return 0;
         }
     }
@@ -277,15 +285,27 @@ int service_registry_backend_allowed_for_source(const char* name, int32_t pid, u
     return service_registry_backend_allowed_for_source_path(name, pid, right, source, (const char*)0);
 }
 
-/* AOS-2172: with live vfs-virtual, FAT I/O stays behind grants; owner ATA/FAT
- * bypass remains only for the degraded path (no storage worker published). */
+/* AOS-2172/2173/2174: with live vfs-virtual, every valid backend scope
+ * (single source, combinations, or SOURCE_ALL covering ATA-backed overlay/FAT)
+ * stays behind grants; owner bypass remains only without the storage worker. */
 int service_registry_owner_bypasses_backend(const char* name, int32_t pid, uint32_t source) {
     if (!name || pid <= 0) return 0;
     if (service_registry_lookup(name) != pid) return 0;
-    if (source == OS_SERVICE_BACKEND_SOURCE_FAT16 || source == OS_SERVICE_BACKEND_SOURCE_FAT32) {
+    if (source != 0U && (source & ~OS_SERVICE_BACKEND_SOURCE_ALL) == 0U) {
         if (service_registry_lookup("vfs-virtual") > 0) return 0;
     }
     return 1;
+}
+
+/* AOS-2175: with vfs-virtual live, ATA-backed overlay I/O (read/stat slice) is
+ * worker-mediated — only that PID may exercise the overlay path. Degraded mode
+ * without the worker keeps historical local exercise. Drivers stay Ring 0. */
+int service_registry_ata_overlay_io_via_worker(int32_t pid) {
+    int32_t worker;
+    if (pid <= 0) return 0;
+    worker = service_registry_lookup("vfs-virtual");
+    if (worker <= 0) return 1;
+    return pid == worker;
 }
 
 /* Les appels backend génériques restent compatibles, mais exigent explicitement

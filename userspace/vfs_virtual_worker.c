@@ -9,6 +9,47 @@ static void puts(const char* text) {
     while (text[index] != '\0') putc(text[index++]);
 }
 
+/* One puts for storage/alias path logs so QEMU contract needles stay contiguous
+ * across yield (AOS-2173 flake: SCHED between prefix and path). */
+static void worker_log_path_op(const char* kind, const char* op, const char* path) {
+    char line[160];
+    uint32_t n = 0U;
+    const char* parts[5];
+    uint32_t part;
+    parts[0] = "vfsvirtual ";
+    parts[1] = kind;
+    parts[2] = " ";
+    parts[3] = op;
+    parts[4] = " ";
+    for (part = 0U; part < 5U; part++) {
+        uint32_t i = 0U;
+        while (parts[part][i] != '\0' && n + 1U < (uint32_t)sizeof(line)) {
+            line[n++] = parts[part][i++];
+        }
+    }
+    if (path) {
+        uint32_t i = 0U;
+        while (path[i] != '\0' && n + 1U < (uint32_t)sizeof(line)) {
+            line[n++] = path[i++];
+        }
+    }
+    if (n + 1U < (uint32_t)sizeof(line)) line[n++] = '\n';
+    line[n] = '\0';
+    puts(line);
+}
+
+/* AOS-2175: distinct QEMU needle for the ATA-backed overlay read/stat slice. */
+static void worker_log_ata_overlay_slice(const char* op, const char* path) {
+    if (!path || !op) return;
+    if (path[0] == 'o' && path[1] == 'v' && path[2] == 'e' && path[3] == 'r' &&
+        path[4] == 'l' && path[5] == 'a' && path[6] == 'y' && path[7] == '/') {
+        worker_log_path_op("ata-backed", op, path);
+    }
+}
+
+
+
+
 static int ipc_receive(os_ipc_message_t* message) {
     int result;
     asm volatile("int $0x80" : "=a"(result) : "a"(SYS_IPC_RECV), "b"(message));
@@ -575,9 +616,9 @@ void main(void) {
                 status = worker_alias_read(path, data, &size);
                 if (status == OS_VFS_STATUS_OK) {
                     reply_data = data;
-                    if (worker_path_uses_boot_mount(path, 0)) puts("vfsvirtual storage read ");
-                    else puts("vfsvirtual alias read ");
-                    puts(path); puts("\n");
+                    worker_log_path_op(worker_path_uses_boot_mount(path, 0) ? "storage" : "alias",
+                                       "read", path);
+                    worker_log_ata_overlay_slice("read", path);
                 }
             }
             if (os_vfs_make_worker_read_reply(&reply, status, reply_data, size, message.request_id)
@@ -611,9 +652,9 @@ void main(void) {
             os_dirent_t entry;
             if (os_vfs_parse_worker_stat_request(&message, path) == OS_VFS_STATUS_OK) {
                 int32_t status = worker_alias_stat(path, &entry);
-                if (worker_path_uses_boot_mount(path, 0)) puts("vfsvirtual storage stat ");
-                else puts("vfsvirtual alias stat ");
-                puts(path); puts("\n");
+                worker_log_path_op(worker_path_uses_boot_mount(path, 0) ? "storage" : "alias",
+                                   "stat", path);
+                worker_log_ata_overlay_slice("stat", path);
                 if (os_vfs_make_worker_stat_reply(&reply, status,
                                                    status == OS_VFS_STATUS_OK ? entry.size : 0U,
                                                    status == OS_VFS_STATUS_OK ? entry.flags : 0U,
@@ -630,9 +671,8 @@ void main(void) {
                 int32_t status = worker_alias_list(path, OS_VFS_LIST_PAGE_END, data,
                                                     OS_VFS_LIST_DATA_MAX, &size, &count,
                                                     &ignored_next);
-                if (worker_path_uses_boot_mount(path, 1)) puts("vfsvirtual storage list ");
-                else puts("vfsvirtual alias list ");
-                puts(path); puts("\n");
+                worker_log_path_op(worker_path_uses_boot_mount(path, 1) ? "storage" : "alias",
+                                   "list", path);
                 if (os_vfs_make_worker_list_reply(&reply, status, count,
                                                   status < 0 ? (const uint8_t*)0 : data,
                                                   status < 0 ? 0U : size,
@@ -652,9 +692,8 @@ void main(void) {
                     status = worker_alias_list(path, start, data, OS_VFS_LIST_PAGE_DATA_MAX,
                                                &size, &count, &next);
                 }
-                if (worker_path_uses_boot_mount(path, 1)) puts("vfsvirtual storage list page ");
-                else puts("vfsvirtual alias list page ");
-                puts(path); puts("\n");
+                worker_log_path_op(worker_path_uses_boot_mount(path, 1) ? "storage" : "alias",
+                                   "list page", path);
                 if (os_vfs_make_worker_list_page_reply(&reply, status, count, next,
                                                        status < 0 ? (const uint8_t*)0 : data,
                                                        status < 0 ? 0U : size,
