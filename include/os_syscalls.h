@@ -246,7 +246,9 @@
 #define SYS_PEER_ACCEPT 129
 /* EBX = os_peer_tls_poll_request_t* : role serveur TLS guest (ServerHello..Finished). */
 #define SYS_PEER_TLS_POLL 130
-#define MAX_SYSCALLS 131
+/* Pas d'argument : A emet un record AES-GCM applicatif "ping" apres TLS_COMPLETE. */
+#define SYS_LLM_APP_PING 131
+#define MAX_SYSCALLS 132
 
 #define OS_VGA_COLS 80
 #define OS_VGA_ROWS 25

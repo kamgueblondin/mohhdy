@@ -37,7 +37,6 @@ Injection PS/2 mutexee hote. Hors `make ci` et `make integration-qemu`.
 ## Limites
 
 - Handshake TLS 1.2 complet (ServerHello..Finished, A TLS_COMPLETE) est vert.
-- Compteur hub `guest_app_data` reste a 0 dans ce harness : pas encore de
-  record applicatif AES-GCM mesure dans chaque sens (echo B pret si A emet).
-- Pas de reseau public ni OpenAI.
-- Suite logique : ping/pong AES-GCM puis chat metier sur la session etablie.
+- Ce harness s'arrete a Finished ; le echo B reste pret si A emet.
+- Suite livre : `make qemu-ne2k-guest-tls-appdata` (ping/pong AES-GCM).
+- Pas de reseau public ni OpenAI. Chat metier bilaterale reste ouvert.

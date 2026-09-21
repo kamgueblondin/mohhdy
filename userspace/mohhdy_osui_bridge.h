@@ -31,6 +31,7 @@ static const char * const mohhdy_shell_commands[] = {
     "ai-peer-accept",
     "ai-peer-listen",
     "ai-peer-tls-poll",
+    "ai-app-ping",
     "ai-provider",
     "ai-request",
     "ai-runtime",

@@ -602,23 +602,16 @@ int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
     }
 
     if (boot_peer_tls_step == 7U) {
-        /* Un record applicatif AES-GCM echo minimal si A a envoye des donnees. */
-        net_tcp_view_t view;
-        uint16_t frame_length = 0U;
+        /* Drain en tete a deja fait ne2k_socket_poll_tcp/feed (accept_data).
+         * Ouvrir le record depuis le buffer socket, sans second accept_data. */
         net_tls_record_view_t opened;
-        status = ne2k_rx_poll_tcp(&boot_ne2k_device, &boot_ne2k_io, boot_llm_frame,
-                                  sizeof(boot_llm_frame), &frame_length, &view);
-        if (status != 0) return 8;
-        if (view.payload_length == 0U) return 8;
-        if (net_socket_feed(boot_peer_listen_socket,
-                            boot_llm_frame + NET_ETHERNET_HEADER_SIZE +
-                                ((boot_llm_frame[NET_ETHERNET_HEADER_SIZE] & 0x0fU) * 4U),
-                            (uint16_t)(frame_length - NET_ETHERNET_HEADER_SIZE -
-                                       ((boot_llm_frame[NET_ETHERNET_HEADER_SIZE] & 0x0fU) * 4U))) != 0)
+        status = net_socket_receive(boot_peer_listen_socket, boot_peer_tls_record,
+                                    sizeof(boot_peer_tls_record), &rx_length);
+        if (status != 0 || rx_length < 5U) return 8;
+        if (net_tls_aes_gcm_session_open(&boot_peer_tls_server.session, boot_peer_tls_record,
+                                         rx_length, boot_llm_plaintext,
+                                         sizeof(boot_llm_plaintext), &opened) != 0)
             return 8;
-        status = net_socket_receive_tls(boot_peer_listen_socket, &boot_peer_tls_server.session, &view,
-                                        boot_llm_plaintext, sizeof(boot_llm_plaintext), &opened, &rx_length);
-        if (status != 0) return 8;
         if (opened.content_type != NET_TLS_CONTENT_APPLICATION_DATA) return 8;
         /* Echo "pong" */
         {
@@ -643,6 +636,40 @@ int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
         }
     }
     return 8;
+}
+
+/* A : record AES-GCM applicatif minimal apres TLS_COMPLETE (ping). Pas de fake hub. */
+int kernel_llm_app_ping(void) {
+    static const uint8_t ping[4] = {'p', 'i', 'n', 'g'};
+    uint16_t segment_length = 0U;
+    net_tcp_connection_t snapshot;
+    net_tls_aes_gcm_session_t previous_session;
+    int status;
+
+    if (!boot_ne2k_present || boot_llm_socket_session.state.phase != NE2K_LLM_CONNECTION_TLS_COMPLETE)
+        return OS_LLM_REQUEST_BAD_PHASE;
+    if (boot_llm_socket_session.socket_id < 0) return OS_LLM_REQUEST_FAILED;
+    if (net_socket_connection_snapshot(boot_llm_socket_session.socket_id, &snapshot) != 0)
+        return OS_LLM_REQUEST_FAILED;
+    previous_session = boot_llm_tls_client.session;
+    status = net_socket_send_tls(boot_llm_socket_session.socket_id, &boot_llm_tls_client.session,
+                                 NET_TLS_CONTENT_APPLICATION_DATA, ping, 4U,
+                                 boot_llm_http_tls_record, sizeof(boot_llm_http_tls_record),
+                                 boot_llm_tcp_segment, sizeof(boot_llm_tcp_segment),
+                                 &segment_length, 2U);
+    if (status != 0) {
+        boot_llm_tls_client.session = previous_session;
+        return OS_LLM_REQUEST_FAILED;
+    }
+    if (ne2k_tcp_segment(&boot_ne2k_device, &boot_ne2k_io, &boot_llm_arp_cache, boot_llm_frame,
+                         sizeof(boot_llm_frame), boot_llm_lease.ipv4,
+                         boot_llm_socket_session.state.remote_ip, boot_llm_tcp_segment,
+                         segment_length) != 0) {
+        (void)net_socket_connection_restore(boot_llm_socket_session.socket_id, &snapshot);
+        boot_llm_tls_client.session = previous_session;
+        return OS_LLM_REQUEST_FAILED;
+    }
+    return 0;
 }
 
 /* Appelé depuis un contexte noyau sûr ; jamais depuis le gestionnaire IRQ0. */
