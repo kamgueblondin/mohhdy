@@ -1,6 +1,7 @@
 /* test_task.c - Tests unitaires pour le Task Manager */
 
 #include "../../framework/unity.h"
+#include <string.h>
 #include "../../framework/test_kernel.h"
 
 // Include du module à tester

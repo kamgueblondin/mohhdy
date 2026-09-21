@@ -114,6 +114,8 @@ typedef struct {
 } kernel_llm_application_recovery_t;
 static kernel_llm_application_recovery_t boot_llm_application_recovery;
 static uint8_t boot_ne2k_present;
+static int boot_peer_listen_socket = -1;
+static uint8_t boot_peer_segment[64];
 static void kernel_llm_clear_bytes(uint8_t* buffer, uint32_t length);
 static int kernel_llm_rdrand_supported(void);
 static int kernel_llm_close_internal(uint8_t preserve_provider);
@@ -142,6 +144,7 @@ static void ne2k_boot_probe(void) {
     boot_llm_dhcp_maintenance.retry_limit = KERNEL_LLM_DHCP_RETRY_LIMIT;
     boot_llm_dhcp_maintenance.next_retry_tick = 0U;
     boot_ne2k_present = 0U;
+    boot_peer_listen_socket = -1;
     if (ne2k_i386_io(&boot_ne2k_io) != 0) return;
     if (ne2k_probe(&boot_ne2k_device, 0x300U, &boot_ne2k_io) != 0) {
         print_string("NE2000 ISA absent; reseau reste desactive.\\n");
@@ -346,6 +349,54 @@ int kernel_llm_acquire_start(const os_llm_acquire_start_request_t* request) {
     boot_llm_dhcp_maintenance.next_retry_tick = 0U;
     kernel_llm_copy_hostname(request->hostname);
     return 0;
+}
+
+
+int kernel_peer_listen(const os_peer_listen_request_t* request) {
+    int socket_id;
+    if (!request || request->local_port == 0U) return OS_PEER_BAD_REQUEST;
+    if (!boot_ne2k_present) return OS_PEER_UNAVAILABLE;
+    if (!boot_llm_lease.valid) return OS_PEER_NO_LEASE;
+    if (boot_peer_listen_socket >= 0) {
+        uint8_t state = 0U;
+        if (net_socket_get_state(boot_peer_listen_socket, &state) == 0 &&
+            (state == NET_TCP_STATE_LISTEN || state == NET_TCP_STATE_SYN_RECEIVED ||
+             state == NET_TCP_STATE_ESTABLISHED))
+            return OS_PEER_IN_PROGRESS;
+        (void)net_socket_close(boot_peer_listen_socket);
+        boot_peer_listen_socket = -1;
+    }
+    socket_id = net_socket_listen(request->local_port,
+                                  request->local_sequence ? request->local_sequence : 0x20406080U);
+    if (socket_id < 0) return OS_PEER_FAILED;
+    boot_peer_listen_socket = socket_id;
+    return 0;
+}
+
+int kernel_peer_accept(const os_peer_accept_request_t* request) {
+    uint8_t state = 0U;
+    uint16_t attempts;
+    int status;
+    if (!request) return OS_PEER_BAD_REQUEST;
+    if (!boot_ne2k_present) return OS_PEER_UNAVAILABLE;
+    if (!boot_llm_lease.valid) return OS_PEER_NO_LEASE;
+    if (boot_peer_listen_socket < 0) return OS_PEER_NOT_LISTENING;
+    if (net_socket_get_state(boot_peer_listen_socket, &state) != 0) return OS_PEER_FAILED;
+    if (state == NET_TCP_STATE_ESTABLISHED) return 0;
+    if (state != NET_TCP_STATE_LISTEN && state != NET_TCP_STATE_SYN_RECEIVED)
+        return OS_PEER_NOT_LISTENING;
+    attempts = request->attempts ? request->attempts : 64U;
+    status = ne2k_socket_passive_accept(
+        &boot_ne2k_device, &boot_ne2k_io, &boot_llm_arp_cache,
+        boot_llm_frame, sizeof(boot_llm_frame),
+        boot_llm_dhcp_tx, sizeof(boot_llm_dhcp_tx),
+        boot_peer_segment, sizeof(boot_peer_segment),
+        boot_llm_lease.ipv4, boot_peer_listen_socket, attempts,
+        request->require_established);
+    if (status == 0) return 0;
+    if (status == 1) return 1; /* SYN-ACK guest emis, SYN_RECEIVED */
+    if (status == -12) return OS_PEER_TIMEOUT;
+    return OS_PEER_FAILED;
 }
 
 /* Appelé depuis un contexte noyau sûr ; jamais depuis le gestionnaire IRQ0. */

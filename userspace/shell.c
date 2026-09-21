@@ -253,6 +253,18 @@ int sys_llm_close(void) {
     return status;
 }
 
+int sys_peer_listen(const os_peer_listen_request_t* request) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_PEER_LISTEN), "b"(request));
+    return result;
+}
+
+int sys_peer_accept(const os_peer_accept_request_t* request) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_PEER_ACCEPT), "b"(request));
+    return result;
+}
+
 int sys_meminfo(os_meminfo_t* info) {
     int result;
     asm volatile("int $0x80" : "=a"(result) : "a"(SYS_MEMINFO), "b"(info));
@@ -1086,6 +1098,8 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  ai-runtime         - Etat du moteur IA et des prerequis\n");
     print_string("  ai-continue        - Poursuivre un token de la session GGUF locale\n");
     print_string("  ai-acquire <hote> [port] - Demarrer DHCP, DNS et TCP LLM sans secret\n");
+    print_string("  ai-peer-listen [port] - Ecoute TCP passive guest (apres bail DHCP)\n");
+    print_string("  ai-peer-accept [attempts] - Accepte SYN pair et emet SYN-ACK guest\n");
     print_string("  ai-tls-poll         - Piloter SYN-ACK/TLS avec les materiaux noyau\n");
     print_string("  ai-request <f> <m> <p> <q> - Emettre POST LLM apres TLS authentifie\n");
     print_string("  ai-stream-request <f> <m> <p> <q> - Emettre POST LLM SSE chiffre\n");
@@ -2638,7 +2652,7 @@ static int is_builtin(const char* cmd) {
     static const char* names[] = {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
-        "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "net-status",
+        "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "net-status",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
         "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
         "alias", "unalias", "export", "which", "rc",
@@ -4598,6 +4612,65 @@ static void cmd_ai_acquire(shell_context_t* ctx, char args[][128], int arg_count
     else print_error("ai-acquire: bootstrap reseau echoue; contexte conserve");
 }
 
+
+static void cmd_ai_peer_listen(shell_context_t* ctx, char args[][128], int arg_count) {
+    os_peer_listen_request_t request = {0};
+    int status;
+    (void)ctx;
+    request.local_port = 443U;
+    request.local_sequence = 0x20406080U;
+    if (arg_count > 1) {
+        print_error("Usage: ai-peer-listen [port]");
+        return;
+    }
+    if (arg_count == 1 && ai_parse_port(args[0], &request.local_port) != 0) {
+        print_error("ai-peer-listen: port invalide");
+        return;
+    }
+    status = sys_peer_listen(&request);
+    if (status == 0) {
+        print_success("ai-peer-listen: LISTEN");
+        return;
+    }
+    if (status == OS_PEER_BAD_REQUEST) print_error("ai-peer-listen: requete invalide");
+    else if (status == OS_PEER_UNAVAILABLE) print_error("ai-peer-listen: NE2000 absent");
+    else if (status == OS_PEER_NO_LEASE) print_error("ai-peer-listen: bail DHCP requis (ai-acquire d abord)");
+    else if (status == OS_PEER_IN_PROGRESS) print_error("ai-peer-listen: ecoute deja active");
+    else print_error("ai-peer-listen: echec");
+}
+
+static void cmd_ai_peer_accept(shell_context_t* ctx, char args[][128], int arg_count) {
+    os_peer_accept_request_t request = {0};
+    int status;
+    uint16_t attempts = 96U;
+    (void)ctx;
+    if (arg_count > 1) {
+        print_error("Usage: ai-peer-accept [attempts]");
+        return;
+    }
+    if (arg_count == 1 && ai_parse_port(args[0], &attempts) != 0) {
+        print_error("ai-peer-accept: attempts invalide");
+        return;
+    }
+    request.attempts = attempts;
+    request.require_established = 0U;
+    status = sys_peer_accept(&request);
+    if (status == 0) {
+        print_success("ai-peer-accept: ESTABLISHED");
+        return;
+    }
+    if (status == 1) {
+        print_success("ai-peer-accept: SYN-ACK guest emis");
+        return;
+    }
+    if (status == OS_PEER_BAD_REQUEST) print_error("ai-peer-accept: requete invalide");
+    else if (status == OS_PEER_UNAVAILABLE) print_error("ai-peer-accept: NE2000 absent");
+    else if (status == OS_PEER_NO_LEASE) print_error("ai-peer-accept: bail DHCP requis");
+    else if (status == OS_PEER_NOT_LISTENING) print_error("ai-peer-accept: ai-peer-listen requis");
+    else if (status == OS_PEER_TIMEOUT) print_error("ai-peer-accept: timeout sans SYN pair");
+    else print_error("ai-peer-accept: echec");
+}
+
 static int ai_copy_field(char* destination, uint16_t capacity, const char* source) {
     uint16_t index;
     if (!destination || !source || capacity == 0U) return -1;
@@ -5429,6 +5502,12 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "ai-acquire") == 0) {
         cmd_ai_acquire(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "ai-peer-listen") == 0) {
+        cmd_ai_peer_listen(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "ai-peer-accept") == 0) {
+        cmd_ai_peer_accept(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "ai-tls-poll") == 0) {
         cmd_ai_tls_poll(ctx, args, arg_count);

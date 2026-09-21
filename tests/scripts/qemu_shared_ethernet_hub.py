@@ -7,7 +7,7 @@ segment. Chaque trame Ethernet est préfixée d'une longueur big-endian 32 bits
 DHCP/ARP/DNS localement (pair contrôlé, sans TAP ni Internet).
 
 Extensions guest↔guest : ARP proxy pour les IPs louées, DNS `peer.local` vers
-le pair, et SYN-ACK minimal vers l'IP du pair (flux applicatif simple).
+le pair, SYN-ACK proxy optionnel vers l'IP du pair, et comptage des SYN-ACK emis par un invite.
 """
 from __future__ import print_function
 
@@ -203,9 +203,10 @@ def _mac_str(mac):
 class SharedEthernetHub(object):
     """Hub stream multi-clients + pair DHCP/ARP/DNS local (127.0.0.1)."""
 
-    def __init__(self, respond=True, full_tls=False):
+    def __init__(self, respond=True, full_tls=False, proxy_peer_syn_ack=True):
         self.respond = respond
         self.full_tls = full_tls
+        self.proxy_peer_syn_ack = proxy_peer_syn_ack
         self.events = {
             "discover": 0,
             "offer": 0,
@@ -224,6 +225,7 @@ class SharedEthernetHub(object):
             "cross_arp_reply": 0,
             "cross_syn": 0,
             "cross_syn_ack": 0,
+            "guest_syn_ack": 0,
             "peer_dns": 0,
         }
         self.source_macs = set()
@@ -399,7 +401,17 @@ class SharedEthernetHub(object):
                 return
             payload = frame[tcp_offset + tcp_header_length:ip_end]
             peer_mac = self._mac_for_ip(dest_ip)
-            # Flux applicatif simple : SYN vers l'IP louee du pair → SYN-ACK proxy.
+            owner_mac = self._mac_for_ip(source_ip)
+            # SYN-ACK emis par un invite loue (pas un proxy hub).
+            if (
+                owner_mac is not None
+                and owner_mac == source_mac
+                and peer_mac is not None
+                and dest_ip != source_ip
+                and (flags & 0x12) == 0x12
+            ):
+                self.events["guest_syn_ack"] += 1
+            # Flux applicatif simple : SYN vers l'IP louee du pair → SYN-ACK proxy optionnel.
             if (
                 peer_mac is not None
                 and dest_ip != source_ip
@@ -407,17 +419,18 @@ class SharedEthernetHub(object):
                 and (flags & 0x12) == 0x02
             ):
                 self.events["cross_syn"] += 1
-                syn_ack = _ethernet(
-                    source_mac,
-                    0x0800,
-                    _ipv4_tcp(
-                        dest_ip, source_ip, destination_port, source_port,
-                        0x10203040, sequence + 1, 0x12,
-                    ),
-                    source_mac=peer_mac,
-                )
-                self._reply(connection, syn_ack)
-                self.events["cross_syn_ack"] += 1
+                if self.proxy_peer_syn_ack:
+                    syn_ack = _ethernet(
+                        source_mac,
+                        0x0800,
+                        _ipv4_tcp(
+                            dest_ip, source_ip, destination_port, source_port,
+                            0x10203040, sequence + 1, 0x12,
+                        ),
+                        source_mac=peer_mac,
+                    )
+                    self._reply(connection, syn_ack)
+                    self.events["cross_syn_ack"] += 1
                 return
             if self.full_tls and source_port == 49152 and destination_port == 443:
                 acknowledgment = struct.unpack("!I", frame[tcp_offset + 8:tcp_offset + 12])[0]

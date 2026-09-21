@@ -240,6 +240,10 @@
 #define SYS_SERVICE_BACKEND_GRANT_SCOPED_SOURCE_PREFIX 126
 /* EBX = os_fb_scene_t* (magic OS_FB_MAGIC) pour le bureau VBE ; EBX = 0 pour quitter. */
 #define SYS_VGA_BLIT 127
+/* EBX = os_peer_listen_request_t* : ecoute passive guest puis SYN-ACK NE2000. */
+#define SYS_PEER_LISTEN 128
+/* EBX = os_peer_accept_request_t* : poll SYN/ACK jusqu a SYN_RECEIVED ou ESTABLISHED. */
+#define SYS_PEER_ACCEPT 129
 #define MAX_SYSCALLS 128
 
 #define OS_VGA_COLS 80
@@ -331,6 +335,25 @@ typedef struct {
     uint32_t acknowledgment;
     uint8_t flags;
 } os_socket_passive_view_t;
+
+typedef struct {
+    uint16_t local_port;
+    uint32_t local_sequence;
+} os_peer_listen_request_t;
+
+typedef struct {
+    uint16_t attempts;
+    uint8_t require_established;
+} os_peer_accept_request_t;
+
+#define OS_PEER_BAD_REQUEST (-130)
+#define OS_PEER_UNAVAILABLE (-131)
+#define OS_PEER_NO_LEASE (-132)
+#define OS_PEER_IN_PROGRESS (-133)
+#define OS_PEER_FAILED (-134)
+#define OS_PEER_TIMEOUT (-135)
+#define OS_PEER_NOT_LISTENING (-136)
+
 
 #define OS_SOCKET_BAD_ARGUMENT (-120)
 #define OS_SOCKET_NO_SLOT (-121)

@@ -75,6 +75,7 @@ make run
 | `make qemu-ne2k-shared-topology` | Deux QEMU TCG simultanés sur un hub socket `127.0.0.1` (pas de TAP) : `nic=detected` des deux côtés, DHCP Discover de A observé pendant que B reste vivant ; injection PS/2 mutexée (hors `make ci`) |
 | `make qemu-ne2k-tls-multi-guest` | Suite : TLS_COMPLETE ×2, baux `10.32.0.15`/`10.32.0.16` sur le même hub (hors `make ci`) |
 | `make qemu-ne2k-guest-app-traffic` | Suite : DNS `peer.local`, ARP croisé + SYN guest→guest (hors `make ci`) |
+| `make qemu-ne2k-guest-tls-peer` | Suite : B `ai-peer-listen` + SYN-ACK guest, hub sans proxy (hors `make ci`) |
 | `make qemu-ipc-foundation` | Lance `ipcserver`, envoie un message et vérifie sa réception |
 | `make qemu-vfs-service` | Lance `vfsvirtual` puis `vfsserver`, vérifie l'autorité Ring 3 corrélée des alias add/remove et I/O (`read`, `stat`, liste, pages et observation), la révocation complète de la capacité mono-source après chaque transaction, la purge du miroir après remplacement worker, l'échec `INVALID` sans rejeu d'une lecture d'alias expirée, deux volumes IDE FAT16/FAT32, les capacités et refus, les mutations overlay et les cycles FAT racine/LFN ainsi que `mkdir`, écriture, `stat`, liste, renommage, refus `rmdir` non vide, suppression et `rmdir` d'un sous-répertoire 8.3 ; un renommage tenté vers son voisin hors préfixe est refusé par le backend avant mutation, sans divulguer la borne interne |
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |

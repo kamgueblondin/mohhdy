@@ -1,4 +1,5 @@
 #include "../../framework/unity.h"
+#include "../../../kernel/x25519.h"
 #include "../../../kernel/net_tls_record.h"
 #include "../../../kernel/ecdsa_p256.h"
 #include "../../../kernel/tls_test_trust_anchor.h"
