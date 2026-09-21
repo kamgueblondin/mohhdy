@@ -43,7 +43,7 @@ Le contrat de contrôle IA vérifie désormais le catalogue réellement déclar�
 |---:|---|---|
 | 0 | Tenir le budget CI QEMU avec garanties complètes | Conserver les sept contrats séquentiels sous 25 minutes, le smoke multi-pairs local et toutes les assertions métier, sans rejeu de mutation ou d'I/O incertaine. |
 | 1 | Maintien de l'ACL préfixée | Conserver les preuves unitaires et QEMU de voisin, de racine et de voie sans chemin ; le diagnostic public reste droit-source et ne divulgue jamais le préfixe interne. |
-| 2 | Topologie réseau locale partagée optionnelle | Livrée au niveau harness : `make qemu-ne2k-shared-topology` (hub socket 127.0.0.1, deux NE2000 simultanés, nic×2, DHCP Discover A pendant que B reste vivant). Sans TAP / Internet / OpenAI / secret. TLS multi-invités simultanés encore ouvert. |
+| 2 | Topologie réseau locale partagée + TLS multi | Harness : `make qemu-ne2k-shared-topology` + `make qemu-ne2k-tls-multi-guest` (hub 127.0.0.1, dual lease, TLS_COMPLETE x2, hors ci). Sans TAP / Internet / OpenAI / secret. Guest↔guest applicatif encore ouvert. |
 | 3 | Réseau public optionnel | Uniquement après accord explicite et secret fourni hors image, logs et dépôt ; validation de certificat et de l'endpoint réel séparées de la CI. |
 
 > La validation locale la plus récente conserve les sept contrats et termine en **760,9 s** (12 min 41 s) en séquentiel ; la stabilité reste à confirmer par la CI de cette branche avant fusion. Les attentes d'injection ne retirent aucune assertion : la ligne VFS est réconciliée intégralement avant `ret`, et une ligne réseau n'est jamais rejouée après son entrée.
