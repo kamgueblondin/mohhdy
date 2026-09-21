@@ -99,6 +99,7 @@ static uint32_t task_static_kernel_stack_top(const task_t* task) {
 extern vmm_directory_t* kernel_directory;
 extern vmm_directory_t* current_directory;
 extern void print_string_serial(const char* str);
+extern void write_serial(char c);
 
 // Prototypes
 vmm_directory_t* create_user_vmm_directory();
