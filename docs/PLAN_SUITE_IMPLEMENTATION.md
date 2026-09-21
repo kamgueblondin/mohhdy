@@ -311,7 +311,7 @@ Les rangs 0-4 sont **ce fichier**. Les rangs OS-UI sont le [plan maitre](PLAN_SE
 | 1 | ACL prefixee | Prototype guest | Garder les preuves negatives |
 | 2 | Topologie locale partagee | Prototype guest | `qemu-ne2k-shared-topology` + `qemu-ne2k-tls-multi-guest` + `qemu-ne2k-guest-app-traffic` + `qemu-ne2k-guest-tls-peer` + `qemu-ne2k-guest-tls-chat` + `qemu-ne2k-guest-tls-server` (hub 127.0.0.1, hors ci) |
 | 3 | Latence GGUF materiel / KVM | Prototype guest | Item ouvert README + priorite 3 `mohhdy_us.md` |
-| 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | I/O protegees via worker (AOS-2163) ; repli local refuse si worker vivant (AOS-2171) ; pilote ATA encore Ring 0 `[~]` |
+| 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | I/O protegees via worker (AOS-2163) ; repli local refuse si worker vivant (AOS-2171) ; bypass proprio FAT ferme si worker publie (AOS-2172) ; pilote ATA encore Ring 0 `[~]` |
 | - | Reseau public | Prototype guest | Sous condition, hors CI |
 | - | Identite / capabilities | Increment Foundation | Petits pas, pas US-016, pas US-001 total |
 | OS-UI-000 | Spec migration | Docs | Plan maitre (fait dans cette vague) |

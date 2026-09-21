@@ -1017,8 +1017,9 @@ int sys_service_status(const char* name, os_service_status_t* out) {
 
 static int vfs_backend_allowed_for_source_path(uint32_t right, uint32_t source,
                                                    const char* path) {
+    /* AOS-2172: owner FAT bypass closes when vfs-virtual is published. */
     return current_task && current_task->type == TASK_TYPE_USER &&
-        (service_registry_lookup("vfs") == current_task->id ||
+        (service_registry_owner_bypasses_backend("vfs", current_task->id, source) ||
          service_registry_backend_allowed_for_source_path("vfs", current_task->id, right,
                                                           source, path));
 }

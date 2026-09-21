@@ -277,6 +277,17 @@ int service_registry_backend_allowed_for_source(const char* name, int32_t pid, u
     return service_registry_backend_allowed_for_source_path(name, pid, right, source, (const char*)0);
 }
 
+/* AOS-2172: with live vfs-virtual, FAT I/O stays behind grants; owner ATA/FAT
+ * bypass remains only for the degraded path (no storage worker published). */
+int service_registry_owner_bypasses_backend(const char* name, int32_t pid, uint32_t source) {
+    if (!name || pid <= 0) return 0;
+    if (service_registry_lookup(name) != pid) return 0;
+    if (source == OS_SERVICE_BACKEND_SOURCE_FAT16 || source == OS_SERVICE_BACKEND_SOURCE_FAT32) {
+        if (service_registry_lookup("vfs-virtual") > 0) return 0;
+    }
+    return 1;
+}
+
 /* Les appels backend génériques restent compatibles, mais exigent explicitement
  * le scope toutes sources : une capacité source-scopée ne peut pas les utiliser. */
 int service_registry_backend_allowed_for(const char* name, int32_t pid, uint32_t right) {
