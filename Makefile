@@ -632,7 +632,7 @@ qemu-vfs-service: $(OS_IMAGE) pack-initrd disk
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
 
-.PHONY: qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit qemu-osui-gui-fit-input osui-registry-check
+.PHONY: qemu-osui-runtime qemu-osui-gui qemu-osui-gui-ps2 qemu-osui-gui-fit qemu-osui-gui-fit-input osui-registry-check
 osui-registry-check:
 	@python3 scripts/extract_guest_commands.py --check
 
@@ -641,6 +641,10 @@ qemu-osui-runtime: $(OS_IMAGE) pack-initrd disk
 
 qemu-osui-gui: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_osui_gui.py
+
+# Sans usb-tablet : fumee PS/2 relative (move, clic dock, clamp bords, console).
+qemu-osui-gui-ps2: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_osui_gui_ps2.py
 
 # GTK + COM2 : le bureau suit la fenetre. Hors integration-qemu (besoin DISPLAY).
 qemu-osui-gui-fit: $(OS_IMAGE) pack-initrd disk
@@ -737,6 +741,7 @@ help:
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  qemu-osui-runtime - Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA ; hors integration-qemu)"
 	@echo "  qemu-osui-gui   - Fumee QEMU : gui, screendump VBE, tablet click dock, console (hors integration-qemu)"
+	@echo "  qemu-osui-gui-ps2 - Fumee QEMU : gui sans usb-tablet, PS/2 relative + clamp (hors integration-qemu)"
 	@echo "  qemu-osui-gui-fit - GTK : VBE suit la fenetre (DISPLAY, hors integration-qemu)"
 	@echo "  qemu-osui-gui-fit-input - GTK : tablet hit-test apres resize (DISPLAY, hors integration-qemu)"
 	@echo "  osui-registry-check - Verifie JSON/header vs userspace/shell.c"
