@@ -15,6 +15,70 @@ static uint8_t g_prev_buttons = 0;
 static os_fb_scene_t g_last_scene;
 static int g_last_scene_valid = 0;
 
+/* OS-UI-2-W: minimal pane windowing (focus + drag). Offsets are kernel-local. */
+static int g_pane_dx = 0;
+static int g_pane_dy = 0;
+static int g_pane_focused = 0;
+static int g_drag_active = 0;
+static int g_drag_grab_x = 0;
+static int g_drag_grab_y = 0;
+static int g_drag_orig_dx = 0;
+static int g_drag_orig_dy = 0;
+static uint8_t g_pane_seen = OS_FB_PANE_NONE;
+
+void gfx_desktop_reset_pane_windowing(void) {
+    g_pane_dx = 0;
+    g_pane_dy = 0;
+    g_pane_focused = 0;
+    g_drag_active = 0;
+    g_pane_seen = OS_FB_PANE_NONE;
+}
+
+int gfx_desktop_pane_focused(void) {
+    return g_pane_focused;
+}
+
+void gfx_desktop_get_pane_offset(int *dx, int *dy) {
+    if (dx) *dx = g_pane_dx;
+    if (dy) *dy = g_pane_dy;
+}
+
+static void sync_pane_windowing(uint8_t pane) {
+    if (pane == OS_FB_PANE_NONE) {
+        gfx_desktop_reset_pane_windowing();
+        return;
+    }
+    if (g_pane_seen == OS_FB_PANE_NONE)
+        g_pane_focused = 1;
+    g_pane_seen = pane;
+}
+
+static void pane_default_geom(int w, int h, int bar_h, int *wx, int *wy, int *ww, int *wh) {
+    int x, y, pw, ph;
+    pw = w - (w >= 780 ? 420 : 48);
+    if (pw < 240) pw = 240;
+    if (pw > w - 48) pw = w - 48;
+    if (pw < 80) pw = 80;
+    ph = h - 220;
+    if (ph < 160) ph = 160;
+    if (ph > h - bar_h - 80) ph = h - bar_h - 80;
+    if (ph < 80) ph = 80;
+    x = 36 + g_pane_dx;
+    y = bar_h + 28 + g_pane_dy;
+    if (x < 0) x = 0;
+    if (y < bar_h) y = bar_h;
+    if (x + pw > w) x = w - pw;
+    if (y + ph > h - 48) y = h - ph - 48;
+    if (x < 0) x = 0;
+    if (y < bar_h) y = bar_h;
+    g_pane_dx = x - 36;
+    g_pane_dy = y - (bar_h + 28);
+    *wx = x;
+    *wy = y;
+    *ww = pw;
+    *wh = ph;
+}
+
 static int in_rect(int px, int py, const gfx_rect_t *r) {
     if (!r || r->w <= 0 || r->h <= 0) return 0;
     return px >= r->x && px < r->x + r->w && py >= r->y && py < r->y + r->h;
@@ -43,13 +107,7 @@ static void gfx_desktop_handle_click(int x, int y) {
         return;
     }
 
-    /* 2. Window pane close button (traffic light) */
-    if (layout.pane_win.active && in_rect(x, y, &layout.pane_win.traffic)) {
-        kbd_put_string("/center\n");
-        return;
-    }
-
-    /* 3. Dock icons */
+    /* 2. Dock icons */
     for (i = 0; i < 7; i++) {
         if (in_rect(x, y, &layout.dock.icons[i])) {
             kbd_put_string(cmds[i]);
@@ -57,7 +115,7 @@ static void gfx_desktop_handle_click(int x, int y) {
         }
     }
 
-    /* 4. Top menu bar items */
+    /* 3. Top menu bar items */
     for (i = 0; i < layout.menu_count; i++) {
         if (in_rect(x, y, &layout.menu_items[i])) {
             kbd_put_string(cmds[i]);
@@ -65,7 +123,7 @@ static void gfx_desktop_handle_click(int x, int y) {
         }
     }
 
-    /* 5. Scene IA Mode Pills */
+    /* 4. Scene IA Mode Pills */
     if (in_rect(x, y, &layout.scene_ia.pills[0])) {
         kbd_put_string("/stage-prompt reflexion\n");
         return;
@@ -83,10 +141,65 @@ static void gfx_desktop_handle_click(int x, int y) {
         return;
     }
 
-    /* 6. Stage mode badge */
+    /* 5. Stage mode badge */
     if (in_rect(x, y, &layout.stage_badge)) {
         kbd_put_string("/stage\n");
         return;
+    }
+}
+
+static void gfx_desktop_on_buttons(int x, int y, uint8_t left_now, uint8_t left_prev) {
+    gfx_desktop_layout_t layout;
+    int w = gfx_fb_width();
+    int h = gfx_fb_height();
+
+    if (!vga_desktop_active()) {
+        g_drag_active = 0;
+        return;
+    }
+
+    gfx_desktop_get_layout(g_last_scene_valid ? &g_last_scene : 0, w, h, &layout);
+
+    if (left_now && g_drag_active) {
+        g_pane_dx = g_drag_orig_dx + (x - g_drag_grab_x);
+        g_pane_dy = g_drag_orig_dy + (y - g_drag_grab_y);
+        return;
+    }
+
+    if (left_prev && !left_now) {
+        g_drag_active = 0;
+        return;
+    }
+
+    if (!left_prev && left_now) {
+        /* Traffic close -> /center and clear windowing. */
+        if (layout.pane_win.active && in_rect(x, y, &layout.pane_win.traffic)) {
+            kbd_put_string("/center\n");
+            if (g_last_scene_valid) {
+                g_last_scene.pane = OS_FB_PANE_NONE;
+                g_last_scene.chat_mode = OS_FB_CHAT_CENTER;
+            }
+            gfx_desktop_reset_pane_windowing();
+            return;
+        }
+        /* Titlebar drag + focus. */
+        if (layout.pane_win.active && in_rect(x, y, &layout.pane_win.titlebar)) {
+            g_pane_focused = 1;
+            g_drag_active = 1;
+            g_drag_grab_x = x;
+            g_drag_grab_y = y;
+            g_drag_orig_dx = g_pane_dx;
+            g_drag_orig_dy = g_pane_dy;
+            return;
+        }
+        /* Pane body: focus only. */
+        if (layout.pane_win.active && in_rect(x, y, &layout.pane_win.box)) {
+            g_pane_focused = 1;
+            return;
+        }
+        /* Click outside pane clears focus, then widget hit-test. */
+        g_pane_focused = 0;
+        gfx_desktop_handle_click(x, y);
     }
 }
 
@@ -116,9 +229,7 @@ void gfx_desktop_set_mouse(int x, int y, uint8_t buttons) {
     g_mouse_buttons = buttons;
     clamp_mouse_to_fb();
 
-    if (vga_desktop_active() && !left_prev && left_now) {
-        gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
-    }
+    gfx_desktop_on_buttons(g_mouse_x, g_mouse_y, left_now, left_prev);
     g_prev_buttons = buttons;
 
     gfx_fb_update_cursor();
@@ -146,9 +257,7 @@ void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons) {
     g_mouse_buttons = buttons;
     clamp_mouse_to_fb();
 
-    if (vga_desktop_active() && !left_prev && left_now) {
-        gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
-    }
+    gfx_desktop_on_buttons(g_mouse_x, g_mouse_y, left_now, left_prev);
     g_prev_buttons = buttons;
 
     gfx_fb_update_cursor();
@@ -554,7 +663,9 @@ static const char *pane_title(uint8_t pane) {
 
 static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const char *title, const char *body) {
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(18, 28, 36), 230);
-    stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
+    stroke_round(fb, w, h, x, y, rw, rh, 10,
+                 g_pane_focused ? RGB(122, 212, 196) : RGB(61, 154, 138),
+                 g_pane_focused ? 2 : 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
     traffic(fb, w, h, x + 8, y + 8);
     draw_text(fb, w, h, x + 56, y + 12, title ? title : "", RGB(232, 238, 244));
@@ -566,7 +677,9 @@ static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh
 static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
     int ty, term_h, i, maxc, prompt_y, n;
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 16, 20), 240);
-    stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
+    stroke_round(fb, w, h, x, y, rw, rh, 10,
+                 g_pane_focused ? RGB(122, 212, 196) : RGB(61, 154, 138),
+                 g_pane_focused ? 2 : 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
     traffic(fb, w, h, x + 8, y + 8);
     draw_text(fb, w, h, x + 56, y + 12, "Shell Multiboot", RGB(232, 238, 244));
@@ -717,16 +830,22 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     out->scene_ia.pills[2].h = 40;
 
     pane = sc->pane;
+    sync_pane_windowing(pane);
     if (pane != OS_FB_PANE_NONE) {
-        int wx = 36, wy = bar_h + 28;
-        int ww = clampi(w - (w >= 780 ? 420 : 48), 240, w - 48);
-        int wh = clampi(h - 220, 160, h - bar_h - 80);
+        int wx, wy, ww, wh;
+        pane_default_geom(w, h, bar_h, &wx, &wy, &ww, &wh);
 
         out->pane_win.active = 1;
+        out->pane_win.focused = g_pane_focused;
         out->pane_win.box.x = wx;
         out->pane_win.box.y = wy;
         out->pane_win.box.w = ww;
         out->pane_win.box.h = wh;
+
+        out->pane_win.titlebar.x = wx;
+        out->pane_win.titlebar.y = wy;
+        out->pane_win.titlebar.w = ww;
+        out->pane_win.titlebar.h = 32;
 
         out->pane_win.traffic.x = wx + 8;
         out->pane_win.traffic.y = wy + 8;
@@ -734,6 +853,11 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         out->pane_win.traffic.h = 16;
     } else {
         out->pane_win.active = 0;
+        out->pane_win.focused = 0;
+        out->pane_win.titlebar.x = 0;
+        out->pane_win.titlebar.y = 0;
+        out->pane_win.titlebar.w = 0;
+        out->pane_win.titlebar.h = 0;
     }
 
     chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(w / 3, 220, 360) : clampi(w / 2, 240, 640);
@@ -743,8 +867,9 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     if (chat_h < 120) chat_h = 120;
 
     if (sc->chat_mode == OS_FB_CHAT_FLOAT) {
-        int pane_w = (pane != OS_FB_PANE_NONE) ? clampi(w - (w >= 780 ? 420 : 48), 240, w - 48) : 0;
-        int pane_right = (pane != OS_FB_PANE_NONE) ? (36 + pane_w + 12) : 8;
+        int pane_right = 8;
+        if (out->pane_win.active)
+            pane_right = out->pane_win.box.x + out->pane_win.box.w + 12;
         int max_x = w - chat_w - 8;
         chat_x = w - chat_w - 16;
         chat_y = h - chat_h - 70;
@@ -907,11 +1032,11 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     draw_stage_body(fb, w, h, scene_x + 12, scene_y + 48, scene_w - 24, scene_h - 60, sc);
 
     pane = sc->pane;
+    sync_pane_windowing(pane);
     ptitle = pane_title(pane);
     if (ptitle) {
-        int wx = 36, wy = bar_h + 28;
-        int ww = clampi(w - (w >= 780 ? 420 : 48), 240, w - 48);
-        int wh = clampi(h - 220, 160, h - bar_h - 80);
+        int wx, wy, ww, wh;
+        pane_default_geom(w, h, bar_h, &wx, &wy, &ww, &wh);
         if (pane == OS_FB_PANE_SHELL)
             draw_shell(fb, w, h, wx, wy, ww, wh, sc);
         else
@@ -926,8 +1051,12 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     if (chat_h > h - bar_h - 56) chat_h = h - bar_h - 56;
     if (chat_h < 120) chat_h = 120;
     if (sc->chat_mode == OS_FB_CHAT_FLOAT) {
-        int pane_w = ptitle ? clampi(w - (w >= 780 ? 420 : 48), 240, w - 48) : 0;
-        int pane_right = ptitle ? (36 + pane_w + 12) : 8;
+        int pane_right = 8;
+        if (ptitle) {
+            int pwx, pwy, pww, pwh;
+            pane_default_geom(w, h, bar_h, &pwx, &pwy, &pww, &pwh);
+            pane_right = pwx + pww + 12;
+        }
         int max_x = w - chat_w - 8;
         chat_x = w - chat_w - 16;
         chat_y = h - chat_h - 70;

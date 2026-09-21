@@ -405,6 +405,11 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         return 0;
     }
     if (key == OS_VGA_KEY_ESC) {
+        /* OS-UI-2-W: ESC closes the focused program pane first; second ESC leaves gui. */
+        if (scmp(osui_get_pane(), "none") != 0) {
+            osui_dispatch_line("/center", out, out_max);
+            return 0;
+        }
         g_leave = 1;
         if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=qemu_fb\n");
         return 1;

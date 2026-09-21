@@ -292,6 +292,7 @@ static void test_hit_regions_dock_menu_stage_close(void) {
     TEST_ASSERT_EQUAL_STRING("/stage-prompt reflexion\n", got);
 
     /* Pane close (traffic) requires an active pane in last scene */
+    gfx_desktop_reset_pane_windowing();
     blank_scene();
     g_scene.chat_mode = OS_FB_CHAT_FLOAT;
     g_scene.pane = OS_FB_PANE_SHELL;
@@ -304,6 +305,64 @@ static void test_hit_regions_dock_menu_stage_close(void) {
     TEST_ASSERT_EQUAL_STRING("/center\n", got);
 
     vga_desktop_set(0);
+}
+
+
+static void test_pane_focus_and_drag_and_close(void) {
+    gfx_desktop_layout_t layout;
+    char got[48];
+    int dx = 0, dy = 0;
+    int title_x, title_y;
+    int traffic_x, traffic_y;
+
+    gfx_desktop_reset_pane_windowing();
+    blank_scene();
+    g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+    g_scene.pane = OS_FB_PANE_SHELL;
+    vga_desktop_set(1);
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    gfx_desktop_get_layout(&g_scene, W, H, &layout);
+    TEST_ASSERT(layout.pane_win.active);
+    TEST_ASSERT(layout.pane_win.focused); /* auto-focus on open */
+    TEST_ASSERT(layout.pane_win.titlebar.h == 32);
+
+    /* Click pane body keeps focus (no command). */
+    drain_kbd();
+    click_at(layout.pane_win.box.x + layout.pane_win.box.w / 2,
+             layout.pane_win.box.y + layout.pane_win.box.h / 2);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("", got);
+    TEST_ASSERT(gfx_desktop_pane_focused());
+
+    /* Drag titlebar (avoid traffic lights). */
+    title_x = layout.pane_win.titlebar.x + layout.pane_win.titlebar.w / 2;
+    title_y = layout.pane_win.titlebar.y + layout.pane_win.titlebar.h / 2;
+    gfx_desktop_set_mouse(title_x, title_y, 0);
+    gfx_desktop_set_mouse(title_x, title_y, 1);
+    gfx_desktop_set_mouse(title_x + 40, title_y + 30, 1);
+    gfx_desktop_set_mouse(title_x + 40, title_y + 30, 0);
+    gfx_desktop_get_pane_offset(&dx, &dy);
+    TEST_ASSERT_EQUAL(40, dx);
+    TEST_ASSERT_EQUAL(30, dy);
+
+    gfx_desktop_get_layout(&g_scene, W, H, &layout);
+    TEST_ASSERT_EQUAL(36 + 40, layout.pane_win.box.x);
+    TEST_ASSERT_EQUAL(layout.bar_h + 28 + 30, layout.pane_win.box.y);
+
+    /* Traffic close at dragged position -> /center and clears windowing. */
+    drain_kbd();
+    traffic_x = rect_center_x(&layout.pane_win.traffic);
+    traffic_y = rect_center_y(&layout.pane_win.traffic);
+    click_at(traffic_x, traffic_y);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("/center\n", got);
+    TEST_ASSERT_EQUAL(0, gfx_desktop_pane_focused());
+    gfx_desktop_get_pane_offset(&dx, &dy);
+    TEST_ASSERT_EQUAL(0, dx);
+    TEST_ASSERT_EQUAL(0, dy);
+
+    vga_desktop_set(0);
+    gfx_desktop_reset_pane_windowing();
 }
 
 int main(void) {
@@ -320,6 +379,7 @@ int main(void) {
     RUN_TEST(test_desktop_layout_and_hit_test);
     RUN_TEST(test_mouse_clamped_to_fb);
     RUN_TEST(test_hit_regions_dock_menu_stage_close);
+    RUN_TEST(test_pane_focus_and_drag_and_close);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -141,7 +141,7 @@ def clampi(v, lo, hi):
     return v
 
 
-def desktop_hit_centers(width, height, chat_mode="center", pane=None):
+def desktop_hit_centers(width, height, chat_mode="center", pane=None, pane_dx=0, pane_dy=0):
     """Mirror gfx_desktop_get_layout centers used by gfx_desktop_handle_click."""
     bar_h = clampi(height // 22, 28, 40)
     menus = ["Chat", "Browser-OS", "Shell", "Admin", "Support", "Statut", "FS"]
@@ -158,10 +158,24 @@ def desktop_hit_centers(width, height, chat_mode="center", pane=None):
         mx += lw + gap
     stage_badge = (12 + 48, bar_h + 8 + 9)
     traffic = None
+    titlebar = None
+    pane_box = None
     if pane:
-        wx = 36
-        wy = bar_h + 28
+        ww = clampi(width - (420 if width >= 780 else 48), 240, width - 48)
+        wh = clampi(height - 220, 160, height - bar_h - 80)
+        wx = 36 + pane_dx
+        wy = bar_h + 28 + pane_dy
+        if wx < 0:
+            wx = 0
+        if wy < bar_h:
+            wy = bar_h
+        if wx + ww > width:
+            wx = width - ww
+        if wy + wh > height - 48:
+            wy = height - wh - 48
         traffic = (wx + 8 + 21, wy + 8 + 8)
+        titlebar = (wx + ww // 2, wy + 16)
+        pane_box = (wx + ww // 2, wy + wh // 2)
     if chat_mode == "float":
         chat_w = clampi(width // 3, 220, 360)
         chat_h = clampi(height // 2, 180, 400)
@@ -198,6 +212,8 @@ def desktop_hit_centers(width, height, chat_mode="center", pane=None):
         "stage_badge": stage_badge,
         "send_btn": send_btn,
         "traffic": traffic,
+        "titlebar": titlebar,
+        "pane_box": pane_box,
         "docks": docks,
     }
 
@@ -258,6 +274,32 @@ def click_tablet(qmp, px, py, width, height):
     ]}})
     time.sleep(0.5)
 
+
+def drag_tablet(qmp, x0, y0, x1, y1, width, height, steps=4):
+    """Press at (x0,y0), drag absolute to (x1,y1), release (OS-UI-2-W titlebar)."""
+    ax0, ay0 = tablet_abs_xy(x0, y0, width, height)
+    qmp_cmd(qmp, {"execute": "input-send-event", "arguments": {"events": [
+        {"type": "abs", "data": {"axis": "x", "value": ax0}},
+        {"type": "abs", "data": {"axis": "y", "value": ay0}},
+    ]}})
+    time.sleep(0.4)
+    qmp_cmd(qmp, {"execute": "input-send-event", "arguments": {"events": [
+        {"type": "btn", "data": {"down": True, "button": "left"}},
+    ]}})
+    time.sleep(0.4)
+    for i in range(1, steps + 1):
+        px = x0 + (x1 - x0) * i // steps
+        py = y0 + (y1 - y0) * i // steps
+        ax, ay = tablet_abs_xy(px, py, width, height)
+        qmp_cmd(qmp, {"execute": "input-send-event", "arguments": {"events": [
+            {"type": "abs", "data": {"axis": "x", "value": ax}},
+            {"type": "abs", "data": {"axis": "y", "value": ay}},
+        ]}})
+        time.sleep(0.25)
+    qmp_cmd(qmp, {"execute": "input-send-event", "arguments": {"events": [
+        {"type": "btn", "data": {"down": False, "button": "left"}},
+    ]}})
+    time.sleep(0.4)
 
 
 def wait_for_empty_gui_line(proc, timeout, start=0):
@@ -472,11 +514,23 @@ def main():
                 qmp, proc, width, height, mx, my, "menu[Browser-OS]",
                 "osui gui line=/browser", extra_marker="chat_mode=float",
             )
-            # After /browser, floating chat + browser pane -> close (traffic) maps to /center.
+            # OS-UI-2-W: focus pane body, drag titlebar, traffic-close at new position.
             hits_pane = desktop_hit_centers(width, height, chat_mode="float", pane="browser")
-            tx, ty = hits_pane["traffic"]
+            bx, by = hits_pane["pane_box"]
+            say("click pane body (focus) at %d,%d ..." % (bx, by))
+            click_tablet(qmp, bx, by, width, height)
+            time.sleep(0.4)
+            tbx, tby = hits_pane["titlebar"]
+            drag_dx, drag_dy = 40, 30
+            say("drag titlebar from %d,%d by %+d,%+d ..." % (tbx, tby, drag_dx, drag_dy))
+            drag_tablet(qmp, tbx, tby, tbx + drag_dx, tby + drag_dy, width, height)
+            hits_dragged = desktop_hit_centers(
+                width, height, chat_mode="float", pane="browser",
+                pane_dx=drag_dx, pane_dy=drag_dy,
+            )
+            tx, ty = hits_dragged["traffic"]
             click_xy_and_wait(
-                qmp, proc, width, height, tx, ty, "pane_close",
+                qmp, proc, width, height, tx, ty, "pane_close_dragged",
                 "osui gui line=/center", extra_marker="chat_mode=center",
             )
             hits = desktop_hit_centers(width, height, chat_mode="center", pane=None)
@@ -522,10 +576,11 @@ def main():
             send_command_until(
                 monitor, "ai hello", "[IA]", proc, mode="getc", wait_prompt=False
             )
-            say("typing /center in gui ...")
-            send_command_until(
-                monitor, "/center", "chat_mode=center", proc, mode="getc", wait_prompt=False
-            )
+            # OS-UI-2-W: ESC closes shell pane (/center); console still leaves gui.
+            say("sending ESC to close pane ...")
+            start_esc = len(log_text())
+            send_key(monitor, "esc")
+            wait_for(proc, "chat_mode=center", CMD_TIMEOUT, start_esc)
             say("typing console ...")
             send_command_until(
                 monitor, "console", "chrome=text", proc, mode="getc", wait_prompt=True
