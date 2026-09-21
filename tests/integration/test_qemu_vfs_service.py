@@ -38,6 +38,46 @@ def log_text():
         return ""
 
 
+def rejoin_spawn_preempted_puts(output):
+    """Recolle un puts() coupe juste avant le `spawn ok` du meme binaire.
+
+    Sous IRQ0, SYS_PUTC peut n'emettre qu'un prefixe (`v`) avant le retour
+    shell `spawn ok pid N vfsserver` ; la suite (`fsserver ready vfs`) arrive
+    apres le yield. Sans recollement, wait_for("vfsserver ready vfs") rate.
+    """
+    pattern = re.compile(
+        r"\b([A-Za-z]{1,16})[ \t]*\r?\n?"
+        r"(spawn ok pid \d+ ([A-Za-z0-9_]+)\r?\n)"
+    )
+    pieces = []
+    last = 0
+    for match in pattern.finditer(output):
+        prefix = match.group(1)
+        name = match.group(3)
+        if not name.startswith(prefix):
+            continue
+        continuation = name[len(prefix):]
+        if not continuation:
+            continue
+        after = match.end()
+        window = output[after:after + 4000]
+        cont = re.search(r"(?m)^" + re.escape(continuation), window)
+        if not cont:
+            continue
+        line_end = window.find("\n", cont.start())
+        if line_end < 0:
+            line_end = len(window)
+        line = window[cont.start():line_end]
+        gap = window[:cont.start()]
+        pieces.append(output[last:match.start()])
+        pieces.append(match.group(2))
+        pieces.append(gap)
+        pieces.append(prefix + line)
+        last = after + line_end
+    pieces.append(output[last:])
+    return "".join(pieces)
+
+
 def normalized_log(output):
     """Retire les diagnostics noyau asynchrones sans recoller les réponses."""
     # Un timer peut couper une réponse au milieu d’un mot ou juste avant une
@@ -52,6 +92,8 @@ def normalized_log(output):
     scheduler_run = r"(?:\[SCHED\] switching to task \d+\s*)+"
     output = re.sub(r"(?<=\w)" + scheduler_run + r"(?=\w)", " ", output)
     output = re.sub(r"\[SCHED\] switching to task \d+\s*", "", output)
+    # Prefixe puts() + spawn ok + suffixe de la meme ligne (flake CI vfs-service).
+    output = rejoin_spawn_preempted_puts(output)
     return re.sub(r"[ \t]{2,}", " ", output)
 
 def wait_for(needle, proc, offset=0, timeout=25):
@@ -103,6 +145,28 @@ def key_echoes(output):
 
 def prepared_line_matches(output, command):
     return key_echoes(output) == [char.lower() for char in command]
+
+
+
+def verify_spawn_preempted_puts_rejoin():
+    """Sonde : prefixe puts() + spawn ok + suite → marqueur intact."""
+    sample = (
+        "v[SCHED] switching to task 1\n"
+        "spawn ok pid 3 vfsserver\n"
+        "(-.-) : SYS_GETS: Debut de la lecture\n"
+        "SYS_GETS: ligne lue: yield\n"
+        "[SCHED] switching to task 3\n"
+        "fsserver ready vfs\n"
+        "vfsserver mount initrd/ ro\n"
+    )
+    output = normalized_log(sample)
+    if "vfsserver ready vfs" not in output:
+        raise RuntimeError("sonde spawn-preempt: ready non recolle")
+    if "spawn ok pid 3 vfsserver" not in output:
+        raise RuntimeError("sonde spawn-preempt: spawn ok perdu")
+    intact = normalized_log("vfsserver ready vfs\nspawn ok pid 3 vfsserver\n")
+    if "vfsserver ready vfs" not in intact:
+        raise RuntimeError("sonde spawn-preempt: chemin intact casse")
 
 
 def verify_pre_ret_reconciliation_parser():
