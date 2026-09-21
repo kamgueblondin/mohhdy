@@ -612,7 +612,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ipc-foundation qemu-vfs-service qemu-service-grant
+.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ipc-foundation qemu-vfs-service qemu-service-grant
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -625,9 +625,13 @@ qemu-ne2k-tls-multipair: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_ne2k_tls_multipair.py
 
 # Garde 2 gate: two simultaneous TCG guests + host-mutexed PS/2 inject.
-# Not part of integration-qemu. Shared topology stays blocked until this stays green.
+# Not part of integration-qemu. Prerequisite for shared Ethernet topology.
 qemu-ps2-dual: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_ps2_dual_inject.py
+
+# Tranche 2: dual guests on shared 127.0.0.1 socket hub (no TAP). Hors integration-qemu / ci.
+qemu-ne2k-shared-topology: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_ne2k_shared_topology.py
 qemu-ipc-foundation: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_ipc_foundation.py
 
@@ -727,6 +731,7 @@ help:
 	@echo "  qemu-ne2k-tls-next - Second tour LLM sur la meme session TLS via ai-next"
 	@echo "  qemu-ne2k-tls-multipair - Deux liens NE2000/TLS locaux séquentiels, MAC et journaux séparés"
 	@echo "  qemu-ps2-dual - Garde 2: deux QEMU TCG simultanés + injection PS/2 (hors integration-qemu)"
+	@echo "  qemu-ne2k-shared-topology - Tranche 2: hub Ethernet 127.0.0.1 + 2 guests NE2000 (hors ci)"
 	@echo "  qemu-ipc-foundation - Vérifie l’IPC entre tâches Ring 3"
 	@echo "  qemu-vfs-service - Vérifie une lecture via le médiateur VFS Ring 3"
 	@echo "  gguf-benchmark  - Mesure répétée du premier token et de ai-continue GGUF sous QEMU"

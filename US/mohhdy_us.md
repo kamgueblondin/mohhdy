@@ -77,7 +77,7 @@ La mention **fait** signifie que le comportement est observable dans le code et 
 
 **Limite et suite.** Un client OpenAI reel exige encore un secret hors initrd et un hote public. QEMU peut relier `ne2k_isa` a un backend utilisateur [1] ; le guest a un pilote, un TLS local et un HTTP local, pas un client HTTPS public.
 
-**Vérification.** `make qemu-ai-provider`, `make qemu-ne2k-status`, `make qemu-ne2k-acquire`, `make qemu-ne2k-tls-http`, `make qemu-ne2k-tls-sse`, `make qemu-ne2k-tls-close`, `make qemu-ne2k-tls-next` et `make qemu-ne2k-tls-multipair`.
+**Vérification.** `make qemu-ai-provider`, `make qemu-ne2k-status`, `make qemu-ne2k-acquire`, `make qemu-ne2k-tls-http`, `make qemu-ne2k-tls-sse`, `make qemu-ne2k-tls-close`, `make qemu-ne2k-tls-next`, `make qemu-ne2k-tls-multipair` et `make qemu-ne2k-shared-topology` (hors ci).
 
 ### AOS-026 - Volume FAT sur disque IDE (lot 68 livré)
 
@@ -131,7 +131,7 @@ Les lots 113-154 sont **faits** au sens caller-owned / Unity / smoke NIC. Les lo
 |---|---|---|
 | 0 | Budget CI QEMU | Conserver les sept contrats séquentiels sous 25 minutes et le smoke multi-pairs dans GitHub Actions, sans retirer d'assertion métier ni rejouer une mutation ou I/O incertaine ; la dernière mesure locale est 760,9 s |
 | 1 | Couverture de l'ACL préfixée | Conserver les preuves négatives de voisin, racine et voie sans chemin ; le diagnostic public reste droit-source et ne doit jamais divulguer le préfixe interne |
-| 2 | Topologie réseau locale partagée optionnelle | Préalable : `make qemu-ps2-dual` (deux TCG simultanés + PS/2 mutexé). Topologie partagée encore ouverte ; sans TAP, clé, Internet public ni OpenAI |
+| 2 | Topologie réseau locale partagée optionnelle | `make qemu-ne2k-shared-topology` (hub 127.0.0.1, 2 guests NE2000 simultanés, nic×2, DHCP Discover A / B vivant). TLS multi simultané encore ouvert ; sans TAP, clé, Internet public ni OpenAI |
 | 3 | Latence locale | Mesure sous matériel/KVM sur une plateforme de référence ; QEMU TCG reste ~48 s / ~23 s |
 
 La vision historique (microkernel, P2P, economie, multi-plateforme, etc.) reste une collection de specifications dans `US/`. Elle ne doit pas etre lue comme un second produit ni comme indicateur d'implementation du guest. Capacites OS de l'instance : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Roadmap produit : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) (premieres tranches OS-UI-0/1/2, prochain OS-UI-3). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).

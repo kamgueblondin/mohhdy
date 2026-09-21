@@ -120,19 +120,20 @@ make integration-qemu
 
 **But.** Plusieurs instances QEMU sur un réseau local partagé, seulement **après** une injection PS/2 démontrée avec plusieurs QEMU **simultanés**. Sans TAP, sans clé, sans Internet public, sans OpenAI.
 
-**IDs liés.** AOS-025 (réseau minimal / profil OpenAI honnête), lots NE2000 / TLS local (`qemu-ne2k-tls-multipair`). Pas un daemon DHCP public.
+**IDs liés.** AOS-025 (réseau minimal / profil OpenAI honnête), lots NE2000 / TLS local (`qemu-ne2k-tls-multipair`). Pas un daemon DHCP public. Harness : [aos_shared_ethernet_topology.md](aos_shared_ethernet_topology.md).
 
 **Critère de sortie.**
 
-- Préalable bloquant : deux (ou plus) QEMU TCG simultanés reçoivent une injection PS/2 fiable, sans contention de scancodes
-- Ensuite seulement : topologie locale partagée optionnelle, toujours `127.0.0.1` / pair Ethernet contrôlé
+- Préalable Garde 2 : `make qemu-ps2-dual` vert (deux QEMU TCG simultanés, `sendkey` mutexé hôte, écho confirmé)
+- Topologie locale partagée : `make qemu-ne2k-shared-topology` — deux invités NE2000 sur un hub socket `127.0.0.1`, `nic=detected` des deux côtés, DHCP Discover de A observé pendant que B reste vivant sur le même segment
 - Interdit : TAP, hôte Internet, secret, OpenAI réel
-- Le contrat séquentiel actuel `make qemu-ne2k-tls-multipair` reste vert tant que le simultané n'est pas prouvé
+- Le contrat séquentiel `make qemu-ne2k-tls-multipair` reste le smoke TLS multi-pairs ; le partage simultané ne le remplace pas
 
 **Commandes de vérification.**
 
 ```text
 make qemu-ps2-dual
+make qemu-ne2k-shared-topology
 make qemu-ne2k-status
 make qemu-ne2k-acquire
 make qemu-ne2k-tls-http
@@ -143,18 +144,16 @@ make qemu-ne2k-tls-multipair
 make qemu-smoke
 ```
 
-`make qemu-ps2-dual` est le préalable PS/2 : deux QEMU TCG vivants en parallèle,
-injection `sendkey` confirmée par écho, verrou hôte (pas de sendkey chevauché).
-La topologie réseau partagée reste hors livrable tant que ce gate n'est pas vert.
-Le multi-pairs TLS séquentiel ne change pas.
+`make qemu-ne2k-shared-topology` est hors `make ci` / `integration-qemu` (budget).
+Pas de TLS multi-invités simultanés ni de lien guest↔guest applicatif dans ce lot.
 
 **Risques et limites.**
 
-- ETAT_REEL : le caractère séquentiel du multi-pairs évite la contention PS/2 connue de deux QEMU TCG simultanés
-- Sans solution d'injection, paralléliser est une régression, pas une fonctionnalité
+- L'injection PS/2 reste mutexée hôte ; des sendkey chevauchés sous TCG restent un mode diagnostic seulement
+- Un seul bail DHCP déterministe (`10.32.0.15`) : un seul invité émet `ai-acquire` dans ce contrat
 - Ce n'est pas le réseau public (voir tranche sous condition plus bas)
 
-**Ordre suggéré.** Après CI et ACL. Ne pas commencer le partage réseau tant que le préalable PS/2 simultané n'est pas démontré.
+**Ordre suggéré.** Après Garde 2. Étendre ensuite (ARP croisé, deuxième bail, TLS simultané) seulement si le budget CI le permet.
 
 ### Tranche 3. Latence GGUF sur plateforme de référence (matériel / KVM)
 
@@ -305,7 +304,7 @@ Les rangs 0-4 sont **ce fichier**. Les rangs OS-UI sont le [plan maitre](PLAN_SE
 |---:|---|---|---|
 | 0 | Budget CI QEMU | Prototype guest | Garder, ne pas relacher |
 | 1 | ACL prefixee | Prototype guest | Garder les preuves negatives |
-| 2 | Topologie locale partagee | Prototype guest | Optionnel, bloque par PS/2 simultane |
+| 2 | Topologie locale partagee | Prototype guest | `qemu-ne2k-shared-topology` (hub 127.0.0.1) ; TLS multi simultane encore ouvert |
 | 3 | Latence GGUF materiel / KVM | Prototype guest | Item ouvert README + priorite 3 `mohhdy_us.md` |
 | 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | Item partiel README `[~]` |
 | - | Reseau public | Prototype guest | Sous condition, hors CI |
