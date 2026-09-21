@@ -12,11 +12,15 @@ import socket
 import struct
 import threading
 
+from qemu_ne2k_tls12_server import LocalTls12Server
+
 SERVER_MAC = b"\x52\x54\x00\xa0\x20\x02"
 SERVER_IP = b"\x0a\x20\x00\x02"  # 10.32.0.2
-GUEST_IP = b"\x0a\x20\x00\x0f"  # 10.32.0.15
+GUEST_IP = b"\x0a\x20\x00\x0f"  # 10.32.0.15 — first lease
+GUEST_IP_B = b"\x0a\x20\x00\x10"  # 10.32.0.16 — second lease
 NETMASK = b"\xff\xff\xff\x00"
 REMOTE_IP = b"\xcb\x00\x71\x14"  # 203.0.113.20 TEST-NET-3
+MAX_TCP_PAYLOAD = 256
 
 
 def _checksum(data):
@@ -73,13 +77,13 @@ def _dhcp_type(payload):
     return 0
 
 
-def _dhcp_reply(request, message_type):
+def _dhcp_reply(request, message_type, guest_ip):
     xid = request[4:8]
     client_mac = request[28:34]
     payload = bytearray(278)
     payload[0:4] = b"\x02\x01\x06\x00"
     payload[4:8] = xid
-    payload[16:20] = GUEST_IP
+    payload[16:20] = guest_ip
     payload[28:34] = client_mac
     payload[236:240] = b"\x63\x82\x53\x63"
     options = bytearray()
@@ -99,13 +103,50 @@ def _dhcp_reply(request, message_type):
     )
 
 
-def _arp_reply(request):
+def _ipv4_tcp(source_ip, destination_ip, source_port, destination_port, sequence,
+              acknowledgment, flags, payload=b""):
+    tcp = bytearray(20 + len(payload))
+    tcp[0:4] = struct.pack("!HH", source_port, destination_port)
+    tcp[4:12] = struct.pack("!II", sequence, acknowledgment)
+    tcp[12] = 0x50
+    tcp[13] = flags
+    tcp[14:16] = b"\xff\xff"
+    tcp[20:] = payload
+    pseudo_header = source_ip + destination_ip + b"\x00\x06" + struct.pack("!H", len(tcp))
+    tcp[16:18] = struct.pack("!H", _checksum(pseudo_header + bytes(tcp)))
+    return _ipv4_packet(source_ip, destination_ip, 6, bytes(tcp))
+
+
+class _TlsSession(object):
+    """Etat TLS/HTTP local pour un seul invité du hub (pair controle)."""
+
+    def __init__(self):
+        self.tls = LocalTls12Server()
+        self.tls_step = 0
+        self.last_sent_end = 0
+        self.last_payload = b""
+        self.last_payload_sequence = 0
+        self.pending_advance = False
+        self.deferred_ack = None
+        self.server_sequence = 0x10203041
+        self.complete = False
+
+    @staticmethod
+    def _tls_handshake_type(payload):
+        if len(payload) < 6 or payload[:3] != b"\x16\x03\x03":
+            return None
+        return payload[5]
+
+
+def _arp_reply(request, target_ip=None):
     sender_mac = request[22:28]
     sender_ip = request[28:32]
+    if target_ip is None:
+        target_ip = SERVER_IP
     payload = (
         b"\x00\x01\x08\x00\x06\x04\x00\x02"
         + SERVER_MAC
-        + SERVER_IP
+        + target_ip
         + sender_mac
         + sender_ip
     )
@@ -138,8 +179,9 @@ def _mac_str(mac):
 class SharedEthernetHub(object):
     """Hub stream multi-clients + pair DHCP/ARP/DNS local (127.0.0.1)."""
 
-    def __init__(self, respond=True):
+    def __init__(self, respond=True, full_tls=False):
         self.respond = respond
+        self.full_tls = full_tls
         self.events = {
             "discover": 0,
             "offer": 0,
@@ -148,10 +190,18 @@ class SharedEthernetHub(object):
             "arp": 0,
             "dns": 0,
             "frames": 0,
+            "syn": 0,
+            "syn_ack": 0,
+            "client_hello": 0,
+            "server_finished": 0,
+            "http_response": 0,
+            "tls_complete_sessions": 0,
         }
         self.source_macs = set()
+        self.leases = {}  # mac_str -> guest_ip bytes
         self.error = None
         self._clients = []
+        self._sessions = {}  # connection -> _TlsSession
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -161,6 +211,26 @@ class SharedEthernetHub(object):
         self._listener.settimeout(0.2)
         self.port = self._listener.getsockname()[1]
         self._thread = threading.Thread(target=self._accept_loop, daemon=True)
+
+    def _lease_for_mac(self, client_mac):
+        key = _mac_str(client_mac)
+        with self._lock:
+            if key in self.leases:
+                return self.leases[key]
+            guest_ip = GUEST_IP if len(self.leases) == 0 else GUEST_IP_B
+            if len(self.leases) >= 2:
+                # Reuse second lease pool slot for any further MAC (test uses 2).
+                guest_ip = GUEST_IP_B
+            self.leases[key] = guest_ip
+            return guest_ip
+
+    def _session(self, connection):
+        with self._lock:
+            session = self._sessions.get(connection)
+            if session is None:
+                session = _TlsSession()
+                self._sessions[connection] = session
+            return session
 
     def start(self):
         self._thread.start()
@@ -240,9 +310,10 @@ class SharedEthernetHub(object):
             return
         ethertype = struct.unpack("!H", frame[12:14])[0]
         if ethertype == 0x0806 and len(frame) >= 42:
-            if frame[20:22] == b"\x00\x01" and frame[38:42] == SERVER_IP:
+            # Pair local : repondre pour la passerelle et pour l'IP TLS (meme MAC).
+            if frame[20:22] == b"\x00\x01" and frame[38:42] in (SERVER_IP, REMOTE_IP):
                 self.events["arp"] += 1
-                self._reply(connection, _arp_reply(frame))
+                self._reply(connection, _arp_reply(frame, frame[38:42]))
             return
         if ethertype != 0x0800 or len(frame) < 42:
             return
@@ -253,7 +324,27 @@ class SharedEthernetHub(object):
         total_length = struct.unpack("!H", frame[ip_offset + 2 : ip_offset + 4])[0]
         if header_length < 20 or total_length < header_length or len(frame) < ip_offset + total_length:
             return
+        ip_end = ip_offset + total_length
         protocol = frame[ip_offset + 9]
+        source_ip = frame[ip_offset + 12 : ip_offset + 16]
+        if protocol == 6 and self.full_tls:
+            tcp_offset = ip_offset + header_length
+            if len(frame) < tcp_offset + 20:
+                return
+            source_port, destination_port = struct.unpack("!HH", frame[tcp_offset:tcp_offset + 4])
+            sequence = struct.unpack("!I", frame[tcp_offset + 4:tcp_offset + 8])[0]
+            flags = frame[tcp_offset + 13]
+            tcp_header_length = (frame[tcp_offset + 12] >> 4) * 4
+            if tcp_header_length < 20 or ip_end < tcp_offset + tcp_header_length:
+                return
+            payload = frame[tcp_offset + tcp_header_length:ip_end]
+            if source_port == 49152 and destination_port == 443:
+                acknowledgment = struct.unpack("!I", frame[tcp_offset + 8:tcp_offset + 12])[0]
+                self._handle_tcp_443(
+                    connection, source_mac, source_ip, source_port,
+                    sequence, acknowledgment, flags, payload,
+                )
+            return
         if protocol != 17:
             return
         udp_offset = ip_offset + header_length
@@ -267,13 +358,14 @@ class SharedEthernetHub(object):
         payload = frame[udp_offset + 8 : udp_offset + udp_length]
         if source_port == 68 and destination_port == 67 and len(payload) >= 244:
             kind = _dhcp_type(payload)
+            guest_ip = self._lease_for_mac(payload[28:34])
             if kind == 1:
                 self.events["discover"] += 1
-                self._reply(connection, _dhcp_reply(payload, 2))
+                self._reply(connection, _dhcp_reply(payload, 2, guest_ip))
                 self.events["offer"] += 1
             elif kind == 3:
                 self.events["request"] += 1
-                self._reply(connection, _dhcp_reply(payload, 5))
+                self._reply(connection, _dhcp_reply(payload, 5, guest_ip))
                 self.events["ack"] += 1
             return
         if source_port == 49152 and destination_port == 53:
@@ -289,6 +381,128 @@ class SharedEthernetHub(object):
                 self.events["dns"] += 1
                 self._reply(connection, reply)
 
+    def _send_tcp_chunk(self, connection, dest_mac, dest_ip, dest_port, sequence,
+                        guest_ack, payload, flags=0x18):
+        frame = _ethernet(
+            dest_mac, 0x0800,
+            _ipv4_tcp(REMOTE_IP, dest_ip, 443, dest_port, sequence, guest_ack, flags, payload),
+        )
+        self._reply(connection, frame)
+
+    def _send_tcp(self, connection, session, dest_mac, dest_ip, dest_port, guest_ack,
+                  payload, flags=0x18):
+        if (not session.last_payload or
+                session.last_payload_sequence + len(session.last_payload) != session.server_sequence):
+            session.last_payload = b""
+            session.last_payload_sequence = session.server_sequence
+        session.last_payload += payload
+        if not payload:
+            self._send_tcp_chunk(connection, dest_mac, dest_ip, dest_port,
+                                 session.server_sequence, guest_ack, b"", flags)
+        offset = 0
+        while offset < len(payload):
+            chunk = payload[offset:offset + MAX_TCP_PAYLOAD]
+            self._send_tcp_chunk(connection, dest_mac, dest_ip, dest_port,
+                                 session.server_sequence, guest_ack, chunk, flags)
+            session.server_sequence += len(chunk)
+            offset += len(chunk)
+        session.last_sent_end = session.server_sequence
+        session.pending_advance = True
+
+    def _retransmit_tcp(self, connection, session, dest_mac, dest_ip, dest_port,
+                        guest_ack, acknowledgment=None):
+        if not session.last_payload:
+            return
+        if acknowledgment is None or acknowledgment < session.last_payload_sequence:
+            offset = 0
+            sequence = session.last_payload_sequence
+        else:
+            offset = acknowledgment - session.last_payload_sequence
+            sequence = acknowledgment
+        remaining = session.last_payload[offset:]
+        while remaining:
+            chunk = remaining[:MAX_TCP_PAYLOAD]
+            remaining = remaining[MAX_TCP_PAYLOAD:]
+            self._send_tcp_chunk(connection, dest_mac, dest_ip, dest_port,
+                                 sequence, guest_ack, chunk)
+            sequence += len(chunk)
+
+    def _handle_tcp_443(self, connection, dest_mac, dest_ip, dest_port, sequence,
+                        acknowledgment, flags, payload):
+        session = self._session(connection)
+        if (flags & 0x12) == 0x02:
+            self.events["syn"] += 1
+            self._reply(
+                connection,
+                _ethernet(
+                    dest_mac, 0x0800,
+                    _ipv4_tcp(REMOTE_IP, dest_ip, 443, dest_port, 0x10203040,
+                              sequence + 1, 0x12),
+                ),
+            )
+            self.events["syn_ack"] += 1
+            return
+        kind = _TlsSession._tls_handshake_type(payload)
+        if kind == 1 and session.tls_step == 0:
+            self.events["client_hello"] += 1
+            guest_ack = sequence + len(payload)
+            session.tls.note_client_hello(payload)
+            self._send_tcp(connection, session, dest_mac, dest_ip, dest_port, guest_ack,
+                           session.tls.server_hello_record())
+            session.tls_step = 1
+            return
+        if kind == 1 and 1 <= session.tls_step < 4:
+            self._retransmit_tcp(connection, session, dest_mac, dest_ip, dest_port,
+                                 sequence + len(payload), acknowledgment)
+            return
+        if payload and session.tls_step == 4:
+            session.tls.accept_client_flight(payload)
+            self._send_tcp(connection, session, dest_mac, dest_ip, dest_port,
+                           sequence + len(payload), session.tls.change_cipher_spec_record())
+            session.tls_step = 5
+            return
+        if payload and session.tls.ready and session.tls_step >= 6 and not session.complete:
+            request = session.tls.open_application(payload)
+            if b"POST" not in request:
+                raise RuntimeError("HTTP POST local attendu")
+            self._send_tcp(connection, session, dest_mac, dest_ip, dest_port,
+                           sequence + len(payload), session.tls.http_ok_record())
+            self.events["http_response"] += 1
+            session.tls_step = 7
+            session.complete = True
+            self.events["tls_complete_sessions"] += 1
+            return
+        if (flags & 0x10) and not payload:
+            if session.tls_step >= 1:
+                session.deferred_ack = (dest_mac, dest_ip, dest_port, sequence, acknowledgment)
+
+    def _advance_tls_on_ack(self, connection, session, dest_mac, dest_ip, dest_port,
+                            sequence, acknowledgment):
+        if not session.pending_advance or acknowledgment < session.last_sent_end:
+            return
+        session.pending_advance = False
+        guest_ack = sequence
+        if session.tls_step == 1:
+            self._send_tcp(connection, session, dest_mac, dest_ip, dest_port, guest_ack,
+                           session.tls.certificate_record())
+            session.tls_step = 2
+        elif session.tls_step == 2:
+            self._send_tcp(connection, session, dest_mac, dest_ip, dest_port, guest_ack,
+                           session.tls.server_key_exchange_record())
+            session.tls_step = 3
+        elif session.tls_step == 3:
+            self._send_tcp(connection, session, dest_mac, dest_ip, dest_port, guest_ack,
+                           session.tls.server_hello_done_record())
+            session.tls_step = 4
+        elif session.tls_step == 5:
+            self._send_tcp(connection, session, dest_mac, dest_ip, dest_port, guest_ack,
+                           session.tls.finished_record())
+            session.tls_step = 6
+            self.events["server_finished"] += 1
+            if not session.complete:
+                session.complete = True
+                self.events["tls_complete_sessions"] += 1
+
     def _serve_client(self, connection):
         try:
             while not self._stop.is_set():
@@ -296,7 +510,19 @@ class SharedEthernetHub(object):
                 if header is None:
                     break
                 if header == b"":
-                    continue  # idle timeout, keep client
+                    # Idle: advance deferred TLS ACK for this client.
+                    session = self._sessions.get(connection)
+                    if session is not None and session.deferred_ack is not None:
+                        dest_mac, dest_ip, dest_port, sequence, acknowledgment = session.deferred_ack
+                        session.deferred_ack = None
+                        try:
+                            self._advance_tls_on_ack(
+                                connection, session, dest_mac, dest_ip, dest_port,
+                                sequence, acknowledgment,
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            self.error = exc
+                    continue
                 (length,) = struct.unpack("!I", header)
                 if length == 0 or length > 65535:
                     break
@@ -318,6 +544,7 @@ class SharedEthernetHub(object):
             with self._lock:
                 if connection in self._clients:
                     self._clients.remove(connection)
+                self._sessions.pop(connection, None)
             try:
                 connection.close()
             except OSError:
