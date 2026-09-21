@@ -145,15 +145,15 @@ make qemu-smoke
 ```
 
 `make qemu-ne2k-shared-topology` est hors `make ci` / `integration-qemu` (budget).
-Pas de TLS multi-invités simultanés ni de lien guest↔guest applicatif dans ce lot.
+Suite : `make qemu-ne2k-tls-multi-guest` (TLS_COMPLETE x2 sur hub partage, hors ci). Lien guest↔guest applicatif encore ouvert.
 
 **Risques et limites.**
 
 - L'injection PS/2 reste mutexée hôte ; des sendkey chevauchés sous TCG restent un mode diagnostic seulement
-- Un seul bail DHCP déterministe (`10.32.0.15`) : un seul invité émet `ai-acquire` dans ce contrat
+- Topologie de base : un seul `ai-acquire` ; suite TLS multi : baux `10.32.0.15` / `10.32.0.16`
 - Ce n'est pas le réseau public (voir tranche sous condition plus bas)
 
-**Ordre suggéré.** Après Garde 2. Étendre ensuite (ARP croisé, deuxième bail, TLS simultané) seulement si le budget CI le permet.
+**Ordre suggéré.** Après Garde 2. TLS multi-invites livre (`qemu-ne2k-tls-multi-guest`). Étendre ensuite (ARP croisé / guest↔guest applicatif) seulement si le budget CI le permet.
 
 ### Tranche 3. Latence GGUF sur plateforme de référence (matériel / KVM)
 

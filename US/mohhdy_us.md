@@ -131,7 +131,7 @@ Les lots 113-154 sont **faits** au sens caller-owned / Unity / smoke NIC. Les lo
 |---|---|---|
 | 0 | Budget CI QEMU | Conserver les sept contrats séquentiels sous 25 minutes et le smoke multi-pairs dans GitHub Actions, sans retirer d'assertion métier ni rejouer une mutation ou I/O incertaine ; la dernière mesure locale est 760,9 s |
 | 1 | Couverture de l'ACL préfixée | Conserver les preuves négatives de voisin, racine et voie sans chemin ; le diagnostic public reste droit-source et ne doit jamais divulguer le préfixe interne |
-| 2 | Topologie réseau locale partagée optionnelle | `make qemu-ne2k-shared-topology` (hub 127.0.0.1, 2 guests NE2000 simultanés, nic×2, DHCP Discover A / B vivant). TLS multi simultané encore ouvert ; sans TAP, clé, Internet public ni OpenAI |
+| 2 | Topologie réseau locale partagée + TLS multi | `make qemu-ne2k-shared-topology` + `make qemu-ne2k-tls-multi-guest` (hub 127.0.0.1, dual lease, TLS_COMPLETE x2, hors ci). Guest↔guest applicatif encore ouvert ; sans TAP, clé, Internet public ni OpenAI |
 | 3 | Latence locale | Mesure sous matériel/KVM sur une plateforme de référence ; QEMU TCG reste ~48 s / ~23 s |
 
 La vision historique (microkernel, P2P, economie, multi-plateforme, etc.) reste une collection de specifications dans `US/`. Elle ne doit pas etre lue comme un second produit ni comme indicateur d'implementation du guest. Capacites OS de l'instance : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Roadmap produit : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) (premieres tranches OS-UI-0/1/2, prochain OS-UI-3). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
