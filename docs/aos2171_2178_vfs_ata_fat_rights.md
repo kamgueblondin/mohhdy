@@ -11,6 +11,8 @@ AOS-2174 closes owner bypass for `SOURCE_ALL` and any valid combination
 AOS-2175 adds the smallest worker-mediated ATA I/O slice: overlay
 `read`/`stat` syscalls are exercisable only by the live `vfs-virtual`
 PID (grants alone do not authorize the vfs owner locally).
+AOS-2176 extends that gate to overlay list and mutate syscalls
+(listdir, listdir_page, write via backend, unlink, rename, mkdir, rmdir).
 
 > Drivers stay Ring 0. This does not claim "microkernel done" or US-001
 > complete. It only places ATA/FAT I/O further behind rights already checked.
@@ -31,7 +33,7 @@ PID (grants alone do not authorize the vfs owner locally).
 | Shell | Public VFS IPC only | No backend syscall |
 | `vfsserver` | Policy + temporary grant to worker | No local ATA/FAT when worker live |
 | `vfsvirtual` | Syscalls under grant | Only from PID `vfs` |
-| Kernel | ATA PIO / FAT still Ring 0 | Owner bypass for any valid backend scope only if no `vfs-virtual` ; overlay read/stat only by worker PID when live (AOS-2175) |
+| Kernel | ATA PIO / FAT still Ring 0 | Owner bypass for any valid backend scope only if no `vfs-virtual` ; overlay read/stat/list/mutate only by worker PID when live (AOS-2175/2176) |
 
 ## Proofs
 
@@ -111,13 +113,50 @@ Drivers stay Ring 0. This is not full ATA driver extraction and not
 
 Unit proof: `test_ata_overlay_io_only_via_worker_when_live`.
 
+
+## AOS-2176 - worker-mediated ATA overlay list/mutate slice
+
+When `vfs-virtual` is published, overlay list and mutate syscalls succeed
+only for the worker PID:
+
+- `SYS_VFS_OVERLAY_LISTDIR` / `SYS_VFS_OVERLAY_LISTDIR_PAGE`
+- `SYS_VFS_BACKEND_WRITE` (overlay write path)
+- `SYS_VFS_OVERLAY_UNLINK` / `SYS_VFS_OVERLAY_RENAME`
+- `SYS_VFS_OVERLAY_MKDIR` / `SYS_VFS_OVERLAY_RMDIR`
+
+An explicit OVERLAY grant on the vfs owner is not enough to call those
+ATA-backed paths locally. Without a live worker, degraded local exercise
+remains. Historical `SYS_READFILE` / `SYS_WRITEFILE` stay ungated here.
+
+QEMU needles for the slice:
+
+```text
+vfsvirtual storage list overlay/
+vfsvirtual ata-backed list overlay/
+vfsvirtual ata-backed write overlay/note.txt
+vfsvirtual ata-backed rename overlay/note.txt
+vfsvirtual ata-backed remove overlay/moved.txt
+vfsvirtual ata-backed mkdir overlay/newdir
+vfsvirtual ata-backed rmdir overlay/newdir
+```
+
+Drivers stay Ring 0. This is not full ATA driver extraction and not
+"microkernel done".
+
+Unit proof: `test_ata_overlay_io_only_via_worker_when_live` (shared gate).
+
+QEMU also requires `vfsmutateclaim mutate-only worker-mediated` once the
+worker is live (mutate grant alone no longer authorizes local write/unlink).
+Local exercise denied by the worker gate returns `OS_VFS_BACKEND_WORKER_REQUIRED`
+(-65), distinct from a missing-grant `OS_VFS_BACKEND_DENIED`.
+
 ## Limits
 
 - No driver extraction from the kernel.
 - No shared memory, no multi-request worker, no US-010 / US-016.
 - Degraded mode without worker still uses local owner backend path.
 - ATA PIO driver itself remains in Ring 0; owner bypass gates (including SOURCE_ALL) moved, driver not extracted.
-- AOS-2175 mediates only overlay read/stat via the worker PID; mutate/list and historical SYS_READFILE stay for later slices.
+- AOS-2175/2176 mediate overlay read/stat/list/mutate via the worker PID; historical SYS_READFILE/SYS_WRITEFILE stay for later slices.
 
 ## References
 

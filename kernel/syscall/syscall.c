@@ -1042,6 +1042,10 @@ int sys_vfs_backend_write(const char* path, const char* data, uint32_t size) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2176: ATA-backed overlay list/mutate only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
+    }
     return sys_writefile(path, data, size);
 }
 
@@ -1259,9 +1263,9 @@ int sys_vfs_overlay_read(const char* path, char* buffer, uint32_t max) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
-    /* AOS-2175: ATA-backed overlay read only via live storage worker. */
+    /* AOS-2175/2176: ATA-backed overlay I/O only via live storage worker. */
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
-        return OS_VFS_BACKEND_DENIED;
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!path || !buffer || max == 0U) return -1;
     return overlay_read(path, buffer, max);
@@ -1271,6 +1275,10 @@ int sys_vfs_overlay_unlink(const char* path) {
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
+    }
+    /* AOS-2176: ATA-backed overlay list/mutate only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!path) return -1;
     return overlay_unlink(path);
@@ -1282,6 +1290,10 @@ int sys_vfs_overlay_rename(const char* oldpath, const char* newpath) {
         !vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, newpath)) {
         return OS_VFS_BACKEND_DENIED;
+    }
+    /* AOS-2176: ATA-backed overlay list/mutate only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!oldpath || !newpath) return -1;
     return overlay_rename(oldpath, newpath);
@@ -1301,9 +1313,9 @@ int sys_vfs_overlay_stat(const char* path, os_dirent_t* out) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
-    /* AOS-2175: ATA-backed overlay stat only via live storage worker. */
+    /* AOS-2175/2176: ATA-backed overlay I/O only via live storage worker. */
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
-        return OS_VFS_BACKEND_DENIED;
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!path || !out) return -1;
     return overlay_stat(path, out);
@@ -1323,6 +1335,10 @@ int sys_vfs_overlay_listdir(const char* path, os_dirent_t* out, int max_n) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2176: ATA-backed overlay list/mutate only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
+    }
     if (!path || !out || max_n <= 0 || !overlay_is_dir(path)) return -1;
     return overlay_listdir(path, out, 0, max_n);
 }
@@ -1341,6 +1357,10 @@ int sys_vfs_overlay_listdir_page(const char* path, os_dirent_t* out, uint32_t st
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2176: ATA-backed overlay list/mutate only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
+    }
     if (!path || !out || !overlay_is_dir(path)) return -1;
     return overlay_listdir_page(path, out, start, 5);
 }
@@ -1350,6 +1370,10 @@ int sys_vfs_overlay_mkdir(const char* path) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2176: ATA-backed overlay list/mutate only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
+    }
     if (!path) return -1;
     return overlay_mkdir(path);
 }
@@ -1358,6 +1382,10 @@ int sys_vfs_overlay_rmdir(const char* path) {
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
+    }
+    /* AOS-2176: ATA-backed overlay list/mutate only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!path || !overlay_is_dir(path)) return -1;
     return overlay_unlink(path);

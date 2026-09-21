@@ -38,7 +38,7 @@ static void worker_log_path_op(const char* kind, const char* op, const char* pat
     puts(line);
 }
 
-/* AOS-2175: distinct QEMU needle for the ATA-backed overlay read/stat slice. */
+/* AOS-2175/2176: distinct QEMU needle for ATA-backed overlay I/O slice. */
 static void worker_log_ata_overlay_slice(const char* op, const char* path) {
     if (!path || !op) return;
     if (path[0] == 'o' && path[1] == 'v' && path[2] == 'e' && path[3] == 'r' &&
@@ -673,6 +673,7 @@ void main(void) {
                                                     &ignored_next);
                 worker_log_path_op(worker_path_uses_boot_mount(path, 1) ? "storage" : "alias",
                                    "list", path);
+                worker_log_ata_overlay_slice("list", path);
                 if (os_vfs_make_worker_list_reply(&reply, status, count,
                                                   status < 0 ? (const uint8_t*)0 : data,
                                                   status < 0 ? 0U : size,
@@ -694,6 +695,7 @@ void main(void) {
                 }
                 worker_log_path_op(worker_path_uses_boot_mount(path, 1) ? "storage" : "alias",
                                    "list page", path);
+                worker_log_ata_overlay_slice("list page", path);
                 if (os_vfs_make_worker_list_page_reply(&reply, status, count, next,
                                                        status < 0 ? (const uint8_t*)0 : data,
                                                        status < 0 ? 0U : size,
@@ -731,6 +733,7 @@ void main(void) {
                 puts("vfsvirtual write ");
                 puts(path);
                 puts("\n");
+                worker_log_ata_overlay_slice("write", path);
                 if (os_vfs_make_write_reply(&reply, status, message.request_id) == OS_VFS_STATUS_OK) {
                     (void)ipc_send(message.sender_pid, &reply);
                 }
@@ -742,6 +745,7 @@ void main(void) {
                 puts("vfsvirtual remove ");
                 puts(path);
                 puts("\n");
+                worker_log_ata_overlay_slice("remove", path);
                 if (os_vfs_make_remove_reply(&reply, status, message.request_id) == OS_VFS_STATUS_OK) {
                     (void)ipc_send(message.sender_pid, &reply);
                 }
@@ -756,6 +760,7 @@ void main(void) {
                 puts(" -> ");
                 puts(new_path);
                 puts("\n");
+                worker_log_ata_overlay_slice("rename", path);
                 if (os_vfs_make_rename_reply(&reply, status, message.request_id) == OS_VFS_STATUS_OK) {
                     (void)ipc_send(message.sender_pid, &reply);
                 }
@@ -766,6 +771,7 @@ void main(void) {
                 == OS_VFS_STATUS_OK) {
                 int32_t status = mutate_mkdir(path);
                 puts("vfsvirtual mkdir "); puts(path); puts("\n");
+                worker_log_ata_overlay_slice("mkdir", path);
                 if (os_vfs_make_mkdir_reply(&reply, status, message.request_id) == OS_VFS_STATUS_OK)
                     (void)ipc_send(message.sender_pid, &reply);
             }
@@ -775,6 +781,7 @@ void main(void) {
                 == OS_VFS_STATUS_OK) {
                 int32_t status = mutate_rmdir(path);
                 puts("vfsvirtual rmdir "); puts(path); puts("\n");
+                worker_log_ata_overlay_slice("rmdir", path);
                 if (os_vfs_make_rmdir_reply(&reply, status, message.request_id) == OS_VFS_STATUS_OK)
                     (void)ipc_send(message.sender_pid, &reply);
             }

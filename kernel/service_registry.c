@@ -297,9 +297,10 @@ int service_registry_owner_bypasses_backend(const char* name, int32_t pid, uint3
     return 1;
 }
 
-/* AOS-2175: with vfs-virtual live, ATA-backed overlay I/O (read/stat slice) is
- * worker-mediated — only that PID may exercise the overlay path. Degraded mode
- * without the worker keeps historical local exercise. Drivers stay Ring 0. */
+/* AOS-2175/2176: with vfs-virtual live, ATA-backed overlay I/O
+ * (read/stat/list/mutate) is worker-mediated — only that PID may exercise the
+ * overlay path. Degraded mode without the worker keeps historical local
+ * exercise. Drivers stay Ring 0. */
 int service_registry_ata_overlay_io_via_worker(int32_t pid) {
     int32_t worker;
     if (pid <= 0) return 0;

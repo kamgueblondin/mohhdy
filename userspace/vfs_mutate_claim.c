@@ -29,6 +29,7 @@ void main(void) {
         int read_rc = backend_read("hello.txt", data, sizeof(data));
         int write_rc = backend_write("mutate.txt", "yes", 3U);
         if (read_rc == OS_VFS_BACKEND_DENIED && write_rc >= 0) {
+            /* Degraded mode: no live vfs-virtual — mutate grant authorizes local I/O. */
             if (backend_unlink("mutate.txt") >= 0) {
                 puts("vfsmutateclaim mutate-only enforced\n");
                 for (;;) yield();
@@ -36,11 +37,17 @@ void main(void) {
             puts("vfsmutateclaim cleanup unexpectedly denied\n");
             for (;;) yield();
         }
+        if (read_rc == OS_VFS_BACKEND_DENIED && write_rc == OS_VFS_BACKEND_WORKER_REQUIRED) {
+            /* AOS-2176: mutate grant present but ATA overlay mutate is worker-mediated. */
+            puts("vfsmutateclaim mutate-only worker-mediated\n");
+            for (;;) yield();
+        }
         if (read_rc >= 0) {
             puts("vfsmutateclaim read unexpectedly allowed\n");
             for (;;) yield();
         }
-        if (write_rc != OS_VFS_BACKEND_DENIED) {
+        if (write_rc != OS_VFS_BACKEND_DENIED && write_rc != OS_VFS_BACKEND_WORKER_REQUIRED &&
+            write_rc < 0) {
             puts("vfsmutateclaim mutation unexpectedly denied\n");
             for (;;) yield();
         }
