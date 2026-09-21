@@ -1276,6 +1276,8 @@ def main():
                                "vfs-read: service vfs indisponible", proc)
             before_return = len(log_text())
             send_command_until(monitor, "rc", "rc ok 0", proc)
+            if "vfsserver storage rights local refused" in normalized_log(log_text()):
+                raise RuntimeError("repli local ATA/FAT sous worker de confiance")
             print("MOHHDY Foundation VFS service contract passed")
             return 0
         finally:
