@@ -28,5 +28,5 @@ Injection PS/2 mutexee hote (meme politique que Garde 2 / topologie). Hors
 ## Limites
 
 - Les cycles TLS sont enchaines sous mutex PS/2 ; les deux VMs restent allumees
-- Pas de conversation applicative guest↔guest (ARP croise / flux metier)
+- Suite guest-guest : `make qemu-ne2k-guest-app-traffic` ([aos_guest_guest_app_traffic.md](aos_guest_guest_app_traffic.md))
 - Pas de reseau public ni OpenAI

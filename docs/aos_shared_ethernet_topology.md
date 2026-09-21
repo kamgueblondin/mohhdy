@@ -27,5 +27,5 @@ séquentiel `make qemu-ne2k-tls-multipair` reste inchangé.
 
 - Un seul bail déterministe (`10.32.0.15`) : un seul invité émet `ai-acquire`
 - Suite TLS multi-invites : `make qemu-ne2k-tls-multi-guest` ([aos_tls_multi_guest_traffic.md](aos_tls_multi_guest_traffic.md))
-- Pas encore de conversation applicative guest↔guest
+- Suite guest-guest : `make qemu-ne2k-guest-app-traffic` ([aos_guest_guest_app_traffic.md](aos_guest_guest_app_traffic.md))
 - Pas de réseau public
