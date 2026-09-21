@@ -732,7 +732,7 @@ help:
 	@echo "  gpt2-benchmark  - Modèle requis : mesure de latence QEMU SSE2"
 	@echo "  gpt2-tests      - Modèle requis : recovery + benchmark GPT-2"
 	@echo "  qemu-osui-runtime - Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA ; hors integration-qemu)"
-	@echo "  qemu-osui-gui   - Fumee QEMU : commande gui, screendump VBE, console (hors integration-qemu)"
+	@echo "  qemu-osui-gui   - Fumee QEMU : gui, screendump VBE, tablet click dock, console (hors integration-qemu)"
 	@echo "  qemu-osui-gui-fit - GTK : VBE suit la fenetre (DISPLAY, hors integration-qemu)"
 	@echo "  osui-registry-check - Verifie JSON/header vs userspace/shell.c"
 	@echo "  ci              - make all + test-all + smokes QEMU locaux (gate PR)"

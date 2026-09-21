@@ -10,6 +10,8 @@
 #include "kernel/gdt.h"
 #include "kernel/timer.h"
 
+extern void write_serial(char c);
+
 // Variables globales
 task_t* current_task = NULL;
 task_t* task_queue = NULL;
