@@ -47,9 +47,11 @@ def normalized_log(output):
     # L’ordonnanceur peut couper deux champs. S’il est joint à deux mots,
     # garder un séparateur ; s’il suit déjà un espace applicatif, le retirer
     # sans en ajouter un second qui casserait une assertion textuelle.
-    scheduler = r"\[SCHED\] switching to task \d+\s*"
-    output = re.sub(r"(?<=\w)" + scheduler + r"(?=\w)", " ", output)
-    output = re.sub(scheduler, "", output)
+    # Une suite de diagnostics entre deux mots doit devenir un seul espace ;
+    # sinon le \s* final avale le separateur applicatif (ex. readsources).
+    scheduler_run = r"(?:\[SCHED\] switching to task \d+\s*)+"
+    output = re.sub(r"(?<=\w)" + scheduler_run + r"(?=\w)", " ", output)
+    output = re.sub(r"\[SCHED\] switching to task \d+\s*", "", output)
     return re.sub(r"[ \t]{2,}", " ", output)
 
 def wait_for(needle, proc, offset=0, timeout=25):
@@ -601,20 +603,27 @@ def main():
             send_command_until(monitor, "service-find vfs", "service-find ok vfs %s" % server_pid, proc)
             before_initrd_list = len(log_text())
             send_command_until(monitor, "vfs-list initrd/", "vfsserver list request", proc)
+            wait_for("vfsserver delegated storage list", proc, before_initrd_list)
+            wait_for("vfsvirtual storage list initrd/", proc, before_initrd_list)
             wait_for("vfs-list partiel count 4", proc, before_initrd_list)
             wait_for_listed_name(monitor, proc, "initrd/", "hello.txt")
             before_page_zero = len(log_text())
             send_command_until(monitor, "vfs-list-page initrd/ 0", "vfsserver list page request", proc)
+            wait_for("vfsserver delegated storage list page", proc, before_page_zero)
+            wait_for("vfsvirtual storage list page initrd/", proc, before_page_zero)
             wait_for("vfs-list-page partiel count 4 next 4", proc, before_page_zero)
             before_page_last = len(log_text())
             send_command_until(monitor, "vfs-list-page initrd/ 4", "vfsserver list page request", proc)
+            wait_for("vfsserver delegated storage list page", proc, before_page_last)
             wait_for("vfs-list-page ok count 4 next end", proc, before_page_last)
             before_observe = len(log_text())
             send_command_until(monitor, "vfs-list-observe initrd/ 0 0", "vfsserver list observe request", proc)
+            wait_for("vfsserver delegated storage list observe", proc, before_observe)
             wait_for("vfs-list-observe partiel count 4 next 4 generation 1", proc, before_observe)
             wait_for_listed_name(monitor, proc, "initrd/bin/", "shell")
             before_overlay_empty_list = len(log_text())
             send_command_until(monitor, "vfs-list overlay/", "vfsserver list request", proc)
+            wait_for("vfsserver delegated storage list", proc, before_overlay_empty_list)
             wait_for("vfs-list ok count 0", proc, before_overlay_empty_list)
             before_mkdir = len(log_text())
             send_command_until(monitor, "vfs-mkdir overlay/newdir", "vfsserver mkdir request", proc)
@@ -820,6 +829,7 @@ def main():
             read_until_payload(monitor, proc, "fat16/renamed.txt", "qemu-fat16")
             before_fat16_new_list = len(log_text())
             send_command_until(monitor, "vfs-list fat16/", "vfsserver list request", proc)
+            wait_for("vfsserver delegated storage list", proc, before_fat16_new_list)
             wait_for("vfs-list ok count 3", proc, before_fat16_new_list)
             wait_for("RENAMED.TXT", proc, before_fat16_new_list)
             before_fat16_remove = len(log_text())
@@ -891,6 +901,8 @@ def main():
                                key_delay=0.55)
             before_read = len(log_text())
             send_command_until(monitor, "vfs-read initrd/hello.txt", "vfs-read ok", proc)
+            wait_for("vfsserver delegated storage read", proc, before_read)
+            wait_for("vfsvirtual storage read initrd/hello.txt", proc, before_read)
             wait_for("vfs-read ok 35 request", proc, before_read)
             wait_for("Un autre fichier de demonstration.", proc, before_read)
             before_deferred_list = len(log_text())
@@ -1062,6 +1074,8 @@ def main():
                                "Processus %s termine" % alias_flight_pid, proc)
             before_initrd_stat = len(log_text())
             send_command_until(monitor, "vfs-stat initrd/hello.txt", "vfs-stat ok size 35 flags file", proc)
+            wait_for("vfsserver delegated storage stat", proc, before_initrd_stat)
+            wait_for("vfsvirtual storage stat initrd/hello.txt", proc, before_initrd_stat)
             wait_for("vfs-stat ok size 35 flags file", proc, before_initrd_stat)
             before_readonly_write = len(log_text())
             send_command_until(monitor, "vfs-write initrd/no.txt denied",
@@ -1081,12 +1095,17 @@ def main():
             wait_for("vfs-write ok request", proc, before_write)
             before_overlay_list = len(log_text())
             send_command_until(monitor, "vfs-list overlay/", "vfsserver list request", proc)
+            wait_for("vfsserver delegated storage list", proc, before_overlay_list)
             wait_for("note.txt", proc, before_overlay_list)
             before_overlay_stat = len(log_text())
             send_command_until(monitor, "vfs-stat overlay/note.txt", "vfsserver stat request", proc)
+            wait_for("vfsserver delegated storage stat", proc, before_overlay_stat)
+            wait_for("vfsvirtual storage stat overlay/note.txt", proc, before_overlay_stat)
             wait_for("vfs-stat ok size 5 flags file", proc, before_overlay_stat)
             before_written_read = len(log_text())
             send_command_until(monitor, "vfs-read overlay/note.txt", "vfs-read ok", proc)
+            wait_for("vfsserver delegated storage read", proc, before_written_read)
+            wait_for("vfsvirtual storage read overlay/note.txt", proc, before_written_read)
             wait_for("vfsok", proc, before_written_read)
             before_rename = len(log_text())
             send_command_until(monitor, "vfs-rename overlay/note.txt overlay/moved.txt",
