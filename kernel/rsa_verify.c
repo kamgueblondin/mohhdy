@@ -48,3 +48,39 @@ int rsa_pkcs1_v15_sha256_verify(const uint8_t* modulus,uint16_t modulus_length,
     for(i=0U;i<32U;i++)difference|=(uint8_t)(recovered[encoded_offset+RSA_SHA256_DIGEST_INFO_LENGTH+i]^digest[i]);
     return difference==0U?0:-11;
 }
+
+int rsa_pkcs1_v15_sha256_sign(const uint8_t* modulus,uint16_t modulus_length,
+                              const uint8_t* private_exponent,uint16_t private_exponent_length,
+                              const uint8_t digest[32],uint8_t* signature,
+                              uint16_t signature_capacity,uint32_t* workspace,
+                              uint16_t workspace_length){
+    uint16_t limbs,encoded_offset,padding_length,i;
+    bigint_t n,d,message,signature_value;
+    if(!modulus||!private_exponent||!digest||!signature||!workspace||modulus_length==0U)return -1;
+    while(modulus_length>1U&&*modulus==0U){modulus++;modulus_length--;}
+    while(private_exponent_length>1U&&*private_exponent==0U){private_exponent++;private_exponent_length--;}
+    if(signature_capacity<modulus_length||private_exponent_length==0U||private_exponent_length>modulus_length)return -2;
+    if(modulus_length<11U+RSA_SHA256_DIGEST_INFO_LENGTH+32U)return -3;
+    limbs=(uint16_t)((modulus_length+3U)/4U);
+    /* n, d, message, signature_value + 4*limbs modexp workspace */
+    if(limbs==0U||workspace_length<(uint16_t)(8U*limbs))return -4;
+    if(bigint_init(&n,workspace,limbs)!=0||bigint_init(&d,workspace+limbs,limbs)!=0||
+       bigint_init(&message,workspace+(uint16_t)(2U*limbs),limbs)!=0||
+       bigint_init(&signature_value,workspace+(uint16_t)(3U*limbs),limbs)!=0)return -5;
+    if(bigint_from_be(&n,modulus,modulus_length)!=0||n.length==0U)return -6;
+    if(bigint_from_be(&d,private_exponent,private_exponent_length)!=0||d.length==0U)return -7;
+    /* Encode PKCS#1 v1.5 dans le buffer signature (ecrase ensuite par le resultat). */
+    for(i=0U;i<modulus_length;i++)signature[i]=0U;
+    signature[0]=0U;signature[1]=0x01U;
+    encoded_offset=(uint16_t)(modulus_length-(RSA_SHA256_DIGEST_INFO_LENGTH+32U));
+    padding_length=(uint16_t)(encoded_offset-3U);
+    for(i=0U;i<padding_length;i++)signature[2U+i]=0xffU;
+    signature[2U+padding_length]=0U;
+    for(i=0U;i<RSA_SHA256_DIGEST_INFO_LENGTH;i++)signature[encoded_offset+i]=rsa_sha256_digest_info[i];
+    for(i=0U;i<32U;i++)signature[encoded_offset+RSA_SHA256_DIGEST_INFO_LENGTH+i]=digest[i];
+    if(bigint_from_be(&message,signature,modulus_length)!=0)return -8;
+    if(bigint_compare(&message,&n)>=0)return -9;
+    if(bigint_modexp(&signature_value,&message,&d,&n,workspace+(uint16_t)(4U*limbs),(uint16_t)(4U*limbs))!=0)return -10;
+    if(bigint_to_be(&signature_value,signature,modulus_length)!=0)return -11;
+    return (int)modulus_length;
+}

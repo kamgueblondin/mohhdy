@@ -259,6 +259,12 @@ int sys_peer_listen(const os_peer_listen_request_t* request) {
     return result;
 }
 
+int sys_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_PEER_TLS_POLL), "b"(request));
+    return result;
+}
+
 int sys_peer_accept(const os_peer_accept_request_t* request) {
     int result;
     asm volatile("int $0x80" : "=a"(result) : "a"(SYS_PEER_ACCEPT), "b"(request));
@@ -1099,7 +1105,8 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  ai-continue        - Poursuivre un token de la session GGUF locale\n");
     print_string("  ai-acquire <hote> [port] - Demarrer DHCP, DNS et TCP LLM sans secret\n");
     print_string("  ai-peer-listen [port] - Ecoute TCP passive guest (apres bail DHCP)\n");
-    print_string("  ai-peer-accept [attempts] - Accepte SYN pair et emet SYN-ACK guest\n");
+    print_string("  ai-peer-accept [attempts] [established] - SYN-ACK guest ou ESTABLISHED\n");
+    print_string("  ai-peer-tls-poll - Role serveur TLS 1.2 guest (SH..Finished)\n");
     print_string("  ai-tls-poll         - Piloter SYN-ACK/TLS avec les materiaux noyau\n");
     print_string("  ai-request <f> <m> <p> <q> - Emettre POST LLM apres TLS authentifie\n");
     print_string("  ai-stream-request <f> <m> <p> <q> - Emettre POST LLM SSE chiffre\n");
@@ -2652,7 +2659,7 @@ static int is_builtin(const char* cmd) {
     static const char* names[] = {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
-        "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "net-status",
+        "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "net-status",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
         "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
         "alias", "unalias", "export", "which", "rc",
@@ -4639,21 +4646,52 @@ static void cmd_ai_peer_listen(shell_context_t* ctx, char args[][128], int arg_c
     else print_error("ai-peer-listen: echec");
 }
 
+
+static void cmd_ai_peer_tls_poll(shell_context_t* ctx, char args[][128], int arg_count) {
+    os_peer_tls_poll_request_t request = {0};
+    int status;
+    (void)ctx; (void)args; (void)arg_count;
+    request.attempts = 1U;
+    status = sys_peer_tls_poll(&request);
+    if (status == 1) print_success("ai-peer-tls-poll: ServerHello emis");
+    else if (status == 2) print_success("ai-peer-tls-poll: Certificate emis");
+    else if (status == 3) print_success("ai-peer-tls-poll: ServerKeyExchange emis");
+    else if (status == 4) print_success("ai-peer-tls-poll: ServerHelloDone emis");
+    else if (status == 5) print_success("ai-peer-tls-poll: attente flight client");
+    else if (status == 6) print_success("ai-peer-tls-poll: ChangeCipherSpec emis");
+    else if (status == 7) print_success("ai-peer-tls-poll: Finished emis");
+    else if (status == 8) print_success("ai-peer-tls-poll: session complete");
+    else if (status == 9) print_success("ai-peer-tls-poll: app echo emis");
+    else if (status == 0) print_success("ai-peer-tls-poll: en cours");
+    else if (status == OS_PEER_BAD_REQUEST) print_error("ai-peer-tls-poll: requete invalide");
+    else if (status == OS_PEER_UNAVAILABLE) print_error("ai-peer-tls-poll: NE2000 absent");
+    else if (status == OS_PEER_NO_LEASE) print_error("ai-peer-tls-poll: bail DHCP requis");
+    else if (status == OS_PEER_NOT_LISTENING) print_error("ai-peer-tls-poll: ESTABLISHED requis");
+    else print_error("ai-peer-tls-poll: echec");
+}
+
 static void cmd_ai_peer_accept(shell_context_t* ctx, char args[][128], int arg_count) {
     os_peer_accept_request_t request = {0};
     int status;
     uint16_t attempts = 96U;
     (void)ctx;
-    if (arg_count > 1) {
-        print_error("Usage: ai-peer-accept [attempts]");
+    if (arg_count > 2) {
+        print_error("Usage: ai-peer-accept [attempts] [established]");
         return;
     }
-    if (arg_count == 1 && ai_parse_port(args[0], &attempts) != 0) {
+    if (arg_count >= 1 && ai_parse_port(args[0], &attempts) != 0) {
         print_error("ai-peer-accept: attempts invalide");
         return;
     }
     request.attempts = attempts;
     request.require_established = 0U;
+    if (arg_count == 2) {
+        if (strcmp(args[1], "established") != 0 && strcmp(args[1], "1") != 0) {
+            print_error("ai-peer-accept: attendu established|1");
+            return;
+        }
+        request.require_established = 1U;
+    }
     status = sys_peer_accept(&request);
     if (status == 0) {
         print_success("ai-peer-accept: ESTABLISHED");
@@ -5508,6 +5546,8 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "ai-peer-accept") == 0) {
         cmd_ai_peer_accept(ctx, args, arg_count);
+    } else if (strcmp(command, "ai-peer-tls-poll") == 0) {
+        cmd_ai_peer_tls_poll(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "ai-tls-poll") == 0) {
         cmd_ai_tls_poll(ctx, args, arg_count);

@@ -26,6 +26,8 @@
 #include "net_socket.h"
 #include "tls_trust_anchor.h"
 #include "tls_test_trust_anchor.h"
+#include "tls_test_leaf.h"
+#include "net_tls_server.h"
 #include "ecdsa_p256.h"
 #include <stddef.h>
 
@@ -115,7 +117,15 @@ typedef struct {
 static kernel_llm_application_recovery_t boot_llm_application_recovery;
 static uint8_t boot_ne2k_present;
 static int boot_peer_listen_socket = -1;
-static uint8_t boot_peer_segment[64];
+static uint8_t boot_peer_segment[1500];
+static uint8_t boot_peer_remote_ip[4];
+static net_tls_server_t boot_peer_tls_server;
+static uint8_t boot_peer_tls_ready;
+static uint8_t boot_peer_tls_step; /* 0 idle..7 finished+app */
+static uint8_t boot_peer_tls_record[1200];
+static uint8_t boot_peer_server_random[32];
+static uint8_t boot_peer_server_private[32];
+static uint8_t boot_peer_app_seen;
 static void kernel_llm_clear_bytes(uint8_t* buffer, uint32_t length);
 static int kernel_llm_rdrand_supported(void);
 static int kernel_llm_close_internal(uint8_t preserve_provider);
@@ -145,6 +155,9 @@ static void ne2k_boot_probe(void) {
     boot_llm_dhcp_maintenance.next_retry_tick = 0U;
     boot_ne2k_present = 0U;
     boot_peer_listen_socket = -1;
+    boot_peer_tls_ready = 0U;
+    boot_peer_tls_step = 0U;
+    boot_peer_app_seen = 0U;
     if (ne2k_i386_io(&boot_ne2k_io) != 0) return;
     if (ne2k_probe(&boot_ne2k_device, 0x300U, &boot_ne2k_io) != 0) {
         print_string("NE2000 ISA absent; reseau reste desactive.\\n");
@@ -291,9 +304,17 @@ static const x509_certificate_view_t* kernel_llm_select_trust_anchor(void) {
     const char* hostname = kernel_llm_session_hostname();
     if (boot_llm_test_trust_anchor_ready &&
         (kernel_llm_hostname_has_suffix(hostname, "example.test") ||
-         kernel_llm_hostname_has_suffix(hostname, "example.com")))
+         kernel_llm_hostname_has_suffix(hostname, "example.com") ||
+         kernel_llm_hostname_has_suffix(hostname, "peer.local")))
         return &boot_llm_test_trust_anchor;
     return &boot_llm_trust_anchor;
+}
+
+/* Identite feuille locale example.com pour le pair guest peer.local. */
+static const char* kernel_llm_identity_hostname(void) {
+    const char* hostname = kernel_llm_session_hostname();
+    if (kernel_llm_hostname_has_suffix(hostname, "peer.local")) return "example.com";
+    return hostname;
 }
 
 static void kernel_llm_copy_hostname(const char source[OS_LLM_HOSTNAME_MAX]) {
@@ -397,6 +418,231 @@ int kernel_peer_accept(const os_peer_accept_request_t* request) {
     if (status == 1) return 1; /* SYN-ACK guest emis, SYN_RECEIVED */
     if (status == -12) return OS_PEER_TIMEOUT;
     return OS_PEER_FAILED;
+}
+
+static int kernel_peer_send_record(const uint8_t* record, uint16_t record_length) {
+    net_tcp_connection_t snapshot;
+    uint16_t segment_length = 0U;
+    int status;
+    if (net_socket_connection_snapshot(boot_peer_listen_socket, &snapshot) != 0) return -1;
+    status = net_socket_send_limit(boot_peer_listen_socket, record, record_length, boot_peer_segment,
+                                   sizeof(boot_peer_segment), &segment_length, 2U);
+    if (status != 0) return -2;
+    status = ne2k_tcp_segment(&boot_ne2k_device, &boot_ne2k_io, &boot_llm_arp_cache, boot_llm_frame,
+                              sizeof(boot_llm_frame), boot_llm_lease.ipv4, boot_peer_remote_ip,
+                              boot_peer_segment, segment_length);
+    if (status != 0) {
+        (void)net_socket_connection_restore(boot_peer_listen_socket, &snapshot);
+        return -3;
+    }
+    return 0;
+}
+
+static int kernel_peer_capture_remote_ip(void) {
+    uint16_t i;
+    uint8_t candidate[4] = {10U, 32U, 0U, 15U};
+    uint8_t mac[6];
+    for (i = 0U; i < 4U; i++) boot_peer_remote_ip[i] = 0U;
+    /* Ne pas utiliser remote_ip LLM (souvent 203.0.113.20) : viser l autre invite loue. */
+    if (boot_llm_lease.ipv4[3] == 15U) candidate[3] = 16U;
+    else candidate[3] = 15U;
+    if (net_arp_cache_lookup(&boot_llm_arp_cache, candidate, mac) == 0) {
+        for (i = 0U; i < 4U; i++) boot_peer_remote_ip[i] = candidate[i];
+        return 0;
+    }
+    candidate[3] = (uint8_t)(candidate[3] == 16U ? 15U : 16U);
+    if (net_arp_cache_lookup(&boot_llm_arp_cache, candidate, mac) == 0) {
+        for (i = 0U; i < 4U; i++) boot_peer_remote_ip[i] = candidate[i];
+        return 0;
+    }
+    return -2;
+}
+
+/* Retours : 1=ServerHello, 2=Certificate, 3=SKE, 4=SHD, 5=attente flight,
+ * 6=CCS, 7=Finished, 8=app echo, 0=noop/in-progress positif. */
+int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
+    uint8_t state = 0U;
+    uint16_t rx_length = 0U;
+    int status;
+    int built;
+    uint16_t i;
+    (void)request;
+    if (!boot_ne2k_present) return OS_PEER_UNAVAILABLE;
+    if (!boot_llm_lease.valid) return OS_PEER_NO_LEASE;
+    if (boot_peer_listen_socket < 0) return OS_PEER_NOT_LISTENING;
+    if (net_socket_get_state(boot_peer_listen_socket, &state) != 0) return OS_PEER_FAILED;
+    if (state != NET_TCP_STATE_ESTABLISHED) return OS_PEER_NOT_LISTENING;
+
+    if (!boot_peer_tls_ready) {
+        
+        uint32_t word = 0U;
+        if (!boot_llm_rdrand_supported) return OS_PEER_FAILED;
+        for (i = 0U; i < 32U; i++) {
+            if ((i & 3U) == 0U) {
+                if (kernel_llm_rdrand_word(&word) != 0) return OS_PEER_FAILED;
+            }
+            boot_peer_server_random[i] = (uint8_t)(word >> ((i & 3U) * 8U));
+            boot_peer_server_private[i] = 0U;
+        }
+        for (i = 0U; i < 32U; i++) {
+            if ((i & 3U) == 0U) {
+                if (kernel_llm_rdrand_word(&word) != 0) return OS_PEER_FAILED;
+            }
+            boot_peer_server_private[i] = (uint8_t)(word >> ((i & 3U) * 8U));
+        }
+        boot_peer_server_private[0] &= 248U;
+        boot_peer_server_private[31] &= 127U;
+        boot_peer_server_private[31] |= 64U;
+        if (kernel_peer_capture_remote_ip() != 0) return OS_PEER_FAILED;
+        if (net_tls_server_init(&boot_peer_tls_server, boot_peer_server_random,
+                                boot_peer_server_private, boot_llm_x25519_workspace,
+                                KERNEL_LLM_TLS_WORKSPACE_WORDS) != 0)
+            return OS_PEER_FAILED;
+        boot_peer_tls_ready = 1U;
+        boot_peer_tls_step = 0U;
+    }
+
+    /* Drain NIC into socket while advancing. */
+    for (i = 0U; i < 8U; i++) {
+        status = ne2k_socket_poll_tcp(&boot_ne2k_device, &boot_ne2k_io, boot_llm_frame,
+                                      sizeof(boot_llm_frame), boot_peer_listen_socket);
+        if (status != 0) break;
+    }
+
+    if (boot_peer_tls_step == 0U) {
+        status = net_socket_receive(boot_peer_listen_socket, boot_peer_tls_record,
+                                    sizeof(boot_peer_tls_record), &rx_length);
+        if (status != 0 || rx_length == 0U) return 0;
+        if (net_tls_server_accept_client_hello(&boot_peer_tls_server, boot_peer_tls_record,
+                                               rx_length) != 0)
+            return OS_PEER_FAILED;
+        built = net_tls_server_hello_build(boot_peer_tls_record, sizeof(boot_peer_tls_record),
+                                           boot_peer_server_random,
+                                           NET_TLS_CIPHER_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+        if (built < 0) return OS_PEER_FAILED;
+        if (net_tls_server_note_handshake_message(&boot_peer_tls_server, boot_peer_tls_record,
+                                                  (uint16_t)built) != 0)
+            return OS_PEER_FAILED;
+        if (kernel_peer_send_record(boot_peer_tls_record, (uint16_t)built) != 0) return OS_PEER_FAILED;
+        boot_peer_tls_server.phase = NET_TLS_SERVER_PHASE_HELLO_SENT;
+        boot_peer_tls_step = 1U;
+        return 1;
+    }
+
+    if (boot_peer_tls_step == 1U) {
+        built = net_tls_server_certificate_build(boot_peer_tls_record, sizeof(boot_peer_tls_record),
+                                                 aos_tls_test_leaf_der, (uint16_t)AOS_TLS_TEST_LEAF_DER_LEN);
+        if (built < 0) return OS_PEER_FAILED;
+        if (net_tls_server_note_handshake_message(&boot_peer_tls_server, boot_peer_tls_record,
+                                                  (uint16_t)built) != 0)
+            return OS_PEER_FAILED;
+        if (kernel_peer_send_record(boot_peer_tls_record, (uint16_t)built) != 0) return OS_PEER_FAILED;
+        boot_peer_tls_step = 2U;
+        return 2;
+    }
+
+    if (boot_peer_tls_step == 2U) {
+        built = net_tls_server_key_exchange_ecdhe_rsa_build(
+            boot_peer_tls_record, sizeof(boot_peer_tls_record),
+            boot_peer_tls_server.client_random, boot_peer_server_random,
+            boot_peer_tls_server.server_public, aos_tls_test_leaf_modulus,
+            AOS_TLS_TEST_LEAF_MODULUS_LEN, aos_tls_test_leaf_private_exponent,
+            AOS_TLS_TEST_LEAF_PRIVATE_LEN, boot_llm_rsa_workspace, KERNEL_LLM_TLS_WORKSPACE_WORDS);
+        if (built < 0) return OS_PEER_FAILED;
+        if (net_tls_server_note_handshake_message(&boot_peer_tls_server, boot_peer_tls_record,
+                                                  (uint16_t)built) != 0)
+            return OS_PEER_FAILED;
+        if (kernel_peer_send_record(boot_peer_tls_record, (uint16_t)built) != 0) return OS_PEER_FAILED;
+        boot_peer_tls_step = 3U;
+        return 3;
+    }
+
+    if (boot_peer_tls_step == 3U) {
+        built = net_tls_server_hello_done_build(boot_peer_tls_record, sizeof(boot_peer_tls_record));
+        if (built < 0) return OS_PEER_FAILED;
+        if (net_tls_server_note_handshake_message(&boot_peer_tls_server, boot_peer_tls_record,
+                                                  (uint16_t)built) != 0)
+            return OS_PEER_FAILED;
+        if (kernel_peer_send_record(boot_peer_tls_record, (uint16_t)built) != 0) return OS_PEER_FAILED;
+        boot_peer_tls_server.phase = NET_TLS_SERVER_PHASE_WAIT_CLIENT_FLIGHT;
+        boot_peer_tls_step = 4U;
+        return 4;
+    }
+
+    if (boot_peer_tls_step == 4U) {
+        status = net_socket_receive(boot_peer_listen_socket, boot_peer_tls_record,
+                                    sizeof(boot_peer_tls_record), &rx_length);
+        if (status != 0 || rx_length == 0U) return 5;
+        if (net_tls_server_accept_client_flight(
+                &boot_peer_tls_server, boot_peer_tls_record, rx_length, boot_llm_x25519_workspace,
+                KERNEL_LLM_TLS_WORKSPACE_WORDS, boot_llm_prf_workspace,
+                sizeof(boot_llm_prf_workspace), boot_llm_plaintext,
+                sizeof(boot_llm_plaintext)) != 0)
+            return OS_PEER_FAILED;
+        boot_peer_tls_step = 5U;
+        return 5;
+    }
+
+    if (boot_peer_tls_step == 5U) {
+        built = net_tls_change_cipher_spec_build(boot_peer_tls_record, sizeof(boot_peer_tls_record));
+        if (built < 0) return OS_PEER_FAILED;
+        if (kernel_peer_send_record(boot_peer_tls_record, (uint16_t)built) != 0) return OS_PEER_FAILED;
+        boot_peer_tls_step = 6U;
+        return 6;
+    }
+
+    if (boot_peer_tls_step == 6U) {
+        built = net_tls_server_finished_record_build(&boot_peer_tls_server, boot_peer_tls_record,
+                                                     sizeof(boot_peer_tls_record), boot_llm_prf_workspace,
+                                                     sizeof(boot_llm_prf_workspace));
+        if (built < 0) return OS_PEER_FAILED;
+        if (kernel_peer_send_record(boot_peer_tls_record, (uint16_t)built) != 0) return OS_PEER_FAILED;
+        boot_peer_tls_step = 7U;
+        return 7;
+    }
+
+    if (boot_peer_tls_step == 7U) {
+        /* Un record applicatif AES-GCM echo minimal si A a envoye des donnees. */
+        net_tcp_view_t view;
+        uint16_t frame_length = 0U;
+        net_tls_record_view_t opened;
+        status = ne2k_rx_poll_tcp(&boot_ne2k_device, &boot_ne2k_io, boot_llm_frame,
+                                  sizeof(boot_llm_frame), &frame_length, &view);
+        if (status != 0) return 8;
+        if (view.payload_length == 0U) return 8;
+        if (net_socket_feed(boot_peer_listen_socket,
+                            boot_llm_frame + NET_ETHERNET_HEADER_SIZE +
+                                ((boot_llm_frame[NET_ETHERNET_HEADER_SIZE] & 0x0fU) * 4U),
+                            (uint16_t)(frame_length - NET_ETHERNET_HEADER_SIZE -
+                                       ((boot_llm_frame[NET_ETHERNET_HEADER_SIZE] & 0x0fU) * 4U))) != 0)
+            return 8;
+        status = net_socket_receive_tls(boot_peer_listen_socket, &boot_peer_tls_server.session, &view,
+                                        boot_llm_plaintext, sizeof(boot_llm_plaintext), &opened, &rx_length);
+        if (status != 0) return 8;
+        if (opened.content_type != NET_TLS_CONTENT_APPLICATION_DATA) return 8;
+        /* Echo "pong" */
+        {
+            static const uint8_t pong[4] = {'p', 'o', 'n', 'g'};
+            uint16_t segment_length = 0U;
+            net_tcp_connection_t snapshot;
+            if (net_socket_connection_snapshot(boot_peer_listen_socket, &snapshot) != 0) return OS_PEER_FAILED;
+            status = net_socket_send_tls(boot_peer_listen_socket, &boot_peer_tls_server.session,
+                                         NET_TLS_CONTENT_APPLICATION_DATA, pong, 4U, boot_peer_tls_record,
+                                         sizeof(boot_peer_tls_record), boot_peer_segment,
+                                         sizeof(boot_peer_segment), &segment_length, 2U);
+            if (status != 0) return OS_PEER_FAILED;
+            if (ne2k_tcp_segment(&boot_ne2k_device, &boot_ne2k_io, &boot_llm_arp_cache, boot_llm_frame,
+                                 sizeof(boot_llm_frame), boot_llm_lease.ipv4, boot_peer_remote_ip,
+                                 boot_peer_segment, segment_length) != 0) {
+                (void)net_socket_connection_restore(boot_peer_listen_socket, &snapshot);
+                return OS_PEER_FAILED;
+            }
+            boot_peer_app_seen = 1U;
+            boot_peer_tls_step = 8U;
+            return 9;
+        }
+    }
+    return 8;
 }
 
 /* Appelé depuis un contexte noyau sûr ; jamais depuis le gestionnaire IRQ0. */
@@ -704,7 +950,7 @@ int kernel_llm_poll_tls(void) {
         &boot_ne2k_device, &boot_ne2k_io, &boot_llm_arp_cache,
         boot_llm_arp_rx, sizeof(boot_llm_arp_rx), boot_llm_frame, sizeof(boot_llm_frame),
         boot_llm_lease.ipv4, &boot_llm_socket_session, &boot_llm_tls_client, boot_llm_client_random,
-        boot_llm_client_private, kernel_llm_select_trust_anchor(), kernel_llm_session_hostname(), utc_time,
+        boot_llm_client_private, kernel_llm_select_trust_anchor(), kernel_llm_identity_hostname(), utc_time,
         boot_llm_rsa_workspace, KERNEL_LLM_TLS_WORKSPACE_WORDS,
         boot_llm_x25519_workspace, KERNEL_LLM_TLS_WORKSPACE_WORDS, boot_llm_prf_workspace,
         sizeof(boot_llm_prf_workspace), boot_llm_tcp_segment, sizeof(boot_llm_tcp_segment),
