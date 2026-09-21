@@ -8,9 +8,9 @@ This document summarizes findings regarding host and guest mouse input, GTK grab
 - 32-bit multilib libraries (`gcc-multilib`, `libc6-dev-i386`) are required for host execution of kernel unit tests (`make -C tests`).
 
 ## 2. QEMU GUI Flags & UHCI USB Tablet
-- When QEMU is launched without `-usb -device usb-tablet` (e.g. headless smoke test `test_qemu_osui_gui.py`), the guest kernel reports:
+- When QEMU is launched without `-usb -device usb-tablet`, the guest kernel reports:
   `USB Tablet: Controller UHCI non trouve`
-- When QEMU is launched with `-usb -device usb-tablet` (e.g. `test_qemu_osui_gui.py`, `qemu_gui_fit.py`, `test_qemu_gui_fit.py`), UHCI initializes and reports:
+- When QEMU is launched with `-usb -device usb-tablet` (e.g. `test_qemu_osui_gui.py`, `qemu_gui_fit.py`, `test_qemu_gui_fit.py`), UHCI controller initialization and USB enumeration complete successfully, reporting:
   `USB Tablet: Controller UHCI initialise et enumere`
 - On USB tablet presence, absolute coordinates are mapped directly to screen dimensions without mouse drift. On fallback PS/2 relative mouse mode, relative deltas x2 multiplier is applied.
 
