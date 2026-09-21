@@ -9,6 +9,9 @@ void keyboard_init();
 // Le handler appelé par l'ISR pour traiter une interruption clavier
 void keyboard_interrupt_handler();
 
+/* Drain i8042 aux (PS/2 relative mouse) when IRQ12 is masked. */
+void ps2_mouse_poll(void);
+
 // Convertit un scancode en caractère ASCII.
 char scancode_to_ascii(uint8_t scancode);
 

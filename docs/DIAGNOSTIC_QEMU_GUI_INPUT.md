@@ -45,3 +45,12 @@ This document summarizes findings regarding host and guest mouse input, GTK grab
 - Guest mapping uses current `gfx_fb_width`/`gfx_fb_height` in `usb_tablet_poll`. After a COM2-driven VBE resize, `gfx_desktop_clamp_mouse` keeps stored pointer coords inside the new framebuffer so hit-test and cursor stay consistent.
 - Existing `make qemu-osui-gui` hit-test smoke (OS-UI-G-1) is unchanged and does not resize the window.
 - Grow/shrink window sizes default to 1200x750 and 800x600 (override with OSUI_FIT_GROW_W/H and OSUI_FIT_SHRINK_W/H) so the smoke fits common 1280x800 displays.
+
+## 7. PS/2 relative fallback (OS-UI-G-3 / AOS-003)
+- `make qemu-osui-gui-ps2` launches QEMU **without** `-usb -device usb-tablet`. Serial must show `USB Tablet: Controller UHCI non trouve` (no absolute tablet path).
+- After `gui`, the harness drives QMP `input-send-event` **relative** axes (`type=rel`) plus left button. Guest `mouse_handle_byte` feeds `gfx_desktop_move_mouse` (x2 gain when `!usb_tablet_present()`).
+- IRQ12 stays masked on this PIC map; `ps2_mouse_poll` drains i8042 aux bytes from the 100 Hz timer while the desktop is active (parallel to `usb_tablet_poll`).
+- Edge clamping: large relative floods past the framebuffer; `clamp_mouse_to_fb` / `gfx_desktop_clamp_mouse` keep coords in `[0..w-1] x [0..h-1]` (negative and positive). Unit: `test_mouse_clamped_to_fb`.
+- Smoke then relative-moves from the clamped corner onto dock `/shell` (`osui gui line=/shell`, `live_eval=true`) and returns via `console`.
+- `make qemu-osui-gui` (with tablet) remains the absolute-path contract and must stay green.
+

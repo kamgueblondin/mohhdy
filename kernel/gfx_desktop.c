@@ -95,7 +95,10 @@ static void clamp_mouse_to_fb(void) {
     int h = gfx_fb_height();
     if (w < 1) w = 1;
     if (h < 1) h = 1;
-    if (g_mouse_x < 0 || g_mouse_y < 0) return;
+    /* Sentinel (-1,-1): no pointer yet (e.g. resize before first move). */
+    if (g_mouse_x == -1 && g_mouse_y == -1) return;
+    if (g_mouse_x < 0) g_mouse_x = 0;
+    if (g_mouse_y < 0) g_mouse_y = 0;
     if (g_mouse_x >= w) g_mouse_x = w - 1;
     if (g_mouse_y >= h) g_mouse_y = h - 1;
 }

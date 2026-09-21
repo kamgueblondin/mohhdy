@@ -4,6 +4,7 @@
 #include "vga_console.h"
 #include "gfx_fb.h"
 #include "input/usb_tablet.h"
+#include "keyboard.h"
 
 // Fonctions externes
 extern void outb(unsigned short port, unsigned char data);
@@ -54,6 +55,7 @@ void timer_handler(cpu_state_t* cpu) {
     
     if (vga_desktop_active()) {
         usb_tablet_poll();
+        ps2_mouse_poll();
         gfx_fb_update_cursor();
     }
 

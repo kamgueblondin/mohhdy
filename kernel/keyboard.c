@@ -56,6 +56,19 @@ void mouse_handle_byte(uint8_t b) {
     }
 }
 
+void ps2_mouse_poll(void) {
+    int i;
+    /* Absolute UHCI tablet owns the pointer when present. */
+    if (usb_tablet_present()) return;
+    for (i = 0; i < 48; i++) {
+        uint8_t status = inb(0x64);
+        if (!(status & 0x01)) break;
+        if (!(status & 0x20)) break; /* keyboard byte: leave for IRQ1 */
+        mouse_handle_byte(inb(0x60));
+    }
+}
+
+
 // Délai optimisé pour QEMU
 void qemu_delay() {
     for (volatile int i = 0; i < 1000; i++);

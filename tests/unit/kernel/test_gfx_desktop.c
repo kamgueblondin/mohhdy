@@ -250,6 +250,12 @@ static void test_mouse_clamped_to_fb(void) {
     gfx_desktop_get_mouse(&x, &y, &b);
     TEST_ASSERT_EQUAL(GFX_FB_WIDTH - 1, x);
     TEST_ASSERT_EQUAL(GFX_FB_HEIGHT - 1, y);
+    /* Negative overflow / edge clamp (PS/2 relative fallback). */
+    gfx_desktop_set_mouse(5, 5, 0);
+    gfx_desktop_move_mouse(-20000, -20000, 0);
+    gfx_desktop_get_mouse(&x, &y, &b);
+    TEST_ASSERT_EQUAL(0, x);
+    TEST_ASSERT_EQUAL(0, y);
 }
 
 static void test_hit_regions_dock_menu_stage_close(void) {
