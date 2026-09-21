@@ -58,7 +58,7 @@ int service_registry_backend_allowed_for_source(const char* name, int32_t pid, u
 /* Une voie sans chemin ne passe que sous le préfixe racine. */
 int service_registry_backend_allowed_for_source_path(const char* name, int32_t pid, uint32_t right,
                                                      uint32_t source, const char* path);
-/* AOS-2172/2173: owner FAT/initrd/overlay bypass only when vfs-virtual absent. */
+/* AOS-2172/2173/2174: owner bypass for any valid backend scope only when vfs-virtual absent. */
 int service_registry_owner_bypasses_backend(const char* name, int32_t pid, uint32_t source);
 void service_registry_backend_remove_name(const char* name);
 void service_registry_backend_remove_pid(int32_t pid);
