@@ -5,6 +5,9 @@ Plusieurs invités `-netdev socket,connect=127.0.0.1:PORT` partagent le même
 segment. Chaque trame Ethernet est préfixée d'une longueur big-endian 32 bits
 (protocole stream QEMU). Le hub inonde les autres clients et peut répondre
 DHCP/ARP/DNS localement (pair contrôlé, sans TAP ni Internet).
+
+Extensions guest↔guest : ARP proxy pour les IPs louées, DNS `peer.local` vers
+le pair, et SYN-ACK minimal vers l'IP du pair (flux applicatif simple).
 """
 from __future__ import print_function
 
@@ -52,8 +55,10 @@ def _ipv4_udp(source_ip, destination_ip, source_port, destination_port, payload)
     return _ipv4_packet(source_ip, destination_ip, 17, udp + payload)
 
 
-def _ethernet(destination_mac, ethertype, payload):
-    return destination_mac + SERVER_MAC + struct.pack("!H", ethertype) + payload
+def _ethernet(destination_mac, ethertype, payload, source_mac=None):
+    if source_mac is None:
+        source_mac = SERVER_MAC
+    return destination_mac + source_mac + struct.pack("!H", ethertype) + payload
 
 
 def _dhcp_type(payload):
@@ -138,24 +143,43 @@ class _TlsSession(object):
         return payload[5]
 
 
-def _arp_reply(request, target_ip=None):
+def _arp_reply(request, target_ip=None, reply_mac=None):
     sender_mac = request[22:28]
     sender_ip = request[28:32]
     if target_ip is None:
         target_ip = SERVER_IP
+    if reply_mac is None:
+        reply_mac = SERVER_MAC
     payload = (
         b"\x00\x01\x08\x00\x06\x04\x00\x02"
-        + SERVER_MAC
+        + reply_mac
         + target_ip
         + sender_mac
         + sender_ip
     )
-    return _ethernet(sender_mac, 0x0806, payload)
+    return _ethernet(sender_mac, 0x0806, payload, source_mac=reply_mac)
 
 
-def _dns_reply(request_payload):
+def _dns_qname(request_payload):
+    if len(request_payload) < 13:
+        return ""
+    labels = []
+    position = 12
+    while position < len(request_payload) and request_payload[position] != 0:
+        length = request_payload[position]
+        position += 1
+        if length > 63 or position + length > len(request_payload):
+            return ""
+        labels.append(request_payload[position:position + length].decode("ascii", "ignore"))
+        position += length
+    return ".".join(labels).lower()
+
+
+def _dns_reply(request_payload, answer_ip=None):
     if len(request_payload) < 17:
         return None
+    if answer_ip is None:
+        answer_ip = REMOTE_IP
     question_end = 12
     while question_end < len(request_payload) and request_payload[question_end] != 0:
         label_length = request_payload[question_end]
@@ -168,7 +192,7 @@ def _dns_reply(request_payload):
     header[2:4] = b"\x81\x80"
     header[4:6] = b"\x00\x01"
     header[6:8] = b"\x00\x01"
-    answer = b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04" + REMOTE_IP
+    answer = b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04" + answer_ip
     return bytes(header) + request_payload[12:question_end] + answer
 
 
@@ -196,9 +220,15 @@ class SharedEthernetHub(object):
             "server_finished": 0,
             "http_response": 0,
             "tls_complete_sessions": 0,
+            "cross_arp": 0,
+            "cross_arp_reply": 0,
+            "cross_syn": 0,
+            "cross_syn_ack": 0,
+            "peer_dns": 0,
         }
         self.source_macs = set()
         self.leases = {}  # mac_str -> guest_ip bytes
+        self.ip_owners = {}  # guest_ip bytes -> mac bytes
         self.error = None
         self._clients = []
         self._sessions = {}  # connection -> _TlsSession
@@ -222,7 +252,20 @@ class SharedEthernetHub(object):
                 # Reuse second lease pool slot for any further MAC (test uses 2).
                 guest_ip = GUEST_IP_B
             self.leases[key] = guest_ip
+            self.ip_owners[guest_ip] = bytes(client_mac)
             return guest_ip
+
+    def _peer_ip_for(self, guest_ip):
+        with self._lock:
+            owners = list(self.ip_owners.keys())
+        for candidate in owners:
+            if candidate != guest_ip:
+                return candidate
+        return None
+
+    def _mac_for_ip(self, guest_ip):
+        with self._lock:
+            return self.ip_owners.get(guest_ip)
 
     def _session(self, connection):
         with self._lock:
@@ -291,12 +334,16 @@ class SharedEthernetHub(object):
                 pass
 
     def _reply(self, source, frame):
-        """Envoie une réponse au client source et l'inonde aux autres (L2)."""
+        """Envoie une reponse au seul client source (pas d'inondation).
+
+        Les trames emises par les invites restent inondees via `_flood`. Les
+        reponses de controle (DHCP/DNS/ARP/TCP) restent unicast-hub→client pour
+        eviter que deux invites au meme xid DHCP ne consomment le bail du pair.
+        """
         try:
             self._send_frame(source, frame)
         except OSError:
             return
-        self._flood(source, frame)
 
     def _handle_frame(self, connection, frame):
         self.events["frames"] += 1
@@ -311,9 +358,21 @@ class SharedEthernetHub(object):
         ethertype = struct.unpack("!H", frame[12:14])[0]
         if ethertype == 0x0806 and len(frame) >= 42:
             # Pair local : repondre pour la passerelle et pour l'IP TLS (meme MAC).
-            if frame[20:22] == b"\x00\x01" and frame[38:42] in (SERVER_IP, REMOTE_IP):
-                self.events["arp"] += 1
-                self._reply(connection, _arp_reply(frame, frame[38:42]))
+            if frame[20:22] == b"\x00\x01":
+                target_ip = frame[38:42]
+                if target_ip in (SERVER_IP, REMOTE_IP):
+                    self.events["arp"] += 1
+                    self._reply(connection, _arp_reply(frame, target_ip))
+                else:
+                    owner_mac = self._mac_for_ip(target_ip)
+                    if owner_mac is not None and owner_mac != source_mac:
+                        # ARP croise guest↔guest : proxy avec la MAC du titulaire du bail.
+                        self.events["cross_arp"] += 1
+                        self._reply(
+                            connection,
+                            _arp_reply(frame, target_ip, reply_mac=owner_mac),
+                        )
+                        self.events["cross_arp_reply"] += 1
             return
         if ethertype != 0x0800 or len(frame) < 42:
             return
@@ -327,7 +386,8 @@ class SharedEthernetHub(object):
         ip_end = ip_offset + total_length
         protocol = frame[ip_offset + 9]
         source_ip = frame[ip_offset + 12 : ip_offset + 16]
-        if protocol == 6 and self.full_tls:
+        dest_ip = frame[ip_offset + 16 : ip_offset + 20]
+        if protocol == 6:
             tcp_offset = ip_offset + header_length
             if len(frame) < tcp_offset + 20:
                 return
@@ -338,7 +398,28 @@ class SharedEthernetHub(object):
             if tcp_header_length < 20 or ip_end < tcp_offset + tcp_header_length:
                 return
             payload = frame[tcp_offset + tcp_header_length:ip_end]
-            if source_port == 49152 and destination_port == 443:
+            peer_mac = self._mac_for_ip(dest_ip)
+            # Flux applicatif simple : SYN vers l'IP louee du pair → SYN-ACK proxy.
+            if (
+                peer_mac is not None
+                and dest_ip != source_ip
+                and destination_port == 443
+                and (flags & 0x12) == 0x02
+            ):
+                self.events["cross_syn"] += 1
+                syn_ack = _ethernet(
+                    source_mac,
+                    0x0800,
+                    _ipv4_tcp(
+                        dest_ip, source_ip, destination_port, source_port,
+                        0x10203040, sequence + 1, 0x12,
+                    ),
+                    source_mac=peer_mac,
+                )
+                self._reply(connection, syn_ack)
+                self.events["cross_syn_ack"] += 1
+                return
+            if self.full_tls and source_port == 49152 and destination_port == 443:
                 acknowledgment = struct.unpack("!I", frame[tcp_offset + 8:tcp_offset + 12])[0]
                 self._handle_tcp_443(
                     connection, source_mac, source_ip, source_port,
@@ -369,10 +450,18 @@ class SharedEthernetHub(object):
                 self.events["ack"] += 1
             return
         if source_port == 49152 and destination_port == 53:
-            response = _dns_reply(payload)
+            guest_mac = frame[6:12]
+            guest_ip = frame[ip_offset + 12 : ip_offset + 16]
+            qname = _dns_qname(payload)
+            answer_ip = REMOTE_IP
+            if qname == "peer.local":
+                peer_ip = self._peer_ip_for(guest_ip)
+                if peer_ip is None:
+                    return
+                answer_ip = peer_ip
+                self.events["peer_dns"] += 1
+            response = _dns_reply(payload, answer_ip)
             if response is not None:
-                guest_mac = frame[6:12]
-                guest_ip = frame[ip_offset + 12 : ip_offset + 16]
                 reply = _ethernet(
                     guest_mac,
                     0x0800,
