@@ -12,6 +12,12 @@ This document summarizes findings regarding host and guest mouse input, GTK grab
   `USB Tablet: Controller UHCI non trouve`
 - When QEMU is launched with `-usb -device usb-tablet` (e.g. `test_qemu_osui_gui.py`, `qemu_gui_fit.py`, `test_qemu_gui_fit.py`), UHCI controller initialization and USB enumeration complete successfully, reporting:
   `USB Tablet: Controller UHCI initialise et enumere`
+- Implementation details & measured reality for guest UHCI USB tablet enumeration:
+  - TD status active bit is bit 23 (`0x00800000`). The `uhci_td_t.status` field is qualified `volatile` to prevent GCC `-O3` from caching TD status in CPU registers during control transfer polling loops.
+  - Device speed is detected dynamically via UHCI PORTSC bit 8 (`0x0100`). Full-speed USB devices (like QEMU `usb-tablet` on port 1 with `PORTSC = 0x0087`) set `ls_bit = 0`.
+  - Port reset requires a ~10ms reset pulse (`0x0200`) followed by a ~10ms reset-recovery delay before executing SET_ADDRESS and SET_CONFIGURATION control transfers.
+  - On failure, formatted ASCII debug logs record TD status and error codes.
+  - Smoke tests (`tests/scripts/test_qemu_osui_gui.py`) explicitly require the success line and fail immediately if failure strings (e.g. `Enumeration non terminee`) appear in serial logs.
 - On USB tablet presence, absolute coordinates are mapped directly to screen dimensions without mouse drift. On fallback PS/2 relative mouse mode, relative deltas x2 multiplier is applied.
 
 ## 3. Host GTK Grab Behavior

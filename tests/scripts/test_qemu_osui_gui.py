@@ -42,12 +42,17 @@ def log_text():
         return ""
 
 
-def wait_for(proc, needle, timeout, start=0):
+def wait_for(proc, needle, timeout, start=0, fail_needles=None):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             raise RuntimeError("QEMU stopped unexpectedly; log tail:\n%s" % log_text()[-2000:])
-        if needle in normalized_log(log_text()[start:]):
+        output = normalized_log(log_text()[start:])
+        if fail_needles:
+            for fail_needle in fail_needles:
+                if fail_needle in output:
+                    raise RuntimeError("USB tablet enumeration failed with %r; log tail:\n%s" % (fail_needle, log_text()[-2000:]))
+        if needle in output:
             time.sleep(0.35)
             return
         time.sleep(0.15)
@@ -207,7 +212,17 @@ def main():
             ] + qemu_disk_args(), cwd=ROOT, stdout=err, stderr=err)
             wait_for(proc, "(-.-)", BOOT_TIMEOUT)
             wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
-            wait_for(proc, "USB Tablet: Controller UHCI initialise et enumere", CMD_TIMEOUT)
+            wait_for(
+                proc,
+                "USB Tablet: Controller UHCI initialise et enumere",
+                CMD_TIMEOUT,
+                fail_needles=[
+                    "Enumeration non terminee",
+                    "Controller UHCI non trouve",
+                    "BAR4 non-IO",
+                    "Aucun peripherique USB detecte",
+                ],
+            )
             log = log_text()
             if "Enumeration non terminee" in log or "Controller UHCI non trouve" in log:
                 raise RuntimeError("USB tablet enumeration failed in serial log")

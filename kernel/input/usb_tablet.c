@@ -46,7 +46,7 @@ static inline uint32_t inl(uint16_t port) {
 
 typedef struct __attribute__((packed, aligned(16))) {
     uint32_t link;
-    uint32_t status;
+    volatile uint32_t status;
     uint32_t token;
     uint32_t buffer;
     uint32_t reserved[4];
@@ -77,6 +77,20 @@ static int g_tablet_present = 0;
 static uint16_t g_io_base = 0;
 static uint8_t g_toggle = 0;
 static uint8_t g_dev_addr = 2;
+static uint32_t g_ls_bit = 0;
+
+static void print_hex32_serial(uint32_t val) {
+    char buf[11];
+    buf[0] = '0';
+    buf[1] = 'x';
+    const char* hex = "0123456789ABCDEF";
+    for (int i = 7; i >= 0; i--) {
+        buf[2 + i] = hex[val & 0x0F];
+        val >>= 4;
+    }
+    buf[10] = '\0';
+    print_string_serial(buf);
+}
 
 static void pci_write32(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, uint32_t val) {
     uint32_t addr = pci_config_address(bus, slot, func, offset);
@@ -92,21 +106,29 @@ static int uhci_control_transfer(uint8_t dev_addr, uint8_t req_type, uint8_t req
     g_setup_pkt.wLength = 0;
 
     g_ctrl_td[0].link = (uint32_t)(uint32_t)&g_ctrl_td[1] | UHCI_TD_LINK_DEPTH;
-    g_ctrl_td[0].status = 0x00800000 | (3 << 27) | (1 << 26);
+    g_ctrl_td[0].status = 0x00800000 | (3 << 27) | g_ls_bit;
     g_ctrl_td[0].token = (7 << 21) | (0x00 << 19) | (0 << 15) | ((uint32_t)dev_addr << 8) | 0x2D;
     g_ctrl_td[0].buffer = (uint32_t)(uint32_t)&g_setup_pkt;
 
     g_ctrl_td[1].link = UHCI_TD_LINK_TERM;
-    g_ctrl_td[1].status = 0x00800000 | (3 << 27) | (1 << 26);
-    g_ctrl_td[1].token = (0x7FF << 21) | (0x01 << 19) | (0 << 15) | ((uint32_t)dev_addr << 8) | 0x69;
+    g_ctrl_td[1].status = 0x00800000 | (3 << 27) | g_ls_bit;
+    g_ctrl_td[1].token = (0x7FFu << 21) | (0x01 << 19) | (0 << 15) | ((uint32_t)dev_addr << 8) | 0x69;
     g_ctrl_td[1].buffer = 0;
 
     g_qh.element = (uint32_t)(uint32_t)&g_ctrl_td[0];
+    outw(g_io_base + UHCI_STS, 0xFFFF);
+    outw(g_io_base + UHCI_CMD, UHCI_CMD_RUN | UHCI_CMD_MAXP);
 
-    for (int timeout = 0; timeout < 50; timeout++) {
-        if (!(g_ctrl_td[1].status & 0x80000000)) {
-            uint32_t err = g_ctrl_td[1].status & 0x007E0000;
-            return (err == 0) ? 0 : -1;
+    for (int timeout = 0; timeout < 200000; timeout++) {
+        uint32_t st0 = g_ctrl_td[0].status;
+        uint32_t st1 = g_ctrl_td[1].status;
+        if (!(st0 & 0x00800000) && !(st1 & 0x00800000)) {
+            uint32_t err0 = st0 & 0x007E0000;
+            uint32_t err1 = st1 & 0x007E0000;
+            return (err0 == 0 && err1 == 0) ? 0 : -1;
+        }
+        if (!(st0 & 0x00800000) && (st0 & 0x007E0000)) {
+            return -1;
         }
         for (volatile int d = 0; d < 100; d++);
     }
@@ -157,14 +179,21 @@ void usb_tablet_init(void) {
 
     if (p1 & 0x0001) {
         outw(g_io_base + UHCI_PORTSC1, 0x0200);
-        for (volatile int d = 0; d < 2000; d++);
+        for (volatile int d = 0; d < 50000; d++);
         outw(g_io_base + UHCI_PORTSC1, 0x0004);
+        for (volatile int d = 0; d < 50000; d++);
+        p1 = inw(g_io_base + UHCI_PORTSC1);
     }
     if (p2 & 0x0001) {
         outw(g_io_base + UHCI_PORTSC2, 0x0200);
-        for (volatile int d = 0; d < 2000; d++);
+        for (volatile int d = 0; d < 50000; d++);
         outw(g_io_base + UHCI_PORTSC2, 0x0004);
+        for (volatile int d = 0; d < 50000; d++);
+        p2 = inw(g_io_base + UHCI_PORTSC2);
     }
+
+    uint16_t active_port = (p1 & 0x0001) ? p1 : p2;
+    g_ls_bit = (active_port & 0x0100) ? (1 << 26) : 0;
 
     g_qh.head = UHCI_TD_LINK_TERM;
     g_qh.element = UHCI_TD_LINK_TERM;
@@ -182,14 +211,26 @@ void usb_tablet_init(void) {
     int r2 = uhci_control_transfer(g_dev_addr, 0x00, 0x09, 1, 0);
 
     if (r1 != 0 || r2 != 0) {
-        print_string_serial("USB Tablet: Enumeration non terminee, fallback PS/2\n");
+        print_string_serial("USB Tablet: Enumeration non terminee, fallback PS/2 (r1=");
+        if (r1 == -1) print_string_serial("-1");
+        else if (r1 == -2) print_string_serial("-2");
+        else print_string_serial("0");
+        print_string_serial(", r2=");
+        if (r2 == -1) print_string_serial("-1");
+        else if (r2 == -2) print_string_serial("-2");
+        else print_string_serial("0");
+        print_string_serial(", td0_st=");
+        print_hex32_serial(g_ctrl_td[0].status);
+        print_string_serial(", td1_st=");
+        print_hex32_serial(g_ctrl_td[1].status);
+        print_string_serial(")\n");
         return;
     }
 
     for (i = 0; i < 8; i++) g_report_buf[i] = 0;
 
     g_td.link = UHCI_TD_LINK_TERM;
-    g_td.status = 0x00800000 | (3 << 27) | (1 << 26);
+    g_td.status = 0x00800000 | (3 << 27) | g_ls_bit;
     g_td.token = (7 << 21) | (0x00 << 19) | (1 << 15) | ((uint32_t)g_dev_addr << 8) | 0x69;
     g_td.buffer = (uint32_t)(uint32_t)g_report_buf;
 
@@ -207,7 +248,7 @@ void usb_tablet_poll(void) {
     if (!g_tablet_present || !g_io_base) return;
 
     uint32_t st = g_td.status;
-    if (st & 0x80000000) return; // Still active
+    if (st & 0x00800000) return; // Still active (bit 23)
 
     uint32_t err_bits = st & 0x007E0000;
     uint32_t actual_len = (st + 1) & 0x07FF;
@@ -232,7 +273,7 @@ void usb_tablet_poll(void) {
     }
 
     g_toggle ^= 1;
-    g_td.status = 0x00800000 | (3 << 27) | (1 << 26);
+    g_td.status = 0x00800000 | (3 << 27) | g_ls_bit;
     g_td.token = (7 << 21) | ((uint32_t)g_toggle << 19) | (1 << 15) | ((uint32_t)g_dev_addr << 8) | 0x69;
     g_qh.element = (uint32_t)(uint32_t)&g_td;
 }
