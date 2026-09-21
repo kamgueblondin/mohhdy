@@ -43,4 +43,4 @@ pair.
 ## Suite
 
 Premier pas sans proxy : `make qemu-ne2k-guest-tls-peer` /
-[aos_guest_guest_tls_peer.md](aos_guest_guest_tls_peer.md) (B LISTEN + SYN-ACK guest).
+[aos_guest_guest_tls_peer.md](aos_guest_guest_tls_peer.md) (B LISTEN + SYN-ACK guest) puis [aos_guest_guest_tls_chat.md](aos_guest_guest_tls_chat.md) (ACK final + ClientHello TLS).

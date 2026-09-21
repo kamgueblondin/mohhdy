@@ -40,4 +40,6 @@ Injection PS/2 mutexee hote. Hors `make ci` et `make integration-qemu`.
 - Pas d ACK final cote A ni ESTABLISHED mutuel dans ce lot (A reste SYN_SENT)
 - Pas de TLS 1.2 guest↔guest ni POST/SSE metier
 - Pas de reseau public ni OpenAI
-- Suite logique : ACK final + handshake TLS peer, puis conversation chiffree
+- Suite : `make qemu-ne2k-guest-tls-chat` /
+  [aos_guest_guest_tls_chat.md](aos_guest_guest_tls_chat.md) (ACK final +
+  ClientHello TLS 1.2 ; role serveur TLS et chat chiffre restent ouverts)
