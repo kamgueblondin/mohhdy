@@ -1206,11 +1206,13 @@ def main():
             send_command_until(monitor, "vfs-stat overlay/note.txt", "vfsserver stat request", proc)
             wait_for("vfsserver delegated storage stat", proc, before_overlay_stat)
             wait_for("vfsvirtual storage stat overlay/note.txt", proc, before_overlay_stat)
+            wait_for("vfsvirtual ata-backed stat overlay/note.txt", proc, before_overlay_stat)
             wait_for("vfs-stat ok size 5 flags file", proc, before_overlay_stat)
             before_written_read = len(log_text())
             send_command_until(monitor, "vfs-read overlay/note.txt", "vfs-read ok", proc)
             wait_for("vfsserver delegated storage read", proc, before_written_read)
             wait_for("vfsvirtual storage read overlay/note.txt", proc, before_written_read)
+            wait_for("vfsvirtual ata-backed read overlay/note.txt", proc, before_written_read)
             wait_for("vfsok", proc, before_written_read)
             before_rename = len(log_text())
             send_command_until(monitor, "vfs-rename overlay/note.txt overlay/moved.txt",

@@ -38,6 +38,17 @@ static void worker_log_path_op(const char* kind, const char* op, const char* pat
     puts(line);
 }
 
+/* AOS-2175: distinct QEMU needle for the ATA-backed overlay read/stat slice. */
+static void worker_log_ata_overlay_slice(const char* op, const char* path) {
+    if (!path || !op) return;
+    if (path[0] == 'o' && path[1] == 'v' && path[2] == 'e' && path[3] == 'r' &&
+        path[4] == 'l' && path[5] == 'a' && path[6] == 'y' && path[7] == '/') {
+        worker_log_path_op("ata-backed", op, path);
+    }
+}
+
+
+
 
 static int ipc_receive(os_ipc_message_t* message) {
     int result;
@@ -607,6 +618,7 @@ void main(void) {
                     reply_data = data;
                     worker_log_path_op(worker_path_uses_boot_mount(path, 0) ? "storage" : "alias",
                                        "read", path);
+                    worker_log_ata_overlay_slice("read", path);
                 }
             }
             if (os_vfs_make_worker_read_reply(&reply, status, reply_data, size, message.request_id)
@@ -642,6 +654,7 @@ void main(void) {
                 int32_t status = worker_alias_stat(path, &entry);
                 worker_log_path_op(worker_path_uses_boot_mount(path, 0) ? "storage" : "alias",
                                    "stat", path);
+                worker_log_ata_overlay_slice("stat", path);
                 if (os_vfs_make_worker_stat_reply(&reply, status,
                                                    status == OS_VFS_STATUS_OK ? entry.size : 0U,
                                                    status == OS_VFS_STATUS_OK ? entry.flags : 0U,

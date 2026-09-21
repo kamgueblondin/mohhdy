@@ -8,6 +8,9 @@ kernel owner bypass for FAT16/FAT32 while `vfs-virtual` is published.
 AOS-2173 closes the same owner bypass for initrd/overlay.
 AOS-2174 closes owner bypass for `SOURCE_ALL` and any valid combination
 (ATA-backed generic backend path) while `vfs-virtual` is published.
+AOS-2175 adds the smallest worker-mediated ATA I/O slice: overlay
+`read`/`stat` syscalls are exercisable only by the live `vfs-virtual`
+PID (grants alone do not authorize the vfs owner locally).
 
 > Drivers stay Ring 0. This does not claim "microkernel done" or US-001
 > complete. It only places ATA/FAT I/O further behind rights already checked.
@@ -28,7 +31,7 @@ AOS-2174 closes owner bypass for `SOURCE_ALL` and any valid combination
 | Shell | Public VFS IPC only | No backend syscall |
 | `vfsserver` | Policy + temporary grant to worker | No local ATA/FAT when worker live |
 | `vfsvirtual` | Syscalls under grant | Only from PID `vfs` |
-| Kernel | ATA PIO / FAT still Ring 0 | Owner bypass for any valid backend scope only if no `vfs-virtual` |
+| Kernel | ATA PIO / FAT still Ring 0 | Owner bypass for any valid backend scope only if no `vfs-virtual` ; overlay read/stat only by worker PID when live (AOS-2175) |
 
 ## Proofs
 
@@ -85,12 +88,36 @@ Drivers stay Ring 0. This is not full ATA driver extraction and not
 
 Unit proof: `test_owner_ata_generic_bypass_closes_when_storage_worker_live`.
 
+
+## AOS-2175 - worker-mediated ATA overlay read/stat slice
+
+When `vfs-virtual` is published, `SYS_VFS_OVERLAY_READ` and
+`SYS_VFS_OVERLAY_STAT` succeed only for the worker PID. An explicit
+OVERLAY grant on the vfs owner is not enough to call those ATA-backed
+paths locally; the temporary grant issued to the worker is the intended
+exercise path. Without a live worker, degraded local exercise remains.
+
+QEMU needles for the slice:
+
+```text
+vfsvirtual storage stat overlay/note.txt
+vfsvirtual ata-backed stat overlay/note.txt
+vfsvirtual storage read overlay/note.txt
+vfsvirtual ata-backed read overlay/note.txt
+```
+
+Drivers stay Ring 0. This is not full ATA driver extraction and not
+"microkernel done".
+
+Unit proof: `test_ata_overlay_io_only_via_worker_when_live`.
+
 ## Limits
 
 - No driver extraction from the kernel.
 - No shared memory, no multi-request worker, no US-010 / US-016.
 - Degraded mode without worker still uses local owner backend path.
 - ATA PIO driver itself remains in Ring 0; owner bypass gates (including SOURCE_ALL) moved, driver not extracted.
+- AOS-2175 mediates only overlay read/stat via the worker PID; mutate/list and historical SYS_READFILE stay for later slices.
 
 ## References
 
