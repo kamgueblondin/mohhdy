@@ -248,7 +248,11 @@
 #define SYS_PEER_TLS_POLL 130
 /* Pas d'argument : A emet un record AES-GCM applicatif "ping" apres TLS_COMPLETE. */
 #define SYS_LLM_APP_PING 131
-#define MAX_SYSCALLS 132
+/* EBX = slot 0|1 : A emet un message metier AES-GCM distinct apres TLS_COMPLETE. */
+#define SYS_LLM_APP_CHAT 132
+/* Pas d'argument : A ouvre la prochaine reponse metier AES-GCM (B0/B1). */
+#define SYS_LLM_APP_RECV 133
+#define MAX_SYSCALLS 134
 
 #define OS_VGA_COLS 80
 #define OS_VGA_ROWS 25

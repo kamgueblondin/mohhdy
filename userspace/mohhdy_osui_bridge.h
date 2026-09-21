@@ -14,13 +14,16 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 194
+#define MOHHDY_SHELL_COMMAND_COUNT 197
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
     "admin-status",
     "ai",
     "ai-acquire",
+    "ai-app-chat",
+    "ai-app-ping",
+    "ai-app-recv",
     "ai-close",
     "ai-continue",
     "ai-credential",
@@ -31,7 +34,6 @@ static const char * const mohhdy_shell_commands[] = {
     "ai-peer-accept",
     "ai-peer-listen",
     "ai-peer-tls-poll",
-    "ai-app-ping",
     "ai-provider",
     "ai-request",
     "ai-runtime",

@@ -38,5 +38,5 @@ Injection PS/2 mutexee hote. Hors `make ci` et `make integration-qemu`.
 ## Limites
 
 - Ping/pong AES-GCM mesure dans chaque sens est vert.
-- Chat metier bilaterale (messages utiles, framing applicatif) reste ouvert.
+- Chat metier bilaterale multi-messages : voir [aos_guest_guest_tls_chat_metier.md](aos_guest_guest_tls_chat_metier.md).
 - Pas de reseau public ni OpenAI.
