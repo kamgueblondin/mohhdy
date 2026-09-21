@@ -755,6 +755,13 @@ static void vfs_virtual_log_storage_delegation(const char* op, const char* path,
     puts("\n");
 }
 
+/* AOS-2171: worker vivant => pas de repli local ATA/FAT (capacite deja verifiee). */
+static int vfs_storage_refuse_local_when_worker_live(void) {
+    if (vfs_virtual_lookup() <= 0) return 0;
+    puts("vfsserver storage rights local refused\n");
+    return 1;
+}
+
 static uint32_t vfs_mount_source_for_path(const char* path, int list_path) {
     uint32_t index;
     if (!path) return 0U;
@@ -1788,14 +1795,20 @@ void main(void) {
             uint32_t count = 0U;
             puts("vfsserver list request\n");
             status = os_vfs_parse_list_request(&message, path);
-            if (status == 0 && vfs_path_is_storage_io(path, 1) &&
-                vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_LIST, path, 0U,
-                                            message.sender_pid, message.request_id) == 0) {
-                vfs_virtual_log_storage_delegation("list", path, 1);
-                yield();
-                continue;
-            }
-            if (status == 0) {
+            if (status == 0 && vfs_path_is_storage_io(path, 1)) {
+                if (vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_LIST, path, 0U,
+                                                message.sender_pid, message.request_id) == 0) {
+                    vfs_virtual_log_storage_delegation("list", path, 1);
+                    yield();
+                    continue;
+                }
+                if (vfs_storage_refuse_local_when_worker_live()) {
+                    status = OS_VFS_STATUS_INVALID;
+                } else {
+                    status = list_mounted_backend(path, data, &size, &count);
+                    if (status == OS_VFS_STATUS_NOT_MOUNTED) puts("vfsserver list outside mounts\n");
+                }
+            } else if (status == 0) {
                 status = list_mounted_backend(path, data, &size, &count);
                 if (status == OS_VFS_STATUS_NOT_MOUNTED) puts("vfsserver list outside mounts\n");
             }
@@ -1821,12 +1834,20 @@ void main(void) {
                 status = list_virtual_mounts_page(start, data, OS_VFS_LIST_PAGE_DATA_MAX,
                                                   &size, &count, &next_start);
                 puts("vfsserver virtual mount page local\n");
-            } else if (status == 0 && vfs_path_is_storage_io(path, 1) &&
-                       vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_LIST_PAGE, path, start,
-                                                   message.sender_pid, message.request_id) == 0) {
-                vfs_virtual_log_storage_delegation("list page", path, 1);
-                yield();
-                continue;
+            } else if (status == 0 && vfs_path_is_storage_io(path, 1)) {
+                if (vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_LIST_PAGE, path, start,
+                                                message.sender_pid, message.request_id) == 0) {
+                    vfs_virtual_log_storage_delegation("list page", path, 1);
+                    yield();
+                    continue;
+                }
+                if (vfs_storage_refuse_local_when_worker_live()) {
+                    status = OS_VFS_STATUS_INVALID;
+                } else {
+                    status = list_mounted_backend_page(path, start, data, OS_VFS_LIST_PAGE_DATA_MAX,
+                                                       &size, &count, &next_start);
+                    if (status == OS_VFS_STATUS_NOT_MOUNTED) puts("vfsserver list page outside mounts\n");
+                }
             } else if (status == 0) {
                 status = list_mounted_backend_page(path, start, data, OS_VFS_LIST_PAGE_DATA_MAX,
                                                    &size, &count, &next_start);
@@ -1858,12 +1879,20 @@ void main(void) {
                 status = list_virtual_mounts_page(start, data, OS_VFS_LIST_OBSERVE_DATA_MAX,
                                                   &size, &count, &next_start);
                 puts("vfsserver virtual mount observe local\n");
-            } else if (status == 0 && vfs_path_is_storage_io(path, 1) &&
-                       vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_LIST_OBSERVE, path, start,
-                                                   message.sender_pid, message.request_id) == 0) {
-                vfs_virtual_log_storage_delegation("list observe", path, 1);
-                yield();
-                continue;
+            } else if (status == 0 && vfs_path_is_storage_io(path, 1)) {
+                if (vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_LIST_OBSERVE, path, start,
+                                                message.sender_pid, message.request_id) == 0) {
+                    vfs_virtual_log_storage_delegation("list observe", path, 1);
+                    yield();
+                    continue;
+                }
+                if (vfs_storage_refuse_local_when_worker_live()) {
+                    status = OS_VFS_STATUS_INVALID;
+                } else {
+                    status = list_mounted_backend_page(path, start, data, OS_VFS_LIST_OBSERVE_DATA_MAX,
+                                                       &size, &count, &next_start);
+                    if (status == OS_VFS_STATUS_NOT_MOUNTED) puts("vfsserver list observe outside mounts\n");
+                }
             } else if (status == 0) {
                 status = list_mounted_backend_page(path, start, data, OS_VFS_LIST_OBSERVE_DATA_MAX,
                                                    &size, &count, &next_start);
@@ -1878,14 +1907,22 @@ void main(void) {
             int status;
             puts("vfsserver stat request\n");
             status = os_vfs_parse_stat_request(&message, path);
-            if (status == 0 && vfs_path_is_storage_io(path, 0) &&
-                vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_STAT, path, 0U,
-                                            message.sender_pid, message.request_id) == 0) {
-                vfs_virtual_log_storage_delegation("stat", path, 0);
-                yield();
-                continue;
-            }
-            if (status == 0) {
+            if (status == 0 && vfs_path_is_storage_io(path, 0)) {
+                if (vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_STAT, path, 0U,
+                                                message.sender_pid, message.request_id) == 0) {
+                    vfs_virtual_log_storage_delegation("stat", path, 0);
+                    yield();
+                    continue;
+                }
+                if (vfs_storage_refuse_local_when_worker_live()) {
+                    status = OS_VFS_STATUS_INVALID;
+                } else {
+                    status = stat_mounted_backend(path, &metadata);
+                    if (status == OS_VFS_STATUS_NOT_MOUNTED) {
+                        puts("vfsserver stat outside mounts\n");
+                    }
+                }
+            } else if (status == 0) {
                 status = stat_mounted_backend(path, &metadata);
                 if (status == OS_VFS_STATUS_NOT_MOUNTED) {
                     puts("vfsserver stat outside mounts\n");
@@ -1921,14 +1958,27 @@ void main(void) {
                 yield();
                 continue;
             }
-            if (status == 0 && vfs_path_is_storage_io(path, 0) &&
-                vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_READ, path, 0U,
-                                            message.sender_pid, message.request_id) == 0) {
-                vfs_virtual_log_storage_delegation("read", path, 0);
-                yield();
-                continue;
-            }
-            if (status == 0) {
+            if (status == 0 && vfs_path_is_storage_io(path, 0)) {
+                if (vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_READ, path, 0U,
+                                                message.sender_pid, message.request_id) == 0) {
+                    vfs_virtual_log_storage_delegation("read", path, 0);
+                    yield();
+                    continue;
+                }
+                if (vfs_storage_refuse_local_when_worker_live()) {
+                    status = OS_VFS_STATUS_INVALID;
+                } else if (read_virtual(path, data, &size)) {
+                    if (string_equal(path, "vfs-info")) puts("vfsserver virtual vfs-info local\n");
+                    else if (string_equal(path, "vfs-mounts")) puts("vfsserver virtual vfs-mounts local\n");
+                    else if (string_equal(path, "vfs-stats")) puts("vfsserver virtual vfs-stats local\n");
+                    else puts("vfsserver virtual vfs-worker local\n");
+                } else {
+                    status = read_mounted_backend(path, data, &size);
+                    if (status == OS_VFS_STATUS_NOT_MOUNTED) {
+                        puts("vfsserver path outside mounts\n");
+                    }
+                }
+            } else if (status == 0) {
                 if (read_virtual(path, data, &size)) {
                     if (string_equal(path, "vfs-info")) puts("vfsserver virtual vfs-info local\n");
                     else if (string_equal(path, "vfs-mounts")) puts("vfsserver virtual vfs-mounts local\n");
@@ -1951,15 +2001,23 @@ void main(void) {
             vfs_write_requests++;
             puts("vfsserver write request\n");
             status = os_vfs_parse_write_request(&message, path, write_data, &size);
-            if (status == 0 && vfs_virtual_mutation_path_is_routed(path) &&
-                vfs_virtual_submit_mutation(VFS_VIRTUAL_PENDING_WRITE, path, (const char*)0,
+            if (status == 0 && vfs_virtual_mutation_path_is_routed(path)) {
+                if (vfs_virtual_submit_mutation(VFS_VIRTUAL_PENDING_WRITE, path, (const char*)0,
                                             write_data, size, message.sender_pid,
                                             message.request_id) == 0) {
-                puts("vfsserver delegated write\n");
-                yield();
-                continue;
-            }
-            if (status == 0) {
+                    puts("vfsserver delegated write\n");
+                    yield();
+                    continue;
+                }
+                if (vfs_mount_worker_trusted && vfs_storage_refuse_local_when_worker_live()) {
+                    status = OS_VFS_STATUS_INVALID;
+                } else {
+                    status = write_mounted_backend(path, write_data, size);
+                    if (status == OS_VFS_STATUS_NOT_MOUNTED) {
+                        puts("vfsserver write outside mounts\n");
+                    }
+                }
+            } else if (status == 0) {
                 status = write_mounted_backend(path, write_data, size);
                 if (status == OS_VFS_STATUS_NOT_MOUNTED) {
                     puts("vfsserver write outside mounts\n");
@@ -1973,15 +2031,21 @@ void main(void) {
             int status;
             puts("vfsserver mkdir request\n");
             status = os_vfs_parse_mkdir_request(&message, path);
-            if (status == 0 && vfs_virtual_mutation_path_is_routed(path) &&
-                vfs_virtual_submit_mutation(VFS_VIRTUAL_PENDING_MKDIR, path, (const char*)0,
+            if (status == 0 && vfs_virtual_mutation_path_is_routed(path)) {
+                if (vfs_virtual_submit_mutation(VFS_VIRTUAL_PENDING_MKDIR, path, (const char*)0,
                                             (const uint8_t*)0, 0U, message.sender_pid,
                                             message.request_id) == 0) {
-                puts("vfsserver delegated mkdir\n");
-                yield();
-                continue;
-            }
-            if (status == 0) {
+                    puts("vfsserver delegated mkdir\n");
+                    yield();
+                    continue;
+                }
+                if (vfs_mount_worker_trusted && vfs_storage_refuse_local_when_worker_live()) {
+                    status = OS_VFS_STATUS_INVALID;
+                } else {
+                    status = mkdir_mounted_backend(path);
+                    if (status == OS_VFS_STATUS_NOT_MOUNTED) puts("vfsserver mkdir outside mounts\n");
+                }
+            } else if (status == 0) {
                 status = mkdir_mounted_backend(path);
                 if (status == OS_VFS_STATUS_NOT_MOUNTED) puts("vfsserver mkdir outside mounts\n");
             }
@@ -1993,15 +2057,21 @@ void main(void) {
             int status;
             puts("vfsserver rmdir request\n");
             status = os_vfs_parse_rmdir_request(&message, path);
-            if (status == 0 && vfs_virtual_mutation_path_is_routed(path) &&
-                vfs_virtual_submit_mutation(VFS_VIRTUAL_PENDING_RMDIR, path, (const char*)0,
+            if (status == 0 && vfs_virtual_mutation_path_is_routed(path)) {
+                if (vfs_virtual_submit_mutation(VFS_VIRTUAL_PENDING_RMDIR, path, (const char*)0,
                                             (const uint8_t*)0, 0U, message.sender_pid,
                                             message.request_id) == 0) {
-                puts("vfsserver delegated rmdir\n");
-                yield();
-                continue;
-            }
-            if (status == 0) {
+                    puts("vfsserver delegated rmdir\n");
+                    yield();
+                    continue;
+                }
+                if (vfs_mount_worker_trusted && vfs_storage_refuse_local_when_worker_live()) {
+                    status = OS_VFS_STATUS_INVALID;
+                } else {
+                    status = rmdir_mounted_backend(path);
+                    if (status == OS_VFS_STATUS_NOT_MOUNTED) puts("vfsserver rmdir outside mounts\n");
+                }
+            } else if (status == 0) {
                 status = rmdir_mounted_backend(path);
                 if (status == OS_VFS_STATUS_NOT_MOUNTED) puts("vfsserver rmdir outside mounts\n");
             }
@@ -2014,15 +2084,23 @@ void main(void) {
             vfs_remove_requests++;
             puts("vfsserver remove request\n");
             status = os_vfs_parse_remove_request(&message, path);
-            if (status == 0 && vfs_virtual_mutation_path_is_routed(path) &&
-                vfs_virtual_submit_mutation(VFS_VIRTUAL_PENDING_REMOVE, path, (const char*)0,
+            if (status == 0 && vfs_virtual_mutation_path_is_routed(path)) {
+                if (vfs_virtual_submit_mutation(VFS_VIRTUAL_PENDING_REMOVE, path, (const char*)0,
                                             (const uint8_t*)0, 0U, message.sender_pid,
                                             message.request_id) == 0) {
-                puts("vfsserver delegated remove\n");
-                yield();
-                continue;
-            }
-            if (status == 0) {
+                    puts("vfsserver delegated remove\n");
+                    yield();
+                    continue;
+                }
+                if (vfs_mount_worker_trusted && vfs_storage_refuse_local_when_worker_live()) {
+                    status = OS_VFS_STATUS_INVALID;
+                } else {
+                    status = remove_mounted_backend(path);
+                    if (status == OS_VFS_STATUS_NOT_MOUNTED) {
+                        puts("vfsserver remove outside mounts\n");
+                    }
+                }
+            } else if (status == 0) {
                 status = remove_mounted_backend(path);
                 if (status == OS_VFS_STATUS_NOT_MOUNTED) {
                     puts("vfsserver remove outside mounts\n");
@@ -2038,15 +2116,23 @@ void main(void) {
             puts("vfsserver rename request\n");
             status = os_vfs_parse_rename_request(&message, path, new_path);
             if (status == 0 && vfs_virtual_mutation_path_is_routed(path) &&
-                vfs_virtual_mutation_path_is_routed(new_path) &&
-                vfs_virtual_submit_mutation(VFS_VIRTUAL_PENDING_RENAME, path, new_path,
-                                            (const uint8_t*)0, 0U, message.sender_pid,
-                                            message.request_id) == 0) {
-                puts("vfsserver delegated rename\n");
-                yield();
-                continue;
-            }
-            if (status == 0) {
+                vfs_virtual_mutation_path_is_routed(new_path)) {
+                if (vfs_virtual_submit_mutation(VFS_VIRTUAL_PENDING_RENAME, path, new_path,
+                                                (const uint8_t*)0, 0U, message.sender_pid,
+                                                message.request_id) == 0) {
+                    puts("vfsserver delegated rename\n");
+                    yield();
+                    continue;
+                }
+                if (vfs_mount_worker_trusted && vfs_storage_refuse_local_when_worker_live()) {
+                    status = OS_VFS_STATUS_INVALID;
+                } else {
+                    status = rename_mounted_backend(path, new_path);
+                    if (status == OS_VFS_STATUS_NOT_MOUNTED) {
+                        puts("vfsserver rename outside mounts\n");
+                    }
+                }
+            } else if (status == 0) {
                 status = rename_mounted_backend(path, new_path);
                 if (status == OS_VFS_STATUS_NOT_MOUNTED) {
                     puts("vfsserver rename outside mounts\n");
