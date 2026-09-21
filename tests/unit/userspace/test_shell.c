@@ -1,6 +1,7 @@
 /* test_shell.c - Tests unitaires pour le Shell MOHHDY */
 
 #include "../../framework/unity.h"
+#include <string.h>
 #include "../../framework/test_kernel.h"
 
 extern int putchar(int c);

@@ -39,3 +39,8 @@ pair.
 - Le SYN-ACK vers l IP du pair est un proxy hub (B n ecoute pas encore en Ring 3)
 - Pas de TLS guest-guest ni de conversation metier chiffree
 - Pas de reseau public ni OpenAI
+
+## Suite
+
+Premier pas sans proxy : `make qemu-ne2k-guest-tls-peer` /
+[aos_guest_guest_tls_peer.md](aos_guest_guest_tls_peer.md) (B LISTEN + SYN-ACK guest).

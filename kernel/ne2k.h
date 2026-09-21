@@ -681,6 +681,24 @@ int ne2k_rx_poll_tcp(ne2k_device_t* device, const ne2k_io_t* io,
 /* Lit au plus une trame TCP et l’injecte dans le registre socket statique. */
 int ne2k_socket_poll_tcp(ne2k_device_t* device, const ne2k_io_t* io,
                          uint8_t* frame, uint16_t frame_capacity, int socket_id);
+/* Une etape d ecoute passive : SYN -> SYN-ACK guest, ou ACK final -> ESTABLISHED.
+ * Apprend la MAC Ethernet source dans le cache ARP. Retourne 0 si ESTABLISHED,
+ * 1 si progression (SYN-ACK emis), 2 si trame ignoree/vide, <0 si erreur. */
+int ne2k_socket_passive_step(ne2k_device_t* device, const ne2k_io_t* io,
+                             net_arp_cache_t* cache, uint8_t* rx_frame,
+                             uint16_t rx_capacity, uint8_t* tx_frame,
+                             uint16_t tx_capacity, uint8_t* segment,
+                             uint16_t segment_capacity, const uint8_t local_ip[4],
+                             int socket_id);
+/* Boucle bornee de ne2k_socket_passive_step jusqu a SYN_RECEIVED (SYN-ACK emis)
+ * ou ESTABLISHED. require_established=0 accepte SYN_RECEIVED apres emission. */
+int ne2k_socket_passive_accept(ne2k_device_t* device, const ne2k_io_t* io,
+                               net_arp_cache_t* cache, uint8_t* rx_frame,
+                               uint16_t rx_capacity, uint8_t* tx_frame,
+                               uint16_t tx_capacity, uint8_t* segment,
+                               uint16_t segment_capacity, const uint8_t local_ip[4],
+                               int socket_id, uint16_t attempts,
+                               uint8_t require_established);
 /* Extrait une trame reçue depuis un buffer DMA caller-owned vers la file RX. */
 int ne2k_rx_extract(const uint8_t* dma_buffer, uint16_t dma_length,
                     net_nic_queue_t* rx_queue);

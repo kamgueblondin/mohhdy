@@ -915,6 +915,89 @@ int ne2k_socket_poll_tcp(ne2k_device_t* device, const ne2k_io_t* io,
     return net_socket_feed(socket_id, frame + tcp_offset, (uint16_t)(frame_length - tcp_offset));
 }
 
+int ne2k_socket_passive_step(ne2k_device_t* device, const ne2k_io_t* io,
+                             net_arp_cache_t* cache, uint8_t* rx_frame,
+                             uint16_t rx_capacity, uint8_t* tx_frame,
+                             uint16_t tx_capacity, uint8_t* segment,
+                             uint16_t segment_capacity, const uint8_t local_ip[4],
+                             int socket_id) {
+    net_tcp_view_t view;
+    net_tcp_connection_t snapshot;
+    uint8_t state = 0U;
+    uint8_t remote_ip[4];
+    uint8_t remote_mac[6];
+    uint16_t frame_length = 0U;
+    uint16_t ip_header_size;
+    uint16_t tcp_offset;
+    uint16_t segment_length = 0U;
+    uint16_t i;
+    int status;
+    if (!device || !io || !cache || !rx_frame || !tx_frame || !segment || !local_ip)
+        return -1;
+    if (net_socket_get_state(socket_id, &state) != 0) return -2;
+    if (state != NET_TCP_STATE_LISTEN && state != NET_TCP_STATE_SYN_RECEIVED) return -3;
+    status = ne2k_rx_poll_tcp(device, io, rx_frame, rx_capacity, &frame_length, &view);
+    /* 1=vide, 2=non-IPv4, <0=UDP/ARP/parse : consomme et ignore pour garder le poll. */
+    if (status != 0) return 2;
+    if (frame_length < NET_ETHERNET_HEADER_SIZE + 20U) return -4;
+    ip_header_size = (uint16_t)(rx_frame[NET_ETHERNET_HEADER_SIZE] & 0x0fU) * 4U;
+    if (ip_header_size < 20U) return -5;
+    tcp_offset = (uint16_t)(NET_ETHERNET_HEADER_SIZE + ip_header_size);
+    if (tcp_offset >= frame_length) return -6;
+    for (i = 0U; i < 4U; ++i)
+        remote_ip[i] = rx_frame[NET_ETHERNET_HEADER_SIZE + 12U + i];
+    for (i = 0U; i < 6U; ++i)
+        remote_mac[i] = rx_frame[6U + i];
+    status = net_socket_feed(socket_id, rx_frame + tcp_offset,
+                             (uint16_t)(frame_length - tcp_offset));
+    if (status != 0) return 2;
+    if (net_socket_get_state(socket_id, &state) != 0) return -7;
+    if (state == NET_TCP_STATE_SYN_RECEIVED) {
+        if (net_arp_cache_put(cache, remote_ip, remote_mac) != 0) return -8;
+        if (net_socket_connection_snapshot(socket_id, &snapshot) != 0) return -9;
+        if (net_socket_build_syn_ack(socket_id, segment, segment_capacity,
+                                     &segment_length) != 0) return -10;
+        if (ne2k_tcp_segment(device, io, cache, tx_frame, tx_capacity, local_ip,
+                             remote_ip, segment, segment_length) != 0) {
+            (void)net_socket_connection_restore(socket_id, &snapshot);
+            return -11;
+        }
+        return 1;
+    }
+    if (state == NET_TCP_STATE_ESTABLISHED) return 0;
+    return 2;
+}
+
+int ne2k_socket_passive_accept(ne2k_device_t* device, const ne2k_io_t* io,
+                               net_arp_cache_t* cache, uint8_t* rx_frame,
+                               uint16_t rx_capacity, uint8_t* tx_frame,
+                               uint16_t tx_capacity, uint8_t* segment,
+                               uint16_t segment_capacity, const uint8_t local_ip[4],
+                               int socket_id, uint16_t attempts,
+                               uint8_t require_established) {
+    uint8_t state = 0U;
+    uint16_t i;
+    int status;
+    if (!device || !io || !cache || !rx_frame || !tx_frame || !segment || !local_ip)
+        return -1;
+    if (attempts == 0U) return -1;
+    if (net_socket_get_state(socket_id, &state) != 0) return -2;
+    if (state != NET_TCP_STATE_LISTEN && state != NET_TCP_STATE_SYN_RECEIVED) return -3;
+    for (i = 0U; i < attempts; ++i) {
+        status = ne2k_socket_passive_step(device, io, cache, rx_frame, rx_capacity,
+                                         tx_frame, tx_capacity, segment,
+                                         segment_capacity, local_ip, socket_id);
+        if (status == 0) return 0;
+        if (status == 1 && !require_established) return 1;
+        if (status < 0 && status != 2) return status;
+        ne2k_poll_pause();
+    }
+    if (net_socket_get_state(socket_id, &state) == 0 &&
+        state == NET_TCP_STATE_SYN_RECEIVED && !require_established)
+        return 1;
+    return -12;
+}
+
 int ne2k_rx_poll_udp(ne2k_device_t* device, const ne2k_io_t* io,
                      uint8_t* frame, uint16_t frame_capacity,
                      uint16_t* frame_length, net_udp_view_t* udp) {
