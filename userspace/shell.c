@@ -1099,7 +1099,7 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  ai-continue        - Poursuivre un token de la session GGUF locale\n");
     print_string("  ai-acquire <hote> [port] - Demarrer DHCP, DNS et TCP LLM sans secret\n");
     print_string("  ai-peer-listen [port] - Ecoute TCP passive guest (apres bail DHCP)\n");
-    print_string("  ai-peer-accept [attempts] - Accepte SYN pair et emet SYN-ACK guest\n");
+    print_string("  ai-peer-accept [attempts] [established] - SYN-ACK guest ou ESTABLISHED\n");
     print_string("  ai-tls-poll         - Piloter SYN-ACK/TLS avec les materiaux noyau\n");
     print_string("  ai-request <f> <m> <p> <q> - Emettre POST LLM apres TLS authentifie\n");
     print_string("  ai-stream-request <f> <m> <p> <q> - Emettre POST LLM SSE chiffre\n");
@@ -4644,16 +4644,23 @@ static void cmd_ai_peer_accept(shell_context_t* ctx, char args[][128], int arg_c
     int status;
     uint16_t attempts = 96U;
     (void)ctx;
-    if (arg_count > 1) {
-        print_error("Usage: ai-peer-accept [attempts]");
+    if (arg_count > 2) {
+        print_error("Usage: ai-peer-accept [attempts] [established]");
         return;
     }
-    if (arg_count == 1 && ai_parse_port(args[0], &attempts) != 0) {
+    if (arg_count >= 1 && ai_parse_port(args[0], &attempts) != 0) {
         print_error("ai-peer-accept: attempts invalide");
         return;
     }
     request.attempts = attempts;
     request.require_established = 0U;
+    if (arg_count == 2) {
+        if (strcmp(args[1], "established") != 0 && strcmp(args[1], "1") != 0) {
+            print_error("ai-peer-accept: attendu established|1");
+            return;
+        }
+        request.require_established = 1U;
+    }
     status = sys_peer_accept(&request);
     if (status == 0) {
         print_success("ai-peer-accept: ESTABLISHED");
