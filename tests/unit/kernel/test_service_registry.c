@@ -369,8 +369,6 @@ static void test_owner_fat_bypass_closes_when_storage_worker_live(void) {
         "vfs", 3, OS_SERVICE_BACKEND_SOURCE_FAT16));
     TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
         "vfs", 3, OS_SERVICE_BACKEND_SOURCE_FAT32));
-    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
-        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_INITRD));
     TEST_ASSERT_FALSE(service_registry_owner_bypasses_backend(
         "vfs", 9, OS_SERVICE_BACKEND_SOURCE_FAT16));
     TEST_ASSERT_EQUAL(0, service_registry_register("vfs-virtual", 11));
@@ -378,11 +376,6 @@ static void test_owner_fat_bypass_closes_when_storage_worker_live(void) {
         "vfs", 3, OS_SERVICE_BACKEND_SOURCE_FAT16));
     TEST_ASSERT_FALSE(service_registry_owner_bypasses_backend(
         "vfs", 3, OS_SERVICE_BACKEND_SOURCE_FAT32));
-    /* Non-FAT sources keep owner bypass even with worker live. */
-    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
-        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_INITRD));
-    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
-        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_OVERLAY));
     /* Explicit grant still authorizes the worker path separately. */
     TEST_ASSERT_EQUAL(0, service_registry_backend_grant_scoped_source_prefix(
         "vfs", 3, 11, SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_FAT16, ""));
@@ -391,6 +384,37 @@ static void test_owner_fat_bypass_closes_when_storage_worker_live(void) {
     TEST_ASSERT_EQUAL(0, service_registry_remove("vfs-virtual", 11));
     TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
         "vfs", 3, OS_SERVICE_BACKEND_SOURCE_FAT16));
+}
+
+static void test_owner_initrd_overlay_bypass_closes_when_storage_worker_live(void) {
+    /* AOS-2173: initrd/overlay owner bypass only in degraded mode (no vfs-virtual). */
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", 3));
+    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
+        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_INITRD));
+    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
+        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_OVERLAY));
+    TEST_ASSERT_FALSE(service_registry_owner_bypasses_backend(
+        "vfs", 9, OS_SERVICE_BACKEND_SOURCE_INITRD));
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs-virtual", 11));
+    TEST_ASSERT_FALSE(service_registry_owner_bypasses_backend(
+        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_INITRD));
+    TEST_ASSERT_FALSE(service_registry_owner_bypasses_backend(
+        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_OVERLAY));
+    /* Explicit grant still authorizes the worker path separately. */
+    TEST_ASSERT_EQUAL(0, service_registry_backend_grant_scoped_source_prefix(
+        "vfs", 3, 11, SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_INITRD, ""));
+    TEST_ASSERT_TRUE(service_registry_backend_allowed_for_source_path(
+        "vfs", 11, SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_INITRD, "hello.txt"));
+    TEST_ASSERT_EQUAL(0, service_registry_backend_grant_scoped_source_prefix(
+        "vfs", 3, 11, SERVICE_BACKEND_RIGHT_MUTATE, OS_SERVICE_BACKEND_SOURCE_OVERLAY, ""));
+    TEST_ASSERT_TRUE(service_registry_backend_allowed_for_source_path(
+        "vfs", 11, SERVICE_BACKEND_RIGHT_MUTATE, OS_SERVICE_BACKEND_SOURCE_OVERLAY, "note.txt"));
+    TEST_ASSERT_EQUAL(0, service_registry_remove("vfs-virtual", 11));
+    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
+        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_INITRD));
+    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
+        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_OVERLAY));
 }
 
 int main(void) {
@@ -420,6 +444,7 @@ int main(void) {
     RUN_TEST(test_backend_capability_can_be_released_by_its_grantee);
     RUN_TEST(test_backend_observe_detects_stale_generations_without_disclosure);
     RUN_TEST(test_owner_fat_bypass_closes_when_storage_worker_live);
+    RUN_TEST(test_owner_initrd_overlay_bypass_closes_when_storage_worker_live);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
