@@ -121,7 +121,7 @@ static uint8_t boot_peer_segment[1500];
 static uint8_t boot_peer_remote_ip[4];
 static net_tls_server_t boot_peer_tls_server;
 static uint8_t boot_peer_tls_ready;
-static uint8_t boot_peer_tls_step; /* 0 idle..7 finished+app */
+static uint8_t boot_peer_tls_step; /* 0 idle..7 finished; 8+ app tours */
 static uint8_t boot_peer_tls_record[1200];
 static uint8_t boot_peer_server_random[32];
 static uint8_t boot_peer_server_private[32];
@@ -459,7 +459,7 @@ static int kernel_peer_capture_remote_ip(void) {
 }
 
 /* Retours : 1=ServerHello, 2=Certificate, 3=SKE, 4=SHD, 5=attente flight,
- * 6=CCS, 7=Finished, 8=app echo, 0=noop/in-progress positif. */
+ * 6=CCS, 7=Finished, 8=attente app, 9=pong, 10/11=metier B0/B1, 0=noop. */
 int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
     uint8_t state = 0U;
     uint16_t rx_length = 0U;
@@ -601,10 +601,24 @@ int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
         return 7;
     }
 
-    if (boot_peer_tls_step == 7U) {
-        /* Drain en tete a deja fait ne2k_socket_poll_tcp/feed (accept_data).
-         * Ouvrir le record depuis le buffer socket, sans second accept_data. */
+    /* Etape 7+ : tours applicatifs AES-GCM (ping/pong ou chat metier).
+     * Reste rejouable pour plusieurs messages distincts. */
+    if (boot_peer_tls_step >= 7U) {
         net_tls_record_view_t opened;
+        static const uint8_t pong[4] = {'p', 'o', 'n', 'g'};
+        static const uint8_t metier_b0[9] = {
+            'M', 'E', 'T', 'I', 'E', 'R', '-', 'B', '0'
+        };
+        static const uint8_t metier_b1[9] = {
+            'M', 'E', 'T', 'I', 'E', 'R', '-', 'B', '1'
+        };
+        const uint8_t* reply = pong;
+        uint16_t reply_len = 4U;
+        int retcode = 9;
+        uint16_t segment_length = 0U;
+        net_tcp_connection_t snapshot;
+        uint16_t pi;
+
         status = net_socket_receive(boot_peer_listen_socket, boot_peer_tls_record,
                                     sizeof(boot_peer_tls_record), &rx_length);
         if (status != 0 || rx_length < 5U) return 8;
@@ -613,27 +627,48 @@ int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
                                          sizeof(boot_llm_plaintext), &opened) != 0)
             return 8;
         if (opened.content_type != NET_TLS_CONTENT_APPLICATION_DATA) return 8;
-        /* Echo "pong" */
-        {
-            static const uint8_t pong[4] = {'p', 'o', 'n', 'g'};
-            uint16_t segment_length = 0U;
-            net_tcp_connection_t snapshot;
-            if (net_socket_connection_snapshot(boot_peer_listen_socket, &snapshot) != 0) return OS_PEER_FAILED;
-            status = net_socket_send_tls(boot_peer_listen_socket, &boot_peer_tls_server.session,
-                                         NET_TLS_CONTENT_APPLICATION_DATA, pong, 4U, boot_peer_tls_record,
-                                         sizeof(boot_peer_tls_record), boot_peer_segment,
-                                         sizeof(boot_peer_segment), &segment_length, 2U);
-            if (status != 0) return OS_PEER_FAILED;
-            if (ne2k_tcp_segment(&boot_ne2k_device, &boot_ne2k_io, &boot_llm_arp_cache, boot_llm_frame,
-                                 sizeof(boot_llm_frame), boot_llm_lease.ipv4, boot_peer_remote_ip,
-                                 boot_peer_segment, segment_length) != 0) {
-                (void)net_socket_connection_restore(boot_peer_listen_socket, &snapshot);
-                return OS_PEER_FAILED;
+
+        if (opened.payload_length == 9U && opened.payload) {
+            uint8_t is_a0 = 1U;
+            uint8_t is_a1 = 1U;
+            static const uint8_t metier_a0[9] = {
+                'M', 'E', 'T', 'I', 'E', 'R', '-', 'A', '0'
+            };
+            static const uint8_t metier_a1[9] = {
+                'M', 'E', 'T', 'I', 'E', 'R', '-', 'A', '1'
+            };
+            for (pi = 0U; pi < 9U; pi++) {
+                if (opened.payload[pi] != metier_a0[pi]) is_a0 = 0U;
+                if (opened.payload[pi] != metier_a1[pi]) is_a1 = 0U;
             }
-            boot_peer_app_seen = 1U;
-            boot_peer_tls_step = 8U;
-            return 9;
+            if (is_a0) {
+                reply = metier_b0;
+                reply_len = 9U;
+                retcode = 10;
+            } else if (is_a1) {
+                reply = metier_b1;
+                reply_len = 9U;
+                retcode = 11;
+            }
         }
+
+        if (net_socket_connection_snapshot(boot_peer_listen_socket, &snapshot) != 0)
+            return OS_PEER_FAILED;
+        status = net_socket_send_tls(boot_peer_listen_socket, &boot_peer_tls_server.session,
+                                     NET_TLS_CONTENT_APPLICATION_DATA, reply, reply_len,
+                                     boot_peer_tls_record, sizeof(boot_peer_tls_record),
+                                     boot_peer_segment, sizeof(boot_peer_segment),
+                                     &segment_length, 2U);
+        if (status != 0) return OS_PEER_FAILED;
+        if (ne2k_tcp_segment(&boot_ne2k_device, &boot_ne2k_io, &boot_llm_arp_cache, boot_llm_frame,
+                             sizeof(boot_llm_frame), boot_llm_lease.ipv4, boot_peer_remote_ip,
+                             boot_peer_segment, segment_length) != 0) {
+            (void)net_socket_connection_restore(boot_peer_listen_socket, &snapshot);
+            return OS_PEER_FAILED;
+        }
+        boot_peer_app_seen = 1U;
+        boot_peer_tls_step = 8U;
+        return retcode;
     }
     return 8;
 }
@@ -670,6 +705,98 @@ int kernel_llm_app_ping(void) {
         return OS_LLM_REQUEST_FAILED;
     }
     return 0;
+}
+
+/* A : message metier AES-GCM distinct (slot 0/1) apres TLS_COMPLETE. */
+int kernel_llm_app_chat(uint32_t slot) {
+    static const uint8_t metier_a0[9] = {
+        'M', 'E', 'T', 'I', 'E', 'R', '-', 'A', '0'
+    };
+    static const uint8_t metier_a1[9] = {
+        'M', 'E', 'T', 'I', 'E', 'R', '-', 'A', '1'
+    };
+    const uint8_t* payload;
+    uint16_t payload_len = 9U;
+    uint16_t segment_length = 0U;
+    net_tcp_connection_t snapshot;
+    net_tls_aes_gcm_session_t previous_session;
+    int status;
+
+    if (slot > 1U) return OS_LLM_REQUEST_BAD_REQUEST;
+    payload = (slot == 0U) ? metier_a0 : metier_a1;
+    if (!boot_ne2k_present || boot_llm_socket_session.state.phase != NE2K_LLM_CONNECTION_TLS_COMPLETE)
+        return OS_LLM_REQUEST_BAD_PHASE;
+    if (boot_llm_socket_session.socket_id < 0) return OS_LLM_REQUEST_FAILED;
+    if (net_socket_connection_snapshot(boot_llm_socket_session.socket_id, &snapshot) != 0)
+        return OS_LLM_REQUEST_FAILED;
+    previous_session = boot_llm_tls_client.session;
+    status = net_socket_send_tls(boot_llm_socket_session.socket_id, &boot_llm_tls_client.session,
+                                 NET_TLS_CONTENT_APPLICATION_DATA, payload, payload_len,
+                                 boot_llm_http_tls_record, sizeof(boot_llm_http_tls_record),
+                                 boot_llm_tcp_segment, sizeof(boot_llm_tcp_segment),
+                                 &segment_length, 2U);
+    if (status != 0) {
+        boot_llm_tls_client.session = previous_session;
+        return OS_LLM_REQUEST_FAILED;
+    }
+    if (ne2k_tcp_segment(&boot_ne2k_device, &boot_ne2k_io, &boot_llm_arp_cache, boot_llm_frame,
+                         sizeof(boot_llm_frame), boot_llm_lease.ipv4,
+                         boot_llm_socket_session.state.remote_ip, boot_llm_tcp_segment,
+                         segment_length) != 0) {
+        (void)net_socket_connection_restore(boot_llm_socket_session.socket_id, &snapshot);
+        boot_llm_tls_client.session = previous_session;
+        return OS_LLM_REQUEST_FAILED;
+    }
+    return (int)slot;
+}
+
+/* A : ouvre la prochaine reponse metier AES-GCM (B0/B1). Retour 0/1, 2=attente. */
+int kernel_llm_app_recv(void) {
+    net_tls_record_view_t opened;
+    uint16_t rx_length = 0U;
+    uint16_t i;
+    int status;
+    static const uint8_t metier_b0[9] = {
+        'M', 'E', 'T', 'I', 'E', 'R', '-', 'B', '0'
+    };
+    static const uint8_t metier_b1[9] = {
+        'M', 'E', 'T', 'I', 'E', 'R', '-', 'B', '1'
+    };
+
+    if (!boot_ne2k_present || boot_llm_socket_session.state.phase != NE2K_LLM_CONNECTION_TLS_COMPLETE)
+        return OS_LLM_REQUEST_BAD_PHASE;
+    if (boot_llm_socket_session.socket_id < 0) return OS_LLM_REQUEST_FAILED;
+
+    for (i = 0U; i < 8U; i++) {
+        status = ne2k_socket_poll_tcp(&boot_ne2k_device, &boot_ne2k_io, boot_llm_frame,
+                                      sizeof(boot_llm_frame), boot_llm_socket_session.socket_id);
+        if (status != 0) break;
+    }
+
+    status = net_socket_receive(boot_llm_socket_session.socket_id, boot_llm_http_tls_record,
+                                sizeof(boot_llm_http_tls_record), &rx_length);
+    if (status != 0 || rx_length < 5U) return 2;
+    if (net_tls_aes_gcm_session_open(&boot_llm_tls_client.session, boot_llm_http_tls_record,
+                                     rx_length, boot_llm_plaintext,
+                                     sizeof(boot_llm_plaintext), &opened) != 0)
+        return 2;
+    if (opened.content_type != NET_TLS_CONTENT_APPLICATION_DATA || !opened.payload)
+        return OS_LLM_REQUEST_FAILED;
+    if (opened.payload_length == 9U) {
+        uint8_t is_b0 = 1U;
+        uint8_t is_b1 = 1U;
+        for (i = 0U; i < 9U; i++) {
+            if (opened.payload[i] != metier_b0[i]) is_b0 = 0U;
+            if (opened.payload[i] != metier_b1[i]) is_b1 = 0U;
+        }
+        if (is_b0) return 0;
+        if (is_b1) return 1;
+    }
+    /* "pong" ou autre : ignore pour le chat metier (attente d un B0/B1). */
+    if (opened.payload_length == 4U && opened.payload[0] == 'p' && opened.payload[1] == 'o' &&
+        opened.payload[2] == 'n' && opened.payload[3] == 'g')
+        return 2;
+    return OS_LLM_REQUEST_FAILED;
 }
 
 /* Appelé depuis un contexte noyau sûr ; jamais depuis le gestionnaire IRQ0. */
