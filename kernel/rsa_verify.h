@@ -11,3 +11,13 @@ int rsa_pkcs1_v15_sha256_verify(const uint8_t* modulus,uint16_t modulus_length,
                                 uint16_t signature_length,uint32_t* workspace,
                                 uint16_t workspace_length);
 #endif
+
+/* Signe un digest SHA-256 en PKCS#1 v1.5 RSA.
+ * `workspace` appartient a l appelant et contient au moins
+ * 7 * ceil(modulus_length / 4) limbs : module, exposant, base, resultat et
+ * quatre temporaires bigint_modexp. */
+int rsa_pkcs1_v15_sha256_sign(const uint8_t* modulus, uint16_t modulus_length,
+                              const uint8_t* private_exponent, uint16_t private_exponent_length,
+                              const uint8_t digest[32], uint8_t* signature,
+                              uint16_t signature_capacity, uint32_t* workspace,
+                              uint16_t workspace_length);

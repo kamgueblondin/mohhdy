@@ -37,7 +37,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/userspace_switch.o \
           build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/gdt.o build/idt.o build/vmm.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/interrupts.o \
-          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_http_tls.o
+          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o
 
 # L'ABI partagée influence notamment la taille de task_t et des messages IPC.
 # Une évolution de structure doit donc reconstruire toute l'image, pas seulement ipc.o.
@@ -245,6 +245,9 @@ build/rsa_verify.o: kernel/rsa_verify.c kernel/rsa_verify.h kernel/bigint.h
 build/net_tls_record.o: kernel/net_tls_record.c kernel/net_tls_record.h kernel/aes_gcm.h kernel/x509_der.h kernel/rsa_verify.h kernel/x25519.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+build/net_tls_server.o: kernel/net_tls_server.c kernel/net_tls_server.h kernel/net_tls_record.h kernel/rsa_verify.h kernel/x25519.h kernel/sha256.h
+	$(CC) $(CFLAGS) -c kernel/net_tls_server.c -o $@
+
 
 build/net_http_tls.o: kernel/net_http_tls.c kernel/net_http_tls.h kernel/net_tcp.h kernel/net_tls_record.h
 	@mkdir -p $(dir $@)
@@ -612,7 +615,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ipc-foundation qemu-vfs-service qemu-service-grant
+.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ipc-foundation qemu-vfs-service qemu-service-grant
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -647,6 +650,10 @@ qemu-ne2k-guest-tls-peer: $(OS_IMAGE) pack-initrd
 # Suite guest-guest : ACK final + ClientHello TLS 1.2 (hors ci).
 qemu-ne2k-guest-tls-chat: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_ne2k_guest_tls_chat.py
+
+# Suite guest-guest : role serveur TLS B jusqu a Finished (hors ci).
+qemu-ne2k-guest-tls-server: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_ne2k_guest_tls_server.py
 qemu-ipc-foundation: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_ipc_foundation.py
 
@@ -751,6 +758,7 @@ help:
 	@echo "  qemu-ne2k-guest-app-traffic - Suite tranche 2: ARP croise + SYN peer.local (hors ci)"
 	@echo "  qemu-ne2k-guest-tls-peer - Suite: B LISTEN + SYN-ACK guest (hors ci)"
 	@echo "  qemu-ne2k-guest-tls-chat - Suite: ACK final + ClientHello TLS peer (hors ci)"
+	@echo "  qemu-ne2k-guest-tls-server - Suite: role serveur TLS B + Finished (hors ci)"
 	@echo "  qemu-ipc-foundation - Vérifie l’IPC entre tâches Ring 3"
 	@echo "  qemu-vfs-service - Vérifie une lecture via le médiateur VFS Ring 3"
 	@echo "  gguf-benchmark  - Mesure répétée du premier token et de ai-continue GGUF sous QEMU"

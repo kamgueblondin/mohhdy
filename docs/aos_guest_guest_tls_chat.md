@@ -39,9 +39,5 @@ Injection PS/2 mutexee hote. Hors `make ci` et `make integration-qemu`.
 
 ## Limites
 
-- Pas de ServerHello / Finished cote B (role serveur TLS absent de l arbre)
-- Pas d application data AES-GCM bilaterale ni POST/SSE metier peer
-- Le ClientHello piggybacke sur l ACK final est compte par le hub ; B ne parse
-  pas encore le record TLS serveur
-- Suite logique : role serveur TLS guest + au moins un record applicatif chiffre
-  dans chaque sens
+- Role serveur TLS + Finished : voir [aos_guest_guest_tls_server.md](aos_guest_guest_tls_server.md)
+- Pas d application data AES-GCM bilaterale metier ni POST/SSE peer dans ce lot

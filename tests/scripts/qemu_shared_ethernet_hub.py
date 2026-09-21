@@ -228,6 +228,9 @@ class SharedEthernetHub(object):
             "guest_syn_ack": 0,
             "guest_final_ack": 0,
             "guest_client_hello": 0,
+            "guest_server_hello": 0,
+            "guest_server_finished": 0,
+            "guest_app_data": 0,
             "peer_dns": 0,
         }
         self.source_macs = set()
@@ -433,6 +436,22 @@ class SharedEthernetHub(object):
                     and payload[5] == 0x01
                 ):
                     self.events["guest_client_hello"] += 1
+            # Reponses TLS serveur emis par un invite (source_port 443).
+            if (
+                owner_mac is not None
+                and owner_mac == source_mac
+                and peer_mac is not None
+                and dest_ip != source_ip
+                and source_port == 443
+                and (flags & 0x12) == 0x10
+                and len(payload) >= 5
+            ):
+                if payload[0] == 0x16 and payload[1] == 0x03 and payload[2] == 0x03 and len(payload) >= 6 and payload[5] == 0x02:
+                    self.events["guest_server_hello"] += 1
+                if payload[0] == 0x14 and payload[1] == 0x03 and payload[2] == 0x03:
+                    self.events["guest_server_finished"] += 1
+                if payload[0] == 0x17 and payload[1] == 0x03 and payload[2] == 0x03:
+                    self.events["guest_app_data"] += 1
             # Flux applicatif simple : SYN vers l'IP louee du pair → SYN-ACK proxy optionnel.
             if (
                 peer_mac is not None

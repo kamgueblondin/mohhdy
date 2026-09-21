@@ -145,7 +145,7 @@ make qemu-smoke
 ```
 
 `make qemu-ne2k-shared-topology` est hors `make ci` / `integration-qemu` (budget).
-Suite : `make qemu-ne2k-tls-multi-guest` (TLS_COMPLETE x2), `make qemu-ne2k-guest-app-traffic` (ARP croise + SYN peer.local, hors ci), `make qemu-ne2k-guest-tls-peer` (B LISTEN + SYN-ACK guest, hors ci), puis `make qemu-ne2k-guest-tls-chat` (ACK final + ClientHello TLS, hors ci).
+Suite : `make qemu-ne2k-tls-multi-guest` (TLS_COMPLETE x2), `make qemu-ne2k-guest-app-traffic` (ARP croise + SYN peer.local, hors ci), `make qemu-ne2k-guest-tls-peer` (B LISTEN + SYN-ACK guest, hors ci), puis `make qemu-ne2k-guest-tls-chat` (ACK final + ClientHello TLS, hors ci), puis `make qemu-ne2k-guest-tls-server` (role serveur TLS Finished, hors ci).
 
 **Risques et limites.**
 
@@ -153,7 +153,7 @@ Suite : `make qemu-ne2k-tls-multi-guest` (TLS_COMPLETE x2), `make qemu-ne2k-gues
 - Topologie de base : un seul `ai-acquire` ; suite TLS multi : baux `10.32.0.15` / `10.32.0.16`
 - Ce n'est pas le réseau public (voir tranche sous condition plus bas)
 
-**Ordre suggéré.** Après Garde 2. TLS multi-invites livre (`qemu-ne2k-tls-multi-guest`). Guest-guest applicatif livre (`qemu-ne2k-guest-app-traffic`, hors ci). SYN-ACK guest livre (`qemu-ne2k-guest-tls-peer`, hors ci). ACK final + ClientHello TLS livre (`qemu-ne2k-guest-tls-chat`, hors ci) ; role serveur TLS + chat chiffre bilaterale restent ouverts.
+**Ordre suggéré.** Après Garde 2. TLS multi-invites livre (`qemu-ne2k-tls-multi-guest`). Guest-guest applicatif livre (`qemu-ne2k-guest-app-traffic`, hors ci). SYN-ACK guest livre (`qemu-ne2k-guest-tls-peer`, hors ci). ACK final + ClientHello TLS livre (`qemu-ne2k-guest-tls-chat`, hors ci). Role serveur TLS jusqu a Finished livre (`qemu-ne2k-guest-tls-server`, hors ci) ; chat chiffre bilaterale metier reste ouvert.
 
 ### Tranche 3. Latence GGUF sur plateforme de référence (matériel / KVM)
 
@@ -309,7 +309,7 @@ Les rangs 0-4 sont **ce fichier**. Les rangs OS-UI sont le [plan maitre](PLAN_SE
 |---:|---|---|---|
 | 0 | Budget CI QEMU | Prototype guest | Garder, ne pas relacher |
 | 1 | ACL prefixee | Prototype guest | Garder les preuves negatives |
-| 2 | Topologie locale partagee | Prototype guest | `qemu-ne2k-shared-topology` + `qemu-ne2k-tls-multi-guest` + `qemu-ne2k-guest-app-traffic` + `qemu-ne2k-guest-tls-peer` + `qemu-ne2k-guest-tls-chat` (hub 127.0.0.1, hors ci) |
+| 2 | Topologie locale partagee | Prototype guest | `qemu-ne2k-shared-topology` + `qemu-ne2k-tls-multi-guest` + `qemu-ne2k-guest-app-traffic` + `qemu-ne2k-guest-tls-peer` + `qemu-ne2k-guest-tls-chat` + `qemu-ne2k-guest-tls-server` (hub 127.0.0.1, hors ci) |
 | 3 | Latence GGUF materiel / KVM | Prototype guest | Item ouvert README + priorite 3 `mohhdy_us.md` |
 | 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | I/O montages protégés via worker (AOS-2163) ; pilote ATA encore Ring 0 `[~]` |
 | - | Reseau public | Prototype guest | Sous condition, hors CI |

@@ -886,7 +886,7 @@ int ne2k_arp_service(ne2k_device_t* device, const ne2k_io_t* io,
 int ne2k_rx_poll_tcp(ne2k_device_t* device, const ne2k_io_t* io,
                      uint8_t* frame, uint16_t frame_capacity,
                      uint16_t* frame_length, net_tcp_view_t* tcp) {
-    net_ethernet_header_t ethernet; uint16_t ip_header_size; int status;
+    net_ethernet_header_t ethernet; uint16_t ip_header_size, ip_length, tcp_length; int status;
     if (!tcp) return -1;
     status = ne2k_rx_poll(device, io, frame, frame_capacity, frame_length);
     if (status != 0) return status;
@@ -896,8 +896,13 @@ int ne2k_rx_poll_tcp(ne2k_device_t* device, const ne2k_io_t* io,
     ip_header_size = (uint16_t)(frame[NET_ETHERNET_HEADER_SIZE] & 0x0fU) * 4U;
     if (ip_header_size < 20U || frame[NET_ETHERNET_HEADER_SIZE + 9U] != NET_TCP_PROTOCOL ||
         *frame_length < NET_ETHERNET_HEADER_SIZE + ip_header_size) return -3;
-    if (net_tcp_parse(frame + NET_ETHERNET_HEADER_SIZE + ip_header_size,
-                      (uint32_t)(*frame_length - NET_ETHERNET_HEADER_SIZE - ip_header_size), tcp) != 0)
+    /* Longueur IPv4 (sans FCS ethernet) : ne2k_rx inclut souvent le CRC dans frame_length. */
+    ip_length = (uint16_t)(((uint16_t)frame[NET_ETHERNET_HEADER_SIZE + 2U] << 8) |
+                           frame[NET_ETHERNET_HEADER_SIZE + 3U]);
+    if (ip_length < ip_header_size + NET_TCP_HEADER_SIZE ||
+        (uint32_t)NET_ETHERNET_HEADER_SIZE + ip_length > *frame_length) return -3;
+    tcp_length = (uint16_t)(ip_length - ip_header_size);
+    if (net_tcp_parse(frame + NET_ETHERNET_HEADER_SIZE + ip_header_size, tcp_length, tcp) != 0)
         return -4;
     return 0;
 }
@@ -905,14 +910,19 @@ int ne2k_rx_poll_tcp(ne2k_device_t* device, const ne2k_io_t* io,
 int ne2k_socket_poll_tcp(ne2k_device_t* device, const ne2k_io_t* io,
                          uint8_t* frame, uint16_t frame_capacity, int socket_id) {
     net_tcp_view_t view;
-    uint16_t frame_length, ip_header_size, tcp_offset;
+    uint16_t frame_length, ip_header_size, ip_length, tcp_offset, tcp_length;
     int status;
     status = ne2k_rx_poll_tcp(device, io, frame, frame_capacity, &frame_length, &view);
     if (status != 0) return status;
     ip_header_size = (uint16_t)(frame[NET_ETHERNET_HEADER_SIZE] & 0x0fU) * 4U;
+    ip_length = (uint16_t)(((uint16_t)frame[NET_ETHERNET_HEADER_SIZE + 2U] << 8) |
+                           frame[NET_ETHERNET_HEADER_SIZE + 3U]);
     tcp_offset = (uint16_t)(NET_ETHERNET_HEADER_SIZE + ip_header_size);
-    if (tcp_offset >= frame_length) return -5;
-    return net_socket_feed(socket_id, frame + tcp_offset, (uint16_t)(frame_length - tcp_offset));
+    if (ip_header_size < 20U || ip_length < ip_header_size + NET_TCP_HEADER_SIZE ||
+        tcp_offset >= frame_length ||
+        (uint32_t)NET_ETHERNET_HEADER_SIZE + ip_length > frame_length) return -5;
+    tcp_length = (uint16_t)(ip_length - ip_header_size);
+    return net_socket_feed(socket_id, frame + tcp_offset, tcp_length);
 }
 
 int ne2k_socket_passive_step(ne2k_device_t* device, const ne2k_io_t* io,

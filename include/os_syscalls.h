@@ -244,7 +244,9 @@
 #define SYS_PEER_LISTEN 128
 /* EBX = os_peer_accept_request_t* : poll SYN/ACK jusqu a SYN_RECEIVED ou ESTABLISHED. */
 #define SYS_PEER_ACCEPT 129
-#define MAX_SYSCALLS 128
+/* EBX = os_peer_tls_poll_request_t* : role serveur TLS guest (ServerHello..Finished). */
+#define SYS_PEER_TLS_POLL 130
+#define MAX_SYSCALLS 131
 
 #define OS_VGA_COLS 80
 #define OS_VGA_ROWS 25
@@ -345,6 +347,10 @@ typedef struct {
     uint16_t attempts;
     uint8_t require_established;
 } os_peer_accept_request_t;
+
+typedef struct {
+    uint16_t attempts;
+} os_peer_tls_poll_request_t;
 
 #define OS_PEER_BAD_REQUEST (-130)
 #define OS_PEER_UNAVAILABLE (-131)
