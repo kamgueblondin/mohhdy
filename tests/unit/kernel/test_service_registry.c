@@ -476,6 +476,33 @@ static void test_ata_overlay_io_only_via_worker_when_live(void) {
     TEST_ASSERT_TRUE(service_registry_ata_overlay_io_via_worker(3));
 }
 
+static void test_notify_ack_and_history_persistence(void) {
+    uint32_t seq1 = 0U, seq2 = 0U;
+    uint32_t acked = 0U, unacked = 0U;
+    service_registry_init();
+
+    TEST_ASSERT_EQUAL(0, service_registry_notify_record("vfs", 4, 3, 9, OS_SERVICE_EVENT_GRANTED, &seq1));
+    TEST_ASSERT_TRUE(seq1 > 0U);
+    TEST_ASSERT_EQUAL(0, service_registry_notify_record("vfs", 4, 9, 0, OS_SERVICE_EVENT_UNREGISTERED, &seq2));
+    TEST_ASSERT_TRUE(seq2 > seq1);
+
+    TEST_ASSERT_EQUAL(0, service_registry_notify_history_count(4, &acked, &unacked));
+    TEST_ASSERT_EQUAL(0U, acked);
+    TEST_ASSERT_EQUAL(2U, unacked);
+
+    TEST_ASSERT_EQUAL(0, service_registry_notify_ack(4, seq1));
+    TEST_ASSERT_EQUAL(0, service_registry_notify_history_count(4, &acked, &unacked));
+    TEST_ASSERT_EQUAL(1U, acked);
+    TEST_ASSERT_EQUAL(1U, unacked);
+
+    TEST_ASSERT_EQUAL(0, service_registry_notify_ack(4, seq2));
+    TEST_ASSERT_EQUAL(0, service_registry_notify_history_count(4, &acked, &unacked));
+    TEST_ASSERT_EQUAL(2U, acked);
+    TEST_ASSERT_EQUAL(0U, unacked);
+
+    TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_ack(4, 9999U));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_registry_rejects_invalid_names);
@@ -506,6 +533,7 @@ int main(void) {
     RUN_TEST(test_owner_initrd_overlay_bypass_closes_when_storage_worker_live);
     RUN_TEST(test_owner_ata_generic_bypass_closes_when_storage_worker_live);
     RUN_TEST(test_ata_overlay_io_only_via_worker_when_live);
+    RUN_TEST(test_notify_ack_and_history_persistence);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

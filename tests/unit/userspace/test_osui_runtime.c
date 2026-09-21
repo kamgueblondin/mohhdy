@@ -244,6 +244,67 @@ static void test_guest_status_honesty(void) {
     TEST_ASSERT(strstr(g_out, "scripts_stripped=1") != NULL);
 }
 
+static void test_browser_tabs_and_dom_acts(void) {
+    int rc;
+    setup();
+    rc = run_line("browser-tab-new https://mohhdy.local/app");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "tab_id=t0001") != NULL);
+    TEST_ASSERT(strstr(g_out, "https://mohhdy.local/app") != NULL);
+
+    rc = run_line("browser-tab-new https://mohhdy.local/docs");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "tab_id=t0002") != NULL);
+
+    rc = run_line("browser-tab-list");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "count=2") != NULL);
+    TEST_ASSERT(strstr(g_out, "t0001") != NULL);
+    TEST_ASSERT(strstr(g_out, "t0002") != NULL);
+
+    rc = run_line("browser-tab-use t0001");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "tab_id=t0001") != NULL);
+
+    rc = run_line("browser-tab-close t0002");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "tab_id=t0002") != NULL);
+
+    rc = run_line("browser-form-fill Bob 42");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "customer=Bob") != NULL);
+    TEST_ASSERT(strstr(g_out, "amount=42") != NULL);
+
+    rc = run_line("browser-dom-act submit");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "form_submitted=true") != NULL);
+
+    rc = run_line("browser-dom-act reset");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "form_submitted=false") != NULL);
+}
+
+static void test_mcp_connectors_extended(void) {
+    int rc;
+    setup();
+    rc = run_line("mcp-list");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "mcp.invoice.create") != NULL);
+    TEST_ASSERT(strstr(g_out, "mcp.payment.process") != NULL);
+
+    rc = run_line("mcp-status");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "active=true") != NULL);
+
+    rc = run_line("mcp-invoke mcp.payment.process");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "tool=mcp.payment.process") != NULL);
+
+    rc = run_line("mcp-invoke mcp.document.sign");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "tool=mcp.document.sign") != NULL);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -257,6 +318,8 @@ int main(void) {
     RUN_TEST(test_mcp_invoice_and_undeclared);
     RUN_TEST(test_fs_sandbox);
     RUN_TEST(test_guest_status_honesty);
+    RUN_TEST(test_browser_tabs_and_dom_acts);
+    RUN_TEST(test_mcp_connectors_extended);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
