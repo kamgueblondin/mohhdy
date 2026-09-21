@@ -731,6 +731,30 @@ static int vfs_path_is_dynamic_alias(const char* path, int list_path) {
     return 0;
 }
 
+/* Montages protégés + alias : le médiateur délègue l'I/O au worker sous
+ * capacité temporaire. Sans worker de confiance, le chemin local historique
+ * reste disponible. */
+static int vfs_path_is_storage_io(const char* path, int list_path) {
+    uint32_t index;
+    if (!path || !vfs_mount_worker_trusted) return 0;
+    for (index = 0U; index < vfs_mount_count; index++) {
+        const char* relative = (const char*)0;
+        if (!list_path && os_vfs_match_mount(path, vfs_mounts[index].prefix, &relative)) return 1;
+        if (list_path && list_path_matches_mount(path, vfs_mounts[index].prefix, &relative)) return 1;
+    }
+    return 0;
+}
+
+static void vfs_virtual_log_storage_delegation(const char* op, const char* path, int list_path) {
+    if (vfs_path_is_dynamic_alias(path, list_path)) {
+        puts("vfsserver delegated alias ");
+    } else {
+        puts("vfsserver delegated storage ");
+    }
+    puts(op);
+    puts("\n");
+}
+
 static uint32_t vfs_mount_source_for_path(const char* path, int list_path) {
     uint32_t index;
     if (!path) return 0U;
@@ -808,7 +832,7 @@ static int vfs_virtual_submit_alias_io(uint32_t kind, const char* path, uint32_t
     int status;
     if (vfs_virtual_pending.active) return -1;
     worker_pid = vfs_virtual_lookup();
-    if (worker_pid < 0 || !vfs_path_is_dynamic_alias(path,
+    if (worker_pid < 0 || !vfs_path_is_storage_io(path,
         kind == VFS_VIRTUAL_PENDING_ALIAS_LIST || kind == VFS_VIRTUAL_PENDING_ALIAS_LIST_PAGE ||
         kind == VFS_VIRTUAL_PENDING_ALIAS_LIST_OBSERVE)) return -2;
     if (kind == VFS_VIRTUAL_PENDING_ALIAS_READ) {
@@ -1764,10 +1788,10 @@ void main(void) {
             uint32_t count = 0U;
             puts("vfsserver list request\n");
             status = os_vfs_parse_list_request(&message, path);
-            if (status == 0 && vfs_path_is_dynamic_alias(path, 1) &&
+            if (status == 0 && vfs_path_is_storage_io(path, 1) &&
                 vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_LIST, path, 0U,
                                             message.sender_pid, message.request_id) == 0) {
-                puts("vfsserver delegated alias list\n");
+                vfs_virtual_log_storage_delegation("list", path, 1);
                 yield();
                 continue;
             }
@@ -1797,10 +1821,10 @@ void main(void) {
                 status = list_virtual_mounts_page(start, data, OS_VFS_LIST_PAGE_DATA_MAX,
                                                   &size, &count, &next_start);
                 puts("vfsserver virtual mount page local\n");
-            } else if (status == 0 && vfs_path_is_dynamic_alias(path, 1) &&
+            } else if (status == 0 && vfs_path_is_storage_io(path, 1) &&
                        vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_LIST_PAGE, path, start,
                                                    message.sender_pid, message.request_id) == 0) {
-                puts("vfsserver delegated alias list page\n");
+                vfs_virtual_log_storage_delegation("list page", path, 1);
                 yield();
                 continue;
             } else if (status == 0) {
@@ -1834,10 +1858,10 @@ void main(void) {
                 status = list_virtual_mounts_page(start, data, OS_VFS_LIST_OBSERVE_DATA_MAX,
                                                   &size, &count, &next_start);
                 puts("vfsserver virtual mount observe local\n");
-            } else if (status == 0 && vfs_path_is_dynamic_alias(path, 1) &&
+            } else if (status == 0 && vfs_path_is_storage_io(path, 1) &&
                        vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_LIST_OBSERVE, path, start,
                                                    message.sender_pid, message.request_id) == 0) {
-                puts("vfsserver delegated alias list observe\n");
+                vfs_virtual_log_storage_delegation("list observe", path, 1);
                 yield();
                 continue;
             } else if (status == 0) {
@@ -1854,10 +1878,10 @@ void main(void) {
             int status;
             puts("vfsserver stat request\n");
             status = os_vfs_parse_stat_request(&message, path);
-            if (status == 0 && vfs_path_is_dynamic_alias(path, 0) &&
+            if (status == 0 && vfs_path_is_storage_io(path, 0) &&
                 vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_STAT, path, 0U,
                                             message.sender_pid, message.request_id) == 0) {
-                puts("vfsserver delegated alias stat\n");
+                vfs_virtual_log_storage_delegation("stat", path, 0);
                 yield();
                 continue;
             }
@@ -1897,10 +1921,10 @@ void main(void) {
                 yield();
                 continue;
             }
-            if (status == 0 && vfs_path_is_dynamic_alias(path, 0) &&
+            if (status == 0 && vfs_path_is_storage_io(path, 0) &&
                 vfs_virtual_submit_alias_io(VFS_VIRTUAL_PENDING_ALIAS_READ, path, 0U,
                                             message.sender_pid, message.request_id) == 0) {
-                puts("vfsserver delegated alias read\n");
+                vfs_virtual_log_storage_delegation("read", path, 0);
                 yield();
                 continue;
             }

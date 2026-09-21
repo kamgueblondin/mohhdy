@@ -38,6 +38,67 @@ def log_text():
         return ""
 
 
+def rejoin_spawn_preempted_puts(output):
+    """Recolle un puts() coupe juste avant le `spawn ok` du meme binaire.
+
+    Sous IRQ0, SYS_PUTC peut n'emettre qu'un prefixe (`v`) avant le retour
+    shell `spawn ok pid N vfsserver` ; la suite (`fsserver ready vfs`) arrive
+    apres le yield. Sans recollement, wait_for("vfsserver ready vfs") rate.
+    """
+    pattern = re.compile(
+        r"\b([A-Za-z]{1,16})[ \t]*\r?\n?"
+        r"(spawn ok pid \d+ ([A-Za-z0-9_]+)\r?\n)"
+    )
+    pieces = []
+    last = 0
+    for match in pattern.finditer(output):
+        prefix = match.group(1)
+        name = match.group(3)
+        if not name.startswith(prefix):
+            continue
+        continuation = name[len(prefix):]
+        if not continuation:
+            continue
+        after = match.end()
+        window = output[after:after + 4000]
+        cont = re.search(r"(?m)^" + re.escape(continuation), window)
+        if not cont:
+            continue
+        line_end = window.find("\n", cont.start())
+        if line_end < 0:
+            line_end = len(window)
+        line = window[cont.start():line_end]
+        gap = window[:cont.start()]
+        pieces.append(output[last:match.start()])
+        pieces.append(match.group(2))
+        pieces.append(gap)
+        pieces.append(prefix + line)
+        last = after + line_end
+    pieces.append(output[last:])
+    return "".join(pieces)
+
+
+
+def rejoin_task_resume_ok(output):
+    """Recolle `task-resume ok` + bruit + pid apres preemption IRQ0.
+
+    Exemple local : `task-resume ok` puis `vfsvirtual read ...` puis `8`.
+    """
+    pattern = re.compile(
+        r"(task-resume ok)[ \t]*"
+        r"((?:(?!task-resume ok\s+\d)[\s\S]){0,1200}?)"
+        r"(?<![0-9])(\d{1,4})(?![0-9A-Za-z])"
+    )
+
+    def replacer(match):
+        head, gap, pid = match.group(1), match.group(2), match.group(3)
+        if gap.strip() == "":
+            return match.group(0)
+        return "%s %s\n%s" % (head, pid, gap)
+
+    return pattern.sub(replacer, output, count=4)
+
+
 def normalized_log(output):
     """Retire les diagnostics noyau asynchrones sans recoller les réponses."""
     # Un timer peut couper une réponse au milieu d’un mot ou juste avant une
@@ -47,9 +108,15 @@ def normalized_log(output):
     # L’ordonnanceur peut couper deux champs. S’il est joint à deux mots,
     # garder un séparateur ; s’il suit déjà un espace applicatif, le retirer
     # sans en ajouter un second qui casserait une assertion textuelle.
-    scheduler = r"\[SCHED\] switching to task \d+\s*"
-    output = re.sub(r"(?<=\w)" + scheduler + r"(?=\w)", " ", output)
-    output = re.sub(scheduler, "", output)
+    # Une suite de diagnostics entre deux mots doit devenir un seul espace ;
+    # sinon le \s* final avale le separateur applicatif (ex. readsources).
+    scheduler_run = r"(?:\[SCHED\] switching to task \d+\s*)+"
+    output = re.sub(r"(?<=\w)" + scheduler_run + r"(?=\w)", " ", output)
+    output = re.sub(r"\[SCHED\] switching to task \d+\s*", "", output)
+    # Prefixe puts() + spawn ok + suffixe de la meme ligne (flake CI vfs-service).
+    output = rejoin_spawn_preempted_puts(output)
+    # task-resume ok <pid> coupe apres ok (SCHED + trace worker).
+    output = rejoin_task_resume_ok(output)
     return re.sub(r"[ \t]{2,}", " ", output)
 
 def wait_for(needle, proc, offset=0, timeout=25):
@@ -101,6 +168,35 @@ def key_echoes(output):
 
 def prepared_line_matches(output, command):
     return key_echoes(output) == [char.lower() for char in command]
+
+
+
+def verify_spawn_preempted_puts_rejoin():
+    """Sonde : prefixe puts() + spawn ok + suite → marqueur intact."""
+    sample = (
+        "v[SCHED] switching to task 1\n"
+        "spawn ok pid 3 vfsserver\n"
+        "(-.-) : SYS_GETS: Debut de la lecture\n"
+        "SYS_GETS: ligne lue: yield\n"
+        "[SCHED] switching to task 3\n"
+        "fsserver ready vfs\n"
+        "vfsserver mount initrd/ ro\n"
+    )
+    output = normalized_log(sample)
+    if "vfsserver ready vfs" not in output:
+        raise RuntimeError("sonde spawn-preempt: ready non recolle")
+    if "spawn ok pid 3 vfsserver" not in output:
+        raise RuntimeError("sonde spawn-preempt: spawn ok perdu")
+    intact = normalized_log("vfsserver ready vfs\nspawn ok pid 3 vfsserver\n")
+    if "vfsserver ready vfs" not in intact:
+        raise RuntimeError("sonde spawn-preempt: chemin intact casse")
+    resume = normalized_log(
+        "task-resume ok [SCHED] switching to task 3\n"
+        "vfsvirtual read vfs-info\n"
+        "8\n"
+    )
+    if "task-resume ok 8" not in resume:
+        raise RuntimeError("sonde task-resume: pid non recolle")
 
 
 def verify_pre_ret_reconciliation_parser():
@@ -605,20 +701,27 @@ def main():
             send_command_until(monitor, "service-find vfs", "service-find ok vfs %s" % server_pid, proc)
             before_initrd_list = len(log_text())
             send_command_until(monitor, "vfs-list initrd/", "vfsserver list request", proc)
+            wait_for("vfsserver delegated storage list", proc, before_initrd_list)
+            wait_for("vfsvirtual storage list initrd/", proc, before_initrd_list)
             wait_for("vfs-list partiel count 4", proc, before_initrd_list)
             wait_for_listed_name(monitor, proc, "initrd/", "hello.txt")
             before_page_zero = len(log_text())
             send_command_until(monitor, "vfs-list-page initrd/ 0", "vfsserver list page request", proc)
+            wait_for("vfsserver delegated storage list page", proc, before_page_zero)
+            wait_for("vfsvirtual storage list page initrd/", proc, before_page_zero)
             wait_for("vfs-list-page partiel count 4 next 4", proc, before_page_zero)
             before_page_last = len(log_text())
             send_command_until(monitor, "vfs-list-page initrd/ 4", "vfsserver list page request", proc)
+            wait_for("vfsserver delegated storage list page", proc, before_page_last)
             wait_for("vfs-list-page ok count 4 next end", proc, before_page_last)
             before_observe = len(log_text())
             send_command_until(monitor, "vfs-list-observe initrd/ 0 0", "vfsserver list observe request", proc)
+            wait_for("vfsserver delegated storage list observe", proc, before_observe)
             wait_for("vfs-list-observe partiel count 4 next 4 generation 1", proc, before_observe)
             wait_for_listed_name(monitor, proc, "initrd/bin/", "shell")
             before_overlay_empty_list = len(log_text())
             send_command_until(monitor, "vfs-list overlay/", "vfsserver list request", proc)
+            wait_for("vfsserver delegated storage list", proc, before_overlay_empty_list)
             wait_for("vfs-list ok count 0", proc, before_overlay_empty_list)
             before_mkdir = len(log_text())
             send_command_until(monitor, "vfs-mkdir overlay/newdir", "vfsserver mkdir request", proc)
@@ -824,6 +927,7 @@ def main():
             read_until_payload(monitor, proc, "fat16/renamed.txt", "qemu-fat16")
             before_fat16_new_list = len(log_text())
             send_command_until(monitor, "vfs-list fat16/", "vfsserver list request", proc)
+            wait_for("vfsserver delegated storage list", proc, before_fat16_new_list)
             wait_for("vfs-list ok count 3", proc, before_fat16_new_list)
             wait_for("RENAMED.TXT", proc, before_fat16_new_list)
             before_fat16_remove = len(log_text())
@@ -895,6 +999,8 @@ def main():
                                key_delay=0.55)
             before_read = len(log_text())
             send_command_until(monitor, "vfs-read initrd/hello.txt", "vfs-read ok", proc)
+            wait_for("vfsserver delegated storage read", proc, before_read)
+            wait_for("vfsvirtual storage read initrd/hello.txt", proc, before_read)
             wait_for("vfs-read ok 35 request", proc, before_read)
             wait_for("Un autre fichier de demonstration.", proc, before_read)
             before_deferred_list = len(log_text())
@@ -1025,7 +1131,14 @@ def main():
             # troisième reprend le médiateur. Aucune requête VFS ni mutation
             # n’est rejouée.
             send_command_until(monitor, "yield", "yield ok", proc)
-            send_command_until(monitor, "yield", "vfsserver delegated alias read", proc)
+            # La delegation alias peut arriver avant le troisieme yield
+            # (IRQ0 / ordonnancement). Attendre depuis le spawn client, pas
+            # depuis le debut du yield courant, pour ne pas rater le marqueur.
+            before_third_yield = len(log_text())
+            send_command(monitor, "yield", proc)
+            wait_for("vfsserver delegated alias read", proc,
+                     before_alias_flight_spawn, timeout=40)
+            wait_for("(-.-)", proc, before_third_yield)
             before_alias_scope = len(log_text())
             send_command_until(monitor, "vfs-backend-scope %s" % worker_pid,
                                "vfsserver backend scope request", proc)
@@ -1066,6 +1179,8 @@ def main():
                                "Processus %s termine" % alias_flight_pid, proc)
             before_initrd_stat = len(log_text())
             send_command_until(monitor, "vfs-stat initrd/hello.txt", "vfs-stat ok size 35 flags file", proc)
+            wait_for("vfsserver delegated storage stat", proc, before_initrd_stat)
+            wait_for("vfsvirtual storage stat initrd/hello.txt", proc, before_initrd_stat)
             wait_for("vfs-stat ok size 35 flags file", proc, before_initrd_stat)
             before_readonly_write = len(log_text())
             send_command_until(monitor, "vfs-write initrd/no.txt denied",
@@ -1085,12 +1200,17 @@ def main():
             wait_for("vfs-write ok request", proc, before_write)
             before_overlay_list = len(log_text())
             send_command_until(monitor, "vfs-list overlay/", "vfsserver list request", proc)
+            wait_for("vfsserver delegated storage list", proc, before_overlay_list)
             wait_for("note.txt", proc, before_overlay_list)
             before_overlay_stat = len(log_text())
             send_command_until(monitor, "vfs-stat overlay/note.txt", "vfsserver stat request", proc)
+            wait_for("vfsserver delegated storage stat", proc, before_overlay_stat)
+            wait_for("vfsvirtual storage stat overlay/note.txt", proc, before_overlay_stat)
             wait_for("vfs-stat ok size 5 flags file", proc, before_overlay_stat)
             before_written_read = len(log_text())
             send_command_until(monitor, "vfs-read overlay/note.txt", "vfs-read ok", proc)
+            wait_for("vfsserver delegated storage read", proc, before_written_read)
+            wait_for("vfsvirtual storage read overlay/note.txt", proc, before_written_read)
             wait_for("vfsok", proc, before_written_read)
             before_rename = len(log_text())
             send_command_until(monitor, "vfs-rename overlay/note.txt overlay/moved.txt",

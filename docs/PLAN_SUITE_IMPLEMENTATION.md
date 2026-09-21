@@ -167,6 +167,7 @@ Pas de TLS multi-invités simultanés ni de lien guest↔guest applicatif dans c
 - Rapport min / médiane / max / dispersion, isolant le temps de commande du boot (même contrat que le benchmark JSON existant)
 - Ne pas déclarer "moins d'une seconde" sans mesure native ou KVM
 - `make qemu-gguf-smoke` et `make test-all` restent verts. Pas de régression du chemin Q3_K réel
+- Harness : `make gguf-kvm-benchmark` / `make gguf-kvm-benchmark-check` (skip CI sans KVM)
 
 **Commandes de vérification.**
 
@@ -176,7 +177,11 @@ make gguf-disk
 make qemu-gguf-smoke
 make gguf-benchmark
 make gguf-benchmark-check
+make gguf-kvm-benchmark-check
+make gguf-kvm-benchmark
 ```
+
+`make gguf-kvm-benchmark` skippe (exit 0) sans `/dev/kvm` utilisable ou sans disque GGUF ; sur un hôte de référence, passer `GGUF_KVM_REQUIRE=1`. Détail : [aos_gguf_kvm_latency_harness.md](aos_gguf_kvm_latency_harness.md).
 
 **Risques et limites.**
 
@@ -188,7 +193,7 @@ make gguf-benchmark-check
 
 ### Tranche 4. Séparation du pilote de stockage (incrément Foundation, pas US-001 complet)
 
-**But.** Pousser d'un cran la migration microkernel **déjà commencée** : aujourd'hui `vfsserver` délègue à `vfsvirtual` les vues, mutations fixes et I/O d'alias sous capacité temporaire. README : **la séparation complète du pilote de stockage reste ouverte**.
+**But.** Pousser d'un cran la migration microkernel **déjà commencée** : `vfsserver` délègue à `vfsvirtual` les vues, mutations fixes, I/O d'alias **et** I/O des montages protégés sous capacité temporaire (AOS-2163...2170). README : **la séparation complète du pilote ATA/FAT hors noyau reste ouverte**.
 
 **IDs liés.** US-001 (architecture microkernel) uniquement comme **incrément**. AOS-007 / AOS-023 / AOS-026 (overlay AIOV, FAT). Incréments Foundation IPC/VFS déjà livrés (01 à 64 et suivants). Pas US-010 "tous les pilotes modulaires". Pas US-016.
 
@@ -306,7 +311,7 @@ Les rangs 0-4 sont **ce fichier**. Les rangs OS-UI sont le [plan maitre](PLAN_SE
 | 1 | ACL prefixee | Prototype guest | Garder les preuves negatives |
 | 2 | Topologie locale partagee | Prototype guest | `qemu-ne2k-shared-topology` (hub 127.0.0.1) ; TLS multi simultane encore ouvert |
 | 3 | Latence GGUF materiel / KVM | Prototype guest | Item ouvert README + priorite 3 `mohhdy_us.md` |
-| 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | Item partiel README `[~]` |
+| 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | I/O montages protégés via worker (AOS-2163) ; pilote ATA encore Ring 0 `[~]` |
 | - | Reseau public | Prototype guest | Sous condition, hors CI |
 | - | Identite / capabilities | Increment Foundation | Petits pas, pas US-016, pas US-001 total |
 | OS-UI-000 | Spec migration | Docs | Plan maitre (fait dans cette vague) |

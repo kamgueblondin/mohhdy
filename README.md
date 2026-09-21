@@ -60,6 +60,8 @@ make run
 | `make qemu-smoke` | Scénarios QEMU classiques : overlay, persistance, spawn/yield et exec |
 | `make gguf-disk` | Construit un disque FAT16 de déploiement contenant le modèle sous l'alias `GPT2.GGU` |
 | `make qemu-gguf-smoke` | Démarre le disque GGUF, sélectionne `gpt2.gguf`, valide le premier token local réel puis `ai-continue` et affiche les deux latences |
+| `make gguf-benchmark` / `make gguf-benchmark-check` | Campagne TCG répétée + contrôle de synthèse JSON |
+| `make gguf-kvm-benchmark` / `make gguf-kvm-benchmark-check` | Campagne KVM Multiboot (même JSON) ; skip documenté si `/dev/kvm` inutilisable ; voir [docs/aos_gguf_kvm_latency_harness.md](docs/aos_gguf_kvm_latency_harness.md) |
 | `make integration-qemu` | Sept contrats QEMU AOS-022, AOS-024, AOS-025, NE2000, IPC, VFS avec montages dynamiques, I/O d'alias médiées, diagnostic public droit-source-requête corrélée sans préfixe actif, refus backend corrélé d'une mutation hors préfixe, révocation, notifications, cycle de vie et transfert Foundation ; l'ordonnanceur est séquentiel par défaut pour éviter la contention PS/2 ; les smokes cœur, VFS et IRQ0 réconcilient la ligne entière avant `ret`, effacent localement toute divergence et ne rejouent jamais une commande exécutée ; les sept contrats ont été validés en 760,9 s, sans assertion retirée |
 | `make qemu-irq0-preemption` | Lance `spin` puis exige un shell toujours réactif |
 | `make qemu-ai-provider` | Vérifie le diagnostic réseau et le blocage OpenAI |
@@ -193,12 +195,12 @@ Les items ASSIST (sessions, admin, simulateur, FS sandbox) sont des **devoirs du
 - [x] Inventaire médié de capacités backend VFS : `vfs-backend-list` affiche jusqu'à quatre délégations actives et leurs masques au propriétaire public de `vfs`
 - [x] Capabilities backend VFS : délégation, moindre privilège, révocation indépendante, identité issue de la tâche Ring 3 et routage général des réponses discordantes
 - [x] Externalisation locale du backend de chemins VFS : table statique d'opérations par source, droits de mutation explicites et alias dynamiques validés
-- [~] Migration microkernel réelle : `vfsserver` délègue à `vfsvirtual` Ring 3 les vues publiques, les mutations fixes et les I/O `read`/`stat`/liste/pages/observation des alias dynamiques sous capacité backend temporaire droit-source-préfixe relatif, corrélation PID/requête et absence de rejeu ; la séparation complète du pilote de stockage reste ouverte
+- [~] Migration microkernel réelle : `vfsserver` délègue à `vfsvirtual` Ring 3 les vues publiques, les mutations fixes, les I/O des alias dynamiques **et** les I/O `read`/`stat`/liste/pages/observation des montages protégés (`initrd/`, `overlay/`, `fat16/`, `fat32/`) sous capacité backend temporaire droit-source-préfixe relatif, corrélation PID/requête et absence de rejeu ([docs/aos2163_2170_vfs_storage_worker_separation.md](docs/aos2163_2170_vfs_storage_worker_separation.md)) ; la séparation complète du pilote ATA/FAT hors noyau reste ouverte
 - [x] Latence GGUF quantifiée sur QEMU : benchmark répétable, rapport JSON de médiane/dispersion et référence premier token/continuation
 - [x] Tenir `make integration-qemu` sous 25 minutes sans relâcher les assertions métier : sept contrats complets séquentiels en 12 min 41 s en validation locale
 - [x] Étendre le VFS aux sous-répertoires FAT à un niveau, sous un contrat de non-écrasement et de non-rejeu des mutations incertaines
 - [x] Externaliser les I/O des alias VFS au worker Ring 3, avec droit-source-préfixe temporaire, corrélation stricte, diagnostic de scope non divulguant et absence de rejeu après issue incertaine
-- [ ] Optimisation supplémentaire de la latence GGUF sur une plateforme de référence stable, distincte de la variabilité QEMU TCG
+- [~] Latence GGUF plateforme de référence (KVM) : harness Multiboot `make gguf-kvm-benchmark` + seuils documentés ([docs/aos_gguf_kvm_latency_harness.md](docs/aos_gguf_kvm_latency_harness.md)) ; campagne chiffrée et optimisation runtime encore ouvertes tant qu'un hôte avec `/dev/kvm` utilisable et poids déployés n'a pas produit le JSON KVM
 - [x] Bootstrap DHCP/OFFER/REQUEST/ACK, ARP, DNS A, SYN/SYN-ACK, ClientHello, ServerHello minimal et ACK LLM observé sur NE2000 QEMU avec pair Ethernet local contrôlé
 - [x] Handshake TLS 1.2 authentifie local et POST HTTP 200 JSON sur pair QEMU (`make qemu-ne2k-tls-http`) ; pas d'hote public ni d'OpenAI
 - [x] Flux SSE chunked Ollama sur le meme pair TLS local (`make qemu-ne2k-tls-sse`) ; deltas incrementaux puis `[DONE]`, sans hote public ni OpenAI
