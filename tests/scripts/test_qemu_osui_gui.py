@@ -5,6 +5,7 @@ Hors make integration-qemu. Complements test_qemu_osui_runtime.py.
 """
 from __future__ import print_function
 
+import json
 import os
 import re
 import socket
@@ -19,6 +20,7 @@ LOG_DIR = os.path.join(ROOT, "test_logs")
 LOG = os.environ.get("OSUI_GUI_LOG", os.path.join(LOG_DIR, "qemu-osui-gui-serial.log"))
 QEMU_ERR = os.environ.get("OSUI_GUI_ERR", os.path.join(LOG_DIR, "qemu-osui-gui-stderr.log"))
 MON_SOCK = os.environ.get("OSUI_GUI_MON_SOCK", os.path.join(LOG_DIR, "qemu-osui-gui-monitor.sock"))
+QMP_SOCK = os.environ.get("OSUI_GUI_QMP_SOCK", os.path.join(LOG_DIR, "qemu-osui-gui-qmp.sock"))
 TEST_DISK = os.environ.get("OVERLAY_DISK", os.path.join(LOG_DIR, "qemu-osui-gui-overlay.img"))
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "75"))
 CMD_TIMEOUT = float(os.environ.get("CMD_TIMEOUT", "20"))
@@ -110,6 +112,114 @@ def send_key(client, key):
     client.sendall(("sendkey %s %d\n" % (key, KEY_HOLD_MS)).encode("ascii"))
 
 
+
+
+def tablet_abs_xy(px, py, width, height):
+    """Map guest framebuffer pixels to QEMU usb-tablet absolute 0..32767."""
+    if width < 1:
+        width = 1024
+    if height < 1:
+        height = 768
+    ax = int((px * 32767) / width)
+    ay = int((py * 32767) / height)
+    if ax < 0:
+        ax = 0
+    if ay < 0:
+        ay = 0
+    if ax > 32767:
+        ax = 32767
+    if ay > 32767:
+        ay = 32767
+    return ax, ay
+
+
+def dock_icon_center(width, height, index):
+    """Match gfx_desktop_get_layout dock icons for 7 icons of 36x32."""
+    dock_w = 7 * 44 + 16
+    if dock_w > width - 16:
+        dock_w = width - 16
+    dock_x = (width - dock_w) // 2
+    dock_y = height - 48
+    if dock_y < 36:
+        dock_y = height - 36
+    ix = dock_x + 8 + index * 44
+    iy = dock_y + 4
+    return ix + 18, iy + 16
+
+
+def qmp_connect():
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if os.path.exists(QMP_SOCK):
+            client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                client.connect(QMP_SOCK)
+                client.settimeout(1.0)
+                try:
+                    client.recv(4096)
+                except socket.timeout:
+                    pass
+                client.sendall(b'{"execute":"qmp_capabilities"}\n')
+                try:
+                    client.recv(4096)
+                except socket.timeout:
+                    pass
+                return client
+            except OSError:
+                client.close()
+        time.sleep(0.1)
+    raise RuntimeError("QEMU QMP unavailable")
+
+
+def qmp_cmd(client, obj):
+    client.sendall((json.dumps(obj) + "\n").encode("ascii"))
+    time.sleep(0.05)
+    try:
+        client.recv(8192)
+    except socket.timeout:
+        pass
+
+
+def click_tablet(qmp, px, py, width, height):
+    """Absolute tablet click via QMP (HMP mouse_* is unreliable after screendump)."""
+    ax, ay = tablet_abs_xy(px, py, width, height)
+    # Gaps must exceed guest UHCI poll+re-arm (timer 100Hz).
+    qmp_cmd(qmp, {"execute": "input-send-event", "arguments": {"events": [
+        {"type": "abs", "data": {"axis": "x", "value": ax}},
+        {"type": "abs", "data": {"axis": "y", "value": ay}},
+    ]}})
+    time.sleep(0.5)
+    qmp_cmd(qmp, {"execute": "input-send-event", "arguments": {"events": [
+        {"type": "btn", "data": {"down": True, "button": "left"}},
+    ]}})
+    time.sleep(0.5)
+    qmp_cmd(qmp, {"execute": "input-send-event", "arguments": {"events": [
+        {"type": "btn", "data": {"down": False, "button": "left"}},
+    ]}})
+    time.sleep(0.5)
+
+
+def click_dock_and_wait(qmp, proc, width, height, index, line_marker, extra_marker=None):
+    """Click a dock icon and assert gfx_desktop_handle_click serial reaction."""
+    px, py = dock_icon_center(width, height, index)
+    start = len(log_text())
+    say("click dock[%d] at %d,%d (tablet abs via QMP) ..." % (index, px, py))
+    last_error = None
+    for attempt in range(3):
+        click_tablet(qmp, px, py, width, height)
+        try:
+            wait_for(proc, line_marker, min(CMD_TIMEOUT, 8.0), start)
+            if extra_marker:
+                wait_for(proc, extra_marker, CMD_TIMEOUT, start)
+            return
+        except RuntimeError as err:
+            last_error = err
+            say("click attempt %d missed; retrying" % (attempt + 1))
+            start = len(log_text())
+    raise last_error
+
+
+
 def key_echo_count(output, char, mode):
     if mode == "getc":
         pattern = r"SYS_GETC: caract.re retourn.:\s*'%s'" % re.escape(char)
@@ -192,7 +302,7 @@ def main():
     if not os.path.isfile(KERNEL) or not os.path.isfile(INITRD):
         raise RuntimeError("missing build artefacts; run make all first")
     os.makedirs(LOG_DIR, exist_ok=True)
-    for path in (LOG, QEMU_ERR, MON_SOCK):
+    for path in (LOG, QEMU_ERR, MON_SOCK, QMP_SOCK):
         try:
             os.remove(path)
         except OSError:
@@ -201,6 +311,7 @@ def main():
     prepare_test_disk()
     proc = None
     monitor = None
+    qmp = None
     try:
         with open(QEMU_ERR, "wb") as err:
             proc = subprocess.Popen([
@@ -208,6 +319,7 @@ def main():
                 "-initrd", INITRD, "-m", "1024M", "-display", "none", "-vga", "std",
                 "-usb", "-device", "usb-tablet",
                 "-serial", "file:" + LOG, "-monitor", "unix:%s,server,nowait" % MON_SOCK,
+                "-qmp", "unix:%s,server,nowait" % QMP_SOCK,
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
             ] + qemu_disk_args(), cwd=ROOT, stdout=err, stderr=err)
             wait_for(proc, "(-.-)", BOOT_TIMEOUT)
@@ -227,6 +339,7 @@ def main():
             if "Enumeration non terminee" in log or "Controller UHCI non trouve" in log:
                 raise RuntimeError("USB tablet enumeration failed in serial log")
             monitor = monitor_connect()
+            qmp = qmp_connect()
             time.sleep(0.6)
 
             say("typing gui-status ...")
@@ -266,6 +379,16 @@ def main():
                 raise RuntimeError("unexpected ppm magic")
             if len(rgb) == 3 and rgb == b"\x00\x00\x00":
                 say("corner pixel black (ok if top-left landscape is dark)")
+            # Dock index 2 is "/shell" (C, B, sh, A, S, i, F). Hit-test via UHCI tablet.
+            click_dock_and_wait(
+                qmp,
+                proc,
+                width,
+                height,
+                2,
+                "osui gui line=/shell",
+                extra_marker="live_eval=true",
+            )
             say("typing /browser in gui ...")
             send_command_until(
                 monitor, "/browser", "chat_mode=float", proc, mode="getc", wait_prompt=False
@@ -293,11 +416,17 @@ def main():
         say("QEMU OS-UI GUI contract passed.")
         return 0
     finally:
+        if qmp is not None:
+            qmp.close()
         if monitor is not None:
             monitor.close()
         terminate(proc)
         try:
             os.remove(MON_SOCK)
+        except OSError:
+            pass
+        try:
+            os.remove(QMP_SOCK)
         except OSError:
             pass
 

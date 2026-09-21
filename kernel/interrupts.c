@@ -2,6 +2,9 @@
 #include "keyboard.h"
 #include "timer.h"
 
+extern void write_serial(char c);
+extern void print_hex_serial(unsigned int n);
+
 // Déclaration pour le nouveau handler
 void keyboard_interrupt_handler();
 void io_delay();

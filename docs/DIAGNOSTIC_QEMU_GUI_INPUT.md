@@ -30,3 +30,9 @@ This document summarizes findings regarding host and guest mouse input, GTK grab
 - Complete test suite: `make test-all`
 - Headless QEMU OS-UI GUI test: `python3 tests/scripts/test_qemu_osui_gui.py`
 - GTK interactive launcher: `make run-gui`
+
+## 5. Guest dock hit-test click smoke (monitor)
+- After `gui` and the UHCI tablet success line, `tests/scripts/test_qemu_osui_gui.py` drives QMP `input-send-event` absolute tablet axes plus left button onto dock icon index 2 (`/shell`). HMP `mouse_move`/`mouse_button` alone is unreliable after `screendump` in this harness.
+- Guest `gfx_desktop_handle_click` injects the slash command into the keyboard buffer; the smoke asserts serial `osui gui line=/shell` and `live_eval=true`.
+- This proves guest hit-test wiring without a host GTK grab. Interactive `make run-gui` may still require `Ctrl+Alt+G` to release the host pointer grab after clicking inside the GTK window.
+- Keyboard OS-UI path (`/browser`, `/shell`, `whoami`, `ai hello`, `/center`, `console`) remains covered in the same script after the click smoke.
