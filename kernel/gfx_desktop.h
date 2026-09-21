@@ -26,7 +26,9 @@ typedef struct {
     } scene_ia;
     struct {
         int active;
+        int focused;
         gfx_rect_t box;
+        gfx_rect_t titlebar;
         gfx_rect_t traffic;
     } pane_win;
     struct {
@@ -50,5 +52,11 @@ void gfx_desktop_set_mouse(int x, int y, uint8_t buttons);
 void gfx_desktop_get_mouse(int *x, int *y, uint8_t *buttons);
 void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons);
 void gfx_desktop_clamp_mouse(void);
+
+
+/* OS-UI-2-W: native pane focus / drag offset (kernel-local). */
+int gfx_desktop_pane_focused(void);
+void gfx_desktop_get_pane_offset(int *dx, int *dy);
+void gfx_desktop_reset_pane_windowing(void);
 
 #endif

@@ -135,6 +135,14 @@ static void test_gui_feed_slash_and_esc(void) {
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT_EQUAL_STRING("float", osui_get_chat_mode());
 
+    /* OS-UI-2-W: first ESC closes pane (/center), second ESC leaves gui. */
+    memset(g_out, 0, sizeof(g_out));
+    rc = osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT_EQUAL_STRING("center", osui_get_chat_mode());
+    TEST_ASSERT_EQUAL_STRING("none", osui_get_pane());
+    TEST_ASSERT(strstr(g_out, "chat_mode=center") != NULL);
+
     memset(g_out, 0, sizeof(g_out));
     rc = osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
     TEST_ASSERT_EQUAL(1, rc);
@@ -185,6 +193,23 @@ static void test_gui_live_shell_eval(void) {
     osui_gui_set_program_eval(0);
 }
 
+
+static void test_esc_closes_pane_then_exits(void) {
+    int rc;
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("/shell"));
+    TEST_ASSERT_EQUAL_STRING("shell", osui_get_pane());
+    memset(g_out, 0, sizeof(g_out));
+    rc = osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT_EQUAL_STRING("none", osui_get_pane());
+    TEST_ASSERT_EQUAL(0, run_line("/center")); /* idempotent */
+    memset(g_out, 0, sizeof(g_out));
+    rc = osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "gui exit") != NULL);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_gui_command_canonical);
@@ -193,6 +218,7 @@ int main(void) {
     RUN_TEST(test_snap_center_and_float);
     RUN_TEST(test_snap_stage_kind);
     RUN_TEST(test_gui_feed_slash_and_esc);
+    RUN_TEST(test_esc_closes_pane_then_exits);
     RUN_TEST(test_gui_live_shell_eval);
     unity_print_results();
     unity_cleanup();

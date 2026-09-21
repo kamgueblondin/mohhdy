@@ -54,3 +54,12 @@ This document summarizes findings regarding host and guest mouse input, GTK grab
 - Smoke then relative-moves from the clamped corner onto dock `/shell` (`osui gui line=/shell`, `live_eval=true`) and returns via `console`.
 - `make qemu-osui-gui` (with tablet) remains the absolute-path contract and must stay green.
 
+## 8. Native pane windowing (OS-UI-2-W)
+
+- Guest `kernel/gfx_desktop.c` keeps a kernel-local pane offset (`dx`/`dy`) and focus bit.
+- Mouse press on the pane titlebar starts a drag; release ends it. Traffic lights still inject `/center` and clear windowing state.
+- Clicking the pane body focuses it (brighter border); clicking outside clears focus then runs dock/menu/stage hit-test.
+- `userspace/osui_gui.c`: ESC closes an open pane via `/center`; a second ESC leaves `gui` (same as `console`).
+- Unit: `test_pane_focus_and_drag_and_close` in `test_gfx_desktop.c`; ESC coverage in `test_osui_gui.c`.
+- QEMU: `make qemu-osui-gui` drags the Browser-OS titlebar then clicks traffic at the moved position; later ESC closes the shell pane before `console`.
+- Out of scope: Chromium, US-031 tabs-as-tasks, HTML `:8080`, Python `agent/`.
