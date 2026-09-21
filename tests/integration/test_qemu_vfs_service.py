@@ -1127,7 +1127,14 @@ def main():
             # troisième reprend le médiateur. Aucune requête VFS ni mutation
             # n’est rejouée.
             send_command_until(monitor, "yield", "yield ok", proc)
-            send_command_until(monitor, "yield", "vfsserver delegated alias read", proc)
+            # La delegation alias peut arriver avant le troisieme yield
+            # (IRQ0 / ordonnancement). Attendre depuis le spawn client, pas
+            # depuis le debut du yield courant, pour ne pas rater le marqueur.
+            before_third_yield = len(log_text())
+            send_command(monitor, "yield", proc)
+            wait_for("vfsserver delegated alias read", proc,
+                     before_alias_flight_spawn, timeout=40)
+            wait_for("(-.-)", proc, before_third_yield)
             before_alias_scope = len(log_text())
             send_command_until(monitor, "vfs-backend-scope %s" % worker_pid,
                                "vfsserver backend scope request", proc)
