@@ -313,14 +313,18 @@ def wait_for_write_delivery(client, proc, path, start):
     wait_for("vfsvirtual write %s" % path, proc, start)
 
 
-def read_until_payload(client, proc, path, payload, attempts=4):
+def read_until_payload(client, proc, path, payload, attempts=8):
     """Relit un backend FAT sans rejouer l'ecriture.
 
     Apres vfs-write delegue au worker, vfsserver relit localement SYS_FAT16_READ.
     Sur runner CI, la premiere lecture peut renvoyer la taille exacte mais une
-    charge nulle ; un second vfs-read (pas un second vfs-write) voit les clusters.
+    charge nulle ; des vfs-read suivants (pas un second vfs-write) voient les
+    clusters. Le noyau protege desormais le RMW FAT sous cli ; les retries
+    restent une ceinture pour les fenetres de lecture encore en vol.
     """
     error = None
+    for _ in range(2):
+        send_command_until(client, "yield", "yield ok", proc)
     for _ in range(attempts):
         before = len(log_text())
         send_command_until(client, "vfs-read %s" % path, "vfs-read ok", proc)
