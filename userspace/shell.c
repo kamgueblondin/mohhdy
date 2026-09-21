@@ -229,6 +229,12 @@ int sys_llm_request(const os_llm_request_t* request) {
     return result;
 }
 
+int sys_llm_app_ping(void) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_LLM_APP_PING));
+    return result;
+}
+
 int sys_llm_poll_text(os_llm_text_result_t* result) {
     int status;
     asm volatile("int $0x80" : "=a"(status) : "a"(SYS_LLM_POLL_TEXT), "b"(result));
@@ -1107,6 +1113,7 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  ai-peer-listen [port] - Ecoute TCP passive guest (apres bail DHCP)\n");
     print_string("  ai-peer-accept [attempts] [established] - SYN-ACK guest ou ESTABLISHED\n");
     print_string("  ai-peer-tls-poll - Role serveur TLS 1.2 guest (SH..Finished)\n");
+    print_string("  ai-app-ping - Record AES-GCM applicatif ping apres TLS_COMPLETE\n");
     print_string("  ai-tls-poll         - Piloter SYN-ACK/TLS avec les materiaux noyau\n");
     print_string("  ai-request <f> <m> <p> <q> - Emettre POST LLM apres TLS authentifie\n");
     print_string("  ai-stream-request <f> <m> <p> <q> - Emettre POST LLM SSE chiffre\n");
@@ -2659,7 +2666,7 @@ static int is_builtin(const char* cmd) {
     static const char* names[] = {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
-        "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "net-status",
+        "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-app-ping", "net-status",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
         "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
         "alias", "unalias", "export", "which", "rc",
@@ -4670,6 +4677,20 @@ static void cmd_ai_peer_tls_poll(shell_context_t* ctx, char args[][128], int arg
     else print_error("ai-peer-tls-poll: echec");
 }
 
+
+static void cmd_ai_app_ping(shell_context_t* ctx, char args[][128], int arg_count) {
+    int status;
+    (void)ctx; (void)args; (void)arg_count;
+    status = sys_llm_app_ping();
+    if (status == 0) {
+        print_success("ai-app-ping: app ping emis");
+        return;
+    }
+    if (status == OS_LLM_REQUEST_BAD_PHASE) print_error("ai-app-ping: TLS_COMPLETE requis");
+    else if (status == OS_LLM_REQUEST_FAILED) print_error("ai-app-ping: emission refusee");
+    else print_error("ai-app-ping: echec");
+}
+
 static void cmd_ai_peer_accept(shell_context_t* ctx, char args[][128], int arg_count) {
     os_peer_accept_request_t request = {0};
     int status;
@@ -5548,6 +5569,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         cmd_ai_peer_accept(ctx, args, arg_count);
     } else if (strcmp(command, "ai-peer-tls-poll") == 0) {
         cmd_ai_peer_tls_poll(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "ai-app-ping") == 0) {
+        cmd_ai_app_ping(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "ai-tls-poll") == 0) {
         cmd_ai_tls_poll(ctx, args, arg_count);

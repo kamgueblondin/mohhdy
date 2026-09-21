@@ -42,6 +42,7 @@ extern int kernel_llm_configure_openai(const os_llm_openai_credential_request_t*
 extern int kernel_peer_listen(const os_peer_listen_request_t* request);
 extern int kernel_peer_accept(const os_peer_accept_request_t* request);
 extern int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request);
+extern int kernel_llm_app_ping(void);
 extern int kernel_llm_dhcp_maintenance(uint32_t now);
 extern void print_char(char c, int x, int y, char color);
 extern void write_serial(char c);
@@ -600,6 +601,9 @@ void syscall_handler(cpu_state_t* cpu) {
             break;
         case SYS_PEER_TLS_POLL:
             cpu->eax = (uint32_t)kernel_peer_tls_poll((const os_peer_tls_poll_request_t*)cpu->ebx);
+            break;
+        case SYS_LLM_APP_PING:
+            cpu->eax = (uint32_t)kernel_llm_app_ping();
             break;
         case SYS_VGA_BLIT:
             {
