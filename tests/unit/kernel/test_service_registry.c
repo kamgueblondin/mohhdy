@@ -417,6 +417,42 @@ static void test_owner_initrd_overlay_bypass_closes_when_storage_worker_live(voi
         "vfs", 3, OS_SERVICE_BACKEND_SOURCE_OVERLAY));
 }
 
+static void test_owner_ata_generic_bypass_closes_when_storage_worker_live(void) {
+    /* AOS-2174: SOURCE_ALL / ATA-backed generic backend owner bypass only
+     * in degraded mode (no vfs-virtual). Combinations close the same way. */
+    uint32_t ata_backed = OS_SERVICE_BACKEND_SOURCE_OVERLAY | OS_SERVICE_BACKEND_SOURCE_FAT16;
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", 3));
+    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
+        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_ALL));
+    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
+        "vfs", 3, ata_backed));
+    TEST_ASSERT_FALSE(service_registry_owner_bypasses_backend(
+        "vfs", 9, OS_SERVICE_BACKEND_SOURCE_ALL));
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs-virtual", 11));
+    TEST_ASSERT_FALSE(service_registry_owner_bypasses_backend(
+        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_ALL));
+    TEST_ASSERT_FALSE(service_registry_owner_bypasses_backend(
+        "vfs", 3, ata_backed));
+    /* Explicit full-scope grant still authorizes the worker path. */
+    TEST_ASSERT_EQUAL(0, service_registry_backend_grant_scoped_source_prefix(
+        "vfs", 3, 11, SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_ALL, ""));
+    TEST_ASSERT_TRUE(service_registry_backend_allowed_for_source_path(
+        "vfs", 11, SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_ALL, "note.txt"));
+    TEST_ASSERT_EQUAL(0, service_registry_remove("vfs-virtual", 11));
+    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
+        "vfs", 3, OS_SERVICE_BACKEND_SOURCE_ALL));
+    TEST_ASSERT_TRUE(service_registry_owner_bypasses_backend(
+        "vfs", 3, ata_backed));
+    /* Handoff while worker live: name grant issues SOURCE_ALL to new owner. */
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs-virtual", 11));
+    TEST_ASSERT_EQUAL(0, service_registry_grant("vfs", 3, 9));
+    TEST_ASSERT_FALSE(service_registry_owner_bypasses_backend(
+        "vfs", 9, OS_SERVICE_BACKEND_SOURCE_ALL));
+    TEST_ASSERT_TRUE(service_registry_backend_allowed_for_source_path(
+        "vfs", 9, SERVICE_BACKEND_RIGHT_READ, OS_SERVICE_BACKEND_SOURCE_ALL, "hello.txt"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_registry_rejects_invalid_names);
@@ -445,6 +481,7 @@ int main(void) {
     RUN_TEST(test_backend_observe_detects_stale_generations_without_disclosure);
     RUN_TEST(test_owner_fat_bypass_closes_when_storage_worker_live);
     RUN_TEST(test_owner_initrd_overlay_bypass_closes_when_storage_worker_live);
+    RUN_TEST(test_owner_ata_generic_bypass_closes_when_storage_worker_live);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

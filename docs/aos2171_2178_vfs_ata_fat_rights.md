@@ -6,6 +6,8 @@ right-source-prefix capability. AOS-2171 closes the mediator local
 fallback when a trusted worker is alive. AOS-2172 closes the matching
 kernel owner bypass for FAT16/FAT32 while `vfs-virtual` is published.
 AOS-2173 closes the same owner bypass for initrd/overlay.
+AOS-2174 closes owner bypass for `SOURCE_ALL` and any valid combination
+(ATA-backed generic backend path) while `vfs-virtual` is published.
 
 > Drivers stay Ring 0. This does not claim "microkernel done" or US-001
 > complete. It only places ATA/FAT I/O further behind rights already checked.
@@ -26,7 +28,7 @@ AOS-2173 closes the same owner bypass for initrd/overlay.
 | Shell | Public VFS IPC only | No backend syscall |
 | `vfsserver` | Policy + temporary grant to worker | No local ATA/FAT when worker live |
 | `vfsvirtual` | Syscalls under grant | Only from PID `vfs` |
-| Kernel | ATA PIO / FAT still Ring 0 | Owner FAT/initrd/overlay bypass only if no `vfs-virtual` |
+| Kernel | ATA PIO / FAT still Ring 0 | Owner bypass for any valid backend scope only if no `vfs-virtual` |
 
 ## Proofs
 
@@ -66,12 +68,29 @@ Drivers stay Ring 0. No microkernel claim. ATA PIO remains in-kernel.
 
 Unit proof: `test_owner_initrd_overlay_bypass_closes_when_storage_worker_live`.
 
+
+## AOS-2174 - ATA-backed generic backend owner bypass gated by storage worker
+
+Same gate as AOS-2172/2173 for `OS_SERVICE_BACKEND_SOURCE_ALL` and any valid
+source combination (for example overlay|fat16). The generic backend read path
+and combined ATA-backed scopes no longer bypass rights via vfs ownership when
+`vfs-virtual` is published; an explicit grant covering the requested scope is
+required. A `vfs` name handoff while the worker is live issues a SOURCE_ALL
+grant to the new owner so ATA-backed generic I/O stays behind rights rather
+than owner bypass. Degraded mode without the worker keeps the historical
+owner path.
+
+Drivers stay Ring 0. This is not full ATA driver extraction and not
+"microkernel done".
+
+Unit proof: `test_owner_ata_generic_bypass_closes_when_storage_worker_live`.
+
 ## Limits
 
 - No driver extraction from the kernel.
 - No shared memory, no multi-request worker, no US-010 / US-016.
 - Degraded mode without worker still uses local owner backend path.
-- ATA PIO driver itself remains in Ring 0; only the owner bypass gates moved.
+- ATA PIO driver itself remains in Ring 0; owner bypass gates (including SOURCE_ALL) moved, driver not extracted.
 
 ## References
 
