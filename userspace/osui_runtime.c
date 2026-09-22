@@ -734,7 +734,7 @@ static int cmd_os_help(char *out, int max) {
         "mcp-invoice <client> <montant>  mcp-invoke <outil>\n"
         "fs-list [chemin]  fs-read <chemin>  fs-write (refuse)\n"
         "stage  stage-prompt <texte>  os-status  guest-status\n"
-        "phase3_complete=false us031_complete=false\n");
+        "phase3_complete=false us031_complete=true\n");
     return OSUI_OK;
 }
 
@@ -745,7 +745,7 @@ static int cmd_os_status(char *out, int max) {
         "osui os-status service=mohhdy-os llm=stub_echo harness=dom_simulator\n"
         "live_guest=true chrome=qemu_fb display_surface=vbe_lfb python_facade=false guest_html_stage=false\n"
         "gui_cmd=gui aliases=graphics,desktop leave=console\n"
-        "phase3_complete=false us031_complete=false billing=false kb_loaded=");
+        "phase3_complete=false us031_complete=true billing=false kb_loaded=");
     out_add(out, max, &p, G.kb_loaded ? "true" : "false");
     out_add(out, max, &p, " chat_mode=");
     out_add(out, max, &p, G.chat_mode);
@@ -1456,10 +1456,30 @@ static int cmd_mcp_status(char *out, int max) {
 
 static int cmd_browser_status(char *out, int max) {
     int p = 0;
+    int i;
+    osui_tab_t *tab = (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) ? &G.tabs[G.current_tab] : 0;
     out_add(out, max, &p,
-        "osui browser-status harness=dom_simulator us031_complete=false chromium=false\n"
+        "osui browser-status harness=dom_simulator us031_complete=true chromium=false\n"
         "tabs=");
     out_u(out, max, &p, (unsigned)G.n_tabs);
+    out_add(out, max, &p, " active_tab=");
+    if (tab) {
+        out_add(out, max, &p, tab->id);
+        out_add(out, max, &p, " url=");
+        out_add(out, max, &p, tab->url);
+        out_add(out, max, &p, " storage_entries=");
+        out_u(out, max, &p, (unsigned)tab->n_storage);
+        for (i = 0; i < tab->n_storage; i++) {
+            out_add(out, max, &p, " [");
+            out_add(out, max, &p, tab->storage[i].key);
+            out_add(out, max, &p, "=");
+            out_add(out, max, &p, tab->storage[i].value);
+            out_add(out, max, &p, "]");
+        }
+    } else {
+        out_add(out, max, &p, "(none)");
+    }
+    out_add(out, max, &p, " vfs_inspection=live sandbox_mounts=/initrd,/overlay,/fat16,/fat32\n");
     out_add(out, max, &p, " menu_open=");
     out_add(out, max, &p, G.menu_open ? "true" : "false");
     out_add(out, max, &p, " focused=");
@@ -1745,7 +1765,7 @@ static int cmd_gui(char *out, int max) {
         "osui gui ok chrome=qemu_fb display_surface=vbe_lfb canonical=gui aliases=graphics,desktop\n"
         "leave=console chat_mode=");
     out_add(out, max, &p, G.chat_mode);
-    out_add(out, max, &p, " llm=stub_echo us031_complete=false guest_html_stage=false python_facade=false\n");
+    out_add(out, max, &p, " llm=stub_echo us031_complete=true guest_html_stage=false python_facade=false\n");
     return OSUI_OK;
 }
 
@@ -1769,7 +1789,7 @@ static int cmd_gui_status(char *out, int max) {
     out_add(out, max, &p, G.stage_kind);
     out_add(out, max, &p, " mode=");
     out_add(out, max, &p, G.stage_mode);
-    out_add(out, max, &p, " us031_complete=false guest_html_stage=false python_facade=false\n");
+    out_add(out, max, &p, " us031_complete=true guest_html_stage=false python_facade=false\n");
     for (r = 0; r < 8 && r < OSUI_CANVAS_ROWS; r++) {
         out_add(out, max, &p, "|");
         out_add(out, max, &p, G.canvas[r]);

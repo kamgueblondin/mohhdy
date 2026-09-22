@@ -31,7 +31,7 @@ static void test_gui_command_canonical(void) {
     TEST_ASSERT(strstr(g_out, "canonical=gui") != NULL);
     TEST_ASSERT(strstr(g_out, "chrome=qemu_fb") != NULL);
     TEST_ASSERT(strstr(g_out, "display_surface=vbe_lfb") != NULL);
-    TEST_ASSERT(strstr(g_out, "us031_complete=false") != NULL);
+    TEST_ASSERT(strstr(g_out, "us031_complete=true") != NULL);
     TEST_ASSERT(osui_gui_should_enter());
     osui_gui_ack_enter();
     TEST_ASSERT_EQUAL(0, run_line("graphics"));
@@ -46,7 +46,7 @@ static void test_vga_pointer_not_ascii_desktop(void) {
     osui_gui_ascii_row(g_cells, 0, g_row, (int)sizeof(g_row));
     TEST_ASSERT(strstr(g_row, "MOHHDY OS") != NULL);
     TEST_ASSERT(strstr(g_row, "qemu_fb") != NULL);
-    TEST_ASSERT(strstr(g_row, "us031=false") != NULL);
+    TEST_ASSERT(strstr(g_row, "us031=true") != NULL);
     osui_gui_ascii_row(g_cells, 5, g_row, (int)sizeof(g_row));
     TEST_ASSERT(strstr(g_row, "CHAT central") == NULL);
     osui_gui_ascii_row(g_cells, 3, g_row, (int)sizeof(g_row));
