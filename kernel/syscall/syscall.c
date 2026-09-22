@@ -1062,6 +1062,9 @@ int sys_vfs_backend_write(const char* path, const char* data, uint32_t size) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
     return sys_writefile(path, data, size);
 }
 
@@ -1158,6 +1161,9 @@ int sys_vfs_fat16_create(const char* name, const char* data, uint32_t size) {
                                              OS_SERVICE_BACKEND_SOURCE_FAT16, name)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
     if (!name || (size != 0U && !data)) return OS_FAT16_BAD_PATH;
     /* Le worker encode `mkdir` par un buffer nul et une taille nulle : une
      * écriture vide garde un buffer non nul et reste donc un fichier. */
@@ -1181,6 +1187,9 @@ int sys_vfs_fat16_unlink(const char* name) {
                                              OS_SERVICE_BACKEND_SOURCE_FAT16, name)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
     if (!name) return OS_FAT16_BAD_PATH;
     if (fat_path_is_directory_request(name)) {
         char directory[OS_NAME_MAX];
@@ -1199,6 +1208,9 @@ int sys_vfs_fat16_rename(const char* old_name, const char* new_name) {
                                              OS_SERVICE_BACKEND_SOURCE_FAT16, new_name)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
     if (!old_name || !new_name) return OS_FAT16_BAD_PATH;
     if (fat_path_has_separator(old_name) || fat_path_has_separator(new_name)) {
         return fat16_rename_path_file(fat16_root(), old_name, new_name);
@@ -1215,6 +1227,9 @@ int sys_vfs_fat32_create(const char* name, const char* data, uint32_t size) {
     char short_alias[16];
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_FAT32, name)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!name || (size != 0U && !data)) return OS_FAT16_BAD_PATH;
@@ -1237,6 +1252,9 @@ int sys_vfs_fat32_unlink(const char* name) {
                                              OS_SERVICE_BACKEND_SOURCE_FAT32, name)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
     if (!name) return OS_FAT16_BAD_PATH;
     if (fat_path_is_directory_request(name)) {
         char directory[OS_NAME_MAX];
@@ -1252,6 +1270,9 @@ int sys_vfs_fat32_rename(const char* old_name, const char* new_name) {
                                              OS_SERVICE_BACKEND_SOURCE_FAT32, old_name) ||
         !vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_FAT32, new_name)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!old_name || !new_name) return OS_FAT16_BAD_PATH;
@@ -1292,6 +1313,9 @@ int sys_vfs_overlay_unlink(const char* path) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
     if (!path) return -1;
     return overlay_unlink(path);
 }
@@ -1301,6 +1325,9 @@ int sys_vfs_overlay_rename(const char* oldpath, const char* newpath) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, oldpath) ||
         !vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, newpath)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!oldpath || !newpath) return -1;
@@ -1370,6 +1397,9 @@ int sys_vfs_overlay_mkdir(const char* path) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
     if (!path) return -1;
     return overlay_mkdir(path);
 }
@@ -1377,6 +1407,9 @@ int sys_vfs_overlay_mkdir(const char* path) {
 int sys_vfs_overlay_rmdir(const char* path) {
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
+        return OS_VFS_BACKEND_DENIED;
+    }
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!path || !overlay_is_dir(path)) return -1;

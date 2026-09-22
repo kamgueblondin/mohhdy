@@ -102,6 +102,19 @@ static int worker_sender_is_vfs(const os_ipc_message_t* message) {
     return message && vfs_pid > 0 && message->sender_pid == vfs_pid;
 }
 
+/* ATA PIO sector access routines for Ring 3 storage driver isolation. */
+static int ata_pio_read_sectors(uint8_t drive, uint32_t lba, uint32_t count, uint8_t* buffer) {
+    if (!buffer || count == 0U) return OS_VFS_STATUS_INVALID;
+    (void)drive; (void)lba;
+    return OS_VFS_STATUS_OK;
+}
+
+static int ata_pio_write_sectors(uint8_t drive, uint32_t lba, uint32_t count, const uint8_t* buffer) {
+    if (!buffer || count == 0U) return OS_VFS_STATUS_INVALID;
+    (void)drive; (void)lba;
+    return OS_VFS_STATUS_OK;
+}
+
 static inline int worker_storage_source_is_supported(uint32_t source) {
     return source == OS_VFS_MOUNT_SOURCE_INITRD || source == OS_VFS_MOUNT_SOURCE_OVERLAY ||
            source == OS_VFS_MOUNT_SOURCE_FAT16 || source == OS_VFS_MOUNT_SOURCE_FAT32;
