@@ -384,6 +384,16 @@ int service_registry_ata_overlay_io_via_worker(int32_t pid) {
     return pid == worker;
 }
 
+/* Isolation du sous-système réseau NE2000 : avec net-driver présent, l'accès
+ * aux primitives réseau est restreint au seul PID du pilote Ring 3 enregistré. */
+int service_registry_net_io_via_worker(int32_t pid) {
+    int32_t worker;
+    if (pid <= 0) return 0;
+    worker = service_registry_lookup("net-driver");
+    if (worker <= 0) return 1;
+    return pid == worker;
+}
+
 /* Les appels backend génériques restent compatibles, mais exigent explicitement
  * le scope toutes sources : une capacité source-scopée ne peut pas les utiliser. */
 int service_registry_backend_allowed_for(const char* name, int32_t pid, uint32_t right) {

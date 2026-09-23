@@ -390,6 +390,7 @@ pack-initrd: userspace-all
 	@cp -f userspace/ipcserver $(BIN_DEST_DIR)/ipcserver
 	@cp -f userspace/vfsserver $(BIN_DEST_DIR)/vfsserver
 	@cp -f userspace/vfsvirtual $(BIN_DEST_DIR)/vfsvirtual
+	@cp -f userspace/networker $(BIN_DEST_DIR)/networker
 	@cp -f userspace/vfsflight $(BIN_DEST_DIR)/vfsflight
 	@cp -f userspace/vfsaliasflight $(BIN_DEST_DIR)/vfsaliasflight
 	@cp -f userspace/serviceclaim $(BIN_DEST_DIR)/serviceclaim
@@ -443,7 +444,7 @@ iso-clean:
 	@rm -rf build/isodir $(ISO_IMAGE)
 
 # Compile tous les programmes utilisateur
-user-program userspace/shell userspace/fake_ai userspace/test_program userspace/ai_assistant userspace/idle userspace/spin userspace/ipcserver userspace/vfsserver userspace/vfsvirtual userspace/vfsflight userspace/serviceclaim userspace/vfsclaim userspace/vfscapclaim userspace/vfsreleaseclaim userspace/vfsreadclaim userspace/vfsmutateclaim userspace/waitchild userspace/ok: userspace-all
+user-program userspace/shell userspace/fake_ai userspace/test_program userspace/ai_assistant userspace/idle userspace/spin userspace/ipcserver userspace/vfsserver userspace/vfsvirtual userspace/networker userspace/vfsflight userspace/serviceclaim userspace/vfsclaim userspace/vfscapclaim userspace/vfsreleaseclaim userspace/vfsreadclaim userspace/vfsmutateclaim userspace/waitchild userspace/ok: userspace-all
 
 # Cible pour exécuter l'OS dans QEMU avec initrd (mode console corrigé)
 run: $(OS_IMAGE) pack-initrd disk
