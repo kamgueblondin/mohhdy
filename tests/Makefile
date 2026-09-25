@@ -5,7 +5,7 @@ CC = gcc
 CFLAGS_BASE = -Wall -Wextra -std=c99 -I. -I.. -I../kernel -I../include -DKERNEL_TEST=1
 # Les mocks de syscall reproduisent des registres i386 32 bits. Sans cette
 # base non-PIE, des pointeurs hôte PIE 64 bits seraient tronqués dans EBX/ECX.
-CFLAGS_KERNEL = $(CFLAGS_BASE) -DUSE_INLINE_ASM -g -m32 -fno-pie -no-pie
+CFLAGS_KERNEL = $(CFLAGS_BASE) -DUSE_INLINE_ASM -g -m32 -fno-pie -no-pie -msse2 -mfpmath=sse
 CFLAGS_USER = $(CFLAGS_BASE) -g -m32 -fno-pie -no-pie
 
 # Répertoires

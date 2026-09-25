@@ -69,9 +69,14 @@ static void test_q3_k_dot_one_super_block(void) {
     for (i = 104U; i < 108U; i++) block[i] = 0xaaU;
     block[108] = 0x00U;
     block[109] = 0x3cU;
-    assert_close(gpt2_q3_k_dot_f32(activation, block, GPT2_QK_K), 256.0f, 0.0001f);
+    float dot_val = gpt2_q3_k_dot_f32(activation, block, GPT2_QK_K);
+    assert_close(dot_val, 256.0f, 0.0001f);
     TEST_ASSERT_EQUAL(0, gpt2_q3_k_dequantize(block, GPT2_QK_K, decoded));
-    { float total = 0.0f; for (i = 0U; i < GPT2_QK_K; i++) total += decoded[i]; assert_close(total, 256.0f, 0.0001f); }
+    {
+        float total = 0.0f;
+        for (i = 0U; i < GPT2_QK_K; i++) total += decoded[i] * activation[i];
+        assert_close(dot_val, total, 0.0001f);
+    }
     TEST_ASSERT_EQUAL(-1, gpt2_q3_k_dequantize(block, 128U, decoded));
     TEST_ASSERT_EQUAL(0, (int)gpt2_q3_k_dot_f32(activation, block, 128U));
 }
@@ -87,9 +92,14 @@ static void test_q4_k_dot_one_super_block(void) {
     for (i = 0U; i < 4U; i++) block[4U + i] = 1U;
     for (i = 0U; i < 4U; i++) block[12U + i] = 1U;
     for (i = 0U; i < 128U; i++) block[16U + i] = 0x11U;
-    assert_close(gpt2_q4_k_dot_f32(activation, block, GPT2_QK_K), 256.0f, 0.0001f);
+    float dot_val = gpt2_q4_k_dot_f32(activation, block, GPT2_QK_K);
+    assert_close(dot_val, 256.0f, 0.0001f);
     TEST_ASSERT_EQUAL(0, gpt2_q4_k_dequantize(block, GPT2_QK_K, decoded));
-    { float total = 0.0f; for (i = 0U; i < GPT2_QK_K; i++) total += decoded[i]; assert_close(total, 256.0f, 0.0001f); }
+    {
+        float total = 0.0f;
+        for (i = 0U; i < GPT2_QK_K; i++) total += decoded[i] * activation[i];
+        assert_close(dot_val, total, 0.0001f);
+    }
     TEST_ASSERT_EQUAL(-1, gpt2_q4_k_dequantize(block, 128U, decoded));
     TEST_ASSERT_EQUAL(0, (int)gpt2_q4_k_dot_f32(activation, block, 128U));
 }
@@ -104,9 +114,14 @@ static void test_q6_k_dot_one_super_block(void) {
     for (i = 128U; i < 192U; i++) block[i] = 0xaaU;
     for (i = 192U; i < 208U; i++) block[i] = 1U;
     block[208] = 0x00U; block[209] = 0x3cU;
-    assert_close(gpt2_q6_k_dot_f32(activation, block, GPT2_QK_K), 256.0f, 0.0001f);
+    float dot_val = gpt2_q6_k_dot_f32(activation, block, GPT2_QK_K);
+    assert_close(dot_val, 256.0f, 0.0001f);
     TEST_ASSERT_EQUAL(0, gpt2_q6_k_dequantize(block, GPT2_QK_K, decoded));
-    { float total = 0.0f; for (i = 0U; i < GPT2_QK_K; i++) total += decoded[i]; assert_close(total, 256.0f, 0.0001f); }
+    {
+        float total = 0.0f;
+        for (i = 0U; i < GPT2_QK_K; i++) total += decoded[i] * activation[i];
+        assert_close(dot_val, total, 0.0001f);
+    }
     TEST_ASSERT_EQUAL(-1, gpt2_q6_k_dequantize(block, 128U, decoded));
     TEST_ASSERT_EQUAL(0, (int)gpt2_q6_k_dot_f32(activation, block, 128U));
 }
