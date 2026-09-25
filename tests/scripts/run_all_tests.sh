@@ -89,8 +89,11 @@ run_test() {
     local cflags="-I$TEST_DIR -I$BASE_DIR -I$BASE_DIR/kernel -I$BASE_DIR/include -Wall -Wextra -std=c99 -DKERNEL_TEST=1"
     local extra_src="$BASE_DIR/fs/overlay.c"
     
-    if [ "$test_type" == "kernel" ]; then
-        cflags="$cflags -m32 -ffreestanding -nostdlib -fno-pie"
+    if [ "$test_type" == "kernel" ] || [ "$(basename "$test_file")" = "test_fat16.c" ] || [ "$(basename "$test_file")" = "test_gpt2_gguf.c" ] || [ "$(basename "$test_file")" = "test_gpt2_gguf_infer.c" ] || [ "$(basename "$test_file")" = "test_gpt2_quant.c" ]; then
+        cflags="$cflags -m32 -fno-pie -msse2 -mfpmath=sse"
+        if [ "$test_type" == "kernel" ]; then
+            cflags="$cflags -ffreestanding -nostdlib"
+        fi
     else
         cflags="$cflags -m32"
     fi
