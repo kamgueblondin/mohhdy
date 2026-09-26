@@ -236,6 +236,9 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_gpt2_gguf_bounds.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_gguf.c"
     fi
+    if [ "$(basename "$test_file")" = "test_io_bitmap.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/io_bitmap.c"
+    fi
     
     # Compiler
     echo "gcc $cflags -o \"$test_binary\" \"$test_file\" $extra_src \"$TEST_DIR/framework/unity.c\" \"$TEST_DIR/framework/test_kernel.c\" \"$TEST_DIR/framework/kernel_mocks.c\"" >> "$RESULTS_FILE"

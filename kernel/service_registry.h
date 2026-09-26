@@ -77,6 +77,9 @@ int service_registry_backend_allowed_for_source_path(const char* name, int32_t p
 int service_registry_owner_bypasses_backend(const char* name, int32_t pid, uint32_t source);
 /* AOS-2175: ATA-backed overlay read/stat only exercisable by live vfs-virtual worker. */
 int service_registry_ata_overlay_io_via_worker(int32_t pid);
+/* Tranche 4: ata-driver name policy and Ring 3 ATA port (IOPB) grant. */
+int service_registry_ata_driver_name_allowed(const char* service_name, const char* task_name);
+int service_registry_ata_ports_granted(int32_t pid);
 /* AOS-2177: historical SYS_READFILE decision (overlay_hit = path exists in overlay). */
 #define SERVICE_HIST_READ_DENIED          0
 #define SERVICE_HIST_READ_FULL            1

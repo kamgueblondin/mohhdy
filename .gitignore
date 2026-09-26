@@ -48,6 +48,10 @@ osui/__pycache__/
 docs/*.log
 docs/*.docx
 docs/*.pdf
+# Tranche 4: Ring 3 ATA driver binaries (not versioned).
+userspace/atadriver
+userspace/ataclient
+userspace/atarogue
 # Tranche 5: built net worker binaries (not versioned).
 userspace/networker
 userspace/netclaim

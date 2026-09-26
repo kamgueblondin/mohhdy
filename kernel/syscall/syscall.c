@@ -74,6 +74,21 @@ static void service_notify_purge_pid(int32_t pid) {
     }
 }
 
+/* Tranche 4: a Ring 3 fault (e.g. #GP from an IN/OUT on a port denied by the
+ * TSS IOPB) terminates only the faulting task, like SYS_EXIT with the killed
+ * exit code, instead of halting the kernel. Never returns. */
+void syscall_kill_current_on_user_fault(cpu_state_t* cpu) {
+    if (!current_task) return;
+    service_notify_purge_pid(current_task->id);
+    service_registry_backend_remove_pid(current_task->id);
+    (void)service_registry_remove_watcher_pid(current_task->id);
+    task_report_parent_exit(current_task, OS_TASK_EXIT_KILLED, OS_TASK_EVENT_KILLED);
+    task_wake_waiter(current_task);
+    task_reparent_children(current_task);
+    current_task->state = TASK_TERMINATED;
+    schedule(cpu);
+}
+
 // ==============================================================================
 // GESTIONNAIRE D'APPELS SYSTÈME
 // ==============================================================================
@@ -908,6 +923,9 @@ int sys_service_register(const char* name) {
     int rc;
     task_t* owner;
     if (!current_task || current_task->type != TASK_TYPE_USER) return OS_SERVICE_BAD_NAME;
+    /* Tranche 4: ata-driver (Ring 3 ATA port capability) only for atadriver. */
+    if (!service_registry_ata_driver_name_allowed(name, current_task->name))
+        return OS_ATA_DRIVER_REQUIRED;
     owner_pid = service_registry_lookup(name);
     if (owner_pid > 0) {
         owner = get_task_by_id(owner_pid);
@@ -953,6 +971,9 @@ int sys_service_grant(const char* name, int target_pid) {
     if (!target || target->type != TASK_TYPE_USER || target->state == TASK_TERMINATED) {
         return OS_SERVICE_BAD_GRANTEE;
     }
+    /* Tranche 4: the ATA port capability never moves to another binary. */
+    if (!service_registry_ata_driver_name_allowed(name, target->name))
+        return OS_ATA_DRIVER_REQUIRED;
     rc = service_registry_grant(name, current_task->id, target_pid);
     if (rc == 0) service_notify_change(name, current_task->id, target_pid, OS_SERVICE_EVENT_GRANTED);
     return rc;

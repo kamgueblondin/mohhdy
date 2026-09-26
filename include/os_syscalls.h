@@ -469,6 +469,10 @@ typedef struct {
 #define OS_SERVICE_WATCH_FULL  (-56)
 #define OS_SERVICE_STALE        (-57)
 #define OS_VFS_BACKEND_DENIED (-61)
+/* Tranche 4: ata-driver service / ATA sector IPC reserved to the dedicated
+ * atadriver binary or refused because no Ring 3 ATA driver is live. -59 and
+ * -60 are kept for the net / VFS worker codes of PR #64 / #62. */
+#define OS_ATA_DRIVER_REQUIRED (-58)
 /* AOS-2177: historical SYS_READFILE/SYS_WRITEFILE hit the ATA-backed overlay
  * while vfs-virtual is live and the caller is not the worker PID. */
 #define OS_VFS_BACKEND_WORKER_REQUIRED (-60)
@@ -901,6 +905,19 @@ static inline int os_task_parse_event(const os_ipc_message_t* message,
 /* Notification noyau best-effort de toute transition retenue lorsqu’un parent
  * a explicitement activé sa souscription locale. */
 #define OS_IPC_TASK_SUPERVISION_EVENT 0x54415302U
+
+/* Tranche 4: Ring 3 ATA driver IPC. The driver owns the ATA port capability
+ * (TSS IOPB) and serves bounded windows of one sector (payload <= 96 bytes, no
+ * shared memory yet). Only the ATA sector client service owner may ask.
+ * data layout: [0..3] lba, [4] drive, [5] offset/16 (0..31), [6] len (<=64),
+ * [8..71] bytes for WRITE. Reply: [0..3] status, [4..67] bytes for READ. */
+#define OS_IPC_ATA_READ   0x41544101U
+#define OS_IPC_ATA_WRITE  0x41544102U
+#define OS_IPC_ATA_REPLY  0x41544103U
+#define OS_ATA_IPC_WINDOW 64U
+#define OS_ATA_IPC_CLIENT_SERVICE "ata-client"
+/* LBA 0-63 of the master disk hold the kernel overlay snapshot (Ring 0). */
+#define OS_ATA_KERNEL_RESERVED_LBAS 64U
 #define OS_TASK_SUPERVISION_EVENT_SIZE 24U
 
 static inline int os_task_make_supervision_event(os_ipc_payload_t* payload,

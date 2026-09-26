@@ -37,8 +37,29 @@ typedef struct {
     uint32_t eip, cs, eflags, useresp, ss;
 } registers_t;
 
+extern void syscall_kill_current_on_user_fault(void* cpu);
+
+/* Tranche 4: fault taken in Ring 3 (CS RPL 3). The frame from isr_common_stub
+ * is laid out as registers_t (gs..ds first), not cpu_state_t, but schedule()
+ * ignores the frame of a terminated task, so it is only used to pick the next
+ * task. */
+static void fault_kill_user_task(registers_t *r) {
+    print_string_serial("[FAULT] user task killed: int=");
+    print_hex_serial(r->int_no);
+    print_string_serial(" err=");
+    print_hex_serial(r->err_code);
+    print_string_serial(" eip=");
+    print_hex_serial(r->eip);
+    print_string_serial("\n");
+    syscall_kill_current_on_user_fault((void*)r);
+}
+
 // C-level fault handler
 void fault_handler_c(registers_t *r) {
+    if ((r->cs & 3U) == 3U) {
+        fault_kill_user_task(r);
+        return;
+    }
     print_string_serial("\n!!! KERNEL EXCEPTION !!!\n");
     print_string_serial("Interrupt: ");
     print_hex_serial(r->int_no);
