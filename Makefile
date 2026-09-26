@@ -629,7 +629,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ipc-foundation qemu-ata-driver qemu-vfs-service qemu-service-grant
+.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-vfs-service qemu-service-grant
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 

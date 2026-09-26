@@ -64,6 +64,8 @@ ataclient: ata_client.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 atarogue: ata_rogue.o start.o
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
 netclaim: net_claim.o start.o
 	@echo "Linking netclaim..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
