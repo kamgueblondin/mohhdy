@@ -573,6 +573,8 @@ static void test_ata_driver_name_and_port_grant(void) {
     TEST_ASSERT_EQUAL(-58, OS_ATA_DRIVER_REQUIRED);
     TEST_ASSERT_TRUE(OS_ATA_DRIVER_REQUIRED != OS_VFS_BACKEND_DENIED);
     TEST_ASSERT_TRUE(OS_ATA_DRIVER_REQUIRED != OS_TASK_NOT_CHILD);
+}
+
 static void test_net_syscalls_only_via_net_driver_when_live(void) {
     /* Tranche 5: with net-driver registered, NIC/socket/LLM-network/peer
      * syscalls are reserved to that PID; status stays open; degraded mode
