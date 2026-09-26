@@ -101,6 +101,11 @@ def normalized_log(output):
     output = re.sub(r"TIMER_ALIVE: tick=\d+\+?", "", output)
     # [SCHED] peut couper un marqueur metier (ex. FAT16 fixture OK).
     output = re.sub(r"\[SCHED\] switching to task \d+\r?\n?", "", output)
+    # Ring 3 atadriver (Tranche 4) prints its flush/load line from its own
+    # task; it can land between two putc of a shell reply ("append ok " ...
+    # "q.txt"), seen in CI on PR #72.
+    output = re.sub(r"atadriver snapshot (?:flush|load) ok gen=\d+ flushes=\d+ loads=\d+ "
+                    r"kpio=\d+\r?\n", "", output)
     return output
 
 
@@ -114,6 +119,13 @@ def _self_check_normalized_log():
     joined = normalized_log(sample)
     if "FAT16 fixture OK" not in joined:
         raise AssertionError("normalized_log doit recoller FAT16 fixture OK, obtenu %r" % joined)
+    sample = ("append ok [SCHED] switching to task 2\n"
+              "atadriver snapshot flush ok gen=4 flushes=4 loads=0 kpio=0\n"
+              "[SCHED] switching to task 1\n"
+              "q.txt\n")
+    joined = normalized_log(sample)
+    if "append ok q.txt" not in joined:
+        raise AssertionError("normalized_log doit recoller append ok q.txt, obtenu %r" % joined)
 
 
 def send_key(client, key):
