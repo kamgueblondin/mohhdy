@@ -136,7 +136,7 @@ jobs:
         run: make qemu-osui-gui
 
       # Tranche 4 : pilote ATA Ring 3 (IOPB TSS + IPC), job parallele,
-      # n'allonge pas integration-qemu (~80 s).
+      # n'allonge pas integration-qemu (~110 s, deux boots).
       - name: QEMU Tranche 4 Ring 3 ATA driver (hors integration-qemu)
         run: make qemu-ata-driver
 

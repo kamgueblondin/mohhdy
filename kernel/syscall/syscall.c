@@ -15,6 +15,9 @@
 #include "../llm/gpt2_model.h"
 #include "../llm/gpt2_tokenizer.h"
 #include "../service_registry.h"
+#include "../ata_job.h"
+#include "../ata.h"
+#include "../gdt.h"
 #include "../fs/fat16.h"
 #include "../fs/fat32.h"
 #include "../net_socket.h"
@@ -63,6 +66,96 @@ static void service_notify_change(const char* name, int32_t old_owner_pid,
     }
 }
 
+/* ==========================================================================
+ * Tranche 4 slice 2: bridge between the kernel overlay snapshot, the kernel
+ * PIO path and the Ring 3 atadriver (see kernel/ata_job.c).
+ * ========================================================================== */
+static int32_t ata_live_driver(void) {
+    int32_t pid = service_registry_lookup("ata-driver");
+    return pid > 0 ? pid : 0;
+}
+
+static int ata_bridge_snapshot(uint8_t* buf, uint32_t capacity) {
+    uint32_t size = 0U;
+    return overlay_snapshot(buf, capacity, &size);
+}
+
+static int ata_bridge_restore(const uint8_t* buf, uint32_t size) {
+    return overlay_restore(buf, size);
+}
+
+/* Overlay flush: queue for the live driver instead of Ring 0 PIO. */
+static int ata_bridge_overlay_redirect(void) {
+    if (ata_live_driver() <= 0) return 0;
+    ata_job_request_flush();
+    return 1;
+}
+
+/* Kernel PIO gate: refused while the live driver holds the controller. */
+static int ata_bridge_kernel_gate(void) {
+    return ata_owner_kernel_may_pio(ata_live_driver());
+}
+
+void syscall_ata_bridge_init(void) {
+    ata_job_init(ata_bridge_snapshot, ata_bridge_restore);
+    ata_set_kernel_gate(ata_bridge_kernel_gate);
+    overlay_set_disk_hooks(ata_bridge_overlay_redirect, ata_job_note_kernel_overlay_write);
+}
+
+/* Called after a service purge: if the driver vanished with a queued or
+ * in-flight flush, persist through the Ring 0 PIO fallback right away. */
+static void ata_bridge_after_purge(void) {
+    if (ata_live_driver() > 0) return;
+    if (ata_job_driver_gone()) {
+        if (overlay_save_disk() == 0) ata_job_note_fallback_flush();
+    }
+}
+
+static int sys_ata_claim(void) {
+    int rc;
+    if (!current_task || current_task->type != TASK_TYPE_USER) return OS_ATA_DRIVER_REQUIRED;
+    rc = ata_owner_claim(current_task->id, ata_live_driver());
+    /* Returning to Ring 3 without a task switch: apply the IOPB now. */
+    if (rc == 0) tss_set_ata_io(1);
+    return rc;
+}
+
+static int sys_ata_release(void) {
+    int rc;
+    if (!current_task || current_task->type != TASK_TYPE_USER) return OS_ATA_DRIVER_REQUIRED;
+    rc = ata_owner_release(current_task->id);
+    tss_set_ata_io(0);
+    return rc;
+}
+
+static int syscall_user_range(const void* pointer, uint32_t length, int write);
+
+static int sys_ata_job_fetch(os_ata_job_t* job, uint8_t* data) {
+    if (!current_task || current_task->type != TASK_TYPE_USER ||
+        !service_registry_ata_ports_granted(current_task->id))
+        return OS_ATA_DRIVER_REQUIRED;
+    if (!syscall_user_range(job, sizeof(*job), 1) ||
+        !syscall_user_range(data, OS_ATA_JOB_MAX_SECTORS * 512U, 1))
+        return OS_ATA_JOB_STALE;
+    return ata_job_fetch(job, data, OS_ATA_JOB_MAX_SECTORS * 512U);
+}
+
+static int sys_ata_job_done(const os_ata_job_t* job, int32_t status, const uint8_t* data) {
+    if (!current_task || current_task->type != TASK_TYPE_USER ||
+        !service_registry_ata_ports_granted(current_task->id))
+        return OS_ATA_DRIVER_REQUIRED;
+    if (!syscall_user_range(job, sizeof(*job), 0) ||
+        (data && !syscall_user_range(data, OS_ATA_JOB_MAX_SECTORS * 512U, 0)))
+        return OS_ATA_JOB_STALE;
+    return ata_job_done(job, status, data, data ? OS_ATA_JOB_MAX_SECTORS * 512U : 0U);
+}
+
+static int sys_ata_status(os_ata_status_t* out) {
+    if (!syscall_user_range(out, sizeof(*out), 1)) return OS_SERVICE_BAD_NAME;
+    ata_job_fill_status(out, ata_live_driver());
+    return 0;
+}
+
 static void service_notify_purge_pid(int32_t pid) {
     service_registry_entry_t owned[SERVICE_REGISTRY_CAPACITY];
     int count = service_registry_collect_owned(pid, owned, SERVICE_REGISTRY_CAPACITY);
@@ -72,6 +165,7 @@ static void service_notify_purge_pid(int32_t pid) {
     for (i = 0; i < count && i < (int)SERVICE_REGISTRY_CAPACITY; i++) {
         service_notify_change(owned[i].name, pid, 0, OS_SERVICE_EVENT_PURGED);
     }
+    ata_bridge_after_purge();
 }
 
 /* Tranche 4: a Ring 3 fault (e.g. #GP from an IN/OUT on a port denied by the
@@ -638,6 +732,22 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_PEER_TLS_POLL:
             cpu->eax = (uint32_t)kernel_peer_tls_poll((const os_peer_tls_poll_request_t*)cpu->ebx);
             break;
+        case SYS_ATA_CLAIM:
+            cpu->eax = (uint32_t)sys_ata_claim();
+            break;
+        case SYS_ATA_RELEASE:
+            cpu->eax = (uint32_t)sys_ata_release();
+            break;
+        case SYS_ATA_JOB_FETCH:
+            cpu->eax = (uint32_t)sys_ata_job_fetch((os_ata_job_t*)cpu->ebx, (uint8_t*)cpu->ecx);
+            break;
+        case SYS_ATA_JOB_DONE:
+            cpu->eax = (uint32_t)sys_ata_job_done((const os_ata_job_t*)cpu->ebx, (int32_t)cpu->ecx,
+                                                  (const uint8_t*)cpu->edx);
+            break;
+        case SYS_ATA_STATUS:
+            cpu->eax = (uint32_t)sys_ata_status((os_ata_status_t*)cpu->ebx);
+            break;
         case SYS_VGA_BLIT:
             {
                 if (!cpu->ebx) {
@@ -840,7 +950,10 @@ static int syscall_user_range(const void* pointer, uint32_t length, int write) {
     for (address = start & ~(PAGE_SIZE - 1U); ; address += PAGE_SIZE) {
         page = vmm_get_page(address, 0, current_task->vmm_dir);
         if (!page || !page->present || !page->user || (write && !page->rw)) return 0;
-        if (address > end - (end % PAGE_SIZE)) break;
+        /* Stop after the page holding the last byte (the old '>' also
+         * required the following page to be mapped, which rejected buffers
+         * ending in the top user stack page). */
+        if (address >= end - (end % PAGE_SIZE)) break;
         if (address > 0xffffffffU - PAGE_SIZE) return 0;
     }
     return 1;
@@ -931,6 +1044,9 @@ int sys_service_register(const char* name) {
     if (rc == 0 && owner_pid == OS_SERVICE_NOT_FOUND) {
         service_notify_change(name, 0, current_task->id, OS_SERVICE_EVENT_PUBLISHED);
     }
+    /* Tranche 4 slice 2: a new driver first loads the overlay snapshot back
+     * through its own Ring 3 PIO (kept only if RAM did not change meanwhile). */
+    if (rc == 0 && strcmp(name, "ata-driver") == 0) ata_job_request_load();
     return rc;
 }
 

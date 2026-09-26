@@ -1,4 +1,5 @@
 #include "ata.h"
+#include "os_syscalls.h"
 
 extern unsigned char inb(unsigned short port);
 extern void outb(unsigned short port, unsigned char data);
@@ -136,6 +137,13 @@ static void ata_irq_restore(uint32_t flags) {
     if ((flags & (1U << 9)) != 0U) asm volatile("sti" ::: "memory");
 }
 
+/* Tranche 4 slice 2: exclusion with the Ring 3 atadriver. The gate returns 0
+ * while the live driver holds the controller; kernel PIO then refuses instead
+ * of interleaving commands with the driver. */
+static int (*g_ata_kernel_gate)(void);
+
+void ata_set_kernel_gate(int (*gate)(void)) { g_ata_kernel_gate = gate; }
+
 int ata_read_sectors_drive(uint8_t drive, uint32_t lba, uint32_t count, void* buf) {
     uint8_t* out = (uint8_t*)buf;
     uint32_t s;
@@ -144,6 +152,7 @@ int ata_read_sectors_drive(uint8_t drive, uint32_t lba, uint32_t count, void* bu
 
     if (drive > ATA_DRIVE_SLAVE || !g_ata_drive_present[drive] || !buf || count == 0 || count > 256) return -1;
     if (lba + count < lba) return -1;
+    if (g_ata_kernel_gate && !g_ata_kernel_gate()) return OS_ATA_CONTROLLER_BUSY;
 
     flags = ata_irq_save();
     ata_select_lba(drive, lba, (uint8_t)count);
@@ -169,6 +178,7 @@ int ata_write_sectors_drive(uint8_t drive, uint32_t lba, uint32_t count, const v
 
     if (drive > ATA_DRIVE_SLAVE || !g_ata_drive_present[drive] || !buf || count == 0 || count > 256) return -1;
     if (lba + count < lba) return -1;
+    if (g_ata_kernel_gate && !g_ata_kernel_gate()) return OS_ATA_CONTROLLER_BUSY;
 
     flags = ata_irq_save();
     ata_select_lba(drive, lba, (uint8_t)count);

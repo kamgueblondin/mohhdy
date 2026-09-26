@@ -246,7 +246,21 @@
 #define SYS_PEER_ACCEPT 129
 /* EBX = os_peer_tls_poll_request_t* : role serveur TLS guest (ServerHello..Finished). */
 #define SYS_PEER_TLS_POLL 130
-#define MAX_SYSCALLS 131
+/* Tranche 4 slice 2 (Ring 3 ATA driver). 131-134 are reserved to the live
+ * ata-driver owner (OS_ATA_DRIVER_REQUIRED otherwise); 135 is a public
+ * read-only snapshot. */
+/* Take the controller: opens the ATA ports in the TSS IOPB for the caller. */
+#define SYS_ATA_CLAIM 131
+/* Give the controller back: ports closed again, kernel PIO allowed. */
+#define SYS_ATA_RELEASE 132
+/* EBX = os_ata_job_t*, ECX = buffer of OS_ATA_JOB_MAX_SECTORS*512 bytes.
+ * Returns 1 and fills the job (and the data for a write) or 0 if idle. */
+#define SYS_ATA_JOB_FETCH 133
+/* EBX = const os_ata_job_t*, ECX = driver status, EDX = buffer (read data). */
+#define SYS_ATA_JOB_DONE 134
+/* EBX = os_ata_status_t* : counters and client write fences. */
+#define SYS_ATA_STATUS 135
+#define MAX_SYSCALLS 136
 
 #define OS_VGA_COLS 80
 #define OS_VGA_ROWS 25
@@ -914,6 +928,48 @@ static inline int os_task_parse_event(const os_ipc_message_t* message,
 #define OS_ATA_IPC_CLIENT_SERVICE "ata-client"
 /* LBA 0-63 of the master disk hold the kernel overlay snapshot (Ring 0). */
 #define OS_ATA_KERNEL_RESERVED_LBAS 64U
+
+/* Tranche 4 slice 2: kernel <-> atadriver multi-sector job protocol. The
+ * kernel copies up to 8 sectors per chunk between its overlay snapshot buffer
+ * and the driver buffer (no shared page); the driver runs the PIO at CPL 3. */
+#define OS_ATA_OVERLAY_SECTORS 64U
+#define OS_ATA_JOB_MAX_SECTORS 8U
+#define OS_ATA_JOB_NONE  0U
+#define OS_ATA_JOB_WRITE 1U
+#define OS_ATA_JOB_READ  2U
+/* SYS_ATA_JOB_DONE results (>= 0). */
+#define OS_ATA_JOB_CHUNK_OK      0
+#define OS_ATA_JOB_FLUSH_DONE    1
+#define OS_ATA_JOB_LOAD_DONE     2
+#define OS_ATA_JOB_LOAD_SKIPPED  3
+#define OS_ATA_JOB_FAILED        4
+/* Kernel PIO refused because the Ring 3 driver holds the controller. */
+#define OS_ATA_CONTROLLER_BUSY (-85)
+/* Job completion does not match the chunk currently handed out. */
+#define OS_ATA_JOB_STALE (-86)
+
+typedef struct {
+    uint32_t op;
+    uint32_t drive;
+    uint32_t lba;
+    uint32_t count;
+    uint32_t generation;
+} os_ata_job_t;
+
+typedef struct {
+    int32_t driver_pid;        /* live ata-driver owner or 0 */
+    int32_t claim_pid;         /* current controller holder or 0 */
+    uint32_t flush_done;       /* overlay snapshots written by the driver */
+    uint32_t load_done;        /* overlay snapshots loaded via the driver */
+    uint32_t load_skipped;     /* driver loads dropped because RAM was newer */
+    uint32_t job_failures;     /* chunks reported failed by the driver */
+    uint32_t kernel_overlay_writes; /* overlay snapshots written by Ring 0 PIO */
+    uint32_t kernel_pio_refused;    /* kernel PIO calls refused while claimed */
+    uint32_t fallback_flushes;      /* Ring 0 flushes after driver loss */
+    uint32_t pending;          /* 1 if a flush/load is queued or in flight */
+    uint32_t client_min_lba;   /* first master LBA a client may write */
+    uint32_t slave_write_locked; /* 1 if the slave disk holds FAT32 */
+} os_ata_status_t;
 #define OS_TASK_SUPERVISION_EVENT_SIZE 24U
 
 static inline int os_task_make_supervision_event(os_ipc_payload_t* payload,

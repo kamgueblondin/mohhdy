@@ -625,14 +625,29 @@ int overlay_restore(const uint8_t* buf, uint32_t n) {
     return 0;
 }
 
+/* Tranche 4 slice 2: when the Ring 3 atadriver is live, redirect() queues the
+ * snapshot for the driver and returns 1; the kernel PIO write below then only
+ * runs when no driver exists (degraded fallback). */
+static int (*g_ov_save_redirect)(void);
+static void (*g_ov_kernel_written)(void);
+
+void overlay_set_disk_hooks(int (*redirect)(void), void (*kernel_written)(void)) {
+    g_ov_save_redirect = redirect;
+    g_ov_kernel_written = kernel_written;
+}
+
 int overlay_save_disk(void) {
     uint32_t sz = 0;
     uint32_t i;
+    int rc;
 
     if (!ata_present()) return 0;
+    if (g_ov_save_redirect && g_ov_save_redirect()) return 0;
     if (overlay_snapshot(g_ov_disk_buf, sizeof(g_ov_disk_buf), &sz) != 0) return -1;
     for (i = sz; i < sizeof(g_ov_disk_buf); i++) g_ov_disk_buf[i] = 0;
-    return ata_write_sectors(0, OV_DISK_SECTORS, g_ov_disk_buf);
+    rc = ata_write_sectors(0, OV_DISK_SECTORS, g_ov_disk_buf);
+    if (rc == 0 && g_ov_kernel_written) g_ov_kernel_written();
+    return rc;
 }
 
 int overlay_load_disk(void) {

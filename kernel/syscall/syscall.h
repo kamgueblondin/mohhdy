@@ -10,6 +10,8 @@ typedef struct {
 } syscall_params_t;
 
 void syscall_init();
+/* Tranche 4 slice 2: overlay/ATA bridge with the Ring 3 atadriver. */
+void syscall_ata_bridge_init(void);
 void syscall_handler(cpu_state_t* cpu);
 
 void sys_exit(uint32_t exit_code);

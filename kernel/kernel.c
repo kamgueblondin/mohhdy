@@ -21,6 +21,7 @@
 #include "keyboard.h"
 #include "input/usb_tablet.h"
 #include "service_registry.h"
+#include "ata_job.h"
 #include "vga_console.h"
 #include "ne2k.h"
 #include "net_socket.h"
@@ -1526,6 +1527,7 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     }
 
     overlay_init();
+    syscall_ata_bridge_init();
     if (ata_init() == 0) {
         if (overlay_load_disk() == 0) {
             print_string("Overlay FS charge depuis le disque IDE.\n");
@@ -1563,6 +1565,13 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     } else {
         print_string("Overlay FS initialise (mkdir/rm en RAM).\n");
     }
+
+    /* Tranche 4 slice 2: client write fences for the Ring 3 atadriver: the
+     * FAT16 volume on the master and a FAT32 slave stay kernel-only. */
+    ata_job_set_fences(fat16_root()->mounted ?
+                           fat16_root()->base_lba + fat16_root()->total_sectors :
+                           OS_ATA_KERNEL_RESERVED_LBAS,
+                       (uint32_t)fat32_is_mounted(fat32_root()));
 
     // NOUVEAU: Initialisation du système de tâches
     print_string("Initialisation du systeme de taches...\n");
