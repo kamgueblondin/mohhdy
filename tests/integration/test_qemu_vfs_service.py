@@ -1229,6 +1229,10 @@ def main():
             wait_for_cooperative_client(monitor, proc,
                                         "vfshistclaim historical worker-mediated initrd ok",
                                         before_hist_claim)
+            # AOS-2178: SYS_STAT/LISTDIR/MKDIR/UNLINK/RENAME/COPY/APPEND on overlay.
+            wait_for_cooperative_client(monitor, proc,
+                                        "vfshistclaim overlay entry points worker-mediated",
+                                        before_hist_claim)
             send_command_until(monitor, "kill %s" % hist_claim_pid,
                                "Processus %s termine" % hist_claim_pid, proc)
             send_command_until(monitor, "service-find vfs", "service-find ok vfs %s" % server_pid, proc)
