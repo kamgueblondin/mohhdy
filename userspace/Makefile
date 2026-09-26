@@ -14,6 +14,8 @@ USER_HEADERS = ../include/os_syscalls.h ../include/os_vfs_service.h ../include/o
 PROGRAMS += atadriver ataclient atarogue
 # Tranche 5: net-driver gate proof client.
 PROGRAMS += netclaim
+# Tranche 5 slice 2: net IPC relay proof client.
+PROGRAMS += netrelay
 
 all: $(PROGRAMS)
 
@@ -68,6 +70,10 @@ atarogue: ata_rogue.o start.o
 
 netclaim: net_claim.o start.o
 	@echo "Linking netclaim..."
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
+netrelay: net_relay_client.o start.o
+	@echo "Linking netrelay..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 vfsflight: vfs_flight_client.o start.o

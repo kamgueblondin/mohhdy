@@ -116,6 +116,8 @@ int sys_ipc_send(int target_pid, const os_ipc_payload_t* payload);
 int sys_ipc_receive(os_ipc_message_t* out);
 int sys_service_register(const char* name);
 int sys_service_lookup(const char* name);
+int sys_net_relay_reply(const os_net_relay_reply_t* reply);
+int sys_net_relay_status(os_net_relay_status_t* out);
 int sys_service_unregister(const char* name);
 int sys_service_grant(const char* name, int target_pid);
 int sys_service_backend_grant(const char* name, int target_pid);

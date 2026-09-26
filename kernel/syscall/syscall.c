@@ -16,6 +16,7 @@
 #include "../llm/gpt2_tokenizer.h"
 #include "../service_registry.h"
 #include "../ata_job.h"
+#include "../net_relay.h"
 #include "../ata.h"
 #include "../gdt.h"
 #include "../fs/fat16.h"
@@ -345,6 +346,224 @@ static int historical_overlay_mutation_allowed(void) {
     return current_task && service_registry_ata_overlay_io_via_worker(current_task->id);
 }
 
+
+/* ------------------------------------------------------------------------
+ * Tranche 5 slice 2: net IPC relay (socket syscalls 99-108).
+ * The caller keeps re-entering its own syscall (rewind over int 0x80 and
+ * yield) until the worker reply is stored; user buffers are only touched
+ * in the caller's own context. One request in flight at a time. */
+static void net_relay_wait(cpu_state_t* cpu) {
+    cpu->eip -= 2U;
+    schedule(cpu);
+}
+
+static int32_t net_relay_live_worker(void) {
+    int32_t worker = sys_service_lookup("net-driver");
+    return worker > 0 ? worker : 0;
+}
+
+static uint16_t net_relay_cap(uint32_t capacity) {
+    return (uint16_t)(capacity < OS_NET_RELAY_MAX_OUT ? capacity : OS_NET_RELAY_MAX_OUT);
+}
+
+static void net_relay_copy(uint8_t* dst, const uint8_t* src, uint32_t n) {
+    uint32_t i;
+    for (i = 0U; i < n; i++) dst[i] = src[i];
+}
+
+/* Fills req from the caller registers; 0 or an OS_SOCKET_* error. */
+static int net_relay_marshal(const cpu_state_t* cpu, os_net_relay_request_t* req) {
+    req->op = cpu->eax;
+    switch (cpu->eax) {
+        case SYS_SOCKET_OPEN:
+            req->arg0 = cpu->ebx & 0xFFFFU; req->arg1 = cpu->ecx & 0xFFFFU; req->arg2 = cpu->edx;
+            return 0;
+        case SYS_SOCKET_LISTEN:
+            req->arg0 = cpu->ebx & 0xFFFFU; req->arg1 = cpu->ecx;
+            return 0;
+        case SYS_SOCKET_CLOSE:
+            req->arg0 = cpu->ebx;
+            return 0;
+        case SYS_SOCKET_ACCEPT_SYN_ACK:
+            if (!syscall_user_range((const void*)cpu->ecx, sizeof(os_socket_syn_ack_t), 0))
+                return OS_SOCKET_BAD_ARGUMENT;
+            req->arg0 = cpu->ebx;
+            req->in_length = (uint16_t)sizeof(os_socket_syn_ack_t);
+            net_relay_copy(req->in, (const uint8_t*)cpu->ecx, req->in_length);
+            return 0;
+        case SYS_SOCKET_ACCEPT_SYN:
+        case SYS_SOCKET_ACCEPT_ACK:
+            if (!syscall_user_range((const void*)cpu->ecx, sizeof(os_socket_passive_view_t), 0))
+                return OS_SOCKET_BAD_ARGUMENT;
+            req->arg0 = cpu->ebx;
+            req->in_length = (uint16_t)sizeof(os_socket_passive_view_t);
+            net_relay_copy(req->in, (const uint8_t*)cpu->ecx, req->in_length);
+            return 0;
+        case SYS_SOCKET_BUILD_SYN_ACK:
+            if (!syscall_user_range((void*)cpu->ecx, cpu->edx & 0xFFFFU, 1) ||
+                !syscall_user_range((void*)cpu->esi, sizeof(uint16_t), 1))
+                return OS_SOCKET_BAD_ARGUMENT;
+            req->arg0 = cpu->ebx;
+            req->out_capacity = net_relay_cap(cpu->edx & 0xFFFFU);
+            return 0;
+        case SYS_SOCKET_SEND: {
+            const os_socket_send_request_t* r = (const os_socket_send_request_t*)cpu->ebx;
+            if (!syscall_user_range(r, sizeof(*r), 0) ||
+                !syscall_user_range(r->payload, r->length, 0) ||
+                !syscall_user_range(r->segment, r->capacity, 1) ||
+                !syscall_user_range(r->out_length, sizeof(*r->out_length), 1))
+                return OS_SOCKET_BAD_ARGUMENT;
+            if (r->length > OS_NET_RELAY_MAX_IN) return OS_SOCKET_BUFFER_SMALL;
+            req->arg0 = (uint32_t)r->socket_id;
+            req->in_length = r->length;
+            net_relay_copy(req->in, r->payload, r->length);
+            req->out_capacity = net_relay_cap(r->capacity);
+            return 0;
+        }
+        case SYS_SOCKET_FEED: {
+            const os_socket_feed_request_t* r = (const os_socket_feed_request_t*)cpu->ebx;
+            if (!syscall_user_range(r, sizeof(*r), 0) ||
+                !syscall_user_range(r->segment, r->length, 0))
+                return OS_SOCKET_BAD_ARGUMENT;
+            if (r->length > OS_NET_RELAY_MAX_IN) return OS_SOCKET_BUFFER_SMALL;
+            req->arg0 = (uint32_t)r->socket_id;
+            req->in_length = r->length;
+            net_relay_copy(req->in, r->segment, r->length);
+            return 0;
+        }
+        case SYS_SOCKET_RECEIVE: {
+            const os_socket_receive_request_t* r = (const os_socket_receive_request_t*)cpu->ebx;
+            if (!syscall_user_range(r, sizeof(*r), 0) ||
+                !syscall_user_range(r->buffer, r->capacity, 1) ||
+                !syscall_user_range(r->out_length, sizeof(*r->out_length), 1))
+                return OS_SOCKET_BAD_ARGUMENT;
+            req->arg0 = (uint32_t)r->socket_id;
+            req->out_capacity = net_relay_cap(r->capacity);
+            return 0;
+        }
+        default:
+            return OS_SOCKET_BAD_ARGUMENT;
+    }
+}
+
+/* Caller side of a DONE slot: copy the worker output back, return result. */
+static int32_t net_relay_deliver(const cpu_state_t* cpu) {
+    static uint8_t out[OS_NET_RELAY_MAX_OUT];
+    uint32_t op = 0U, n = 0U;
+    uint8_t* dst = 0;
+    uint16_t* dst_len = 0;
+    uint32_t cap = 0U;
+    int32_t result = net_relay_take((int32_t)current_task->id, &op, out, sizeof(out), &n);
+    if (result != 0 || op != cpu->eax) return result;
+    if (op == SYS_SOCKET_BUILD_SYN_ACK) {
+        dst = (uint8_t*)cpu->ecx; cap = cpu->edx & 0xFFFFU; dst_len = (uint16_t*)cpu->esi;
+    } else if (op == SYS_SOCKET_SEND) {
+        const os_socket_send_request_t* r = (const os_socket_send_request_t*)cpu->ebx;
+        if (!syscall_user_range(r, sizeof(*r), 0)) return OS_SOCKET_BAD_ARGUMENT;
+        dst = r->segment; cap = r->capacity; dst_len = r->out_length;
+    } else if (op == SYS_SOCKET_RECEIVE) {
+        const os_socket_receive_request_t* r = (const os_socket_receive_request_t*)cpu->ebx;
+        if (!syscall_user_range(r, sizeof(*r), 0)) return OS_SOCKET_BAD_ARGUMENT;
+        dst = r->buffer; cap = r->capacity; dst_len = r->out_length;
+    } else {
+        return result;
+    }
+    if (n > cap || !syscall_user_range(dst, n, 1) ||
+        !syscall_user_range(dst_len, sizeof(*dst_len), 1))
+        return OS_SOCKET_BAD_ARGUMENT;
+    net_relay_copy(dst, out, n);
+    *dst_len = (uint16_t)n;
+    return result;
+}
+
+/* 1 = handled (eax set or task rescheduled), 0 = run the syscall locally
+ * (no worker any more and nothing in flight for this task). */
+static int syscall_net_relay(cpu_state_t* cpu) {
+    int32_t pid = (int32_t)current_task->id;
+    uint32_t now = timer_get_ticks();
+    uint32_t state = net_relay_state_for(pid);
+    int32_t owner, worker, job;
+    task_t* target;
+    os_net_relay_request_t req;
+    os_ipc_payload_t payload;
+    int rc;
+
+    if (state == NET_RELAY_SENT) {
+        net_relay_note_poll();
+        worker = net_relay_live_worker();
+        if (worker != net_relay_worker()) {
+            net_relay_fail(OS_NET_RELAY_ABORTED);
+            print_string_serial("[NET] relay aborted: net-driver lost\n");
+        } else if (net_relay_expired(now)) {
+            net_relay_fail(OS_NET_RELAY_TIMEOUT);
+            print_string_serial("[NET] relay timeout\n");
+        } else {
+            net_relay_wait(cpu);
+            return 1;
+        }
+        state = NET_RELAY_DONE;
+    }
+    if (state == NET_RELAY_DONE) {
+        cpu->eax = (uint32_t)net_relay_deliver(cpu);
+        return 1;
+    }
+    owner = net_relay_owner();
+    if (owner != 0) {
+        target = get_task_by_id(owner);
+        if (!target || target->state == TASK_TERMINATED) {
+            net_relay_drop_owner();
+        } else {
+            net_relay_wait(cpu); /* one request in flight at a time */
+            return 1;
+        }
+    }
+    worker = net_relay_live_worker();
+    if (worker <= 0 || worker == pid) return 0;
+    target = get_task_by_id(worker);
+    if (!target) return 0;
+    memset(&req, 0, sizeof(req));
+    rc = net_relay_marshal(cpu, &req);
+    if (rc != 0) {
+        cpu->eax = (uint32_t)rc;
+        return 1;
+    }
+    job = net_relay_begin(pid, worker, cpu->eax, now);
+    if (job <= 0) {
+        net_relay_wait(cpu);
+        return 1;
+    }
+    req.job_id = (uint32_t)job;
+    memset(&payload, 0, sizeof(payload));
+    payload.type = OS_IPC_NET_RELAY_REQUEST;
+    payload.size = (uint32_t)sizeof(req);
+    payload.request_id = (uint32_t)job;
+    net_relay_copy(payload.data, (const uint8_t*)&req, sizeof(req));
+    rc = ipc_endpoint_send(&target->ipc_endpoint, 0, &payload);
+    if (rc != 0) {
+        net_relay_cancel();
+        cpu->eax = (uint32_t)rc;
+        return 1;
+    }
+    net_relay_wait(cpu);
+    return 1;
+}
+
+int sys_net_relay_reply(const os_net_relay_reply_t* reply) {
+    int32_t worker = net_relay_live_worker();
+    if (!current_task || worker <= 0 || (int32_t)current_task->id != worker)
+        return OS_NET_WORKER_REQUIRED;
+    if (!syscall_user_range(reply, sizeof(*reply), 0)) return OS_SOCKET_BAD_ARGUMENT;
+    if (reply->out_length > OS_NET_RELAY_MAX_OUT) return OS_SOCKET_BAD_ARGUMENT;
+    return net_relay_complete(worker, reply->job_id, reply->result, reply->out,
+                              reply->out_length) == 0 ? 0 : OS_IPC_BAD_MESSAGE;
+}
+
+int sys_net_relay_status(os_net_relay_status_t* out) {
+    if (!syscall_user_range(out, sizeof(*out), 1)) return OS_SOCKET_BAD_ARGUMENT;
+    net_relay_fill_status(out, net_relay_live_worker());
+    return 0;
+}
+
 void syscall_handler(cpu_state_t* cpu) {
     // Réactive les interruptions pour permettre au clavier de fonctionner
     asm volatile("sti");
@@ -365,8 +584,17 @@ void syscall_handler(cpu_state_t* cpu) {
 
     /* Tranche 5: with net-driver registered, network syscalls are reserved
      * to that worker PID. Degraded mode (no worker) is unchanged. */
+    /* Tranche 5 slice 2: socket syscalls 99-108 of a non-worker task are
+     * relayed to the worker over IPC instead of refused. A request already
+     * in flight for this task is finished even if the worker just died. */
+    if (current_task && net_relay_supported(cpu->eax) &&
+        (net_relay_state_for((int32_t)current_task->id) != NET_RELAY_FREE ||
+         !service_registry_net_syscall_allowed((int32_t)current_task->id, cpu->eax))) {
+        if (syscall_net_relay(cpu)) return;
+    }
     if (!service_registry_net_syscall_allowed(current_task ? (int32_t)current_task->id : 0,
                                               cpu->eax)) {
+        net_relay_note_denied();
         cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;
         return;
     }
@@ -636,6 +864,12 @@ void syscall_handler(cpu_state_t* cpu) {
 
         case SYS_SERVICE_BACKEND_RELEASE:
             cpu->eax = (uint32_t)sys_service_backend_release((const char*)cpu->ebx);
+            break;
+        case SYS_NET_RELAY_REPLY:
+            cpu->eax = (uint32_t)sys_net_relay_reply((const os_net_relay_reply_t*)cpu->ebx);
+            break;
+        case SYS_NET_RELAY_STATUS:
+            cpu->eax = (uint32_t)sys_net_relay_status((os_net_relay_status_t*)cpu->ebx);
             break;
         case SYS_SOCKET_OPEN:
             cpu->eax = (uint32_t)sys_socket_open((uint16_t)cpu->ebx, (uint16_t)cpu->ecx, cpu->edx);
