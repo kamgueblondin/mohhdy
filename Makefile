@@ -391,6 +391,7 @@ pack-initrd: userspace-all
 	@cp -f userspace/vfsserver $(BIN_DEST_DIR)/vfsserver
 	@cp -f userspace/vfsvirtual $(BIN_DEST_DIR)/vfsvirtual
 	@cp -f userspace/networker $(BIN_DEST_DIR)/networker
+	@cp -f userspace/netclaim $(BIN_DEST_DIR)/netclaim
 	@cp -f userspace/vfsflight $(BIN_DEST_DIR)/vfsflight
 	@cp -f userspace/vfsaliasflight $(BIN_DEST_DIR)/vfsaliasflight
 	@cp -f userspace/serviceclaim $(BIN_DEST_DIR)/serviceclaim
@@ -617,7 +618,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ipc-foundation qemu-vfs-service qemu-service-grant
+.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ipc-foundation qemu-vfs-service qemu-net-worker qemu-service-grant
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -661,6 +662,10 @@ qemu-ipc-foundation: $(OS_IMAGE) pack-initrd disk
 
 qemu-vfs-service: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_vfs_service.py
+
+# Tranche 5: net-driver worker gate on NE2000/socket/peer/LLM-network syscalls.
+qemu-net-worker: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/integration/test_qemu_net_worker.py
 
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
@@ -763,6 +768,7 @@ help:
 	@echo "  qemu-ne2k-guest-tls-server - Suite: role serveur TLS B + Finished (hors ci)"
 	@echo "  qemu-ipc-foundation - Vérifie l’IPC entre tâches Ring 3"
 	@echo "  qemu-vfs-service - Vérifie une lecture via le médiateur VFS Ring 3"
+	@echo "  qemu-net-worker  - Tranche 5: gate net-driver sur syscalls NE2000/socket/peer"
 	@echo "  gguf-benchmark  - Mesure répétée du premier token et de ai-continue GGUF sous QEMU"
 	@echo "  gguf-benchmark-check - Vérifie le protocole de synthèse sans démarrer QEMU"
 	@echo "  gguf-kvm-benchmark - Latence GGUF sous QEMU KVM Multiboot (skip si /dev/kvm absent)"

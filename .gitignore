@@ -48,3 +48,6 @@ osui/__pycache__/
 docs/*.log
 docs/*.docx
 docs/*.pdf
+# Tranche 5: built net worker binaries (not versioned).
+userspace/networker
+userspace/netclaim
