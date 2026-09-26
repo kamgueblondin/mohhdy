@@ -194,6 +194,12 @@ jobs:
       - name: QEMU Tranche 4 Ring 3 ATA driver (hors integration-qemu)
         run: make qemu-ata-driver
 
+      # Tranche 5 slice 3: wire TCP through the net-driver worker to a local
+      # echo peer (-netdev socket, no internet). Placed in this job because
+      # it is the shortest one (~6.5 min), so the CI wall time is unchanged.
+      - name: QEMU Tranche 5 wire TCP via worker (hors integration-qemu)
+        run: make qemu-net-wire
+
       - name: Upload OS-UI logs
         if: always()
         uses: actions/upload-artifact@v4

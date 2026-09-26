@@ -35,7 +35,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 
 # Liste des fichiers objets - MISE À JOUR avec tous les nouveaux fichiers
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/kctx.o build/userspace_switch.o \
-          build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/net_relay.o build/gdt.o build/idt.o build/vmm.o build/task.o \
+          build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/net_relay.o build/net_wire.o build/gdt.o build/idt.o build/vmm.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/interrupts.o \
           build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o
 
@@ -86,7 +86,7 @@ kernel-only: $(OS_IMAGE)
 	@echo "Fichier: $(OS_IMAGE) ($(shell ls -lh $(OS_IMAGE) | awk '{print $$5}'))"
 
 # Règles de compilation pour les fichiers .c du kernel principal
-build/kernel.o: kernel/kernel.c kernel/ata_job.h include/os_syscalls.h
+build/kernel.o: kernel/kernel.c kernel/ata_job.h kernel/net_wire.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -111,6 +111,10 @@ build/ata_job.o: kernel/ata_job.c kernel/ata_job.h include/os_syscalls.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/net_relay.o: kernel/net_relay.c kernel/net_relay.h include/os_syscalls.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/net_wire.o: kernel/net_wire.c kernel/net_wire.h kernel/ne2k.h kernel/net_socket.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -182,7 +186,7 @@ build/task.o: kernel/task/task.c kernel/task/task.h kernel/ata_job.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Règles de compilation pour les appels système
-build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/ata_job.h kernel/net_relay.h include/os_syscalls.h
+build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/ata_job.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -412,6 +416,7 @@ pack-initrd: userspace-all
 	@cp -f userspace/atarogue $(BIN_DEST_DIR)/atarogue
 	@cp -f userspace/netclaim $(BIN_DEST_DIR)/netclaim
 	@cp -f userspace/netrelay $(BIN_DEST_DIR)/netrelay
+	@cp -f userspace/netwire $(BIN_DEST_DIR)/netwire
 	@cp -f userspace/vfsflight $(BIN_DEST_DIR)/vfsflight
 	@cp -f userspace/vfsaliasflight $(BIN_DEST_DIR)/vfsaliasflight
 	@cp -f userspace/serviceclaim $(BIN_DEST_DIR)/serviceclaim
@@ -638,7 +643,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-vfs-service qemu-service-grant
+.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -690,6 +695,11 @@ qemu-vfs-service: $(OS_IMAGE) pack-initrd disk
 # Tranche 5: net-driver worker gate on NE2000/socket/peer/LLM-network syscalls.
 qemu-net-worker: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_net_worker.py
+
+# Tranche 5 slice 3: wire TCP through the worker to a local echo peer
+# (-netdev socket, no user-net, no public internet).
+qemu-net-wire: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/integration/test_qemu_net_wire.py
 
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
@@ -805,6 +815,7 @@ help:
 	@echo "  qemu-ipc-foundation - Vérifie l’IPC entre tâches Ring 3"
 	@echo "  qemu-vfs-service - Vérifie une lecture via le médiateur VFS Ring 3"
 	@echo "  qemu-net-worker  - Tranche 5: gate net-driver sur syscalls NE2000/socket/peer"
+	@echo "  qemu-net-wire    - Tranche 5 slice 3: TCP sur le fil via le worker (pair echo local)"
 	@echo "  gguf-benchmark  - Mesure répétée du premier token et de ai-continue GGUF sous QEMU"
 	@echo "  gguf-benchmark-check - Vérifie le protocole de synthèse sans démarrer QEMU"
 	@echo "  gguf-kvm-benchmark - Latence GGUF sous QEMU KVM Multiboot (skip si /dev/kvm absent)"

@@ -97,6 +97,24 @@ static void copy_bytes(uint8_t* dst, const uint8_t* src, uint32_t n) {
     for (i = 0U; i < n; i++) dst[i] = src[i];
 }
 
+/* Tranche 5 slice 3 counters, printed in the relay log lines. */
+static uint32_t wire_calls;
+
+/* Tranche 5 slice 3: for a wire-bound socket, SEND/RECEIVE/CLOSE go through
+ * the worker-only SYS_NET_WIRE_* path (real NE2000 frames); any other socket
+ * answers OS_NET_WIRE_NOT_BOUND and keeps the slice 2 in-registry path. */
+static int32_t wire_io(uint32_t op, int32_t socket_id, const uint8_t* data, uint16_t length,
+                       uint8_t* rx, uint16_t cap, uint32_t* out_length) {
+    os_net_wire_io_t io;
+    uint16_t got = 0U;
+    int32_t rc;
+    io.socket_id = socket_id; io.data = data; io.length = length;
+    io.rx = rx; io.rx_capacity = cap; io.rx_length = &got; io.attempts = 0U;
+    rc = net_call1(op, (uint32_t)&io);
+    if (rc != OS_NET_WIRE_NOT_BOUND) { wire_calls++; *out_length = got; }
+    return rc;
+}
+
 /* Tranche 5 slice 2: run one relayed socket syscall through this worker's
  * own (privileged) path. The TCP/socket registry itself stays in Ring 0. */
 static int32_t relay_execute(const os_net_relay_request_t* req, os_net_relay_reply_t* reply) {
@@ -113,7 +131,16 @@ static int32_t relay_execute(const os_net_relay_request_t* req, os_net_relay_rep
         case SYS_SOCKET_LISTEN:
             return net_call2(SYS_SOCKET_LISTEN, req->arg0, req->arg1);
         case SYS_SOCKET_CLOSE:
+            rc = net_call1(SYS_NET_WIRE_CLOSE, req->arg0);
+            if (rc != OS_NET_WIRE_NOT_BOUND) { wire_calls++; return rc; }
             return net_call1(SYS_SOCKET_CLOSE, req->arg0);
+        case SYS_SOCKET_CONNECT: {
+            os_net_wire_connect_t c;
+            if (in_length != sizeof(os_socket_connect_request_t)) return OS_SOCKET_BAD_ARGUMENT;
+            copy_bytes((uint8_t*)&c, in, sizeof(c));
+            wire_calls++;
+            return net_call1(SYS_NET_WIRE_CONNECT, (uint32_t)&c);
+        }
         case SYS_SOCKET_ACCEPT_SYN_ACK: {
             os_socket_syn_ack_t view;
             if (in_length != sizeof(view)) return OS_SOCKET_BAD_ARGUMENT;
@@ -134,6 +161,9 @@ static int32_t relay_execute(const os_net_relay_request_t* req, os_net_relay_rep
             return rc;
         case SYS_SOCKET_SEND: {
             os_socket_send_request_t r;
+            rc = wire_io(SYS_NET_WIRE_SEND, (int32_t)req->arg0, in, (uint16_t)in_length,
+                         reply->out, (uint16_t)cap, &reply->out_length);
+            if (rc != OS_NET_WIRE_NOT_BOUND) return rc;
             r.socket_id = (int32_t)req->arg0; r.payload = in; r.length = (uint16_t)in_length;
             r.segment = reply->out; r.capacity = (uint16_t)cap; r.out_length = &out_length;
             rc = net_call1(SYS_SOCKET_SEND, (uint32_t)&r);
@@ -147,6 +177,9 @@ static int32_t relay_execute(const os_net_relay_request_t* req, os_net_relay_rep
         }
         case SYS_SOCKET_RECEIVE: {
             os_socket_receive_request_t r;
+            rc = wire_io(SYS_NET_WIRE_RECV, (int32_t)req->arg0, 0, 0U, reply->out,
+                         (uint16_t)cap, &reply->out_length);
+            if (rc != OS_NET_WIRE_NOT_BOUND) return rc;
             r.socket_id = (int32_t)req->arg0; r.buffer = reply->out; r.capacity = (uint16_t)cap;
             r.out_length = &out_length;
             rc = net_call1(SYS_SOCKET_RECEIVE, (uint32_t)&r);
@@ -199,6 +232,7 @@ void main(void) {
         put_int(rc);
         puts(" total ");
         put_uint(relayed);
+        if (wire_calls) { puts(" wire "); put_uint(wire_calls); }
         putc('\n');
     }
     (void)ignored;

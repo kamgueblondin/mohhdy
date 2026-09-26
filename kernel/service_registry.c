@@ -434,6 +434,10 @@ int service_registry_net_io_via_worker(int32_t pid) {
 int service_registry_net_syscall_gated(uint32_t syscall_number) {
     if (syscall_number >= SYS_LLM_ACQUIRE_START && syscall_number <= SYS_LLM_OPENAI_CREDENTIAL) return 1;
     if (syscall_number >= SYS_SOCKET_OPEN && syscall_number <= SYS_SOCKET_ACCEPT_ACK) return 1;
+    /* Tranche 5 slice 3: relayed wire connect. SYS_NET_WIRE_* (139-142) are
+     * stricter (live worker only, even in degraded mode) and are checked in
+     * the syscall handler itself. */
+    if (syscall_number == SYS_SOCKET_CONNECT) return 1;
     if (syscall_number >= SYS_PEER_LISTEN && syscall_number <= SYS_PEER_TLS_POLL) return 1;
     return 0;
 }

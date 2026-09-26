@@ -17,6 +17,7 @@
 #include "../service_registry.h"
 #include "../ata_job.h"
 #include "../net_relay.h"
+#include "../net_wire.h"
 #include "../ata.h"
 #include "../gdt.h"
 #include "../fs/fat16.h"
@@ -47,6 +48,13 @@ extern int kernel_peer_listen(const os_peer_listen_request_t* request);
 extern int kernel_peer_accept(const os_peer_accept_request_t* request);
 extern int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request);
 extern int kernel_llm_dhcp_maintenance(uint32_t now);
+extern int kernel_net_wire_connect(const os_net_wire_connect_t* request);
+extern int kernel_net_wire_send(int socket_id, const uint8_t* data, uint16_t length,
+                                uint8_t* segment, uint16_t capacity, uint16_t* out_length,
+                                uint16_t attempts);
+extern int kernel_net_wire_recv(int socket_id, uint8_t* buffer, uint16_t capacity,
+                                uint16_t* out_length, uint16_t attempts);
+extern int kernel_net_wire_close(int socket_id);
 extern void print_char(char c, int x, int y, char color);
 extern void write_serial(char c);
 
@@ -441,6 +449,12 @@ static int net_relay_marshal(const cpu_state_t* cpu, os_net_relay_request_t* req
             req->out_capacity = net_relay_cap(r->capacity);
             return 0;
         }
+        case SYS_SOCKET_CONNECT:
+            if (!syscall_user_range((const void*)cpu->ebx, sizeof(os_socket_connect_request_t), 0))
+                return OS_SOCKET_BAD_ARGUMENT;
+            req->in_length = (uint16_t)sizeof(os_socket_connect_request_t);
+            net_relay_copy(req->in, (const uint8_t*)cpu->ebx, req->in_length);
+            return 0;
         default:
             return OS_SOCKET_BAD_ARGUMENT;
     }
@@ -546,6 +560,76 @@ static int syscall_net_relay(cpu_state_t* cpu) {
     }
     net_relay_wait(cpu);
     return 1;
+}
+
+/* Tranche 5 slice 3: SYS_NET_WIRE_* are reserved to the live net-driver
+ * PID, even in degraded mode (no worker = nobody drives raw frames from a
+ * syscall). Everything else is refused with OS_NET_WORKER_REQUIRED and
+ * counted in os_net_wire_status_t.refused. */
+static int net_wire_caller_is_worker(void) {
+    int32_t worker = net_relay_live_worker();
+    if (current_task && worker > 0 && (int32_t)current_task->id == worker) return 1;
+    net_wire_note_refused();
+    return 0;
+}
+
+static int sys_net_wire_connect(const os_net_wire_connect_t* user) {
+    os_net_wire_connect_t request;
+    if (!net_wire_caller_is_worker()) return OS_NET_WORKER_REQUIRED;
+    if (!syscall_user_range(user, sizeof(*user), 0)) return OS_SOCKET_BAD_ARGUMENT;
+    request = *user;
+    return kernel_net_wire_connect(&request);
+}
+
+static int sys_net_wire_io(uint32_t op, const os_net_wire_io_t* user) {
+    os_net_wire_io_t io;
+    uint16_t length = 0U;
+    int rc;
+    if (!net_wire_caller_is_worker()) return OS_NET_WORKER_REQUIRED;
+    if (!syscall_user_range(user, sizeof(*user), 0)) return OS_SOCKET_BAD_ARGUMENT;
+    io = *user;
+    if ((io.rx_capacity && !syscall_user_range(io.rx, io.rx_capacity, 1)) ||
+        (io.rx_length && !syscall_user_range(io.rx_length, sizeof(*io.rx_length), 1)))
+        return OS_SOCKET_BAD_ARGUMENT;
+    if (op == SYS_NET_WIRE_SEND) {
+        if (io.length > OS_NET_WIRE_MAX_IO) return OS_SOCKET_BUFFER_SMALL;
+        if (!syscall_user_range(io.data, io.length, 0)) return OS_SOCKET_BAD_ARGUMENT;
+        rc = kernel_net_wire_send(io.socket_id, io.data, io.length, io.rx, io.rx_capacity,
+                                  &length, io.attempts);
+    } else {
+        if (!io.rx || !io.rx_length) return OS_SOCKET_BAD_ARGUMENT;
+        rc = kernel_net_wire_recv(io.socket_id, io.rx, io.rx_capacity, &length, io.attempts);
+    }
+    if (io.rx_length) *io.rx_length = length;
+    return rc;
+}
+
+static int sys_net_wire_close(int socket_id) {
+    if (!net_wire_caller_is_worker()) return OS_NET_WORKER_REQUIRED;
+    return kernel_net_wire_close(socket_id);
+}
+
+static int sys_net_wire_status(os_net_wire_status_t* out) {
+    if (!syscall_user_range(out, sizeof(*out), 1)) return OS_SOCKET_BAD_ARGUMENT;
+    net_wire_fill_status(out, net_relay_live_worker());
+    return 0;
+}
+
+/* Public relayed connect. Reached here only by the worker itself (other
+ * tasks are relayed) or, without a worker, by anyone: refused then. */
+static int sys_socket_connect(const os_socket_connect_request_t* user) {
+    os_net_wire_connect_t request;
+    if (!net_wire_caller_is_worker()) return OS_NET_WORKER_REQUIRED;
+    if (!syscall_user_range(user, sizeof(*user), 0)) return OS_SOCKET_BAD_ARGUMENT;
+    request.local_port = user->local_port;
+    request.remote_port = user->remote_port;
+    request.local_ip[0] = user->local_ip[0]; request.local_ip[1] = user->local_ip[1];
+    request.local_ip[2] = user->local_ip[2]; request.local_ip[3] = user->local_ip[3];
+    request.remote_ip[0] = user->remote_ip[0]; request.remote_ip[1] = user->remote_ip[1];
+    request.remote_ip[2] = user->remote_ip[2]; request.remote_ip[3] = user->remote_ip[3];
+    request.local_sequence = user->local_sequence;
+    request.attempts = user->attempts;
+    return kernel_net_wire_connect(&request);
 }
 
 int sys_net_relay_reply(const os_net_relay_reply_t* reply) {
@@ -870,6 +954,22 @@ void syscall_handler(cpu_state_t* cpu) {
             break;
         case SYS_NET_RELAY_STATUS:
             cpu->eax = (uint32_t)sys_net_relay_status((os_net_relay_status_t*)cpu->ebx);
+            break;
+        case SYS_NET_WIRE_CONNECT:
+            cpu->eax = (uint32_t)sys_net_wire_connect((const os_net_wire_connect_t*)cpu->ebx);
+            break;
+        case SYS_NET_WIRE_SEND:
+        case SYS_NET_WIRE_RECV:
+            cpu->eax = (uint32_t)sys_net_wire_io(cpu->eax, (const os_net_wire_io_t*)cpu->ebx);
+            break;
+        case SYS_NET_WIRE_CLOSE:
+            cpu->eax = (uint32_t)sys_net_wire_close((int)cpu->ebx);
+            break;
+        case SYS_NET_WIRE_STATUS:
+            cpu->eax = (uint32_t)sys_net_wire_status((os_net_wire_status_t*)cpu->ebx);
+            break;
+        case SYS_SOCKET_CONNECT:
+            cpu->eax = (uint32_t)sys_socket_connect((const os_socket_connect_request_t*)cpu->ebx);
             break;
         case SYS_SOCKET_OPEN:
             cpu->eax = (uint32_t)sys_socket_open((uint16_t)cpu->ebx, (uint16_t)cpu->ecx, cpu->edx);
@@ -1448,6 +1548,7 @@ int sys_socket_receive(const os_socket_receive_request_t* request) {
 
 int sys_socket_close(int socket_id) {
     if (!current_task || current_task->type != TASK_TYPE_USER) return OS_SOCKET_BAD_ARGUMENT;
+    (void)net_wire_unbind(socket_id); /* slice 3: never leave a stale wire binding */
     return net_socket_close(socket_id);
 }
 

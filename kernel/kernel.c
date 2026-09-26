@@ -25,6 +25,7 @@
 #include "vga_console.h"
 #include "ne2k.h"
 #include "net_socket.h"
+#include "net_wire.h"
 #include "tls_trust_anchor.h"
 #include "tls_test_trust_anchor.h"
 #include "tls_test_leaf.h"
@@ -183,6 +184,57 @@ static void ne2k_boot_probe(void) {
 
 uint32_t kernel_net_status(void) {
     return boot_ne2k_present ? 3U : 0U;
+}
+
+/* Tranche 5 slice 3: worker-only wire path. The syscall layer only calls
+ * these for the live net-driver PID; they drive the boot NE2000 (Ring 0)
+ * with dedicated frame buffers so the LLM/peer paths keep theirs. */
+static uint8_t boot_wire_tx[KERNEL_LLM_FRAME_CAPACITY];
+static uint8_t boot_wire_rx[KERNEL_LLM_FRAME_CAPACITY];
+
+static int kernel_net_wire_ctx(net_wire_ctx_t* ctx) {
+    if (!boot_ne2k_present) return OS_NET_WIRE_UNAVAILABLE;
+    ctx->device = &boot_ne2k_device;
+    ctx->io = &boot_ne2k_io;
+    ctx->cache = &boot_llm_arp_cache;
+    ctx->tx = boot_wire_tx;
+    ctx->rx = boot_wire_rx;
+    ctx->capacity = (uint16_t)sizeof(boot_wire_tx);
+    return 0;
+}
+
+int kernel_net_wire_connect(const os_net_wire_connect_t* request) {
+    net_wire_ctx_t ctx;
+    int status = kernel_net_wire_ctx(&ctx);
+    if (status != 0) return status;
+    return net_wire_connect(&ctx, request);
+}
+
+int kernel_net_wire_send(int socket_id, const uint8_t* data, uint16_t length, uint8_t* segment,
+                         uint16_t capacity, uint16_t* out_length, uint16_t attempts) {
+    net_wire_ctx_t ctx;
+    int status;
+    if (!net_wire_is_bound(socket_id)) return OS_NET_WIRE_NOT_BOUND;
+    status = kernel_net_wire_ctx(&ctx);
+    if (status != 0) return status;
+    return net_wire_send(&ctx, socket_id, data, length, segment, capacity, out_length, attempts);
+}
+
+int kernel_net_wire_recv(int socket_id, uint8_t* buffer, uint16_t capacity, uint16_t* out_length,
+                         uint16_t attempts) {
+    net_wire_ctx_t ctx;
+    int status;
+    if (!net_wire_is_bound(socket_id)) return OS_NET_WIRE_NOT_BOUND;
+    status = kernel_net_wire_ctx(&ctx);
+    if (status != 0) return status;
+    return net_wire_recv(&ctx, socket_id, buffer, capacity, out_length, attempts);
+}
+
+int kernel_net_wire_close(int socket_id) {
+    net_wire_ctx_t ctx;
+    if (!net_wire_is_bound(socket_id)) return OS_NET_WIRE_NOT_BOUND;
+    if (kernel_net_wire_ctx(&ctx) != 0) return net_wire_close(0, socket_id, 0U);
+    return net_wire_close(&ctx, socket_id, 0U);
 }
 
 static int kernel_llm_rdrand_supported(void) {

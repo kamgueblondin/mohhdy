@@ -19,7 +19,8 @@
 #define NET_RELAY_TIMEOUT_POLLS 3U
 
 void net_relay_init(void);
-/* 1 for the socket syscalls 99-108 that are relayed. */
+/* 1 for the socket syscalls 99-108 (and SYS_SOCKET_CONNECT, slice 3) that
+ * are relayed. */
 int net_relay_supported(uint32_t syscall_number);
 /* Slot state as seen by pid: FREE (slot free or owned by someone else is
  * reported through net_relay_owner), SENT or DONE when owned by pid. */
