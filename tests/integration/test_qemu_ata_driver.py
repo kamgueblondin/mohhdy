@@ -135,9 +135,13 @@ def assert_no_port_leak(start):
             raise RuntimeError("unexpected ATA capability outcome: %s" % needle)
 
 
-FLUSH_RE = re.compile(r"atadriver snapshot flush ok gen=(\d+) flushes=(\d+) loads=(\d+) kpio=(\d+)")
-READY_RE = re.compile(r"atadriver ring3 pio ready flushes=(\d+) loads=(\d+) kpio=(\d+)")
-LOAD_RE = re.compile(r"atadriver snapshot load ok gen=(\d+) flushes=(\d+) loads=(\d+) kpio=(\d+)")
+# Counter lines are emitted with several putc syscalls; IRQ0 preemption can
+# interleave "[SCHED]" lines and shell output between tokens (CI flake). The
+# contract therefore reads the tokens in order after the line prefix.
+FLUSH_SPEC = ("atadriver snapshot flush ok", ("gen", "flushes", "loads", "kpio"))
+READY_SPEC = ("atadriver ring3 pio ready", ("flushes", "loads", "kpio"))
+LOAD_SPEC = ("atadriver snapshot load ok", ("gen", "flushes", "loads", "kpio"))
+SCHED_LINE = re.compile(r"\[SCHED\] switching to task \d+\s*")
 
 
 def make_disk():
@@ -194,13 +198,29 @@ def shutdown(proc, monitor):
         pass
 
 
-def search_after(regex, start, what, client=None, proc=None, rounds=8):
-    """Find a complete counter line; the driver prints it with several putc
-    syscalls, so give it bounded cooperative turns to finish the line."""
+def parse_counters(spec, start):
+    prefix, keys = spec
+    text = SCHED_LINE.sub("", log_text()[start:])
+    pos = text.find(prefix)
+    if pos < 0:
+        return None
+    pos += len(prefix)
+    values = []
+    for key in keys:
+        match = re.compile(r"\b%s=(\d+)" % key).search(text, pos)
+        if not match:
+            return None
+        values.append(int(match.group(1)))
+        pos = match.end()
+    return values
+
+
+def search_after(spec, start, what, client=None, proc=None, rounds=8):
+    """Give the driver bounded cooperative turns to finish its counter line."""
     for _ in range(rounds + 1):
-        match = regex.search(normalized_log(log_text()[start:]))
-        if match:
-            return [int(x) for x in match.groups()]
+        values = parse_counters(spec, start)
+        if values is not None:
+            return values
         if client is None:
             break
         time.sleep(0.3)
@@ -224,7 +244,7 @@ def boot1():
         #    dropped (nothing valid to restore).
         driver_pid, start = spawn(monitor, proc, "atadriver")
         wait_child(monitor, proc, "atadriver ring3 pio ready", start)
-        ready = search_after(READY_RE, start, "driver ready counters", monitor, proc)
+        ready = search_after(READY_SPEC, start, "driver ready counters", monitor, proc)
         wait_child(monitor, proc, "atadriver snapshot load skipped", start, rounds=12)
         send_command_until(monitor, "service-find ata-driver",
                            "service-find ok ata-driver %s" % driver_pid, proc)
@@ -238,7 +258,7 @@ def boot1():
         #    through the driver; the kernel PIO overlay counter does not move.
         start = send_command_until(monitor, "write t4s2 viadrv", "write ok", proc)
         wait_child(monitor, proc, "atadriver snapshot flush ok", start, rounds=16)
-        flush = search_after(FLUSH_RE, start, "driver flush counters", monitor, proc)
+        flush = search_after(FLUSH_SPEC, start, "driver flush counters", monitor, proc)
         if flush[1] < 1 or flush[3] != ready[2]:
             raise RuntimeError("flush not via driver: ready=%r flush=%r" % (ready, flush))
         send_command_until(monitor, "cat t4s2", "viadrv", proc)
@@ -267,7 +287,7 @@ def boot2():
         # 7. New driver: the snapshot is loaded back through its Ring 3 PIO.
         driver_pid, start = spawn(monitor, proc, "atadriver")
         wait_child(monitor, proc, "atadriver snapshot load ok", start, rounds=16)
-        load = search_after(LOAD_RE, start, "driver load counters", monitor, proc)
+        load = search_after(LOAD_SPEC, start, "driver load counters", monitor, proc)
         if load[2] < 1:
             raise RuntimeError("load not via driver: %r" % load)
         send_command_until(monitor, "cat t4s2", "viadrv", proc)
