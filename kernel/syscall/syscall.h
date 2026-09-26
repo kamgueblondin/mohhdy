@@ -12,6 +12,13 @@ typedef struct {
 void syscall_init();
 /* Tranche 4 slice 2: overlay/ATA bridge with the Ring 3 atadriver. */
 void syscall_ata_bridge_init(void);
+/* Tranche 4 slice 3: FAT sector I/O through the live Ring 3 driver. Returns 1
+ * if the request was served by the driver (*out_rc = status), 0 if the caller
+ * must use the Ring 0 PIO path (no driver, not in a user syscall, aborted). */
+int syscall_ata_fat_io(uint32_t drive, uint32_t lba, uint32_t count, void* buf,
+                       int write, int* out_rc);
+void syscall_ata_note_fat_kernel_pio(uint32_t sectors);
+void syscall_ata_set_boot_driver(int32_t pid);
 void syscall_handler(cpu_state_t* cpu);
 
 void sys_exit(uint32_t exit_code);

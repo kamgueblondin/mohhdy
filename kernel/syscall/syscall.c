@@ -84,10 +84,15 @@ static int ata_bridge_restore(const uint8_t* buf, uint32_t size) {
     return overlay_restore(buf, size);
 }
 
-/* Overlay flush: queue for the live driver instead of Ring 0 PIO. */
+static void ata_rpc_wait_flush(void);
+
+/* Overlay flush: queue for the live driver instead of Ring 0 PIO. Slice 3:
+ * from a user syscall the caller then waits until the driver wrote the whole
+ * snapshot, so "write ok" still means "on disk" with the boot driver. */
 static int ata_bridge_overlay_redirect(void) {
     if (ata_live_driver() <= 0) return 0;
     ata_job_request_flush();
+    ata_rpc_wait_flush();
     return 1;
 }
 
@@ -96,16 +101,162 @@ static int ata_bridge_kernel_gate(void) {
     return ata_owner_kernel_may_pio(ata_live_driver());
 }
 
+static void ata_rpc_sched_hook(uint32_t now);
+
 void syscall_ata_bridge_init(void) {
     ata_job_init(ata_bridge_snapshot, ata_bridge_restore);
     ata_set_kernel_gate(ata_bridge_kernel_gate);
     overlay_set_disk_hooks(ata_bridge_overlay_redirect, ata_job_note_kernel_overlay_write);
+    task_sched_hook = ata_rpc_sched_hook;
+}
+
+/* Tranche 4 slice 3: synchronous FAT sector RPC through the Ring 3 driver.
+ *
+ * FAT16/FAT32 sector callbacks run inside a syscall of some user task T (the
+ * VFS worker, the shell...). When the driver is live, the callback submits a
+ * job (<= 8 sectors), saves T's kernel continuation (kctx on T's own kernel
+ * stack), marks T TASK_BLOCKED_KERNEL and schedules the driver. The driver
+ * fetches the job, runs the PIO at CPL 3 and completes it; SYS_ATA_JOB_DONE
+ * marks T ready and the scheduler resumes T inside its syscall. While T is
+ * blocked only the driver is scheduled, and any other task entering a
+ * syscall is rewound and retried later, so FAT static buffers are never
+ * re-entered. If the driver dies (purge) or stalls (no progress for
+ * ATA_RPC_TIMEOUT_TICKS), the RPC is aborted and the callback falls back to
+ * the Ring 0 PIO path (only possible once the driver no longer holds the
+ * controller claim). */
+#define ATA_RPC_TIMEOUT_TICKS 300U
+#define ATA_RPC_IO 1
+#define ATA_RPC_FLUSH 2
+static task_t* g_rpc_waiter;
+static int g_rpc_kind;
+static uint32_t g_rpc_started;
+static int g_rpc_aborted;
+static int32_t g_boot_driver_pid;
+static int g_boot_driver_registered;
+
+static void ata_rpc_abort(void) {
+    task_t* waiter = g_rpc_waiter;
+    if (!waiter || waiter->state != TASK_BLOCKED_KERNEL) return;
+    g_rpc_aborted = 1;
+    if (g_rpc_kind == ATA_RPC_IO) ata_job_io_cancel();
+    waiter->state = TASK_READY;
+    task_sched_only = waiter;
+}
+
+static void ata_rpc_sched_hook(uint32_t now) {
+    task_t* waiter = g_rpc_waiter;
+    task_t* driver;
+    if (!waiter || waiter->state != TASK_BLOCKED_KERNEL) return;
+    driver = task_sched_only;
+    if (now - g_rpc_started > ATA_RPC_TIMEOUT_TICKS ||
+        !driver || driver->state == TASK_TERMINATED ||
+        (driver->state != TASK_READY && driver->state != TASK_RUNNING)) {
+        print_string_serial("[ATA] sector rpc aborted\n");
+        ata_rpc_abort();
+    }
+}
+
+/* Blocks the current task until the driver completed the submitted job.
+ * Returns 0 on success, -1 on driver failure, -2 if aborted. */
+static int ata_rpc_block(task_t* driver, int kind) {
+    task_t* self = current_task;
+    g_rpc_kind = kind;
+    g_rpc_waiter = self;
+    g_rpc_aborted = 0;
+    g_rpc_started = timer_get_ticks();
+    task_sched_only = driver;
+    self->state = TASK_BLOCKED_KERNEL;
+    self->kctx_valid = 1U;
+    if (kctx_save(self->kctx) == 0) {
+        schedule(self->syscall_frame); /* never returns; resumed below */
+    }
+    g_rpc_waiter = NULL;
+    task_sched_only = NULL;
+    self->kctx_valid = 0U;
+    if (g_rpc_aborted) return -2;
+    if (kind == ATA_RPC_FLUSH) return 0;
+    return ata_job_io_state() == ATA_IO_DONE ? 0 : -1;
+}
+
+/* 1 if the current task may block on a driver RPC right now. */
+static task_t* ata_rpc_driver_for_current(void) {
+    int32_t driver_pid = ata_live_driver();
+    task_t* driver;
+    if (driver_pid <= 0 || !current_task || current_task->type != TASK_TYPE_USER ||
+        (int32_t)current_task->id == driver_pid || !current_task->syscall_frame || g_rpc_waiter)
+        return NULL;
+    driver = get_task_by_id(driver_pid);
+    if (!driver || driver->type != TASK_TYPE_USER || driver->state != TASK_READY) return NULL;
+    return driver;
+}
+
+/* If the driver dies meanwhile, the purge path persists the snapshot through
+ * Ring 0 PIO; if it stalls, the flush stays queued (asynchronous). */
+static void ata_rpc_wait_flush(void) {
+    task_t* driver = ata_rpc_driver_for_current();
+    if (!driver) return;
+    (void)ata_rpc_block(driver, ATA_RPC_FLUSH);
+}
+
+int syscall_ata_fat_io(uint32_t drive, uint32_t lba, uint32_t count, void* buf,
+                       int write, int* out_rc) {
+    int32_t driver_pid;
+    task_t* driver = ata_rpc_driver_for_current();
+    uint32_t done = 0U;
+    if (!driver || !buf || count == 0U) return 0;
+    while (done < count) {
+        uint32_t n = count - done;
+        uint8_t* p = (uint8_t*)buf + done * 512U;
+        int st;
+        if (n > OS_ATA_JOB_MAX_SECTORS) n = OS_ATA_JOB_MAX_SECTORS;
+        if (ata_job_io_submit(drive, lba + done, n, write, write ? p : 0) != 0) return 0;
+        st = ata_rpc_block(driver, ATA_RPC_IO);
+        if (st == -2) return 0; /* driver gone/stalled: caller uses Ring 0 PIO */
+        if (ata_job_io_take(write ? 0 : p, write ? 0U : n * 512U) != 0 || st != 0) {
+            *out_rc = -1;
+            return 1;
+        }
+        done += n;
+        driver_pid = ata_live_driver();
+        driver = driver_pid > 0 ? get_task_by_id(driver_pid) : NULL;
+        if (done < count && (!driver || driver->state != TASK_READY)) {
+            /* Remaining sectors through the fallback path. */
+            int rc = write ? ata_write_sectors_drive((uint8_t)drive, lba + done, count - done,
+                                                     (const uint8_t*)buf + done * 512U)
+                           : ata_read_sectors_drive((uint8_t)drive, lba + done, count - done,
+                                                    (uint8_t*)buf + done * 512U);
+            if (rc == 0) ata_job_note_fat_kernel_pio(count - done, ata_live_driver() > 0);
+            *out_rc = rc;
+            return 1;
+        }
+    }
+    *out_rc = 0;
+    return 1;
+}
+
+void syscall_ata_note_fat_kernel_pio(uint32_t sectors) {
+    ata_job_note_fat_kernel_pio(sectors, ata_live_driver() > 0);
+}
+
+void syscall_ata_set_boot_driver(int32_t pid) {
+    g_boot_driver_pid = pid;
+    g_boot_driver_registered = 0;
+    ata_job_set_boot_driver(pid);
 }
 
 /* Called after a service purge: if the driver vanished with a queued or
- * in-flight flush, persist through the Ring 0 PIO fallback right away. */
+ * in-flight flush, persist through the Ring 0 PIO fallback right away; a
+ * task blocked on a sector RPC is resumed and falls back too. */
 static void ata_bridge_after_purge(void) {
+    int in_use;
     if (ata_live_driver() > 0) return;
+    ata_rpc_abort();
+    in_use = ata_job_controller_in_use();
+    if (in_use) {
+        /* The dead driver may have stopped mid-transfer: reset the channel. */
+        if (ata_channel_reset() == 0) print_string_serial("[ATA] channel reset after driver loss\n");
+        ata_job_note_channel_reset();
+    }
     if (ata_job_driver_gone()) {
         if (overlay_save_disk() == 0) ata_job_note_fallback_flush();
     }
@@ -197,6 +348,17 @@ static int historical_overlay_mutation_allowed(void) {
 void syscall_handler(cpu_state_t* cpu) {
     // Réactive les interruptions pour permettre au clavier de fonctionner
     asm volatile("sti");
+
+    if (current_task) current_task->syscall_frame = cpu;
+    /* Tranche 4 slice 3: while a task is blocked mid-FAT on a sector RPC,
+     * any other task (except the driver) retries its syscall later: rewind
+     * over "int 0x80" (2 bytes) and yield. */
+    if (g_rpc_waiter && current_task && current_task != g_rpc_waiter &&
+        (int32_t)current_task->id != ata_live_driver()) {
+        cpu->eip -= 2U;
+        schedule(cpu);
+        return;
+    }
 
     /* Maintenance réseau différée : aucune E/S DHCP n’est réalisée dans IRQ0. */
     (void)kernel_llm_dhcp_maintenance(timer_get_ticks());
@@ -752,9 +914,33 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_ATA_JOB_DONE:
             cpu->eax = (uint32_t)sys_ata_job_done((const os_ata_job_t*)cpu->ebx, (int32_t)cpu->ecx,
                                                   (const uint8_t*)cpu->edx);
+            /* Slice 3: resume the task blocked on this sector job (or on the
+             * whole overlay flush) now; any accepted chunk counts as progress
+             * for the stall timeout. */
+            if (g_rpc_waiter && (int)cpu->eax >= 0) g_rpc_started = timer_get_ticks();
+            if (g_rpc_waiter && g_rpc_waiter->state == TASK_BLOCKED_KERNEL &&
+                ((g_rpc_kind == ATA_RPC_IO &&
+                  (ata_job_io_state() == ATA_IO_DONE || ata_job_io_state() == ATA_IO_FAILED)) ||
+                 (g_rpc_kind == ATA_RPC_FLUSH && (int)cpu->eax == OS_ATA_JOB_FLUSH_DONE &&
+                  !ata_job_flush_queued()))) {
+                g_rpc_waiter->state = TASK_READY;
+                task_sched_only = g_rpc_waiter;
+                schedule(cpu);
+            }
             break;
         case SYS_ATA_STATUS:
             cpu->eax = (uint32_t)sys_ata_status((os_ata_status_t*)cpu->ebx);
+            break;
+        case SYS_ATA_DEBUG:
+            /* Test hook, root shell only (the task the kernel started). */
+            if (!current_task || task_root_shell_pid() <= 0 ||
+                current_task->id != task_root_shell_pid() || cpu->ebx != OS_ATA_DEBUG_CRASH_FAT_WRITE) {
+                cpu->eax = (uint32_t)OS_TASK_CONTROL_DENIED;
+            } else {
+                ata_job_debug_arm_crash();
+                print_string_serial("[ATA] debug: driver crash armed for next FAT write\n");
+                cpu->eax = 0;
+            }
             break;
         case SYS_VGA_BLIT:
             {
@@ -1054,7 +1240,18 @@ int sys_service_register(const char* name) {
     }
     /* Tranche 4 slice 2: a new driver first loads the overlay snapshot back
      * through its own Ring 3 PIO (kept only if RAM did not change meanwhile). */
-    if (rc == 0 && strcmp(name, "ata-driver") == 0) ata_job_request_load();
+    /* Slice 3: the atadriver spawned at boot skips it: the kernel loaded the
+     * snapshot from the same disk just before any task existed and every
+     * overlay write since then was persisted, so disk == RAM. */
+    if (rc == 0 && strcmp(name, "ata-driver") == 0) {
+        if (g_boot_driver_pid > 0 && (int32_t)current_task->id == g_boot_driver_pid &&
+            !g_boot_driver_registered) {
+            g_boot_driver_registered = 1;
+            print_string_serial("[ATA] boot driver registered; kernel boot load kept\n");
+        } else {
+            ata_job_request_load();
+        }
+    }
     return rc;
 }
 

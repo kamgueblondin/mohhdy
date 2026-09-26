@@ -1,4 +1,4 @@
-/* Tranche 4 - Ring 3 ATA PIO driver (slices 1 and 2).
+/* Tranche 4 - Ring 3 ATA PIO driver (slices 1, 2 and 3).
  *
  * Registers "ata-driver". While it holds the controller claim
  * (SYS_ATA_CLAIM), the kernel opens ports 0x1F0-0x1F7 and 0x3F6 in the TSS I/O
@@ -6,6 +6,8 @@
  * is refused meanwhile. Two request sources:
  *  - kernel jobs (slice 2): the overlay snapshot (LBA 0-63) is written or
  *    loaded here, 8 sectors per chunk copied by SYS_ATA_JOB_FETCH/DONE;
+ *  - kernel FAT sector jobs (slice 3): FAT16 (master) / FAT32 (slave) sector
+ *    reads and writes of a task blocked in its syscall, served first;
  *  - "ata-client" IPC (slice 1): 64-byte sector windows, with client writes
  *    fenced off the overlay snapshot and the FAT areas.
  */
@@ -48,6 +50,8 @@ static inline void outw(uint16_t p, uint16_t v) { asm volatile("outw %0, %1" : :
 
 static uint8_t sector[512];
 static uint8_t job_buf[OS_ATA_JOB_MAX_SECTORS * 512U];
+/* Slice 3 driver-side counters of FAT sectors moved by this task's PIO. */
+static uint32_t fat_rd, fat_wr, fat_reported_rd, fat_reported_wr;
 
 static void delay(void) { (void)inb(ATA_ALT); (void)inb(ATA_ALT); (void)inb(ATA_ALT); (void)inb(ATA_ALT); }
 
@@ -65,6 +69,31 @@ static int wait_drq(void) {
     }
     return -1;
 }
+/* A write or cache flush can keep BSY for a long time when the host disk is
+ * slow (QEMU completes it with a host write/fsync; seen on CI runners), far
+ * beyond one bounded spin. Keep waiting across cooperative turns instead of
+ * failing the chunk: up to ATA_PATIENT_ROUNDS spins, yielding in between. */
+#define ATA_PATIENT_ROUNDS 256U
+static int wait_bsy_patient(void) {
+    uint32_t r;
+    for (r = 0; r < ATA_PATIENT_ROUNDS; r++) {
+        if (wait_bsy() == 0) return 0;
+        if (inb(ATA_CMD) == 0xFF) return -1;
+        yield();
+    }
+    return -1;
+}
+static int wait_drq_patient(void) {
+    uint32_t r;
+    for (r = 0; r < ATA_PATIENT_ROUNDS; r++) {
+        uint8_t s;
+        if (wait_drq() == 0) return 0;
+        s = inb(ATA_CMD);
+        if (s == 0xFF || (s & 0x21)) return -1; /* error, not slowness */
+        yield();
+    }
+    return -1;
+}
 static void select_lba(uint8_t drive, uint32_t lba) {
     outb(ATA_DRIVE, (uint8_t)(0xE0 | (drive ? 0x10 : 0) | ((lba >> 24) & 0x0F)));
     delay();
@@ -73,20 +102,24 @@ static void select_lba(uint8_t drive, uint32_t lba) {
 }
 static int pio_read(uint8_t drive, uint32_t lba, uint8_t* out) {
     uint32_t i;
-    if (wait_bsy() < 0) return -1;
+    if (wait_bsy_patient() < 0) return -1;
     select_lba(drive, lba); outb(ATA_CMD, 0x20);
-    if (wait_drq() < 0) return -1;
+    if (wait_drq_patient() < 0) return -1;
     for (i = 0; i < 256; i++) { uint16_t w = inw(ATA_DATA); out[2*i] = (uint8_t)w; out[2*i+1] = (uint8_t)(w >> 8); }
-    return wait_bsy();
+    return wait_bsy_patient();
 }
 static int pio_write(uint8_t drive, uint32_t lba, const uint8_t* in) {
     uint32_t i;
-    if (wait_bsy() < 0) return -1;
+    if (wait_bsy_patient() < 0) return -1;
     select_lba(drive, lba); outb(ATA_CMD, 0x30);
-    if (wait_drq() < 0) return -1;
+    if (wait_drq_patient() < 0) return -1;
     for (i = 0; i < 256; i++) outw(ATA_DATA, (uint16_t)(in[2*i] | (in[2*i+1] << 8)));
-    outb(ATA_CMD, 0xE7); /* cache flush */
-    return wait_bsy();
+    return wait_bsy_patient();
+}
+/* One cache flush per write job (was one per sector). */
+static int pio_flush(void) {
+    outb(ATA_CMD, 0xE7);
+    return wait_bsy_patient();
 }
 
 /* Controller claim: ports are open only between claim and release. */
@@ -104,6 +137,21 @@ static void print_counters(void) {
     puts(" kpio="); putu(st.kernel_overlay_writes);
 }
 
+/* Slice 3: one line per burst of FAT jobs, printed once the queue is idle.
+ * rd/wr are this driver's own counters; kfat is the kernel count of FAT
+ * sectors moved by Ring 0 PIO while a driver was live (expected 0). */
+static void report_fat_io(void) {
+    os_ata_status_t st;
+    if (fat_rd == fat_reported_rd && fat_wr == fat_reported_wr) return;
+    fat_reported_rd = fat_rd;
+    fat_reported_wr = fat_wr;
+    if (sc1(SYS_ATA_STATUS, (uint32_t)&st) != 0) return;
+    puts("atadriver fat io rd="); putu(fat_rd);
+    puts(" wr="); putu(fat_wr);
+    puts(" kfat="); putu(st.fat_kernel_pio_live);
+    puts("\n");
+}
+
 /* One kernel job chunk. Returns 1 if a chunk was served. */
 static int serve_job(void) {
     os_ata_job_t job;
@@ -112,13 +160,36 @@ static int serve_job(void) {
     int res;
     if (sc2(SYS_ATA_JOB_FETCH, (uint32_t)&job, (uint32_t)job_buf) != 1) return 0;
     claim();
-    for (s = 0; s < job.count && rc == 0; s++) {
-        if (job.op == OS_ATA_JOB_WRITE) rc = pio_write(0, job.lba + s, job_buf + s * 512U);
-        else rc = pio_read(0, job.lba + s, job_buf + s * 512U);
+    if ((job.flags & OS_ATA_JOB_FLAG_DEBUG_CRASH) && job.op == OS_ATA_JOB_IO_WRITE) {
+        /* Test hook (armed by the root shell via SYS_ATA_DEBUG): start the
+         * sector write, push half of the data, then crash while holding the
+         * claim with the transfer open (raw IN on a port outside the IOPB
+         * raises #GP; the kernel kills this task). */
+        uint32_t w;
+        puts("atadriver debug crash mid-job\n");
+        if (wait_bsy() == 0) {
+            select_lba(job.drive ? 1U : 0U, job.lba);
+            outb(ATA_CMD, 0x30);
+            if (wait_drq() == 0)
+                for (w = 0; w < 128U; w++)
+                    outw(ATA_DATA, (uint16_t)(job_buf[2*w] | (job_buf[2*w+1] << 8)));
+        }
+        (void)inb(0x60);
+        for (;;) yield();
     }
+    for (s = 0; s < job.count && rc == 0; s++) {
+        uint8_t drive = job.drive ? 1U : 0U;
+        if (job.op == OS_ATA_JOB_WRITE || job.op == OS_ATA_JOB_IO_WRITE)
+            rc = pio_write(drive, job.lba + s, job_buf + s * 512U);
+        else rc = pio_read(drive, job.lba + s, job_buf + s * 512U);
+    }
+    if (rc == 0 && (job.op == OS_ATA_JOB_WRITE || job.op == OS_ATA_JOB_IO_WRITE))
+        rc = pio_flush();
     release();
     res = sc3(SYS_ATA_JOB_DONE, (uint32_t)&job, (uint32_t)rc, (uint32_t)job_buf);
-    if (res == OS_ATA_JOB_FLUSH_DONE) {
+    if (res == OS_ATA_JOB_IO_DONE) {
+        if (job.op == OS_ATA_JOB_IO_WRITE) fat_wr += job.count; else fat_rd += job.count;
+    } else if (res == OS_ATA_JOB_FLUSH_DONE) {
         puts("atadriver snapshot flush ok gen="); putu(job.generation); print_counters(); puts("\n");
     } else if (res == OS_ATA_JOB_LOAD_DONE) {
         puts("atadriver snapshot load ok gen="); putu(job.generation); print_counters(); puts("\n");
@@ -153,6 +224,7 @@ void main(void) {
         uint32_t lba, off, len;
         uint8_t drive;
         while (serve_job() && served < 8) served++;
+        if (served < 8) report_fat_io();
         if (sc1(SYS_IPC_RECV, (uint32_t)&m) != 0) { yield(); continue; }
         if (m.type != OS_IPC_ATA_READ && m.type != OS_IPC_ATA_WRITE) continue;
         for (i = 0; i < sizeof(r); i++) ((uint8_t*)&r)[i] = 0;
@@ -186,6 +258,7 @@ void main(void) {
             if (rc == 0) {
                 for (i = 0; i < len; i++) sector[off + i] = m.data[8 + i];
                 rc = pio_write(drive, lba, sector);
+                if (rc == 0) rc = pio_flush();
                 if (rc == 0) rc = (int32_t)len;
             }
             release();

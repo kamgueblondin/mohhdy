@@ -13,7 +13,10 @@ typedef enum {
     TASK_WAITING,
     TASK_WAITING_FOR_INPUT,
     TASK_SUSPENDED,
-    TASK_TERMINATED
+    TASK_TERMINATED,
+    /* Tranche 4 slice 3: blocked inside a syscall (kernel continuation in
+     * kctx) until the Ring 3 atadriver completes its sector job. */
+    TASK_BLOCKED_KERNEL
 } task_state_t;
 
 // Types de tâches
@@ -77,6 +80,12 @@ typedef struct task {
     uint32_t supervision_notify_budget_limit;
     uint32_t supervision_notify_budget_used;
     ipc_endpoint_t ipc_endpoint; // Boîte aux lettres IPC propre à la tâche
+    /* Tranche 4 slice 3: syscall frame of the current int 0x80, and the
+     * kernel continuation used while blocked in TASK_BLOCKED_KERNEL. */
+    cpu_state_t* syscall_frame;
+    uint32_t kctx[7];
+    uint32_t kctx_valid;
+    uint32_t boot_service;      /* spawned by the kernel at boot (atadriver) */
     struct task* next;         // Pour la liste chaînée de tâches
     struct task* prev;         // Liste doublement chaînée
 } task_t;
@@ -106,6 +115,18 @@ task_t* find_task_waiting_for_input(void);
 /* Vrai lorsqu’une autre tâche Ring 3 prête peut recevoir un quantum IRQ0. */
 int task_has_other_ready_user(void);
 int task_kill(int requester_pid, int pid);
+/* Tranche 4 slice 3: the root shell may stop a kernel-spawned boot service
+ * (the boot atadriver has no user parent). */
+void task_set_root_shell(int pid);
+int task_root_shell_pid(void);
+/* Put a freshly created task first in the round-robin order (right after
+ * the kernel task) so it runs before the shell reaches its input loop. */
+void task_queue_move_first_user(task_t* task);
+/* Scheduler restriction/hook used by the ATA sector RPC (NULL = none). */
+extern task_t* task_sched_only;
+extern void (*task_sched_hook)(uint32_t now);
+int kctx_save(uint32_t* ctx) __attribute__((returns_twice));
+void kctx_resume(const uint32_t* ctx) __attribute__((noreturn));
 void task_reparent_children(task_t* departing);
 uint32_t task_count_direct_children(int pid);
 int task_can_create_child(int pid);
