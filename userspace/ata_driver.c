@@ -131,6 +131,23 @@ static int serve_job(void) {
     int res;
     if (sc2(SYS_ATA_JOB_FETCH, (uint32_t)&job, (uint32_t)job_buf) != 1) return 0;
     claim();
+    if ((job.flags & OS_ATA_JOB_FLAG_DEBUG_CRASH) && job.op == OS_ATA_JOB_IO_WRITE) {
+        /* Test hook (armed by the root shell via SYS_ATA_DEBUG): start the
+         * sector write, push half of the data, then crash while holding the
+         * claim with the transfer open (raw IN on a port outside the IOPB
+         * raises #GP; the kernel kills this task). */
+        uint32_t w;
+        puts("atadriver debug crash mid-job\n");
+        if (wait_bsy() == 0) {
+            select_lba(job.drive ? 1U : 0U, job.lba);
+            outb(ATA_CMD, 0x30);
+            if (wait_drq() == 0)
+                for (w = 0; w < 128U; w++)
+                    outw(ATA_DATA, (uint16_t)(job_buf[2*w] | (job_buf[2*w+1] << 8)));
+        }
+        (void)inb(0x60);
+        for (;;) yield();
+    }
     for (s = 0; s < job.count && rc == 0; s++) {
         uint8_t drive = job.drive ? 1U : 0U;
         if (job.op == OS_ATA_JOB_WRITE || job.op == OS_ATA_JOB_IO_WRITE)

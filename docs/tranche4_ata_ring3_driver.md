@@ -278,8 +278,50 @@ disk, two boots):
    overlay files in LBA 0-63.
 8. Boot 2: kernel boot load, boot driver live again, `cat t4s2`/`t4note`,
    `fat16-cat t4s3.txt` and `t4fb.txt` read back through the driver.
-9. Boot driver killed, `spawn atadriver`: `atadriver snapshot load ok ...
+9. (Boot driver crash, see the PR A section below.)
+10. `spawn atadriver`: `atadriver snapshot load ok ...
    loads=1` (reload through the driver), `cat t4s2`.
+
+
+## Driver crash mid-FAT-job proof (PR A, after slice 3)
+
+Goal: show that a driver dying while it owns the controller in the middle of
+a FAT sector job does not hang the caller or lose data.
+
+- Test hook `SYS_ATA_DEBUG` (136), op `OS_ATA_DEBUG_CRASH_FAT_WRITE`. Only
+  the root shell may call it (anyone else gets `OS_TASK_CONTROL_DENIED`,
+  -64; `atarogue` proves the refusal). It arms a one-shot flag; the next FAT
+  write job is handed to the driver with `OS_ATA_JOB_FLAG_DEBUG_CRASH`.
+  Shell command: `ata-debug-crash`. This is a debug path, compiled in, and
+  harmless unless armed by the root shell.
+- With the flag set, `atadriver` prints `atadriver debug crash mid-job`,
+  selects the LBA, issues WRITE SECTORS (0x30), waits for DRQ, pushes half
+  of the first sector (128 of 256 words) and then executes `inb 0x60` (a port
+  outside its IOPB), which raises #GP. The kernel kills it with the claim
+  held and the device mid-transfer.
+- Kernel recovery (`ata_bridge_after_purge`): the outstanding RPC is aborted
+  (`aborts` +1), and because the controller was in use (claim held or job
+  handed out) the kernel pulses SRST on 0x3F6 and waits for BSY to clear
+  (`[ATA] channel reset after driver loss`, new status field `resets`). The
+  blocked caller (VFS worker) is resumed and redoes the request through the
+  Ring 0 PIO fallback.
+- QEMU (`make qemu-ata-driver`, boot 2 step 9): the boot driver (no user
+  parent, so no exit notice reaches the shell mid-command) is crashed during
+  `vfs-write fat16/t4cr.txt viacrash`. Checked: the write and the read back
+  succeed (no hang), `service-find ata-driver` reports it gone,
+  `aborts` 0->1, `resets` 0->1, `fatkpio` grows (Ring 0 fallback did the
+  I/O), `t4s3.txt` / `t4fb.txt` written earlier still read back, and the
+  host finds `viacrash` in the FAT16 area of the disk image. Step 10 then
+  respawns a driver and reloads the snapshot through it.
+- Unit (`make test-kernel`): `test_debug_crash_flag` (one-shot arm, not
+  consumed by reads, carried in `job.flags` of the next write only,
+  `controller_in_use` during the handed job and cleared by driver loss,
+  reset counter).
+- Limit: a crashed driver whose parent is the shell delivers its exit event
+  to the shell IPC mailbox; if that happens while the shell waits for a VFS
+  reply, the shell reports "reponse VFS absente ou invalide" even though the
+  write completed. The proof therefore crashes the boot driver. Hardening
+  the shell reply matching is left for later.
 
 ## Next steps
 

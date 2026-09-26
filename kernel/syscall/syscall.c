@@ -248,8 +248,15 @@ void syscall_ata_set_boot_driver(int32_t pid) {
  * in-flight flush, persist through the Ring 0 PIO fallback right away; a
  * task blocked on a sector RPC is resumed and falls back too. */
 static void ata_bridge_after_purge(void) {
+    int in_use;
     if (ata_live_driver() > 0) return;
     ata_rpc_abort();
+    in_use = ata_job_controller_in_use();
+    if (in_use) {
+        /* The dead driver may have stopped mid-transfer: reset the channel. */
+        if (ata_channel_reset() == 0) print_string_serial("[ATA] channel reset after driver loss\n");
+        ata_job_note_channel_reset();
+    }
     if (ata_job_driver_gone()) {
         if (overlay_save_disk() == 0) ata_job_note_fallback_flush();
     }
@@ -923,6 +930,17 @@ void syscall_handler(cpu_state_t* cpu) {
             break;
         case SYS_ATA_STATUS:
             cpu->eax = (uint32_t)sys_ata_status((os_ata_status_t*)cpu->ebx);
+            break;
+        case SYS_ATA_DEBUG:
+            /* Test hook, root shell only (the task the kernel started). */
+            if (!current_task || task_root_shell_pid() <= 0 ||
+                current_task->id != task_root_shell_pid() || cpu->ebx != OS_ATA_DEBUG_CRASH_FAT_WRITE) {
+                cpu->eax = (uint32_t)OS_TASK_CONTROL_DENIED;
+            } else {
+                ata_job_debug_arm_crash();
+                print_string_serial("[ATA] debug: driver crash armed for next FAT write\n");
+                cpu->eax = 0;
+            }
             break;
         case SYS_VGA_BLIT:
             {

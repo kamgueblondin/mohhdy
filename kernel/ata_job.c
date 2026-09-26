@@ -24,6 +24,8 @@ static uint32_t g_handed;
 static uint32_t g_io_state;
 static uint32_t g_io_op, g_io_drive, g_io_lba, g_io_count, g_io_gen;
 static uint8_t g_io_buf[OS_ATA_JOB_MAX_SECTORS * 512U];
+static uint32_t g_io_flags;
+static uint32_t g_debug_crash_armed;
 
 void ata_job_init(ata_job_snapshot_fn snapshot, ata_job_restore_fn restore) {
     uint32_t i;
@@ -41,6 +43,8 @@ void ata_job_init(ata_job_snapshot_fn snapshot, ata_job_restore_fn restore) {
     g_slave_locked = 0U;
     g_handed = ATA_HANDED_NONE;
     g_io_state = ATA_IO_NONE;
+    g_io_flags = 0U;
+    g_debug_crash_armed = 0U;
     for (i = 0U; i < sizeof(g_stats); i++) s[i] = 0U;
 }
 
@@ -103,6 +107,11 @@ int ata_job_io_submit(uint32_t drive, uint32_t lba, uint32_t count, int write,
     g_io_count = count;
     g_io_gen = ++g_generation;
     if (write) for (i = 0U; i < count * 512U; i++) g_io_buf[i] = data[i];
+    g_io_flags = 0U;
+    if (write && g_debug_crash_armed) {
+        g_io_flags = OS_ATA_JOB_FLAG_DEBUG_CRASH;
+        g_debug_crash_armed = 0U; /* one shot */
+    }
     g_io_state = ATA_IO_PENDING;
     return 0;
 }
@@ -140,6 +149,14 @@ void ata_job_note_fat_kernel_pio(uint32_t sectors, int driver_live) {
 
 void ata_job_set_boot_driver(int32_t pid) { g_stats.boot_driver_pid = pid; }
 
+void ata_job_debug_arm_crash(void) { g_debug_crash_armed = 1U; }
+
+int ata_job_controller_in_use(void) {
+    return g_claim_pid != 0 || g_handed != ATA_HANDED_NONE;
+}
+
+void ata_job_note_channel_reset(void) { g_stats.channel_resets++; }
+
 static uint32_t chunk_count(void) {
     uint32_t left = OS_ATA_OVERLAY_SECTORS - g_cursor;
     return left < OS_ATA_JOB_MAX_SECTORS ? left : OS_ATA_JOB_MAX_SECTORS;
@@ -160,6 +177,7 @@ int ata_job_fetch(os_ata_job_t* job, uint8_t* data, uint32_t capacity) {
         job->lba = g_io_lba;
         job->count = g_io_count;
         job->generation = g_io_gen;
+        job->flags = g_io_flags;
         g_io_state = ATA_IO_HANDED;
         g_handed = ATA_HANDED_IO;
         return 1;
@@ -191,6 +209,7 @@ int ata_job_fetch(os_ata_job_t* job, uint8_t* data, uint32_t capacity) {
     job->lba = g_cursor; /* the overlay snapshot starts at LBA 0 */
     job->count = count;
     job->generation = g_ov_generation;
+    job->flags = 0U;
     g_handed = ATA_HANDED_OVERLAY;
     return 1;
 }
@@ -291,4 +310,5 @@ void ata_job_fill_status(os_ata_status_t* out, int32_t live_driver) {
     out->pending = (uint32_t)ata_job_pending();
     out->client_min_lba = g_client_min_lba;
     out->slave_write_locked = g_slave_locked;
+    out->debug_crash_armed = g_debug_crash_armed;
 }

@@ -246,6 +246,45 @@ static void test_fat_io_job(void) {
     TEST_ASSERT_EQUAL(2, st.boot_driver_pid);
 }
 
+/* PR A: one-shot debug crash flag for the QEMU driver-crash proof. */
+static void test_debug_crash_flag(void) {
+    static uint8_t buf[OS_ATA_JOB_MAX_SECTORS * 512U];
+    static uint8_t data[512U];
+    os_ata_job_t job;
+    os_ata_status_t st;
+    setup();
+    TEST_ASSERT_FALSE(ata_job_controller_in_use());
+    ata_job_debug_arm_crash();
+    ata_job_fill_status(&st, 0);
+    TEST_ASSERT_EQUAL(1, (int)st.debug_crash_armed);
+    /* A FAT read does not consume the arm and carries no flag. */
+    TEST_ASSERT_EQUAL(0, ata_job_io_submit(0U, 50U, 1U, 0, 0));
+    job.flags = 0xFFU;
+    TEST_ASSERT_EQUAL(1, ata_job_fetch(&job, buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL(0, (int)job.flags);
+    TEST_ASSERT_TRUE(ata_job_controller_in_use());
+    TEST_ASSERT_EQUAL(OS_ATA_JOB_IO_DONE, ata_job_done(&job, 0, buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL(0, ata_job_io_take(buf, sizeof(buf)));
+    TEST_ASSERT_FALSE(ata_job_controller_in_use());
+    /* The next FAT write consumes it (one shot). */
+    TEST_ASSERT_EQUAL(0, ata_job_io_submit(0U, 51U, 1U, 1, data));
+    ata_job_fill_status(&st, 0);
+    TEST_ASSERT_EQUAL(0, (int)st.debug_crash_armed);
+    TEST_ASSERT_EQUAL(1, ata_job_fetch(&job, buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL(OS_ATA_JOB_FLAG_DEBUG_CRASH, (int)job.flags);
+    TEST_ASSERT_TRUE(ata_job_controller_in_use());
+    /* Driver dies mid-job: slot freed, controller no longer handed. */
+    (void)ata_job_driver_gone();
+    TEST_ASSERT_FALSE(ata_job_controller_in_use());
+    ata_job_note_channel_reset();
+    ata_job_fill_status(&st, 0);
+    TEST_ASSERT_EQUAL(1, (int)st.channel_resets);
+    /* Following write is plain. */
+    TEST_ASSERT_EQUAL(0, ata_job_io_submit(0U, 52U, 1U, 1, data));
+    TEST_ASSERT_EQUAL(1, ata_job_fetch(&job, buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL(0, (int)job.flags);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_claim_exclusion);
@@ -254,6 +293,7 @@ int main(void) {
     RUN_TEST(test_mutation_invalidates_load_and_driver_loss);
     RUN_TEST(test_client_fences);
     RUN_TEST(test_fat_io_job);
+    RUN_TEST(test_debug_crash_flag);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

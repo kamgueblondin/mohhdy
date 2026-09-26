@@ -118,6 +118,7 @@ int task_kill(int requester_pid, int pid);
 /* Tranche 4 slice 3: the root shell may stop a kernel-spawned boot service
  * (the boot atadriver has no user parent). */
 void task_set_root_shell(int pid);
+int task_root_shell_pid(void);
 /* Put a freshly created task first in the round-robin order (right after
  * the kernel task) so it runs before the shell reaches its input loop. */
 void task_queue_move_first_user(task_t* task);
