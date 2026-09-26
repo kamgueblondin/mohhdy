@@ -159,7 +159,10 @@ LOAD_SPEC = ("atadriver snapshot load ok", ("gen", "flushes", "loads", "kpio"))
 FATIO_SPEC = ("atadriver fat io", ("rd", "wr", "kfat"))
 STATUS_KEYS = ("driver", "boot", "fatrd", "fatwr", "fatkpio", "fatkpiolive",
                "aborts", "flushes", "kpio", "resets")
-SCHED_LINE = re.compile(r"\[SCHED\] switching to task \d+\s*")
+# Drop only the scheduler line itself: eating the following whitespace glued
+# "driver 2" to " boot 2" into "driver 2boot 2" when the switch landed
+# inside the ata-status reply (CI flake seen on PR #72).
+SCHED_LINE = re.compile(r"\[SCHED\] switching to task \d+\r?\n?")
 
 
 def make_disk():
