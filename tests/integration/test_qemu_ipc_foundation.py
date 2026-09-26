@@ -33,10 +33,35 @@ def wait_for(needle, proc, offset=0, timeout=15):
     while time.time() < deadline:
         if proc.poll() is not None:
             raise RuntimeError("QEMU s'est arrêté prématurément")
-        if needle in log_text()[offset:]:
+        if log_contains(needle, log_text()[offset:]):
             return
         time.sleep(0.1)
     raise RuntimeError("sortie manquante : %s" % needle)
+
+
+def log_contains(needle, text):
+    """Match a line even if IRQ0 cut it with [SCHED]/TIMER_ALIVE lines.
+
+    The server prints its receive line with one putc syscall per character,
+    so a timer-driven scheduler line can land between any two tokens (same
+    CI flake family as #65). Match on the normalized log, then fall back to
+    the needle tokens in order separated by arbitrary whitespace."""
+    if needle in text:
+        return True
+    clean = normalized_log(text)
+    if needle in clean:
+        return True
+    # A cut inside a word ("da" + scheduler line + "ta"): drop the diagnostic
+    # lines with their newline and no separator.
+    joined = re.sub(r"\[SCHED\] switching to task \d+\r?\n?", "", text)
+    joined = re.sub(r"TIMER_ALIVE: tick=\d+\+?\r?\n?", "", joined)
+    if needle in joined:
+        return True
+    tokens = needle.split()
+    if len(tokens) < 2:
+        return False
+    pattern = r"\s+".join(re.escape(token) for token in tokens)
+    return re.search(pattern, clean) is not None
 
 
 def connect_monitor():

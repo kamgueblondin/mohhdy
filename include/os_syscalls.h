@@ -941,12 +941,16 @@ static inline int os_task_parse_event(const os_ipc_message_t* message,
 #define OS_ATA_JOB_NONE  0U
 #define OS_ATA_JOB_WRITE 1U
 #define OS_ATA_JOB_READ  2U
+/* Tranche 4 slice 3: synchronous FAT sector job (drive 0 or 1). */
+#define OS_ATA_JOB_IO_READ  3U
+#define OS_ATA_JOB_IO_WRITE 4U
 /* SYS_ATA_JOB_DONE results (>= 0). */
 #define OS_ATA_JOB_CHUNK_OK      0
 #define OS_ATA_JOB_FLUSH_DONE    1
 #define OS_ATA_JOB_LOAD_DONE     2
 #define OS_ATA_JOB_LOAD_SKIPPED  3
 #define OS_ATA_JOB_FAILED        4
+#define OS_ATA_JOB_IO_DONE       5
 /* Kernel PIO refused because the Ring 3 driver holds the controller. */
 #define OS_ATA_CONTROLLER_BUSY (-85)
 /* Job completion does not match the chunk currently handed out. */
@@ -973,6 +977,13 @@ typedef struct {
     uint32_t pending;          /* 1 if a flush/load is queued or in flight */
     uint32_t client_min_lba;   /* first master LBA a client may write */
     uint32_t slave_write_locked; /* 1 if the slave disk holds FAT32 */
+    /* Tranche 4 slice 3: FAT16/FAT32 sector I/O routed through the driver. */
+    uint32_t fat_driver_read_sectors;  /* FAT sectors read by the driver */
+    uint32_t fat_driver_write_sectors; /* FAT sectors written by the driver */
+    uint32_t fat_kernel_pio_sectors;   /* FAT sectors moved by Ring 0 PIO (boot mount, fallback) */
+    uint32_t fat_kernel_pio_live;      /* ... of which while a driver was live (expected 0) */
+    uint32_t fat_rpc_aborts;           /* sector RPCs aborted (driver died or stalled) */
+    int32_t boot_driver_pid;           /* atadriver spawned by the kernel at boot, 0 if none */
 } os_ata_status_t;
 #define OS_TASK_SUPERVISION_EVENT_SIZE 24U
 
