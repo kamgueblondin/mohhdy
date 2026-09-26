@@ -69,6 +69,31 @@ static int wait_drq(void) {
     }
     return -1;
 }
+/* A write or cache flush can keep BSY for a long time when the host disk is
+ * slow (QEMU completes it with a host write/fsync; seen on CI runners), far
+ * beyond one bounded spin. Keep waiting across cooperative turns instead of
+ * failing the chunk: up to ATA_PATIENT_ROUNDS spins, yielding in between. */
+#define ATA_PATIENT_ROUNDS 256U
+static int wait_bsy_patient(void) {
+    uint32_t r;
+    for (r = 0; r < ATA_PATIENT_ROUNDS; r++) {
+        if (wait_bsy() == 0) return 0;
+        if (inb(ATA_CMD) == 0xFF) return -1;
+        yield();
+    }
+    return -1;
+}
+static int wait_drq_patient(void) {
+    uint32_t r;
+    for (r = 0; r < ATA_PATIENT_ROUNDS; r++) {
+        uint8_t s;
+        if (wait_drq() == 0) return 0;
+        s = inb(ATA_CMD);
+        if (s == 0xFF || (s & 0x21)) return -1; /* error, not slowness */
+        yield();
+    }
+    return -1;
+}
 static void select_lba(uint8_t drive, uint32_t lba) {
     outb(ATA_DRIVE, (uint8_t)(0xE0 | (drive ? 0x10 : 0) | ((lba >> 24) & 0x0F)));
     delay();
@@ -77,20 +102,24 @@ static void select_lba(uint8_t drive, uint32_t lba) {
 }
 static int pio_read(uint8_t drive, uint32_t lba, uint8_t* out) {
     uint32_t i;
-    if (wait_bsy() < 0) return -1;
+    if (wait_bsy_patient() < 0) return -1;
     select_lba(drive, lba); outb(ATA_CMD, 0x20);
-    if (wait_drq() < 0) return -1;
+    if (wait_drq_patient() < 0) return -1;
     for (i = 0; i < 256; i++) { uint16_t w = inw(ATA_DATA); out[2*i] = (uint8_t)w; out[2*i+1] = (uint8_t)(w >> 8); }
-    return wait_bsy();
+    return wait_bsy_patient();
 }
 static int pio_write(uint8_t drive, uint32_t lba, const uint8_t* in) {
     uint32_t i;
-    if (wait_bsy() < 0) return -1;
+    if (wait_bsy_patient() < 0) return -1;
     select_lba(drive, lba); outb(ATA_CMD, 0x30);
-    if (wait_drq() < 0) return -1;
+    if (wait_drq_patient() < 0) return -1;
     for (i = 0; i < 256; i++) outw(ATA_DATA, (uint16_t)(in[2*i] | (in[2*i+1] << 8)));
-    outb(ATA_CMD, 0xE7); /* cache flush */
-    return wait_bsy();
+    return wait_bsy_patient();
+}
+/* One cache flush per write job (was one per sector). */
+static int pio_flush(void) {
+    outb(ATA_CMD, 0xE7);
+    return wait_bsy_patient();
 }
 
 /* Controller claim: ports are open only between claim and release. */
@@ -154,6 +183,8 @@ static int serve_job(void) {
             rc = pio_write(drive, job.lba + s, job_buf + s * 512U);
         else rc = pio_read(drive, job.lba + s, job_buf + s * 512U);
     }
+    if (rc == 0 && (job.op == OS_ATA_JOB_WRITE || job.op == OS_ATA_JOB_IO_WRITE))
+        rc = pio_flush();
     release();
     res = sc3(SYS_ATA_JOB_DONE, (uint32_t)&job, (uint32_t)rc, (uint32_t)job_buf);
     if (res == OS_ATA_JOB_IO_DONE) {
@@ -227,6 +258,7 @@ void main(void) {
             if (rc == 0) {
                 for (i = 0; i < len; i++) sector[off + i] = m.data[8 + i];
                 rc = pio_write(drive, lba, sector);
+                if (rc == 0) rc = pio_flush();
                 if (rc == 0) rc = (int32_t)len;
             }
             release();
