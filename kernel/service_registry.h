@@ -88,6 +88,9 @@ int service_registry_ata_ports_granted(int32_t pid);
 int service_registry_historical_read_decision(int32_t pid, int overlay_hit);
 /* Network driver isolation: raw network and socket I/O exercisable by live net-driver worker. */
 int service_registry_net_io_via_worker(int32_t pid);
+/* Tranche 5: NIC/socket/LLM-network/peer syscall classification and gate. */
+int service_registry_net_syscall_gated(uint32_t syscall_number);
+int service_registry_net_syscall_allowed(int32_t pid, uint32_t syscall_number);
 void service_registry_backend_remove_name(const char* name);
 void service_registry_backend_remove_pid(int32_t pid);
 

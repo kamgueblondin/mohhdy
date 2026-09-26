@@ -107,6 +107,14 @@ void syscall_handler(cpu_state_t* cpu) {
     /* Maintenance réseau différée : aucune E/S DHCP n’est réalisée dans IRQ0. */
     (void)kernel_llm_dhcp_maintenance(timer_get_ticks());
 
+    /* Tranche 5: with net-driver registered, network syscalls are reserved
+     * to that worker PID. Degraded mode (no worker) is unchanged. */
+    if (!service_registry_net_syscall_allowed(current_task ? (int32_t)current_task->id : 0,
+                                              cpu->eax)) {
+        cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;
+        return;
+    }
+
     // Le numéro de syscall est dans le registre EAX
     switch (cpu->eax) {
         case SYS_EXIT:

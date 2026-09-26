@@ -398,6 +398,7 @@ pack-initrd: userspace-all
 	@cp -f userspace/atadriver $(BIN_DEST_DIR)/atadriver
 	@cp -f userspace/ataclient $(BIN_DEST_DIR)/ataclient
 	@cp -f userspace/atarogue $(BIN_DEST_DIR)/atarogue
+	@cp -f userspace/netclaim $(BIN_DEST_DIR)/netclaim
 	@cp -f userspace/vfsflight $(BIN_DEST_DIR)/vfsflight
 	@cp -f userspace/vfsaliasflight $(BIN_DEST_DIR)/vfsaliasflight
 	@cp -f userspace/serviceclaim $(BIN_DEST_DIR)/serviceclaim
@@ -673,6 +674,10 @@ qemu-ata-driver: $(OS_IMAGE) pack-initrd disk
 qemu-vfs-service: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_vfs_service.py
 
+# Tranche 5: net-driver worker gate on NE2000/socket/peer/LLM-network syscalls.
+qemu-net-worker: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/integration/test_qemu_net_worker.py
+
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
 
@@ -774,6 +779,7 @@ help:
 	@echo "  qemu-ne2k-guest-tls-server - Suite: role serveur TLS B + Finished (hors ci)"
 	@echo "  qemu-ipc-foundation - Vérifie l’IPC entre tâches Ring 3"
 	@echo "  qemu-vfs-service - Vérifie une lecture via le médiateur VFS Ring 3"
+	@echo "  qemu-net-worker  - Tranche 5: gate net-driver sur syscalls NE2000/socket/peer"
 	@echo "  gguf-benchmark  - Mesure répétée du premier token et de ai-continue GGUF sous QEMU"
 	@echo "  gguf-benchmark-check - Vérifie le protocole de synthèse sans démarrer QEMU"
 	@echo "  gguf-kvm-benchmark - Latence GGUF sous QEMU KVM Multiboot (skip si /dev/kvm absent)"

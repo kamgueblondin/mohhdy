@@ -12,6 +12,8 @@ PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver
 USER_HEADERS = ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h
 # Tranche 4: Ring 3 ATA driver + proofs.
 PROGRAMS += atadriver ataclient atarogue
+# Tranche 5: net-driver gate proof client.
+PROGRAMS += netclaim
 
 all: $(PROGRAMS)
 
@@ -62,6 +64,8 @@ ataclient: ata_client.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 atarogue: ata_rogue.o start.o
+netclaim: net_claim.o start.o
+	@echo "Linking netclaim..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 vfsflight: vfs_flight_client.o start.o
