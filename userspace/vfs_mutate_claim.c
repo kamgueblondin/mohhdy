@@ -36,11 +36,16 @@ void main(void) {
             puts("vfsmutateclaim cleanup unexpectedly denied\n");
             for (;;) yield();
         }
+        if (read_rc == OS_VFS_BACKEND_DENIED && write_rc == OS_VFS_BACKEND_WORKER_REQUIRED) {
+            /* Worker live: mutate grant ok but ATA overlay mutation is worker-mediated. */
+            puts("vfsmutateclaim mutate-only worker-mediated\n");
+            for (;;) yield();
+        }
         if (read_rc >= 0) {
             puts("vfsmutateclaim read unexpectedly allowed\n");
             for (;;) yield();
         }
-        if (write_rc != OS_VFS_BACKEND_DENIED) {
+        if (write_rc != OS_VFS_BACKEND_DENIED && write_rc < 0) {
             puts("vfsmutateclaim mutation unexpectedly denied\n");
             for (;;) yield();
         }

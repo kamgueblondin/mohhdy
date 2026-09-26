@@ -8,7 +8,7 @@ LDFLAGS = -nostdlib -Ttext=0x40000000
 ASFLAGS = --32
 
 # Programmes à compiler
-PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver vfsvirtual networker vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim waitchild ok
+PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver vfsvirtual networker vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim vfshistclaim waitchild ok
 USER_HEADERS = ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h
 # Tranche 5: net-driver gate proof client.
 PROGRAMS += netclaim
@@ -89,6 +89,10 @@ vfsreadclaim: vfs_read_claim.o start.o
 
 vfsmutateclaim: vfs_mutate_claim.o start.o
 	@echo "Linking vfsmutateclaim..."
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
+vfshistclaim: vfs_hist_claim.o start.o
+	@echo "Linking vfshistclaim..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 waitchild: wait_child.o start.o

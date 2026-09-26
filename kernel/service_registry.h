@@ -77,6 +77,12 @@ int service_registry_backend_allowed_for_source_path(const char* name, int32_t p
 int service_registry_owner_bypasses_backend(const char* name, int32_t pid, uint32_t source);
 /* AOS-2175: ATA-backed overlay read/stat only exercisable by live vfs-virtual worker. */
 int service_registry_ata_overlay_io_via_worker(int32_t pid);
+/* AOS-2177: historical SYS_READFILE decision (overlay_hit = path exists in overlay). */
+#define SERVICE_HIST_READ_DENIED          0
+#define SERVICE_HIST_READ_FULL            1
+#define SERVICE_HIST_READ_INITRD_ONLY     2
+#define SERVICE_HIST_READ_WORKER_REQUIRED 3
+int service_registry_historical_read_decision(int32_t pid, int overlay_hit);
 /* Network driver isolation: raw network and socket I/O exercisable by live net-driver worker. */
 int service_registry_net_io_via_worker(int32_t pid);
 /* Tranche 5: NIC/socket/LLM-network/peer syscall classification and gate. */

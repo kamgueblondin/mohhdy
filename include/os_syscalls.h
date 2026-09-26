@@ -469,6 +469,9 @@ typedef struct {
 #define OS_SERVICE_WATCH_FULL  (-56)
 #define OS_SERVICE_STALE        (-57)
 #define OS_VFS_BACKEND_DENIED (-61)
+/* AOS-2177: historical SYS_READFILE/SYS_WRITEFILE hit the ATA-backed overlay
+ * while vfs-virtual is live and the caller is not the worker PID. */
+#define OS_VFS_BACKEND_WORKER_REQUIRED (-60)
 /* Sources de backend pour le scope de lecture, sous forme de bitmask. */
 #define OS_SERVICE_BACKEND_SOURCE_INITRD  (1U << 0)
 #define OS_SERVICE_BACKEND_SOURCE_OVERLAY (1U << 1)
