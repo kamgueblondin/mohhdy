@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tranche 4 contract (slices 1 and 2): Ring 3 ATA PIO driver.
+"""Tranche 4 contract (slices 1, 2 and 3): Ring 3 ATA PIO driver.
 
 Slice 1: atadriver executes IN/OUT on 0x1F0-0x1F7/0x3F6 at CPL 3 (TSS IOPB)
 and serves sector windows over IPC to the ata-client owner. A non-driver task
@@ -7,12 +7,18 @@ cannot publish ata-driver/ata-client (-58), its sector IPC is refused and a raw
 IN on 0x1F7 raises #GP which kills only that task.
 
 Slice 2: with the driver live, the overlay snapshot flush goes through the
-driver (driver-side counter line, kernel PIO overlay counter unchanged), the
-file survives a cold reboot (second QEMU process on the same disk), and the
-next driver loads the snapshot back through its own PIO. Client writes to the
-FAT16 volume are refused. A non-driver task cannot claim the controller nor
-touch the kernel job queue. After the driver dies, the kernel Ring 0 PIO path
-persists overlay writes again (degraded fallback).
+driver (driver-side counter line, kernel PIO overlay counter unchanged) and
+survives a cold reboot; a newly registered driver loads the snapshot back
+through its own PIO. Client writes to the FAT16 volume are refused. A
+non-driver task cannot claim the controller nor touch the kernel job queue.
+
+Slice 3: the kernel spawns atadriver at boot (default path, no manual
+spawn); a second driver instance cannot take the service. FAT16 sector I/O
+(vfs-write/vfs-read through the VFS worker) goes through the driver: driver
+counters rd/wr grow, the kernel FAT PIO counter does not move and the
+"FAT PIO while a driver is live" counter stays 0. After the root shell kills
+the boot driver, FAT and overlay writes fall back to Ring 0 PIO and persist
+(checked after a cold reboot, where the boot driver is live again).
 """
 import os
 import re
@@ -77,7 +83,8 @@ def connect_monitor():
 
 
 def send_command(client, command):
-    special = {" ": "spc", "-": "minus"}
+    # Lower case only: shift combos can stick in the guest keyboard driver.
+    special = {" ": "spc", "-": "minus", ".": "dot", "/": "slash"}
     for char in command:
         client.sendall(("sendkey %s %d\n" %
                         (special.get(char, char.lower()), KEY_HOLD_MS)).encode("ascii"))
@@ -141,6 +148,9 @@ def assert_no_port_leak(start):
 FLUSH_SPEC = ("atadriver snapshot flush ok", ("gen", "flushes", "loads", "kpio"))
 READY_SPEC = ("atadriver ring3 pio ready", ("flushes", "loads", "kpio"))
 LOAD_SPEC = ("atadriver snapshot load ok", ("gen", "flushes", "loads", "kpio"))
+FATIO_SPEC = ("atadriver fat io", ("rd", "wr", "kfat"))
+STATUS_KEYS = ("driver", "boot", "fatrd", "fatwr", "fatkpio", "fatkpiolive",
+               "aborts", "flushes", "kpio")
 SCHED_LINE = re.compile(r"\[SCHED\] switching to task \d+\s*")
 
 
@@ -215,6 +225,66 @@ def parse_counters(spec, start):
     return values
 
 
+def ata_status(client, proc):
+    """Kernel view (SYS_ATA_STATUS) printed by the shell: key value pairs."""
+    start = send_command_until(client, "ata-status", "ata-status ok", proc)
+    wait_for(" end", proc, start, timeout=10)
+    text = SCHED_LINE.sub("", log_text()[start:])
+    pos = text.find("ata-status ok")
+    values = {}
+    for key in STATUS_KEYS:
+        match = re.compile(r"\b%s (-?\d+)" % key).search(text, pos)
+        if not match:
+            raise RuntimeError("ata-status missing %s" % key)
+        values[key] = int(match.group(1))
+        pos = match.end()
+    return values
+
+
+def last_counters(spec, start):
+    """Like parse_counters, for the last occurrence of the line prefix."""
+    prefix, keys = spec
+    text = SCHED_LINE.sub("", log_text()[start:])
+    pos = text.rfind(prefix)
+    if pos < 0:
+        return None
+    return _counters_at(text, pos + len(prefix), keys)
+
+
+def _counters_at(text, pos, keys):
+    values = []
+    for key in keys:
+        match = re.compile(r"\b%s=(\d+)" % key).search(text, pos)
+        if not match:
+            return None
+        values.append(int(match.group(1)))
+        pos = match.end()
+    return values
+
+
+def vfs_write_read(client, proc, path, payload):
+    start = send_command_until(client, "vfs-write %s %s" % (path, payload), "vfs-write ok", proc)
+    wait_for("vfsvirtual write %s" % path, proc, start, timeout=20)
+    for _ in range(2):
+        send_command_until(client, "yield", "yield ok", proc)
+    for _ in range(6):
+        before = send_command_until(client, "vfs-read %s" % path, "vfs-read", proc)
+        try:
+            wait_for(payload, proc, before, timeout=4)
+            return start
+        except RuntimeError:
+            send_command_until(client, "yield", "yield ok", proc)
+    raise RuntimeError("payload %s not read back from %s" % (payload, path))
+
+
+def start_vfs(client, proc):
+    worker, start = spawn(client, proc, "vfsvirtual")
+    wait_child(client, proc, "vfsvirtual ready", start)
+    server, start = spawn(client, proc, "vfsserver")
+    wait_child(client, proc, "vfsserver ready vfs", start, rounds=12)
+    return worker, server
+
+
 def search_after(spec, start, what, client=None, proc=None, rounds=8):
     """Give the driver bounded cooperative turns to finish its counter line."""
     for _ in range(rounds + 1):
@@ -231,21 +301,31 @@ def search_after(spec, start, what, client=None, proc=None, rounds=8):
 def boot1():
     proc, monitor = boot(LOG_BOOT1)
     try:
-        # 1. No driver: every task has the ATA ports denied by the IOPB and
-        #    cannot claim the controller or touch the kernel job queue.
+        # 0. Default boot: the kernel spawned atadriver, it registered before
+        #    the shell prompt; the snapshot was loaded by the kernel at boot
+        #    (no task yet), so the boot driver does not reload it.
+        wait_for("[ATA] boot atadriver spawned", proc)
+        wait_for("[ATA] boot driver registered; kernel boot load kept", proc)
+        ready = search_after(READY_SPEC, 0, "driver ready counters", monitor, proc)
+        st = ata_status(monitor, proc)
+        if st["driver"] <= 0 or st["driver"] != st["boot"]:
+            raise RuntimeError("boot driver not live: %r" % st)
+        driver_pid = str(st["driver"])
+        send_command_until(monitor, "service-find ata-driver",
+                           "service-find ok ata-driver %s" % driver_pid, proc)
+        # 1. Non-driver task: register, claim/job, sector IPC and raw port
+        #    access are all refused (driver live).
         _, start = spawn(monitor, proc, "atarogue")
         wait_child(monitor, proc, "atarogue register refused", start)
         wait_child(monitor, proc, "atarogue client claim refused", start)
         wait_child(monitor, proc, "atarogue claim and job refused", start)
+        wait_child(monitor, proc, "atarogue sector ipc refused", start, rounds=12)
         wait_child(monitor, proc, GP_FAULT, start)
         assert_no_port_leak(start)
-        send_command_until(monitor, "uptime", "uptime", proc)
-        # 2. Driver live: Ring 3 PIO; empty disk snapshot, so the load job is
-        #    dropped (nothing valid to restore).
-        driver_pid, start = spawn(monitor, proc, "atadriver")
-        wait_child(monitor, proc, "atadriver ring3 pio ready", start)
-        ready = search_after(READY_SPEC, start, "driver ready counters", monitor, proc)
-        wait_child(monitor, proc, "atadriver snapshot load skipped", start, rounds=12)
+        # 2. A second driver instance cannot take the ata-driver service.
+        dup_pid, start = spawn(monitor, proc, "atadriver")
+        wait_child(monitor, proc, "atadriver register failed", start)
+        kill(monitor, proc, dup_pid)
         send_command_until(monitor, "service-find ata-driver",
                            "service-find ok ata-driver %s" % driver_pid, proc)
         # 3. Client sector window + overlay and FAT16 fences.
@@ -254,25 +334,47 @@ def boot1():
         wait_child(monitor, proc, "ataclient overlay region refused", start, rounds=12)
         wait_child(monitor, proc, "ataclient fat region refused", start, rounds=12)
         assert_no_port_leak(start)
-        # 4. Overlay write while the driver is live: the snapshot flush goes
-        #    through the driver; the kernel PIO overlay counter does not move.
+        # 4. Overlay write: the snapshot flush goes through the driver; the
+        #    kernel PIO overlay counter does not move.
         start = send_command_until(monitor, "write t4s2 viadrv", "write ok", proc)
         wait_child(monitor, proc, "atadriver snapshot flush ok", start, rounds=16)
         flush = search_after(FLUSH_SPEC, start, "driver flush counters", monitor, proc)
         if flush[1] < 1 or flush[3] != ready[2]:
             raise RuntimeError("flush not via driver: ready=%r flush=%r" % (ready, flush))
         send_command_until(monitor, "cat t4s2", "viadrv", proc)
-        # 5. Driver live: non-driver refused at register, claim/job, IPC, port.
-        _, start = spawn(monitor, proc, "atarogue")
-        wait_child(monitor, proc, "atarogue register refused", start)
-        wait_child(monitor, proc, "atarogue client claim refused", start)
-        wait_child(monitor, proc, "atarogue claim and job refused", start)
-        wait_child(monitor, proc, "atarogue sector ipc refused", start, rounds=12)
-        wait_child(monitor, proc, GP_FAULT, start)
-        assert_no_port_leak(start)
+        # 5. FAT16 through the driver: the VFS worker's FAT sector I/O is a
+        #    synchronous RPC served by the driver's PIO. Driver counters grow;
+        #    the kernel FAT PIO counter stays where the boot mount left it.
+        vfs_pids = start_vfs(monitor, proc)
+        before = ata_status(monitor, proc)
+        start = vfs_write_read(monitor, proc, "fat16/t4s3.txt", "viadrvfat")
+        wait_child(monitor, proc, "atadriver fat io", start, rounds=8)
+        fatio = last_counters(FATIO_SPEC, start)
+        if fatio is None:
+            raise RuntimeError("missing driver fat io counters")
+        after = ata_status(monitor, proc)
+        if (fatio[0] < 1 or fatio[1] < 1 or fatio[2] != 0 or
+                after["fatrd"] <= before["fatrd"] or after["fatwr"] <= before["fatwr"] or
+                after["fatkpio"] != before["fatkpio"] or after["fatkpiolive"] != 0 or
+                after["aborts"] != 0):
+            raise RuntimeError("FAT not via driver: before=%r after=%r driver=%r" %
+                               (before, after, fatio))
+        # 6. Kill the boot driver (root shell): FAT and overlay writes fall
+        #    back to Ring 0 PIO.
+        kill(monitor, proc, driver_pid)
         send_command_until(monitor, "service-find ata-driver",
-                           "service-find ok ata-driver %s" % driver_pid, proc)
-        return flush
+                           "service-find: service indisponible", proc)
+        vfs_write_read(monitor, proc, "fat16/t4fb.txt", "viakernel")
+        fallback = ata_status(monitor, proc)
+        if fallback["driver"] != 0 or fallback["fatkpio"] <= after["fatkpio"]:
+            raise RuntimeError("FAT fallback not via Ring 0: %r" % fallback)
+        # Plain overlay writes are reserved to vfsvirtual while it is live
+        # (AOS-2178): stop the VFS pair first.
+        for pid in vfs_pids:
+            kill(monitor, proc, pid)
+        send_command_until(monitor, "write t4note ok4", "write ok", proc)
+        send_command_until(monitor, "cat t4note", "ok4", proc)
+        return flush, fatio, before, after, fallback
     finally:
         shutdown(proc, monitor)
 
@@ -280,26 +382,38 @@ def boot1():
 def boot2():
     proc, monitor = boot(LOG_BOOT2)
     try:
-        # 6. Cold reboot: the kernel loads the driver-written snapshot at boot
-        #    (no driver exists yet, so Ring 0 PIO load is the fallback).
+        # 7. Cold reboot: the kernel loads the snapshot at boot (Ring 0, no
+        #    task yet) and the boot driver is live again.
         wait_for("Overlay FS charge depuis le disque IDE", proc)
+        wait_for("[ATA] boot driver registered; kernel boot load kept", proc)
         send_command_until(monitor, "cat t4s2", "viadrv", proc)
-        # 7. New driver: the snapshot is loaded back through its Ring 3 PIO.
+        send_command_until(monitor, "cat t4note", "ok4", proc)
+        st = ata_status(monitor, proc)
+        driver_pid = str(st["driver"])
+        if st["driver"] <= 0:
+            raise RuntimeError("boot driver not live after reboot: %r" % st)
+        # 8. Both FAT files persisted (driver-written and fallback-written),
+        #    read back through the boot driver.
+        send_command_until(monitor, "fat16-cat t4s3.txt", "viadrvfat", proc)
+        send_command_until(monitor, "fat16-cat t4fb.txt", "viakernel", proc)
+        # 9. Respawned driver: loads the snapshot back through its Ring 3 PIO.
+        kill(monitor, proc, driver_pid)
+        send_command_until(monitor, "service-find ata-driver",
+                           "service-find: service indisponible", proc)
         driver_pid, start = spawn(monitor, proc, "atadriver")
         wait_child(monitor, proc, "atadriver snapshot load ok", start, rounds=16)
         load = search_after(LOAD_SPEC, start, "driver load counters", monitor, proc)
         if load[2] < 1:
             raise RuntimeError("load not via driver: %r" % load)
         send_command_until(monitor, "cat t4s2", "viadrv", proc)
-        # 8. Driver gone: kernel Ring 0 overlay path persists files again.
-        kill(monitor, proc, driver_pid)
-        send_command_until(monitor, "service-find ata-driver",
-                           "service-find: service indisponible", proc)
-        send_command_until(monitor, "write t4note ok4", "write ok", proc)
-        send_command_until(monitor, "cat t4note", "ok4", proc)
         return load
     finally:
         shutdown(proc, monitor)
+
+
+def disk_bytes():
+    with open(DISK, "rb") as handle:
+        return handle.read()
 
 
 def main():
@@ -310,16 +424,17 @@ def main():
         except OSError:
             pass
     make_disk()
-    flush = boot1()
-    # The overlay snapshot on disk (LBA 0-63) was written by the driver only.
-    if b"viadrv" not in snapshot_bytes():
-        raise RuntimeError("driver flush did not reach the disk snapshot")
+    flush, fatio, before, after, fallback = boot1()
+    if b"viadrv" not in snapshot_bytes() or b"t4note" not in snapshot_bytes():
+        raise RuntimeError("overlay snapshot missing driver or fallback writes")
+    fat_area = disk_bytes()[64 * 512:]
+    if b"viadrvfat" not in fat_area or b"viakernel" not in fat_area:
+        raise RuntimeError("FAT16 files did not reach the disk")
     load = boot2()
-    # After the driver died, the kernel Ring 0 fallback wrote t4note.
-    if b"t4note" not in snapshot_bytes():
-        raise RuntimeError("kernel fallback flush did not reach the disk snapshot")
-    print("ata-driver flush gen=%d flushes=%d kpio=%d; reboot load loads=%d" %
-          (flush[0], flush[1], flush[3], load[2]))
+    print("ata-driver flush gen=%d flushes=%d kpio=%d; fat via driver rd=%d wr=%d kfat=%d "
+          "kernel fatkpio %d->%d; fallback fatkpio %d; reboot load loads=%d" %
+          (flush[0], flush[1], flush[3], fatio[0], fatio[1], fatio[2],
+           before["fatkpio"], after["fatkpio"], fallback["fatkpio"], load[2]))
     print("MOHHDY Tranche 4 Ring 3 ATA driver contract passed")
     return 0
 

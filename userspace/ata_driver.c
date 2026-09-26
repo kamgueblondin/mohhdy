@@ -1,4 +1,4 @@
-/* Tranche 4 - Ring 3 ATA PIO driver (slices 1 and 2).
+/* Tranche 4 - Ring 3 ATA PIO driver (slices 1, 2 and 3).
  *
  * Registers "ata-driver". While it holds the controller claim
  * (SYS_ATA_CLAIM), the kernel opens ports 0x1F0-0x1F7 and 0x3F6 in the TSS I/O
@@ -6,6 +6,8 @@
  * is refused meanwhile. Two request sources:
  *  - kernel jobs (slice 2): the overlay snapshot (LBA 0-63) is written or
  *    loaded here, 8 sectors per chunk copied by SYS_ATA_JOB_FETCH/DONE;
+ *  - kernel FAT sector jobs (slice 3): FAT16 (master) / FAT32 (slave) sector
+ *    reads and writes of a task blocked in its syscall, served first;
  *  - "ata-client" IPC (slice 1): 64-byte sector windows, with client writes
  *    fenced off the overlay snapshot and the FAT areas.
  */
@@ -48,6 +50,8 @@ static inline void outw(uint16_t p, uint16_t v) { asm volatile("outw %0, %1" : :
 
 static uint8_t sector[512];
 static uint8_t job_buf[OS_ATA_JOB_MAX_SECTORS * 512U];
+/* Slice 3 driver-side counters of FAT sectors moved by this task's PIO. */
+static uint32_t fat_rd, fat_wr, fat_reported_rd, fat_reported_wr;
 
 static void delay(void) { (void)inb(ATA_ALT); (void)inb(ATA_ALT); (void)inb(ATA_ALT); (void)inb(ATA_ALT); }
 
@@ -104,6 +108,21 @@ static void print_counters(void) {
     puts(" kpio="); putu(st.kernel_overlay_writes);
 }
 
+/* Slice 3: one line per burst of FAT jobs, printed once the queue is idle.
+ * rd/wr are this driver's own counters; kfat is the kernel count of FAT
+ * sectors moved by Ring 0 PIO while a driver was live (expected 0). */
+static void report_fat_io(void) {
+    os_ata_status_t st;
+    if (fat_rd == fat_reported_rd && fat_wr == fat_reported_wr) return;
+    fat_reported_rd = fat_rd;
+    fat_reported_wr = fat_wr;
+    if (sc1(SYS_ATA_STATUS, (uint32_t)&st) != 0) return;
+    puts("atadriver fat io rd="); putu(fat_rd);
+    puts(" wr="); putu(fat_wr);
+    puts(" kfat="); putu(st.fat_kernel_pio_live);
+    puts("\n");
+}
+
 /* One kernel job chunk. Returns 1 if a chunk was served. */
 static int serve_job(void) {
     os_ata_job_t job;
@@ -113,12 +132,16 @@ static int serve_job(void) {
     if (sc2(SYS_ATA_JOB_FETCH, (uint32_t)&job, (uint32_t)job_buf) != 1) return 0;
     claim();
     for (s = 0; s < job.count && rc == 0; s++) {
-        if (job.op == OS_ATA_JOB_WRITE) rc = pio_write(0, job.lba + s, job_buf + s * 512U);
-        else rc = pio_read(0, job.lba + s, job_buf + s * 512U);
+        uint8_t drive = job.drive ? 1U : 0U;
+        if (job.op == OS_ATA_JOB_WRITE || job.op == OS_ATA_JOB_IO_WRITE)
+            rc = pio_write(drive, job.lba + s, job_buf + s * 512U);
+        else rc = pio_read(drive, job.lba + s, job_buf + s * 512U);
     }
     release();
     res = sc3(SYS_ATA_JOB_DONE, (uint32_t)&job, (uint32_t)rc, (uint32_t)job_buf);
-    if (res == OS_ATA_JOB_FLUSH_DONE) {
+    if (res == OS_ATA_JOB_IO_DONE) {
+        if (job.op == OS_ATA_JOB_IO_WRITE) fat_wr += job.count; else fat_rd += job.count;
+    } else if (res == OS_ATA_JOB_FLUSH_DONE) {
         puts("atadriver snapshot flush ok gen="); putu(job.generation); print_counters(); puts("\n");
     } else if (res == OS_ATA_JOB_LOAD_DONE) {
         puts("atadriver snapshot load ok gen="); putu(job.generation); print_counters(); puts("\n");
@@ -153,6 +176,7 @@ void main(void) {
         uint32_t lba, off, len;
         uint8_t drive;
         while (serve_job() && served < 8) served++;
+        if (served < 8) report_fat_io();
         if (sc1(SYS_IPC_RECV, (uint32_t)&m) != 0) { yield(); continue; }
         if (m.type != OS_IPC_ATA_READ && m.type != OS_IPC_ATA_WRITE) continue;
         for (i = 0; i < sizeof(r); i++) ((uint8_t*)&r)[i] = 0;
