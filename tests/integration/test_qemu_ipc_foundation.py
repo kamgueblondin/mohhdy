@@ -7,6 +7,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from test_qemu_vfs_service import normalized_log  # noqa: E402
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 LOG_DIR = os.path.join(ROOT, "test_logs")
 LOG = os.path.join(LOG_DIR, "ipc-foundation.log")
@@ -99,7 +102,10 @@ def main():
             wait_for("(-.-)", proc)
             monitor = connect_monitor()
             before_spawn = send_command_until(monitor, "spawn ipcserver", "spawn ok pid", proc)
-            spawned = re.search(r"spawn ok pid (\d+) ipcserver", log_text()[before_spawn:])
+            # IRQ0 may print "[SCHED] switching to task N" inside the line
+            # (CI flake "PID du serveur IPC absent"): match on the normalized log.
+            spawned = re.search(r"spawn ok pid[\s\S]*?(\d+) ipcserver",
+                                normalized_log(log_text()[before_spawn:]))
             if not spawned:
                 raise RuntimeError("PID du serveur IPC absent")
             server_pid = spawned.group(1)
