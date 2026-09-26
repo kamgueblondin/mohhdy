@@ -47,5 +47,8 @@ int overlay_snapshot(uint8_t* buf, uint32_t max, uint32_t* out_size);
 int overlay_restore(const uint8_t* buf, uint32_t n);
 int overlay_load_disk(void);
 int overlay_save_disk(void);
+/* Tranche 4 slice 2: redirect() != 0 means the snapshot was queued for the
+ * Ring 3 driver; kernel_written() is called after a Ring 0 PIO snapshot write. */
+void overlay_set_disk_hooks(int (*redirect)(void), void (*kernel_written)(void));
 
 #endif

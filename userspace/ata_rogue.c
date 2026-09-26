@@ -23,6 +23,20 @@ void main(void) {
     rc = sc1(SYS_SERVICE_REGISTER, (uint32_t)OS_ATA_IPC_CLIENT_SERVICE);
     if (rc == OS_ATA_DRIVER_REQUIRED) puts("atarogue client claim refused\n");
     else puts("atarogue client claim unexpected\n");
+    /* Slice 2: controller claim and kernel job queue are driver-only too. */
+    {
+        os_ata_job_t job;
+        static uint8_t buf[OS_ATA_JOB_MAX_SECTORS * 512U];
+        int c, f, d;
+        c = sc1(SYS_ATA_CLAIM, 0);
+        f = sc2(SYS_ATA_JOB_FETCH, (uint32_t)&job, (uint32_t)buf);
+        job.op = OS_ATA_JOB_WRITE; job.drive = 0; job.lba = 0; job.count = 8; job.generation = 1;
+        d = sc2(SYS_ATA_JOB_DONE, (uint32_t)&job, 0);
+        if (c == OS_ATA_DRIVER_REQUIRED && f == OS_ATA_DRIVER_REQUIRED && d == OS_ATA_DRIVER_REQUIRED)
+            puts("atarogue claim and job refused\n");
+        else
+            puts("atarogue claim or job unexpected\n");
+    }
     driver = sc1(SYS_SERVICE_LOOKUP, (uint32_t)"ata-driver");
     if (driver > 0) {
         for (i = 0; i < sizeof(p); i++) ((uint8_t*)&p)[i] = 0;

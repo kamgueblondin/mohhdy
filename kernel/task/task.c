@@ -8,6 +8,7 @@
 #include "kernel/mem/heap.h"
 #include "fs/initrd.h"
 #include "kernel/gdt.h"
+#include "kernel/ata_job.h"
 #include "service_registry.h"
 #include "kernel/timer.h"
 
@@ -315,9 +316,11 @@ void schedule(cpu_state_t* cpu) {
         tss_set_stack(0x10, current_task->kernel_stack_p);
     }
     /* Tranche 4: only the live ata-driver owner keeps the ATA ports open at
-     * Ring 3; every other task runs with them denied (a stray IN/OUT faults). */
+     * Ring 3, and (slice 2) only while it holds the controller claim; every
+     * other task runs with them denied (a stray IN/OUT faults). */
     tss_set_ata_io(current_task->type == TASK_TYPE_USER &&
-                   service_registry_ata_ports_granted(current_task->id));
+                   service_registry_ata_ports_granted(current_task->id) &&
+                   ata_owner_ports_open(current_task->id, current_task->id));
 
     // Changer de répertoire de pages si nécessaire
     if (current_directory != current_task->vmm_dir) {

@@ -269,6 +269,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_io_bitmap: $(UNIT_DIR)/kernel/test_io_bitma
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/io_bitmap.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_ata_job: $(UNIT_DIR)/kernel/test_ata_job.c ../kernel/ata_job.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/ata_job.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled kernel test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_%: $(UNIT_DIR)/kernel/test_%.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< $(FRAMEWORK_SOURCES)
