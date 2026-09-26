@@ -270,7 +270,24 @@
 #define SYS_NET_RELAY_REPLY 137
 /* Public read-only: EBX = os_net_relay_status_t*. */
 #define SYS_NET_RELAY_STATUS 138
-#define MAX_SYSCALLS 139
+/* Tranche 5 slice 3 (wire TCP through the worker). 139-142 are reserved to
+ * the live net-driver worker PID (OS_NET_WORKER_REQUIRED otherwise); they
+ * drive real NE2000 frames for a socket of the Ring 0 registry. */
+/* EBX = os_net_wire_connect_t* : ARP-resolve, emit SYN, complete handshake. */
+#define SYS_NET_WIRE_CONNECT 139
+/* EBX = os_net_wire_io_t* : build a data segment, emit it, poll until the
+ * peer ACKs it (payload that arrives meanwhile is queued in the socket). */
+#define SYS_NET_WIRE_SEND 140
+/* EBX = os_net_wire_io_t* : poll frames, demux to the bound socket, ACK. */
+#define SYS_NET_WIRE_RECV 141
+/* EBX = socket id : emit FIN and drop the wire binding. */
+#define SYS_NET_WIRE_CLOSE 142
+/* Public read-only: EBX = os_net_wire_status_t*. */
+#define SYS_NET_WIRE_STATUS 143
+/* EBX = os_socket_connect_request_t* : open + wire-connect in one relayed
+ * call (public, gated and relayed like the other socket syscalls). */
+#define SYS_SOCKET_CONNECT 144
+#define MAX_SYSCALLS 145
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
@@ -401,6 +418,13 @@ typedef struct {
 /* Tranche 5 slice 2: net-driver died after taking the request; outcome is
  * unknown, the kernel does not replay it. */
 #define OS_NET_RELAY_ABORTED (-88)
+/* Tranche 5 slice 3: the wire handshake / echo did not complete in time. */
+#define OS_NET_WIRE_TIMEOUT (-126)
+/* Tranche 5 slice 3: no NE2000 present, so no wire path. */
+#define OS_NET_WIRE_UNAVAILABLE (-127)
+/* Tranche 5 slice 3: socket is not wire-bound; the worker falls back to the
+ * in-registry (segment codec) path of slice 2. */
+#define OS_NET_WIRE_NOT_BOUND (-119)
 
 /* Requête POD sans pointeur : hostname, ports et budgets uniquement. */
 #define OS_LLM_HOSTNAME_MAX 96U
@@ -1086,5 +1110,53 @@ typedef struct {
     uint32_t pending;     /* 1 while a request is in flight */
     int32_t worker_pid;   /* live net-driver PID, 0 if none */
 } os_net_relay_status_t;
+
+/* Tranche 5 slice 3: worker-only NE2000 wire path for the socket registry.
+ * The worker is the only task allowed to call SYS_NET_WIRE_* (-59 otherwise);
+ * the NE2000 driver, IRQ handler and TCP stack stay in Ring 0. */
+#define OS_NET_WIRE_MAX_IO 256U
+typedef struct {
+    uint16_t local_port;
+    uint16_t remote_port;
+    uint8_t local_ip[4];
+    uint8_t remote_ip[4];   /* on-link peer: QEMU user-net host or a guest */
+    uint32_t local_sequence;
+    uint16_t attempts;      /* bounded poll rounds for ARP / SYN-ACK */
+} os_net_wire_connect_t;
+typedef struct {
+    int32_t socket_id;
+    const uint8_t* data;    /* SEND: payload to emit */
+    uint16_t length;        /* SEND: payload length */
+    uint8_t* rx;            /* RECV: received bytes; SEND: copy of the emitted
+                             * TCP segment (keeps the SYS_SOCKET_SEND contract) */
+    uint16_t rx_capacity;
+    uint16_t* rx_length;
+    uint16_t attempts;      /* bounded poll rounds for the reply */
+} os_net_wire_io_t;
+typedef struct {
+    uint32_t connects;      /* wire connects completed */
+    uint32_t frames_tx;     /* Ethernet frames emitted on the worker path */
+    uint32_t frames_rx;     /* Ethernet frames consumed on the worker path */
+    uint32_t arp_tx;        /* ARP requests emitted while resolving a peer */
+    uint32_t sends;         /* SYS_NET_WIRE_SEND that emitted a data segment */
+    uint32_t recvs;         /* SYS_NET_WIRE_RECV that returned payload */
+    uint32_t closes;        /* FINs emitted */
+    uint32_t refused;       /* non-worker attempts to touch the wire (-59) */
+    uint32_t demuxed;       /* rx TCP frames matched to a wire-bound socket */
+    uint32_t dropped;       /* rx frames not addressed to a bound socket */
+    uint32_t arp_replies;   /* ARP replies sent for a bound local IP */
+    uint32_t peer_fins;     /* FINs received from wire peers */
+    uint32_t bound;         /* wire-bound sockets currently tracked */
+    int32_t worker_pid;     /* live net-driver PID, 0 if none */
+} os_net_wire_status_t;
+/* Relayed public connect: same fields as the wire connect. */
+typedef struct {
+    uint16_t local_port;
+    uint16_t remote_port;
+    uint8_t local_ip[4];
+    uint8_t remote_ip[4];
+    uint32_t local_sequence;
+    uint16_t attempts;
+} os_socket_connect_request_t;
 
 #endif

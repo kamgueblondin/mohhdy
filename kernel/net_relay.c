@@ -29,7 +29,8 @@ void net_relay_init(void) {
 }
 
 int net_relay_supported(uint32_t syscall_number) {
-    return syscall_number >= SYS_SOCKET_OPEN && syscall_number <= SYS_SOCKET_ACCEPT_ACK;
+    return (syscall_number >= SYS_SOCKET_OPEN && syscall_number <= SYS_SOCKET_ACCEPT_ACK) ||
+           syscall_number == SYS_SOCKET_CONNECT;
 }
 
 uint32_t net_relay_state_for(int32_t pid) {

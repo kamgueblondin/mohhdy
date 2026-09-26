@@ -2657,7 +2657,7 @@ static void cmd_cat(shell_context_t* ctx, char args[][128], int arg_count) {
 
 static int is_builtin(const char* cmd) {
     static const char* names[] = {
-        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
+        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "net-status",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
@@ -4124,6 +4124,30 @@ static void cmd_net_relay_status(shell_context_t* ctx, char args[][128], int arg
     print_string(" end\n");
 }
 
+/* Tranche 5 slice 3: kernel counters of the worker-only NE2000 wire path. */
+static void cmd_net_wire_status(shell_context_t* ctx, char args[][128], int arg_count) {
+    os_net_wire_status_t st;
+    int rc;
+    (void)ctx; (void)args;
+    if (arg_count != 0) { print_error("Usage: net-wire-status"); return; }
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_NET_WIRE_STATUS), "b"((uint32_t)&st) : "memory");
+    if (rc != 0) { print_error("net-wire-status: indisponible"); return; }
+    print_string("net-wire ok worker "); print_int(st.worker_pid);
+    print_string(" connects "); print_uint(st.connects);
+    print_string(" tx "); print_uint(st.frames_tx);
+    print_string(" rx "); print_uint(st.frames_rx);
+    print_string(" arp "); print_uint(st.arp_tx);
+    print_string(" sends "); print_uint(st.sends);
+    print_string(" recvs "); print_uint(st.recvs);
+    print_string(" closes "); print_uint(st.closes);
+    print_string(" demuxed "); print_uint(st.demuxed);
+    print_string(" dropped "); print_uint(st.dropped);
+    print_string(" fins "); print_uint(st.peer_fins);
+    print_string(" refused "); print_uint(st.refused);
+    print_string(" bound "); print_uint(st.bound);
+    print_string(" end\n");
+}
+
 static void cmd_uptime(shell_context_t* ctx, char args[][128], int arg_count) {
     unsigned int ticks = sys_ticks();
     int sec = (int)(ticks / 100);
@@ -5543,6 +5567,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "net-relay-status") == 0) {
         cmd_net_relay_status(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "net-wire-status") == 0) {
+        cmd_net_wire_status(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "uptime") == 0) {
         cmd_uptime(ctx, args, arg_count);

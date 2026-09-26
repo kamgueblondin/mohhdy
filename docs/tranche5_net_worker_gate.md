@@ -1,4 +1,4 @@
-# Tranche 5 - net-driver worker gate (slice 1) and net IPC relay (slice 2)
+# Tranche 5 - net-driver worker gate (slice 1), net IPC relay (slice 2), wire TCP via the worker (slice 3)
 
 Status: guest QEMU prototype increment. The NE2000 driver, the TCP/socket
 registry, the LLM network session and the peer (guest-guest) path all stay
@@ -198,7 +198,161 @@ integration-qemu-rest).
   wire to the QEMU user-net host or to a second guest. Wire TCP for
   relayed callers would need a kernel "emit segment / poll segment" pair
   on NE2000 (ARP, IPv4 framing, RX demux) reserved to the worker: not
-  done.
+  done in slice 2; slice 3 below adds it for an active open.
 - One request in flight; one relayed call per cooperative turn of the
   caller (the shell hands out turns with `yield` in the QEMU proof).
 - Inputs are capped at 72 bytes per call (IPC payload), outputs at 256.
+
+## Slice 3 - wire TCP through the worker
+
+### What changed
+
+Relayed socket calls from a non-worker task now produce real Ethernet
+frames on the NE2000, and only the worker can make that happen.
+
+New syscalls (`include/os_syscalls.h`, `MAX_SYSCALLS` 139 -> 145):
+
+| # | Name | Who | What |
+|---|---|---|---|
+| 139 | `SYS_NET_WIRE_CONNECT` | live `net-driver` PID only | open a registry socket, bind it to the wire (local/remote IP and port), ARP-resolve the on-link peer, emit SYN, consume SYN-ACK, emit ACK |
+| 140 | `SYS_NET_WIRE_SEND` | worker only | build a data segment from the registry socket, wrap it in IPv4/Ethernet, emit it, poll until the peer ACKs it |
+| 141 | `SYS_NET_WIRE_RECV` | worker only | poll frames, demux them to the bound socket, ACK received data, return the bytes |
+| 142 | `SYS_NET_WIRE_CLOSE` | worker only | emit FIN, consume the peer FIN, ACK it, close and unbind |
+| 143 | `SYS_NET_WIRE_STATUS` | public, read-only | counters (below) |
+| 144 | `SYS_SOCKET_CONNECT` | public, gated and relayed | "connect" for applications: relayed to the worker, which runs `SYS_NET_WIRE_CONNECT` |
+
+139-142 are refused with `OS_NET_WORKER_REQUIRED` (-59) for every other
+task, **including in degraded mode** (no worker registered): nobody but the
+worker drives raw frames from a syscall. `SYS_SOCKET_CONNECT` without a
+worker is refused too (there is no local fallback for the wire path).
+Each refusal is counted in `refused`.
+
+Flow for a plain task (the `netwire` proof client):
+
+1. `SYS_SOCKET_CONNECT {10.32.0.15:40007 -> 10.32.0.2:7}` is intercepted
+   by the slice 2 relay (144 was added to the relayed set, 16-byte input)
+   and forwarded to the worker over IPC.
+2. The worker (`userspace/net_worker.c`) calls `SYS_NET_WIRE_CONNECT`.
+   The kernel (`kernel/net_wire.c`, called from `kernel/kernel.c` with the
+   boot NE2000 and dedicated frame buffers) opens a registry socket, binds
+   it, sends an ARP request, feeds the ARP reply to the cache, sends the
+   SYN through `ne2k_tcp_segment()` (IPv4 + Ethernet framing), accepts the
+   SYN-ACK and sends the ACK. The socket id goes back to the caller.
+3. The caller's `SYS_SOCKET_SEND`, `SYS_SOCKET_RECEIVE`, `SYS_SOCKET_CLOSE`
+   are relayed as before. For a wire-bound socket the worker uses
+   `SYS_NET_WIRE_SEND` / `RECV` / `CLOSE`; for any other socket the kernel
+   answers `OS_NET_WIRE_NOT_BOUND` (-119) and the worker keeps the slice 2
+   segment-codec path (so `netrelay` is unchanged). `SYS_SOCKET_SEND` still
+   returns the emitted TCP segment to the caller (same contract).
+4. Receive demux: every polled frame is classified by
+   `net_wire_demux()`. A TCP frame is fed to a socket only if its IPv4
+   destination/source and TCP destination/source ports match that
+   socket's binding (a 4-tuple can be bound once). ARP requests/replies
+   for a bound local IP are answered/learned. Everything else (other
+   hosts, other ports, UDP, IPv4 fragments) is counted `dropped` and never
+   reaches a socket.
+
+Counters (`SYS_NET_WIRE_STATUS`, shell `net-wire-status`): `connects`,
+`frames_tx`, `frames_rx` (frames emitted/consumed on the worker path),
+`arp_tx`, `sends`, `recvs`, `closes`, `demuxed`, `dropped`,
+`arp_replies`, `peer_fins`, `refused`, `bound`, `worker_pid`. The worker
+log line gains `wire <n>` (wire calls it made).
+
+New error codes: `OS_NET_WIRE_TIMEOUT` (-126), `OS_NET_WIRE_UNAVAILABLE`
+(-127, no NE2000), `OS_NET_WIRE_NOT_BOUND` (-119), taken from gaps no other
+`OS_*` code uses (the unit test asserts they differ from their neighbours).
+
+### Proofs
+
+Unit (`make test-kernel`, `tests/unit/kernel/test_net_wire.c`): bind rules
+(one owner per 4-tuple, bad ids/zero IP/zero port refused), demux (match,
+Ethernet padding ignored, wrong port/peer/destination, truncated, fragment,
+UDP, unbound -> drop), ARP demux only for a bound local IP, status and
+`refused` counters, unbound ops answer NOT_BOUND, connect without a device
+answers UNAVAILABLE, relay ABI (connect request fits the 72-byte relay
+input, 144 relayed, 139-143 never relayed).
+
+QEMU (`make qemu-net-wire`, `tests/integration/test_qemu_net_wire.py`).
+The NE2000 is connected with `-netdev socket,connect=127.0.0.1:<port>` to
+`tests/scripts/qemu_wire_echo_peer.py`, a local process that owns
+10.32.0.2, answers ARP and runs a TCP echo on port 7. No user-net, no
+public internet. The peer verifies the IPv4 and TCP checksums of every
+guest frame. About 60 s locally:
+
+```text
+net-wire ok worker 0 connects 0 tx 0 rx 0 ... refused 0 bound 0   boot
+netwire raw wire refused 4 of 4                  degraded, direct 139-142
+netwire connect worker-required                  degraded, relayed connect
+net-wire ok worker 0 ... tx 0 ... refused 5      no frame without worker
+net-driver relay op 144 rc 0 reply 0 total 1 wire 1
+netwire connect ok socket 0
+net-driver relay op 101 rc 0 reply 0 total 2 wire 2
+netwire send ok segment 36
+net-driver relay op 103 rc 0 reply 0 total 3 wire 3
+net-driver relay op 104 rc 0 reply 0 total 4 wire 4
+netwire echo ok bytes 16 relayed 4 frames tx 7 rx 4 demuxed 3 refused 4 bound 0
+net-wire ok worker 3 connects 1 tx 7 rx 4 arp 1 sends 1 recvs 1 closes 1
+  demuxed 3 dropped 0 fins 1 refused 9 bound 0
+host: wire tcp: guest->peer frames 7, peer->guest frames 4 (kernel rx 4),
+  arp 1, relayed calls 4, echo 16 bytes, raw wire refused 9,
+  peer checksum errors 0
+```
+
+The 7 guest frames are ARP request, SYN, ACK, data, ACK of the echo, FIN,
+ACK of the peer FIN; the 4 peer frames are ARP reply, SYN-ACK, echo
+(PSH+ACK), FIN+ACK. The test requires the kernel `tx` counter to equal the
+frames the peer received, the peer to have seen exactly one SYN, one data
+segment carrying `mohhdy-wire-echo`, one FIN and zero checksum errors, and
+no frame at all before the worker exists. It runs in CI in the `OS-UI
+guest C` job (the shortest job) so the wall time does not grow.
+
+### What runs where (read before claiming anything)
+
+| Piece | Ring |
+|---|---|
+| `netwire` application, socket calls | Ring 3 |
+| `networker` (`net-driver`): decides and issues every wire operation, relays results | Ring 3 |
+| Relay (IPC request/reply, user copies) | Ring 0 kernel code, one request at a time |
+| `net_wire.c`: bindings, demux, ARP, poll loops | Ring 0, entered only from the worker's syscalls |
+| NE2000 driver (`ne2k.c`: port I/O, TX/RX ring DMA), IRQ handler | Ring 0 |
+| TCP state machine and socket registry (`net_tcp.c`, `net_socket.c`), TLS, LLM session, peer path | Ring 0 |
+
+So the worker owns the **right** to put frames on the wire, not the NIC.
+This is not "driver out of the kernel" and not "microkernel done".
+
+### Limits
+
+- Active open only, to an on-link peer given by IP (no DHCP/DNS/gateway
+  on this path; the proof uses static 10.32.0.15 -> 10.32.0.2). No listen
+  or accept on the wire path (the peer/TLS server path stays separate and
+  still -59 for non-workers).
+- Polling, bounded per call (default 200 rounds, max 2000, one timer tick
+  per idle round); SYN is re-sent every 100 idle rounds; data segments
+  are not retransmitted (no RTO on this path yet): a lost data segment
+  gives `OS_NET_WIRE_TIMEOUT`. Payload per call <= 72 bytes in (relay
+  input) and 256 out.
+- The wire path and the LLM/peer paths share the NIC and the ARP cache;
+  they are not meant to run at the same time (a frame for the other path
+  polled by one of them is dropped).
+- The relay timeout (-87) still applies: a wire call must finish within
+  5 s / 3 caller turns.
+
+### Next step: NE2000 port I/O in Ring 3 (not done)
+
+The ATA driver already runs its port I/O from Ring 3 through the TSS I/O
+permission bitmap (`kernel/io_bitmap.c`, granted to `atadriver` on task
+switch). The equivalent for the NIC is not a small change, which is why it
+is not in this PR:
+
+1. Grant ports 0x300-0x31F in the IOPB to the `net-driver` PID only, and
+   stop every kernel path (LLM, peer, wire, the IRQ handler that acks the
+   ISR) from touching them while the worker holds the grant.
+2. Build `ne2k.c` (probe, rings, remote DMA TX/RX) into the worker, with
+   the kernel forwarding the NE2000 IRQ as an IPC notification.
+3. Move ARP/IPv4 framing and the demux of `net_wire.c` into the worker, so
+   the kernel keeps only the relay and the socket registry, then decide
+   whether the TCP state machine follows.
+
+Step 1 alone (grant without moving the driver) would only add a second
+writer to the same ports, so it is deliberately not done as a "slice".
+

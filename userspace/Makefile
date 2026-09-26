@@ -16,6 +16,7 @@ PROGRAMS += atadriver ataclient atarogue
 PROGRAMS += netclaim
 # Tranche 5 slice 2: net IPC relay proof client.
 PROGRAMS += netrelay
+PROGRAMS += netwire
 
 all: $(PROGRAMS)
 
@@ -74,6 +75,10 @@ netclaim: net_claim.o start.o
 
 netrelay: net_relay_client.o start.o
 	@echo "Linking netrelay..."
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
+netwire: net_wire_client.o start.o
+	@echo "Linking netwire..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 vfsflight: vfs_flight_client.o start.o
