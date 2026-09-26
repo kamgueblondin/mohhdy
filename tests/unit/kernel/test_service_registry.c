@@ -476,6 +476,48 @@ static void test_ata_overlay_io_only_via_worker_when_live(void) {
     TEST_ASSERT_TRUE(service_registry_ata_overlay_io_via_worker(3));
 }
 
+static void test_historical_readfile_writefile_gate_when_worker_live(void) {
+    /* AOS-2177: historical SYS_READFILE keeps the full overlay+initrd path in
+     * degraded mode and for the worker; otherwise overlay hits need the worker
+     * and initrd-only reads stay open. SYS_WRITEFILE uses the shared gate. */
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", 3));
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_DENIED, service_registry_historical_read_decision(0, 0));
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_FULL, service_registry_historical_read_decision(7, 1));
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_FULL, service_registry_historical_read_decision(7, 0));
+    TEST_ASSERT_TRUE(service_registry_ata_overlay_io_via_worker(7));
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs-virtual", 11));
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_FULL, service_registry_historical_read_decision(11, 1));
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_WORKER_REQUIRED, service_registry_historical_read_decision(7, 1));
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_WORKER_REQUIRED, service_registry_historical_read_decision(3, 1));
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_INITRD_ONLY, service_registry_historical_read_decision(7, 0));
+    TEST_ASSERT_FALSE(service_registry_ata_overlay_io_via_worker(7));
+    TEST_ASSERT_EQUAL(0, service_registry_remove("vfs-virtual", 11));
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_FULL, service_registry_historical_read_decision(7, 1));
+    TEST_ASSERT_TRUE(service_registry_ata_overlay_io_via_worker(7));
+}
+
+static void test_historical_overlay_entry_points_gate_when_worker_live(void) {
+    /* AOS-2178: SYS_STAT/SYS_LISTDIR reuse the historical read split (overlay
+     * hit or overlay-only dir needs the worker, initrd stays open); SYS_MKDIR,
+     * SYS_UNLINK, SYS_RENAME, SYS_COPY, SYS_APPEND use the shared worker gate. */
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", 3));
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs-virtual", 11));
+    /* stat of an overlay file / list of an overlay-only directory. */
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_WORKER_REQUIRED, service_registry_historical_read_decision(5, 1));
+    /* stat of an initrd file / list of an initrd directory. */
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_INITRD_ONLY, service_registry_historical_read_decision(5, 0));
+    /* mutations. */
+    TEST_ASSERT_FALSE(service_registry_ata_overlay_io_via_worker(5));
+    TEST_ASSERT_FALSE(service_registry_ata_overlay_io_via_worker(3));
+    TEST_ASSERT_TRUE(service_registry_ata_overlay_io_via_worker(11));
+    /* worker disappears: degraded historical path reopens for everyone. */
+    service_registry_remove_pid(11);
+    TEST_ASSERT_EQUAL(SERVICE_HIST_READ_FULL, service_registry_historical_read_decision(5, 1));
+    TEST_ASSERT_TRUE(service_registry_ata_overlay_io_via_worker(5));
+}
+
 static void test_notify_ack_and_history_persistence(void) {
     uint32_t seq1 = 0U, seq2 = 0U;
     uint32_t acked = 0U, unacked = 0U;
@@ -563,6 +605,8 @@ int main(void) {
     RUN_TEST(test_owner_initrd_overlay_bypass_closes_when_storage_worker_live);
     RUN_TEST(test_owner_ata_generic_bypass_closes_when_storage_worker_live);
     RUN_TEST(test_ata_overlay_io_only_via_worker_when_live);
+    RUN_TEST(test_historical_readfile_writefile_gate_when_worker_live);
+    RUN_TEST(test_historical_overlay_entry_points_gate_when_worker_live);
     RUN_TEST(test_notify_ack_and_history_persistence);
     /* Tranche 4 Ring 3 ATA driver. */
     RUN_TEST(test_ata_driver_name_and_port_grant);

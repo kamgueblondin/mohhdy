@@ -24,6 +24,12 @@ int sys_spawn(const char* path, char* argv[]);
 
 int sys_listdir(const char* path, os_dirent_t* out, int max_n);
 int sys_readfile(const char* path, char* buf, uint32_t max);
+/* AOS-2177: historical SYS_READFILE/SYS_WRITEFILE with worker gate. */
+int sys_readfile_historical(const char* path, char* buf, uint32_t max);
+int sys_writefile_historical(const char* path, const char* buf, uint32_t n);
+/* AOS-2178: historical SYS_LISTDIR/SYS_STAT with worker gate on overlay part. */
+int sys_listdir_historical(const char* path, os_dirent_t* out, int max_n);
+int sys_stat_historical(const char* path, os_dirent_t* out);
 int sys_getpid(void);
 int sys_ps(os_proc_t* out, int max_n);
 int sys_kill(int pid);

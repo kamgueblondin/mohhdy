@@ -93,6 +93,13 @@ void syscall_kill_current_on_user_fault(cpu_state_t* cpu) {
 // GESTIONNAIRE D'APPELS SYSTÈME
 // ==============================================================================
 
+/* AOS-2178: historical overlay mutations (SYS_MKDIR, SYS_UNLINK, SYS_RENAME,
+ * SYS_COPY, SYS_APPEND) only for the live vfs-virtual PID; degraded mode
+ * without the worker keeps local exercise. */
+static int historical_overlay_mutation_allowed(void) {
+    return current_task && service_registry_ata_overlay_io_via_worker(current_task->id);
+}
+
 void syscall_handler(cpu_state_t* cpu) {
     // Réactive les interruptions pour permettre au clavier de fonctionner
     asm volatile("sti");
@@ -190,10 +197,12 @@ void syscall_handler(cpu_state_t* cpu) {
             }
             break;
         case SYS_LISTDIR:
-            cpu->eax = (uint32_t)sys_listdir((const char*)cpu->ebx, (os_dirent_t*)cpu->ecx, (int)cpu->edx);
+            /* AOS-2178: overlay part worker-mediated when vfs-virtual is live. */
+            cpu->eax = (uint32_t)sys_listdir_historical((const char*)cpu->ebx, (os_dirent_t*)cpu->ecx, (int)cpu->edx);
             break;
         case SYS_READFILE:
-            cpu->eax = (uint32_t)sys_readfile((const char*)cpu->ebx, (char*)cpu->ecx, cpu->edx);
+            /* AOS-2177: overlay part worker-mediated when vfs-virtual is live. */
+            cpu->eax = (uint32_t)sys_readfile_historical((const char*)cpu->ebx, (char*)cpu->ecx, cpu->edx);
             break;
         case SYS_GETPID:
             cpu->eax = (uint32_t)sys_getpid();
@@ -430,25 +439,38 @@ void syscall_handler(cpu_state_t* cpu) {
             cpu->eax = (uint32_t)kernel_llm_configure_openai((const os_llm_openai_credential_request_t*)cpu->ebx);
             break;
         case SYS_MKDIR:
-            cpu->eax = (uint32_t)sys_mkdir((const char*)cpu->ebx);
+            /* AOS-2178: historical overlay mutations need the live worker. */
+            cpu->eax = historical_overlay_mutation_allowed()
+                ? (uint32_t)sys_mkdir((const char*)cpu->ebx)
+                : (uint32_t)OS_VFS_BACKEND_WORKER_REQUIRED;
             break;
         case SYS_UNLINK:
-            cpu->eax = (uint32_t)sys_unlink((const char*)cpu->ebx);
+            cpu->eax = historical_overlay_mutation_allowed()
+                ? (uint32_t)sys_unlink((const char*)cpu->ebx)
+                : (uint32_t)OS_VFS_BACKEND_WORKER_REQUIRED;
             break;
         case SYS_WRITEFILE:
-            cpu->eax = (uint32_t)sys_writefile((const char*)cpu->ebx, (const char*)cpu->ecx, cpu->edx);
+            /* AOS-2177: ATA-backed overlay write only via live storage worker. */
+            cpu->eax = (uint32_t)sys_writefile_historical((const char*)cpu->ebx, (const char*)cpu->ecx, cpu->edx);
             break;
         case SYS_STAT:
-            cpu->eax = (uint32_t)sys_stat((const char*)cpu->ebx, (os_dirent_t*)cpu->ecx);
+            /* AOS-2178: overlay stat worker-mediated, initrd stat stays open. */
+            cpu->eax = (uint32_t)sys_stat_historical((const char*)cpu->ebx, (os_dirent_t*)cpu->ecx);
             break;
         case SYS_RENAME:
-            cpu->eax = (uint32_t)sys_rename((const char*)cpu->ebx, (const char*)cpu->ecx);
+            cpu->eax = historical_overlay_mutation_allowed()
+                ? (uint32_t)sys_rename((const char*)cpu->ebx, (const char*)cpu->ecx)
+                : (uint32_t)OS_VFS_BACKEND_WORKER_REQUIRED;
             break;
         case SYS_COPY:
-            cpu->eax = (uint32_t)sys_copy((const char*)cpu->ebx, (const char*)cpu->ecx);
+            cpu->eax = historical_overlay_mutation_allowed()
+                ? (uint32_t)sys_copy((const char*)cpu->ebx, (const char*)cpu->ecx)
+                : (uint32_t)OS_VFS_BACKEND_WORKER_REQUIRED;
             break;
         case SYS_APPEND:
-            cpu->eax = (uint32_t)sys_append((const char*)cpu->ebx, (const char*)cpu->ecx, cpu->edx);
+            cpu->eax = historical_overlay_mutation_allowed()
+                ? (uint32_t)sys_append((const char*)cpu->ebx, (const char*)cpu->ecx, cpu->edx)
+                : (uint32_t)OS_VFS_BACKEND_WORKER_REQUIRED;
             break;
         case SYS_GPT2_GENERATE:
             cpu->eax = (uint32_t)sys_gpt2_generate((const char*)cpu->ebx, (char*)cpu->ecx, cpu->edx);
@@ -1083,8 +1105,9 @@ int sys_vfs_backend_write(const char* path, const char* data, uint32_t size) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2177: mutate grant ok, ATA overlay mutation needs the live worker. */
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
-        return OS_VFS_BACKEND_DENIED;
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     return sys_writefile(path, data, size);
 }
@@ -1334,8 +1357,9 @@ int sys_vfs_overlay_unlink(const char* path) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2177: mutate grant ok, ATA overlay mutation needs the live worker. */
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
-        return OS_VFS_BACKEND_DENIED;
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!path) return -1;
     return overlay_unlink(path);
@@ -1348,8 +1372,9 @@ int sys_vfs_overlay_rename(const char* oldpath, const char* newpath) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, newpath)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2177: mutate grant ok, ATA overlay mutation needs the live worker. */
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
-        return OS_VFS_BACKEND_DENIED;
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!oldpath || !newpath) return -1;
     return overlay_rename(oldpath, newpath);
@@ -1391,6 +1416,10 @@ int sys_vfs_overlay_listdir(const char* path, os_dirent_t* out, int max_n) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2178: ATA-backed overlay list only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
+    }
     if (!path || !out || max_n <= 0 || !overlay_is_dir(path)) return -1;
     return overlay_listdir(path, out, 0, max_n);
 }
@@ -1409,6 +1438,10 @@ int sys_vfs_overlay_listdir_page(const char* path, os_dirent_t* out, uint32_t st
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2178: ATA-backed overlay list only via live storage worker. */
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
+    }
     if (!path || !out || !overlay_is_dir(path)) return -1;
     return overlay_listdir_page(path, out, start, 5);
 }
@@ -1418,8 +1451,9 @@ int sys_vfs_overlay_mkdir(const char* path) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2177: mutate grant ok, ATA overlay mutation needs the live worker. */
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
-        return OS_VFS_BACKEND_DENIED;
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!path) return -1;
     return overlay_mkdir(path);
@@ -1430,8 +1464,9 @@ int sys_vfs_overlay_rmdir(const char* path) {
                                              OS_SERVICE_BACKEND_SOURCE_OVERLAY, path)) {
         return OS_VFS_BACKEND_DENIED;
     }
+    /* AOS-2177: mutate grant ok, ATA overlay mutation needs the live worker. */
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
-        return OS_VFS_BACKEND_DENIED;
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!path || !overlay_is_dir(path)) return -1;
     return overlay_unlink(path);
@@ -1738,6 +1773,75 @@ int sys_readfile(const char* path, char* buf, uint32_t max) {
     if (n >= 0) return n;
     if (n == OV_ERR_ISDIR) return n;
     return initrd_read_into(path, buf, max);
+}
+
+/* AOS-2177: historical ABI entry points. sys_readfile / sys_writefile stay
+ * ungated helpers because granted backend paths (SYS_VFS_BACKEND_WRITE and
+ * friends) already passed their own AOS-2175/2176 worker gate. */
+int sys_readfile_historical(const char* path, char* buf, uint32_t max) {
+    os_dirent_t probe;
+    int overlay_hit;
+    int32_t pid = current_task ? (int32_t)current_task->id : 0;
+    if (!path || !buf || max == 0) return -1;
+    overlay_hit = overlay_stat(path, &probe) == OV_OK;
+    switch (service_registry_historical_read_decision(pid, overlay_hit)) {
+    case SERVICE_HIST_READ_FULL:
+        return sys_readfile(path, buf, max);
+    case SERVICE_HIST_READ_INITRD_ONLY:
+        return initrd_read_into(path, buf, max);
+    case SERVICE_HIST_READ_WORKER_REQUIRED:
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
+    default:
+        return -1;
+    }
+}
+
+/* AOS-2178: historical SYS_LISTDIR. Initrd (RAM) listing stays open for
+ * non-worker callers while vfs-virtual is live; overlay entries are hidden
+ * and an overlay-only directory needs the worker. */
+int sys_listdir_historical(const char* path, os_dirent_t* out, int max_n) {
+    int overlay_hit;
+    int n;
+    int32_t pid = current_task ? (int32_t)current_task->id : 0;
+    if (!path || !out || max_n <= 0) return -1;
+    overlay_hit = !initrd_is_dir(path) && overlay_is_dir(path);
+    switch (service_registry_historical_read_decision(pid, overlay_hit)) {
+    case SERVICE_HIST_READ_FULL:
+        return sys_listdir(path, out, max_n);
+    case SERVICE_HIST_READ_INITRD_ONLY:
+        if (!initrd_is_dir(path)) return -1;
+        n = initrd_listdir(path, out, max_n);
+        return n < 0 ? 0 : n;
+    case SERVICE_HIST_READ_WORKER_REQUIRED:
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
+    default:
+        return -1;
+    }
+}
+
+/* AOS-2178: historical SYS_STAT, same split as SYS_READFILE. */
+int sys_stat_historical(const char* path, os_dirent_t* out) {
+    os_dirent_t probe;
+    int overlay_hit;
+    int32_t pid = current_task ? (int32_t)current_task->id : 0;
+    if (!path || !out) return -1;
+    overlay_hit = overlay_stat(path, &probe) == OV_OK;
+    switch (service_registry_historical_read_decision(pid, overlay_hit)) {
+    case SERVICE_HIST_READ_FULL:
+        return sys_stat(path, out);
+    case SERVICE_HIST_READ_INITRD_ONLY:
+        return initrd_stat(path, out);
+    case SERVICE_HIST_READ_WORKER_REQUIRED:
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
+    default:
+        return -1;
+    }
+}
+
+int sys_writefile_historical(const char* path, const char* buf, uint32_t n) {
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
+    return sys_writefile(path, buf, n);
 }
 
 int sys_mkdir(const char* path) {

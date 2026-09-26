@@ -80,6 +80,12 @@ int service_registry_ata_overlay_io_via_worker(int32_t pid);
 /* Tranche 4: ata-driver name policy and Ring 3 ATA port (IOPB) grant. */
 int service_registry_ata_driver_name_allowed(const char* service_name, const char* task_name);
 int service_registry_ata_ports_granted(int32_t pid);
+/* AOS-2177: historical SYS_READFILE decision (overlay_hit = path exists in overlay). */
+#define SERVICE_HIST_READ_DENIED          0
+#define SERVICE_HIST_READ_FULL            1
+#define SERVICE_HIST_READ_INITRD_ONLY     2
+#define SERVICE_HIST_READ_WORKER_REQUIRED 3
+int service_registry_historical_read_decision(int32_t pid, int overlay_hit);
 /* Network driver isolation: raw network and socket I/O exercisable by live net-driver worker. */
 int service_registry_net_io_via_worker(int32_t pid);
 void service_registry_backend_remove_name(const char* name);

@@ -16,6 +16,7 @@ userspace/vfscapclaim
 userspace/vfsreleaseclaim
 userspace/vfsreadclaim
 userspace/vfsmutateclaim
+userspace/vfshistclaim
 userspace/waitchild
 userspace/ok
 userspace/*.o
