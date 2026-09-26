@@ -44,8 +44,22 @@ typedef struct {
     uint16_t iomap_base;
 } __attribute__((packed)) tss_entry_t;
 
+/* Tranche 4: full TSS with an I/O permission bitmap so a granted Ring 3 task
+ * can execute ATA PIO (ports 0x1F0-0x1F7, 0x3F6) directly. iomap_base points
+ * at io_bitmap; a trailing 0xFF byte terminates the map per the x86 rules. */
+#define TSS_IO_BITMAP_BYTES 8192U
+
+typedef struct {
+    tss_entry_t tss;
+    uint8_t io_bitmap[TSS_IO_BITMAP_BYTES];
+    uint8_t io_bitmap_end; /* must stay 0xFF */
+} __attribute__((packed)) tss_full_t;
+
 void gdt_init();
 void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran);
 void tss_set_stack(uint32_t ss, uint32_t esp);
+/* Load (grant=1) or clear (grant=0) the ATA port range in the live TSS IOPB.
+ * Idempotent; only rewrites the map when the state changes. */
+void tss_set_ata_io(int grant);
 
 #endif

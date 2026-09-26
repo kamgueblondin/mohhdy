@@ -1,5 +1,6 @@
 #include "gdt.h"
 #include "kernel/mem/string.h" // For memset
+#include "io_bitmap.h"
 
 // GDT pointer and entries
 typedef struct {
@@ -9,7 +10,9 @@ typedef struct {
 
 gdt_entry_t gdt_entries[6];
 gdt_ptr_t   gdt_ptr;
-tss_entry_t tss_entry;
+tss_full_t tss_full;
+#define tss_entry (tss_full.tss)
+static int g_tss_ata_granted = -1;
 
 // External assembly functions
 extern void gdt_flush(uint32_t);
@@ -40,16 +43,22 @@ void gdt_init() {
     gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF); // User Data Segment
 
     // Create TSS entry
-    uint32_t tss_base = (uint32_t)&tss_entry;
-    uint32_t tss_limit = sizeof(tss_entry);
+    uint32_t tss_base = (uint32_t)&tss_full;
+    uint32_t tss_limit = sizeof(tss_full) - 1U;
     gdt_set_gate(5, tss_base, tss_limit, 0x89, 0x00); // 0x89 = Present, DPL=0, TSS
 
-    // Initialize TSS
-    memset(&tss_entry, 0, sizeof(tss_entry));
+    // Initialize TSS + I/O bitmap (deny every port by default).
+    memset(&tss_full, 0, sizeof(tss_full));
     tss_entry.ss0  = 0x10;  // Kernel data segment selector
     tss_entry.esp0 = 0x0;   // Will be set by the scheduler
     tss_entry.cs   = 0x0b;
     tss_entry.ss = tss_entry.ds = tss_entry.es = tss_entry.fs = tss_entry.gs = 0x13;
+    /* iomap_base is measured from the TSS base; place the bitmap right after
+     * the 104-byte hardware TSS. */
+    tss_entry.iomap_base = (uint16_t)((uint32_t)&tss_full.io_bitmap - (uint32_t)&tss_full);
+    io_bitmap_deny_all(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES);
+    tss_full.io_bitmap_end = 0xFFU;
+    g_tss_ata_granted = 0;
 
     // Flush GDT and TSS
     gdt_flush((uint32_t)&gdt_ptr);
@@ -60,4 +69,14 @@ void gdt_init() {
 void tss_set_stack(uint32_t ss, uint32_t esp) {
     tss_entry.ss0 = ss;
     tss_entry.esp0 = esp;
+}
+
+/* Tranche 4: rewrite the ATA range in the live TSS IOPB only on transitions.
+ * The scheduler calls this with the incoming task's grant flag, so exactly one
+ * task (the ata-driver holder) ever sees the ATA ports opened at Ring 3. */
+void tss_set_ata_io(int grant) {
+    grant = grant ? 1 : 0;
+    if (g_tss_ata_granted == grant) return;
+    io_bitmap_apply_ata(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
+    g_tss_ata_granted = grant;
 }

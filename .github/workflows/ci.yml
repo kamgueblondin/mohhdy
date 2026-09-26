@@ -135,6 +135,11 @@ jobs:
       - name: QEMU OS-UI GUI smoke (hors integration-qemu)
         run: make qemu-osui-gui
 
+      # Tranche 4 : pilote ATA Ring 3 (IOPB TSS + IPC), job parallele,
+      # n'allonge pas integration-qemu (~80 s).
+      - name: QEMU Tranche 4 Ring 3 ATA driver (hors integration-qemu)
+        run: make qemu-ata-driver
+
       - name: Upload OS-UI logs
         if: always()
         uses: actions/upload-artifact@v4

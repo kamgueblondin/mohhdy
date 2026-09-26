@@ -503,6 +503,36 @@ static void test_notify_ack_and_history_persistence(void) {
     TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_ack(4, 9999U));
 }
 
+static void test_ata_driver_name_and_port_grant(void) {
+    /* Tranche 4: only the atadriver binary may hold "ata-driver", and only
+     * that live owner gets the ATA ports opened in the TSS IOPB. */
+    service_registry_init();
+    TEST_ASSERT_TRUE(service_registry_ata_driver_name_allowed("ata-driver", "atadriver"));
+    TEST_ASSERT_FALSE(service_registry_ata_driver_name_allowed("ata-driver", "atarogue"));
+    TEST_ASSERT_FALSE(service_registry_ata_driver_name_allowed("ata-driver", "shell"));
+    TEST_ASSERT_FALSE(service_registry_ata_driver_name_allowed("ata-driver", "atadriverx"));
+    TEST_ASSERT_FALSE(service_registry_ata_driver_name_allowed("ata-driver", 0));
+    TEST_ASSERT_TRUE(service_registry_ata_driver_name_allowed("vfs", "shell"));
+    TEST_ASSERT_TRUE(service_registry_ata_driver_name_allowed("ata-client", "ataclient"));
+    TEST_ASSERT_FALSE(service_registry_ata_driver_name_allowed("ata-client", "atarogue"));
+    TEST_ASSERT_FALSE(service_registry_ata_driver_name_allowed("ata-client", 0));
+    /* No driver: nobody gets the ports. */
+    TEST_ASSERT_FALSE(service_registry_ata_ports_granted(4));
+    TEST_ASSERT_FALSE(service_registry_ata_ports_granted(0));
+    TEST_ASSERT_EQUAL(0, service_registry_register("ata-driver", 4));
+    TEST_ASSERT_TRUE(service_registry_ata_ports_granted(4));
+    TEST_ASSERT_FALSE(service_registry_ata_ports_granted(5));
+    /* A vfs-virtual worker gets no port capability. */
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs-virtual", 6));
+    TEST_ASSERT_FALSE(service_registry_ata_ports_granted(6));
+    /* Driver gone: grant disappears. */
+    service_registry_remove_pid(4);
+    TEST_ASSERT_FALSE(service_registry_ata_ports_granted(4));
+    TEST_ASSERT_EQUAL(-58, OS_ATA_DRIVER_REQUIRED);
+    TEST_ASSERT_TRUE(OS_ATA_DRIVER_REQUIRED != OS_VFS_BACKEND_DENIED);
+    TEST_ASSERT_TRUE(OS_ATA_DRIVER_REQUIRED != OS_TASK_NOT_CHILD);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_registry_rejects_invalid_names);
@@ -534,6 +564,8 @@ int main(void) {
     RUN_TEST(test_owner_ata_generic_bypass_closes_when_storage_worker_live);
     RUN_TEST(test_ata_overlay_io_only_via_worker_when_live);
     RUN_TEST(test_notify_ack_and_history_persistence);
+    /* Tranche 4 Ring 3 ATA driver. */
+    RUN_TEST(test_ata_driver_name_and_port_grant);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

@@ -384,6 +384,28 @@ int service_registry_ata_overlay_io_via_worker(int32_t pid) {
     return pid == worker;
 }
 
+/* Tranche 4: the "ata-driver" name carries the Ring 3 ATA port capability
+ * (TSS IOPB). Only a task whose binary name is "atadriver" may publish or
+ * receive it, and only "ataclient" may hold "ata-client" (the sole sector IPC
+ * peer accepted by the driver). Any other service name is unaffected. */
+int service_registry_ata_driver_name_allowed(const char* service_name, const char* task_name) {
+    if (name_equal(service_name, "ata-driver"))
+        return task_name && name_equal(task_name, "atadriver");
+    /* The sector IPC client identity is pinned to the ataclient binary too,
+     * so an arbitrary task cannot claim it to reach the driver. */
+    if (name_equal(service_name, "ata-client"))
+        return task_name && name_equal(task_name, "ataclient");
+    return 1;
+}
+
+/* Tranche 4: TSS IOPB decision for the task being scheduled. */
+int service_registry_ata_ports_granted(int32_t pid) {
+    int32_t owner;
+    if (pid <= 0) return 0;
+    owner = service_registry_lookup("ata-driver");
+    return owner > 0 && owner == pid;
+}
+
 /* Isolation du sous-système réseau NE2000 : avec net-driver présent, l'accès
  * aux primitives réseau est restreint au seul PID du pilote Ring 3 enregistré. */
 int service_registry_net_io_via_worker(int32_t pid) {
