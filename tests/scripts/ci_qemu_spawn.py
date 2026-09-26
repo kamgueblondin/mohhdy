@@ -169,7 +169,11 @@ def main():
                                "task-name ok %s sleeper" % idle_pid, proc)
 
             say("typing task-capacity (one child) ...")
-            send_command_until(monitor, "task-capacity", "task-capacity ok 3 16 13", proc)
+            # Active tasks: kernel + shell + boot atadriver (Tranche 4 slice 3,
+            # spawned at boot only when an IDE disk is present) + the child.
+            boot_tasks = 2 + (1 if "[ATA] boot atadriver spawned" in log_text() else 0)
+            send_command_until(monitor, "task-capacity", "task-capacity ok %d 16 %d" %
+                               (boot_tasks + 1, 16 - boot_tasks - 1), proc)
 
             say("typing children (one child) ...")
             children_start = send_command_until(monitor, "children", "children ok 1", proc)
@@ -207,7 +211,7 @@ def main():
             send_command_until(monitor, "child-exit-count", "child-exit-count ok 1", proc)
 
             say("typing task-capacity (after grouped termination) ...")
-            send_command_until(monitor, "task-capacity", "task-capacity ok 2 16 14", proc)
+            send_command_until(monitor, "task-capacity", "task-capacity ok %d 16 %d" % (boot_tasks, 16 - boot_tasks), proc)
 
             say("typing ps (after grouped termination) ...")
             start = send_command_until(monitor, "ps", "Total:", proc)

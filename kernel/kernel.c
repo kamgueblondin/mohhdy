@@ -989,24 +989,37 @@ int kernel_llm_poll_tls(void) {
 #define FAT16_ATA_READ_WINDOW_SECTORS 16U
 static uint8_t fat16_ata_read_window[FAT16_ATA_READ_WINDOW_SECTORS * 512U];
 
+/* Tranche 4 slice 3: FAT16/FAT32 sector I/O goes through the Ring 3
+ * atadriver when it is live (synchronous sector RPC from the calling
+ * syscall, see syscall_ata_fat_io); Ring 0 PIO only at boot (mount, before
+ * any task) or as the fallback when the driver is absent or dead. */
+static int fat_disk_io(uint8_t drive, uint32_t lba, uint32_t count, void* buffer, int write) {
+    int rc;
+    if (syscall_ata_fat_io(drive, lba, count, buffer, write, &rc)) return rc;
+    rc = write ? ata_write_sectors_drive(drive, lba, count, buffer)
+               : ata_read_sectors_drive(drive, lba, count, buffer);
+    if (rc == 0) syscall_ata_note_fat_kernel_pio(count);
+    return rc;
+}
+
 static int fat16_ata_read_sector(uint32_t lba, void* buffer) {
-    return ata_read_sectors(lba, 1U, buffer);
+    return fat_disk_io(ATA_DRIVE_MASTER, lba, 1U, buffer, 0);
 }
 
 static int fat16_ata_read_sectors(uint32_t lba, uint32_t count, void* buffer) {
-    return ata_read_sectors(lba, count, buffer);
+    return fat_disk_io(ATA_DRIVE_MASTER, lba, count, buffer, 0);
 }
 
 static int fat16_ata_write_sector(uint32_t lba, const void* buffer) {
-    return ata_write_sectors(lba, 1U, buffer);
+    return fat_disk_io(ATA_DRIVE_MASTER, lba, 1U, (void*)buffer, 1);
 }
 
 static int fat32_ata_slave_read_sector(uint32_t lba, void* buffer) {
-    return ata_read_sectors_drive(ATA_DRIVE_SLAVE, lba, 1U, buffer);
+    return fat_disk_io(ATA_DRIVE_SLAVE, lba, 1U, buffer, 0);
 }
 
 static int fat32_ata_slave_write_sector(uint32_t lba, const void* buffer) {
-    return ata_write_sectors_drive(ATA_DRIVE_SLAVE, lba, 1U, buffer);
+    return fat_disk_io(ATA_DRIVE_SLAVE, lba, 1U, (void*)buffer, 1);
 }
 
 void serial_init() {
@@ -1632,6 +1645,28 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
         while(1) asm volatile("hlt");
     }
     
+    task_set_root_shell(shell_task->id);
+
+    /* Tranche 4 slice 3: the Ring 3 atadriver is spawned at boot when an IDE
+     * disk is present, so FAT and overlay disk I/O take the driver path by
+     * default; Ring 0 PIO stays the fallback when it is absent or dead. It is
+     * created after the shell (the shell keeps PID 1) but runs first so it
+     * registers before the shell reaches its input loop. It has no user
+     * parent; only the root shell may stop it (kill). The overlay snapshot
+     * was already loaded above by Ring 0 PIO (no task could run yet); the
+     * boot driver does not reload it (see sys_service_register). */
+    if (ata_present()) {
+        task_t* ata_driver_task = create_task_from_initrd_file("bin/atadriver");
+        if (ata_driver_task) {
+            ata_driver_task->boot_service = 1U;
+            task_queue_move_first_user(ata_driver_task);
+            syscall_ata_set_boot_driver(ata_driver_task->id);
+            print_string_serial("[ATA] boot atadriver spawned\n");
+        } else {
+            print_string_serial("[ATA] boot atadriver unavailable; Ring 0 PIO path\n");
+        }
+    }
+
     print_string("Tache shell prete. Demarrage du timer...\n");
     timer_init(100);
 
