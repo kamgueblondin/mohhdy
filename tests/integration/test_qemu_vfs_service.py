@@ -687,7 +687,8 @@ def main():
             send_command_until(monitor, "vfs-backend-grant-mutate %s" % mutate_claim_pid,
                                "vfsserver backend scoped grant request", proc)
             wait_for("vfs-backend-grant-mutate ok request", proc, before_mutate_grant)
-            wait_for("vfsmutateclaim mutate-only enforced", proc, before_mutate_grant)
+            # Worker live: mutate grant alone no longer authorizes local overlay I/O.
+            wait_for("vfsmutateclaim mutate-only worker-mediated", proc, before_mutate_grant)
             before_mutate_status = len(log_text())
             send_command_until(monitor, "vfs-backend-status %s" % mutate_claim_pid,
                                "vfsserver backend status request", proc)
@@ -1214,6 +1215,23 @@ def main():
             wait_for("vfsvirtual storage read overlay/note.txt", proc, before_written_read)
             wait_for("vfsvirtual ata-backed read overlay/note.txt", proc, before_written_read)
             wait_for("vfsok", proc, before_written_read)
+            # AOS-2177: historical SYS_READFILE/SYS_WRITEFILE on the ATA-backed
+            # overlay require the live worker PID; initrd reads stay open.
+            before_hist_claim = len(log_text())
+            send_command_until(monitor, "spawn vfshistclaim", "spawn ok pid", proc)
+            hist_claimed = re.search(r"spawn ok pid[\s\S]*?(\d+) vfshistclaim",
+                                     normalized_log(log_text()[before_hist_claim:]))
+            if not hist_claimed:
+                raise RuntimeError("preuve historique READFILE/WRITEFILE non lancee")
+            hist_claim_pid = hist_claimed.group(1)
+            wait_for_cooperative_client(monitor, proc, "vfshistclaim waiting historical",
+                                        before_hist_claim)
+            wait_for_cooperative_client(monitor, proc,
+                                        "vfshistclaim historical worker-mediated initrd ok",
+                                        before_hist_claim)
+            send_command_until(monitor, "kill %s" % hist_claim_pid,
+                               "Processus %s termine" % hist_claim_pid, proc)
+            send_command_until(monitor, "service-find vfs", "service-find ok vfs %s" % server_pid, proc)
             before_rename = len(log_text())
             send_command_until(monitor, "vfs-rename overlay/note.txt overlay/moved.txt",
                                "vfs-rename ok request", proc)
