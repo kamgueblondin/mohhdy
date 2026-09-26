@@ -49,6 +49,8 @@ Le contrat de contrôle IA vérifie désormais le catalogue réellement déclar�
 
 > La validation locale la plus récente conserve les sept contrats et termine en **760,9 s** (12 min 41 s) en séquentiel ; la stabilité reste à confirmer par la CI de cette branche avant fusion. Les attentes d'injection ne retirent aucune assertion : la ligne VFS est réconciliée intégralement avant `ret`, et une ligne réseau n'est jamais rejouée après son entrée.
 
+> CI GitHub (PR #70) : les sept contrats sont repartis en deux jobs paralleles (vfs-service seul ; les six autres plus le smoke multi-pairs), sans `needs` sur le job de build. Duree murale mesuree : 25 min 00 s (main, run 36249178581) et 26 min 00 s (#69, run 36255587009) avant ; 10 min 24 s apres (run 36262363929 : build+tests+qemu-smoke 10 min 20 s, vfs-service 9 min 04 s, six autres + multi-pairs 6 min 38 s, OS-UI + ATA 6 min 26 s). `make integration-qemu` execute toujours les sept contrats d'un coup.
+
 ## Fonctions livrées
 
 ### GGUF et kernels de quantification

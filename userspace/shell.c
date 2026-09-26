@@ -2657,7 +2657,7 @@ static void cmd_cat(shell_context_t* ctx, char args[][128], int arg_count) {
 
 static int is_builtin(const char* cmd) {
     static const char* names[] = {
-        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
+        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "net-status",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
@@ -4074,6 +4074,17 @@ static void cmd_getpid(shell_context_t* ctx, char args[][128], int arg_count) {
 }
 
 /* Tranche 4 slice 3: kernel view of the ATA driver path (SYS_ATA_STATUS). */
+/* Tranche 4 test hook: arm a one-shot driver crash in its next FAT write
+ * job (root shell only, SYS_ATA_DEBUG). */
+static void cmd_ata_debug_crash(shell_context_t* ctx, char args[][128], int arg_count) {
+    int rc;
+    (void)ctx; (void)args;
+    if (arg_count != 0) { print_error("Usage: ata-debug-crash"); return; }
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_ATA_DEBUG), "b"(OS_ATA_DEBUG_CRASH_FAT_WRITE) : "memory");
+    if (rc != 0) { print_error("ata-debug-crash: refuse"); return; }
+    print_string("ata-debug-crash ok armed\n");
+}
+
 static void cmd_ata_status(shell_context_t* ctx, char args[][128], int arg_count) {
     os_ata_status_t st;
     int rc;
@@ -4090,6 +4101,7 @@ static void cmd_ata_status(shell_context_t* ctx, char args[][128], int arg_count
     print_string(" aborts "); print_uint(st.fat_rpc_aborts);
     print_string(" flushes "); print_uint(st.flush_done);
     print_string(" kpio "); print_uint(st.kernel_overlay_writes);
+    print_string(" resets "); print_uint(st.channel_resets);
     print_string(" end\n");
 }
 
@@ -5503,6 +5515,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "getpid") == 0) {
         cmd_getpid(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "ata-debug-crash") == 0) {
+        cmd_ata_debug_crash(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "ata-status") == 0) {
         cmd_ata_status(ctx, args, arg_count);

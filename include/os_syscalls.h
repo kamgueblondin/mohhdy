@@ -260,7 +260,12 @@
 #define SYS_ATA_JOB_DONE 134
 /* EBX = os_ata_status_t* : counters and client write fences. */
 #define SYS_ATA_STATUS 135
-#define MAX_SYSCALLS 136
+/* Tranche 4 test hook (root shell only): EBX = OS_ATA_DEBUG_CRASH_FAT_WRITE
+ * arms a one-shot crash of the driver in the middle of its next FAT write
+ * job, to prove the Ring 0 fallback after a driver death mid-transfer. */
+#define SYS_ATA_DEBUG 136
+#define MAX_SYSCALLS 137
+#define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
 #define OS_VGA_ROWS 25
@@ -962,7 +967,10 @@ typedef struct {
     uint32_t lba;
     uint32_t count;
     uint32_t generation;
+    uint32_t flags;            /* OS_ATA_JOB_FLAG_* */
 } os_ata_job_t;
+/* Test hook: the driver must crash in the middle of this job. */
+#define OS_ATA_JOB_FLAG_DEBUG_CRASH 1U
 
 typedef struct {
     int32_t driver_pid;        /* live ata-driver owner or 0 */
@@ -984,6 +992,8 @@ typedef struct {
     uint32_t fat_kernel_pio_live;      /* ... of which while a driver was live (expected 0) */
     uint32_t fat_rpc_aborts;           /* sector RPCs aborted (driver died or stalled) */
     int32_t boot_driver_pid;           /* atadriver spawned by the kernel at boot, 0 if none */
+    uint32_t channel_resets;           /* ATA soft resets after a driver died holding the controller */
+    uint32_t debug_crash_armed;        /* test hook pending (SYS_ATA_DEBUG) */
 } os_ata_status_t;
 #define OS_TASK_SUPERVISION_EVENT_SIZE 24U
 

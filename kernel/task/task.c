@@ -184,6 +184,7 @@ void (*task_sched_hook)(uint32_t now) = NULL;
 static int g_root_shell_pid = 0;
 
 void task_set_root_shell(int pid) { g_root_shell_pid = pid; }
+int task_root_shell_pid(void) { return g_root_shell_pid; }
 
 void task_queue_move_first_user(task_t* task) {
     task_t* head = task_queue;

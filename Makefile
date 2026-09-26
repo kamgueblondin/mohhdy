@@ -708,6 +708,17 @@ qemu-osui-gui-fit: $(OS_IMAGE) pack-initrd disk
 integration-qemu: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/run_qemu_contracts.py
 
+# CI shards (two parallel jobs). The union is exactly integration-qemu:
+# vfs-service alone (longest, ~8.5 min), every other contract in -rest.
+# A new contract lands in -rest automatically (SKIP-based selection).
+QEMU_VFS_SHARD := vfs-service
+.PHONY: integration-qemu-vfs integration-qemu-rest
+integration-qemu-vfs: $(OS_IMAGE) pack-initrd disk
+	@QEMU_INTEGRATION_ONLY=$(QEMU_VFS_SHARD) python3 tests/integration/run_qemu_contracts.py
+
+integration-qemu-rest: $(OS_IMAGE) pack-initrd disk
+	@QEMU_INTEGRATION_SKIP=$(QEMU_VFS_SHARD) python3 tests/integration/run_qemu_contracts.py
+
 # Affiche la liste exacte des contrats et leur ordre sans demarrer QEMU.
 qemu-integration-plan: $(OS_IMAGE) pack-initrd disk
 	@QEMU_INTEGRATION_DRY_RUN=1 python3 tests/integration/run_qemu_contracts.py
@@ -769,6 +780,7 @@ help:
 	@echo "  test-all        - Suite complète de tests (< 5 min)"
 	@echo "  qemu-smoke      - Boots QEMU : overlay, extras, persist, spawn, exec"
 	@echo "  integration-qemu - Sept contrats QEMU sequentiels par defaut (QEMU_INTEGRATION_JOBS=N pour diagnostic)"
+	@echo "  integration-qemu-vfs / integration-qemu-rest - Les deux shards CI (union = integration-qemu)"
 	@echo "  qemu-integration-plan - Affiche les sept contrats sans demarrer QEMU"
 	@echo "  qemu-irq0-preemption - Prouve la reprise du shell après spawn spin"
 	@echo "  qemu-ai-provider - Vérifie le stub OpenAI/réseau explicite"

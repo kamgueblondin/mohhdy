@@ -11,6 +11,7 @@ int ata_init(void);
 /* Tranche 4 slice 2: kernel PIO refused (OS_ATA_CONTROLLER_BUSY) when gate() == 0. */
 void ata_set_kernel_gate(int (*gate)(void));
 int ata_present(void);
+int ata_channel_reset(void);
 int ata_present_drive(uint8_t drive);
 int ata_read_sectors(uint32_t lba, uint32_t count, void* buf);
 int ata_read_sectors_drive(uint8_t drive, uint32_t lba, uint32_t count, void* buf);
