@@ -78,6 +78,7 @@ make run
 | `make qemu-ne2k-guest-tls-peer` | Suite : B `ai-peer-listen` + SYN-ACK guest, hub sans proxy (hors `make ci`) |
 | `make qemu-ne2k-guest-tls-chat` | Suite : ACK final + ClientHello TLS 1.2 peer, ESTABLISHED (hors `make ci`) |
 | `make qemu-ne2k-guest-tls-server` | Suite : role serveur TLS B jusqu a Finished (hors `make ci`) |
+| `make qemu-net-worker` | Tranche 5 : avec `net-driver` enregistre, syscalls NE2000/socket/peer/LLM reseau refuses (-59) hors PID worker, `net-status` reste lisible ; mode degrade inchange (pilote NE2000 toujours Ring 0) |
 | `make qemu-ipc-foundation` | Lance `ipcserver`, envoie un message et vérifie sa réception |
 | `make qemu-vfs-service` | Lance `vfsvirtual` puis `vfsserver`, vérifie l'autorité Ring 3 corrélée des alias add/remove et I/O (`read`, `stat`, liste, pages et observation), la révocation complète de la capacité mono-source après chaque transaction, la purge du miroir après remplacement worker, l'échec `INVALID` sans rejeu d'une lecture d'alias expirée, deux volumes IDE FAT16/FAT32, les capacités et refus, les mutations overlay et les cycles FAT racine/LFN ainsi que `mkdir`, écriture, `stat`, liste, renommage, refus `rmdir` non vide, suppression et `rmdir` d'un sous-répertoire 8.3 ; un renommage tenté vers son voisin hors préfixe est refusé par le backend avant mutation, sans divulguer la borne interne |
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
@@ -206,6 +207,7 @@ Les items ASSIST (sessions, admin, simulateur, FS sandbox) sont des **devoirs du
 - [x] Étendre le VFS aux sous-répertoires FAT à un niveau, sous un contrat de non-écrasement et de non-rejeu des mutations incertaines
 - [x] Externaliser les I/O des alias VFS au worker Ring 3, avec droit-source-préfixe temporaire, corrélation stricte, diagnostic de scope non divulguant et absence de rejeu après issue incertaine
 - [~] Latence GGUF plateforme de référence (KVM) : harness Multiboot `make gguf-kvm-benchmark` + seuils documentés ([docs/aos_gguf_kvm_latency_harness.md](docs/aos_gguf_kvm_latency_harness.md)) ; campagne chiffrée et optimisation runtime encore ouvertes tant qu'un hôte avec `/dev/kvm` utilisable et poids déployés n'a pas produit le JSON KVM
+- [~] Tranche 5 isolation reseau : avec `networker` (`net-driver`) enregistre, les syscalls LLM reseau (91-98), socket (99-108) et peer (128-130) sont reserves a son PID (`OS_NET_WORKER_REQUIRED` -59) ; pas de relais IPC, pilote NE2000 et piles TCP/TLS encore Ring 0 ([docs/tranche5_net_worker_gate.md](docs/tranche5_net_worker_gate.md))
 - [x] Bootstrap DHCP/OFFER/REQUEST/ACK, ARP, DNS A, SYN/SYN-ACK, ClientHello, ServerHello minimal et ACK LLM observé sur NE2000 QEMU avec pair Ethernet local contrôlé
 - [x] Handshake TLS 1.2 authentifie local et POST HTTP 200 JSON sur pair QEMU (`make qemu-ne2k-tls-http`) ; pas d'hote public ni d'OpenAI
 - [x] Flux SSE chunked Ollama sur le meme pair TLS local (`make qemu-ne2k-tls-sse`) ; deltas incrementaux puis `[DONE]`, sans hote public ni OpenAI

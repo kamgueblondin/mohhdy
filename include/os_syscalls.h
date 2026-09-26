@@ -367,6 +367,10 @@ typedef struct {
 #define OS_SOCKET_NOT_CONNECTED (-123)
 #define OS_SOCKET_BUFFER_SMALL (-124)
 #define OS_SOCKET_PROTOCOL (-125)
+/* Tranche 5: NE2000 / socket / LLM-network / peer syscall from a task that is
+ * not the live net-driver worker PID while that worker is registered. -60 is
+ * kept free for OS_VFS_BACKEND_WORKER_REQUIRED (AOS-2177, PR #62). */
+#define OS_NET_WORKER_REQUIRED (-59)
 
 /* Requête POD sans pointeur : hostname, ports et budgets uniquement. */
 #define OS_LLM_HOSTNAME_MAX 96U

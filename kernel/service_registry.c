@@ -394,6 +394,24 @@ int service_registry_net_io_via_worker(int32_t pid) {
     return pid == worker;
 }
 
+/* Tranche 5: syscalls that drive the NE2000 NIC or the kernel TCP/socket,
+ * LLM-network and peer state. Read-only status (SYS_NET_STATUS,
+ * SYS_LLM_SESSION_STATUS) stays open for diagnostics. */
+int service_registry_net_syscall_gated(uint32_t syscall_number) {
+    if (syscall_number >= SYS_LLM_ACQUIRE_START && syscall_number <= SYS_LLM_OPENAI_CREDENTIAL) return 1;
+    if (syscall_number >= SYS_SOCKET_OPEN && syscall_number <= SYS_SOCKET_ACCEPT_ACK) return 1;
+    if (syscall_number >= SYS_PEER_LISTEN && syscall_number <= SYS_PEER_TLS_POLL) return 1;
+    return 0;
+}
+
+/* Tranche 5: 1 = dispatch, 0 = refuse with OS_NET_WORKER_REQUIRED. Without a
+ * registered net-driver (degraded mode) every task keeps the historical path.
+ * The NE2000 driver itself stays in Ring 0. */
+int service_registry_net_syscall_allowed(int32_t pid, uint32_t syscall_number) {
+    if (!service_registry_net_syscall_gated(syscall_number)) return 1;
+    return service_registry_net_io_via_worker(pid);
+}
+
 /* Les appels backend génériques restent compatibles, mais exigent explicitement
  * le scope toutes sources : une capacité source-scopée ne peut pas les utiliser. */
 int service_registry_backend_allowed_for(const char* name, int32_t pid, uint32_t right) {

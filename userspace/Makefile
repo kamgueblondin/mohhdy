@@ -9,6 +9,8 @@ ASFLAGS = --32
 
 # Programmes à compiler
 PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver vfsvirtual networker vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim waitchild ok
+# Tranche 5: net-driver gate proof client.
+PROGRAMS += netclaim
 USER_HEADERS = ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h
 
 all: $(PROGRAMS)
@@ -51,6 +53,10 @@ vfsvirtual: vfs_virtual_worker.o start.o
 
 networker: net_worker.o start.o
 	@echo "Linking networker..."
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
+netclaim: net_claim.o start.o
+	@echo "Linking netclaim..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 vfsflight: vfs_flight_client.o start.o

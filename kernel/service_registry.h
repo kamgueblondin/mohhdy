@@ -79,6 +79,9 @@ int service_registry_owner_bypasses_backend(const char* name, int32_t pid, uint3
 int service_registry_ata_overlay_io_via_worker(int32_t pid);
 /* Network driver isolation: raw network and socket I/O exercisable by live net-driver worker. */
 int service_registry_net_io_via_worker(int32_t pid);
+/* Tranche 5: NIC/socket/LLM-network/peer syscall classification and gate. */
+int service_registry_net_syscall_gated(uint32_t syscall_number);
+int service_registry_net_syscall_allowed(int32_t pid, uint32_t syscall_number);
 void service_registry_backend_remove_name(const char* name);
 void service_registry_backend_remove_pid(int32_t pid);
 

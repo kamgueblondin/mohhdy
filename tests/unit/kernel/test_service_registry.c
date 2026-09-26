@@ -503,6 +503,46 @@ static void test_notify_ack_and_history_persistence(void) {
     TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_ack(4, 9999U));
 }
 
+static void test_net_syscalls_only_via_net_driver_when_live(void) {
+    /* Tranche 5: with net-driver registered, NIC/socket/LLM-network/peer
+     * syscalls are reserved to that PID; status stays open; degraded mode
+     * without the worker keeps the historical local path. */
+    service_registry_init();
+    TEST_ASSERT_TRUE(service_registry_net_syscall_gated(SYS_SOCKET_OPEN));
+    TEST_ASSERT_TRUE(service_registry_net_syscall_gated(SYS_SOCKET_ACCEPT_ACK));
+    TEST_ASSERT_TRUE(service_registry_net_syscall_gated(SYS_LLM_ACQUIRE_START));
+    TEST_ASSERT_TRUE(service_registry_net_syscall_gated(SYS_LLM_OPENAI_CREDENTIAL));
+    TEST_ASSERT_TRUE(service_registry_net_syscall_gated(SYS_PEER_LISTEN));
+    TEST_ASSERT_TRUE(service_registry_net_syscall_gated(SYS_PEER_TLS_POLL));
+    TEST_ASSERT_FALSE(service_registry_net_syscall_gated(SYS_NET_STATUS));
+    TEST_ASSERT_FALSE(service_registry_net_syscall_gated(SYS_LLM_SESSION_STATUS));
+    TEST_ASSERT_FALSE(service_registry_net_syscall_gated(SYS_PUTC));
+    TEST_ASSERT_FALSE(service_registry_net_syscall_gated(SYS_SERVICE_REGISTER));
+    TEST_ASSERT_FALSE(service_registry_net_syscall_gated(SYS_VGA_BLIT));
+    /* Degraded: no worker. */
+    TEST_ASSERT_TRUE(service_registry_net_syscall_allowed(4, SYS_SOCKET_LISTEN));
+    TEST_ASSERT_TRUE(service_registry_net_syscall_allowed(4, SYS_PEER_LISTEN));
+    TEST_ASSERT_EQUAL(0, service_registry_register("net-driver", 9));
+    TEST_ASSERT_TRUE(service_registry_net_syscall_allowed(9, SYS_SOCKET_LISTEN));
+    TEST_ASSERT_TRUE(service_registry_net_syscall_allowed(9, SYS_LLM_POLL_TLS));
+    TEST_ASSERT_FALSE(service_registry_net_syscall_allowed(4, SYS_SOCKET_LISTEN));
+    TEST_ASSERT_FALSE(service_registry_net_syscall_allowed(4, SYS_LLM_POLL_TLS));
+    TEST_ASSERT_FALSE(service_registry_net_syscall_allowed(4, SYS_PEER_ACCEPT));
+    TEST_ASSERT_TRUE(service_registry_net_syscall_allowed(4, SYS_NET_STATUS));
+    TEST_ASSERT_TRUE(service_registry_net_syscall_allowed(4, SYS_PUTC));
+    TEST_ASSERT_FALSE(service_registry_net_syscall_allowed(0, SYS_SOCKET_LISTEN));
+    /* A vfs-virtual worker gets no network privilege. */
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs-virtual", 11));
+    TEST_ASSERT_FALSE(service_registry_net_syscall_allowed(11, SYS_SOCKET_OPEN));
+    /* Worker gone: degraded path reopens. */
+    service_registry_remove_pid(9);
+    TEST_ASSERT_TRUE(service_registry_net_syscall_allowed(4, SYS_SOCKET_LISTEN));
+    /* Error code does not collide with task/VFS codes. */
+    TEST_ASSERT_EQUAL(-59, OS_NET_WORKER_REQUIRED);
+    TEST_ASSERT_TRUE(OS_NET_WORKER_REQUIRED != OS_VFS_BACKEND_DENIED);
+    TEST_ASSERT_TRUE(OS_NET_WORKER_REQUIRED != OS_TASK_NOT_CHILD);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_registry_rejects_invalid_names);
@@ -534,6 +574,8 @@ int main(void) {
     RUN_TEST(test_owner_ata_generic_bypass_closes_when_storage_worker_live);
     RUN_TEST(test_ata_overlay_io_only_via_worker_when_live);
     RUN_TEST(test_notify_ack_and_history_persistence);
+    /* Tranche 5 net-driver gate. */
+    RUN_TEST(test_net_syscalls_only_via_net_driver_when_live);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
