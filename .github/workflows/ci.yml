@@ -53,8 +53,19 @@ jobs:
       - name: Run unit tests (make test-all)
         run: make test-all
 
-      - name: QEMU smokes (système + topologie NE2000 locale)
-        run: make qemu-smoke qemu-ne2k-tls-multipair
+      # Guard: the two integration shards cover exactly the seven contracts.
+      - name: Integration shard coverage (dry run)
+        run: |
+          plan() { env "$@" QEMU_INTEGRATION_DRY_RUN=1 python3 tests/integration/run_qemu_contracts.py | sed -n 's/^\[QEMU integration\] plan \([^:]*\):.*/\1/p' | sort; }
+          plan X=1 > /tmp/all.txt
+          { plan QEMU_INTEGRATION_ONLY=vfs-service; plan QEMU_INTEGRATION_SKIP=vfs-service; } | sort > /tmp/union.txt
+          test "$(wc -l < /tmp/all.txt)" -eq 7
+          diff /tmp/all.txt /tmp/union.txt
+
+      # qemu-ne2k-tls-multipair moved to the integration-qemu-rest job
+      # (still run on every PR, it just no longer serializes behind qemu-smoke).
+      - name: QEMU smoke (systeme)
+        run: make qemu-smoke
 
       - name: Upload logs
         if: always()
@@ -66,11 +77,13 @@ jobs:
             test_logs/
             ci-serial.log
 
-  integration-qemu:
-    name: QEMU integration contracts
-    needs: build-and-test
+  # The seven QEMU integration contracts run as two parallel shards with no
+  # dependency on build-and-test (each job builds its own image in ~20 s).
+  # Union of the shards = make integration-qemu (checked in build-and-test).
+  integration-qemu-vfs:
+    name: QEMU integration contracts (vfs-service)
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -89,21 +102,62 @@ jobs:
       - name: Build OS image
         run: make all
 
-      - name: Run QEMU integration contracts
-        run: make integration-qemu
+      - name: Run QEMU integration shard (vfs-service)
+        run: make integration-qemu-vfs
 
       - name: Upload integration logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-qemu-logs
+          name: integration-qemu-vfs-logs
           if-no-files-found: ignore
           path: |
             test_logs/
             ci-serial.log
 
-  # OS-UI Ring 3 : registre + contrat QEMU. Ne needs pas integration-qemu.
-  # N'allonge pas les sept contrats. Facade Python retiree (OS-UI-3).
+  integration-qemu-rest:
+    name: QEMU integration contracts (other six + NE2000 multipair + net relay)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc-multilib \
+            libc6-dev-i386 \
+            nasm \
+            qemu-system-x86
+
+      - name: Build OS image
+        run: make all
+
+      - name: Run QEMU integration shard (all contracts except vfs-service)
+        run: make integration-qemu-rest
+
+      - name: QEMU NE2000 TLS multipair (moved from build-and-test)
+        run: make qemu-ne2k-tls-multipair
+
+      # Tranche 5 slices 1-2: net-driver gate and net IPC relay (no disk).
+      - name: QEMU Tranche 5 net-driver gate + IPC relay
+        run: make qemu-net-worker
+
+      - name: Upload integration logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-qemu-rest-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+            ci-serial.log
+
+  # OS-UI Ring 3 : registre + contrat QEMU. Independant des shards integration. Facade Python retiree (OS-UI-3).
   osui-guest:
     name: OS-UI guest C
     runs-on: ubuntu-latest

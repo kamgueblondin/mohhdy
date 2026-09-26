@@ -16,6 +16,7 @@
 #include "../llm/gpt2_tokenizer.h"
 #include "../service_registry.h"
 #include "../ata_job.h"
+#include "../net_relay.h"
 #include "../ata.h"
 #include "../gdt.h"
 #include "../fs/fat16.h"
@@ -84,10 +85,15 @@ static int ata_bridge_restore(const uint8_t* buf, uint32_t size) {
     return overlay_restore(buf, size);
 }
 
-/* Overlay flush: queue for the live driver instead of Ring 0 PIO. */
+static void ata_rpc_wait_flush(void);
+
+/* Overlay flush: queue for the live driver instead of Ring 0 PIO. Slice 3:
+ * from a user syscall the caller then waits until the driver wrote the whole
+ * snapshot, so "write ok" still means "on disk" with the boot driver. */
 static int ata_bridge_overlay_redirect(void) {
     if (ata_live_driver() <= 0) return 0;
     ata_job_request_flush();
+    ata_rpc_wait_flush();
     return 1;
 }
 
@@ -96,16 +102,162 @@ static int ata_bridge_kernel_gate(void) {
     return ata_owner_kernel_may_pio(ata_live_driver());
 }
 
+static void ata_rpc_sched_hook(uint32_t now);
+
 void syscall_ata_bridge_init(void) {
     ata_job_init(ata_bridge_snapshot, ata_bridge_restore);
     ata_set_kernel_gate(ata_bridge_kernel_gate);
     overlay_set_disk_hooks(ata_bridge_overlay_redirect, ata_job_note_kernel_overlay_write);
+    task_sched_hook = ata_rpc_sched_hook;
+}
+
+/* Tranche 4 slice 3: synchronous FAT sector RPC through the Ring 3 driver.
+ *
+ * FAT16/FAT32 sector callbacks run inside a syscall of some user task T (the
+ * VFS worker, the shell...). When the driver is live, the callback submits a
+ * job (<= 8 sectors), saves T's kernel continuation (kctx on T's own kernel
+ * stack), marks T TASK_BLOCKED_KERNEL and schedules the driver. The driver
+ * fetches the job, runs the PIO at CPL 3 and completes it; SYS_ATA_JOB_DONE
+ * marks T ready and the scheduler resumes T inside its syscall. While T is
+ * blocked only the driver is scheduled, and any other task entering a
+ * syscall is rewound and retried later, so FAT static buffers are never
+ * re-entered. If the driver dies (purge) or stalls (no progress for
+ * ATA_RPC_TIMEOUT_TICKS), the RPC is aborted and the callback falls back to
+ * the Ring 0 PIO path (only possible once the driver no longer holds the
+ * controller claim). */
+#define ATA_RPC_TIMEOUT_TICKS 300U
+#define ATA_RPC_IO 1
+#define ATA_RPC_FLUSH 2
+static task_t* g_rpc_waiter;
+static int g_rpc_kind;
+static uint32_t g_rpc_started;
+static int g_rpc_aborted;
+static int32_t g_boot_driver_pid;
+static int g_boot_driver_registered;
+
+static void ata_rpc_abort(void) {
+    task_t* waiter = g_rpc_waiter;
+    if (!waiter || waiter->state != TASK_BLOCKED_KERNEL) return;
+    g_rpc_aborted = 1;
+    if (g_rpc_kind == ATA_RPC_IO) ata_job_io_cancel();
+    waiter->state = TASK_READY;
+    task_sched_only = waiter;
+}
+
+static void ata_rpc_sched_hook(uint32_t now) {
+    task_t* waiter = g_rpc_waiter;
+    task_t* driver;
+    if (!waiter || waiter->state != TASK_BLOCKED_KERNEL) return;
+    driver = task_sched_only;
+    if (now - g_rpc_started > ATA_RPC_TIMEOUT_TICKS ||
+        !driver || driver->state == TASK_TERMINATED ||
+        (driver->state != TASK_READY && driver->state != TASK_RUNNING)) {
+        print_string_serial("[ATA] sector rpc aborted\n");
+        ata_rpc_abort();
+    }
+}
+
+/* Blocks the current task until the driver completed the submitted job.
+ * Returns 0 on success, -1 on driver failure, -2 if aborted. */
+static int ata_rpc_block(task_t* driver, int kind) {
+    task_t* self = current_task;
+    g_rpc_kind = kind;
+    g_rpc_waiter = self;
+    g_rpc_aborted = 0;
+    g_rpc_started = timer_get_ticks();
+    task_sched_only = driver;
+    self->state = TASK_BLOCKED_KERNEL;
+    self->kctx_valid = 1U;
+    if (kctx_save(self->kctx) == 0) {
+        schedule(self->syscall_frame); /* never returns; resumed below */
+    }
+    g_rpc_waiter = NULL;
+    task_sched_only = NULL;
+    self->kctx_valid = 0U;
+    if (g_rpc_aborted) return -2;
+    if (kind == ATA_RPC_FLUSH) return 0;
+    return ata_job_io_state() == ATA_IO_DONE ? 0 : -1;
+}
+
+/* 1 if the current task may block on a driver RPC right now. */
+static task_t* ata_rpc_driver_for_current(void) {
+    int32_t driver_pid = ata_live_driver();
+    task_t* driver;
+    if (driver_pid <= 0 || !current_task || current_task->type != TASK_TYPE_USER ||
+        (int32_t)current_task->id == driver_pid || !current_task->syscall_frame || g_rpc_waiter)
+        return NULL;
+    driver = get_task_by_id(driver_pid);
+    if (!driver || driver->type != TASK_TYPE_USER || driver->state != TASK_READY) return NULL;
+    return driver;
+}
+
+/* If the driver dies meanwhile, the purge path persists the snapshot through
+ * Ring 0 PIO; if it stalls, the flush stays queued (asynchronous). */
+static void ata_rpc_wait_flush(void) {
+    task_t* driver = ata_rpc_driver_for_current();
+    if (!driver) return;
+    (void)ata_rpc_block(driver, ATA_RPC_FLUSH);
+}
+
+int syscall_ata_fat_io(uint32_t drive, uint32_t lba, uint32_t count, void* buf,
+                       int write, int* out_rc) {
+    int32_t driver_pid;
+    task_t* driver = ata_rpc_driver_for_current();
+    uint32_t done = 0U;
+    if (!driver || !buf || count == 0U) return 0;
+    while (done < count) {
+        uint32_t n = count - done;
+        uint8_t* p = (uint8_t*)buf + done * 512U;
+        int st;
+        if (n > OS_ATA_JOB_MAX_SECTORS) n = OS_ATA_JOB_MAX_SECTORS;
+        if (ata_job_io_submit(drive, lba + done, n, write, write ? p : 0) != 0) return 0;
+        st = ata_rpc_block(driver, ATA_RPC_IO);
+        if (st == -2) return 0; /* driver gone/stalled: caller uses Ring 0 PIO */
+        if (ata_job_io_take(write ? 0 : p, write ? 0U : n * 512U) != 0 || st != 0) {
+            *out_rc = -1;
+            return 1;
+        }
+        done += n;
+        driver_pid = ata_live_driver();
+        driver = driver_pid > 0 ? get_task_by_id(driver_pid) : NULL;
+        if (done < count && (!driver || driver->state != TASK_READY)) {
+            /* Remaining sectors through the fallback path. */
+            int rc = write ? ata_write_sectors_drive((uint8_t)drive, lba + done, count - done,
+                                                     (const uint8_t*)buf + done * 512U)
+                           : ata_read_sectors_drive((uint8_t)drive, lba + done, count - done,
+                                                    (uint8_t*)buf + done * 512U);
+            if (rc == 0) ata_job_note_fat_kernel_pio(count - done, ata_live_driver() > 0);
+            *out_rc = rc;
+            return 1;
+        }
+    }
+    *out_rc = 0;
+    return 1;
+}
+
+void syscall_ata_note_fat_kernel_pio(uint32_t sectors) {
+    ata_job_note_fat_kernel_pio(sectors, ata_live_driver() > 0);
+}
+
+void syscall_ata_set_boot_driver(int32_t pid) {
+    g_boot_driver_pid = pid;
+    g_boot_driver_registered = 0;
+    ata_job_set_boot_driver(pid);
 }
 
 /* Called after a service purge: if the driver vanished with a queued or
- * in-flight flush, persist through the Ring 0 PIO fallback right away. */
+ * in-flight flush, persist through the Ring 0 PIO fallback right away; a
+ * task blocked on a sector RPC is resumed and falls back too. */
 static void ata_bridge_after_purge(void) {
+    int in_use;
     if (ata_live_driver() > 0) return;
+    ata_rpc_abort();
+    in_use = ata_job_controller_in_use();
+    if (in_use) {
+        /* The dead driver may have stopped mid-transfer: reset the channel. */
+        if (ata_channel_reset() == 0) print_string_serial("[ATA] channel reset after driver loss\n");
+        ata_job_note_channel_reset();
+    }
     if (ata_job_driver_gone()) {
         if (overlay_save_disk() == 0) ata_job_note_fallback_flush();
     }
@@ -194,17 +346,255 @@ static int historical_overlay_mutation_allowed(void) {
     return current_task && service_registry_ata_overlay_io_via_worker(current_task->id);
 }
 
+
+/* ------------------------------------------------------------------------
+ * Tranche 5 slice 2: net IPC relay (socket syscalls 99-108).
+ * The caller keeps re-entering its own syscall (rewind over int 0x80 and
+ * yield) until the worker reply is stored; user buffers are only touched
+ * in the caller's own context. One request in flight at a time. */
+static void net_relay_wait(cpu_state_t* cpu) {
+    cpu->eip -= 2U;
+    schedule(cpu);
+}
+
+static int32_t net_relay_live_worker(void) {
+    int32_t worker = sys_service_lookup("net-driver");
+    return worker > 0 ? worker : 0;
+}
+
+static uint16_t net_relay_cap(uint32_t capacity) {
+    return (uint16_t)(capacity < OS_NET_RELAY_MAX_OUT ? capacity : OS_NET_RELAY_MAX_OUT);
+}
+
+static void net_relay_copy(uint8_t* dst, const uint8_t* src, uint32_t n) {
+    uint32_t i;
+    for (i = 0U; i < n; i++) dst[i] = src[i];
+}
+
+/* Fills req from the caller registers; 0 or an OS_SOCKET_* error. */
+static int net_relay_marshal(const cpu_state_t* cpu, os_net_relay_request_t* req) {
+    req->op = cpu->eax;
+    switch (cpu->eax) {
+        case SYS_SOCKET_OPEN:
+            req->arg0 = cpu->ebx & 0xFFFFU; req->arg1 = cpu->ecx & 0xFFFFU; req->arg2 = cpu->edx;
+            return 0;
+        case SYS_SOCKET_LISTEN:
+            req->arg0 = cpu->ebx & 0xFFFFU; req->arg1 = cpu->ecx;
+            return 0;
+        case SYS_SOCKET_CLOSE:
+            req->arg0 = cpu->ebx;
+            return 0;
+        case SYS_SOCKET_ACCEPT_SYN_ACK:
+            if (!syscall_user_range((const void*)cpu->ecx, sizeof(os_socket_syn_ack_t), 0))
+                return OS_SOCKET_BAD_ARGUMENT;
+            req->arg0 = cpu->ebx;
+            req->in_length = (uint16_t)sizeof(os_socket_syn_ack_t);
+            net_relay_copy(req->in, (const uint8_t*)cpu->ecx, req->in_length);
+            return 0;
+        case SYS_SOCKET_ACCEPT_SYN:
+        case SYS_SOCKET_ACCEPT_ACK:
+            if (!syscall_user_range((const void*)cpu->ecx, sizeof(os_socket_passive_view_t), 0))
+                return OS_SOCKET_BAD_ARGUMENT;
+            req->arg0 = cpu->ebx;
+            req->in_length = (uint16_t)sizeof(os_socket_passive_view_t);
+            net_relay_copy(req->in, (const uint8_t*)cpu->ecx, req->in_length);
+            return 0;
+        case SYS_SOCKET_BUILD_SYN_ACK:
+            if (!syscall_user_range((void*)cpu->ecx, cpu->edx & 0xFFFFU, 1) ||
+                !syscall_user_range((void*)cpu->esi, sizeof(uint16_t), 1))
+                return OS_SOCKET_BAD_ARGUMENT;
+            req->arg0 = cpu->ebx;
+            req->out_capacity = net_relay_cap(cpu->edx & 0xFFFFU);
+            return 0;
+        case SYS_SOCKET_SEND: {
+            const os_socket_send_request_t* r = (const os_socket_send_request_t*)cpu->ebx;
+            if (!syscall_user_range(r, sizeof(*r), 0) ||
+                !syscall_user_range(r->payload, r->length, 0) ||
+                !syscall_user_range(r->segment, r->capacity, 1) ||
+                !syscall_user_range(r->out_length, sizeof(*r->out_length), 1))
+                return OS_SOCKET_BAD_ARGUMENT;
+            if (r->length > OS_NET_RELAY_MAX_IN) return OS_SOCKET_BUFFER_SMALL;
+            req->arg0 = (uint32_t)r->socket_id;
+            req->in_length = r->length;
+            net_relay_copy(req->in, r->payload, r->length);
+            req->out_capacity = net_relay_cap(r->capacity);
+            return 0;
+        }
+        case SYS_SOCKET_FEED: {
+            const os_socket_feed_request_t* r = (const os_socket_feed_request_t*)cpu->ebx;
+            if (!syscall_user_range(r, sizeof(*r), 0) ||
+                !syscall_user_range(r->segment, r->length, 0))
+                return OS_SOCKET_BAD_ARGUMENT;
+            if (r->length > OS_NET_RELAY_MAX_IN) return OS_SOCKET_BUFFER_SMALL;
+            req->arg0 = (uint32_t)r->socket_id;
+            req->in_length = r->length;
+            net_relay_copy(req->in, r->segment, r->length);
+            return 0;
+        }
+        case SYS_SOCKET_RECEIVE: {
+            const os_socket_receive_request_t* r = (const os_socket_receive_request_t*)cpu->ebx;
+            if (!syscall_user_range(r, sizeof(*r), 0) ||
+                !syscall_user_range(r->buffer, r->capacity, 1) ||
+                !syscall_user_range(r->out_length, sizeof(*r->out_length), 1))
+                return OS_SOCKET_BAD_ARGUMENT;
+            req->arg0 = (uint32_t)r->socket_id;
+            req->out_capacity = net_relay_cap(r->capacity);
+            return 0;
+        }
+        default:
+            return OS_SOCKET_BAD_ARGUMENT;
+    }
+}
+
+/* Caller side of a DONE slot: copy the worker output back, return result. */
+static int32_t net_relay_deliver(const cpu_state_t* cpu) {
+    static uint8_t out[OS_NET_RELAY_MAX_OUT];
+    uint32_t op = 0U, n = 0U;
+    uint8_t* dst = 0;
+    uint16_t* dst_len = 0;
+    uint32_t cap = 0U;
+    int32_t result = net_relay_take((int32_t)current_task->id, &op, out, sizeof(out), &n);
+    if (result != 0 || op != cpu->eax) return result;
+    if (op == SYS_SOCKET_BUILD_SYN_ACK) {
+        dst = (uint8_t*)cpu->ecx; cap = cpu->edx & 0xFFFFU; dst_len = (uint16_t*)cpu->esi;
+    } else if (op == SYS_SOCKET_SEND) {
+        const os_socket_send_request_t* r = (const os_socket_send_request_t*)cpu->ebx;
+        if (!syscall_user_range(r, sizeof(*r), 0)) return OS_SOCKET_BAD_ARGUMENT;
+        dst = r->segment; cap = r->capacity; dst_len = r->out_length;
+    } else if (op == SYS_SOCKET_RECEIVE) {
+        const os_socket_receive_request_t* r = (const os_socket_receive_request_t*)cpu->ebx;
+        if (!syscall_user_range(r, sizeof(*r), 0)) return OS_SOCKET_BAD_ARGUMENT;
+        dst = r->buffer; cap = r->capacity; dst_len = r->out_length;
+    } else {
+        return result;
+    }
+    if (n > cap || !syscall_user_range(dst, n, 1) ||
+        !syscall_user_range(dst_len, sizeof(*dst_len), 1))
+        return OS_SOCKET_BAD_ARGUMENT;
+    net_relay_copy(dst, out, n);
+    *dst_len = (uint16_t)n;
+    return result;
+}
+
+/* 1 = handled (eax set or task rescheduled), 0 = run the syscall locally
+ * (no worker any more and nothing in flight for this task). */
+static int syscall_net_relay(cpu_state_t* cpu) {
+    int32_t pid = (int32_t)current_task->id;
+    uint32_t now = timer_get_ticks();
+    uint32_t state = net_relay_state_for(pid);
+    int32_t owner, worker, job;
+    task_t* target;
+    os_net_relay_request_t req;
+    os_ipc_payload_t payload;
+    int rc;
+
+    if (state == NET_RELAY_SENT) {
+        net_relay_note_poll();
+        worker = net_relay_live_worker();
+        if (worker != net_relay_worker()) {
+            net_relay_fail(OS_NET_RELAY_ABORTED);
+            print_string_serial("[NET] relay aborted: net-driver lost\n");
+        } else if (net_relay_expired(now)) {
+            net_relay_fail(OS_NET_RELAY_TIMEOUT);
+            print_string_serial("[NET] relay timeout\n");
+        } else {
+            net_relay_wait(cpu);
+            return 1;
+        }
+        state = NET_RELAY_DONE;
+    }
+    if (state == NET_RELAY_DONE) {
+        cpu->eax = (uint32_t)net_relay_deliver(cpu);
+        return 1;
+    }
+    owner = net_relay_owner();
+    if (owner != 0) {
+        target = get_task_by_id(owner);
+        if (!target || target->state == TASK_TERMINATED) {
+            net_relay_drop_owner();
+        } else {
+            net_relay_wait(cpu); /* one request in flight at a time */
+            return 1;
+        }
+    }
+    worker = net_relay_live_worker();
+    if (worker <= 0 || worker == pid) return 0;
+    target = get_task_by_id(worker);
+    if (!target) return 0;
+    memset(&req, 0, sizeof(req));
+    rc = net_relay_marshal(cpu, &req);
+    if (rc != 0) {
+        cpu->eax = (uint32_t)rc;
+        return 1;
+    }
+    job = net_relay_begin(pid, worker, cpu->eax, now);
+    if (job <= 0) {
+        net_relay_wait(cpu);
+        return 1;
+    }
+    req.job_id = (uint32_t)job;
+    memset(&payload, 0, sizeof(payload));
+    payload.type = OS_IPC_NET_RELAY_REQUEST;
+    payload.size = (uint32_t)sizeof(req);
+    payload.request_id = (uint32_t)job;
+    net_relay_copy(payload.data, (const uint8_t*)&req, sizeof(req));
+    rc = ipc_endpoint_send(&target->ipc_endpoint, 0, &payload);
+    if (rc != 0) {
+        net_relay_cancel();
+        cpu->eax = (uint32_t)rc;
+        return 1;
+    }
+    net_relay_wait(cpu);
+    return 1;
+}
+
+int sys_net_relay_reply(const os_net_relay_reply_t* reply) {
+    int32_t worker = net_relay_live_worker();
+    if (!current_task || worker <= 0 || (int32_t)current_task->id != worker)
+        return OS_NET_WORKER_REQUIRED;
+    if (!syscall_user_range(reply, sizeof(*reply), 0)) return OS_SOCKET_BAD_ARGUMENT;
+    if (reply->out_length > OS_NET_RELAY_MAX_OUT) return OS_SOCKET_BAD_ARGUMENT;
+    return net_relay_complete(worker, reply->job_id, reply->result, reply->out,
+                              reply->out_length) == 0 ? 0 : OS_IPC_BAD_MESSAGE;
+}
+
+int sys_net_relay_status(os_net_relay_status_t* out) {
+    if (!syscall_user_range(out, sizeof(*out), 1)) return OS_SOCKET_BAD_ARGUMENT;
+    net_relay_fill_status(out, net_relay_live_worker());
+    return 0;
+}
+
 void syscall_handler(cpu_state_t* cpu) {
     // Réactive les interruptions pour permettre au clavier de fonctionner
     asm volatile("sti");
+
+    if (current_task) current_task->syscall_frame = cpu;
+    /* Tranche 4 slice 3: while a task is blocked mid-FAT on a sector RPC,
+     * any other task (except the driver) retries its syscall later: rewind
+     * over "int 0x80" (2 bytes) and yield. */
+    if (g_rpc_waiter && current_task && current_task != g_rpc_waiter &&
+        (int32_t)current_task->id != ata_live_driver()) {
+        cpu->eip -= 2U;
+        schedule(cpu);
+        return;
+    }
 
     /* Maintenance réseau différée : aucune E/S DHCP n’est réalisée dans IRQ0. */
     (void)kernel_llm_dhcp_maintenance(timer_get_ticks());
 
     /* Tranche 5: with net-driver registered, network syscalls are reserved
      * to that worker PID. Degraded mode (no worker) is unchanged. */
+    /* Tranche 5 slice 2: socket syscalls 99-108 of a non-worker task are
+     * relayed to the worker over IPC instead of refused. A request already
+     * in flight for this task is finished even if the worker just died. */
+    if (current_task && net_relay_supported(cpu->eax) &&
+        (net_relay_state_for((int32_t)current_task->id) != NET_RELAY_FREE ||
+         !service_registry_net_syscall_allowed((int32_t)current_task->id, cpu->eax))) {
+        if (syscall_net_relay(cpu)) return;
+    }
     if (!service_registry_net_syscall_allowed(current_task ? (int32_t)current_task->id : 0,
                                               cpu->eax)) {
+        net_relay_note_denied();
         cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;
         return;
     }
@@ -474,6 +864,12 @@ void syscall_handler(cpu_state_t* cpu) {
 
         case SYS_SERVICE_BACKEND_RELEASE:
             cpu->eax = (uint32_t)sys_service_backend_release((const char*)cpu->ebx);
+            break;
+        case SYS_NET_RELAY_REPLY:
+            cpu->eax = (uint32_t)sys_net_relay_reply((const os_net_relay_reply_t*)cpu->ebx);
+            break;
+        case SYS_NET_RELAY_STATUS:
+            cpu->eax = (uint32_t)sys_net_relay_status((os_net_relay_status_t*)cpu->ebx);
             break;
         case SYS_SOCKET_OPEN:
             cpu->eax = (uint32_t)sys_socket_open((uint16_t)cpu->ebx, (uint16_t)cpu->ecx, cpu->edx);
@@ -752,9 +1148,33 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_ATA_JOB_DONE:
             cpu->eax = (uint32_t)sys_ata_job_done((const os_ata_job_t*)cpu->ebx, (int32_t)cpu->ecx,
                                                   (const uint8_t*)cpu->edx);
+            /* Slice 3: resume the task blocked on this sector job (or on the
+             * whole overlay flush) now; any accepted chunk counts as progress
+             * for the stall timeout. */
+            if (g_rpc_waiter && (int)cpu->eax >= 0) g_rpc_started = timer_get_ticks();
+            if (g_rpc_waiter && g_rpc_waiter->state == TASK_BLOCKED_KERNEL &&
+                ((g_rpc_kind == ATA_RPC_IO &&
+                  (ata_job_io_state() == ATA_IO_DONE || ata_job_io_state() == ATA_IO_FAILED)) ||
+                 (g_rpc_kind == ATA_RPC_FLUSH && (int)cpu->eax == OS_ATA_JOB_FLUSH_DONE &&
+                  !ata_job_flush_queued()))) {
+                g_rpc_waiter->state = TASK_READY;
+                task_sched_only = g_rpc_waiter;
+                schedule(cpu);
+            }
             break;
         case SYS_ATA_STATUS:
             cpu->eax = (uint32_t)sys_ata_status((os_ata_status_t*)cpu->ebx);
+            break;
+        case SYS_ATA_DEBUG:
+            /* Test hook, root shell only (the task the kernel started). */
+            if (!current_task || task_root_shell_pid() <= 0 ||
+                current_task->id != task_root_shell_pid() || cpu->ebx != OS_ATA_DEBUG_CRASH_FAT_WRITE) {
+                cpu->eax = (uint32_t)OS_TASK_CONTROL_DENIED;
+            } else {
+                ata_job_debug_arm_crash();
+                print_string_serial("[ATA] debug: driver crash armed for next FAT write\n");
+                cpu->eax = 0;
+            }
             break;
         case SYS_VGA_BLIT:
             {
@@ -1054,7 +1474,18 @@ int sys_service_register(const char* name) {
     }
     /* Tranche 4 slice 2: a new driver first loads the overlay snapshot back
      * through its own Ring 3 PIO (kept only if RAM did not change meanwhile). */
-    if (rc == 0 && strcmp(name, "ata-driver") == 0) ata_job_request_load();
+    /* Slice 3: the atadriver spawned at boot skips it: the kernel loaded the
+     * snapshot from the same disk just before any task existed and every
+     * overlay write since then was persisted, so disk == RAM. */
+    if (rc == 0 && strcmp(name, "ata-driver") == 0) {
+        if (g_boot_driver_pid > 0 && (int32_t)current_task->id == g_boot_driver_pid &&
+            !g_boot_driver_registered) {
+            g_boot_driver_registered = 1;
+            print_string_serial("[ATA] boot driver registered; kernel boot load kept\n");
+        } else {
+            ata_job_request_load();
+        }
+    }
     return rc;
 }
 

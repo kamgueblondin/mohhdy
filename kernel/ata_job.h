@@ -51,4 +51,30 @@ void ata_job_set_fences(uint32_t client_min_lba, uint32_t slave_locked);
 /* 1 if a client (not the kernel job) may write this drive/LBA. */
 int ata_job_client_write_allowed(uint32_t drive, uint32_t lba);
 
+/* Slice 3: synchronous FAT sector job (one at a time, <= 8 sectors). The
+ * kernel submits it, blocks the calling task, the driver fetches it first
+ * (between overlay chunks), and the caller takes the result on resume. */
+#define ATA_IO_NONE 0U
+#define ATA_IO_PENDING 1U
+#define ATA_IO_HANDED 2U
+#define ATA_IO_DONE 3U
+#define ATA_IO_FAILED 4U
+int ata_job_io_submit(uint32_t drive, uint32_t lba, uint32_t count, int write,
+                      const uint8_t* data);
+uint32_t ata_job_io_state(void);
+/* 1 if a newer overlay snapshot is queued behind the one in flight. */
+int ata_job_flush_queued(void);
+/* Copies read data (capacity >= count*512) and frees the slot. 0 = ok. */
+int ata_job_io_take(uint8_t* out, uint32_t capacity);
+/* Abort (driver stalled): frees the slot, a late completion is stale. */
+void ata_job_io_cancel(void);
+void ata_job_note_fat_kernel_pio(uint32_t sectors, int driver_live);
+void ata_job_set_boot_driver(int32_t pid);
+/* Test hook: the next FAT write job carries OS_ATA_JOB_FLAG_DEBUG_CRASH. */
+void ata_job_debug_arm_crash(void);
+/* 1 if the driver holds the claim or a job is handed out (call before
+ * ata_job_driver_gone to know whether the channel may be mid-command). */
+int ata_job_controller_in_use(void);
+void ata_job_note_channel_reset(void);
+
 #endif

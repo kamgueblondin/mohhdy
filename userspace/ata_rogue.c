@@ -36,6 +36,11 @@ void main(void) {
             puts("atarogue claim and job refused\n");
         else
             puts("atarogue claim or job unexpected\n");
+        /* The driver crash test hook is root-shell only. */
+        if (sc1(SYS_ATA_DEBUG, OS_ATA_DEBUG_CRASH_FAT_WRITE) == OS_TASK_CONTROL_DENIED)
+            puts("atarogue debug arm refused\n");
+        else
+            puts("atarogue debug arm unexpected\n");
     }
     driver = sc1(SYS_SERVICE_LOOKUP, (uint32_t)"ata-driver");
     if (driver > 0) {

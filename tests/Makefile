@@ -269,6 +269,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_io_bitmap: $(UNIT_DIR)/kernel/test_io_bitma
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/io_bitmap.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_net_relay: $(UNIT_DIR)/kernel/test_net_relay.c ../kernel/net_relay.c ../kernel/net_socket.c ../kernel/net_tcp.c ../kernel/net_tls_record.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x509_der.c ../kernel/x25519.c ../kernel/rsa_verify.c ../kernel/bigint.c ../kernel/ecdsa_p256.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/net_relay.c ../kernel/net_socket.c ../kernel/net_tcp.c ../kernel/net_tls_record.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x509_der.c ../kernel/x25519.c ../kernel/rsa_verify.c ../kernel/bigint.c ../kernel/ecdsa_p256.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled kernel test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_ata_job: $(UNIT_DIR)/kernel/test_ata_job.c ../kernel/ata_job.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/ata_job.c $(FRAMEWORK_SOURCES)

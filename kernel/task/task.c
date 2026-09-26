@@ -179,6 +179,24 @@ void add_task_to_queue(task_t* task) {
     }
 }
 
+task_t* task_sched_only = NULL;
+void (*task_sched_hook)(uint32_t now) = NULL;
+static int g_root_shell_pid = 0;
+
+void task_set_root_shell(int pid) { g_root_shell_pid = pid; }
+int task_root_shell_pid(void) { return g_root_shell_pid; }
+
+void task_queue_move_first_user(task_t* task) {
+    task_t* head = task_queue;
+    if (!task || !head || task == head || head->next == task) return;
+    task->prev->next = task->next;
+    task->next->prev = task->prev;
+    task->next = head->next;
+    task->prev = head;
+    head->next->prev = task;
+    head->next = task;
+}
+
 // Déclaration de la fonction assembleur pour le changement de contexte
 extern void jump_to_task(cpu_state_t* next_state);
 static void unlink_task(task_t* task);
@@ -236,6 +254,7 @@ void schedule(cpu_state_t* cpu) {
     uint32_t now = timer_get_ticks();
     asm volatile("cli"); // Désactiver les interruptions pour la planification
     task_reap_deferred();
+    if (task_sched_hook) task_sched_hook(now);
     if (!current_task) {
         asm volatile("sti");
         return;
@@ -301,6 +320,13 @@ void schedule(cpu_state_t* cpu) {
             } while (t != start);
         }
 
+        /* Tranche 4 slice 3: while a task is blocked on an ATA sector RPC,
+         * only the atadriver (then the resumed waiter) is run, so no other
+         * task can re-enter FAT code whose static buffers are in use. */
+        if (task_sched_only && task_sched_only->state == TASK_READY) {
+            next_task = task_sched_only;
+        }
+
         current_task = next_task;
     }
 
@@ -326,6 +352,13 @@ void schedule(cpu_state_t* cpu) {
     if (current_directory != current_task->vmm_dir) {
         vmm_switch_page_directory(current_task->vmm_dir->physical_addr);
         current_directory = current_task->vmm_dir;
+    }
+
+    /* Tranche 4 slice 3: a task blocked inside a syscall resumes on its own
+     * kernel stack (kernel continuation), not from its user frame. */
+    if (current_task->kctx_valid) {
+        current_task->kctx_valid = 0U;
+        kctx_resume(current_task->kctx);
     }
 
     // Sauter à la nouvelle tâche. Ne retourne jamais.
@@ -682,7 +715,9 @@ int task_kill(int requester_pid, int pid) {
     t = get_task_by_id(pid);
     if (!t) return -1;
     if (requester_pid == pid) return -3;
-    if (requester_pid != t->parent_pid) return OS_TASK_CONTROL_DENIED;
+    if (requester_pid != t->parent_pid &&
+        !(t->boot_service && g_root_shell_pid > 0 && requester_pid == g_root_shell_pid))
+        return OS_TASK_CONTROL_DENIED;
     task_report_parent_exit(t, OS_TASK_EXIT_KILLED, OS_TASK_EVENT_KILLED);
     task_wake_waiter(t);
     task_reparent_children(t);

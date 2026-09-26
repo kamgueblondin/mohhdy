@@ -34,8 +34,8 @@ INITRD_DIR := initrd_content
 BIN_DEST_DIR := $(INITRD_DIR)/bin
 
 # Liste des fichiers objets - MISE À JOUR avec tous les nouveaux fichiers
-OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/userspace_switch.o \
-          build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/gdt.o build/idt.o build/vmm.o build/task.o \
+OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/kctx.o build/userspace_switch.o \
+          build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/net_relay.o build/gdt.o build/idt.o build/vmm.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/interrupts.o \
           build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o
 
@@ -110,6 +110,10 @@ build/ata_job.o: kernel/ata_job.c kernel/ata_job.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+build/net_relay.o: kernel/net_relay.c kernel/net_relay.h include/os_syscalls.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 build/gdt.o: kernel/gdt.c kernel/gdt.h kernel/io_bitmap.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -178,7 +182,7 @@ build/task.o: kernel/task/task.c kernel/task/task.h kernel/ata_job.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Règles de compilation pour les appels système
-build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/ata_job.h include/os_syscalls.h
+build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/ata_job.h kernel/net_relay.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -350,6 +354,10 @@ build/context_switch.o: boot/context_switch_new.s
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
+build/kctx.o: boot/kctx.s
+	@mkdir -p $(dir $@)
+	$(AS) $(ASFLAGS) $< -o $@
+
 build/userspace_switch.o: boot/userspace_switch.s
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
@@ -403,6 +411,7 @@ pack-initrd: userspace-all
 	@cp -f userspace/ataclient $(BIN_DEST_DIR)/ataclient
 	@cp -f userspace/atarogue $(BIN_DEST_DIR)/atarogue
 	@cp -f userspace/netclaim $(BIN_DEST_DIR)/netclaim
+	@cp -f userspace/netrelay $(BIN_DEST_DIR)/netrelay
 	@cp -f userspace/vfsflight $(BIN_DEST_DIR)/vfsflight
 	@cp -f userspace/vfsaliasflight $(BIN_DEST_DIR)/vfsaliasflight
 	@cp -f userspace/serviceclaim $(BIN_DEST_DIR)/serviceclaim
@@ -704,6 +713,17 @@ qemu-osui-gui-fit: $(OS_IMAGE) pack-initrd disk
 integration-qemu: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/run_qemu_contracts.py
 
+# CI shards (two parallel jobs). The union is exactly integration-qemu:
+# vfs-service alone (longest, ~8.5 min), every other contract in -rest.
+# A new contract lands in -rest automatically (SKIP-based selection).
+QEMU_VFS_SHARD := vfs-service
+.PHONY: integration-qemu-vfs integration-qemu-rest
+integration-qemu-vfs: $(OS_IMAGE) pack-initrd disk
+	@QEMU_INTEGRATION_ONLY=$(QEMU_VFS_SHARD) python3 tests/integration/run_qemu_contracts.py
+
+integration-qemu-rest: $(OS_IMAGE) pack-initrd disk
+	@QEMU_INTEGRATION_SKIP=$(QEMU_VFS_SHARD) python3 tests/integration/run_qemu_contracts.py
+
 # Affiche la liste exacte des contrats et leur ordre sans demarrer QEMU.
 qemu-integration-plan: $(OS_IMAGE) pack-initrd disk
 	@QEMU_INTEGRATION_DRY_RUN=1 python3 tests/integration/run_qemu_contracts.py
@@ -765,6 +785,7 @@ help:
 	@echo "  test-all        - Suite complète de tests (< 5 min)"
 	@echo "  qemu-smoke      - Boots QEMU : overlay, extras, persist, spawn, exec"
 	@echo "  integration-qemu - Sept contrats QEMU sequentiels par defaut (QEMU_INTEGRATION_JOBS=N pour diagnostic)"
+	@echo "  integration-qemu-vfs / integration-qemu-rest - Les deux shards CI (union = integration-qemu)"
 	@echo "  qemu-integration-plan - Affiche les sept contrats sans demarrer QEMU"
 	@echo "  qemu-irq0-preemption - Prouve la reprise du shell après spawn spin"
 	@echo "  qemu-ai-provider - Vérifie le stub OpenAI/réseau explicite"

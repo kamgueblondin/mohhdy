@@ -260,7 +260,18 @@
 #define SYS_ATA_JOB_DONE 134
 /* EBX = os_ata_status_t* : counters and client write fences. */
 #define SYS_ATA_STATUS 135
-#define MAX_SYSCALLS 136
+/* Tranche 4 test hook (root shell only): EBX = OS_ATA_DEBUG_CRASH_FAT_WRITE
+ * arms a one-shot crash of the driver in the middle of its next FAT write
+ * job, to prove the Ring 0 fallback after a driver death mid-transfer. */
+#define SYS_ATA_DEBUG 136
+/* Tranche 5 slice 2 (net IPC relay). 137 is reserved to the live net-driver
+ * worker: EBX = const os_net_relay_reply_t*, answers the relayed request
+ * the kernel forwarded to it over IPC (OS_IPC_NET_RELAY_REQUEST). */
+#define SYS_NET_RELAY_REPLY 137
+/* Public read-only: EBX = os_net_relay_status_t*. */
+#define SYS_NET_RELAY_STATUS 138
+#define MAX_SYSCALLS 139
+#define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
 #define OS_VGA_ROWS 25
@@ -385,6 +396,11 @@ typedef struct {
  * not the live net-driver worker PID while that worker is registered. -60 is
  * kept free for OS_VFS_BACKEND_WORKER_REQUIRED (AOS-2177, PR #62). */
 #define OS_NET_WORKER_REQUIRED (-59)
+/* Tranche 5 slice 2: a relayed socket call got no worker reply in time. */
+#define OS_NET_RELAY_TIMEOUT (-87)
+/* Tranche 5 slice 2: net-driver died after taking the request; outcome is
+ * unknown, the kernel does not replay it. */
+#define OS_NET_RELAY_ABORTED (-88)
 
 /* Requête POD sans pointeur : hostname, ports et budgets uniquement. */
 #define OS_LLM_HOSTNAME_MAX 96U
@@ -941,12 +957,16 @@ static inline int os_task_parse_event(const os_ipc_message_t* message,
 #define OS_ATA_JOB_NONE  0U
 #define OS_ATA_JOB_WRITE 1U
 #define OS_ATA_JOB_READ  2U
+/* Tranche 4 slice 3: synchronous FAT sector job (drive 0 or 1). */
+#define OS_ATA_JOB_IO_READ  3U
+#define OS_ATA_JOB_IO_WRITE 4U
 /* SYS_ATA_JOB_DONE results (>= 0). */
 #define OS_ATA_JOB_CHUNK_OK      0
 #define OS_ATA_JOB_FLUSH_DONE    1
 #define OS_ATA_JOB_LOAD_DONE     2
 #define OS_ATA_JOB_LOAD_SKIPPED  3
 #define OS_ATA_JOB_FAILED        4
+#define OS_ATA_JOB_IO_DONE       5
 /* Kernel PIO refused because the Ring 3 driver holds the controller. */
 #define OS_ATA_CONTROLLER_BUSY (-85)
 /* Job completion does not match the chunk currently handed out. */
@@ -958,7 +978,10 @@ typedef struct {
     uint32_t lba;
     uint32_t count;
     uint32_t generation;
+    uint32_t flags;            /* OS_ATA_JOB_FLAG_* */
 } os_ata_job_t;
+/* Test hook: the driver must crash in the middle of this job. */
+#define OS_ATA_JOB_FLAG_DEBUG_CRASH 1U
 
 typedef struct {
     int32_t driver_pid;        /* live ata-driver owner or 0 */
@@ -973,6 +996,15 @@ typedef struct {
     uint32_t pending;          /* 1 if a flush/load is queued or in flight */
     uint32_t client_min_lba;   /* first master LBA a client may write */
     uint32_t slave_write_locked; /* 1 if the slave disk holds FAT32 */
+    /* Tranche 4 slice 3: FAT16/FAT32 sector I/O routed through the driver. */
+    uint32_t fat_driver_read_sectors;  /* FAT sectors read by the driver */
+    uint32_t fat_driver_write_sectors; /* FAT sectors written by the driver */
+    uint32_t fat_kernel_pio_sectors;   /* FAT sectors moved by Ring 0 PIO (boot mount, fallback) */
+    uint32_t fat_kernel_pio_live;      /* ... of which while a driver was live (expected 0) */
+    uint32_t fat_rpc_aborts;           /* sector RPCs aborted (driver died or stalled) */
+    int32_t boot_driver_pid;           /* atadriver spawned by the kernel at boot, 0 if none */
+    uint32_t channel_resets;           /* ATA soft resets after a driver died holding the controller */
+    uint32_t debug_crash_armed;        /* test hook pending (SYS_ATA_DEBUG) */
 } os_ata_status_t;
 #define OS_TASK_SUPERVISION_EVENT_SIZE 24U
 
@@ -1017,5 +1049,42 @@ static inline int os_task_parse_supervision_event(const os_ipc_message_t* messag
           event_out->action != OS_TASK_SUPERVISION_DELEGATE_IN) && event_out->related_pid != 0)) return -1;
     return 0;
 }
+
+/* Tranche 5 slice 2: net IPC relay. While net-driver is registered, the
+ * socket syscalls 99-108 of any other task are forwarded to the worker: the
+ * kernel sends it one IPC message (sender_pid 0, type
+ * OS_IPC_NET_RELAY_REQUEST, request_id = job id) carrying the syscall
+ * number, scalar arguments and up to OS_NET_RELAY_MAX_IN input bytes. The
+ * worker runs the same syscall itself and answers with SYS_NET_RELAY_REPLY.
+ * LLM (91-98) and peer (128-130) syscalls are not relayed (still -59). */
+#define OS_IPC_NET_RELAY_REQUEST 0x4E524C01U
+#define OS_NET_RELAY_MAX_IN 72U
+#define OS_NET_RELAY_MAX_OUT 256U
+typedef struct {
+    uint32_t job_id;
+    uint32_t op;           /* SYS_SOCKET_* number */
+    uint32_t arg0;         /* socket id or local port */
+    uint32_t arg1;         /* remote port / sequence */
+    uint32_t arg2;         /* sequence */
+    uint16_t in_length;    /* bytes used in in[] */
+    uint16_t out_capacity; /* max bytes the caller accepts back */
+    uint8_t in[OS_NET_RELAY_MAX_IN];
+} os_net_relay_request_t;
+typedef struct {
+    uint32_t job_id;
+    int32_t result;
+    uint32_t out_length;
+    uint8_t out[OS_NET_RELAY_MAX_OUT];
+} os_net_relay_reply_t;
+typedef struct {
+    uint32_t forwarded;   /* requests sent to the worker over IPC */
+    uint32_t completed;   /* replies delivered back to the caller */
+    uint32_t aborted;     /* worker lost with a request in flight */
+    uint32_t timeouts;    /* no reply in time */
+    uint32_t denied;      /* gated but not relayed (-59), e.g. LLM / peer */
+    uint32_t stale;       /* replies that matched no request */
+    uint32_t pending;     /* 1 while a request is in flight */
+    int32_t worker_pid;   /* live net-driver PID, 0 if none */
+} os_net_relay_status_t;
 
 #endif

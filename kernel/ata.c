@@ -84,6 +84,20 @@ static void ata_select_lba(uint8_t drive, uint32_t lba, uint8_t count) {
 
 int ata_present(void) { return g_ata_present; }
 
+/* Tranche 4: a Ring 3 driver killed in the middle of a PIO transfer leaves
+ * the channel with DRQ set; the device then ignores new commands (QEMU and
+ * real drives alike). Software reset (SRST in the device control register)
+ * aborts it before the Ring 0 fallback touches the controller. */
+int ata_channel_reset(void) {
+    uint32_t i;
+    if (!g_ata_present) return -1;
+    outb(ATA_ALTSTAT, 0x04); /* SRST */
+    for (i = 0; i < 16U; i++) ata_io_delay();
+    outb(ATA_ALTSTAT, 0x00); /* back to the power-on value (never changed elsewhere) */
+    for (i = 0; i < 16U; i++) ata_io_delay();
+    return ata_wait_not_busy() < 0 ? -1 : 0;
+}
+
 int ata_present_drive(uint8_t drive) {
     return drive < 2U && g_ata_drive_present[drive];
 }
