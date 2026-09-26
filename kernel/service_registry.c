@@ -384,6 +384,18 @@ int service_registry_ata_overlay_io_via_worker(int32_t pid) {
     return pid == worker;
 }
 
+/* AOS-2177: decision for the historical SYS_READFILE ABI. Without a live
+ * vfs-virtual worker (degraded mode) or for the worker PID itself, the full
+ * overlay-then-initrd path stays open. Otherwise the ATA-backed overlay is
+ * refused (WORKER_REQUIRED when the path lives there) while RAM-only initrd
+ * reads stay available. Drivers stay Ring 0. */
+int service_registry_historical_read_decision(int32_t pid, int overlay_hit) {
+    if (pid <= 0) return SERVICE_HIST_READ_DENIED;
+    if (service_registry_ata_overlay_io_via_worker(pid)) return SERVICE_HIST_READ_FULL;
+    if (overlay_hit) return SERVICE_HIST_READ_WORKER_REQUIRED;
+    return SERVICE_HIST_READ_INITRD_ONLY;
+}
+
 /* Isolation du sous-système réseau NE2000 : avec net-driver présent, l'accès
  * aux primitives réseau est restreint au seul PID du pilote Ring 3 enregistré. */
 int service_registry_net_io_via_worker(int32_t pid) {
