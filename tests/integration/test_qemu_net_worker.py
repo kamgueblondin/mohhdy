@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""Tranche 5 contract: net-driver worker gate on network syscalls.
+"""Tranche 5 contract: net-driver worker gate and net IPC relay.
 
-Degraded (no net-driver): netclaim keeps the historical local path.
-Worker live: networker still reaches socket/peer syscalls (positive proof);
-netclaim is refused with OS_NET_WORKER_REQUIRED while net-status stays open
-(negative proof). Worker killed: degraded path reopens.
-The NE2000 driver itself stays in Ring 0.
+Degraded (no net-driver): netclaim and netrelay use the historical local
+path (relay counters unchanged).
+Worker live: networker still reaches socket/peer syscalls (positive proof).
+Slice 2: socket syscalls 99-108 of non-worker tasks are relayed to the
+worker over IPC (netclaim listen, netrelay 14-call TCP loopback between two
+registry sockets, worker "relay op" lines, kernel counters) while LLM and
+peer syscalls stay refused with OS_NET_WORKER_REQUIRED (negative proof) and
+a forged relay reply is refused. A suspended worker makes a relayed call
+time out (-87) and a worker killed mid-request aborts it (-88), without
+hanging the caller or replaying the call. Worker killed: degraded path
+reopens. The NE2000 driver and the TCP/socket registry stay in Ring 0.
 """
 import os
 import re
@@ -113,6 +119,29 @@ def kill(client, proc, pid):
     send_command_until(client, "kill %s" % pid, "Processus %s termine" % pid, proc)
 
 
+STATUS_KEYS = ("worker", "fwd", "done", "aborted", "timeouts", "denied", "stale", "pending")
+
+
+def relay_status(client, proc):
+    start = send_command_until(client, "net-relay-status", "net-relay ok worker", proc)
+    wait_for(" end", proc, start, timeout=5)
+    text = normalized_log(log_text()[start:])
+    match = re.search(r"net-relay ok worker (-?\d+) fwd (\d+) done (\d+) aborted (\d+) "
+                      r"timeouts (\d+) denied (\d+) stale (\d+) pending (\d+) end", text)
+    if not match:
+        raise RuntimeError("unparsable net-relay-status")
+    return dict(zip(STATUS_KEYS, (int(v) for v in match.groups())))
+
+
+def relay_local(client, proc):
+    """netrelay without a worker: same loopback, run locally, not relayed."""
+    pid, start = spawn(client, proc, "netrelay")
+    wait_child(client, proc, "netrelay tcp loopback ok ping pong mode local "
+               "forwarded 0 completed 0", start)
+    wait_child(client, proc, "netrelay forged reply refused", start)
+    kill(client, proc, pid)
+
+
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     for path in (LOG, ERR, MON):
@@ -141,24 +170,88 @@ def main():
             claim_pid, start = spawn(monitor, proc, "netclaim")
             wait_child(monitor, proc, "netclaim local ok", start)
             kill(monitor, proc, claim_pid)
+            relay_local(monitor, proc)
+            base = relay_status(monitor, proc)
+            if base["worker"] != 0 or base["fwd"] != 0 or base["pending"] != 0:
+                raise RuntimeError("relay active without worker: %r" % base)
             # Worker live: positive proof from the worker PID itself.
             worker_pid, start = spawn(monitor, proc, "networker")
             wait_child(monitor, proc, "net-driver ready", start)
             wait_child(monitor, proc, "net-driver gated syscalls ok", start)
             send_command_until(monitor, "service-find net-driver",
                                "service-find ok net-driver %s" % worker_pid, proc)
-            # Negative proof: non-worker task refused, status still readable.
+            # Negative proof: LLM/peer refused for a non-worker task, status
+            # still readable. Slice 2: its socket call is relayed instead.
             claim_pid, start = spawn(monitor, proc, "netclaim")
             wait_child(monitor, proc, "netclaim worker-required enforced", start)
+            wait_child(monitor, proc, "netclaim socket relayed", start)
+            wait_for("net-driver relay op 105 rc 0", proc, start, timeout=5)
             kill(monitor, proc, claim_pid)
             send_command_until(monitor, "net-status", "Carte Ethernet : detectee", proc)
-            # Worker gone: degraded path reopens.
+            # Relay: 14 socket calls (TCP loopback between two registry
+            # sockets) forwarded to the worker and answered.
+            relay_pid, start = spawn(monitor, proc, "netrelay")
+            # One relayed call per cooperative turn: the shell waits for a
+            # key in SYS_GETS, so the test hands out turns with "yield".
+            wait_child(monitor, proc, "netrelay tcp loopback ok ping pong mode relay "
+                       "forwarded 14 completed 14", start, rounds=30)
+            wait_child(monitor, proc, "netrelay unsupported still worker-required", start)
+            wait_child(monitor, proc, "netrelay forged reply refused", start)
+            relayed = normalized_log(log_text()[start:])
+            for op in range(99, 109):
+                # open/listen return a socket id, the others 0; never < 0.
+                if not re.search(r"net-driver relay op %d rc \d+ reply 0" % op, relayed):
+                    raise RuntimeError("worker did not run relayed op %d" % op)
+            kill(monitor, proc, relay_pid)
+            live = relay_status(monitor, proc)
+            if (live["worker"] != int(worker_pid) or live["fwd"] != 16 or
+                    live["done"] != 16 or live["aborted"] != 0 or
+                    live["timeouts"] != 0 or live["denied"] < 4 or live["pending"] != 0):
+                raise RuntimeError("unexpected relay counters: %r" % live)
+            # Stalled worker: the relayed call times out, the caller is not
+            # hung and gets OS_NET_RELAY_TIMEOUT (-87), never a replay.
+            send_command_until(monitor, "task-suspend %s" % worker_pid,
+                               "task-suspend ok", proc)
+            claim_pid, start = spawn(monitor, proc, "netclaim")
+            wait_child(monitor, proc, "[NET] relay timeout", start, rounds=20)
+            wait_child(monitor, proc, "netclaim socket rc -87", start)
+            kill(monitor, proc, claim_pid)
+            send_command_until(monitor, "task-resume %s" % worker_pid,
+                               "task-resume ok", proc)
+            stalled = relay_status(monitor, proc)
+            if stalled["timeouts"] != 1 or stalled["pending"] != 0:
+                raise RuntimeError("timeout not accounted: %r" % stalled)
+            # Worker killed with a request in flight: the caller gets
+            # OS_NET_RELAY_ABORTED (-88) once, the call is not replayed.
+            send_command_until(monitor, "task-suspend %s" % worker_pid,
+                               "task-suspend ok", proc)
+            claim_pid, start = spawn(monitor, proc, "netclaim")
+            wait_child(monitor, proc, "netclaim waiting net", start)
+            # Kill the worker only once netclaim's socket call is in flight.
+            for _ in range(8):
+                if relay_status(monitor, proc)["pending"] == 1:
+                    break
+                send_command_until(monitor, "yield", "yield ok", proc)
+            else:
+                raise RuntimeError("relayed request never pending")
             kill(monitor, proc, worker_pid)
+            wait_child(monitor, proc, "[NET] relay aborted: net-driver lost", start, rounds=10)
+            wait_child(monitor, proc, "netclaim socket rc -88", start)
+            kill(monitor, proc, claim_pid)
+            aborted = relay_status(monitor, proc)
+            if aborted["aborted"] != 1 or aborted["pending"] != 0 or aborted["worker"] != 0:
+                raise RuntimeError("abort not accounted: %r" % aborted)
+            # Worker gone: degraded path reopens.
             send_command_until(monitor, "service-find net-driver",
                                "service-find: service indisponible", proc)
             claim_pid, start = spawn(monitor, proc, "netclaim")
             wait_child(monitor, proc, "netclaim local ok", start)
             kill(monitor, proc, claim_pid)
+            relay_local(monitor, proc)
+            print("net relay: fwd %d done %d denied %d; stalled worker timeouts %d; "
+                  "killed worker aborted %d" %
+                  (live["fwd"], live["done"], live["denied"], stalled["timeouts"],
+                   aborted["aborted"]))
             print("MOHHDY Tranche 5 net-driver worker gate contract passed")
             return 0
         finally:

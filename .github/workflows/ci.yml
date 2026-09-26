@@ -116,7 +116,7 @@ jobs:
             ci-serial.log
 
   integration-qemu-rest:
-    name: QEMU integration contracts (other six + NE2000 multipair)
+    name: QEMU integration contracts (other six + NE2000 multipair + net relay)
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -142,6 +142,10 @@ jobs:
 
       - name: QEMU NE2000 TLS multipair (moved from build-and-test)
         run: make qemu-ne2k-tls-multipair
+
+      # Tranche 5 slices 1-2: net-driver gate and net IPC relay (no disk).
+      - name: QEMU Tranche 5 net-driver gate + IPC relay
+        run: make qemu-net-worker
 
       - name: Upload integration logs
         if: always()
