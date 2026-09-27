@@ -31,6 +31,10 @@ int kernel_llm_configure_openai(const os_llm_openai_credential_request_t* reques
 int kernel_llm_dhcp_maintenance(uint32_t now);
 int kernel_llm_rdrand_word(uint32_t* output);
 
+int kernel_peer_listen(const os_peer_listen_request_t* request);
+int kernel_peer_accept(const os_peer_accept_request_t* request);
+int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request);
+
 /* Shared with the Ring 0 peer and wire paths in kernel/kernel.c. */
 extern net_dhcp_lease_t boot_llm_lease;
 extern net_arp_cache_t boot_llm_arp_cache;

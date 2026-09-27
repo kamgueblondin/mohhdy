@@ -860,6 +860,28 @@ static int net_relay_marshal(const cpu_state_t* cpu, os_net_relay_request_t* req
             req->in_length = (uint16_t)sizeof(os_socket_connect_request_t);
             net_relay_copy(req->in, (const uint8_t*)cpu->ebx, req->in_length);
             return 0;
+        case SYS_PEER_LISTEN:
+            if (!syscall_user_range((const void*)cpu->ebx, sizeof(os_peer_listen_request_t), 0))
+                return OS_PEER_BAD_REQUEST;
+            req->in_length = (uint16_t)sizeof(os_peer_listen_request_t);
+            net_relay_copy(req->in, (const uint8_t*)cpu->ebx, req->in_length);
+            return 0;
+        case SYS_PEER_ACCEPT:
+            if (!syscall_user_range((const void*)cpu->ebx, sizeof(os_peer_accept_request_t), 0))
+                return OS_PEER_BAD_REQUEST;
+            req->in_length = (uint16_t)sizeof(os_peer_accept_request_t);
+            net_relay_copy(req->in, (const uint8_t*)cpu->ebx, req->in_length);
+            return 0;
+        case SYS_PEER_TLS_POLL:
+            if (cpu->ebx && !syscall_user_range((const void*)cpu->ebx, sizeof(os_peer_tls_poll_request_t), 0))
+                return OS_PEER_BAD_REQUEST;
+            if (cpu->ebx) {
+                req->in_length = (uint16_t)sizeof(os_peer_tls_poll_request_t);
+                net_relay_copy(req->in, (const uint8_t*)cpu->ebx, req->in_length);
+            } else {
+                req->in_length = 0U;
+            }
+            return 0;
         default:
             return OS_SOCKET_BAD_ARGUMENT;
     }
@@ -966,7 +988,7 @@ static int syscall_net_relay(cpu_state_t* cpu) {
         return 1;
     }
     memset(&payload, 0, sizeof(payload));
-    payload.type = OS_IPC_NET_RELAY_REQUEST;
+    payload.type = net_relay_peer_supported(req.op) ? OS_IPC_NET_PEER_RELAY_REQUEST : OS_IPC_NET_RELAY_REQUEST;
     payload.size = (uint32_t)sizeof(req);
     payload.request_id = (uint32_t)job;
     net_relay_copy(payload.data, (const uint8_t*)&req, sizeof(req));

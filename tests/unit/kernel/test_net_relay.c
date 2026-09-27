@@ -10,8 +10,8 @@ static void test_supported_subset(void) {
     for (n = SYS_SOCKET_OPEN; n <= SYS_SOCKET_ACCEPT_ACK; n++) TEST_ASSERT_TRUE(net_relay_supported(n));
     TEST_ASSERT_FALSE(net_relay_supported(SYS_LLM_POLL_TLS));
     TEST_ASSERT_FALSE(net_relay_supported(SYS_LLM_ACQUIRE_START));
-    TEST_ASSERT_FALSE(net_relay_supported(SYS_PEER_LISTEN));
-    TEST_ASSERT_FALSE(net_relay_supported(SYS_PEER_TLS_POLL));
+    TEST_ASSERT_TRUE(net_relay_supported(SYS_PEER_LISTEN));
+    TEST_ASSERT_TRUE(net_relay_supported(SYS_PEER_TLS_POLL));
     TEST_ASSERT_FALSE(net_relay_supported(SYS_NET_STATUS));
     TEST_ASSERT_FALSE(net_relay_supported(SYS_NET_RELAY_REPLY));
     TEST_ASSERT_TRUE(sizeof(os_net_relay_request_t) <= OS_IPC_MAX_DATA);
@@ -30,7 +30,7 @@ static void test_roundtrip_and_stale(void) {
     /* Worker itself, bad pids and unsupported ops are never relayed. */
     TEST_ASSERT_EQUAL(-1, net_relay_begin(5, 5, SYS_SOCKET_OPEN, 0U));
     TEST_ASSERT_EQUAL(-1, net_relay_begin(0, 5, SYS_SOCKET_OPEN, 0U));
-    TEST_ASSERT_EQUAL(-1, net_relay_begin(4, 5, SYS_PEER_LISTEN, 0U));
+    TEST_ASSERT_EQUAL(-1, net_relay_begin(4, 5, SYS_NET_STATUS, 0U));
     job = net_relay_begin(4, 5, SYS_SOCKET_SEND, 10U);
     TEST_ASSERT_TRUE(job > 0);
     TEST_ASSERT_EQUAL(NET_RELAY_SENT, (int)net_relay_state_for(4));
@@ -148,7 +148,8 @@ static void test_llm_bulk_channel(void) {
     TEST_ASSERT_TRUE(net_relay_llm_supported(SYS_LLM_OPENAI_CREDENTIAL));
     TEST_ASSERT_FALSE(net_relay_llm_supported(SYS_LLM_SESSION_STATUS));
     TEST_ASSERT_FALSE(net_relay_llm_supported(SYS_SOCKET_OPEN));
-    TEST_ASSERT_FALSE(net_relay_llm_supported(SYS_PEER_LISTEN));
+    TEST_ASSERT_TRUE(net_relay_peer_supported(SYS_PEER_LISTEN));
+    TEST_ASSERT_TRUE(net_relay_peer_supported(SYS_PEER_TLS_POLL));
     TEST_ASSERT_EQUAL(NET_RELAY_LLM_TIMEOUT_TICKS, net_relay_timeout_ticks(SYS_LLM_POLL_TLS));
     TEST_ASSERT_EQUAL(NET_RELAY_TIMEOUT_TICKS, net_relay_timeout_ticks(SYS_SOCKET_SEND));
     TEST_ASSERT_TRUE(sizeof(os_llm_request_t) <= OS_NET_RELAY_BULK_MAX);

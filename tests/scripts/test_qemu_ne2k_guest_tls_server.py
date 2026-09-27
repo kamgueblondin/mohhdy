@@ -178,6 +178,22 @@ def run_command(inst, command, needle, peer_alive_check, timeout=60):
         return start
 
 
+def spawn_networker(inst, peer_alive_check):
+    run_command(inst, "spawn networker", "spawn ok pid", peer_alive_check, timeout=30)
+    ready = False
+    for _ in range(12):
+        peer_alive_check()
+        if "net-driver stack ring3 ready arp ipv4 tcp tls" in normalized_log(log_text(inst["log"])):
+            ready = True
+            break
+        run_command(inst, "yield", "yield ok", peer_alive_check, timeout=20)
+    if not ready:
+        raise RuntimeError("networker Ring 3 stack not ready on %s: %s" % (inst["label"], log_text(inst["log"])[-1500:]))
+    if "[NET] NE2000 ports 0x300-0x31F handed to the Ring 3 worker" not in log_text(inst["log"]):
+        raise RuntimeError("worker on %s did not take the NE2000" % inst["label"])
+    say("[guest-tls-server] networker Ring 3 active on guest %s" % inst["label"])
+
+
 def terminate(proc):
     if proc is None:
         return
@@ -261,11 +277,12 @@ def main():
                 inst, "net-status json", "detected", peer_alive_check, timeout=30
             )
 
-        # B first: claim a lease so peer.local can resolve to B.
+        # B first: spawn networker Ring 3 worker and claim a lease so peer.local can resolve to B.
         run_command(
             guest_b, "ai-runtime", "Entropie TLS RDRAND : disponible",
             peer_alive_check, timeout=30,
         )
+        spawn_networker(guest_b, peer_alive_check)
         try:
             run_command(
                 guest_b, "ai-acquire example.com",
@@ -292,11 +309,12 @@ def main():
             peer_alive_check, timeout=30,
         )
 
-        # A targets peer.local → DNS peer IP, ARP croise, SYN vers B.
+        # A targets peer.local → spawn networker Ring 3 worker, DNS peer IP, ARP croise, SYN vers B.
         run_command(
             guest_a, "ai-runtime", "Entropie TLS RDRAND : disponible",
             peer_alive_check, timeout=30,
         )
+        spawn_networker(guest_a, peer_alive_check)
         try:
             run_command(
                 guest_a, "ai-acquire peer.local",

@@ -63,9 +63,9 @@ void main(void) {
     } else if (before.worker_pid > 0) {
         os_net_relay_status_t llm_after;
         (void)call1(SYS_NET_RELAY_STATUS, (uint32_t)&llm_after);
-        if (peer_rc == OS_NET_WORKER_REQUIRED &&
+        if ((peer_rc == OS_PEER_BAD_REQUEST || peer_rc == OS_NET_WORKER_REQUIRED) &&
             (llm_rc == OS_NET_WORKER_REQUIRED ||
-             (llm_rc == OS_LLM_TLS_BAD_PHASE && llm_after.forwarded == after.forwarded + 1U)))
+             (llm_rc == OS_LLM_TLS_BAD_PHASE && (llm_after.forwarded == after.forwarded + 1U || llm_after.forwarded == after.forwarded + 2U))))
             puts("netclaim worker-required enforced\n");
         else
             puts("netclaim unexpected result\n");

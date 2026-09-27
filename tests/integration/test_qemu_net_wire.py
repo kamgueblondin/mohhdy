@@ -144,7 +144,7 @@ def main():
             stacks = re.findall(r"net-driver stack ring3 sockets (\d+) wire (\d+) llm (\d+) "
                                 r"rounds (\d+) framed (\d+) decoded (\d+) kernel-pumps (\d+) "
                                 r"kernel-out (\d+) kernel-in (\d+) end", text)
-            if "net-driver stack ring3 ready arp ipv4 tcp tls" not in text or not stacks:
+            if "net-driver stack ring3 ready arp ipv4 tcp tls" not in normalized_log(nw.log_text()) or not stacks:
                 raise RuntimeError("worker did not run the Ring 3 stack")
             stk = [int(v) for v in stacks[-1]]
             if (stk[1] != 4 or stk[4] != n_tx or stk[5] != n_rx or stk[3] != n_pumps or

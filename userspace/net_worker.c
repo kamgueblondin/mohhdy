@@ -366,6 +366,10 @@ static int32_t relay_execute(const os_net_relay_request_t* req, os_net_relay_rep
             if (rc == 0) reply->out_length = out_length;
             return rc;
         }
+        case SYS_PEER_LISTEN:
+        case SYS_PEER_ACCEPT:
+        case SYS_PEER_TLS_POLL:
+            return net_call1(req->op, (uint32_t)in);
         default:
             return OS_SOCKET_BAD_ARGUMENT;
     }
@@ -487,7 +491,8 @@ void main(void) {
             continue;
         }
         /* Only the kernel (sender 0) forwards relay requests. */
-        if (message.sender_pid != 0 || message.type != OS_IPC_NET_RELAY_REQUEST ||
+        if (message.sender_pid != 0 ||
+            (message.type != OS_IPC_NET_RELAY_REQUEST && message.type != OS_IPC_NET_PEER_RELAY_REQUEST) ||
             message.size != sizeof(req)) {
             ignored++;
             puts("net-driver received IPC message\n");

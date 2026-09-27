@@ -22,11 +22,13 @@ void net_relay_init(void);
 /* 1 for the socket syscalls 99-108 (and SYS_SOCKET_CONNECT, slice 3) that
  * are relayed. */
 int net_relay_supported(uint32_t syscall_number);
+/* 1 for peer syscalls 128-130. */
+int net_relay_peer_supported(uint32_t syscall_number);
 /* Tranche 5 pile: LLM 91-98, relayed only while the worker owns the NIC
  * (the caller decides); structs go through the bulk channel. */
 int net_relay_llm_supported(uint32_t syscall_number);
 /* Ticks before a stuck op may expire: TLS ops run long in Ring 3. */
-#define NET_RELAY_LLM_TIMEOUT_TICKS 6000U
+#define NET_RELAY_LLM_TIMEOUT_TICKS 20000U
 uint32_t net_relay_timeout_ticks(uint32_t op);
 /* Slot state as seen by pid: FREE (slot free or owned by someone else is
  * reported through net_relay_owner), SENT or DONE when owned by pid. */
