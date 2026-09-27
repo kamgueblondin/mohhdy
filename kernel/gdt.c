@@ -13,6 +13,7 @@ gdt_ptr_t   gdt_ptr;
 tss_full_t tss_full;
 #define tss_entry (tss_full.tss)
 static int g_tss_ata_granted = -1;
+static int g_tss_nic_granted = -1;
 
 // External assembly functions
 extern void gdt_flush(uint32_t);
@@ -59,6 +60,7 @@ void gdt_init() {
     io_bitmap_deny_all(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES);
     tss_full.io_bitmap_end = 0xFFU;
     g_tss_ata_granted = 0;
+    g_tss_nic_granted = 0;
 
     // Flush GDT and TSS
     gdt_flush((uint32_t)&gdt_ptr);
@@ -79,4 +81,11 @@ void tss_set_ata_io(int grant) {
     if (g_tss_ata_granted == grant) return;
     io_bitmap_apply_ata(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
     g_tss_ata_granted = grant;
+}
+
+void tss_set_nic_io(int grant) {
+    grant = grant ? 1 : 0;
+    if (g_tss_nic_granted == grant) return;
+    io_bitmap_apply_ne2k(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
+    g_tss_nic_granted = grant;
 }

@@ -26,6 +26,7 @@
 #include "ne2k.h"
 #include "net_socket.h"
 #include "net_wire.h"
+#include "net_nic_owner.h"
 #include "tls_trust_anchor.h"
 #include "tls_test_trust_anchor.h"
 #include "tls_test_leaf.h"
@@ -132,7 +133,29 @@ static void kernel_llm_clear_bytes(uint8_t* buffer, uint32_t length);
 static int kernel_llm_rdrand_supported(void);
 static int kernel_llm_close_internal(uint8_t preserve_provider);
 int kernel_llm_close(void);
-void ne2k_irq_handler(void) { ne2k_irq_service(); }
+/* Tranche 5 suite: while the Ring 3 worker owns the NE2000, IRQ3 is only
+ * counted for it (the worker reads and acks the ISR with its own PIO); the
+ * PIC EOI stays in the stub. */
+void ne2k_irq_handler(void) {
+    if (nic_owner_irq()) return;
+    ne2k_irq_service();
+}
+
+/* Tranche 5 suite: every kernel NE2000 access goes through this gate. While
+ * a Ring 3 worker owns the card the kernel entry points refuse first
+ * (OS_NET_NIC_WORKER_OWNED); this is the safety net: a stray access is
+ * dropped and counted (kernel_refused, expected 0 in the contracts). */
+static ne2k_io_t boot_ne2k_raw_io;
+static uint8_t kernel_nic_inb(void* context, uint16_t port) {
+    (void)context;
+    if (!nic_owner_kernel_may_touch()) { nic_owner_note_kernel_refused(); return 0xFFU; }
+    return boot_ne2k_raw_io.inb(boot_ne2k_raw_io.context, port);
+}
+static void kernel_nic_outb(void* context, uint16_t port, uint8_t value) {
+    (void)context;
+    if (!nic_owner_kernel_may_touch()) { nic_owner_note_kernel_refused(); return; }
+    boot_ne2k_raw_io.outb(boot_ne2k_raw_io.context, port, value);
+}
 
 static void ne2k_boot_probe(void) {
     net_dhcp_lease_clear(&boot_llm_lease);
@@ -160,7 +183,10 @@ static void ne2k_boot_probe(void) {
     boot_peer_tls_ready = 0U;
     boot_peer_tls_step = 0U;
     boot_peer_app_seen = 0U;
-    if (ne2k_i386_io(&boot_ne2k_io) != 0) return;
+    if (ne2k_i386_io(&boot_ne2k_raw_io) != 0) return;
+    boot_ne2k_io.context = 0;
+    boot_ne2k_io.inb = kernel_nic_inb;
+    boot_ne2k_io.outb = kernel_nic_outb;
     if (ne2k_probe(&boot_ne2k_device, 0x300U, &boot_ne2k_io) != 0) {
         print_string("NE2000 ISA absent; reseau reste desactive.\\n");
         return;
@@ -192,6 +218,25 @@ uint32_t kernel_net_status(void) {
 static uint8_t boot_wire_tx[KERNEL_LLM_FRAME_CAPACITY];
 static uint8_t boot_wire_rx[KERNEL_LLM_FRAME_CAPACITY];
 
+/* Tranche 5 suite: frames of a wire op running on the worker's NIC wait
+ * here until the next SYS_NET_NIC pump copies them out. */
+static uint8_t boot_wire_q[OS_NET_NIC_PUMP_TX_MAX][OS_NET_NIC_FRAME_MAX];
+static uint16_t boot_wire_q_len[OS_NET_NIC_PUMP_TX_MAX];
+static uint16_t boot_wire_q_count;
+static struct { uint8_t pending; uint8_t done; int32_t result; } boot_wire_port;
+
+static int kernel_wire_emit(void* context, const uint8_t* frame, uint16_t length) {
+    uint16_t i;
+    (void)context;
+    if (boot_wire_q_count >= OS_NET_NIC_PUMP_TX_MAX || length > OS_NET_NIC_FRAME_MAX) return -1;
+    for (i = 0U; i < length; i++) boot_wire_q[boot_wire_q_count][i] = frame[i];
+    boot_wire_q_len[boot_wire_q_count] = length;
+    boot_wire_q_count++;
+    return 0;
+}
+
+int kernel_net_nic_port_mode(void) { return nic_owner_pid() != 0; }
+
 static int kernel_net_wire_ctx(net_wire_ctx_t* ctx) {
     if (!boot_ne2k_present) return OS_NET_WIRE_UNAVAILABLE;
     ctx->device = &boot_ne2k_device;
@@ -200,6 +245,91 @@ static int kernel_net_wire_ctx(net_wire_ctx_t* ctx) {
     ctx->tx = boot_wire_tx;
     ctx->rx = boot_wire_rx;
     ctx->capacity = (uint16_t)sizeof(boot_wire_tx);
+    ctx->emit = 0;
+    ctx->emit_context = 0;
+    if (kernel_net_nic_port_mode()) {
+        if (boot_wire_port.pending) return OS_NET_WIRE_UNAVAILABLE; /* one op at a time */
+        ctx->emit = kernel_wire_emit;
+        boot_wire_q_count = 0U;
+    }
+    return 0;
+}
+
+/* Port mode: the op keeps running on the worker's NIC. Frames already queued
+ * (even by an op that finished at once, e.g. a CLOSE_WAIT FIN) are handed out
+ * by the next pump, together with the result. */
+static int kernel_net_wire_port_begin(const net_wire_ctx_t* ctx, int running) {
+    if (!ctx->emit) return running; /* unused */
+    if (!running && boot_wire_q_count == 0U) return net_wire_op_result();
+    boot_wire_port.pending = 1U;
+    boot_wire_port.done = running ? 0U : 1U;
+    boot_wire_port.result = running ? 0 : net_wire_op_result();
+    return OS_NET_WIRE_PENDING;
+}
+
+int kernel_net_nic_pump(os_net_nic_pump_t* pump) {
+    net_wire_ctx_t ctx;
+    uint16_t i, j, frame_in = 0U;
+    if (!pump || !boot_wire_port.pending) return OS_NET_WIRE_UNAVAILABLE;
+    if (pump->mode != OS_NET_NIC_PUMP_FETCH && !boot_wire_port.done) {
+        ctx.device = &boot_ne2k_device; ctx.io = &boot_ne2k_io; ctx.cache = &boot_llm_arp_cache;
+        ctx.tx = boot_wire_tx; ctx.rx = boot_wire_rx; ctx.capacity = (uint16_t)sizeof(boot_wire_tx);
+        ctx.emit = kernel_wire_emit; ctx.emit_context = 0;
+        if (pump->mode == OS_NET_NIC_PUMP_FRAME) {
+            if (!pump->rx || pump->rx_length == 0U || pump->rx_length > sizeof(boot_wire_rx))
+                return OS_SOCKET_BAD_ARGUMENT;
+            for (i = 0U; i < pump->rx_length; i++) boot_wire_rx[i] = pump->rx[i];
+            frame_in = 1U;
+        }
+        if (!net_wire_op_step(&ctx, frame_in, frame_in ? pump->rx_length : 0U)) {
+            boot_wire_port.done = 1U;
+            boot_wire_port.result = net_wire_op_result();
+        }
+    }
+    pump->tx_count = boot_wire_q_count;
+    for (i = 0U; i < boot_wire_q_count; i++) {
+        pump->tx_length[i] = boot_wire_q_len[i];
+        for (j = 0U; j < boot_wire_q_len[i]; j++)
+            pump->tx[(uint32_t)i * OS_NET_NIC_FRAME_MAX + j] = boot_wire_q[i][j];
+    }
+    nic_owner_note_pump(boot_wire_q_count, frame_in, pump->tx_sent, pump->tx_failed);
+    boot_wire_q_count = 0U;
+    pump->done = boot_wire_port.done;
+    pump->result = boot_wire_port.result;
+    if (boot_wire_port.done) boot_wire_port.pending = 0U;
+    return 0;
+}
+
+int kernel_net_nic_info(os_net_nic_info_t* info) {
+    uint8_t i;
+    if (!boot_ne2k_present || !info) return OS_NET_NIC_ABSENT;
+    info->base_port = (uint16_t)OS_NET_NIC_BASE_PORT;
+    info->irq = (uint8_t)OS_NET_NIC_IRQ_LINE;
+    for (i = 0U; i < 6U; i++) info->mac[i] = boot_ne2k_device.mac[i];
+    info->reserved = 0U;
+    return 0;
+}
+
+int kernel_net_nic_present(void) { return boot_ne2k_present ? 1 : 0; }
+
+/* Worker lost: cancel its op, then re-initialise the card from Ring 0 (the
+ * worker left rings, IMR and maybe a DMA in an unknown state). */
+int kernel_net_nic_reclaim(void) {
+    boot_wire_port.pending = 0U;
+    boot_wire_q_count = 0U;
+    if (net_wire_op_active()) net_wire_op_cancel();
+    if (!boot_ne2k_present) return 0;
+    nic_owner_note_reclaim();
+    if (ne2k_probe(&boot_ne2k_device, 0x300U, &boot_ne2k_io) != 0 ||
+        ne2k_prepare(&boot_ne2k_device, &boot_ne2k_io) != 0 ||
+        ne2k_read_mac(&boot_ne2k_device, &boot_ne2k_io) != 0 ||
+        ne2k_configure_rings(&boot_ne2k_device, &boot_ne2k_io) != 0) {
+        print_string_serial("[NET] NE2000 reclaim failed\n");
+        return -1;
+    }
+    boot_ne2k_io.outb(boot_ne2k_io.context, (uint16_t)(0x300U + 0x0FU), 0x00U); /* IMR off */
+    (void)ne2k_irq_attach(&boot_ne2k_device, &boot_ne2k_io);
+    print_string_serial("[NET] NE2000 back in Ring 0 after worker loss\n");
     return 0;
 }
 
@@ -207,9 +337,9 @@ int kernel_net_wire_connect(const os_net_wire_connect_t* request) {
     net_wire_ctx_t ctx;
     int status = kernel_net_wire_ctx(&ctx);
     if (status != 0) return status;
+    if (ctx.emit) return kernel_net_wire_port_begin(&ctx, net_wire_op_connect(&ctx, request));
     return net_wire_connect(&ctx, request);
 }
-
 int kernel_net_wire_send(int socket_id, const uint8_t* data, uint16_t length, uint8_t* segment,
                          uint16_t capacity, uint16_t* out_length, uint16_t attempts) {
     net_wire_ctx_t ctx;
@@ -217,9 +347,11 @@ int kernel_net_wire_send(int socket_id, const uint8_t* data, uint16_t length, ui
     if (!net_wire_is_bound(socket_id)) return OS_NET_WIRE_NOT_BOUND;
     status = kernel_net_wire_ctx(&ctx);
     if (status != 0) return status;
+    if (ctx.emit)
+        return kernel_net_wire_port_begin(&ctx, net_wire_op_send(&ctx, socket_id, data, length, segment,
+                                                                 capacity, out_length, attempts));
     return net_wire_send(&ctx, socket_id, data, length, segment, capacity, out_length, attempts);
 }
-
 int kernel_net_wire_recv(int socket_id, uint8_t* buffer, uint16_t capacity, uint16_t* out_length,
                          uint16_t attempts) {
     net_wire_ctx_t ctx;
@@ -227,13 +359,16 @@ int kernel_net_wire_recv(int socket_id, uint8_t* buffer, uint16_t capacity, uint
     if (!net_wire_is_bound(socket_id)) return OS_NET_WIRE_NOT_BOUND;
     status = kernel_net_wire_ctx(&ctx);
     if (status != 0) return status;
+    if (ctx.emit)
+        return kernel_net_wire_port_begin(&ctx, net_wire_op_recv(&ctx, socket_id, buffer, capacity,
+                                                                 out_length, attempts));
     return net_wire_recv(&ctx, socket_id, buffer, capacity, out_length, attempts);
 }
-
 int kernel_net_wire_close(int socket_id) {
     net_wire_ctx_t ctx;
     if (!net_wire_is_bound(socket_id)) return OS_NET_WIRE_NOT_BOUND;
     if (kernel_net_wire_ctx(&ctx) != 0) return net_wire_close(0, socket_id, 0U);
+    if (ctx.emit) return kernel_net_wire_port_begin(&ctx, net_wire_op_close(&ctx, socket_id, 0U));
     return net_wire_close(&ctx, socket_id, 0U);
 }
 
@@ -702,6 +837,7 @@ int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
 int kernel_llm_dhcp_maintenance(uint32_t now) {
     int status; uint32_t delay; uint8_t attempt; os_llm_acquire_start_request_t retry;
     if (!boot_llm_dhcp_maintenance.armed || !boot_ne2k_present) return 0;
+    if (!nic_owner_kernel_may_touch()) return 0; /* Tranche 5 suite: card in Ring 3 */
     if (boot_llm_lease.valid) {
         /* ne2k_dhcp_poll_ack consomme la tete du ring, DHCP ou pas. Pendant
          * SYN/TLS/HTTP ces trames ne doivent pas disparaitre. */
@@ -1592,6 +1728,7 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     }
 
     overlay_init();
+    nic_owner_init();
     syscall_ata_bridge_init();
     if (ata_init() == 0) {
         if (overlay_load_disk() == 0) {

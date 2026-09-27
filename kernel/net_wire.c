@@ -162,11 +162,23 @@ void net_wire_fill_status(os_net_wire_status_t* out, int32_t worker_pid) {
 
 /* ---------------------------------------------------------------- driver */
 
+/* Tranche 5 suite: every frame leaves through wire_emit. Without an emit
+ * callback (degraded path, unit fixtures) it is ne2k_tx_submit on ctx->io in
+ * Ring 0; with one, the frame is handed to the Ring 3 networker that owns the
+ * NE2000 ports and transmits it with its own PIO. */
+static int wire_emit(const net_wire_ctx_t* ctx, uint16_t length) {
+    if (ctx->emit) return ctx->emit(ctx->emit_context, ctx->tx, length);
+    return ne2k_tx_submit(ctx->device, ctx->io, ctx->tx, length);
+}
+
 static int wire_tx_segment(const net_wire_ctx_t* ctx, int socket_id, const uint8_t* segment,
                            uint16_t length) {
-    int status = ne2k_tcp_segment(ctx->device, ctx->io, ctx->cache, ctx->tx, ctx->capacity,
-                                  g_bind[socket_id].local_ip, g_bind[socket_id].remote_ip,
-                                  segment, length);
+    int built = ne2k_tcp_frame(ctx->device, ctx->cache, ctx->tx, ctx->capacity,
+                               g_bind[socket_id].local_ip, g_bind[socket_id].remote_ip,
+                               segment, length);
+    int status;
+    if (built < 0) return built;
+    status = wire_emit(ctx, (uint16_t)built);
     if (status == 0) g_stat.frames_tx++;
     return status;
 }
@@ -191,7 +203,7 @@ static void wire_handle_arp(const net_wire_ctx_t* ctx, uint16_t length, int kind
     /* Learn the requester, answer for our bound address. */
     (void)net_arp_cache_put(ctx->cache, arp.sender_ipv4, arp.sender_mac);
     built = net_arp_build_reply(ctx->tx, ctx->capacity, &arp, ctx->device->mac, arp.target_ipv4);
-    if (built > 0 && ne2k_tx_submit(ctx->device, ctx->io, ctx->tx, (uint16_t)built) == 0) {
+    if (built > 0 && wire_emit(ctx, (uint16_t)built) == 0) {
         g_stat.frames_tx++;
         g_stat.arp_replies++;
     }
@@ -253,109 +265,221 @@ static void wire_handle_tcp(const net_wire_ctx_t* ctx, int s, uint16_t offset, u
     }
 }
 
-/* 1 = nothing received, 0 = one frame consumed. */
-static int wire_poll_once(const net_wire_ctx_t* ctx, wire_observe_t* obs) {
-    uint16_t length = 0U, offset = 0U, tcp_length = 0U;
+/* One received frame (already in ctx->rx): count, demux, handle. */
+static void wire_consume(const net_wire_ctx_t* ctx, uint16_t length, wire_observe_t* obs) {
+    uint16_t offset = 0U, tcp_length = 0U;
     int kind;
-    if (ne2k_rx_poll(ctx->device, ctx->io, ctx->rx, ctx->capacity, &length) != 0) return 1;
     g_stat.frames_rx++;
     kind = net_wire_demux(ctx->rx, length, &offset, &tcp_length);
     if (kind >= 0) wire_handle_tcp(ctx, kind, offset, tcp_length, obs);
     else if (kind == NET_WIRE_DEMUX_ARP_REQUEST || kind == NET_WIRE_DEMUX_ARP_REPLY)
         wire_handle_arp(ctx, length, kind);
     else g_stat.dropped++;
-    return 0;
 }
 
 static int wire_ctx_ok(const net_wire_ctx_t* ctx) {
-    return ctx && ctx->device && ctx->io && ctx->cache && ctx->tx && ctx->rx &&
+    return ctx && ctx->device && (ctx->io || ctx->emit) && ctx->cache && ctx->tx && ctx->rx &&
            ctx->capacity >= NET_ETHERNET_HEADER_SIZE + 20U + NET_TCP_HEADER_SIZE + OS_NET_WIRE_MAX_IO &&
            ctx->device->mac_valid;
 }
 
-static int wire_resolve(const net_wire_ctx_t* ctx, int s, uint16_t attempts) {
-    uint8_t mac[6];
-    uint16_t i;
-    int built;
-    for (i = 0U; i < attempts; i++) {
-        if (net_arp_cache_lookup(ctx->cache, g_bind[s].remote_ip, mac) == 0) return 0;
-        if ((i % 50U) == 0U) {
-            built = net_arp_build_request(ctx->tx, ctx->capacity, ctx->device->mac,
-                                          g_bind[s].local_ip, g_bind[s].remote_ip);
-            if (built > 0 && ne2k_tx_submit(ctx->device, ctx->io, ctx->tx, (uint16_t)built) == 0) {
-                g_stat.frames_tx++;
-                g_stat.arp_tx++;
-            }
-        }
-        if (wire_poll_once(ctx, 0) != 0) wire_pause();
-    }
-    return net_arp_cache_lookup(ctx->cache, g_bind[s].remote_ip, mac) == 0 ? 0 : -1;
+/* ------------------------------------------------------------ op engine
+ *
+ * Tranche 5 suite: each wire operation is a resumable state machine driven
+ * one poll round at a time. A round is "consume the frame the NIC delivered
+ * (if any), then run the next round's checks and periodic transmits". The
+ * blocking net_wire_* entry points drive it from Ring 0 on ctx->io exactly
+ * like the slice 3 loops (poll, pause when idle); the Ring 3 networker drives
+ * it with SYS_NET_NIC pump calls (its own PIO RX, frames out through emit).
+ * Same rounds, same counters, same retransmit cadence.
+ */
+#define WIRE_PHASE_RESOLVE 1U
+#define WIRE_PHASE_SYN     2U
+#define WIRE_PHASE_WAIT    3U
+
+typedef struct {
+    uint8_t kind;
+    uint8_t phase;
+    int socket;
+    uint16_t attempts;
+    uint16_t round;
+    wire_observe_t obs;
+    uint8_t syn[NET_TCP_HEADER_SIZE + 8U];
+    uint16_t syn_length;
+    uint8_t* recv_buffer;
+    uint16_t recv_capacity;
+    uint16_t* recv_length;
+    int32_t result;
+} wire_op_t;
+
+static wire_op_t g_op;
+
+static void op_observe(int s, uint32_t want_ack) {
+    g_op.obs.target = s; g_op.obs.established = 0U; g_op.obs.data = 0U; g_op.obs.acked = 0U;
+    g_op.obs.fin = 0U; g_op.obs.reset = 0U; g_op.obs.want_ack = want_ack;
 }
 
-int net_wire_connect(const net_wire_ctx_t* ctx, const os_net_wire_connect_t* request) {
-    wire_observe_t obs;
-    uint16_t attempts, i, syn_length = 0U;
-    uint8_t syn[NET_TCP_HEADER_SIZE + 8U];
-    int s, status;
-    if (!wire_ctx_ok(ctx)) return OS_NET_WIRE_UNAVAILABLE;
+static void op_finish(int32_t result) {
+    g_op.result = result;
+    g_op.kind = NET_WIRE_OP_NONE;
+}
+
+static void op_drop_socket(int s) {
+    (void)net_wire_unbind(s);
+    (void)net_socket_close(s);
+}
+
+static void op_recv_finish(void) {
+    uint16_t got = 0U;
+    int status = net_socket_receive(g_op.socket, g_op.recv_buffer, g_op.recv_capacity, &got);
+    if (status != 0) { op_finish(map_socket_error(status)); return; }
+    if (got == 0U && g_op.obs.reset) { op_finish(OS_SOCKET_PROTOCOL); return; }
+    if (got == 0U && !g_op.obs.fin) { op_finish(OS_NET_WIRE_TIMEOUT); return; }
+    if (got > 0U) g_stat.recvs++;
+    *g_op.recv_length = got;
+    op_finish(0);
+}
+
+/* Checks and transmits at the start of round g_op.round. */
+static void op_pre(const net_wire_ctx_t* ctx) {
+    uint8_t mac[6];
+    uint8_t state = 0U;
+    int built, s = g_op.socket;
+    switch (g_op.kind) {
+        case NET_WIRE_OP_CONNECT:
+            if (g_op.phase == WIRE_PHASE_RESOLVE) {
+                if (net_arp_cache_lookup(ctx->cache, g_bind[s].remote_ip, mac) == 0) {
+                    int status;
+                    op_observe(s, 0U);
+                    status = net_socket_build_syn(s, g_op.syn, sizeof(g_op.syn), &g_op.syn_length);
+                    if (status != 0) { op_drop_socket(s); op_finish(map_socket_error(status)); return; }
+                    g_op.phase = WIRE_PHASE_SYN;
+                    g_op.round = 0U;
+                    op_pre(ctx);
+                    return;
+                }
+                if (g_op.round >= g_op.attempts) { op_drop_socket(s); op_finish(OS_NET_WIRE_TIMEOUT); return; }
+                if ((g_op.round % 50U) == 0U) {
+                    built = net_arp_build_request(ctx->tx, ctx->capacity, ctx->device->mac,
+                                                  g_bind[s].local_ip, g_bind[s].remote_ip);
+                    if (built > 0 && wire_emit(ctx, (uint16_t)built) == 0) {
+                        g_stat.frames_tx++;
+                        g_stat.arp_tx++;
+                    }
+                }
+                return;
+            }
+            if (g_op.obs.established) { g_stat.connects++; op_finish(s); return; }
+            if (g_op.obs.reset || g_op.round >= g_op.attempts) {
+                op_drop_socket(s);
+                op_finish(g_op.obs.reset ? OS_SOCKET_PROTOCOL : OS_NET_WIRE_TIMEOUT);
+                return;
+            }
+            /* SYN, retried every 100 idle rounds (no retransmit timer yet). */
+            if ((g_op.round % 100U) == 0U) (void)wire_tx_segment(ctx, s, g_op.syn, g_op.syn_length);
+            return;
+        case NET_WIRE_OP_SEND:
+            if (g_op.obs.reset) { op_finish(OS_SOCKET_PROTOCOL); return; }
+            if (g_op.obs.acked) { op_finish(0); return; }
+            if (g_op.round >= g_op.attempts) op_finish(OS_NET_WIRE_TIMEOUT);
+            return;
+        case NET_WIRE_OP_RECV:
+            if (g_op.obs.data || g_op.obs.fin || g_op.obs.reset || g_op.round >= g_op.attempts ||
+                (net_socket_get_state(s, &state) == 0 && state != NET_TCP_STATE_ESTABLISHED))
+                op_recv_finish();
+            return;
+        case NET_WIRE_OP_CLOSE:
+            if (g_op.obs.fin || g_op.obs.reset || g_op.round >= g_op.attempts) {
+                op_drop_socket(s);
+                op_finish(0);
+            }
+            return;
+        default:
+            return;
+    }
+}
+
+int net_wire_op_active(void) { return g_op.kind != NET_WIRE_OP_NONE; }
+int32_t net_wire_op_result(void) { return g_op.result; }
+uint32_t net_wire_op_kind(void) { return g_op.kind; }
+
+void net_wire_op_cancel(void) {
+    /* Worker lost mid-op: the socket stays in the registry (the caller's
+     * close cleans it up); nothing is replayed. */
+    if (g_op.kind == NET_WIRE_OP_CONNECT) op_drop_socket(g_op.socket);
+    op_finish(OS_NET_WIRE_UNAVAILABLE);
+}
+
+int net_wire_op_step(const net_wire_ctx_t* ctx, int has_frame, uint16_t length) {
+    if (g_op.kind == NET_WIRE_OP_NONE) return 0;
+    if (!wire_ctx_ok(ctx)) {
+        if (g_op.kind == NET_WIRE_OP_CONNECT) op_drop_socket(g_op.socket);
+        op_finish(OS_NET_WIRE_UNAVAILABLE);
+        return 0;
+    }
+    if (has_frame)
+        wire_consume(ctx, length,
+                     (g_op.kind == NET_WIRE_OP_CONNECT && g_op.phase == WIRE_PHASE_RESOLVE) ? 0 : &g_op.obs);
+    g_op.round++;
+    op_pre(ctx);
+    return g_op.kind != NET_WIRE_OP_NONE;
+}
+
+/* Begin functions: 1 = op running (step it), <= 0 / socket id = finished
+ * immediately (result in net_wire_op_result()). They return the running
+ * flag; the caller reads the result when it is 0. */
+int net_wire_op_connect(const net_wire_ctx_t* ctx, const os_net_wire_connect_t* request) {
+    int s;
+    if (g_op.kind != NET_WIRE_OP_NONE) { g_op.result = OS_NET_WIRE_UNAVAILABLE; return 0; }
+    if (!wire_ctx_ok(ctx)) { g_op.result = OS_NET_WIRE_UNAVAILABLE; return 0; }
     if (!request || request->local_port == 0U || request->remote_port == 0U ||
-        ip_zero(request->local_ip) || ip_zero(request->remote_ip))
-        return OS_SOCKET_BAD_ARGUMENT;
-    attempts = clamp_attempts(request->attempts);
+        ip_zero(request->local_ip) || ip_zero(request->remote_ip)) {
+        g_op.result = OS_SOCKET_BAD_ARGUMENT;
+        return 0;
+    }
     s = net_socket_open(request->local_port, request->remote_port,
                         request->local_sequence ? request->local_sequence : 0x51A70000U);
-    if (s < 0) return map_socket_error(s);
+    if (s < 0) { g_op.result = map_socket_error(s); return 0; }
     if (net_wire_bind(s, request->local_ip, request->remote_ip, request->local_port,
                       request->remote_port) != 0) {
         (void)net_socket_close(s);
-        return OS_SOCKET_BAD_ARGUMENT;
+        g_op.result = OS_SOCKET_BAD_ARGUMENT;
+        return 0;
     }
-    if (wire_resolve(ctx, s, attempts) != 0) {
-        (void)net_wire_unbind(s);
-        (void)net_socket_close(s);
-        return OS_NET_WIRE_TIMEOUT;
-    }
-    obs.target = s; obs.established = 0U; obs.data = 0U; obs.acked = 0U; obs.fin = 0U;
-    obs.reset = 0U; obs.want_ack = 0U;
-    status = net_socket_build_syn(s, syn, sizeof(syn), &syn_length);
-    if (status != 0) {
-        (void)net_wire_unbind(s);
-        (void)net_socket_close(s);
-        return map_socket_error(status);
-    }
-    for (i = 0U; i < attempts && !obs.established && !obs.reset; i++) {
-        /* SYN, retried every 100 idle rounds (no retransmit timer yet). */
-        if ((i % 100U) == 0U) (void)wire_tx_segment(ctx, s, syn, syn_length);
-        if (wire_poll_once(ctx, &obs) != 0) wire_pause();
-    }
-    if (!obs.established) {
-        (void)net_wire_unbind(s);
-        (void)net_socket_close(s);
-        return obs.reset ? OS_SOCKET_PROTOCOL : OS_NET_WIRE_TIMEOUT;
-    }
-    g_stat.connects++;
-    return s;
+    g_op.kind = NET_WIRE_OP_CONNECT;
+    g_op.phase = WIRE_PHASE_RESOLVE;
+    g_op.socket = s;
+    g_op.attempts = clamp_attempts(request->attempts);
+    g_op.round = 0U;
+    op_observe(s, 0U);
+    op_pre(ctx);
+    return g_op.kind != NET_WIRE_OP_NONE;
 }
 
-int net_wire_send(const net_wire_ctx_t* ctx, int socket_id, const uint8_t* data,
-                  uint16_t length, uint8_t* segment_out, uint16_t segment_capacity,
-                  uint16_t* segment_length, uint16_t attempts) {
-    wire_observe_t obs;
+int net_wire_op_send(const net_wire_ctx_t* ctx, int socket_id, const uint8_t* data,
+                     uint16_t length, uint8_t* segment_out, uint16_t segment_capacity,
+                     uint16_t* segment_length, uint16_t attempts) {
     net_tcp_connection_t snapshot;
     uint16_t built = 0U, i, n;
     int status;
-    if (!net_wire_is_bound(socket_id)) return OS_NET_WIRE_NOT_BOUND;
-    if (!wire_ctx_ok(ctx)) return OS_NET_WIRE_UNAVAILABLE;
-    if (!data || length == 0U) return OS_SOCKET_BAD_ARGUMENT;
-    if (length > OS_NET_WIRE_MAX_IO) return OS_SOCKET_BUFFER_SMALL;
+    if (g_op.kind != NET_WIRE_OP_NONE) { g_op.result = OS_NET_WIRE_UNAVAILABLE; return 0; }
+    g_op.result = 0;
+    if (!net_wire_is_bound(socket_id)) { g_op.result = OS_NET_WIRE_NOT_BOUND; return 0; }
+    if (!wire_ctx_ok(ctx)) { g_op.result = OS_NET_WIRE_UNAVAILABLE; return 0; }
+    if (!data || length == 0U) { g_op.result = OS_SOCKET_BAD_ARGUMENT; return 0; }
+    if (length > OS_NET_WIRE_MAX_IO) { g_op.result = OS_SOCKET_BUFFER_SMALL; return 0; }
     for (i = 0U; i < length; i++) g_payload[i] = data[i];
-    if (net_socket_connection_snapshot(socket_id, &snapshot) != 0) return OS_SOCKET_NOT_OPEN;
+    if (net_socket_connection_snapshot(socket_id, &snapshot) != 0) {
+        g_op.result = OS_SOCKET_NOT_OPEN;
+        return 0;
+    }
     status = net_socket_send_limit(socket_id, g_payload, length, g_segment, sizeof(g_segment),
                                    &built, 0U);
-    if (status != 0) return map_socket_error(status);
+    if (status != 0) { g_op.result = map_socket_error(status); return 0; }
     if (wire_tx_segment(ctx, socket_id, g_segment, built) != 0) {
         (void)net_socket_connection_restore(socket_id, &snapshot);
-        return OS_NET_WIRE_UNAVAILABLE;
+        g_op.result = OS_NET_WIRE_UNAVAILABLE;
+        return 0;
     }
     g_stat.sends++;
     if (segment_out && segment_length) {
@@ -363,66 +487,76 @@ int net_wire_send(const net_wire_ctx_t* ctx, int socket_id, const uint8_t* data,
         for (i = 0U; i < n; i++) segment_out[i] = g_segment[i];
         *segment_length = n;
     }
-    obs.target = socket_id; obs.established = 1U; obs.data = 0U; obs.acked = 0U; obs.fin = 0U;
-    obs.reset = 0U; obs.want_ack = snapshot.local_sequence + length;
-    attempts = clamp_attempts(attempts);
-    for (i = 0U; i < attempts && !obs.acked && !obs.reset; i++)
-        if (wire_poll_once(ctx, &obs) != 0) wire_pause();
-    if (obs.reset) return OS_SOCKET_PROTOCOL;
-    return obs.acked ? 0 : OS_NET_WIRE_TIMEOUT;
+    g_op.kind = NET_WIRE_OP_SEND;
+    g_op.phase = WIRE_PHASE_WAIT;
+    g_op.socket = socket_id;
+    g_op.attempts = clamp_attempts(attempts);
+    g_op.round = 0U;
+    op_observe(socket_id, snapshot.local_sequence + length);
+    g_op.obs.established = 1U;
+    op_pre(ctx);
+    return g_op.kind != NET_WIRE_OP_NONE;
 }
 
-int net_wire_recv(const net_wire_ctx_t* ctx, int socket_id, uint8_t* buffer,
-                  uint16_t capacity, uint16_t* out_length, uint16_t attempts) {
-    wire_observe_t obs;
-    uint16_t i, got = 0U;
-    uint8_t state = 0U;
+int net_wire_op_recv(const net_wire_ctx_t* ctx, int socket_id, uint8_t* buffer,
+                     uint16_t capacity, uint16_t* out_length, uint16_t attempts) {
+    uint16_t got = 0U;
     int status;
-    if (!net_wire_is_bound(socket_id)) return OS_NET_WIRE_NOT_BOUND;
-    if (!wire_ctx_ok(ctx)) return OS_NET_WIRE_UNAVAILABLE;
-    if (!buffer || !out_length) return OS_SOCKET_BAD_ARGUMENT;
+    if (g_op.kind != NET_WIRE_OP_NONE) { g_op.result = OS_NET_WIRE_UNAVAILABLE; return 0; }
+    if (!net_wire_is_bound(socket_id)) { g_op.result = OS_NET_WIRE_NOT_BOUND; return 0; }
+    if (!wire_ctx_ok(ctx)) { g_op.result = OS_NET_WIRE_UNAVAILABLE; return 0; }
+    if (!buffer || !out_length) { g_op.result = OS_SOCKET_BAD_ARGUMENT; return 0; }
     *out_length = 0U;
     status = net_socket_receive(socket_id, buffer, capacity, &got);
-    if (status != 0) return map_socket_error(status);
-    if (got == 0U) {
-        obs.target = socket_id; obs.established = 1U; obs.data = 0U; obs.acked = 0U;
-        obs.fin = 0U; obs.reset = 0U; obs.want_ack = 0xFFFFFFFFU;
-        attempts = clamp_attempts(attempts);
-        for (i = 0U; i < attempts && !obs.data && !obs.fin && !obs.reset; i++) {
-            if (net_socket_get_state(socket_id, &state) == 0 && state != NET_TCP_STATE_ESTABLISHED)
-                break;
-            if (wire_poll_once(ctx, &obs) != 0) wire_pause();
-        }
-        status = net_socket_receive(socket_id, buffer, capacity, &got);
-        if (status != 0) return map_socket_error(status);
-        if (got == 0U && obs.reset) return OS_SOCKET_PROTOCOL;
-        if (got == 0U && !obs.fin) return OS_NET_WIRE_TIMEOUT;
+    if (status != 0) { g_op.result = map_socket_error(status); return 0; }
+    if (got > 0U) {
+        g_stat.recvs++;
+        *out_length = got;
+        g_op.result = 0;
+        return 0;
     }
-    if (got > 0U) g_stat.recvs++;
-    *out_length = got;
-    return 0;
+    g_op.kind = NET_WIRE_OP_RECV;
+    g_op.phase = WIRE_PHASE_WAIT;
+    g_op.socket = socket_id;
+    g_op.attempts = clamp_attempts(attempts);
+    g_op.round = 0U;
+    g_op.recv_buffer = buffer;
+    g_op.recv_capacity = capacity;
+    g_op.recv_length = out_length;
+    op_observe(socket_id, 0xFFFFFFFFU);
+    g_op.obs.established = 1U;
+    op_pre(ctx);
+    return g_op.kind != NET_WIRE_OP_NONE;
 }
 
-int net_wire_close(const net_wire_ctx_t* ctx, int socket_id, uint16_t attempts) {
-    wire_observe_t obs;
-    net_tcp_connection_t conn;
+int net_wire_op_close(const net_wire_ctx_t* ctx, int socket_id, uint16_t attempts) {
+    net_tcp_connection_t conn, previous;
     uint8_t segment[NET_TCP_HEADER_SIZE];
+    uint8_t fin[64];
+    uint16_t fin_length = 0U;
     uint8_t state = 0U;
-    uint16_t i;
     int built;
-    if (!net_wire_is_bound(socket_id)) return OS_NET_WIRE_NOT_BOUND;
-    obs.target = socket_id; obs.established = 1U; obs.data = 0U; obs.acked = 0U; obs.fin = 0U;
-    obs.reset = 0U; obs.want_ack = 0U;
+    if (g_op.kind != NET_WIRE_OP_NONE) { g_op.result = OS_NET_WIRE_UNAVAILABLE; return 0; }
+    if (!net_wire_is_bound(socket_id)) { g_op.result = OS_NET_WIRE_NOT_BOUND; return 0; }
+    g_op.result = 0;
+    op_observe(socket_id, 0U);
+    g_op.obs.established = 1U;
     if (wire_ctx_ok(ctx) && net_socket_get_state(socket_id, &state) == 0) {
         if (state == NET_TCP_STATE_ESTABLISHED) {
-            if (ne2k_socket_fin(ctx->device, ctx->io, ctx->cache, ctx->tx, ctx->capacity,
-                                g_bind[socket_id].local_ip, g_bind[socket_id].remote_ip,
-                                socket_id) == 0) {
-                g_stat.frames_tx++;
-                g_stat.closes++;
-                attempts = clamp_attempts(attempts);
-                for (i = 0U; i < attempts && !obs.fin && !obs.reset; i++)
-                    if (wire_poll_once(ctx, &obs) != 0) wire_pause();
+            /* Same as ne2k_socket_fin(), through wire_emit. */
+            if (net_socket_connection_snapshot(socket_id, &previous) == 0) {
+                if (net_socket_begin_close(socket_id, fin, sizeof(fin), &fin_length) == 0 &&
+                    wire_tx_segment(ctx, socket_id, fin, fin_length) == 0) {
+                    g_stat.closes++;
+                    g_op.kind = NET_WIRE_OP_CLOSE;
+                    g_op.phase = WIRE_PHASE_WAIT;
+                    g_op.socket = socket_id;
+                    g_op.attempts = clamp_attempts(attempts);
+                    g_op.round = 0U;
+                    op_pre(ctx);
+                    return g_op.kind != NET_WIRE_OP_NONE;
+                }
+                (void)net_socket_connection_restore(socket_id, &previous);
             }
         } else if (state == NET_TCP_STATE_CLOSE_WAIT &&
                    net_socket_connection_snapshot(socket_id, &conn) == 0) {
@@ -434,7 +568,48 @@ int net_wire_close(const net_wire_ctx_t* ctx, int socket_id, uint16_t attempts) 
                 g_stat.closes++;
         }
     }
-    (void)net_wire_unbind(socket_id);
-    (void)net_socket_close(socket_id);
+    op_drop_socket(socket_id);
     return 0;
+}
+
+/* Blocking Ring 0 driver of the engine (degraded / unit fixtures). */
+static int32_t wire_run(const net_wire_ctx_t* ctx, int running) {
+    uint16_t length = 0U;
+    while (running) {
+        if (ne2k_rx_poll(ctx->device, ctx->io, ctx->rx, ctx->capacity, &length) != 0) {
+            wire_pause();
+            running = net_wire_op_step(ctx, 0, 0U);
+        } else {
+            running = net_wire_op_step(ctx, 1, length);
+        }
+    }
+    return g_op.result;
+}
+
+static int wire_direct_ok(const net_wire_ctx_t* ctx) {
+    return ctx && !ctx->emit && ctx->io;
+}
+
+int net_wire_connect(const net_wire_ctx_t* ctx, const os_net_wire_connect_t* request) {
+    if (ctx && !wire_direct_ok(ctx)) return OS_NET_WIRE_UNAVAILABLE;
+    return wire_run(ctx, net_wire_op_connect(ctx, request));
+}
+
+int net_wire_send(const net_wire_ctx_t* ctx, int socket_id, const uint8_t* data,
+                  uint16_t length, uint8_t* segment_out, uint16_t segment_capacity,
+                  uint16_t* segment_length, uint16_t attempts) {
+    if (ctx && !wire_direct_ok(ctx) && net_wire_is_bound(socket_id)) return OS_NET_WIRE_UNAVAILABLE;
+    return wire_run(ctx, net_wire_op_send(ctx, socket_id, data, length, segment_out,
+                                          segment_capacity, segment_length, attempts));
+}
+
+int net_wire_recv(const net_wire_ctx_t* ctx, int socket_id, uint8_t* buffer,
+                  uint16_t capacity, uint16_t* out_length, uint16_t attempts) {
+    if (ctx && !wire_direct_ok(ctx) && net_wire_is_bound(socket_id)) return OS_NET_WIRE_UNAVAILABLE;
+    return wire_run(ctx, net_wire_op_recv(ctx, socket_id, buffer, capacity, out_length, attempts));
+}
+
+int net_wire_close(const net_wire_ctx_t* ctx, int socket_id, uint16_t attempts) {
+    const net_wire_ctx_t* direct = (ctx && wire_direct_ok(ctx)) ? ctx : 0;
+    return wire_run(direct, net_wire_op_close(direct, socket_id, attempts));
 }

@@ -329,4 +329,54 @@ a FAT sector job does not hang the caller or lose data.
   kernel to finish init in a task context, or a deferred mount).
 - Replace the per-chunk kernel copy with a shared page, and allow more than
   one outstanding sector RPC.
-- Move FAT/overlay logic itself out of Ring 0 (today only port I/O left).
+- ~~Move FAT/overlay logic itself out of Ring 0~~: done in the suite below.
+
+
+## Tranche 4 suite - FAT16/FAT32/overlay logic served by the Ring 3 driver
+
+Commit `220d0ae`. Before it, the driver only did sector PIO and the FAT /
+overlay code ran in Ring 0. Now the live `atadriver` runs its **own**
+FAT16/FAT32/overlay code on its own PIO; the kernel only marshals bytes.
+
+### What changed
+
+- **`SYS_ATA_FS` (145)**, reserved to the live `ata-driver`: store handover
+  (`READY` with the volumes served, `OS_ATA_FS_STORE_*`), request fetch /
+  done, progress notes, overlay image publish, initrd probes, and a public
+  status.
+- **`kernel/ata_fsop.c`** (pure logic, `test_ata_fsop`, 7 tests): store
+  ownership, one FS op slot `FREE -> SUBMITTED -> FETCHED -> DONE/ABORTED`,
+  the overlay mirror (last image published by the driver, 30224 bytes) and
+  counters.
+- **`kernel/fs/fsop_exec.c`**: the FAT naming rules and the op codec /
+  dispatcher, shared by the kernel fallback and the driver.
+- **`atadriver`** links its own FAT16/FAT32/overlay objects, mounts the
+  volumes through its PIO at start, takes the overlay store over (one
+  kernel handover) and persists LBA 0-63 incrementally. A VFS/FAT/overlay
+  syscall from any task becomes one RPC: the caller is blocked in its
+  syscall, the driver runs the operation and publishes the result; the
+  kernel FAT counter (`fskernel`) stays 0 while it is live.
+- **Fallback, no replay.** When the driver dies the store comes back to
+  Ring 0 from the mirror ("[ATA] store back in Ring 0 (overlay from driver
+  mirror)"). An in-flight FAT op is redone in Ring 0 only if no sector was
+  committed yet ("fs op redone in Ring 0 after driver loss"); otherwise
+  the caller gets `OS_ATA_FS_ABORTED`. A store owned by a driver that
+  cannot serve now answers `OS_ATA_FS_UNAVAILABLE` (-137): the kernel does
+  not run its stale copy instead (fail closed).
+
+### Proof (`make qemu-ata-driver`, extended)
+
+Store handed to the boot driver (FAT16 + overlay, 1 handover, `fskernel 0`);
+overlay write/read and FAT16 ops served by the driver (`fat via driver rd=65
+wr=4 kfat=0`, kernel FAT PIO counter unchanged 17 -> 17); after `kill` the
+store returns to Ring 0 from the mirror and persists across a cold reboot;
+a crash in the middle of a driver FAT job aborts it once and Ring 0 redoes
+it once (aborts 0 -> 1, resets 0 -> 1); a respawned driver takes the store
+back and the next overlay read runs in Ring 3 again.
+
+### What still runs in Ring 0 (by design)
+
+- Boot: overlay load and FAT mounts before any task exists (the driver
+  re-mounts with its own code as soon as it starts).
+- The fallback copy of the FAT/overlay code, used only when no driver is
+  alive (never while one is live and serving).

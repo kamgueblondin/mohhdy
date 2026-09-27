@@ -56,7 +56,14 @@ vfsvirtual: vfs_virtual_worker.o start.o
 	@echo "Linking vfsvirtual..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
-networker: net_worker.o start.o
+# Tranche 5 suite: the worker links the NE2000 hardware core it drives at
+# CPL 3 through the TSS I/O bitmap.
+drv_ne2k_hw.o: ../kernel/ne2k_hw.c ../kernel/ne2k.h $(USER_HEADERS)
+	$(CC) $(CFLAGS) -I.. -DMOHHDY_RING3 -c -o $@ $<
+net_worker.o: net_worker.c ../kernel/ne2k.h $(USER_HEADERS)
+	$(CC) $(CFLAGS) -I.. -DMOHHDY_RING3 -c -o $@ $<
+
+networker: net_worker.o drv_ne2k_hw.o start.o
 	@echo "Linking networker..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 

@@ -17,6 +17,7 @@
 #include "../service_registry.h"
 #include "../ata_job.h"
 #include "../ata_fsop.h"
+#include "../net_nic_owner.h"
 #include "../fs/fsop_exec.h"
 #include "../net_relay.h"
 #include "../net_wire.h"
@@ -50,6 +51,12 @@ extern int kernel_peer_listen(const os_peer_listen_request_t* request);
 extern int kernel_peer_accept(const os_peer_accept_request_t* request);
 extern int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request);
 extern int kernel_llm_dhcp_maintenance(uint32_t now);
+/* Tranche 5 suite: NE2000 owned by the Ring 3 worker (kernel/kernel.c). */
+extern int kernel_net_nic_port_mode(void);
+extern int kernel_net_nic_pump(os_net_nic_pump_t* pump);
+extern int kernel_net_nic_info(os_net_nic_info_t* info);
+extern int kernel_net_nic_present(void);
+extern int kernel_net_nic_reclaim(void);
 extern int kernel_net_wire_connect(const os_net_wire_connect_t* request);
 extern int kernel_net_wire_send(int socket_id, const uint8_t* data, uint16_t length,
                                 uint8_t* segment, uint16_t capacity, uint16_t* out_length,
@@ -707,6 +714,11 @@ static void service_notify_purge_pid(int32_t pid) {
         service_notify_change(owned[i].name, pid, 0, OS_SERVICE_EVENT_PURGED);
     }
     ata_bridge_after_purge();
+    /* Tranche 5 suite: a dead NIC owner gives the card back to Ring 0. */
+    if (nic_owner_drop_if_gone(sys_service_lookup("net-driver"))) {
+        tss_set_nic_io(0);
+        (void)kernel_net_nic_reclaim();
+    }
 }
 
 /* Tranche 4: a Ring 3 fault (e.g. #GP from an IN/OUT on a port denied by the
@@ -954,6 +966,47 @@ static int net_wire_caller_is_worker(void) {
     return 0;
 }
 
+/* Tranche 5 suite: SYS_NET_NIC. */
+static int32_t sys_net_nic(cpu_state_t* cpu) {
+    int32_t pid = current_task ? (int32_t)current_task->id : 0;
+    int32_t worker = sys_service_lookup("net-driver");
+    int rc;
+    switch (cpu->ebx) {
+        case OS_NET_NIC_STATUS: {
+            os_net_nic_status_t* out = (os_net_nic_status_t*)cpu->ecx;
+            if (!syscall_user_range(out, sizeof(*out), 1)) return OS_SOCKET_BAD_ARGUMENT;
+            nic_owner_fill_status(out);
+            return 0;
+        }
+        case OS_NET_NIC_CLAIM: {
+            os_net_nic_info_t* info = (os_net_nic_info_t*)cpu->ecx;
+            if (!current_task || current_task->type != TASK_TYPE_USER) return OS_NET_WORKER_REQUIRED;
+            if (info && !syscall_user_range(info, sizeof(*info), 1)) return OS_SOCKET_BAD_ARGUMENT;
+            rc = nic_owner_claim(pid, worker, kernel_net_nic_present());
+            if (rc != 0) return rc;
+            if (info) (void)kernel_net_nic_info(info);
+            tss_set_nic_io(1); /* open now; task switches keep it per owner */
+            print_string_serial("[NET] NE2000 ports 0x300-0x31F handed to the Ring 3 worker\n");
+            return 0;
+        }
+        case OS_NET_NIC_IRQ:
+            if (pid <= 0 || pid != worker || nic_owner_pid() != pid) return OS_NET_WORKER_REQUIRED;
+            return (int32_t)nic_owner_irq_take(pid);
+        case OS_NET_NIC_PUMP: {
+            os_net_nic_pump_t* pump = (os_net_nic_pump_t*)cpu->ecx;
+            if (pid <= 0 || pid != worker || nic_owner_pid() != pid) return OS_NET_WORKER_REQUIRED;
+            if (!syscall_user_range(pump, sizeof(*pump), 1) ||
+                !syscall_user_range(pump->tx, OS_NET_NIC_PUMP_TX_MAX * OS_NET_NIC_FRAME_MAX, 1) ||
+                (pump->mode == OS_NET_NIC_PUMP_FRAME &&
+                 !syscall_user_range(pump->rx, pump->rx_length, 0)))
+                return OS_SOCKET_BAD_ARGUMENT;
+            return kernel_net_nic_pump(pump);
+        }
+        default:
+            return OS_SOCKET_BAD_ARGUMENT;
+    }
+}
+
 static int sys_net_wire_connect(const os_net_wire_connect_t* user) {
     os_net_wire_connect_t request;
     if (!net_wire_caller_is_worker()) return OS_NET_WORKER_REQUIRED;
@@ -965,10 +1018,14 @@ static int sys_net_wire_connect(const os_net_wire_connect_t* user) {
 static int sys_net_wire_io(uint32_t op, const os_net_wire_io_t* user) {
     os_net_wire_io_t io;
     uint16_t length = 0U;
+    uint16_t* lenp = &length;
     int rc;
     if (!net_wire_caller_is_worker()) return OS_NET_WORKER_REQUIRED;
     if (!syscall_user_range(user, sizeof(*user), 0)) return OS_SOCKET_BAD_ARGUMENT;
     io = *user;
+    /* Tranche 5 suite: on the worker's NIC a RECV completes in a later pump,
+     * so the engine writes the length straight into the worker's variable. */
+    if (kernel_net_nic_port_mode() && io.rx_length) lenp = io.rx_length;
     if ((io.rx_capacity && !syscall_user_range(io.rx, io.rx_capacity, 1)) ||
         (io.rx_length && !syscall_user_range(io.rx_length, sizeof(*io.rx_length), 1)))
         return OS_SOCKET_BAD_ARGUMENT;
@@ -976,12 +1033,12 @@ static int sys_net_wire_io(uint32_t op, const os_net_wire_io_t* user) {
         if (io.length > OS_NET_WIRE_MAX_IO) return OS_SOCKET_BUFFER_SMALL;
         if (!syscall_user_range(io.data, io.length, 0)) return OS_SOCKET_BAD_ARGUMENT;
         rc = kernel_net_wire_send(io.socket_id, io.data, io.length, io.rx, io.rx_capacity,
-                                  &length, io.attempts);
+                                  lenp, io.attempts);
     } else {
         if (!io.rx || !io.rx_length) return OS_SOCKET_BAD_ARGUMENT;
-        rc = kernel_net_wire_recv(io.socket_id, io.rx, io.rx_capacity, &length, io.attempts);
+        rc = kernel_net_wire_recv(io.socket_id, io.rx, io.rx_capacity, lenp, io.attempts);
     }
-    if (io.rx_length) *io.rx_length = length;
+    if (io.rx_length && lenp == &length) *io.rx_length = length;
     return rc;
 }
 
@@ -1061,6 +1118,16 @@ void syscall_handler(cpu_state_t* cpu) {
                                               cpu->eax)) {
         net_relay_note_denied();
         cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;
+        return;
+    }
+    /* Tranche 5 suite: the kernel LLM session (91-97) and peer (128-130)
+     * paths drive the NE2000 from Ring 0; while the worker owns the card
+     * they are refused for everybody, the worker included. */
+    if (!nic_owner_kernel_may_touch() &&
+        ((cpu->eax >= SYS_LLM_ACQUIRE_START && cpu->eax <= SYS_LLM_CLOSE) ||
+         (cpu->eax >= SYS_PEER_LISTEN && cpu->eax <= SYS_PEER_TLS_POLL))) {
+        nic_owner_note_kernel_gated();
+        cpu->eax = (uint32_t)OS_NET_NIC_WORKER_OWNED;
         return;
     }
 
@@ -1338,6 +1405,9 @@ void syscall_handler(cpu_state_t* cpu) {
             break;
         case SYS_NET_WIRE_CONNECT:
             cpu->eax = (uint32_t)sys_net_wire_connect((const os_net_wire_connect_t*)cpu->ebx);
+            break;
+        case SYS_NET_NIC:
+            cpu->eax = (uint32_t)sys_net_nic(cpu);
             break;
         case SYS_NET_WIRE_SEND:
         case SYS_NET_WIRE_RECV:

@@ -293,7 +293,14 @@
  * driver runs its own FAT16/FAT32/overlay code on its own PIO; the kernel
  * only marshals bytes (see docs/tranche4_ata_ring3_driver.md, "suite"). */
 #define SYS_ATA_FS 145
-#define MAX_SYSCALLS 146
+/* Tranche 5 suite (NE2000 driver out of Ring 0). EBX selects an
+ * OS_NET_NIC_* sub-operation; CLAIM/PUMP/IRQ are reserved to the live
+ * net-driver worker (OS_NET_WORKER_REQUIRED otherwise), STATUS is public.
+ * After CLAIM the worker owns the NE2000 ports 0x300-0x31F through the TSS
+ * I/O bitmap and gets IRQ3 as a counter; the kernel no longer touches the
+ * NIC until the worker dies (reclaim). See docs/tranche5_net_worker_gate.md. */
+#define SYS_NET_NIC 146
+#define MAX_SYSCALLS 147
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
@@ -1085,6 +1092,66 @@ typedef struct {
     uint32_t sectors_read;   /* sectors the driver read for this op */
     uint32_t sectors_written;
 } os_ata_fsop_reply_t;
+
+/* ------------------------------------------------------------------------
+ * Tranche 5 suite: NE2000 owned by the Ring 3 net-driver worker.
+ * ------------------------------------------------------------------------ */
+#define OS_NET_NIC_CLAIM  1U /* ECX = os_net_nic_info_t* (out) */
+#define OS_NET_NIC_PUMP   2U /* ECX = os_net_nic_pump_t* */
+#define OS_NET_NIC_IRQ    3U /* -> IRQ3 events since the last call */
+#define OS_NET_NIC_STATUS 4U /* public: ECX = os_net_nic_status_t* */
+
+#define OS_NET_NIC_BASE_PORT 0x300U
+#define OS_NET_NIC_LAST_PORT 0x31FU
+#define OS_NET_NIC_IRQ_LINE 3U
+#define OS_NET_NIC_FRAME_MAX 1536U
+#define OS_NET_NIC_PUMP_TX_MAX 4U
+
+typedef struct {
+    uint16_t base_port;
+    uint8_t irq;
+    uint8_t mac[6];       /* MAC the kernel probed at boot */
+    uint8_t reserved;
+} os_net_nic_info_t;
+
+/* One engine round of the pending SYS_NET_WIRE_* / SYS_SOCKET_CONNECT op. */
+#define OS_NET_NIC_PUMP_FETCH 0U /* only collect the frames queued so far */
+#define OS_NET_NIC_PUMP_FRAME 1U /* rx holds a frame the worker polled */
+#define OS_NET_NIC_PUMP_IDLE  2U /* nothing received this round */
+typedef struct {
+    uint32_t mode;                     /* OS_NET_NIC_PUMP_* */
+    const uint8_t* rx;
+    uint16_t rx_length;
+    uint16_t tx_sent;                  /* frames of the previous pump sent OK */
+    uint16_t tx_failed;
+    uint16_t tx_count;                 /* out */
+    uint16_t tx_length[OS_NET_NIC_PUMP_TX_MAX]; /* out */
+    uint8_t* tx;                       /* OS_NET_NIC_PUMP_TX_MAX * OS_NET_NIC_FRAME_MAX */
+    int32_t result;                    /* out, valid when done */
+    uint32_t done;                     /* out: 1 = op finished */
+} os_net_nic_pump_t;
+
+typedef struct {
+    int32_t owner_pid;       /* worker owning the ports, 0 = kernel */
+    uint32_t claims;
+    uint32_t reclaims;       /* kernel re-inits after a worker loss */
+    uint32_t irq_forwarded;  /* IRQ3 events counted for the worker */
+    uint32_t kernel_refused; /* kernel port accesses refused while owned (expected 0) */
+    uint32_t kernel_gated;   /* kernel NE2000 syscalls refused while owned */
+    uint32_t pumps;
+    uint32_t frames_out;     /* frames handed to the worker to transmit */
+    uint32_t frames_in;      /* frames the worker fed in */
+    uint32_t worker_tx_ok;   /* worker-reported transmits */
+    uint32_t worker_tx_failed;
+} os_net_nic_status_t;
+
+/* Kernel NE2000 path (LLM 91-98/131-138, peer 128-130, DHCP) refused: the
+ * NIC is owned by the Ring 3 worker. */
+#define OS_NET_NIC_WORKER_OWNED (-141)
+/* SYS_NET_WIRE_* / SYS_SOCKET_CONNECT started on the worker's NIC: pump it. */
+#define OS_NET_WIRE_PENDING (-142)
+/* CLAIM without an NE2000 probed at boot. */
+#define OS_NET_NIC_ABSENT (-143)
 
 /* Store in Ring 3 but the driver cannot serve now (suspended, stalled): the
  * kernel does not run its own stale FS code instead (fail closed). */

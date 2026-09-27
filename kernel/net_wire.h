@@ -35,6 +35,9 @@ typedef struct {
     uint16_t remote_port;
 } net_wire_binding_t;
 
+/* Tranche 5 suite: frame sink. 0 = accepted for transmission. */
+typedef int (*net_wire_emit_fn)(void* context, const uint8_t* frame, uint16_t length);
+
 typedef struct {
     ne2k_device_t* device;
     const ne2k_io_t* io;
@@ -42,7 +45,17 @@ typedef struct {
     uint8_t* tx;       /* frame buffers, capacity bytes each */
     uint8_t* rx;
     uint16_t capacity;
+    /* Tranche 5 suite: when set, frames go to the Ring 3 networker that
+     * owns the NIC (io unused); NULL = ne2k_tx_submit on io in Ring 0. */
+    net_wire_emit_fn emit;
+    void* emit_context;
 } net_wire_ctx_t;
+
+#define NET_WIRE_OP_NONE    0U
+#define NET_WIRE_OP_CONNECT 1U
+#define NET_WIRE_OP_SEND    2U
+#define NET_WIRE_OP_RECV    3U
+#define NET_WIRE_OP_CLOSE   4U
 
 /* Pure bookkeeping (unit tested). */
 void net_wire_reset(void);
@@ -67,5 +80,22 @@ int net_wire_send(const net_wire_ctx_t* ctx, int socket_id, const uint8_t* data,
 int net_wire_recv(const net_wire_ctx_t* ctx, int socket_id, uint8_t* buffer,
                   uint16_t capacity, uint16_t* out_length, uint16_t attempts);
 int net_wire_close(const net_wire_ctx_t* ctx, int socket_id, uint16_t attempts);
+
+/* Tranche 5 suite: resumable engine behind the four calls above (one op at a
+ * time). The begin calls return 1 while the op runs, 0 once it finished
+ * (net_wire_op_result()); net_wire_op_step() runs one poll round with the
+ * frame the NIC delivered in ctx->rx (has_frame = 0: idle round). */
+int net_wire_op_connect(const net_wire_ctx_t* ctx, const os_net_wire_connect_t* request);
+int net_wire_op_send(const net_wire_ctx_t* ctx, int socket_id, const uint8_t* data,
+                     uint16_t length, uint8_t* segment_out, uint16_t segment_capacity,
+                     uint16_t* segment_length, uint16_t attempts);
+int net_wire_op_recv(const net_wire_ctx_t* ctx, int socket_id, uint8_t* buffer,
+                     uint16_t capacity, uint16_t* out_length, uint16_t attempts);
+int net_wire_op_close(const net_wire_ctx_t* ctx, int socket_id, uint16_t attempts);
+int net_wire_op_step(const net_wire_ctx_t* ctx, int has_frame, uint16_t length);
+int net_wire_op_active(void);
+int32_t net_wire_op_result(void);
+uint32_t net_wire_op_kind(void);
+void net_wire_op_cancel(void);
 
 #endif

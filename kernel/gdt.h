@@ -61,5 +61,7 @@ void tss_set_stack(uint32_t ss, uint32_t esp);
 /* Load (grant=1) or clear (grant=0) the ATA port range in the live TSS IOPB.
  * Idempotent; only rewrites the map when the state changes. */
 void tss_set_ata_io(int grant);
+/* Tranche 5 suite: NE2000 ports 0x300-0x31F for the NIC-owning worker. */
+void tss_set_nic_io(int grant);
 
 #endif

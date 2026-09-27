@@ -376,6 +376,10 @@ int ne2k_tcp_data(ne2k_device_t* device, const ne2k_io_t* io,
                   const net_tcp_connection_t* connection, const uint8_t* payload,
                   uint16_t payload_length);
 /* Encapsule et émet un segment TCP déjà construit par une API socket caller-owned. */
+int ne2k_tcp_frame(const ne2k_device_t* device, const net_arp_cache_t* cache,
+                   uint8_t* frame, uint16_t frame_capacity,
+                   const uint8_t local_ip[4], const uint8_t remote_ip[4],
+                   const uint8_t* segment, uint16_t segment_length);
 int ne2k_tcp_segment(ne2k_device_t* device, const ne2k_io_t* io,
                      const net_arp_cache_t* cache, uint8_t* frame, uint16_t frame_capacity,
                      const uint8_t local_ip[4], const uint8_t remote_ip[4],
