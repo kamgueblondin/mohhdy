@@ -35,7 +35,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 
 # Liste des fichiers objets - MISE À JOUR avec tous les nouveaux fichiers
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/kctx.o build/userspace_switch.o \
-          build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/net_relay.o build/net_wire.o build/gdt.o build/idt.o build/vmm.o build/task.o \
+          build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/ata_fsop.o build/fsop_exec.o build/net_relay.o build/net_wire.o build/gdt.o build/idt.o build/vmm.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/interrupts.o \
           build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o
 
@@ -107,6 +107,16 @@ build/io_bitmap.o: kernel/io_bitmap.c kernel/io_bitmap.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/ata_job.o: kernel/ata_job.c kernel/ata_job.h include/os_syscalls.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Tranche 4 suite: FS op slot/mirror (kernel) and the FAT/overlay op codec
+# and dispatch shared with the Ring 3 atadriver.
+build/ata_fsop.o: kernel/ata_fsop.c kernel/ata_fsop.h include/os_syscalls.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/fsop_exec.o: kernel/fs/fsop_exec.c kernel/fs/fsop_exec.h kernel/fs/fat16.h kernel/fs/fat32.h fs/overlay.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -186,7 +196,7 @@ build/task.o: kernel/task/task.c kernel/task/task.h kernel/ata_job.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Règles de compilation pour les appels système
-build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/ata_job.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h
+build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

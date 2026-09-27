@@ -155,6 +155,14 @@ fat16_volume_t* fat16_root(void) {
     return &root_volume;
 }
 
+/* Tranche 4 suite: the Ring 3 driver mutates the volume with its own copy of
+ * this code, so the kernel copy drops its FAT sector cache and read window
+ * before it touches the volume again (fallback, GGUF streaming). */
+void fat16_invalidate_caches(fat16_volume_t* v) {
+    fat_sector_cache_valid = 0U;
+    if (v) v->read_window_valid = 0U;
+}
+
 int fat16_mount(fat16_volume_t* v, fat16_read_sector_fn read_sector, uint32_t base_lba) {
     uint32_t total;
     uint32_t fat_lba;
@@ -255,14 +263,14 @@ int fat16_attach_writer(fat16_volume_t* v, fat16_write_sector_fn write_sector){i
  * puis une relecture a taille exacte et charge nulle (CI). Meme motif que ATA. */
 static uint32_t fat16_irq_save(void) {
     uint32_t flags = 0U;
-#ifndef KERNEL_TEST
+#if !defined(KERNEL_TEST) && !defined(MOHHDY_RING3)
     __asm__ __volatile__("pushfl; popl %0; cli" : "=r"(flags) :: "memory");
 #endif
     return flags;
 }
 
 static void fat16_irq_restore(uint32_t flags) {
-#ifndef KERNEL_TEST
+#if !defined(KERNEL_TEST) && !defined(MOHHDY_RING3)
     if ((flags & (1U << 9)) != 0U) __asm__ __volatile__("sti" ::: "memory");
 #else
     (void)flags;

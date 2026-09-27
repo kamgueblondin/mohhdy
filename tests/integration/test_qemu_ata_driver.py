@@ -158,7 +158,13 @@ READY_SPEC = ("atadriver ring3 pio ready", ("flushes", "loads", "kpio"))
 LOAD_SPEC = ("atadriver snapshot load ok", ("gen", "flushes", "loads", "kpio"))
 FATIO_SPEC = ("atadriver fat io", ("rd", "wr", "kfat"))
 STATUS_KEYS = ("driver", "boot", "fatrd", "fatwr", "fatkpio", "fatkpiolive",
-               "aborts", "flushes", "kpio", "resets")
+               "aborts", "flushes", "kpio", "resets",
+               # Tranche 4 suite: FAT/overlay code served by the driver itself.
+               "store", "fsops", "fskernel", "fsaborts", "fsredo", "fsunavail",
+               "publishes", "handovers", "restores")
+STORE_SPEC = ("atadriver store ready", ("flags", "fat16", "fat32", "overlay", "image"))
+# OS_ATA_FS_STORE_FAT16 | OS_ATA_FS_STORE_OVERLAY (no FAT32 slave here).
+STORE_FAT16_OVERLAY = 5
 # Drop only the scheduler line itself: eating the following whitespace glued
 # "driver 2" to " boot 2" into "driver 2boot 2" when the switch landed
 # inside the ata-status reply (CI flake seen on PR #72).
@@ -335,6 +341,14 @@ def boot1():
         driver_pid = str(st["driver"])
         send_command_until(monitor, "service-find ata-driver",
                            "service-find ok ata-driver %s" % driver_pid, proc)
+        # 0b. Tranche 4 suite: the boot driver mounted FAT16 with its own
+        #     code and took the overlay store over (one kernel handover).
+        store = search_after(STORE_SPEC, 0, "driver store ready", monitor, proc)
+        st = ata_status(monitor, proc)
+        if (store[0] != STORE_FAT16_OVERLAY or store[1] != 1 or store[3] != 1 or
+                store[4] <= 16 or st["store"] != STORE_FAT16_OVERLAY or
+                st["handovers"] != 1 or st["fskernel"] != 0):
+            raise RuntimeError("store not handed to the driver: %r %r" % (store, st))
         # 1. Non-driver task: register, claim/job, sector IPC and raw port
         #    access are all refused (driver live).
         _, start = spawn(monitor, proc, "atarogue")
@@ -365,7 +379,13 @@ def boot1():
         if flush[1] < 1 or flush[3] != ready[2]:
             raise RuntimeError("flush not via driver: ready=%r flush=%r" % (ready, flush))
         send_command_until(monitor, "cat t4s2", "viadrv", proc)
-        # 5. FAT16 through the driver: the VFS worker's FAT sector I/O is a
+        # 4b. The write and the read ran in the driver's overlay store: the
+        #     kernel only copied bytes and received the published image.
+        ovl = ata_status(monitor, proc)
+        if (ovl["fsops"] < 2 or ovl["publishes"] < 1 or ovl["fskernel"] != 0 or
+                ovl["flushes"] != flush[1] or ovl["kpio"] != 0):
+            raise RuntimeError("overlay ops not served by the driver: %r" % ovl)
+        # 5. FAT16 through the driver: the VFS worker's FAT operation is a
         #    synchronous RPC served by the driver's PIO. Driver counters grow;
         #    the kernel FAT PIO counter stays where the boot mount left it.
         vfs_pids = start_vfs(monitor, proc)
@@ -379,7 +399,8 @@ def boot1():
         if (fatio[0] < 1 or fatio[1] < 1 or fatio[2] != 0 or
                 after["fatrd"] <= before["fatrd"] or after["fatwr"] <= before["fatwr"] or
                 after["fatkpio"] != before["fatkpio"] or after["fatkpiolive"] != 0 or
-                after["aborts"] != 0):
+                after["aborts"] != 0 or after["fsops"] <= before["fsops"] or
+                after["fskernel"] != 0 or after["store"] != STORE_FAT16_OVERLAY):
             raise RuntimeError("FAT not via driver: before=%r after=%r driver=%r" %
                                (before, after, fatio))
         # 6. Kill the boot driver (root shell): FAT and overlay writes fall
@@ -389,6 +410,11 @@ def boot1():
                            "service-find: service indisponible", proc)
         vfs_write_read(monitor, proc, "fat16/t4fb.txt", "viakernel")
         fallback = ata_status(monitor, proc)
+        # Tranche 4 suite: the store came back to Ring 0 from the mirror.
+        if "[ATA] store back in Ring 0 (overlay from driver mirror)" not in log_text():
+            raise RuntimeError("store not taken back after driver loss")
+        if fallback["store"] != 0 or fallback["restores"] != 1:
+            raise RuntimeError("store fallback not clean: %r" % fallback)
         if fallback["driver"] != 0 or fallback["fatkpio"] <= after["fatkpio"]:
             raise RuntimeError("FAT fallback not via Ring 0: %r" % fallback)
         # Plain overlay writes are reserved to vfsvirtual while it is live
@@ -437,7 +463,12 @@ def boot2():
         crash = ata_status(monitor, proc)
         if (crash["driver"] != 0 or crash["aborts"] != before["aborts"] + 1 or
                 crash["resets"] != before["resets"] + 1 or
-                crash["fatkpio"] <= before["fatkpio"]):
+                crash["fatkpio"] <= before["fatkpio"] or
+                # Tranche 4 suite: the crash hit the driver's own FAT code
+                # before any sector completed, so Ring 0 redid it once.
+                crash["fsaborts"] != before["fsaborts"] + 1 or
+                crash["fsredo"] != before["fsredo"] + 1 or crash["store"] != 0 or
+                "[ATA] fs op redone in Ring 0 after driver loss" not in log_text()[start:]):
             raise RuntimeError("crash fallback not clean: before=%r after=%r" % (before, crash))
         # Files written before the crash are intact.
         vfs_read_payload(monitor, proc, "fat16/t4s3.txt", "viadrvfat")
@@ -451,7 +482,15 @@ def boot2():
         load = search_after(LOAD_SPEC, start, "driver load counters", monitor, proc)
         if load[2] < 1:
             raise RuntimeError("load not via driver: %r" % load)
+        # Tranche 4 suite: after the load job the respawned driver takes the
+        # store over again, and the next overlay read runs in Ring 3.
+        search_after(STORE_SPEC, start, "respawned driver store ready", monitor, proc, rounds=16)
+        again = ata_status(monitor, proc)
         send_command_until(monitor, "cat t4s2", "viadrv", proc)
+        served = ata_status(monitor, proc)
+        if (again["store"] != STORE_FAT16_OVERLAY or again["handovers"] != crash["handovers"] + 1 or
+                served["fsops"] <= again["fsops"] or served["fskernel"] != 0):
+            raise RuntimeError("respawned driver store not live: %r %r" % (again, served))
         return load, before, crash
     finally:
         shutdown(proc, monitor)

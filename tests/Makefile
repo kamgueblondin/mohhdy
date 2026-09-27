@@ -284,6 +284,13 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_ata_job: $(UNIT_DIR)/kernel/test_ata_job.c 
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/ata_job.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
+# Tranche 4 suite: FS op slot/mirror + shared FAT/overlay codec and dispatch.
+ATA_FSOP_SOURCES = ../kernel/ata_fsop.c ../kernel/fs/fsop_exec.c ../kernel/fs/fat16.c ../kernel/fs/fat32.c
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_ata_fsop: $(UNIT_DIR)/kernel/test_ata_fsop.c $(ATA_FSOP_SOURCES) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< $(ATA_FSOP_SOURCES) $(FRAMEWORK_SOURCES)
+	@echo "Compiled kernel test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_%: $(UNIT_DIR)/kernel/test_%.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< $(FRAMEWORK_SOURCES)

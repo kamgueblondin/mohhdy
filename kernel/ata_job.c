@@ -151,6 +151,23 @@ void ata_job_set_boot_driver(int32_t pid) { g_stats.boot_driver_pid = pid; }
 
 void ata_job_debug_arm_crash(void) { g_debug_crash_armed = 1U; }
 
+/* Tranche 4 suite: the armed crash rides the next FAT mutation served by the
+ * driver's own FAT code (one shot). */
+int ata_job_debug_take_crash(void) {
+    if (!g_debug_crash_armed) return 0;
+    g_debug_crash_armed = 0U;
+    return 1;
+}
+
+void ata_job_note_fat_driver_io(uint32_t read_sectors, uint32_t written_sectors) {
+    g_stats.fat_driver_read_sectors += read_sectors;
+    g_stats.fat_driver_write_sectors += written_sectors;
+}
+
+void ata_job_note_driver_flush(void) { g_stats.flush_done++; }
+
+void ata_job_note_rpc_abort(void) { g_stats.fat_rpc_aborts++; }
+
 int ata_job_controller_in_use(void) {
     return g_claim_pid != 0 || g_handed != ATA_HANDED_NONE;
 }

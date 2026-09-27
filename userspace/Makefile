@@ -60,7 +60,22 @@ networker: net_worker.o start.o
 	@echo "Linking networker..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
-atadriver: ata_driver.o start.o
+# Tranche 4 suite: the driver links its own copy of the FAT16/FAT32/overlay
+# code (-DMOHHDY_RING3: no cli/sti at CPL 3) plus the shared op dispatch.
+DRV_FS_CFLAGS = $(CFLAGS) -I.. -DMOHHDY_RING3
+DRV_FS_OBJS = drv_fat16.o drv_fat32.o drv_fsop_exec.o drv_overlay.o
+drv_fat16.o: ../kernel/fs/fat16.c ../kernel/fs/fat16.h $(USER_HEADERS)
+	$(CC) $(DRV_FS_CFLAGS) -c -o $@ $<
+drv_fat32.o: ../kernel/fs/fat32.c ../kernel/fs/fat32.h ../kernel/fs/fat16.h $(USER_HEADERS)
+	$(CC) $(DRV_FS_CFLAGS) -c -o $@ $<
+drv_fsop_exec.o: ../kernel/fs/fsop_exec.c ../kernel/fs/fsop_exec.h ../fs/overlay.h $(USER_HEADERS)
+	$(CC) $(DRV_FS_CFLAGS) -c -o $@ $<
+drv_overlay.o: ../fs/overlay.c ../fs/overlay.h $(USER_HEADERS)
+	$(CC) $(DRV_FS_CFLAGS) -c -o $@ $<
+ata_driver.o: ata_driver.c ../kernel/fs/fsop_exec.h ../fs/overlay.h $(USER_HEADERS)
+	$(CC) $(DRV_FS_CFLAGS) -c -o $@ $<
+
+atadriver: ata_driver.o $(DRV_FS_OBJS) start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 ataclient: ata_client.o start.o
