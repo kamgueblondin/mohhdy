@@ -100,6 +100,8 @@ static void test_socket_ops_local_registry(void) {
     r.in_length = 3U;
     TEST_ASSERT_EQUAL(OS_SOCKET_BAD_ARGUMENT, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
     request(&r, SYS_PEER_LISTEN, 0U, 0U, 0U);
+    TEST_ASSERT_EQUAL(OS_PEER_BAD_REQUEST, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
+    request(&r, SYS_NET_STATUS, 0U, 0U, 0U);
     TEST_ASSERT_EQUAL(OS_SOCKET_BAD_ARGUMENT, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
     TEST_ASSERT_EQUAL(OS_SOCKET_BAD_ARGUMENT, net_stack_exec(&st, 0, 0, 0U, out, &n, 0, 0));
     TEST_ASSERT_EQUAL(6, (int)st.report.socket_ops);

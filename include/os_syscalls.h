@@ -1254,13 +1254,14 @@ static inline int os_task_parse_supervision_event(const os_ipc_message_t* messag
 }
 
 /* Tranche 5 slice 2: net IPC relay. While net-driver is registered, the
- * socket syscalls 99-108 of any other task are forwarded to the worker: the
- * kernel sends it one IPC message (sender_pid 0, type
- * OS_IPC_NET_RELAY_REQUEST, request_id = job id) carrying the syscall
- * number, scalar arguments and up to OS_NET_RELAY_MAX_IN input bytes. The
- * worker runs the same syscall itself and answers with SYS_NET_RELAY_REPLY.
- * LLM (91-98) and peer (128-130) syscalls are not relayed (still -59). */
-#define OS_IPC_NET_RELAY_REQUEST 0x4E524C01U
+ * socket syscalls 99-108 and peer syscalls 128-130 of any other task are
+ * forwarded to the worker: the kernel sends it one IPC message (sender_pid 0,
+ * type OS_IPC_NET_RELAY_REQUEST or OS_IPC_NET_PEER_RELAY_REQUEST,
+ * request_id = job id) carrying the syscall number, scalar arguments and up
+ * to OS_NET_RELAY_MAX_IN input bytes. The worker runs the same syscall itself
+ * and answers with SYS_NET_RELAY_REPLY. */
+#define OS_IPC_NET_RELAY_REQUEST      0x4E524C01U
+#define OS_IPC_NET_PEER_RELAY_REQUEST 0x4E524C02U
 #define OS_NET_RELAY_MAX_IN 72U
 #define OS_NET_RELAY_MAX_OUT 256U
 typedef struct {

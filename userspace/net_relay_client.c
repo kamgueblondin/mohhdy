@@ -137,7 +137,7 @@ void main(void) {
     forged.job_id = 1U;
     forge_rc = call1(SYS_NET_RELAY_REPLY, (uint32_t)&forged);
     if (before.worker_pid > 0) {
-        if (peer_rc == OS_NET_WORKER_REQUIRED &&
+        if ((peer_rc == OS_PEER_BAD_REQUEST || peer_rc == OS_NET_WORKER_REQUIRED) &&
             (llm_rc == OS_NET_WORKER_REQUIRED || llm_rc == OS_LLM_TLS_BAD_PHASE))
             puts("netrelay unsupported still worker-required\n");
         else

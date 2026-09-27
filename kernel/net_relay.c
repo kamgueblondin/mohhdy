@@ -36,7 +36,12 @@ void net_relay_init(void) {
 
 int net_relay_supported(uint32_t syscall_number) {
     return (syscall_number >= SYS_SOCKET_OPEN && syscall_number <= SYS_SOCKET_ACCEPT_ACK) ||
-           syscall_number == SYS_SOCKET_CONNECT;
+           syscall_number == SYS_SOCKET_CONNECT ||
+           net_relay_peer_supported(syscall_number);
+}
+
+int net_relay_peer_supported(uint32_t syscall_number) {
+    return syscall_number >= SYS_PEER_LISTEN && syscall_number <= SYS_PEER_TLS_POLL;
 }
 
 int net_relay_llm_supported(uint32_t syscall_number) {
@@ -44,7 +49,8 @@ int net_relay_llm_supported(uint32_t syscall_number) {
 }
 
 uint32_t net_relay_timeout_ticks(uint32_t op) {
-    return net_relay_llm_supported(op) ? NET_RELAY_LLM_TIMEOUT_TICKS : NET_RELAY_TIMEOUT_TICKS;
+    return (net_relay_llm_supported(op) || net_relay_peer_supported(op))
+        ? NET_RELAY_LLM_TIMEOUT_TICKS : NET_RELAY_TIMEOUT_TICKS;
 }
 
 uint32_t net_relay_state_for(int32_t pid) {

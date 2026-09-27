@@ -1,4 +1,5 @@
 #include "net_stack_exec.h"
+#include "net_llm_client.h"
 
 static void stack_copy(void* dst, const void* src, uint32_t n) {
     uint8_t* d = (uint8_t*)dst;
@@ -147,6 +148,34 @@ static int32_t stack_socket(net_stack_t* st, const os_net_relay_request_t* req,
     }
 }
 
+static int32_t stack_peer(const os_net_relay_request_t* req) {
+    uint16_t in_length = req->in_length <= OS_NET_RELAY_MAX_IN ? req->in_length : 0U;
+    switch (req->op) {
+        case SYS_PEER_LISTEN: {
+            os_peer_listen_request_t r;
+            if (in_length != sizeof(r)) return OS_PEER_BAD_REQUEST;
+            stack_copy(&r, req->in, sizeof(r));
+            return kernel_peer_listen(&r);
+        }
+        case SYS_PEER_ACCEPT: {
+            os_peer_accept_request_t r;
+            if (in_length != sizeof(r)) return OS_PEER_BAD_REQUEST;
+            stack_copy(&r, req->in, sizeof(r));
+            return kernel_peer_accept(&r);
+        }
+        case SYS_PEER_TLS_POLL: {
+            os_peer_tls_poll_request_t r;
+            if (in_length == sizeof(r)) {
+                stack_copy(&r, req->in, sizeof(r));
+                return kernel_peer_tls_poll(&r);
+            }
+            return kernel_peer_tls_poll(0);
+        }
+        default:
+            return OS_PEER_BAD_REQUEST;
+    }
+}
+
 static int32_t stack_llm(net_stack_t* st, uint32_t op, const uint8_t* in, uint32_t in_length,
                          uint8_t* bulk_out, uint32_t* bulk_out_length) {
     static os_llm_acquire_start_request_t acquire;
@@ -211,6 +240,8 @@ int32_t net_stack_exec(net_stack_t* stack, const os_net_relay_request_t* request
     if (!stack || !request) return OS_SOCKET_BAD_ARGUMENT;
     if (request->op >= SYS_LLM_ACQUIRE_START && request->op <= SYS_LLM_OPENAI_CREDENTIAL)
         return stack_llm(stack, request->op, bulk_in, bulk_in_length, bulk_out, bulk_out_length);
+    if (request->op >= SYS_PEER_LISTEN && request->op <= SYS_PEER_TLS_POLL)
+        return stack_peer(request);
     if (!out) return OS_SOCKET_BAD_ARGUMENT;
     {
         int32_t rc = stack_socket(stack, request, out, &local_length);
