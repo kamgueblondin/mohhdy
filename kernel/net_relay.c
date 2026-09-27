@@ -12,6 +12,10 @@ static int32_t g_result;
 static uint32_t g_out_length;
 static uint8_t g_out[OS_NET_RELAY_MAX_OUT];
 static os_net_relay_status_t g_stats;
+static uint8_t g_bulk_in[OS_NET_RELAY_BULK_MAX];
+static uint32_t g_bulk_in_length;
+static uint8_t g_bulk_out[OS_NET_RELAY_BULK_MAX];
+static uint32_t g_bulk_out_length;
 
 void net_relay_init(void) {
     uint32_t i;
@@ -25,12 +29,22 @@ void net_relay_init(void) {
     g_started = 0U;
     g_result = 0;
     g_out_length = 0U;
+    g_bulk_in_length = 0U;
+    g_bulk_out_length = 0U;
     for (i = 0U; i < sizeof(g_stats); i++) s[i] = 0U;
 }
 
 int net_relay_supported(uint32_t syscall_number) {
     return (syscall_number >= SYS_SOCKET_OPEN && syscall_number <= SYS_SOCKET_ACCEPT_ACK) ||
            syscall_number == SYS_SOCKET_CONNECT;
+}
+
+int net_relay_llm_supported(uint32_t syscall_number) {
+    return syscall_number >= SYS_LLM_ACQUIRE_START && syscall_number <= SYS_LLM_OPENAI_CREDENTIAL;
+}
+
+uint32_t net_relay_timeout_ticks(uint32_t op) {
+    return net_relay_llm_supported(op) ? NET_RELAY_LLM_TIMEOUT_TICKS : NET_RELAY_TIMEOUT_TICKS;
 }
 
 uint32_t net_relay_state_for(int32_t pid) {
@@ -43,7 +57,7 @@ int32_t net_relay_worker(void) { return g_state == NET_RELAY_FREE ? 0 : g_worker
 
 int32_t net_relay_begin(int32_t pid, int32_t worker_pid, uint32_t op, uint32_t now) {
     if (g_state != NET_RELAY_FREE || pid <= 0 || worker_pid <= 0 || pid == worker_pid ||
-        !net_relay_supported(op)) return -1;
+        (!net_relay_supported(op) && !net_relay_llm_supported(op))) return -1;
     g_state = NET_RELAY_SENT;
     g_owner = pid;
     g_worker = worker_pid;
@@ -55,6 +69,8 @@ int32_t net_relay_begin(int32_t pid, int32_t worker_pid, uint32_t op, uint32_t n
     g_polls = 0U;
     g_result = 0;
     g_out_length = 0U;
+    g_bulk_in_length = 0U;
+    g_bulk_out_length = 0U;
     g_stats.forwarded++;
     return (int32_t)g_job_id;
 }
@@ -89,7 +105,7 @@ void net_relay_note_poll(void) {
  * it waits for a key, which must not look like a dead worker). */
 int net_relay_expired(uint32_t now) {
     return g_state == NET_RELAY_SENT && g_polls >= NET_RELAY_TIMEOUT_POLLS &&
-           (uint32_t)(now - g_started) > NET_RELAY_TIMEOUT_TICKS;
+           (uint32_t)(now - g_started) > net_relay_timeout_ticks(g_op);
 }
 
 int32_t net_relay_take(int32_t pid, uint32_t* op, uint8_t* out, uint32_t capacity,
@@ -115,6 +131,7 @@ void net_relay_fail(int32_t error) {
     g_job_id = 0U; /* a late reply is stale */
     g_result = error;
     g_out_length = 0U;
+    g_bulk_out_length = 0U;
     g_state = NET_RELAY_DONE;
 }
 
@@ -122,6 +139,42 @@ void net_relay_drop_owner(void) {
     g_state = NET_RELAY_FREE;
     g_owner = 0;
     g_job_id = 0U;
+}
+
+int net_relay_bulk_stage(int32_t caller_pid, const uint8_t* data, uint32_t length) {
+    uint32_t i;
+    if (g_state != NET_RELAY_SENT || caller_pid <= 0 || caller_pid != g_owner ||
+        length > OS_NET_RELAY_BULK_MAX || (length > 0U && !data)) return -1;
+    for (i = 0U; i < length; i++) g_bulk_in[i] = data[i];
+    g_bulk_in_length = length;
+    return 0;
+}
+
+int net_relay_bulk_fetch(int32_t worker_pid, uint32_t job_id, uint8_t* out, uint32_t capacity) {
+    uint32_t i;
+    if (g_state != NET_RELAY_SENT || worker_pid <= 0 || worker_pid != g_worker ||
+        job_id == 0U || job_id != g_job_id || capacity < g_bulk_in_length ||
+        (g_bulk_in_length > 0U && !out)) return -1;
+    for (i = 0U; i < g_bulk_in_length; i++) out[i] = g_bulk_in[i];
+    return (int)g_bulk_in_length;
+}
+
+int net_relay_bulk_put(int32_t worker_pid, uint32_t job_id, const uint8_t* data, uint32_t length) {
+    uint32_t i;
+    if (g_state != NET_RELAY_SENT || worker_pid <= 0 || worker_pid != g_worker ||
+        job_id == 0U || job_id != g_job_id || length > OS_NET_RELAY_BULK_MAX ||
+        (length > 0U && !data)) return -1;
+    for (i = 0U; i < length; i++) g_bulk_out[i] = data[i];
+    g_bulk_out_length = length;
+    return 0;
+}
+
+int net_relay_bulk_result(int32_t caller_pid, uint8_t* out, uint32_t capacity) {
+    uint32_t i, n;
+    if (g_state != NET_RELAY_DONE || caller_pid <= 0 || caller_pid != g_owner || g_job_id == 0U) return 0;
+    n = g_bulk_out_length < capacity ? g_bulk_out_length : capacity;
+    for (i = 0U; out && i < n; i++) out[i] = g_bulk_out[i];
+    return out ? (int)n : 0;
 }
 
 void net_relay_note_denied(void) { g_stats.denied++; }

@@ -300,7 +300,11 @@
  * I/O bitmap and gets IRQ3 as a counter; the kernel no longer touches the
  * NIC until the worker dies (reclaim). See docs/tranche5_net_worker_gate.md. */
 #define SYS_NET_NIC 146
-#define MAX_SYSCALLS 147
+/* Tranche 5 pile: bulk side channel of the net relay (LLM structs larger
+ * than one IPC payload). EBX = OS_NET_RELAY_BULK_* , ECX = job id, EDX =
+ * buffer, ESI = length / capacity. Live net-driver PID only (-59). */
+#define SYS_NET_RELAY_BULK 147
+#define MAX_SYSCALLS 148
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
@@ -1100,6 +1104,12 @@ typedef struct {
 #define OS_NET_NIC_PUMP   2U /* ECX = os_net_nic_pump_t* */
 #define OS_NET_NIC_IRQ    3U /* -> IRQ3 events since the last call */
 #define OS_NET_NIC_STATUS 4U /* public: ECX = os_net_nic_status_t* */
+/* Tranche 5 pile (ARP/IPv4/TCP/TLS in the Ring 3 worker). */
+#define OS_NET_NIC_LOG     5U /* live net-driver: ECX = text, EDX = length, one atomic line */
+#define OS_NET_NIC_UTC     6U /* owner: ECX = char[16] YYYYMMDDHHMMSSZ (TLS validity) */
+#define OS_NET_NIC_PUBLISH 7U /* owner: ECX = const os_net_stack_report_t* */
+#define OS_NET_NIC_STACK   8U /* public: ECX = os_net_stack_report_t* (last published) */
+#define OS_NET_NIC_LOG_MAX 192U
 
 #define OS_NET_NIC_BASE_PORT 0x300U
 #define OS_NET_NIC_LAST_PORT 0x31FU
@@ -1269,6 +1279,13 @@ typedef struct {
     uint32_t out_length;
     uint8_t out[OS_NET_RELAY_MAX_OUT];
 } os_net_relay_reply_t;
+/* Tranche 5 pile: while the worker owns the NE2000, LLM 91-98 of any
+ * other task are relayed too; their structs travel through
+ * SYS_NET_RELAY_BULK (request in_length = 0, arg0 = bulk bytes in,
+ * out_capacity = bulk bytes expected back). */
+#define OS_NET_RELAY_BULK_FETCH 1U
+#define OS_NET_RELAY_BULK_PUT   2U
+#define OS_NET_RELAY_BULK_MAX 2304U
 typedef struct {
     uint32_t forwarded;   /* requests sent to the worker over IPC */
     uint32_t completed;   /* replies delivered back to the caller */
@@ -1318,6 +1335,18 @@ typedef struct {
     uint32_t bound;         /* wire-bound sockets currently tracked */
     int32_t worker_pid;     /* live net-driver PID, 0 if none */
 } os_net_wire_status_t;
+/* Tranche 5 pile: counters the Ring 3 stack publishes after each op. */
+typedef struct {
+    os_net_wire_status_t wire; /* Ring 3 ARP/IPv4/TCP wire engine */
+    uint32_t llm_status;       /* SYS_LLM_SESSION_STATUS word of the Ring 3 session */
+    uint32_t socket_ops;       /* relayed 99-108 run on the Ring 3 registry */
+    uint32_t wire_ops;         /* relayed connect/send/recv/close on the wire */
+    uint32_t llm_ops;          /* relayed 91-98 run by the Ring 3 TLS client */
+    uint32_t rounds;           /* wire poll rounds run in Ring 3 */
+    uint32_t frames_built;     /* frames the Ring 3 stack handed to the driver */
+    uint32_t frames_parsed;    /* frames the Ring 3 stack decoded */
+    uint32_t reports;          /* kernel side: accepted publications */
+} os_net_stack_report_t;
 /* Relayed public connect: same fields as the wire connect. */
 typedef struct {
     uint16_t local_port;

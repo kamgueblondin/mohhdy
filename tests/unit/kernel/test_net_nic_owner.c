@@ -118,6 +118,59 @@ static void test_abi(void) {
     TEST_ASSERT_TRUE(OS_NET_NIC_FRAME_MAX >= 1514U);
 }
 
+/* Tranche 5 pile: the Ring 3 stack publishes its counters. */
+static void test_stack_publish(void) {
+    os_net_stack_report_t r, got;
+    os_net_wire_status_t w;
+    uint32_t i;
+    uint8_t* p = (uint8_t*)&r;
+    for (i = 0U; i < sizeof(r); i++) p[i] = 0U;
+    nic_owner_init();
+    r.wire.connects = 1U; r.wire.frames_tx = 7U; r.wire.frames_rx = 4U; r.wire.bound = 1U;
+    r.llm_status = 0x1FU; r.socket_ops = 3U;
+    /* Nobody owns the card: publishing is refused, nothing to report. */
+    TEST_ASSERT_EQUAL(OS_NET_WORKER_REQUIRED, nic_owner_publish(3, &r));
+    TEST_ASSERT_EQUAL(0, nic_owner_stack(&got));
+    TEST_ASSERT_EQUAL(0x5U, nic_owner_llm_status(0x5U));
+    TEST_ASSERT_EQUAL(0, nic_owner_claim(3, 3, 1));
+    TEST_ASSERT_EQUAL(OS_NET_WORKER_REQUIRED, nic_owner_publish(4, &r)); /* not the owner */
+    TEST_ASSERT_EQUAL(OS_NET_WORKER_REQUIRED, nic_owner_publish(3, 0));
+    TEST_ASSERT_EQUAL(0x5U, nic_owner_llm_status(0x5U)); /* owner, not published yet */
+    TEST_ASSERT_EQUAL(0, nic_owner_publish(3, &r));
+    TEST_ASSERT_EQUAL(1, nic_owner_stack(&got));
+    TEST_ASSERT_EQUAL(3, (int)got.wire.worker_pid);
+    TEST_ASSERT_EQUAL(1, (int)got.reports);
+    TEST_ASSERT_EQUAL(3, (int)got.socket_ops);
+    TEST_ASSERT_EQUAL(0x1FU, nic_owner_llm_status(0x5U));
+    /* Kernel counters + live Ring 3 counters. */
+    for (i = 0U, p = (uint8_t*)&w; i < sizeof(w); i++) p[i] = 0U;
+    w.refused = 2U;
+    nic_owner_merge_wire(&w);
+    TEST_ASSERT_EQUAL(7, (int)w.frames_tx);
+    TEST_ASSERT_EQUAL(2, (int)w.refused);
+    TEST_ASSERT_EQUAL(1, (int)w.bound);
+    /* Owner lost: counters retire (totals never go backwards), bound and
+     * the session word do not survive. */
+    TEST_ASSERT_EQUAL(1, nic_owner_drop_if_gone(0));
+    TEST_ASSERT_EQUAL(0, nic_owner_stack(&got));
+    TEST_ASSERT_EQUAL(1, (int)got.reports);
+    TEST_ASSERT_EQUAL(0x5U, nic_owner_llm_status(0x5U));
+    for (i = 0U, p = (uint8_t*)&w; i < sizeof(w); i++) p[i] = 0U;
+    nic_owner_merge_wire(&w);
+    TEST_ASSERT_EQUAL(7, (int)w.frames_tx);
+    TEST_ASSERT_EQUAL(1, (int)w.connects);
+    TEST_ASSERT_EQUAL(0, (int)w.bound);
+    /* A new owner adds on top of the retired base. */
+    TEST_ASSERT_EQUAL(0, nic_owner_claim(9, 9, 1));
+    r.wire.frames_tx = 3U;
+    TEST_ASSERT_EQUAL(0, nic_owner_publish(9, &r));
+    for (i = 0U, p = (uint8_t*)&w; i < sizeof(w); i++) p[i] = 0U;
+    nic_owner_merge_wire(&w);
+    TEST_ASSERT_EQUAL(10, (int)w.frames_tx);
+    TEST_ASSERT_EQUAL(2, (int)w.connects);
+    nic_owner_merge_wire(0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_claim_rules);
@@ -126,6 +179,7 @@ int main(void) {
     RUN_TEST(test_irq_forwarding);
     RUN_TEST(test_counters);
     RUN_TEST(test_abi);
+    RUN_TEST(test_stack_publish);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

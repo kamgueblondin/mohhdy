@@ -184,6 +184,7 @@ def main():
             # still readable. Slice 2: its socket call is relayed instead.
             claim_pid, start = spawn(monitor, proc, "netclaim")
             wait_child(monitor, proc, "netclaim worker-required enforced", start)
+            wait_child(monitor, proc, "netclaim llm relayed to worker rc -94", start)
             wait_child(monitor, proc, "netclaim socket relayed", start)
             wait_for("net-driver relay op 105 rc 0", proc, start, timeout=5)
             kill(monitor, proc, claim_pid)
@@ -196,6 +197,7 @@ def main():
             wait_child(monitor, proc, "netrelay tcp loopback ok ping pong mode relay "
                        "forwarded 14 completed 14", start, rounds=30)
             wait_child(monitor, proc, "netrelay unsupported still worker-required", start)
+            wait_child(monitor, proc, "netrelay llm relayed to worker rc -94", start)
             wait_child(monitor, proc, "netrelay forged reply refused", start)
             relayed = normalized_log(log_text()[start:])
             for op in range(99, 109):
@@ -204,9 +206,11 @@ def main():
                     raise RuntimeError("worker did not run relayed op %d" % op)
             kill(monitor, proc, relay_pid)
             live = relay_status(monitor, proc)
-            if (live["worker"] != int(worker_pid) or live["fwd"] != 16 or
-                    live["done"] != 16 or live["aborted"] != 0 or
-                    live["timeouts"] != 0 or live["denied"] < 4 or live["pending"] != 0):
+            # Tranche 5 pile: 16 socket calls + 2 LLM polls relayed to the
+            # worker's Ring 3 TLS client; only the 2 peer calls stay denied.
+            if (live["worker"] != int(worker_pid) or live["fwd"] != 18 or
+                    live["done"] != 18 or live["aborted"] != 0 or
+                    live["timeouts"] != 0 or live["denied"] < 2 or live["pending"] != 0):
                 raise RuntimeError("unexpected relay counters: %r" % live)
             # Stalled worker: the relayed call times out, the caller is not
             # hung and gets OS_NET_RELAY_TIMEOUT (-87), never a replay.

@@ -31,4 +31,16 @@ void nic_owner_note_reclaim(void);
 void nic_owner_note_pump(uint32_t frames_out, uint32_t frame_in, uint32_t tx_ok, uint32_t tx_failed);
 void nic_owner_fill_status(os_net_nic_status_t* out);
 
+/* Tranche 5 pile: the owner runs ARP/IPv4/TCP/TLS in Ring 3 and publishes
+ * its counters. Only the owner may publish (else OS_NET_WORKER_REQUIRED).
+ * When the owner is dropped its wire counters fold into a retired base so
+ * SYS_NET_WIRE_STATUS totals never go backwards. */
+int nic_owner_publish(int32_t pid, const os_net_stack_report_t* report);
+/* 1 = a live owner has published (out filled), 0 = none (out zeroed). */
+int nic_owner_stack(os_net_stack_report_t* out);
+/* inout += retired + live published wire counters (bound: live only). */
+void nic_owner_merge_wire(os_net_wire_status_t* inout);
+/* Published Ring 3 session word while an owner has published, else kernel_word. */
+uint32_t nic_owner_llm_status(uint32_t kernel_word);
+
 #endif

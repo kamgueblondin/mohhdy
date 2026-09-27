@@ -53,14 +53,27 @@ void main(void) {
     socket_rc = call2(SYS_SOCKET_LISTEN, 7102U, 1U);
     (void)call1(SYS_NET_RELAY_STATUS, (uint32_t)&after);
     peer_rc = call1(SYS_PEER_LISTEN, 0U);
-    llm_rc = call0(SYS_LLM_POLL_TLS);
+    /* Tranche 5 pile: with the worker owning the NE2000, LLM calls are
+     * relayed to its Ring 3 TLS client (idle session: -94). Skipped when the
+     * worker just failed to answer (stalled/killed: relay timeout/abort). */
+    llm_rc = (socket_rc == OS_NET_RELAY_TIMEOUT || socket_rc == OS_NET_RELAY_ABORTED)
+        ? OS_NET_WORKER_REQUIRED : call0(SYS_LLM_POLL_TLS);
     if (status_rc == OS_NET_WORKER_REQUIRED) {
         puts("netclaim status unexpectedly gated\n");
     } else if (before.worker_pid > 0) {
-        if (peer_rc == OS_NET_WORKER_REQUIRED && llm_rc == OS_NET_WORKER_REQUIRED)
+        os_net_relay_status_t llm_after;
+        (void)call1(SYS_NET_RELAY_STATUS, (uint32_t)&llm_after);
+        if (peer_rc == OS_NET_WORKER_REQUIRED &&
+            (llm_rc == OS_NET_WORKER_REQUIRED ||
+             (llm_rc == OS_LLM_TLS_BAD_PHASE && llm_after.forwarded == after.forwarded + 1U)))
             puts("netclaim worker-required enforced\n");
         else
             puts("netclaim unexpected result\n");
+        if (llm_rc != OS_NET_WORKER_REQUIRED) {
+            puts("netclaim llm relayed to worker rc ");
+            put_int(llm_rc);
+            putc('\n');
+        }
         if (socket_rc >= 0 && after.forwarded == before.forwarded + 1U) {
             (void)call1(SYS_SOCKET_CLOSE, (uint32_t)socket_rc);
             puts("netclaim socket relayed\n");

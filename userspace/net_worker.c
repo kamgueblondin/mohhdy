@@ -1,15 +1,32 @@
 /* userspace/net_worker.c - net-driver worker (Tranche 5).
- * Registers the service name "net-driver". The NE2000 driver and the
- * TCP/socket registry stay in Ring 0; this worker is the only task allowed
- * to call the network syscalls while registered, and since slice 2 it runs
- * the socket syscalls relayed to it by the kernel over IPC.
+ * Registers the service name "net-driver" and runs the network syscalls the
+ * kernel relays to it over IPC. Once it owns the NE2000 (Tranche 5 suite)
+ * the whole stack runs here at CPL 3 (Tranche 5 pile): socket registry,
+ * TCP, ARP/IPv4 framing and demux, and the DHCP/DNS/TLS/HTTP LLM client.
  */
 
 #include "os_syscalls.h"
 #include "ne2k.h"
+#include "net_stack_exec.h"
+#include "net_llm_client.h"
 
+static char log_line[OS_NET_NIC_LOG_MAX];
+static uint32_t log_length;
+
+static void log_flush(void) {
+    int rc;
+    uint32_t i;
+    if (log_length == 0U) return;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_NET_NIC), "b"(OS_NET_NIC_LOG), "c"(log_line), "d"(log_length));
+    if (rc != 0)
+        for (i = 0U; i < log_length; i++) asm volatile("int $0x80" : : "a"(SYS_PUTC), "b"(log_line[i]));
+    log_length = 0U;
+}
+
+/* Lines go out in one syscall: a preempted worker no longer splits them. */
 static void putc(char value) {
-    asm volatile("int $0x80" : : "a"(SYS_PUTC), "b"(value));
+    log_line[log_length++] = value;
+    if (value == '\n' || log_length == sizeof(log_line)) log_flush();
 }
 
 static void puts(const char* text) {
@@ -86,6 +103,11 @@ static uint16_t nic_base;
 static uint8_t nic_rx[OS_NET_NIC_FRAME_MAX];
 static uint8_t nic_tx[OS_NET_NIC_PUMP_TX_MAX * OS_NET_NIC_FRAME_MAX];
 static uint32_t nic_tx_ok, nic_tx_failed, nic_rx_frames, nic_irq, nic_pumps;
+static net_stack_t stack;
+static uint8_t stack_tx[KERNEL_LLM_FRAME_CAPACITY];
+static uint8_t stack_rx[KERNEL_LLM_FRAME_CAPACITY];
+static uint8_t bulk_in[OS_NET_RELAY_BULK_MAX];
+static uint8_t bulk_out[OS_NET_RELAY_BULK_MAX];
 
 static inline uint8_t port_inb(uint16_t port) {
     uint8_t v; asm volatile("inb %1, %0" : "=a"(v) : "Nd"(port)); return v;
@@ -168,6 +190,8 @@ static void nic_pause(void) {
     }
 }
 
+/* Stack mode: pumps/out/in are the Ring 3 engine rounds and the frames it
+ * framed / decoded; the kernel pump counters are printed apart (must stay 0). */
 static void nic_report(void) {
     os_net_nic_status_t st;
     if (net_call2(SYS_NET_NIC, OS_NET_NIC_STATUS, (uint32_t)&st) != 0) return;
@@ -177,11 +201,22 @@ static void nic_report(void) {
     puts(" rx "); put_uint(nic_rx_frames);
     puts(" irq "); put_uint(nic_irq);
     puts(" kirq "); put_uint(st.irq_forwarded);
-    puts(" pumps "); put_uint(st.pumps);
-    puts(" out "); put_uint(st.frames_out);
-    puts(" in "); put_uint(st.frames_in);
+    puts(" pumps "); put_uint(nic_owned ? stack.report.rounds : st.pumps);
+    puts(" out "); put_uint(nic_owned ? stack.report.frames_built : st.frames_out);
+    puts(" in "); put_uint(nic_owned ? stack.report.frames_parsed : st.frames_in);
     puts(" refused "); put_uint(st.kernel_refused);
     puts(" gated "); put_uint(st.kernel_gated);
+    puts(" end\n");
+    if (!nic_owned) return;
+    puts("net-driver stack ring3 sockets "); put_uint(stack.report.socket_ops);
+    puts(" wire "); put_uint(stack.report.wire_ops);
+    puts(" llm "); put_uint(stack.report.llm_ops);
+    puts(" rounds "); put_uint(stack.report.rounds);
+    puts(" framed "); put_uint(stack.report.frames_built);
+    puts(" decoded "); put_uint(stack.report.frames_parsed);
+    puts(" kernel-pumps "); put_uint(st.pumps);
+    puts(" kernel-out "); put_uint(st.frames_out);
+    puts(" kernel-in "); put_uint(st.frames_in);
     puts(" end\n");
 }
 
@@ -336,12 +371,103 @@ static int32_t relay_execute(const os_net_relay_request_t* req, os_net_relay_rep
     }
 }
 
+/* ---- Tranche 5 pile: Ring 3 stack glue ---- */
+uint32_t timer_get_ticks(void) { return (uint32_t)net_call1(SYS_TICKS, 0U); }
+
+int net_llm_client_utc(rtc_io_t* io, char* out, uint16_t capacity) {
+    (void)io;
+    if (capacity < 16U) return -1;
+    return net_call2(SYS_NET_NIC, OS_NET_NIC_UTC, (uint32_t)out) == 0 ? 0 : -1;
+}
+
+static int r3_emit(void* context, const uint8_t* frame, uint16_t length) {
+    (void)context;
+    if (ne2k_tx_submit(&nic, &nic_io, frame, length) == 0) { nic_tx_ok++; return 0; }
+    nic_tx_failed++;
+    return -1;
+}
+
+static int r3_poll(void* user, uint8_t* frame, uint16_t capacity, uint16_t* length) {
+    (void)user;
+    if (ne2k_rx_poll(&nic, &nic_io, frame, capacity, length) != 0) return -1;
+    nic_rx_frames++;
+    return 0;
+}
+
+static void r3_idle(void* user) { (void)user; nic_pause(); }
+
+static void r3_round(void* user) {
+    int irq;
+    (void)user;
+    nic_ack();
+    irq = net_call2(SYS_NET_NIC, OS_NET_NIC_IRQ, 0U);
+    if (irq > 0) nic_irq += (uint32_t)irq;
+}
+
+static const net_stack_llm_ops_t r3_llm = {
+    kernel_llm_acquire_start, kernel_llm_poll_tls, kernel_llm_request, kernel_llm_poll_text,
+    kernel_llm_poll_sse, kernel_llm_reset_for_request, kernel_llm_close,
+    kernel_llm_configure_openai, kernel_llm_session_status
+};
+
+static void stack_publish(void) {
+    stack.report.llm_status = kernel_llm_session_status();
+    stack.report.wire.worker_pid = 0;
+    net_wire_fill_status(&stack.report.wire, 0);
+    (void)net_call2(SYS_NET_NIC, OS_NET_NIC_PUBLISH, (uint32_t)&stack.report);
+}
+
+static void stack_start(void) {
+    net_stack_init(&stack);
+    net_socket_reset_all();
+    net_wire_reset();
+    net_llm_client_reset();
+    net_llm_client_bind(&nic, &nic_io, 1);
+    stack.emit = r3_emit;
+    stack.poll = r3_poll;
+    stack.idle = r3_idle;
+    stack.after_round = r3_round;
+    stack.device = &nic;
+    stack.cache = &boot_llm_arp_cache;
+    stack.tx = stack_tx;
+    stack.rx = stack_rx;
+    stack.capacity = (uint16_t)sizeof(stack_tx);
+    stack.llm = &r3_llm;
+    stack_publish();
+    puts("net-driver stack ring3 ready arp ipv4 tcp tls llm-status ");
+    put_uint(stack.report.llm_status);
+    putc('\n');
+}
+
+static int32_t stack_execute(const os_net_relay_request_t* req, os_net_relay_reply_t* reply) {
+    uint32_t in_length = 0U, out_length = 0U;
+    uint16_t small = 0U;
+    int32_t rc;
+    int got;
+    if (req->op >= SYS_LLM_ACQUIRE_START && req->op <= SYS_LLM_OPENAI_CREDENTIAL && req->arg0) {
+        if (req->arg0 > sizeof(bulk_in)) return OS_LLM_REQUEST_BAD_REQUEST;
+        asm volatile("int $0x80" : "=a"(got) : "a"(SYS_NET_RELAY_BULK), "b"(OS_NET_RELAY_BULK_FETCH),
+                     "c"(req->job_id), "d"(bulk_in), "S"(req->arg0));
+        if (got < 0) return got;
+        in_length = (uint32_t)got;
+    }
+    rc = net_stack_exec(&stack, req, bulk_in, in_length, reply->out, &small, bulk_out, &out_length);
+    reply->out_length = small;
+    if (out_length) {
+        asm volatile("int $0x80" : "=a"(got) : "a"(SYS_NET_RELAY_BULK), "b"(OS_NET_RELAY_BULK_PUT),
+                     "c"(req->job_id), "d"(bulk_out), "S"(out_length));
+        if (got != 0) return got;
+    }
+    return rc;
+}
+
 void main(void) {
     static os_ipc_message_t message;
     static os_net_relay_request_t req;
     static os_net_relay_reply_t reply;
     uint32_t relayed = 0U;
     uint32_t ignored = 0U;
+    uint32_t last_wire_ops = 0U;
     int rc;
 
     if (service_register("net-driver") != 0) {
@@ -352,10 +478,11 @@ void main(void) {
     if (net_worker_gate_self_check()) puts("net-driver gated syscalls ok\n");
     else puts("net-driver gated syscalls unexpected\n");
     /* Tranche 5 suite: take the NE2000 over (no-op without a card). */
-    (void)nic_claim();
+    if (nic_claim() == 0) stack_start();
 
     for (;;) {
         if (ipc_receive(&message) != 0) {
+            if (nic_owned) (void)kernel_llm_dhcp_maintenance(timer_get_ticks());
             yield();
             continue;
         }
@@ -368,7 +495,12 @@ void main(void) {
         }
         copy_bytes((uint8_t*)&req, message.data, sizeof(req));
         reply.job_id = req.job_id;
-        reply.result = relay_execute(&req, &reply);
+        if (nic_owned) {
+            reply.result = stack_execute(&req, &reply);
+            wire_calls = stack.report.wire_ops;
+        } else {
+            reply.result = relay_execute(&req, &reply);
+        }
         rc = relay_reply(&reply);
         relayed++;
         puts("net-driver relay op ");
@@ -381,6 +513,11 @@ void main(void) {
         put_uint(relayed);
         if (wire_calls) { puts(" wire "); put_uint(wire_calls); }
         putc('\n');
+        if (nic_owned) {
+            stack_publish();
+            if (req.op == SYS_SOCKET_CONNECT || (stack.report.wire_ops != last_wire_ops)) nic_report();
+            last_wire_ops = stack.report.wire_ops;
+        }
     }
     (void)ignored;
     (void)ipc_send;

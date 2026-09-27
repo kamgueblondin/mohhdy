@@ -60,10 +60,20 @@ vfsvirtual: vfs_virtual_worker.o start.o
 # CPL 3 through the TSS I/O bitmap.
 drv_ne2k_hw.o: ../kernel/ne2k_hw.c ../kernel/ne2k.h $(USER_HEADERS)
 	$(CC) $(CFLAGS) -I.. -DMOHHDY_RING3 -c -o $@ $<
-net_worker.o: net_worker.c ../kernel/ne2k.h $(USER_HEADERS)
+net_worker.o: net_worker.c ../kernel/ne2k.h ../kernel/net_stack_exec.h ../kernel/net_llm_client.h $(USER_HEADERS)
 	$(CC) $(CFLAGS) -I.. -DMOHHDY_RING3 -c -o $@ $<
 
-networker: net_worker.o drv_ne2k_hw.o start.o
+# Tranche 5 pile: the networker links its own copy of the whole network
+# stack (ARP/IPv4/UDP/DHCP/DNS/TCP/socket registry/wire engine/TLS/HTTP)
+# and runs every relayed network syscall at CPL 3.
+NET_STACK_SRCS = ne2k net_nic net_ethernet_arp net_ipv4_udp net_dhcp net_dns net_tcp net_socket \
+                 net_llm_socket net_http_tls net_tls_record net_tls_server net_wire net_stack_exec \
+                 net_llm_client sha256 aes_gcm x509_der bigint ecdsa_p256 x25519 rsa_verify rtc
+NET_STACK_OBJS = $(addprefix drvnet_,$(addsuffix .o,$(NET_STACK_SRCS)))
+drvnet_%.o: ../kernel/%.c $(USER_HEADERS)
+	$(CC) $(CFLAGS) -I.. -DMOHHDY_RING3 -c -o $@ $<
+
+networker: net_worker.o drv_ne2k_hw.o $(NET_STACK_OBJS) net_libc.o start.o
 	@echo "Linking networker..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 

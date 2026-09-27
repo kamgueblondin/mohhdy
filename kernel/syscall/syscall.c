@@ -21,6 +21,7 @@
 #include "../fs/fsop_exec.h"
 #include "../net_relay.h"
 #include "../net_wire.h"
+#include "../net_stack_exec.h"
 #include "../ata.h"
 #include "../gdt.h"
 #include "../fs/fat16.h"
@@ -53,6 +54,7 @@ extern int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request);
 extern int kernel_llm_dhcp_maintenance(uint32_t now);
 /* Tranche 5 suite: NE2000 owned by the Ring 3 worker (kernel/kernel.c). */
 extern int kernel_net_nic_port_mode(void);
+extern int kernel_net_utc(char* out, uint16_t capacity);
 extern int kernel_net_nic_pump(os_net_nic_pump_t* pump);
 extern int kernel_net_nic_info(os_net_nic_info_t* info);
 extern int kernel_net_nic_present(void);
@@ -775,6 +777,16 @@ static void net_relay_copy(uint8_t* dst, const uint8_t* src, uint32_t n) {
 /* Fills req from the caller registers; 0 or an OS_SOCKET_* error. */
 static int net_relay_marshal(const cpu_state_t* cpu, os_net_relay_request_t* req) {
     req->op = cpu->eax;
+    if (net_relay_llm_supported(cpu->eax)) {
+        uint32_t in = net_stack_bulk_in_size(cpu->eax), out = net_stack_bulk_out_size(cpu->eax);
+        if ((in && !syscall_user_range((const void*)cpu->ebx, in, 0)) ||
+            (out && !syscall_user_range((void*)cpu->ebx, out, 1)))
+            return cpu->eax == SYS_LLM_ACQUIRE_START ? OS_LLM_ACQUIRE_BAD_REQUEST : OS_LLM_REQUEST_BAD_REQUEST;
+        req->arg0 = in;
+        req->out_capacity = (uint16_t)0U;
+        req->arg1 = out;
+        return 0;
+    }
     switch (cpu->eax) {
         case SYS_SOCKET_OPEN:
             req->arg0 = cpu->ebx & 0xFFFFU; req->arg1 = cpu->ecx & 0xFFFFU; req->arg2 = cpu->edx;
@@ -860,7 +872,14 @@ static int32_t net_relay_deliver(const cpu_state_t* cpu) {
     uint8_t* dst = 0;
     uint16_t* dst_len = 0;
     uint32_t cap = 0U;
-    int32_t result = net_relay_take((int32_t)current_task->id, &op, out, sizeof(out), &n);
+    int32_t result;
+    if (net_relay_llm_supported(cpu->eax)) {
+        uint32_t want = net_stack_bulk_out_size(cpu->eax);
+        if (want && syscall_user_range((void*)cpu->ebx, want, 1))
+            (void)net_relay_bulk_result((int32_t)current_task->id, (uint8_t*)cpu->ebx, want);
+        return net_relay_take((int32_t)current_task->id, &op, 0, 0U, &n);
+    }
+    result = net_relay_take((int32_t)current_task->id, &op, out, sizeof(out), &n);
     if (result != 0 || op != cpu->eax) return result;
     if (op == SYS_SOCKET_BUILD_SYN_ACK) {
         dst = (uint8_t*)cpu->ecx; cap = cpu->edx & 0xFFFFU; dst_len = (uint16_t*)cpu->esi;
@@ -940,6 +959,12 @@ static int syscall_net_relay(cpu_state_t* cpu) {
         return 1;
     }
     req.job_id = (uint32_t)job;
+    if (req.arg0 && net_relay_llm_supported(req.op) &&
+        net_relay_bulk_stage(pid, (const uint8_t*)cpu->ebx, req.arg0) != 0) {
+        net_relay_cancel();
+        cpu->eax = (uint32_t)OS_LLM_REQUEST_BAD_REQUEST;
+        return 1;
+    }
     memset(&payload, 0, sizeof(payload));
     payload.type = OS_IPC_NET_RELAY_REQUEST;
     payload.size = (uint32_t)sizeof(req);
@@ -1002,9 +1027,57 @@ static int32_t sys_net_nic(cpu_state_t* cpu) {
                 return OS_SOCKET_BAD_ARGUMENT;
             return kernel_net_nic_pump(pump);
         }
+        case OS_NET_NIC_LOG: {
+            const char* text = (const char*)cpu->ecx;
+            uint32_t i, n = cpu->edx;
+            if (pid <= 0 || pid != worker) return OS_NET_WORKER_REQUIRED;
+            if (n > OS_NET_NIC_LOG_MAX || !syscall_user_range(text, n, 0)) return OS_SOCKET_BAD_ARGUMENT;
+            for (i = 0U; i < n; i++) {
+                print_char(text[i], -1, -1, 0x0F);
+                write_serial(text[i]);
+            }
+            return 0;
+        }
+        case OS_NET_NIC_UTC: {
+            char* out = (char*)cpu->ecx;
+            if (pid <= 0 || pid != worker || nic_owner_pid() != pid) return OS_NET_WORKER_REQUIRED;
+            if (!syscall_user_range(out, 16U, 1)) return OS_SOCKET_BAD_ARGUMENT;
+            return kernel_net_utc(out, 16U);
+        }
+        case OS_NET_NIC_PUBLISH: {
+            const os_net_stack_report_t* report = (const os_net_stack_report_t*)cpu->ecx;
+            if (pid <= 0 || pid != worker) return OS_NET_WORKER_REQUIRED;
+            if (!syscall_user_range(report, sizeof(*report), 0)) return OS_SOCKET_BAD_ARGUMENT;
+            return nic_owner_publish(pid, report);
+        }
+        case OS_NET_NIC_STACK: {
+            os_net_stack_report_t* out = (os_net_stack_report_t*)cpu->ecx;
+            if (!syscall_user_range(out, sizeof(*out), 1)) return OS_SOCKET_BAD_ARGUMENT;
+            return nic_owner_stack(out) ? 0 : OS_NET_NIC_ABSENT;
+        }
         default:
             return OS_SOCKET_BAD_ARGUMENT;
     }
+}
+
+/* Tranche 5 pile: bulk side of a relayed LLM op (worker only). */
+static int32_t sys_net_relay_bulk(cpu_state_t* cpu) {
+    int32_t worker = net_relay_live_worker();
+    int32_t pid = current_task ? (int32_t)current_task->id : 0;
+    uint32_t n = cpu->esi;
+    if (pid <= 0 || worker <= 0 || pid != worker) return OS_NET_WORKER_REQUIRED;
+    if (n > OS_NET_RELAY_BULK_MAX) return OS_SOCKET_BUFFER_SMALL;
+    if (cpu->ebx == OS_NET_RELAY_BULK_FETCH) {
+        int got;
+        if (!syscall_user_range((void*)cpu->edx, n, 1)) return OS_SOCKET_BAD_ARGUMENT;
+        got = net_relay_bulk_fetch(pid, cpu->ecx, (uint8_t*)cpu->edx, n);
+        return got < 0 ? OS_NET_RELAY_ABORTED : got;
+    }
+    if (cpu->ebx == OS_NET_RELAY_BULK_PUT) {
+        if (!syscall_user_range((const void*)cpu->edx, n, 0)) return OS_SOCKET_BAD_ARGUMENT;
+        return net_relay_bulk_put(pid, cpu->ecx, (const uint8_t*)cpu->edx, n) == 0 ? 0 : OS_NET_RELAY_ABORTED;
+    }
+    return OS_SOCKET_BAD_ARGUMENT;
 }
 
 static int sys_net_wire_connect(const os_net_wire_connect_t* user) {
@@ -1050,6 +1123,7 @@ static int sys_net_wire_close(int socket_id) {
 static int sys_net_wire_status(os_net_wire_status_t* out) {
     if (!syscall_user_range(out, sizeof(*out), 1)) return OS_SOCKET_BAD_ARGUMENT;
     net_wire_fill_status(out, net_relay_live_worker());
+    nic_owner_merge_wire(out); /* Tranche 5 pile: Ring 3 stack counters */
     return 0;
 }
 
@@ -1112,6 +1186,15 @@ void syscall_handler(cpu_state_t* cpu) {
     if (current_task && net_relay_supported(cpu->eax) &&
         (net_relay_state_for((int32_t)current_task->id) != NET_RELAY_FREE ||
          !service_registry_net_syscall_allowed((int32_t)current_task->id, cpu->eax))) {
+        if (syscall_net_relay(cpu)) return;
+    }
+    /* Tranche 5 pile: while the worker owns the NE2000 the whole stack
+     * (ARP/IPv4/TCP/TLS) runs there, so LLM 91-98 of the other tasks are
+     * relayed to it (bulk channel) instead of refused. */
+    if (current_task && net_relay_llm_supported(cpu->eax) &&
+        (net_relay_state_for((int32_t)current_task->id) != NET_RELAY_FREE ||
+         (kernel_net_nic_port_mode() &&
+          !service_registry_net_syscall_allowed((int32_t)current_task->id, cpu->eax)))) {
         if (syscall_net_relay(cpu)) return;
     }
     if (!service_registry_net_syscall_allowed(current_task ? (int32_t)current_task->id : 0,
@@ -1409,6 +1492,9 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_NET_NIC:
             cpu->eax = (uint32_t)sys_net_nic(cpu);
             break;
+        case SYS_NET_RELAY_BULK:
+            cpu->eax = (uint32_t)sys_net_relay_bulk(cpu);
+            break;
         case SYS_NET_WIRE_SEND:
         case SYS_NET_WIRE_RECV:
             cpu->eax = (uint32_t)sys_net_wire_io(cpu->eax, (const os_net_wire_io_t*)cpu->ebx);
@@ -1460,7 +1546,7 @@ void syscall_handler(cpu_state_t* cpu) {
             cpu->eax = kernel_net_status();
             break;
         case SYS_LLM_SESSION_STATUS:
-            cpu->eax = kernel_llm_session_status();
+            cpu->eax = nic_owner_llm_status(kernel_llm_session_status());
             break;
         case SYS_LLM_ACQUIRE_START:
             cpu->eax = (uint32_t)kernel_llm_acquire_start(
