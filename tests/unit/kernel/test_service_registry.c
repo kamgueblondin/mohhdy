@@ -1,5 +1,6 @@
 #include "../../framework/unity.h"
 #include "../../../kernel/service_registry.h"
+#include "kernel/task/task.h"
 
 static void test_registry_rejects_invalid_names(void) {
     char too_long[OS_SERVICE_NAME_MAX];
@@ -575,6 +576,84 @@ static void test_ata_driver_name_and_port_grant(void) {
     TEST_ASSERT_TRUE(OS_ATA_DRIVER_REQUIRED != OS_TASK_NOT_CHILD);
 }
 
+static void test_stable_identity_blocks_stale_reused_pid_acl(void) {
+    task_t* task_owner;
+    task_t* task_grantee1;
+    task_t* task_grantee2;
+
+    tasking_init();
+    service_registry_init();
+
+    task_owner = create_task((void*)0);
+    add_task_to_queue(task_owner);
+
+    task_grantee1 = create_task((void*)0);
+    add_task_to_queue(task_grantee1);
+
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", task_owner->id));
+    TEST_ASSERT_EQUAL(0, service_registry_backend_grant("vfs", task_owner->id, task_grantee1->id));
+    TEST_ASSERT_TRUE(service_registry_backend_allowed_for("vfs", task_grantee1->id, SERVICE_BACKEND_RIGHT_READ));
+
+    /* Simulate task_grantee1 termination/removal and slot reuse with same PID */
+    int grantee_pid = task_grantee1->id;
+    remove_task(task_grantee1);
+
+    /* Create new task that happens to get same PID or slot */
+    next_task_id = grantee_pid;
+    task_grantee2 = create_task((void*)0);
+    add_task_to_queue(task_grantee2);
+    TEST_ASSERT_EQUAL(grantee_pid, task_grantee2->id);
+
+    /* Stable identity check must deny task_grantee2 because sequence/generation differ! */
+    TEST_ASSERT_FALSE(service_registry_backend_allowed_for("vfs", grantee_pid, SERVICE_BACKEND_RIGHT_READ));
+}
+
+static void test_acknowledged_event_replay_and_bounded_retry(void) {
+    uint32_t seq = 0U;
+    service_registry_init();
+
+    TEST_ASSERT_EQUAL(0, service_registry_notify_record("vfs", 4, 3, 9, OS_SERVICE_EVENT_GRANTED, &seq));
+    TEST_ASSERT_EQUAL(0, service_registry_notify_is_acked(4, seq));
+
+    /* Replay event on timeout */
+    TEST_ASSERT_EQUAL(0, service_registry_notify_replay(4, seq));
+
+    /* Second replay attempt must be rejected (bounded to once) */
+    TEST_ASSERT_EQUAL(OS_SERVICE_FULL, service_registry_notify_replay(4, seq));
+
+    /* Acknowledge event */
+    TEST_ASSERT_EQUAL(0, service_registry_notify_ack(4, seq));
+    TEST_ASSERT_EQUAL(1, service_registry_notify_is_acked(4, seq));
+
+    /* Replay after ack must be rejected */
+    TEST_ASSERT_EQUAL(OS_SERVICE_STALE, service_registry_notify_replay(4, seq));
+}
+
+static void test_persistent_mounts_auto_restore_on_service_reregistration(void) {
+    service_registry_persistent_mount_t mounts[SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY];
+    int count;
+
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", 3));
+
+    TEST_ASSERT_EQUAL(0, service_registry_persistent_mount_add("vfs", "custom/", OS_SERVICE_BACKEND_SOURCE_OVERLAY));
+
+    count = service_registry_persistent_mount_get("vfs", mounts, SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY);
+    TEST_ASSERT_EQUAL(5, count); /* 4 default boot mounts + 1 custom */
+
+    /* Simulate service crash/purge */
+    TEST_ASSERT_EQUAL(0, service_registry_remove_pid(3));
+    TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_lookup("vfs"));
+
+    /* Re-register service after crash */
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", 10));
+    TEST_ASSERT_EQUAL(10, service_registry_lookup("vfs"));
+
+    /* Mounts restored automatically */
+    count = service_registry_persistent_mount_get("vfs", mounts, SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY);
+    TEST_ASSERT_EQUAL(5, count);
+}
+
 static void test_net_syscalls_only_via_net_driver_when_live(void) {
     /* Tranche 5: with net-driver registered, NIC/socket/LLM-network/peer
      * syscalls are reserved to that PID; status stays open; degraded mode
@@ -652,6 +731,10 @@ int main(void) {
     RUN_TEST(test_ata_driver_name_and_port_grant);
     /* Tranche 5 net-driver gate. */
     RUN_TEST(test_net_syscalls_only_via_net_driver_when_live);
+    /* Task 2 Increments */
+    RUN_TEST(test_stable_identity_blocks_stale_reused_pid_acl);
+    RUN_TEST(test_acknowledged_event_replay_and_bounded_retry);
+    RUN_TEST(test_persistent_mounts_auto_restore_on_service_reregistration);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

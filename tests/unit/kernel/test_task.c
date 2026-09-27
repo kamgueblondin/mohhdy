@@ -1488,6 +1488,26 @@ void test_multitask_execution_simulation(void) {
     TEST_ASSERT_GREATER_THAN(num_cycles / 2, mock_task_switch_called);
 }
 
+void test_stable_task_identity_unique_per_task_creation(void) {
+    task_t* task1;
+    task_t* task2;
+    uint32_t seq1 = 0, gen1 = 0, seq2 = 0, gen2 = 0;
+
+    tasking_init();
+    task1 = create_task(dummy_task_function);
+    add_task_to_queue(task1);
+
+    TEST_ASSERT_EQUAL(0, task_get_identity(task1->id, &seq1, &gen1));
+    TEST_ASSERT_GREATER_THAN(0, seq1);
+    TEST_ASSERT_GREATER_THAN(0, gen1);
+
+    task2 = create_task(dummy_task_function);
+    add_task_to_queue(task2);
+
+    TEST_ASSERT_EQUAL(0, task_get_identity(task2->id, &seq2, &gen2));
+    TEST_ASSERT_GREATER_THAN(seq1, seq2);
+}
+
 // === RUNNER PRINCIPAL ===
 
 int main(void) {
@@ -1557,6 +1577,7 @@ int main(void) {
     // Tests d'intégration
     RUN_TEST(test_task_integration_with_memory);
     RUN_TEST(test_multitask_execution_simulation);
+    RUN_TEST(test_stable_task_identity_unique_per_task_creation);
     
     unity_print_results();
     unity_cleanup();

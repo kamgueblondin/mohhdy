@@ -28,6 +28,8 @@ static task_t* deferred_reap_task = NULL;
 #define TASK_STATIC_KERNEL_STACK_SIZE 16384U
 static task_t task_static_pool[OS_TASK_GLOBAL_CAPACITY];
 static uint8_t task_static_used[OS_TASK_GLOBAL_CAPACITY];
+static uint32_t g_task_sequence_counter = 0U;
+static uint32_t task_static_slot_generation[OS_TASK_GLOBAL_CAPACITY];
 static uint8_t task_static_kernel_stacks[OS_TASK_GLOBAL_CAPACITY][TASK_STATIC_KERNEL_STACK_SIZE] __attribute__((aligned(16)));
 static vmm_directory_t task_static_vmm_pool[OS_TASK_GLOBAL_CAPACITY];
 static uint8_t task_static_vmm_used[OS_TASK_GLOBAL_CAPACITY];
@@ -75,6 +77,12 @@ static task_t* task_static_acquire(void) {
         if (!task_static_used[index]) {
             task_static_used[index] = 1U;
             memset(&task_static_pool[index], 0, sizeof(task_t));
+            task_static_slot_generation[index]++;
+            if (task_static_slot_generation[index] == 0U) task_static_slot_generation[index] = 1U;
+            g_task_sequence_counter++;
+            if (g_task_sequence_counter == 0U) g_task_sequence_counter = 1U;
+            task_static_pool[index].sequence = g_task_sequence_counter;
+            task_static_pool[index].generation = task_static_slot_generation[index];
             return &task_static_pool[index];
         }
     }
@@ -116,9 +124,13 @@ void tasking_init() {
     deferred_reap_task = NULL;
     memset(task_static_used, 0, sizeof(task_static_used));
     memset(task_static_vmm_used, 0, sizeof(task_static_vmm_used));
+    memset(task_static_slot_generation, 0, sizeof(task_static_slot_generation));
+    g_task_sequence_counter = 1U;
     current_task = task_static_acquire();
     if (!current_task) return;
     current_task->id = next_task_id++;
+    current_task->sequence = 1U;
+    current_task->generation = 1U;
     current_task->state = TASK_RUNNING;
     current_task->type = TASK_TYPE_KERNEL;
     current_task->priority = OS_TASK_PRIORITY_NORMAL;
@@ -617,6 +629,14 @@ task_t* get_task_by_id(int id) {
         t = t->next;
     } while (t && t != task_queue);
     return NULL;
+}
+
+int task_get_identity(int pid, uint32_t* out_sequence, uint32_t* out_generation) {
+    task_t* t = get_task_by_id(pid);
+    if (!t) return OS_TASK_NOT_FOUND;
+    if (out_sequence) *out_sequence = t->sequence;
+    if (out_generation) *out_generation = t->generation;
+    return 0;
 }
 
 int task_has_other_ready_user(void) {

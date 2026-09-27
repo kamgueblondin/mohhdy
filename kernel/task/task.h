@@ -41,6 +41,8 @@ typedef struct cpu_state {
 // Structure pour une tâche
 typedef struct task {
     int id;
+    uint32_t sequence;   /* Identité stable : numéro de séquence unique de création */
+    uint32_t generation; /* Identité stable : génération du slot de tâche */
     cpu_state_t cpu_state;
     task_state_t state;
     task_type_t type;          // Type de tâche (kernel/user)
@@ -108,6 +110,7 @@ void task_yield();
 
 // Fonctions utilitaires
 task_t* get_task_by_id(int id);
+int task_get_identity(int pid, uint32_t* out_sequence, uint32_t* out_generation);
 void remove_task(task_t* task);
 void add_task_to_queue(task_t* task);
 int get_task_count();
