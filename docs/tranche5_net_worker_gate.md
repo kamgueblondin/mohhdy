@@ -456,3 +456,36 @@ Steps 1 and 2 of the plan above. Step 3 (framing out of Ring 0) is not done.
 - Polling is still the pacing mechanism; IRQ3 is counted and acked, the
   worker does not block on it yet.
 - One wire op at a time, at most 4 frames per pump, 1536 bytes per frame.
+
+## Tranche 5 pile - ARP/IPv4/TCP/TLS in the Ring 3 worker
+
+Once `networker` owns the NE2000, the kernel no longer builds or decodes a
+single frame. The worker links its own copy of the stack (compiled with
+`-DMOHHDY_RING3`: `net_socket`, `net_tcp`, `net_ethernet_arp`, `net_ipv4_udp`,
+`net_dhcp`, `net_dns`, `net_wire`, `ne2k`, TLS record/AES-GCM/X25519/RSA/X.509,
+HTTP, `net_llm_client`) and runs every relayed call with the shared executor
+`kernel/net_stack_exec.c` (unit tested: `tests/unit/kernel/test_net_stack_exec.c`).
+
+- Socket 99-108: executed on the worker's registry (TCP state machine in Ring 3).
+- `SYS_SOCKET_CONNECT` and send/recv/close of a wire-bound socket: the worker's
+  own `net_wire` engine, driven by a local loop (poll RX, step, ack ISR, collect
+  IRQ3). `PUMP` is no longer used in this mode: kernel pumps/frames stay 0.
+- LLM 91-98 of any other task (the shell `ai-*` commands): relayed while the
+  worker owns the card (degraded/no-card behaviour unchanged). The structs go
+  through `SYS_NET_RELAY_BULK` (147, FETCH/PUT, `OS_NET_RELAY_BULK_MAX` 2304),
+  timeout `NET_RELAY_LLM_TIMEOUT_TICKS` (60 s). The session code
+  (`kernel/net_llm_client.c`, moved unchanged out of `kernel/kernel.c`) is the
+  same object logic in Ring 0 (fallback) and Ring 3.
+- `SYS_NET_NIC` new ops: LOG (atomic line for the live worker), UTC (owner,
+  X.509 validity), PUBLISH (owner, `os_net_stack_report_t`), STACK (public).
+  `SYS_NET_WIRE_STATUS` = kernel counters + retired + live Ring 3 counters;
+  `SYS_LLM_SESSION_STATUS` returns the published Ring 3 session word.
+
+Proofs: `make qemu-net-wire` (stack line: framed = peer rx, kernel-pumps 0),
+`make qemu-net-worker` (18 relayed: 16 socket + 2 LLM answered -94 by the Ring 3
+TLS client; peer still -59; stalled 1 timeout, killed 1 abort),
+`make qemu-net-tls-worker` (authenticated TLS 1.2, TLS_COMPLETE, HTTP 200, all
+from Ring 3).
+
+Still Ring 0: the no-worker fallback, the boot probe, and the guest-guest TLS
+server (peer 128-130, -141 while the worker owns the card).

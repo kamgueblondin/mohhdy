@@ -129,17 +129,20 @@ void main(void) {
         put_uint(after.completed - before.completed);
         putc('\n');
     }
-    /* Negatives kept: LLM / peer are not relayed, and only the worker may
-     * post a relay reply. */
+    /* Negatives kept: peer is not relayed, and only the worker may post a
+     * relay reply. Tranche 5 pile: LLM is relayed to the worker's Ring 3 TLS
+     * client while it owns the NE2000 (idle session: -94). */
     peer_rc = call1(SYS_PEER_LISTEN, 0U);
     llm_rc = call0(SYS_LLM_POLL_TLS);
     forged.job_id = 1U;
     forge_rc = call1(SYS_NET_RELAY_REPLY, (uint32_t)&forged);
     if (before.worker_pid > 0) {
-        if (peer_rc == OS_NET_WORKER_REQUIRED && llm_rc == OS_NET_WORKER_REQUIRED)
+        if (peer_rc == OS_NET_WORKER_REQUIRED &&
+            (llm_rc == OS_NET_WORKER_REQUIRED || llm_rc == OS_LLM_TLS_BAD_PHASE))
             puts("netrelay unsupported still worker-required\n");
         else
             puts("netrelay unsupported unexpected\n");
+        if (llm_rc == OS_LLM_TLS_BAD_PHASE) puts("netrelay llm relayed to worker rc -94\n");
     }
     if (forge_rc == OS_NET_WORKER_REQUIRED) puts("netrelay forged reply refused\n");
     else puts("netrelay forged reply unexpected\n");

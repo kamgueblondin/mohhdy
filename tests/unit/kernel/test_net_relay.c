@@ -136,12 +136,68 @@ static void test_socket_loopback_sequence(void) {
     TEST_ASSERT_EQUAL(0, net_socket_close(b));
 }
 
+/* Tranche 5 pile: LLM 91-98 relay and its bulk channel. */
+static void test_llm_bulk_channel(void) {
+    uint8_t in[OS_NET_RELAY_BULK_MAX + 1U], out[OS_NET_RELAY_BULK_MAX];
+    uint32_t i, op = 0U, n = 0U;
+    int32_t job;
+    for (i = 0U; i < sizeof(in); i++) in[i] = (uint8_t)(i * 7U);
+    net_relay_init();
+    TEST_ASSERT_TRUE(net_relay_llm_supported(SYS_LLM_ACQUIRE_START));
+    TEST_ASSERT_TRUE(net_relay_llm_supported(SYS_LLM_POLL_TLS));
+    TEST_ASSERT_TRUE(net_relay_llm_supported(SYS_LLM_OPENAI_CREDENTIAL));
+    TEST_ASSERT_FALSE(net_relay_llm_supported(SYS_LLM_SESSION_STATUS));
+    TEST_ASSERT_FALSE(net_relay_llm_supported(SYS_SOCKET_OPEN));
+    TEST_ASSERT_FALSE(net_relay_llm_supported(SYS_PEER_LISTEN));
+    TEST_ASSERT_EQUAL(NET_RELAY_LLM_TIMEOUT_TICKS, net_relay_timeout_ticks(SYS_LLM_POLL_TLS));
+    TEST_ASSERT_EQUAL(NET_RELAY_TIMEOUT_TICKS, net_relay_timeout_ticks(SYS_SOCKET_SEND));
+    TEST_ASSERT_TRUE(sizeof(os_llm_request_t) <= OS_NET_RELAY_BULK_MAX);
+    TEST_ASSERT_TRUE(sizeof(os_llm_text_result_t) <= OS_NET_RELAY_BULK_MAX);
+    TEST_ASSERT_TRUE(sizeof(os_llm_acquire_start_request_t) <= OS_NET_RELAY_BULK_MAX);
+    /* No slot: nothing can be staged. */
+    TEST_ASSERT_EQUAL(-1, net_relay_bulk_stage(4, in, 16U));
+    job = net_relay_begin(4, 5, SYS_LLM_REQUEST, 100U);
+    TEST_ASSERT_TRUE(job > 0);
+    TEST_ASSERT_EQUAL(-1, net_relay_bulk_stage(6, in, 16U));           /* not the caller */
+    TEST_ASSERT_EQUAL(-1, net_relay_bulk_stage(4, in, sizeof(in)));    /* too large */
+    TEST_ASSERT_EQUAL(0, net_relay_bulk_stage(4, in, 300U));
+    TEST_ASSERT_EQUAL(-1, net_relay_bulk_fetch(6, (uint32_t)job, out, sizeof(out))); /* not the worker */
+    TEST_ASSERT_EQUAL(-1, net_relay_bulk_fetch(5, (uint32_t)job + 1U, out, sizeof(out)));
+    TEST_ASSERT_EQUAL(-1, net_relay_bulk_fetch(5, (uint32_t)job, out, 100U)); /* too small */
+    TEST_ASSERT_EQUAL(300, net_relay_bulk_fetch(5, (uint32_t)job, out, sizeof(out)));
+    TEST_ASSERT_EQUAL_MEMORY(in, out, 300U);
+    TEST_ASSERT_EQUAL(-1, net_relay_bulk_put(5, (uint32_t)job, in, sizeof(in)));
+    TEST_ASSERT_EQUAL(0, net_relay_bulk_put(5, (uint32_t)job, in + 1, 40U));
+    TEST_ASSERT_EQUAL(0, net_relay_bulk_result(4, out, sizeof(out)));   /* not DONE yet */
+    TEST_ASSERT_EQUAL(0, net_relay_complete(5, (uint32_t)job, 0, 0, 0U));
+    TEST_ASSERT_EQUAL(-1, net_relay_bulk_put(5, (uint32_t)job, in, 4U)); /* too late */
+    TEST_ASSERT_EQUAL(0, net_relay_bulk_result(6, out, sizeof(out)));
+    for (i = 0U; i < sizeof(out); i++) out[i] = 0U;
+    TEST_ASSERT_EQUAL(40, net_relay_bulk_result(4, out, sizeof(out)));
+    TEST_ASSERT_EQUAL_MEMORY(in + 1, out, 40U);
+    TEST_ASSERT_EQUAL(0, (int)net_relay_take(4, &op, 0, 0U, &n));
+    TEST_ASSERT_EQUAL(SYS_LLM_REQUEST, (int)op);
+    /* A TLS op may run far longer than a socket op before it expires. */
+    job = net_relay_begin(4, 5, SYS_LLM_POLL_TLS, 1000U);
+    TEST_ASSERT_TRUE(job > 0);
+    net_relay_note_poll(); net_relay_note_poll(); net_relay_note_poll();
+    TEST_ASSERT_FALSE(net_relay_expired(1000U + NET_RELAY_TIMEOUT_TICKS + 1U));
+    TEST_ASSERT_TRUE(net_relay_expired(1000U + NET_RELAY_LLM_TIMEOUT_TICKS + 1U));
+    TEST_ASSERT_EQUAL(0, net_relay_bulk_put(5, (uint32_t)job, in, 8U));
+    net_relay_fail(OS_NET_RELAY_TIMEOUT);
+    /* Failed op: no bulk reply leaks to the caller, late puts are stale. */
+    TEST_ASSERT_EQUAL(0, net_relay_bulk_result(4, out, sizeof(out)));
+    TEST_ASSERT_EQUAL(-1, net_relay_bulk_put(5, (uint32_t)job, in, 8U));
+    TEST_ASSERT_EQUAL(OS_NET_RELAY_TIMEOUT, (int)net_relay_take(4, &op, 0, 0U, &n));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_supported_subset);
     RUN_TEST(test_roundtrip_and_stale);
     RUN_TEST(test_timeout_abort_cancel_drop);
     RUN_TEST(test_socket_loopback_sequence);
+    RUN_TEST(test_llm_bulk_channel);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

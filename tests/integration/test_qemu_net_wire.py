@@ -139,6 +139,17 @@ def main():
                     n_tx < 5 or n_rx < 4 or n_ref != 0 or n_gated != 0 or n_kirq < 1 or
                     n_irq < 1 or n_pumps < 4):
                 raise RuntimeError("unexpected Ring 3 NIC counters: %r" % nic)
+            # Tranche 5 pile: ARP/IPv4/TCP framing and demux ran in the
+            # worker; the kernel wire engine built and decoded nothing.
+            stacks = re.findall(r"net-driver stack ring3 sockets (\d+) wire (\d+) llm (\d+) "
+                                r"rounds (\d+) framed (\d+) decoded (\d+) kernel-pumps (\d+) "
+                                r"kernel-out (\d+) kernel-in (\d+) end", text)
+            if "net-driver stack ring3 ready arp ipv4 tcp tls" not in text or not stacks:
+                raise RuntimeError("worker did not run the Ring 3 stack")
+            stk = [int(v) for v in stacks[-1]]
+            if (stk[1] != 4 or stk[4] != n_tx or stk[5] != n_rx or stk[3] != n_pumps or
+                    stk[6] != 0 or stk[7] != 0 or stk[8] != 0):
+                raise RuntimeError("unexpected Ring 3 stack counters: %r" % stk)
             nw.kill(monitor, proc, pid)
             live = wire_status(monitor, proc)
             relay_after = nw.relay_status(monitor, proc)
@@ -178,6 +189,8 @@ def main():
             print("ring3 nic: owner pid %d, worker tx %d rx %d, irq3 %d (kernel counted %d), "
                   "pumps %d, kernel port accesses %d, reclaim+reclaim-claim ok" %
                   (n_owner, n_tx, n_rx, n_irq, n_kirq, n_pumps, n_ref))
+            print("ring3 stack: wire ops %d, framed %d, decoded %d, rounds %d, kernel pumps %d" %
+                  (stk[1], stk[4], stk[5], stk[3], stk[6]))
             print("MOHHDY Tranche 5 wire TCP via worker contract passed")
             return 0
         finally:
