@@ -91,7 +91,7 @@ run_test() {
     
     if [ "$test_type" == "kernel" ] || [ "$(basename "$test_file")" = "test_fat16.c" ] || [ "$(basename "$test_file")" = "test_gpt2_gguf.c" ] || [ "$(basename "$test_file")" = "test_gpt2_gguf_infer.c" ] || [ "$(basename "$test_file")" = "test_gpt2_quant.c" ]; then
         cflags="$cflags -m32 -fno-pie -msse2 -mfpmath=sse"
-        if [ "$test_type" == "kernel" ]; then
+        if [ "$test_type" == "kernel" ] && [ "$(basename "$test_file")" != "test_net_wire.c" ] && [ "$(basename "$test_file")" != "test_net_stack_exec.c" ]; then
             cflags="$cflags -ffreestanding -nostdlib"
         fi
     else
@@ -248,7 +248,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/fs/fat16.c $BASE_DIR/kernel/fs/fat32.c"
     fi
     # Tranche 5 slices 2-3: net relay (pure) and wire bookkeeping/demux.
-    if [ "$(basename "$test_file")" = "test_net_relay.c" ] || [ "$(basename "$test_file")" = "test_net_wire.c" ]; then
+    if [ "$(basename "$test_file")" = "test_net_relay.c" ] || [ "$(basename "$test_file")" = "test_net_wire.c" ] || [ "$(basename "$test_file")" = "test_net_stack_exec.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/net_relay.c $BASE_DIR/kernel/net_socket.c $BASE_DIR/kernel/net_tcp.c"
         extra_src="$extra_src $BASE_DIR/kernel/net_tls_record.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c"
         extra_src="$extra_src $BASE_DIR/kernel/x509_der.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/rsa_verify.c"
@@ -257,7 +257,10 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_net_nic_owner.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/net_nic_owner.c"
     fi
-    if [ "$(basename "$test_file")" = "test_net_wire.c" ]; then
+    if [ "$(basename "$test_file")" = "test_net_wire.c" ] || [ "$(basename "$test_file")" = "test_net_stack_exec.c" ]; then
+        if [ "$(basename "$test_file")" = "test_net_stack_exec.c" ]; then
+            extra_src="$extra_src $BASE_DIR/kernel/net_stack_exec.c"
+        fi
         extra_src="$extra_src $BASE_DIR/kernel/net_wire.c $BASE_DIR/kernel/ne2k.c $BASE_DIR/kernel/ne2k_hw.c $BASE_DIR/kernel/net_llm_socket.c"
         extra_src="$extra_src $BASE_DIR/kernel/rtc.c $BASE_DIR/kernel/net_nic.c $BASE_DIR/kernel/net_ethernet_arp.c"
         extra_src="$extra_src $BASE_DIR/kernel/net_ipv4_udp.c $BASE_DIR/kernel/net_dhcp.c $BASE_DIR/kernel/net_dns.c"

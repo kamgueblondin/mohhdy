@@ -18,6 +18,8 @@ extern uint32_t mock_timer_get_ticks(void);
 task_t* current_task = NULL;
 task_t* task_queue = NULL;
 int next_task_id = 1;
+static uint32_t mock_task_sequence_counter = 0U;
+static uint32_t mock_task_slot_generation = 0U;
 volatile int g_reschedule_needed = 0;
 
 // Global counter for task switches
@@ -35,6 +37,10 @@ task_t* create_task(void (*entry_point)(void)) {
     if (!task) return NULL;
     memset(task, 0, sizeof(task_t));
     task->id = next_task_id++;
+    mock_task_sequence_counter++;
+    mock_task_slot_generation++;
+    task->sequence = mock_task_sequence_counter;
+    task->generation = mock_task_slot_generation;
     task->state = TASK_READY;
     task->type = TASK_TYPE_KERNEL;
     task->priority = OS_TASK_PRIORITY_NORMAL;
@@ -107,6 +113,14 @@ task_t* get_task_by_id(int id) {
         temp = temp->next;
     }
     return NULL;
+}
+
+int task_get_identity(int pid, uint32_t* out_sequence, uint32_t* out_generation) {
+    task_t* t = get_task_by_id(pid);
+    if (!t) return OS_TASK_NOT_FOUND;
+    if (out_sequence) *out_sequence = t->sequence;
+    if (out_generation) *out_generation = t->generation;
+    return 0;
 }
 
 task_t* find_task_waiting_for_input(void) {

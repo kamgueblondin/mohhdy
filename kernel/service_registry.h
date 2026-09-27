@@ -13,12 +13,16 @@
 
 typedef struct {
     int32_t pid;
+    uint32_t sequence;
+    uint32_t generation;
     char name[OS_SERVICE_NAME_MAX];
     uint32_t backend_generation;
 } service_registry_entry_t;
 
 typedef struct {
     int32_t pid;
+    uint32_t sequence;
+    uint32_t generation;
     char name[OS_SERVICE_NAME_MAX];
 } service_registry_watch_t;
 
@@ -38,6 +42,7 @@ typedef struct {
     int32_t new_pid;
     uint32_t reason;
     uint8_t acked;
+    uint8_t replayed;
 } service_registry_notify_event_t;
 
 int service_registry_subscribe(const char* name, int32_t pid);
@@ -46,6 +51,22 @@ int service_registry_remove_watcher_pid(int32_t pid);
 int service_registry_notify_record(const char* name, int32_t watcher_pid, int32_t old_pid, int32_t new_pid, uint32_t reason, uint32_t* out_sequence);
 int service_registry_notify_ack(int32_t watcher_pid, uint32_t sequence);
 int service_registry_notify_history_count(int32_t watcher_pid, uint32_t* out_acked, uint32_t* out_unacked);
+int service_registry_notify_replay(int32_t watcher_pid, uint32_t sequence);
+int service_registry_notify_is_acked(int32_t watcher_pid, uint32_t sequence);
+
+#define SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY 8U
+
+typedef struct {
+    char service_name[OS_SERVICE_NAME_MAX];
+    char prefix[OS_SERVICE_BACKEND_PREFIX_MAX];
+    uint32_t source;
+    uint8_t active;
+} service_registry_persistent_mount_t;
+
+int service_registry_persistent_mount_add(const char* service_name, const char* prefix, uint32_t source);
+int service_registry_persistent_mount_remove(const char* service_name, const char* prefix);
+int service_registry_persistent_mount_get(const char* service_name, service_registry_persistent_mount_t* out, uint32_t max);
+int service_registry_persistent_mount_restore(const char* service_name);
 int service_registry_collect_owned(int32_t pid, service_registry_entry_t* out, uint32_t max);
 int service_registry_pid_is_owner(int32_t pid);
 int service_registry_name_valid(const char* name);
