@@ -9,9 +9,19 @@
  *  - kernel FAT sector jobs (slice 3): FAT16 (master) / FAT32 (slave) sector
  *    reads and writes of a task blocked in its syscall, served first;
  *  - "ata-client" IPC (slice 1): 64-byte sector windows, with client writes
- *    fenced off the overlay snapshot and the FAT areas.
+ *    fenced off the overlay snapshot and the FAT areas;
+ *  - Tranche 4 suite: whole FAT16/FAT32/overlay operations (OS_ATA_JOB_FS_OP).
+ *    This task links its own copy of the FAT16/FAT32/overlay code, mounts
+ *    the volumes through its own PIO, takes the overlay store over from the
+ *    kernel (OS_ATA_FS_READY) and persists it itself (LBA 0-63, only the
+ *    sectors that changed). The kernel only copies request/reply bytes and
+ *    keeps the last published overlay image for the fallback.
  */
 #include "os_syscalls.h"
+#include "fs/fat16.h"
+#include "fs/fat32.h"
+#include "fs/fsop_exec.h"
+#include "fs/overlay.h"
 
 static void putc(char c) { asm volatile("int $0x80" : : "a"(SYS_PUTC), "b"(c)); }
 static void puts(const char* t) { int i = 0; while (t[i]) putc(t[i++]); }
@@ -31,6 +41,12 @@ static int sc2(uint32_t n, uint32_t a, uint32_t b) {
 }
 static int sc3(uint32_t n, uint32_t a, uint32_t b, uint32_t c) {
     int r; asm volatile("int $0x80" : "=a"(r) : "a"(n), "b"(a), "c"(b), "d"(c)); return r;
+}
+static int sc4(uint32_t n, uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+    int r; asm volatile("int $0x80" : "=a"(r) : "a"(n), "b"(a), "c"(b), "d"(c), "S"(d)); return r;
+}
+static int sc5(uint32_t n, uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e) {
+    int r; asm volatile("int $0x80" : "=a"(r) : "a"(n), "b"(a), "c"(b), "d"(c), "S"(d), "D"(e)); return r;
 }
 
 static inline uint8_t inb(uint16_t p) { uint8_t v; asm volatile("inb %1, %0" : "=a"(v) : "Nd"(p)); return v; }
@@ -153,12 +169,19 @@ static void report_fat_io(void) {
 }
 
 /* One kernel job chunk. Returns 1 if a chunk was served. */
+static void serve_fs_op(const os_ata_job_t* job);
+static void ov_disk_note(uint32_t lba, uint32_t count, const uint8_t* data);
+
 static int serve_job(void) {
     os_ata_job_t job;
     int32_t rc = 0;
     uint32_t s;
     int res;
     if (sc2(SYS_ATA_JOB_FETCH, (uint32_t)&job, (uint32_t)job_buf) != 1) return 0;
+    if (job.op == OS_ATA_JOB_FS_OP) {
+        serve_fs_op(&job);
+        return 1;
+    }
     claim();
     if ((job.flags & OS_ATA_JOB_FLAG_DEBUG_CRASH) && job.op == OS_ATA_JOB_IO_WRITE) {
         /* Test hook (armed by the root shell via SYS_ATA_DEBUG): start the
@@ -186,6 +209,8 @@ static int serve_job(void) {
     if (rc == 0 && (job.op == OS_ATA_JOB_WRITE || job.op == OS_ATA_JOB_IO_WRITE))
         rc = pio_flush();
     release();
+    if (rc == 0 && job.drive == 0U && (job.op == OS_ATA_JOB_WRITE || job.op == OS_ATA_JOB_READ))
+        ov_disk_note(job.lba, job.count, job_buf);
     res = sc3(SYS_ATA_JOB_DONE, (uint32_t)&job, (uint32_t)rc, (uint32_t)job_buf);
     if (res == OS_ATA_JOB_IO_DONE) {
         if (job.op == OS_ATA_JOB_IO_WRITE) fat_wr += job.count; else fat_rd += job.count;
@@ -199,6 +224,230 @@ static int serve_job(void) {
         puts("atadriver snapshot chunk failed\n");
     }
     return 1;
+}
+
+/* ========================================================================
+ * Tranche 4 suite: the FS store served by this task's own code.
+ * ======================================================================== */
+#define OV_DISK_SECTORS_DRV 64U
+static fat16_volume_t v16;
+static fat32_volume_t v32;
+static uint8_t v16_window[16U * 512U];
+static int v16_ok, v32_ok, disk_ok;
+static uint32_t store_flags;   /* flags the kernel accepted */
+static int store_ready;
+static uint8_t fs_req[OS_ATA_FSOP_BUFFER_SIZE];
+static uint8_t fs_reply[OS_ATA_FSOP_BUFFER_SIZE];
+static uint8_t ov_img[OV_DISK_SECTORS_DRV * 512U];  /* snapshot to write / handover */
+static uint8_t ov_disk[OV_DISK_SECTORS_DRV * 512U]; /* what LBA 0-63 hold */
+static int ov_disk_known;
+/* Per-op state. */
+static uint32_t op_gen, op_rd, op_wr;
+static int op_noted, op_crash, ov_dirty;
+
+static void ov_disk_note(uint32_t lba, uint32_t count, const uint8_t* data) {
+    uint32_t i;
+    if (!ov_disk_known || lba >= OV_DISK_SECTORS_DRV) return;
+    if (lba + count > OV_DISK_SECTORS_DRV) count = OV_DISK_SECTORS_DRV - lba;
+    for (i = 0; i < count * 512U; i++) ov_disk[lba * 512U + i] = data[i];
+}
+
+/* Overlay hooks: the store only marks itself dirty; serve_fs_op persists
+ * once per op, after the op result is known. */
+static int drv_overlay_redirect(void) { ov_dirty = 1; return 1; }
+int ata_present(void) { return disk_ok; }
+int ata_read_sectors(uint32_t lba, uint32_t count, void* buf) { (void)lba; (void)count; (void)buf; return -1; }
+int ata_write_sectors(uint32_t lba, uint32_t count, const void* buf) { (void)lba; (void)count; (void)buf; return -1; }
+/* Initrd lives in kernel RAM: read-only probes for the overlay rules. */
+int initrd_is_file(const char* path) { int r = sc2(SYS_ATA_FS, OS_ATA_FS_INITRD_STAT, (uint32_t)path); return r > 0 && (r & OS_ATA_FS_INITRD_FILE); }
+int initrd_is_dir(const char* path) { int r = sc2(SYS_ATA_FS, OS_ATA_FS_INITRD_STAT, (uint32_t)path); return r > 0 && (r & OS_ATA_FS_INITRD_DIR); }
+int initrd_read_into(const char* path, char* buf, uint32_t max) {
+    return sc4(SYS_ATA_FS, OS_ATA_FS_INITRD_READ, (uint32_t)path, (uint32_t)buf, max);
+}
+
+/* FAT sector callbacks (this task's PIO; claim held for the whole op). */
+static int drv_read(uint8_t drive, uint32_t lba, void* buf) {
+    int rc = pio_read(drive, lba, (uint8_t*)buf);
+    if (rc == 0) op_rd++;
+    return rc;
+}
+static int drv_write(uint8_t drive, uint32_t lba, const void* buf) {
+    const uint8_t* in = (const uint8_t*)buf;
+    int rc;
+    if (op_crash) {
+        /* Test hook (SYS_ATA_DEBUG, root shell): start the first sector write
+         * of this FAT mutation, push half of it and fault holding the claim
+         * with the transfer open. Nothing of the op is committed. */
+        uint32_t w;
+        puts("atadriver debug crash mid-job\n");
+        if (wait_bsy() == 0) {
+            select_lba(drive, lba);
+            outb(ATA_CMD, 0x30);
+            if (wait_drq() == 0)
+                for (w = 0; w < 128U; w++) outw(ATA_DATA, (uint16_t)(in[2*w] | (in[2*w+1] << 8)));
+        }
+        (void)inb(0x60);
+        for (;;) yield();
+    }
+    rc = pio_write(drive, lba, in);
+    if (rc == 0) {
+        op_wr++;
+        if (!op_noted) {
+            /* First completed sector: from now on the op is not replayable. */
+            (void)sc3(SYS_ATA_FS, OS_ATA_FS_NOTE, op_gen, OS_ATA_FS_NOTE_SECTOR_WRITTEN);
+            op_noted = 1;
+        }
+    }
+    return rc;
+}
+static int v16_read(uint32_t lba, void* buf) { return drv_read(0, lba, buf); }
+static int v16_reads(uint32_t lba, uint32_t count, void* buf) {
+    uint32_t i;
+    for (i = 0; i < count; i++) if (drv_read(0, lba + i, (uint8_t*)buf + i * 512U) != 0) return -1;
+    return 0;
+}
+static int v16_write(uint32_t lba, const void* buf) { return drv_write(0, lba, buf); }
+static int v32_read(uint32_t lba, void* buf) { return drv_read(1, lba, buf); }
+static int v32_write(uint32_t lba, const void* buf) { return drv_write(1, lba, buf); }
+
+static void fs_mount(void) {
+    uint8_t st;
+    os_ata_status_t ks;
+    int want16 = 0, want32 = 0;
+    /* Mount only what the kernel mounted at boot (it probed the drives):
+     * FAT16 fences the master past LBA 64, FAT32 locks the slave. Probing a
+     * missing slave from here would spin on its status register. */
+    if (sc1(SYS_ATA_STATUS, (uint32_t)&ks) == 0) {
+        want16 = ks.client_min_lba > OS_ATA_KERNEL_RESERVED_LBAS;
+        want32 = ks.slave_write_locked != 0U;
+    }
+    claim();
+    st = inb(ATA_CMD);
+    disk_ok = !(st == 0xFF || st == 0x00);
+    if (disk_ok && want16 && fat16_mount(&v16, v16_read, 64U) == 0 &&
+        fat16_attach_read_window(&v16, v16_reads, v16_window, sizeof(v16_window)) == 0 &&
+        fat16_attach_writer(&v16, v16_write) == 0) v16_ok = 1;
+    if (disk_ok && want32 && fat32_mount(&v32, v32_read, 0U) == 0 &&
+        fat32_attach_writer(&v32, v32_write) == 0) v32_ok = 1;
+    release();
+    op_rd = 0; /* mount reads are not FS op traffic */
+    overlay_init();
+    overlay_set_disk_hooks(drv_overlay_redirect, 0);
+}
+
+static int mem_eq(const uint8_t* a, const uint8_t* b, uint32_t n) {
+    uint32_t i;
+    for (i = 0; i < n; i++) if (a[i] != b[i]) return 0;
+    return 1;
+}
+
+/* Handover: the kernel serialises its overlay store into ov_img in the same
+ * syscall that makes this task the authority. Then read LBA 0-63 once as
+ * the base for incremental writes. */
+static void fs_try_ready(void) {
+    uint32_t want = 0U, i;
+    int rc;
+    os_ata_status_t st;
+    if (store_ready || !disk_ok) return;
+    if (v16_ok) want |= OS_ATA_FS_STORE_FAT16;
+    if (v32_ok) want |= OS_ATA_FS_STORE_FAT32;
+    want |= OS_ATA_FS_STORE_OVERLAY;
+    rc = sc4(SYS_ATA_FS, OS_ATA_FS_READY, want, (uint32_t)ov_img, sizeof(ov_img));
+    if (rc == OS_ATA_FS_BUSY) return; /* a slice 2 job first, retry */
+    if (rc < 0) {
+        store_ready = -1;
+        puts("atadriver store refused\n");
+        return;
+    }
+    store_ready = 1;
+    if (overlay_restore(ov_img, (uint32_t)rc) != 0) overlay_init();
+    claim();
+    ov_disk_known = 1;
+    for (i = 0; i < OV_DISK_SECTORS_DRV && ov_disk_known; i++)
+        if (pio_read(0, i, ov_disk + i * 512U) != 0) ov_disk_known = 0;
+    release();
+    store_flags = want;
+    if (sc2(SYS_ATA_FS, OS_ATA_FS_STATUS, (uint32_t)&st) == 0) store_flags = st.fs_store_flags;
+    puts("atadriver store ready flags="); putu(store_flags);
+    puts(" fat16="); putu((store_flags & OS_ATA_FS_STORE_FAT16) ? 1U : 0U);
+    puts(" fat32="); putu((store_flags & OS_ATA_FS_STORE_FAT32) ? 1U : 0U);
+    puts(" overlay="); putu((store_flags & OS_ATA_FS_STORE_OVERLAY) ? 1U : 0U);
+    puts(" image="); putu((uint32_t)rc);
+    puts("\n");
+}
+
+/* Overlay persistence after a mutating op: publish the image to the kernel
+ * mirror first (a torn disk write is then repaired by the Ring 0 fallback),
+ * then write only the sectors that differ from what LBA 0-63 hold. */
+static void fs_persist(int32_t result) {
+    uint32_t size = 0U, i, s, wrote = 0U;
+    int rc = 0;
+    if (overlay_snapshot(ov_img, sizeof(ov_img), &size) != 0) {
+        (void)sc3(SYS_ATA_FS, OS_ATA_FS_NOTE, op_gen, OS_ATA_FS_NOTE_PERSIST_FAILED);
+        puts("atadriver snapshot build failed\n");
+        return;
+    }
+    for (i = size; i < sizeof(ov_img); i++) ov_img[i] = 0;
+    (void)sc5(SYS_ATA_FS, OS_ATA_FS_PUBLISH, op_gen, (uint32_t)ov_img, size, (uint32_t)result);
+    for (s = 0; s < OV_DISK_SECTORS_DRV && rc == 0; s++) {
+        if (ov_disk_known && mem_eq(ov_img + s * 512U, ov_disk + s * 512U, 512U)) continue;
+        rc = pio_write(0, s, ov_img + s * 512U);
+        if (rc == 0) {
+            for (i = 0; i < 512U; i++) ov_disk[s * 512U + i] = ov_img[s * 512U + i];
+            wrote++;
+        }
+    }
+    if (rc == 0 && wrote) rc = pio_flush();
+    if (rc != 0) {
+        ov_disk_known = 0; /* next persist rewrites everything */
+        (void)sc3(SYS_ATA_FS, OS_ATA_FS_NOTE, op_gen, OS_ATA_FS_NOTE_PERSIST_FAILED);
+        puts("atadriver snapshot write failed\n");
+        return;
+    }
+    ov_disk_known = 1;
+    (void)sc3(SYS_ATA_FS, OS_ATA_FS_NOTE, op_gen, OS_ATA_FS_NOTE_PERSISTED);
+    puts("atadriver snapshot flush ok gen="); putu(op_gen); print_counters();
+    puts(" sectors="); putu(wrote); puts("\n");
+}
+
+static void serve_fs_op(const os_ata_job_t* job) {
+    os_ata_fsop_request_t req;
+    os_ata_fsop_reply_t* reply = (os_ata_fsop_reply_t*)fs_reply;
+    const char* path;
+    const char* path2;
+    const uint8_t* in;
+    uint32_t out_len = 0U, store;
+    int32_t result = -1;
+    int n;
+    n = sc4(SYS_ATA_FS, OS_ATA_FS_REQUEST, (uint32_t)job, (uint32_t)fs_req, sizeof(fs_req));
+    if (n < 0) return; /* stale: the kernel gave up on it */
+    op_gen = job->generation;
+    op_rd = op_wr = 0U;
+    op_noted = 0;
+    ov_dirty = 0;
+    op_crash = (job->flags & OS_ATA_JOB_FLAG_DEBUG_CRASH) ? 1 : 0;
+    if (fsop_decode(fs_req, (uint32_t)n, &req, &path, &path2, &in) == 0) {
+        store = fsop_store_for(req.op);
+        if (store_ready != 1 || (store_flags & store) == 0U) {
+            result = OS_FAT16_NOT_MOUNTED;
+        } else {
+            claim();
+            result = fsop_execute(&req, path, path2, in, fs_reply + sizeof(*reply),
+                                  sizeof(fs_reply) - sizeof(*reply), &out_len,
+                                  v16_ok ? &v16 : 0, v32_ok ? &v32 : 0);
+            if (op_wr) (void)pio_flush();
+            if (ov_dirty) fs_persist(result);
+            release();
+        }
+    }
+    reply->result = result;
+    reply->out_len = out_len;
+    reply->sectors_read = op_rd;
+    reply->sectors_written = op_wr;
+    fat_rd += op_rd;
+    fat_wr += op_wr;
+    (void)sc4(SYS_ATA_FS, OS_ATA_FS_DONE, (uint32_t)job, (uint32_t)fs_reply,
+              (uint32_t)sizeof(*reply) + out_len);
 }
 
 void main(void) {
@@ -218,6 +467,7 @@ void main(void) {
     else puts("atadriver ring3 pio ready");
     print_counters();
     puts("\n");
+    fs_mount();
     for (;;) {
         int client, served = 0;
         int32_t rc = -1;
@@ -225,6 +475,7 @@ void main(void) {
         uint8_t drive;
         while (serve_job() && served < 8) served++;
         if (served < 8) report_fat_io();
+        if (served < 8) fs_try_ready();
         if (sc1(SYS_IPC_RECV, (uint32_t)&m) != 0) { yield(); continue; }
         if (m.type != OS_IPC_ATA_READ && m.type != OS_IPC_ATA_WRITE) continue;
         for (i = 0; i < sizeof(r); i++) ((uint8_t*)&r)[i] = 0;

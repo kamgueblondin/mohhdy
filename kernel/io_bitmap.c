@@ -27,3 +27,10 @@ void io_bitmap_apply_ata(uint8_t* map, uint32_t len, int allow) {
         io_bitmap_set_port(map, len, port, allow);
     io_bitmap_set_port(map, len, IO_BITMAP_ATA_CTRL, allow);
 }
+
+/* Tranche 5 suite: the live net-driver worker that claimed the NE2000. */
+void io_bitmap_apply_ne2k(uint8_t* map, uint32_t len, int allow) {
+    uint16_t port;
+    for (port = IO_BITMAP_NE2K_BASE; port <= IO_BITMAP_NE2K_LAST; port++)
+        io_bitmap_set_port(map, len, port, allow);
+}

@@ -211,7 +211,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/net_dhcp.c"
     fi
     if [ "$(basename "$test_file")" = "test_ne2k.c" ]; then
-        extra_src="$extra_src $BASE_DIR/kernel/ne2k.c $BASE_DIR/kernel/net_socket.c $BASE_DIR/kernel/net_llm_socket.c $BASE_DIR/kernel/rtc.c"
+        extra_src="$extra_src $BASE_DIR/kernel/ne2k.c $BASE_DIR/kernel/ne2k_hw.c $BASE_DIR/kernel/net_socket.c $BASE_DIR/kernel/net_llm_socket.c $BASE_DIR/kernel/rtc.c"
         extra_src="$extra_src $BASE_DIR/kernel/net_nic.c"
         extra_src="$extra_src $BASE_DIR/kernel/net_ethernet_arp.c"
         extra_src="$extra_src $BASE_DIR/kernel/net_ipv4_udp.c"
@@ -242,6 +242,11 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_ata_job.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/ata_job.c"
     fi
+    # Tranche 4 suite: FS op slot/mirror + shared FAT/overlay codec/dispatch.
+    if [ "$(basename "$test_file")" = "test_ata_fsop.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/ata_fsop.c $BASE_DIR/kernel/fs/fsop_exec.c"
+        extra_src="$extra_src $BASE_DIR/kernel/fs/fat16.c $BASE_DIR/kernel/fs/fat32.c"
+    fi
     # Tranche 5 slices 2-3: net relay (pure) and wire bookkeeping/demux.
     if [ "$(basename "$test_file")" = "test_net_relay.c" ] || [ "$(basename "$test_file")" = "test_net_wire.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/net_relay.c $BASE_DIR/kernel/net_socket.c $BASE_DIR/kernel/net_tcp.c"
@@ -249,19 +254,24 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/x509_der.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/rsa_verify.c"
         extra_src="$extra_src $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/ecdsa_p256.c"
     fi
+    if [ "$(basename "$test_file")" = "test_net_nic_owner.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/net_nic_owner.c"
+    fi
     if [ "$(basename "$test_file")" = "test_net_wire.c" ]; then
-        extra_src="$extra_src $BASE_DIR/kernel/net_wire.c $BASE_DIR/kernel/ne2k.c $BASE_DIR/kernel/net_llm_socket.c"
+        extra_src="$extra_src $BASE_DIR/kernel/net_wire.c $BASE_DIR/kernel/ne2k.c $BASE_DIR/kernel/ne2k_hw.c $BASE_DIR/kernel/net_llm_socket.c"
         extra_src="$extra_src $BASE_DIR/kernel/rtc.c $BASE_DIR/kernel/net_nic.c $BASE_DIR/kernel/net_ethernet_arp.c"
         extra_src="$extra_src $BASE_DIR/kernel/net_ipv4_udp.c $BASE_DIR/kernel/net_dhcp.c $BASE_DIR/kernel/net_dns.c"
         extra_src="$extra_src $BASE_DIR/kernel/net_http_tls.c"
     fi
     
     # Compiler
-    echo "gcc $cflags -o \"$test_binary\" \"$test_file\" $extra_src \"$TEST_DIR/framework/unity.c\" \"$TEST_DIR/framework/test_kernel.c\" \"$TEST_DIR/framework/kernel_mocks.c\"" >> "$RESULTS_FILE"
-    if gcc $cflags -o "$test_binary" "$test_file" $extra_src "$TEST_DIR/framework/unity.c" "$TEST_DIR/framework/test_kernel.c" "$TEST_DIR/framework/kernel_mocks.c" 2>> "$RESULTS_FILE"; then
+    echo "${TEST_CC:-gcc} $cflags -o \"$test_binary\" \"$test_file\" $extra_src \"$TEST_DIR/framework/unity.c\" \"$TEST_DIR/framework/test_kernel.c\" \"$TEST_DIR/framework/kernel_mocks.c\"" >> "$RESULTS_FILE"
+    if ${TEST_CC:-gcc} $cflags -o "$test_binary" "$test_file" $extra_src "$TEST_DIR/framework/unity.c" "$TEST_DIR/framework/test_kernel.c" "$TEST_DIR/framework/kernel_mocks.c" 2>> "$RESULTS_FILE"; then
         # Exécuter le test
         local test_output
-        if test_output=$("$test_binary" 2>&1); then
+        # TEST_RUNNER lets a non-x86 host run the i386 ELF (for example
+        # TEST_RUNNER="qemu-i386 -L /usr/i686-linux-gnu" on arm64). Empty on x86.
+        if test_output=$(${TEST_RUNNER:-} "$test_binary" 2>&1); then
             echo -e "${GREEN}PASS${NC}"
             echo "$test_output" >> "$RESULTS_FILE"
             add_unity_counts "$test_output" pass

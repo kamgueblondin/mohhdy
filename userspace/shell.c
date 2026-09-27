@@ -4102,6 +4102,16 @@ static void cmd_ata_status(shell_context_t* ctx, char args[][128], int arg_count
     print_string(" flushes "); print_uint(st.flush_done);
     print_string(" kpio "); print_uint(st.kernel_overlay_writes);
     print_string(" resets "); print_uint(st.channel_resets);
+    /* Tranche 4 suite: FAT/overlay code served by the driver itself. */
+    print_string(" store "); print_uint(st.fs_store_flags);
+    print_string(" fsops "); print_uint(st.fs_ops);
+    print_string(" fskernel "); print_uint(st.fs_kernel_live);
+    print_string(" fsaborts "); print_uint(st.fs_aborts);
+    print_string(" fsredo "); print_uint(st.fs_redone);
+    print_string(" fsunavail "); print_uint(st.fs_unavailable);
+    print_string(" publishes "); print_uint(st.fs_publishes);
+    print_string(" handovers "); print_uint(st.fs_handovers);
+    print_string(" restores "); print_uint(st.fs_restores);
     print_string(" end\n");
 }
 

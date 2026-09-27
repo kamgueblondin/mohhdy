@@ -23,4 +23,9 @@ int io_bitmap_port_allowed(const uint8_t* map, uint32_t len, uint16_t port);
 /* Allow (allow=1) or deny (allow=0) exactly the ATA port range above. */
 void io_bitmap_apply_ata(uint8_t* map, uint32_t len, int allow);
 
+/* Tranche 5 suite: NE2000 ISA window (command/data/reset ports). */
+#define IO_BITMAP_NE2K_BASE 0x300U
+#define IO_BITMAP_NE2K_LAST 0x31FU
+void io_bitmap_apply_ne2k(uint8_t* map, uint32_t len, int allow);
+
 #endif

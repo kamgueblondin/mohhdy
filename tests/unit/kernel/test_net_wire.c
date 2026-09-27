@@ -150,6 +150,123 @@ static void test_abi(void) {
     TEST_ASSERT_TRUE(OS_NET_WIRE_NOT_BOUND != OS_LLM_ACQUIRE_DHCP_ACK_TIMEOUT);
 }
 
+/* ---- Tranche 5 suite: resumable engine driven through an emit sink, the
+ * way SYS_NET_NIC pumps drive it for the Ring 3 NE2000 owner. ---- */
+static uint8_t g_sink[4][1536];
+static uint16_t g_sink_len[4];
+static int g_sink_count;
+static int g_sink_fail;
+
+static int sink_emit(void* context, const uint8_t* frame, uint16_t length) {
+    (void)context;
+    if (g_sink_fail || g_sink_count >= 4) return -1;
+    memcpy(g_sink[g_sink_count], frame, length);
+    g_sink_len[g_sink_count++] = length;
+    return 0;
+}
+
+static ne2k_device_t g_dev;
+static net_arp_cache_t g_cache;
+static uint8_t g_tx[1536], g_rx[1536];
+
+static void emit_ctx(net_wire_ctx_t* ctx) {
+    memset(&g_dev, 0, sizeof(g_dev));
+    g_dev.base_port = 0x300U;
+    g_dev.mac[0] = 0x52; g_dev.mac[1] = 0x54; g_dev.mac[5] = 0x56;
+    g_dev.mac_valid = 1U;
+    (void)net_arp_cache_init(&g_cache);
+    memset(ctx, 0, sizeof(*ctx));
+    ctx->device = &g_dev; ctx->io = 0; ctx->cache = &g_cache;
+    ctx->tx = g_tx; ctx->rx = g_rx; ctx->capacity = sizeof(g_tx);
+    ctx->emit = sink_emit; ctx->emit_context = 0;
+    g_sink_count = 0; g_sink_fail = 0;
+}
+
+static void connect_req(os_net_wire_connect_t* c, uint16_t attempts) {
+    memset(c, 0, sizeof(*c));
+    memcpy(c->local_ip, k_local, 4); memcpy(c->remote_ip, k_remote, 4);
+    c->local_port = 40007; c->remote_port = 7; c->attempts = attempts;
+}
+
+static void test_engine_emit_arp_then_syn(void) {
+    net_wire_ctx_t ctx;
+    os_net_wire_connect_t c;
+    uint16_t n;
+    net_wire_reset();
+    emit_ctx(&ctx);
+    connect_req(&c, 200);
+    /* Begin: the op keeps running, the ARP request went to the sink (the
+     * NIC owner transmits it), not to any port. */
+    TEST_ASSERT_EQUAL(1, net_wire_op_connect(&ctx, &c));
+    TEST_ASSERT_TRUE(net_wire_op_active());
+    TEST_ASSERT_EQUAL(NET_WIRE_OP_CONNECT, (int)net_wire_op_kind());
+    TEST_ASSERT_EQUAL(1, g_sink_count);
+    TEST_ASSERT_EQUAL(0x08, g_sink[0][12]);
+    TEST_ASSERT_EQUAL(0x06, g_sink[0][13]);
+    /* A second op cannot start while one runs (one op at a time). */
+    TEST_ASSERT_EQUAL(0, net_wire_op_close(&ctx, 0, 0));
+    TEST_ASSERT_EQUAL(OS_NET_WIRE_UNAVAILABLE, net_wire_op_result());
+    TEST_ASSERT_TRUE(net_wire_op_active());
+    /* Idle round: no new frame (ARP retried every 50 rounds only). */
+    TEST_ASSERT_EQUAL(1, net_wire_op_step(&ctx, 0, 0));
+    TEST_ASSERT_EQUAL(1, g_sink_count);
+    /* The worker feeds the ARP reply it polled: the engine learns the peer
+     * and emits the SYN as an IPv4/TCP frame to the learned MAC. */
+    n = arp_frame(g_rx, NET_ARP_OPCODE_REPLY, k_local);
+    TEST_ASSERT_EQUAL(1, net_wire_op_step(&ctx, 1, n));
+    TEST_ASSERT_EQUAL(2, g_sink_count);
+    TEST_ASSERT_EQUAL(0x08, g_sink[1][12]);
+    TEST_ASSERT_EQUAL(0x00, g_sink[1][13]);
+    TEST_ASSERT_EQUAL(0x52, g_sink[1][0]);
+    TEST_ASSERT_EQUAL(0x02, g_sink[1][5]);
+    TEST_ASSERT_EQUAL(6, g_sink[1][23]);
+    TEST_ASSERT_EQUAL(NET_TCP_FLAG_SYN, g_sink[1][47] & 0x3F);
+    TEST_ASSERT_TRUE(net_wire_is_bound(0));
+    /* Worker lost mid-op: cancel frees the socket binding. */
+    net_wire_op_cancel();
+    TEST_ASSERT_FALSE(net_wire_op_active());
+    TEST_ASSERT_EQUAL(OS_NET_WIRE_UNAVAILABLE, net_wire_op_result());
+    TEST_ASSERT_FALSE(net_wire_is_bound(0));
+}
+
+static void test_engine_emit_timeout_and_failed_sink(void) {
+    net_wire_ctx_t ctx;
+    os_net_wire_connect_t c;
+    int rounds = 0;
+    net_wire_reset();
+    emit_ctx(&ctx);
+    connect_req(&c, 3);
+    /* Nobody answers ARP: the op ends with OS_NET_WIRE_TIMEOUT after the
+     * requested number of rounds, and the socket is dropped. */
+    TEST_ASSERT_EQUAL(1, net_wire_op_connect(&ctx, &c));
+    while (net_wire_op_step(&ctx, 0, 0) && rounds < 10) rounds++;
+    TEST_ASSERT_EQUAL(2, rounds);
+    TEST_ASSERT_FALSE(net_wire_op_active());
+    TEST_ASSERT_EQUAL(OS_NET_WIRE_TIMEOUT, net_wire_op_result());
+    TEST_ASSERT_FALSE(net_wire_is_bound(0));
+    /* A refusing sink transmits nothing and counts nothing. */
+    net_wire_reset();
+    emit_ctx(&ctx);
+    g_sink_fail = 1;
+    connect_req(&c, 200);
+    TEST_ASSERT_EQUAL(1, net_wire_op_connect(&ctx, &c));
+    TEST_ASSERT_EQUAL(0, g_sink_count);
+    {
+        os_net_wire_status_t st;
+        net_wire_fill_status(&st, 0);
+        TEST_ASSERT_EQUAL(0, (int)st.frames_tx);
+    }
+    net_wire_op_cancel();
+    /* No sink and no io: the engine refuses to start. */
+    emit_ctx(&ctx);
+    ctx.emit = 0;
+    TEST_ASSERT_EQUAL(0, net_wire_op_connect(&ctx, &c));
+    TEST_ASSERT_EQUAL(OS_NET_WIRE_UNAVAILABLE, net_wire_op_result());
+    /* The blocking Ring 0 entry points refuse a sink context. */
+    emit_ctx(&ctx);
+    TEST_ASSERT_EQUAL(OS_NET_WIRE_UNAVAILABLE, net_wire_connect(&ctx, &c));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bind_rules);
@@ -158,6 +275,8 @@ int main(void) {
     RUN_TEST(test_status_and_refused);
     RUN_TEST(test_ops_without_device);
     RUN_TEST(test_abi);
+    RUN_TEST(test_engine_emit_arp_then_syn);
+    RUN_TEST(test_engine_emit_timeout_and_failed_sink);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

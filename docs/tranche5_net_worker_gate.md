@@ -337,7 +337,7 @@ This is not "driver out of the kernel" and not "microkernel done".
 - The relay timeout (-87) still applies: a wire call must finish within
   5 s / 3 caller turns.
 
-### Next step: NE2000 port I/O in Ring 3 (not done)
+### Next step: NE2000 port I/O in Ring 3 (steps 1 and 2 done in the suite below)
 
 The ATA driver already runs its port I/O from Ring 3 through the TSS I/O
 permission bitmap (`kernel/io_bitmap.c`, granted to `atadriver` on task
@@ -356,3 +356,103 @@ is not in this PR:
 Step 1 alone (grant without moving the driver) would only add a second
 writer to the same ports, so it is deliberately not done as a "slice".
 
+
+
+## Tranche 5 suite - the NE2000 driven from Ring 3 through the IOPB
+
+Steps 1 and 2 of the plan above. Step 3 (framing out of Ring 0) is not done.
+
+### What changed
+
+- **Ownership (`kernel/net_nic_owner.c`, pure logic, unit tested).** The NIC
+  owner is `0` (kernel) or the PID of the live `net-driver`. Only that PID
+  can claim, only if an NE2000 was probed at boot (`OS_NET_NIC_ABSENT` -143
+  otherwise); the claim is idempotent and a stale owner must be dropped
+  before another worker can claim.
+- **`SYS_NET_NIC` (146).** `CLAIM`, `PUMP`, `IRQ` are reserved to the live
+  owner (`OS_NET_WORKER_REQUIRED` otherwise); `STATUS` is public
+  (`os_net_nic_status_t`: owner, claims, reclaims, IRQs forwarded, kernel
+  accesses refused, kernel syscalls gated, pumps, frames out/in, worker
+  TX ok/failed).
+- **IOPB.** `io_bitmap_apply_ne2k()` opens exactly 0x300-0x31F.
+  `schedule()` calls `tss_set_nic_io()` on every switch: the window is open
+  only while the owner runs and is still the live `net-driver`. Any other
+  task doing `in`/`out` there takes #GP (only that task dies), as for ATA.
+  The NE2000 grant is independent of the ATA grant (unit tested).
+- **Kernel hands off.** Every kernel NE2000 access goes through a gated
+  `ne2k_io_t` (`kernel_nic_inb/outb`): while a worker owns the card the
+  access is dropped and counted (`kernel_refused`, expected and measured 0).
+  Before that, the entry points refuse: LLM 91-98 and peer 128-130 answer
+  `OS_NET_NIC_WORKER_OWNED` (-141) for everybody, the worker included
+  (counted in `kernel_gated`), and the DHCP maintenance tick is skipped.
+- **IRQ3.** `ne2k_irq_handler()` only counts the event for the owner
+  (`nic_owner_irq()`); the PIC EOI stays in the stub. The worker enables
+  PRX|PTX in the card's IMR, reads and acks the ISR with its own PIO and
+  collects the count with `OS_NET_NIC_IRQ`.
+- **Driver in the worker.** The NE2000 hardware core was split out of
+  `ne2k.c` into `kernel/ne2k_hw.c` (probe, PROM/MAC, rings, remote-DMA TX,
+  RX ring poll), compiled twice: into the kernel and, with
+  `-DMOHHDY_RING3`, into `networker`. After `CLAIM` the worker re-probes the
+  card at CPL 3, re-reads the station PROM (compared with the MAC the
+  kernel probed: `prom-match 1`) and reconfigures the rings.
+- **Resumable wire engine (`net_wire.c`).** The slice 3 blocking loops
+  became a one-op-at-a-time state machine (`net_wire_op_connect/send/recv/
+  close`, `net_wire_op_step`). Frames leave through a sink (`ctx->emit`)
+  instead of `ne2k_tx_submit`. The Ring 0 blocking entry points
+  (`net_wire_connect`...) still drive it on `ctx->io` when no worker owns
+  the card (same rounds, same counters, same SYN cadence).
+- **Pump protocol.** With a worker owner, `SYS_NET_WIRE_*` and the relayed
+  `SYS_SOCKET_CONNECT` return `OS_NET_WIRE_PENDING` (-142). The worker then
+  loops on `OS_NET_NIC_PUMP`: the kernel copies out up to 4 frames the
+  engine queued, the worker transmits them with its own remote DMA, polls
+  its RX ring and feeds the next frame (or an idle round after one timer
+  tick, spinning without yielding like the Ring 0 `wire_pause()` so the
+  op still completes inside the 5 s relay deadline). `done`/`result` end
+  the op; a RECV writes its length directly into the worker's variable.
+- **Worker loss.** When the `net-driver` PID is purged, the kernel closes
+  the window, cancels the pending op (no replay), re-probes and
+  re-initialises the card from Ring 0 with IMR off ("NE2000 back in Ring 0
+  after worker loss"); a new worker can claim again.
+
+### What runs where now
+
+| Piece | Ring |
+|---|---|
+| NE2000 port I/O: probe, PROM, rings, remote-DMA TX, RX ring poll, ISR ack | **Ring 3** (`networker`, IOPB 0x300-0x31F) |
+| IRQ3 | Ring 0 stub + EOI, **counted** for the worker; serviced by the worker |
+| ARP/IPv4/TCP framing, 4-tuple demux, TCP state machine, socket registry | Ring 0 (`net_wire.c`, `net_tcp.c`, `net_socket.c`), driven by the worker's pumps |
+| TLS, LLM session, peer path | Ring 0, refused (-141) while the worker owns the card |
+| Boot probe, degraded path without worker, reclaim after worker loss | Ring 0 |
+
+### Proofs
+
+- Unity: `test_net_nic_owner` (6 tests: claim rules, ports follow the owner,
+  drop/reclaim, IRQ forwarding, counters, ABI), `test_io_bitmap` (+2:
+  NE2000 window only, independent from ATA), `test_net_wire` (+2: the
+  engine through an emit sink: ARP request, one op at a time, ARP reply
+  learned then SYN framed to the learned MAC, cancel frees the binding,
+  timeout after the requested rounds, refusing sink counts nothing, Ring 0
+  blocking entry points refuse a sink context).
+- `make qemu-net-wire` (extended; the NIC is now declared `irq=3`, QEMU's
+  `ne2k_isa` defaults to IRQ 9): the ports are handed to the worker, the
+  worker's own PROM read matches (`prom-match 1`), the same 16-byte echo
+  passes, and the worker's last report must show owner = worker PID,
+  worker TX = frames handed out = frames the peer received (7), worker RX =
+  frames fed in (4), 0 TX failure, IRQ3 taken by the worker (9, 10 counted
+  by the kernel), 0 kernel port access, 0 gated call. Then the worker is
+  killed: the kernel logs the reclaim, and a respawned worker (new PID)
+  claims the card again with `prom-match 1`.
+- `make qemu-net-worker` unchanged and passing (the worker claims the
+  user-net NIC; the stalled/killed worker paths still time out / abort and
+  the kernel reclaims the card).
+
+### Limits (read before claiming anything)
+
+- This is "NIC port I/O and IRQ servicing out of Ring 0", not "network stack
+  out of Ring 0": framing, demux, TCP and TLS stay in the kernel (step 3).
+- While a worker owns the card the kernel LLM/TLS/peer paths are refused;
+  they are not yet re-routed through the worker. Without a worker nothing
+  changes (`networker` is not started at boot).
+- Polling is still the pacing mechanism; IRQ3 is counted and acked, the
+  worker does not block on it yet.
+- One wire op at a time, at most 4 frames per pump, 1536 bytes per frame.

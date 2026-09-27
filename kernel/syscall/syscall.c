@@ -16,6 +16,9 @@
 #include "../llm/gpt2_tokenizer.h"
 #include "../service_registry.h"
 #include "../ata_job.h"
+#include "../ata_fsop.h"
+#include "../net_nic_owner.h"
+#include "../fs/fsop_exec.h"
 #include "../net_relay.h"
 #include "../net_wire.h"
 #include "../ata.h"
@@ -48,6 +51,12 @@ extern int kernel_peer_listen(const os_peer_listen_request_t* request);
 extern int kernel_peer_accept(const os_peer_accept_request_t* request);
 extern int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request);
 extern int kernel_llm_dhcp_maintenance(uint32_t now);
+/* Tranche 5 suite: NE2000 owned by the Ring 3 worker (kernel/kernel.c). */
+extern int kernel_net_nic_port_mode(void);
+extern int kernel_net_nic_pump(os_net_nic_pump_t* pump);
+extern int kernel_net_nic_info(os_net_nic_info_t* info);
+extern int kernel_net_nic_present(void);
+extern int kernel_net_nic_reclaim(void);
 extern int kernel_net_wire_connect(const os_net_wire_connect_t* request);
 extern int kernel_net_wire_send(int socket_id, const uint8_t* data, uint16_t length,
                                 uint8_t* segment, uint16_t capacity, uint16_t* out_length,
@@ -114,6 +123,7 @@ static void ata_rpc_sched_hook(uint32_t now);
 
 void syscall_ata_bridge_init(void) {
     ata_job_init(ata_bridge_snapshot, ata_bridge_restore);
+    ata_fsop_init();
     ata_set_kernel_gate(ata_bridge_kernel_gate);
     overlay_set_disk_hooks(ata_bridge_overlay_redirect, ata_job_note_kernel_overlay_write);
     task_sched_hook = ata_rpc_sched_hook;
@@ -136,6 +146,9 @@ void syscall_ata_bridge_init(void) {
 #define ATA_RPC_TIMEOUT_TICKS 300U
 #define ATA_RPC_IO 1
 #define ATA_RPC_FLUSH 2
+/* Tranche 4 suite: a whole FAT16/FAT32/overlay operation served by the
+ * driver's own filesystem code (kernel/ata_fsop.c). */
+#define ATA_RPC_FSOP 3
 static task_t* g_rpc_waiter;
 static int g_rpc_kind;
 static uint32_t g_rpc_started;
@@ -148,6 +161,10 @@ static void ata_rpc_abort(void) {
     if (!waiter || waiter->state != TASK_BLOCKED_KERNEL) return;
     g_rpc_aborted = 1;
     if (g_rpc_kind == ATA_RPC_IO) ata_job_io_cancel();
+    if (g_rpc_kind == ATA_RPC_FSOP) {
+        ata_fsop_abort();
+        ata_job_note_rpc_abort();
+    }
     waiter->state = TASK_READY;
     task_sched_only = waiter;
 }
@@ -184,6 +201,7 @@ static int ata_rpc_block(task_t* driver, int kind) {
     self->kctx_valid = 0U;
     if (g_rpc_aborted) return -2;
     if (kind == ATA_RPC_FLUSH) return 0;
+    if (kind == ATA_RPC_FSOP) return ata_fsop_state() == ATA_FSOP_DONE ? 0 : -1;
     return ata_job_io_state() == ATA_IO_DONE ? 0 : -1;
 }
 
@@ -258,6 +276,7 @@ void syscall_ata_set_boot_driver(int32_t pid) {
  * task blocked on a sector RPC is resumed and falls back too. */
 static void ata_bridge_after_purge(void) {
     int in_use;
+    int persist = 0;
     if (ata_live_driver() > 0) return;
     ata_rpc_abort();
     in_use = ata_job_controller_in_use();
@@ -266,9 +285,273 @@ static void ata_bridge_after_purge(void) {
         if (ata_channel_reset() == 0) print_string_serial("[ATA] channel reset after driver loss\n");
         ata_job_note_channel_reset();
     }
-    if (ata_job_driver_gone()) {
+    /* Tranche 4 suite: the store served by the dead driver comes back to the
+     * kernel (fallback). The overlay is restored from the last image the
+     * driver published (published before its disk write, so a torn write is
+     * repaired by the Ring 0 persist below); the kernel FAT copy drops its
+     * caches since the driver changed the volumes behind it. */
+    if (ata_fsop_store_pid() > 0) {
+        uint32_t size = 0U;
+        const uint8_t* image = ata_fsop_mirror(&size);
+        uint32_t flags = ata_fsop_store_flags(ata_fsop_store_pid());
+        ata_fsop_store_drop();
+        fat16_invalidate_caches(fat16_root());
+        if ((flags & OS_ATA_FS_STORE_OVERLAY) != 0U) {
+            if (image && overlay_restore(image, size) == 0) {
+                ata_fsop_note_restore();
+                print_string_serial("[ATA] store back in Ring 0 (overlay from driver mirror)\n");
+            } else {
+                print_string_serial("[ATA] store back in Ring 0 (mirror invalid, kernel copy kept)\n");
+            }
+            persist = 1;
+        } else {
+            print_string_serial("[ATA] store back in Ring 0 (FAT only)\n");
+        }
+    }
+    if (ata_job_driver_gone()) persist = 1;
+    if (persist) {
         if (overlay_save_disk() == 0) ata_job_note_fallback_flush();
     }
+}
+
+/* ==========================================================================
+ * Tranche 4 suite: FAT16/FAT32/overlay operations served by the driver.
+ *
+ * When the live driver announced a store (OS_ATA_FS_READY), the FAT and
+ * overlay syscalls below no longer run the kernel filesystem code: the
+ * request is encoded (paths, input bytes) into the kernel slot, the caller
+ * blocks on the same synchronous RPC as the slice 3 sector jobs, and the
+ * driver executes it with its own FAT16/FAT32/overlay code and its own PIO.
+ * The kernel only copies bytes back. Failure policy:
+ *  - driver cannot serve (suspended, RPC busy): OS_ATA_FS_UNAVAILABLE, the
+ *    stale kernel copy is never used instead (fail closed);
+ *  - driver stalled past the timeout: OS_ATA_FS_TIMEOUT (outcome unknown);
+ *  - driver died: the store is back in Ring 0 (ata_bridge_after_purge); an
+ *    overlay op the driver already published returns its published result,
+ *    anything else that committed nothing is redone by Ring 0 once; a FAT
+ *    mutation that completed at least one sector write returns
+ *    OS_ATA_FS_ABORTED (no replay of an uncertain mutation).
+ * ========================================================================== */
+#define ATA_FS_LOCAL 0
+#define ATA_FS_DONE 1
+#define ATA_FS_OUT_MAX (OS_ATA_FSOP_BUFFER_SIZE - (uint32_t)sizeof(os_ata_fsop_reply_t))
+static uint8_t g_fsop_out[OS_ATA_FSOP_BUFFER_SIZE];
+
+static int ata_fs_relay(uint32_t op, uint32_t arg0, uint32_t arg1, const char* path,
+                        const char* path2, const void* in, uint32_t in_len, void* out,
+                        uint32_t out_cap, int32_t* rc) {
+    int32_t driver_pid = ata_live_driver();
+    uint32_t store = fsop_store_for(op);
+    uint32_t flags = 0U;
+    task_t* driver;
+    os_ata_fsop_reply_t reply;
+    int len, st, committed, published;
+    int32_t published_result = 0;
+    if (store == 0U || (ata_fsop_store_flags(driver_pid) & store) == 0U) return ATA_FS_LOCAL;
+    driver = ata_rpc_driver_for_current();
+    if (!driver) {
+        ata_fsop_note_unavailable();
+        *rc = OS_ATA_FS_UNAVAILABLE;
+        return ATA_FS_DONE;
+    }
+    if (out_cap > ATA_FS_OUT_MAX) out_cap = ATA_FS_OUT_MAX;
+    len = fsop_encode(ata_fsop_request_buffer(), ata_fsop_request_capacity(), op, arg0, arg1,
+                      path, path2, in, in_len, out_cap);
+    if (len < 0) {
+        if (store == OS_ATA_FS_STORE_OVERLAY) {
+            *rc = OV_ERR_INVAL; /* the driver's overlay would refuse it too */
+            return ATA_FS_DONE;
+        }
+        /* Oversized FAT request (no current caller): kernel FAT code on the
+         * disk itself, counted as kernel FS work while the store is live. */
+        fat16_invalidate_caches(fat16_root());
+        ata_fsop_note_kernel_live();
+        return ATA_FS_LOCAL;
+    }
+    if (fsop_is_fat_mutation(op) && ata_job_debug_take_crash()) flags = OS_ATA_JOB_FLAG_DEBUG_CRASH;
+    if (ata_fsop_submit((uint32_t)len, op, driver_pid, flags) < 0) {
+        ata_fsop_note_unavailable();
+        *rc = OS_ATA_FS_UNAVAILABLE;
+        return ATA_FS_DONE;
+    }
+    st = ata_rpc_block(driver, ATA_RPC_FSOP);
+    if (st == 0 && ata_fsop_take(g_fsop_out, sizeof(g_fsop_out), &reply) == 0) {
+        if (store != OS_ATA_FS_STORE_OVERLAY) {
+            ata_job_note_fat_driver_io(reply.sectors_read, reply.sectors_written);
+            if (reply.sectors_written) fat16_invalidate_caches(fat16_root());
+        }
+        if (reply.out_len > out_cap || (reply.out_len && !out)) {
+            *rc = -1;
+            return ATA_FS_DONE;
+        }
+        memcpy(out, g_fsop_out, reply.out_len);
+        *rc = reply.result;
+        return ATA_FS_DONE;
+    }
+    committed = ata_fsop_committed();
+    published = ata_fsop_published(&published_result);
+    ata_fsop_release();
+    if (ata_live_driver() == driver_pid && driver_pid > 0) {
+        print_string_serial("[ATA] fs op timeout (driver stalled)\n");
+        *rc = OS_ATA_FS_TIMEOUT;
+        return ATA_FS_DONE;
+    }
+    /* Driver died: ata_bridge_after_purge already took the store back. */
+    if (store == OS_ATA_FS_STORE_OVERLAY) {
+        if (published && fsop_is_mutation(op)) {
+            *rc = published_result;
+            return ATA_FS_DONE;
+        }
+        ata_fsop_note_redone();
+        print_string_serial("[ATA] fs op redone in Ring 0 after driver loss\n");
+        return ATA_FS_LOCAL;
+    }
+    fat16_invalidate_caches(fat16_root());
+    if (committed && fsop_is_mutation(op)) {
+        print_string_serial("[ATA] fs op aborted after a committed sector\n");
+        *rc = OS_ATA_FS_ABORTED;
+        return ATA_FS_DONE;
+    }
+    ata_fsop_note_redone();
+    print_string_serial("[ATA] fs op redone in Ring 0 after driver loss\n");
+    return ATA_FS_LOCAL;
+}
+
+/* Overlay store entry points used by every syscall below: the driver's
+ * store when it serves one, the kernel overlay otherwise. */
+#define OVS_DIRENT_MAX (ATA_FS_OUT_MAX / (uint32_t)sizeof(os_dirent_t))
+
+static int ovs_read(const char* path, char* buf, uint32_t max) {
+    int32_t rc;
+    uint32_t cap = max < ATA_FS_OUT_MAX ? max : ATA_FS_OUT_MAX;
+    if (path && ata_fs_relay(OS_ATA_FSOP_OVL_READ, cap, 0U, path, 0, 0, 0U, buf, cap, &rc))
+        return rc;
+    return overlay_read(path, buf, max);
+}
+
+static int ovs_write(const char* path, const char* data, uint32_t n) {
+    int32_t rc;
+    if (path && ata_fs_relay(OS_ATA_FSOP_OVL_WRITE, 0U, 0U, path, 0, data, n, 0, 0U, &rc)) return rc;
+    return overlay_write(path, data, n);
+}
+
+static int ovs_append(const char* path, const char* data, uint32_t n) {
+    int32_t rc;
+    if (path && ata_fs_relay(OS_ATA_FSOP_OVL_APPEND, 0U, 0U, path, 0, data, n, 0, 0U, &rc)) return rc;
+    return overlay_append(path, data, n);
+}
+
+static int ovs_path_op(uint32_t op, const char* path, const char* path2, int* handled) {
+    int32_t rc = -1;
+    int two = op == OS_ATA_FSOP_OVL_RENAME || op == OS_ATA_FSOP_OVL_COPY;
+    *handled = 0;
+    if (!path || (two && !path2)) return rc;
+    *handled = ata_fs_relay(op, 0U, 0U, path, path2, 0, 0U, 0, 0U, &rc);
+    return rc;
+}
+
+static int ovs_mkdir(const char* path) {
+    int handled, rc = ovs_path_op(OS_ATA_FSOP_OVL_MKDIR, path, 0, &handled);
+    return handled ? rc : overlay_mkdir(path);
+}
+
+static int ovs_unlink(const char* path) {
+    int handled, rc = ovs_path_op(OS_ATA_FSOP_OVL_UNLINK, path, 0, &handled);
+    return handled ? rc : overlay_unlink(path);
+}
+
+static int ovs_rename(const char* oldpath, const char* newpath) {
+    int handled, rc = ovs_path_op(OS_ATA_FSOP_OVL_RENAME, oldpath, newpath, &handled);
+    return handled ? rc : overlay_rename(oldpath, newpath);
+}
+
+static int ovs_copy(const char* src, const char* dst) {
+    int handled, rc = ovs_path_op(OS_ATA_FSOP_OVL_COPY, src, dst, &handled);
+    return handled ? rc : overlay_copy(src, dst);
+}
+
+static int ovs_is_dir(const char* path) {
+    int handled, rc = ovs_path_op(OS_ATA_FSOP_OVL_IS_DIR, path, 0, &handled);
+    return handled ? rc : overlay_is_dir(path);
+}
+
+static int ovs_stat(const char* path, os_dirent_t* out) {
+    int32_t rc;
+    if (path && out && ata_fs_relay(OS_ATA_FSOP_OVL_STAT, 0U, 0U, path, 0, 0, 0U, out,
+                                    (uint32_t)sizeof(*out), &rc))
+        return rc;
+    return overlay_stat(path, out);
+}
+
+static int ovs_listdir(const char* path, os_dirent_t* out, int start, int max_n) {
+    int32_t rc;
+    uint32_t n = max_n > 0 ? (uint32_t)max_n : 0U;
+    uint32_t first = start > 0 ? (uint32_t)start : 0U;
+    if (n > OVS_DIRENT_MAX) n = OVS_DIRENT_MAX;
+    if (path && out && n > 0U && first <= n &&
+        ata_fs_relay(OS_ATA_FSOP_OVL_LISTDIR, first, n, path, 0, out,
+                     first * (uint32_t)sizeof(os_dirent_t), out, n * (uint32_t)sizeof(os_dirent_t), &rc))
+        return rc;
+    return overlay_listdir(path, out, start, max_n);
+}
+
+static int ovs_listdir_page(const char* path, os_dirent_t* out, uint32_t start, int max_n) {
+    int32_t rc;
+    uint32_t n = max_n > 0 ? (uint32_t)max_n : 0U;
+    if (path && out && n > 0U && n <= OVS_DIRENT_MAX &&
+        ata_fs_relay(OS_ATA_FSOP_OVL_LISTDIR_PAGE, start, n, path, 0, 0, 0U, out,
+                     n * (uint32_t)sizeof(os_dirent_t), &rc))
+        return rc;
+    return overlay_listdir_page(path, out, start, max_n);
+}
+
+/* FAT entry points: relayed when the driver serves the volume, else the
+ * kernel code (boot, fallback, no driver). */
+static int fsr_fat_read(uint32_t op, const char* name, char* buffer, uint32_t max, int* handled) {
+    int32_t rc = -1;
+    uint32_t cap = max;
+    /* A read larger than one reply window stays on the kernel path (the
+     * relay would truncate it); no Ring 3 caller asks for more today. */
+    *handled = 0;
+    if (cap > ATA_FS_OUT_MAX) {
+        if (ata_fsop_store_flags(ata_live_driver()) & fsop_store_for(op)) {
+            fat16_invalidate_caches(fat16_root());
+            ata_fsop_note_kernel_live();
+        }
+        return 0;
+    }
+    *handled = ata_fs_relay(op, cap, 0U, name, 0, 0, 0U, buffer, cap, &rc);
+    return rc;
+}
+
+static int fsr_fat_list(uint32_t op, const char* path, os_fat16_dirent_t* out, uint32_t capacity,
+                        uint32_t start, int* handled) {
+    int32_t rc = -1;
+    uint32_t cap = capacity;
+    uint32_t each = (uint32_t)sizeof(os_fat16_dirent_t);
+    *handled = 0;
+    if (cap > ATA_FS_OUT_MAX / each) {
+        if (ata_fsop_store_flags(ata_live_driver()) & fsop_store_for(op)) {
+            fat16_invalidate_caches(fat16_root());
+            ata_fsop_note_kernel_live();
+        }
+        return 0;
+    }
+    *handled = ata_fs_relay(op, cap, start, path, 0, 0, 0U, out, cap * each, &rc);
+    return rc;
+}
+
+static int fsr_fat_create(uint32_t op, const char* name, const char* data, uint32_t size, int* handled) {
+    int32_t rc = -1;
+    int is_dir = !data && size == 0U;
+    *handled = ata_fs_relay(op, is_dir ? 1U : 0U, 0U, name, 0, data, size, 0, 0U, &rc);
+    return rc;
+}
+
+static int fsr_fat_path(uint32_t op, const char* a, const char* b, int* handled) {
+    int32_t rc = -1;
+    *handled = ata_fs_relay(op, 0U, 0U, a, b, 0, 0U, 0, 0U, &rc);
+    return rc;
 }
 
 static int sys_ata_claim(void) {
@@ -297,6 +580,8 @@ static int sys_ata_job_fetch(os_ata_job_t* job, uint8_t* data) {
     if (!syscall_user_range(job, sizeof(*job), 1) ||
         !syscall_user_range(data, OS_ATA_JOB_MAX_SECTORS * 512U, 1))
         return OS_ATA_JOB_STALE;
+    /* Tranche 4 suite: a filesystem op (caller blocked) goes first. */
+    if (ata_fsop_fetch((int32_t)current_task->id, job) == 1) return 1;
     return ata_job_fetch(job, data, OS_ATA_JOB_MAX_SECTORS * 512U);
 }
 
@@ -313,7 +598,110 @@ static int sys_ata_job_done(const os_ata_job_t* job, int32_t status, const uint8
 static int sys_ata_status(os_ata_status_t* out) {
     if (!syscall_user_range(out, sizeof(*out), 1)) return OS_SERVICE_BAD_NAME;
     ata_job_fill_status(out, ata_live_driver());
+    ata_fsop_fill_status(out, ata_live_driver());
     return 0;
+}
+
+/* Tranche 4 suite: SYS_ATA_FS driver side. */
+static int ata_fs_caller_is_driver(void) {
+    return current_task && current_task->type == TASK_TYPE_USER &&
+           (int32_t)current_task->id == ata_live_driver() &&
+           service_registry_ata_ports_granted(current_task->id);
+}
+
+/* Store handover kernel -> driver. Refused while a slice 2 snapshot job is
+ * queued (the driver serves it first). With the overlay, the kernel
+ * serialises its store once into the mirror and the driver's buffer, then
+ * stops running its own overlay code for the syscalls (same syscall, so no
+ * kernel mutation can slip in between). */
+static int sys_ata_fs_ready(uint32_t flags, uint8_t* image, uint32_t capacity) {
+    uint32_t size = 0U;
+    int32_t pid;
+    if (!ata_fs_caller_is_driver()) return OS_ATA_DRIVER_REQUIRED;
+    pid = (int32_t)current_task->id;
+    if (flags == 0U || (flags & ~OS_ATA_FS_STORE_ALL) != 0U) return OS_ATA_JOB_STALE;
+    if (ata_job_pending() || ata_fsop_state() != ATA_FSOP_FREE) return OS_ATA_FS_BUSY;
+    if ((flags & OS_ATA_FS_STORE_FAT16) && !fat16_is_mounted(fat16_root())) flags &= ~OS_ATA_FS_STORE_FAT16;
+    if ((flags & OS_ATA_FS_STORE_FAT32) && !fat32_is_mounted(fat32_root())) flags &= ~OS_ATA_FS_STORE_FAT32;
+    if (flags & OS_ATA_FS_STORE_OVERLAY) {
+        if (!syscall_user_range(image, capacity, 1)) return OS_ATA_JOB_STALE;
+        if (overlay_snapshot(ata_fsop_mirror_buffer(), ATA_FSOP_MIRROR_BYTES, &size) != 0 ||
+            size > capacity || ata_fsop_mirror_commit(size) != 0) return OS_ATA_JOB_STALE;
+        memcpy(image, ata_fsop_mirror_buffer(), size);
+    }
+    if (ata_fsop_store_ready(pid, flags) != 0) return OS_ATA_JOB_STALE;
+    fat16_invalidate_caches(fat16_root());
+    ata_fsop_note_handover();
+    print_string_serial("[ATA] store handed to the Ring 3 driver\n");
+    return (int)size;
+}
+
+static void ata_fs_wake_waiter(cpu_state_t* cpu) {
+    if (g_rpc_waiter && g_rpc_waiter->state == TASK_BLOCKED_KERNEL && g_rpc_kind == ATA_RPC_FSOP &&
+        ata_fsop_state() == ATA_FSOP_DONE) {
+        g_rpc_waiter->state = TASK_READY;
+        task_sched_only = g_rpc_waiter;
+        schedule(cpu);
+    }
+}
+
+static int32_t sys_ata_fs(cpu_state_t* cpu) {
+    int32_t pid = current_task ? (int32_t)current_task->id : 0;
+    int rc;
+    switch (cpu->ebx) {
+        case OS_ATA_FS_STATUS:
+            return sys_ata_status((os_ata_status_t*)cpu->ecx);
+        case OS_ATA_FS_READY:
+            return sys_ata_fs_ready(cpu->ecx, (uint8_t*)cpu->edx, cpu->esi);
+        default:
+            break;
+    }
+    if (!ata_fs_caller_is_driver()) return OS_ATA_DRIVER_REQUIRED;
+    switch (cpu->ebx) {
+        case OS_ATA_FS_REQUEST: {
+            const os_ata_job_t* job = (const os_ata_job_t*)cpu->ecx;
+            if (!syscall_user_range(job, sizeof(*job), 0) ||
+                !syscall_user_range((void*)cpu->edx, cpu->esi, 1)) return OS_ATA_JOB_STALE;
+            return ata_fsop_copy_request(pid, job->generation, (uint8_t*)cpu->edx, cpu->esi);
+        }
+        case OS_ATA_FS_NOTE:
+            rc = ata_fsop_note(pid, cpu->ecx, cpu->edx);
+            if (rc == 0) {
+                if (g_rpc_waiter) g_rpc_started = timer_get_ticks(); /* progress */
+                if (cpu->edx == OS_ATA_FS_NOTE_PERSISTED) ata_job_note_driver_flush();
+            }
+            return rc;
+        case OS_ATA_FS_PUBLISH:
+            if (!syscall_user_range((const void*)cpu->edx, cpu->esi, 0)) return OS_ATA_JOB_STALE;
+            rc = ata_fsop_publish(pid, cpu->ecx, (const uint8_t*)cpu->edx, cpu->esi, (int32_t)cpu->edi);
+            if (rc == 0 && g_rpc_waiter) g_rpc_started = timer_get_ticks();
+            return rc;
+        case OS_ATA_FS_DONE: {
+            const os_ata_job_t* job = (const os_ata_job_t*)cpu->ecx;
+            if (!syscall_user_range(job, sizeof(*job), 0) ||
+                !syscall_user_range((const void*)cpu->edx, cpu->esi, 0)) return OS_ATA_JOB_STALE;
+            rc = ata_fsop_done(pid, job->generation, (const uint8_t*)cpu->edx, cpu->esi);
+            if (rc == OS_ATA_JOB_FS_DONE) {
+                cpu->eax = (uint32_t)rc;
+                ata_fs_wake_waiter(cpu); /* returns here only if nobody waits */
+            }
+            return rc;
+        }
+        case OS_ATA_FS_INITRD_STAT: {
+            const char* path = (const char*)cpu->ecx;
+            if (!syscall_user_range(path, 1U, 0)) return -1;
+            return (initrd_is_file(path) ? OS_ATA_FS_INITRD_FILE : 0) |
+                   (initrd_is_dir(path) ? OS_ATA_FS_INITRD_DIR : 0);
+        }
+        case OS_ATA_FS_INITRD_READ: {
+            const char* path = (const char*)cpu->ecx;
+            if (!syscall_user_range(path, 1U, 0) || cpu->esi == 0U ||
+                !syscall_user_range((void*)cpu->edx, cpu->esi, 1)) return -1;
+            return initrd_read_into(path, (char*)cpu->edx, cpu->esi);
+        }
+        default:
+            return OS_ATA_JOB_STALE;
+    }
 }
 
 static void service_notify_purge_pid(int32_t pid) {
@@ -326,6 +714,11 @@ static void service_notify_purge_pid(int32_t pid) {
         service_notify_change(owned[i].name, pid, 0, OS_SERVICE_EVENT_PURGED);
     }
     ata_bridge_after_purge();
+    /* Tranche 5 suite: a dead NIC owner gives the card back to Ring 0. */
+    if (nic_owner_drop_if_gone(sys_service_lookup("net-driver"))) {
+        tss_set_nic_io(0);
+        (void)kernel_net_nic_reclaim();
+    }
 }
 
 /* Tranche 4: a Ring 3 fault (e.g. #GP from an IN/OUT on a port denied by the
@@ -573,6 +966,47 @@ static int net_wire_caller_is_worker(void) {
     return 0;
 }
 
+/* Tranche 5 suite: SYS_NET_NIC. */
+static int32_t sys_net_nic(cpu_state_t* cpu) {
+    int32_t pid = current_task ? (int32_t)current_task->id : 0;
+    int32_t worker = sys_service_lookup("net-driver");
+    int rc;
+    switch (cpu->ebx) {
+        case OS_NET_NIC_STATUS: {
+            os_net_nic_status_t* out = (os_net_nic_status_t*)cpu->ecx;
+            if (!syscall_user_range(out, sizeof(*out), 1)) return OS_SOCKET_BAD_ARGUMENT;
+            nic_owner_fill_status(out);
+            return 0;
+        }
+        case OS_NET_NIC_CLAIM: {
+            os_net_nic_info_t* info = (os_net_nic_info_t*)cpu->ecx;
+            if (!current_task || current_task->type != TASK_TYPE_USER) return OS_NET_WORKER_REQUIRED;
+            if (info && !syscall_user_range(info, sizeof(*info), 1)) return OS_SOCKET_BAD_ARGUMENT;
+            rc = nic_owner_claim(pid, worker, kernel_net_nic_present());
+            if (rc != 0) return rc;
+            if (info) (void)kernel_net_nic_info(info);
+            tss_set_nic_io(1); /* open now; task switches keep it per owner */
+            print_string_serial("[NET] NE2000 ports 0x300-0x31F handed to the Ring 3 worker\n");
+            return 0;
+        }
+        case OS_NET_NIC_IRQ:
+            if (pid <= 0 || pid != worker || nic_owner_pid() != pid) return OS_NET_WORKER_REQUIRED;
+            return (int32_t)nic_owner_irq_take(pid);
+        case OS_NET_NIC_PUMP: {
+            os_net_nic_pump_t* pump = (os_net_nic_pump_t*)cpu->ecx;
+            if (pid <= 0 || pid != worker || nic_owner_pid() != pid) return OS_NET_WORKER_REQUIRED;
+            if (!syscall_user_range(pump, sizeof(*pump), 1) ||
+                !syscall_user_range(pump->tx, OS_NET_NIC_PUMP_TX_MAX * OS_NET_NIC_FRAME_MAX, 1) ||
+                (pump->mode == OS_NET_NIC_PUMP_FRAME &&
+                 !syscall_user_range(pump->rx, pump->rx_length, 0)))
+                return OS_SOCKET_BAD_ARGUMENT;
+            return kernel_net_nic_pump(pump);
+        }
+        default:
+            return OS_SOCKET_BAD_ARGUMENT;
+    }
+}
+
 static int sys_net_wire_connect(const os_net_wire_connect_t* user) {
     os_net_wire_connect_t request;
     if (!net_wire_caller_is_worker()) return OS_NET_WORKER_REQUIRED;
@@ -584,10 +1018,14 @@ static int sys_net_wire_connect(const os_net_wire_connect_t* user) {
 static int sys_net_wire_io(uint32_t op, const os_net_wire_io_t* user) {
     os_net_wire_io_t io;
     uint16_t length = 0U;
+    uint16_t* lenp = &length;
     int rc;
     if (!net_wire_caller_is_worker()) return OS_NET_WORKER_REQUIRED;
     if (!syscall_user_range(user, sizeof(*user), 0)) return OS_SOCKET_BAD_ARGUMENT;
     io = *user;
+    /* Tranche 5 suite: on the worker's NIC a RECV completes in a later pump,
+     * so the engine writes the length straight into the worker's variable. */
+    if (kernel_net_nic_port_mode() && io.rx_length) lenp = io.rx_length;
     if ((io.rx_capacity && !syscall_user_range(io.rx, io.rx_capacity, 1)) ||
         (io.rx_length && !syscall_user_range(io.rx_length, sizeof(*io.rx_length), 1)))
         return OS_SOCKET_BAD_ARGUMENT;
@@ -595,12 +1033,12 @@ static int sys_net_wire_io(uint32_t op, const os_net_wire_io_t* user) {
         if (io.length > OS_NET_WIRE_MAX_IO) return OS_SOCKET_BUFFER_SMALL;
         if (!syscall_user_range(io.data, io.length, 0)) return OS_SOCKET_BAD_ARGUMENT;
         rc = kernel_net_wire_send(io.socket_id, io.data, io.length, io.rx, io.rx_capacity,
-                                  &length, io.attempts);
+                                  lenp, io.attempts);
     } else {
         if (!io.rx || !io.rx_length) return OS_SOCKET_BAD_ARGUMENT;
-        rc = kernel_net_wire_recv(io.socket_id, io.rx, io.rx_capacity, &length, io.attempts);
+        rc = kernel_net_wire_recv(io.socket_id, io.rx, io.rx_capacity, lenp, io.attempts);
     }
-    if (io.rx_length) *io.rx_length = length;
+    if (io.rx_length && lenp == &length) *io.rx_length = length;
     return rc;
 }
 
@@ -680,6 +1118,16 @@ void syscall_handler(cpu_state_t* cpu) {
                                               cpu->eax)) {
         net_relay_note_denied();
         cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;
+        return;
+    }
+    /* Tranche 5 suite: the kernel LLM session (91-97) and peer (128-130)
+     * paths drive the NE2000 from Ring 0; while the worker owns the card
+     * they are refused for everybody, the worker included. */
+    if (!nic_owner_kernel_may_touch() &&
+        ((cpu->eax >= SYS_LLM_ACQUIRE_START && cpu->eax <= SYS_LLM_CLOSE) ||
+         (cpu->eax >= SYS_PEER_LISTEN && cpu->eax <= SYS_PEER_TLS_POLL))) {
+        nic_owner_note_kernel_gated();
+        cpu->eax = (uint32_t)OS_NET_NIC_WORKER_OWNED;
         return;
     }
 
@@ -957,6 +1405,9 @@ void syscall_handler(cpu_state_t* cpu) {
             break;
         case SYS_NET_WIRE_CONNECT:
             cpu->eax = (uint32_t)sys_net_wire_connect((const os_net_wire_connect_t*)cpu->ebx);
+            break;
+        case SYS_NET_NIC:
+            cpu->eax = (uint32_t)sys_net_nic(cpu);
             break;
         case SYS_NET_WIRE_SEND:
         case SYS_NET_WIRE_RECV:
@@ -1265,6 +1716,9 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_ATA_STATUS:
             cpu->eax = (uint32_t)sys_ata_status((os_ata_status_t*)cpu->ebx);
             break;
+        case SYS_ATA_FS:
+            cpu->eax = (uint32_t)sys_ata_fs(cpu);
+            break;
         case SYS_ATA_DEBUG:
             /* Test hook, root shell only (the task the kernel started). */
             if (!current_task || task_root_shell_pid() <= 0 ||
@@ -1396,6 +1850,10 @@ int sys_fat16_read(const char* name, char* buffer, uint32_t max) {
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!name || !buffer || max == 0U) return OS_FAT16_BAD_PATH;
+    {
+        int handled, rc = fsr_fat_read(OS_ATA_FSOP_FAT16_READ + 0U, name, buffer, max, &handled);
+        if (handled) return rc;
+    }
     return fat16_read_path(fat16_root(), name, buffer, max);
 }
 
@@ -1405,6 +1863,10 @@ int sys_fat16_list(os_fat16_dirent_t* out, uint32_t capacity) {
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!out || capacity == 0U) return OS_FAT16_BAD_PATH;
+    {
+        int handled, rc = fsr_fat_list(OS_ATA_FSOP_FAT16_LIST + 0U, 0, out, capacity, 0U, &handled);
+        if (handled) return rc;
+    }
     return fat16_list_root(fat16_root(), out, capacity);
 }
 
@@ -1414,6 +1876,10 @@ int sys_fat16_list_page(os_fat16_dirent_t* out, uint32_t capacity, uint32_t star
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!out || capacity == 0U) return OS_FAT16_BAD_PATH;
+    {
+        int handled, rc = fsr_fat_list(OS_ATA_FSOP_FAT16_LIST_PAGE + 0U, 0, out, capacity, start, &handled);
+        if (handled) return rc;
+    }
     return fat16_list_root_page(fat16_root(), start, out, capacity);
 }
 
@@ -1425,6 +1891,10 @@ int sys_fat16_list_path(const char* path, os_fat16_dirent_t* out, uint32_t capac
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!path || !out || capacity == 0U) return OS_FAT16_BAD_PATH;
+    {
+        int handled, rc = fsr_fat_list(OS_ATA_FSOP_FAT16_LIST_PATH + 0U, path, out, capacity, start, &handled);
+        if (handled) return rc;
+    }
     return fat16_list_path_page(fat16_root(), path, start, out, capacity);
 }
 
@@ -1435,6 +1905,10 @@ int sys_fat32_read(const char* name, char* buffer, uint32_t max) {
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!name || !buffer || max == 0U) return OS_FAT16_BAD_PATH;
+    {
+        int handled, rc = fsr_fat_read(OS_ATA_FSOP_FAT16_READ + OS_ATA_FSOP_FAT32_BASE, name, buffer, max, &handled);
+        if (handled) return rc;
+    }
     return fat32_read_path(fat32_root(), name, (uint8_t*)buffer, max);
 }
 
@@ -1444,6 +1918,10 @@ int sys_fat32_list(os_fat16_dirent_t* out, uint32_t capacity) {
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!out || capacity == 0U) return OS_FAT16_BAD_PATH;
+    {
+        int handled, rc = fsr_fat_list(OS_ATA_FSOP_FAT16_LIST + OS_ATA_FSOP_FAT32_BASE, 0, out, capacity, 0U, &handled);
+        if (handled) return rc;
+    }
     return fat32_list_root(fat32_root(), out, capacity);
 }
 
@@ -1453,6 +1931,10 @@ int sys_fat32_list_page(os_fat16_dirent_t* out, uint32_t capacity, uint32_t star
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!out || capacity == 0U) return OS_FAT16_BAD_PATH;
+    {
+        int handled, rc = fsr_fat_list(OS_ATA_FSOP_FAT16_LIST_PAGE + OS_ATA_FSOP_FAT32_BASE, 0, out, capacity, start, &handled);
+        if (handled) return rc;
+    }
     return fat32_list_root_page(fat32_root(), start, out, capacity);
 }
 
@@ -1464,6 +1946,10 @@ int sys_fat32_list_path(const char* path, os_fat16_dirent_t* out, uint32_t capac
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
         return OS_VFS_BACKEND_DENIED;
     if (!path || !out || capacity == 0U) return OS_FAT16_BAD_PATH;
+    {
+        int handled, rc = fsr_fat_list(OS_ATA_FSOP_FAT16_LIST_PATH + OS_ATA_FSOP_FAT32_BASE, path, out, capacity, start, &handled);
+        if (handled) return rc;
+    }
     return fat32_list_path_page(fat32_root(), path, start, out, capacity);
 }
 static int syscall_user_range(const void* pointer, uint32_t length, int write) {
@@ -1768,95 +2254,11 @@ int sys_vfs_backend_write(const char* path, const char* data, uint32_t size) {
     return sys_writefile(path, data, size);
 }
 
-static void generate_short_alias(const char* name, char* short_out) {
-    uint32_t i = 0U, base = 0U, ext = 0U;
-    while (name[i] != '\0' && name[i] != '.') {
-        char c = name[i++];
-        if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
-        if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-            if (base < 6U) short_out[base++] = c;
-        }
-    }
-    if (base == 0U) {
-        short_out[base++] = 'F';
-        short_out[base++] = 'I';
-        short_out[base++] = 'L';
-        short_out[base++] = 'E';
-    }
-    short_out[base++] = '~';
-    short_out[base++] = '1';
-    if (name[i] == '.') {
-        i++;
-        while (name[i] != '\0' && ext < 3U) {
-            char c = name[i++];
-            if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
-            if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-                if (ext == 0U) short_out[base++] = '.';
-                short_out[base++] = c;
-                ext++;
-            }
-        }
-    }
-    if (ext == 0U) {
-        short_out[base++] = '.';
-        short_out[base++] = 'T';
-        short_out[base++] = 'X';
-        short_out[base++] = 'T';
-    }
-    short_out[base] = '\0';
-}
-
-static int is_strict_short_83(const char* name) {
-    uint32_t i = 0U, base = 0U, ext = 0U;
-    int dot = 0;
-    if (!name || name[0] == '\0') return 0;
-    while (name[i] != '\0') {
-        char c = name[i];
-        if (c == '.') {
-            if (dot || base == 0U) return 0;
-            dot = 1; i++; continue;
-        }
-        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-')) return 0;
-        if (!dot) { if (++base > 8U) return 0; }
-        else { if (++ext > 3U) return 0; }
-        i++;
-    }
-    return base > 0U;
-}
-
-static int fat_path_has_separator(const char* path) {
-    uint32_t i = 0U;
-    if (!path) return 0;
-    while (path[i] != '\0') {
-        if (path[i++] == '/') return 1;
-    }
-    return 0;
-}
-
-static int fat_path_is_directory_request(const char* path) {
-    uint32_t i = 0U;
-    if (!path || path[0] == '\0') return 0;
-    while (path[i] != '\0') i++;
-    return i > 0U && path[i - 1U] == '/';
-}
-
-static int fat_directory_name(const char* path, char* out) {
-    uint32_t i = 0U;
-    if (!path || !out || !fat_path_is_directory_request(path)) return OS_FAT16_BAD_PATH;
-    while (path[i] != '\0' && path[i + 1U] != '\0') {
-        if (i >= OS_NAME_MAX - 1U) return OS_FAT16_BAD_PATH;
-        out[i] = path[i];
-        i++;
-    }
-    if (i == 0U) return OS_FAT16_BAD_PATH;
-    out[i] = '\0';
-    return 0;
-}
+/* Tranche 4 suite: the FAT naming rules (8.3 / LFN alias / sub-directory
+ * paths) moved unchanged to kernel/fs/fsop_exec.c, shared with the driver. */
 
 /* Création FAT16 explicite : gère à la fois le format 8.3 classique et les noms longs LFN. */
 int sys_vfs_fat16_create(const char* name, const char* data, uint32_t size) {
-    uint16_t first_cluster = 0U;
-    char short_alias[16];
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_FAT16, name)) {
         return OS_VFS_BACKEND_DENIED;
@@ -1865,20 +2267,11 @@ int sys_vfs_fat16_create(const char* name, const char* data, uint32_t size) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!name || (size != 0U && !data)) return OS_FAT16_BAD_PATH;
-    /* Le worker encode `mkdir` par un buffer nul et une taille nulle : une
-     * écriture vide garde un buffer non nul et reste donc un fichier. */
-    if (!data && size == 0U) return fat16_create_directory(fat16_root(), name);
-    if (fat_path_has_separator(name)) {
-        return fat16_create_path_file(fat16_root(), name, (const uint8_t*)data, size,
-                                      &first_cluster);
+    {
+        int handled, rc = fsr_fat_create(OS_ATA_FSOP_FAT16_CREATE + 0U, name, data, size, &handled);
+        if (handled) return rc;
     }
-    if (is_strict_short_83(name)) {
-        return fat16_create_file(fat16_root(), name, 0x20U, (const uint8_t*)data, size,
-                                 &first_cluster);
-    }
-    generate_short_alias(name, short_alias);
-    return fat16_create_lfn_file(fat16_root(), name, short_alias, 0x20U, (const uint8_t*)data, size,
-                                 &first_cluster);
+    return fatvfs_fat16_create(fat16_root(), name, data, size, !data && size == 0U);
 }
 
 /* Suppression FAT16 explicite : supporte 8.3 et LFN. */
@@ -1891,17 +2284,15 @@ int sys_vfs_fat16_unlink(const char* name) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!name) return OS_FAT16_BAD_PATH;
-    if (fat_path_is_directory_request(name)) {
-        char directory[OS_NAME_MAX];
-        int rc = fat_directory_name(name, directory);
-        return rc == 0 ? fat16_remove_directory(fat16_root(), directory) : rc;
+    {
+        int handled, rc = fsr_fat_path(OS_ATA_FSOP_FAT16_UNLINK + 0U, name, 0, &handled);
+        if (handled) return rc;
     }
-    return fat16_unlink_path_file(fat16_root(), name);
+    return fatvfs_fat16_unlink(fat16_root(), name);
 }
 
 /* Renommage FAT16 explicite : supporte 8.3 et LFN. */
 int sys_vfs_fat16_rename(const char* old_name, const char* new_name) {
-    char new_short[16];
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_FAT16, old_name) ||
         !vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
@@ -1912,19 +2303,14 @@ int sys_vfs_fat16_rename(const char* old_name, const char* new_name) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!old_name || !new_name) return OS_FAT16_BAD_PATH;
-    if (fat_path_has_separator(old_name) || fat_path_has_separator(new_name)) {
-        return fat16_rename_path_file(fat16_root(), old_name, new_name);
+    {
+        int handled, rc = fsr_fat_path(OS_ATA_FSOP_FAT16_RENAME + 0U, old_name, new_name, &handled);
+        if (handled) return rc;
     }
-    if (is_strict_short_83(old_name) && is_strict_short_83(new_name)) {
-        return fat16_rename_file(fat16_root(), old_name, new_name);
-    }
-    generate_short_alias(new_name, new_short);
-    return fat16_rename_lfn_file(fat16_root(), old_name, new_name, new_short);
+    return fatvfs_fat16_rename(fat16_root(), old_name, new_name);
 }
 
 int sys_vfs_fat32_create(const char* name, const char* data, uint32_t size) {
-    uint32_t first_cluster = 0U;
-    char short_alias[16];
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_FAT32, name)) {
         return OS_VFS_BACKEND_DENIED;
@@ -1933,18 +2319,11 @@ int sys_vfs_fat32_create(const char* name, const char* data, uint32_t size) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!name || (size != 0U && !data)) return OS_FAT16_BAD_PATH;
-    if (!data && size == 0U) return fat32_create_directory(fat32_root(), name);
-    if (fat_path_has_separator(name)) {
-        return fat32_create_path_file(fat32_root(), name, (const uint8_t*)data, size,
-                                      &first_cluster);
+    {
+        int handled, rc = fsr_fat_create(OS_ATA_FSOP_FAT16_CREATE + OS_ATA_FSOP_FAT32_BASE, name, data, size, &handled);
+        if (handled) return rc;
     }
-    if (is_strict_short_83(name)) {
-        return fat32_create_file(fat32_root(), name, 0x20U, (const uint8_t*)data, size,
-                                 &first_cluster);
-    }
-    generate_short_alias(name, short_alias);
-    return fat32_create_lfn_file(fat32_root(), name, short_alias, 0x20U, (const uint8_t*)data, size,
-                                 &first_cluster);
+    return fatvfs_fat32_create(fat32_root(), name, data, size, !data && size == 0U);
 }
 
 int sys_vfs_fat32_unlink(const char* name) {
@@ -1956,16 +2335,14 @@ int sys_vfs_fat32_unlink(const char* name) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!name) return OS_FAT16_BAD_PATH;
-    if (fat_path_is_directory_request(name)) {
-        char directory[OS_NAME_MAX];
-        int rc = fat_directory_name(name, directory);
-        return rc == 0 ? fat32_remove_directory(fat32_root(), directory) : rc;
+    {
+        int handled, rc = fsr_fat_path(OS_ATA_FSOP_FAT16_UNLINK + OS_ATA_FSOP_FAT32_BASE, name, 0, &handled);
+        if (handled) return rc;
     }
-    return fat32_unlink_path_file(fat32_root(), name);
+    return fatvfs_fat32_unlink(fat32_root(), name);
 }
 
 int sys_vfs_fat32_rename(const char* old_name, const char* new_name) {
-    char new_short[16];
     if (!vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
                                              OS_SERVICE_BACKEND_SOURCE_FAT32, old_name) ||
         !vfs_backend_allowed_for_source_path(SERVICE_BACKEND_RIGHT_MUTATE,
@@ -1976,14 +2353,11 @@ int sys_vfs_fat32_rename(const char* old_name, const char* new_name) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!old_name || !new_name) return OS_FAT16_BAD_PATH;
-    if (fat_path_has_separator(old_name) || fat_path_has_separator(new_name)) {
-        return fat32_rename_path_file(fat32_root(), old_name, new_name);
+    {
+        int handled, rc = fsr_fat_path(OS_ATA_FSOP_FAT16_RENAME + OS_ATA_FSOP_FAT32_BASE, old_name, new_name, &handled);
+        if (handled) return rc;
     }
-    if (is_strict_short_83(old_name) && is_strict_short_83(new_name)) {
-        return fat32_rename_file(fat32_root(), old_name, new_name);
-    }
-    generate_short_alias(new_name, new_short);
-    return fat32_rename_lfn_file(fat32_root(), old_name, new_name, new_short);
+    return fatvfs_fat32_rename(fat32_root(), old_name, new_name);
 }
 
 int sys_vfs_initrd_read(const char* path, char* buffer, uint32_t max) {
@@ -2005,7 +2379,7 @@ int sys_vfs_overlay_read(const char* path, char* buffer, uint32_t max) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!path || !buffer || max == 0U) return -1;
-    return overlay_read(path, buffer, max);
+    return ovs_read(path, buffer, max);
 }
 
 int sys_vfs_overlay_unlink(const char* path) {
@@ -2018,7 +2392,7 @@ int sys_vfs_overlay_unlink(const char* path) {
         return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!path) return -1;
-    return overlay_unlink(path);
+    return ovs_unlink(path);
 }
 
 int sys_vfs_overlay_rename(const char* oldpath, const char* newpath) {
@@ -2033,7 +2407,7 @@ int sys_vfs_overlay_rename(const char* oldpath, const char* newpath) {
         return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!oldpath || !newpath) return -1;
-    return overlay_rename(oldpath, newpath);
+    return ovs_rename(oldpath, newpath);
 }
 
 int sys_vfs_initrd_stat(const char* path, os_dirent_t* out) {
@@ -2055,7 +2429,7 @@ int sys_vfs_overlay_stat(const char* path, os_dirent_t* out) {
         return OS_VFS_BACKEND_DENIED;
     }
     if (!path || !out) return -1;
-    return overlay_stat(path, out);
+    return ovs_stat(path, out);
 }
 
 int sys_vfs_initrd_listdir(const char* path, os_dirent_t* out, int max_n) {
@@ -2076,8 +2450,8 @@ int sys_vfs_overlay_listdir(const char* path, os_dirent_t* out, int max_n) {
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
         return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
-    if (!path || !out || max_n <= 0 || !overlay_is_dir(path)) return -1;
-    return overlay_listdir(path, out, 0, max_n);
+    if (!path || !out || max_n <= 0 || !ovs_is_dir(path)) return -1;
+    return ovs_listdir(path, out, 0, max_n);
 }
 
 int sys_vfs_initrd_listdir_page(const char* path, os_dirent_t* out, uint32_t start) {
@@ -2098,8 +2472,8 @@ int sys_vfs_overlay_listdir_page(const char* path, os_dirent_t* out, uint32_t st
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
         return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
-    if (!path || !out || !overlay_is_dir(path)) return -1;
-    return overlay_listdir_page(path, out, start, 5);
+    if (!path || !out || !ovs_is_dir(path)) return -1;
+    return ovs_listdir_page(path, out, start, 5);
 }
 
 int sys_vfs_overlay_mkdir(const char* path) {
@@ -2112,7 +2486,7 @@ int sys_vfs_overlay_mkdir(const char* path) {
         return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
     if (!path) return -1;
-    return overlay_mkdir(path);
+    return ovs_mkdir(path);
 }
 
 int sys_vfs_overlay_rmdir(const char* path) {
@@ -2124,8 +2498,8 @@ int sys_vfs_overlay_rmdir(const char* path) {
     if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id)) {
         return OS_VFS_BACKEND_WORKER_REQUIRED;
     }
-    if (!path || !overlay_is_dir(path)) return -1;
-    return overlay_unlink(path);
+    if (!path || !ovs_is_dir(path)) return -1;
+    return ovs_unlink(path);
 }
 
 /*
@@ -2416,16 +2790,16 @@ void sys_gets(char* buffer, uint32_t size) {
 int sys_listdir(const char* path, os_dirent_t* out, int max_n) {
     int n;
     if (!path || !out || max_n <= 0) return -1;
-    if (!overlay_is_dir(path) && !initrd_is_dir(path)) return -1;
+    if (!ovs_is_dir(path) && !initrd_is_dir(path)) return -1;
     n = initrd_listdir(path, out, max_n);
     if (n < 0) n = 0;
-    return overlay_listdir(path, out, n, max_n);
+    return ovs_listdir(path, out, n, max_n);
 }
 
 int sys_readfile(const char* path, char* buf, uint32_t max) {
     int n;
     if (!path || !buf || max == 0) return -1;
-    n = overlay_read(path, buf, max);
+    n = ovs_read(path, buf, max);
     if (n >= 0) return n;
     if (n == OV_ERR_ISDIR) return n;
     return initrd_read_into(path, buf, max);
@@ -2439,7 +2813,7 @@ int sys_readfile_historical(const char* path, char* buf, uint32_t max) {
     int overlay_hit;
     int32_t pid = current_task ? (int32_t)current_task->id : 0;
     if (!path || !buf || max == 0) return -1;
-    overlay_hit = overlay_stat(path, &probe) == OV_OK;
+    overlay_hit = ovs_stat(path, &probe) == OV_OK;
     switch (service_registry_historical_read_decision(pid, overlay_hit)) {
     case SERVICE_HIST_READ_FULL:
         return sys_readfile(path, buf, max);
@@ -2460,7 +2834,7 @@ int sys_listdir_historical(const char* path, os_dirent_t* out, int max_n) {
     int n;
     int32_t pid = current_task ? (int32_t)current_task->id : 0;
     if (!path || !out || max_n <= 0) return -1;
-    overlay_hit = !initrd_is_dir(path) && overlay_is_dir(path);
+    overlay_hit = !initrd_is_dir(path) && ovs_is_dir(path);
     switch (service_registry_historical_read_decision(pid, overlay_hit)) {
     case SERVICE_HIST_READ_FULL:
         return sys_listdir(path, out, max_n);
@@ -2481,7 +2855,7 @@ int sys_stat_historical(const char* path, os_dirent_t* out) {
     int overlay_hit;
     int32_t pid = current_task ? (int32_t)current_task->id : 0;
     if (!path || !out) return -1;
-    overlay_hit = overlay_stat(path, &probe) == OV_OK;
+    overlay_hit = ovs_stat(path, &probe) == OV_OK;
     switch (service_registry_historical_read_decision(pid, overlay_hit)) {
     case SERVICE_HIST_READ_FULL:
         return sys_stat(path, out);
@@ -2502,38 +2876,38 @@ int sys_writefile_historical(const char* path, const char* buf, uint32_t n) {
 
 int sys_mkdir(const char* path) {
     if (!path) return -1;
-    return overlay_mkdir(path);
+    return ovs_mkdir(path);
 }
 
 int sys_unlink(const char* path) {
     if (!path) return -1;
-    return overlay_unlink(path);
+    return ovs_unlink(path);
 }
 
 int sys_writefile(const char* path, const char* buf, uint32_t n) {
     if (!path || (n > 0 && !buf)) return -1;
-    return overlay_write(path, buf, n);
+    return ovs_write(path, buf, n);
 }
 
 int sys_stat(const char* path, os_dirent_t* out) {
     if (!path || !out) return -1;
-    if (overlay_stat(path, out) == OV_OK) return 0;
+    if (ovs_stat(path, out) == OV_OK) return 0;
     return initrd_stat(path, out);
 }
 
 int sys_rename(const char* oldpath, const char* newpath) {
     if (!oldpath || !newpath) return -1;
-    return overlay_rename(oldpath, newpath);
+    return ovs_rename(oldpath, newpath);
 }
 
 int sys_copy(const char* src, const char* dst) {
     if (!src || !dst) return -1;
-    return overlay_copy(src, dst);
+    return ovs_copy(src, dst);
 }
 
 int sys_append(const char* path, const char* buf, uint32_t n) {
     if (!path || (n > 0 && !buf)) return -1;
-    return overlay_append(path, buf, n);
+    return ovs_append(path, buf, n);
 }
 
 int sys_getpid(void) {

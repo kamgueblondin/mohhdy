@@ -67,7 +67,7 @@ def main():
         "-monitor", "unix:%s,server,nowait" % nw.MON,
         "-machine", "type=pc,accel=tcg",
         "-netdev", "socket,id=n0,connect=127.0.0.1:%d" % peer.port,
-        "-device", "ne2k_isa,netdev=n0,mac=52:54:00:12:34:56",
+        "-device", "ne2k_isa,netdev=n0,mac=52:54:00:12:34:56,irq=3",
         "-no-reboot", "-no-shutdown",
     ]
     with open(nw.ERR, "wb") as err_handle:
@@ -95,6 +95,13 @@ def main():
             worker_pid, start = nw.spawn(monitor, proc, "networker")
             nw.wait_child(monitor, proc, "net-driver ready", start)
             nw.wait_child(monitor, proc, "net-driver gated syscalls ok", start)
+            # Tranche 5 suite: the worker owns the NE2000 ports through the
+            # TSS I/O bitmap and re-reads the station PROM itself at CPL 3.
+            nw.wait_child(monitor, proc, "[NET] NE2000 ports 0x300-0x31F handed to the Ring 3 worker",
+                          start)
+            nw.wait_child(monitor, proc,
+                          "net-driver nic ring3 ok base 768 irq 3 mac 52:54:00:12:34:56 prom-match 1",
+                          start)
             relay_before = nw.relay_status(monitor, proc)
             pid, start = nw.spawn(monitor, proc, "netwire")
             nw.wait_child(monitor, proc, "netwire raw wire refused 4 of 4", start)
@@ -118,6 +125,20 @@ def main():
                 if not re.search(r"net-driver relay op %d rc 0 reply 0 total \d+ wire \d+" % op,
                                  text):
                     raise RuntimeError("worker did not run relayed op %d on the wire" % op)
+            # Every frame went through the Ring 3 driver: the kernel only
+            # built them (pumps), never touched the ports, and IRQ3 reached
+            # the worker as a counter.
+            reports = re.findall(r"net-driver nic owner (\d+) tx (\d+) txfail (\d+) rx (\d+) "
+                                 r"irq (\d+) kirq (\d+) pumps (\d+) out (\d+) in (\d+) "
+                                 r"refused (\d+) gated (\d+) end", text)
+            if not reports:
+                raise RuntimeError("worker never reported its NIC counters")
+            nic = [int(v) for v in reports[-1]]
+            n_owner, n_tx, n_txfail, n_rx, n_irq, n_kirq, n_pumps, n_out, n_in, n_ref, n_gated = nic
+            if (n_owner != int(worker_pid) or n_txfail != 0 or n_tx != n_out or n_rx != n_in or
+                    n_tx < 5 or n_rx < 4 or n_ref != 0 or n_gated != 0 or n_kirq < 1 or
+                    n_irq < 1 or n_pumps < 4):
+                raise RuntimeError("unexpected Ring 3 NIC counters: %r" % nic)
             nw.kill(monitor, proc, pid)
             live = wire_status(monitor, proc)
             relay_after = nw.relay_status(monitor, proc)
@@ -135,12 +156,28 @@ def main():
             # Kernel and peer agree on frame counts (guest tx = peer rx).
             if live["tx"] != host["frames_rx"] or live["rx"] < host["frames_tx"]:
                 raise RuntimeError("frame counts disagree: kernel %r peer %r" % (live, host))
+            if n_tx != host["frames_rx"]:
+                raise RuntimeError("Ring 3 tx %d != peer rx %d" % (n_tx, host["frames_rx"]))
             relayed_calls = relay_after["done"] - relay_before["done"]
+            # Worker loss: the kernel takes the card back, re-initialises it
+            # and a fresh worker can claim it again.
+            mark = len(nw.log_text())
+            nw.kill(monitor, proc, worker_pid)
+            nw.wait_for("[NET] NE2000 back in Ring 0 after worker loss", proc, mark, timeout=20)
+            worker2, start = nw.spawn(monitor, proc, "networker")
+            nw.wait_child(monitor, proc,
+                          "net-driver nic ring3 ok base 768 irq 3 mac 52:54:00:12:34:56 prom-match 1",
+                          start)
+            if int(worker2) == int(worker_pid):
+                raise RuntimeError("respawned worker reused pid %s" % worker2)
             print("wire tcp: guest->peer frames %d, peer->guest frames %d (kernel rx %d), "
                   "arp %d, relayed calls %d, echo %d bytes, raw wire refused %d, "
                   "peer checksum errors %d" %
                   (live["tx"], host["frames_tx"], live["rx"], live["arp"], relayed_calls,
                    host["echoed_bytes"], live["refused"], host["bad_checksum"]))
+            print("ring3 nic: owner pid %d, worker tx %d rx %d, irq3 %d (kernel counted %d), "
+                  "pumps %d, kernel port accesses %d, reclaim+reclaim-claim ok" %
+                  (n_owner, n_tx, n_rx, n_irq, n_kirq, n_pumps, n_ref))
             print("MOHHDY Tranche 5 wire TCP via worker contract passed")
             return 0
         finally:

@@ -287,7 +287,20 @@
 /* EBX = os_socket_connect_request_t* : open + wire-connect in one relayed
  * call (public, gated and relayed like the other socket syscalls). */
 #define SYS_SOCKET_CONNECT 144
-#define MAX_SYSCALLS 145
+/* Tranche 4 suite (FAT/overlay logic out of Ring 0 at runtime). EBX selects
+ * an OS_ATA_FS_* sub-operation; all of them but OS_ATA_FS_STATUS are
+ * reserved to the live ata-driver (OS_ATA_DRIVER_REQUIRED otherwise). The
+ * driver runs its own FAT16/FAT32/overlay code on its own PIO; the kernel
+ * only marshals bytes (see docs/tranche4_ata_ring3_driver.md, "suite"). */
+#define SYS_ATA_FS 145
+/* Tranche 5 suite (NE2000 driver out of Ring 0). EBX selects an
+ * OS_NET_NIC_* sub-operation; CLAIM/PUMP/IRQ are reserved to the live
+ * net-driver worker (OS_NET_WORKER_REQUIRED otherwise), STATUS is public.
+ * After CLAIM the worker owns the NE2000 ports 0x300-0x31F through the TSS
+ * I/O bitmap and gets IRQ3 as a counter; the kernel no longer touches the
+ * NIC until the worker dies (reclaim). See docs/tranche5_net_worker_gate.md. */
+#define SYS_NET_NIC 146
+#define MAX_SYSCALLS 147
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
@@ -1004,6 +1017,152 @@ typedef struct {
     uint32_t generation;
     uint32_t flags;            /* OS_ATA_JOB_FLAG_* */
 } os_ata_job_t;
+
+/* Tranche 4 suite: filesystem operation served by the driver's own
+ * FAT16/FAT32/overlay code. SYS_ATA_JOB_FETCH hands out a job with
+ * op = OS_ATA_JOB_FS_OP (count 0, no sector data); the driver copies the
+ * request with OS_ATA_FS_REQUEST and completes it with OS_ATA_FS_DONE. */
+#define OS_ATA_JOB_FS_OP 7U
+#define OS_ATA_JOB_FS_DONE 6 /* OS_ATA_FS_DONE accepted */
+
+/* SYS_ATA_FS sub-operations (EBX). */
+#define OS_ATA_FS_READY       1U /* ECX=store flags, EDX=image buffer, ESI=capacity */
+#define OS_ATA_FS_REQUEST     2U /* ECX=os_ata_job_t*, EDX=buffer, ESI=capacity */
+#define OS_ATA_FS_NOTE        3U /* ECX=generation, EDX=OS_ATA_FS_NOTE_* */
+#define OS_ATA_FS_PUBLISH     4U /* ECX=generation, EDX=image, ESI=size, EDI=op result */
+#define OS_ATA_FS_DONE        5U /* ECX=os_ata_job_t*, EDX=reply buffer, ESI=capacity */
+#define OS_ATA_FS_INITRD_STAT 6U /* ECX=path -> OS_ATA_FS_INITRD_* bits */
+#define OS_ATA_FS_INITRD_READ 7U /* ECX=path, EDX=buffer, ESI=max -> bytes */
+#define OS_ATA_FS_STATUS      8U /* public: ECX=os_ata_status_t* (same as SYS_ATA_STATUS) */
+
+/* Store flags: what the driver serves from its own code. */
+#define OS_ATA_FS_STORE_FAT16   1U
+#define OS_ATA_FS_STORE_FAT32   2U
+#define OS_ATA_FS_STORE_OVERLAY 4U
+#define OS_ATA_FS_STORE_ALL     7U
+
+/* OS_ATA_FS_NOTE kinds. */
+#define OS_ATA_FS_NOTE_SECTOR_WRITTEN 1U /* first completed sector write of the op */
+#define OS_ATA_FS_NOTE_PERSISTED      2U /* overlay snapshot written to LBA 0-63 */
+#define OS_ATA_FS_NOTE_PERSIST_FAILED 3U
+
+#define OS_ATA_FS_INITRD_FILE 1
+#define OS_ATA_FS_INITRD_DIR  2
+
+/* Request/reply buffers (kernel <-> driver copies, no shared page). */
+#define OS_ATA_FSOP_BUFFER_SIZE 8192U
+#define OS_ATA_FSOP_PATH_MAX 256U
+#define OS_ATA_FSOP_MAGIC 0x504F5346U /* 'FSOP' */
+
+/* Operations. FAT32 codes are the FAT16 ones + OS_ATA_FSOP_FAT32_BASE. */
+#define OS_ATA_FSOP_FAT16_READ      1U  /* path, arg0=max            -> bytes */
+#define OS_ATA_FSOP_FAT16_LIST      2U  /* arg0=capacity             -> dirents */
+#define OS_ATA_FSOP_FAT16_LIST_PAGE 3U  /* arg0=capacity, arg1=start -> dirents */
+#define OS_ATA_FSOP_FAT16_LIST_PATH 4U  /* path, arg0=cap, arg1=start-> dirents */
+#define OS_ATA_FSOP_FAT16_CREATE    5U  /* path, in=data, arg0=1 for mkdir */
+#define OS_ATA_FSOP_FAT16_UNLINK    6U  /* path */
+#define OS_ATA_FSOP_FAT16_RENAME    7U  /* path, path2 */
+#define OS_ATA_FSOP_FAT32_BASE      8U
+#define OS_ATA_FSOP_OVL_READ        17U /* path, arg0=max -> bytes */
+#define OS_ATA_FSOP_OVL_WRITE       18U /* path, in=data */
+#define OS_ATA_FSOP_OVL_APPEND      19U /* path, in=data */
+#define OS_ATA_FSOP_OVL_MKDIR       20U /* path */
+#define OS_ATA_FSOP_OVL_UNLINK      21U /* path */
+#define OS_ATA_FSOP_OVL_RENAME      22U /* path, path2 */
+#define OS_ATA_FSOP_OVL_COPY        23U /* path, path2 */
+#define OS_ATA_FSOP_OVL_STAT        24U /* path -> one os_dirent_t */
+#define OS_ATA_FSOP_OVL_LISTDIR     25U /* path, in=out[0..arg0), arg0=start, arg1=max_n -> out[0..max_n) */
+#define OS_ATA_FSOP_OVL_LISTDIR_PAGE 26U /* path, arg0=start, arg1=max_n -> dirents */
+#define OS_ATA_FSOP_OVL_IS_DIR      27U /* path */
+
+typedef struct {
+    uint32_t magic;     /* OS_ATA_FSOP_MAGIC */
+    uint32_t op;        /* OS_ATA_FSOP_* */
+    uint32_t arg0;
+    uint32_t arg1;
+    uint32_t path_len;  /* bytes of path (NUL excluded), 0 if none */
+    uint32_t path2_len;
+    uint32_t in_len;    /* input bytes after the two NUL-terminated paths */
+    uint32_t out_cap;   /* output bytes the caller can take */
+} os_ata_fsop_request_t;
+
+typedef struct {
+    int32_t result;          /* return value of the operation */
+    uint32_t out_len;        /* output bytes following this header */
+    uint32_t sectors_read;   /* sectors the driver read for this op */
+    uint32_t sectors_written;
+} os_ata_fsop_reply_t;
+
+/* ------------------------------------------------------------------------
+ * Tranche 5 suite: NE2000 owned by the Ring 3 net-driver worker.
+ * ------------------------------------------------------------------------ */
+#define OS_NET_NIC_CLAIM  1U /* ECX = os_net_nic_info_t* (out) */
+#define OS_NET_NIC_PUMP   2U /* ECX = os_net_nic_pump_t* */
+#define OS_NET_NIC_IRQ    3U /* -> IRQ3 events since the last call */
+#define OS_NET_NIC_STATUS 4U /* public: ECX = os_net_nic_status_t* */
+
+#define OS_NET_NIC_BASE_PORT 0x300U
+#define OS_NET_NIC_LAST_PORT 0x31FU
+#define OS_NET_NIC_IRQ_LINE 3U
+#define OS_NET_NIC_FRAME_MAX 1536U
+#define OS_NET_NIC_PUMP_TX_MAX 4U
+
+typedef struct {
+    uint16_t base_port;
+    uint8_t irq;
+    uint8_t mac[6];       /* MAC the kernel probed at boot */
+    uint8_t reserved;
+} os_net_nic_info_t;
+
+/* One engine round of the pending SYS_NET_WIRE_* / SYS_SOCKET_CONNECT op. */
+#define OS_NET_NIC_PUMP_FETCH 0U /* only collect the frames queued so far */
+#define OS_NET_NIC_PUMP_FRAME 1U /* rx holds a frame the worker polled */
+#define OS_NET_NIC_PUMP_IDLE  2U /* nothing received this round */
+typedef struct {
+    uint32_t mode;                     /* OS_NET_NIC_PUMP_* */
+    const uint8_t* rx;
+    uint16_t rx_length;
+    uint16_t tx_sent;                  /* frames of the previous pump sent OK */
+    uint16_t tx_failed;
+    uint16_t tx_count;                 /* out */
+    uint16_t tx_length[OS_NET_NIC_PUMP_TX_MAX]; /* out */
+    uint8_t* tx;                       /* OS_NET_NIC_PUMP_TX_MAX * OS_NET_NIC_FRAME_MAX */
+    int32_t result;                    /* out, valid when done */
+    uint32_t done;                     /* out: 1 = op finished */
+} os_net_nic_pump_t;
+
+typedef struct {
+    int32_t owner_pid;       /* worker owning the ports, 0 = kernel */
+    uint32_t claims;
+    uint32_t reclaims;       /* kernel re-inits after a worker loss */
+    uint32_t irq_forwarded;  /* IRQ3 events counted for the worker */
+    uint32_t kernel_refused; /* kernel port accesses refused while owned (expected 0) */
+    uint32_t kernel_gated;   /* kernel NE2000 syscalls refused while owned */
+    uint32_t pumps;
+    uint32_t frames_out;     /* frames handed to the worker to transmit */
+    uint32_t frames_in;      /* frames the worker fed in */
+    uint32_t worker_tx_ok;   /* worker-reported transmits */
+    uint32_t worker_tx_failed;
+} os_net_nic_status_t;
+
+/* Kernel NE2000 path (LLM 91-98/131-138, peer 128-130, DHCP) refused: the
+ * NIC is owned by the Ring 3 worker. */
+#define OS_NET_NIC_WORKER_OWNED (-141)
+/* SYS_NET_WIRE_* / SYS_SOCKET_CONNECT started on the worker's NIC: pump it. */
+#define OS_NET_WIRE_PENDING (-142)
+/* CLAIM without an NE2000 probed at boot. */
+#define OS_NET_NIC_ABSENT (-143)
+
+/* Store in Ring 3 but the driver cannot serve now (suspended, stalled): the
+ * kernel does not run its own stale FS code instead (fail closed). */
+#define OS_ATA_FS_UNAVAILABLE (-137)
+/* Driver died after committing at least one sector of a FAT mutation:
+ * outcome unknown, the kernel does not replay it. */
+#define OS_ATA_FS_ABORTED (-138)
+/* Driver stalled past the RPC timeout: outcome unknown, not replayed. */
+#define OS_ATA_FS_TIMEOUT (-139)
+/* OS_ATA_FS_READY refused while a slice 2 snapshot job is queued. */
+#define OS_ATA_FS_BUSY (-140)
 /* Test hook: the driver must crash in the middle of this job. */
 #define OS_ATA_JOB_FLAG_DEBUG_CRASH 1U
 
@@ -1029,6 +1188,16 @@ typedef struct {
     int32_t boot_driver_pid;           /* atadriver spawned by the kernel at boot, 0 if none */
     uint32_t channel_resets;           /* ATA soft resets after a driver died holding the controller */
     uint32_t debug_crash_armed;        /* test hook pending (SYS_ATA_DEBUG) */
+    /* Tranche 4 suite: FAT/overlay logic served by the driver's own code. */
+    uint32_t fs_store_flags;   /* OS_ATA_FS_STORE_* currently served in Ring 3 */
+    uint32_t fs_ops;           /* FS operations completed by the driver */
+    uint32_t fs_kernel_live;   /* FS ops run by kernel FS code while the store was in Ring 3 (expected 0) */
+    uint32_t fs_aborts;        /* FS RPCs aborted (driver died or stalled) */
+    uint32_t fs_redone;        /* aborted ops redone by Ring 0 (nothing committed) */
+    uint32_t fs_unavailable;   /* ops refused fail-closed (store in Ring 3, driver unable to serve) */
+    uint32_t fs_publishes;     /* overlay images published into the kernel mirror */
+    uint32_t fs_handovers;     /* store handovers kernel -> driver */
+    uint32_t fs_restores;      /* kernel store restored from the mirror after driver loss */
 } os_ata_status_t;
 #define OS_TASK_SUPERVISION_EVENT_SIZE 24U
 

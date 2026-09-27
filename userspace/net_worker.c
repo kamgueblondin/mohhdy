@@ -6,6 +6,7 @@
  */
 
 #include "os_syscalls.h"
+#include "ne2k.h"
 
 static void putc(char value) {
     asm volatile("int $0x80" : : "a"(SYS_PUTC), "b"(value));
@@ -67,17 +68,33 @@ static int net_worker_gate_self_check(void) {
     return 1;
 }
 
-static int net_call3(uint32_t number, uint32_t a, uint32_t b, uint32_t c) {
-    int result;
-    asm volatile("int $0x80" : "=a"(result) : "a"(number), "b"(a), "c"(b), "d"(c));
-    return result;
-}
+/* ========================================================================
+ * Tranche 5 suite: the NE2000 driven from Ring 3.
+ *
+ * After OS_NET_NIC_CLAIM the kernel opens 0x300-0x31F for this PID in the
+ * TSS I/O bitmap and stops touching the card; this task runs the NE2000
+ * hardware core (kernel/ne2k_hw.c, linked here) with plain in/out at CPL 3,
+ * enables the card's RX/TX interrupts and acks them itself (the kernel only
+ * counts IRQ3 for us). A wire op started by SYS_NET_WIRE_* / relayed
+ * SYS_SOCKET_CONNECT returns OS_NET_WIRE_PENDING: the kernel TCP/ARP engine
+ * then runs one round per OS_NET_NIC_PUMP, frames in and out through here.
+ * ======================================================================== */
+static ne2k_device_t nic;
+static ne2k_io_t nic_io;
+static int nic_owned;
+static uint16_t nic_base;
+static uint8_t nic_rx[OS_NET_NIC_FRAME_MAX];
+static uint8_t nic_tx[OS_NET_NIC_PUMP_TX_MAX * OS_NET_NIC_FRAME_MAX];
+static uint32_t nic_tx_ok, nic_tx_failed, nic_rx_frames, nic_irq, nic_pumps;
 
-static int net_call4(uint32_t number, uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
-    int result;
-    asm volatile("int $0x80" : "=a"(result) : "a"(number), "b"(a), "c"(b), "d"(c), "S"(d));
-    return result;
+static inline uint8_t port_inb(uint16_t port) {
+    uint8_t v; asm volatile("inb %1, %0" : "=a"(v) : "Nd"(port)); return v;
 }
+static inline void port_outb(uint16_t port, uint8_t v) {
+    asm volatile("outb %0, %1" : : "a"(v), "Nd"(port));
+}
+static uint8_t r3_inb(void* context, uint16_t port) { (void)context; return port_inb(port); }
+static void r3_outb(void* context, uint16_t port, uint8_t value) { (void)context; port_outb(port, value); }
 
 static void put_uint(uint32_t value) {
     char digits[11];
@@ -91,6 +108,134 @@ static void put_int(int value) {
     if (value < 0) { putc('-'); put_uint((uint32_t)(-value)); }
     else put_uint((uint32_t)value);
 }
+
+static void put_hex8(uint8_t v) {
+    const char* h = "0123456789abcdef";
+    putc(h[v >> 4]); putc(h[v & 15U]);
+}
+
+/* Acknowledge the interrupt causes we serviced (RX/TX/errors/overflow),
+ * never RDC (remote DMA complete, owned by ne2k_tx_submit). Dropping the
+ * INT line lets the next event raise a fresh IRQ3 edge. */
+static void nic_ack(void) {
+    uint8_t isr;
+    port_outb(nic_base, 0x22U);             /* page 0, started, no DMA */
+    isr = port_inb((uint16_t)(nic_base + 0x07U));
+    if (isr & 0x1FU) port_outb((uint16_t)(nic_base + 0x07U), (uint8_t)(isr & 0x1FU));
+}
+
+static int nic_claim(void) {
+    os_net_nic_info_t info;
+    uint32_t i;
+    int same = 1, rc;
+    rc = net_call2(SYS_NET_NIC, OS_NET_NIC_CLAIM, (uint32_t)&info);
+    if (rc != 0) {
+        puts("net-driver nic claim "); put_int(rc); putc('\n');
+        return -1;
+    }
+    nic_io.context = 0;
+    nic_io.inb = r3_inb;
+    nic_io.outb = r3_outb;
+    nic_base = info.base_port;
+    if (ne2k_probe(&nic, info.base_port, &nic_io) != 0 || ne2k_prepare(&nic, &nic_io) != 0 ||
+        ne2k_read_mac(&nic, &nic_io) != 0 || ne2k_configure_rings(&nic, &nic_io) != 0) {
+        puts("net-driver nic ring3 init failed\n");
+        return -1;
+    }
+    for (i = 0; i < 6U; i++) if (nic.mac[i] != info.mac[i]) same = 0;
+    port_outb(nic_base, 0x22U);
+    port_outb((uint16_t)(nic_base + 0x07U), 0xFFU);  /* clear stale causes */
+    port_outb((uint16_t)(nic_base + 0x0FU), 0x03U);  /* IMR: PRX | PTX -> IRQ3 */
+    nic_owned = 1;
+    puts("net-driver nic ring3 ok base "); put_uint(nic_base);
+    puts(" irq "); put_uint(info.irq);
+    puts(" mac ");
+    for (i = 0; i < 6U; i++) { if (i) putc(':'); put_hex8(nic.mac[i]); }
+    puts(same ? " prom-match 1\n" : " prom-match 0\n");
+    return 0;
+}
+
+/* Idle round: wait for the next timer tick like the Ring 0 engine does
+ * (wire_pause), without yielding. The op then completes inside this task's
+ * slice, as it did when the kernel busy-polled the card itself; yielding here
+ * would hand one round per shell turn and blow the 5 s relay deadline. */
+static void nic_pause(void) {
+    int t = net_call1(SYS_TICKS, 0U);
+    uint32_t spins = 0U;
+    while (net_call1(SYS_TICKS, 0U) == t && spins < 2000000U) {
+        asm volatile("pause" : : : "memory");
+        spins++;
+    }
+}
+
+static void nic_report(void) {
+    os_net_nic_status_t st;
+    if (net_call2(SYS_NET_NIC, OS_NET_NIC_STATUS, (uint32_t)&st) != 0) return;
+    puts("net-driver nic owner "); put_int(st.owner_pid);
+    puts(" tx "); put_uint(nic_tx_ok);
+    puts(" txfail "); put_uint(nic_tx_failed);
+    puts(" rx "); put_uint(nic_rx_frames);
+    puts(" irq "); put_uint(nic_irq);
+    puts(" kirq "); put_uint(st.irq_forwarded);
+    puts(" pumps "); put_uint(st.pumps);
+    puts(" out "); put_uint(st.frames_out);
+    puts(" in "); put_uint(st.frames_in);
+    puts(" refused "); put_uint(st.kernel_refused);
+    puts(" gated "); put_uint(st.kernel_gated);
+    puts(" end\n");
+}
+
+/* Drives the pending wire op to completion on this task's NIC. */
+static int nic_pump_loop(void) {
+    os_net_nic_pump_t p;
+    uint16_t length = 0U, i;
+    int irq;
+    p.mode = OS_NET_NIC_PUMP_FETCH;
+    p.rx = 0; p.rx_length = 0U; p.tx_sent = 0U; p.tx_failed = 0U;
+    p.tx_count = 0U; p.tx = nic_tx; p.result = 0; p.done = 0U;
+    for (;;) {
+        if (net_call2(SYS_NET_NIC, OS_NET_NIC_PUMP, (uint32_t)&p) != 0) return OS_NET_WIRE_UNAVAILABLE;
+        nic_pumps++;
+        p.tx_sent = 0U; p.tx_failed = 0U;
+        for (i = 0U; i < p.tx_count; i++) {
+            if (ne2k_tx_submit(&nic, &nic_io, nic_tx + (uint32_t)i * OS_NET_NIC_FRAME_MAX,
+                               p.tx_length[i]) == 0) { p.tx_sent++; nic_tx_ok++; }
+            else { p.tx_failed++; nic_tx_failed++; }
+        }
+        nic_ack();
+        if (p.done) return p.result;
+        if (ne2k_rx_poll(&nic, &nic_io, nic_rx, sizeof(nic_rx), &length) == 0) {
+            p.mode = OS_NET_NIC_PUMP_FRAME; p.rx = nic_rx; p.rx_length = length;
+            nic_rx_frames++;
+        } else {
+            nic_pause();
+            p.mode = OS_NET_NIC_PUMP_IDLE; p.rx = 0; p.rx_length = 0U;
+        }
+        nic_ack();
+        irq = net_call2(SYS_NET_NIC, OS_NET_NIC_IRQ, 0U);
+        if (irq > 0) nic_irq += (uint32_t)irq;
+    }
+}
+
+static int wire_done(int rc) {
+    if (rc != OS_NET_WIRE_PENDING) return rc;
+    rc = nic_pump_loop();
+    nic_report();
+    return rc;
+}
+
+static int net_call3(uint32_t number, uint32_t a, uint32_t b, uint32_t c) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(number), "b"(a), "c"(b), "d"(c));
+    return result;
+}
+
+static int net_call4(uint32_t number, uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(number), "b"(a), "c"(b), "d"(c), "S"(d));
+    return result;
+}
+
 
 static void copy_bytes(uint8_t* dst, const uint8_t* src, uint32_t n) {
     uint32_t i;
@@ -110,7 +255,7 @@ static int32_t wire_io(uint32_t op, int32_t socket_id, const uint8_t* data, uint
     int32_t rc;
     io.socket_id = socket_id; io.data = data; io.length = length;
     io.rx = rx; io.rx_capacity = cap; io.rx_length = &got; io.attempts = 0U;
-    rc = net_call1(op, (uint32_t)&io);
+    rc = wire_done(net_call1(op, (uint32_t)&io));
     if (rc != OS_NET_WIRE_NOT_BOUND) { wire_calls++; *out_length = got; }
     return rc;
 }
@@ -131,7 +276,7 @@ static int32_t relay_execute(const os_net_relay_request_t* req, os_net_relay_rep
         case SYS_SOCKET_LISTEN:
             return net_call2(SYS_SOCKET_LISTEN, req->arg0, req->arg1);
         case SYS_SOCKET_CLOSE:
-            rc = net_call1(SYS_NET_WIRE_CLOSE, req->arg0);
+            rc = wire_done(net_call1(SYS_NET_WIRE_CLOSE, req->arg0));
             if (rc != OS_NET_WIRE_NOT_BOUND) { wire_calls++; return rc; }
             return net_call1(SYS_SOCKET_CLOSE, req->arg0);
         case SYS_SOCKET_CONNECT: {
@@ -139,7 +284,7 @@ static int32_t relay_execute(const os_net_relay_request_t* req, os_net_relay_rep
             if (in_length != sizeof(os_socket_connect_request_t)) return OS_SOCKET_BAD_ARGUMENT;
             copy_bytes((uint8_t*)&c, in, sizeof(c));
             wire_calls++;
-            return net_call1(SYS_NET_WIRE_CONNECT, (uint32_t)&c);
+            return wire_done(net_call1(SYS_NET_WIRE_CONNECT, (uint32_t)&c));
         }
         case SYS_SOCKET_ACCEPT_SYN_ACK: {
             os_socket_syn_ack_t view;
@@ -206,6 +351,8 @@ void main(void) {
     puts("net-driver ready\n");
     if (net_worker_gate_self_check()) puts("net-driver gated syscalls ok\n");
     else puts("net-driver gated syscalls unexpected\n");
+    /* Tranche 5 suite: take the NE2000 over (no-op without a card). */
+    (void)nic_claim();
 
     for (;;) {
         if (ipc_receive(&message) != 0) {

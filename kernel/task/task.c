@@ -9,6 +9,7 @@
 #include "fs/initrd.h"
 #include "kernel/gdt.h"
 #include "kernel/ata_job.h"
+#include "kernel/net_nic_owner.h"
 #include "service_registry.h"
 #include "kernel/timer.h"
 
@@ -347,6 +348,11 @@ void schedule(cpu_state_t* cpu) {
     tss_set_ata_io(current_task->type == TASK_TYPE_USER &&
                    service_registry_ata_ports_granted(current_task->id) &&
                    ata_owner_ports_open(current_task->id, current_task->id));
+    /* Tranche 5 suite: the NE2000 window only for the worker that claimed
+     * the card, while it is still the live net-driver owner. */
+    tss_set_nic_io(current_task->type == TASK_TYPE_USER && nic_owner_pid() != 0 &&
+                   nic_owner_ports_open((int32_t)current_task->id,
+                                        service_registry_lookup("net-driver")));
 
     // Changer de répertoire de pages si nécessaire
     if (current_directory != current_task->vmm_dir) {

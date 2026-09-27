@@ -47,6 +47,7 @@ typedef struct {
 } fat16_file_t;
 
 fat16_volume_t* fat16_root(void);
+void fat16_invalidate_caches(fat16_volume_t* volume);
 int fat16_mount(fat16_volume_t* volume, fat16_read_sector_fn read_sector,
                 uint32_t base_lba);
 int fat16_is_mounted(const fat16_volume_t* volume);
