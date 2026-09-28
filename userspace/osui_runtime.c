@@ -48,7 +48,7 @@ static const char *const k_cmds[] = {
     "fs-list", "fs-read", "fs-write",
     "stage", "stage-prompt",
     "os-help", "os-status", "os-browser", "os-shell", "os-admin",
-    "os-support", "os-fs", "os-center", "os-close",
+    "os-support", "os-fs", "os-center", "os-close", "osui-model",
     "guest-status", "attach", "detach", "open",
     "gui", "graphics", "desktop", "console", "gui-status", "gui-exit",
     "gui-move",
@@ -167,6 +167,7 @@ typedef struct {
     osui_fs_t fs[OSUI_MAX_FS];
     int n_fs;
     int kb_loaded;
+    char ai_model[32];
 } osui_state_t;
 
 static osui_state_t G;
@@ -736,6 +737,35 @@ static int cmd_os_help(char *out, int max) {
         "stage  stage-prompt <texte>  os-status  guest-status\n"
         "phase3_complete=false us031_complete=true\n");
     return OSUI_OK;
+}
+
+static int cmd_osui_model(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    if (narg == 0 || s_cmp(args[0], "status") == 0) {
+        out_add(out, max, &p, "osui osui-model model=");
+        out_add(out, max, &p, G.ai_model[0] ? G.ai_model : "gpt2_124M.bin");
+        out_add(out, max, &p, " status=active\n");
+        return OSUI_OK;
+    }
+    if (s_cmp(args[0], "list") == 0) {
+        out_add(out, max, &p, "osui osui-model list=gpt2_124M.bin,gpt2.gguf current=");
+        out_add(out, max, &p, G.ai_model[0] ? G.ai_model : "gpt2_124M.bin");
+        out_add(out, max, &p, "\n");
+        return OSUI_OK;
+    }
+    if (s_cmp(args[0], "use") == 0) {
+        if (narg < 2) {
+            out_add(out, max, &p, "osui osui-model error=model_name_missing\n");
+            return OSUI_ERR;
+        }
+        s_cpy(G.ai_model, 32, args[1]);
+        out_add(out, max, &p, "osui osui-model ok model=");
+        out_add(out, max, &p, G.ai_model);
+        out_add(out, max, &p, "\n");
+        return OSUI_OK;
+    }
+    out_add(out, max, &p, "osui osui-model error=unknown_action\n");
+    return OSUI_ERR;
 }
 
 static int cmd_os_status(char *out, int max) {
@@ -1847,6 +1877,7 @@ static int map_slash(const char *cmd, char *mapped, int max) {
     if (s_cmp(cmd, "fs") == 0) { s_cpy(mapped, max, "os-fs"); return 1; }
     if (s_cmp(cmd, "center") == 0) { s_cpy(mapped, max, "os-center"); return 1; }
     if (s_cmp(cmd, "close") == 0) { s_cpy(mapped, max, "os-center"); return 1; }
+    if (s_cmp(cmd, "model") == 0) { s_cpy(mapped, max, "osui-model"); return 1; }
     if (s_cmp(cmd, "plan") == 0) { s_cpy(mapped, max, "stage-prompt"); return 1; }
     if (s_cmp(cmd, "draw") == 0) { s_cpy(mapped, max, "stage-prompt"); return 1; }
     if (s_cmp(cmd, "stage") == 0) { s_cpy(mapped, max, "stage-prompt"); return 1; }
@@ -1868,6 +1899,7 @@ static int open_then(const char *pane, int (*fn)(char *, int), char *out, int ma
 static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     if (s_cmp(cmd, "os-help") == 0 || s_cmp(cmd, "help") == 0) return cmd_os_help(out, max);
     if (s_cmp(cmd, "os-status") == 0) return cmd_os_status(out, max);
+    if (s_cmp(cmd, "osui-model") == 0) return cmd_osui_model(args, narg, out, max);
     if (s_cmp(cmd, "os-browser") == 0) return open_then("browser", cmd_browser_status, out, max);
     if (s_cmp(cmd, "os-shell") == 0) {
         char dummy[64];
@@ -2003,6 +2035,7 @@ void osui_runtime_init(void) {
     s_cpy(G.chat_mode, 12, "center");
     s_cpy(G.stage_mode, 16, "reflecting");
     s_cpy(G.stage_kind, OSUI_KIND, "plan");
+    s_cpy(G.ai_model, 32, "gpt2_124M.bin");
     G.kb_loaded = 1;
     G.chat_x = 16;
     G.chat_y = 5;

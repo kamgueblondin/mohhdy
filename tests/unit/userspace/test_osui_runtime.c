@@ -341,6 +341,26 @@ static void test_mcp_connectors_extended(void) {
     TEST_ASSERT(strstr(g_out, "tool=mcp.document.sign") != NULL);
 }
 
+static void test_osui_model(void) {
+    int rc;
+    setup();
+    rc = run_line("osui-model");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "model=gpt2_124M.bin") != NULL);
+
+    rc = run_line("/model list");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "list=gpt2_124M.bin,gpt2.gguf") != NULL);
+
+    rc = run_line("osui-model use gpt2.gguf");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "model=gpt2.gguf") != NULL);
+
+    rc = run_line("osui-model status");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "model=gpt2.gguf") != NULL);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -357,6 +377,7 @@ int main(void) {
     RUN_TEST(test_browser_tabs_and_dom_acts);
     RUN_TEST(test_browser_fetch_and_storage);
     RUN_TEST(test_mcp_connectors_extended);
+    RUN_TEST(test_osui_model);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
