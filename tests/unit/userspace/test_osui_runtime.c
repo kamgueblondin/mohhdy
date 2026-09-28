@@ -361,6 +361,26 @@ static void test_osui_model(void) {
     TEST_ASSERT(strstr(g_out, "model=gpt2.gguf") != NULL);
 }
 
+static void test_osui_provider(void) {
+    int rc;
+    setup();
+    rc = run_line("osui-provider");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "provider=local") != NULL);
+
+    rc = run_line("/provider openai");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "provider=openai") != NULL);
+
+    rc = run_line("osui-provider status");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "provider=openai") != NULL);
+
+    rc = run_line("osui-provider local");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "provider=local") != NULL);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -378,6 +398,7 @@ int main(void) {
     RUN_TEST(test_browser_fetch_and_storage);
     RUN_TEST(test_mcp_connectors_extended);
     RUN_TEST(test_osui_model);
+    RUN_TEST(test_osui_provider);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
