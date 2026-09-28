@@ -55,6 +55,10 @@ static void test_prompt_chat_and_stage(void) {
     TEST_ASSERT(strstr(g_out, "mode=reflecting") != NULL);
     TEST_ASSERT(strstr(g_out, "guest_html_stage=false") != NULL);
 
+    rc = run_line("chat ai comment fonctionne le noyau ?");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "llm=gpt2_local") != NULL);
+
     rc = run_line("stage-prompt dessine trois boites");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "mode=presenting") != NULL);

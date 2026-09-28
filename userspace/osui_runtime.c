@@ -895,6 +895,18 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
         out_add(out, max, &p, "\nLe droit site.explain n'est pas accorde.\n");
         return OSUI_OK;
     }
+    if (s_ncmp(text, "ai ", 3) == 0 || s_cmp(text, "ai") == 0) {
+        add_msg(s, "[IA local]");
+        stage_render(text);
+        out_add(out, max, &p, "osui chat ok llm=gpt2_local session_id=");
+        out_add(out, max, &p, s->id);
+        emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, "\n");
+        out_add(out, max, &p, text);
+        out_add(out, max, &p, "\n");
+        emit_stage(out, max, &p);
+        return OSUI_OK;
+    }
     add_msg(s, "stub_echo");
     stage_render(text);
     out_add(out, max, &p, "osui chat ok llm=stub_echo session_id=");
