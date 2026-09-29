@@ -710,10 +710,11 @@ static void service_notify_purge_pid(int32_t pid) {
     service_registry_entry_t owned[SERVICE_REGISTRY_CAPACITY];
     int count = service_registry_collect_owned(pid, owned, SERVICE_REGISTRY_CAPACITY);
     int i;
-    if (count <= 0) return;
-    (void)service_registry_remove_pid(pid);
-    for (i = 0; i < count && i < (int)SERVICE_REGISTRY_CAPACITY; i++) {
-        service_notify_change(owned[i].name, pid, 0, OS_SERVICE_EVENT_PURGED);
+    if (count > 0) {
+        for (i = 0; i < count && i < (int)SERVICE_REGISTRY_CAPACITY; i++) {
+            service_notify_change(owned[i].name, pid, 0, OS_SERVICE_EVENT_PURGED);
+        }
+        (void)service_registry_remove_pid(pid);
     }
     ata_bridge_after_purge();
     /* Tranche 5 suite: a dead NIC owner gives the card back to Ring 0. */
@@ -3031,12 +3032,10 @@ int sys_ps(os_proc_t* out, int max_n) {
 int sys_kill(int pid) {
     int rc;
     if (!current_task) return OS_TASK_CONTROL_DENIED;
+    service_notify_purge_pid(pid);
+    service_registry_backend_remove_pid(pid);
+    (void)service_registry_remove_watcher_pid(pid);
     rc = task_kill(current_task->id, pid);
-    if (rc == 0) {
-        service_notify_purge_pid(pid);
-        service_registry_backend_remove_pid(pid);
-        (void)service_registry_remove_watcher_pid(pid);
-    }
     return rc;
 }
 

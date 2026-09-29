@@ -55,6 +55,10 @@ static void test_prompt_chat_and_stage(void) {
     TEST_ASSERT(strstr(g_out, "mode=reflecting") != NULL);
     TEST_ASSERT(strstr(g_out, "guest_html_stage=false") != NULL);
 
+    rc = run_line("chat ai comment fonctionne le noyau ?");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "llm=gpt2_local") != NULL);
+
     rc = run_line("stage-prompt dessine trois boites");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "mode=presenting") != NULL);
@@ -329,12 +333,97 @@ static void test_mcp_connectors_extended(void) {
     TEST_ASSERT(strstr(g_out, "active=true") != NULL);
 
     rc = run_line("mcp-invoke mcp.payment.process");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "authentication_required") != NULL);
+
+    run_line("mcp-auth mcp.payment.process token1");
+    rc = run_line("mcp-invoke mcp.payment.process");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "tool=mcp.payment.process") != NULL);
 
+    run_line("mcp-auth mcp.document.sign token2");
     rc = run_line("mcp-invoke mcp.document.sign");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "tool=mcp.document.sign") != NULL);
+}
+
+static void test_osui_model(void) {
+    int rc;
+    setup();
+    rc = run_line("osui-model");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "model=gpt2_124M.bin") != NULL);
+
+    rc = run_line("/model list");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "list=gpt2_124M.bin,gpt2.gguf") != NULL);
+
+    rc = run_line("osui-model use gpt2.gguf");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "model=gpt2.gguf") != NULL);
+
+    rc = run_line("osui-model status");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "model=gpt2.gguf") != NULL);
+}
+
+static void test_osui_provider(void) {
+    int rc;
+    setup();
+    rc = run_line("osui-provider");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "provider=local") != NULL);
+
+    rc = run_line("/provider openai");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "provider=openai") != NULL);
+
+    rc = run_line("osui-provider status");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "provider=openai") != NULL);
+
+    rc = run_line("osui-provider local");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "provider=local") != NULL);
+}
+
+static void test_browser_navigation_dom_tree_and_audit(void) {
+    int rc;
+    setup();
+    rc = run_line("browser-tab-new https://mohhdy.local/home");
+    TEST_ASSERT_EQUAL(0, rc);
+
+    rc = run_line("/navigate https://mohhdy.local/page1");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "url=https://mohhdy.local/page1") != NULL);
+
+    rc = run_line("/back");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "url=https://mohhdy.local/home") != NULL);
+
+    rc = run_line("browser-forward");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "url=https://mohhdy.local/page1") != NULL);
+
+    rc = run_line("/dom");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "<button id=\"menu-toggle\">") != NULL);
+
+    rc = run_line("browser-eval console.log('hello')");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "sandbox=js_simulator") != NULL);
+
+    rc = run_line("/auth mcp.payment.process token123");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "authenticated=true") != NULL);
+
+    rc = run_line("mcp-credentials");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "bearer=[masked]") != NULL);
+
+    rc = run_line("/audit");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "count=") != NULL);
 }
 
 int main(void) {
@@ -353,6 +442,9 @@ int main(void) {
     RUN_TEST(test_browser_tabs_and_dom_acts);
     RUN_TEST(test_browser_fetch_and_storage);
     RUN_TEST(test_mcp_connectors_extended);
+    RUN_TEST(test_osui_model);
+    RUN_TEST(test_osui_provider);
+    RUN_TEST(test_browser_navigation_dom_tree_and_audit);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
