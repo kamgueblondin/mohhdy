@@ -258,16 +258,13 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/net_nic_owner.c"
     fi
     if [ "$(basename "$test_file")" = "test_net_wire.c" ] || [ "$(basename "$test_file")" = "test_net_stack_exec.c" ]; then
-        if [ "$(basename "$test_file")" = "test_net_stack_exec.c" ]; then
-            extra_src="$extra_src $BASE_DIR/kernel/net_stack_exec.c"
-        fi
         extra_src="$extra_src $BASE_DIR/kernel/net_wire.c $BASE_DIR/kernel/ne2k.c $BASE_DIR/kernel/ne2k_hw.c $BASE_DIR/kernel/net_llm_socket.c"
         extra_src="$extra_src $BASE_DIR/kernel/rtc.c $BASE_DIR/kernel/net_nic.c $BASE_DIR/kernel/net_ethernet_arp.c"
         extra_src="$extra_src $BASE_DIR/kernel/net_ipv4_udp.c $BASE_DIR/kernel/net_dhcp.c $BASE_DIR/kernel/net_dns.c"
         extra_src="$extra_src $BASE_DIR/kernel/net_http_tls.c"
     fi
     if [ "$(basename "$test_file")" = "test_net_stack_exec.c" ]; then
-        extra_src="$extra_src $BASE_DIR/kernel/net_stack_exec.c $BASE_DIR/kernel/net_wire.c $BASE_DIR/kernel/net_relay.c $BASE_DIR/kernel/ne2k.c $BASE_DIR/kernel/ne2k_hw.c $BASE_DIR/kernel/net_socket.c $BASE_DIR/kernel/net_llm_socket.c $BASE_DIR/kernel/rtc.c $BASE_DIR/kernel/net_nic.c $BASE_DIR/kernel/net_ethernet_arp.c $BASE_DIR/kernel/net_ipv4_udp.c $BASE_DIR/kernel/net_dhcp.c $BASE_DIR/kernel/net_dns.c $BASE_DIR/kernel/net_tcp.c $BASE_DIR/kernel/net_tls_record.c $BASE_DIR/kernel/net_http_tls.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x509_der.c $BASE_DIR/kernel/rsa_verify.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/ecdsa_p256.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/net_llm_client.c $BASE_DIR/kernel/net_tls_server.c $BASE_DIR/kernel/net_nic_owner.c"
+        extra_src="$extra_src $BASE_DIR/kernel/net_stack_exec.c $BASE_DIR/kernel/net_llm_client.c $BASE_DIR/kernel/net_tls_server.c $BASE_DIR/kernel/net_nic_owner.c"
     fi
     
     # Compiler
