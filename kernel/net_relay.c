@@ -34,10 +34,12 @@ void net_relay_init(void) {
     for (i = 0U; i < sizeof(g_stats); i++) s[i] = 0U;
 }
 
+extern int kernel_net_nic_port_mode(void);
+
 int net_relay_supported(uint32_t syscall_number) {
     return (syscall_number >= SYS_SOCKET_OPEN && syscall_number <= SYS_SOCKET_ACCEPT_ACK) ||
            syscall_number == SYS_SOCKET_CONNECT ||
-           net_relay_peer_supported(syscall_number);
+           (!kernel_net_nic_port_mode() && net_relay_peer_supported(syscall_number));
 }
 
 int net_relay_peer_supported(uint32_t syscall_number) {

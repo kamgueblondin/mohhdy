@@ -1742,6 +1742,10 @@ int ata_read_sectors(uint32_t lba, uint32_t count, void* buf) {
     return -1;
 }
 
+__attribute__((weak)) int kernel_net_nic_port_mode(void) {
+    return 0;
+}
+
 static int g_mock_vga_desktop = 0;
 static char g_mock_kbd_buf[256];
 static int g_mock_kbd_head = 0;
