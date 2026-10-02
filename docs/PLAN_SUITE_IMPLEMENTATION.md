@@ -43,12 +43,12 @@ Les capacites `ASSIST-xxx` **reprennent** le vocabulaire Foundation (droits, gra
 
 Constat courant (ETAT_REEL, 2 octobre 2026) :
 
-- Suite : **627/627** au rejeu local du 2 octobre 2026. Les chiffres 522 et 523 decrivent septembre 2026
+- Suite : **628/628** au rejeu local du 2 octobre 2026. Les chiffres 522 et 523 decrivent septembre 2026
 - `make qemu-smoke` : six scenarios verts le 2 octobre 2026, rejoue apres le correctif de relais pair et le retrait de la trace serie
 - CI `8264b62`, run 37032910130 : quatre jobs verts. Le mur des poids residents `9999514`, run 37029710466, l'etait aussi.
-- Sept contrats `make integration-qemu`, budget 25 minutes. Rejeu du 2 octobre 2026 apres le PIO multi-secteurs : 809,7 s, 7/7. Mesure anterieure : 760,9 s
+- Sept contrats `make integration-qemu`, budget 25 minutes. Rejeu du 2 octobre 2026 sur ce tip : 800,6 s, 7/7. Mesures anterieures : 809,7 s puis 760,9 s
 - VFS Ring 3 : `vfsserver` / `vfsvirtual`, ACL droit-source-prefixe, diagnostic public sans prefixe
-- ATA et NE2000 Ring 3 au runtime. `networker` demarre au boot si la carte est presente. Le montage ATA au boot, la sonde de presence et les replis sans worker restent Ring 0
+- ATA et NE2000 Ring 3 au runtime. `networker` demarre au boot si la carte est presente et programme les registres de la carte. Le montage ATA au boot, la sonde de presence, l'IRQ NIC et les replis sans worker restent Ring 0
 - Reseau local QEMU : `make qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next`, `qemu-ne2k-tls-multipair` (sequentiel, `127.0.0.1`)
 - GGUF Q3_K/Q4_K/Q6_K local. Sous QEMU TCG, mediane documentee ~48,7 s (premier jeton) et ~22,8 s (continuation). Ce n'est pas une mesure materielle.
 - Axe de latence GGUF sous QEMU TCG clos avec mesures (lots AOS-1641...1648). La campagne KVM d'un echantillon, poids residents, mesure 43,916 s / 20,224 s. Elle ne declare pas moins d'une seconde. Pas un second tour TCG.
@@ -286,11 +286,11 @@ Un `[OK]` dans l'index vision signifie "fichier de spec présent", **pas** "impl
 
 US/README, suite Foundation (pas un sprint vision). Les cinq pas ci-dessous sont entames dans le guest. Ils ne ferment pas US-001.
 
-1. Identite : sequence, generation et cle `identity_key` en RAM. Un PID reutilise qui recopie les deux premiers temoins est refuse. Pas un certificat, pas une identite qui survit au reboot.
-2. Capabilities : jeton backend non nul, plus `right_token` et cle sur le nom de service. Les ports ATA et l'entree reseau (worker vivant) exigent ce droit. Pas un systeme de capabilities transferable.
-3. Evenements : pull et journal `EVNT` survivent au reboot. La copie IPC, si la boite de quatre places est pleine, attend dans un deversoir RAM de huit places. Au-dela, ou apres reboot, cette copie IPC n'est plus la. Le pull reste la copie durable.
+1. Identite : sequence, generation et cle `identity_key` en RAM. Un PID reutilise qui recopie les deux premiers temoins est refuse. Le shell lit la cle courante avec `id-key` (syscall 151). Pas un certificat, pas une identite qui survit au reboot.
+2. Capabilities : jeton backend non nul, compteur distinct du `right_token`. Le premier grant vfs reste `cap-token 1` meme si `atadriver` et `networker` se sont enregistres. Les ports ATA et l'entree reseau (worker vivant) exigent le droit de nom. Pas un systeme de capabilities transferable.
+3. Evenements : pull et journal `EVNT` survivent au reboot. La copie IPC, si la boite de quatre places est pleine, attend dans un deversoir RAM de huit places. Un deversoir plein incremente un compteur qui sature a `0xFFFFFFFF` (`spill-drops`, syscall 152). Les notifications de supervision utilisent le meme deversoir. Au-dela, ou apres reboot, cette copie IPC n'est plus la. Le pull reste la copie durable.
 4. Montages : journal `MNTJ` relu au boot. Le backend VFS runtime est deja `vfsvirtual`, avec repli Ring 0.
-5. Pilotes : `atadriver` et `networker` tournent en Ring 3, et leurs ports passent par le droit du point 2. Le montage ATA au boot, les replis sans worker et la sonde de presence restent Ring 0.
+5. Pilotes : `atadriver` et `networker` tournent en Ring 3, et leurs ports passent par le droit du point 2. Le programme des registres NE2000 est dans `networker`. Le montage ATA au boot, les replis sans worker, la sonde de presence et l'IRQ NIC restent Ring 0.
 
 Ces pas restent des **incréments** du prototype i386. Ils préparent US-001 / US-003 / US-012 / US-013. Ils ne livrent pas la phase 1 complète (plugins, logging distribué, virtualisation).
 
@@ -315,7 +315,7 @@ Les rangs 0-4 sont **ce fichier**. Les rangs OS-UI sont le [plan maitre](PLAN_SE
 | 2 | Topologie locale partagee | Prototype guest | Harness guest-guest jusqu'a Finished, plus `make qemu-ne2k-guest-tls-metier` (chat chiffre, hors ci) |
 | 3 | Latence GGUF materiel / KVM | Prototype guest | Un echantillon KVM, poids residents (43,916 s / 20,224 s) ; pas de claim sous 1 s ; le TCG n'est pas le critere |
 | 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | I/O protegees via worker (AOS-2163) ; repli local refuse si worker vivant (AOS-2171) ; bypass proprio FAT ferme si worker publie (AOS-2172) ; bypass proprio initrd/overlay ferme si worker publie (AOS-2173) ; bypass SOURCE_ALL / ATA-backed ferme si worker publie (AOS-2174) ; overlay read/stat uniquement via PID worker (AOS-2175) ; SYS_READFILE/SYS_WRITEFILE historiques gates sur la partie overlay si worker publie (AOS-2177) ; autres points d'entree historiques overlay (STAT, LISTDIR, MKDIR, UNLINK, RENAME, COPY, APPEND) et liste overlay backend gates (AOS-2178) ; Tranche 4 slice 1 : ports ATA 0x1F0-0x1F7/0x3F6 a CPL 3 pour le seul `atadriver` via IOPB TSS + fenetre secteur IPC 64 octets (`make qemu-ata-driver`) ; slice 2 : flush/chargement post-boot du snapshot overlay via le pilote + claim d'exclusion + barrieres FAT ; slice 3 : `atadriver` lance au boot (disque IDE present), E/S secteur FAT16/FAT32 via le pilote par RPC synchrone quand il est vivant (PIO noyau FAT a 0), repli Ring 0 apres mort du pilote ; chargement overlay et montage FAT au boot + repli encore PIO Ring 0 `[~]` |
-| 5 | Isolation reseau (worker `net-driver`) | Prototype guest | Slice 1 : gate -59 ; slice 2 : relais IPC des syscalls socket 99-108 vers le worker (codec TCP), LLM/peer toujours -59 ; slice 3 : TCP sur le fil via le worker (`SYS_SOCKET_CONNECT` relaye, `SYS_NET_WIRE_*` 139-142 reserves au worker : ARP, trames IPv4/TCP, demux RX), preuve `make qemu-net-wire` vers un pair echo local ; pilote NE2000, IRQ et pile TCP encore Ring 0. Suite : ports NE2000 en Ring 3 via l'IOPB (comme atadriver) et pilote dans le worker |
+| 5 | Isolation reseau (worker `net-driver`) | Prototype guest | Slice 1 : gate -59 ; slice 2 : relais IPC des syscalls socket 99-108 vers le worker (codec TCP), LLM/peer toujours -59 ; slice 3 : TCP sur le fil via le worker (`SYS_SOCKET_CONNECT` relaye, `SYS_NET_WIRE_*` 139-142 reserves au worker : ARP, trames IPv4/TCP, demux RX), preuve `make qemu-net-wire` vers un pair echo local. Le programme des registres NE2000 est dans `networker` (Ring 3, IOPB). L'IRQ et la sonde de presence au boot restent Ring 0 |
 | - | Reseau public | Prototype guest | Sous condition, hors CI |
 | - | Identite / capabilities | Increment Foundation | Petits pas, pas US-016, pas US-001 total |
 | OS-UI-000 | Spec migration | Docs | Plan maitre (fait dans cette vague) |
