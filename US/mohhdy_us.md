@@ -134,7 +134,7 @@ La liste vivante et les criteres sont dans [docs/ETAT_REEL.md](../docs/ETAT_REEL
 | 0 | Gates | `make test-all` 622/622 tenu. Quatre jobs CI et sept contrats : gate distant, pas relance ici |
 | 1 | Chaine US-031 | Livre : `us031_complete=false`, `chromium=false` |
 | 2 | Chat chiffre metier | Livre : `make qemu-ne2k-guest-tls-metier`, hors CI |
-| 3 | Latence KVM | Campagne `make gguf-kvm-benchmark` en cours |
+| 3 | Latence KVM | Livre, un echantillon : 1407,034 s puis 477,200 s. Pas sous 1 s |
 | 4 | Jeton de capability | Livre : `make qemu-foundation-steps` (`cap-token`). Pas US-001 complet |
 | 5 | Evenement non perdu | Livre : `service-event-pull` dans le meme contrat. Pas de journal disque |
 | 6 | Montages et reboot | Livre : `alias/` encore present au second boot du meme contrat |

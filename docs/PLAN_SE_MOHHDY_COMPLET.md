@@ -84,8 +84,8 @@ Observable aujourd'hui :
 - Identite de tache (sequence et generation), jeton de capability non nul, et journal de montages `MNTJ` qui survit au reboot (`make qemu-foundation-steps`)
 - Evenements de service : bit `acked` en RAM, plus `service-event-pull` qui ne depend pas de la boite IPC de quatre entrees
 - NE2000 local, TLS/HTTP/SSE sur pair `127.0.0.1`, pile Ring 3 si `networker` detient la carte ; pas Internet public, pas OpenAI
-- GPT-2 124M et GGUF Q3_K/Q4_K/Q6_K locaux ; sous QEMU TCG ~48,7 s / ~22,8 s ; poids hors Git
-- `make test-all` 622/622 au rejeu du 2 octobre 2026. `make qemu-smoke` : six scenarios verts plus tot le meme jour, avant le correctif de relais pair
+- GPT-2 124M et GGUF Q3_K/Q4_K/Q6_K locaux ; TCG ~48,7 s / ~22,8 s ; KVM un echantillon 1407,034 s / 477,200 s, pas sous 1 s ; poids hors Git
+- `make test-all` 622/622 au rejeu du 2 octobre 2026. `make qemu-smoke` : six scenarios verts le meme jour, y compris apres le correctif de relais pair et le retrait de la trace serie
 - `make integration-qemu` : sept contrats, budget 25 min. CI du commit `0ffe841` (run 36715656797, 30 septembre 2026) : quatre jobs verts, mur d'environ 11 min
 
 La surface OS-UI (chat, sessions, simulateur, MCP, FS sandbox, commande `gui`) est dans le meme guest. Elle est decrite en 2.2. Le guest n'execute pas de HTML `#ai-stage`.
@@ -154,7 +154,7 @@ Une ligne peut cumuler bootstrap et "a porter" : le comportement existe hors OS,
 | AOS-009 | `exec`, attente parent | verifie | garde |
 | AOS-010 / AOS-011 / AOS-021 | GPT-2 local, BPE, Unicode cible | verifie | IA guest |
 | AOS-012 / AOS-022 | Tests Unity + `make integration-qemu` | verifie, a tenir | **garde 0** |
-| AOS-020 | GGUF local Q3_K/Q4_K/Q6_K | verifie TCG ; latence KVM ouverte | **garde 3** |
+| AOS-020 | GGUF local Q3_K/Q4_K/Q6_K | verifie TCG ; KVM mesure (un echantillon, pas sous 1 s) | **garde 3** |
 | AOS-025 | NE2000 local, TLS/HTTP/SSE `127.0.0.1`, stub OpenAI honnete | verifie local | reseau |
 | AOS-026 | FAT16/FAT32 VFS, ACL prefixe | verifie | **garde 1** |
 | IPC Foundation | FIFO Ring 3, `request_id`, capacite service | verifie (pas capabilities completes) | Foundation |
@@ -479,7 +479,7 @@ Detail operationnel : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.m
 | 0 | Budget CI QEMU 25 min, sept contrats | Tenir |
 | 1 | ACL prefixee, preuves negatives | Tenir |
 | 2 | Topologie locale partagee, harness livre | Chat chiffre metier livre : `make qemu-ne2k-guest-tls-metier` (hors CI) |
-| 3 | Latence GGUF materiel / KVM | Campagne `make gguf-kvm-benchmark` en cours sur cette branche |
+| 3 | Latence GGUF materiel / KVM | Mesuree : un run, 1407,034 s / 477,200 s, claim sous 1 s refuse |
 | 4 | Pilote stockage Ring 3 | Livre (`atadriver`) ; boot et repli Ring 0 a conserver |
 | * | Reseau public | Sous condition, hors CI |
 | * | Jeton, evenement durable, montage disque | Livres : `make qemu-foundation-steps` (jeton, pull, journal au reboot) |
@@ -566,7 +566,7 @@ Ce n'est **pas** la sortie de OS-UI-0.
 | Garde 0 | 7 contrats, < 25 min, smoke multi-pairs CI |
 | Garde 1 | Preuves ACL prefixe, diagnostic sans prefixe |
 | Garde 2 | PS/2 simultane d'abord, sinon pas de topologie partagee |
-| Garde 3 | Campagne KVM/materiel distincte des chiffres TCG |
+| Garde 3 | Campagne KVM distincte du TCG : 1407,034 s / 477,200 s, un echantillon |
 | Garde 4 | Increment stockage mesure, ACL intacte, pas "US-001 fini" |
 
 ### 8.3 Parite avant retrait Python (OS-UI-3)

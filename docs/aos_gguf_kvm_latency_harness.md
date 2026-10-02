@@ -39,9 +39,10 @@ Critères de sortie (PLAN tranche 3 / priorité 3 `mohhdy_us.md`) :
 4. `make qemu-gguf-smoke` et `make test-all` restent verts ; pas de régression du chemin Q3_K réel.
 5. En CI sans KVM : `make gguf-kvm-benchmark` doit **skipper** proprement (exit 0), tandis que `make gguf-kvm-benchmark-check` reste obligatoire et vert.
 
-L'optimisation supplémentaire du runtime GGUF reste ouverte tant qu'aucune
-campagne KVM avec poids déployés n'a produit un rapport JSON sur un hôte
-référence.
+Mesure du 2 octobre 2026, un echantillon, poids Q3_K deployes, `/dev/kvm`
+ouvert : premier jeton 1407,034 s, continuation 477,200 s.
+`sub_second_claim_allowed` est faux. L'optimisation du runtime reste ouverte.
+Le defaut de trois runs n'a pas ete execute.
 
 ## Utilisation
 

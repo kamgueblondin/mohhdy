@@ -44,14 +44,14 @@ Les capacites `ASSIST-xxx` **reprennent** le vocabulaire Foundation (droits, gra
 Constat courant (ETAT_REEL, 2 octobre 2026) :
 
 - Suite : **622/622** au rejeu local du 2 octobre 2026. Les chiffres 522 et 523 decrivent septembre 2026
-- `make qemu-smoke` : six scenarios verts le 2 octobre 2026
+- `make qemu-smoke` : six scenarios verts le 2 octobre 2026, rejoue apres le correctif de relais pair et le retrait de la trace serie
 - CI `0ffe841`, run 36715656797 : quatre jobs verts, mur d'environ 11 minutes
 - Sept contrats `make integration-qemu`, budget 25 minutes. Mesure locale historique : 760,9 s
 - VFS Ring 3 : `vfsserver` / `vfsvirtual`, ACL droit-source-prefixe, diagnostic public sans prefixe
 - ATA et NE2000 Ring 3 au runtime ; boot et repli restent Ring 0
 - Reseau local QEMU : `make qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next`, `qemu-ne2k-tls-multipair` (sequentiel, `127.0.0.1`)
 - GGUF Q3_K/Q4_K/Q6_K local. Sous QEMU TCG, mediane documentee ~48,7 s (premier jeton) et ~22,8 s (continuation). Ce n'est pas une mesure materielle.
-- Axe de latence GGUF sous QEMU TCG clos avec mesures (lots AOS-1641...1648). L'item ouvert est KVM, pas un second tour TCG.
+- Axe de latence GGUF sous QEMU TCG clos avec mesures (lots AOS-1641...1648). La campagne KVM d'un echantillon est mesuree (1407,034 s / 477,200 s) ; elle ne declare pas moins d'une seconde. L'optimisation du chemin reste ouverte. Pas un second tour TCG.
 
 Limites FAT **hors** la file courante : ecrasement, renommage inter-repertoire, remplacement atomique. Les sous-repertoires multi-niveaux et les LFN dans ces sous-repertoires sont livres. Ces limites ne deviennent des cibles que si `mohhdy_us.md` les ajoute.
 
@@ -184,7 +184,7 @@ make gguf-kvm-benchmark-check
 make gguf-kvm-benchmark
 ```
 
-`make gguf-kvm-benchmark` skippe (exit 0) sans `/dev/kvm` utilisable ou sans disque GGUF ; sur un hôte de référence, passer `GGUF_KVM_REQUIRE=1`. Détail : [aos_gguf_kvm_latency_harness.md](aos_gguf_kvm_latency_harness.md).
+`make gguf-kvm-benchmark` skippe (exit 0) sans `/dev/kvm` utilisable ou sans disque GGUF ; sur un hôte de référence, passer `GGUF_KVM_REQUIRE=1`. Mesure du 2 octobre 2026, un echantillon, timeout de generation 1800 s : premier jeton 1407,034 s, continuation 477,200 s, `sub_second_claim_allowed` faux. Le defaut du harness reste trois runs ; ce passage n'en a fait qu'un. Detail : [aos_gguf_kvm_latency_harness.md](aos_gguf_kvm_latency_harness.md).
 
 **Risques et limites.**
 
@@ -313,7 +313,7 @@ Les rangs 0-4 sont **ce fichier**. Les rangs OS-UI sont le [plan maitre](PLAN_SE
 | 0 | Budget CI QEMU | Prototype guest | Garder, ne pas relacher |
 | 1 | ACL prefixee | Prototype guest | Garder les preuves negatives |
 | 2 | Topologie locale partagee | Prototype guest | Harness guest-guest jusqu'a Finished, plus `make qemu-ne2k-guest-tls-metier` (chat chiffre, hors ci) |
-| 3 | Latence GGUF materiel / KVM | Prototype guest | Campagne `make gguf-kvm-benchmark` en cours ; le TCG n'est pas le critere |
+| 3 | Latence GGUF materiel / KVM | Prototype guest | Un echantillon KVM livre (1407,034 s / 477,200 s) ; pas de claim sous 1 s ; le TCG n'est pas le critere |
 | 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | I/O protegees via worker (AOS-2163) ; repli local refuse si worker vivant (AOS-2171) ; bypass proprio FAT ferme si worker publie (AOS-2172) ; bypass proprio initrd/overlay ferme si worker publie (AOS-2173) ; bypass SOURCE_ALL / ATA-backed ferme si worker publie (AOS-2174) ; overlay read/stat uniquement via PID worker (AOS-2175) ; SYS_READFILE/SYS_WRITEFILE historiques gates sur la partie overlay si worker publie (AOS-2177) ; autres points d'entree historiques overlay (STAT, LISTDIR, MKDIR, UNLINK, RENAME, COPY, APPEND) et liste overlay backend gates (AOS-2178) ; Tranche 4 slice 1 : ports ATA 0x1F0-0x1F7/0x3F6 a CPL 3 pour le seul `atadriver` via IOPB TSS + fenetre secteur IPC 64 octets (`make qemu-ata-driver`) ; slice 2 : flush/chargement post-boot du snapshot overlay via le pilote + claim d'exclusion + barrieres FAT ; slice 3 : `atadriver` lance au boot (disque IDE present), E/S secteur FAT16/FAT32 via le pilote par RPC synchrone quand il est vivant (PIO noyau FAT a 0), repli Ring 0 apres mort du pilote ; chargement overlay et montage FAT au boot + repli encore PIO Ring 0 `[~]` |
 | 5 | Isolation reseau (worker `net-driver`) | Prototype guest | Slice 1 : gate -59 ; slice 2 : relais IPC des syscalls socket 99-108 vers le worker (codec TCP), LLM/peer toujours -59 ; slice 3 : TCP sur le fil via le worker (`SYS_SOCKET_CONNECT` relaye, `SYS_NET_WIRE_*` 139-142 reserves au worker : ARP, trames IPv4/TCP, demux RX), preuve `make qemu-net-wire` vers un pair echo local ; pilote NE2000, IRQ et pile TCP encore Ring 0. Suite : ports NE2000 en Ring 3 via l'IOPB (comme atadriver) et pilote dans le worker |
 | - | Reseau public | Prototype guest | Sous condition, hors CI |
