@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 198
+#define MOHHDY_SHELL_COMMAND_COUNT 203
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -25,6 +25,7 @@ static const char * const mohhdy_shell_commands[] = {
     "ai-continue",
     "ai-credential",
     "ai-help",
+    "ai-metier",
     "ai-mode",
     "ai-model",
     "ai-next",
@@ -53,6 +54,7 @@ static const char * const mohhdy_shell_commands[] = {
     "browser-pointer",
     "browser-status",
     "browser-type",
+    "cap-token",
     "cat",
     "cd",
     "chat",
@@ -107,6 +109,8 @@ static const char * const mohhdy_shell_commands[] = {
     "mem",
     "memory",
     "mkdir",
+    "mount-journal",
+    "mount-journal-add",
     "mv",
     "net-relay-status",
     "net-status",
@@ -131,6 +135,7 @@ static const char * const mohhdy_shell_commands[] = {
     "revoke",
     "rm",
     "rmdir",
+    "service-event-pull",
     "service-find",
     "service-grant",
     "service-publish",

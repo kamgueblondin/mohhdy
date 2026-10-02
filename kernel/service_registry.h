@@ -53,6 +53,8 @@ int service_registry_notify_ack(int32_t watcher_pid, uint32_t sequence);
 int service_registry_notify_history_count(int32_t watcher_pid, uint32_t* out_acked, uint32_t* out_unacked);
 int service_registry_notify_replay(int32_t watcher_pid, uint32_t sequence);
 int service_registry_notify_is_acked(int32_t watcher_pid, uint32_t sequence);
+/* Plus vieil evenement non acquitte, puis bit acked. Hors boite IPC. */
+int service_registry_notify_pull(int32_t watcher_pid, service_registry_notify_event_t* out);
 
 #define SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY 8U
 
@@ -67,6 +69,13 @@ int service_registry_persistent_mount_add(const char* service_name, const char* 
 int service_registry_persistent_mount_remove(const char* service_name, const char* prefix);
 int service_registry_persistent_mount_get(const char* service_name, service_registry_persistent_mount_t* out, uint32_t max);
 int service_registry_persistent_mount_restore(const char* service_name);
+/* Image memoire du journal disque (deux secteurs). Prouve le reboot sans ATA. */
+int service_registry_mount_journal_export(uint8_t* buf, uint32_t cap);
+int service_registry_mount_journal_import(const uint8_t* buf, uint32_t len);
+int service_registry_mount_journal_format(const char* service_name, char* buf, uint32_t max);
+int service_registry_backend_token_of(const char* name, int32_t grantee_pid, uint32_t* out_token);
+/* Remet le jeton a 0. La ligne reste, mais allowed doit refuser. */
+int service_registry_backend_clear_token(const char* name, int32_t grantee_pid);
 int service_registry_collect_owned(int32_t pid, service_registry_entry_t* out, uint32_t max);
 int service_registry_pid_is_owner(int32_t pid);
 int service_registry_name_valid(const char* name);

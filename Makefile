@@ -646,7 +646,7 @@ ci-tests: $(OS_IMAGE) pack-initrd
 	@$(MAKE) -C tests ci-test
 
 # Image disque IDE brute (snapshot overlay). Recréee seulement si absente.
-$(DISK_IMAGE):
+$(DISK_IMAGE): tests/scripts/make_fat16_image.py
 	@mkdir -p $(dir $@)
 	dd if=/dev/zero of=$@ bs=512 count=$(DISK_SECTORS) status=none
 	python3 tests/scripts/make_fat16_image.py --image $@
@@ -671,7 +671,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant
+.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -710,6 +710,13 @@ qemu-ne2k-guest-tls-chat: $(OS_IMAGE) pack-initrd
 # Suite guest-guest : role serveur TLS B jusqu a Finished (hors ci).
 qemu-ne2k-guest-tls-server: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_ne2k_guest_tls_server.py
+
+# Chat metier chiffre sur la session TLS guest-guest (hors ci).
+qemu-ne2k-guest-tls-metier: $(OS_IMAGE) pack-initrd
+	@METIER=1 python3 tests/scripts/test_qemu_ne2k_guest_tls_server.py
+
+qemu-foundation-steps: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_foundation_steps.py
 qemu-ipc-foundation: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_ipc_foundation.py
 

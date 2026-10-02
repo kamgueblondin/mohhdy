@@ -613,6 +613,24 @@ int sys_service_notify(const char* name) {
     return result;
 }
 
+int sys_service_backend_token(const char* name, uint32_t* out_token) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_SERVICE_BACKEND_TOKEN), "b"(name), "c"(out_token));
+    return result;
+}
+
+int sys_service_event_pull(os_service_event_pull_t* out) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_SERVICE_EVENT_PULL), "b"(out));
+    return result;
+}
+
+int sys_mount_journal(uint32_t op, uint32_t arg1, uint32_t arg2) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_MOUNT_JOURNAL), "b"(op), "c"(arg1), "d"(arg2));
+    return result;
+}
+
 int sys_vfs_backend_read(const char* path, char* buffer, uint32_t max) {
     int result;
     asm volatile("int $0x80" : "=a"(result) : "a"(SYS_VFS_BACKEND_READ), "b"(path), "c"(buffer), "d"(max));
@@ -1009,6 +1027,10 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  service-find <nom> - Resoudre un service nomme\n");
     print_string("  service-status <nom> - Afficher la capacite IPC d'un service\n");
     print_string("  service-watch <nom> - S'abonner aux changements de proprietaire\n");
+    print_string("  service-event-pull - Retirer le plus vieil evenement non acquitte\n");
+    print_string("  cap-token - Lire le jeton backend vfs du shell\n");
+    print_string("  mount-journal-add <prefixe/> <source> - Journaliser un montage disque\n");
+    print_string("  mount-journal - Lister les montages du journal\n");
     print_string("  vfs-backend-probe <fichier> - Verifier le backend VFS reserve\n");
     print_string("  vfs-backend-write-probe <fichier> <texte> - Verifier l'ecriture backend reservee\n");
     print_string("  vfs-backend-remove-probe <fichier> - Verifier la suppression backend reservee\n");
@@ -2659,9 +2681,9 @@ static int is_builtin(const char* cmd) {
     static const char* names[] = {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
-        "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "net-status",
+        "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
-        "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
+        "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
         "alias", "unalias", "export", "which", "rc",
         "grep", "wc", "sort", "head", "tail",
         "logout", "reboot", "shutdown",
@@ -3142,6 +3164,99 @@ static void cmd_service_status(shell_context_t* ctx, char args[][128], int arg_c
     } else {
         print_error("service-status: requete invalide");
     }
+}
+
+static void cmd_cap_token(shell_context_t* ctx, char args[][128], int arg_count) {
+    uint32_t token = 0U;
+    int rc;
+    (void)args;
+    if (arg_count != 0) {
+        print_error("Usage: cap-token");
+        return;
+    }
+    rc = sys_service_backend_token("vfs", &token);
+    ctx->last_rc = rc;
+    if (rc != 0 || token == 0U) {
+        print_error("cap-token: jeton absent");
+        return;
+    }
+    print_string("cap-token ok ");
+    print_int((int)token);
+    print_string("\n");
+}
+
+static void cmd_service_event_pull(shell_context_t* ctx, char args[][128], int arg_count) {
+    os_service_event_pull_t event;
+    int rc;
+    (void)args;
+    if (arg_count != 0) {
+        print_error("Usage: service-event-pull");
+        return;
+    }
+    rc = sys_service_event_pull(&event);
+    ctx->last_rc = rc;
+    if (rc != 0) {
+        print_error("service-event-pull: aucun evenement");
+        return;
+    }
+    print_string("service-event-pull ok ");
+    print_string(event.name);
+    print_string(" ");
+    print_int(event.old_pid);
+    print_string(" ");
+    print_int(event.new_pid);
+    print_string(" ");
+    print_int((int)event.reason);
+    print_string(" ");
+    print_int((int)event.sequence);
+    print_string("\n");
+}
+
+static void cmd_mount_journal_add(shell_context_t* ctx, char args[][128], int arg_count) {
+    uint32_t source;
+    int rc;
+    if (arg_count != 2) {
+        print_error("Usage: mount-journal-add <prefixe/> <initrd|overlay|fat16|fat32>");
+        return;
+    }
+    if (strcmp(args[1], "initrd") == 0) source = OS_SERVICE_BACKEND_SOURCE_INITRD;
+    else if (strcmp(args[1], "overlay") == 0) source = OS_SERVICE_BACKEND_SOURCE_OVERLAY;
+    else if (strcmp(args[1], "fat16") == 0) source = OS_SERVICE_BACKEND_SOURCE_FAT16;
+    else if (strcmp(args[1], "fat32") == 0) source = OS_SERVICE_BACKEND_SOURCE_FAT32;
+    else {
+        print_error("mount-journal-add: source invalide");
+        ctx->last_rc = OS_SERVICE_BAD_NAME;
+        return;
+    }
+    rc = sys_mount_journal(1U, (uint32_t)args[0], source);
+    ctx->last_rc = rc;
+    if (rc != 0) {
+        print_error("mount-journal-add: montage refuse");
+        return;
+    }
+    print_string("mount-journal-add ok ");
+    print_string(args[0]);
+    print_string("\n");
+}
+
+static void cmd_mount_journal(shell_context_t* ctx, char args[][128], int arg_count) {
+    char line[256];
+    int rc;
+    (void)args;
+    if (arg_count != 0) {
+        print_error("Usage: mount-journal");
+        return;
+    }
+    line[0] = '\0';
+    rc = sys_mount_journal(2U, (uint32_t)line, sizeof(line));
+    ctx->last_rc = rc;
+    if (rc != 0) {
+        print_error("mount-journal: lecture refusee");
+        return;
+    }
+    print_string("mount-journal ok ");
+    print_string(line);
+    print_string("\n");
 }
 
 static void cmd_service_watch(shell_context_t* ctx, char args[][128], int arg_count) {
@@ -4747,12 +4862,36 @@ static void cmd_ai_peer_tls_poll(shell_context_t* ctx, char args[][128], int arg
     else if (status == 7) print_success("ai-peer-tls-poll: Finished emis");
     else if (status == 8) print_success("ai-peer-tls-poll: session complete");
     else if (status == 9) print_success("ai-peer-tls-poll: app echo emis");
+    else if (status == 10) print_success("ai-peer-tls-poll: METIER ok");
+    else if (status == 11) print_success("ai-peer-tls-poll: attente metier");
+    else if (status == 12) print_success("ai-peer-tls-poll: METIER facture emis");
     else if (status == 0) print_success("ai-peer-tls-poll: en cours");
     else if (status == OS_PEER_BAD_REQUEST) print_error("ai-peer-tls-poll: requete invalide");
     else if (status == OS_PEER_UNAVAILABLE) print_error("ai-peer-tls-poll: NE2000 absent");
     else if (status == OS_PEER_NO_LEASE) print_error("ai-peer-tls-poll: bail DHCP requis");
     else if (status == OS_PEER_NOT_LISTENING) print_error("ai-peer-tls-poll: ESTABLISHED requis");
     else print_error("ai-peer-tls-poll: echec");
+}
+
+static void cmd_ai_metier(shell_context_t* ctx, char args[][128], int arg_count) {
+    os_peer_tls_poll_request_t request = {0};
+    int status;
+    (void)ctx;
+    (void)args;
+    if (arg_count != 0) {
+        print_error("Usage: ai-metier");
+        return;
+    }
+    request.attempts = 1U;
+    request.metier = 1U;
+    status = sys_peer_tls_poll(&request);
+    if (status == 10) print_success("ai-metier: METIER ok");
+    else if (status == 12) print_success("ai-metier: METIER facture emis");
+    else if (status == 11) print_success("ai-metier: attente");
+    else if (status == OS_PEER_UNAVAILABLE) print_error("ai-metier: NE2000 absent");
+    else if (status == OS_PEER_NO_LEASE) print_error("ai-metier: bail DHCP requis");
+    else if (status == OS_PEER_NOT_LISTENING) print_error("ai-metier: session TLS absente");
+    else print_error("ai-metier: echec");
 }
 
 static void cmd_ai_peer_accept(shell_context_t* ctx, char args[][128], int arg_count) {
@@ -5482,6 +5621,18 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
     } else if (strcmp(command, "service-watch") == 0) {
         cmd_service_watch(ctx, args, arg_count);
         return 1;
+    } else if (strcmp(command, "service-event-pull") == 0) {
+        cmd_service_event_pull(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "cap-token") == 0) {
+        cmd_cap_token(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "mount-journal-add") == 0) {
+        cmd_mount_journal_add(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "mount-journal") == 0) {
+        cmd_mount_journal(ctx, args, arg_count);
+        return 1;
     } else if (strcmp(command, "vfs-backend-probe") == 0) {
         cmd_vfs_backend_probe(ctx, args, arg_count);
         return 1;
@@ -5645,6 +5796,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         cmd_ai_peer_accept(ctx, args, arg_count);
     } else if (strcmp(command, "ai-peer-tls-poll") == 0) {
         cmd_ai_peer_tls_poll(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "ai-metier") == 0) {
+        cmd_ai_metier(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "ai-tls-poll") == 0) {
         cmd_ai_tls_poll(ctx, args, arg_count);

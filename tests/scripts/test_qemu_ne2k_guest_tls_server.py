@@ -461,6 +461,48 @@ def main():
         )
         peer_alive_check()
 
+        if os.environ.get("METIER") == "1":
+            sent = False
+            answered = False
+            received = False
+            for _ in range(16):
+                peer_alive_check()
+                if not sent:
+                    start_a = run_command(
+                        guest_a, "ai-metier", "ai-metier:",
+                        peer_alive_check, timeout=60,
+                    )
+                    chunk_a = log_text(guest_a["log"])[start_a:]
+                    if "ai-metier: echec" in chunk_a or "session TLS absente" in chunk_a:
+                        raise RuntimeError("metier send failed on A: %s" % chunk_a[-800:])
+                    if "METIER facture emis" in chunk_a:
+                        sent = True
+                    continue
+                start_b = run_command(
+                    guest_b, "ai-metier", "ai-metier:",
+                    peer_alive_check, timeout=60,
+                )
+                chunk_b = log_text(guest_b["log"])[start_b:]
+                if "ai-metier: echec" in chunk_b:
+                    raise RuntimeError("metier reply failed on B: %s" % chunk_b[-800:])
+                if "METIER ok" in chunk_b:
+                    answered = True
+                start_a = run_command(
+                    guest_a, "ai-metier", "ai-metier:",
+                    peer_alive_check, timeout=60,
+                )
+                chunk_a = log_text(guest_a["log"])[start_a:]
+                if "METIER ok" in chunk_a:
+                    received = True
+                if answered and received:
+                    break
+            if not (sent and answered and received):
+                raise RuntimeError(
+                    "expected bilateral METIER ok; sent=%s answered=%s received=%s events=%r"
+                    % (sent, answered, received, hub.events)
+                )
+            say("[guest-tls-server] METIER facture / METIER ok on both guests")
+
         say(
             "QEMU NE2000 guest-guest TLS-server step passed "
             "(guest B ServerHello..Finished in-tree, A TLS_COMPLETE, "
