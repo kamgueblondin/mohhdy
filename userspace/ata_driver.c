@@ -110,27 +110,39 @@ static int wait_drq_patient(void) {
     }
     return -1;
 }
-static void select_lba(uint8_t drive, uint32_t lba) {
+static void select_lba_count(uint8_t drive, uint32_t lba, uint8_t count) {
     outb(ATA_DRIVE, (uint8_t)(0xE0 | (drive ? 0x10 : 0) | ((lba >> 24) & 0x0F)));
     delay();
-    outb(ATA_SECCOUNT, 1);
+    outb(ATA_SECCOUNT, count);
     outb(ATA_LBA0, (uint8_t)lba); outb(ATA_LBA1, (uint8_t)(lba >> 8)); outb(ATA_LBA2, (uint8_t)(lba >> 16));
 }
-static int pio_read(uint8_t drive, uint32_t lba, uint8_t* out) {
-    uint32_t i;
+static void select_lba(uint8_t drive, uint32_t lba) { select_lba_count(drive, lba, 1U); }
+/* rep insw/outsw : QEMU traite la chaine en un seul exit, au lieu d'un exit par mot. */
+static void pio_insw(uint8_t* out, uint32_t words) {
+    asm volatile("cld; rep insw" : "+D"(out), "+c"(words) : "d"(ATA_DATA) : "memory");
+}
+static void pio_outsw(const uint8_t* in, uint32_t words) {
+    asm volatile("cld; rep outsw" : "+S"(in), "+c"(words) : "d"(ATA_DATA) : "memory");
+}
+/* Une commande READ/WRITE SECTORS pour tout le bloc contigu (1..255). */
+static int pio_transfer(uint8_t drive, uint32_t lba, uint8_t count, uint8_t* buf, int write) {
+    uint32_t s;
+    if (count == 0U) return -1;
     if (wait_bsy_patient() < 0) return -1;
-    select_lba(drive, lba); outb(ATA_CMD, 0x20);
-    if (wait_drq_patient() < 0) return -1;
-    for (i = 0; i < 256; i++) { uint16_t w = inw(ATA_DATA); out[2*i] = (uint8_t)w; out[2*i+1] = (uint8_t)(w >> 8); }
+    select_lba_count(drive, lba, count);
+    outb(ATA_CMD, write ? 0x30 : 0x20);
+    for (s = 0; s < count; s++) {
+        if (wait_drq_patient() < 0) return -1;
+        if (write) pio_outsw(buf + s * 512U, 256U);
+        else pio_insw(buf + s * 512U, 256U);
+    }
     return wait_bsy_patient();
 }
+static int pio_read(uint8_t drive, uint32_t lba, uint8_t* out) {
+    return pio_transfer(drive, lba, 1U, out, 0);
+}
 static int pio_write(uint8_t drive, uint32_t lba, const uint8_t* in) {
-    uint32_t i;
-    if (wait_bsy_patient() < 0) return -1;
-    select_lba(drive, lba); outb(ATA_CMD, 0x30);
-    if (wait_drq_patient() < 0) return -1;
-    for (i = 0; i < 256; i++) outw(ATA_DATA, (uint16_t)(in[2*i] | (in[2*i+1] << 8)));
-    return wait_bsy_patient();
+    return pio_transfer(drive, lba, 1U, (uint8_t*)in, 1);
 }
 /* One cache flush per write job (was one per sector). */
 static int pio_flush(void) {
@@ -175,7 +187,6 @@ static void ov_disk_note(uint32_t lba, uint32_t count, const uint8_t* data);
 static int serve_job(void) {
     os_ata_job_t job;
     int32_t rc = 0;
-    uint32_t s;
     int res;
     if (sc2(SYS_ATA_JOB_FETCH, (uint32_t)&job, (uint32_t)job_buf) != 1) return 0;
     if (job.op == OS_ATA_JOB_FS_OP) {
@@ -200,12 +211,10 @@ static int serve_job(void) {
         (void)inb(0x60);
         for (;;) yield();
     }
-    for (s = 0; s < job.count && rc == 0; s++) {
-        uint8_t drive = job.drive ? 1U : 0U;
-        if (job.op == OS_ATA_JOB_WRITE || job.op == OS_ATA_JOB_IO_WRITE)
-            rc = pio_write(drive, job.lba + s, job_buf + s * 512U);
-        else rc = pio_read(drive, job.lba + s, job_buf + s * 512U);
-    }
+    if (job.count == 0U || job.count > 255U) rc = -1;
+    else if (job.op == OS_ATA_JOB_WRITE || job.op == OS_ATA_JOB_IO_WRITE)
+        rc = pio_transfer(job.drive ? 1U : 0U, job.lba, (uint8_t)job.count, job_buf, 1);
+    else rc = pio_transfer(job.drive ? 1U : 0U, job.lba, (uint8_t)job.count, job_buf, 0);
     if (rc == 0 && (job.op == OS_ATA_JOB_WRITE || job.op == OS_ATA_JOB_IO_WRITE))
         rc = pio_flush();
     release();

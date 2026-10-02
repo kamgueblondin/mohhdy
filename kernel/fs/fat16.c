@@ -21,6 +21,19 @@ static int fat16_lfn_name_equals_folded(const uint16_t* units, const char* name)
 static uint8_t fat_sector_cache[FAT16_SECTOR_SIZE];
 static uint32_t fat_sector_cache_lba;
 static uint8_t fat_sector_cache_valid;
+/* Curseur de chaine pour fat16_read_file_range : une lecture plus loin dans
+ * le meme fichier reprend au cluster deja atteint, sans reparcourir la FAT. */
+static const fat16_volume_t* range_cursor_volume;
+static uint8_t range_cursor_name[11];
+static uint32_t range_cursor_size;
+static uint16_t range_cursor_cluster;
+static uint32_t range_cursor_index;
+static uint8_t range_cursor_valid;
+
+static void fat16_range_cursor_clear(void) {
+    range_cursor_valid = 0U;
+    range_cursor_volume = 0;
+}
 static uint8_t write_scratch[FAT16_SECTOR_SIZE];
 static const char* status_text = "FAT16: non monte";
 static fat16_volume_t root_volume;
@@ -160,6 +173,7 @@ fat16_volume_t* fat16_root(void) {
  * before it touches the volume again (fallback, GGUF streaming). */
 void fat16_invalidate_caches(fat16_volume_t* v) {
     fat_sector_cache_valid = 0U;
+    fat16_range_cursor_clear();
     if (v) v->read_window_valid = 0U;
 }
 
@@ -178,6 +192,7 @@ int fat16_mount(fat16_volume_t* v, fat16_read_sector_fn read_sector, uint32_t ba
     if (!v || !read_sector) return OS_FAT16_CORRUPT;
     v->mounted = 0U;
     fat_sector_cache_valid = 0U;
+    fat16_range_cursor_clear();
     v->read_sector = read_sector;
     v->read_sectors = 0;
     v->write_sector = 0;
@@ -286,6 +301,7 @@ static int fat16_write_sector_unlocked(const fat16_volume_t* v, uint32_t lba, co
     rc = v->write_sector(lba, write_scratch);
     mutable = (fat16_volume_t*)v;
     if (fat_sector_cache_valid && fat_sector_cache_lba == lba) fat_sector_cache_valid = 0U;
+    if (rc == 0) fat16_range_cursor_clear();
     if (mutable->read_window_valid && lba >= mutable->read_window_lba &&
         lba - mutable->read_window_lba < mutable->read_window_sectors) {
         if (rc == 0) {
@@ -815,6 +831,25 @@ const char* fat16_status(void) {
     return status_text;
 }
 
+static int fat16_range_name_equal(const uint8_t* entry) {
+    uint32_t i;
+    for (i = 0U; i < 11U; i++) {
+        if (range_cursor_name[i] != entry[i]) return 0;
+    }
+    return 1;
+}
+
+static void fat16_range_cursor_store(const fat16_volume_t* v, const uint8_t* entry,
+                                     uint32_t size, uint16_t cluster, uint32_t index) {
+    uint32_t i;
+    range_cursor_volume = v;
+    for (i = 0U; i < 11U; i++) range_cursor_name[i] = entry[i];
+    range_cursor_size = size;
+    range_cursor_cluster = cluster;
+    range_cursor_index = index;
+    range_cursor_valid = 1U;
+}
+
 int fat16_read_file_range(const fat16_volume_t* v, const char* name,
                           uint32_t offset, uint8_t* buffer, uint32_t max,
                           uint32_t* out_read) {
@@ -823,6 +858,7 @@ int fat16_read_file_range(const fat16_volume_t* v, const char* name,
     uint32_t size;
     uint32_t cluster_bytes;
     uint32_t skip_clusters;
+    uint32_t cluster_index;
     uint32_t intra;
     uint32_t copied = 0U;
     uint16_t cluster;
@@ -841,20 +877,39 @@ int fat16_read_file_range(const fat16_volume_t* v, const char* name,
     if (cluster_bytes == 0U) return OS_FAT16_CORRUPT;
     skip_clusters = offset / cluster_bytes;
     intra = offset % cluster_bytes;
-    while (skip_clusters-- > 0U) {
+    cluster_index = 0U;
+    if (range_cursor_valid && range_cursor_volume == v &&
+        range_cursor_size == size && fat16_range_name_equal(entry) &&
+        range_cursor_index <= skip_clusters) {
+        cluster = range_cursor_cluster;
+        cluster_index = range_cursor_index;
+        guard = cluster_index;
+    }
+    while (cluster_index < skip_clusters) {
         if (cluster < 2U || cluster >= FAT16_EOC_MIN ||
             cluster - 2U >= v->cluster_count || guard++ > v->cluster_count ||
-            read_fat_entry(v, cluster, &cluster) != 0) return OS_FAT16_CORRUPT;
+            read_fat_entry(v, cluster, &cluster) != 0) {
+            fat16_range_cursor_clear();
+            return OS_FAT16_CORRUPT;
+        }
+        cluster_index++;
     }
+    fat16_range_cursor_store(v, entry, size, cluster, cluster_index);
     while (copied < max && offset + copied < size) {
         uint32_t sector_in_cluster = intra / FAT16_SECTOR_SIZE;
         uint32_t sector_offset = intra % FAT16_SECTOR_SIZE;
         uint32_t lba;
         uint32_t take = FAT16_SECTOR_SIZE - sector_offset;
         if (cluster < 2U || cluster >= FAT16_EOC_MIN ||
-            cluster - 2U >= v->cluster_count || guard > v->cluster_count) return OS_FAT16_CORRUPT;
+            cluster - 2U >= v->cluster_count || guard > v->cluster_count) {
+            fat16_range_cursor_clear();
+            return OS_FAT16_CORRUPT;
+        }
         lba = v->data_lba + (uint32_t)(cluster - 2U) * v->sectors_per_cluster + sector_in_cluster;
-        if (read_at(v, lba, sector2) != 0) return OS_FAT16_CORRUPT;
+        if (read_at(v, lba, sector2) != 0) {
+            fat16_range_cursor_clear();
+            return OS_FAT16_CORRUPT;
+        }
         if (take > max - copied) take = max - copied;
         if (take > size - offset - copied) take = size - offset - copied;
         for (i = 0U; i < take; i++) buffer[copied + i] = sector2[sector_offset + i];
@@ -862,8 +917,13 @@ int fat16_read_file_range(const fat16_volume_t* v, const char* name,
         intra += take;
         if (intra >= cluster_bytes && copied < max && offset + copied < size) {
             if (guard++ >= v->cluster_count ||
-                read_fat_entry(v, cluster, &cluster) != 0) return OS_FAT16_CORRUPT;
+                read_fat_entry(v, cluster, &cluster) != 0) {
+                fat16_range_cursor_clear();
+                return OS_FAT16_CORRUPT;
+            }
             intra = 0U;
+            cluster_index++;
+            fat16_range_cursor_store(v, entry, size, cluster, cluster_index);
         }
     }
     *out_read = copied;
