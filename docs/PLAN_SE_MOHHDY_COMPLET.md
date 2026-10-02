@@ -164,7 +164,7 @@ Une ligne peut cumuler bootstrap et "a porter" : le comportement existe hors OS,
 | Reseau public optionnel | TLS vers hote reel, OpenAI sous condition | sous condition, hors CI | conditionnel |
 | CI budget 25 min | Sept contrats sequentiels, smoke multi-pairs | verifie a tenir | **garde 0** |
 
-Limites FAT **hors** cible tant que `mohhdy_us.md` ne les ajoute pas : ecrasement, LFN enfant, renommage inter-repertoire, remplacement atomique.
+Limites FAT **hors** cible tant que `mohhdy_us.md` ne les ajoute pas : ecrasement, renommage inter-repertoire, remplacement atomique. Les LFN de sous-repertoire sont deja livres.
 
 ### 3.2 Direction Foundation / microkernel (famille US-001)
 
