@@ -43,7 +43,7 @@ Les capacites `ASSIST-xxx` **reprennent** le vocabulaire Foundation (droits, gra
 
 Constat courant (ETAT_REEL, 2 octobre 2026) :
 
-- Suite : **619/619** au rejeu local (31 s). Les chiffres 522 et 523 decrivent septembre 2026
+- Suite : **622/622** au rejeu local du 2 octobre 2026. Les chiffres 522 et 523 decrivent septembre 2026
 - `make qemu-smoke` : six scenarios verts le 2 octobre 2026
 - CI `0ffe841`, run 36715656797 : quatre jobs verts, mur d'environ 11 minutes
 - Sept contrats `make integration-qemu`, budget 25 minutes. Mesure locale historique : 760,9 s
@@ -156,7 +156,7 @@ Suite : `make qemu-ne2k-tls-multi-guest` (TLS_COMPLETE x2), `make qemu-ne2k-gues
 - Topologie de base : un seul `ai-acquire` ; suite TLS multi : baux `10.32.0.15` / `10.32.0.16`
 - Ce n'est pas le réseau public (voir tranche sous condition plus bas)
 
-**Ordre suggéré.** Après Garde 2. TLS multi-invites livre (`qemu-ne2k-tls-multi-guest`). Guest-guest applicatif livre (`qemu-ne2k-guest-app-traffic`, hors ci). SYN-ACK guest livre (`qemu-ne2k-guest-tls-peer`, hors ci). ACK final + ClientHello TLS livre (`qemu-ne2k-guest-tls-chat`, hors ci). Role serveur TLS jusqu a Finished livre (`qemu-ne2k-guest-tls-server`, hors ci) ; chat chiffre bilaterale metier reste ouvert.
+**Ordre suggéré.** Après Garde 2. TLS multi-invites livre (`qemu-ne2k-tls-multi-guest`). Guest-guest applicatif livre (`qemu-ne2k-guest-app-traffic`, hors ci). SYN-ACK guest livre (`qemu-ne2k-guest-tls-peer`, hors ci). ACK final + ClientHello TLS livre (`qemu-ne2k-guest-tls-chat`, hors ci). Role serveur TLS jusqu a Finished livre (`qemu-ne2k-guest-tls-server`, hors ci). Chat chiffre bilateral metier livre : `make qemu-ne2k-guest-tls-metier` (hors CI, les deux invites impriment `METIER ok`).
 
 ### Tranche 3. Latence GGUF sur plateforme de référence (matériel / KVM)
 
@@ -312,8 +312,8 @@ Les rangs 0-4 sont **ce fichier**. Les rangs OS-UI sont le [plan maitre](PLAN_SE
 |---:|---|---|---|
 | 0 | Budget CI QEMU | Prototype guest | Garder, ne pas relacher |
 | 1 | ACL prefixee | Prototype guest | Garder les preuves negatives |
-| 2 | Topologie locale partagee | Prototype guest | `qemu-ne2k-shared-topology` + `qemu-ne2k-tls-multi-guest` + `qemu-ne2k-guest-app-traffic` + `qemu-ne2k-guest-tls-peer` + `qemu-ne2k-guest-tls-chat` + `qemu-ne2k-guest-tls-server` (hub 127.0.0.1, hors ci) |
-| 3 | Latence GGUF materiel / KVM | Prototype guest | Item ouvert README + priorite 3 `mohhdy_us.md` |
+| 2 | Topologie locale partagee | Prototype guest | Harness guest-guest jusqu'a Finished, plus `make qemu-ne2k-guest-tls-metier` (chat chiffre, hors ci) |
+| 3 | Latence GGUF materiel / KVM | Prototype guest | Campagne `make gguf-kvm-benchmark` en cours ; le TCG n'est pas le critere |
 | 4 | Pilote de stockage hors noyau | Prototype guest, increment US-001 | I/O protegees via worker (AOS-2163) ; repli local refuse si worker vivant (AOS-2171) ; bypass proprio FAT ferme si worker publie (AOS-2172) ; bypass proprio initrd/overlay ferme si worker publie (AOS-2173) ; bypass SOURCE_ALL / ATA-backed ferme si worker publie (AOS-2174) ; overlay read/stat uniquement via PID worker (AOS-2175) ; SYS_READFILE/SYS_WRITEFILE historiques gates sur la partie overlay si worker publie (AOS-2177) ; autres points d'entree historiques overlay (STAT, LISTDIR, MKDIR, UNLINK, RENAME, COPY, APPEND) et liste overlay backend gates (AOS-2178) ; Tranche 4 slice 1 : ports ATA 0x1F0-0x1F7/0x3F6 a CPL 3 pour le seul `atadriver` via IOPB TSS + fenetre secteur IPC 64 octets (`make qemu-ata-driver`) ; slice 2 : flush/chargement post-boot du snapshot overlay via le pilote + claim d'exclusion + barrieres FAT ; slice 3 : `atadriver` lance au boot (disque IDE present), E/S secteur FAT16/FAT32 via le pilote par RPC synchrone quand il est vivant (PIO noyau FAT a 0), repli Ring 0 apres mort du pilote ; chargement overlay et montage FAT au boot + repli encore PIO Ring 0 `[~]` |
 | 5 | Isolation reseau (worker `net-driver`) | Prototype guest | Slice 1 : gate -59 ; slice 2 : relais IPC des syscalls socket 99-108 vers le worker (codec TCP), LLM/peer toujours -59 ; slice 3 : TCP sur le fil via le worker (`SYS_SOCKET_CONNECT` relaye, `SYS_NET_WIRE_*` 139-142 reserves au worker : ARP, trames IPv4/TCP, demux RX), preuve `make qemu-net-wire` vers un pair echo local ; pilote NE2000, IRQ et pile TCP encore Ring 0. Suite : ports NE2000 en Ring 3 via l'IOPB (comme atadriver) et pilote dans le worker |
 | - | Reseau public | Prototype guest | Sous condition, hors CI |

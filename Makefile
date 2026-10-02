@@ -417,12 +417,18 @@ pack-initrd: userspace-all
 	@echo "gpt2.gguf|gpt2|optional|GGUF-v3|kquant-kernels" >> $(INITRD_DIR)/models/models.manifest
 	@echo "# Provide gpt2_124M.bin and gpt2_tokenizer.bin in models/ before build." > $(INITRD_DIR)/models/README.txt
 	@echo "# models/gpt2.gguf is optional: v3 structure and Q3_K/Q4_K/Q6_K kernel layouts are validated; full GGUF GPT-2 loading remains pending." >> $(INITRD_DIR)/models/README.txt
-	@if [ -f "$(GPT2_MODEL)" ] && [ -f "$(MODEL_DIR)/gpt2_tokenizer.bin" ]; then \
-		echo "[mkinitrd] Inclusion du checkpoint et du tokenizer GPT-2 locaux..."; \
-		cp -f "$(GPT2_MODEL)" "$(INITRD_DIR)/models/gpt2_124M.bin"; \
+	@rm -f "$(INITRD_DIR)/models/gpt2_tokenizer.bin" "$(INITRD_DIR)/models/gpt2_124M.bin"
+	@if [ -f "$(MODEL_DIR)/gpt2_tokenizer.bin" ]; then \
+		echo "[mkinitrd] Inclusion du tokenizer GPT-2 local..."; \
 		cp -f "$(MODEL_DIR)/gpt2_tokenizer.bin" "$(INITRD_DIR)/models/gpt2_tokenizer.bin"; \
 	else \
-		echo "[mkinitrd] Checkpoint ou tokenizer GPT-2 local absent."; \
+		echo "[mkinitrd] Tokenizer GPT-2 local absent."; \
+	fi
+	@if [ -f "$(GPT2_MODEL)" ]; then \
+		echo "[mkinitrd] Inclusion du checkpoint GPT-2 local..."; \
+		cp -f "$(GPT2_MODEL)" "$(INITRD_DIR)/models/gpt2_124M.bin"; \
+	else \
+		echo "[mkinitrd] Checkpoint GPT-2 local absent."; \
 	fi
 	@rm -f "$(INITRD_DIR)/models/gpt2.gguf"
 	@if [ -f "$(GPT2_GGUF_MODEL)" ]; then \
