@@ -84,9 +84,11 @@ static void service_notify_change(const char* name, int32_t old_owner_pid,
         /* Best effort non bloquant : une boîte pleine ne retarde jamais un changement de registre. */
         (void)service_registry_notify_record(name, watchers[i], old_owner_pid,
                                              new_owner_pid, reason, (uint32_t*)0);
-        /* Best effort non bloquant : une boite pleine ne retarde jamais le registre.
-         * L'historique ci-dessus reste lisible par service-event-pull. */
-        (void)ipc_endpoint_send(&watcher->ipc_endpoint, 0, &payload);
+        /* La boite de quatre places ne perd plus la copie : le surplus attend
+         * le prochain ipc-recv. Le pull disque reste le journal durable. */
+        if (ipc_endpoint_send(&watcher->ipc_endpoint, 0, &payload) != 0) {
+            (void)service_registry_ipc_spill_push(watchers[i], &payload);
+        }
     }
 }
 
@@ -1896,10 +1898,21 @@ int sys_ipc_send(int target_pid, const os_ipc_payload_t* payload) {
 }
 
 int sys_ipc_receive(os_ipc_message_t* out) {
+    os_ipc_payload_t spilled;
+    uint32_t i;
+    int rc;
     if (!current_task || current_task->type != TASK_TYPE_USER || !out) {
         return OS_IPC_BAD_MESSAGE;
     }
-    return ipc_endpoint_receive(&current_task->ipc_endpoint, out);
+    rc = ipc_endpoint_receive(&current_task->ipc_endpoint, out);
+    if (rc != OS_IPC_EMPTY) return rc;
+    if (service_registry_ipc_spill_pop(current_task->id, &spilled) != 0) return OS_IPC_EMPTY;
+    out->sender_pid = 0;
+    out->type = spilled.type;
+    out->size = spilled.size;
+    out->request_id = spilled.request_id;
+    for (i = 0U; i < OS_IPC_MAX_DATA; i++) out->data[i] = spilled.data[i];
+    return 0;
 }
 
 int sys_task_supervision_notify(uint32_t enabled) {

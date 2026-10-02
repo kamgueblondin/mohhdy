@@ -41,7 +41,8 @@ OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build
 
 # L'ABI partagée influence notamment la taille de task_t et des messages IPC.
 # Une évolution de structure doit donc reconstruire toute l'image, pas seulement ipc.o.
-$(OBJECTS): include/os_syscalls.h
+# task.h decale les champs de task_t : un .o perime ecrit boot_service sur kctx_valid.
+$(OBJECTS): include/os_syscalls.h kernel/task/task.h
 
 # Cible par défaut : construire le système complet (noyau + initrd + disque overlay)
 all: $(OS_IMAGE) pack-initrd disk

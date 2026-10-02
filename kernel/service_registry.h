@@ -17,6 +17,8 @@ typedef struct {
     uint32_t generation;
     char name[OS_SERVICE_NAME_MAX];
     uint32_t backend_generation;
+    uint32_t right_token;
+    uint32_t identity_key;
 } service_registry_entry_t;
 
 typedef struct {
@@ -79,6 +81,9 @@ int service_registry_event_journal_export(uint8_t* buf, uint32_t cap);
 int service_registry_event_journal_import(const uint8_t* buf, uint32_t len);
 /* 1 si le LBA du journal est hors du volume FAT16 monte. Defaut faible : oui. */
 int service_registry_event_journal_allowed(void);
+/* Copie IPC d'un evenement de service quand la boite de quatre places est pleine. */
+int service_registry_ipc_spill_push(int32_t watcher_pid, const os_ipc_payload_t* payload);
+int service_registry_ipc_spill_pop(int32_t watcher_pid, os_ipc_payload_t* out);
 int service_registry_backend_token_of(const char* name, int32_t grantee_pid, uint32_t* out_token);
 /* Remet le jeton a 0. La ligne reste, mais allowed doit refuser. */
 int service_registry_backend_clear_token(const char* name, int32_t grantee_pid);
