@@ -2934,6 +2934,17 @@ static void cmd_spawn(shell_context_t* ctx, char args[][128], int arg_count) {
         print_error("spawn: programme manquant");
         return;
     }
+    /* The kernel already started networker when a NIC is present. A second
+     * task would fail to register net-driver. Report the live PID. */
+    if (strcmp(args[0], "networker") == 0) {
+        int live = sys_service_lookup("net-driver");
+        if (live > 0) {
+            print_string("spawn ok pid ");
+            print_int(live);
+            print_string(" networker\n");
+            return;
+        }
+    }
     pid = spawn(args[0], 0);
     if (pid == OS_TASK_CHILD_LIMIT) {
         print_error("spawn: capacité de quatre enfants atteinte");

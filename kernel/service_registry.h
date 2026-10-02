@@ -73,6 +73,12 @@ int service_registry_persistent_mount_restore(const char* service_name);
 int service_registry_mount_journal_export(uint8_t* buf, uint32_t cap);
 int service_registry_mount_journal_import(const uint8_t* buf, uint32_t len);
 int service_registry_mount_journal_format(const char* service_name, char* buf, uint32_t max);
+/* Image des evenements non acquittes (un secteur, magic EVNT). watcher_pid
+ * n'est pas stocke : au reboot, service-watch rattache le nom au nouveau PID. */
+int service_registry_event_journal_export(uint8_t* buf, uint32_t cap);
+int service_registry_event_journal_import(const uint8_t* buf, uint32_t len);
+/* 1 si le LBA du journal est hors du volume FAT16 monte. Defaut faible : oui. */
+int service_registry_event_journal_allowed(void);
 int service_registry_backend_token_of(const char* name, int32_t grantee_pid, uint32_t* out_token);
 /* Remet le jeton a 0. La ligne reste, mais allowed doit refuser. */
 int service_registry_backend_clear_token(const char* name, int32_t grantee_pid);

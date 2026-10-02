@@ -87,7 +87,7 @@ typedef struct task {
     cpu_state_t* syscall_frame;
     uint32_t kctx[7];
     uint32_t kctx_valid;
-    uint32_t boot_service;      /* spawned by the kernel at boot (atadriver) */
+    uint32_t boot_service;      /* spawned by the kernel at boot (atadriver, networker) */
     struct task* next;         // Pour la liste chaînée de tâches
     struct task* prev;         // Liste doublement chaînée
 } task_t;

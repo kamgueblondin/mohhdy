@@ -667,6 +667,34 @@ static void test_notify_pull_returns_oldest_without_ipc(void) {
     TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_pull(4, &event));
 }
 
+static void test_event_journal_survives_without_ata_and_rebinds(void) {
+    uint8_t image[512];
+    service_registry_notify_event_t event;
+    uint32_t seq = 0U;
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_notify_record("keep", 4, 0, 9, OS_SERVICE_EVENT_PUBLISHED, &seq));
+    TEST_ASSERT_EQUAL(0, service_registry_notify_record("keep", 4, 9, 0, OS_SERVICE_EVENT_UNREGISTERED, &seq));
+    TEST_ASSERT_EQUAL(0, service_registry_notify_pull(4, &event));
+    TEST_ASSERT_EQUAL(0, service_registry_event_journal_export(image, sizeof(image)));
+    service_registry_init();
+    TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_pull(8, &event));
+    TEST_ASSERT_EQUAL(0, service_registry_event_journal_import(image, sizeof(image)));
+    TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_pull(8, &event));
+    TEST_ASSERT_EQUAL(0, service_registry_subscribe("keep", 8));
+    TEST_ASSERT_EQUAL(0, service_registry_notify_pull(8, &event));
+    TEST_ASSERT_EQUAL('k', event.name[0]);
+    TEST_ASSERT_EQUAL('e', event.name[1]);
+    TEST_ASSERT_EQUAL('e', event.name[2]);
+    TEST_ASSERT_EQUAL('p', event.name[3]);
+    TEST_ASSERT_EQUAL(0, event.name[4]);
+    TEST_ASSERT_EQUAL(9, event.old_pid);
+    TEST_ASSERT_EQUAL(0, event.new_pid);
+    TEST_ASSERT_EQUAL(OS_SERVICE_EVENT_UNREGISTERED, event.reason);
+    TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_pull(8, &event));
+    image[0] ^= 0xFFU;
+    TEST_ASSERT_TRUE(service_registry_event_journal_import(image, sizeof(image)) != 0);
+}
+
 static void test_mount_journal_roundtrip_without_ata(void) {
     uint8_t image[1024];
     service_registry_persistent_mount_t mounts[SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY];
@@ -798,6 +826,7 @@ int main(void) {
     RUN_TEST(test_persistent_mounts_auto_restore_on_service_reregistration);
     RUN_TEST(test_backend_token_is_nonzero_unique_and_required);
     RUN_TEST(test_notify_pull_returns_oldest_without_ipc);
+    RUN_TEST(test_event_journal_survives_without_ata_and_rebinds);
     RUN_TEST(test_mount_journal_roundtrip_without_ata);
     unity_print_results();
     unity_cleanup();

@@ -25,7 +25,7 @@ Le backend refuse les BPB invalides, les tailles hors plage FAT16, les offsets h
 
 ## Image de test et isolation
 
-`tests/scripts/make_fat16_image.py` fabrique une image brute de 4224 secteurs. Le fixture contient `FATOK.TXT` et `BIGFILE.BIN`, utilise deux copies de FAT et réserve explicitement la zone AIOV avant le volume. Le smoke core QEMU recrée son disque de test à chaque exécution, puis vérifie `fat16-list` et `fat16-cat FATOK.TXT` avant les tests initrd et overlay.
+`tests/scripts/make_fat16_image.py` fabrique une image brute de 4225 secteurs. Le fixture contient `FATOK.TXT` et `BIGFILE.BIN`, utilise deux copies de FAT et réserve explicitement la zone AIOV avant le volume. Le smoke core QEMU recrée son disque de test à chaque exécution, puis vérifie `fat16-list` et `fat16-cat FATOK.TXT` avant les tests initrd et overlay.
 
 > Le volume FAT16 est préparé par l'hôte de build. MOHHDY ne contient pas d'outil de formatage et ne modifie pas la FAT.
 

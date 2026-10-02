@@ -5,9 +5,11 @@ from pathlib import Path
 
 SECTOR = 512
 BASE_LBA = 64
-TOTAL_DISK_SECTORS = 4224
-# LBA 4222-4223 : journal de montages (magic MNTJ), hors AIOV (0-63).
-JOURNAL_SECTORS = 2
+TOTAL_DISK_SECTORS = 4225
+# LBA 4222-4223 : journal de montages (magic MNTJ).
+# LBA 4224 : journal d'evenements non acquittes (magic EVNT).
+# Les deux sont hors AIOV (0-63) et hors volume FAT.
+JOURNAL_SECTORS = 3
 TOTAL_FAT_SECTORS = TOTAL_DISK_SECTORS - BASE_LBA - JOURNAL_SECTORS
 FAT_SECTORS = 16
 ROOT_ENTRIES = 32

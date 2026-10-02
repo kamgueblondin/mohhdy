@@ -27,6 +27,9 @@ static service_registry_persistent_mount_t persistent_mounts[SERVICE_REGISTRY_PE
 
 static int mount_insert(const char* service_name, const char* prefix, uint32_t source);
 static int mount_journal_load(void);
+static void event_journal_flush(void);
+static int event_journal_load(void);
+static void event_journal_bind(const char* name, int32_t pid);
 
 static int task_identity_valid(int32_t pid, uint32_t sequence, uint32_t generation) {
     uint32_t cur_seq = 0U, cur_gen = 0U;
@@ -202,6 +205,7 @@ void service_registry_init(void) {
         (void)mount_insert("vfs", "fat16/", OS_SERVICE_BACKEND_SOURCE_FAT16);
         (void)mount_insert("vfs", "fat32/", OS_SERVICE_BACKEND_SOURCE_FAT32);
     }
+    (void)event_journal_load();
 }
 
 int service_registry_register(const char* name, int32_t pid) {
@@ -379,6 +383,7 @@ int service_registry_notify_record(const char* name, int32_t watcher_pid, int32_
     service_notify_history[slot].acked = 0U;
     service_notify_history[slot].replayed = 0U;
     if (out_sequence) *out_sequence = service_notify_seq_counter;
+    event_journal_flush();
     return 0;
 }
 
@@ -400,6 +405,7 @@ int service_registry_notify_pull(int32_t watcher_pid, service_registry_notify_ev
     if (found < 0) return OS_SERVICE_NOT_FOUND;
     *out = service_notify_history[found];
     service_notify_history[found].acked = 1U;
+    event_journal_flush();
     return 0;
 }
 
@@ -410,6 +416,7 @@ int service_registry_notify_ack(int32_t watcher_pid, uint32_t sequence) {
         if (service_notify_history[i].watcher_pid == watcher_pid &&
             service_notify_history[i].sequence == sequence) {
             service_notify_history[i].acked = 1U;
+            event_journal_flush();
             return 0;
         }
     }
@@ -590,6 +597,140 @@ static void mount_journal_flush(void) {
 static int mount_journal_load(void) {
     if (ata_read_sectors(MOUNT_JOURNAL_LBA, MOUNT_JOURNAL_BYTES / 512U, mount_journal_buf) != 0) return -1;
     return service_registry_mount_journal_import(mount_journal_buf, MOUNT_JOURNAL_BYTES);
+}
+
+#define EVENT_JOURNAL_MAGIC 0x544E5645U /* 'EVNT' */
+#define EVENT_JOURNAL_VERSION 1U
+#define EVENT_JOURNAL_LBA 4224U
+#define EVENT_JOURNAL_BYTES 512U
+
+typedef struct __attribute__((packed)) {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t count;
+    uint32_t seq_counter;
+    uint32_t checksum;
+} event_journal_header_t;
+
+typedef struct __attribute__((packed)) {
+    uint32_t sequence;
+    char name[OS_SERVICE_NAME_MAX];
+    int32_t old_pid;
+    int32_t new_pid;
+    uint32_t reason;
+} event_journal_entry_t;
+
+static uint8_t event_journal_buf[EVENT_JOURNAL_BYTES];
+
+__attribute__((weak)) int service_registry_event_journal_allowed(void) {
+    return 1;
+}
+
+int service_registry_event_journal_export(uint8_t* buf, uint32_t cap) {
+    event_journal_header_t header;
+    uint32_t i;
+    uint32_t count = 0U;
+    uint32_t need;
+    uint8_t* cursor;
+    if (!buf) return OS_SERVICE_BAD_NAME;
+    for (i = 0U; i < SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY; i++) {
+        if (service_notify_history[i].sequence > 0U && service_notify_history[i].acked == 0U) count++;
+    }
+    need = (uint32_t)sizeof(header) + count * (uint32_t)sizeof(event_journal_entry_t);
+    if (cap < need || need > EVENT_JOURNAL_BYTES) return OS_SERVICE_FULL;
+    for (i = 0U; i < cap; i++) buf[i] = 0U;
+    cursor = buf + sizeof(header);
+    for (i = 0U; i < SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY; i++) {
+        event_journal_entry_t entry;
+        uint32_t b;
+        if (service_notify_history[i].sequence == 0U || service_notify_history[i].acked != 0U) continue;
+        entry.sequence = service_notify_history[i].sequence;
+        copy_name(entry.name, service_notify_history[i].name);
+        entry.old_pid = service_notify_history[i].old_pid;
+        entry.new_pid = service_notify_history[i].new_pid;
+        entry.reason = service_notify_history[i].reason;
+        for (b = 0U; b < sizeof(entry); b++) cursor[b] = ((const uint8_t*)&entry)[b];
+        cursor += sizeof(entry);
+    }
+    header.magic = EVENT_JOURNAL_MAGIC;
+    header.version = EVENT_JOURNAL_VERSION;
+    header.count = count;
+    header.seq_counter = service_notify_seq_counter;
+    header.checksum = mount_journal_checksum(buf + sizeof(header),
+                                             count * (uint32_t)sizeof(event_journal_entry_t));
+    for (i = 0U; i < sizeof(header); i++) buf[i] = ((const uint8_t*)&header)[i];
+    return 0;
+}
+
+int service_registry_event_journal_import(const uint8_t* buf, uint32_t len) {
+    event_journal_header_t header;
+    uint32_t i;
+    uint32_t need;
+    const uint8_t* cursor;
+    if (!buf || len < sizeof(header)) return OS_SERVICE_BAD_NAME;
+    for (i = 0U; i < sizeof(header); i++) ((uint8_t*)&header)[i] = buf[i];
+    if (header.magic != EVENT_JOURNAL_MAGIC || header.version != EVENT_JOURNAL_VERSION) return OS_SERVICE_NOT_FOUND;
+    if (header.count > SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY) return OS_SERVICE_NOT_FOUND;
+    need = (uint32_t)sizeof(header) + header.count * (uint32_t)sizeof(event_journal_entry_t);
+    if (len < need) return OS_SERVICE_NOT_FOUND;
+    if (header.checksum != mount_journal_checksum(buf + sizeof(header),
+                                                  header.count * (uint32_t)sizeof(event_journal_entry_t))) {
+        return OS_SERVICE_NOT_FOUND;
+    }
+    for (i = 0U; i < SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY; i++) {
+        service_notify_history[i].sequence = 0U;
+        service_notify_history[i].watcher_pid = 0;
+        service_notify_history[i].name[0] = '\0';
+        service_notify_history[i].old_pid = 0;
+        service_notify_history[i].new_pid = 0;
+        service_notify_history[i].reason = 0U;
+        service_notify_history[i].acked = 0U;
+        service_notify_history[i].replayed = 0U;
+    }
+    if (header.seq_counter > service_notify_seq_counter) service_notify_seq_counter = header.seq_counter;
+    cursor = buf + sizeof(header);
+    for (i = 0U; i < header.count; i++) {
+        event_journal_entry_t entry;
+        uint32_t b;
+        for (b = 0U; b < sizeof(entry); b++) ((uint8_t*)&entry)[b] = cursor[b];
+        cursor += sizeof(entry);
+        if (entry.sequence == 0U) return OS_SERVICE_NOT_FOUND;
+        if (entry.reason < OS_SERVICE_EVENT_PUBLISHED || entry.reason > OS_SERVICE_EVENT_PURGED) return OS_SERVICE_NOT_FOUND;
+        entry.name[OS_SERVICE_NAME_MAX - 1U] = '\0';
+        if (!service_registry_name_valid(entry.name)) return OS_SERVICE_NOT_FOUND;
+        service_notify_history[i].sequence = entry.sequence;
+        service_notify_history[i].watcher_pid = 0;
+        copy_name(service_notify_history[i].name, entry.name);
+        service_notify_history[i].old_pid = entry.old_pid;
+        service_notify_history[i].new_pid = entry.new_pid;
+        service_notify_history[i].reason = entry.reason;
+        service_notify_history[i].acked = 0U;
+        service_notify_history[i].replayed = 0U;
+    }
+    return 0;
+}
+
+static void event_journal_flush(void) {
+    if (!service_registry_event_journal_allowed()) return;
+    if (service_registry_event_journal_export(event_journal_buf, EVENT_JOURNAL_BYTES) != 0) return;
+    (void)ata_write_sectors(EVENT_JOURNAL_LBA, EVENT_JOURNAL_BYTES / 512U, event_journal_buf);
+}
+
+static int event_journal_load(void) {
+    if (ata_read_sectors(EVENT_JOURNAL_LBA, EVENT_JOURNAL_BYTES / 512U, event_journal_buf) != 0) return -1;
+    return service_registry_event_journal_import(event_journal_buf, EVENT_JOURNAL_BYTES);
+}
+
+static void event_journal_bind(const char* name, int32_t pid) {
+    uint32_t i;
+    for (i = 0U; i < SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY; i++) {
+        if (service_notify_history[i].watcher_pid == 0 &&
+            service_notify_history[i].sequence > 0U &&
+            service_notify_history[i].acked == 0U &&
+            name_equal(service_notify_history[i].name, name)) {
+            service_notify_history[i].watcher_pid = pid;
+        }
+    }
 }
 
 int service_registry_mount_journal_format(const char* service_name, char* buf, uint32_t max) {
@@ -1033,6 +1174,7 @@ int service_registry_subscribe(const char* name, int32_t pid) {
         if (service_watches[i].pid == pid && name_equal(service_watches[i].name, name)) {
             service_watches[i].sequence = seq;
             service_watches[i].generation = gen;
+            event_journal_bind(name, pid);
             return 0;
         }
     }
@@ -1041,6 +1183,7 @@ int service_registry_subscribe(const char* name, int32_t pid) {
     service_watches[free_slot].sequence = seq;
     service_watches[free_slot].generation = gen;
     copy_name(service_watches[free_slot].name, name);
+    event_journal_bind(name, pid);
     return 0;
 }
 

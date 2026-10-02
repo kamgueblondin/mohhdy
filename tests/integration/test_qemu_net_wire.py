@@ -78,6 +78,7 @@ def main():
             monitor = nw.connect_monitor()
             time.sleep(0.5)
             nw.send_command_until(monitor, "net-status", "Carte Ethernet : detectee", proc)
+            nw.release_boot_worker(monitor, proc)
             base = wire_status(monitor, proc)
             if base["worker"] != 0 or base["tx"] != 0 or base["bound"] != 0:
                 raise RuntimeError("wire active at boot: %r" % base)
