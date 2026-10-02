@@ -209,6 +209,18 @@ int kernel_net_nic_info(os_net_nic_info_t* info) {
 
 int kernel_net_nic_present(void) { return boot_ne2k_present ? 1 : 0; }
 
+/* LBA 4224 holds the service-event journal. Skip the write when that sector
+ * sits inside the mounted FAT16 volume (the large GGUF disk). The foundation
+ * fixture keeps it past the volume, next to the mount journal. */
+int service_registry_event_journal_allowed(void) {
+    fat16_volume_t* volume = fat16_root();
+    uint32_t end;
+    if (!volume || !volume->mounted) return 1;
+    end = volume->base_lba + volume->total_sectors;
+    if (end < volume->base_lba) return 0;
+    return 4224U < end ? 0 : 1;
+}
+
 /* Worker lost: cancel its op, then re-initialise the card from Ring 0 (the
  * worker left rings, IMR and maybe a DMA in an unknown state). */
 int kernel_net_nic_reclaim(void) {
@@ -952,6 +964,20 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
             print_string_serial("[ATA] boot atadriver spawned\n");
         } else {
             print_string_serial("[ATA] boot atadriver unavailable; Ring 0 PIO path\n");
+        }
+    }
+
+    /* Tranche 5: when the boot probe saw a NE2000, start networker before the
+     * shell prompt. Presence detection and the reclaim path stay in Ring 0.
+     * The worker takes the ports; killing it (root shell) restores Ring 0. */
+    if (kernel_net_nic_present()) {
+        task_t* net_driver_task = create_task_from_initrd_file("bin/networker");
+        if (net_driver_task) {
+            net_driver_task->boot_service = 1U;
+            task_queue_move_first_user(net_driver_task);
+            print_string_serial("[NET] boot networker spawned\n");
+        } else {
+            print_string_serial("[NET] boot networker unavailable; Ring 0 NIC path\n");
         }
     }
 

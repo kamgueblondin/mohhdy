@@ -19,7 +19,7 @@ DISK_IMAGE ?= build/overlay.img
 GGUF_DISK_IMAGE ?= build/gpt2_gguf_fat16.img
 FAT32_SECONDARY_IMAGE ?= build/fat32_secondary.img
 GPT2_GGUF_DEPLOY_MODEL ?= models/gpt2-Q3_K_M.gguf
-DISK_SECTORS ?= 4224
+DISK_SECTORS ?= 4225
 FAT_BASE_LBA ?= 64
 QEMU_DISK_OPTS = -drive file=$(DISK_IMAGE),format=raw,if=ide,cache=writethrough
 MODEL_DIR ?= models

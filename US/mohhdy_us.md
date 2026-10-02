@@ -131,15 +131,15 @@ La liste vivante et les criteres sont dans [docs/ETAT_REEL.md](../docs/ETAT_REEL
 
 | Priorite | Sujet | Etat |
 |---|---|---|
-| 0 | Gates | `make test-all` 624/624. `make integration-qemu` 7/7 en 809,7 s sur le tip precedent. `make qemu-ata-driver` vert apres retour aux jobs de 8 secteurs |
+| 0 | Gates | `make test-all` 625/625. `make integration-qemu` 7/7 en 809,7 s sur le tip precedent. `make qemu-ata-driver` vert apres retour aux jobs de 8 secteurs |
 | 1 | Chaine US-031 | Livre : `us031_complete=false`, `chromium=false` |
 | 2 | Chat chiffre metier | Livre : `make qemu-ne2k-guest-tls-metier`, hors CI |
 | 3 | Latence KVM | Livre, un echantillon, poids residents : 43,916 s puis 20,224 s. Pas sous 1 s |
 | 4 | Jeton de capability | Livre : `make qemu-foundation-steps` (`cap-token`). Pas US-001 complet |
-| 5 | Evenement non perdu | Livre : `service-event-pull` dans le meme contrat. Pas de journal disque |
+| 5 | Evenement non perdu | Livre : `service-event-pull` et journal `EVNT` au LBA 4224, relu au second boot |
 | 6 | Montages et reboot | Livre : `alias/` encore present au second boot du meme contrat |
 
-Deja livre, a ne pas reouvrir comme si c'etait absent : pilote ATA Ring 3, pile NE2000 Ring 3 quand le worker tient la carte, LFN et sous-repertoires multi-niveaux, stub OS-UI, jeton, pull d'evenement, journal de montages, chat metier chiffre. Restent Ring 0 : boot ATA, replis sans worker, `networker` non lance au boot. Le chemin noyau pair 128-130 reste refuse s'il n'est pas relaye au worker.
+Deja livre, a ne pas reouvrir comme si c'etait absent : pilote ATA Ring 3, pile NE2000 Ring 3 quand le worker tient la carte, lancement de `networker` au boot si la NIC est presente, LFN et sous-repertoires multi-niveaux, stub OS-UI, jeton, pull d'evenement, journaux de montages et d'evenements, chat metier chiffre. Restent Ring 0 : boot ATA, replis sans worker, sonde de presence de la carte. Le chemin noyau pair 128-130 reste refuse s'il n'est pas relaye au worker.
 
 La vision historique (microkernel complet, P2P, economie, multi-plateforme) reste une collection de specifications dans `US/`. Elle n'est pas la file de build. Capacites OS : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Roadmap produit : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
 

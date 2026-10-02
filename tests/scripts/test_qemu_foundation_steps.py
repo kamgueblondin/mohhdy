@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """QEMU: jeton de capacite, retrait d'evenement, journal de montages apres reboot.
 
-Hors CI. Un disque FAT reserve les LBA 4222-4223 au journal MNTJ, hors AIOV.
+Hors CI. Un disque FAT reserve les LBA 4222-4223 au journal MNTJ et le LBA 4224 au journal EVNT, hors AIOV.
 Le second boot est un nouveau processus QEMU sur la meme image.
 """
 from __future__ import print_function
@@ -233,6 +233,9 @@ def main():
         if " demo " not in normalized(chunk):
             raise RuntimeError("event pull missing demo: %s" % chunk[-400:])
         say("[foundation] service-event-pull kept the grant")
+        run_command(proc, client, "service-watch keep", "service-watch ok")
+        run_command(proc, client, "service-publish keep", "service-publish ok")
+        say("[foundation] unacked keep event queued")
         run_command(proc, client, "mount-journal-add alias/ overlay", "mount-journal-add ok alias/")
         chunk = run_command(proc, client, "mount-journal", "mount-journal ok ")
         if "alias/" not in chunk:
@@ -245,6 +248,11 @@ def main():
     try:
         proc, client, err = boot()
         say("[foundation] second boot")
+        run_command(proc, client, "service-watch keep", "service-watch ok")
+        chunk = run_command(proc, client, "service-event-pull", "service-event-pull ok keep")
+        if " keep " not in normalized(chunk):
+            raise RuntimeError("event journal missing after reboot: %s" % chunk[-500:])
+        say("[foundation] unacked keep event survived reboot on LBA 4224")
         chunk = run_command(proc, client, "mount-journal", "mount-journal ok ")
         if "alias/" not in chunk:
             raise RuntimeError("alias missing after reboot: %s" % chunk[-500:])

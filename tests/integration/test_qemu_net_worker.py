@@ -133,6 +133,21 @@ def kill(client, proc, pid):
     send_command_until(client, "kill %s" % pid, "Processus %s termine" % pid, proc)
 
 
+def release_boot_worker(client, proc):
+    """NIC present: the kernel already started networker. Stop it so a test
+    can exercise the Ring 0 fallback, then spawn its own worker."""
+    text = normalized_log(log_text())
+    if "[NET] boot networker spawned" not in text:
+        raise RuntimeError("NIC boot did not spawn networker")
+    wait_for("net-driver ready", proc, 0, timeout=20)
+    start = send_command_until(client, "service-find net-driver", "service-find ok net-driver", proc)
+    match = re.search(r"service-find ok net-driver (\d+)", normalized_log(log_text()[start:]))
+    if not match:
+        raise RuntimeError("boot networker pid missing")
+    kill(client, proc, match.group(1))
+    wait_for("[NET] NE2000 back in Ring 0 after worker loss", proc, start, timeout=20)
+
+
 STATUS_KEYS = ("worker", "fwd", "done", "aborted", "timeouts", "denied", "stale", "pending")
 
 
@@ -180,6 +195,7 @@ def main():
             monitor = connect_monitor()
             time.sleep(0.5)
             send_command_until(monitor, "net-status", "Carte Ethernet : detectee", proc)
+            release_boot_worker(monitor, proc)
             # Degraded: no net-driver, historical local path unchanged.
             claim_pid, start = spawn(monitor, proc, "netclaim")
             wait_child(monitor, proc, "netclaim local ok", start)

@@ -43,12 +43,12 @@ Les capacites `ASSIST-xxx` **reprennent** le vocabulaire Foundation (droits, gra
 
 Constat courant (ETAT_REEL, 2 octobre 2026) :
 
-- Suite : **624/624** au rejeu local du 2 octobre 2026. Les chiffres 522 et 523 decrivent septembre 2026
+- Suite : **625/625** au rejeu local du 2 octobre 2026. Les chiffres 522 et 523 decrivent septembre 2026
 - `make qemu-smoke` : six scenarios verts le 2 octobre 2026, rejoue apres le correctif de relais pair et le retrait de la trace serie
 - CI `8264b62`, run 37032910130 : quatre jobs verts. Le mur des poids residents `9999514`, run 37029710466, l'etait aussi.
 - Sept contrats `make integration-qemu`, budget 25 minutes. Rejeu du 2 octobre 2026 apres le PIO multi-secteurs : 809,7 s, 7/7. Mesure anterieure : 760,9 s
 - VFS Ring 3 : `vfsserver` / `vfsvirtual`, ACL droit-source-prefixe, diagnostic public sans prefixe
-- ATA et NE2000 Ring 3 au runtime ; boot et repli restent Ring 0
+- ATA et NE2000 Ring 3 au runtime. `networker` demarre au boot si la carte est presente. Le montage ATA au boot, la sonde de presence et les replis sans worker restent Ring 0
 - Reseau local QEMU : `make qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next`, `qemu-ne2k-tls-multipair` (sequentiel, `127.0.0.1`)
 - GGUF Q3_K/Q4_K/Q6_K local. Sous QEMU TCG, mediane documentee ~48,7 s (premier jeton) et ~22,8 s (continuation). Ce n'est pas une mesure materielle.
 - Axe de latence GGUF sous QEMU TCG clos avec mesures (lots AOS-1641...1648). La campagne KVM d'un echantillon, poids residents, mesure 43,916 s / 20,224 s. Elle ne declare pas moins d'une seconde. Pas un second tour TCG.
