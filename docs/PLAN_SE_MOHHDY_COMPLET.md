@@ -86,7 +86,7 @@ Observable aujourd'hui :
 - NE2000 local, TLS/HTTP/SSE sur pair `127.0.0.1`, pile Ring 3 si `networker` detient la carte ; pas Internet public, pas OpenAI
 - GPT-2 124M et GGUF Q3_K/Q4_K/Q6_K locaux ; TCG ~48,7 s / ~22,8 s ; KVM un echantillon 43,916 s / 20,224 s avec poids residents, pas sous 1 s ; poids hors Git
 - `make test-all` 624/624 au rejeu du 2 octobre 2026. `make qemu-smoke` : six scenarios verts le meme jour, y compris apres le correctif de relais pair et le retrait de la trace serie
-- `make integration-qemu` : sept contrats verts en 809,7 s le 2 octobre 2026, sous 25 min. CI du commit `9999514` (run 37029710466) : quatre jobs verts. Le mur precedent `0ffe841` (run 36715656797) durait environ 11 min.
+- `make integration-qemu` : sept contrats verts en 809,7 s le 2 octobre 2026, sous 25 min. CI du commit `8264b62` (run 37032910130) : quatre jobs verts, comme `9999514` (run 37029710466).
 
 La surface OS-UI (chat, sessions, simulateur, MCP, FS sandbox, commande `gui`) est dans le meme guest. Elle est decrite en 2.2. Le guest n'execute pas de HTML `#ai-stage`.
 
