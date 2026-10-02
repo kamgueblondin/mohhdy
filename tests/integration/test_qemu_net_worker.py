@@ -207,10 +207,12 @@ def main():
             kill(monitor, proc, relay_pid)
             live = relay_status(monitor, proc)
             # Tranche 5 pile: 16 socket calls + 2 LLM polls relayed to the
-            # worker's Ring 3 TLS client; only the 2 peer calls stay denied.
+            # worker's Ring 3 TLS client. The two SYS_PEER_LISTEN probes pass
+            # a null request and stop in the relay marshal as
+            # OS_PEER_BAD_REQUEST, so they do not increment denied.
             if (live["worker"] != int(worker_pid) or live["fwd"] != 18 or
                     live["done"] != 18 or live["aborted"] != 0 or
-                    live["timeouts"] != 0 or live["denied"] < 2 or live["pending"] != 0):
+                    live["timeouts"] != 0 or live["denied"] != 0 or live["pending"] != 0):
                 raise RuntimeError("unexpected relay counters: %r" % live)
             # Stalled worker: the relayed call times out, the caller is not
             # hung and gets OS_NET_RELAY_TIMEOUT (-87), never a replay.

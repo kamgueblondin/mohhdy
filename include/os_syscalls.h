@@ -1010,11 +1010,10 @@ static inline int os_task_parse_event(const os_ipc_message_t* message,
 #define OS_ATA_KERNEL_RESERVED_LBAS 64U
 
 /* Tranche 4 slice 2: kernel <-> atadriver multi-sector job protocol. The
- * kernel copies up to OS_ATA_JOB_MAX_SECTORS sectors per chunk between its
- * buffer and the driver buffer (no shared page); the driver runs the PIO at
- * CPL 3. 64 secteurs tiennent dans un seul comptage ATA (1..255). */
+ * kernel copies up to 8 sectors per chunk between its overlay snapshot buffer
+ * and the driver buffer (no shared page); the driver runs the PIO at CPL 3. */
 #define OS_ATA_OVERLAY_SECTORS 64U
-#define OS_ATA_JOB_MAX_SECTORS 64U
+#define OS_ATA_JOB_MAX_SECTORS 8U
 #define OS_ATA_JOB_NONE  0U
 #define OS_ATA_JOB_WRITE 1U
 #define OS_ATA_JOB_READ  2U

@@ -123,7 +123,7 @@ static int entry_matches(const uint8_t* entry, const uint8_t* short_name) {
     return 1;
 }
 
-#define FAT16_READ_WINDOW_MAX_SECTORS 64U
+#define FAT16_READ_WINDOW_MAX_SECTORS 16U
 
 static int read_metadata_at(const fat16_volume_t* v, uint32_t lba, void* out) {
     if (!v || !v->read_sector || !out || lba < v->base_lba ||
