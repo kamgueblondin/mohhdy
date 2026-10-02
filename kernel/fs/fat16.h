@@ -106,6 +106,11 @@ int fat16_read_file(const fat16_volume_t* volume, const char* name,
 int fat16_read_file_range(const fat16_volume_t* volume, const char* name,
                           uint32_t offset, uint8_t* buffer, uint32_t max,
                           uint32_t* out_read);
+/* Copie un fichier entier dans un buffer caller-owned. Les lectures suivantes
+ * de ce nom sur ce volume servent cette copie, y compris apres
+ * fat16_invalidate_caches (fenetre secteur seulement). Un remontage l'oublie. */
+int fat16_load_resident(const fat16_volume_t* volume, const char* name,
+                        uint8_t* storage, uint32_t capacity, uint32_t* out_size);
 int fat16_open_file(const fat16_volume_t* volume, const char* name,
                     fat16_file_t* out);
 int fat16_file_read(fat16_file_t* file, uint8_t* buffer, uint32_t max,

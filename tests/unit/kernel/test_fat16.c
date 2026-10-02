@@ -1355,6 +1355,37 @@ static void test_range_cursor_avoids_repeat_fat_walk(void) {
     for (i = 0U; i < sizeof(first); i++) TEST_ASSERT_EQUAL((uint8_t)(0x10U + i), first[i]);
 }
 
+static void test_resident_file_serves_ranges_without_disk(void) {
+    fat16_volume_t volume;
+    uint8_t storage[8];
+    uint8_t out[5];
+    uint32_t size = 0U;
+    uint32_t read = 0U;
+    uint32_t i;
+    make_volume();
+    TEST_ASSERT_EQUAL(0, fat16_mount(&volume, read_sector, 0U));
+    TEST_ASSERT_EQUAL(OS_FAT16_BUFFER_SMALL, fat16_load_resident(&volume, "FATOK.TXT", storage, 2U, &size));
+    TEST_ASSERT_EQUAL(0, fat16_load_resident(&volume, "FATOK.TXT", storage, sizeof(storage), &size));
+    TEST_ASSERT_EQUAL(5U, size);
+    TEST_ASSERT_EQUAL_MEMORY("hello", storage, 5U);
+    read_sector_calls = 0U;
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range(&volume, "FATOK.TXT", 1U, out, 3U, &read));
+    TEST_ASSERT_EQUAL(3U, read);
+    TEST_ASSERT_EQUAL(0U, read_sector_calls);
+    TEST_ASSERT_EQUAL('e', out[0]);
+    TEST_ASSERT_EQUAL('l', out[1]);
+    TEST_ASSERT_EQUAL('l', out[2]);
+    fat16_invalidate_caches(&volume);
+    read_sector_calls = 0U;
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range(&volume, "FATOK.TXT", 0U, out, 5U, &read));
+    TEST_ASSERT_EQUAL(0U, read_sector_calls);
+    TEST_ASSERT_EQUAL(0, fat16_mount(&volume, read_sector, 0U));
+    read_sector_calls = 0U;
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range(&volume, "FATOK.TXT", 0U, out, 5U, &read));
+    TEST_ASSERT_TRUE(read_sector_calls > 0U);
+    for (i = 0U; i < 5U; i++) TEST_ASSERT_EQUAL((uint8_t)"hello"[i], out[i]);
+}
+
 static void test_rejects_bad_name_and_small_buffer(void) {
     fat16_volume_t volume;
     char content[4];
@@ -1521,6 +1552,7 @@ int main(void) {
     RUN_TEST(test_cursor_uses_attached_multisector_window);
     RUN_TEST(test_reads_deep_multisector_cluster_without_false_corruption);
     RUN_TEST(test_range_cursor_avoids_repeat_fat_walk);
+    RUN_TEST(test_resident_file_serves_ranges_without_disk);
     RUN_TEST(test_rejects_bad_name_and_small_buffer);
     RUN_TEST(test_writes_only_with_explicit_writer);
     RUN_TEST(test_creates_persistent_file);

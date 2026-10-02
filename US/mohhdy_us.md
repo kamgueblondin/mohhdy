@@ -131,10 +131,10 @@ La liste vivante et les criteres sont dans [docs/ETAT_REEL.md](../docs/ETAT_REEL
 
 | Priorite | Sujet | Etat |
 |---|---|---|
-| 0 | Gates | `make test-all` 623/623. `make integration-qemu` 7/7 en 809,7 s. `make qemu-ata-driver` vert |
+| 0 | Gates | `make test-all` 624/624. `make integration-qemu` 7/7 en 809,7 s sur le tip precedent. `make qemu-ata-driver` vert apres retour aux jobs de 8 secteurs |
 | 1 | Chaine US-031 | Livre : `us031_complete=false`, `chromium=false` |
 | 2 | Chat chiffre metier | Livre : `make qemu-ne2k-guest-tls-metier`, hors CI |
-| 3 | Latence KVM | Livre, un echantillon apres PIO : 52,319 s puis 23,227 s. Pas sous 1 s |
+| 3 | Latence KVM | Livre, un echantillon, poids residents : 43,916 s puis 20,224 s. Pas sous 1 s |
 | 4 | Jeton de capability | Livre : `make qemu-foundation-steps` (`cap-token`). Pas US-001 complet |
 | 5 | Evenement non perdu | Livre : `service-event-pull` dans le meme contrat. Pas de journal disque |
 | 6 | Montages et reboot | Livre : `alias/` encore present au second boot du meme contrat |

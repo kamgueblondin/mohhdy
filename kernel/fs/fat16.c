@@ -29,10 +29,35 @@ static uint32_t range_cursor_size;
 static uint16_t range_cursor_cluster;
 static uint32_t range_cursor_index;
 static uint8_t range_cursor_valid;
+/* Instantane d'un fichier. Survit a l'invalidation de la fenetre secteur. */
+static const fat16_volume_t* resident_volume;
+static char resident_name[13];
+static const uint8_t* resident_data;
+static uint32_t resident_size;
+static uint8_t resident_valid;
 
 static void fat16_range_cursor_clear(void) {
     range_cursor_valid = 0U;
     range_cursor_volume = 0;
+}
+
+static void fat16_resident_clear(void) {
+    resident_valid = 0U;
+    resident_volume = 0;
+    resident_data = 0;
+    resident_size = 0U;
+    resident_name[0] = '\0';
+}
+
+static int fat16_resident_name_equal(const char* name) {
+    uint32_t i = 0U;
+    if (!name) return 0;
+    while (resident_name[i] != '\0' && name[i] != '\0') {
+        if (resident_name[i] != name[i]) return 0;
+        i++;
+        if (i >= sizeof(resident_name)) return 0;
+    }
+    return resident_name[i] == '\0' && name[i] == '\0';
 }
 static uint8_t write_scratch[FAT16_SECTOR_SIZE];
 static const char* status_text = "FAT16: non monte";
@@ -193,6 +218,7 @@ int fat16_mount(fat16_volume_t* v, fat16_read_sector_fn read_sector, uint32_t ba
     v->mounted = 0U;
     fat_sector_cache_valid = 0U;
     fat16_range_cursor_clear();
+    fat16_resident_clear();
     v->read_sector = read_sector;
     v->read_sectors = 0;
     v->write_sector = 0;
@@ -867,6 +893,15 @@ int fat16_read_file_range(const fat16_volume_t* v, const char* name,
     if (out_read) *out_read = 0U;
     if (!fat16_is_mounted(v)) return OS_FAT16_NOT_MOUNTED;
     if (!buffer || max == 0U || !out_read) return OS_FAT16_BUFFER_SMALL;
+    if (resident_valid && v == resident_volume && resident_data &&
+        fat16_resident_name_equal(name)) {
+        uint32_t n = max;
+        if (offset > resident_size) return OS_FAT16_BAD_PATH;
+        if (n > resident_size - offset) n = resident_size - offset;
+        for (i = 0U; i < n; i++) buffer[i] = resident_data[offset + i];
+        *out_read = n;
+        return 0;
+    }
     status = fat16_find_root_entry(v, name, entry);
     if (status != 0) return status;
     if (entry[11] & 0x10U) return OS_FAT16_BAD_PATH;
@@ -930,6 +965,46 @@ int fat16_read_file_range(const fat16_volume_t* v, const char* name,
     return 0;
 }
 
+
+int fat16_load_resident(const fat16_volume_t* v, const char* name,
+                        uint8_t* storage, uint32_t capacity, uint32_t* out_size) {
+    uint32_t offset = 0U;
+    uint32_t i = 0U;
+    if (out_size) *out_size = 0U;
+    fat16_resident_clear();
+    if (!fat16_is_mounted(v) || !name || !name[0] || !storage || capacity == 0U) return OS_FAT16_CORRUPT;
+    while (name[i] != '\0') {
+        if (i + 1U >= sizeof(resident_name)) return OS_FAT16_BAD_PATH;
+        i++;
+    }
+    while (offset < capacity) {
+        uint32_t chunk = capacity - offset;
+        uint32_t n = 0U;
+        int status;
+        if (chunk > 65536U) chunk = 65536U;
+        status = fat16_read_file_range(v, name, offset, storage + offset, chunk, &n);
+        if (status != 0) return status;
+        if (n == 0U) break;
+        offset += n;
+        if (n < chunk) break;
+    }
+    if (offset == 0U) return OS_FAT16_NOT_FOUND;
+    if (offset == capacity) {
+        uint8_t extra = 0U;
+        uint32_t n = 0U;
+        int status = fat16_read_file_range(v, name, offset, &extra, 1U, &n);
+        if (status != 0) return status;
+        if (n != 0U) return OS_FAT16_BUFFER_SMALL;
+    }
+    for (i = 0U; name[i] != '\0'; i++) resident_name[i] = name[i];
+    resident_name[i] = '\0';
+    resident_volume = v;
+    resident_data = storage;
+    resident_size = offset;
+    resident_valid = 1U;
+    if (out_size) *out_size = offset;
+    return 0;
+}
 
 int fat16_open_file(const fat16_volume_t* v, const char* name, fat16_file_t* out) {
     uint8_t entry[FAT16_ENTRY_SIZE];

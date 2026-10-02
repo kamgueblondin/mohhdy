@@ -39,10 +39,10 @@ Critères de sortie (PLAN tranche 3 / priorité 3 `mohhdy_us.md`) :
 4. `make qemu-gguf-smoke` et `make test-all` restent verts ; pas de régression du chemin Q3_K réel.
 5. En CI sans KVM : `make gguf-kvm-benchmark` doit **skipper** proprement (exit 0), tandis que `make gguf-kvm-benchmark-check` reste obligatoire et vert.
 
-Mesure du 2 octobre 2026, un echantillon, poids Q3_K deployes, `/dev/kvm`
-ouvert, apres PIO multi-secteurs `rep insw` et curseur de chaine FAT16 :
-premier jeton 52,319 s, continuation 23,227 s.
-La mesure precedente sur le meme hote etait 1407,034 s / 477,200 s.
+Mesure du 2 octobre 2026, un echantillon, poids Q3_K copies en RAM au boot,
+`/dev/kvm` ouvert : premier jeton 43,916 s, continuation 20,224 s.
+La mesure PIO groupe sur le meme hote etait 52,319 s / 23,227 s.
+Avant le PIO : 1407,034 s / 477,200 s.
 `sub_second_claim_allowed` est faux.
 Le defaut de trois runs n'a pas ete execute.
 
