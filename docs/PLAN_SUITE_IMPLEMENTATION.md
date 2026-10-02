@@ -8,7 +8,7 @@
 
 Ce document **ne** remplace **pas** le plan maitre. Il detaille seulement les **tranches 0-4** : gardes du guest i386 mesure (CI, ACL, GGUF, stockage). Un seul produit : le SE Mohhdy. Docker / PC / hyperviseur = boot de l'instance QEMU, pas un sidecar. La surface OS-UI vit dans `userspace/osui_runtime.c` (OS-UI-0 a 3 livres, facade Python metier retiree, commande `gui` + bureau VBE QEMU). Les tickets `ASSIST-xxx` restent la spec fonctionnelle ([../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)). LLM de production, Chromium de session et US-031 **ne sont pas** livres. En cas de contradiction sur le **guest**, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment. En cas de contradiction sur l'ordre **produit**, le plan maitre prime.
 
-**Prochain build produit :** voir [ETAT_REEL.md](ETAT_REEL.md), section "Prochaines etapes de developpement". Ordre : gates, chaine `us031_complete=false`, chat chiffre metier, GGUF KVM, jeton, evenement non perdu, montages reboot. OS-UI-3 est livre. Bureau VBE : [osui_0_1_2.md](osui_0_1_2.md). `guest_html_stage=false`. `chromium=false`.
+**Prochain build produit :** voir [ETAT_REEL.md](ETAT_REEL.md), section "Prochaines etapes de developpement". Les pas 0 a 9 sont livres en local : gates, chaine `us031_complete=false`, chat chiffre metier, GGUF KVM, jeton, evenement non perdu, montages reboot, cle d'identite, droit de service, pilotes derriere ce droit. OS-UI-3 est livre. Bureau VBE : [osui_0_1_2.md](osui_0_1_2.md). `guest_html_stage=false`. `chromium=false`. La CI distante de ce tip n'est pas encore citee.
 
 ## Sources lues (sans les réécrire)
 
@@ -43,7 +43,7 @@ Les capacites `ASSIST-xxx` **reprennent** le vocabulaire Foundation (droits, gra
 
 Constat courant (ETAT_REEL, 2 octobre 2026) :
 
-- Suite : **625/625** au rejeu local du 2 octobre 2026. Les chiffres 522 et 523 decrivent septembre 2026
+- Suite : **627/627** au rejeu local du 2 octobre 2026. Les chiffres 522 et 523 decrivent septembre 2026
 - `make qemu-smoke` : six scenarios verts le 2 octobre 2026, rejoue apres le correctif de relais pair et le retrait de la trace serie
 - CI `8264b62`, run 37032910130 : quatre jobs verts. Le mur des poids residents `9999514`, run 37029710466, l'etait aussi.
 - Sept contrats `make integration-qemu`, budget 25 minutes. Rejeu du 2 octobre 2026 apres le PIO multi-secteurs : 809,7 s, 7/7. Mesure anterieure : 760,9 s
@@ -284,13 +284,13 @@ Un `[OK]` dans l'index vision signifie "fichier de spec présent", **pas** "impl
 
 ### Ce qui peut continuer, par petits incréments déjà entamés
 
-US/README, suite Foundation (pas un sprint vision) :
+US/README, suite Foundation (pas un sprint vision). Les cinq pas ci-dessous sont entames dans le guest. Ils ne ferment pas US-001.
 
-1. Identité vérifiée et capabilities (au-delà du PID volatile actuel)
-2. Événements accusés ou persistants (les notifications actuelles sont best-effort)
-3. Montages persistants associés à des services
-4. Externaliser le backend VFS lui-même (recouvre la tranche 4 prototype)
-5. Puis seulement déplacer pilotes ou réseau derrière ces droits
+1. Identite : sequence, generation et cle `identity_key` en RAM. Un PID reutilise qui recopie les deux premiers temoins est refuse. Pas un certificat, pas une identite qui survit au reboot.
+2. Capabilities : jeton backend non nul, plus `right_token` et cle sur le nom de service. Les ports ATA et l'entree reseau (worker vivant) exigent ce droit. Pas un systeme de capabilities transferable.
+3. Evenements : pull et journal `EVNT` survivent au reboot. La copie IPC, si la boite de quatre places est pleine, attend dans un deversoir RAM de huit places. Au-dela, ou apres reboot, cette copie IPC n'est plus la. Le pull reste la copie durable.
+4. Montages : journal `MNTJ` relu au boot. Le backend VFS runtime est deja `vfsvirtual`, avec repli Ring 0.
+5. Pilotes : `atadriver` et `networker` tournent en Ring 3, et leurs ports passent par le droit du point 2. Le montage ATA au boot, les replis sans worker et la sonde de presence restent Ring 0.
 
 Ces pas restent des **incréments** du prototype i386. Ils préparent US-001 / US-003 / US-012 / US-013. Ils ne livrent pas la phase 1 complète (plugins, logging distribué, virtualisation).
 

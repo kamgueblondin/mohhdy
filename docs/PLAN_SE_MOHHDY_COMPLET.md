@@ -81,11 +81,11 @@ Observable aujourd'hui :
 - VFS Ring 3 (`vfsserver` / `vfsvirtual`), FAT16/FAT32 multi-niveaux, ACL droit-source-prefixe, diagnostic public sans prefixe
 - Pilote ATA Ring 3 (`atadriver`) pour la logique FAT/overlay au runtime ; le montage au boot et le repli sans pilote restent Ring 0
 - IPC, registre de services, grant/revoke backend, `request_id`
-- Identite de tache (sequence et generation), jeton de capability non nul, et journal de montages `MNTJ` qui survit au reboot (`make qemu-foundation-steps`)
+- Identite de tache (sequence, generation et cle `identity_key`), jeton de capability non nul, droit de service sur les ports ATA et le reseau, et journal de montages `MNTJ` qui survit au reboot (`make qemu-foundation-steps`)
 - Evenements de service : bit `acked`, `service-event-pull`, et journal `EVNT` au LBA 4224 qui survit au reboot (`make qemu-foundation-steps`)
 - NE2000 local, TLS/HTTP/SSE sur pair `127.0.0.1`, pile Ring 3 si `networker` detient la carte ; pas Internet public, pas OpenAI
 - GPT-2 124M et GGUF Q3_K/Q4_K/Q6_K locaux ; TCG ~48,7 s / ~22,8 s ; KVM un echantillon 43,916 s / 20,224 s avec poids residents, pas sous 1 s ; poids hors Git
-- `make test-all` 625/625 au rejeu du 2 octobre 2026. `make qemu-smoke` : six scenarios verts le meme jour, y compris apres le correctif de relais pair et le retrait de la trace serie
+- `make test-all` 627/627 au rejeu du 2 octobre 2026. `make qemu-smoke` : six scenarios verts le meme jour, y compris apres le correctif de relais pair et le retrait de la trace serie
 - `make integration-qemu` : sept contrats verts en 809,7 s le 2 octobre 2026, sous 25 min. CI du commit `8264b62` (run 37032910130) : quatre jobs verts, comme `9999514` (run 37029710466).
 
 La surface OS-UI (chat, sessions, simulateur, MCP, FS sandbox, commande `gui`) est dans le meme guest. Elle est decrite en 2.2. Le guest n'execute pas de HTML `#ai-stage`.
@@ -173,16 +173,16 @@ Increments **petits**, deja entames. Pas US-001 "d'un coup". Pas US-010 "tous le
 | Sujet | Visee | Statut | Ou |
 |---|---|---|---|
 | IPC message passing | Services Ring 3 | verifie, borne | guest |
-| Identite verifiee | Au-dela du PID volatile | partiel : sequence et generation en RAM, pas un certificat | suite Foundation |
-| Capabilities completes | Tokens, pas seulement masque PID | partiel VFS ; jeton encore a ecrire | suite Foundation |
-| Evenements accuses / persistants | Au-dela du best-effort | livre : pull plus journal `EVNT` au reboot ; la boite IPC peut encore perdre sa copie | guest |
-| Montages persistants lies aux services | Survivre au reboot | partiel : restauration au reenregistrement, meme boot seulement | suite Foundation |
+| Identite verifiee | Au-dela du PID volatile | partiel : sequence, generation et cle `identity_key` en RAM, pas un certificat | suite Foundation |
+| Capabilities completes | Tokens, pas seulement masque PID | partiel : jeton backend, plus `right_token` et cle sur `ata-driver` et `net-driver`. Pas US-001 | suite Foundation |
+| Evenements accuses / persistants | Au-dela du best-effort | livre : pull plus journal `EVNT` au reboot ; deversoir RAM de huit places si la boite de quatre est pleine. Au-dela, la copie IPC est perdue | guest |
+| Montages persistants lies aux services | Survivre au reboot | livre : journal `MNTJ` aux LBA 4222-4223, relu au boot | suite Foundation |
 | Externaliser backend VFS | Runtime hors du noyau | livre via `vfsvirtual` et `atadriver` ; repli Ring 0 conserve | garde 4 |
-| Pilotes / NIC derriere droits | Apres VFS et identite | ouvert, plus tard | apres garde 4 |
+| Pilotes / NIC derriere droits | Apres VFS et identite | livre au runtime : ports ATA et entree reseau via `service_right_held`. Replis Ring 0 conserves | garde 4 |
 | Plugins, logging distribue, virtualisation (US-004, US-005, US-011) | Phase 1 complete | spec / futur | hors proche |
 | US-001 microkernel termine | Services memoire/FS/reseau isoles | **non livre** | jamais un sprint unique |
 
-Le jeton, l'evenement durable et le journal de montages sont livres. Le backend VFS runtime et les pilotes ATA/NE2000 Ring 3 le sont aussi, avec repli Ring 0. `networker` demarre au boot si la carte est presente.
+Le jeton, la cle d'identite, le droit sur les ports, l'evenement durable, le deversoir IPC et le journal de montages sont livres. Le backend VFS runtime et les pilotes ATA/NE2000 Ring 3 le sont aussi, avec repli Ring 0. `networker` demarre au boot si la carte est presente. Ce n'est pas US-001.
 
 ### 3.3 Coeur IA du SE (phase 2 / US-021 / US-028)
 
