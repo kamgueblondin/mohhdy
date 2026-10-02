@@ -5,7 +5,8 @@
  * bitmap for this task only, so the IN/OUT below execute at CPL 3; kernel PIO
  * is refused meanwhile. Two request sources:
  *  - kernel jobs (slice 2): the overlay snapshot (LBA 0-63) is written or
- *    loaded here, 8 sectors per chunk copied by SYS_ATA_JOB_FETCH/DONE;
+ *    loaded here, up to OS_ATA_JOB_MAX_SECTORS sectors per chunk copied by
+ *    SYS_ATA_JOB_FETCH/DONE;
  *  - kernel FAT sector jobs (slice 3): FAT16 (master) / FAT32 (slave) sector
  *    reads and writes of a task blocked in its syscall, served first;
  *  - "ata-client" IPC (slice 1): 64-byte sector windows, with client writes

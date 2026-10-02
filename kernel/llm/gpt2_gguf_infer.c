@@ -52,6 +52,10 @@ static gpt2_sample_top_k_state_t gguf_last_top_k;
 static uint8_t gguf_last_top_k_ready;
 static uint8_t gguf_ready;
 static const char* gguf_status = "GGUF: profil local non initialise";
+/* Instantane du fichier GGUF. 100 Mio couvrent gpt2-Q3_K_M (environ 93 Mio). */
+#define GPT2_GGUF_RESIDENT_BYTES (100U * 1024U * 1024U)
+static uint8_t gguf_resident[GPT2_GGUF_RESIDENT_BYTES];
+static uint32_t gguf_resident_size;
 
 static int gpt2_gguf_copy_filename(const char* filename) {
     uint32_t i = 0U;
@@ -162,10 +166,17 @@ int gpt2_gguf_infer_init_fat16(const fat16_volume_t* volume, const char* filenam
         return status;
     }
     gpt2_gguf_workspace_bind();
+    gguf_resident_size = 0U;
+    status = fat16_load_resident(volume, gguf_filename, gguf_resident,
+                                 sizeof(gguf_resident), &gguf_resident_size);
+    if (status != 0 || gguf_resident_size == 0U) {
+        gguf_status = "GGUF: copie residente indisponible";
+        return status != 0 ? status : -7;
+    }
     gguf_volume = volume;
     gguf_volume_fat32 = 0;
     gguf_ready = 1U;
-    gguf_status = "GGUF: profil local FAT16 pret (cache KV actif)";
+    gguf_status = "GGUF: profil local FAT16 pret (poids residents, cache KV actif)";
     return 0;
 }
 

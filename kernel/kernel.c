@@ -273,7 +273,7 @@ int kernel_net_wire_close(int socket_id) {
 
 
 
-#define FAT16_ATA_READ_WINDOW_SECTORS 16U
+#define FAT16_ATA_READ_WINDOW_SECTORS 64U
 static uint8_t fat16_ata_read_window[FAT16_ATA_READ_WINDOW_SECTORS * 512U];
 
 /* Tranche 4 slice 3: FAT16/FAT32 sector I/O goes through the Ring 3
