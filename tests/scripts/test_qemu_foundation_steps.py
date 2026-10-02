@@ -223,9 +223,19 @@ def main():
         run_command(proc, client, "vfs-backend-grant " + shell_pid, "vfs-backend-grant ok")
         chunk = run_command(proc, client, "cap-token", "cap-token ok ")
         token = parse_pid(chunk, "cap-token ok")
-        if token == "0":
-            raise RuntimeError("token is zero")
+        if token != "1":
+            raise RuntimeError("first vfs grant must be cap-token 1, got %s" % token)
         say("[foundation] cap-token %s" % token)
+        chunk = run_command(proc, client, "id-key", "id-key ok ")
+        key = parse_pid(chunk, "id-key ok")
+        if key == "0":
+            raise RuntimeError("identity key is zero")
+        say("[foundation] id-key %s" % key)
+        chunk = run_command(proc, client, "spill-drops", "spill-drops ok ")
+        drops = parse_pid(chunk, "spill-drops ok")
+        if drops != "0":
+            raise RuntimeError("spill drops not zero: %s" % drops)
+        say("[foundation] spill-drops %s" % drops)
         run_command(proc, client, "service-publish demo", "service-publish ok")
         run_command(proc, client, "service-watch demo", "service-watch ok")
         run_command(proc, client, "service-grant demo " + vfs_pid, "service-grant ok")

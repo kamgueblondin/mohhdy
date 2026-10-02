@@ -840,8 +840,10 @@ static void task_notify_supervision_event(task_t* parent,
     if (os_task_make_supervision_event(&payload, event) != 0) return;
     parent->supervision_notify_budget_used++;
     parent->supervision_delivery_attempted++;
-    /* Best effort : une boîte pleine ne retarde jamais une transition de supervision. */
-    if (ipc_endpoint_send(&parent->ipc_endpoint, 0, &payload) == 0) {
+    /* La boite pleine ne retarde pas la transition. La copie attend dans le
+     * deversoir. S'il est plein aussi, le compteur de pertes augmente. */
+    if (ipc_endpoint_send(&parent->ipc_endpoint, 0, &payload) == 0 ||
+        service_registry_ipc_spill_push(parent->id, &payload) == 0) {
         parent->supervision_delivery_delivered++;
     } else {
         parent->supervision_delivery_dropped++;
@@ -1227,6 +1229,7 @@ int task_replay_supervision_event(int requester_pid, uint32_t sequence) {
     if (os_task_make_supervision_event(&payload, &event) != 0) return OS_IPC_BAD_MESSAGE;
     parent->supervision_delivery_attempted++;
     rc = ipc_endpoint_send(&parent->ipc_endpoint, 0, &payload);
+    if (rc != 0) rc = service_registry_ipc_spill_push(parent->id, &payload);
     if (rc == 0) {
         parent->supervision_delivery_delivered++;
         return 0;

@@ -710,10 +710,13 @@ static void test_ipc_spill_keeps_event_when_mailbox_is_full(void) {
     os_ipc_payload_t out;
     uint32_t i;
     service_registry_init();
+    TEST_ASSERT_EQUAL(0U, service_registry_ipc_spill_drops());
     in.type = OS_IPC_SERVICE_EVENT;
     in.size = 4U;
     in.request_id = 0U;
     for (i = 0U; i < OS_IPC_MAX_DATA; i++) in.data[i] = 0U;
+    TEST_ASSERT_EQUAL(OS_IPC_BAD_MESSAGE, service_registry_ipc_spill_push(0, &in));
+    TEST_ASSERT_EQUAL(0U, service_registry_ipc_spill_drops());
     for (i = 0U; i < 7U; i++) {
         in.data[0] = (uint8_t)i;
         TEST_ASSERT_EQUAL(0, service_registry_ipc_spill_push(4, &in));
@@ -722,6 +725,11 @@ static void test_ipc_spill_keeps_event_when_mailbox_is_full(void) {
     TEST_ASSERT_EQUAL(0, service_registry_ipc_spill_push(5, &in));
     in.data[0] = 7U;
     TEST_ASSERT_EQUAL(OS_IPC_FULL, service_registry_ipc_spill_push(4, &in));
+    TEST_ASSERT_EQUAL(1U, service_registry_ipc_spill_drops());
+    TEST_ASSERT_EQUAL(OS_IPC_FULL, service_registry_ipc_spill_push(4, &in));
+    TEST_ASSERT_EQUAL(2U, service_registry_ipc_spill_drops());
+    TEST_ASSERT_EQUAL(OS_IPC_BAD_MESSAGE, service_registry_ipc_spill_push(0, &in));
+    TEST_ASSERT_EQUAL(2U, service_registry_ipc_spill_drops());
     for (i = 0U; i < 7U; i++) {
         TEST_ASSERT_EQUAL(0, service_registry_ipc_spill_pop(4, &out));
         TEST_ASSERT_EQUAL(i, out.data[0]);
@@ -730,6 +738,28 @@ static void test_ipc_spill_keeps_event_when_mailbox_is_full(void) {
     TEST_ASSERT_EQUAL(OS_IPC_EMPTY, service_registry_ipc_spill_pop(4, &out));
     TEST_ASSERT_EQUAL(0, service_registry_ipc_spill_pop(5, &out));
     TEST_ASSERT_EQUAL(9U, out.data[0]);
+    in.data[0] = 1U;
+    TEST_ASSERT_EQUAL(0, service_registry_ipc_spill_push(4, &in));
+    TEST_ASSERT_EQUAL(2U, service_registry_ipc_spill_drops());
+    service_registry_ipc_spill_arm_drops(0xFFFFFFFFU);
+    for (i = 0U; i < 7U; i++) {
+        TEST_ASSERT_EQUAL(0, service_registry_ipc_spill_push(6, &in));
+    }
+    TEST_ASSERT_EQUAL(OS_IPC_FULL, service_registry_ipc_spill_push(6, &in));
+    TEST_ASSERT_EQUAL(0xFFFFFFFFU, service_registry_ipc_spill_drops());
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0U, service_registry_ipc_spill_drops());
+}
+
+static void test_right_token_does_not_consume_backend_token(void) {
+    uint32_t token = 0U;
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_register("ata-driver", 4));
+    TEST_ASSERT_EQUAL(0, service_registry_register("net-driver", 5));
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", 3));
+    TEST_ASSERT_EQUAL(0, service_registry_backend_grant("vfs", 3, 7));
+    TEST_ASSERT_EQUAL(0, service_registry_backend_token_of("vfs", 7, &token));
+    TEST_ASSERT_EQUAL(1U, token);
 }
 
 static void test_event_journal_survives_without_ata_and_rebinds(void) {
@@ -893,6 +923,7 @@ int main(void) {
     RUN_TEST(test_notify_pull_returns_oldest_without_ipc);
     RUN_TEST(test_identity_key_blocks_cloned_sequence);
     RUN_TEST(test_ipc_spill_keeps_event_when_mailbox_is_full);
+    RUN_TEST(test_right_token_does_not_consume_backend_token);
     RUN_TEST(test_event_journal_survives_without_ata_and_rebinds);
     RUN_TEST(test_mount_journal_roundtrip_without_ata);
     unity_print_results();

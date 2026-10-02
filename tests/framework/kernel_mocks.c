@@ -26,11 +26,39 @@ volatile int g_reschedule_needed = 0;
 // Global counter for task switches
 int mock_task_switch_called = 0;
 
+#define MOCK_IPC_SPILL_CAPACITY 8U
+static int32_t mock_ipc_spill_pid[MOCK_IPC_SPILL_CAPACITY];
+static uint8_t mock_ipc_spill_used[MOCK_IPC_SPILL_CAPACITY];
+
+static void mock_ipc_spill_reset(void) {
+    uint32_t i;
+    for (i = 0U; i < MOCK_IPC_SPILL_CAPACITY; i++) {
+        mock_ipc_spill_used[i] = 0U;
+        mock_ipc_spill_pid[i] = 0;
+    }
+}
+
+/* Miroir du deversoir noyau : la boite pleine ne perd la copie que si les
+ * huit places sont prises. Les tests de tache ne lient pas service_registry. */
+static int mock_ipc_spill_push(int32_t pid) {
+    uint32_t i;
+    if (pid <= 0) return OS_IPC_BAD_MESSAGE;
+    for (i = 0U; i < MOCK_IPC_SPILL_CAPACITY; i++) {
+        if (!mock_ipc_spill_used[i]) {
+            mock_ipc_spill_used[i] = 1U;
+            mock_ipc_spill_pid[i] = pid;
+            return 0;
+        }
+    }
+    return OS_IPC_FULL;
+}
+
 void tasking_init(void) {
     current_task = NULL;
     task_queue = NULL;
     next_task_id = 1;
     g_reschedule_needed = 0;
+    mock_ipc_spill_reset();
 }
 
 task_t* create_task(void (*entry_point)(void)) {
@@ -315,6 +343,8 @@ static void task_notify_supervision_event(task_t* parent,
     parent->supervision_delivery_attempted++;
     if (parent->ipc_endpoint.count < IPC_ENDPOINT_CAPACITY) {
         mock_task_event_send(&parent->ipc_endpoint, &payload);
+        parent->supervision_delivery_delivered++;
+    } else if (mock_ipc_spill_push(parent->id) == 0) {
         parent->supervision_delivery_delivered++;
     } else {
         parent->supervision_delivery_dropped++;
@@ -647,6 +677,10 @@ int task_replay_supervision_event(int requester_pid, uint32_t sequence) {
     parent->supervision_delivery_attempted++;
     if (parent->ipc_endpoint.count < IPC_ENDPOINT_CAPACITY) {
         mock_task_event_send(&parent->ipc_endpoint, &payload);
+        parent->supervision_delivery_delivered++;
+        return 0;
+    }
+    if (mock_ipc_spill_push(parent->id) == 0) {
         parent->supervision_delivery_delivered++;
         return 0;
     }

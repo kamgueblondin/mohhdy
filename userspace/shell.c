@@ -619,6 +619,18 @@ int sys_service_backend_token(const char* name, uint32_t* out_token) {
     return result;
 }
 
+int sys_task_identity_key_read(uint32_t* out_key) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_TASK_IDENTITY_KEY), "b"(out_key));
+    return result;
+}
+
+int sys_ipc_spill_drops(uint32_t* out_drops) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_IPC_SPILL_DROPS), "b"(out_drops));
+    return result;
+}
+
 int sys_service_event_pull(os_service_event_pull_t* out) {
     int result;
     asm volatile("int $0x80" : "=a"(result) : "a"(SYS_SERVICE_EVENT_PULL), "b"(out));
@@ -1029,6 +1041,8 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  service-watch <nom> - S'abonner aux changements de proprietaire\n");
     print_string("  service-event-pull - Retirer le plus vieil evenement non acquitte\n");
     print_string("  cap-token - Lire le jeton backend vfs du shell\n");
+    print_string("  id-key - Lire la cle d'identite de cette tache\n");
+    print_string("  spill-drops - Lire les copies IPC perdues du deversoir\n");
     print_string("  mount-journal-add <prefixe/> <source> - Journaliser un montage disque\n");
     print_string("  mount-journal - Lister les montages du journal\n");
     print_string("  vfs-backend-probe <fichier> - Verifier le backend VFS reserve\n");
@@ -2683,7 +2697,7 @@ static int is_builtin(const char* cmd) {
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
-        "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
+        "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
         "alias", "unalias", "export", "which", "rc",
         "grep", "wc", "sort", "head", "tail",
         "logout", "reboot", "shutdown",
@@ -3193,6 +3207,44 @@ static void cmd_cap_token(shell_context_t* ctx, char args[][128], int arg_count)
     }
     print_string("cap-token ok ");
     print_int((int)token);
+    print_string("\n");
+}
+
+static void cmd_id_key(shell_context_t* ctx, char args[][128], int arg_count) {
+    uint32_t key = 0U;
+    int rc;
+    (void)args;
+    if (arg_count != 0) {
+        print_error("Usage: id-key");
+        return;
+    }
+    rc = sys_task_identity_key_read(&key);
+    ctx->last_rc = rc;
+    if (rc != 0 || key == 0U) {
+        print_error("id-key: cle absente");
+        return;
+    }
+    print_string("id-key ok ");
+    print_int((int)key);
+    print_string("\n");
+}
+
+static void cmd_spill_drops(shell_context_t* ctx, char args[][128], int arg_count) {
+    uint32_t drops = 0U;
+    int rc;
+    (void)args;
+    if (arg_count != 0) {
+        print_error("Usage: spill-drops");
+        return;
+    }
+    rc = sys_ipc_spill_drops(&drops);
+    ctx->last_rc = rc;
+    if (rc != 0) {
+        print_error("spill-drops: lecture impossible");
+        return;
+    }
+    print_string("spill-drops ok ");
+    print_int((int)drops);
     print_string("\n");
 }
 
@@ -5637,6 +5689,12 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "cap-token") == 0) {
         cmd_cap_token(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "id-key") == 0) {
+        cmd_id_key(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "spill-drops") == 0) {
+        cmd_spill_drops(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "mount-journal-add") == 0) {
         cmd_mount_journal_add(ctx, args, arg_count);
