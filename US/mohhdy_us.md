@@ -21,7 +21,7 @@ La mention **fait** signifie que le comportement est observable dans le code et 
 | AOS-009 | Executer un ELF bloquant | `exec`, parent `TASK_WAITING`, reveil par `SYS_EXIT` |
 | AOS-010 | Completer localement avec GPT-2 | `SYS_GPT2_GENERATE`, GPT-2 124M optionnel, cache KV et SSE2 |
 | AOS-011 | Tokeniser BPE GPT-2 | Vocabulaire/fusions BPE et decodage UTF-8 brut |
-| AOS-012 | Prévenir les régressions | 622 tests C au rejeu du 2 octobre 2026, `make qemu-smoke` (six scenarios, avant le correctif de relais pair) et sept contrats QEMU, dont `qemu-ne2k-status`, `qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next` et `qemu-vfs-service` |
+| AOS-012 | Prévenir les régressions | 623 tests C au rejeu du 2 octobre 2026, `make qemu-smoke` (six scenarios) et sept contrats QEMU, dont `qemu-ne2k-status`, `qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next` et `qemu-vfs-service` |
 
 ## Tranche AOS-020 à AOS-025 - livrée
 
@@ -131,10 +131,10 @@ La liste vivante et les criteres sont dans [docs/ETAT_REEL.md](../docs/ETAT_REEL
 
 | Priorite | Sujet | Etat |
 |---|---|---|
-| 0 | Gates | `make test-all` 622/622 tenu. Quatre jobs CI et sept contrats : gate distant, pas relance ici |
+| 0 | Gates | `make test-all` 623/623. `make integration-qemu` 7/7 en 809,7 s. `make qemu-ata-driver` vert |
 | 1 | Chaine US-031 | Livre : `us031_complete=false`, `chromium=false` |
 | 2 | Chat chiffre metier | Livre : `make qemu-ne2k-guest-tls-metier`, hors CI |
-| 3 | Latence KVM | Livre, un echantillon : 1407,034 s puis 477,200 s. Pas sous 1 s |
+| 3 | Latence KVM | Livre, un echantillon apres PIO : 52,319 s puis 23,227 s. Pas sous 1 s |
 | 4 | Jeton de capability | Livre : `make qemu-foundation-steps` (`cap-token`). Pas US-001 complet |
 | 5 | Evenement non perdu | Livre : `service-event-pull` dans le meme contrat. Pas de journal disque |
 | 6 | Montages et reboot | Livre : `alias/` encore present au second boot du meme contrat |

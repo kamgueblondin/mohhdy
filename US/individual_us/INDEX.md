@@ -18,7 +18,7 @@ Il n'y a **pas** 120 fichiers : environ 78 specs détaillées + des phases décr
 | US-002 | Gestionnaire de ressources IA | PMM / VMM / heap / `SYS_MEMINFO` seulement |
 | US-003 | Sécurité adaptative IA | Isolation Ring 0/3 et PID d'émetteur IPC attribué par le noyau ; pas de capabilities ni de détection de menaces |
 | US-007 | Monitoring temps réel | `ps` / `mem` / `uptime` / `SYS_TICKS`, pas de télémétrie |
-| US-008 | Framework de tests | 622 tests le 2 octobre 2026 (51 binaires) plus contrats QEMU et GitHub Actions. Pas de framework distribue. Le pourcentage de couverture du script est une constante |
+| US-008 | Framework de tests | 623 tests le 2 octobre 2026 (51 binaires) plus contrats QEMU et GitHub Actions. Pas de framework distribue. Le pourcentage de couverture du script est une constante |
 | US-010 | Pilotes modulaires | PIC, PIT, PS/2, ATA et NE2000, ces deux derniers aussi en Ring 3 au runtime. Pas de framework de pilotes |
 | US-012 | APIs unifiees | `include/os_syscalls.h` : syscalls 0-147, `MAX_SYSCALLS = 148` |
 | US-013 | Communication inter-services | **Livraison partielle :** IPC avec saturation et instantané de file par propriétaire de service, VFS local de lecture-écriture-suppression-renommage et listage de racine ou sous-répertoire avec lectures et métadonnées de sources distinctes, statistiques volatiles et alias de montage bornés, registre, cycle de vie, corrélation, conservation bornée des réponses, transfert, révocation et notifications best-effort ; pas de capabilities, d'identité vérifiée, de persistance, de priorité ni de garantie de livraison |
