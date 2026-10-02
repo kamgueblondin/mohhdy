@@ -41,7 +41,7 @@ make osui-registry-check
 ## Ce qui reste hors C freestanding
 
 - Framebuffer pixel **dans** le guest i386 (`chrome=qemu_fb`, `guest_html_stage=false`)
-- Navigateur-OS Chromium (US-031, `us031_complete=false`)
+- Navigateur-OS Chromium (US-031). `chromium=false`. La chaine `us031_complete=true` du guest est un ecart a corriger.
 - LLM de production (`llm=stub_echo` ; GPT-2 local = autre chemin `ai`)
 - Widget embed HTTP pour un site tiers
 

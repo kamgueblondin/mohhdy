@@ -1,6 +1,6 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **État réel et pilotage (26 août 2026).** Le shell utilisateur Ring 3 **se lance** et le clavier **répond** (correctif EOI IRQ0). Le périmètre courant validé, les limites et les prochaines tranches priorisées sont dans [ETAT_REEL.md](ETAT_REEL.md) ; la suite compte **505/505** tests et les sept contrats QEMU terminent localement en **23 min 30 s**. Les phases et incréments ci-dessous restent un **journal de livraison** : leurs compteurs et limites décrivent l'état de leur date, sauf lorsqu'une note les actualise explicitement.
+> **Etat reel et pilotage (2 octobre 2026).** Le perimetre courant, les limites et les prochaines etapes sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **619/619** tests et `make qemu-smoke` vert. Les phases ci-dessous restent un **journal** : leurs compteurs decrivent la date de chaque ligne. Le bandeau du 26 aout 2026 (505 tests, 23 min 30 s) est historique.
 
 ## Phase 1: Récupération et configuration du projet ✅
 - [x] Cloner le projet depuis GitHub

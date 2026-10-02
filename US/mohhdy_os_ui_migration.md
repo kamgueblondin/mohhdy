@@ -49,7 +49,7 @@ Gates : moindre privilege, grant/revoke, `request_id`, pas de secret image, orig
 
 **En tant que** operateur, **je veux** taper `gui` au prompt, **afin d'**entrer le bureau VGA du meme SE.
 
-**Statut.** Livre. Commande canonique `gui` (aliases `graphics`, `desktop`). Cerveau `osui_runtime.c`. Bureau VBE QEMU 1024x768 (`kernel/gfx_desktop.c`). Chat central, panes slash, chat flottant, Scene IA. `console` / ESC revient a `MOHHDY>`. `us031_complete=false`. Le VGA ASCII 80x25 n'est plus le recit produit.
+**Statut.** Livre. Commande canonique `gui` (aliases `graphics`, `desktop`). Cerveau `osui_runtime.c`. Bureau VBE QEMU 1024x768 (`kernel/gfx_desktop.c`). Chat central, panes slash, chat flottant, scene. `console` / ESC revient a `MOHHDY>`. Chromium n'est pas livre (`chromium=false`). Plusieurs chaines impriment encore `us031_complete=true` : prochaine etape de code, les remettre a `false`. Le VGA ASCII 80x25 n'est plus le recit produit.
 
 ## Table recap
 

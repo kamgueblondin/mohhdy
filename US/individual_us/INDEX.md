@@ -14,13 +14,13 @@ Il n'y a **pas** 120 fichiers : environ 78 specs détaillées + des phases décr
 
 | US fichier | Spec MOHHDY | Dans le prototype |
 |---|---|---|
-| US-001 | Microkernel + IPC | **Livraison partielle :** IPC avec capacité de deux messages clients et instantané de profondeur pour un propriétaire publié, VFS Ring 3 lecture-écriture-suppression-renommage avec lectures, métadonnées et listage de racine ou sous-répertoire initrd/overlay distincts, statistiques locales, trois alias de montage dynamiques au plus, découverte `vfs`, cycle de vie, corrélation, conservation différée, transfert, révocation et notifications best-effort ; noyau monolithique, backend non externalisé |
+| US-001 | Microkernel + IPC | **Livraison partielle :** IPC, VFS Ring 3, `atadriver` et `networker`. Memoire, ordonnancement, boot et replis restent dans le noyau. Pas de jeton de capability |
 | US-002 | Gestionnaire de ressources IA | PMM / VMM / heap / `SYS_MEMINFO` seulement |
 | US-003 | Sécurité adaptative IA | Isolation Ring 0/3 et PID d'émetteur IPC attribué par le noyau ; pas de capabilities ni de détection de menaces |
 | US-007 | Monitoring temps réel | `ps` / `mem` / `uptime` / `SYS_TICKS`, pas de télémétrie |
-| US-008 | Framework de tests IA | Unity 490 + contrats QEMU (coeur, IRQ0, fournisseur IA, NE2000, `ai-acquire`, IPC, VFS FAT16/FAT32 mutate, cycle de vie, transfert, revocation et notifications) + GitHub Actions ; pas de framework distribue |
-| US-010 | Pilotes modulaires | PIC, PIT, PS/2, ATA PIO, NE2000 ISA ; pas de framework de drivers |
-| US-012 | APIs unifiees | `include/os_syscalls.h` (syscalls 0-121, `MAX_SYSCALLS = 122`), IPC avec `request_id` opaque, VFS lecture-ecriture-suppression-renommage, FAT16 et FAT32 8.3 racine mutables, sockets 99-108, session LLM 90-98, `SYS_NET_STATUS` |
+| US-008 | Framework de tests | 619 tests le 2 octobre 2026 (51 binaires) plus contrats QEMU et GitHub Actions. Pas de framework distribue. Le pourcentage de couverture du script est une constante |
+| US-010 | Pilotes modulaires | PIC, PIT, PS/2, ATA et NE2000, ces deux derniers aussi en Ring 3 au runtime. Pas de framework de pilotes |
+| US-012 | APIs unifiees | `include/os_syscalls.h` : syscalls 0-147, `MAX_SYSCALLS = 148` |
 | US-013 | Communication inter-services | **Livraison partielle :** IPC avec saturation et instantané de file par propriétaire de service, VFS local de lecture-écriture-suppression-renommage et listage de racine ou sous-répertoire avec lectures et métadonnées de sources distinctes, statistiques volatiles et alias de montage bornés, registre, cycle de vie, corrélation, conservation bornée des réponses, transfert, révocation et notifications best-effort ; pas de capabilities, d'identité vérifiée, de persistance, de priorité ni de garantie de livraison |
 | US-016 | Moteur TensorFlow Lite | GPT-2 124M freestanding (`SYS_GPT2_GENERATE`), pas TFLite |
 | US-017 | NLU 90 % d'intentions | BPE + complétion 12 jetons, pas d'analyse d'intention |
