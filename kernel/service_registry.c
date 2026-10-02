@@ -19,6 +19,7 @@ typedef struct {
     char prefix[OS_SERVICE_BACKEND_PREFIX_MAX];
     char name[OS_SERVICE_NAME_MAX];
     uint32_t token;
+    uint32_t identity_key;
 } service_backend_cap_t;
 static service_backend_cap_t service_backend_caps[SERVICE_REGISTRY_BACKEND_CAPACITY];
 static uint32_t service_backend_token_next = 1U;
@@ -30,6 +31,10 @@ static int mount_journal_load(void);
 static void event_journal_flush(void);
 static int event_journal_load(void);
 static void event_journal_bind(const char* name, int32_t pid);
+static void ipc_spill_clear_pid(int32_t pid);
+static void ipc_spill_reset(void);
+static uint32_t mint_right_token(void);
+static int identity_key_bound(int32_t pid, uint32_t stored);
 
 static int task_identity_valid(int32_t pid, uint32_t sequence, uint32_t generation) {
     uint32_t cur_seq = 0U, cur_gen = 0U;
@@ -158,6 +163,8 @@ void service_registry_init(void) {
         service_entries[i].generation = 0U;
         service_entries[i].name[0] = '\0';
         service_entries[i].backend_generation = 1U;
+        service_entries[i].right_token = 0U;
+        service_entries[i].identity_key = 0U;
     }
     for (i = 0U; i < SERVICE_REGISTRY_WATCH_CAPACITY; i++) {
         service_watches[i].pid = 0;
@@ -188,6 +195,7 @@ void service_registry_init(void) {
         service_backend_caps[i].prefix[0] = '\0';
         service_backend_caps[i].name[0] = '\0';
         service_backend_caps[i].token = 0U;
+        service_backend_caps[i].identity_key = 0U;
     }
     service_backend_token_next = 1U;
     for (i = 0U; i < SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY; i++) {
@@ -206,6 +214,23 @@ void service_registry_init(void) {
         (void)mount_insert("vfs", "fat32/", OS_SERVICE_BACKEND_SOURCE_FAT32);
     }
     (void)event_journal_load();
+    ipc_spill_reset();
+}
+
+static uint32_t mint_right_token(void) {
+    uint32_t token = service_backend_token_next;
+    service_backend_token_next++;
+    if (service_backend_token_next == 0U) service_backend_token_next = 1U;
+    if (token == 0U) token = 1U;
+    return token;
+}
+
+/* Sans tache (tests unitaires sur un PID nu), une cle stockee a 0 reste
+ * acceptee. Une tache vivante doit presenter exactement sa cle, non nulle. */
+static int identity_key_bound(int32_t pid, uint32_t stored) {
+    uint32_t live = 0U;
+    if (task_identity_key(pid, &live) != 0) return stored == 0U;
+    return live != 0U && stored == live;
 }
 
 int service_registry_register(const char* name, int32_t pid) {
@@ -237,6 +262,12 @@ int service_registry_register(const char* name, int32_t pid) {
     service_entries[free_slot].generation = gen;
     copy_name(service_entries[free_slot].name, name);
     service_entries[free_slot].backend_generation = 1U;
+    service_entries[free_slot].right_token = mint_right_token();
+    {
+        uint32_t key = 0U;
+        if (task_identity_key(pid, &key) != 0) key = 0U;
+        service_entries[free_slot].identity_key = key;
+    }
     (void)service_registry_persistent_mount_restore(name);
     return 0;
 }
@@ -294,6 +325,11 @@ int service_registry_grant(const char* name, int32_t owner_pid, int32_t grantee_
             service_entries[i].pid = grantee_pid;
             service_entries[i].sequence = g_seq;
             service_entries[i].generation = g_gen;
+            {
+                uint32_t key = 0U;
+                if (task_identity_key(grantee_pid, &key) != 0) key = 0U;
+                service_entries[i].identity_key = key;
+            }
             service_registry_backend_remove_name(name);
             /* AOS-2174: with vfs-virtual live, vfs name handoff keeps the
              * ATA-backed generic backend behind an explicit SOURCE_ALL grant
@@ -344,6 +380,8 @@ int service_registry_remove_pid(int32_t pid) {
         if (service_entries[i].pid == pid) {
             service_entries[i].pid = 0;
             service_entries[i].name[0] = '\0';
+            service_entries[i].right_token = 0U;
+            service_entries[i].identity_key = 0U;
             removed++;
         }
     }
@@ -355,6 +393,7 @@ int service_registry_remove_pid(int32_t pid) {
             service_notify_history[i].acked = 0U;
         }
     }
+    ipc_spill_clear_pid(pid);
     return removed > 0 ? 0 : OS_SERVICE_NOT_FOUND;
 }
 
@@ -802,7 +841,7 @@ void service_registry_backend_remove_name(const char* name) {
     if (!service_registry_name_valid(name)) return;
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         if (service_backend_caps[i].owner_pid > 0 && name_equal(service_backend_caps[i].name, name)) {
-            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0'; service_backend_caps[i].token = 0U;
+            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0'; service_backend_caps[i].token = 0U; service_backend_caps[i].identity_key = 0U;
             changed = 1;
         }
     }
@@ -815,7 +854,7 @@ void service_registry_backend_remove_pid(int32_t pid) {
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         if (service_backend_caps[i].owner_pid == pid || service_backend_caps[i].grantee_pid == pid) {
             service_registry_backend_generation_bump(service_backend_caps[i].name);
-            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0'; service_backend_caps[i].token = 0U;
+            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0'; service_backend_caps[i].token = 0U; service_backend_caps[i].identity_key = 0U;
         }
     }
 }
@@ -834,6 +873,7 @@ int service_registry_backend_allowed_for_source_path(const char* name, int32_t p
             service_backend_caps[i].token != 0U &&
             (service_backend_caps[i].rights & right) == right &&
             (service_backend_caps[i].sources & source) == source &&
+            identity_key_bound(pid, service_backend_caps[i].identity_key) &&
             service_registry_backend_prefix_matches(service_backend_caps[i].prefix, path)) return 1;
     }
     return 0;
@@ -882,11 +922,21 @@ int service_registry_ata_driver_name_allowed(const char* service_name, const cha
 }
 
 /* Tranche 4: TSS IOPB decision for the task being scheduled. */
+static int service_right_held(const char* name, int32_t pid) {
+    uint32_t i;
+    for (i = 0U; i < SERVICE_REGISTRY_CAPACITY; i++) {
+        if (service_entries[i].pid == pid &&
+            name_equal(service_entries[i].name, name) &&
+            service_entries[i].right_token != 0U &&
+            task_identity_valid(pid, service_entries[i].sequence, service_entries[i].generation) &&
+            identity_key_bound(pid, service_entries[i].identity_key)) return 1;
+    }
+    return 0;
+}
+
 int service_registry_ata_ports_granted(int32_t pid) {
-    int32_t owner;
     if (pid <= 0) return 0;
-    owner = service_registry_lookup("ata-driver");
-    return owner > 0 && owner == pid;
+    return service_right_held("ata-driver", pid);
 }
 
 /* AOS-2177: decision for the historical SYS_READFILE ABI. Without a live
@@ -908,7 +958,7 @@ int service_registry_net_io_via_worker(int32_t pid) {
     if (pid <= 0) return 0;
     worker = service_registry_lookup("net-driver");
     if (worker <= 0) return 1;
-    return pid == worker;
+    return pid == worker && service_right_held("net-driver", pid);
 }
 
 /* Tranche 5: syscalls that drive the NE2000 NIC or the kernel TCP/socket,
@@ -983,6 +1033,11 @@ int service_registry_backend_grant_scoped_source_prefix(const char* name, int32_
                 service_backend_caps[i].owner_generation = o_gen;
                 service_backend_caps[i].grantee_sequence = g_seq;
                 service_backend_caps[i].grantee_generation = g_gen;
+                {
+                    uint32_t key = 0U;
+                    if (task_identity_key(grantee_pid, &key) != 0) key = 0U;
+                    service_backend_caps[i].identity_key = key;
+                }
                 service_registry_backend_copy_prefix(service_backend_caps[i].prefix, prefix);
                 if (service_backend_caps[i].token == 0U) {
                     service_backend_caps[i].token = service_backend_token_next++;
@@ -1001,6 +1056,11 @@ int service_registry_backend_grant_scoped_source_prefix(const char* name, int32_
     service_backend_caps[free_slot].grantee_pid = grantee_pid;
     service_backend_caps[free_slot].grantee_sequence = g_seq;
     service_backend_caps[free_slot].grantee_generation = g_gen;
+    {
+        uint32_t key = 0U;
+        if (task_identity_key(grantee_pid, &key) != 0) key = 0U;
+        service_backend_caps[free_slot].identity_key = key;
+    }
     service_backend_caps[free_slot].rights = rights;
     service_backend_caps[free_slot].sources = sources;
     service_backend_caps[free_slot].token = service_backend_token_next++;
@@ -1018,7 +1078,7 @@ int service_registry_backend_revoke(const char* name, int32_t owner_pid, int32_t
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         if (service_backend_caps[i].owner_pid == owner_pid && service_backend_caps[i].grantee_pid == grantee_pid &&
             name_equal(service_backend_caps[i].name, name)) {
-            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0'; service_backend_caps[i].token = 0U;
+            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0'; service_backend_caps[i].token = 0U; service_backend_caps[i].identity_key = 0U;
             service_registry_backend_generation_bump(name);
             return 0;
         }
@@ -1050,7 +1110,7 @@ int service_registry_backend_clear_token(const char* name, int32_t grantee_pid) 
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         if (service_backend_caps[i].grantee_pid == grantee_pid &&
             name_equal(service_backend_caps[i].name, name)) {
-            service_backend_caps[i].token = 0U;
+            service_backend_caps[i].token = 0U; service_backend_caps[i].identity_key = 0U;
             return 0;
         }
     }
@@ -1066,7 +1126,7 @@ int service_registry_backend_release(const char* name, int32_t grantee_pid) {
             service_backend_caps[i].owner_pid = 0;
             service_backend_caps[i].grantee_pid = 0;
             service_backend_caps[i].rights = 0U;
-            service_backend_caps[i].token = 0U;
+            service_backend_caps[i].token = 0U; service_backend_caps[i].identity_key = 0U;
             service_backend_caps[i].name[0] = '\0';
             service_registry_backend_generation_bump(name);
             return 0;
@@ -1212,5 +1272,84 @@ int service_registry_remove_watcher_pid(int32_t pid) {
             removed++;
         }
     }
+    ipc_spill_clear_pid(pid);
     return removed > 0 ? 0 : OS_SERVICE_NOT_FOUND;
+}
+
+#define SERVICE_IPC_SPILL_CAPACITY 8U
+
+typedef struct {
+    int32_t watcher_pid;
+    uint32_t order;
+    os_ipc_payload_t payload;
+    uint8_t used;
+} service_ipc_spill_slot_t;
+
+static service_ipc_spill_slot_t service_ipc_spill[SERVICE_IPC_SPILL_CAPACITY];
+static uint32_t service_ipc_spill_order;
+
+static void ipc_spill_reset(void) {
+    uint32_t i;
+    for (i = 0U; i < SERVICE_IPC_SPILL_CAPACITY; i++) {
+        service_ipc_spill[i].used = 0U;
+        service_ipc_spill[i].watcher_pid = 0;
+        service_ipc_spill[i].order = 0U;
+    }
+    service_ipc_spill_order = 0U;
+}
+
+static void ipc_spill_clear_pid(int32_t pid) {
+    uint32_t i;
+    for (i = 0U; i < SERVICE_IPC_SPILL_CAPACITY; i++) {
+        if (service_ipc_spill[i].used && service_ipc_spill[i].watcher_pid == pid) {
+            service_ipc_spill[i].used = 0U;
+            service_ipc_spill[i].watcher_pid = 0;
+        }
+    }
+}
+
+int service_registry_ipc_spill_push(int32_t watcher_pid, const os_ipc_payload_t* payload) {
+    uint32_t i;
+    uint32_t n;
+    if (watcher_pid <= 0 || !payload || payload->size > OS_IPC_MAX_DATA) return OS_IPC_BAD_MESSAGE;
+    for (i = 0U; i < SERVICE_IPC_SPILL_CAPACITY; i++) {
+        if (!service_ipc_spill[i].used) {
+            service_ipc_spill_order++;
+            if (service_ipc_spill_order == 0U) service_ipc_spill_order = 1U;
+            service_ipc_spill[i].used = 1U;
+            service_ipc_spill[i].watcher_pid = watcher_pid;
+            service_ipc_spill[i].order = service_ipc_spill_order;
+            service_ipc_spill[i].payload.type = payload->type;
+            service_ipc_spill[i].payload.size = payload->size;
+            service_ipc_spill[i].payload.request_id = payload->request_id;
+            for (n = 0U; n < payload->size; n++) service_ipc_spill[i].payload.data[n] = payload->data[n];
+            for (; n < OS_IPC_MAX_DATA; n++) service_ipc_spill[i].payload.data[n] = 0U;
+            return 0;
+        }
+    }
+    return OS_IPC_FULL;
+}
+
+int service_registry_ipc_spill_pop(int32_t watcher_pid, os_ipc_payload_t* out) {
+    uint32_t i;
+    uint32_t n;
+    int found = -1;
+    uint32_t best = 0U;
+    if (watcher_pid <= 0 || !out) return OS_IPC_BAD_MESSAGE;
+    for (i = 0U; i < SERVICE_IPC_SPILL_CAPACITY; i++) {
+        if (service_ipc_spill[i].used && service_ipc_spill[i].watcher_pid == watcher_pid) {
+            if (found < 0 || service_ipc_spill[i].order < best) {
+                found = (int)i;
+                best = service_ipc_spill[i].order;
+            }
+        }
+    }
+    if (found < 0) return OS_IPC_EMPTY;
+    out->type = service_ipc_spill[found].payload.type;
+    out->size = service_ipc_spill[found].payload.size;
+    out->request_id = service_ipc_spill[found].payload.request_id;
+    for (n = 0U; n < OS_IPC_MAX_DATA; n++) out->data[n] = service_ipc_spill[found].payload.data[n];
+    service_ipc_spill[found].used = 0U;
+    service_ipc_spill[found].watcher_pid = 0;
+    return 0;
 }

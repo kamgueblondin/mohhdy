@@ -20,6 +20,7 @@ task_t* task_queue = NULL;
 int next_task_id = 1;
 static uint32_t mock_task_sequence_counter = 0U;
 static uint32_t mock_task_slot_generation = 0U;
+static uint32_t mock_task_identity_key = 1U;
 volatile int g_reschedule_needed = 0;
 
 // Global counter for task switches
@@ -41,6 +42,8 @@ task_t* create_task(void (*entry_point)(void)) {
     mock_task_slot_generation++;
     task->sequence = mock_task_sequence_counter;
     task->generation = mock_task_slot_generation;
+    task->identity_key = mock_task_identity_key++;
+    if (mock_task_identity_key == 0U) mock_task_identity_key = 1U;
     task->state = TASK_READY;
     task->type = TASK_TYPE_KERNEL;
     task->priority = OS_TASK_PRIORITY_NORMAL;
@@ -120,6 +123,13 @@ int task_get_identity(int pid, uint32_t* out_sequence, uint32_t* out_generation)
     if (!t) return OS_TASK_NOT_FOUND;
     if (out_sequence) *out_sequence = t->sequence;
     if (out_generation) *out_generation = t->generation;
+    return 0;
+}
+
+int task_identity_key(int pid, uint32_t* out_key) {
+    task_t* t = get_task_by_id(pid);
+    if (!t || !out_key) return OS_TASK_NOT_FOUND;
+    *out_key = t->identity_key;
     return 0;
 }
 

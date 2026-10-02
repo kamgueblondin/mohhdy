@@ -667,6 +667,71 @@ static void test_notify_pull_returns_oldest_without_ipc(void) {
     TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_pull(4, &event));
 }
 
+static void test_identity_key_blocks_cloned_sequence(void) {
+    task_t* owner;
+    task_t* first;
+    task_t* second;
+    uint32_t saved_seq;
+    uint32_t saved_gen;
+    uint32_t saved_key;
+    int pid;
+    tasking_init();
+    service_registry_init();
+    owner = create_task((void*)0);
+    add_task_to_queue(owner);
+    first = create_task((void*)0);
+    add_task_to_queue(first);
+    saved_seq = first->sequence;
+    saved_gen = first->generation;
+    saved_key = first->identity_key;
+    TEST_ASSERT_TRUE(saved_key != 0U);
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", owner->id));
+    TEST_ASSERT_EQUAL(0, service_registry_backend_grant("vfs", owner->id, first->id));
+    TEST_ASSERT_TRUE(service_registry_backend_allowed_for("vfs", first->id, SERVICE_BACKEND_RIGHT_READ));
+    TEST_ASSERT_EQUAL(0, service_registry_register("ata-driver", first->id));
+    TEST_ASSERT_TRUE(service_registry_ata_ports_granted(first->id));
+    TEST_ASSERT_EQUAL(0, service_registry_register("net-driver", first->id));
+    TEST_ASSERT_TRUE(service_registry_net_io_via_worker(first->id));
+    pid = first->id;
+    remove_task(first);
+    next_task_id = pid;
+    second = create_task((void*)0);
+    add_task_to_queue(second);
+    second->sequence = saved_seq;
+    second->generation = saved_gen;
+    TEST_ASSERT_TRUE(second->identity_key != saved_key);
+    TEST_ASSERT_FALSE(service_registry_backend_allowed_for("vfs", pid, SERVICE_BACKEND_RIGHT_READ));
+    TEST_ASSERT_FALSE(service_registry_ata_ports_granted(pid));
+    TEST_ASSERT_FALSE(service_registry_net_io_via_worker(pid));
+}
+
+static void test_ipc_spill_keeps_event_when_mailbox_is_full(void) {
+    os_ipc_payload_t in;
+    os_ipc_payload_t out;
+    uint32_t i;
+    service_registry_init();
+    in.type = OS_IPC_SERVICE_EVENT;
+    in.size = 4U;
+    in.request_id = 0U;
+    for (i = 0U; i < OS_IPC_MAX_DATA; i++) in.data[i] = 0U;
+    for (i = 0U; i < 7U; i++) {
+        in.data[0] = (uint8_t)i;
+        TEST_ASSERT_EQUAL(0, service_registry_ipc_spill_push(4, &in));
+    }
+    in.data[0] = 9U;
+    TEST_ASSERT_EQUAL(0, service_registry_ipc_spill_push(5, &in));
+    in.data[0] = 7U;
+    TEST_ASSERT_EQUAL(OS_IPC_FULL, service_registry_ipc_spill_push(4, &in));
+    for (i = 0U; i < 7U; i++) {
+        TEST_ASSERT_EQUAL(0, service_registry_ipc_spill_pop(4, &out));
+        TEST_ASSERT_EQUAL(i, out.data[0]);
+        TEST_ASSERT_EQUAL(OS_IPC_SERVICE_EVENT, out.type);
+    }
+    TEST_ASSERT_EQUAL(OS_IPC_EMPTY, service_registry_ipc_spill_pop(4, &out));
+    TEST_ASSERT_EQUAL(0, service_registry_ipc_spill_pop(5, &out));
+    TEST_ASSERT_EQUAL(9U, out.data[0]);
+}
+
 static void test_event_journal_survives_without_ata_and_rebinds(void) {
     uint8_t image[512];
     service_registry_notify_event_t event;
@@ -826,6 +891,8 @@ int main(void) {
     RUN_TEST(test_persistent_mounts_auto_restore_on_service_reregistration);
     RUN_TEST(test_backend_token_is_nonzero_unique_and_required);
     RUN_TEST(test_notify_pull_returns_oldest_without_ipc);
+    RUN_TEST(test_identity_key_blocks_cloned_sequence);
+    RUN_TEST(test_ipc_spill_keeps_event_when_mailbox_is_full);
     RUN_TEST(test_event_journal_survives_without_ata_and_rebinds);
     RUN_TEST(test_mount_journal_roundtrip_without_ata);
     unity_print_results();

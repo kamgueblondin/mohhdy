@@ -160,7 +160,7 @@ Gardes guest 0-4 : [docs/PLAN_SUITE_IMPLEMENTATION.md](docs/PLAN_SUITE_IMPLEMENT
 
 Les items ASSIST (sessions, admin, simulateur, FS sandbox) sont des **devoirs du SE**. Ils vivent dans `userspace/osui_runtime.c` ([docs/osui_0_1_2.md](docs/osui_0_1_2.md)). Stub local, **pas** LLM de production, **pas** Chromium de session, **pas** US-031. ETAT_REEL mesure aussi cette surface guest C, sans pretendre a un bureau HTML.
 
-Mesures du 2 octobre 2026 : `make test-all` 625/625 ; `us031_complete=false` ; chat chiffre bilateral metier ; campagne GGUF KVM d'un echantillon avec les poids residents (43,916 s / 20,224 s, pas sous 1 s) ; capability a jeton ; evenement de service qui ne se perd pas ; montages qui survivent a un reboot. Detail : [docs/ETAT_REEL.md](docs/ETAT_REEL.md). Hors file : phases 4 a 8, TensorFlow Lite, facturation, OpenAI public.
+Mesures du 2 octobre 2026 : `make test-all` 627/627 ; `us031_complete=false` ; chat chiffre bilateral metier ; campagne GGUF KVM d'un echantillon avec les poids residents (43,916 s / 20,224 s, pas sous 1 s) ; capability a jeton et cle d'identite ; evenement de service tire par pull, avec deversoir IPC en RAM ; montages qui survivent a un reboot. Les ports ATA et reseau du worker exigent ce droit. Detail : [docs/ETAT_REEL.md](docs/ETAT_REEL.md). Hors file : phases 4 a 8, TensorFlow Lite, facturation, OpenAI public, US-001.
 
 - [x] GPT-2 local, cache KV, SSE2 et top-k borné
 - [x] Tokenizer BPE UTF-8 avec couverture de lettres Unicode ciblée
