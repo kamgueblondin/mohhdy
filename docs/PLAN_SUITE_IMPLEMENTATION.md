@@ -45,7 +45,7 @@ Constat courant (ETAT_REEL, 2 octobre 2026) :
 
 - Suite : **624/624** au rejeu local du 2 octobre 2026. Les chiffres 522 et 523 decrivent septembre 2026
 - `make qemu-smoke` : six scenarios verts le 2 octobre 2026, rejoue apres le correctif de relais pair et le retrait de la trace serie
-- CI `0ffe841`, run 36715656797 : quatre jobs verts, mur d'environ 11 minutes
+- CI `9999514`, run 37029710466 : quatre jobs verts. Le mur precedent `0ffe841`, run 36715656797, durait environ 11 minutes.
 - Sept contrats `make integration-qemu`, budget 25 minutes. Rejeu du 2 octobre 2026 apres le PIO multi-secteurs : 809,7 s, 7/7. Mesure anterieure : 760,9 s
 - VFS Ring 3 : `vfsserver` / `vfsvirtual`, ACL droit-source-prefixe, diagnostic public sans prefixe
 - ATA et NE2000 Ring 3 au runtime ; boot et repli restent Ring 0

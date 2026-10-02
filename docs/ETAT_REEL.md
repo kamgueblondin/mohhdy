@@ -41,7 +41,7 @@ Le contrat de contrôle IA vérifie désormais le catalogue réellement déclar�
 
 ## Prochaines etapes de developpement
 
-Constat de pilotage du 2 octobre 2026. Les pas 1 a 6 ci-dessous sont livres. Le pas 0 : `make test-all` 624/624. `make qemu-ata-driver` est vert apres le PIO multi-secteurs. `make qemu-smoke` a ete rejoue apres le correctif de relais pair et le retrait de la trace serie : six scenarios verts. `make integration-qemu` : sept contrats verts en 809,7 s, sous 25 minutes, aucune assertion retiree. La CI distante du commit `0ffe841`, run 36715656797, reste le dernier mur GitHub vert connu.
+Constat de pilotage du 2 octobre 2026. Les pas 1 a 6 ci-dessous sont livres. Le pas 0 : `make test-all` 624/624. `make qemu-ata-driver` est vert apres le PIO multi-secteurs. `make qemu-smoke` a ete rejoue apres le correctif de relais pair et le retrait de la trace serie : six scenarios verts. `make integration-qemu` : sept contrats verts en 809,7 s, sous 25 minutes, aucune assertion retiree. La CI distante du commit `9999514`, run 37029710466, a les quatre jobs verts. Le mur precedent etait `0ffe841`, run 36715656797.
 
 | Ordre | Etat | Preuve |
 |---:|---|---|
