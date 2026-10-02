@@ -1303,6 +1303,58 @@ static void test_reads_deep_multisector_cluster_without_false_corruption(void) {
     for (i = 0U; i < sizeof(cursor); i++) TEST_ASSERT_EQUAL((uint8_t)(i ^ 0x5AU), cursor[i]);
 }
 
+/* Deux lectures successives du meme fichier profond ne reparcourent pas la FAT. */
+static void test_range_cursor_avoids_repeat_fat_walk(void) {
+    fat16_volume_t volume;
+    uint8_t first[64];
+    uint8_t second[64];
+    uint8_t earlier[64];
+    uint32_t root = (1U + 2U * 17U) * 512U;
+    uint32_t data = (root / 512U + 2U) * 512U;
+    uint32_t clusters = (TEST_SECTORS - (data / 512U)) / 8U;
+    uint32_t offset = (clusters - 3U) * 8U * 512U + 100U;
+    uint32_t read = 0U;
+    uint32_t i;
+    uint32_t fat;
+    uint32_t first_calls;
+    uint32_t second_calls;
+    make_volume();
+    disk[13] = 8U;
+    for (fat = 1U; fat <= 2U; fat++) {
+        uint32_t base = (1U + (fat - 1U) * 17U) * 512U;
+        for (i = 2U; i < clusters + 1U; i++) put16(base + i * 2U, (uint16_t)(i + 1U));
+        put16(base + clusters * 2U, 0xFFF8U);
+    }
+    disk[root + 32U] = 'D'; disk[root + 33U] = 'E'; disk[root + 34U] = 'E'; disk[root + 35U] = 'P';
+    disk[root + 36U] = ' '; disk[root + 37U] = ' '; disk[root + 38U] = ' '; disk[root + 39U] = ' ';
+    disk[root + 40U] = 'B'; disk[root + 41U] = 'I'; disk[root + 42U] = 'N'; disk[root + 43U] = 0x20U;
+    put16(root + 32U + 26U, 2U);
+    put32(root + 32U + 28U, clusters * 8U * 512U);
+    for (i = 0U; i < sizeof(first); i++) disk[data + offset + i] = (uint8_t)(0x10U + i);
+    for (i = 0U; i < sizeof(second); i++) disk[data + offset + 64U + i] = (uint8_t)(0x40U + i);
+    for (i = 0U; i < sizeof(earlier); i++) disk[data + (offset / 2U) + i] = (uint8_t)(0x80U + i);
+    TEST_ASSERT_EQUAL(0, fat16_mount(&volume, read_sector, 0U));
+    read_sector_calls = 0U;
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range(&volume, "deep.bin", offset, first, sizeof(first), &read));
+    TEST_ASSERT_EQUAL(sizeof(first), read);
+    first_calls = read_sector_calls;
+    read_sector_calls = 0U;
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range(&volume, "deep.bin", offset + 64U, second, sizeof(second), &read));
+    TEST_ASSERT_EQUAL(sizeof(second), read);
+    second_calls = read_sector_calls;
+    TEST_ASSERT_TRUE(first_calls > 8U);
+    TEST_ASSERT_TRUE(second_calls < first_calls / 2U);
+    TEST_ASSERT_TRUE(second_calls <= 4U);
+    for (i = 0U; i < sizeof(second); i++) TEST_ASSERT_EQUAL((uint8_t)(0x40U + i), second[i]);
+    read_sector_calls = 0U;
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range(&volume, "deep.bin", offset / 2U, earlier, sizeof(earlier), &read));
+    TEST_ASSERT_EQUAL(sizeof(earlier), read);
+    for (i = 0U; i < sizeof(earlier); i++) TEST_ASSERT_EQUAL((uint8_t)(0x80U + i), earlier[i]);
+    fat16_invalidate_caches(&volume);
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range(&volume, "deep.bin", offset, first, sizeof(first), &read));
+    for (i = 0U; i < sizeof(first); i++) TEST_ASSERT_EQUAL((uint8_t)(0x10U + i), first[i]);
+}
+
 static void test_rejects_bad_name_and_small_buffer(void) {
     fat16_volume_t volume;
     char content[4];
@@ -1468,6 +1520,7 @@ int main(void) {
     RUN_TEST(test_rejects_bad_bpb);
     RUN_TEST(test_cursor_uses_attached_multisector_window);
     RUN_TEST(test_reads_deep_multisector_cluster_without_false_corruption);
+    RUN_TEST(test_range_cursor_avoids_repeat_fat_walk);
     RUN_TEST(test_rejects_bad_name_and_small_buffer);
     RUN_TEST(test_writes_only_with_explicit_writer);
     RUN_TEST(test_creates_persistent_file);

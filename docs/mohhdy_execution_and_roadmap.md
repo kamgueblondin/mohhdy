@@ -48,7 +48,7 @@ Elle confirme visuellement :
 
 ### Étape 3 : Gestionnaire de mémoire et latence GGUF sous KVM / Matériel de référence (Garde 3)
 - **Objectif** : Évaluer et optimiser les gains de latence du cache KV réutilisé lors de l'inférence GGUF locale sur plateforme KVM/matériel par rapport à QEMU TCG.
-- **Mesure** : un echantillon KVM, 2 octobre 2026. Premier jeton 1407,034 s, continuation 477,200 s. `sub_second_claim_allowed` faux. L'optimisation reste ouverte.
+- **Mesure** : un echantillon KVM, 2 octobre 2026, apres PIO multi-secteurs. Premier jeton 52,319 s, continuation 23,227 s. `sub_second_claim_allowed` faux.
 - **Déploiement du harnais de mesure** : Exécuter le harnais `tests/scripts/benchmark_qemu_gguf_kvm_latency.py` sous KVM (`make gguf-kvm-benchmark`).
 - **Évaluation des métriques de latence** : Établir le rapport (min, médiane, max, dispersion) isolant le temps du premier jeton et la réutilisation du cache KV multi-tours.
 - **Validation** : Exécution de `make gguf-kvm-benchmark-check`.
