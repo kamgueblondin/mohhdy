@@ -1230,9 +1230,10 @@ void syscall_handler(cpu_state_t* cpu) {
         cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;
         return;
     }
-    /* Tranche 5 suite: the kernel LLM session (91-97) and peer (128-130)
-     * paths drive the NE2000 from Ring 0; while the worker owns the card
-     * they are refused for everybody, the worker included. */
+    /* Tranche 5 suite: if a kernel LLM (91-97) or peer (128-130) call was
+     * not relayed above, it still drives the NE2000 from Ring 0. While the
+     * worker owns the card that path is refused, worker included. Other
+     * tasks reach the Ring 3 stack through the relay instead. */
     if (!nic_owner_kernel_may_touch() &&
         ((cpu->eax >= SYS_LLM_ACQUIRE_START && cpu->eax <= SYS_LLM_CLOSE) ||
          (cpu->eax >= SYS_PEER_LISTEN && cpu->eax <= SYS_PEER_TLS_POLL))) {

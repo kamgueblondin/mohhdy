@@ -208,6 +208,16 @@ def main():
     try:
         proc, client, err = boot()
         say("[foundation] first boot")
+        run_command(proc, client, "spawn vfsserver", "spawn ok pid")
+        vfs_pid = None
+        for _ in range(8):
+            run_command(proc, client, "yield", "yield ok")
+            chunk = run_command(proc, client, "service-find vfs", "service-find")
+            if "service-find ok vfs" in normalized(chunk):
+                vfs_pid = parse_pid(chunk, "service-find ok vfs")
+                break
+        if not vfs_pid:
+            raise RuntimeError("vfsserver did not publish vfs")
         chunk = run_command(proc, client, "getpid", "getpid ok ")
         shell_pid = parse_pid(chunk, "getpid ok")
         run_command(proc, client, "vfs-backend-grant " + shell_pid, "vfs-backend-grant ok")
@@ -218,8 +228,6 @@ def main():
         say("[foundation] cap-token %s" % token)
         run_command(proc, client, "service-publish demo", "service-publish ok")
         run_command(proc, client, "service-watch demo", "service-watch ok")
-        chunk = run_command(proc, client, "service-find vfs", "service-find ok vfs")
-        vfs_pid = parse_pid(chunk, "service-find ok vfs")
         run_command(proc, client, "service-grant demo " + vfs_pid, "service-grant ok")
         chunk = run_command(proc, client, "service-event-pull", "service-event-pull ok demo")
         if " demo " not in normalized(chunk):

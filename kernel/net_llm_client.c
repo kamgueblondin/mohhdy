@@ -566,19 +566,15 @@ static int kernel_tls_app_recv(int socket_id, net_tls_aes_gcm_session_t* session
     net_tls_record_view_t opened;
     uint16_t frame_length = 0U;
     uint16_t consumed = 0U;
-    uint16_t ip_header;
     int status;
     if (!plaintext || !out_len || socket_id < 0 || !session) return -1;
     *out_len = 0U;
     status = ne2k_rx_poll_tcp(g_llm_dev, g_llm_io, boot_llm_frame,
                               sizeof(boot_llm_frame), &frame_length, &view);
     if (status != 0 || view.payload_length == 0U) return -2;
-    ip_header = (uint16_t)((boot_llm_frame[NET_ETHERNET_HEADER_SIZE] & 0x0fU) * 4U);
-    if (frame_length < (uint16_t)(NET_ETHERNET_HEADER_SIZE + ip_header)) return -3;
-    if (net_socket_feed(socket_id,
-                        boot_llm_frame + NET_ETHERNET_HEADER_SIZE + ip_header,
-                        (uint16_t)(frame_length - NET_ETHERNET_HEADER_SIZE - ip_header)) != 0)
-        return -4;
+    /* net_socket_receive_tls accepte deja le segment TCP. Un feed avant
+     * avancerait remote_sequence et ferait rejeter ce second accept. */
+    (void)frame_length;
     status = net_socket_receive_tls(socket_id, session, &view, plaintext, plaintext_cap,
                                     &opened, &consumed);
     if (status != 0 || opened.content_type != NET_TLS_CONTENT_APPLICATION_DATA) return -5;
