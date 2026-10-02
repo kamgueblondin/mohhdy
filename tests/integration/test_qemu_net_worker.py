@@ -41,12 +41,26 @@ def log_text():
         return ""
 
 
+def needle_seen(text, needle):
+    """True if needle is intact, or a trailing integer was split by yield."""
+    if needle in text:
+        return True
+    match = re.fullmatch(r"(.*?)(\d+)", needle)
+    if not match:
+        return False
+    prefix, number = match.group(1), match.group(2)
+    return re.search(
+        re.escape(prefix) + r"[\s\S]{0,1500}?" + re.escape(number) + r"(?!\d)",
+        text,
+    ) is not None
+
+
 def wait_for(needle, proc, offset=0, timeout=25):
     deadline = time.time() + timeout
     while time.time() < deadline:
         if proc.poll() is not None:
             raise RuntimeError("QEMU stopped early")
-        if needle in normalized_log(log_text()[offset:]):
+        if needle_seen(normalized_log(log_text()[offset:]), needle):
             return
         time.sleep(0.1)
     raise RuntimeError("missing output: %s" % needle)
