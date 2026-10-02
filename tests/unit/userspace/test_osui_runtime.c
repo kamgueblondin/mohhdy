@@ -241,7 +241,7 @@ static void test_guest_status_honesty(void) {
     rc = run_line("os-status");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "service=mohhdy-os") != NULL);
-    TEST_ASSERT(strstr(g_out, "us031_complete=true") != NULL);
+    TEST_ASSERT(strstr(g_out, "us031_complete=false") != NULL);
 
     rc = run_line("stage-prompt <script>alert(1)</script> dessine");
     TEST_ASSERT_EQUAL(0, rc);

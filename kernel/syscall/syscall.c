@@ -82,6 +82,10 @@ static void service_notify_change(const char* name, int32_t old_owner_pid,
         task_t* watcher = get_task_by_id(watchers[i]);
         if (!watcher || watcher->type != TASK_TYPE_USER || watcher->state == TASK_TERMINATED) continue;
         /* Best effort non bloquant : une boîte pleine ne retarde jamais un changement de registre. */
+        (void)service_registry_notify_record(name, watchers[i], old_owner_pid,
+                                             new_owner_pid, reason, (uint32_t*)0);
+        /* Best effort non bloquant : une boite pleine ne retarde jamais le registre.
+         * L'historique ci-dessus reste lisible par service-event-pull. */
         (void)ipc_endpoint_send(&watcher->ipc_endpoint, 0, &payload);
     }
 }
@@ -1226,9 +1230,10 @@ void syscall_handler(cpu_state_t* cpu) {
         cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;
         return;
     }
-    /* Tranche 5 suite: the kernel LLM session (91-97) and peer (128-130)
-     * paths drive the NE2000 from Ring 0; while the worker owns the card
-     * they are refused for everybody, the worker included. */
+    /* Tranche 5 suite: if a kernel LLM (91-97) or peer (128-130) call was
+     * not relayed above, it still drives the NE2000 from Ring 0. While the
+     * worker owns the card that path is refused, worker included. Other
+     * tasks reach the Ring 3 stack through the relay instead. */
     if (!nic_owner_kernel_may_touch() &&
         ((cpu->eax >= SYS_LLM_ACQUIRE_START && cpu->eax <= SYS_LLM_CLOSE) ||
          (cpu->eax >= SYS_PEER_LISTEN && cpu->eax <= SYS_PEER_TLS_POLL))) {
@@ -1839,6 +1844,15 @@ void syscall_handler(cpu_state_t* cpu) {
                 cpu->eax = 0;
             }
             break;
+        case SYS_SERVICE_BACKEND_TOKEN:
+            cpu->eax = (uint32_t)sys_service_backend_token((const char*)cpu->ebx, (uint32_t*)cpu->ecx);
+            break;
+        case SYS_SERVICE_EVENT_PULL:
+            cpu->eax = (uint32_t)sys_service_event_pull((os_service_event_pull_t*)cpu->ebx);
+            break;
+        case SYS_MOUNT_JOURNAL:
+            cpu->eax = (uint32_t)sys_mount_journal(cpu->ebx, cpu->ecx, cpu->edx);
+            break;
         case SYS_VGA_BLIT:
             {
                 if (!cpu->ebx) {
@@ -2279,6 +2293,41 @@ int sys_service_backend_status(const char* name, int target_pid, uint32_t* out_r
     target = get_task_by_id(target_pid);
     if (!target || target->type != TASK_TYPE_USER || target->state == TASK_TERMINATED) return OS_SERVICE_BAD_GRANTEE;
     return service_registry_backend_rights(name, current_task->id, target_pid, out_rights);
+}
+
+int sys_service_backend_token(const char* name, uint32_t* out_token) {
+    if (!current_task || current_task->type != TASK_TYPE_USER || !out_token) return OS_SERVICE_BAD_NAME;
+    if (!syscall_user_range(out_token, sizeof(*out_token), 1)) return OS_SERVICE_BAD_NAME;
+    return service_registry_backend_token_of(name, current_task->id, out_token);
+}
+
+int sys_service_event_pull(os_service_event_pull_t* out) {
+    service_registry_notify_event_t event;
+    uint32_t i;
+    int rc;
+    if (!current_task || current_task->type != TASK_TYPE_USER || !out) return OS_SERVICE_BAD_NAME;
+    if (!syscall_user_range(out, sizeof(*out), 1)) return OS_SERVICE_BAD_NAME;
+    rc = service_registry_notify_pull(current_task->id, &event);
+    if (rc != 0) return rc;
+    for (i = 0U; i < OS_SERVICE_NAME_MAX; i++) out->name[i] = event.name[i];
+    out->old_pid = event.old_pid;
+    out->new_pid = event.new_pid;
+    out->reason = event.reason;
+    out->sequence = event.sequence;
+    return 0;
+}
+
+int sys_mount_journal(uint32_t op, uint32_t arg1, uint32_t arg2) {
+    if (!current_task || current_task->type != TASK_TYPE_USER) return OS_SERVICE_BAD_NAME;
+    if (op == 1U) {
+        if (arg2 == 0U || (arg2 & ~OS_SERVICE_BACKEND_SOURCE_ALL) != 0U) return OS_SERVICE_BAD_NAME;
+        return service_registry_persistent_mount_add("vfs", (const char*)arg1, arg2);
+    }
+    if (op == 2U) {
+        if (arg2 == 0U || !syscall_user_range((void*)arg1, arg2, 1)) return OS_SERVICE_BAD_NAME;
+        return service_registry_mount_journal_format("vfs", (char*)arg1, arg2);
+    }
+    return OS_SERVICE_BAD_NAME;
 }
 
 int sys_service_backend_scope_status(const char* name, int target_pid,

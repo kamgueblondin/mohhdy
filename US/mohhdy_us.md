@@ -21,7 +21,7 @@ La mention **fait** signifie que le comportement est observable dans le code et 
 | AOS-009 | Executer un ELF bloquant | `exec`, parent `TASK_WAITING`, reveil par `SYS_EXIT` |
 | AOS-010 | Completer localement avec GPT-2 | `SYS_GPT2_GENERATE`, GPT-2 124M optionnel, cache KV et SSE2 |
 | AOS-011 | Tokeniser BPE GPT-2 | Vocabulaire/fusions BPE et decodage UTF-8 brut |
-| AOS-012 | Prévenir les régressions | 619 tests C au rejeu du 2 octobre 2026, `make qemu-smoke` (six scenarios) et sept contrats QEMU, dont `qemu-ne2k-status`, `qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next` et `qemu-vfs-service` |
+| AOS-012 | Prévenir les régressions | 622 tests C au rejeu du 2 octobre 2026, `make qemu-smoke` (six scenarios, avant le correctif de relais pair) et sept contrats QEMU, dont `qemu-ne2k-status`, `qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next` et `qemu-vfs-service` |
 
 ## Tranche AOS-020 à AOS-025 - livrée
 
@@ -123,23 +123,23 @@ Les lots 113-154 sont **faits** au sens caller-owned / Unity / smoke NIC. Les lo
 | 126 | Grant backend VFS droit-source-préfixe relatif : EDX droits, ESI sources, EDI préfixe NUL-terminé |
 | 127 | `SYS_VGA_BLIT` : bureau 80x25 (`os_vga_frame_t*`) ; EBX=0 quitte le desktop |
 
-`MAX_SYSCALLS = 148` (0 a 147). Le tableau ci-dessus s'arrete a 127, socle historique dont `SYS_VGA_BLIT`.
+`MAX_SYSCALLS = 151` (0 a 150). Le tableau ci-dessus s'arrete a 127, socle historique dont `SYS_VGA_BLIT`. 148 est le jeton de capability, 149 le pull d'evenement, 150 le journal de montages.
 
 ## Prochaines etapes, hors livraison actuelle
 
 La liste vivante et les criteres sont dans [docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Resume :
 
-| Priorite | Sujet | Critere de sortie |
+| Priorite | Sujet | Etat |
 |---|---|---|
-| 0 | Gates | `make test-all` 619/619 tenu, `make qemu-smoke`, quatre jobs CI, sept contrats sous 25 minutes, aucune assertion retiree |
-| 1 | Chaine US-031 | `us031_complete=false` dans le guest et les tests Unity ; `chromium=false` |
-| 2 | Chat chiffre metier | Contrat local hors CI, sans TAP, sans Internet, sans secret |
-| 3 | Latence KVM | JSON `gguf-kvm-benchmark` avec `/dev/kvm` et poids deployes |
-| 4 | Jeton de capability | Plus seulement un PID et un masque. Pas US-001 complet |
-| 5 | Evenement non perdu | Au-dela du best-effort IPC. Pas de journal disque dans ce pas |
-| 6 | Montages et reboot | La restauration au reenregistrement existe. Le pas suivant survit au reboot sous QEMU |
+| 0 | Gates | `make test-all` 622/622 tenu. Quatre jobs CI et sept contrats : gate distant, pas relance ici |
+| 1 | Chaine US-031 | Livre : `us031_complete=false`, `chromium=false` |
+| 2 | Chat chiffre metier | Livre : `make qemu-ne2k-guest-tls-metier`, hors CI |
+| 3 | Latence KVM | Livre, un echantillon : 1407,034 s puis 477,200 s. Pas sous 1 s |
+| 4 | Jeton de capability | Livre : `make qemu-foundation-steps` (`cap-token`). Pas US-001 complet |
+| 5 | Evenement non perdu | Livre : `service-event-pull` dans le meme contrat. Pas de journal disque |
+| 6 | Montages et reboot | Livre : `alias/` encore present au second boot du meme contrat |
 
-Deja livre, a ne pas reouvrir comme si c'etait absent : pilote ATA Ring 3, pile NE2000 Ring 3 quand le worker tient la carte, LFN et sous-repertoires multi-niveaux, stub OS-UI. Restent Ring 0 : boot ATA, replis sans worker, `networker` non lance au boot, pair TLS 128-130 tant que la carte est prise.
+Deja livre, a ne pas reouvrir comme si c'etait absent : pilote ATA Ring 3, pile NE2000 Ring 3 quand le worker tient la carte, LFN et sous-repertoires multi-niveaux, stub OS-UI, jeton, pull d'evenement, journal de montages, chat metier chiffre. Restent Ring 0 : boot ATA, replis sans worker, `networker` non lance au boot. Le chemin noyau pair 128-130 reste refuse s'il n'est pas relaye au worker.
 
 La vision historique (microkernel complet, P2P, economie, multi-plateforme) reste une collection de specifications dans `US/`. Elle n'est pas la file de build. Capacites OS : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Roadmap produit : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
 

@@ -34,12 +34,14 @@ void net_relay_init(void) {
     for (i = 0U; i < sizeof(g_stats); i++) s[i] = 0U;
 }
 
-extern int kernel_net_nic_port_mode(void);
-
 int net_relay_supported(uint32_t syscall_number) {
+    /* Peer 128-130 stay relayable while the Ring 3 worker owns the NE2000.
+     * The listen, accept and TLS session live in that worker, same as the
+     * LLM session. Gating them on !port mode returned OS_NET_WORKER_REQUIRED
+     * to the shell before any relay. */
     return (syscall_number >= SYS_SOCKET_OPEN && syscall_number <= SYS_SOCKET_ACCEPT_ACK) ||
            syscall_number == SYS_SOCKET_CONNECT ||
-           (!kernel_net_nic_port_mode() && net_relay_peer_supported(syscall_number));
+           net_relay_peer_supported(syscall_number);
 }
 
 int net_relay_peer_supported(uint32_t syscall_number) {

@@ -31,7 +31,7 @@ static void test_gui_command_canonical(void) {
     TEST_ASSERT(strstr(g_out, "canonical=gui") != NULL);
     TEST_ASSERT(strstr(g_out, "chrome=qemu_fb") != NULL);
     TEST_ASSERT(strstr(g_out, "display_surface=vbe_lfb") != NULL);
-    TEST_ASSERT(strstr(g_out, "us031_complete=true") != NULL);
+    TEST_ASSERT(strstr(g_out, "us031_complete=false") != NULL);
     TEST_ASSERT(osui_gui_should_enter());
     osui_gui_ack_enter();
     TEST_ASSERT_EQUAL(0, run_line("graphics"));

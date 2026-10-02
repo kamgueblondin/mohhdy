@@ -417,12 +417,18 @@ pack-initrd: userspace-all
 	@echo "gpt2.gguf|gpt2|optional|GGUF-v3|kquant-kernels" >> $(INITRD_DIR)/models/models.manifest
 	@echo "# Provide gpt2_124M.bin and gpt2_tokenizer.bin in models/ before build." > $(INITRD_DIR)/models/README.txt
 	@echo "# models/gpt2.gguf is optional: v3 structure and Q3_K/Q4_K/Q6_K kernel layouts are validated; full GGUF GPT-2 loading remains pending." >> $(INITRD_DIR)/models/README.txt
-	@if [ -f "$(GPT2_MODEL)" ] && [ -f "$(MODEL_DIR)/gpt2_tokenizer.bin" ]; then \
-		echo "[mkinitrd] Inclusion du checkpoint et du tokenizer GPT-2 locaux..."; \
-		cp -f "$(GPT2_MODEL)" "$(INITRD_DIR)/models/gpt2_124M.bin"; \
+	@rm -f "$(INITRD_DIR)/models/gpt2_tokenizer.bin" "$(INITRD_DIR)/models/gpt2_124M.bin"
+	@if [ -f "$(MODEL_DIR)/gpt2_tokenizer.bin" ]; then \
+		echo "[mkinitrd] Inclusion du tokenizer GPT-2 local..."; \
 		cp -f "$(MODEL_DIR)/gpt2_tokenizer.bin" "$(INITRD_DIR)/models/gpt2_tokenizer.bin"; \
 	else \
-		echo "[mkinitrd] Checkpoint ou tokenizer GPT-2 local absent."; \
+		echo "[mkinitrd] Tokenizer GPT-2 local absent."; \
+	fi
+	@if [ -f "$(GPT2_MODEL)" ]; then \
+		echo "[mkinitrd] Inclusion du checkpoint GPT-2 local..."; \
+		cp -f "$(GPT2_MODEL)" "$(INITRD_DIR)/models/gpt2_124M.bin"; \
+	else \
+		echo "[mkinitrd] Checkpoint GPT-2 local absent."; \
 	fi
 	@rm -f "$(INITRD_DIR)/models/gpt2.gguf"
 	@if [ -f "$(GPT2_GGUF_MODEL)" ]; then \
@@ -646,7 +652,7 @@ ci-tests: $(OS_IMAGE) pack-initrd
 	@$(MAKE) -C tests ci-test
 
 # Image disque IDE brute (snapshot overlay). Recréee seulement si absente.
-$(DISK_IMAGE):
+$(DISK_IMAGE): tests/scripts/make_fat16_image.py
 	@mkdir -p $(dir $@)
 	dd if=/dev/zero of=$@ bs=512 count=$(DISK_SECTORS) status=none
 	python3 tests/scripts/make_fat16_image.py --image $@
@@ -671,7 +677,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant
+.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -710,6 +716,13 @@ qemu-ne2k-guest-tls-chat: $(OS_IMAGE) pack-initrd
 # Suite guest-guest : role serveur TLS B jusqu a Finished (hors ci).
 qemu-ne2k-guest-tls-server: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_ne2k_guest_tls_server.py
+
+# Chat metier chiffre sur la session TLS guest-guest (hors ci).
+qemu-ne2k-guest-tls-metier: $(OS_IMAGE) pack-initrd
+	@METIER=1 python3 tests/scripts/test_qemu_ne2k_guest_tls_server.py
+
+qemu-foundation-steps: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_foundation_steps.py
 qemu-ipc-foundation: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_ipc_foundation.py
 

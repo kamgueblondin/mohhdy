@@ -629,6 +629,67 @@ static void test_acknowledged_event_replay_and_bounded_retry(void) {
     TEST_ASSERT_EQUAL(OS_SERVICE_STALE, service_registry_notify_replay(4, seq));
 }
 
+static void test_backend_token_is_nonzero_unique_and_required(void) {
+    uint32_t first = 0U;
+    uint32_t second = 0U;
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_register("vfs", 3));
+    TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_backend_token_of("vfs", 7, &first));
+    TEST_ASSERT_EQUAL(0, service_registry_backend_grant("vfs", 3, 7));
+    TEST_ASSERT_EQUAL(0, service_registry_backend_grant("vfs", 3, 8));
+    TEST_ASSERT_EQUAL(0, service_registry_backend_token_of("vfs", 7, &first));
+    TEST_ASSERT_EQUAL(0, service_registry_backend_token_of("vfs", 8, &second));
+    TEST_ASSERT_TRUE(first != 0U);
+    TEST_ASSERT_TRUE(second != 0U);
+    TEST_ASSERT_TRUE(first != second);
+    TEST_ASSERT_TRUE(service_registry_backend_allowed("vfs", 7));
+    TEST_ASSERT_EQUAL(0, service_registry_backend_clear_token("vfs", 7));
+    TEST_ASSERT_FALSE(service_registry_backend_allowed("vfs", 7));
+    TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_backend_token_of("vfs", 7, &first));
+    TEST_ASSERT_TRUE(service_registry_backend_allowed("vfs", 8));
+}
+
+static void test_notify_pull_returns_oldest_without_ipc(void) {
+    service_registry_notify_event_t event;
+    uint32_t first = 0U;
+    uint32_t second = 0U;
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_notify_record("vfs", 4, 3, 9, OS_SERVICE_EVENT_GRANTED, &first));
+    TEST_ASSERT_EQUAL(0, service_registry_notify_record("vfs", 4, 9, 11, OS_SERVICE_EVENT_PUBLISHED, &second));
+    TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_pull(5, &event));
+    TEST_ASSERT_EQUAL(0, service_registry_notify_pull(4, &event));
+    TEST_ASSERT_EQUAL(first, event.sequence);
+    TEST_ASSERT_EQUAL(3, event.old_pid);
+    TEST_ASSERT_EQUAL(9, event.new_pid);
+    TEST_ASSERT_EQUAL(1, service_registry_notify_is_acked(4, first));
+    TEST_ASSERT_EQUAL(0, service_registry_notify_pull(4, &event));
+    TEST_ASSERT_EQUAL(second, event.sequence);
+    TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_pull(4, &event));
+}
+
+static void test_mount_journal_roundtrip_without_ata(void) {
+    uint8_t image[1024];
+    service_registry_persistent_mount_t mounts[SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY];
+    int count;
+    int i;
+    int found = 0;
+    service_registry_init();
+    TEST_ASSERT_EQUAL(0, service_registry_persistent_mount_add("vfs", "alias/", OS_SERVICE_BACKEND_SOURCE_OVERLAY));
+    TEST_ASSERT_EQUAL(0, service_registry_mount_journal_export(image, sizeof(image)));
+    service_registry_init();
+    count = service_registry_persistent_mount_get("vfs", mounts, SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY);
+    TEST_ASSERT_EQUAL(4, count);
+    TEST_ASSERT_EQUAL(0, service_registry_mount_journal_import(image, sizeof(image)));
+    count = service_registry_persistent_mount_get("vfs", mounts, SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY);
+    TEST_ASSERT_EQUAL(5, count);
+    for (i = 0; i < count; i++) {
+        if (mounts[i].prefix[0] == 'a' && mounts[i].prefix[1] == 'l') found = 1;
+    }
+    TEST_ASSERT_TRUE(found);
+    image[0] ^= 0xFFU;
+    TEST_ASSERT_TRUE(service_registry_mount_journal_import(image, sizeof(image)) != 0);
+}
+
 static void test_persistent_mounts_auto_restore_on_service_reregistration(void) {
     service_registry_persistent_mount_t mounts[SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY];
     int count;
@@ -735,6 +796,9 @@ int main(void) {
     RUN_TEST(test_stable_identity_blocks_stale_reused_pid_acl);
     RUN_TEST(test_acknowledged_event_replay_and_bounded_retry);
     RUN_TEST(test_persistent_mounts_auto_restore_on_service_reregistration);
+    RUN_TEST(test_backend_token_is_nonzero_unique_and_required);
+    RUN_TEST(test_notify_pull_returns_oldest_without_ipc);
+    RUN_TEST(test_mount_journal_roundtrip_without_ata);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

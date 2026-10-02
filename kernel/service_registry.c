@@ -1,5 +1,6 @@
 #include "service_registry.h"
 #include "kernel/task/task.h"
+#include "ata.h"
 
 static service_registry_entry_t service_entries[SERVICE_REGISTRY_CAPACITY];
 static service_registry_watch_t service_watches[SERVICE_REGISTRY_WATCH_CAPACITY];
@@ -17,10 +18,15 @@ typedef struct {
     uint32_t sources;
     char prefix[OS_SERVICE_BACKEND_PREFIX_MAX];
     char name[OS_SERVICE_NAME_MAX];
+    uint32_t token;
 } service_backend_cap_t;
 static service_backend_cap_t service_backend_caps[SERVICE_REGISTRY_BACKEND_CAPACITY];
+static uint32_t service_backend_token_next = 1U;
 
 static service_registry_persistent_mount_t persistent_mounts[SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY];
+
+static int mount_insert(const char* service_name, const char* prefix, uint32_t source);
+static int mount_journal_load(void);
 
 static int task_identity_valid(int32_t pid, uint32_t sequence, uint32_t generation) {
     uint32_t cur_seq = 0U, cur_gen = 0U;
@@ -178,18 +184,24 @@ void service_registry_init(void) {
         service_backend_caps[i].sources = 0U;
         service_backend_caps[i].prefix[0] = '\0';
         service_backend_caps[i].name[0] = '\0';
+        service_backend_caps[i].token = 0U;
     }
+    service_backend_token_next = 1U;
     for (i = 0U; i < SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY; i++) {
         persistent_mounts[i].active = 0U;
         persistent_mounts[i].service_name[0] = '\0';
         persistent_mounts[i].prefix[0] = '\0';
         persistent_mounts[i].source = 0U;
     }
-    /* Default boot mounts for "vfs" */
-    service_registry_persistent_mount_add("vfs", "initrd/", OS_SERVICE_BACKEND_SOURCE_INITRD);
-    service_registry_persistent_mount_add("vfs", "overlay/", OS_SERVICE_BACKEND_SOURCE_OVERLAY);
-    service_registry_persistent_mount_add("vfs", "fat16/", OS_SERVICE_BACKEND_SOURCE_FAT16);
-    service_registry_persistent_mount_add("vfs", "fat32/", OS_SERVICE_BACKEND_SOURCE_FAT32);
+    /* Defauts seulement si le journal disque est absent ou illisible.
+     * L'ajout par defaut n'ecrit pas le disque : un reboot sans montage
+     * custom retrouve ces quatre entrees, pas un journal vide. */
+    if (mount_journal_load() != 0) {
+        (void)mount_insert("vfs", "initrd/", OS_SERVICE_BACKEND_SOURCE_INITRD);
+        (void)mount_insert("vfs", "overlay/", OS_SERVICE_BACKEND_SOURCE_OVERLAY);
+        (void)mount_insert("vfs", "fat16/", OS_SERVICE_BACKEND_SOURCE_FAT16);
+        (void)mount_insert("vfs", "fat32/", OS_SERVICE_BACKEND_SOURCE_FAT32);
+    }
 }
 
 int service_registry_register(const char* name, int32_t pid) {
@@ -365,7 +377,29 @@ int service_registry_notify_record(const char* name, int32_t watcher_pid, int32_
     service_notify_history[slot].new_pid = new_pid;
     service_notify_history[slot].reason = reason;
     service_notify_history[slot].acked = 0U;
+    service_notify_history[slot].replayed = 0U;
     if (out_sequence) *out_sequence = service_notify_seq_counter;
+    return 0;
+}
+
+int service_registry_notify_pull(int32_t watcher_pid, service_registry_notify_event_t* out) {
+    uint32_t i;
+    uint32_t best = 0U;
+    int found = -1;
+    if (watcher_pid <= 0 || !out) return OS_SERVICE_BAD_NAME;
+    for (i = 0U; i < SERVICE_REGISTRY_NOTIFY_HISTORY_CAPACITY; i++) {
+        if (service_notify_history[i].watcher_pid == watcher_pid &&
+            service_notify_history[i].sequence > 0U &&
+            service_notify_history[i].acked == 0U) {
+            if (found < 0 || service_notify_history[i].sequence < best) {
+                found = (int)i;
+                best = service_notify_history[i].sequence;
+            }
+        }
+    }
+    if (found < 0) return OS_SERVICE_NOT_FOUND;
+    *out = service_notify_history[found];
+    service_notify_history[found].acked = 1U;
     return 0;
 }
 
@@ -429,10 +463,11 @@ int service_registry_notify_is_acked(int32_t watcher_pid, uint32_t sequence) {
     return OS_SERVICE_NOT_FOUND;
 }
 
-int service_registry_persistent_mount_add(const char* service_name, const char* prefix, uint32_t source) {
+static int mount_insert(const char* service_name, const char* prefix, uint32_t source) {
     uint32_t i;
     int free_slot = -1;
     if (!service_registry_name_valid(service_name) || !prefix || prefix[0] == '\0') return OS_SERVICE_BAD_NAME;
+    if (!service_registry_backend_prefix_valid(prefix)) return OS_SERVICE_BAD_NAME;
     for (i = 0U; i < SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY; i++) {
         if (persistent_mounts[i].active &&
             name_equal(persistent_mounts[i].service_name, service_name) &&
@@ -450,6 +485,141 @@ int service_registry_persistent_mount_add(const char* service_name, const char* 
     return 0;
 }
 
+#define MOUNT_JOURNAL_MAGIC 0x4A544E4DU
+#define MOUNT_JOURNAL_VERSION 1U
+#define MOUNT_JOURNAL_LBA 4222U
+#define MOUNT_JOURNAL_BYTES 1024U
+
+typedef struct __attribute__((packed)) {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t count;
+    uint32_t checksum;
+} mount_journal_header_t;
+
+typedef struct __attribute__((packed)) {
+    char service_name[OS_SERVICE_NAME_MAX];
+    char prefix[OS_SERVICE_BACKEND_PREFIX_MAX];
+    uint32_t source;
+    uint8_t active;
+} mount_journal_entry_t;
+
+static uint8_t mount_journal_buf[MOUNT_JOURNAL_BYTES];
+
+static uint32_t mount_journal_checksum(const uint8_t* data, uint32_t length) {
+    uint32_t i;
+    uint32_t sum = 0U;
+    for (i = 0U; i < length; i++) sum += data[i];
+    return sum;
+}
+
+int service_registry_mount_journal_export(uint8_t* buf, uint32_t cap) {
+    mount_journal_header_t header;
+    uint32_t i;
+    uint32_t count = 0U;
+    uint32_t need;
+    uint8_t* cursor;
+    if (!buf) return OS_SERVICE_BAD_NAME;
+    for (i = 0U; i < SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY; i++) {
+        if (persistent_mounts[i].active) count++;
+    }
+    need = (uint32_t)sizeof(header) + count * (uint32_t)sizeof(mount_journal_entry_t);
+    if (cap < need || need > MOUNT_JOURNAL_BYTES) return OS_SERVICE_FULL;
+    for (i = 0U; i < cap; i++) buf[i] = 0U;
+    cursor = buf + sizeof(header);
+    for (i = 0U; i < SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY; i++) {
+        mount_journal_entry_t entry;
+        uint32_t b;
+        if (!persistent_mounts[i].active) continue;
+        for (b = 0U; b < sizeof(entry); b++) ((uint8_t*)&entry)[b] = 0U;
+        copy_name(entry.service_name, persistent_mounts[i].service_name);
+        service_registry_backend_copy_prefix(entry.prefix, persistent_mounts[i].prefix);
+        entry.source = persistent_mounts[i].source;
+        entry.active = 1U;
+        for (b = 0U; b < sizeof(entry); b++) cursor[b] = ((uint8_t*)&entry)[b];
+        cursor += sizeof(entry);
+    }
+    header.magic = MOUNT_JOURNAL_MAGIC;
+    header.version = MOUNT_JOURNAL_VERSION;
+    header.count = count;
+    header.checksum = mount_journal_checksum(buf + sizeof(header), count * (uint32_t)sizeof(mount_journal_entry_t));
+    for (i = 0U; i < sizeof(header); i++) buf[i] = ((uint8_t*)&header)[i];
+    return 0;
+}
+
+int service_registry_mount_journal_import(const uint8_t* buf, uint32_t len) {
+    mount_journal_header_t header;
+    uint32_t i;
+    uint32_t need;
+    const uint8_t* cursor;
+    if (!buf || len < sizeof(header)) return OS_SERVICE_BAD_NAME;
+    for (i = 0U; i < sizeof(header); i++) ((uint8_t*)&header)[i] = buf[i];
+    if (header.magic != MOUNT_JOURNAL_MAGIC || header.version != MOUNT_JOURNAL_VERSION) return OS_SERVICE_NOT_FOUND;
+    if (header.count == 0U || header.count > SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY) return OS_SERVICE_NOT_FOUND;
+    need = (uint32_t)sizeof(header) + header.count * (uint32_t)sizeof(mount_journal_entry_t);
+    if (len < need) return OS_SERVICE_NOT_FOUND;
+    if (header.checksum != mount_journal_checksum(buf + sizeof(header),
+                                                  header.count * (uint32_t)sizeof(mount_journal_entry_t))) {
+        return OS_SERVICE_NOT_FOUND;
+    }
+    for (i = 0U; i < SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY; i++) {
+        persistent_mounts[i].active = 0U;
+        persistent_mounts[i].service_name[0] = '\0';
+        persistent_mounts[i].prefix[0] = '\0';
+        persistent_mounts[i].source = 0U;
+    }
+    cursor = buf + sizeof(header);
+    for (i = 0U; i < header.count; i++) {
+        mount_journal_entry_t entry;
+        uint32_t b;
+        for (b = 0U; b < sizeof(entry); b++) ((uint8_t*)&entry)[b] = cursor[b];
+        cursor += sizeof(entry);
+        if (!entry.active) continue;
+        entry.service_name[OS_SERVICE_NAME_MAX - 1U] = '\0';
+        entry.prefix[OS_SERVICE_BACKEND_PREFIX_MAX - 1U] = '\0';
+        if (mount_insert(entry.service_name, entry.prefix, entry.source) != 0) return OS_SERVICE_FULL;
+    }
+    return 0;
+}
+
+static void mount_journal_flush(void) {
+    if (service_registry_mount_journal_export(mount_journal_buf, MOUNT_JOURNAL_BYTES) != 0) return;
+    (void)ata_write_sectors(MOUNT_JOURNAL_LBA, MOUNT_JOURNAL_BYTES / 512U, mount_journal_buf);
+}
+
+static int mount_journal_load(void) {
+    if (ata_read_sectors(MOUNT_JOURNAL_LBA, MOUNT_JOURNAL_BYTES / 512U, mount_journal_buf) != 0) return -1;
+    return service_registry_mount_journal_import(mount_journal_buf, MOUNT_JOURNAL_BYTES);
+}
+
+int service_registry_mount_journal_format(const char* service_name, char* buf, uint32_t max) {
+    uint32_t i;
+    uint32_t used = 0U;
+    if (!buf || max == 0U || !service_registry_name_valid(service_name)) return OS_SERVICE_BAD_NAME;
+    buf[0] = '\0';
+    for (i = 0U; i < SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY; i++) {
+        uint32_t n;
+        if (!persistent_mounts[i].active || !name_equal(persistent_mounts[i].service_name, service_name)) continue;
+        n = 0U;
+        while (persistent_mounts[i].prefix[n] != '\0' && n < OS_SERVICE_BACKEND_PREFIX_MAX) n++;
+        if (used + n + 2U > max) return OS_SERVICE_FULL;
+        {
+            uint32_t c;
+            for (c = 0U; c < n; c++) buf[used + c] = persistent_mounts[i].prefix[c];
+        }
+        used += n;
+        buf[used++] = ' ';
+        buf[used] = '\0';
+    }
+    return 0;
+}
+
+int service_registry_persistent_mount_add(const char* service_name, const char* prefix, uint32_t source) {
+    int rc = mount_insert(service_name, prefix, source);
+    if (rc == 0) mount_journal_flush();
+    return rc;
+}
+
 int service_registry_persistent_mount_remove(const char* service_name, const char* prefix) {
     uint32_t i;
     if (!service_registry_name_valid(service_name) || !prefix) return OS_SERVICE_BAD_NAME;
@@ -460,6 +630,7 @@ int service_registry_persistent_mount_remove(const char* service_name, const cha
             persistent_mounts[i].active = 0U;
             persistent_mounts[i].service_name[0] = '\0';
             persistent_mounts[i].prefix[0] = '\0';
+            mount_journal_flush();
             return 0;
         }
     }
@@ -490,7 +661,7 @@ void service_registry_backend_remove_name(const char* name) {
     if (!service_registry_name_valid(name)) return;
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         if (service_backend_caps[i].owner_pid > 0 && name_equal(service_backend_caps[i].name, name)) {
-            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0';
+            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0'; service_backend_caps[i].token = 0U;
             changed = 1;
         }
     }
@@ -503,7 +674,7 @@ void service_registry_backend_remove_pid(int32_t pid) {
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         if (service_backend_caps[i].owner_pid == pid || service_backend_caps[i].grantee_pid == pid) {
             service_registry_backend_generation_bump(service_backend_caps[i].name);
-            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0';
+            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0'; service_backend_caps[i].token = 0U;
         }
     }
 }
@@ -519,6 +690,7 @@ int service_registry_backend_allowed_for_source_path(const char* name, int32_t p
             name_equal(service_backend_caps[i].name, name) &&
             service_registry_lookup(name) == service_backend_caps[i].owner_pid &&
             task_identity_valid(service_backend_caps[i].owner_pid, service_backend_caps[i].owner_sequence, service_backend_caps[i].owner_generation) &&
+            service_backend_caps[i].token != 0U &&
             (service_backend_caps[i].rights & right) == right &&
             (service_backend_caps[i].sources & source) == source &&
             service_registry_backend_prefix_matches(service_backend_caps[i].prefix, path)) return 1;
@@ -671,6 +843,10 @@ int service_registry_backend_grant_scoped_source_prefix(const char* name, int32_
                 service_backend_caps[i].grantee_sequence = g_seq;
                 service_backend_caps[i].grantee_generation = g_gen;
                 service_registry_backend_copy_prefix(service_backend_caps[i].prefix, prefix);
+                if (service_backend_caps[i].token == 0U) {
+                    service_backend_caps[i].token = service_backend_token_next++;
+                    if (service_backend_token_next == 0U) service_backend_token_next = 1U;
+                }
                 service_registry_backend_generation_bump(name);
             }
             return 0;
@@ -686,6 +862,8 @@ int service_registry_backend_grant_scoped_source_prefix(const char* name, int32_
     service_backend_caps[free_slot].grantee_generation = g_gen;
     service_backend_caps[free_slot].rights = rights;
     service_backend_caps[free_slot].sources = sources;
+    service_backend_caps[free_slot].token = service_backend_token_next++;
+    if (service_backend_token_next == 0U) service_backend_token_next = 1U;
     service_registry_backend_copy_prefix(service_backend_caps[free_slot].prefix, prefix);
     copy_name(service_backend_caps[free_slot].name, name);
     service_registry_backend_generation_bump(name);
@@ -699,8 +877,39 @@ int service_registry_backend_revoke(const char* name, int32_t owner_pid, int32_t
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         if (service_backend_caps[i].owner_pid == owner_pid && service_backend_caps[i].grantee_pid == grantee_pid &&
             name_equal(service_backend_caps[i].name, name)) {
-            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0';
+            service_backend_caps[i].owner_pid = 0; service_backend_caps[i].grantee_pid = 0; service_backend_caps[i].rights = 0U; service_backend_caps[i].sources = 0U; service_backend_caps[i].prefix[0] = '\0'; service_backend_caps[i].name[0] = '\0'; service_backend_caps[i].token = 0U;
             service_registry_backend_generation_bump(name);
+            return 0;
+        }
+    }
+    return OS_SERVICE_NOT_FOUND;
+}
+
+int service_registry_backend_token_of(const char* name, int32_t grantee_pid, uint32_t* out_token) {
+    uint32_t i;
+    if (!out_token) return OS_SERVICE_BAD_NAME;
+    *out_token = 0U;
+    if (!service_registry_name_valid(name) || grantee_pid <= 0) return OS_SERVICE_BAD_NAME;
+    for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
+        if (service_backend_caps[i].grantee_pid == grantee_pid &&
+            service_backend_caps[i].token != 0U &&
+            name_equal(service_backend_caps[i].name, name) &&
+            task_identity_valid(grantee_pid, service_backend_caps[i].grantee_sequence,
+                                service_backend_caps[i].grantee_generation)) {
+            *out_token = service_backend_caps[i].token;
+            return 0;
+        }
+    }
+    return OS_SERVICE_NOT_FOUND;
+}
+
+int service_registry_backend_clear_token(const char* name, int32_t grantee_pid) {
+    uint32_t i;
+    if (!service_registry_name_valid(name) || grantee_pid <= 0) return OS_SERVICE_BAD_NAME;
+    for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
+        if (service_backend_caps[i].grantee_pid == grantee_pid &&
+            name_equal(service_backend_caps[i].name, name)) {
+            service_backend_caps[i].token = 0U;
             return 0;
         }
     }
@@ -716,6 +925,7 @@ int service_registry_backend_release(const char* name, int32_t grantee_pid) {
             service_backend_caps[i].owner_pid = 0;
             service_backend_caps[i].grantee_pid = 0;
             service_backend_caps[i].rights = 0U;
+            service_backend_caps[i].token = 0U;
             service_backend_caps[i].name[0] = '\0';
             service_registry_backend_generation_bump(name);
             return 0;
@@ -730,7 +940,8 @@ int service_registry_backend_rights(const char* name, int32_t owner_pid, int32_t
     if (service_registry_lookup(name) != owner_pid) return OS_SERVICE_NOT_OWNER;
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         if (service_backend_caps[i].owner_pid == owner_pid && service_backend_caps[i].grantee_pid == grantee_pid &&
-            name_equal(service_backend_caps[i].name, name)) {
+            name_equal(service_backend_caps[i].name, name) &&
+            service_backend_caps[i].token != 0U) {
             *out_rights = service_backend_caps[i].rights;
             return 0;
         }
@@ -748,7 +959,8 @@ int service_registry_backend_scope(const char* name, int32_t owner_pid, int32_t 
     if (service_registry_lookup(name) != owner_pid) return OS_SERVICE_NOT_OWNER;
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         if (service_backend_caps[i].owner_pid == owner_pid && service_backend_caps[i].grantee_pid == grantee_pid &&
-            name_equal(service_backend_caps[i].name, name)) {
+            name_equal(service_backend_caps[i].name, name) &&
+            service_backend_caps[i].token != 0U) {
             out_scope->rights = service_backend_caps[i].rights;
             out_scope->sources = service_backend_caps[i].sources;
             return 0;
@@ -771,6 +983,7 @@ int service_registry_backend_list(const char* name, int32_t owner_pid, os_servic
     for (i = 0U; i < SERVICE_REGISTRY_BACKEND_CAPACITY; i++) {
         if (service_backend_caps[i].owner_pid == owner_pid &&
             service_backend_caps[i].grantee_pid > 0 &&
+            service_backend_caps[i].token != 0U &&
             name_equal(service_backend_caps[i].name, name)) {
             out_list->entries[count].pid = service_backend_caps[i].grantee_pid;
             out_list->entries[count].rights = service_backend_caps[i].rights;

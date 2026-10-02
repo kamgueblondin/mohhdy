@@ -5,6 +5,10 @@
 /* Tranche 5 slice 2: single-slot net IPC relay (pure logic) and the socket
  * loopback sequence the QEMU proof client runs through the relay. */
 
+/* The production guest hands the NE2000 to the Ring 3 worker. Peer
+ * listen/accept/poll must still be relayable in that mode. */
+int kernel_net_nic_port_mode(void) { return 1; }
+
 static void test_supported_subset(void) {
     uint32_t n;
     for (n = SYS_SOCKET_OPEN; n <= SYS_SOCKET_ACCEPT_ACK; n++) TEST_ASSERT_TRUE(net_relay_supported(n));
@@ -12,6 +16,9 @@ static void test_supported_subset(void) {
     TEST_ASSERT_FALSE(net_relay_supported(SYS_LLM_ACQUIRE_START));
     TEST_ASSERT_TRUE(net_relay_supported(SYS_PEER_LISTEN));
     TEST_ASSERT_TRUE(net_relay_supported(SYS_PEER_TLS_POLL));
+    net_relay_init();
+    TEST_ASSERT_TRUE(net_relay_begin(4, 5, SYS_PEER_LISTEN, 0U) > 0);
+    net_relay_init();
     TEST_ASSERT_FALSE(net_relay_supported(SYS_NET_STATUS));
     TEST_ASSERT_FALSE(net_relay_supported(SYS_NET_RELAY_REPLY));
     TEST_ASSERT_TRUE(sizeof(os_net_relay_request_t) <= OS_IPC_MAX_DATA);

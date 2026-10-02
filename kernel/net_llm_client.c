@@ -101,6 +101,7 @@ static uint8_t boot_peer_tls_record[1200];
 static uint8_t boot_peer_server_random[32];
 static uint8_t boot_peer_server_private[32];
 static uint8_t boot_peer_app_seen;
+static uint8_t boot_metier_client_sent;
 
 #ifndef MOHHDY_RING3
 int net_llm_client_utc(rtc_io_t* io, char* out, uint16_t capacity) {
@@ -139,6 +140,7 @@ void net_llm_client_reset(void) {
     boot_peer_tls_ready = 0U;
     boot_peer_tls_step = 0U;
     boot_peer_app_seen = 0U;
+    boot_metier_client_sent = 0U;
 }
 
 static int kernel_llm_rdrand_supported(void) {
@@ -558,15 +560,107 @@ static int kernel_peer_capture_remote_ip(void) {
     return -2;
 }
 
+static int kernel_tls_app_recv(int socket_id, net_tls_aes_gcm_session_t* session,
+                               uint8_t* plaintext, uint16_t plaintext_cap, uint16_t* out_len) {
+    net_tcp_view_t view;
+    net_tls_record_view_t opened;
+    uint16_t frame_length = 0U;
+    uint16_t consumed = 0U;
+    int status;
+    if (!plaintext || !out_len || socket_id < 0 || !session) return -1;
+    *out_len = 0U;
+    status = ne2k_rx_poll_tcp(g_llm_dev, g_llm_io, boot_llm_frame,
+                              sizeof(boot_llm_frame), &frame_length, &view);
+    if (status != 0 || view.payload_length == 0U) return -2;
+    /* net_socket_receive_tls accepte deja le segment TCP. Un feed avant
+     * avancerait remote_sequence et ferait rejeter ce second accept. */
+    (void)frame_length;
+    status = net_socket_receive_tls(socket_id, session, &view, plaintext, plaintext_cap,
+                                    &opened, &consumed);
+    if (status != 0 || opened.content_type != NET_TLS_CONTENT_APPLICATION_DATA) return -5;
+    *out_len = opened.payload_length;
+    return 0;
+}
+
+static int kernel_tls_app_send(int socket_id, net_tls_aes_gcm_session_t* session,
+                               const uint8_t remote_ip[4],
+                               const uint8_t* payload, uint16_t payload_length) {
+    net_tcp_connection_t snapshot;
+    uint16_t segment_length = 0U;
+    int status;
+    if (net_socket_connection_snapshot(socket_id, &snapshot) != 0) return -1;
+    status = net_socket_send_tls(socket_id, session, NET_TLS_CONTENT_APPLICATION_DATA,
+                                 payload, payload_length, boot_peer_tls_record,
+                                 sizeof(boot_peer_tls_record), boot_peer_segment,
+                                 sizeof(boot_peer_segment), &segment_length, 2U);
+    if (status != 0) return -2;
+    status = ne2k_tcp_segment(g_llm_dev, g_llm_io, &boot_llm_arp_cache, boot_llm_frame,
+                              sizeof(boot_llm_frame), boot_llm_lease.ipv4, remote_ip,
+                              boot_peer_segment, segment_length);
+    if (status != 0) {
+        (void)net_socket_connection_restore(socket_id, &snapshot);
+        return -3;
+    }
+    return 0;
+}
+
+static int plaintext_starts_metier(const uint8_t* data, uint16_t length) {
+    static const uint8_t mark[6] = {'M', 'E', 'T', 'I', 'E', 'R'};
+    uint16_t i;
+    if (!data || length < 6U) return 0;
+    for (i = 0U; i < 6U; i++) if (data[i] != mark[i]) return 0;
+    return 1;
+}
+
+/* 10 = METIER ok, 11 = attente, 12 = METIER facture emis. */
+static int kernel_metier_exchange(void) {
+    static const uint8_t facture[14] = {
+        'M', 'E', 'T', 'I', 'E', 'R', ' ', 'f', 'a', 'c', 't', 'u', 'r', 'e'
+    };
+    static const uint8_t ok_reply[9] = {
+        'M', 'E', 'T', 'I', 'E', 'R', ' ', 'o', 'k'
+    };
+    uint16_t rx = 0U;
+    int status;
+    if (!g_llm_present) return OS_PEER_UNAVAILABLE;
+    if (!boot_llm_lease.valid) return OS_PEER_NO_LEASE;
+    if (boot_peer_tls_step >= 7U && boot_peer_listen_socket >= 0) {
+        status = kernel_tls_app_recv(boot_peer_listen_socket, &boot_peer_tls_server.session,
+                                     boot_llm_plaintext, sizeof(boot_llm_plaintext), &rx);
+        if (status != 0 || !plaintext_starts_metier(boot_llm_plaintext, rx)) return 11;
+        if (kernel_peer_capture_remote_ip() != 0) return OS_PEER_FAILED;
+        if (kernel_tls_app_send(boot_peer_listen_socket, &boot_peer_tls_server.session,
+                                boot_peer_remote_ip, ok_reply, 9U) != 0)
+            return OS_PEER_FAILED;
+        return 10;
+    }
+    if (boot_llm_socket_session.state.phase != NE2K_LLM_CONNECTION_TLS_COMPLETE ||
+        boot_llm_socket_session.socket_id < 0)
+        return OS_PEER_NOT_LISTENING;
+    if (!boot_metier_client_sent) {
+        if (kernel_tls_app_send(boot_llm_socket_session.socket_id, &boot_llm_tls_client.session,
+                                boot_llm_socket_session.state.remote_ip, facture, 14U) != 0)
+            return OS_PEER_FAILED;
+        boot_metier_client_sent = 1U;
+        return 12;
+    }
+    status = kernel_tls_app_recv(boot_llm_socket_session.socket_id, &boot_llm_tls_client.session,
+                                 boot_llm_plaintext, sizeof(boot_llm_plaintext), &rx);
+    if (status != 0 || rx < 9U || !plaintext_starts_metier(boot_llm_plaintext, rx)) return 11;
+    if (boot_llm_plaintext[7] == 'o' && boot_llm_plaintext[8] == 'k') return 10;
+    return 11;
+}
+
 /* Retours : 1=ServerHello, 2=Certificate, 3=SKE, 4=SHD, 5=attente flight,
- * 6=CCS, 7=Finished, 8=app echo, 0=noop/in-progress positif. */
+ * 6=CCS, 7=Finished, 8=attente applicative, 9=app echo, 0=noop.
+ * request->metier : 10=METIER ok, 11=attente, 12=facture emise. */
 int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
     uint8_t state = 0U;
     uint16_t rx_length = 0U;
     int status;
     int built;
     uint16_t i;
-    (void)request;
+    if (request && request->metier) return kernel_metier_exchange();
     if (!g_llm_present) return OS_PEER_UNAVAILABLE;
     if (!boot_llm_lease.valid) return OS_PEER_NO_LEASE;
     if (boot_peer_listen_socket < 0) return OS_PEER_NOT_LISTENING;

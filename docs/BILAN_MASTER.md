@@ -1,6 +1,6 @@
 # Bilan de la derniere version master
 
-Ce fichier est un snapshot du 13 septembre 2026. Il ne decrit pas `main` au 2 octobre 2026. Le chiffre vivant des tests, l'ABI (`MAX_SYSCALLS = 148`) et les prochaines etapes sont dans [ETAT_REEL.md](ETAT_REEL.md).
+Ce fichier est un snapshot du 13 septembre 2026. Il ne decrit pas `main` au 2 octobre 2026. Le chiffre vivant des tests, l'ABI (`MAX_SYSCALLS = 151`) et les prochaines etapes sont dans [ETAT_REEL.md](ETAT_REEL.md).
 
 Date du bilan : 13 septembre 2026
 Depot source : `github.com/kamgueblondin/ai-os`

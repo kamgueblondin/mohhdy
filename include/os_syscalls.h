@@ -304,7 +304,16 @@
  * than one IPC payload). EBX = OS_NET_RELAY_BULK_* , ECX = job id, EDX =
  * buffer, ESI = length / capacity. Live net-driver PID only (-59). */
 #define SYS_NET_RELAY_BULK 147
-#define MAX_SYSCALLS 148
+/* EBX = nom du service, ECX = uint32_t* : jeton non nul de la capacite
+ * backend detenue par l'appelant. 0 en memoire n'est pas une capacite. */
+#define SYS_SERVICE_BACKEND_TOKEN 148
+/* EBX = os_service_event_pull_t* : plus vieil evenement non acquitte de
+ * l'appelant, puis acquitte. Independant de la boite IPC. */
+#define SYS_SERVICE_EVENT_PULL 149
+/* EBX = 1 ajout (ECX = prefixe, EDX = source) ou 2 liste (ECX = tampon,
+ * EDX = capacite). Journal disque hors zone AIOV et hors BPB FAT. */
+#define SYS_MOUNT_JOURNAL 150
+#define MAX_SYSCALLS 151
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
@@ -409,6 +418,7 @@ typedef struct {
 
 typedef struct {
     uint16_t attempts;
+    uint8_t metier; /* 1 : echange applicatif METIER, pas le poll handshake */
 } os_peer_tls_poll_request_t;
 
 #define OS_PEER_BAD_REQUEST (-130)
@@ -663,6 +673,15 @@ typedef struct {
     uint32_t rights;
     uint32_t sources;
 } os_service_backend_scope_t;
+
+/* Retrait d'un evenement de service hors de la boite IPC. */
+typedef struct {
+    char name[OS_SERVICE_NAME_MAX];
+    int32_t old_pid;
+    int32_t new_pid;
+    uint32_t reason;
+    uint32_t sequence;
+} os_service_event_pull_t;
 
 typedef struct {
     uint32_t count;

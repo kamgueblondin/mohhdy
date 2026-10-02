@@ -503,7 +503,7 @@ void osui_gui_run(void) {
     g_input[0] = 0;
     osui_gui_term_reset();
     osui_gui_ack_enter();
-    serial_puts("osui gui live chrome=qemu_fb display_surface=vbe_lfb us031_complete=true\n");
+    serial_puts("osui gui live chrome=qemu_fb display_surface=vbe_lfb us031_complete=false\n");
     osui_gui_fill_scene(&scene);
     sys_vga_blit_scene(&scene);
     emit_snap();
