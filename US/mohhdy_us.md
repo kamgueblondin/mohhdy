@@ -15,13 +15,13 @@ La mention **fait** signifie que le comportement est observable dans le code et 
 | AOS-003 | Recevoir timer et clavier | PIC/PIT 100 Hz/i8042 ; prefixe `0xE0` (Page Up/Down, fleches) ; EOI IRQ0 avant le gestionnaire C |
 | AOS-004 | Lire un initrd | Archive TAR (ustar) en lecture seule, `SYS_LISTDIR`, `SYS_READFILE` |
 | AOS-005 | Executer un shell isole | Shell ELF utilisateur et retour Ring 3 par `iret` |
-| AOS-006 | Exposer une ABI de syscalls | ABI propre `int 0x80` ; aujourd'hui syscalls 0-127, `MAX_SYSCALLS = 128` |
+| AOS-006 | Exposer une ABI de syscalls | ABI propre `int 0x80` ; syscalls 0-147, `MAX_SYSCALLS = 148` |
 | AOS-007 | Conserver de petits fichiers | Overlay ATA PIO persistant V2 et restauration V1/V2 |
 | AOS-008 | Gerer plusieurs taches | `spawn`, `yield`, `ps`, `kill`, plus preemption IRQ0 sure |
 | AOS-009 | Executer un ELF bloquant | `exec`, parent `TASK_WAITING`, reveil par `SYS_EXIT` |
 | AOS-010 | Completer localement avec GPT-2 | `SYS_GPT2_GENERATE`, GPT-2 124M optionnel, cache KV et SSE2 |
 | AOS-011 | Tokeniser BPE GPT-2 | Vocabulaire/fusions BPE et decodage UTF-8 brut |
-| AOS-012 | Prévenir les régressions | 506 tests C et sept contrats QEMU versionnés, dont `qemu-ne2k-status`, `qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next` et `qemu-vfs-service` |
+| AOS-012 | Prévenir les régressions | 619 tests C au rejeu du 2 octobre 2026, `make qemu-smoke` (six scenarios) et sept contrats QEMU, dont `qemu-ne2k-status`, `qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next` et `qemu-vfs-service` |
 
 ## Tranche AOS-020 à AOS-025 - livrée
 
@@ -123,19 +123,25 @@ Les lots 113-154 sont **faits** au sens caller-owned / Unity / smoke NIC. Les lo
 | 126 | Grant backend VFS droit-source-préfixe relatif : EDX droits, ESI sources, EDI préfixe NUL-terminé |
 | 127 | `SYS_VGA_BLIT` : bureau 80x25 (`os_vga_frame_t*`) ; EBX=0 quitte le desktop |
 
-`MAX_SYSCALLS = 128`.
+`MAX_SYSCALLS = 148` (0 a 147). Le tableau ci-dessus s'arrete a 127, socle historique dont `SYS_VGA_BLIT`.
 
-## Prochaines tranches, hors livraison actuelle
+## Prochaines etapes, hors livraison actuelle
+
+La liste vivante et les criteres sont dans [docs/ETAT_REEL.md](../docs/ETAT_REEL.md). Resume :
 
 | Priorite | Sujet | Critere de sortie |
 |---|---|---|
-| 0 | Budget CI QEMU | Conserver les sept contrats séquentiels sous 25 minutes et le smoke multi-pairs dans GitHub Actions, sans retirer d'assertion métier ni rejouer une mutation ou I/O incertaine ; la dernière mesure locale est 760,9 s |
-| 1 | Couverture de l'ACL préfixée | Conserver les preuves négatives de voisin, racine et voie sans chemin ; le diagnostic public reste droit-source et ne doit jamais divulguer le préfixe interne |
-| 2 | Topologie réseau locale partagée + TLS multi + guest-guest | `make qemu-ne2k-shared-topology` + `make qemu-ne2k-tls-multi-guest` + `make qemu-ne2k-guest-app-traffic` + `make qemu-ne2k-guest-tls-peer` + `make qemu-ne2k-guest-tls-chat` + `make qemu-ne2k-guest-tls-server` (hub 127.0.0.1, dual lease, ARP/SYN/ACK/ClientHello/serveur TLS Finished, hors ci) ; suite : chat chiffre metier ; sans TAP, clé, Internet public ni OpenAI |
-| 3 | Latence locale | Mesure sous matériel/KVM sur une plateforme de référence ; QEMU TCG reste ~48 s / ~23 s |
-| 4 | Stockage hors noyau (suite) | AOS-2163...2170 I/O protegees via worker ; AOS-2171 refuse repli local si worker vivant ; AOS-2172 ferme bypass proprio FAT si worker publie ; AOS-2173 ferme bypass proprio initrd/overlay si worker publie ; AOS-2174 ferme bypass SOURCE_ALL / ATA-backed si worker publie  ; AOS-2175 restreint overlay read/stat au PID worker ; AOS-2177 gate SYS_READFILE/SYS_WRITEFILE historiques (partie overlay) si worker publie ; AOS-2178 gate les autres points d'entree historiques overlay et la liste overlay backend; pilote ATA encore Ring 0 |
+| 0 | Gates | `make test-all` 619/619 tenu, `make qemu-smoke`, quatre jobs CI, sept contrats sous 25 minutes, aucune assertion retiree |
+| 1 | Chaine US-031 | `us031_complete=false` dans le guest et les tests Unity ; `chromium=false` |
+| 2 | Chat chiffre metier | Contrat local hors CI, sans TAP, sans Internet, sans secret |
+| 3 | Latence KVM | JSON `gguf-kvm-benchmark` avec `/dev/kvm` et poids deployes |
+| 4 | Jeton de capability | Plus seulement un PID et un masque. Pas US-001 complet |
+| 5 | Evenement non perdu | Au-dela du best-effort IPC. Pas de journal disque dans ce pas |
+| 6 | Montages et reboot | La restauration au reenregistrement existe. Le pas suivant survit au reboot sous QEMU |
 
-La vision historique (microkernel, P2P, economie, multi-plateforme, etc.) reste une collection de specifications dans `US/`. Elle ne doit pas etre lue comme un second produit ni comme indicateur d'implementation du guest. Capacites OS de l'instance : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Roadmap produit : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md) (premieres tranches OS-UI-0/1/2, prochain OS-UI-3). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
+Deja livre, a ne pas reouvrir comme si c'etait absent : pilote ATA Ring 3, pile NE2000 Ring 3 quand le worker tient la carte, LFN et sous-repertoires multi-niveaux, stub OS-UI. Restent Ring 0 : boot ATA, replis sans worker, `networker` non lance au boot, pair TLS 128-130 tant que la carte est prise.
+
+La vision historique (microkernel complet, P2P, economie, multi-plateforme) reste une collection de specifications dans `US/`. Elle n'est pas la file de build. Capacites OS : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Roadmap produit : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
 
 ## Références
 

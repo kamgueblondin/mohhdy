@@ -1,14 +1,14 @@
 # Plan de suite d'implémentation (gardes guest)
 
-**Date :** 15 septembre 2026
+**Date :** 2 octobre 2026
 **Statut :** gardes noyau du guest i386, pas la feuille de route produit complete
-**Ponctuation :** ASCII usuel et accents français uniquement
+**Ponctuation :** ASCII usuel et accents francais uniquement
 
 **Roadmap produit (toutes les capacites visees, portage OS+UI) :** [PLAN_SE_MOHHDY_COMPLET.md](PLAN_SE_MOHHDY_COMPLET.md). Epiques de migration : [../US/mohhdy_os_ui_migration.md](../US/mohhdy_os_ui_migration.md).
 
 Ce document **ne** remplace **pas** le plan maitre. Il detaille seulement les **tranches 0-4** : gardes du guest i386 mesure (CI, ACL, GGUF, stockage). Un seul produit : le SE Mohhdy. Docker / PC / hyperviseur = boot de l'instance QEMU, pas un sidecar. La surface OS-UI vit dans `userspace/osui_runtime.c` (OS-UI-0 a 3 livres, facade Python metier retiree, commande `gui` + bureau VBE QEMU). Les tickets `ASSIST-xxx` restent la spec fonctionnelle ([../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)). LLM de production, Chromium de session et US-031 **ne sont pas** livres. En cas de contradiction sur le **guest**, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment. En cas de contradiction sur l'ordre **produit**, le plan maitre prime.
 
-**Prochain build produit :** gardes 0-4 et honnetete US-031. OS-UI-3 (facade Python metier) est livre. Bureau VBE QEMU : [osui_0_1_2.md](osui_0_1_2.md), [osui_chat_desktop.md](osui_chat_desktop.md). `guest_html_stage=false`. `display_host=false`.
+**Prochain build produit :** voir [ETAT_REEL.md](ETAT_REEL.md), section "Prochaines etapes de developpement". Ordre : gates, chaine `us031_complete=false`, chat chiffre metier, GGUF KVM, jeton, evenement non perdu, montages reboot. OS-UI-3 est livre. Bureau VBE : [osui_0_1_2.md](osui_0_1_2.md). `guest_html_stage=false`. `chromium=false`.
 
 ## Sources lues (sans les réécrire)
 
@@ -33,7 +33,7 @@ Ne pas vendre trois produits. Un item de spec historique n'est pas un ticket de 
 | **Instance OS autonome** | Docker / PC / hyperviseur / machine vierge ; meme guest C sous QEMU | Devoirs ASSIST portes (OS-UI-0..3 livres). Chromium / LLM prod non livres |
 | **Specs historiques** | `US/mohhdy_*.md` et `US/individual_us/` (US-001, US-016 TFLite, P2P, etc.) | Archives. Pas des cibles de build courantes du guest |
 
-Le guest verifie AOS-001 a AOS-026, plus les lots reseau / VFS / GGUF documentes dans ETAT_REEL. Ce n'est pas TensorFlow Lite, pas un microkernel abouti, pas un client OpenAI public, pas Internet. Ce n'est **pas** non plus "le SE autonome deja complet" : widget, Docker et navigateur-OS ne tournent pas dans QEMU i386.
+Le guest verifie AOS-001 a AOS-026, plus les lots reseau / VFS / GGUF documentes dans ETAT_REEL. Ce n'est pas TensorFlow Lite, pas un microkernel abouti, pas un client OpenAI public, pas Internet. Le stub OS-UI (chat, sessions, simulateur, commande `gui`) tourne dans le meme QEMU. Chromium et le LLM de production ne tournent pas.
 
 Les specs historiques continuent seulement par de **petits increments Foundation deja entames** (identite verifiee, capabilities, pilote de stockage hors noyau). Elles ne doivent **pas** etre lues comme "implementer US-016 TFLite" ni comme "migrer US-001 d'un coup".
 
@@ -41,16 +41,19 @@ Les capacites `ASSIST-xxx` **reprennent** le vocabulaire Foundation (droits, gra
 
 ## État de départ (déjà livré, à ne pas réouvrir sans régression)
 
-Constat courant (ETAT_REEL, 27 août 2026, complété par BILAN_MASTER) :
+Constat courant (ETAT_REEL, 2 octobre 2026) :
 
-- Suite Unity : **522/522** documentés, **523/523** au rejeu local du 13 septembre 2026
-- Sept contrats `make integration-qemu` séquentiels, mesure locale **760,9 s** (12 min 41 s), budget 25 minutes
-- VFS Ring 3 : `vfsserver` / `vfsvirtual`, ACL droit-source-préfixe, diagnostic public sans préfixe
-- Réseau local QEMU : `make qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next`, `qemu-ne2k-tls-multipair` (séquentiel, `127.0.0.1`)
-- GGUF Q3_K/Q4_K/Q6_K local. Sous QEMU TCG, médiane documentée ~48,7 s (premier jeton) et ~22,8 s (continuation). Ce n'est pas une mesure matérielle.
-- Axe de latence GGUF sous QEMU TCG **clôturé** avec mesures (lots AOS-1641...1648). L'item ouvert README vise une **autre** plateforme (matériel / KVM), pas un second tour TCG.
+- Suite : **619/619** au rejeu local (31 s). Les chiffres 522 et 523 decrivent septembre 2026
+- `make qemu-smoke` : six scenarios verts le 2 octobre 2026
+- CI `0ffe841`, run 36715656797 : quatre jobs verts, mur d'environ 11 minutes
+- Sept contrats `make integration-qemu`, budget 25 minutes. Mesure locale historique : 760,9 s
+- VFS Ring 3 : `vfsserver` / `vfsvirtual`, ACL droit-source-prefixe, diagnostic public sans prefixe
+- ATA et NE2000 Ring 3 au runtime ; boot et repli restent Ring 0
+- Reseau local QEMU : `make qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next`, `qemu-ne2k-tls-multipair` (sequentiel, `127.0.0.1`)
+- GGUF Q3_K/Q4_K/Q6_K local. Sous QEMU TCG, mediane documentee ~48,7 s (premier jeton) et ~22,8 s (continuation). Ce n'est pas une mesure materielle.
+- Axe de latence GGUF sous QEMU TCG clos avec mesures (lots AOS-1641...1648). L'item ouvert est KVM, pas un second tour TCG.
 
-Limites FAT déjà énoncées et **hors** la table de priorité AOS : écrasement, LFN enfant, renommage inter-répertoire, remplacement atomique. Elles restent des limites du contrat livré. Elles ne deviennent des cibles que si `mohhdy_us.md` les ajoute explicitement.
+Limites FAT **hors** la file courante : ecrasement, renommage inter-repertoire, remplacement atomique. Les sous-repertoires multi-niveaux et les LFN dans ces sous-repertoires sont livres. Ces limites ne deviennent des cibles que si `mohhdy_us.md` les ajoute.
 
 ## Ordre des prochaines tranches (prototype guest)
 
@@ -259,7 +262,7 @@ Docker **doit** booter l'instance comme une machine vierge. `docker run -it mohh
 1. **OS-UI-000** : plan maitre (docs).
 2. **OS-UI-0** : boot Docker = QEMU. Guides historiques : [assist050_docker_runtime.md](assist050_docker_runtime.md).
 3. **OS-UI-1** : ASSIST-010..013, 030, 031, 040, 041 dans le guest C.
-4. **OS-UI-2** : ASSIST-020..022, 060, 061 dans le guest C. `phase3_complete=false`, `us031_complete=false`.
+4. **OS-UI-2** : ASSIST-020..022, 060, 061 dans le guest C. `phase3_complete=false`. `chromium=false`. La chaine `us031_complete` doit revenir a `false`.
 5. **OS-UI-3** : facade Python retiree.
 6. **ASSIST-090** / billing reel / TFLite / phases 4-8 : hors proche.
 

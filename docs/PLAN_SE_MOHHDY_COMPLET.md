@@ -77,15 +77,18 @@ Source de verite : [ETAT_REEL.md](ETAT_REEL.md), backlog [../US/mohhdy_us.md](..
 
 Observable aujourd'hui :
 
-- Boot Multiboot, VGA/serie, shell ELF Ring 3, syscalls 0-127
-- VFS Ring 3 (`vfsserver` / `vfsvirtual`), FAT16/FAT32, ACL droit-source-prefixe, diagnostic public sans prefixe
-- IPC, registre de services, grant/revoke backend, `request_id`, evenements best-effort
-- NE2000 local, TLS/HTTP/SSE sur pair `127.0.0.1`, pas Internet public, pas OpenAI
-- GPT-2 124M et GGUF Q3_K/Q4_K/Q6_K locaux ; sous QEMU TCG ~48,7 s / ~22,8 s
-- `make test-all` 522/522 documentes, 523/523 au rejeu du 13 septembre 2026
-- `make integration-qemu` : sept contrats sequentiels, 760,9 s local, budget 25 min
+- Boot Multiboot, VGA/serie, shell ELF Ring 3, syscalls 0-147 (`MAX_SYSCALLS = 148`)
+- VFS Ring 3 (`vfsserver` / `vfsvirtual`), FAT16/FAT32 multi-niveaux, ACL droit-source-prefixe, diagnostic public sans prefixe
+- Pilote ATA Ring 3 (`atadriver`) pour la logique FAT/overlay au runtime ; le montage au boot et le repli sans pilote restent Ring 0
+- IPC, registre de services, grant/revoke backend, `request_id`
+- Identite de tache (sequence et generation) et table de montages restauree au reenregistrement : en RAM, pour le boot courant
+- Evenements de service : historique avec bit `acked`, livraison IPC toujours best-effort
+- NE2000 local, TLS/HTTP/SSE sur pair `127.0.0.1`, pile Ring 3 si `networker` detient la carte ; pas Internet public, pas OpenAI
+- GPT-2 124M et GGUF Q3_K/Q4_K/Q6_K locaux ; sous QEMU TCG ~48,7 s / ~22,8 s ; poids hors Git
+- `make test-all` 619/619 au rejeu du 2 octobre 2026 (31 s). `make qemu-smoke` : six scenarios verts le meme jour
+- `make integration-qemu` : sept contrats, budget 25 min. CI du commit `0ffe841` (run 36715656797, 30 septembre 2026) : quatre jobs verts, mur d'environ 11 min
 
-Le guest **n'heberge pas** : widget, admin web, sessions visiteur, simulateur DOM, MCP demo, `/browser`, FS sandbox, image Docker du SE graphique, scene HTML `#ai-stage`.
+La surface OS-UI (chat, sessions, simulateur, MCP, FS sandbox, commande `gui`) est dans le meme guest. Elle est decrite en 2.2. Le guest n'execute pas de HTML `#ai-stage`.
 
 ### 2.2 Surface OS-UI Ring 3 (guest C, facade Python retiree)
 
@@ -102,13 +105,14 @@ Present dans le guest C (stub, pas production) :
 - Origine etrangere refusee (`origin_denied`, 403)
 - Gestes simulateur DOM, MCP declare, facture mock
 - FS sandbox lecture ; traversal et write refuses
-- Scene VGA 8x48 + canvas desktop 22x78, commande `gui`, `llm=stub_echo`, `phase3_complete=false`, `us031_complete=false`
+- Scene VGA 8x48 + canvas desktop 22x78, commande `gui`, `llm=stub_echo`, `phase3_complete=false`, `chromium=false`
+- Plusieurs chaines impriment `us031_complete=true` (aide, statuts, ligne serie `gui`) et une ligne du canvas imprime `false`. Le produit reste : pas de Chromium. Prochaine etape de code : une seule valeur, `false`
 - Pont : `shared/multiboot_shell_commands.json` + `userspace/mohhdy_osui_bridge.h`
 - `python_facade=false`
 
 Absent (ne pas marquer livre) :
 
-- Navigateur-OS (US-031 phase 3) ; `us031_complete=false`, `chromium_session_engine=false`
+- Navigateur-OS (US-031 phase 3) ; `chromium=false`. La chaine `us031_complete=true` presente dans le guest est un ecart a corriger, pas une livraison
 - LLM de production (le chemin `ai` GPT-2 local n'est pas ce stub)
 - Chromium comme harness de session
 - Auth par comptes / par site
@@ -155,8 +159,8 @@ Une ligne peut cumuler bootstrap et "a porter" : le comportement existe hors OS,
 | AOS-026 | FAT16/FAT32 VFS, ACL prefixe | verifie | **garde 1** |
 | IPC Foundation | FIFO Ring 3, `request_id`, capacite service | verifie (pas capabilities completes) | Foundation |
 | Capabilities VFS | grant/revoke/read/mutate/full, scope source, prefixe interne | verifie | **garde 1** |
-| Topologie locale partagee | Plusieurs QEMU simultanes, reseau local partage | ouvert, bloque PS/2 | **garde 2** |
-| Pilote stockage hors noyau | ATA/FAT plus seulement backend noyau opaque | partiel (`vfsvirtual`) | **garde 4** |
+| Topologie locale partagee | Plusieurs QEMU simultanes, reseau local partage | harness livre hors CI ; suite = chat chiffre metier | **garde 2** |
+| Pilote stockage hors noyau | ATA/FAT servi par `atadriver` Ring 3 au runtime | livre ; boot et repli restent Ring 0 | **garde 4** |
 | Reseau public optionnel | TLS vers hote reel, OpenAI sous condition | sous condition, hors CI | conditionnel |
 | CI budget 25 min | Sept contrats sequentiels, smoke multi-pairs | verifie a tenir | **garde 0** |
 
@@ -169,16 +173,16 @@ Increments **petits**, deja entames. Pas US-001 "d'un coup". Pas US-010 "tous le
 | Sujet | Visee | Statut | Ou |
 |---|---|---|---|
 | IPC message passing | Services Ring 3 | verifie, borne | guest |
-| Identite verifiee | Au-dela du PID volatile | a porter (increments guest) | suite Foundation |
-| Capabilities completes | Tokens, pas seulement masque PID | partiel VFS ; reste ouvert | suite Foundation |
-| Evenements accuses / persistants | Au-dela du best-effort | ouvert | suite Foundation |
-| Montages persistants lies aux services | Table volatile aujourd'hui | ouvert | suite Foundation |
-| Externaliser backend VFS | Recouvre garde 4 | partiel | garde 4 |
+| Identite verifiee | Au-dela du PID volatile | partiel : sequence et generation en RAM, pas un certificat | suite Foundation |
+| Capabilities completes | Tokens, pas seulement masque PID | partiel VFS ; jeton encore a ecrire | suite Foundation |
+| Evenements accuses / persistants | Au-dela du best-effort | partiel : bit `acked` en RAM ; la boite IPC peut encore perdre l'evenement | suite Foundation |
+| Montages persistants lies aux services | Survivre au reboot | partiel : restauration au reenregistrement, meme boot seulement | suite Foundation |
+| Externaliser backend VFS | Runtime hors du noyau | livre via `vfsvirtual` et `atadriver` ; repli Ring 0 conserve | garde 4 |
 | Pilotes / NIC derriere droits | Apres VFS et identite | ouvert, plus tard | apres garde 4 |
 | Plugins, logging distribue, virtualisation (US-004, US-005, US-011) | Phase 1 complete | spec / futur | hors proche |
 | US-001 microkernel termine | Services memoire/FS/reseau isoles | **non livre** | jamais un sprint unique |
 
-Ordre impose : identite et capabilities, puis evenements, puis montages persistants, puis backend VFS, **puis seulement** pilotes ou reseau derriere ces droits.
+Ordre qui reste : capability a jeton, puis evenement qui ne se perd pas, puis montages qui survivent au reboot. Le backend VFS runtime et les pilotes ATA/NE2000 Ring 3 sont deja livres, avec repli Ring 0.
 
 ### 3.3 Coeur IA du SE (phase 2 / US-021 / US-028)
 
@@ -474,11 +478,11 @@ Detail operationnel : [PLAN_SUITE_IMPLEMENTATION.md](PLAN_SUITE_IMPLEMENTATION.m
 |---|---|---|
 | 0 | Budget CI QEMU 25 min, sept contrats | Tenir |
 | 1 | ACL prefixee, preuves negatives | Tenir |
-| 2 | Topologie locale partagee | Optionnel, bloque PS/2 simultane |
-| 3 | Latence GGUF materiel / KVM | Item ouvert README |
-| 4 | Pilote stockage hors noyau | Increment US-001, pas refonte |
+| 2 | Topologie locale partagee, harness livre | Suite : chat chiffre metier, hors CI |
+| 3 | Latence GGUF materiel / KVM | Campagne JSON encore absente |
+| 4 | Pilote stockage Ring 3 | Livre (`atadriver`) ; boot et repli Ring 0 a conserver |
 | * | Reseau public | Sous condition, hors CI |
-| * | Identite / capabilities / evenements / montages | Petits pas Foundation |
+| * | Jeton, evenement durable, montage disque | Petits pas Foundation, voir ETAT_REEL |
 
 Aucune tranche OS-UI ne relache ces gardes.
 

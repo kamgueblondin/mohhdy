@@ -29,7 +29,7 @@ make run-gui
 - **Bureau** : tapez `gui` apres `MOHHDY>` (aliases `graphics`, `desktop`)
 - **Quitter le bureau** : `console`, `gui-exit` ou ESC
 - **Nographic / CI** : `gui-status` et `make qemu-osui-gui` (hors integration-qemu)
-- **Honnêteté** : `llm=stub_echo`, `us031_complete=false`, `python_facade=false`, `chrome=qemu_fb`
+- **Honnetete** : `llm=stub_echo`, `chromium=false`, `python_facade=false`, `chrome=qemu_fb`. La chaine `us031_complete` est encore `true` dans plusieurs statuts : ce n'est pas Chromium, et la prochaine etape de code la remet a `false`.
 
 Pour tester la sonde NE2000 (optionnel, hors `make run-gui`) :
 

@@ -43,7 +43,9 @@ Quitter : `console` / ESC. Nographic : `gui-status` dump le canvas.
 
 Pas de serveur metier. Sante guest : `os-status` et `guest-status`
 (`llm=stub_echo`, `python_facade=false`, `phase3_complete=false`,
-`us031_complete=false`, `display_surface=vbe_lfb`, `chrome=qemu_fb`).
+`chromium=false`, `display_surface=vbe_lfb`, `chrome=qemu_fb`).
+Certaines chaines impriment encore `us031_complete=true`. Ce n'est pas
+Chromium. La prochaine etape de code remet cette chaine a `false`.
 
 Aucun secret dans l'image. Utilisateur du conteneur = processus QEMU.
 Les poids GPT-2 ne sont pas dans l'image par defaut (`MOHHDY_RAM=256M`).
@@ -89,7 +91,7 @@ les tests et `scripts/extract_guest_commands.py`.
 - `browser-click` / `browser-type` / `browser-pointer` (simulateur DOM)
 - `mcp-invoice` declare ; `mcp-invoke` outil non declare = `tool_undeclared`
 - `fs-list` / `fs-read` sandbox ; `..` = `traversal_denied` ; write refuse
-- `phase3_complete=false`, `us031_complete=false`
+- `phase3_complete=false`, `chromium=false`. La chaine `us031_complete=true` est un ecart, pas une livraison.
 
 ## OS-UI-3 - Python metier retire
 
