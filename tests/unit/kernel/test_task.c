@@ -555,6 +555,89 @@ void test_task_identity_visible_to_self_and_child(void) {
     TEST_ASSERT_EQUAL(child->identity_key, children.entries[0].identity_key);
 }
 
+void test_task_identity_follows_current_parent(void) {
+    task_t* parent;
+    task_t* supervisor;
+    task_t* child;
+    task_t* stranger;
+    os_task_metrics_t metrics;
+    os_task_children_t children;
+    os_proc_t procs[8];
+    int n;
+    int i;
+    int saw = 0;
+
+    tasking_init();
+    parent = create_task(dummy_task_function);
+    supervisor = create_task(dummy_task_function);
+    child = create_task(dummy_task_function);
+    stranger = create_task(dummy_task_function);
+    parent->type = TASK_TYPE_USER;
+    supervisor->type = TASK_TYPE_USER;
+    child->type = TASK_TYPE_USER;
+    stranger->type = TASK_TYPE_USER;
+    child->parent_pid = parent->id;
+    add_task_to_queue(parent);
+    add_task_to_queue(supervisor);
+    add_task_to_queue(child);
+    add_task_to_queue(stranger);
+
+    current_task = parent;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(child->id, &metrics));
+    TEST_ASSERT_EQUAL(1U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(child->identity_key, metrics.identity_key);
+
+    TEST_ASSERT_EQUAL(0, task_delegate_child(parent->id, child->id, supervisor->id));
+    TEST_ASSERT_EQUAL(supervisor->id, child->parent_pid);
+
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(child->id, &metrics));
+    TEST_ASSERT_EQUAL(0U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(0U, metrics.identity_key);
+    TEST_ASSERT_EQUAL(0U, metrics.sequence);
+    TEST_ASSERT_EQUAL(0U, metrics.generation);
+    TEST_ASSERT_EQUAL(0, task_fill_direct_children(parent->id, &children));
+    TEST_ASSERT_EQUAL(0U, children.count);
+
+    n = task_fill_ps(procs, 8);
+    for (i = 0; i < n; i++) {
+        if (procs[i].pid == child->id) {
+            saw = 1;
+            TEST_ASSERT_EQUAL(0U, procs[i].identity_visible);
+            TEST_ASSERT_EQUAL(0U, procs[i].identity_key);
+        }
+    }
+    TEST_ASSERT_TRUE(saw);
+
+    current_task = supervisor;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(child->id, &metrics));
+    TEST_ASSERT_EQUAL(1U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(child->sequence, metrics.sequence);
+    TEST_ASSERT_EQUAL(child->generation, metrics.generation);
+    TEST_ASSERT_EQUAL(child->identity_key, metrics.identity_key);
+    TEST_ASSERT_TRUE(metrics.identity_key != 0U);
+    TEST_ASSERT_EQUAL(0, task_fill_direct_children(supervisor->id, &children));
+    TEST_ASSERT_EQUAL(1U, children.count);
+    TEST_ASSERT_EQUAL(child->id, children.entries[0].pid);
+    TEST_ASSERT_EQUAL(1U, children.entries[0].identity_visible);
+    TEST_ASSERT_EQUAL(child->identity_key, children.entries[0].identity_key);
+
+    current_task = stranger;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(child->id, &metrics));
+    TEST_ASSERT_EQUAL(0U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(0U, metrics.identity_key);
+
+    current_task = child;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(child->id, &metrics));
+    TEST_ASSERT_EQUAL(1U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(child->identity_key, metrics.identity_key);
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(supervisor->id, &metrics));
+    TEST_ASSERT_EQUAL(0U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(0U, metrics.identity_key);
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(parent->id, &metrics));
+    TEST_ASSERT_EQUAL(0U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(0U, metrics.identity_key);
+}
+
 // === TESTS DE POLITIQUE CPU ===
 
 void test_task_priority_selection_and_validation(void) {
@@ -1660,6 +1743,7 @@ int main(void) {
     // Tests de télémétrie
     RUN_TEST(test_task_metrics_snapshot_and_missing_pid);
     RUN_TEST(test_task_identity_visible_to_self_and_child);
+    RUN_TEST(test_task_identity_follows_current_parent);
 
     // Tests de politique CPU
     RUN_TEST(test_task_priority_selection_and_validation);
