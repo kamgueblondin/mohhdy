@@ -14,13 +14,13 @@ Il n'y a **pas** 120 fichiers : environ 78 specs détaillées + des phases décr
 
 | US fichier | Spec MOHHDY | Dans le prototype |
 |---|---|---|
-| US-001 | Microkernel + IPC | **Livraison partielle :** IPC, VFS Ring 3, `atadriver` et `networker`. Memoire, ordonnancement, boot et replis restent dans le noyau. Pas de jeton de capability |
+| US-001 | Microkernel + IPC | **Livraison partielle :** IPC, VFS Ring 3, `atadriver` et `networker`. Memoire, ordonnancement, boot et replis restent dans le noyau, ainsi que l'inference GPT-2/GGUF et les pilotes PIC, PIT, PS/2, VGA, serie, PCI et `usb_tablet`. Jeton de capability backend (`SYS_SERVICE_BACKEND_TOKEN` 148, builtin `cap-token`) et droit du nom detenu (`SYS_SERVICE_RIGHT_TOKEN` 153, `right-token`) presents, sans serveur de capabilities general |
 | US-002 | Gestionnaire de ressources IA | PMM / VMM / heap / `SYS_MEMINFO` seulement |
-| US-003 | Sécurité adaptative IA | Isolation Ring 0/3 et PID d'émetteur IPC attribué par le noyau ; pas de capabilities ni de détection de menaces |
+| US-003 | Sécurité adaptative IA | Isolation Ring 0/3 et PID d'émetteur IPC attribué par le noyau ; capabilities bornees : grants VFS droits-sources-prefixe, jeton backend (`cap-token`, 148), droit de service (`right-token`, 153), bitmap I/O TSS par PID pour `atadriver` et `networker`. Pas de detection de menaces |
 | US-007 | Monitoring temps réel | `ps` / `mem` / `uptime` / `SYS_TICKS`, pas de télémétrie |
-| US-008 | Framework de tests | 623 tests le 2 octobre 2026 (51 binaires) plus contrats QEMU et GitHub Actions. Pas de framework distribue. Le pourcentage de couverture du script est une constante |
-| US-010 | Pilotes modulaires | PIC, PIT, PS/2, ATA et NE2000, ces deux derniers aussi en Ring 3 au runtime. Pas de framework de pilotes |
-| US-012 | APIs unifiees | `include/os_syscalls.h` : syscalls 0-147, `MAX_SYSCALLS = 148` |
+| US-008 | Framework de tests | 632 tests le 3 octobre 2026 (51 binaires) plus contrats QEMU et GitHub Actions. Pas de framework distribue. Pas de mesure de couverture : le script ne publie plus de pourcentage |
+| US-010 | Pilotes modulaires | PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`, ATA et NE2000. Seuls ATA et NE2000 ont aussi un pilote Ring 3 au runtime ; les autres restent Ring 0. Pas de framework de pilotes |
+| US-012 | APIs unifiees | `include/os_syscalls.h` : syscalls 0-153, `MAX_SYSCALLS = 154` |
 | US-013 | Communication inter-services | **Livraison partielle :** IPC avec saturation et instantané de file par propriétaire de service, VFS local de lecture-écriture-suppression-renommage et listage de racine ou sous-répertoire avec lectures et métadonnées de sources distinctes, statistiques volatiles et alias de montage bornés, registre, cycle de vie, corrélation, conservation bornée des réponses, transfert, révocation et notifications best-effort ; pas de capabilities, d'identité vérifiée, de persistance, de priorité ni de garantie de livraison |
 | US-016 | Moteur TensorFlow Lite | GPT-2 124M freestanding (`SYS_GPT2_GENERATE`), pas TFLite |
 | US-017 | NLU 90 % d'intentions | BPE + complétion 12 jetons, pas d'analyse d'intention |
