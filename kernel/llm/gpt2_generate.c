@@ -61,7 +61,7 @@ int gpt2_generate_fp32(const char* normalized, char* out, uint32_t max,
          token_count < model->config.max_seq_len; step++) {
         uint32_t next_token = 0U;
         const char* piece;
-        int saw_newline = 0;
+        int saw_stop = 0;
         uint32_t generated_count = token_count - prompt_tokens;
         rc = gpt2_generate_next_sampled(tokens, token_count, generated_count,
                                         &next_token, &rng_state);
@@ -73,14 +73,16 @@ int gpt2_generate_fp32(const char* normalized, char* out, uint32_t max,
         piece = gpt2_tokenizer_decode(next_token);
         if (!piece) return -4;
         for (uint32_t i = 0U; piece[i] != '\0'; i++) {
+            char ch;
             if (written + 1U >= max) {
                 out[written] = '\0';
                 goto done;
             }
-            out[written++] = piece[i];
-            if (piece[i] == '\n') saw_newline = 1;
+            ch = piece[i];
+            out[written++] = ch;
+            if (ch == '\n' || ch == '.' || ch == '!' || ch == '?') saw_stop = 1;
         }
-        if (saw_newline) break;
+        if (saw_stop && written >= GPT2_GENERATE_MIN_CHARS) break;
     }
     out[written] = '\0';
 done:

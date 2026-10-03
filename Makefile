@@ -948,6 +948,8 @@ help:
 	@echo "  qemu-net-worker  - Tranche 5: gate net-driver sur syscalls NE2000/socket/peer"
 	@echo "  qemu-ai-worker   - Inventaire 4: GPT-2 FP32 dans le worker Ring 3 aiworker (fixture synthetique)"
 	@echo "  qemu-ai-gguf     - Inventaire 4: pas GGUF 109/110 dans le worker Ring 3 aiworker (GGUF synthetique)"
+	@echo "  qemu-gpt2-sentences - Phrase lisible sur le GGUF reel Q3_K_M (hors CI, hors latence)"
+	@echo "  qemu-keyboard-case  - Maj et Verr Maj dans les deux sens (hors CI)"
 	@echo "  qemu-net-wire    - Tranche 5 slice 3: TCP sur le fil via le worker (pair echo local)"
 	@echo "  gguf-benchmark  - Mesure répétée du premier token et de ai-continue GGUF sous QEMU"
 	@echo "  gguf-benchmark-check - Vérifie le protocole de synthèse sans démarrer QEMU"
@@ -998,7 +1000,7 @@ gguf-disk:
 fat32-secondary-disk:
 	@python3 scripts/make_fat32_secondary_image.py --image $(FAT32_SECONDARY_IMAGE)
 
-.PHONY: qemu-gguf-smoke gguf-benchmark gguf-kvm-benchmark gguf-kvm-benchmark-check
+.PHONY: qemu-gguf-smoke qemu-gpt2-sentences qemu-keyboard-case gguf-benchmark gguf-kvm-benchmark gguf-kvm-benchmark-check
 qemu-ne2k-acquire: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_ne2k_llm_acquire.py
 
@@ -1041,6 +1043,12 @@ qemu-ne2k-tls-next: $(OS_IMAGE) pack-initrd
 
 qemu-gguf-smoke: $(OS_IMAGE) pack-initrd gguf-disk
 	@OVERLAY_DISK="$(abspath $(GGUF_DISK_IMAGE))" python3 tests/scripts/ci_qemu_gguf_local_smoke.py
+
+qemu-gpt2-sentences: $(OS_IMAGE) pack-initrd gguf-disk
+	@OVERLAY_DISK="$(abspath $(GGUF_DISK_IMAGE))" python3 tests/scripts/test_gpt2_sentences.py
+
+qemu-keyboard-case: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_keyboard_case.py
 
 gguf-benchmark: $(OS_IMAGE) pack-initrd gguf-disk
 	@OVERLAY_DISK="$(abspath $(GGUF_DISK_IMAGE))" python3 tests/scripts/benchmark_qemu_gguf_latency.py

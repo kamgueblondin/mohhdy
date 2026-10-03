@@ -40,6 +40,8 @@ Les empreintes attendues sont les suivantes :
 | `gpt2_124M.bin` | `3da8b207584030bcdcd207cf7a99952e3421dce92da218b351071857511bf162` |
 | `gpt2_tokenizer.bin` | `6f3abc21e444e4e8300e225f4e03da48ea121cf17e30f67009b8dad7a66c2f13` |
 
+Le même `gpt2_124M.bin` (497 904 640 octets) s'obtient depuis [openai-community/gpt2](https://huggingface.co/openai-community/gpt2) : `model.safetensors`, transposition des Conv1D vers le layout `llm.c` v3, vocabulaire complété de 50 257 à 50 304. L'empreinte ci-dessus est celle de cet export.
+
 ## Contenu de l'ISO
 
 L'archive `build/mohhdy.iso` contient les éléments suivants :
@@ -68,6 +70,8 @@ Après le démarrage, le shell MOHHDY apparaît. Les commandes suivantes sont di
 | `ai-runtime` | Affiche les capacités et limites réelles du moteur |
 | `ai-provider local` | Force le fournisseur local |
 
+Le GELU du chemin FP32 est celui d'OpenAI : `0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 x^3)))`. Une approximation rationnelle de `tanh` ne saturait pas ; le residuel partait en bruit et `ai` enchainait des mots outils (`the`, `and`, `of`). Avec le checkpoint ci-dessus, le guest a repondu a `ai my name is` par `a little bit different, but I'm not sure if it's because of the fact that I'm from the same country`. En glouton, `The capital of France is` continue par `the capital of the French Republic, and the capital of`, comme le modele public.
+
 ## Validations réalisées
 
 Les validations suivantes ont été exécutées dans le bac à sable :
@@ -84,15 +88,15 @@ Les validations suivantes ont été exécutées dans le bac à sable :
 | ISO GRUB GPT-2 | Générée ; taille approximative 481 Mio |
 | Amorçage ISO sous QEMU | Le noyau, le checkpoint, le tokenizer et le shell sont atteints |
 
-> La qualité conversationnelle reste limitée par le modèle GPT-2 124M et la longueur de sortie volontairement courte (64 jetons de contexte, 4 jetons nouveaux). Une sortie générée localement confirme le chemin de calcul, sans prétendre atteindre le niveau d'un modèle instructionnel moderne.
+> La sortie locale est une continuation GPT-2 124M, pas une réponse factuelle. La ligne de 7,693 s et quatre jetons décrit une génération plus courte. Le guest mesure maintenant une phrase : voir le paragraphe GELU au-dessus. Une phrase échantillonnée peut être grammaticale et fausse. Ce n'est pas un modèle instructionnel.
 
 ## Limites connues et prochaines améliorations
 
-Le moteur conserve une limite de **64 jetons de contexte** et génère jusqu'à **4 jetons** à la fois. Il utilise un cache KV et un échantillonnage top-k avec pénalité de répétition, ce qui évite de recalculer le préfixe pour chaque jeton. La compilation SSE2 emploie aussi `-mstackrealign`, nécessaire pour garantir l'alignement des opérations vectorielles dans les chemins noyau. Cependant, chaque nouveau jeton exécute encore les projections d'attention, le MLP et la projection de vocabulaire complète en FP32 ; l'émulation QEMU sans KVM reste donc coûteuse. Les poids sont au format de checkpoint GPT-2 `llm.c` v3 : des fichiers GGUF ou des modèles d'une autre famille ne sont pas encore exécutables automatiquement.
+Le chemin FP32 garde un cache de **64 jetons** et produit jusqu'à **24 jetons** nouveaux. Il s'arrête dès 80 caractères et une fin de phrase. L'échantillonnage est top-k 8, température 0,2, pénalité de répétition 1,2 sur les jetons déjà générés. La compilation SSE2 emploie aussi `-mstackrealign`, nécessaire pour garantir l'alignement des opérations vectorielles dans les chemins noyau. Chaque nouveau jeton exécute encore les projections d'attention, le MLP et la projection de vocabulaire complète en FP32 ; l'émulation QEMU sans KVM reste donc coûteuse. Les poids de ce profil sont le checkpoint GPT-2 `llm.c` v3. Le profil GGUF Q3_K_M est un second chemin, documenté dans [ai_worker_gguf.md](ai_worker_gguf.md).
 
 L'ajout d'un vrai OpenAI ou d'un fournisseur en ligne exige encore un bail IPv4 live, un flux TCP utilisateur, un handshake TLS et HTTP. Un pilote NE2000 ISA et des codecs caller-owned existent déjà ; ils ne suffisent pas. La clé API ne doit jamais être placée dans l'ISO ; elle devra être injectée depuis une configuration locale protégée lorsque le réseau live sera disponible.
 
-Les évolutions prioritaires sont l'inférence GGUF bout-en-bout (kernels Q3_K/Q4_K/Q6_K déjà unit-testés), la latence sous KVM, puis l'**écriture FAT** pour des checkpoints trop gros pour l'initrd ([aos_fat_volume.md](aos_fat_volume.md) : lecture seule déjà livrée). Un amorçage UEFI et d'autres familles de modèles restent hors du sprint courant.
+Le profil GGUF Q3_K_M place les poids sur un disque FAT16, hors initrd ([ai_worker_gguf.md](ai_worker_gguf.md)). La latence KVM des phrases n'est pas rejouée : les 43,916 s / 20,224 s restent la mesure d'un jeton, et `sub_second_claim_allowed` reste faux. Un amorçage UEFI et d'autres familles de modèles restent hors du sprint courant.
 
 ## Intégrité de l'ISO
 

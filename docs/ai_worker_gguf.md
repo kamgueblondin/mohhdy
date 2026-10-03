@@ -198,6 +198,34 @@ genere), puis `session step 1` pour chaque `ai-continue` (tokens 4, 5, 6).
 Worker 5,2 / 2,7 / 2,6 / 2,6 s, noyau (worker tue) 5,1 / 2,6 / 2,7 / 2,6 s,
 textes egaux (`maxwell`, `DeliveryDate`, `Nitrome`, meme suite d'octets).
 
+## Phrase sur le GGUF reel (3 octobre 2026)
+
+Les tableaux ci-dessus restent la mesure historique : un jeton par appel,
+textes `maxwell` / `DeliveryDate` / `Nitrome`. Ce n'etait pas une preuve de
+prose. Le decodeur Q3_K reutilisait les echelles 0..7 sur la seconde moitie
+de chaque super-bloc, le decodeur Q6_K appliquait une echelle a 32 valeurs
+au lieu de 16, et l'attention multi-tetes relisait toujours la requete de la
+tete 0. L'embedding, le MLP (`ffn_up` Q3_K) et `output.weight` (Q6_K) etaient
+donc du bruit.
+
+Apres l'alignement sur le dequant GGML et la tranche de requete par tete,
+`make qemu-gpt2-sentences` (TCG, `-m 1024M`, meme fichier 97668800 octets,
+hors CI) envoie `the capital of france is` une fois le worker `GGUF ready`.
+Le shell enchaine les pas 109/110 (temperature 0.2, ban du jeton precedent,
+penalite 1.2, arret apres 80 caracteres et une fin de phrase, ou 24 pieces).
+Une mesure :
+
+| Prompt | Reponse | Duree | Accel |
+|---|---|---|---|
+| `the capital of france is` | `the city of the city of the capital, which is called "the city of france" and is known as "` | 67,4 s | tcg |
+
+Le prompt mesure reste en minuscules. Le verrouillage en capitales venait du
+pilote : le relachement Maj gauche est le scancode `0xAA`, filtre alors comme
+code de controle, et Verr Maj n'inversait plus les lettres quand Maj etait
+enfoncee. Les lettres suivent maintenant Maj XOR Verr Maj, dans les deux
+sens. Les 43,916 s / 20,224 s ne sont pas rejoues.
+`sub_second_claim_allowed` reste faux.
+
 ## Budget memoire
 
 - `aiworker` : bss 12578400 octets (12,0 Mio ; 5619904 avant cette tranche),
@@ -259,8 +287,9 @@ CI distante de ce commit.
 ## Limites et suite
 
 - Le contrat local prouve le mecanisme sur la fixture synthetique seulement.
-  Le GGUF reel (Q3_K_M, 124M) n'a pas ete rejoue ici. La verification manuelle
-  precedente (4 pas, textes egaux) decrivait encore le repli Ring 0.
+  La phrase reelle Q3_K_M est la section "Phrase sur le GGUF reel" : une
+  mesure TCG, pas un nouveau tour de latence. La verification manuelle
+  historique (4 pas, `maxwell`) reste dans son tableau.
 - La normalisation du prompt et le miroir de session restent Ring 0. Le
   repli FP32 reste. Le montage ATA au boot, le repli disque sans `atadriver`,
   la sonde NIC et l'IRQ NIC restent Ring 0.

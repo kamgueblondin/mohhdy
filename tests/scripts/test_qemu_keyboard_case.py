@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Smoke QEMU optionnel : selection shell puis une phrase GPT-2 GGUF FAT16.
+"""Shift and Caps Lock must change letter case in both directions.
 
-`ai` enchaine les pas 109/110 jusqu'a une phrase (ou 24 pieces) avant
-d'imprimer le marqueur. Le delai mesure est celui de la phrase, pas d'un
-seul jeton. Les chiffres historiques de latence un jeton restent ceux des
-documents, ce script ne les remplace pas.
+Left Shift break is scancode 0xAA. Dropping it latches Shift, so the next
+letters stay uppercase. Caps Lock XOR Shift must turn letters back to
+lowercase, and releasing Caps Lock must restore lowercase.
 """
-
 from __future__ import print_function
+
 import os
 import socket
 import subprocess
@@ -17,13 +16,11 @@ import time
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 KERNEL = os.environ.get("KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
 INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd.tar"))
-DISK = os.environ.get("OVERLAY_DISK", os.path.join(ROOT, "build", "gpt2_gguf_fat16.img"))
-LOG = os.environ.get("LOG", os.path.join(ROOT, "test_logs", "ci-qemu-gguf-local.log"))
-ERR = os.environ.get("QEMU_ERR", os.path.join(ROOT, "test_logs", "ci-qemu-gguf-local.err"))
-MON = os.environ.get("QEMU_MON_SOCK", os.path.join(ROOT, "test_logs", "qemu-gguf-monitor.sock"))
-BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "90"))
-GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "1200"))
-KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.65"))
+LOG = os.environ.get("LOG", os.path.join(ROOT, "test_logs", "keyboard-case.log"))
+ERR = os.environ.get("QEMU_ERR", os.path.join(ROOT, "test_logs", "keyboard-case.err"))
+MON = os.environ.get("QEMU_MON_SOCK", os.path.join(ROOT, "test_logs", "keyboard-case-monitor.sock"))
+BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "180"))
+KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.15"))
 
 
 def text():
@@ -40,14 +37,14 @@ def wait_for(proc, needle, timeout, start=0):
         if proc.poll() is not None:
             raise RuntimeError("QEMU stopped: %s" % text()[-2000:])
         if needle in text()[start:]:
-            time.sleep(0.4)
-            return
-        time.sleep(0.15)
+            time.sleep(0.3)
+            return text()
+        time.sleep(0.2)
     raise RuntimeError("timeout for %r: %s" % (needle, text()[-2000:]))
 
 
 def monitor():
-    end = time.monotonic() + 10.0
+    end = time.monotonic() + 15.0
     while time.monotonic() < end:
         if os.path.exists(MON):
             client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -65,18 +62,20 @@ def monitor():
     raise RuntimeError("QEMU monitor unavailable")
 
 
-def send(client, command):
-    aliases = {" ": "spc", "-": "minus", ".": "dot"}
-    for char in command:
-        client.sendall(("sendkey %s\n" % aliases.get(char, char.lower())).encode("ascii"))
-        time.sleep(KEY_DELAY)
+def key(client, name):
+    client.sendall(("sendkey %s 80\n" % name).encode("ascii"))
     time.sleep(KEY_DELAY)
-    client.sendall(b"sendkey ret\n")
+
+
+def line(client, names):
+    for name in names:
+        key(client, name)
+    key(client, "ret")
 
 
 def main():
-    if not all(os.path.isfile(path) for path in (KERNEL, INITRD, DISK)):
-        raise RuntimeError("missing kernel, initrd or GGUF FAT16 disk")
+    if not os.path.isfile(KERNEL) or not os.path.isfile(INITRD):
+        raise RuntimeError("missing kernel or initrd")
     os.makedirs(os.path.dirname(LOG), exist_ok=True)
     for path in (LOG, ERR, MON):
         try:
@@ -92,30 +91,22 @@ def main():
                 "-initrd", INITRD, "-m", "1024M", "-display", "none", "-vga", "none",
                 "-serial", "file:" + LOG, "-monitor", "unix:%s,server,nowait" % MON,
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
-                "-drive", "file=%s,format=raw,if=ide,cache=writethrough" % DISK,
             ], cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, "GGUF: profil local FAT16 pret", BOOT_TIMEOUT)
             wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
             client = monitor()
             start = len(text())
-            send(client, "ai-model use gpt2.gguf")
-            wait_for(proc, "Profil GPT-2 GGUF selectionne", BOOT_TIMEOUT, start)
+            # Shift only on T, then lowercase. A latched Shift would shout HE.
+            line(client, ["e", "c", "h", "o", "spc", "shift-t", "h", "e"])
+            wait_for(proc, "ligne lue: echo The", BOOT_TIMEOUT, start)
             start = len(text())
-            started = time.monotonic()
-            send(client, "ai bonjour")
-            wait_for(proc, "[GPT-2 GGUF local]", GENERATION_TIMEOUT, start)
-            if "[GPT-2 GGUF local] indisponible" in text()[start:]:
-                raise RuntimeError("GGUF local rejected generation: %s" % text()[start:][-1000:])
-            first_token_elapsed = time.monotonic() - started
+            # Caps Lock on, Shift+t must come back out lowercase, then e is E.
+            line(client, ["e", "c", "h", "o", "spc", "caps_lock", "shift-t", "e", "caps_lock"])
+            wait_for(proc, "ligne lue: echo tE", BOOT_TIMEOUT, start)
             start = len(text())
-            continued = time.monotonic()
-            send(client, "ai-continue")
-            wait_for(proc, "[GPT-2 GGUF local suite]", GENERATION_TIMEOUT, start)
-            if "session indisponible" in text()[start:]:
-                raise RuntimeError("GGUF continuation rejected: %s" % text()[start:][-1000:])
-            continue_elapsed = time.monotonic() - continued
-        print("QEMU GGUF local smoke passed: phrase %.2fs, suite %.2fs." %
-              (first_token_elapsed, continue_elapsed))
+            # Caps Lock released: the next word is lowercase again.
+            line(client, ["e", "c", "h", "o", "spc", "o", "k"])
+            wait_for(proc, "ligne lue: echo ok", BOOT_TIMEOUT, start)
+        print("keyboard case test passed")
         return 0
     finally:
         if client is not None:
@@ -136,5 +127,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as error:
-        print("QEMU GGUF local smoke failed: %s" % error, file=sys.stderr)
+        print("keyboard case test failed: %s" % error, file=sys.stderr)
         raise SystemExit(1)

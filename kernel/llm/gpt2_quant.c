@@ -92,8 +92,10 @@ float gpt2_q3_k_dot_f32(const float* input, const uint8_t* q3_blocks, uint32_t c
                 uint32_t base = block * GPT2_QK_K + n + j * 32U;
                 uint32_t shift = j * 2U;
                 uint32_t mask = 1U << (mask_base + j);
-                float d0 = d * (float)(scales[2U * j] - 32);
-                float d1 = d * (float)(scales[2U * j + 1U] - 32);
+                /* Les 16 echelles couvrent le super-bloc : 0..7 puis 8..15. */
+                uint32_t scale_base = n == 0U ? 0U : 8U;
+                float d0 = d * (float)(scales[scale_base + 2U * j] - 32);
+                float d1 = d * (float)(scales[scale_base + 2U * j + 1U] - 32);
                 __m128 vd0 = _mm_set1_ps(d0);
                 __m128 vd1 = _mm_set1_ps(d1);
 
@@ -222,21 +224,23 @@ float gpt2_q6_k_dot_f32(const float* input, const uint8_t* q6_blocks, uint32_t c
             uint32_t ql_base = n / 2U;
             uint32_t qh_base = 128U + n / 4U;
             uint32_t scale_base = 192U + n / 16U;
-            float scale1 = d * (float)(int8_t)raw[scale_base];
-            float scale2 = d * (float)(int8_t)raw[scale_base + 2U];
-            float scale3 = d * (float)(int8_t)raw[scale_base + 4U];
-            float scale4 = d * (float)(int8_t)raw[scale_base + 6U];
-            __m128 vscale1 = _mm_set1_ps(scale1);
-            __m128 vscale2 = _mm_set1_ps(scale2);
-            __m128 vscale3 = _mm_set1_ps(scale3);
-            __m128 vscale4 = _mm_set1_ps(scale4);
 
             const float* in1 = input + block * GPT2_QK_K + n;
             const float* in2 = in1 + 32U;
             const float* in3 = in1 + 64U;
             const float* in4 = in1 + 96U;
 
+            /* Une echelle int8 pour 16 valeurs : l 0..15 puis 16..31. */
             for (l = 0U; l < 32U; l += 4U) {
+                uint32_t is = l / 16U;
+                float scale1 = d * (float)(int8_t)raw[scale_base + is];
+                float scale2 = d * (float)(int8_t)raw[scale_base + is + 2U];
+                float scale3 = d * (float)(int8_t)raw[scale_base + is + 4U];
+                float scale4 = d * (float)(int8_t)raw[scale_base + is + 6U];
+                __m128 vscale1 = _mm_set1_ps(scale1);
+                __m128 vscale2 = _mm_set1_ps(scale2);
+                __m128 vscale3 = _mm_set1_ps(scale3);
+                __m128 vscale4 = _mm_set1_ps(scale4);
                 uint8_t qh0 = raw[qh_base + l + 0U];
                 uint8_t qh1 = raw[qh_base + l + 1U];
                 uint8_t qh2 = raw[qh_base + l + 2U];
@@ -306,8 +310,9 @@ int gpt2_q3_k_dequantize(const uint8_t* q3_blocks, uint32_t count, float* output
                 uint32_t base = block * GPT2_QK_K + n + j * 32U;
                 uint32_t shift = j * 2U;
                 uint32_t mask = 1U << (mask_base + j);
-                float d0 = d * (float)(scales[2U * j] - 32);
-                float d1 = d * (float)(scales[2U * j + 1U] - 32);
+                uint32_t scale_base = n == 0U ? 0U : 8U;
+                float d0 = d * (float)(scales[scale_base + 2U * j] - 32);
+                float d1 = d * (float)(scales[scale_base + 2U * j + 1U] - 32);
                 for (l = 0U; l < 16U; l++) {
                     int q0 = (int)((raw[qbase + l] >> shift) & 3U);
                     int q1 = (int)((raw[qbase + l + 16U] >> shift) & 3U);
@@ -364,14 +369,15 @@ int gpt2_q6_k_dequantize(const uint8_t* q6_blocks, uint32_t count, float* output
             uint32_t base = block * GPT2_QK_K + n;
             for (l = 0U; l < 32U; l++) {
                 const uint8_t qh = raw[qh_base + l];
+                uint32_t is = l / 16U;
                 int q1 = (int)((raw[ql_base + l] & 0x0fU) | ((qh & 3U) << 4)) - 32;
                 int q2 = (int)((raw[ql_base + l + 32U] & 0x0fU) | (((qh >> 2) & 3U) << 4)) - 32;
                 int q3 = (int)((raw[ql_base + l] >> 4) | (((qh >> 4) & 3U) << 4)) - 32;
                 int q4 = (int)((raw[ql_base + l + 32U] >> 4) | (((qh >> 6) & 3U) << 4)) - 32;
-                output[base + l] = d * (float)(int8_t)raw[scale_base] * (float)q1;
-                output[base + 32U + l] = d * (float)(int8_t)raw[scale_base + 2U] * (float)q2;
-                output[base + 64U + l] = d * (float)(int8_t)raw[scale_base + 4U] * (float)q3;
-                output[base + 96U + l] = d * (float)(int8_t)raw[scale_base + 6U] * (float)q4;
+                output[base + l] = d * (float)(int8_t)raw[scale_base + is] * (float)q1;
+                output[base + 32U + l] = d * (float)(int8_t)raw[scale_base + is + 2U] * (float)q2;
+                output[base + 64U + l] = d * (float)(int8_t)raw[scale_base + is + 4U] * (float)q3;
+                output[base + 96U + l] = d * (float)(int8_t)raw[scale_base + is + 6U] * (float)q4;
             }
         }
     }

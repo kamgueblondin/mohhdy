@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Quantifie la latence observée du runtime GGUF local MOHHDY sous QEMU TCG.
+"""Quantifie la latence observee du runtime GGUF local MOHHDY sous QEMU TCG.
 
-Le benchmark mesure uniquement les deux demandes de génération Ring 3 après le
-boot et la sélection du modèle : premier token ``ai bonjour`` puis réutilisation
-coopérative ``ai-continue``. Les résultats sont écrits dans un JSON portable;
-ils ne constituent pas une promesse de performance sur matériel physique.
+`ai bonjour` puis `ai-continue` enchainent chacun une phrase (plusieurs pas
+109/110) avant le marqueur. Les champs JSON gardent les noms historiques
+first_token_seconds et continuation_seconds : ils mesurent desormais la
+phrase, pas un seul jeton. Les 43,916 s / 20,224 s documentes decrivent
+l'ancien protocole un jeton et ne sont pas rejoues ici.
 """
 from __future__ import print_function
 
@@ -23,7 +24,7 @@ DISK = os.environ.get("OVERLAY_DISK", os.path.join(ROOT, "build", "gpt2_gguf_fat
 LOG_DIR = os.path.join(ROOT, "test_logs")
 RUNS = int(os.environ.get("GGUF_BENCH_RUNS", "3"))
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "90"))
-GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "600"))
+GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "1200"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.65"))
 MAX_SPREAD_RATIO = float(os.environ.get("GGUF_BENCH_MAX_SPREAD_RATIO", "0"))
 REPORT = os.environ.get("GGUF_BENCH_REPORT", os.path.join(LOG_DIR, "gguf-qemu-latency.json"))

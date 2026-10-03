@@ -345,6 +345,16 @@ static void test_loads_gpt2_from_fat16(void) {
                         TEST_ASSERT_EQUAL(4, (int)concat_count);
                         TEST_ASSERT_TRUE(multi_output[0] > 15.0f);
                         TEST_ASSERT_TRUE(multi_output[2] > 6.9f);
+                        multi_query[2] = 0.0f;
+                        multi_query[3] = 0.0f;
+                        TEST_ASSERT_EQUAL(0, gpt2_gguf_kv_cache_attention_multi_head(
+                            &cache, 1U, 0U, 3U, multi_query, 2U,
+                            multi_heads, 4U, multi_key, 2U, multi_scores, 3U,
+                            multi_output, 4U, &concat_count));
+                        TEST_ASSERT_TRUE(multi_output[2] > 6.9f);
+                        TEST_ASSERT_TRUE(multi_output[2] < 7.1f);
+                        TEST_ASSERT_TRUE(multi_output[3] > 7.9f);
+                        TEST_ASSERT_TRUE(multi_output[3] < 8.1f);
                         TEST_ASSERT_EQUAL(-9, gpt2_gguf_kv_cache_attention_multi_head(
                             &cache, 1U, 0U, 3U, multi_query, 3U,
                             multi_heads, 4U, multi_key, 2U, multi_scores, 3U,

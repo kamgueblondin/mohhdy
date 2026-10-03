@@ -86,7 +86,8 @@ faites sur ce depot :
 - Reseau local : NE2000, ARP, IPv4, ICMP, TCP, HTTP, TLS 1.2 d'exemple,
   SSE, session suivante
 - IA locale : GPT-2 124M si les poids sont dans l'initrd ; GGUF
-  TinyLlama documente (premiere generation lente, continue plus rapide)
+  GPT-2 Q3_K_M sur FAT16. `ai` continue le prompt, ce n'est pas un
+  fait. Voir `docs/gpt2_baremetal_deployment.md`
 - GUI : captures VGA possibles ; le paquet `qemu-system-gui` est
   necessaire pour le affichage GTK
 
@@ -95,9 +96,14 @@ Ne pas affirmer :
 - un acces Internet public
 - un DHCP
 - un TLS authentifie vers un vrai hote
-- un ChatGPT live ; `ai hello` en local produit un echantillon GPT-2
-  court (`a the to.` dans les captures de validation), pas une phrase
-  de chat
+- un ChatGPT live. `ai` en local continue le prompt avec GPT-2 124M.
+  Mesure guest : `ai my name is` donne `a little bit different, but
+  I'm not sure if it's because of the fact that I'm from the same
+  country`. En glouton, `The capital of France is` continue par
+  `the capital of the French Republic, and the capital of`. Une
+  phrase echantillonnee peut etre fausse. Le profil GGUF, prompt
+  `the capital of france is`, a donne `the city of the city of the
+  capital, which is called "the city of france" and is known as "`
 
 Les poids GPT-2 / GGUF ne sont pas dans Git. Leur absence n'est pas
 une regression produit.

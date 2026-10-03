@@ -19,7 +19,7 @@ Le clavier de MOHHDY ne fonctionnait pas correctement car :
    - Configuration explicite du scancode set 1
 
 2. **Gestion Améliorée des Codes PS/2** :
-   - Distinction claire entre les codes de contrôle (0xFA, 0xFE, 0xAA) et les scancodes
+   - Les codes de contrôle à ignorer sont `0xFA` (ACK) et `0xFE` (resend). `0xAA` est le relâchement de Maj gauche en set 1 : le filtrer laisse Maj enclenché. La casse des lettres est Maj XOR Verr Maj.
    - Handler d'interruption optimisé avec moins de debug spam
    - Timeout amélioré dans keyboard_getc()
 
@@ -79,7 +79,7 @@ Après cette correction :
 ### Modifications du Handler IRQ1
 
 - Vérification du statut avant lecture des données
-- Gestion explicite des codes PS/2 spéciaux (0xFA, 0xFE, 0xAA)
+- Gestion explicite des codes PS/2 ACK et resend (`0xFA`, `0xFE`) ; `0xAA` reste le break Maj gauche
 - Réduction du debug spam pour éviter la surcharge
 - Amélioration de la conversion scancode -> ASCII
 

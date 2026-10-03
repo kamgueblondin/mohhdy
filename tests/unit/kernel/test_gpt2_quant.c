@@ -81,6 +81,26 @@ static void test_q3_k_dot_one_super_block(void) {
     TEST_ASSERT_EQUAL(0, (int)gpt2_q3_k_dot_f32(activation, block, 128U));
 }
 
+/* Nibbles hauts (echelles 8..15) differents des nibbles bas : la seconde
+ * moitie du super-bloc ne doit pas reutiliser les echelles 0..7. */
+static void test_q3_k_second_half_scale(void) {
+    float activation[GPT2_QK_K];
+    float decoded[GPT2_QK_K];
+    uint8_t block[GPT2_Q3_K_BLOCK_BYTES];
+    uint32_t i;
+    for (i = 0U; i < GPT2_QK_K; i++) activation[i] = 1.0f;
+    for (i = 0U; i < GPT2_Q3_K_BLOCK_BYTES; i++) block[i] = 0U;
+    for (i = 0U; i < 32U; i++) block[i] = 0xffU;
+    for (i = 32U; i < 96U; i++) block[i] = 0x55U;
+    for (i = 96U; i < 104U; i++) block[i] = 0x10U;
+    block[108] = 0x00U;
+    block[109] = 0x3cU;
+    TEST_ASSERT_EQUAL(0, gpt2_q3_k_dequantize(block, GPT2_QK_K, decoded));
+    assert_close(decoded[0], -32.0f, 0.001f);
+    assert_close(decoded[128], -31.0f, 0.001f);
+    assert_close(gpt2_q3_k_dot_f32(activation, block, GPT2_QK_K), -8064.0f, 0.05f);
+}
+
 static void test_q4_k_dot_one_super_block(void) {
     float activation[GPT2_QK_K];
     float decoded[GPT2_QK_K];
@@ -126,6 +146,28 @@ static void test_q6_k_dot_one_super_block(void) {
     TEST_ASSERT_EQUAL(0, (int)gpt2_q6_k_dot_f32(activation, block, 128U));
 }
 
+/* Echelles paires et impaires : l>=16 utilise l'echelle suivante, pas la meme. */
+static void test_q6_k_scale_group_is_sixteen(void) {
+    float decoded[GPT2_QK_K];
+    float activation[GPT2_QK_K];
+    uint8_t block[GPT2_Q6_K_BLOCK_BYTES];
+    uint32_t i;
+    float dot = 0.0f;
+    for (i = 0U; i < GPT2_Q6_K_BLOCK_BYTES; i++) block[i] = 0U;
+    for (i = 0U; i < GPT2_QK_K; i++) activation[i] = 0.0f;
+    block[192] = 1U;
+    block[193] = 2U;
+    block[208] = 0x00U;
+    block[209] = 0x3cU;
+    activation[0] = 1.0f;
+    activation[16] = 1.0f;
+    TEST_ASSERT_EQUAL(0, gpt2_q6_k_dequantize(block, GPT2_QK_K, decoded));
+    assert_close(decoded[0], -32.0f, 0.001f);
+    assert_close(decoded[16], -64.0f, 0.001f);
+    dot = gpt2_q6_k_dot_f32(activation, block, GPT2_QK_K);
+    assert_close(dot, decoded[0] + decoded[16], 0.001f);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_f16_common_values);
@@ -134,8 +176,10 @@ int main(void) {
     RUN_TEST(test_q8_dot_two_blocks_with_signs);
     RUN_TEST(test_q8_rejects_invalid_length);
     RUN_TEST(test_q3_k_dot_one_super_block);
+    RUN_TEST(test_q3_k_second_half_scale);
     RUN_TEST(test_q4_k_dot_one_super_block);
     RUN_TEST(test_q6_k_dot_one_super_block);
+    RUN_TEST(test_q6_k_scale_group_is_sixteen);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
