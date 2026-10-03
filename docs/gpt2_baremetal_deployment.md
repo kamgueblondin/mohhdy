@@ -70,6 +70,8 @@ Après le démarrage, le shell MOHHDY apparaît. Les commandes suivantes sont di
 | `ai-runtime` | Affiche les capacités et limites réelles du moteur |
 | `ai-provider local` | Force le fournisseur local |
 
+Le GELU du chemin FP32 est celui d'OpenAI : `0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 x^3)))`. Une approximation rationnelle de `tanh` ne saturait pas ; le residuel partait en bruit et `ai` enchainait des mots outils (`the`, `and`, `of`). Avec le checkpoint ci-dessus, le guest a repondu a `ai my name is` par `a little bit different, but I'm not sure if it's because of the fact that I'm from the same country`. En glouton, `The capital of France is` continue par `the capital of the French Republic, and the capital of`, comme le modele public.
+
 ## Validations réalisées
 
 Les validations suivantes ont été exécutées dans le bac à sable :

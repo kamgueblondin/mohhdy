@@ -63,23 +63,45 @@ static float gpt2_inv_sqrt(float value) {
     convert.f = value;
     convert.u = 0x5f3759dfU - (convert.u >> 1);
     convert.f = convert.f * (1.5f - half * convert.f * convert.f);
+    convert.f = convert.f * (1.5f - half * convert.f * convert.f);
     return convert.f;
 }
 
-static float gpt2_fast_exp(float value) {
+/* exp(x) = 2^n * exp(f), f in about [-0.35, 0.35]. The bit trick scales by 2^n. */
+static float gpt2_exp(float value) {
     union { float f; uint32_t u; } convert;
+    int n;
+    int bits;
+    float fraction;
+    float series;
     if (value < -80.0f) return 0.0f;
     if (value > 80.0f) value = 80.0f;
-    convert.u = (uint32_t)(12102203.0f * value + 1064866805.0f);
+    n = (int)(value * 1.4426950408889634f + (value >= 0.0f ? 0.5f : -0.5f));
+    fraction = value - (float)n * 0.6931471805599453f;
+    series = 1.0f + fraction * (1.0f + fraction * (0.5f + fraction * (0.1666666716f +
+             fraction * (0.0416666679f + fraction * (0.0083333338f + fraction * 0.0013888889f)))));
+    convert.f = series;
+    bits = (int)((convert.u >> 23) & 0xffU) + n;
+    if (bits <= 0) return 0.0f;
+    if (bits >= 255) return 3.4e38f;
+    convert.u = (convert.u & 0x807fffffU) | ((uint32_t)bits << 23);
     return convert.f;
+}
+
+/* OpenAI GELU: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 x^3))).
+ * tanh must saturate. A rational approximation grows like x/9 and turns the
+ * residual into noise, so the next token collapses onto " the". */
+static float gpt2_tanh(float value) {
+    float e;
+    if (value > 8.0f) return 1.0f;
+    if (value < -8.0f) return -1.0f;
+    e = gpt2_exp(-2.0f * value);
+    return (1.0f - e) / (1.0f + e);
 }
 
 static float gpt2_gelu(float value) {
-    float x3 = value * value * value;
-    float inner = 0.7978845608f * (value + 0.044715f * x3);
-    float inner2 = inner * inner;
-    float tanh_approx = inner * (27.0f + inner2) / (27.0f + 9.0f * inner2);
-    return 0.5f * value * (1.0f + tanh_approx);
+    float inner = 0.7978845608f * (value + 0.044715f * value * value * value);
+    return 0.5f * value * (1.0f + gpt2_tanh(inner));
 }
 
 static void gpt2_map_params(gpt2_params_t* params, const gpt2_model_t* model) {
@@ -165,7 +187,7 @@ static void gpt2_attention_cached(float* out, float* scores, const float* qkv,
         }
         float sum = 0.0f;
         for (uint32_t previous = 0; previous <= position; previous++) {
-            scores[previous] = gpt2_fast_exp(scores[previous] - max_score);
+            scores[previous] = gpt2_exp(scores[previous] - max_score);
             sum += scores[previous];
         }
         float* destination = out + head * head_size;
