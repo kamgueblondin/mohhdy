@@ -24,6 +24,6 @@ Branche `feat/tranche4-5-ring3-drivers`, build arm64 croisé (`i686-linux-gnu-gc
 
 ## Ce qui reste
 
-- Serveur TLS invité-invité (peer 128-130) : toujours Ring 0, refusé -141 tant que le worker détient la carte.
-- Repli sans worker (session LLM et moteur fil noyau) et sonde au boot restent Ring 0 par conception ; `networker` n'est pas lancé au boot.
+- Serveur TLS invite-invite (peer 128-130) : les appels du shell sont relayes au worker (`OS_IPC_NET_PEER_RELAY_REQUEST`), qui les execute dans sa pile Ring 3 ; le chemin noyau direct reste refuse (-141) s'il n'a pas ete relaye.
+- Repli sans worker (session LLM et moteur fil noyau) et sonde au boot restent Ring 0 par conception. `networker` est lance au boot quand la sonde NE2000 a vu une carte (`[NET] boot networker spawned`, `kernel/kernel.c`).
 - `qemu-net-tls-worker` est hors `integration-qemu` (7 contrats conservés) ; le libellé shell « Session LLM noyau » est conservé pour la compatibilité des contrats.
