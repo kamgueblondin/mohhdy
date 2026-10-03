@@ -231,14 +231,26 @@ def main():
         if key == "0":
             raise RuntimeError("identity key is zero")
         say("[foundation] id-key %s" % key)
-        chunk = run_command(proc, client, "spill-drops", "spill-drops ok ")
-        drops = parse_pid(chunk, "spill-drops ok")
-        if drops != "0":
-            raise RuntimeError("spill drops not zero: %s" % drops)
-        say("[foundation] spill-drops %s" % drops)
+        chunk = run_command(proc, client, "spill-drops", "spill-drops ok service ")
+        if "spill-drops ok service 0 supervision 0" not in normalized(chunk):
+            raise RuntimeError("spill drops not zero: %s" % chunk[-400:])
+        say("[foundation] spill-drops service 0 supervision 0")
+        chunk = run_command(proc, client, "task-metrics " + shell_pid, "task-metrics ok ")
+        if re.search(r"task-metrics id \d+ \d+ " + re.escape(key) + r"(?:\D|$)", normalized(chunk)) is None:
+            raise RuntimeError("task-metrics id missing key %s: %s" % (key, chunk[-400:]))
+        say("[foundation] task-metrics id carries key %s" % key)
         run_command(proc, client, "service-publish demo", "service-publish ok")
+        chunk = run_command(proc, client, "right-token demo", "right-token ok demo ")
+        right = parse_pid(chunk, "right-token ok demo")
+        if not right or right == "0" or right == token:
+            raise RuntimeError("right-token demo must differ from cap-token %s, got %s" % (token, right))
+        say("[foundation] right-token demo %s" % right)
         run_command(proc, client, "service-watch demo", "service-watch ok")
         run_command(proc, client, "service-grant demo " + vfs_pid, "service-grant ok")
+        chunk = run_command(proc, client, "right-token demo", "right-token:")
+        if "right-token ok" in normalized(chunk):
+            raise RuntimeError("right-token still readable after grant: %s" % chunk[-400:])
+        say("[foundation] right-token refused after grant")
         chunk = run_command(proc, client, "service-event-pull", "service-event-pull ok demo")
         if " demo " not in normalized(chunk):
             raise RuntimeError("event pull missing demo: %s" % chunk[-400:])

@@ -1332,6 +1332,11 @@ int task_fill_direct_children(int requester_pid, os_task_children_t* out) {
                 out->entries[count].name[0] = '?';
                 out->entries[count].name[1] = '\0';
             }
+            task_identity_store(requester_pid, t,
+                                &out->entries[count].sequence,
+                                &out->entries[count].generation,
+                                &out->entries[count].identity_key,
+                                &out->entries[count].identity_visible);
             count++;
         }
         t = t->next;
@@ -1362,6 +1367,9 @@ int task_fill_ps(os_proc_t* out, int max_n) {
             out[count].name[0] = '?';
             out[count].name[1] = '\0';
         }
+        task_identity_store(current_task ? current_task->id : -1, t,
+                            &out[count].sequence, &out[count].generation,
+                            &out[count].identity_key, &out[count].identity_visible);
         count++;
         t = t->next;
     } while (t && t != task_queue);
@@ -1391,6 +1399,9 @@ int task_fill_metrics(int pid, os_task_metrics_t* out) {
     out->run_ticks = run;
     out->switch_count = t->switch_count;
     out->direct_children = task_count_direct_children(t->id);
+    task_identity_store(current_task ? current_task->id : -1, t,
+                        &out->sequence, &out->generation,
+                        &out->identity_key, &out->identity_visible);
     return 0;
 }
 

@@ -123,7 +123,7 @@ Les lots 113-154 sont **faits** au sens caller-owned / Unity / smoke NIC. Les lo
 | 126 | Grant backend VFS droit-source-préfixe relatif : EDX droits, ESI sources, EDI préfixe NUL-terminé |
 | 127 | `SYS_VGA_BLIT` : bureau 80x25 (`os_vga_frame_t*`) ; EBX=0 quitte le desktop |
 
-`MAX_SYSCALLS = 153` (0 a 152). Le tableau ci-dessus s'arrete a 127, socle historique dont `SYS_VGA_BLIT`. 148 est le jeton de capability, 149 le pull d'evenement, 150 le journal de montages, 151 la cle d'identite de la tache courante, 152 le compteur de pertes du deversoir IPC.
+`MAX_SYSCALLS = 154` (0 a 153). Le tableau ci-dessus s'arrete a 127, socle historique dont `SYS_VGA_BLIT`. 148 est le jeton de capability, 149 le pull d'evenement, 150 le journal de montages, 151 la cle d'identite de la tache courante, 152 les deux compteurs de pertes du deversoir IPC, 153 le droit du nom dont l'appelant est titulaire.
 
 ## Prochaines etapes, hors livraison actuelle
 
@@ -131,18 +131,18 @@ La liste vivante et les criteres sont dans [docs/ETAT_REEL.md](../docs/ETAT_REEL
 
 | Priorite | Sujet | Etat |
 |---|---|---|
-| 0 | Gates | `make test-all` 628/628. `make qemu-foundation-steps` : `cap-token 1`, `id-key` non nul, `spill-drops 0`. `make integration-qemu` : 7/7 en 800,6 s |
+| 0 | Gates | `make test-all` 629/629. `make qemu-foundation-steps` : `cap-token 1`, `id-key 2`, `spill-drops ok service 0 supervision 0`, `right-token demo 3` puis refus. `make qemu-ata-driver` 295,1 s, `make qemu-net-worker` 209,3 s, `make qemu-net-wire` 86,8 s. `make integration-qemu` 7/7 en 800,6 s est le tip precedent |
 | 1 | Chaine US-031 | Livre : `us031_complete=false`, `chromium=false` |
 | 2 | Chat chiffre metier | Livre : `make qemu-ne2k-guest-tls-metier`, hors CI |
 | 3 | Latence KVM | Livre, un echantillon, poids residents : 43,916 s puis 20,224 s. Pas sous 1 s |
 | 4 | Jeton de capability | Livre : compteur distinct du droit de nom. `make qemu-foundation-steps` imprime `cap-token 1`. Pas US-001 complet |
-| 5 | Evenement non perdu | Livre : `service-event-pull`, journal `EVNT` au LBA 4224, deversoir IPC de huit places, compteur de pertes sature (`spill-drops`) |
+| 5 | Evenement non perdu | Livre : `service-event-pull`, journal `EVNT` au LBA 4224, deversoir IPC de huit places, deux compteurs de pertes satures (`spill-drops` service et supervision) |
 | 6 | Montages et reboot | Livre : `alias/` encore present au second boot du meme contrat |
-| 7 | Cle d'identite | Livre : `identity_key` distincte du PID, de la sequence et de la generation. Le shell la lit avec `id-key`. Pas un certificat |
-| 8 | Droit de service | Livre : `right_token` et cle. Ports ATA et reseau du worker passes par ce droit |
+| 7 | Cle d'identite | Livre : `identity_key` distincte du PID, de la sequence et de la generation. Le shell la lit avec `id-key`. `ps` et `task-metrics` la montrent pour soi et l'enfant direct seulement. Pas un certificat |
+| 8 | Droit de service | Livre : `right_token` et cle. `right-token` lit le droit du titulaire. Ports ATA et reseau du worker passes par ce droit |
 | 9 | Pilotes derriere le droit | Livre au runtime. Montage au boot, replis et sonde NIC restent Ring 0 |
 
-Deja livre, a ne pas reouvrir comme si c'etait absent : pilote ATA Ring 3, pile NE2000 Ring 3 quand le worker tient la carte (registres programmes par `networker`), lancement de `networker` au boot si la NIC est presente, LFN et sous-repertoires multi-niveaux, stub OS-UI, jeton de capability distinct du droit de nom, cle d'identite lue par `id-key`, droit de service, pull d'evenement, deversoir IPC et son compteur de pertes, notifications de supervision dans ce deversoir, journaux de montages et d'evenements, chat metier chiffre. Restent Ring 0 : boot ATA, replis sans worker, sonde de presence de la carte. Le chemin noyau pair 128-130 reste refuse s'il n'est pas relaye au worker. Ce n'est pas US-001. La CI distante de ce tip n'est pas encore verte.
+Deja livre, a ne pas reouvrir comme si c'etait absent : pilote ATA Ring 3, pile NE2000 Ring 3 quand le worker tient la carte (registres programmes par `networker`), lancement de `networker` au boot si la NIC est presente, LFN et sous-repertoires multi-niveaux, stub OS-UI, jeton de capability distinct du droit de nom, cle d'identite lue par `id-key` et visible pour soi ou l'enfant direct, droit de service lu par `right-token`, pull d'evenement, deversoir IPC et ses deux compteurs de pertes, notifications de supervision dans ce deversoir, journaux de montages et d'evenements, chat metier chiffre. Restent Ring 0 : boot ATA, replis sans worker, sonde de presence de la carte. Le chemin noyau pair 128-130 reste refuse s'il n'est pas relaye au worker. Ce n'est pas US-001. La CI distante de ce tip n'est pas encore verte. `make integration-qemu` n'a pas ete rejoue sur ce tip.
 
 La vision historique (microkernel complet, P2P, economie, multi-plateforme) reste une collection de specifications dans `US/`. Elle n'est pas la file de build. Capacites OS : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Roadmap produit : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
 

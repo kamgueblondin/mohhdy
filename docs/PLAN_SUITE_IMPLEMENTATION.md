@@ -1,6 +1,6 @@
 # Plan de suite d'implémentation (gardes guest)
 
-**Date :** 2 octobre 2026
+**Date :** 3 octobre 2026
 **Statut :** gardes noyau du guest i386, pas la feuille de route produit complete
 **Ponctuation :** ASCII usuel et accents francais uniquement
 
@@ -8,7 +8,7 @@
 
 Ce document **ne** remplace **pas** le plan maitre. Il detaille seulement les **tranches 0-4** : gardes du guest i386 mesure (CI, ACL, GGUF, stockage). Un seul produit : le SE Mohhdy. Docker / PC / hyperviseur = boot de l'instance QEMU, pas un sidecar. La surface OS-UI vit dans `userspace/osui_runtime.c` (OS-UI-0 a 3 livres, facade Python metier retiree, commande `gui` + bureau VBE QEMU). Les tickets `ASSIST-xxx` restent la spec fonctionnelle ([../US/mohhdy_agent_support_web.md](../US/mohhdy_agent_support_web.md)). LLM de production, Chromium de session et US-031 **ne sont pas** livres. En cas de contradiction sur le **guest**, [ETAT_REEL.md](ETAT_REEL.md) et [../US/mohhdy_us.md](../US/mohhdy_us.md) priment. En cas de contradiction sur l'ordre **produit**, le plan maitre prime.
 
-**Prochain build produit :** voir [ETAT_REEL.md](ETAT_REEL.md), section "Prochaines etapes de developpement". Les pas 0 a 9 sont livres en local : gates, chaine `us031_complete=false`, chat chiffre metier, GGUF KVM, jeton, evenement non perdu, montages reboot, cle d'identite, droit de service, pilotes derriere ce droit. OS-UI-3 est livre. Bureau VBE : [osui_0_1_2.md](osui_0_1_2.md). `guest_html_stage=false`. `chromium=false`. La CI distante de ce tip n'est pas encore citee.
+**Prochain build produit :** voir [ETAT_REEL.md](ETAT_REEL.md), section "Prochaines etapes de developpement". Les pas 0 a 14 sont livres en local : gates, chaine `us031_complete=false`, chat chiffre metier, GGUF KVM, jeton, evenement non perdu, montages reboot, cle d'identite visible pour soi et l'enfant direct, droit de service lu par `right-token`, pilotes derriere ce droit, compteurs de pertes separes. OS-UI-3 est livre. Bureau VBE : [osui_0_1_2.md](osui_0_1_2.md). `guest_html_stage=false`. `chromium=false`. La CI distante de ce tip n'est pas encore citee. `make integration-qemu` n'a pas ete rejoue sur ce tip.
 
 ## Sources lues (sans les réécrire)
 
@@ -41,12 +41,14 @@ Les capacites `ASSIST-xxx` **reprennent** le vocabulaire Foundation (droits, gra
 
 ## État de départ (déjà livré, à ne pas réouvrir sans régression)
 
-Constat courant (ETAT_REEL, 2 octobre 2026) :
+Constat courant (ETAT_REEL, 3 octobre 2026) :
 
-- Suite : **628/628** au rejeu local du 2 octobre 2026. Les chiffres 522 et 523 decrivent septembre 2026
-- `make qemu-smoke` : six scenarios verts le 2 octobre 2026, rejoue apres le correctif de relais pair et le retrait de la trace serie
-- CI `8264b62`, run 37032910130 : quatre jobs verts. Le mur des poids residents `9999514`, run 37029710466, l'etait aussi.
-- Sept contrats `make integration-qemu`, budget 25 minutes. Rejeu du 2 octobre 2026 sur ce tip : 800,6 s, 7/7. Mesures anterieures : 809,7 s puis 760,9 s
+- Suite : **629/629** au rejeu local du 3 octobre 2026. 628/628 decrit le 2 octobre. Les chiffres 522 et 523 decrivent septembre 2026
+- `make qemu-smoke` : six scenarios verts le 2 octobre 2026, rejoue apres le correctif de relais pair et le retrait de la trace serie. Pas rejoue sur ce tip
+- `make qemu-foundation-steps` : `cap-token 1`, `id-key 2`, `spill-drops ok service 0 supervision 0`, `right-token demo 3` puis refus
+- `make qemu-ata-driver` 295,1 s, `make qemu-net-worker` 209,3 s, `make qemu-net-wire` 86,8 s, le 3 octobre 2026
+- CI `8264b62`, run 37032910130 : quatre jobs verts. Le mur des poids residents `9999514`, run 37029710466, l'etait aussi. Ni l'un ni l'autre ne couvre ce tip
+- Sept contrats `make integration-qemu`, budget 25 minutes. Rejeu du 2 octobre 2026 sur le tip precedent : 800,6 s, 7/7. Mesures anterieures : 809,7 s puis 760,9 s. Ce tip n'a pas rejoue les sept ensemble
 - VFS Ring 3 : `vfsserver` / `vfsvirtual`, ACL droit-source-prefixe, diagnostic public sans prefixe
 - ATA et NE2000 Ring 3 au runtime. `networker` demarre au boot si la carte est presente et programme les registres de la carte. Le montage ATA au boot, la sonde de presence, l'IRQ NIC et les replis sans worker restent Ring 0
 - Reseau local QEMU : `make qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next`, `qemu-ne2k-tls-multipair` (sequentiel, `127.0.0.1`)
@@ -286,9 +288,9 @@ Un `[OK]` dans l'index vision signifie "fichier de spec présent", **pas** "impl
 
 US/README, suite Foundation (pas un sprint vision). Les cinq pas ci-dessous sont entames dans le guest. Ils ne ferment pas US-001.
 
-1. Identite : sequence, generation et cle `identity_key` en RAM. Un PID reutilise qui recopie les deux premiers temoins est refuse. Le shell lit la cle courante avec `id-key` (syscall 151). Pas un certificat, pas une identite qui survit au reboot.
-2. Capabilities : jeton backend non nul, compteur distinct du `right_token`. Le premier grant vfs reste `cap-token 1` meme si `atadriver` et `networker` se sont enregistres. Les ports ATA et l'entree reseau (worker vivant) exigent le droit de nom. Pas un systeme de capabilities transferable.
-3. Evenements : pull et journal `EVNT` survivent au reboot. La copie IPC, si la boite de quatre places est pleine, attend dans un deversoir RAM de huit places. Un deversoir plein incremente un compteur qui sature a `0xFFFFFFFF` (`spill-drops`, syscall 152). Les notifications de supervision utilisent le meme deversoir. Au-dela, ou apres reboot, cette copie IPC n'est plus la. Le pull reste la copie durable.
+1. Identite : sequence, generation et cle `identity_key` en RAM. Un PID reutilise qui recopie les deux premiers temoins est refuse. Le shell lit la cle courante avec `id-key` (syscall 151). `ps` et `task-metrics` montrent les trois temoins seulement pour soi ou un enfant direct. Pas un certificat, pas une identite qui survit au reboot, pas une lecture de la cle d'une tache quelconque.
+2. Capabilities : jeton backend non nul, compteur distinct du `right_token`. Le premier grant vfs reste `cap-token 1` meme si `atadriver` et `networker` se sont enregistres. `right-token <nom>` (syscall 153) lit le droit du titulaire. Apres un transfert, l'ancien titulaire ne le lit plus. Les ports ATA et l'entree reseau (worker vivant) exigent le droit de nom. Pas un systeme de capabilities transferable.
+3. Evenements : pull et journal `EVNT` survivent au reboot. La copie IPC, si la boite de quatre places est pleine, attend dans un deversoir RAM de huit places. Un deversoir plein incremente un des deux compteurs, chacun sature a `0xFFFFFFFF` (`spill-drops`, syscall 152) : service, ou supervision si le type est `OS_IPC_TASK_SUPERVISION_EVENT`. Un message refuse ne compte pas. Au-dela, ou apres reboot, cette copie IPC n'est plus la. Le pull reste la copie durable. Pas un second journal disque.
 4. Montages : journal `MNTJ` relu au boot. Le backend VFS runtime est deja `vfsvirtual`, avec repli Ring 0.
 5. Pilotes : `atadriver` et `networker` tournent en Ring 3, et leurs ports passent par le droit du point 2. Le programme des registres NE2000 est dans `networker`. Le montage ATA au boot, les replis sans worker, la sonde de presence et l'IRQ NIC restent Ring 0.
 
