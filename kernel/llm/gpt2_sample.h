@@ -14,9 +14,10 @@ typedef struct {
 } gpt2_sample_top_k_state_t;
 
 /*
- * Near-greedy top-k (temperature 0.6). Frequency penalty and the previous-token
- * ban apply only to tokens already emitted, never to the prompt. That stops
- * GPT-2's " The The The" loop without derailing the continuation.
+ * Near-greedy top-k (temperature 0.2). The previous emitted token is banned
+ * so a continuation cannot repeat itself immediately. A mild frequency
+ * penalty applies only to tokens already emitted, never to the prompt: one
+ * use does not knock a clearly leading word out of the top of the list.
  */
 void gpt2_sample_top_k_init(gpt2_sample_top_k_state_t* state,
                             const uint32_t* generated, uint32_t generated_count);

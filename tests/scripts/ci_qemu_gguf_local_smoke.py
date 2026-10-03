@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Smoke QEMU optionnel : sélection shell puis première génération GPT-2 GGUF FAT16."""
+"""Smoke QEMU optionnel : selection shell puis une phrase GPT-2 GGUF FAT16.
+
+`ai` enchaine les pas 109/110 jusqu'a une phrase (ou 24 pieces) avant
+d'imprimer le marqueur. Le delai mesure est celui de la phrase, pas d'un
+seul jeton. Les chiffres historiques de latence un jeton restent ceux des
+documents, ce script ne les remplace pas.
+"""
 
 from __future__ import print_function
 import os
@@ -16,7 +22,7 @@ LOG = os.environ.get("LOG", os.path.join(ROOT, "test_logs", "ci-qemu-gguf-local.
 ERR = os.environ.get("QEMU_ERR", os.path.join(ROOT, "test_logs", "ci-qemu-gguf-local.err"))
 MON = os.environ.get("QEMU_MON_SOCK", os.path.join(ROOT, "test_logs", "qemu-gguf-monitor.sock"))
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "90"))
-GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "600"))
+GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "1200"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.65"))
 
 
@@ -108,7 +114,7 @@ def main():
             if "session indisponible" in text()[start:]:
                 raise RuntimeError("GGUF continuation rejected: %s" % text()[start:][-1000:])
             continue_elapsed = time.monotonic() - continued
-        print("QEMU GGUF local smoke passed: premier token %.2fs, continuation %.2fs." %
+        print("QEMU GGUF local smoke passed: phrase %.2fs, suite %.2fs." %
               (first_token_elapsed, continue_elapsed))
         return 0
     finally:

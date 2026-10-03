@@ -32,7 +32,8 @@
 #include "../net_socket.h"
 #include "../vga_console.h"
 #include "../gfx_fb.h"
-/* Completions locales : BPE, top-k basse temperature, arret newline/EOT/repetition. */
+/* Completions locales : BPE, top-k basse temperature, arret EOT ou repetition,
+ * et newline ou fin de phrase une fois 80 caracteres ecrits. */
 
 // Externs VMM
 extern vmm_directory_t* current_directory;

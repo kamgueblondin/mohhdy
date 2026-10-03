@@ -5,6 +5,10 @@ Meme contrat de mesure que le benchmark TCG : horloge monotone hote avant
 chaque commande Ring 3 ``ai bonjour`` / ``ai-continue``, exclusion du boot et
 de la selection de modele, rapport JSON min/mediane/max/dispersion.
 
+`ai` et `ai-continue` enchainent maintenant une phrase avant le marqueur.
+Les 43,916 s / 20,224 s documentes decrivent l'ancien protocole un jeton.
+Ce script ne les rejoue pas. sub_second_claim_allowed reste faux.
+
 Sans ``/dev/kvm`` accessible, le script se termine en skip (code 0) sauf si
 ``GGUF_KVM_REQUIRE=1``. Les poids GGUF hors depot absents produisent aussi un
 skip documente. Ce n'est pas une promesse "moins d'une seconde".
@@ -26,7 +30,7 @@ DISK = os.environ.get("OVERLAY_DISK", os.path.join(ROOT, "build", "gpt2_gguf_fat
 LOG_DIR = os.path.join(ROOT, "test_logs")
 RUNS = int(os.environ.get("GGUF_BENCH_RUNS", "3"))
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "90"))
-GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "600"))
+GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "1200"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.65"))
 MAX_SPREAD_RATIO = float(os.environ.get("GGUF_BENCH_MAX_SPREAD_RATIO", "0"))
 REPORT = os.environ.get(

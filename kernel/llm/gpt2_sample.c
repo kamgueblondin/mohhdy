@@ -1,7 +1,7 @@
 #include "gpt2_sample.h"
 
-#define GPT2_REPEAT_PENALTY 3.0f
-#define GPT2_SAMPLE_TEMPERATURE 0.60f
+#define GPT2_REPEAT_PENALTY 1.2f
+#define GPT2_SAMPLE_TEMPERATURE 0.20f
 
 static float gpt2_fast_exp(float value) {
     union { float f; uint32_t u; } convert;
