@@ -24,7 +24,7 @@ MON = os.environ.get("QEMU_MON_SOCK", os.path.join(ROOT, "test_logs", "gpt2-sent
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "300"))
 GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "1200"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.12"))
-PROMPT = os.environ.get("GPT2_SENTENCE_PROMPT", "the capital of france is")
+PROMPT = os.environ.get("GPT2_SENTENCE_PROMPT", "The capital of France is")
 
 
 def text():
@@ -117,7 +117,9 @@ def main():
             os.remove(path)
         except OSError:
             pass
-    accel = "kvm" if os.path.exists("/dev/kvm") else "tcg"
+    # KVM on this host wedged the guest before the first serial byte.
+    # TCG is the path that boots. GPT2_ACCEL=kvm overrides.
+    accel = os.environ.get("GPT2_ACCEL", "tcg")
     proc = None
     client = None
     try:
@@ -131,6 +133,9 @@ def main():
             ], cwd=ROOT, stdout=err, stderr=err)
             wait_for(proc, "GGUF: profil local FAT16 pret", BOOT_TIMEOUT)
             wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
+            # The shell prompt is up before aiworker finishes the disk copy.
+            # 109/110 return -148 until GGUF_READY.
+            wait_for(proc, "[AI] ai-engine GGUF ready in Ring 3", 900)
             client = monitor()
             start = len(text())
             send(client, "ai-model use gpt2.gguf")
