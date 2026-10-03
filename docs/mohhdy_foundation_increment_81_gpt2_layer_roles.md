@@ -23,7 +23,7 @@ Les cinq rôles globaux historiques restent inchangés et `gpt2_gguf_map_role` c
 
 La fixture GGUF caller-owned contient désormais sept tenseurs: les cinq tenseurs globaux historiques, `blk.0.attn_norm.weight` et `blk.0.attn_qkv.weight`. Les tests vérifient la construction exacte des deux noms, leur résolution dans l'index, le rejet de `blk.1` absent et le rejet d'une capacité de huit octets.
 
-La suite `make test-all` passe avec **265 tests réussis, 0 échec et 0 test ignoré**. Les taux de couverture rapportés restent de 85 % pour le noyau, 72 % pour l'espace utilisateur et 78 % global; l'avertissement de cible 70-79 % est inchangé.
+La suite `make test-all` passe avec **265 tests réussis, 0 échec et 0 test ignoré**. Les taux de couverture que le lanceur affichait alors (85 % noyau, 72 % espace utilisateur, 78 % global) etaient des constantes codees en dur dans `tests/scripts/run_all_tests.sh`, pas une mesure : ils sont retires, le lanceur affiche maintenant "Coverage: not measured" et aucune couverture n'est mesuree (note du 3 octobre 2026).
 
 ## Limites et suite
 

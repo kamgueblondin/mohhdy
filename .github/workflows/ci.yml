@@ -183,7 +183,8 @@ jobs:
             gcc-multilib \
             libc6-dev-i386 \
             nasm \
-            qemu-system-x86
+            qemu-system-x86 \
+            python3-cryptography
 
       - name: Build OS image
         run: make all
@@ -215,6 +216,16 @@ jobs:
       # (~80 s locally, one boot).
       - name: QEMU aiworker Ring 3 GPT-2 (hors integration-qemu)
         run: make qemu-ai-worker
+
+      # Worker contracts proven locally but previously off-CI (~35 s each
+      # locally): TLS/HTTP through the Ring 3 networker stack (local TLS 1.2
+      # peer, no internet) and the foundation steps (cap-token, id-key,
+      # spill-drops across a reboot, right-token ata-driver refused).
+      - name: QEMU Tranche 5 TLS/HTTP via networker (hors integration-qemu)
+        run: make qemu-net-tls-worker
+
+      - name: QEMU foundation steps (hors integration-qemu)
+        run: make qemu-foundation-steps
 
       - name: Upload OS-UI logs
         if: always()
