@@ -62,6 +62,21 @@ static vmm_directory_t* task_static_vmm_acquire(void) {
     return NULL;
 }
 
+/* A kernel mapping added after some task directories were created (new
+ * kernel page tables, e.g. the VBE framebuffer) is pushed to every live task
+ * directory so Ring 0 code (IRQ0 cursor redraw) can use it whatever CR3 is
+ * loaded. Returns the number of tables shared. */
+uint32_t task_share_kernel_tables(uint32_t first_table, uint32_t count) {
+    uint32_t index, shared = 0U;
+    if (!kernel_directory) return 0U;
+    for (index = 0U; index < OS_TASK_GLOBAL_CAPACITY; index++) {
+        if (!task_static_vmm_used[index]) continue;
+        shared += vmm_share_kernel_tables(&task_static_vmm_pool[index], kernel_directory,
+                                          first_table, count);
+    }
+    return shared;
+}
+
 static void task_static_vmm_release(vmm_directory_t* dir) {
     uint32_t index;
     for (index = 0U; index < OS_TASK_GLOBAL_CAPACITY; index++) {

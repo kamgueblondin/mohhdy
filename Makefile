@@ -35,7 +35,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 
 # Liste des fichiers objets - MISE À JOUR avec tous les nouveaux fichiers
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/kctx.o build/userspace_switch.o \
-          build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/ata_fsop.o build/fsop_exec.o build/net_relay.o build/ai_relay.o build/net_nic_owner.o build/net_wire.o build/gdt.o build/idt.o build/vmm.o build/task.o \
+          build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/ata_fsop.o build/fsop_exec.o build/net_relay.o build/ai_relay.o build/net_nic_owner.o build/net_wire.o build/gdt.o build/idt.o build/vmm.o build/vmm_share.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/gpt2_generate.o build/interrupts.o \
           build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
 
@@ -189,6 +189,10 @@ build/pmm.o: kernel/mem/pmm.c kernel/mem/pmm.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/vmm.o: kernel/mem/vmm.c kernel/mem/vmm.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/vmm_share.o: kernel/mem/vmm_share.c kernel/mem/vmm.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

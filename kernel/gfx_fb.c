@@ -7,6 +7,7 @@
 #include "gfx_desktop.h"
 #include "vga_console.h"
 #include "mem/vmm.h"
+#include "task/task.h"
 #include "mem/heap.h"
 #include "mem/string.h"
 #include "pci.h"
@@ -141,24 +142,38 @@ static unsigned short dispi_read(unsigned short index) {
     return inw(VBE_DISPI_IOPORT_DATA);
 }
 
+/* The LFB is mapped (supervisor RW) in the kernel directory, then its page
+ * tables are shared with every live task directory. Before, it was mapped
+ * only in the kernel directory and in the directory current at init (the
+ * shell): IRQ0 redraws the cursor (timer.c) whatever CR3 is loaded, and a
+ * task created before the desktop started (atadriver, vfsserver, aiworker
+ * spawned at boot) faulted on the LFB write (qemu-osui-gui, EIP in
+ * gfx_fb_update_cursor). Directories created later copy the kernel tables. */
 static int map_range(uint32_t phys, uint32_t bytes) {
-    uint32_t off;
-    vmm_directory_t *dirs[2];
-    int d, nd = 0;
+    uint32_t off, first, last;
     if (!kernel_directory) return -1;
-    dirs[nd++] = kernel_directory;
-    if (current_directory && current_directory != kernel_directory)
-        dirs[nd++] = current_directory;
     bytes = (bytes + 4095u) & ~4095u;
-    for (d = 0; d < nd; d++) {
-        for (off = 0; off < bytes; off += 4096u) {
-            if (vmm_map_page_in_directory(dirs[d],
-                                          (void *)(phys + off),
-                                          (void *)(phys + off),
-                                          PAGE_PRESENT | PAGE_WRITE) != 0) {
-                return -2;
-            }
+    if (bytes == 0u) return -1;
+    for (off = 0; off < bytes; off += 4096u) {
+        if (vmm_map_page_in_directory(kernel_directory,
+                                      (void *)(phys + off),
+                                      (void *)(phys + off),
+                                      PAGE_PRESENT | PAGE_WRITE) != 0) {
+            return -2;
         }
+    }
+    first = phys >> 22;
+    last = (phys + bytes - 1u) >> 22;
+    {
+        /* Diagnostic: tables pushed to directories that lacked the LFB. */
+        uint32_t shared = task_share_kernel_tables(first, last - first + 1u);
+        char line[] = "[GFX] LFB page tables pushed to task directories: 000\n";
+        uint32_t pos = sizeof(line) - 5u;
+        if (shared > 999u) shared = 999u;
+        line[pos] = (char)('0' + shared / 100u);
+        line[pos + 1u] = (char)('0' + (shared / 10u) % 10u);
+        line[pos + 2u] = (char)('0' + shared % 10u);
+        print_string_serial(line);
     }
     return 0;
 }

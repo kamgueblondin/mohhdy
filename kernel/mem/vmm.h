@@ -48,6 +48,11 @@ typedef struct {
 } vmm_directory_t;
 
 // Fonctions publiques
+/* Copies into dst the kernel tables of [first, first+count) that dst lacks
+ * (never replaces a table dst already has or a private one). Returns the
+ * number of tables shared. kernel/mem/vmm_share.c */
+uint32_t vmm_share_kernel_tables(vmm_directory_t* dst, const vmm_directory_t* src,
+                                 uint32_t first, uint32_t count);
 void vmm_init();
 void vmm_switch_page_directory(uint32_t physical_addr);
 page_t *vmm_get_page(uint32_t address, int make, vmm_directory_t *dir);
