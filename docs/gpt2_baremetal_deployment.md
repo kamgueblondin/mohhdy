@@ -38,6 +38,8 @@ Les empreintes attendues sont les suivantes :
 | Fichier | SHA-256 |
 |---|---|
 | `gpt2_124M.bin` | `3da8b207584030bcdcd207cf7a99952e3421dce92da218b351071857511bf162` |
+
+Le même `gpt2_124M.bin` (497 904 640 octets) s'obtient depuis [openai-community/gpt2](https://huggingface.co/openai-community/gpt2) : `model.safetensors`, transposition des Conv1D vers le layout `llm.c` v3, vocabulaire complété de 50 257 à 50 304. L'empreinte ci-dessus est celle de cet export.
 | `gpt2_tokenizer.bin` | `6f3abc21e444e4e8300e225f4e03da48ea121cf17e30f67009b8dad7a66c2f13` |
 
 ## Contenu de l'ISO
