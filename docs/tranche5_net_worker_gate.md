@@ -588,3 +588,43 @@ Proofs:
 Still Ring 0 after the flip: the NE2000 boot probe and the card reset after
 a worker loss, the network objects linked in the kernel image (unreachable
 from a syscall), and the legacy build kept for comparison.
+
+## Guest-to-guest TLS + encrypted peer chat through networker (CI)
+
+`make qemu-net-peer-tls-worker` (about 120 s locally; own CI job
+`net-peer-tls`). Two QEMU TCG guests, each on the default strict kernel,
+share one Ethernet segment through `tests/scripts/qemu_shared_ethernet_hub.py`.
+The hub serves DHCP/DNS only: no TAP, no Internet, no secret, no proxied
+SYN-ACK and no crypto in the hub. The contract reuses the existing two-guest
+harness `test_qemu_ne2k_guest_tls_server.py` with `METIER=1`. That harness
+already ran on the Ring 3 path once the strict kernel became the default, so
+nothing had to be ported. The new script adds the Ring 3 evidence:
+
+- Both guests print `[NET] build NET_RING0_FALLBACK=0` and
+  `[NET] boot networker spawned`. The worker prints `kernel socket stack
+  absent, ring3 only` and takes the NE2000 ports.
+- Guest B (TLS server) relays these shell syscalls to the worker, each logged
+  as `net-driver relay op N rc R reply 0`:
+  - op 128 rc 0 (LISTEN);
+  - op 129 rc 1 (guest SYN-ACK), then rc 0 (ESTABLISHED);
+  - op 130 rc 1..7 (ServerHello, Certificate, ServerKeyExchange,
+    ServerHelloDone, wait, ChangeCipherSpec, Finished);
+  - op 130 rc 10 (`METIER ok` sent back).
+- Guest A (TLS client) relays op 91, op 92 (TLS client polls until
+  TLS_COMPLETE), op 130 rc 12 (`METIER facture` sent) and op 130 rc 10
+  (`METIER ok` received).
+- No Ring 0 network refusal is logged after the first relayed call. The only
+  refusals are the worker's own boot self-check, counted as `denied 2`.
+- `net-relay-status` on each guest: the live worker is the boot networker,
+  `fwd == done` (13 on A, 14 on B), aborted 0, timeouts 0, pending 0.
+- What the hub sees on the wire (it does no crypto): one guest ServerHello,
+  one server Finished/CCS, one TLS application_data record from A to B and
+  one from B to A, and 0 guest-to-guest TCP payloads containing the
+  plaintext `METIER`. Both guests decrypt the peer record (`METIER ok` on
+  both sides), so the chat is encrypted end to end with AES-128-GCM, and the
+  hub never fakes it.
+
+Limits: A authenticates B against the in-tree test root, with a test leaf
+for `example.com` (the identity used for `peer.local`). That is test PKI
+material, not a real certificate chain. One record each way. No
+retransmission or loss handling is exercised.

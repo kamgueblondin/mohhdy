@@ -231,6 +231,11 @@ class SharedEthernetHub(object):
             "guest_server_hello": 0,
             "guest_server_finished": 0,
             "guest_app_data": 0,
+            # Guest -> guest TLS application records sent by the client
+            # (towards :443), and guest -> guest TCP payloads carrying the
+            # METIER plaintext marker in clear (must stay 0: encrypted chat).
+            "guest_client_app_data": 0,
+            "guest_plaintext_metier": 0,
             "peer_dns": 0,
         }
         self.source_macs = set()
@@ -407,6 +412,13 @@ class SharedEthernetHub(object):
             payload = frame[tcp_offset + tcp_header_length:ip_end]
             peer_mac = self._mac_for_ip(dest_ip)
             owner_mac = self._mac_for_ip(source_ip)
+            if (
+                owner_mac is not None
+                and peer_mac is not None
+                and dest_ip != source_ip
+                and b"METIER" in payload
+            ):
+                self.events["guest_plaintext_metier"] += 1
             # SYN-ACK emis par un invite loue (pas un proxy hub).
             if (
                 owner_mac is not None
@@ -436,6 +448,13 @@ class SharedEthernetHub(object):
                     and payload[5] == 0x01
                 ):
                     self.events["guest_client_hello"] += 1
+                if (
+                    len(payload) >= 5
+                    and payload[0] == 0x17
+                    and payload[1] == 0x03
+                    and payload[2] == 0x03
+                ):
+                    self.events["guest_client_app_data"] += 1
             # Reponses TLS serveur emis par un invite (source_port 443).
             if (
                 owner_mac is not None
