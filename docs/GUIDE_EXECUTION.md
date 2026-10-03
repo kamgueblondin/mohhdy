@@ -29,7 +29,7 @@ make run-gui
 - **Bureau** : tapez `gui` apres `MOHHDY>` (aliases `graphics`, `desktop`)
 - **Quitter le bureau** : `console`, `gui-exit` ou ESC
 - **Nographic / CI** : `gui-status` et `make qemu-osui-gui` (hors integration-qemu)
-- **Honnetete** : `llm=stub_echo`, `chromium=false`, `python_facade=false`, `chrome=qemu_fb`. La chaine `us031_complete` est encore `true` dans plusieurs statuts : ce n'est pas Chromium, et la prochaine etape de code la remet a `false`.
+- **Honnetete** : `llm=stub_echo`, `chromium=false`, `python_facade=false`, `chrome=qemu_fb`. Les chaines guest impriment `us031_complete=false`. Ce n'est pas Chromium.
 
 Pour tester la sonde NE2000 (optionnel, hors `make run-gui`) :
 
@@ -57,6 +57,9 @@ make run-nographic
 
 ### Problème : Caractères incorrects affichés
 **Vérification** : La table PS/2 Set 1 est maintenant corrigée
+
+### Problème : Les lettres restent en majuscules
+Le relâchement de Maj gauche est le scancode `0xAA`. Le filtrer laisse Maj enclenché. Les lettres suivent Maj XOR Verr Maj : Maj ou Verr Maj seuls passent en majuscules, les deux ensemble reviennent en minuscules. Les symboles restent sur la table Maj. Le `0xAA` vu au boot (BAT) est vidé pendant l'initialisation, avant ce chemin. Dans la fenêtre GTK, Ctrl+Alt+G rend la souris à l'hôte.
 
 ### Problème : Touches qui ne répondent pas
 **Debug** : Vérifiez les logs série pour les messages d'initialisation du clavier

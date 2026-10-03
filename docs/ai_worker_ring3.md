@@ -123,6 +123,11 @@ meme code, des memes poids et de la meme graine.
 
 ## Limites et suite
 
+- Phrase mesuree sur les poids 124M, hors CI : le GELU FP32 est la formule
+  OpenAI. Le guest a repondu a `ai my name is` par
+  `a little bit different, but I'm not sure if it's because of the fact that I'm from the same country`.
+  Detail : [gpt2_baremetal_deployment.md](gpt2_baremetal_deployment.md).
+  La fixture synthetique de `make qemu-ai-worker` ne change pas.
 - Le CI prouve le mecanisme sur la fixture synthetique, pas sur les poids 124M.
 - Texte de reponse borne a 512 octets, prompt normalise a 128 octets (comme le
   chemin noyau).
