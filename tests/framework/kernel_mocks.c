@@ -1006,6 +1006,10 @@ int task_set_name(int requester_pid, int pid, const char* name) {
         if (i >= OS_PROC_NAME_MAX - 1 || c < 32U || c > 126U) return OS_TASK_BAD_NAME;
         i++;
     }
+    /* Mirror of kernel/task/task.c: service-pinning binary names are reserved. */
+    if (strcmp(name, "atadriver") == 0 || strcmp(name, "ataclient") == 0 ||
+        strcmp(name, "aiworker") == 0)
+        return OS_TASK_BAD_NAME;
     t = get_task_by_id(pid);
     if (!t) return OS_TASK_NOT_FOUND;
     if (requester_pid != t->id && requester_pid != t->parent_pid) return OS_TASK_CONTROL_DENIED;

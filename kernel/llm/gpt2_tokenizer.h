@@ -6,6 +6,7 @@
 /* Tokenizer llm.c (magic 20240328) : vocabulaire en octets bruts tiktoken. */
 int gpt2_tokenizer_load_from_buffer(const uint8_t* blob, uint32_t blob_size);
 int gpt2_tokenizer_load_from_initrd(const char* path);
+int gpt2_tokenizer_ready(void);
 /* BPE GPT-2 (fusions par plus petit id, decoupage type regex). */
 int gpt2_tokenizer_encode(const char* text, uint32_t* out_tokens,
                           uint32_t max_tokens, uint32_t* out_count);

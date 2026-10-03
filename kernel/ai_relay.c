@@ -1,0 +1,171 @@
+#include "ai_relay.h"
+
+typedef struct {
+    uint32_t state;
+    int32_t caller_pid;
+    int32_t worker_pid;
+    uint32_t job_id;
+    uint32_t next_job;
+    uint32_t started;
+    os_ai_engine_job_t job;
+    os_ai_engine_reply_t reply;
+} ai_relay_slot_t;
+
+static ai_relay_slot_t slot;
+static os_ai_engine_status_t stats;
+
+static void ai_copy(void* dst, const void* src, uint32_t n) {
+    uint8_t* d = (uint8_t*)dst;
+    const uint8_t* s = (const uint8_t*)src;
+    uint32_t i;
+    for (i = 0U; i < n; i++) d[i] = s[i];
+}
+
+static void ai_zero(void* dst, uint32_t n) {
+    uint8_t* d = (uint8_t*)dst;
+    uint32_t i;
+    for (i = 0U; i < n; i++) d[i] = 0U;
+}
+
+void ai_relay_init(void) {
+    ai_zero(&slot, sizeof(slot));
+    ai_zero(&stats, sizeof(stats));
+    slot.next_job = 1U;
+}
+
+uint32_t ai_relay_state(void) { return slot.state; }
+int32_t ai_relay_caller(void) { return slot.state == AI_RELAY_FREE ? 0 : slot.caller_pid; }
+int32_t ai_relay_worker(void) { return slot.state == AI_RELAY_FREE ? 0 : slot.worker_pid; }
+uint32_t ai_relay_job(void) { return slot.state == AI_RELAY_FREE ? 0U : slot.job_id; }
+
+int32_t ai_relay_begin(int32_t caller_pid, int32_t worker_pid, const char* prompt,
+                       uint32_t max, uint32_t now) {
+    uint32_t n = 0U;
+    if (slot.state != AI_RELAY_FREE || caller_pid <= 0 || worker_pid <= 0 ||
+        caller_pid == worker_pid || !prompt || max < 2U)
+        return -1;
+    if (slot.next_job == 0U || slot.next_job > 0x7FFFFFFFU) slot.next_job = 1U;
+    ai_zero(&slot.job, sizeof(slot.job));
+    ai_zero(&slot.reply, sizeof(slot.reply));
+    while (prompt[n] != '\0' && n + 1U < OS_AI_ENGINE_PROMPT_MAX) {
+        slot.job.prompt[n] = prompt[n];
+        n++;
+    }
+    slot.job.prompt[n] = '\0';
+    slot.job.prompt_length = n;
+    slot.job.max = max > OS_AI_ENGINE_TEXT_MAX ? OS_AI_ENGINE_TEXT_MAX : max;
+    slot.job_id = slot.next_job++;
+    slot.job.job_id = slot.job_id;
+    slot.caller_pid = caller_pid;
+    slot.worker_pid = worker_pid;
+    slot.started = now;
+    slot.state = AI_RELAY_SENT;
+    stats.forwarded++;
+    return (int32_t)slot.job_id;
+}
+
+void ai_relay_cancel(void) {
+    if (slot.state != AI_RELAY_SENT) return;
+    if (stats.forwarded > 0U) stats.forwarded--;
+    slot.state = AI_RELAY_FREE;
+}
+
+int ai_relay_fetch(int32_t sender_pid, int32_t live_worker, uint32_t job_id,
+                   os_ai_engine_job_t* out) {
+    if (sender_pid <= 0 || live_worker <= 0 || sender_pid != live_worker) return OS_AI_ENGINE_REQUIRED;
+    if (!out) return OS_AI_ENGINE_BAD_ARGUMENT;
+    if (slot.state != AI_RELAY_SENT || slot.worker_pid != sender_pid || slot.job_id != job_id) {
+        stats.stale_refused++;
+        return OS_AI_ENGINE_STALE;
+    }
+    ai_copy(out, &slot.job, sizeof(*out));
+    return 0;
+}
+
+int ai_relay_complete(int32_t sender_pid, int32_t live_worker, const os_ai_engine_reply_t* reply) {
+    uint32_t i;
+    if (sender_pid <= 0 || live_worker <= 0 || sender_pid != live_worker) {
+        stats.rogue_refused++;
+        return OS_AI_ENGINE_REQUIRED;
+    }
+    if (!reply) return OS_AI_ENGINE_BAD_ARGUMENT;
+    if (slot.state != AI_RELAY_SENT || slot.worker_pid != sender_pid || slot.job_id != reply->job_id) {
+        stats.stale_refused++;
+        return OS_AI_ENGINE_STALE;
+    }
+    if (reply->text_length >= OS_AI_ENGINE_TEXT_MAX || reply->text_length >= slot.job.max ||
+        reply->token_count > OS_AI_ENGINE_TOKENS_MAX || reply->prompt_tokens > reply->token_count ||
+        (reply->result >= 0 && (uint32_t)reply->result != reply->text_length))
+        return OS_AI_ENGINE_BAD_ARGUMENT;
+    ai_copy(&slot.reply, reply, sizeof(slot.reply));
+    for (i = reply->text_length; i < OS_AI_ENGINE_TEXT_MAX; i++) slot.reply.text[i] = '\0';
+    slot.state = AI_RELAY_DONE;
+    return 0;
+}
+
+int ai_relay_should_fail(int32_t live_worker, uint32_t now) {
+    if (slot.state != AI_RELAY_SENT) return 0;
+    if (live_worker <= 0 || live_worker != slot.worker_pid) return 1;
+    return now - slot.started > AI_RELAY_TIMEOUT_TICKS;
+}
+
+void ai_relay_fail(void) {
+    if (slot.state != AI_RELAY_SENT) return;
+    slot.state = AI_RELAY_FAILED;
+    stats.aborted++;
+}
+
+uint32_t ai_relay_take(int32_t caller_pid, os_ai_engine_reply_t* reply) {
+    uint32_t state = slot.state;
+    if ((state != AI_RELAY_DONE && state != AI_RELAY_FAILED) || slot.caller_pid != caller_pid)
+        return AI_RELAY_FREE;
+    if (state == AI_RELAY_DONE) {
+        if (reply) ai_copy(reply, &slot.reply, sizeof(*reply));
+        stats.completed++;
+    }
+    slot.state = AI_RELAY_FREE;
+    return state;
+}
+
+void ai_relay_drop_caller(void) {
+    if (slot.state == AI_RELAY_SENT) stats.aborted++;
+    slot.state = AI_RELAY_FREE;
+}
+
+void ai_relay_note_kernel_infer(int worker_live, int fallback) {
+    stats.kernel_infer++;
+    if (fallback) stats.fallbacks++;
+    else if (worker_live) stats.kernel_infer_while_live++;
+}
+
+void ai_relay_note_rogue(void) { stats.rogue_refused++; }
+
+void ai_relay_record_last(uint32_t path, int32_t result, const uint32_t* tokens,
+                          uint32_t prompt_tokens, uint32_t token_count) {
+    uint32_t i;
+    if (token_count > OS_AI_ENGINE_TOKENS_MAX) token_count = OS_AI_ENGINE_TOKENS_MAX;
+    if (prompt_tokens > token_count) prompt_tokens = token_count;
+    stats.last_path = path;
+    stats.last_result = result;
+    stats.last_prompt_tokens = prompt_tokens;
+    stats.last_token_count = tokens ? token_count : 0U;
+    for (i = 0U; i < OS_AI_ENGINE_TOKENS_MAX; i++)
+        stats.last_tokens[i] = (tokens && i < token_count) ? tokens[i] : 0U;
+}
+
+void ai_relay_note_mapped(uint32_t which, uint32_t bytes) {
+    if (which == OS_AI_ENGINE_BLOB_CHECKPOINT) stats.checkpoint_mapped = bytes;
+    if (which == OS_AI_ENGINE_BLOB_TOKENIZER) stats.tokenizer_mapped = bytes;
+}
+
+void ai_relay_worker_reset(void) {
+    stats.checkpoint_mapped = 0U;
+    stats.tokenizer_mapped = 0U;
+}
+
+void ai_relay_fill_status(os_ai_engine_status_t* out, int32_t live_worker) {
+    if (!out) return;
+    ai_copy(out, &stats, sizeof(*out));
+    out->worker_pid = live_worker > 0 ? live_worker : 0;
+    out->pending = slot.state == AI_RELAY_SENT ? 1U : 0U;
+}

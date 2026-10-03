@@ -161,7 +161,7 @@ jobs:
   osui-guest:
     name: OS-UI guest C
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -199,6 +199,14 @@ jobs:
       # it is the shortest one (~6.5 min), so the CI wall time is unchanged.
       - name: QEMU Tranche 5 wire TCP via worker (hors integration-qemu)
         run: make qemu-net-wire
+
+      # Inventory item 4: GPT-2 FP32 in the Ring 3 aiworker. CI has no GPT-2
+      # weights: the contract packs the synthetic llm.c checkpoint of
+      # tests/scripts/ai_worker_fixture.py, proves worker / Ring 0 /
+      # fallback token equality and rogue refusal, then restores the initrd
+      # (~80 s locally, one boot).
+      - name: QEMU aiworker Ring 3 GPT-2 (hors integration-qemu)
+        run: make qemu-ai-worker
 
       - name: Upload OS-UI logs
         if: always()

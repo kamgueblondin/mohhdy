@@ -64,8 +64,8 @@ void test_kernel_restore_state(void) {
 // === GESTION MÉMOIRE POUR TESTS ===
 
 void* test_malloc(size_t size) {
-    // Alignement sur 4 bytes
-    size = (size + 3) & ~3;
+    // Alignement sur 16 bytes (task_t::fx_state est aligne pour FXSAVE)
+    size = (size + 15) & ~(size_t)15;
     
     if (test_context.heap_used + size > sizeof(test_context.test_heap)) {
         return NULL; // Out of memory

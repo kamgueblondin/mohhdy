@@ -5,6 +5,7 @@
 #include "gfx_fb.h"
 #include "input/usb_tablet.h"
 #include "sched_quantum.h"
+#include "syscall/syscall.h"
 
 // Fonctions externes
 extern void outb(unsigned short port, unsigned char data);
@@ -58,6 +59,15 @@ void timer_handler(cpu_state_t* cpu) {
 
     /* SYS_IPC_RECV_WAIT deadlines: expired sleepers become READY here. */
     task_ipc_wait_tick(timer_ticks);
+
+    /* Inventory item 4: a relayed GPT-2 job whose aiworker died or stalled
+     * wakes its caller for the Ring 0 fallback. If only the idle kernel task
+     * was running, switch now (same path as the boot hand-off). */
+    if (syscall_ai_relay_watchdog(timer_ticks) && current_task &&
+        current_task->type == TASK_TYPE_KERNEL) {
+        schedule(cpu);
+        return;
+    }
 
     // Changement explicite existant (lancement du shell / yield coopératif).
     if (g_reschedule_needed) {

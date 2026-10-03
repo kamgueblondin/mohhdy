@@ -8,6 +8,10 @@ userspace/spin
 userspace/ipcserver
 userspace/ipcwait
 userspace/ipcpoke
+userspace/aiworker
+userspace/aiclient
+userspace/aistat
+userspace/airogue
 userspace/vfsserver
 userspace/vfsvirtual
 userspace/vfsflight

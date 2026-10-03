@@ -963,6 +963,11 @@ void test_task_governance_name_capacity_and_events(void) {
     TEST_ASSERT_EQUAL(0, task_set_name(parent->id, child->id, "worker"));
     TEST_ASSERT_EQUAL_STRING("worker", child->name);
     TEST_ASSERT_EQUAL(OS_TASK_BAD_NAME, task_set_name(parent->id, child->id, ""));
+    /* Names that pin a privileged service cannot be taken by renaming. */
+    TEST_ASSERT_EQUAL(OS_TASK_BAD_NAME, task_set_name(parent->id, child->id, "aiworker"));
+    TEST_ASSERT_EQUAL(OS_TASK_BAD_NAME, task_set_name(parent->id, child->id, "atadriver"));
+    TEST_ASSERT_EQUAL(OS_TASK_BAD_NAME, task_set_name(parent->id, child->id, "ataclient"));
+    TEST_ASSERT_EQUAL_STRING("worker", child->name);
     TEST_ASSERT_EQUAL(OS_TASK_CONTROL_DENIED,
                       task_set_name(child->id, parent->id, "forbidden"));
     TEST_ASSERT_EQUAL(0, task_suspend_child(parent->id, child->id));

@@ -72,12 +72,25 @@ static void task_static_vmm_release(vmm_directory_t* dir) {
     }
 }
 
+/* Offset used by the asm stubs (boot/isr_stubs.s, context_switch_new.s). */
+const uint32_t task_fx_state_offset = (uint32_t)__builtin_offsetof(task_t, fx_state);
+
+void task_fx_init(task_t* task) {
+    if (!task) return;
+    memset(task->fx_state, 0, sizeof(task->fx_state));
+    task->fx_state[0] = 0x7FU; /* FCW 0x037F: FNINIT control word */
+    task->fx_state[1] = 0x03U;
+    task->fx_state[24] = 0x80U; /* MXCSR 0x1F80: default, all masked */
+    task->fx_state[25] = 0x1FU;
+}
+
 static task_t* task_static_acquire(void) {
     uint32_t index;
     for (index = 0U; index < OS_TASK_GLOBAL_CAPACITY; index++) {
         if (!task_static_used[index]) {
             task_static_used[index] = 1U;
             memset(&task_static_pool[index], 0, sizeof(task_t));
+            task_fx_init(&task_static_pool[index]);
             task_static_slot_generation[index]++;
             if (task_static_slot_generation[index] == 0U) task_static_slot_generation[index] = 1U;
             g_task_sequence_counter++;
@@ -541,6 +554,7 @@ task_t* create_task_from_initrd_file(const char* filename) {
 
 void setup_initial_user_context(task_t* task, uint32_t entry_point, uint32_t stack_top) {
     memset(&task->cpu_state, 0, sizeof(cpu_state_t));
+    task_fx_init(task); /* a fresh image starts from a clean FPU/SSE state */
     
     // Configuration des registres généraux
     task->cpu_state.eax = 0;
@@ -1475,6 +1489,11 @@ int task_set_name(int requester_pid, int pid, const char* name) {
         if (i >= OS_PROC_NAME_MAX - 1 || c < 32U || c > 126U) return OS_TASK_BAD_NAME;
         i++;
     }
+    /* Binary names that pin a privileged service name (service_registry.c:
+     * ata-driver, ata-client, ai-engine) cannot be taken by renaming. */
+    if (strcmp(name, "atadriver") == 0 || strcmp(name, "ataclient") == 0 ||
+        strcmp(name, "aiworker") == 0)
+        return OS_TASK_BAD_NAME;
     t = get_task_by_id(pid);
     if (!t) return OS_TASK_NOT_FOUND;
     if (requester_pid != t->id && requester_pid != t->parent_pid) {

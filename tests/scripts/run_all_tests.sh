@@ -119,6 +119,11 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_gpt2_infer.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_infer.c $BASE_DIR/kernel/llm/gpt2_sample.c"
     fi
+    if [ "$(basename "$test_file")" = "test_gpt2_generate.c" ]; then
+        # FP32 generation core shared by the Ring 0 fallback and aiworker.
+        extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_generate.c $BASE_DIR/kernel/llm/gpt2_infer.c $BASE_DIR/kernel/llm/gpt2_sample.c $BASE_DIR/kernel/llm/gpt2_tokenizer.c $BASE_DIR/kernel/llm/gpt2_model.c"
+        cflags="$cflags -DMOHHDY_RING3"
+    fi
     if [ "$(basename "$test_file")" = "test_gpt2_gguf.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/fs/fat16.c $BASE_DIR/kernel/fs/fat32.c $BASE_DIR/kernel/llm/gpt2_gguf.c $BASE_DIR/kernel/llm/gpt2_gguf_loader.c $BASE_DIR/kernel/llm/gpt2_quant.c $BASE_DIR/kernel/llm/gpt2_sample.c"
     fi
