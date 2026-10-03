@@ -130,6 +130,9 @@ int sys_service_backend_grant_scoped_source_prefix(const char* name, int target_
 int sys_service_backend_revoke(const char* name, int target_pid);
 int sys_service_backend_token(const char* name, uint32_t* out_token);
 int sys_service_event_pull(os_service_event_pull_t* out);
+int sys_task_identity_key_read(uint32_t* out);
+int sys_ipc_spill_drops(os_ipc_spill_drops_t* out);
+int sys_service_right_token(const char* name, uint32_t* out_token);
 int sys_mount_journal(uint32_t op, uint32_t arg1, uint32_t arg2);
 /* Libère, pour le seul appelant Ring 3 courant, sa capacité sur le service nommé. */
 int sys_service_backend_release(const char* name);
