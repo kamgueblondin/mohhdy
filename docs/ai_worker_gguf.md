@@ -134,7 +134,8 @@ a celui de l'instantane noyau, aucune ligne `aiworker gguf step` (ancien job
 sans etat). Les chemins noyau et repli (`ring0` 1 puis 2) donnent les memes
 jetons que le worker : le tokenizer Ring 3 et le tokenizer Ring 0 lisent le
 meme fichier de l'initrd et executent le meme code. Environ 280 s en local
-(196 s avant la scene `ggufpause`).
+(196 s avant la scene `ggufpause`). En CI le contrat a son propre job (`ai-gguf`, environ 6 min sur un
+runner) : place dans le job vfs-service, il portait ce job a 15 min 26 s.
 
 L'egalite des jetons vient du meme code K-quant, des memes octets, du meme
 code de session et de tokenizer et du meme etat de generateur. Le miroir
