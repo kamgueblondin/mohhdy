@@ -1292,6 +1292,13 @@ void syscall_handler(cpu_state_t* cpu) {
      * sockets from its own Ring 3 stack). No worker = no network. */
     if (service_registry_net_syscall_gated(cpu->eax) ||
         (cpu->eax >= SYS_NET_WIRE_CONNECT && cpu->eax <= SYS_NET_WIRE_CLOSE)) {
+        /* Wire 139-142 / connect 144 of a non-worker task: same refusal and
+         * same counter (wire refused) as the legacy kernel. */
+        if (((cpu->eax >= SYS_NET_WIRE_CONNECT && cpu->eax <= SYS_NET_WIRE_CLOSE) ||
+             cpu->eax == SYS_SOCKET_CONNECT) && !net_wire_caller_is_worker()) {
+            cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;
+            return;
+        }
         net_relay_note_denied();
         syscall_net_strict_note_refused(cpu->eax);
         cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;

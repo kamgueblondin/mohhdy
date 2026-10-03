@@ -81,21 +81,37 @@ $(OS_IMAGE): $(OBJECTS)
 	@mkdir -p $(dir $@)
 	$(LD) -m elf_i386 -T linker.ld -o $@ --start-group $(OBJECTS) --end-group
 
-# Strict network build: same objects, syscall.c compiled with
-# -DMOHHDY_NET_NO_RING0_FALLBACK. The kernel socket/LLM/peer/wire syscalls
-# are refused to every task; the Ring 3 networker is the only network path.
-NETSTRICT_IMAGE = build/mohhdy-netstrict.bin
-NETSTRICT_OBJECTS = $(filter-out build/syscall.o,$(OBJECTS)) build/syscall-netstrict.o
+# Network Ring 0 fallback. Default 0 (strict): syscall.c is compiled with
+# -DMOHHDY_NET_NO_RING0_FALLBACK, the kernel socket/LLM/peer/wire syscalls
+# are refused to every task and the Ring 3 networker (spawned at boot, with
+# or without a NE2000) is the only network path. NET_RING0_FALLBACK=1
+# restores the historical degraded path in build/mohhdy.bin (make clean
+# first). build/mohhdy-netlegacy.bin is always that legacy kernel, for
+# comparison (same objects, only syscall.c differs).
+NET_RING0_FALLBACK ?= 0
+ifeq ($(NET_RING0_FALLBACK),0)
+NET_SYSCALL_FLAGS = -DMOHHDY_NET_NO_RING0_FALLBACK
+else
+NET_SYSCALL_FLAGS =
+endif
+# Changing NET_RING0_FALLBACK rebuilds syscall.o (stamp file per value).
+NET_FLAG_STAMP = build/.net-ring0-fallback-$(NET_RING0_FALLBACK)
+$(NET_FLAG_STAMP):
+	@mkdir -p build
+	@rm -f build/.net-ring0-fallback-*
+	@touch $@
+NETLEGACY_IMAGE = build/mohhdy-netlegacy.bin
+NETLEGACY_OBJECTS = $(filter-out build/syscall.o,$(OBJECTS)) build/syscall-netlegacy.o
 
-build/syscall-netstrict.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h
+build/syscall-netlegacy.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -DMOHHDY_NET_NO_RING0_FALLBACK -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
-$(NETSTRICT_IMAGE): $(NETSTRICT_OBJECTS)
+$(NETLEGACY_IMAGE): $(NETLEGACY_OBJECTS)
 	@mkdir -p $(dir $@)
-	$(LD) -m elf_i386 -T linker.ld -o $@ --start-group $(NETSTRICT_OBJECTS) --end-group
+	$(LD) -m elf_i386 -T linker.ld -o $@ --start-group $(NETLEGACY_OBJECTS) --end-group
 
-kernel-netstrict: $(NETSTRICT_IMAGE)
+kernel-netlegacy: $(NETLEGACY_IMAGE)
 
 # Cible pour compiler seulement le noyau (sans initrd)
 kernel-only: $(OS_IMAGE)
@@ -226,9 +242,9 @@ build/task.o: kernel/task/task.c kernel/task/task.h kernel/ata_job.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Règles de compilation pour les appels système
-build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h
+build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h $(NET_FLAG_STAMP)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(NET_SYSCALL_FLAGS) -c $< -o $@
 
 build/net_ethernet_arp.o: kernel/net_ethernet_arp.c kernel/net_ethernet_arp.h
 	@mkdir -p $(dir $@)
@@ -722,7 +738,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-net-no-ring0 qemu-net-loopback-worker kernel-netstrict qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
+.PHONY: integration-qemu qemu-net-no-ring0 qemu-net-loopback-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -979,13 +995,13 @@ qemu-net-tls-worker: $(OS_IMAGE) pack-initrd
 
 # Strict network build: TLS/HTTP and TCP sockets through networker only;
 # without the worker every network syscall is refused (no Ring 0 fallback).
-qemu-net-no-ring0: $(NETSTRICT_IMAGE) pack-initrd
+qemu-net-no-ring0: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/qemu_ne2k_tls12_server.py
 	@python3 tests/scripts/test_qemu_net_no_ring0.py
 
 # Strict network build without NE2000: networker serves the sockets
 # loopback-only from its Ring 3 registry; LLM/peer answered from Ring 3.
-qemu-net-loopback-worker: $(NETSTRICT_IMAGE) pack-initrd
+qemu-net-loopback-worker: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_net_loopback_worker.py
 
 qemu-ne2k-tls-sse: $(OS_IMAGE) pack-initrd
