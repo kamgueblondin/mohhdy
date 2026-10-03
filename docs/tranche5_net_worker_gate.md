@@ -528,8 +528,32 @@ What this slice does NOT remove (still Ring 0, honest list):
   cut;
 - the NE2000 boot probe and the reset of the card in Ring 0 after a worker
   loss (`NE2000 back in Ring 0 after worker loss`);
-- without a NE2000 the worker does not start its Ring 3 stack, so a strict
-  kernel without a card has no sockets at all (the default build serves
-  loopback sockets from the kernel registry);
-- peer 128-130 are relayed to the worker in strict mode but not exercised by
-  this contract.
+- networker is only spawned at boot when the probe saw a NE2000; without a
+  card it must be started by hand (`spawn networker`), see below.
+
+### Loopback-only worker (strict kernel, no NE2000)
+
+On a strict kernel the worker self-check sees the kernel socket stack
+refused; if it then cannot claim a NE2000 it starts its Ring 3 stack in
+loopback-only mode (`net-driver stack ring3 ready loopback-only (no NE2000)`):
+no emit/device, so the socket registry, TCP handshake and segment
+send/feed/receive between local sockets run in Ring 3, wire ops answer
+`OS_NET_WIRE_UNAVAILABLE`, and the never-bound LLM client answers LLM and
+peer calls with UNAVAILABLE ("NE2000 absent") from Ring 3. The strict kernel
+now relays LLM 91-98 to any live worker (not only while it owns the card).
+A legacy kernel without a card keeps the old worker path (relay to the
+kernel registry), unchanged.
+
+Proofs:
+- `make qemu-net-loopback-worker` (about 25 s, no NIC, `-net none`):
+  `spawn networker` -> loopback-only stack; `netrelay` loopback ping/pong,
+  14 socket calls, all ten ops 99-108 run by the worker; `ai-acquire` and
+  `ai-peer-listen` relayed (ops 91, 128) and answered "NE2000 absent" from
+  Ring 3; worker killed -> `open rc -59`, `denied` up, no relay op.
+- `make qemu-net-no-ring0` now also drives the peer server through the
+  worker after the TLS run: `ai-peer-listen` -> LISTEN (op 128 rc 0 in the
+  worker), `ai-peer-tls-poll` -> op 130 answered by the worker (-136,
+  ESTABLISHED required: no guest client in this contract, so no peer
+  handshake is proven here).
+- Unit: `test_net_stack_exec` gains the full loopback handshake without NIC
+  (11 socket ops, 0 wire op, 0 frame) and the peer UNAVAILABLE case.

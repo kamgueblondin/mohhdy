@@ -73,6 +73,9 @@ jobs:
       - name: QEMU strict network build, no Ring 0 fallback
         run: make qemu-net-no-ring0
 
+      - name: QEMU strict network build, loopback-only worker (no NE2000)
+        run: make qemu-net-loopback-worker
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

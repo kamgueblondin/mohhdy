@@ -717,7 +717,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-net-no-ring0 kernel-netstrict qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
+.PHONY: integration-qemu qemu-net-no-ring0 qemu-net-loopback-worker kernel-netstrict qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -977,6 +977,11 @@ qemu-net-tls-worker: $(OS_IMAGE) pack-initrd
 qemu-net-no-ring0: $(NETSTRICT_IMAGE) pack-initrd
 	@python3 tests/scripts/qemu_ne2k_tls12_server.py
 	@python3 tests/scripts/test_qemu_net_no_ring0.py
+
+# Strict network build without NE2000: networker serves the sockets
+# loopback-only from its Ring 3 registry; LLM/peer answered from Ring 3.
+qemu-net-loopback-worker: $(NETSTRICT_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_net_loopback_worker.py
 
 qemu-ne2k-tls-sse: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/qemu_ne2k_tls12_server.py

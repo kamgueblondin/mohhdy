@@ -4,8 +4,9 @@ syscall socket/LLM/peer/wire depuis sa pile Ring 0.
 
 Contrat :
 1. networker (Ring 3) possede la NE2000 et sert seul DHCP/DNS/TCP/TLS/HTTP
-   (meme contrat que qemu-net-tls-worker) et les sockets TCP (netrelay,
-   boucle locale ping/pong relayee au worker) ;
+   (meme contrat que qemu-net-tls-worker), le serveur pair (ecoute 128 et
+   poll TLS 130) et les sockets TCP (netrelay, boucle locale ping/pong
+   relayee au worker) ;
 2. le worker lui-meme voit la pile socket noyau refusee (-59) ;
 3. networker tue : socket et LLM renvoient -59 (aucun repli Ring 0), le
    compteur denied monte, aucune op relayee ni execution noyau.
@@ -74,6 +75,18 @@ def main():
 
         # 1. TLS/HTTP through networker only.
         tls_ops = tw.run_tls_http(proc, client, peer)
+
+        # 1b. Peer TLS server 128/130 in the worker (lease from step 1): the
+        #     listen succeeds and the TLS poll (no client yet) is answered
+        #     by the worker, not by the kernel peer server.
+        start = command(proc, client, "ai-peer-listen", "ai-peer-listen:")
+        command(proc, client, "ai-peer-tls-poll", "ai-peer-tls-poll", 30)
+        chunk = tw.normalized_log(tw.text()[start:])
+        if "ai-peer-listen: LISTEN" not in chunk:
+            raise RuntimeError("peer listen failed through networker: %s" % chunk[-800:])
+        for op in (128, 130):
+            if not re.search(r"net-driver relay op %d rc -?\d+ reply 0" % op, chunk):
+                raise RuntimeError("peer op %d not run by the worker" % op)
 
         # 2. TCP sockets (open/listen/handshake/send/feed/receive/close) served
         #    by the worker's Ring 3 registry.
