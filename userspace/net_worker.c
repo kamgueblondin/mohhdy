@@ -79,6 +79,10 @@ static int net_call2(uint32_t number, uint32_t a, uint32_t b) {
  * in Ring 0; the worker is the only task allowed to drive it). */
 static int net_worker_gate_self_check(void) {
     int socket_id = net_call2(SYS_SOCKET_LISTEN, 7101U, 1U);
+    /* Kernel built with NET_RING0_FALLBACK=0: the Ring 0 socket and peer
+     * stacks are refused to every task, this worker included. */
+    if (socket_id == OS_NET_WORKER_REQUIRED &&
+        net_call1(SYS_PEER_LISTEN, 0U) == OS_NET_WORKER_REQUIRED) return 2;
     if (socket_id < 0) return 0;
     if (net_call1(SYS_SOCKET_CLOSE, (uint32_t)socket_id) != 0) return 0;
     if (net_call1(SYS_PEER_LISTEN, 0U) == OS_NET_WORKER_REQUIRED) return 0;
@@ -479,7 +483,9 @@ void main(void) {
         for (;;) yield();
     }
     puts("net-driver ready\n");
-    if (net_worker_gate_self_check()) puts("net-driver gated syscalls ok\n");
+    rc = net_worker_gate_self_check();
+    if (rc == 2) puts("net-driver kernel socket stack absent, ring3 only\n");
+    else if (rc) puts("net-driver gated syscalls ok\n");
     else puts("net-driver gated syscalls unexpected\n");
     /* Tranche 5 suite: take the NE2000 over (no-op without a card). */
     if (nic_claim() == 0) stack_start();

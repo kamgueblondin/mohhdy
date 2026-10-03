@@ -145,7 +145,8 @@ def wait_for_prompt(proc, start):
     wait_for(proc, "(-.-)", 15, start)
 
 
-def main():
+def start_guest(kernel="mohhdy.bin"):
+    """Boot the guest with a NE2000 wired to the controlled TLS peer."""
     os.makedirs(LOG_DIR, exist_ok=True)
     for path in (LOG, ERR, MON):
         try:
@@ -155,7 +156,7 @@ def main():
     peer = ControlledEthernetPeer(full_tls=True)
     peer.start()
     command = [
-        "qemu-system-i386", "-kernel", os.path.join(ROOT, "build", "mohhdy.bin"),
+        "qemu-system-i386", "-kernel", os.path.join(ROOT, "build", kernel),
         "-initrd", os.path.join(ROOT, "my_initrd.tar"), "-cpu", "max", "-m", "1024M",
         "-display", "none", "-vga", "none", "-serial", "file:" + LOG,
         "-monitor", "unix:%s,server,nowait" % MON, "-machine", "type=pc,accel=tcg",
@@ -165,132 +166,152 @@ def main():
         ((",mac=" + EXPECTED_GUEST_MAC) if EXPECTED_GUEST_MAC else ""),
         "-no-reboot", "-no-shutdown",
     ]
-    proc = None
-    client = None
+    with open(ERR, "wb") as err:
+        proc = subprocess.Popen(command, cwd=ROOT, stdout=err, stderr=err)
+    return peer, proc
+
+
+def stop_guest(peer, proc, client):
+    peer.close()
+    if client is not None:
+        client.close()
+    if proc is not None and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=4)
+        except subprocess.TimeoutExpired:
+            proc.kill()
     try:
-        with open(ERR, "wb") as err:
-            proc = subprocess.Popen(command, cwd=ROOT, stdout=err, stderr=err)
-        wait_for(proc, "(-.-)")
-        client = monitor()
-        start = send_command(client, proc, "ai-runtime")
-        wait_for(proc, "Entropie TLS RDRAND : disponible (materiel)", 20, start)
-        wait_for_prompt(proc, start)
+        os.remove(MON)
+    except OSError:
+        pass
+
+
+def wait_ring3_stack(proc, client, spawn_extra=True):
+    """Wait until the boot networker owns the NE2000 and runs its stack."""
+    start = send_command(client, proc, "ai-runtime")
+    wait_for(proc, "Entropie TLS RDRAND : disponible (materiel)", 20, start)
+    wait_for_prompt(proc, start)
+    if spawn_extra:
         start = send_command(client, proc, "spawn networker")
         wait_for(proc, "spawn ok pid", 20, start)
         wait_for_prompt(proc, start)
-        ready = False
-        for _ in range(12):
-            if "net-driver stack ring3 ready arp ipv4 tcp tls" in normalized_log(text()):
-                ready = True
-                break
-            start = send_command(client, proc, "yield")
-            wait_for(proc, "yield ok", 15, start)
-            wait_for_prompt(proc, start)
-        if not ready:
-            raise RuntimeError("networker Ring 3 stack not ready: %s" % text()[-1500:])
-        if "[NET] NE2000 ports 0x300-0x31F handed to the Ring 3 worker" not in text():
-            raise RuntimeError("worker did not take the NE2000")
-        start = send_command(client, proc, "ai-acquire example.com")
-        try:
-            wait_for(proc, "ai-acquire: DHCP, DNS et SYN LLM demarres", 120, start)
-            wait_for_prompt(proc, start)
-        except RuntimeError as error:
-            raise RuntimeError("%s; peer events=%r peer error=%r" %
-                               (error, peer.events, peer.error))
-        complete = False
-        progressions = 0
-        for _ in range(32):
-            start = send_command(client, proc, "ai-tls-poll")
-            deadline = time.monotonic() + 90
-            while time.monotonic() < deadline:
-                if proc.poll() is not None:
-                    raise RuntimeError("QEMU stopped: %s" % text()[-2000:])
-                chunk = text()[start:]
-                if "ai-tls-poll: echec TLS" in chunk:
-                    raise RuntimeError("TLS failed; peer events=%r sizes=%r peer error=%r log=%s" %
-                                       (peer.events, peer.sent_sizes, peer.error, chunk[-1500:]))
-                if "progression TLS publiee" in chunk:
-                    progressions += 1
-                    wait_for_prompt(proc, start)
-                    break
-                if "attente de trame TLS" in chunk:
-                    wait_for_prompt(proc, start)
-                    break
-                time.sleep(0.10)
-            else:
-                raise RuntimeError("tls-poll mute; peer events=%r sizes=%r peer error=%r" %
-                                   (peer.events, peer.sent_sizes, peer.error))
-            if progressions >= 7:
-                start = send_command(client, proc, "ai-runtime")
-                wait_for(proc, "Session LLM noyau", 20, start)
+    ready = False
+    for _ in range(12):
+        if "net-driver stack ring3 ready arp ipv4 tcp tls" in normalized_log(text()):
+            ready = True
+            break
+        start = send_command(client, proc, "yield")
+        wait_for(proc, "yield ok", 15, start)
+        wait_for_prompt(proc, start)
+    if not ready:
+        raise RuntimeError("networker Ring 3 stack not ready: %s" % text()[-1500:])
+    if "[NET] NE2000 ports 0x300-0x31F handed to the Ring 3 worker" not in text():
+        raise RuntimeError("worker did not take the NE2000")
+
+
+def run_tls_http(proc, client, peer):
+    """DHCP/DNS/TCP/TLS/HTTP through the worker; returns relayed LLM ops."""
+    start = send_command(client, proc, "ai-acquire example.com")
+    try:
+        wait_for(proc, "ai-acquire: DHCP, DNS et SYN LLM demarres", 120, start)
+        wait_for_prompt(proc, start)
+    except RuntimeError as error:
+        raise RuntimeError("%s; peer events=%r peer error=%r" %
+                           (error, peer.events, peer.error))
+    complete = False
+    progressions = 0
+    for _ in range(32):
+        start = send_command(client, proc, "ai-tls-poll")
+        deadline = time.monotonic() + 90
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                raise RuntimeError("QEMU stopped: %s" % text()[-2000:])
+            chunk = text()[start:]
+            if "ai-tls-poll: echec TLS" in chunk:
+                raise RuntimeError("TLS failed; peer events=%r sizes=%r peer error=%r log=%s" %
+                                   (peer.events, peer.sent_sizes, peer.error, chunk[-1500:]))
+            if "progression TLS publiee" in chunk:
+                progressions += 1
                 wait_for_prompt(proc, start)
-                if "TLS_COMPLETE" in text()[start:]:
-                    complete = True
-                    break
-        if not complete:
+                break
+            if "attente de trame TLS" in chunk:
+                wait_for_prompt(proc, start)
+                break
+            time.sleep(0.10)
+        else:
+            raise RuntimeError("tls-poll mute; peer events=%r sizes=%r peer error=%r" %
+                               (peer.events, peer.sent_sizes, peer.error))
+        if progressions >= 7:
             start = send_command(client, proc, "ai-runtime")
             wait_for(proc, "Session LLM noyau", 20, start)
             wait_for_prompt(proc, start)
             if "TLS_COMPLETE" in text()[start:]:
                 complete = True
-        if not complete:
-            raise RuntimeError("TLS_COMPLETE absent; peer events=%r sizes=%r peer error=%r log=%s" %
-                               (peer.events, peer.sent_sizes, peer.error, text()[-2000:]))
-        start = send_command(client, proc, "ai-request ollama tiny /api/generate hi")
+                break
+    if not complete:
+        start = send_command(client, proc, "ai-runtime")
+        wait_for(proc, "Session LLM noyau", 20, start)
+        wait_for_prompt(proc, start)
+        if "TLS_COMPLETE" in text()[start:]:
+            complete = True
+    if not complete:
+        raise RuntimeError("TLS_COMPLETE absent; peer events=%r sizes=%r peer error=%r log=%s" %
+                           (peer.events, peer.sent_sizes, peer.error, text()[-2000:]))
+    start = send_command(client, proc, "ai-request ollama tiny /api/generate hi")
+    try:
+        wait_for(proc, "ai-request: POST LLM chiffre emis", 90, start)
+        wait_for_prompt(proc, start)
+    except RuntimeError as error:
+        raise RuntimeError("%s; peer events=%r peer error=%r" %
+                           (error, peer.events, peer.error))
+    start = send_command(client, proc, "ai-text-poll")
+    try:
+        wait_for(proc, "LLM : ok", 90, start)
+        wait_for(proc, "HTTP : 200", 10, start)
+        wait_for_prompt(proc, start)
+    except RuntimeError as error:
+        raise RuntimeError("%s; peer events=%r peer error=%r" %
+                           (error, peer.events, peer.error))
+    if peer.error is not None:
+        raise RuntimeError("controlled Ethernet peer failed: %s" % peer.error)
+    required = ("discover", "offer", "request", "ack", "arp", "dns", "syn", "syn_ack",
+                "client_hello", "certificate", "server_key_exchange", "server_hello_done",
+                "client_flight", "server_finished", "http_request", "http_response")
+    missing = [name for name in required if peer.events.get(name, 0) == 0]
+    if missing:
+        raise RuntimeError("missing controlled TLS/HTTP events: %s" % ", ".join(missing))
+    if EXPECTED_GUEST_MAC:
         try:
-            wait_for(proc, "ai-request: POST LLM chiffre emis", 90, start)
-            wait_for_prompt(proc, start)
-        except RuntimeError as error:
-            raise RuntimeError("%s; peer events=%r peer error=%r" %
-                               (error, peer.events, peer.error))
-        start = send_command(client, proc, "ai-text-poll")
-        try:
-            wait_for(proc, "LLM : ok", 90, start)
-            wait_for(proc, "HTTP : 200", 10, start)
-            wait_for_prompt(proc, start)
-        except RuntimeError as error:
-            raise RuntimeError("%s; peer events=%r peer error=%r" %
-                               (error, peer.events, peer.error))
-        if peer.error is not None:
-            raise RuntimeError("controlled Ethernet peer failed: %s" % peer.error)
-        required = ("discover", "offer", "request", "ack", "arp", "dns", "syn", "syn_ack",
-                    "client_hello", "certificate", "server_key_exchange", "server_hello_done",
-                    "client_flight", "server_finished", "http_request", "http_response")
-        missing = [name for name in required if peer.events.get(name, 0) == 0]
-        if missing:
-            raise RuntimeError("missing controlled TLS/HTTP events: %s" % ", ".join(missing))
-        if EXPECTED_GUEST_MAC:
-            try:
-                expected_mac = bytes(int(part, 16) for part in EXPECTED_GUEST_MAC.split(":"))
-            except ValueError:
-                raise RuntimeError("MOHHDY_NE2K_GUEST_MAC invalide")
-            if len(expected_mac) != 6 or peer.guest_mac != expected_mac:
-                raise RuntimeError("guest MAC inattendue: %r" % peer.guest_mac)
-        log = normalized_log(text())
-        for op in (91, 92, 93, 94):
-            if not re.search(r"net-driver relay op %d rc -?\d+ reply 0 total \d+" % op, log):
-                raise RuntimeError("LLM op %d was not run by the Ring 3 worker" % op)
-        for bad in ("[NET] relay timeout", "[NET] relay aborted", "NE2000 back in Ring 0"):
-            if bad in log:
-                raise RuntimeError("unexpected kernel event: %s" % bad)
-        tls_ops = len(re.findall(r"net-driver relay op (?:9[1-8]) rc", log))
+            expected_mac = bytes(int(part, 16) for part in EXPECTED_GUEST_MAC.split(":"))
+        except ValueError:
+            raise RuntimeError("MOHHDY_NE2K_GUEST_MAC invalide")
+        if len(expected_mac) != 6 or peer.guest_mac != expected_mac:
+            raise RuntimeError("guest MAC inattendue: %r" % peer.guest_mac)
+    log = normalized_log(text())
+    for op in (91, 92, 93, 94):
+        if not re.search(r"net-driver relay op %d rc -?\d+ reply 0 total \d+" % op, log):
+            raise RuntimeError("LLM op %d was not run by the Ring 3 worker" % op)
+    for bad in ("[NET] relay timeout", "[NET] relay aborted", "NE2000 back in Ring 0"):
+        if bad in log:
+            raise RuntimeError("unexpected kernel event: %s" % bad)
+    return len(re.findall(r"net-driver relay op (?:9[1-8]) rc", log))
+
+
+def main():
+    peer = proc = client = None
+    try:
+        peer, proc = start_guest()
+        wait_for(proc, "(-.-)")
+        client = monitor()
+        wait_ring3_stack(proc, client)
+        tls_ops = run_tls_http(proc, client, peer)
         print("ring3 tls: %d LLM syscalls relayed to networker (DHCP/DNS/TCP/TLS/HTTP in Ring 3)" % tls_ops)
         print("QEMU NE2000 TLS/HTTP via Ring 3 worker contract passed.")
         return 0
     finally:
-        peer.close()
-        if client is not None:
-            client.close()
-        if proc is not None and proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=4)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-        try:
-            os.remove(MON)
-        except OSError:
-            pass
+        if peer is not None:
+            stop_guest(peer, proc, client)
 
 
 if __name__ == "__main__":

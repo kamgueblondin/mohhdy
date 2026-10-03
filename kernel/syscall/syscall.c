@@ -1191,6 +1191,38 @@ static int sys_socket_connect(const os_socket_connect_request_t* user) {
     return kernel_net_wire_connect(&request);
 }
 
+/* 1 in the default build (degraded mode runs the kernel stack), 0 when
+ * built with NET_RING0_FALLBACK=0. kernel.c prints it at boot. */
+int syscall_net_ring0_fallback_enabled(void) {
+#ifdef MOHHDY_NET_NO_RING0_FALLBACK
+    return 0;
+#else
+    return 1;
+#endif
+}
+
+#ifdef MOHHDY_NET_NO_RING0_FALLBACK
+static uint32_t g_net_strict_refused;
+
+/* Counts every refusal; the first 16 are logged on the serial line. */
+static void syscall_net_strict_note_refused(uint32_t number) {
+    char digits[12];
+    int n = 0;
+    uint32_t v;
+    g_net_strict_refused++;
+    if (g_net_strict_refused > 16U) return;
+    print_string_serial("[NET] ring0 fallback absent: syscall ");
+    v = number;
+    do { digits[n++] = (char)('0' + v % 10U); v /= 10U; } while (v && n < 11);
+    while (n > 0) { char c[2] = { digits[--n], 0 }; print_string_serial(c); }
+    print_string_serial(" refused (-59) count ");
+    v = g_net_strict_refused; n = 0;
+    do { digits[n++] = (char)('0' + v % 10U); v /= 10U; } while (v && n < 11);
+    while (n > 0) { char c[2] = { digits[--n], 0 }; print_string_serial(c); }
+    print_string_serial("\n");
+}
+#endif
+
 int sys_net_relay_reply(const os_net_relay_reply_t* reply) {
     int32_t worker = net_relay_live_worker();
     if (!current_task || worker <= 0 || (int32_t)current_task->id != worker)
@@ -1250,6 +1282,20 @@ void syscall_handler(cpu_state_t* cpu) {
         cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;
         return;
     }
+#ifdef MOHHDY_NET_NO_RING0_FALLBACK
+    /* Strict network build (NET_RING0_FALLBACK=0): the kernel socket
+     * registry, LLM session, peer TLS server and wire engine are never run
+     * from a syscall. A gated call that was not relayed above to the live
+     * Ring 3 networker is refused here, the worker included (it serves
+     * sockets from its own Ring 3 stack). No worker = no network. */
+    if (service_registry_net_syscall_gated(cpu->eax) ||
+        (cpu->eax >= SYS_NET_WIRE_CONNECT && cpu->eax <= SYS_NET_WIRE_CLOSE)) {
+        net_relay_note_denied();
+        syscall_net_strict_note_refused(cpu->eax);
+        cpu->eax = (uint32_t)OS_NET_WORKER_REQUIRED;
+        return;
+    }
+#endif
     /* Tranche 5 suite: if a kernel LLM (91-97) or peer (128-130) call was
      * not relayed above, it still drives the NE2000 from Ring 0. While the
      * worker owns the card that path is refused, worker included. Other

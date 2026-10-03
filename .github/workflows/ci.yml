@@ -38,6 +38,7 @@ jobs:
             gcc-multilib \
             libc6-dev-i386 \
             nasm \
+            python3-cryptography \
             qemu-system-x86
 
       - name: Build OS image
@@ -66,6 +67,11 @@ jobs:
       # (still run on every PR, it just no longer serializes behind qemu-smoke).
       - name: QEMU smoke (systeme)
         run: make qemu-smoke
+
+      # Strict network kernel (NET_RING0_FALLBACK=0): networker is the only
+      # network path, no Ring 0 fallback after its death (about 1 min).
+      - name: QEMU strict network build, no Ring 0 fallback
+        run: make qemu-net-no-ring0
 
       - name: Upload logs
         if: always()
