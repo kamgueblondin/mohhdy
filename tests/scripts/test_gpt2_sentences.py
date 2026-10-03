@@ -24,8 +24,8 @@ MON = os.environ.get("QEMU_MON_SOCK", os.path.join(ROOT, "test_logs", "gpt2-sent
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "300"))
 GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "1200"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.12"))
-# Lowercase on purpose: QEMU sendkey shift-letter drops the shift break in the
-# i8042 queue, so a capital sticks and the rest of the line is shouted.
+# The measured sentence used a lowercase prompt. Shift release is scancode
+# 0xAA and letter case is Shift XOR Caps Lock (see test_qemu_keyboard_case.py).
 PROMPT = os.environ.get("GPT2_SENTENCE_PROMPT", "the capital of france is")
 
 

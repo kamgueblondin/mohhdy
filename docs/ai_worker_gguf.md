@@ -219,9 +219,11 @@ Une mesure :
 |---|---|---|---|
 | `the capital of france is` | `the city of the city of the capital, which is called "the city of france" and is known as "` | 67,4 s | tcg |
 
-Le prompt est en minuscules : un `sendkey shift-lettre` laisse Shift enclenche
-(le relachement est perdu dans la file i8042) et le reste de la ligne sort en
-capitales. Les 43,916 s / 20,224 s ne sont pas rejoues.
+Le prompt mesure reste en minuscules. Le verrouillage en capitales venait du
+pilote : le relachement Maj gauche est le scancode `0xAA`, filtre alors comme
+code de controle, et Verr Maj n'inversait plus les lettres quand Maj etait
+enfoncee. Les lettres suivent maintenant Maj XOR Verr Maj, dans les deux
+sens. Les 43,916 s / 20,224 s ne sont pas rejoues.
 `sub_second_claim_allowed` reste faux.
 
 ## Budget memoire

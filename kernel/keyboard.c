@@ -161,10 +161,12 @@ static const char shift_map[128] = {
 static inline char map_scancode(uint8_t sc) {
     if (sc >= 128) return 0;
     char ch = g_shift_pressed ? shift_map[sc] : base_map[sc];
-    // Caps Lock: inverser casse pour lettres si SHIFT non actif
-    if (g_caps_lock) {
-        if (!g_shift_pressed && ch >= 'a' && ch <= 'z') return (char)(ch - 'a' + 'A');
-        if (!g_shift_pressed && ch >= 'A' && ch <= 'Z') return (char)(ch - 'A' + 'a');
+    /* Letters follow Shift XOR Caps Lock, both directions. Symbols stay on
+     * the shift map: Caps Lock does not turn '1' into '!'. */
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+        int upper = (g_shift_pressed ? 1 : 0) ^ (g_caps_lock ? 1 : 0);
+        if (upper && ch >= 'a' && ch <= 'z') return (char)(ch - 'a' + 'A');
+        if (!upper && ch >= 'A' && ch <= 'Z') return (char)(ch - 'A' + 'a');
     }
     return ch;
 }
@@ -234,8 +236,10 @@ void keyboard_poll_check() {
 
             debug_polling_count++;
             
-            // Filtrer les ACK et codes de contrôle
-            if (scancode == 0xFA || scancode == 0xFE || scancode == 0xAA) {
+            /* ACK / resend only. 0xAA is Left Shift break (Set 1), not a
+             * control byte: dropping it latches Shift. BAT 0xAA is flushed
+             * during keyboard_init before this path runs. */
+            if (scancode == 0xFA || scancode == 0xFE) {
                 return;
             }
             if (kbd_take_extended_prefix(scancode)) {
@@ -304,8 +308,8 @@ void keyboard_interrupt_handler() {
         print_string_serial("\n");
     }
     
-    // Filtrer les codes de contrôle
-    if (scancode == 0xFA || scancode == 0xFE || scancode == 0xAA) {
+    /* ACK / resend only. 0xAA must reach the Left Shift release below. */
+    if (scancode == 0xFA || scancode == 0xFE) {
         return;
     }
     if (kbd_take_extended_prefix(scancode)) {
