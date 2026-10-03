@@ -12,6 +12,7 @@ userspace/aiworker
 userspace/aiclient
 userspace/aistat
 userspace/airogue
+userspace/ggufclient
 userspace/vfsserver
 userspace/vfsvirtual
 userspace/vfsflight

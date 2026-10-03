@@ -481,6 +481,7 @@ pack-initrd: userspace-all
 	@cp -f userspace/aiclient $(BIN_DEST_DIR)/aiclient
 	@cp -f userspace/aistat $(BIN_DEST_DIR)/aistat
 	@cp -f userspace/airogue $(BIN_DEST_DIR)/airogue
+	@cp -f userspace/ggufclient $(BIN_DEST_DIR)/ggufclient
 	@tar -C $(INITRD_DIR) -cf $(INITRD_IMAGE) .
 	@echo "[mkinitrd] Packed executables into $(INITRD_IMAGE)"
 
@@ -524,7 +525,7 @@ iso-clean:
 	@rm -rf build/isodir $(ISO_IMAGE)
 
 # Compile tous les programmes utilisateur
-user-program userspace/shell userspace/fake_ai userspace/test_program userspace/ai_assistant userspace/idle userspace/spin userspace/ipcserver userspace/ipcwait userspace/ipcpoke userspace/vfsserver userspace/vfsvirtual userspace/networker userspace/vfsflight userspace/serviceclaim userspace/vfsclaim userspace/vfscapclaim userspace/vfsreleaseclaim userspace/vfsreadclaim userspace/vfsmutateclaim userspace/vfshistclaim userspace/waitchild userspace/ok userspace/aiworker userspace/aiclient userspace/aistat userspace/airogue: userspace-all
+user-program userspace/shell userspace/fake_ai userspace/test_program userspace/ai_assistant userspace/idle userspace/spin userspace/ipcserver userspace/ipcwait userspace/ipcpoke userspace/vfsserver userspace/vfsvirtual userspace/networker userspace/vfsflight userspace/serviceclaim userspace/vfsclaim userspace/vfscapclaim userspace/vfsreleaseclaim userspace/vfsreadclaim userspace/vfsmutateclaim userspace/vfshistclaim userspace/waitchild userspace/ok userspace/aiworker userspace/aiclient userspace/aistat userspace/airogue userspace/ggufclient: userspace-all
 
 # Cible pour exécuter l'OS dans QEMU avec initrd (mode console corrigé)
 run: $(OS_IMAGE) pack-initrd disk
@@ -696,7 +697,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker
+.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -765,6 +766,12 @@ qemu-net-wire: $(OS_IMAGE) pack-initrd disk
 # token equality worker / Ring 0 / fallback, rogue replies refused).
 qemu-ai-worker: $(OS_IMAGE) pack-initrd
 	@python3 tests/integration/test_qemu_ai_worker.py
+
+# Inventory item 4, GGUF slice: GPT-2 GGUF sampling steps (109/110) in the
+# Ring 3 aiworker (synthetic K-quant GGUF on a FAT16 IDE disk, worker-only
+# bulk read, token equality worker / Ring 0 / fallback).
+qemu-ai-gguf: $(OS_IMAGE) pack-initrd
+	@python3 tests/integration/test_qemu_ai_gguf.py
 
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
@@ -881,6 +888,7 @@ help:
 	@echo "  qemu-vfs-service - Vérifie une lecture via le médiateur VFS Ring 3"
 	@echo "  qemu-net-worker  - Tranche 5: gate net-driver sur syscalls NE2000/socket/peer"
 	@echo "  qemu-ai-worker   - Inventaire 4: GPT-2 FP32 dans le worker Ring 3 aiworker (fixture synthetique)"
+	@echo "  qemu-ai-gguf     - Inventaire 4: pas GGUF 109/110 dans le worker Ring 3 aiworker (GGUF synthetique)"
 	@echo "  qemu-net-wire    - Tranche 5 slice 3: TCP sur le fil via le worker (pair echo local)"
 	@echo "  gguf-benchmark  - Mesure répétée du premier token et de ai-continue GGUF sous QEMU"
 	@echo "  gguf-benchmark-check - Vérifie le protocole de synthèse sans démarrer QEMU"

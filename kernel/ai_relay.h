@@ -28,6 +28,12 @@ uint32_t ai_relay_job(void);
  * max is clamped to OS_AI_ENGINE_TEXT_MAX. */
 int32_t ai_relay_begin(int32_t caller_pid, int32_t worker_pid, const char* prompt,
                        uint32_t max, uint32_t now);
+/* GGUF slice: one 109/110 sampling step of the kernel-owned session. */
+int32_t ai_relay_begin_gguf(int32_t caller_pid, int32_t worker_pid, const uint32_t* tokens,
+                            uint32_t token_count, uint32_t generated, uint32_t rng_state,
+                            uint32_t now);
+/* OS_AI_JOB_* of the job in flight (0 when free). */
+uint32_t ai_relay_kind(void);
 /* Doorbell could not be sent: slot freed, nothing counted. */
 void ai_relay_cancel(void);
 /* Worker side: copy of the job in flight (0) or OS_AI_ENGINE_REQUIRED /
@@ -52,6 +58,14 @@ void ai_relay_drop_caller(void);
 /* Accounting of the Ring 0 path and of the last generation trace. */
 void ai_relay_note_kernel_infer(int worker_live, int fallback);
 void ai_relay_note_rogue(void);
+void ai_relay_note_gguf_kernel(int worker_ready, int fallback);
+/* path OS_AI_PATH_NONE only refreshes the session snapshot. */
+void ai_relay_record_gguf(uint32_t path, int32_t result, const uint32_t* tokens,
+                          uint32_t prompt_tokens, uint32_t token_count);
+/* Worker that declared GGUF_READY after loading `bytes` (0, 0 to clear). */
+void ai_relay_set_gguf_worker(int32_t pid, uint32_t bytes);
+/* That worker if it is still the live ai-engine owner, else 0. */
+int32_t ai_relay_gguf_worker(int32_t live_worker);
 void ai_relay_record_last(uint32_t path, int32_t result, const uint32_t* tokens,
                           uint32_t prompt_tokens, uint32_t token_count);
 void ai_relay_note_mapped(uint32_t which, uint32_t bytes);

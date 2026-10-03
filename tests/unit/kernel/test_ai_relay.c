@@ -207,6 +207,94 @@ static void test_kernel_accounting_and_trace(void) {
     TEST_ASSERT_EQUAL(0U, st.checkpoint_mapped);
 }
 
+/* GGUF slice: one 109/110 sampling step relayed with the whole session
+ * state; kind checked on reply; separate counters; GGUF worker identity. */
+static void test_gguf_step(void) {
+    uint32_t toks[4] = {0U, 1U, 2U, 14U};
+    int32_t j, k;
+    ai_relay_init();
+    TEST_ASSERT_EQUAL(-1, ai_relay_begin_gguf(5, 5, toks, 4U, 0U, 7U, 1U)); /* worker as caller */
+    TEST_ASSERT_EQUAL(-1, ai_relay_begin_gguf(5, 9, toks, 0U, 0U, 7U, 1U));
+    TEST_ASSERT_EQUAL(-1, ai_relay_begin_gguf(5, 9, toks, OS_AI_ENGINE_TOKENS_MAX + 1U, 0U, 7U, 1U));
+    TEST_ASSERT_EQUAL(-1, ai_relay_begin_gguf(5, 9, toks, 4U, 5U, 7U, 1U)); /* generated > count */
+    j = ai_relay_begin_gguf(5, 9, toks, 4U, 1U, 12345U, 10U);
+    TEST_ASSERT_TRUE(j > 0);
+    TEST_ASSERT_EQUAL(OS_AI_JOB_GGUF_STEP, ai_relay_kind());
+    TEST_ASSERT_EQUAL(-1, ai_relay_begin(6, 9, "x", 8U, 11U)); /* single slot */
+    TEST_ASSERT_EQUAL(0, ai_relay_fetch(9, 9, (uint32_t)j, &job));
+    TEST_ASSERT_EQUAL(OS_AI_JOB_GGUF_STEP, job.kind);
+    TEST_ASSERT_EQUAL(12345U, job.rng_state);
+    TEST_ASSERT_EQUAL(1U, job.generated);
+    TEST_ASSERT_EQUAL(4U, job.token_count);
+    TEST_ASSERT_EQUAL(14U, job.tokens[3]);
+    /* An FP32-shaped reply (text, tokens, wrong kind) is malformed here. */
+    make_reply((uint32_t)j, "dab");
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_BAD_ARGUMENT, ai_relay_complete(9, 9, &reply));
+    memset(&reply, 0, sizeof(reply));
+    reply.job_id = (uint32_t)j;
+    reply.kind = OS_AI_JOB_GGUF_STEP;
+    reply.result = 1;
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_BAD_ARGUMENT, ai_relay_complete(9, 9, &reply)); /* result > 0 */
+    reply.result = 0;
+    reply.next_token = 6U;
+    reply.rng_state = 777U;
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_REQUIRED, ai_relay_complete(8, 9, &reply)); /* rogue */
+    TEST_ASSERT_EQUAL(0, ai_relay_complete(9, 9, &reply));
+    memset(&reply, 0, sizeof(reply));
+    TEST_ASSERT_EQUAL(AI_RELAY_DONE, ai_relay_take(5, &reply));
+    TEST_ASSERT_EQUAL(6U, reply.next_token);
+    TEST_ASSERT_EQUAL(777U, reply.rng_state);
+    TEST_ASSERT_EQUAL(0U, ai_relay_kind());
+
+    /* Second step: worker lost -> FAILED, caller runs the Ring 0 step. */
+    k = ai_relay_begin_gguf(5, 9, toks, 4U, 2U, 777U, 20U);
+    TEST_ASSERT_EQUAL(j + 1, k);
+    TEST_ASSERT_EQUAL(1, ai_relay_should_fail(0, 21U));
+    ai_relay_fail();
+    TEST_ASSERT_EQUAL(AI_RELAY_FAILED, ai_relay_take(5, &reply));
+    ai_relay_note_gguf_kernel(0, 1);
+    ai_relay_note_gguf_kernel(0, 0);
+    /* Cancelled doorbell is not counted. */
+    k = ai_relay_begin_gguf(5, 9, toks, 4U, 2U, 777U, 30U);
+    ai_relay_cancel();
+    TEST_ASSERT_EQUAL(AI_RELAY_FREE, ai_relay_state());
+
+    ai_relay_set_gguf_worker(9, 4024704U);
+    TEST_ASSERT_EQUAL(9, ai_relay_gguf_worker(9));
+    TEST_ASSERT_EQUAL(0, ai_relay_gguf_worker(10)); /* another ai-engine owner */
+    TEST_ASSERT_EQUAL(0, ai_relay_gguf_worker(0));
+    ai_relay_note_gguf_kernel(1, 0);
+    ai_relay_record_gguf(OS_AI_PATH_KERNEL_FALLBACK, 0, toks, 3U, 4U);
+    ai_relay_record_gguf(OS_AI_PATH_NONE, 0, toks, 3U, 3U); /* snapshot only */
+    ai_relay_fill_status(&st, 9);
+    TEST_ASSERT_EQUAL(9, st.gguf_worker_pid);
+    TEST_ASSERT_EQUAL(4024704U, st.gguf_bytes_loaded);
+    TEST_ASSERT_EQUAL(2U, st.gguf_forwarded);
+    TEST_ASSERT_EQUAL(1U, st.gguf_completed);
+    TEST_ASSERT_EQUAL(0U, st.forwarded);
+    TEST_ASSERT_EQUAL(0U, st.completed);
+    TEST_ASSERT_EQUAL(1U, st.aborted);
+    TEST_ASSERT_EQUAL(3U, st.gguf_kernel);
+    TEST_ASSERT_EQUAL(1U, st.gguf_fallbacks);
+    TEST_ASSERT_EQUAL(1U, st.gguf_kernel_while_live);
+    TEST_ASSERT_EQUAL(OS_AI_PATH_KERNEL_FALLBACK, st.gguf_last_path);
+    TEST_ASSERT_EQUAL(3U, st.gguf_token_count);
+    TEST_ASSERT_EQUAL(3U, st.gguf_prompt_tokens);
+    TEST_ASSERT_EQUAL(2U, st.gguf_tokens[2]);
+    TEST_ASSERT_EQUAL(1U, st.rogue_refused);
+    ai_relay_fill_status(&st, 10);
+    TEST_ASSERT_EQUAL(0, st.gguf_worker_pid);
+    TEST_ASSERT_EQUAL(0U, st.gguf_bytes_loaded);
+    ai_relay_worker_reset();
+    ai_relay_fill_status(&st, 9);
+    TEST_ASSERT_EQUAL(0, st.gguf_worker_pid);
+    /* GGUF window below the tokenizer window, chunks bounded. */
+    TEST_ASSERT_TRUE(OS_AI_ENGINE_TOKENIZER_WINDOW + OS_AI_ENGINE_TOKENIZER_WINDOW_MAX <=
+                     OS_AI_ENGINE_GGUF_WINDOW);
+    TEST_ASSERT_TRUE(OS_AI_ENGINE_GGUF_WINDOW + OS_AI_ENGINE_GGUF_WINDOW_MAX <= 0xB0000000U - 16U * 4096U);
+    TEST_ASSERT_TRUE(OS_AI_ENGINE_GGUF_CHUNK_MAX <= OS_AI_ENGINE_GGUF_WINDOW_MAX);
+}
+
 /* ABI: syscall number, distinct errors, windows clear of the user ELF
  * (0x40000000) and of the user stack (16 pages below 0xB0000000). */
 static void test_abi_constants(void) {
@@ -235,6 +323,7 @@ int main(void) {
     RUN_TEST(test_worker_loss_and_timeout);
     RUN_TEST(test_slot_rules);
     RUN_TEST(test_kernel_accounting_and_trace);
+    RUN_TEST(test_gguf_step);
     RUN_TEST(test_abi_constants);
     unity_print_results();
     unity_cleanup();

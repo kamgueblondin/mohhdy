@@ -28,6 +28,10 @@ int gpt2_gguf_infer_preload_kv_cache(const uint32_t* tokens, uint32_t token_coun
 uint32_t gpt2_gguf_infer_kv_cache_count(void);
 /* Indique la disponibilité du profil GGUF local. */
 int gpt2_gguf_infer_ready(void);
+/* FAT16 profile: bytes of the resident GGUF snapshot (0 if not ready or
+ * FAT32), and its 8.3 name. Used by the aiworker bulk read. */
+uint32_t gpt2_gguf_infer_resident_size(void);
+const char* gpt2_gguf_infer_filename(void);
 const char* gpt2_gguf_infer_status(void);
 
 #endif

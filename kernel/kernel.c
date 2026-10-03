@@ -984,9 +984,11 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     /* Inventory item 4: with a valid FP32 checkpoint and tokenizer in the
      * initrd, the GPT-2 engine runs in the Ring 3 aiworker ("ai-engine"),
      * which maps the same initrd frames read-only. The Ring 0 engine stays
-     * as the fallback when the worker is absent, dead or stalled. GGUF
-     * (SYS_GPT2_GGUF_*) stays Ring 0. */
-    if (gpt2_model_current()->ready && gpt2_tokenizer_ready()) {
+     * as the fallback when the worker is absent, dead or stalled. With the
+     * FAT16 GGUF profile ready, the worker also bulk-reads its own copy of
+     * GPT2.GGU and serves the 109/110 sampling steps (Ring 0 fallback). */
+    if (gpt2_tokenizer_ready() &&
+        (gpt2_model_current()->ready || gpt2_gguf_infer_resident_size() != 0U)) {
         task_t* ai_worker_task = create_task_from_initrd_file("bin/aiworker");
         if (ai_worker_task) {
             ai_worker_task->boot_service = 1U;

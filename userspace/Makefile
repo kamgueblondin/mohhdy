@@ -20,7 +20,7 @@ PROGRAMS += netwire
 # Blocking IPC (SYS_IPC_RECV_WAIT) proof programs.
 PROGRAMS += ipcwait ipcpoke
 # Inventory item 4: Ring 3 GPT-2 worker + proof clients.
-PROGRAMS += aiworker aiclient aistat airogue
+PROGRAMS += aiworker aiclient aistat airogue ggufclient
 
 all: $(PROGRAMS)
 
@@ -28,14 +28,17 @@ all: $(PROGRAMS)
 # (model probe, tokenizer, top-k sampler, forward pass, generation loop),
 # compiled at CPL 3 with the kernel's float flags (-O3 -msse2 -mfpmath=sse)
 # so both paths produce the same token ids.
-AI_LLM_SRCS = gpt2_model gpt2_tokenizer gpt2_sample gpt2_infer gpt2_generate
+AI_LLM_SRCS = gpt2_model gpt2_tokenizer gpt2_sample gpt2_infer gpt2_generate \
+              gpt2_gguf gpt2_gguf_loader gpt2_quant gpt2_gguf_infer
 AI_LLM_OBJS = $(addprefix ai_,$(addsuffix .o,$(AI_LLM_SRCS)))
-AI_CFLAGS = $(CFLAGS) -I.. -DMOHHDY_RING3 -ffreestanding -fno-pie -O3 -msse2 -mfpmath=sse -mstackrealign -fomit-frame-pointer
+AI_CFLAGS = $(CFLAGS) -I.. -isystem $(shell $(CC) -print-file-name=include) -D_MM_MALLOC_H_INCLUDED -DMOHHDY_RING3 -ffreestanding -fno-pie -O3 -msse2 -mfpmath=sse -mstackrealign -fomit-frame-pointer
 ai_%.o: ../kernel/llm/%.c ../kernel/llm/%.h $(USER_HEADERS)
 	$(CC) $(AI_CFLAGS) -c -o $@ $<
-ai_worker.o: ai_worker.c ai_common.h ../kernel/llm/gpt2_generate.h $(USER_HEADERS)
+ai_worker.o: ai_worker.c ai_common.h ai_fat16_shim.h ../kernel/llm/gpt2_generate.h ../kernel/llm/gpt2_gguf_infer.h $(USER_HEADERS)
 	$(CC) $(AI_CFLAGS) -c -o $@ $<
-aiworker: ai_worker.o $(AI_LLM_OBJS) net_libc.o start.o
+ai_fat16_shim.o: ai_fat16_shim.c ai_fat16_shim.h $(USER_HEADERS)
+	$(CC) $(AI_CFLAGS) -c -o $@ $<
+aiworker: ai_worker.o ai_fat16_shim.o $(AI_LLM_OBJS) net_libc.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 aiclient: ai_client.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
@@ -43,7 +46,9 @@ aistat: ai_stat.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 airogue: ai_rogue.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
-ai_client.o ai_stat.o ai_rogue.o: ai_common.h $(USER_HEADERS)
+ggufclient: ai_gguf_client.o start.o
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+ai_client.o ai_stat.o ai_rogue.o ai_gguf_client.o: ai_common.h $(USER_HEADERS)
 
 shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o start.o
 	@echo "Linking shell..."
