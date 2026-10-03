@@ -334,29 +334,15 @@ run_test_category() {
     echo ""
 }
 
-# Fonction pour générer le rapport de couverture (simulé)
+# Couverture : ce lanceur ne mesure rien (pas d'instrumentation gcov/lcov).
+# Les anciens pourcentages 85/72/78 etaient des constantes codees en dur ; ils
+# ont ete retires pour ne plus afficher de mesure inventee.
 generate_coverage_report() {
     print_header "Code Coverage Analysis"
-    
-    echo "Analyzing test coverage..." 
-    
-    # Simulation de l'analyse de couverture
-    local kernel_coverage=85
-    local userspace_coverage=72
-    local overall_coverage=78
-    
-    echo "Kernel Code Coverage: ${kernel_coverage}%"
-    echo "Userspace Code Coverage: ${userspace_coverage}%"
-    echo "Overall Coverage: ${overall_coverage}%"
-    
-    if [ $overall_coverage -ge 80 ]; then
-        print_success "Coverage target met (≥80%)"
-    elif [ $overall_coverage -ge 70 ]; then
-        print_warning "Coverage acceptable but below target (70-79%)"
-    else
-        print_error "Coverage below acceptable threshold (<70%)"
-    fi
-    
+
+    echo "Coverage: not measured (no gcov/lcov instrumentation in this runner)."
+    echo "No percentage is reported; see test counts above for what was run."
+
     echo ""
 }
 
