@@ -2,8 +2,8 @@
 """Build reseau strict sans NE2000 : networker sert seul les sockets en
 boucle locale (registre Ring 3), sans carte et sans repli Ring 0.
 
-Contrat (noyau build/mohhdy-netstrict.bin, aucune carte reseau) :
-1. `spawn networker` : pile Ring 3 loopback-only ;
+Contrat (noyau par defaut build/mohhdy.bin, strict, aucune carte reseau) :
+1. networker lance au boot meme sans carte : pile Ring 3 loopback-only ;
 2. `netrelay` : boucle TCP locale (open/listen/poignee de main/send/feed/
    receive/close), les 10 ops socket executees par le worker ;
 3. `ai-acquire` et `ai-peer-listen` relayes au worker, qui repond
@@ -32,7 +32,7 @@ def boot():
         except OSError:
             pass
     command = [
-        "qemu-system-i386", "-kernel", os.path.join(tw.ROOT, "build", "mohhdy-netstrict.bin"),
+        "qemu-system-i386", "-kernel", os.path.join(tw.ROOT, "build", "mohhdy.bin"),
         "-initrd", os.path.join(tw.ROOT, "my_initrd.tar"), "-cpu", "max", "-m", "1024M",
         "-display", "none", "-vga", "none", "-serial", "file:" + tw.LOG,
         "-monitor", "unix:%s,server,nowait" % tw.MON, "-machine", "type=pc,accel=tcg",
@@ -55,14 +55,12 @@ def main():
         log = tw.normalized_log(tw.text())
         if strict.BANNER not in log:
             raise RuntimeError("strict build banner absent (wrong kernel?)")
-        if "[NET] boot networker spawned" in log:
-            raise RuntimeError("networker spawned at boot without a NE2000 (unexpected here)")
-
-        worker, start = strict.spawn(proc, client, "networker")
-        strict.yield_until(proc, client, "net-driver stack ring3 ready loopback-only (no NE2000)", start)
-        chunk = tw.normalized_log(tw.text()[start:])
-        if "net-driver kernel socket stack absent, ring3 only" not in chunk:
+        if "[NET] boot networker spawned" not in log:
+            raise RuntimeError("networker not spawned at boot without a NE2000")
+        strict.yield_until(proc, client, "net-driver stack ring3 ready loopback-only (no NE2000)", 0)
+        if "net-driver kernel socket stack absent, ring3 only" not in tw.normalized_log(tw.text()):
             raise RuntimeError("worker still reaches the kernel socket stack")
+        worker = str(strict.relay_status(proc, client)[0])
 
         pid, start = strict.spawn(proc, client, "netrelay")
         strict.yield_until(proc, client, "netrelay forged reply refused", start)

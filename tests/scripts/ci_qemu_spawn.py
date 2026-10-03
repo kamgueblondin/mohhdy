@@ -196,6 +196,9 @@ def main():
             # Active tasks: kernel + shell + boot atadriver (Tranche 4 slice 3,
             # spawned at boot only when an IDE disk is present) + the child.
             boot_tasks = 2 + (1 if "[ATA] boot atadriver spawned" in log_text() else 0)
+            # Default strict network kernel: networker starts at boot even
+            # without a NE2000 (loopback-only Ring 3 socket stack).
+            boot_tasks += 1 if "[NET] boot networker spawned" in log_text() else 0
             send_command_until(monitor, "task-capacity", "task-capacity ok %d 16 %d" %
                                (boot_tasks + 1, 16 - boot_tasks - 1), proc)
 

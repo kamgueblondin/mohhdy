@@ -87,6 +87,10 @@ void main(void) {
                llm_rc != OS_NET_WORKER_REQUIRED && after.forwarded == before.forwarded) {
         (void)call1(SYS_SOCKET_CLOSE, (uint32_t)socket_rc);
         puts("netclaim local ok\n");
+    } else if (socket_rc == OS_NET_WORKER_REQUIRED && peer_rc == OS_NET_WORKER_REQUIRED &&
+               llm_rc == OS_NET_WORKER_REQUIRED && after.forwarded == before.forwarded) {
+        /* Strict kernel (default): no worker, no Ring 0 fallback. */
+        puts("netclaim no worker refused -59\n");
     } else {
         puts("netclaim unexpected result\n");
     }

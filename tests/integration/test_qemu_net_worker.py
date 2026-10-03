@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Tranche 5 contract: net-driver worker gate and net IPC relay.
 
-Degraded (no net-driver): netclaim and netrelay use the historical local
-path (relay counters unchanged).
+Degraded (no net-driver): with the default strict kernel
+(NET_RING0_FALLBACK=0) netclaim and netrelay are refused with -59 (no Ring 0
+fallback); with the legacy kernel (MOHHDY_NET_WORKER_KERNEL=
+build/mohhdy-netlegacy.bin) they use the historical local path. The mode is
+read from the boot banner. Relay counters unchanged in both.
 Worker live: networker still reaches socket/peer syscalls (positive proof).
 Slice 2: socket syscalls 99-108 of non-worker tasks are relayed to the
 worker over IPC (netclaim listen, netrelay 14-call TCP loopback between two
@@ -28,7 +31,9 @@ LOG_DIR = os.path.join(ROOT, "test_logs")
 LOG = os.path.join(LOG_DIR, "net-worker.log")
 ERR = os.path.join(LOG_DIR, "net-worker.err")
 MON = os.path.join(LOG_DIR, "net-worker-monitor.sock")
-KERNEL = os.path.join(ROOT, "build", "mohhdy.bin")
+KERNEL = os.environ.get("MOHHDY_NET_WORKER_KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
+STRICT_BANNER = "[NET] build NET_RING0_FALLBACK=0"
+STRICT = [False]
 INITRD = os.path.join(ROOT, "my_initrd.tar")
 KEY_HOLD_MS = int(os.environ.get("KEY_HOLD_MS", "10"))
 
@@ -163,12 +168,23 @@ def relay_status(client, proc):
 
 
 def relay_local(client, proc):
-    """netrelay without a worker: same loopback, run locally, not relayed."""
+    """netrelay without a worker: legacy runs the loopback locally (not
+    relayed); strict refuses the first socket call with -59."""
     pid, start = spawn(client, proc, "netrelay")
-    wait_child(client, proc, "netrelay tcp loopback ok ping pong mode local "
-               "forwarded 0 completed 0", start)
+    if STRICT[0]:
+        wait_child(client, proc, "netrelay tcp loopback failed at open rc -59", start)
+    else:
+        wait_child(client, proc, "netrelay tcp loopback ok ping pong mode local "
+                   "forwarded 0 completed 0", start)
     wait_child(client, proc, "netrelay forged reply refused", start)
     kill(client, proc, pid)
+
+
+def claim_degraded(client, proc):
+    claim_pid, start = spawn(client, proc, "netclaim")
+    wait_child(client, proc, "netclaim no worker refused -59" if STRICT[0] else "netclaim local ok",
+               start)
+    kill(client, proc, claim_pid)
 
 
 def main():
@@ -195,11 +211,10 @@ def main():
             monitor = connect_monitor()
             time.sleep(0.5)
             send_command_until(monitor, "net-status", "Carte Ethernet : detectee", proc)
+            STRICT[0] = STRICT_BANNER in normalized_log(log_text())
             release_boot_worker(monitor, proc)
-            # Degraded: no net-driver, historical local path unchanged.
-            claim_pid, start = spawn(monitor, proc, "netclaim")
-            wait_child(monitor, proc, "netclaim local ok", start)
-            kill(monitor, proc, claim_pid)
+            # Degraded: no net-driver (strict: refused, legacy: local path).
+            claim_degraded(monitor, proc)
             relay_local(monitor, proc)
             base = relay_status(monitor, proc)
             if base["worker"] != 0 or base["fwd"] != 0 or base["pending"] != 0:
@@ -207,7 +222,8 @@ def main():
             # Worker live: positive proof from the worker PID itself.
             worker_pid, start = spawn(monitor, proc, "networker")
             wait_child(monitor, proc, "net-driver ready", start)
-            wait_child(monitor, proc, "net-driver gated syscalls ok", start)
+            wait_child(monitor, proc, "net-driver kernel socket stack absent, ring3 only"
+                       if STRICT[0] else "net-driver gated syscalls ok", start)
             send_command_until(monitor, "service-find net-driver",
                                "service-find ok net-driver %s" % worker_pid, proc)
             # Negative proof: LLM/peer refused for a non-worker task, status
@@ -239,10 +255,13 @@ def main():
             # Tranche 5 pile: 16 socket calls + 2 LLM polls relayed to the
             # worker's Ring 3 TLS client. The two SYS_PEER_LISTEN probes pass
             # a null request and stop in the relay marshal as
-            # OS_PEER_BAD_REQUEST, so they do not increment denied.
+            # OS_PEER_BAD_REQUEST, so they do not increment denied. Strict:
+            # only the worker's own self-check (socket + peer) is refused.
+            denied = live["denied"] - base["denied"] if STRICT[0] else live["denied"]
             if (live["worker"] != int(worker_pid) or live["fwd"] != 18 or
                     live["done"] != 18 or live["aborted"] != 0 or
-                    live["timeouts"] != 0 or live["denied"] != 0 or live["pending"] != 0):
+                    live["timeouts"] != 0 or denied != (2 if STRICT[0] else 0) or
+                    live["pending"] != 0):
                 raise RuntimeError("unexpected relay counters: %r" % live)
             # Stalled worker: the relayed call times out, the caller is not
             # hung and gets OS_NET_RELAY_TIMEOUT (-87), never a replay.
@@ -277,17 +296,16 @@ def main():
             aborted = relay_status(monitor, proc)
             if aborted["aborted"] != 1 or aborted["pending"] != 0 or aborted["worker"] != 0:
                 raise RuntimeError("abort not accounted: %r" % aborted)
-            # Worker gone: degraded path reopens.
+            # Worker gone: legacy reopens the degraded path, strict refuses.
             send_command_until(monitor, "service-find net-driver",
                                "service-find: service indisponible", proc)
-            claim_pid, start = spawn(monitor, proc, "netclaim")
-            wait_child(monitor, proc, "netclaim local ok", start)
-            kill(monitor, proc, claim_pid)
+            claim_degraded(monitor, proc)
             relay_local(monitor, proc)
             print("net relay: fwd %d done %d denied %d; stalled worker timeouts %d; "
                   "killed worker aborted %d" %
                   (live["fwd"], live["done"], live["denied"], stalled["timeouts"],
                    aborted["aborted"]))
+            print("kernel: %s" % ("strict (no Ring 0 fallback)" if STRICT[0] else "legacy (Ring 0 fallback)"))
             print("MOHHDY Tranche 5 net-driver worker gate contract passed")
             return 0
         finally:

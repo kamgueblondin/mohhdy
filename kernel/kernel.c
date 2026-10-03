@@ -973,7 +973,9 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     if (!syscall_net_ring0_fallback_enabled())
         print_string_serial("[NET] build NET_RING0_FALLBACK=0: kernel socket/LLM/peer/wire syscalls "
                             "disabled, networker is the only network path\n");
-    if (kernel_net_nic_present()) {
+    /* Strict build (default): networker is the only network path, so it
+     * is started even without a card (loopback-only sockets in Ring 3). */
+    if (kernel_net_nic_present() || !syscall_net_ring0_fallback_enabled()) {
         task_t* net_driver_task = create_task_from_initrd_file("bin/networker");
         if (net_driver_task) {
             net_driver_task->boot_service = 1U;
