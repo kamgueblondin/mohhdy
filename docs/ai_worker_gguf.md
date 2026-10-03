@@ -122,12 +122,25 @@ fixture `llm.c` de #94 (tokenizer de 16 pieces). Un boot `-m 1024M`, environ
 | Nouveau worker | recharge sa copie, 8 pas `path worker`, memes jetons |
 | Worker bloque (`task-priority`), pas `pending 1`, puis tue | premier pas `path fallback`, suite `path kernel`, memes jetons |
 | `airogue` contre un worker GGUF vivant | GGUF_OPEN / READ / READY -144 ; puis 8 pas `path worker`, memes jetons |
+| `ggufpause` : pas 0 sur le worker, worker tue et remplace avant le pas 1 | le nouveau worker adopte le miroir (`resumed` sur le premier `session step`), 7 pas `path worker`, memes jetons |
 | Meme worker, FP32 | `aiclient` `path worker`, jetons `0 1 2 14 3 4 \| 3 0 1 7 6 4` |
-| Compteurs finaux | gguf fwd 25, done 24, kernel 16, live 0, fallback 1, aborted 1, rogue 1, pending 0 |
-| Memoire | empreinte du worker 4106 pages dont 983 pour la copie GGUF ; pages libres avant/apres sa vie 232117/232117 |
+| Compteurs finaux | gguf fwd 33, done 32, kernel 16, live 0, fallback 1, aborted 1, rogue 1, pending 0 ; session worker 32, resumed 1, ring0 2 |
+| Memoire | empreinte du worker 4106 pages dont 983 pour la copie GGUF ; pages libres avant/apres sa vie 231994/231994 |
 
-L'egalite des jetons vient du meme code K-quant, des memes octets et du meme
-etat de generateur transmis a chaque pas.
+Depuis la tranche session, chaque execution worker est aussi verifiee sur le
+journal du worker : une ligne `aiworker gguf session start <id>` puis une
+ligne `session step <id>` par pas suivant, meme id, nombre de jetons final egal
+a celui de l'instantane noyau, aucune ligne `aiworker gguf step` (ancien job
+sans etat). Les chemins noyau et repli (`ring0` 1 puis 2) donnent les memes
+jetons que le worker : le tokenizer Ring 3 et le tokenizer Ring 0 lisent le
+meme fichier de l'initrd et executent le meme code. Environ 280 s en local
+(196 s avant la scene `ggufpause`).
+
+L'egalite des jetons vient du meme code K-quant, des memes octets, du meme
+code de session et de tokenizer et du meme etat de generateur. Le miroir
+renvoye par le worker n'est pas une porte d'entree pour le Ring 0 : le
+noyau borne la reponse et le pas Ring 0 refuse deja tout jeton hors
+vocabulaire (`gpt2_gguf_infer`).
 
 ## Verification manuelle sur le GGUF reel (hors CI)
 

@@ -60,7 +60,7 @@ static int serve_session(void) {
                job.token_count > 0U && job.token_count <= OS_AI_ENGINE_TOKENS_MAX &&
                job.prompt_tokens <= job.token_count) {
         if (!session.active || session.id != job.session_id ||
-            session.token_count != job.token_count) {
+            session.token_count != job.token_count || session.rng != job.rng_state) {
             /* Not our session (restarted worker, or started in Ring 0):
              * adopt the kernel mirror. */
             for (i = 0U; i < job.token_count; i++) session.tokens[i] = job.tokens[i];

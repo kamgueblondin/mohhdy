@@ -1,6 +1,6 @@
 # État réel de MOHHDY
 
-**Date de constat :** 3 octobre 2026 (rejeu local de `make test-all` 662/662 apres la tranche GGUF de `aiworker`, 661/661 avant, 648/648 avant, et `make qemu-smoke`, six scenarios en 547,9 s apres l'image). `make qemu-foundation-steps`, `make qemu-ata-driver` 295,1 s, `make qemu-net-worker` 209,3 s, `make qemu-net-wire` 86,8 s et `make integration-qemu` 7/7 en 800,2 s decrivent la pointe precedente du meme jour. Le smoke du 2 octobre 2026 et les 800,6 s decrivent une mesure anterieure. Ponctuation de cette mise a jour : ASCII et accents francais.
+**Date de constat :** 3 octobre 2026 (rejeu local de `make test-all` 674/674 apres la tranche session GGUF de `aiworker` (`test_gpt2_gguf_session`, `test_gguf_session`), 662/662 apres la tranche GGUF de `aiworker`, 661/661 avant, 648/648 avant, et `make qemu-smoke`, six scenarios en 547,9 s apres l'image). `make qemu-foundation-steps`, `make qemu-ata-driver` 295,1 s, `make qemu-net-worker` 209,3 s, `make qemu-net-wire` 86,8 s et `make integration-qemu` 7/7 en 800,2 s decrivent la pointe precedente du meme jour. Le smoke du 2 octobre 2026 et les 800,6 s decrivent une mesure anterieure. Ponctuation de cette mise a jour : ASCII et accents francais.
 
 **Reference :** prototype guest i386 32-bit, BIOS/Multiboot, QEMU et Ring 3. Ce n'est pas une distribution Linux.
 
