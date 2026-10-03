@@ -1087,6 +1087,8 @@ typedef struct {
 #define OS_ATA_FS_INITRD_STAT 6U /* ECX=path -> OS_ATA_FS_INITRD_* bits */
 #define OS_ATA_FS_INITRD_READ 7U /* ECX=path, EDX=buffer, ESI=max -> bytes */
 #define OS_ATA_FS_STATUS      8U /* public: ECX=os_ata_status_t* (same as SYS_ATA_STATUS) */
+#define OS_ATA_FS_LOG         9U /* live driver: ECX=text, EDX=length, one atomic line */
+#define OS_ATA_FS_LOG_MAX     192U
 
 /* Store flags: what the driver serves from its own code. */
 #define OS_ATA_FS_STORE_FAT16   1U

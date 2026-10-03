@@ -24,7 +24,24 @@
 #include "fs/fsop_exec.h"
 #include "fs/overlay.h"
 
-static void putc(char c) { asm volatile("int $0x80" : : "a"(SYS_PUTC), "b"(c)); }
+/* Lines go out in one syscall (OS_ATA_FS_LOG) once this task is the live
+ * driver: a preempted driver no longer gets shell output cut into a counter
+ * line. Before registration (or if refused) the bytes go out one by one. */
+static char log_line[OS_ATA_FS_LOG_MAX];
+static uint32_t log_length;
+static void log_flush(void) {
+    int rc;
+    uint32_t i;
+    if (log_length == 0U) return;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_ATA_FS), "b"(OS_ATA_FS_LOG), "c"(log_line), "d"(log_length));
+    if (rc != 0)
+        for (i = 0U; i < log_length; i++) asm volatile("int $0x80" : : "a"(SYS_PUTC), "b"(log_line[i]));
+    log_length = 0U;
+}
+static void putc(char c) {
+    log_line[log_length++] = c;
+    if (c == '\n' || log_length == sizeof(log_line)) log_flush();
+}
 static void puts(const char* t) { int i = 0; while (t[i]) putc(t[i++]); }
 static void putu(uint32_t v) {
     char b[11]; int n = 0;

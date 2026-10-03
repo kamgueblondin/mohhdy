@@ -4,6 +4,7 @@
 #include "vga_console.h"
 #include "gfx_fb.h"
 #include "input/usb_tablet.h"
+#include "sched_quantum.h"
 
 // Fonctions externes
 extern void outb(unsigned short port, unsigned char data);
@@ -18,8 +19,6 @@ int timer_mode = 0; // 0 = logiciel, 1 = matériel
 
 /* La préemption IRQ0 est limitée aux retours Ring 3 : un cadre noyau issu d’un
  * syscall ne possède pas l’ESP/SS utilisateur requis par jump_to_task(). */
-#define TIMER_PREEMPT_QUANTUM 20U
-static uint32_t timer_last_preempt_tick;
 
 static int timer_user_frame(const cpu_state_t* cpu) {
     return cpu && (cpu->cs & 3U) == 3U && (cpu->ss & 3U) == 3U;
@@ -65,10 +64,11 @@ void timer_handler(cpu_state_t* cpu) {
 
     /* Préemption matérielle : uniquement entre deux cadres utilisateur valides.
      * Le garde Ring 3 évite le basculement depuis un syscall ou une IRQ noyau. */
-    if (timer_user_frame(cpu) && current_task && current_task->type == TASK_TYPE_USER &&
-        task_has_other_ready_user() &&
-        timer_ticks - timer_last_preempt_tick >= TIMER_PREEMPT_QUANTUM) {
-        timer_last_preempt_tick = timer_ticks;
+    if (current_task &&
+        sched_quantum_preempt_due(timer_user_frame(cpu),
+                                  current_task->type == TASK_TYPE_USER,
+                                  task_has_other_ready_user(), timer_ticks,
+                                  current_task->last_scheduled_ticks)) {
         schedule(cpu);
     }
 }
@@ -89,7 +89,6 @@ void timer_update() {
 // Initialise le timer matériel (PIT) pour le scheduling préemptif
 void timer_init(uint32_t frequency) {
     timer_mode = 1; // Mode matériel
-    timer_last_preempt_tick = 0U;
 
     // Le PIT (Programmable Interval Timer) utilise une fréquence de base de 1.193182 MHz
     uint32_t divisor = 1193182 / frequency;

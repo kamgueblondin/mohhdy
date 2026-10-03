@@ -85,7 +85,8 @@ def prepared_line_matches(output, command):
 
 def command_echoed(output, command):
     expected = " ".join(command.lower().split())
-    for received in re.findall(r"SYS_GETS: ligne lue: ([^\r\n]+)", normalized_log(output)):
+    # Complete lines only: a half-flushed echo is not a mismatch.
+    for received in re.findall(r"SYS_GETS: ligne lue: ([^\r\n]*)\r?\n", normalized_log(output)):
         if " ".join(received.lower().split()) == expected:
             return True
     return False
@@ -157,7 +158,7 @@ def send_command(client, command, proc, key_delay=KEY_DELAY):
                 output = normalized_log(log_text()[start:])
                 if command_echoed(output, command):
                     return
-                if "SYS_GETS: ligne lue: " in output:
+                if re.search(r"SYS_GETS: ligne lue: [^\r\n]*\r?\n", output):
                     raise CommandEchoMismatch("echo commande altéré : %s" % command)
                 time.sleep(0.1)
             raise RuntimeError("echo commande absent : %s" % command)

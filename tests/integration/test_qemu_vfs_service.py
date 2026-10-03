@@ -253,7 +253,8 @@ def clear_prepared_line(client, output, key_delay=KEY_DELAY):
 def command_echoed(output, command):
     """Accepte les espaces redondants, mais aucune autre altération."""
     expected = " ".join(command.split())
-    for received in re.findall(r"SYS_GETS: ligne lue: ([^\r\n]+)", normalized_log(output)):
+    # Complete lines only: a half-flushed echo must not trigger a retype.
+    for received in re.findall(r"SYS_GETS: ligne lue: ([^\r\n]*)\r?\n", normalized_log(output)):
         if " ".join(received.split()) == expected:
             return True
     return False
@@ -278,8 +279,8 @@ def send_command(client, command, proc=None, key_delay=KEY_DELAY):
                 output = normalized_log(log_text()[start:])
                 if command_echoed(output, command):
                     return
-                if "SYS_GETS: ligne lue: " in output:
-                    actuals = re.findall(r"SYS_GETS: ligne lue: ([^\r\n]+)", output)
+                actuals = re.findall(r"SYS_GETS: ligne lue: ([^\r\n]*)\r?\n", output)
+                if actuals:
                     actual_str = actuals[-1] if actuals else "inconnu"
                     if attempt + 1 < KEY_PRE_RET_RETRIES:
                         try:
