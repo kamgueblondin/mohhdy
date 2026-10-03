@@ -81,6 +81,27 @@ fixture `llm.c` de #94 (tokenizer de 16 pieces). Un boot `-m 1024M`, environ
 L'egalite des jetons vient du meme code K-quant, des memes octets et du meme
 etat de generateur transmis a chaque pas.
 
+## Verification manuelle sur le GGUF reel (hors CI)
+
+`gpt2-Q3_K_M.gguf` de `tensorblock/gpt2-GGUF` (97668800 octets, non commite),
+image FAT16 par `scripts/make_gguf_fat16_image.py`, vrai tokenizer GPT-2 dans
+l'initrd, sans checkpoint FP32, `-m 1024M`, TCG. Le worker charge sa copie
+(`aiworker gguf ready bytes 97668800 at 0xa1000000 chunks 94`, environ 19 s
+apres le lancement de QEMU). Dans le shell, `ai-model use gpt2.gguf`, puis
+`ai abc de` et trois `ai-continue` :
+
+| Pas | Worker | Noyau (worker tue) | Texte |
+|---|---|---|---|
+| `ai abc de` (109) | 5,4 s | 22,6 s | `maxwell` |
+| `ai-continue` (110) | 2,6 s | 12,1 s | `DeliveryDate` |
+| `ai-continue` | 2,6 s | 11,6 s | `Nitrome` |
+| `ai-continue` | 2,7 s | 12,3 s | suite d'octets non ASCII, identique |
+
+Textes egaux sur les deux chemins ; jetons du worker 29047 39749 42066 14827.
+Une seule mesure sous TCG ; l'ecart n'a pas ete analyse (memes options -O3
+-msse2 des deux cotes ; piste probable : lectures FAT16 par plage cote noyau
+contre `memcpy` a plat dans la cale du worker).
+
 ## Budget memoire
 
 - `aiworker` : bss 12578400 octets (12,0 Mio ; 5619904 avant cette tranche),
@@ -93,8 +114,8 @@ etat de generateur transmis a chaque pas.
 
 ## Limites et suite
 
-- Prouve sur la fixture synthetique seulement : le GGUF reel (Q3_K_M, 124M)
-  n'a pas ete passe par le worker dans cette tranche.
+- Le CI prouve le mecanisme sur la fixture synthetique seulement ; le GGUF
+  reel (Q3_K_M, 124M) n'a ete verifie qu'a la main (4 pas, voir plus haut).
 - La copie residente du noyau reste (double occupation memoire avec un worker
   GGUF vivant).
 - Tokenisation, decodage et session restent dans le noyau ; seul le pas
