@@ -492,9 +492,10 @@ server (peer 128-130, -141 while the worker owns the card).
 
 ## Strict network build: no Ring 0 fallback (`NET_RING0_FALLBACK=0`)
 
-`make kernel-netstrict` links `build/mohhdy-netstrict.bin`: the same objects
-as `build/mohhdy.bin`, except `kernel/syscall/syscall.c` compiled with
-`-DMOHHDY_NET_NO_RING0_FALLBACK`. In that kernel, any gated network syscall
+**Since 3 October 2026 this is the default kernel** (`build/mohhdy.bin`,
+Makefile `NET_RING0_FALLBACK ?= 0`, see "Default flip" below). It was first
+added as a separate `build/mohhdy-netstrict.bin` (#99/#100). `syscall.c`
+is compiled with `-DMOHHDY_NET_NO_RING0_FALLBACK`. In that kernel, any gated network syscall
 (LLM 91-98, socket 99-108 and 144, peer 128-130, wire 139-142) that was not
 relayed to the live `networker` is refused with -59 (`OS_NET_WORKER_REQUIRED`)
 before the dispatch, for every task including the worker itself. It is
@@ -520,16 +521,17 @@ kernel with a NE2000 wired to the controlled TLS peer and checks:
 
 What this slice does NOT remove (still Ring 0, honest list):
 
-- the default build (`build/mohhdy.bin`, used by every other test) keeps the
-  degraded fallback: without a worker the kernel stack serves the calls;
+- the legacy kernel (`build/mohhdy-netlegacy.bin`, or `make
+  NET_RING0_FALLBACK=1`) keeps the degraded fallback: without a worker the
+  kernel stack serves the calls;
 - the kernel objects (`net_socket`, `net_tcp`, `net_llm_client`, TLS,
   `net_wire`...) are still linked in the strict kernel (unreachable from a
   syscall, but not pruned from the image); only the syscall entry points are
   cut;
 - the NE2000 boot probe and the reset of the card in Ring 0 after a worker
   loss (`NE2000 back in Ring 0 after worker loss`);
-- networker is only spawned at boot when the probe saw a NE2000; without a
-  card it must be started by hand (`spawn networker`), see below.
+- (fixed by the default flip) networker used to be spawned at boot only
+  when the probe saw a NE2000.
 
 ### Loopback-only worker (strict kernel, no NE2000)
 
@@ -546,7 +548,7 @@ kernel registry), unchanged.
 
 Proofs:
 - `make qemu-net-loopback-worker` (about 25 s, no NIC, `-net none`):
-  `spawn networker` -> loopback-only stack; `netrelay` loopback ping/pong,
+  boot networker -> loopback-only stack; `netrelay` loopback ping/pong,
   14 socket calls, all ten ops 99-108 run by the worker; `ai-acquire` and
   `ai-peer-listen` relayed (ops 91, 128) and answered "NE2000 absent" from
   Ring 3; worker killed -> `open rc -59`, `denied` up, no relay op.
@@ -557,3 +559,32 @@ Proofs:
   handshake is proven here).
 - Unit: `test_net_stack_exec` gains the full loopback handshake without NIC
   (11 socket ops, 0 wire op, 0 frame) and the peer UNAVAILABLE case.
+
+### Default flip (strict kernel by default)
+
+- Makefile: `NET_RING0_FALLBACK ?= 0`; `build/syscall.o` gets
+  `-DMOHHDY_NET_NO_RING0_FALLBACK` (a stamp file rebuilds it when the value
+  changes). `make NET_RING0_FALLBACK=1` restores the historical kernel in
+  `build/mohhdy.bin`; `make kernel-netlegacy` always links the legacy
+  kernel as `build/mohhdy-netlegacy.bin` for comparison (only `syscall.c`
+  differs). `kernel-netstrict` / `mohhdy-netstrict.bin` are gone.
+- `kernel/kernel.c`: on the strict kernel `networker` is spawned at boot
+  even without a NE2000 (loopback-only stack), so ordinary tasks keep TCP
+  sockets between local endpoints and get "NE2000 absent" for LLM/peer from
+  Ring 3, as before from Ring 0.
+- Wire 139-142 / connect 144 from a non-worker task are refused by the
+  historical check (-59, counted in `net-wire-status refused`, same counters
+  as before); only the worker's own calls are cut by the strict gate.
+- Tests adapted to the default: `qemu-smoke` (`ci_qemu_spawn.py` counts the
+  boot networker in `task-capacity`), `qemu-net-worker` and `qemu-net-wire`
+  read the mode from the boot banner (strict: degraded calls answer -59,
+  `netclaim no worker refused -59`, worker self-check `kernel socket stack
+  absent`; legacy: historical local path). `qemu-net-worker` was also run
+  against `build/mohhdy-netlegacy.bin` (`MOHHDY_NET_WORKER_KERNEL=...`):
+  pass. `qemu-net-no-ring0` and `qemu-net-loopback-worker` now boot the
+  default kernel.
+- Every CI QEMU target passed locally on the strict default kernel (see PR).
+
+Still Ring 0 after the flip: the NE2000 boot probe and the card reset after
+a worker loss, the network objects linked in the kernel image (unreachable
+from a syscall), and the legacy build kept for comparison.

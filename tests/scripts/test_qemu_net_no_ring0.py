@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build reseau strict (NET_RING0_FALLBACK=0) : le noyau ne sert plus aucun
+"""Noyau par defaut (strict, NET_RING0_FALLBACK=0) : le noyau ne sert plus aucun
 syscall socket/LLM/peer/wire depuis sa pile Ring 0.
 
 Contrat :
@@ -63,7 +63,7 @@ def spawn(proc, client, name):
 def main():
     peer = proc = client = None
     try:
-        peer, proc = tw.start_guest("mohhdy-netstrict.bin")
+        peer, proc = tw.start_guest("mohhdy.bin")
         tw.wait_for(proc, "(-.-)")
         client = tw.monitor()
         boot = tw.normalized_log(tw.text())

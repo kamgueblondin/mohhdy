@@ -78,6 +78,7 @@ def main():
             monitor = nw.connect_monitor()
             time.sleep(0.5)
             nw.send_command_until(monitor, "net-status", "Carte Ethernet : detectee", proc)
+            nw.STRICT[0] = nw.STRICT_BANNER in nw.normalized_log(nw.log_text())
             nw.release_boot_worker(monitor, proc)
             base = wire_status(monitor, proc)
             if base["worker"] != 0 or base["tx"] != 0 or base["bound"] != 0:
@@ -95,7 +96,8 @@ def main():
             # Worker live.
             worker_pid, start = nw.spawn(monitor, proc, "networker")
             nw.wait_child(monitor, proc, "net-driver ready", start)
-            nw.wait_child(monitor, proc, "net-driver gated syscalls ok", start)
+            nw.wait_child(monitor, proc, "net-driver kernel socket stack absent, ring3 only"
+                          if nw.STRICT[0] else "net-driver gated syscalls ok", start)
             # Tranche 5 suite: the worker owns the NE2000 ports through the
             # TSS I/O bitmap and re-reads the station PROM itself at CPL 3.
             nw.wait_child(monitor, proc, "[NET] NE2000 ports 0x300-0x31F handed to the Ring 3 worker",
