@@ -81,12 +81,12 @@ Observable aujourd'hui :
 - VFS Ring 3 (`vfsserver` / `vfsvirtual`), FAT16/FAT32 multi-niveaux, ACL droit-source-prefixe, diagnostic public sans prefixe
 - Pilote ATA Ring 3 (`atadriver`) pour la logique FAT/overlay au runtime ; le montage au boot et le repli sans pilote restent Ring 0
 - IPC, registre de services, grant/revoke backend, `request_id`
-- Identite de tache (sequence, generation et cle `identity_key`, lue par `id-key`, visible dans `ps` et `task-metrics` pour soi et l'enfant direct), jeton de capability distinct du droit de nom (`cap-token 1`), droit de service lu par `right-token` sur les ports ATA et le reseau, et journal de montages `MNTJ` qui survit au reboot (`make qemu-foundation-steps`)
+- Identite de tache (sequence, generation et cle `identity_key`, lue par `id-key`, visible dans `ps`, `task-metrics` et `children` pour soi et l'enfant direct, et elle suit le parent apres delegation), jeton de capability distinct du droit de nom (`cap-token 1`), droit de service lu par `right-token` sur les ports ATA et le reseau, et journal de montages `MNTJ` qui survit au reboot (`make qemu-foundation-steps`)
 - Evenements de service : bit `acked`, `service-event-pull`, deversoir IPC avec deux compteurs de pertes (service et supervision), notifications de supervision dans ce deversoir, et journal `EVNT` au LBA 4224 qui survit au reboot (`make qemu-foundation-steps`)
 - NE2000 local, TLS/HTTP/SSE sur pair `127.0.0.1`, pile Ring 3 si `networker` detient la carte ; pas Internet public, pas OpenAI
 - GPT-2 124M et GGUF Q3_K/Q4_K/Q6_K locaux ; TCG ~48,7 s / ~22,8 s ; KVM un echantillon 43,916 s / 20,224 s avec poids residents, pas sous 1 s ; poids hors Git
-- `make test-all` 629/629 au rejeu du 3 octobre 2026. `make qemu-ata-driver` 295,1 s, `make qemu-net-worker` 209,3 s, `make qemu-net-wire` 86,8 s le meme jour. `make qemu-smoke` : six scenarios verts le 2 octobre, y compris apres le correctif de relais pair et le retrait de la trace serie
-- `make integration-qemu` : sept contrats verts en 800,6 s le 2 octobre 2026 sur le tip precedent, sous 25 min. La mesure 809,7 s est anterieure. Ce tip n'a pas rejoue les sept ensemble. CI du commit `8264b62` (run 37032910130) : quatre jobs verts, comme `9999514` (run 37029710466). Elle ne couvre pas ce tip.
+- `make test-all` 630/630 au rejeu du 3 octobre 2026. `make qemu-ata-driver` 295,1 s, `make qemu-net-worker` 209,3 s, `make qemu-net-wire` 86,8 s le meme jour. `make qemu-smoke` : six scenarios verts le 2 octobre, y compris apres le correctif de relais pair et le retrait de la trace serie
+- `make integration-qemu` : sept contrats verts en 800,2 s le 3 octobre 2026 sur ce tip, sous 25 min. La mesure 800,6 s est anterieure, comme 809,7 s. CI du commit `8264b62` (run 37032910130) : quatre jobs verts, comme `9999514` (run 37029710466). Elle ne couvre pas ce tip.
 
 La surface OS-UI (chat, sessions, simulateur, MCP, FS sandbox, commande `gui`) est dans le meme guest. Elle est decrite en 2.2. Le guest n'execute pas de HTML `#ai-stage`.
 
