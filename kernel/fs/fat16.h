@@ -44,6 +44,9 @@ typedef struct {
     uint8_t sector_cache[512];
     uint8_t cache_valid;
     uint8_t open;
+    /* Set when the file is the kernel resident snapshot (fat16_load_resident):
+     * seek/read are then served from RAM, no sector or FAT reads. */
+    const uint8_t* resident;
 } fat16_file_t;
 
 fat16_volume_t* fat16_root(void);

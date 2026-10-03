@@ -1386,6 +1386,70 @@ static void test_resident_file_serves_ranges_without_disk(void) {
     for (i = 0U; i < 5U; i++) TEST_ASSERT_EQUAL((uint8_t)"hello"[i], out[i]);
 }
 
+static void test_resident_file_serves_handle_reads_without_disk(void) {
+    fat16_volume_t volume;
+    fat16_file_t file, stale;
+    uint8_t storage[8];
+    uint8_t out[8];
+    uint32_t size = 0U;
+    uint32_t read = 0U;
+    make_volume();
+    TEST_ASSERT_EQUAL(0, fat16_mount(&volume, read_sector, 0U));
+    TEST_ASSERT_EQUAL(0, fat16_load_resident(&volume, "FATOK.TXT", storage, sizeof(storage), &size));
+    read_sector_calls = 0U;
+    /* open + seek + read: no sector (root, FAT or data) read at all. */
+    TEST_ASSERT_EQUAL(0, fat16_open_file(&volume, "FATOK.TXT", &file));
+    TEST_ASSERT_EQUAL(5U, file.size);
+    TEST_ASSERT_EQUAL(0, fat16_file_seek(&file, 2U));
+    TEST_ASSERT_EQUAL(0, fat16_file_read(&file, out, sizeof(out), &read));
+    TEST_ASSERT_EQUAL(3U, read);
+    TEST_ASSERT_EQUAL_MEMORY("llo", out, 3U);
+    TEST_ASSERT_EQUAL(0, fat16_file_read(&file, out, sizeof(out), &read));
+    TEST_ASSERT_EQUAL(0U, read); /* end of file */
+    TEST_ASSERT_EQUAL(OS_FAT16_BAD_PATH, fat16_file_seek(&file, 6U));
+    TEST_ASSERT_EQUAL(0, fat16_file_seek(&file, 0U));
+    TEST_ASSERT_EQUAL(0, fat16_file_read(&file, out, 2U, &read));
+    TEST_ASSERT_EQUAL_MEMORY("he", out, 2U);
+    TEST_ASSERT_EQUAL(0U, read_sector_calls);
+    /* Remount drops the snapshot: an old handle is refused, a new one reads
+     * the disk and returns the same bytes. */
+    TEST_ASSERT_EQUAL(0, fat16_open_file(&volume, "FATOK.TXT", &stale));
+    TEST_ASSERT_EQUAL(0, fat16_mount(&volume, read_sector, 0U));
+    TEST_ASSERT_EQUAL(OS_FAT16_CORRUPT, fat16_file_read(&stale, out, 2U, &read));
+    TEST_ASSERT_EQUAL(OS_FAT16_CORRUPT, fat16_file_seek(&stale, 1U));
+    read_sector_calls = 0U;
+    TEST_ASSERT_EQUAL(0, fat16_open_file(&volume, "FATOK.TXT", &file));
+    TEST_ASSERT_EQUAL(0, fat16_file_read(&file, out, sizeof(out), &read));
+    TEST_ASSERT_EQUAL(5U, read);
+    TEST_ASSERT_EQUAL_MEMORY("hello", out, 5U);
+    TEST_ASSERT_TRUE(read_sector_calls > 0U);
+}
+
+static void test_resident_dropped_on_unlink_and_rename(void) {
+    fat16_volume_t volume;
+    fat16_file_t file;
+    uint8_t storage[8];
+    uint8_t out[8];
+    uint32_t size = 0U;
+    uint32_t read = 0U;
+    make_volume();
+    TEST_ASSERT_EQUAL(0, fat16_mount(&volume, read_sector, 0U));
+    TEST_ASSERT_EQUAL(0, fat16_attach_writer(&volume, write_sector));
+    TEST_ASSERT_EQUAL(0, fat16_load_resident(&volume, "FATOK.TXT", storage, sizeof(storage), &size));
+    TEST_ASSERT_EQUAL(0, fat16_open_file(&volume, "FATOK.TXT", &file));
+    /* Rename (case variant of the resident name): snapshot dropped, the old
+     * name is gone from the disk view too. */
+    TEST_ASSERT_EQUAL(0, fat16_rename_file(&volume, "fatok.txt", "MOVED.TXT"));
+    TEST_ASSERT_EQUAL(OS_FAT16_CORRUPT, fat16_file_read(&file, out, 2U, &read));
+    TEST_ASSERT_EQUAL(OS_FAT16_NOT_FOUND, fat16_read_file_range(&volume, "FATOK.TXT", 0U, out, 5U, &read));
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range(&volume, "MOVED.TXT", 0U, out, 5U, &read));
+    TEST_ASSERT_EQUAL_MEMORY("hello", out, 5U);
+    /* Unlink drops a fresh snapshot as well. */
+    TEST_ASSERT_EQUAL(0, fat16_load_resident(&volume, "MOVED.TXT", storage, sizeof(storage), &size));
+    TEST_ASSERT_EQUAL(0, fat16_unlink_file(&volume, "MOVED.TXT"));
+    TEST_ASSERT_EQUAL(OS_FAT16_NOT_FOUND, fat16_open_file(&volume, "MOVED.TXT", &file));
+}
+
 static void test_rejects_bad_name_and_small_buffer(void) {
     fat16_volume_t volume;
     char content[4];
@@ -1553,6 +1617,8 @@ int main(void) {
     RUN_TEST(test_reads_deep_multisector_cluster_without_false_corruption);
     RUN_TEST(test_range_cursor_avoids_repeat_fat_walk);
     RUN_TEST(test_resident_file_serves_ranges_without_disk);
+    RUN_TEST(test_resident_file_serves_handle_reads_without_disk);
+    RUN_TEST(test_resident_dropped_on_unlink_and_rename);
     RUN_TEST(test_rejects_bad_name_and_small_buffer);
     RUN_TEST(test_writes_only_with_explicit_writer);
     RUN_TEST(test_creates_persistent_file);
