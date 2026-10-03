@@ -1269,10 +1269,11 @@ void syscall_handler(cpu_state_t* cpu) {
     }
     /* Tranche 5 pile: while the worker owns the NE2000 the whole stack
      * (ARP/IPv4/TCP/TLS) runs there, so LLM 91-98 of the other tasks are
-     * relayed to it (bulk channel) instead of refused. */
+     * relayed to it (bulk channel) instead of refused. Strict build: always
+     * relayed to a live worker (loopback-only worker answers UNAVAILABLE). */
     if (current_task && net_relay_llm_supported(cpu->eax) &&
         (net_relay_state_for((int32_t)current_task->id) != NET_RELAY_FREE ||
-         (kernel_net_nic_port_mode() &&
+         ((kernel_net_nic_port_mode() || !syscall_net_ring0_fallback_enabled()) &&
           !service_registry_net_syscall_allowed((int32_t)current_task->id, cpu->eax)))) {
         if (syscall_net_relay(cpu)) return;
     }

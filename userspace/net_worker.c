@@ -103,6 +103,9 @@ static int net_worker_gate_self_check(void) {
 static ne2k_device_t nic;
 static ne2k_io_t nic_io;
 static int nic_owned;
+/* 1 once this worker answers relayed calls from its own Ring 3 stack (with
+ * the NE2000, or loopback-only without a card on a strict kernel). */
+static int stack_live;
 static uint16_t nic_base;
 static uint8_t nic_rx[OS_NET_NIC_FRAME_MAX];
 static uint8_t nic_tx[OS_NET_NIC_PUMP_TX_MAX * OS_NET_NIC_FRAME_MAX];
@@ -442,9 +445,26 @@ static void stack_start(void) {
     stack.capacity = (uint16_t)sizeof(stack_tx);
     stack.llm = &r3_llm;
     stack_publish();
+    stack_live = 1;
     puts("net-driver stack ring3 ready arp ipv4 tcp tls llm-status ");
     put_uint(stack.report.llm_status);
     putc('\n');
+}
+
+/* Strict kernel (NET_RING0_FALLBACK=0) and no NE2000: the kernel socket
+ * registry is refused to everyone, so this worker serves the socket calls
+ * (loopback segments between local sockets) from its own registry. No
+ * emit/device: wire ops (connect, bound send/recv) answer
+ * OS_NET_WIRE_UNAVAILABLE; the LLM client is never bound, so LLM and peer
+ * calls answer UNAVAILABLE ("NE2000 absent") from Ring 3. */
+static void stack_start_loopback(void) {
+    net_stack_init(&stack);
+    net_socket_reset_all();
+    net_wire_reset();
+    net_llm_client_reset();
+    stack.llm = &r3_llm;
+    stack_live = 1;
+    puts("net-driver stack ring3 ready loopback-only (no NE2000)\n");
 }
 
 static int32_t stack_execute(const os_net_relay_request_t* req, os_net_relay_reply_t* reply) {
@@ -487,8 +507,11 @@ void main(void) {
     if (rc == 2) puts("net-driver kernel socket stack absent, ring3 only\n");
     else if (rc) puts("net-driver gated syscalls ok\n");
     else puts("net-driver gated syscalls unexpected\n");
-    /* Tranche 5 suite: take the NE2000 over (no-op without a card). */
+    /* Tranche 5 suite: take the NE2000 over (no-op without a card). On a
+     * strict kernel without a card, serve sockets loopback-only. A legacy
+     * kernel without a card keeps the relay_execute path (kernel registry). */
     if (nic_claim() == 0) stack_start();
+    else if (rc == 2) stack_start_loopback();
 
     for (;;) {
         if (ipc_receive(&message) != 0) {
@@ -506,7 +529,7 @@ void main(void) {
         }
         copy_bytes((uint8_t*)&req, message.data, sizeof(req));
         reply.job_id = req.job_id;
-        if (nic_owned) {
+        if (stack_live) {
             reply.result = stack_execute(&req, &reply);
             wire_calls = stack.report.wire_ops;
         } else {

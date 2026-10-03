@@ -3,6 +3,7 @@
  * ARP/IPv4 framing, wire engine, LLM client hooks). */
 #include "../../framework/unity.h"
 #include "../../../kernel/net_stack_exec.h"
+#include "../../../kernel/net_llm_client.h"
 #include <string.h>
 
 static const uint8_t k_local[4] = {10, 32, 0, 15};
@@ -106,6 +107,88 @@ static void test_socket_ops_local_registry(void) {
     TEST_ASSERT_EQUAL(OS_SOCKET_BAD_ARGUMENT, net_stack_exec(&st, 0, 0, 0U, out, &n, 0, 0));
     TEST_ASSERT_EQUAL(6, (int)st.report.socket_ops);
     TEST_ASSERT_EQUAL(0, (int)st.report.wire_ops);
+}
+
+static uint32_t be32_at(const uint8_t* p) {
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
+}
+
+/* Loopback-only networker (strict kernel, no NE2000): the whole netrelay
+ * handshake and data exchange between two local sockets runs on the Ring 3
+ * registry with no emit/device, and never touches the wire engine. */
+static void test_loopback_handshake_without_nic(void) {
+    net_stack_t st;
+    os_net_relay_request_t r;
+    os_socket_passive_view_t pv;
+    os_socket_syn_ack_t sa;
+    uint8_t out[OS_NET_RELAY_MAX_OUT], synack[OS_NET_RELAY_MAX_OUT], seg[OS_NET_RELAY_MAX_OUT];
+    uint16_t n = 0U, synack_len = 0U, seg_len = 0U;
+    int32_t a, b;
+    stack_setup(&st, 0);
+    request(&r, SYS_SOCKET_OPEN, 40001U, 40002U, 100U);
+    a = net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0);
+    TEST_ASSERT_TRUE(a >= 0);
+    request(&r, SYS_SOCKET_LISTEN, 40002U, 1234U, 0U);
+    b = net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0);
+    TEST_ASSERT_TRUE(b >= 0);
+    memset(&pv, 0, sizeof(pv));
+    pv.source_port = 40001U; pv.destination_port = 40002U; pv.sequence = 100U; pv.flags = 0x02U;
+    request(&r, SYS_SOCKET_ACCEPT_SYN, (uint32_t)b, 0U, 0U);
+    r.in_length = (uint16_t)sizeof(pv); memcpy(r.in, &pv, sizeof(pv));
+    TEST_ASSERT_EQUAL(0, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
+    request(&r, SYS_SOCKET_BUILD_SYN_ACK, (uint32_t)b, 0U, 0U);
+    TEST_ASSERT_EQUAL(0, net_stack_exec(&st, &r, 0, 0U, synack, &synack_len, 0, 0));
+    TEST_ASSERT_TRUE(synack_len >= 20U);
+    TEST_ASSERT_EQUAL(0x12, synack[13]);
+    memset(&sa, 0, sizeof(sa));
+    sa.source_port = (uint16_t)((synack[0] << 8) | synack[1]);
+    sa.destination_port = (uint16_t)((synack[2] << 8) | synack[3]);
+    sa.sequence = be32_at(synack + 4); sa.acknowledgment = be32_at(synack + 8); sa.flags = synack[13];
+    request(&r, SYS_SOCKET_ACCEPT_SYN_ACK, (uint32_t)a, 0U, 0U);
+    r.in_length = (uint16_t)sizeof(sa); memcpy(r.in, &sa, sizeof(sa));
+    TEST_ASSERT_EQUAL(0, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
+    memset(&pv, 0, sizeof(pv));
+    pv.source_port = 40001U; pv.destination_port = 40002U;
+    pv.sequence = sa.acknowledgment; pv.acknowledgment = sa.sequence + 1U; pv.flags = 0x10U;
+    request(&r, SYS_SOCKET_ACCEPT_ACK, (uint32_t)b, 0U, 0U);
+    r.in_length = (uint16_t)sizeof(pv); memcpy(r.in, &pv, sizeof(pv));
+    TEST_ASSERT_EQUAL(0, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
+    request(&r, SYS_SOCKET_SEND, (uint32_t)a, 0U, 0U);
+    r.in_length = 4U; memcpy(r.in, "ping", 4);
+    TEST_ASSERT_EQUAL(0, net_stack_exec(&st, &r, 0, 0U, seg, &seg_len, 0, 0));
+    TEST_ASSERT_EQUAL(24, (int)seg_len);
+    request(&r, SYS_SOCKET_FEED, (uint32_t)b, 0U, 0U);
+    r.in_length = seg_len; memcpy(r.in, seg, seg_len);
+    TEST_ASSERT_EQUAL(0, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
+    request(&r, SYS_SOCKET_RECEIVE, (uint32_t)b, 0U, 0U);
+    TEST_ASSERT_EQUAL(0, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
+    TEST_ASSERT_EQUAL(4, (int)n);
+    TEST_ASSERT_EQUAL(0, memcmp(out, "ping", 4));
+    request(&r, SYS_SOCKET_CLOSE, (uint32_t)a, 0U, 0U);
+    TEST_ASSERT_EQUAL(0, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
+    request(&r, SYS_SOCKET_CLOSE, (uint32_t)b, 0U, 0U);
+    TEST_ASSERT_EQUAL(0, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
+    TEST_ASSERT_EQUAL(11, (int)st.report.socket_ops);
+    TEST_ASSERT_EQUAL(0, (int)st.report.wire_ops);
+    TEST_ASSERT_EQUAL(0, (int)st.report.frames_built);
+}
+
+/* Same worker, peer listen: the LLM client is never bound without a card,
+ * so the Ring 3 peer server answers UNAVAILABLE ("NE2000 absent"). */
+static void test_peer_unavailable_without_nic(void) {
+    net_stack_t st;
+    os_net_relay_request_t r;
+    os_peer_listen_request_t pl;
+    uint8_t out[OS_NET_RELAY_MAX_OUT];
+    uint16_t n;
+    stack_setup(&st, 0);
+    net_llm_client_reset();
+    net_llm_client_bind(0, 0, 0);
+    memset(&pl, 0, sizeof(pl));
+    pl.local_port = 443U;
+    request(&r, SYS_PEER_LISTEN, 0U, 0U, 0U);
+    r.in_length = (uint16_t)sizeof(pl); memcpy(r.in, &pl, sizeof(pl));
+    TEST_ASSERT_EQUAL(OS_PEER_UNAVAILABLE, net_stack_exec(&st, &r, 0, 0U, out, &n, 0, 0));
 }
 
 static void connect_request(os_net_relay_request_t* r, uint16_t attempts) {
@@ -231,6 +314,8 @@ int main(void) {
     RUN_TEST(test_bulk_sizes);
     RUN_TEST(test_socket_ops_local_registry);
     RUN_TEST(test_wire_without_nic);
+    RUN_TEST(test_loopback_handshake_without_nic);
+    RUN_TEST(test_peer_unavailable_without_nic);
     RUN_TEST(test_wire_connect_framed_in_ring3);
     RUN_TEST(test_llm_ops_bulk);
     unity_print_results();
