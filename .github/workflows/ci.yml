@@ -105,6 +105,14 @@ jobs:
       - name: Run QEMU integration shard (vfs-service)
         run: make integration-qemu-vfs
 
+      # Inventory item 4, GGUF slice: 109/110 sampling steps in the Ring 3
+      # aiworker. No GPT-2 GGUF weights in CI: synthetic K-quant GGUF
+      # (tests/scripts/ai_gguf_fixture.py) on a FAT16 IDE disk, token
+      # equality worker / Ring 0 / fallback (~215 s locally, one boot).
+      # Placed in the shortest job so the CI wall time stays bounded.
+      - name: QEMU aiworker Ring 3 GGUF steps (hors integration-qemu)
+        run: make qemu-ai-gguf
+
       - name: Upload integration logs
         if: always()
         uses: actions/upload-artifact@v4

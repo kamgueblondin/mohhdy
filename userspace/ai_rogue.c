@@ -7,7 +7,7 @@ int main(void) {
     static os_ai_engine_job_t job;
     os_ai_engine_map_t map;
     ai_line_t l;
-    int reg, ren, rep, mp, fe;
+    int reg, ren, rep, mp, fe, go, gr, gy;
     unsigned int i;
     int self;
     reg = ai_service_register("ai-engine");
@@ -21,6 +21,9 @@ int main(void) {
     rep = ai_engine(OS_AI_ENGINE_REPLY, (unsigned int)&reply, 0U);
     mp = ai_engine(OS_AI_ENGINE_MAP, OS_AI_ENGINE_BLOB_CHECKPOINT, (unsigned int)&map);
     fe = ai_engine(OS_AI_ENGINE_FETCH, 1U, (unsigned int)&job);
+    go = ai_engine(OS_AI_ENGINE_GGUF_OPEN, (unsigned int)&map, 0U);
+    gr = ai_engine(OS_AI_ENGINE_GGUF_READ, 0U, 4096U);
+    gy = ai_engine(OS_AI_ENGINE_GGUF_READY, 0U, 0U);
     ai_line_reset(&l);
     ai_line_add(&l, "airogue register rc ");
     ai_line_int(&l, reg);
@@ -32,6 +35,12 @@ int main(void) {
     ai_line_int(&l, mp);
     ai_line_add(&l, " fetch rc ");
     ai_line_int(&l, fe);
+    ai_line_add(&l, " gguf rc ");
+    ai_line_int(&l, go);
+    ai_line_add(&l, " ");
+    ai_line_int(&l, gr);
+    ai_line_add(&l, " ");
+    ai_line_int(&l, gy);
     ai_line_add(&l, " end\n");
     ai_puts(l.text);
     return 0;

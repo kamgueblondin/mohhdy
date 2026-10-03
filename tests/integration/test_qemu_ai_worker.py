@@ -268,10 +268,11 @@ def contract(monitor, proc):
     free_live = mem_free(monitor, proc)
     _, start = spawn(monitor, proc, "airogue")
     rogue = child_regex(monitor, proc, r"airogue register rc (-?\d+) rename rc (-?\d+) reply rc (-?\d+) "
-                        r"map rc (-?\d+) fetch rc (-?\d+) end", start)
-    reg, ren, rep, mp, fe = (int(v) for v in rogue.groups())
+                        r"map rc (-?\d+) fetch rc (-?\d+) gguf rc (-?\d+) (-?\d+) (-?\d+) end", start)
+    reg, ren, rep, mp, fe, go, gr, gy = (int(v) for v in rogue.groups())
     if reg != OS_AI_ENGINE_REQUIRED or ren >= 0 or rep != OS_AI_ENGINE_REQUIRED or \
-            mp != OS_AI_ENGINE_REQUIRED or fe != OS_AI_ENGINE_REQUIRED:
+            mp != OS_AI_ENGINE_REQUIRED or fe != OS_AI_ENGINE_REQUIRED or \
+            (go, gr, gy) != (OS_AI_ENGINE_REQUIRED,) * 3:
         raise RuntimeError("rogue not refused: %s" % rogue.group(0))
     w3 = run_client(monitor, proc, "worker")
     s = w3["status"]
@@ -284,8 +285,8 @@ def contract(monitor, proc):
     send_command_until(monitor, "yield", "yield ok", proc)
     free_after = mem_free(monitor, proc)
     footprint = free_before - free_live
-    # 5.4 MiB of .bss alone is 1372 pages.
-    if footprint < 1372 or abs(free_after - free_before) > 8:
+    # 12.0 MiB of .bss alone (FP32 + GGUF runtime buffers) is 3071 pages.
+    if footprint < 3071 or abs(free_after - free_before) > 8:
         raise RuntimeError("memory: before %d live %d after %d" % (free_before, free_live, free_after))
     print("ai worker: tokens [%s] text [%s]; worker/kernel/fallback paths equal; "
           "final counters %r; worker footprint %d pages, free before/after %d/%d" %

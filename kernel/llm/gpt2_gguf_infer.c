@@ -52,9 +52,13 @@ static gpt2_sample_top_k_state_t gguf_last_top_k;
 static uint8_t gguf_last_top_k_ready;
 static uint8_t gguf_ready;
 static const char* gguf_status = "GGUF: profil local non initialise";
+#ifndef MOHHDY_RING3
 /* Instantane du fichier GGUF. 100 Mio couvrent gpt2-Q3_K_M (environ 93 Mio). */
 #define GPT2_GGUF_RESIDENT_BYTES (100U * 1024U * 1024U)
 static uint8_t gguf_resident[GPT2_GGUF_RESIDENT_BYTES];
+#endif
+/* Ring 3 (aiworker): the worker already owns the whole file (bulk read) and
+ * its fat16 shim serves every read from it, so no second copy is made. */
 static uint32_t gguf_resident_size;
 
 static int gpt2_gguf_copy_filename(const char* filename) {
@@ -167,12 +171,24 @@ int gpt2_gguf_infer_init_fat16(const fat16_volume_t* volume, const char* filenam
     }
     gpt2_gguf_workspace_bind();
     gguf_resident_size = 0U;
+#ifndef MOHHDY_RING3
     status = fat16_load_resident(volume, gguf_filename, gguf_resident,
                                  sizeof(gguf_resident), &gguf_resident_size);
     if (status != 0 || gguf_resident_size == 0U) {
         gguf_status = "GGUF: copie residente indisponible";
         return status != 0 ? status : -7;
     }
+#else
+    {
+        fat16_file_t file;
+        status = fat16_open_file(volume, gguf_filename, &file);
+        if (status != 0 || file.size == 0U) {
+            gguf_status = "GGUF: copie worker indisponible";
+            return status != 0 ? status : -7;
+        }
+        gguf_resident_size = file.size;
+    }
+#endif
     gguf_volume = volume;
     gguf_volume_fat32 = 0;
     gguf_ready = 1U;
@@ -339,6 +355,14 @@ int gpt2_gguf_generate_next_sampled(const uint32_t* tokens, uint32_t token_count
     *next_token = gpt2_sample_top_k_finish(&gguf_last_top_k, rng_state);
     gguf_status = "GGUF: jeton top-k en flux (cache KV FAT16 actif)";
     return 0;
+}
+
+uint32_t gpt2_gguf_infer_resident_size(void) {
+    return gguf_ready && gguf_volume ? gguf_resident_size : 0U;
+}
+
+const char* gpt2_gguf_infer_filename(void) {
+    return gguf_filename;
 }
 
 int gpt2_gguf_infer_ready(void) {

@@ -20,10 +20,10 @@ Date : 3 octobre 2026. Texte ASCII.
   `SYS_AI_ENGINE` FETCH (prompt de 128 octets au plus), genere, puis repond par
   REPLY (texte 512 octets au plus, jetons, nombre de jetons du prompt), ce qui
   reveille l'appelant.
-- Restent Ring 0 : le chemin GGUF (syscalls 109-110 et session GGUF, noyaux
-  Q3_K/Q4_K/Q6_K, chargement resident FAT16), le chargement au boot du
-  checkpoint et du tokenizer depuis l'initrd (pour le repli), et le repli FP32
-  lui-meme.
+- Restent Ring 0 : le chargement au boot du checkpoint et du tokenizer depuis
+  l'initrd (pour le repli) et le repli FP32 lui-meme. Le chemin GGUF
+  (109-110) a suivi dans la tranche suivante : ses pas d'echantillonnage
+  tournent aussi dans `aiworker`, voir [ai_worker_gguf.md](ai_worker_gguf.md).
 
 ## Poids : pas de copie
 
@@ -129,7 +129,7 @@ meme code, des memes poids et de la meme graine.
 - Un worker suspendu n'est detecte que par le delai de 300 s ou par sa mort ;
   `task-suspend` ne vise que les enfants READY, d'ou `task-priority` dans le
   contrat pour garder un job en attente.
-- GGUF reste Ring 0. Etape suivante : compiler les noyaux Q3_K/Q4_K/Q6_K et le
-  runtime GGUF pour le worker, et lui faire charger les poids residents (environ
-  100 Mio) depuis FAT16 par `atadriver`/VFS ou par une lecture bulk reservee,
-  puis relayer 109-110 et la session GGUF de la meme facon.
+- GGUF : fait dans la tranche suivante ([ai_worker_gguf.md](ai_worker_gguf.md)) :
+  noyaux Q3_K/Q4_K/Q6_K et runtime GGUF compiles pour le worker, poids copies
+  par une lecture bulk reservee au worker, pas 109-110 relayes. Le bss du
+  worker passe alors a 12578400 octets (empreinte 3071 pages au moins).

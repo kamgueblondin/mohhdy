@@ -1255,6 +1255,16 @@ typedef struct {
 #define OS_AI_ENGINE_FETCH  3U
 #define OS_AI_ENGINE_REPLY  4U
 #define OS_AI_ENGINE_LOG    5U
+/* GGUF slice (worker only). GGUF_OPEN maps a fresh, zeroed, worker-owned
+ * read-write window sized to the kernel's FAT16 GPT2.GGU (ECX =
+ * os_ai_engine_map_t* out). GGUF_READ (ECX = file offset, EDX = length <=
+ * OS_AI_ENGINE_GGUF_CHUNK_MAX) copies those file bytes into the window at
+ * the same offset and returns the byte count: the bulk read restricted to
+ * the worker. GGUF_READY declares the worker's GGUF runtime initialised from
+ * its copy; only then are 109/110 relayed. */
+#define OS_AI_ENGINE_GGUF_OPEN  6U
+#define OS_AI_ENGINE_GGUF_READ  7U
+#define OS_AI_ENGINE_GGUF_READY 8U
 /* OS_AI_ENGINE_MAP, ECX: which initrd blob to map read-only. */
 #define OS_AI_ENGINE_BLOB_CHECKPOINT 1U
 #define OS_AI_ENGINE_BLOB_TOKENIZER  2U
@@ -1263,6 +1273,13 @@ typedef struct {
 #define OS_AI_ENGINE_CHECKPOINT_WINDOW_MAX 0x20000000U /* 512 MiB */
 #define OS_AI_ENGINE_TOKENIZER_WINDOW 0xA0000000U
 #define OS_AI_ENGINE_TOKENIZER_WINDOW_MAX 0x01000000U  /* 16 MiB */
+/* Worker-owned GGUF copy (freed with the worker), below the user stack. */
+#define OS_AI_ENGINE_GGUF_WINDOW 0xA1000000U
+#define OS_AI_ENGINE_GGUF_WINDOW_MAX 0x08000000U /* 128 MiB */
+#define OS_AI_ENGINE_GGUF_CHUNK_MAX 0x00100000U  /* 1 MiB per bulk read */
+/* os_ai_engine_job_t.kind */
+#define OS_AI_JOB_FP32_GENERATE 0U
+#define OS_AI_JOB_GGUF_STEP 1U
 #define OS_AI_ENGINE_PROMPT_MAX 128U
 #define OS_AI_ENGINE_TEXT_MAX 512U
 #define OS_AI_ENGINE_TOKENS_MAX 64U
@@ -1284,6 +1301,13 @@ typedef struct {
     uint32_t max;            /* caller output capacity, <= OS_AI_ENGINE_TEXT_MAX */
     uint32_t prompt_length;
     char prompt[OS_AI_ENGINE_PROMPT_MAX]; /* already normalised, NUL terminated */
+    uint32_t kind;           /* OS_AI_JOB_* */
+    /* OS_AI_JOB_GGUF_STEP: one gpt2_gguf_generate_next_sampled() call on the
+     * kernel-owned session (tokens, generated count, sampler state). */
+    uint32_t rng_state;
+    uint32_t generated;
+    uint32_t token_count;
+    uint32_t tokens[OS_AI_ENGINE_TOKENS_MAX];
 } os_ai_engine_job_t;
 typedef struct {
     uint32_t job_id;
@@ -1293,6 +1317,9 @@ typedef struct {
     uint32_t token_count;
     uint32_t tokens[OS_AI_ENGINE_TOKENS_MAX];
     char text[OS_AI_ENGINE_TEXT_MAX];
+    uint32_t kind;           /* must match the job */
+    uint32_t rng_state;      /* GGUF step: sampler state after the step */
+    uint32_t next_token;     /* GGUF step: sampled token (result 0) */
 } os_ai_engine_reply_t;
 typedef struct {
     int32_t worker_pid;          /* live ai-engine owner, 0 if none */
@@ -1312,6 +1339,19 @@ typedef struct {
     uint32_t last_tokens[OS_AI_ENGINE_TOKENS_MAX];
     uint32_t checkpoint_mapped;  /* bytes mapped into the current worker */
     uint32_t tokenizer_mapped;
+    /* GGUF slice (109/110). */
+    int32_t gguf_worker_pid;     /* live worker that declared GGUF_READY, 0 if none */
+    uint32_t gguf_bytes_loaded;  /* bytes bulk-read into that worker's copy */
+    uint32_t gguf_forwarded;     /* GGUF steps sent to the worker */
+    uint32_t gguf_completed;     /* GGUF worker replies applied */
+    uint32_t gguf_kernel;        /* Ring 0 GGUF steps (any reason) */
+    uint32_t gguf_kernel_while_live; /* of which with a GGUF-ready worker and no abort: must stay 0 */
+    uint32_t gguf_fallbacks;     /* Ring 0 GGUF steps run after an abort */
+    uint32_t gguf_last_path;     /* OS_AI_PATH_* of the last GGUF step */
+    int32_t gguf_last_result;
+    uint32_t gguf_prompt_tokens; /* kernel GGUF session snapshot */
+    uint32_t gguf_token_count;
+    uint32_t gguf_tokens[OS_AI_ENGINE_TOKENS_MAX];
 } os_ai_engine_status_t;
 /* Test hook: the driver must crash in the middle of this job. */
 #define OS_ATA_JOB_FLAG_DEBUG_CRASH 1U
