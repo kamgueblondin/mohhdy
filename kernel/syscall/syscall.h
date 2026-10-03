@@ -114,6 +114,7 @@ int sys_gpt2_gguf_generate(const char* prompt, char* out, uint32_t max);
 int sys_gpt2_gguf_continue(char* out, uint32_t max);
 int sys_ipc_send(int target_pid, const os_ipc_payload_t* payload);
 int sys_ipc_receive(os_ipc_message_t* out);
+int sys_ipc_receive_wait(os_ipc_message_t* out, uint32_t timeout);
 int sys_service_register(const char* name);
 int sys_service_lookup(const char* name);
 int sys_net_relay_reply(const os_net_relay_reply_t* reply);

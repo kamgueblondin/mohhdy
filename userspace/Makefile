@@ -17,6 +17,8 @@ PROGRAMS += netclaim
 # Tranche 5 slice 2: net IPC relay proof client.
 PROGRAMS += netrelay
 PROGRAMS += netwire
+# Blocking IPC (SYS_IPC_RECV_WAIT) proof programs.
+PROGRAMS += ipcwait ipcpoke
 
 all: $(PROGRAMS)
 
@@ -46,6 +48,14 @@ spin: spin.o start.o
 
 ipcserver: ipc_server.o start.o
 	@echo "Linking ipcserver..."
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
+ipcwait: ipc_wait_server.o start.o
+	@echo "Linking ipcwait..."
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
+ipcpoke: ipc_wait_poke.o start.o
+	@echo "Linking ipcpoke..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 vfsserver: vfs_server.o start.o
@@ -168,3 +178,4 @@ start.o: start.s
 clean:
 	@echo "Cleaning userspace..."
 	rm -f *.o $(PROGRAMS)
+ipc_wait_server.o ipc_wait_poke.o: ipc_wait_common.h

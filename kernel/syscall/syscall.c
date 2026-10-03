@@ -86,8 +86,9 @@ static void service_notify_change(const char* name, int32_t old_owner_pid,
                                              new_owner_pid, reason, (uint32_t*)0);
         /* La boite de quatre places ne perd plus la copie : le surplus attend
          * le prochain ipc-recv. Le pull disque reste le journal durable. */
-        if (ipc_endpoint_send(&watcher->ipc_endpoint, 0, &payload) != 0) {
-            (void)service_registry_ipc_spill_push(watchers[i], &payload);
+        if (ipc_endpoint_send(&watcher->ipc_endpoint, 0, &payload) == 0 ||
+            service_registry_ipc_spill_push(watchers[i], &payload) == 0) {
+            task_ipc_message_queued(watcher);
         }
     }
 }
@@ -1013,6 +1014,7 @@ static int syscall_net_relay(cpu_state_t* cpu) {
     payload.request_id = (uint32_t)job;
     net_relay_copy(payload.data, (const uint8_t*)&req, sizeof(req));
     rc = ipc_endpoint_send(&target->ipc_endpoint, 0, &payload);
+    if (rc == 0) task_ipc_message_queued(target);
     if (rc != 0) {
         net_relay_cancel();
         cpu->eax = (uint32_t)rc;
@@ -1670,6 +1672,9 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_IPC_RECV:
             cpu->eax = (uint32_t)sys_ipc_receive((os_ipc_message_t*)cpu->ebx);
             break;
+        case SYS_IPC_RECV_WAIT:
+            cpu->eax = (uint32_t)sys_ipc_receive_wait((os_ipc_message_t*)cpu->ebx, cpu->ecx);
+            break;
         case SYS_SERVICE_REGISTER:
             cpu->eax = (uint32_t)sys_service_register((const char*)cpu->ebx);
             break;
@@ -1916,7 +1921,11 @@ int sys_ipc_send(int target_pid, const os_ipc_payload_t* payload) {
         target->ipc_endpoint.count >= IPC_SERVICE_ENDPOINT_CAPACITY) {
         return OS_IPC_SERVICE_FULL;
     }
-    return ipc_endpoint_send(&target->ipc_endpoint, current_task->id, payload);
+    {
+        int rc = ipc_endpoint_send(&target->ipc_endpoint, current_task->id, payload);
+        if (rc == 0) task_ipc_message_queued(target);
+        return rc;
+    }
 }
 
 int sys_ipc_receive(os_ipc_message_t* out) {
@@ -1935,6 +1944,52 @@ int sys_ipc_receive(os_ipc_message_t* out) {
     out->request_id = spilled.request_id;
     for (i = 0U; i < OS_IPC_MAX_DATA; i++) out->data[i] = spilled.data[i];
     return 0;
+}
+
+/* SYS_IPC_RECV_WAIT: blocking receive.
+ *
+ * Same mailbox and same rules as SYS_IPC_RECV (own endpoint, then the
+ * spill), so no capability or right check changes: senders are still
+ * checked in sys_ipc_send. With a message pending it returns at once. With
+ * timeout 0 it is a poll (OS_IPC_EMPTY). Otherwise the task sleeps in
+ * TASK_BLOCKED_IPC on its own kernel stack (kernel continuation, like the
+ * ATA RPC) and is never selected by the scheduler, so an idle server costs
+ * no CPU switch. A queued message (task_ipc_message_queued) or the IRQ0
+ * deadline scan (task_ipc_wait_tick) makes it READY again; it then resumes
+ * here and receives in its own address space. A killed waiter is simply
+ * never resumed. */
+static int ipc_recv_wait_may_block(const task_t* self) {
+    if (!self || self->type != TASK_TYPE_USER || !self->syscall_frame) return 0;
+    if (self->kctx_valid) return 0;
+    /* The ATA RPC restricts the scheduler; its waiter/driver must not sleep. */
+    if (g_rpc_waiter || task_sched_only) return 0;
+    return 1;
+}
+
+int sys_ipc_receive_wait(os_ipc_message_t* out, uint32_t timeout) {
+    task_t* self = current_task;
+    int rc;
+    if (!self || self->type != TASK_TYPE_USER || !out) return OS_IPC_BAD_MESSAGE;
+    rc = sys_ipc_receive(out);
+    if (ipc_wait_decide(rc, OS_IPC_EMPTY, timeout, ipc_recv_wait_may_block(self)) ==
+        IPC_WAIT_RETURN) {
+        return rc;
+    }
+    ipc_wait_begin(&self->ipc_wait, timer_get_ticks(), timeout, OS_IPC_WAIT_FOREVER);
+    for (;;) {
+        int final_rc = OS_IPC_EMPTY;
+        self->state = TASK_BLOCKED_IPC;
+        self->kctx_valid = 1U;
+        if (kctx_save(self->kctx) == 0) {
+            schedule(self->syscall_frame); /* never returns; resumed below */
+        }
+        self->kctx_valid = 0U;
+        rc = sys_ipc_receive(out);
+        if (ipc_wait_after_wake(&self->ipc_wait, rc, OS_IPC_EMPTY, OS_IPC_TIMEOUT,
+                                timer_get_ticks(), &final_rc) == IPC_WAIT_RETURN) {
+            return final_rc;
+        }
+    }
 }
 
 int sys_task_supervision_notify(uint32_t enabled) {

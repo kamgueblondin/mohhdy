@@ -5,6 +5,7 @@
 #include "kernel/mem/vmm.h" // Inclure pour vmm_directory_t
 #include "os_syscalls.h"
 #include "../ipc.h"
+#include "../ipc_wait.h"
 
 // États possibles d'une tâche
 typedef enum {
@@ -16,7 +17,11 @@ typedef enum {
     TASK_TERMINATED,
     /* Tranche 4 slice 3: blocked inside a syscall (kernel continuation in
      * kctx) until the Ring 3 atadriver completes its sector job. */
-    TASK_BLOCKED_KERNEL
+    TASK_BLOCKED_KERNEL,
+    /* SYS_IPC_RECV_WAIT: asleep until a message is queued for the task or
+     * its optional deadline passes (kernel continuation in kctx). Never
+     * selected by the scheduler while in this state. */
+    TASK_BLOCKED_IPC
 } task_state_t;
 
 // Types de tâches
@@ -83,6 +88,7 @@ typedef struct task {
     uint32_t supervision_notify_budget_limit;
     uint32_t supervision_notify_budget_used;
     ipc_endpoint_t ipc_endpoint; // Boîte aux lettres IPC propre à la tâche
+    ipc_wait_t ipc_wait;         /* SYS_IPC_RECV_WAIT state (kernel/ipc_wait.h) */
     /* Tranche 4 slice 3: syscall frame of the current int 0x80, and the
      * kernel continuation used while blocked in TASK_BLOCKED_KERNEL. */
     cpu_state_t* syscall_frame;
@@ -141,6 +147,13 @@ int get_task_count();
 task_t* find_task_waiting_for_input(void);
 /* Vrai lorsqu’une autre tâche Ring 3 prête peut recevoir un quantum IRQ0. */
 int task_has_other_ready_user(void);
+/* SYS_IPC_RECV_WAIT: a message was queued for t (endpoint or spill); wake
+ * it if it sleeps in TASK_BLOCKED_IPC. */
+void task_ipc_message_queued(task_t* t);
+/* Same, by PID (kernel notifications that only know the PID). */
+void task_ipc_message_queued_pid(int32_t pid);
+/* IRQ0: wake the TASK_BLOCKED_IPC tasks whose deadline has passed. */
+void task_ipc_wait_tick(uint32_t now);
 int task_kill(int requester_pid, int pid);
 /* Tranche 4 slice 3: the root shell may stop a kernel-spawned boot service
  * (the boot atadriver has no user parent). */

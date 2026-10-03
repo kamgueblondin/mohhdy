@@ -171,6 +171,7 @@ void tasking_init() {
     current_task->supervision_notify_budget_limit = 0U;
     current_task->supervision_notify_budget_used = 0U;
     ipc_endpoint_init(&current_task->ipc_endpoint);
+    memset(&current_task->ipc_wait, 0, sizeof(current_task->ipc_wait));
     current_task->name[0] = 'k';
     current_task->name[1] = 'e';
     current_task->name[2] = 'r';
@@ -506,6 +507,7 @@ task_t* create_task_from_initrd_file(const char* filename) {
     new_task->supervision_notify_budget_limit = 0U;
     new_task->supervision_notify_budget_used = 0U;
     ipc_endpoint_init(&new_task->ipc_endpoint);
+    memset(&new_task->ipc_wait, 0, sizeof(new_task->ipc_wait));
     {
         int i = 0;
         const char* n = name_src ? name_src : "user";
@@ -646,6 +648,27 @@ int task_identity_key(int pid, uint32_t* out_key) {
     if (!t || !out_key) return OS_TASK_NOT_FOUND;
     *out_key = t->identity_key;
     return 0;
+}
+
+void task_ipc_message_queued(task_t* t) {
+    if (!t || t->state != TASK_BLOCKED_IPC) return;
+    if (ipc_wait_on_message(&t->ipc_wait)) t->state = TASK_READY;
+}
+
+void task_ipc_message_queued_pid(int32_t pid) {
+    task_ipc_message_queued(get_task_by_id(pid));
+}
+
+void task_ipc_wait_tick(uint32_t now) {
+    task_t* t;
+    if (!task_queue) return;
+    t = task_queue;
+    do {
+        if (t->state == TASK_BLOCKED_IPC && ipc_wait_on_tick(&t->ipc_wait, now)) {
+            t->state = TASK_READY;
+        }
+        t = t->next;
+    } while (t && t != task_queue);
 }
 
 int task_has_other_ready_user(void) {
@@ -844,6 +867,7 @@ static void task_notify_supervision_event(task_t* parent,
      * deversoir. S'il est plein aussi, le compteur de pertes augmente. */
     if (ipc_endpoint_send(&parent->ipc_endpoint, 0, &payload) == 0 ||
         service_registry_ipc_spill_push(parent->id, &payload) == 0) {
+        task_ipc_message_queued(parent);
         parent->supervision_delivery_delivered++;
     } else {
         parent->supervision_delivery_dropped++;
@@ -962,7 +986,7 @@ void task_report_parent_exit(task_t* child, int exit_code, uint32_t reason) {
     }
     if (os_task_make_event(&payload, child->id, reason) != 0) return;
     /* Best effort : la terminaison ne dépend jamais d’une boîte IPC disponible. */
-    (void)ipc_endpoint_send(&parent->ipc_endpoint, 0, &payload);
+    if (ipc_endpoint_send(&parent->ipc_endpoint, 0, &payload) == 0) task_ipc_message_queued(parent);
 }
 
 static int32_t map_task_state(task_state_t s) {
@@ -1242,6 +1266,7 @@ int task_replay_supervision_event(int requester_pid, uint32_t sequence) {
     parent->supervision_delivery_attempted++;
     rc = ipc_endpoint_send(&parent->ipc_endpoint, 0, &payload);
     if (rc != 0) rc = service_registry_ipc_spill_push(parent->id, &payload);
+    if (rc == 0) task_ipc_message_queued(parent);
     if (rc == 0) {
         parent->supervision_delivery_delivered++;
         return 0;

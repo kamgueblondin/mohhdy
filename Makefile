@@ -37,7 +37,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/kctx.o build/userspace_switch.o \
           build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/ata_fsop.o build/fsop_exec.o build/net_relay.o build/net_nic_owner.o build/net_wire.o build/gdt.o build/idt.o build/vmm.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/interrupts.o \
-          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
+          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
 
 # L'ABI partagée influence notamment la taille de task_t et des messages IPC.
 # Une évolution de structure doit donc reconstruire toute l'image, pas seulement ipc.o.
@@ -164,6 +164,10 @@ build/timer.o: kernel/timer.c kernel/timer.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/ipc.o: kernel/ipc.c kernel/ipc.h include/os_syscalls.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/ipc_wait.o: kernel/ipc_wait.c kernel/ipc_wait.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -443,6 +447,8 @@ pack-initrd: userspace-all
 	@cp -f userspace/idle $(BIN_DEST_DIR)/idle
 	@cp -f userspace/spin $(BIN_DEST_DIR)/spin
 	@cp -f userspace/ipcserver $(BIN_DEST_DIR)/ipcserver
+	@cp -f userspace/ipcwait $(BIN_DEST_DIR)/ipcwait
+	@cp -f userspace/ipcpoke $(BIN_DEST_DIR)/ipcpoke
 	@cp -f userspace/vfsserver $(BIN_DEST_DIR)/vfsserver
 	@cp -f userspace/vfsvirtual $(BIN_DEST_DIR)/vfsvirtual
 	@cp -f userspace/networker $(BIN_DEST_DIR)/networker
@@ -506,7 +512,7 @@ iso-clean:
 	@rm -rf build/isodir $(ISO_IMAGE)
 
 # Compile tous les programmes utilisateur
-user-program userspace/shell userspace/fake_ai userspace/test_program userspace/ai_assistant userspace/idle userspace/spin userspace/ipcserver userspace/vfsserver userspace/vfsvirtual userspace/networker userspace/vfsflight userspace/serviceclaim userspace/vfsclaim userspace/vfscapclaim userspace/vfsreleaseclaim userspace/vfsreadclaim userspace/vfsmutateclaim userspace/vfshistclaim userspace/waitchild userspace/ok: userspace-all
+user-program userspace/shell userspace/fake_ai userspace/test_program userspace/ai_assistant userspace/idle userspace/spin userspace/ipcserver userspace/ipcwait userspace/ipcpoke userspace/vfsserver userspace/vfsvirtual userspace/networker userspace/vfsflight userspace/serviceclaim userspace/vfsclaim userspace/vfscapclaim userspace/vfsreleaseclaim userspace/vfsreadclaim userspace/vfsmutateclaim userspace/vfshistclaim userspace/waitchild userspace/ok: userspace-all
 
 # Cible pour exécuter l'OS dans QEMU avec initrd (mode console corrigé)
 run: $(OS_IMAGE) pack-initrd disk
