@@ -24,7 +24,9 @@ MON = os.environ.get("QEMU_MON_SOCK", os.path.join(ROOT, "test_logs", "gpt2-sent
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "300"))
 GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "1200"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.12"))
-PROMPT = os.environ.get("GPT2_SENTENCE_PROMPT", "The capital of France is")
+# Lowercase on purpose: QEMU sendkey shift-letter drops the shift break in the
+# i8042 queue, so a capital sticks and the rest of the line is shouted.
+PROMPT = os.environ.get("GPT2_SENTENCE_PROMPT", "the capital of france is")
 
 
 def text():
@@ -69,10 +71,7 @@ def monitor():
 def send(client, command):
     aliases = {" ": "spc", "-": "minus", ".": "dot", "?": "shift-slash", "!": "shift-1"}
     for char in command:
-        if char.isupper():
-            name = "shift-" + char.lower()
-        else:
-            name = aliases.get(char, char)
+        name = aliases.get(char, char.lower())
         client.sendall(("sendkey %s\n" % name).encode("ascii"))
         time.sleep(KEY_DELAY)
     time.sleep(KEY_DELAY)
