@@ -1106,6 +1106,24 @@ int service_registry_backend_token_of(const char* name, int32_t grantee_pid, uin
     return OS_SERVICE_NOT_FOUND;
 }
 
+int service_registry_right_token_of(const char* name, int32_t pid, uint32_t* out_token) {
+    uint32_t i;
+    int found = 0;
+    if (!out_token) return OS_SERVICE_BAD_NAME;
+    *out_token = 0U;
+    if (!service_registry_name_valid(name) || pid <= 0) return OS_SERVICE_BAD_NAME;
+    for (i = 0U; i < SERVICE_REGISTRY_CAPACITY; i++) {
+        if (service_entries[i].pid > 0 && name_equal(service_entries[i].name, name)) {
+            found = 1;
+            if (service_entries[i].pid == pid && service_right_held(name, pid)) {
+                *out_token = service_entries[i].right_token;
+                return 0;
+            }
+        }
+    }
+    return found ? OS_SERVICE_NOT_OWNER : OS_SERVICE_NOT_FOUND;
+}
+
 int service_registry_backend_clear_token(const char* name, int32_t grantee_pid) {
     uint32_t i;
     if (!service_registry_name_valid(name) || grantee_pid <= 0) return OS_SERVICE_BAD_NAME;
@@ -1290,6 +1308,7 @@ typedef struct {
 static service_ipc_spill_slot_t service_ipc_spill[SERVICE_IPC_SPILL_CAPACITY];
 static uint32_t service_ipc_spill_order;
 static uint32_t service_ipc_spill_drops;
+static uint32_t service_ipc_spill_supervision_drops;
 
 static void ipc_spill_reset(void) {
     uint32_t i;
@@ -1300,14 +1319,30 @@ static void ipc_spill_reset(void) {
     }
     service_ipc_spill_order = 0U;
     service_ipc_spill_drops = 0U;
+    service_ipc_spill_supervision_drops = 0U;
 }
 
 uint32_t service_registry_ipc_spill_drops(void) {
     return service_ipc_spill_drops;
 }
 
+uint32_t service_registry_ipc_spill_supervision_drops(void) {
+    return service_ipc_spill_supervision_drops;
+}
+
 void service_registry_ipc_spill_arm_drops(uint32_t value) {
     service_ipc_spill_drops = value;
+}
+
+void service_registry_ipc_spill_arm_supervision_drops(uint32_t value) {
+    service_ipc_spill_supervision_drops = value;
+}
+
+static void note_spill_drop(uint32_t type) {
+    uint32_t* slot = (type == OS_IPC_TASK_SUPERVISION_EVENT)
+        ? &service_ipc_spill_supervision_drops
+        : &service_ipc_spill_drops;
+    if (*slot != 0xFFFFFFFFU) (*slot)++;
 }
 
 static void ipc_spill_clear_pid(int32_t pid) {
@@ -1339,7 +1374,7 @@ int service_registry_ipc_spill_push(int32_t watcher_pid, const os_ipc_payload_t*
             return 0;
         }
     }
-    if (service_ipc_spill_drops != 0xFFFFFFFFU) service_ipc_spill_drops++;
+    note_spill_drop(payload->type);
     return OS_IPC_FULL;
 }
 

@@ -93,6 +93,28 @@ typedef struct task {
     struct task* prev;         // Liste doublement chaînée
 } task_t;
 
+/* L'appelant voit la cle seulement pour lui-meme ou pour un enfant direct. */
+static inline int task_identity_visible_to(int viewer_pid, int subject_pid, int subject_parent_pid) {
+    if (viewer_pid < 0 || subject_pid < 0) return 0;
+    if (viewer_pid == subject_pid) return 1;
+    return viewer_pid > 0 && subject_parent_pid == viewer_pid;
+}
+
+static inline void task_identity_store(int viewer_pid, const task_t* subject,
+                                       uint32_t* sequence, uint32_t* generation,
+                                       uint32_t* key, uint32_t* visible) {
+    if (sequence) *sequence = 0U;
+    if (generation) *generation = 0U;
+    if (key) *key = 0U;
+    if (visible) *visible = 0U;
+    if (!subject || !sequence || !generation || !key || !visible) return;
+    if (!task_identity_visible_to(viewer_pid, subject->id, subject->parent_pid)) return;
+    *sequence = subject->sequence;
+    *generation = subject->generation;
+    *key = subject->identity_key;
+    *visible = 1U;
+}
+
 // Variables globales
 extern task_t* current_task;
 extern task_t* task_queue;

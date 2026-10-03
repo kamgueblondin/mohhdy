@@ -315,9 +315,11 @@
 #define SYS_MOUNT_JOURNAL 150
 /* EBX = uint32_t* : cle d'identite de la tache appelante. Jamais nulle. */
 #define SYS_TASK_IDENTITY_KEY 151
-/* EBX = uint32_t* : copies IPC perdues quand le deversoir de huit places est plein. */
+/* EBX = os_ipc_spill_drops_t* : pertes service et supervision, compteurs separes. */
 #define SYS_IPC_SPILL_DROPS 152
-#define MAX_SYSCALLS 153
+/* EBX = nom, ECX = uint32_t* : right_token du nom dont l'appelant est le titulaire. */
+#define SYS_SERVICE_RIGHT_TOKEN 153
+#define MAX_SYSCALLS 154
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
@@ -703,6 +705,12 @@ typedef struct {
     int32_t state;
     int32_t type;
     char name[OS_PROC_NAME_MAX];
+    /* sequence, generation, identity_key : seulement si identity_visible vaut 1
+     * (l'appelant est la tache, ou son parent direct). Sinon les trois restent a 0. */
+    uint32_t sequence;
+    uint32_t generation;
+    uint32_t identity_key;
+    uint32_t identity_visible;
 } os_proc_t;
 
 /* Instantané local et non atomique des enfants directs actifs d’un parent. */
@@ -799,7 +807,19 @@ typedef struct {
     uint32_t run_ticks;
     uint32_t switch_count;
     uint32_t direct_children;
+    uint32_t sequence;
+    uint32_t generation;
+    uint32_t identity_key;
+    uint32_t identity_visible;
 } os_task_metrics_t;
+
+/* Pertes du deversoir RAM. service : evenements de service. supervision :
+ * notifications de sortie, suspension, reprise et delegation. Chacun sature
+ * a 0xFFFFFFFF. */
+typedef struct {
+    uint32_t service;
+    uint32_t supervision;
+} os_ipc_spill_drops_t;
 
 /* Instantané global de la file de tâches ; il est volatil et non atomique. */
 typedef struct {

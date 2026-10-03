@@ -84,11 +84,16 @@ int service_registry_event_journal_allowed(void);
 /* Copie IPC d'un evenement de service quand la boite de quatre places est pleine. */
 int service_registry_ipc_spill_push(int32_t watcher_pid, const os_ipc_payload_t* payload);
 int service_registry_ipc_spill_pop(int32_t watcher_pid, os_ipc_payload_t* out);
-/* Copies refusees parce que les huit places etaient prises. Ne revient pas a 0. */
+/* Copies refusees parce que les huit places etaient prises. Ne revient pas a 0.
+ * service : evenements de service. supervision : notifications de tache. */
 uint32_t service_registry_ipc_spill_drops(void);
-/* Fixe le compteur pour prouver la saturation a 0xFFFFFFFF. */
+uint32_t service_registry_ipc_spill_supervision_drops(void);
+/* Fixe un compteur pour prouver la saturation a 0xFFFFFFFF. */
 void service_registry_ipc_spill_arm_drops(uint32_t value);
+void service_registry_ipc_spill_arm_supervision_drops(uint32_t value);
 int service_registry_backend_token_of(const char* name, int32_t grantee_pid, uint32_t* out_token);
+/* right_token du nom dont pid est le titulaire. Ne mint pas et ne transfere pas. */
+int service_registry_right_token_of(const char* name, int32_t pid, uint32_t* out_token);
 /* Remet le jeton a 0. La ligne reste, mais allowed doit refuser. */
 int service_registry_backend_clear_token(const char* name, int32_t grantee_pid);
 int service_registry_collect_owned(int32_t pid, service_registry_entry_t* out, uint32_t max);

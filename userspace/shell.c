@@ -625,9 +625,15 @@ int sys_task_identity_key_read(uint32_t* out_key) {
     return result;
 }
 
-int sys_ipc_spill_drops(uint32_t* out_drops) {
+int sys_ipc_spill_drops(os_ipc_spill_drops_t* out_drops) {
     int result;
     asm volatile("int $0x80" : "=a"(result) : "a"(SYS_IPC_SPILL_DROPS), "b"(out_drops));
+    return result;
+}
+
+int sys_service_right_token(const char* name, uint32_t* out_token) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_SERVICE_RIGHT_TOKEN), "b"(name), "c"(out_token));
     return result;
 }
 
@@ -1042,7 +1048,8 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  service-event-pull - Retirer le plus vieil evenement non acquitte\n");
     print_string("  cap-token - Lire le jeton backend vfs du shell\n");
     print_string("  id-key - Lire la cle d'identite de cette tache\n");
-    print_string("  spill-drops - Lire les copies IPC perdues du deversoir\n");
+    print_string("  spill-drops - Lire les copies IPC perdues, service et supervision\n");
+    print_string("  right-token <nom> - Lire le droit du nom dont ce shell est titulaire\n");
     print_string("  mount-journal-add <prefixe/> <source> - Journaliser un montage disque\n");
     print_string("  mount-journal - Lister les montages du journal\n");
     print_string("  vfs-backend-probe <fichier> - Verifier le backend VFS reserve\n");
@@ -1288,6 +1295,14 @@ void cmd_ps(shell_context_t* ctx, char args[][128], int arg_count) {
         print_string("     ");
         print_string(procs[i].type == OS_TASK_USER ? "user  " : "kern  ");
         print_string(procs[i].name);
+        if (procs[i].identity_visible) {
+            print_string(" id ");
+            print_int((int)procs[i].sequence);
+            print_string(" ");
+            print_int((int)procs[i].generation);
+            print_string(" ");
+            print_int((int)procs[i].identity_key);
+        }
         print_string("\n");
     }
     print_string("Total: ");
@@ -1320,6 +1335,15 @@ void cmd_task_metrics(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("\nExécution cumulée : "); print_int((int)metrics.run_ticks); print_string(" ticks");
     print_string("\nCommutations : "); print_int((int)metrics.switch_count);
     print_string("\nEnfants directs : "); print_int((int)metrics.direct_children); print_string("\n");
+    if (metrics.identity_visible) {
+        print_string("task-metrics id ");
+        print_int((int)metrics.sequence);
+        print_string(" ");
+        print_int((int)metrics.generation);
+        print_string(" ");
+        print_int((int)metrics.identity_key);
+        print_string("\n");
+    }
     if (sys_meminfo(&mem) == 0) {
         print_string("PMM pages total/utilisées/libres : "); print_int((int)mem.total_pages);
         print_string("/"); print_int((int)mem.used_pages); print_string("/"); print_int((int)mem.free_pages); print_string("\n");
@@ -2697,7 +2721,7 @@ static int is_builtin(const char* cmd) {
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
-        "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
+        "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "right-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
         "alias", "unalias", "export", "which", "rc",
         "grep", "wc", "sort", "head", "tail",
         "logout", "reboot", "shutdown",
@@ -3230,21 +3254,45 @@ static void cmd_id_key(shell_context_t* ctx, char args[][128], int arg_count) {
 }
 
 static void cmd_spill_drops(shell_context_t* ctx, char args[][128], int arg_count) {
-    uint32_t drops = 0U;
+    os_ipc_spill_drops_t drops;
     int rc;
     (void)args;
     if (arg_count != 0) {
         print_error("Usage: spill-drops");
         return;
     }
+    drops.service = 0U;
+    drops.supervision = 0U;
     rc = sys_ipc_spill_drops(&drops);
     ctx->last_rc = rc;
     if (rc != 0) {
         print_error("spill-drops: lecture impossible");
         return;
     }
-    print_string("spill-drops ok ");
-    print_int((int)drops);
+    print_string("spill-drops ok service ");
+    print_int((int)drops.service);
+    print_string(" supervision ");
+    print_int((int)drops.supervision);
+    print_string("\n");
+}
+
+static void cmd_right_token(shell_context_t* ctx, char args[][128], int arg_count) {
+    uint32_t token = 0U;
+    int rc;
+    if (arg_count != 1) {
+        print_error("Usage: right-token <nom>");
+        return;
+    }
+    rc = sys_service_right_token(args[0], &token);
+    ctx->last_rc = rc;
+    if (rc != 0 || token == 0U) {
+        print_error("right-token: droit absent");
+        return;
+    }
+    print_string("right-token ok ");
+    print_string(args[0]);
+    print_string(" ");
+    print_int((int)token);
     print_string("\n");
 }
 
@@ -5695,6 +5743,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "spill-drops") == 0) {
         cmd_spill_drops(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "right-token") == 0) {
+        cmd_right_token(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "mount-journal-add") == 0) {
         cmd_mount_journal_add(ctx, args, arg_count);

@@ -1859,7 +1859,10 @@ void syscall_handler(cpu_state_t* cpu) {
             cpu->eax = (uint32_t)sys_task_identity_key_read((uint32_t*)cpu->ebx);
             break;
         case SYS_IPC_SPILL_DROPS:
-            cpu->eax = (uint32_t)sys_ipc_spill_drops((uint32_t*)cpu->ebx);
+            cpu->eax = (uint32_t)sys_ipc_spill_drops((os_ipc_spill_drops_t*)cpu->ebx);
+            break;
+        case SYS_SERVICE_RIGHT_TOKEN:
+            cpu->eax = (uint32_t)sys_service_right_token((const char*)cpu->ebx, (uint32_t*)cpu->ecx);
             break;
         case SYS_VGA_BLIT:
             {
@@ -2322,11 +2325,18 @@ int sys_task_identity_key_read(uint32_t* out) {
     return 0;
 }
 
-int sys_ipc_spill_drops(uint32_t* out) {
+int sys_ipc_spill_drops(os_ipc_spill_drops_t* out) {
     if (!current_task || current_task->type != TASK_TYPE_USER || !out) return OS_IPC_BAD_MESSAGE;
     if (!syscall_user_range(out, sizeof(*out), 1)) return OS_IPC_BAD_MESSAGE;
-    *out = service_registry_ipc_spill_drops();
+    out->service = service_registry_ipc_spill_drops();
+    out->supervision = service_registry_ipc_spill_supervision_drops();
     return 0;
+}
+
+int sys_service_right_token(const char* name, uint32_t* out_token) {
+    if (!current_task || current_task->type != TASK_TYPE_USER || !out_token) return OS_SERVICE_BAD_NAME;
+    if (!syscall_user_range(out_token, sizeof(*out_token), 1)) return OS_SERVICE_BAD_NAME;
+    return service_registry_right_token_of(name, current_task->id, out_token);
 }
 
 int sys_service_backend_token(const char* name, uint32_t* out_token) {
