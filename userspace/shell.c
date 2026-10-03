@@ -1572,6 +1572,29 @@ static const char* supervision_action_name(uint32_t action) {
     return "unknown";
 }
 
+static void print_task_event_detail(const os_task_supervision_event_t* event, int with_ok) {
+    if (with_ok) print_string("task-event ok ");
+    else print_string("task-event ");
+    print_uint(event->sequence);
+    print_string(" ");
+    print_string(supervision_action_name(event->action));
+    print_string(" ");
+    print_int(event->child_pid);
+    print_string(" ");
+    print_int(event->related_pid);
+    print_string(" ");
+    print_uint(event->detail);
+    print_string(" ");
+    print_uint(event->ticks);
+    print_string(" id ");
+    print_uint(event->child_sequence);
+    print_string(" ");
+    print_uint(event->child_generation);
+    print_string(" ");
+    print_uint(event->identity_key);
+    print_string("\n");
+}
+
 void cmd_task_events(shell_context_t* ctx, char args[][128], int arg_count) {
     os_task_supervision_events_t events;
     uint32_t i;
@@ -1589,12 +1612,7 @@ void cmd_task_events(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("task-events ok "); print_uint(events.generation); print_string(" ");
     print_uint(events.count); print_string("\n");
     for (i = 0U; i < events.count; i++) {
-        os_task_supervision_event_t* event = &events.entries[i];
-        print_string("task-event "); print_uint(event->sequence); print_string(" ");
-        print_string(supervision_action_name(event->action)); print_string(" ");
-        print_int(event->child_pid); print_string(" "); print_int(event->related_pid);
-        print_string(" "); print_uint(event->detail); print_string(" ");
-        print_uint(event->ticks); print_string("\n");
+        print_task_event_detail(&events.entries[i], 0);
     }
 }
 
@@ -1636,12 +1654,7 @@ void cmd_task_events_observe(shell_context_t* ctx, char args[][128], int arg_cou
     print_string("task-events-observe ok "); print_uint(observation.generation);
     print_string(" "); print_uint(observation.events.count); print_string("\n");
     for (i = 0U; i < observation.events.count; i++) {
-        os_task_supervision_event_t* event = &observation.events.entries[i];
-        print_string("task-event "); print_uint(event->sequence); print_string(" ");
-        print_string(supervision_action_name(event->action)); print_string(" ");
-        print_int(event->child_pid); print_string(" "); print_int(event->related_pid);
-        print_string(" "); print_uint(event->detail); print_string(" ");
-        print_uint(event->ticks); print_string("\n");
+        print_task_event_detail(&observation.events.entries[i], 0);
     }
 }
 
@@ -1663,11 +1676,7 @@ void cmd_task_event(shell_context_t* ctx, char args[][128], int arg_count) {
         print_error("task-event: syscall indisponible");
         return;
     }
-    print_string("task-event ok "); print_uint(event.sequence); print_string(" ");
-    print_string(supervision_action_name(event.action)); print_string(" ");
-    print_int(event.child_pid); print_string(" "); print_int(event.related_pid);
-    print_string(" "); print_uint(event.detail); print_string(" ");
-    print_uint(event.ticks); print_string("\n");
+    print_task_event_detail(&event, 1);
 }
 
 void cmd_task_events_forget(shell_context_t* ctx, char args[][128], int arg_count) {

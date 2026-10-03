@@ -46,6 +46,30 @@ def wait_for(proc, needle, timeout, start=0):
     raise RuntimeError("timeout waiting for %r; log tail:\n%s" % (needle, log_text()[-2000:]))
 
 
+def normalized(text):
+    text = re.sub(r"TIMER_ALIVE: tick=\d+\+?", "", text)
+    text = re.sub(r"\[SCHED\] switching to task \d+\r?\n?", "", text)
+    return text
+
+
+def parse_child_identity(text, pid):
+    match = re.search(
+        r"child-entry %s \S+ \S+ id (\d+) (\d+) (\d+)" % re.escape(str(pid)),
+        normalized(text))
+    if not match:
+        raise RuntimeError("child identity missing for pid %s; tail:\n%s" % (pid, text[-1500:]))
+    if match.group(3) == "0":
+        raise RuntimeError("child identity key is zero for pid %s" % pid)
+    return match.group(1), match.group(2), match.group(3)
+
+
+def assert_event_identity(text, prefix, sequence, generation, key):
+    pattern = (re.escape(prefix) + r"\d+ id " + re.escape(sequence) + " " +
+               re.escape(generation) + " " + re.escape(key))
+    if not re.search(pattern, normalized(text)):
+        raise RuntimeError("missing stamped identity on %r; tail:\n%s" % (prefix, text[-1500:]))
+
+
 def parse_spawn_pid(text, program):
     key = "spawn ok pid "
     idx = text.find(key)
@@ -179,6 +203,8 @@ def main():
             children_start = send_command_until(monitor, "children", "children ok 1", proc)
             wait_for(proc, "child-entry %s" % idle_pid, CMD_TIMEOUT, children_start)
             wait_for(proc, "sleeper", CMD_TIMEOUT, children_start)
+            idle_seq, idle_gen, idle_key = parse_child_identity(log_text()[children_start:], idle_pid)
+            say("idle identity %s %s %s" % (idle_seq, idle_gen, idle_key))
 
             say("typing task-metrics %s ..." % idle_pid)
             send_command_until(monitor, "task-metrics %s" % idle_pid, "Parent : 1", proc)
@@ -223,6 +249,15 @@ def main():
             wait_pid = parse_spawn_pid(log_text()[spawn_start:], "waitchild")
             say("spawned waitchild pid %s" % wait_pid)
 
+            say("typing children (waitchild identity) ...")
+            wait_children_start = send_command_until(monitor, "children", "children ok 1", proc)
+            wait_for(proc, "child-entry %s" % wait_pid, CMD_TIMEOUT, wait_children_start)
+            wait_seq, wait_gen, wait_key = parse_child_identity(
+                log_text()[wait_children_start:], wait_pid)
+            if wait_key == idle_key:
+                raise RuntimeError("waitchild reused idle identity key %s" % wait_key)
+            say("waitchild identity %s %s %s" % (wait_seq, wait_gen, wait_key))
+
             say("typing task-metrics 1 (one child) ...")
             send_command_until(monitor, "task-metrics 1", "Enfants directs : 1", proc)
 
@@ -245,12 +280,22 @@ def main():
             wait_for(proc, "task-event 1 suspend %s 0 0" % idle_pid, CMD_TIMEOUT, events_start)
             wait_for(proc, "task-event 2 exit %s 0 2" % idle_pid, CMD_TIMEOUT, events_start)
             wait_for(proc, "task-event 3 exit %s 0 1" % wait_pid, CMD_TIMEOUT, events_start)
+            events_text = log_text()[events_start:]
+            assert_event_identity(events_text, "task-event 1 suspend %s 0 0 " % idle_pid,
+                                  idle_seq, idle_gen, idle_key)
+            assert_event_identity(events_text, "task-event 2 exit %s 0 2 " % idle_pid,
+                                  idle_seq, idle_gen, idle_key)
+            assert_event_identity(events_text, "task-event 3 exit %s 0 1 " % wait_pid,
+                                  wait_seq, wait_gen, wait_key)
             say("typing task-events-observe 2 (stale) ...")
             send_command_until(monitor, "task-events-observe 2", "task-events-observe stale 3", proc)
             say("typing task-events-observe 3 (fresh) ...")
             observe_events_start = send_command_until(monitor, "task-events-observe 3",
                                                       "task-events-observe ok 3 3", proc)
             wait_for(proc, "task-event 3 exit %s 0 1" % wait_pid, CMD_TIMEOUT, observe_events_start)
+            assert_event_identity(log_text()[observe_events_start:],
+                                  "task-event 3 exit %s 0 1 " % wait_pid,
+                                  wait_seq, wait_gen, wait_key)
             say("typing task-events-clear ...")
             send_command_until(monitor, "task-events-clear", "task-events-clear ok 4", proc)
             say("typing task-events (empty) ...")

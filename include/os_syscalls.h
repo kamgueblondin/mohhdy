@@ -724,9 +724,12 @@ typedef struct {
     uint32_t count;
 } os_task_child_exit_count_t;
 
-/* Événement local de supervision : child_pid est l’enfant concerné ; related_pid
- * désigne le superviseur entrant ou sortant lors d’une délégation ; detail vaut
- * le motif de sortie pour OS_TASK_SUPERVISION_EXIT et zéro sinon. */
+/* Evenement local de supervision : child_pid est l'enfant concerne ; related_pid
+ * designe le superviseur entrant ou sortant lors d'une delegation ; detail vaut
+ * le motif de sortie pour OS_TASK_SUPERVISION_EXIT et zero sinon.
+ * child_sequence, child_generation et identity_key sont les temoins de l'enfant
+ * copies a l'enregistrement. Ils restent dans le journal RAM du parent et
+ * meurent avec lui. L'avis IPC reste sur 24 octets et ne les porte pas. */
 typedef struct {
     uint32_t sequence;
     uint32_t action;
@@ -734,6 +737,9 @@ typedef struct {
     int32_t related_pid;
     uint32_t detail;
     uint32_t ticks;
+    uint32_t child_sequence;
+    uint32_t child_generation;
+    uint32_t identity_key;
 } os_task_supervision_event_t;
 
 /* Instantané circulaire local, de l’événement le plus ancien au plus récent. */
@@ -1286,6 +1292,10 @@ static inline int os_task_parse_supervision_event(const os_ipc_message_t* messag
     event_out->related_pid = os_service_decode_i32(&message->data[12]);
     event_out->detail = os_ipc_decode_u32(&message->data[16]);
     event_out->ticks = os_ipc_decode_u32(&message->data[20]);
+    /* L'avis IPC ne porte pas les temoins. Un parse ne doit pas les laisser sales. */
+    event_out->child_sequence = 0U;
+    event_out->child_generation = 0U;
+    event_out->identity_key = 0U;
     if (event_out->sequence == 0U || event_out->child_pid <= 0 ||
         event_out->action < OS_TASK_SUPERVISION_EXIT ||
         event_out->action > OS_TASK_SUPERVISION_DELEGATE_IN) return -1;
