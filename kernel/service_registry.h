@@ -84,6 +84,10 @@ int service_registry_event_journal_allowed(void);
 /* Copie IPC d'un evenement de service quand la boite de quatre places est pleine. */
 int service_registry_ipc_spill_push(int32_t watcher_pid, const os_ipc_payload_t* payload);
 int service_registry_ipc_spill_pop(int32_t watcher_pid, os_ipc_payload_t* out);
+/* Copies refusees parce que les huit places etaient prises. Ne revient pas a 0. */
+uint32_t service_registry_ipc_spill_drops(void);
+/* Fixe le compteur pour prouver la saturation a 0xFFFFFFFF. */
+void service_registry_ipc_spill_arm_drops(uint32_t value);
 int service_registry_backend_token_of(const char* name, int32_t grantee_pid, uint32_t* out_token);
 /* Remet le jeton a 0. La ligne reste, mais allowed doit refuser. */
 int service_registry_backend_clear_token(const char* name, int32_t grantee_pid);

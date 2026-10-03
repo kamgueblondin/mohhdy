@@ -1855,6 +1855,12 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_MOUNT_JOURNAL:
             cpu->eax = (uint32_t)sys_mount_journal(cpu->ebx, cpu->ecx, cpu->edx);
             break;
+        case SYS_TASK_IDENTITY_KEY:
+            cpu->eax = (uint32_t)sys_task_identity_key_read((uint32_t*)cpu->ebx);
+            break;
+        case SYS_IPC_SPILL_DROPS:
+            cpu->eax = (uint32_t)sys_ipc_spill_drops((uint32_t*)cpu->ebx);
+            break;
         case SYS_VGA_BLIT:
             {
                 if (!cpu->ebx) {
@@ -2306,6 +2312,21 @@ int sys_service_backend_status(const char* name, int target_pid, uint32_t* out_r
     target = get_task_by_id(target_pid);
     if (!target || target->type != TASK_TYPE_USER || target->state == TASK_TERMINATED) return OS_SERVICE_BAD_GRANTEE;
     return service_registry_backend_rights(name, current_task->id, target_pid, out_rights);
+}
+
+int sys_task_identity_key_read(uint32_t* out) {
+    if (!current_task || current_task->type != TASK_TYPE_USER || !out) return OS_TASK_NOT_FOUND;
+    if (!syscall_user_range(out, sizeof(*out), 1)) return OS_TASK_NOT_FOUND;
+    if (current_task->identity_key == 0U) return OS_TASK_NOT_FOUND;
+    *out = current_task->identity_key;
+    return 0;
+}
+
+int sys_ipc_spill_drops(uint32_t* out) {
+    if (!current_task || current_task->type != TASK_TYPE_USER || !out) return OS_IPC_BAD_MESSAGE;
+    if (!syscall_user_range(out, sizeof(*out), 1)) return OS_IPC_BAD_MESSAGE;
+    *out = service_registry_ipc_spill_drops();
+    return 0;
 }
 
 int sys_service_backend_token(const char* name, uint32_t* out_token) {

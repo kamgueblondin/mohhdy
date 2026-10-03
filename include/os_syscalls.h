@@ -313,7 +313,11 @@
 /* EBX = 1 ajout (ECX = prefixe, EDX = source) ou 2 liste (ECX = tampon,
  * EDX = capacite). Journal disque hors zone AIOV et hors BPB FAT. */
 #define SYS_MOUNT_JOURNAL 150
-#define MAX_SYSCALLS 151
+/* EBX = uint32_t* : cle d'identite de la tache appelante. Jamais nulle. */
+#define SYS_TASK_IDENTITY_KEY 151
+/* EBX = uint32_t* : copies IPC perdues quand le deversoir de huit places est plein. */
+#define SYS_IPC_SPILL_DROPS 152
+#define MAX_SYSCALLS 153
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80

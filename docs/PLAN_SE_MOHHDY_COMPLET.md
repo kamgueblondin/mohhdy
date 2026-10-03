@@ -77,16 +77,16 @@ Source de verite : [ETAT_REEL.md](ETAT_REEL.md), backlog [../US/mohhdy_us.md](..
 
 Observable aujourd'hui :
 
-- Boot Multiboot, VGA/serie, shell ELF Ring 3, syscalls 0-150 (`MAX_SYSCALLS = 151`)
+- Boot Multiboot, VGA/serie, shell ELF Ring 3, syscalls 0-152 (`MAX_SYSCALLS = 153`)
 - VFS Ring 3 (`vfsserver` / `vfsvirtual`), FAT16/FAT32 multi-niveaux, ACL droit-source-prefixe, diagnostic public sans prefixe
 - Pilote ATA Ring 3 (`atadriver`) pour la logique FAT/overlay au runtime ; le montage au boot et le repli sans pilote restent Ring 0
 - IPC, registre de services, grant/revoke backend, `request_id`
-- Identite de tache (sequence, generation et cle `identity_key`), jeton de capability non nul, droit de service sur les ports ATA et le reseau, et journal de montages `MNTJ` qui survit au reboot (`make qemu-foundation-steps`)
-- Evenements de service : bit `acked`, `service-event-pull`, et journal `EVNT` au LBA 4224 qui survit au reboot (`make qemu-foundation-steps`)
+- Identite de tache (sequence, generation et cle `identity_key`, lue par `id-key`), jeton de capability distinct du droit de nom (`cap-token 1`), droit de service sur les ports ATA et le reseau, et journal de montages `MNTJ` qui survit au reboot (`make qemu-foundation-steps`)
+- Evenements de service : bit `acked`, `service-event-pull`, deversoir IPC avec compteur de pertes, notifications de supervision dans ce deversoir, et journal `EVNT` au LBA 4224 qui survit au reboot (`make qemu-foundation-steps`)
 - NE2000 local, TLS/HTTP/SSE sur pair `127.0.0.1`, pile Ring 3 si `networker` detient la carte ; pas Internet public, pas OpenAI
 - GPT-2 124M et GGUF Q3_K/Q4_K/Q6_K locaux ; TCG ~48,7 s / ~22,8 s ; KVM un echantillon 43,916 s / 20,224 s avec poids residents, pas sous 1 s ; poids hors Git
-- `make test-all` 627/627 au rejeu du 2 octobre 2026. `make qemu-smoke` : six scenarios verts le meme jour, y compris apres le correctif de relais pair et le retrait de la trace serie
-- `make integration-qemu` : sept contrats verts en 809,7 s le 2 octobre 2026, sous 25 min. CI du commit `8264b62` (run 37032910130) : quatre jobs verts, comme `9999514` (run 37029710466).
+- `make test-all` 628/628 au rejeu du 2 octobre 2026. `make qemu-smoke` : six scenarios verts le meme jour, y compris apres le correctif de relais pair et le retrait de la trace serie
+- `make integration-qemu` : sept contrats verts en 800,6 s le 2 octobre 2026, sous 25 min. La mesure 809,7 s est anterieure. CI du commit `8264b62` (run 37032910130) : quatre jobs verts, comme `9999514` (run 37029710466). Elle ne couvre pas ce tip.
 
 La surface OS-UI (chat, sessions, simulateur, MCP, FS sandbox, commande `gui`) est dans le meme guest. Elle est decrite en 2.2. Le guest n'execute pas de HTML `#ai-stage`.
 

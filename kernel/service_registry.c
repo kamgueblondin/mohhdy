@@ -23,6 +23,7 @@ typedef struct {
 } service_backend_cap_t;
 static service_backend_cap_t service_backend_caps[SERVICE_REGISTRY_BACKEND_CAPACITY];
 static uint32_t service_backend_token_next = 1U;
+static uint32_t service_right_token_next = 1U;
 
 static service_registry_persistent_mount_t persistent_mounts[SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY];
 
@@ -198,6 +199,7 @@ void service_registry_init(void) {
         service_backend_caps[i].identity_key = 0U;
     }
     service_backend_token_next = 1U;
+    service_right_token_next = 1U;
     for (i = 0U; i < SERVICE_REGISTRY_PERSISTENT_MOUNT_CAPACITY; i++) {
         persistent_mounts[i].active = 0U;
         persistent_mounts[i].service_name[0] = '\0';
@@ -218,9 +220,9 @@ void service_registry_init(void) {
 }
 
 static uint32_t mint_right_token(void) {
-    uint32_t token = service_backend_token_next;
-    service_backend_token_next++;
-    if (service_backend_token_next == 0U) service_backend_token_next = 1U;
+    uint32_t token = service_right_token_next;
+    service_right_token_next++;
+    if (service_right_token_next == 0U) service_right_token_next = 1U;
     if (token == 0U) token = 1U;
     return token;
 }
@@ -1287,6 +1289,7 @@ typedef struct {
 
 static service_ipc_spill_slot_t service_ipc_spill[SERVICE_IPC_SPILL_CAPACITY];
 static uint32_t service_ipc_spill_order;
+static uint32_t service_ipc_spill_drops;
 
 static void ipc_spill_reset(void) {
     uint32_t i;
@@ -1296,6 +1299,15 @@ static void ipc_spill_reset(void) {
         service_ipc_spill[i].order = 0U;
     }
     service_ipc_spill_order = 0U;
+    service_ipc_spill_drops = 0U;
+}
+
+uint32_t service_registry_ipc_spill_drops(void) {
+    return service_ipc_spill_drops;
+}
+
+void service_registry_ipc_spill_arm_drops(uint32_t value) {
+    service_ipc_spill_drops = value;
 }
 
 static void ipc_spill_clear_pid(int32_t pid) {
@@ -1327,6 +1339,7 @@ int service_registry_ipc_spill_push(int32_t watcher_pid, const os_ipc_payload_t*
             return 0;
         }
     }
+    if (service_ipc_spill_drops != 0xFFFFFFFFU) service_ipc_spill_drops++;
     return OS_IPC_FULL;
 }
 
