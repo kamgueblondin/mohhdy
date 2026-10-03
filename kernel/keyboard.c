@@ -591,6 +591,30 @@ char keyboard_getc(void) {
     return 0; // Caractère null seulement après tous les filtres
 }
 
+int keyboard_poll_char(char* out) {
+    int skipped = 0;
+    if (!out) return 0;
+    for (;;) {
+        char sc = read_serial();
+        char c = 0;
+        if ((sc >= 32 && sc <= 126) || sc == '\n' || sc == '\r' || sc == '\t' || sc == '\b'
+            || sc == (char)OS_VGA_KEY_ESC) {
+            *out = sc;
+            return 1;
+        }
+        keyboard_poll_check();
+        if (!kbd_get_char_nonblock(&c)) return 0;
+        if ((c >= 32 && c <= 126) || c == '\n' || c == '\r' || c == '\t' || c == '\b'
+            || c == (char)OS_VGA_KEY_ESC
+            || c == (char)OS_VGA_KEY_LEFT || c == (char)OS_VGA_KEY_RIGHT
+            || c == (char)OS_VGA_KEY_UP || c == (char)OS_VGA_KEY_DOWN) {
+            *out = c;
+            return 1;
+        }
+        if (++skipped > 8) return 0;
+    }
+}
+
 // Fonctions de compatibilité
 char scancode_to_ascii(uint8_t scancode) {
     return map_scancode(scancode);

@@ -35,6 +35,8 @@
 /* Completions locales : BPE, top-k basse temperature, arret EOT ou repetition,
  * et newline ou fin de phrase une fois 80 caracteres ecrits. */
 
+static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu);
+
 // Externs VMM
 extern vmm_directory_t* current_directory;
 extern void vmm_switch_page_directory(uint32_t phys_addr);
@@ -1409,7 +1411,10 @@ void syscall_handler(cpu_state_t* cpu) {
             
         // SYS_GETS - Lire une ligne depuis le clavier
         case SYS_GETS:
-            sys_gets((char*)cpu->ebx, cpu->ecx);
+            /* Yield while the line is incomplete so a Ring 3 worker (the GGUF
+             * disk copy, atadriver) keeps running. keyboard_getc would busy-wait
+             * inside this syscall, and IRQ0 does not preempt a syscall. */
+            sys_gets_cooperative((char*)cpu->ebx, cpu->ecx, cpu);
             break;
             
         case SYS_EXEC:
@@ -3475,6 +3480,57 @@ int sys_spawn(const char* path, char* argv[]) {
 
 
 // Implémentation de SYS_GETS - Lire une ligne complète depuis le clavier
+static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu) {
+    volatile uint32_t i = 0;
+    (void)cpu;
+    if (!buffer || size == 0) return;
+
+    print_string_serial("SYS_GETS: Debut de la lecture (version corrigee)...\n");
+    asm volatile("sti");
+
+    while (i < size - 1) {
+        char c = 0;
+        if (!keyboard_poll_char(&c)) {
+            task_t* self = current_task;
+            /* Save the kernel continuation. schedule(cpu) would store the
+             * user int 0x80 frame and re-enter SYS_GETS from scratch. */
+            if (self && self->syscall_frame && !self->kctx_valid) {
+                self->kctx_valid = 1U;
+                if (kctx_save(self->kctx) == 0) {
+                    schedule(self->syscall_frame);
+                }
+                self->kctx_valid = 0U;
+            }
+            continue;
+        }
+        if (c == '\r' || c == '\n') {
+            print_char('\n', -1, -1, 0x0F);
+            buffer[i] = '\0';
+            print_string_serial("SYS_GETS: ligne lue: ");
+            print_string_serial(buffer);
+            print_string_serial("\n");
+            return;
+        }
+        if (c == '\b' && i > 0) {
+            i--;
+            print_char('\b', -1, -1, 0x0F);
+            print_char(' ', -1, -1, 0x0F);
+            print_char('\b', -1, -1, 0x0F);
+        } else if ((unsigned char)c >= 32 && (unsigned char)c <= 126) {
+            buffer[i++] = c;
+            print_char(c, -1, -1, 0x0F);
+            print_string_serial("SYS_GETS: caractère ajouté: '");
+            write_serial(c);
+            print_string_serial("'\n");
+        }
+    }
+
+    buffer[i] = '\0';
+    print_string_serial("SYS_GETS: buffer plein, ligne lue: ");
+    print_string_serial(buffer);
+    print_string_serial("\n");
+}
+
 void sys_gets(char* buffer, uint32_t size) {
     if (!buffer || size == 0) return;
     
