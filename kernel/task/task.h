@@ -95,6 +95,12 @@ typedef struct task {
     uint32_t kctx[7];
     uint32_t kctx_valid;
     uint32_t boot_service;      /* spawned by the kernel at boot (atadriver, networker) */
+    /* Per-task x87/MMX/SSE state (FXSAVE image, 16-byte aligned). Saved by
+     * the int/IRQ stubs on every Ring 3 -> Ring 0 entry and restored on the
+     * way back (or by jump_to_task), so a Ring 3 SSE2 user (aiworker) keeps
+     * its XMM registers across preemption and kernel code compiled with
+     * -msse2. See boot/isr_stubs.s. */
+    uint8_t fx_state[512] __attribute__((aligned(16)));
     struct task* next;         // Pour la liste chaînée de tâches
     struct task* prev;         // Liste doublement chaînée
 } task_t;
@@ -133,6 +139,9 @@ task_t* create_task(void (*entry_point)());
 task_t* create_task_from_initrd_file(const char* filename);
 task_t* load_elf_task(uint8_t* elf_data, uint32_t size);
 void schedule(cpu_state_t* cpu);
+/* Clean FXSAVE image (FNINIT state, MXCSR 0x1F80, all exceptions masked). */
+void task_fx_init(task_t* task);
+extern const uint32_t task_fx_state_offset;
 void jump_to_task(cpu_state_t* state);
 void task_exit();
 void task_yield();

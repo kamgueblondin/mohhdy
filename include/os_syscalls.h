@@ -326,7 +326,13 @@
  * CPU switch) until SYS_IPC_SEND or a kernel notification queues a
  * message for it. */
 #define SYS_IPC_RECV_WAIT 154
-#define MAX_SYSCALLS 155
+/* Inventory item 4: Ring 3 GPT-2 FP32 worker ("ai-engine", binary
+ * aiworker). EBX = OS_AI_ENGINE_* op, ECX/EDX = op arguments. STATUS is
+ * open to every task; MAP/FETCH/LOG only to the live ai-engine owner;
+ * REPLY from anyone else is refused and counted (rogue). See
+ * docs/ai_worker_ring3.md. */
+#define SYS_AI_ENGINE 155
+#define MAX_SYSCALLS 156
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
@@ -1234,6 +1240,79 @@ typedef struct {
 #define OS_ATA_FS_TIMEOUT (-139)
 /* OS_ATA_FS_READY refused while a slice 2 snapshot job is queued. */
 #define OS_ATA_FS_BUSY (-140)
+
+/* Inventory item 4: SYS_AI_ENGINE errors. */
+/* Caller is not the live ai-engine owner (MAP/FETCH/LOG, rogue REPLY). */
+#define OS_AI_ENGINE_REQUIRED (-144)
+#define OS_AI_ENGINE_BAD_ARGUMENT (-145)
+/* Worker REPLY/FETCH for a job that is not the one in flight. */
+#define OS_AI_ENGINE_STALE (-146)
+/* No FP32 checkpoint / tokenizer in the initrd to map. */
+#define OS_AI_ENGINE_NO_MODEL (-147)
+
+#define OS_AI_ENGINE_STATUS 1U
+#define OS_AI_ENGINE_MAP    2U
+#define OS_AI_ENGINE_FETCH  3U
+#define OS_AI_ENGINE_REPLY  4U
+#define OS_AI_ENGINE_LOG    5U
+/* OS_AI_ENGINE_MAP, ECX: which initrd blob to map read-only. */
+#define OS_AI_ENGINE_BLOB_CHECKPOINT 1U
+#define OS_AI_ENGINE_BLOB_TOKENIZER  2U
+/* Fixed user windows of the borrowed (never freed, read-only) mappings. */
+#define OS_AI_ENGINE_CHECKPOINT_WINDOW 0x80000000U
+#define OS_AI_ENGINE_CHECKPOINT_WINDOW_MAX 0x20000000U /* 512 MiB */
+#define OS_AI_ENGINE_TOKENIZER_WINDOW 0xA0000000U
+#define OS_AI_ENGINE_TOKENIZER_WINDOW_MAX 0x01000000U  /* 16 MiB */
+#define OS_AI_ENGINE_PROMPT_MAX 128U
+#define OS_AI_ENGINE_TEXT_MAX 512U
+#define OS_AI_ENGINE_TOKENS_MAX 64U
+#define OS_AI_ENGINE_LOG_MAX 160U
+/* Doorbell sent by the kernel (sender_pid 0, request_id = job id); the
+ * prompt itself is pulled with OS_AI_ENGINE_FETCH, never over IPC. */
+#define OS_IPC_AI_ENGINE_REQUEST 0x41494A01U
+/* last_path values. */
+#define OS_AI_PATH_NONE 0U
+#define OS_AI_PATH_KERNEL 1U
+#define OS_AI_PATH_WORKER 2U
+#define OS_AI_PATH_KERNEL_FALLBACK 3U
+typedef struct {
+    uint32_t address; /* user address of the first blob byte */
+    uint32_t size;    /* blob bytes */
+} os_ai_engine_map_t;
+typedef struct {
+    uint32_t job_id;
+    uint32_t max;            /* caller output capacity, <= OS_AI_ENGINE_TEXT_MAX */
+    uint32_t prompt_length;
+    char prompt[OS_AI_ENGINE_PROMPT_MAX]; /* already normalised, NUL terminated */
+} os_ai_engine_job_t;
+typedef struct {
+    uint32_t job_id;
+    int32_t result;          /* bytes of text, or a negative generation code */
+    uint32_t text_length;
+    uint32_t prompt_tokens;
+    uint32_t token_count;
+    uint32_t tokens[OS_AI_ENGINE_TOKENS_MAX];
+    char text[OS_AI_ENGINE_TEXT_MAX];
+} os_ai_engine_reply_t;
+typedef struct {
+    int32_t worker_pid;          /* live ai-engine owner, 0 if none */
+    uint32_t forwarded;          /* SYS_GPT2_GENERATE jobs sent to the worker */
+    uint32_t completed;          /* worker replies delivered to callers */
+    uint32_t aborted;            /* worker lost / timed out with a job in flight */
+    uint32_t fallbacks;          /* Ring 0 generations run after an abort */
+    uint32_t kernel_infer;       /* Ring 0 FP32 generations (any reason) */
+    uint32_t kernel_infer_while_live; /* of which with a live worker and no abort: must stay 0 */
+    uint32_t rogue_refused;      /* REPLY from a task that is not the worker */
+    uint32_t stale_refused;      /* worker REPLY/FETCH for a wrong job */
+    uint32_t pending;            /* 1 while a job is in flight */
+    uint32_t last_path;          /* OS_AI_PATH_* of the last generation */
+    int32_t last_result;
+    uint32_t last_prompt_tokens;
+    uint32_t last_token_count;
+    uint32_t last_tokens[OS_AI_ENGINE_TOKENS_MAX];
+    uint32_t checkpoint_mapped;  /* bytes mapped into the current worker */
+    uint32_t tokenizer_mapped;
+} os_ai_engine_status_t;
 /* Test hook: the driver must crash in the middle of this job. */
 #define OS_ATA_JOB_FLAG_DEBUG_CRASH 1U
 

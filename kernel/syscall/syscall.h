@@ -48,6 +48,8 @@ int sys_task_metrics(int pid, os_task_metrics_t* out);
 int sys_task_set_priority(int pid, uint32_t priority);
 int sys_task_wait(int pid);
 int sys_task_set_name(int pid, const char* name);
+/* Inventory item 4: AI relay watchdog, called from IRQ0 each tick. */
+int syscall_ai_relay_watchdog(uint32_t now);
 int sys_task_capacity(os_task_capacity_t* out);
 int sys_task_child_result(int pid, os_task_exit_result_t* out);
 int sys_task_child_result_list(os_task_exit_history_t* out);

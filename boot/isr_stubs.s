@@ -3,81 +3,116 @@ extern timer_handler
 extern ne2k_irq_handler
 extern syscall_handler
 
+extern current_task
+extern task_fx_state_offset
+
+; Per-task FPU/SSE state (FXSAVE). On an entry from Ring 3 the user state is
+; saved into current_task->fx_state and restored on the way back, so kernel
+; code compiled with -msse2 (and other tasks) never leak into a Ring 3 SSE2
+; user. An entry from Ring 0 (IRQ during a syscall, e.g. the kernel GPT-2
+; fallback) saves the state on the kernel stack instead (nesting-safe).
+; %1 = offset of the saved CS from ESP right after the register pushes.
+; EBP keeps the frame pointer (callee-saved by the C handlers).
+%macro FPU_ENTER 1
+    mov ebp, esp
+    test dword [ebp + %1], 3
+    jz %%ring0
+    mov eax, [current_task]
+    test eax, eax
+    jz %%done
+    add eax, [task_fx_state_offset]
+    fxsave [eax]
+    jmp %%done
+%%ring0:
+    sub esp, 512
+    and esp, 0xFFFFFFF0
+    fxsave [esp]
+%%done:
+%endmacro
+
+%macro FPU_LEAVE 1
+    test dword [ebp + %1], 3
+    jz %%ring0
+    mov eax, [current_task]
+    test eax, eax
+    jz %%done
+    add eax, [task_fx_state_offset]
+    fxrstor [eax]
+    jmp %%done
+%%ring0:
+    fxrstor [esp]
+%%done:
+    mov esp, ebp
+%endmacro
+
+; Frame of the IRQ/syscall stubs: pushad (32) + gs fs es ds (16), then
+; EIP at +48 and CS at +52.
+%define IRQ_CS 52
+
 global irq0
 global irq1
 global irq3
 global isr_syscall
 
-; ISR pour le timer (IRQ 0) - Version robuste
+; ISR pour le timer (IRQ 0)
 irq0:
-    ; Sauvegarde complète de l'état du processeur
     push ds
     push es
     push fs
     push gs
     pushad
-    
-    ; Charge les segments du noyau
+
     mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
 
-    ; EOI avant le handler C : schedule() fait iret et ne revient jamais.
-    ; Sans ceci, IRQ0 reste in-service et le PIC bloque IRQ1 (clavier).
     mov al, 0x20
     out 0x20, al
-    
-    ; Passe un pointeur vers la structure de registres au handler C
-    push esp
+
+    FPU_ENTER IRQ_CS
+    push ebp
     call timer_handler
     add esp, 4
-    
-    ; Restaure l'état complet du processeur
+    FPU_LEAVE IRQ_CS
+
     popad
     pop gs
     pop fs
     pop es
     pop ds
-    
-    ; Retour d'interruption
+
     iret
 
-; ISR pour le clavier (IRQ 1) - Version robuste
 irq1:
-    ; Sauvegarde complète de l'état du processeur
     push ds               ; Sauvegarde des segments
     push es
     push fs
     push gs
     pushad                ; Sauvegarde EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
-    
-    ; Charge les segments du noyau
-    mov ax, 0x10          ; Segment de données du noyau
+
+    mov ax, 0x10          ; Segment de donnees du noyau
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
-    
-    ; Appelle le handler C du clavier
+
+    FPU_ENTER IRQ_CS
     call keyboard_interrupt_handler
-    
-    ; Envoie EOI au PIC pour IRQ 1
+    FPU_LEAVE IRQ_CS
+
     mov al, 0x20          ; Commande EOI
-    out 0x20, al          ; Envoie à PIC1
-    
-    ; Restaure l'état complet du processeur
-    popad                 ; Restaure tous les registres généraux
+    out 0x20, al          ; Envoie a PIC1
+
+    popad                 ; Restaure tous les registres generaux
     pop gs
     pop fs
     pop es
     pop ds
-    
-    ; Retour d'interruption
+
     iret
 
-; ISR pour la carte réseau NE2000 (IRQ 3)
 irq3:
     push ds
     push es
@@ -89,7 +124,9 @@ irq3:
     mov es, ax
     mov fs, ax
     mov gs, ax
+    FPU_ENTER IRQ_CS
     call ne2k_irq_handler
+    FPU_LEAVE IRQ_CS
     mov al, 0x20
     out 0x20, al
     popad
@@ -99,7 +136,6 @@ irq3:
     pop ds
     iret
 
-; ISR pour le scheduler volontaire (INT 0x30)
 global isr_schedule
 isr_schedule:
     push ds
@@ -114,9 +150,11 @@ isr_schedule:
     mov fs, ax
     mov gs, ax
 
-    push esp
+    FPU_ENTER IRQ_CS
+    push ebp
     call timer_handler ; Le timer handler appelle schedule, c'est ce qu'on veut
     add esp, 4
+    FPU_LEAVE IRQ_CS
 
     popad
     pop gs
@@ -126,39 +164,34 @@ isr_schedule:
 
     iret
 
-; ISR pour les appels système (INT 0x80)
 isr_syscall:
-    ; Sauvegarde l'état complet du CPU
     push ds
     push es
     push fs
     push gs
     pushad
-    
-    ; Charge les segments du noyau
-    mov ax, 0x10  ; Segment de données du noyau
+
+    mov ax, 0x10  ; Segment de donnees du noyau
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
-    
-    ; Prépare la structure cpu_state_t sur la pile
-    ; L'ordre doit correspondre à la structure dans task.h
-    push esp      ; Pointeur vers la structure
-    
-    ; Appelle le handler C des syscalls
+
+    FPU_ENTER IRQ_CS
+    push ebp      ; Pointeur vers la structure (cpu_state_t*)
+
     call syscall_handler
-    
-    ; Nettoie la pile
+
     add esp, 4
-    
-    ; Restaure l'état du CPU
+    FPU_LEAVE IRQ_CS
+
+    ; Restaure l'etat du CPU
     popad
     pop gs
     pop fs
     pop es
     pop ds
-    
+
     ; Retour d'interruption
     iret
 
@@ -204,9 +237,13 @@ isr_common_stub:
     mov gs, ax
 
     ; 4. Call the C handler, passing a pointer to the stack frame
-    push esp
+    ; Ring 3 faults: FPU/SSE state into the task (restored if it resumes).
+    ; Ring 0 faults: stack save. CS is at +60 (segments, pushad, int, err).
+    FPU_ENTER 60
+    push ebp
     call fault_handler_c
     add esp, 4 ; Clean up the stack pointer argument
+    FPU_LEAVE 60
 
     ; 5. Restore data segment registers
     pop ds

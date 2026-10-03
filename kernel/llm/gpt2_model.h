@@ -33,6 +33,9 @@ typedef struct {
 
 /* Probe a checkpoint in the initrd without copying its weight payload. */
 int gpt2_model_load_from_initrd(const char* path);
+/* Same validation on a caller-provided blob (the Ring 3 aiworker maps the
+ * initrd checkpoint read-only and loads it from there, zero copy). */
+int gpt2_model_load_from_buffer(const uint8_t* blob, uint32_t blob_size);
 const gpt2_model_t* gpt2_model_current(void);
 const char* gpt2_model_status(void);
 

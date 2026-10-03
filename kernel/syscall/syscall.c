@@ -14,6 +14,8 @@
 #include "../llm/gpt2_gguf_infer.h"
 #include "../llm/gpt2_model.h"
 #include "../llm/gpt2_tokenizer.h"
+#include "../llm/gpt2_generate.h"
+#include "../ai_relay.h"
 #include "../service_registry.h"
 #include "../ata_job.h"
 #include "../ata_fsop.h"
@@ -30,7 +32,6 @@
 #include "../vga_console.h"
 #include "../gfx_fb.h"
 /* Completions locales : BPE, top-k basse temperature, arret newline/EOT/repetition. */
-#define GPT2_BAREMETAL_GENERATION_STEPS 12U
 
 // Externs VMM
 extern vmm_directory_t* current_directory;
@@ -137,6 +138,8 @@ void syscall_ata_bridge_init(void) {
     overlay_set_disk_hooks(ata_bridge_overlay_redirect, ata_job_note_kernel_overlay_write);
     task_sched_hook = ata_rpc_sched_hook;
 }
+
+static int32_t sys_ai_engine(cpu_state_t* cpu);
 
 /* Tranche 4 slice 3: synchronous FAT sector RPC through the Ring 3 driver.
  *
@@ -1675,6 +1678,9 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_IPC_RECV_WAIT:
             cpu->eax = (uint32_t)sys_ipc_receive_wait((os_ipc_message_t*)cpu->ebx, cpu->ecx);
             break;
+        case SYS_AI_ENGINE:
+            cpu->eax = (uint32_t)sys_ai_engine(cpu);
+            break;
         case SYS_SERVICE_REGISTER:
             cpu->eax = (uint32_t)sys_service_register((const char*)cpu->ebx);
             break;
@@ -2258,7 +2264,8 @@ int sys_service_register(const char* name) {
     if (!current_task || current_task->type != TASK_TYPE_USER) return OS_SERVICE_BAD_NAME;
     /* Tranche 4: ata-driver (Ring 3 ATA port capability) only for atadriver. */
     if (!service_registry_ata_driver_name_allowed(name, current_task->name))
-        return OS_ATA_DRIVER_REQUIRED;
+        return (name && strcmp(name, "ai-engine") == 0) ? OS_AI_ENGINE_REQUIRED
+                                                        : OS_ATA_DRIVER_REQUIRED;
     owner_pid = service_registry_lookup(name);
     if (owner_pid > 0) {
         owner = get_task_by_id(owner_pid);
@@ -2816,95 +2823,278 @@ static int sys_gpt2_gguf_session_step(char* out, uint32_t max) {
     return (int)written;
 }
 
-static int sys_gpt2_generate_impl(const char* prompt, char* out, uint32_t max,
-                                  uint8_t use_gguf) {
-    char prompt_copy[128];
-    uint32_t tokens[64];
+/* GGUF profile (SYS_GPT2_GGUF_GENERATE 109 / CONTINUE 110): still Ring 0
+ * (about 100 MiB of resident Q3_K/Q6_K weights loaded from FAT16). */
+static int sys_gpt2_gguf_generate_impl(const char* prompt, char* out, uint32_t max) {
+    char prompt_copy[GPT2_GENERATE_PROMPT_MAX];
+    uint32_t tokens[GPT2_GENERATE_MAX_TOKENS];
     uint32_t token_count = 0;
-    uint32_t written = 0;
-    uint32_t rng_state;
-    uint32_t prompt_tokens;
-    uint32_t generation_steps;
-    uint32_t prev_generated = 0xFFFFFFFFu;
-    const gpt2_model_t* model;
     int rc;
 
     if (!prompt || !out || max < 2) return -1;
-    if (use_gguf) gguf_session_active = 0U;
-    /* Conserve punctuation, apostrophes, espaces simples et UTF-8. */
-    uint32_t input_pos = 0;
-    uint32_t output_pos = 0;
-    while (input_pos < 255U && prompt[input_pos] != '\0' && output_pos + 1U < sizeof(prompt_copy)) {
-        uint8_t ch = (uint8_t)prompt[input_pos++];
-        if (ch == '\t' || ch == '\r' || ch == '\n') ch = ' ';
-        if (ch < 32U || ch == 127U) continue;
-        if (ch == ' ' && (output_pos == 0U || (uint8_t)prompt_copy[output_pos - 1U] == ' ')) continue;
-        prompt_copy[output_pos++] = (char)ch;
-    }
-    prompt_copy[output_pos] = '\0';
-
-    rc = gpt2_tokenizer_encode(prompt_copy, tokens, 64, &token_count);
+    gguf_session_active = 0U;
+    (void)gpt2_generate_normalize(prompt, 255U, prompt_copy, sizeof(prompt_copy));
+    rc = gpt2_tokenizer_encode(prompt_copy, tokens, GPT2_GENERATE_MAX_TOKENS, &token_count);
     if (rc != 0) return -2;
-    model = gpt2_model_current();
-    if (use_gguf) {
-        if (!gpt2_gguf_infer_ready() || token_count > GPT2_GGUF_INFER_MAX_CONTEXT) return -5;
-    } else if (!model->ready || token_count > model->config.max_seq_len) return -5;
-    prompt_tokens = token_count;
-
-    generation_steps = use_gguf ? 1U : GPT2_BAREMETAL_GENERATION_STEPS;
-    rng_state = 0x9e3779b9U;
-    for (uint32_t i = 0; prompt_copy[i] != '\0'; i++) {
-        rng_state = rng_state * 16777619U + (uint8_t)prompt_copy[i];
-    }
-    if (rng_state == 0U) rng_state = 1U;
-    if (use_gguf) {
-        for (uint32_t i = 0U; i < token_count; i++) gguf_session_tokens[i] = tokens[i];
-        gguf_session_token_count = token_count;
-        gguf_session_prompt_tokens = prompt_tokens;
-        gguf_session_rng = rng_state;
-        gguf_session_active = 1U;
-        return sys_gpt2_gguf_session_step(out, max);
-    }
-
-    for (uint32_t step = 0; step < generation_steps && token_count < 64 &&
-         (use_gguf || token_count < model->config.max_seq_len); step++) {
-        uint32_t next_token = 0;
-        const char* piece;
-        int saw_newline = 0;
-        uint32_t generated_count = token_count - prompt_tokens;
-        if (use_gguf)
-            rc = gpt2_gguf_generate_next_sampled(tokens, token_count, generated_count,
-                                                  &next_token, &rng_state);
-        else
-            rc = gpt2_generate_next_sampled(tokens, token_count, generated_count,
-                                            &next_token, &rng_state);
-        if (rc != 0) return -30 + rc;
-        if (next_token == gpt2_tokenizer_eot()) break;
-        if (next_token == prev_generated) break;
-        prev_generated = next_token;
-        tokens[token_count++] = next_token;
-        piece = gpt2_tokenizer_decode(next_token);
-        if (!piece) return -4;
-        for (uint32_t i = 0; piece[i] != '\0'; i++) {
-            if (written + 1 >= max) {
-                out[written] = '\0';
-                return (int)written;
-            }
-            out[written++] = piece[i];
-            if (piece[i] == '\n') saw_newline = 1;
-        }
-        if (saw_newline) break;
-    }
-    out[written] = '\0';
-    return (int)written;
+    if (!gpt2_gguf_infer_ready() || token_count > GPT2_GGUF_INFER_MAX_CONTEXT) return -5;
+    for (uint32_t i = 0U; i < token_count; i++) gguf_session_tokens[i] = tokens[i];
+    gguf_session_token_count = token_count;
+    gguf_session_prompt_tokens = token_count;
+    gguf_session_rng = gpt2_generate_seed(prompt_copy);
+    gguf_session_active = 1U;
+    return sys_gpt2_gguf_session_step(out, max);
 }
 
+/* ------------------------------------------------------------------------
+ * Inventory item 4: Ring 3 GPT-2 FP32 worker ("ai-engine" / aiworker).
+ * While the worker is registered, SYS_GPT2_GENERATE of any other user task
+ * is relayed to it: the kernel keeps the normalised prompt in the relay
+ * slot, rings the worker with one IPC doorbell (sender 0, no prompt bytes)
+ * and blocks the caller in TASK_BLOCKED_KERNEL. The worker pulls the job
+ * with OS_AI_ENGINE_FETCH, runs the same gpt2_generate_fp32() on the
+ * checkpoint it mapped read-only (OS_AI_ENGINE_MAP) and answers with
+ * OS_AI_ENGINE_REPLY, which wakes the caller. Worker lost or stalled: the
+ * caller runs the Ring 0 path (fallback, counted). */
+static task_t* g_ai_waiter;
+static int32_t g_ai_mapped_pid;
+
+/* Live ai-engine owner without the purge side effects of
+ * sys_service_lookup (also called from the scheduler hook). */
+static int32_t ai_live_worker(void) {
+    int32_t pid = service_registry_lookup("ai-engine");
+    task_t* t;
+    if (pid <= 0) return 0;
+    t = get_task_by_id(pid);
+    if (!t || t->type != TASK_TYPE_USER || t->state == TASK_TERMINATED) return 0;
+    return pid;
+}
+
+static void ai_relay_wake_caller(void) {
+    task_t* waiter = g_ai_waiter;
+    if (waiter && (int32_t)waiter->id == ai_relay_caller() &&
+        waiter->state == TASK_BLOCKED_KERNEL)
+        waiter->state = TASK_READY;
+}
+
+/* Called from IRQ0 (kernel/timer.c) every tick: a job in flight whose
+ * worker died, was replaced or stalled past AI_RELAY_TIMEOUT_TICKS is
+ * failed and its caller woken for the Ring 0 fallback; a caller that died
+ * frees the slot. Returns 1 when it woke the caller. */
+int syscall_ai_relay_watchdog(uint32_t now) {
+    task_t* caller;
+    if (ai_relay_state() != AI_RELAY_SENT) return 0;
+    caller = get_task_by_id(ai_relay_caller());
+    if (!caller || caller->state == TASK_TERMINATED) {
+        ai_relay_drop_caller();
+        g_ai_waiter = NULL;
+        return 0;
+    }
+    if (!ai_relay_should_fail(ai_live_worker(), now)) return 0;
+    ai_relay_fail();
+    print_string_serial("[AI] relay aborted: ai-engine lost or stalled; Ring 0 fallback\n");
+    ai_relay_wake_caller();
+    return 1;
+}
+
+/* Runs one relayed generation. Returns the worker result with *fallback 0,
+ * or *fallback 1 when the caller must run the Ring 0 path. */
+static int ai_relay_run(int32_t worker_pid, const char* prompt, char* out, uint32_t max,
+                        int* fallback) {
+    task_t* self = current_task;
+    task_t* worker = get_task_by_id(worker_pid);
+    os_ipc_payload_t payload;
+    os_ai_engine_reply_t reply;
+    uint32_t words[3];
+    uint32_t state;
+    int32_t job;
+    int rc;
+
+    *fallback = 1;
+    if (!self || !self->syscall_frame || !worker) return 0;
+    job = ai_relay_begin((int32_t)self->id, worker_pid, prompt, max, timer_get_ticks());
+    if (job <= 0) {
+        /* One job in flight at a time: retry the syscall later. */
+        self->syscall_frame->eip -= 2U;
+        schedule(self->syscall_frame);
+        return 0; /* not reached */
+    }
+    memset(&payload, 0, sizeof(payload));
+    payload.type = OS_IPC_AI_ENGINE_REQUEST;
+    payload.request_id = (uint32_t)job;
+    words[0] = (uint32_t)job;
+    words[1] = max > OS_AI_ENGINE_TEXT_MAX ? OS_AI_ENGINE_TEXT_MAX : max;
+    words[2] = 0U;
+    while (prompt[words[2]] != '\0' && words[2] < OS_AI_ENGINE_PROMPT_MAX) words[2]++;
+    payload.size = (uint32_t)sizeof(words);
+    memcpy(payload.data, words, sizeof(words));
+    rc = ipc_endpoint_send(&worker->ipc_endpoint, 0, &payload);
+    if (rc != 0) {
+        ai_relay_cancel();
+        print_string_serial("[AI] ai-engine mailbox refused the job; Ring 0 fallback\n");
+        return 0;
+    }
+    task_ipc_message_queued(worker);
+    g_ai_waiter = self;
+    for (;;) {
+        if (ai_relay_state() != AI_RELAY_SENT || ai_relay_caller() != (int32_t)self->id) break;
+        self->state = TASK_BLOCKED_KERNEL;
+        self->kctx_valid = 1U;
+        if (kctx_save(self->kctx) == 0) {
+            schedule(self->syscall_frame); /* never returns; resumed below */
+        }
+        self->kctx_valid = 0U;
+    }
+    g_ai_waiter = NULL;
+    memset(&reply, 0, sizeof(reply));
+    state = ai_relay_take((int32_t)self->id, &reply);
+    if (state != AI_RELAY_DONE) return 0;
+    *fallback = 0;
+    if (reply.result >= 0) {
+        uint32_t n = reply.text_length;
+        if (n + 1U > max) n = max - 1U;
+        memcpy(out, reply.text, n);
+        out[n] = '\0';
+    }
+    ai_relay_record_last(OS_AI_PATH_WORKER, reply.result, reply.tokens,
+                         reply.prompt_tokens, reply.token_count);
+    return reply.result;
+}
+
+/* SYS_GPT2_GENERATE (22), FP32 llm.c checkpoint. */
 int sys_gpt2_generate(const char* prompt, char* out, uint32_t max) {
-    return sys_gpt2_generate_impl(prompt, out, max, 0U);
+    char prompt_copy[GPT2_GENERATE_PROMPT_MAX];
+    gpt2_generate_trace_t trace;
+    int32_t worker;
+    int fallback = 0;
+    int rc;
+
+    if (!prompt || !out || max < 2) return -1;
+    if (current_task && current_task->type == TASK_TYPE_USER &&
+        !syscall_user_range(out, max, 1))
+        return -1;
+    (void)gpt2_generate_normalize(prompt, 255U, prompt_copy, sizeof(prompt_copy));
+    worker = ai_live_worker();
+    if (worker > 0 && current_task && current_task->type == TASK_TYPE_USER) {
+        /* The worker itself never borrows the Ring 0 engine. */
+        if ((int32_t)current_task->id == worker) return OS_AI_ENGINE_REQUIRED;
+        rc = ai_relay_run(worker, prompt_copy, out, max, &fallback);
+        if (!fallback) return rc;
+    }
+    rc = gpt2_generate_fp32(prompt_copy, out, max, &trace);
+    ai_relay_note_kernel_infer(ai_live_worker() > 0, fallback);
+    ai_relay_record_last(fallback ? OS_AI_PATH_KERNEL_FALLBACK : OS_AI_PATH_KERNEL, rc,
+                         trace.tokens, trace.prompt_tokens, trace.token_count);
+    return rc;
+}
+
+/* OS_AI_ENGINE_MAP: the initrd blob (the same frames the Ring 0 fallback
+ * reads) mapped read-only into the worker at a fixed window, PAGE_BORROWED
+ * so the worker exit never frees initrd frames. The <4 KiB of initrd bytes
+ * sharing the first/last page are visible too; the whole initrd is already
+ * world-readable through SYS_READFILE. */
+static int ai_engine_map(uint32_t which, os_ai_engine_map_t* out) {
+    const char* path;
+    uint32_t window, window_max, data, size, offset, pages, i;
+    if (which == OS_AI_ENGINE_BLOB_CHECKPOINT) {
+        path = "models/gpt2_124M.bin";
+        window = OS_AI_ENGINE_CHECKPOINT_WINDOW;
+        window_max = OS_AI_ENGINE_CHECKPOINT_WINDOW_MAX;
+        if (!gpt2_model_current()->ready) return OS_AI_ENGINE_NO_MODEL;
+    } else if (which == OS_AI_ENGINE_BLOB_TOKENIZER) {
+        path = "models/gpt2_tokenizer.bin";
+        window = OS_AI_ENGINE_TOKENIZER_WINDOW;
+        window_max = OS_AI_ENGINE_TOKENIZER_WINDOW_MAX;
+        if (!gpt2_tokenizer_ready()) return OS_AI_ENGINE_NO_MODEL;
+    } else {
+        return OS_AI_ENGINE_BAD_ARGUMENT;
+    }
+    data = (uint32_t)initrd_read_file(path);
+    size = initrd_get_file_size(path);
+    if (!data || size == 0U) return OS_AI_ENGINE_NO_MODEL;
+    offset = data & (PAGE_SIZE - 1U);
+    if (size > window_max - offset) return OS_AI_ENGINE_NO_MODEL;
+    pages = (offset + size + PAGE_SIZE - 1U) / PAGE_SIZE;
+    for (i = 0U; i < pages; i++) {
+        if (vmm_map_borrowed_user_page(current_task->vmm_dir,
+                                       (void*)((data & ~(PAGE_SIZE - 1U)) + i * PAGE_SIZE),
+                                       (void*)(window + i * PAGE_SIZE)) != 0)
+            return OS_AI_ENGINE_BAD_ARGUMENT;
+    }
+    out->address = window + offset;
+    out->size = size;
+    ai_relay_note_mapped(which, size);
+    return 0;
+}
+
+static int32_t sys_ai_engine(cpu_state_t* cpu) {
+    int32_t pid = current_task ? (int32_t)current_task->id : 0;
+    int32_t worker = ai_live_worker();
+    switch (cpu->ebx) {
+        case OS_AI_ENGINE_STATUS: {
+            os_ai_engine_status_t* out = (os_ai_engine_status_t*)cpu->ecx;
+            if (!syscall_user_range(out, sizeof(*out), 1)) return OS_AI_ENGINE_BAD_ARGUMENT;
+            ai_relay_fill_status(out, worker);
+            if (worker <= 0 || worker != g_ai_mapped_pid) {
+                out->checkpoint_mapped = 0U;
+                out->tokenizer_mapped = 0U;
+            }
+            return 0;
+        }
+        case OS_AI_ENGINE_MAP: {
+            os_ai_engine_map_t map;
+            int rc;
+            if (pid <= 0 || pid != worker) return OS_AI_ENGINE_REQUIRED;
+            if (!syscall_user_range((void*)cpu->edx, sizeof(map), 1)) return OS_AI_ENGINE_BAD_ARGUMENT;
+            if (g_ai_mapped_pid != pid) {
+                ai_relay_worker_reset();
+                g_ai_mapped_pid = pid;
+            }
+            rc = ai_engine_map(cpu->ecx, &map);
+            if (rc == 0) memcpy((void*)cpu->edx, &map, sizeof(map));
+            return rc;
+        }
+        case OS_AI_ENGINE_FETCH: {
+            os_ai_engine_job_t job;
+            int rc;
+            if (pid <= 0 || pid != worker) return OS_AI_ENGINE_REQUIRED;
+            if (!syscall_user_range((void*)cpu->edx, sizeof(job), 1)) return OS_AI_ENGINE_BAD_ARGUMENT;
+            rc = ai_relay_fetch(pid, worker, cpu->ecx, &job);
+            if (rc == 0) memcpy((void*)cpu->edx, &job, sizeof(job));
+            return rc;
+        }
+        case OS_AI_ENGINE_REPLY: {
+            static os_ai_engine_reply_t reply; /* kernel copy, ~800 bytes */
+            int rc;
+            if (pid <= 0 || worker <= 0 || pid != worker) {
+                ai_relay_note_rogue();
+                print_string_serial("[AI] rogue relay reply refused\n");
+                return OS_AI_ENGINE_REQUIRED;
+            }
+            if (!syscall_user_range((const void*)cpu->ecx, sizeof(reply), 0)) return OS_AI_ENGINE_BAD_ARGUMENT;
+            memcpy(&reply, (const void*)cpu->ecx, sizeof(reply));
+            rc = ai_relay_complete(pid, worker, &reply);
+            if (rc == OS_AI_ENGINE_STALE) print_string_serial("[AI] stale relay reply refused\n");
+            if (rc == 0) ai_relay_wake_caller();
+            return rc;
+        }
+        case OS_AI_ENGINE_LOG: {
+            const char* text = (const char*)cpu->ecx;
+            uint32_t i, n = cpu->edx;
+            if (pid <= 0 || pid != worker) return OS_AI_ENGINE_REQUIRED;
+            if (n > OS_AI_ENGINE_LOG_MAX || !syscall_user_range(text, n, 0)) return OS_AI_ENGINE_BAD_ARGUMENT;
+            for (i = 0U; i < n; i++) {
+                print_char(text[i], -1, -1, 0x0F);
+                write_serial(text[i]);
+            }
+            return 0;
+        }
+        default:
+            return OS_AI_ENGINE_BAD_ARGUMENT;
+    }
 }
 
 int sys_gpt2_gguf_generate(const char* prompt, char* out, uint32_t max) {
-    return sys_gpt2_generate_impl(prompt, out, max, 1U);
+    return sys_gpt2_gguf_generate_impl(prompt, out, max);
 }
 
 int sys_gpt2_gguf_continue(char* out, uint32_t max) {
@@ -2921,6 +3111,9 @@ void syscall_init() {
     gguf_session_token_count = 0U;
     gguf_session_prompt_tokens = 0U;
     gguf_session_rng = 0U;
+    ai_relay_init();
+    g_ai_waiter = NULL;
+    g_ai_mapped_pid = 0;
     // Enregistre notre handler pour l'interruption 0x80
     register_interrupt_handler(0x80, (interrupt_handler_t)syscall_handler);
 }

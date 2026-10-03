@@ -15,13 +15,13 @@ La mention **fait** signifie que le comportement est observable dans le code et 
 | AOS-003 | Recevoir timer et clavier | PIC/PIT 100 Hz/i8042 ; prefixe `0xE0` (Page Up/Down, fleches) ; EOI IRQ0 avant le gestionnaire C |
 | AOS-004 | Lire un initrd | Archive TAR (ustar) en lecture seule, `SYS_LISTDIR`, `SYS_READFILE` |
 | AOS-005 | Executer un shell isole | Shell ELF utilisateur et retour Ring 3 par `iret` |
-| AOS-006 | Exposer une ABI de syscalls | ABI propre `int 0x80` ; syscalls 0-154, `MAX_SYSCALLS = 155` (148 jeton de capability backend, 153 droit du nom detenu, 154 reception IPC bloquante) |
+| AOS-006 | Exposer une ABI de syscalls | ABI propre `int 0x80` ; syscalls 0-155, `MAX_SYSCALLS = 156` (148 jeton de capability backend, 153 droit du nom detenu, 154 reception IPC bloquante, 155 `SYS_AI_ENGINE` du worker GPT-2 Ring 3) |
 | AOS-007 | Conserver de petits fichiers | Overlay ATA PIO persistant V2 et restauration V1/V2 |
 | AOS-008 | Gerer plusieurs taches | `spawn`, `yield`, `ps`, `kill`, plus preemption IRQ0 sure |
 | AOS-009 | Executer un ELF bloquant | `exec`, parent `TASK_WAITING`, reveil par `SYS_EXIT` |
 | AOS-010 | Completer localement avec GPT-2 | `SYS_GPT2_GENERATE`, GPT-2 124M optionnel, cache KV et SSE2 |
 | AOS-011 | Tokeniser BPE GPT-2 | Vocabulaire/fusions BPE et decodage UTF-8 brut |
-| AOS-012 | Prévenir les régressions | 648 tests C au rejeu du 3 octobre 2026, `make qemu-smoke` (six scenarios) et sept contrats QEMU, dont `qemu-ne2k-status`, `qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next` et `qemu-vfs-service` |
+| AOS-012 | Prévenir les régressions | 657 tests C au rejeu du 3 octobre 2026 (648 avant `aiworker`), `make qemu-smoke` (six scenarios) et sept contrats QEMU, dont `qemu-ne2k-status`, `qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next` et `qemu-vfs-service` |
 
 ## Tranche AOS-020 à AOS-025 - livrée
 
@@ -123,7 +123,7 @@ Les lots 113-154 sont **faits** au sens caller-owned / Unity / smoke NIC. Les lo
 | 126 | Grant backend VFS droit-source-préfixe relatif : EDX droits, ESI sources, EDI préfixe NUL-terminé |
 | 127 | `SYS_VGA_BLIT` : bureau 80x25 (`os_vga_frame_t*`) ; EBX=0 quitte le desktop |
 
-`MAX_SYSCALLS = 155` (0 a 154). Le tableau ci-dessus s'arrete a 127, socle historique dont `SYS_VGA_BLIT`. 148 est le jeton de capability, 149 le pull d'evenement, 150 le journal de montages, 151 la cle d'identite de la tache courante, 152 les deux compteurs de pertes du deversoir IPC, 153 le droit du nom dont l'appelant est titulaire, 154 `SYS_IPC_RECV_WAIT` (reception bloquante : EBX message, ECX delai en ticks, 0 = sondage, `OS_IPC_WAIT_FOREVER` = sans delai, `OS_IPC_TIMEOUT` -45).
+`MAX_SYSCALLS = 156` (0 a 155). Le tableau ci-dessus s'arrete a 127, socle historique dont `SYS_VGA_BLIT`. 148 est le jeton de capability, 149 le pull d'evenement, 150 le journal de montages, 151 la cle d'identite de la tache courante, 152 les deux compteurs de pertes du deversoir IPC, 153 le droit du nom dont l'appelant est titulaire, 154 `SYS_IPC_RECV_WAIT` (reception bloquante : EBX message, ECX delai en ticks, 0 = sondage, `OS_IPC_WAIT_FOREVER` = sans delai, `OS_IPC_TIMEOUT` -45), 155 `SYS_AI_ENGINE` (STATUS/MAP/FETCH/REPLY/LOG du service `ai-engine` tenu par `aiworker`, voir [docs/ai_worker_ring3.md](../docs/ai_worker_ring3.md)).
 
 ## Prochaines etapes, hors livraison actuelle
 
@@ -131,7 +131,7 @@ La liste vivante et les criteres sont dans [docs/ETAT_REEL.md](../docs/ETAT_REEL
 
 | Priorite | Sujet | Etat |
 |---|---|---|
-| 0 | Gates | `make test-all` 648/648. `make qemu-smoke` : six scenarios en 547,9 s. `make qemu-foundation-steps` (pointe precedente) : `cap-token 1`, `id-key 2`, cle fils 4, `spill-drops` encore nul au second boot, `right-token ata-driver` refuse. `make qemu-ata-driver` 295,1 s, `make qemu-net-worker` 209,3 s, `make qemu-net-wire` 86,8 s. `make integration-qemu` : 7/7 en 800,2 s, pointe precedente |
+| 0 | Gates | `make test-all` 657/657 (648/648 avant `aiworker`). `make qemu-smoke` : six scenarios en 547,9 s. `make qemu-foundation-steps` (pointe precedente) : `cap-token 1`, `id-key 2`, cle fils 4, `spill-drops` encore nul au second boot, `right-token ata-driver` refuse. `make qemu-ata-driver` 295,1 s, `make qemu-net-worker` 209,3 s, `make qemu-net-wire` 86,8 s. `make integration-qemu` : 7/7 en 800,2 s, pointe precedente |
 | 1 | Chaine US-031 | Livre : `us031_complete=false`, `chromium=false` |
 | 2 | Chat chiffre metier | Livre : `make qemu-ne2k-guest-tls-metier`, hors CI |
 | 3 | Latence KVM | Livre, un echantillon, poids residents : 43,916 s puis 20,224 s. Pas sous 1 s |
@@ -144,7 +144,7 @@ La liste vivante et les criteres sont dans [docs/ETAT_REEL.md](../docs/ETAT_REEL
 | 17 | Mort du parent | Livre : le nouveau parent direct voit sequence, generation et cle. L'etranger non. Le petit-enfant reste cache tant que son parent intermediaire vit. Preuve `test_task_identity_follows_parent_death` |
 | 18 | Journal local | Livre : `task-event` ajoute ` id SEQ GEN KEY` apres les ticks. `task-events ok` ne change pas. L'avis IPC reste 24 octets. `make qemu-smoke` : `sleeper` `id 5 1 4`, `waitchild` `id 6 2 5`, y compris apres la mort |
 
-Deja livre, a ne pas reouvrir comme si c'etait absent : pilote ATA Ring 3, pile NE2000 Ring 3 quand le worker tient la carte (registres programmes par `networker`), lancement de `networker` au boot si la NIC est presente, LFN et sous-repertoires multi-niveaux, stub OS-UI, jeton de capability distinct du droit de nom, cle d'identite lue par `id-key` et visible pour soi ou l'enfant direct (`children` compris, elle suit le parent apres delegation et apres sa mort, et le journal local la recopie a l'evenement), droit de service lu par `right-token`, pull d'evenement, deversoir IPC et ses deux compteurs de pertes, notifications de supervision dans ce deversoir, journaux de montages et d'evenements, chat metier chiffre. Restent Ring 0 : boot ATA, replis sans worker, sonde de presence de la carte. Le chemin noyau pair 128-130 reste refuse s'il n'est pas relaye au worker. Ce n'est pas US-001. `make integration-qemu` est vert en 800,2 s sur la pointe precedente. `make qemu-smoke` est vert en 547,9 s sur ce tip. La CI du commit `e8c3ff6`, run 37094146840, a les quatre jobs verts. Elle couvre le code, pas ce commit de documentation.
+Deja livre, a ne pas reouvrir comme si c'etait absent : pilote ATA Ring 3, pile NE2000 Ring 3 quand le worker tient la carte (registres programmes par `networker`), lancement de `networker` au boot si la NIC est presente, LFN et sous-repertoires multi-niveaux, stub OS-UI, jeton de capability distinct du droit de nom, cle d'identite lue par `id-key` et visible pour soi ou l'enfant direct (`children` compris, elle suit le parent apres delegation et apres sa mort, et le journal local la recopie a l'evenement), droit de service lu par `right-token`, pull d'evenement, deversoir IPC et ses deux compteurs de pertes, notifications de supervision dans ce deversoir, journaux de montages et d'evenements, chat metier chiffre. Inference GPT-2 FP32 en Ring 3 dans `aiworker` quand il est vivant (`make qemu-ai-worker`, fixture synthetique). Restent Ring 0 : boot ATA, replis sans worker (dont le repli FP32), sonde de presence de la carte, GGUF. Le chemin noyau pair 128-130 reste refuse s'il n'est pas relaye au worker. Ce n'est pas US-001. `make integration-qemu` est vert en 800,2 s sur la pointe precedente. `make qemu-smoke` est vert en 547,9 s sur ce tip. La CI du commit `e8c3ff6`, run 37094146840, a les quatre jobs verts. Elle couvre le code, pas ce commit de documentation.
 
 La vision historique (microkernel complet, P2P, economie, multi-plateforme) reste une collection de specifications dans `US/`. Elle n'est pas la file de build. Capacites OS : [mohhdy_agent_support_web.md](mohhdy_agent_support_web.md). Roadmap produit : [docs/PLAN_SE_MOHHDY_COMPLET.md](../docs/PLAN_SE_MOHHDY_COMPLET.md). Gardes guest : [docs/PLAN_SUITE_IMPLEMENTATION.md](../docs/PLAN_SUITE_IMPLEMENTATION.md).
 

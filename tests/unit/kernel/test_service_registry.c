@@ -546,6 +546,18 @@ static void test_notify_ack_and_history_persistence(void) {
     TEST_ASSERT_EQUAL(OS_SERVICE_NOT_FOUND, service_registry_notify_ack(4, 9999U));
 }
 
+/* Inventory item 4: "ai-engine" (relayed prompts, initrd checkpoint map)
+ * is pinned to the aiworker binary name. */
+static void test_ai_engine_name_pinned_to_aiworker(void) {
+    service_registry_init();
+    TEST_ASSERT_TRUE(service_registry_ata_driver_name_allowed("ai-engine", "aiworker"));
+    TEST_ASSERT_FALSE(service_registry_ata_driver_name_allowed("ai-engine", "airogue"));
+    TEST_ASSERT_FALSE(service_registry_ata_driver_name_allowed("ai-engine", "shell"));
+    TEST_ASSERT_FALSE(service_registry_ata_driver_name_allowed("ai-engine", "aiworkerx"));
+    TEST_ASSERT_FALSE(service_registry_ata_driver_name_allowed("ai-engine", 0));
+    TEST_ASSERT_TRUE(service_registry_ata_driver_name_allowed("ai-engine2", "shell"));
+}
+
 static void test_ata_driver_name_and_port_grant(void) {
     /* Tranche 4: only the atadriver binary may hold "ata-driver", and only
      * that live owner gets the ATA ports opened in the TSS IOPB. */
@@ -938,6 +950,7 @@ int main(void) {
     RUN_TEST(test_notify_ack_and_history_persistence);
     /* Tranche 4 Ring 3 ATA driver. */
     RUN_TEST(test_ata_driver_name_and_port_grant);
+    RUN_TEST(test_ai_engine_name_pinned_to_aiworker);
     /* Tranche 5 net-driver gate. */
     RUN_TEST(test_net_syscalls_only_via_net_driver_when_live);
     /* Task 2 Increments */

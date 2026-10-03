@@ -1,5 +1,7 @@
 #include "gpt2_tokenizer.h"
+#ifndef MOHHDY_RING3
 #include "../../fs/initrd.h"
+#endif
 
 #define GPT2_TOKENIZER_MAGIC 20240328U
 #define GPT2_TOKENIZER_MAX_VOCAB 50257U
@@ -332,11 +334,13 @@ int gpt2_tokenizer_load_from_buffer(const uint8_t* blob, uint32_t blob_size) {
     return 0;
 }
 
+#ifndef MOHHDY_RING3
 int gpt2_tokenizer_load_from_initrd(const char* path) {
     const uint8_t* blob = (const uint8_t*)initrd_read_file(path);
     uint32_t blob_size = initrd_get_file_size(path);
     return gpt2_tokenizer_load_from_buffer(blob, blob_size);
 }
+#endif
 
 int gpt2_tokenizer_encode(const char* text, uint32_t* out_tokens,
                           uint32_t max_tokens, uint32_t* out_count) {
@@ -385,6 +389,10 @@ const char* gpt2_tokenizer_decode(uint32_t token_id) {
     }
     decoded_piece[out] = '\0';
     return decoded_piece;
+}
+
+int gpt2_tokenizer_ready(void) {
+    return tokenizer_ready;
 }
 
 uint32_t gpt2_tokenizer_eot(void) {

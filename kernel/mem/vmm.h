@@ -7,6 +7,9 @@
 #define PAGE_PRESENT    0x01
 #define PAGE_WRITE      0x02
 #define PAGE_USER       0x04
+/* AVL bit 9: frame borrowed from the kernel (e.g. initrd pages mapped
+ * read-only into the aiworker). vmm_destroy_user_directory never frees it. */
+#define PAGE_BORROWED   0x200
 
 // Taille d'une page et nombre d'entrées par table
 #define PAGE_SIZE       4096
@@ -50,6 +53,11 @@ void vmm_switch_page_directory(uint32_t physical_addr);
 page_t *vmm_get_page(uint32_t address, int make, vmm_directory_t *dir);
 /* Retourne 0 après mapping ; négatif si une table privée ne peut pas être obtenue. */
 int vmm_map_page_in_directory(vmm_directory_t *dir, void *physaddr, void *virtualaddr, uint32_t flags);
+/* Maps a frame the task does not own (read-only, user, PAGE_BORROWED).
+ * Returns 0, or negative like vmm_map_page_in_directory. */
+int vmm_map_borrowed_user_page(vmm_directory_t *dir, void *physaddr, void *virtualaddr);
+/* 1 if the user page at virtualaddr is a borrowed (never freed) frame. */
+int vmm_page_is_borrowed(const page_t *page);
 /* Libère uniquement un répertoire utilisateur inactif et ses pages marquées utilisateur. */
 int vmm_destroy_user_directory(vmm_directory_t *dir);
 

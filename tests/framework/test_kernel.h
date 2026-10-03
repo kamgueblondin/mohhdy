@@ -29,7 +29,7 @@ typedef struct {
     uint32_t user_stack;
     uint64_t original_cr3;  // 64-bit pour compatibilité
     int interrupts_enabled;
-    char test_heap[512 * 1024]; /* Le journal de supervision agrandit task_t. */
+    char test_heap[512 * 1024] __attribute__((aligned(16))); /* Le journal de supervision agrandit task_t ; fx_state exige 16 octets. */
     size_t heap_used;
 } test_kernel_context_t;
 

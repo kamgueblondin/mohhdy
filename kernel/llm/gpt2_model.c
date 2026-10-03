@@ -1,5 +1,7 @@
 #include "gpt2_model.h"
+#ifndef MOHHDY_RING3
 #include "../../fs/initrd.h"
+#endif
 
 static gpt2_model_t current_model;
 static const char* current_status = "GPT-2: aucun checkpoint charge";
@@ -39,16 +41,12 @@ static void gpt2_model_reset(const char* status) {
     current_status = status;
 }
 
-int gpt2_model_load_from_initrd(const char* path) {
-    const uint8_t* blob;
+int gpt2_model_load_from_buffer(const uint8_t* blob, uint32_t blob_size) {
     const uint32_t* header;
-    uint32_t blob_size;
     uint64_t count;
     uint64_t required_size;
 
     gpt2_model_reset("GPT-2: verification du checkpoint");
-    blob = (const uint8_t*)initrd_read_file(path);
-    blob_size = initrd_get_file_size(path);
     if (!blob || blob_size < GPT2_HEADER_BYTES) {
         gpt2_model_reset("GPT-2: checkpoint absent de l'initrd");
         return -1;
@@ -97,6 +95,18 @@ int gpt2_model_load_from_initrd(const char* path) {
     current_status = "GPT-2: checkpoint local valide";
     return 0;
 }
+
+#ifndef MOHHDY_RING3
+int gpt2_model_load_from_initrd(const char* path) {
+    const uint8_t* blob = (const uint8_t*)initrd_read_file(path);
+    uint32_t blob_size = initrd_get_file_size(path);
+    if (!blob || blob_size < GPT2_HEADER_BYTES) {
+        gpt2_model_reset("GPT-2: checkpoint absent de l'initrd");
+        return -1;
+    }
+    return gpt2_model_load_from_buffer(blob, blob_size);
+}
+#endif
 
 const gpt2_model_t* gpt2_model_current(void) {
     return &current_model;

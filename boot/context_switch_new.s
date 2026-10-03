@@ -3,11 +3,25 @@
 section .text
 
 global jump_to_task, switch_task
+extern current_task
+extern task_fx_state_offset
 
 ; void jump_to_task(cpu_state_t* next_state)
 ; Ne sauvegarde rien, charge juste le nouvel état.
 jump_to_task:
     mov ebx, [esp + 4]  ; Pointeur vers next_state
+
+    ; Returning to Ring 3: restore the task's own FPU/SSE state (saved by
+    ; the int/IRQ stub on its last Ring 3 -> Ring 0 entry, or the clean
+    ; image of a new task). cs is at +52 in cpu_state_t.
+    test dword [ebx + 52], 3
+    jz .no_fx
+    mov eax, [current_task]
+    test eax, eax
+    jz .no_fx
+    add eax, [task_fx_state_offset]
+    fxrstor [eax]
+.no_fx:
 
     ; Structure cpu_state_t correcte (from task.h):
     ; edi:0, esi:4, ebp:8, esp_dummy:12, ebx:16, edx:20, ecx:24, eax:28

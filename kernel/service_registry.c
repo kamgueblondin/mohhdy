@@ -920,6 +920,10 @@ int service_registry_ata_driver_name_allowed(const char* service_name, const cha
      * so an arbitrary task cannot claim it to reach the driver. */
     if (name_equal(service_name, "ata-client"))
         return task_name && name_equal(task_name, "ataclient");
+    /* Inventory item 4: "ai-engine" receives every relayed GPT-2 prompt and
+     * may map the initrd checkpoint, so only the aiworker binary holds it. */
+    if (name_equal(service_name, "ai-engine"))
+        return task_name && name_equal(task_name, "aiworker");
     return 1;
 }
 

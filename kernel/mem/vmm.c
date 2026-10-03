@@ -143,6 +143,22 @@ int vmm_map_page_in_directory(vmm_directory_t *dir, void *physaddr, void *virtua
     return 0;
 }
 
+int vmm_page_is_borrowed(const page_t *page) {
+    return page && ((*(const uint32_t*)page) & PAGE_BORROWED) != 0U;
+}
+
+int vmm_map_borrowed_user_page(vmm_directory_t *dir, void *physaddr, void *virtualaddr) {
+    page_t *page;
+    int rc;
+    if (!dir || dir == kernel_directory) return -1;
+    rc = vmm_map_page_in_directory(dir, physaddr, virtualaddr, PAGE_PRESENT | PAGE_USER);
+    if (rc != 0) return rc;
+    page = vmm_get_page((uint32_t)virtualaddr, 0, dir);
+    if (!page) return -3;
+    *(uint32_t*)page |= PAGE_BORROWED;
+    return 0;
+}
+
 int vmm_destroy_user_directory(vmm_directory_t *dir) {
     uint32_t table_index, page_index;
     if (!dir || dir == kernel_directory || dir == current_directory) return -1;
@@ -152,7 +168,8 @@ int vmm_destroy_user_directory(vmm_directory_t *dir) {
         if (!vmm_table_is_private(dir, table_index) || !table) continue;
         for (page_index = 0U; page_index < ENTRIES_PER_TABLE; page_index++) {
             page_t* page = &table->pages[page_index];
-            if (page->present && page->user) pmm_free_page((void*)(page->frame * PAGE_SIZE));
+            if (page->present && page->user && !vmm_page_is_borrowed(page))
+                pmm_free_page((void*)(page->frame * PAGE_SIZE));
         }
         pmm_free_page(table);
     }
