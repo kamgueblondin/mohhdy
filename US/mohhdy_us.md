@@ -21,7 +21,7 @@ La mention **fait** signifie que le comportement est observable dans le code et 
 | AOS-009 | Executer un ELF bloquant | `exec`, parent `TASK_WAITING`, reveil par `SYS_EXIT` |
 | AOS-010 | Completer localement avec GPT-2 | `SYS_GPT2_GENERATE`, GPT-2 124M optionnel, cache KV et SSE2 |
 | AOS-011 | Tokeniser BPE GPT-2 | Vocabulaire/fusions BPE et decodage UTF-8 brut |
-| AOS-012 | Prévenir les régressions | 657 tests C au rejeu du 3 octobre 2026 (648 avant `aiworker`), `make qemu-smoke` (six scenarios) et sept contrats QEMU, dont `qemu-ne2k-status`, `qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next` et `qemu-vfs-service` |
+| AOS-012 | Prévenir les régressions | 661 tests C au rejeu du 3 octobre 2026 (648 avant `aiworker`), `make qemu-smoke` (six scenarios) et sept contrats QEMU, dont `qemu-ne2k-status`, `qemu-ne2k-acquire`, `qemu-ne2k-tls-http`, `qemu-ne2k-tls-sse`, `qemu-ne2k-tls-close`, `qemu-ne2k-tls-next` et `qemu-vfs-service` |
 
 ## Tranche AOS-020 à AOS-025 - livrée
 
@@ -131,7 +131,7 @@ La liste vivante et les criteres sont dans [docs/ETAT_REEL.md](../docs/ETAT_REEL
 
 | Priorite | Sujet | Etat |
 |---|---|---|
-| 0 | Gates | `make test-all` 657/657 (648/648 avant `aiworker`). `make qemu-smoke` : six scenarios en 547,9 s. `make qemu-foundation-steps` (pointe precedente) : `cap-token 1`, `id-key 2`, cle fils 4, `spill-drops` encore nul au second boot, `right-token ata-driver` refuse. `make qemu-ata-driver` 295,1 s, `make qemu-net-worker` 209,3 s, `make qemu-net-wire` 86,8 s. `make integration-qemu` : 7/7 en 800,2 s, pointe precedente |
+| 0 | Gates | `make test-all` 661/661 (648/648 avant `aiworker`). `make qemu-smoke` : six scenarios en 547,9 s. `make qemu-foundation-steps` (pointe precedente) : `cap-token 1`, `id-key 2`, cle fils 4, `spill-drops` encore nul au second boot, `right-token ata-driver` refuse. `make qemu-ata-driver` 295,1 s, `make qemu-net-worker` 209,3 s, `make qemu-net-wire` 86,8 s. `make integration-qemu` : 7/7 en 800,2 s, pointe precedente |
 | 1 | Chaine US-031 | Livre : `us031_complete=false`, `chromium=false` |
 | 2 | Chat chiffre metier | Livre : `make qemu-ne2k-guest-tls-metier`, hors CI |
 | 3 | Latence KVM | Livre, un echantillon, poids residents : 43,916 s puis 20,224 s. Pas sous 1 s |
