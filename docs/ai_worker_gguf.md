@@ -98,9 +98,29 @@ apres le lancement de QEMU). Dans le shell, `ai-model use gpt2.gguf`, puis
 | `ai-continue` | 2,7 s | 12,3 s | suite d'octets non ASCII, identique |
 
 Textes egaux sur les deux chemins ; jetons du worker 29047 39749 42066 14827.
-Une seule mesure sous TCG ; l'ecart n'a pas ete analyse (memes options -O3
--msse2 des deux cotes ; piste probable : lectures FAT16 par plage cote noyau
-contre `memcpy` a plat dans la cale du worker).
+
+Cause de l'ecart (memes options -O3 -msse2 des deux cotes) : le chemin noyau
+lisait les grandes matrices (`ffn_up`, `ffn_down`, projections d'attention,
+`output`) par `fat16_open_file` / `fat16_file_seek` / `fat16_file_read`, qui
+ignoraient la copie residente : relecture de l'entree racine, parcours de la
+chaine FAT depuis le premier cluster a chaque seek, puis secteurs relus sur le
+disque IDE par ATA PIO a chaque jeton. Seul `fat16_read_file_range` servait
+la copie residente. Corrige ensuite : un fichier ouvert dont le nom est celui
+de l'instantane resident est servi depuis la RAM (open, seek, read), le
+chemin disque reste pour les autres fichiers ; l'instantane est abandonne
+sur remontage, unlink ou rename du volume. Mesure sous TCG, meme protocole,
+avant / apres la correction :
+
+| Pas | Noyau avant | Noyau apres | Worker | Texte |
+|---|---|---|---|---|
+| `ai abc de` (109) | 22,9 s | 5,0 s | 5,5 s | `maxwell` |
+| `ai-continue` (110) | 10,9 s | 2,4 s | 2,7 s | `DeliveryDate` |
+| `ai-continue` | 10,7 s | 2,4 s | 2,6 s | `Nitrome` |
+| `ai-continue` | 11,3 s | 2,4 s | 2,8 s | identique |
+
+Sur la fixture synthetique : noyau 3,5 / 0,6 / 0,6 / 0,6 s avant, 1,0 / 0,2 /
+0,2 / 0,2 s apres (worker 1,0 / 0,2 / 0,2 / 0,2 s), memes textes. Une mesure
+par cas.
 
 ## Budget memoire
 
@@ -110,7 +130,10 @@ contre `memcpy` a plat dans la cale du worker).
   (`gguf_header`). Ce cout existe meme sans disque GGUF.
 - Copie GGUF du worker : taille du fichier (4024704 octets pour la fixture,
   environ 93 Mio pour le Q3_K_M reel), en plus du tampon resident noyau de
-  100 Mio qui reste necessaire au repli et a la lecture bulk.
+  100 Mio. Ce tampon sert la lecture bulk du worker et, depuis la correction
+  ci-dessus, les lectures d'un pas d'inference du repli Ring 0 (plages par
+  nom et fichiers ouverts) ; sans lui le repli relirait le disque a chaque
+  jeton.
 
 ## Limites et suite
 
