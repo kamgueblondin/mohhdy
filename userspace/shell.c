@@ -1145,7 +1145,7 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  ai-provider [nom]  - Choisir local ou openai\n");
     print_string("  ai-model [action]  - Lister ou choisir le modele local\n");
     print_string("  ai-runtime         - Etat du moteur IA et des prerequis\n");
-    print_string("  ai-continue        - Poursuivre un token de la session GGUF locale\n");
+    print_string("  ai-continue        - Poursuivre la phrase de la session GGUF locale\n");
     print_string("  ai-acquire <hote> [port] - Demarrer DHCP, DNS et TCP LLM sans secret\n");
     print_string("  ai-peer-listen [port] - Ecoute TCP passive guest (apres bail DHCP)\n");
     print_string("  ai-peer-accept [attempts] [established] - SYN-ACK guest ou ESTABLISHED\n");
@@ -5345,6 +5345,49 @@ void cmd_exit(shell_context_t* ctx, char args[][128], int arg_count) {
 // INTÉGRATION IA AVANCÉE
 // ==============================================================================
 
+/* GGUF 109/110 still return one piece. The shell keeps stepping until the
+ * continuation is a readable stretch of text: at least AI_GGUF_SENTENCE_MIN
+ * characters and a sentence end, or AI_GGUF_SENTENCE_STEPS pieces. */
+#define AI_GGUF_SENTENCE_MIN 80
+#define AI_GGUF_SENTENCE_STEPS 24
+
+static int ai_gguf_has_sentence_end(const char* text, int length) {
+    int i;
+    for (i = 0; i < length; i++) {
+        char ch = text[i];
+        if (ch == '.' || ch == '!' || ch == '?' || ch == '\n') return 1;
+    }
+    return 0;
+}
+
+static int ai_gguf_append(char* dst, int used, int cap, const char* piece, int piece_len) {
+    int i;
+    for (i = 0; i < piece_len && used + 1 < cap; i++) dst[used++] = piece[i];
+    dst[used] = '\0';
+    return used;
+}
+
+static int ai_gguf_sentence(const char* query, int first, char* dst, int cap) {
+    char piece[128];
+    int used = 0;
+    int steps = 0;
+    int n;
+    if (!dst || cap < 2) return -1;
+    dst[0] = '\0';
+    n = first ? sys_gpt2_gguf_generate(query, piece, (int)sizeof(piece))
+              : sys_gpt2_gguf_continue(piece, (int)sizeof(piece));
+    if (n < 0) return n;
+    while (n > 0 && steps < AI_GGUF_SENTENCE_STEPS) {
+        used = ai_gguf_append(dst, used, cap, piece, n);
+        steps++;
+        if (used >= AI_GGUF_SENTENCE_MIN && ai_gguf_has_sentence_end(dst, used)) break;
+        if (used + 1 >= cap) break;
+        n = sys_gpt2_gguf_continue(piece, (int)sizeof(piece));
+        if (n < 0) break;
+    }
+    return used;
+}
+
 void call_ai_assistant(shell_context_t* ctx, const char* query) {
     if (ctx->ai_provider == AI_PROVIDER_OPENAI) {
         print_colored("[IA] OpenAI selectionne : utilisez ai-acquire, ai-tls-poll, puis ai-request ou ai-stream-request\n", COLOR_YELLOW);
@@ -5354,10 +5397,10 @@ void call_ai_assistant(shell_context_t* ctx, const char* query) {
     print_string(ai_model_name(ctx));
     print_string("\n");
     if (strstr(ai_model_name(ctx), "gpt2") != 0) {
-        char generated[384];
+        char generated[512];
         int use_gguf = strstr(ai_model_name(ctx), ".gguf") != 0;
         int generated_len = use_gguf
-            ? sys_gpt2_gguf_generate(query, generated, sizeof(generated))
+            ? ai_gguf_sentence(query, 1, generated, (int)sizeof(generated))
             : sys_gpt2_generate(query, generated, sizeof(generated));
         if (generated_len >= 0) {
             print_colored(use_gguf ? "[GPT-2 GGUF local] " : "[GPT-2 local] ", COLOR_GREEN);
@@ -5414,7 +5457,7 @@ void cmd_ai(shell_context_t* ctx, char args[][128], int arg_count) {
 }
 
 void cmd_ai_continue(shell_context_t* ctx, char args[][128], int arg_count) {
-    char generated[384];
+    char generated[512];
     int generated_len;
     (void)args;
     if (arg_count != 0) {
@@ -5425,7 +5468,7 @@ void cmd_ai_continue(shell_context_t* ctx, char args[][128], int arg_count) {
         print_error("ai-continue: selectionnez d'abord ai-model use gpt2.gguf");
         return;
     }
-    generated_len = sys_gpt2_gguf_continue(generated, sizeof(generated));
+    generated_len = ai_gguf_sentence(0, 0, generated, (int)sizeof(generated));
     if (generated_len < 0) {
         print_colored("[GPT-2 GGUF local] session indisponible (lancez d'abord ai <question>) code ", COLOR_YELLOW);
         print_int(generated_len);

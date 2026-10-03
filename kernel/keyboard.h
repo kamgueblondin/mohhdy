@@ -18,6 +18,10 @@ char keyboard_getc(void);
 // Lecture non-bloquante depuis le buffer ASCII du clavier
 int kbd_get_char_nonblock(char *out);
 
+/* One poll of the serial line and the keyboard buffer. 1 and *out set when
+ * a character is waiting, 0 when the prompt should let other tasks run. */
+int keyboard_poll_char(char* out);
+
 // Fonction pour ajouter un caractère au buffer
 void kbd_put_char(char c);
 

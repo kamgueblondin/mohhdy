@@ -11,7 +11,9 @@
 
 #define GPT2_GENERATE_PROMPT_MAX 128U
 #define GPT2_GENERATE_MAX_TOKENS 64U
-#define GPT2_GENERATE_STEPS 12U
+#define GPT2_GENERATE_STEPS 24U
+/* Once this many characters are written, a newline or . ! ? ends the text. */
+#define GPT2_GENERATE_MIN_CHARS 80U
 
 typedef struct {
     uint32_t tokens[GPT2_GENERATE_MAX_TOKENS];

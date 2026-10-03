@@ -44,19 +44,31 @@ static void test_sample_bans_last_generated_token(void) {
     }
 }
 
-static void test_sample_penalizes_generated_repeats(void) {
+static void test_sample_one_use_keeps_a_clear_leader(void) {
     float logits[SAMPLE_VOCAB];
-    uint32_t generated[5];
+    uint32_t generated[2];
     uint32_t rng = 1U;
     uint32_t picked;
 
     fill_the_loop_logits(logits);
+    /* Token 3 was emitted once and is not the previous token (5 is banned). */
     generated[0] = 3;
-    generated[1] = 3;
-    generated[2] = 3;
-    generated[3] = 3;
-    generated[4] = 7;
-    picked = gpt2_sample_top_k(logits, SAMPLE_VOCAB, generated, 5, &rng);
+    generated[1] = 5;
+    picked = gpt2_sample_top_k(logits, SAMPLE_VOCAB, generated, 2, &rng);
+    TEST_ASSERT_EQUAL(3, (int)picked);
+}
+
+static void test_sample_penalizes_generated_repeats(void) {
+    float logits[SAMPLE_VOCAB];
+    uint32_t generated[9];
+    uint32_t rng = 1U;
+    uint32_t i;
+    uint32_t picked;
+
+    fill_the_loop_logits(logits);
+    for (i = 0U; i < 8U; i++) generated[i] = 3;
+    generated[8] = 7;
+    picked = gpt2_sample_top_k(logits, SAMPLE_VOCAB, generated, 9, &rng);
     TEST_ASSERT_NOT_EQUAL(3, (int)picked);
     TEST_ASSERT_NOT_EQUAL(7, (int)picked);
     TEST_ASSERT_EQUAL(5, (int)picked);
@@ -82,6 +94,7 @@ int main(void) {
     unity_init();
     RUN_TEST(test_sample_first_token_follows_prompt_argmax);
     RUN_TEST(test_sample_bans_last_generated_token);
+    RUN_TEST(test_sample_one_use_keeps_a_clear_leader);
     RUN_TEST(test_sample_penalizes_generated_repeats);
     RUN_TEST(test_sample_same_seed_is_deterministic);
     unity_print_results();

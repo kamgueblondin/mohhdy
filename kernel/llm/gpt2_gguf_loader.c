@@ -1041,7 +1041,8 @@ int gpt2_gguf_kv_cache_attention_multi_head(const gpt2_gguf_kv_cache_t* cache, u
         key_scratch_capacity < head_size || score_capacity < position_count) return -6;
     for (head = 0U; head < head_count; head++) {
         status = gpt2_gguf_kv_cache_attention_head(cache, layer, start_position,
-                                                    position_count, query, head_count, head,
+                                                    position_count, query + head * head_size,
+                                                    head_count, head,
                                                     key_scratch, key_scratch_capacity, scores,
                                                     score_capacity, head_outputs + head * head_size,
                                                     head_size, &produced);
