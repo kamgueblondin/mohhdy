@@ -87,6 +87,17 @@ def send_command_once(client, command):
     client.sendall(b"sendkey ret\n")
 
 
+def complete_echoes(output):
+    """Echo lines of the shell, only once their newline reached the log.
+
+    The serial log is read while QEMU is still writing it: a half-flushed
+    "SYS_GETS: ligne lue: ipc-send 1 o" must not count as a different echo,
+    otherwise the command is typed again after it already ran (double IPC
+    send seen as "ipc-send 1 one" twice, then "capacite du service atteinte").
+    """
+    return re.findall(r"SYS_GETS: ligne lue: ([^\r\n]*)\r?\n", normalized_log(output))
+
+
 def command_echoed(output, command):
     """Retourne vrai si le shell a reçu la même commande après normalisation.
 
@@ -95,7 +106,7 @@ def command_echoed(output, command):
     duplique uniquement un scancode d’espace.
     """
     expected = " ".join(command.split())
-    for received in re.findall(r"SYS_GETS: ligne lue: ([^\r\n]+)", normalized_log(output)):
+    for received in complete_echoes(output):
         if " ".join(received.split()) == expected:
             return True
     return False
@@ -116,8 +127,8 @@ def send_command(client, command, proc=None):
             output = normalized_log(log_text()[start:])
             if command_echoed(output, command):
                 return
-            if "SYS_GETS: ligne lue: " in output:
-                break
+            if complete_echoes(output):
+                break  # a complete, different line ran: the typing was garbled
             time.sleep(0.1)
         if attempt < KEY_RETRIES:
             time.sleep(0.2)
