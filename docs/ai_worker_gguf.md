@@ -183,6 +183,13 @@ Sur la fixture synthetique : noyau 3,5 / 0,6 / 0,6 / 0,6 s avant, 1,0 / 0,2 /
 0,2 / 0,2 s apres (worker 1,0 / 0,2 / 0,2 / 0,2 s), memes textes. Une mesure
 par cas.
 
+Rejeu apres la tranche session (meme image, meme protocole, une mesure par
+cas) : le worker tokenise lui-meme le prompt avec le vrai tokenizer GPT-2
+(`aiworker gguf session start 1 job 1 rc 7 tokens 3`, 2 jetons de prompt + 1
+genere), puis `session step 1` pour chaque `ai-continue` (tokens 4, 5, 6).
+Worker 5,2 / 2,7 / 2,6 / 2,6 s, noyau (worker tue) 5,1 / 2,6 / 2,7 / 2,6 s,
+textes egaux (`maxwell`, `DeliveryDate`, `Nitrome`, meme suite d'octets).
+
 ## Budget memoire
 
 - `aiworker` : bss 12578400 octets (12,0 Mio ; 5619904 avant cette tranche),
