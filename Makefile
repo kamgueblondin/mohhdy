@@ -738,7 +738,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-net-no-ring0 qemu-net-loopback-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
+.PHONY: integration-qemu qemu-net-no-ring0 qemu-net-loopback-worker qemu-net-peer-tls-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -1003,6 +1003,11 @@ qemu-net-no-ring0: $(OS_IMAGE) pack-initrd
 # loopback-only from its Ring 3 registry; LLM/peer answered from Ring 3.
 qemu-net-loopback-worker: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_net_loopback_worker.py
+
+# Guest-to-guest TLS 1.2 + encrypted METIER chat through networker on the
+# default strict kernel (two QEMU guests on the shared Ethernet hub).
+qemu-net-peer-tls-worker: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_net_peer_tls_worker.py
 
 qemu-ne2k-tls-sse: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/qemu_ne2k_tls12_server.py

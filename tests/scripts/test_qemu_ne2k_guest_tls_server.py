@@ -32,6 +32,11 @@ KEY_DUPLICATE_SETTLE_DELAY = float(os.environ.get("KEY_DUPLICATE_SETTLE_DELAY", 
 KEY_CHAR_RETRIES = int(os.environ.get("KEY_CHAR_RETRIES", "3"))
 
 INJECT_LOCK = threading.Lock()
+LAST_HUB = None  # read by test_qemu_net_peer_tls_worker.py after main()
+# Optional extra checks run while both guests are still up (same signature
+# as used by test_qemu_net_peer_tls_worker.py): fn(instances, run_command,
+# peer_alive_check, hub).
+POST_CHECK = None
 
 INSTANCES = (
     {
@@ -235,7 +240,9 @@ def main():
         raise RuntimeError("missing KERNEL or INITRD (build first)")
     os.makedirs(LOG_DIR, exist_ok=True)
 
+    global LAST_HUB
     hub = SharedEthernetHub(respond=True, full_tls=False, proxy_peer_syn_ack=False)
+    LAST_HUB = hub
     hub.start()
     say("[guest-tls-server] hub listening on 127.0.0.1:%d" % hub.port)
 
@@ -502,6 +509,9 @@ def main():
                     % (sent, answered, received, hub.events)
                 )
             say("[guest-tls-server] METIER facture / METIER ok on both guests")
+
+        if POST_CHECK is not None:
+            POST_CHECK(INSTANCES, run_command, peer_alive_check, hub)
 
         say(
             "QEMU NE2000 guest-guest TLS-server step passed "

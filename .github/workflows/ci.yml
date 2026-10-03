@@ -244,3 +244,42 @@ jobs:
           if-no-files-found: ignore
           path: |
             test_logs/
+
+  # Guest-to-guest TLS 1.2 + encrypted METIER chat through networker on the
+  # default strict kernel: two QEMU guests on the local shared Ethernet hub
+  # (no TAP, no Internet, no secret). About 120 s locally. Own job so no
+  # other job grows.
+  net-peer-tls:
+    name: QEMU guest-guest TLS through networker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc-multilib \
+            libc6-dev-i386 \
+            nasm \
+            python3-cryptography \
+            qemu-system-x86
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU guest-guest TLS + encrypted peer chat via networker
+        run: make qemu-net-peer-tls-worker
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: net-peer-tls-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
