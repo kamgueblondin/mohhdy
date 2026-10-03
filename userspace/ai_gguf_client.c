@@ -4,7 +4,7 @@
  * kernel session token ids and the GGUF relay counters.
  *
  * Built with -DGGUF_PAUSE it is ggufpause: after the first step it waits
- * (yield, at most 120 s) until another GGUF worker is live, so a test can
+ * (sleeping 10 ticks at a time, at most 120 s) until another GGUF worker is live, so a test can
  * replace the worker between two steps of one session. */
 #include "ai_common.h"
 
@@ -26,6 +26,16 @@ static const char* path_name(unsigned int path) {
     if (path == OS_AI_PATH_KERNEL_FALLBACK) return "fallback";
     return "none";
 }
+
+#ifdef GGUF_PAUSE
+static int sys_wait_ticks(unsigned int ticks) {
+    static os_ipc_message_t message;
+    int result;
+    asm volatile("int $0x80" : "=a"(result) : "a"(SYS_IPC_RECV_WAIT), "b"(&message), "c"(ticks)
+                 : "memory");
+    return result;
+}
+#endif
 
 static void print_status(const os_ai_engine_status_t* st);
 
@@ -69,7 +79,9 @@ int main(void) {
             while (sys_simple(SYS_TICKS) - t0 < 12000U) {
                 (void)ai_engine(OS_AI_ENGINE_STATUS, (unsigned int)&st, 0U);
                 if (st.gguf_worker_pid > 0 && st.gguf_worker_pid != first) break;
-                (void)sys_simple(SYS_YIELD);
+                /* Sleep 10 ticks (no message is expected): leaves the CPU
+                 * to the new worker loading its GGUF copy. */
+                (void)sys_wait_ticks(10U);
             }
             ai_line_reset(&l);
             ai_line_add(&l, "ggufpause resume worker ");
