@@ -1,6 +1,6 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (3 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **630/630** tests. Cle d'identite visible pour soi et l'enfant direct, y compris dans `children`, et elle suit le parent apres delegation. Droit de nom lu par `right-token`. Deversoir IPC de huit places avec deux compteurs de pertes. `make integration-qemu` : 7/7 en 800,2 s. Les phases ci-dessous restent un **journal** : leurs compteurs decrivent la date de chaque ligne. Le bandeau du 26 aout 2026 (505 tests, 23 min 30 s) est historique.
+> **Etat reel et pilotage (3 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **632/632** tests. Cle d'identite visible pour soi et l'enfant direct, y compris dans `children`. Elle suit le parent apres delegation et apres sa mort. Le journal local de supervision la recopie a l'evenement. `make qemu-smoke` : six scenarios verts en 547,9 s. Droit de nom lu par `right-token`. Deversoir IPC de huit places avec deux compteurs de pertes. `make integration-qemu` : 7/7 en 800,2 s sur la pointe precedente. Les phases ci-dessous restent un **journal** : leurs compteurs decrivent la date de chaque ligne. Le bandeau du 26 aout 2026 (505 tests, 23 min 30 s) est historique.
 
 ## Phase 1: Récupération et configuration du projet ✅
 - [x] Cloner le projet depuis GitHub
