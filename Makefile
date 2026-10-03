@@ -100,12 +100,30 @@ $(NET_FLAG_STAMP):
 	@mkdir -p build
 	@rm -f build/.net-ring0-fallback-*
 	@touch $@
+# GGUF 109/110 Ring 0 tokenizer/session. Default 0 (strict): syscall.c is
+# compiled with -DMOHHDY_GGUF_NO_RING0_FALLBACK. Without a GGUF-ready
+# aiworker, or when the relayed job is aborted, 109/110 return
+# OS_AI_GGUF_NO_WORKER. GGUF_RING0_FALLBACK=1 restores the Ring 0 session
+# (make clean first, or rely on the stamp below). The FP32 SYS_GPT2_GENERATE
+# fallback is unchanged. Prompt normalisation and the kernel session mirror
+# stay Ring 0 either way.
+GGUF_RING0_FALLBACK ?= 0
+ifeq ($(GGUF_RING0_FALLBACK),0)
+GGUF_SYSCALL_FLAGS = -DMOHHDY_GGUF_NO_RING0_FALLBACK
+else
+GGUF_SYSCALL_FLAGS =
+endif
+GGUF_FLAG_STAMP = build/.gguf-ring0-fallback-$(GGUF_RING0_FALLBACK)
+$(GGUF_FLAG_STAMP):
+	@mkdir -p build
+	@rm -f build/.gguf-ring0-fallback-*
+	@touch $@
 NETLEGACY_IMAGE = build/mohhdy-netlegacy.bin
 NETLEGACY_OBJECTS = $(filter-out build/syscall.o,$(OBJECTS)) build/syscall-netlegacy.o
 
-build/syscall-netlegacy.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h
+build/syscall-netlegacy.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h $(GGUF_FLAG_STAMP)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(GGUF_SYSCALL_FLAGS) -c $< -o $@
 
 $(NETLEGACY_IMAGE): $(NETLEGACY_OBJECTS)
 	@mkdir -p $(dir $@)
@@ -242,9 +260,9 @@ build/task.o: kernel/task/task.c kernel/task/task.h kernel/ata_job.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Règles de compilation pour les appels système
-build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h $(NET_FLAG_STAMP)
+build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h $(NET_FLAG_STAMP) $(GGUF_FLAG_STAMP)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(NET_SYSCALL_FLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(NET_SYSCALL_FLAGS) $(GGUF_SYSCALL_FLAGS) -c $< -o $@
 
 build/net_ethernet_arp.o: kernel/net_ethernet_arp.c kernel/net_ethernet_arp.h
 	@mkdir -p $(dir $@)

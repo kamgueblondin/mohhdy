@@ -76,6 +76,10 @@ static void fat16_copy_bytes(uint8_t* dst, const uint8_t* src, uint32_t n) {
 static void fat16_resident_invalidate_volume(const fat16_volume_t* v) {
     if (resident_valid && v == resident_volume) fat16_resident_clear();
 }
+
+void fat16_resident_drop(void) {
+    fat16_resident_clear();
+}
 static uint8_t write_scratch[FAT16_SECTOR_SIZE];
 static const char* status_text = "FAT16: non monte";
 static fat16_volume_t root_volume;
@@ -896,9 +900,9 @@ static void fat16_range_cursor_store(const fat16_volume_t* v, const uint8_t* ent
     range_cursor_valid = 1U;
 }
 
-int fat16_read_file_range(const fat16_volume_t* v, const char* name,
-                          uint32_t offset, uint8_t* buffer, uint32_t max,
-                          uint32_t* out_read) {
+int fat16_read_file_range_disk(const fat16_volume_t* v, const char* name,
+                               uint32_t offset, uint8_t* buffer, uint32_t max,
+                               uint32_t* out_read) {
     uint8_t entry[FAT16_ENTRY_SIZE];
     uint32_t i;
     uint32_t size;
@@ -913,15 +917,6 @@ int fat16_read_file_range(const fat16_volume_t* v, const char* name,
     if (out_read) *out_read = 0U;
     if (!fat16_is_mounted(v)) return OS_FAT16_NOT_MOUNTED;
     if (!buffer || max == 0U || !out_read) return OS_FAT16_BUFFER_SMALL;
-    if (resident_valid && v == resident_volume && resident_data &&
-        fat16_resident_name_equal(name)) {
-        uint32_t n = max;
-        if (offset > resident_size) return OS_FAT16_BAD_PATH;
-        if (n > resident_size - offset) n = resident_size - offset;
-        for (i = 0U; i < n; i++) buffer[i] = resident_data[offset + i];
-        *out_read = n;
-        return 0;
-    }
     status = fat16_find_root_entry(v, name, entry);
     if (status != 0) return status;
     if (entry[11] & 0x10U) return OS_FAT16_BAD_PATH;
@@ -983,6 +978,25 @@ int fat16_read_file_range(const fat16_volume_t* v, const char* name,
     }
     *out_read = copied;
     return 0;
+}
+
+int fat16_read_file_range(const fat16_volume_t* v, const char* name,
+                          uint32_t offset, uint8_t* buffer, uint32_t max,
+                          uint32_t* out_read) {
+    uint32_t i;
+    if (out_read) *out_read = 0U;
+    if (!fat16_is_mounted(v)) return OS_FAT16_NOT_MOUNTED;
+    if (!buffer || max == 0U || !out_read) return OS_FAT16_BUFFER_SMALL;
+    if (resident_valid && v == resident_volume && resident_data &&
+        fat16_resident_name_equal(name)) {
+        uint32_t n = max;
+        if (offset > resident_size) return OS_FAT16_BAD_PATH;
+        if (n > resident_size - offset) n = resident_size - offset;
+        for (i = 0U; i < n; i++) buffer[i] = resident_data[offset + i];
+        *out_read = n;
+        return 0;
+    }
+    return fat16_read_file_range_disk(v, name, offset, buffer, max, out_read);
 }
 
 

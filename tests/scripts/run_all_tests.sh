@@ -133,7 +133,9 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/fs/fat16.c $BASE_DIR/kernel/fs/fat32.c $BASE_DIR/kernel/llm/gpt2_gguf.c $BASE_DIR/kernel/llm/gpt2_gguf_loader.c $BASE_DIR/kernel/llm/gpt2_quant.c $BASE_DIR/kernel/llm/gpt2_sample.c"
     fi
     if [ "$(basename "$test_file")" = "test_gpt2_gguf_infer.c" ]; then
+        # Host binary: the null-volume checks do not allocate the kernel snapshot.
         extra_src="$extra_src $BASE_DIR/kernel/fs/fat16.c $BASE_DIR/kernel/fs/fat32.c $BASE_DIR/kernel/llm/gpt2_gguf.c $BASE_DIR/kernel/llm/gpt2_gguf_loader.c $BASE_DIR/kernel/llm/gpt2_quant.c $BASE_DIR/kernel/llm/gpt2_gguf_infer.c $BASE_DIR/kernel/llm/gpt2_sample.c"
+        cflags="$cflags -DMOHHDY_RING3"
     fi
     if [ "$(basename "$test_file")" = "test_gpt2_quant.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_quant.c"

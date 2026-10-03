@@ -5,19 +5,27 @@ CI has no GPT-2 GGUF weights. The initrd gets the synthetic llm.c fixture
 of tests/scripts/ai_worker_fixture.py (tokenizer + FP32 checkpoint) and the
 IDE disk the synthetic GGUF of tests/scripts/ai_gguf_fixture.py (C=768,
 1 layer, vocab 16; attn_qkv/ffn_down Q4_K, attn_output/output Q6_K, ffn_up
-Q3_K) as FAT16 GPT2.GGU. The kernel loads its resident GGUF snapshot at boot
-(Ring 0, unchanged); the boot aiworker bulk-reads its own copy
-(OS_AI_ENGINE_GGUF_READ) and declares GGUF_READY.
+Q3_K) as FAT16 GPT2.GGU. The kernel loads a PMM snapshot of that file at
+boot (sized to the file, not a 100 MiB BSS). The boot aiworker bulk-reads
+its own copy from the disk (OS_AI_ENGINE_GGUF_READ / fat16_read_file_range_disk,
+atadriver once that driver is live) and declares GGUF_READY, which frees
+the kernel snapshot.
 
-1. Boot: worker ready (FP32 + GGUF), "[AI] ai-engine GGUF ready in Ring 3".
+Default build GGUF_RING0_FALLBACK=0: 109/110 do not fall back into the Ring 0
+tokenizer or session. Without a GGUF-ready worker, or if the job is aborted,
+they return OS_AI_GGUF_NO_WORKER (-148), path none. Prompt normalisation and
+the kernel session mirror stay Ring 0. FP32 SYS_GPT2_GENERATE still falls
+back to Ring 0.
+
+1. Boot: worker ready (FP32 + GGUF), "[AI] GGUF resident released pages 983",
+   "[AI] ai-engine GGUF ready in Ring 3".
 2. ggufclient (109 then 110 until the session ends): every step path
    worker; gguf counters fwd = done = steps, kernel 0, live 0.
-3. Worker killed: the same session runs in Ring 0 (path kernel), same token
-   ids.
-4. A new aiworker loads its copy again and serves (same tokens).
+3. Worker killed: 109 returns -148, path none. kernel and sess_ring0 stay 0.
+4. A new aiworker loads its copy from disk again and serves (same tokens).
 5. Worker at low priority with a step in flight, then killed: the step is
-   aborted, the caller runs it in Ring 0 (path fallback) and the session
-   ends in Ring 0 with the same tokens.
+   aborted, the caller gets -148 (path none). fallback and kernel stay 0,
+   aborted is 1, sess_ring0 stays 0.
 6. airogue: GGUF_OPEN / GGUF_READ / GGUF_READY refused (-144) like the
    FP32 paths; then a worker-path session, same tokens.
 7. ggufpause: first step on the worker, then the worker is killed and a
@@ -30,8 +38,7 @@ gguf_kernel_while_live stays 0 throughout.
 Session in Ring 3 (OS_AI_JOB_GGUF_SESSION): on the worker path the aiworker
 tokenizes the normalised prompt and owns the session (tokens, rng); every
 worker run shows one "aiworker gguf session start" and one "session step"
-per further step, the gguf session counters (session worker / resumed /
-ring0) are checked, and the token ids are the same as the Ring 0 path.
+per further step. The worker-path token ids match across worker runs.
 """
 import os
 import re
@@ -50,6 +57,8 @@ base.ERR = os.path.join(base.LOG_DIR, "ai-gguf.err")
 base.MON = os.path.join(base.LOG_DIR, "ai-gguf-monitor.sock")
 base.FIXTURE = os.path.join(ROOT, "build", "ai_fixture")
 GGUF_BYTES = 4024704
+GGUF_PAGES = (GGUF_BYTES + 4095) // 4096
+OS_AI_GGUF_NO_WORKER = -148
 FP32_TOKENS = "0 1 2 14 3 4 |3 0 1 7 6 4"
 
 GGUF_RE = (r"%s gguf worker (-?\d+) bytes (\d+) fwd (\d+) done (\d+) kernel (\d+) "
@@ -102,7 +111,7 @@ def check_worker_session(run, resumed_first=False):
 def worker_gguf_ready(monitor, proc, start):
     base.worker_ready(monitor, proc, start)
     m = base.child_regex(monitor, proc, r"aiworker gguf ready bytes (\d+) at (0x[0-9a-f]+) chunks (\d+)",
-                         start, rounds=20)
+                         start, rounds=60)
     if int(m.group(1)) != GGUF_BYTES or m.group(2) != "0xa1000000":
         raise RuntimeError("unexpected gguf load: %s" % m.group(0))
     return m
@@ -112,6 +121,12 @@ def contract(monitor, proc):
     base.wait_for("[AI] boot aiworker spawned", proc, 0, timeout=30)
     worker_gguf_ready(monitor, proc, 0)
     base.wait_for("[AI] ai-engine GGUF ready in Ring 3", proc, 0, timeout=30)
+    released = re.search(r"\[AI\] GGUF resident released pages (\d+)",
+                         base.normalized_log(base.log_text()))
+    if not released or int(released.group(1)) != GGUF_PAGES:
+        raise RuntimeError("resident not released: %r (want %d pages)" %
+                           (released.group(0) if released else None, GGUF_PAGES))
+    print("gguf resident released: %d pages" % GGUF_PAGES, flush=True)
 
     # 2. Worker path.
     w1 = run_gguf(monitor, proc)
@@ -128,13 +143,14 @@ def contract(monitor, proc):
     boot_pid = s["worker"]
     print("gguf worker session: %d steps, tokens [%s]" % (n, w1["tokens"]), flush=True)
 
-    # 3. Worker gone: Ring 0.
+    # 3. Worker gone: strict build refuses 109, no Ring 0 session.
     base.kill(monitor, proc, boot_pid)
     k1 = run_gguf(monitor, proc)
-    if set(k1["paths"]) != {"kernel"} or k1["tokens"] != w1["tokens"] or k1["status"]["live"] != 0 \
-            or k1["status"]["kernel"] != len(k1["paths"]) or k1["status"]["worker"] != 0 \
-            or k1["sessions"] or k1["status"]["sess_ring0"] != 1 or k1["status"]["sess_worker"] != n:
-        raise RuntimeError("gguf kernel run: %r vs %r" % (k1, w1))
+    if k1["paths"] != ["none"] or k1["rcs"] != [OS_AI_GGUF_NO_WORKER] or k1["status"]["live"] != 0 \
+            or k1["status"]["kernel"] != 0 or k1["status"]["fallback"] != 0 \
+            or k1["status"]["worker"] != 0 or k1["sessions"] \
+            or k1["status"]["sess_ring0"] != 0 or k1["status"]["sess_worker"] != n:
+        raise RuntimeError("gguf refused without worker: %r" % k1)
 
     # 4. New worker.
     wpid, start = base.spawn(monitor, proc, "aiworker")
@@ -144,7 +160,7 @@ def contract(monitor, proc):
         raise RuntimeError("gguf second worker: %r" % w2)
     check_worker_session(w2)
 
-    # 5. Step in flight, worker killed: Ring 0 fallback, session finishes.
+    # 5. Step in flight, worker killed: aborted, 109 refused, no Ring 0 step.
     base.send_command_until(monitor, "task-priority %s 1" % wpid, "task-priority ok %s 1" % wpid, proc)
     cpid, start = base.spawn(monitor, proc, "ggufclient")
     base.child_regex(monitor, proc, r"ggufclient start", start)
@@ -156,11 +172,11 @@ def contract(monitor, proc):
     base.kill(monitor, proc, wpid)
     base.child_regex(monitor, proc, r"\[AI\] relay aborted: ai-engine lost or stalled", start)
     f1 = run_gguf(monitor, proc, start)
-    if f1["paths"][0] != "fallback" or set(f1["paths"][1:]) - {"kernel"} or \
-            f1["tokens"] != w1["tokens"] or f1["status"]["fallback"] != 1 or \
+    if f1["paths"] != ["none"] or f1["rcs"] != [OS_AI_GGUF_NO_WORKER] or \
+            f1["status"]["fallback"] != 0 or f1["status"]["kernel"] != 0 or \
             f1["status"]["live"] != 0 or f1["status"]["aborted"] != 1 or \
-            f1["status"]["sess_ring0"] != 2:
-        raise RuntimeError("gguf fallback: %r" % f1)
+            f1["status"]["sess_ring0"] != 0:
+        raise RuntimeError("gguf abort refused: %r" % f1)
 
     # 6. Rogue against a live GGUF worker, memory around its life.
     base.send_command_until(monitor, "yield", "yield ok", proc)
@@ -210,12 +226,12 @@ def contract(monitor, proc):
     base.send_command_until(monitor, "yield", "yield ok", proc)
     free_after = base.mem_free(monitor, proc)
     footprint = free_before - free_live
-    gguf_pages = (GGUF_BYTES + 4095) // 4096
-    if footprint < gguf_pages + 3071 or abs(free_after - free_before) > 8:
+    if footprint < GGUF_PAGES + 3071 or abs(free_after - free_before) > 8:
         raise RuntimeError("memory: before %d live %d after %d" % (free_before, free_live, free_after))
-    print("ai gguf: tokens [%s] equal on worker/kernel/fallback paths; final gguf counters %r; "
-          "worker footprint %d pages (GGUF copy %d pages), free before/after %d/%d" %
-          (w1["tokens"], s, footprint, gguf_pages, free_before, free_after), flush=True)
+    print("ai gguf: worker tokens [%s]; 109/110 refused without a worker; "
+          "final gguf counters %r; worker footprint %d pages (GGUF copy %d pages), "
+          "free before/after %d/%d" %
+          (w1["tokens"], s, footprint, GGUF_PAGES, free_before, free_after), flush=True)
 
 
 def main():
@@ -243,7 +259,7 @@ def main():
             proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
             monitor = None
             try:
-                base.wait_for("(-.-)", proc, 0, timeout=90)
+                base.wait_for("(-.-)", proc, 0, timeout=180)
                 monitor = base.connect_monitor()
                 time.sleep(0.5)
                 contract(monitor, proc)

@@ -1202,6 +1202,31 @@ int syscall_net_ring0_fallback_enabled(void) {
 #endif
 }
 
+/* 1 when 109/110 may run the Ring 0 tokenizer and session. 0 in the default
+ * strict build: those syscalls return OS_AI_GGUF_NO_WORKER instead. */
+int syscall_gguf_ring0_fallback_enabled(void) {
+#ifdef MOHHDY_GGUF_NO_RING0_FALLBACK
+    return 0;
+#else
+    return 1;
+#endif
+}
+
+static void serial_print_u32(uint32_t v) {
+    char digits[12];
+    int n = 0;
+    do {
+        digits[n++] = (char)('0' + (v % 10U));
+        v /= 10U;
+    } while (v != 0U && n < 11);
+    while (n > 0) {
+        char c[2];
+        c[0] = digits[--n];
+        c[1] = '\0';
+        print_string_serial(c);
+    }
+}
+
 #ifdef MOHHDY_NET_NO_RING0_FALLBACK
 static uint32_t g_net_strict_refused;
 
@@ -2841,9 +2866,11 @@ int sys_vfs_overlay_rmdir(const char* path) {
  */
 /* GGUF 109/110 session. With a GGUF-ready aiworker the session lives in the
  * worker (it encodes the prompt, samples and decodes each piece) and this
- * is only the kernel mirror of its replies (status snapshot, Ring 0
- * fallback, adoption by a restarted worker). Without one it is the Ring 0
- * session, run by the same kernel/llm/gpt2_gguf_session.c code. */
+ * is only the kernel mirror of its replies (status snapshot, adoption by a
+ * restarted worker). The default build (GGUF_RING0_FALLBACK=0) refuses
+ * 109/110 when no such worker is ready, or when the relayed job is aborted.
+ * GGUF_RING0_FALLBACK=1 keeps the Ring 0 tokenizer and session
+ * (kernel/llm/gpt2_gguf_session.c). Prompt normalisation stays Ring 0. */
 static gpt2_gguf_session_t g_gguf_session;
 static uint32_t g_gguf_session_next_id;
 
@@ -2866,8 +2893,14 @@ static int gguf_kernel_step(char* out, uint32_t max, int fallback) {
     return rc;
 }
 
+static int gguf_refuse_ring0(void) {
+    ai_relay_note_gguf_refused(OS_AI_GGUF_NO_WORKER);
+    return OS_AI_GGUF_NO_WORKER;
+}
+
 /* GGUF profile (SYS_GPT2_GGUF_GENERATE 109 / CONTINUE 110): the whole
- * session job goes to the GGUF-ready aiworker (path worker), else Ring 0. */
+ * session job goes to the GGUF-ready aiworker (path worker). Without one,
+ * the strict build refuses; GGUF_RING0_FALLBACK=1 runs Ring 0. */
 static int sys_gpt2_gguf_generate_impl(const char* prompt, char* out, uint32_t max) {
     char prompt_copy[GPT2_GENERATE_PROMPT_MAX];
     int result = 0, fallback = 0, rc;
@@ -2878,6 +2911,7 @@ static int sys_gpt2_gguf_generate_impl(const char* prompt, char* out, uint32_t m
     g_gguf_session.id = ++g_gguf_session_next_id;
     if (gguf_session_relay(OS_AI_GGUF_SESSION_START, prompt_copy, out, max, &result, &fallback))
         return result;
+    if (!syscall_gguf_ring0_fallback_enabled()) return gguf_refuse_ring0();
     rc = gpt2_gguf_session_start(&g_gguf_session, prompt_copy, gpt2_gguf_infer_ready(),
                                  GPT2_GGUF_INFER_MAX_CONTEXT);
     if (rc != 0) return rc;
@@ -2897,6 +2931,7 @@ static int sys_gpt2_gguf_continue_impl(char* out, uint32_t max) {
     }
     if (gguf_session_relay(OS_AI_GGUF_SESSION_STEP, 0, out, max, &result, &fallback))
         return result;
+    if (!syscall_gguf_ring0_fallback_enabled()) return gguf_refuse_ring0();
     return gguf_kernel_step(out, max, fallback);
 }
 
@@ -2945,8 +2980,15 @@ int syscall_ai_relay_watchdog(uint32_t now) {
         return 0;
     }
     if (!ai_relay_should_fail(ai_live_worker(), now)) return 0;
-    ai_relay_fail();
-    print_string_serial("[AI] relay aborted: ai-engine lost or stalled; Ring 0 fallback\n");
+    {
+        uint32_t kind = ai_relay_kind();
+        ai_relay_fail();
+        if (!syscall_gguf_ring0_fallback_enabled() &&
+            (kind == OS_AI_JOB_GGUF_SESSION || kind == OS_AI_JOB_GGUF_STEP))
+            print_string_serial("[AI] relay aborted: ai-engine lost or stalled; Ring 0 refused\n");
+        else
+            print_string_serial("[AI] relay aborted: ai-engine lost or stalled; Ring 0 fallback\n");
+    }
     ai_relay_wake_caller();
     return 1;
 }
@@ -2977,8 +3019,13 @@ static uint32_t ai_relay_dispatch(task_t* self, task_t* worker, int32_t job,
     memcpy(payload.data, words, sizeof(words));
     rc = ipc_endpoint_send(&worker->ipc_endpoint, 0, &payload);
     if (rc != 0) {
+        uint32_t kind = ai_relay_kind();
         ai_relay_cancel();
-        print_string_serial("[AI] ai-engine mailbox refused the job; Ring 0 fallback\n");
+        if (!syscall_gguf_ring0_fallback_enabled() &&
+            (kind == OS_AI_JOB_GGUF_SESSION || kind == OS_AI_JOB_GGUF_STEP))
+            print_string_serial("[AI] ai-engine mailbox refused the job; Ring 0 refused\n");
+        else
+            print_string_serial("[AI] ai-engine mailbox refused the job; Ring 0 fallback\n");
         return AI_RELAY_FAILED;
     }
     task_ipc_message_queued(worker);
@@ -3155,9 +3202,9 @@ static int ai_engine_gguf_open(int32_t pid, os_ai_engine_map_t* out) {
 }
 
 /* OS_AI_ENGINE_GGUF_READ: the bulk read restricted to the worker. The bytes
- * come from fat16_read_file_range() on the boot FAT16 volume, i.e. from the
- * kernel's resident snapshot of GPT2.GGU, straight into the worker's window
- * at the same offset (the destination is fixed by the kernel). */
+ * come from fat16_read_file_range_disk() on the boot FAT16 volume (sector
+ * path, atadriver when that driver is live), even while the kernel snapshot
+ * still exists. Destination is the worker window at the same offset. */
 static int ai_engine_gguf_read(int32_t pid, uint32_t offset, uint32_t length) {
     uint32_t read = 0U;
     int status;
@@ -3169,8 +3216,8 @@ static int ai_engine_gguf_read(int32_t pid, uint32_t offset, uint32_t length) {
         return OS_AI_ENGINE_BAD_ARGUMENT;
     if (length > g_ai_gguf_size - offset) length = g_ai_gguf_size - offset;
     if (gpt2_gguf_infer_resident_size() != g_ai_gguf_size) return OS_AI_ENGINE_NO_MODEL;
-    status = fat16_read_file_range(fat16_root(), gpt2_gguf_infer_filename(), offset,
-                                   (uint8_t*)(OS_AI_ENGINE_GGUF_WINDOW + offset), length, &read);
+    status = fat16_read_file_range_disk(fat16_root(), gpt2_gguf_infer_filename(), offset,
+                                        (uint8_t*)(OS_AI_ENGINE_GGUF_WINDOW + offset), length, &read);
     if (status != 0) return OS_AI_ENGINE_NO_MODEL;
     g_ai_gguf_loaded += read;
     return (int)read;
@@ -3293,9 +3340,18 @@ static int32_t sys_ai_engine(cpu_state_t* cpu) {
             if (pid <= 0 || pid != worker) return OS_AI_ENGINE_REQUIRED;
             if (pid != g_ai_gguf_pid || g_ai_gguf_size == 0U || g_ai_gguf_loaded < g_ai_gguf_size)
                 return OS_AI_ENGINE_BAD_ARGUMENT;
-            ai_relay_set_gguf_worker(pid, g_ai_gguf_loaded);
-            print_string_serial("[AI] ai-engine GGUF ready in Ring 3\n");
-            return 0;
+            {
+                uint32_t pages;
+                ai_relay_set_gguf_worker(pid, g_ai_gguf_loaded);
+                pages = gpt2_gguf_infer_release_resident();
+                if (pages != 0U) {
+                    print_string_serial("[AI] GGUF resident released pages ");
+                    serial_print_u32(pages);
+                    print_string_serial("\n");
+                }
+                print_string_serial("[AI] ai-engine GGUF ready in Ring 3\n");
+                return 0;
+            }
         default:
             return OS_AI_ENGINE_BAD_ARGUMENT;
     }
