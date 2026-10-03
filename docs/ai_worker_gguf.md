@@ -134,7 +134,8 @@ a celui de l'instantane noyau, aucune ligne `aiworker gguf step` (ancien job
 sans etat). Les chemins noyau et repli (`ring0` 1 puis 2) donnent les memes
 jetons que le worker : le tokenizer Ring 3 et le tokenizer Ring 0 lisent le
 meme fichier de l'initrd et executent le meme code. Environ 280 s en local
-(196 s avant la scene `ggufpause`).
+(196 s avant la scene `ggufpause`). En CI le contrat a son propre job (`ai-gguf`, environ 6 min sur un
+runner) : place dans le job vfs-service, il portait ce job a 15 min 26 s.
 
 L'egalite des jetons vient du meme code K-quant, des memes octets, du meme
 code de session et de tokenizer et du meme etat de generateur. Le miroir
@@ -182,6 +183,13 @@ avant / apres la correction :
 Sur la fixture synthetique : noyau 3,5 / 0,6 / 0,6 / 0,6 s avant, 1,0 / 0,2 /
 0,2 / 0,2 s apres (worker 1,0 / 0,2 / 0,2 / 0,2 s), memes textes. Une mesure
 par cas.
+
+Rejeu apres la tranche session (meme image, meme protocole, une mesure par
+cas) : le worker tokenise lui-meme le prompt avec le vrai tokenizer GPT-2
+(`aiworker gguf session start 1 job 1 rc 7 tokens 3`, 2 jetons de prompt + 1
+genere), puis `session step 1` pour chaque `ai-continue` (tokens 4, 5, 6).
+Worker 5,2 / 2,7 / 2,6 / 2,6 s, noyau (worker tue) 5,1 / 2,6 / 2,7 / 2,6 s,
+textes egaux (`maxwell`, `DeliveryDate`, `Nitrome`, meme suite d'octets).
 
 ## Budget memoire
 
