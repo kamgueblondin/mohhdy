@@ -56,6 +56,9 @@ void timer_handler(cpu_state_t* cpu) {
         gfx_fb_update_cursor();
     }
 
+    /* SYS_IPC_RECV_WAIT deadlines: expired sleepers become READY here. */
+    task_ipc_wait_tick(timer_ticks);
+
     // Changement explicite existant (lancement du shell / yield coopératif).
     if (g_reschedule_needed) {
         g_reschedule_needed = 0;

@@ -106,6 +106,117 @@ def send_command_until(client, command, marker, proc, attempts=3):
     raise failure
 
 
+def spawn_pid(client, proc, name):
+    start = send_command_until(client, "spawn %s" % name, "spawn ok pid", proc)
+    found = re.search(r"spawn ok pid[\s\S]*?(\d+) %s" % name, normalized_log(log_text()[start:]))
+    if not found:
+        raise RuntimeError("PID de %s absent" % name)
+    return found.group(1), start
+
+
+def send_once(client, command, marker, proc, timeout=20):
+    """Mutating command (ipc-send, kill): typed once, never replayed."""
+    start = len(log_text())
+    send_command(client, command)
+    wait_for(marker, proc, start, timeout=timeout)
+    return start
+
+
+def switches(client, proc, pid):
+    """Scheduler selections of pid (task-metrics: pid prio run_ticks switches)."""
+    start = len(log_text())
+    send_command(client, "task-metrics %s" % pid)
+    pattern = r"task-metrics ok %s \d+ \d+ (\d+)" % pid
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        found = re.search(pattern, normalized_log(log_text()[start:]))
+        if found:
+            return int(found.group(1))
+        time.sleep(0.1)
+    raise RuntimeError("task-metrics %s illisible" % pid)
+
+
+def wait_with_turns(client, proc, needle, start, turns=3, first_timeout=5):
+    """Wait for needle; if absent, give bounded cooperative turns (yield).
+
+    The shell parks in SYS_GETS (Ring 0, never preempted), so a task made
+    READY while the shell waits for input only runs at the next switch.
+    Returns the number of yields that were needed."""
+    try:
+        wait_for(needle, proc, start, timeout=first_timeout)
+        return 0
+    except RuntimeError:
+        pass
+    for used in range(1, turns + 1):
+        send_command_until(client, "yield", "yield ok", proc)
+        try:
+            wait_for(needle, proc, start, timeout=3)
+            return used
+        except RuntimeError:
+            pass
+    raise RuntimeError("sortie manquante : %s" % needle)
+
+
+def blocking_ipc_contract(client, proc, server_pid):
+    """SYS_IPC_RECV_WAIT: sleep without CPU, wake on send, timeout, kills."""
+    waiter, start = spawn_pid(client, proc, "ipcwait")
+    wait_with_turns(client, proc, "ipcwait ready", start, turns=6)
+    for needle in ("ipcwait registered rc 0", "ipcwait null rc -43", "ipcwait poll rc -40"):
+        wait_for(needle, proc, start)
+
+    # Idle: the blocked waiter is never selected; the polling ipcserver is.
+    idle_waiter = switches(client, proc, waiter)
+    idle_server = switches(client, proc, server_pid)
+    for _ in range(3):
+        send_command_until(client, "yield", "yield ok", proc)
+    time.sleep(1.0)
+    after_waiter = switches(client, proc, waiter)
+    after_server = switches(client, proc, server_pid)
+    if after_waiter != idle_waiter:
+        raise RuntimeError("ipcwait a ete planifie au repos : %d -> %d switches"
+                           % (idle_waiter, after_waiter))
+    if after_server <= idle_server:
+        raise RuntimeError("temoin ipcserver non planifie : %d -> %d" % (idle_server, after_server))
+    print("blocking ipc idle: ipcwait %d -> %d switches, polling ipcserver %d -> %d"
+          % (idle_waiter, after_waiter, idle_server, after_server))
+    send_once(client, "kill %s" % server_pid, "Processus %s termine" % server_pid, proc)
+
+    # Wake on send (kernel-stamped sender PID 1 = shell).
+    start = send_once(client, "ipc-send %s hello" % waiter, "ipc-send ok %s 5" % waiter, proc)
+    turns = wait_with_turns(client, proc, "ipcwait got from 1 type 0 data hello", start)
+    woke = switches(client, proc, waiter)
+    if woke <= after_waiter:
+        raise RuntimeError("ipcwait non reveille : %d switches" % woke)
+    print("blocking ipc wake: switches %d -> %d, extra yields %d" % (after_waiter, woke, turns))
+
+    # Timeout path: a 50-tick deadline with no sender.
+    start = send_once(client, "ipc-send %s timeout" % waiter, "ipc-send ok %s 7" % waiter, proc)
+    wait_with_turns(client, proc, "ipcwait got from 1 type 0 data timeout", start)
+    time.sleep(1.0)
+    wait_with_turns(client, proc, "ipcwait timeout rc -45", start, first_timeout=1)
+
+    # Sender that is then killed while itself blocked in SYS_IPC_RECV_WAIT.
+    poke, start = spawn_pid(client, proc, "ipcpoke")
+    wait_with_turns(client, proc, "ipcpoke waiting", start, turns=6)
+    wait_for("ipcpoke sent rc 0 to %s" % waiter, proc, start)
+    wait_with_turns(client, proc, "ipcwait got from %s type 7 data poke" % poke, start)
+    blocked_poke = switches(client, proc, poke)
+    send_command_until(client, "yield", "yield ok", proc)
+    if switches(client, proc, poke) != blocked_poke:
+        raise RuntimeError("ipcpoke bloque a ete planifie")
+    send_once(client, "kill %s" % poke, "Processus %s termine" % poke, proc)
+    send_once(client, "ipc-send %s late" % poke, "ipc-send: cible utilisateur introuvable", proc)
+    # The waiter still works after its sender died.
+    start = send_once(client, "ipc-send %s again" % waiter, "ipc-send ok %s 5" % waiter, proc)
+    wait_with_turns(client, proc, "ipcwait got from 1 type 0 data again", start)
+
+    # Killed receiver: blocked waiter killed, its PID and service are gone.
+    send_once(client, "kill %s" % waiter, "Processus %s termine" % waiter, proc)
+    send_once(client, "ipc-send %s bye" % waiter, "ipc-send: cible utilisateur introuvable", proc)
+    send_once(client, "service-find ipc-wait", "service-find: service indisponible", proc)
+    print("blocking ipc kill paths: sender %s and receiver %s removed while blocked" % (poke, waiter))
+
+
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     for path in (LOG, ERR, MON):
@@ -142,6 +253,7 @@ def main():
                                              "ipc-send ok %s 7" % server_pid, proc)
             wait_for("ipc recv from 1 type 0 data bonjour", proc, before_send)
             before_receive = send_command_until(monitor, "ipc-recv", "ipc-recv empty", proc)
+            blocking_ipc_contract(monitor, proc, server_pid)
             print("MOHHDY Foundation IPC contract passed")
             return 0
         finally:

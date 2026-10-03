@@ -319,7 +319,14 @@
 #define SYS_IPC_SPILL_DROPS 152
 /* EBX = nom, ECX = uint32_t* : right_token du nom dont l'appelant est le titulaire. */
 #define SYS_SERVICE_RIGHT_TOKEN 153
-#define MAX_SYSCALLS 154
+/* EBX = os_ipc_message_t*, ECX = timeout in timer ticks (100 Hz).
+ * Blocking SYS_IPC_RECV: 0 with a message, OS_IPC_EMPTY if ECX = 0 and
+ * nothing is queued (poll), OS_IPC_TIMEOUT when the deadline passes first.
+ * ECX = OS_IPC_WAIT_FOREVER waits without deadline. The task sleeps (no
+ * CPU switch) until SYS_IPC_SEND or a kernel notification queues a
+ * message for it. */
+#define SYS_IPC_RECV_WAIT 154
+#define MAX_SYSCALLS 155
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
@@ -541,6 +548,9 @@ typedef struct {
 /* L’endpoint d’un propriétaire de service est saturé par la politique de
  * service avant la capacité brute de la tâche. */
 #define OS_IPC_SERVICE_FULL (-44)
+/* SYS_IPC_RECV_WAIT: deadline reached before any message. */
+#define OS_IPC_TIMEOUT (-45)
+#define OS_IPC_WAIT_FOREVER 0xFFFFFFFFU
 
 /* Registre Foundation : simple découverte de nom, pas une capability. */
 #define OS_SERVICE_NAME_MAX 16U

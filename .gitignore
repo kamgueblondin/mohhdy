@@ -6,6 +6,8 @@ userspace/ai_assistant
 userspace/idle
 userspace/spin
 userspace/ipcserver
+userspace/ipcwait
+userspace/ipcpoke
 userspace/vfsserver
 userspace/vfsvirtual
 userspace/vfsflight
