@@ -239,6 +239,26 @@ def main():
         if re.search(r"task-metrics id \d+ \d+ " + re.escape(key) + r"(?:\D|$)", normalized(chunk)) is None:
             raise RuntimeError("task-metrics id missing key %s: %s" % (key, chunk[-400:]))
         say("[foundation] task-metrics id carries key %s" % key)
+        chunk = run_command(proc, client, "children", "children ok ")
+        child_id = re.search(
+            r"child-entry " + re.escape(vfs_pid) + r" \S+ \S+ id (\d+) (\d+) (\d+)",
+            normalized(chunk))
+        if child_id is None or child_id.group(3) == "0" or child_id.group(3) == key:
+            raise RuntimeError("children missing vfs identity: %s" % chunk[-500:])
+        child_key = child_id.group(3)
+        say("[foundation] children id key %s" % child_key)
+        chunk = run_command(proc, client, "ps", "Total:")
+        ps_id = re.search(
+            r"(?m)^\s*" + re.escape(vfs_pid) + r"\s+\d+\s+\S+\s+\S+\s+\S+ id (\d+) (\d+) (\d+)\s*$",
+            normalized(chunk))
+        if ps_id is None or ps_id.group(3) != child_key:
+            raise RuntimeError("ps identity differs from children: %s" % chunk[-500:])
+        say("[foundation] ps carries the same child key")
+        chunk = run_command(proc, client, "task-metrics " + vfs_pid, "task-metrics ok ")
+        if re.search(r"task-metrics id \d+ \d+ " + re.escape(child_key) + r"(?:\D|$)",
+                     normalized(chunk)) is None:
+            raise RuntimeError("task-metrics child key mismatch: %s" % chunk[-500:])
+        say("[foundation] task-metrics carries the same child key")
         run_command(proc, client, "service-publish demo", "service-publish ok")
         chunk = run_command(proc, client, "right-token demo", "right-token ok demo ")
         right = parse_pid(chunk, "right-token ok demo")
@@ -281,6 +301,14 @@ def main():
         if "initrd/" not in chunk or "overlay/" not in chunk:
             raise RuntimeError("default mounts missing after reboot: %s" % chunk[-500:])
         say("[foundation] alias/ survived reboot on LBA 4222")
+        chunk = run_command(proc, client, "spill-drops", "spill-drops ok service ")
+        if "spill-drops ok service 0 supervision 0" not in normalized(chunk):
+            raise RuntimeError("spill drops survived reboot: %s" % chunk[-400:])
+        say("[foundation] spill-drops still service 0 supervision 0 after reboot")
+        chunk = run_command(proc, client, "right-token ata-driver", "right-token:")
+        if "right-token ok" in normalized(chunk):
+            raise RuntimeError("shell read a right it does not hold: %s" % chunk[-400:])
+        say("[foundation] right-token ata-driver refused")
         return 0
     finally:
         stop(proc, client, err)

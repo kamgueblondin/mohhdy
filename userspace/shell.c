@@ -1470,7 +1470,16 @@ void cmd_children(shell_context_t* ctx, char args[][128], int arg_count) {
     for (i = 0U; i < children.count; i++) {
         print_string("child-entry "); print_int(children.entries[i].pid); print_string(" ");
         print_string(proc_state_str(children.entries[i].state)); print_string(" ");
-        print_string(children.entries[i].name); print_string("\n");
+        print_string(children.entries[i].name);
+        if (children.entries[i].identity_visible) {
+            print_string(" id ");
+            print_int((int)children.entries[i].sequence);
+            print_string(" ");
+            print_int((int)children.entries[i].generation);
+            print_string(" ");
+            print_int((int)children.entries[i].identity_key);
+        }
+        print_string("\n");
     }
     print_string("children ok "); print_int((int)children.count); print_string("\n");
 }
