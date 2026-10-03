@@ -159,6 +159,48 @@ def receive_service_event(client, proc, pattern, description):
     raise failure
 
 
+def child_metrics(client, proc, pid):
+    """Diagnostic only: task-metrics line of the claimant (switch count)."""
+    start = len(log_text())
+    try:
+        send_command(client, "task-metrics %s" % pid, proc)
+        wait_for_pattern(r"task-metrics ok %s \d+ \d+ \d+" % pid,
+                         "task-metrics %s" % pid, proc, start, timeout=8)
+    except RuntimeError as error:
+        return "task-metrics %s indisponible (%s)" % (pid, error)
+    found = re.search(r"task-metrics ok %s \d+ \d+ \d+" % pid,
+                      normalized_log(log_text()[start:]))
+    return found.group(0) if found else "task-metrics %s illisible" % pid
+
+
+def yield_until_child(client, proc, marker, pid, offset, extra_yields=3):
+    """Give the claimant extra cooperative turns until it prints marker.
+
+    CI run 37095007623 (PR #89, docs only) shows the shell printing
+    `service-grant ok` then `yield ok` with no `serviceclaim notified`
+    line at all: no text was cut into the output, the claimant simply did
+    not print within 15 s. `yield` has no business effect (unlike ipc-send
+    or service-grant, which are never replayed), so a missed turn is
+    retried a bounded number of times. The marker itself is still
+    required, and on failure the claimant switch counts are reported so a
+    real scheduling bug stays visible instead of being masked.
+    """
+    notes = []
+    for attempt in range(extra_yields + 1):
+        if attempt > 0:
+            notes.append(child_metrics(client, proc, pid))
+            send_command(client, "yield", proc)
+        try:
+            wait_for(marker, proc, offset, timeout=15 if attempt == 0 else 10)
+            return
+        except RuntimeError:
+            if proc.poll() is not None:
+                raise
+    notes.append(child_metrics(client, proc, pid))
+    raise RuntimeError("sortie manquante : %s apres %d yield supplementaires (%s)"
+                       % (marker, extra_yields, "; ".join(notes)))
+
+
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     for path in (LOG, ERR, MON):
@@ -221,7 +263,8 @@ def main():
             send_command(monitor, "service-grant demo %s" % claimant_pid, proc)
             wait_for("service-grant ok demo %s" % claimant_pid, proc, before_grant)
             send_command(monitor, "yield", proc)
-            wait_for("serviceclaim notified demo", proc, before_grant)
+            yield_until_child(monitor, proc, "serviceclaim notified demo",
+                              claimant_pid, before_grant)
             wait_for("serviceclaim claimed demo", proc, before_grant)
             receive_service_event(
                 monitor,
