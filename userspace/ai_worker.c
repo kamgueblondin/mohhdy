@@ -16,12 +16,18 @@
  * worker-only bulk read (OS_AI_ENGINE_GGUF_READ, 1 MiB chunks), points the
  * GGUF runtime (kernel/llm/gpt2_gguf*.c + gpt2_quant.c K-quant kernels,
  * built here at CPL 3) at it through ai_fat16_shim.c and declares
- * OS_AI_ENGINE_GGUF_READY. A doorbell of kind OS_AI_JOB_GGUF_STEP is then one
- * gpt2_gguf_generate_next_sampled() step of the kernel's 109/110 session. */
+ * OS_AI_ENGINE_GGUF_READY. A doorbell of kind OS_AI_JOB_GGUF_SESSION is then
+ * a 109/110 call on the session this worker owns (kernel/llm/
+ * gpt2_gguf_session.c): START encodes the prompt with the worker's own
+ * tokenizer and seeds the sampler, every step samples and decodes the piece
+ * here; the reply carries the session back as the kernel mirror. A STEP for
+ * a session this worker does not hold (restart) adopts the mirror. The older
+ * stateless OS_AI_JOB_GGUF_STEP is still answered. */
 #include "ai_common.h"
 #include "ai_fat16_shim.h"
 #include "llm/gpt2_generate.h"
 #include "llm/gpt2_gguf_infer.h"
+#include "llm/gpt2_gguf_session.h"
 #include "llm/gpt2_model.h"
 #include "llm/gpt2_tokenizer.h"
 
@@ -30,6 +36,57 @@ static os_ai_engine_job_t job;
 static ai_line_t line;
 static fat16_volume_t gguf_volume;
 static int gguf_ready;
+static gpt2_gguf_session_t session;
+
+static int worker_next(void* context, const uint32_t* tokens, uint32_t token_count,
+                       uint32_t generated_count, uint32_t* next_token, uint32_t* rng_state) {
+    (void)context;
+    return gpt2_gguf_generate_next_sampled(tokens, token_count, generated_count, next_token,
+                                           rng_state);
+}
+
+/* 109/110 on the worker-owned session. */
+static int serve_session(void) {
+    unsigned int i;
+    int result;
+    reply.session_resumed = 0U;
+    if (!gguf_ready) {
+        result = -5;
+    } else if (job.session_op == OS_AI_GGUF_SESSION_START) {
+        session.id = job.session_id;
+        result = gpt2_gguf_session_start(&session, job.prompt, 1, GPT2_GGUF_INFER_MAX_CONTEXT);
+        if (result == 0) result = gpt2_gguf_session_step(&session, worker_next, 0, reply.text, job.max);
+    } else if (job.session_op == OS_AI_GGUF_SESSION_STEP &&
+               job.token_count > 0U && job.token_count <= OS_AI_ENGINE_TOKENS_MAX &&
+               job.prompt_tokens <= job.token_count) {
+        if (!session.active || session.id != job.session_id ||
+            session.token_count != job.token_count) {
+            /* Not our session (restarted worker, or started in Ring 0):
+             * adopt the kernel mirror. */
+            for (i = 0U; i < job.token_count; i++) session.tokens[i] = job.tokens[i];
+            session.token_count = job.token_count;
+            session.prompt_tokens = job.prompt_tokens;
+            session.rng = job.rng_state;
+            session.active = 1U;
+            session.id = job.session_id;
+            reply.session_resumed = 1U;
+        }
+        result = gpt2_gguf_session_step(&session, worker_next, 0, reply.text, job.max);
+    } else {
+        result = -1;
+    }
+    reply.job_id = job.job_id;
+    reply.kind = OS_AI_JOB_GGUF_SESSION;
+    reply.result = result;
+    reply.text_length = result > 0 ? (unsigned int)result : 0U;
+    if (result <= 0) reply.text[0] = '\0';
+    reply.token_count = session.token_count;
+    reply.prompt_tokens = session.prompt_tokens;
+    for (i = 0U; i < session.token_count && i < OS_AI_ENGINE_TOKENS_MAX; i++) reply.tokens[i] = session.tokens[i];
+    reply.rng_state = session.rng;
+    reply.session_active = session.active ? 1U : 0U;
+    return result;
+}
 
 static void wlog(void) {
     if (ai_engine(OS_AI_ENGINE_LOG, (unsigned int)line.text, line.length) != 0) ai_puts(line.text);
@@ -62,6 +119,26 @@ static void serve(const os_ipc_message_t* message) {
         return;
     }
     for (i = 0U; i < sizeof(reply); i++) ((char*)&reply)[i] = 0;
+    if (job.kind == OS_AI_JOB_GGUF_SESSION) {
+        result = serve_session();
+        rc = ai_engine(OS_AI_ENGINE_REPLY, (unsigned int)&reply, 0U);
+        ai_line_reset(&line);
+        ai_line_add(&line, job.session_op == OS_AI_GGUF_SESSION_START ? "aiworker gguf session start "
+                                                                      : "aiworker gguf session step ");
+        ai_line_int(&line, (int)job.session_id);
+        ai_line_add(&line, " job ");
+        ai_line_int(&line, (int)job.job_id);
+        ai_line_add(&line, " rc ");
+        ai_line_int(&line, result);
+        ai_line_add(&line, " tokens ");
+        ai_line_int(&line, (int)session.token_count);
+        if (reply.session_resumed) ai_line_add(&line, " resumed");
+        ai_line_add(&line, " reply rc ");
+        ai_line_int(&line, rc);
+        ai_line_add(&line, "\n");
+        wlog();
+        return;
+    }
     if (job.kind == OS_AI_JOB_GGUF_STEP) {
         unsigned int next = 0U, rng = job.rng_state;
         result = gguf_ready ? gpt2_gguf_generate_next_sampled(job.tokens, job.token_count,

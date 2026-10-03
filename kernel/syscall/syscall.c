@@ -12,6 +12,7 @@
 #include "../timer.h"
 #include "../llm/gpt2_infer.h"
 #include "../llm/gpt2_gguf_infer.h"
+#include "../llm/gpt2_gguf_session.h"
 #include "../llm/gpt2_model.h"
 #include "../llm/gpt2_tokenizer.h"
 #include "../llm/gpt2_generate.h"
@@ -2831,72 +2832,65 @@ int sys_vfs_overlay_rmdir(const char* path) {
  * modele s'execute dans le noyau freestanding et ne doit jamais consommer un
  * buffer utilisateur non borne.
  */
-static uint32_t gguf_session_tokens[64];
-static uint32_t gguf_session_token_count;
-static uint32_t gguf_session_prompt_tokens;
-static uint32_t gguf_session_rng;
-static uint8_t gguf_session_active;
+/* GGUF 109/110 session. With a GGUF-ready aiworker the session lives in the
+ * worker (it encodes the prompt, samples and decodes each piece) and this
+ * is only the kernel mirror of its replies (status snapshot, Ring 0
+ * fallback, adoption by a restarted worker). Without one it is the Ring 0
+ * session, run by the same kernel/llm/gpt2_gguf_session.c code. */
+static gpt2_gguf_session_t g_gguf_session;
+static uint32_t g_gguf_session_next_id;
 
-static int ai_gguf_next(uint32_t generated_count, uint32_t* next_token);
+static int gguf_session_relay(uint32_t op, const char* prompt, char* out, uint32_t max,
+                              int* result, int* fallback);
+static int ai_gguf_kernel_next(void* context, const uint32_t* tokens, uint32_t token_count,
+                               uint32_t generated_count, uint32_t* next_token,
+                               uint32_t* rng_state);
 
-static int sys_gpt2_gguf_session_step(char* out, uint32_t max) {
-    const char* piece;
-    uint32_t next_token = 0U;
-    uint32_t written = 0U;
-    uint32_t generated_count;
-    int rc;
-    if (!out || max < 2U) return -1;
-    if (!gguf_session_active) return -6;
-    if (gguf_session_token_count == 0U || gguf_session_token_count >= 64U) {
-        gguf_session_active = 0U;
-        out[0] = '\0';
-        return 0;
-    }
-    generated_count = gguf_session_token_count - gguf_session_prompt_tokens;
-    rc = ai_gguf_next(generated_count, &next_token);
-    if (rc != 0) return -30 + rc;
-    if (next_token == gpt2_tokenizer_eot()) {
-        gguf_session_active = 0U;
-        out[0] = '\0';
-        return 0;
-    }
-    gguf_session_tokens[gguf_session_token_count++] = next_token;
-    ai_relay_record_gguf(OS_AI_PATH_NONE, 0, gguf_session_tokens, gguf_session_prompt_tokens,
-                         gguf_session_token_count);
-    piece = gpt2_tokenizer_decode(next_token);
-    if (!piece) return -4;
-    for (uint32_t i = 0U; piece[i] != '\0'; i++) {
-        if (written + 1U >= max) break;
-        out[written++] = piece[i];
-    }
-    out[written] = '\0';
-    return (int)written;
+static void gguf_session_snapshot(void) {
+    ai_relay_record_gguf(OS_AI_PATH_NONE, 0, g_gguf_session.tokens, g_gguf_session.prompt_tokens,
+                         g_gguf_session.token_count);
 }
 
-/* GGUF profile (SYS_GPT2_GGUF_GENERATE 109 / CONTINUE 110). The kernel owns
- * the small session (tokens, sampler state) and the tokenizer; each sampling
- * step (forward pass with the Q3_K/Q4_K/Q6_K kernels + top-k) runs in the
- * aiworker when it declared GGUF_READY, else in Ring 0 (ai_gguf_next). */
+/* One Ring 0 step (path kernel, or fallback after an aborted relay). */
+static int gguf_kernel_step(char* out, uint32_t max, int fallback) {
+    uint32_t before = g_gguf_session.token_count;
+    int rc = gpt2_gguf_session_step(&g_gguf_session, ai_gguf_kernel_next, &fallback, out, max);
+    if (g_gguf_session.token_count != before) gguf_session_snapshot();
+    return rc;
+}
+
+/* GGUF profile (SYS_GPT2_GGUF_GENERATE 109 / CONTINUE 110): the whole
+ * session job goes to the GGUF-ready aiworker (path worker), else Ring 0. */
 static int sys_gpt2_gguf_generate_impl(const char* prompt, char* out, uint32_t max) {
     char prompt_copy[GPT2_GENERATE_PROMPT_MAX];
-    uint32_t tokens[GPT2_GENERATE_MAX_TOKENS];
-    uint32_t token_count = 0;
-    int rc;
+    int result = 0, fallback = 0, rc;
 
     if (!prompt || !out || max < 2) return -1;
-    gguf_session_active = 0U;
+    g_gguf_session.active = 0U;
     (void)gpt2_generate_normalize(prompt, 255U, prompt_copy, sizeof(prompt_copy));
-    rc = gpt2_tokenizer_encode(prompt_copy, tokens, GPT2_GENERATE_MAX_TOKENS, &token_count);
-    if (rc != 0) return -2;
-    if (!gpt2_gguf_infer_ready() || token_count > GPT2_GGUF_INFER_MAX_CONTEXT) return -5;
-    for (uint32_t i = 0U; i < token_count; i++) gguf_session_tokens[i] = tokens[i];
-    gguf_session_token_count = token_count;
-    gguf_session_prompt_tokens = token_count;
-    gguf_session_rng = gpt2_generate_seed(prompt_copy);
-    gguf_session_active = 1U;
-    ai_relay_record_gguf(OS_AI_PATH_NONE, 0, gguf_session_tokens, gguf_session_prompt_tokens,
-                         gguf_session_token_count);
-    return sys_gpt2_gguf_session_step(out, max);
+    g_gguf_session.id = ++g_gguf_session_next_id;
+    if (gguf_session_relay(OS_AI_GGUF_SESSION_START, prompt_copy, out, max, &result, &fallback))
+        return result;
+    rc = gpt2_gguf_session_start(&g_gguf_session, prompt_copy, gpt2_gguf_infer_ready(),
+                                 GPT2_GGUF_INFER_MAX_CONTEXT);
+    if (rc != 0) return rc;
+    ai_relay_note_gguf_session_kernel();
+    gguf_session_snapshot();
+    return gguf_kernel_step(out, max, fallback);
+}
+
+static int sys_gpt2_gguf_continue_impl(char* out, uint32_t max) {
+    int result = 0, fallback = 0;
+    if (!out || max < 2U) return -1;
+    if (!g_gguf_session.active) return -6;
+    if (g_gguf_session.token_count == 0U || g_gguf_session.token_count >= GPT2_GGUF_SESSION_TOKENS) {
+        g_gguf_session.active = 0U;
+        out[0] = '\0';
+        return 0;
+    }
+    if (gguf_session_relay(OS_AI_GGUF_SESSION_STEP, 0, out, max, &result, &fallback))
+        return result;
+    return gguf_kernel_step(out, max, fallback);
 }
 
 /* ------------------------------------------------------------------------
@@ -3058,50 +3052,63 @@ int sys_gpt2_generate(const char* prompt, char* out, uint32_t max) {
     return rc;
 }
 
-/* One GGUF sampling step of the kernel session: relayed to the GGUF-ready
- * worker (path worker), else Ring 0 (path kernel, or fallback after an
- * abort). The worker gets the whole session (tokens, generated count,
- * sampler state) so a restarted worker or the Ring 0 path can take over at
- * any step; both run the same gpt2_gguf_generate_next_sampled(). */
-static int ai_gguf_next(uint32_t generated_count, uint32_t* next_token) {
-    int32_t worker = ai_live_worker();
-    int32_t gguf_worker = ai_relay_gguf_worker(worker);
-    int fallback = 0;
-    int rc;
-    if (gguf_worker > 0 && current_task && current_task->type == TASK_TYPE_USER &&
-        (int32_t)current_task->id != gguf_worker) {
-        task_t* self = current_task;
-        task_t* target = get_task_by_id(gguf_worker);
-        os_ai_engine_reply_t reply;
-        int32_t job;
-        if (self->syscall_frame && target) {
-            job = ai_relay_begin_gguf((int32_t)self->id, gguf_worker, gguf_session_tokens,
-                                      gguf_session_token_count, generated_count,
-                                      gguf_session_rng, timer_get_ticks());
-            if (job <= 0) {
-                ai_relay_busy_retry(self);
-                return -1; /* not reached */
-            }
-            if (ai_relay_dispatch(self, target, job, 0U, gguf_session_token_count,
-                                  &reply) == AI_RELAY_DONE) {
-                if (reply.result == 0) {
-                    *next_token = reply.next_token;
-                    gguf_session_rng = reply.rng_state;
-                }
-                ai_relay_record_gguf(OS_AI_PATH_WORKER, reply.result, gguf_session_tokens,
-                                     gguf_session_prompt_tokens, gguf_session_token_count);
-                return reply.result;
-            }
-            fallback = 1;
-        }
-    }
-    rc = gpt2_gguf_generate_next_sampled(gguf_session_tokens, gguf_session_token_count,
-                                         generated_count, next_token, &gguf_session_rng);
+/* Ring 0 sampling step for gpt2_gguf_session_step(): counted as path kernel
+ * (or fallback when a relayed job was just aborted). */
+static int ai_gguf_kernel_next(void* context, const uint32_t* tokens, uint32_t token_count,
+                               uint32_t generated_count, uint32_t* next_token,
+                               uint32_t* rng_state) {
+    int fallback = context ? *(int*)context : 0;
+    int rc = gpt2_gguf_generate_next_sampled(tokens, token_count, generated_count, next_token,
+                                             rng_state);
     ai_relay_note_gguf_kernel(ai_relay_gguf_worker(ai_live_worker()) > 0, fallback);
     ai_relay_record_gguf(fallback ? OS_AI_PATH_KERNEL_FALLBACK : OS_AI_PATH_KERNEL, rc,
-                         gguf_session_tokens, gguf_session_prompt_tokens,
-                         gguf_session_token_count);
+                         tokens, g_gguf_session.prompt_tokens, token_count);
     return rc;
+}
+
+/* 109/110 relayed to the GGUF-ready worker as one session job. Returns 1
+ * with *result = the worker's answer (the reply is the new kernel mirror,
+ * the piece is copied to out), or 0 when the caller runs Ring 0 (*fallback
+ * 1 if the job was aborted: worker lost or stalled). */
+static int gguf_session_relay(uint32_t op, const char* prompt, char* out, uint32_t max,
+                              int* result, int* fallback) {
+    int32_t worker = ai_live_worker();
+    int32_t gguf_worker = ai_relay_gguf_worker(worker);
+    task_t* self = current_task;
+    task_t* target;
+    os_ai_engine_reply_t reply;
+    int32_t job;
+    uint32_t i;
+    *fallback = 0;
+    if (gguf_worker <= 0 || !self || self->type != TASK_TYPE_USER ||
+        (int32_t)self->id == gguf_worker || !self->syscall_frame)
+        return 0;
+    target = get_task_by_id(gguf_worker);
+    if (!target) return 0;
+    job = ai_relay_begin_gguf_session((int32_t)self->id, gguf_worker, op, g_gguf_session.id,
+                                      prompt, max, g_gguf_session.tokens,
+                                      g_gguf_session.token_count, g_gguf_session.prompt_tokens,
+                                      g_gguf_session.rng, timer_get_ticks());
+    if (job <= 0) {
+        ai_relay_busy_retry(self);
+        return 0; /* not reached */
+    }
+    if (ai_relay_dispatch(self, target, job, max, g_gguf_session.token_count, &reply) != AI_RELAY_DONE) {
+        *fallback = 1;
+        return 0;
+    }
+    for (i = 0U; i < GPT2_GGUF_SESSION_TOKENS; i++)
+        g_gguf_session.tokens[i] = i < reply.token_count ? reply.tokens[i] : 0U;
+    g_gguf_session.token_count = reply.token_count;
+    g_gguf_session.prompt_tokens = reply.prompt_tokens;
+    g_gguf_session.rng = reply.rng_state;
+    g_gguf_session.active = reply.session_active;
+    ai_relay_record_gguf(OS_AI_PATH_WORKER, reply.result, g_gguf_session.tokens,
+                         g_gguf_session.prompt_tokens, g_gguf_session.token_count);
+    memcpy(out, reply.text, reply.text_length);
+    out[reply.text_length] = '\0';
+    *result = reply.result;
+    return 1;
 }
 
 /* OS_AI_ENGINE_GGUF_OPEN: a fresh worker-owned window (normal user pages,
@@ -3299,7 +3306,7 @@ int sys_gpt2_gguf_continue(char* out, uint32_t max) {
     if (current_task && current_task->type == TASK_TYPE_USER &&
         (int32_t)current_task->id == ai_live_worker())
         return OS_AI_ENGINE_REQUIRED;
-    return sys_gpt2_gguf_session_step(out, max);
+    return sys_gpt2_gguf_continue_impl(out, max);
 }
 
 // Cette fonction est maintenant obsolète pour l'entrée clavier
@@ -3308,10 +3315,8 @@ void syscall_add_input_char(char c) {
 }
 
 void syscall_init() {
-    gguf_session_active = 0U;
-    gguf_session_token_count = 0U;
-    gguf_session_prompt_tokens = 0U;
-    gguf_session_rng = 0U;
+    gpt2_gguf_session_reset(&g_gguf_session);
+    g_gguf_session_next_id = 0U;
     ai_relay_init();
     g_ai_waiter = NULL;
     g_ai_mapped_pid = 0;

@@ -94,6 +94,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_gpt2_sample: $(UNIT_DIR)/kernel/test_gpt2_s
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/llm/gpt2_sample.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_gpt2_gguf_session: $(UNIT_DIR)/kernel/test_gpt2_gguf_session.c ../kernel/llm/gpt2_gguf_session.c ../kernel/llm/gpt2_generate.c ../kernel/llm/gpt2_infer.c ../kernel/llm/gpt2_sample.c ../kernel/llm/gpt2_tokenizer.c ../kernel/llm/gpt2_model.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -DMOHHDY_RING3 -o $@ $< ../kernel/llm/gpt2_gguf_session.c ../kernel/llm/gpt2_generate.c ../kernel/llm/gpt2_infer.c ../kernel/llm/gpt2_sample.c ../kernel/llm/gpt2_tokenizer.c ../kernel/llm/gpt2_model.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled kernel test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_gpt2_generate: $(UNIT_DIR)/kernel/test_gpt2_generate.c ../kernel/llm/gpt2_generate.c ../kernel/llm/gpt2_infer.c ../kernel/llm/gpt2_sample.c ../kernel/llm/gpt2_tokenizer.c ../kernel/llm/gpt2_model.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -DMOHHDY_RING3 -o $@ $< ../kernel/llm/gpt2_generate.c ../kernel/llm/gpt2_infer.c ../kernel/llm/gpt2_sample.c ../kernel/llm/gpt2_tokenizer.c ../kernel/llm/gpt2_model.c $(FRAMEWORK_SOURCES)

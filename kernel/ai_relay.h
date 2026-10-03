@@ -33,6 +33,13 @@ int32_t ai_relay_begin_gguf(int32_t caller_pid, int32_t worker_pid, const uint32
                             uint32_t token_count, uint32_t generated, uint32_t rng_state,
                             uint32_t now);
 /* OS_AI_JOB_* of the job in flight (0 when free). */
+/* 109/110 session job (OS_AI_JOB_GGUF_SESSION): START with the normalised
+ * prompt, STEP with the session id and the kernel mirror. */
+int32_t ai_relay_begin_gguf_session(int32_t caller_pid, int32_t worker_pid, uint32_t op,
+                                    uint32_t session_id, const char* prompt, uint32_t max,
+                                    const uint32_t* tokens, uint32_t token_count,
+                                    uint32_t prompt_tokens, uint32_t rng_state, uint32_t now);
+void ai_relay_note_gguf_session_kernel(void);
 uint32_t ai_relay_kind(void);
 /* Doorbell could not be sent: slot freed, nothing counted. */
 void ai_relay_cancel(void);
