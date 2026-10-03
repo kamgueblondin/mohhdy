@@ -19,6 +19,7 @@ int syscall_ata_fat_io(uint32_t drive, uint32_t lba, uint32_t count, void* buf,
                        int write, int* out_rc);
 void syscall_ata_note_fat_kernel_pio(uint32_t sectors);
 void syscall_ata_set_boot_driver(int32_t pid);
+int syscall_net_ring0_fallback_enabled(void);
 void syscall_handler(cpu_state_t* cpu);
 
 void sys_exit(uint32_t exit_code);

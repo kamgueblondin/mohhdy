@@ -970,6 +970,9 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     /* Tranche 5: when the boot probe saw a NE2000, start networker before the
      * shell prompt. Presence detection and the reclaim path stay in Ring 0.
      * The worker takes the ports; killing it (root shell) restores Ring 0. */
+    if (!syscall_net_ring0_fallback_enabled())
+        print_string_serial("[NET] build NET_RING0_FALLBACK=0: kernel socket/LLM/peer/wire syscalls "
+                            "disabled, networker is the only network path\n");
     if (kernel_net_nic_present()) {
         task_t* net_driver_task = create_task_from_initrd_file("bin/networker");
         if (net_driver_task) {

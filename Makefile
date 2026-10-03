@@ -81,6 +81,22 @@ $(OS_IMAGE): $(OBJECTS)
 	@mkdir -p $(dir $@)
 	$(LD) -m elf_i386 -T linker.ld -o $@ --start-group $(OBJECTS) --end-group
 
+# Strict network build: same objects, syscall.c compiled with
+# -DMOHHDY_NET_NO_RING0_FALLBACK. The kernel socket/LLM/peer/wire syscalls
+# are refused to every task; the Ring 3 networker is the only network path.
+NETSTRICT_IMAGE = build/mohhdy-netstrict.bin
+NETSTRICT_OBJECTS = $(filter-out build/syscall.o,$(OBJECTS)) build/syscall-netstrict.o
+
+build/syscall-netstrict.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DMOHHDY_NET_NO_RING0_FALLBACK -c $< -o $@
+
+$(NETSTRICT_IMAGE): $(NETSTRICT_OBJECTS)
+	@mkdir -p $(dir $@)
+	$(LD) -m elf_i386 -T linker.ld -o $@ --start-group $(NETSTRICT_OBJECTS) --end-group
+
+kernel-netstrict: $(NETSTRICT_IMAGE)
+
 # Cible pour compiler seulement le noyau (sans initrd)
 kernel-only: $(OS_IMAGE)
 	@echo "=== Noyau MOHHDY Compilé ==="
@@ -697,7 +713,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
+.PHONY: integration-qemu qemu-net-no-ring0 kernel-netstrict qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -951,6 +967,12 @@ qemu-ne2k-tls-http: $(OS_IMAGE) pack-initrd
 qemu-net-tls-worker: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/qemu_ne2k_tls12_server.py
 	@python3 tests/scripts/test_qemu_net_tls_worker.py
+
+# Strict network build: TLS/HTTP and TCP sockets through networker only;
+# without the worker every network syscall is refused (no Ring 0 fallback).
+qemu-net-no-ring0: $(NETSTRICT_IMAGE) pack-initrd
+	@python3 tests/scripts/qemu_ne2k_tls12_server.py
+	@python3 tests/scripts/test_qemu_net_no_ring0.py
 
 qemu-ne2k-tls-sse: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/qemu_ne2k_tls12_server.py

@@ -489,3 +489,47 @@ from Ring 3).
 
 Still Ring 0: the no-worker fallback, the boot probe, and the guest-guest TLS
 server (peer 128-130, -141 while the worker owns the card).
+
+## Strict network build: no Ring 0 fallback (`NET_RING0_FALLBACK=0`)
+
+`make kernel-netstrict` links `build/mohhdy-netstrict.bin`: the same objects
+as `build/mohhdy.bin`, except `kernel/syscall/syscall.c` compiled with
+`-DMOHHDY_NET_NO_RING0_FALLBACK`. In that kernel, any gated network syscall
+(LLM 91-98, socket 99-108 and 144, peer 128-130, wire 139-142) that was not
+relayed to the live `networker` is refused with -59 (`OS_NET_WORKER_REQUIRED`)
+before the dispatch, for every task including the worker itself. It is
+counted in `SYS_NET_RELAY_STATUS.denied` and the first 16 refusals are logged
+(`[NET] ring0 fallback absent: syscall N refused (-59)`). The kernel socket
+registry, the kernel LLM session, the kernel peer TLS server and the kernel
+wire engine are therefore not reachable from userland at all; no worker
+means no network, instead of a silent Ring 0 replay. The boot log prints
+`[NET] build NET_RING0_FALLBACK=0 ...` and the worker self-check prints
+`net-driver kernel socket stack absent, ring3 only`.
+
+Proof: `make qemu-net-no-ring0` (about 55 s locally, in CI) boots the strict
+kernel with a NE2000 wired to the controlled TLS peer and checks:
+
+1. the boot `networker` owns the card and serves DHCP/DNS/TCP/TLS 1.2/HTTP
+   (TLS_COMPLETE, HTTP 200, 15 LLM syscalls relayed) - same contract as
+   `qemu-net-tls-worker`;
+2. `netrelay` (ordinary task) runs its TCP loopback (open, listen, 3-way
+   handshake, send/feed/receive ping and pong, close): 14 socket calls, all
+   run by the worker on its Ring 3 registry, no Ring 0 refusal meanwhile;
+3. after `kill` of the worker: `netrelay` fails at `open rc -59`, LLM poll and
+   `ai-acquire` are refused (-59, logged), no relay op, `denied` 2 -> 6.
+
+What this slice does NOT remove (still Ring 0, honest list):
+
+- the default build (`build/mohhdy.bin`, used by every other test) keeps the
+  degraded fallback: without a worker the kernel stack serves the calls;
+- the kernel objects (`net_socket`, `net_tcp`, `net_llm_client`, TLS,
+  `net_wire`...) are still linked in the strict kernel (unreachable from a
+  syscall, but not pruned from the image); only the syscall entry points are
+  cut;
+- the NE2000 boot probe and the reset of the card in Ring 0 after a worker
+  loss (`NE2000 back in Ring 0 after worker loss`);
+- without a NE2000 the worker does not start its Ring 3 stack, so a strict
+  kernel without a card has no sockets at all (the default build serves
+  loopback sockets from the kernel registry);
+- peer 128-130 are relayed to the worker in strict mode but not exercised by
+  this contract.
