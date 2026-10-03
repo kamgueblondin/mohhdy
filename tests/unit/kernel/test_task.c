@@ -764,6 +764,124 @@ void test_task_reparents_children_on_departure(void) {
     TEST_ASSERT_EQUAL(-1, orphan->parent_pid);
 }
 
+void test_task_identity_follows_parent_death(void) {
+    task_t* owner;
+    task_t* parent;
+    task_t* child;
+    task_t* grandchild;
+    task_t* stranger;
+    task_t* root;
+    task_t* orphan;
+    os_task_metrics_t metrics;
+    os_task_children_t children;
+    uint32_t child_key;
+    uint32_t grandchild_key;
+
+    tasking_init();
+    owner = create_task(dummy_task_function);
+    parent = create_task(dummy_task_function);
+    child = create_task(dummy_task_function);
+    grandchild = create_task(dummy_task_function);
+    stranger = create_task(dummy_task_function);
+    owner->type = TASK_TYPE_USER;
+    parent->type = TASK_TYPE_USER;
+    child->type = TASK_TYPE_USER;
+    grandchild->type = TASK_TYPE_USER;
+    stranger->type = TASK_TYPE_USER;
+    parent->parent_pid = owner->id;
+    child->parent_pid = parent->id;
+    grandchild->parent_pid = child->id;
+    add_task_to_queue(owner);
+    add_task_to_queue(parent);
+    add_task_to_queue(child);
+    add_task_to_queue(grandchild);
+    add_task_to_queue(stranger);
+
+    child_key = child->identity_key;
+    grandchild_key = grandchild->identity_key;
+    TEST_ASSERT_TRUE(child_key != 0U);
+    TEST_ASSERT_TRUE(grandchild_key != 0U);
+    TEST_ASSERT_TRUE(child_key != grandchild_key);
+
+    current_task = parent;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(child->id, &metrics));
+    TEST_ASSERT_EQUAL(1U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(child->sequence, metrics.sequence);
+    TEST_ASSERT_EQUAL(child->generation, metrics.generation);
+    TEST_ASSERT_EQUAL(child_key, metrics.identity_key);
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(grandchild->id, &metrics));
+    TEST_ASSERT_EQUAL(0U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(0U, metrics.identity_key);
+
+    TEST_ASSERT_EQUAL(0, task_kill(owner->id, parent->id));
+    TEST_ASSERT_EQUAL(owner->id, child->parent_pid);
+    TEST_ASSERT_EQUAL(child->id, grandchild->parent_pid);
+
+    current_task = owner;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(child->id, &metrics));
+    TEST_ASSERT_EQUAL(1U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(child->sequence, metrics.sequence);
+    TEST_ASSERT_EQUAL(child->generation, metrics.generation);
+    TEST_ASSERT_EQUAL(child_key, metrics.identity_key);
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(grandchild->id, &metrics));
+    TEST_ASSERT_EQUAL(0U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(0U, metrics.identity_key);
+    TEST_ASSERT_EQUAL(0, task_fill_direct_children(owner->id, &children));
+    TEST_ASSERT_EQUAL(1U, children.count);
+    TEST_ASSERT_EQUAL(child->id, children.entries[0].pid);
+    TEST_ASSERT_EQUAL(1U, children.entries[0].identity_visible);
+    TEST_ASSERT_EQUAL(child_key, children.entries[0].identity_key);
+
+    current_task = stranger;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(child->id, &metrics));
+    TEST_ASSERT_EQUAL(0U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(0U, metrics.identity_key);
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(grandchild->id, &metrics));
+    TEST_ASSERT_EQUAL(0U, metrics.identity_visible);
+
+    current_task = child;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(owner->id, &metrics));
+    TEST_ASSERT_EQUAL(0U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(0U, metrics.identity_key);
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(grandchild->id, &metrics));
+    TEST_ASSERT_EQUAL(1U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(grandchild_key, metrics.identity_key);
+
+    TEST_ASSERT_EQUAL(0, task_kill(owner->id, child->id));
+    TEST_ASSERT_EQUAL(owner->id, grandchild->parent_pid);
+    current_task = owner;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(grandchild->id, &metrics));
+    TEST_ASSERT_EQUAL(1U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(grandchild->sequence, metrics.sequence);
+    TEST_ASSERT_EQUAL(grandchild->generation, metrics.generation);
+    TEST_ASSERT_EQUAL(grandchild_key, metrics.identity_key);
+    TEST_ASSERT_EQUAL(0, task_fill_direct_children(owner->id, &children));
+    TEST_ASSERT_EQUAL(1U, children.count);
+    TEST_ASSERT_EQUAL(grandchild->id, children.entries[0].pid);
+    TEST_ASSERT_EQUAL(1U, children.entries[0].identity_visible);
+    TEST_ASSERT_EQUAL(grandchild_key, children.entries[0].identity_key);
+
+    root = create_task(dummy_task_function);
+    orphan = create_task(dummy_task_function);
+    root->type = TASK_TYPE_USER;
+    orphan->type = TASK_TYPE_USER;
+    root->parent_pid = -1;
+    orphan->parent_pid = root->id;
+    add_task_to_queue(root);
+    add_task_to_queue(orphan);
+    task_reparent_children(root);
+    TEST_ASSERT_EQUAL(-1, orphan->parent_pid);
+    current_task = stranger;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(orphan->id, &metrics));
+    TEST_ASSERT_EQUAL(0U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(0U, metrics.identity_key);
+    current_task = orphan;
+    TEST_ASSERT_EQUAL(0, task_fill_metrics(orphan->id, &metrics));
+    TEST_ASSERT_EQUAL(1U, metrics.identity_visible);
+    TEST_ASSERT_EQUAL(orphan->identity_key, metrics.identity_key);
+    TEST_ASSERT_TRUE(orphan->identity_key != 0U);
+}
+
 void test_task_supervision_wait_and_children(void) {
     task_t* parent;
     task_t* child;
@@ -1186,6 +1304,96 @@ void test_task_supervision_events(void) {
     TEST_ASSERT_EQUAL(2, supervisor_events.count);
     TEST_ASSERT_EQUAL(OS_TASK_SUPERVISION_EXIT, supervisor_events.entries[1].action);
     TEST_ASSERT_EQUAL(OS_TASK_EVENT_KILLED, supervisor_events.entries[1].detail);
+}
+
+void test_task_supervision_journal_keeps_child_identity(void) {
+    task_t* parent;
+    task_t* child;
+    task_t* supervisor;
+    os_task_supervision_events_t events;
+    os_ipc_message_t message;
+    os_task_supervision_event_t event;
+    uint32_t key;
+    uint32_t sequence;
+    uint32_t generation;
+    uint32_t replaced;
+
+    tasking_init();
+    parent = create_task(dummy_task_function);
+    child = create_task(dummy_task_function);
+    supervisor = create_task(dummy_task_function);
+    TEST_ASSERT_NOT_NULL(parent);
+    TEST_ASSERT_NOT_NULL(child);
+    TEST_ASSERT_NOT_NULL(supervisor);
+    parent->type = TASK_TYPE_USER;
+    child->type = TASK_TYPE_USER;
+    supervisor->type = TASK_TYPE_USER;
+    child->parent_pid = parent->id;
+    add_task_to_queue(parent);
+    add_task_to_queue(child);
+    add_task_to_queue(supervisor);
+
+    key = child->identity_key;
+    sequence = child->sequence;
+    generation = child->generation;
+    TEST_ASSERT_TRUE(key != 0U);
+
+    TEST_ASSERT_EQUAL(1, task_set_supervision_notify(parent->id, 1U));
+    TEST_ASSERT_EQUAL(0, task_suspend_child(parent->id, child->id));
+    TEST_ASSERT_EQUAL(0, task_fill_supervision_events(parent->id, &events));
+    TEST_ASSERT_EQUAL(1, events.count);
+    TEST_ASSERT_EQUAL(sequence, events.entries[0].child_sequence);
+    TEST_ASSERT_EQUAL(generation, events.entries[0].child_generation);
+    TEST_ASSERT_EQUAL(key, events.entries[0].identity_key);
+
+    message = parent->ipc_endpoint.messages[parent->ipc_endpoint.read_index];
+    event.child_sequence = 9U;
+    event.child_generation = 8U;
+    event.identity_key = 7U;
+    TEST_ASSERT_EQUAL(0, os_task_parse_supervision_event(&message, &event));
+    TEST_ASSERT_EQUAL(OS_TASK_SUPERVISION_SUSPEND, event.action);
+    TEST_ASSERT_EQUAL(child->id, event.child_pid);
+    TEST_ASSERT_EQUAL(0U, event.child_sequence);
+    TEST_ASSERT_EQUAL(0U, event.child_generation);
+    TEST_ASSERT_EQUAL(0U, event.identity_key);
+
+    replaced = key + 17U;
+    child->identity_key = replaced;
+    TEST_ASSERT_EQUAL(0, task_fill_supervision_events(parent->id, &events));
+    TEST_ASSERT_EQUAL(key, events.entries[0].identity_key);
+    TEST_ASSERT_TRUE(events.entries[0].identity_key != child->identity_key);
+
+    TEST_ASSERT_EQUAL(0, task_resume_child(parent->id, child->id));
+    TEST_ASSERT_EQUAL(0, task_fill_supervision_events(parent->id, &events));
+    TEST_ASSERT_EQUAL(2, events.count);
+    TEST_ASSERT_EQUAL(key, events.entries[0].identity_key);
+    TEST_ASSERT_EQUAL(replaced, events.entries[1].identity_key);
+    TEST_ASSERT_EQUAL(sequence, events.entries[1].child_sequence);
+    TEST_ASSERT_EQUAL(generation, events.entries[1].child_generation);
+
+    child->identity_key = key;
+    TEST_ASSERT_EQUAL(0, task_delegate_child(parent->id, child->id, supervisor->id));
+    TEST_ASSERT_EQUAL(0, task_fill_supervision_events(parent->id, &events));
+    TEST_ASSERT_EQUAL(3, events.count);
+    TEST_ASSERT_EQUAL(OS_TASK_SUPERVISION_DELEGATE_OUT, events.entries[2].action);
+    TEST_ASSERT_EQUAL(key, events.entries[2].identity_key);
+    TEST_ASSERT_EQUAL(sequence, events.entries[2].child_sequence);
+    TEST_ASSERT_EQUAL(0, task_fill_supervision_events(supervisor->id, &events));
+    TEST_ASSERT_EQUAL(1, events.count);
+    TEST_ASSERT_EQUAL(OS_TASK_SUPERVISION_DELEGATE_IN, events.entries[0].action);
+    TEST_ASSERT_EQUAL(key, events.entries[0].identity_key);
+    TEST_ASSERT_EQUAL(generation, events.entries[0].child_generation);
+
+    TEST_ASSERT_EQUAL(0, task_kill(supervisor->id, child->id));
+    TEST_ASSERT_NULL(get_task_by_id(child->id));
+    TEST_ASSERT_EQUAL(0, task_fill_supervision_events(supervisor->id, &events));
+    TEST_ASSERT_EQUAL(2, events.count);
+    TEST_ASSERT_EQUAL(OS_TASK_SUPERVISION_EXIT, events.entries[1].action);
+    TEST_ASSERT_EQUAL(key, events.entries[1].identity_key);
+    TEST_ASSERT_EQUAL(sequence, events.entries[1].child_sequence);
+    TEST_ASSERT_EQUAL(generation, events.entries[1].child_generation);
+    TEST_ASSERT_EQUAL(0, task_fill_supervision_events(parent->id, &events));
+    TEST_ASSERT_EQUAL(key, events.entries[0].identity_key);
 }
 
 void test_task_supervision_event_selective(void) {
@@ -1744,6 +1952,7 @@ int main(void) {
     RUN_TEST(test_task_metrics_snapshot_and_missing_pid);
     RUN_TEST(test_task_identity_visible_to_self_and_child);
     RUN_TEST(test_task_identity_follows_current_parent);
+    RUN_TEST(test_task_identity_follows_parent_death);
 
     // Tests de politique CPU
     RUN_TEST(test_task_priority_selection_and_validation);
@@ -1758,6 +1967,7 @@ int main(void) {
     RUN_TEST(test_task_child_exit_count);
     RUN_TEST(test_task_supervision_delegation);
     RUN_TEST(test_task_supervision_events);
+    RUN_TEST(test_task_supervision_journal_keeps_child_identity);
     RUN_TEST(test_task_supervision_event_selective);
     RUN_TEST(test_task_supervision_notifications);
     RUN_TEST(test_task_supervision_notification_filter);

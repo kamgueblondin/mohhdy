@@ -351,6 +351,17 @@ static void task_notify_supervision_event(task_t* parent,
     }
 }
 
+static void task_stamp_supervision_identity(os_task_supervision_event_t* event, int child_pid) {
+    task_t* child = get_task_by_id(child_pid);
+    event->child_sequence = 0U;
+    event->child_generation = 0U;
+    event->identity_key = 0U;
+    if (!child) return;
+    event->child_sequence = child->sequence;
+    event->child_generation = child->generation;
+    event->identity_key = child->identity_key;
+}
+
 static void task_record_supervision_event(task_t* parent, uint32_t action,
                                           int child_pid, int related_pid, uint32_t detail) {
     uint32_t index;
@@ -374,6 +385,7 @@ static void task_record_supervision_event(task_t* parent, uint32_t action,
     event->related_pid = related_pid;
     event->detail = detail;
     event->ticks = mock_timer_get_ticks();
+    task_stamp_supervision_identity(event, child_pid);
     parent->supervision_event_generation++;
     if (parent->supervision_event_generation == 0U) parent->supervision_event_generation = 1U;
     task_notify_supervision_event(parent, event);
