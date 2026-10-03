@@ -141,6 +141,9 @@ task_t* load_elf_task(uint8_t* elf_data, uint32_t size);
 void schedule(cpu_state_t* cpu);
 /* Clean FXSAVE image (FNINIT state, MXCSR 0x1F80, all exceptions masked). */
 void task_fx_init(task_t* task);
+/* Push kernel tables [first_table, first_table+count) added after task
+ * directories were created into every live task directory. */
+uint32_t task_share_kernel_tables(uint32_t first_table, uint32_t count);
 extern const uint32_t task_fx_state_offset;
 void jump_to_task(cpu_state_t* state);
 void task_exit();

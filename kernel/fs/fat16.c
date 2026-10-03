@@ -59,6 +59,23 @@ static int fat16_resident_name_equal(const char* name) {
     }
     return resident_name[i] == '\0' && name[i] == '\0';
 }
+
+/* An unlink or rename on the resident file's volume drops the snapshot so
+ * later reads go back to the disk. Volume-wide on purpose: name matching
+ * would miss case variants and LFN aliases of the resident short name. */
+/* Local copy (fat16.c is also linked into Ring 3 atadriver, no libc):
+ * 32-bit words when both pointers are aligned, bytes otherwise. */
+static void fat16_copy_bytes(uint8_t* dst, const uint8_t* src, uint32_t n) {
+    uint32_t i = 0U;
+    if ((((uint32_t)dst | (uint32_t)src) & 3U) == 0U) {
+        for (; i + 4U <= n; i += 4U) *(uint32_t*)(dst + i) = *(const uint32_t*)(src + i);
+    }
+    for (; i < n; i++) dst[i] = src[i];
+}
+
+static void fat16_resident_invalidate_volume(const fat16_volume_t* v) {
+    if (resident_valid && v == resident_volume) fat16_resident_clear();
+}
 static uint8_t write_scratch[FAT16_SECTOR_SIZE];
 static const char* status_text = "FAT16: non monte";
 static fat16_volume_t root_volume;
@@ -433,6 +450,7 @@ int fat16_unlink_file(const fat16_volume_t* v, const char* name) {
     uint32_t size;
     int short_valid;
     if (!v || !name || !fat16_is_mounted(v) || !v->write_sector) return OS_FAT16_NOT_MOUNTED;
+    fat16_resident_invalidate_volume(v);
     short_valid = make_short_name(name, short_name) == 0;
     if (!fat16_lfn_query_valid(name)) return OS_FAT16_BAD_PATH;
     for (i = 0U; i < v->root_entries; i++) {
@@ -482,6 +500,7 @@ int fat16_rename_file(const fat16_volume_t* v, const char* old_name, const char*
     if (!v || !old_name || !new_name || !fat16_is_mounted(v) || !v->write_sector) {
         return OS_FAT16_NOT_MOUNTED;
     }
+    fat16_resident_invalidate_volume(v);
     if (make_short_name(old_name, old_short) != 0 || make_short_name(new_name, new_short) != 0) {
         return OS_FAT16_BAD_PATH;
     }
@@ -518,6 +537,7 @@ int fat16_rename_lfn_file(const fat16_volume_t* v, const char* old_name,
     uint32_t start = 0U, i, j, old_count = 0U, length = 0U, new_count;
     int old_short_valid;
     if (!v || !old_name || !new_long_name || !new_short_name || !fat16_is_mounted(v) || !v->write_sector) return OS_FAT16_NOT_MOUNTED;
+    fat16_resident_invalidate_volume(v);
     old_short_valid = make_short_name(old_name, old_short) == 0;
     if (make_short_name(new_short_name, new_short) != 0) return OS_FAT16_BAD_PATH;
     if (lfn_utf8_to_utf16_bmp(new_long_name, units, OS_NAME_MAX, &length) != 0) return OS_FAT16_BAD_PATH;
@@ -1011,6 +1031,23 @@ int fat16_open_file(const fat16_volume_t* v, const char* name, fat16_file_t* out
     int status;
     if (!fat16_is_mounted(v) || !out) return OS_FAT16_NOT_MOUNTED;
     out->open = 0U;
+    out->resident = 0;
+    if (resident_valid && v == resident_volume && resident_data && name &&
+        fat16_resident_name_equal(name)) {
+        /* Same source as fat16_read_file_range: the boot snapshot. */
+        out->volume = v;
+        out->first_cluster = 0U;
+        out->cluster = 0U;
+        out->size = resident_size;
+        out->position = 0U;
+        out->cluster_offset = 0U;
+        out->guard = 0U;
+        out->cached_lba = 0U;
+        out->cache_valid = 0U;
+        out->resident = resident_data;
+        out->open = 1U;
+        return 0;
+    }
     status = fat16_find_root_entry(v, name, entry);
     if (status != 0) return status;
     if (entry[11] & 0x10U) return OS_FAT16_BAD_PATH;
@@ -1033,6 +1070,11 @@ int fat16_file_seek(fat16_file_t* file, uint32_t offset) {
     uint32_t steps;
     uint32_t i;
     if (!file || !file->open || !file->volume || offset > file->size) return OS_FAT16_BAD_PATH;
+    if (file->resident) {
+        if (file->resident != resident_data || !resident_valid) return OS_FAT16_CORRUPT;
+        file->position = offset;
+        return 0;
+    }
     v = file->volume;
     cluster_bytes = (uint32_t)v->sectors_per_cluster * FAT16_SECTOR_SIZE;
     if (cluster_bytes == 0U) return OS_FAT16_CORRUPT;
@@ -1067,6 +1109,17 @@ int fat16_file_read(fat16_file_t* file, uint8_t* buffer, uint32_t max,
     uint32_t copied = 0U;
     if (out_read) *out_read = 0U;
     if (!file || !file->open || !file->volume || !buffer || max == 0U || !out_read) return OS_FAT16_BUFFER_SMALL;
+    if (file->resident) {
+        uint32_t n = max;
+        /* Snapshot dropped or replaced since open: refuse, never read freed data. */
+        if (file->resident != resident_data || !resident_valid) return OS_FAT16_CORRUPT;
+        if (file->position > file->size) return OS_FAT16_CORRUPT;
+        if (n > file->size - file->position) n = file->size - file->position;
+        fat16_copy_bytes(buffer, file->resident + file->position, n);
+        file->position += n;
+        *out_read = n;
+        return 0;
+    }
     v = file->volume;
     cluster_bytes = (uint32_t)v->sectors_per_cluster * FAT16_SECTOR_SIZE;
     if (cluster_bytes == 0U || file->position > file->size) return OS_FAT16_CORRUPT;
