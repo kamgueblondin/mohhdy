@@ -69,7 +69,10 @@ def monitor():
 def send(client, command):
     aliases = {" ": "spc", "-": "minus", ".": "dot", "?": "shift-slash", "!": "shift-1"}
     for char in command:
-        name = aliases.get(char, char.lower())
+        if char.isupper():
+            name = "shift-" + char.lower()
+        else:
+            name = aliases.get(char, char)
         client.sendall(("sendkey %s\n" % name).encode("ascii"))
         time.sleep(KEY_DELAY)
     time.sleep(KEY_DELAY)
