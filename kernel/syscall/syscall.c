@@ -695,6 +695,19 @@ static int32_t sys_ata_fs(cpu_state_t* cpu) {
             }
             return rc;
         }
+        case OS_ATA_FS_LOG: {
+            /* Same discipline as OS_NET_NIC_LOG: the whole counter line is
+             * printed inside one syscall, so IRQ0 can no longer cut shell
+             * output into it (qemu-ata-driver flake, run 37059589131). */
+            const char* text = (const char*)cpu->ecx;
+            uint32_t i, n = cpu->edx;
+            if (n > OS_ATA_FS_LOG_MAX || !syscall_user_range(text, n, 0)) return OS_ATA_JOB_STALE;
+            for (i = 0U; i < n; i++) {
+                print_char(text[i], -1, -1, 0x0F);
+                write_serial(text[i]);
+            }
+            return 0;
+        }
         case OS_ATA_FS_INITRD_STAT: {
             const char* path = (const char*)cpu->ecx;
             if (!syscall_user_range(path, 1U, 0)) return -1;
