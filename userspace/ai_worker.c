@@ -13,7 +13,8 @@
  *
  * GGUF slice: when the kernel has the FAT16 GGUF profile, the worker opens a
  * window of its own memory (OS_AI_ENGINE_GGUF_OPEN), fills it with the
- * worker-only bulk read (OS_AI_ENGINE_GGUF_READ, 1 MiB chunks), points the
+ * worker-only bulk read (OS_AI_ENGINE_GGUF_READ, 1 MiB chunks, disk sectors
+ * via atadriver, not the kernel snapshot), points the
  * GGUF runtime (kernel/llm/gpt2_gguf*.c + gpt2_quant.c K-quant kernels,
  * built here at CPL 3) at it through ai_fat16_shim.c and declares
  * OS_AI_ENGINE_GGUF_READY. A doorbell of kind OS_AI_JOB_GGUF_SESSION is then

@@ -1249,6 +1249,9 @@ typedef struct {
 #define OS_AI_ENGINE_STALE (-146)
 /* No FP32 checkpoint / tokenizer in the initrd to map. */
 #define OS_AI_ENGINE_NO_MODEL (-147)
+/* 109/110 refused: no GGUF-ready worker, or the relayed job was aborted,
+ * and this build has no Ring 0 GGUF tokenizer/session fallback. */
+#define OS_AI_GGUF_NO_WORKER (-148)
 
 #define OS_AI_ENGINE_STATUS 1U
 #define OS_AI_ENGINE_MAP    2U
@@ -1256,12 +1259,15 @@ typedef struct {
 #define OS_AI_ENGINE_REPLY  4U
 #define OS_AI_ENGINE_LOG    5U
 /* GGUF slice (worker only). GGUF_OPEN maps a fresh, zeroed, worker-owned
- * read-write window sized to the kernel's FAT16 GPT2.GGU (ECX =
- * os_ai_engine_map_t* out). GGUF_READ (ECX = file offset, EDX = length <=
- * OS_AI_ENGINE_GGUF_CHUNK_MAX) copies those file bytes into the window at
- * the same offset and returns the byte count: the bulk read restricted to
- * the worker. GGUF_READY declares the worker's GGUF runtime initialised from
- * its copy; only then are 109/110 relayed. */
+ * read-write window sized to the FAT16 GPT2.GGU (ECX = os_ai_engine_map_t*
+ * out). The recorded file size stays after the kernel snapshot is released.
+ * GGUF_READ (ECX = file offset, EDX = length <= OS_AI_ENGINE_GGUF_CHUNK_MAX)
+ * reads those bytes from the disk (fat16_read_file_range_disk: atadriver
+ * when that driver is live, not a memcpy of the kernel snapshot) into the
+ * window at the same offset and returns the byte count. GGUF_READY declares
+ * the worker's GGUF runtime initialised from its copy, then the kernel
+ * releases its snapshot; only then are 109/110 relayed. Without a GGUF-ready
+ * worker, a build with GGUF_RING0_FALLBACK=0 returns OS_AI_GGUF_NO_WORKER. */
 #define OS_AI_ENGINE_GGUF_OPEN  6U
 #define OS_AI_ENGINE_GGUF_READ  7U
 #define OS_AI_ENGINE_GGUF_READY 8U

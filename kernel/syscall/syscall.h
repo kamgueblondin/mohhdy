@@ -20,6 +20,9 @@ int syscall_ata_fat_io(uint32_t drive, uint32_t lba, uint32_t count, void* buf,
 void syscall_ata_note_fat_kernel_pio(uint32_t sectors);
 void syscall_ata_set_boot_driver(int32_t pid);
 int syscall_net_ring0_fallback_enabled(void);
+/* 1 when 109/110 may run the Ring 0 tokenizer/session, 0 in the default
+ * strict build (GGUF_RING0_FALLBACK=0). */
+int syscall_gguf_ring0_fallback_enabled(void);
 void syscall_handler(cpu_state_t* cpu);
 
 void sys_exit(uint32_t exit_code);

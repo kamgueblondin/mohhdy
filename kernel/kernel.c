@@ -973,6 +973,9 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     if (!syscall_net_ring0_fallback_enabled())
         print_string_serial("[NET] build NET_RING0_FALLBACK=0: kernel socket/LLM/peer/wire syscalls "
                             "disabled, networker is the only network path\n");
+    if (!syscall_gguf_ring0_fallback_enabled())
+        print_string_serial("[AI] build GGUF_RING0_FALLBACK=0: syscalls 109/110 refused without a "
+                            "GGUF worker\n");
     /* Strict build (default): networker is the only network path, so it
      * is started even without a card (loopback-only sockets in Ring 3). */
     if (kernel_net_nic_present() || !syscall_net_ring0_fallback_enabled()) {
@@ -990,8 +993,10 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
      * initrd, the GPT-2 engine runs in the Ring 3 aiworker ("ai-engine"),
      * which maps the same initrd frames read-only. The Ring 0 engine stays
      * as the fallback when the worker is absent, dead or stalled. With the
-     * FAT16 GGUF profile ready, the worker also bulk-reads its own copy of
-     * GPT2.GGU and serves the 109/110 sampling steps (Ring 0 fallback). */
+     * FAT16 GGUF profile ready, the worker also bulk-reads GPT2.GGU from the
+     * disk and serves the 109/110 sampling steps. The default build refuses
+     * 109/110 when that worker is absent; GGUF_READY releases the kernel
+     * snapshot. The FP32 Ring 0 fallback stays. */
     if (gpt2_tokenizer_ready() &&
         (gpt2_model_current()->ready || gpt2_gguf_infer_resident_size() != 0U)) {
         task_t* ai_worker_task = create_task_from_initrd_file("bin/aiworker");

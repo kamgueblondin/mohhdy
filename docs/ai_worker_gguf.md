@@ -61,14 +61,15 @@ Restent en Ring 0, honnetement :
 
 - la normalisation du prompt (`gpt2_generate_normalize`, avant l'envoi) ;
 - le miroir de la session (jetons, graine, nombre de jetons du prompt, actif),
-  qui sert a reprendre la session si le worker change ou disparait ;
-- un tokenizer, un decodeur et le meme code de session pour le repli : sans
-  worker GGUF pret, ou si un job est abandonne (worker mort ou bloque 300 s),
-  le noyau fait `start` + pas ou le pas lui-meme a partir du miroir (`path
-  kernel` / `path fallback`) ;
-- le montage FAT16 et la copie residente de 100 Mio de `GPT2.GGU` (servent la
-  lecture bulk du worker et le repli) ;
-- la detection d'un worker suspendu (seulement le delai de 300 s).
+  qui sert a reprendre la session si le worker change ;
+- le montage FAT16 au boot (aucune tache n'existe encore) et, a ce moment,
+  le remplissage d'un instantane PMM a la taille du fichier ;
+- la detection d'un worker suspendu (seulement le delai de 300 s) ;
+- le repli FP32 de `SYS_GPT2_GENERATE`.
+
+Le defaut `GGUF_RING0_FALLBACK=0` ne fait plus tourner le tokenizer ni la
+session GGUF en Ring 0. Voir la section suivante. `GGUF_RING0_FALLBACK=1`
+restaure ce chemin (`path kernel` / `path fallback`).
 
 ## Poids : lecture bulk reservee au worker
 
@@ -80,17 +81,19 @@ copie :
    128 Mio au plus), de la taille du `GPT2.GGU` resident. Elles sont rendues a
    la mort du worker.
 2. `OS_AI_ENGINE_GGUF_READ(offset, longueur)` : morceaux de 1 Mio au plus,
-   strictement sequentiels. Le noyau copie par `fat16_read_file_range()`
-   depuis son instantane resident vers fenetre + offset ; la destination est
-   fixee par le noyau, pas par l'appelant.
+   strictement sequentiels. Le noyau lit par `fat16_read_file_range_disk()`
+   (secteurs du volume, `atadriver` des que ce pilote est vivant), meme si
+   l'instantane boot existe encore, vers fenetre + offset. La destination
+   est fixee par le noyau, pas par l'appelant.
 3. Le worker branche son runtime sur cette memoire par une petite cale FAT16
    (`userspace/ai_fat16_shim.c`), initialise `gpt2_gguf_infer`, puis
    `OS_AI_ENGINE_GGUF_READY`, accepte seulement si toute la taille a ete lue
-   (`[AI] ai-engine GGUF ready in Ring 3`).
+   (`[AI] ai-engine GGUF ready in Ring 3`). Ce syscall libere ensuite
+   l'instantane noyau (`[AI] GGUF resident released pages N`).
 
 Une tache autre que le worker recoit -144 sur ces trois operations (verifie
-par `airogue`). Le chemin `atadriver`/VFS n'est pas utilise : la lecture
-passe par la copie residente que le noyau a deja.
+par `airogue`). La taille enregistree au boot reste apres la liberation, pour
+qu'un worker suivant puisse rouvrir la fenetre et relire le disque.
 
 ## Compteurs (`OS_AI_ENGINE_STATUS`)
 
@@ -105,6 +108,10 @@ Ring 0). `ggufclient` les affiche (`session worker N resumed N ring0 N`). `abort
 `pending` sont partages avec le chemin FP32 (un seul slot de relais).
 
 ## Preuve QEMU : `make qemu-ai-gguf`
+
+La table ci-dessous decrit la pointe d'avant le repli strict (chemins `kernel`
+et `fallback`, instantane de 100 Mio). La preuve courante est la section
+"Instantane libere et repli strict".
 
 Le CI n'a pas de poids GPT-2 GGUF. `tests/scripts/ai_gguf_fixture.py` ecrit un
 GGUF v3 synthetique (architecture `gpt2`, graine 20261004, C=768, 1 couche,
@@ -198,23 +205,66 @@ textes egaux (`maxwell`, `DeliveryDate`, `Nitrome`, meme suite d'octets).
   (`gguf_kv_storage`, dimensionne pour GPT-2 124M) et tampon d'en-tete 2 Mio
   (`gguf_header`). Ce cout existe meme sans disque GGUF.
 - Copie GGUF du worker : taille du fichier (4024704 octets pour la fixture,
-  environ 93 Mio pour le Q3_K_M reel), en plus du tampon resident noyau de
-  100 Mio. Ce tampon sert la lecture bulk du worker et, depuis la correction
-  ci-dessus, les lectures d'un pas d'inference du repli Ring 0 (plages par
-  nom et fichiers ouverts) ; sans lui le repli relirait le disque a chaque
-  jeton.
+  environ 93 Mio pour le Q3_K_M reel). L'instantane noyau n'est plus un BSS
+  de 100 Mio : il est alloue en pages PMM a la taille du fichier au boot, puis
+  rendu au PMM des `GGUF_READY`. Un worker vivant ne le double plus.
+
+## Instantane libere et repli strict (3 octobre 2026)
+
+- Au boot, `gpt2_gguf_infer_init_fat16` ouvre `GPT2.GGU`, alloue
+  `ceil(taille / 4096)` pages avec `pmm_alloc_pages` et les remplit
+  (`fat16_load_resident`) pendant qu'aucune tache ne tourne encore (PIO Ring 0).
+- `OS_AI_ENGINE_GGUF_READ` ignore cet instantane
+  (`fat16_read_file_range_disk`). Avec `atadriver` vivant, ce sont ses
+  lectures de secteurs.
+- `OS_AI_ENGINE_GGUF_READY` appelle `gpt2_gguf_infer_release_resident` :
+  `fat16_resident_drop` puis `pmm_free_pages`. La taille du fichier reste.
+  Un second worker relit le disque sans cet instantane.
+- Defaut `GGUF_RING0_FALLBACK=0` (`-DMOHHDY_GGUF_NO_RING0_FALLBACK`, tampon
+  `build/.gguf-ring0-fallback-0`). Sans worker GGUF pret, ou si le relais est
+  abandonne (worker mort ou bloque 300 s), 109 et 110 rendent
+  `OS_AI_GGUF_NO_WORKER` (-148). `ggufclient` imprime `path none`. Les
+  compteurs `gguf_kernel`, `gguf_fallbacks` et `gguf_session_kernel` ne
+  bougent pas. Le journal garde le prefixe
+  `[AI] relay aborted: ai-engine lost or stalled` et, pour un job GGUF,
+  termine par `Ring 0 refused`.
+- `GGUF_RING0_FALLBACK=1` recompile `syscall.c` sans ce define et rend
+  l'ancien chemin noyau. Le repli FP32 de `SYS_GPT2_GENERATE` ne depend pas
+  de ce drapeau.
+
+Preuve locale, binaires deja construits :
+`python3 tests/integration/test_qemu_ai_gguf.py`, exit 0, 255 s
+(3 octobre 2026). `make qemu-ai-gguf` du meme arbre, en comptant la
+reconstruction userspace due au changement d'en-tete, a dure 361 s et a
+aussi termine par exit 0. Fixture 4024704 octets, 983 pages liberees.
+
+| Etape | Resultat |
+|---|---|
+| Boot | `[AI] build GGUF_RING0_FALLBACK=0`, `[AI] GGUF resident released pages 983`, `aiworker gguf ready bytes 4024704` |
+| `ggufclient` | 8 pas `path worker`, jetons `0 1 2 14 3 4 \| 1 14 6 14 0 5 13 7` |
+| Worker tue | un pas `rc -148 path none`. `kernel` 0, `ring0` 0 |
+| Nouveau worker | recharge depuis le disque, 8 pas `path worker`, memes jetons |
+| Pas en vol, worker tue | `rc -148 path none`, `aborted` 1, `fallback` 0, `kernel` 0, `ring0` 0 |
+| `airogue` | GGUF_OPEN / READ / READY -144, puis 8 pas `path worker` |
+| `ggufpause` | reprise `resumed`, memes jetons, chemin worker |
+| FP32 | `aiclient` jetons `0 1 2 14 3 4 \| 3 0 1 7 6 4` |
+| Compteurs finaux | fwd 33, done 32, kernel 0, live 0, fallback 0, aborted 1, rogue 1, pending 0 ; session worker 32, resumed 1, ring0 0 |
+| Memoire | empreinte worker 4106 pages dont 983 pour la copie ; libres avant/apres 257599/257599 |
+
+`make test-all` : 675/675 (674 avant `test_disk_range_ignores_resident_bytes`).
+Registre guest : 206 noms. Pas de rejeu KVM. `sub_second_claim_allowed` reste
+faux. Les 43,916 s / 20,224 s ne sont pas une mesure de cette pointe. Pas de
+CI distante de ce commit.
 
 ## Limites et suite
 
-- Le CI prouve le mecanisme sur la fixture synthetique seulement ; le GGUF
-  reel (Q3_K_M, 124M) n'a ete verifie qu'a la main (4 pas, voir plus haut).
-- La copie residente du noyau reste (double occupation memoire avec un worker
-  GGUF vivant).
-- Tokenisation, decodage et session passent en Ring 3 sur le chemin worker,
-  mais le noyau garde la normalisation, un miroir de la session et tout le
-  code de repli (voir plus haut).
+- Le contrat local prouve le mecanisme sur la fixture synthetique seulement.
+  Le GGUF reel (Q3_K_M, 124M) n'a pas ete rejoue ici. La verification manuelle
+  precedente (4 pas, textes egaux) decrivait encore le repli Ring 0.
+- La normalisation du prompt et le miroir de session restent Ring 0. Le
+  repli FP32 reste. Le montage ATA au boot, le repli disque sans `atadriver`,
+  la sonde NIC et l'IRQ NIC restent Ring 0.
 - Un worker suspendu n'est detecte que par le delai de 300 s ou par sa mort.
-- Suite possible : charger les poids par `atadriver`/VFS puis liberer le
-  tampon resident noyau quand un worker GGUF est pret ; retirer le repli
-  Ring 0 (tokenizer, session) une fois un mode strict prouve, comme pour le
-  reseau.
+- Hors file : US-001, phases 4 a 8, TensorFlow Lite, facturation, OpenAI
+  public, ecrasement FAT, renommage inter-repertoire, remplacement atomique,
+  un nouveau tour de latence GGUF.

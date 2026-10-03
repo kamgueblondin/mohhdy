@@ -1450,6 +1450,35 @@ static void test_resident_dropped_on_unlink_and_rename(void) {
     TEST_ASSERT_EQUAL(OS_FAT16_NOT_FOUND, fat16_open_file(&volume, "MOVED.TXT", &file));
 }
 
+static void test_disk_range_ignores_resident_bytes(void) {
+    fat16_volume_t volume;
+    uint8_t storage[8];
+    uint8_t out[5];
+    uint32_t size = 0U;
+    uint32_t read = 0U;
+    make_volume();
+    TEST_ASSERT_EQUAL(0, fat16_mount(&volume, read_sector, 0U));
+    TEST_ASSERT_EQUAL(0, fat16_load_resident(&volume, "FATOK.TXT", storage, sizeof(storage), &size));
+    TEST_ASSERT_EQUAL_MEMORY("hello", storage, 5U);
+    storage[0] = (uint8_t)'X';
+    read_sector_calls = 0U;
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range(&volume, "FATOK.TXT", 0U, out, 5U, &read));
+    TEST_ASSERT_EQUAL(5U, read);
+    TEST_ASSERT_EQUAL(0U, read_sector_calls);
+    TEST_ASSERT_EQUAL_MEMORY("Xello", out, 5U);
+    read_sector_calls = 0U;
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range_disk(&volume, "FATOK.TXT", 0U, out, 5U, &read));
+    TEST_ASSERT_EQUAL(5U, read);
+    TEST_ASSERT_TRUE(read_sector_calls > 0U);
+    TEST_ASSERT_EQUAL_MEMORY("hello", out, 5U);
+    fat16_resident_drop();
+    read_sector_calls = 0U;
+    TEST_ASSERT_EQUAL(0, fat16_read_file_range(&volume, "FATOK.TXT", 0U, out, 5U, &read));
+    TEST_ASSERT_EQUAL(5U, read);
+    TEST_ASSERT_EQUAL_MEMORY("hello", out, 5U);
+    TEST_ASSERT_TRUE(read_sector_calls > 0U);
+}
+
 static void test_rejects_bad_name_and_small_buffer(void) {
     fat16_volume_t volume;
     char content[4];
@@ -1619,6 +1648,7 @@ int main(void) {
     RUN_TEST(test_resident_file_serves_ranges_without_disk);
     RUN_TEST(test_resident_file_serves_handle_reads_without_disk);
     RUN_TEST(test_resident_dropped_on_unlink_and_rename);
+    RUN_TEST(test_disk_range_ignores_resident_bytes);
     RUN_TEST(test_rejects_bad_name_and_small_buffer);
     RUN_TEST(test_writes_only_with_explicit_writer);
     RUN_TEST(test_creates_persistent_file);

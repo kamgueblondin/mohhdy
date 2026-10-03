@@ -247,6 +247,11 @@ void ai_relay_note_gguf_kernel(int worker_ready, int fallback) {
     else if (worker_ready) stats.gguf_kernel_while_live++;
 }
 
+void ai_relay_note_gguf_refused(int32_t result) {
+    stats.gguf_last_path = OS_AI_PATH_NONE;
+    stats.gguf_last_result = result;
+}
+
 void ai_relay_record_gguf(uint32_t path, int32_t result, const uint32_t* tokens,
                           uint32_t prompt_tokens, uint32_t token_count) {
     uint32_t i;

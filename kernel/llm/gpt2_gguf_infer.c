@@ -1,6 +1,9 @@
 #include "gpt2_gguf_infer.h"
 #include "gpt2_gguf_loader.h"
 #include "gpt2_sample.h"
+#ifndef MOHHDY_RING3
+#include "mem/pmm.h"
+#endif
 
 #define GPT2_GGUF_INFER_HIDDEN (4U * GPT2_GGUF_INFER_MAX_CHANNELS)
 #define GPT2_GGUF_INFER_DENSE_BYTES (GPT2_GGUF_INFER_HIDDEN * (uint32_t)sizeof(float))
@@ -53,12 +56,14 @@ static uint8_t gguf_last_top_k_ready;
 static uint8_t gguf_ready;
 static const char* gguf_status = "GGUF: profil local non initialise";
 #ifndef MOHHDY_RING3
-/* Instantane du fichier GGUF. 100 Mio couvrent gpt2-Q3_K_M (environ 93 Mio). */
-#define GPT2_GGUF_RESIDENT_BYTES (100U * 1024U * 1024U)
-static uint8_t gguf_resident[GPT2_GGUF_RESIDENT_BYTES];
+/* Instantane du fichier, alloue a la taille du fichier (pages PMM), libere
+ * quand le worker declare GGUF_READY. Plus de BSS de 100 Mio. */
+static uint8_t* gguf_resident;
+static uint32_t gguf_resident_pages;
 #endif
 /* Ring 3 (aiworker): the worker already owns the whole file (bulk read) and
- * its fat16 shim serves every read from it, so no second copy is made. */
+ * its fat16 shim serves every read from it, so no second copy is made.
+ * Apres release_resident(), cette taille reste pour un OPEN suivant. */
 static uint32_t gguf_resident_size;
 
 static int gpt2_gguf_copy_filename(const char* filename) {
@@ -172,11 +177,38 @@ int gpt2_gguf_infer_init_fat16(const fat16_volume_t* volume, const char* filenam
     gpt2_gguf_workspace_bind();
     gguf_resident_size = 0U;
 #ifndef MOHHDY_RING3
-    status = fat16_load_resident(volume, gguf_filename, gguf_resident,
-                                 sizeof(gguf_resident), &gguf_resident_size);
-    if (status != 0 || gguf_resident_size == 0U) {
-        gguf_status = "GGUF: copie residente indisponible";
-        return status != 0 ? status : -7;
+    if (gguf_resident) {
+        fat16_resident_drop();
+        pmm_free_pages(gguf_resident, gguf_resident_pages);
+        gguf_resident = 0;
+        gguf_resident_pages = 0U;
+    }
+    {
+        fat16_file_t file;
+        uint32_t pages;
+        status = fat16_open_file(volume, gguf_filename, &file);
+        if (status != 0 || file.size == 0U) {
+            gguf_status = "GGUF: copie residente indisponible";
+            return status != 0 ? status : -7;
+        }
+        pages = (file.size + (PAGE_SIZE - 1U)) / PAGE_SIZE;
+        gguf_resident = (uint8_t*)pmm_alloc_pages(pages);
+        if (!gguf_resident) {
+            gguf_status = "GGUF: copie residente indisponible";
+            return -7;
+        }
+        gguf_resident_pages = pages;
+        status = fat16_load_resident(volume, gguf_filename, gguf_resident,
+                                     file.size, &gguf_resident_size);
+        if (status != 0 || gguf_resident_size == 0U || gguf_resident_size != file.size) {
+            fat16_resident_drop();
+            pmm_free_pages(gguf_resident, pages);
+            gguf_resident = 0;
+            gguf_resident_pages = 0U;
+            gguf_resident_size = 0U;
+            gguf_status = "GGUF: copie residente indisponible";
+            return status != 0 ? status : -7;
+        }
     }
 #else
     {
@@ -359,6 +391,22 @@ int gpt2_gguf_generate_next_sampled(const uint32_t* tokens, uint32_t token_count
 
 uint32_t gpt2_gguf_infer_resident_size(void) {
     return gguf_ready && gguf_volume ? gguf_resident_size : 0U;
+}
+
+uint32_t gpt2_gguf_infer_release_resident(void) {
+#ifndef MOHHDY_RING3
+    uint32_t pages = gguf_resident_pages;
+    if (!gguf_resident || pages == 0U) return 0U;
+    fat16_resident_drop();
+    pmm_free_pages(gguf_resident, pages);
+    gguf_resident = 0;
+    gguf_resident_pages = 0U;
+    if (gguf_ready)
+        gguf_status = "GGUF: profil local FAT16 pret (copie residente liberee, lectures disque)";
+    return pages;
+#else
+    return 0U;
+#endif
 }
 
 const char* gpt2_gguf_infer_filename(void) {

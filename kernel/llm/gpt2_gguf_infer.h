@@ -28,9 +28,14 @@ int gpt2_gguf_infer_preload_kv_cache(const uint32_t* tokens, uint32_t token_coun
 uint32_t gpt2_gguf_infer_kv_cache_count(void);
 /* Indique la disponibilité du profil GGUF local. */
 int gpt2_gguf_infer_ready(void);
-/* FAT16 profile: bytes of the resident GGUF snapshot (0 if not ready or
- * FAT32), and its 8.3 name. Used by the aiworker bulk read. */
+/* Taille du fichier GGUF FAT16 (0 si pas pret ou FAT32). Reste valide apres
+ * gpt2_gguf_infer_release_resident(), qui oublie l'instantane. Le nom 8.3
+ * sert la lecture bulk du worker. */
 uint32_t gpt2_gguf_infer_resident_size(void);
+/* Rend les pages de l'instantane au PMM et l'oublie (lectures suivantes sur
+ * le disque). 0 s'il n'y en a plus, ou dans le binaire Ring 3. La taille
+ * enregistree reste. */
+uint32_t gpt2_gguf_infer_release_resident(void);
 const char* gpt2_gguf_infer_filename(void);
 const char* gpt2_gguf_infer_status(void);
 

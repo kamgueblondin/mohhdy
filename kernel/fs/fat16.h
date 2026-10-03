@@ -105,10 +105,19 @@ int fat16_create_directory(const fat16_volume_t* volume, const char* name);
 int fat16_remove_directory(const fat16_volume_t* volume, const char* name);
 int fat16_read_file(const fat16_volume_t* volume, const char* name,
                     char* buffer, uint32_t max);
-/* Lit au plus max octets à partir d’un offset sans charger tout le fichier. */
+/* Lit au plus max octets à partir d’un offset sans charger tout le fichier.
+ * Si ce nom est l'instantane resident, les octets viennent de cette copie. */
 int fat16_read_file_range(const fat16_volume_t* volume, const char* name,
                           uint32_t offset, uint8_t* buffer, uint32_t max,
                           uint32_t* out_read);
+/* Meme lecture, en ignorant l'instantane : secteurs du volume (atadriver
+ * quand le pilote est vivant). */
+int fat16_read_file_range_disk(const fat16_volume_t* volume, const char* name,
+                               uint32_t offset, uint8_t* buffer, uint32_t max,
+                               uint32_t* out_read);
+/* Oublie l'instantane resident. Les lectures suivantes de ce nom relisent
+ * le disque. Ne libere pas le tampon de l'appelant. */
+void fat16_resident_drop(void);
 /* Copie un fichier entier dans un buffer caller-owned. Les lectures suivantes
  * de ce nom sur ce volume servent cette copie, y compris apres
  * fat16_invalidate_caches (fenetre secteur seulement). Un remontage l'oublie. */
