@@ -17,5 +17,7 @@ int ata_read_sectors(uint32_t lba, uint32_t count, void* buf);
 int ata_read_sectors_drive(uint8_t drive, uint32_t lba, uint32_t count, void* buf);
 int ata_write_sectors(uint32_t lba, uint32_t count, const void* buf);
 int ata_write_sectors_drive(uint8_t drive, uint32_t lba, uint32_t count, const void* buf);
+/* Kernel PIO channel recoveries (stale transfer reset or failed transfer reset). */
+uint32_t ata_pio_recoveries(void);
 
 #endif
