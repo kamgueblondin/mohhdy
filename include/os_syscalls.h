@@ -1280,6 +1280,13 @@ typedef struct {
 /* os_ai_engine_job_t.kind */
 #define OS_AI_JOB_FP32_GENERATE 0U
 #define OS_AI_JOB_GGUF_STEP 1U
+/* 109/110 with a GGUF-ready worker: the worker owns the session and the
+ * tokenizer use (encode, sample, decode). session_op START carries the
+ * normalised prompt; STEP carries the session id plus the kernel mirror
+ * (tokens, prompt_tokens, rng) so a fresh worker can adopt it. */
+#define OS_AI_JOB_GGUF_SESSION 2U
+#define OS_AI_GGUF_SESSION_START 1U
+#define OS_AI_GGUF_SESSION_STEP  2U
 #define OS_AI_ENGINE_PROMPT_MAX 128U
 #define OS_AI_ENGINE_TEXT_MAX 512U
 #define OS_AI_ENGINE_TOKENS_MAX 64U
@@ -1308,6 +1315,10 @@ typedef struct {
     uint32_t generated;
     uint32_t token_count;
     uint32_t tokens[OS_AI_ENGINE_TOKENS_MAX];
+    /* OS_AI_JOB_GGUF_SESSION */
+    uint32_t session_op;     /* OS_AI_GGUF_SESSION_* */
+    uint32_t session_id;
+    uint32_t prompt_tokens;  /* STEP: kernel mirror */
 } os_ai_engine_job_t;
 typedef struct {
     uint32_t job_id;
@@ -1320,6 +1331,9 @@ typedef struct {
     uint32_t kind;           /* must match the job */
     uint32_t rng_state;      /* GGUF step: sampler state after the step */
     uint32_t next_token;     /* GGUF step: sampled token (result 0) */
+    /* OS_AI_JOB_GGUF_SESSION: session after the step (kernel mirror). */
+    uint32_t session_active;
+    uint32_t session_resumed; /* 1 if the worker adopted the kernel mirror */
 } os_ai_engine_reply_t;
 typedef struct {
     int32_t worker_pid;          /* live ai-engine owner, 0 if none */
@@ -1352,6 +1366,11 @@ typedef struct {
     uint32_t gguf_prompt_tokens; /* kernel GGUF session snapshot */
     uint32_t gguf_token_count;
     uint32_t gguf_tokens[OS_AI_ENGINE_TOKENS_MAX];
+    /* Session in Ring 3: 109/110 answered by the worker's own session
+     * (encode + sample + decode in the worker), and mirror adoptions. */
+    uint32_t gguf_session_worker;
+    uint32_t gguf_session_resumed;
+    uint32_t gguf_session_kernel;    /* 109/110 sessions started in Ring 0 */
 } os_ai_engine_status_t;
 /* Test hook: the driver must crash in the middle of this job. */
 #define OS_ATA_JOB_FLAG_DEBUG_CRASH 1U

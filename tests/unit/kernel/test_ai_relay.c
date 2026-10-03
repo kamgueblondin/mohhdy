@@ -295,6 +295,96 @@ static void test_gguf_step(void) {
     TEST_ASSERT_TRUE(OS_AI_ENGINE_GGUF_CHUNK_MAX <= OS_AI_ENGINE_GGUF_WINDOW_MAX);
 }
 
+/* GGUF session slice: START carries the normalised prompt, STEP carries
+ * the kernel mirror; the reply (text + tokens + rng + active) is bounded
+ * before it becomes the mirror; worker sessions and resumes are counted. */
+static void test_gguf_session(void) {
+    uint32_t toks[4] = {0U, 1U, 2U, 14U};
+    int32_t j, k;
+    ai_relay_init();
+    TEST_ASSERT_EQUAL(-1, ai_relay_begin_gguf_session(5, 9, 3U, 1U, "ab", 64U, 0, 0U, 0U, 0U, 0U));
+    TEST_ASSERT_EQUAL(-1, ai_relay_begin_gguf_session(5, 9, OS_AI_GGUF_SESSION_START, 1U, 0, 64U, 0, 0U, 0U, 0U, 0U));
+    TEST_ASSERT_EQUAL(-1, ai_relay_begin_gguf_session(5, 5, OS_AI_GGUF_SESSION_START, 1U, "ab", 64U, 0, 0U, 0U, 0U, 0U));
+    TEST_ASSERT_EQUAL(-1, ai_relay_begin_gguf_session(5, 9, OS_AI_GGUF_SESSION_STEP, 1U, 0, 64U, toks, 0U, 0U, 0U, 0U));
+    TEST_ASSERT_EQUAL(-1, ai_relay_begin_gguf_session(5, 9, OS_AI_GGUF_SESSION_STEP, 1U, 0, 64U, toks, 2U, 3U, 0U, 0U));
+    j = ai_relay_begin_gguf_session(5, 9, OS_AI_GGUF_SESSION_START, 7U, "bonjour", 64U, 0, 0U, 0U, 0U, 1U);
+    TEST_ASSERT_TRUE(j > 0);
+    TEST_ASSERT_EQUAL(OS_AI_JOB_GGUF_SESSION, ai_relay_kind());
+    TEST_ASSERT_EQUAL(0, ai_relay_fetch(9, 9, (uint32_t)j, &job));
+    TEST_ASSERT_EQUAL(OS_AI_GGUF_SESSION_START, job.session_op);
+    TEST_ASSERT_EQUAL(7U, job.session_id);
+    TEST_ASSERT_EQUAL_STRING("bonjour", job.prompt);
+    TEST_ASSERT_EQUAL(0U, job.token_count);
+    /* Malformed session replies never reach the mirror. */
+    memset(&reply, 0, sizeof(reply));
+    reply.job_id = (uint32_t)j;
+    reply.kind = OS_AI_JOB_GGUF_STEP;
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_BAD_ARGUMENT, ai_relay_complete(9, 9, &reply)); /* wrong kind */
+    reply.kind = OS_AI_JOB_GGUF_SESSION;
+    reply.result = 1;
+    reply.text_length = 1U;
+    reply.text[0] = 'a';
+    reply.token_count = OS_AI_ENGINE_TOKENS_MAX + 1U;
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_BAD_ARGUMENT, ai_relay_complete(9, 9, &reply));
+    reply.token_count = 4U;
+    reply.prompt_tokens = 5U;
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_BAD_ARGUMENT, ai_relay_complete(9, 9, &reply));
+    reply.prompt_tokens = 3U;
+    reply.session_active = 2U;
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_BAD_ARGUMENT, ai_relay_complete(9, 9, &reply));
+    reply.session_active = 1U;
+    reply.result = 2; /* != text_length */
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_BAD_ARGUMENT, ai_relay_complete(9, 9, &reply));
+    reply.result = 1;
+    reply.text_length = 64U; /* >= max */
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_BAD_ARGUMENT, ai_relay_complete(9, 9, &reply));
+    reply.text_length = 1U;
+    memcpy(reply.tokens, toks, sizeof(toks));
+    reply.rng_state = 4242U;
+    TEST_ASSERT_EQUAL(0, ai_relay_complete(9, 9, &reply));
+    memset(&reply, 0, sizeof(reply));
+    TEST_ASSERT_EQUAL(AI_RELAY_DONE, ai_relay_take(5, &reply));
+    TEST_ASSERT_EQUAL(1U, reply.session_active);
+    TEST_ASSERT_EQUAL(4242U, reply.rng_state);
+    TEST_ASSERT_EQUAL(14U, reply.tokens[3]);
+    TEST_ASSERT_EQUAL_STRING("a", reply.text);
+
+    /* STEP carries the mirror; a resumed reply is counted. */
+    k = ai_relay_begin_gguf_session(5, 9, OS_AI_GGUF_SESSION_STEP, 7U, 0, 64U, toks, 4U, 3U, 4242U, 2U);
+    TEST_ASSERT_EQUAL(j + 1, k);
+    TEST_ASSERT_EQUAL(0, ai_relay_fetch(9, 9, (uint32_t)k, &job));
+    TEST_ASSERT_EQUAL(OS_AI_GGUF_SESSION_STEP, job.session_op);
+    TEST_ASSERT_EQUAL(4U, job.token_count);
+    TEST_ASSERT_EQUAL(3U, job.prompt_tokens);
+    TEST_ASSERT_EQUAL(1U, job.generated);
+    TEST_ASSERT_EQUAL(4242U, job.rng_state);
+    TEST_ASSERT_EQUAL(14U, job.tokens[3]);
+    TEST_ASSERT_EQUAL(0U, job.prompt_length);
+    memset(&reply, 0, sizeof(reply));
+    reply.job_id = (uint32_t)k;
+    reply.kind = OS_AI_JOB_GGUF_SESSION;
+    reply.result = 0; /* end of session */
+    reply.token_count = 4U;
+    reply.prompt_tokens = 3U;
+    reply.session_resumed = 1U;
+    TEST_ASSERT_EQUAL(0, ai_relay_complete(9, 9, &reply));
+    TEST_ASSERT_EQUAL(AI_RELAY_DONE, ai_relay_take(5, &reply));
+    /* Worker lost mid-step: FAILED, the caller falls back to Ring 0. */
+    k = ai_relay_begin_gguf_session(5, 9, OS_AI_GGUF_SESSION_STEP, 7U, 0, 64U, toks, 4U, 3U, 1U, 3U);
+    TEST_ASSERT_EQUAL(1, ai_relay_should_fail(0, 4U));
+    ai_relay_fail();
+    TEST_ASSERT_EQUAL(AI_RELAY_FAILED, ai_relay_take(5, &reply));
+    ai_relay_note_gguf_session_kernel();
+    ai_relay_fill_status(&st, 9);
+    TEST_ASSERT_EQUAL(3U, st.gguf_forwarded);
+    TEST_ASSERT_EQUAL(2U, st.gguf_completed);
+    TEST_ASSERT_EQUAL(2U, st.gguf_session_worker);
+    TEST_ASSERT_EQUAL(1U, st.gguf_session_resumed);
+    TEST_ASSERT_EQUAL(1U, st.gguf_session_kernel);
+    TEST_ASSERT_EQUAL(1U, st.aborted);
+    TEST_ASSERT_EQUAL(0U, st.forwarded);
+}
+
 /* ABI: syscall number, distinct errors, windows clear of the user ELF
  * (0x40000000) and of the user stack (16 pages below 0xB0000000). */
 static void test_abi_constants(void) {
@@ -324,6 +414,7 @@ int main(void) {
     RUN_TEST(test_slot_rules);
     RUN_TEST(test_kernel_accounting_and_trace);
     RUN_TEST(test_gguf_step);
+    RUN_TEST(test_gguf_session);
     RUN_TEST(test_abi_constants);
     unity_print_results();
     unity_cleanup();

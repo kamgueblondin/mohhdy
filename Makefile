@@ -36,7 +36,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 # Liste des fichiers objets - MISE À JOUR avec tous les nouveaux fichiers
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/kctx.o build/userspace_switch.o \
           build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/ata_fsop.o build/fsop_exec.o build/net_relay.o build/ai_relay.o build/net_nic_owner.o build/net_wire.o build/gdt.o build/idt.o build/vmm.o build/vmm_share.o build/task.o \
-          build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/gpt2_generate.o build/interrupts.o \
+          build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_gguf_session.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/gpt2_generate.o build/interrupts.o \
           build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
 
 # L'ABI partagée influence notamment la taille de task_t et des messages IPC.
@@ -103,7 +103,7 @@ $(NET_FLAG_STAMP):
 NETLEGACY_IMAGE = build/mohhdy-netlegacy.bin
 NETLEGACY_OBJECTS = $(filter-out build/syscall.o,$(OBJECTS)) build/syscall-netlegacy.o
 
-build/syscall-netlegacy.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h
+build/syscall-netlegacy.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -242,7 +242,7 @@ build/task.o: kernel/task/task.c kernel/task/task.h kernel/ata_job.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Règles de compilation pour les appels système
-build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h $(NET_FLAG_STAMP)
+build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h $(NET_FLAG_STAMP)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(NET_SYSCALL_FLAGS) -c $< -o $@
 
@@ -394,6 +394,10 @@ build/gpt2_sample.o: kernel/llm/gpt2_sample.c kernel/llm/gpt2_sample.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Noyau d'inference GPT-2 CPU freestanding.
+build/gpt2_gguf_session.o: kernel/llm/gpt2_gguf_session.c kernel/llm/gpt2_gguf_session.h kernel/llm/gpt2_generate.h kernel/llm/gpt2_tokenizer.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 build/gpt2_gguf_infer.o: kernel/llm/gpt2_gguf_infer.c kernel/llm/gpt2_gguf_infer.h kernel/llm/gpt2_gguf_loader.h kernel/llm/gpt2_sample.h kernel/fs/fat16.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -518,6 +522,7 @@ pack-initrd: userspace-all
 	@cp -f userspace/aistat $(BIN_DEST_DIR)/aistat
 	@cp -f userspace/airogue $(BIN_DEST_DIR)/airogue
 	@cp -f userspace/ggufclient $(BIN_DEST_DIR)/ggufclient
+	@cp -f userspace/ggufpause $(BIN_DEST_DIR)/ggufpause
 	@tar -C $(INITRD_DIR) -cf $(INITRD_IMAGE) .
 	@echo "[mkinitrd] Packed executables into $(INITRD_IMAGE)"
 
@@ -561,7 +566,7 @@ iso-clean:
 	@rm -rf build/isodir $(ISO_IMAGE)
 
 # Compile tous les programmes utilisateur
-user-program userspace/shell userspace/fake_ai userspace/test_program userspace/ai_assistant userspace/idle userspace/spin userspace/ipcserver userspace/ipcwait userspace/ipcpoke userspace/vfsserver userspace/vfsvirtual userspace/networker userspace/vfsflight userspace/serviceclaim userspace/vfsclaim userspace/vfscapclaim userspace/vfsreleaseclaim userspace/vfsreadclaim userspace/vfsmutateclaim userspace/vfshistclaim userspace/waitchild userspace/ok userspace/aiworker userspace/aiclient userspace/aistat userspace/airogue userspace/ggufclient: userspace-all
+user-program userspace/shell userspace/fake_ai userspace/test_program userspace/ai_assistant userspace/idle userspace/spin userspace/ipcserver userspace/ipcwait userspace/ipcpoke userspace/vfsserver userspace/vfsvirtual userspace/networker userspace/vfsflight userspace/serviceclaim userspace/vfsclaim userspace/vfscapclaim userspace/vfsreleaseclaim userspace/vfsreadclaim userspace/vfsmutateclaim userspace/vfshistclaim userspace/waitchild userspace/ok userspace/aiworker userspace/aiclient userspace/aistat userspace/airogue userspace/ggufclient userspace/ggufpause: userspace-all
 
 # Cible pour exécuter l'OS dans QEMU avec initrd (mode console corrigé)
 run: $(OS_IMAGE) pack-initrd disk

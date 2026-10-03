@@ -92,11 +92,55 @@ int32_t ai_relay_begin_gguf(int32_t caller_pid, int32_t worker_pid, const uint32
     return (int32_t)slot.job_id;
 }
 
+int32_t ai_relay_begin_gguf_session(int32_t caller_pid, int32_t worker_pid, uint32_t op,
+                                    uint32_t session_id, const char* prompt, uint32_t max,
+                                    const uint32_t* tokens, uint32_t token_count,
+                                    uint32_t prompt_tokens, uint32_t rng_state, uint32_t now) {
+    uint32_t i, n = 0U;
+    if (slot.state != AI_RELAY_FREE || caller_pid <= 0 || worker_pid <= 0 ||
+        caller_pid == worker_pid || max < 2U ||
+        (op != OS_AI_GGUF_SESSION_START && op != OS_AI_GGUF_SESSION_STEP) ||
+        (op == OS_AI_GGUF_SESSION_START && !prompt) ||
+        (op == OS_AI_GGUF_SESSION_STEP &&
+         (!tokens || token_count == 0U || token_count > OS_AI_ENGINE_TOKENS_MAX ||
+          prompt_tokens > token_count)))
+        return -1;
+    if (slot.next_job == 0U || slot.next_job > 0x7FFFFFFFU) slot.next_job = 1U;
+    ai_zero(&slot.job, sizeof(slot.job));
+    ai_zero(&slot.reply, sizeof(slot.reply));
+    slot.job.kind = OS_AI_JOB_GGUF_SESSION;
+    slot.job.session_op = op;
+    slot.job.session_id = session_id;
+    slot.job.max = max > OS_AI_ENGINE_TEXT_MAX ? OS_AI_ENGINE_TEXT_MAX : max;
+    if (op == OS_AI_GGUF_SESSION_START) {
+        while (prompt[n] != '\0' && n + 1U < OS_AI_ENGINE_PROMPT_MAX) {
+            slot.job.prompt[n] = prompt[n];
+            n++;
+        }
+        slot.job.prompt[n] = '\0';
+        slot.job.prompt_length = n;
+    } else {
+        slot.job.rng_state = rng_state;
+        slot.job.token_count = token_count;
+        slot.job.prompt_tokens = prompt_tokens;
+        slot.job.generated = token_count - prompt_tokens;
+        for (i = 0U; i < token_count; i++) slot.job.tokens[i] = tokens[i];
+    }
+    slot.job_id = slot.next_job++;
+    slot.job.job_id = slot.job_id;
+    slot.caller_pid = caller_pid;
+    slot.worker_pid = worker_pid;
+    slot.started = now;
+    slot.state = AI_RELAY_SENT;
+    stats.gguf_forwarded++;
+    return (int32_t)slot.job_id;
+}
+
 uint32_t ai_relay_kind(void) { return slot.state == AI_RELAY_FREE ? 0U : slot.job.kind; }
 
 void ai_relay_cancel(void) {
     if (slot.state != AI_RELAY_SENT) return;
-    if (slot.job.kind == OS_AI_JOB_GGUF_STEP) {
+    if (slot.job.kind == OS_AI_JOB_GGUF_STEP || slot.job.kind == OS_AI_JOB_GGUF_SESSION) {
         if (stats.gguf_forwarded > 0U) stats.gguf_forwarded--;
     } else if (stats.forwarded > 0U) {
         stats.forwarded--;
@@ -135,6 +179,18 @@ int ai_relay_complete(int32_t sender_pid, int32_t live_worker, const os_ai_engin
         slot.state = AI_RELAY_DONE;
         return 0;
     }
+    if (slot.job.kind == OS_AI_JOB_GGUF_SESSION) {
+        /* The reply becomes the kernel mirror: bound every field. */
+        if (reply->text_length >= OS_AI_ENGINE_TEXT_MAX || reply->text_length >= slot.job.max ||
+            reply->token_count > OS_AI_ENGINE_TOKENS_MAX || reply->prompt_tokens > reply->token_count ||
+            reply->session_active > 1U ||
+            (reply->result >= 0 && (uint32_t)reply->result != reply->text_length))
+            return OS_AI_ENGINE_BAD_ARGUMENT;
+        ai_copy(&slot.reply, reply, sizeof(slot.reply));
+        for (i = reply->text_length; i < OS_AI_ENGINE_TEXT_MAX; i++) slot.reply.text[i] = '\0';
+        slot.state = AI_RELAY_DONE;
+        return 0;
+    }
     if (reply->text_length >= OS_AI_ENGINE_TEXT_MAX || reply->text_length >= slot.job.max ||
         reply->token_count > OS_AI_ENGINE_TOKENS_MAX || reply->prompt_tokens > reply->token_count ||
         (reply->result >= 0 && (uint32_t)reply->result != reply->text_length))
@@ -164,7 +220,11 @@ uint32_t ai_relay_take(int32_t caller_pid, os_ai_engine_reply_t* reply) {
     if (state == AI_RELAY_DONE) {
         if (reply) ai_copy(reply, &slot.reply, sizeof(*reply));
         if (slot.job.kind == OS_AI_JOB_GGUF_STEP) stats.gguf_completed++;
-        else stats.completed++;
+        else if (slot.job.kind == OS_AI_JOB_GGUF_SESSION) {
+            stats.gguf_completed++;
+            stats.gguf_session_worker++;
+            if (slot.reply.session_resumed) stats.gguf_session_resumed++;
+        } else stats.completed++;
     }
     slot.state = AI_RELAY_FREE;
     return state;
@@ -212,6 +272,8 @@ int32_t ai_relay_gguf_worker(int32_t live_worker) {
 }
 
 void ai_relay_note_rogue(void) { stats.rogue_refused++; }
+
+void ai_relay_note_gguf_session_kernel(void) { stats.gguf_session_kernel++; }
 
 void ai_relay_record_last(uint32_t path, int32_t result, const uint32_t* tokens,
                           uint32_t prompt_tokens, uint32_t token_count) {

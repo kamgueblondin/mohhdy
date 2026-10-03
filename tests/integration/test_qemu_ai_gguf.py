@@ -20,8 +20,18 @@ Q3_K) as FAT16 GPT2.GGU. The kernel loads its resident GGUF snapshot at boot
    ends in Ring 0 with the same tokens.
 6. airogue: GGUF_OPEN / GGUF_READ / GGUF_READY refused (-144) like the
    FP32 paths; then a worker-path session, same tokens.
-7. The same worker still serves FP32 SYS_GPT2_GENERATE (aiclient).
+7. ggufpause: first step on the worker, then the worker is killed and a
+   new one started between two steps of the same session; the new worker
+   adopts the kernel mirror ("resumed") and finishes the session in Ring 3
+   with the same tokens.
+8. The same worker still serves FP32 SYS_GPT2_GENERATE (aiclient).
 gguf_kernel_while_live stays 0 throughout.
+
+Session in Ring 3 (OS_AI_JOB_GGUF_SESSION): on the worker path the aiworker
+tokenizes the normalised prompt and owns the session (tokens, rng); every
+worker run shows one "aiworker gguf session start" and one "session step"
+per further step, the gguf session counters (session worker / resumed /
+ring0) are checked, and the token ids are the same as the Ring 0 path.
 """
 import os
 import re
@@ -42,27 +52,51 @@ base.FIXTURE = os.path.join(ROOT, "build", "ai_fixture")
 GGUF_BYTES = 4024704
 FP32_TOKENS = "0 1 2 14 3 4 |3 0 1 7 6 4"
 
-GGUF_RE = (r"ggufclient gguf worker (-?\d+) bytes (\d+) fwd (\d+) done (\d+) kernel (\d+) "
-           r"live (\d+) fallback (\d+) aborted (\d+) rogue (\d+) pending (\d+) end")
+GGUF_RE = (r"%s gguf worker (-?\d+) bytes (\d+) fwd (\d+) done (\d+) kernel (\d+) "
+           r"live (\d+) fallback (\d+) aborted (\d+) rogue (\d+) pending (\d+) "
+           r"session worker (\d+) resumed (\d+) ring0 (\d+) end")
 GGUF_KEYS = ("worker", "bytes", "fwd", "done", "kernel", "live", "fallback", "aborted",
-             "rogue", "pending")
+             "rogue", "pending", "sess_worker", "sess_resumed", "sess_ring0")
+SESSION_RE = (r"aiworker gguf session (start|step) (\d+) job (\d+) rc (-?\d+) tokens (\d+)"
+              r"( resumed)? reply rc (-?\d+)")
 
 
-def run_gguf(monitor, proc, start=None):
+def run_gguf(monitor, proc, start=None, name="ggufclient"):
     if start is None:
-        _, start = base.spawn(monitor, proc, "ggufclient")
-    st = base.child_regex(monitor, proc, GGUF_RE, start, rounds=40)
+        _, start = base.spawn(monitor, proc, name)
+    st = base.child_regex(monitor, proc, GGUF_RE % name, start, rounds=40)
     text = base.normalized_log(base.log_text()[start:])
-    steps = re.findall(r"ggufclient step (\d+) rc (-?\d+) path (\w+)", text)
-    toks = re.search(r"ggufclient tokens([ |0-9]*) end", text)
+    steps = re.findall(r"%s step (\d+) rc (-?\d+) path (\w+)" % name, text)
+    toks = re.search(r"%s tokens([ |0-9]*) end" % name, text)
     if not steps or not toks:
-        raise RuntimeError("ggufclient incomplete: %r" % text[-400:])
+        raise RuntimeError("%s incomplete: %r" % (name, text[-400:]))
     return {
         "paths": [p for _, _, p in steps],
         "rcs": [int(r) for _, r, _ in steps],
         "tokens": toks.group(1).strip(),
         "status": dict(zip(GGUF_KEYS, (int(v) for v in st.groups()))),
+        "sessions": [(op, int(sid), int(rc), int(n), bool(res), int(rrc))
+                     for op, sid, _, rc, n, res, rrc in re.findall(SESSION_RE, text)],
+        "old_steps": len(re.findall(r"aiworker gguf step ", text)),
     }
+
+
+def check_worker_session(run, resumed_first=False):
+    """One session owned by the worker: start (or a resumed step) then steps,
+    one id, token count growing by one, no old per-step GGUF_STEP job."""
+    sess = run["sessions"]
+    n = len(run["paths"])
+    total = len(run["tokens"].replace("|", " ").split())
+    if run["old_steps"] != 0 or not sess:
+        raise RuntimeError("worker session lines: %r" % run)
+    ops = [op for op, _, _, _, _, _ in sess]
+    if resumed_first:
+        if ops != ["step"] * len(sess) or not sess[0][4] or any(x[4] for x in sess[1:]):
+            raise RuntimeError("resumed session lines: %r" % sess)
+    elif ops != ["start"] + ["step"] * (n - 1) or any(x[4] for x in sess):
+        raise RuntimeError("worker session lines: %r" % sess)
+    if len({x[1] for x in sess}) != 1 or any(x[5] != 0 for x in sess) or sess[-1][3] != total:
+        raise RuntimeError("worker session ids/tokens: %r (tokens %d)" % (sess, total))
 
 
 def worker_gguf_ready(monitor, proc, start):
@@ -88,6 +122,9 @@ def contract(monitor, proc):
         raise RuntimeError("gguf worker run: %r" % w1)
     if "|" not in w1["tokens"] or len(w1["tokens"].split("|")[1].split()) < 2:
         raise RuntimeError("gguf generated too few tokens: %r" % w1)
+    check_worker_session(w1)
+    if s["sess_worker"] != n or s["sess_resumed"] != 0 or s["sess_ring0"] != 0:
+        raise RuntimeError("gguf session counters: %r" % s)
     boot_pid = s["worker"]
     print("gguf worker session: %d steps, tokens [%s]" % (n, w1["tokens"]), flush=True)
 
@@ -95,7 +132,8 @@ def contract(monitor, proc):
     base.kill(monitor, proc, boot_pid)
     k1 = run_gguf(monitor, proc)
     if set(k1["paths"]) != {"kernel"} or k1["tokens"] != w1["tokens"] or k1["status"]["live"] != 0 \
-            or k1["status"]["kernel"] != len(k1["paths"]) or k1["status"]["worker"] != 0:
+            or k1["status"]["kernel"] != len(k1["paths"]) or k1["status"]["worker"] != 0 \
+            or k1["sessions"] or k1["status"]["sess_ring0"] != 1 or k1["status"]["sess_worker"] != n:
         raise RuntimeError("gguf kernel run: %r vs %r" % (k1, w1))
 
     # 4. New worker.
@@ -104,6 +142,7 @@ def contract(monitor, proc):
     w2 = run_gguf(monitor, proc)
     if set(w2["paths"]) != {"worker"} or w2["tokens"] != w1["tokens"]:
         raise RuntimeError("gguf second worker: %r" % w2)
+    check_worker_session(w2)
 
     # 5. Step in flight, worker killed: Ring 0 fallback, session finishes.
     base.send_command_until(monitor, "task-priority %s 1" % wpid, "task-priority ok %s 1" % wpid, proc)
@@ -119,7 +158,8 @@ def contract(monitor, proc):
     f1 = run_gguf(monitor, proc, start)
     if f1["paths"][0] != "fallback" or set(f1["paths"][1:]) - {"kernel"} or \
             f1["tokens"] != w1["tokens"] or f1["status"]["fallback"] != 1 or \
-            f1["status"]["live"] != 0 or f1["status"]["aborted"] != 1:
+            f1["status"]["live"] != 0 or f1["status"]["aborted"] != 1 or \
+            f1["status"]["sess_ring0"] != 2:
         raise RuntimeError("gguf fallback: %r" % f1)
 
     # 6. Rogue against a live GGUF worker, memory around its life.
@@ -138,8 +178,31 @@ def contract(monitor, proc):
     s = w3["status"]
     if set(w3["paths"]) != {"worker"} or w3["tokens"] != w1["tokens"] or s["rogue"] != 1 or s["live"] != 0:
         raise RuntimeError("gguf after rogue: %r" % w3)
+    check_worker_session(w3)
 
-    # 7. Same worker, FP32 path.
+    # 7. Worker replaced between two steps of one session: the new worker
+    # adopts the kernel mirror and finishes the session in Ring 3.
+    resumed_before = s["sess_resumed"]
+    _, start = base.spawn(monitor, proc, "ggufpause")
+    base.child_regex(monitor, proc, r"ggufpause waiting worker %s" % wpid, start)
+    base.kill(monitor, proc, wpid)
+    wpid, wstart = base.spawn(monitor, proc, "aiworker")
+    worker_gguf_ready(monitor, proc, wstart)
+    p1 = run_gguf(monitor, proc, start, name="ggufpause")
+    ps = p1["status"]
+    if set(p1["paths"]) != {"worker"} or p1["tokens"] != w1["tokens"] or \
+            ps["sess_resumed"] != resumed_before + 1 or ps["live"] != 0 or ps["worker"] != int(wpid):
+        raise RuntimeError("gguf resumed session: %r" % p1)
+    resumed = [x for x in p1["sessions"] if x[4]]
+    if len(resumed) != 1 or p1["sessions"][0][0] != "start" or \
+            [x[0] for x in p1["sessions"][1:]] != ["step"] * (len(p1["paths"]) - 1):
+        raise RuntimeError("gguf resumed session lines: %r" % p1["sessions"])
+    check_worker_session({"sessions": p1["sessions"][1:], "paths": p1["paths"],
+                          "tokens": p1["tokens"], "old_steps": p1["old_steps"]}, resumed_first=True)
+    print("gguf session resumed by a new worker after step 0: tokens [%s]" % p1["tokens"], flush=True)
+    s = ps
+
+    # 8. Same worker, FP32 path.
     fp = base.run_client(monitor, proc, "worker")
     if fp["tokens"] != FP32_TOKENS:
         raise RuntimeError("fp32 tokens changed: %r" % fp)

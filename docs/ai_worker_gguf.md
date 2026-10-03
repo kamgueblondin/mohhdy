@@ -24,6 +24,51 @@ apres elle.
 - Restent Ring 0 : la session elle-meme (jetons, graine), la tokenisation du
   prompt et le decodage du texte, le montage FAT16 et le chargement resident de
   `GPT2.GGU` au boot (tampon noyau de 100 Mio, inchange), le repli.
+  (Etat de la premiere tranche ; la session est passee en Ring 3 ensuite, voir
+  la section suivante.)
+
+## Session et tokenizer GGUF en Ring 3 (`OS_AI_JOB_GGUF_SESSION`)
+
+Le code de session est sorti de `syscall.c` dans
+`kernel/llm/gpt2_gguf_session.{c,h}` (64 jetons au plus, graine, nombre de
+jetons du prompt, actif, id). Il est compile dans le noyau et dans
+`aiworker` : memes regles des deux cotes (fin sur EOT ou a 64 jetons, une
+erreur de pas garde la session, un jeton non decodable rend -4).
+
+Chemin worker (des que le worker a declare `GGUF_READY`) :
+
+1. 109 : le noyau normalise le prompt (`gpt2_generate_normalize`, Ring 0),
+   prend un nouvel id de session et envoie un job `GGUF_SESSION` / `START`
+   avec le texte normalise. Le worker tokenise le prompt avec son propre
+   tokenizer (la copie `OS_AI_ENGINE_MAP` du tokenizer de l'initrd), seme le
+   generateur, fait le premier pas d'echantillonnage, decode le jeton et rend
+   texte + jetons + graine + etat actif.
+2. 110 : job `GGUF_SESSION` / `STEP` avec l'id et le miroir noyau. Le worker
+   utilise sa session si l'id et le nombre de jetons correspondent ; sinon
+   (worker relance entre deux pas) il adopte le miroir et le signale
+   (`resumed`). Il rend le texte decode et le nouvel etat.
+3. Le noyau valide la reponse (texte borne par `max`, au plus 64 jetons,
+   jetons du prompt <= jetons, actif 0/1, `result` = longueur du texte) et la
+   garde comme miroir de la session. Le texte du worker est copie tel quel
+   vers l'appelant.
+
+Le tokenizer et le decodage ne tournent donc plus en Ring 0 sur ce chemin :
+`aiworker gguf session start|step <id> job <j> rc <r> tokens <n> [resumed]`
+dans le journal du worker, et aucun pas `OS_AI_JOB_GGUF_STEP` n'est plus
+emis par le noyau (le worker sait encore y repondre).
+
+Restent en Ring 0, honnetement :
+
+- la normalisation du prompt (`gpt2_generate_normalize`, avant l'envoi) ;
+- le miroir de la session (jetons, graine, nombre de jetons du prompt, actif),
+  qui sert a reprendre la session si le worker change ou disparait ;
+- un tokenizer, un decodeur et le meme code de session pour le repli : sans
+  worker GGUF pret, ou si un job est abandonne (worker mort ou bloque 300 s),
+  le noyau fait `start` + pas ou le pas lui-meme a partir du miroir (`path
+  kernel` / `path fallback`) ;
+- le montage FAT16 et la copie residente de 100 Mio de `GPT2.GGU` (servent la
+  lecture bulk du worker et le repli) ;
+- la detection d'un worker suspendu (seulement le delai de 300 s).
 
 ## Poids : lecture bulk reservee au worker
 
@@ -53,7 +98,10 @@ passe par la copie residente que le noyau a deja.
 `gguf_kernel`, `gguf_kernel_while_live` (pas faits en Ring 0 alors qu'un
 worker GGUF etait pret : doit rester 0), `gguf_fallbacks`, `gguf_last_path`,
 `gguf_last_result` et l'instantane de la session (`gguf_tokens`,
-`gguf_prompt_tokens`, `gguf_token_count`). `aborted`, `rogue_refused` et
+`gguf_prompt_tokens`, `gguf_token_count`). Session : `gguf_session_worker`
+(jobs de session servis par le worker), `gguf_session_resumed` (pas ou le
+worker a adopte le miroir noyau), `gguf_session_kernel` (sessions demarrees en
+Ring 0). `ggufclient` les affiche (`session worker N resumed N ring0 N`). `aborted`, `rogue_refused` et
 `pending` sont partages avec le chemin FP32 (un seul slot de relais).
 
 ## Preuve QEMU : `make qemu-ai-gguf`
@@ -74,12 +122,25 @@ fixture `llm.c` de #94 (tokenizer de 16 pieces). Un boot `-m 1024M`, environ
 | Nouveau worker | recharge sa copie, 8 pas `path worker`, memes jetons |
 | Worker bloque (`task-priority`), pas `pending 1`, puis tue | premier pas `path fallback`, suite `path kernel`, memes jetons |
 | `airogue` contre un worker GGUF vivant | GGUF_OPEN / READ / READY -144 ; puis 8 pas `path worker`, memes jetons |
+| `ggufpause` : pas 0 sur le worker, worker tue et remplace avant le pas 1 | le nouveau worker adopte le miroir (`resumed` sur le premier `session step`), 7 pas `path worker`, memes jetons |
 | Meme worker, FP32 | `aiclient` `path worker`, jetons `0 1 2 14 3 4 \| 3 0 1 7 6 4` |
-| Compteurs finaux | gguf fwd 25, done 24, kernel 16, live 0, fallback 1, aborted 1, rogue 1, pending 0 |
-| Memoire | empreinte du worker 4106 pages dont 983 pour la copie GGUF ; pages libres avant/apres sa vie 232117/232117 |
+| Compteurs finaux | gguf fwd 33, done 32, kernel 16, live 0, fallback 1, aborted 1, rogue 1, pending 0 ; session worker 32, resumed 1, ring0 2 |
+| Memoire | empreinte du worker 4106 pages dont 983 pour la copie GGUF ; pages libres avant/apres sa vie 231994/231994 |
 
-L'egalite des jetons vient du meme code K-quant, des memes octets et du meme
-etat de generateur transmis a chaque pas.
+Depuis la tranche session, chaque execution worker est aussi verifiee sur le
+journal du worker : une ligne `aiworker gguf session start <id>` puis une
+ligne `session step <id>` par pas suivant, meme id, nombre de jetons final egal
+a celui de l'instantane noyau, aucune ligne `aiworker gguf step` (ancien job
+sans etat). Les chemins noyau et repli (`ring0` 1 puis 2) donnent les memes
+jetons que le worker : le tokenizer Ring 3 et le tokenizer Ring 0 lisent le
+meme fichier de l'initrd et executent le meme code. Environ 280 s en local
+(196 s avant la scene `ggufpause`).
+
+L'egalite des jetons vient du meme code K-quant, des memes octets, du meme
+code de session et de tokenizer et du meme etat de generateur. Le miroir
+renvoye par le worker n'est pas une porte d'entree pour le Ring 0 : le
+noyau borne la reponse et le pas Ring 0 refuse deja tout jeton hors
+vocabulaire (`gpt2_gguf_infer`).
 
 ## Verification manuelle sur le GGUF reel (hors CI)
 
@@ -141,9 +202,11 @@ par cas.
   reel (Q3_K_M, 124M) n'a ete verifie qu'a la main (4 pas, voir plus haut).
 - La copie residente du noyau reste (double occupation memoire avec un worker
   GGUF vivant).
-- Tokenisation, decodage et session restent dans le noyau ; seul le pas
-  d'echantillonnage passe en Ring 3.
+- Tokenisation, decodage et session passent en Ring 3 sur le chemin worker,
+  mais le noyau garde la normalisation, un miroir de la session et tout le
+  code de repli (voir plus haut).
 - Un worker suspendu n'est detecte que par le delai de 300 s ou par sa mort.
 - Suite possible : charger les poids par `atadriver`/VFS puis liberer le
-  tampon resident noyau quand un worker GGUF est pret, et deplacer la session
-  et la tokenisation dans le worker.
+  tampon resident noyau quand un worker GGUF est pret ; retirer le repli
+  Ring 0 (tokenizer, session) une fois un mode strict prouve, comme pour le
+  reseau.
