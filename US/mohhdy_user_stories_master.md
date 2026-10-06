@@ -222,3 +222,75 @@ Le développement MOHHDY est organisé en 8 phases principales :
 
 Ce document constitue la base du développement MOHHDY. Chaque User Story sera détaillée dans des documents séparés avec des spécifications techniques complètes.
 
+## Feuille de route opérationnelle post-baseline — octobre 2026
+
+Cette section traduit la vision historique ci-dessus en ordre d'implémentation concret. Elle ne marque aucune User Story comme livrée ; l'état livré reste celui de `docs/ETAT_REEL.md`.
+
+### Baseline de départ
+
+- Branche : `main`, commit `dcc248a`.
+- `make all` : succès.
+- `make test-all` : **678/678 réussis**, 0 échec, 0 ignoré.
+- Répartition : 53 kernel, 4 userspace, 1 robustness.
+- La couverture n'est pas mesurée ; les contrats QEMU doivent être relancés séparément.
+
+### Ordre de réalisation
+
+#### Étape 1 — Contrat IA local (priorité immédiate)
+
+**But :** rendre explicite la différence entre complétion GPT-2, assistant instruction-tuned et fournisseur réseau.
+
+**Critères d'acceptation :**
+
+- `ai-runtime` expose le profil, le modèle, le contexte, la latence et la disponibilité réels.
+- La sortie GPT-2 est présentée comme une complétion et non comme une réponse factuelle garantie.
+- Les erreurs de modèle, de worker, de timeout et de réseau sont distinguées.
+- Les tests couvrent le chemin worker Ring 3, le repli et la sélection de profil.
+
+#### Étape 2 — Parcours OS-UI IA réel
+
+**But :** relier l'interface graphique à une session IA effectivement exécutée.
+
+**Critères d'acceptation :**
+
+- Le parcours `gui -> session IA -> worker -> réponse -> affichage` est démontré en QEMU.
+- Le chat stub, une réponse générée, une erreur et l'absence de modèle sont visuellement distincts.
+- Les sessions ont un historique borné, un statut, une annulation et une fin explicite.
+- Un test QEMU de bout en bout couvre l'ouverture, la requête, la réponse et la fermeture.
+
+#### Étape 3 — Sessions et capacités agentiques bornées
+
+**But :** donner à l'agent des actions utiles sans accès implicite illimité.
+
+**Critères d'acceptation :**
+
+- Les sessions peuvent être créées, restaurées, expirées et nettoyées.
+- Les capacités de lecture VFS, recherche et commandes allowlistées sont accordées par scope.
+- Toute mutation exige une confirmation et toute opération est révocable et traçable.
+- Les tests couvrent succès, refus, expiration, worker disparu et capacité insuffisante.
+
+#### Étape 4 — Fournisseur réseau et repli local
+
+**But :** passer des pairs QEMU locaux à un contrat réseau robuste sans confondre la preuve de test avec Internet public.
+
+**Critères d'acceptation :**
+
+- Les secrets ne sont jamais intégrés à l'image.
+- TLS, requête, streaming, fermeture, timeout et erreurs sont testés séparément.
+- Le repli local est explicite et observable.
+- La documentation conserve la distinction entre pair QEMU, hôte réel et Internet public.
+
+#### Étape 5 — Web Runtime après stabilisation de l'IA
+
+**But :** fournir une supervision et une console web contrôlées avant toute prétention de navigateur-OS.
+
+**Critères d'acceptation :**
+
+- Une API locale contrôlée expose le statut et les sessions autorisées.
+- Le VFS et la console IA web respectent les mêmes capacités que le guest.
+- Les routes, erreurs, authentification et limites de ressources sont testées.
+- `phase3_complete=false` reste inchangé tant qu'un moteur navigateur réel n'est pas livré ; Chromium/WebKit n'est pas déclaré présent par anticipation.
+
+### Règle de progression
+
+Une étape ne passe à l'état livré qu'après implémentation, test ciblé, test de régression (`make test-all`) et mise à jour de `docs/ETAT_REEL.md`. Les compteurs historiques de ce document sont conservés pour la traçabilité ; le compteur vivant de la baseline courante est **678/678**.

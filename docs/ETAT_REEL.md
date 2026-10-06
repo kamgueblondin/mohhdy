@@ -10,6 +10,31 @@
 
 ## État courant vérifié
 
+## Baseline vivante du 6 octobre 2026
+
+La branche `main` a été réalignée sur `origin/main` au commit `dcc248a` (`Merge pull request #106 from kamgueblondin/cursor/gpt2-phrases-lisibles-1988`). La baseline a été exécutée depuis un arbre Git propre :
+
+```text
+make all       : succès
+make test-all  : 678/678 réussis, 0 échec, 0 ignoré
+```
+
+Détail de `make test-all` : **53/53 tests kernel**, **4/4 tests userspace** et **1/1 test robustness**. Le runner indique que la couverture n'est pas mesurée (aucune instrumentation gcov/lcov). Les répertoires `unit/fs`, `integration`, `system` et `performance` ne contiennent pas de tests pour ce lanceur. Le journal reproductible est `test_logs/test_results_20261006_180024.log`.
+
+Ce résultat remplace le compteur historique `675/675` pour cette baseline ; les anciens compteurs restent dans les paragraphes de livraison afin de préserver la traçabilité. `make qemu-smoke` n'a pas été relancé dans cette baseline : les 678 tests sont une validation de compilation et de tests locaux, pas une nouvelle preuve QEMU.
+
+## Feuille de route opérationnelle après la baseline
+
+L'ordre suivant est la suite d'implémentation retenue ; il ne transforme pas les fonctions futures en fonctions livrées :
+
+1. **Contrat IA local** : distinguer explicitement la complétion GPT-2, l'assistant instruction-tuned et le fournisseur réseau ; documenter le modèle, le contexte, la latence, la non-garantie factuelle et les erreurs.
+2. **Parcours OS-UI réel** : remplacer le chat stub par `gui -> session IA -> worker -> réponse -> affichage`, avec statut du fournisseur, historique borné, annulation et test QEMU de bout en bout.
+3. **Sessions et capacités agentiques** : restaurer les préférences, gérer plusieurs sessions, puis ajouter progressivement lecture VFS, recherche, commandes allowlistées, confirmation avant mutation et journal d'audit.
+4. **Réseau utile** : conserver les pairs QEMU comme preuves locales, puis isoler secrets, TLS, streaming, erreurs et repli local avant toute affirmation d'accès Internet public.
+5. **Web Runtime** : seulement après le parcours IA réel, exposer une API locale contrôlée, la supervision web, le VFS et la console IA ; `phase3_complete=false` et Chromium/WebKit restent hors périmètre.
+
+Chaque étape devra ajouter ses critères d'acceptation et ses tests avant d'être marquée comme livrée.
+
 | Domaine | État au 3 octobre 2026 |
 |---|---|
 | FAT16/FAT32, capacités et IPC VFS | FAT16 et FAT32 valident leurs BPB, lisent, listent, paginent et statent la racine ainsi que les sous-répertoires multi-niveaux (ex. `SUB1/SUB2/FILE.TXT`). `vfsserver` délègue à `vfsvirtual` les mutations de montages fixes, les I/O des quatre alias dynamiques **et** les I/O `read`/`stat`/liste/pages/observation des montages protégés, toujours avec PID et `request_id` corrélés (AOS-2163...2170 ; AOS-2171 refuse le repli local ATA/FAT quand le worker est vivant ; AOS-2172 ferme le contournement proprietaire FAT16/FAT32 tant que `vfs-virtual` est publie ; AOS-2173 ferme le meme contournement pour initrd/overlay ; AOS-2174 ferme le contournement SOURCE_ALL / combinaisons ATA-backed tant que `vfs-virtual` est publie ; AOS-2175 restreint overlay read/stat au PID worker vivant ; AOS-2177 gate SYS_READFILE/SYS_WRITEFILE historiques sur la partie overlay, initrd RAM restant lisible ; AOS-2178 ferme les autres points d'entree historiques overlay et la liste overlay backend). Le worker est l'autorité bornée de ses alias ; le médiateur ne garde qu'un miroir volatile de sélection. Le registre backend attache chaque capability à un masque de sources (`initrd`, `overlay`, `fat16`, `fat32`) et gère l'octroi cumulatif dynamique (`rights |= new_rights`, `sources |= new_sources`) : une transaction worker reçoit une source avec `read` ou `mutate`, puis cette capacité est révoquée à la réponse, au délai ou à la disparition. Les primitives FAT brutes sont elles aussi backend-protégées. `vfs-backend-scope <pid>` fournit en outre un instantané IPC corrélé. Le miroir est purgé à tout changement, disparition ou expiration du PID worker ; toute I/O ou mutation incertaine retourne `INVALID`, sans repli local ni rejeu. `vfs-write`, `vfs-remove` et `vfs-rename` refusent l'écrasement ; `rmdir` refuse un répertoire non vide. |
