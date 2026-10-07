@@ -23,6 +23,12 @@ Détail de `make test-all` : **53/53 tests kernel**, **4/4 tests userspace** et 
 
 Ce résultat remplace le compteur historique `675/675` pour cette baseline ; les anciens compteurs restent dans les paragraphes de livraison afin de préserver la traçabilité. `make qemu-smoke` n'a pas été relancé dans cette baseline : les 678 tests sont une validation de compilation et de tests locaux, pas une nouvelle preuve QEMU.
 
+## Lot IA 1 valide le 7 octobre 2026
+
+Le shell du guest expose maintenant `ai-runtime json`. Cette commande publie le contrat machine du moteur local : profil FP32 ou GGUF, fournisseur, modele, execution dans le guest QEMU, contexte de 64 jetons, maximum de 24 nouveaux jetons, sortie de complétion et absence de garantie factuelle, ainsi que l'etat reseau. La commande humaine `ai-runtime` affiche les memes limites en clair et refuse les arguments inconnus.
+
+Le test `python3 tests/scripts/test_gpt2_shell.py` demontre d'abord `ai-runtime json`, puis la generation GPT-2 dans QEMU avec des actifs de test. Resultat : compilation reussie, test QEMU reussi et `make test-all` a **678/678** sans echec ni test ignore. Journal : `test_logs/test_results_20261007_175037.log`.
+
 ## Feuille de route opérationnelle après la baseline
 
 L'ordre suivant est la suite d'implémentation retenue ; il ne transforme pas les fonctions futures en fonctions livrées :

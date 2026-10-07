@@ -5269,7 +5269,26 @@ static void cmd_ai_tls_poll(shell_context_t* ctx, char args[][128], int arg_coun
 
 static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count) {
     unsigned int session_status = sys_llm_session_status();
-    (void)args; (void)arg_count;
+    const char* contract = strstr(ai_model_name(ctx), ".gguf") != 0
+        ? "completion-local-gguf" : "completion-local-fp32";
+    const char* network = (session_status & 1U) && (session_status & 2U)
+        ? "available-for-declared-provider" : "not-ready";
+    if (arg_count > 0 && strcmp(args[0], "json") == 0) {
+        print_string("{\"contract\":\"");
+        print_string(contract);
+        print_string("\",\"provider\":\"");
+        print_string(ai_provider_name(ctx));
+        print_string("\",\"model\":\"");
+        print_string(ai_model_name(ctx));
+        print_string("\",\"execution\":\"qemu-guest\",\"context_tokens\":64,\"max_new_tokens\":24,\"factuality\":\"not-guaranteed\",\"network\":\"");
+        print_string(network);
+        print_string("\",\"status\":\"declared\"}\n");
+        return;
+    }
+    if (arg_count > 0) {
+        print_error("Usage: ai-runtime [json]");
+        return;
+    }
     print_colored("\n=== Runtime IA bare-metal ===\n", COLOR_CYAN);
     print_string("Architecture active : PC i386 Multiboot, CPU, 1 Gio RAM requis pour GPT-2\n");
     print_string("Fournisseur actif  : ");
@@ -5278,6 +5297,12 @@ static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count
     print_string(ai_model_name(ctx));
     print_string("\nLocal              : GPT-2 FP32 initrd ou GPT-2 GGUF FAT16, generation top-k\n");
     print_string("Limite locale      : 64 jetons de contexte, cache KV actif; GGUF lit les poids par fenetres\n");
+    print_string("Contrat de sortie  : completion locale, pas une reponse factuelle garantie\n");
+    print_string("Execution          : guest QEMU unique, worker Ring 3 ou repli Ring 0\n");
+    print_string("Nouveaux jetons    : 24 maximum par generation\n");
+    print_string("Etat reseau        : ");
+    print_string(network);
+    print_string("\n");
     print_string("Session LLM noyau  : ");
     print_string(ai_session_phase_name(session_status));
     print_string((session_status & 1U) ? " (NE2000 pret)\n" : " (NE2000 absent)\n");

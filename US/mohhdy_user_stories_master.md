@@ -247,6 +247,8 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 - Les erreurs de modèle, de worker, de timeout et de réseau sont distinguées.
 - Les tests couvrent le chemin worker Ring 3, le repli et la sélection de profil.
 
+**Etat du lot du 7 octobre 2026 :** la commande `ai-runtime json` et sa sortie humaine sont livrees dans le shell du guest. Elles publient le profil FP32 ou GGUF, le modele, l'execution QEMU, les limites de contexte et de sortie, la nature de complétion et l'etat reseau. Le test QEMU GPT-2 et `make test-all` passent, avec **678/678** tests reussis. Restent a implementer dans cette meme etape le suivi precis de latence, les erreurs distinguees, le contrat assistant instruction-tuned et le contrat reseau complet.
+
 #### Étape 2 — Parcours OS-UI IA réel
 
 **But :** relier l'interface graphique à une session IA effectivement exécutée.
