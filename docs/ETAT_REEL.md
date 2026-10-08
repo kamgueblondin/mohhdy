@@ -29,6 +29,12 @@ Le shell du guest expose maintenant `ai-runtime json`. Cette commande publie le 
 
 Le test `python3 tests/scripts/test_gpt2_shell.py` demontre d'abord `ai-runtime json`, puis la generation GPT-2 dans QEMU avec des actifs de test. Resultat : compilation reussie, test QEMU reussi et `make test-all` a **678/678** sans echec ni test ignore. Journal : `test_logs/test_results_20261007_175037.log`.
 
+## Lot IA 2 valide le 8 octobre 2026
+
+Le chat OS-UI reconnait maintenant le chemin `chat ai ...` comme une vraie requete locale : il appelle `SYS_GPT2_GENERATE`, conserve l'etat `idle`, `generating`, `ready` ou `error` dans la session, ajoute la reponse a l'historique borne et expose `response=...` avec `ai_status=ready`. La scene VGA indique `llm=gpt2_local` pendant ce parcours ; les messages ordinaires restent explicitement `stub_echo`. En cas d'echec du modele, le chat retourne `ai_generation_failed` sans fabriquer de reponse.
+
+La preuve QEMU `python3 tests/scripts/test_qemu_osui_runtime.py` couvre `chat ai a` et passe avec la generation GPT-2 reelle dans le guest. Le timeout du contrat est fixe a 120 secondes pour tenir compte de la latence mesuree du moteur local. Le runner de non-regression utilise un fixture uniquement pour les tests unitaires hote, jamais dans QEMU. Validation finale : `make all` reussi, contrat QEMU OS-UI reussi, `make test-all` **678/678**, 0 echec, 0 ignore ; journal : `test_logs/test_results_20261008_044200.log`.
+
 ## Feuille de route opérationnelle après la baseline
 
 L'ordre suivant est la suite d'implémentation retenue ; il ne transforme pas les fonctions futures en fonctions livrées :

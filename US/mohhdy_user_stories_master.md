@@ -260,6 +260,8 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 - Les sessions ont un historique borné, un statut, une annulation et une fin explicite.
 - Un test QEMU de bout en bout couvre l'ouverture, la requête, la réponse et la fermeture.
 
+**Etat du lot du 8 octobre 2026 :** le sous-parcours `chat ai ...` est livre dans le meme OS guest QEMU. Il appelle le syscall GPT-2 local, retourne la reponse dans le chat, conserve un historique borne, publie `idle/generating/ready/error` et distingue `gpt2_local` de `stub_echo` dans la scene VGA. Le contrat QEMU couvre une generation reelle et passe ; la suite complete reste a **678/678**. Restent ouverts dans cette etape : ouverture/fermeture GUI automatisee de bout en bout, annulation effective, affichage visuel distinct de l'erreur et de l'absence de modele, et gestion de fin explicite de session.
+
 #### Étape 3 — Sessions et capacités agentiques bornées
 
 **But :** donner à l'agent des actions utiles sans accès implicite illimité.

@@ -104,11 +104,11 @@ run_test() {
     fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c"
-        cflags="$cflags -I$BASE_DIR/userspace"
+        cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_gui.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_runtime.c"
-        cflags="$cflags -I$BASE_DIR/userspace"
+        cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_tokenizer.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_tokenizer.c"

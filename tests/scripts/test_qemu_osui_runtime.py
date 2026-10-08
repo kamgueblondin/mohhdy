@@ -21,7 +21,7 @@ QEMU_ERR = os.environ.get("OSUI_ERR", os.path.join(LOG_DIR, "qemu-osui-runtime-s
 MON_SOCK = os.environ.get("OSUI_MON_SOCK", os.path.join(LOG_DIR, "qemu-osui-runtime-monitor.sock"))
 TEST_DISK = os.environ.get("OVERLAY_DISK", os.path.join(LOG_DIR, "qemu-osui-runtime-overlay.img"))
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "75"))
-CMD_TIMEOUT = float(os.environ.get("CMD_TIMEOUT", "20"))
+CMD_TIMEOUT = float(os.environ.get("CMD_TIMEOUT", "120"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.05"))
 KEY_HOLD_MS = int(os.environ.get("KEY_HOLD_MS", "10"))
 KEY_ECHO_TIMEOUT = float(os.environ.get("KEY_ECHO_TIMEOUT", "3"))
@@ -202,6 +202,7 @@ def main():
             commands = (
                 ("os-status", "service=mohhdy-os"),
                 ("chat bonjour", "llm=stub_echo"),
+                ("chat ai a", "ai_status=ready"),
                 ("origin-check evil", "origin_denied"),
                 ("grant mcp.invoice.create", "grant ok"),
                 ("mcp-invoice alice 10", "invoice_id="),

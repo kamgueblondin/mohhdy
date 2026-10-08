@@ -5,6 +5,7 @@
 
 #include "osui_runtime.h"
 #include "mohhdy_osui_bridge.h"
+#include "os_syscalls.h"
 
 #define OSUI_MAX_SESSIONS 8
 #define OSUI_MAX_TABS 4
@@ -83,6 +84,7 @@ typedef struct {
     char site[32];
     int status;
     int handoff;
+    char ai_state[16];
     int n_caps;
     char caps[OSUI_MAX_CAPS][OSUI_CAP];
     int n_msgs;
@@ -169,6 +171,7 @@ typedef struct {
     char stage_mode[16];
     char stage_prompt[OSUI_TEXT];
     char stage_kind[OSUI_KIND];
+    char stage_llm[20];
     int scripts_stripped;
     char stage_rows[OSUI_STAGE_ROWS][OSUI_STAGE_COLS];
     char canvas[OSUI_CANVAS_ROWS][OSUI_CANVAS_COLS];
@@ -196,11 +199,38 @@ typedef struct {
 
 static osui_state_t G;
 
+#ifdef MOHHDY_OSUI_HOST_TEST
+static int osui_gpt2_generate(const char *prompt, char *out, int max) {
+    const char *fixture = "test local response";
+    int i = 0;
+    (void)prompt;
+    if (!out || max < 2) return -1;
+    while (fixture[i] && i < max - 1) {
+        out[i] = fixture[i];
+        i++;
+    }
+    out[i] = 0;
+    return i;
+}
+#else
+static int osui_gpt2_generate(const char *prompt, char *out, int max) {
+    int result;
+    asm volatile("int $0x80" : "=a"(result)
+                 : "a"(SYS_GPT2_GENERATE), "b"(prompt), "c"(out), "d"(max)
+                 : "memory");
+    return result;
+}
+#endif
+
 static int s_len(const char *s) {
     int n = 0;
     if (!s) return 0;
     while (s[n]) n++;
     return n;
+}
+
+static const char *stage_llm_name(void) {
+    return G.stage_llm[0] ? G.stage_llm : "stub_echo";
 }
 
 static int s_cmp(const char *a, const char *b) {
@@ -449,6 +479,7 @@ static osui_session_t *alloc_session(const char *site) {
     s_cpy(s->site, 32, site && site[0] ? site : "default");
     s->status = ST_OPEN;
     s->handoff = 0;
+    s_cpy(s->ai_state, 16, "idle");
     s->n_caps = 0;
     s->n_msgs = 0;
     add_cap(s, "chat.reply");
@@ -630,7 +661,9 @@ static void stage_render(const char *prompt) {
         cap[i] = c;
     }
     cap[n] = 0;
-    canvas_text(0, 0, "scene VGA desktop  guest_html_stage=false  llm=stub_echo");
+    canvas_text(0, 0, "scene VGA desktop  guest_html_stage=false");
+    canvas_text(0, 42, "llm=");
+    canvas_text(0, 46, stage_llm_name());
     if (s_cmp(kind, "circle") == 0) {
         canvas_circle(10, 24, 6);
         canvas_text(18, 2, "construction=cercle (cellules VGA, pas SVG HTML)");
@@ -660,7 +693,8 @@ static void stage_render(const char *prompt) {
     }
     canvas_text(20, 0, cap);
     if (s_cmp(mode, "presenting") == 0) {
-        stage_put(0, 0, "mode=presenting llm=stub_echo");
+        stage_put(0, 0, "mode=presenting llm=");
+        stage_put(0, 20, stage_llm_name());
         stage_put(1, 0, "[A] [B] [C]  scene VGA structuree");
         stage_put(2, 0, cap);
         stage_put(3, 0, "sanitizer=allowlist guest_html_stage=false");
@@ -668,14 +702,16 @@ static void stage_render(const char *prompt) {
         stage_put(4, 5, kind);
         stage_put(4, 5 + s_len(kind), " canvas=vga_desktop");
     } else if (s_cmp(mode, "acting") == 0) {
-        stage_put(0, 0, "mode=acting llm=stub_echo");
+        stage_put(0, 0, "mode=acting llm=");
+        stage_put(0, 16, stage_llm_name());
         stage_put(1, 0, "acte1 -> acte2 -> resultat");
         stage_put(2, 0, cap);
         stage_put(3, 0, "simulation stub, pas Chromium");
         stage_put(4, 0, "kind=");
         stage_put(4, 5, kind);
     } else {
-        stage_put(0, 0, "mode=reflecting llm=stub_echo");
+        stage_put(0, 0, "mode=reflecting llm=");
+        stage_put(0, 20, stage_llm_name());
         stage_put(1, 0, "lire prompt | contrat Ring 3 | plan");
         stage_put(2, 0, cap);
         stage_put(3, 0, "scene VGA, pas #ai-stage HTML");
@@ -688,7 +724,9 @@ static void emit_stage(char *out, int max, int *pos) {
     int r;
     out_add(out, max, pos, "osui stage mode=");
     out_add(out, max, pos, G.stage_mode);
-    out_add(out, max, pos, " llm=stub_echo sanitizer=allowlist scripts_stripped=");
+    out_add(out, max, pos, " llm=");
+    out_add(out, max, pos, stage_llm_name());
+    out_add(out, max, pos, " sanitizer=allowlist scripts_stripped=");
     out_u(out, max, pos, (unsigned)G.scripts_stripped);
     out_add(out, max, pos, " guest_html_stage=false kind=");
     out_add(out, max, pos, G.stage_kind[0] ? G.stage_kind : "plan");
@@ -926,6 +964,8 @@ static int cmd_session_status(char *out, int max) {
     out_add(out, max, &p, s->site);
     out_add(out, max, &p, " status=");
     out_add(out, max, &p, st_name(s->status));
+    out_add(out, max, &p, " ai_status=");
+    out_add(out, max, &p, s->ai_state);
     out_add(out, max, &p, " handoff=");
     out_add(out, max, &p, s->handoff ? "true" : "false");
     emit_caps(s, out, max, &p);
@@ -961,8 +1001,11 @@ static int cmd_session_list(char *out, int max) {
 static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     osui_session_t *s = cur();
     char text[OSUI_TEXT];
+    char reply[OSUI_TEXT];
+    const char *prompt;
     unsigned rid;
     int p = 0;
+    int rc;
     rest_from(args, narg, 0, text, OSUI_TEXT);
     if (!s) {
         out_add(out, max, &p, "osui chat error=session_id inconnu\n");
@@ -999,11 +1042,28 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
         return OSUI_OK;
     }
     if (s_ncmp(text, "ai ", 3) == 0 || s_cmp(text, "ai") == 0) {
-        add_msg(s, "[IA local]");
+        prompt = s_ncmp(text, "ai ", 3) == 0 ? text + 3 : text;
+        s_cpy(s->ai_state, 16, "generating");
+        s_cpy(G.stage_llm, 20, "gpt2_local");
+        rc = osui_gpt2_generate(prompt, reply, sizeof(reply));
+        if (rc < 0) {
+            s_cpy(s->ai_state, 16, "error");
+            add_msg(s, "ai_error model_unavailable");
+            out_add(out, max, &p, "osui chat error=ai_generation_failed llm=gpt2_local ai_status=error session_id=");
+            out_add(out, max, &p, s->id);
+            emit_rid(out, max, &p, rid);
+            out_add(out, max, &p, " rc=failed");
+            out_add(out, max, &p, "\n");
+            return OSUI_ERR;
+        }
+        s_cpy(s->ai_state, 16, "ready");
+        add_msg(s, reply);
         stage_render(text);
-        out_add(out, max, &p, "osui chat ok llm=gpt2_local session_id=");
+        out_add(out, max, &p, "osui chat ok llm=gpt2_local ai_status=ready session_id=");
         out_add(out, max, &p, s->id);
         emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, " response=");
+        out_add(out, max, &p, reply);
         out_add(out, max, &p, "\n");
         out_add(out, max, &p, text);
         out_add(out, max, &p, "\n");
@@ -1011,6 +1071,7 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
         return OSUI_OK;
     }
     add_msg(s, "stub_echo");
+    s_cpy(G.stage_llm, 20, "stub_echo");
     stage_render(text);
     out_add(out, max, &p, "osui chat ok llm=stub_echo session_id=");
     out_add(out, max, &p, s->id);
@@ -1988,6 +2049,7 @@ static int cmd_stage_prompt(char args[OSUI_MAX_ARGS][96], int narg, char *out, i
     int p = 0;
     rest_from(args, narg, 0, text, OSUI_TEXT);
     if (!text[0]) s_cpy(text, OSUI_TEXT, "prompt vide");
+    s_cpy(G.stage_llm, 20, "stub_echo");
     stage_render(text);
     emit_stage(out, max, &p);
     return OSUI_OK;
@@ -2283,10 +2345,12 @@ static int cmd_prompt(char args[OSUI_MAX_ARGS][96], int narg, const char *raw, c
     }
     if (s_has_ci(text, "dessine") || s_has_ci(text, "draw")
         || s_has_ci(text, "mini-plan") || s_has_ci(text, "simule")) {
+        s_cpy(G.stage_llm, 20, "stub_echo");
         stage_render(text);
         emit_stage(out, max, &p);
         return OSUI_OK;
     }
+    s_cpy(G.stage_llm, 20, "stub_echo");
     return cmd_chat(args, narg, out, max);
 }
 
@@ -2300,6 +2364,7 @@ void osui_runtime_init(void) {
     s_cpy(G.chat_mode, 12, "center");
     s_cpy(G.stage_mode, 16, "reflecting");
     s_cpy(G.stage_kind, OSUI_KIND, "plan");
+    s_cpy(G.stage_llm, 20, "stub_echo");
     s_cpy(G.ai_model, 32, "gpt2_124M.bin");
     s_cpy(G.ai_provider, 16, "local");
     G.kb_loaded = 1;
