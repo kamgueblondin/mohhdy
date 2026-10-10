@@ -715,7 +715,13 @@ def main():
             before_page_last = len(log_text())
             send_command_until(monitor, "vfs-list-page initrd/ 4", "vfsserver list page request", proc)
             wait_for("vfsserver delegated storage list page", proc, before_page_last)
-            wait_for("vfs-list-page ok count 4 next end", proc, before_page_last)
+            # Phase 4 added initrd/pm/ (PromptMessage samples): 9 root
+            # entries, so the second page is partial and a third one ends.
+            wait_for("vfs-list-page partiel count 4 next 8", proc, before_page_last)
+            before_page_end = len(log_text())
+            send_command_until(monitor, "vfs-list-page initrd/ 8", "vfsserver list page request", proc)
+            wait_for("vfsserver delegated storage list page", proc, before_page_end)
+            wait_for("vfs-list-page ok count 1 next end", proc, before_page_end)
             before_observe = len(log_text())
             send_command_until(monitor, "vfs-list-observe initrd/ 0 0", "vfsserver list observe request", proc)
             wait_for("vfsserver delegated storage list observe", proc, before_observe)
