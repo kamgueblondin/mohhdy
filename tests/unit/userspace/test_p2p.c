@@ -259,6 +259,30 @@ void test_rate_limit_and_stats(void) {
     TEST_ASSERT_EQUAL(-1, p2p_send_text(&g_n[0], &g_h[0], "nobody", "x"));
 }
 
+void test_traffic_analysis(void) {
+    char rep[2048];
+    int i;
+    setup(2, 0);
+    run(2, 300);
+    p2p_report(&g_n[0], &g_h[0], "analyze", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze ok findings 0 verdict healthy"));
+    g_n[0].rate_limit = 2;
+    for (i = 0; i < 5; i++) (void)p2p_send_text(&g_n[0], &g_h[0], "beta", "burst");
+    p2p_report(&g_n[0], &g_h[0], "analyze", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze finding beta throttled 3 (sender above p2p-limit)"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "verdict degraded"));
+    /* a peer that stops answering is reported as unreachable */
+    g_cut[1][0] = 1;
+    run(2, 1500);
+    p2p_report(&g_n[0], &g_h[0], "analyze", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze finding beta down-for-s "));
+    g_n[0].bad_hello = 2;
+    p2p_report(&g_n[0], &g_h[0], "analyze", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze finding node bad-hello 2"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "verdict suspicious"));
+    g_cut[1][0] = 0;
+}
+
 void test_bad_inputs(void) {
     uint8_t ip[4] = {10, 77, 0, 9}, seed[32] = {0};
     p2p_node_t n;
@@ -284,6 +308,7 @@ int main(void) {
     RUN_TEST(test_consensus_commit_reject_timeout);
     RUN_TEST(test_failure_detection_and_relay);
     RUN_TEST(test_rate_limit_and_stats);
+    RUN_TEST(test_traffic_analysis);
     RUN_TEST(test_bad_inputs);
     unity_print_results();
     unity_cleanup();

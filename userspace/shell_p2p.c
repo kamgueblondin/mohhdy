@@ -159,6 +159,7 @@ int shell_p2p_line(const char* line) {
     if (s_eq(cmd, "p2p-peers")) { report("peers"); return 0; }
     if (s_eq(cmd, "p2p-health")) { report("health"); return 0; }
     if (s_eq(cmd, "p2p-stats")) { report("stats"); return 0; }
+    if (s_eq(cmd, "p2p-analyze")) { report("analyze"); return 0; }
     if (s_eq(cmd, "p2p-kv")) { report("kv"); return 0; }
     if (s_eq(cmd, "p2p-poll")) {
         unsigned until;
