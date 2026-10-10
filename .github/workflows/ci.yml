@@ -161,8 +161,6 @@ jobs:
       - name: QEMU aiworker Ring 3 GGUF session (hors integration-qemu)
         run: make qemu-ai-gguf
 
-      - name: Phase 8 production contract (one guest)
-        run: make qemu-production
       - name: QEMU phase 6 platform groundwork (HAL, screen, power, devices, migration, deploy)
         run: make qemu-platform
 
@@ -171,6 +169,43 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ai-gguf-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
+  production:
+    name: QEMU production + persistence across reboot
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc-multilib \
+            libc6-dev-i386 \
+            nasm \
+            qemu-system-x86
+
+      - name: Build OS image
+        run: make all
+
+      - name: Phase 8 production contract (one guest)
+        run: make qemu-production
+
+      - name: Persistence across a cold reboot (two boots, same disk)
+        run: make qemu-persistence
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-logs
           if-no-files-found: ignore
           path: |
             test_logs/

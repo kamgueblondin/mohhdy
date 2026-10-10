@@ -286,3 +286,94 @@ void prod_usage_sort(prod_usage_t* u) {
         u->u[j + 1] = k;
     }
 }
+
+/* ---------------------------------------------------------- persistence */
+typedef struct { uint8_t* p; int n, cap, bad; } wr_t;
+typedef struct { const uint8_t* p; int n, pos, bad; } rd_t;
+static void w8(wr_t* w, uint32_t v) { if (w->n >= w->cap) { w->bad = 1; return; } w->p[w->n++] = (uint8_t)v; }
+static void w32(wr_t* w, uint32_t v) { w8(w, v); w8(w, v >> 8); w8(w, v >> 16); w8(w, v >> 24); }
+static void wstr(wr_t* w, const char* s) { int l = s_len(s), i; if (l > 255) l = 255; w8(w, (uint32_t)l); for (i = 0; i < l; i++) w8(w, (uint8_t)s[i]); }
+static void wbytes(wr_t* w, const uint8_t* b, uint32_t n) { uint32_t i; for (i = 0; i < n; i++) w8(w, b[i]); }
+static uint32_t r8(rd_t* r) { if (r->pos >= r->n) { r->bad = 1; return 0; } return r->p[r->pos++]; }
+static uint32_t r32(rd_t* r) { uint32_t v = r8(r); v |= r8(r) << 8; v |= r8(r) << 16; v |= r8(r) << 24; return v; }
+static void rstr(rd_t* r, char* d, int cap) { int l = (int)r8(r), i; for (i = 0; i < l; i++) { char c = (char)r8(r); if (i < cap - 1) d[i] = c; } d[l < cap - 1 ? l : cap - 1] = 0; }
+#define PROD_MAGIC 0x31445250U /* "PRD1" */
+
+int prod_state_save(const prod_state_ref_t* r, uint8_t* out, int cap) {
+    wr_t w; int i, k, ns, ne;
+    w.p = out; w.n = 0; w.cap = cap; w.bad = 0;
+    w32(&w, PROD_MAGIC);
+    ns = r->m->n < 16 ? r->m->n : 16;
+    w32(&w, r->m->total); w8(&w, (uint32_t)ns);
+    for (i = r->m->n - ns; i < r->m->n; i++) { const prod_sample_t* s = at(r->m, i); w32(&w, s->tick); for (k = 0; k < PM_COUNT; k++) w32(&w, s->v[k]); }
+    k = 0; for (i = 0; i < PROD_RULES; i++) k += r->a->r[i].used;
+    w8(&w, (uint32_t)k);
+    for (i = 0; i < PROD_RULES; i++) if (r->a->r[i].used) {
+        const prod_rule_t* q = &r->a->r[i];
+        wstr(&w, q->name); w8(&w, (uint32_t)q->metric); w8(&w, (uint32_t)q->above); w32(&w, q->threshold);
+        w8(&w, (uint32_t)q->for_n); w32(&w, (uint32_t)q->breach); w8(&w, (uint32_t)q->clear); w8(&w, (uint32_t)q->firing);
+    }
+    w32(&w, r->a->fired_total); w32(&w, r->a->resolved_total); w32(&w, r->a->suppressed);
+    ne = r->a->ev_n < 8 ? r->a->ev_n : 8;
+    w8(&w, (uint32_t)ne);
+    for (i = r->a->ev_n - ne; i < r->a->ev_n; i++) {
+        const prod_event_t* e = &r->a->ev[(r->a->ev_head - r->a->ev_n + i + PROD_EVENTS) % PROD_EVENTS];
+        w32(&w, e->tick); wstr(&w, e->text);
+    }
+    w8(&w, (uint32_t)r->slots);
+    for (i = 0; i < r->slots; i++) {
+        const prod_archive_t* a = &r->arch[i];
+        wstr(&w, a->label); wstr(&w, r->dir[i]); w32(&w, a->tick); w8(&w, (uint32_t)a->n);
+        for (k = 0; k < a->n; k++) { wstr(&w, a->e[k].path); w32(&w, a->e[k].len); w32(&w, a->e[k].fnv); wbytes(&w, a->data + a->e[k].off, a->e[k].len); }
+    }
+    w32(&w, r->fb->total); w32(&w, r->fb->sum);
+    for (i = 0; i < 6; i++) w32(&w, r->fb->hist[i]);
+    w8(&w, (uint32_t)r->fb->n);
+    for (i = 0; i < r->fb->n; i++) { w8(&w, r->fb->f[i].rating); wstr(&w, r->fb->f[i].text); }
+    return w.bad ? -1 : w.n;
+}
+
+int prod_state_load(const prod_state_ref_t* r, const uint8_t* in, int len) {
+    rd_t d; int i, k, ns, nr, ne, sl;
+    d.p = in; d.n = len; d.pos = 0; d.bad = 0;
+    prod_metrics_init(r->m); prod_alerts_init(r->a); mzero(r->fb, (int)sizeof(*r->fb));
+    for (i = 0; i < r->slots; i++) { prod_archive_init(&r->arch[i], "", 0); r->dir[i][0] = 0; }
+    if (r32(&d) != PROD_MAGIC) return -1;
+    { uint32_t total = r32(&d); ns = (int)r8(&d);
+      for (i = 0; i < ns && !d.bad; i++) { prod_sample_t s; s.tick = r32(&d); for (k = 0; k < PM_COUNT; k++) s.v[k] = r32(&d); prod_metrics_push(r->m, &s); }
+      r->m->total = total; }
+    nr = (int)r8(&d);
+    for (i = 0; i < nr && i < PROD_RULES && !d.bad; i++) {
+        prod_rule_t* q = &r->a->r[i];
+        rstr(&d, q->name, 16); q->metric = (int)r8(&d); q->above = (int)r8(&d); q->threshold = r32(&d);
+        q->for_n = (int)r8(&d); q->breach = (int)r32(&d); q->clear = (int)r8(&d); q->firing = (int)r8(&d); q->used = 1;
+        if (q->metric >= PM_COUNT) d.bad = 1;
+    }
+    r->a->fired_total = r32(&d); r->a->resolved_total = r32(&d); r->a->suppressed = r32(&d);
+    ne = (int)r8(&d);
+    for (i = 0; i < ne && !d.bad; i++) { char t[64]; uint32_t tick = r32(&d); rstr(&d, t, 64); prod_event(r->a, tick, t); }
+    sl = (int)r8(&d);
+    for (i = 0; i < sl && !d.bad; i++) {
+        char label[16], dir[64]; uint32_t tick; int n;
+        rstr(&d, label, 16); rstr(&d, dir, 64); tick = r32(&d); n = (int)r8(&d);
+        if (i < r->slots) { prod_archive_init(&r->arch[i], label, tick); s_copy(r->dir[i], dir, 64); }
+        for (k = 0; k < n && !d.bad; k++) {
+            char path[64]; uint32_t l, f; int idx;
+            rstr(&d, path, 64); l = r32(&d); f = r32(&d);
+            if (d.pos + (int)l > d.n) { d.bad = 1; break; }
+            if (i < r->slots) { idx = prod_archive_add(&r->arch[i], path, d.p + d.pos, l); if (idx >= 0) r->arch[i].e[idx].fnv = f; else d.bad = 1; }
+            d.pos += (int)l;
+        }
+    }
+    r->fb->total = r32(&d); r->fb->sum = r32(&d);
+    for (i = 0; i < 6; i++) r->fb->hist[i] = r32(&d);
+    ne = (int)r8(&d);
+    for (i = 0; i < ne && i < PROD_FEEDBACK && !d.bad; i++) { r->fb->f[i].rating = (uint8_t)r8(&d); rstr(&d, r->fb->f[i].text, 48); }
+    r->fb->n = i;
+    if (d.bad) {
+        prod_metrics_init(r->m); prod_alerts_init(r->a); mzero(r->fb, (int)sizeof(*r->fb));
+        for (i = 0; i < r->slots; i++) { prod_archive_init(&r->arch[i], "", 0); r->dir[i][0] = 0; }
+        return -1;
+    }
+    return 0;
+}

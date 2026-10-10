@@ -67,6 +67,47 @@ static void say_rc(const char* what, int rc) {
     k = 0; if (rc < 0) n[k++] = '-'; while (i) n[k++] = t[--i]; n[k] = 0;
     print_string(what); print_string(n); print_string("\n");
 }
+/* node identity seed: kept so a restored ledger keeps the same node id */
+static uint8_t g_seed[32];
+static int g_seed_ok;
+int shell_p2p_seed_get(uint8_t out[32]) { int i; if (!g_seed_ok) return -1; for (i = 0; i < 32; i++) out[i] = g_seed[i]; return 0; }
+void shell_p2p_seed_set(const uint8_t in[32]) { int i; for (i = 0; i < 32; i++) g_seed[i] = in[i]; g_seed_ok = 1; }
+/* P2P key/value store persistence (US-069): applied right after p2p-up */
+static p2p_item_t g_pending[P2P_KV];
+static int g_npending = -1;
+int shell_p2p_kv_save(uint8_t* out, int cap) {
+    int i, n = 0, k;
+    const p2p_node_t* nd = &g_node;
+    if (!nd->up) return 0;
+    for (i = 0; i < P2P_KV; i++) if (nd->kv[i].used) {
+        if ((n + 1) * (int)sizeof(p2p_item_t) + 4 > cap) return -1;
+        for (k = 0; k < (int)sizeof(p2p_item_t); k++) out[4 + n * (int)sizeof(p2p_item_t) + k] = ((const uint8_t*)&nd->kv[i])[k];
+        n++;
+    }
+    if (n == 0) return 0;
+    out[0] = (uint8_t)n; out[1] = 'K'; out[2] = 'V'; out[3] = (uint8_t)sizeof(p2p_item_t);
+    return 4 + n * (int)sizeof(p2p_item_t);
+}
+static void kv_apply_pending(void) {
+    int i;
+    if (g_npending <= 0 || !g_node.up) return;
+    for (i = 0; i < g_npending && i < P2P_KV; i++) { g_node.kv[i] = g_pending[i]; g_node.kv[i].used = 1; }
+    print_string("p2p kv restored items "); { char t[4]; t[0] = (char)('0' + g_npending / 10); t[1] = (char)('0' + g_npending % 10); t[2] = 0; print_string(g_npending < 10 ? t + 1 : t); } print_string("\n");
+    g_npending = -1;
+}
+int shell_p2p_kv_load(const uint8_t* in, int len) {
+    int n, i, k;
+    if (len < 4 || in[1] != 'K' || in[2] != 'V' || in[3] != (uint8_t)sizeof(p2p_item_t)) return -1;
+    n = in[0];
+    if (n > P2P_KV || len != 4 + n * (int)sizeof(p2p_item_t)) return -1;
+    for (i = 0; i < n; i++) {
+        for (k = 0; k < (int)sizeof(p2p_item_t); k++) ((uint8_t*)&g_pending[i])[k] = in[4 + i * (int)sizeof(p2p_item_t) + k];
+        g_pending[i].key[P2P_KEY_MAX - 1] = 0; g_pending[i].value[P2P_VAL_MAX - 1] = 0;
+    }
+    g_npending = n;
+    kv_apply_pending();
+    return n;
+}
 static void seed_from_machine(uint8_t seed[32], const char* name) {
     /* Emulated machine: entropy is the TSC and the tick counter mixed with the
      * node name (documented as weak in docs/p2p.md; not a CSPRNG). */
@@ -104,11 +145,13 @@ int shell_p2p_line(const char* line) {
         if (!a[0] || parse_ip(b, ip) != 0) { print_string("p2p-up error usage: p2p-up NAME IP [NETKEY]\n"); return 1; }
         if (osui_web_active()) { print_string("p2p-up error web-serve active\n"); return 1; }
         if (!key[0]) { int i; const char* d = "mohhdy-p2p-lab"; for (i = 0; d[i]; i++) key[i] = d[i]; key[i] = 0; }
-        seed_from_machine(seed, a);
+        if (g_seed_ok) { int i; for (i = 0; i < 32; i++) seed[i] = g_seed[i]; }
+        else { int i; seed_from_machine(seed, a); for (i = 0; i < 32; i++) g_seed[i] = seed[i]; g_seed_ok = 1; }
         rc = p2p_up(&g_node, a, ip, key, seed, &g_host);
         if (rc != 0) { print_string("p2p-up error bad arguments\n"); return 1; }
         print_string("p2p-up ok name "); print_string(a); print_string(" ip "); print_string(b);
         print_string(" port 7700 crypto x25519+aes128gcm\n");
+        kv_apply_pending();
         return 0;
     }
     if (!g_node.up) { print_string(cmd); print_string(" error p2p down (p2p-up first)\n"); return 1; }
@@ -116,6 +159,7 @@ int shell_p2p_line(const char* line) {
     if (s_eq(cmd, "p2p-peers")) { report("peers"); return 0; }
     if (s_eq(cmd, "p2p-health")) { report("health"); return 0; }
     if (s_eq(cmd, "p2p-stats")) { report("stats"); return 0; }
+    if (s_eq(cmd, "p2p-analyze")) { report("analyze"); return 0; }
     if (s_eq(cmd, "p2p-kv")) { report("kv"); return 0; }
     if (s_eq(cmd, "p2p-poll")) {
         unsigned until;
