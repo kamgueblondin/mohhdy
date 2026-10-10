@@ -258,14 +258,14 @@ int osui_test_peer_request_rc = 0;
 int osui_test_peer_text_polls = 0;   /* polls before the reply; <0 fails */
 unsigned osui_test_peer_http = 200U;
 static int g_tp_tls, g_tp_text, g_tp_phase;
-static int peer_acquire(void) { g_tp_tls = 0; g_tp_text = 0; g_tp_phase = 2; return osui_test_peer_acquire_rc; }
+static int peer_acquire(void) { g_tp_tls = 0; g_tp_phase = 2; return osui_test_peer_acquire_rc; }
 static int peer_phase(void) { return g_tp_phase; }
 static int peer_poll_tls(void) {
     if (osui_test_peer_tls_polls < 0) return -1;
     if (++g_tp_tls >= osui_test_peer_tls_polls) g_tp_phase = 3;
     return 0;
 }
-static int peer_request(const char *prompt) { (void)prompt; return osui_test_peer_request_rc; }
+static int peer_request(const char *prompt) { (void)prompt; g_tp_text = 0; return osui_test_peer_request_rc; }
 static int peer_poll_text(char *out, int max, unsigned *code) {
     const char *t = "peer says ok";
     int i = 0;
@@ -276,7 +276,8 @@ static int peer_poll_text(char *out, int max, unsigned *code) {
     *code = osui_test_peer_http;
     return 0;
 }
-static void peer_close(void) {}
+static void peer_close(void) { g_tp_phase = 0; }
+static int peer_rearm(void) { g_tp_phase = 3; return 0; }
 static void peer_yield(void) { osui_test_now += 1U; }
 #else
 static unsigned osui_now(void) {
@@ -319,7 +320,7 @@ static int peer_acquire(void) {
     for (i = 0; h[i]; i++) rq.hostname[i] = h[i];
     rq.xid = 0xa0650011U; rq.local_sequence = 1U; rq.dns_id = 0xa675U;
     rq.dhcp_attempts = OS_LLM_ACQUIRE_MAX_ATTEMPTS; rq.dns_attempts = OS_LLM_ACQUIRE_MAX_ATTEMPTS;
-    rq.arp_attempts = OS_LLM_ACQUIRE_MAX_ATTEMPTS; rq.local_port = 49160U; rq.remote_port = 443U;
+    rq.arp_attempts = OS_LLM_ACQUIRE_MAX_ATTEMPTS; rq.local_port = 49152U; rq.remote_port = 443U;
     return peer_sys1(SYS_LLM_ACQUIRE_START, &rq);
 }
 static int peer_phase(void) { return (int)(((unsigned)peer_sys1(SYS_LLM_SESSION_STATUS, 0) >> 8) & 0xffU); }
@@ -346,7 +347,16 @@ static int peer_poll_text(char *out, int max, unsigned *code) {
     return 0;
 }
 static void peer_close(void) { (void)peer_sys1(SYS_LLM_CLOSE, 0); }
-static void peer_yield(void) { (void)peer_sys1(SYS_YIELD, 0); }
+static int peer_rearm(void) { return peer_sys1(SYS_LLM_RESET_FOR_REQUEST, 0); }
+/* About 50 ms between polls so the peer's frames can arrive (100 Hz). */
+static void peer_yield(void) {
+    int t0, t;
+    asm volatile("int $0x80" : "=a"(t0) : "a"(SYS_TICKS) : "memory");
+    do {
+        (void)peer_sys1(SYS_YIELD, 0);
+        asm volatile("int $0x80" : "=a"(t) : "a"(SYS_TICKS) : "memory");
+    } while ((unsigned)(t - t0) < 5U);
+}
 static unsigned osui_ai_last_abort(void) {
     static os_ai_engine_status_t st;
     int result;
@@ -1023,8 +1033,11 @@ static const char *peer_unready_reason(void) {
 static const char *peer_chat(const char *prompt, char *reply, int max) {
     unsigned t0 = osui_now(), code = 0U;
     int i, rc;
-    rc = peer_acquire();
-    if (rc != 0) { peer_close(); return "acquire_failed"; }
+    /* A session left at TLS_COMPLETE by the previous turn is reused. */
+    if (peer_phase() != 3) {
+        rc = peer_acquire();
+        if (rc != 0) { peer_close(); return "acquire_failed"; }
+    }
     for (i = 0; i < OSUI_PEER_POLLS && peer_phase() != 3; i++) {
         if (osui_now() - t0 > OSUI_PEER_DEADLINE) { peer_close(); return "tls_timeout"; }
         rc = peer_poll_tls();
@@ -1040,9 +1053,10 @@ static const char *peer_chat(const char *prompt, char *reply, int max) {
         if (rc == 0) break;
         peer_yield();
     }
-    peer_close();
-    if (i == OSUI_PEER_POLLS) return "response_timeout";
-    if (code != 200U) return "http_error";
+    if (i == OSUI_PEER_POLLS) { peer_close(); return "response_timeout"; }
+    if (code != 200U) { peer_close(); return "http_error"; }
+    /* Re-arm the TLS session for the next turn instead of closing it. */
+    if (peer_rearm() != 0) peer_close();
     return 0;
 }
 

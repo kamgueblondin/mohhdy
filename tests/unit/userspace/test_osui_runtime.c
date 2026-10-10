@@ -667,12 +667,17 @@ static void test_provider_peer_fallback(void) {
     TEST_ASSERT(strstr(g_out, "osui chat ok llm=peer_qemu ai_status=ready provider=peer") != NULL);
     TEST_ASSERT(strstr(g_out, "response=peer says ok") != NULL);
     TEST_ASSERT(strstr(g_out, "fallback") == NULL);
+    /* Second turn reuses the re-armed TLS session (no new acquire). */
     osui_test_peer_acquire_rc = -1;
-    osui_test_ai_rc = -1; osui_test_ai_error = 1U; /* fallback fails too: still explicit */
+    TEST_ASSERT_EQUAL(0, run_line("chat ai y"));
+    TEST_ASSERT(strstr(g_out, "llm=peer_qemu") != NULL);
+    osui_test_peer_request_rc = -1;      /* peer fails, then the fallback fails too */
+    osui_test_ai_rc = -1; osui_test_ai_error = 1U; /* still explicit */
     rc = run_line("chat ai x");
     TEST_ASSERT_EQUAL(1, rc);
     TEST_ASSERT(strstr(g_out, "ai_status=no_model provider=peer fallback=local") != NULL);
-    osui_test_ai_rc = 0; osui_test_ai_error = 0U;
+    TEST_ASSERT(strstr(g_out, "reason=request_failed") != NULL);
+    osui_test_ai_rc = 0; osui_test_ai_error = 0U; osui_test_peer_request_rc = 0;
     run_line("osui-provider local");
     run_line("chat ai x");
     TEST_ASSERT(strstr(g_out, "provider=peer") == NULL);
