@@ -14,6 +14,8 @@
 #define GPT2_GENERATE_STEPS 24U
 /* Once this many characters are written, a newline or . ! ? ends the text. */
 #define GPT2_GENERATE_MIN_CHARS 80U
+/* gpt2_generate_fp32: gpt2_progress_hook asked to stop between tokens. */
+#define GPT2_GENERATE_CANCELLED (-9)
 
 typedef struct {
     uint32_t tokens[GPT2_GENERATE_MAX_TOKENS];

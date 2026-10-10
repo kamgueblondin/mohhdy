@@ -11,5 +11,7 @@ int main(void) {
     }
     ai_status_line(&l, "aistat", &st);
     ai_puts(l.text);
+    ai_contract_line(&l, "aistat", &st);
+    ai_puts(l.text);
     return 0;
 }

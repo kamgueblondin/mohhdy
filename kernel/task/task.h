@@ -176,6 +176,9 @@ int task_root_shell_pid(void);
 void task_queue_move_first_user(task_t* task);
 /* Scheduler restriction/hook used by the ATA sector RPC (NULL = none). */
 extern task_t* task_sched_only;
+/* Set while that task waits for a key in SYS_GETS: only boot services and
+ * itself are scheduled until it resumes. */
+extern task_t* task_gets_waiter;
 extern void (*task_sched_hook)(uint32_t now);
 int kctx_save(uint32_t* ctx) __attribute__((returns_twice));
 void kctx_resume(const uint32_t* ctx) __attribute__((noreturn));

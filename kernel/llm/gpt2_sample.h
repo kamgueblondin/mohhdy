@@ -29,4 +29,13 @@ uint32_t gpt2_sample_top_k(const float* logits, uint32_t vocab,
                            const uint32_t* generated, uint32_t generated_count,
                            uint32_t* rng_state);
 
+/* Liveness and cancellation hook. Called once per transformer layer (FP32
+ * and GGUF) and once per generated token. The aiworker points it at an
+ * OS_AI_ENGINE_HEARTBEAT call (progress for the kernel watchdog), the
+ * kernel at its Ring 0 cancel flag. A non-zero return asks the token loop
+ * to stop (gpt2_generate_fp32 returns GPT2_GENERATE_CANCELLED); the layer
+ * calls ignore it. NULL by default (host tests). */
+extern int (*gpt2_progress_hook)(void);
+int gpt2_progress_note(void);
+
 #endif

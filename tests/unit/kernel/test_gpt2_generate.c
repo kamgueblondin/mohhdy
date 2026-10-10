@@ -124,12 +124,51 @@ static void test_output_bound_and_errors(void) {
     TEST_ASSERT_EQUAL(-2, gpt2_generate_fp32("abc", out, sizeof(out), &t));
 }
 
+/* Liveness / cancel hook: called once per layer and once per token; a
+ * non-zero answer stops the token loop with GPT2_GENERATE_CANCELLED. */
+static uint32_t hook_calls;
+static uint32_t hook_cancel_at;
+
+static int test_hook(void) {
+    hook_calls++;
+    return hook_cancel_at != 0U && hook_calls >= hook_cancel_at;
+}
+
+static void test_progress_hook_and_cancel(void) {
+    gpt2_generate_trace_t t, ref;
+    char out[384], ref_out[384];
+    int rc, ref_rc;
+    load_fixture();
+    gpt2_progress_hook = 0;
+    ref_rc = gpt2_generate_fp32("abc de", ref_out, sizeof(ref_out), &ref);
+    TEST_ASSERT_TRUE(ref_rc >= 0);
+    /* Observing hook: same tokens, called at least once per layer. */
+    hook_calls = 0U;
+    hook_cancel_at = 0U;
+    gpt2_progress_hook = test_hook;
+    rc = gpt2_generate_fp32("abc de", out, sizeof(out), &t);
+    TEST_ASSERT_EQUAL(ref_rc, rc);
+    TEST_ASSERT_EQUAL_STRING(ref_out, out);
+    TEST_ASSERT_TRUE(hook_calls >= gpt2_model_current()->config.num_layers);
+    /* Cancel at the first token boundary. */
+    hook_calls = 0U;
+    hook_cancel_at = 1U;
+    TEST_ASSERT_EQUAL(GPT2_GENERATE_CANCELLED, gpt2_generate_fp32("abc de", out, sizeof(out), &t));
+    TEST_ASSERT_EQUAL(1U, hook_calls);
+    /* Cancel mid-generation: the layer calls ignore it, the next token stops. */
+    hook_calls = 0U;
+    hook_cancel_at = 3U;
+    TEST_ASSERT_EQUAL(GPT2_GENERATE_CANCELLED, gpt2_generate_fp32("abc de", out, sizeof(out), &t));
+    gpt2_progress_hook = 0;
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_normalize_rules);
     RUN_TEST(test_seed_formula);
     RUN_TEST(test_generation_is_deterministic);
     RUN_TEST(test_output_bound_and_errors);
+    RUN_TEST(test_progress_hook_and_cancel);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

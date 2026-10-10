@@ -227,6 +227,15 @@ void add_task_to_queue(task_t* task) {
 }
 
 task_t* task_sched_only = NULL;
+task_t* task_gets_waiter = NULL;
+
+/* While the root shell waits for a key in SYS_GETS, only boot services
+ * (atadriver, networker, aiworker) and the shell itself may run: the shell's
+ * own children keep the pre-cooperative semantics (they run when the shell
+ * runs a command or yields), which the QEMU contracts rely on. */
+static int task_sched_allowed(const task_t* t) {
+    return !task_gets_waiter || t == task_gets_waiter || t->boot_service;
+}
 void (*task_sched_hook)(uint32_t now) = NULL;
 static int g_root_shell_pid = 0;
 
@@ -343,6 +352,7 @@ void schedule(cpu_state_t* cpu) {
         do {
             t = t->next;
             if (t->state == TASK_READY && t->type == TASK_TYPE_USER &&
+                task_sched_allowed(t) &&
                 (!found_user || t->priority > best_priority)) {
                 next_task = t;
                 best_priority = t->priority;
@@ -351,6 +361,7 @@ void schedule(cpu_state_t* cpu) {
         } while (t != start);
 
         if (start->state == TASK_READY && start->type == TASK_TYPE_USER &&
+            task_sched_allowed(start) &&
             (!found_user || start->priority > best_priority)) {
             next_task = start;
             found_user = 1;

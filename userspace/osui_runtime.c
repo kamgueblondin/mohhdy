@@ -37,7 +37,7 @@ static const char *const k_linux_traps[] = {
 };
 
 static const char *const k_cmds[] = {
-    "session-new", "session-use", "session-status", "session-list",
+    "session-new", "session-use", "session-status", "session-list", "session-end",
     "chat", "prompt",
     "grant", "revoke", "escalate", "takeover", "admin-status",
     "origin-check",
@@ -172,6 +172,7 @@ typedef struct {
     char stage_prompt[OSUI_TEXT];
     char stage_kind[OSUI_KIND];
     char stage_llm[20];
+    char stage_ai_note[48]; /* visible AI state on the VGA scene */
     int scripts_stripped;
     char stage_rows[OSUI_STAGE_ROWS][OSUI_STAGE_COLS];
     char canvas[OSUI_CANVAS_ROWS][OSUI_CANVAS_COLS];
@@ -200,11 +201,20 @@ typedef struct {
 static osui_state_t G;
 
 #ifdef MOHHDY_OSUI_HOST_TEST
+/* Host fixture: osui_test_ai_rc < 0 forces a failure, with
+ * osui_test_ai_error as the kernel's OS_AI_ERROR_* class. */
+int osui_test_ai_rc = 0;
+unsigned osui_test_ai_error = 0U;
+static unsigned osui_ai_last_error(void) { return osui_test_ai_error; }
 static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     const char *fixture = "test local response";
     int i = 0;
     (void)prompt;
     if (!out || max < 2) return -1;
+    if (osui_test_ai_rc < 0) {
+        out[0] = 0;
+        return osui_test_ai_rc;
+    }
     while (fixture[i] && i < max - 1) {
         out[i] = fixture[i];
         i++;
@@ -213,6 +223,14 @@ static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     return i;
 }
 #else
+static unsigned osui_ai_last_error(void) {
+    static os_ai_engine_status_t st;
+    int result;
+    asm volatile("int $0x80" : "=a"(result)
+                 : "a"(SYS_AI_ENGINE), "b"(OS_AI_ENGINE_STATUS), "c"(&st), "d"(0)
+                 : "memory");
+    return result == 0 ? st.last_error : OS_AI_ERROR_MODEL_FAILED;
+}
 static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     int result;
     asm volatile("int $0x80" : "=a"(result)
@@ -692,6 +710,10 @@ static void stage_render(const char *prompt) {
         canvas_text(4, 52, "plan stub");
     }
     canvas_text(20, 0, cap);
+    if (s_ncmp(stage_llm_name(), "gpt2_", 5) == 0 && G.stage_ai_note[0]) {
+        canvas_text(1, 0, G.stage_ai_note);
+        stage_put(6, 0, G.stage_ai_note);
+    }
     if (s_cmp(mode, "presenting") == 0) {
         stage_put(0, 0, "mode=presenting llm=");
         stage_put(0, 20, stage_llm_name());
@@ -805,7 +827,7 @@ static int cmd_os_help(char *out, int max) {
         "slash: /help /browser /shell /admin /support /status /fs /center /close /plan /draw\n"
         "gui (aliases graphics, desktop) : entre le bureau graphique QEMU. console : retour texte.\n"
         "/shell : terminal Multiboot live (help ls date whoami ai). !cmd depuis le chat.\n"
-        "session-new [site]  session-use <id>  session-list  session-status\n"
+        "session-new [site]  session-use <id>  session-list  session-status  session-end\n"
         "chat <texte>  prompt <texte>  grant/revoke <cap>  escalate  takeover\n"
         "origin-check <origine>  browser-click|type|pointer  browser-status\n"
         "mcp-invoice <client> <montant>  mcp-invoke <outil>\n"
@@ -951,6 +973,32 @@ static void emit_caps(osui_session_t *s, char *out, int max, int *p) {
     }
 }
 
+/* Explicit end of a chat session: history and AI state dropped, further
+ * chat refused until session-new / session-use of another session. */
+static int cmd_session_end(char *out, int max) {
+    osui_session_t *s = cur();
+    int p = 0;
+    if (!s) {
+        out_add(out, max, &p, "osui session-end error=session_id inconnu\n");
+        return OSUI_ERR;
+    }
+    if (s->status == ST_CLOSED) {
+        out_add(out, max, &p, "osui session-end error=already_closed session_id=");
+        out_add(out, max, &p, s->id);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+    s->status = ST_CLOSED;
+    s->handoff = 0;
+    s->n_msgs = 0;
+    s_cpy(s->ai_state, 16, "ended");
+    journal(s->id, "session.end", "ok", 0U);
+    out_add(out, max, &p, "osui session-end ok session_id=");
+    out_add(out, max, &p, s->id);
+    out_add(out, max, &p, " status=closed ai_status=ended history=cleared\n");
+    return OSUI_OK;
+}
+
 static int cmd_session_status(char *out, int max) {
     osui_session_t *s = cur();
     int p = 0, i;
@@ -1015,6 +1063,14 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
         out_add(out, max, &p, "osui chat error=texte manquant\n");
         return OSUI_ERR;
     }
+    if (s->status == ST_CLOSED) {
+        out_add(out, max, &p, "osui chat error=session_closed ai_status=");
+        out_add(out, max, &p, s->ai_state);
+        out_add(out, max, &p, " session_id=");
+        out_add(out, max, &p, s->id);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
     rid = new_rid();
     add_msg(s, text);
     if (s->status == ST_HUMAN || s->handoff) {
@@ -1047,15 +1103,44 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
         s_cpy(G.stage_llm, 20, "gpt2_local");
         rc = osui_gpt2_generate(prompt, reply, sizeof(reply));
         if (rc < 0) {
-            s_cpy(s->ai_state, 16, "error");
-            add_msg(s, "ai_error model_unavailable");
-            out_add(out, max, &p, "osui chat error=ai_generation_failed llm=gpt2_local ai_status=error session_id=");
+            /* Distinct states (and scene labels): cancelled by ESC, no
+             * model installed, or a real generation failure. */
+            const char *state = "error", *llm = "gpt2_error", *why = "ai_generation_failed";
+            const char *note = "etat_ia=erreur generation";
+            unsigned err = osui_ai_last_error();
+            if (rc == OS_AI_CANCELLED || err == OS_AI_ERROR_CANCELLED) {
+                state = "cancelled"; llm = "gpt2_cancelled"; why = "ai_cancelled";
+                note = "etat_ia=annule (Echap)";
+            } else if (err == OS_AI_ERROR_MODEL_MISSING) {
+                state = "no_model"; llm = "gpt2_missing"; why = "ai_model_missing";
+                note = "etat_ia=modele absent";
+            }
+            s_cpy(s->ai_state, 16, state);
+            s_cpy(G.stage_llm, 20, llm);
+            s_cpy(G.stage_ai_note, 48, note);
+            add_msg(s, why);
+            stage_render(text);
+            out_add(out, max, &p, "osui chat error=");
+            out_add(out, max, &p, why);
+            out_add(out, max, &p, " llm=");
+            out_add(out, max, &p, llm);
+            out_add(out, max, &p, " ai_status=");
+            out_add(out, max, &p, state);
+            out_add(out, max, &p, " session_id=");
             out_add(out, max, &p, s->id);
             emit_rid(out, max, &p, rid);
-            out_add(out, max, &p, " rc=failed");
+            out_add(out, max, &p, " rc=");
+            if (rc < 0) {
+                out_add(out, max, &p, "-");
+                out_u(out, max, &p, (unsigned)(-rc));
+            } else {
+                out_u(out, max, &p, (unsigned)rc);
+            }
             out_add(out, max, &p, "\n");
+            emit_stage(out, max, &p);
             return OSUI_ERR;
         }
+        s_cpy(G.stage_ai_note, 48, "etat_ia=reponse prete");
         s_cpy(s->ai_state, 16, "ready");
         add_msg(s, reply);
         stage_render(text);
@@ -2247,6 +2332,7 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "session-use") == 0) return cmd_session_use(args, narg, out, max);
     if (s_cmp(cmd, "session-status") == 0) return cmd_session_status(out, max);
     if (s_cmp(cmd, "session-list") == 0) return cmd_session_list(out, max);
+    if (s_cmp(cmd, "session-end") == 0) return cmd_session_end(out, max);
     if (s_cmp(cmd, "chat") == 0) { audit_log_add("chat", args[0]); return cmd_chat(args, narg, out, max); }
     if (s_cmp(cmd, "grant") == 0) { audit_log_add("grant", args[0]); return cmd_grant_revoke(1, args, narg, out, max); }
     if (s_cmp(cmd, "revoke") == 0) { audit_log_add("revoke", args[0]); return cmd_grant_revoke(0, args, narg, out, max); }

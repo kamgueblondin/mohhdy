@@ -7,6 +7,8 @@ typedef struct {
     uint32_t job_id;
     uint32_t next_job;
     uint32_t started;
+    uint32_t progress;   /* tick of the last fetch / heartbeat */
+    uint32_t abort;      /* OS_AI_ABORT_* of the last failed job */
     os_ai_engine_job_t job;
     os_ai_engine_reply_t reply;
 } ai_relay_slot_t;
@@ -61,6 +63,8 @@ int32_t ai_relay_begin(int32_t caller_pid, int32_t worker_pid, const char* promp
     slot.caller_pid = caller_pid;
     slot.worker_pid = worker_pid;
     slot.started = now;
+    slot.progress = now;
+    slot.abort = OS_AI_ABORT_NONE;
     slot.state = AI_RELAY_SENT;
     stats.forwarded++;
     return (int32_t)slot.job_id;
@@ -87,6 +91,8 @@ int32_t ai_relay_begin_gguf(int32_t caller_pid, int32_t worker_pid, const uint32
     slot.caller_pid = caller_pid;
     slot.worker_pid = worker_pid;
     slot.started = now;
+    slot.progress = now;
+    slot.abort = OS_AI_ABORT_NONE;
     slot.state = AI_RELAY_SENT;
     stats.gguf_forwarded++;
     return (int32_t)slot.job_id;
@@ -131,6 +137,8 @@ int32_t ai_relay_begin_gguf_session(int32_t caller_pid, int32_t worker_pid, uint
     slot.caller_pid = caller_pid;
     slot.worker_pid = worker_pid;
     slot.started = now;
+    slot.progress = now;
+    slot.abort = OS_AI_ABORT_NONE;
     slot.state = AI_RELAY_SENT;
     stats.gguf_forwarded++;
     return (int32_t)slot.job_id;
@@ -201,16 +209,51 @@ int ai_relay_complete(int32_t sender_pid, int32_t live_worker, const os_ai_engin
     return 0;
 }
 
-int ai_relay_should_fail(int32_t live_worker, uint32_t now) {
-    if (slot.state != AI_RELAY_SENT) return 0;
-    if (live_worker <= 0 || live_worker != slot.worker_pid) return 1;
-    return now - slot.started > AI_RELAY_TIMEOUT_TICKS;
+int ai_relay_heartbeat(int32_t sender_pid, int32_t live_worker, uint32_t job_id, uint32_t now) {
+    if (sender_pid <= 0 || live_worker <= 0 || sender_pid != live_worker) return OS_AI_ENGINE_REQUIRED;
+    if (slot.state != AI_RELAY_SENT || slot.worker_pid != sender_pid || slot.job_id != job_id)
+        return OS_AI_ENGINE_STALE;
+    slot.progress = now;
+    stats.heartbeats++;
+    return 0;
 }
 
-void ai_relay_fail(void) {
+uint32_t ai_relay_should_fail(int32_t live_worker, uint32_t now) {
+    if (slot.state != AI_RELAY_SENT) return OS_AI_ABORT_NONE;
+    if (live_worker <= 0 || live_worker != slot.worker_pid) return OS_AI_ABORT_WORKER_LOST;
+    if (now - slot.progress > AI_RELAY_STALL_TICKS) return OS_AI_ABORT_STALLED;
+    if (now - slot.started > AI_RELAY_TIMEOUT_TICKS) return OS_AI_ABORT_TIMEOUT;
+    return OS_AI_ABORT_NONE;
+}
+
+void ai_relay_fail(uint32_t reason) {
     if (slot.state != AI_RELAY_SENT) return;
     slot.state = AI_RELAY_FAILED;
+    slot.abort = reason;
+    if (reason == OS_AI_ABORT_CANCELLED) {
+        stats.cancelled++;
+        return;
+    }
     stats.aborted++;
+    if (reason == OS_AI_ABORT_STALLED) stats.stalls++;
+    else if (reason == OS_AI_ABORT_TIMEOUT) stats.timeouts++;
+    else stats.lost++;
+}
+
+uint32_t ai_relay_last_abort(void) { return slot.abort; }
+
+void ai_relay_note_cancelled(void) { stats.cancelled++; }
+
+void ai_relay_record_outcome(int gguf, uint32_t latency_ticks, uint32_t error, uint32_t abort) {
+    if (gguf) {
+        stats.gguf_last_latency_ticks = latency_ticks;
+        stats.gguf_last_error = error;
+        stats.gguf_last_abort = abort;
+    } else {
+        stats.last_latency_ticks = latency_ticks;
+        stats.last_error = error;
+        stats.last_abort = abort;
+    }
 }
 
 uint32_t ai_relay_take(int32_t caller_pid, os_ai_engine_reply_t* reply) {
@@ -231,7 +274,10 @@ uint32_t ai_relay_take(int32_t caller_pid, os_ai_engine_reply_t* reply) {
 }
 
 void ai_relay_drop_caller(void) {
-    if (slot.state == AI_RELAY_SENT) stats.aborted++;
+    if (slot.state == AI_RELAY_SENT) {
+        stats.aborted++;
+        stats.lost++;
+    }
     slot.state = AI_RELAY_FREE;
 }
 

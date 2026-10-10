@@ -1,5 +1,11 @@
 #include "gpt2_sample.h"
 
+int (*gpt2_progress_hook)(void) = 0;
+
+int gpt2_progress_note(void) {
+    return gpt2_progress_hook ? gpt2_progress_hook() : 0;
+}
+
 #define GPT2_REPEAT_PENALTY 1.2f
 #define GPT2_SAMPLE_TEMPERATURE 0.20f
 

@@ -17,6 +17,10 @@
 /* A live worker computing 12 tokens of GPT-2 124M under TCG can take tens of
  * seconds; this only bounds a stalled (suspended) worker. 100 Hz ticks. */
 #define AI_RELAY_TIMEOUT_TICKS 30000U
+/* Liveness: a live worker heartbeats once per transformer layer (and at
+ * fetch). No progress for this long means the worker is stalled (frozen,
+ * suspended, starved) and the job is failed well before the 300 s bound. */
+#define AI_RELAY_STALL_TICKS 3000U
 
 void ai_relay_init(void);
 uint32_t ai_relay_state(void);
@@ -51,10 +55,22 @@ int ai_relay_fetch(int32_t sender_pid, int32_t live_worker, uint32_t job_id,
  * not the live worker (rogue, counted), OS_AI_ENGINE_STALE = wrong or
  * finished job (counted), OS_AI_ENGINE_BAD_ARGUMENT = malformed. */
 int ai_relay_complete(int32_t sender_pid, int32_t live_worker, const os_ai_engine_reply_t* reply);
-/* 1 if the SENT job must be failed now: worker gone/changed or timeout. */
-int ai_relay_should_fail(int32_t live_worker, uint32_t now);
-/* SENT -> FAILED (counted as aborted). */
-void ai_relay_fail(void);
+/* Worker progress for the job in flight: 0, OS_AI_ENGINE_REQUIRED (not the
+ * live worker) or OS_AI_ENGINE_STALE (job finished, cancelled or aborted). */
+int ai_relay_heartbeat(int32_t sender_pid, int32_t live_worker, uint32_t job_id, uint32_t now);
+/* OS_AI_ABORT_* reason if the SENT job must be failed now (worker gone or
+ * changed, stalled without heartbeat, overall timeout), else NONE. */
+uint32_t ai_relay_should_fail(int32_t live_worker, uint32_t now);
+/* SENT -> FAILED with an OS_AI_ABORT_* reason. CANCELLED counts in
+ * cancelled, every other reason in aborted and its own counter. */
+void ai_relay_fail(uint32_t reason);
+/* Reason of the last failed job (NONE after a fresh begin). */
+uint32_t ai_relay_last_abort(void);
+/* Ring 0 generation cancelled by the user. */
+void ai_relay_note_cancelled(void);
+/* Latency (ticks), OS_AI_ERROR_* and OS_AI_ABORT_* of the last FP32 (gguf
+ * 0) or 109/110 (gguf 1) call. */
+void ai_relay_record_outcome(int gguf, uint32_t latency_ticks, uint32_t error, uint32_t abort);
 /* Caller side after wake-up. Returns AI_RELAY_DONE with *reply filled,
  * AI_RELAY_FAILED (caller must run the fallback), or AI_RELAY_FREE if the
  * slot is not the caller's. The slot is freed in both first cases. */

@@ -1,4 +1,5 @@
 #include "gpt2_gguf_loader.h"
+#include "gpt2_sample.h"
 
 int gpt2_gguf_load_fat16(const fat16_volume_t* volume, const char* filename,
                          uint8_t* buffer, uint32_t capacity,
@@ -1387,6 +1388,7 @@ static int gpt2_gguf_generation_token_impl(
     if (status != 0) return status;
     for (i = 0U; i < channels; i++) workspace->final_hidden[i] += workspace->position_embedding[i];
     for (layer_index = 0U; layer_index < generation->runtime.layer_count; layer_index++) {
+        (void)gpt2_progress_note();
         status = gpt2_gguf_runtime_get_layer(&generation->runtime, layer_index, &layer);
         if (status != 0) return status;
         if (gpt2_gguf_layer_get(&layer, GPT2_GGUF_ROLE_LAYER_ATTN_NORM_WEIGHT, &attention_gamma) != 0 ||

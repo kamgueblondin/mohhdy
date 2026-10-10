@@ -119,4 +119,28 @@ static void ai_status_line(ai_line_t* l, const char* who, const os_ai_engine_sta
     ai_line_add(l, " end\n");
 }
 
+/* Runtime contract line: last FP32 call latency (ticks), result class and
+ * abort reason, then the liveness / cancel counters. */
+static void ai_contract_line(ai_line_t* l, const char* who, const os_ai_engine_status_t* st) {
+    ai_line_reset(l);
+    ai_line_add(l, who);
+    ai_line_add(l, " contract latency ");
+    ai_line_int(l, (int)st->last_latency_ticks);
+    ai_line_add(l, " error ");
+    ai_line_int(l, (int)st->last_error);
+    ai_line_add(l, " abort ");
+    ai_line_int(l, (int)st->last_abort);
+    ai_line_add(l, " hb ");
+    ai_line_int(l, (int)st->heartbeats);
+    ai_line_add(l, " stalls ");
+    ai_line_int(l, (int)st->stalls);
+    ai_line_add(l, " lost ");
+    ai_line_int(l, (int)st->lost);
+    ai_line_add(l, " timeouts ");
+    ai_line_int(l, (int)st->timeouts);
+    ai_line_add(l, " cancelled ");
+    ai_line_int(l, (int)st->cancelled);
+    ai_line_add(l, " end\n");
+}
+
 #endif

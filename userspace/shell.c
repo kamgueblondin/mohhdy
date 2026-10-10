@@ -2744,7 +2744,7 @@ static int is_builtin(const char* cmd) {
         "grep", "wc", "sort", "head", "tail",
         "logout", "reboot", "shutdown",
         "aistats", "aimode", "aihelp", "aitest",
-        "session-new", "session-use", "session-status", "session-list",
+        "session-new", "session-use", "session-status", "session-list", "session-end",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
@@ -5267,7 +5267,61 @@ static void cmd_ai_tls_poll(shell_context_t* ctx, char args[][128], int arg_coun
     else print_error("ai-tls-poll: echec TLS; contexte conserve");
 }
 
+/* Runtime contract (roadmap step 1): measured latency, distinguished
+ * errors and liveness of the Ring 3 worker, read from SYS_AI_ENGINE. */
+static int ai_runtime_status(os_ai_engine_status_t* st) {
+    int result;
+    uint32_t i;
+    for (i = 0U; i < sizeof(*st); i++) ((char*)st)[i] = 0;
+    asm volatile("int $0x80" : "=a"(result)
+                 : "a"(SYS_AI_ENGINE), "b"(OS_AI_ENGINE_STATUS), "c"(st), "d"(0)
+                 : "memory");
+    return result;
+}
+
+static const char* ai_runtime_path_name(uint32_t path) {
+    if (path == OS_AI_PATH_WORKER) return "worker";
+    if (path == OS_AI_PATH_KERNEL) return "kernel";
+    if (path == OS_AI_PATH_KERNEL_FALLBACK) return "fallback";
+    return "none";
+}
+
+static const char* ai_runtime_error_name(uint32_t error) {
+    if (error == OS_AI_ERROR_MODEL_MISSING) return "model-missing";
+    if (error == OS_AI_ERROR_MODEL_FAILED) return "model-failed";
+    if (error == OS_AI_ERROR_CANCELLED) return "cancelled";
+    if (error == OS_AI_ERROR_NO_WORKER) return "no-worker";
+    return "none";
+}
+
+static const char* ai_runtime_abort_name(uint32_t abort_reason) {
+    if (abort_reason == OS_AI_ABORT_WORKER_LOST) return "worker-lost";
+    if (abort_reason == OS_AI_ABORT_STALLED) return "stalled";
+    if (abort_reason == OS_AI_ABORT_TIMEOUT) return "timeout";
+    if (abort_reason == OS_AI_ABORT_CANCELLED) return "cancelled";
+    return "none";
+}
+
+static void ai_runtime_json_call(const char* key, uint32_t path, int32_t result,
+                                 uint32_t ticks, uint32_t error, uint32_t abort_reason) {
+    print_string(",\"");
+    print_string(key);
+    print_string("\":{\"path\":\"");
+    print_string(ai_runtime_path_name(path));
+    print_string("\",\"result\":");
+    print_int(result);
+    print_string(",\"latency_ms\":");
+    print_int((int)(ticks * 10U));
+    print_string(",\"error\":\"");
+    print_string(ai_runtime_error_name(error));
+    print_string("\",\"abort\":\"");
+    print_string(ai_runtime_abort_name(abort_reason));
+    print_string("\"}");
+}
+
 static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count) {
+    os_ai_engine_status_t ai_st;
+    int ai_rc = ai_runtime_status(&ai_st);
     unsigned int session_status = sys_llm_session_status();
     const char* contract = strstr(ai_model_name(ctx), ".gguf") != 0
         ? "completion-local-gguf" : "completion-local-fp32";
@@ -5282,7 +5336,37 @@ static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count
         print_string(ai_model_name(ctx));
         print_string("\",\"execution\":\"qemu-guest\",\"context_tokens\":64,\"max_new_tokens\":24,\"factuality\":\"not-guaranteed\",\"network\":\"");
         print_string(network);
-        print_string("\",\"status\":\"declared\"}\n");
+        print_string("\",\"network_detail\":{\"nic\":");
+        print_string((session_status & 1U) ? "true" : "false");
+        print_string(",\"dhcp_lease\":");
+        print_string((session_status & 2U) ? "true" : "false");
+        print_string(",\"tls_entropy\":");
+        print_string((session_status & 4U) ? "true" : "false");
+        print_string(",\"x509_anchor\":");
+        print_string((session_status & 8U) ? "true" : "false");
+        print_string("},\"assistant\":\"not-available\",\"cancel\":\"esc\"");
+        if (ai_rc == 0) {
+            print_string(",\"worker\":\"");
+            print_string(ai_st.worker_pid > 0 ? "live" : "absent");
+            print_string("\"");
+            ai_runtime_json_call("last", ai_st.last_path, ai_st.last_result,
+                                 ai_st.last_latency_ticks, ai_st.last_error, ai_st.last_abort);
+            ai_runtime_json_call("gguf_last", ai_st.gguf_last_path, ai_st.gguf_last_result,
+                                 ai_st.gguf_last_latency_ticks, ai_st.gguf_last_error,
+                                 ai_st.gguf_last_abort);
+            print_string(",\"liveness\":{\"heartbeats\":");
+            print_int((int)ai_st.heartbeats);
+            print_string(",\"stalls\":");
+            print_int((int)ai_st.stalls);
+            print_string(",\"lost\":");
+            print_int((int)ai_st.lost);
+            print_string(",\"timeouts\":");
+            print_int((int)ai_st.timeouts);
+            print_string(",\"cancelled\":");
+            print_int((int)ai_st.cancelled);
+            print_string("}");
+        }
+        print_string(",\"status\":\"declared\"}\n");
         return;
     }
     if (arg_count > 0) {
@@ -5300,6 +5384,30 @@ static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count
     print_string("Contrat de sortie  : completion locale, pas une reponse factuelle garantie\n");
     print_string("Execution          : guest QEMU unique, worker Ring 3 ou repli Ring 0\n");
     print_string("Nouveaux jetons    : 24 maximum par generation\n");
+    print_string("Assistant instruit : non disponible (GPT-2 de base, pas de modele instruction-tuned)\n");
+    print_string("Annulation         : touche Echap pendant une generation\n");
+    if (ai_rc == 0) {
+        print_string("Worker IA Ring 3   : ");
+        print_string(ai_st.worker_pid > 0 ? "vivant" : "absent");
+        print_string(" (battements ");
+        print_int((int)ai_st.heartbeats);
+        print_string(", bloques ");
+        print_int((int)ai_st.stalls);
+        print_string(", perdus ");
+        print_int((int)ai_st.lost);
+        print_string(", annulations ");
+        print_int((int)ai_st.cancelled);
+        print_string(")\n");
+        print_string("Derniere generation: chemin ");
+        print_string(ai_runtime_path_name(ai_st.last_path));
+        print_string(", latence ");
+        print_int((int)(ai_st.last_latency_ticks * 10U));
+        print_string(" ms, erreur ");
+        print_string(ai_runtime_error_name(ai_st.last_error));
+        print_string(", abandon ");
+        print_string(ai_runtime_abort_name(ai_st.last_abort));
+        print_string("\n");
+    }
     print_string("Etat reseau        : ");
     print_string(network);
     print_string("\n");

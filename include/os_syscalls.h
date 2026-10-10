@@ -1271,6 +1271,25 @@ typedef struct {
 #define OS_AI_ENGINE_GGUF_OPEN  6U
 #define OS_AI_ENGINE_GGUF_READ  7U
 #define OS_AI_ENGINE_GGUF_READY 8U
+/* Worker liveness: ecx = job id in flight. 0 = progress noted, STALE = the
+ * job was cancelled / aborted (the worker should stop computing it). */
+#define OS_AI_ENGINE_HEARTBEAT  9U
+/* A generation stopped by the user (ESC while it runs): the caller gets
+ * this code, never a Ring 0 replay of the cancelled job. */
+#define OS_AI_CANCELLED (-149)
+
+/* Result class of the last generation (last_error / gguf_last_error). */
+#define OS_AI_ERROR_NONE 0U
+#define OS_AI_ERROR_MODEL_MISSING 1U /* no tokenizer / checkpoint / GGUF */
+#define OS_AI_ERROR_MODEL_FAILED 2U  /* model present, generation failed */
+#define OS_AI_ERROR_CANCELLED 3U
+#define OS_AI_ERROR_NO_WORKER 4U     /* strict GGUF build, no worker */
+/* Why the last relayed job was aborted (last_abort / gguf_last_abort). */
+#define OS_AI_ABORT_NONE 0U
+#define OS_AI_ABORT_WORKER_LOST 1U   /* worker exited or was replaced */
+#define OS_AI_ABORT_STALLED 2U       /* no heartbeat for AI_RELAY_STALL_TICKS */
+#define OS_AI_ABORT_TIMEOUT 3U       /* AI_RELAY_TIMEOUT_TICKS overall */
+#define OS_AI_ABORT_CANCELLED 4U
 /* OS_AI_ENGINE_MAP, ECX: which initrd blob to map read-only. */
 #define OS_AI_ENGINE_BLOB_CHECKPOINT 1U
 #define OS_AI_ENGINE_BLOB_TOKENIZER  2U
@@ -1377,6 +1396,18 @@ typedef struct {
     uint32_t gguf_session_worker;
     uint32_t gguf_session_resumed;
     uint32_t gguf_session_kernel;    /* 109/110 sessions started in Ring 0 */
+    /* Runtime contract: liveness, latency and distinguished errors. */
+    uint32_t heartbeats;         /* OS_AI_ENGINE_HEARTBEAT accepted */
+    uint32_t stalls;             /* jobs aborted for missing heartbeats */
+    uint32_t timeouts;           /* jobs aborted at the overall timeout */
+    uint32_t lost;               /* jobs aborted because the worker left */
+    uint32_t cancelled;          /* generations cancelled by the user */
+    uint32_t last_latency_ticks; /* SYS_GPT2_GENERATE wall time, 100 Hz */
+    uint32_t last_error;         /* OS_AI_ERROR_* */
+    uint32_t last_abort;         /* OS_AI_ABORT_* */
+    uint32_t gguf_last_latency_ticks; /* last 109/110 call */
+    uint32_t gguf_last_error;
+    uint32_t gguf_last_abort;
 } os_ai_engine_status_t;
 /* Test hook: the driver must crash in the middle of this job. */
 #define OS_ATA_JOB_FLAG_DEBUG_CRASH 1U
