@@ -14,6 +14,12 @@ int sys_task_metrics(int pid, os_task_metrics_t* out);
 unsigned int sys_ticks(void);
 int spawn(const char* path, char* argv[]);
 int sys_kill_pid(int pid);
+int sys_getpid(void);
+void shell_p2p_key_info(int* len, int* is_default);
+int shell_persist_pass_len(void);
+void osui_web_info(int* port, int* tls);
+int shell_collab_signing(void);
+int shell_p2p_active(void);
 
 #define SLOTS 3
 static prod_metrics_t g_m;
@@ -30,6 +36,11 @@ static int g_pool[POOL_MAX], g_npool;
 static prod_scaler_t g_sc;
 static uint32_t g_sc_t;
 static int g_sc_on;
+static prod_scaler_t g_sa;
+static uint32_t g_sa_t;
+static int g_sa_on;
+#define LOAD_MAX 4
+static int g_load[LOAD_MAX], g_nload;
 static char g_out[4096];
 static char g_buf[4096];
 static char g_tmp[4096];
@@ -78,7 +89,8 @@ static const char* k_cmds[] = {
     "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
     "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
     "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "prod-integrity", "prod-bench", "prod-diag",
-    "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", 0
+    "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap",
+    "prod-alert-adapt", "prod-load", "prod-scale-auto", "prod-sec-scan", 0
 };
 int shell_prod_is(const char* l) {
     char w[24]; int i;
@@ -292,6 +304,79 @@ int shell_prod_line(const char* l) {
         rc = prod_alert_add(&g_a, a, id, s_eq(c, "above"), x, (int)y);
         if (rc < 0) { out(rc == -2 ? "prod-alert-add error exists\n" : "prod-alert-add error invalid or full\n"); return 1; }
         out("prod-alert-add ok "); out(a); out("\n"); return 0;
+    }
+    if (s_eq(cmd, "prod-alert-adapt")) {
+        /* US-114: NAME METRIC K [FOR] - fires above EWMA + K * deviation */
+        int id, rc;
+        rest = word(rest, a, 64); rest = word(rest, b, 64); rest = word(rest, c, 64);
+        id = prod_metric_id(b);
+        if (id < 0 || to_u(c, &x) || to_u(rest[0] ? rest : "1", &y)) { out("prod-alert-adapt error usage: NAME METRIC K [FOR]\n"); return 1; }
+        rc = prod_alert_add_adaptive(&g_a, a, id, (int)x, (int)y);
+        if (rc < 0) { out("prod-alert-adapt error invalid or full\n"); return 1; }
+        out("prod-alert-adapt ok "); out(a); out(" learning "); line("", PROD_LEARN, " samples\n"); return 0;
+    }
+    if (s_eq(cmd, "prod-load")) {
+        /* US-110 test load: busy `spin` tasks the scaler will measure */
+        word(rest, a, 64); rest = word(rest, a, 64);
+        if (s_eq(a, "start")) {
+            if (to_u(rest, &x) || x > LOAD_MAX) { out("prod-load error usage: start N (<= 4) | stop\n"); return 1; }
+            while (g_nload < (int)x) { int pid = spawn("spin", 0); if (pid <= 0) break; g_load[g_nload++] = pid; }
+        } else if (s_eq(a, "stop")) {
+            while (g_nload > 0) (void)sys_kill_pid(g_load[--g_nload]);
+        } else { out("prod-load error usage: start N | stop\n"); return 1; }
+        pause(5);
+        line("prod-load ok tasks ", (uint32_t)g_nload, "\n"); return 0;
+    }
+    if (s_eq(cmd, "prod-scale-auto")) {
+        /* US-110: scale on the measured run queue (runnable user tasks
+         * other than this shell and the worker pool), one step per second */
+        static os_proc_t ps[16];
+        static prod_task_t tk[16];
+        int ex[POOL_MAX + 1], nex, i, n, q, want;
+        if (to_u(rest, &x) || x == 0 || x > 60) { out("prod-scale-auto error usage: STEPS (1..60)\n"); return 1; }
+        if (!g_sa_on) { prod_scaler_init(&g_sa, 0, POOL_MAX, 1000U, 500U, 1U); g_sa_on = 1; g_sa_t = 0; }
+        while (x--) {
+            n = sys_ps(ps, 16);
+            for (i = 0; i < n; i++) { tk[i].pid = ps[i].pid; tk[i].state = ps[i].state; tk[i].user = ps[i].type == OS_TASK_USER; }
+            nex = 0; ex[nex++] = sys_getpid();
+            for (i = 0; i < g_npool; i++) ex[nex++] = g_pool[i];
+            q = prod_runq(tk, n, ex, nex);
+            want = prod_scaler_step(&g_sa, (uint32_t)q, g_sa_t++);
+            while (g_npool < want) { int pid = spawn("idle", 0); if (pid <= 0) break; g_pool[g_npool++] = pid; }
+            while (g_npool > want) (void)sys_kill_pid(g_pool[--g_npool]);
+            g_out[0] = 0; s_cat(g_out, "prod-scale-auto step runq ", 4096); cat_u(g_out, (uint32_t)q, 4096);
+            s_cat(g_out, " workers ", 4096); cat_u(g_out, (uint32_t)g_npool, 4096); s_cat(g_out, "\n", 4096); out(g_out);
+            pause(100);
+        }
+        g_out[0] = 0; s_cat(g_out, "prod-scale-auto ok workers ", 4096); cat_u(g_out, (uint32_t)g_npool, 4096);
+        s_cat(g_out, " ups ", 4096); cat_u(g_out, (uint32_t)g_sa.ups, 4096); s_cat(g_out, " downs ", 4096); cat_u(g_out, (uint32_t)g_sa.downs, 4096);
+        s_cat(g_out, "\n", 4096); out(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "prod-sec-scan")) {
+        /* US-112: capability audit (running tasks), open ports, weak keys */
+        static os_proc_t ps[16];
+        static prod_sec_input_t si;
+        int i, n, f = 0, crit = 0, score, port, tls;
+        for (i = 0; i < (int)sizeof(si); i++) ((char*)&si)[i] = 0;
+        n = sys_ps(ps, 16);
+        for (i = 0; i < n && si.ntask < PROD_SEC_TASKS; i++) if (ps[i].type == OS_TASK_USER && ps[i].state != OS_TASK_TERMINATED) s_copy(si.task[si.ntask++], ps[i].name, 32);
+        if (shell_p2p_active()) { si.port[si.nport].port = 7700U; si.port[si.nport].udp = 1; si.port[si.nport].encrypted = 1; s_copy(si.port[si.nport].what, "p2p", 16); si.nport++; }
+        osui_web_info(&port, &tls);
+        if (port) { si.port[si.nport].port = (uint32_t)port; si.port[si.nport].udp = 0; si.port[si.nport].encrypted = tls; s_copy(si.port[si.nport].what, "web", 16); si.nport++; }
+        shell_p2p_key_info(&si.netkey_len, &si.netkey_default);
+        si.pass_len = shell_persist_pass_len();
+        si.signing_key = shell_collab_signing();
+        si.key_at_rest_encrypted = si.pass_len > 0;
+        g_out[0] = 0;
+        score = prod_sec_scan(&si, g_out, 4096, &f, &crit);
+        out(g_out);
+        g_out[0] = 0; s_cat(g_out, "prod-sec-scan ok tasks ", 4096); cat_u(g_out, (uint32_t)si.ntask, 4096);
+        s_cat(g_out, " ports ", 4096); cat_u(g_out, (uint32_t)si.nport, 4096);
+        s_cat(g_out, " findings ", 4096); cat_u(g_out, (uint32_t)f, 4096); s_cat(g_out, " critical ", 4096); cat_u(g_out, (uint32_t)crit, 4096);
+        s_cat(g_out, " score ", 4096); cat_u(g_out, (uint32_t)score, 4096);
+        s_cat(g_out, crit ? " verdict critical\n" : f ? " verdict warn\n" : " verdict ok\n", 4096); out(g_out);
+        return 0;
     }
     if (s_eq(cmd, "prod-alert-del")) {
         word(rest, a, 64);

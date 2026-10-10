@@ -4,6 +4,8 @@
 static int s_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
 static void s_copy(char* d, const char* s, int cap) { int i = 0; while (s && s[i] && i < cap - 1) { d[i] = s[i]; i++; } d[i] = 0; }
+static void s_cat(char* d, const char* s, int cap) { int n = s_len(d), i = 0; while (s && s[i] && n < cap - 1) d[n++] = s[i++]; d[n] = 0; }
+static void cat_u(char* d, uint32_t v, int cap) { char t[11], r[12]; int n = 0, i = 0; do { t[n++] = (char)('0' + v % 10U); v /= 10U; } while (v); while (n) r[i++] = t[--n]; r[i] = 0; s_cat(d, r, cap); }
 static void mzero(void* p, int n) { int i; for (i = 0; i < n; i++) ((uint8_t*)p)[i] = 0; }
 
 static const char* const k_metrics[PM_COUNT] = {"mem_used", "mem_free", "procs", "busy", "custom"};
@@ -96,6 +98,29 @@ static void ev2(prod_alerts_t* a, uint32_t tick, const char* what, const char* n
     t[k] = 0;
     prod_event(a, tick, t);
 }
+int prod_alert_add_adaptive(prod_alerts_t* a, const char* name, int metric, int k, int for_n) {
+    int i;
+    if (k < 1 || k > 20) return -1;
+    i = prod_alert_add(a, name, metric, 1, 0xFFFFFFFFU, for_n);
+    if (i < 0) return i;
+    a->r[i].adaptive = 1; a->r[i].k = k; a->r[i].seen = 0; a->r[i].ewma16 = 0; a->r[i].dev16 = 0;
+    return i;
+}
+static uint32_t adapt_limit(const prod_rule_t* r) {
+    uint32_t floor16 = r->ewma16 / 20U + 16U;            /* 5% of the baseline, at least 1 */
+    uint32_t d = r->dev16 > floor16 ? r->dev16 : floor16;
+    return (r->ewma16 + (uint32_t)r->k * d) / 16U;
+}
+static void adapt_learn(prod_rule_t* r, uint32_t v) {
+    uint32_t v16 = v > 0x0FFFFFFFU ? 0xFFFFFFF0U : v * 16U, diff;
+    if (r->seen == 0) { r->ewma16 = v16; r->dev16 = 0; }
+    else {
+        if (v16 >= r->ewma16) r->ewma16 += (v16 - r->ewma16) / 8U; else r->ewma16 -= (r->ewma16 - v16) / 8U;
+        diff = v16 > r->ewma16 ? v16 - r->ewma16 : r->ewma16 - v16;
+        if (diff >= r->dev16) r->dev16 += (diff - r->dev16) / 8U; else r->dev16 -= (r->dev16 - diff) / 8U;
+    }
+    if (r->seen < 1000) r->seen++;
+}
 int prod_alerts_eval(prod_alerts_t* a, const prod_sample_t* s) {
     int i, changes = 0;
     for (i = 0; i < PROD_RULES; i++) {
@@ -104,6 +129,13 @@ int prod_alerts_eval(prod_alerts_t* a, const prod_sample_t* s) {
         int bad;
         if (!r->used) continue;
         v = s->v[r->metric];
+        if (r->adaptive) {
+            /* anomalies are not learned, so a sustained spike keeps firing */
+            if (r->seen < PROD_LEARN) { adapt_learn(r, v); r->threshold = adapt_limit(r); continue; }
+            r->threshold = adapt_limit(r);
+            bad = v > r->threshold;
+            if (!bad) { adapt_learn(r, v); r->threshold = adapt_limit(r); }
+        } else
         bad = r->above ? (v > r->threshold) : (v < r->threshold);
         if (bad) {
             r->clear = 0;
@@ -376,4 +408,62 @@ int prod_state_load(const prod_state_ref_t* r, const uint8_t* in, int len) {
         return -1;
     }
     return 0;
+}
+
+/* ---------------------------------------------------------- US-110 load */
+int prod_runq(const prod_task_t* t, int n, const int* exclude, int nexclude) {
+    int i, j, q = 0;
+    for (i = 0; i < n; i++) {
+        int skip = 0;
+        if (!t[i].user || (t[i].state != 0 && t[i].state != 1)) continue; /* running / ready */
+        for (j = 0; j < nexclude; j++) if (exclude[j] == t[i].pid) skip = 1;
+        if (!skip) q++;
+    }
+    return q;
+}
+
+/* ------------------------------------------------------ US-112 security */
+static const char* const k_known_tasks[] = {
+    "shell", "idle", "spin", "networker", "atadriver", "vfsserver", "vfsvirtual", "aiworker", "aiclient",
+    "aistat", "ggufclient", "ipcserver", "ipcwait", "ok", "waitchild", "user_program", "fake_ai", "ai_assistant", 0
+};
+static const char* const k_test_tasks[] = { "atarogue", "airogue", "netclaim", "serviceclaim", "vfsclaim", "netwire", "ggufpause", 0 };
+static int in_list(const char* const* l, const char* n) {
+    int i; const char* b = n; int k;
+    for (k = 0; n[k]; k++) if (n[k] == '/') b = n + k + 1;   /* basename */
+    for (i = 0; l[i]; i++) if (s_eq(l[i], b)) return 1;
+    return 0;
+}
+static void sec_line(char* out, int cap, const char* sev, const char* what, const char* detail, int* f, int* c, int* score, int cost) {
+    s_cat(out, "prod-sec ", cap); s_cat(out, sev, cap); s_cat(out, " ", cap); s_cat(out, what, cap);
+    if (detail && detail[0]) { s_cat(out, " ", cap); s_cat(out, detail, cap); }
+    s_cat(out, "\n", cap);
+    (*f)++; if (sev[0] == 'c') (*c)++;
+    *score -= cost;
+}
+int prod_sec_scan(const prod_sec_input_t* in, char* out, int cap, int* findings, int* critical) {
+    int i, f = 0, c = 0, score = 100;
+    char t[48];
+    for (i = 0; i < in->ntask; i++) {
+        if (in_list(k_known_tasks, in->task[i])) continue;
+        if (in_list(k_test_tasks, in->task[i])) sec_line(out, cap, "critical", "capability test/rogue binary running:", in->task[i], &f, &c, &score, 30);
+        else sec_line(out, cap, "warn", "capability unknown task:", in->task[i], &f, &c, &score, 10);
+    }
+    for (i = 0; i < in->nport; i++) {
+        t[0] = 0; s_cat(t, in->port[i].udp ? "udp/" : "tcp/", 48); cat_u(t, in->port[i].port, 48);
+        s_cat(t, " ", 48); s_cat(t, in->port[i].what, 48);
+        s_cat(out, "prod-sec info open port ", cap); s_cat(out, t, cap);
+        s_cat(out, in->port[i].encrypted ? " encrypted\n" : " plaintext\n", cap);
+        if (!in->port[i].encrypted) sec_line(out, cap, "warn", "port without encryption:", t, &f, &c, &score, 15);
+    }
+    if (in->netkey_len > 0) {
+        if (in->netkey_default) sec_line(out, cap, "critical", "weak key: default P2P network key", "", &f, &c, &score, 30);
+        else if (in->netkey_len < 12) sec_line(out, cap, "warn", "weak key: P2P network key under 12 chars", "", &f, &c, &score, 15);
+    }
+    if (in->signing_key && !in->key_at_rest_encrypted) sec_line(out, cap, "warn", "weak key: signing key not encrypted at rest (no passphrase)", "", &f, &c, &score, 15);
+    if (in->pass_len > 0 && in->pass_len < 10) sec_line(out, cap, "warn", "weak key: passphrase under 10 chars", "", &f, &c, &score, 15);
+    if (score < 0) score = 0;
+    if (findings) *findings = f;
+    if (critical) *critical = c;
+    return score;
 }
