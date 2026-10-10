@@ -19,11 +19,13 @@ uint32_t net_stack_bulk_in_size(uint32_t op) {
         case SYS_LLM_ACQUIRE_START: return (uint32_t)sizeof(os_llm_acquire_start_request_t);
         case SYS_LLM_REQUEST: return (uint32_t)sizeof(os_llm_request_t);
         case SYS_LLM_OPENAI_CREDENTIAL: return (uint32_t)sizeof(os_llm_openai_credential_request_t);
+        case SYS_PEER_DATA: return (uint32_t)sizeof(os_peer_data_request_t);
         default: return 0U;
     }
 }
 
 uint32_t net_stack_bulk_out_size(uint32_t op) {
+    if (op == SYS_PEER_DATA) return (uint32_t)sizeof(os_peer_data_request_t);
     return (op == SYS_LLM_POLL_TEXT || op == SYS_LLM_POLL_SSE) ? (uint32_t)sizeof(os_llm_text_result_t) : 0U;
 }
 
@@ -148,7 +150,7 @@ static int32_t stack_socket(net_stack_t* st, const os_net_relay_request_t* req,
     }
 }
 
-static int32_t stack_peer(const os_net_relay_request_t* req) {
+static int32_t stack_peer(const os_net_relay_request_t* req, uint8_t* out, uint16_t* out_length) {
     uint16_t in_length = req->in_length <= OS_NET_RELAY_MAX_IN ? req->in_length : 0U;
     switch (req->op) {
         case SYS_PEER_LISTEN: {
@@ -240,8 +242,20 @@ int32_t net_stack_exec(net_stack_t* stack, const os_net_relay_request_t* request
     if (!stack || !request) return OS_SOCKET_BAD_ARGUMENT;
     if (request->op >= SYS_LLM_ACQUIRE_START && request->op <= SYS_LLM_OPENAI_CREDENTIAL)
         return stack_llm(stack, request->op, bulk_in, bulk_in_length, bulk_out, bulk_out_length);
+    if (request->op == SYS_PEER_DATA) {
+        static os_peer_data_request_t r;
+        int32_t rc;
+        if (bulk_in_length != sizeof(r) || !bulk_in) return OS_PEER_BAD_REQUEST;
+        stack_copy(&r, bulk_in, sizeof(r));
+        rc = kernel_peer_data(&r);
+        if (bulk_out && bulk_out_length) {
+            stack_copy(bulk_out, &r, sizeof(r));
+            *bulk_out_length = (uint32_t)sizeof(r);
+        }
+        return rc;
+    }
     if (request->op >= SYS_PEER_LISTEN && request->op <= SYS_PEER_TLS_POLL)
-        return stack_peer(request);
+        return stack_peer(request, out, out_length);
     if (!out) return OS_SOCKET_BAD_ARGUMENT;
     {
         int32_t rc = stack_socket(stack, request, out, &local_length);

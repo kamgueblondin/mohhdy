@@ -309,6 +309,35 @@ static void test_llm_ops_bulk(void) {
     TEST_ASSERT_EQUAL(0, (int)st.report.socket_ops);
 }
 
+
+/* Roadmap step 5: SYS_PEER_DATA rides the bulk channel (1 KiB per call). */
+static void test_peer_data_bulk(void) {
+    net_stack_t st;
+    os_net_relay_request_t r;
+    static os_peer_data_request_t d, back;
+    uint8_t out[OS_NET_RELAY_MAX_OUT];
+    uint16_t n;
+    uint32_t got = 0U;
+    TEST_ASSERT_EQUAL(sizeof(os_peer_data_request_t), net_stack_bulk_in_size(SYS_PEER_DATA));
+    TEST_ASSERT_EQUAL(sizeof(os_peer_data_request_t), net_stack_bulk_out_size(SYS_PEER_DATA));
+    TEST_ASSERT(OS_PEER_DATA_MAX >= 1024U);
+    TEST_ASSERT(sizeof(os_peer_data_request_t) <= OS_NET_RELAY_BULK_MAX);
+    stack_setup(&st, 0);
+    net_llm_client_reset();
+    net_llm_client_bind(0, 0, 0);
+    memset(&d, 0, sizeof(d));
+    d.op = OS_PEER_WEB_OPEN; d.port = 8443U; d.flags = OS_PEER_WEB_TLS;
+    request(&r, SYS_PEER_DATA, (uint32_t)sizeof(d), (uint32_t)sizeof(d), 0U);
+    /* wrong bulk size is refused before any network work */
+    TEST_ASSERT_EQUAL(OS_PEER_BAD_REQUEST, net_stack_exec(&st, &r, (const uint8_t*)&d, 4U, out, &n,
+                                                          (uint8_t*)&back, &got));
+    /* no NIC: honest UNAVAILABLE, and the struct comes back whole */
+    TEST_ASSERT_EQUAL(OS_PEER_UNAVAILABLE, net_stack_exec(&st, &r, (const uint8_t*)&d, sizeof(d), out, &n,
+                                                          (uint8_t*)&back, &got));
+    TEST_ASSERT_EQUAL(sizeof(d), got);
+    TEST_ASSERT_EQUAL(8443, back.port);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bulk_sizes);
@@ -318,6 +347,7 @@ int main(void) {
     RUN_TEST(test_peer_unavailable_without_nic);
     RUN_TEST(test_wire_connect_framed_in_ring3);
     RUN_TEST(test_llm_ops_bulk);
+    RUN_TEST(test_peer_data_bulk);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

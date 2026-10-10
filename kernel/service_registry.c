@@ -978,6 +978,7 @@ int service_registry_net_syscall_gated(uint32_t syscall_number) {
      * the syscall handler itself. */
     if (syscall_number == SYS_SOCKET_CONNECT) return 1;
     if (syscall_number >= SYS_PEER_LISTEN && syscall_number <= SYS_PEER_TLS_POLL) return 1;
+    if (syscall_number == SYS_PEER_DATA) return 1;
     return 0;
 }
 

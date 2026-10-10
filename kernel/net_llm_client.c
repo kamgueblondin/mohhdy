@@ -489,12 +489,18 @@ int kernel_peer_listen(const os_peer_listen_request_t* request) {
         (void)net_socket_close(boot_peer_listen_socket);
         boot_peer_listen_socket = -1;
     }
+    {
+        uint16_t i;
+        for (i = 0U; i < 4U; i++) boot_peer_remote_ip[i] = 0U;
+    }
     socket_id = net_socket_listen(request->local_port,
                                   request->local_sequence ? request->local_sequence : 0x20406080U);
     if (socket_id < 0) return OS_PEER_FAILED;
     boot_peer_listen_socket = socket_id;
     return 0;
 }
+
+static void kernel_peer_note_remote(void);
 
 int kernel_peer_accept(const os_peer_accept_request_t* request) {
     uint8_t state = 0U;
@@ -516,7 +522,7 @@ int kernel_peer_accept(const os_peer_accept_request_t* request) {
         boot_peer_segment, sizeof(boot_peer_segment),
         boot_llm_lease.ipv4, boot_peer_listen_socket, attempts,
         request->require_established);
-    if (status == 0) return 0;
+    if (status == 0) { kernel_peer_note_remote(); return 0; }
     if (status == 1) return 1; /* SYN-ACK guest emis, SYN_RECEIVED */
     if (status == -12) return OS_PEER_TIMEOUT;
     return OS_PEER_FAILED;
@@ -654,6 +660,377 @@ static int kernel_metier_exchange(void) {
 /* Retours : 1=ServerHello, 2=Certificate, 3=SKE, 4=SHD, 5=attente flight,
  * 6=CCS, 7=Finished, 8=attente applicative, 9=app echo, 0=noop.
  * request->metier : 10=METIER ok, 11=attente, 12=facture emise. */
+static void kernel_peer_note_remote(void) {
+    uint16_t i;
+    if (boot_llm_frame[12] != 0x08U || boot_llm_frame[13] != 0x00U) return;
+    for (i = 0U; i < 4U; i++) boot_peer_remote_ip[i] = boot_llm_frame[NET_ETHERNET_HEADER_SIZE + 12U + i];
+}
+
+
+/* ---- Roadmap step 5: web table (several connections, optional TLS) ----
+ * One port, up to OS_PEER_WEB_SLOTS TCP connections, each with its own
+ * socket and (in TLS mode) its own TLS 1.2 server state. The NIC is pumped
+ * here: TCP frames for the web port are demultiplexed by remote address and
+ * port; other frames are counted and dropped while the table is open. */
+typedef struct {
+    int sock;
+    uint8_t used;
+    uint8_t tls_step;   /* 0 hello, 4 wait flight, 7 open, 9 failed */
+    uint8_t peer_closed;
+    uint8_t fail;       /* TLS failure point (diagnostics) */
+    uint8_t ip[4];
+    uint16_t raw_len;
+    uint16_t plain_len;
+    uint8_t raw[2048];
+    uint8_t plain[OS_PEER_DATA_MAX];
+    net_tls_server_t tls;
+} web_slot_t;
+
+extern uint32_t timer_get_ticks(void) __attribute__((weak));
+static web_slot_t g_web[OS_PEER_WEB_SLOTS];
+static uint16_t g_web_port;
+static uint8_t g_web_tls;
+static uint8_t g_web_open;
+static uint8_t g_web_record[1600];
+uint32_t boot_web_dropped;
+
+static int web_send_raw(web_slot_t* s, const uint8_t* data, uint16_t length) {
+    net_tcp_connection_t snapshot;
+    uint16_t segment_length = 0U, off = 0U, n;
+    while (off < length) {
+        n = (uint16_t)((uint16_t)(length - off) > 1024U ? 1024U : (uint16_t)(length - off));
+        if (net_socket_connection_snapshot(s->sock, &snapshot) != 0) return -1;
+        if (net_socket_send_limit(s->sock, data + off, n, boot_peer_segment, sizeof(boot_peer_segment),
+                                  &segment_length, 2U) != 0)
+            return -2;
+        if (ne2k_tcp_segment(g_llm_dev, g_llm_io, &boot_llm_arp_cache, boot_llm_frame, sizeof(boot_llm_frame),
+                             boot_llm_lease.ipv4, s->ip, boot_peer_segment, segment_length) != 0) {
+            (void)net_socket_connection_restore(s->sock, &snapshot);
+            return -3;
+        }
+        off = (uint16_t)(off + n);
+    }
+    return 0;
+}
+
+static void web_slot_free(web_slot_t* s) {
+    if (s->sock >= 0) (void)net_socket_close(s->sock);
+    s->sock = -1;
+    s->used = 0U;
+    s->tls_step = 0U;
+    s->peer_closed = 0U;
+    s->fail = 0U;
+    s->raw_len = 0U;
+    s->plain_len = 0U;
+}
+
+/* Keeps exactly one slot listening while a slot is free. */
+static void web_arm(void) {
+    uint16_t i;
+    uint8_t state;
+    for (i = 0U; i < OS_PEER_WEB_SLOTS; i++)
+        if (g_web[i].used && net_socket_get_state(g_web[i].sock, &state) == 0 && state == NET_TCP_STATE_LISTEN)
+            return;
+    for (i = 0U; i < OS_PEER_WEB_SLOTS; i++) {
+        if (g_web[i].used) continue;
+        g_web[i].sock = net_socket_listen(g_web_port, 0x51000000U + ((uint32_t)i << 20) +
+                                                       (timer_get_ticks ? timer_get_ticks() : 0U));
+        if (g_web[i].sock < 0) { g_web[i].sock = -1; return; }
+        g_web[i].used = 1U;
+        return;
+    }
+}
+
+static int web_tls_init(web_slot_t* s) {
+    uint8_t random[32], priv[32];
+    uint32_t word = 0U;
+    uint16_t i;
+    if (!boot_llm_rdrand_supported) return -1;
+    for (i = 0U; i < 64U; i++) {
+        if ((i & 3U) == 0U && kernel_llm_rdrand_word(&word) != 0) return -1;
+        if (i < 32U) random[i] = (uint8_t)(word >> ((i & 3U) * 8U));
+        else priv[i - 32U] = (uint8_t)(word >> ((i & 3U) * 8U));
+    }
+    priv[0] &= 248U; priv[31] &= 127U; priv[31] |= 64U;
+    return net_tls_server_init(&s->tls, random, priv, boot_llm_x25519_workspace, KERNEL_LLM_TLS_WORKSPACE_WORDS);
+}
+
+static int web_tls_note_send(web_slot_t* s, int built) {
+    if (built < 0) return -1;
+    if (net_tls_server_note_handshake_message(&s->tls, g_web_record, (uint16_t)built) != 0) return -1;
+    return web_send_raw(s, g_web_record, (uint16_t)built);
+}
+
+static void web_shift(web_slot_t* s, uint16_t n) {
+    uint16_t i;
+    for (i = n; i < s->raw_len; i++) s->raw[i - n] = s->raw[i];
+    s->raw_len = (uint16_t)(s->raw_len - n);
+}
+
+/* Length of the first `count` complete records in raw, 0 if not all there. */
+static uint16_t web_records(const web_slot_t* s, uint16_t count) {
+    uint16_t off = 0U, len;
+    while (count--) {
+        if (s->raw_len < off + 5U) return 0U;
+        len = (uint16_t)(((uint16_t)s->raw[off + 3U] << 8) | s->raw[off + 4U]);
+        if (s->raw_len < off + 5U + len) return 0U;
+        off = (uint16_t)(off + 5U + len);
+    }
+    return off;
+}
+
+static void web_tls_step(web_slot_t* s) {
+    uint16_t n;
+    net_tls_record_view_t view;
+    if (s->tls_step == 0U) {
+        n = web_records(s, 1U);
+        if (!n) return;
+        /* RFC 5246 E.1: a ClientHello record may carry version 3.1; the
+         * record header is not hashed, so accept it as 3.3. */
+        if (s->raw[0] == NET_TLS_CONTENT_HANDSHAKE && s->raw[1] == 3U && s->raw[2] == 1U) s->raw[2] = 3U;
+        if (web_tls_init(s) != 0 || net_tls_server_accept_client_hello(&s->tls, s->raw, n) != 0) { s->fail = 1; goto fail; }
+        web_shift(s, n);
+        if (web_tls_note_send(s, net_tls_server_hello_build(g_web_record, sizeof(g_web_record), s->tls.server_random,
+                                                             NET_TLS_CIPHER_ECDHE_RSA_WITH_AES_128_GCM_SHA256)) != 0)
+            { s->fail = 2; goto fail; }
+        s->tls.phase = NET_TLS_SERVER_PHASE_HELLO_SENT;
+        if (web_tls_note_send(s, net_tls_server_certificate_build(g_web_record, sizeof(g_web_record),
+                                                                   aos_tls_test_leaf_der,
+                                                                   (uint16_t)AOS_TLS_TEST_LEAF_DER_LEN)) != 0)
+            { s->fail = 3; goto fail; }
+        if (web_tls_note_send(s, net_tls_server_key_exchange_ecdhe_rsa_build(
+                g_web_record, sizeof(g_web_record), s->tls.client_random, s->tls.server_random,
+                s->tls.server_public, aos_tls_test_leaf_modulus, AOS_TLS_TEST_LEAF_MODULUS_LEN,
+                aos_tls_test_leaf_private_exponent, AOS_TLS_TEST_LEAF_PRIVATE_LEN, boot_llm_rsa_workspace,
+                KERNEL_LLM_TLS_WORKSPACE_WORDS)) != 0)
+            { s->fail = 4; goto fail; }
+        if (web_tls_note_send(s, net_tls_server_hello_done_build(g_web_record, sizeof(g_web_record))) != 0) { s->fail = 5; goto fail; }
+        s->tls.phase = NET_TLS_SERVER_PHASE_WAIT_CLIENT_FLIGHT;
+        s->tls_step = 4U;
+        return;
+    }
+    if (s->tls_step == 4U) {
+        int built;
+        n = web_records(s, 3U);
+        if (!n) return;
+        if (net_tls_server_accept_client_flight(&s->tls, s->raw, n, boot_llm_x25519_workspace,
+                                                KERNEL_LLM_TLS_WORKSPACE_WORDS, boot_llm_prf_workspace,
+                                                sizeof(boot_llm_prf_workspace), boot_llm_plaintext,
+                                                sizeof(boot_llm_plaintext)) != 0)
+            { s->fail = 6; goto fail; }
+        web_shift(s, n);
+        built = net_tls_change_cipher_spec_build(g_web_record, sizeof(g_web_record));
+        if (built < 0 || web_send_raw(s, g_web_record, (uint16_t)built) != 0) { s->fail = 7; goto fail; }
+        built = net_tls_server_finished_record_build(&s->tls, g_web_record, sizeof(g_web_record),
+                                                     boot_llm_prf_workspace, sizeof(boot_llm_prf_workspace));
+        if (built < 0 || web_send_raw(s, g_web_record, (uint16_t)built) != 0) { s->fail = 8; goto fail; }
+        s->tls_step = 7U;
+    }
+    while (s->tls_step == 7U && (n = web_records(s, 1U)) != 0U) {
+        uint16_t i;
+        if (net_tls_aes_gcm_session_open(&s->tls.session, s->raw, n, boot_llm_plaintext,
+                                         sizeof(boot_llm_plaintext), &view) != 0)
+            { s->fail = 9; goto fail; }
+        web_shift(s, n);
+        if (view.content_type == NET_TLS_CONTENT_ALERT) { s->peer_closed = 1U; continue; }
+        if (view.content_type != NET_TLS_CONTENT_APPLICATION_DATA) continue;
+        for (i = 0U; i < view.payload_length && s->plain_len < sizeof(s->plain); i++)
+            s->plain[s->plain_len++] = view.payload[i];
+    }
+    return;
+fail:
+    s->tls_step = 9U;
+}
+
+static void web_drain(web_slot_t* s) {
+    uint16_t n = 0U;
+    uint8_t* dst;
+    uint16_t room;
+    if (g_web_tls) { dst = s->raw + s->raw_len; room = (uint16_t)(sizeof(s->raw) - s->raw_len); }
+    else { dst = s->plain + s->plain_len; room = (uint16_t)(sizeof(s->plain) - s->plain_len); }
+    if (room == 0U) return;
+    if (net_socket_receive(s->sock, dst, room, &n) != 0) return;
+    if (g_web_tls) s->raw_len = (uint16_t)(s->raw_len + n);
+    else s->plain_len = (uint16_t)(s->plain_len + n);
+}
+
+/* One frame: 0 = handled or nothing, 1 = NIC empty. */
+static int web_pump_one(void) {
+    net_tcp_view_t view;
+    net_tcp_connection_t conn;
+    uint16_t frame_length = 0U, ihl, tcp_off, ip_len, i, seg_len = 0U;
+    uint8_t ip[4], mac[6], state;
+    int status = ne2k_rx_poll_tcp(g_llm_dev, g_llm_io, boot_llm_frame, sizeof(boot_llm_frame), &frame_length, &view);
+    if (status == 1) return 1;
+    if (status != 0) return 0;
+    if (view.destination_port != g_web_port) { boot_web_dropped++; return 0; }
+    ihl = (uint16_t)((boot_llm_frame[NET_ETHERNET_HEADER_SIZE] & 0x0fU) * 4U);
+    ip_len = (uint16_t)(((uint16_t)boot_llm_frame[NET_ETHERNET_HEADER_SIZE + 2U] << 8) |
+                        boot_llm_frame[NET_ETHERNET_HEADER_SIZE + 3U]);
+    tcp_off = (uint16_t)(NET_ETHERNET_HEADER_SIZE + ihl);
+    for (i = 0U; i < 4U; i++) ip[i] = boot_llm_frame[NET_ETHERNET_HEADER_SIZE + 12U + i];
+    for (i = 0U; i < 6U; i++) mac[i] = boot_llm_frame[6U + i];
+    for (i = 0U; i < OS_PEER_WEB_SLOTS; i++) {
+        web_slot_t* s = &g_web[i];
+        if (!s->used || net_socket_get_state(s->sock, &state) != 0 || state == NET_TCP_STATE_LISTEN) continue;
+        if (net_socket_connection_snapshot(s->sock, &conn) != 0) continue;
+        if (conn.remote_port != view.source_port || s->ip[0] != ip[0] || s->ip[1] != ip[1] ||
+            s->ip[2] != ip[2] || s->ip[3] != ip[3])
+            continue;
+        (void)net_socket_feed(s->sock, boot_llm_frame + tcp_off, (uint16_t)(ip_len - ihl));
+        if (view.flags & 0x01U) s->peer_closed = 1U;
+        return 0;
+    }
+    if ((view.flags & 0x02U) == 0U || (view.flags & 0x10U) != 0U) { boot_web_dropped++; return 0; }
+    for (i = 0U; i < OS_PEER_WEB_SLOTS; i++) {
+        web_slot_t* s = &g_web[i];
+        uint16_t k;
+        if (!s->used || net_socket_get_state(s->sock, &state) != 0 || state != NET_TCP_STATE_LISTEN) continue;
+        if (net_socket_feed(s->sock, boot_llm_frame + tcp_off, (uint16_t)(ip_len - ihl)) != 0) return 0;
+        if (net_arp_cache_put(&boot_llm_arp_cache, ip, mac) != 0) return 0;
+        for (k = 0U; k < 4U; k++) s->ip[k] = ip[k];
+        if (net_socket_build_syn_ack(s->sock, boot_peer_segment, sizeof(boot_peer_segment), &seg_len) != 0) return 0;
+        (void)ne2k_tcp_segment(g_llm_dev, g_llm_io, &boot_llm_arp_cache, boot_llm_frame, sizeof(boot_llm_frame),
+                               boot_llm_lease.ipv4, s->ip, boot_peer_segment, seg_len);
+        web_arm();
+        return 0;
+    }
+    boot_web_dropped++; /* table full: the client retransmits its SYN */
+    return 0;
+}
+
+static int kernel_web_op(os_peer_data_request_t* r) {
+    web_slot_t* s;
+    uint16_t i, n;
+    uint8_t state;
+    if (r->op == OS_PEER_WEB_OPEN) {
+        if (r->port == 0U) return OS_PEER_BAD_REQUEST;
+        for (i = 0U; i < OS_PEER_WEB_SLOTS; i++) { if (g_web[i].used) web_slot_free(&g_web[i]); g_web[i].sock = -1; }
+        g_web_port = r->port;
+        g_web_tls = (uint8_t)(r->flags & OS_PEER_WEB_TLS);
+        if (g_web_tls && !boot_llm_rdrand_supported) return OS_PEER_FAILED;
+        g_web_open = 1U;
+        web_arm();
+        return g_web[0].used || g_web[1].used ? 0 : OS_PEER_FAILED;
+    }
+    if (!g_web_open) return OS_PEER_NOT_LISTENING;
+    if (r->op == OS_PEER_WEB_STOP) {
+        for (i = 0U; i < OS_PEER_WEB_SLOTS; i++) if (g_web[i].used) web_slot_free(&g_web[i]);
+        g_web_open = 0U;
+        return 0;
+    }
+    if (r->op == OS_PEER_WEB_POLL) {
+        n = r->attempts ? r->attempts : 8U;
+        while (n--) if (web_pump_one() == 1) break;
+        for (i = 0U; i < OS_PEER_WEB_SLOTS; i++) {
+            uint8_t st = OS_PEER_SLOT_FREE;
+            s = &g_web[i];
+            if (s->used && net_socket_get_state(s->sock, &state) == 0) {
+                if (state == NET_TCP_STATE_LISTEN) st = OS_PEER_SLOT_LISTEN;
+                else if (state == NET_TCP_STATE_SYN_RECEIVED) st = OS_PEER_SLOT_HANDSHAKE;
+                else {
+                    web_drain(s);
+                    if (g_web_tls) web_tls_step(s);
+                    st = (g_web_tls && s->tls_step != 7U) ? OS_PEER_SLOT_HANDSHAKE : OS_PEER_SLOT_OPEN;
+                    if (s->tls_step == 9U) st |= OS_PEER_SLOT_FAILED;
+                    if (s->plain_len) st |= OS_PEER_SLOT_DATA;
+                    if (s->peer_closed || state == NET_TCP_STATE_CLOSE_WAIT || state == NET_TCP_STATE_CLOSED)
+                        st |= OS_PEER_SLOT_PEER_CLOSED;
+                }
+            }
+            r->data[i] = st;
+            r->data[OS_PEER_WEB_SLOTS + i] = s->fail;
+        }
+        r->length = 2U * OS_PEER_WEB_SLOTS;
+        return 0;
+    }
+    if (r->slot >= OS_PEER_WEB_SLOTS || !g_web[r->slot].used) return OS_PEER_BAD_REQUEST;
+    s = &g_web[r->slot];
+    if (r->op == OS_PEER_WEB_RECV) {
+        n = s->plain_len < OS_PEER_DATA_MAX ? s->plain_len : (uint16_t)OS_PEER_DATA_MAX;
+        for (i = 0U; i < n; i++) r->data[i] = s->plain[i];
+        for (i = n; i < s->plain_len; i++) s->plain[i - n] = s->plain[i];
+        s->plain_len = (uint16_t)(s->plain_len - n);
+        r->length = n;
+        return n ? 0 : 1;
+    }
+    if (r->op == OS_PEER_WEB_SEND) {
+        int built;
+        if (r->length == 0U || r->length > OS_PEER_DATA_MAX) return OS_PEER_BAD_REQUEST;
+        if (!g_web_tls) return web_send_raw(s, r->data, r->length) == 0 ? 0 : OS_PEER_FAILED;
+        if (s->tls_step != 7U) return OS_PEER_NOT_LISTENING;
+        built = net_tls_aes_gcm_session_build(&s->tls.session, g_web_record, sizeof(g_web_record),
+                                              NET_TLS_CONTENT_APPLICATION_DATA, r->data, r->length);
+        if (built < 0) return OS_PEER_FAILED;
+        return web_send_raw(s, g_web_record, (uint16_t)built) == 0 ? 0 : OS_PEER_FAILED;
+    }
+    if (r->op == OS_PEER_WEB_CLOSE) {
+        uint16_t seg_len = 0U;
+        if (net_socket_get_state(s->sock, &state) == 0 &&
+            (state == NET_TCP_STATE_ESTABLISHED || state == NET_TCP_STATE_CLOSE_WAIT)) {
+            if (g_web_tls && s->tls_step == 7U) {
+                int built = net_tls_close_notify_build(&s->tls.session, g_web_record, sizeof(g_web_record));
+                if (built > 0) (void)web_send_raw(s, g_web_record, (uint16_t)built);
+            }
+            if (net_socket_begin_close(s->sock, boot_peer_segment, sizeof(boot_peer_segment), &seg_len) == 0)
+                (void)ne2k_tcp_segment(g_llm_dev, g_llm_io, &boot_llm_arp_cache, boot_llm_frame,
+                                       sizeof(boot_llm_frame), boot_llm_lease.ipv4, s->ip, boot_peer_segment,
+                                       seg_len);
+        }
+        web_slot_free(s);
+        web_arm();
+        return 0;
+    }
+    return OS_PEER_BAD_REQUEST;
+}
+
+/* Plain data on the accepted peer socket (see SYS_PEER_DATA). */
+int kernel_peer_data(os_peer_data_request_t* r) {
+    uint8_t state = 0U;
+    uint16_t attempts, n = 0U, segment_length = 0U;
+    int status;
+    if (!r) return OS_PEER_BAD_REQUEST;
+    if (!g_llm_present) return OS_PEER_UNAVAILABLE;
+    if (!boot_llm_lease.valid) return OS_PEER_NO_LEASE;
+    if (r->op >= OS_PEER_WEB_OPEN) return kernel_web_op(r);
+    if (boot_peer_listen_socket < 0) return OS_PEER_NOT_LISTENING;
+    if (net_socket_get_state(boot_peer_listen_socket, &state) != 0) return OS_PEER_FAILED;
+    attempts = r->attempts ? r->attempts : 32U;
+    if (r->op == OS_PEER_DATA_RECV) {
+        r->length = 0U;
+        while (attempts--) {
+            (void)net_socket_receive(boot_peer_listen_socket, r->data, OS_PEER_DATA_RECV_MAX, &n);
+            if (n) { r->length = n; return 0; }
+            if (net_socket_get_state(boot_peer_listen_socket, &state) != 0) return OS_PEER_FAILED;
+            if (state == NET_TCP_STATE_CLOSE_WAIT || state == NET_TCP_STATE_CLOSED) return 2;
+            if (state != NET_TCP_STATE_ESTABLISHED) return OS_PEER_NOT_LISTENING;
+            status = ne2k_socket_poll_tcp(g_llm_dev, g_llm_io, boot_llm_frame, sizeof(boot_llm_frame),
+                                          boot_peer_listen_socket);
+            if (status == 0) kernel_peer_note_remote();
+        }
+        (void)net_socket_receive(boot_peer_listen_socket, r->data, OS_PEER_DATA_RECV_MAX, &n);
+        r->length = n;
+        return n ? 0 : 1;
+    }
+    if (r->op == OS_PEER_DATA_SEND) {
+        if (state != NET_TCP_STATE_ESTABLISHED && state != NET_TCP_STATE_CLOSE_WAIT) return OS_PEER_NOT_LISTENING;
+        if (r->length == 0U || r->length > OS_PEER_DATA_SEND_MAX) return OS_PEER_BAD_REQUEST;
+        if (boot_peer_remote_ip[0] == 0U) return OS_PEER_FAILED;
+        return kernel_peer_send_record(r->data, r->length) == 0 ? 0 : OS_PEER_FAILED;
+    }
+    if (r->op == OS_PEER_DATA_CLOSE) {
+        if (state != NET_TCP_STATE_ESTABLISHED && state != NET_TCP_STATE_CLOSE_WAIT) return 0;
+        if (net_socket_begin_close(boot_peer_listen_socket, boot_peer_segment, sizeof(boot_peer_segment),
+                                   &segment_length) != 0)
+            return OS_PEER_FAILED;
+        status = ne2k_tcp_segment(g_llm_dev, g_llm_io, &boot_llm_arp_cache, boot_llm_frame,
+                                  sizeof(boot_llm_frame), boot_llm_lease.ipv4, boot_peer_remote_ip,
+                                  boot_peer_segment, segment_length);
+        return status == 0 ? 0 : OS_PEER_FAILED;
+    }
+    return OS_PEER_BAD_REQUEST;
+}
+
 int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
     uint8_t state = 0U;
     uint16_t rx_length = 0U;

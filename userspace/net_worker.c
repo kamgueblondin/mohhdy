@@ -490,7 +490,8 @@ static int32_t stack_execute(const os_net_relay_request_t* req, os_net_relay_rep
     uint16_t small = 0U;
     int32_t rc;
     int got;
-    if (req->op >= SYS_LLM_ACQUIRE_START && req->op <= SYS_LLM_OPENAI_CREDENTIAL && req->arg0) {
+    if (((req->op >= SYS_LLM_ACQUIRE_START && req->op <= SYS_LLM_OPENAI_CREDENTIAL) ||
+         req->op == SYS_PEER_DATA) && req->arg0) {
         if (req->arg0 > sizeof(bulk_in)) return OS_LLM_REQUEST_BAD_REQUEST;
         asm volatile("int $0x80" : "=a"(got) : "a"(SYS_NET_RELAY_BULK), "b"(OS_NET_RELAY_BULK_FETCH),
                      "c"(req->job_id), "d"(bulk_in), "S"(req->arg0));
@@ -550,7 +551,9 @@ void main(void) {
         }
         copy_bytes((uint8_t*)&req, message.data, sizeof(req));
         reply.job_id = req.job_id;
-        if (stack_live) {
+        if (stack_live || req.op == SYS_PEER_DATA) {
+            /* SYS_PEER_DATA always goes through the bulk channel; without a
+             * live Ring 3 stack kernel_peer_data answers UNAVAILABLE. */
             reply.result = stack_execute(&req, &reply);
             wire_calls = stack.report.wire_ops;
         } else {

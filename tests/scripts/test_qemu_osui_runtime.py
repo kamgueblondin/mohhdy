@@ -256,6 +256,43 @@ def main():
             ):
                 say("typing %s ..." % command)
                 send_command_until(monitor, command, marker, proc)
+            # Roadmap step 4: provider peer, explicit local fallback.
+            for command, marker in (
+                ("session-ttl 3600", "session-ttl ok ttl=3600"),
+                ("session-new web", "session_id=s"),
+                ("osui-provider peer", "osui-provider ok provider=peer"),
+                ("osui-provider status", "secrets_in_image=false public_internet=false"),
+                ("chat ai a", "provider=peer fallback=local reason="),
+                ("osui-provider local", "osui-provider ok provider=local"),
+            ):
+                say("typing %s ..." % command)
+                send_command_until(monitor, command, marker, proc)
+            # Roadmap step 5: controlled local API (routes, auth, errors).
+            for command, marker in (
+                ("api get /status", "osui api status=200 route=/status"),
+                ("api post /status", "status=405"),
+                ("api get /nope", "status=404"),
+                ("api get /sessions", "status=401"),
+                ("api-token", "capability_denied capability=web.api"),
+                ("grant web.api", "grant ok capability=web.api"),
+            ):
+                say("typing %s ..." % command)
+                send_command_until(monitor, command, marker, proc)
+            start = len(log_text())
+            send_command_until(monitor, "api-token", "api-token ok token=", proc)
+            token = re.search(r"api-token ok token=(t\d{5})", normalized_log(log_text()[start:])).group(1)
+            for command, marker in (
+                ("api get /sessions %s" % token, "own_session_only"),
+                ("api get /supervision %s" % token, "status=403"),
+                ("grant admin.observe", "grant ok capability=admin.observe"),
+                ("api get /supervision %s" % token, '"net_worker":'),
+                ("api get /vfs/demo/hello.txt %s" % token, "status=403"),
+                ("api post /ai/chat %s a" % token, "status=202"),
+                ("api-revoke", "api-revoke ok"),
+                ("api get /sessions %s" % token, "status=401"),
+            ):
+                say("typing %s ..." % command)
+                send_command_until(monitor, command, marker, proc)
         say("QEMU OS-UI runtime contract passed.")
         return 0
     finally:

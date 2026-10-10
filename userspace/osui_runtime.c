@@ -39,7 +39,7 @@ static const char *const k_linux_traps[] = {
 static const char *const k_cmds[] = {
     "session-new", "session-use", "session-status", "session-list", "session-end",
     "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
-    "agent-run",
+    "agent-run", "api", "api-token", "api-revoke", "web-serve",
     "chat", "prompt",
     "grant", "revoke", "escalate", "takeover", "admin-status",
     "origin-check",
@@ -63,7 +63,7 @@ static const char *const k_caps[] = {
     "chat.reply", "site.explain", "session.escalate",
     "admin.observe", "admin.takeover",
     "dom.click", "dom.type", "pointer.move",
-    "mcp.invoice.create", "agent.run",
+    "mcp.invoice.create", "agent.run", "web.api",
     0
 };
 
@@ -97,6 +97,10 @@ typedef struct {
     char pending_tool[OSUI_CAP];
     char pending_a[48];
     char pending_b[24];
+    /* Roadmap step 5: local API token bound to this session. */
+    char api_token[OSUI_ID];
+    unsigned api_window;    /* osui_now() second the rate window opened */
+    unsigned api_count;     /* requests in the current window */
 } osui_session_t;
 
 typedef struct {
@@ -221,8 +225,18 @@ static unsigned osui_now(void) { return osui_test_now; }
 int osui_test_ai_rc = 0;
 unsigned osui_test_ai_error = 0U;
 unsigned osui_test_ai_abort = 0U;
+int osui_test_net_rc = -1;           /* no published Ring 3 stack */
+unsigned osui_test_net_llm_status = 0U;
+int osui_test_net_worker = 0;
+static int osui_net_stack(unsigned *llm_status, int *worker) {
+    *llm_status = osui_test_net_llm_status;
+    *worker = osui_test_net_worker;
+    return osui_test_net_rc;
+}
 static unsigned osui_ai_last_error(void) { return osui_test_ai_error; }
 static unsigned osui_ai_last_abort(void) { return osui_test_ai_abort; }
+int osui_test_ai_worker = 0;
+static int osui_ai_worker_pid(void) { return osui_test_ai_worker; }
 static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     const char *fixture = "test local response";
     int i = 0;
@@ -239,6 +253,76 @@ static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     out[i] = 0;
     return i;
 }
+/* Host fixture of the QEMU peer provider (roadmap step 4). */
+int osui_test_peer_acquire_rc = -1;
+int osui_test_peer_tls_polls = 0;    /* polls before TLS_COMPLETE; <0 fails */
+int osui_test_peer_request_rc = 0;
+int osui_test_peer_text_polls = 0;   /* polls before the reply; <0 fails */
+unsigned osui_test_peer_http = 200U;
+static int g_tp_tls, g_tp_text, g_tp_phase;
+static int peer_acquire(void) { g_tp_tls = 0; g_tp_phase = 2; return osui_test_peer_acquire_rc; }
+static int peer_phase(void) { return g_tp_phase; }
+static int peer_poll_tls(void) {
+    if (osui_test_peer_tls_polls < 0) return -1;
+    if (++g_tp_tls >= osui_test_peer_tls_polls) g_tp_phase = 3;
+    return 0;
+}
+static int peer_request(const char *prompt) { (void)prompt; g_tp_text = 0; return osui_test_peer_request_rc; }
+static int peer_poll_text(char *out, int max, unsigned *code) {
+    const char *t = "peer says ok";
+    int i = 0;
+    if (osui_test_peer_text_polls < 0) return -1;
+    if (++g_tp_text < osui_test_peer_text_polls) return 1;
+    while (t[i] && i < max - 1) { out[i] = t[i]; i++; }
+    out[i] = 0;
+    *code = osui_test_peer_http;
+    return 0;
+}
+static void peer_close(void) { g_tp_phase = 0; }
+static int peer_rearm(void) { g_tp_phase = 3; return 0; }
+static void peer_yield(void) { osui_test_now += 1U; }
+/* Host fixture of the web table (roadmap step 5): slot i carries the
+ * scripted request osui_test_web_req[i]; every scripted slot is ready in
+ * the same poll, so the server handles them concurrently. */
+const char *osui_test_web_req[4];
+static unsigned char g_web_fail[OS_PEER_WEB_SLOTS];
+int osui_test_web_open_rc = 0;
+int osui_test_web_open_tls = -1;
+char osui_test_web_out[4][2048];
+int osui_test_web_closed[4];
+static int g_tw_given[4];
+void osui_test_web_rewind(void) {
+    int i;
+    for (i = 0; i < 4; i++) { g_tw_given[i] = 0; osui_test_web_closed[i] = 0; osui_test_web_out[i][0] = 0; }
+}
+static int web_open(unsigned port, int tls) { (void)port; osui_test_web_open_tls = tls; return osui_test_web_open_rc; }
+static void web_stop(void) {}
+static int web_poll(unsigned char st[OS_PEER_WEB_SLOTS]) {
+    int i;
+    for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) {
+        if (!osui_test_web_req[i] || osui_test_web_closed[i]) { st[i] = OS_PEER_SLOT_LISTEN; continue; }
+        st[i] = OS_PEER_SLOT_OPEN | (g_tw_given[i] ? OS_PEER_SLOT_PEER_CLOSED : OS_PEER_SLOT_DATA);
+    }
+    return 0;
+}
+static int web_recv_slot(int slot, char *buf, int cap, int *n) {
+    const char *r = osui_test_web_req[slot];
+    int i = 0;
+    *n = 0;
+    if (!r || g_tw_given[slot]) return 1;
+    while (r[i] && i < cap) { buf[i] = r[i]; i++; }
+    *n = i;
+    g_tw_given[slot] = 1;
+    return 0;
+}
+static int web_send_slot(int slot, const char *buf, int n) {
+    int l = 0, i;
+    while (osui_test_web_out[slot][l]) l++;
+    for (i = 0; i < n && l + i < 2047; i++) osui_test_web_out[slot][l + i] = buf[i];
+    osui_test_web_out[slot][l + i] = 0;
+    return 0;
+}
+static void web_close_slot(int slot) { osui_test_web_closed[slot] = 1; }
 #else
 static unsigned osui_now(void) {
     int t;
@@ -253,6 +337,117 @@ static unsigned osui_ai_last_error(void) {
                  : "memory");
     return result == 0 ? st.last_error : OS_AI_ERROR_MODEL_FAILED;
 }
+static int osui_net_stack(unsigned *llm_status, int *worker) {
+    static os_net_stack_report_t rep;
+    int result;
+    asm volatile("int $0x80" : "=a"(result)
+                 : "a"(SYS_NET_NIC), "b"(OS_NET_NIC_STACK), "c"(&rep), "d"(0)
+                 : "memory");
+    *llm_status = rep.llm_status;
+    *worker = rep.wire.worker_pid;
+    return result;
+}
+
+/* QEMU peer provider (roadmap step 4): the same SYS_LLM_* session the shell
+ * ai-acquire / ai-tls-poll / ai-request / ai-text-poll commands drive,
+ * relayed to the Ring 3 networker's TLS client (strict kernel). */
+static int peer_sys1(int nr, const void *arg) {
+    int r;
+    asm volatile("int $0x80" : "=a"(r) : "a"(nr), "b"(arg) : "memory");
+    return r;
+}
+static int peer_acquire(void) {
+    static os_llm_acquire_start_request_t rq;
+    const char *h = "example.com";
+    int i;
+    for (i = 0; i < (int)sizeof(rq); i++) ((char *)&rq)[i] = 0;
+    for (i = 0; h[i]; i++) rq.hostname[i] = h[i];
+    rq.xid = 0xa0650011U; rq.local_sequence = 1U; rq.dns_id = 0xa675U;
+    rq.dhcp_attempts = OS_LLM_ACQUIRE_MAX_ATTEMPTS; rq.dns_attempts = OS_LLM_ACQUIRE_MAX_ATTEMPTS;
+    rq.arp_attempts = OS_LLM_ACQUIRE_MAX_ATTEMPTS; rq.local_port = 49152U; rq.remote_port = 443U;
+    return peer_sys1(SYS_LLM_ACQUIRE_START, &rq);
+}
+static int peer_phase(void) { return (int)(((unsigned)peer_sys1(SYS_LLM_SESSION_STATUS, 0) >> 8) & 0xffU); }
+static int peer_poll_tls(void) { return peer_sys1(SYS_LLM_POLL_TLS, 0); }
+static int peer_request(const char *prompt) {
+    static os_llm_request_t rq;
+    const char *m = "tiny", *pa = "/api/generate";
+    int i;
+    for (i = 0; i < (int)sizeof(rq); i++) ((char *)&rq)[i] = 0;
+    rq.provider = 0U; /* ollama-shaped request to the local peer */
+    for (i = 0; m[i]; i++) rq.model[i] = m[i];
+    for (i = 0; pa[i]; i++) rq.path[i] = pa[i];
+    for (i = 0; prompt[i] && i < (int)OS_LLM_PROMPT_MAX; i++) rq.prompt[i] = (uint8_t)prompt[i];
+    rq.prompt_length = (uint16_t)i;
+    return peer_sys1(SYS_LLM_REQUEST, &rq);
+}
+static int peer_poll_text(char *out, int max, unsigned *code) {
+    static os_llm_text_result_t res;
+    int rc = peer_sys1(SYS_LLM_POLL_TEXT, &res), i;
+    if (rc != 0) return rc;
+    for (i = 0; i < res.text_length && i < max - 1; i++) out[i] = (char)res.text[i];
+    out[i] = 0;
+    *code = res.status_code;
+    return 0;
+}
+static void peer_close(void) { (void)peer_sys1(SYS_LLM_CLOSE, 0); }
+static int peer_rearm(void) { return peer_sys1(SYS_LLM_RESET_FOR_REQUEST, 0); }
+/* About 50 ms between polls so the peer's frames can arrive (100 Hz). */
+static void peer_yield(void) {
+    int t0, t;
+    asm volatile("int $0x80" : "=a"(t0) : "a"(SYS_TICKS) : "memory");
+    do {
+        (void)peer_sys1(SYS_YIELD, 0);
+        asm volatile("int $0x80" : "=a"(t) : "a"(SYS_TICKS) : "memory");
+    } while ((unsigned)(t - t0) < 5U);
+}
+/* Web table (roadmap step 5): SYS_PEER_DATA web ops, relayed to the Ring 3
+ * networker on the strict kernel (one bulk struct per call, 1 KiB data). */
+static os_peer_data_request_t g_web_io;
+static unsigned char g_web_fail[OS_PEER_WEB_SLOTS];
+static int web_io(unsigned op, int slot) {
+    g_web_io.op = (uint8_t)op;
+    g_web_io.slot = (uint8_t)slot;
+    return peer_sys1(SYS_PEER_DATA, &g_web_io);
+}
+static int web_open(unsigned port, int tls) {
+    g_web_io.port = (uint16_t)port;
+    g_web_io.flags = tls ? OS_PEER_WEB_TLS : 0U;
+    return web_io(OS_PEER_WEB_OPEN, 0);
+}
+static void web_stop(void) { (void)web_io(OS_PEER_WEB_STOP, 0); }
+static int web_poll(unsigned char st[OS_PEER_WEB_SLOTS]) {
+    int rc, i;
+    g_web_io.attempts = 16U;
+    rc = web_io(OS_PEER_WEB_POLL, 0);
+    for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) {
+        st[i] = rc == 0 ? g_web_io.data[i] : 0U;
+        g_web_fail[i] = rc == 0 ? g_web_io.data[OS_PEER_WEB_SLOTS + i] : 0U;
+    }
+    return rc;
+}
+static int web_recv_slot(int slot, char *buf, int cap, int *n) {
+    int rc = web_io(OS_PEER_WEB_RECV, slot), i;
+    *n = 0;
+    if (rc == 0) {
+        for (i = 0; i < g_web_io.length && i < cap; i++) buf[i] = (char)g_web_io.data[i];
+        *n = i;
+    }
+    return rc;
+}
+static int web_send_slot(int slot, const char *buf, int n) {
+    int off = 0, k, i, rc;
+    while (off < n) {
+        k = n - off > (int)OS_PEER_DATA_MAX ? (int)OS_PEER_DATA_MAX : n - off;
+        for (i = 0; i < k; i++) g_web_io.data[i] = (uint8_t)buf[off + i];
+        g_web_io.length = (uint16_t)k;
+        rc = web_io(OS_PEER_WEB_SEND, slot);
+        if (rc != 0) return rc;
+        off += k;
+    }
+    return 0;
+}
+static void web_close_slot(int slot) { (void)web_io(OS_PEER_WEB_CLOSE, slot); }
 static unsigned osui_ai_last_abort(void) {
     static os_ai_engine_status_t st;
     int result;
@@ -260,6 +455,14 @@ static unsigned osui_ai_last_abort(void) {
                  : "a"(SYS_AI_ENGINE), "b"(OS_AI_ENGINE_STATUS), "c"(&st), "d"(0)
                  : "memory");
     return result == 0 ? st.last_abort : OS_AI_ABORT_NONE;
+}
+static int osui_ai_worker_pid(void) {
+    static os_ai_engine_status_t st;
+    int result;
+    asm volatile("int $0x80" : "=a"(result)
+                 : "a"(SYS_AI_ENGINE), "b"(OS_AI_ENGINE_STATUS), "c"(&st), "d"(0)
+                 : "memory");
+    return result == 0 ? (int)st.worker_pid : 0;
 }
 static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     int result;
@@ -907,15 +1110,79 @@ static int cmd_osui_audit(char *out, int max) {
     return OSUI_OK;
 }
 
+/* Roadmap step 4: provider "peer" is the QEMU local peer reached through the
+ * Ring 3 networker (no secret, no public internet). Readiness comes from the
+ * stack report the networker publishes. When the peer cannot serve, the
+ * local GPT-2 answers and the fallback is explicit in every reply. With a
+ * live networker and NIC, OS-UI runs a bounded exchange with the peer
+ * (peer_chat) and falls back with the failing step as the reason. */
+static const char *peer_unready_reason(void) {
+    unsigned st = 0U;
+    int worker = 0;
+    if (osui_net_stack(&st, &worker) != 0 || worker <= 0) return "no_net_worker";
+    if (!(st & 1U)) return "no_nic";
+    return 0;
+}
+
+/* One bounded peer exchange: acquire (DHCP, DNS, SYN), TLS, request,
+ * response, close. Every failure has its own reason; the whole exchange is
+ * bounded by OSUI_PEER_DEADLINE seconds and by poll budgets. */
+#define OSUI_PEER_DEADLINE 30U
+#define OSUI_PEER_POLLS 512
+static const char *peer_chat(const char *prompt, char *reply, int max) {
+    unsigned t0 = osui_now(), code = 0U;
+    int i, rc;
+    /* A session left at TLS_COMPLETE by the previous turn is reused. */
+    if (peer_phase() != 3) {
+        rc = peer_acquire();
+        if (rc != 0) { peer_close(); return "acquire_failed"; }
+    }
+    for (i = 0; i < OSUI_PEER_POLLS && peer_phase() != 3; i++) {
+        if (osui_now() - t0 > OSUI_PEER_DEADLINE) { peer_close(); return "tls_timeout"; }
+        rc = peer_poll_tls();
+        if (rc < 0) { peer_close(); return "tls_failed"; }
+        peer_yield();
+    }
+    if (peer_phase() != 3) { peer_close(); return "tls_timeout"; }
+    if (peer_request(prompt) != 0) { peer_close(); return "request_failed"; }
+    for (i = 0; i < OSUI_PEER_POLLS; i++) {
+        if (osui_now() - t0 > OSUI_PEER_DEADLINE) { peer_close(); return "response_timeout"; }
+        rc = peer_poll_text(reply, max, &code);
+        if (rc < 0) { peer_close(); return "response_failed"; }
+        if (rc == 0) break;
+        peer_yield();
+    }
+    if (i == OSUI_PEER_POLLS) { peer_close(); return "response_timeout"; }
+    if (code != 200U) { peer_close(); return "http_error"; }
+    /* Re-arm the TLS session for the next turn instead of closing it. */
+    if (peer_rearm() != 0) peer_close();
+    return 0;
+}
+
+static const char *g_fallback_reason;
+
+static void emit_provider(char *out, int max, int *p) {
+    if (!g_fallback_reason) return;
+    out_add(out, max, p, " provider=peer fallback=local reason=");
+    out_add(out, max, p, g_fallback_reason);
+}
+
 static int cmd_osui_provider(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0;
     if (narg == 0 || s_cmp(args[0], "status") == 0) {
         out_add(out, max, &p, "osui osui-provider provider=");
         out_add(out, max, &p, G.ai_provider[0] ? G.ai_provider : "local");
+        if (s_cmp(G.ai_provider, "peer") == 0) {
+            const char *why = peer_unready_reason();
+            out_add(out, max, &p, " network=");
+            out_add(out, max, &p, why ? why : "ready");
+            out_add(out, max, &p, " secrets_in_image=false public_internet=false");
+        }
         out_add(out, max, &p, " status=active\n");
         return OSUI_OK;
     }
-    if (s_cmp(args[0], "local") == 0 || s_cmp(args[0], "openai") == 0) {
+    if (s_cmp(args[0], "local") == 0 || s_cmp(args[0], "openai") == 0 ||
+        s_cmp(args[0], "peer") == 0) {
         s_cpy(G.ai_provider, 16, args[0]);
         out_add(out, max, &p, "osui osui-provider ok provider=");
         out_add(out, max, &p, G.ai_provider);
@@ -1324,6 +1591,28 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
         prompt = s_ncmp(text, "ai ", 3) == 0 ? text + 3 : text;
         s_cpy(s->ai_state, 16, "generating");
         s_cpy(G.stage_llm, 20, "gpt2_local");
+        g_fallback_reason = 0;
+        if (s_cmp(G.ai_provider, "peer") == 0) {
+            g_fallback_reason = peer_unready_reason();
+            if (!g_fallback_reason) {
+                g_fallback_reason = peer_chat(prompt, reply, (int)sizeof(reply));
+                if (!g_fallback_reason) {
+                    s_cpy(G.stage_llm, 20, "peer_qemu");
+                    s_cpy(G.stage_ai_note, 48, "etat_ia=reponse du pair QEMU");
+                    s_cpy(s->ai_state, 16, "ready");
+                    add_msg(s, reply);
+                    stage_render(text);
+                    out_add(out, max, &p, "osui chat ok llm=peer_qemu ai_status=ready provider=peer session_id=");
+                    out_add(out, max, &p, s->id);
+                    emit_rid(out, max, &p, rid);
+                    out_add(out, max, &p, " response=");
+                    out_add(out, max, &p, reply);
+                    out_add(out, max, &p, "\n");
+                    emit_stage(out, max, &p);
+                    return OSUI_OK;
+                }
+            }
+        }
         rc = osui_gpt2_generate(prompt, reply, sizeof(reply));
         if (rc < 0) {
             /* Distinct states (and scene labels): cancelled by ESC, no
@@ -1356,6 +1645,7 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
             out_add(out, max, &p, llm);
             out_add(out, max, &p, " ai_status=");
             out_add(out, max, &p, state);
+            emit_provider(out, max, &p);
             out_add(out, max, &p, " session_id=");
             out_add(out, max, &p, s->id);
             emit_rid(out, max, &p, rid);
@@ -1370,11 +1660,27 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
             emit_stage(out, max, &p);
             return OSUI_ERR;
         }
-        s_cpy(G.stage_ai_note, 48, "etat_ia=reponse prete");
-        s_cpy(s->ai_state, 16, "ready");
-        add_msg(s, reply);
-        stage_render(text);
-        out_add(out, max, &p, "osui chat ok llm=gpt2_local ai_status=ready session_id=");
+        {
+            /* The Ring 3 worker was lost or stalled mid request and the
+             * kernel answered in Ring 0: say so (degraded, not hidden). */
+            unsigned ab = osui_ai_last_abort();
+            const char *w = ab == OS_AI_ABORT_WORKER_LOST ? "lost" :
+                            ab == OS_AI_ABORT_STALLED ? "stalled" :
+                            ab == OS_AI_ABORT_TIMEOUT ? "timeout" : 0;
+            s_cpy(G.stage_ai_note, 48, w ? "etat_ia=reponse (repli Ring 0, worker IA perdu)"
+                                         : "etat_ia=reponse prete");
+            s_cpy(s->ai_state, 16, "ready");
+            add_msg(s, reply);
+            stage_render(text);
+            out_add(out, max, &p, "osui chat ok llm=gpt2_local ai_status=ready");
+            if (w) {
+                out_add(out, max, &p, " worker=");
+                out_add(out, max, &p, w);
+                out_add(out, max, &p, " fallback=ring0");
+            }
+            emit_provider(out, max, &p);
+            out_add(out, max, &p, " session_id=");
+        }
         out_add(out, max, &p, s->id);
         emit_rid(out, max, &p, rid);
         out_add(out, max, &p, " response=");
@@ -2607,7 +2913,478 @@ static int cmd_agent_run(char args[OSUI_MAX_ARGS][96], int narg, char *out, int 
     return rc;
 }
 
+
+/* Roadmap step 5: controlled local API of the Web Runtime, served inside the
+ * guest by OS-UI (no socket, no browser engine: phase3_complete=false). A
+ * request is "api <GET|POST> <route> [token] [body words]". Status is
+ * public; every other route needs the session token issued by api-token
+ * (capability web.api) and runs with that session's capabilities, the same
+ * ones the guest console enforces. Limits: 8 requests per token per 10 s
+ * (429), body at most OSUI_API_BODY bytes (413). Every request is journaled.
+ * The token is a local session handle, not a cryptographic secret. */
+#define OSUI_API_RATE 8U
+#define OSUI_API_WINDOW 10U
+#define OSUI_API_BODY 64
+#define OSUI_OUT_JSON 384
+
+static osui_session_t *api_owner(const char *tok) {
+    int i;
+    if (!tok || tok[0] != 't') return 0;
+    for (i = 0; i < OSUI_MAX_SESSIONS; i++) {
+        osui_session_t *s = &G.sessions[i];
+        if (s->used && s->api_token[0] && s_cmp(s->api_token, tok) == 0) return s;
+    }
+    return 0;
+}
+
+static int api_reply(char *out, int max, int *p, unsigned code, const char *route, const char *json,
+                     unsigned rid) {
+    out_add(out, max, p, "osui api status=");
+    out_u(out, max, p, code);
+    out_add(out, max, p, " route=");
+    out_add(out, max, p, route);
+    emit_rid(out, max, p, rid);
+    out_add(out, max, p, "\n");
+    out_add(out, max, p, json);
+    out_add(out, max, p, "\n");
+    return code == 200U ? OSUI_OK : OSUI_ERR;
+}
+
+static int cmd_api_token(int issue, char *out, int max) {
+    osui_session_t *s = cur();
+    int p = 0;
+    if (!s || s->status == ST_CLOSED) {
+        out_add(out, max, &p, "osui api-token error=no_session\n");
+        return OSUI_ERR;
+    }
+    if (!issue) {
+        s->api_token[0] = 0;
+        journal(s->id, "web.api", "token_revoked", 0U);
+        out_add(out, max, &p, "osui api-revoke ok session_id=");
+        out_add(out, max, &p, s->id);
+        out_add(out, max, &p, "\n");
+        return OSUI_OK;
+    }
+    if (!has_cap(s, "web.api")) {
+        journal(s->id, "web.api", "capability_denied", 0U);
+        out_add(out, max, &p, "osui api-token error=capability_denied capability=web.api\n");
+        return OSUI_ERR;
+    }
+    {
+        unsigned v = (new_rid() * 7919U + osui_now() * 104729U) % 90000U + 10000U;
+        int i;
+        s->api_token[0] = 't';
+        for (i = 5; i >= 1; i--) { s->api_token[i] = (char)('0' + v % 10U); v /= 10U; }
+        s->api_token[6] = 0;
+    }
+    s->api_window = osui_now();
+    s->api_count = 0U;
+    journal(s->id, "web.api", "token_issued", 0U);
+    out_add(out, max, &p, "osui api-token ok token=");
+    out_add(out, max, &p, s->api_token);
+    out_add(out, max, &p, " session_id=");
+    out_add(out, max, &p, s->id);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_api(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    char json[OSUI_OUT_JSON];
+    char body[OSUI_TEXT];
+    const char *m, *r;
+    osui_session_t *s;
+    unsigned rid = new_rid();
+    int p = 0, get, post, rc, i, q = 0;
+    if (narg < 2) return api_reply(out, max, &p, 400U, "-", "{\"error\":\"usage api <GET|POST> <route> [token] [body]\"}", rid);
+    m = args[0]; r = args[1];
+    get = s_cmp(m, "GET") == 0 || s_cmp(m, "get") == 0;
+    post = s_cmp(m, "POST") == 0 || s_cmp(m, "post") == 0;
+    if (!get && !post) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+    if (s_cmp(r, "/status") == 0) {
+        if (!get) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+        journal("", "web.api:/status", "ok", rid);
+        json[0] = 0;
+        out_add(json, sizeof(json), &q, "{\"status\":\"ok\",\"runtime\":\"osui-local-api\",\"phase3_complete\":false,"
+                "\"browser_engine\":\"none\",\"sessions\":");
+        {
+            unsigned n = 0U;
+            for (i = 0; i < OSUI_MAX_SESSIONS; i++) if (G.sessions[i].used) n++;
+            out_u(json, sizeof(json), &q, n);
+        }
+        out_add(json, sizeof(json), &q, ",\"ai_provider\":\"");
+        out_add(json, sizeof(json), &q, G.ai_provider[0] ? G.ai_provider : "local");
+        out_add(json, sizeof(json), &q, "\"}");
+        return api_reply(out, max, &p, 200U, r, json, rid);
+    }
+    if (s_cmp(r, "/sessions") != 0 && s_ncmp(r, "/vfs/", 5) != 0 && s_cmp(r, "/ai/chat") != 0 &&
+        s_cmp(r, "/supervision") != 0) {
+        journal("", "web.api", "not_found", rid);
+        return api_reply(out, max, &p, 404U, r, "{\"error\":\"no_such_route\"}", rid);
+    }
+    s = narg >= 3 ? api_owner(args[2]) : 0;
+    if (!s || s->status == ST_CLOSED) {
+        journal("", "web.api", "unauthorized", rid);
+        return api_reply(out, max, &p, 401U, r, "{\"error\":\"token_required\"}", rid);
+    }
+    if (osui_now() - s->api_window >= OSUI_API_WINDOW) { s->api_window = osui_now(); s->api_count = 0U; }
+    if (++s->api_count > OSUI_API_RATE) {
+        journal(s->id, "web.api", "rate_limited", rid);
+        return api_reply(out, max, &p, 429U, r, "{\"error\":\"rate_limited\",\"limit\":8,\"window_s\":10}", rid);
+    }
+    rest_from(args, narg, 3, body, OSUI_TEXT);
+    if (s_len(body) > OSUI_API_BODY) {
+        journal(s->id, "web.api", "body_too_large", rid);
+        return api_reply(out, max, &p, 413U, r, "{\"error\":\"body_too_large\",\"max\":64}", rid);
+    }
+    if (!has_cap(s, "web.api")) {   /* revoked after the token was issued */
+        journal(s->id, "web.api", "capability_denied", rid);
+        return api_reply(out, max, &p, 403U, r, "{\"error\":\"capability_denied\",\"capability\":\"web.api\"}", rid);
+    }
+    /* Web supervision: worker liveness, network state and the journal tail,
+     * under admin.observe (the same capability as admin-status). */
+    if (s_cmp(r, "/supervision") == 0) {
+        unsigned st = 0U;
+        int nw = 0, n, k;
+        const char *ab;
+        if (!get) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+        if (!has_cap(s, "admin.observe")) {
+            journal(s->id, "web.api:/supervision", "capability_denied", rid);
+            return api_reply(out, max, &p, 403U, r, "{\"error\":\"capability_denied\",\"capability\":\"admin.observe\"}", rid);
+        }
+        journal(s->id, "web.api:/supervision", "ok", rid);
+        if (osui_net_stack(&st, &nw) != 0) { st = 0U; nw = 0; }
+        k = (int)osui_ai_last_abort();
+        ab = k == OS_AI_ABORT_WORKER_LOST ? "worker_lost" : k == OS_AI_ABORT_STALLED ? "stalled" :
+             k == OS_AI_ABORT_TIMEOUT ? "timeout" : k == OS_AI_ABORT_CANCELLED ? "cancelled" : "none";
+        out_add(json, sizeof(json), &q, "{\"ai_worker\":");
+        out_add(json, sizeof(json), &q, osui_ai_worker_pid() > 0 ? "\"live\"" : "\"absent\"");
+        out_add(json, sizeof(json), &q, ",\"ai_last_abort\":\"");
+        out_add(json, sizeof(json), &q, ab);
+        out_add(json, sizeof(json), &q, "\",\"net_worker\":");
+        out_add(json, sizeof(json), &q, nw > 0 ? "\"live\"" : "\"absent\"");
+        out_add(json, sizeof(json), &q, ",\"nic\":");
+        out_add(json, sizeof(json), &q, (st & 1U) ? "true" : "false");
+        out_add(json, sizeof(json), &q, ",\"journal\":[");
+        n = G.n_journal < 3 ? G.n_journal : 3;
+        for (k = G.n_journal - n; k < G.n_journal; k++) {
+            out_add(json, sizeof(json), &q, "\"");
+            out_add(json, sizeof(json), &q, G.journal[k].tool);
+            out_add(json, sizeof(json), &q, ":");
+            out_add(json, sizeof(json), &q, G.journal[k].outcome);
+            out_add(json, sizeof(json), &q, k + 1 < G.n_journal ? "\"," : "\"");
+        }
+        out_add(json, sizeof(json), &q, "]}");
+        return api_reply(out, max, &p, 200U, r, json, rid);
+    }
+    if (s_cmp(r, "/sessions") == 0) {
+        if (!get) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+        journal(s->id, "web.api:/sessions", "ok", rid);
+        out_add(json, sizeof(json), &q, "{\"sessions\":[{\"id\":\"");
+        out_add(json, sizeof(json), &q, s->id);
+        out_add(json, sizeof(json), &q, "\",\"status\":\"");
+        out_add(json, sizeof(json), &q, st_name(s->status));
+        out_add(json, sizeof(json), &q, "\",\"caps\":");
+        out_u(json, sizeof(json), &q, (unsigned)s->n_caps);
+        out_add(json, sizeof(json), &q, "}],\"visible\":\"own_session_only\"}");
+        return api_reply(out, max, &p, 200U, r, json, rid);
+    }
+    if (s_ncmp(r, "/vfs/", 5) == 0) {
+        const char *path = r + 5;
+        osui_fs_t *f;
+        if (!get) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+        if (fs_traversal(path)) {
+            journal(s->id, "web.api:/vfs", "traversal_denied", rid);
+            return api_reply(out, max, &p, 400U, r, "{\"error\":\"traversal_denied\"}", rid);
+        }
+        if (!fs_read_allowed(s, path)) {
+            journal(s->id, "web.api:/vfs", "scope_denied", rid);
+            return api_reply(out, max, &p, 403U, r, "{\"error\":\"capability_denied\",\"capability\":\"fs.read:<scope>\"}", rid);
+        }
+        f = fs_find(path);
+        if (!f || f->is_dir) return api_reply(out, max, &p, 404U, r, "{\"error\":\"not_found\"}", rid);
+        journal(s->id, "web.api:/vfs", "ok", rid);
+        out_add(json, sizeof(json), &q, "{\"path\":\"");
+        out_add(json, sizeof(json), &q, path);
+        out_add(json, sizeof(json), &q, "\",\"bytes\":");
+        out_u(json, sizeof(json), &q, (unsigned)s_len(f->content));
+        out_add(json, sizeof(json), &q, "}");
+        api_reply(out, max, &p, 200U, r, json, rid);
+        out_add(out, max, &p, f->content);
+        return OSUI_OK;
+    }
+    /* POST /ai/chat: the same chat path as the console, as the token owner. */
+    if (!post) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+    if (!body[0]) return api_reply(out, max, &p, 400U, r, "{\"error\":\"empty_body\"}", rid);
+    {
+        char a2[OSUI_MAX_ARGS][96];
+        int saved = G.current, n = 1;
+        const char *b = body;
+        for (i = 0; i < OSUI_MAX_ARGS; i++) a2[i][0] = 0;
+        s_cpy(a2[0], 96, "ai");
+        while (*b && n < OSUI_MAX_ARGS) {
+            int k = 0;
+            while (*b == ' ') b++;
+            while (*b && *b != ' ' && k < 95) a2[n][k++] = *b++;
+            a2[n][k] = 0;
+            if (k) n++;
+        }
+        G.current = (int)(s - G.sessions);
+        api_reply(out, max, &p, 202U, r, "{\"accepted\":true,\"via\":\"osui chat\"}", rid);
+        rc = cmd_chat(a2, n, out + p, max - p);
+        G.current = saved;
+        journal(s->id, "web.api:/ai/chat", rc == OSUI_OK ? "ok" : "error", rid);
+        return rc;
+    }
+}
+
+/* Roadmap step 5: the local API and AI console served over HTTP/1.0 or
+ * HTTPS (TLS 1.2, test certificate) through the Ring 3 networker, up to
+ * OS_PEER_WEB_SLOTS connections at once. Each request is mapped onto the
+ * same cmd_api routes, token and limits ("Authorization: Bearer tNNNNN");
+ * GET / is a minimal console page. "web-serve start" keeps serving in the
+ * background while the console reads keys (shell calls osui_web_poll).
+ * No browser engine (phase3_complete=false), local peers only. */
+#define OSUI_WEB_REQ 512
+static int web_find(const char *h, int n, const char *needle) {
+    int i, k, l = s_len(needle);
+    for (i = 0; i + l <= n; i++) {
+        for (k = 0; k < l && h[i + k] == needle[k]; k++) {}
+        if (k == l) return i;
+    }
+    return -1;
+}
+
+static struct {
+    int active;
+    int tls;
+    unsigned port;
+    unsigned limit;
+    unsigned served;
+    unsigned failed;
+    int len[OS_PEER_WEB_SLOTS];
+    int seen[OS_PEER_WEB_SLOTS];
+    unsigned t0[OS_PEER_WEB_SLOTS];
+    char req[OS_PEER_WEB_SLOTS][OSUI_WEB_REQ + 1];
+} g_ws;
+
+/* 1 when the request in buf is complete (headers and Content-Length). */
+static int web_complete(const char *req, int n) {
+    int hdr = web_find(req, n, "\r\n\r\n"), k, i;
+    unsigned clen = 0U;
+    if (hdr < 0) return n >= OSUI_WEB_REQ;
+    k = web_find(req, hdr, "Content-Length: ");
+    if (k >= 0)
+        for (i = k + 16; req[i] >= '0' && req[i] <= '9'; i++) clen = clen * 10U + (unsigned)(req[i] - '0');
+    return (unsigned)(n - hdr - 4) >= clen;
+}
+
+static void web_respond(int slot, char *log, int lmax, int *lp) {
+    static char api_out[OSUI_OUT_MAX];
+    static char resp[OSUI_OUT_MAX + 160];
+    char args[OSUI_MAX_ARGS][96];
+    char *req = g_ws.req[slot];
+    int n = g_ws.len[slot], hdr, i, k, narg, rp = 0, code = 500, rc;
+    const char *body = "";
+    const char *ctype = "application/json";
+    for (i = 0; i < OSUI_MAX_ARGS; i++) args[i][0] = 0;
+    req[n] = 0;
+    hdr = web_find(req, n, "\r\n\r\n");
+    if (hdr < 0) { code = 400; body = "{\"error\":\"bad_request\"}"; goto reply; }
+    for (i = 0, k = 0; req[i] && req[i] != ' ' && k < 95; i++) args[0][k++] = req[i];
+    args[0][k] = 0;
+    while (req[i] == ' ') i++;
+    for (k = 0; req[i] && req[i] != ' ' && req[i] != '\r' && k < 95; i++) args[1][k++] = req[i];
+    args[1][k] = 0;
+    if (s_cmp(args[1], "/") == 0 && s_cmp(args[0], "GET") == 0) {
+        code = 200; ctype = "text/html";
+        body = "<html><body><h1>MOHHDY local console</h1><p>API: /status /sessions /vfs/ /supervision /ai/chat"
+               " (Bearer token). phase3_complete=false, no browser engine.</p></body></html>";
+        goto reply;
+    }
+    narg = 3;
+    k = web_find(req, hdr, "Authorization: Bearer ");
+    if (k >= 0) {
+        for (i = k + 22, n = 0; req[i] && req[i] != '\r' && n < 95; i++) args[2][n++] = req[i];
+        args[2][n] = 0;
+    } else {
+        s_cpy(args[2], 96, "-");
+    }
+    i = hdr + 4;
+    while (req[i] && narg < OSUI_MAX_ARGS) {
+        while (req[i] == ' ' || req[i] == '\r' || req[i] == '\n') i++;
+        for (n = 0; req[i] && req[i] != ' ' && req[i] != '\r' && req[i] != '\n' && n < 95; i++) args[narg][n++] = req[i];
+        args[narg][n] = 0;
+        if (n) narg++;
+    }
+    api_out[0] = 0;
+    (void)cmd_api(args, narg, api_out, sizeof(api_out));
+    k = web_find(api_out, s_len(api_out), "status=");
+    if (k >= 0) {
+        code = 0;
+        for (i = k + 7; api_out[i] >= '0' && api_out[i] <= '9'; i++) code = code * 10 + (api_out[i] - '0');
+    }
+    for (i = 0; api_out[i] && api_out[i] != '\n'; i++) {}
+    body = api_out[i] ? api_out + i + 1 : "";
+reply:
+    out_add(resp, sizeof(resp), &rp, "HTTP/1.0 ");
+    out_u(resp, sizeof(resp), &rp, (unsigned)code);
+    out_add(resp, sizeof(resp), &rp, code == 200 ? " OK" : code == 202 ? " Accepted" : " Error");
+    out_add(resp, sizeof(resp), &rp, "\r\nServer: mohhdy-osui\r\nContent-Type: ");
+    out_add(resp, sizeof(resp), &rp, ctype);
+    out_add(resp, sizeof(resp), &rp, "\r\nContent-Length: ");
+    out_u(resp, sizeof(resp), &rp, (unsigned)s_len(body));
+    out_add(resp, sizeof(resp), &rp, "\r\nConnection: close\r\n\r\n");
+    out_add(resp, sizeof(resp), &rp, body);
+    rc = web_send_slot(slot, resp, s_len(resp));
+    web_close_slot(slot);
+    out_add(log, lmax, lp, "osui web-serve request slot=");
+    out_u(log, lmax, lp, (unsigned)slot);
+    out_add(log, lmax, lp, g_ws.tls ? " scheme=https method=" : " scheme=http method=");
+    out_add(log, lmax, lp, args[0][0] ? args[0] : "-");
+    out_add(log, lmax, lp, " path=");
+    out_add(log, lmax, lp, args[1][0] ? args[1] : "-");
+    out_add(log, lmax, lp, " status=");
+    out_u(log, lmax, lp, (unsigned)code);
+    out_add(log, lmax, lp, rc == 0 ? " sent=ok\n" : " sent=failed\n");
+    journal("", "web.http", rc == 0 ? "served" : "send_failed", 0U);
+}
+
+static void web_finish(char *log, int lmax, int *lp) {
+    web_stop();
+    g_ws.active = 0;
+    out_add(log, lmax, lp, "osui web-serve ok served=");
+    out_u(log, lmax, lp, g_ws.served);
+    out_add(log, lmax, lp, " failed=");
+    out_u(log, lmax, lp, g_ws.failed);
+    out_add(log, lmax, lp, "\n");
+}
+
+/* One non-blocking step of the server; appends log lines. */
+static void web_tick(char *log, int lmax, int *lp) {
+    unsigned char st[OS_PEER_WEB_SLOTS];
+    int i, got;
+    if (!g_ws.active || web_poll(st) != 0) return;
+    for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) {
+        unsigned kind = st[i] & 0x0FU;
+        if (kind != OS_PEER_SLOT_OPEN && kind != OS_PEER_SLOT_HANDSHAKE) { g_ws.seen[i] = 0; continue; }
+        if (!g_ws.seen[i]) { g_ws.seen[i] = 1; g_ws.len[i] = 0; g_ws.t0[i] = osui_now(); }
+        /* The request timer starts once TLS is complete (seen == 2). */
+        if (kind == OS_PEER_SLOT_OPEN && g_ws.seen[i] == 1) { g_ws.seen[i] = 2; g_ws.t0[i] = osui_now(); }
+        if (st[i] & OS_PEER_SLOT_FAILED) {
+            web_close_slot(i);
+            g_ws.seen[i] = 0;
+            g_ws.failed++;
+            out_add(log, lmax, lp, "osui web-serve slot=");
+            out_u(log, lmax, lp, (unsigned)i);
+            out_add(log, lmax, lp, " error=tls_failed at=");
+            out_u(log, lmax, lp, g_web_fail[i]);
+            out_add(log, lmax, lp, "\n");
+            continue;
+        }
+        while ((st[i] & OS_PEER_SLOT_DATA) && g_ws.len[i] < OSUI_WEB_REQ &&
+               web_recv_slot(i, g_ws.req[i] + g_ws.len[i], OSUI_WEB_REQ - g_ws.len[i], &got) == 0 && got > 0)
+            g_ws.len[i] += got;
+        if (kind == OS_PEER_SLOT_OPEN &&
+            (web_complete(g_ws.req[i], g_ws.len[i]) || (st[i] & OS_PEER_SLOT_PEER_CLOSED) ||
+             osui_now() - g_ws.t0[i] > 20U)) {
+            web_respond(i, log, lmax, lp);
+            g_ws.seen[i] = 0;
+            g_ws.served++;
+        } else if (osui_now() - g_ws.t0[i] > (kind == OS_PEER_SLOT_OPEN ? 20U : 180U)) {
+            web_close_slot(i);
+            g_ws.seen[i] = 0;
+            g_ws.failed++;
+        }
+    }
+    if (g_ws.limit && g_ws.served + g_ws.failed >= g_ws.limit) web_finish(log, lmax, lp);
+}
+
+int osui_web_active(void) { return g_ws.active; }
+
+int osui_web_poll(char *out, int max) {
+    int p = 0;
+    if (max > 0) out[0] = 0;
+    web_tick(out, max, &p);
+    return p;
+}
+
+static int web_start(unsigned port, int tls, unsigned limit, char *out, int max, int *p) {
+    int rc, i;
+    if (g_ws.active) {
+        out_add(out, max, p, "osui web-serve error=already_running\n");
+        return OSUI_ERR;
+    }
+    rc = web_open(port, tls);
+    if (rc != 0) {
+        out_add(out, max, p, "osui web-serve error=listen_failed rc=");
+        out_u(out, max, p, (unsigned)(-rc));
+        out_add(out, max, p, "\n");
+        return OSUI_ERR;
+    }
+    g_ws.active = 1; g_ws.tls = tls; g_ws.port = port; g_ws.limit = limit; g_ws.served = 0U; g_ws.failed = 0U;
+    for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) g_ws.seen[i] = 0;
+    out_add(out, max, p, "osui web-serve listening port=");
+    out_u(out, max, p, port);
+    out_add(out, max, p, tls ? " scheme=https slots=" : " scheme=http slots=");
+    out_u(out, max, p, OS_PEER_WEB_SLOTS);
+    out_add(out, max, p, limit ? " mode=blocking\n" : " mode=background\n");
+    journal("", "web.http", tls ? "start_https" : "start_http", 0U);
+    return OSUI_OK;
+}
+
+/* web-serve [port] [requests 1-8] [tls] (blocking)
+ * web-serve start [port] [tls] | status | stop (background) */
+static int cmd_web_serve(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    unsigned port = 8080U, count = 1U, t0;
+    int p = 0, tls = 0, a = 0;
+    if (narg >= 1 && s_cmp(args[0], "status") == 0) {
+        out_add(out, max, &p, g_ws.active ? "osui web-serve status=running port=" : "osui web-serve status=stopped port=");
+        out_u(out, max, &p, g_ws.port);
+        out_add(out, max, &p, g_ws.tls ? " scheme=https served=" : " scheme=http served=");
+        out_u(out, max, &p, g_ws.served);
+        out_add(out, max, &p, "\n");
+        return OSUI_OK;
+    }
+    if (narg >= 1 && s_cmp(args[0], "stop") == 0) {
+        if (!g_ws.active) { out_add(out, max, &p, "osui web-serve error=not_running\n"); return OSUI_ERR; }
+        web_finish(out, max, &p);
+        return OSUI_OK;
+    }
+    if (narg >= 1 && s_cmp(args[0], "start") == 0) {
+        if (narg >= 2 && s_cmp(args[1], "tls") != 0 && !parse_u(args[1], &port)) port = 0U;
+        tls = (narg >= 2 && s_cmp(args[narg - 1], "tls") == 0);
+        if (port == 0U || port > 65535U) {
+            out_add(out, max, &p, "osui web-serve error=usage web-serve start [port] [tls]\n");
+            return OSUI_ERR;
+        }
+        return web_start(port, tls, 0U, out, max, &p);
+    }
+    if (narg >= 1 && s_cmp(args[narg - 1], "tls") == 0) { tls = 1; narg--; }
+    if (narg >= 1 && !parse_u(args[a], &port)) port = 0U;
+    if (narg >= 2 && !parse_u(args[a + 1], &count)) count = 0U;
+    if (port == 0U || port > 65535U || count == 0U || count > 8U) {
+        out_add(out, max, &p, "osui web-serve error=usage web-serve [port] [requests 1-8] [tls]\n");
+        return OSUI_ERR;
+    }
+    if (web_start(port, tls, count, out, max, &p) != OSUI_OK) return OSUI_ERR;
+    t0 = osui_now();
+    while (g_ws.active && osui_now() - t0 < 120U) {
+        web_tick(out, max, &p);
+        if (g_ws.active) peer_yield();
+    }
+    if (g_ws.active) {
+        web_finish(out, max, &p);
+        out_add(out, max, &p, "osui web-serve error=timeout\n");
+        return OSUI_ERR;
+    }
+    return g_ws.failed ? OSUI_ERR : OSUI_OK;
+}
+
 static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    if (s_cmp(cmd, "web-serve") == 0) return cmd_web_serve(args, narg, out, max);
+    if (s_cmp(cmd, "api") == 0) return cmd_api(args, narg, out, max);
+    if (s_cmp(cmd, "api-token") == 0) return cmd_api_token(1, out, max);
+    if (s_cmp(cmd, "api-revoke") == 0) return cmd_api_token(0, out, max);
     if (s_cmp(cmd, "agent-run") == 0) return cmd_agent_run(args, narg, out, max);
     if (s_cmp(cmd, "os-help") == 0 || s_cmp(cmd, "help") == 0) return cmd_os_help(out, max);
     if (s_cmp(cmd, "os-status") == 0) return cmd_os_status(out, max);

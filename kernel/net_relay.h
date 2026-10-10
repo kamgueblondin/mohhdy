@@ -27,6 +27,7 @@ int net_relay_peer_supported(uint32_t syscall_number);
 /* Tranche 5 pile: LLM 91-98, relayed only while the worker owns the NIC
  * (the caller decides); structs go through the bulk channel. */
 int net_relay_llm_supported(uint32_t syscall_number);
+int net_relay_bulk_op(uint32_t syscall_number);
 /* Ticks before a stuck op may expire: TLS ops run long in Ring 3. */
 #define NET_RELAY_LLM_TIMEOUT_TICKS 20000U
 uint32_t net_relay_timeout_ticks(uint32_t op);

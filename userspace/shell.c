@@ -2746,7 +2746,7 @@ static int is_builtin(const char* cmd) {
         "aistats", "aimode", "aihelp", "aitest",
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
-        "agent-run",
+        "agent-run", "api", "api-token", "api-revoke", "web-serve",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
@@ -5421,7 +5421,9 @@ static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count
     print_string("Entropie TLS RDRAND : ");
     print_string((session_status & 4U) ? "disponible (materiel)\n" : "indisponible\n");
     print_string("Ancre X.509 noyau  : ");
-    print_string((session_status & 8U) ? "ISRG Root X1 validee\n" : "indisponible\n");
+    print_string((session_status & 8U) ? "ISRG Root X1 validee\n" :
+                 (session_status & 0x80000000U) ? "non liee (image stricte, ancre TLS validee par le networker Ring 3)\n"
+                                                : "indisponible\n");
     print_string("Ancre TLS locale   : ");
     print_string((session_status & 16U) ? "prete (example.com / example.test)\n" : "indisponible\n");
     print_string("En ligne           : controle de phase integre; DHCP/DNS/identifiants requis avant appel\n");
@@ -6329,8 +6331,31 @@ void shell_main_loop(shell_context_t* ctx) {
     while (1) {
         display_prompt(ctx);
         buf[0] = '\0';
-        // Lecture bloquante et stable de la ligne par le noyau
-        gets(buf, (int)sizeof(buf));
+        if (osui_web_active()) {
+            /* Roadmap step 5: OS-UI web server in the background. Keys are
+             * read without blocking (SYS_GETC) and the server is stepped
+             * between keys, so the console stays usable. */
+            static char web_log[OSUI_OUT_MAX];
+            int len = 0, c;
+            for (;;) {
+                c = sys_getchar();
+                if (c == '\n' || c == '\r') { putc('\n'); break; }
+                if (c == '\b' || c == 127) {
+                    if (len > 0) { len--; putc('\b'); }
+                    continue;
+                }
+                if (c > 0) {
+                    if (len < (int)sizeof(buf) - 1) { buf[len++] = (char)c; putc((char)c); }
+                    continue;
+                }
+                if (osui_web_active() && osui_web_poll(web_log, (int)sizeof(web_log)) > 0) print_string(web_log);
+                yield();
+            }
+            buf[len] = '\0';
+        } else {
+            // Lecture bloquante et stable de la ligne par le noyau
+            gets(buf, (int)sizeof(buf));
+        }
         handle_line(ctx, buf);
     }
 }

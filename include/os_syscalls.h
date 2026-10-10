@@ -332,7 +332,54 @@
  * REPLY from anyone else is refused and counted (rogue). See
  * docs/ai_worker_ring3.md. */
 #define SYS_AI_ENGINE 155
-#define MAX_SYSCALLS 156
+
+/* Roadmap step 5: data on peer connections, so a guest can serve any
+ * protocol (HTTP, HTTPS) through the Ring 3 networker. EBX =
+ * os_peer_data_request_t* (in/out). The struct travels through the relay
+ * bulk channel, so one call carries up to OS_PEER_DATA_MAX bytes.
+ * Single connection (SYS_PEER_LISTEN / SYS_PEER_ACCEPT):
+ *   RECV: 0 = data in data[0..length), 1 = nothing yet, 2 = peer closed.
+ *   SEND: 0 = length bytes emitted. CLOSE: FIN emitted.
+ * Web table (several connections on one port, optional TLS):
+ *   WEB_OPEN (port, flags OS_PEER_WEB_TLS): one listening slot armed.
+ *   WEB_POLL: pumps up to `attempts` frames, drives TLS handshakes, then
+ *     data[0..OS_PEER_WEB_SLOTS) = OS_PEER_SLOT_* state per slot.
+ *   WEB_RECV / WEB_SEND / WEB_CLOSE (slot): plaintext in/out (TLS sealed
+ *     and opened in the networker), close (close_notify + FIN, re-arm).
+ *   WEB_STOP: all slots closed. */
+#define SYS_PEER_DATA 156
+#define OS_PEER_DATA_RECV 1U
+#define OS_PEER_DATA_SEND 2U
+#define OS_PEER_DATA_CLOSE 3U
+#define OS_PEER_WEB_OPEN 4U
+#define OS_PEER_WEB_POLL 5U
+#define OS_PEER_WEB_RECV 6U
+#define OS_PEER_WEB_SEND 7U
+#define OS_PEER_WEB_CLOSE 8U
+#define OS_PEER_WEB_STOP 9U
+#define OS_PEER_WEB_TLS 1U
+#define OS_PEER_WEB_SLOTS 4U
+#define OS_PEER_SLOT_FREE 0U
+#define OS_PEER_SLOT_LISTEN 1U
+#define OS_PEER_SLOT_HANDSHAKE 2U
+#define OS_PEER_SLOT_OPEN 3U
+#define OS_PEER_SLOT_DATA 0x10U
+#define OS_PEER_SLOT_PEER_CLOSED 0x20U
+#define OS_PEER_SLOT_FAILED 0x40U
+#define OS_PEER_DATA_MAX 1024U
+#define OS_PEER_DATA_SEND_MAX OS_PEER_DATA_MAX
+#define OS_PEER_DATA_RECV_MAX OS_PEER_DATA_MAX
+typedef struct {
+    uint8_t op;
+    uint8_t slot;
+    uint16_t attempts;
+    uint16_t length;
+    uint16_t port;
+    uint8_t flags;
+    uint8_t pad[3];
+    uint8_t data[OS_PEER_DATA_MAX];
+} os_peer_data_request_t;
+#define MAX_SYSCALLS 157
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 
 #define OS_VGA_COLS 80
