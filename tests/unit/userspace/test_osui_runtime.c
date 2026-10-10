@@ -767,47 +767,74 @@ static void test_local_api(void) {
 
 
 extern const char *osui_test_web_req[4];
-extern int osui_test_web_listen_rc;
-extern char osui_test_web_out[2048];
+extern int osui_test_web_open_rc;
+extern int osui_test_web_open_tls;
+extern char osui_test_web_out[4][2048];
+extern int osui_test_web_closed[4];
 extern void osui_test_web_rewind(void);
+extern int osui_web_active(void);
+extern int osui_web_poll(char *out, int max);
 
-/* Roadmap step 5: HTTP front of the local API (routes, auth, errors). */
+/* Roadmap step 5: HTTP(S) front of the local API, several connections in
+ * one poll, blocking and background modes. */
 static void test_web_serve(void) {
-    char tok[8], req[160];
+    char tok[8], req[160], log[2048];
     const char *t;
+    int i;
     setup();
-    osui_test_web_out[0] = 0; osui_test_web_rewind();
+    osui_test_web_rewind();
     osui_test_web_req[0] = "GET /status HTTP/1.0\r\nHost: g\r\n\r\n";
     osui_test_web_req[1] = "GET / HTTP/1.0\r\n\r\n";
     osui_test_web_req[2] = "GET /sessions HTTP/1.0\r\n\r\n";
     osui_test_web_req[3] = 0;
     TEST_ASSERT_EQUAL(0, run_line("web-serve 8080 3"));
-    TEST_ASSERT(strstr(g_out, "osui web-serve ok served=3") != NULL);
-    TEST_ASSERT(strstr(g_out, "path=/status status=200 sent=ok") != NULL);
-    TEST_ASSERT(strstr(osui_test_web_out, "HTTP/1.0 200 OK\r\n") != NULL);
-    TEST_ASSERT(strstr(osui_test_web_out, "\"phase3_complete\":false") != NULL);
-    TEST_ASSERT(strstr(osui_test_web_out, "MOHHDY local console") != NULL);
-    TEST_ASSERT(strstr(osui_test_web_out, "HTTP/1.0 401 Error") != NULL);
-    /* Bearer token: same session, scopes and capabilities as the console. */
+    TEST_ASSERT(strstr(g_out, "listening port=8080 scheme=http slots=4 mode=blocking") != NULL);
+    TEST_ASSERT(strstr(g_out, "osui web-serve ok served=3 failed=0") != NULL);
+    TEST_ASSERT(strstr(g_out, "slot=0 scheme=http method=GET path=/status status=200 sent=ok") != NULL);
+    TEST_ASSERT(strstr(g_out, "slot=2 scheme=http method=GET path=/sessions status=401 sent=ok") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out[0], "HTTP/1.0 200 OK\r\n") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out[0], "\"phase3_complete\":false") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out[1], "MOHHDY local console") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out[2], "HTTP/1.0 401 Error") != NULL);
+    for (i = 0; i < 3; i++) TEST_ASSERT_EQUAL(1, osui_test_web_closed[i]);
+    /* Bearer token over TLS: same session, scopes and capabilities. */
     TEST_ASSERT_EQUAL(0, run_line("grant web.api"));
     TEST_ASSERT_EQUAL(0, run_line("api-token"));
     t = strstr(g_out, "token=");
     memcpy(tok, t + 6, 6); tok[6] = 0;
     snprintf(req, sizeof(req), "POST /ai/chat HTTP/1.0\r\nAuthorization: Bearer %s\r\nContent-Length: 7\r\n\r\nbonjour", tok);
-    osui_test_web_out[0] = 0; osui_test_web_rewind();
-    osui_test_web_req[0] = req; osui_test_web_req[1] = 0;
-    TEST_ASSERT_EQUAL(0, run_line("web-serve 8080 1"));
-    TEST_ASSERT(strstr(osui_test_web_out, "HTTP/1.0 202 Accepted") != NULL);
-    TEST_ASSERT(strstr(osui_test_web_out, "osui chat ok llm=gpt2_local ai_status=ready") != NULL);
-    osui_test_web_out[0] = 0; osui_test_web_rewind();
-    osui_test_web_req[0] = "garbage"; osui_test_web_req[1] = 0;
-    TEST_ASSERT_EQUAL(0, run_line("web-serve 8080 1"));
-    TEST_ASSERT(strstr(osui_test_web_out, "HTTP/1.0 400 Error") != NULL);
+    osui_test_web_rewind();
+    osui_test_web_req[0] = req; osui_test_web_req[1] = "garbage"; osui_test_web_req[2] = 0;
+    TEST_ASSERT_EQUAL(0, run_line("web-serve 8443 2 tls"));
+    TEST_ASSERT_EQUAL(1, osui_test_web_open_tls);
+    TEST_ASSERT(strstr(g_out, "scheme=https method=POST path=/ai/chat status=202") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out[0], "osui chat ok llm=gpt2_local ai_status=ready") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out[1], "HTTP/1.0 400 Error") != NULL);
+    /* Background: the command returns at once, polls serve later. */
+    osui_test_web_rewind();
+    osui_test_web_req[0] = 0; osui_test_web_req[1] = 0;
+    TEST_ASSERT_EQUAL(0, run_line("web-serve start 8080"));
+    TEST_ASSERT(strstr(g_out, "mode=background") != NULL);
+    TEST_ASSERT_EQUAL(1, osui_web_active());
+    TEST_ASSERT_EQUAL(1, run_line("web-serve start 8081"));
+    TEST_ASSERT(strstr(g_out, "error=already_running") != NULL);
+    TEST_ASSERT_EQUAL(0, osui_web_poll(log, sizeof(log)));
+    TEST_ASSERT_EQUAL(0, run_line("status"));
+    osui_test_web_req[3] = "GET /status HTTP/1.0\r\n\r\n";
+    TEST_ASSERT(osui_web_poll(log, sizeof(log)) > 0);
+    TEST_ASSERT(strstr(log, "slot=3 scheme=http method=GET path=/status status=200 sent=ok") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-serve status"));
+    TEST_ASSERT(strstr(g_out, "status=running port=8080 scheme=http served=1") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-serve stop"));
+    TEST_ASSERT(strstr(g_out, "osui web-serve ok served=1 failed=0") != NULL);
+    TEST_ASSERT_EQUAL(0, osui_web_active());
+    TEST_ASSERT_EQUAL(1, run_line("web-serve stop"));
+    osui_test_web_req[3] = 0;
     TEST_ASSERT_EQUAL(1, run_line("web-serve 0"));
-    osui_test_web_listen_rc = -5;
+    osui_test_web_open_rc = -5;
     TEST_ASSERT_EQUAL(1, run_line("web-serve 8080 1"));
     TEST_ASSERT(strstr(g_out, "error=listen_failed") != NULL);
-    osui_test_web_listen_rc = 0;
+    osui_test_web_open_rc = 0;
 }
 
 int main(void) {

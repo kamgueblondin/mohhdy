@@ -4,9 +4,10 @@ import os
 import re
 import socket
 import subprocess
+import threading
 import time
 
-from qemu_http_client_peer import HttpClientPeer
+from qemu_http_client_peer import HttpClientPeer, TlsConn
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 LOG_DIR = os.path.join(ROOT, "test_logs")
@@ -139,6 +140,18 @@ def send_command(client, proc, command):
     raise RuntimeError("command echo absent: %s" % command)
 
 
+def type_line(client, proc, line):
+    """Background web-serve: the shell reads keys with SYS_GETC (no
+    SYS_GETS echo in the log), so keys are paced and the outcome checked."""
+    aliases = {" ": "spc", ".": "dot", "-": "minus", "/": "slash"}
+    for char in line:
+        if proc.poll() is not None:
+            raise RuntimeError("QEMU stopped during keyboard input")
+        send_key(client, aliases.get(char, char.lower()))
+        time.sleep(0.25)
+    send_key(client, "ret")
+
+
 def wait_for_prompt(proc, start):
     wait_for(proc, "(-.-)", 15, start)
 
@@ -150,7 +163,7 @@ def main():
             os.remove(path)
         except OSError:
             pass
-    peer = HttpClientPeer(8080)
+    peer = HttpClientPeer()
     peer.start()
     command = [
         "qemu-system-i386", "-kernel", os.path.join(ROOT, "build", "mohhdy.bin"),
@@ -182,19 +195,18 @@ def main():
         wait_for(proc, "api-token ok token=", 20, start)
         wait_for_prompt(proc, start)
         token = re.search(r"api-token ok token=(t\d{5})", text()[start:]).group(1).encode()
+        # (1) HTTP, three connections open at the same time, then two more.
         start = send_command(client, proc, "web-serve 8080 5")
-        wait_for(proc, "SYS_GETS: ligne lue: web-serve 8080 5", 20, start)
-        r1 = peer.request(b"GET /status HTTP/1.0\r\nHost: mohhdy\r\n\r\n")
-        r2 = peer.request(b"GET / HTTP/1.0\r\n\r\n")
-        r3 = peer.request(b"GET /sessions HTTP/1.0\r\n\r\n")
+        c1, c2, c3 = peer.connect(8080), peer.connect(8080), peer.connect(8080)
+        c3.send(b"GET /sessions HTTP/1.0\r\n\r\n")
+        c1.send(b"GET /status HTTP/1.0\r\nHost: mohhdy\r\n\r\n")
+        c2.send(b"GET / HTTP/1.0\r\n\r\n")
+        r3, r1, r2 = c3.read_all(), c1.read_all(), c2.read_all()
         r4 = peer.request(b"GET /sessions HTTP/1.0\r\nAuthorization: Bearer " + token + b"\r\n\r\n")
+        body = b"bonjour " * 40
         r5 = peer.request(b"POST /ai/chat HTTP/1.0\r\nAuthorization: Bearer " + token +
-                          b"\r\nContent-Length: 2\r\n\r\nhi")
-        wait_for(proc, "osui web-serve ok served=5", 60, start)
-        if not r4.startswith(b"HTTP/1.0 200 OK") or b"own_session_only" not in r4:
-            raise RuntimeError("GET /sessions with token: %r" % r4[:300])
-        if not r5.startswith(b"HTTP/1.0 202 ") or b"osui chat" not in r5:
-            raise RuntimeError("POST /ai/chat: %r" % r5[:400])
+                          b"\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
+        wait_for(proc, "osui web-serve ok served=5 failed=0", 60, start)
         wait_for_prompt(proc, start)
         if not r1.startswith(b"HTTP/1.0 200 OK\r\n") or b'"phase3_complete":false' not in r1:
             raise RuntimeError("GET /status: %r" % r1[:300])
@@ -202,14 +214,72 @@ def main():
             raise RuntimeError("GET /: %r" % r2[:300])
         if not r3.startswith(b"HTTP/1.0 401 "):
             raise RuntimeError("GET /sessions without token: %r" % r3[:300])
-        for path in ("path=/status status=200 sent=ok", "path=/ status=200 sent=ok",
-                     "path=/sessions status=401 sent=ok"):
-            if path not in text()[start:]:
-                raise RuntimeError("guest log misses %s" % path)
+        if not r4.startswith(b"HTTP/1.0 200 OK") or b"own_session_only" not in r4:
+            raise RuntimeError("GET /sessions with token: %r" % r4[:300])
+        if not r5.startswith(b"HTTP/1.0 413 "):
+            raise RuntimeError("POST /ai/chat 320 bytes: %r" % r5[:400])
+        log = text()[start:]
+        slots = set(re.findall(r"osui web-serve request slot=(\d) scheme=http method=GET path=/(?:status|sessions)? ", log)[:3])
+        if len(slots) < 3:
+            raise RuntimeError("three concurrent connections did not use three slots: %s" % slots)
+        # (2) HTTPS, two concurrent TLS 1.2 connections.
+        start = send_command(client, proc, "web-serve 8443 2 tls")
+        results = {}
+
+        def https(name, raw):
+            try:
+                t = TlsConn(peer.connect(8443)).handshake(240)
+                t.send(raw)
+                results[name] = t.read_all(120)
+            except Exception as exc:  # reported below with the guest log
+                results[name] = exc
+
+        th = [threading.Thread(target=https, args=("s1", b"GET /status HTTP/1.0\r\n\r\n")),
+              threading.Thread(target=https, args=("s2", b"POST /ai/chat HTTP/1.0\r\nAuthorization: Bearer " +
+                                                  token + b"\r\nContent-Length: 2\r\n\r\nhi"))]
+        t_https = time.monotonic()
+        for t in th:
+            t.start()
+            time.sleep(0.5)
+        for t in th:
+            t.join(400)
+        for name in ("s1", "s2"):
+            if not isinstance(results.get(name), bytes):
+                try:
+                    wait_for(proc, "osui web-serve ok served=", 200, start)
+                except RuntimeError:
+                    pass
+                raise RuntimeError("%s: %r; guest: %s" % (name, results.get(name), " | ".join(
+                    l for l in text()[start:].splitlines() if "web-serve" in l)))
+        s1, s2 = results["s1"], results["s2"]
+        print("HTTPS: two concurrent TLS 1.2 exchanges in %.1f s, client retransmits %d" % (
+            time.monotonic() - t_https, sum(c.retransmits for c in peer.conns.values())))
+        wait_for(proc, "osui web-serve ok served=2 failed=0", 120, start)
+        wait_for_prompt(proc, start)
+        if not s1.startswith(b"HTTP/1.0 200 OK") or b'"phase3_complete":false' not in s1:
+            raise RuntimeError("HTTPS GET /status: %r" % s1[:300])
+        if not s2.startswith(b"HTTP/1.0 202 ") or b"osui chat" not in s2:
+            raise RuntimeError("HTTPS POST /ai/chat: %r" % s2[:400])
+        if "scheme=https method=GET path=/status status=200 sent=ok" not in text()[start:]:
+            raise RuntimeError("guest log misses the https request")
+        # (3) Background: the console stays usable while the server runs.
+        start = send_command(client, proc, "web-serve start 8080")
+        wait_for(proc, "mode=background", 20, start)
+        b1 = peer.request(b"GET /status HTTP/1.0\r\n\r\n")
+        if not b1.startswith(b"HTTP/1.0 200 OK"):
+            raise RuntimeError("background GET /status: %r" % b1[:300])
+        type_line(client, proc, "web-serve status")
+        wait_for(proc, "osui web-serve status=running port=8080 scheme=http served=1", 30, start)
+        b2 = peer.request(b"GET / HTTP/1.0\r\n\r\n")
+        if b"MOHHDY local console" not in b2:
+            raise RuntimeError("background GET /: %r" % b2[:300])
+        type_line(client, proc, "web-serve stop")
+        wait_for(proc, "osui web-serve ok served=2 failed=0", 30, start)
+        wait_for_prompt(proc, len(text()) - 400)
         if peer.error is not None:
             raise RuntimeError("controlled Ethernet peer failed: %s" % peer.error)
-        print("QEMU OS-UI web contract: %d/%d/%d response bytes" % (len(r1), len(r2), len(r3)))
-        print("QEMU OS-UI web contract passed (HTTP to the guest API through networker).")
+        print("QEMU OS-UI web contract: http 3 concurrent + 2, https 2 concurrent, background 2")
+        print("QEMU OS-UI web contract passed (HTTP/HTTPS to the guest API through networker).")
         return 0
     finally:
         peer.close()

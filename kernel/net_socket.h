@@ -5,7 +5,7 @@
 #include "net_tcp.h"
 #include "net_tls_record.h"
 
-#define NET_SOCKET_CAPACITY 4U
+#define NET_SOCKET_CAPACITY 8U
 #define NET_SOCKET_RX_CAPACITY 1024U
 #define NET_SOCKET_TX_CAPACITY 1500U
 
