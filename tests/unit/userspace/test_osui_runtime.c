@@ -607,6 +607,11 @@ static void test_ai_worker_lost(void) {
     rc = run_line("chat ai degraded");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "ai_status=ready worker=stalled fallback=ring0") != NULL);
+    {
+        char row[96];
+        osui_canvas_row(1, row, (int)sizeof(row)); /* VGA scene */
+        TEST_ASSERT(strstr(row, "repli Ring 0") != NULL);
+    }
     osui_test_ai_abort = 0U;
 }
 

@@ -370,7 +370,6 @@ def contract(monitor, proc):
     send_command(monitor, "chat ai a")
     wait_regex(r"osui chat ok llm=gpt2_local ai_status=ready worker=stalled fallback=ring0", proc, start,
                timeout=120)
-    wait_for("etat_ia=reponse (repli Ring 0, worker IA perdu)", proc, start, timeout=10)
     wait_for("(-.-)", proc, start, timeout=30)
     kill(monitor, proc, wpid)
     # 11. Worker gone for good: OS-UI is served by the Ring 0 path directly,
