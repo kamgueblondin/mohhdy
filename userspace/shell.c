@@ -2746,7 +2746,7 @@ static int is_builtin(const char* cmd) {
         "aistats", "aimode", "aihelp", "aitest",
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
-        "agent-run",
+        "agent-run", "api", "api-token", "api-revoke",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
@@ -5421,7 +5421,9 @@ static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count
     print_string("Entropie TLS RDRAND : ");
     print_string((session_status & 4U) ? "disponible (materiel)\n" : "indisponible\n");
     print_string("Ancre X.509 noyau  : ");
-    print_string((session_status & 8U) ? "ISRG Root X1 validee\n" : "indisponible\n");
+    print_string((session_status & 8U) ? "ISRG Root X1 validee\n" :
+                 (session_status & 0x80000000U) ? "non liee (image stricte, ancre TLS validee par le networker Ring 3)\n"
+                                                : "indisponible\n");
     print_string("Ancre TLS locale   : ");
     print_string((session_status & 16U) ? "prete (example.com / example.test)\n" : "indisponible\n");
     print_string("En ligne           : controle de phase integre; DHCP/DNS/identifiants requis avant appel\n");

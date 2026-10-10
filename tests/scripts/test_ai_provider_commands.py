@@ -12,6 +12,10 @@ LOG = os.path.join(LOG_DIR, "ai-provider-smoke.log")
 ERR = os.path.join(LOG_DIR, "ai-provider-smoke.err")
 MON = os.path.join(LOG_DIR, "ai-provider-monitor.sock")
 KERNEL = os.path.join(ROOT, "build", "mohhdy.bin")
+# The Ring 0 provider control plane (kernel LLM client, X.509 anchor, OpenAI
+# bearer) only exists in the legacy image; the strict default image does not
+# link the Ring 0 network stack and is checked for that honest state.
+LEGACY_KERNEL = os.path.join(ROOT, "build", "mohhdy-netlegacy.bin")
 INITRD = os.path.join(ROOT, "my_initrd.tar")
 
 
@@ -80,7 +84,8 @@ def run_command(client, proc, command, expected):
     raise RuntimeError("command %s did not emit %s" % (command, expected))
 
 
-def main():
+def main(kernel=None, strict=False):
+    kernel = kernel or LEGACY_KERNEL
     os.makedirs(LOG_DIR, exist_ok=True)
     for path in (LOG, ERR, MON):
         try:
@@ -88,7 +93,7 @@ def main():
         except OSError:
             pass
     command = [
-        "qemu-system-i386", "-kernel", KERNEL, "-initrd", INITRD,
+        "qemu-system-i386", "-kernel", kernel, "-initrd", INITRD,
         "-m", "1024M", "-display", "none", "-vga", "none",
         "-serial", "file:" + LOG,
         "-monitor", "unix:%s,server,nowait" % MON,
@@ -101,6 +106,13 @@ def main():
             wait_for("(-.-)", proc)
             monitor = connect_monitor()
             time.sleep(0.5)
+            if strict:
+                run_command(monitor, proc, "ai-runtime",
+                            "Ancre X.509 noyau  : non liee (image stricte, ancre TLS validee par le networker Ring 3)")
+                run_command(monitor, proc, "ai-runtime", "Session LLM noyau  : IDLE (NE2000 absent)")
+                run_command(monitor, proc, "ai-runtime", "Secrets OpenAI     : jamais integres")
+                print("AI provider strict image: no Ring 0 stack, honest status passed.")
+                return 0
             run_command(monitor, proc, "ai-provider", "Fournisseur IA : local")
             run_command(monitor, proc, "ai-model list", "gpt2.gguf")
             run_command(monitor, proc, "ai-model use control.bin", "Profil memorise; seuls les profils GPT-2 locaux sont executables")
@@ -148,7 +160,12 @@ def main():
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(main())
+        if not os.path.exists(LEGACY_KERNEL):
+            subprocess.check_call(["make", "-C", ROOT, "kernel-netlegacy"])
+        rc = main(LEGACY_KERNEL)
+        if rc == 0:
+            rc = main(KERNEL, strict=True)
+        raise SystemExit(rc)
     except Exception as error:
         print("AI provider control-plane smoke failed: %s" % error, file=sys.stderr)
         raise SystemExit(1)
