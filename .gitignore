@@ -65,3 +65,4 @@ userspace/networker
 userspace/netclaim
 userspace/netrelay
 userspace/netwire
+/initrd_content/pm/

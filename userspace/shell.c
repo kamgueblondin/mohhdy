@@ -11,6 +11,7 @@
 #include "osui_runtime.h"
 #include "shell_p2p.h"
 #include "osui_gui.h"
+#include "promptmessage.h"
 
 // ==============================================================================
 // STRUCTURES ET DÉFINITIONS
@@ -2734,11 +2735,362 @@ static void cmd_cat(shell_context_t* ctx, char args[][128], int arg_count) {
     if (size == 0 || data[size - 1] != '\n') print_string("\n");
 }
 
+// ==============================================================================
+// PHASE 4 - PromptMessage (userspace/promptmessage.c) dans le shell guest
+// ==============================================================================
+static shell_context_t* g_pm_ctx;
+static pm_program_t g_pm_prog;      /* last program loaded by pm-run / pm-exec */
+static int g_pm_loaded;
+static pm_program_t g_pm_tmp;
+static pm_vm_t g_pm_vm;
+static char g_pm_src[PM_SRC_MAX];
+static unsigned char g_pm_img[PM_IMAGE_MAX];
+static char g_pm_text[2048];
+
+static int pm_host_read(void* c, const char* p, char* buf, int cap) {
+    char path[RAMFS_PATH_MAX];
+    const char* data;
+    int n, size = 0;
+    (void)c;
+    resolve_arg(g_pm_ctx, p, path);
+    n = sys_readfile(path, buf, cap);
+    if (n >= 0) return n;
+    if (ramfs_is_dir(path)) return -1;
+    data = ramfs_read(path, &size);
+    if (!data) return -1;
+    if (size > cap) size = cap;
+    for (n = 0; n < size; n++) buf[n] = data[n];
+    return size;
+}
+static int pm_host_write(void* c, const char* p, const char* d, int len, int append) {
+    char path[RAMFS_PATH_MAX];
+    (void)c;
+    resolve_arg(g_pm_ctx, p, path);
+    return append ? sys_append(path, d, len) : sys_writefile(path, d, len);
+}
+static int pm_host_mem(void* c) {
+    os_meminfo_t mi;
+    (void)c;
+    if (sys_meminfo(&mi) != 0 || mi.total_pages == 0) return 0;
+    return (int)((mi.used_pages * 100U) / mi.total_pages);
+}
+static void pm_host_out(void* c, const char* s) { (void)c; print_string(s); print_string("\n"); }
+static const pm_host_t g_pm_host = {0, pm_host_read, pm_host_write, pm_host_mem, pm_host_out};
+
+static void pm_print_hex(unsigned int v) {
+    const char* h = "0123456789abcdef";
+    char b[9]; int i;
+    for (i = 7; i >= 0; i--) { b[i] = h[v & 15U]; v >>= 4; }
+    b[8] = 0;
+    print_string(b);
+}
+static int pm_load_source(const char* who, const char* file, int* len) {
+    *len = pm_host_read(0, file, g_pm_src, PM_SRC_MAX);
+    if (*len < 0) { print_string(who); print_string(" error file not found "); print_string(file); print_string("\n"); return -1; }
+    return 0;
+}
+static int pm_compile_report(const char* who, int len, pm_program_t* prog) {
+    int st = pm_compile(g_pm_src, len, prog, &g_pm_host);
+    if (st == PM_OK) return 0;
+    print_string(who);
+    print_string(" error line "); print_int(prog->err_line);
+    print_string(" col "); print_int(prog->err_col);
+    print_string(": "); print_string(prog->err); print_string("\n");
+    return -1;
+}
+static void pm_vm_report(const char* who, int st) {
+    print_string(who);
+    if (st == PM_OK) print_string(" ok");
+    else if (st == PM_BREAK) print_string(" break");
+    else if (st == PM_ERR_EXPECT) print_string(" fail");
+    else { print_string(" error "); print_string(g_pm_vm.err); }
+    print_string(" line "); print_int(g_pm_vm.line);
+    print_string(" steps "); print_int((int)g_pm_vm.steps);
+    print_string(" prints "); print_int((int)g_pm_vm.prints);
+    print_string(" writes "); print_int((int)g_pm_vm.writes);
+    print_string(" expects "); print_int((int)g_pm_vm.expects);
+    print_string(" failed "); print_int((int)g_pm_vm.expect_failed);
+    print_string("\n");
+}
+static void pm_copy_prog(pm_program_t* d, const pm_program_t* s) {
+    const char* a = (const char*)s; char* b = (char*)d; unsigned int i;
+    for (i = 0; i < sizeof(*d); i++) b[i] = a[i];
+}
+
+/* pm-check FILE | pm-run FILE | pm-test FILE | pm-doc FILE | pm-disasm FILE
+ * pm-debug FILE [LINE] | pm-compile SRC OUT | pm-exec IMG | pm-say PHRASE...
+ * pm-version FILE | pm-versions FILE | pm-edit FILE | pm STATEMENT (raw line) */
+static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], int arg_count) {
+    int len = 0, st;
+    g_pm_ctx = ctx;
+    ctx->last_rc = 1;
+    if (strcmp(command, "pm-say") == 0) {
+        char phrase[256]; int p = 0, i, j;
+        if (!g_pm_loaded) { print_string("pm-say error no program loaded\n"); return; }
+        for (i = 0; i < arg_count; i++) {
+            if (i && p < 254) phrase[p++] = ' ';
+            for (j = 0; args[i][j] && p < 254; j++) phrase[p++] = args[i][j];
+        }
+        phrase[p] = 0;
+        st = pm_say(&g_pm_prog, &g_pm_vm, &g_pm_host, phrase);
+        pm_vm_report("pm-say", st);
+        ctx->last_rc = st == PM_OK ? 0 : 1;
+        return;
+    }
+    if (strcmp(command, "pm-catalog") == 0) {
+        static os_dirent_t ents[16];
+        char path[RAMFS_PATH_MAX]; int n = sys_listdir("/pm", ents, 16), i, shown = 0;
+        for (i = 0; i < n; i++) {
+            int k = 0, j = 0, m, l;
+            if (ents[i].flags == OS_DIRENT_DIR) continue;
+            l = (int)strlen(ents[i].name);
+            if (l < 4 || strcmp(ents[i].name + l - 3, ".pm") != 0) continue;
+            { const char* pre = "/pm/"; while (pre[k]) { path[k] = pre[k]; k++; } }
+            while (ents[i].name[j] && k < RAMFS_PATH_MAX - 1) path[k++] = ents[i].name[j++];
+            path[k] = 0;
+            m = pm_host_read(0, path, g_pm_src, PM_SRC_MAX - 1);
+            print_string("pm-catalog "); print_string(ents[i].name); print_string(" -");
+            if (m > 3 && g_pm_src[0] == '#' && g_pm_src[1] == '#') {
+                char d[80]; int e = 2, q = 0;
+                while (e < m && g_pm_src[e] != '\n' && q < 79) d[q++] = g_pm_src[e++];
+                d[q] = 0;
+                print_string(d);
+            }
+            print_string("\n");
+            shown++;
+        }
+        print_string("pm-catalog ok "); print_int(shown); print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (arg_count < 1) { print_string("usage: "); print_string(command); print_string(" FICHIER\n"); return; }
+    if (strcmp(command, "pm-exec") == 0) {
+        len = pm_host_read(0, args[0], (char*)g_pm_img, PM_IMAGE_MAX);
+        if (len < 0 || pm_image_read(g_pm_img, len, &g_pm_tmp) != PM_OK) {
+            print_string("pm-exec error image rejected "); print_string(args[0]); print_string("\n");
+            return;
+        }
+        pm_copy_prog(&g_pm_prog, &g_pm_tmp);
+        g_pm_loaded = 1;
+        pm_vm_reset(&g_pm_vm);
+        st = pm_run(&g_pm_prog, &g_pm_vm, &g_pm_host);
+        pm_vm_report("pm-exec", st);
+        ctx->last_rc = st == PM_OK ? 0 : 1;
+        return;
+    }
+    if (strcmp(command, "pm-versions") == 0) {
+        char path[RAMFS_PATH_MAX]; int v, n, found = 0;
+        for (v = 1; v <= 9; v++) {
+            int k = 0;
+            while (args[0][k] && k < RAMFS_PATH_MAX - 4) { path[k] = args[0][k]; k++; }
+            path[k++] = '.'; path[k++] = 'v'; path[k++] = (char)('0' + v); path[k] = 0;
+            n = pm_host_read(0, path, g_pm_src, PM_SRC_MAX);
+            if (n < 0) continue;
+            found++;
+            print_string("pm-versions "); print_string(path);
+            print_string(" bytes "); print_int(n);
+            print_string(" checksum "); pm_print_hex(pm_checksum((const unsigned char*)g_pm_src, n));
+            print_string("\n");
+        }
+        print_string("pm-versions ok "); print_int(found); print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (strcmp(command, "pm-edit") == 0) {
+        /* Minimal integrated editor (US-050): lines are typed raw (quotes kept),
+         * ".l" lists, ".q" abandons, "." saves and validates. */
+        char line[MAX_COMMAND_LENGTH];
+        int n = pm_host_read(0, args[0], g_pm_src, PM_SRC_MAX - 1);
+        if (n < 0) n = 0;
+        print_string("pm-edit "); print_string(args[0]); print_string(" lines: '.' save, '.l' list, '.q' quit\n");
+        while (1) {
+            int k = 0;
+            print_string("pm-edit> ");
+            line[0] = 0;
+            gets(line, (int)sizeof(line));
+            if (strcmp(line, ".q") == 0) { print_string("pm-edit quit unsaved\n"); return; }
+            if (strcmp(line, ".l") == 0) {
+                g_pm_src[n] = 0; print_string(g_pm_src);
+                if (n && g_pm_src[n - 1] != '\n') print_string("\n");
+                continue;
+            }
+            if (strcmp(line, ".") == 0) break;
+            while (line[k] && n < PM_SRC_MAX - 2) g_pm_src[n++] = line[k++];
+            if (n < PM_SRC_MAX - 1) g_pm_src[n++] = '\n';
+        }
+        if (pm_host_write(0, args[0], g_pm_src, n, 0) < 0) { print_string("pm-edit error write failed\n"); return; }
+        print_string("pm-edit saved "); print_string(args[0]); print_string(" bytes "); print_int(n); print_string("\n");
+        if (pm_compile_report("pm-edit check", n, &g_pm_tmp) == 0) {
+            print_string("pm-edit check ok statements "); print_int(g_pm_tmp.statements); print_string("\n");
+            ctx->last_rc = 0;
+        }
+        return;
+    }
+    if (strcmp(command, "pm-install") == 0) {
+        /* Local PromptProgram catalog (US-059 local part): /pm/NAME -> NAME,
+         * only if it validates. No network. */
+        char src[RAMFS_PATH_MAX]; int k = 0, j = 0;
+        const char* pre = "/pm/";
+        while (pre[k]) { src[k] = pre[k]; k++; }
+        while (args[0][j] && k < RAMFS_PATH_MAX - 1) src[k++] = args[0][j++];
+        src[k] = 0;
+        if (pm_load_source("pm-install", src, &len) != 0) return;
+        if (pm_compile_report("pm-install", len, &g_pm_tmp) != 0) return;
+        if (pm_host_write(0, args[0], g_pm_src, len, 0) < 0) { print_string("pm-install error write failed\n"); return; }
+        print_string("pm-install ok "); print_string(args[0]);
+        print_string(" bytes "); print_int(len);
+        print_string(" checksum "); pm_print_hex(pm_checksum((const unsigned char*)g_pm_src, len));
+        print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (strcmp(command, "pm-verify") == 0) {
+        char cert[RAMFS_PATH_MAX], rec[96], want[9]; int k = 0, n, i;
+        unsigned int sum;
+        if (pm_load_source("pm-verify", args[0], &len) != 0) return;
+        sum = pm_checksum((const unsigned char*)g_pm_src, len);
+        while (args[0][k] && k < RAMFS_PATH_MAX - 6) { cert[k] = args[0][k]; k++; }
+        cert[k++] = '.'; cert[k++] = 'c'; cert[k++] = 'e'; cert[k++] = 'r'; cert[k++] = 't'; cert[k] = 0;
+        n = pm_host_read(0, cert, rec, (int)sizeof(rec) - 1);
+        if (n < 0) { print_string("pm-verify error no certificate record\n"); return; }
+        rec[n] = 0;
+        for (i = 0; i < 8; i++) { want[7 - i] = "0123456789abcdef"[sum & 15U]; sum >>= 4; }
+        want[8] = 0;
+        for (i = 0; rec[i] && !(rec[i] == 's' && rec[i + 1] == 'u' && rec[i + 2] == 'm' && rec[i + 3] == '='); i++) {}
+        if (!rec[i] || strncmp(rec + i + 4, want, 8) != 0) {
+            print_string("pm-verify mismatch "); print_string(args[0]); print_string(" sum="); print_string(want); print_string("\n");
+            return;
+        }
+        print_string("pm-verify ok "); print_string(args[0]); print_string(" sum="); print_string(want); print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (pm_load_source(command, args[0], &len) != 0) return;
+    if (strcmp(command, "pm-version") == 0) {
+        char path[RAMFS_PATH_MAX]; int v, k;
+        for (v = 1; v <= 9; v++) {
+            char probe[4];
+            k = 0;
+            while (args[0][k] && k < RAMFS_PATH_MAX - 4) { path[k] = args[0][k]; k++; }
+            path[k++] = '.'; path[k++] = 'v'; path[k++] = (char)('0' + v); path[k] = 0;
+            if (pm_host_read(0, path, probe, (int)sizeof(probe)) < 0) break;
+        }
+        if (v > 9) { print_string("pm-version error 9 versions max\n"); return; }
+        if (pm_host_write(0, path, g_pm_src, len, 0) < 0) { print_string("pm-version error write failed\n"); return; }
+        print_string("pm-version ok "); print_string(path);
+        print_string(" checksum "); pm_print_hex(pm_checksum((const unsigned char*)g_pm_src, len));
+        print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (pm_compile_report(command, len, &g_pm_tmp) != 0) return;
+    if (strcmp(command, "pm-check") == 0) {
+        print_string("pm-check ok "); print_string(args[0]);
+        print_string(" statements "); print_int(g_pm_tmp.statements);
+        print_string(" triggers "); print_int(g_pm_tmp.ntrig);
+        print_string(" bytecode "); print_int(g_pm_tmp.code_len);
+        print_string(" folded "); print_int(g_pm_tmp.folded);
+        print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (strcmp(command, "pm-certify") == 0) {
+        /* Local certification record (US-060, partial): the program must
+         * validate and its expect tests must pass; the record keeps the
+         * FNV-1a sum of the source. Not a signature. */
+        char cert[RAMFS_PATH_MAX], rec[96]; int k = 0, r = 0, i;
+        unsigned int sum = pm_checksum((const unsigned char*)g_pm_src, len);
+        pm_copy_prog(&g_pm_prog, &g_pm_tmp);
+        pm_vm_reset(&g_pm_vm);
+        st = pm_run(&g_pm_prog, &g_pm_vm, &g_pm_host);
+        if (st != PM_OK || g_pm_vm.expects == 0) {
+            print_string("pm-certify refused "); print_string(args[0]);
+            print_string(g_pm_vm.expects == 0 ? " no expect\n" : " tests failed\n");
+            return;
+        }
+        while (args[0][k] && k < RAMFS_PATH_MAX - 6) { cert[k] = args[0][k]; k++; }
+        cert[k++] = '.'; cert[k++] = 'c'; cert[k++] = 'e'; cert[k++] = 'r'; cert[k++] = 't'; cert[k] = 0;
+        { const char* h = "pmcert1 sum="; while (*h) rec[r++] = *h++; }
+        for (i = 7; i >= 0; i--) rec[r++] = "0123456789abcdef"[(sum >> (i * 4)) & 15U];
+        { const char* h = " expects="; while (*h) rec[r++] = *h++; }
+        rec[r++] = (char)('0' + (g_pm_vm.expects % 10U));
+        rec[r++] = '\n';
+        if (pm_host_write(0, cert, rec, r, 0) < 0) { print_string("pm-certify error write failed\n"); return; }
+        rec[r - 1] = 0;
+        print_string("pm-certify ok "); print_string(cert); print_string(" "); print_string(rec); print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (strcmp(command, "pm-doc") == 0) {
+        pm_doc(g_pm_src, len, &g_pm_tmp, g_pm_text, (int)sizeof(g_pm_text));
+        print_string(g_pm_text);
+        print_string("pm-doc ok\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (strcmp(command, "pm-disasm") == 0) {
+        if (pm_disasm(&g_pm_tmp, g_pm_text, (int)sizeof(g_pm_text)) < 0) { print_string("pm-disasm error too long\n"); return; }
+        print_string(g_pm_text);
+        print_string("pm-disasm ok\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (strcmp(command, "pm-compile") == 0) {
+        int n;
+        if (arg_count < 2) { print_string("usage: pm-compile SOURCE SORTIE\n"); return; }
+        n = pm_image_write(&g_pm_tmp, g_pm_img, PM_IMAGE_MAX);
+        if (n < 0 || pm_host_write(0, args[1], (const char*)g_pm_img, n, 0) < 0) { print_string("pm-compile error write failed\n"); return; }
+        print_string("pm-compile ok "); print_string(args[1]);
+        print_string(" bytes "); print_int(n);
+        print_string(" checksum "); pm_print_hex(pm_checksum(g_pm_img, n - 4));
+        print_string(" folded "); print_int(g_pm_tmp.folded);
+        print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    /* pm-run, pm-test, pm-debug */
+    pm_copy_prog(&g_pm_prog, &g_pm_tmp);
+    g_pm_loaded = 1;
+    pm_vm_reset(&g_pm_vm);
+    if (strcmp(command, "pm-debug") == 0) {
+        int line = 0, k;
+        for (k = 0; arg_count > 1 && args[1][k] >= '0' && args[1][k] <= '9'; k++) line = line * 10 + (args[1][k] - '0');
+        if (line > 0) g_pm_vm.break_line = line; else g_pm_vm.trace = 1;
+    }
+    st = pm_run(&g_pm_prog, &g_pm_vm, &g_pm_host);
+    if (strcmp(command, "pm-test") == 0) {
+        print_string(st == PM_OK ? "pm-test ok " : "pm-test fail ");
+        print_string(args[0]);
+        print_string(" expects "); print_int((int)g_pm_vm.expects);
+        print_string(" failed "); print_int((int)g_pm_vm.expect_failed);
+        if (st != PM_OK && st != PM_ERR_EXPECT) { print_string(" error "); print_string(g_pm_vm.err); }
+        print_string("\n");
+        ctx->last_rc = (st == PM_OK && g_pm_vm.expects > 0) ? 0 : 1;
+        return;
+    }
+    pm_vm_report(command, st);
+    ctx->last_rc = (st == PM_OK || st == PM_BREAK) ? 0 : 1;
+}
+
+/* `pm STATEMENT` keeps the raw line (quotes included) and runs it once. */
+static void cmd_pm_inline(shell_context_t* ctx, const char* stmt) {
+    int n = 0, st;
+    g_pm_ctx = ctx;
+    while (stmt[n] && n < PM_SRC_MAX - 2) { g_pm_src[n] = stmt[n]; n++; }
+    g_pm_src[n++] = '\n';
+    if (pm_compile_report("pm", n, &g_pm_tmp) != 0) { ctx->last_rc = 1; return; }
+    pm_vm_reset(&g_pm_vm);
+    st = pm_run(&g_pm_tmp, &g_pm_vm, &g_pm_host);
+    pm_vm_report("pm", st);
+    ctx->last_rc = st == PM_OK ? 0 : 1;
+}
+
 static int is_builtin(const char* cmd) {
     static const char* names[] = {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-catalog", "pm-install", "pm-certify", "pm-verify",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
         "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "right-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
         "alias", "unalias", "export", "which", "rc",
@@ -5860,6 +6212,17 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
     } else if (strcmp(command, "cat") == 0) {
         cmd_cat(ctx, args, arg_count);
         return 1;
+    } else if (strncmp(command, "pm-", 3) == 0 &&
+               (strcmp(command, "pm-check") == 0 || strcmp(command, "pm-run") == 0 ||
+                strcmp(command, "pm-test") == 0 || strcmp(command, "pm-doc") == 0 ||
+                strcmp(command, "pm-disasm") == 0 || strcmp(command, "pm-debug") == 0 ||
+                strcmp(command, "pm-compile") == 0 || strcmp(command, "pm-exec") == 0 ||
+                strcmp(command, "pm-say") == 0 || strcmp(command, "pm-version") == 0 ||
+                strcmp(command, "pm-versions") == 0 || strcmp(command, "pm-edit") == 0 ||
+                strcmp(command, "pm-catalog") == 0 || strcmp(command, "pm-install") == 0 ||
+                strcmp(command, "pm-certify") == 0 || strcmp(command, "pm-verify") == 0)) {
+        cmd_pm(ctx, command, args, arg_count);
+        return 1;
     } else if (strcmp(command, "stat") == 0) {
         cmd_stat(ctx, args, arg_count);
         return 1;
@@ -6228,6 +6591,11 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         if (osui_gui_should_enter()) {
             if (!g_gui_eval) osui_gui_run();
         }
+        return;
+    }
+
+    if (strncmp(input_buffer, "pm ", 3) == 0) {
+        cmd_pm_inline(ctx, input_buffer + 3);
         return;
     }
 
