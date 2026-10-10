@@ -1,6 +1,7 @@
 /* userspace/shell_collab.c - collab-* shell commands (Phase 7, docs/collab.md).
  * The ledger rides on the phase 5 P2P node (sealed P2P_I_APP payloads). */
 #include "collab.h"
+#include "csig.h"
 #include "p2p.h"
 #include "../kernel/sha256.h"
 
@@ -256,3 +257,11 @@ void shell_collab_key_install(const uint8_t* sk) {
     g_c.signing = 1;
 }
 int shell_collab_signing(void) { return g_joined && g_c.signing; }
+/* US-060: sign with this node's collab key (pm-certify) */
+int shell_collab_sign(const uint8_t* m, int len, uint8_t sig[40], uint8_t pk[128]) {
+    int i;
+    if (!g_joined || !g_c.signing) return -1;
+    if (csig_sign(g_c.sk, m, len, sig) != 0) return -1;
+    for (i = 0; i < 128; i++) pk[i] = g_c.pk[i];
+    return 0;
+}

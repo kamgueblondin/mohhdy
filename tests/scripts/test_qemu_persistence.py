@@ -113,6 +113,14 @@ def boot1(hub):
         cmd(node, "persist-passphrase correct-horse-9", "persist-passphrase ok (kept in RAM only)")
         cmd(node, "p2p-put color blue", "p2p-put ok color")
         fpr = fingerprint(node)
+        # US-060: PromptMessage certificate signed with this node's key
+        cmd(node, "write /t.pm expect 4 == 4", "write ok /t.pm")
+        cmd(node, "pm-certify /t.pm", "pm-certify signed /t.pm.sig author " + fpr)
+        cmd(node, "pm-verify /t.pm", "pm-verify signature ok author " + fpr)
+        cmd(node, "write /u.pm expect 6 == 6", "write ok /u.pm")
+        cmd(node, "pm-certify /u.pm", "pm-certify signed /u.pm.sig")
+        cmd(node, "cp /u.pm.sig /t.pm.sig", "cp ok ")
+        cmd(node, "pm-verify /t.pm", "pm-verify signature bad /t.pm.sig")
         before = audit(node)
         # production state
         cmd(node, "prod-sample 5 10", "prod-sample ok n 5 ")
