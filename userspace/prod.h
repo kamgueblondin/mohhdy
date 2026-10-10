@@ -24,7 +24,12 @@ int prod_predict(const prod_metrics_t* m, int id, uint32_t limit, int32_t* slope
 
 #define PROD_RULES 8
 #define PROD_EVENTS 32
-typedef struct { char name[16]; int metric; int above; uint32_t threshold; int for_n; int breach, clear, firing, used; } prod_rule_t;
+typedef struct {
+    char name[16]; int metric; int above; uint32_t threshold; int for_n; int breach, clear, firing, used;
+    /* US-114 adaptive rules: EWMA baseline (alpha 1/8, x16 fixed point) and
+     * EWMA absolute deviation; fires above baseline + k * max(dev, 5%). */
+    int adaptive, k, seen; uint32_t ewma16, dev16;
+} prod_rule_t;
 typedef struct { uint32_t tick; char text[64]; } prod_event_t;
 typedef struct {
     prod_rule_t r[PROD_RULES];
@@ -32,6 +37,8 @@ typedef struct {
 } prod_alerts_t;
 void prod_alerts_init(prod_alerts_t* a);
 int prod_alert_add(prod_alerts_t* a, const char* name, int metric, int above, uint32_t threshold, int for_n);
+#define PROD_LEARN 8   /* samples learned before an adaptive rule may fire */
+int prod_alert_add_adaptive(prod_alerts_t* a, const char* name, int metric, int k, int for_n);
 int prod_alert_remove(prod_alerts_t* a, const char* name);
 /* Evaluates every rule on one sample; returns the number of transitions. */
 int prod_alerts_eval(prod_alerts_t* a, const prod_sample_t* s);
@@ -65,6 +72,27 @@ typedef struct { int min, max, cur; uint32_t high_milli, low_milli, cooldown, la
 void prod_scaler_init(prod_scaler_t* s, int min, int max, uint32_t high_milli, uint32_t low_milli, uint32_t cooldown);
 /* returns the new worker count for a queue length at tick now */
 int prod_scaler_step(prod_scaler_t* s, uint32_t queue, uint32_t now);
+
+/* US-110 measured load: run queue = runnable (running/ready) user tasks
+ * that actually consumed CPU in the measuring window (ran >= min_ran
+ * ticks; a task that only yields is not load), minus the scaler's own
+ * workers and the caller. */
+typedef struct { int pid, state, user; uint32_t ran; } prod_task_t;
+int prod_runq(const prod_task_t* t, int n, const int* exclude, int nexclude, uint32_t min_ran);
+
+/* US-112 security scan over facts gathered by the host. */
+#define PROD_SEC_TASKS 16
+#define PROD_SEC_PORTS 4
+typedef struct {
+    char task[PROD_SEC_TASKS][32]; int ntask;
+    struct { uint32_t port; int udp, encrypted; char what[16]; } port[PROD_SEC_PORTS]; int nport;
+    int netkey_len, netkey_default;   /* P2P network key (0 len: P2P down) */
+    int pass_len;                     /* persist passphrase length, 0: none */
+    int signing_key, key_at_rest_encrypted;
+} prod_sec_input_t;
+/* Appends one "prod-sec ..." line per finding; returns the score 0..100
+ * and sets *critical to the number of critical findings. */
+int prod_sec_scan(const prod_sec_input_t* in, char* out, int cap, int* findings, int* critical);
 
 #define PROD_BASE 32
 typedef struct { char path[64]; uint32_t fnv; } prod_base_entry_t;

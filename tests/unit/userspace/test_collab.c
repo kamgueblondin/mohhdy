@@ -56,6 +56,116 @@ static void same_digest(void) {
     report(2, "audit", 0); TEST_ASSERT_NOT_NULL(strstr(rep, d0));
 }
 
+int shell_collab_cond(const char* cond, int32_t bal, uint32_t rep10, uint32_t paid);
+
+/* US-094: auctions with escrowed bids, outbid refunds, close; search. */
+void test_auctions_and_search(void) {
+    setup();
+    collab_emit(&g_c[0], &g_h[0], CE_AUCTION, 0, 0, 20, 0, "old-laptop");      /* alpha seq 2 */
+    collab_emit(&g_c[0], &g_h[0], CE_OFFER, 0, 0, 10, 1, "gpu-slot");          /* alpha seq 3 */
+    collab_emit(&g_c[1], &g_h[1], CE_OFFER, 0, 0, 15, 2, "GPU-big");           /* beta seq 2 */
+    deliver();
+    collab_emit(&g_c[1], &g_h[1], CE_BID, k_id[0], 2, 25, 0, "");
+    collab_emit(&g_c[2], &g_h[2], CE_BID, k_id[0], 2, 30, 0, "");
+    collab_emit(&g_c[0], &g_h[0], CE_BID, k_id[0], 2, 40, 0, "");             /* seller */
+    deliver();
+    collab_emit(&g_c[1], &g_h[1], CE_BID, k_id[0], 2, 28, 0, "");             /* below high */
+    collab_emit(&g_c[2], &g_h[2], CE_BID, k_id[0], 2, 10, 0, "");             /* below reserve */
+    deliver();
+    collab_search(&g_c[1], &g_h[1], "gpu", 0, rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab hit offer alpha#3 'gpu-slot' price 10\ncollab hit offer beta#2 'GPU-big' price 15"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "hits 2"));
+    collab_search(&g_c[1], &g_h[1], "gpu", 12, rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "hits 1"));
+    collab_search(&g_c[1], &g_h[1], "*", 0, rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab hit auction alpha#2 'old-laptop' min-bid 31"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "hits 3"));
+    collab_emit(&g_c[0], &g_h[0], CE_CLOSE, k_id[0], 2, 0, 0, "");
+    deliver();
+    collab_emit(&g_c[1], &g_h[1], CE_BID, k_id[0], 2, 50, 0, "");             /* closed */
+    deliver();
+    report(2, "auctions", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab auction alpha#2 'old-laptop' reserve 20 high 30 bidder gamma state sold"));
+    report(2, "balances", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct alpha balance 130"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct beta balance 100"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct gamma balance 70"));
+    report(0, "audit", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab rejected bid alpha seq 4 reason not-allowed"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab rejected bid beta seq 4 reason bid-too-low"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab rejected bid gamma seq 3 reason bid-too-low"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab rejected bid beta seq 5 reason auction-closed"));
+    collab_search(&g_c[1], &g_h[1], "laptop", 0, rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "hits 0"));
+    same_digest();
+}
+
+/* US-101: a buyer disputes a reservation; parties cannot rule; majority of
+ * the other members decides; refund moves the price back. */
+void test_dispute_flow(void) {
+    setup();
+    collab_emit(&g_c[0], &g_h[0], CE_OFFER, 0, 0, 10, 2, "disk");             /* alpha seq 2 */
+    deliver();
+    collab_emit(&g_c[1], &g_h[1], CE_RESERVE, k_id[0], 2, 0, 0, "");          /* beta seq 2 */
+    collab_emit(&g_c[2], &g_h[2], CE_RESERVE, k_id[0], 2, 0, 0, "");          /* gamma seq 2 */
+    deliver();
+    collab_emit(&g_c[1], &g_h[1], CE_DISPUTE, 0, 2, 0, 0, "");                /* beta seq 3 */
+    collab_emit(&g_c[2], &g_h[2], CE_DISPUTE, 0, 2, 0, 0, "");                /* gamma seq 3 */
+    deliver();
+    collab_emit(&g_c[0], &g_h[0], CE_RULING, k_id[1], 3, 0, 0, "");           /* party */
+    collab_emit(&g_c[2], &g_h[2], CE_RULING, k_id[1], 3, 1, 0, "");           /* refund beta */
+    collab_emit(&g_c[1], &g_h[1], CE_RULING, k_id[2], 3, 0, 0, "");           /* deny gamma */
+    collab_emit(&g_c[1], &g_h[1], CE_DISPUTE, 0, 2, 0, 0, "");                /* again */
+    deliver();
+    report(0, "disputes", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab dispute beta#3 against alpha price 10 refund 1 deny 0 state refunded"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab dispute gamma#3 against alpha price 10 refund 0 deny 1 state denied"));
+    report(0, "balances", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct alpha balance 110"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct beta balance 100"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct gamma balance 90"));
+    report(0, "audit", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab rejected ruling alpha seq 3 reason not-arbiter"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab rejected dispute beta seq 5 reason duplicate"));
+    same_digest();
+}
+
+/* US-099: contracts whose condition is a PromptMessage expression. */
+void test_user_contracts(void) {
+    TEST_ASSERT_EQUAL(1, shell_collab_cond("$bal >= 120", 130, 0, 0));
+    TEST_ASSERT_EQUAL(0, shell_collab_cond("$bal >= 120", 100, 0, 0));
+    TEST_ASSERT_EQUAL(1, shell_collab_cond("$rep == 45", 0, 45, 0));
+    TEST_ASSERT_EQUAL(-1, shell_collab_cond("print \"x\"", 0, 0, 0));
+    TEST_ASSERT_EQUAL(-1, shell_collab_cond("((", 0, 0, 0));
+    collab_set_cond(shell_collab_cond);
+    setup();
+    collab_emit(&g_c[0], &g_h[0], CE_CONTRACT, k_id[1], 0, 20, 0, "$bal >= 120"); /* alpha seq 2 */
+    collab_emit(&g_c[0], &g_h[0], CE_CONTRACT, k_id[2], 0, 5, 0, "((");          /* seq 3 bad */
+    collab_emit(&g_c[0], &g_h[0], CE_CONTRACT, k_id[2], 0, 10, 0, "$paid >= 1");  /* seq 4 */
+    deliver();
+    collab_emit(&g_c[2], &g_h[2], CE_SETTLE, k_id[0], 2, 0, 0, "");              /* false yet, seq 2 */
+    collab_emit(&g_c[2], &g_h[2], CE_SETTLE, k_id[0], 4, 1, 0, "");              /* only payer cancels, seq 3 */
+    deliver();
+    collab_emit(&g_c[2], &g_h[2], CE_TRANSFER, k_id[1], 0, 30, 0, "");           /* beta -> 130 */
+    deliver();
+    collab_emit(&g_c[2], &g_h[2], CE_SETTLE, k_id[0], 2, 0, 0, "");              /* any member */
+    collab_emit(&g_c[0], &g_h[0], CE_SETTLE, k_id[0], 4, 1, 0, "");              /* cancel */
+    deliver();
+    report(1, "contracts", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab contract alpha#2 pays beta 20 when '$bal >= 120' state settled"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab contract alpha#4 pays gamma 10 when '$paid >= 1' state cancelled"));
+    report(1, "balances", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct alpha balance 80"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct beta balance 150"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct gamma balance 70"));
+    report(1, "audit", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab rejected contract alpha seq 3 reason bad-contract"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab rejected settle gamma seq 2 reason condition-false"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab rejected settle gamma seq 3 reason not-allowed"));
+    same_digest();
+    collab_set_cond(0);
+}
+
 void test_points_transfer_overdraft_and_convergence(void) {
     setup();
     collab_emit(&g_c[0], &g_h[0], CE_TRANSFER, k_id[1], 0, 30, 0, "");
@@ -298,6 +408,9 @@ int main(void) {
     RUN_TEST(test_codec_and_eval);
     RUN_TEST(test_signed_entries_forgery_and_redaction);
     RUN_TEST(test_save_load_roundtrip);
+    RUN_TEST(test_auctions_and_search);
+    RUN_TEST(test_dispute_flow);
+    RUN_TEST(test_user_contracts);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

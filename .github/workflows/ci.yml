@@ -57,6 +57,10 @@ jobs:
       - name: Run unit tests (make test-all)
         run: make test-all
 
+      # Guard: build + unit tests must not modify or add tracked/unignored files.
+      - name: Build leaves the tree clean
+        run: make tree-clean-check
+
       # Guard: the two integration shards cover exactly the seven contracts.
       - name: Integration shard coverage (dry run)
         run: |
@@ -238,6 +242,9 @@ jobs:
       - name: Session handoff, sync, collector, staged deploy (three guests)
         run: make qemu-fleet
 
+      - name: QEMU runs leave the tree clean
+        run: make tree-clean-check
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -280,6 +287,43 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: p2p-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
+  p2p-route:
+    name: QEMU P2P multi-hop routing four guests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc-multilib \
+            libc6-dev-i386 \
+            nasm \
+            qemu-system-x86
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU P2P line topology (relayed hellos, 3-hop sealed delivery)
+        run: make qemu-p2p-route
+
+      - name: QEMU runs leave the tree clean
+        run: make tree-clean-check
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2p-route-logs
           if-no-files-found: ignore
           path: |
             test_logs/

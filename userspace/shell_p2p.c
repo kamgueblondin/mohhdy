@@ -135,6 +135,9 @@ static void report(const char* what) {
     print_string(out);
 }
 
+static int g_key_len, g_key_default;
+/* US-112: network key facts for the security scan (never the key) */
+void shell_p2p_key_info(int* len, int* is_default) { *len = g_node.up ? g_key_len : 0; *is_default = g_node.up && g_key_default; }
 int shell_p2p_active(void) { return g_node.up; }
 void shell_fleet_tick(void);
 void shell_p2p_hint(const char* what) {
@@ -160,7 +163,9 @@ int shell_p2p_line(const char* line) {
         rest = word(rest, key, (int)sizeof(key));
         if (!a[0] || parse_ip(b, ip) != 0) { print_string("p2p-up error usage: p2p-up NAME IP [NETKEY]\n"); return 1; }
         if (osui_web_active()) { print_string("p2p-up error web-serve active\n"); return 1; }
+        g_key_default = !key[0];
         if (!key[0]) { int i; const char* d = "mohhdy-p2p-lab"; for (i = 0; d[i]; i++) key[i] = d[i]; key[i] = 0; }
+        { int i; for (i = 0; key[i]; i++) {} g_key_len = i; }
         if (g_seed_ok) { int i; for (i = 0; i < 32; i++) seed[i] = g_seed[i]; }
         else { int i; seed_from_machine(seed, a); for (i = 0; i < 32; i++) g_seed[i] = seed[i]; g_seed_ok = 1; }
         rc = p2p_up(&g_node, a, ip, key, seed, &g_host);
@@ -174,6 +179,23 @@ int shell_p2p_line(const char* line) {
     if (!g_node.up) { print_string(cmd); print_string(" error p2p down (p2p-up first)\n"); return 1; }
     if (s_eq(cmd, "p2p-down")) { p2p_down(&g_node); print_string("p2p-down ok\n"); return 0; }
     if (s_eq(cmd, "p2p-peers")) { report("peers"); return 0; }
+    if (s_eq(cmd, "p2p-route")) {
+        /* US-063: next hop and hop count to a peer (shortest path) */
+        p2p_peer_t* p;
+        int hops = 0;
+        uint32_t nx;
+        char t[12]; int k = 0;
+        word(rest, a, (int)sizeof(a));
+        p = p2p_find(&g_node, a);
+        if (!p) { print_string("p2p-route error unknown peer\n"); return 1; }
+        nx = p2p_route(&g_node, p->id, &hops);
+        print_string("p2p-route "); print_string(a);
+        if (nx == 0xffffffffU) { print_string(" unreachable\n"); return 1; }
+        print_string(" next "); print_string(nx == 0 ? a : p2p_peer_name(&g_node, nx));
+        t[k++] = ' '; t[k++] = 'h'; t[k++] = 'o'; t[k++] = 'p'; t[k++] = 's'; t[k++] = ' '; t[k++] = (char)('0' + hops % 10); t[k++] = '\n'; t[k] = 0;
+        print_string(t);
+        return 0;
+    }
     if (s_eq(cmd, "p2p-health")) { report("health"); return 0; }
     if (s_eq(cmd, "p2p-stats")) { report("stats"); return 0; }
     if (s_eq(cmd, "p2p-analyze")) { report("analyze"); return 0; }

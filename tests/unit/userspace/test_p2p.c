@@ -254,6 +254,47 @@ void test_failure_detection_and_relay(void) {
     TEST_ASSERT_EQUAL(-1, p2p_block(&g_n[0], "nobody", 1));
 }
 
+/* US-063 multi-hop: line topology alpha-beta-gamma-delta from boot.
+ * Hellos are relayed across partial links, so the ends discover and key
+ * each other, and sealed frames follow the shortest path hop by hop. */
+void test_multihop_line_topology(void) {
+    int hops = 0, i, j;
+    uint32_t nx;
+    static const int cut[3][2] = {{0, 2}, {0, 3}, {1, 3}};
+    setup(4, 0);
+    for (i = 0; i < 3; i++) { g_cut[cut[i][0]][cut[i][1]] = 1; g_cut[cut[i][1]][cut[i][0]] = 1; }
+    memset(g_qh, 0, sizeof(g_qh)); memset(g_qt, 0, sizeof(g_qt)); /* links cut from boot */
+    run(4, 3000);
+    TEST_ASSERT_NOT_NULL(p2p_find(&g_n[0], "delta"));
+    TEST_ASSERT_TRUE(p2p_find(&g_n[0], "delta")->keyed);
+    TEST_ASSERT_FALSE(p2p_find(&g_n[0], "delta")->up);
+    nx = p2p_route(&g_n[0], p2p_find(&g_n[0], "delta")->id, &hops);
+    TEST_ASSERT_EQUAL(p2p_find(&g_n[0], "beta")->id, nx);
+    TEST_ASSERT_EQUAL(3, hops);
+    nx = p2p_route(&g_n[0], p2p_find(&g_n[0], "gamma")->id, &hops);
+    TEST_ASSERT_EQUAL(2, hops);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p peer delta reachable hops 3 via beta"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[3], "p2p peer alpha reachable hops 3 via gamma"));
+    TEST_ASSERT_TRUE(g_n[1].hello_relayed > 0 && g_n[2].hello_relayed > 0);
+    TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "delta", "three hops"));
+    run(4, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[3], "p2p msg from alpha: three hops (relayed)"));
+    TEST_ASSERT_TRUE(g_n[1].relayed >= 1 && g_n[2].relayed >= 1);
+    TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[3], &g_h[3], "alpha", "back"));
+    run(4, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p msg from delta: back (relayed)"));
+    /* no relay of hellos on a full mesh */
+    for (i = 0; i < 4; i++) for (j = 0; j < 4; j++) g_cut[i][j] = 0;
+    run(4, 600);
+    nx = p2p_route(&g_n[0], p2p_find(&g_n[0], "delta")->id, &hops);
+    TEST_ASSERT_EQUAL(0, nx); TEST_ASSERT_EQUAL(1, hops);
+    {
+        uint32_t before = g_n[1].hello_relayed + g_n[2].hello_relayed;
+        run(4, 1000);
+        TEST_ASSERT_EQUAL(before, g_n[1].hello_relayed + g_n[2].hello_relayed);
+    }
+}
+
 void test_rate_limit_and_stats(void) {
     char rep[2048];
     int i, ok = 0, throttled = 0;
@@ -327,6 +368,7 @@ int main(void) {
     RUN_TEST(test_replication_lww_get_and_sync);
     RUN_TEST(test_consensus_commit_reject_timeout);
     RUN_TEST(test_failure_detection_and_relay);
+    RUN_TEST(test_multihop_line_topology);
     RUN_TEST(test_rate_limit_and_stats);
     RUN_TEST(test_traffic_analysis);
     RUN_TEST(test_bad_inputs);
