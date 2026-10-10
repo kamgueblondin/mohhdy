@@ -57,6 +57,10 @@ jobs:
       - name: Run unit tests (make test-all)
         run: make test-all
 
+      # Guard: build + unit tests must not modify or add tracked/unignored files.
+      - name: Build leaves the tree clean
+        run: make tree-clean-check
+
       # Guard: the two integration shards cover exactly the seven contracts.
       - name: Integration shard coverage (dry run)
         run: |
@@ -237,6 +241,9 @@ jobs:
 
       - name: Session handoff, sync, collector, staged deploy (three guests)
         run: make qemu-fleet
+
+      - name: QEMU runs leave the tree clean
+        run: make tree-clean-check
 
       - name: Upload logs
         if: always()
