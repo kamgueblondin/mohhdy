@@ -63,7 +63,7 @@ static const char *const k_caps[] = {
     "chat.reply", "site.explain", "session.escalate",
     "admin.observe", "admin.takeover",
     "dom.click", "dom.type", "pointer.move",
-    "mcp.invoice.create", "agent.run",
+    "mcp.invoice.create", "agent.run", "web.api",
     0
 };
 
@@ -97,6 +97,10 @@ typedef struct {
     char pending_tool[OSUI_CAP];
     char pending_a[48];
     char pending_b[24];
+    /* Roadmap step 5: local API token bound to this session. */
+    char api_token[OSUI_ID];
+    unsigned api_window;    /* osui_now() second the rate window opened */
+    unsigned api_count;     /* requests in the current window */
 } osui_session_t;
 
 typedef struct {
@@ -2680,7 +2684,197 @@ static int cmd_agent_run(char args[OSUI_MAX_ARGS][96], int narg, char *out, int 
     return rc;
 }
 
+
+/* Roadmap step 5: controlled local API of the Web Runtime, served inside the
+ * guest by OS-UI (no socket, no browser engine: phase3_complete=false). A
+ * request is "api <GET|POST> <route> [token] [body words]". Status is
+ * public; every other route needs the session token issued by api-token
+ * (capability web.api) and runs with that session's capabilities, the same
+ * ones the guest console enforces. Limits: 8 requests per token per 10 s
+ * (429), body at most OSUI_API_BODY bytes (413). Every request is journaled.
+ * The token is a local session handle, not a cryptographic secret. */
+#define OSUI_API_RATE 8U
+#define OSUI_API_WINDOW 10U
+#define OSUI_API_BODY 64
+#define OSUI_OUT_JSON 256
+
+static osui_session_t *api_owner(const char *tok) {
+    int i;
+    if (!tok || tok[0] != 't') return 0;
+    for (i = 0; i < OSUI_MAX_SESSIONS; i++) {
+        osui_session_t *s = &G.sessions[i];
+        if (s->used && s->api_token[0] && s_cmp(s->api_token, tok) == 0) return s;
+    }
+    return 0;
+}
+
+static int api_reply(char *out, int max, int *p, unsigned code, const char *route, const char *json,
+                     unsigned rid) {
+    out_add(out, max, p, "osui api status=");
+    out_u(out, max, p, code);
+    out_add(out, max, p, " route=");
+    out_add(out, max, p, route);
+    emit_rid(out, max, p, rid);
+    out_add(out, max, p, "\n");
+    out_add(out, max, p, json);
+    out_add(out, max, p, "\n");
+    return code == 200U ? OSUI_OK : OSUI_ERR;
+}
+
+static int cmd_api_token(int issue, char *out, int max) {
+    osui_session_t *s = cur();
+    int p = 0;
+    if (!s || s->status == ST_CLOSED) {
+        out_add(out, max, &p, "osui api-token error=no_session\n");
+        return OSUI_ERR;
+    }
+    if (!issue) {
+        s->api_token[0] = 0;
+        journal(s->id, "web.api", "token_revoked", 0U);
+        out_add(out, max, &p, "osui api-revoke ok session_id=");
+        out_add(out, max, &p, s->id);
+        out_add(out, max, &p, "\n");
+        return OSUI_OK;
+    }
+    if (!has_cap(s, "web.api")) {
+        journal(s->id, "web.api", "capability_denied", 0U);
+        out_add(out, max, &p, "osui api-token error=capability_denied capability=web.api\n");
+        return OSUI_ERR;
+    }
+    {
+        unsigned v = (new_rid() * 7919U + osui_now() * 104729U) % 90000U + 10000U;
+        int i;
+        s->api_token[0] = 't';
+        for (i = 5; i >= 1; i--) { s->api_token[i] = (char)('0' + v % 10U); v /= 10U; }
+        s->api_token[6] = 0;
+    }
+    s->api_window = osui_now();
+    s->api_count = 0U;
+    journal(s->id, "web.api", "token_issued", 0U);
+    out_add(out, max, &p, "osui api-token ok token=");
+    out_add(out, max, &p, s->api_token);
+    out_add(out, max, &p, " session_id=");
+    out_add(out, max, &p, s->id);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_api(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    char json[OSUI_OUT_JSON];
+    char body[OSUI_TEXT];
+    const char *m, *r;
+    osui_session_t *s;
+    unsigned rid = new_rid();
+    int p = 0, get, post, rc, i, q = 0;
+    if (narg < 2) return api_reply(out, max, &p, 400U, "-", "{\"error\":\"usage api <GET|POST> <route> [token] [body]\"}", rid);
+    m = args[0]; r = args[1];
+    get = s_cmp(m, "GET") == 0 || s_cmp(m, "get") == 0;
+    post = s_cmp(m, "POST") == 0 || s_cmp(m, "post") == 0;
+    if (!get && !post) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+    if (s_cmp(r, "/status") == 0) {
+        if (!get) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+        journal("", "web.api:/status", "ok", rid);
+        json[0] = 0;
+        out_add(json, sizeof(json), &q, "{\"status\":\"ok\",\"runtime\":\"osui-local-api\",\"phase3_complete\":false,"
+                "\"browser_engine\":\"none\",\"sessions\":");
+        {
+            unsigned n = 0U;
+            for (i = 0; i < OSUI_MAX_SESSIONS; i++) if (G.sessions[i].used) n++;
+            out_u(json, sizeof(json), &q, n);
+        }
+        out_add(json, sizeof(json), &q, ",\"ai_provider\":\"");
+        out_add(json, sizeof(json), &q, G.ai_provider[0] ? G.ai_provider : "local");
+        out_add(json, sizeof(json), &q, "\"}");
+        return api_reply(out, max, &p, 200U, r, json, rid);
+    }
+    if (s_cmp(r, "/sessions") != 0 && s_ncmp(r, "/vfs/", 5) != 0 && s_cmp(r, "/ai/chat") != 0) {
+        journal("", "web.api", "not_found", rid);
+        return api_reply(out, max, &p, 404U, r, "{\"error\":\"no_such_route\"}", rid);
+    }
+    s = narg >= 3 ? api_owner(args[2]) : 0;
+    if (!s || s->status == ST_CLOSED) {
+        journal("", "web.api", "unauthorized", rid);
+        return api_reply(out, max, &p, 401U, r, "{\"error\":\"token_required\"}", rid);
+    }
+    if (osui_now() - s->api_window >= OSUI_API_WINDOW) { s->api_window = osui_now(); s->api_count = 0U; }
+    if (++s->api_count > OSUI_API_RATE) {
+        journal(s->id, "web.api", "rate_limited", rid);
+        return api_reply(out, max, &p, 429U, r, "{\"error\":\"rate_limited\",\"limit\":8,\"window_s\":10}", rid);
+    }
+    rest_from(args, narg, 3, body, OSUI_TEXT);
+    if (s_len(body) > OSUI_API_BODY) {
+        journal(s->id, "web.api", "body_too_large", rid);
+        return api_reply(out, max, &p, 413U, r, "{\"error\":\"body_too_large\",\"max\":64}", rid);
+    }
+    if (!has_cap(s, "web.api")) {   /* revoked after the token was issued */
+        journal(s->id, "web.api", "capability_denied", rid);
+        return api_reply(out, max, &p, 403U, r, "{\"error\":\"capability_denied\",\"capability\":\"web.api\"}", rid);
+    }
+    if (s_cmp(r, "/sessions") == 0) {
+        if (!get) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+        journal(s->id, "web.api:/sessions", "ok", rid);
+        out_add(json, sizeof(json), &q, "{\"sessions\":[{\"id\":\"");
+        out_add(json, sizeof(json), &q, s->id);
+        out_add(json, sizeof(json), &q, "\",\"status\":\"");
+        out_add(json, sizeof(json), &q, st_name(s->status));
+        out_add(json, sizeof(json), &q, "\",\"caps\":");
+        out_u(json, sizeof(json), &q, (unsigned)s->n_caps);
+        out_add(json, sizeof(json), &q, "}],\"visible\":\"own_session_only\"}");
+        return api_reply(out, max, &p, 200U, r, json, rid);
+    }
+    if (s_ncmp(r, "/vfs/", 5) == 0) {
+        const char *path = r + 5;
+        osui_fs_t *f;
+        if (!get) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+        if (fs_traversal(path)) {
+            journal(s->id, "web.api:/vfs", "traversal_denied", rid);
+            return api_reply(out, max, &p, 400U, r, "{\"error\":\"traversal_denied\"}", rid);
+        }
+        if (!fs_read_allowed(s, path)) {
+            journal(s->id, "web.api:/vfs", "scope_denied", rid);
+            return api_reply(out, max, &p, 403U, r, "{\"error\":\"capability_denied\",\"capability\":\"fs.read:<scope>\"}", rid);
+        }
+        f = fs_find(path);
+        if (!f || f->is_dir) return api_reply(out, max, &p, 404U, r, "{\"error\":\"not_found\"}", rid);
+        journal(s->id, "web.api:/vfs", "ok", rid);
+        out_add(json, sizeof(json), &q, "{\"path\":\"");
+        out_add(json, sizeof(json), &q, path);
+        out_add(json, sizeof(json), &q, "\",\"bytes\":");
+        out_u(json, sizeof(json), &q, (unsigned)s_len(f->content));
+        out_add(json, sizeof(json), &q, "}");
+        api_reply(out, max, &p, 200U, r, json, rid);
+        out_add(out, max, &p, f->content);
+        return OSUI_OK;
+    }
+    /* POST /ai/chat: the same chat path as the console, as the token owner. */
+    if (!post) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+    if (!body[0]) return api_reply(out, max, &p, 400U, r, "{\"error\":\"empty_body\"}", rid);
+    {
+        char a2[OSUI_MAX_ARGS][96];
+        int saved = G.current, n = 1;
+        const char *b = body;
+        for (i = 0; i < OSUI_MAX_ARGS; i++) a2[i][0] = 0;
+        s_cpy(a2[0], 96, "ai");
+        while (*b && n < OSUI_MAX_ARGS) {
+            int k = 0;
+            while (*b == ' ') b++;
+            while (*b && *b != ' ' && k < 95) a2[n][k++] = *b++;
+            a2[n][k] = 0;
+            if (k) n++;
+        }
+        G.current = (int)(s - G.sessions);
+        api_reply(out, max, &p, 202U, r, "{\"accepted\":true,\"via\":\"osui chat\"}", rid);
+        rc = cmd_chat(a2, n, out + p, max - p);
+        G.current = saved;
+        journal(s->id, "web.api:/ai/chat", rc == OSUI_OK ? "ok" : "error", rid);
+        return rc;
+    }
+}
+
 static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    if (s_cmp(cmd, "api") == 0) return cmd_api(args, narg, out, max);
+    if (s_cmp(cmd, "api-token") == 0) return cmd_api_token(1, out, max);
+    if (s_cmp(cmd, "api-revoke") == 0) return cmd_api_token(0, out, max);
     if (s_cmp(cmd, "agent-run") == 0) return cmd_agent_run(args, narg, out, max);
     if (s_cmp(cmd, "os-help") == 0 || s_cmp(cmd, "help") == 0) return cmd_os_help(out, max);
     if (s_cmp(cmd, "os-status") == 0) return cmd_os_status(out, max);

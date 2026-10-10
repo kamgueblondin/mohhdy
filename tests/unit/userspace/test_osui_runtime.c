@@ -5,6 +5,7 @@
 #include "osui_runtime.h"
 #include "mohhdy_osui_bridge.h"
 #include <string.h>
+#include <stdio.h>
 
 static char g_out[OSUI_OUT_MAX];
 
@@ -653,6 +654,77 @@ static void test_provider_peer_fallback(void) {
     osui_test_net_rc = -1; osui_test_net_worker = 0; osui_test_net_llm_status = 0U;
 }
 
+
+/* Roadmap step 5: controlled local API (routes, auth, errors, limits). */
+static void test_local_api(void) {
+    char tok[8];
+    const char *t;
+    char line[128];
+    int i;
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("api GET /status"));
+    TEST_ASSERT(strstr(g_out, "osui api status=200 route=/status") != NULL);
+    TEST_ASSERT(strstr(g_out, "\"phase3_complete\":false,\"browser_engine\":\"none\"") != NULL);
+    TEST_ASSERT_EQUAL(1, run_line("api POST /status"));
+    TEST_ASSERT(strstr(g_out, "status=405") != NULL);
+    TEST_ASSERT_EQUAL(1, run_line("api GET /nope"));
+    TEST_ASSERT(strstr(g_out, "status=404") != NULL);
+    TEST_ASSERT_EQUAL(1, run_line("api DELETE /status"));
+    TEST_ASSERT(strstr(g_out, "status=405") != NULL);
+    TEST_ASSERT_EQUAL(1, run_line("api GET /sessions"));
+    TEST_ASSERT(strstr(g_out, "status=401") != NULL);
+    TEST_ASSERT_EQUAL(1, run_line("api GET /sessions t00000"));
+    TEST_ASSERT(strstr(g_out, "status=401") != NULL);
+    TEST_ASSERT_EQUAL(1, run_line("api-token"));
+    TEST_ASSERT(strstr(g_out, "capability_denied capability=web.api") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("grant web.api"));
+    TEST_ASSERT_EQUAL(0, run_line("api-token"));
+    t = strstr(g_out, "token=");
+    TEST_ASSERT(t != NULL);
+    memcpy(tok, t + 6, 6); tok[6] = 0;
+    TEST_ASSERT_EQUAL('t', tok[0]);
+    snprintf(line, sizeof(line), "api GET /sessions %s", tok);
+    TEST_ASSERT_EQUAL(0, run_line(line));
+    TEST_ASSERT(strstr(g_out, "own_session_only") != NULL);
+    /* VFS: same scope rules as the console. */
+    snprintf(line, sizeof(line), "api GET /vfs/demo/hello.txt %s", tok);
+    TEST_ASSERT_EQUAL(1, run_line(line));
+    TEST_ASSERT(strstr(g_out, "status=403") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("grant fs.read:demo/"));
+    TEST_ASSERT_EQUAL(0, run_line(line));
+    TEST_ASSERT(strstr(g_out, "status=200 route=/vfs/demo/hello.txt") != NULL);
+    TEST_ASSERT(strstr(g_out, "hello from guest FS sandbox") != NULL);
+    snprintf(line, sizeof(line), "api GET /vfs/demo/../x %s", tok);
+    TEST_ASSERT_EQUAL(1, run_line(line));
+    TEST_ASSERT(strstr(g_out, "status=400") != NULL);
+    /* AI console over the API: same chat path, same capability. */
+    snprintf(line, sizeof(line), "api POST /ai/chat %s bonjour", tok);
+    TEST_ASSERT_EQUAL(0, run_line(line));
+    TEST_ASSERT(strstr(g_out, "status=202") != NULL);
+    TEST_ASSERT(strstr(g_out, "osui chat ok llm=gpt2_local ai_status=ready") != NULL);
+    snprintf(line, sizeof(line), "api POST /ai/chat %s %s", tok,
+             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    TEST_ASSERT_EQUAL(1, run_line(line));
+    TEST_ASSERT(strstr(g_out, "status=413") != NULL);
+    /* Rate limit: 8 per 10 s per token (6 used above). */
+    snprintf(line, sizeof(line), "api GET /sessions %s", tok);
+    TEST_ASSERT_EQUAL(0, run_line(line));
+    TEST_ASSERT_EQUAL(0, run_line(line));
+    TEST_ASSERT_EQUAL(1, run_line(line));
+    TEST_ASSERT(strstr(g_out, "status=429") != NULL);
+    osui_test_now += 11U;
+    TEST_ASSERT_EQUAL(0, run_line(line));
+    /* Revocation of the capability, then of the token. */
+    TEST_ASSERT_EQUAL(0, run_line("revoke web.api"));
+    TEST_ASSERT_EQUAL(1, run_line(line));
+    TEST_ASSERT(strstr(g_out, "status=403") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("api-revoke"));
+    TEST_ASSERT_EQUAL(1, run_line(line));
+    TEST_ASSERT(strstr(g_out, "status=401") != NULL);
+    TEST_ASSERT(strstr(g_out, "hello") == NULL);
+    (void)i;
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -664,6 +736,7 @@ int main(void) {
     RUN_TEST(test_scopes_and_agent_run);
     RUN_TEST(test_ai_worker_lost);
     RUN_TEST(test_provider_peer_fallback);
+    RUN_TEST(test_local_api);
     RUN_TEST(test_grant_revoke_chat);
     RUN_TEST(test_escalate_takeover);
     RUN_TEST(test_origin_denied);

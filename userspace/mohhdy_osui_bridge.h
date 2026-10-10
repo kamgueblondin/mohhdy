@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 214
+#define MOHHDY_SHELL_COMMAND_COUNT 217
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -47,6 +47,9 @@ static const char * const mohhdy_shell_commands[] = {
     "aistats",
     "aitest",
     "alias",
+    "api",
+    "api-revoke",
+    "api-token",
     "append",
     "ata-debug-crash",
     "ata-status",
