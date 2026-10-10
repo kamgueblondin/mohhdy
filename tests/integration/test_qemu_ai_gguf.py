@@ -59,7 +59,7 @@ base.FIXTURE = os.path.join(ROOT, "build", "ai_fixture")
 GGUF_BYTES = 4024704
 GGUF_PAGES = (GGUF_BYTES + 4095) // 4096
 OS_AI_GGUF_NO_WORKER = -148
-FP32_TOKENS = "0 1 2 14 3 4 |9 1 10 13 0 6 13 7 10 3 2 3 6 9 1 12 0"
+FP32_TOKENS = "0 1 2 14 3 4 |10 1 13 0 3 8 6 9 11 10 6 4 7"
 
 GGUF_RE = (r"%s gguf worker (-?\d+) bytes (\d+) fwd (\d+) done (\d+) kernel (\d+) "
            r"live (\d+) fallback (\d+) aborted (\d+) rogue (\d+) pending (\d+) "

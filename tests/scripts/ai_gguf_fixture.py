@@ -23,7 +23,7 @@ import struct
 import subprocess
 import sys
 
-SEED = 20261004
+SEED = int(os.environ.get("AI_GGUF_FIXTURE_SEED", "1"))
 C = 768
 VOCAB = 16
 POSITIONS = 32
