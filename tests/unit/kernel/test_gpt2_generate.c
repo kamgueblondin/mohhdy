@@ -8,6 +8,7 @@
 #include "../../../kernel/llm/gpt2_generate.h"
 #include "../../../kernel/llm/gpt2_model.h"
 #include "../../../kernel/llm/gpt2_tokenizer.h"
+#include "../../../kernel/llm/gpt2_sample.h"
 
 /* T=32 V=16 L=2 heads=2 C=32, like tests/scripts/ai_worker_fixture.py. */
 #define T 32U
