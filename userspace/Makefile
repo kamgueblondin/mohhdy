@@ -9,7 +9,7 @@ ASFLAGS = --32
 
 # Programmes à compiler
 PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver vfsvirtual networker vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim vfshistclaim waitchild ok
-USER_HEADERS = ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h
+USER_HEADERS = promptmessage.h ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h
 # Tranche 4: Ring 3 ATA driver + proofs.
 PROGRAMS += atadriver ataclient atarogue
 # Tranche 5: net-driver gate proof client.
@@ -54,7 +54,7 @@ ai_gguf_pause.o: ai_gguf_client.c
 	$(CC) $(CFLAGS) -DGGUF_PAUSE -c -o $@ $<
 ai_client.o ai_stat.o ai_rogue.o ai_gguf_client.o ai_gguf_pause.o: ai_common.h $(USER_HEADERS)
 
-shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o start.o
+shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o promptmessage.o start.o
 	@echo "Linking shell..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
