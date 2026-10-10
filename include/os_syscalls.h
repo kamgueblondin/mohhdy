@@ -332,6 +332,27 @@
  * REPLY from anyone else is refused and counted (rogue). See
  * docs/ai_worker_ring3.md. */
 #define SYS_AI_ENGINE 155
+
+/* Roadmap step 5: plain (non-TLS) data on the accepted peer connection
+ * (SYS_PEER_LISTEN / SYS_PEER_ACCEPT), so a guest can serve any protocol
+ * (HTTP) through the Ring 3 networker. EBX = os_peer_data_request_t*
+ * (in/out). RECV: 0 = data in data[0..length), 1 = nothing yet, 2 = peer
+ * closed (FIN). SEND: 0 = length bytes emitted (at most OS_PEER_DATA_SEND_MAX
+ * per call). CLOSE: FIN emitted, the listen slot can be re-armed. */
+#define SYS_PEER_DATA 156
+#define OS_PEER_DATA_RECV 1U
+#define OS_PEER_DATA_SEND 2U
+#define OS_PEER_DATA_CLOSE 3U
+#define OS_PEER_DATA_SEND_MAX 64U
+#define OS_PEER_DATA_RECV_MAX 248U
+typedef struct {
+    uint8_t op;
+    uint8_t reserved;
+    uint16_t attempts;
+    uint16_t length;
+    uint16_t pad;
+    uint8_t data[OS_PEER_DATA_RECV_MAX];
+} os_peer_data_request_t;
 #define MAX_SYSCALLS 156
 #define OS_ATA_DEBUG_CRASH_FAT_WRITE 1U
 

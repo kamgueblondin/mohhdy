@@ -45,7 +45,8 @@ int net_relay_supported(uint32_t syscall_number) {
 }
 
 int net_relay_peer_supported(uint32_t syscall_number) {
-    return syscall_number >= SYS_PEER_LISTEN && syscall_number <= SYS_PEER_TLS_POLL;
+    return (syscall_number >= SYS_PEER_LISTEN && syscall_number <= SYS_PEER_TLS_POLL) ||
+           syscall_number == SYS_PEER_DATA;
 }
 
 int net_relay_llm_supported(uint32_t syscall_number) {
