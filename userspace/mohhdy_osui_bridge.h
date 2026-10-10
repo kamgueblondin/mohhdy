@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 260
+#define MOHHDY_SHELL_COMMAND_COUNT 317
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -96,6 +96,8 @@ static const char * const mohhdy_shell_commands[] = {
     "collab-vote",
     "collab-votes",
     "collab-work",
+    "compat-check",
+    "compat-scan",
     "confirm",
     "console",
     "cp",
@@ -203,6 +205,8 @@ static const char * const mohhdy_shell_commands[] = {
     "pm-verify",
     "pm-version",
     "pm-versions",
+    "power-profile",
+    "power-status",
     "prod-alert-add",
     "prod-alert-del",
     "prod-alerts",
