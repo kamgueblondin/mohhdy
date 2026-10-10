@@ -3113,7 +3113,7 @@ static int is_builtin(const char* cmd) {
         "collab-join", "collab-pay", "collab-offer", "collab-reserve", "collab-task", "collab-claim", "collab-work",
         "collab-review", "collab-rate", "collab-propose", "collab-vote", "collab-profile", "collab-forget",
         "collab-export", "collab-ticket", "collab-answer", "collab-sync", "collab-balances", "collab-audit",
-        "collab-tasks", "collab-offers", "collab-votes", "collab-tickets",
+        "collab-tasks", "collab-offers", "collab-votes", "collab-tickets", "collab-keys", "collab-forge",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
