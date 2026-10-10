@@ -9,7 +9,7 @@ ASFLAGS = --32
 
 # Programmes à compiler
 PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver vfsvirtual networker vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim vfshistclaim waitchild ok
-USER_HEADERS = promptmessage.h ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h
+USER_HEADERS = promptmessage.h ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h p2p.h shell_p2p.h
 # Tranche 4: Ring 3 ATA driver + proofs.
 PROGRAMS += atadriver ataclient atarogue
 # Tranche 5: net-driver gate proof client.
@@ -54,7 +54,7 @@ ai_gguf_pause.o: ai_gguf_client.c
 	$(CC) $(CFLAGS) -DGGUF_PAUSE -c -o $@ $<
 ai_client.o ai_stat.o ai_rogue.o ai_gguf_client.o ai_gguf_pause.o: ai_common.h $(USER_HEADERS)
 
-shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o promptmessage.o start.o
+shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o promptmessage.o shell_p2p.o p2p.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o start.o
 	@echo "Linking shell..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
@@ -94,6 +94,9 @@ vfsserver: vfs_server.o start.o
 	@echo "Linking vfsserver..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
+p2p_%.o: ../kernel/%.c $(USER_HEADERS)
+	$(CC) $(CFLAGS) -I.. -DMOHHDY_RING3 -c -o $@ $<
+
 vfsvirtual: vfs_virtual_worker.o start.o
 	@echo "Linking vfsvirtual..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
@@ -110,7 +113,7 @@ net_worker.o: net_worker.c ../kernel/ne2k.h ../kernel/net_stack_exec.h ../kernel
 # and runs every relayed network syscall at CPL 3.
 NET_STACK_SRCS = ne2k net_nic net_ethernet_arp net_ipv4_udp net_dhcp net_dns net_tcp net_socket \
                  net_llm_socket net_http_tls net_tls_record net_tls_server net_wire net_stack_exec \
-                 net_llm_client sha256 aes_gcm x509_der bigint ecdsa_p256 x25519 rsa_verify rtc
+                 net_llm_client net_p2p sha256 aes_gcm x509_der bigint ecdsa_p256 x25519 rsa_verify rtc
 NET_STACK_OBJS = $(addprefix drvnet_,$(addsuffix .o,$(NET_STACK_SRCS)))
 drvnet_%.o: ../kernel/%.c $(USER_HEADERS)
 	$(CC) $(CFLAGS) -I.. -DMOHHDY_RING3 -c -o $@ $<
