@@ -64,7 +64,10 @@ int net_llm_client_utc(rtc_io_t* io, char* out, uint16_t capacity) {
     if (rtc_i386_io(io) != 0) return -1;
     return rtc_read_utc(io, out, capacity);
 }
-uint32_t kernel_llm_session_status(void) { return kernel_net_nic_present() ? 1U : 0U; }
+/* Bit 31: this kernel has no Ring 0 network stack (strict image). */
+uint32_t kernel_llm_session_status(void) {
+    return 0x80000000U | (kernel_net_nic_present() ? 1U : 0U);
+}
 int kernel_llm_acquire_start(const os_llm_acquire_start_request_t* r) { (void)r; return absent(); }
 int kernel_llm_poll_tls(void) { return absent(); }
 int kernel_llm_request(const os_llm_request_t* r) { (void)r; return absent(); }
