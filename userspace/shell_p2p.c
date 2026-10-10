@@ -180,3 +180,9 @@ int shell_p2p_line(const char* line) {
     print_string(cmd); print_string(" error unknown p2p command\n");
     return 1;
 }
+
+p2p_node_t* shell_p2p_node(void) { return &g_node; }
+const p2p_host_t* shell_p2p_host(void) {
+    g_host.ctx = 0; g_host.send = h_send; g_host.recv = h_recv; g_host.ticks = h_ticks; g_host.out = h_out;
+    return &g_host;
+}

@@ -30,7 +30,7 @@ enum {
     P2P_T_HELLO = 1, P2P_T_SEALED = 2,
     /* inner (sealed) types */
     P2P_I_PING = 10, P2P_I_PONG, P2P_I_MSG, P2P_I_PUT, P2P_I_SYNC_REQ, P2P_I_SYNC_ITEMS,
-    P2P_I_GET_REQ, P2P_I_GET_RESP, P2P_I_PROPOSE, P2P_I_VOTE, P2P_I_COMMIT, P2P_I_COUNT
+    P2P_I_GET_REQ, P2P_I_GET_RESP, P2P_I_PROPOSE, P2P_I_VOTE, P2P_I_COMMIT, P2P_I_APP, P2P_I_COUNT
 };
 
 typedef struct {
@@ -105,6 +105,9 @@ typedef struct {
     uint32_t tx_type[P2P_I_COUNT], rx_type[P2P_I_COUNT];
     uint32_t tx_bytes, rx_bytes, relayed, bad_hello, foreign, dup;
     char last_msg[P2P_TEXT_MAX];
+    /* Application payloads (Phase 7 collab) carried in sealed P2P_I_APP. */
+    void (*app)(void* app_ctx, uint32_t from_id, const uint8_t* data, int length);
+    void* app_ctx;
 } p2p_node_t;
 
 int p2p_up(p2p_node_t* n, const char* name, const uint8_t ip[4], const char* netkey,
@@ -123,4 +126,9 @@ int p2p_block(p2p_node_t* n, const char* peer, int blocked);
 /* Report lines into out (peers, health, stats, kv). */
 int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char* out, int cap);
 const char* p2p_type_name(int type);
+/* Sealed application payload to one peer id, or to every keyed peer (0).
+ * Returns the number of peers it was sent to. */
+int p2p_send_app(p2p_node_t* n, const p2p_host_t* h, uint32_t peer_id, const uint8_t* data, int length);
+const char* p2p_peer_name(const p2p_node_t* n, uint32_t id);
+uint32_t p2p_member_count(const p2p_node_t* n);
 #endif

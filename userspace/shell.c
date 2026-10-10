@@ -9,7 +9,8 @@
 #include "os_vfs_service.h"
 #include "os_ipc_deferred.h"
 #include "osui_runtime.h"
-#include "shell_platform.h"
+#include "shell_p2p.h"
+int shell_collab_line(const char* line);
 #include "osui_gui.h"
 #include "promptmessage.h"
 
@@ -3100,9 +3101,12 @@ static int is_builtin(const char* cmd) {
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
-        "hal-info", "hal-port", "screen-adapt", "gesture", "power-profile", "power-status", "dev-list",
-        "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
-        "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
+        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-kv", "p2p-poll",
+        "p2p-send", "p2p-put", "p2p-get", "p2p-sync", "p2p-propose", "p2p-block", "p2p-unblock", "p2p-limit",
+        "collab-join", "collab-pay", "collab-offer", "collab-reserve", "collab-task", "collab-claim", "collab-work",
+        "collab-review", "collab-rate", "collab-propose", "collab-vote", "collab-profile", "collab-forget",
+        "collab-export", "collab-ticket", "collab-answer", "collab-sync", "collab-balances", "collab-audit",
+        "collab-tasks", "collab-offers", "collab-votes", "collab-tickets",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
@@ -6580,8 +6584,12 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
     else
         add_to_history(ctx, input_buffer);
 
-    if (shell_platform_is(input_buffer)) {
-        ctx->last_rc = shell_platform_line(input_buffer);
+    if (strncmp(input_buffer, "collab-", 7U) == 0) {
+        ctx->last_rc = shell_collab_line(input_buffer);
+        return;
+    }
+    if (strncmp(input_buffer, "p2p-", 4U) == 0) {
+        ctx->last_rc = shell_p2p_line(input_buffer);
         return;
     }
 

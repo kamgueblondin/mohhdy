@@ -8,7 +8,7 @@
 static uint32_t g_ws[X25519_WORKSPACE_LIMBS];
 static const char* const k_names[P2P_I_COUNT] = {
     "?", "hello", "sealed", "?", "?", "?", "?", "?", "?", "?",
-    "ping", "pong", "msg", "put", "sync-req", "sync-items", "get-req", "get-resp", "propose", "vote", "commit"
+    "ping", "pong", "msg", "put", "sync-req", "sync-items", "get-req", "get-resp", "propose", "vote", "commit", "app"
 };
 const char* p2p_type_name(int t) { return (t > 0 && t < P2P_I_COUNT) ? k_names[t] : "?"; }
 
@@ -371,6 +371,9 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         if (m[4]) pr->yes++; else pr->no++;
         break;
     }
+    case P2P_I_APP:
+        if (n->app) n->app(n->app_ctx, p->id, m, len);
+        break;
     default:
         break;
     }
@@ -749,3 +752,22 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
     }
     return s_len(out);
 }
+
+int p2p_send_app(p2p_node_t* n, const p2p_host_t* h, uint32_t peer_id, const uint8_t* data, int length) {
+    int i, sent = 0;
+    if (!n || !n->up || length < 1 || length > 400) return -1;
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        if (!p->used || !p->keyed || (peer_id && p->id != peer_id)) continue;
+        /* keyed peers keep their link key across a heartbeat flap */
+        if (seal_send(n, h, p, P2P_I_APP, data, length) == 0) sent++;
+    }
+    return sent;
+}
+const char* p2p_peer_name(const p2p_node_t* n, uint32_t id) {
+    int i;
+    if (id == n->id) return n->name;
+    for (i = 0; i < P2P_PEERS; i++) if (n->peers[i].used && n->peers[i].id == id) return n->peers[i].name;
+    return "?";
+}
+uint32_t p2p_member_count(const p2p_node_t* n) { return up_count(n) + 1U; }

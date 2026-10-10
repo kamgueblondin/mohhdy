@@ -102,8 +102,14 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/ramfs.c $BASE_DIR/userspace/procsim.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
-    if [ "$(basename "$test_file")" = "test_platform.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/platform.c"
+    if [ "$(basename "$test_file")" = "test_net_p2p.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/net_p2p.c $BASE_DIR/kernel/net_ipv4_udp.c"
+    fi
+    if [ "$(basename "$test_file")" = "test_collab.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/collab.c $BASE_DIR/kernel/sha256.c"
+    fi
+    if [ "$(basename "$test_file")" = "test_p2p.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
     fi
     if [ "$(basename "$test_file")" = "test_promptmessage.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/promptmessage.c"
