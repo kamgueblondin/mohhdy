@@ -716,6 +716,15 @@ static void test_local_api(void) {
     snprintf(line, sizeof(line), "api GET /sessions %s", tok);
     TEST_ASSERT_EQUAL(0, run_line(line));
     TEST_ASSERT(strstr(g_out, "own_session_only") != NULL);
+    /* Web supervision needs admin.observe. */
+    snprintf(line, sizeof(line), "api GET /supervision %s", tok);
+    TEST_ASSERT_EQUAL(1, run_line(line));
+    TEST_ASSERT(strstr(g_out, "status=403") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("grant admin.observe"));
+    TEST_ASSERT_EQUAL(0, run_line(line));
+    TEST_ASSERT(strstr(g_out, "\"ai_worker\":\"absent\",\"ai_last_abort\":\"none\",\"net_worker\":\"absent\"") != NULL);
+    TEST_ASSERT(strstr(g_out, "web.api:/supervision:capability_denied") != NULL);
+    osui_test_now += 11U;   /* new rate window for the rest of the test */
     /* VFS: same scope rules as the console. */
     snprintf(line, sizeof(line), "api GET /vfs/demo/hello.txt %s", tok);
     TEST_ASSERT_EQUAL(1, run_line(line));
@@ -736,8 +745,9 @@ static void test_local_api(void) {
              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     TEST_ASSERT_EQUAL(1, run_line(line));
     TEST_ASSERT(strstr(g_out, "status=413") != NULL);
-    /* Rate limit: 8 per 10 s per token (6 used above). */
+    /* Rate limit: 8 per 10 s per token (5 used in this window). */
     snprintf(line, sizeof(line), "api GET /sessions %s", tok);
+    TEST_ASSERT_EQUAL(0, run_line(line));
     TEST_ASSERT_EQUAL(0, run_line(line));
     TEST_ASSERT_EQUAL(0, run_line(line));
     TEST_ASSERT_EQUAL(1, run_line(line));

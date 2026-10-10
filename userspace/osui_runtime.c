@@ -235,6 +235,8 @@ static int osui_net_stack(unsigned *llm_status, int *worker) {
 }
 static unsigned osui_ai_last_error(void) { return osui_test_ai_error; }
 static unsigned osui_ai_last_abort(void) { return osui_test_ai_abort; }
+int osui_test_ai_worker = 0;
+static int osui_ai_worker_pid(void) { return osui_test_ai_worker; }
 static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     const char *fixture = "test local response";
     int i = 0;
@@ -364,6 +366,14 @@ static unsigned osui_ai_last_abort(void) {
                  : "a"(SYS_AI_ENGINE), "b"(OS_AI_ENGINE_STATUS), "c"(&st), "d"(0)
                  : "memory");
     return result == 0 ? st.last_abort : OS_AI_ABORT_NONE;
+}
+static int osui_ai_worker_pid(void) {
+    static os_ai_engine_status_t st;
+    int result;
+    asm volatile("int $0x80" : "=a"(result)
+                 : "a"(SYS_AI_ENGINE), "b"(OS_AI_ENGINE_STATUS), "c"(&st), "d"(0)
+                 : "memory");
+    return result == 0 ? (int)st.worker_pid : 0;
 }
 static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     int result;
@@ -2826,7 +2836,7 @@ static int cmd_agent_run(char args[OSUI_MAX_ARGS][96], int narg, char *out, int 
 #define OSUI_API_RATE 8U
 #define OSUI_API_WINDOW 10U
 #define OSUI_API_BODY 64
-#define OSUI_OUT_JSON 256
+#define OSUI_OUT_JSON 384
 
 static osui_session_t *api_owner(const char *tok) {
     int i;
@@ -2917,7 +2927,8 @@ static int cmd_api(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
         out_add(json, sizeof(json), &q, "\"}");
         return api_reply(out, max, &p, 200U, r, json, rid);
     }
-    if (s_cmp(r, "/sessions") != 0 && s_ncmp(r, "/vfs/", 5) != 0 && s_cmp(r, "/ai/chat") != 0) {
+    if (s_cmp(r, "/sessions") != 0 && s_ncmp(r, "/vfs/", 5) != 0 && s_cmp(r, "/ai/chat") != 0 &&
+        s_cmp(r, "/supervision") != 0) {
         journal("", "web.api", "not_found", rid);
         return api_reply(out, max, &p, 404U, r, "{\"error\":\"no_such_route\"}", rid);
     }
@@ -2939,6 +2950,42 @@ static int cmd_api(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     if (!has_cap(s, "web.api")) {   /* revoked after the token was issued */
         journal(s->id, "web.api", "capability_denied", rid);
         return api_reply(out, max, &p, 403U, r, "{\"error\":\"capability_denied\",\"capability\":\"web.api\"}", rid);
+    }
+    /* Web supervision: worker liveness, network state and the journal tail,
+     * under admin.observe (the same capability as admin-status). */
+    if (s_cmp(r, "/supervision") == 0) {
+        unsigned st = 0U;
+        int nw = 0, n, k;
+        const char *ab;
+        if (!get) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);
+        if (!has_cap(s, "admin.observe")) {
+            journal(s->id, "web.api:/supervision", "capability_denied", rid);
+            return api_reply(out, max, &p, 403U, r, "{\"error\":\"capability_denied\",\"capability\":\"admin.observe\"}", rid);
+        }
+        journal(s->id, "web.api:/supervision", "ok", rid);
+        if (osui_net_stack(&st, &nw) != 0) { st = 0U; nw = 0; }
+        k = (int)osui_ai_last_abort();
+        ab = k == OS_AI_ABORT_WORKER_LOST ? "worker_lost" : k == OS_AI_ABORT_STALLED ? "stalled" :
+             k == OS_AI_ABORT_TIMEOUT ? "timeout" : k == OS_AI_ABORT_CANCELLED ? "cancelled" : "none";
+        out_add(json, sizeof(json), &q, "{\"ai_worker\":");
+        out_add(json, sizeof(json), &q, osui_ai_worker_pid() > 0 ? "\"live\"" : "\"absent\"");
+        out_add(json, sizeof(json), &q, ",\"ai_last_abort\":\"");
+        out_add(json, sizeof(json), &q, ab);
+        out_add(json, sizeof(json), &q, "\",\"net_worker\":");
+        out_add(json, sizeof(json), &q, nw > 0 ? "\"live\"" : "\"absent\"");
+        out_add(json, sizeof(json), &q, ",\"nic\":");
+        out_add(json, sizeof(json), &q, (st & 1U) ? "true" : "false");
+        out_add(json, sizeof(json), &q, ",\"journal\":[");
+        n = G.n_journal < 3 ? G.n_journal : 3;
+        for (k = G.n_journal - n; k < G.n_journal; k++) {
+            out_add(json, sizeof(json), &q, "\"");
+            out_add(json, sizeof(json), &q, G.journal[k].tool);
+            out_add(json, sizeof(json), &q, ":");
+            out_add(json, sizeof(json), &q, G.journal[k].outcome);
+            out_add(json, sizeof(json), &q, k + 1 < G.n_journal ? "\"," : "\"");
+        }
+        out_add(json, sizeof(json), &q, "]}");
+        return api_reply(out, max, &p, 200U, r, json, rid);
     }
     if (s_cmp(r, "/sessions") == 0) {
         if (!get) return api_reply(out, max, &p, 405U, r, "{\"error\":\"method_not_allowed\"}", rid);

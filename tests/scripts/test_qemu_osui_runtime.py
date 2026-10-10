@@ -283,6 +283,9 @@ def main():
             token = re.search(r"api-token ok token=(t\d{5})", normalized_log(log_text()[start:])).group(1)
             for command, marker in (
                 ("api get /sessions %s" % token, "own_session_only"),
+                ("api get /supervision %s" % token, "status=403"),
+                ("grant admin.observe", "grant ok capability=admin.observe"),
+                ("api get /supervision %s" % token, '"net_worker":'),
                 ("api get /vfs/demo/hello.txt %s" % token, "status=403"),
                 ("api post /ai/chat %s a" % token, "status=202"),
                 ("api-revoke", "api-revoke ok"),
