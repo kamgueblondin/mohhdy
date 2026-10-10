@@ -375,6 +375,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
     }
 }
 
+static int propose_send(p2p_node_t* n, const p2p_host_t* h, int only_missing);
 static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int len, const uint8_t mac[6]) {
     uint8_t tag[32];
     p2p_peer_t* p;
@@ -540,6 +541,10 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
             pr->result = -2; pr->active = 0;
             s_cat(line, "p2p propose timeout ", 160);
         }
+        if (pr->active && t - pr->last_tx >= P2P_PROPOSE_RESEND_TICKS) {
+            pr->last_tx = t;
+            if (propose_send(n, h, 1) > 0) pr->resent++;
+        }
         if (line[0]) {
             s_cat(line, pr->key, 160); s_cat(line, "=", 160); s_cat(line, pr->value, 160);
             s_cat(line, " round ", 160); cat_u(line, pr->round, 160);
@@ -610,11 +615,33 @@ int p2p_sync(p2p_node_t* n, const p2p_host_t* h, const char* peer) {
     return sent;
 }
 
-int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value) {
+static int has_voted(const p2p_proposal_t* pr, uint32_t id) {
+    uint32_t k;
+    for (k = 0; k < pr->yes + pr->no; k++) if (pr->voters[k] == id) return 1;
+    return 0;
+}
+/* send the active proposal to every up keyed peer (only_missing: to those
+ * that have not voted yet). Returns the number of peers reached. */
+static int propose_send(p2p_node_t* n, const p2p_host_t* h, int only_missing) {
     uint8_t b[P2P_DATAGRAM_MAX];
     p2p_item_t it;
     p2p_proposal_t* pr = &n->prop;
     int i, pos, sent = 0;
+    mzero(&it, (int)sizeof(it));
+    s_copy(it.key, pr->key, P2P_KEY_MAX); s_copy(it.value, pr->value, P2P_VAL_MAX);
+    it.version = pr->version; it.origin = n->id;
+    put32(b, pr->round);
+    pos = item_encode(b, 4, 400, &it);
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        if (!p->used || !p->keyed || !p->up || (only_missing && has_voted(pr, p->id))) continue;
+        if (seal_send(n, h, p, P2P_I_PROPOSE, b, pos) == 0) sent++;
+    }
+    return sent;
+}
+
+int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value) {
+    p2p_proposal_t* pr = &n->prop;
     uint32_t members;
     if (!n->up || pr->active || !key[0] || s_len(key) >= P2P_KEY_MAX || s_len(value) >= P2P_VAL_MAX) return -1;
     mzero(pr, (int)sizeof(*pr));
@@ -625,14 +652,8 @@ int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char*
     pr->members = members;
     pr->needed = members / 2U + 1U;
     pr->yes = 1; pr->voters[0] = n->id; /* own vote */
-    mzero(&it, (int)sizeof(it));
-    s_copy(it.key, key, P2P_KEY_MAX); s_copy(it.value, value, P2P_VAL_MAX);
-    it.version = pr->version; it.origin = n->id;
-    put32(b, pr->round);
-    pos = item_encode(b, 4, 400, &it);
-    for (i = 0; i < P2P_PEERS; i++)
-        if (n->peers[i].used && n->peers[i].keyed && n->peers[i].up && seal_send(n, h, &n->peers[i], P2P_I_PROPOSE, b, pos) == 0) sent++;
-    return sent;
+    pr->last_tx = pr->started;
+    return propose_send(n, h, 0);
 }
 
 int p2p_block(p2p_node_t* n, const char* peer, int blocked) {

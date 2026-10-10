@@ -76,7 +76,10 @@ typedef struct {
     uint32_t yes, no, needed, members;
     uint32_t voters[P2P_PEERS + 1];
     int result; /* 0 pending, 1 committed, -1 rejected, -2 timeout */
+    uint32_t last_tx; /* datagrams are not retransmitted by the link: the */
+    uint32_t resent;  /* proposer re-sends to peers that have not voted yet */
 } p2p_proposal_t;
+#define P2P_PROPOSE_RESEND_TICKS (2U * P2P_HZ)
 
 typedef struct {
     uint8_t up;
