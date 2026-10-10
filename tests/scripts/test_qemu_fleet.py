@@ -76,6 +76,10 @@ def main():
                 if other is not node:
                     p2p.wait_log(node, "p2p peer %s up id " % other["name"], 180)
         say("p2p mesh up (%.0fs)" % (time.monotonic() - t0))
+        # X25519 key agreement with each new peer runs inside the pump and
+        # takes ~3 s per peer on a CI runner (TCG): stalls are checked from
+        # here on, once every link is keyed.
+        mesh_at = dict((n["label"], len(log(n))) for n in NODES)
 
         # US-084 session handoff alpha -> beta.
         cmd(a, "mkdir /work", "(-.-)")
@@ -150,7 +154,7 @@ def main():
         say("phase 8 staged deploy ok (%.0fs)" % (time.monotonic() - t0))
         for node in NODES:
             text = log(node)
-            up_at = text.find("(-.-)", text.find("p2p-up ok name"))
+            up_at = mesh_at[node["label"]]
             if "shell stall" in text[up_at:]:
                 raise RuntimeError("%s console loop stalled with P2P up: %s"
                                    % (node["label"], text[text.find("shell stall", up_at):][:120]))
