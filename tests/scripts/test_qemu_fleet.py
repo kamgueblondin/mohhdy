@@ -9,7 +9,7 @@ per-node acknowledgements and checksum verification.
 Every command is typed once: the fleet layer acknowledges each chunk and
 re-sends what is lost (bounded). Payloads above one datagram are chunked
 (a 390+ byte file is synced and deployed). The guests also report any
-console-loop stall over 3 s ("shell stall"); none may appear once P2P is up.
+console-loop stall over 3 s ("shell stall"); none may appear from boot (key agreement is step-wise).
 """
 from __future__ import print_function
 
