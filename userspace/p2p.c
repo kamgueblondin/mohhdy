@@ -309,6 +309,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         int cnt, applied = 0;
         if (len < 1) break;
         cnt = m[0]; pos = 1;
+        p->sync_retries = 0; /* the answer arrived */
         for (i = 0; i < cnt; i++) {
             pos = item_decode(m, pos, len, &it);
             if (pos < 0) break;
@@ -518,6 +519,15 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
             (void)seal_send(n, h, p, P2P_I_PING, b, 4);
         }
     }
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        if (!p->used || !p->sync_retries || t - p->sync_at < P2P_SYNC_RESEND_TICKS) continue;
+        p->sync_retries--; p->sync_at = t;
+        if (p->keyed && p->up) {
+            int dl = digest_encode(n, b, 0);
+            if (dl > 0) (void)seal_send(n, h, p, P2P_I_SYNC_REQ, b, dl);
+        }
+    }
     if (n->prop.active) {
         p2p_proposal_t* pr = &n->prop;
         char line[160];
@@ -610,7 +620,10 @@ int p2p_sync(p2p_node_t* n, const p2p_host_t* h, const char* peer) {
         p2p_peer_t* p = &n->peers[i];
         if (!p->used || !p->keyed || !p->up) continue;
         if (peer && peer[0] && !s_eq(p->name, peer)) continue;
-        if (seal_send(n, h, p, P2P_I_SYNC_REQ, b, len) == 0) sent++;
+        if (seal_send(n, h, p, P2P_I_SYNC_REQ, b, len) == 0) {
+            sent++;
+            p->sync_at = now(h); p->sync_retries = 3; /* datagrams can be lost */
+        }
     }
     return sent;
 }
