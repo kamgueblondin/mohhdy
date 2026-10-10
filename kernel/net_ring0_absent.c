@@ -106,10 +106,12 @@ uint32_t net_stack_bulk_in_size(uint32_t op) {
         case SYS_LLM_ACQUIRE_START: return (uint32_t)sizeof(os_llm_acquire_start_request_t);
         case SYS_LLM_REQUEST: return (uint32_t)sizeof(os_llm_request_t);
         case SYS_LLM_OPENAI_CREDENTIAL: return (uint32_t)sizeof(os_llm_openai_credential_request_t);
+        case SYS_PEER_DATA: return (uint32_t)sizeof(os_peer_data_request_t);
         default: return 0U;
     }
 }
 uint32_t net_stack_bulk_out_size(uint32_t op) {
+    if (op == SYS_PEER_DATA) return (uint32_t)sizeof(os_peer_data_request_t);
     return (op == SYS_LLM_POLL_TEXT || op == SYS_LLM_POLL_SSE) ? (uint32_t)sizeof(os_llm_text_result_t) : 0U;
 }
 

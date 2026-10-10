@@ -19,11 +19,13 @@ uint32_t net_stack_bulk_in_size(uint32_t op) {
         case SYS_LLM_ACQUIRE_START: return (uint32_t)sizeof(os_llm_acquire_start_request_t);
         case SYS_LLM_REQUEST: return (uint32_t)sizeof(os_llm_request_t);
         case SYS_LLM_OPENAI_CREDENTIAL: return (uint32_t)sizeof(os_llm_openai_credential_request_t);
+        case SYS_PEER_DATA: return (uint32_t)sizeof(os_peer_data_request_t);
         default: return 0U;
     }
 }
 
 uint32_t net_stack_bulk_out_size(uint32_t op) {
+    if (op == SYS_PEER_DATA) return (uint32_t)sizeof(os_peer_data_request_t);
     return (op == SYS_LLM_POLL_TEXT || op == SYS_LLM_POLL_SSE) ? (uint32_t)sizeof(os_llm_text_result_t) : 0U;
 }
 
@@ -171,26 +173,6 @@ static int32_t stack_peer(const os_net_relay_request_t* req, uint8_t* out, uint1
             }
             return kernel_peer_tls_poll(0);
         }
-        case SYS_PEER_DATA: {
-            static os_peer_data_request_t r;
-            uint16_t i, n;
-            int32_t rc;
-            if (in_length < 4U || !out || !out_length) return OS_PEER_BAD_REQUEST;
-            r.op = req->in[0];
-            r.attempts = (uint16_t)(req->in[2] | ((uint16_t)req->in[3] << 8));
-            n = (uint16_t)(in_length - 4U);
-            if (n > OS_PEER_DATA_SEND_MAX) return OS_PEER_BAD_REQUEST;
-            for (i = 0U; i < n; i++) r.data[i] = req->in[4U + i];
-            r.length = n;
-            rc = kernel_peer_data(&r);
-            *out_length = 0U;
-            if (r.op == OS_PEER_DATA_RECV && rc == 0) {
-                n = r.length <= OS_PEER_DATA_RECV_MAX ? r.length : OS_PEER_DATA_RECV_MAX;
-                for (i = 0U; i < n; i++) out[i] = r.data[i];
-                *out_length = n;
-            }
-            return rc;
-        }
         default:
             return OS_PEER_BAD_REQUEST;
     }
@@ -260,8 +242,19 @@ int32_t net_stack_exec(net_stack_t* stack, const os_net_relay_request_t* request
     if (!stack || !request) return OS_SOCKET_BAD_ARGUMENT;
     if (request->op >= SYS_LLM_ACQUIRE_START && request->op <= SYS_LLM_OPENAI_CREDENTIAL)
         return stack_llm(stack, request->op, bulk_in, bulk_in_length, bulk_out, bulk_out_length);
-    if ((request->op >= SYS_PEER_LISTEN && request->op <= SYS_PEER_TLS_POLL) ||
-        request->op == SYS_PEER_DATA)
+    if (request->op == SYS_PEER_DATA) {
+        static os_peer_data_request_t r;
+        int32_t rc;
+        if (bulk_in_length != sizeof(r) || !bulk_in) return OS_PEER_BAD_REQUEST;
+        stack_copy(&r, bulk_in, sizeof(r));
+        rc = kernel_peer_data(&r);
+        if (bulk_out && bulk_out_length) {
+            stack_copy(bulk_out, &r, sizeof(r));
+            *bulk_out_length = (uint32_t)sizeof(r);
+        }
+        return rc;
+    }
+    if (request->op >= SYS_PEER_LISTEN && request->op <= SYS_PEER_TLS_POLL)
         return stack_peer(request, out, out_length);
     if (!out) return OS_SOCKET_BAD_ARGUMENT;
     {

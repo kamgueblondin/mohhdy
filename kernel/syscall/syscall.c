@@ -809,11 +809,12 @@ static void net_relay_copy(uint8_t* dst, const uint8_t* src, uint32_t n) {
 /* Fills req from the caller registers; 0 or an OS_SOCKET_* error. */
 static int net_relay_marshal(const cpu_state_t* cpu, os_net_relay_request_t* req) {
     req->op = cpu->eax;
-    if (net_relay_llm_supported(cpu->eax)) {
+    if (net_relay_bulk_op(cpu->eax)) {
         uint32_t in = net_stack_bulk_in_size(cpu->eax), out = net_stack_bulk_out_size(cpu->eax);
         if ((in && !syscall_user_range((const void*)cpu->ebx, in, 0)) ||
             (out && !syscall_user_range((void*)cpu->ebx, out, 1)))
-            return cpu->eax == SYS_LLM_ACQUIRE_START ? OS_LLM_ACQUIRE_BAD_REQUEST : OS_LLM_REQUEST_BAD_REQUEST;
+            return cpu->eax == SYS_PEER_DATA ? OS_PEER_BAD_REQUEST :
+                   cpu->eax == SYS_LLM_ACQUIRE_START ? OS_LLM_ACQUIRE_BAD_REQUEST : OS_LLM_REQUEST_BAD_REQUEST;
         req->arg0 = in;
         req->out_capacity = (uint16_t)0U;
         req->arg1 = out;
@@ -914,19 +915,6 @@ static int net_relay_marshal(const cpu_state_t* cpu, os_net_relay_request_t* req
                 req->in_length = 0U;
             }
             return 0;
-        case SYS_PEER_DATA: {
-            const os_peer_data_request_t* r = (const os_peer_data_request_t*)cpu->ebx;
-            uint16_t n;
-            if (!syscall_user_range(r, sizeof(*r), 1)) return OS_PEER_BAD_REQUEST;
-            n = r->op == OS_PEER_DATA_SEND ? r->length : 0U;
-            if (n > OS_PEER_DATA_SEND_MAX) return OS_PEER_BAD_REQUEST;
-            req->in[0] = r->op; req->in[1] = 0U;
-            req->in[2] = (uint8_t)r->attempts; req->in[3] = (uint8_t)(r->attempts >> 8);
-            net_relay_copy(req->in + 4, r->data, n);
-            req->in_length = (uint16_t)(4U + n);
-            req->out_capacity = net_relay_cap(OS_PEER_DATA_RECV_MAX);
-            return 0;
-        }
         default:
             return OS_SOCKET_BAD_ARGUMENT;
     }
@@ -940,7 +928,7 @@ static int32_t net_relay_deliver(const cpu_state_t* cpu) {
     uint16_t* dst_len = 0;
     uint32_t cap = 0U;
     int32_t result;
-    if (net_relay_llm_supported(cpu->eax)) {
+    if (net_relay_bulk_op(cpu->eax)) {
         uint32_t want = net_stack_bulk_out_size(cpu->eax);
         if (want && syscall_user_range((void*)cpu->ebx, want, 1))
             (void)net_relay_bulk_result((int32_t)current_task->id, (uint8_t*)cpu->ebx, want);
@@ -958,10 +946,6 @@ static int32_t net_relay_deliver(const cpu_state_t* cpu) {
         const os_socket_receive_request_t* r = (const os_socket_receive_request_t*)cpu->ebx;
         if (!syscall_user_range(r, sizeof(*r), 0)) return OS_SOCKET_BAD_ARGUMENT;
         dst = r->buffer; cap = r->capacity; dst_len = r->out_length;
-    } else if (op == SYS_PEER_DATA) {
-        os_peer_data_request_t* r = (os_peer_data_request_t*)cpu->ebx;
-        if (!syscall_user_range(r, sizeof(*r), 1)) return OS_PEER_BAD_REQUEST;
-        dst = r->data; cap = OS_PEER_DATA_RECV_MAX; dst_len = &r->length;
     } else {
         return result;
     }
@@ -1030,7 +1014,7 @@ static int syscall_net_relay(cpu_state_t* cpu) {
         return 1;
     }
     req.job_id = (uint32_t)job;
-    if (req.arg0 && net_relay_llm_supported(req.op) &&
+    if (req.arg0 && net_relay_bulk_op(req.op) &&
         net_relay_bulk_stage(pid, (const uint8_t*)cpu->ebx, req.arg0) != 0) {
         net_relay_cancel();
         cpu->eax = (uint32_t)OS_LLM_REQUEST_BAD_REQUEST;

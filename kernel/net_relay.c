@@ -49,6 +49,11 @@ int net_relay_peer_supported(uint32_t syscall_number) {
            syscall_number == SYS_PEER_DATA;
 }
 
+/* Ops whose struct travels through the bulk channel (LLM 91-98, peer data). */
+int net_relay_bulk_op(uint32_t syscall_number) {
+    return net_relay_llm_supported(syscall_number) || syscall_number == SYS_PEER_DATA;
+}
+
 int net_relay_llm_supported(uint32_t syscall_number) {
     return syscall_number >= SYS_LLM_ACQUIRE_START && syscall_number <= SYS_LLM_OPENAI_CREDENTIAL;
 }

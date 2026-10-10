@@ -3,6 +3,9 @@
 #define OSUI_RUNTIME_H
 
 #define OSUI_OUT_MAX 2048
+/* Roadmap step 5: background web server step (shell input loop). */
+int osui_web_active(void);
+int osui_web_poll(char *out, int max);
 #define OSUI_CANVAS_ROWS 22
 #define OSUI_CANVAS_COLS 78
 

@@ -395,21 +395,6 @@ static int32_t relay_execute(const os_net_relay_request_t* req, os_net_relay_rep
         case SYS_PEER_ACCEPT:
         case SYS_PEER_TLS_POLL:
             return net_call1(req->op, (uint32_t)in);
-        case SYS_PEER_DATA: {
-            static os_peer_data_request_t r;
-            uint16_t i, n = in_length >= 4U ? (uint16_t)(in_length - 4U) : 0U;
-            if (in_length < 4U || n > OS_PEER_DATA_SEND_MAX) return OS_PEER_BAD_REQUEST;
-            r.op = in[0];
-            r.attempts = (uint16_t)(in[2] | ((uint16_t)in[3] << 8));
-            for (i = 0U; i < n; i++) r.data[i] = in[4U + i];
-            r.length = n;
-            rc = net_call1(SYS_PEER_DATA, (uint32_t)&r);
-            if (rc == 0 && r.op == OS_PEER_DATA_RECV && r.length <= cap) {
-                for (i = 0U; i < r.length; i++) reply->out[i] = r.data[i];
-                reply->out_length = r.length;
-            }
-            return rc;
-        }
         default:
             return OS_SOCKET_BAD_ARGUMENT;
     }
@@ -505,7 +490,8 @@ static int32_t stack_execute(const os_net_relay_request_t* req, os_net_relay_rep
     uint16_t small = 0U;
     int32_t rc;
     int got;
-    if (req->op >= SYS_LLM_ACQUIRE_START && req->op <= SYS_LLM_OPENAI_CREDENTIAL && req->arg0) {
+    if (((req->op >= SYS_LLM_ACQUIRE_START && req->op <= SYS_LLM_OPENAI_CREDENTIAL) ||
+         req->op == SYS_PEER_DATA) && req->arg0) {
         if (req->arg0 > sizeof(bulk_in)) return OS_LLM_REQUEST_BAD_REQUEST;
         asm volatile("int $0x80" : "=a"(got) : "a"(SYS_NET_RELAY_BULK), "b"(OS_NET_RELAY_BULK_FETCH),
                      "c"(req->job_id), "d"(bulk_in), "S"(req->arg0));
@@ -565,7 +551,9 @@ void main(void) {
         }
         copy_bytes((uint8_t*)&req, message.data, sizeof(req));
         reply.job_id = req.job_id;
-        if (stack_live) {
+        if (stack_live || req.op == SYS_PEER_DATA) {
+            /* SYS_PEER_DATA always goes through the bulk channel; without a
+             * live Ring 3 stack kernel_peer_data answers UNAVAILABLE. */
             reply.result = stack_execute(&req, &reply);
             wire_calls = stack.report.wire_ops;
         } else {
