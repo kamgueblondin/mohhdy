@@ -9,6 +9,7 @@
 #include "os_vfs_service.h"
 #include "os_ipc_deferred.h"
 #include "osui_runtime.h"
+#include "shell_p2p.h"
 #include "osui_gui.h"
 
 // ==============================================================================
@@ -2747,6 +2748,8 @@ static int is_builtin(const char* cmd) {
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
+        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-kv", "p2p-poll",
+        "p2p-send", "p2p-put", "p2p-get", "p2p-sync", "p2p-propose", "p2p-block", "p2p-unblock", "p2p-limit",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
@@ -6213,6 +6216,11 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
     else
         add_to_history(ctx, input_buffer);
 
+    if (strncmp(input_buffer, "p2p-", 4U) == 0) {
+        ctx->last_rc = shell_p2p_line(input_buffer);
+        return;
+    }
+
     if (input_buffer[0] == '/') {
         char osui_out[OSUI_OUT_MAX];
         ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
@@ -6331,7 +6339,7 @@ void shell_main_loop(shell_context_t* ctx) {
     while (1) {
         display_prompt(ctx);
         buf[0] = '\0';
-        if (osui_web_active()) {
+        if (osui_web_active() || shell_p2p_active()) {
             /* Roadmap step 5: OS-UI web server in the background. Keys are
              * read without blocking (SYS_GETC) and the server is stepped
              * between keys, so the console stays usable. */
@@ -6349,6 +6357,7 @@ void shell_main_loop(shell_context_t* ctx) {
                     continue;
                 }
                 if (osui_web_active() && osui_web_poll(web_log, (int)sizeof(web_log)) > 0) print_string(web_log);
+                shell_p2p_poll();
                 yield();
             }
             buf[len] = '\0';

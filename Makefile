@@ -52,7 +52,7 @@ all: $(OS_IMAGE) pack-initrd disk
 	@echo "Système prêt pour exécution avec: make run"
 
 # Paquets hôte (Debian/Ubuntu) - même ensemble que .github/workflows/ci.yml
-.PHONY: deps check-build-deps
+.PHONY: qemu-p2p deps check-build-deps
 deps:
 	@bash scripts/bootstrap-dev.sh
 
@@ -1044,6 +1044,9 @@ qemu-osui-peer: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_osui_peer.py
 
 # Roadmap step 5: OS-UI local API over HTTP via networker (host HTTP client).
+qemu-p2p: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_p2p.py
+
 qemu-osui-web: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_osui_web.py
 

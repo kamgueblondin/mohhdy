@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 218
+#define MOHHDY_SHELL_COMMAND_COUNT 233
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -134,6 +134,21 @@ static const char * const mohhdy_shell_commands[] = {
     "os-shell",
     "os-status",
     "os-support",
+    "p2p-block",
+    "p2p-down",
+    "p2p-get",
+    "p2p-health",
+    "p2p-kv",
+    "p2p-limit",
+    "p2p-peers",
+    "p2p-poll",
+    "p2p-propose",
+    "p2p-put",
+    "p2p-send",
+    "p2p-stats",
+    "p2p-sync",
+    "p2p-unblock",
+    "p2p-up",
     "prompt",
     "ps",
     "pwd",

@@ -561,6 +561,12 @@ void main(void) {
         }
         rc = relay_reply(&reply);
         relayed++;
+        /* Phase 5 P2P pumps relay several datagram polls per second: keep
+         * them out of the serial log (counted in p2p-stats instead). */
+        if (req.op == SYS_PEER_DATA && (bulk_in[0] == OS_PEER_P2P_SEND || bulk_in[0] == OS_PEER_P2P_RECV) && rc == 0) {
+            if (nic_owned) stack_publish();
+            continue;
+        }
         puts("net-driver relay op ");
         put_uint(req.op);
         puts(" rc ");
