@@ -53,6 +53,8 @@ typedef struct {
     uint8_t iv[4];
     uint32_t tx_counter, rx_counter;
     uint32_t last_seen, ping_sent_at, rtt_ticks;
+    uint32_t sync_at;      /* last SYNC_REQ sent by p2p_sync */
+    uint8_t sync_retries;  /* re-sends left until SYNC_ITEMS arrives */
     uint32_t via;            /* 0: direct, else id of the relay node */
     uint32_t neighbors[P2P_PEERS];
     uint32_t sent, received, auth_fail, replay, throttled, down_events;
@@ -80,6 +82,7 @@ typedef struct {
     uint32_t resent;  /* proposer re-sends to peers that have not voted yet */
 } p2p_proposal_t;
 #define P2P_PROPOSE_RESEND_TICKS (2U * P2P_HZ)
+#define P2P_SYNC_RESEND_TICKS (2U * P2P_HZ)
 
 typedef struct {
     uint8_t up;
