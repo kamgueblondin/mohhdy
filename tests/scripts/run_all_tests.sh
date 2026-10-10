@@ -123,6 +123,9 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_promptmessage.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/promptmessage.c"
     fi
+    if [ "$(basename "$test_file")" = "test_raft.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/raft.c"
+    fi
     if [ "$(basename "$test_file")" = "test_prod.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/prod.c"
     fi

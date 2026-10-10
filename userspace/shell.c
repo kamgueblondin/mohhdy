@@ -7,6 +7,8 @@ int shell_persist_is(const char* line);
 int shell_persist_line(const char* line);
 void shell_persist_tick(void);
 int shell_fleet_is(const char* line);
+int shell_raft_is(const char* line);
+int shell_raft_line(const char* line);
 int shell_fleet_line(const char* line);
 int shell_platform_idle_yields(void);
 static void stall_mark(const char* what);
@@ -3234,6 +3236,7 @@ static int is_builtin(const char* cmd) {
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
         "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-kv", "p2p-poll",
         "p2p-send", "p2p-put", "p2p-get", "p2p-sync", "p2p-propose", "p2p-block", "p2p-unblock", "p2p-limit", "p2p-route",
+        "raft-start", "raft-put", "raft-get", "raft-status",
         "collab-join", "collab-pay", "collab-offer", "collab-reserve", "collab-task", "collab-claim", "collab-work",
         "collab-review", "collab-rate", "collab-propose", "collab-vote", "collab-profile", "collab-forget",
         "collab-export", "collab-ticket", "collab-answer", "collab-sync", "collab-balances", "collab-audit",
@@ -6731,6 +6734,10 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
     }
     if (shell_fleet_is(input_buffer)) {
         ctx->last_rc = shell_fleet_line(input_buffer);
+        return;
+    }
+    if (shell_raft_is(input_buffer)) {
+        ctx->last_rc = shell_raft_line(input_buffer);
         return;
     }
     if (strncmp(input_buffer, "p2p-", 4U) == 0) {
