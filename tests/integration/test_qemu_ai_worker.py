@@ -19,6 +19,15 @@ sampler code runs on it as on GPT-2 124M.
 6. airogue: register ai-engine, rename to aiworker, forged reply, map and
    fetch are all refused; the forged reply is counted (rogue) and a
    following generation still returns the true tokens.
+7. Runtime contract, liveness: a fresh worker at low priority never runs
+   the job, so it never heartbeats; the IRQ0 watchdog fails the job as
+   stalled after AI_RELAY_STALL_TICKS (15 s, far below the 300 s bound)
+   and the caller gets the Ring 0 fallback, same tokens (abort stalled).
+8. Runtime contract, cancel: ESC while a relayed job is in flight drops
+   it: the caller gets OS_AI_CANCELLED (-149), no Ring 0 replay (kernel
+   count unchanged), error cancelled, abort cancelled.
+9. ai-runtime json exposes path / latency / error / abort of the last call,
+   liveness counters and the declared limits (assistant not available).
 kernel_infer_while_live stays 0 throughout.
 """
 import os
@@ -150,6 +159,18 @@ STATUS_KEYS = ("worker", "fwd", "done", "aborted", "fallback", "kernel", "live",
                "rogue", "stale", "pending", "mapped")
 
 
+CONTRACT_RE = (r"(\w+) contract latency (\d+) error (\d+) abort (\d+) hb (\d+) stalls (\d+) "
+               r"lost (\d+) timeouts (\d+) cancelled (\d+) end")
+CONTRACT_KEYS = ("latency", "error", "abort", "hb", "stalls", "lost", "timeouts", "cancelled")
+OS_AI_CANCELLED = -149
+OS_AI_ERROR_NONE, OS_AI_ERROR_CANCELLED = 0, 3
+OS_AI_ABORT_NONE, OS_AI_ABORT_STALLED, OS_AI_ABORT_CANCELLED = 0, 2, 4
+
+
+def parse_contract(match):
+    return dict(zip(CONTRACT_KEYS, (int(v) for v in match.groups()[1:])))
+
+
 def parse_status(match):
     return dict(zip(STATUS_KEYS, (int(v) for v in match.groups()[1:])))
 
@@ -159,9 +180,11 @@ def run_client(client, proc, expect_path):
     gen = child_regex(client, proc, r"aiclient rc (-?\d+) path (\w+) text \[([^\]\n]*)\]", start)
     toks = child_regex(client, proc, r"aiclient tokens([ |0-9]*) end", start)
     st = child_regex(client, proc, r"(aiclient) status worker" + STATUS_RE[len(r"(\w+) status worker"):], start)
+    ct = child_regex(client, proc, r"(aiclient)" + CONTRACT_RE[len(r"(\w+)"):], start)
     result = {
         "rc": int(gen.group(1)), "path": gen.group(2), "text": gen.group(3),
         "tokens": toks.group(1).strip(), "status": parse_status(st),
+        "contract": parse_contract(ct),
     }
     if result["path"] != expect_path:
         raise RuntimeError("expected path %s, got %r" % (expect_path, result))
@@ -216,6 +239,11 @@ def contract(monitor, proc):
     boot_pid = s["worker"]
     if not w1["tokens"] or "|" not in w1["tokens"]:
         raise RuntimeError("no generated tokens: %r" % w1)
+
+    c = w1["contract"]
+    if c["error"] != OS_AI_ERROR_NONE or c["abort"] != OS_AI_ABORT_NONE or c["hb"] < 2 or \
+            c["stalls"] != 0 or c["cancelled"] != 0:
+        raise RuntimeError("worker contract: %r" % c)
 
     # 3. Worker gone: Ring 0 path, same tokens.
     kill(monitor, proc, boot_pid)
@@ -288,6 +316,57 @@ def contract(monitor, proc):
     # 12.0 MiB of .bss alone (FP32 + GGUF runtime buffers) is 3071 pages.
     if footprint < 3071 or abs(free_after - free_before) > 8:
         raise RuntimeError("memory: before %d live %d after %d" % (free_before, free_live, free_after))
+    # 7. Liveness: a worker that never runs never heartbeats. The job is
+    # failed as stalled (not after 300 s) and the caller falls back.
+    wpid, start = spawn(monitor, proc, "aiworker")
+    worker_ready(monitor, proc, start)
+    send_command_until(monitor, "task-priority %s 1" % wpid, "task-priority ok %s 1" % wpid, proc)
+    _, start = spawn(monitor, proc, "aiclient")
+    child_regex(monitor, proc, r"aiclient start", start)
+    t_stall = time.time()
+    wait_regex(r"\[AI\] relay abort reason stalled \(no heartbeat\)", proc, start, timeout=60)
+    stall_s = time.time() - t_stall
+    gen = child_regex(monitor, proc, r"aiclient rc (-?\d+) path (\w+) text \[([^\]\n]*)\]", start)
+    toks = child_regex(monitor, proc, r"aiclient tokens([ |0-9]*) end", start)
+    ct = parse_contract(child_regex(monitor, proc, r"(aiclient)" + CONTRACT_RE[len(r"(\w+)"):], start))
+    if gen.group(2) != "fallback" or (toks.group(1).strip(), gen.group(3)) != (w1["tokens"], w1["text"]):
+        raise RuntimeError("stall fallback mismatch: %s / %s" % (gen.group(0), toks.group(0)))
+    if ct["abort"] != OS_AI_ABORT_STALLED or ct["error"] != OS_AI_ERROR_NONE or ct["stalls"] != 1 or \
+            ct["latency"] < 1000:
+        raise RuntimeError("stall contract: %r" % ct)
+    if stall_s > 45:
+        raise RuntimeError("stall detected too late: %.1fs" % stall_s)
+
+    # 8. ESC cancels the relayed job in flight: -149, no Ring 0 replay.
+    kernel_before = aistat(monitor, proc)["kernel"]
+    _, start = spawn(monitor, proc, "aiclient")
+    child_regex(monitor, proc, r"aiclient start", start)
+    monitor.sendall(("sendkey esc %d\n" % KEY_HOLD_MS).encode("ascii"))
+    wait_for("[AI] generation cancelled (ESC), relayed job dropped", proc, start, timeout=10)
+    gen = child_regex(monitor, proc, r"aiclient rc (-?\d+) path (\w+) text \[([^\]\n]*)\]", start)
+    ct = parse_contract(child_regex(monitor, proc, r"(aiclient)" + CONTRACT_RE[len(r"(\w+)"):], start))
+    if int(gen.group(1)) != OS_AI_CANCELLED or gen.group(3) != "":
+        raise RuntimeError("cancel result: %s" % gen.group(0))
+    if ct["error"] != OS_AI_ERROR_CANCELLED or ct["abort"] != OS_AI_ABORT_CANCELLED or ct["cancelled"] != 1:
+        raise RuntimeError("cancel contract: %r" % ct)
+    after = aistat(monitor, proc)
+    if after["kernel"] != kernel_before or after["live"] != 0 or after["pending"] != 0:
+        raise RuntimeError("cancel replayed in Ring 0: %r" % after)
+
+    # 9. ai-runtime json: the same evidence for the user.
+    start = send_command_until(monitor, "ai-runtime json", '"status":"declared"', proc)
+    text = normalized_log(log_text()[start:])
+    for needle in ('"assistant":"not-available"', '"cancel":"esc"', '"worker":"live"',
+                   '"last":{"path":"none","result":-149,', '"error":"cancelled","abort":"cancelled"',
+                   '"stalls":1,', '"cancelled":1}'):
+        if needle not in text:
+            raise RuntimeError("ai-runtime json misses %s" % needle)
+    hb = re.search(r'"heartbeats":(\d+)', text)
+    if not hb or int(hb.group(1)) < 2:
+        raise RuntimeError("ai-runtime json heartbeats: %r" % (hb and hb.group(0)))
+    kill(monitor, proc, wpid)
+    print("ai worker contract: stall detected in %.1fs, ESC cancel -149 without replay" % stall_s)
+
     print("ai worker: tokens [%s] text [%s]; worker/kernel/fallback paths equal; "
           "final counters %r; worker footprint %d pages, free before/after %d/%d" %
           (w1["tokens"], w1["text"], s, footprint, free_before, free_after))

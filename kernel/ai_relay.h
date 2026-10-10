@@ -20,7 +20,7 @@
 /* Liveness: a live worker heartbeats once per transformer layer (and at
  * fetch). No progress for this long means the worker is stalled (frozen,
  * suspended, starved) and the job is failed well before the 300 s bound. */
-#define AI_RELAY_STALL_TICKS 3000U
+#define AI_RELAY_STALL_TICKS 1500U
 
 void ai_relay_init(void);
 uint32_t ai_relay_state(void);
