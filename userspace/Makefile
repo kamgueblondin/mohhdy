@@ -54,7 +54,7 @@ ai_gguf_pause.o: ai_gguf_client.c
 	$(CC) $(CFLAGS) -DGGUF_PAUSE -c -o $@ $<
 ai_client.o ai_stat.o ai_rogue.o ai_gguf_client.o ai_gguf_pause.o: ai_common.h $(USER_HEADERS)
 
-shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o promptmessage.o start.o
+shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o promptmessage.o shell_prod.o prod.o start.o
 	@echo "Linking shell..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 

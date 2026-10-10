@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 235
+#define MOHHDY_SHELL_COMMAND_COUNT 260
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -151,6 +151,31 @@ static const char * const mohhdy_shell_commands[] = {
     "pm-verify",
     "pm-version",
     "pm-versions",
+    "prod-alert-add",
+    "prod-alert-del",
+    "prod-alerts",
+    "prod-backup",
+    "prod-backup-corrupt",
+    "prod-backup-verify",
+    "prod-backups",
+    "prod-bench",
+    "prod-deploy",
+    "prod-diag",
+    "prod-feedback",
+    "prod-inject",
+    "prod-integrity",
+    "prod-log-analyze",
+    "prod-log-append",
+    "prod-manifest",
+    "prod-metrics",
+    "prod-predict",
+    "prod-restore",
+    "prod-roadmap",
+    "prod-rollback",
+    "prod-sample",
+    "prod-scale-sim",
+    "prod-tutorial",
+    "prod-usage",
     "prompt",
     "ps",
     "pwd",
