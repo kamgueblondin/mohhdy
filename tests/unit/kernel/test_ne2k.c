@@ -441,12 +441,33 @@ void test_ne2k_llm_socket_bootstrap_failure_releases_slot(void){
     for(i=0;i<4;i++){slots[i]=net_socket_open((uint16_t)(49200U+i),443U,(uint32_t)(200U+i));TEST_ASSERT_TRUE(slots[i]>=0);}for(i=0;i<4;i++)TEST_ASSERT_EQUAL(0,net_socket_close(slots[i]));
 }
 
+/* QEMU's ne2000_receive drops frames while CR.STP is set: a TX must never
+ * stop the 8390, otherwise the peer frame answering the previous TX is lost
+ * (CI flake: ServerHello lost after ClientHello). */
+void test_tx_submit_never_stops_the_chip(void) {
+    fake_ne2k_t fake = {0x12, NE2K_ISR_RESET, 0, 0};
+    ne2k_io_t io = {&fake, fake_inb, fake_outb};
+    ne2k_device_t device; uint8_t frame[64] = {1}; uint16_t i; uint8_t commands = 0U;
+    TEST_ASSERT_EQUAL(0, ne2k_probe(&device, 0x300, &io));
+    TEST_ASSERT_EQUAL(0, ne2k_prepare(&device, &io));
+    TEST_ASSERT_EQUAL(0, ne2k_configure_rings(&device, &io));
+    fake.trace_count = 0U; fake.isr = NE2K_ISR_RDC;
+    TEST_ASSERT_EQUAL(0, ne2k_tx_submit(&device, &io, frame, sizeof(frame)));
+    for (i = 0U; i < fake.trace_count; ++i) {
+        if ((fake.trace_ports[i] & 0x1fU) != NE2K_REG_COMMAND) continue;
+        commands++;
+        TEST_ASSERT_EQUAL(0, fake.trace_values[i] & NE2K_COMMAND_STOP);
+    }
+    TEST_ASSERT_GREATER_THAN(1, commands);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_probe_and_prepare_use_injected_io);RUN_TEST(test_ne2k_rom_read_and_tx_dma_order);RUN_TEST(test_ne2k_udp_via_gateway_preserves_ipv4_destination);    RUN_TEST(test_ne2k_tcp_syn_via_gateway_preserves_ipv4_destination); RUN_TEST(test_ne2k_tcp_segment_bridge); RUN_TEST(test_ne2k_tcp_syn_ack_via_gateway);RUN_TEST(test_ne2k_socket_syn_bridge);
 RUN_TEST(test_ne2k_llm_network_context_lifecycle);RUN_TEST(test_ne2k_llm_network_context_sse_resume_lifecycle);RUN_TEST(test_ne2k_llm_network_context_sse_event_tick_persists_retry);RUN_TEST(test_ne2k_llm_network_context_sse_rotate_provider);RUN_TEST(test_ne2k_llm_network_context_sse_schedule_jittered);RUN_TEST(test_ne2k_llm_network_context_dhcp_renew_if_due);RUN_TEST(test_ne2k_llm_network_context_reconcile_lease);RUN_TEST(test_ne2k_llm_network_context_sse_resume_decide);RUN_TEST(test_ne2k_socket_poll_tcp_guards);RUN_TEST(test_ne2k_socket_passive_step_guards);RUN_TEST(test_ne2k_dhcp_renew_if_due_guards_transactionally);RUN_TEST(test_ne2k_llm_connection_acquire_start_dhcp_guard_is_transactional);RUN_TEST(test_ne2k_llm_connection_start_dhcp_guard_is_transactional);
     RUN_TEST(test_tcp_receive_copies_bounded_payload);
     RUN_TEST(test_tcp_poll_is_bounded_when_rx_empty);
+    RUN_TEST(test_tx_submit_never_stops_the_chip);
     RUN_TEST(test_tcp_ack_is_emitted_from_connection_state);
     RUN_TEST(test_rx_extract_publishes_bounded_frame);
     RUN_TEST(test_probe_rejects_missing_reset_ack);
