@@ -108,6 +108,14 @@ int shell_p2p_kv_load(const uint8_t* in, int len) {
     kv_apply_pending();
     return n;
 }
+void shell_collab_app(uint32_t from, const uint8_t* d, int len);
+void shell_fleet_app(uint32_t from, const uint8_t* d, int len);
+/* one P2P app channel, two users: fleet tags 0x40.., collab below */
+static void app_dispatch(void* ctx, uint32_t from, const uint8_t* d, int len) {
+    (void)ctx;
+    if (len < 1) return;
+    if (d[0] >= 0x40) shell_fleet_app(from, d, len); else shell_collab_app(from, d, len);
+}
 static void seed_from_machine(uint8_t seed[32], const char* name) {
     /* Emulated machine: entropy is the TSC and the tick counter mixed with the
      * node name (documented as weak in docs/p2p.md; not a CSPRNG). */
@@ -151,6 +159,7 @@ int shell_p2p_line(const char* line) {
         if (rc != 0) { print_string("p2p-up error bad arguments\n"); return 1; }
         print_string("p2p-up ok name "); print_string(a); print_string(" ip "); print_string(b);
         print_string(" port 7700 crypto x25519+aes128gcm\n");
+        g_node.app = app_dispatch; g_node.app_ctx = 0;
         kv_apply_pending();
         return 0;
     }

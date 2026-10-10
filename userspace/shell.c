@@ -6,6 +6,8 @@ int shell_prod_is(const char* line);
 int shell_persist_is(const char* line);
 int shell_persist_line(const char* line);
 void shell_persist_tick(void);
+int shell_fleet_is(const char* line);
+int shell_fleet_line(const char* line);
 int shell_platform_idle_yields(void);
 void shell_persist_shutdown(void);
 int shell_prod_line(const char* line);
@@ -3232,6 +3234,8 @@ static int is_builtin(const char* cmd) {
         "collab-review", "collab-rate", "collab-propose", "collab-vote", "collab-profile", "collab-forget",
         "collab-export", "collab-ticket", "collab-answer", "collab-sync", "collab-balances", "collab-audit",
         "collab-tasks", "collab-offers", "collab-votes", "collab-tickets", "collab-keys", "collab-forge",
+        "session-handoff", "session-resume", "sync-push", "sync-status", "fleet-report", "fleet-collect",
+        "deploy-stage", "deploy-promote", "deploy-rollback", "deploy-status",
         "hal-info", "hal-port", "screen-adapt", "gesture", "power-profile", "power-status", "dev-list",
         "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
         "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
@@ -6351,7 +6355,7 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
                 strcmp(command, "pm-disasm") == 0 || strcmp(command, "pm-debug") == 0 ||
                 strcmp(command, "pm-compile") == 0 || strcmp(command, "pm-exec") == 0 ||
                 strcmp(command, "pm-say") == 0 || strcmp(command, "pm-version") == 0 ||
-                strcmp(command, "pm-versions") == 0 || strcmp(command, "pm-edit") == 0 ||
+                strcmp(command, "pm-versions") == 0 || strcmp(command, "pm-edit") == 0 || strcmp(command, "pm-ide") == 0 ||
                 strcmp(command, "pm-catalog") == 0 || strcmp(command, "pm-install") == 0 ||
                 strcmp(command, "pm-certify") == 0 || strcmp(command, "pm-verify") == 0)) {
         cmd_pm(ctx, command, args, arg_count);
@@ -6719,6 +6723,10 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         ctx->last_rc = shell_collab_line(input_buffer);
         return;
     }
+    if (shell_fleet_is(input_buffer)) {
+        ctx->last_rc = shell_fleet_line(input_buffer);
+        return;
+    }
     if (strncmp(input_buffer, "p2p-", 4U) == 0) {
         ctx->last_rc = shell_p2p_line(input_buffer);
         return;
@@ -6930,3 +6938,57 @@ void main() {
     // Ne devrait jamais être atteint
     exit_program(0);
 }
+
+/* ---------------------------------------------------------------------
+ * Fleet hooks (userspace/shell_fleet.c): session handoff and file access.
+ * Session text: cwd 0x1e name=value 0x1f ... 0x1e history 0x1f ...
+ * ------------------------------------------------------------------- */
+static int sess_put(char* o, int k, int cap, const char* s) {
+    while (*s && k < cap - 1) { if (*s != 0x1e && *s != 0x1f) o[k++] = *s; s++; }
+    return k;
+}
+int shell_session_export(char* out, int cap) {
+    shell_context_t* c = g_live_ctx;
+    int k = 0, i, first;
+    if (!c || cap < 8) return -1;
+    k = sess_put(out, k, cap, c->current_dir);
+    out[k++] = 0x1e;
+    for (i = 0; i < c->env_count && k < cap - 40; i++) {
+        int l1 = (int)strlen(c->env_vars[i].name), l2 = (int)strlen(c->env_vars[i].value);
+        if (l1 + l2 + 2 > cap - 40 - k) continue;
+        k = sess_put(out, k, cap, c->env_vars[i].name); out[k++] = '=';
+        k = sess_put(out, k, cap, c->env_vars[i].value); out[k++] = 0x1f;
+    }
+    out[k++] = 0x1e;
+    first = c->history.count > 5 ? c->history.count - 5 : 0;
+    for (i = first; i < c->history.count && i < MAX_HISTORY; i++) {
+        if ((int)strlen(c->history.commands[i]) + 2 > cap - 1 - k) break;
+        k = sess_put(out, k, cap, c->history.commands[i]); out[k++] = 0x1f;
+    }
+    out[k] = 0;
+    return k;
+}
+int shell_session_import(const char* s, int len, int* vars, int* hist) {
+    shell_context_t* c = g_live_ctx;
+    char item[300];
+    int part = 0, k = 0, i;
+    *vars = 0; *hist = 0;
+    if (!c) return -1;
+    for (i = 0; i <= len; i++) {
+        char ch = i < len ? s[i] : 0x1e;
+        if (ch == 0x1e || ch == 0x1f) {
+            item[k] = 0;
+            if (part == 0 && ch == 0x1e) { if (item[0] == '/') { int q = 0; while (item[q] && q < MAX_PATH_LENGTH - 1) { c->current_dir[q] = item[q]; q++; } c->current_dir[q] = 0; } }
+            else if (part == 1 && item[0]) { char* eq = item; while (*eq && *eq != '=') eq++; if (*eq) { *eq = 0; set_env_var(c, item, eq + 1); (*vars)++; } }
+            else if (part == 2 && item[0]) { add_to_history(c, item); (*hist)++; }
+            k = 0;
+            if (ch == 0x1e) part++;
+            continue;
+        }
+        if (k < (int)sizeof(item) - 1) item[k++] = ch;
+    }
+    return 0;
+}
+const char* shell_session_cwd(void) { return g_live_ctx ? g_live_ctx->current_dir : "/"; }
+int shell_file_read(const char* p, char* buf, int cap) { if (!g_pm_ctx) g_pm_ctx = g_live_ctx; return pm_host_read(0, p, buf, cap); }
+int shell_file_write(const char* p, const char* d, int len) { if (!g_pm_ctx) g_pm_ctx = g_live_ctx; return pm_host_write(0, p, d, len, 0); }

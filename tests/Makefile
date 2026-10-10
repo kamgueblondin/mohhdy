@@ -343,6 +343,10 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_pmedit: $(UNIT_DIR)/userspace/test_pmedi
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/pmedit.c $(FRAMEWORK_SOURCES)
 
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_fleet: $(UNIT_DIR)/userspace/test_fleet.c ../userspace/fleet.c ../userspace/fleet.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/fleet.c $(FRAMEWORK_SOURCES)
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_promptmessage: $(UNIT_DIR)/userspace/test_promptmessage.c ../userspace/promptmessage.c ../userspace/promptmessage.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/promptmessage.c $(FRAMEWORK_SOURCES)

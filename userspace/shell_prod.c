@@ -590,3 +590,21 @@ static prod_state_ref_t ref(void) {
 }
 int shell_prod_save(uint8_t* o, int cap) { prod_state_ref_t r = ref(); if (!g_init) return 0; return prod_state_save(&r, o, cap); }
 int shell_prod_load(const uint8_t* in, int len) { prod_state_ref_t r = ref(); init(); return prod_state_load(&r, in, len); }
+/* fleet-report (shell_fleet.c): take a fresh sample, summarise it and the
+ * newest alert event for the guest-to-guest collector */
+void shell_prod_summary(char* metric, int mcap, char* log, int lcap) {
+    prod_sample_t s;
+    int i, firing = 0;
+    init();
+    take(&s); push(&s);
+    for (i = 0; i < PROD_RULES; i++) if (g_a.r[i].used && g_a.r[i].firing) firing++;
+    metric[0] = 0;
+    s_cat(metric, "mem_used_kb=", mcap); cat_u(metric, s.v[PM_MEM_USED], mcap);
+    s_cat(metric, " procs=", mcap); cat_u(metric, s.v[PM_PROCS], mcap);
+    s_cat(metric, " busy=", mcap); cat_u(metric, s.v[PM_BUSY], mcap);
+    s_cat(metric, " custom=", mcap); cat_u(metric, s.v[PM_CUSTOM], mcap);
+    s_cat(metric, " firing=", mcap); cat_u(metric, (uint32_t)firing, mcap);
+    s_cat(metric, " samples=", mcap); cat_u(metric, (uint32_t)g_m.n, mcap);
+    log[0] = 0;
+    if (g_a.ev_n > 0) s_cat(log, g_a.ev[(g_a.ev_head - 1 + PROD_EVENTS) % PROD_EVENTS].text, lcap);
+}
