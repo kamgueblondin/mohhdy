@@ -2746,6 +2746,7 @@ static int is_builtin(const char* cmd) {
         "aistats", "aimode", "aihelp", "aitest",
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
+        "agent-run",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",

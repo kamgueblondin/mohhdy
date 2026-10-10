@@ -39,6 +39,7 @@ static const char *const k_linux_traps[] = {
 static const char *const k_cmds[] = {
     "session-new", "session-use", "session-status", "session-list", "session-end",
     "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
+    "agent-run",
     "chat", "prompt",
     "grant", "revoke", "escalate", "takeover", "admin-status",
     "origin-check",
@@ -62,7 +63,7 @@ static const char *const k_caps[] = {
     "chat.reply", "site.explain", "session.escalate",
     "admin.observe", "admin.takeover",
     "dom.click", "dom.type", "pointer.move",
-    "mcp.invoice.create",
+    "mcp.invoice.create", "agent.run",
     0
 };
 
@@ -219,7 +220,9 @@ unsigned osui_test_now = 0U;
 static unsigned osui_now(void) { return osui_test_now; }
 int osui_test_ai_rc = 0;
 unsigned osui_test_ai_error = 0U;
+unsigned osui_test_ai_abort = 0U;
 static unsigned osui_ai_last_error(void) { return osui_test_ai_error; }
+static unsigned osui_ai_last_abort(void) { return osui_test_ai_abort; }
 static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     const char *fixture = "test local response";
     int i = 0;
@@ -249,6 +252,14 @@ static unsigned osui_ai_last_error(void) {
                  : "a"(SYS_AI_ENGINE), "b"(OS_AI_ENGINE_STATUS), "c"(&st), "d"(0)
                  : "memory");
     return result == 0 ? st.last_error : OS_AI_ERROR_MODEL_FAILED;
+}
+static unsigned osui_ai_last_abort(void) {
+    static os_ai_engine_status_t st;
+    int result;
+    asm volatile("int $0x80" : "=a"(result)
+                 : "a"(SYS_AI_ENGINE), "b"(OS_AI_ENGINE_STATUS), "c"(&st), "d"(0)
+                 : "memory");
+    return result == 0 ? st.last_abort : OS_AI_ABORT_NONE;
 }
 static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     int result;
@@ -389,9 +400,31 @@ static int has_cap(const osui_session_t *s, const char *cap) {
     return 0;
 }
 
+/* Roadmap step 3: VFS reads are granted per scope, "fs.read:<prefix>"
+ * (for instance fs.read:demo/). No scope, no read. */
+static int fs_scope_valid(const char *cap) {
+    int i;
+    if (s_ncmp(cap, "fs.read:", 8) != 0 || !cap[8]) return 0;
+    for (i = 8; cap[i]; i++) {
+        if (cap[i] == '.' && cap[i + 1] == '.') return 0;
+        if (cap[i] == ' ' || i >= OSUI_CAP - 1) return 0;
+    }
+    return 1;
+}
+
+static int fs_read_allowed(const osui_session_t *s, const char *path) {
+    int i;
+    if (!s) return 0;
+    for (i = 0; i < s->n_caps; i++) {
+        const char *c = s->caps[i];
+        if (s_ncmp(c, "fs.read:", 8) == 0 && s_ncmp(path, c + 8, s_len(c + 8)) == 0) return 1;
+    }
+    return 0;
+}
+
 static void add_cap(osui_session_t *s, const char *cap) {
     if (!s || !cap || !cap[0]) return;
-    if (!in_list(k_caps, cap)) return;
+    if (!in_list(k_caps, cap) && !fs_scope_valid(cap)) return;
     if (has_cap(s, cap)) return;
     if (s->n_caps >= OSUI_MAX_CAPS) return;
     s_cpy(s->caps[s->n_caps], OSUI_CAP, cap);
@@ -1301,6 +1334,13 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
             if (rc == OS_AI_CANCELLED || err == OS_AI_ERROR_CANCELLED) {
                 state = "cancelled"; llm = "gpt2_cancelled"; why = "ai_cancelled";
                 note = "etat_ia=annule (Echap)";
+            } else if (err == OS_AI_ERROR_NO_WORKER ||
+                       osui_ai_last_abort() == OS_AI_ABORT_WORKER_LOST ||
+                       osui_ai_last_abort() == OS_AI_ABORT_STALLED) {
+                /* Agent behaviour when the AI worker disappears: distinct
+                 * state, session kept open, the request can be retried. */
+                state = "worker_lost"; llm = "gpt2_no_worker"; why = "ai_worker_lost";
+                note = "etat_ia=worker IA perdu";
             } else if (err == OS_AI_ERROR_MODEL_MISSING) {
                 state = "no_model"; llm = "gpt2_missing"; why = "ai_model_missing";
                 note = "etat_ia=modele absent";
@@ -1369,7 +1409,7 @@ static int cmd_grant_revoke(int grant, char args[OSUI_MAX_ARGS][96], int narg, c
         out_add(out, max, &p, "osui error=capability manquante\n");
         return OSUI_ERR;
     }
-    if (!in_list(k_caps, args[0])) {
+    if (!in_list(k_caps, args[0]) && !fs_scope_valid(args[0])) {
         out_add(out, max, &p, "osui error=capability inconnue\n");
         return OSUI_ERR;
     }
@@ -2312,6 +2352,18 @@ static int cmd_fs_read(char args[OSUI_MAX_ARGS][96], int narg, char *out, int ma
         out_add(out, max, &p, "\n");
         return OSUI_ERR;
     }
+    if (!fs_read_allowed(cur(), args[0])) {
+        osui_session_t *s = cur();
+        journal(s ? s->id : "", "fs.read", "scope_denied", rid);
+        out_add(out, max, &p, "osui fs-read error=capability_denied capability=fs.read:<scope>");
+        emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+    {
+        osui_session_t *s = cur();
+        journal(s ? s->id : "", "fs.read", "ok", rid);
+    }
     f = fs_find(args[0]);
     if (!f || f->is_dir) {
         out_add(out, max, &p, "osui fs-read error=not_found\n");
@@ -2513,7 +2565,50 @@ static int open_then(const char *pane, int (*fn)(char *, int), char *out, int ma
     return fn(out, max);
 }
 
+static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg, char *out, int max);
+
+/* Roadmap step 3: the agent runs only allowlisted, read-only commands, under
+ * the agent.run capability; every run (and refusal) is journaled. The
+ * commands keep their own checks (fs-read still needs its scope). */
+static const char *const k_agent_allow[] = {
+    "os-status", "session-status", "fs-list", "fs-read", "gui-status", "stage", 0
+};
+
+static int cmd_agent_run(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    osui_session_t *s = cur();
+    char a2[OSUI_MAX_ARGS][96];
+    char tool[OSUI_CAP];
+    int i, p = 0, rc;
+    if (!s || s->status == ST_CLOSED || narg < 1) {
+        out_add(out, max, &p, "osui agent-run error=usage agent-run <commande> [args]\n");
+        return OSUI_ERR;
+    }
+    s_cpy(tool, OSUI_CAP, "agent.run:");
+    s_cpy(tool + 10, OSUI_CAP - 10, args[0]);
+    if (!has_cap(s, "agent.run")) {
+        journal(s->id, tool, "capability_denied", 0U);
+        out_add(out, max, &p, "osui agent-run error=capability_denied capability=agent.run\n");
+        return OSUI_ERR;
+    }
+    if (!in_list(k_agent_allow, args[0])) {
+        journal(s->id, tool, "not_allowlisted", 0U);
+        out_add(out, max, &p, "osui agent-run error=command_not_allowlisted command=");
+        out_add(out, max, &p, args[0]);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+    for (i = 0; i < OSUI_MAX_ARGS; i++) a2[i][0] = 0;
+    for (i = 1; i < narg && i < OSUI_MAX_ARGS; i++) s_cpy(a2[i - 1], 96, args[i]);
+    out_add(out, max, &p, "osui agent-run ok command=");
+    out_add(out, max, &p, args[0]);
+    out_add(out, max, &p, "\n");
+    rc = dispatch_cmd(args[0], a2, narg - 1, out + p, max - p);
+    journal(s->id, tool, rc == OSUI_OK ? "ok" : "refused", 0U);
+    return rc;
+}
+
 static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    if (s_cmp(cmd, "agent-run") == 0) return cmd_agent_run(args, narg, out, max);
     if (s_cmp(cmd, "os-help") == 0 || s_cmp(cmd, "help") == 0) return cmd_os_help(out, max);
     if (s_cmp(cmd, "os-status") == 0) return cmd_os_status(out, max);
     if (s_cmp(cmd, "osui-audit") == 0) return cmd_osui_audit(out, max);

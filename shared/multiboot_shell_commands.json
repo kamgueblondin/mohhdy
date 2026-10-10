@@ -11,6 +11,7 @@
   "commands": [
     "[",
     "admin-status",
+    "agent-run",
     "ai",
     "ai-acquire",
     "ai-close",
@@ -378,6 +379,7 @@
     "confirm",
     "deny",
     "mcp-invoice-void",
+    "agent-run",
     "chat",
     "prompt",
     "grant",
