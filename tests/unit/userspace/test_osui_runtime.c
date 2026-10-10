@@ -765,6 +765,51 @@ static void test_local_api(void) {
     (void)i;
 }
 
+
+extern const char *osui_test_web_req[4];
+extern int osui_test_web_listen_rc;
+extern char osui_test_web_out[2048];
+extern void osui_test_web_rewind(void);
+
+/* Roadmap step 5: HTTP front of the local API (routes, auth, errors). */
+static void test_web_serve(void) {
+    char tok[8], req[160];
+    const char *t;
+    setup();
+    osui_test_web_out[0] = 0; osui_test_web_rewind();
+    osui_test_web_req[0] = "GET /status HTTP/1.0\r\nHost: g\r\n\r\n";
+    osui_test_web_req[1] = "GET / HTTP/1.0\r\n\r\n";
+    osui_test_web_req[2] = "GET /sessions HTTP/1.0\r\n\r\n";
+    osui_test_web_req[3] = 0;
+    TEST_ASSERT_EQUAL(0, run_line("web-serve 8080 3"));
+    TEST_ASSERT(strstr(g_out, "osui web-serve ok served=3") != NULL);
+    TEST_ASSERT(strstr(g_out, "path=/status status=200 sent=ok") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out, "HTTP/1.0 200 OK\r\n") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out, "\"phase3_complete\":false") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out, "MOHHDY local console") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out, "HTTP/1.0 401 Error") != NULL);
+    /* Bearer token: same session, scopes and capabilities as the console. */
+    TEST_ASSERT_EQUAL(0, run_line("grant web.api"));
+    TEST_ASSERT_EQUAL(0, run_line("api-token"));
+    t = strstr(g_out, "token=");
+    memcpy(tok, t + 6, 6); tok[6] = 0;
+    snprintf(req, sizeof(req), "POST /ai/chat HTTP/1.0\r\nAuthorization: Bearer %s\r\nContent-Length: 7\r\n\r\nbonjour", tok);
+    osui_test_web_out[0] = 0; osui_test_web_rewind();
+    osui_test_web_req[0] = req; osui_test_web_req[1] = 0;
+    TEST_ASSERT_EQUAL(0, run_line("web-serve 8080 1"));
+    TEST_ASSERT(strstr(osui_test_web_out, "HTTP/1.0 202 Accepted") != NULL);
+    TEST_ASSERT(strstr(osui_test_web_out, "osui chat ok llm=gpt2_local ai_status=ready") != NULL);
+    osui_test_web_out[0] = 0; osui_test_web_rewind();
+    osui_test_web_req[0] = "garbage"; osui_test_web_req[1] = 0;
+    TEST_ASSERT_EQUAL(0, run_line("web-serve 8080 1"));
+    TEST_ASSERT(strstr(osui_test_web_out, "HTTP/1.0 400 Error") != NULL);
+    TEST_ASSERT_EQUAL(1, run_line("web-serve 0"));
+    osui_test_web_listen_rc = -5;
+    TEST_ASSERT_EQUAL(1, run_line("web-serve 8080 1"));
+    TEST_ASSERT(strstr(g_out, "error=listen_failed") != NULL);
+    osui_test_web_listen_rc = 0;
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -777,6 +822,7 @@ int main(void) {
     RUN_TEST(test_ai_worker_lost);
     RUN_TEST(test_provider_peer_fallback);
     RUN_TEST(test_local_api);
+    RUN_TEST(test_web_serve);
     RUN_TEST(test_grant_revoke_chat);
     RUN_TEST(test_escalate_takeover);
     RUN_TEST(test_origin_denied);

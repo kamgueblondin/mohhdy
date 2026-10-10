@@ -489,12 +489,18 @@ int kernel_peer_listen(const os_peer_listen_request_t* request) {
         (void)net_socket_close(boot_peer_listen_socket);
         boot_peer_listen_socket = -1;
     }
+    {
+        uint16_t i;
+        for (i = 0U; i < 4U; i++) boot_peer_remote_ip[i] = 0U;
+    }
     socket_id = net_socket_listen(request->local_port,
                                   request->local_sequence ? request->local_sequence : 0x20406080U);
     if (socket_id < 0) return OS_PEER_FAILED;
     boot_peer_listen_socket = socket_id;
     return 0;
 }
+
+static void kernel_peer_note_remote(void);
 
 int kernel_peer_accept(const os_peer_accept_request_t* request) {
     uint8_t state = 0U;
@@ -516,7 +522,7 @@ int kernel_peer_accept(const os_peer_accept_request_t* request) {
         boot_peer_segment, sizeof(boot_peer_segment),
         boot_llm_lease.ipv4, boot_peer_listen_socket, attempts,
         request->require_established);
-    if (status == 0) return 0;
+    if (status == 0) { kernel_peer_note_remote(); return 0; }
     if (status == 1) return 1; /* SYN-ACK guest emis, SYN_RECEIVED */
     if (status == -12) return OS_PEER_TIMEOUT;
     return OS_PEER_FAILED;
@@ -654,6 +660,58 @@ static int kernel_metier_exchange(void) {
 /* Retours : 1=ServerHello, 2=Certificate, 3=SKE, 4=SHD, 5=attente flight,
  * 6=CCS, 7=Finished, 8=attente applicative, 9=app echo, 0=noop.
  * request->metier : 10=METIER ok, 11=attente, 12=facture emise. */
+static void kernel_peer_note_remote(void) {
+    uint16_t i;
+    if (boot_llm_frame[12] != 0x08U || boot_llm_frame[13] != 0x00U) return;
+    for (i = 0U; i < 4U; i++) boot_peer_remote_ip[i] = boot_llm_frame[NET_ETHERNET_HEADER_SIZE + 12U + i];
+}
+
+/* Plain data on the accepted peer socket (see SYS_PEER_DATA). */
+int kernel_peer_data(os_peer_data_request_t* r) {
+    uint8_t state = 0U;
+    uint16_t attempts, n = 0U, segment_length = 0U;
+    int status;
+    if (!r) return OS_PEER_BAD_REQUEST;
+    if (!g_llm_present) return OS_PEER_UNAVAILABLE;
+    if (!boot_llm_lease.valid) return OS_PEER_NO_LEASE;
+    if (boot_peer_listen_socket < 0) return OS_PEER_NOT_LISTENING;
+    if (net_socket_get_state(boot_peer_listen_socket, &state) != 0) return OS_PEER_FAILED;
+    attempts = r->attempts ? r->attempts : 32U;
+    if (r->op == OS_PEER_DATA_RECV) {
+        r->length = 0U;
+        while (attempts--) {
+            (void)net_socket_receive(boot_peer_listen_socket, r->data, OS_PEER_DATA_RECV_MAX, &n);
+            if (n) { r->length = n; return 0; }
+            if (net_socket_get_state(boot_peer_listen_socket, &state) != 0) return OS_PEER_FAILED;
+            if (state == NET_TCP_STATE_CLOSE_WAIT || state == NET_TCP_STATE_CLOSED) return 2;
+            if (state != NET_TCP_STATE_ESTABLISHED) return OS_PEER_NOT_LISTENING;
+            status = ne2k_socket_poll_tcp(g_llm_dev, g_llm_io, boot_llm_frame, sizeof(boot_llm_frame),
+                                          boot_peer_listen_socket);
+            if (status == 0) kernel_peer_note_remote();
+        }
+        (void)net_socket_receive(boot_peer_listen_socket, r->data, OS_PEER_DATA_RECV_MAX, &n);
+        r->length = n;
+        return n ? 0 : 1;
+    }
+    if (r->op == OS_PEER_DATA_SEND) {
+        if (state != NET_TCP_STATE_ESTABLISHED && state != NET_TCP_STATE_CLOSE_WAIT) return OS_PEER_NOT_LISTENING;
+        if (r->length == 0U || r->length > OS_PEER_DATA_SEND_MAX) return OS_PEER_BAD_REQUEST;
+        if (boot_peer_remote_ip[0] == 0U) return OS_PEER_FAILED;
+        return kernel_peer_send_record(r->data, r->length) == 0 ? 0 : OS_PEER_FAILED;
+    }
+    if (r->op == OS_PEER_DATA_CLOSE) {
+        if (state != NET_TCP_STATE_ESTABLISHED && state != NET_TCP_STATE_CLOSE_WAIT) return 0;
+        if (net_socket_begin_close(boot_peer_listen_socket, boot_peer_segment, sizeof(boot_peer_segment),
+                                   &segment_length) != 0)
+            return OS_PEER_FAILED;
+        status = ne2k_tcp_segment(g_llm_dev, g_llm_io, &boot_llm_arp_cache, boot_llm_frame,
+                                  sizeof(boot_llm_frame), boot_llm_lease.ipv4, boot_peer_remote_ip,
+                                  boot_peer_segment, segment_length);
+        return status == 0 ? 0 : OS_PEER_FAILED;
+    }
+    return OS_PEER_BAD_REQUEST;
+}
+
 int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request) {
     uint8_t state = 0U;
     uint16_t rx_length = 0U;

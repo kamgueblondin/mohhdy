@@ -854,7 +854,7 @@ qemu-ai-gguf: $(OS_IMAGE) pack-initrd
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
 
-.PHONY: qemu-osui-peer qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit osui-registry-check secrets-check strict-image-check
+.PHONY: qemu-osui-web qemu-osui-peer qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit osui-registry-check secrets-check strict-image-check
 # Roadmap step 4 guardrail: no provider secret built into any image.
 secrets-check: $(OS_IMAGE) pack-initrd kernel-netlegacy
 	@python3 scripts/check_no_secrets.py
@@ -1039,6 +1039,10 @@ qemu-ne2k-acquire: $(OS_IMAGE) pack-initrd
 qemu-osui-peer: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/qemu_ne2k_tls12_server.py
 	@python3 tests/scripts/test_qemu_osui_peer.py
+
+# Roadmap step 5: OS-UI local API over HTTP via networker (host HTTP client).
+qemu-osui-web: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_osui_web.py
 
 qemu-ne2k-tls-http: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/qemu_ne2k_tls12_server.py

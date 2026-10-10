@@ -395,6 +395,21 @@ static int32_t relay_execute(const os_net_relay_request_t* req, os_net_relay_rep
         case SYS_PEER_ACCEPT:
         case SYS_PEER_TLS_POLL:
             return net_call1(req->op, (uint32_t)in);
+        case SYS_PEER_DATA: {
+            static os_peer_data_request_t r;
+            uint16_t i, n = in_length >= 4U ? (uint16_t)(in_length - 4U) : 0U;
+            if (in_length < 4U || n > OS_PEER_DATA_SEND_MAX) return OS_PEER_BAD_REQUEST;
+            r.op = in[0];
+            r.attempts = (uint16_t)(in[2] | ((uint16_t)in[3] << 8));
+            for (i = 0U; i < n; i++) r.data[i] = in[4U + i];
+            r.length = n;
+            rc = net_call1(SYS_PEER_DATA, (uint32_t)&r);
+            if (rc == 0 && r.op == OS_PEER_DATA_RECV && r.length <= cap) {
+                for (i = 0U; i < r.length; i++) reply->out[i] = r.data[i];
+                reply->out_length = r.length;
+            }
+            return rc;
+        }
         default:
             return OS_SOCKET_BAD_ARGUMENT;
     }

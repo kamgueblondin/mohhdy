@@ -39,7 +39,7 @@ static const char *const k_linux_traps[] = {
 static const char *const k_cmds[] = {
     "session-new", "session-use", "session-status", "session-list", "session-end",
     "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
-    "agent-run", "api", "api-token", "api-revoke",
+    "agent-run", "api", "api-token", "api-revoke", "web-serve",
     "chat", "prompt",
     "grant", "revoke", "escalate", "takeover", "admin-status",
     "origin-check",
@@ -281,6 +281,33 @@ static int peer_poll_text(char *out, int max, unsigned *code) {
 static void peer_close(void) { g_tp_phase = 0; }
 static int peer_rearm(void) { g_tp_phase = 3; return 0; }
 static void peer_yield(void) { osui_test_now += 1U; }
+/* Host fixture of the web server (roadmap step 5): one scripted request per
+ * accepted connection, the response collected in osui_test_web_out. */
+const char *osui_test_web_req[4];
+int osui_test_web_listen_rc = 0;
+char osui_test_web_out[2048];
+static int g_tw_idx, g_tw_sent;
+void osui_test_web_rewind(void) { g_tw_idx = 0; g_tw_sent = 0; }
+static int web_listen(unsigned port) { (void)port; return osui_test_web_listen_rc; }
+static int web_accept(void) { return osui_test_web_req[g_tw_idx] ? 0 : 1; }
+static int web_recv(char *buf, int cap, int *n) {
+    const char *r = osui_test_web_req[g_tw_idx];
+    int i = 0;
+    *n = 0;
+    if (!r || g_tw_sent) return 2;
+    while (r[i] && i < cap) { buf[i] = r[i]; i++; }
+    *n = i;
+    g_tw_sent = 1;
+    return 0;
+}
+static int web_send(const char *buf, int n) {
+    int l = 0, i;
+    while (osui_test_web_out[l]) l++;
+    for (i = 0; i < n && l + i < (int)sizeof(osui_test_web_out) - 1; i++) osui_test_web_out[l + i] = buf[i];
+    osui_test_web_out[l + i] = 0;
+    return 0;
+}
+static void web_close(void) { g_tw_idx++; g_tw_sent = 0; }
 #else
 static unsigned osui_now(void) {
     int t;
@@ -358,6 +385,48 @@ static void peer_yield(void) {
         (void)peer_sys1(SYS_YIELD, 0);
         asm volatile("int $0x80" : "=a"(t) : "a"(SYS_TICKS) : "memory");
     } while ((unsigned)(t - t0) < 5U);
+}
+/* Web server (roadmap step 5): SYS_PEER_LISTEN / SYS_PEER_ACCEPT and plain
+ * SYS_PEER_DATA, relayed to the Ring 3 networker on the strict kernel. */
+static int web_listen(unsigned port) {
+    static os_peer_listen_request_t rq;
+    rq.local_port = (uint16_t)port;
+    rq.local_sequence = 0x31415926U;
+    return peer_sys1(SYS_PEER_LISTEN, &rq);
+}
+static int web_accept(void) {
+    static os_peer_accept_request_t rq;
+    rq.attempts = 64U;
+    rq.require_established = 1U;
+    return peer_sys1(SYS_PEER_ACCEPT, &rq);
+}
+static os_peer_data_request_t g_web_io;
+static int web_recv(char *buf, int cap, int *n) {
+    int rc, i;
+    g_web_io.op = OS_PEER_DATA_RECV; g_web_io.attempts = 32U; g_web_io.length = 0U;
+    rc = peer_sys1(SYS_PEER_DATA, &g_web_io);
+    *n = 0;
+    if (rc == 0) {
+        for (i = 0; i < g_web_io.length && i < cap; i++) buf[i] = (char)g_web_io.data[i];
+        *n = i;
+    }
+    return rc;
+}
+static int web_send(const char *buf, int n) {
+    int off = 0, k, i, rc;
+    while (off < n) {
+        k = n - off > (int)OS_PEER_DATA_SEND_MAX ? (int)OS_PEER_DATA_SEND_MAX : n - off;
+        g_web_io.op = OS_PEER_DATA_SEND; g_web_io.attempts = 0U; g_web_io.length = (uint16_t)k;
+        for (i = 0; i < k; i++) g_web_io.data[i] = (uint8_t)buf[off + i];
+        rc = peer_sys1(SYS_PEER_DATA, &g_web_io);
+        if (rc != 0) return rc;
+        off += k;
+    }
+    return 0;
+}
+static void web_close(void) {
+    g_web_io.op = OS_PEER_DATA_CLOSE; g_web_io.attempts = 0U; g_web_io.length = 0U;
+    (void)peer_sys1(SYS_PEER_DATA, &g_web_io);
 }
 static unsigned osui_ai_last_abort(void) {
     static os_ai_engine_status_t st;
@@ -3048,7 +3117,165 @@ static int cmd_api(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     }
 }
 
+/* Roadmap step 5: the local API and AI console served over HTTP/1.0 through
+ * the Ring 3 networker ("web-serve [port] [requests]", blocking). Each
+ * request is mapped onto the same cmd_api routes, token and limits
+ * ("Authorization: Bearer tNNNNN"); GET / is a minimal console page. No
+ * browser engine (phase3_complete=false), no TLS on this port, local peers
+ * only. */
+#define OSUI_WEB_REQ 512
+static int web_find(const char *h, int n, const char *needle) {
+    int i, k, l = s_len(needle);
+    for (i = 0; i + l <= n; i++) {
+        for (k = 0; k < l && h[i + k] == needle[k]; k++) {}
+        if (k == l) return i;
+    }
+    return -1;
+}
+
+static int web_one(char *log, int lmax, int *lp) {
+    static char req[OSUI_WEB_REQ + 1];
+    static char api_out[OSUI_OUT_MAX];
+    static char resp[OSUI_OUT_MAX + 160];
+    char args[OSUI_MAX_ARGS][96];
+    int n = 0, got, rc, hdr = -1, i, k, narg, rp = 0, code = 500, blen = 0, tries;
+    unsigned clen = 0U, t0 = osui_now();
+    const char *body = "";
+    const char *ctype = "application/json";
+    for (i = 0; i < OSUI_MAX_ARGS; i++) args[i][0] = 0;
+    /* read headers (and body) within 20 s */
+    for (tries = 0; tries < 4096 && n < OSUI_WEB_REQ; tries++) {
+        if (osui_now() - t0 > 20U) break;
+        rc = web_recv(req + n, OSUI_WEB_REQ - n, &got);
+        if (rc < 0) return rc;
+        n += got;
+        req[n] = 0;
+        if (hdr < 0) {
+            hdr = web_find(req, n, "\r\n\r\n");
+            if (hdr >= 0) {
+                k = web_find(req, hdr, "Content-Length: ");
+                if (k >= 0) {
+                    clen = 0U;
+                    for (i = k + 16; req[i] >= '0' && req[i] <= '9'; i++) clen = clen * 10U + (unsigned)(req[i] - '0');
+                }
+            }
+        }
+        if (hdr >= 0 && (unsigned)(n - hdr - 4) >= clen) break;
+        if (rc == 2) break;
+    }
+    if (hdr < 0) { code = 400; body = "{\"error\":\"bad_request\"}"; goto reply; }
+    /* request line: METHOD SP PATH SP VERSION */
+    for (i = 0, k = 0; req[i] && req[i] != ' ' && k < 95; i++) args[0][k++] = req[i];
+    args[0][k] = 0;
+    while (req[i] == ' ') i++;
+    for (k = 0; req[i] && req[i] != ' ' && req[i] != '\r' && k < 95; i++) args[1][k++] = req[i];
+    args[1][k] = 0;
+    if (s_cmp(args[1], "/") == 0 && (s_cmp(args[0], "GET") == 0)) {
+        code = 200; ctype = "text/html";
+        body = "<html><body><h1>MOHHDY local console</h1><p>API: /status /sessions /vfs/ /supervision /ai/chat"
+               " (Bearer token). phase3_complete=false, no browser engine.</p></body></html>";
+        goto reply;
+    }
+    narg = 2;
+    k = web_find(req, hdr, "Authorization: Bearer ");
+    if (k >= 0) {
+        for (i = k + 22, n = 0; req[i] && req[i] != '\r' && n < 95; i++) args[2][n++] = req[i];
+        args[2][n] = 0;
+        narg = 3;
+    } else {
+        s_cpy(args[2], 96, "-");
+        narg = 3;
+    }
+    /* body words (POST /ai/chat) */
+    i = hdr + 4;
+    while (req[i] && narg < OSUI_MAX_ARGS) {
+        while (req[i] == ' ' || req[i] == '\r' || req[i] == '\n') i++;
+        for (n = 0; req[i] && req[i] != ' ' && req[i] != '\r' && req[i] != '\n' && n < 95; i++) args[narg][n++] = req[i];
+        args[narg][n] = 0;
+        if (n) narg++;
+    }
+    api_out[0] = 0;
+    (void)cmd_api(args, narg, api_out, sizeof(api_out));
+    k = web_find(api_out, s_len(api_out), "status=");
+    if (k >= 0) {
+        code = 0;
+        for (i = k + 7; api_out[i] >= '0' && api_out[i] <= '9'; i++) code = code * 10 + (api_out[i] - '0');
+    }
+    for (i = 0; api_out[i] && api_out[i] != '\n'; i++) {}
+    body = api_out[i] ? api_out + i + 1 : "";
+reply:
+    blen = s_len(body);
+    out_add(resp, sizeof(resp), &rp, "HTTP/1.0 ");
+    out_u(resp, sizeof(resp), &rp, (unsigned)code);
+    out_add(resp, sizeof(resp), &rp, code == 200 ? " OK" : code == 202 ? " Accepted" : " Error");
+    out_add(resp, sizeof(resp), &rp, "\r\nServer: mohhdy-osui\r\nContent-Type: ");
+    out_add(resp, sizeof(resp), &rp, ctype);
+    out_add(resp, sizeof(resp), &rp, "\r\nContent-Length: ");
+    out_u(resp, sizeof(resp), &rp, (unsigned)blen);
+    out_add(resp, sizeof(resp), &rp, "\r\nConnection: close\r\n\r\n");
+    out_add(resp, sizeof(resp), &rp, body);
+    rc = web_send(resp, s_len(resp));
+    web_close();
+    out_add(log, lmax, lp, "osui web-serve request method=");
+    out_add(log, lmax, lp, args[0][0] ? args[0] : "-");
+    out_add(log, lmax, lp, " path=");
+    out_add(log, lmax, lp, args[1][0] ? args[1] : "-");
+    out_add(log, lmax, lp, " status=");
+    out_u(log, lmax, lp, (unsigned)code);
+    out_add(log, lmax, lp, rc == 0 ? " sent=ok\n" : " sent=failed\n");
+    journal("", "web.http", rc == 0 ? "served" : "send_failed", 0U);
+    return rc == 0 ? 0 : rc;
+}
+
+static int cmd_web_serve(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    unsigned port = 8080U, count = 1U, served = 0U, t0;
+    int p = 0, rc;
+    if (narg >= 1 && !parse_u(args[0], &port)) port = 0U;
+    if (narg >= 2 && !parse_u(args[1], &count)) count = 0U;
+    if (port == 0U || port > 65535U || count == 0U || count > 8U) {
+        out_add(out, max, &p, "osui web-serve error=usage web-serve [port] [requests 1-8]\n");
+        return OSUI_ERR;
+    }
+    while (served < count) {
+        rc = web_listen(port);
+        if (rc != 0 && rc != OS_PEER_IN_PROGRESS) {
+            out_add(out, max, &p, "osui web-serve error=listen_failed rc=");
+            out_u(out, max, &p, (unsigned)(-rc));
+            out_add(out, max, &p, "\n");
+            return OSUI_ERR;
+        }
+        if (served == 0U) {
+            out_add(out, max, &p, "osui web-serve listening port=");
+            out_u(out, max, &p, port);
+            out_add(out, max, &p, "\n");
+        }
+        t0 = osui_now();
+        do {
+            rc = web_accept();
+            if (rc < 0 && rc != OS_PEER_TIMEOUT) {
+                out_add(out, max, &p, "osui web-serve error=accept_failed\n");
+                return OSUI_ERR;
+            }
+            if (rc != 0) peer_yield();
+        } while (rc != 0 && osui_now() - t0 < 60U);
+        if (rc != 0) {
+            out_add(out, max, &p, "osui web-serve error=accept_timeout\n");
+            return OSUI_ERR;
+        }
+        if (web_one(out, max, &p) != 0) {
+            out_add(out, max, &p, "osui web-serve error=io_failed\n");
+            return OSUI_ERR;
+        }
+        served++;
+    }
+    out_add(out, max, &p, "osui web-serve ok served=");
+    out_u(out, max, &p, served);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
 static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    if (s_cmp(cmd, "web-serve") == 0) return cmd_web_serve(args, narg, out, max);
     if (s_cmp(cmd, "api") == 0) return cmd_api(args, narg, out, max);
     if (s_cmp(cmd, "api-token") == 0) return cmd_api_token(1, out, max);
     if (s_cmp(cmd, "api-revoke") == 0) return cmd_api_token(0, out, max);

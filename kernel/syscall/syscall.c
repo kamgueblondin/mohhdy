@@ -56,6 +56,7 @@ extern int kernel_llm_close(void);
 extern int kernel_llm_configure_openai(const os_llm_openai_credential_request_t* request);
 extern int kernel_peer_listen(const os_peer_listen_request_t* request);
 extern int kernel_peer_accept(const os_peer_accept_request_t* request);
+extern int kernel_peer_data(os_peer_data_request_t* request);
 extern int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* request);
 extern int kernel_llm_dhcp_maintenance(uint32_t now);
 /* Tranche 5 suite: NE2000 owned by the Ring 3 worker (kernel/kernel.c). */
@@ -913,6 +914,19 @@ static int net_relay_marshal(const cpu_state_t* cpu, os_net_relay_request_t* req
                 req->in_length = 0U;
             }
             return 0;
+        case SYS_PEER_DATA: {
+            const os_peer_data_request_t* r = (const os_peer_data_request_t*)cpu->ebx;
+            uint16_t n;
+            if (!syscall_user_range(r, sizeof(*r), 1)) return OS_PEER_BAD_REQUEST;
+            n = r->op == OS_PEER_DATA_SEND ? r->length : 0U;
+            if (n > OS_PEER_DATA_SEND_MAX) return OS_PEER_BAD_REQUEST;
+            req->in[0] = r->op; req->in[1] = 0U;
+            req->in[2] = (uint8_t)r->attempts; req->in[3] = (uint8_t)(r->attempts >> 8);
+            net_relay_copy(req->in + 4, r->data, n);
+            req->in_length = (uint16_t)(4U + n);
+            req->out_capacity = net_relay_cap(OS_PEER_DATA_RECV_MAX);
+            return 0;
+        }
         default:
             return OS_SOCKET_BAD_ARGUMENT;
     }
@@ -944,6 +958,10 @@ static int32_t net_relay_deliver(const cpu_state_t* cpu) {
         const os_socket_receive_request_t* r = (const os_socket_receive_request_t*)cpu->ebx;
         if (!syscall_user_range(r, sizeof(*r), 0)) return OS_SOCKET_BAD_ARGUMENT;
         dst = r->buffer; cap = r->capacity; dst_len = r->out_length;
+    } else if (op == SYS_PEER_DATA) {
+        os_peer_data_request_t* r = (os_peer_data_request_t*)cpu->ebx;
+        if (!syscall_user_range(r, sizeof(*r), 1)) return OS_PEER_BAD_REQUEST;
+        dst = r->data; cap = OS_PEER_DATA_RECV_MAX; dst_len = &r->length;
     } else {
         return result;
     }
@@ -1353,7 +1371,7 @@ void syscall_handler(cpu_state_t* cpu) {
      * tasks reach the Ring 3 stack through the relay instead. */
     if (!nic_owner_kernel_may_touch() &&
         ((cpu->eax >= SYS_LLM_ACQUIRE_START && cpu->eax <= SYS_LLM_CLOSE) ||
-         (cpu->eax >= SYS_PEER_LISTEN && cpu->eax <= SYS_PEER_TLS_POLL))) {
+         (cpu->eax >= SYS_PEER_LISTEN && cpu->eax <= SYS_PEER_TLS_POLL) || cpu->eax == SYS_PEER_DATA)) {
         nic_owner_note_kernel_gated();
         cpu->eax = (uint32_t)OS_NET_NIC_WORKER_OWNED;
         return;
@@ -1923,6 +1941,13 @@ void syscall_handler(cpu_state_t* cpu) {
             break;
         case SYS_PEER_ACCEPT:
             cpu->eax = (uint32_t)kernel_peer_accept((const os_peer_accept_request_t*)cpu->ebx);
+            break;
+        case SYS_PEER_DATA:
+            if (!syscall_user_range((const void*)cpu->ebx, sizeof(os_peer_data_request_t), 1)) {
+                cpu->eax = (uint32_t)OS_PEER_BAD_REQUEST;
+                break;
+            }
+            cpu->eax = (uint32_t)kernel_peer_data((os_peer_data_request_t*)cpu->ebx);
             break;
         case SYS_PEER_TLS_POLL:
             cpu->eax = (uint32_t)kernel_peer_tls_poll((const os_peer_tls_poll_request_t*)cpu->ebx);

@@ -80,6 +80,7 @@ int kernel_llm_dhcp_maintenance(uint32_t now) { (void)now; return 0; }
 int kernel_peer_listen(const os_peer_listen_request_t* r) { (void)r; return absent(); }
 int kernel_peer_accept(const os_peer_accept_request_t* r) { (void)r; return absent(); }
 int kernel_peer_tls_poll(const os_peer_tls_poll_request_t* r) { (void)r; return absent(); }
+int kernel_peer_data(os_peer_data_request_t* r) { (void)r; return absent(); }
 
 /* Kernel socket registry: not in this image. */
 int net_socket_open(uint16_t a, uint16_t b, uint32_t c) { (void)a; (void)b; (void)c; return absent(); }
