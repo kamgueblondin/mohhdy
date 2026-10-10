@@ -11,6 +11,7 @@ DNS, TLS or public internet). Scenarios:
 from __future__ import print_function
 
 import os
+import re
 import struct
 import sys
 import time
@@ -178,6 +179,10 @@ def main():
         wait_log(c, "p2p kv synced mode=eco v1 from alpha", 60, start_c)
         wait_log(c, "p2p sync from alpha items ", 60, start_c)
         cmd(c, "p2p-kv", "p2p kv ok 2")
+        cmd(a, "p2p-get nokey", "p2p-get pending asked 2")
+        wait_log(a, "p2p kv miss nokey at beta", 60)
+        wait_log(a, "p2p kv miss nokey at gamma", 60)
+        cmd(c, "p2p-get color", "p2p-get ok local color=blue v1")
         say("scenario 2: replication + partition sync ok (%.0fs)" % (time.monotonic() - t0))
         cmd(b, "p2p-propose leader beta", "p2p-propose ok leader sent 2")
         wait_log(b, "p2p propose committed leader=beta", 90)
@@ -193,7 +198,10 @@ def main():
         wait_log(a, "p2p peer gamma down", 90)
         cmd(a, "p2p-send gamma via-relay-msg", "p2p-send ok to gamma")
         wait_log(c, "p2p msg from alpha: via-relay-msg (relayed)", 60)
-        cmd(b, "p2p-stats", "relayed 1")
+        start_b = cmd(b, "p2p-stats", "p2p stats ok tx_bytes ")
+        relayed = re.search(r"relayed (\d+)", log(b, start_b))
+        if not relayed or int(relayed.group(1)) < 1:
+            raise RuntimeError("beta relayed nothing: %s" % log(b, start_b)[-400:])
         cmd(a, "p2p-health", "p2p health ok 2 up 1")
         if "p2p health gamma down blocked" not in log(a) or "down_events 1" not in log(a):
             raise RuntimeError("alpha health lacks the failed link: %s" % log(a)[-800:])

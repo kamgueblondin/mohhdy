@@ -135,6 +135,11 @@ Le développement MOHHDY est organisé en 8 phases principales :
 - US-074 : Développement du gestionnaire de NAT traversal
 - US-075 : Création du système d'analyse de trafic intelligent
 
+Etat Phase 5 (10 octobre 2026, lot P2P ; detail et limites dans `docs/p2p.md`) :
+- Fait (preuve QEMU trois invites `make qemu-p2p` + unitaires) : US-061 protocole, US-062 decouverte, US-065 replication (LWW), US-066 chiffrement (X25519 + AES-128-GCM par paire, cle de reseau, anti-rejeu ; hub verifie l'absence de clair), US-071 synchronisation (anti-entropie apres partition), US-072 moniteur de sante (RTT, vu, erreurs, pannes).
+- Partiel : US-063 routage (un relais choisi via les voisins, QEMU ; pas de cout multi-sauts), US-064 consensus (vote majoritaire a un tour, QEMU ; pas Raft/Paxos), US-069 tolerance aux pannes (detection + reroutage + resync, QEMU ; pas de persistance), US-070 cache distribue (lecture distante, QEMU), US-068 bande passante et US-073 QoS (budget par pair, controle prioritaire ; unitaires seulement, pas adaptatif), US-075 analyse de trafic (compteurs par type ; pas d'analyse automatique).
+- Non livre : US-067 gRPC, US-074 NAT traversal (segment unique sans NAT dans le labo).
+
 ### Phase 6 - Multi-Platform (US-076 à US-090)
 - US-076 : Adaptation du noyau pour architecture ARM
 - US-077 : Développement de l'interface mobile native
