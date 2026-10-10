@@ -35,10 +35,31 @@ def send_command(client, command):
 nw.send_command = send_command
 
 
+def send_exact(mon, proc, command, tries=3):
+    """Type a state-changing command once. QEMU sendkey can repeat or drop a
+    key under CI load (seen: 'prod-innject 80'); the shell then runs nothing
+    of ours ('Commande non trouvee'), so the exact command is typed again.
+    A line read intact is never resent."""
+    for _ in range(tries):
+        start = len(nw.log_text())
+        nw.send_command(mon, command)
+        nw.wait_for("ligne lue: ", proc, start, timeout=25)
+        line = nw.log_text()[start:].split("ligne lue: ", 1)[1].split("\n", 1)[0].strip()
+        if line == command:
+            return start
+        nw.wait_for("(-.-)", proc, start, timeout=25)
+        print("[production] typed %r read as %r, typing it again" % (command, line))
+    raise RuntimeError("could not type %r intact" % command)
+
+
 def run(mon, proc, command, needles, attempts=1, timeout=25):
     if isinstance(needles, str):
         needles = [needles]
-    start = nw.send_command_until(mon, command, needles[0], proc, attempts=attempts)
+    if attempts > 1:  # read-only commands: plain retry
+        start = nw.send_command_until(mon, command, needles[0], proc, attempts=attempts)
+    else:
+        start = send_exact(mon, proc, command)
+        nw.wait_for(needles[0], proc, start, timeout=timeout)
     for needle in needles[1:]:
         nw.wait_for(needle, proc, start, timeout=timeout)
     nw.wait_for("(-.-)", proc, start, timeout=timeout)
