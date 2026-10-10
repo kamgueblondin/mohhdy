@@ -9,6 +9,7 @@
 #include "os_vfs_service.h"
 #include "os_ipc_deferred.h"
 #include "osui_runtime.h"
+#include "shell_platform.h"
 #include "osui_gui.h"
 
 // ==============================================================================
@@ -2747,6 +2748,9 @@ static int is_builtin(const char* cmd) {
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
+        "hal-info", "hal-port", "screen-adapt", "gesture", "power-profile", "power-status", "dev-list",
+        "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
+        "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
@@ -6212,6 +6216,11 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         add_to_history(ctx, "ai-credential [masque]");
     else
         add_to_history(ctx, input_buffer);
+
+    if (shell_platform_is(input_buffer)) {
+        ctx->last_rc = shell_platform_line(input_buffer);
+        return;
+    }
 
     if (input_buffer[0] == '/') {
         char osui_out[OSUI_OUT_MAX];
