@@ -67,6 +67,11 @@ static void say_rc(const char* what, int rc) {
     k = 0; if (rc < 0) n[k++] = '-'; while (i) n[k++] = t[--i]; n[k] = 0;
     print_string(what); print_string(n); print_string("\n");
 }
+/* node identity seed: kept so a restored ledger keeps the same node id */
+static uint8_t g_seed[32];
+static int g_seed_ok;
+int shell_p2p_seed_get(uint8_t out[32]) { int i; if (!g_seed_ok) return -1; for (i = 0; i < 32; i++) out[i] = g_seed[i]; return 0; }
+void shell_p2p_seed_set(const uint8_t in[32]) { int i; for (i = 0; i < 32; i++) g_seed[i] = in[i]; g_seed_ok = 1; }
 static void seed_from_machine(uint8_t seed[32], const char* name) {
     /* Emulated machine: entropy is the TSC and the tick counter mixed with the
      * node name (documented as weak in docs/p2p.md; not a CSPRNG). */
@@ -104,7 +109,8 @@ int shell_p2p_line(const char* line) {
         if (!a[0] || parse_ip(b, ip) != 0) { print_string("p2p-up error usage: p2p-up NAME IP [NETKEY]\n"); return 1; }
         if (osui_web_active()) { print_string("p2p-up error web-serve active\n"); return 1; }
         if (!key[0]) { int i; const char* d = "mohhdy-p2p-lab"; for (i = 0; d[i]; i++) key[i] = d[i]; key[i] = 0; }
-        seed_from_machine(seed, a);
+        if (g_seed_ok) { int i; for (i = 0; i < 32; i++) seed[i] = g_seed[i]; }
+        else { int i; seed_from_machine(seed, a); for (i = 0; i < 32; i++) g_seed[i] = seed[i]; g_seed_ok = 1; }
         rc = p2p_up(&g_node, a, ip, key, seed, &g_host);
         if (rc != 0) { print_string("p2p-up error bad arguments\n"); return 1; }
         print_string("p2p-up ok name "); print_string(a); print_string(" ip "); print_string(b);

@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 298
+#define MOHHDY_SHELL_COMMAND_COUNT 306
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -77,8 +77,10 @@ static const char * const mohhdy_shell_commands[] = {
     "collab-balances",
     "collab-claim",
     "collab-export",
+    "collab-forge",
     "collab-forget",
     "collab-join",
+    "collab-keys",
     "collab-offer",
     "collab-offers",
     "collab-pay",
@@ -172,6 +174,9 @@ static const char * const mohhdy_shell_commands[] = {
     "p2p-sync",
     "p2p-unblock",
     "p2p-up",
+    "persist-load",
+    "persist-save",
+    "persist-status",
     "pm",
     "pm-catalog",
     "pm-certify",
@@ -211,7 +216,10 @@ static const char * const mohhdy_shell_commands[] = {
     "prod-roadmap",
     "prod-rollback",
     "prod-sample",
+    "prod-scale-run",
     "prod-scale-sim",
+    "prod-scale-status",
+    "prod-scale-stop",
     "prod-tutorial",
     "prod-usage",
     "prompt",
