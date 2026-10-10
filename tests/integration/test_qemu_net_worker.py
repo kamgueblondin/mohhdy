@@ -34,6 +34,14 @@ MON = os.path.join(LOG_DIR, "net-worker-monitor.sock")
 KERNEL = os.environ.get("MOHHDY_NET_WORKER_KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
 STRICT_BANNER = "[NET] build NET_RING0_FALLBACK=0"
 STRICT = [False]
+# Worker loss: legacy re-initialises the card in Ring 0; strict leaves the
+# reset to the next networker (no kernel port access).
+RECLAIM_LEGACY = "[NET] NE2000 back in Ring 0 after worker loss"
+RECLAIM_STRICT = "[NET] NE2000 released after worker loss; reset left to the next Ring 3 networker"
+RECLAIM_MARK = [RECLAIM_LEGACY]
+PROM_LEGACY = "net-driver nic ring3 ok base 768 irq 3 mac 52:54:00:12:34:56 prom-match 1"
+PROM_STRICT = "net-driver nic ring3 ok base 768 irq 3 mac 52:54:00:12:34:56 prom-match ring3"
+PROM_MARK = [PROM_LEGACY]
 INITRD = os.path.join(ROOT, "my_initrd.tar")
 KEY_HOLD_MS = int(os.environ.get("KEY_HOLD_MS", "10"))
 
@@ -149,8 +157,14 @@ def release_boot_worker(client, proc):
     match = re.search(r"service-find ok net-driver (\d+)", normalized_log(log_text()[start:]))
     if not match:
         raise RuntimeError("boot networker pid missing")
+    if STRICT[0]:
+        # Strict kernel: probe, reset and PROM read happen only in Ring 3.
+        for needle in ("[NET] NE2000 probe deferred to the Ring 3 networker",
+                       "[NET] NE2000 probed, reset and MAC read by the Ring 3 networker"):
+            if needle not in normalized_log(log_text()):
+                raise RuntimeError("strict NE2000 boot: missing %r" % needle)
     kill(client, proc, match.group(1))
-    wait_for("[NET] NE2000 back in Ring 0 after worker loss", proc, start, timeout=20)
+    wait_for(RECLAIM_MARK[0], proc, start, timeout=20)
 
 
 STATUS_KEYS = ("worker", "fwd", "done", "aborted", "timeouts", "denied", "stale", "pending")
@@ -212,6 +226,8 @@ def main():
             time.sleep(0.5)
             send_command_until(monitor, "net-status", "Carte Ethernet : detectee", proc)
             STRICT[0] = STRICT_BANNER in normalized_log(log_text())
+            RECLAIM_MARK[0] = RECLAIM_STRICT if STRICT[0] else RECLAIM_LEGACY
+            PROM_MARK[0] = PROM_STRICT if STRICT[0] else PROM_LEGACY
             release_boot_worker(monitor, proc)
             # Degraded: no net-driver (strict: refused, legacy: local path).
             claim_degraded(monitor, proc)

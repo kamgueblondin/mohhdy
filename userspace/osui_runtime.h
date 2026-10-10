@@ -17,6 +17,10 @@ const char *osui_get_chat_mode(void);
 const char *osui_get_pane(void);
 const char *osui_get_stage_mode(void);
 const char *osui_get_stage_kind(void);
+const char *osui_get_stage_llm(void);
+/* The VBE loop returned to the text console (any exit path). */
+void osui_gui_closed(void);
+const char *osui_get_ai_state(void);
 const char *osui_get_session_id(void);
 int osui_get_chat_x(void);
 int osui_get_chat_y(void);

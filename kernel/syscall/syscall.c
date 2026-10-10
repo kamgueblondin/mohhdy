@@ -65,6 +65,8 @@ extern int kernel_net_nic_pump(os_net_nic_pump_t* pump);
 extern int kernel_net_nic_info(os_net_nic_info_t* info);
 extern int kernel_net_nic_present(void);
 extern int kernel_net_nic_reclaim(void);
+extern int kernel_net_nic_claimable(void);
+extern int kernel_net_nic_report(int found, const uint8_t* mac);
 extern int kernel_net_wire_connect(const os_net_wire_connect_t* request);
 extern int kernel_net_wire_send(int socket_id, const uint8_t* data, uint16_t length,
                                 uint8_t* segment, uint16_t capacity, uint16_t* out_length,
@@ -1059,12 +1061,23 @@ static int32_t sys_net_nic(cpu_state_t* cpu) {
             os_net_nic_info_t* info = (os_net_nic_info_t*)cpu->ecx;
             if (!current_task || current_task->type != TASK_TYPE_USER) return OS_NET_WORKER_REQUIRED;
             if (info && !syscall_user_range(info, sizeof(*info), 1)) return OS_SOCKET_BAD_ARGUMENT;
-            rc = nic_owner_claim(pid, worker, kernel_net_nic_present());
+            rc = nic_owner_claim(pid, worker, kernel_net_nic_claimable());
             if (rc != 0) return rc;
             if (info) (void)kernel_net_nic_info(info);
             tss_set_nic_io(1); /* open now; task switches keep it per owner */
             print_string_serial("[NET] NE2000 ports 0x300-0x31F handed to the Ring 3 worker\n");
             return 0;
+        }
+        case OS_NET_NIC_REPORT: {
+            const uint8_t* mac = (const uint8_t*)cpu->edx;
+            if (pid <= 0 || pid != worker || nic_owner_pid() != pid) return OS_NET_WORKER_REQUIRED;
+            if (cpu->ecx != 0U && !syscall_user_range(mac, 6U, 0)) return OS_SOCKET_BAD_ARGUMENT;
+            rc = kernel_net_nic_report(cpu->ecx != 0U, mac);
+            if (rc == 0 && cpu->ecx == 0U) {
+                (void)nic_owner_release(pid);
+                tss_set_nic_io(0);
+            }
+            return rc;
         }
         case OS_NET_NIC_IRQ:
             if (pid <= 0 || pid != worker || nic_owner_pid() != pid) return OS_NET_WORKER_REQUIRED;

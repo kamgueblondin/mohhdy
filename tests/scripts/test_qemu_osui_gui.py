@@ -31,6 +31,20 @@ KEY_DUPLICATE_SETTLE_DELAY = float(os.environ.get("KEY_DUPLICATE_SETTLE_DELAY", 
 KEY_CHAR_RETRIES = int(os.environ.get("KEY_CHAR_RETRIES", "3"))
 
 
+def _model_packed():
+    import tarfile
+    try:
+        with tarfile.open(os.environ.get("INITRD", os.path.join(ROOT, "my_initrd.tar"))) as tar:
+            return any(n.endswith("models/gpt2_124M.bin") for n in tar.getnames())
+    except (OSError, tarfile.TarError):
+        return False
+
+
+MODEL_PACKED = _model_packed()
+AI_GUI_MARKER = "ai_status=ready" if MODEL_PACKED else "llm=gpt2_missing ai_status=no_model"
+AI_GUI_NOTE = "llm=gpt2_local ai=ready" if MODEL_PACKED else "llm=gpt2_missing ai=no_model"
+
+
 def say(message):
     sys.stdout.write(message + "\n")
     sys.stdout.flush()
@@ -526,10 +540,28 @@ def main():
             send_command_until(
                 monitor, "/center", "chat_mode=center", proc, mode="getc", wait_prompt=False
             )
+            # Roadmap step 2, end to end inside the open GUI: request to the
+            # local GPT-2 session, its answer (or, without packed weights,
+            # the distinct no-model state), explicit session end, close.
+            say("typing chat ai a in gui ...")
+            ai_start = len(log_text())
+            send_command_until(
+                monitor, "chat ai a", AI_GUI_MARKER, proc, mode="getc", wait_prompt=False
+            )
+            wait_for(proc, "osui stage mode=", CMD_TIMEOUT, ai_start)
+            wait_for(proc, AI_GUI_NOTE, CMD_TIMEOUT, ai_start)
+            say("typing session-end in gui ...")
+            end_start = len(log_text())
+            send_command_until(
+                monitor, "session-end", "history=cleared", proc, mode="getc", wait_prompt=False
+            )
+            wait_for(proc, "ai=ended", CMD_TIMEOUT, end_start)
             say("typing console ...")
             send_command_until(
                 monitor, "console", "chrome=text", proc, mode="getc", wait_prompt=True
             )
+            say("typing gui-status after close ...")
+            send_command_until(monitor, "gui-status", "gui_live=false", proc)
         say("QEMU OS-UI GUI contract passed.")
         return 0
     finally:

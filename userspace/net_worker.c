@@ -153,10 +153,12 @@ static void nic_ack(void) {
     if (isr & 0x1FU) port_outb((uint16_t)(nic_base + 0x07U), (uint8_t)(isr & 0x1FU));
 }
 
+static int net_call3(uint32_t number, uint32_t a, uint32_t b, uint32_t c);
+
 static int nic_claim(void) {
     os_net_nic_info_t info;
     uint32_t i;
-    int same = 1, rc;
+    int same = 1, deferred = 1, rc;
     rc = net_call2(SYS_NET_NIC, OS_NET_NIC_CLAIM, (uint32_t)&info);
     if (rc != 0) {
         puts("net-driver nic claim "); put_int(rc); putc('\n');
@@ -166,10 +168,26 @@ static int nic_claim(void) {
     nic_io.inb = r3_inb;
     nic_io.outb = r3_outb;
     nic_base = info.base_port;
+    /* The probe, the reset (prepare) and the PROM MAC read are ours. A
+     * strict kernel never touched the card (info.mac all zero) and learns
+     * the result through OS_NET_NIC_REPORT. */
+    for (i = 0; i < 6U; i++) if (info.mac[i] != 0U) deferred = 0;
     if (ne2k_probe(&nic, info.base_port, &nic_io) != 0 || ne2k_prepare(&nic, &nic_io) != 0 ||
         ne2k_read_mac(&nic, &nic_io) != 0 || ne2k_configure_rings(&nic, &nic_io) != 0) {
+        if (deferred) {
+            (void)net_call3(SYS_NET_NIC, OS_NET_NIC_REPORT, 0U, 0U);
+            puts("net-driver nic ring3 probe: no NE2000\n");
+            return -2;
+        }
         puts("net-driver nic ring3 init failed\n");
         return -1;
+    }
+    if (deferred) {
+        rc = net_call3(SYS_NET_NIC, OS_NET_NIC_REPORT, 1U, (uint32_t)nic.mac);
+        if (rc != 0) {
+            puts("net-driver nic report rc "); put_int(rc); putc('\n');
+            return -1;
+        }
     }
     for (i = 0; i < 6U; i++) if (nic.mac[i] != info.mac[i]) same = 0;
     port_outb(nic_base, 0x22U);
@@ -180,7 +198,7 @@ static int nic_claim(void) {
     puts(" irq "); put_uint(info.irq);
     puts(" mac ");
     for (i = 0; i < 6U; i++) { if (i) putc(':'); put_hex8(nic.mac[i]); }
-    puts(same ? " prom-match 1\n" : " prom-match 0\n");
+    puts(deferred ? " prom-match ring3\n" : same ? " prom-match 1\n" : " prom-match 0\n");
     return 0;
 }
 
@@ -510,8 +528,11 @@ void main(void) {
     /* Tranche 5 suite: take the NE2000 over (no-op without a card). On a
      * strict kernel without a card, serve sockets loopback-only. A legacy
      * kernel without a card keeps the relay_execute path (kernel registry). */
-    if (nic_claim() == 0) stack_start();
-    else if (rc == 2) stack_start_loopback();
+    {
+        int claim = nic_claim();
+        if (claim == 0) stack_start();
+        else if (rc == 2) stack_start_loopback();
+    }
 
     for (;;) {
         if (ipc_receive(&message) != 0) {

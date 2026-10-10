@@ -79,6 +79,8 @@ def main():
             time.sleep(0.5)
             nw.send_command_until(monitor, "net-status", "Carte Ethernet : detectee", proc)
             nw.STRICT[0] = nw.STRICT_BANNER in nw.normalized_log(nw.log_text())
+            nw.RECLAIM_MARK[0] = nw.RECLAIM_STRICT if nw.STRICT[0] else nw.RECLAIM_LEGACY
+            nw.PROM_MARK[0] = nw.PROM_STRICT if nw.STRICT[0] else nw.PROM_LEGACY
             nw.release_boot_worker(monitor, proc)
             base = wire_status(monitor, proc)
             if base["worker"] != 0 or base["tx"] != 0 or base["bound"] != 0:
@@ -102,9 +104,7 @@ def main():
             # TSS I/O bitmap and re-reads the station PROM itself at CPL 3.
             nw.wait_child(monitor, proc, "[NET] NE2000 ports 0x300-0x31F handed to the Ring 3 worker",
                           start)
-            nw.wait_child(monitor, proc,
-                          "net-driver nic ring3 ok base 768 irq 3 mac 52:54:00:12:34:56 prom-match 1",
-                          start)
+            nw.wait_child(monitor, proc, nw.PROM_MARK[0], start)
             relay_before = nw.relay_status(monitor, proc)
             pid, start = nw.spawn(monitor, proc, "netwire")
             nw.wait_child(monitor, proc, "netwire raw wire refused 4 of 4", start)
@@ -177,11 +177,11 @@ def main():
             # and a fresh worker can claim it again.
             mark = len(nw.log_text())
             nw.kill(monitor, proc, worker_pid)
-            nw.wait_for("[NET] NE2000 back in Ring 0 after worker loss", proc, mark, timeout=20)
+            nw.wait_for(nw.RECLAIM_MARK[0], proc, mark, timeout=20)
             worker2, start = nw.spawn(monitor, proc, "networker")
-            nw.wait_child(monitor, proc,
-                          "net-driver nic ring3 ok base 768 irq 3 mac 52:54:00:12:34:56 prom-match 1",
-                          start)
+            nw.wait_child(monitor, proc, nw.PROM_MARK[0], start)
+            if nw.STRICT[0]:
+                nw.wait_for("[NET] NE2000 reset again by a new Ring 3 networker", proc, mark, timeout=20)
             if int(worker2) == int(worker_pid):
                 raise RuntimeError("respawned worker reused pid %s" % worker2)
             print("wire tcp: guest->peer frames %d, peer->guest frames %d (kernel rx %d), "
