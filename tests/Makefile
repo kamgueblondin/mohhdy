@@ -326,9 +326,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ramfs: $(UNIT_DIR)/userspace/test_ramfs.
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/ramfs.c ../userspace/procsim.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p: $(UNIT_DIR)/userspace/test_p2p.c ../userspace/p2p.c ../userspace/p2p.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_platform: $(UNIT_DIR)/userspace/test_platform.c ../userspace/platform.c ../userspace/platform.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/p2p.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x25519.c ../kernel/bigint.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/platform.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_promptmessage: $(UNIT_DIR)/userspace/test_promptmessage.c ../userspace/promptmessage.c ../userspace/promptmessage.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
