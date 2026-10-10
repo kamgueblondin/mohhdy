@@ -170,7 +170,7 @@ static int cmd_migrate_export(const char* rest) {
     if (n < 0) { print_string("migrate-export error no such directory\n"); return 1; }
     for (i = 0; i < n; i++) {
         int got;
-        if (!(ents[i].flags & OS_DIRENT_FILE)) continue;
+        if (ents[i].flags == OS_DIRENT_DIR) continue;
         if (cnt >= PLAT_MIG_FILES) { print_string("migrate-export error too many files\n"); return 1; }
         join(path, dir, ents[i].name, 160);
         got = sys_readfile(path, data[cnt], 1024);
@@ -234,7 +234,7 @@ static int cmd_deploy_make(const char* rest) {
     if (n < 0) { print_string("deploy-make error no such directory\n"); return 1; }
     g_big[0] = 0; s_cat(g_big, "DEPLOY1\n", 1024);
     for (i = 0; i < n; i++) {
-        if (!(ents[i].flags & OS_DIRENT_FILE)) continue;
+        if (ents[i].flags == OS_DIRENT_DIR) continue;
         join(path, src, ents[i].name, 160);
         got = sys_readfile(path, g_file, 1024);
         if (got < 0) continue;
@@ -427,7 +427,7 @@ int shell_platform_line(const char* line) {
         if (!a[0] || n < 0) { print_string(cmd); print_string(" error usage: compat-check PATH | compat-scan [DIR]\n"); return 1; }
         for (i = 0; i < n; i++) {
             int got;
-            if (scan) { if (!(ents[i].flags & OS_DIRENT_FILE)) continue; join(path, a, ents[i].name, 160); }
+            if (scan) { if (ents[i].flags == OS_DIRENT_DIR) continue; join(path, a, ents[i].name, 160); }
             else s_copy(path, a, 160);
             got = sys_readfile(path, g_file, 64);
             if (got < 0) { print_string(cmd); print_string(" error unreadable "); print_string(path); print_string("\n"); return 1; }
