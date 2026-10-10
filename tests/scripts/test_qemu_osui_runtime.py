@@ -29,6 +29,19 @@ KEY_DUPLICATE_SETTLE_DELAY = float(os.environ.get("KEY_DUPLICATE_SETTLE_DELAY", 
 KEY_CHAR_RETRIES = int(os.environ.get("KEY_CHAR_RETRIES", "3"))
 
 
+def _model_packed():
+    import tarfile
+    try:
+        with tarfile.open(INITRD) as tar:
+            return any(n.endswith("models/gpt2_124M.bin") for n in tar.getnames())
+    except (OSError, tarfile.TarError):
+        return False
+
+
+MODEL_PACKED = _model_packed()
+AI_READY_MARKER = "ai_status=ready" if MODEL_PACKED else "llm=gpt2_missing ai_status=no_model"
+
+
 def say(message):
     sys.stdout.write(message + "\n")
     sys.stdout.flush()
@@ -202,7 +215,9 @@ def main():
             commands = (
                 ("os-status", "service=mohhdy-os"),
                 ("chat bonjour", "llm=stub_echo"),
-                ("chat ai a", "ai_status=ready"),
+                # With weights packed: a real answer; without (CI): the
+                # distinct no-model state, never a fake answer.
+                ("chat ai a", AI_READY_MARKER),
                 ("origin-check evil", "origin_denied"),
                 ("grant mcp.invoice.create", "grant ok"),
                 ("mcp-invoice alice 10", "invoice_id="),
@@ -210,6 +225,10 @@ def main():
                 ("stage-prompt dessine", "mode=presenting"),
                 ("gui-status", "canonical=gui"),
                 ("apt", "Pas un bash Linux"),
+                ("session-end", "status=closed ai_status=ended history=cleared"),
+                ("chat ai b", "error=session_closed ai_status=ended"),
+                ("session-new fin", "session_id=s0002"),
+                ("chat c", "llm=stub_echo"),
             )
             for command, marker in commands:
                 say("typing %s ..." % command)

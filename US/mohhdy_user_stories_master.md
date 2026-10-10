@@ -249,6 +249,8 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 
 **Etat du lot du 7 octobre 2026 :** la commande `ai-runtime json` et sa sortie humaine sont livrees dans le shell du guest. Elles publient le profil FP32 ou GGUF, le modele, l'execution QEMU, les limites de contexte et de sortie, la nature de complétion et l'etat reseau. Le test QEMU GPT-2 et `make test-all` passent, avec **678/678** tests reussis. Restent a implementer dans cette meme etape le suivi precis de latence, les erreurs distinguees, le contrat assistant instruction-tuned et le contrat reseau complet.
 
+**Etat du lot du 10 octobre 2026 :** livres dans le guest QEMU : latence mesuree de chaque appel GPT-2 (FP32 et GGUF 109/110, ticks 100 Hz), erreurs distinguees (`model-missing`, `model-failed`, `cancelled`, `no-worker`) et raison d'abandon du job relaye (`worker-lost`, `stalled`, `timeout`, `cancelled`), vivacite reelle du worker Ring 3 (battement par couche de transformeur, job declare bloque apres 15 s sans battement au lieu de 300 s), declaration explicite `assistant: not-available` (GPT-2 de base) et detail reseau (`nic`, `dhcp_lease`, `tls_entropy`, `x509_anchor`) dans `ai-runtime json`. Preuves : tests unitaires `test_ai_relay`, `test_gpt2_generate`, contrat QEMU `qemu-ai-worker` etendu (blocage detecte, annulation Echap). Restent : un vrai modele instruction-tuned et le contrat reseau de bout en bout vers un fournisseur.
+
 #### Étape 2 — Parcours OS-UI IA réel
 
 **But :** relier l'interface graphique à une session IA effectivement exécutée.
@@ -261,6 +263,8 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 - Un test QEMU de bout en bout couvre l'ouverture, la requête, la réponse et la fermeture.
 
 **Etat du lot du 8 octobre 2026 :** le sous-parcours `chat ai ...` est livre dans le meme OS guest QEMU. Il appelle le syscall GPT-2 local, retourne la reponse dans le chat, conserve un historique borne, publie `idle/generating/ready/error` et distingue `gpt2_local` de `stub_echo` dans la scene VGA. Le contrat QEMU couvre une generation reelle et passe ; la suite complete reste a **678/678**. Restent ouverts dans cette etape : ouverture/fermeture GUI automatisee de bout en bout, annulation effective, affichage visuel distinct de l'erreur et de l'absence de modele, et gestion de fin explicite de session.
+
+**Etat du lot du 10 octobre 2026 :** livres : annulation effective par la touche Echap (job relaye abandonne sans rejeu Ring 0, le worker s'arrete au battement suivant ; generation Ring 0 arretee au jeton suivant ; code -149), etats et libelles de scene distincts `no_model`/`gpt2_missing`, `error`/`gpt2_error`, `cancelled`/`gpt2_cancelled` avec la ligne `etat_ia=` sur la scene VGA, et fin explicite `session-end` (historique efface, chat refuse ensuite). Preuves : `test_osui_runtime` et contrat QEMU OS-UI (etat sans modele en CI, fin de session). Reste : ouverture/fermeture GUI automatisee de bout en bout.
 
 #### Étape 3 — Sessions et capacités agentiques bornées
 
