@@ -620,6 +620,8 @@ static void test_ai_worker_lost(void) {
 extern int osui_test_net_rc;
 extern unsigned osui_test_net_llm_status;
 extern int osui_test_net_worker;
+extern int osui_test_peer_acquire_rc, osui_test_peer_tls_polls, osui_test_peer_request_rc, osui_test_peer_text_polls;
+extern unsigned osui_test_peer_http;
 
 /* Roadmap step 4: provider peer, explicit and observable local fallback. */
 static void test_provider_peer_fallback(void) {
@@ -632,22 +634,50 @@ static void test_provider_peer_fallback(void) {
     rc = run_line("chat ai bonjour");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "ai_status=ready provider=peer fallback=local reason=no_net_worker") != NULL);
-    osui_test_net_rc = 0; osui_test_net_worker = 3; osui_test_net_llm_status = 1U;
-    run_line("chat ai x");
-    TEST_ASSERT(strstr(g_out, "reason=no_dhcp_lease") != NULL);
-    osui_test_net_llm_status = 0U;
+    osui_test_net_rc = 0; osui_test_net_worker = 3; osui_test_net_llm_status = 0U;
     run_line("chat ai x");
     TEST_ASSERT(strstr(g_out, "reason=no_nic") != NULL);
-    osui_test_net_llm_status = 1U | 2U | 4U | 8U;
+    osui_test_net_llm_status = 1U;
     run_line("osui-provider status");
     TEST_ASSERT(strstr(g_out, "network=ready") != NULL);
+    /* Each failing step of the peer exchange is its own reason. */
+    osui_test_peer_acquire_rc = -1;
     run_line("chat ai x");
-    TEST_ASSERT(strstr(g_out, "reason=peer_request_not_wired") != NULL);
-    osui_test_ai_rc = -1; osui_test_ai_error = 1U; /* fallback fails too: still explicit */
+    TEST_ASSERT(strstr(g_out, "reason=acquire_failed") != NULL);
+    osui_test_peer_acquire_rc = 0; osui_test_peer_tls_polls = -1;
+    run_line("chat ai x");
+    TEST_ASSERT(strstr(g_out, "reason=tls_failed") != NULL);
+    osui_test_peer_tls_polls = 100000;   /* never completes: deadline */
+    run_line("chat ai x");
+    TEST_ASSERT(strstr(g_out, "reason=tls_timeout") != NULL);
+    osui_test_peer_tls_polls = 3; osui_test_peer_request_rc = -1;
+    run_line("chat ai x");
+    TEST_ASSERT(strstr(g_out, "reason=request_failed") != NULL);
+    osui_test_peer_request_rc = 0; osui_test_peer_text_polls = -1;
+    run_line("chat ai x");
+    TEST_ASSERT(strstr(g_out, "reason=response_failed") != NULL);
+    osui_test_peer_text_polls = 100000;
+    run_line("chat ai x");
+    TEST_ASSERT(strstr(g_out, "reason=response_timeout") != NULL);
+    osui_test_peer_text_polls = 2; osui_test_peer_http = 500U;
+    run_line("chat ai x");
+    TEST_ASSERT(strstr(g_out, "reason=http_error") != NULL);
+    osui_test_peer_http = 200U;
+    TEST_ASSERT_EQUAL(0, run_line("chat ai x"));
+    TEST_ASSERT(strstr(g_out, "osui chat ok llm=peer_qemu ai_status=ready provider=peer") != NULL);
+    TEST_ASSERT(strstr(g_out, "response=peer says ok") != NULL);
+    TEST_ASSERT(strstr(g_out, "fallback") == NULL);
+    /* Second turn reuses the re-armed TLS session (no new acquire). */
+    osui_test_peer_acquire_rc = -1;
+    TEST_ASSERT_EQUAL(0, run_line("chat ai y"));
+    TEST_ASSERT(strstr(g_out, "llm=peer_qemu") != NULL);
+    osui_test_peer_request_rc = -1;      /* peer fails, then the fallback fails too */
+    osui_test_ai_rc = -1; osui_test_ai_error = 1U; /* still explicit */
     rc = run_line("chat ai x");
     TEST_ASSERT_EQUAL(1, rc);
     TEST_ASSERT(strstr(g_out, "ai_status=no_model provider=peer fallback=local") != NULL);
-    osui_test_ai_rc = 0; osui_test_ai_error = 0U;
+    TEST_ASSERT(strstr(g_out, "reason=request_failed") != NULL);
+    osui_test_ai_rc = 0; osui_test_ai_error = 0U; osui_test_peer_request_rc = 0;
     run_line("osui-provider local");
     run_line("chat ai x");
     TEST_ASSERT(strstr(g_out, "provider=peer") == NULL);
@@ -686,6 +716,15 @@ static void test_local_api(void) {
     snprintf(line, sizeof(line), "api GET /sessions %s", tok);
     TEST_ASSERT_EQUAL(0, run_line(line));
     TEST_ASSERT(strstr(g_out, "own_session_only") != NULL);
+    /* Web supervision needs admin.observe. */
+    snprintf(line, sizeof(line), "api GET /supervision %s", tok);
+    TEST_ASSERT_EQUAL(1, run_line(line));
+    TEST_ASSERT(strstr(g_out, "status=403") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("grant admin.observe"));
+    TEST_ASSERT_EQUAL(0, run_line(line));
+    TEST_ASSERT(strstr(g_out, "\"ai_worker\":\"absent\",\"ai_last_abort\":\"none\",\"net_worker\":\"absent\"") != NULL);
+    TEST_ASSERT(strstr(g_out, "web.api:/supervision:capability_denied") != NULL);
+    osui_test_now += 11U;   /* new rate window for the rest of the test */
     /* VFS: same scope rules as the console. */
     snprintf(line, sizeof(line), "api GET /vfs/demo/hello.txt %s", tok);
     TEST_ASSERT_EQUAL(1, run_line(line));
@@ -706,8 +745,9 @@ static void test_local_api(void) {
              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     TEST_ASSERT_EQUAL(1, run_line(line));
     TEST_ASSERT(strstr(g_out, "status=413") != NULL);
-    /* Rate limit: 8 per 10 s per token (6 used above). */
+    /* Rate limit: 8 per 10 s per token (5 used in this window). */
     snprintf(line, sizeof(line), "api GET /sessions %s", tok);
+    TEST_ASSERT_EQUAL(0, run_line(line));
     TEST_ASSERT_EQUAL(0, run_line(line));
     TEST_ASSERT_EQUAL(0, run_line(line));
     TEST_ASSERT_EQUAL(1, run_line(line));

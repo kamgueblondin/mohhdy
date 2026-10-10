@@ -292,7 +292,7 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 - Le repli local est explicite et observable.
 - La documentation conserve la distinction entre pair QEMU, hôte réel et Internet public.
 
-**Etat du lot 3 du 10 octobre 2026 :** partiel. Livre : aucun secret dans les images (`make secrets-check` en CI), fournisseur OS-UI `peer` (pair QEMU local via le networker, pas d'Internet public) avec repli local explicite et observable dans chaque reponse (`provider=peer fallback=local reason=no_net_worker|no_nic|no_dhcp_lease|no_trust_anchor|peer_request_not_wired`). TLS, requete, streaming, fermeture et erreurs sont testes separement par les contrats shell `qemu-ne2k-tls-*` et `qemu-net-peer-tls-worker`. Reste : OS-UI n'envoie pas encore la requete au pair lui-meme, et le timeout du fournisseur n'est pas encore un contrat distinct. Hote reel et Internet public : hors perimetre.
+**Etat du lot 3 du 10 octobre 2026 :** partiel. Livre : aucun secret dans les images (`make secrets-check` en CI), fournisseur OS-UI `peer` (pair QEMU local via le networker, pas d'Internet public) avec repli local explicite et observable dans chaque reponse (`provider=peer fallback=local reason=no_net_worker|no_nic|no_dhcp_lease|no_trust_anchor|peer_request_not_wired`). TLS, requete, streaming, fermeture et erreurs sont testes separement par les contrats shell `qemu-ne2k-tls-*` et `qemu-net-peer-tls-worker`. Lot 4 : OS-UI envoie la requete au pair QEMU lui-meme (echange borne, session TLS rearmee, une raison de repli par etape) et le timeout est un contrat distinct (`qemu-osui-peer` : pair arrete, `reason=response_timeout`). Critere d'acceptation de l'etape 4 tenu pour le pair QEMU ; hote reel et Internet public : hors perimetre.
 
 #### Étape 5 — Web Runtime après stabilisation de l'IA
 
@@ -305,7 +305,7 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 - Les routes, erreurs, authentification et limites de ressources sont testées.
 - `phase3_complete=false` reste inchangé tant qu'un moteur navigateur réel n'est pas livré ; Chromium/WebKit n'est pas déclaré présent par anticipation.
 
-**Etat du lot 3 du 10 octobre 2026 :** API locale controlee livree dans OS-UI Ring 3 (guest QEMU, sans socket ni moteur navigateur) : `/status` public, `/sessions` limite a la session du jeton, `/vfs/<chemin>` sous les memes scopes `fs.read:` que la console, `/ai/chat` par le meme chemin de chat ; jeton `api-token` sous `web.api`, `api-revoke` ; erreurs 400/401/403/404/405/413/429 testees (unitaire et QEMU). Reste : supervision web et console IA servies sur le reseau (HTTP via le networker) et moteur de rendu ; `phase3_complete=false` inchange.
+**Etat du lot 3 du 10 octobre 2026 :** API locale controlee livree dans OS-UI Ring 3 (guest QEMU, sans socket ni moteur navigateur) : `/status` public, `/sessions` limite a la session du jeton, `/vfs/<chemin>` sous les memes scopes `fs.read:` que la console, `/ai/chat` par le meme chemin de chat ; jeton `api-token` sous `web.api`, `api-revoke` ; erreurs 400/401/403/404/405/413/429 testees (unitaire et QEMU). Lot 4 : route `/supervision` (workers IA et reseau, NIC, journal) sous `admin.observe`. Reste : servir l'API et la console sur le reseau (HTTP via le networker) et moteur de rendu ; `phase3_complete=false` inchange.
 
 ### Règle de progression
 

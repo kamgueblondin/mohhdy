@@ -310,6 +310,9 @@ jobs:
       - name: QEMU Tranche 5 wire TCP via worker (moved from OS-UI guest C for the 15 min budget)
         run: make qemu-net-wire
 
+      - name: QEMU OS-UI peer provider (local QEMU peer, timeout fallback)
+        run: make qemu-osui-peer
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
