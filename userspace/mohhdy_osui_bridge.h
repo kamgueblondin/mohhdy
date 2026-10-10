@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 207
+#define MOHHDY_SHELL_COMMAND_COUNT 213
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -68,9 +68,11 @@ static const char * const mohhdy_shell_commands[] = {
     "children",
     "clear",
     "cls",
+    "confirm",
     "console",
     "cp",
     "date",
+    "deny",
     "desktop",
     "detach",
     "dir",
@@ -106,6 +108,7 @@ static const char * const mohhdy_shell_commands[] = {
     "logout",
     "ls",
     "mcp-invoice",
+    "mcp-invoice-void",
     "mcp-invoke",
     "mem",
     "memory",
@@ -143,10 +146,13 @@ static const char * const mohhdy_shell_commands[] = {
     "service-publish",
     "service-status",
     "service-watch",
+    "session-cleanup",
     "session-end",
     "session-list",
     "session-new",
+    "session-restore",
     "session-status",
+    "session-ttl",
     "session-use",
     "shutdown",
     "sort",
