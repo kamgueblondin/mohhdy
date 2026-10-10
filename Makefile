@@ -854,7 +854,19 @@ qemu-ai-gguf: $(OS_IMAGE) pack-initrd
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
 
-.PHONY: qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit osui-registry-check
+.PHONY: qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit osui-registry-check secrets-check strict-image-check
+# Roadmap step 4 guardrail: no provider secret built into any image.
+secrets-check: $(OS_IMAGE) pack-initrd kernel-netlegacy
+	@python3 scripts/check_no_secrets.py
+
+# Strict default image: the Ring 0 network stack must not be linked in.
+strict-image-check: $(OS_IMAGE) kernel-netlegacy
+	@size $(OS_IMAGE) $(NETLEGACY_IMAGE)
+	@if nm $(OS_IMAGE) | grep -E ' (net_tls_record_|net_tcp_|x509_|net_dhcp_|ne2k_llm_|net_wire_demux)' >/dev/null; then \
+		echo "FAIL: Ring 0 network stack linked in the strict image"; exit 1; fi
+	@nm $(NETLEGACY_IMAGE) | grep -q ' net_tls_record_' || { echo "FAIL: legacy image lost its stack"; exit 1; }
+	@echo "OK strict image without Ring 0 network stack; legacy image keeps it"
+
 osui-registry-check:
 	@python3 scripts/extract_guest_commands.py --check
 

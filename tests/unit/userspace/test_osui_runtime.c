@@ -615,6 +615,44 @@ static void test_ai_worker_lost(void) {
     osui_test_ai_abort = 0U;
 }
 
+
+extern int osui_test_net_rc;
+extern unsigned osui_test_net_llm_status;
+extern int osui_test_net_worker;
+
+/* Roadmap step 4: provider peer, explicit and observable local fallback. */
+static void test_provider_peer_fallback(void) {
+    int rc;
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("osui-provider peer"));
+    run_line("osui-provider status");
+    TEST_ASSERT(strstr(g_out, "provider=peer network=no_net_worker") != NULL);
+    TEST_ASSERT(strstr(g_out, "secrets_in_image=false public_internet=false") != NULL);
+    rc = run_line("chat ai bonjour");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "ai_status=ready provider=peer fallback=local reason=no_net_worker") != NULL);
+    osui_test_net_rc = 0; osui_test_net_worker = 3; osui_test_net_llm_status = 1U;
+    run_line("chat ai x");
+    TEST_ASSERT(strstr(g_out, "reason=no_dhcp_lease") != NULL);
+    osui_test_net_llm_status = 0U;
+    run_line("chat ai x");
+    TEST_ASSERT(strstr(g_out, "reason=no_nic") != NULL);
+    osui_test_net_llm_status = 1U | 2U | 4U | 8U;
+    run_line("osui-provider status");
+    TEST_ASSERT(strstr(g_out, "network=ready") != NULL);
+    run_line("chat ai x");
+    TEST_ASSERT(strstr(g_out, "reason=peer_request_not_wired") != NULL);
+    osui_test_ai_rc = -1; osui_test_ai_error = 1U; /* fallback fails too: still explicit */
+    rc = run_line("chat ai x");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "ai_status=no_model provider=peer fallback=local") != NULL);
+    osui_test_ai_rc = 0; osui_test_ai_error = 0U;
+    run_line("osui-provider local");
+    run_line("chat ai x");
+    TEST_ASSERT(strstr(g_out, "provider=peer") == NULL);
+    osui_test_net_rc = -1; osui_test_net_worker = 0; osui_test_net_llm_status = 0U;
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -625,6 +663,7 @@ int main(void) {
     RUN_TEST(test_mutation_confirm);
     RUN_TEST(test_scopes_and_agent_run);
     RUN_TEST(test_ai_worker_lost);
+    RUN_TEST(test_provider_peer_fallback);
     RUN_TEST(test_grant_revoke_chat);
     RUN_TEST(test_escalate_takeover);
     RUN_TEST(test_origin_denied);

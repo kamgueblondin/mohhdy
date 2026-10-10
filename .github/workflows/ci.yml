@@ -51,6 +51,9 @@ jobs:
           ls -lh build/mohhdy.bin my_initrd.tar
           file build/mohhdy.bin
 
+      - name: Strict image without Ring 0 net stack + no secrets (sizes)
+        run: make strict-image-check secrets-check
+
       - name: Run unit tests (make test-all)
         run: make test-all
 

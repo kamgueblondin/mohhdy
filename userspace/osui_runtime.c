@@ -221,6 +221,14 @@ static unsigned osui_now(void) { return osui_test_now; }
 int osui_test_ai_rc = 0;
 unsigned osui_test_ai_error = 0U;
 unsigned osui_test_ai_abort = 0U;
+int osui_test_net_rc = -1;           /* no published Ring 3 stack */
+unsigned osui_test_net_llm_status = 0U;
+int osui_test_net_worker = 0;
+static int osui_net_stack(unsigned *llm_status, int *worker) {
+    *llm_status = osui_test_net_llm_status;
+    *worker = osui_test_net_worker;
+    return osui_test_net_rc;
+}
 static unsigned osui_ai_last_error(void) { return osui_test_ai_error; }
 static unsigned osui_ai_last_abort(void) { return osui_test_ai_abort; }
 static int osui_gpt2_generate(const char *prompt, char *out, int max) {
@@ -252,6 +260,16 @@ static unsigned osui_ai_last_error(void) {
                  : "a"(SYS_AI_ENGINE), "b"(OS_AI_ENGINE_STATUS), "c"(&st), "d"(0)
                  : "memory");
     return result == 0 ? st.last_error : OS_AI_ERROR_MODEL_FAILED;
+}
+static int osui_net_stack(unsigned *llm_status, int *worker) {
+    static os_net_stack_report_t rep;
+    int result;
+    asm volatile("int $0x80" : "=a"(result)
+                 : "a"(SYS_NET_NIC), "b"(OS_NET_NIC_STACK), "c"(&rep), "d"(0)
+                 : "memory");
+    *llm_status = rep.llm_status;
+    *worker = rep.wire.worker_pid;
+    return result;
 }
 static unsigned osui_ai_last_abort(void) {
     static os_ai_engine_status_t st;
@@ -907,15 +925,48 @@ static int cmd_osui_audit(char *out, int max) {
     return OSUI_OK;
 }
 
+/* Roadmap step 4: provider "peer" is the QEMU local peer reached through the
+ * Ring 3 networker (no secret, no public internet). Readiness comes from the
+ * stack report the networker publishes. When the peer cannot serve, the
+ * local GPT-2 answers and the fallback is explicit in every reply. Today the
+ * OS-UI chat never sends the request to the peer itself (reason
+ * peer_request_not_wired once the network is ready): the TLS, request,
+ * streaming and close steps are proven by the shell-level qemu-ne2k-tls-*
+ * contracts, not through OS-UI. */
+static const char *peer_unready_reason(void) {
+    unsigned st = 0U;
+    int worker = 0;
+    if (osui_net_stack(&st, &worker) != 0 || worker <= 0) return "no_net_worker";
+    if (!(st & 1U)) return "no_nic";
+    if (!(st & 2U)) return "no_dhcp_lease";
+    if (!(st & 8U)) return "no_trust_anchor";
+    return 0;
+}
+
+static const char *g_fallback_reason;
+
+static void emit_provider(char *out, int max, int *p) {
+    if (!g_fallback_reason) return;
+    out_add(out, max, p, " provider=peer fallback=local reason=");
+    out_add(out, max, p, g_fallback_reason);
+}
+
 static int cmd_osui_provider(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0;
     if (narg == 0 || s_cmp(args[0], "status") == 0) {
         out_add(out, max, &p, "osui osui-provider provider=");
         out_add(out, max, &p, G.ai_provider[0] ? G.ai_provider : "local");
+        if (s_cmp(G.ai_provider, "peer") == 0) {
+            const char *why = peer_unready_reason();
+            out_add(out, max, &p, " network=");
+            out_add(out, max, &p, why ? why : "ready");
+            out_add(out, max, &p, " secrets_in_image=false public_internet=false");
+        }
         out_add(out, max, &p, " status=active\n");
         return OSUI_OK;
     }
-    if (s_cmp(args[0], "local") == 0 || s_cmp(args[0], "openai") == 0) {
+    if (s_cmp(args[0], "local") == 0 || s_cmp(args[0], "openai") == 0 ||
+        s_cmp(args[0], "peer") == 0) {
         s_cpy(G.ai_provider, 16, args[0]);
         out_add(out, max, &p, "osui osui-provider ok provider=");
         out_add(out, max, &p, G.ai_provider);
@@ -1324,6 +1375,11 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
         prompt = s_ncmp(text, "ai ", 3) == 0 ? text + 3 : text;
         s_cpy(s->ai_state, 16, "generating");
         s_cpy(G.stage_llm, 20, "gpt2_local");
+        g_fallback_reason = 0;
+        if (s_cmp(G.ai_provider, "peer") == 0) {
+            g_fallback_reason = peer_unready_reason();
+            if (!g_fallback_reason) g_fallback_reason = "peer_request_not_wired";
+        }
         rc = osui_gpt2_generate(prompt, reply, sizeof(reply));
         if (rc < 0) {
             /* Distinct states (and scene labels): cancelled by ESC, no
@@ -1356,6 +1412,7 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
             out_add(out, max, &p, llm);
             out_add(out, max, &p, " ai_status=");
             out_add(out, max, &p, state);
+            emit_provider(out, max, &p);
             out_add(out, max, &p, " session_id=");
             out_add(out, max, &p, s->id);
             emit_rid(out, max, &p, rid);
@@ -1388,6 +1445,7 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
                 out_add(out, max, &p, w);
                 out_add(out, max, &p, " fallback=ring0");
             }
+            emit_provider(out, max, &p);
             out_add(out, max, &p, " session_id=");
         }
         out_add(out, max, &p, s->id);
