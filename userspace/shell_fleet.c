@@ -127,7 +127,7 @@ int shell_fleet_line(const char* line) {
     if (s_eq(cmd, "sync-push")) {
         int v;
         n = shell_file_read(a, g_buf, FL_DATA_MAX + 1);
-        if (n > FL_DATA_MAX) { print_string("sync-push error too large (1900 bytes max)\n"); return 1; }
+        if (n > FL_DATA_MAX) { print_string("sync-push error too large (3900 bytes max)\n"); return 1; }
         if (n < 0) { print_string("sync-push error file not found\n"); return 1; }
         v = fleet_sync_push(&g_f, &h, a, g_buf, n);
         if (v < 0) { print_string("sync-push error path too long (39) or send queue full\n"); return 1; }
@@ -170,7 +170,7 @@ int shell_fleet_line(const char* line) {
         uint32_t to = peer(c); int v;
         if (!a[0] || !to) { print_string("deploy-stage error usage: deploy-stage NAME FILE CANARY_PEER\n"); return 1; }
         n = shell_file_read(b, g_buf, FL_DATA_MAX + 1);
-        if (n > FL_DATA_MAX) { print_string("deploy-stage error too large (1900 bytes max)\n"); return 1; }
+        if (n > FL_DATA_MAX) { print_string("deploy-stage error too large (3900 bytes max)\n"); return 1; }
         if (n < 0) { print_string("deploy-stage error file not found\n"); return 1; }
         v = fleet_deploy_stage(&g_f, &h, a, g_buf, n, to);
         if (v < 0) { print_string("deploy-stage error\n"); return 1; }

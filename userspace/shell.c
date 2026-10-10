@@ -3382,7 +3382,7 @@ static void fs_join(char* out, int max, const char* dir, const char* name) {
 
 static int kernel_copy_file_to(const char* src, const char* dest) {
     os_dirent_t st;
-    char buf[256];
+    static char buf[OV_FILE_BYTES]; /* whole file: was 256 and silently truncated */
     int n;
     int w;
     if (sys_stat(src, &st) != 0) return -1;

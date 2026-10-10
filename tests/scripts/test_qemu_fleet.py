@@ -128,6 +128,7 @@ def main():
         cmd(a, "write /r1.txt release-one", "(-.-)")
         cmd(a, "write /r2.txt release-two", "(-.-)")
         cmd(a, "cp /big.txt /r3.txt", "(-.-)")
+        cmd(a, "wc /r3.txt", "3000")  # cp used to cut files at 256 bytes
         remote(a, "deploy-stage web /r1.txt beta", "deploy-stage ok web v",
                [(b, " canary applied from alpha"), (a, "ok from beta")])
         cmd(c, "cat /app/web", "(-.-)")
