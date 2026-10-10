@@ -334,7 +334,7 @@ int shell_prod_line(const char* l) {
         static prod_task_t tk[16];
         int ex[POOL_MAX + 1], nex, i, n, q, want;
         if (to_u(rest, &x) || x == 0 || x > 60) { out("prod-scale-auto error usage: STEPS (1..60)\n"); return 1; }
-        if (!g_sa_on) { prod_scaler_init(&g_sa, 0, POOL_MAX, 1000U, 500U, 1U); g_sa_on = 1; g_sa_t = 0; }
+        if (!g_sa_on) { prod_scaler_init(&g_sa, 0, POOL_MAX, 1000U, 600U, 1U); g_sa_on = 1; g_sa_t = 0; }
         while (x--) {
             /* window of 1 s: CPU ticks each task consumed in it */
             static uint32_t r0[16];

@@ -163,7 +163,7 @@ def main():
             run(mon, proc, "prod-scale-sim 2 10 10 10 0 0 0 0", ["prod-scale workers 1 2 2 3 3 2 2 1", "prod-scale-sim ok ups 2 downs 2"], attempts=2)
             # US-110 autoscaling on the measured run queue (busy spin tasks).
             run(mon, proc, "prod-load start 2", "prod-load ok tasks 2", timeout=60)
-            out = run(mon, proc, "prod-scale-auto 5", "prod-scale-auto ok workers 3", timeout=120)
+            out = run(mon, proc, "prod-scale-auto 5", "prod-scale-auto ok workers 2", timeout=120)  # one worker per busy task
             if not re.search(r"prod-scale-auto step runq [2-9] workers 1 busy[a-z_ ]* spin spin", out):
                 raise RuntimeError("scaler did not measure the load: %s" % out[-600:])
             run(mon, proc, "prod-load stop", "prod-load ok tasks 0", timeout=60)
