@@ -90,6 +90,12 @@ static void test_prompt_chat_and_stage(void) {
     TEST_ASSERT(strstr(g_out, "canonical=gui") != NULL);
     TEST_ASSERT(osui_gui_should_enter());
     osui_gui_ack_enter();
+    run_line("gui-status");
+    TEST_ASSERT(strstr(g_out, "gui_live=true") != NULL);
+    rc = run_line("console");
+    TEST_ASSERT_EQUAL(0, rc);
+    run_line("gui-status");
+    TEST_ASSERT(strstr(g_out, "gui_live=false") != NULL);
 }
 
 static void test_sessions_isolated(void) {

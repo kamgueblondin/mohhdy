@@ -180,6 +180,7 @@ typedef struct {
     int chat_x;
     int chat_y;
     int gui_enter;
+    int gui_live; /* between gui and console / gui-exit */
     int gui_leave;
     int stage_tick;
     int stage_autonomous;
@@ -2199,6 +2200,7 @@ static int cmd_gui(char *out, int max) {
     int p = 0;
     G.gui_enter = 1;
     G.gui_leave = 0;
+    G.gui_live = 1;
     out_add(out, max, &p,
         "osui gui ok chrome=qemu_fb display_surface=vbe_lfb canonical=gui aliases=graphics,desktop\n"
         "leave=console chat_mode=");
@@ -2211,6 +2213,7 @@ static int cmd_gui_exit(char *out, int max) {
     int p = 0;
     G.gui_leave = 1;
     G.gui_enter = 0;
+    G.gui_live = 0;
     s_cpy(G.chat_mode, 12, "center");
     G.pane[0] = 0;
     out_add(out, max, &p, "osui gui exit chat_mode=center chrome=text prompt=MOHHDY>\n");
@@ -2227,6 +2230,7 @@ static int cmd_gui_status(char *out, int max) {
     out_add(out, max, &p, G.stage_kind);
     out_add(out, max, &p, " mode=");
     out_add(out, max, &p, G.stage_mode);
+    out_add(out, max, &p, G.gui_live ? " gui_live=true" : " gui_live=false");
     out_add(out, max, &p, " us031_complete=false guest_html_stage=false python_facade=false\n");
     for (r = 0; r < 8 && r < OSUI_CANVAS_ROWS; r++) {
         out_add(out, max, &p, "|");
