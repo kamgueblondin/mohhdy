@@ -124,7 +124,7 @@ def key_echo_count(output, char):
 
 
 def send_command_once(client, command, proc):
-    aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash"}
+    aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash", ":": "shift-semicolon"}
     for char in command:
         count = 0
         for _ in range(KEY_CHAR_RETRIES):
