@@ -13,7 +13,15 @@
 #define FL_LOG 0x43
 #define FL_DEPLOY 0x44
 #define FL_ACK 0x45
-#define FL_PAYLOAD 384
+#define FL_PAYLOAD 2048          /* largest fleet message (chunked) */
+#define FL_FRAG 0x46             /* [tag][msg id 4][index][count] chunk */
+#define FL_FACK 0x47             /* [tag][msg id 4][index] chunk ack */
+#define FL_CHUNK 320
+#define FL_MAXCHUNKS ((FL_PAYLOAD + 64 + FL_CHUNK - 1) / FL_CHUNK)
+#define FL_OUTBOX 24
+#define FL_XRESEND_TICKS 150U
+#define FL_XRESENDS 6
+#define FL_DATA_MAX 1900         /* file / deploy content bytes */
 #define FL_FILES 8
 #define FL_NODES 8
 #define FL_LOGS 4
@@ -28,6 +36,8 @@ typedef struct {
     int (*write_file)(void* ctx, const char* path, const char* d, int len);
     const char* (*name)(void* ctx, uint32_t id);
     uint32_t (*members)(void* ctx);      /* live peers + self */
+    int (*peers)(void* ctx, uint32_t* ids, int max); /* known keyed peers */
+    uint32_t (*now)(void* ctx);          /* ticks (100 Hz) */
 } fleet_host_t;
 
 typedef struct { char path[40]; uint32_t ver, origin, sum; int used; } fl_file_t;
@@ -37,13 +47,16 @@ typedef struct {
     char name[24];
     uint32_t ver, sum, prev_ver, prev_sum;
     int stage, used;
-    char content[300]; int clen;
-    char prev[300]; int plen;
+    char content[FL_DATA_MAX]; int clen;
+    char prev[FL_DATA_MAX]; int plen;
     uint32_t canary;
     uint32_t last_send; int resends;
     fl_ack_t ack[FL_NODES];
 } fl_deploy_t;
 typedef struct { char name[24]; uint32_t ver, sum; int used; } fl_applied_t;
+/* reliable transport: one outgoing message to one peer, chunk acks */
+typedef struct { int used; uint32_t to, mid, last; int len, cnt, tries; uint32_t acked; uint8_t d[FL_PAYLOAD + 64]; } fl_out_t;
+typedef struct { uint32_t from, mid; int cnt, len; uint32_t have; uint8_t d[FL_PAYLOAD + 64]; int used; } fl_in_t;
 
 typedef struct {
     /* pending session offered by a peer */
@@ -53,6 +66,11 @@ typedef struct {
     fl_deploy_t dep[FL_APPS];      /* deployments coordinated here */
     fl_applied_t app[FL_APPS];     /* deployments applied here */
     uint32_t rejected;
+    fl_out_t out[FL_OUTBOX];
+    fl_in_t in[2 * FL_NODES];
+    uint32_t done_from[16], done_mid[16]; int done_next;
+    uint32_t next_mid;
+    uint32_t delivered, resent, failed, dup;
 } fleet_t;
 
 uint32_t fleet_sum(const char* d, int len);
@@ -73,4 +91,9 @@ fl_deploy_t* fleet_deploy_find(fleet_t* f, const char* name);
 #define FL_RESEND_TICKS 200U
 #define FL_RESENDS 3
 int fleet_tick(fleet_t* f, const fleet_host_t* h, uint32_t now);
+/* queue one message (any tag) for reliable chunked delivery; to 0 = every
+ * known peer. Returns the number of peers queued, -1 if too large/full. */
+int fleet_xmit(fleet_t* f, const fleet_host_t* h, uint32_t to, const uint8_t* d, int len);
+/* messages still waiting for acknowledgement */
+int fleet_pending(const fleet_t* f);
 #endif

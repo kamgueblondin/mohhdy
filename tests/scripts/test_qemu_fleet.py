@@ -6,9 +6,10 @@ off from alpha to beta. US-083 multi-device sync: a file replicated to all
 devices, last writer wins. Phase 8: metrics and alert logs collected on
 alpha from beta and gamma; deploy staged canary -> all -> rollback with
 per-node acknowledgements and checksum verification.
-Datagrams are not retransmitted by the fleet layer: when an expected line
-does not show up, the command is repeated (all of them are idempotent or
-bump a version on purpose).
+Every command is typed once: the fleet layer acknowledges each chunk and
+re-sends what is lost (bounded). Payloads above one datagram are chunked
+(a 390+ byte file is synced and deployed). The guests also report any
+console-loop stall over 3 s ("shell stall"); none may appear once P2P is up.
 """
 from __future__ import print_function
 
@@ -32,26 +33,17 @@ for node in NODES:
 cmd, log, say = p2p.cmd, p2p.log, p2p.say
 
 
-def remote(node, line, local_needle, targets, tries=4):
-    """Run line on node until every (target, needle) shows up."""
-    starts = {}
-    for attempt in range(tries):
-        for target, _ in targets:
-            starts.setdefault(id(target), len(base.log_text(target["log"])))
-        cmd(node, line, local_needle)
-        missing = []
-        for target, needle in targets:
-            try:
-                p2p.wait_log(target, needle, 20, starts[id(target)])
-            except Exception:  # noqa: BLE001
-                missing.append((target, needle))
-        if not missing:
-            return
-        say("%s: %r not seen on %s, again" % (node["label"], line, [t["label"] for t, _ in missing]))
-        for target in NODES:
-            cmd(target, "p2p-poll", "p2p-poll ")
-        targets = missing
-    raise RuntimeError("%r: still missing %r" % (line, [(t["label"], n) for t, n in targets]))
+def remote(node, line, local_needle, targets, timeout=90):
+    """Type line ONCE on node and wait for every (target, needle). Delivery
+    is the fleet layer's job (chunk acks + bounded re-send): no retyping."""
+    starts = dict((id(t), len(base.log_text(t["log"]))) for t, _ in targets)
+    cmd(node, line, local_needle)
+    for target, needle in targets:
+        try:
+            p2p.wait_log(target, needle, timeout, starts[id(target)])
+        except Exception as error:  # noqa: BLE001
+            raise RuntimeError("%r on %s: %r never reached %s: %s"
+                               % (line, node["label"], needle, target["label"], error))
 
 
 def main():
@@ -108,6 +100,14 @@ def main():
                [(a, "bytes 16 from gamma"), (b, "bytes 16 from gamma")])
         cmd(a, "cat /notes.txt", "edited-on-gamma")
         cmd(b, "sync-status", "sync-status ok files 1")
+        line = "line-of-the-big-file-0123456789-abcdefghijklmnopqrstuvwxyz-end"
+        cmd(a, "write /big.txt " + line, "(-.-)")
+        for _ in range(5):
+            cmd(a, "append /big.txt " + line, "(-.-)")
+        remote(a, "sync-push /big.txt", "sync-push ok /big.txt v1 bytes 3",
+               [(b, "fleet sync applied /big.txt v1 bytes 3"), (c, "fleet sync applied /big.txt v1 bytes 3")])
+        cmd(c, "wc /big.txt", "(-.-)")
+        cmd(a, "sync-status", "failed 0 pending 0")
         say("US-083 sync ok (%.0fs)" % (time.monotonic() - t0))
 
         # Phase 8 collector: metrics and alert log from beta and gamma.
@@ -126,6 +126,7 @@ def main():
         # Phase 8 staged deploy: canary beta, then all, then rollback.
         cmd(a, "write /r1.txt release-one", "(-.-)")
         cmd(a, "write /r2.txt release-two", "(-.-)")
+        cmd(a, "cp /big.txt /r3.txt", "(-.-)")
         remote(a, "deploy-stage web /r1.txt beta", "deploy-stage ok web v",
                [(b, " canary applied from alpha"), (a, "ok from beta")])
         cmd(c, "cat /app/web", "(-.-)")
@@ -142,8 +143,19 @@ def main():
         cmd(c, "cat /app/web", "release-one")
         cmd(b, "cat /app/web", "release-one")
         cmd(a, "deploy-status web", "stage rollback acks ")
+        remote(a, "deploy-stage big /r3.txt beta", "deploy-stage ok big v1",
+               [(b, "fleet deploy big v1 canary applied")])
+        cmd(b, "cat /app/big", "abcdefghijklmnopqrstuvwxyz-end")
         cmd(a, "deploy-promote nothing", "deploy-promote error")
         say("phase 8 staged deploy ok (%.0fs)" % (time.monotonic() - t0))
+        for node in NODES:
+            text = log(node)
+            up_at = text.find("(-.-)", text.find("p2p-up ok name"))
+            if "shell stall" in text[up_at:]:
+                raise RuntimeError("%s console loop stalled with P2P up: %s"
+                                   % (node["label"], text[text.find("shell stall", up_at):][:120]))
+            if " down" in "".join(l for l in text.splitlines() if l.startswith("p2p peer ") or "p2p peer " in l):
+                raise RuntimeError("%s saw a peer go down" % node["label"])
         if hub.p2p_plaintext:
             raise RuntimeError("plaintext secret seen on the wire")
         say("PASS fleet frames=%d sealed=%d plaintext=0 in %.0fs"
