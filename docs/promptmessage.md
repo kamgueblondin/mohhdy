@@ -58,6 +58,8 @@ File writes refuse `..`, `/bin/` and `/models/`.
 | `pm-version FILE` / `pm-versions FILE` | US-054 | snapshots FILE.v1..v9 with checksums |
 | `pm-edit FILE` | US-050 | line editor (`.` save and check, `.l` list, `.q` quit) |
 | `pm STATEMENT` | US-048 | runs one statement typed on the shell line |
+| `pm-catalog` / `pm-install NAME` | US-059 (local) | lists /pm/*.pm with their `##` line, installs a validated copy |
+| `pm-certify FILE` / `pm-verify FILE` | US-060 (local) | FILE.cert record (FNV-1a sum, expects passed); verify detects a changed source |
 
 The optimizer (US-056) folds integer constants and constant conditions at
 compile time (`folded N` in `pm-check` / `pm-compile`).
@@ -76,6 +78,7 @@ Samples: `promptmessage/examples/*.pm`, shipped in the initrd under `/pm/`.
 ## Not delivered
 
 US-055 cross compiler (one target: this VM), US-058 AI assistance (no
-instruction-tuned model offline), US-059 marketplace, US-060 certification
-(the image checksum detects corruption, it is not a signature). The editor is
+instruction-tuned model offline). US-059 is only a local catalog (no network
+marketplace, no publishing). US-060 is only a local record: the FNV-1a sum
+detects a change, it is not a signature and proves no author. The editor is
 a line editor, not a full screen IDE.

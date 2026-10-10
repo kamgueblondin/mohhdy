@@ -138,6 +138,17 @@ def main():
             expect(out, "pm-edit saved mine.pm")
             out = run(client, proc, "pm-run mine.pm", "pm-run ok")
             expect(out, "pm> n=42")
+            # Local catalog, install, certification record (US-059/060 local).
+            out = run(client, proc, "pm-catalog", "pm-catalog ok 4")
+            expect(out, "pm-catalog hello.pm - PromptMessage demo")
+            out = run(client, proc, "pm-install tests.pm", "pm-install ok")
+            out = run(client, proc, "pm-certify tests.pm", "pm-certify ok")
+            expect(out, "pmcert1 sum=")
+            out = run(client, proc, "pm-verify tests.pm", "pm-verify ok")
+            run(client, proc, "append tests.pm expect 1 == 1", "append ok")
+            out = run(client, proc, "pm-verify tests.pm", "pm-verify mismatch")
+            out = run(client, proc, "pm-certify /pm/lib.pm", "pm-certify refused")
+            expect(out, "no expect")
             print("PromptMessage QEMU contract passed in %.0f s" % (time.monotonic() - t0))
             return 0
         finally:
