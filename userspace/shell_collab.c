@@ -71,7 +71,12 @@ int shell_collab_line(const char* line) {
     if (s_eq(cmd, "collab-join")) {
         if (!g_joined || g_c.self != node->id) { collab_init(&g_c, node->id); g_joined = 1; }
         node->app = on_app; node->app_ctx = 0;
-        return emitted(cmd, collab_emit(&g_c, &g_h, CE_JOIN, 0, 0, 0, 0, node->name));
+        {
+            /* entries sent before this node joined were dropped: catch up */
+            int rc = emitted(cmd, collab_emit(&g_c, &g_h, CE_JOIN, 0, 0, 0, 0, node->name));
+            (void)collab_sync(&g_c, &g_h);
+            return rc;
+        }
     }
     if (!g_joined) { print_string(cmd); print_string(" error collab-join first\n"); return 1; }
     node->app = on_app;

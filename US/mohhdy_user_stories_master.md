@@ -174,6 +174,11 @@ Etat Phase 5 (10 octobre 2026, lot P2P ; detail et limites dans `docs/p2p.md`) :
 - US-104 : Développement du système de conformité réglementaire
 - US-105 : Création du système de support communautaire
 
+Etat Phase 7 (10 octobre 2026, PR #119 empilee sur #117 ; detail dans `docs/collab.md`, preuve `make qemu-collab`) :
+- Fait : US-091 points, US-092 ressources partagees, US-095 reputation, US-096 taches distribuees, US-098 audit, US-100 gouvernance, US-102 donnees personnelles, US-105 support.
+- Partiel : US-093 authentification (cle de reseau, pas de signature par noeud), US-094 marche (offres payees, sans recherche ni encheres), US-099 contrats (modeles fixes), US-101 conflits (re-verification deterministe), US-103 confidentialite (champs prives locaux, redaction), US-104 conformite (export et oubli seulement).
+- Non livre : US-097 paiement reel (exclu).
+
 ### Phase 8 - Production (US-106 à US-120)
 - US-106 : Optimisation des performances système globales
 - US-107 : Développement du système de monitoring en production
