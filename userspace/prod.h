@@ -73,10 +73,12 @@ void prod_scaler_init(prod_scaler_t* s, int min, int max, uint32_t high_milli, u
 /* returns the new worker count for a queue length at tick now */
 int prod_scaler_step(prod_scaler_t* s, uint32_t queue, uint32_t now);
 
-/* US-110 measured load: run queue = runnable (running/ready) user tasks,
- * minus the scaler's own workers and the caller. */
-typedef struct { int pid, state, user; } prod_task_t;
-int prod_runq(const prod_task_t* t, int n, const int* exclude, int nexclude);
+/* US-110 measured load: run queue = runnable (running/ready) user tasks
+ * that actually consumed CPU in the measuring window (ran >= min_ran
+ * ticks; a task that only yields is not load), minus the scaler's own
+ * workers and the caller. */
+typedef struct { int pid, state, user; uint32_t ran; } prod_task_t;
+int prod_runq(const prod_task_t* t, int n, const int* exclude, int nexclude, uint32_t min_ran);
 
 /* US-112 security scan over facts gathered by the host. */
 #define PROD_SEC_TASKS 16

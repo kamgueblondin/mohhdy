@@ -9,6 +9,7 @@ autoscaling decisions, performance measurements, diagnostics, tutorial,
 feedback, usage metrics. No network service is used.
 """
 import os
+import re
 import subprocess
 import sys
 import time
@@ -116,6 +117,16 @@ def main():
             run(mon, proc, "prod-log-analyze /var/app.log", ["prod-log lines 5 errors 3 warns 1 infos 1 other 0",
                                                              "prod-log top 3 x error timeout on req #",
                                                              "prod-log verdict incident"], attempts=2)
+            # US-114 adaptive threshold: EWMA baseline learned, spike fires,
+            # back to baseline resolves (no fixed threshold given).
+            run(mon, proc, "prod-alert-adapt spike custom 3", "prod-alert-adapt ok spike learning 8 samples")
+            for value in (50, 52, 48, 51, 49, 50, 53, 47, 51):
+                out = run(mon, proc, "prod-inject %d" % value, "prod-inject ok custom %d" % value)
+                if "FIRING spike" in out:
+                    raise RuntimeError("adaptive rule fired on baseline noise: %s" % out)
+            run(mon, proc, "prod-inject 120", ["prod-alert FIRING spike v=120", "prod-inject ok custom 120"])
+            run(mon, proc, "prod-inject 50", "prod-inject ok custom 50")
+            run(mon, proc, "prod-inject 50", ["prod-alert RESOLVED spike v=50", "prod-inject ok custom 50"])
             # US-111 backup and restore, corruption refused.
             run(mon, proc, "mkdir /cfg", "(-.-)")
             run(mon, proc, "write /cfg/a.conf mode=eco", "(-.-)")
@@ -150,6 +161,20 @@ def main():
             run(mon, proc, "prod-rollback", "prod-rollback ok files 2")
             # US-110 autoscaling decisions.
             run(mon, proc, "prod-scale-sim 2 10 10 10 0 0 0 0", ["prod-scale workers 1 2 2 3 3 2 2 1", "prod-scale-sim ok ups 2 downs 2"], attempts=2)
+            # US-110 autoscaling on the measured run queue (busy spin tasks).
+            run(mon, proc, "prod-load start 2", "prod-load ok tasks 2", timeout=60)
+            out = run(mon, proc, "prod-scale-auto 5", "prod-scale-auto ok workers 3", timeout=120)
+            if not re.search(r"prod-scale-auto step runq [2-9] workers 1 busy[a-z_ ]* spin spin", out):
+                raise RuntimeError("scaler did not measure the load: %s" % out[-600:])
+            run(mon, proc, "prod-load stop", "prod-load ok tasks 0", timeout=60)
+            out = run(mon, proc, "prod-scale-auto 5", "prod-scale-auto ok workers ", timeout=120)
+            steps = re.findall(r"prod-scale-auto step runq (\d+) workers (\d+) busy([a-z_ ]*)", out)
+            if len(steps) != 5 or any("spin" in s[2] for s in steps) or int(steps[-1][1]) > 1 or int(steps[-1][0]) > 1:
+                raise RuntimeError("scaler did not scale down once the load stopped: %s" % out[-800:])
+            # US-112 security scan: nothing exposed on a fresh single guest.
+            run(mon, proc, "prod-sec-scan", "prod-sec-scan ok tasks ", attempts=2)
+            if not re.search(r"prod-sec-scan ok tasks \d+ ports 0 findings 0 critical 0 score 100 verdict ok", normalized_log(nw.log_text())):
+                raise RuntimeError("security scan not clean: %s" % normalized_log(nw.log_text())[-600:])
             # US-106 performance measurements.
             run(mon, proc, "prod-bench", ["prod-bench alu ops_per_s ", "prod-bench memcpy kib_per_s ", "prod-bench syscall calls_per_s ",
                                           "prod-bench file512 rw_per_s ", "prod-bench ok checksum "], timeout=60)

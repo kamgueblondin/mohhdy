@@ -177,13 +177,14 @@ void test_adaptive_alerts(void) {
 
 /* US-110 measured load and US-112 security scan. */
 void test_runq_and_security_scan(void) {
-    static const prod_task_t t[6] = {{1, 0, 1}, {2, 1, 1}, {3, 1, 1}, {4, 2, 1}, {5, 1, 0}, {6, 1, 1}};
+    static const prod_task_t t[7] = {{1, 0, 1, 50}, {2, 1, 1, 40}, {3, 1, 1, 30}, {4, 2, 1, 90}, {5, 1, 0, 90}, {6, 1, 1, 60}, {7, 1, 1, 2}};
     static const int ex[2] = {1, 6};
     static prod_sec_input_t in;
     static char out[2048];
     int f, c, score;
-    TEST_ASSERT_EQUAL(4, prod_runq(t, 6, 0, 0));
-    TEST_ASSERT_EQUAL(2, prod_runq(t, 6, ex, 2));
+    TEST_ASSERT_EQUAL(5, prod_runq(t, 7, 0, 0, 0));
+    TEST_ASSERT_EQUAL(4, prod_runq(t, 7, 0, 0, 10));   /* task 7 only yields */
+    TEST_ASSERT_EQUAL(2, prod_runq(t, 7, ex, 2, 10));
     memset(&in, 0, sizeof(in));
     strcpy(in.task[0], "shell"); strcpy(in.task[1], "networker"); in.ntask = 2;
     in.port[0].port = 7700; in.port[0].udp = 1; in.port[0].encrypted = 1; strcpy(in.port[0].what, "p2p"); in.nport = 1;

@@ -411,11 +411,11 @@ int prod_state_load(const prod_state_ref_t* r, const uint8_t* in, int len) {
 }
 
 /* ---------------------------------------------------------- US-110 load */
-int prod_runq(const prod_task_t* t, int n, const int* exclude, int nexclude) {
+int prod_runq(const prod_task_t* t, int n, const int* exclude, int nexclude, uint32_t min_ran) {
     int i, j, q = 0;
     for (i = 0; i < n; i++) {
         int skip = 0;
-        if (!t[i].user || (t[i].state != 0 && t[i].state != 1)) continue; /* running / ready */
+        if (!t[i].user || (t[i].state != 0 && t[i].state != 1) || t[i].ran < min_ran) continue; /* running / ready, busy */
         for (j = 0; j < nexclude; j++) if (exclude[j] == t[i].pid) skip = 1;
         if (!skip) q++;
     }

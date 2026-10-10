@@ -103,3 +103,10 @@ origin's first entry could bind its own key; keys are not certified); the
 1024/160 group is legacy strength; signing and verification are not constant
 time; the secret key is kept in RAM and, with `persist-save`, in clear on the
 disk.
+
+## Auctions, search, disputes, user contracts (PR #127)
+
+- US-094: `collab-auction ITEM RESERVE`, `collab-bid SELLER SEQ AMOUNT` (bid escrowed, previous high bidder refunded, must beat the high bid and the reserve), `collab-close SEQ` (seller paid, rating right granted). `collab-search WORD|* [MAXPRICE]` lists available offers and open auctions, cheapest first.
+- US-101: `collab-dispute SEQ` contests one of your reservations; `collab-rule BUYER SEQ refund|deny` by members who are not parties; a majority of eligible members refunds the price or denies. Parties cannot rule.
+- US-099: `collab-contract PAYEE AMOUNT CONDITION` escrows AMOUNT; CONDITION is a PromptMessage expression over `$bal`, `$rep` (x10) and `$paid` of the payee, run in a sandboxed VM (no files, no output). `collab-settle PAYER SEQ` pays when the condition holds at that point of the canonical order; `collab-settle PAYER SEQ cancel` refunds the payer while it is false.
+- Views: `collab-auctions`, `collab-disputes`, `collab-contracts`.

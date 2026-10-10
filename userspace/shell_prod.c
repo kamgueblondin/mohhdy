@@ -336,17 +336,38 @@ int shell_prod_line(const char* l) {
         if (to_u(rest, &x) || x == 0 || x > 60) { out("prod-scale-auto error usage: STEPS (1..60)\n"); return 1; }
         if (!g_sa_on) { prod_scaler_init(&g_sa, 0, POOL_MAX, 1000U, 500U, 1U); g_sa_on = 1; g_sa_t = 0; }
         while (x--) {
+            /* window of 1 s: CPU ticks each task consumed in it */
+            static uint32_t r0[16];
+            static int p0[16];
+            int n0 = sys_ps(ps, 16);
+            for (i = 0; i < n0; i++) { os_task_metrics_t tm; p0[i] = ps[i].pid; r0[i] = sys_task_metrics(ps[i].pid, &tm) == 0 ? tm.run_ticks : 0U; }
+            pause(100);
             n = sys_ps(ps, 16);
-            for (i = 0; i < n; i++) { tk[i].pid = ps[i].pid; tk[i].state = ps[i].state; tk[i].user = ps[i].type == OS_TASK_USER; }
+            for (i = 0; i < n; i++) {
+                os_task_metrics_t tm; int k; uint32_t before = 0xFFFFFFFFU;
+                for (k = 0; k < n0; k++) if (p0[k] == ps[i].pid) before = r0[k];
+                tk[i].pid = ps[i].pid; tk[i].state = ps[i].state; tk[i].user = ps[i].type == OS_TASK_USER;
+                tk[i].ran = (before != 0xFFFFFFFFU && sys_task_metrics(ps[i].pid, &tm) == 0 && tm.run_ticks >= before) ? tm.run_ticks - before : 0U;
+            }
             nex = 0; ex[nex++] = sys_getpid();
             for (i = 0; i < g_npool; i++) ex[nex++] = g_pool[i];
-            q = prod_runq(tk, n, ex, nex);
+            q = prod_runq(tk, n, ex, nex, 10U);
             want = prod_scaler_step(&g_sa, (uint32_t)q, g_sa_t++);
-            while (g_npool < want) { int pid = spawn("idle", 0); if (pid <= 0) break; g_pool[g_npool++] = pid; }
+            while (g_npool < want) {
+                int pid = spawn("idle", 0);
+                if (pid <= 0) { out("prod-scale-auto spawn refused (task capacity)\n"); g_sa.cur = g_npool; break; }
+                g_pool[g_npool++] = pid;
+            }
             while (g_npool > want) (void)sys_kill_pid(g_pool[--g_npool]);
             g_out[0] = 0; s_cat(g_out, "prod-scale-auto step runq ", 4096); cat_u(g_out, (uint32_t)q, 4096);
-            s_cat(g_out, " workers ", 4096); cat_u(g_out, (uint32_t)g_npool, 4096); s_cat(g_out, "\n", 4096); out(g_out);
-            pause(100);
+            s_cat(g_out, " workers ", 4096); cat_u(g_out, (uint32_t)g_npool, 4096); s_cat(g_out, " busy", 4096);
+            for (i = 0; i < n; i++) {
+                int k, skip = 0;
+                for (k = 0; k < nex; k++) if (ex[k] == tk[i].pid) skip = 1;
+                if (skip || !tk[i].user || tk[i].ran < 10U || (tk[i].state != 0 && tk[i].state != 1)) continue;
+                s_cat(g_out, " ", 4096); s_cat(g_out, ps[i].name, 4096);
+            }
+            s_cat(g_out, "\n", 4096); out(g_out);
         }
         g_out[0] = 0; s_cat(g_out, "prod-scale-auto ok workers ", 4096); cat_u(g_out, (uint32_t)g_npool, 4096);
         s_cat(g_out, " ups ", 4096); cat_u(g_out, (uint32_t)g_sa.ups, 4096); s_cat(g_out, " downs ", 4096); cat_u(g_out, (uint32_t)g_sa.downs, 4096);
