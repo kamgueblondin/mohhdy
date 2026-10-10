@@ -496,6 +496,7 @@ pack-initrd: userspace-all
 	@echo "Ceci est un fichier de test depuis l'initrd !" > $(INITRD_DIR)/test.txt
 	@echo "Un autre fichier de demonstration." > $(INITRD_DIR)/hello.txt
 	@echo "Configuration du systeme MOHHDY v7" > $(INITRD_DIR)/config.cfg
+	@mkdir -p $(INITRD_DIR)/pm && cp -f promptmessage/examples/*.pm $(INITRD_DIR)/pm/
 	@echo "#!/bin/sh" > $(INITRD_DIR)/startup.sh
 	@echo "echo 'Script de demarrage MOHHDY v7'" >> $(INITRD_DIR)/startup.sh
 	@echo "Donnees de demonstration pour l'intelligence artificielle locale" > $(INITRD_DIR)/ai_data.txt
@@ -775,7 +776,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-net-no-ring0 qemu-net-loopback-worker qemu-net-peer-tls-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
+.PHONY: integration-qemu qemu-promptmessage qemu-net-no-ring0 qemu-net-loopback-worker qemu-net-peer-tls-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -823,6 +824,10 @@ qemu-foundation-steps: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_foundation_steps.py
 qemu-ipc-foundation: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_ipc_foundation.py
+
+# Phase 4: PromptMessage language in the guest shell (US-046..US-057).
+qemu-promptmessage: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/integration/test_qemu_promptmessage.py
 
 # Tranche 4: Ring 3 ATA PIO driver with TSS IOPB port capability.
 qemu-ata-driver: $(OS_IMAGE) pack-initrd disk

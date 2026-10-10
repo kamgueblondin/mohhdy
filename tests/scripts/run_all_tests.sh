@@ -102,6 +102,9 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/ramfs.c $BASE_DIR/userspace/procsim.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
+    if [ "$(basename "$test_file")" = "test_promptmessage.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/promptmessage.c"
+    fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c"
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
