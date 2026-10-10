@@ -168,7 +168,7 @@ jobs:
             test_logs/
 
   p2p:
-    name: QEMU P2P three guests
+    name: QEMU P2P and collab three guests
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -191,6 +191,9 @@ jobs:
 
       - name: QEMU P2P three guests (discovery, encrypted links, replication, consensus, relay)
         run: make qemu-p2p
+
+      - name: Phase 7 collaborative ledger (three guests)
+        run: make qemu-collab
 
       - name: Upload logs
         if: always()

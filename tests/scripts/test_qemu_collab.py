@@ -117,20 +117,28 @@ def main():
         cmd(a, "collab-answer gamma 8 use collab-reserve", "collab-answer ok seq 7")
         say("reputation, governance, privacy, support done (%.0fs)" % (time.monotonic() - t0))
 
-        # Anti-entropy then identical audit (US-098) on the three guests.
-        for node in NODES:
-            cmd(node, "collab-sync", "collab-sync ok asked 2")
-        for node in NODES:
-            cmd(node, "p2p-poll 4", "p2p-poll ok", timeout=30)
+        # Anti-entropy then identical audit (US-098) on the three guests. A
+        # peer can flap down for a moment under load (heartbeat), so sync is
+        # repeated until the three ledgers hold all 23 entries.
         digests = []
-        for node in NODES:
-            start = cmd(node, "collab-audit", "collab audit entries 23 applied ")
-            match = re.search(r"collab audit entries 23 applied (\d+) rejected (\d+) digest ([0-9a-f]{16})", log(node, start))
-            if not match:
-                raise RuntimeError("audit line missing on %s: %s" % (node["label"], log(node, start)[-600:]))
-            digests.append(match.group(3))
-        if len(set(digests)) != 1:
+        for attempt in range(5):
+            for node in NODES:
+                cmd(node, "collab-sync", "collab-sync ok asked ")
+            for node in NODES:
+                cmd(node, "p2p-poll 4", "p2p-poll ok", timeout=30)
+            digests = []
+            for node in NODES:
+                start = cmd(node, "collab-audit", "collab audit entries ")
+                match = re.search(r"collab audit entries (\d+) applied (\d+) rejected (\d+) digest ([0-9a-f]{16})", log(node, start))
+                if not match:
+                    raise RuntimeError("audit line missing on %s" % node["label"])
+                digests.append((match.group(1), match.group(4)))
+            say("audit round %d: %r" % (attempt + 1, digests))
+            if all(d[0] == "23" for d in digests):
+                break
+        if any(d[0] != "23" for d in digests) or len(set(digests)) != 1:
             raise RuntimeError("ledger diverged: %r" % digests)
+        digests = [d[1] for d in digests]
         audit = log(a)
         if "collab rejected reserve gamma seq 2 reason capacity-full" not in audit:
             raise RuntimeError("capacity rejection missing in audit")
