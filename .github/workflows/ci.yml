@@ -250,9 +250,6 @@ jobs:
       # Tranche 5 slice 3: wire TCP through the net-driver worker to a local
       # echo peer (-netdev socket, no internet). Placed in this job because
       # it is the shortest one (~6.5 min), so the CI wall time is unchanged.
-      - name: QEMU Tranche 5 wire TCP via worker (hors integration-qemu)
-        run: make qemu-net-wire
-
       # Inventory item 4: GPT-2 FP32 in the Ring 3 aiworker. CI has no GPT-2
       # weights: the contract packs the synthetic llm.c checkpoint of
       # tests/scripts/ai_worker_fixture.py, proves worker / Ring 0 /
@@ -309,6 +306,9 @@ jobs:
 
       - name: QEMU guest-guest TLS + encrypted peer chat via networker
         run: make qemu-net-peer-tls-worker
+
+      - name: QEMU Tranche 5 wire TCP via worker (moved from OS-UI guest C for the 15 min budget)
+        run: make qemu-net-wire
 
       - name: Upload logs
         if: always()
