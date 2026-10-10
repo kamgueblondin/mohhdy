@@ -244,17 +244,6 @@ jobs:
 
       # Tranche 4 : pilote ATA Ring 3 (IOPB TSS + IPC), job parallele,
       # n'allonge pas integration-qemu (~110 s, deux boots).
-      - name: QEMU Tranche 4 Ring 3 ATA driver (hors integration-qemu)
-        run: make qemu-ata-driver
-
-      # Tranche 5 slice 3: wire TCP through the net-driver worker to a local
-      # echo peer (-netdev socket, no internet). Placed in this job because
-      # it is the shortest one (~6.5 min), so the CI wall time is unchanged.
-      # Inventory item 4: GPT-2 FP32 in the Ring 3 aiworker. CI has no GPT-2
-      # weights: the contract packs the synthetic llm.c checkpoint of
-      # tests/scripts/ai_worker_fixture.py, proves worker / Ring 0 /
-      # fallback token equality and rogue refusal, then restores the initrd
-      # (~80 s locally, one boot).
       - name: QEMU aiworker Ring 3 GPT-2 (hors integration-qemu)
         run: make qemu-ai-worker
 
@@ -313,6 +302,17 @@ jobs:
       - name: QEMU OS-UI peer provider (local QEMU peer, timeout fallback)
         run: make qemu-osui-peer
 
+      - name: QEMU Tranche 4 Ring 3 ATA driver (moved from OS-UI guest C, 15 min budget)
+        run: make qemu-ata-driver
+
+      # Tranche 5 slice 3: wire TCP through the net-driver worker to a local
+      # echo peer (-netdev socket, no internet). Placed in this job because
+      # it is the shortest one (~6.5 min), so the CI wall time is unchanged.
+      # Inventory item 4: GPT-2 FP32 in the Ring 3 aiworker. CI has no GPT-2
+      # weights: the contract packs the synthetic llm.c checkpoint of
+      # tests/scripts/ai_worker_fixture.py, proves worker / Ring 0 /
+      # fallback token equality and rogue refusal, then restores the initrd
+      # (~80 s locally, one boot).
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
