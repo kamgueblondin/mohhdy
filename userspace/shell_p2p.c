@@ -170,6 +170,9 @@ int shell_p2p_line(const char* line) {
         else { int i; seed_from_machine(seed, a); for (i = 0; i < 32; i++) g_seed[i] = seed[i]; g_seed_ok = 1; }
         rc = p2p_up(&g_node, a, ip, key, seed, &g_host);
         if (rc != 0) { print_string("p2p-up error bad arguments\n"); return 1; }
+        /* own key computed step-wise by the pump (48 ladder steps a tick) */
+        while (g_node.up && g_node.own_kx) p2p_tick(&g_node, &g_host, 4);
+        if (!p2p_ready(&g_node)) { print_string("p2p-up error key\n"); return 1; }
         print_string("p2p-up ok name "); print_string(a); print_string(" ip "); print_string(b);
         print_string(" port 7700 crypto x25519+aes128gcm\n");
         g_node.app = app_dispatch; g_node.app_ctx = 0;

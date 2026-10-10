@@ -562,16 +562,35 @@ int p2p_up(p2p_node_t* n, const char* name, const uint8_t ip[4], const char* net
     sha256_update(&c, (const uint8_t*)netkey, (uint32_t)s_len(netkey)); sha256_final(&c, n->netkey);
     sha256_init(&c); sha256_update(&c, seed, 32); sha256_update(&c, (const uint8_t*)name, (uint32_t)s_len(name));
     sha256_final(&c, n->secret);
-    if (x25519_public_key(n->pub, n->secret, g_ws, X25519_WORKSPACE_LIMBS) != 0) return -1;
-    sha256_init(&c); sha256_update(&c, n->pub, 32); sha256_final(&c, d);
-    n->id = get32(d) | 1U;
+    {
+        /* own public key = secret * basepoint(9), computed step-wise from
+         * p2p_tick like a peer agreement (no single long call at p2p-up) */
+        uint8_t base[32];
+        mzero(base, 32); base[0] = 9;
+        if (x25519_job_start(&n->kx_job, n->secret, base) != 0) return -1;
+    }
+    (void)d; (void)g_ws;
+    n->own_kx = 1;
     n->up = 1;
     n->kx_peer = -1;
-    n->last_hello = now(h) - P2P_HELLO_TICKS;
     n->last_ping = now(h);
-    send_hello(n, h);
     n->last_hello = now(h);
     return 0;
+}
+int p2p_ready(const p2p_node_t* n) { return n && n->up && !n->own_kx && n->id != 0; }
+static int own_key_step(p2p_node_t* n, const p2p_host_t* h) {
+    uint8_t d[32];
+    sha256_ctx_t c;
+    int r = x25519_job_step(&n->kx_job, P2P_KX_BUDGET);
+    if (r == 0) return 0;
+    n->own_kx = 0;
+    if (r < 0 || x25519_job_result(&n->kx_job, n->pub) != 0) { n->up = 0; say(h, "p2p key error"); return -1; }
+    sha256_init(&c); sha256_update(&c, n->pub, 32); sha256_final(&c, d);
+    n->id = get32(d) | 1U;
+    say(h, "p2p key ready");
+    send_hello(n, h);
+    n->last_hello = now(h);
+    return 1;
 }
 
 void p2p_down(p2p_node_t* n) { if (n) { mzero(n->secret, 32); n->up = 0; } }
@@ -593,6 +612,12 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
         say(h, line);
     }
     n->last_pump = t;
+    if (n->own_kx) {
+        /* no identity yet: leave arrivals queued, handled once keyed */
+        (void)budget;
+        (void)own_key_step(n, h);
+        return;
+    }
     while (budget-- > 0 && h && h->recv) {
         got = h->recv(h->ctx, ip, mac, b, (uint16_t)sizeof(b));
         if (got <= 0) break;

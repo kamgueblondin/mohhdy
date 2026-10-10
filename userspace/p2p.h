@@ -128,6 +128,7 @@ typedef struct {
     uint32_t last_pump, stalls, worst_gap;
     const char* stall_hint;  /* set by the host: what ran before the gap */
     uint32_t hello_relayed;
+    uint8_t own_kx;          /* own public key still being computed step-wise (id 0 until done) */
 } p2p_node_t;
 
 int p2p_up(p2p_node_t* n, const char* name, const uint8_t ip[4], const char* netkey,
@@ -151,6 +152,8 @@ const char* p2p_type_name(int type);
 int p2p_send_app(p2p_node_t* n, const p2p_host_t* h, uint32_t peer_id, const uint8_t* data, int length);
 const char* p2p_peer_name(const p2p_node_t* n, uint32_t id);
 uint32_t p2p_member_count(const p2p_node_t* n);
+/* 1 once the node's own key and id exist (p2p_up computes them step-wise). */
+int p2p_ready(const p2p_node_t* n);
 /* Route to a peer: next hop id (0 direct, 0xFFFFFFFF none) and hop count. */
 uint32_t p2p_route(p2p_node_t* n, uint32_t dst, int* hops);
 #endif
