@@ -163,6 +163,8 @@ jobs:
 
       - name: Phase 8 production contract (one guest)
         run: make qemu-production
+      - name: QEMU phase 6 platform groundwork (HAL, screen, power, devices, migration, deploy)
+        run: make qemu-platform
 
       - name: Upload logs
         if: always()

@@ -52,7 +52,7 @@ all: $(OS_IMAGE) pack-initrd disk
 	@echo "Système prêt pour exécution avec: make run"
 
 # Paquets hôte (Debian/Ubuntu) - même ensemble que .github/workflows/ci.yml
-.PHONY: qemu-production deps check-build-deps
+.PHONY: qemu-platform qemu-production qemu-collab qemu-p2p deps check-build-deps
 deps:
 	@bash scripts/bootstrap-dev.sh
 
@@ -1057,6 +1057,9 @@ qemu-collab: $(OS_IMAGE) pack-initrd
 
 qemu-p2p: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_p2p.py
+
+qemu-platform: $(OS_IMAGE) pack-initrd
+	@python3 tests/integration/test_qemu_platform.py
 
 qemu-osui-web: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_osui_web.py
