@@ -686,7 +686,7 @@ typedef struct {
     net_tls_server_t tls;
 } web_slot_t;
 
-extern uint32_t timer_get_ticks(void);
+extern uint32_t timer_get_ticks(void) __attribute__((weak));
 static web_slot_t g_web[OS_PEER_WEB_SLOTS];
 static uint16_t g_web_port;
 static uint8_t g_web_tls;
@@ -733,7 +733,8 @@ static void web_arm(void) {
             return;
     for (i = 0U; i < OS_PEER_WEB_SLOTS; i++) {
         if (g_web[i].used) continue;
-        g_web[i].sock = net_socket_listen(g_web_port, 0x51000000U + ((uint32_t)i << 20) + timer_get_ticks());
+        g_web[i].sock = net_socket_listen(g_web_port, 0x51000000U + ((uint32_t)i << 20) +
+                                                       (timer_get_ticks ? timer_get_ticks() : 0U));
         if (g_web[i].sock < 0) { g_web[i].sock = -1; return; }
         g_web[i].used = 1U;
         return;
