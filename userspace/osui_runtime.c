@@ -251,6 +251,33 @@ static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     out[i] = 0;
     return i;
 }
+/* Host fixture of the QEMU peer provider (roadmap step 4). */
+int osui_test_peer_acquire_rc = -1;
+int osui_test_peer_tls_polls = 0;    /* polls before TLS_COMPLETE; <0 fails */
+int osui_test_peer_request_rc = 0;
+int osui_test_peer_text_polls = 0;   /* polls before the reply; <0 fails */
+unsigned osui_test_peer_http = 200U;
+static int g_tp_tls, g_tp_text, g_tp_phase;
+static int peer_acquire(void) { g_tp_tls = 0; g_tp_text = 0; g_tp_phase = 2; return osui_test_peer_acquire_rc; }
+static int peer_phase(void) { return g_tp_phase; }
+static int peer_poll_tls(void) {
+    if (osui_test_peer_tls_polls < 0) return -1;
+    if (++g_tp_tls >= osui_test_peer_tls_polls) g_tp_phase = 3;
+    return 0;
+}
+static int peer_request(const char *prompt) { (void)prompt; return osui_test_peer_request_rc; }
+static int peer_poll_text(char *out, int max, unsigned *code) {
+    const char *t = "peer says ok";
+    int i = 0;
+    if (osui_test_peer_text_polls < 0) return -1;
+    if (++g_tp_text < osui_test_peer_text_polls) return 1;
+    while (t[i] && i < max - 1) { out[i] = t[i]; i++; }
+    out[i] = 0;
+    *code = osui_test_peer_http;
+    return 0;
+}
+static void peer_close(void) {}
+static void peer_yield(void) { osui_test_now += 1U; }
 #else
 static unsigned osui_now(void) {
     int t;
@@ -275,6 +302,51 @@ static int osui_net_stack(unsigned *llm_status, int *worker) {
     *worker = rep.wire.worker_pid;
     return result;
 }
+
+/* QEMU peer provider (roadmap step 4): the same SYS_LLM_* session the shell
+ * ai-acquire / ai-tls-poll / ai-request / ai-text-poll commands drive,
+ * relayed to the Ring 3 networker's TLS client (strict kernel). */
+static int peer_sys1(int nr, const void *arg) {
+    int r;
+    asm volatile("int $0x80" : "=a"(r) : "a"(nr), "b"(arg) : "memory");
+    return r;
+}
+static int peer_acquire(void) {
+    static os_llm_acquire_start_request_t rq;
+    const char *h = "example.com";
+    int i;
+    for (i = 0; i < (int)sizeof(rq); i++) ((char *)&rq)[i] = 0;
+    for (i = 0; h[i]; i++) rq.hostname[i] = h[i];
+    rq.xid = 0xa0650011U; rq.local_sequence = 1U; rq.dns_id = 0xa675U;
+    rq.dhcp_attempts = OS_LLM_ACQUIRE_MAX_ATTEMPTS; rq.dns_attempts = OS_LLM_ACQUIRE_MAX_ATTEMPTS;
+    rq.arp_attempts = OS_LLM_ACQUIRE_MAX_ATTEMPTS; rq.local_port = 49160U; rq.remote_port = 443U;
+    return peer_sys1(SYS_LLM_ACQUIRE_START, &rq);
+}
+static int peer_phase(void) { return (int)(((unsigned)peer_sys1(SYS_LLM_SESSION_STATUS, 0) >> 8) & 0xffU); }
+static int peer_poll_tls(void) { return peer_sys1(SYS_LLM_POLL_TLS, 0); }
+static int peer_request(const char *prompt) {
+    static os_llm_request_t rq;
+    const char *m = "tiny", *pa = "/api/generate";
+    int i;
+    for (i = 0; i < (int)sizeof(rq); i++) ((char *)&rq)[i] = 0;
+    rq.provider = 0U; /* ollama-shaped request to the local peer */
+    for (i = 0; m[i]; i++) rq.model[i] = m[i];
+    for (i = 0; pa[i]; i++) rq.path[i] = pa[i];
+    for (i = 0; prompt[i] && i < (int)OS_LLM_PROMPT_MAX; i++) rq.prompt[i] = (uint8_t)prompt[i];
+    rq.prompt_length = (uint16_t)i;
+    return peer_sys1(SYS_LLM_REQUEST, &rq);
+}
+static int peer_poll_text(char *out, int max, unsigned *code) {
+    static os_llm_text_result_t res;
+    int rc = peer_sys1(SYS_LLM_POLL_TEXT, &res), i;
+    if (rc != 0) return rc;
+    for (i = 0; i < res.text_length && i < max - 1; i++) out[i] = (char)res.text[i];
+    out[i] = 0;
+    *code = res.status_code;
+    return 0;
+}
+static void peer_close(void) { (void)peer_sys1(SYS_LLM_CLOSE, 0); }
+static void peer_yield(void) { (void)peer_sys1(SYS_YIELD, 0); }
 static unsigned osui_ai_last_abort(void) {
     static os_ai_engine_status_t st;
     int result;
@@ -932,18 +1004,45 @@ static int cmd_osui_audit(char *out, int max) {
 /* Roadmap step 4: provider "peer" is the QEMU local peer reached through the
  * Ring 3 networker (no secret, no public internet). Readiness comes from the
  * stack report the networker publishes. When the peer cannot serve, the
- * local GPT-2 answers and the fallback is explicit in every reply. Today the
- * OS-UI chat never sends the request to the peer itself (reason
- * peer_request_not_wired once the network is ready): the TLS, request,
- * streaming and close steps are proven by the shell-level qemu-ne2k-tls-*
- * contracts, not through OS-UI. */
+ * local GPT-2 answers and the fallback is explicit in every reply. With a
+ * live networker and NIC, OS-UI runs a bounded exchange with the peer
+ * (peer_chat) and falls back with the failing step as the reason. */
 static const char *peer_unready_reason(void) {
     unsigned st = 0U;
     int worker = 0;
     if (osui_net_stack(&st, &worker) != 0 || worker <= 0) return "no_net_worker";
     if (!(st & 1U)) return "no_nic";
-    if (!(st & 2U)) return "no_dhcp_lease";
-    if (!(st & 8U)) return "no_trust_anchor";
+    return 0;
+}
+
+/* One bounded peer exchange: acquire (DHCP, DNS, SYN), TLS, request,
+ * response, close. Every failure has its own reason; the whole exchange is
+ * bounded by OSUI_PEER_DEADLINE seconds and by poll budgets. */
+#define OSUI_PEER_DEADLINE 30U
+#define OSUI_PEER_POLLS 512
+static const char *peer_chat(const char *prompt, char *reply, int max) {
+    unsigned t0 = osui_now(), code = 0U;
+    int i, rc;
+    rc = peer_acquire();
+    if (rc != 0) { peer_close(); return "acquire_failed"; }
+    for (i = 0; i < OSUI_PEER_POLLS && peer_phase() != 3; i++) {
+        if (osui_now() - t0 > OSUI_PEER_DEADLINE) { peer_close(); return "tls_timeout"; }
+        rc = peer_poll_tls();
+        if (rc < 0) { peer_close(); return "tls_failed"; }
+        peer_yield();
+    }
+    if (peer_phase() != 3) { peer_close(); return "tls_timeout"; }
+    if (peer_request(prompt) != 0) { peer_close(); return "request_failed"; }
+    for (i = 0; i < OSUI_PEER_POLLS; i++) {
+        if (osui_now() - t0 > OSUI_PEER_DEADLINE) { peer_close(); return "response_timeout"; }
+        rc = peer_poll_text(reply, max, &code);
+        if (rc < 0) { peer_close(); return "response_failed"; }
+        if (rc == 0) break;
+        peer_yield();
+    }
+    peer_close();
+    if (i == OSUI_PEER_POLLS) return "response_timeout";
+    if (code != 200U) return "http_error";
     return 0;
 }
 
@@ -1382,7 +1481,24 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
         g_fallback_reason = 0;
         if (s_cmp(G.ai_provider, "peer") == 0) {
             g_fallback_reason = peer_unready_reason();
-            if (!g_fallback_reason) g_fallback_reason = "peer_request_not_wired";
+            if (!g_fallback_reason) {
+                g_fallback_reason = peer_chat(prompt, reply, (int)sizeof(reply));
+                if (!g_fallback_reason) {
+                    s_cpy(G.stage_llm, 20, "peer_qemu");
+                    s_cpy(G.stage_ai_note, 48, "etat_ia=reponse du pair QEMU");
+                    s_cpy(s->ai_state, 16, "ready");
+                    add_msg(s, reply);
+                    stage_render(text);
+                    out_add(out, max, &p, "osui chat ok llm=peer_qemu ai_status=ready provider=peer session_id=");
+                    out_add(out, max, &p, s->id);
+                    emit_rid(out, max, &p, rid);
+                    out_add(out, max, &p, " response=");
+                    out_add(out, max, &p, reply);
+                    out_add(out, max, &p, "\n");
+                    emit_stage(out, max, &p);
+                    return OSUI_OK;
+                }
+            }
         }
         rc = osui_gpt2_generate(prompt, reply, sizeof(reply));
         if (rc < 0) {
