@@ -28,12 +28,16 @@ static int f_write(void* c, const char* p, const char* d, int len) {
     return shell_file_write(p, d, len);
 }
 static const char* f_name(void* c, uint32_t id) { (void)c; return p2p_peer_name(shell_p2p_node(), id); }
+static uint32_t f_members(void* c) { (void)c; return p2p_member_count(shell_p2p_node()); }
 static fleet_host_t host(void) {
     fleet_host_t h;
-    h.ctx = 0; h.self = shell_p2p_node()->id; h.send = f_send; h.out = f_out; h.write_file = f_write; h.name = f_name;
+    h.ctx = 0; h.self = shell_p2p_node()->id; h.send = f_send; h.out = f_out; h.write_file = f_write; h.name = f_name; h.members = f_members;
     return h;
 }
 static void init(void) { if (!g_init) { fleet_init(&g_f); g_init = 1; } }
+unsigned int sys_ticks(void);
+/* background pump (shell_p2p_poll): re-send unacknowledged deploy steps */
+void shell_fleet_tick(void) { fleet_host_t h; if (!g_init || !shell_p2p_node()->up) return; h = host(); (void)fleet_tick(&g_f, &h, sys_ticks()); }
 void shell_fleet_app(uint32_t from, const uint8_t* d, int len) { fleet_host_t h = host(); init(); fleet_receive(&g_f, &h, from, d, len); }
 
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }

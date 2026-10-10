@@ -27,6 +27,7 @@ typedef struct {
     void (*out)(void* ctx, const char* line);
     int (*write_file)(void* ctx, const char* path, const char* d, int len);
     const char* (*name)(void* ctx, uint32_t id);
+    uint32_t (*members)(void* ctx);      /* live peers + self */
 } fleet_host_t;
 
 typedef struct { char path[40]; uint32_t ver, origin, sum; int used; } fl_file_t;
@@ -39,6 +40,7 @@ typedef struct {
     char content[300]; int clen;
     char prev[300]; int plen;
     uint32_t canary;
+    uint32_t last_send; int resends;
     fl_ack_t ack[FL_NODES];
 } fl_deploy_t;
 typedef struct { char name[24]; uint32_t ver, sum; int used; } fl_applied_t;
@@ -66,4 +68,9 @@ int fleet_deploy_stage(fleet_t* f, const fleet_host_t* h, const char* name, cons
 int fleet_deploy_promote(fleet_t* f, const fleet_host_t* h, const char* name);
 int fleet_deploy_rollback(fleet_t* f, const fleet_host_t* h, const char* name);
 fl_deploy_t* fleet_deploy_find(fleet_t* f, const char* name);
+/* re-send a deployment step to nodes that have not acknowledged it yet
+ * (every FL_RESEND_TICKS, at most FL_RESENDS times); returns sends done */
+#define FL_RESEND_TICKS 200U
+#define FL_RESENDS 3
+int fleet_tick(fleet_t* f, const fleet_host_t* h, uint32_t now);
 #endif

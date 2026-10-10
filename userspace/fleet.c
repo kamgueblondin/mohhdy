@@ -80,7 +80,8 @@ static int deploy_send(const fleet_host_t* h, const fl_deploy_t* dp, int stage, 
     for (i = 0; i < len; i++) b[15 + nl + i] = (uint8_t)d[i];
     return h->send(h->ctx, stage == FL_STAGE_CANARY ? to : 0, b, 15 + nl + len);
 }
-static void ack_reset(fl_deploy_t* dp) { int i; for (i = 0; i < FL_NODES; i++) dp->ack[i].used = 0; }
+static fl_ack_t* ack_of(fl_deploy_t* dp, uint32_t id, int make);
+static void ack_reset(fl_deploy_t* dp) { int i; for (i = 0; i < FL_NODES; i++) dp->ack[i].used = 0; dp->resends = 0; dp->last_send = 0; }
 
 int fleet_deploy_stage(fleet_t* f, const fleet_host_t* h, const char* name, const char* d, int len, uint32_t canary) {
     fl_deploy_t* dp = fleet_deploy_find(f, name);
@@ -107,13 +108,29 @@ static fl_ack_t* ack_of(fl_deploy_t* dp, uint32_t id, int make) {
     if (!make || fr < 0) return 0;
     dp->ack[fr].used = 1; dp->ack[fr].id = id; return &dp->ack[fr];
 }
+int fleet_tick(fleet_t* f, const fleet_host_t* h, uint32_t now) {
+    int i, j, sent = 0;
+    for (i = 0; i < FL_APPS; i++) {
+        fl_deploy_t* dp = &f->dep[i];
+        int good = 0, need;
+        if (!dp->used || !dp->stage || dp->resends >= FL_RESENDS) continue;
+        if (!dp->last_send) { dp->last_send = now ? now : 1U; continue; }
+        if ((uint32_t)(now - dp->last_send) < FL_RESEND_TICKS) continue;
+        for (j = 0; j < FL_NODES; j++) if (dp->ack[j].used && dp->ack[j].ver == dp->ver) good++;
+        if (dp->stage == FL_STAGE_CANARY) { fl_ack_t* a = ack_of(dp, dp->canary, 0); if (a && a->ver == dp->ver) continue; }
+        else { need = h->members ? (int)h->members(h->ctx) - 1 : 0; if (good >= need) continue; }
+        dp->resends++; dp->last_send = now;
+        if (deploy_send(h, dp, dp->stage, dp->stage == FL_STAGE_CANARY ? dp->canary : 0, dp->content, dp->clen, dp->ver, dp->sum) > 0) sent++;
+    }
+    return sent;
+}
 int fleet_deploy_promote(fleet_t* f, const fleet_host_t* h, const char* name) {
     fl_deploy_t* dp = fleet_deploy_find(f, name);
     fl_ack_t* a;
     if (!dp) return -1;
     a = ack_of(dp, dp->canary, 0);
     if (dp->stage != FL_STAGE_CANARY || !a || !a->ok || a->ver != dp->ver || a->sum != dp->sum) return -2;
-    dp->stage = FL_STAGE_ALL;
+    dp->stage = FL_STAGE_ALL; dp->resends = 0; dp->last_send = 0;
     return deploy_send(h, dp, FL_STAGE_ALL, 0, dp->content, dp->clen, dp->ver, dp->sum) > 0 ? 0 : -3;
 }
 int fleet_deploy_rollback(fleet_t* f, const fleet_host_t* h, const char* name) {

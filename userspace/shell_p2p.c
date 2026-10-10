@@ -136,7 +136,8 @@ static void report(const char* what) {
 }
 
 int shell_p2p_active(void) { return g_node.up; }
-void shell_p2p_poll(void) { if (g_node.up) p2p_tick(&g_node, &g_host, 4); }
+void shell_fleet_tick(void);
+void shell_p2p_poll(void) { if (g_node.up) { p2p_tick(&g_node, &g_host, 4); shell_fleet_tick(); } }
 
 int shell_p2p_line(const char* line) {
     char cmd[24], a[P2P_TEXT_MAX], b[P2P_TEXT_MAX];

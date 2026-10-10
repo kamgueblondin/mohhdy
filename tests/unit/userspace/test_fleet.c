@@ -29,6 +29,7 @@ static int h_write(void* c, const char* p, const char* d, int len) {
     }
     return -1;
 }
+static uint32_t h_members(void* c) { (void)c; return 3; }
 static const char* h_name(void* c, uint32_t id) { static const char* n[] = {"alpha", "beta", "gamma"}; (void)c; return id >= 1 && id <= 3 ? n[id - 1] : "?"; }
 static const char* file_of(int node, const char* p) { int i; for (i = 0; i < 4; i++) if (!strcmp(g_fs[node][i][0], p)) return g_fs[node][i][1]; return 0; }
 static void pump(void) {
@@ -42,7 +43,7 @@ static void setup(void) {
     for (i = 0; i < N; i++) {
         fleet_init(&g_f[i]);
         g_h[i].ctx = (void*)(long)i; g_h[i].self = (uint32_t)i + 1; g_h[i].send = h_send;
-        g_h[i].out = h_out; g_h[i].write_file = h_write; g_h[i].name = h_name;
+        g_h[i].out = h_out; g_h[i].write_file = h_write; g_h[i].name = h_name; g_h[i].members = h_members;
     }
 }
 
@@ -128,11 +129,41 @@ static void test_staged_deploy(void) {
     TEST_ASSERT_EQUAL(-1, fleet_deploy_promote(&g_f[0], &g_h[0], "nope"));
 }
 
+/* lost deploy datagrams are re-sent until acknowledged, bounded */
+static void test_deploy_resend(void) {
+    setup();
+    g_drop = 1;
+    TEST_ASSERT_EQUAL(1, fleet_deploy_stage(&g_f[0], &g_h[0], "api", "build 1", 7, 2));
+    g_drop = 0;
+    TEST_ASSERT_EQUAL(0, fleet_tick(&g_f[0], &g_h[0], 1000));            /* arms the timer */
+    TEST_ASSERT_EQUAL(0, fleet_tick(&g_f[0], &g_h[0], 1000 + FL_RESEND_TICKS - 1));
+    TEST_ASSERT_EQUAL(1, fleet_tick(&g_f[0], &g_h[0], 1000 + FL_RESEND_TICKS));
+    pump(); pump();
+    TEST_ASSERT_EQUAL_STRING("build 1", file_of(1, "/app/api"));
+    TEST_ASSERT_EQUAL(0, fleet_tick(&g_f[0], &g_h[0], 5000));            /* acked: quiet */
+    TEST_ASSERT_EQUAL(0, fleet_deploy_promote(&g_f[0], &g_h[0], "api"));
+    g_nq = 0;                                                             /* promote lost */
+    fleet_tick(&g_f[0], &g_h[0], 6000);
+    TEST_ASSERT_EQUAL(1, fleet_tick(&g_f[0], &g_h[0], 6000 + FL_RESEND_TICKS));
+    pump(); pump();
+    TEST_ASSERT_EQUAL_STRING("build 1", file_of(2, "/app/api"));
+    TEST_ASSERT_EQUAL(0, fleet_tick(&g_f[0], &g_h[0], 9000));            /* both acked */
+    /* an unreachable canary stops after FL_RESENDS attempts */
+    g_drop = 1;
+    fleet_deploy_stage(&g_f[0], &g_h[0], "api", "build 2", 7, 3);
+    fleet_tick(&g_f[0], &g_h[0], 10000);
+    TEST_ASSERT_EQUAL(1, fleet_tick(&g_f[0], &g_h[0], 10000 + FL_RESEND_TICKS));
+    TEST_ASSERT_EQUAL(1, fleet_tick(&g_f[0], &g_h[0], 10000 + 2 * FL_RESEND_TICKS));
+    TEST_ASSERT_EQUAL(1, fleet_tick(&g_f[0], &g_h[0], 10000 + 3 * FL_RESEND_TICKS));
+    TEST_ASSERT_EQUAL(0, fleet_tick(&g_f[0], &g_h[0], 10000 + 4 * FL_RESEND_TICKS));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_session_handoff_and_sync);
     RUN_TEST(test_metrics_and_logs);
     RUN_TEST(test_staged_deploy);
+    RUN_TEST(test_deploy_resend);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
