@@ -179,6 +179,23 @@ int shell_p2p_line(const char* line) {
     if (!g_node.up) { print_string(cmd); print_string(" error p2p down (p2p-up first)\n"); return 1; }
     if (s_eq(cmd, "p2p-down")) { p2p_down(&g_node); print_string("p2p-down ok\n"); return 0; }
     if (s_eq(cmd, "p2p-peers")) { report("peers"); return 0; }
+    if (s_eq(cmd, "p2p-route")) {
+        /* US-063: next hop and hop count to a peer (shortest path) */
+        p2p_peer_t* p;
+        int hops = 0;
+        uint32_t nx;
+        char t[12]; int k = 0;
+        word(rest, a, (int)sizeof(a));
+        p = p2p_find(&g_node, a);
+        if (!p) { print_string("p2p-route error unknown peer\n"); return 1; }
+        nx = p2p_route(&g_node, p->id, &hops);
+        print_string("p2p-route "); print_string(a);
+        if (nx == 0xffffffffU) { print_string(" unreachable\n"); return 1; }
+        print_string(" next "); print_string(nx == 0 ? a : p2p_peer_name(&g_node, nx));
+        t[k++] = ' '; t[k++] = 'h'; t[k++] = 'o'; t[k++] = 'p'; t[k++] = 's'; t[k++] = ' '; t[k++] = (char)('0' + hops % 10); t[k++] = '\n'; t[k] = 0;
+        print_string(t);
+        return 0;
+    }
     if (s_eq(cmd, "p2p-health")) { report("health"); return 0; }
     if (s_eq(cmd, "p2p-stats")) { report("stats"); return 0; }
     if (s_eq(cmd, "p2p-analyze")) { report("analyze"); return 0; }
