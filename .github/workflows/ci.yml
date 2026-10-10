@@ -117,6 +117,9 @@ jobs:
       - name: Run QEMU integration shard (vfs-service)
         run: make integration-qemu-vfs
 
+      - name: QEMU phase 4 PromptMessage (guest shell, about 1 min)
+        run: make qemu-promptmessage
+
       - name: Upload integration logs
         if: always()
         uses: actions/upload-artifact@v4
