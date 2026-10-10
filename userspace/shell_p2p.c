@@ -159,6 +159,14 @@ int shell_p2p_line(const char* line) {
     }
     if (s_eq(cmd, "p2p-block") || s_eq(cmd, "p2p-unblock")) {
         rest = word(rest, a, (int)sizeof(a));
+        if (s_eq(cmd, "p2p-unblock") && g_node.up) {
+            /* Frames sent while the link was cut may still sit in the
+             * networker receive queue (the shell was busy reading keys).
+             * Drain them while the peer is still blocked so they are
+             * dropped as on a real cut link, not applied after healing. */
+            int k;
+            for (k = 0; k < 16; k++) p2p_tick(&g_node, &g_host, 8);
+        }
         if (p2p_block(&g_node, a, s_eq(cmd, "p2p-block")) != 0) { print_string(cmd); print_string(" error unknown peer\n"); return 1; }
         print_string(cmd); print_string(" ok "); print_string(a); print_string("\n");
         return 0;

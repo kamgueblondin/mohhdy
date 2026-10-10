@@ -531,6 +531,20 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
             if (dl > 0) (void)seal_send(n, h, p, P2P_I_SYNC_REQ, b, dl);
         }
     }
+    if (!n->prop.active && n->prop.commit_resends && t - n->prop.last_tx >= P2P_PROPOSE_RESEND_TICKS) {
+        /* applying a COMMIT twice is a no-op (same version and origin) */
+        p2p_proposal_t* pr = &n->prop;
+        p2p_item_t it;
+        int len;
+        pr->commit_resends--; pr->last_tx = t;
+        mzero(&it, (int)sizeof(it));
+        s_copy(it.key, pr->key, P2P_KEY_MAX); s_copy(it.value, pr->value, P2P_VAL_MAX);
+        it.version = pr->version; it.origin = n->id; it.used = 1;
+        len = item_encode(b, 0, 400, &it);
+        for (i = 0; i < P2P_PEERS && len > 0; i++)
+            if (n->peers[i].used && n->peers[i].keyed && n->peers[i].up)
+                (void)seal_send(n, h, &n->peers[i], P2P_I_COMMIT, b, len);
+    }
     if (n->prop.active) {
         p2p_proposal_t* pr = &n->prop;
         char line[160];
@@ -545,7 +559,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
             for (i = 0; i < P2P_PEERS && got > 0; i++)
                 if (n->peers[i].used && n->peers[i].keyed && (n->peers[i].up || n->peers[i].via))
                     (void)seal_send(n, h, &n->peers[i], P2P_I_COMMIT, b, got);
-            pr->result = 1; pr->active = 0;
+            pr->result = 1; pr->active = 0; pr->commit_resends = 3; pr->last_tx = t;
             s_cat(line, "p2p propose committed ", 160);
         } else if (pr->no > pr->members - pr->needed) {
             pr->result = -1; pr->active = 0;

@@ -80,6 +80,7 @@ typedef struct {
     int result; /* 0 pending, 1 committed, -1 rejected, -2 timeout */
     uint32_t last_tx; /* datagrams are not retransmitted by the link: the */
     uint32_t resent;  /* proposer re-sends to peers that have not voted yet */
+    uint8_t commit_resends; /* COMMIT is repeated: a lost one left a peer behind */
 } p2p_proposal_t;
 #define P2P_PROPOSE_RESEND_TICKS (2U * P2P_HZ)
 #define P2P_SYNC_RESEND_TICKS (2U * P2P_HZ)
