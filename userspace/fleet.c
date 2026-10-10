@@ -25,6 +25,39 @@ static void send_chunk(const fleet_host_t* h, fl_out_t* o, int i) {
     for (k = 0; k < n; k++) b[7 + k] = o->d[off + k];
     (void)h->send(h->ctx, o->to, b, 7 + n);
 }
+static fl_cc_t* cc_of(fleet_t* f, uint32_t id) {
+    int i, free_i = -1;
+    for (i = 0; i < FL_NODES; i++) { if (f->cc[i].used && f->cc[i].id == id) return &f->cc[i]; if (!f->cc[i].used && free_i < 0) free_i = i; }
+    if (free_i < 0) free_i = (int)(id % FL_NODES);
+    {
+        fl_cc_t* c = &f->cc[free_i]; char* z = (char*)c; int k;
+        for (k = 0; k < (int)sizeof(*c); k++) z[k] = 0;
+        c->used = 1; c->id = id; c->cwnd = FL_CWND_INIT; c->ssthresh = FL_SSTHRESH; c->peak = FL_CWND_INIT;
+        return c;
+    }
+}
+const fl_cc_t* fleet_cc(const fleet_t* f, uint32_t id) {
+    int i;
+    for (i = 0; i < FL_NODES; i++) if (f->cc[i].used && f->cc[i].id == id) return &f->cc[i];
+    return 0;
+}
+/* send what the windows allow: high priority messages first */
+static void pump(fleet_t* f, const fleet_host_t* h, uint32_t now) {
+    int pr, i, k;
+    for (pr = 0; pr < 2; pr++)
+        for (i = 0; i < FL_OUTBOX; i++) {
+            fl_out_t* o = &f->out[i];
+            fl_cc_t* c;
+            if (!o->used || o->prio != pr) continue;
+            c = cc_of(f, o->to);
+            for (k = 0; k < o->cnt && c->inflight < c->cwnd; k++) {
+                if ((o->sent | o->acked) & (1U << k)) continue;
+                send_chunk(h, o, k); o->sent |= 1U << k; c->inflight++; o->last = now;
+                if (!c->first) c->first = now ? now : 1U;
+                if (pr == 0) c->sent_hi++; else c->sent_bulk++;
+            }
+        }
+}
 static int queue_one(fleet_t* f, const fleet_host_t* h, uint32_t to, const uint8_t* d, int len) {
     int i, k;
     for (i = 0; i < FL_OUTBOX && f->out[i].used; i++) {}
@@ -33,10 +66,11 @@ static int queue_one(fleet_t* f, const fleet_host_t* h, uint32_t to, const uint8
         fl_out_t* o = &f->out[i];
         o->used = 1; o->to = to; o->mid = ++f->next_mid; o->len = len;
         o->cnt = (len + FL_CHUNK - 1) / FL_CHUNK; if (o->cnt < 1) o->cnt = 1;
-        o->acked = 0; o->tries = 0; o->last = tnow(h);
+        o->acked = 0; o->sent = 0; o->tries = 0; o->last = tnow(h);
+        o->prio = (d[0] == FL_ACK || d[0] == FL_SESSION) ? 0 : 1;
         for (k = 0; k < len; k++) o->d[k] = d[k];
-        for (k = 0; k < o->cnt; k++) send_chunk(h, o, k);
     }
+    pump(f, h, tnow(h));
     return 0;
 }
 int fleet_xmit(fleet_t* f, const fleet_host_t* h, uint32_t to, const uint8_t* d, int len) {
@@ -52,17 +86,27 @@ static int xmit_tick(fleet_t* f, const fleet_host_t* h, uint32_t now) {
     int i, k, sent = 0;
     for (i = 0; i < FL_OUTBOX; i++) {
         fl_out_t* o = &f->out[i];
-        if (!o->used || (uint32_t)(now - o->last) < FL_XRESEND_TICKS) continue;
+        fl_cc_t* c;
+        uint32_t lost;
+        if (!o->used || !o->sent || (uint32_t)(now - o->last) < FL_XRESEND_TICKS) continue;
+        lost = o->sent & ~o->acked;
+        if (!lost) continue;
+        c = cc_of(f, o->to);
         if (o->tries >= FL_XRESENDS) {
             char line[96]; line[0] = 0;
             scat(line, "fleet send to ", 96); scat(line, h->name ? h->name(h->ctx, o->to) : "?", 96);
             scat(line, " failed after ", 96); catu(line, (uint32_t)o->tries, 96); scat(line, " re-sends", 96);
             if (h->out) h->out(h->ctx, line);
+            for (k = 0; k < o->cnt; k++) if (lost & (1U << k)) c->inflight--;
             o->used = 0; f->failed++; continue;
         }
-        o->tries++; o->last = now;
-        for (k = 0; k < o->cnt; k++) if (!(o->acked & (1U << k))) { send_chunk(h, o, k); f->resent++; sent++; }
+        /* loss: halve the threshold, restart the window at 1 */
+        o->tries++;
+        for (k = 0; k < o->cnt; k++) if (lost & (1U << k)) { c->inflight--; o->sent &= ~(1U << k); f->resent++; sent++; }
+        if (c->inflight < 0) c->inflight = 0;
+        c->losses++; c->ssthresh = c->cwnd / 2 > 1 ? c->cwnd / 2 : 1; c->cwnd = 1; c->grow = 0;
     }
+    pump(f, h, now);
     return sent;
 }
 void fleet_init(fleet_t* f) { int i; char* z = (char*)f; for (i = 0; i < (int)sizeof(*f); i++) z[i] = 0; }
@@ -298,10 +342,21 @@ void fleet_receive(fleet_t* f, const fleet_host_t* h, uint32_t from, const uint8
         uint32_t mid = get32(d + 1); int idx = d[5];
         for (i = 0; i < FL_OUTBOX; i++) {
             fl_out_t* o = &f->out[i];
+            fl_cc_t* c;
             if (!o->used || o->to != from || o->mid != mid || idx >= o->cnt) continue;
+            if (o->acked & (1U << idx)) continue;
+            c = cc_of(f, from);
+            if (o->sent & (1U << idx)) { if (c->inflight > 0) c->inflight--; }
             o->acked |= 1U << idx;
+            c->acks++; c->last = tnow(h);
+            c->bytes += (uint32_t)((idx == o->cnt - 1) ? o->len - idx * FL_CHUNK : FL_CHUNK);
+            if (c->cwnd < c->ssthresh) c->cwnd++;               /* slow start */
+            else if (++c->grow >= c->cwnd) { c->grow = 0; c->cwnd++; } /* additive increase */
+            if (c->cwnd > FL_CWND_MAX) c->cwnd = FL_CWND_MAX;
+            if ((uint32_t)c->cwnd > c->peak) c->peak = (uint32_t)c->cwnd;
             if (o->acked == ((o->cnt >= 32) ? 0xffffffffU : ((1U << o->cnt) - 1U))) { o->used = 0; f->delivered++; }
         }
+        pump(f, h, tnow(h));
         return;
     }
     if (d[0] == FL_FRAG && len >= 8) {

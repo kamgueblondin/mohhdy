@@ -206,6 +206,49 @@ static void test_chunked_large_and_lossy(void) {
     }
 }
 
+/* US-068/073: the window grows on a clean link, collapses on loss, and a
+ * high-priority message overtakes queued bulk chunks. */
+static void test_adaptive_window_and_priority(void) {
+    static char big[3800];
+    const fl_cc_t* c;
+    int i;
+    setup();
+    for (i = 0; i < (int)sizeof(big); i++) big[i] = (char)('a' + i % 26);
+    TEST_ASSERT_TRUE(fleet_sync_push(&g_f[0], &g_h[0], "/big", big, (int)sizeof(big)) > 0);
+    c = fleet_cc(&g_f[0], 2);
+    TEST_ASSERT_NOT_NULL(c);
+    TEST_ASSERT_EQUAL(FL_CWND_INIT, c->inflight);             /* window-limited */
+    run_ticks(20);
+    c = fleet_cc(&g_f[0], 2);
+    TEST_ASSERT_EQUAL(0, (int)c->losses);
+    TEST_ASSERT_TRUE(c->cwnd >= FL_SSTHRESH);                 /* slow start on acks */
+    TEST_ASSERT_TRUE(c->bytes >= sizeof(big));
+    TEST_ASSERT_NOT_NULL(file_of(1, "/big"));
+    /* lossy link: re-send timeouts shrink the window */
+    g_lossy = 50;
+    big[0] = 'Z';
+    TEST_ASSERT_TRUE(fleet_sync_push(&g_f[0], &g_h[0], "/big", big, (int)sizeof(big)) > 0);
+    run_ticks(200);
+    c = fleet_cc(&g_f[0], 2);
+    TEST_ASSERT_TRUE(c->losses >= 1);
+    TEST_ASSERT_TRUE(c->ssthresh < FL_SSTHRESH + 8);
+    TEST_ASSERT_TRUE((int)c->peak > c->ssthresh);
+    /* priority: with the window full of bulk, a session goes first */
+    setup();
+    g_drop = 1;
+    TEST_ASSERT_TRUE(fleet_sync_push(&g_f[0], &g_h[0], "/big", big, (int)sizeof(big)) > 0);
+    g_drop = 0;
+    TEST_ASSERT_EQUAL(0, fleet_session_send(&g_f[0], &g_h[0], 2, "cwd=/x", 6));
+    c = fleet_cc(&g_f[0], 2);
+    TEST_ASSERT_EQUAL(FL_CWND_INIT, (int)c->sent_bulk);        /* bulk stuck on the window */
+    g_now += FL_XRESEND_TICKS + 10; fleet_tick(&g_f[0], &g_h[0], g_now);
+    c = fleet_cc(&g_f[0], 2);
+    TEST_ASSERT_EQUAL(1, (int)c->sent_hi);                     /* session sent before more bulk */
+    TEST_ASSERT_EQUAL(FL_CWND_INIT, (int)c->sent_bulk);
+    pump(); run_ticks(60);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "fleet session offered by alpha"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_session_handoff_and_sync);
@@ -213,6 +256,7 @@ int main(void) {
     RUN_TEST(test_staged_deploy);
     RUN_TEST(test_reliable_resend);
     RUN_TEST(test_chunked_large_and_lossy);
+    RUN_TEST(test_adaptive_window_and_priority);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

@@ -55,7 +55,15 @@ typedef struct {
 } fl_deploy_t;
 typedef struct { char name[24]; uint32_t ver, sum; int used; } fl_applied_t;
 /* reliable transport: one outgoing message to one peer, chunk acks */
-typedef struct { int used; uint32_t to, mid, last; int len, cnt, tries; uint32_t acked; uint8_t d[FL_PAYLOAD + 64]; } fl_out_t;
+typedef struct { int used; uint32_t to, mid, last; int len, cnt, tries; uint32_t acked, sent; int prio; uint8_t d[FL_PAYLOAD + 64]; } fl_out_t;
+/* US-068/073 adaptive bandwidth: per-peer congestion window in chunks
+ * (slow start then additive increase on acks, halved with a restart at 1
+ * on a re-send timeout); chunks of high-priority messages (acks, session)
+ * are sent before bulk (sync, deploy, reports) when the window is full. */
+#define FL_CWND_INIT 2
+#define FL_CWND_MAX 16
+#define FL_SSTHRESH 8
+typedef struct { uint32_t id; int used, cwnd, ssthresh, inflight, grow; uint32_t acks, losses, bytes, first, last, peak; uint32_t sent_hi, sent_bulk; } fl_cc_t;
 typedef struct { uint32_t from, mid; int cnt, len; uint32_t have; uint8_t d[FL_PAYLOAD + 64]; int used; } fl_in_t;
 
 typedef struct {
@@ -71,6 +79,7 @@ typedef struct {
     uint32_t done_from[16], done_mid[16]; int done_next;
     uint32_t next_mid;
     uint32_t delivered, resent, failed, dup;
+    fl_cc_t cc[FL_NODES];
 } fleet_t;
 
 uint32_t fleet_sum(const char* d, int len);
@@ -94,6 +103,8 @@ int fleet_tick(fleet_t* f, const fleet_host_t* h, uint32_t now);
 /* queue one message (any tag) for reliable chunked delivery; to 0 = every
  * known peer. Returns the number of peers queued, -1 if too large/full. */
 int fleet_xmit(fleet_t* f, const fleet_host_t* h, uint32_t to, const uint8_t* d, int len);
+/* congestion state of one peer (0 if unknown) */
+const fl_cc_t* fleet_cc(const fleet_t* f, uint32_t id);
 /* messages still waiting for acknowledgement */
 int fleet_pending(const fleet_t* f);
 #endif
