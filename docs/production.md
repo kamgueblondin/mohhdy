@@ -4,35 +4,8 @@ Status: delivered in the guest as C code (`userspace/prod.c`, pure and
 host-tested; shell front end `userspace/shell_prod.c`). Proven by unit tests
 (`tests/unit/userspace/test_prod.c`) and a single-guest QEMU contract
 (`make qemu-production`). Independent of the P2P lots (#117, #119).
-Everything runs inside one guest: there is no fleet and no remote collector.
-Since the consolidation lot (#121) the state can be saved to disk and
-reloaded after a cold reboot (`persist-*`, below).
-
-## Persistence (consolidation lot)
-
-`persist-save` writes three checksummed blobs to the overlay: `node` (the
-P2P identity seed, so the node id and the collab signing key stay the same),
-`prod` (newest 16 samples, alert rules and state, newest 8 events, the three
-backup slots with their stored checksums, feedback) and `collab` (the whole
-ledger with signatures, known public keys and the node's own key). Overlay
-files hold at most 384 bytes, so each blob is split into
-`/persist/<name>.<k>` chunks; chunk 0 starts with magic, length and FNV-1a,
-checked by `persist-load` / `persist-status` (a damaged blob is refused and
-nothing is applied from it). With an IDE disk attached every overlay write is
-flushed to LBA 0-63 by the Ring 3 `atadriver`, and the kernel reloads that
-snapshot at boot. Saving is explicit (no autosave); the overlay holds 64
-nodes, which bounds the total size (about 20 KiB). The signing secret is
-stored in clear on the disk. Proof: `make qemu-persistence` (two boots of
-one guest on the same image).
-
-## Autoscaling with real tasks
-
-`prod-scale-run Q1 Q2 ...` runs one scaler step per queue value (min 1, max
-3 workers, scale up above 4 items per worker, down below 1, cooldown 2
-steps) and starts or kills real tasks (the `idle` program, which only
-yields) to match; `prod-scale-status` / `prod-scale-stop` report and stop the
-pool, checking every pid against `ps`. Workers do no useful work; the shell's
-four-children limit caps the pool.
+Everything runs inside one guest: there is no fleet, no remote collector,
+no persistence across reboot (backups and metrics live in RAM).
 
 ## Commands
 
@@ -47,8 +20,6 @@ four-children limit caps the pool.
 | Scaling | `prod-scale-sim Q1 Q2 ...` |
 | Security | `prod-integrity baseline|check DIR` |
 | Performance | `prod-bench` |
-| Scaling (real tasks) | `prod-scale-run Q1 Q2 ...`, `prod-scale-status`, `prod-scale-stop` |
-| Persistence | `persist-save`, `persist-load`, `persist-status` |
 | Support | `prod-diag`, `prod-tutorial [N]`, `prod-feedback RATING TEXT|summary`, `prod-usage`, `prod-roadmap` |
 
 Metrics: `mem_used`, `mem_free` (KiB, from `SYS_MEMINFO`), `procs` (`SYS_PS`),
@@ -83,8 +54,8 @@ manifest entry checksum and `TARGET/health` == `ok`; on failure restore
 | US-107 monitoring | done | sampled metrics, ring, stats; QEMU |
 | US-108 continuous deployment | partial | staged deploy with manifest and health check in one guest; no pipeline, no remote |
 | US-109 automatic rollback | done | failed health check restores the previous files; QEMU |
-| US-110 autoscaling | partial | scaler starts/stops real worker tasks (`prod-scale-run`, #121); workers do no useful work, load is a given queue length |
-| US-111 backup/recovery | done | checksummed backups, verified restore, corruption refusal; persisted to disk with `persist-save` (#121) |
+| US-110 autoscaling | partial | decision engine (thresholds, bounds, cooldown) only; it starts no workers |
+| US-111 backup/recovery | done | checksummed RAM backups, verified restore, corruption refusal; RAM only |
 | US-112 production security | partial | file integrity baseline and drift detection; no hardening review |
 | US-113 log analysis | done | levels, patterns, bursts, incident verdict; QEMU |
 | US-114 intelligent alerts | partial | thresholds with FOR, dedupe, hysteresis; no learning |

@@ -157,6 +157,11 @@ Etat Phase 5 (10 octobre 2026, lot P2P ; detail et limites dans `docs/p2p.md`) :
 - US-089 : Développement de l'interface d'administration unifiée
 - US-090 : Création du système de déploiement automatisé
 
+Etat Phase 6 (10 octobre 2026, socle i386 ; detail dans `docs/platform.md`, preuve `make qemu-platform`) :
+- Fait (sur cette plate-forme) : US-087 compatibilite applicative (ELF), US-088 migration de donnees (ramfs, archive verifiee), US-090 deploiement automatise (manifeste local, retour arriere).
+- Partiel : US-076 (socle HAL i386 seulement, aucun portage ARM), US-079 gestes (classifieur, pas de peripherique tactile), US-080 adaptation d'ecran (calcul, OS-UI non re-agence), US-081 energie (profils et choix auto, politique non appliquee, pas de batterie), US-082 notifications (file locale), US-085 peripheriques (registre a partir des sondes existantes), US-089 administration (vue agregee).
+- Non livre : US-077 interface mobile, US-078 capteurs, US-083 synchronisation multi-appareils (voir P2P #117), US-084 continuite, US-086 emulation legacy.
+
 ### Phase 7 - Collaborative (US-091 à US-105)
 - US-091 : Implémentation du système de points MOHHDY
 - US-092 : Développement du gestionnaire de ressources partagées
