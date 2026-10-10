@@ -84,4 +84,14 @@ typedef struct { prod_use_t u[PROD_USAGE]; int n; uint32_t total, other; } prod_
 void prod_usage_hit(prod_usage_t* u, const char* name);
 /* sorts by count desc (stable for ties) */
 void prod_usage_sort(prod_usage_t* u);
+
+/* Persistence (consolidation lot): compact serialization of the in-RAM
+ * state; the shell stores it on the disk-backed overlay. Metrics keep the
+ * newest 16 samples and alerts the newest 8 events. */
+typedef struct {
+    prod_metrics_t* m; prod_alerts_t* a; prod_archive_t* arch; char (*dir)[64]; int slots; prod_feedback_t* fb;
+} prod_state_ref_t;
+int prod_state_save(const prod_state_ref_t* r, uint8_t* out, int cap);
+/* returns 0, or -1 on a malformed blob (state then reset) */
+int prod_state_load(const prod_state_ref_t* r, const uint8_t* in, int len);
 #endif

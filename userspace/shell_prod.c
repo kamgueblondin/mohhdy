@@ -12,6 +12,8 @@ int sys_meminfo(os_meminfo_t* info);
 int sys_ps(os_proc_t* out, int max_n);
 int sys_task_metrics(int pid, os_task_metrics_t* out);
 unsigned int sys_ticks(void);
+int spawn(const char* path, char* argv[]);
+int sys_kill_pid(int pid);
 
 #define SLOTS 3
 static prod_metrics_t g_m;
@@ -23,6 +25,11 @@ static prod_feedback_t g_fb;
 static prod_usage_t g_use;
 static uint32_t g_custom, g_run_prev, g_tick_prev;
 static int g_init;
+#define POOL_MAX 3
+static int g_pool[POOL_MAX], g_npool;
+static prod_scaler_t g_sc;
+static uint32_t g_sc_t;
+static int g_sc_on;
 static char g_out[4096];
 static char g_buf[4096];
 static char g_tmp[4096];
@@ -70,7 +77,7 @@ static void join(char* d, const char* dir, const char* name, int cap) {
 static const char* k_cmds[] = {
     "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
     "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
-    "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-integrity", "prod-bench", "prod-diag",
+    "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "prod-integrity", "prod-bench", "prod-diag",
     "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", 0
 };
 int shell_prod_is(const char* l) {
@@ -437,6 +444,44 @@ int shell_prod_line(const char* l) {
         s_cat(g_out, " downs ", 4096); cat_u(g_out, (uint32_t)sc.downs, 4096); s_cat(g_out, "\n", 4096);
         out(g_out); return 0;
     }
+    if (s_eq(cmd, "prod-scale-run") || s_eq(cmd, "prod-scale-status") || s_eq(cmd, "prod-scale-stop")) {
+        /* US-110: the scaler drives a pool of real worker tasks (the `idle`
+         * program, which yields forever); one step per queue value. */
+        static os_proc_t ps[16];
+        int i, n, live = 0;
+        if (s_eq(cmd, "prod-scale-run")) {
+            if (!g_sc_on) { prod_scaler_init(&g_sc, 1, POOL_MAX, 4000U, 1000U, 2U); g_sc_on = 1; g_sc_t = 0; }
+            while (*rest) {
+                int want;
+                rest = word(rest, a, 64);
+                if (to_u(a, &x)) { out("prod-scale-run error queue values\n"); return 1; }
+                want = prod_scaler_step(&g_sc, x, g_sc_t++);
+                while (g_npool < want) {
+                    int pid = spawn("idle", 0);
+                    if (pid <= 0) { out("prod-scale-run error spawn refused (child capacity)\n"); break; }
+                    g_pool[g_npool++] = pid;
+                }
+                if (g_npool < want) break;
+                while (g_npool > want) { (void)sys_kill_pid(g_pool[--g_npool]); }
+                pause(5);
+                g_out[0] = 0; s_cat(g_out, "prod-scale step queue ", 4096); cat_u(g_out, x, 4096);
+                s_cat(g_out, " workers ", 4096); cat_u(g_out, (uint32_t)g_npool, 4096); s_cat(g_out, " pids", 4096);
+                for (i = 0; i < g_npool; i++) { s_cat(g_out, " ", 4096); cat_u(g_out, (uint32_t)g_pool[i], 4096); }
+                s_cat(g_out, "\n", 4096); out(g_out);
+            }
+        } else if (s_eq(cmd, "prod-scale-stop")) {
+            while (g_npool > 0) (void)sys_kill_pid(g_pool[--g_npool]);
+            g_sc_on = 0;
+            pause(5);
+        }
+        n = sys_ps(ps, 16);
+        for (i = 0; i < n; i++) { int k; for (k = 0; k < g_npool; k++) if (ps[i].pid == g_pool[k]) live++; }
+        g_out[0] = 0; s_cat(g_out, cmd, 4096); s_cat(g_out, " ok workers ", 4096); cat_u(g_out, (uint32_t)g_npool, 4096);
+        s_cat(g_out, " live_in_ps ", 4096); cat_u(g_out, (uint32_t)live, 4096);
+        s_cat(g_out, " ups ", 4096); cat_u(g_out, (uint32_t)g_sc.ups, 4096); s_cat(g_out, " downs ", 4096); cat_u(g_out, (uint32_t)g_sc.downs, 4096);
+        s_cat(g_out, "\n", 4096); out(g_out);
+        return 0;
+    }
     if (s_eq(cmd, "prod-integrity")) {
         static os_dirent_t ents[48];
         char p[96];
@@ -536,3 +581,12 @@ int shell_prod_line(const char* l) {
     out(cmd); out(" error unknown prod command\n");
     return 1;
 }
+
+/* persistence hooks for shell_persist.c */
+static prod_state_ref_t ref(void) {
+    prod_state_ref_t r;
+    r.m = &g_m; r.a = &g_a; r.arch = g_arch; r.dir = g_dir; r.slots = SLOTS; r.fb = &g_fb;
+    return r;
+}
+int shell_prod_save(uint8_t* o, int cap) { prod_state_ref_t r = ref(); if (!g_init) return 0; return prod_state_save(&r, o, cap); }
+int shell_prod_load(const uint8_t* in, int len) { prod_state_ref_t r = ref(); init(); return prod_state_load(&r, in, len); }
