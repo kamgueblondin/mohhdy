@@ -212,8 +212,9 @@ int kernel_net_nic_pump(os_net_nic_pump_t* pump) {
 int kernel_net_nic_info(os_net_nic_info_t* info) {
     uint8_t i;
     if (!info) return OS_NET_NIC_ABSENT;
-    if (!boot_ne2k_present && boot_ne2k_deferred) {
-        /* Not probed by the kernel: the worker reads the PROM itself. */
+    if (boot_ne2k_deferred) {
+        /* Strict: the kernel never reads the PROM. Every networker (first
+         * or respawned) probes, resets and reads the MAC itself. */
         info->base_port = (uint16_t)OS_NET_NIC_BASE_PORT;
         info->irq = (uint8_t)OS_NET_NIC_IRQ_LINE;
         for (i = 0U; i < 6U; i++) info->mac[i] = 0U;
