@@ -348,6 +348,9 @@
  *     and opened in the networker), close (close_notify + FIN, re-arm).
  *   WEB_STOP: all slots closed. */
 #define SYS_PEER_DATA 156
+/* EBX = 0: current preemption quantum (ticks); 1: IRQ0 preemptions so far;
+ * 5..100: set the quantum (returns it, 0xFFFFFFFF if out of range). */
+#define SYS_SCHED_TUNE 157
 #define OS_PEER_DATA_RECV 1U
 #define OS_PEER_DATA_SEND 2U
 #define OS_PEER_DATA_CLOSE 3U
@@ -443,6 +446,10 @@ typedef struct {
     char input[OS_FB_INPUT_LEN];
     char messages[OS_FB_MSG_MAX][OS_FB_MSG_LEN];
     char term[OS_FB_TERM_MAX][OS_FB_TERM_LEN];
+    /* version 3: framebuffer size requested by screen-adapt (US-077);
+     * 0 = follow the host window. The desktop layout follows the size. */
+    uint16_t want_w;
+    uint16_t want_h;
 } os_fb_scene_t;
 
 typedef struct {

@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 329
+#define MOHHDY_SHELL_COMMAND_COUNT 330
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -207,6 +207,7 @@ static const char * const mohhdy_shell_commands[] = {
     "pm-doc",
     "pm-edit",
     "pm-exec",
+    "pm-ide",
     "pm-install",
     "pm-run",
     "pm-say",

@@ -6,6 +6,7 @@ int shell_prod_is(const char* line);
 int shell_persist_is(const char* line);
 int shell_persist_line(const char* line);
 void shell_persist_tick(void);
+int shell_platform_idle_yields(void);
 void shell_persist_shutdown(void);
 int shell_prod_line(const char* line);
 void shell_prod_count(const char* line);
@@ -21,6 +22,7 @@ int shell_collab_line(const char* line);
 #include "shell_platform.h"
 #include "osui_gui.h"
 #include "promptmessage.h"
+#include "pmedit.h"
 #include "csig.h"
 #include "collab.h"
 #include "../kernel/sha256.h"
@@ -2970,6 +2972,64 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         ctx->last_rc = 0;
         return;
     }
+    if (strcmp(command, "pm-ide") == 0) {
+        /* Full-screen editor on the VGA text screen (US-050). */
+        static pme_t ed;
+        static os_vga_frame_t frame;
+        static char snap[PME_COLS + 1];
+        int quit = 0, act, c, n, warned = 0;
+        len = pm_host_read(0, args[0], g_pm_src, PM_SRC_MAX);
+        if (len < 0) len = 0;
+        pme_load(&ed, args[0], g_pm_src, len);
+        print_string("pm-ide open "); print_string(args[0]); print_string(" lines "); print_int(ed.n); print_string("\n");
+        while (!quit) {
+            pme_render(&ed, frame.cells);
+            asm volatile("int $0x80" : "=a"(c) : "a"(SYS_VGA_BLIT), "b"(&frame) : "memory");
+            do {
+                asm volatile("int $0x80" : "=a"(c) : "a"(SYS_GETC));
+                if (c <= 0) asm volatile("int $0x80" : : "a"(SYS_YIELD));
+            } while (c <= 0);
+            act = pme_key(&ed, c);
+            if (act == PME_QUIT) {
+                if (ed.modified && !warned) { warned = 1; pme_status(&ed, "unsaved changes: ESC q again to discard"); }
+                else quit = 1;
+            } else if (act == PME_SAVE || act == PME_CHECK) {
+                int then_quit = (ed.esc == 2);
+                ed.esc = 0;
+                n = pme_text(&ed, g_pm_src, PM_SRC_MAX);
+                if (n < 0) { pme_status(&ed, "too large to save"); continue; }
+                if (pm_compile(g_pm_src, n, &g_pm_tmp, &g_pm_host) == PM_OK) {
+                    char t[PME_COLS + 1]; int k = 0; const char* h = act == PME_SAVE ? "saved, check ok statements " : "check ok statements ";
+                    while (*h) t[k++] = *h++;
+                    { int v = g_pm_tmp.statements, d = 1; while (v / d >= 10) d *= 10; while (d) { t[k++] = (char)('0' + (v / d) % 10); d /= 10; } }
+                    t[k] = 0; pme_status(&ed, t);
+                } else {
+                    char t[PME_COLS + 1]; int k = 0; const char* h = "error line ";
+                    while (*h) t[k++] = *h++;
+                    t[k++] = (char)('0' + (g_pm_tmp.err_line / 10) % 10); t[k++] = (char)('0' + g_pm_tmp.err_line % 10);
+                    t[k++] = ':'; t[k++] = ' ';
+                    for (h = g_pm_tmp.err; *h && k < PME_COLS - 1; h++) t[k++] = *h;
+                    t[k] = 0; pme_status(&ed, t);
+                    then_quit = 0;
+                }
+                if (act == PME_SAVE) {
+                    if (pm_host_write(0, args[0], g_pm_src, n, 0) < 0) { pme_status(&ed, "write failed"); continue; }
+                    ed.modified = 0;
+                }
+                pme_render(&ed, frame.cells);
+                print_string("pm-ide "); print_string(act == PME_SAVE ? "saved " : "checked "); print_string(args[0]);
+                print_string(" lines "); print_int(ed.n); print_string(" status: "); print_string(ed.status); print_string("\n");
+                pme_row(frame.cells, 0, snap, (int)sizeof(snap)); print_string("pm-ide screen 0: "); print_string(snap); print_string("\n");
+                pme_row(frame.cells, 2, snap, (int)sizeof(snap)); print_string("pm-ide screen 2: "); print_string(snap); print_string("\n");
+                pme_row(frame.cells, 23, snap, (int)sizeof(snap)); print_string("pm-ide screen 23: "); print_string(snap); print_string("\n");
+                if (then_quit) quit = 1;
+            }
+        }
+        asm volatile("int $0x80" : "=a"(c) : "a"(SYS_VGA_BLIT), "b"(0) : "memory");
+        print_string("pm-ide closed "); print_string(args[0]); print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
     if (strcmp(command, "pm-verify") == 0) {
         char cert[RAMFS_PATH_MAX], rec[96], want[9]; int k = 0, n, i;
         unsigned int sum;
@@ -3152,7 +3212,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-catalog", "pm-install", "pm-certify", "pm-verify",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-install", "pm-certify", "pm-verify",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -6821,7 +6881,7 @@ void shell_main_loop(shell_context_t* ctx) {
                 if (osui_web_active() && osui_web_poll(web_log, (int)sizeof(web_log)) > 0) print_string(web_log);
                 shell_p2p_poll();
                 shell_persist_tick();
-                yield();
+                { int y = shell_platform_idle_yields(); while (y-- > 0) yield(); }
             }
             buf[len] = '\0';
         } else {
