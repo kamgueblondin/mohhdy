@@ -109,9 +109,9 @@ int plat_power_policy(int p, plat_power_policy_t* o) {
     if (!o) return -1;
     o->profile = p;
     switch (p) {
-    case PLAT_PWR_PERFORMANCE: o->idle_yields = 1; o->poll_budget = 8; o->screen_dim_s = 0; o->background_ms = 10; return 0;
-    case PLAT_PWR_BALANCED: o->idle_yields = 2; o->poll_budget = 4; o->screen_dim_s = 300; o->background_ms = 50; return 0;
-    case PLAT_PWR_SAVER: o->idle_yields = 8; o->poll_budget = 1; o->screen_dim_s = 60; o->background_ms = 250; return 0;
+    case PLAT_PWR_PERFORMANCE: o->idle_yields = 1; o->poll_budget = 8; o->screen_dim_s = 0; o->background_ms = 10; o->quantum_ticks = 10; return 0;
+    case PLAT_PWR_BALANCED: o->idle_yields = 2; o->poll_budget = 4; o->screen_dim_s = 300; o->background_ms = 50; o->quantum_ticks = 20; return 0;
+    case PLAT_PWR_SAVER: o->idle_yields = 8; o->poll_budget = 1; o->screen_dim_s = 60; o->background_ms = 250; o->quantum_ticks = 40; return 0;
     default: return -1;
     }
 }

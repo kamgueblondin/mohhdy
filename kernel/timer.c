@@ -5,6 +5,8 @@
 #include "gfx_fb.h"
 #include "input/usb_tablet.h"
 #include "sched_quantum.h"
+volatile uint32_t g_sched_quantum_ticks = TIMER_PREEMPT_QUANTUM;
+volatile uint32_t g_sched_preemptions;
 #include "syscall/syscall.h"
 
 // Fonctions externes
@@ -78,12 +80,24 @@ void timer_handler(cpu_state_t* cpu) {
     /* Préemption matérielle : uniquement entre deux cadres utilisateur valides.
      * Le garde Ring 3 évite le basculement depuis un syscall ou une IRQ noyau. */
     if (current_task &&
-        sched_quantum_preempt_due(timer_user_frame(cpu),
-                                  current_task->type == TASK_TYPE_USER,
-                                  task_has_other_ready_user(), timer_ticks,
-                                  current_task->last_scheduled_ticks)) {
+        sched_quantum_preempt_due_q(timer_user_frame(cpu),
+                                    current_task->type == TASK_TYPE_USER,
+                                    task_has_other_ready_user(), timer_ticks,
+                                    current_task->last_scheduled_ticks,
+                                    g_sched_quantum_ticks)) {
+        g_sched_preemptions++;
         schedule(cpu);
     }
+}
+
+/* SYS_SCHED_TUNE: 0 = query quantum, 1 = query preemption count,
+ * SCHED_QUANTUM_MIN..MAX = set the quantum (power profiles, US-081). */
+uint32_t timer_sched_tune(uint32_t arg) {
+    if (arg == 0U) return g_sched_quantum_ticks;
+    if (arg == 1U) return g_sched_preemptions;
+    if (!sched_quantum_valid(arg)) return 0xFFFFFFFFU;
+    g_sched_quantum_ticks = arg;
+    return arg;
 }
 
 // Fonction unifiée pour obtenir les ticks (marche avec les deux modes)

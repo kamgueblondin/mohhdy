@@ -6,6 +6,9 @@ int shell_prod_is(const char* line);
 int shell_persist_is(const char* line);
 int shell_persist_line(const char* line);
 void shell_persist_tick(void);
+int shell_fleet_is(const char* line);
+int shell_fleet_line(const char* line);
+int shell_platform_idle_yields(void);
 void shell_persist_shutdown(void);
 int shell_prod_line(const char* line);
 void shell_prod_count(const char* line);
@@ -21,6 +24,7 @@ int shell_collab_line(const char* line);
 #include "shell_platform.h"
 #include "osui_gui.h"
 #include "promptmessage.h"
+#include "pmedit.h"
 #include "csig.h"
 #include "collab.h"
 #include "../kernel/sha256.h"
@@ -2970,6 +2974,64 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         ctx->last_rc = 0;
         return;
     }
+    if (strcmp(command, "pm-ide") == 0) {
+        /* Full-screen editor on the VGA text screen (US-050). */
+        static pme_t ed;
+        static os_vga_frame_t frame;
+        static char snap[PME_COLS + 1];
+        int quit = 0, act, c, n, warned = 0;
+        len = pm_host_read(0, args[0], g_pm_src, PM_SRC_MAX);
+        if (len < 0) len = 0;
+        pme_load(&ed, args[0], g_pm_src, len);
+        print_string("pm-ide open "); print_string(args[0]); print_string(" lines "); print_int(ed.n); print_string("\n");
+        while (!quit) {
+            pme_render(&ed, frame.cells);
+            asm volatile("int $0x80" : "=a"(c) : "a"(SYS_VGA_BLIT), "b"(&frame) : "memory");
+            do {
+                asm volatile("int $0x80" : "=a"(c) : "a"(SYS_GETC));
+                if (c <= 0) asm volatile("int $0x80" : : "a"(SYS_YIELD));
+            } while (c <= 0);
+            act = pme_key(&ed, c);
+            if (act == PME_QUIT) {
+                if (ed.modified && !warned) { warned = 1; pme_status(&ed, "unsaved changes: ESC q again to discard"); }
+                else quit = 1;
+            } else if (act == PME_SAVE || act == PME_CHECK) {
+                int then_quit = (ed.esc == 2);
+                ed.esc = 0;
+                n = pme_text(&ed, g_pm_src, PM_SRC_MAX);
+                if (n < 0) { pme_status(&ed, "too large to save"); continue; }
+                if (pm_compile(g_pm_src, n, &g_pm_tmp, &g_pm_host) == PM_OK) {
+                    char t[PME_COLS + 1]; int k = 0; const char* h = act == PME_SAVE ? "saved, check ok statements " : "check ok statements ";
+                    while (*h) t[k++] = *h++;
+                    { int v = g_pm_tmp.statements, d = 1; while (v / d >= 10) d *= 10; while (d) { t[k++] = (char)('0' + (v / d) % 10); d /= 10; } }
+                    t[k] = 0; pme_status(&ed, t);
+                } else {
+                    char t[PME_COLS + 1]; int k = 0; const char* h = "error line ";
+                    while (*h) t[k++] = *h++;
+                    t[k++] = (char)('0' + (g_pm_tmp.err_line / 10) % 10); t[k++] = (char)('0' + g_pm_tmp.err_line % 10);
+                    t[k++] = ':'; t[k++] = ' ';
+                    for (h = g_pm_tmp.err; *h && k < PME_COLS - 1; h++) t[k++] = *h;
+                    t[k] = 0; pme_status(&ed, t);
+                    then_quit = 0;
+                }
+                if (act == PME_SAVE) {
+                    if (pm_host_write(0, args[0], g_pm_src, n, 0) < 0) { pme_status(&ed, "write failed"); continue; }
+                    ed.modified = 0;
+                }
+                pme_render(&ed, frame.cells);
+                print_string("pm-ide "); print_string(act == PME_SAVE ? "saved " : "checked "); print_string(args[0]);
+                print_string(" lines "); print_int(ed.n); print_string(" status: "); print_string(ed.status); print_string("\n");
+                pme_row(frame.cells, 0, snap, (int)sizeof(snap)); print_string("pm-ide screen 0: "); print_string(snap); print_string("\n");
+                pme_row(frame.cells, 2, snap, (int)sizeof(snap)); print_string("pm-ide screen 2: "); print_string(snap); print_string("\n");
+                pme_row(frame.cells, 23, snap, (int)sizeof(snap)); print_string("pm-ide screen 23: "); print_string(snap); print_string("\n");
+                if (then_quit) quit = 1;
+            }
+        }
+        asm volatile("int $0x80" : "=a"(c) : "a"(SYS_VGA_BLIT), "b"(0) : "memory");
+        print_string("pm-ide closed "); print_string(args[0]); print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
     if (strcmp(command, "pm-verify") == 0) {
         char cert[RAMFS_PATH_MAX], rec[96], want[9]; int k = 0, n, i;
         unsigned int sum;
@@ -3152,7 +3214,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-catalog", "pm-install", "pm-certify", "pm-verify",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-install", "pm-certify", "pm-verify",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -3172,6 +3234,8 @@ static int is_builtin(const char* cmd) {
         "collab-review", "collab-rate", "collab-propose", "collab-vote", "collab-profile", "collab-forget",
         "collab-export", "collab-ticket", "collab-answer", "collab-sync", "collab-balances", "collab-audit",
         "collab-tasks", "collab-offers", "collab-votes", "collab-tickets", "collab-keys", "collab-forge",
+        "session-handoff", "session-resume", "sync-push", "sync-status", "fleet-report", "fleet-collect",
+        "deploy-stage", "deploy-promote", "deploy-rollback", "deploy-status",
         "hal-info", "hal-port", "screen-adapt", "gesture", "power-profile", "power-status", "dev-list",
         "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
         "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
@@ -6291,7 +6355,7 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
                 strcmp(command, "pm-disasm") == 0 || strcmp(command, "pm-debug") == 0 ||
                 strcmp(command, "pm-compile") == 0 || strcmp(command, "pm-exec") == 0 ||
                 strcmp(command, "pm-say") == 0 || strcmp(command, "pm-version") == 0 ||
-                strcmp(command, "pm-versions") == 0 || strcmp(command, "pm-edit") == 0 ||
+                strcmp(command, "pm-versions") == 0 || strcmp(command, "pm-edit") == 0 || strcmp(command, "pm-ide") == 0 ||
                 strcmp(command, "pm-catalog") == 0 || strcmp(command, "pm-install") == 0 ||
                 strcmp(command, "pm-certify") == 0 || strcmp(command, "pm-verify") == 0)) {
         cmd_pm(ctx, command, args, arg_count);
@@ -6659,6 +6723,10 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         ctx->last_rc = shell_collab_line(input_buffer);
         return;
     }
+    if (shell_fleet_is(input_buffer)) {
+        ctx->last_rc = shell_fleet_line(input_buffer);
+        return;
+    }
     if (strncmp(input_buffer, "p2p-", 4U) == 0) {
         ctx->last_rc = shell_p2p_line(input_buffer);
         return;
@@ -6821,7 +6889,7 @@ void shell_main_loop(shell_context_t* ctx) {
                 if (osui_web_active() && osui_web_poll(web_log, (int)sizeof(web_log)) > 0) print_string(web_log);
                 shell_p2p_poll();
                 shell_persist_tick();
-                yield();
+                { int y = shell_platform_idle_yields(); while (y-- > 0) yield(); }
             }
             buf[len] = '\0';
         } else {
@@ -6870,3 +6938,57 @@ void main() {
     // Ne devrait jamais être atteint
     exit_program(0);
 }
+
+/* ---------------------------------------------------------------------
+ * Fleet hooks (userspace/shell_fleet.c): session handoff and file access.
+ * Session text: cwd 0x1e name=value 0x1f ... 0x1e history 0x1f ...
+ * ------------------------------------------------------------------- */
+static int sess_put(char* o, int k, int cap, const char* s) {
+    while (*s && k < cap - 1) { if (*s != 0x1e && *s != 0x1f) o[k++] = *s; s++; }
+    return k;
+}
+int shell_session_export(char* out, int cap) {
+    shell_context_t* c = g_live_ctx;
+    int k = 0, i, first;
+    if (!c || cap < 8) return -1;
+    k = sess_put(out, k, cap, c->current_dir);
+    out[k++] = 0x1e;
+    for (i = 0; i < c->env_count && k < cap - 40; i++) {
+        int l1 = (int)strlen(c->env_vars[i].name), l2 = (int)strlen(c->env_vars[i].value);
+        if (l1 + l2 + 2 > cap - 40 - k) continue;
+        k = sess_put(out, k, cap, c->env_vars[i].name); out[k++] = '=';
+        k = sess_put(out, k, cap, c->env_vars[i].value); out[k++] = 0x1f;
+    }
+    out[k++] = 0x1e;
+    first = c->history.count > 5 ? c->history.count - 5 : 0;
+    for (i = first; i < c->history.count && i < MAX_HISTORY; i++) {
+        if ((int)strlen(c->history.commands[i]) + 2 > cap - 1 - k) break;
+        k = sess_put(out, k, cap, c->history.commands[i]); out[k++] = 0x1f;
+    }
+    out[k] = 0;
+    return k;
+}
+int shell_session_import(const char* s, int len, int* vars, int* hist) {
+    shell_context_t* c = g_live_ctx;
+    char item[300];
+    int part = 0, k = 0, i;
+    *vars = 0; *hist = 0;
+    if (!c) return -1;
+    for (i = 0; i <= len; i++) {
+        char ch = i < len ? s[i] : 0x1e;
+        if (ch == 0x1e || ch == 0x1f) {
+            item[k] = 0;
+            if (part == 0 && ch == 0x1e) { if (item[0] == '/') { int q = 0; while (item[q] && q < MAX_PATH_LENGTH - 1) { c->current_dir[q] = item[q]; q++; } c->current_dir[q] = 0; } }
+            else if (part == 1 && item[0]) { char* eq = item; while (*eq && *eq != '=') eq++; if (*eq) { *eq = 0; set_env_var(c, item, eq + 1); (*vars)++; } }
+            else if (part == 2 && item[0]) { add_to_history(c, item); (*hist)++; }
+            k = 0;
+            if (ch == 0x1e) part++;
+            continue;
+        }
+        if (k < (int)sizeof(item) - 1) item[k++] = ch;
+    }
+    return 0;
+}
+const char* shell_session_cwd(void) { return g_live_ctx ? g_live_ctx->current_dir : "/"; }
+int shell_file_read(const char* p, char* buf, int cap) { if (!g_pm_ctx) g_pm_ctx = g_live_ctx; return pm_host_read(0, p, buf, cap); }
+int shell_file_write(const char* p, const char* d, int len) { if (!g_pm_ctx) g_pm_ctx = g_live_ctx; return pm_host_write(0, p, d, len, 0); }

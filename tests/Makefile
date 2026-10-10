@@ -339,6 +339,14 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_platform: $(UNIT_DIR)/userspace/test_pla
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/platform.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_pmedit: $(UNIT_DIR)/userspace/test_pmedit.c ../userspace/pmedit.c ../userspace/pmedit.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/pmedit.c $(FRAMEWORK_SOURCES)
+
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_fleet: $(UNIT_DIR)/userspace/test_fleet.c ../userspace/fleet.c ../userspace/fleet.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/fleet.c $(FRAMEWORK_SOURCES)
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_promptmessage: $(UNIT_DIR)/userspace/test_promptmessage.c ../userspace/promptmessage.c ../userspace/promptmessage.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/promptmessage.c $(FRAMEWORK_SOURCES)

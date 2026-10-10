@@ -389,7 +389,19 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
 
     if (!scene || scene->magic != OS_FB_MAGIC) return -1;
     memcpy(&local, scene, sizeof(local));
-    if (com2_poll_size(&nw, &nh)) {
+    if (local.want_w >= 320 && local.want_h >= 200 &&
+        (uint32_t)local.want_w * (uint32_t)local.want_h * 4u <= GFX_BACK_MAX_BYTES) {
+        nw = local.want_w; nh = local.want_h;
+        if (!g_on || nw != g_w || nh != g_h) {
+            if (vbe_set_mode(nw, nh) == 0) {
+                g_on = 1;
+                g_saved_cursor_valid = 0;
+                vga_desktop_set(1);
+                log_fb_size("osui gui fb adapt ", nw, nh);
+                g_logged = 1;
+            }
+        }
+    } else if (com2_poll_size(&nw, &nh)) {
         if (!g_on || nw != g_w || nh != g_h) {
             if (vbe_set_mode(nw, nh) == 0) {
                 g_on = 1;

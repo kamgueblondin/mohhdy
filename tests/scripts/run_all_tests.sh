@@ -114,6 +114,12 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_platform.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/platform.c"
     fi
+    if [ "$(basename "$test_file")" = "test_fleet.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/fleet.c"
+    fi
+    if [ "$(basename "$test_file")" = "test_pmedit.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/pmedit.c"
+    fi
     if [ "$(basename "$test_file")" = "test_promptmessage.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/promptmessage.c"
     fi

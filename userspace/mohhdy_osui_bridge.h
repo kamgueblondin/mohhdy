@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 329
+#define MOHHDY_SHELL_COMMAND_COUNT 340
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -107,6 +107,10 @@ static const char * const mohhdy_shell_commands[] = {
     "deny",
     "deploy-apply",
     "deploy-make",
+    "deploy-promote",
+    "deploy-rollback",
+    "deploy-stage",
+    "deploy-status",
     "deploy-verify",
     "desktop",
     "detach",
@@ -119,6 +123,8 @@ static const char * const mohhdy_shell_commands[] = {
     "export",
     "fat16-cat",
     "fat16-list",
+    "fleet-collect",
+    "fleet-report",
     "fs-list",
     "fs-read",
     "fs-write",
@@ -207,6 +213,7 @@ static const char * const mohhdy_shell_commands[] = {
     "pm-doc",
     "pm-edit",
     "pm-exec",
+    "pm-ide",
     "pm-install",
     "pm-run",
     "pm-say",
@@ -263,9 +270,11 @@ static const char * const mohhdy_shell_commands[] = {
     "service-watch",
     "session-cleanup",
     "session-end",
+    "session-handoff",
     "session-list",
     "session-new",
     "session-restore",
+    "session-resume",
     "session-status",
     "session-ttl",
     "session-use",
@@ -276,6 +285,8 @@ static const char * const mohhdy_shell_commands[] = {
     "stage",
     "stage-prompt",
     "stat",
+    "sync-push",
+    "sync-status",
     "sysinfo",
     "tail",
     "takeover",
