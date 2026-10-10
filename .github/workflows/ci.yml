@@ -161,8 +161,8 @@ jobs:
       - name: QEMU aiworker Ring 3 GGUF session (hors integration-qemu)
         run: make qemu-ai-gguf
 
-      - name: QEMU phase 6 platform groundwork (HAL, screen, power, devices, migration, deploy)
-        run: make qemu-platform
+      - name: Phase 8 production contract (one guest)
+        run: make qemu-production
 
       - name: Upload logs
         if: always()

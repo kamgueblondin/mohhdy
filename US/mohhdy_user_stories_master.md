@@ -201,6 +201,10 @@ Etat Phase 7 (10 octobre 2026, PR #119 empilee sur #117 ; detail dans `docs/coll
 - US-119 : Développement du système de métriques business
 - US-120 : Création du système de roadmap évolutive
 
+Etat Phase 8 (10 octobre 2026, PR #120 ; detail dans `docs/production.md`, preuve `make qemu-production`) :
+- Fait : US-107 monitoring, US-109 retour arriere automatique, US-111 sauvegarde/restauration (RAM), US-113 analyse de journaux, US-118 retours.
+- Partiel : US-106 (mesures seulement), US-108 (deploiement local), US-110 (decision seulement), US-112 (integrite de fichiers), US-114 (seuils), US-115 (tendance lineaire), US-116 (diagnostic), US-117 (lecons fixes), US-119 (compteurs de commandes), US-120 (resume statique).
+
 ## Estimation Globale
 
 ### Complexité par Phase
