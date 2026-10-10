@@ -29,7 +29,22 @@ NODES = [
 for node in NODES:
     for key in ("log", "err", "mon"):
         node[key] = node[key].replace("p2p-", "collab-")
-cmd, wait_log, log, say = p2p.cmd, p2p.wait_log, p2p.log, p2p.say
+cmd, log, say = p2p.cmd, p2p.log, p2p.say
+
+
+def wait_log(node, needle, timeout):
+    """Wait for a ledger entry; datagrams are not retransmitted, so after a
+    quiet spell ask the peers for missing entries (collab-sync) and retry."""
+    if not needle.startswith("collab got "):
+        return p2p.wait_log(node, needle, timeout)
+    for attempt in range(4):
+        try:
+            return p2p.wait_log(node, needle, 20)
+        except Exception:  # noqa: BLE001 - base.wait_for timeout
+            if attempt == 3:
+                raise
+            say("%s: %r missing, syncing" % (node["label"], needle))
+            cmd(node, "collab-sync", "collab-sync ok asked ")
 
 
 def main():

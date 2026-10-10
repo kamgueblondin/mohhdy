@@ -711,7 +711,7 @@ int p2p_send_app(p2p_node_t* n, const p2p_host_t* h, uint32_t peer_id, const uin
     for (i = 0; i < P2P_PEERS; i++) {
         p2p_peer_t* p = &n->peers[i];
         if (!p->used || !p->keyed || (peer_id && p->id != peer_id)) continue;
-        if (!peer_id && !p->up) continue;
+        /* keyed peers keep their link key across a heartbeat flap */
         if (seal_send(n, h, p, P2P_I_APP, data, length) == 0) sent++;
     }
     return sent;

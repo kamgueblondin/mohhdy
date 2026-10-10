@@ -119,7 +119,7 @@ int p2p_block(p2p_node_t* n, const char* peer, int blocked);
 /* Report lines into out (peers, health, stats, kv). */
 int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char* out, int cap);
 const char* p2p_type_name(int type);
-/* Sealed application payload to one peer id, or to every keyed up peer (0).
+/* Sealed application payload to one peer id, or to every keyed peer (0).
  * Returns the number of peers it was sent to. */
 int p2p_send_app(p2p_node_t* n, const p2p_host_t* h, uint32_t peer_id, const uint8_t* data, int length);
 const char* p2p_peer_name(const p2p_node_t* n, uint32_t id);
