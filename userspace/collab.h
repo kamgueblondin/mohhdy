@@ -23,7 +23,9 @@
 
 enum {
     CE_JOIN = 1, CE_TRANSFER, CE_OFFER, CE_RESERVE, CE_TASK, CE_CLAIM, CE_DONE, CE_ACCEPT, CE_REJECT,
-    CE_RATE, CE_PROPOSE, CE_VOTE, CE_PROFILE, CE_REDACT, CE_TICKET, CE_ANSWER, CE_COUNT
+    CE_RATE, CE_PROPOSE, CE_VOTE, CE_PROFILE, CE_REDACT, CE_TICKET, CE_ANSWER,
+    /* US-094 auctions, US-101 disputes, US-099 user-defined contracts */
+    CE_AUCTION, CE_BID, CE_CLOSE, CE_DISPUTE, CE_RULING, CE_CONTRACT, CE_SETTLE, CE_COUNT
 };
 
 typedef struct {
@@ -110,6 +112,16 @@ const uint8_t* collab_key_of(const collab_t* c, uint32_t origin);
  * mode 0: signed with our key but carrying the victim's public key,
  * mode 1: carrying our own key, mode 2: unsigned. Not stored locally. */
 int collab_forge(collab_t* c, const collab_host_t* h, uint32_t victim, uint32_t amount, int mode);
+/* US-099: user-defined contract conditions are PromptMessage expressions,
+ * evaluated by the host (same interpreter on every node, no file or system
+ * access). Returns 1 true, 0 false, -1 invalid. Variables: bal (payee
+ * balance), rep (payee average rating x10), paid (tasks paid to payee). */
+typedef int (*collab_cond_fn)(const char* cond, int32_t bal, uint32_t rep10, uint32_t paid);
+void collab_set_cond(collab_cond_fn fn);
+/* US-094 search: offers and open auctions whose text contains `word`
+ * (case-insensitive, "*" = all) at price <= max_price (0: any), cheapest
+ * first. Returns the number of hits. */
+int collab_search(collab_t* c, const collab_host_t* h, const char* word, uint32_t max_price, char* out, int cap);
 /* persistence: serialize / restore the whole ledger, keys included */
 int collab_save(const collab_t* c, uint8_t* out, int cap);
 int collab_load(collab_t* c, const uint8_t* in, int len);

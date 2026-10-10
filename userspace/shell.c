@@ -2810,6 +2810,7 @@ static int pm_host_mem(void* c) {
 static void pm_host_out(void* c, const char* s) { (void)c; print_string(s); print_string("\n"); }
 static const pm_host_t g_pm_host = {0, pm_host_read, pm_host_write, pm_host_mem, pm_host_out};
 
+
 static void pm_print_hex(unsigned int v) {
     const char* h = "0123456789abcdef";
     char b[9]; int i;
@@ -3237,6 +3238,8 @@ static int is_builtin(const char* cmd) {
         "collab-review", "collab-rate", "collab-propose", "collab-vote", "collab-profile", "collab-forget",
         "collab-export", "collab-ticket", "collab-answer", "collab-sync", "collab-balances", "collab-audit",
         "collab-tasks", "collab-offers", "collab-votes", "collab-tickets", "collab-keys", "collab-forge",
+        "collab-auction", "collab-bid", "collab-close", "collab-search", "collab-auctions", "collab-dispute",
+        "collab-rule", "collab-disputes", "collab-contract", "collab-settle", "collab-contracts",
         "session-handoff", "session-resume", "sync-push", "sync-status", "fleet-report", "fleet-collect",
         "deploy-stage", "deploy-promote", "deploy-rollback", "deploy-status",
         "hal-info", "hal-port", "screen-adapt", "gesture", "power-profile", "power-status", "dev-list",

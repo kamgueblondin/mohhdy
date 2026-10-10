@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 340
+#define MOHHDY_SHELL_COMMAND_COUNT 351
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -74,9 +74,17 @@ static const char * const mohhdy_shell_commands[] = {
     "clear",
     "cls",
     "collab-answer",
+    "collab-auction",
+    "collab-auctions",
     "collab-audit",
     "collab-balances",
+    "collab-bid",
     "collab-claim",
+    "collab-close",
+    "collab-contract",
+    "collab-contracts",
+    "collab-dispute",
+    "collab-disputes",
     "collab-export",
     "collab-forge",
     "collab-forget",
@@ -90,6 +98,9 @@ static const char * const mohhdy_shell_commands[] = {
     "collab-rate",
     "collab-reserve",
     "collab-review",
+    "collab-rule",
+    "collab-search",
+    "collab-settle",
     "collab-sync",
     "collab-task",
     "collab-tasks",
