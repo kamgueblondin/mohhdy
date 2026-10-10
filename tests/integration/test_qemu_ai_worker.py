@@ -156,7 +156,31 @@ def spawn(client, proc, name):
 
 
 def kill(client, proc, pid):
-    send_command_until(client, "kill %s" % pid, "Processus %s termine" % pid, proc)
+    """kill is mutating: retype only if the shell never read the line.
+
+    The kernel prints "[AI] relay abort reason worker-lost" while the shell
+    prints "Processus N termine", so the line can be cut in two (CI-like
+    flake: "Processus 7 te[AI] relay abort ... rmine", then the replayed kill
+    answered "pid introuvable"). Kernel [AI] lines are removed before
+    matching."""
+    needle = "Processus %s termine" % pid
+    for _ in range(3):
+        start = len(log_text())
+        send_command(client, "kill %s" % pid)
+        deadline = time.time() + 25
+        read = False
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                raise RuntimeError("QEMU stopped early")
+            chunk = normalized_log(log_text()[start:])
+            if "ligne lue: kill %s" % pid in chunk:
+                read = True
+            if needle in re.sub(r"\[AI\] [^\n]*\n?", "", chunk):
+                return start
+            time.sleep(0.1)
+        if read:
+            raise RuntimeError("missing output: %s" % needle)
+    raise RuntimeError("kill %s never read by the shell" % pid)
 
 
 STATUS_RE = (r"(\w+) status worker (-?\d+) fwd (\d+) done (\d+) aborted (\d+) "
