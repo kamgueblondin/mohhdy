@@ -266,6 +266,8 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 
 **Etat du lot du 10 octobre 2026 :** livres : annulation effective par la touche Echap (job relaye abandonne sans rejeu Ring 0, le worker s'arrete au battement suivant ; generation Ring 0 arretee au jeton suivant ; code -149), etats et libelles de scene distincts `no_model`/`gpt2_missing`, `error`/`gpt2_error`, `cancelled`/`gpt2_cancelled` avec la ligne `etat_ia=` sur la scene VGA, et fin explicite `session-end` (historique efface, chat refuse ensuite). Preuves : `test_osui_runtime` et contrat QEMU OS-UI (etat sans modele en CI, fin de session). Reste : ouverture/fermeture GUI automatisee de bout en bout.
 
+**Etat du lot 2 du 10 octobre 2026 :** etape 2 close. Le contrat QEMU `qemu-osui-gui` ouvre le bureau VBE (`gui`), envoie `chat ai a` dans la GUI, attend la reponse (ou, sans poids GPT-2 empaquetes comme en CI, l'etat distinct `llm=gpt2_missing ai=no_model` dans l'instantane `OSUI-SNAP`, qui affichait auparavant `llm=stub_echo` en dur), termine la session (`session-end`, `ai=ended`), ferme (`console`) et verifie `gui_live=false` cote shell texte.
+
 #### Étape 3 — Sessions et capacités agentiques bornées
 
 **But :** donner à l'agent des actions utiles sans accès implicite illimité.
@@ -276,6 +278,8 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 - Les capacités de lecture VFS, recherche et commandes allowlistées sont accordées par scope.
 - Toute mutation exige une confirmation et toute opération est révocable et traçable.
 - Les tests couvrent succès, refus, expiration, worker disparu et capacité insuffisante.
+
+**Etat du lot 2 du 10 octobre 2026 :** livres dans OS-UI Ring 3 (guest QEMU) : expiration des sessions inactives (`session-ttl <s>`, statut `expired`, mutation en attente abandonnee, historique garde), `session-restore <id>` (seulement une session expiree ; une session terminee par `session-end` n'est pas restaurable), `session-cleanup` (libere les sessions fermees), confirmation explicite de toute mutation (`mcp-invoice` rend un jeton `cNNNN`, `confirm`/`deny`, jeton a usage unique, capacite reverifiee a la confirmation donc une revocation entre-temps refuse), mutation revocable (`mcp-invoice-void`), et journal (`admin-status`) de chaque expiration, restauration, nettoyage, refus et annulation. Preuves : `test_osui_runtime` (cycle de vie, confirmation/refus/revocation/expiration) et contrat QEMU OS-UI (confirm/deny/void, expiration reelle a 2 s, restauration avec historique, nettoyage). Restent : capacites de lecture VFS et commandes allowlistees accordees par scope, cas worker disparu pour l'agent.
 
 #### Étape 4 — Fournisseur réseau et repli local
 
