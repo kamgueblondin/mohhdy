@@ -20,7 +20,13 @@ static char g_line[200];
 
 static int f_send(void* c, uint32_t to, const uint8_t* d, int len) { (void)c; return p2p_send_app(shell_p2p_node(), shell_p2p_host(), to, d, len); }
 static void f_out(void* c, const char* s) { (void)c; print_string(s); print_string("\n"); }
-static int f_write(void* c, const char* p, const char* d, int len) { (void)c; return shell_file_write(p, d, len); }
+int sys_mkdir(const char* path);
+static int f_write(void* c, const char* p, const char* d, int len) {
+    (void)c;
+    /* deployments land in /app (created on first use) */
+    if (p[0] == '/' && p[1] == 'a' && p[2] == 'p' && p[3] == 'p' && p[4] == '/') (void)sys_mkdir("/app");
+    return shell_file_write(p, d, len);
+}
 static const char* f_name(void* c, uint32_t id) { (void)c; return p2p_peer_name(shell_p2p_node(), id); }
 static fleet_host_t host(void) {
     fleet_host_t h;

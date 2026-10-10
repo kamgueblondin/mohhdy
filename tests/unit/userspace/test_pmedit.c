@@ -1,7 +1,7 @@
 /* Full-screen PromptMessage editor model (userspace/pmedit.c, US-050). */
 #include "../../framework/unity.h"
 #include <string.h>
-#include "pmedit.h"
+#include "../../../userspace/pmedit.h"
 
 static pme_t g_e;
 static uint16_t g_cells[PME_COLS * PME_ROWS];

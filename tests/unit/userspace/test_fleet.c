@@ -1,7 +1,7 @@
 /* Fleet services over the P2P app channel (userspace/fleet.c). */
 #include "../../framework/unity.h"
 #include <string.h>
-#include "fleet.h"
+#include "../../../userspace/fleet.h"
 
 #define N 3
 typedef struct { int to; uint32_t from; uint8_t d[400]; int len; } msg_t;
