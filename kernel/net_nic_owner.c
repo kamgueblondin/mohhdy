@@ -51,6 +51,13 @@ int nic_owner_claim(int32_t pid, int32_t live_worker, int nic_present) {
     return 0;
 }
 
+int nic_owner_release(int32_t pid) {
+    if (pid <= 0 || g_owner != pid) return OS_NET_WORKER_REQUIRED;
+    g_owner = 0;
+    g_pending_irq = 0U;
+    return 0;
+}
+
 int32_t nic_owner_pid(void) { return g_owner; }
 
 int nic_owner_ports_open(int32_t task_pid, int32_t live_worker) {

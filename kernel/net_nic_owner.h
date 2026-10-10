@@ -15,6 +15,9 @@
 void nic_owner_init(void);
 /* 0, OS_NET_WORKER_REQUIRED (not the live worker), OS_NET_NIC_ABSENT. */
 int nic_owner_claim(int32_t pid, int32_t live_worker, int nic_present);
+/* The owner gives the ports back (its own probe found no card). 0, or
+ * OS_NET_WORKER_REQUIRED when pid is not the owner. Not a retirement. */
+int nic_owner_release(int32_t pid);
 int32_t nic_owner_pid(void);
 /* Ports open for this task on a switch: it owns the NIC and is still the
  * live worker. */

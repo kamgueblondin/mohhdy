@@ -1177,6 +1177,11 @@ typedef struct {
 #define OS_NET_NIC_PUBLISH 7U /* owner: ECX = const os_net_stack_report_t* */
 #define OS_NET_NIC_STACK   8U /* public: ECX = os_net_stack_report_t* (last published) */
 #define OS_NET_NIC_LOG_MAX 192U
+/* Strict kernel: the kernel never probes or resets the NE2000. The live
+ * net-driver claims the ports, probes / resets / reads the MAC itself and
+ * reports: ECX = 1 found (EDX = const uint8_t mac[6]) or 0 absent (the
+ * claim is released, the worker serves loopback-only). */
+#define OS_NET_NIC_REPORT 9U
 
 #define OS_NET_NIC_BASE_PORT 0x300U
 #define OS_NET_NIC_LAST_PORT 0x31FU

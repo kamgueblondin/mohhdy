@@ -42,7 +42,7 @@ def _model_packed():
 
 MODEL_PACKED = _model_packed()
 AI_GUI_MARKER = "ai_status=ready" if MODEL_PACKED else "llm=gpt2_missing ai_status=no_model"
-AI_GUI_NOTE = "etat_ia=reponse prete" if MODEL_PACKED else "etat_ia=modele absent"
+AI_GUI_NOTE = "llm=gpt2_local ai=ready" if MODEL_PACKED else "llm=gpt2_missing ai=no_model"
 
 
 def say(message):
@@ -551,9 +551,11 @@ def main():
             wait_for(proc, "osui stage mode=", CMD_TIMEOUT, ai_start)
             wait_for(proc, AI_GUI_NOTE, CMD_TIMEOUT, ai_start)
             say("typing session-end in gui ...")
+            end_start = len(log_text())
             send_command_until(
                 monitor, "session-end", "history=cleared", proc, mode="getc", wait_prompt=False
             )
+            wait_for(proc, "ai=ended", CMD_TIMEOUT, end_start)
             say("typing console ...")
             send_command_until(
                 monitor, "console", "chrome=text", proc, mode="getc", wait_prompt=True

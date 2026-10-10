@@ -2524,6 +2524,11 @@ int osui_guest_command_count(void) {
 const char *osui_get_chat_mode(void) { return G.chat_mode; }
 const char *osui_get_pane(void) { return G.pane[0] ? G.pane : "none"; }
 const char *osui_get_stage_mode(void) { return G.stage_mode; }
+const char *osui_get_stage_llm(void) { return stage_llm_name(); }
+const char *osui_get_ai_state(void) {
+    osui_session_t *s = cur();
+    return s ? s->ai_state : "idle";
+}
 const char *osui_get_stage_kind(void) { return G.stage_kind[0] ? G.stage_kind : "plan"; }
 const char *osui_get_session_id(void) {
     osui_session_t *s = cur();

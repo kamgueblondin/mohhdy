@@ -75,14 +75,26 @@ int kernel_net_utc(char* out, uint16_t capacity) {
     return net_llm_client_utc(&io, out, capacity) == 0 ? 0 : OS_NET_NIC_ABSENT;
 }
 
+/* Strict kernel (NET_RING0_FALLBACK=0): the NE2000 boot probe, reset, MAC
+ * read and the reset after a worker loss all run in the Ring 3 networker.
+ * The kernel only learns the result (OS_NET_NIC_REPORT). */
+static uint8_t boot_ne2k_deferred;
+
 static void ne2k_boot_probe(void) {
     net_llm_client_bind(&boot_ne2k_device, &boot_ne2k_io, 0);
     net_llm_client_reset();
     boot_ne2k_present = 0U;
+    boot_ne2k_deferred = 0U;
     if (ne2k_i386_io(&boot_ne2k_raw_io) != 0) return;
     boot_ne2k_io.context = 0;
     boot_ne2k_io.inb = kernel_nic_inb;
     boot_ne2k_io.outb = kernel_nic_outb;
+    if (!syscall_net_ring0_fallback_enabled()) {
+        boot_ne2k_deferred = 1U;
+        print_string("NE2000 : sonde et reset delegues au networker Ring 3 (noyau strict).\n");
+        print_string_serial("[NET] NE2000 probe deferred to the Ring 3 networker\n");
+        return;
+    }
     if (ne2k_probe(&boot_ne2k_device, 0x300U, &boot_ne2k_io) != 0) {
         print_string("NE2000 ISA absent; reseau reste desactive.\\n");
         return;
@@ -199,7 +211,16 @@ int kernel_net_nic_pump(os_net_nic_pump_t* pump) {
 
 int kernel_net_nic_info(os_net_nic_info_t* info) {
     uint8_t i;
-    if (!boot_ne2k_present || !info) return OS_NET_NIC_ABSENT;
+    if (!info) return OS_NET_NIC_ABSENT;
+    if (!boot_ne2k_present && boot_ne2k_deferred) {
+        /* Not probed by the kernel: the worker reads the PROM itself. */
+        info->base_port = (uint16_t)OS_NET_NIC_BASE_PORT;
+        info->irq = (uint8_t)OS_NET_NIC_IRQ_LINE;
+        for (i = 0U; i < 6U; i++) info->mac[i] = 0U;
+        info->reserved = 0U;
+        return 0;
+    }
+    if (!boot_ne2k_present) return OS_NET_NIC_ABSENT;
     info->base_port = (uint16_t)OS_NET_NIC_BASE_PORT;
     info->irq = (uint8_t)OS_NET_NIC_IRQ_LINE;
     for (i = 0U; i < 6U; i++) info->mac[i] = boot_ne2k_device.mac[i];
@@ -208,6 +229,31 @@ int kernel_net_nic_info(os_net_nic_info_t* info) {
 }
 
 int kernel_net_nic_present(void) { return boot_ne2k_present ? 1 : 0; }
+
+/* Ports may be handed out: a probed card, or a strict kernel that left the
+ * probe to the worker. */
+int kernel_net_nic_claimable(void) { return (boot_ne2k_present || boot_ne2k_deferred) ? 1 : 0; }
+
+/* OS_NET_NIC_REPORT from the owner on a strict kernel. */
+int kernel_net_nic_report(int found, const uint8_t* mac) {
+    uint8_t i;
+    if (!boot_ne2k_deferred) return OS_SOCKET_BAD_ARGUMENT;
+    if (!found) {
+        print_string_serial("[NET] networker probe: no NE2000, loopback-only\n");
+        return 0;
+    }
+    boot_ne2k_device.base_port = (uint16_t)OS_NET_NIC_BASE_PORT;
+    for (i = 0U; i < 6U; i++) boot_ne2k_device.mac[i] = mac[i];
+    (void)ne2k_irq_attach(&boot_ne2k_device, &boot_ne2k_io); /* bookkeeping, no port I/O */
+    if (!boot_ne2k_present) {
+        boot_ne2k_present = 1U;
+        net_llm_client_bind(&boot_ne2k_device, &boot_ne2k_io, 1);
+        print_string_serial("[NET] NE2000 probed, reset and MAC read by the Ring 3 networker\n");
+    } else {
+        print_string_serial("[NET] NE2000 reset again by a new Ring 3 networker\n");
+    }
+    return 0;
+}
 
 /* LBA 4224 holds the service-event journal. Skip the write when that sector
  * sits inside the mounted FAT16 volume (the large GGUF disk). The foundation
@@ -229,6 +275,12 @@ int kernel_net_nic_reclaim(void) {
     if (net_wire_op_active()) net_wire_op_cancel();
     if (!boot_ne2k_present) return 0;
     nic_owner_note_reclaim();
+    if (boot_ne2k_deferred) {
+        /* Strict: no Ring 0 port access. The next networker resets the
+         * card (probe + prepare + rings) before using it. */
+        print_string_serial("[NET] NE2000 released after worker loss; reset left to the next Ring 3 networker\n");
+        return 0;
+    }
     if (ne2k_probe(&boot_ne2k_device, 0x300U, &boot_ne2k_io) != 0 ||
         ne2k_prepare(&boot_ne2k_device, &boot_ne2k_io) != 0 ||
         ne2k_read_mac(&boot_ne2k_device, &boot_ne2k_io) != 0 ||

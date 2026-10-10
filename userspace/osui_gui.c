@@ -283,8 +283,12 @@ void osui_gui_write_snap(char *dst, int max) {
     if (!dst || max <= 0) return;
     dst[0] = 0;
     snap_add(dst, max, &p,
-        "OSUI-SNAP chrome=qemu_fb display_surface=vbe_lfb llm=stub_echo "
-        "us031=true python=false phase3=false guest_html_stage=false chat_mode=");
+        "OSUI-SNAP chrome=qemu_fb display_surface=vbe_lfb llm=");
+    snap_add(dst, max, &p, osui_get_stage_llm());
+    snap_add(dst, max, &p, " ai=");
+    snap_add(dst, max, &p, osui_get_ai_state());
+    snap_add(dst, max, &p,
+        " us031=true python=false phase3=false guest_html_stage=false chat_mode=");
     snap_add(dst, max, &p, osui_get_chat_mode());
     snap_add(dst, max, &p, " pane=");
     snap_add(dst, max, &p, pane && pane[0] ? pane : "none");
