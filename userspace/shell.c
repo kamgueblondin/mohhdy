@@ -15,6 +15,8 @@ int shell_prod_line(const char* line);
 void shell_prod_count(const char* line);
 #include <stddef.h>
 #include "ramfs.h"
+/* largest overlay file (fs/overlay.h OV_FILE_MAX): cat/wc/grep read it whole */
+#define OV_FILE_BYTES 4096
 #include "procsim.h"
 #include "os_syscalls.h"
 #include "os_vfs_service.h"
@@ -2738,7 +2740,7 @@ static void cmd_cd(shell_context_t* ctx, char args[][128], int arg_count) {
 
 static void cmd_cat(shell_context_t* ctx, char args[][128], int arg_count) {
     char path[RAMFS_PATH_MAX];
-    char kbuf[1024];
+    static char kbuf[OV_FILE_BYTES];
     const char* data;
     int size = 0;
     int kn;
@@ -3380,7 +3382,7 @@ static void fs_join(char* out, int max, const char* dir, const char* name) {
 
 static int kernel_copy_file_to(const char* src, const char* dest) {
     os_dirent_t st;
-    char buf[256];
+    static char buf[OV_FILE_BYTES]; /* whole file: was 256 and silently truncated */
     int n;
     int w;
     if (sys_stat(src, &st) != 0) return -1;
@@ -5071,7 +5073,7 @@ static void cmd_export(shell_context_t* ctx, char args[][128], int arg_count) {
 static int load_file_lines(shell_context_t* ctx, const char* filearg,
                            char lines[][128], int max_lines) {
     char path[RAMFS_PATH_MAX];
-    char kbuf[1024];
+    static char kbuf[OV_FILE_BYTES];
     const char* data;
     int size = 0;
     int pos = 0;
@@ -5129,7 +5131,7 @@ static void cmd_grep(shell_context_t* ctx, char args[][128], int arg_count) {
 
 static void cmd_wc(shell_context_t* ctx, char args[][128], int arg_count) {
     char path[RAMFS_PATH_MAX];
-    char kbuf[1024];
+    static char kbuf[OV_FILE_BYTES];
     const char* data;
     int size = 0;
     int lines = 0, words = 0, chars = 0;
@@ -6915,14 +6917,11 @@ void shell_main_loop(shell_context_t* ctx) {
 
 /* Pump stall diagnostics: prints when one step of the console loop took
  * more than 3 s (P2P peers declare a node down after 10 s of silence). */
+/* Names the last console-loop step for the P2P pump-gap monitor
+ * ("p2p stall N ticks after STEP", see p2p_tick). */
+void shell_p2p_hint(const char* what);
 static void stall_mark(const char* what) {
-    static unsigned int last;
-    unsigned int now = sys_ticks();
-    /* only meaningful when background work (P2P, web) rides the loop */
-    if (last && now - last > 300U && (shell_p2p_active() || osui_web_active())) {
-        print_string("shell stall "); print_int((int)(now - last)); print_string(" ticks in "); print_string(what); print_string("\n");
-    }
-    last = now;
+    shell_p2p_hint(what);
 }
 
 void main() {

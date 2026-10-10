@@ -137,6 +137,13 @@ static void report(const char* what) {
 
 int shell_p2p_active(void) { return g_node.up; }
 void shell_fleet_tick(void);
+void shell_p2p_hint(const char* what) {
+    static char hint[48];
+    int i;
+    for (i = 0; what && what[i] && i < 47; i++) hint[i] = what[i];
+    hint[i] = 0;
+    g_node.stall_hint = hint;
+}
 void shell_p2p_poll(void) { if (g_node.up) { p2p_tick(&g_node, &g_host, 4); shell_fleet_tick(); } }
 
 int shell_p2p_line(const char* line) {

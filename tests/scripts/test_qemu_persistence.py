@@ -128,6 +128,8 @@ def boot1(hub):
         cmd(node, "prod-inject 80", "prod-alert FIRING app v=80")
         cmd(node, "mkdir /cfg", "(-.-)")
         cmd(node, "write /cfg/a.conf mode=eco", "(-.-)")
+        # multi-block overlay file (8 extents of 384 bytes) must survive the reboot
+        cmd(node, "mkfile /big.bin 3000", "mkfile ok /big.bin bytes 3000")
         cmd(node, "prod-backup daily /cfg", "prod-backup ok daily files 1 bytes ")
         cmd(node, "prod-feedback 5 durable", "prod-feedback ok total 1")
         # autoscaling with real worker tasks
@@ -171,6 +173,8 @@ def boot2(hub, fpr, before):
             raise RuntimeError("overlay not loaded from disk at boot 2")
         cmd(node, "persist-status", "persist-status ok", timeout=60)
         cmd(node, "persist-load", "persist-load ok", timeout=60)
+        cmd(node, "wc /big.bin", "3000")
+        cmd(node, "cat /big.bin", "mk-0084-abcdefghijklmnopqrstuvwxyz")
         if "persist-load collab 4 entries key 0" not in log(node):
             raise RuntimeError("ledger not restored: %s" % log(node)[-600:])
         cmd(node, "p2p-up alpha 10.77.0.1 %s" % p2p.NETKEY, "p2p-up ok name alpha", timeout=120)

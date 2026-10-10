@@ -1801,6 +1801,23 @@ void test_sys_overlay_append(void) {
     cpu.ecx = (uint32_t)"b";
     cpu.edx = 1;
     syscall_handler(&cpu);
+    /* multi-block files: one node full is no longer the end of the file */
+    TEST_ASSERT_EQUAL(1, (int)cpu.eax);
+    {
+        static char huge[OV_FILE_MAX];
+        for (i = 0; i < (int)OV_FILE_MAX; i++) huge[i] = 'c';
+        cpu.eax = SYS_WRITEFILE;
+        cpu.ebx = (uint32_t)"full.txt";
+        cpu.ecx = (uint32_t)huge;
+        cpu.edx = OV_FILE_MAX;
+        syscall_handler(&cpu);
+        TEST_ASSERT_EQUAL((int)OV_FILE_MAX, (int)cpu.eax);
+    }
+    cpu.eax = SYS_APPEND;
+    cpu.ebx = (uint32_t)"full.txt";
+    cpu.ecx = (uint32_t)"b";
+    cpu.edx = 1;
+    syscall_handler(&cpu);
     TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, (int)cpu.eax);
 }
 
