@@ -166,8 +166,12 @@ int ne2k_tx_submit(ne2k_device_t* device, const ne2k_io_t* io,
         return -1;
     base = device->base_port;
     wire_length = length < NE2K_ETHERNET_MIN_FRAME ? NE2K_ETHERNET_MIN_FRAME : length;
+    /* Keep the chip started (STA, not STP): QEMU's ne2000_receive drops every
+     * frame that arrives while CR.STP is set, so stopping the 8390 for each
+     * TX lost the peer frame that answered the previous TX (ServerHello after
+     * ClientHello, flight after ACK). Remote DMA and TX work while started. */
     io->outb(io->context, (uint16_t)(base + NE2K_REG_COMMAND),
-             NE2K_COMMAND_STOP | NE2K_COMMAND_NODMA | NE2K_COMMAND_PAGE0);
+             NE2K_COMMAND_START | NE2K_COMMAND_NODMA | NE2K_COMMAND_PAGE0);
     io->outb(io->context, (uint16_t)(base + NE2K_REG_DCR), NE2K_DCR_BYTE_MODE);
     io->outb(io->context, (uint16_t)(base + NE2K_REG_RBCR0), (uint8_t)wire_length);
     io->outb(io->context, (uint16_t)(base + NE2K_REG_RBCR1), (uint8_t)(wire_length >> 8));
