@@ -9,7 +9,7 @@ ASFLAGS = --32
 
 # Programmes à compiler
 PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver vfsvirtual networker vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim vfshistclaim waitchild ok
-USER_HEADERS = promptmessage.h ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h
+USER_HEADERS = promptmessage.h ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h prod.h
 # Tranche 4: Ring 3 ATA driver + proofs.
 PROGRAMS += atadriver ataclient atarogue
 # Tranche 5: net-driver gate proof client.
