@@ -358,6 +358,13 @@
 #define OS_PEER_WEB_CLOSE 8U
 #define OS_PEER_WEB_STOP 9U
 #define OS_PEER_WEB_TLS 1U
+/* Phase 5 P2P (US-061): UDP datagrams broadcast on the shared Ethernet.
+ * No DHCP lease needed: the caller gives its own static address.
+ * P2P_SEND: data = src_ip[4] dst_ip[4] payload, length = 8 + payload, port.
+ * P2P_RECV: polls up to `attempts` frames for UDP `port`; returns 1 with
+ * data = src_ip[4] src_mac[6] payload, length = 10 + payload, or 0. */
+#define OS_PEER_P2P_SEND 10U
+#define OS_PEER_P2P_RECV 11U
 #define OS_PEER_WEB_SLOTS 4U
 #define OS_PEER_SLOT_FREE 0U
 #define OS_PEER_SLOT_LISTEN 1U

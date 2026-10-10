@@ -102,6 +102,12 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/ramfs.c $BASE_DIR/userspace/procsim.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
+    if [ "$(basename "$test_file")" = "test_net_p2p.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/net_p2p.c $BASE_DIR/kernel/net_ipv4_udp.c"
+    fi
+    if [ "$(basename "$test_file")" = "test_p2p.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+    fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c"
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
@@ -276,7 +282,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/net_http_tls.c"
     fi
     if [ "$(basename "$test_file")" = "test_net_stack_exec.c" ]; then
-        extra_src="$extra_src $BASE_DIR/kernel/net_stack_exec.c $BASE_DIR/kernel/net_llm_client.c $BASE_DIR/kernel/net_tls_server.c $BASE_DIR/kernel/net_nic_owner.c"
+        extra_src="$extra_src $BASE_DIR/kernel/net_stack_exec.c $BASE_DIR/kernel/net_llm_client.c $BASE_DIR/kernel/net_p2p.c $BASE_DIR/kernel/net_tls_server.c $BASE_DIR/kernel/net_nic_owner.c"
     fi
     
     # Compiler
