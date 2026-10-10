@@ -94,6 +94,9 @@ vfsserver: vfs_server.o start.o
 	@echo "Linking vfsserver..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
+p2p_%.o: ../kernel/%.c $(USER_HEADERS)
+	$(CC) $(CFLAGS) -I.. -DMOHHDY_RING3 -c -o $@ $<
+
 vfsvirtual: vfs_virtual_worker.o start.o
 	@echo "Linking vfsvirtual..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
@@ -110,7 +113,7 @@ net_worker.o: net_worker.c ../kernel/ne2k.h ../kernel/net_stack_exec.h ../kernel
 # and runs every relayed network syscall at CPL 3.
 NET_STACK_SRCS = ne2k net_nic net_ethernet_arp net_ipv4_udp net_dhcp net_dns net_tcp net_socket \
                  net_llm_socket net_http_tls net_tls_record net_tls_server net_wire net_stack_exec \
-                 net_llm_client sha256 aes_gcm x509_der bigint ecdsa_p256 x25519 rsa_verify rtc
+                 net_llm_client net_p2p sha256 aes_gcm x509_der bigint ecdsa_p256 x25519 rsa_verify rtc
 NET_STACK_OBJS = $(addprefix drvnet_,$(addsuffix .o,$(NET_STACK_SRCS)))
 drvnet_%.o: ../kernel/%.c $(USER_HEADERS)
 	$(CC) $(CFLAGS) -I.. -DMOHHDY_RING3 -c -o $@ $<

@@ -289,9 +289,13 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_net_wire: $(UNIT_DIR)/kernel/test_net_wire.
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/net_wire.c ../kernel/net_relay.c ../kernel/ne2k.c ../kernel/ne2k_hw.c ../kernel/net_socket.c ../kernel/net_llm_socket.c ../kernel/rtc.c ../kernel/net_nic.c ../kernel/net_ethernet_arp.c ../kernel/net_ipv4_udp.c ../kernel/net_dhcp.c ../kernel/net_dns.c ../kernel/net_tcp.c ../kernel/net_tls_record.c ../kernel/net_http_tls.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x509_der.c ../kernel/rsa_verify.c ../kernel/bigint.c ../kernel/ecdsa_p256.c ../kernel/x25519.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_net_stack_exec: $(UNIT_DIR)/kernel/test_net_stack_exec.c ../kernel/net_stack_exec.c ../kernel/net_llm_client.c ../kernel/net_tls_server.c ../kernel/net_wire.c ../kernel/net_relay.c ../kernel/net_nic_owner.c ../kernel/ne2k.c ../kernel/ne2k_hw.c ../kernel/net_socket.c ../kernel/net_llm_socket.c ../kernel/rtc.c ../kernel/net_nic.c ../kernel/net_ethernet_arp.c ../kernel/net_ipv4_udp.c ../kernel/net_dhcp.c ../kernel/net_dns.c ../kernel/net_tcp.c ../kernel/net_tls_record.c ../kernel/net_http_tls.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x509_der.c ../kernel/rsa_verify.c ../kernel/bigint.c ../kernel/ecdsa_p256.c ../kernel/x25519.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_net_p2p: $(UNIT_DIR)/kernel/test_net_p2p.c ../kernel/net_p2p.c ../kernel/net_ipv4_udp.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/net_stack_exec.c ../kernel/net_llm_client.c ../kernel/net_tls_server.c ../kernel/net_wire.c ../kernel/net_relay.c ../kernel/net_nic_owner.c ../kernel/ne2k.c ../kernel/ne2k_hw.c ../kernel/net_socket.c ../kernel/net_llm_socket.c ../kernel/rtc.c ../kernel/net_nic.c ../kernel/net_ethernet_arp.c ../kernel/net_ipv4_udp.c ../kernel/net_dhcp.c ../kernel/net_dns.c ../kernel/net_tcp.c ../kernel/net_tls_record.c ../kernel/net_http_tls.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x509_der.c ../kernel/rsa_verify.c ../kernel/bigint.c ../kernel/ecdsa_p256.c ../kernel/x25519.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/net_p2p.c ../kernel/net_ipv4_udp.c $(FRAMEWORK_SOURCES)
+
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_net_stack_exec: $(UNIT_DIR)/kernel/test_net_stack_exec.c ../kernel/net_stack_exec.c ../kernel/net_llm_client.c ../kernel/net_p2p.c ../kernel/net_tls_server.c ../kernel/net_wire.c ../kernel/net_relay.c ../kernel/net_nic_owner.c ../kernel/ne2k.c ../kernel/ne2k_hw.c ../kernel/net_socket.c ../kernel/net_llm_socket.c ../kernel/rtc.c ../kernel/net_nic.c ../kernel/net_ethernet_arp.c ../kernel/net_ipv4_udp.c ../kernel/net_dhcp.c ../kernel/net_dns.c ../kernel/net_tcp.c ../kernel/net_tls_record.c ../kernel/net_http_tls.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x509_der.c ../kernel/rsa_verify.c ../kernel/bigint.c ../kernel/ecdsa_p256.c ../kernel/x25519.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/net_stack_exec.c ../kernel/net_llm_client.c ../kernel/net_p2p.c ../kernel/net_tls_server.c ../kernel/net_wire.c ../kernel/net_relay.c ../kernel/net_nic_owner.c ../kernel/ne2k.c ../kernel/ne2k_hw.c ../kernel/net_socket.c ../kernel/net_llm_socket.c ../kernel/rtc.c ../kernel/net_nic.c ../kernel/net_ethernet_arp.c ../kernel/net_ipv4_udp.c ../kernel/net_dhcp.c ../kernel/net_dns.c ../kernel/net_tcp.c ../kernel/net_tls_record.c ../kernel/net_http_tls.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x509_der.c ../kernel/rsa_verify.c ../kernel/bigint.c ../kernel/ecdsa_p256.c ../kernel/x25519.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_net_relay: $(UNIT_DIR)/kernel/test_net_relay.c ../kernel/net_relay.c ../kernel/net_socket.c ../kernel/net_tcp.c ../kernel/net_tls_record.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x509_der.c ../kernel/x25519.c ../kernel/rsa_verify.c ../kernel/bigint.c ../kernel/ecdsa_p256.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
@@ -320,6 +324,16 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_%: $(UNIT_DIR)/kernel/test_%.c $(FRAMEWORK_
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ramfs: $(UNIT_DIR)/userspace/test_ramfs.c ../userspace/ramfs.c ../userspace/procsim.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/ramfs.c ../userspace/procsim.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_platform: $(UNIT_DIR)/userspace/test_platform.c ../userspace/platform.c ../userspace/platform.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/platform.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_collab: $(UNIT_DIR)/userspace/test_collab.c ../userspace/collab.c ../userspace/collab.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/collab.c ../kernel/sha256.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_promptmessage: $(UNIT_DIR)/userspace/test_promptmessage.c ../userspace/promptmessage.c ../userspace/promptmessage.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
