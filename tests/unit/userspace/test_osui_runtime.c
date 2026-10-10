@@ -601,7 +601,13 @@ static void test_ai_worker_lost(void) {
     osui_test_ai_error = 0U;
     rc = run_line("chat ai retry"); /* session kept open, retry works */
     TEST_ASSERT_EQUAL(0, rc);
-    TEST_ASSERT(strstr(g_out, "ai_status=ready") != NULL);
+    TEST_ASSERT(strstr(g_out, "ai_status=ready session_id") != NULL);
+    /* Worker stalled, Ring 0 answered: success, but the degradation shows. */
+    osui_test_ai_abort = 2U;
+    rc = run_line("chat ai degraded");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "ai_status=ready worker=stalled fallback=ring0") != NULL);
+    osui_test_ai_abort = 0U;
 }
 
 int main(void) {

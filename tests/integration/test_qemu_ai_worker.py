@@ -364,8 +364,23 @@ def contract(monitor, proc):
     hb = re.search(r'"heartbeats":(\d+)', text)
     if not hb or int(hb.group(1)) < 2:
         raise RuntimeError("ai-runtime json heartbeats: %r" % (hb and hb.group(0)))
+    # 10. OS-UI chat while the worker is starved: the relayed job stalls,
+    # Ring 0 answers, and OS-UI shows the degradation (not a silent ready).
+    start = len(log_text())
+    send_command(monitor, "chat ai a")
+    wait_regex(r"osui chat ok llm=gpt2_local ai_status=ready worker=stalled fallback=ring0", proc, start,
+               timeout=120)
+    wait_for("etat_ia=reponse (repli Ring 0, worker IA perdu)", proc, start, timeout=10)
+    wait_for("(-.-)", proc, start, timeout=30)
     kill(monitor, proc, wpid)
-    print("ai worker contract: stall detected in %.1fs, ESC cancel -149 without replay" % stall_s)
+    # 11. Worker gone for good: OS-UI is served by the Ring 0 path directly,
+    # without a stale degradation flag.
+    start = len(log_text())
+    send_command(monitor, "chat ai a")
+    wait_regex(r"osui chat ok llm=gpt2_local ai_status=ready session_id", proc, start, timeout=120)
+    wait_for("(-.-)", proc, start, timeout=30)
+    print("ai worker contract: stall detected in %.1fs, ESC cancel -149 without replay, "
+          "OS-UI shows worker=stalled fallback=ring0" % stall_s)
 
     print("ai worker: tokens [%s] text [%s]; worker/kernel/fallback paths equal; "
           "final counters %r; worker footprint %d pages, free before/after %d/%d" %

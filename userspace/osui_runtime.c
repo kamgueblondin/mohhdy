@@ -1370,11 +1370,26 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
             emit_stage(out, max, &p);
             return OSUI_ERR;
         }
-        s_cpy(G.stage_ai_note, 48, "etat_ia=reponse prete");
-        s_cpy(s->ai_state, 16, "ready");
-        add_msg(s, reply);
-        stage_render(text);
-        out_add(out, max, &p, "osui chat ok llm=gpt2_local ai_status=ready session_id=");
+        {
+            /* The Ring 3 worker was lost or stalled mid request and the
+             * kernel answered in Ring 0: say so (degraded, not hidden). */
+            unsigned ab = osui_ai_last_abort();
+            const char *w = ab == OS_AI_ABORT_WORKER_LOST ? "lost" :
+                            ab == OS_AI_ABORT_STALLED ? "stalled" :
+                            ab == OS_AI_ABORT_TIMEOUT ? "timeout" : 0;
+            s_cpy(G.stage_ai_note, 48, w ? "etat_ia=reponse (repli Ring 0, worker IA perdu)"
+                                         : "etat_ia=reponse prete");
+            s_cpy(s->ai_state, 16, "ready");
+            add_msg(s, reply);
+            stage_render(text);
+            out_add(out, max, &p, "osui chat ok llm=gpt2_local ai_status=ready");
+            if (w) {
+                out_add(out, max, &p, " worker=");
+                out_add(out, max, &p, w);
+                out_add(out, max, &p, " fallback=ring0");
+            }
+            out_add(out, max, &p, " session_id=");
+        }
         out_add(out, max, &p, s->id);
         emit_rid(out, max, &p, rid);
         out_add(out, max, &p, " response=");
