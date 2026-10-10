@@ -181,8 +181,8 @@ Etat Phase 6 (10 octobre 2026, socle i386 ; detail dans `docs/platform.md`, preu
 - US-105 : Création du système de support communautaire
 
 Etat Phase 7 (10 octobre 2026, PR #119 empilee sur #117 ; detail dans `docs/collab.md`, preuve `make qemu-collab`) :
-- Fait : US-091 points, US-092 ressources partagees, US-094 marche avec recherche et encheres (PR #127), US-099 contrats definis par l'utilisateur en PromptMessage (PR #127), US-101 litiges arbitres par les membres (PR #127), US-095 reputation, US-096 taches distribuees, US-098 audit, US-100 gouvernance, US-102 donnees personnelles, US-105 support.
-- Partiel : US-093 authentification (cle de reseau, pas de signature par noeud), US-103 confidentialite (champs prives locaux, redaction), US-104 conformite (export et oubli seulement).
+- Fait : US-091 points, US-092 ressources partagees, US-093 authentification distribuee (cle Schnorr par noeud, entrees signees et verifiees, falsifications rejetees, cle chiffree au repos ; PR #121/#123, `make qemu-collab`), US-094 marche avec recherche et encheres (PR #127), US-099 contrats definis par l'utilisateur en PromptMessage (PR #127), US-101 litiges arbitres par les membres (PR #127), US-095 reputation, US-096 taches distribuees, US-098 audit, US-100 gouvernance, US-102 donnees personnelles, US-105 support.
+- Partiel : US-103 confidentialite (champs prives locaux, redaction), US-104 conformite (export et oubli seulement).
 - Non livre : US-097 paiement reel (exclu).
 
 ### Phase 8 - Production (US-106 à US-120)

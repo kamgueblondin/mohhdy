@@ -77,11 +77,7 @@ jobs:
 
       # Strict network kernel (NET_RING0_FALLBACK=0): networker is the only
       # network path, no Ring 0 fallback after its death (about 1 min).
-      - name: QEMU strict network build, no Ring 0 fallback
-        run: make qemu-net-no-ring0
-
-      - name: QEMU strict network build, loopback-only worker (no NE2000)
-        run: make qemu-net-loopback-worker
+      # strict network contracts moved to the fleet job (rebalance, PR #128)
 
       - name: Upload logs
         if: always()
@@ -178,7 +174,7 @@ jobs:
             test_logs/
 
   production:
-    name: QEMU production + persistence across reboot
+    name: QEMU production
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -202,8 +198,7 @@ jobs:
       - name: Phase 8 production contract (one guest)
         run: make qemu-production
 
-      - name: Persistence across a cold reboot (two boots, same disk)
-        run: make qemu-persistence
+      # persistence contract moved to the p2p-route job (rebalance, PR #128)
 
       - name: Upload logs
         if: always()
@@ -215,7 +210,7 @@ jobs:
             test_logs/
 
   partials:
-    name: QEMU fleet three guests + desktop partials
+    name: QEMU fleet three guests + desktop partials + strict network
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -244,6 +239,12 @@ jobs:
 
       - name: QEMU runs leave the tree clean
         run: make tree-clean-check
+
+      - name: QEMU strict network build, no Ring 0 fallback
+        run: make qemu-net-no-ring0
+
+      - name: QEMU strict network build, loopback-only worker (no NE2000)
+        run: make qemu-net-loopback-worker
 
       - name: Upload logs
         if: always()
@@ -292,7 +293,7 @@ jobs:
             test_logs/
 
   p2p-route:
-    name: QEMU P2P multi-hop routing four guests
+    name: QEMU P2P multi-hop routing four guests + persistence
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -315,6 +316,9 @@ jobs:
 
       - name: QEMU P2P line topology (relayed hellos, 3-hop sealed delivery)
         run: make qemu-p2p-route
+
+      - name: Persistence across a cold reboot (two boots, same disk)
+        run: make qemu-persistence
 
       - name: QEMU runs leave the tree clean
         run: make tree-clean-check
