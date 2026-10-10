@@ -522,6 +522,18 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
     uint32_t t;
     int i, got;
     if (!n || !n->up) return;
+    t = now(h);
+    if (n->last_pump && (uint32_t)(t - n->last_pump) > P2P_STALL_TICKS) {
+        char line[96];
+        uint32_t gap = t - n->last_pump;
+        n->stalls++;
+        if (gap > n->worst_gap) n->worst_gap = gap;
+        line[0] = 0;
+        s_cat(line, "p2p stall ", 96); cat_u(line, gap, 96); s_cat(line, " ticks after ", 96);
+        s_cat(line, n->stall_hint ? n->stall_hint : "?", 96);
+        say(h, line);
+    }
+    n->last_pump = t;
     while (budget-- > 0 && h && h->recv) {
         got = h->recv(h->ctx, ip, mac, b, (uint16_t)sizeof(b));
         if (got <= 0) break;

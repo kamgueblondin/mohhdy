@@ -64,7 +64,7 @@ static uint32_t peer(const char* name) { p2p_peer_t* p = p2p_find(shell_p2p_node
 
 static const char* const k_cmds[] = {
     "session-handoff", "session-resume", "sync-push", "sync-status", "fleet-report", "fleet-collect",
-    "deploy-stage", "deploy-promote", "deploy-rollback", "deploy-status", 0
+    "deploy-stage", "deploy-promote", "deploy-rollback", "deploy-status", "mkfile", 0
 };
 int shell_fleet_is(const char* line) {
     char w[24]; int i;
@@ -78,6 +78,29 @@ int shell_fleet_line(const char* line) {
     const char* rest = word(line, cmd, (int)sizeof(cmd));
     fleet_host_t h;
     int n, i;
+    if (s_eq(cmd, "mkfile")) {
+        /* mkfile PATH BYTES: deterministic multi-block test file
+         * ("mk-NNNN-a..z" lines, last 4 bytes "END\n"). */
+        static char big[4096];
+        int want = 0, k = 0, ln = 0, w;
+        rest = word(rest, a, 48); rest = word(rest, b, 48);
+        for (i = 0; b[i] >= '0' && b[i] <= '9'; i++) want = want * 10 + (b[i] - '0');
+        if (!a[0] || want <= 0 || want > (int)sizeof(big)) { print_string("mkfile error usage: mkfile PATH BYTES (1..4096)\n"); return 1; }
+        while (k < want) {
+            char t[40]; int j = 0, v = ln++;
+            t[j++] = 'm'; t[j++] = 'k'; t[j++] = '-';
+            t[j++] = (char)('0' + (v / 1000) % 10); t[j++] = (char)('0' + (v / 100) % 10); t[j++] = (char)('0' + (v / 10) % 10); t[j++] = (char)('0' + v % 10);
+            t[j++] = '-';
+            for (w = 0; w < 26; w++) t[j++] = (char)('a' + w);
+            t[j++] = '\n';
+            for (w = 0; w < j && k < want; w++) big[k++] = t[w];
+        }
+        if (want >= 4) { big[want - 4] = 'E'; big[want - 3] = 'N'; big[want - 2] = 'D'; big[want - 1] = '\n'; }
+        n = shell_file_write(a, big, want);
+        if (n != want) { print_string("mkfile error write "); print_string(a); print_string("\n"); return 1; }
+        g_line[0] = 0; cat(g_line, "mkfile ok "); cat(g_line, a); cat(g_line, " bytes "); catu(g_line, (uint32_t)want); emit();
+        return 0;
+    }
     if (!shell_p2p_node()->up) { print_string(cmd); print_string(" error p2p down (p2p-up first)\n"); return 1; }
     init(); h = host();
     rest = word(rest, a, 48); rest = word(rest, b, 48); rest = word(rest, c, 48);

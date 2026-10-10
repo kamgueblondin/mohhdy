@@ -24,6 +24,7 @@
 #define P2P_HZ 100U
 #define P2P_HELLO_TICKS (2U * P2P_HZ)
 #define P2P_PING_TICKS (3U * P2P_HZ)
+#define P2P_STALL_TICKS 300U
 #define P2P_KX_BUDGET 48      /* ~11 slices per peer, each well under 0.5 s on CI */
 #define P2P_DOWN_TICKS (10U * P2P_HZ)
 #define P2P_PROPOSE_TICKS (15U * P2P_HZ)
@@ -116,6 +117,10 @@ typedef struct {
     x25519_job_t kx_job;
     int kx_peer;             /* index in peers[] or -1 */
     uint32_t kx_done;
+    /* Pump starvation monitor: a gap over P2P_STALL_TICKS between two
+     * p2p_tick calls is reported ("p2p stall N ticks after HINT"). */
+    uint32_t last_pump, stalls, worst_gap;
+    const char* stall_hint;  /* set by the host: what ran before the gap */
 } p2p_node_t;
 
 int p2p_up(p2p_node_t* n, const char* name, const uint8_t ip[4], const char* netkey,

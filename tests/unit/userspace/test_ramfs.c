@@ -100,6 +100,54 @@ static void test_ramfs_parent_must_exist(void) {
     TEST_ASSERT_EQUAL(RAMFS_ERR_NOTDIR, ramfs_write("/no/file.txt", "a", 1));
 }
 
+/* Multi-block files: beyond the former 1024-byte cap, grow/shrink in
+ * place or move, blocks released on rm, NOSPACE when the pool is full. */
+static char g_big[RAMFS_FILE_MAX + 16];
+static void test_ramfs_multiblock(void) {
+    const char* d; int size = 0, i, free0, free1;
+    ramfs_init();
+    free0 = ramfs_free_blocks();
+    for (i = 0; i < 5000; i++) g_big[i] = (char)('a' + i % 26);
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_write("/big.txt", g_big, 5000));
+    d = ramfs_read("/big.txt", &size);
+    TEST_ASSERT_EQUAL(5000, size);
+    TEST_ASSERT_EQUAL(0, memcmp(d, g_big, 5000));
+    TEST_ASSERT_EQUAL(0, d[5000]);
+    TEST_ASSERT_EQUAL(free0 - 20, ramfs_free_blocks());   /* 5001 bytes = 20 blocks */
+    /* grow past the run: relocated, content intact */
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_write("/small.txt", "x", 1));
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_write("/big.txt", g_big, 7000));
+    d = ramfs_read("/big.txt", &size);
+    TEST_ASSERT_EQUAL(7000, size);
+    TEST_ASSERT_EQUAL(0, memcmp(d, g_big, 7000));
+    TEST_ASSERT_EQUAL(0, strcmp(ramfs_read("/small.txt", &size), "x"));
+    /* copy keeps all blocks; shrink releases the tail; rm frees all */
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_cp("/big.txt", "/big2.txt"));
+    d = ramfs_read("/big2.txt", &size);
+    TEST_ASSERT_EQUAL(7000, size);
+    TEST_ASSERT_EQUAL(0, memcmp(d, g_big, 7000));
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_write("/big2.txt", "tiny", 4));
+    free1 = ramfs_free_blocks();
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_rm("/big.txt"));
+    TEST_ASSERT_EQUAL(free1 + 28, ramfs_free_blocks());
+    /* the per-file cap still applies (truncated like before) */
+    for (i = 0; i < RAMFS_FILE_MAX + 10; i++) g_big[i] = 'z';
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_write("/cap.txt", g_big, RAMFS_FILE_MAX + 10));
+    (void)ramfs_read("/cap.txt", &size);
+    TEST_ASSERT_EQUAL(RAMFS_FILE_MAX - 1, size);
+    /* pool exhaustion: NOSPACE and no half-created node */
+    for (i = 0; i < 40; i++) {
+        char name[16] = "/fill00";
+        name[5] = (char)('0' + i / 10); name[6] = (char)('0' + i % 10);
+        if (ramfs_write(name, g_big, RAMFS_FILE_MAX - 1) != RAMFS_OK) {
+            TEST_ASSERT_FALSE(ramfs_exists(name));
+            break;
+        }
+    }
+    TEST_ASSERT_TRUE(i < 40);
+    TEST_ASSERT_EQUAL(0, strcmp(ramfs_read("/big2.txt", &size), "tiny"));
+}
+
 static void test_procsim_table_and_kill(void) {
     procsim_init();
     TEST_ASSERT_EQUAL(5, procsim_count());
@@ -139,6 +187,7 @@ int main(void) {
     RUN_TEST(test_ramfs_grep_content);
     RUN_TEST(test_ramfs_parent_must_exist);
     RUN_TEST(test_ramfs_mv_directory);
+    RUN_TEST(test_ramfs_multiblock);
     RUN_TEST(test_procsim_table_and_kill);
 
     unity_print_results();

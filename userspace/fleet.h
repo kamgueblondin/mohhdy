@@ -13,7 +13,7 @@
 #define FL_LOG 0x43
 #define FL_DEPLOY 0x44
 #define FL_ACK 0x45
-#define FL_PAYLOAD 2048          /* largest fleet message (chunked) */
+#define FL_PAYLOAD 4096          /* largest fleet message (chunked) */
 #define FL_FRAG 0x46             /* [tag][msg id 4][index][count] chunk */
 #define FL_FACK 0x47             /* [tag][msg id 4][index] chunk ack */
 #define FL_CHUNK 320
@@ -21,7 +21,7 @@
 #define FL_OUTBOX 24
 #define FL_XRESEND_TICKS 150U
 #define FL_XRESENDS 6
-#define FL_DATA_MAX 1900         /* file / deploy content bytes */
+#define FL_DATA_MAX 3900         /* file / deploy content bytes */
 #define FL_FILES 8
 #define FL_NODES 8
 #define FL_LOGS 4
