@@ -36,10 +36,13 @@ nw.send_command = send_command
 
 
 def send_exact(mon, proc, command, tries=3):
-    """Type a state-changing command once. QEMU sendkey can repeat or drop a
-    key under CI load (seen: 'prod-innject 80'); the shell then runs nothing
-    of ours ('Commande non trouvee'), so the exact command is typed again.
-    A line read intact is never resent."""
+    """Type a state-changing command once. Last resort only: the doubled key
+    seen in CI ('prod-innject 80') was a guest bug, fixed in
+    kernel/keyboard.c (keyboard_poll_check read port 0x60 after IRQ1 had
+    already consumed the byte, so the scancode was read twice). If a line is
+    still read differently, nothing of ours ran ('Commande non trouvee') and
+    the exact command is typed again, logged. A line read intact (or a
+    half-flushed echo) is never resent."""
     for _ in range(tries):
         start = len(nw.log_text())
         nw.send_command(mon, command)
