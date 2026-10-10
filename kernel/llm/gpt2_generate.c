@@ -1,4 +1,5 @@
 #include "gpt2_generate.h"
+#include "gpt2_sample.h"
 #include "gpt2_infer.h"
 #include "gpt2_model.h"
 #include "gpt2_tokenizer.h"
@@ -63,6 +64,7 @@ int gpt2_generate_fp32(const char* normalized, char* out, uint32_t max,
         const char* piece;
         int saw_stop = 0;
         uint32_t generated_count = token_count - prompt_tokens;
+        if (gpt2_progress_note() != 0) return GPT2_GENERATE_CANCELLED;
         rc = gpt2_generate_next_sampled(tokens, token_count, generated_count,
                                         &next_token, &rng_state);
         if (rc != 0) return -30 + rc;

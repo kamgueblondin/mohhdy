@@ -38,5 +38,7 @@ int main(void) {
     ai_puts(l.text);
     ai_status_line(&l, "aiclient", &st);
     ai_puts(l.text);
+    ai_contract_line(&l, "aiclient", &st);
+    ai_puts(l.text);
     return 0;
 }

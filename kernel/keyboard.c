@@ -1,4 +1,5 @@
 #include "keyboard.h"
+#include "syscall/syscall.h"
 #include "kernel.h"
 #include "vga_console.h"
 #include "gfx_desktop.h"
@@ -265,6 +266,7 @@ void keyboard_poll_check() {
                 // Modifieurs
                 if (scancode == 0x2A || scancode == 0x36) { g_shift_pressed = 1; return; }
                 if (scancode == 0x3A) { g_caps_lock = !g_caps_lock; return; }
+                if (scancode == 0x01 && syscall_ai_cancel_key()) return;
                 char c = map_scancode(scancode);
                 if (c != 0) {
                     kbd_put_char(c);
@@ -323,7 +325,10 @@ void keyboard_interrupt_handler() {
     
     // Traiter seulement les key press
     if (!(scancode & 0x80)) {
-        char c = map_scancode(scancode);
+        char c;
+        /* ESC while a GPT-2 generation runs cancels it (runtime contract). */
+        if (scancode == 0x01 && syscall_ai_cancel_key()) return;
+        c = map_scancode(scancode);
         if (c != 0) {
             kbd_put_char(c);
         } else if (vga_desktop_active() && scancode == 0x01) {

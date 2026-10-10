@@ -31,6 +31,7 @@
 #include "llm/gpt2_gguf_session.h"
 #include "llm/gpt2_model.h"
 #include "llm/gpt2_tokenizer.h"
+#include "llm/gpt2_sample.h"
 
 static os_ai_engine_reply_t reply;
 static os_ai_engine_job_t job;
@@ -38,6 +39,18 @@ static ai_line_t line;
 static fat16_volume_t gguf_volume;
 static int gguf_ready;
 static gpt2_gguf_session_t session;
+
+/* Liveness: gpt2_progress_hook heartbeats the job in flight once per
+ * transformer layer. STALE means the kernel dropped the job (cancelled by
+ * the user, or aborted): stop computing it and do not reply. */
+static unsigned int hb_job;
+static int hb_stop;
+
+static int worker_heartbeat(void) {
+    if (hb_job == 0U || hb_stop) return hb_stop;
+    if (ai_engine(OS_AI_ENGINE_HEARTBEAT, hb_job, 0U) == OS_AI_ENGINE_STALE) hb_stop = 1;
+    return hb_stop;
+}
 
 static int worker_next(void* context, const uint32_t* tokens, uint32_t token_count,
                        uint32_t generated_count, uint32_t* next_token, uint32_t* rng_state) {
@@ -120,8 +133,11 @@ static void serve(const os_ipc_message_t* message) {
         return;
     }
     for (i = 0U; i < sizeof(reply); i++) ((char*)&reply)[i] = 0;
+    hb_job = job.job_id;
+    hb_stop = 0;
     if (job.kind == OS_AI_JOB_GGUF_SESSION) {
         result = serve_session();
+        hb_job = 0U;
         rc = ai_engine(OS_AI_ENGINE_REPLY, (unsigned int)&reply, 0U);
         ai_line_reset(&line);
         ai_line_add(&line, job.session_op == OS_AI_GGUF_SESSION_START ? "aiworker gguf session start "
@@ -145,6 +161,7 @@ static void serve(const os_ipc_message_t* message) {
         result = gguf_ready ? gpt2_gguf_generate_next_sampled(job.tokens, job.token_count,
                                                               job.generated, &next, &rng)
                             : -1;
+        hb_job = 0U;
         reply.job_id = job.job_id;
         reply.kind = OS_AI_JOB_GGUF_STEP;
         reply.result = result;
@@ -165,6 +182,17 @@ static void serve(const os_ipc_message_t* message) {
         return;
     }
     result = gpt2_generate_fp32(job.prompt, reply.text, job.max, &trace);
+    hb_job = 0U;
+    if (hb_stop) {
+        ai_line_reset(&line);
+        ai_line_add(&line, "aiworker job ");
+        ai_line_int(&line, (int)job.job_id);
+        ai_line_add(&line, " dropped by kernel, stopped rc ");
+        ai_line_int(&line, result);
+        ai_line_add(&line, "\n");
+        wlog();
+        return;
+    }
     reply.job_id = job.job_id;
     reply.result = result;
     reply.text_length = result > 0 ? (unsigned int)result : 0U;
@@ -219,6 +247,7 @@ int main(void) {
     os_ipc_message_t message;
     int rc, fp32_rc, gguf_rc;
 
+    gpt2_progress_hook = worker_heartbeat;
     rc = ai_service_register("ai-engine");
     if (rc != 0) {
         ai_line_reset(&line);

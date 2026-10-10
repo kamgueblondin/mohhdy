@@ -130,27 +130,101 @@ static void test_malformed_reply(void) {
  * AI_RELAY_FAILED (Ring 0 fallback) and a late reply is stale. */
 static void test_worker_loss_and_timeout(void) {
     int32_t j;
+    uint32_t t;
     ai_relay_init();
     j = ai_relay_begin(5, 9, "abc", 64U, 1000U);
-    TEST_ASSERT_EQUAL(0, ai_relay_should_fail(9, 1000U + AI_RELAY_TIMEOUT_TICKS));
-    TEST_ASSERT_EQUAL(1, ai_relay_should_fail(0, 1001U));
-    TEST_ASSERT_EQUAL(1, ai_relay_should_fail(11, 1001U));
-    TEST_ASSERT_EQUAL(1, ai_relay_should_fail(9, 1001U + AI_RELAY_TIMEOUT_TICKS));
-    ai_relay_fail();
-    ai_relay_fail(); /* only once */
-    TEST_ASSERT_EQUAL(0, ai_relay_should_fail(0, 2000U));
+    /* A heartbeating worker is never stalled; the overall bound still holds. */
+    for (t = 1000U; t <= 1000U + AI_RELAY_TIMEOUT_TICKS; t += AI_RELAY_STALL_TICKS / 2U)
+        TEST_ASSERT_EQUAL(0, ai_relay_heartbeat(9, 9, (uint32_t)j, t));
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_NONE, ai_relay_should_fail(9, 1000U + AI_RELAY_TIMEOUT_TICKS));
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_WORKER_LOST, ai_relay_should_fail(0, 1001U));
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_WORKER_LOST, ai_relay_should_fail(11, 1001U));
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_TIMEOUT, ai_relay_should_fail(9, 1001U + AI_RELAY_TIMEOUT_TICKS));
+    ai_relay_fail(OS_AI_ABORT_TIMEOUT);
+    ai_relay_fail(OS_AI_ABORT_TIMEOUT); /* only once */
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_NONE, ai_relay_should_fail(0, 2000U));
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_TIMEOUT, ai_relay_last_abort());
     make_reply((uint32_t)j, "late");
     TEST_ASSERT_EQUAL(OS_AI_ENGINE_STALE, ai_relay_complete(9, 9, &reply));
     TEST_ASSERT_EQUAL(AI_RELAY_FAILED, ai_relay_take(5, &reply));
     TEST_ASSERT_EQUAL(AI_RELAY_FREE, ai_relay_state());
     ai_relay_fill_status(&st, 0);
     TEST_ASSERT_EQUAL(1U, st.aborted);
+    TEST_ASSERT_EQUAL(1U, st.timeouts);
+    TEST_ASSERT_EQUAL(0U, st.stalls);
     TEST_ASSERT_EQUAL(0U, st.completed);
     TEST_ASSERT_EQUAL(0, st.worker_pid);
-    /* Tick wrap does not fake a timeout. */
+    /* Tick wrap does not fake a timeout or a stall. */
     j = ai_relay_begin(5, 9, "abc", 64U, 0xFFFFFFF0U);
     TEST_ASSERT_TRUE(j > 0);
-    TEST_ASSERT_EQUAL(0, ai_relay_should_fail(9, 0x00000010U));
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_NONE, ai_relay_should_fail(9, 0x00000010U));
+}
+
+/* Liveness: no heartbeat for AI_RELAY_STALL_TICKS fails the job as
+ * stalled long before the overall timeout; heartbeats from anyone but the
+ * live worker, or for another job, are refused. */
+static void test_heartbeat_stall(void) {
+    int32_t j;
+    ai_relay_init();
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_STALE, ai_relay_heartbeat(9, 9, 1U, 10U)); /* nothing in flight */
+    j = ai_relay_begin(5, 9, "abc", 64U, 100U);
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_REQUIRED, ai_relay_heartbeat(7, 9, (uint32_t)j, 110U));
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_REQUIRED, ai_relay_heartbeat(9, 0, (uint32_t)j, 110U));
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_STALE, ai_relay_heartbeat(9, 9, (uint32_t)j + 1U, 110U));
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_NONE, ai_relay_should_fail(9, 100U + AI_RELAY_STALL_TICKS));
+    TEST_ASSERT_EQUAL(0, ai_relay_heartbeat(9, 9, (uint32_t)j, 100U + AI_RELAY_STALL_TICKS));
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_NONE, ai_relay_should_fail(9, 100U + 2U * AI_RELAY_STALL_TICKS));
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_STALLED, ai_relay_should_fail(9, 101U + 2U * AI_RELAY_STALL_TICKS));
+    TEST_ASSERT_TRUE(AI_RELAY_STALL_TICKS * 10U <= AI_RELAY_TIMEOUT_TICKS);
+    ai_relay_fail(OS_AI_ABORT_STALLED);
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_STALE, ai_relay_heartbeat(9, 9, (uint32_t)j, 3000U));
+    TEST_ASSERT_EQUAL(AI_RELAY_FAILED, ai_relay_take(5, &reply));
+    ai_relay_fill_status(&st, 9);
+    TEST_ASSERT_EQUAL(1U, st.heartbeats);
+    TEST_ASSERT_EQUAL(1U, st.stalls);
+    TEST_ASSERT_EQUAL(1U, st.aborted);
+    TEST_ASSERT_EQUAL(0U, st.lost);
+    /* Worker lost and caller death are counted as lost. */
+    j = ai_relay_begin(5, 9, "abc", 64U, 5000U);
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_WORKER_LOST, ai_relay_should_fail(0, 5001U));
+    ai_relay_fail(OS_AI_ABORT_WORKER_LOST);
+    TEST_ASSERT_EQUAL(AI_RELAY_FAILED, ai_relay_take(5, &reply));
+    j = ai_relay_begin(5, 9, "abc", 64U, 6000U);
+    TEST_ASSERT_TRUE(j > 0);
+    ai_relay_drop_caller();
+    ai_relay_fill_status(&st, 9);
+    TEST_ASSERT_EQUAL(2U, st.lost);
+    TEST_ASSERT_EQUAL(3U, st.aborted);
+}
+
+/* ESC: the job in flight is failed as cancelled (not an abort), the worker
+ * sees STALE on its next heartbeat and its late reply is refused. */
+static void test_cancel_and_outcome(void) {
+    int32_t j;
+    ai_relay_init();
+    j = ai_relay_begin(5, 9, "abc", 64U, 100U);
+    TEST_ASSERT_EQUAL(0, ai_relay_fetch(9, 9, (uint32_t)j, &job));
+    ai_relay_fail(OS_AI_ABORT_CANCELLED);
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_STALE, ai_relay_heartbeat(9, 9, (uint32_t)j, 120U));
+    make_reply((uint32_t)j, "late");
+    TEST_ASSERT_EQUAL(OS_AI_ENGINE_STALE, ai_relay_complete(9, 9, &reply));
+    TEST_ASSERT_EQUAL(AI_RELAY_FAILED, ai_relay_take(5, &reply));
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_CANCELLED, ai_relay_last_abort());
+    ai_relay_note_cancelled(); /* a Ring 0 generation cancelled too */
+    ai_relay_record_outcome(0, 42U, OS_AI_ERROR_CANCELLED, OS_AI_ABORT_CANCELLED);
+    ai_relay_record_outcome(1, 7U, OS_AI_ERROR_NO_WORKER, OS_AI_ABORT_NONE);
+    ai_relay_fill_status(&st, 9);
+    TEST_ASSERT_EQUAL(2U, st.cancelled);
+    TEST_ASSERT_EQUAL(0U, st.aborted);
+    TEST_ASSERT_EQUAL(42U, st.last_latency_ticks);
+    TEST_ASSERT_EQUAL(OS_AI_ERROR_CANCELLED, st.last_error);
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_CANCELLED, st.last_abort);
+    TEST_ASSERT_EQUAL(7U, st.gguf_last_latency_ticks);
+    TEST_ASSERT_EQUAL(OS_AI_ERROR_NO_WORKER, st.gguf_last_error);
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_NONE, st.gguf_last_abort);
+    /* A fresh job starts with no abort reason. */
+    j = ai_relay_begin(5, 9, "abc", 64U, 200U);
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_NONE, ai_relay_last_abort());
 }
 
 /* One job at a time; bad begins; cancel; caller death. */
@@ -249,8 +323,8 @@ static void test_gguf_step(void) {
     /* Second step: worker lost -> FAILED, caller runs the Ring 0 step. */
     k = ai_relay_begin_gguf(5, 9, toks, 4U, 2U, 777U, 20U);
     TEST_ASSERT_EQUAL(j + 1, k);
-    TEST_ASSERT_EQUAL(1, ai_relay_should_fail(0, 21U));
-    ai_relay_fail();
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_WORKER_LOST, ai_relay_should_fail(0, 21U));
+    ai_relay_fail(OS_AI_ABORT_WORKER_LOST);
     TEST_ASSERT_EQUAL(AI_RELAY_FAILED, ai_relay_take(5, &reply));
     ai_relay_note_gguf_kernel(0, 1);
     ai_relay_note_gguf_kernel(0, 0);
@@ -371,8 +445,8 @@ static void test_gguf_session(void) {
     TEST_ASSERT_EQUAL(AI_RELAY_DONE, ai_relay_take(5, &reply));
     /* Worker lost mid-step: FAILED, the caller falls back to Ring 0. */
     k = ai_relay_begin_gguf_session(5, 9, OS_AI_GGUF_SESSION_STEP, 7U, 0, 64U, toks, 4U, 3U, 1U, 3U);
-    TEST_ASSERT_EQUAL(1, ai_relay_should_fail(0, 4U));
-    ai_relay_fail();
+    TEST_ASSERT_EQUAL(OS_AI_ABORT_WORKER_LOST, ai_relay_should_fail(0, 4U));
+    ai_relay_fail(OS_AI_ABORT_WORKER_LOST);
     TEST_ASSERT_EQUAL(AI_RELAY_FAILED, ai_relay_take(5, &reply));
     ai_relay_note_gguf_session_kernel();
     ai_relay_fill_status(&st, 9);
@@ -411,6 +485,8 @@ int main(void) {
     RUN_TEST(test_stale_replies_refused);
     RUN_TEST(test_malformed_reply);
     RUN_TEST(test_worker_loss_and_timeout);
+    RUN_TEST(test_heartbeat_stall);
+    RUN_TEST(test_cancel_and_outcome);
     RUN_TEST(test_slot_rules);
     RUN_TEST(test_kernel_accounting_and_trace);
     RUN_TEST(test_gguf_step);

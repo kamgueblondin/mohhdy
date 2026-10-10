@@ -16,6 +16,7 @@
 #include "../llm/gpt2_model.h"
 #include "../llm/gpt2_tokenizer.h"
 #include "../llm/gpt2_generate.h"
+#include "../llm/gpt2_sample.h"
 #include "../ai_relay.h"
 #include "../service_registry.h"
 #include "../ata_job.h"
@@ -2886,6 +2887,29 @@ static int ai_gguf_kernel_next(void* context, const uint32_t* tokens, uint32_t t
                                uint32_t generated_count, uint32_t* next_token,
                                uint32_t* rng_state);
 
+/* Runtime contract: OS_AI_ABORT_* of the relayed job of the current call
+ * (set by ai_relay_dispatch), and the Ring 0 cancel request (ESC while a
+ * Ring 0 FP32 generation runs, polled through gpt2_progress_hook). */
+static uint32_t g_ai_call_abort;
+static volatile int g_ai_ring0_busy;
+static volatile int g_ai_ring0_cancel;
+
+static uint32_t ai_error_class(int rc, int gguf) {
+    if (rc >= 0) return OS_AI_ERROR_NONE;
+    if (rc == OS_AI_CANCELLED) return OS_AI_ERROR_CANCELLED;
+    if (rc == OS_AI_GGUF_NO_WORKER) return OS_AI_ERROR_NO_WORKER;
+    if (rc == OS_AI_ENGINE_NO_MODEL) return OS_AI_ERROR_MODEL_MISSING;
+    if (gguf) {
+        if (gpt2_gguf_infer_resident_size() == 0U && !gpt2_gguf_infer_ready())
+            return OS_AI_ERROR_MODEL_MISSING;
+        return OS_AI_ERROR_MODEL_FAILED;
+    }
+    /* The worker maps the kernel's initrd blobs: no blob, no model. (-5
+     * alone is ambiguous: also a prompt longer than the context.) */
+    if (!gpt2_tokenizer_ready() || !gpt2_model_current()->ready) return OS_AI_ERROR_MODEL_MISSING;
+    return OS_AI_ERROR_MODEL_FAILED;
+}
+
 static void gguf_session_snapshot(void) {
     ai_relay_record_gguf(OS_AI_PATH_NONE, 0, g_gguf_session.tokens, g_gguf_session.prompt_tokens,
                          g_gguf_session.token_count);
@@ -2985,10 +3009,14 @@ int syscall_ai_relay_watchdog(uint32_t now) {
         g_ai_waiter = NULL;
         return 0;
     }
-    if (!ai_relay_should_fail(ai_live_worker(), now)) return 0;
     {
+        uint32_t reason = ai_relay_should_fail(ai_live_worker(), now);
         uint32_t kind = ai_relay_kind();
-        ai_relay_fail();
+        if (reason == OS_AI_ABORT_NONE) return 0;
+        ai_relay_fail(reason);
+        print_string_serial(reason == OS_AI_ABORT_STALLED ? "[AI] relay abort reason stalled (no heartbeat)\n"
+                            : reason == OS_AI_ABORT_TIMEOUT ? "[AI] relay abort reason timeout\n"
+                            : "[AI] relay abort reason worker-lost\n");
         if (!syscall_gguf_ring0_fallback_enabled() &&
             (kind == OS_AI_JOB_GGUF_SESSION || kind == OS_AI_JOB_GGUF_STEP))
             print_string_serial("[AI] relay aborted: ai-engine lost or stalled; Ring 0 refused\n");
@@ -2997,6 +3025,30 @@ int syscall_ai_relay_watchdog(uint32_t now) {
     }
     ai_relay_wake_caller();
     return 1;
+}
+
+/* ESC pressed (keyboard IRQ). A relayed job in flight is failed as
+ * cancelled and its caller woken (no Ring 0 replay; the worker sees STALE
+ * on its next heartbeat and stops). A Ring 0 FP32 generation stops at the
+ * next token. Returns 1 when the key was consumed by a cancel. */
+int syscall_ai_cancel_key(void) {
+    if (ai_relay_state() == AI_RELAY_SENT && g_ai_waiter &&
+        (int32_t)g_ai_waiter->id == ai_relay_caller()) {
+        ai_relay_fail(OS_AI_ABORT_CANCELLED);
+        print_string_serial("[AI] generation cancelled (ESC), relayed job dropped\n");
+        ai_relay_wake_caller();
+        return 1;
+    }
+    if (g_ai_ring0_busy) {
+        if (!g_ai_ring0_cancel) print_string_serial("[AI] generation cancelled (ESC), Ring 0 stops\n");
+        g_ai_ring0_cancel = 1;
+        return 1;
+    }
+    return 0;
+}
+
+static int ai_ring0_progress(void) {
+    return g_ai_ring0_busy && g_ai_ring0_cancel;
 }
 
 /* One job in flight at a time: the busy caller retries its syscall later
@@ -3047,7 +3099,11 @@ static uint32_t ai_relay_dispatch(task_t* self, task_t* worker, int32_t job,
     }
     g_ai_waiter = NULL;
     memset(reply, 0, sizeof(*reply));
-    return ai_relay_take((int32_t)self->id, reply);
+    {
+        uint32_t state = ai_relay_take((int32_t)self->id, reply);
+        if (state == AI_RELAY_FAILED) g_ai_call_abort = ai_relay_last_abort();
+        return state;
+    }
 }
 
 /* Runs one relayed generation. Returns the worker result with *fallback 0,
@@ -3072,7 +3128,15 @@ static int ai_relay_run(int32_t worker_pid, const char* prompt, char* out, uint3
     state = ai_relay_dispatch(self, worker, job,
                               max > OS_AI_ENGINE_TEXT_MAX ? OS_AI_ENGINE_TEXT_MAX : max,
                               length, &reply);
-    if (state != AI_RELAY_DONE) return 0;
+    if (state != AI_RELAY_DONE) {
+        if (g_ai_call_abort == OS_AI_ABORT_CANCELLED) {
+            *fallback = 0;
+            out[0] = '\0';
+            ai_relay_record_last(OS_AI_PATH_NONE, OS_AI_CANCELLED, 0, 0U, 0U);
+            return OS_AI_CANCELLED;
+        }
+        return 0;
+    }
     *fallback = 0;
     if (reply.result >= 0) {
         uint32_t n = reply.text_length;
@@ -3086,7 +3150,19 @@ static int ai_relay_run(int32_t worker_pid, const char* prompt, char* out, uint3
 }
 
 /* SYS_GPT2_GENERATE (22), FP32 llm.c checkpoint. */
+static int sys_gpt2_generate_impl(const char* prompt, char* out, uint32_t max);
+
+/* Wall time (ticks), result class and abort reason of every call. */
 int sys_gpt2_generate(const char* prompt, char* out, uint32_t max) {
+    uint32_t t0 = timer_get_ticks();
+    int rc;
+    g_ai_call_abort = OS_AI_ABORT_NONE;
+    rc = sys_gpt2_generate_impl(prompt, out, max);
+    ai_relay_record_outcome(0, timer_get_ticks() - t0, ai_error_class(rc, 0), g_ai_call_abort);
+    return rc;
+}
+
+static int sys_gpt2_generate_impl(const char* prompt, char* out, uint32_t max) {
     char prompt_copy[GPT2_GENERATE_PROMPT_MAX];
     gpt2_generate_trace_t trace;
     int32_t worker;
@@ -3105,7 +3181,19 @@ int sys_gpt2_generate(const char* prompt, char* out, uint32_t max) {
         rc = ai_relay_run(worker, prompt_copy, out, max, &fallback);
         if (!fallback) return rc;
     }
+    g_ai_ring0_cancel = 0;
+    g_ai_ring0_busy = 1;
     rc = gpt2_generate_fp32(prompt_copy, out, max, &trace);
+    g_ai_ring0_busy = 0;
+    if (rc == GPT2_GENERATE_CANCELLED) {
+        g_ai_ring0_cancel = 0;
+        out[0] = '\0';
+        ai_relay_note_cancelled();
+        g_ai_call_abort = OS_AI_ABORT_CANCELLED;
+        ai_relay_record_last(fallback ? OS_AI_PATH_KERNEL_FALLBACK : OS_AI_PATH_KERNEL,
+                             OS_AI_CANCELLED, 0, 0U, 0U);
+        return OS_AI_CANCELLED;
+    }
     ai_relay_note_kernel_infer(ai_live_worker() > 0, fallback);
     ai_relay_record_last(fallback ? OS_AI_PATH_KERNEL_FALLBACK : OS_AI_PATH_KERNEL, rc,
                          trace.tokens, trace.prompt_tokens, trace.token_count);
@@ -3154,6 +3242,13 @@ static int gguf_session_relay(uint32_t op, const char* prompt, char* out, uint32
         return 0; /* not reached */
     }
     if (ai_relay_dispatch(self, target, job, max, g_gguf_session.token_count, &reply) != AI_RELAY_DONE) {
+        if (g_ai_call_abort == OS_AI_ABORT_CANCELLED) {
+            /* Cancelled by the user: no Ring 0 replay, mirror unchanged. */
+            ai_relay_note_gguf_refused(OS_AI_CANCELLED);
+            out[0] = '\0';
+            *result = OS_AI_CANCELLED;
+            return 1;
+        }
         *fallback = 1;
         return 0;
     }
@@ -3339,6 +3434,9 @@ static int32_t sys_ai_engine(cpu_state_t* cpu) {
             if (rc == 0) memcpy((void*)cpu->ecx, &map, sizeof(map));
             return rc;
         }
+        case OS_AI_ENGINE_HEARTBEAT:
+            if (pid <= 0 || pid != worker) return OS_AI_ENGINE_REQUIRED;
+            return ai_relay_heartbeat(pid, worker, cpu->ecx, timer_get_ticks());
         case OS_AI_ENGINE_GGUF_READ:
             if (pid <= 0 || pid != worker) return OS_AI_ENGINE_REQUIRED;
             return ai_engine_gguf_read(pid, cpu->ecx, cpu->edx);
@@ -3368,14 +3466,28 @@ int sys_gpt2_gguf_generate(const char* prompt, char* out, uint32_t max) {
     if (current_task && current_task->type == TASK_TYPE_USER &&
         (int32_t)current_task->id == ai_live_worker())
         return OS_AI_ENGINE_REQUIRED;
-    return sys_gpt2_gguf_generate_impl(prompt, out, max);
+    {
+        uint32_t t0 = timer_get_ticks();
+        int rc;
+        g_ai_call_abort = OS_AI_ABORT_NONE;
+        rc = sys_gpt2_gguf_generate_impl(prompt, out, max);
+        ai_relay_record_outcome(1, timer_get_ticks() - t0, ai_error_class(rc, 1), g_ai_call_abort);
+        return rc;
+    }
 }
 
 int sys_gpt2_gguf_continue(char* out, uint32_t max) {
     if (current_task && current_task->type == TASK_TYPE_USER &&
         (int32_t)current_task->id == ai_live_worker())
         return OS_AI_ENGINE_REQUIRED;
-    return sys_gpt2_gguf_continue_impl(out, max);
+    {
+        uint32_t t0 = timer_get_ticks();
+        int rc;
+        g_ai_call_abort = OS_AI_ABORT_NONE;
+        rc = sys_gpt2_gguf_continue_impl(out, max);
+        ai_relay_record_outcome(1, timer_get_ticks() - t0, ai_error_class(rc, 1), g_ai_call_abort);
+        return rc;
+    }
 }
 
 // Cette fonction est maintenant obsolète pour l'entrée clavier
@@ -3388,6 +3500,9 @@ void syscall_init() {
     g_gguf_session_next_id = 0U;
     ai_relay_init();
     g_ai_waiter = NULL;
+    g_ai_ring0_busy = 0;
+    g_ai_ring0_cancel = 0;
+    gpt2_progress_hook = ai_ring0_progress;
     g_ai_mapped_pid = 0;
     // Enregistre notre handler pour l'interruption 0x80
     register_interrupt_handler(0x80, (interrupt_handler_t)syscall_handler);
@@ -3497,8 +3612,10 @@ static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu) 
             if (self && self->syscall_frame && !self->kctx_valid) {
                 self->kctx_valid = 1U;
                 if (kctx_save(self->kctx) == 0) {
+                    task_gets_waiter = self;
                     schedule(self->syscall_frame);
                 }
+                task_gets_waiter = NULL;
                 self->kctx_valid = 0U;
             }
             continue;

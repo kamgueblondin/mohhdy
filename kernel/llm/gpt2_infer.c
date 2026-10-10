@@ -261,6 +261,7 @@ static void gpt2_forward_cached_token(const gpt2_params_t* params, const gpt2_co
     for (uint32_t i = 0; i < c; i++) workspace.residual[i] = embedding[i] + positional[i];
 
     for (uint32_t layer = 0; layer < cfg->num_layers; layer++) {
+        (void)gpt2_progress_note();
         const float* ln1w = params->ln1w + layer * c;
         const float* ln1b = params->ln1b + layer * c;
         const float* qkvw = params->qkvw + layer * (3U * c) * c;
