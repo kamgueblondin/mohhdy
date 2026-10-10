@@ -54,7 +54,7 @@ ai_gguf_pause.o: ai_gguf_client.c
 	$(CC) $(CFLAGS) -DGGUF_PAUSE -c -o $@ $<
 ai_client.o ai_stat.o ai_rogue.o ai_gguf_client.o ai_gguf_pause.o: ai_common.h $(USER_HEADERS)
 
-shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o shell_p2p.o p2p.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o start.o
+shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o shell_p2p.o shell_collab.o collab.o p2p.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o start.o
 	@echo "Linking shell..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
