@@ -9,6 +9,7 @@ void shell_persist_tick(void);
 int shell_fleet_is(const char* line);
 int shell_fleet_line(const char* line);
 int shell_platform_idle_yields(void);
+static void stall_mark(const char* what);
 void shell_persist_shutdown(void);
 int shell_prod_line(const char* line);
 void shell_prod_count(const char* line);
@@ -6884,11 +6885,16 @@ void shell_main_loop(shell_context_t* ctx) {
                 }
                 if (c > 0) {
                     if (len < (int)sizeof(buf) - 1) { buf[len++] = (char)c; putc((char)c); }
+                    /* keep the P2P link alive while a line is being typed */
+                    shell_p2p_poll();
                     continue;
                 }
                 if (osui_web_active() && osui_web_poll(web_log, (int)sizeof(web_log)) > 0) print_string(web_log);
+                stall_mark("idle-gap");
                 shell_p2p_poll();
+                stall_mark("p2p-pump");
                 shell_persist_tick();
+                stall_mark("persist-tick");
                 { int y = shell_platform_idle_yields(); while (y-- > 0) yield(); }
             }
             buf[len] = '\0';
@@ -6896,7 +6902,9 @@ void shell_main_loop(shell_context_t* ctx) {
             // Lecture bloquante et stable de la ligne par le noyau
             gets(buf, (int)sizeof(buf));
         }
+        stall_mark("input");
         handle_line(ctx, buf);
+        stall_mark(buf);
         shell_persist_tick();
     }
 }
@@ -6904,6 +6912,18 @@ void shell_main_loop(shell_context_t* ctx) {
 // ==============================================================================
 // POINT D'ENTRÉE PRINCIPAL
 // ==============================================================================
+
+/* Pump stall diagnostics: prints when one step of the console loop took
+ * more than 3 s (P2P peers declare a node down after 10 s of silence). */
+static void stall_mark(const char* what) {
+    static unsigned int last;
+    unsigned int now = sys_ticks();
+    /* only meaningful when background work (P2P, web) rides the loop */
+    if (last && now - last > 300U && (shell_p2p_active() || osui_web_active())) {
+        print_string("shell stall "); print_int((int)(now - last)); print_string(" ticks in "); print_string(what); print_string("\n");
+    }
+    last = now;
+}
 
 void main() {
     shell_context_t shell_ctx;

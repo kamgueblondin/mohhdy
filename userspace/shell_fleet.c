@@ -15,7 +15,7 @@ void shell_prod_summary(char* metric, int mcap, char* log, int lcap);
 
 static fleet_t g_f;
 static int g_init;
-static char g_buf[400];
+static char g_buf[FL_PAYLOAD + 64];
 static char g_line[200];
 
 static int f_send(void* c, uint32_t to, const uint8_t* d, int len) { (void)c; return p2p_send_app(shell_p2p_node(), shell_p2p_host(), to, d, len); }
@@ -29,13 +29,20 @@ static int f_write(void* c, const char* p, const char* d, int len) {
 }
 static const char* f_name(void* c, uint32_t id) { (void)c; return p2p_peer_name(shell_p2p_node(), id); }
 static uint32_t f_members(void* c) { (void)c; return p2p_member_count(shell_p2p_node()); }
+unsigned int sys_ticks(void);
+static uint32_t f_now(void* c) { (void)c; return sys_ticks(); }
+static int f_peers(void* c, uint32_t* ids, int max) {
+    p2p_node_t* n = shell_p2p_node(); int i, k = 0;
+    (void)c;
+    for (i = 0; i < P2P_PEERS && k < max; i++) if (n->peers[i].used && n->peers[i].keyed) ids[k++] = n->peers[i].id;
+    return k;
+}
 static fleet_host_t host(void) {
     fleet_host_t h;
-    h.ctx = 0; h.self = shell_p2p_node()->id; h.send = f_send; h.out = f_out; h.write_file = f_write; h.name = f_name; h.members = f_members;
+    h.ctx = 0; h.self = shell_p2p_node()->id; h.send = f_send; h.out = f_out; h.write_file = f_write; h.name = f_name; h.members = f_members; h.now = f_now; h.peers = f_peers;
     return h;
 }
 static void init(void) { if (!g_init) { fleet_init(&g_f); g_init = 1; } }
-unsigned int sys_ticks(void);
 /* background pump (shell_p2p_poll): re-send unacknowledged deploy steps */
 void shell_fleet_tick(void) { fleet_host_t h; if (!g_init || !shell_p2p_node()->up) return; h = host(); (void)fleet_tick(&g_f, &h, sys_ticks()); }
 void shell_fleet_app(uint32_t from, const uint8_t* d, int len) { fleet_host_t h = host(); init(); fleet_receive(&g_f, &h, from, d, len); }
@@ -96,10 +103,11 @@ int shell_fleet_line(const char* line) {
     }
     if (s_eq(cmd, "sync-push")) {
         int v;
-        n = shell_file_read(a, g_buf, 300);
+        n = shell_file_read(a, g_buf, FL_DATA_MAX + 1);
+        if (n > FL_DATA_MAX) { print_string("sync-push error too large (1900 bytes max)\n"); return 1; }
         if (n < 0) { print_string("sync-push error file not found\n"); return 1; }
         v = fleet_sync_push(&g_f, &h, a, g_buf, n);
-        if (v < 0) { print_string("sync-push error too large (300 bytes, path 39)\n"); return 1; }
+        if (v < 0) { print_string("sync-push error path too long (39) or send queue full\n"); return 1; }
         cat(g_line, "sync-push ok "); cat(g_line, a); cat(g_line, " v"); catu(g_line, (uint32_t)v);
         cat(g_line, " bytes "); catu(g_line, (uint32_t)n); cat(g_line, " sum "); hex(g_line, fleet_sum(g_buf, n)); emit();
         return 0;
@@ -110,7 +118,9 @@ int shell_fleet_line(const char* line) {
             g_line[0] = 0; cat(g_line, "sync "); cat(g_line, g_f.files[i].path); cat(g_line, " v"); catu(g_line, g_f.files[i].ver);
             cat(g_line, " by "); cat(g_line, p2p_peer_name(shell_p2p_node(), g_f.files[i].origin)); cat(g_line, " sum "); hex(g_line, g_f.files[i].sum); emit(); k++;
         }
-        g_line[0] = 0; cat(g_line, "sync-status ok files "); catu(g_line, (uint32_t)k); cat(g_line, " rejected "); catu(g_line, g_f.rejected); emit();
+        g_line[0] = 0; cat(g_line, "sync-status ok files "); catu(g_line, (uint32_t)k); cat(g_line, " rejected "); catu(g_line, g_f.rejected);
+        cat(g_line, " delivered "); catu(g_line, g_f.delivered); cat(g_line, " resent "); catu(g_line, g_f.resent);
+        cat(g_line, " failed "); catu(g_line, g_f.failed); cat(g_line, " pending "); catu(g_line, (uint32_t)fleet_pending(&g_f)); emit();
         return 0;
     }
     if (s_eq(cmd, "fleet-report")) {
@@ -136,7 +146,8 @@ int shell_fleet_line(const char* line) {
     if (s_eq(cmd, "deploy-stage")) {
         uint32_t to = peer(c); int v;
         if (!a[0] || !to) { print_string("deploy-stage error usage: deploy-stage NAME FILE CANARY_PEER\n"); return 1; }
-        n = shell_file_read(b, g_buf, 300);
+        n = shell_file_read(b, g_buf, FL_DATA_MAX + 1);
+        if (n > FL_DATA_MAX) { print_string("deploy-stage error too large (1900 bytes max)\n"); return 1; }
         if (n < 0) { print_string("deploy-stage error file not found\n"); return 1; }
         v = fleet_deploy_stage(&g_f, &h, a, g_buf, n, to);
         if (v < 0) { print_string("deploy-stage error\n"); return 1; }
