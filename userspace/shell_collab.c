@@ -247,3 +247,12 @@ int shell_collab_load(const uint8_t* in, int len) {
     return n;
 }
 uint32_t shell_collab_self(void) { return g_joined ? g_c.self : 0; }
+/* key at rest: the persisted blob carries the secret only encrypted (or not
+ * at all); after a load the shell installs it here, or locks signing */
+void shell_collab_key_install(const uint8_t* sk) {
+    int i;
+    if (!sk) { for (i = 0; i < 20; i++) g_c.sk[i] = 0; g_c.signing = 0; return; }
+    for (i = 0; i < 20; i++) g_c.sk[i] = sk[i];
+    g_c.signing = 1;
+}
+int shell_collab_signing(void) { return g_joined && g_c.signing; }

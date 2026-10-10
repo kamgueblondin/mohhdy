@@ -588,5 +588,5 @@ static prod_state_ref_t ref(void) {
     r.m = &g_m; r.a = &g_a; r.arch = g_arch; r.dir = g_dir; r.slots = SLOTS; r.fb = &g_fb;
     return r;
 }
-int shell_prod_save(uint8_t* o, int cap) { prod_state_ref_t r = ref(); init(); return prod_state_save(&r, o, cap); }
+int shell_prod_save(uint8_t* o, int cap) { prod_state_ref_t r = ref(); if (!g_init) return 0; return prod_state_save(&r, o, cap); }
 int shell_prod_load(const uint8_t* in, int len) { prod_state_ref_t r = ref(); init(); return prod_state_load(&r, in, len); }

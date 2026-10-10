@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 306
+#define MOHHDY_SHELL_COMMAND_COUNT 309
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -174,9 +174,12 @@ static const char * const mohhdy_shell_commands[] = {
     "p2p-sync",
     "p2p-unblock",
     "p2p-up",
+    "persist-auto",
     "persist-load",
+    "persist-passphrase",
     "persist-save",
     "persist-status",
+    "persist-unlock",
     "pm",
     "pm-catalog",
     "pm-certify",

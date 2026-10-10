@@ -5,6 +5,8 @@
 int shell_prod_is(const char* line);
 int shell_persist_is(const char* line);
 int shell_persist_line(const char* line);
+void shell_persist_tick(void);
+void shell_persist_shutdown(void);
 int shell_prod_line(const char* line);
 void shell_prod_count(const char* line);
 #include <stddef.h>
@@ -3099,7 +3101,7 @@ static int is_builtin(const char* cmd) {
         "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-catalog", "pm-install", "pm-certify", "pm-verify",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
-        "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "prod-integrity", "prod-bench", "prod-diag",
+        "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
         "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
         "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "right-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
@@ -6254,6 +6256,7 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         }
         return 1;
     } else if (strcmp(command, "exit") == 0 || strcmp(command, "quit") == 0) {
+        shell_persist_shutdown();
         cmd_exit(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "ai") == 0) {
@@ -6526,9 +6529,11 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         cmd_exit(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "reboot") == 0) {
+        shell_persist_shutdown();
         cmd_reboot(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "shutdown") == 0) {
+        shell_persist_shutdown();
         cmd_shutdown(ctx, args, arg_count);
         return 1;
     }
@@ -6754,6 +6759,7 @@ void shell_main_loop(shell_context_t* ctx) {
                 }
                 if (osui_web_active() && osui_web_poll(web_log, (int)sizeof(web_log)) > 0) print_string(web_log);
                 shell_p2p_poll();
+                shell_persist_tick();
                 yield();
             }
             buf[len] = '\0';
@@ -6762,6 +6768,7 @@ void shell_main_loop(shell_context_t* ctx) {
             gets(buf, (int)sizeof(buf));
         }
         handle_line(ctx, buf);
+        shell_persist_tick();
     }
 }
 

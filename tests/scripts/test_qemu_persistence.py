@@ -110,6 +110,8 @@ def boot1(hub):
         cmd(node, "collab-offer cpu 5 2", "collab-offer ok seq 2")
         cmd(node, "collab-profile set city paris shared", "collab-profile ok seq 3")
         cmd(node, "collab-forget", "collab-forget ok seq 4")
+        cmd(node, "persist-passphrase correct-horse-9", "persist-passphrase ok (kept in RAM only)")
+        cmd(node, "p2p-put color blue", "p2p-put ok color")
         fpr = fingerprint(node)
         before = audit(node)
         # production state
@@ -136,10 +138,17 @@ def boot1(hub):
         if flushes < 5:  # one overlay flush per chunk, done by the Ring 3 driver
             raise RuntimeError("persist-save not flushed by atadriver (%d flushes)" % flushes)
         out = log(node)
-        for name in ("node 32 bytes", "prod ", "collab "):
+        for name in ("node 32 bytes", "prod ", "collab ", "p2pkv ", "collab key encrypted aes128-gcm"):
             if "persist-save " + name not in out:
                 raise RuntimeError("persist-save missing %s" % name)
         cmd(node, "persist-status", "persist-status ok", timeout=60)
+        # automatic periodic save, then the save on a clean shutdown
+        cmd(node, "persist-auto 5", "persist-auto ok every 5 s")
+        cmd(node, "prod-inject 90", "prod-inject ok custom 90")
+        p2p.wait_log(node, "persist autosave ok blobs 1", 60, len(base.log_text(node["log"])) - 4000)
+        cmd(node, "persist-auto 3600", "persist-auto ok every 3600 s")  # next change only saved by shutdown
+        cmd(node, "prod-feedback 4 second", "prod-feedback ok total 2")
+        cmd(node, "shutdown", "persist shutdown save ok blobs 1", timeout=60)
         time.sleep(2)
         return fpr, before
     finally:
@@ -154,9 +163,18 @@ def boot2(hub, fpr, before):
             raise RuntimeError("overlay not loaded from disk at boot 2")
         cmd(node, "persist-status", "persist-status ok", timeout=60)
         cmd(node, "persist-load", "persist-load ok", timeout=60)
-        if "persist-load collab " not in log(node) or " bytes entries 4" not in log(node):
+        if "persist-load collab 4 entries key 0" not in log(node):
             raise RuntimeError("ledger not restored: %s" % log(node)[-600:])
         cmd(node, "p2p-up alpha 10.77.0.1 %s" % p2p.NETKEY, "p2p-up ok name alpha", timeout=120)
+        if "persist-load collab key locked (persist-unlock PASSPHRASE)" not in log(node):
+            raise RuntimeError("encrypted key was not locked without passphrase")
+        if "p2p kv restored items 1" not in log(node):
+            raise RuntimeError("p2p kv not restored")
+        cmd(node, "p2p-get color", "p2p-get ok local color=blue v1")
+        cmd(node, "collab-keys", "collab-keys ok known 1 rejected 0 signing off")
+        cmd(node, "persist-save", "persist-save skip collab key locked")
+        cmd(node, "persist-unlock wrong-pass-0", "persist-unlock error wrong passphrase")
+        cmd(node, "persist-unlock correct-horse-9", "persist-unlock ok signing on")
         if fingerprint(node) != fpr:
             raise RuntimeError("signing key changed across reboot")
         after = audit(node)
@@ -166,18 +184,18 @@ def boot2(hub, fpr, before):
         cmd(node, "collab-profile show alpha", "collab profile alpha shared (none)")
         cmd(node, "prod-alerts", ["prod-rule app custom > 50 for 1 state firing"][0])
         cmd(node, "prod-alerts", "prod-alerts ok fired 1 resolved 0")
-        cmd(node, "prod-metrics", "prod-metrics ok samples 6")
+        cmd(node, "prod-metrics", "prod-metrics ok samples 7")
         cmd(node, "prod-backups", "prod-backup daily dir /cfg files 1 tick ")
         cmd(node, "write /cfg/a.conf broken", "(-.-)")
         cmd(node, "prod-restore daily", "prod-restore ok files 1")
         cmd(node, "cat /cfg/a.conf", "mode=eco")
-        cmd(node, "prod-feedback summary", "prod-feedback total 1 avg 5.0")
+        cmd(node, "prod-feedback summary", "prod-feedback total 2 avg 4.5")
         # a damaged chunk is refused, nothing is applied from it
         cmd(node, "write /persist/prod.0 garbage", "(-.-)")
         cmd(node, "persist-load", "persist-load error", timeout=60)
         if "persist-load prod corrupt (checksum)" not in log(node):
             raise RuntimeError("corrupt chunk not detected")
-        cmd(node, "prod-metrics", "prod-metrics ok samples 6")
+        cmd(node, "prod-metrics", "prod-metrics ok samples 7")
         return after
     finally:
         stop(node)
