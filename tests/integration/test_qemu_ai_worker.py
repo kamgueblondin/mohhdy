@@ -141,8 +141,15 @@ def child_regex(client, proc, pattern, start, rounds=8):
 
 def spawn(client, proc, name):
     start = send_command_until(client, "spawn %s" % name, "spawn ok pid", proc)
-    match = re.search(r"spawn ok pid[\s\S]*?(\d+) %s" % name,
-                      normalized_log(log_text()[start:]))
+    # "spawn ok pid", the pid and the name are printed by separate writes:
+    # the marker can be in the log before the rest, so wait for the line.
+    deadline = time.monotonic() + 10
+    while True:
+        match = re.search(r"spawn ok pid[\s\S]*?(\d+) %s" % name,
+                          normalized_log(log_text()[start:]))
+        if match or time.monotonic() > deadline:
+            break
+        time.sleep(0.1)
     if not match:
         raise RuntimeError("%s not spawned" % name)
     return match.group(1), start

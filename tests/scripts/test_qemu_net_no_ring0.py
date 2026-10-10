@@ -13,6 +13,7 @@ Contrat :
 """
 import os
 import re
+import time
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -53,8 +54,15 @@ def relay_status(proc, client):
 
 def spawn(proc, client, name):
     start = command(proc, client, "spawn %s" % name, "spawn ok pid")
-    match = re.search(r"spawn ok pid[\s\S]*?(\d+) %s" % name,
-                      tw.normalized_log(tw.text()[start:]))
+    # "spawn ok pid", the pid and the name are printed by separate writes:
+    # the marker can be in the log before the rest, so wait for the line.
+    deadline = time.monotonic() + 10
+    while True:
+        match = re.search(r"spawn ok pid[\s\S]*?(\d+) %s" % name,
+                          tw.normalized_log(tw.text()[start:]))
+        if match or time.monotonic() > deadline:
+            break
+        time.sleep(0.1)
     if not match:
         raise RuntimeError("%s not spawned" % name)
     return match.group(1), start
