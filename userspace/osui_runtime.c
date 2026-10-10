@@ -39,7 +39,7 @@ static const char *const k_linux_traps[] = {
 static const char *const k_cmds[] = {
     "session-new", "session-use", "session-status", "session-list", "session-end",
     "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
-    "agent-run",
+    "agent-run", "api", "api-token", "api-revoke",
     "chat", "prompt",
     "grant", "revoke", "escalate", "takeover", "admin-status",
     "origin-check",

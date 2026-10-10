@@ -258,6 +258,8 @@ def main():
                 send_command_until(monitor, command, marker, proc)
             # Roadmap step 4: provider peer, explicit local fallback.
             for command, marker in (
+                ("session-ttl 3600", "session-ttl ok ttl=3600"),
+                ("session-new web", "session_id=s"),
                 ("osui-provider peer", "osui-provider ok provider=peer"),
                 ("osui-provider status", "secrets_in_image=false public_internet=false"),
                 ("chat ai a", "provider=peer fallback=local reason="),
