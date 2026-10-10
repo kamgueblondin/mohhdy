@@ -313,6 +313,9 @@ jobs:
       # tests/scripts/ai_worker_fixture.py, proves worker / Ring 0 /
       # fallback token equality and rogue refusal, then restores the initrd
       # (~80 s locally, one boot).
+      - name: QEMU OS-UI local API over HTTP via networker (host HTTP client)
+        run: make qemu-osui-web
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
