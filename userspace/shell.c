@@ -18,6 +18,7 @@ void shell_prod_count(const char* line);
 #include "osui_runtime.h"
 #include "shell_p2p.h"
 int shell_collab_line(const char* line);
+#include "shell_platform.h"
 #include "osui_gui.h"
 #include "promptmessage.h"
 
@@ -3118,6 +3119,9 @@ static int is_builtin(const char* cmd) {
         "collab-review", "collab-rate", "collab-propose", "collab-vote", "collab-profile", "collab-forget",
         "collab-export", "collab-ticket", "collab-answer", "collab-sync", "collab-balances", "collab-audit",
         "collab-tasks", "collab-offers", "collab-votes", "collab-tickets", "collab-keys", "collab-forge",
+        "hal-info", "hal-port", "screen-adapt", "gesture", "power-profile", "power-status", "dev-list",
+        "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
+        "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
@@ -6604,6 +6608,10 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
     }
     if (strncmp(input_buffer, "p2p-", 4U) == 0) {
         ctx->last_rc = shell_p2p_line(input_buffer);
+        return;
+    }
+    if (shell_platform_is(input_buffer)) {
+        ctx->last_rc = shell_platform_line(input_buffer);
         return;
     }
 
