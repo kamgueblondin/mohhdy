@@ -285,6 +285,7 @@ static void peer_yield(void) { osui_test_now += 1U; }
  * scripted request osui_test_web_req[i]; every scripted slot is ready in
  * the same poll, so the server handles them concurrently. */
 const char *osui_test_web_req[4];
+static unsigned char g_web_fail[OS_PEER_WEB_SLOTS];
 int osui_test_web_open_rc = 0;
 int osui_test_web_open_tls = -1;
 char osui_test_web_out[4][2048];
@@ -403,6 +404,7 @@ static void peer_yield(void) {
 /* Web table (roadmap step 5): SYS_PEER_DATA web ops, relayed to the Ring 3
  * networker on the strict kernel (one bulk struct per call, 1 KiB data). */
 static os_peer_data_request_t g_web_io;
+static unsigned char g_web_fail[OS_PEER_WEB_SLOTS];
 static int web_io(unsigned op, int slot) {
     g_web_io.op = (uint8_t)op;
     g_web_io.slot = (uint8_t)slot;
@@ -418,7 +420,10 @@ static int web_poll(unsigned char st[OS_PEER_WEB_SLOTS]) {
     int rc, i;
     g_web_io.attempts = 16U;
     rc = web_io(OS_PEER_WEB_POLL, 0);
-    for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) st[i] = rc == 0 ? g_web_io.data[i] : 0U;
+    for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) {
+        st[i] = rc == 0 ? g_web_io.data[i] : 0U;
+        g_web_fail[i] = rc == 0 ? g_web_io.data[OS_PEER_WEB_SLOTS + i] : 0U;
+    }
     return rc;
 }
 static int web_recv_slot(int slot, char *buf, int cap, int *n) {
@@ -3263,13 +3268,17 @@ static void web_tick(char *log, int lmax, int *lp) {
         unsigned kind = st[i] & 0x0FU;
         if (kind != OS_PEER_SLOT_OPEN && kind != OS_PEER_SLOT_HANDSHAKE) { g_ws.seen[i] = 0; continue; }
         if (!g_ws.seen[i]) { g_ws.seen[i] = 1; g_ws.len[i] = 0; g_ws.t0[i] = osui_now(); }
+        /* The request timer starts once TLS is complete (seen == 2). */
+        if (kind == OS_PEER_SLOT_OPEN && g_ws.seen[i] == 1) { g_ws.seen[i] = 2; g_ws.t0[i] = osui_now(); }
         if (st[i] & OS_PEER_SLOT_FAILED) {
             web_close_slot(i);
             g_ws.seen[i] = 0;
             g_ws.failed++;
             out_add(log, lmax, lp, "osui web-serve slot=");
             out_u(log, lmax, lp, (unsigned)i);
-            out_add(log, lmax, lp, " error=tls_failed\n");
+            out_add(log, lmax, lp, " error=tls_failed at=");
+            out_u(log, lmax, lp, g_web_fail[i]);
+            out_add(log, lmax, lp, "\n");
             continue;
         }
         while ((st[i] & OS_PEER_SLOT_DATA) && g_ws.len[i] < OSUI_WEB_REQ &&
@@ -3281,7 +3290,7 @@ static void web_tick(char *log, int lmax, int *lp) {
             web_respond(i, log, lmax, lp);
             g_ws.seen[i] = 0;
             g_ws.served++;
-        } else if (osui_now() - g_ws.t0[i] > 20U) {
+        } else if (osui_now() - g_ws.t0[i] > (kind == OS_PEER_SLOT_OPEN ? 20U : 180U)) {
             web_close_slot(i);
             g_ws.seen[i] = 0;
             g_ws.failed++;

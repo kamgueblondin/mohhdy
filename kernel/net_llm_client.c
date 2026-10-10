@@ -677,6 +677,7 @@ typedef struct {
     uint8_t used;
     uint8_t tls_step;   /* 0 hello, 4 wait flight, 7 open, 9 failed */
     uint8_t peer_closed;
+    uint8_t fail;       /* TLS failure point (diagnostics) */
     uint8_t ip[4];
     uint16_t raw_len;
     uint16_t plain_len;
@@ -718,6 +719,7 @@ static void web_slot_free(web_slot_t* s) {
     s->used = 0U;
     s->tls_step = 0U;
     s->peer_closed = 0U;
+    s->fail = 0U;
     s->raw_len = 0U;
     s->plain_len = 0U;
 }
@@ -782,23 +784,26 @@ static void web_tls_step(web_slot_t* s) {
     if (s->tls_step == 0U) {
         n = web_records(s, 1U);
         if (!n) return;
-        if (web_tls_init(s) != 0 || net_tls_server_accept_client_hello(&s->tls, s->raw, n) != 0) goto fail;
+        /* RFC 5246 E.1: a ClientHello record may carry version 3.1; the
+         * record header is not hashed, so accept it as 3.3. */
+        if (s->raw[0] == NET_TLS_CONTENT_HANDSHAKE && s->raw[1] == 3U && s->raw[2] == 1U) s->raw[2] = 3U;
+        if (web_tls_init(s) != 0 || net_tls_server_accept_client_hello(&s->tls, s->raw, n) != 0) { s->fail = 1; goto fail; }
         web_shift(s, n);
         if (web_tls_note_send(s, net_tls_server_hello_build(g_web_record, sizeof(g_web_record), s->tls.server_random,
                                                              NET_TLS_CIPHER_ECDHE_RSA_WITH_AES_128_GCM_SHA256)) != 0)
-            goto fail;
+            { s->fail = 2; goto fail; }
         s->tls.phase = NET_TLS_SERVER_PHASE_HELLO_SENT;
         if (web_tls_note_send(s, net_tls_server_certificate_build(g_web_record, sizeof(g_web_record),
                                                                    aos_tls_test_leaf_der,
                                                                    (uint16_t)AOS_TLS_TEST_LEAF_DER_LEN)) != 0)
-            goto fail;
+            { s->fail = 3; goto fail; }
         if (web_tls_note_send(s, net_tls_server_key_exchange_ecdhe_rsa_build(
                 g_web_record, sizeof(g_web_record), s->tls.client_random, s->tls.server_random,
                 s->tls.server_public, aos_tls_test_leaf_modulus, AOS_TLS_TEST_LEAF_MODULUS_LEN,
                 aos_tls_test_leaf_private_exponent, AOS_TLS_TEST_LEAF_PRIVATE_LEN, boot_llm_rsa_workspace,
                 KERNEL_LLM_TLS_WORKSPACE_WORDS)) != 0)
-            goto fail;
-        if (web_tls_note_send(s, net_tls_server_hello_done_build(g_web_record, sizeof(g_web_record))) != 0) goto fail;
+            { s->fail = 4; goto fail; }
+        if (web_tls_note_send(s, net_tls_server_hello_done_build(g_web_record, sizeof(g_web_record))) != 0) { s->fail = 5; goto fail; }
         s->tls.phase = NET_TLS_SERVER_PHASE_WAIT_CLIENT_FLIGHT;
         s->tls_step = 4U;
         return;
@@ -811,20 +816,20 @@ static void web_tls_step(web_slot_t* s) {
                                                 KERNEL_LLM_TLS_WORKSPACE_WORDS, boot_llm_prf_workspace,
                                                 sizeof(boot_llm_prf_workspace), boot_llm_plaintext,
                                                 sizeof(boot_llm_plaintext)) != 0)
-            goto fail;
+            { s->fail = 6; goto fail; }
         web_shift(s, n);
         built = net_tls_change_cipher_spec_build(g_web_record, sizeof(g_web_record));
-        if (built < 0 || web_send_raw(s, g_web_record, (uint16_t)built) != 0) goto fail;
+        if (built < 0 || web_send_raw(s, g_web_record, (uint16_t)built) != 0) { s->fail = 7; goto fail; }
         built = net_tls_server_finished_record_build(&s->tls, g_web_record, sizeof(g_web_record),
                                                      boot_llm_prf_workspace, sizeof(boot_llm_prf_workspace));
-        if (built < 0 || web_send_raw(s, g_web_record, (uint16_t)built) != 0) goto fail;
+        if (built < 0 || web_send_raw(s, g_web_record, (uint16_t)built) != 0) { s->fail = 8; goto fail; }
         s->tls_step = 7U;
     }
     while (s->tls_step == 7U && (n = web_records(s, 1U)) != 0U) {
         uint16_t i;
         if (net_tls_aes_gcm_session_open(&s->tls.session, s->raw, n, boot_llm_plaintext,
                                          sizeof(boot_llm_plaintext), &view) != 0)
-            goto fail;
+            { s->fail = 9; goto fail; }
         web_shift(s, n);
         if (view.content_type == NET_TLS_CONTENT_ALERT) { s->peer_closed = 1U; continue; }
         if (view.content_type != NET_TLS_CONTENT_APPLICATION_DATA) continue;
@@ -933,8 +938,9 @@ static int kernel_web_op(os_peer_data_request_t* r) {
                 }
             }
             r->data[i] = st;
+            r->data[OS_PEER_WEB_SLOTS + i] = s->fail;
         }
-        r->length = OS_PEER_WEB_SLOTS;
+        r->length = 2U * OS_PEER_WEB_SLOTS;
         return 0;
     }
     if (r->slot >= OS_PEER_WEB_SLOTS || !g_web[r->slot].used) return OS_PEER_BAD_REQUEST;
