@@ -134,17 +134,12 @@ static void send_hello(p2p_node_t* n, const p2p_host_t* h) {
     (void)emit(n, h, 0, b, pos);
 }
 
-static void derive(p2p_node_t* n, p2p_peer_t* p) {
-    uint8_t shared[32], d[32], ids[8];
+/* Session key from the X25519 shared secret (job result). */
+static void derive_finish(p2p_node_t* n, p2p_peer_t* p, uint8_t shared[32]) {
+    uint8_t d[32], ids[8];
     sha256_ctx_t c;
     uint32_t lo = n->id < p->id ? n->id : p->id, hi = n->id < p->id ? p->id : n->id;
     p->keyed = 0;
-    if (x25519_shared_secret(shared, n->secret, p->pub, g_ws, X25519_WORKSPACE_LIMBS) != 0) return;
-    {
-        int i, z = 0;
-        for (i = 0; i < 32; i++) z |= shared[i];
-        if (!z) return; /* low-order point */
-    }
     put32(ids, lo); put32(ids + 4, hi);
     sha256_init(&c);
     sha256_update(&c, (const uint8_t*)"mohhdy-p2p-v1", 13);
@@ -155,6 +150,29 @@ static void derive(p2p_node_t* n, p2p_peer_t* p) {
     mcopy(p->key, d, 16); mcopy(p->iv, d + 16, 4);
     p->keyed = 1; p->tx_counter = 0; p->rx_counter = 0;
     mzero(shared, 32); mzero(d, 32);
+}
+static void announce_up(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p);
+/* Runs a bounded slice of the pending key agreement (one peer at a time). */
+static void kx_pump(p2p_node_t* n, const p2p_host_t* h) {
+    int i, r;
+    if (n->kx_peer < 0) {
+        for (i = 0; i < P2P_PEERS; i++) if (n->peers[i].used && n->peers[i].kx) break;
+        if (i == P2P_PEERS) return;
+        if (x25519_job_start(&n->kx_job, n->secret, n->peers[i].pub) != 0) { n->peers[i].kx = 0; return; }
+        n->kx_peer = i;
+    }
+    r = x25519_job_step(&n->kx_job, P2P_KX_BUDGET);
+    if (r == 0) return;
+    {
+        p2p_peer_t* p = &n->peers[n->kx_peer];
+        uint8_t shared[32];
+        n->kx_peer = -1;
+        p->kx = 0;
+        if (r < 0 || x25519_job_result(&n->kx_job, shared) != 0) return; /* low-order point */
+        derive_finish(n, p, shared);
+        n->kx_done++;
+        if ((uint32_t)(now(h) - p->last_seen) < P2P_DOWN_TICKS) announce_up(n, h, p);
+    }
 }
 
 /* Route: direct if the peer is up, else through an up neighbor that lists it. */
@@ -404,20 +422,27 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
     p->name[P2P_NAME_MAX - 1] = 0;
     mcopy(p->ip, b + HDR + P2P_NAME_MAX, 4);
     mcopy(p->mac, mac, 6);
-    if (!p->keyed || !meq(p->pub, b + HDR + P2P_NAME_MAX + 4, 32)) {
+    if ((!p->keyed && !p->kx) || !meq(p->pub, b + HDR + P2P_NAME_MAX + 4, 32)) {
         mcopy(p->pub, b + HDR + P2P_NAME_MAX + 4, 32);
-        derive(n, p);
+        /* new or changed key: agree step-wise from p2p_tick */
+        p->keyed = 0; p->kx = 1;
+        if (n->kx_peer == (int)(p - n->peers)) n->kx_peer = -1;
     }
     for (i = 0; i < P2P_PEERS; i++) p->neighbors[i] = i < cnt ? get32(b + body + i * 4) : 0;
     p->last_seen = now(h);
     p->via = 0;
-    if (!p->up) {
-        p->up = 1;
-        line[0] = 0;
-        s_cat(line, "p2p peer ", 96); s_cat(line, p->name, 96); s_cat(line, " up id ", 96); cat_hex32(line, p->id, 96);
-        s_cat(line, p->keyed ? " keyed" : " unkeyed", 96);
-        say(h, line);
-    }
+    (void)line;
+    if (!p->up && p->keyed) announce_up(n, h, p);
+}
+static void announce_up(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
+    char line[96];
+    (void)n;
+    if (p->up) return;
+    p->up = 1;
+    line[0] = 0;
+    s_cat(line, "p2p peer ", 96); s_cat(line, p->name, 96); s_cat(line, " up id ", 96); cat_hex32(line, p->id, 96);
+    s_cat(line, p->keyed ? " keyed" : " unkeyed", 96);
+    say(h, line);
 }
 
 static void on_datagram(p2p_node_t* n, const p2p_host_t* h, uint8_t* b, int len, const uint8_t mac[6]) {
@@ -482,6 +507,7 @@ int p2p_up(p2p_node_t* n, const char* name, const uint8_t ip[4], const char* net
     sha256_init(&c); sha256_update(&c, n->pub, 32); sha256_final(&c, d);
     n->id = get32(d) | 1U;
     n->up = 1;
+    n->kx_peer = -1;
     n->last_hello = now(h) - P2P_HELLO_TICKS;
     n->last_ping = now(h);
     send_hello(n, h);
@@ -501,6 +527,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
         if (got <= 0) break;
         on_datagram(n, h, b, got, mac);
     }
+    kx_pump(n, h);
     t = now(h);
     if (t - n->last_hello >= P2P_HELLO_TICKS) { n->last_hello = t; send_hello(n, h); }
     for (i = 0; i < P2P_PEERS; i++) {

@@ -10,6 +10,7 @@
 #ifndef MOHHDY_P2P_H
 #define MOHHDY_P2P_H
 #include <stdint.h>
+#include "../kernel/x25519.h"
 
 #define P2P_PORT 7700U
 #define P2P_PEERS 6
@@ -23,6 +24,7 @@
 #define P2P_HZ 100U
 #define P2P_HELLO_TICKS (2U * P2P_HZ)
 #define P2P_PING_TICKS (3U * P2P_HZ)
+#define P2P_KX_BUDGET 48      /* ~11 slices per peer, each well under 0.5 s on CI */
 #define P2P_DOWN_TICKS (10U * P2P_HZ)
 #define P2P_PROPOSE_TICKS (15U * P2P_HZ)
 
@@ -44,6 +46,7 @@ typedef struct {
 
 typedef struct {
     uint8_t used, up, blocked, keyed;
+    uint8_t kx;              /* key agreement pending (step-wise X25519) */
     uint32_t id;
     char name[P2P_NAME_MAX];
     uint8_t ip[4];
@@ -108,6 +111,11 @@ typedef struct {
     /* Application payloads (Phase 7 collab) carried in sealed P2P_I_APP. */
     void (*app)(void* app_ctx, uint32_t from_id, const uint8_t* data, int length);
     void* app_ctx;
+    /* Step-wise key agreement: one peer at a time, P2P_KX_BUDGET ladder
+     * steps per p2p_tick, so discovery never stalls the caller's loop. */
+    x25519_job_t kx_job;
+    int kx_peer;             /* index in peers[] or -1 */
+    uint32_t kx_done;
 } p2p_node_t;
 
 int p2p_up(p2p_node_t* n, const char* name, const uint8_t ip[4], const char* netkey,

@@ -87,3 +87,73 @@ int x25519_shared_secret(uint8_t output[X25519_KEY_LENGTH],const uint8_t private
     for(i=0U;i<X25519_KEY_LENGTH;i++)difference|=output[i];
     return difference==0U?-9:0;
 }
+
+/* ---- step-wise variant (same arithmetic as x25519_scalar_mult) ---- */
+enum { J_P, J_X1, J_X2, J_Z2, J_X3, J_Z3, J_A, J_AA, J_B, J_BB, J_E, J_C, J_D, J_DA, J_CB, J_T0, J_T1 };
+int x25519_job_start(x25519_job_t* job, const uint8_t scalar[X25519_KEY_LENGTH], const uint8_t u[X25519_KEY_LENGTH]) {
+    uint8_t encoded_u[X25519_KEY_LENGTH];
+    uint16_t i;
+    bigint_t* v;
+    if (!job || !scalar || !u) return -1;
+    v = job->v;
+    for (i = 0U; i < X25519_WORKSPACE_LIMBS; i++) job->ws[i] = 0U;
+    for (i = 0U; i < 17U; i++) if (bigint_init(&v[i], job->ws + i * X25519_LIMBS, X25519_LIMBS) != 0) return -2;
+    if (bigint_from_be(&v[J_P], x25519_prime_be, sizeof(x25519_prime_be)) != 0) return -3;
+    for (i = 0U; i < X25519_KEY_LENGTH; i++) { job->k[i] = scalar[i]; encoded_u[i] = u[X25519_KEY_LENGTH - 1U - i]; }
+    job->k[0] &= 248U; job->k[31] &= 127U; job->k[31] |= 64U; encoded_u[0] &= 127U;
+    if (bigint_from_be(&v[J_X1], encoded_u, sizeof(encoded_u)) != 0 || bigint_mod_reduce(&v[J_T0], &v[J_X1], &v[J_P]) != 0) return -4;
+    x25519_copy(&v[J_X1], &v[J_T0]);
+    v[J_X1].length = X25519_LIMBS; v[J_X2].limbs[0] = 1U; v[J_X2].length = X25519_LIMBS; v[J_Z2].length = X25519_LIMBS;
+    v[J_X3].length = X25519_LIMBS; v[J_Z3].limbs[0] = 1U; v[J_Z3].length = X25519_LIMBS; x25519_copy(&v[J_X3], &v[J_X1]);
+    job->swap = 0U; job->bit = 255U; job->inv_bit = 256U; job->phase = 1;
+    return 0;
+}
+int x25519_job_step(x25519_job_t* job, int budget) {
+    bigint_t* v;
+    if (!job || job->phase < 1) return -1;
+    v = job->v;
+    while (budget-- > 0) {
+        if (job->phase == 1) {
+            uint16_t bit = job->bit;
+            uint32_t current = (uint32_t)((job->k[(bit - 1U) / 8U] >> ((bit - 1U) & 7U)) & 1U);
+            bigint_t* temporary = &v[J_T1]; bigint_t* product = &v[J_DA];
+            job->swap ^= current; x25519_swap(&v[J_X2], &v[J_X3], job->swap); x25519_swap(&v[J_Z2], &v[J_Z3], job->swap); job->swap = current;
+            if (bigint_mod_add_ct(&v[J_A], &v[J_X2], &v[J_Z2], &v[J_P]) != 0 || bigint_mod_multiply_ct(&v[J_AA], &v[J_A], &v[J_A], &v[J_P], temporary) != 0 || x25519_subtract(&v[J_B], &v[J_X2], &v[J_Z2], &v[J_P]) != 0 || bigint_mod_multiply_ct(&v[J_BB], &v[J_B], &v[J_B], &v[J_P], temporary) != 0 || x25519_subtract(&v[J_E], &v[J_AA], &v[J_BB], &v[J_P]) != 0 || bigint_mod_add_ct(&v[J_C], &v[J_X3], &v[J_Z3], &v[J_P]) != 0 || x25519_subtract(&v[J_D], &v[J_X3], &v[J_Z3], &v[J_P]) != 0 || bigint_mod_multiply_ct(&v[J_DA], &v[J_D], &v[J_A], &v[J_P], temporary) != 0 || bigint_mod_multiply_ct(&v[J_CB], &v[J_C], &v[J_B], &v[J_P], temporary) != 0) return -5;
+            if (bigint_mod_add_ct(&v[J_T0], &v[J_DA], &v[J_CB], &v[J_P]) != 0 || bigint_mod_multiply_ct(&v[J_X3], &v[J_T0], &v[J_T0], &v[J_P], temporary) != 0 || x25519_subtract(&v[J_T0], &v[J_DA], &v[J_CB], &v[J_P]) != 0 || bigint_mod_multiply_ct(&v[J_DA], &v[J_T0], &v[J_T0], &v[J_P], temporary) != 0 || bigint_mod_multiply_ct(&v[J_Z3], &v[J_X1], &v[J_DA], &v[J_P], temporary) != 0 || bigint_mod_multiply_ct(&v[J_X2], &v[J_AA], &v[J_BB], &v[J_P], temporary) != 0 || x25519_small_multiply(&v[J_T0], &v[J_E], 121665U, &v[J_P], product, temporary) != 0 || bigint_mod_add_ct(&v[J_T0], &v[J_AA], &v[J_T0], &v[J_P]) != 0 || bigint_mod_multiply_ct(&v[J_Z2], &v[J_E], &v[J_T0], &v[J_P], temporary) != 0) return -6;
+            job->bit--;
+            if (job->bit == 0U) {
+                uint32_t limb;
+                x25519_swap(&v[J_X2], &v[J_X3], job->swap); x25519_swap(&v[J_Z2], &v[J_Z3], job->swap);
+                /* invert(z2): result in A, product T0, temporary T1 */
+                for (limb = 0U; limb < X25519_LIMBS; limb++) v[J_A].limbs[limb] = 0U;
+                v[J_A].limbs[0] = 1U; v[J_A].length = 1U;
+                job->phase = 2;
+            }
+        } else if (job->phase == 2) {
+            uint16_t bit_index = (uint16_t)(job->inv_bit - 1U);
+            if (bigint_mod_multiply_ct(&v[J_T0], &v[J_A], &v[J_A], &v[J_P], &v[J_T1]) != 0) return -7;
+            x25519_copy(&v[J_A], &v[J_T0]);
+            if ((bit_index >= 5U && bit_index <= 254U) || bit_index == 3U || bit_index == 1U || bit_index == 0U) {
+                if (bigint_mod_multiply_ct(&v[J_T0], &v[J_A], &v[J_Z2], &v[J_P], &v[J_T1]) != 0) return -7;
+                x25519_copy(&v[J_A], &v[J_T0]);
+            }
+            job->inv_bit--;
+            if (job->inv_bit == 0U) {
+                x25519_copy(&v[J_Z2], &v[J_A]);
+                if (bigint_mod_multiply_ct(&v[J_T0], &v[J_X2], &v[J_Z2], &v[J_P], &v[J_T1]) != 0) return -7;
+                x25519_copy(&v[J_X2], &v[J_T0]);
+                job->phase = 3;
+            }
+        }
+        if (job->phase == 3) return 1;
+    }
+    return job->phase == 3 ? 1 : 0;
+}
+int x25519_job_result(x25519_job_t* job, uint8_t output[X25519_KEY_LENGTH]) {
+    uint8_t encoded_output[X25519_KEY_LENGTH], difference = 0U;
+    uint16_t i;
+    if (!job || job->phase != 3) return -1;
+    if (bigint_to_be(&job->v[J_X2], encoded_output, sizeof(encoded_output)) != 0) return -8;
+    for (i = 0U; i < X25519_KEY_LENGTH; i++) { output[i] = encoded_output[X25519_KEY_LENGTH - 1U - i]; difference |= output[i]; }
+    return difference == 0U ? -9 : 0;
+}

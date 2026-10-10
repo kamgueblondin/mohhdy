@@ -6917,12 +6917,16 @@ void shell_main_loop(shell_context_t* ctx) {
  * more than 3 s (P2P peers declare a node down after 10 s of silence). */
 static void stall_mark(const char* what) {
     static unsigned int last;
+    static int was_active;
     unsigned int now = sys_ticks();
-    /* only meaningful when background work (P2P, web) rides the loop */
-    if (last && now - last > 300U && (shell_p2p_active() || osui_web_active())) {
+    int active = shell_p2p_active() || osui_web_active();
+    /* only meaningful when background work (P2P, web) rode the loop for the
+     * whole step (p2p-up itself starts the work: not a stall) */
+    if (last && now - last > 300U && active && was_active) {
         print_string("shell stall "); print_int((int)(now - last)); print_string(" ticks in "); print_string(what); print_string("\n");
     }
     last = now;
+    was_active = active;
 }
 
 void main() {
