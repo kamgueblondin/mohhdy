@@ -282,7 +282,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/net_http_tls.c"
     fi
     if [ "$(basename "$test_file")" = "test_net_stack_exec.c" ]; then
-        extra_src="$extra_src $BASE_DIR/kernel/net_stack_exec.c $BASE_DIR/kernel/net_llm_client.c $BASE_DIR/kernel/net_tls_server.c $BASE_DIR/kernel/net_nic_owner.c"
+        extra_src="$extra_src $BASE_DIR/kernel/net_stack_exec.c $BASE_DIR/kernel/net_llm_client.c $BASE_DIR/kernel/net_p2p.c $BASE_DIR/kernel/net_tls_server.c $BASE_DIR/kernel/net_nic_owner.c"
     fi
     
     # Compiler

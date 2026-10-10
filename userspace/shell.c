@@ -6708,7 +6708,7 @@ void shell_main_loop(shell_context_t* ctx) {
     while (1) {
         display_prompt(ctx);
         buf[0] = '\0';
-        if (osui_web_active()) {
+        if (osui_web_active() || shell_p2p_active()) {
             /* Roadmap step 5: OS-UI web server in the background. Keys are
              * read without blocking (SYS_GETC) and the server is stepped
              * between keys, so the console stays usable. */
@@ -6726,6 +6726,7 @@ void shell_main_loop(shell_context_t* ctx) {
                     continue;
                 }
                 if (osui_web_active() && osui_web_poll(web_log, (int)sizeof(web_log)) > 0) print_string(web_log);
+                shell_p2p_poll();
                 yield();
             }
             buf[len] = '\0';

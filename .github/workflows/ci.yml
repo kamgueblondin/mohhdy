@@ -173,6 +173,40 @@ jobs:
           path: |
             test_logs/
 
+  p2p:
+    name: QEMU P2P three guests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc-multilib \
+            libc6-dev-i386 \
+            nasm \
+            qemu-system-x86
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU P2P three guests (discovery, encrypted links, replication, consensus, relay)
+        run: make qemu-p2p
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2p-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   integration-qemu-rest:
     name: QEMU integration contracts (other six + NE2000 multipair + net relay)
     runs-on: ubuntu-latest

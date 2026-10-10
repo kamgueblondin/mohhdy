@@ -4,6 +4,7 @@
  * degraded path) and, with -DMOHHDY_RING3, in the Ring 3 networker that
  * owns the card: relayed SYS_LLM_* calls then run here at CPL 3. */
 #include "net_llm_client.h"
+#include "net_p2p.h"
 #include "tls_trust_anchor.h"
 #include "tls_test_trust_anchor.h"
 #include "tls_test_leaf.h"
@@ -984,6 +985,43 @@ static int kernel_web_op(os_peer_data_request_t* r) {
     return OS_PEER_BAD_REQUEST;
 }
 
+/* Phase 5 P2P datagrams (see OS_PEER_P2P_*). Frames that are not P2P
+ * datagrams for the port are dropped while polling (counted). */
+static uint32_t g_p2p_sent, g_p2p_received, g_p2p_dropped;
+static int kernel_p2p_op(os_peer_data_request_t* r) {
+    net_p2p_view_t view;
+    uint16_t i, attempts, frame_length;
+    int n;
+    if (r->port == 0U) return OS_PEER_BAD_REQUEST;
+    if (r->op == OS_PEER_P2P_SEND) {
+        if (r->length < 8U || r->length > OS_PEER_DATA_MAX) return OS_PEER_BAD_REQUEST;
+        n = net_p2p_build(boot_llm_frame, (uint16_t)sizeof(boot_llm_frame), g_llm_dev->mac,
+                          r->data, r->data + 4, r->port, r->data + 8, (uint16_t)(r->length - 8U));
+        if (n < 0) return OS_PEER_BAD_REQUEST;
+        if (ne2k_tx_submit(g_llm_dev, g_llm_io, boot_llm_frame, (uint16_t)n) != 0) return OS_PEER_FAILED;
+        g_p2p_sent++;
+        return (int)(r->length - 8U);
+    }
+    attempts = r->attempts ? r->attempts : 16U;
+    r->length = 0U;
+    for (i = 0U; i < attempts; i++) {
+        frame_length = 0U;
+        if (ne2k_rx_poll(g_llm_dev, g_llm_io, boot_llm_frame, (uint16_t)sizeof(boot_llm_frame), &frame_length) != 0 ||
+            frame_length == 0U)
+            continue;
+        if (!net_p2p_parse(boot_llm_frame, frame_length, g_llm_dev->mac, r->port, &view)) { g_p2p_dropped++; continue; }
+        if (view.payload_length > OS_PEER_DATA_MAX - 10U) { g_p2p_dropped++; continue; }
+        for (n = 0; n < 4; n++) r->data[n] = view.source_ip[n];
+        for (n = 0; n < 6; n++) r->data[4 + n] = view.source_mac[n];
+        for (n = 0; n < (int)view.payload_length; n++) r->data[10 + n] = view.payload[n];
+        r->length = (uint16_t)(10U + view.payload_length);
+        r->flags = (uint8_t)(g_p2p_dropped > 255U ? 255U : g_p2p_dropped);
+        g_p2p_received++;
+        return 1;
+    }
+    return 0;
+}
+
 /* Plain data on the accepted peer socket (see SYS_PEER_DATA). */
 int kernel_peer_data(os_peer_data_request_t* r) {
     uint8_t state = 0U;
@@ -991,6 +1029,7 @@ int kernel_peer_data(os_peer_data_request_t* r) {
     int status;
     if (!r) return OS_PEER_BAD_REQUEST;
     if (!g_llm_present) return OS_PEER_UNAVAILABLE;
+    if (r->op == OS_PEER_P2P_SEND || r->op == OS_PEER_P2P_RECV) return kernel_p2p_op(r);
     if (!boot_llm_lease.valid) return OS_PEER_NO_LEASE;
     if (r->op >= OS_PEER_WEB_OPEN) return kernel_web_op(r);
     if (boot_peer_listen_socket < 0) return OS_PEER_NOT_LISTENING;
