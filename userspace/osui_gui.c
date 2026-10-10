@@ -529,5 +529,6 @@ void osui_gui_run(void) {
         if (key == 0) yield_gui();
     }
     sys_vga_leave();
+    osui_gui_closed();
     serial_puts("osui gui exit chrome=text prompt=MOHHDY>\n");
 }

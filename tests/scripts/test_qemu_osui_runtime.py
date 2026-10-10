@@ -220,7 +220,11 @@ def main():
                 ("chat ai a", AI_READY_MARKER),
                 ("origin-check evil", "origin_denied"),
                 ("grant mcp.invoice.create", "grant ok"),
-                ("mcp-invoice alice 10", "invoice_id="),
+                ("mcp-invoice alice 10", "confirm_required token=c0001"),
+                ("confirm c0001", "invoice_id=i0001"),
+                ("mcp-invoice-void i0001", "voided=true"),
+                ("mcp-invoice bob 3", "confirm_required token=c0002"),
+                ("deny c0002", "executed=false"),
                 ("fs-read ../secret", "traversal_denied"),
                 ("stage-prompt dessine", "mode=presenting"),
                 ("gui-status", "canonical=gui"),
@@ -231,6 +235,18 @@ def main():
                 ("chat c", "llm=stub_echo"),
             )
             for command, marker in commands:
+                say("typing %s ..." % command)
+                send_command_until(monitor, command, marker, proc)
+            # Roadmap step 3: idle expiry, restore with history, cleanup.
+            say("typing session-ttl 2 ...")
+            send_command_until(monitor, "session-ttl 2", "session-ttl ok ttl=2", proc)
+            time.sleep(5)
+            for command, marker in (
+                ("session-status", "ai_status=expired"),
+                ("chat d", "error=session_closed ai_status=expired"),
+                ("session-restore s0002", "session-restore ok session_id=s0002 status=open history=2"),
+                ("session-cleanup", "session-cleanup ok freed="),
+            ):
                 say("typing %s ..." % command)
                 send_command_until(monitor, command, marker, proc)
         say("QEMU OS-UI runtime contract passed.")

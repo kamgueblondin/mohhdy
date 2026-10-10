@@ -38,6 +38,7 @@ static const char *const k_linux_traps[] = {
 
 static const char *const k_cmds[] = {
     "session-new", "session-use", "session-status", "session-list", "session-end",
+    "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
     "chat", "prompt",
     "grant", "revoke", "escalate", "takeover", "admin-status",
     "origin-check",
@@ -89,6 +90,12 @@ typedef struct {
     char caps[OSUI_MAX_CAPS][OSUI_CAP];
     int n_msgs;
     char msgs[OSUI_MAX_MSGS][OSUI_TEXT];
+    unsigned last_active;   /* osui_now() seconds of the last command */
+    /* One mutation waiting for an explicit confirm (roadmap step 3). */
+    char pending_token[OSUI_ID];
+    char pending_tool[OSUI_CAP];
+    char pending_a[48];
+    char pending_b[24];
 } osui_session_t;
 
 typedef struct {
@@ -97,6 +104,7 @@ typedef struct {
     char session[OSUI_ID];
     char customer[48];
     char amount[24];
+    int voided;
 } osui_invoice_t;
 
 typedef struct {
@@ -160,6 +168,8 @@ typedef struct {
     unsigned next_sid;
     unsigned next_rid;
     unsigned next_iid;
+    unsigned next_cid;      /* confirmation tokens c0001.. */
+    unsigned session_ttl;   /* idle expiry in seconds, 0 = never */
     char chat_mode[12];
     int menu_open;
     char focused[24];
@@ -168,6 +178,7 @@ typedef struct {
     char form_customer[48];
     char form_amount[24];
     int form_submitted;
+    int confirming;         /* replaying a confirmed mutation */
     char stage_mode[16];
     char stage_prompt[OSUI_TEXT];
     char stage_kind[OSUI_KIND];
@@ -204,6 +215,8 @@ static osui_state_t G;
 #ifdef MOHHDY_OSUI_HOST_TEST
 /* Host fixture: osui_test_ai_rc < 0 forces a failure, with
  * osui_test_ai_error as the kernel's OS_AI_ERROR_* class. */
+unsigned osui_test_now = 0U;
+static unsigned osui_now(void) { return osui_test_now; }
 int osui_test_ai_rc = 0;
 unsigned osui_test_ai_error = 0U;
 static unsigned osui_ai_last_error(void) { return osui_test_ai_error; }
@@ -224,6 +237,11 @@ static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     return i;
 }
 #else
+static unsigned osui_now(void) {
+    int t;
+    asm volatile("int $0x80" : "=a"(t) : "a"(SYS_TICKS) : "memory");
+    return (unsigned)t / 100U;
+}
 static unsigned osui_ai_last_error(void) {
     static os_ai_engine_status_t st;
     int result;
@@ -501,6 +519,8 @@ static osui_session_t *alloc_session(const char *site) {
     s_cpy(s->ai_state, 16, "idle");
     s->n_caps = 0;
     s->n_msgs = 0;
+    s->last_active = osui_now();
+    s->pending_token[0] = 0;
     add_cap(s, "chat.reply");
     add_cap(s, "site.explain");
     add_cap(s, "session.escalate");
@@ -998,6 +1018,175 @@ static int cmd_session_end(char *out, int max) {
     out_add(out, max, &p, s->id);
     out_add(out, max, &p, " status=closed ai_status=ended history=cleared\n");
     return OSUI_OK;
+}
+
+/* Roadmap step 3: bounded agent sessions. Idle sessions expire after
+ * G.session_ttl seconds (0 = never): status closed, ai_status expired,
+ * pending mutation dropped, history kept so session-restore can reopen it.
+ * session-end is final (history cleared, not restorable). session-cleanup
+ * frees every closed session slot. */
+static void sessions_expire(void) {
+    unsigned now = osui_now();
+    int i;
+    if (G.session_ttl == 0U) return;
+    for (i = 0; i < OSUI_MAX_SESSIONS; i++) {
+        osui_session_t *s = &G.sessions[i];
+        if (!s->used || s->status == ST_CLOSED) continue;
+        if (now - s->last_active > G.session_ttl) {
+            s->status = ST_CLOSED;
+            s_cpy(s->ai_state, 16, "expired");
+            if (s->pending_token[0]) journal(s->id, s->pending_tool, "pending_expired", 0U);
+            s->pending_token[0] = 0;
+            journal(s->id, "session.expire", "expired", 0U);
+        }
+    }
+}
+
+static int parse_u(const char *a, unsigned *v) {
+    int i = 0;
+    unsigned x = 0U;
+    if (!a || !a[0]) return 0;
+    while (a[i]) {
+        if (a[i] < '0' || a[i] > '9' || x > 100000U) return 0;
+        x = x * 10U + (unsigned)(a[i] - '0');
+        i++;
+    }
+    *v = x;
+    return 1;
+}
+
+static int cmd_session_ttl(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    unsigned v = 0U;
+    if (narg >= 1 && !parse_u(args[0], &v)) {
+        out_add(out, max, &p, "osui session-ttl error=usage session-ttl <secondes>\n");
+        return OSUI_ERR;
+    }
+    if (narg >= 1) G.session_ttl = v;
+    out_add(out, max, &p, "osui session-ttl ok ttl=");
+    out_u(out, max, &p, G.session_ttl);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_session_restore(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    osui_session_t *s = narg > 0 ? find_sid(args[0]) : 0;
+    int i, p = 0;
+    if (!s) {
+        out_add(out, max, &p, "osui session-restore error=session_id inconnu\n");
+        return OSUI_ERR;
+    }
+    if (s->status != ST_CLOSED || s_cmp(s->ai_state, "expired") != 0) {
+        out_add(out, max, &p, s->status == ST_CLOSED ? "osui session-restore error=ended_not_restorable session_id="
+                                                    : "osui session-restore error=not_expired session_id=");
+        out_add(out, max, &p, s->id);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+    s->status = ST_OPEN;
+    s_cpy(s->ai_state, 16, "idle");
+    s->last_active = osui_now();
+    for (i = 0; i < OSUI_MAX_SESSIONS; i++)
+        if (&G.sessions[i] == s) G.current = i;
+    journal(s->id, "session.restore", "ok", 0U);
+    out_add(out, max, &p, "osui session-restore ok session_id=");
+    out_add(out, max, &p, s->id);
+    out_add(out, max, &p, " status=open history=");
+    out_u(out, max, &p, (unsigned)s->n_msgs);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_session_cleanup(char *out, int max) {
+    int i, p = 0;
+    unsigned freed = 0U;
+    for (i = 0; i < OSUI_MAX_SESSIONS; i++) {
+        osui_session_t *s = &G.sessions[i];
+        if (!s->used || s->status != ST_CLOSED) continue;
+        journal(s->id, "session.cleanup", "freed", 0U);
+        s->used = 0;
+        s->n_msgs = 0;
+        s->n_caps = 0;
+        s->pending_token[0] = 0;
+        if (G.n_sessions > 0) G.n_sessions--;
+        freed++;
+    }
+    if (G.current < 0 || G.current >= OSUI_MAX_SESSIONS || !G.sessions[G.current].used) {
+        G.current = -1;
+        for (i = 0; i < OSUI_MAX_SESSIONS; i++)
+            if (G.sessions[i].used) { G.current = i; break; }
+    }
+    out_add(out, max, &p, "osui session-cleanup ok freed=");
+    out_u(out, max, &p, freed);
+    out_add(out, max, &p, " remaining=");
+    out_u(out, max, &p, (unsigned)G.n_sessions);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_mcp_invoice(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max);
+
+/* confirm <token>: replays the pending mutation of the current session with
+ * every check redone (capability may have been revoked meanwhile). */
+static int cmd_confirm(char args[OSUI_MAX_ARGS][96], int narg, int accept, char *out, int max) {
+    osui_session_t *s = cur();
+    char a2[OSUI_MAX_ARGS][96];
+    int p = 0, rc, i;
+    const char *verb = accept ? "confirm" : "deny";
+    if (!s || s->status == ST_CLOSED || narg < 1 || !s->pending_token[0] ||
+        s_cmp(args[0], s->pending_token) != 0) {
+        if (s && narg >= 1) journal(s->id, "confirm", "token_unknown", 0U);
+        out_add(out, max, &p, "osui ");
+        out_add(out, max, &p, verb);
+        out_add(out, max, &p, " error=token_unknown\n");
+        return OSUI_ERR;
+    }
+    s->pending_token[0] = 0;
+    if (!accept) {
+        journal(s->id, s->pending_tool, "denied_by_user", 0U);
+        out_add(out, max, &p, "osui deny ok tool=");
+        out_add(out, max, &p, s->pending_tool);
+        out_add(out, max, &p, " executed=false\n");
+        return OSUI_OK;
+    }
+    for (i = 0; i < OSUI_MAX_ARGS; i++) a2[i][0] = 0;
+    s_cpy(a2[0], 96, s->pending_a);
+    s_cpy(a2[1], 96, s->pending_b);
+    G.confirming = 1;
+    rc = cmd_mcp_invoice(a2, 2, out, max);
+    G.confirming = 0;
+    return rc;
+}
+
+static int cmd_invoice_void(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    osui_session_t *s = cur();
+    int i, p = 0;
+    if (!s || narg < 1) {
+        out_add(out, max, &p, "osui mcp-invoice-void error=usage mcp-invoice-void <invoice_id>\n");
+        return OSUI_ERR;
+    }
+    for (i = 0; i < G.n_invoices; i++) {
+        osui_invoice_t *inv = &G.invoices[i];
+        if (!inv->used || s_cmp(inv->id, args[0]) != 0) continue;
+        if (s_cmp(inv->session, s->id) != 0) {
+            journal(s->id, "mcp.invoice.void", "other_session", 0U);
+            out_add(out, max, &p, "osui mcp-invoice-void error=other_session\n");
+            return OSUI_ERR;
+        }
+        if (!has_cap(s, "mcp.invoice.create")) {
+            journal(s->id, "mcp.invoice.void", "capability_denied", 0U);
+            out_add(out, max, &p, "osui mcp-invoice-void error=capability_denied capability=mcp.invoice.create\n");
+            return OSUI_ERR;
+        }
+        inv->voided = 1;
+        journal(s->id, "mcp.invoice.void", "ok", 0U);
+        out_add(out, max, &p, "osui mcp-invoice-void ok invoice_id=");
+        out_add(out, max, &p, inv->id);
+        out_add(out, max, &p, " voided=true\n");
+        return OSUI_OK;
+    }
+    out_add(out, max, &p, "osui mcp-invoice-void error=invoice_unknown\n");
+    return OSUI_ERR;
 }
 
 static int cmd_session_status(char *out, int max) {
@@ -1963,7 +2152,28 @@ static int cmd_mcp_invoice(char args[OSUI_MAX_ARGS][96], int narg, char *out, in
         out_add(out, max, &p, "osui mcp-invoice error=too_many\n");
         return OSUI_ERR;
     }
+    if (!G.confirming) {
+        /* Roadmap step 3: every mutation waits for an explicit confirm. */
+        G.next_cid++;
+        make_id(s->pending_token, 'c', G.next_cid);
+        s_cpy(s->pending_tool, OSUI_CAP, "mcp.invoice.create");
+        s_cpy(s->pending_a, 48, args[0]);
+        s_cpy(s->pending_b, 24, args[1]);
+        journal(s->id, "mcp.invoice.create", "confirm_required", rid);
+        out_add(out, max, &p, "osui mcp-invoice confirm_required token=");
+        out_add(out, max, &p, s->pending_token);
+        out_add(out, max, &p, " session_id=");
+        out_add(out, max, &p, s->id);
+        out_add(out, max, &p, " confirm=confirm ");
+        out_add(out, max, &p, s->pending_token);
+        out_add(out, max, &p, " deny=deny ");
+        out_add(out, max, &p, s->pending_token);
+        emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, "\n");
+        return OSUI_OK;
+    }
     inv = &G.invoices[G.n_invoices++];
+    inv->voided = 0;
     inv->used = 1;
     G.next_iid++;
     make_id(inv->id, 'i', G.next_iid);
@@ -2337,6 +2547,12 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "session-status") == 0) return cmd_session_status(out, max);
     if (s_cmp(cmd, "session-list") == 0) return cmd_session_list(out, max);
     if (s_cmp(cmd, "session-end") == 0) return cmd_session_end(out, max);
+    if (s_cmp(cmd, "session-ttl") == 0) return cmd_session_ttl(args, narg, out, max);
+    if (s_cmp(cmd, "session-restore") == 0) return cmd_session_restore(args, narg, out, max);
+    if (s_cmp(cmd, "session-cleanup") == 0) return cmd_session_cleanup(out, max);
+    if (s_cmp(cmd, "confirm") == 0) return cmd_confirm(args, narg, 1, out, max);
+    if (s_cmp(cmd, "deny") == 0) return cmd_confirm(args, narg, 0, out, max);
+    if (s_cmp(cmd, "mcp-invoice-void") == 0) return cmd_invoice_void(args, narg, out, max);
     if (s_cmp(cmd, "chat") == 0) { audit_log_add("chat", args[0]); return cmd_chat(args, narg, out, max); }
     if (s_cmp(cmd, "grant") == 0) { audit_log_add("grant", args[0]); return cmd_grant_revoke(1, args, narg, out, max); }
     if (s_cmp(cmd, "revoke") == 0) { audit_log_add("revoke", args[0]); return cmd_grant_revoke(0, args, narg, out, max); }
@@ -2504,6 +2720,11 @@ int osui_dispatch_line(const char *line, char *out, int out_max) {
         }
         s_cpy(cmd, 64, mapped);
     }
+    sessions_expire();
+    {
+        osui_session_t *s = cur();
+        if (s && s->status != ST_CLOSED) s->last_active = osui_now();
+    }
     if (s_cmp(cmd, "prompt") == 0)
         return cmd_prompt(args, narg, line, out, out_max);
     rc = dispatch_cmd(cmd, args, narg, out, out_max);
@@ -2570,6 +2791,7 @@ int osui_gui_should_enter(void) { return G.gui_enter; }
 void osui_gui_ack_enter(void) { G.gui_enter = 0; }
 int osui_gui_should_leave(void) { return G.gui_leave; }
 void osui_gui_ack_leave(void) { G.gui_leave = 0; }
+void osui_gui_closed(void) { G.gui_live = 0; G.gui_leave = 0; }
 
 int osui_stage_tick(char *out, int out_max) {
     if (out && out_max > 0) out[0] = 0;

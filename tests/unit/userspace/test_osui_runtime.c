@@ -207,6 +207,10 @@ static void test_mcp_invoice_and_undeclared(void) {
     run_line("grant mcp.invoice.create");
     rc = run_line("mcp-invoice alice 10");
     TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "confirm_required token=c0001") != NULL);
+    TEST_ASSERT(strstr(g_out, "invoice_id=") == NULL);
+    rc = run_line("confirm c0001");
+    TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "invoice_id=i0001") != NULL);
     TEST_ASSERT(strstr(g_out, "session_id=s0001") != NULL);
 
@@ -435,12 +439,109 @@ static void test_browser_navigation_dom_tree_and_audit(void) {
     TEST_ASSERT(strstr(g_out, "count=") != NULL);
 }
 
+
+extern unsigned osui_test_now;
+
+/* Roadmap step 3: create, expire, restore, end, clean up. */
+static void test_session_lifecycle(void) {
+    int rc;
+    setup();
+    osui_test_now = 100U;
+    run_line("session-new demo");
+    run_line("chat hello");
+    rc = run_line("session-ttl 30");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "ttl=30") != NULL);
+    TEST_ASSERT_EQUAL(1, run_line("session-ttl abc"));
+    osui_test_now = 120U;
+    run_line("session-status");
+    TEST_ASSERT(strstr(g_out, "status=open") != NULL);
+    rc = run_line("session-restore s0002");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "not_expired") != NULL);
+    osui_test_now = 200U; /* idle 80 s > 30 s */
+    run_line("session-status");
+    TEST_ASSERT(strstr(g_out, "ai_status=expired") != NULL);
+    rc = run_line("chat again");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "session_closed") != NULL);
+    rc = run_line("session-restore s0002");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "status=open history=") != NULL);
+    TEST_ASSERT(strstr(g_out, "history=0") == NULL); /* history kept */
+    TEST_ASSERT_EQUAL(0, run_line("chat back"));
+    run_line("session-end");
+    rc = run_line("session-restore s0002");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "ended_not_restorable") != NULL);
+    run_line("session-new other");
+    rc = run_line("session-cleanup");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "freed=2 remaining=1") != NULL);
+    rc = run_line("session-use s0002");
+    TEST_ASSERT_EQUAL(1, rc);
+    run_line("admin-status"); /* traceable */
+    TEST_ASSERT(strstr(g_out, "session.expire") != NULL);
+    TEST_ASSERT(strstr(g_out, "session.restore") != NULL);
+    TEST_ASSERT(strstr(g_out, "session.cleanup") != NULL);
+    run_line("session-ttl 0");
+    osui_test_now = 0U;
+}
+
+/* Mutations need an explicit confirm; refusal, revocation, expiry. */
+static void test_mutation_confirm(void) {
+    int rc;
+    setup();
+    osui_test_now = 10U;
+    run_line("grant mcp.invoice.create");
+    run_line("mcp-invoice bob 5");
+    TEST_ASSERT(strstr(g_out, "token=c0001") != NULL);
+    rc = run_line("confirm c9999");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "token_unknown") != NULL);
+    rc = run_line("deny c0001");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "executed=false") != NULL);
+    TEST_ASSERT_EQUAL(1, run_line("confirm c0001")); /* single use */
+    /* capability revoked between request and confirm */
+    run_line("mcp-invoice bob 6");
+    TEST_ASSERT(strstr(g_out, "token=c0002") != NULL);
+    run_line("revoke mcp.invoice.create");
+    rc = run_line("confirm c0002");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "capability_denied") != NULL);
+    /* confirmed, then revocable (void) and traced */
+    run_line("grant mcp.invoice.create");
+    run_line("mcp-invoice carol 7");
+    TEST_ASSERT_EQUAL(0, run_line("confirm c0003"));
+    TEST_ASSERT(strstr(g_out, "invoice_id=i0001") != NULL);
+    rc = run_line("mcp-invoice-void i0001");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "voided=true") != NULL);
+    TEST_ASSERT_EQUAL(1, run_line("mcp-invoice-void i0042"));
+    run_line("admin-status");
+    TEST_ASSERT(strstr(g_out, "denied_by_user") != NULL);
+    TEST_ASSERT(strstr(g_out, "mcp.invoice.void") != NULL);
+    /* pending mutation dropped when the session expires */
+    run_line("mcp-invoice dave 8");
+    TEST_ASSERT(strstr(g_out, "token=c0004") != NULL);
+    run_line("session-ttl 5");
+    osui_test_now = 100U;
+    rc = run_line("confirm c0004");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "token_unknown") != NULL);
+    run_line("session-ttl 0");
+    osui_test_now = 0U;
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
     RUN_TEST(test_slash_help_and_linux_trap);
     RUN_TEST(test_prompt_chat_and_stage);
     RUN_TEST(test_sessions_isolated);
+    RUN_TEST(test_session_lifecycle);
+    RUN_TEST(test_mutation_confirm);
     RUN_TEST(test_grant_revoke_chat);
     RUN_TEST(test_escalate_takeover);
     RUN_TEST(test_origin_denied);
