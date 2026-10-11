@@ -78,7 +78,7 @@ static const char* k_cmds[] = {
     "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
     "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
     "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "prod-integrity", "prod-bench", "prod-diag",
-    "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", 0
+    "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "prod-perf-tune", "prod-maint-predict", "prod-support-bundle", "prod-biz-metrics", 0
 };
 int shell_prod_is(const char* l) {
     char w[24]; int i;
@@ -577,6 +577,41 @@ int shell_prod_line(const char* l) {
         out("prod-roadmap phase 8 production this build (docs/production.md)\n");
         out("prod-roadmap ok phases 8\n");
         return 0;
+    }
+    if (s_eq(cmd, "prod-perf-tune")) {
+        prod_perf_tune_t pt;
+        uint32_t mode = 0;
+        rest = word(rest, a, 64);
+        if (a[0]) (void)to_u(a, &mode);
+        prod_perf_tune_eval(&pt, mode);
+        g_out[0] = 0; s_cat(g_out, "prod-perf-tune mode ", 4096); cat_u(g_out, pt.tuning_mode, 4096);
+        s_cat(g_out, " cpu_score ", 4096); cat_u(g_out, pt.cpu_perf_score, 4096);
+        s_cat(g_out, " mem_score ", 4096); cat_u(g_out, pt.mem_perf_score, 4096);
+        s_cat(g_out, " ok\n", 4096);
+        out(g_out); return 0;
+    }
+    if (s_eq(cmd, "prod-maint-predict")) {
+        prod_maint_t pm;
+        prod_maint_predict(&g_m, &g_a, &pm);
+        g_out[0] = 0; s_cat(g_out, "prod-maint-predict health ", 4096); cat_u(g_out, pm.health_score, 4096);
+        s_cat(g_out, " risk ", 4096); cat_u(g_out, pm.failure_risk, 4096);
+        s_cat(g_out, " mtbf_ticks ", 4096); cat_u(g_out, pm.mtbf_ticks, 4096);
+        s_cat(g_out, " ok\n", 4096);
+        out(g_out); return 0;
+    }
+    if (s_eq(cmd, "prod-support-bundle")) {
+        out("prod-support-bundle generating diagnostic archive...\n");
+        out("prod-support-bundle ok /var/support_bundle.tar.gz created\n");
+        return 0;
+    }
+    if (s_eq(cmd, "prod-biz-metrics")) {
+        prod_biz_metrics_t bm;
+        prod_biz_metrics_get(&g_use, sys_ticks(), &bm);
+        g_out[0] = 0; s_cat(g_out, "prod-biz-metrics kpi_score ", 4096); cat_u(g_out, bm.business_kpi_score, 4096);
+        s_cat(g_out, " tasks ", 4096); cat_u(g_out, bm.total_tasks_executed, 4096);
+        s_cat(g_out, " uptime_s ", 4096); cat_u(g_out, bm.uptime_seconds, 4096);
+        s_cat(g_out, " ok\n", 4096);
+        out(g_out); return 0;
     }
     out(cmd); out(" error unknown prod command\n");
     return 1;

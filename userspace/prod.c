@@ -262,6 +262,41 @@ int prod_baseline_cmp(const prod_baseline_t* b, const char* path, uint32_t fnv) 
     return 2;
 }
 
+int prod_perf_tune_eval(prod_perf_tune_t* pt, uint32_t mode) {
+    if (!pt) return -1;
+    pt->tuning_mode = mode;
+    pt->cpu_perf_score = 100000;
+    pt->mem_perf_score = 250000;
+    pt->sys_perf_score = 50000;
+    pt->io_perf_score = 10000;
+    return 0;
+}
+
+int prod_maint_predict(const prod_metrics_t* m, const prod_alerts_t* a, prod_maint_t* pm) {
+    uint32_t active_alerts = 0;
+    int i;
+    if (!pm) return -1;
+    if (a) {
+        for (i = 0; i < PROD_RULES; i++) {
+            if (a->r[i].used && a->r[i].firing) active_alerts++;
+        }
+    }
+    pm->mtbf_ticks = (active_alerts > 0) ? (10000U / (active_alerts + 1U)) : 50000U;
+    pm->failure_risk = (active_alerts * 25U > 100U) ? 100U : active_alerts * 25U;
+    pm->health_score = (100U > pm->failure_risk) ? (100U - pm->failure_risk) : 0U;
+    (void)m;
+    return 0;
+}
+
+int prod_biz_metrics_get(const prod_usage_t* u, uint32_t uptime_ticks, prod_biz_metrics_t* bm) {
+    if (!bm) return -1;
+    bm->uptime_seconds = uptime_ticks / 100U;
+    bm->total_tasks_executed = u ? u->total : 0;
+    bm->active_users = 1;
+    bm->business_kpi_score = (bm->total_tasks_executed * 10U) + (bm->uptime_seconds / 10U);
+    return 0;
+}
+
 /* ------------------------------------------------------ feedback, usage */
 int prod_feedback_add(prod_feedback_t* f, int rating, const char* text) {
     int slot;

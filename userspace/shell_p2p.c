@@ -147,8 +147,14 @@ int shell_p2p_line(const char* line) {
         if (!key[0]) { int i; const char* d = "mohhdy-p2p-lab"; for (i = 0; d[i]; i++) key[i] = d[i]; key[i] = 0; }
         if (g_seed_ok) { int i; for (i = 0; i < 32; i++) seed[i] = g_seed[i]; }
         else { int i; seed_from_machine(seed, a); for (i = 0; i < 32; i++) g_seed[i] = seed[i]; g_seed_ok = 1; }
-        rc = p2p_up(&g_node, a, ip, key, seed, &g_host);
-        if (rc != 0) { print_string("p2p-up error bad arguments\n"); return 1; }
+        print_string("p2p-up step 1/4: netkey\n");
+        if (p2p_up_step(&g_node, 1, a, ip, key, seed, &g_host) != 0) { print_string("p2p-up error bad arguments\n"); return 1; }
+        print_string("p2p-up step 2/4: secret\n");
+        if (p2p_up_step(&g_node, 2, a, ip, key, seed, &g_host) != 0) { print_string("p2p-up error secret\n"); return 1; }
+        print_string("p2p-up step 3/4: pubkey+id\n");
+        if (p2p_up_step(&g_node, 3, a, ip, key, seed, &g_host) != 0) { print_string("p2p-up error pubkey\n"); return 1; }
+        print_string("p2p-up step 4/4: hello\n");
+        if (p2p_up_step(&g_node, 4, a, ip, key, seed, &g_host) != 0) { print_string("p2p-up error hello\n"); return 1; }
         print_string("p2p-up ok name "); print_string(a); print_string(" ip "); print_string(b);
         print_string(" port 7700 crypto x25519+aes128gcm\n");
         kv_apply_pending();
@@ -161,6 +167,36 @@ int shell_p2p_line(const char* line) {
     if (s_eq(cmd, "p2p-stats")) { report("stats"); return 0; }
     if (s_eq(cmd, "p2p-analyze")) { report("analyze"); return 0; }
     if (s_eq(cmd, "p2p-kv")) { report("kv"); return 0; }
+    if (s_eq(cmd, "p2p-raft")) {
+        rest = word(rest, a, (int)sizeof(a));
+        if (s_eq(a, "elect")) {
+            p2p_raft_elect(&g_node, &g_host);
+            print_string("p2p-raft election started\n");
+            return 0;
+        }
+        report("raft");
+        return 0;
+    }
+    if (s_eq(cmd, "p2p-cache")) {
+        rest = word(rest, a, (int)sizeof(a));
+        rest = word(rest, b, (int)sizeof(b));
+        if (s_eq(a, "get")) {
+            const p2p_item_t* it = p2p_cache_get(&g_node, b, ticks());
+            if (it) { print_string("p2p-cache ok "); print_string(b); print_string("="); print_string(it->value); print_string("\n"); }
+            else { print_string("p2p-cache miss "); print_string(b); print_string("\n"); }
+            return 0;
+        }
+        if (s_eq(a, "put")) {
+            char val[P2P_VAL_MAX];
+            const char* r2 = word(rest, val, (int)sizeof(val));
+            int ttl = r2[0] ? to_int(r2) : 500;
+            p2p_cache_put(&g_node, b, val, (uint32_t)ttl, ticks());
+            print_string("p2p-cache put ok "); print_string(b); print_string("\n");
+            return 0;
+        }
+        report("cache");
+        return 0;
+    }
     if (s_eq(cmd, "p2p-poll")) {
         unsigned until;
         rest = word(rest, a, (int)sizeof(a));

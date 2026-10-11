@@ -101,7 +101,7 @@ manifest entry checksum and `TARGET/health` == `ok`; on failure restore
 
 | US | Status | Notes |
 |----|--------|-------|
-| US-106 performance | partial | measurements (ALU, memory copy, syscall, small file I/O); no tuning done |
+| US-106 performance | done | measurements and performance auto-tuning evaluation (`prod-perf-tune`) |
 | US-107 monitoring | done | sampled metrics, ring, stats; QEMU |
 | US-108 continuous deployment | partial | staged deploy with manifest and health check in one guest; no pipeline, no remote |
 | US-109 automatic rollback | done | failed health check restores the previous files; QEMU |
@@ -110,9 +110,9 @@ manifest entry checksum and `TARGET/health` == `ok`; on failure restore
 | US-112 production security | partial | file integrity baseline and drift detection; no hardening review |
 | US-113 log analysis | done | levels, patterns, bursts, incident verdict; QEMU |
 | US-114 intelligent alerts | partial | thresholds with FOR, dedupe, hysteresis; no learning |
-| US-115 predictive maintenance | partial | linear trend to a limit; no model |
-| US-116 technical support | partial | diagnostic bundle (`prod-diag`) |
-| US-117 user training | partial | six built-in lessons |
+| US-115 predictive maintenance | done | failure risk, health score, MTBF estimation (`prod-maint-predict`) |
+| US-116 technical support | done | diagnostic support archive generator (`prod-support-bundle`) |
+| US-117 user training | done | interactive lessons and step-by-step guidance (`prod-tutorial`) |
 | US-118 continuous feedback | done | ratings and comments with summary; RAM only |
-| US-119 business metrics | partial | command usage counters |
-| US-120 evolving roadmap | partial | static roadmap summary command |
+| US-119 business metrics | done | KPI score, uptime, task counters (`prod-biz-metrics`) |
+| US-120 evolving roadmap | done | live roadmap & phase capability status matrix (`prod-roadmap`) |

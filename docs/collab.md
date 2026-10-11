@@ -18,10 +18,9 @@ SHA-256 digest of the canonical ledger (with the verdict of each entry):
 equal digests mean equal ledgers. Missing entries are repaired with
 `collab-sync` (two-way anti-entropy by origin and sequence).
 
-Trust is membership-level: transport is authenticated by the network key
-and per-pair AES-GCM (phase 5), but entries are not signed per node, so a
-member relaying entries could forge another member's entry. There is no
-signing primitive for this in the tree yet (the TLS stack only verifies).
+Trust is authenticated by the network key and per-pair AES-GCM (phase 5),
+and entries are signed per node with Schnorr signatures (#121) using trust
+on first use (TOFU) key binding.
 
 ## Rules applied by the fold
 
@@ -62,7 +61,7 @@ signing primitive for this in the tree yet (the TLS stack only verifies).
 |----|--------|-------|
 | US-091 points | done | grant, transfers, overdraft refused; QEMU |
 | US-092 shared resources | done | offers with capacity, bookings; QEMU |
-| US-093 distributed authentication | partial | membership by network key + per-pair AEAD (phase 5); no per-node signatures |
+| US-093 distributed authentication | done | membership by network key + per-pair AEAD (phase 5) and per-node Schnorr signatures (#121) |
 | US-094 resource marketplace | partial | priced offers and paid bookings; no search, auction or price discovery |
 | US-095 reputation | done | ratings gated by completed exchanges, average shown; QEMU |
 | US-096 distributed tasks | done | post with escrow, claim, compute on another guest, review; QEMU |

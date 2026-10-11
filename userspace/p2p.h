@@ -30,7 +30,8 @@ enum {
     P2P_T_HELLO = 1, P2P_T_SEALED = 2,
     /* inner (sealed) types */
     P2P_I_PING = 10, P2P_I_PONG, P2P_I_MSG, P2P_I_PUT, P2P_I_SYNC_REQ, P2P_I_SYNC_ITEMS,
-    P2P_I_GET_REQ, P2P_I_GET_RESP, P2P_I_PROPOSE, P2P_I_VOTE, P2P_I_COMMIT, P2P_I_APP, P2P_I_COUNT
+    P2P_I_GET_REQ, P2P_I_GET_RESP, P2P_I_PROPOSE, P2P_I_VOTE, P2P_I_COMMIT, P2P_I_APP,
+    P2P_I_RAFT_VOTE_REQ, P2P_I_RAFT_VOTE_RESP, P2P_I_RAFT_HEARTBEAT, P2P_I_CACHE_INV, P2P_I_COUNT
 };
 
 typedef struct {
@@ -51,7 +52,7 @@ typedef struct {
     uint8_t pub[32];
     uint8_t key[16];
     uint8_t iv[4];
-    uint32_t tx_counter, rx_counter;
+    uint32_t tx_counter, rx_counter, rx_window;
     uint32_t last_seen, ping_sent_at, rtt_ticks;
     uint32_t sync_at;      /* last SYNC_REQ sent by p2p_sync */
     uint8_t sync_retries;  /* re-sends left until SYNC_ITEMS arrives */
@@ -85,6 +86,44 @@ typedef struct {
 #define P2P_PROPOSE_RESEND_TICKS (2U * P2P_HZ)
 #define P2P_SYNC_RESEND_TICKS (2U * P2P_HZ)
 
+typedef enum { P2P_RAFT_FOLLOWER = 0, P2P_RAFT_CANDIDATE = 1, P2P_RAFT_LEADER = 2 } p2p_raft_role_t;
+
+typedef struct {
+    uint8_t active;           /* 1 if Raft consensus mode is active */
+    uint8_t role;             /* Follower (0), Candidate (1), Leader (2) */
+    uint32_t term;            /* current Raft term */
+    uint32_t voted_for;       /* candidate ID voted for in current term (0 if none) */
+    uint32_t leader_id;       /* current leader ID */
+    uint32_t votes_granted;   /* votes received in current election */
+    uint32_t election_tick;   /* election timeout tick */
+    uint32_t heartbeat_tick;  /* next heartbeat tick if leader */
+    uint32_t term_changes;    /* term change counter */
+} p2p_raft_state_t;
+
+#define P2P_CACHE_MAX 8
+typedef struct {
+    uint8_t used;
+    char key[P2P_KEY_MAX];
+    char value[P2P_VAL_MAX];
+    uint32_t expire_tick;
+    uint32_t hits;
+} p2p_cache_entry_t;
+
+typedef struct {
+    p2p_cache_entry_t entries[P2P_CACHE_MAX];
+    uint32_t total_hits;
+    uint32_t total_misses;
+    uint32_t invalidations;
+} p2p_cache_t;
+
+typedef struct {
+    uint32_t window_size;     /* dynamic congestion window (1..16) */
+    uint32_t rtt_avg_ms;      /* smoothed RTT in ms */
+    uint32_t loss_count;      /* total detected losses / retransmissions */
+    uint32_t priority_high_tx;/* high-priority control frames sent */
+    uint32_t priority_low_tx; /* low-priority data frames sent */
+} p2p_qos_t;
+
 typedef struct {
     uint8_t up;
     char name[P2P_NAME_MAX];
@@ -99,6 +138,9 @@ typedef struct {
     p2p_peer_t peers[P2P_PEERS];
     p2p_item_t kv[P2P_KV];
     p2p_proposal_t prop;
+    p2p_raft_state_t raft;
+    p2p_cache_t cache;
+    p2p_qos_t qos;
     struct { uint32_t src, id; } seen[P2P_SEEN];
     uint32_t seen_next;
     /* traffic analysis (US-075) */
@@ -110,6 +152,8 @@ typedef struct {
     void* app_ctx;
 } p2p_node_t;
 
+int p2p_up_step(p2p_node_t* n, int step, const char* name, const uint8_t ip[4], const char* netkey,
+                const uint8_t seed[32], const p2p_host_t* h);
 int p2p_up(p2p_node_t* n, const char* name, const uint8_t ip[4], const char* netkey,
            const uint8_t seed[32], const p2p_host_t* h);
 void p2p_down(p2p_node_t* n);
@@ -123,6 +167,9 @@ int p2p_get_remote(p2p_node_t* n, const p2p_host_t* h, const char* key);
 int p2p_sync(p2p_node_t* n, const p2p_host_t* h, const char* peer);
 int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 int p2p_block(p2p_node_t* n, const char* peer, int blocked);
+int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h);
+const p2p_item_t* p2p_cache_get(p2p_node_t* n, const char* key, uint32_t current_tick);
+int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t ttl_ticks, uint32_t current_tick);
 /* Report lines into out (peers, health, stats, kv). */
 int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char* out, int cap);
 const char* p2p_type_name(int type);
