@@ -735,6 +735,31 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
             s_cat(out, "\n", cap);
         }
         s_cat(out, "p2p kv ok ", cap); cat_u(out, (uint32_t)shown, cap); s_cat(out, "\n", cap);
+    } else if (s_eq(what, "analyze")) {
+        /* US-075: automatic reading of the counters; rules are fixed and
+         * documented, each finding names its cause and a hint */
+        uint32_t rx_all = 0, suspicious = 0, degraded = 0;
+        for (i = 1; i < P2P_I_COUNT; i++) rx_all += n->rx_type[i];
+        for (i = 0; i < P2P_PEERS; i++) {
+            const p2p_peer_t* p = &n->peers[i];
+            if (!p->used) continue;
+#define FIND(cond, kind, label, val, hint) if (cond) { s_cat(out, "p2p analyze finding ", cap); s_cat(out, p->name, cap); s_cat(out, " " label " ", cap); cat_u(out, (val), cap); s_cat(out, " (" hint ")\n", cap); kind++; shown++; }
+            FIND(p->auth_fail > 0, suspicious, "auth-failures", p->auth_fail, "wrong network key or tampering")
+            FIND(p->replay > 0, suspicious, "replays", p->replay, "old frames re-sent")
+            FIND(p->throttled > 0, degraded, "throttled", p->throttled, "sender above p2p-limit")
+            FIND(p->down_events >= 2, degraded, "down-events", p->down_events, "unstable link")
+            FIND(p->up && p->rtt_ticks * (1000U / P2P_HZ) > 500U, degraded, "rtt-ms", p->rtt_ticks * (1000U / P2P_HZ), "high latency")
+            FIND(!p->up, degraded, "down-for-s", (t - p->last_seen) / P2P_HZ, "peer unreachable")
+#undef FIND
+        }
+#define NFIND(cond, kind, label, val, hint) if (cond) { s_cat(out, "p2p analyze finding node " label " ", cap); cat_u(out, (val), cap); s_cat(out, " (" hint ")\n", cap); kind++; shown++; }
+        NFIND(n->bad_hello > 0, suspicious, "bad-hello", n->bad_hello, "HELLO with a wrong network key")
+        NFIND(n->foreign > 0, degraded, "foreign", n->foreign, "non P2P frames on the segment")
+        NFIND(rx_all >= 10U && n->dup * 10U > rx_all, degraded, "duplicates", n->dup, "more than 10 percent of received")
+        NFIND(n->relayed > 0, degraded, "relayed", n->relayed, "a direct link is down, relay in use")
+#undef NFIND
+        s_cat(out, "p2p analyze ok findings ", cap); cat_u(out, (uint32_t)shown, cap);
+        s_cat(out, suspicious ? " verdict suspicious\n" : degraded ? " verdict degraded\n" : " verdict healthy\n", cap);
     } else {
         for (i = 1; i < P2P_I_COUNT; i++) {
             if (!n->tx_type[i] && !n->rx_type[i]) continue;

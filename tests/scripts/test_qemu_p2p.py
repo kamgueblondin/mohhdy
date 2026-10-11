@@ -210,6 +210,13 @@ def main():
         for node in NODES:
             if "[NET] relay aborted" in log(node) or "Ring 0 fallback" in log(node):
                 raise RuntimeError("%s used a fallback path" % node["label"])
+        # US-075: automatic analysis names the dead link and the relay
+        start_a = cmd(a, "p2p-analyze", "p2p analyze ok findings ")
+        if "p2p analyze finding gamma down-for-s " not in log(a, start_a) or "verdict degraded" not in log(a, start_a):
+            raise RuntimeError("alpha analysis missed the failed link: %s" % log(a, start_a)[-600:])
+        start_b = cmd(b, "p2p-analyze", "p2p analyze ok findings ")
+        if "p2p analyze finding node relayed " not in log(b, start_b):
+            raise RuntimeError("beta analysis missed the relay: %s" % log(b, start_b)[-600:])
         say("scenario 3 ok: failure detected, relayed delivery (%.0fs)" % (time.monotonic() - t0))
         say("PASS frames=%d hello=%d sealed=%d plaintext=0 in %.0fs"
             % (hub.p2p_frames, hub.p2p_hello, hub.p2p_sealed, time.monotonic() - t0))

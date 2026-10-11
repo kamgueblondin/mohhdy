@@ -60,13 +60,13 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
 | US-066 encryption | done | X25519 + AES-128-GCM per pair, PSK-authenticated, replay protection; QEMU checks no plaintext on the wire |
 | US-067 gRPC | not delivered | no HTTP/2 or protobuf in the guest |
 | US-068 bandwidth | partial | per-peer message budget per second (`p2p-limit`), throttle counters; unit tests only |
-| US-069 fault tolerance | partial | failure detection (10 s), relay rerouting, resync after partition; QEMU. No state persistence across reboot |
+| US-069 fault tolerance | partial | failure detection (10 s), relay rerouting, resync after partition; QEMU. The key/value store and node identity persist across a reboot (`persist-*`, consolidation lot); links and peers are rebuilt by discovery |
 | US-070 distributed cache | partial | remote get with miss reporting; unit tests only |
 | US-071 synchronization | done | two-way digest anti-entropy (`p2p-sync`); QEMU after a partition |
 | US-072 health monitor | done | per-peer RTT, last seen, sent/recv, auth failures, replays, throttled, down events; QEMU |
 | US-073 adaptive QoS | partial | control frames bypass the user budget; no adaptation to measured load |
 | US-074 NAT traversal | not delivered | single shared segment, no NAT to traverse in the lab |
-| US-075 traffic analysis | partial | per-type tx/rx counters, bytes, relayed, duplicates, foreign frames (`p2p-stats`); no automatic analysis |
+| US-075 traffic analysis | partial | per-type tx/rx counters, bytes, relayed, duplicates, foreign frames (`p2p-stats`); `p2p-analyze` applies fixed rules (auth failures, replays, throttling, unstable or dead links, latency, bad HELLO, foreign frames, duplicates, relaying) and gives a verdict; QEMU. No learning, no history |
 
 ## Limits (honest)
 

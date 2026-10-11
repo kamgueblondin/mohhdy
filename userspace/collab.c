@@ -1,6 +1,7 @@
 /* userspace/collab.c - Phase 7 collaborative ledger. See collab.h. */
 #include "collab.h"
 #include "../kernel/sha256.h"
+#include "csig.h"
 
 static const char* const k_types[CE_COUNT] = {
     "?", "join", "transfer", "offer", "reserve", "task", "claim", "done", "accept", "reject",
@@ -82,6 +83,150 @@ static int store(collab_t* c, const collab_entry_t* e) {
     return 1;
 }
 
+
+/* ------------------------------------------------------- signatures */
+#define SIGN_LEN 64
+#define MSG3_LEN (1 + COLLAB_WIRE + 32 + 40 + 128)
+static void text_hash(const char* text, uint8_t th[32]) {
+    sha256_ctx_t h;
+    sha256_init(&h); sha256_update(&h, (const uint8_t*)text, (uint32_t)s_len(text)); sha256_final(&h, th);
+}
+/* signed bytes: the 32 fixed header bytes of the wire entry + SHA-256 of
+ * the original text, so redacting a profile text keeps the signature valid */
+static void sign_input(const collab_entry_t* e, const uint8_t th[32], uint8_t* out) {
+    uint8_t w[COLLAB_WIRE];
+    int i;
+    collab_encode(e, w);
+    for (i = 0; i < 32; i++) { out[i] = w[i]; out[32 + i] = th[i]; }
+}
+const uint8_t* collab_key_of(const collab_t* c, uint32_t origin) {
+    int i;
+    for (i = 0; i < c->nkeys; i++) if (c->key_origin[i] == origin) return c->key_pk[i];
+    return 0;
+}
+static int bind_key(collab_t* c, uint32_t origin, const uint8_t* pk) {
+    int i;
+    if (collab_key_of(c, origin)) return 0;
+    if (c->nkeys >= COLLAB_NODES) return -1;
+    c->key_origin[c->nkeys] = origin;
+    for (i = 0; i < 128; i++) c->key_pk[c->nkeys][i] = pk[i];
+    c->nkeys++;
+    return 0;
+}
+int collab_keys_set(collab_t* c, const uint8_t seed[32]) {
+    if (csig_keypair(seed, c->sk, c->pk) != 0) return -1;
+    c->signing = 1;
+    if (collab_key_of(c, c->self)) { int i; for (i = 0; i < c->nkeys; i++) if (c->key_origin[i] == c->self) { int j; for (j = 0; j < 128; j++) c->key_pk[i][j] = c->pk[j]; } return 0; }
+    return bind_key(c, c->self, c->pk);
+}
+void collab_key_fpr(const uint8_t pk[128], char out[17]) {
+    sha256_ctx_t h; uint8_t d[32]; int i;
+    sha256_init(&h); sha256_update(&h, pk, 128); sha256_final(&h, d);
+    for (i = 0; i < 8; i++) { out[2 * i] = "0123456789abcdef"[d[i] >> 4]; out[2 * i + 1] = "0123456789abcdef"[d[i] & 15]; }
+    out[16] = 0;
+}
+static void send_entry(collab_t* c, const collab_host_t* h, uint32_t to, int i) {
+    uint8_t b[MSG3_LEN];
+    const uint8_t* pk = collab_key_of(c, c->e[i].origin);
+    int k;
+    if (c->has_sig[i] && pk) {
+        b[0] = 3; collab_encode(&c->e[i], b + 1);
+        for (k = 0; k < 32; k++) b[1 + COLLAB_WIRE + k] = c->th[i][k];
+        for (k = 0; k < 40; k++) b[1 + COLLAB_WIRE + 32 + k] = c->sig[i][k];
+        for (k = 0; k < 128; k++) b[1 + COLLAB_WIRE + 72 + k] = pk[k];
+        if (h && h->send) (void)h->send(h->ctx, to, b, MSG3_LEN);
+        return;
+    }
+    b[0] = 1; collab_encode(&c->e[i], b + 1);
+    if (h && h->send) (void)h->send(h->ctx, to, b, 1 + COLLAB_WIRE);
+}
+static int is_redacted(const collab_entry_t* e) { return e->type == CE_PROFILE && s_eq(e->text, "[redacted]"); }
+static void reject(collab_t* c, const collab_host_t* h, const char* why, const collab_entry_t* e, uint32_t from) {
+    char line[120];
+    c->forged++;
+    line[0] = 0;
+    s_cat(line, "collab reject ", 120); s_cat(line, why, 120); s_cat(line, " ", 120);
+    s_cat(line, collab_type_name(e->type), 120); s_cat(line, " claimed from ", 120); s_cat(line, nm(h, e->origin), 120);
+    s_cat(line, " seq ", 120); cat_u(line, e->seq, 120); s_cat(line, " via ", 120); s_cat(line, nm(h, from), 120);
+    say(h, line);
+}
+int collab_forge(collab_t* c, const collab_host_t* h, uint32_t victim, uint32_t amount, int mode) {
+    collab_entry_t e;
+    uint8_t b[MSG3_LEN], th[32], in[SIGN_LEN];
+    uint32_t maxseq = 0;
+    const uint8_t* vpk = collab_key_of(c, victim);
+    int i;
+    if (!c->signing || victim == c->self) return -1;
+    for (i = 0; i < c->n; i++) if (c->e[i].origin == victim && c->e[i].seq > maxseq) maxseq = c->e[i].seq;
+    mzero(&e, (int)sizeof(e));
+    e.type = CE_TRANSFER; e.origin = victim; e.seq = maxseq + 1U; e.lamport = c->lamport + 1U;
+    e.peer = c->self; e.amount = amount; s_copy(e.text, "forged", COLLAB_TEXT);
+    collab_encode(&e, b + 1);
+    if (mode == 2) { b[0] = 1; return (h && h->send) ? h->send(h->ctx, 0, b, 1 + COLLAB_WIRE) : 0; }
+    if (mode == 0 && !vpk) return -1;
+    text_hash(e.text, th); sign_input(&e, th, in);
+    b[0] = 3;
+    for (i = 0; i < 32; i++) b[1 + COLLAB_WIRE + i] = th[i];
+    if (csig_sign(c->sk, in, SIGN_LEN, b + 1 + COLLAB_WIRE + 32) != 0) return -1;
+    for (i = 0; i < 128; i++) b[1 + COLLAB_WIRE + 72 + i] = mode == 0 ? vpk[i] : c->pk[i];
+    return (h && h->send) ? h->send(h->ctx, 0, b, MSG3_LEN) : 0;
+}
+
+/* ------------------------------------------------------- persistence */
+#define SAVE_MAGIC 0x31424c43U /* "CLB1" */
+int collab_save(const collab_t* c, uint8_t* o, int cap) {
+    int pos = 0, i, k;
+    int need = 32 + 128 + 20 + c->nkeys * 132 + c->n * (COLLAB_WIRE + 40 + 1 + 32);
+    if (need > cap) return -1;
+    put32(o, SAVE_MAGIC); put32(o + 4, c->self); put32(o + 8, c->seq); put32(o + 12, c->lamport);
+    put32(o + 16, (uint32_t)c->n); put32(o + 20, (uint32_t)c->nkeys); put32(o + 24, c->signing); put32(o + 28, c->forged);
+    pos = 32;
+    for (k = 0; k < 20; k++) o[pos++] = c->sk[k];
+    for (k = 0; k < 128; k++) o[pos++] = c->pk[k];
+    for (i = 0; i < c->nkeys; i++) {
+        put32(o + pos, c->key_origin[i]); pos += 4;
+        for (k = 0; k < 128; k++) o[pos++] = c->key_pk[i][k];
+    }
+    for (i = 0; i < c->n; i++) {
+        collab_encode(&c->e[i], o + pos); pos += COLLAB_WIRE;
+        o[pos++] = (uint8_t)(c->has_sig[i] | (is_redacted(&c->e[i]) ? 2 : 0));
+        for (k = 0; k < 40; k++) o[pos++] = c->sig[i][k];
+        if (is_redacted(&c->e[i])) for (k = 0; k < 32; k++) o[pos++] = c->th[i][k];
+    }
+    return pos;
+}
+int collab_load(collab_t* c, const uint8_t* in, int len) {
+    int pos = 32, i, k, n, nk;
+    collab_field_t keep[COLLAB_FIELDS];
+    if (len < 32 + 148 || get32(in) != SAVE_MAGIC) return -1;
+    n = (int)get32(in + 16); nk = (int)get32(in + 20);
+    if (n < 0 || n > COLLAB_ENTRIES || nk < 0 || nk > COLLAB_NODES) return -1;
+    for (i = 0; i < COLLAB_FIELDS; i++) keep[i] = c->profile[i];
+    collab_init(c, get32(in + 4));
+    for (i = 0; i < COLLAB_FIELDS; i++) c->profile[i] = keep[i];
+    c->seq = get32(in + 8); c->lamport = get32(in + 12); c->signing = (uint8_t)get32(in + 24); c->forged = get32(in + 28);
+    for (k = 0; k < 20; k++) c->sk[k] = in[pos++];
+    for (k = 0; k < 128; k++) c->pk[k] = in[pos++];
+    for (i = 0; i < nk; i++) {
+        if (pos + 132 > len) return -1;
+        c->key_origin[i] = get32(in + pos); pos += 4;
+        for (k = 0; k < 128; k++) c->key_pk[i][k] = in[pos++];
+    }
+    c->nkeys = nk;
+    for (i = 0; i < n; i++) {
+        uint8_t f;
+        if (pos + COLLAB_WIRE + 41 > len || collab_decode(in + pos, COLLAB_WIRE, &c->e[i]) != 0) return -1;
+        pos += COLLAB_WIRE;
+        f = in[pos++];
+        c->has_sig[i] = f & 1U;
+        for (k = 0; k < 40; k++) c->sig[i][k] = in[pos++];
+        if (f & 2U) { if (pos + 32 > len) return -1; for (k = 0; k < 32; k++) c->th[i][k] = in[pos++]; }
+        else text_hash(c->e[i].text, c->th[i]);
+    }
+    c->n = n;
+    return n;
+}
+
 int collab_emit(collab_t* c, const collab_host_t* h, uint8_t type, uint32_t peer, uint32_t ref,
                 uint32_t amount, uint32_t aux, const char* text) {
     collab_entry_t e;
@@ -93,15 +238,14 @@ int collab_emit(collab_t* c, const collab_host_t* h, uint8_t type, uint32_t peer
     s_copy(e.text, text ? text : "", COLLAB_TEXT);
     if (store(c, &e) != 1) return -2;
     c->seq = e.seq;
-    b[0] = 1; collab_encode(&e, b + 1);
-    if (h && h->send) (void)h->send(h->ctx, 0, b, 1 + COLLAB_WIRE);
+    if (c->signing) {
+        int i = c->n - 1;
+        text_hash(e.text, c->th[i]);
+        sign_input(&e, c->th[i], b);
+        if (csig_sign(c->sk, b, SIGN_LEN, c->sig[i]) == 0) c->has_sig[i] = 1;
+    }
+    send_entry(c, h, 0, c->n - 1);
     return (int)e.seq;
-}
-
-static void send_entry(collab_t* c, const collab_host_t* h, uint32_t to, int i) {
-    uint8_t b[1 + COLLAB_WIRE];
-    b[0] = 1; collab_encode(&c->e[i], b + 1);
-    if (h && h->send) (void)h->send(h->ctx, to, b, 1 + COLLAB_WIRE);
 }
 
 int collab_sync(collab_t* c, const collab_host_t* h) {
@@ -121,10 +265,29 @@ int collab_sync(collab_t* c, const collab_host_t* h) {
 void collab_receive(collab_t* c, const collab_host_t* h, uint32_t from, const uint8_t* d, int len) {
     char line[120];
     if (!c || !d || len < 1) return;
-    if (d[0] == 1) {
+    if (d[0] == 1 || d[0] == 3) {
         collab_entry_t e;
+        uint8_t th[32], in[SIGN_LEN];
+        const uint8_t *sig = 0, *pk = 0;
         if (collab_decode(d + 1, len - 1, &e) != 0) return;
+        if (find(c, e.origin, e.seq) >= 0) { c->duplicates++; return; } /* no re-verification */
+        if (d[0] == 1 && c->signing) { reject(c, h, "unsigned", &e, from); return; }
+        if (d[0] == 3) {
+            const uint8_t* known;
+            int k;
+            if (len < MSG3_LEN) return;
+            sig = d + 1 + COLLAB_WIRE + 32; pk = d + 1 + COLLAB_WIRE + 72;
+            if (is_redacted(&e)) for (k = 0; k < 32; k++) th[k] = d[1 + COLLAB_WIRE + k];
+            else text_hash(e.text, th);
+            known = collab_key_of(c, e.origin);
+            if (known) { for (k = 0; k < 128 && known[k] == pk[k]; k++) {} if (k < 128) { reject(c, h, "key-mismatch", &e, from); return; } }
+            else if (!csig_pk_valid(pk)) { reject(c, h, "bad-key", &e, from); return; }
+            sign_input(&e, th, in);
+            if (!csig_verify(pk, in, SIGN_LEN, sig)) { reject(c, h, "bad-signature", &e, from); return; }
+            if (!known) (void)bind_key(c, e.origin, pk); /* first verified key of this origin */
+        }
         if (store(c, &e) == 1) {
+            if (sig) { int k, i = c->n - 1; for (k = 0; k < 40; k++) c->sig[i][k] = sig[k]; for (k = 0; k < 32; k++) c->th[i][k] = th[k]; c->has_sig[i] = 1; }
             line[0] = 0;
             s_cat(line, "collab got ", 120); s_cat(line, collab_type_name(e.type), 120);
             s_cat(line, " from ", 120); s_cat(line, nm(h, e.origin), 120);

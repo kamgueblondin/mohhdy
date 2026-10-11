@@ -5,9 +5,10 @@
  * the same canonical order (lamport, origin, seq), so balances, bookings,
  * tasks, reputation, votes and profiles converge; invalid entries are
  * rejected identically everywhere. Points are local accounting units, not
- * money. Trust is membership-level (network key + per-pair AEAD): there is
- * no per-node signature, so a member could forge another member's entry
- * when relaying (documented in docs/collab.md). Pure C, no allocation.
+ * money. Transport trust is membership-level (network key + per-pair AEAD);
+ * with collab_keys_set() every entry is also signed by its origin (Schnorr,
+ * userspace/csig.c) and verified on receipt, so a member can no longer forge
+ * another member's entry. Pure C, no allocation.
  */
 #ifndef MOHHDY_COLLAB_H
 #define MOHHDY_COLLAB_H
@@ -54,6 +55,16 @@ typedef struct {
     int n;
     uint32_t dropped, duplicates;
     collab_field_t profile[COLLAB_FIELDS]; /* local personal data (US-102) */
+    /* per-node signatures */
+    uint8_t signing;                         /* own key set: sign, require signed input */
+    uint8_t sk[20], pk[128];
+    uint8_t sig[COLLAB_ENTRIES][40];
+    uint8_t th[COLLAB_ENTRIES][32];          /* SHA-256 of the original text (redaction-proof) */
+    uint8_t has_sig[COLLAB_ENTRIES];
+    uint32_t key_origin[COLLAB_NODES];
+    uint8_t key_pk[COLLAB_NODES][128];
+    int nkeys;
+    uint32_t forged;                         /* entries rejected: unsigned, bad signature, key mismatch */
 } collab_t;
 
 /* derived state after a canonical fold */
@@ -90,4 +101,16 @@ int collab_report(collab_t* c, const collab_host_t* h, const char* what, uint32_
 /* personal data (US-102/103/104) */
 int collab_profile_set(collab_t* c, const char* key, const char* value, int shared);
 int collab_forget(collab_t* c, const collab_host_t* h);
+/* per-node keys: derive the keypair from a 32-byte seed, sign from now on */
+int collab_keys_set(collab_t* c, const uint8_t seed[32]);
+/* fingerprint (first 8 bytes of SHA-256 of the public key) as 16 hex chars */
+void collab_key_fpr(const uint8_t pk[128], char out[17]);
+const uint8_t* collab_key_of(const collab_t* c, uint32_t origin);
+/* test hook (US-093 contract): broadcast a TRANSFER claiming `victim` as origin.
+ * mode 0: signed with our key but carrying the victim's public key,
+ * mode 1: carrying our own key, mode 2: unsigned. Not stored locally. */
+int collab_forge(collab_t* c, const collab_host_t* h, uint32_t victim, uint32_t amount, int mode);
+/* persistence: serialize / restore the whole ledger, keys included */
+int collab_save(const collab_t* c, uint8_t* out, int cap);
+int collab_load(collab_t* c, const uint8_t* in, int len);
 #endif

@@ -141,6 +141,35 @@ void test_baseline_feedback_usage(void) {
     TEST_ASSERT_EQUAL(6, (int)u.total);
 }
 
+
+void test_state_save_load(void) {
+    static prod_metrics_t m, m2; static prod_alerts_t a, a2; static prod_archive_t ar[2], ar2[2]; static char dir[2][64], dir2[2][64];
+    static prod_feedback_t fb, fb2; static uint8_t blob[65536];
+    prod_state_ref_t r = {&m, &a, ar, dir, 2, &fb}, r2 = {&m2, &a2, ar2, dir2, 2, &fb2};
+    prod_stat_t st; int i, n, bad;
+    prod_metrics_init(&m); prod_alerts_init(&a); memset(&fb, 0, sizeof(fb));
+    prod_archive_init(&ar[0], "daily", 7); prod_archive_init(&ar[1], "", 0); strcpy(dir[0], "/cfg"); dir[1][0] = 0;
+    prod_archive_add(&ar[0], "/cfg/a", "mode=eco", 8);
+    prod_alert_add(&a, "hot", PM_BUSY, 1, 80, 1);
+    for (i = 0; i < 20; i++) { prod_sample_t s = S((uint32_t)i, 100U + (uint32_t)i, i == 19 ? 90U : 10U); prod_metrics_push(&m, &s); prod_alerts_eval(&a, &s); }
+    prod_feedback_add(&fb, 4, "nice");
+    ar[0].data[0] ^= 1; /* corruption must survive the round trip */
+    n = prod_state_save(&r, blob, sizeof(blob));
+    TEST_ASSERT_GREATER_THAN(0, n);
+    TEST_ASSERT_EQUAL(-1, prod_state_save(&r, blob, 20));
+    TEST_ASSERT_EQUAL(0, prod_state_load(&r2, blob, n));
+    TEST_ASSERT_EQUAL(16, m2.n); TEST_ASSERT_EQUAL(20, (int)m2.total);
+    prod_metric_stat(&m2, PM_MEM_USED, &st); TEST_ASSERT_EQUAL(119, (int)st.last); TEST_ASSERT_EQUAL(104, (int)st.min);
+    TEST_ASSERT_EQUAL(1, a2.r[0].firing); TEST_ASSERT_EQUAL_STRING("hot", a2.r[0].name); TEST_ASSERT_EQUAL(1, (int)a2.fired_total);
+    TEST_ASSERT_EQUAL_STRING("FIRING hot v=90", a2.ev[a2.ev_n - 1].text);
+    TEST_ASSERT_EQUAL_STRING("daily", ar2[0].label); TEST_ASSERT_EQUAL_STRING("/cfg", dir2[0]); TEST_ASSERT_EQUAL(1, ar2[0].n);
+    TEST_ASSERT_EQUAL(1, prod_archive_verify(&ar2[0], &bad));
+    TEST_ASSERT_EQUAL(1, (int)fb2.total); TEST_ASSERT_EQUAL_STRING("nice", fb2.f[0].text);
+    TEST_ASSERT_EQUAL(-1, prod_state_load(&r2, blob, n - 5)); /* truncated */
+    TEST_ASSERT_EQUAL(0, m2.n);
+    blob[0] ^= 1; TEST_ASSERT_EQUAL(-1, prod_state_load(&r2, blob, n));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_metrics_ring_stats_and_prediction);
@@ -150,6 +179,7 @@ int main(void) {
     RUN_TEST(test_manifest_check);
     RUN_TEST(test_scaler_cooldown_and_bounds);
     RUN_TEST(test_baseline_feedback_usage);
+    RUN_TEST(test_state_save_load);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

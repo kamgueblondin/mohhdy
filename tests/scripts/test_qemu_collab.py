@@ -132,6 +132,32 @@ def main():
         cmd(a, "collab-answer gamma 8 use collab-reserve", "collab-answer ok seq 7")
         say("reputation, governance, privacy, support done (%.0fs)" % (time.monotonic() - t0))
 
+        # US-093 per-node signatures: gamma forges alpha -> gamma transfers.
+        # A forged datagram can be lost like any other, so each forgery is
+        # re-sent until both honest guests logged its rejection.
+        for node in NODES:
+            cmd(node, "collab-keys", "collab-keys ok known 3 rejected 0 signing on")
+        for mode, reason in (("victimkey", "bad-signature"), ("ownkey", "key-mismatch"), ("unsigned", "unsigned")):
+            needle = "collab reject %s transfer claimed from alpha seq 8 via gamma" % reason
+            for attempt in range(4):
+                start_a, start_b = len(log(a)), len(log(b))
+                cmd(c, "collab-forge alpha 50 %s" % mode, "collab-forge sent %s to " % mode)
+                try:
+                    p2p.wait_log(a, needle, 15)
+                    p2p.wait_log(b, needle, 15)
+                    break
+                except Exception:  # noqa: BLE001
+                    if attempt == 3:
+                        raise
+                    say("forgery %s not seen yet, re-sending" % mode)
+            del start_a, start_b
+        for node in (a, b):
+            start = cmd(node, "collab-keys", "collab-keys ok known 3 rejected ")
+            match = re.search(r"collab-keys ok known 3 rejected (\d+) signing on", log(node, start))
+            if not match or int(match.group(1)) < 3:
+                raise RuntimeError("forgeries not all rejected on %s" % node["label"])
+        say("forged entries rejected by signature checks (%.0fs)" % (time.monotonic() - t0))
+
         # Anti-entropy then identical audit (US-098) on the three guests. A
         # peer can flap down for a moment under load (heartbeat), so sync is
         # repeated until the three ledgers hold all 23 entries.

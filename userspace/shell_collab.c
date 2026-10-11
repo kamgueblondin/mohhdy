@@ -1,7 +1,9 @@
 /* userspace/shell_collab.c - collab-* shell commands (Phase 7, docs/collab.md).
  * The ledger rides on the phase 5 P2P node (sealed P2P_I_APP payloads). */
 #include "collab.h"
+#include "csig.h"
 #include "p2p.h"
+#include "../kernel/sha256.h"
 
 void print_string(const char* s);
 p2p_node_t* shell_p2p_node(void);
@@ -71,6 +73,18 @@ int shell_collab_line(const char* line) {
     if (s_eq(cmd, "collab-join")) {
         if (!g_joined || g_c.self != node->id) { collab_init(&g_c, node->id); g_joined = 1; }
         node->app = on_app; node->app_ctx = 0;
+        if (!g_c.signing) {
+            /* per-node signing key: seed from the TSC, ticks and node id */
+            sha256_ctx_t hc; uint8_t seed[32]; uint32_t lo, hi, k;
+            char fpr[17];
+            sha256_init(&hc);
+            for (k = 0; k < 8; k++) { asm volatile("rdtsc" : "=a"(lo), "=d"(hi)); sha256_update(&hc, (const uint8_t*)&lo, 4); sha256_update(&hc, (const uint8_t*)&hi, 4); }
+            sha256_update(&hc, (const uint8_t*)&node->id, 4); sha256_update(&hc, (const uint8_t*)node->secret, 32);
+            sha256_final(&hc, seed);
+            if (collab_keys_set(&g_c, seed) != 0) { print_string("collab-join error key generation\n"); return 1; }
+            collab_key_fpr(g_c.pk, fpr);
+            print_string("collab key schnorr-1024/160 fpr "); print_string(fpr); print_string("\n");
+        }
         {
             /* entries sent before this node joined were dropped: catch up */
             int rc = emitted(cmd, collab_emit(&g_c, &g_h, CE_JOIN, 0, 0, 0, 0, node->name));
@@ -181,6 +195,27 @@ int shell_collab_line(const char* line) {
         if (!(pid = peer_id(a)) || num(b, &x) || !*rest || s_len(rest) >= COLLAB_TEXT) return emitted(cmd, -1);
         return emitted(cmd, collab_emit(&g_c, &g_h, CE_ANSWER, pid, x, 0, 0, rest));
     }
+    if (s_eq(cmd, "collab-keys")) {
+        int i; char fpr[17];
+        for (i = 0; i < g_c.nkeys; i++) {
+            collab_key_fpr(g_c.key_pk[i], fpr);
+            print_string("collab key "); print_string(p2p_peer_name(node, g_c.key_origin[i])); print_string(" fpr "); print_string(fpr); print_string("\n");
+        }
+        print_string("collab-keys ok known "); put_u((uint32_t)g_c.nkeys); print_string(" rejected "); put_u(g_c.forged);
+        print_string(g_c.signing ? " signing on\n" : " signing off\n");
+        return 0;
+    }
+    if (s_eq(cmd, "collab-forge")) {
+        /* test hook: forge a transfer from victim A to us */
+        int mode, rc;
+        rest = word(rest, b, 48); rest = word(rest, c, 48);
+        mode = s_eq(c, "victimkey") ? 0 : s_eq(c, "ownkey") ? 1 : s_eq(c, "unsigned") ? 2 : -1;
+        if (!(pid = peer_id(a)) || num(b, &x) || mode < 0) { print_string("collab-forge error usage: NAME AMOUNT victimkey|ownkey|unsigned\n"); return 1; }
+        rc = collab_forge(&g_c, &g_h, pid, x, mode);
+        if (rc < 0) { print_string("collab-forge error\n"); return 1; }
+        print_string("collab-forge sent "); print_string(c); print_string(" to "); put_u((uint32_t)rc); print_string("\n");
+        return 0;
+    }
     if (s_eq(cmd, "collab-sync")) {
         int n = collab_sync(&g_c, &g_h);
         print_string("collab-sync ok asked "); put_u(n > 0 ? (uint32_t)n : 0U); print_string("\n");
@@ -202,4 +237,31 @@ int shell_collab_line(const char* line) {
     }
     print_string(cmd); print_string(" error unknown collab command\n");
     return 1;
+}
+
+/* persistence hooks for shell_persist.c */
+int shell_collab_save(uint8_t* out, int cap) { return g_joined ? collab_save(&g_c, out, cap) : 0; }
+int shell_collab_load(const uint8_t* in, int len) {
+    int n = collab_load(&g_c, in, len);
+    if (n < 0) { g_joined = 0; return n; }
+    g_joined = 1;
+    return n;
+}
+uint32_t shell_collab_self(void) { return g_joined ? g_c.self : 0; }
+/* key at rest: the persisted blob carries the secret only encrypted (or not
+ * at all); after a load the shell installs it here, or locks signing */
+void shell_collab_key_install(const uint8_t* sk) {
+    int i;
+    if (!sk) { for (i = 0; i < 20; i++) g_c.sk[i] = 0; g_c.signing = 0; return; }
+    for (i = 0; i < 20; i++) g_c.sk[i] = sk[i];
+    g_c.signing = 1;
+}
+int shell_collab_signing(void) { return g_joined && g_c.signing; }
+/* US-060: sign with this node's collab key (pm-certify) */
+int shell_collab_sign(const uint8_t* m, int len, uint8_t sig[40], uint8_t pk[128]) {
+    int i;
+    if (!g_joined || !g_c.signing) return -1;
+    if (csig_sign(g_c.sk, m, len, sig) != 0) return -1;
+    for (i = 0; i < 128; i++) pk[i] = g_c.pk[i];
+    return 0;
 }

@@ -226,9 +226,16 @@ void keyboard_poll_check() {
     int poll_freq = (debug_interrupt_count > 0) ? 20000 : 500; // fréquence d'essai
     
     if (poll_counter % poll_freq == 0) {
-        uint8_t status = inb(0x64);
+        /* Status check and data read must be atomic against IRQ1: if the
+         * IRQ handler consumed the byte between them, port 0x60 returns the
+         * same scancode again and the key is doubled (CI: 'prod-innject'). */
+        uint32_t kbd_flags;
+        uint8_t status, scancode = 0;
+        __asm__ volatile("pushfl; popl %0; cli" : "=r"(kbd_flags) :: "memory");
+        status = inb(0x64);
+        if (status & 0x01) scancode = inb(0x60);
+        if (kbd_flags & 0x200U) __asm__ volatile("sti" ::: "memory");
         if (status & 0x01) { // Données disponibles
-            uint8_t scancode = inb(0x60);
             
             if (status & 0x20) {
                 mouse_handle_byte(scancode);

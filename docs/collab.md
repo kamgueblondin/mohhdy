@@ -81,3 +81,25 @@ signing primitive for this in the tree yet (the TLS stack only verifies).
 96 entries per ledger, 8 members, 16 offers/tasks, 8 proposals; ledger in
 RAM (lost at reboot); a node that never receives the redact entry keeps its
 copy of the redacted profile.
+
+## Per-node signatures (consolidation lot, #121)
+
+`collab-join` derives a per-node keypair (Schnorr over the RFC 5114
+1024-bit MODP group with a 160-bit prime-order subgroup, `userspace/csig.c`;
+deterministic nonce SHA-256(sk || message); Montgomery exponentiation).
+Every entry is signed over its 32 header bytes plus SHA-256 of its original
+text, so a later redaction of a profile text keeps the signature valid. The
+wire message carries entry, text hash, signature and the origin's public
+key. A receiver binds the first public key it verifies for an origin
+(trust on first use) and from then on rejects: entries signed with another
+key (`key-mismatch`), invalid signatures (`bad-signature`), keys outside
+the subgroup (`bad-key`) and, once it signs itself, unsigned entries
+(`unsigned`). Duplicates are not re-verified. `collab-keys` lists
+fingerprints and the rejection count; `collab-forge NAME AMOUNT
+victimkey|ownkey|unsigned` is the test hook used by `make qemu-collab`.
+
+Limits: trust on first use (a forger who reaches a node before the real
+origin's first entry could bind its own key; keys are not certified); the
+1024/160 group is legacy strength; signing and verification are not constant
+time; the secret key is kept in RAM and, with `persist-save`, in clear on the
+disk.

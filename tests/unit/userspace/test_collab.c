@@ -13,7 +13,7 @@ static char g_out[N][8192];
 static char rep[8192];
 static const uint32_t k_id[N] = {101, 202, 303};
 static const char* k_nm[N] = {"alpha", "beta", "gamma"};
-typedef struct { int to; uint32_t from; uint8_t d[128]; int len; } msg_t;
+typedef struct { int to; uint32_t from; uint8_t d[320]; int len; } msg_t;
 static msg_t g_q[512]; static int g_qn;
 
 static int idx_of(uint32_t id) { int i; for (i = 0; i < N; i++) if (k_id[i] == id) return i; return -1; }
@@ -34,12 +34,14 @@ static void deliver(void) {
     for (i = 0; i < g_qn; i++) collab_receive(&g_c[g_q[i].to], &g_h[g_q[i].to], g_q[i].from, g_q[i].d, g_q[i].len);
     g_qn = 0;
 }
+static int g_sign;
 static void setup(void) {
     int i;
     memset(g_out, 0, sizeof(g_out)); memset(g_cut, 0, sizeof(g_cut)); g_qn = 0;
     for (i = 0; i < N; i++) {
         g_idx[i] = i; collab_init(&g_c[i], k_id[i]);
         g_h[i].ctx = &g_idx[i]; g_h[i].send = h_send; g_h[i].out = h_out; g_h[i].name = h_name; g_h[i].members = h_members;
+        if (g_sign) { uint8_t seed[32]; memset(seed, 0x40 + i, sizeof(seed)); TEST_ASSERT_EQUAL(0, collab_keys_set(&g_c[i], seed)); }
     }
     for (i = 0; i < N; i++) TEST_ASSERT_GREATER_THAN(0, collab_emit(&g_c[i], &g_h[i], CE_JOIN, 0, 0, 0, 0, k_nm[i]));
     deliver();
@@ -224,6 +226,67 @@ void test_codec_and_eval(void) {
     g_qn = 0;
 }
 
+
+static int count(const char* hay, const char* needle) { int n = 0; const char* p = hay; while ((p = strstr(p, needle)) != 0) { n++; p++; } return n; }
+void test_signed_entries_forgery_and_redaction(void) {
+    char fpr[17];
+    g_sign = 1; setup(); g_sign = 0;
+    TEST_ASSERT_EQUAL(3, g_c[0].nkeys);
+    TEST_ASSERT_EQUAL(1, g_c[1].has_sig[1]);
+    collab_key_fpr(g_c[0].pk, fpr); TEST_ASSERT_EQUAL(16, (int)strlen(fpr));
+    collab_emit(&g_c[0], &g_h[0], CE_TRANSFER, k_id[1], 0, 30, 0, ""); deliver();
+    /* gamma forges alpha -> gamma transfers three ways */
+    TEST_ASSERT_GREATER_THAN(0, collab_forge(&g_c[2], &g_h[2], k_id[0], 50, 0)); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_forge(&g_c[2], &g_h[2], k_id[0], 50, 1)); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_forge(&g_c[2], &g_h[2], k_id[0], 50, 2)); deliver();
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "collab reject bad-signature transfer claimed from alpha seq 3 via gamma"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "collab reject key-mismatch transfer claimed from alpha seq 3 via gamma"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "collab reject unsigned transfer claimed from alpha seq 3 via gamma"));
+    TEST_ASSERT_EQUAL(3, (int)g_c[0].forged); TEST_ASSERT_EQUAL(3, (int)g_c[1].forged);
+    report(1, "balances", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct alpha balance 70"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct gamma balance 100"));
+    /* the real alpha seq 3 is still accepted afterwards */
+    collab_emit(&g_c[0], &g_h[0], CE_TRANSFER, k_id[2], 0, 5, 0, ""); deliver();
+    report(1, "balances", 0); TEST_ASSERT_NOT_NULL(strstr(rep, "collab acct gamma balance 105"));
+    /* redaction while gamma is cut off; gamma verifies the redacted entry on sync */
+    g_cut[2] = 1;
+    collab_emit(&g_c[1], &g_h[1], CE_PROFILE, 0, 0, 0, 0, "city=lyon"); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_forget(&g_c[1], &g_h[1])); deliver();
+    g_cut[2] = 0;
+    collab_sync(&g_c[2], &g_h[2]); deliver(); deliver();
+    TEST_ASSERT_EQUAL(0, count(g_out[2], "collab reject"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[2], "collab got profile from beta"));
+    same_digest();
+}
+void test_save_load_roundtrip(void) {
+    static uint8_t buf[32768];
+    static collab_t copy;
+    collab_state_t a, b;
+    int n, i;
+    g_sign = 1; setup(); g_sign = 0;
+    collab_emit(&g_c[0], &g_h[0], CE_TRANSFER, k_id[1], 0, 10, 0, "");
+    collab_emit(&g_c[1], &g_h[1], CE_PROFILE, 0, 0, 0, 0, "city=lyon"); deliver();
+    collab_forget(&g_c[1], &g_h[1]); deliver();
+    n = collab_save(&g_c[2], buf, sizeof(buf));
+    TEST_ASSERT_GREATER_THAN(0, n);
+    TEST_ASSERT_EQUAL(-1, collab_save(&g_c[2], buf, 100));
+    memset(&copy, 0, sizeof(copy));
+    TEST_ASSERT_EQUAL(g_c[2].n, collab_load(&copy, buf, n));
+    collab_fold(&g_c[2], &a); collab_fold(&copy, &b);
+    TEST_ASSERT_EQUAL(0, memcmp(a.digest, b.digest, 32));
+    TEST_ASSERT_EQUAL(1, copy.signing); TEST_ASSERT_EQUAL(0, memcmp(copy.sk, g_c[2].sk, 20));
+    for (i = 0; i < copy.n; i++) TEST_ASSERT_EQUAL(0, memcmp(copy.th[i], g_c[2].th[i], 32));
+    /* the restored node re-serves signed entries that a fresh peer accepts */
+    g_c[2] = copy;
+    collab_init(&g_c[0], k_id[0]);
+    { uint8_t seed[32]; memset(seed, 0x40, 32); collab_keys_set(&g_c[0], seed); }
+    g_out[0][0] = 0;
+    collab_sync(&g_c[0], &g_h[0]); deliver(); deliver();
+    TEST_ASSERT_EQUAL(0, count(g_out[0], "collab reject"));
+    buf[0] ^= 1; TEST_ASSERT_EQUAL(-1, collab_load(&copy, buf, n));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_points_transfer_overdraft_and_convergence);
@@ -233,6 +296,8 @@ int main(void) {
     RUN_TEST(test_privacy_forget_and_export);
     RUN_TEST(test_sync_after_partition_and_tickets);
     RUN_TEST(test_codec_and_eval);
+    RUN_TEST(test_signed_entries_forgery_and_redaction);
+    RUN_TEST(test_save_load_roundtrip);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

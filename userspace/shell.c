@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 int shell_prod_is(const char* line);
+int shell_persist_is(const char* line);
+int shell_persist_line(const char* line);
+void shell_persist_tick(void);
+void shell_persist_shutdown(void);
 int shell_prod_line(const char* line);
 void shell_prod_count(const char* line);
 #include <stddef.h>
@@ -17,6 +21,23 @@ int shell_collab_line(const char* line);
 #include "shell_platform.h"
 #include "osui_gui.h"
 #include "promptmessage.h"
+#include "csig.h"
+#include "collab.h"
+#include "../kernel/sha256.h"
+int shell_collab_sign(const uint8_t* m, int len, uint8_t sig[40], uint8_t pk[128]);
+/* US-060: FILE.sig = "pmsig1 pk=<hex> sig=<hex>", Schnorr over
+ * SHA-256("pmcert1" || source) with the node's collab key */
+static char g_pm_sigrec[400];
+static int pm_hexval(char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1; }
+static void pm_sig_digest(const char* src, int len, uint8_t d[32]) {
+    sha256_ctx_t h;
+    sha256_init(&h); sha256_update(&h, (const uint8_t*)"pmcert1", 7); sha256_update(&h, (const uint8_t*)src, (uint32_t)len); sha256_final(&h, d);
+}
+static void pm_sig_path(const char* f, char* out) {
+    int k = 0;
+    while (f[k] && k < RAMFS_PATH_MAX - 5) { out[k] = f[k]; k++; }
+    out[k++] = '.'; out[k++] = 's'; out[k++] = 'i'; out[k++] = 'g'; out[k] = 0;
+}
 
 // ==============================================================================
 // STRUCTURES ET DÉFINITIONS
@@ -2966,6 +2987,25 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
             print_string("pm-verify mismatch "); print_string(args[0]); print_string(" sum="); print_string(want); print_string("\n");
             return;
         }
+        {
+            char path[RAMFS_PATH_MAX]; int m, j;
+            pm_sig_path(args[0], path);
+            m = pm_host_read(0, path, g_pm_sigrec, (int)sizeof(g_pm_sigrec) - 1);
+            if (m >= 0) {
+                uint8_t pk[CSIG_PK], sig[CSIG_SIG], d[32]; char fpr[17]; int bad = 0;
+                g_pm_sigrec[m] = 0;
+                if (m < 10 + 2 * CSIG_PK + 5 + 2 * CSIG_SIG || strncmp(g_pm_sigrec, "pmsig1 pk=", 10) != 0) bad = 1;
+                for (j = 0; !bad && j < CSIG_PK; j++) { int a = pm_hexval(g_pm_sigrec[10 + 2 * j]), b = pm_hexval(g_pm_sigrec[11 + 2 * j]); if (a < 0 || b < 0) bad = 1; else pk[j] = (uint8_t)(a * 16 + b); }
+                for (j = 0; !bad && j < CSIG_SIG; j++) { int o = 10 + 2 * CSIG_PK + 5, a = pm_hexval(g_pm_sigrec[o + 2 * j]), b = pm_hexval(g_pm_sigrec[o + 1 + 2 * j]); if (a < 0 || b < 0) bad = 1; else sig[j] = (uint8_t)(a * 16 + b); }
+                pm_sig_digest(g_pm_src, len, d);
+                if (bad || !csig_pk_valid(pk) || !csig_verify(pk, d, 32, sig)) {
+                    print_string("pm-verify signature bad "); print_string(path); print_string("\n");
+                    return;
+                }
+                collab_key_fpr(pk, fpr);
+                print_string("pm-verify signature ok author "); print_string(fpr); print_string("\n");
+            }
+        }
         print_string("pm-verify ok "); print_string(args[0]); print_string(" sum="); print_string(want); print_string("\n");
         ctx->last_rc = 0;
         return;
@@ -3023,6 +3063,23 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         if (pm_host_write(0, cert, rec, r, 0) < 0) { print_string("pm-certify error write failed\n"); return; }
         rec[r - 1] = 0;
         print_string("pm-certify ok "); print_string(cert); print_string(" "); print_string(rec); print_string("\n");
+        {
+            uint8_t d[32], sig[CSIG_SIG], pk[CSIG_PK]; char path[RAMFS_PATH_MAX], fpr[17]; int q = 0;
+            pm_sig_digest(g_pm_src, len, d);
+            if (shell_collab_sign(d, 32, sig, pk) != 0) { print_string("pm-certify unsigned (no node key: collab-join first)\n"); }
+            else {
+                const char* h = "pmsig1 pk=";
+                while (*h) g_pm_sigrec[q++] = *h++;
+                for (i = 0; i < CSIG_PK; i++) { g_pm_sigrec[q++] = "0123456789abcdef"[pk[i] >> 4]; g_pm_sigrec[q++] = "0123456789abcdef"[pk[i] & 15]; }
+                h = " sig="; while (*h) g_pm_sigrec[q++] = *h++;
+                for (i = 0; i < CSIG_SIG; i++) { g_pm_sigrec[q++] = "0123456789abcdef"[sig[i] >> 4]; g_pm_sigrec[q++] = "0123456789abcdef"[sig[i] & 15]; }
+                g_pm_sigrec[q++] = '\n';
+                pm_sig_path(args[0], path);
+                if (pm_host_write(0, path, g_pm_sigrec, q, 0) < 0) { print_string("pm-certify error signature write failed\n"); return; }
+                collab_key_fpr(pk, fpr);
+                print_string("pm-certify signed "); print_string(path); print_string(" author "); print_string(fpr); print_string("\n");
+            }
+        }
         ctx->last_rc = 0;
         return;
     }
@@ -3098,7 +3155,7 @@ static int is_builtin(const char* cmd) {
         "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-catalog", "pm-install", "pm-certify", "pm-verify",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
-        "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-integrity", "prod-bench", "prod-diag",
+        "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
         "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
         "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "right-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
@@ -3109,12 +3166,12 @@ static int is_builtin(const char* cmd) {
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
-        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-kv", "p2p-poll",
+        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-kv", "p2p-poll",
         "p2p-send", "p2p-put", "p2p-get", "p2p-sync", "p2p-propose", "p2p-block", "p2p-unblock", "p2p-limit",
         "collab-join", "collab-pay", "collab-offer", "collab-reserve", "collab-task", "collab-claim", "collab-work",
         "collab-review", "collab-rate", "collab-propose", "collab-vote", "collab-profile", "collab-forget",
         "collab-export", "collab-ticket", "collab-answer", "collab-sync", "collab-balances", "collab-audit",
-        "collab-tasks", "collab-offers", "collab-votes", "collab-tickets",
+        "collab-tasks", "collab-offers", "collab-votes", "collab-tickets", "collab-keys", "collab-forge",
         "hal-info", "hal-port", "screen-adapt", "gesture", "power-profile", "power-status", "dev-list",
         "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
         "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
@@ -6256,6 +6313,7 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         }
         return 1;
     } else if (strcmp(command, "exit") == 0 || strcmp(command, "quit") == 0) {
+        shell_persist_shutdown();
         cmd_exit(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "ai") == 0) {
@@ -6528,9 +6586,11 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         cmd_exit(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "reboot") == 0) {
+        shell_persist_shutdown();
         cmd_reboot(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "shutdown") == 0) {
+        shell_persist_shutdown();
         cmd_shutdown(ctx, args, arg_count);
         return 1;
     }
@@ -6619,6 +6679,10 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
     }
 
     shell_prod_count(input_buffer);
+    if (shell_persist_is(input_buffer)) {
+        ctx->last_rc = shell_persist_line(input_buffer);
+        return;
+    }
     if (shell_prod_is(input_buffer)) {
         ctx->last_rc = shell_prod_line(input_buffer);
         return;
@@ -6756,6 +6820,7 @@ void shell_main_loop(shell_context_t* ctx) {
                 }
                 if (osui_web_active() && osui_web_poll(web_log, (int)sizeof(web_log)) > 0) print_string(web_log);
                 shell_p2p_poll();
+                shell_persist_tick();
                 yield();
             }
             buf[len] = '\0';
@@ -6764,6 +6829,7 @@ void shell_main_loop(shell_context_t* ctx) {
             gets(buf, (int)sizeof(buf));
         }
         handle_line(ctx, buf);
+        shell_persist_tick();
     }
 }
 
