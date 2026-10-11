@@ -188,7 +188,7 @@ def send_command_until(client, command, marker, proc):
             wait_for(proc, marker, CMD_TIMEOUT, start)
             # Synchronise le prochain prompt sans rejouer une opération déjà
             # entrée, qu’elle soit une mutation ou une I/O.
-            wait_for(proc, "(-.-)", CMD_TIMEOUT, start)
+            wait_for(proc, " : ", CMD_TIMEOUT, start)
             return
         if "SYS_GETS: ligne lue: " in output:
             raise CommandEchoMismatch("command echo altered: %s" % command)
@@ -231,7 +231,7 @@ def main():
                 "-serial", "file:" + LOG, "-monitor", "unix:%s,server,nowait" % MON_SOCK,
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
             ] + qemu_disk_args(), cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, "(-.-)", BOOT_TIMEOUT)
+            wait_for(proc, " : ", BOOT_TIMEOUT)
             wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
             monitor = monitor_connect()
             # Laisser l'attente clavier atteindre un état stable sur les runners CI lents.

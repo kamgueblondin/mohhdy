@@ -117,7 +117,7 @@ def main():
         if hub.client_count < 3:
             raise RuntimeError("hub expected 3 QEMU clients, got %d" % hub.client_count)
         for node in NODES:
-            base.wait_for(node["proc"], node["log"], "(-.-)", base.BOOT_TIMEOUT)
+            base.wait_for(node["proc"], node["log"], " : ", base.BOOT_TIMEOUT)
             node["client"] = base.monitor_connect(node["mon"])
         say("3 guests booted in %.0fs" % (time.monotonic() - t0))
 

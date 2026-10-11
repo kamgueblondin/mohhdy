@@ -135,7 +135,7 @@ def run_command(proc, client, command, needle, timeout=25):
     else:
         raise RuntimeError("command echo absent: %s" % command)
     wait_for(proc, needle, timeout, start)
-    wait_for(proc, "(-.-)", 20, start)
+    wait_for(proc, " : ", 20, start)
     return log_text()[start:]
 
 
@@ -167,7 +167,7 @@ def boot():
         pass
     err = open(ERR, "ab")
     proc = subprocess.Popen(qemu_cmd(), cwd=ROOT, stdout=err, stderr=err)
-    wait_for(proc, "(-.-)", BOOT_TIMEOUT)
+    wait_for(proc, " : ", BOOT_TIMEOUT)
     client = monitor_connect()
     return proc, client, err
 

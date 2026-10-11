@@ -172,7 +172,7 @@ def run_command(inst, command, needle, peer_alive_check, timeout=60):
         else:
             raise RuntimeError("command echo absent on %s: %s" % (inst["label"], command))
         wait_for(inst["proc"], inst["log"], needle, timeout, start)
-        wait_for(inst["proc"], inst["log"], "(-.-)", 20, start)
+        wait_for(inst["proc"], inst["log"], " : ", 20, start)
         return start
 
 
@@ -234,7 +234,7 @@ def main():
             )
 
         for inst in INSTANCES:
-            wait_for(inst["proc"], inst["log"], "(-.-)", BOOT_TIMEOUT)
+            wait_for(inst["proc"], inst["log"], " : ", BOOT_TIMEOUT)
             inst["client"] = monitor_connect(inst["mon"])
             say("[guest-app] guest %s booted" % inst["label"])
 

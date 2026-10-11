@@ -162,7 +162,7 @@ def receive_service_event(client, proc, pattern, description):
             # L’événement est imprimé avant le retour au shell. Attendre le
             # prompt évite d’injecter la commande suivante pendant la fin de
             # traitement de l’IRQ série, sans réessayer d’effet métier.
-            wait_for("(-.-)", proc, start)
+            wait_for(" : ", proc, start)
             return
         except RuntimeError as error:
             failure = error
@@ -230,7 +230,7 @@ def main():
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
         monitor = None
         try:
-            wait_for("(-.-)", proc)
+            wait_for(" : ", proc)
             monitor = connect_monitor()
             time.sleep(0.5)
             before_publish = len(log_text())

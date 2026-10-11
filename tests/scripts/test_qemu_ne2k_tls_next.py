@@ -188,7 +188,7 @@ def main():
     try:
         with open(ERR, "wb") as err:
             proc = subprocess.Popen(command, cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, "(-.-)")
+            wait_for(proc, " : ")
             client = monitor()
             handshake_tls(client, proc, peer)
             try:

@@ -103,7 +103,7 @@ def main(kernel=None, strict=False):
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
         monitor = None
         try:
-            wait_for("(-.-)", proc)
+            wait_for(" : ", proc)
             monitor = connect_monitor()
             time.sleep(0.5)
             if strict:

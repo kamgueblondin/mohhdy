@@ -117,7 +117,7 @@ def boot_and_type(command, marker, verify_command=None, verify_marker=None):
     try:
         with open(QEMU_ERR, "ab") as err:
             proc = subprocess.Popen(qemu_cmd(), cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, "(-.-)", BOOT_TIMEOUT)
+            wait_for(proc, " : ", BOOT_TIMEOUT)
             wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
             monitor = monitor_connect()
             # Stabiliser GETS/PS2 avant la première touche HMP sur les runners lents.

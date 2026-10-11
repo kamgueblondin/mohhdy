@@ -142,7 +142,7 @@ def send_command(client, proc, command):
 
 
 def wait_for_prompt(proc, start):
-    wait_for(proc, "(-.-)", 15, start)
+    wait_for(proc, " : ", 15, start)
 
 
 def start_guest(kernel="mohhdy.bin"):
@@ -302,7 +302,7 @@ def main():
     peer = proc = client = None
     try:
         peer, proc = start_guest()
-        wait_for(proc, "(-.-)")
+        wait_for(proc, " : ")
         client = monitor()
         wait_ring3_stack(proc, client)
         tls_ops = run_tls_http(proc, client, peer)

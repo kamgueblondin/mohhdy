@@ -6634,9 +6634,8 @@ static const char* get_basename(const char* path) {
 
 void display_prompt(shell_context_t* ctx) {
     const char* folder = get_basename(ctx->current_dir);
-    // Exemple: documents (-.-) :
     print_colored(folder, COLOR_BRIGHT);
-    print_string(" (-.-) : ");
+    print_string(" : ");
 }
 
 void handle_line(shell_context_t* ctx, char* input_buffer) {
