@@ -211,7 +211,7 @@ def boot(log_path):
     err_handle = open(ERR, "ab")
     proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
     err_handle.close()
-    wait_for("SYS_GETS: Debut", proc)
+    wait_for("[0m : ", proc)
     monitor = connect_monitor()
     time.sleep(0.5)
     return proc, monitor

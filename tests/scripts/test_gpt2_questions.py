@@ -94,7 +94,7 @@ def main():
                 "-m", "1024M", "-display", "none", "-vga", "none", "-serial", "file:" + LOG,
                 "-monitor", "unix:%s,server,nowait" % MON, "-no-reboot", "-no-shutdown",
             ], cwd=ROOT, stdout=error_handle, stderr=error_handle)
-            wait_for(proc, "SYS_GETS: Debut", 70)
+            wait_for(proc, "[0m : ", 70)
             client = monitor_connect()
             for question in QUESTIONS:
                 offset = len(log_text())
@@ -104,7 +104,7 @@ def main():
                 elapsed = round(time.time() - started, 1)
                 segment = updated[offset:]
                 results.append((question, response_from(segment), elapsed))
-                wait_for(proc, "SYS_GETS: Debut", 30, start=offset)
+                wait_for(proc, "[0m : ", 30, start=offset)
         for question, response, elapsed in results:
             print("QUESTION\t%s\nRESPONSE\t%s\nSECONDS\t%.1f\n" % (question, response, elapsed))
         return 0

@@ -92,7 +92,7 @@ def main():
                 "-serial", "file:" + LOG, "-monitor", "unix:%s,server,nowait" % MON,
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
             ], cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
+            wait_for(proc, "[0m : ", BOOT_TIMEOUT)
             client = monitor()
             start = len(text())
             # Shift only on T, then lowercase. A latched Shift would shout HE.

@@ -134,7 +134,7 @@ def main():
                 "-drive", "file=%s,format=raw,if=ide,cache=writethrough" % DISK,
             ], cwd=ROOT, stdout=err, stderr=err)
             wait_for(proc, "GGUF: profil local FAT16 pret", BOOT_TIMEOUT)
-            wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
+            wait_for(proc, "[0m : ", BOOT_TIMEOUT)
             # The shell prompt is up before aiworker finishes the disk copy.
             # 109/110 return -148 until GGUF_READY.
             wait_for(proc, "[AI] ai-engine GGUF ready in Ring 3", 900)

@@ -119,7 +119,7 @@ def main():
                 "-m", "128M", "-display", "none", "-vga", "none", "-serial", "file:" + LOG,
                 "-monitor", "unix:%s,server,nowait" % MON, "-no-reboot", "-no-shutdown",
             ], cwd=ROOT, stdout=error_handle, stderr=error_handle)
-            wait_for(proc, "SYS_GETS: Debut")
+            wait_for(proc, "[0m : ")
             monitor = monitor_connect()
             start = len(read_log())
             send_command(monitor, "ai-runtime json")

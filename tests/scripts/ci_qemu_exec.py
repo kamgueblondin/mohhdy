@@ -122,15 +122,15 @@ def main():
                 "-serial", "file:" + LOG, "-monitor", "unix:%s,server,nowait" % MON_SOCK,
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
             ] + qemu_disk_args(), cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
-            wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
+            wait_for(proc, "[0m : ", BOOT_TIMEOUT)
+            wait_for(proc, "[0m : ", BOOT_TIMEOUT)
             monitor = monitor_connect()
 
             say("typing ok ...")
             start = len(log_text())
             send_command(monitor, "ok")
             wait_for(proc, "exec ok", CMD_TIMEOUT, start)
-            wait_for(proc, "SYS_GETS: Debut", CMD_TIMEOUT, start)
+            wait_for(proc, "[0m : ", CMD_TIMEOUT, start)
 
             say("typing rc ...")
             start = len(log_text())

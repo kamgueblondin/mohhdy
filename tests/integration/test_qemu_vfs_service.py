@@ -176,7 +176,7 @@ def verify_spawn_preempted_puts_rejoin():
     sample = (
         "v[SCHED] switching to task 1\n"
         "spawn ok pid 3 vfsserver\n"
-        " :  : SYS_GETS: Debut de la lecture\n"
+        " :  : [0m :  de la lecture\n"
         "SYS_GETS: ligne lue: yield\n"
         "[SCHED] switching to task 3\n"
         "fsserver ready vfs\n"
@@ -284,7 +284,7 @@ def send_command(client, command, proc=None, key_delay=KEY_DELAY):
                     actual_str = actuals[-1] if actuals else "inconnu"
                     if attempt + 1 < KEY_PRE_RET_RETRIES:
                         try:
-                            wait_for("SYS_GETS: Debut", proc, start, timeout=10)
+                            wait_for("[0m : ", proc, start, timeout=10)
                         except RuntimeError:
                             pass
                         break
@@ -355,7 +355,7 @@ def send_command_until(client, command, needle, proc, attempts=1, key_delay=KEY_
             # La réponse VFS peut précéder le retour du shell pendant une
             # rafale IRQ0. Synchroniser le prompt évite de concaténer la
             # commande suivante, sans jamais réinjecter une mutation VFS.
-            wait_for("SYS_GETS: Debut", proc, start)
+            wait_for("[0m : ", proc, start)
             return
         except CommandEchoMismatch:
             raise
@@ -565,7 +565,7 @@ def main():
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
         monitor = None
         try:
-            wait_for("SYS_GETS: Debut", proc)
+            wait_for("[0m : ", proc)
             monitor = connect_monitor()
             time.sleep(0.5)
             before_probe = len(log_text())
@@ -1157,7 +1157,7 @@ def main():
             send_command(monitor, "yield", proc)
             wait_for("vfsserver delegated alias read", proc,
                      before_alias_flight_spawn, timeout=40)
-            wait_for("SYS_GETS: Debut", proc, before_third_yield)
+            wait_for("[0m : ", proc, before_third_yield)
             before_alias_scope = len(log_text())
             send_command_until(monitor, "vfs-backend-scope %s" % worker_pid,
                                "vfsserver backend scope request", proc)

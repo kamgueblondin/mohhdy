@@ -140,7 +140,7 @@ def send_command(client, proc, command):
 
 
 def wait_for_prompt(proc, start):
-    wait_for(proc, "SYS_GETS: Debut", 15, start)
+    wait_for(proc, "[0m : ", 15, start)
 
 
 def main():
@@ -168,7 +168,7 @@ def main():
     try:
         with open(ERR, "wb") as err:
             proc = subprocess.Popen(command, cwd=ROOT, stdout=err, stderr=err)
-        wait_for(proc, "SYS_GETS: Debut")
+        wait_for(proc, "[0m : ")
         client = monitor()
         # Roadmap step 4: the OS-UI chat itself talks to the QEMU peer
         # through the Ring 3 networker (strict kernel, no public internet).

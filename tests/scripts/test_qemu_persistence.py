@@ -64,7 +64,7 @@ def start(node, hub_port):
     err = open(node["err"], "wb")
     node["err_handle"] = err
     node["proc"] = subprocess.Popen(command, stdout=err, stderr=err)
-    base.wait_for(node["proc"], node["log"], "SYS_GETS: Debut", base.BOOT_TIMEOUT)
+    base.wait_for(node["proc"], node["log"], "[0m : ", base.BOOT_TIMEOUT)
     node["client"] = base.monitor_connect(node["mon"])
 
     def alive():
@@ -126,8 +126,8 @@ def boot1(hub):
         cmd(node, "prod-sample 5 10", "prod-sample ok n 5 ")
         cmd(node, "prod-alert-add app custom above 50 1", "prod-alert-add ok app")
         cmd(node, "prod-inject 80", "prod-alert FIRING app v=80")
-        cmd(node, "mkdir /cfg", "SYS_GETS: Debut")
-        cmd(node, "write /cfg/a.conf mode=eco", "SYS_GETS: Debut")
+        cmd(node, "mkdir /cfg", "[0m : ")
+        cmd(node, "write /cfg/a.conf mode=eco", "[0m : ")
         cmd(node, "prod-backup daily /cfg", "prod-backup ok daily files 1 bytes ")
         cmd(node, "prod-feedback 5 durable", "prod-feedback ok total 1")
         # autoscaling with real worker tasks
@@ -194,12 +194,12 @@ def boot2(hub, fpr, before):
         cmd(node, "prod-alerts", "prod-alerts ok fired 1 resolved 0")
         cmd(node, "prod-metrics", "prod-metrics ok samples 7")
         cmd(node, "prod-backups", "prod-backup daily dir /cfg files 1 tick ")
-        cmd(node, "write /cfg/a.conf broken", "SYS_GETS: Debut")
+        cmd(node, "write /cfg/a.conf broken", "[0m : ")
         cmd(node, "prod-restore daily", "prod-restore ok files 1")
         cmd(node, "cat /cfg/a.conf", "mode=eco")
         cmd(node, "prod-feedback summary", "prod-feedback total 2 avg 4.5")
         # a damaged chunk is refused, nothing is applied from it
-        cmd(node, "write /persist/prod.0 garbage", "SYS_GETS: Debut")
+        cmd(node, "write /persist/prod.0 garbage", "[0m : ")
         cmd(node, "persist-load", "persist-load error", timeout=60)
         if "persist-load prod corrupt (checksum)" not in log(node):
             raise RuntimeError("corrupt chunk not detected")

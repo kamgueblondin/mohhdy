@@ -259,7 +259,7 @@ def main():
             proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
             monitor = None
             try:
-                base.wait_for("SYS_GETS: Debut", proc, 0, timeout=180)
+                base.wait_for("[0m : ", proc, 0, timeout=180)
                 monitor = base.connect_monitor()
                 time.sleep(0.5)
                 contract(monitor, proc)

@@ -285,8 +285,8 @@ def main():
     ACTIVE_PROC = proc
     mon = None
     try:
-        wait_needle("SYS_GETS: Debut", BOOT_TIMEOUT, proc)
-        wait_needle("SYS_GETS: Debut", BOOT_TIMEOUT, proc)
+        wait_needle("[0m : ", BOOT_TIMEOUT, proc)
+        wait_needle("[0m : ", BOOT_TIMEOUT, proc)
         time.sleep(0.4)
         mon = monitor_connect()
 

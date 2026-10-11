@@ -41,7 +41,7 @@ def run(mon, proc, command, needles, attempts=1, timeout=25):
     start = nw.send_command_until(mon, command, needles[0], proc, attempts=attempts)
     for needle in needles[1:]:
         nw.wait_for(needle, proc, start, timeout=timeout)
-    nw.wait_for("SYS_GETS: Debut", proc, start, timeout=timeout)
+    nw.wait_for("[0m : ", proc, start, timeout=timeout)
     return normalized_log(nw.log_text()[start:])
 
 
@@ -66,7 +66,7 @@ def main():
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
         mon = None
         try:
-            nw.wait_for("SYS_GETS: Debut", proc, timeout=90)
+            nw.wait_for("[0m : ", proc, timeout=90)
             mon = nw.connect_monitor()
             time.sleep(0.5)
             # US-076 HAL groundwork, honest about ARM.
@@ -106,9 +106,9 @@ def main():
             run(mon, proc, "notify-ack 2", "notify-ack ok")
             run(mon, proc, "notify-list", "notify ok pending 1", attempts=2)
             # US-088 migration.
-            run(mon, proc, "mkdir /data", "SYS_GETS: Debut")
-            run(mon, proc, "write /data/a.txt hello", "SYS_GETS: Debut")
-            run(mon, proc, "write /data/b.txt world", "SYS_GETS: Debut")
+            run(mon, proc, "mkdir /data", "[0m : ")
+            run(mon, proc, "write /data/a.txt hello", "[0m : ")
+            run(mon, proc, "write /data/b.txt world", "[0m : ")
             run(mon, proc, "migrate-export /data /arc", "migrate-export ok files 2 bytes ")
             run(mon, proc, "migrate-verify /arc", "migrate-verify ok files 2 a.txt b.txt", attempts=2)
             run(mon, proc, "migrate-import /arc /restore", "migrate-import ok files 2 a.txt b.txt")
@@ -118,11 +118,11 @@ def main():
             run(mon, proc, "deploy-apply /man", "deploy-apply ok files 2")
             run(mon, proc, "deploy-verify /man", "deploy-verify ok files 2", attempts=2)
             run(mon, proc, "cat /apps/a.txt", "hello", attempts=2)
-            run(mon, proc, "write /data/a.txt changed", "SYS_GETS: Debut")
+            run(mon, proc, "write /data/a.txt changed", "[0m : ")
             run(mon, proc, "deploy-apply /man", ["deploy-apply checksum /data/a.txt", "deploy-apply error failed 1 nothing changed"])
             run(mon, proc, "deploy-verify /man", "deploy-verify ok files 2", attempts=2)
             # Tampered archive is refused.
-            run(mon, proc, "write /arc.0 broken", "SYS_GETS: Debut")
+            run(mon, proc, "write /arc.0 broken", "[0m : ")
             run(mon, proc, "migrate-verify /arc", "migrate-verify error bad archive", attempts=2)
             # US-089 unified admin view.
             run(mon, proc, "admin-all", "admin-all arch i386 cpu ", attempts=2)

@@ -113,7 +113,7 @@ def run_once(index):
                 "-drive", "file=%s,format=raw,if=ide,cache=writethrough" % DISK,
             ], cwd=ROOT, stdout=err, stderr=err)
             wait_for(proc, log, "GGUF: profil local FAT16 pret", BOOT_TIMEOUT)
-            wait_for(proc, log, "SYS_GETS: Debut", BOOT_TIMEOUT)
+            wait_for(proc, log, "[0m : ", BOOT_TIMEOUT)
             client = connect_monitor(monitor_path)
             start = len(read_text(log))
             send(client, "ai-model use gpt2.gguf")

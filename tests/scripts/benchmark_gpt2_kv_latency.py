@@ -80,7 +80,7 @@ def main():
                 "-m", "1024M", "-display", "none", "-vga", "none", "-serial", "file:" + LOG,
                 "-monitor", "unix:%s,server,nowait" % MON, "-no-reboot", "-no-shutdown",
             ], cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, "SYS_GETS: Debut", 75)
+            wait_for(proc, "[0m : ", 75)
             client = connect_monitor()
             start_offset = len(read_log())
             start_time = time.monotonic()
