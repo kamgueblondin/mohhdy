@@ -64,7 +64,7 @@ static uint32_t peer(const char* name) { p2p_peer_t* p = p2p_find(shell_p2p_node
 
 static const char* const k_cmds[] = {
     "session-handoff", "session-resume", "sync-push", "sync-status", "fleet-report", "fleet-collect",
-    "deploy-stage", "deploy-promote", "deploy-rollback", "deploy-status", "mkfile", 0
+    "deploy-stage", "deploy-promote", "deploy-rollback", "deploy-status", "mkfile", "fleet-qos", 0
 };
 int shell_fleet_is(const char* line) {
     char w[24]; int i;
@@ -133,6 +133,22 @@ int shell_fleet_line(const char* line) {
         if (v < 0) { print_string("sync-push error path too long (39) or send queue full\n"); return 1; }
         cat(g_line, "sync-push ok "); cat(g_line, a); cat(g_line, " v"); catu(g_line, (uint32_t)v);
         cat(g_line, " bytes "); catu(g_line, (uint32_t)n); cat(g_line, " sum "); hex(g_line, fleet_sum(g_buf, n)); emit();
+        return 0;
+    }
+    if (s_eq(cmd, "fleet-qos")) {
+        /* US-068/073: measured per-peer window, losses and goodput */
+        int k = 0;
+        for (i = 0; i < FL_NODES; i++) if (g_f.cc[i].used) {
+            const fl_cc_t* c = &g_f.cc[i];
+            uint32_t span = c->last > c->first ? c->last - c->first : 0U;
+            g_line[0] = 0; cat(g_line, "fleet-qos "); cat(g_line, p2p_peer_name(shell_p2p_node(), c->id));
+            cat(g_line, " cwnd "); catu(g_line, (uint32_t)c->cwnd); cat(g_line, " peak "); catu(g_line, c->peak);
+            cat(g_line, " ssthresh "); catu(g_line, (uint32_t)c->ssthresh); cat(g_line, " losses "); catu(g_line, c->losses);
+            cat(g_line, " acks "); catu(g_line, c->acks); cat(g_line, " bytes "); catu(g_line, c->bytes);
+            cat(g_line, " goodput_Bps "); catu(g_line, span ? c->bytes * 100U / span : 0U);
+            cat(g_line, " hi "); catu(g_line, c->sent_hi); cat(g_line, " bulk "); catu(g_line, c->sent_bulk); emit(); k++;
+        }
+        g_line[0] = 0; cat(g_line, "fleet-qos ok peers "); catu(g_line, (uint32_t)k); emit();
         return 0;
     }
     if (s_eq(cmd, "sync-status")) {

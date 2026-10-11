@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "../../../userspace/p2p.h"
+#include "../../../kernel/x25519.h"
 
 #define NODES 4
 #define QLEN 96
@@ -67,6 +68,11 @@ static void setup(int count, const char* key_c) {
         g_ctx[i].idx = i;
         g_h[i].ctx = &g_ctx[i]; g_h[i].send = bus_send; g_h[i].recv = bus_recv; g_h[i].ticks = bus_ticks; g_h[i].out = bus_out;
         TEST_ASSERT_EQUAL(0, p2p_up(&g_n[i], names[i], ip, (i == 2 && key_c) ? key_c : "mohhdy-net-key", seed, &g_h[i]));
+    }
+    for (;;) { /* own keys computed step-wise, all nodes pumped together */
+        int all = 1;
+        for (i = 0; i < count; i++) { if (!p2p_ready(&g_n[i])) { p2p_tick(&g_n[i], &g_h[i], 4); all = 0; } }
+        if (all) break;
     }
 }
 /* advance simulated time in steps, pumping every node */
@@ -295,6 +301,26 @@ void test_multihop_line_topology(void) {
     }
 }
 
+/* The node's own public key is computed step-wise too: p2p_up returns at
+ * once, the id appears after several ticks and equals the one-shot key. */
+void test_own_key_stepwise(void) {
+    static uint32_t ws[X25519_WORKSPACE_LIMBS];
+    p2p_node_t* n = &g_n[0];
+    uint8_t ip[4] = {10, 77, 0, 1}, seed[32], want[32];
+    int ticks = 0;
+    memset(g_out, 0, sizeof(g_out)); memset(seed, 0x40, 32);
+    g_ctx[0].idx = 0; g_h[0].ctx = &g_ctx[0]; g_h[0].send = bus_send; g_h[0].recv = bus_recv; g_h[0].ticks = bus_ticks; g_h[0].out = bus_out;
+    TEST_ASSERT_EQUAL(0, p2p_up(n, "alpha", ip, "mohhdy-net-key", seed, &g_h[0]));
+    TEST_ASSERT_FALSE(p2p_ready(n));
+    TEST_ASSERT_EQUAL(0, (int)n->id);
+    while (!p2p_ready(n) && ticks < 100) { p2p_tick(n, &g_h[0], 4); ticks++; }
+    TEST_ASSERT_TRUE(ticks >= 5);
+    TEST_ASSERT_TRUE(p2p_ready(n));
+    TEST_ASSERT_EQUAL(0, x25519_public_key(want, n->secret, ws, X25519_WORKSPACE_LIMBS));
+    TEST_ASSERT_EQUAL(0, memcmp(want, n->pub, 32));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p key ready"));
+}
+
 void test_rate_limit_and_stats(void) {
     char rep[2048];
     int i, ok = 0, throttled = 0;
@@ -369,6 +395,7 @@ int main(void) {
     RUN_TEST(test_consensus_commit_reject_timeout);
     RUN_TEST(test_failure_detection_and_relay);
     RUN_TEST(test_multihop_line_topology);
+    RUN_TEST(test_own_key_stepwise);
     RUN_TEST(test_rate_limit_and_stats);
     RUN_TEST(test_traffic_analysis);
     RUN_TEST(test_bad_inputs);

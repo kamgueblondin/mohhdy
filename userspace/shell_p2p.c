@@ -111,10 +111,12 @@ int shell_p2p_kv_load(const uint8_t* in, int len) {
 void shell_collab_app(uint32_t from, const uint8_t* d, int len);
 void shell_fleet_app(uint32_t from, const uint8_t* d, int len);
 /* one P2P app channel, two users: fleet tags 0x40.., collab below */
+void shell_raft_app(uint32_t from, const uint8_t* d, int len);
 static void app_dispatch(void* ctx, uint32_t from, const uint8_t* d, int len) {
     (void)ctx;
     if (len < 1) return;
-    if (d[0] >= 0x40) shell_fleet_app(from, d, len); else shell_collab_app(from, d, len);
+    if (d[0] >= 0x60 && d[0] <= 0x6F) shell_raft_app(from, d, len);
+    else if (d[0] >= 0x40) shell_fleet_app(from, d, len); else shell_collab_app(from, d, len);
 }
 static void seed_from_machine(uint8_t seed[32], const char* name) {
     /* Emulated machine: entropy is the TSC and the tick counter mixed with the
@@ -147,7 +149,9 @@ void shell_p2p_hint(const char* what) {
     hint[i] = 0;
     g_node.stall_hint = hint;
 }
-void shell_p2p_poll(void) { if (g_node.up) { p2p_tick(&g_node, &g_host, 4); shell_fleet_tick(); } }
+void shell_raft_app(uint32_t from, const uint8_t* d, int len);
+void shell_raft_tick(void);
+void shell_p2p_poll(void) { if (g_node.up) { p2p_tick(&g_node, &g_host, 4); shell_fleet_tick(); shell_raft_tick(); } }
 
 int shell_p2p_line(const char* line) {
     char cmd[24], a[P2P_TEXT_MAX], b[P2P_TEXT_MAX];
@@ -170,6 +174,9 @@ int shell_p2p_line(const char* line) {
         else { int i; seed_from_machine(seed, a); for (i = 0; i < 32; i++) g_seed[i] = seed[i]; g_seed_ok = 1; }
         rc = p2p_up(&g_node, a, ip, key, seed, &g_host);
         if (rc != 0) { print_string("p2p-up error bad arguments\n"); return 1; }
+        /* own key computed step-wise by the pump (48 ladder steps a tick) */
+        while (g_node.up && g_node.own_kx) p2p_tick(&g_node, &g_host, 4);
+        if (!p2p_ready(&g_node)) { print_string("p2p-up error key\n"); return 1; }
         print_string("p2p-up ok name "); print_string(a); print_string(" ip "); print_string(b);
         print_string(" port 7700 crypto x25519+aes128gcm\n");
         g_node.app = app_dispatch; g_node.app_ctx = 0;
