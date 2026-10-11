@@ -349,6 +349,9 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         else if (scmp(pane, "support") == 0) scene->pane = OS_FB_PANE_SUPPORT;
         else if (scmp(pane, "status") == 0) scene->pane = OS_FB_PANE_STATUS;
         else if (scmp(pane, "fs") == 0) scene->pane = OS_FB_PANE_FS;
+        else if (scmp(pane, "p2p") == 0) scene->pane = OS_FB_PANE_P2P;
+        else if (scmp(pane, "collab") == 0) scene->pane = OS_FB_PANE_COLLAB;
+        else if (scmp(pane, "prod") == 0) scene->pane = OS_FB_PANE_PROD;
     }
     scene->stage_mode = OS_FB_STAGE_REFLECTING;
     if (stmode && stmode[0] == 'a') scene->stage_mode = OS_FB_STAGE_ACTING;

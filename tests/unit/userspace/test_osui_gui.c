@@ -185,6 +185,24 @@ static void test_gui_live_shell_eval(void) {
     osui_gui_set_program_eval(0);
 }
 
+static void test_vbe_p2p_collab_prod_panes(void) {
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("/p2p"));
+    TEST_ASSERT_EQUAL_STRING("p2p", osui_get_pane());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_P2P, g_scene.pane);
+
+    TEST_ASSERT_EQUAL(0, run_line("/collab"));
+    TEST_ASSERT_EQUAL_STRING("collab", osui_get_pane());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_COLLAB, g_scene.pane);
+
+    TEST_ASSERT_EQUAL(0, run_line("/prod"));
+    TEST_ASSERT_EQUAL_STRING("prod", osui_get_pane());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_PROD, g_scene.pane);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_gui_command_canonical);
@@ -194,6 +212,7 @@ int main(void) {
     RUN_TEST(test_snap_stage_kind);
     RUN_TEST(test_gui_feed_slash_and_esc);
     RUN_TEST(test_gui_live_shell_eval);
+    RUN_TEST(test_vbe_p2p_collab_prod_panes);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

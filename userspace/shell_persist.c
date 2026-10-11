@@ -26,6 +26,8 @@ void shell_collab_key_install(const uint8_t* sk);
 int shell_collab_signing(void);
 int shell_p2p_kv_save(uint8_t* out, int cap);
 int shell_p2p_kv_load(const uint8_t* in, int len);
+int osui_web_save_state(char *buf, int max);
+int osui_web_load_state(const char *buf, int len);
 unsigned int sys_ticks(void);
 
 #define CHUNK 384
@@ -147,8 +149,8 @@ static int open_key(const uint8_t* b, uint8_t sk[20]) {
 }
 
 /* ------------------------------------------------------- save engine */
-#define NBLOB 4
-static const char* const k_names[NBLOB] = {"node", "prod", "collab", "p2pkv"};
+#define NBLOB 5
+static const char* const k_names[NBLOB] = {"node", "prod", "collab", "p2pkv", "web"};
 static uint32_t g_saved_hash[NBLOB];
 static int g_auto_secs = -1;   /* -1: default (60 s when a disk is present) */
 static uint32_t g_last_auto;
@@ -157,6 +159,7 @@ static int build(int i) {
     if (i == 0) return shell_p2p_seed_get(g_blob + 12) == 0 ? 32 : 0;
     if (i == 1) return shell_prod_save(g_blob + 12, BLOB_MAX);
     if (i == 3) return shell_p2p_kv_save(g_blob + 12, BLOB_MAX);
+    if (i == 4) return osui_web_save_state((char*)g_blob + 12, BLOB_MAX);
     { int z; for (z = 0; z < KHDR; z++) g_blob[12 + z] = 0; }
     n = shell_collab_save(g_blob + 12 + KHDR, BLOB_MAX - KHDR);
     return n > 0 ? n + KHDR : n;
@@ -263,6 +266,7 @@ int shell_persist_line(const char* l) {
             if (i == 0) { if (n == 32) shell_p2p_seed_set(g_blob + 12); else bad = 1; report("persist-load", k_names[i], n, " bytes seed ", n == 32); }
             else if (i == 1) { int rc = shell_prod_load(g_blob + 12, n); if (rc) bad = 1; report("persist-load", k_names[i], n, " bytes ok ", rc == 0); }
             else if (i == 3) { int rc = shell_p2p_kv_load(g_blob + 12, n); if (rc < 0) bad = 1; report("persist-load", k_names[i], n, " bytes items ", rc < 0 ? 0 : rc); }
+            else if (i == 4) { int rc = osui_web_load_state((const char*)g_blob + 12, n); if (rc < 0) bad = 1; report("persist-load", k_names[i], n, " bytes tabs ", rc >= 0); }
             else {
                 uint8_t sk[20]; int rc, kr;
                 if (n < KHDR) { bad = 1; continue; }

@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 329
+#define MOHHDY_SHELL_COMMAND_COUNT 343
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -56,8 +56,19 @@ static const char * const mohhdy_shell_commands[] = {
     "ata-status",
     "attach",
     "browser-click",
+    "browser-fs-load",
+    "browser-fs-save",
+    "browser-fs-sync",
+    "browser-origin-status",
+    "browser-pm-run",
     "browser-pointer",
     "browser-status",
+    "browser-tab-duplicate",
+    "browser-tab-next",
+    "browser-tab-pin",
+    "browser-tab-prev",
+    "browser-tab-rename",
+    "browser-tabs",
     "browser-type",
     "cap-token",
     "cat",
@@ -170,8 +181,11 @@ static const char * const mohhdy_shell_commands[] = {
     "os-browser",
     "os-center",
     "os-close",
+    "os-collab",
     "os-fs",
     "os-help",
+    "os-p2p",
+    "os-prod",
     "os-shell",
     "os-status",
     "os-support",

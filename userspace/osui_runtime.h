@@ -6,6 +6,8 @@
 /* Roadmap step 5: background web server step (shell input loop). */
 int osui_web_active(void);
 int osui_web_poll(char *out, int max);
+int osui_web_save_state(char *buf, int max);
+int osui_web_load_state(const char *buf, int len);
 #define OSUI_CANVAS_ROWS 22
 #define OSUI_CANVAS_COLS 78
 

@@ -284,6 +284,22 @@ static void test_hit_regions_dock_menu_stage_close(void) {
     vga_desktop_set(0);
 }
 
+static void test_p2p_collab_prod_panes_drawing(void) {
+    blank_scene();
+    g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+    g_scene.pane = OS_FB_PANE_P2P;
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    TEST_ASSERT(count_near(40, 70, 400, 110, 28, 44, 56, 40) > 30);
+
+    g_scene.pane = OS_FB_PANE_COLLAB;
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    TEST_ASSERT(count_near(40, 70, 400, 110, 28, 44, 56, 40) > 30);
+
+    g_scene.pane = OS_FB_PANE_PROD;
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    TEST_ASSERT(count_near(40, 70, 400, 110, 28, 44, 56, 40) > 30);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -297,6 +313,7 @@ int main(void) {
     RUN_TEST(test_fb_present_repeated);
     RUN_TEST(test_desktop_layout_and_hit_test);
     RUN_TEST(test_hit_regions_dock_menu_stage_close);
+    RUN_TEST(test_p2p_collab_prod_panes_drawing);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

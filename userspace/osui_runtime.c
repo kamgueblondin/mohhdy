@@ -6,6 +6,7 @@
 #include "osui_runtime.h"
 #include "mohhdy_osui_bridge.h"
 #include "os_syscalls.h"
+#include "promptmessage.h"
 
 #define OSUI_MAX_SESSIONS 8
 #define OSUI_MAX_TABS 4
@@ -43,16 +44,18 @@ static const char *const k_cmds[] = {
     "chat", "prompt",
     "grant", "revoke", "escalate", "takeover", "admin-status",
     "origin-check",
-    "browser-click", "browser-type", "browser-pointer", "browser-status",
+    "browser-click", "browser-type", "browser-pointer", "browser-status", "browser-origin-status",
     "browser-tab-new", "browser-tab-use", "browser-tab-list", "browser-tab-close",
-    "browser-navigate", "browser-back", "browser-forward", "browser-dom-tree", "browser-eval",
+    "browser-tab-rename", "browser-tab-pin", "browser-tab-duplicate", "browser-tab-next", "browser-tab-prev", "browser-tabs",
+    "browser-fs-save", "browser-fs-load", "browser-fs-sync",
+    "browser-navigate", "browser-back", "browser-forward", "browser-dom-tree", "browser-eval", "browser-pm-run",
     "browser-form-fill", "browser-dom-act", "browser-fetch", "fetch-sim",
     "browser-storage-set", "browser-storage-get", "tab-storage",
     "mcp-invoice", "mcp-invoke", "mcp-list", "mcp-status", "mcp-auth", "mcp-credentials",
     "fs-list", "fs-read", "fs-write",
     "stage", "stage-prompt",
     "os-help", "os-status", "os-browser", "os-shell", "os-admin",
-    "os-support", "os-fs", "os-center", "os-close", "osui-model", "osui-provider", "osui-audit",
+    "os-support", "os-fs", "os-p2p", "os-collab", "os-prod", "os-center", "os-close", "osui-model", "osui-provider", "osui-audit",
     "guest-status", "attach", "detach", "open",
     "gui", "graphics", "desktop", "console", "gui-status", "gui-exit",
     "gui-move",
@@ -155,6 +158,10 @@ typedef struct {
     char id[OSUI_ID];
     char url[64];
     char title[32];
+    int pinned;
+    int loading;
+    char kind[16];
+    char origin[32];
     char history[OSUI_MAX_TAB_HISTORY][64];
     int n_history;
     int history_pos;
@@ -895,6 +902,8 @@ static const char *classify_kind(const char *prompt) {
     if (s_has_ci(prompt, "simule") || s_has_ci(prompt, "simulation")
         || s_has_ci(prompt, "mini-plan") || s_has_ci(prompt, "acting"))
         return "sim";
+    if (s_has_ci(prompt, ".pm") || s_has_ci(prompt, "promptmessage") || s_has_ci(prompt, "pm-run") || s_has_ci(prompt, "pm "))
+        return "pm";
     return "plan";
 }
 
@@ -1034,7 +1043,28 @@ static const char *norm_selector(const char *raw, char *tmp, int max) {
 static int origin_ok(const char *origin) {
     if (!origin || !origin[0] || s_cmp(origin, "self") == 0) return 1;
     if (s_cmp(origin, "http://127.0.0.1") == 0) return 1;
+    if (s_cmp(origin, "p2p://node") == 0) return 1;
+    if (s_cmp(origin, "app://local") == 0) return 1;
+    if (s_cmp(origin, "pm://local") == 0) return 1;
+    if (s_cmp(origin, "file://local") == 0) return 1;
     return 0;
+}
+
+static void extract_origin_from_url(const char *url, char *dst, int max) {
+    if (!url || !url[0]) { s_cpy(dst, max, "self"); return; }
+    if (s_ncmp(url, "http://127.0.0.1", 16) == 0 || s_ncmp(url, "http://localhost", 16) == 0) {
+        s_cpy(dst, max, "http://127.0.0.1");
+    } else if (s_ncmp(url, "p2p://", 6) == 0) {
+        s_cpy(dst, max, "p2p://node");
+    } else if (s_ncmp(url, "app://", 6) == 0) {
+        s_cpy(dst, max, "app://local");
+    } else if (s_ncmp(url, "pm://", 5) == 0) {
+        s_cpy(dst, max, "pm://local");
+    } else if (s_ncmp(url, "file://", 7) == 0) {
+        s_cpy(dst, max, "file://local");
+    } else {
+        s_cpy(dst, max, "self");
+    }
 }
 
 static int split_line(const char *line, char cmd[64], char args[OSUI_MAX_ARGS][96], int *narg) {
@@ -1691,13 +1721,24 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
         emit_stage(out, max, &p);
         return OSUI_OK;
     }
-    add_msg(s, "stub_echo");
-    s_cpy(G.stage_llm, 20, "stub_echo");
-    stage_render(text);
-    out_add(out, max, &p, "osui chat ok llm=stub_echo session_id=");
-    out_add(out, max, &p, s->id);
-    emit_rid(out, max, &p, rid);
-    out_add(out, max, &p, "\n");
+    {
+        const char *wf = "general";
+        if (s_has_ci(text, "p2p") || s_has_ci(text, "peer")) wf = "p2p";
+        else if (s_has_ci(text, "collab") || s_has_ci(text, "points")) wf = "collab";
+        else if (s_has_ci(text, "prod") || s_has_ci(text, "metric")) wf = "prod";
+        else if (s_has_ci(text, "pm") || s_has_ci(text, ".pm") || s_has_ci(text, "promptmessage")) wf = "pm";
+        else if (s_has_ci(text, "browser") || s_has_ci(text, "web") || s_has_ci(text, "tab")) wf = "web";
+
+        add_msg(s, "stub_echo");
+        s_cpy(G.stage_llm, 20, "stub_echo");
+        stage_render(text);
+        out_add(out, max, &p, "osui chat ok llm=stub_echo workflow=");
+        out_add(out, max, &p, wf);
+        out_add(out, max, &p, " session_id=");
+        out_add(out, max, &p, s->id);
+        emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, "\n");
+    }
     out_add(out, max, &p, text);
     out_add(out, max, &p, "\n");
     emit_stage(out, max, &p);
@@ -1991,6 +2032,7 @@ static int cmd_browser_pointer(char args[OSUI_MAX_ARGS][96], int narg, char *out
 static int cmd_browser_tab_new(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int i, slot = -1, p = 0;
     const char *url = narg > 0 ? args[0] : "about:blank";
+    const char *kind_arg = narg > 1 ? args[1] : "web";
     osui_tab_t *t;
     if (G.n_tabs >= OSUI_MAX_TABS) {
         out_add(out, max, &p, "osui browser-tab-new error=too_many_tabs\n");
@@ -2005,20 +2047,294 @@ static int cmd_browser_tab_new(char args[OSUI_MAX_ARGS][96], int narg, char *out
     }
     t = &G.tabs[slot];
     t->used = 1;
+    t->pinned = 0;
+    t->loading = 0;
     G.next_tid++;
     make_id(t->id, 't', G.next_tid);
     s_cpy(t->url, 64, url);
     s_cpy(t->title, 32, "Isolated Tab");
+    s_cpy(t->kind, 16, kind_arg);
+    extract_origin_from_url(url, t->origin, sizeof(t->origin));
+    if (s_ncmp(url, "file:", 5) == 0 || s_cmp(url, "/fs") == 0) s_cpy(t->kind, 16, "file");
+    else if (s_ncmp(url, "app:", 4) == 0) s_cpy(t->kind, 16, "app");
+    else if (s_ncmp(url, "agent:", 6) == 0) s_cpy(t->kind, 16, "agent");
     t->n_history = 1;
     t->history_pos = 0;
     s_cpy(t->history[0], 64, url);
+    t->n_storage = 0;
     G.n_tabs++;
     G.current_tab = slot;
     out_add(out, max, &p, "osui browser-tab-new ok tab_id=");
     out_add(out, max, &p, t->id);
     out_add(out, max, &p, " url=");
     out_add(out, max, &p, t->url);
+    out_add(out, max, &p, " kind=");
+    out_add(out, max, &p, t->kind);
     out_add(out, max, &p, " isolated=true\n");
+    return OSUI_OK;
+}
+
+static int cmd_browser_tab_rename(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    osui_tab_t *tab = 0;
+    if (narg < 1) {
+        out_add(out, max, &p, "osui browser-tab-rename error=title_missing\n");
+        return OSUI_ERR;
+    }
+    if (narg >= 2 && args[0][0] == 't') {
+        int i;
+        for (i = 0; i < OSUI_MAX_TABS; i++) {
+            if (G.tabs[i].used && s_cmp(G.tabs[i].id, args[0]) == 0) {
+                tab = &G.tabs[i];
+                s_cpy(tab->title, 32, args[1]);
+                break;
+            }
+        }
+    }
+    if (!tab) {
+        if (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) {
+            tab = &G.tabs[G.current_tab];
+            s_cpy(tab->title, 32, args[0]);
+        }
+    }
+    if (!tab) {
+        out_add(out, max, &p, "osui browser-tab-rename error=no_active_tab\n");
+        return OSUI_ERR;
+    }
+    out_add(out, max, &p, "osui browser-tab-rename ok tab_id=");
+    out_add(out, max, &p, tab->id);
+    out_add(out, max, &p, " title=");
+    out_add(out, max, &p, tab->title);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_browser_tab_pin(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    osui_tab_t *tab = 0;
+    int pin_val = 1;
+    if (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) {
+        tab = &G.tabs[G.current_tab];
+    }
+    if (narg >= 1 && args[0][0] == 't') {
+        int i;
+        for (i = 0; i < OSUI_MAX_TABS; i++) {
+            if (G.tabs[i].used && s_cmp(G.tabs[i].id, args[0]) == 0) {
+                tab = &G.tabs[i];
+                if (narg >= 2) pin_val = (args[1][0] == '1' || args[1][0] == 't') ? 1 : 0;
+                break;
+            }
+        }
+    } else if (narg >= 1) {
+        pin_val = (args[0][0] == '1' || args[0][0] == 't') ? 1 : 0;
+    }
+    if (!tab) {
+        out_add(out, max, &p, "osui browser-tab-pin error=no_active_tab\n");
+        return OSUI_ERR;
+    }
+    tab->pinned = pin_val;
+    out_add(out, max, &p, "osui browser-tab-pin ok tab_id=");
+    out_add(out, max, &p, tab->id);
+    out_add(out, max, &p, " pinned=");
+    out_add(out, max, &p, tab->pinned ? "true" : "false");
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_browser_tab_duplicate(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0, i, slot = -1;
+    osui_tab_t *src = 0, *dst;
+    if (G.n_tabs >= OSUI_MAX_TABS) {
+        out_add(out, max, &p, "osui browser-tab-duplicate error=too_many_tabs\n");
+        return OSUI_ERR;
+    }
+    if (narg >= 1 && args[0][0] == 't') {
+        for (i = 0; i < OSUI_MAX_TABS; i++) {
+            if (G.tabs[i].used && s_cmp(G.tabs[i].id, args[0]) == 0) {
+                src = &G.tabs[i];
+                break;
+            }
+        }
+    }
+    if (!src && G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) {
+        src = &G.tabs[G.current_tab];
+    }
+    if (!src) {
+        out_add(out, max, &p, "osui browser-tab-duplicate error=no_source_tab\n");
+        return OSUI_ERR;
+    }
+    for (i = 0; i < OSUI_MAX_TABS; i++) {
+        if (!G.tabs[i].used) { slot = i; break; }
+    }
+    if (slot < 0) {
+        out_add(out, max, &p, "osui browser-tab-duplicate error=too_many_tabs\n");
+        return OSUI_ERR;
+    }
+    dst = &G.tabs[slot];
+    *dst = *src;
+    G.next_tid++;
+    make_id(dst->id, 't', G.next_tid);
+    G.n_tabs++;
+    G.current_tab = slot;
+    out_add(out, max, &p, "osui browser-tab-duplicate ok source_id=");
+    out_add(out, max, &p, src->id);
+    out_add(out, max, &p, " tab_id=");
+    out_add(out, max, &p, dst->id);
+    out_add(out, max, &p, " url=");
+    out_add(out, max, &p, dst->url);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_browser_tab_next(char *out, int max) {
+    int p = 0, i, start, next_slot = -1;
+    if (G.n_tabs <= 0) {
+        out_add(out, max, &p, "osui browser-tab-next error=no_active_tab\n");
+        return OSUI_ERR;
+    }
+    start = (G.current_tab >= 0) ? G.current_tab : 0;
+    for (i = 1; i <= OSUI_MAX_TABS; i++) {
+        int idx = (start + i) % OSUI_MAX_TABS;
+        if (G.tabs[idx].used) { next_slot = idx; break; }
+    }
+    if (next_slot >= 0) {
+        G.current_tab = next_slot;
+        out_add(out, max, &p, "osui browser-tab-next ok tab_id=");
+        out_add(out, max, &p, G.tabs[G.current_tab].id);
+        out_add(out, max, &p, " url=");
+        out_add(out, max, &p, G.tabs[G.current_tab].url);
+        out_add(out, max, &p, "\n");
+        return OSUI_OK;
+    }
+    out_add(out, max, &p, "osui browser-tab-next error=no_tab\n");
+    return OSUI_ERR;
+}
+
+static int cmd_browser_tab_prev(char *out, int max) {
+    int p = 0, i, start, prev_slot = -1;
+    if (G.n_tabs <= 0) {
+        out_add(out, max, &p, "osui browser-tab-prev error=no_active_tab\n");
+        return OSUI_ERR;
+    }
+    start = (G.current_tab >= 0) ? G.current_tab : 0;
+    for (i = 1; i <= OSUI_MAX_TABS; i++) {
+        int idx = (start - i + OSUI_MAX_TABS * 2) % OSUI_MAX_TABS;
+        if (G.tabs[idx].used) { prev_slot = idx; break; }
+    }
+    if (prev_slot >= 0) {
+        G.current_tab = prev_slot;
+        out_add(out, max, &p, "osui browser-tab-prev ok tab_id=");
+        out_add(out, max, &p, G.tabs[G.current_tab].id);
+        out_add(out, max, &p, " url=");
+        out_add(out, max, &p, G.tabs[G.current_tab].url);
+        out_add(out, max, &p, "\n");
+        return OSUI_OK;
+    }
+    out_add(out, max, &p, "osui browser-tab-prev error=no_tab\n");
+    return OSUI_ERR;
+}
+
+static osui_fs_t *fs_find(const char *path);
+extern int sys_readfile(const char *path, char *buf, int max);
+extern int sys_writefile(const char *path, const char *buf, int n);
+
+static char g_osui_pm_out_buf[1024];
+static int g_osui_pm_out_pos = 0;
+
+static int osui_pm_read(void* ctx, const char* path, char* buf, int cap) {
+    (void)ctx;
+    osui_fs_t *f = fs_find(path);
+    if (f && !f->is_dir) {
+        s_cpy(buf, cap, f->content);
+        return s_len(buf);
+    }
+    int n = sys_readfile(path, buf, cap - 1);
+    if (n >= 0) { buf[n] = 0; return n; }
+    return -1;
+}
+
+static int osui_pm_write(void* ctx, const char* path, const char* data, int len, int append) {
+    (void)ctx; (void)append;
+    return sys_writefile(path, data, len);
+}
+
+static int osui_pm_mem(void* ctx) {
+    (void)ctx;
+    return 25;
+}
+
+static void osui_pm_out(void* ctx, const char* text) {
+    (void)ctx;
+    if (!text) return;
+    if (g_osui_pm_out_pos < (int)sizeof(g_osui_pm_out_buf) - 1) {
+        if (g_osui_pm_out_pos > 0 && g_osui_pm_out_buf[g_osui_pm_out_pos - 1] != '\n') {
+            g_osui_pm_out_buf[g_osui_pm_out_pos++] = ' ';
+        }
+        int i = 0;
+        while (text[i] && g_osui_pm_out_pos < (int)sizeof(g_osui_pm_out_buf) - 1) {
+            g_osui_pm_out_buf[g_osui_pm_out_pos++] = text[i++];
+        }
+        g_osui_pm_out_buf[g_osui_pm_out_pos] = 0;
+    }
+}
+
+static const pm_host_t g_osui_pm_host = { 0, osui_pm_read, osui_pm_write, osui_pm_mem, osui_pm_out };
+
+static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    const char *path = narg > 0 ? args[0] : "demo/app.pm";
+    char src[PM_SRC_MAX];
+    pm_program_t prog;
+    pm_vm_t vm;
+    int len, rc;
+
+    g_osui_pm_out_buf[0] = 0;
+    g_osui_pm_out_pos = 0;
+
+    len = osui_pm_read(0, path, src, sizeof(src));
+    if (len < 0) {
+        rest_from(args, narg, 0, src, sizeof(src));
+        len = s_len(src);
+        if (len == 0) {
+            out_add(out, max, &p, "osui browser-pm-run error=file_not_found path=");
+            out_add(out, max, &p, path);
+            out_add(out, max, &p, "\n");
+            return OSUI_ERR;
+        }
+    }
+
+    rc = pm_compile(src, len, &prog, &g_osui_pm_host);
+    if (rc != PM_OK) {
+        out_add(out, max, &p, "osui browser-pm-run error=compile_failed line=");
+        out_u(out, max, &p, (unsigned)prog.err_line);
+        out_add(out, max, &p, " msg=");
+        out_add(out, max, &p, prog.err);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+
+    pm_vm_reset(&vm);
+    rc = pm_run(&prog, &vm, &g_osui_pm_host);
+    audit_log_add("pm_run", path);
+
+    if (rc != PM_OK && rc != PM_BREAK) {
+        out_add(out, max, &p, "osui browser-pm-run error=runtime_failed path=");
+        out_add(out, max, &p, path);
+        out_add(out, max, &p, " err=");
+        out_add(out, max, &p, vm.err);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+
+    out_add(out, max, &p, "osui browser-pm-run ok path=");
+    out_add(out, max, &p, path);
+    out_add(out, max, &p, " statements=");
+    out_u(out, max, &p, (unsigned)prog.statements);
+    out_add(out, max, &p, " prints=");
+    out_u(out, max, &p, (unsigned)vm.prints);
+    out_add(out, max, &p, " output=");
+    out_add(out, max, &p, g_osui_pm_out_buf[0] ? g_osui_pm_out_buf : "void");
+    out_add(out, max, &p, "\n");
     return OSUI_OK;
 }
 
@@ -2035,6 +2351,11 @@ static int cmd_browser_navigate(char args[OSUI_MAX_ARGS][96], int narg, char *ou
     }
     tab = &G.tabs[G.current_tab];
     s_cpy(tab->url, 64, args[0]);
+    extract_origin_from_url(args[0], tab->origin, sizeof(tab->origin));
+    if (s_has_ci(args[0], ".pm") || s_ncmp(args[0], "pm://", 5) == 0) {
+        s_cpy(tab->kind, 16, "pm");
+        s_cpy(tab->title, 32, "PromptProgram");
+    }
     if (tab->n_history < OSUI_MAX_TAB_HISTORY) {
         tab->history_pos = tab->n_history;
         s_cpy(tab->history[tab->n_history], 64, args[0]);
@@ -2050,6 +2371,13 @@ static int cmd_browser_navigate(char args[OSUI_MAX_ARGS][96], int narg, char *ou
     out_add(out, max, &p, tab->id);
     out_add(out, max, &p, " url=");
     out_add(out, max, &p, tab->url);
+    if (s_cmp(tab->kind, "pm") == 0) {
+        char pm_args[OSUI_MAX_ARGS][96];
+        char pm_out[256];
+        s_cpy(pm_args[0], 96, args[0]);
+        cmd_browser_pm_run(pm_args, 1, pm_out, sizeof(pm_out));
+        out_add(out, max, &p, " kind=pm");
+    }
     out_add(out, max, &p, "\n");
     return OSUI_OK;
 }
@@ -2164,6 +2492,11 @@ static int cmd_browser_tab_list(char *out, int max) {
         out_add(out, max, &p, G.tabs[i].id);
         out_add(out, max, &p, " url=");
         out_add(out, max, &p, G.tabs[i].url);
+        out_add(out, max, &p, " title=");
+        out_add(out, max, &p, G.tabs[i].title[0] ? G.tabs[i].title : "Tab");
+        out_add(out, max, &p, " kind=");
+        out_add(out, max, &p, G.tabs[i].kind[0] ? G.tabs[i].kind : "web");
+        if (G.tabs[i].pinned) out_add(out, max, &p, " pinned");
         if (i == G.current_tab) out_add(out, max, &p, " active");
         out_add(out, max, &p, "\n");
     }
@@ -2228,6 +2561,17 @@ static int cmd_browser_form_fill(char args[OSUI_MAX_ARGS][96], int narg, char *o
     return OSUI_OK;
 }
 
+static int cmd_browser_origin_status(char *out, int max) {
+    int p = 0;
+    osui_tab_t *tab = (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) ? &G.tabs[G.current_tab] : 0;
+    out_add(out, max, &p, "osui browser-origin-status isolation=active allowed=self,http://127.0.0.1,p2p://node,app://local,pm://local active_tab=");
+    out_add(out, max, &p, tab ? tab->id : "none");
+    out_add(out, max, &p, " active_origin=");
+    out_add(out, max, &p, (tab && tab->origin[0]) ? tab->origin : "self");
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
 static int cmd_browser_fetch(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0;
     const char *url = narg > 0 ? args[0] : "";
@@ -2239,6 +2583,16 @@ static int cmd_browser_fetch(char args[OSUI_MAX_ARGS][96], int narg, char *out, 
     }
     if (!origin_ok(origin)) {
         journal(cur() ? cur()->id : "", "fetch", "origin_denied", rid);
+        audit_log_add("fetch", "origin_denied");
+        out_add(out, max, &p, "osui origin_denied origin=");
+        out_add(out, max, &p, origin);
+        emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, " status=403\n");
+        return OSUI_ERR;
+    }
+    if (s_ncmp(url, "p2p://", 6) == 0 && s_cmp(origin, "untrusted") == 0) {
+        journal(cur() ? cur()->id : "", "peer_socket", "origin_denied", rid);
+        audit_log_add("peer_socket", "origin_denied");
         out_add(out, max, &p, "osui origin_denied origin=");
         out_add(out, max, &p, origin);
         emit_rid(out, max, &p, rid);
@@ -2257,6 +2611,8 @@ static int cmd_browser_fetch(char args[OSUI_MAX_ARGS][96], int narg, char *out, 
 static int cmd_browser_storage_set(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0;
     osui_tab_t *tab;
+    const char *origin = parse_origin_flag(args, narg);
+    unsigned rid = new_rid();
     int i;
     if (G.current_tab < 0 || G.current_tab >= OSUI_MAX_TABS || !G.tabs[G.current_tab].used) {
         out_add(out, max, &p, "osui browser-storage-set error=no_active_tab\n");
@@ -2264,6 +2620,15 @@ static int cmd_browser_storage_set(char args[OSUI_MAX_ARGS][96], int narg, char 
     }
     if (narg < 2) {
         out_add(out, max, &p, "osui browser-storage-set error=usage <key> <value>\n");
+        return OSUI_ERR;
+    }
+    if (!origin_ok(origin)) {
+        journal(cur() ? cur()->id : "", "storage_set", "origin_denied", rid);
+        audit_log_add("storage_set", "origin_denied");
+        out_add(out, max, &p, "osui origin_denied origin=");
+        out_add(out, max, &p, origin);
+        emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, " status=403\n");
         return OSUI_ERR;
     }
     tab = &G.tabs[G.current_tab];
@@ -2297,6 +2662,8 @@ static int cmd_browser_storage_set(char args[OSUI_MAX_ARGS][96], int narg, char 
 static int cmd_browser_storage_get(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0;
     osui_tab_t *tab;
+    const char *origin = parse_origin_flag(args, narg);
+    unsigned rid = new_rid();
     int i;
     if (G.current_tab < 0 || G.current_tab >= OSUI_MAX_TABS || !G.tabs[G.current_tab].used) {
         out_add(out, max, &p, "osui browser-storage-get error=no_active_tab\n");
@@ -2304,6 +2671,15 @@ static int cmd_browser_storage_get(char args[OSUI_MAX_ARGS][96], int narg, char 
     }
     if (narg < 1) {
         out_add(out, max, &p, "osui browser-storage-get error=usage <key>\n");
+        return OSUI_ERR;
+    }
+    if (!origin_ok(origin)) {
+        journal(cur() ? cur()->id : "", "storage_get", "origin_denied", rid);
+        audit_log_add("storage_get", "origin_denied");
+        out_add(out, max, &p, "osui origin_denied origin=");
+        out_add(out, max, &p, origin);
+        emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, " status=403\n");
         return OSUI_ERR;
     }
     tab = &G.tabs[G.current_tab];
@@ -2321,6 +2697,189 @@ static int cmd_browser_storage_get(char args[OSUI_MAX_ARGS][96], int narg, char 
     }
     out_add(out, max, &p, "osui browser-storage-get error=not_found\n");
     return OSUI_ERR;
+}
+
+extern int sys_readfile(const char *path, char *buf, int max);
+extern int sys_writefile(const char *path, const char *buf, int n);
+
+static const char *s_find(const char *h, const char *n) {
+    int i, j, hn, nn;
+    if (!h || !n || !n[0]) return 0;
+    hn = s_len(h);
+    nn = s_len(n);
+    if (nn > hn) return 0;
+    for (i = 0; i <= hn - nn; i++) {
+        for (j = 0; j < nn; j++) {
+            if (h[i + j] != n[j]) break;
+        }
+        if (j == nn) return h + i;
+    }
+    return 0;
+}
+
+static void copy_word_val(const char *src, char *dst, int max) {
+    int i = 0;
+    if (!src || !dst || max <= 0) return;
+    while (src[i] && src[i] != ' ' && src[i] != '\t' && src[i] != '\r' && src[i] != '\n' && i < max - 1) {
+        dst[i] = src[i];
+        i++;
+    }
+    dst[i] = 0;
+}
+
+int osui_web_save_state(char *buf, int max) {
+    int p = 0, i, k;
+    if (!buf || max <= 0 || G.n_tabs <= 0) return 0;
+    buf[0] = 0;
+    out_add(buf, max, &p, "WEB_STATE_V1 tabs=");
+    out_u(buf, max, &p, (unsigned)G.n_tabs);
+    out_add(buf, max, &p, " active=");
+    out_u(buf, max, &p, (unsigned)G.current_tab);
+    out_add(buf, max, &p, "\n");
+    for (i = 0; i < OSUI_MAX_TABS; i++) {
+        osui_tab_t *t = &G.tabs[i];
+        if (!t->used) continue;
+        out_add(buf, max, &p, "TAB id=");
+        out_add(buf, max, &p, t->id);
+        out_add(buf, max, &p, " url=");
+        out_add(buf, max, &p, t->url);
+        out_add(buf, max, &p, " title=");
+        out_add(buf, max, &p, t->title[0] ? t->title : "Tab");
+        out_add(buf, max, &p, " pinned=");
+        out_u(buf, max, &p, (unsigned)t->pinned);
+        out_add(buf, max, &p, " origin=");
+        out_add(buf, max, &p, t->origin[0] ? t->origin : "self");
+        out_add(buf, max, &p, " kind=");
+        out_add(buf, max, &p, t->kind[0] ? t->kind : "web");
+        out_add(buf, max, &p, " n_storage=");
+        out_u(buf, max, &p, (unsigned)t->n_storage);
+        out_add(buf, max, &p, "\n");
+        for (k = 0; k < t->n_storage; k++) {
+            if (!t->storage[k].used) continue;
+            out_add(buf, max, &p, "KV key=");
+            out_add(buf, max, &p, t->storage[k].key);
+            out_add(buf, max, &p, " val=");
+            out_add(buf, max, &p, t->storage[k].value);
+            out_add(buf, max, &p, "\n");
+        }
+    }
+    return p;
+}
+
+int osui_web_load_state(const char *buf, int len) {
+    int i, p = 0;
+    osui_tab_t *cur_t = 0;
+    if (!buf || len <= 0) return -1;
+    (void)len;
+    G.n_tabs = 0;
+    G.current_tab = -1;
+    for (i = 0; i < OSUI_MAX_TABS; i++) G.tabs[i].used = 0;
+
+    while (buf[p]) {
+        char line[256];
+        int lp = 0;
+        while (buf[p] && buf[p] != '\n' && lp < (int)sizeof(line) - 1) {
+            line[lp++] = buf[p++];
+        }
+        line[lp] = 0;
+        if (buf[p] == '\n') p++;
+        if (s_ncmp(line, "TAB ", 4) == 0) {
+            char tid[12] = {0}, url[64] = {0}, title[32] = {0}, origin[32] = "self", kind[16] = "web";
+            int pinned = 0;
+            const char *s;
+            if ((s = s_find(line, "id=")) != 0) copy_word_val(s + 3, tid, sizeof(tid));
+            if ((s = s_find(line, "url=")) != 0) copy_word_val(s + 4, url, sizeof(url));
+            if ((s = s_find(line, "title=")) != 0) copy_word_val(s + 6, title, sizeof(title));
+            if ((s = s_find(line, "origin=")) != 0) copy_word_val(s + 7, origin, sizeof(origin));
+            if ((s = s_find(line, "kind=")) != 0) copy_word_val(s + 5, kind, sizeof(kind));
+            if ((s = s_find(line, "pinned=")) != 0) pinned = (s[7] == '1');
+            if (G.n_tabs < OSUI_MAX_TABS) {
+                int slot = G.n_tabs;
+                cur_t = &G.tabs[slot];
+                cur_t->used = 1;
+                s_cpy(cur_t->id, sizeof(cur_t->id), tid[0] ? tid : "t0001");
+                s_cpy(cur_t->url, sizeof(cur_t->url), url[0] ? url : "about:blank");
+                s_cpy(cur_t->title, sizeof(cur_t->title), title[0] ? title : "Tab");
+                s_cpy(cur_t->origin, sizeof(cur_t->origin), origin[0] ? origin : "self");
+                s_cpy(cur_t->kind, sizeof(cur_t->kind), kind[0] ? kind : "web");
+                cur_t->pinned = pinned;
+                cur_t->n_storage = 0;
+                cur_t->n_history = 1;
+                cur_t->history_pos = 0;
+                s_cpy(cur_t->history[0], sizeof(cur_t->history[0]), cur_t->url);
+                G.n_tabs++;
+                if (G.current_tab < 0) G.current_tab = slot;
+            }
+        } else if (s_ncmp(line, "KV ", 3) == 0 && cur_t) {
+            char key[24] = {0}, val[64] = {0};
+            const char *s;
+            if ((s = s_find(line, "key=")) != 0) copy_word_val(s + 4, key, sizeof(key));
+            if ((s = s_find(line, "val=")) != 0) copy_word_val(s + 4, val, sizeof(val));
+            if (key[0] && cur_t->n_storage < OSUI_MAX_TAB_STORAGE) {
+                cur_t->storage[cur_t->n_storage].used = 1;
+                s_cpy(cur_t->storage[cur_t->n_storage].key, 24, key);
+                s_cpy(cur_t->storage[cur_t->n_storage].value, 64, val);
+                cur_t->n_storage++;
+            }
+        }
+    }
+    return G.n_tabs;
+}
+
+static int cmd_browser_fs_save(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0, len;
+    const char *path = (narg > 0 && args[0][0]) ? args[0] : "/web_app.json";
+    static char buf[1024];
+    len = osui_web_save_state(buf, sizeof(buf));
+    if (sys_writefile(path, buf, len) < 0) {
+        out_add(out, max, &p, "osui browser-fs-save error=write_failed path=");
+        out_add(out, max, &p, path);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+    out_add(out, max, &p, "osui browser-fs-save ok path=");
+    out_add(out, max, &p, path);
+    out_add(out, max, &p, " tabs=");
+    out_u(out, max, &p, (unsigned)G.n_tabs);
+    out_add(out, max, &p, " bytes=");
+    out_u(out, max, &p, (unsigned)len);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_browser_fs_load(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0, rc, n;
+    const char *path = (narg > 0 && args[0][0]) ? args[0] : "/web_app.json";
+    static char buf[1024];
+    n = sys_readfile(path, buf, sizeof(buf) - 1);
+    if (n <= 0) {
+        out_add(out, max, &p, "osui browser-fs-load error=read_failed path=");
+        out_add(out, max, &p, path);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+    buf[n] = 0;
+    rc = osui_web_load_state(buf, n);
+    if (rc < 0) {
+        out_add(out, max, &p, "osui browser-fs-load error=parse_failed path=");
+        out_add(out, max, &p, path);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+    out_add(out, max, &p, "osui browser-fs-load ok path=");
+    out_add(out, max, &p, path);
+    out_add(out, max, &p, " tabs=");
+    out_u(out, max, &p, (unsigned)G.n_tabs);
+    out_add(out, max, &p, " active_tab=");
+    out_add(out, max, &p, (G.current_tab >= 0 && G.tabs[G.current_tab].used) ? G.tabs[G.current_tab].id : "none");
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_browser_fs_sync(char *out, int max) {
+    char dummy_args[OSUI_MAX_ARGS][96];
+    s_cpy(dummy_args[0], 96, "/web_app.json");
+    return cmd_browser_fs_save(dummy_args, 1, out, max);
 }
 
 static int cmd_browser_dom_act(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
@@ -2431,6 +2990,8 @@ static int cmd_browser_status(char *out, int max) {
         out_add(out, max, &p, tab->id);
         out_add(out, max, &p, " url=");
         out_add(out, max, &p, tab->url);
+        out_add(out, max, &p, " origin=");
+        out_add(out, max, &p, tab->origin[0] ? tab->origin : "self");
         out_add(out, max, &p, " storage_entries=");
         out_u(out, max, &p, (unsigned)tab->n_storage);
         for (i = 0; i < tab->n_storage; i++) {
@@ -2737,10 +3298,10 @@ static int cmd_open(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
     const char *pane = narg > 0 ? args[0] : "";
     int p = 0;
     static const char *panes[] = {
-        "browser", "shell", "admin", "support", "status", "fs", 0
+        "browser", "shell", "admin", "support", "status", "fs", "p2p", "collab", "prod", 0
     };
     if (!in_list(panes, pane)) {
-        out_add(out, max, &p, "osui open error=usage open browser|shell|admin|support|status|fs\n");
+        out_add(out, max, &p, "osui open error=usage open browser|shell|admin|support|status|fs|p2p|collab|prod\n");
         return OSUI_ERR;
     }
     s_cpy(G.chat_mode, 12, "float");
@@ -2843,9 +3404,13 @@ static int map_slash(const char *cmd, char *mapped, int max) {
     if (s_cmp(cmd, "support") == 0) { s_cpy(mapped, max, "os-support"); return 1; }
     if (s_cmp(cmd, "status") == 0) { s_cpy(mapped, max, "os-pane-status"); return 1; }
     if (s_cmp(cmd, "fs") == 0) { s_cpy(mapped, max, "os-fs"); return 1; }
+    if (s_cmp(cmd, "p2p") == 0) { s_cpy(mapped, max, "os-p2p"); return 1; }
+    if (s_cmp(cmd, "collab") == 0) { s_cpy(mapped, max, "os-collab"); return 1; }
+    if (s_cmp(cmd, "prod") == 0) { s_cpy(mapped, max, "os-prod"); return 1; }
     if (s_cmp(cmd, "center") == 0) { s_cpy(mapped, max, "os-center"); return 1; }
     if (s_cmp(cmd, "close") == 0) { s_cpy(mapped, max, "os-center"); return 1; }
     if (s_cmp(cmd, "auth") == 0) { s_cpy(mapped, max, "mcp-auth"); return 1; }
+    if (s_cmp(cmd, "pm") == 0) { s_cpy(mapped, max, "browser-pm-run"); return 1; }
     if (s_cmp(cmd, "navigate") == 0) { s_cpy(mapped, max, "browser-navigate"); return 1; }
     if (s_cmp(cmd, "back") == 0) { s_cpy(mapped, max, "browser-back"); return 1; }
     if (s_cmp(cmd, "forward") == 0) { s_cpy(mapped, max, "browser-forward"); return 1; }
@@ -3388,6 +3953,9 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "agent-run") == 0) return cmd_agent_run(args, narg, out, max);
     if (s_cmp(cmd, "os-help") == 0 || s_cmp(cmd, "help") == 0) return cmd_os_help(out, max);
     if (s_cmp(cmd, "os-status") == 0) return cmd_os_status(out, max);
+    if (s_cmp(cmd, "os-p2p") == 0) return open_then("p2p", cmd_gui_status, out, max);
+    if (s_cmp(cmd, "os-collab") == 0) return open_then("collab", cmd_gui_status, out, max);
+    if (s_cmp(cmd, "os-prod") == 0) return open_then("prod", cmd_gui_status, out, max);
     if (s_cmp(cmd, "osui-audit") == 0) return cmd_osui_audit(out, max);
     if (s_cmp(cmd, "osui-model") == 0) return cmd_osui_model(args, narg, out, max);
     if (s_cmp(cmd, "osui-provider") == 0) return cmd_osui_provider(args, narg, out, max);
@@ -3436,10 +4004,19 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "browser-type") == 0) return cmd_browser_type(args, narg, out, max);
     if (s_cmp(cmd, "browser-pointer") == 0) return cmd_browser_pointer(args, narg, out, max);
     if (s_cmp(cmd, "browser-status") == 0) return cmd_browser_status(out, max);
+    if (s_cmp(cmd, "browser-origin-status") == 0 || s_cmp(cmd, "origin-status") == 0) return cmd_browser_origin_status(out, max);
     if (s_cmp(cmd, "browser-tab-new") == 0) return cmd_browser_tab_new(args, narg, out, max);
     if (s_cmp(cmd, "browser-tab-use") == 0) return cmd_browser_tab_use(args, narg, out, max);
-    if (s_cmp(cmd, "browser-tab-list") == 0) return cmd_browser_tab_list(out, max);
+    if (s_cmp(cmd, "browser-tab-list") == 0 || s_cmp(cmd, "browser-tabs") == 0) return cmd_browser_tab_list(out, max);
     if (s_cmp(cmd, "browser-tab-close") == 0) return cmd_browser_tab_close(args, narg, out, max);
+    if (s_cmp(cmd, "browser-tab-rename") == 0) return cmd_browser_tab_rename(args, narg, out, max);
+    if (s_cmp(cmd, "browser-tab-pin") == 0) return cmd_browser_tab_pin(args, narg, out, max);
+    if (s_cmp(cmd, "browser-tab-duplicate") == 0) return cmd_browser_tab_duplicate(args, narg, out, max);
+    if (s_cmp(cmd, "browser-tab-next") == 0) return cmd_browser_tab_next(out, max);
+    if (s_cmp(cmd, "browser-tab-prev") == 0) return cmd_browser_tab_prev(out, max);
+    if (s_cmp(cmd, "browser-fs-save") == 0) return cmd_browser_fs_save(args, narg, out, max);
+    if (s_cmp(cmd, "browser-fs-load") == 0) return cmd_browser_fs_load(args, narg, out, max);
+    if (s_cmp(cmd, "browser-fs-sync") == 0) return cmd_browser_fs_sync(out, max);
     if (s_cmp(cmd, "browser-navigate") == 0) return cmd_browser_navigate(args, narg, out, max);
     if (s_cmp(cmd, "browser-back") == 0) return cmd_browser_back(out, max);
     if (s_cmp(cmd, "browser-forward") == 0) return cmd_browser_forward(out, max);
@@ -3447,6 +4024,7 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "browser-eval") == 0) return cmd_browser_eval(args, narg, out, max);
     if (s_cmp(cmd, "browser-form-fill") == 0) return cmd_browser_form_fill(args, narg, out, max);
     if (s_cmp(cmd, "browser-dom-act") == 0) return cmd_browser_dom_act(args, narg, out, max);
+    if (s_cmp(cmd, "browser-pm-run") == 0 || s_cmp(cmd, "pm-run") == 0 || s_cmp(cmd, "pm-exec") == 0) return cmd_browser_pm_run(args, narg, out, max);
     if (s_cmp(cmd, "browser-fetch") == 0 || s_cmp(cmd, "fetch-sim") == 0) return cmd_browser_fetch(args, narg, out, max);
     if (s_cmp(cmd, "browser-storage-set") == 0) return cmd_browser_storage_set(args, narg, out, max);
     if (s_cmp(cmd, "browser-storage-get") == 0 || s_cmp(cmd, "tab-storage") == 0) return cmd_browser_storage_get(args, narg, out, max);
@@ -3519,6 +4097,12 @@ static int cmd_prompt(char args[OSUI_MAX_ARGS][96], int narg, const char *raw, c
             s_cpy(pane[0], 96, "status");
         else if (s_has_ci(text, "fs") || s_has_ci(text, "fichier"))
             s_cpy(pane[0], 96, "fs");
+        else if (s_has_ci(text, "p2p") || s_has_ci(text, "peer"))
+            s_cpy(pane[0], 96, "p2p");
+        else if (s_has_ci(text, "collab") || s_has_ci(text, "points"))
+            s_cpy(pane[0], 96, "collab");
+        else if (s_has_ci(text, "prod") || s_has_ci(text, "metric"))
+            s_cpy(pane[0], 96, "prod");
         if (pane[0][0]) return cmd_open(pane, 1, out, max);
     }
     if (s_has_ci(text, "dessine") || s_has_ci(text, "draw")

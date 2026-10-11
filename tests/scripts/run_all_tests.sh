@@ -121,11 +121,11 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/prod.c"
     fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/promptmessage.c"
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_gui.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_runtime.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/promptmessage.c"
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_tokenizer.c" ]; then

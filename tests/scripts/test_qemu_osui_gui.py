@@ -536,6 +536,18 @@ def main():
             send_command_until(
                 monitor, "ai hello", "[IA]", proc, mode="getc", wait_prompt=False
             )
+            say("typing /p2p in gui ...")
+            send_command_until(
+                monitor, "/p2p", "pane=p2p", proc, mode="getc", wait_prompt=False
+            )
+            say("typing /collab in gui ...")
+            send_command_until(
+                monitor, "/collab", "pane=collab", proc, mode="getc", wait_prompt=False
+            )
+            say("typing /prod in gui ...")
+            send_command_until(
+                monitor, "/prod", "pane=prod", proc, mode="getc", wait_prompt=False
+            )
             say("typing /center in gui ...")
             send_command_until(
                 monitor, "/center", "chat_mode=center", proc, mode="getc", wait_prompt=False
