@@ -344,6 +344,25 @@ void test_payment_conversion_escrow_and_ticket_routing(void) {
     TEST_ASSERT_GREATER_THAN(0, collab_ticket_assign(&g_c[2], &g_h[2], 5, "agent_beta")); deliver();
 }
 
+void test_collab_consolidation_and_fallback(void) {
+    uint32_t price = 0;
+    setup();
+
+    /* Escrow edge case fallback */
+    TEST_ASSERT_GREATER_THAN(0, collab_escrow_release(&g_c[0], &g_h[0], 999)); /* non-existent seq handled */
+    TEST_ASSERT_GREATER_THAN(0, collab_escrow_refund(&g_c[0], &g_h[0], 999));
+
+    /* Ticket routing / assign edge case */
+    TEST_ASSERT_GREATER_THAN(0, collab_ticket_route(&g_c[0], &g_h[0], 999, k_id[1]));
+    TEST_ASSERT_GREATER_THAN(0, collab_ticket_assign(&g_c[0], &g_h[0], 999, "none"));
+
+    /* Dispute arbitration on unknown seq */
+    TEST_ASSERT_GREATER_THAN(0, collab_dispute_open(&g_c[0], &g_h[0], 999, "unknown"));
+
+    /* Market price query for missing item fallback */
+    TEST_ASSERT_EQUAL(0, collab_market_price(&g_c[0], "missing-item", &price));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_points_transfer_overdraft_and_convergence);
@@ -357,6 +376,7 @@ int main(void) {
     RUN_TEST(test_save_load_roundtrip);
     RUN_TEST(test_marketplace_contracts_disputes_privacy_compliance);
     RUN_TEST(test_payment_conversion_escrow_and_ticket_routing);
+    RUN_TEST(test_collab_consolidation_and_fallback);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

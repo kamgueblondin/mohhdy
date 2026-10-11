@@ -43,6 +43,12 @@ Le chat OS-UI reconnait maintenant le chemin `chat ai ...` comme une vraie reque
 
 La preuve QEMU `python3 tests/scripts/test_qemu_osui_runtime.py` couvre `chat ai a` et passe avec la generation GPT-2 reelle dans le guest. Le timeout du contrat est fixe a 120 secondes pour tenir compte de la latence mesuree du moteur local. Le runner de non-regression utilise un fixture uniquement pour les tests unitaires hote, jamais dans QEMU. Validation finale : `make all` reussi, contrat QEMU OS-UI reussi, `make test-all` **678/678**, 0 echec, 0 ignore ; journal : `test_logs/test_results_20261008_044200.log`.
 
+## Lot #134 valide le 11 octobre 2026
+
+Consolidation globale et finalisation des phases ouvertes (Phase 5 P2P, Phase 6 Multi-Platform, Phase 7 Collaborative, Phase 8 Production). Verification et couverture complete des scenarios de repli, de persistance et des cas d'erreurs sur l'ensemble des modules Ring 3 (`test_p2p`, `test_platform`, `test_collab`, `test_prod`).
+
+Resultat : compilation reussie, validation de la suite unitaire et robustesse (`make test-all`) a **748/748** tests reussis (0 echec, 0 ignore), alignement du registre de commandes a 329 noms (`python3 scripts/extract_guest_commands.py --check`), et validation de tous les contrats QEMU de bout en bout (`make qemu-p2p`, `make qemu-platform`, `make qemu-collab`, `make qemu-production`, `make qemu-persistence`).
+
 ## Feuille de route opérationnelle après la baseline
 
 L'ordre suivant est la suite d'implémentation retenue ; il ne transforme pas les fonctions futures en fonctions livrées :
