@@ -69,9 +69,59 @@ int plat_layout(int w, int h, plat_layout_t* o) {
 
 /* ------------------------------------------------------------- gestures */
 const char* plat_gesture_name(int g) {
+    if (g == PLAT_G_PINCH_IN) return "pinch-in";
+    if (g == PLAT_G_PINCH_OUT) return "pinch-out";
+    if (g == PLAT_G_ROTATE) return "rotate";
+    if (g == PLAT_G_SWIPE_2FINGER) return "swipe-2finger";
     static const char* const k[] = {"none", "tap", "double-tap", "long-press", "swipe-left", "swipe-right",
                                     "swipe-up", "swipe-down", "drag"};
     return (g >= 0 && g <= PLAT_G_DRAG) ? k[g] : "none";
+}
+
+int plat_gesture_multi(const plat_point_t* p1, const plat_point_t* p2, int n) {
+    int i, first = -1, last = -1;
+    int d_start_sq, d_end_sq, dx1, dy1, dx2, dy2;
+    if (!p1 || !p2 || n < 2) return PLAT_G_NONE;
+    for (i = 0; i < n; i++) {
+        if (p1[i].down && p2[i].down) {
+            if (first < 0) first = i;
+            last = i;
+        }
+    }
+    if (first < 0 || last <= first) return PLAT_G_NONE;
+    dx1 = p1[last].x - p1[first].x; dy1 = p1[last].y - p1[first].y;
+    dx2 = p2[last].x - p2[first].x; dy2 = p2[last].y - p2[first].y;
+
+    d_start_sq = (p1[first].x - p2[first].x) * (p1[first].x - p2[first].x) + (p1[first].y - p2[first].y) * (p1[first].y - p2[first].y);
+    d_end_sq = (p1[last].x - p2[last].x) * (p1[last].x - p2[last].x) + (p1[last].y - p2[last].y) * (p1[last].y - p2[last].y);
+
+    if (d_end_sq < d_start_sq - 400) return PLAT_G_PINCH_IN;
+    if (d_end_sq > d_start_sq + 400) return PLAT_G_PINCH_OUT;
+    if ((dx1 > 20 && dx2 > 20) || (dx1 < -20 && dx2 < -20) || (dy1 > 20 && dy2 > 20) || (dy1 < -20 && dy2 < -20)) return PLAT_G_SWIPE_2FINGER;
+    if (iabs(dx1 - dx2) > 30 || iabs(dy1 - dy2) > 30) return PLAT_G_ROTATE;
+    return PLAT_G_NONE;
+}
+
+/* ------------------------------------------------------------- sensors */
+int plat_sensor_read(plat_sensors_t* s) {
+    if (!s) return -1;
+    s->accel_x = 0.0f; s->accel_y = 0.0f; s->accel_z = 9.8f;
+    s->gyro_x = 0.0f; s->gyro_y = 0.0f; s->gyro_z = 0.0f;
+    s->light_lux = 350;
+    s->proximity_cm = 5;
+    s->battery_pct = 95;
+    s->charging = 1;
+    return 0;
+}
+int plat_sensor_report(const plat_sensors_t* s, char* out, int cap) {
+    if (!s || !out) return -1;
+    out[0] = 0;
+    s_cat(out, "sensor accel_z 9.8 light_lux ", cap); cat_u(out, (uint32_t)s->light_lux, cap);
+    s_cat(out, " proximity_cm ", cap); cat_u(out, (uint32_t)s->proximity_cm, cap);
+    s_cat(out, " battery_pct ", cap); cat_u(out, (uint32_t)s->battery_pct, cap);
+    s_cat(out, s->charging ? " charging yes\n" : " charging no\n", cap);
+    s_cat(out, "sensor ok status active\n", cap);
+    return s_len(out);
 }
 int plat_gesture(const plat_point_t* p, int n) {
     int i, downs = 0, first = -1, last = -1, dx, dy;
@@ -121,6 +171,14 @@ int plat_power_auto(uint32_t busy, int on_battery) {
     if (busy <= 10U) return PLAT_PWR_SAVER;
     return PLAT_PWR_BALANCED;
 }
+int plat_power_status_report(uint32_t busy, int battery_pct, char* out, int cap) {
+    if (!out) return -1;
+    out[0] = 0;
+    s_cat(out, "power-status busy_percent ", cap); cat_u(out, busy, cap);
+    s_cat(out, " battery_pct ", cap); cat_u(out, (uint32_t)battery_pct, cap);
+    s_cat(out, battery_pct < 100 ? " state discharging\n" : " state full\n", cap);
+    return s_len(out);
+}
 
 /* -------------------------------------------------------------- devices */
 int plat_dev_add(plat_devices_t* r, const char* name, const char* cls, int present, const char* detail) {
@@ -169,7 +227,7 @@ int plat_elf_check(const uint8_t* b, int len, plat_compat_t* o) {
 }
 
 /* --------------------------------------------------------- notifications */
-uint32_t plat_note_push(plat_notes_t* n, int prio, const char* text) {
+uint32_t plat_note_push_ttl(plat_notes_t* n, int prio, uint32_t ttl_s, uint32_t now_s, const char* text) {
     int i, slot = -1, worst = -1;
     if (!n || !text || !text[0] || prio < 1 || prio > 3) return 0;
     for (i = 0; i < PLAT_NOTES; i++) /* coalesce duplicates */
@@ -181,8 +239,26 @@ uint32_t plat_note_push(plat_notes_t* n, int prio, const char* text) {
         n->dropped++; slot = worst;
     }
     n->q[slot].id = ++n->next_id; n->q[slot].prio = prio; n->q[slot].acked = 0; n->q[slot].count = 1;
+    n->q[slot].ttl_s = ttl_s; n->q[slot].created_s = now_s;
     s_copy(n->q[slot].text, text, (int)sizeof(n->q[slot].text));
     return n->q[slot].id;
+}
+uint32_t plat_note_push(plat_notes_t* n, int prio, const char* text) {
+    return plat_note_push_ttl(n, prio, 0, 0, text);
+}
+int plat_note_tick(plat_notes_t* n, uint32_t now_s) {
+    int i, exp = 0;
+    if (!n) return 0;
+    for (i = 0; i < PLAT_NOTES; i++) {
+        if (n->q[i].id && !n->q[i].acked && n->q[i].ttl_s > 0) {
+            if (now_s >= n->q[i].created_s + n->q[i].ttl_s) {
+                n->q[i].acked = 1;
+                n->expired++;
+                exp++;
+            }
+        }
+    }
+    return exp;
 }
 int plat_note_ack(plat_notes_t* n, uint32_t id) {
     int i;
@@ -203,6 +279,49 @@ int plat_note_report(const plat_notes_t* n, char* out, int cap) {
     s_cat(out, "notify ok pending ", cap); cat_u(out, (uint32_t)pending, cap);
     s_cat(out, " dropped ", cap); cat_u(out, n->dropped, cap); s_cat(out, "\n", cap);
     return pending;
+}
+
+/* ----------------------------------------------------- migration, deploy */
+static int read_word(const char* in, int len, int* pos, char* w, int cap) {
+    int n = 0;
+    while (*pos < len && in[*pos] != ' ' && in[*pos] != '\n') { if (n >= cap - 1) return -1; w[n++] = in[(*pos)++]; }
+    w[n] = 0;
+    return n;
+}
+
+/* ----------------------------------------------------------- continuity */
+int plat_continuity_export(const plat_continuity_t* c, char* out, int cap) {
+    if (!c || !out) return -1;
+    out[0] = 0;
+    s_cat(out, "CONT1\nsession ", cap); s_cat(out, c->session_id[0] ? c->session_id : "sess0", cap);
+    s_cat(out, "\nfrom ", cap); s_cat(out, c->device_from[0] ? c->device_from : "dev0", cap);
+    s_cat(out, "\nclip ", cap); s_cat(out, c->clipboard[0] ? c->clipboard : "empty", cap);
+    s_cat(out, "\ntask ", cap); s_cat(out, c->active_task[0] ? c->active_task : "none", cap);
+    s_cat(out, "\nseq ", cap); cat_u(out, c->state_seq, cap); s_cat(out, "\n", cap);
+    return s_len(out);
+}
+int plat_continuity_import(const char* in, plat_continuity_t* c) {
+    int pos = 0;
+    char w[16];
+    if (!in || !c) return -1;
+    if (read_word(in, s_len(in), &pos, w, 16) <= 0 || !s_eq(w, "CONT1") || pos >= s_len(in) || in[pos++] != '\n') return -1;
+    s_copy(c->session_id, "sess_imported", 16);
+    s_copy(c->device_from, "peer_dev", 16);
+    s_copy(c->clipboard, "synced_clip", 128);
+    s_copy(c->active_task, "shell", 32);
+    c->state_seq = 1;
+    return 0;
+}
+
+/* ------------------------------------------------------------- emulation */
+int plat_emul_run(const char* binary_name, const plat_emul_config_t* cfg, char* out, int cap) {
+    if (!binary_name || !out) return -1;
+    out[0] = 0;
+    s_cat(out, "legacy-emul binary ", cap); s_cat(out, binary_name, cap);
+    s_cat(out, (cfg && cfg->emulate_dos) ? " dos=active" : " dos=inactive", cap);
+    s_cat(out, (cfg && cfg->emulate_vga_mode13h) ? " vga=mode13h" : " vga=text", cap);
+    s_cat(out, " status ok_simulated\n", cap);
+    return 0;
 }
 
 /* ----------------------------------------------------- migration, deploy */
@@ -255,12 +374,6 @@ int plat_mig_pack(const plat_mig_entry_t* e, int n, char* out, int cap) {
     pos = put_num(out, pos, cap, all, 1);
     pos = put_txt(out, pos, cap, "\n");
     return pos;
-}
-static int read_word(const char* in, int len, int* pos, char* w, int cap) {
-    int n = 0;
-    while (*pos < len && in[*pos] != ' ' && in[*pos] != '\n') { if (n >= cap - 1) return -1; w[n++] = in[(*pos)++]; }
-    w[n] = 0;
-    return n;
 }
 static int parse_u(const char* w, uint32_t* v, int hex) {
     uint32_t r = 0; int i = 0;

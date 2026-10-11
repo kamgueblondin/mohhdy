@@ -318,6 +318,37 @@ void test_raft_and_cache(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p cache hits 1 misses 1"));
 }
 
+void test_routing_grpc_and_stun(void) {
+    char rep[512];
+    uint32_t nh = 0, cost = 0;
+    setup(3, 0);
+    run(3, 300);
+
+    /* Test US-063 Routing cost */
+    TEST_ASSERT_EQUAL(0, p2p_route_find(&g_n[0], g_n[1].id, &nh, &cost));
+    TEST_ASSERT_EQUAL(0, (int)nh);
+    TEST_ASSERT_GREATER_THAN(0, (int)cost);
+
+    p2p_report(&g_n[0], &g_h[0], "route", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p route dest beta via direct cost "));
+
+    /* Test US-067 gRPC call */
+    TEST_ASSERT_EQUAL(0, p2p_grpc_call(&g_n[0], &g_h[0], "beta", "echo.EchoService", "SayHello", "World"));
+    run(3, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p grpc resp status 0 payload Hello World from beta"));
+
+    /* Test US-074 STUN probe & NAT punch */
+    TEST_ASSERT_EQUAL(0, p2p_stun_probe(&g_n[0], &g_h[0], "beta"));
+    run(3, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p stun mapped_ip 10.77.0.1 port "));
+    p2p_report(&g_n[0], &g_h[0], "stun", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p nat type full_cone mapped_ip 10.77.0.1"));
+
+    TEST_ASSERT_EQUAL(0, p2p_nat_punch(&g_n[0], &g_h[0], "beta"));
+    run(3, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "p2p nat punch from alpha pinhole opened"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -330,6 +361,7 @@ int main(void) {
     RUN_TEST(test_traffic_analysis);
     RUN_TEST(test_bad_inputs);
     RUN_TEST(test_raft_and_cache);
+    RUN_TEST(test_routing_grpc_and_stun);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

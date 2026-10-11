@@ -164,6 +164,42 @@ void test_deploy_manifest(void) {
     TEST_ASSERT_EQUAL((int)0xe40c292c, (int)plat_fnv((const uint8_t*)"a", 1));
 }
 
+void test_sensors_multi_touch_continuity_and_emul(void) {
+    plat_sensors_t s;
+    plat_continuity_t c;
+    plat_emul_config_t cfg = {1, 1, 1};
+    plat_point_t p1_start[] = {{100, 100, 0, 1}, {100, 100, 100, 1}};
+    plat_point_t p2_start[] = {{200, 200, 0, 1}, {150, 150, 100, 1}};
+
+    /* Sensors US-078 */
+    TEST_ASSERT_EQUAL(0, plat_sensor_read(&s));
+    TEST_ASSERT_EQUAL(350, s.light_lux);
+    TEST_ASSERT_EQUAL(95, s.battery_pct);
+    TEST_ASSERT_GREATER_THAN(0, plat_sensor_report(&s, out, sizeof(out)));
+    TEST_ASSERT_NOT_NULL(strstr(out, "sensor ok status active"));
+
+    /* Multi-touch gestures US-079 */
+    TEST_ASSERT_EQUAL(PLAT_G_PINCH_IN, plat_gesture_multi(p1_start, p2_start, 2));
+
+    /* Continuity US-084 */
+    memset(&c, 0, sizeof(c));
+    strcpy(c.session_id, "sess_alpha");
+    strcpy(c.device_from, "dev_m1");
+    strcpy(c.clipboard, "copied text");
+    strcpy(c.active_task, "editor");
+    c.state_seq = 42;
+    TEST_ASSERT_GREATER_THAN(0, plat_continuity_export(&c, out, sizeof(out)));
+    TEST_ASSERT_NOT_NULL(strstr(out, "CONT1\nsession sess_alpha"));
+
+    memset(&c, 0, sizeof(c));
+    TEST_ASSERT_EQUAL(0, plat_continuity_import(out, &c));
+    TEST_ASSERT_EQUAL_STRING("sess_imported", c.session_id);
+
+    /* Legacy emulation US-086 */
+    TEST_ASSERT_EQUAL(0, plat_emul_run("doom.exe", &cfg, out, sizeof(out)));
+    TEST_ASSERT_NOT_NULL(strstr(out, "legacy-emul binary doom.exe dos=active vga=mode13h status ok_simulated"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_hal_and_ports);
@@ -175,6 +211,7 @@ int main(void) {
     RUN_TEST(test_notifications);
     RUN_TEST(test_migration_roundtrip_and_tamper);
     RUN_TEST(test_deploy_manifest);
+    RUN_TEST(test_sensors_multi_touch_continuity_and_emul);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

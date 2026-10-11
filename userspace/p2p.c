@@ -9,7 +9,8 @@ static uint32_t g_ws[X25519_WORKSPACE_LIMBS];
 static const char* const k_names[P2P_I_COUNT] = {
     "?", "hello", "sealed", "?", "?", "?", "?", "?", "?", "?",
     "ping", "pong", "msg", "put", "sync-req", "sync-items", "get-req", "get-resp", "propose", "vote", "commit", "app",
-    "raft-req", "raft-resp", "raft-hb", "cache-inv"
+    "raft-req", "raft-resp", "raft-hb", "cache-inv",
+    "grpc-req", "grpc-resp", "stun-req", "stun-resp", "nat-punch"
 };
 const char* p2p_type_name(int t) { return (t > 0 && t < P2P_I_COUNT) ? k_names[t] : "?"; }
 
@@ -159,9 +160,47 @@ static void derive(p2p_node_t* n, p2p_peer_t* p) {
 }
 
 /* Route: direct if the peer is up, else through an up neighbor that lists it. */
+static uint32_t link_cost(const p2p_peer_t* p) {
+    uint32_t rtt_ms = p->rtt_ticks * (1000U / P2P_HZ);
+    uint32_t load = p->bucket_used > 5 ? 20U : 5U;
+    return 10U + rtt_ms + load;
+}
+
+int p2p_route_find(const p2p_node_t* n, uint32_t dest_id, uint32_t* next_hop, uint32_t* total_cost) {
+    int i, j;
+    uint32_t min_cost = 0xffffffffU, best_hop = 0xffffffffU;
+    if (!n || !dest_id) return -1;
+    for (i = 0; i < P2P_PEERS; i++) {
+        const p2p_peer_t* p = &n->peers[i];
+        if (!p->used || !p->up || p->blocked) continue;
+        if (p->id == dest_id) {
+            uint32_t c = link_cost(p);
+            if (c < min_cost) { min_cost = c; best_hop = 0; }
+        } else {
+            for (j = 0; j < P2P_PEERS; j++) {
+                if (p->neighbors[j] == dest_id) {
+                    uint32_t c = link_cost(p) + 15U; /* 15 penalty for 2nd hop */
+                    if (c < min_cost) { min_cost = c; best_hop = p->id; }
+                }
+            }
+        }
+    }
+    if (best_hop == 0xffffffffU) return -1;
+    if (next_hop) *next_hop = best_hop;
+    if (total_cost) *total_cost = min_cost;
+    return 0;
+}
+
+/* Route: direct if the peer is up, else through an up neighbor that lists it. */
 static uint32_t route(p2p_node_t* n, p2p_peer_t* p, const uint8_t** ip) {
     int i, j;
+    uint32_t nh = 0, cost = 0;
     *ip = 0;
+    if (p2p_route_find(n, p->id, &nh, &cost) == 0) {
+        if (nh == 0) { *ip = p->ip; return 0; }
+        p2p_peer_t* r = by_id(n, nh);
+        if (r && r->up && !r->blocked) { *ip = r->ip; return r->id; }
+    }
     if (p->up && !p->blocked) { *ip = p->ip; return 0; }
     for (i = 0; i < P2P_PEERS; i++) {
         p2p_peer_t* r = &n->peers[i];
@@ -439,6 +478,74 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
                 }
             }
         }
+        break;
+    }
+    case P2P_I_GRPC_REQ: {
+        char svc[32], mth[32], pay[64], resp_pay[96];
+        uint8_t st = 0;
+        int p_pos = 0;
+        p_pos = get_str(m, 0, len, svc, 32);
+        if (p_pos < 0) break;
+        p_pos = get_str(m, p_pos, len, mth, 32);
+        if (p_pos < 0) break;
+        p_pos = get_str(m, p_pos, len, pay, 64);
+        if (p_pos < 0) break;
+
+        resp_pay[0] = 0;
+        if (s_eq(svc, "echo.EchoService") && s_eq(mth, "SayHello")) {
+            s_cat(resp_pay, "Hello ", 96); s_cat(resp_pay, pay, 96); st = 0;
+        } else if (s_eq(svc, "kv.KVService") && s_eq(mth, "Get")) {
+            const p2p_item_t* it = p2p_get_local(n, pay);
+            if (it) { s_cat(resp_pay, it->value, 96); st = 0; }
+            else { s_cat(resp_pay, "not_found", 96); st = 5; }
+        } else if (s_eq(svc, "status.StatusService") && s_eq(mth, "GetStatus")) {
+            s_cat(resp_pay, "p2p_node_active", 96); st = 0;
+        } else {
+            s_cat(resp_pay, "unimplemented", 96); st = 3;
+        }
+        b[0] = st;
+        pos = put_str(b, 1, 200, resp_pay);
+        if (pos > 0) (void)seal_send(n, h, p, P2P_I_GRPC_RESP, b, pos);
+        break;
+    }
+    case P2P_I_GRPC_RESP: {
+        char pay[96];
+        uint8_t st;
+        if (len < 1) break;
+        st = m[0];
+        if (get_str(m, 1, len, pay, 96) >= 0) {
+            s_cat(line, "p2p grpc resp status ", 200); cat_u(line, st, 200);
+            s_cat(line, " payload ", 200); s_cat(line, pay, 200);
+            s_cat(line, " from ", 200); s_cat(line, p->name, 200);
+            say(h, line);
+        }
+        break;
+    }
+    case P2P_I_STUN_REQ: {
+        uint16_t map_port = (uint16_t)(7700U + (p->id & 0xFFU));
+        mcopy(b, p->ip, 4);
+        b[4] = (uint8_t)(map_port >> 8); b[5] = (uint8_t)(map_port & 0xFFU);
+        b[6] = 1; /* 1: FullCone */
+        (void)seal_send(n, h, p, P2P_I_STUN_RESP, b, 7);
+        break;
+    }
+    case P2P_I_STUN_RESP: {
+        if (len < 7) break;
+        mcopy(n->nat.mapped_ip, m, 4);
+        n->nat.mapped_port = ((uint16_t)m[4] << 8) | m[5];
+        n->nat.nat_type = m[6];
+        s_cat(line, "p2p stun mapped_ip ", 200);
+        cat_u(line, m[0], 200); s_cat(line, ".", 200); cat_u(line, m[1], 200); s_cat(line, ".", 200);
+        cat_u(line, m[2], 200); s_cat(line, ".", 200); cat_u(line, m[3], 200);
+        s_cat(line, " port ", 200); cat_u(line, n->nat.mapped_port, 200);
+        s_cat(line, " nat_type full_cone", 200);
+        say(h, line);
+        break;
+    }
+    case P2P_I_NAT_PUNCH: {
+        n->nat.nat_punches++;
+        s_cat(line, "p2p nat punch from ", 200); s_cat(line, p->name, 200); s_cat(line, " pinhole opened", 200);
+        say(h, line);
         break;
     }
     default:
@@ -784,6 +891,39 @@ static int propose_send(p2p_node_t* n, const p2p_host_t* h, int only_missing) {
     return sent;
 }
 
+int p2p_grpc_call(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* service, const char* method, const char* payload) {
+    uint8_t b[P2P_DATAGRAM_MAX];
+    p2p_peer_t* p = p2p_find(n, peer);
+    int pos = 0;
+    if (!n || !n->up || !p) return -1;
+    pos = put_str(b, pos, 400, service);
+    if (pos < 0) return -1;
+    pos = put_str(b, pos, 400, method);
+    if (pos < 0) return -1;
+    pos = put_str(b, pos, 400, payload ? payload : "");
+    if (pos < 0) return -1;
+    return seal_send(n, h, p, P2P_I_GRPC_REQ, b, pos);
+}
+
+int p2p_stun_probe(p2p_node_t* n, const p2p_host_t* h, const char* stun_server_peer) {
+    uint8_t b[8];
+    p2p_peer_t* p = p2p_find(n, stun_server_peer);
+    if (!n || !n->up || !p) return -1;
+    n->nat.stun_probes++;
+    b[0] = 1;
+    return seal_send(n, h, p, P2P_I_STUN_REQ, b, 1);
+}
+
+int p2p_nat_punch(p2p_node_t* n, const p2p_host_t* h, const char* peer) {
+    uint8_t b[16];
+    p2p_peer_t* p = p2p_find(n, peer);
+    if (!n || !n->up || !p) return -1;
+    n->nat.nat_punches++;
+    mcopy(b, n->ip, 4);
+    put32(b + 4, n->id);
+    return seal_send(n, h, p, P2P_I_NAT_PUNCH, b, 8);
+}
+
 int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value) {
     p2p_proposal_t* pr = &n->prop;
     uint32_t members;
@@ -965,6 +1105,31 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, "p2p cache hits ", cap); cat_u(out, n->cache.total_hits, cap);
         s_cat(out, " misses ", cap); cat_u(out, n->cache.total_misses, cap);
         s_cat(out, " invalidations ", cap); cat_u(out, n->cache.invalidations, cap);
+        s_cat(out, "\n", cap);
+    } else if (s_eq(what, "route")) {
+        for (i = 0; i < P2P_PEERS; i++) {
+            const p2p_peer_t* p = &n->peers[i];
+            uint32_t nh = 0, cost = 0;
+            if (!p->used) continue;
+            if (p2p_route_find(n, p->id, &nh, &cost) == 0) {
+                s_cat(out, "p2p route dest ", cap); s_cat(out, p->name, cap);
+                s_cat(out, " via ", cap);
+                if (nh == 0) s_cat(out, "direct", cap);
+                else s_cat(out, p2p_peer_name(n, nh), cap);
+                s_cat(out, " cost ", cap); cat_u(out, cost, cap);
+                s_cat(out, "\n", cap);
+            }
+        }
+        s_cat(out, "p2p route ok\n", cap);
+    } else if (s_eq(what, "nat") || s_eq(what, "stun")) {
+        s_cat(out, "p2p nat type ", cap);
+        s_cat(out, n->nat.nat_type == 1 ? "full_cone" : n->nat.nat_type == 2 ? "restricted_cone" : n->nat.nat_type == 3 ? "symmetric" : "direct", cap);
+        s_cat(out, " mapped_ip ", cap);
+        cat_u(out, n->nat.mapped_ip[0], cap); s_cat(out, ".", cap); cat_u(out, n->nat.mapped_ip[1], cap); s_cat(out, ".", cap);
+        cat_u(out, n->nat.mapped_ip[2], cap); s_cat(out, ".", cap); cat_u(out, n->nat.mapped_ip[3], cap);
+        s_cat(out, " port ", cap); cat_u(out, n->nat.mapped_port, cap);
+        s_cat(out, " probes ", cap); cat_u(out, n->nat.stun_probes, cap);
+        s_cat(out, " punches ", cap); cat_u(out, n->nat.nat_punches, cap);
         s_cat(out, "\n", cap);
     }
     return s_len(out);

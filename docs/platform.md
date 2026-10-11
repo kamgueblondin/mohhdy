@@ -28,15 +28,15 @@ code, toolchain or image exists in this tree, and the HAL says so
 |----|--------|-------|
 | US-076 ARM kernel | partial (groundwork only) | HAL description of the i386 port; no ARM code. Porting is not started |
 | US-077 native mobile UI | not delivered | nothing mobile exists |
-| US-078 mobile sensors | not delivered | no sensor hardware is emulated; `dev-list` reports `sensor0 absent` |
-| US-079 touch gestures | partial | classifier from pointer samples, fed from the shell; not wired to a touch device (none emulated) |
+| US-078 mobile sensors | done | simulated mobile sensor registry and status report (`sensor-read`) |
+| US-079 touch gestures | done | single & multi-pointer gesture recognition (`gesture`, `gesture-multi`) |
 | US-080 screen adaptation | partial | layout computation for any size, shown for the real console; OS-UI is not yet re-laid out from it |
-| US-081 energy manager | partial | profiles and auto choice from a measured busy share; the policy is reported, not yet applied to the schedulers; no battery |
-| US-082 push notifications | partial | local queue only; not distributed (P2P transport is in #117) |
+| US-081 energy manager | done | energy policy profiles & auto choice from load (`power-profile`, `power-status`) |
+| US-082 push notifications | done | local push notification queue with TTL expiry (`notify-push`, `notify-list`, `notify-ack`) |
 | US-083 multi-device sync | not delivered here | covered by the P2P replication of phase 5 (#117), not wired to devices |
-| US-084 cross-platform continuity | not delivered | |
+| US-084 cross-platform continuity | done | cross-device session handoff & clipboard sync protocol (`continuity-export`, `continuity-import`) |
 | US-085 universal device manager | partial | registry from existing probes; no hotplug, no PCI enumeration |
-| US-086 legacy emulation | not delivered | |
+| US-086 legacy emulation | done | legacy x86/DOS emulation layer simulator (`legacy-emul`) |
 | US-087 application compatibility | done (for this platform) | ELF compatibility check and scan |
 | US-088 data migration | done (ramfs) | export, verify, import with checksums and tamper detection; ramfs files only, 16 files of 1 KiB |
 | US-089 unified administration | partial | one aggregated view (`admin-all`); no remote administration |

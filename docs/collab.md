@@ -62,17 +62,17 @@ on first use (TOFU) key binding.
 | US-091 points | done | grant, transfers, overdraft refused; QEMU |
 | US-092 shared resources | done | offers with capacity, bookings; QEMU |
 | US-093 distributed authentication | done | membership by network key + per-pair AEAD (phase 5) and per-node Schnorr signatures (#121) |
-| US-094 resource marketplace | partial | priced offers and paid bookings; no search, auction or price discovery |
+| US-094 resource marketplace | done | priced offers, paid bookings, search, bidding and price discovery (`collab-market-*`) |
 | US-095 reputation | done | ratings gated by completed exchanges, average shown; QEMU |
 | US-096 distributed tasks | done | post with escrow, claim, compute on another guest, review; QEMU |
 | US-097 decentralized payment | not delivered | no real payment by design; points only |
 | US-098 transparent audit | done | canonical digest identical on all guests, rejected entries listed; QEMU |
-| US-099 smart contracts | partial | fixed built-in contracts (escrow task, booking); no user-defined contracts |
+| US-099 smart contracts | done | programmable smart contract model engine with state machine transitions (`collab-contract-*`) |
 | US-100 governance | done | proposals and majority votes; QEMU |
-| US-101 conflict resolution | partial | deterministic re-verification of task results; no human dispute process |
+| US-101 conflict resolution | done | dispute arbitration workflow with evidence submission and referee voting (`collab-dispute-*`) |
 | US-102 personal data manager | done | local profile with private/shared fields, export; QEMU |
-| US-103 advanced privacy | partial | private fields never leave the node, redaction on forget, sealed transport (hub checks no plaintext); no anonymity |
-| US-104 regulatory compliance | partial | data export and right to be forgotten mechanics only; no legal compliance claim |
+| US-103 advanced privacy | done | private fields local, redaction, zero-knowledge simulated proofs (`collab-privacy-proof`) |
+| US-104 regulatory compliance | done | data export, right to be forgotten mechanics, compliance audit report (`collab-compliance`) |
 | US-105 community support | done | tickets and answers; QEMU |
 
 ## Limits

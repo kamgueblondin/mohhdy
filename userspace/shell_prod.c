@@ -78,7 +78,8 @@ static const char* k_cmds[] = {
     "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
     "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
     "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "prod-integrity", "prod-bench", "prod-diag",
-    "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "prod-perf-tune", "prod-maint-predict", "prod-support-bundle", "prod-biz-metrics", 0
+    "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "prod-perf-tune", "prod-maint-predict", "prod-support-bundle", "prod-biz-metrics",
+    "prod-cicd", "prod-pipeline", "prod-autoscale-workload", "prod-sec-scan", 0
 };
 int shell_prod_is(const char* l) {
     char w[24]; int i;
@@ -602,6 +603,27 @@ int shell_prod_line(const char* l) {
     if (s_eq(cmd, "prod-support-bundle")) {
         out("prod-support-bundle generating diagnostic archive...\n");
         out("prod-support-bundle ok /var/support_bundle.tar.gz created\n");
+        return 0;
+    }
+    if (s_eq(cmd, "prod-cicd") || s_eq(cmd, "prod-pipeline")) {
+        prod_pipeline_t pipe;
+        word(rest, a, 64);
+        prod_pipeline_run(&pipe, a[0] ? a : "/", g_out, (int)sizeof(g_out));
+        out(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "prod-autoscale-workload")) {
+        prod_autoscale_workload_t wl = {1, 5, 45, 0};
+        word(rest, a, 64);
+        if (a[0]) (void)to_u(a, &wl.queue_depth);
+        prod_autoscale_workload_eval(&g_sc, &wl, sys_ticks(), g_out, (int)sizeof(g_out));
+        out(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "prod-sec-scan")) {
+        prod_sec_scan_t scan;
+        prod_sec_scan_run(&scan, g_out, (int)sizeof(g_out));
+        out(g_out);
         return 0;
     }
     if (s_eq(cmd, "prod-biz-metrics")) {

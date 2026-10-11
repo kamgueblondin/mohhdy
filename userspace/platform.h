@@ -34,12 +34,26 @@ typedef struct {
 int plat_layout(int width_px, int height_px, plat_layout_t* out);
 const char* plat_form_name(int form);
 
-/* ---- touch gestures from pointer samples (US-079, single pointer) ---- */
+/* ---- touch gestures from pointer samples (US-079, single pointer & multi-touch) ---- */
 typedef struct { int x, y; uint32_t t_ms; int down; } plat_point_t;
 enum { PLAT_G_NONE = 0, PLAT_G_TAP, PLAT_G_DOUBLE_TAP, PLAT_G_LONG_PRESS,
-       PLAT_G_SWIPE_LEFT, PLAT_G_SWIPE_RIGHT, PLAT_G_SWIPE_UP, PLAT_G_SWIPE_DOWN, PLAT_G_DRAG };
+       PLAT_G_SWIPE_LEFT, PLAT_G_SWIPE_RIGHT, PLAT_G_SWIPE_UP, PLAT_G_SWIPE_DOWN, PLAT_G_DRAG,
+       PLAT_G_PINCH_IN = 10, PLAT_G_PINCH_OUT = 11, PLAT_G_ROTATE = 12, PLAT_G_SWIPE_2FINGER = 13 };
 int plat_gesture(const plat_point_t* p, int n);
+int plat_gesture_multi(const plat_point_t* p1, const plat_point_t* p2, int n);
 const char* plat_gesture_name(int g);
+
+/* ---- mobile sensors (US-078) ---- */
+typedef struct {
+    float accel_x, accel_y, accel_z;
+    float gyro_x, gyro_y, gyro_z;
+    int light_lux;
+    int proximity_cm;
+    int battery_pct;
+    int charging;
+} plat_sensors_t;
+int plat_sensor_read(plat_sensors_t* s);
+int plat_sensor_report(const plat_sensors_t* s, char* out, int cap);
 
 /* ---- energy (US-081) ---- */
 enum { PLAT_PWR_PERFORMANCE = 1, PLAT_PWR_BALANCED, PLAT_PWR_SAVER };
@@ -55,6 +69,7 @@ int plat_power_parse(const char* name);
 const char* plat_power_name(int profile);
 /* auto: pick a profile from the busy percentage of the last sample. */
 int plat_power_auto(uint32_t busy_percent, int on_battery);
+int plat_power_status_report(uint32_t busy_percent, int battery_pct, char* out, int cap);
 
 /* ---- device registry (US-085) ---- */
 #define PLAT_DEVICES 12
@@ -67,13 +82,34 @@ int plat_dev_report(const plat_devices_t* r, const char* name, char* out, int ca
 typedef struct { int ok; const char* reason; uint32_t entry; uint32_t phnum; uint32_t machine; } plat_compat_t;
 int plat_elf_check(const uint8_t* b, int len, plat_compat_t* out);
 
-/* ---- notifications (US-082, local queue) ---- */
+/* ---- notifications (US-082, local queue with TTL) ---- */
 #define PLAT_NOTES 8
-typedef struct { uint32_t id; int prio; int acked; uint32_t count; char text[48]; } plat_note_t;
-typedef struct { plat_note_t q[PLAT_NOTES]; uint32_t next_id; uint32_t dropped; } plat_notes_t;
+typedef struct { uint32_t id; int prio; int acked; uint32_t count; uint32_t ttl_s; uint32_t created_s; char text[48]; } plat_note_t;
+typedef struct { plat_note_t q[PLAT_NOTES]; uint32_t next_id; uint32_t dropped; uint32_t expired; } plat_notes_t;
 uint32_t plat_note_push(plat_notes_t* n, int prio, const char* text);
+uint32_t plat_note_push_ttl(plat_notes_t* n, int prio, uint32_t ttl_s, uint32_t now_s, const char* text);
+int plat_note_tick(plat_notes_t* n, uint32_t now_s);
 int plat_note_ack(plat_notes_t* n, uint32_t id);
 int plat_note_report(const plat_notes_t* n, char* out, int cap);
+
+/* ---- continuity cross-platform (US-084) ---- */
+typedef struct {
+    char session_id[16];
+    char device_from[16];
+    char clipboard[128];
+    char active_task[32];
+    uint32_t state_seq;
+} plat_continuity_t;
+int plat_continuity_export(const plat_continuity_t* c, char* out, int cap);
+int plat_continuity_import(const char* in, plat_continuity_t* c);
+
+/* ---- legacy emulation layer (US-086) ---- */
+typedef struct {
+    int emulate_dos;
+    int emulate_bios;
+    int emulate_vga_mode13h;
+} plat_emul_config_t;
+int plat_emul_run(const char* binary_name, const plat_emul_config_t* cfg, char* out, int cap);
 
 /* ---- migration archive (US-088) and deployment manifest (US-090) ---- */
 uint32_t plat_fnv(const uint8_t* b, int len);

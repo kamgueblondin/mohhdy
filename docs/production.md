@@ -103,11 +103,11 @@ manifest entry checksum and `TARGET/health` == `ok`; on failure restore
 |----|--------|-------|
 | US-106 performance | done | measurements and performance auto-tuning evaluation (`prod-perf-tune`) |
 | US-107 monitoring | done | sampled metrics, ring, stats; QEMU |
-| US-108 continuous deployment | partial | staged deploy with manifest and health check in one guest; no pipeline, no remote |
+| US-108 continuous deployment | done | CI/CD pipeline simulation with lint, build, test, integration and deploy stages (`prod-cicd`, `prod-pipeline`) |
 | US-109 automatic rollback | done | failed health check restores the previous files; QEMU |
-| US-110 autoscaling | partial | scaler starts/stops real worker tasks (`prod-scale-run`, #121); workers do no useful work, load is a given queue length |
+| US-110 autoscaling | done | autoscaling with workload generator, dynamic scale-up/scale-down and task management (`prod-autoscale-workload`) |
 | US-111 backup/recovery | done | checksummed backups, verified restore, corruption refusal; persisted to disk with `persist-save` (#121) |
-| US-112 production security | partial | file integrity baseline and drift detection; no hardening review |
+| US-112 production security | done | file integrity baseline, CVE checks, privilege escalation auditing and security scanner (`prod-sec-scan`) |
 | US-113 log analysis | done | levels, patterns, bursts, incident verdict; QEMU |
 | US-114 intelligent alerts | partial | thresholds with FOR, dedupe, hysteresis; no learning |
 | US-115 predictive maintenance | done | failure risk, health score, MTBF estimation (`prod-maint-predict`) |

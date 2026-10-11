@@ -197,6 +197,40 @@ int shell_p2p_line(const char* line) {
         report("cache");
         return 0;
     }
+    if (s_eq(cmd, "p2p-route")) {
+        report("route");
+        return 0;
+    }
+    if (s_eq(cmd, "p2p-grpc")) {
+        char svc[32], mth[32];
+        rest = word(rest, a, (int)sizeof(a)); /* peer */
+        rest = word(rest, svc, (int)sizeof(svc));
+        rest = word(rest, mth, (int)sizeof(mth));
+        if (!a[0] || !svc[0] || !mth[0]) { print_string("p2p-grpc error usage: p2p-grpc PEER SERVICE METHOD [PAYLOAD]\n"); return 1; }
+        rc = p2p_grpc_call(&g_node, &g_host, a, svc, mth, rest);
+        if (rc < 0) { print_string("p2p-grpc error peer unreachable\n"); return 1; }
+        print_string("p2p-grpc ok sent to "); print_string(a); print_string("\n");
+        return 0;
+    }
+    if (s_eq(cmd, "p2p-stun")) {
+        rest = word(rest, a, (int)sizeof(a));
+        if (a[0]) {
+            rc = p2p_stun_probe(&g_node, &g_host, a);
+            if (rc < 0) { print_string("p2p-stun error server unreachable\n"); return 1; }
+            print_string("p2p-stun ok probe sent to "); print_string(a); print_string("\n");
+            return 0;
+        }
+        report("stun");
+        return 0;
+    }
+    if (s_eq(cmd, "p2p-punch")) {
+        rest = word(rest, a, (int)sizeof(a));
+        if (!a[0]) { print_string("p2p-punch error usage: p2p-punch PEER\n"); return 1; }
+        rc = p2p_nat_punch(&g_node, &g_host, a);
+        if (rc < 0) { print_string("p2p-punch error peer unreachable\n"); return 1; }
+        print_string("p2p-punch ok sent to "); print_string(a); print_string("\n");
+        return 0;
+    }
     if (s_eq(cmd, "p2p-poll")) {
         unsigned until;
         rest = word(rest, a, (int)sizeof(a));

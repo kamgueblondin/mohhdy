@@ -113,4 +113,35 @@ int collab_forge(collab_t* c, const collab_host_t* h, uint32_t victim, uint32_t 
 /* persistence: serialize / restore the whole ledger, keys included */
 int collab_save(const collab_t* c, uint8_t* out, int cap);
 int collab_load(collab_t* c, const uint8_t* in, int len);
+
+/* US-094 marketplace extensions */
+int collab_market_search(collab_t* c, const collab_host_t* h, const char* query, char* out, int cap);
+int collab_market_bid(collab_t* c, const collab_host_t* h, uint32_t offer_seq, uint32_t bid_amount);
+int collab_market_price(collab_t* c, const char* item, uint32_t* avg_price);
+
+/* US-099 smart contracts */
+int collab_contract_create(collab_t* c, const collab_host_t* h, const char* name, uint32_t target, uint32_t amount, uint32_t trigger_type);
+int collab_contract_exec(collab_t* c, const collab_host_t* h, uint32_t ref_seq, uint32_t action);
+
+/* US-101 dispute arbitration */
+int collab_dispute_open(collab_t* c, const collab_host_t* h, uint32_t target_seq, const char* evidence);
+int collab_dispute_vote(collab_t* c, const collab_host_t* h, uint32_t dispute_seq, int vote_claimant);
+int collab_dispute_settle(collab_t* c, const collab_host_t* h, uint32_t dispute_seq);
+
+/* US-103 privacy proofs */
+int collab_privacy_proof_gen(uint32_t value, uint32_t secret, uint8_t proof_out[32]);
+int collab_privacy_proof_verify(uint32_t value, const uint8_t proof[32]);
+int collab_anonymize_id(uint32_t raw_id, uint32_t salt, uint32_t* blinded_id);
+
+/* US-104 compliance audit */
+typedef struct {
+    int gdpr_export_ready;
+    int right_to_be_forgotten;
+    int data_minimized;
+    uint32_t compliance_score;
+    char cert_hash[17];
+} collab_compliance_t;
+int collab_compliance_check(const collab_t* c, collab_compliance_t* comp);
+int collab_compliance_report(const collab_t* c, char* out, int cap);
+
 #endif
