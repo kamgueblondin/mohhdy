@@ -23,6 +23,14 @@ Détail de `make test-all` : **53/53 tests kernel**, **4/4 tests userspace** et 
 
 Ce résultat remplace le compteur historique `675/675` pour cette baseline ; les anciens compteurs restent dans les paragraphes de livraison afin de préserver la traçabilité. `make qemu-smoke` n'a pas été relancé dans cette baseline : les 678 tests sont une validation de compilation et de tests locaux, pas une nouvelle preuve QEMU.
 
+## Constat d'écran du 11 octobre 2026
+
+Guest lancé sans poids GPT-2 dans l'initrd. La bannière et les messages du shell impriment `MOHHDY v6.0`. Les messages de `make` impriment `MOHHDY v7`.
+
+Le prompt du shell texte est le répertoire courant suivi de ` : `. La commande `gui` se tape à ce prompt. `MOHHDY>` est le prompt du panneau Shell une fois le bureau ouvert. `echo` imprime ses arguments, puis la ligne `echo ok`. `write note.txt bonjour` a affiché `atadriver snapshot flush ok` et `write ok note.txt` ; `cat note.txt` a relu `bonjour`.
+
+Dans le bureau, le bouton `action` envoie `simule action` et passe la scène en `acting` (pastilles 1, 2 et 3). Le bouton `resultats` envoie `resultats` et laisse le mode `reflecting`. Le clic recopie la commande dans le champ du chat. Sans poids, le bureau affiche `llm=stub_echo` et `us031_complete=false`. `console` et Echap quittent le bureau lorsque la saisie arrive au bureau, pas lorsqu'elle reste dans un panneau.
+
 ## Lot IA 1 valide le 7 octobre 2026
 
 Le shell du guest expose maintenant `ai-runtime json`. Cette commande publie le contrat machine du moteur local : profil FP32 ou GGUF, fournisseur, modele, execution dans le guest QEMU, contexte de 64 jetons, maximum de 24 nouveaux jetons, sortie de complétion et absence de garantie factuelle, ainsi que l'etat reseau. La commande humaine `ai-runtime` affiche les memes limites en clair et refuse les arguments inconnus.

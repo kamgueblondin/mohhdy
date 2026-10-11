@@ -110,6 +110,13 @@ une regression produit.
 
 ## 5. Dettes et points d'attention
 
+- Le shell imprime `MOHHDY v6.0`. Les messages de `make` impriment
+  `MOHHDY v7`. Le badge du README dit version 7.
+- Le prompt du shell texte n'est pas `MOHHDY>`. `MOHHDY>` est le
+  prompt du panneau Shell du bureau.
+- `echo` ajoute la ligne de statut `echo ok` apres le texte.
+- Le bouton `resultats` du bureau laisse le mode `reflecting`.
+  Le bouton `action` passe en `acting`.
 - Divergence mineure README : 522 dans le tableau, 506 dans un
   paragraphe plus bas.
 - `docs/ETAT_REEL.md` date son constat au 27 aout 2026 ; master a
