@@ -31,7 +31,8 @@ enum {
     /* inner (sealed) types */
     P2P_I_PING = 10, P2P_I_PONG, P2P_I_MSG, P2P_I_PUT, P2P_I_SYNC_REQ, P2P_I_SYNC_ITEMS,
     P2P_I_GET_REQ, P2P_I_GET_RESP, P2P_I_PROPOSE, P2P_I_VOTE, P2P_I_COMMIT, P2P_I_APP,
-    P2P_I_RAFT_VOTE_REQ, P2P_I_RAFT_VOTE_RESP, P2P_I_RAFT_HEARTBEAT, P2P_I_CACHE_INV, P2P_I_COUNT
+    P2P_I_RAFT_VOTE_REQ, P2P_I_RAFT_VOTE_RESP, P2P_I_RAFT_HEARTBEAT, P2P_I_CACHE_INV,
+    P2P_I_GRPC_REQ, P2P_I_GRPC_RESP, P2P_I_STUN_REQ, P2P_I_STUN_RESP, P2P_I_NAT_PUNCH, P2P_I_COUNT
 };
 
 typedef struct {
@@ -125,6 +126,14 @@ typedef struct {
 } p2p_qos_t;
 
 typedef struct {
+    uint8_t nat_type; /* 0: Direct, 1: FullCone, 2: RestrictedCone, 3: Symmetric */
+    uint8_t mapped_ip[4];
+    uint16_t mapped_port;
+    uint32_t stun_probes;
+    uint32_t nat_punches;
+} p2p_nat_state_t;
+
+typedef struct {
     uint8_t up;
     char name[P2P_NAME_MAX];
     uint8_t ip[4];
@@ -141,6 +150,7 @@ typedef struct {
     p2p_raft_state_t raft;
     p2p_cache_t cache;
     p2p_qos_t qos;
+    p2p_nat_state_t nat;
     struct { uint32_t src, id; } seen[P2P_SEEN];
     uint32_t seen_next;
     /* traffic analysis (US-075) */
@@ -170,6 +180,10 @@ int p2p_block(p2p_node_t* n, const char* peer, int blocked);
 int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h);
 const p2p_item_t* p2p_cache_get(p2p_node_t* n, const char* key, uint32_t current_tick);
 int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t ttl_ticks, uint32_t current_tick);
+int p2p_route_find(const p2p_node_t* n, uint32_t dest_id, uint32_t* next_hop, uint32_t* total_cost);
+int p2p_grpc_call(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* service, const char* method, const char* payload);
+int p2p_stun_probe(p2p_node_t* n, const p2p_host_t* h, const char* stun_server_peer);
+int p2p_nat_punch(p2p_node_t* n, const p2p_host_t* h, const char* peer);
 /* Report lines into out (peers, health, stats, kv). */
 int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char* out, int cap);
 const char* p2p_type_name(int type);

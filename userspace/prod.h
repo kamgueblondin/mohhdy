@@ -97,6 +97,34 @@ typedef struct {
 int prod_perf_tune_eval(prod_perf_tune_t* pt, uint32_t mode);
 int prod_maint_predict(const prod_metrics_t* m, const prod_alerts_t* a, prod_maint_t* pm);
 
+/* US-108 CI/CD pipeline simulation */
+typedef struct {
+    int stage; /* 1: lint, 2: build, 3: unit-test, 4: integration, 5: deploy, 6: success, -1: failed */
+    int total_steps;
+    int passed_steps;
+    char last_error[64];
+} prod_pipeline_t;
+int prod_pipeline_run(prod_pipeline_t* pipe, const char* repo_path, char* out, int cap);
+
+/* US-110 Autoscaling with workload generator */
+typedef struct {
+    uint32_t active_workers;
+    uint32_t queue_depth;
+    uint32_t cpu_load_pct;
+    uint32_t scale_events;
+} prod_autoscale_workload_t;
+int prod_autoscale_workload_eval(prod_scaler_t* s, prod_autoscale_workload_t* wl, uint32_t now_tick, char* out, int cap);
+
+/* US-112 Security & Vulnerability scanner */
+typedef struct {
+    uint32_t vulnerabilities_found;
+    uint32_t cve_checks_passed;
+    uint32_t privilege_escalations_detected;
+    uint32_t open_ports_audited;
+    uint32_t risk_score; /* 0-100 */
+} prod_sec_scan_t;
+int prod_sec_scan_run(prod_sec_scan_t* scan, char* out, int cap);
+
 #define PROD_FEEDBACK 16
 typedef struct { uint8_t rating; char text[48]; } prod_fb_t;
 typedef struct { prod_fb_t f[PROD_FEEDBACK]; int n; uint32_t total, sum; uint32_t hist[6]; } prod_feedback_t;

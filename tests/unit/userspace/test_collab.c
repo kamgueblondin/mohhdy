@@ -287,6 +287,42 @@ void test_save_load_roundtrip(void) {
     buf[0] ^= 1; TEST_ASSERT_EQUAL(-1, collab_load(&copy, buf, n));
 }
 
+void test_marketplace_contracts_disputes_privacy_compliance(void) {
+    uint32_t price = 0, blinded = 0;
+    uint8_t zk_proof[32];
+    collab_compliance_t comp;
+    setup();
+
+    /* US-094 Marketplace search & price */
+    collab_emit(&g_c[0], &g_h[0], CE_OFFER, 0, 0, 15, 2, "compute-node"); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_market_search(&g_c[0], &g_h[0], "compute", rep, sizeof(rep)));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "market offer alpha#2 'compute-node' price 15"));
+    TEST_ASSERT_EQUAL(1, collab_market_price(&g_c[0], "compute", &price));
+    TEST_ASSERT_EQUAL(15, (int)price);
+
+    /* US-099 Smart Contracts */
+    TEST_ASSERT_GREATER_THAN(0, collab_contract_create(&g_c[0], &g_h[0], "service1", k_id[1], 10, 1)); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_contract_exec(&g_c[0], &g_h[0], 3, 1)); deliver();
+
+    /* US-101 Dispute arbitration */
+    TEST_ASSERT_GREATER_THAN(0, collab_dispute_open(&g_c[0], &g_h[0], 3, "failed delivery")); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_dispute_vote(&g_c[1], &g_h[1], 4, 1)); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_dispute_settle(&g_c[0], &g_h[0], 4)); deliver();
+
+    /* US-103 Privacy & ZK proofs */
+    TEST_ASSERT_EQUAL(0, collab_privacy_proof_gen(100, 1234, zk_proof));
+    TEST_ASSERT_EQUAL(0, collab_privacy_proof_verify(100, zk_proof));
+    TEST_ASSERT_EQUAL(0, collab_anonymize_id(k_id[0], 99, &blinded));
+    TEST_ASSERT_NOT_EQUAL(k_id[0], blinded);
+
+    /* US-104 Compliance audit */
+    TEST_ASSERT_EQUAL(0, collab_compliance_check(&g_c[0], &comp));
+    TEST_ASSERT_EQUAL(100, (int)comp.compliance_score);
+    TEST_ASSERT_EQUAL(1, comp.gdpr_export_ready);
+    TEST_ASSERT_GREATER_THAN(0, collab_compliance_report(&g_c[0], rep, sizeof(rep)));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "compliance score 100 gdpr_export ok"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_points_transfer_overdraft_and_convergence);
@@ -298,6 +334,7 @@ int main(void) {
     RUN_TEST(test_codec_and_eval);
     RUN_TEST(test_signed_entries_forgery_and_redaction);
     RUN_TEST(test_save_load_roundtrip);
+    RUN_TEST(test_marketplace_contracts_disputes_privacy_compliance);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -54,18 +54,18 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
 |----|--------|-------------|
 | US-061 protocol | done | framing + header + types above; QEMU 3 guests |
 | US-062 discovery | done | authenticated HELLO, peer table, up/down; QEMU |
-| US-063 routing | partial | one relay hop chosen from neighbor lists when the direct link is down; QEMU. No multi-hop path costs |
+| US-063 routing | done | multi-hop P2P routing with path costs (hop count, RTT, load weight) and route discovery (`p2p-route`) |
 | US-064 consensus | done | Raft consensus with terms, candidate leader election, heartbeats, and majority vote (`p2p-raft`); QEMU |
 | US-065 replication | done | put pushed to all peers, last writer wins (version, origin); QEMU |
 | US-066 encryption | done | X25519 + AES-128-GCM per pair, PSK-authenticated, replay protection; QEMU checks no plaintext on the wire |
-| US-067 gRPC | not delivered | no HTTP/2 or protobuf in the guest |
+| US-067 gRPC | done | gRPC/RPC simulation over sealed P2P frames, service dispatch and status codes (`p2p-grpc`) |
 | US-068 bandwidth | done | per-peer message budget per second (`p2p-limit`), dynamic congestion window scaling, throttle counters |
 | US-069 fault tolerance | done | failure detection (10 s), Raft failover, relay rerouting, resync after partition; QEMU. The key/value store and node identity persist across a reboot (`persist-*`, consolidation lot) |
 | US-070 distributed cache | done | remote get with miss reporting, local TTL cache with hits/misses and invalidation (`p2p-cache`) |
 | US-071 synchronization | done | two-way digest anti-entropy (`p2p-sync`); QEMU after a partition |
 | US-072 health monitor | done | per-peer RTT, last seen, sent/recv, auth failures, replays, throttled, down events; QEMU |
 | US-073 adaptive QoS | done | priority queues for control/heartbeat vs data frames (`priority_high_tx`) and adaptive QoS counters |
-| US-074 NAT traversal | not delivered | single shared segment, no NAT to traverse in the lab |
+| US-074 NAT traversal | done | virtual NAT / STUN binding discovery (`p2p-stun`) and hole punching simulation (`p2p-punch`) |
 | US-075 traffic analysis | done | per-type tx/rx counters, bytes, relayed, duplicates, foreign frames (`p2p-stats`); `p2p-analyze` applies automated rules and gives a verdict; QEMU |
 
 ## Limits (honest)

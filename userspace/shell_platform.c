@@ -65,9 +65,10 @@ static void join(char* d, const char* dir, const char* name, int cap) {
 }
 
 static const char* k_cmds[] = {
-    "hal-info", "hal-port", "screen-adapt", "gesture", "power-profile", "power-status", "dev-list",
+    "hal-info", "hal-port", "screen-adapt", "gesture", "gesture-multi", "power-profile", "power-status", "dev-list",
     "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
-    "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all", 0
+    "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
+    "sensor-read", "continuity-export", "continuity-import", "legacy-emul", 0
 };
 int shell_platform_is(const char* line) {
     char w[24];
@@ -381,6 +382,67 @@ int shell_platform_line(const char* line) {
         return 0;
     }
     if (s_eq(cmd, "gesture")) return cmd_gesture(rest);
+    if (s_eq(cmd, "gesture-multi")) {
+        plat_point_t p1[16], p2[16];
+        int n = 0, g;
+        char w1[48], w2[48];
+        while (*rest && n < 16) {
+            int v1[4], v2[4], k = 0, i = 0, ok1, ok2;
+            char part[12];
+            rest = word(rest, w1, 48); rest = word(rest, w2, 48);
+            if (!w1[0] || !w2[0]) break;
+            while (k < 4) {
+                int j = 0;
+                while (w1[i] && w1[i] != ',' && j < 11) part[j++] = w1[i++];
+                part[j] = 0; v1[k] = to_int(part, &ok1);
+                if (w1[i] == ',') i++;
+                j = 0; int i2 = 0;
+                while (w2[i2] && w2[i2] != ',' && j < 11) part[j++] = w2[i2++];
+                part[j] = 0; v2[k] = to_int(part, &ok2);
+                k++;
+            }
+            p1[n].x = v1[0]; p1[n].y = v1[1]; p1[n].t_ms = (uint32_t)v1[2]; p1[n].down = v1[3];
+            p2[n].x = v2[0]; p2[n].y = v2[1]; p2[n].t_ms = (uint32_t)v2[2]; p2[n].down = v2[3];
+            n++;
+        }
+        g = plat_gesture_multi(p1, p2, n);
+        g_out[0] = 0; s_cat(g_out, "gesture-multi ok ", 4096); s_cat(g_out, plat_gesture_name(g), 4096);
+        s_cat(g_out, " points ", 4096); cat_u(g_out, (uint32_t)n, 4096); s_cat(g_out, "\n", 4096);
+        print_string(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "sensor-read")) {
+        plat_sensors_t s;
+        plat_sensor_read(&s);
+        plat_sensor_report(&s, g_out, (int)sizeof(g_out));
+        print_string(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "continuity-export")) {
+        plat_continuity_t c;
+        s_copy(c.session_id, "sess1", 16);
+        s_copy(c.device_from, "node1", 16);
+        s_copy(c.clipboard, "shared text clip", 128);
+        s_copy(c.active_task, "shell", 32);
+        c.state_seq = 100;
+        plat_continuity_export(&c, g_out, (int)sizeof(g_out));
+        print_string(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "continuity-import")) {
+        plat_continuity_t c;
+        word(rest, a, 64);
+        plat_continuity_import(a[0] ? a : "CONT1\n", &c);
+        print_string("continuity-import ok session "); print_string(c.session_id); print_string("\n");
+        return 0;
+    }
+    if (s_eq(cmd, "legacy-emul")) {
+        plat_emul_config_t cfg = {1, 1, 1};
+        word(rest, a, 64);
+        plat_emul_run(a[0] ? a : "app.exe", &cfg, g_out, (int)sizeof(g_out));
+        print_string(g_out);
+        return 0;
+    }
     if (s_eq(cmd, "power-profile")) {
         int p;
         word(rest, a, 64);

@@ -221,6 +221,62 @@ int shell_collab_line(const char* line) {
         print_string("collab-sync ok asked "); put_u(n > 0 ? (uint32_t)n : 0U); print_string("\n");
         return 0;
     }
+    if (s_eq(cmd, "collab-market-search")) {
+        collab_market_search(&g_c, &g_h, a, g_out, (int)sizeof(g_out));
+        print_string(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "collab-market-bid")) {
+        rest = word(rest, b, 48);
+        if (num(a, &x) || num(b, &y)) return emitted(cmd, -1);
+        return emitted(cmd, collab_market_bid(&g_c, &g_h, x, y));
+    }
+    if (s_eq(cmd, "collab-market-price")) {
+        uint32_t avg = 0;
+        if (!a[0]) { print_string("collab-market-price error usage: ITEM\n"); return 1; }
+        collab_market_price(&g_c, a, &avg);
+        print_string("market price avg "); put_u(avg); print_string("\n");
+        return 0;
+    }
+    if (s_eq(cmd, "collab-contract-create")) {
+        rest = word(rest, b, 48); rest = word(rest, c, 48);
+        const char* r2 = word(rest, g_out, 64);
+        uint32_t trig = r2[0] ? (uint32_t)r2[0] : 1U;
+        if (!(pid = peer_id(b)) || num(c, &x)) return emitted(cmd, -1);
+        return emitted(cmd, collab_contract_create(&g_c, &g_h, a, pid, x, trig));
+    }
+    if (s_eq(cmd, "collab-contract-exec")) {
+        rest = word(rest, b, 48);
+        if (num(a, &x) || num(b, &y)) return emitted(cmd, -1);
+        return emitted(cmd, collab_contract_exec(&g_c, &g_h, x, y));
+    }
+    if (s_eq(cmd, "collab-dispute-open")) {
+        if (num(a, &x)) return emitted(cmd, -1);
+        return emitted(cmd, collab_dispute_open(&g_c, &g_h, x, rest));
+    }
+    if (s_eq(cmd, "collab-dispute-vote")) {
+        rest = word(rest, b, 48);
+        if (num(a, &x) || (!s_eq(b, "yes") && !s_eq(b, "no"))) return emitted(cmd, -1);
+        return emitted(cmd, collab_dispute_vote(&g_c, &g_h, x, s_eq(b, "yes") ? 1 : 0));
+    }
+    if (s_eq(cmd, "collab-dispute-settle")) {
+        if (num(a, &x)) return emitted(cmd, -1);
+        return emitted(cmd, collab_dispute_settle(&g_c, &g_h, x));
+    }
+    if (s_eq(cmd, "collab-privacy-proof")) {
+        uint8_t proof[32];
+        rest = word(rest, b, 48);
+        if (num(a, &x) || num(b, &y)) { print_string("collab-privacy-proof error usage: VALUE SECRET\n"); return 1; }
+        collab_privacy_proof_gen(x, y, proof);
+        if (collab_privacy_proof_verify(x, proof) == 0) print_string("collab-privacy-proof ok zk_verified\n");
+        else print_string("collab-privacy-proof error failed\n");
+        return 0;
+    }
+    if (s_eq(cmd, "collab-compliance")) {
+        collab_compliance_report(&g_c, g_out, (int)sizeof(g_out));
+        print_string(g_out);
+        return 0;
+    }
     {
         static const char* const views[][2] = {
             {"collab-balances", "balances"}, {"collab-audit", "audit"}, {"collab-tasks", "tasks"},

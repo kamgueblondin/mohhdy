@@ -177,6 +177,11 @@ void test_phase8_offline_extensions(void) {
     prod_metrics_t m;
     prod_alerts_t a;
     prod_usage_t u;
+    prod_pipeline_t pipe;
+    prod_scaler_t sc;
+    prod_autoscale_workload_t wl;
+    prod_sec_scan_t scan;
+    char out_buf[512];
 
     prod_metrics_init(&m);
     prod_alerts_init(&a);
@@ -192,6 +197,25 @@ void test_phase8_offline_extensions(void) {
 
     TEST_ASSERT_EQUAL(0, prod_biz_metrics_get(&u, 10000, &bm));
     TEST_ASSERT_EQUAL(100, (int)bm.uptime_seconds);
+
+    /* US-108 CI/CD Pipeline */
+    TEST_ASSERT_EQUAL(0, prod_pipeline_run(&pipe, "/mohhdy", out_buf, sizeof(out_buf)));
+    TEST_ASSERT_EQUAL(6, pipe.stage);
+    TEST_ASSERT_NOT_NULL(strstr(out_buf, "cicd pipeline repo /mohhdy steps 5/5 status success"));
+
+    /* US-110 Autoscaling Workload */
+    prod_scaler_init(&sc, 1, 4, 4000U, 1000U, 2U);
+    memset(&wl, 0, sizeof(wl));
+    wl.queue_depth = 20;
+    TEST_ASSERT_EQUAL(0, prod_autoscale_workload_eval(&sc, &wl, 100, out_buf, sizeof(out_buf)));
+    TEST_ASSERT_GREATER_THAN(0, (int)wl.active_workers);
+    TEST_ASSERT_NOT_NULL(strstr(out_buf, "autoscale workload workers "));
+
+    /* US-112 Security Scanner */
+    TEST_ASSERT_EQUAL(0, prod_sec_scan_run(&scan, out_buf, sizeof(out_buf)));
+    TEST_ASSERT_EQUAL(0, (int)scan.vulnerabilities_found);
+    TEST_ASSERT_EQUAL(120, (int)scan.cve_checks_passed);
+    TEST_ASSERT_NOT_NULL(strstr(out_buf, "sec-scan status ok_clean"));
 }
 
 int main(void) {
