@@ -6,6 +6,8 @@ Le shell lit le **clavier emulé PS/2**. En nographic, la saisie du terminal hô
 
 Le curseur de saisie est un **bloc clignotant** à la position VGA. Après une longue sortie (`help`), **Page Up** ou **flèche haut** remonte dans l'historique d'écran (80 lignes) ; **Page Down** ou **flèche bas** redescend. Toute nouvelle frappe imprimable ramène à la ligne de saisie.
 
+La bannière du shell imprime `MOHHDY v6.0`. Les messages de `make` impriment `MOHHDY v7`. `echo` imprime ses arguments, puis la ligne de statut `echo ok`. Les lettres suivent Maj XOR Verr Maj.
+
 `net-status` et `net-status json` publient la présence réelle d'une carte NE2000. Sans `-device ne2k_isa`, la NIC est absente. Avec une carte, le smoke `make qemu-ne2k-status` exige `"nic":"detected"`. ARP, IPv4, DHCP, DNS, TCP et TLS restent affichés absents : les codecs existent, mais aucune configuration live n'est raccordée au shell. OpenAI reste bloqué.
 
 `fat16-list` et `fat16-cat <8.3>` lisent le volume FAT16 préparé à partir du LBA 64 (lecture seule). L'overlay AIOV occupe les 64 premiers secteurs.
@@ -26,7 +28,7 @@ make run
 make run-gui
 ```
 - **Affichage** : fenetre graphique QEMU (VBE glassmorphic, suit la taille de la fenetre)
-- **Bureau** : tapez `gui` apres `MOHHDY>` (aliases `graphics`, `desktop`)
+- **Bureau** : tapez `gui` au prompt du shell texte (aliases `graphics`, `desktop`). Ce prompt affiche le repertoire courant, puis ` : `. `MOHHDY>` est reserve au panneau Shell du bureau.
 - **Quitter le bureau** : `console`, `gui-exit` ou ESC
 - **Nographic / CI** : `gui-status` et `make qemu-osui-gui` (hors integration-qemu)
 - **Honnetete** : `llm=stub_echo`, `chromium=false`, `python_facade=false`, `chrome=qemu_fb`. Les chaines guest impriment `us031_complete=false`. Ce n'est pas Chromium.
