@@ -80,7 +80,7 @@ def main():
                 "-m", "1024M", "-display", "none", "-vga", "none", "-serial", "file:" + LOG,
                 "-monitor", "unix:%s,server,nowait" % MON, "-no-reboot", "-no-shutdown",
             ], cwd=ROOT, stdout=error_handle, stderr=error_handle)
-            wait_for(process, " : ", 45)
+            wait_for(process, "SYS_GETS: Debut", 45)
             client = monitor()
             offset = len(log_text())
             type_command(client, "ai hello")

@@ -228,7 +228,7 @@ def main():
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
         monitor = None
         try:
-            wait_for(" : ", proc)
+            wait_for("SYS_GETS: Debut", proc)
             monitor = connect_monitor()
             time.sleep(0.5)
             send_command_until(monitor, "net-status", "Carte Ethernet : detectee", proc)

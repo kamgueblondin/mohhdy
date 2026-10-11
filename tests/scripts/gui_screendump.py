@@ -189,7 +189,7 @@ def run_session(name, extra_qemu, steps):
     try:
         with open(err_path, "wb") as err:
             proc = subprocess.Popen(cmd, cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, log_path, " : ", BOOT_TIMEOUT)
+            wait_for(proc, log_path, "SYS_GETS: Debut", BOOT_TIMEOUT)
             wait_for(proc, log_path, "SYS_GETS: Debut", BOOT_TIMEOUT)
             monitor = monitor_connect(sock_path)
             time.sleep(0.8)

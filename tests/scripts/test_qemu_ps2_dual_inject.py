@@ -185,7 +185,7 @@ def drive_instance(inst, peer_alive_check, errors):
             output = normalized_log(log_text(path)[start:])
             if command_echoed(output, command):
                 wait_for(proc, path, marker, CMD_TIMEOUT, start)
-                wait_for(proc, path, " : ", CMD_TIMEOUT, start)
+                wait_for(proc, path, "SYS_GETS: Debut", CMD_TIMEOUT, start)
                 say("[ps2-dual] guest %s: %s -> %s" % (label, command, marker))
                 return
             if "SYS_GETS: ligne lue: " in output:
@@ -250,7 +250,7 @@ def main():
 
     try:
         for inst in INSTANCES:
-            wait_for(inst["proc"], inst["log"], " : ", BOOT_TIMEOUT)
+            wait_for(inst["proc"], inst["log"], "SYS_GETS: Debut", BOOT_TIMEOUT)
             inst["client"] = monitor_connect(inst["mon"])
             say("[ps2-dual] guest %s booted" % inst["label"])
 

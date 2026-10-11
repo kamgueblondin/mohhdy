@@ -58,7 +58,7 @@ def main():
         while time.monotonic() < deadline and hub.client_count < 3:
             time.sleep(0.1)
         for node in NODES:
-            base.wait_for(node["proc"], node["log"], " : ", base.BOOT_TIMEOUT)
+            base.wait_for(node["proc"], node["log"], "SYS_GETS: Debut", base.BOOT_TIMEOUT)
             node["client"] = base.monitor_connect(node["mon"])
 
         def alive():

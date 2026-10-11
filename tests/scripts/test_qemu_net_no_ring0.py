@@ -72,7 +72,7 @@ def main():
     peer = proc = client = None
     try:
         peer, proc = tw.start_guest("mohhdy.bin")
-        tw.wait_for(proc, " : ")
+        tw.wait_for(proc, "SYS_GETS: Debut")
         client = tw.monitor()
         boot = tw.normalized_log(tw.text())
         if BANNER not in boot:

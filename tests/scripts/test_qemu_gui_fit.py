@@ -267,7 +267,7 @@ def main():
             watcher.daemon = True
             watcher.start()
 
-            wait_for(qemu, " : ", BOOT_TIMEOUT)
+            wait_for(qemu, "SYS_GETS: Debut", BOOT_TIMEOUT)
             wait_for(qemu, "SYS_GETS: Debut", BOOT_TIMEOUT)
             monitor = monitor_connect()
             time.sleep(0.6)

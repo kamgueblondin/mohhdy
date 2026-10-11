@@ -140,7 +140,7 @@ def send_command(client, proc, command):
 
 
 def wait_for_prompt(proc, start):
-    wait_for(proc, " : ", 15, start)
+    wait_for(proc, "SYS_GETS: Debut", 15, start)
 
 
 def main():
@@ -168,7 +168,7 @@ def main():
     try:
         with open(ERR, "wb") as err:
             proc = subprocess.Popen(command, cwd=ROOT, stdout=err, stderr=err)
-        wait_for(proc, " : ")
+        wait_for(proc, "SYS_GETS: Debut")
         client = monitor()
         start = send_command(client, proc, "ai-runtime")
         wait_for(proc, "Entropie TLS RDRAND : disponible (materiel)", 20, start)

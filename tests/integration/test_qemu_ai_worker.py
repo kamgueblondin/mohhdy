@@ -401,14 +401,14 @@ def contract(monitor, proc):
     send_command(monitor, "chat ai a")
     wait_regex(r"osui chat ok llm=gpt2_local ai_status=ready worker=stalled fallback=ring0", proc, start,
                timeout=120)
-    wait_for(" : ", proc, start, timeout=30)
+    wait_for("SYS_GETS: Debut", proc, start, timeout=30)
     kill(monitor, proc, wpid)
     # 11. Worker gone for good: OS-UI is served by the Ring 0 path directly,
     # without a stale degradation flag.
     start = len(log_text())
     send_command(monitor, "chat ai a")
     wait_regex(r"osui chat ok llm=gpt2_local ai_status=ready session_id", proc, start, timeout=120)
-    wait_for(" : ", proc, start, timeout=30)
+    wait_for("SYS_GETS: Debut", proc, start, timeout=30)
     print("ai worker contract: stall detected in %.1fs, ESC cancel -149 without replay, "
           "OS-UI shows worker=stalled fallback=ring0" % stall_s)
 
@@ -438,7 +438,7 @@ def main():
             proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
             monitor = None
             try:
-                wait_for(" : ", proc, 0, timeout=40)
+                wait_for("SYS_GETS: Debut", proc, 0, timeout=40)
                 monitor = connect_monitor()
                 time.sleep(0.5)
                 contract(monitor, proc)

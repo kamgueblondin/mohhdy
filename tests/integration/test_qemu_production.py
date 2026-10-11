@@ -50,7 +50,7 @@ def send_exact(mon, proc, command, tries=3):
         line = nw.log_text()[start:].split("ligne lue: ", 1)[1].split("\n", 1)[0].strip()
         if line == command:
             return start
-        nw.wait_for(" : ", proc, start, timeout=25)
+        nw.wait_for("SYS_GETS: Debut", proc, start, timeout=25)
         print("[production] typed %r read as %r, typing it again" % (command, line))
     raise RuntimeError("could not type %r intact" % command)
 
@@ -65,7 +65,7 @@ def run(mon, proc, command, needles, attempts=1, timeout=25):
         nw.wait_for(needles[0], proc, start, timeout=timeout)
     for needle in needles[1:]:
         nw.wait_for(needle, proc, start, timeout=timeout)
-    nw.wait_for(" : ", proc, start, timeout=timeout)
+    nw.wait_for("SYS_GETS: Debut", proc, start, timeout=timeout)
     return normalized_log(nw.log_text()[start:])
 
 
@@ -90,7 +90,7 @@ def main():
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
         mon = None
         try:
-            nw.wait_for(" : ", proc, timeout=90)
+            nw.wait_for("SYS_GETS: Debut", proc, timeout=90)
             mon = nw.connect_monitor()
             time.sleep(0.5)
             # US-107 monitoring.
@@ -110,18 +110,18 @@ def main():
             run(mon, proc, "prod-predict custom 1000", ["prod-predict custom slope_milli_per_tick ", " reaches 1000 in_ticks "], attempts=2)
             run(mon, proc, "prod-predict nothing 5", "prod-predict error usage", attempts=2)
             # US-113 log analysis.
-            run(mon, proc, "mkdir /var", " : ")
+            run(mon, proc, "mkdir /var", "SYS_GETS: Debut")
             for text in ("info boot ok", "error timeout on req 17", "error timeout on req 18", "warn disk slow", "error timeout on req 99"):
                 run(mon, proc, "prod-log-append /var/app.log " + text, "prod-log-append ok bytes ")
             run(mon, proc, "prod-log-analyze /var/app.log", ["prod-log lines 5 errors 3 warns 1 infos 1 other 0",
                                                              "prod-log top 3 x error timeout on req #",
                                                              "prod-log verdict incident"], attempts=2)
             # US-111 backup and restore, corruption refused.
-            run(mon, proc, "mkdir /cfg", " : ")
-            run(mon, proc, "write /cfg/a.conf mode=eco", " : ")
-            run(mon, proc, "write /cfg/b.conf level=2", " : ")
+            run(mon, proc, "mkdir /cfg", "SYS_GETS: Debut")
+            run(mon, proc, "write /cfg/a.conf mode=eco", "SYS_GETS: Debut")
+            run(mon, proc, "write /cfg/b.conf level=2", "SYS_GETS: Debut")
             run(mon, proc, "prod-backup daily /cfg", "prod-backup ok daily files 2 bytes ")
-            run(mon, proc, "write /cfg/a.conf broken", " : ")
+            run(mon, proc, "write /cfg/a.conf broken", "SYS_GETS: Debut")
             run(mon, proc, "prod-restore daily", "prod-restore ok files 2")
             run(mon, proc, "cat /cfg/a.conf", "mode=eco", attempts=2)
             run(mon, proc, "prod-backup-verify daily", "prod-backup-verify ok files 2", attempts=2)
@@ -130,19 +130,19 @@ def main():
             run(mon, proc, "prod-restore daily", "prod-restore error backup corrupt, nothing written")
             run(mon, proc, "prod-backups", ["prod-backup daily dir /cfg files 2 tick ", " corrupt", "prod-backups ok 1"], attempts=2)
             # US-108/109 deployment with health check and automatic rollback; US-112 integrity.
-            run(mon, proc, "mkdir /app", " : ")
-            run(mon, proc, "write /app/main v1", " : ")
-            run(mon, proc, "write /app/health ok", " : ")
+            run(mon, proc, "mkdir /app", "SYS_GETS: Debut")
+            run(mon, proc, "write /app/main v1", "SYS_GETS: Debut")
+            run(mon, proc, "write /app/health ok", "SYS_GETS: Debut")
             run(mon, proc, "prod-integrity baseline /app", "prod-integrity baseline files 2")
-            run(mon, proc, "mkdir /stg", " : ")
-            run(mon, proc, "write /stg/main v2", " : ")
-            run(mon, proc, "write /stg/health ok", " : ")
+            run(mon, proc, "mkdir /stg", "SYS_GETS: Debut")
+            run(mon, proc, "write /stg/main v2", "SYS_GETS: Debut")
+            run(mon, proc, "write /stg/health ok", "SYS_GETS: Debut")
             run(mon, proc, "prod-manifest /stg /app", "prod-manifest ok files 2")
             run(mon, proc, "prod-deploy /stg /app", ["prod-deploy backup pre-deploy files 2", "prod-deploy ok healthy files 2"])
             run(mon, proc, "cat /app/main", "v2", attempts=2)
             run(mon, proc, "prod-integrity check /app", ["prod-integrity changed /app/main", "prod-integrity check same 1 changed 1 new 0 verdict drift"])
-            run(mon, proc, "write /stg/main v3", " : ")
-            run(mon, proc, "write /stg/health fail", " : ")
+            run(mon, proc, "write /stg/main v3", "SYS_GETS: Debut")
+            run(mon, proc, "write /stg/health fail", "SYS_GETS: Debut")
             run(mon, proc, "prod-manifest /stg /app", "prod-manifest ok files 2")
             run(mon, proc, "prod-deploy /stg /app", ["prod-deploy health failed: health check not ok", "prod-deploy rolled back files 2"])
             run(mon, proc, "cat /app/main", "v2", attempts=2)

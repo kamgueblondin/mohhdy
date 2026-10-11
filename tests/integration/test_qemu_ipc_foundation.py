@@ -235,7 +235,7 @@ def main():
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
         monitor = None
         try:
-            wait_for(" : ", proc)
+            wait_for("SYS_GETS: Debut", proc)
             monitor = connect_monitor()
             before_spawn = send_command_until(monitor, "spawn ipcserver", "spawn ok pid", proc)
             # IRQ0 may print "[SCHED] switching to task N" inside the line

@@ -270,7 +270,7 @@ def main():
         say("[shared-eth] hub clients=%d" % hub.client_count)
 
         for inst in INSTANCES:
-            wait_for(inst["proc"], inst["log"], " : ", BOOT_TIMEOUT)
+            wait_for(inst["proc"], inst["log"], "SYS_GETS: Debut", BOOT_TIMEOUT)
             inst["client"] = monitor_connect(inst["mon"])
             say("[shared-eth] guest %s booted (mac=%s)" % (inst["label"], inst["mac"]))
 

@@ -224,7 +224,7 @@ def main(peer_close=False):
     try:
         with open(ERR, "wb") as err:
             proc = subprocess.Popen(command, cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, " : ")
+            wait_for(proc, "SYS_GETS: Debut")
             client = monitor()
             handshake_tls(client, proc, peer)
             try:
