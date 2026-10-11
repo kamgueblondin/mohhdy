@@ -837,6 +837,65 @@ static void test_web_serve(void) {
     osui_test_web_open_rc = 0;
 }
 
+static void test_browser_tab_extensions_and_fs_web_persistence(void) {
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("browser-tab-new about:blank"));
+    TEST_ASSERT_EQUAL(0, run_line("browser-tab-new http://example.com/app app"));
+    TEST_ASSERT(strstr(g_out, "kind=app") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-tab-rename MyCustomTitle"));
+    TEST_ASSERT(strstr(g_out, "title=MyCustomTitle") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-tab-pin 1"));
+    TEST_ASSERT(strstr(g_out, "pinned=true") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-storage-set token secret123"));
+    TEST_ASSERT(strstr(g_out, "key=token") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-tab-duplicate"));
+    TEST_ASSERT(strstr(g_out, "browser-tab-duplicate ok") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-tabs"));
+    TEST_ASSERT(strstr(g_out, "count=3") != NULL);
+    TEST_ASSERT(strstr(g_out, "pinned") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-tab-next"));
+    TEST_ASSERT(strstr(g_out, "browser-tab-next ok") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-fs-save /web_test.json"));
+    TEST_ASSERT(strstr(g_out, "browser-fs-save ok") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-fs-load /web_test.json"));
+    TEST_ASSERT(strstr(g_out, "browser-fs-load ok") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-fs-sync"));
+    TEST_ASSERT(strstr(g_out, "browser-fs-save ok") != NULL);
+}
+
+static void test_agentic_workflows_p2p_collab_prod(void) {
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("chat p2p status"));
+    TEST_ASSERT(strstr(g_out, "workflow=p2p") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("chat collab points"));
+    TEST_ASSERT(strstr(g_out, "workflow=collab") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("chat prod metrics"));
+    TEST_ASSERT(strstr(g_out, "workflow=prod") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("chat browser tabs"));
+    TEST_ASSERT(strstr(g_out, "workflow=web") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("os-p2p"));
+    TEST_ASSERT(strstr(g_out, "pane=p2p") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("os-collab"));
+    TEST_ASSERT(strstr(g_out, "pane=collab") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("os-prod"));
+    TEST_ASSERT(strstr(g_out, "pane=prod") != NULL);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -863,6 +922,8 @@ int main(void) {
     RUN_TEST(test_osui_model);
     RUN_TEST(test_osui_provider);
     RUN_TEST(test_browser_navigation_dom_tree_and_audit);
+    RUN_TEST(test_browser_tab_extensions_and_fs_web_persistence);
+    RUN_TEST(test_agentic_workflows_p2p_collab_prod);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

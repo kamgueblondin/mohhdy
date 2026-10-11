@@ -407,6 +407,9 @@ typedef struct {
 #define OS_FB_PANE_SUPPORT 4
 #define OS_FB_PANE_STATUS 5
 #define OS_FB_PANE_FS 6
+#define OS_FB_PANE_P2P 7
+#define OS_FB_PANE_COLLAB 8
+#define OS_FB_PANE_PROD 9
 #define OS_FB_STAGE_REFLECTING 0
 #define OS_FB_STAGE_ACTING 1
 #define OS_FB_STAGE_PRESENTING 2

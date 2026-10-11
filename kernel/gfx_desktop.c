@@ -529,6 +529,9 @@ static const char *pane_title(uint8_t pane) {
     case OS_FB_PANE_SUPPORT: return "Support";
     case OS_FB_PANE_STATUS: return "Statut";
     case OS_FB_PANE_FS: return "Fichiers";
+    case OS_FB_PANE_P2P: return "Reseau P2P";
+    case OS_FB_PANE_COLLAB: return "Economie Collab";
+    case OS_FB_PANE_PROD: return "Production Prod";
     default: return 0;
     }
 }
@@ -893,12 +896,16 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         int wx = 36, wy = bar_h + 28;
         int ww = clampi(w - (w >= 780 ? 420 : 48), 240, w - 48);
         int wh = clampi(h - 220, 160, h - bar_h - 80);
+        const char *body = "Cerveau = osui_runtime.c. Pas Chromium.";
+        if (pane == OS_FB_PANE_STATUS) body = "chrome=qemu_fb display_surface=vbe_lfb";
+        else if (pane == OS_FB_PANE_P2P) body = "Noeud P2P actif : decouverte, routes, consensus Raft, encrypted LWW";
+        else if (pane == OS_FB_PANE_COLLAB) body = "Economie Collab : points, sequestres, marketplace, gouvernance, Schnorr";
+        else if (pane == OS_FB_PANE_PROD) body = "Production : metriques, alertes, autoscale, pipeline CI/CD, maintenance";
+
         if (pane == OS_FB_PANE_SHELL)
             draw_shell(fb, w, h, wx, wy, ww, wh, sc);
         else
-            draw_window(fb, w, h, wx, wy, ww, wh, ptitle,
-                        pane == OS_FB_PANE_STATUS ? "chrome=qemu_fb display_surface=vbe_lfb"
-                        : "Cerveau = osui_runtime.c. Pas Chromium.");
+            draw_window(fb, w, h, wx, wy, ww, wh, ptitle, body);
     }
 
     chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(w / 3, 220, 360) : clampi(w / 2, 240, 640);

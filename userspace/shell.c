@@ -3177,9 +3177,11 @@ static int is_builtin(const char* cmd) {
         "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
+        "browser-tab-rename", "browser-tab-pin", "browser-tab-duplicate", "browser-tab-next", "browser-tab-prev", "browser-tabs",
+        "browser-fs-save", "browser-fs-load", "browser-fs-sync",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
         "stage", "stage-prompt", "os-help", "os-status", "os-browser", "os-shell",
-        "os-admin", "os-support", "os-fs", "os-center", "os-close",
+        "os-admin", "os-support", "os-fs", "os-p2p", "os-collab", "os-prod", "os-center", "os-close",
         "guest-status", "attach", "detach", "open",
         "gui", "graphics", "desktop", "console", "gui-status", "gui-exit", "gui-move",
         0
