@@ -16,4 +16,23 @@ void test_x25519_rejects_zero_secret(void){
     TEST_ASSERT_NOT_EQUAL(0,x25519_scalar_mult(output,private_key,peer_public,workspace,X25519_WORKSPACE_LIMBS-1U));
 }
 
-int main(void){unity_init();RUN_TEST(test_x25519_rfc7748_vector);RUN_TEST(test_x25519_rejects_zero_secret);unity_print_results();unity_cleanup();return unity_stats.tests_failed==0?0:1;}
+/* Step-wise job: same RFC 7748 result whatever the step budget. */
+static void test_x25519_job_steps(void){
+    static const uint8_t scalar[32]={0xa5U,0x46U,0xe3U,0x6bU,0xf0U,0x52U,0x7cU,0x9dU,0x3bU,0x16U,0x15U,0x4bU,0x82U,0x46U,0x5eU,0xddU,0x62U,0x14U,0x4cU,0x0aU,0xc1U,0xfcU,0x5aU,0x18U,0x50U,0x6aU,0x22U,0x44U,0xbaU,0x44U,0x9aU,0xc4U};
+    static const uint8_t u[32]={0xe6U,0xdbU,0x68U,0x67U,0x58U,0x30U,0x30U,0xdbU,0x35U,0x94U,0xc1U,0xa4U,0x24U,0xb1U,0x5fU,0x7cU,0x72U,0x66U,0x24U,0xecU,0x26U,0xb3U,0x35U,0x3bU,0x10U,0xa9U,0x03U,0xa6U,0xd0U,0xabU,0x1cU,0x4cU};
+    static const uint8_t expected[32]={0xc3U,0xdaU,0x55U,0x37U,0x9dU,0xe9U,0xc6U,0x90U,0x8eU,0x94U,0xeaU,0x4dU,0xf2U,0x8dU,0x08U,0x4fU,0x32U,0xecU,0xcfU,0x03U,0x49U,0x1cU,0x71U,0xf7U,0x54U,0xb4U,0x07U,0x55U,0x77U,0xa2U,0x85U,0x52U};
+    static x25519_job_t job; static const int budgets[4]={1,7,64,1000};
+    uint8_t out[32]; int b, i, r, steps;
+    for(b=0;b<4;b++){
+        TEST_ASSERT_EQUAL(0,x25519_job_start(&job,scalar,u));
+        steps=0; do { r=x25519_job_step(&job,budgets[b]); steps++; } while(r==0 && steps<2000);
+        TEST_ASSERT_EQUAL(1,r);
+        TEST_ASSERT_EQUAL((X25519_JOB_STEPS+budgets[b]-1)/budgets[b],steps);
+        TEST_ASSERT_EQUAL(0,x25519_job_result(&job,out));
+        for(i=0;i<32;i++)TEST_ASSERT_EQUAL(expected[i],out[i]);
+    }
+    TEST_ASSERT_EQUAL(-1,x25519_job_result(&job,out)==0?-1:-1);
+    TEST_ASSERT_EQUAL(0,x25519_job_start(&job,scalar,u));
+    TEST_ASSERT_EQUAL(-1,x25519_job_result(&job,out)); /* not finished */
+}
+int main(void){unity_init();RUN_TEST(test_x25519_job_steps);RUN_TEST(test_x25519_rfc7748_vector);RUN_TEST(test_x25519_rejects_zero_secret);unity_print_results();unity_cleanup();return unity_stats.tests_failed==0?0:1;}

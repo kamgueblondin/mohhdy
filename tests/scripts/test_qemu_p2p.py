@@ -218,6 +218,9 @@ def main():
         if "p2p analyze finding node relayed " not in log(b, start_b):
             raise RuntimeError("beta analysis missed the relay: %s" % log(b, start_b)[-600:])
         say("scenario 3 ok: failure detected, relayed delivery (%.0fs)" % (time.monotonic() - t0))
+        for node in NODES:
+            if "p2p stall" in log(node):
+                raise RuntimeError("%s console loop stalled: %s" % (node["label"], log(node)[log(node).find("p2p stall"):][:120]))
         say("PASS frames=%d hello=%d sealed=%d plaintext=0 in %.0fs"
             % (hub.p2p_frames, hub.p2p_hello, hub.p2p_sealed, time.monotonic() - t0))
         return 0

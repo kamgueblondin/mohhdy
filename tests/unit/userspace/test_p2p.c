@@ -96,6 +96,25 @@ void test_discovery_and_keys(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p peers ok 2 up 2"));
 }
 
+/* Key agreement is spread over several ticks (no single long call) and a
+ * peer is announced up only once its link key exists. */
+void test_key_agreement_is_stepwise(void) {
+    int ticks = 0;
+    setup(2, 0);
+    run(2, 10);
+    TEST_ASSERT_NOT_NULL(p2p_find(&g_n[0], "beta"));
+    TEST_ASSERT_FALSE(p2p_find(&g_n[0], "beta")->keyed);
+    TEST_ASSERT_FALSE(p2p_find(&g_n[0], "beta")->up);
+    TEST_ASSERT_NULL(strstr(g_out[0], "p2p peer beta up"));
+    while (!p2p_find(&g_n[0], "beta")->keyed && ticks < 100) { run(2, 10); ticks++; }
+    TEST_ASSERT_TRUE(ticks >= (X25519_JOB_STEPS / P2P_KX_BUDGET) - 1);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[0], "beta")->keyed);
+    run(2, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p peer beta up id "));
+    TEST_ASSERT_EQUAL(0, memcmp(p2p_find(&g_n[0], "beta")->key, p2p_find(&g_n[1], "alpha")->key, 16));
+    TEST_ASSERT_EQUAL(1, (int)g_n[0].kx_done);
+}
+
 void test_wrong_network_key_is_kept_out(void) {
     setup(3, "another-network");
     run(3, 300);
@@ -302,6 +321,7 @@ void test_bad_inputs(void) {
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
+    RUN_TEST(test_key_agreement_is_stepwise);
     RUN_TEST(test_wrong_network_key_is_kept_out);
     RUN_TEST(test_encrypted_message_tamper_and_replay);
     RUN_TEST(test_replication_lww_get_and_sync);

@@ -6,12 +6,59 @@ typedef struct {
     int used;
     int is_dir;
     char path[RAMFS_PATH_MAX];
-    char content[RAMFS_CONTENT_MAX];
+    char *content;      /* into g_pool, or g_empty */
+    int first, nblk;    /* contiguous block run */
     int size;
 } ramfs_node_t;
 
 static ramfs_node_t g_nodes[RAMFS_MAX_NODES];
 static int g_count;
+static char g_pool[RAMFS_BLOCKS * RAMFS_BLOCK];
+static unsigned char g_blk_used[RAMFS_BLOCKS];
+static char g_empty[1];
+
+static void blk_release(ramfs_node_t *n) {
+    int i;
+    for (i = 0; i < n->nblk; i++) g_blk_used[n->first + i] = 0;
+    n->nblk = 0; n->first = 0; n->content = g_empty; g_empty[0] = 0;
+}
+int ramfs_free_blocks(void) {
+    int i, c = 0;
+    for (i = 0; i < RAMFS_BLOCKS; i++) if (!g_blk_used[i]) c++;
+    return c;
+}
+/* Sets a file's content: in place when the run is big enough, else a new
+ * contiguous run (first fit) then the old run is released. len is capped
+ * at RAMFS_FILE_MAX - 1 like the former single-buffer cap. */
+static int set_content(ramfs_node_t *n, const char *data, int len) {
+    int need, i, run = 0, start = -1;
+    if (len < 0) len = 0;
+    if (len > RAMFS_FILE_MAX - 1) len = RAMFS_FILE_MAX - 1;
+    need = (len + 1 + RAMFS_BLOCK - 1) / RAMFS_BLOCK;
+    if (n->nblk >= need) {
+        char *dst = g_pool + n->first * RAMFS_BLOCK;
+        if (data && dst != data) { for (i = 0; i < len; i++) dst[i] = data[i]; }
+        dst[len] = 0;
+        for (i = need; i < n->nblk; i++) g_blk_used[n->first + i] = 0;
+        n->nblk = need; n->content = dst; n->size = len;
+        return RAMFS_OK;
+    }
+    for (i = 0; i < RAMFS_BLOCKS; i++) {
+        if (g_blk_used[i]) { run = 0; continue; }
+        if (run == 0) start = i;
+        if (++run == need) break;
+    }
+    if (run < need) return RAMFS_ERR_NOSPACE;
+    {
+        char *dst = g_pool + start * RAMFS_BLOCK;
+        if (data) for (i = 0; i < len; i++) dst[i] = data[i];
+        dst[len] = 0;
+        for (i = 0; i < need; i++) g_blk_used[start + i] = 1;
+        blk_release(n);
+        n->first = start; n->nblk = need; n->content = dst; n->size = len;
+    }
+    return RAMFS_OK;
+}
 
 static int rf_strlen(const char *s) {
     int n = 0;
@@ -49,9 +96,6 @@ static void rf_strcpy(char *d, const char *s) {
     d[i] = 0;
 }
 
-static void rf_memcpy(char *d, const char *s, int n) {
-    for (int i = 0; i < n; i++) d[i] = s[i];
-}
 
 static int rf_push_part(char parts[][64], int *n, const char *start, int len) {
     if (len <= 0) return 0;
@@ -160,7 +204,9 @@ static ramfs_node_t *alloc_node(void) {
             g_nodes[i].used = 1;
             g_nodes[i].is_dir = 0;
             g_nodes[i].path[0] = 0;
-            g_nodes[i].content[0] = 0;
+            g_nodes[i].content = g_empty;
+            g_nodes[i].first = 0;
+            g_nodes[i].nblk = 0;
             g_nodes[i].size = 0;
             g_count++;
             return &g_nodes[i];
@@ -188,10 +234,7 @@ static int add_file(const char *path, const char *text) {
     rf_strcpy(n->path, path);
     n->is_dir = 0;
     len = rf_strlen(text);
-    if (len >= RAMFS_CONTENT_MAX) len = RAMFS_CONTENT_MAX - 1;
-    rf_memcpy(n->content, text, len);
-    n->content[len] = 0;
-    n->size = len;
+    if (set_content(n, text, len) != RAMFS_OK) { n->used = 0; g_count--; return RAMFS_ERR_NOSPACE; }
     return RAMFS_OK;
 }
 
@@ -238,10 +281,13 @@ void ramfs_init(void) {
     for (i = 0; i < RAMFS_MAX_NODES; i++) {
         g_nodes[i].used = 0;
         g_nodes[i].path[0] = 0;
-        g_nodes[i].content[0] = 0;
+        g_nodes[i].content = g_empty;
+        g_nodes[i].first = 0;
+        g_nodes[i].nblk = 0;
         g_nodes[i].size = 0;
         g_nodes[i].is_dir = 0;
     }
+    for (i = 0; i < RAMFS_BLOCKS; i++) g_blk_used[i] = 0;
     g_count = 0;
 
     add_dir("/");
@@ -286,6 +332,7 @@ int ramfs_rmdir(const char *path) {
     if (!n) return RAMFS_ERR_NOTFOUND;
     if (!n->is_dir) return RAMFS_ERR_NOTDIR;
     if (has_children(path)) return RAMFS_ERR_NOTEMPTY;
+    blk_release(n);
     n->used = 0;
     g_count--;
     return RAMFS_OK;
@@ -297,6 +344,7 @@ int ramfs_rm(const char *path) {
     n = find_node(path);
     if (!n) return RAMFS_ERR_NOTFOUND;
     if (n->is_dir) return RAMFS_ERR_ISDIR;
+    blk_release(n);
     n->used = 0;
     g_count--;
     return RAMFS_OK;
@@ -306,23 +354,17 @@ int ramfs_write(const char *path, const char *data, int len) {
     ramfs_node_t *n;
     if (!path || path[0] == 0 || rf_strcmp(path, "/") == 0) return RAMFS_ERR_INVAL;
     if (len < 0) len = 0;
-    if (len >= RAMFS_CONTENT_MAX) len = RAMFS_CONTENT_MAX - 1;
     n = find_node(path);
     if (n) {
         if (n->is_dir) return RAMFS_ERR_ISDIR;
-        if (data) rf_memcpy(n->content, data, len);
-        n->content[len] = 0;
-        n->size = len;
-        return RAMFS_OK;
+        return set_content(n, data, len);
     }
     if (!parent_is_dir(path)) return RAMFS_ERR_NOTDIR;
     n = alloc_node();
     if (!n) return RAMFS_ERR_NOSPACE;
     rf_strcpy(n->path, path);
     n->is_dir = 0;
-    if (data) rf_memcpy(n->content, data, len);
-    n->content[len] = 0;
-    n->size = len;
+    if (set_content(n, data, len) != RAMFS_OK) { n->used = 0; g_count--; return RAMFS_ERR_NOSPACE; }
     return RAMFS_OK;
 }
 

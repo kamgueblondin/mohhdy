@@ -19,6 +19,9 @@
 #define OV_SNAP_NODES   64
 #define OV_SNAP_PATH    80
 #define OV_SNAP_DATA    384
+/* Multi-block files: a file larger than one node's OV_SNAP_DATA continues in
+ * extent nodes (snapshot byte 2 = 1, byte 3 = next index + 1). */
+#define OV_FILE_MAX     4096
 #define OV_SNAP_NODE    (1 + 1 + 2 + 4 + OV_SNAP_PATH + OV_SNAP_DATA)
 #define OV_SNAP_SIZE    (16 + OV_SNAP_NODES * OV_SNAP_NODE)
 
