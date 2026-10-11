@@ -73,6 +73,30 @@ int prod_baseline_add(prod_baseline_t* b, const char* path, uint32_t fnv);
 /* status of one current file: 0 same, 1 changed, 2 new (not in baseline) */
 int prod_baseline_cmp(const prod_baseline_t* b, const char* path, uint32_t fnv);
 
+typedef struct {
+    uint32_t cpu_perf_score;   /* ops per second benchmark score */
+    uint32_t mem_perf_score;   /* kib per second benchmark score */
+    uint32_t sys_perf_score;   /* syscalls per second benchmark score */
+    uint32_t io_perf_score;    /* 512-byte rw ops per second benchmark score */
+    uint32_t tuning_mode;      /* 0 = default, 1 = high throughput, 2 = low latency */
+} prod_perf_tune_t;
+
+typedef struct {
+    uint32_t mtbf_ticks;       /* estimated mean time between failures in ticks */
+    uint32_t failure_risk;     /* 0-100 percentage risk */
+    uint32_t health_score;     /* 0-100 percentage overall health */
+} prod_maint_t;
+
+typedef struct {
+    uint32_t total_tasks_executed;
+    uint32_t uptime_seconds;
+    uint32_t active_users;
+    uint32_t business_kpi_score;
+} prod_biz_metrics_t;
+
+int prod_perf_tune_eval(prod_perf_tune_t* pt, uint32_t mode);
+int prod_maint_predict(const prod_metrics_t* m, const prod_alerts_t* a, prod_maint_t* pm);
+
 #define PROD_FEEDBACK 16
 typedef struct { uint8_t rating; char text[48]; } prod_fb_t;
 typedef struct { prod_fb_t f[PROD_FEEDBACK]; int n; uint32_t total, sum; uint32_t hist[6]; } prod_feedback_t;
@@ -84,6 +108,8 @@ typedef struct { prod_use_t u[PROD_USAGE]; int n; uint32_t total, other; } prod_
 void prod_usage_hit(prod_usage_t* u, const char* name);
 /* sorts by count desc (stable for ties) */
 void prod_usage_sort(prod_usage_t* u);
+
+int prod_biz_metrics_get(const prod_usage_t* u, uint32_t uptime_ticks, prod_biz_metrics_t* bm);
 
 /* Persistence (consolidation lot): compact serialization of the in-RAM
  * state; the shell stores it on the disk-backed overlay. Metrics keep the

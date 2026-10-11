@@ -170,6 +170,30 @@ void test_state_save_load(void) {
     blob[0] ^= 1; TEST_ASSERT_EQUAL(-1, prod_state_load(&r2, blob, n));
 }
 
+void test_phase8_offline_extensions(void) {
+    prod_perf_tune_t pt;
+    prod_maint_t pm;
+    prod_biz_metrics_t bm;
+    prod_metrics_t m;
+    prod_alerts_t a;
+    prod_usage_t u;
+
+    prod_metrics_init(&m);
+    prod_alerts_init(&a);
+    memset(&u, 0, sizeof(u));
+
+    TEST_ASSERT_EQUAL(0, prod_perf_tune_eval(&pt, 1));
+    TEST_ASSERT_EQUAL(1, (int)pt.tuning_mode);
+    TEST_ASSERT_EQUAL(100000, (int)pt.cpu_perf_score);
+
+    TEST_ASSERT_EQUAL(0, prod_maint_predict(&m, &a, &pm));
+    TEST_ASSERT_EQUAL(100, (int)pm.health_score);
+    TEST_ASSERT_EQUAL(0, (int)pm.failure_risk);
+
+    TEST_ASSERT_EQUAL(0, prod_biz_metrics_get(&u, 10000, &bm));
+    TEST_ASSERT_EQUAL(100, (int)bm.uptime_seconds);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_metrics_ring_stats_and_prediction);
@@ -180,6 +204,7 @@ int main(void) {
     RUN_TEST(test_scaler_cooldown_and_bounds);
     RUN_TEST(test_baseline_feedback_usage);
     RUN_TEST(test_state_save_load);
+    RUN_TEST(test_phase8_offline_extensions);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

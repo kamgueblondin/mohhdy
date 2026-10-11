@@ -299,6 +299,25 @@ void test_bad_inputs(void) {
     TEST_ASSERT_EQUAL(1, (int)g_n[0].foreign);
 }
 
+void test_raft_and_cache(void) {
+    char rep[512];
+    setup(3, 0);
+    run(3, 300);
+    /* Trigger Raft election */
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 30);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    p2p_report(&g_n[0], &g_h[0], "raft", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p raft role leader term 2"));
+
+    /* Cache test */
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_n[0], "k1", "v1", 100, g_ticks));
+    TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_n[0], "k1", g_ticks));
+    TEST_ASSERT_NULL(p2p_cache_get(&g_n[0], "k1", g_ticks + 200)); /* expired */
+    p2p_report(&g_n[0], &g_h[0], "cache", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p cache hits 1 misses 1"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -310,6 +329,7 @@ int main(void) {
     RUN_TEST(test_rate_limit_and_stats);
     RUN_TEST(test_traffic_analysis);
     RUN_TEST(test_bad_inputs);
+    RUN_TEST(test_raft_and_cache);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
