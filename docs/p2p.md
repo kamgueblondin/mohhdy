@@ -91,3 +91,7 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
   discovery, encrypted message (hub asserts no plaintext), health, stats,
   replication, partition then sync, majority commit, link failure detection
   and relayed delivery.
+
+## Multi-hop routing (US-063, PR #127)
+
+A node relays a hello (hop byte decremented, at most 2 relays; the hello MAC is computed with the original hop value) when one of its direct neighbors does not list the hello origin, so partial links are bridged and full meshes see no extra traffic. Routes are shortest paths (BFS) over the neighbor lists carried by hellos; sealed frames are forwarded hop by hop (at most 3 relays). `p2p-route NAME` prints the next hop and hop count. Proof: `make qemu-p2p-route` (four guests in a line, cuts enforced by the hub from the first hello).

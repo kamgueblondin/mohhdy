@@ -5,14 +5,16 @@
 
 static const char* const k_types[CE_COUNT] = {
     "?", "join", "transfer", "offer", "reserve", "task", "claim", "done", "accept", "reject",
-    "rate", "propose", "vote", "profile", "redact", "ticket", "answer"
+    "rate", "propose", "vote", "profile", "redact", "ticket", "answer",
+    "auction", "bid", "close", "dispute", "ruling", "contract", "settle"
 };
 static const char* const k_reasons[] = {
     "ok", "not-joined", "insufficient-points", "unknown-ref", "capacity-full", "bad-state",
-    "not-allowed", "wrong-result", "duplicate", "no-rating-right", "bad-amount", "table-full"
+    "not-allowed", "wrong-result", "duplicate", "no-rating-right", "bad-amount", "table-full",
+    "auction-closed", "bid-too-low", "condition-false", "bad-contract", "not-arbiter"
 };
 const char* collab_type_name(int t) { return (t > 0 && t < CE_COUNT) ? k_types[t] : "?"; }
-const char* collab_reason(int r) { return (r >= 0 && r <= 11) ? k_reasons[r] : "?"; }
+const char* collab_reason(int r) { return (r >= 0 && r <= 16) ? k_reasons[r] : "?"; }
 
 static int s_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
@@ -357,6 +359,19 @@ static uint32_t g_tickets, g_answered;
 typedef struct { uint32_t origin, seq; int answered; } ticket_t;
 static ticket_t g_tick[16]; static int g_ntick;
 static int g_order[COLLAB_ENTRIES];
+/* US-094 auctions (bids escrowed, outbid refunded), US-101 disputes over a
+ * reservation (arbitrated by the other members), US-099 contracts. */
+typedef struct { uint32_t seller, seq, reserve, high, bidder; int closed; } auction_t;
+typedef struct { uint32_t buyer, seq, owner, price; int disputed; } resv_t;
+typedef struct { uint32_t buyer, seq; int res; uint32_t yes, no; uint32_t voters[COLLAB_NODES]; int nv, state; } dispute_t; /* 0 open 1 refunded 2 denied */
+typedef struct { uint32_t payer, seq, payee, amount; int state; } contract_t; /* 0 open 1 settled 2 cancelled */
+static auction_t g_auc[8]; static int g_nauc;
+static resv_t g_res[24]; static int g_nres;
+static dispute_t g_dis[8]; static int g_ndis;
+static contract_t g_con[8]; static int g_ncon;
+static collab_cond_fn g_cond;
+static const collab_t* g_cur;           /* ledger being folded (contract source text) */
+void collab_set_cond(collab_cond_fn fn) { g_cond = fn; }
 
 static collab_account_t* acct(collab_state_t* s, uint32_t id, int create) {
     int i;
@@ -442,6 +457,7 @@ static int apply(collab_state_t* s, const collab_entry_t* e) {
         if (!p) return 3;
         o->balance -= (int32_t)g_off[i].price; p->balance += (int32_t)g_off[i].price; g_off[i].used++;
         add_right(e->origin, e->peer);
+        if (g_nres < 24) { g_res[g_nres].buyer = e->origin; g_res[g_nres].seq = e->seq; g_res[g_nres].owner = e->peer; g_res[g_nres].price = g_off[i].price; g_res[g_nres].disputed = 0; g_nres++; }
         return 0;
     case CE_TASK: {
         uint32_t r;
@@ -487,6 +503,91 @@ static int apply(collab_state_t* s, const collab_entry_t* e) {
         } else {
             o->balance += (int32_t)t->reward; t->state = 5;
         }
+        return 0;
+    }
+    case CE_AUCTION:
+        if (!e->text[0] || e->amount > 1000000U) return 10;
+        if (g_nauc >= 8) return 11;
+        g_auc[g_nauc].seller = e->origin; g_auc[g_nauc].seq = e->seq; g_auc[g_nauc].reserve = e->amount;
+        g_auc[g_nauc].high = 0; g_auc[g_nauc].bidder = 0; g_auc[g_nauc].closed = 0; g_nauc++;
+        return 0;
+    case CE_BID:
+        for (i = 0; i < g_nauc; i++) if (g_auc[i].seller == e->peer && g_auc[i].seq == e->ref) break;
+        if (i == g_nauc) return 3;
+        if (g_auc[i].closed) return 12;
+        if (e->origin == g_auc[i].seller) return 6;
+        if (e->amount > 1000000U || e->amount < g_auc[i].reserve || e->amount <= g_auc[i].high) return 13;
+        if (o->balance < (int32_t)e->amount) return 2;
+        o->balance -= (int32_t)e->amount;                       /* escrow */
+        if (g_auc[i].bidder) { p = acct(s, g_auc[i].bidder, 0); if (p) p->balance += (int32_t)g_auc[i].high; }
+        g_auc[i].high = e->amount; g_auc[i].bidder = e->origin;
+        return 0;
+    case CE_CLOSE:
+        for (i = 0; i < g_nauc; i++) if (g_auc[i].seller == e->origin && g_auc[i].seq == e->ref) break;
+        if (i == g_nauc) return 3;
+        if (g_auc[i].closed) return 12;
+        g_auc[i].closed = 1;
+        if (g_auc[i].bidder) { o->balance += (int32_t)g_auc[i].high; add_right(e->origin, g_auc[i].bidder); }
+        return 0;
+    case CE_DISPUTE:
+        for (i = 0; i < g_nres; i++) if (g_res[i].buyer == e->origin && g_res[i].seq == e->ref) break;
+        if (i == g_nres) return 3;
+        if (g_res[i].disputed) return 8;
+        if (g_ndis >= 8) return 11;
+        g_res[i].disputed = 1;
+        mzero(&g_dis[g_ndis], (int)sizeof(g_dis[0]));
+        g_dis[g_ndis].buyer = e->origin; g_dis[g_ndis].seq = e->seq; g_dis[g_ndis].res = i; g_ndis++;
+        return 0;
+    case CE_RULING: {
+        dispute_t* d = 0; resv_t* rv; uint32_t eligible = 0; int v;
+        for (i = 0; i < g_ndis; i++) if (g_dis[i].buyer == e->peer && g_dis[i].seq == e->ref) d = &g_dis[i];
+        if (!d) return 3;
+        if (d->state) return 5;
+        rv = &g_res[d->res];
+        if (e->origin == rv->buyer || e->origin == rv->owner) return 16;
+        for (v = 0; v < d->nv; v++) if (d->voters[v] == e->origin) return 8;
+        if (d->nv >= COLLAB_NODES) return 11;
+        d->voters[d->nv++] = e->origin;
+        if (e->amount) d->yes++; else d->no++;
+        for (v = 0; v < s->nacc; v++) if (s->acc[v].joined && s->acc[v].id != rv->buyer && s->acc[v].id != rv->owner) eligible++;
+        if (d->yes * 2U > eligible) {
+            collab_account_t* own = acct(s, rv->owner, 0); collab_account_t* buy = acct(s, rv->buyer, 0);
+            if (own && buy) { own->balance -= (int32_t)rv->price; buy->balance += (int32_t)rv->price; }
+            d->state = 1;
+        } else if (d->no * 2U >= eligible) d->state = 2;
+        return 0;
+    }
+    case CE_CONTRACT:
+        p = acct(s, e->peer, 0);
+        if (!p || !p->joined || p == o) return 6;
+        if (e->amount == 0 || e->amount > 1000000U) return 10;
+        if (!e->text[0] || !g_cond || g_cond(e->text, 0, 0U, 0U) < 0) return 15;
+        if (o->balance < (int32_t)e->amount) return 2;
+        if (g_ncon >= 8) return 11;
+        o->balance -= (int32_t)e->amount;                       /* escrow */
+        g_con[g_ncon].payer = e->origin; g_con[g_ncon].seq = e->seq; g_con[g_ncon].payee = e->peer;
+        g_con[g_ncon].amount = e->amount; g_con[g_ncon].state = 0; g_ncon++;
+        return 0;
+    case CE_SETTLE: {
+        contract_t* k = 0; const collab_entry_t* src = 0; int r, t; uint32_t paid = 0, rep10;
+        for (i = 0; i < g_ncon; i++) if (g_con[i].payer == e->peer && g_con[i].seq == e->ref) k = &g_con[i];
+        if (!k) return 3;
+        if (k->state) return 5;
+        for (i = 0; i < g_cur->n; i++) if (g_cur->e[i].origin == k->payer && g_cur->e[i].seq == k->seq) src = &g_cur->e[i];
+        p = acct(s, k->payee, 0);
+        if (!src || !p || !g_cond) return 15;
+        for (t = 0; t < g_ntask; t++) if (g_task[t].state == 4 && g_task[t].worker == k->payee) paid++;
+        rep10 = p->ratings ? p->rating_sum * 10U / p->ratings : 0U;
+        r = g_cond(src->text, p->balance, rep10, paid);
+        if (r < 0) return 15;
+        if (e->amount == 1) {                                    /* cancel: payer only, while false */
+            if (e->origin != k->payer) return 6;
+            if (r) return 5;
+            o->balance += (int32_t)k->amount; k->state = 2;
+            return 0;
+        }
+        if (!r) return 14;
+        p->balance += (int32_t)k->amount; k->state = 1;
         return 0;
     }
     case CE_RATE:
@@ -547,6 +648,7 @@ void collab_fold(collab_t* c, collab_state_t* s) {
     int i, j;
     mzero(s, (int)sizeof(*s));
     g_noff = g_ntask = g_nprop = g_nright = g_nrate = g_ntick = 0; g_tickets = g_answered = 0;
+    g_nauc = g_nres = g_ndis = g_ncon = 0; g_cur = c;
     for (i = 0; i < c->n; i++) g_order[i] = i;
     for (i = 1; i < c->n; i++) { /* insertion sort, canonical order */
         int k = g_order[i];
@@ -634,6 +736,34 @@ int collab_report(collab_t* c, const collab_host_t* h, const char* what, uint32_
             s_cat(out, g_prop[i].yes * 2U > m ? " status passed\n" : g_prop[i].no * 2U >= m ? " status rejected\n" : " status open\n", cap);
         }
         s_cat(out, "collab votes ok ", cap); cat_u(out, (uint32_t)g_nprop, cap); s_cat(out, "\n", cap);
+    } else if (s_eq(what, "auctions")) {
+        for (i = 0; i < g_nauc; i++) {
+            int k = find(c, g_auc[i].seller, g_auc[i].seq);
+            s_cat(out, "collab auction ", cap); s_cat(out, nm(h, g_auc[i].seller), cap); s_cat(out, "#", cap); cat_u(out, g_auc[i].seq, cap);
+            s_cat(out, " '", cap); s_cat(out, k >= 0 ? c->e[k].text : "?", cap); s_cat(out, "' reserve ", cap); cat_u(out, g_auc[i].reserve, cap);
+            s_cat(out, " high ", cap); cat_u(out, g_auc[i].high, cap);
+            s_cat(out, " bidder ", cap); s_cat(out, g_auc[i].bidder ? nm(h, g_auc[i].bidder) : "none", cap);
+            s_cat(out, g_auc[i].closed ? (g_auc[i].bidder ? " state sold\n" : " state unsold\n") : " state open\n", cap);
+        }
+        s_cat(out, "collab auctions ok ", cap); cat_u(out, (uint32_t)g_nauc, cap); s_cat(out, "\n", cap);
+    } else if (s_eq(what, "disputes")) {
+        for (i = 0; i < g_ndis; i++) {
+            resv_t* rv = &g_res[g_dis[i].res];
+            s_cat(out, "collab dispute ", cap); s_cat(out, nm(h, g_dis[i].buyer), cap); s_cat(out, "#", cap); cat_u(out, g_dis[i].seq, cap);
+            s_cat(out, " against ", cap); s_cat(out, nm(h, rv->owner), cap); s_cat(out, " price ", cap); cat_u(out, rv->price, cap);
+            s_cat(out, " refund ", cap); cat_u(out, g_dis[i].yes, cap); s_cat(out, " deny ", cap); cat_u(out, g_dis[i].no, cap);
+            s_cat(out, g_dis[i].state == 1 ? " state refunded\n" : g_dis[i].state == 2 ? " state denied\n" : " state open\n", cap);
+        }
+        s_cat(out, "collab disputes ok ", cap); cat_u(out, (uint32_t)g_ndis, cap); s_cat(out, "\n", cap);
+    } else if (s_eq(what, "contracts")) {
+        for (i = 0; i < g_ncon; i++) {
+            int k = find(c, g_con[i].payer, g_con[i].seq);
+            s_cat(out, "collab contract ", cap); s_cat(out, nm(h, g_con[i].payer), cap); s_cat(out, "#", cap); cat_u(out, g_con[i].seq, cap);
+            s_cat(out, " pays ", cap); s_cat(out, nm(h, g_con[i].payee), cap); s_cat(out, " ", cap); cat_u(out, g_con[i].amount, cap);
+            s_cat(out, " when '", cap); s_cat(out, k >= 0 ? c->e[k].text : "?", cap);
+            s_cat(out, g_con[i].state == 1 ? "' state settled\n" : g_con[i].state == 2 ? "' state cancelled\n" : "' state open\n", cap);
+        }
+        s_cat(out, "collab contracts ok ", cap); cat_u(out, (uint32_t)g_ncon, cap); s_cat(out, "\n", cap);
     } else if (s_eq(what, "profile")) {
         const collab_account_t* a = collab_account(&st, arg);
         s_cat(out, "collab profile ", cap); s_cat(out, nm(h, arg), cap); s_cat(out, " shared ", cap);
@@ -687,4 +817,56 @@ int collab_profile_set(collab_t* c, const char* key, const char* value, int shar
 int collab_forget(collab_t* c, const collab_host_t* h) {
     mzero(c->profile, (int)sizeof(c->profile));
     return collab_emit(c, h, CE_REDACT, 0, 0, 0, 0, "");
+}
+
+/* ---------------------------------------------------------- US-094 search */
+static int contains_ci(const char* text, const char* w) {
+    int i, j, wl = s_len(w);
+    if (wl == 0 || (w[0] == '*' && w[1] == 0)) return 1;
+    for (i = 0; text[i]; i++) {
+        for (j = 0; j < wl && text[i + j]; j++) {
+            char a = text[i + j], b = w[j];
+            if (a >= 'A' && a <= 'Z') a = (char)(a + 32);
+            if (b >= 'A' && b <= 'Z') b = (char)(b + 32);
+            if (a != b) break;
+        }
+        if (j == wl) return 1;
+    }
+    return 0;
+}
+int collab_search(collab_t* c, const collab_host_t* h, const char* word, uint32_t max_price, char* out, int cap) {
+    static collab_state_t st;
+    struct { uint32_t price; int kind, idx; } hit[24];
+    int nh = 0, i, j;
+    collab_fold(c, &st);
+    out[0] = 0;
+    for (i = 0; i < g_noff && nh < 24; i++) {
+        int k = find(c, g_off[i].owner, g_off[i].seq);
+        if (k < 0 || g_off[i].used >= g_off[i].cap || !contains_ci(c->e[k].text, word)) continue;
+        if (max_price && g_off[i].price > max_price) continue;
+        hit[nh].price = g_off[i].price; hit[nh].kind = 0; hit[nh].idx = i; nh++;
+    }
+    for (i = 0; i < g_nauc && nh < 24; i++) {
+        int k = find(c, g_auc[i].seller, g_auc[i].seq);
+        uint32_t pr = g_auc[i].high ? g_auc[i].high + 1U : g_auc[i].reserve;
+        if (k < 0 || g_auc[i].closed || !contains_ci(c->e[k].text, word)) continue;
+        if (max_price && pr > max_price) continue;
+        hit[nh].price = pr; hit[nh].kind = 1; hit[nh].idx = i; nh++;
+    }
+    for (i = 1; i < nh; i++) { /* stable insertion sort by price */
+        uint32_t p = hit[i].price; int kd = hit[i].kind, ix = hit[i].idx;
+        for (j = i - 1; j >= 0 && hit[j].price > p; j--) hit[j + 1] = hit[j];
+        hit[j + 1].price = p; hit[j + 1].kind = kd; hit[j + 1].idx = ix;
+    }
+    for (i = 0; i < nh; i++) {
+        uint32_t owner = hit[i].kind ? g_auc[hit[i].idx].seller : g_off[hit[i].idx].owner;
+        uint32_t seq = hit[i].kind ? g_auc[hit[i].idx].seq : g_off[hit[i].idx].seq;
+        int k = find(c, owner, seq);
+        s_cat(out, hit[i].kind ? "collab hit auction " : "collab hit offer ", cap);
+        s_cat(out, nm(h, owner), cap); s_cat(out, "#", cap); cat_u(out, seq, cap);
+        s_cat(out, " '", cap); s_cat(out, k >= 0 ? c->e[k].text : "?", cap);
+        s_cat(out, hit[i].kind ? "' min-bid " : "' price ", cap); cat_u(out, hit[i].price, cap); s_cat(out, "\n", cap);
+    }
+    s_cat(out, "collab search ok hits ", cap); cat_u(out, (uint32_t)nh, cap); s_cat(out, "\n", cap);
+    return nh;
 }

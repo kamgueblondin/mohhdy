@@ -30,7 +30,10 @@ GPT2_RAM ?= 1024M
 
 # Variables pour la création de l'initrd
 USER_SHELL := userspace/shell
-INITRD_DIR := initrd_content
+# The initrd is staged under build/ (seeded from the tracked initrd_content/)
+# so a build never writes into tracked files.
+INITRD_SEED := initrd_content
+INITRD_DIR := build/initrd_root
 BIN_DEST_DIR := $(INITRD_DIR)/bin
 
 # Liste des fichiers objets - MISE À JOUR avec tous les nouveaux fichiers
@@ -52,7 +55,7 @@ all: $(OS_IMAGE) pack-initrd disk
 	@echo "Système prêt pour exécution avec: make run"
 
 # Paquets hôte (Debian/Ubuntu) - même ensemble que .github/workflows/ci.yml
-.PHONY: qemu-desktop-partials qemu-fleet qemu-persistence qemu-platform qemu-production qemu-collab qemu-p2p deps check-build-deps
+.PHONY: qemu-desktop-partials qemu-fleet qemu-persistence qemu-platform qemu-production qemu-collab qemu-p2p qemu-p2p-route deps check-build-deps
 deps:
 	@bash scripts/bootstrap-dev.sh
 
@@ -495,6 +498,7 @@ userspace-all:
 # Règle pour empaqueter l'initrd automatiquement
 pack-initrd: userspace-all
 	@echo "[mkinitrd] Création de l'initrd MOHHDY v7..."
+	@rm -rf $(INITRD_DIR) && mkdir -p $(INITRD_DIR) && cp -R $(INITRD_SEED)/. $(INITRD_DIR)/
 	@mkdir -p $(BIN_DEST_DIR) $(INITRD_DIR)/models
 	@echo "Ceci est un fichier de test depuis l'initrd !" > $(INITRD_DIR)/test.txt
 	@echo "Un autre fichier de demonstration." > $(INITRD_DIR)/hello.txt
@@ -1067,6 +1071,9 @@ qemu-collab: $(OS_IMAGE) pack-initrd
 qemu-p2p: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_p2p.py
 
+qemu-p2p-route: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_p2p_route.py
+
 qemu-platform: $(OS_IMAGE) pack-initrd
 	@python3 tests/integration/test_qemu_platform.py
 
@@ -1135,3 +1142,10 @@ gguf-kvm-benchmark:
 
 gguf-kvm-benchmark-check:
 	@python3 tests/scripts/test_benchmark_qemu_gguf_kvm_latency.py
+
+# Guardrail: a build must not modify or create tracked/unignored files.
+.PHONY: tree-clean-check
+tree-clean-check:
+	@dirty="$$(git status --porcelain --untracked-files=all)"; \
+	if [ -n "$$dirty" ]; then echo "tree-clean-check FAIL: the build dirtied the tree:"; echo "$$dirty"; exit 1; fi; \
+	echo "tree-clean-check OK: build left the tree clean"

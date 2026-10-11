@@ -175,17 +175,50 @@ static void kx_pump(p2p_node_t* n, const p2p_host_t* h) {
     }
 }
 
-/* Route: direct if the peer is up, else through an up neighbor that lists it. */
-static uint32_t route(p2p_node_t* n, p2p_peer_t* p, const uint8_t** ip) {
-    int i, j;
+/* Route (US-063): direct if the peer is up, else the shortest path over
+ * the neighbor lists carried by hellos (direct links only), breadth first
+ * from our up neighbors. Returns the first hop id, or 0xffffffff. */
+static int fresh(p2p_node_t* n, const p2p_host_t* h, const p2p_peer_t* p) {
+    (void)n;
+    return p->used && (uint32_t)(now(h) - p->last_heard) < P2P_DOWN_TICKS;
+}
+static const p2p_host_t* g_route_host;
+static uint32_t route_hops(p2p_node_t* n, p2p_peer_t* p, const uint8_t** ip, int* hops) {
+    int first[P2P_PEERS], dist[P2P_PEERS], queue[P2P_PEERS], qh = 0, qt = 0, i, j;
     *ip = 0;
-    if (p->up && !p->blocked) { *ip = p->ip; return 0; }
+    if (hops) *hops = 0;
+    if (p->up && !p->blocked) { *ip = p->ip; if (hops) *hops = 1; return 0; }
+    for (i = 0; i < P2P_PEERS; i++) { first[i] = -1; dist[i] = 0; }
     for (i = 0; i < P2P_PEERS; i++) {
         p2p_peer_t* r = &n->peers[i];
-        if (!r->used || !r->up || r->blocked || r == p) continue;
-        for (j = 0; j < P2P_PEERS; j++) if (r->neighbors[j] == p->id) { *ip = r->ip; return r->id; }
+        if (!r->used || !r->up || r->blocked) continue;
+        first[i] = i; dist[i] = 1; queue[qt++] = i;
+    }
+    while (qh < qt) {
+        int x = queue[qh++];
+        p2p_peer_t* px = &n->peers[x];
+        if (px == p) { *ip = n->peers[first[x]].ip; if (hops) *hops = dist[x]; return n->peers[first[x]].id; }
+        if (dist[x] >= P2P_HOPS + 1) continue;
+        if (g_route_host && !fresh(n, g_route_host, px)) continue;
+        for (j = 0; j < P2P_PEERS; j++) {
+            uint32_t nid = px->neighbors[j];
+            int y;
+            if (!nid) continue;
+            for (y = 0; y < P2P_PEERS; y++) if (n->peers[y].used && n->peers[y].id == nid) break;
+            if (y == P2P_PEERS || first[y] >= 0 || n->peers[y].id == n->id) continue;
+            first[y] = first[x]; dist[y] = dist[x] + 1; queue[qt++] = y;
+        }
     }
     return 0xffffffffU;
+}
+static uint32_t route(p2p_node_t* n, p2p_peer_t* p, const uint8_t** ip) { return route_hops(n, p, ip, 0); }
+uint32_t p2p_route(p2p_node_t* n, uint32_t dst, int* hops) {
+    const uint8_t* ip; p2p_peer_t* p;
+    int i;
+    for (i = 0; i < P2P_PEERS; i++) if (n->peers[i].used && n->peers[i].id == dst) break;
+    if (i == P2P_PEERS) return 0xffffffffU;
+    p = &n->peers[i];
+    return route_hops(n, p, &ip, hops);
 }
 
 static int seal_send(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inner, const uint8_t* body, int blen) {
@@ -398,30 +431,34 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
 }
 
 static int propose_send(p2p_node_t* n, const p2p_host_t* h, int only_missing);
-static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int len, const uint8_t mac[6]) {
+static int on_hello(p2p_node_t* n, const p2p_host_t* h, uint8_t* b, int len, const uint8_t mac[6]) {
     uint8_t tag[32];
     p2p_peer_t* p;
     uint32_t src = get32(b + 8);
-    int cnt, i, body = HDR + P2P_NAME_MAX + 4 + 32 + 1;
+    int hops, direct, cnt, i, body = HDR + P2P_NAME_MAX + 4 + 32 + 1;
     char line[96];
-    if (len < body + 16) { n->bad_hello++; return; }
+    if (len < body + 16) { n->bad_hello++; return 0; }
     cnt = b[body - 1];
-    if (cnt > P2P_PEERS || len != body + cnt * 4 + 16) { n->bad_hello++; return; }
+    if (cnt > P2P_PEERS || len != body + cnt * 4 + 16) { n->bad_hello++; return 0; }
+    /* relays decrement the hop byte: authenticate with its original value */
+    hops = b[5]; b[5] = P2P_HOPS;
     hmac_sha256(n->netkey, 32, b, (uint32_t)(body + cnt * 4), tag);
-    if (!meq(tag, b + body + cnt * 4, 16)) { n->bad_hello++; return; }
+    b[5] = (uint8_t)hops;
+    if (!meq(tag, b + body + cnt * 4, 16)) { n->bad_hello++; return 0; }
+    direct = hops == P2P_HOPS;
     p = by_id(n, src);
     if (!p) {
         for (i = 0; i < P2P_PEERS && n->peers[i].used; i++) {}
-        if (i == P2P_PEERS) return;
+        if (i == P2P_PEERS) return 0;
         p = &n->peers[i];
         mzero(p, (int)sizeof(*p));
         p->used = 1; p->id = src;
     }
-    if (p->blocked) return;
+    if (p->blocked && direct) return 0;
     s_copy(p->name, (const char*)b + HDR, P2P_NAME_MAX);
     p->name[P2P_NAME_MAX - 1] = 0;
     mcopy(p->ip, b + HDR + P2P_NAME_MAX, 4);
-    mcopy(p->mac, mac, 6);
+    if (direct) mcopy(p->mac, mac, 6);
     if ((!p->keyed && !p->kx) || !meq(p->pub, b + HDR + P2P_NAME_MAX + 4, 32)) {
         mcopy(p->pub, b + HDR + P2P_NAME_MAX + 4, 32);
         /* new or changed key: agree step-wise from p2p_tick */
@@ -429,10 +466,13 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
         if (n->kx_peer == (int)(p - n->peers)) n->kx_peer = -1;
     }
     for (i = 0; i < P2P_PEERS; i++) p->neighbors[i] = i < cnt ? get32(b + body + i * 4) : 0;
+    p->last_heard = now(h);
+    (void)line;
+    if (!direct) return 1;
     p->last_seen = now(h);
     p->via = 0;
-    (void)line;
     if (!p->up && p->keyed) announce_up(n, h, p);
+    return 1;
 }
 static void announce_up(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
     char line[96];
@@ -457,15 +497,34 @@ static void on_datagram(p2p_node_t* n, const p2p_host_t* h, uint8_t* b, int len,
         if (n->peers[i].used && n->peers[i].blocked && meq(n->peers[i].mac, mac, 6)) return;
     if (seen(n, src, id)) { n->dup++; return; }
     remember(n, src, id);
-    if (b[4] == P2P_T_HELLO) { n->rx_type[P2P_T_HELLO]++; on_hello(n, h, b, len, mac); return; }
+    if (b[4] == P2P_T_HELLO) {
+        n->rx_type[P2P_T_HELLO]++;
+        if (on_hello(n, h, b, len, mac) && b[5] > 1) {
+            /* US-063: relay a hello when one of our direct neighbors does
+             * not list its origin (a partial link), once (dedup by id) */
+            int need = 0;
+            for (i = 0; i < P2P_PEERS && !need; i++) {
+                p2p_peer_t* y = &n->peers[i];
+                int k, has = 0;
+                if (!y->used || !y->up || y->blocked || y->id == src || meq(y->mac, mac, 6)) continue;
+                for (k = 0; k < P2P_PEERS; k++) if (y->neighbors[k] == src) has = 1;
+                if (!has) need = 1;
+            }
+            if (need) { b[5]--; n->hello_relayed++; (void)emit(n, h, 0, b, len); }
+        }
+        return;
+    }
     if (b[4] != P2P_T_SEALED) { n->foreign++; return; }
     if (dst != n->id) {
         /* Relay (US-063): forward verbatim when we are the chosen next hop. */
         p2p_peer_t* d = by_id(n, dst);
-        if (via == n->id && b[5] > 0 && d && d->up && !d->blocked) {
-            b[5]--; put32(b + 20, 0);
+        if (via == n->id && b[5] > 0 && d) {
+            const uint8_t* nip;
+            uint32_t next = route(n, d, &nip);
+            if (next == 0xffffffffU || next == src) return;
+            b[5]--; put32(b + 20, next);
             n->relayed++;
-            (void)emit(n, h, d->ip, b, len);
+            (void)emit(n, h, nip, b, len);
         }
         return;
     }
@@ -540,6 +599,25 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
         on_datagram(n, h, b, got, mac);
     }
     kx_pump(n, h);
+    g_route_host = h;
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        int hops;
+        const uint8_t* rip;
+        uint32_t nx;
+        if (!p->used || p->up || !p->keyed) continue;
+        nx = route_hops(n, p, &rip, &hops);
+        if (nx == 0xffffffffU || nx == 0 || p->reach_said == (nx ^ (uint32_t)hops)) continue;
+        {
+            char line[96];
+            p2p_peer_t* r = by_id(n, nx);
+            p->reach_said = nx ^ (uint32_t)hops;
+            line[0] = 0;
+            s_cat(line, "p2p peer ", 96); s_cat(line, p->name, 96); s_cat(line, " reachable hops ", 96); cat_u(line, (uint32_t)hops, 96);
+            s_cat(line, " via ", 96); s_cat(line, r ? r->name : "?", 96);
+            say(h, line);
+        }
+    }
     t = now(h);
     if (t - n->last_hello >= P2P_HELLO_TICKS) { n->last_hello = t; send_hello(n, h); }
     for (i = 0; i < P2P_PEERS; i++) {

@@ -131,6 +131,34 @@ def main():
         wait_log(a, "collab got ticket from gamma seq 8", 60)
         cmd(a, "collab-answer gamma 8 use collab-reserve", "collab-answer ok seq 7")
         say("reputation, governance, privacy, support done (%.0fs)" % (time.monotonic() - t0))
+        # US-094 auction with escrowed bids + search.
+        cmd(a, "collab-auction lamp 5", "collab-auction ok seq 8")
+        wait_log(b, "collab got auction from alpha seq 8", 60)
+        wait_log(c, "collab got auction from alpha seq 8", 60)
+        cmd(b, "collab-bid alpha 8 12", "collab-bid ok seq 9")
+        wait_log(c, "collab got bid from beta seq 9", 60)
+        cmd(c, "collab-bid alpha 8 15", "collab-bid ok seq 9")
+        wait_log(b, "collab got bid from gamma seq 9", 60)
+        wait_log(a, "collab got bid from gamma seq 9", 60)
+        cmd(b, "collab-search lamp", "collab hit auction alpha#8 'lamp' min-bid 16")
+        cmd(b, "collab-search gpu 20", "collab search ok hits 0")  # capacity 1 used
+        cmd(a, "collab-close 8", "collab-close ok seq 9")
+        # US-101 dispute: beta contests its gpu-slot booking, gamma rules.
+        cmd(b, "collab-dispute 2", "collab-dispute ok seq 10")
+        wait_log(c, "collab got dispute from beta seq 10", 60)
+        cmd(c, "collab-rule beta 10 refund", "collab-rule ok seq 10")
+        # US-099 user-defined contract: PromptMessage condition on reputation.
+        cmd(a, "collab-contract gamma 10 $rep >= 50", "collab-contract ok seq 10")
+        wait_log(c, "collab got contract from alpha seq 10", 60)
+        cmd(c, "collab-settle alpha 10", "collab-settle ok seq 11")
+        say("auction, search, dispute, contract done (%.0fs)" % (time.monotonic() - t0))
+        # US-112 security scan on a live P2P node: encrypted UDP port, signing
+        # key present but not encrypted at rest (no passphrase) -> warn.
+        start = cmd(a, "prod-sec-scan", "prod-sec-scan ok tasks ")
+        for needle in ("prod-sec info open port udp/7700 p2p encrypted",
+                       "prod-sec warn weak key: signing key not encrypted at rest", "verdict warn"):
+            if needle not in log(a, start):
+                raise RuntimeError("security scan missing %r: %s" % (needle, log(a, start)[-600:]))
 
         # US-093 per-node signatures: gamma forges alpha -> gamma transfers.
         # A forged datagram can be lost like any other, so each forgery is
@@ -138,7 +166,7 @@ def main():
         for node in NODES:
             cmd(node, "collab-keys", "collab-keys ok known 3 rejected 0 signing on")
         for mode, reason in (("victimkey", "bad-signature"), ("ownkey", "key-mismatch"), ("unsigned", "unsigned")):
-            needle = "collab reject %s transfer claimed from alpha seq 8 via gamma" % reason
+            needle = "collab reject %s transfer claimed from alpha seq 11 via gamma" % reason
             for attempt in range(4):
                 start_a, start_b = len(log(a)), len(log(b))
                 cmd(c, "collab-forge alpha 50 %s" % mode, "collab-forge sent %s to " % mode)
@@ -160,7 +188,7 @@ def main():
 
         # Anti-entropy then identical audit (US-098) on the three guests. A
         # peer can flap down for a moment under load (heartbeat), so sync is
-        # repeated until the three ledgers hold all 23 entries.
+        # repeated until the three ledgers hold all 31 entries.
         digests = []
         for attempt in range(5):
             for node in NODES:
@@ -175,9 +203,9 @@ def main():
                     raise RuntimeError("audit line missing on %s" % node["label"])
                 digests.append((match.group(1), match.group(4)))
             say("audit round %d: %r" % (attempt + 1, digests))
-            if all(d[0] == "23" for d in digests):
+            if all(d[0] == "31" for d in digests):
                 break
-        if any(d[0] != "23" for d in digests) or len(set(digests)) != 1:
+        if any(d[0] != "31" for d in digests) or len(set(digests)) != 1:
             raise RuntimeError("ledger diverged: %r" % digests)
         digests = [d[1] for d in digests]
         audit = log(a)
@@ -185,8 +213,8 @@ def main():
             raise RuntimeError("capacity rejection missing in audit")
         start = cmd(a, "collab-balances", "collab balances ok members 3")
         out = log(a, start)
-        for needle in ("collab acct alpha balance 90 rep 4.0 ratings 1", "collab acct beta balance 90 rep none",
-                       "collab acct gamma balance 120 rep 5.0 ratings 1"):
+        for needle in ("collab acct alpha balance 85 rep 4.0 ratings 1", "collab acct beta balance 100 rep none",
+                       "collab acct gamma balance 115 rep 5.0 ratings 1"):
             if needle not in out:
                 raise RuntimeError("balance missing %r: %s" % (needle, out[-600:]))
         cmd(c, "collab-tasks", "collab tasks ok 2")
@@ -194,6 +222,9 @@ def main():
             raise RuntimeError("task states wrong: %s" % log(c)[-800:])
         cmd(c, "collab-votes", "yes 2 no 0 members 3 status passed")
         cmd(b, "collab-tickets", "collab tickets ok open 0 answered 1")
+        cmd(b, "collab-auctions", "collab auction alpha#8 'lamp' reserve 5 high 15 bidder gamma state sold")
+        cmd(a, "collab-disputes", "collab dispute beta#10 against alpha price 10 refund 1 deny 0 state refunded")
+        cmd(b, "collab-contracts", "collab contract alpha#10 pays gamma 10 when '$rep >= 50' state settled")
         if hub.p2p_plaintext:
             raise RuntimeError("plaintext seen on the wire (%d frames)" % hub.p2p_plaintext)
         say("PASS digest %s sealed=%d plaintext=0 in %.0fs" % (digests[0], hub.p2p_sealed, time.monotonic() - t0))

@@ -82,7 +82,8 @@ def wait_log(node, needle, timeout, start=0):
 
 def type_line(node, line):
     """p2p active: the shell reads keys with SYS_GETC (no SYS_GETS echo)."""
-    aliases = {" ": "spc", ".": "dot", "-": "minus", "/": "slash", "=": "equal"}
+    aliases = {" ": "spc", ".": "dot", "-": "minus", "/": "slash", "=": "equal",
+               "$": "shift-4", ">": "shift-dot", "<": "shift-comma", "'": "apostrophe"}
     for char in line:
         if node["proc"].poll() is not None:
             raise RuntimeError("QEMU %s stopped during keyboard input" % node["label"])

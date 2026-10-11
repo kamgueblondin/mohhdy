@@ -3300,6 +3300,7 @@ static void web_tick(char *log, int lmax, int *lp) {
 }
 
 int osui_web_active(void) { return g_ws.active; }
+void osui_web_info(int* port, int* tls) { *port = g_ws.active ? (int)g_ws.port : 0; *tls = g_ws.active && g_ws.tls; }
 
 int osui_web_poll(char *out, int max) {
     int p = 0;

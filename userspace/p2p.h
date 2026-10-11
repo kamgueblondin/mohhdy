@@ -24,6 +24,8 @@
 #define P2P_HZ 100U
 #define P2P_HELLO_TICKS (2U * P2P_HZ)
 #define P2P_PING_TICKS (3U * P2P_HZ)
+/* longest relay chain for hellos and sealed frames (header hop byte) */
+#define P2P_HOPS 3
 #define P2P_STALL_TICKS 300U
 #define P2P_KX_BUDGET 48      /* ~11 slices per peer, each well under 0.5 s on CI */
 #define P2P_DOWN_TICKS (10U * P2P_HZ)
@@ -60,6 +62,10 @@ typedef struct {
     uint32_t sync_at;      /* last SYNC_REQ sent by p2p_sync */
     uint8_t sync_retries;  /* re-sends left until SYNC_ITEMS arrives */
     uint32_t via;            /* 0: direct, else id of the relay node */
+    /* US-063 multi-hop: hellos relayed across partial links (hop count in
+     * the header); routes are shortest paths over the neighbor lists. */
+    uint32_t last_heard;     /* last hello, direct or relayed */
+    uint32_t reach_said;     /* announced route: next hop id ^ hops (0: none) */
     uint32_t neighbors[P2P_PEERS];
     uint32_t sent, received, auth_fail, replay, throttled, down_events;
     uint32_t bucket_tick, bucket_used;
@@ -121,6 +127,7 @@ typedef struct {
      * p2p_tick calls is reported ("p2p stall N ticks after HINT"). */
     uint32_t last_pump, stalls, worst_gap;
     const char* stall_hint;  /* set by the host: what ran before the gap */
+    uint32_t hello_relayed;
 } p2p_node_t;
 
 int p2p_up(p2p_node_t* n, const char* name, const uint8_t ip[4], const char* netkey,
@@ -144,4 +151,6 @@ const char* p2p_type_name(int type);
 int p2p_send_app(p2p_node_t* n, const p2p_host_t* h, uint32_t peer_id, const uint8_t* data, int length);
 const char* p2p_peer_name(const p2p_node_t* n, uint32_t id);
 uint32_t p2p_member_count(const p2p_node_t* n);
+/* Route to a peer: next hop id (0 direct, 0xFFFFFFFF none) and hop count. */
+uint32_t p2p_route(p2p_node_t* n, uint32_t dst, int* hops);
 #endif

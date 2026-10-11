@@ -102,6 +102,7 @@ static void report(const char* what, const char* name, int a, const char* unit, 
 static char g_pass[64];
 static int g_collab_locked; /* saved key not unlocked: never overwrite it */
 static int g_pass_set;
+int shell_persist_pass_len(void) { int n = 0; if (!g_pass_set) return 0; while (g_pass[n]) n++; return n; }
 static void entropy(uint8_t* out, int n) {
     sha256_ctx_t h; uint8_t d[32]; uint32_t lo, hi, t; int i, k;
     for (k = 0; k < n; k += 32) {

@@ -106,7 +106,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/net_p2p.c $BASE_DIR/kernel/net_ipv4_udp.c"
     fi
     if [ "$(basename "$test_file")" = "test_collab.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/collab.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c"
+        extra_src="$extra_src $BASE_DIR/userspace/collab.c $BASE_DIR/userspace/collab_cond.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c"
     fi
     if [ "$(basename "$test_file")" = "test_p2p.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"

@@ -9,6 +9,7 @@ void print_string(const char* s);
 p2p_node_t* shell_p2p_node(void);
 const p2p_host_t* shell_p2p_host(void);
 
+int shell_collab_cond(const char* cond, int32_t bal, uint32_t rep10, uint32_t paid);
 static collab_t g_c;
 static int g_joined;
 static char g_out[8192];
@@ -71,6 +72,7 @@ int shell_collab_line(const char* line) {
     const char* rest = word(line, cmd, (int)sizeof(cmd));
     p2p_node_t* node = shell_p2p_node();
     if (!node->up) { print_string(cmd); print_string(" error p2p down (p2p-up first)\n"); return 1; }
+    collab_set_cond(shell_collab_cond);
     if (s_eq(cmd, "collab-join")) {
         if (!g_joined || g_c.self != node->id) { collab_init(&g_c, node->id); g_joined = 1; }
         if (!g_c.signing) {
@@ -215,6 +217,51 @@ int shell_collab_line(const char* line) {
         print_string("collab-forge sent "); print_string(c); print_string(" to "); put_u((uint32_t)rc); print_string("\n");
         return 0;
     }
+    /* US-094 auctions + search */
+    if (s_eq(cmd, "collab-auction")) {
+        rest = word(rest, b, 48);
+        if (!a[0] || s_len(a) >= COLLAB_TEXT || num(b, &x)) return emitted(cmd, -1);
+        return emitted(cmd, collab_emit(&g_c, &g_h, CE_AUCTION, 0, 0, x, 0, a));
+    }
+    if (s_eq(cmd, "collab-bid")) {
+        rest = word(rest, b, 48); rest = word(rest, c, 48);
+        if (!(pid = peer_id(a)) || num(b, &x) || num(c, &y)) return emitted(cmd, -1);
+        return emitted(cmd, collab_emit(&g_c, &g_h, CE_BID, pid, x, y, 0, ""));
+    }
+    if (s_eq(cmd, "collab-close")) {
+        if (num(a, &x)) return emitted(cmd, -1);
+        return emitted(cmd, collab_emit(&g_c, &g_h, CE_CLOSE, node->id, x, 0, 0, ""));
+    }
+    if (s_eq(cmd, "collab-search")) {
+        rest = word(rest, b, 48);
+        x = 0;
+        if (!a[0] || (b[0] && num(b, &x))) { print_string("collab-search error usage: WORD|* [MAXPRICE]\n"); return 1; }
+        collab_search(&g_c, &g_h, a, x, g_out, (int)sizeof(g_out));
+        print_string(g_out);
+        return 0;
+    }
+    /* US-101 disputes: the buyer contests a reservation, other members rule */
+    if (s_eq(cmd, "collab-dispute")) {
+        if (num(a, &x)) return emitted(cmd, -1);
+        return emitted(cmd, collab_emit(&g_c, &g_h, CE_DISPUTE, 0, x, 0, 0, ""));
+    }
+    if (s_eq(cmd, "collab-rule")) {
+        rest = word(rest, b, 48); rest = word(rest, c, 48);
+        if (!(pid = peer_id(a)) || num(b, &x) || (!s_eq(c, "refund") && !s_eq(c, "deny"))) return emitted(cmd, -1);
+        return emitted(cmd, collab_emit(&g_c, &g_h, CE_RULING, pid, x, s_eq(c, "refund") ? 1U : 0U, 0, ""));
+    }
+    /* US-099 user-defined contracts: PromptMessage condition over bal/rep/paid */
+    if (s_eq(cmd, "collab-contract")) {
+        rest = word(rest, b, 48);
+        if (!(pid = peer_id(a)) || num(b, &x) || !*rest || s_len(rest) >= COLLAB_TEXT) return emitted(cmd, -1);
+        if (shell_collab_cond(rest, 0, 0, 0) < 0) { print_string("collab-contract error condition does not compile\n"); return 1; }
+        return emitted(cmd, collab_emit(&g_c, &g_h, CE_CONTRACT, pid, 0, x, 0, rest));
+    }
+    if (s_eq(cmd, "collab-settle")) {
+        rest = word(rest, b, 48); rest = word(rest, c, 48);
+        if (!(pid = peer_id(a)) || num(b, &x)) return emitted(cmd, -1);
+        return emitted(cmd, collab_emit(&g_c, &g_h, CE_SETTLE, pid, x, s_eq(c, "cancel") ? 1U : 0U, 0, ""));
+    }
     if (s_eq(cmd, "collab-sync")) {
         int n = collab_sync(&g_c, &g_h);
         print_string("collab-sync ok asked "); put_u(n > 0 ? (uint32_t)n : 0U); print_string("\n");
@@ -224,7 +271,8 @@ int shell_collab_line(const char* line) {
         static const char* const views[][2] = {
             {"collab-balances", "balances"}, {"collab-audit", "audit"}, {"collab-tasks", "tasks"},
             {"collab-offers", "offers"}, {"collab-votes", "votes"}, {"collab-tickets", "tickets"},
-            {"collab-export", "export"}, {0, 0}
+            {"collab-export", "export"}, {"collab-auctions", "auctions"}, {"collab-disputes", "disputes"},
+            {"collab-contracts", "contracts"}, {0, 0}
         };
         int i;
         for (i = 0; views[i][0]; i++)

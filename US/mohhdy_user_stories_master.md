@@ -136,8 +136,8 @@ Le développement MOHHDY est organisé en 8 phases principales :
 - US-075 : Création du système d'analyse de trafic intelligent
 
 Etat Phase 5 (10 octobre 2026, lot P2P ; detail et limites dans `docs/p2p.md`) :
-- Fait (preuve QEMU trois invites `make qemu-p2p` + unitaires) : US-061 protocole, US-062 decouverte, US-065 replication (LWW), US-066 chiffrement (X25519 + AES-128-GCM par paire, cle de reseau, anti-rejeu ; hub verifie l'absence de clair), US-071 synchronisation (anti-entropie apres partition), US-072 moniteur de sante (RTT, vu, erreurs, pannes).
-- Partiel : US-063 routage (un relais choisi via les voisins, QEMU ; pas de cout multi-sauts), US-064 consensus (vote majoritaire a un tour, QEMU ; pas Raft/Paxos), US-069 tolerance aux pannes (detection + reroutage + resync, QEMU ; magasin cle/valeur et identite persistes au redemarrage depuis le lot de consolidation #121), US-070 cache distribue (lecture distante, QEMU), US-068 bande passante et US-073 QoS (budget par pair, controle prioritaire ; unitaires seulement, pas adaptatif), US-075 analyse de trafic (compteurs par type + `p2p-analyze` a regles fixes avec verdict depuis #121, QEMU ; pas d'apprentissage).
+- Fait (preuve QEMU trois invites `make qemu-p2p` + unitaires) : US-061 protocole, US-062 decouverte, US-063 routage multi-sauts (PR #127, quatre invites en ligne `make qemu-p2p-route`), US-065 replication (LWW), US-066 chiffrement (X25519 + AES-128-GCM par paire, cle de reseau, anti-rejeu ; hub verifie l'absence de clair), US-071 synchronisation (anti-entropie apres partition), US-072 moniteur de sante (RTT, vu, erreurs, pannes).
+- Partiel : US-064 consensus (vote majoritaire a un tour, QEMU ; pas Raft/Paxos), US-069 tolerance aux pannes (detection + reroutage + resync, QEMU ; magasin cle/valeur et identite persistes au redemarrage depuis le lot de consolidation #121), US-070 cache distribue (lecture distante, QEMU), US-068 bande passante et US-073 QoS (budget par pair, controle prioritaire ; unitaires seulement, pas adaptatif), US-075 analyse de trafic (compteurs par type + `p2p-analyze` a regles fixes avec verdict depuis #121, QEMU ; pas d'apprentissage).
 - Non livre : US-067 gRPC, US-074 NAT traversal (segment unique sans NAT dans le labo).
 
 ### Phase 6 - Multi-Platform (US-076 à US-090)
@@ -181,8 +181,8 @@ Etat Phase 6 (10 octobre 2026, socle i386 ; detail dans `docs/platform.md`, preu
 - US-105 : Création du système de support communautaire
 
 Etat Phase 7 (10 octobre 2026, PR #119 empilee sur #117 ; detail dans `docs/collab.md`, preuve `make qemu-collab`) :
-- Fait : US-091 points, US-092 ressources partagees, US-095 reputation, US-096 taches distribuees, US-098 audit, US-100 gouvernance, US-102 donnees personnelles, US-105 support.
-- Partiel : US-093 authentification (cle de reseau, pas de signature par noeud), US-094 marche (offres payees, sans recherche ni encheres), US-099 contrats (modeles fixes), US-101 conflits (re-verification deterministe), US-103 confidentialite (champs prives locaux, redaction), US-104 conformite (export et oubli seulement).
+- Fait : US-091 points, US-092 ressources partagees, US-094 marche avec recherche et encheres (PR #127), US-099 contrats definis par l'utilisateur en PromptMessage (PR #127), US-101 litiges arbitres par les membres (PR #127), US-095 reputation, US-096 taches distribuees, US-098 audit, US-100 gouvernance, US-102 donnees personnelles, US-105 support.
+- Partiel : US-093 authentification (cle de reseau, pas de signature par noeud), US-103 confidentialite (champs prives locaux, redaction), US-104 conformite (export et oubli seulement).
 - Non livre : US-097 paiement reel (exclu).
 
 ### Phase 8 - Production (US-106 à US-120)
@@ -203,8 +203,8 @@ Etat Phase 7 (10 octobre 2026, PR #119 empilee sur #117 ; detail dans `docs/coll
 - US-120 : Création du système de roadmap évolutive
 
 Etat Phase 8 (10 octobre 2026, PR #120 ; detail dans `docs/production.md`, preuve `make qemu-production`) :
-- Fait : US-107 monitoring, US-109 retour arriere automatique, US-111 sauvegarde/restauration (RAM), US-113 analyse de journaux, US-118 retours.
-- Partiel : US-106 (mesures ; collecteur de metriques et journaux entre invites `fleet-report`/`fleet-collect`), US-108 (deploiement local, et deploiement par etapes entre invites `deploy-stage` canari -> `deploy-promote` -> `deploy-rollback` avec accuses par noeud), US-110 (decision seulement), US-112 (integrite de fichiers), US-114 (seuils), US-115 (tendance lineaire), US-116 (diagnostic), US-117 (lecons fixes), US-119 (compteurs de commandes), US-120 (resume statique).
+- Fait : US-107 monitoring, US-109 retour arriere automatique, US-110 mise a l'echelle sur la file d'execution mesuree (PR #127), US-111 sauvegarde/restauration (RAM), US-112 audit de securite (PR #127), US-113 analyse de journaux, US-114 alertes a seuil adaptatif EWMA (PR #127), US-118 retours.
+- Partiel : US-106 (mesures ; collecteur de metriques et journaux entre invites `fleet-report`/`fleet-collect`), US-108 (deploiement local, et deploiement par etapes entre invites `deploy-stage` canari -> `deploy-promote` -> `deploy-rollback` avec accuses par noeud), US-115 (tendance lineaire), US-116 (diagnostic), US-117 (lecons fixes), US-119 (compteurs de commandes), US-120 (resume statique).
 
 ## Estimation Globale
 

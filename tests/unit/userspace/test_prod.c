@@ -142,6 +142,71 @@ void test_baseline_feedback_usage(void) {
 }
 
 
+/* US-114: adaptive threshold learns a noisy baseline, fires on a spike
+ * relative to it, does not learn the anomaly, resolves when back. */
+void test_adaptive_alerts(void) {
+    static prod_alerts_t a;
+    prod_sample_t s;
+    int i, fired = 0;
+    static const uint32_t noise[12] = {50, 54, 47, 52, 49, 55, 51, 46, 53, 50, 48, 52};
+    prod_alerts_init(&a);
+    TEST_ASSERT_TRUE(prod_alert_add_adaptive(&a, "cpu", PM_CUSTOM, 0, 1) < 0);
+    TEST_ASSERT_TRUE(prod_alert_add_adaptive(&a, "cpu", PM_CUSTOM, 3, 2) >= 0);
+    memset(&s, 0, sizeof(s));
+    /* learning phase: never fires */
+    for (i = 0; i < 12; i++) { s.v[PM_CUSTOM] = noise[i]; fired += prod_alerts_eval(&a, &s); }
+    TEST_ASSERT_EQUAL(0, fired);
+    TEST_ASSERT_TRUE(a.r[0].threshold >= 55 && a.r[0].threshold <= 75);
+    s.v[PM_CUSTOM] = 58; TEST_ASSERT_EQUAL(0, prod_alerts_eval(&a, &s));     /* within band */
+    s.v[PM_CUSTOM] = 120; TEST_ASSERT_EQUAL(0, prod_alerts_eval(&a, &s));    /* 1st breach (for 2) */
+    TEST_ASSERT_EQUAL(1, prod_alerts_eval(&a, &s));                          /* fires */
+    TEST_ASSERT_EQUAL(1, a.r[0].firing);
+    for (i = 0; i < 10; i++) prod_alerts_eval(&a, &s);                       /* sustained: not learned */
+    TEST_ASSERT_EQUAL(1, a.r[0].firing);
+    TEST_ASSERT_TRUE(a.r[0].threshold < 80);
+    s.v[PM_CUSTOM] = 51; prod_alerts_eval(&a, &s);
+    TEST_ASSERT_EQUAL(1, prod_alerts_eval(&a, &s));                          /* resolved */
+    TEST_ASSERT_EQUAL(0, a.r[0].firing);
+    /* the same rule on a high baseline does not fire at 120 */
+    prod_alerts_init(&a);
+    prod_alert_add_adaptive(&a, "hi", PM_CUSTOM, 3, 1);
+    for (i = 0; i < 12; i++) { s.v[PM_CUSTOM] = 200 + noise[i]; prod_alerts_eval(&a, &s); }
+    s.v[PM_CUSTOM] = 260; TEST_ASSERT_EQUAL(0, prod_alerts_eval(&a, &s));
+    TEST_ASSERT_EQUAL(0, a.fired_total);
+}
+
+/* US-110 measured load and US-112 security scan. */
+void test_runq_and_security_scan(void) {
+    static const prod_task_t t[7] = {{1, 0, 1, 50}, {2, 1, 1, 40}, {3, 1, 1, 30}, {4, 2, 1, 90}, {5, 1, 0, 90}, {6, 1, 1, 60}, {7, 1, 1, 2}};
+    static const int ex[2] = {1, 6};
+    static prod_sec_input_t in;
+    static char out[2048];
+    int f, c, score;
+    TEST_ASSERT_EQUAL(5, prod_runq(t, 7, 0, 0, 0));
+    TEST_ASSERT_EQUAL(4, prod_runq(t, 7, 0, 0, 10));   /* task 7 only yields */
+    TEST_ASSERT_EQUAL(2, prod_runq(t, 7, ex, 2, 10));
+    memset(&in, 0, sizeof(in));
+    strcpy(in.task[0], "shell"); strcpy(in.task[1], "networker"); in.ntask = 2;
+    in.port[0].port = 7700; in.port[0].udp = 1; in.port[0].encrypted = 1; strcpy(in.port[0].what, "p2p"); in.nport = 1;
+    in.netkey_len = 20; in.pass_len = 16; in.signing_key = 1; in.key_at_rest_encrypted = 1;
+    out[0] = 0; score = prod_sec_scan(&in, out, sizeof(out), &f, &c);
+    TEST_ASSERT_EQUAL(100, score); TEST_ASSERT_EQUAL(0, f);
+    TEST_ASSERT_NOT_NULL(strstr(out, "prod-sec info open port udp/7700 p2p encrypted"));
+    strcpy(in.task[2], "/bin/atarogue"); strcpy(in.task[3], "mystery"); in.ntask = 4;
+    in.port[1].port = 8080; strcpy(in.port[1].what, "web"); in.nport = 2;
+    in.netkey_default = 1; in.pass_len = 0; in.key_at_rest_encrypted = 0;
+    out[0] = 0; score = prod_sec_scan(&in, out, sizeof(out), &f, &c);
+    TEST_ASSERT_EQUAL(5, f); TEST_ASSERT_EQUAL(2, c); TEST_ASSERT_EQUAL(0, score);
+    TEST_ASSERT_NOT_NULL(strstr(out, "prod-sec critical capability test/rogue binary running: /bin/atarogue"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "prod-sec warn capability unknown task: mystery"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "prod-sec warn port without encryption: tcp/8080 web"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "prod-sec critical weak key: default P2P network key"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "prod-sec warn weak key: signing key not encrypted at rest"));
+    in.netkey_default = 0; in.netkey_len = 8; in.pass_len = 6; in.key_at_rest_encrypted = 1; in.ntask = 2; in.nport = 1;
+    out[0] = 0; score = prod_sec_scan(&in, out, sizeof(out), &f, &c);
+    TEST_ASSERT_EQUAL(2, f); TEST_ASSERT_EQUAL(0, c); TEST_ASSERT_EQUAL(70, score);
+}
+
 void test_state_save_load(void) {
     static prod_metrics_t m, m2; static prod_alerts_t a, a2; static prod_archive_t ar[2], ar2[2]; static char dir[2][64], dir2[2][64];
     static prod_feedback_t fb, fb2; static uint8_t blob[65536];
@@ -180,6 +245,8 @@ int main(void) {
     RUN_TEST(test_scaler_cooldown_and_bounds);
     RUN_TEST(test_baseline_feedback_usage);
     RUN_TEST(test_state_save_load);
+    RUN_TEST(test_adaptive_alerts);
+    RUN_TEST(test_runq_and_security_scan);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

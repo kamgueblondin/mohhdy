@@ -116,3 +116,9 @@ manifest entry checksum and `TARGET/health` == `ok`; on failure restore
 | US-118 continuous feedback | done | ratings and comments with summary; RAM only |
 | US-119 business metrics | partial | command usage counters |
 | US-120 evolving roadmap | partial | static roadmap summary command |
+
+## Adaptive alerts, measured autoscaling, security scan (PR #127)
+
+- US-114: `prod-alert-adapt NAME METRIC K [FOR]`: EWMA baseline (alpha 1/8) and EWMA absolute deviation; after 8 learning samples the rule fires above baseline + K * max(deviation, 5%); breaching samples are not learned.
+- US-110: `prod-scale-auto STEPS` measures the run queue once per second: running/ready user tasks that consumed at least 10 ticks of CPU in the 1 s window (tasks that only yield are not load), excluding the shell and the worker pool, and drives the worker pool; `prod-load start N|stop` creates busy `spin` tasks. No dedicated AI request queue counter: an AI request counts when its task is runnable.
+- US-112: `prod-sec-scan`: unknown or test/rogue tasks, open ports (P2P UDP 7700, web-serve port) and whether they are encrypted, default/short P2P network key, signing key not encrypted at rest, short passphrase. Score 0..100 and verdict ok/warn/critical.
