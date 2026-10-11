@@ -349,6 +349,27 @@ void test_routing_grpc_and_stun(void) {
     TEST_ASSERT_NOT_NULL(strstr(g_out[1], "p2p nat punch from alpha pinhole opened"));
 }
 
+void test_p2p_consolidation_and_fallback(void) {
+    char rep[512];
+    uint32_t nh = 0, cost = 0;
+    setup(3, 0);
+    run(3, 300);
+
+    /* Unreachable peer gRPC fallback */
+    TEST_ASSERT_EQUAL(-1, p2p_grpc_call(&g_n[0], &g_h[0], "nobody", "svc", "method", "data"));
+    TEST_ASSERT_EQUAL(-1, p2p_stun_probe(&g_n[0], &g_h[0], "nobody"));
+    TEST_ASSERT_EQUAL(-1, p2p_nat_punch(&g_n[0], &g_h[0], "nobody"));
+
+    /* Cut direct link alpha-gamma, route fallback to relayed via beta */
+    g_cut[0][2] = g_cut[2][0] = 1;
+    run(3, 1200);
+    TEST_ASSERT_EQUAL(0, p2p_route_find(&g_n[0], g_n[2].id, &nh, &cost));
+    TEST_ASSERT_EQUAL((int)g_n[1].id, (int)nh); /* next hop is beta */
+
+    p2p_report(&g_n[0], &g_h[0], "stats", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p stats ok"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -362,6 +383,7 @@ int main(void) {
     RUN_TEST(test_bad_inputs);
     RUN_TEST(test_raft_and_cache);
     RUN_TEST(test_routing_grpc_and_stun);
+    RUN_TEST(test_p2p_consolidation_and_fallback);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -232,6 +232,29 @@ void test_resize_hotplug_and_admin_nodes(void) {
     TEST_ASSERT_NOT_NULL(strstr(out, "admin-nodes ok count 2"));
 }
 
+void test_platform_consolidation_and_fallback(void) {
+    plat_layout_t l;
+    plat_devices_t dev_reg;
+    plat_dev_rules_t rule_reg;
+    plat_continuity_t c;
+    char act[32];
+
+    /* Screen resize fallback on edge case */
+    TEST_ASSERT_EQUAL(0, plat_layout(800, 600, &l));
+    TEST_ASSERT_EQUAL(-1, plat_layout_resize(&l, 10, 10)); /* invalid dimensions */
+
+    /* Device hotplug rule evaluation under detachment (unplug) */
+    memset(&dev_reg, 0, sizeof(dev_reg));
+    memset(&rule_reg, 0, sizeof(rule_reg));
+    TEST_ASSERT_EQUAL(0, plat_dev_rule_add(&rule_reg, "net*", "network", "notify_network"));
+    TEST_ASSERT_EQUAL(0, plat_dev_hotplug_event(&dev_reg, &rule_reg, "net0", "network", 0, "eth card", act, sizeof(act)));
+    TEST_ASSERT_EQUAL_STRING("notify_network", act);
+
+    /* Corrupted continuity import fallback */
+    memset(&c, 0, sizeof(c));
+    TEST_ASSERT_EQUAL(-1, plat_continuity_import("INVALID_MAGIC\nfoo", &c));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_hal_and_ports);
@@ -245,6 +268,7 @@ int main(void) {
     RUN_TEST(test_deploy_manifest);
     RUN_TEST(test_sensors_multi_touch_continuity_and_emul);
     RUN_TEST(test_resize_hotplug_and_admin_nodes);
+    RUN_TEST(test_platform_consolidation_and_fallback);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

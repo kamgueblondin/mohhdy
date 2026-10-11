@@ -248,6 +248,26 @@ void test_smart_alerts_and_perf_monitor(void) {
     TEST_ASSERT_NOT_NULL(strstr(out_buf, "status ok_healthy"));
 }
 
+void test_prod_consolidation_and_fallback(void) {
+    prod_metrics_t m;
+    prod_alerts_t a;
+    prod_alert_learn_t al;
+    prod_perf_monitor_t pm;
+    char out_buf[512];
+
+    prod_metrics_init(&m);
+    prod_alerts_init(&a);
+
+    /* Alert learn fallback on empty metrics or invalid metric ID */
+    TEST_ASSERT_EQUAL(-1, prod_alert_learn_update(&al, &m, 999));
+    TEST_ASSERT_EQUAL(-1, prod_alert_learn_update(&al, &m, PM_BUSY)); /* empty ring */
+
+    /* Perf monitor fallback on empty metrics */
+    TEST_ASSERT_GREATER_THAN(0, prod_perf_monitor_eval(&m, &a, &pm, out_buf, sizeof(out_buf)));
+    TEST_ASSERT_EQUAL(100, (int)pm.overall_health_score);
+    TEST_ASSERT_NOT_NULL(strstr(out_buf, "status ok_healthy"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_metrics_ring_stats_and_prediction);
@@ -260,6 +280,7 @@ int main(void) {
     RUN_TEST(test_state_save_load);
     RUN_TEST(test_phase8_offline_extensions);
     RUN_TEST(test_smart_alerts_and_perf_monitor);
+    RUN_TEST(test_prod_consolidation_and_fallback);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
