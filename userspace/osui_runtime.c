@@ -2543,7 +2543,7 @@ static void copy_word_val(const char *src, char *dst, int max) {
 
 int osui_web_save_state(char *buf, int max) {
     int p = 0, i, k;
-    if (!buf || max <= 0) return 0;
+    if (!buf || max <= 0 || G.n_tabs <= 0) return 0;
     buf[0] = 0;
     out_add(buf, max, &p, "WEB_STATE_V1 tabs=");
     out_u(buf, max, &p, (unsigned)G.n_tabs);
