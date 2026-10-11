@@ -74,7 +74,7 @@ def main():
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
         monitor = None
         try:
-            nw.wait_for("(-.-)", proc)
+            nw.wait_for("[0m : ", proc)
             monitor = nw.connect_monitor()
             time.sleep(0.5)
             nw.send_command_until(monitor, "net-status", "Carte Ethernet : detectee", proc)

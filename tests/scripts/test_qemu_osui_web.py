@@ -153,7 +153,7 @@ def type_line(client, proc, line):
 
 
 def wait_for_prompt(proc, start):
-    wait_for(proc, "(-.-)", 15, start)
+    wait_for(proc, "[0m : ", 15, start)
 
 
 def main():
@@ -181,7 +181,7 @@ def main():
     try:
         with open(ERR, "wb") as err:
             proc = subprocess.Popen(command, cwd=ROOT, stdout=err, stderr=err)
-        wait_for(proc, "(-.-)")
+        wait_for(proc, "[0m : ")
         client = monitor()
         # Roadmap step 5: the OS-UI local API and console served over HTTP
         # through the Ring 3 networker; the host peer is the HTTP client.

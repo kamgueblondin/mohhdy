@@ -50,7 +50,7 @@ def main():
     proc = client = None
     try:
         proc = boot()
-        tw.wait_for(proc, "(-.-)")
+        tw.wait_for(proc, "[0m : ")
         client = tw.monitor()
         log = tw.normalized_log(tw.text())
         if strict.BANNER not in log:

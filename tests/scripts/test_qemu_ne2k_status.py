@@ -152,7 +152,7 @@ def main():
         proc = subprocess.Popen(cmd, stdout=err, stderr=err)
         client = None
         try:
-            wait("(-.-)", proc)
+            wait("[0m : ", proc)
             client = monitor()
             time.sleep(0.5)
             before = send_status_command(client, proc)

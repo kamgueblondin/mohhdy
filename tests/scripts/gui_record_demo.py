@@ -138,8 +138,8 @@ def main():
                 "-machine", "type=pc,accel=tcg",
                 "-no-reboot", "-no-shutdown",
             ], cwd=ROOT, stdout=err, stderr=err)
-            wait_for(qemu, "(-.-)", BOOT_TIMEOUT)
-            wait_for(qemu, "SYS_GETS: Debut", BOOT_TIMEOUT)
+            wait_for(qemu, "[0m : ", BOOT_TIMEOUT)
+            wait_for(qemu, "[0m : ", BOOT_TIMEOUT)
             monitor = monitor_connect()
             time.sleep(1.2)
             for command, needle in (

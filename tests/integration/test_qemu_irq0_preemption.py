@@ -187,7 +187,7 @@ def main():
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
         monitor = None
         try:
-            wait_for("(-.-)", proc)
+            wait_for("[0m : ", proc)
             monitor = connect_monitor()
             before_spawn = len(log_text())
             send_command(monitor, "spawn spin", proc)

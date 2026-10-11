@@ -375,7 +375,7 @@ def send_command_until(client, command, marker, proc, mode="gets", wait_prompt=T
         if command_echoed(output, command, mode):
             wait_for(proc, marker, CMD_TIMEOUT, start)
             if wait_prompt:
-                wait_for(proc, "(-.-)", CMD_TIMEOUT, start)
+                wait_for(proc, "[0m : ", CMD_TIMEOUT, start)
             return
         if mode == "gets" and "SYS_GETS: ligne lue: " in output:
             raise CommandEchoMismatch("command echo altered: %s" % command)
@@ -417,8 +417,8 @@ def main():
                 "-qmp", "unix:%s,server,nowait" % QMP_SOCK,
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
             ] + qemu_disk_args(), cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, "(-.-)", BOOT_TIMEOUT)
-            wait_for(proc, "SYS_GETS: Debut", BOOT_TIMEOUT)
+            wait_for(proc, "[0m : ", BOOT_TIMEOUT)
+            wait_for(proc, "[0m : ", BOOT_TIMEOUT)
             wait_for(
                 proc,
                 "USB Tablet: Controller UHCI initialise et enumere",

@@ -78,7 +78,7 @@ def main():
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
         client = None
         try:
-            h.wait_for("(-.-)", proc, timeout=60)
+            h.wait_for("[0m : ", proc, timeout=60)
             client = h.connect_monitor()
             # Validation (US-049): good and bad sources.
             out = run(client, proc, "pm-check /pm/hello.pm", "pm-check ok")
