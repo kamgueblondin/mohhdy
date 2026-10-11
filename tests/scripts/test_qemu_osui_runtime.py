@@ -124,7 +124,7 @@ def key_echo_count(output, char):
 
 
 def send_command_once(client, command, proc):
-    aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash", ":": "shift-semicolon"}
+    aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash", ":": "shift-semicolon", "_": "shift-minus"}
     for char in command:
         count = 0
         for _ in range(KEY_CHAR_RETRIES):
@@ -215,6 +215,19 @@ def main():
             commands = (
                 ("os-status", "service=mohhdy-os"),
                 ("chat bonjour", "llm=stub_echo"),
+                ("browser-tab-new http://example.com/app app", "kind=app"),
+                ("browser-tab-rename customtab", "title=customtab"),
+                ("browser-tab-pin 1", "pinned=true"),
+                ("browser-tab-duplicate", "browser-tab-duplicate ok"),
+                ("browser-tabs", "count=2"),
+                ("browser-fs-save /web.json", "browser-fs-save ok"),
+                ("browser-fs-load /web.json", "browser-fs-load ok"),
+                ("os-p2p", "pane=p2p"),
+                ("os-collab", "pane=collab"),
+                ("os-prod", "pane=prod"),
+                ("chat p2p status", "workflow=p2p"),
+                ("chat collab points", "workflow=collab"),
+                ("chat prod metrics", "workflow=prod"),
                 # With weights packed: a real answer; without (CI): the
                 # distinct no-model state, never a fake answer.
                 ("chat ai a", AI_READY_MARKER),
