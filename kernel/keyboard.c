@@ -497,6 +497,8 @@ void keyboard_init() {
 }
 
 // Fonction getchar hybride avec plusieurs mécanismes et protection anti-fantômes
+#define KBD_GETC_SPIN_TICKS 2U /* 20 ms at 100 Hz */
+uint32_t timer_get_ticks();
 char keyboard_getc(void) {
     static int getc_calls = 0;
     static int consecutive_empty_returns = 0;
@@ -504,6 +506,7 @@ char keyboard_getc(void) {
     int attempts = 0;
     const int MAX_ATTEMPTS = 200000; // Timeout raisonnable
     const int MAX_CONSECUTIVE_EMPTY = 5; // Maximum de retours vides consécutifs
+    uint32_t spin_start;
     
     getc_calls++;
     
@@ -516,8 +519,15 @@ char keyboard_getc(void) {
     
     // Réactiver les interruptions
     asm volatile("sti");
+    spin_start = timer_get_ticks();
     
+    /* Bounded by time as well as by attempts: under TCG with several guests
+     * 200000 polls of the PS/2 and COM1 ports took seconds, so a Ring 3 loop
+     * that pumps background work only when no key is pending (shell + P2P)
+     * starved for the whole time a command was being typed and its peers
+     * declared the node down (fleet deploy acks lost). */
     while (attempts < MAX_ATTEMPTS) {
+        if ((uint32_t)(timer_get_ticks() - spin_start) >= KBD_GETC_SPIN_TICKS) break;
         // 1. Essayer d'abord le buffer d'interruptions
         if (kbd_get_char_nonblock(&c)) {
             // Filtrer: uniquement ASCII imprimable + contrôle utiles

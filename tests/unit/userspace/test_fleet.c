@@ -5,18 +5,24 @@
 
 #define N 3
 typedef struct { int to; uint32_t from; uint8_t d[400]; int len; } msg_t;
-static msg_t g_q[64]; static int g_nq;
+static msg_t g_q[512]; static int g_nq;
 static fleet_t g_f[N]; static fleet_host_t g_h[N];
 static char g_out[N][4096];
-static char g_fs[N][4][2][320]; /* per node: path, content */
+static char g_fs[N][4][2][2048]; /* per node: path, content */
 static int g_drop;
+static uint32_t g_now, g_lossy, g_seed = 7;
+/* g_drop: lose everything; g_lossy: lose every frame whose pseudo-random
+ * draw falls under g_lossy percent */
+static int dropped(void) { if (g_drop) return 1; g_seed = g_seed * 1103515245U + 12345U; return (int)((g_seed >> 16) % 100U) < (int)g_lossy; }
+static uint32_t h_now(void* c) { (void)c; return g_now; }
+static int h_peers(void* c, uint32_t* ids, int max) { int me = (int)(long)c, i, n = 0; for (i = 0; i < N && n < max; i++) if (i != me) ids[n++] = (uint32_t)i + 1; return n; }
 
 static int idx(uint32_t id) { return (int)id - 1; }
 static int h_send(void* c, uint32_t to, const uint8_t* d, int len) {
     int me = (int)(long)c, i, sent = 0;
     for (i = 0; i < N; i++) {
         if (i == me || (to && idx(to) != i)) continue;
-        if (g_nq < 64 && !g_drop) { g_q[g_nq].to = i; g_q[g_nq].from = (uint32_t)me + 1; memcpy(g_q[g_nq].d, d, (size_t)len); g_q[g_nq].len = len; g_nq++; }
+        if (g_nq < 512 && !dropped()) { g_q[g_nq].to = i; g_q[g_nq].from = (uint32_t)me + 1; memcpy(g_q[g_nq].d, d, (size_t)len); g_q[g_nq].len = len; g_nq++; }
         sent++;
     }
     return sent;
@@ -39,11 +45,11 @@ static void pump(void) {
 }
 static void setup(void) {
     int i;
-    memset(g_out, 0, sizeof(g_out)); memset(g_fs, 0, sizeof(g_fs)); g_nq = 0; g_drop = 0;
+    memset(g_out, 0, sizeof(g_out)); memset(g_fs, 0, sizeof(g_fs)); g_nq = 0; g_drop = 0; g_lossy = 0; g_now = 0;
     for (i = 0; i < N; i++) {
         fleet_init(&g_f[i]);
         g_h[i].ctx = (void*)(long)i; g_h[i].self = (uint32_t)i + 1; g_h[i].send = h_send;
-        g_h[i].out = h_out; g_h[i].write_file = h_write; g_h[i].name = h_name; g_h[i].members = h_members;
+        g_h[i].out = h_out; g_h[i].write_file = h_write; g_h[i].name = h_name; g_h[i].members = h_members; g_h[i].now = h_now; g_h[i].peers = h_peers;
     }
 }
 
@@ -129,33 +135,75 @@ static void test_staged_deploy(void) {
     TEST_ASSERT_EQUAL(-1, fleet_deploy_promote(&g_f[0], &g_h[0], "nope"));
 }
 
-/* lost deploy datagrams are re-sent until acknowledged, bounded */
-static void test_deploy_resend(void) {
+/* run every node's tick for a while, delivering what gets through */
+static void run_ticks(int steps) {
+    int k, i;
+    for (k = 0; k < steps; k++) {
+        g_now += 50;
+        for (i = 0; i < N; i++) fleet_tick(&g_f[i], &g_h[i], g_now);
+        pump();
+    }
+}
+
+/* lost frames are re-sent until acknowledged (bounded, then reported) */
+static void test_reliable_resend(void) {
     setup();
     g_drop = 1;
-    TEST_ASSERT_EQUAL(1, fleet_deploy_stage(&g_f[0], &g_h[0], "api", "build 1", 7, 2));
+    TEST_ASSERT_EQUAL(0, fleet_session_send(&g_f[0], &g_h[0], 2, "cwd=/x", 6));
     g_drop = 0;
-    TEST_ASSERT_EQUAL(0, fleet_tick(&g_f[0], &g_h[0], 1000));            /* arms the timer */
-    TEST_ASSERT_EQUAL(0, fleet_tick(&g_f[0], &g_h[0], 1000 + FL_RESEND_TICKS - 1));
-    TEST_ASSERT_EQUAL(1, fleet_tick(&g_f[0], &g_h[0], 1000 + FL_RESEND_TICKS));
-    pump(); pump();
-    TEST_ASSERT_EQUAL_STRING("build 1", file_of(1, "/app/api"));
-    TEST_ASSERT_EQUAL(0, fleet_tick(&g_f[0], &g_h[0], 5000));            /* acked: quiet */
-    TEST_ASSERT_EQUAL(0, fleet_deploy_promote(&g_f[0], &g_h[0], "api"));
-    g_nq = 0;                                                             /* promote lost */
-    fleet_tick(&g_f[0], &g_h[0], 6000);
-    TEST_ASSERT_EQUAL(1, fleet_tick(&g_f[0], &g_h[0], 6000 + FL_RESEND_TICKS));
-    pump(); pump();
-    TEST_ASSERT_EQUAL_STRING("build 1", file_of(2, "/app/api"));
-    TEST_ASSERT_EQUAL(0, fleet_tick(&g_f[0], &g_h[0], 9000));            /* both acked */
-    /* an unreachable canary stops after FL_RESENDS attempts */
+    TEST_ASSERT_EQUAL(1, fleet_pending(&g_f[0]));
+    run_ticks(4);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "fleet session offered by alpha bytes 6"));
+    TEST_ASSERT_EQUAL(0, fleet_pending(&g_f[0]));
+    TEST_ASSERT_TRUE(g_f[0].resent >= 1);
+    /* lost acks: delivered once only, the duplicate is acked again */
+    g_lossy = 0;
+    fleet_report(&g_f[1], &g_h[1], 1, "m=1", "");
+    {   /* deliver the data frame, lose the ack */
+        msg_t m = g_q[0]; g_nq = 0;
+        fleet_receive(&g_f[m.to], &g_h[m.to], m.from, m.d, m.len);
+        g_nq = 0;
+    }
+    run_ticks(4);
+    TEST_ASSERT_EQUAL(1, (int)g_f[0].nodes[0].reports);
+    TEST_ASSERT_TRUE(g_f[0].dup >= 1);
+    TEST_ASSERT_EQUAL(0, fleet_pending(&g_f[1]));
+    /* unreachable peer: bounded, then reported as failed */
     g_drop = 1;
-    fleet_deploy_stage(&g_f[0], &g_h[0], "api", "build 2", 7, 3);
-    fleet_tick(&g_f[0], &g_h[0], 10000);
-    TEST_ASSERT_EQUAL(1, fleet_tick(&g_f[0], &g_h[0], 10000 + FL_RESEND_TICKS));
-    TEST_ASSERT_EQUAL(1, fleet_tick(&g_f[0], &g_h[0], 10000 + 2 * FL_RESEND_TICKS));
-    TEST_ASSERT_EQUAL(1, fleet_tick(&g_f[0], &g_h[0], 10000 + 3 * FL_RESEND_TICKS));
-    TEST_ASSERT_EQUAL(0, fleet_tick(&g_f[0], &g_h[0], 10000 + 4 * FL_RESEND_TICKS));
+    fleet_report(&g_f[2], &g_h[2], 1, "m=2", "");
+    run_ticks(40);
+    TEST_ASSERT_EQUAL(0, fleet_pending(&g_f[2]));
+    TEST_ASSERT_EQUAL(1, (int)g_f[2].failed);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[2], "fleet send to alpha failed after 6 re-sends"));
+}
+
+/* payloads larger than one datagram are chunked; 30% frame loss */
+static void test_chunked_large_and_lossy(void) {
+    static char big[1800];
+    int i;
+    setup();
+    for (i = 0; i < (int)sizeof(big); i++) big[i] = (char)('a' + i % 26);
+    big[sizeof(big) - 1] = 0;
+    g_lossy = 30;
+    TEST_ASSERT_EQUAL(1, fleet_sync_push(&g_f[0], &g_h[0], "/big.txt", big, (int)sizeof(big) - 1));
+    run_ticks(30);
+    TEST_ASSERT_EQUAL_STRING(big, file_of(1, "/big.txt"));
+    TEST_ASSERT_EQUAL_STRING(big, file_of(2, "/big.txt"));
+    TEST_ASSERT_EQUAL(1, fleet_deploy_stage(&g_f[0], &g_h[0], "big", big, 1500, 2));
+    run_ticks(30);
+    TEST_ASSERT_EQUAL(0, strncmp(big, file_of(1, "/app/big"), 1500));
+    TEST_ASSERT_EQUAL(0, fleet_deploy_promote(&g_f[0], &g_h[0], "big"));
+    run_ticks(30);
+    TEST_ASSERT_EQUAL(1500, (int)strlen(file_of(2, "/app/big")));
+    TEST_ASSERT_EQUAL(-1, fleet_sync_push(&g_f[0], &g_h[0], "/x", big, FL_DATA_MAX + 1));
+    g_lossy = 0;
+    /* malformed chunk headers are rejected */
+    {
+        uint8_t bad[12] = {FL_FRAG, 1, 0, 0, 0, 5, 3, 'x'};
+        uint32_t r = g_f[1].rejected;
+        fleet_receive(&g_f[1], &g_h[1], 1, bad, 8);
+        TEST_ASSERT_EQUAL(r + 1, g_f[1].rejected);
+    }
 }
 
 int main(void) {
@@ -163,7 +211,8 @@ int main(void) {
     RUN_TEST(test_session_handoff_and_sync);
     RUN_TEST(test_metrics_and_logs);
     RUN_TEST(test_staged_deploy);
-    RUN_TEST(test_deploy_resend);
+    RUN_TEST(test_reliable_resend);
+    RUN_TEST(test_chunked_large_and_lossy);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
