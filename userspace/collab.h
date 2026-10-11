@@ -144,4 +144,23 @@ typedef struct {
 int collab_compliance_check(const collab_t* c, collab_compliance_t* comp);
 int collab_compliance_report(const collab_t* c, char* out, int cap);
 
+/* US-097 decentralized payment & escrow */
+typedef struct {
+    uint32_t escrow_id;
+    uint32_t payer;
+    uint32_t payee;
+    uint32_t arbiter;
+    uint32_t amount;
+    int status; /* 1 open, 2 released, 3 refunded */
+} collab_escrow_t;
+
+int collab_point_convert(uint32_t points, const char* target_currency, uint32_t* converted_amount);
+int collab_escrow_create(collab_t* c, const collab_host_t* h, uint32_t payee, uint32_t arbiter, uint32_t amount);
+int collab_escrow_release(collab_t* c, const collab_host_t* h, uint32_t escrow_seq);
+int collab_escrow_refund(collab_t* c, const collab_host_t* h, uint32_t escrow_seq);
+
+/* US-105 P2P ticket routing */
+int collab_ticket_route(collab_t* c, const collab_host_t* h, uint32_t ticket_seq, uint32_t helper_id);
+int collab_ticket_assign(collab_t* c, const collab_host_t* h, uint32_t ticket_seq, const char* helper_name);
+
 #endif

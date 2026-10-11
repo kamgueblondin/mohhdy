@@ -350,6 +350,60 @@ int prod_sec_scan_run(prod_sec_scan_t* scan, char* out, int cap) {
     return 0;
 }
 
+/* ---------------------------------- US-114 Smart Alert Threshold Learning */
+int prod_alert_learn_update(prod_alert_learn_t* al, const prod_metrics_t* m, int metric_id) {
+    prod_stat_t st;
+    uint32_t var_sum = 0;
+    int i;
+    if (!al || !m || prod_metric_stat(m, metric_id, &st) != 0) return -1;
+    al->sample_count = (uint32_t)st.n;
+    al->mean = st.avg;
+    for (i = 0; i < st.n; i++) {
+        uint32_t v = at(m, i)->v[metric_id];
+        uint32_t diff = v > st.avg ? (v - st.avg) : (st.avg - v);
+        var_sum += diff * diff;
+    }
+    al->std_dev = st.n > 0 ? (var_sum / (uint32_t)st.n) / (st.avg > 0 ? st.avg : 1U) : 0U;
+    return 0;
+}
+
+int prod_alert_learn_threshold(prod_alert_learn_t* al, uint32_t margin_pct) {
+    if (!al) return -1;
+    al->learned_threshold = al->mean + (al->mean * margin_pct / 100U) + (al->std_dev * 2U);
+    return 0;
+}
+
+/* ------------------------ US-106 / US-107 Performance Monitor Consolidation */
+int prod_perf_monitor_eval(const prod_metrics_t* m, const prod_alerts_t* a, prod_perf_monitor_t* pm, char* out, int cap) {
+    prod_stat_t st_busy, st_mem;
+    uint32_t active = 0;
+    int i;
+    if (!pm || !out || cap <= 0) return -1;
+    mzero(pm, (int)sizeof(*pm));
+    if (a) {
+        for (i = 0; i < PROD_RULES; i++) {
+            if (a->r[i].used && a->r[i].firing) active++;
+        }
+    }
+    pm->active_alerts = active;
+    if (m && m->n > 0) {
+        pm->sample_count = (uint32_t)m->n;
+        if (prod_metric_stat(m, PM_BUSY, &st_busy) == 0) pm->avg_busy_pct = st_busy.avg;
+        if (prod_metric_stat(m, PM_MEM_FREE, &st_mem) == 0) pm->free_mem_kib = st_mem.last;
+    }
+    pm->overall_health_score = (active * 20U < 100U) ? (100U - active * 20U) : 0U;
+    pm->system_status_ok = (pm->overall_health_score >= 60U) ? 1 : 0;
+
+    out[0] = 0;
+    s_cat(out, "perf-monitor health ", cap); cat_u(out, pm->overall_health_score, cap);
+    s_cat(out, " active_alerts ", cap); cat_u(out, pm->active_alerts, cap);
+    s_cat(out, " samples ", cap); cat_u(out, pm->sample_count, cap);
+    s_cat(out, " avg_busy_pct ", cap); cat_u(out, pm->avg_busy_pct, cap);
+    s_cat(out, " free_mem_kib ", cap); cat_u(out, pm->free_mem_kib, cap);
+    s_cat(out, pm->system_status_ok ? " status ok_healthy\n" : " status warning_degraded\n", cap);
+    return s_len(out);
+}
+
 /* ------------------------------------------------------ feedback, usage */
 int prod_feedback_add(prod_feedback_t* f, int rating, const char* text) {
     int slot;

@@ -323,6 +323,27 @@ void test_marketplace_contracts_disputes_privacy_compliance(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "compliance score 100 gdpr_export ok"));
 }
 
+void test_payment_conversion_escrow_and_ticket_routing(void) {
+    uint32_t conv = 0;
+    setup();
+
+    /* US-097 Payment conversion */
+    TEST_ASSERT_EQUAL(0, collab_point_convert(100, "USD", &conv));
+    TEST_ASSERT_EQUAL(10, (int)conv);
+    TEST_ASSERT_EQUAL(0, collab_point_convert(100, "TOKEN", &conv));
+    TEST_ASSERT_EQUAL(200, (int)conv);
+
+    /* US-097 Escrow workflow */
+    TEST_ASSERT_GREATER_THAN(0, collab_escrow_create(&g_c[0], &g_h[0], k_id[1], k_id[2], 25)); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_escrow_release(&g_c[0], &g_h[0], 2)); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_escrow_refund(&g_c[0], &g_h[0], 2)); deliver();
+
+    /* US-105 Ticket routing */
+    collab_emit(&g_c[0], &g_h[0], CE_TICKET, 0, 0, 0, 0, "network issue"); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_ticket_route(&g_c[1], &g_h[1], 5, k_id[2])); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_ticket_assign(&g_c[2], &g_h[2], 5, "agent_beta")); deliver();
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_points_transfer_overdraft_and_convergence);
@@ -335,6 +356,7 @@ int main(void) {
     RUN_TEST(test_signed_entries_forgery_and_redaction);
     RUN_TEST(test_save_load_roundtrip);
     RUN_TEST(test_marketplace_contracts_disputes_privacy_compliance);
+    RUN_TEST(test_payment_conversion_escrow_and_ticket_routing);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

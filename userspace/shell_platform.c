@@ -20,6 +20,8 @@ unsigned int sys_ticks(void);
 static int g_profile = PLAT_PWR_BALANCED;
 static int g_auto;
 static plat_notes_t g_notes;
+static plat_dev_rules_t g_dev_rules;
+static plat_admin_nodes_t g_admin_nodes;
 static char g_out[4096];
 static char g_big[16384];
 static char g_file[1100];
@@ -65,7 +67,8 @@ static void join(char* d, const char* dir, const char* name, int cap) {
 }
 
 static const char* k_cmds[] = {
-    "hal-info", "hal-port", "screen-adapt", "gesture", "gesture-multi", "power-profile", "power-status", "dev-list",
+    "hal-info", "hal-port", "screen-adapt", "screen-resize", "gesture", "gesture-multi", "power-profile", "power-status", "dev-list",
+    "dev-rules", "dev-hotplug", "admin-nodes", "admin-node-add",
     "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
     "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
     "sensor-read", "continuity-export", "continuity-import", "legacy-emul", 0
@@ -357,7 +360,7 @@ int shell_platform_line(const char* line) {
         print_string(ok ? "hal-port ok " : "hal-port error "); print_string(a); print_string(" "); print_string(why); print_string("\n");
         return ok ? 0 : 1;
     }
-    if (s_eq(cmd, "screen-adapt")) {
+    if (s_eq(cmd, "screen-adapt") || s_eq(cmd, "screen-resize")) {
         plat_layout_t l;
         int w = 720, h = 400, ok = 1, i = 0;
         char num[8];
@@ -370,7 +373,8 @@ int shell_platform_line(const char* line) {
         }
         if (!ok || plat_layout(w, h, &l) != 0) { print_string("screen-adapt error size WxH between 160x120 and 8192x8192\n"); return 1; }
         g_out[0] = 0;
-        s_cat(g_out, "screen-adapt ok ", 4096); cat_u(g_out, (uint32_t)w, 4096); s_cat(g_out, "x", 4096); cat_u(g_out, (uint32_t)h, 4096);
+        s_cat(g_out, s_eq(cmd, "screen-resize") ? "screen-resize ok " : "screen-adapt ok ", 4096);
+        cat_u(g_out, (uint32_t)w, 4096); s_cat(g_out, "x", 4096); cat_u(g_out, (uint32_t)h, 4096);
         s_cat(g_out, a[0] ? "" : " (vga text 80x25)", 4096);
         s_cat(g_out, " form ", 4096); s_cat(g_out, plat_form_name(l.form), 4096);
         s_cat(g_out, l.portrait ? " portrait" : " landscape", 4096);
@@ -380,6 +384,85 @@ int shell_platform_line(const char* line) {
         s_cat(g_out, l.compact ? " compact\n" : " full\n", 4096);
         print_string(g_out);
         return 0;
+    }
+    if (s_eq(cmd, "dev-rules")) {
+        char name_p[16], cls_p[12], act[32];
+        const char* r2 = word(rest, name_p, 16);
+        r2 = word(r2, cls_p, 12);
+        word(r2, act, 32);
+        if (!name_p[0]) {
+            int i;
+            g_out[0] = 0;
+            for (i = 0; i < g_dev_rules.n_rules; i++) {
+                s_cat(g_out, "rule ", 4096); s_cat(g_out, g_dev_rules.rules[i].name_pattern, 4096);
+                s_cat(g_out, " class ", 4096); s_cat(g_out, g_dev_rules.rules[i].cls_pattern, 4096);
+                s_cat(g_out, " action ", 4096); s_cat(g_out, g_dev_rules.rules[i].action_cmd, 4096); s_cat(g_out, "\n", 4096);
+            }
+            s_cat(g_out, "dev-rules ok count ", 4096); cat_u(g_out, (uint32_t)g_dev_rules.n_rules, 4096); s_cat(g_out, "\n", 4096);
+            print_string(g_out);
+            return 0;
+        }
+        if (plat_dev_rule_add(&g_dev_rules, name_p, cls_p[0] ? cls_p : "*", act[0] ? act : "log") == 0) {
+            print_string("dev-rules ok rule added\n");
+            return 0;
+        }
+        print_string("dev-rules error capacity full\n");
+        return 1;
+    }
+    if (s_eq(cmd, "dev-hotplug")) {
+        static plat_devices_t r;
+        char dname[16], dcls[12], pres_str[8], act[32];
+        int pres_ok, pres_val;
+        dev_probe(&r);
+        const char* r2 = word(rest, dname, 16);
+        r2 = word(r2, dcls, 12);
+        r2 = word(r2, pres_str, 8);
+        pres_val = to_int(pres_str, &pres_ok);
+        if (!dname[0] || !dcls[0] || !pres_ok) {
+            print_string("dev-hotplug error usage: dev-hotplug NAME CLASS 0|1 [DETAIL]\n");
+            return 1;
+        }
+        plat_dev_hotplug_event(&r, &g_dev_rules, dname, dcls, pres_val, r2[0] ? r2 : "hotplug simulated", act, sizeof(act));
+        g_out[0] = 0;
+        s_cat(g_out, "dev-hotplug ok device ", 4096); s_cat(g_out, dname, 4096);
+        s_cat(g_out, pres_val ? " attached" : " detached", 4096);
+        s_cat(g_out, " action ", 4096); s_cat(g_out, act[0] ? act : "none", 4096); s_cat(g_out, "\n", 4096);
+        print_string(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "admin-nodes")) {
+        if (g_admin_nodes.count == 0) {
+            /* add local node by default */
+            plat_hal_t h;
+            hal_probe(&h);
+            plat_admin_node_add(&g_admin_nodes, 1, "local-node", h.arch, h.mem_free_kib, busy_sample());
+        }
+        plat_admin_nodes_report(&g_admin_nodes, g_out, (int)sizeof(g_out));
+        print_string(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "admin-node-add")) {
+        char nid_str[12], nname[16], narch[16], free_str[12], busy_str[12];
+        int id_ok, free_ok, busy_ok;
+        uint32_t nid, mem_free, busy;
+        const char* r2 = word(rest, nid_str, 12);
+        r2 = word(r2, nname, 16);
+        r2 = word(r2, narch, 16);
+        r2 = word(r2, free_str, 12);
+        word(r2, busy_str, 12);
+        nid = (uint32_t)to_int(nid_str, &id_ok);
+        mem_free = (uint32_t)to_int(free_str, &free_ok);
+        busy = (uint32_t)to_int(busy_str, &busy_ok);
+        if (!id_ok || !nname[0] || !narch[0] || !free_ok || !busy_ok) {
+            print_string("admin-node-add error usage: admin-node-add ID NAME ARCH FREE_KIB BUSY_PCT\n");
+            return 1;
+        }
+        if (plat_admin_node_add(&g_admin_nodes, nid, nname, narch, mem_free, busy) == 0) {
+            print_string("admin-node-add ok node added\n");
+            return 0;
+        }
+        print_string("admin-node-add error max nodes reached\n");
+        return 1;
     }
     if (s_eq(cmd, "gesture")) return cmd_gesture(rest);
     if (s_eq(cmd, "gesture-multi")) {
