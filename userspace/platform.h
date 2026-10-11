@@ -49,6 +49,7 @@ typedef struct {
     uint32_t poll_budget;     /* background datagrams per pump */
     uint32_t screen_dim_s;    /* seconds before dimming the screen */
     uint32_t background_ms;   /* min period of background services */
+    uint32_t quantum_ticks;   /* kernel IRQ0 preemption quantum (SYS_SCHED_TUNE) */
 } plat_power_policy_t;
 int plat_power_policy(int profile, plat_power_policy_t* out);
 int plat_power_parse(const char* name);

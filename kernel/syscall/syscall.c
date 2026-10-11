@@ -1926,6 +1926,11 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_PEER_ACCEPT:
             cpu->eax = (uint32_t)kernel_peer_accept((const os_peer_accept_request_t*)cpu->ebx);
             break;
+        case SYS_SCHED_TUNE: {
+            extern uint32_t timer_sched_tune(uint32_t arg);
+            cpu->eax = timer_sched_tune(cpu->ebx);
+            break;
+        }
         case SYS_PEER_DATA:
             if (!syscall_user_range((const void*)cpu->ebx, sizeof(os_peer_data_request_t), 1)) {
                 cpu->eax = (uint32_t)OS_PEER_BAD_REQUEST;

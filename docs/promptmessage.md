@@ -57,6 +57,7 @@ File writes refuse `..`, `/bin/` and `/models/`.
 | `use "lib.pm"` | US-053 | library inclusion at compile time |
 | `pm-version FILE` / `pm-versions FILE` | US-054 | snapshots FILE.v1..v9 with checksums |
 | `pm-edit FILE` | US-050 | line editor (`.` save and check, `.l` list, `.q` quit) |
+| `pm-ide FILE` | US-050 | full-screen editor on the VGA text screen (arrows, ENTER, BACKSPACE; ESC then s save+check, c check, x save+quit, q quit) |
 | `pm STATEMENT` | US-048 | runs one statement typed on the shell line |
 | `pm-catalog` / `pm-install NAME` | US-059 (local) | lists /pm/*.pm with their `##` line, installs a validated copy |
 | `pm-certify FILE` / `pm-verify FILE` | US-060 (local) | FILE.cert record (FNV-1a sum, expects passed); verify detects a changed source; with a collab key (`collab-join`) also FILE.sig, a Schnorr signature over SHA-256 of the source, checked by `pm-verify` (author = key fingerprint) |

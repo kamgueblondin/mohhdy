@@ -4,6 +4,7 @@
 #include "shell_platform.h"
 #include "platform.h"
 #include "../include/os_syscalls.h"
+#include "osui_gui.h"
 
 void print_string(const char* s);
 int sys_listdir(const char* path, os_dirent_t* out, int max_n);
@@ -324,6 +325,15 @@ static int cmd_gesture(const char* rest) {
     return 0;
 }
 
+static uint32_t sched_tune(uint32_t a) { uint32_t r; asm volatile("int $0x80" : "=a"(r) : "a"(SYS_SCHED_TUNE), "b"(a) : "memory"); return r; }
+/* the profile is applied: kernel quantum now, shell idle loop via
+ * shell_platform_idle_yields() */
+static void power_apply(void) {
+    plat_power_policy_t p;
+    plat_power_policy(g_profile, &p);
+    (void)sched_tune(p.quantum_ticks);
+}
+int shell_platform_idle_yields(void) { plat_power_policy_t p; plat_power_policy(g_profile, &p); return (int)p.idle_yields; }
 static void power_line(void) {
     plat_power_policy_t p;
     plat_power_policy(g_profile, &p);
@@ -334,6 +344,9 @@ static void power_line(void) {
     s_cat(g_out, " poll_budget ", 4096); cat_u(g_out, p.poll_budget, 4096);
     s_cat(g_out, " screen_dim_s ", 4096); cat_u(g_out, p.screen_dim_s, 4096);
     s_cat(g_out, " background_ms ", 4096); cat_u(g_out, p.background_ms, 4096);
+    s_cat(g_out, " quantum_ticks ", 4096); cat_u(g_out, p.quantum_ticks, 4096);
+    s_cat(g_out, " kernel_quantum ", 4096); cat_u(g_out, sched_tune(0), 4096);
+    s_cat(g_out, " preemptions ", 4096); cat_u(g_out, sched_tune(1), 4096);
     s_cat(g_out, "\n", 4096);
     print_string(g_out);
 }
@@ -361,6 +374,7 @@ int shell_platform_line(const char* line) {
         int w = 720, h = 400, ok = 1, i = 0;
         char num[8];
         word(rest, a, 64);
+        if (s_eq(a, "host")) { osui_gui_set_view(0, 0); print_string("screen-adapt ok desktop follows the host window\n"); return 0; }
         if (a[0]) { /* WxH */
             int j = 0;
             while (a[i] && a[i] != 'x' && j < 7) num[j++] = a[i++];
@@ -376,7 +390,12 @@ int shell_platform_line(const char* line) {
         s_cat(g_out, " grid ", 4096); cat_u(g_out, (uint32_t)l.cols, 4096); s_cat(g_out, "x", 4096); cat_u(g_out, (uint32_t)l.rows, 4096);
         s_cat(g_out, " font_px ", 4096); cat_u(g_out, (uint32_t)l.font_px, 4096);
         s_cat(g_out, " panels ", 4096); cat_u(g_out, (uint32_t)l.panels, 4096);
-        s_cat(g_out, l.compact ? " compact\n" : " full\n", 4096);
+        s_cat(g_out, l.compact ? " compact" : " full", 4096);
+        if (a[0] && w >= 320 && h >= 200 && w <= 1920 && h <= 1200) {
+            osui_gui_set_view(w, h);
+            s_cat(g_out, " desktop relayout ", 4096); cat_u(g_out, (uint32_t)w, 4096); s_cat(g_out, "x", 4096); cat_u(g_out, (uint32_t)h, 4096);
+        }
+        s_cat(g_out, "\n", 4096);
         print_string(g_out);
         return 0;
     }
@@ -387,7 +406,7 @@ int shell_platform_line(const char* line) {
         if (!a[0]) { power_line(); return 0; }
         if (s_eq(a, "auto")) {
             uint32_t busy = busy_sample();
-            g_auto = 1; g_profile = plat_power_auto(busy, 0);
+            g_auto = 1; g_profile = plat_power_auto(busy, 0); power_apply();
             g_out[0] = 0; s_cat(g_out, "power-profile auto busy_percent ", 4096); cat_u(g_out, busy, 4096); s_cat(g_out, "\n", 4096);
             print_string(g_out);
             power_line();
@@ -395,13 +414,13 @@ int shell_platform_line(const char* line) {
         }
         p = plat_power_parse(a);
         if (!p) { print_string("power-profile error use performance|balanced|saver|auto\n"); return 1; }
-        g_auto = 0; g_profile = p;
+        g_auto = 0; g_profile = p; power_apply();
         power_line();
         return 0;
     }
     if (s_eq(cmd, "power-status")) {
         uint32_t busy = busy_sample();
-        if (g_auto) g_profile = plat_power_auto(busy, 0);
+        if (g_auto) { g_profile = plat_power_auto(busy, 0); power_apply(); }
         g_out[0] = 0; s_cat(g_out, "power-status busy_percent ", 4096); cat_u(g_out, busy, 4096);
         s_cat(g_out, " uptime_s ", 4096); cat_u(g_out, sys_ticks() / 100U, 4096);
         s_cat(g_out, " battery none (emulated pc, mains)\n", 4096);

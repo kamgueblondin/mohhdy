@@ -49,12 +49,25 @@ static void test_woken_server_finishes_its_line(void) {
     }
 }
 
+/* Power profiles tune the quantum; out-of-range values fall back. */
+static void test_tunable_quantum(void) {
+    TEST_ASSERT_EQUAL(0, sched_quantum_preempt_due_q(1, 1, 1, 109U, 100U, 10U));
+    TEST_ASSERT_EQUAL(1, sched_quantum_preempt_due_q(1, 1, 1, 110U, 100U, 10U));
+    TEST_ASSERT_EQUAL(0, sched_quantum_preempt_due_q(1, 1, 1, 139U, 100U, 40U));
+    TEST_ASSERT_EQUAL(1, sched_quantum_preempt_due_q(1, 1, 1, 140U, 100U, 40U));
+    TEST_ASSERT_EQUAL(0, sched_quantum_valid(4U));
+    TEST_ASSERT_EQUAL(0, sched_quantum_valid(101U));
+    TEST_ASSERT_EQUAL(1, sched_quantum_preempt_due_q(1, 1, 1, 100U + TIMER_PREEMPT_QUANTUM, 100U, 1000U));
+    TEST_ASSERT_EQUAL(0, sched_quantum_preempt_due_q(0, 1, 1, 500U, 0U, 5U));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_fresh_task_gets_full_quantum);
     RUN_TEST(test_preemption_guards);
     RUN_TEST(test_quantum_survives_tick_wrap);
     RUN_TEST(test_woken_server_finishes_its_line);
+    RUN_TEST(test_tunable_quantum);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

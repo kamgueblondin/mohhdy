@@ -63,8 +63,10 @@ void test_power(void) {
     plat_power_policy_t p;
     TEST_ASSERT_EQUAL(0, plat_power_policy(PLAT_PWR_SAVER, &p));
     TEST_ASSERT_EQUAL(8, (int)p.idle_yields); TEST_ASSERT_EQUAL(1, (int)p.poll_budget);
+    TEST_ASSERT_EQUAL(40, (int)p.quantum_ticks);
     TEST_ASSERT_EQUAL(0, plat_power_policy(PLAT_PWR_PERFORMANCE, &p));
     TEST_ASSERT_EQUAL(0, (int)p.screen_dim_s);
+    TEST_ASSERT_EQUAL(10, (int)p.quantum_ticks);
     TEST_ASSERT_EQUAL(-1, plat_power_policy(9, &p));
     TEST_ASSERT_EQUAL(PLAT_PWR_BALANCED, plat_power_parse("balanced"));
     TEST_ASSERT_EQUAL(0, plat_power_parse("turbo"));

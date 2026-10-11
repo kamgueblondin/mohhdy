@@ -21,7 +21,8 @@ static void c_out(void* ctx, const char* s) { (void)ctx; print_string(s); print_
 static const char* c_name(void* ctx, uint32_t id) { (void)ctx; return p2p_peer_name(shell_p2p_node(), id); }
 static uint32_t c_members(void* ctx) { (void)ctx; return p2p_member_count(shell_p2p_node()); }
 static const collab_host_t g_h = {0, c_send, c_out, c_name, c_members};
-static void on_app(void* ctx, uint32_t from, const uint8_t* d, int len) { (void)ctx; collab_receive(&g_c, &g_h, from, d, len); }
+/* called by the P2P app dispatcher (shell_p2p.c) for tags below 0x40 */
+void shell_collab_app(uint32_t from, const uint8_t* d, int len) { if (g_joined) collab_receive(&g_c, &g_h, from, d, len); }
 
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
 static int s_len(const char* s) { int n = 0; while (s[n]) n++; return n; }
@@ -72,7 +73,6 @@ int shell_collab_line(const char* line) {
     if (!node->up) { print_string(cmd); print_string(" error p2p down (p2p-up first)\n"); return 1; }
     if (s_eq(cmd, "collab-join")) {
         if (!g_joined || g_c.self != node->id) { collab_init(&g_c, node->id); g_joined = 1; }
-        node->app = on_app; node->app_ctx = 0;
         if (!g_c.signing) {
             /* per-node signing key: seed from the TSC, ticks and node id */
             sha256_ctx_t hc; uint8_t seed[32]; uint32_t lo, hi, k;
@@ -93,7 +93,6 @@ int shell_collab_line(const char* line) {
         }
     }
     if (!g_joined) { print_string(cmd); print_string(" error collab-join first\n"); return 1; }
-    node->app = on_app;
     rest = word(rest, a, 48);
     if (s_eq(cmd, "collab-pay")) {
         rest = word(rest, b, 48);

@@ -23,5 +23,6 @@ int osui_gui_feed_key(int key, char *out, int out_max);
 void osui_gui_set_input(const char *text);
 const char *osui_gui_input(void);
 void osui_gui_run(void);
+void osui_gui_set_view(int w, int h);
 
 #endif

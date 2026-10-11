@@ -158,9 +158,10 @@ Etat Phase 5 (10 octobre 2026, lot P2P ; detail et limites dans `docs/p2p.md`) :
 - US-090 : Création du système de déploiement automatisé
 
 Etat Phase 6 (10 octobre 2026, socle i386 ; detail dans `docs/platform.md`, preuve `make qemu-platform`) :
-- Fait (sur cette plate-forme) : US-087 compatibilite applicative (ELF), US-088 migration de donnees (ramfs, archive verifiee), US-090 deploiement automatise (manifeste local, retour arriere).
-- Partiel : US-076 (socle HAL i386 seulement, aucun portage ARM), US-079 gestes (classifieur, pas de peripherique tactile), US-080 adaptation d'ecran (calcul, OS-UI non re-agence), US-081 energie (profils et choix auto, politique non appliquee, pas de batterie), US-082 notifications (file locale), US-085 peripheriques (registre a partir des sondes existantes), US-089 administration (vue agregee).
-- Non livre : US-077 interface mobile, US-078 capteurs, US-083 synchronisation multi-appareils (voir P2P #117), US-084 continuite, US-086 emulation legacy.
+- Fait (sur cette plate-forme) : US-080 adaptation d'ecran (`screen-adapt WxH` re-agence le bureau VBE a cette taille, verifie par screendump QEMU), US-083 synchronisation multi-appareils (`sync-push`, fichiers <= 300 octets entre invites P2P, dernier ecrivain gagne, somme verifiee), US-084 continuite (`session-handoff`/`session-resume` : repertoire, variables, historique recent), US-087 compatibilite applicative (ELF), US-088 migration de donnees (ramfs, archive verifiee), US-090 deploiement automatise (manifeste local, retour arriere).
+- Partiel : US-076 (socle HAL i386 seulement, aucun portage ARM), US-079 gestes (classifieur, pas de peripherique tactile), US-081 energie (profils appliques : quantum de preemption du noyau 10/20/40 ticks via SYS_SCHED_TUNE et cadence d'attente du shell ; pas de batterie ni de frequence CPU), US-082 notifications (file locale), US-085 peripheriques (registre a partir des sondes existantes), US-089 administration (vue agregee).
+- Non livre : US-077 interface mobile, US-078 capteurs, US-086 emulation legacy.
+- Preuves des ajouts : `make qemu-desktop-partials` (une invite VGA) et `make qemu-fleet` (trois invites P2P).
 
 ### Phase 7 - Collaborative (US-091 à US-105)
 - US-091 : Implémentation du système de points MOHHDY
@@ -203,7 +204,7 @@ Etat Phase 7 (10 octobre 2026, PR #119 empilee sur #117 ; detail dans `docs/coll
 
 Etat Phase 8 (10 octobre 2026, PR #120 ; detail dans `docs/production.md`, preuve `make qemu-production`) :
 - Fait : US-107 monitoring, US-109 retour arriere automatique, US-111 sauvegarde/restauration (RAM), US-113 analyse de journaux, US-118 retours.
-- Partiel : US-106 (mesures seulement), US-108 (deploiement local), US-110 (decision seulement), US-112 (integrite de fichiers), US-114 (seuils), US-115 (tendance lineaire), US-116 (diagnostic), US-117 (lecons fixes), US-119 (compteurs de commandes), US-120 (resume statique).
+- Partiel : US-106 (mesures ; collecteur de metriques et journaux entre invites `fleet-report`/`fleet-collect`), US-108 (deploiement local, et deploiement par etapes entre invites `deploy-stage` canari -> `deploy-promote` -> `deploy-rollback` avec accuses par noeud), US-110 (decision seulement), US-112 (integrite de fichiers), US-114 (seuils), US-115 (tendance lineaire), US-116 (diagnostic), US-117 (lecons fixes), US-119 (compteurs de commandes), US-120 (resume statique).
 
 ## Estimation Globale
 
@@ -328,7 +329,7 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 
 #### Phase 4 - PromptMessage (ouverte le 10 octobre 2026)
 
-**Etat du lot phase 4 du 10 octobre 2026 :** livres dans le shell guest QEMU (C, Ring 3), voir `docs/promptmessage.md` : US-046 langage (grammaire a mots fixes, exemples de la synthese executables), US-047 compilateur (bytecode, image PMC1 avec somme de controle), US-048 interpreteur (VM bornee, `pm-run`, `pm`, declencheurs `pm-say`), US-049 validation syntaxique (ligne et colonne), US-050 editeur de lignes integre `pm-edit` (partiel : pas d'IDE plein ecran), US-051 documentation automatique `pm-doc`, US-052 debogueur (`pm-debug` trace et point d'arret, `pm-disasm`), US-053 bibliotheques (`use`, un niveau), US-054 versions (`pm-version`, `pm-versions`, 9 instantanes), US-056 optimiseur (repli de constantes), US-057 tests automatises (`expect`, `pm-test`), US-059 partiel (catalogue local `pm-catalog`/`pm-install`, pas de marketplace reseau), US-060 partiel (`pm-certify`/`pm-verify` : enregistrement local, somme FNV-1a et tests passes, pas une signature). Non livres : US-055 compilateur croise, US-058 assistance IA (pas de modele instruit hors ligne). Preuves : `test_promptmessage` et `make qemu-promptmessage` en CI. Depuis le lot de consolidation #121 : US-060 ajoute un fichier `.sig` (signature Schnorr de la cle du noeud, verifiee par `pm-verify`), sans autorite de certification.
+**Etat du lot phase 4 du 10 octobre 2026 :** livres dans le shell guest QEMU (C, Ring 3), voir `docs/promptmessage.md` : US-046 langage (grammaire a mots fixes, exemples de la synthese executables), US-047 compilateur (bytecode, image PMC1 avec somme de controle), US-048 interpreteur (VM bornee, `pm-run`, `pm`, declencheurs `pm-say`), US-049 validation syntaxique (ligne et colonne), US-050 editeur de lignes `pm-edit` et IDE plein ecran `pm-ide` sur l'ecran texte VGA (saisie, curseur, defilement, sauvegarde et verification avec erreur dans la ligne d'etat ; preuve `make qemu-desktop-partials`), US-051 documentation automatique `pm-doc`, US-052 debogueur (`pm-debug` trace et point d'arret, `pm-disasm`), US-053 bibliotheques (`use`, un niveau), US-054 versions (`pm-version`, `pm-versions`, 9 instantanes), US-056 optimiseur (repli de constantes), US-057 tests automatises (`expect`, `pm-test`), US-059 partiel (catalogue local `pm-catalog`/`pm-install`, pas de marketplace reseau), US-060 partiel (`pm-certify`/`pm-verify` : enregistrement local, somme FNV-1a et tests passes, pas une signature). Non livres : US-055 compilateur croise, US-058 assistance IA (pas de modele instruit hors ligne). Preuves : `test_promptmessage` et `make qemu-promptmessage` en CI. Depuis le lot de consolidation #121 : US-060 ajoute un fichier `.sig` (signature Schnorr de la cle du noeud, verifiee par `pm-verify`), sans autorite de certification.
 
 ### Règle de progression
 

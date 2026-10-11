@@ -52,7 +52,7 @@ all: $(OS_IMAGE) pack-initrd disk
 	@echo "Système prêt pour exécution avec: make run"
 
 # Paquets hôte (Debian/Ubuntu) - même ensemble que .github/workflows/ci.yml
-.PHONY: qemu-persistence qemu-platform qemu-production qemu-collab qemu-p2p deps check-build-deps
+.PHONY: qemu-desktop-partials qemu-fleet qemu-persistence qemu-platform qemu-production qemu-collab qemu-p2p deps check-build-deps
 deps:
 	@bash scripts/bootstrap-dev.sh
 
@@ -720,6 +720,12 @@ test-kernel:
 test-userspace:
 	@echo "=== Tests des modules userspace ==="
 	@$(MAKE) -C tests test-userspace
+
+qemu-desktop-partials: $(OS_IMAGE) pack-initrd
+	@python3 tests/integration/test_qemu_desktop_partials.py
+
+qemu-fleet: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_fleet.py
 
 qemu-persistence: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_persistence.py

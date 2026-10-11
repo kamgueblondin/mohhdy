@@ -20,6 +20,9 @@
 
 static char g_input[96];
 static int g_ilen;
+static int g_want_w, g_want_h;
+/* screen-adapt (US-077): the desktop is re-laid out at this size */
+void osui_gui_set_view(int w, int h) { g_want_w = w; g_want_h = h; }
 static int g_leave;
 static int g_idle;
 static osui_program_eval_t g_eval;
@@ -339,7 +342,9 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     if (!scene) return;
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
-    scene->version = 2;
+    scene->version = 3;
+    scene->want_w = (uint16_t)g_want_w;
+    scene->want_h = (uint16_t)g_want_h;
     scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
     scene->pane = OS_FB_PANE_NONE;
     if (pane) {
