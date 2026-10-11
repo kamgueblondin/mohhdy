@@ -200,6 +200,38 @@ void test_sensors_multi_touch_continuity_and_emul(void) {
     TEST_ASSERT_NOT_NULL(strstr(out, "legacy-emul binary doom.exe dos=active vga=mode13h status ok_simulated"));
 }
 
+void test_resize_hotplug_and_admin_nodes(void) {
+    plat_layout_t l;
+    plat_devices_t dev_reg;
+    plat_dev_rules_t rule_reg;
+    plat_admin_nodes_t admin_reg;
+    char act[32];
+
+    /* Screen resize US-080 */
+    TEST_ASSERT_EQUAL(0, plat_layout(600, 400, &l));
+    TEST_ASSERT_EQUAL(PLAT_FORM_TABLET, l.form);
+    TEST_ASSERT_EQUAL(0, plat_layout_resize(&l, 1024, 768));
+    TEST_ASSERT_EQUAL(PLAT_FORM_DESKTOP, l.form);
+
+    /* Hotplug rules US-085 */
+    memset(&dev_reg, 0, sizeof(dev_reg));
+    memset(&rule_reg, 0, sizeof(rule_reg));
+    TEST_ASSERT_EQUAL(0, plat_dev_rule_add(&rule_reg, "usb*", "storage", "mount_storage"));
+    TEST_ASSERT_EQUAL(0, plat_dev_hotplug_event(&dev_reg, &rule_reg, "usb_flash0", "storage", 1, "usb drive", act, sizeof(act)));
+    TEST_ASSERT_EQUAL_STRING("mount_storage", act);
+    TEST_ASSERT_EQUAL(1, (int)rule_reg.hotplug_events);
+    TEST_ASSERT_GREATER_THAN(0, plat_dev_report(&dev_reg, "usb_flash0", out, sizeof(out)));
+    TEST_ASSERT_NOT_NULL(strstr(out, "dev usb_flash0 class storage present usb drive"));
+
+    /* Multi-node admin US-089 */
+    memset(&admin_reg, 0, sizeof(admin_reg));
+    TEST_ASSERT_EQUAL(0, plat_admin_node_add(&admin_reg, 1, "node1", "i386", 512000, 25));
+    TEST_ASSERT_EQUAL(0, plat_admin_node_add(&admin_reg, 2, "node2", "i386", 256000, 50));
+    TEST_ASSERT_GREATER_THAN(0, plat_admin_nodes_report(&admin_reg, out, sizeof(out)));
+    TEST_ASSERT_NOT_NULL(strstr(out, "admin-node id 1 name node1 arch i386 free_kib 512000 busy_pct 25 active yes"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "admin-nodes ok count 2"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_hal_and_ports);
@@ -212,6 +244,7 @@ int main(void) {
     RUN_TEST(test_migration_roundtrip_and_tamper);
     RUN_TEST(test_deploy_manifest);
     RUN_TEST(test_sensors_multi_touch_continuity_and_emul);
+    RUN_TEST(test_resize_hotplug_and_admin_nodes);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -66,6 +66,9 @@ int plat_layout(int w, int h, plat_layout_t* o) {
     o->compact = o->form == PLAT_FORM_PHONE || o->cols < 60;
     return 0;
 }
+int plat_layout_resize(plat_layout_t* layout, int new_w, int new_h) {
+    return plat_layout(new_w, new_h, layout);
+}
 
 /* ------------------------------------------------------------- gestures */
 const char* plat_gesture_name(int g) {
@@ -204,6 +207,107 @@ int plat_dev_report(const plat_devices_t* r, const char* name, char* out, int ca
     s_cat(out, "dev ok count ", cap); cat_u(out, (uint32_t)r->n, cap);
     s_cat(out, " present ", cap); cat_u(out, (uint32_t)present, cap); s_cat(out, "\n", cap);
     return shown;
+}
+
+int plat_dev_rule_add(plat_dev_rules_t* r, const char* name_pat, const char* cls_pat, const char* action) {
+    plat_dev_rule_t* rule;
+    if (!r || r->n_rules >= PLAT_DEV_RULES) return -1;
+    rule = &r->rules[r->n_rules++];
+    s_copy(rule->name_pattern, name_pat ? name_pat : "*", (int)sizeof(rule->name_pattern));
+    s_copy(rule->cls_pattern, cls_pat ? cls_pat : "*", (int)sizeof(rule->cls_pattern));
+    s_copy(rule->action_cmd, action ? action : "log", (int)sizeof(rule->action_cmd));
+    rule->enabled = 1;
+    return 0;
+}
+
+static int pat_match(const char* pat, const char* str) {
+    if (!pat || !str) return 0;
+    if (s_eq(pat, "*") || s_eq(pat, str)) return 1;
+    int len = s_len(pat);
+    if (len > 1 && pat[len - 1] == '*') {
+        int i;
+        for (i = 0; i < len - 1; i++) {
+            if (pat[i] != str[i]) return 0;
+        }
+        return 1;
+    }
+    return 0;
+}
+
+int plat_dev_hotplug_event(plat_devices_t* dev_reg, plat_dev_rules_t* rule_reg, const char* dev_name, const char* cls, int present, const char* detail, char* out_action, int cap) {
+    int i, found = 0;
+    if (!dev_name || !cls) return -1;
+    if (rule_reg) rule_reg->hotplug_events++;
+    if (dev_reg) {
+        for (i = 0; i < dev_reg->n; i++) {
+            if (s_eq(dev_reg->d[i].name, dev_name)) {
+                dev_reg->d[i].present = present ? 1 : 0;
+                if (detail && detail[0]) s_copy(dev_reg->d[i].detail, detail, (int)sizeof(dev_reg->d[i].detail));
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            plat_dev_add(dev_reg, dev_name, cls, present, detail ? detail : "hotplug device");
+        }
+    }
+    if (out_action && cap > 0) out_action[0] = 0;
+    if (rule_reg) {
+        for (i = 0; i < rule_reg->n_rules; i++) {
+            const plat_dev_rule_t* rule = &rule_reg->rules[i];
+            if (!rule->enabled) continue;
+            if (pat_match(rule->name_pattern, dev_name) && pat_match(rule->cls_pattern, cls)) {
+                if (out_action && cap > 0) s_copy(out_action, rule->action_cmd, cap);
+                break;
+            }
+        }
+    }
+    return 0;
+}
+
+/* --------------------------------------------------- multi-node admin */
+int plat_admin_node_add(plat_admin_nodes_t* an, uint32_t id, const char* name, const char* arch, uint32_t mem_free, uint32_t busy) {
+    int i, found = 0;
+    if (!an) return -1;
+    for (i = 0; i < an->count; i++) {
+        if (an->nodes[i].node_id == id) {
+            an->nodes[i].mem_free_kib = mem_free;
+            an->nodes[i].busy_percent = busy;
+            an->nodes[i].active = 1;
+            if (name && name[0]) s_copy(an->nodes[i].name, name, (int)sizeof(an->nodes[i].name));
+            if (arch && arch[0]) s_copy(an->nodes[i].arch, arch, (int)sizeof(an->nodes[i].arch));
+            found = 1;
+            break;
+        }
+    }
+    if (!found) {
+        if (an->count >= PLAT_ADMIN_MAX_NODES) return -1;
+        plat_admin_node_t* nd = &an->nodes[an->count++];
+        nd->node_id = id;
+        s_copy(nd->name, name ? name : "node", (int)sizeof(nd->name));
+        s_copy(nd->arch, arch ? arch : "i386", (int)sizeof(nd->arch));
+        nd->mem_free_kib = mem_free;
+        nd->busy_percent = busy;
+        nd->active = 1;
+    }
+    return 0;
+}
+
+int plat_admin_nodes_report(const plat_admin_nodes_t* an, char* out, int cap) {
+    int i;
+    if (!an || !out || cap <= 0) return -1;
+    out[0] = 0;
+    for (i = 0; i < an->count; i++) {
+        const plat_admin_node_t* nd = &an->nodes[i];
+        s_cat(out, "admin-node id ", cap); cat_u(out, nd->node_id, cap);
+        s_cat(out, " name ", cap); s_cat(out, nd->name, cap);
+        s_cat(out, " arch ", cap); s_cat(out, nd->arch, cap);
+        s_cat(out, " free_kib ", cap); cat_u(out, nd->mem_free_kib, cap);
+        s_cat(out, " busy_pct ", cap); cat_u(out, nd->busy_percent, cap);
+        s_cat(out, nd->active ? " active yes\n" : " active no\n", cap);
+    }
+    s_cat(out, "admin-nodes ok count ", cap); cat_u(out, (uint32_t)an->count, cap); s_cat(out, "\n", cap);
+    return s_len(out);
 }
 
 /* ---------------------------------------------------------------- compat */

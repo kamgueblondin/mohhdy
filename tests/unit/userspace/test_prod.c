@@ -218,6 +218,36 @@ void test_phase8_offline_extensions(void) {
     TEST_ASSERT_NOT_NULL(strstr(out_buf, "sec-scan status ok_clean"));
 }
 
+void test_smart_alerts_and_perf_monitor(void) {
+    prod_metrics_t m;
+    prod_alerts_t a;
+    prod_alert_learn_t al;
+    prod_perf_monitor_t pm;
+    prod_sample_t s1 = S(10, 200, 30);
+    prod_sample_t s2 = S(20, 200, 50);
+    char out_buf[512];
+
+    prod_metrics_init(&m);
+    prod_alerts_init(&a);
+    prod_metrics_push(&m, &s1);
+    prod_metrics_push(&m, &s2);
+
+    /* US-114 Smart Alert Threshold Learning */
+    TEST_ASSERT_EQUAL(0, prod_alert_learn_update(&al, &m, PM_BUSY));
+    TEST_ASSERT_EQUAL(2, (int)al.sample_count);
+    TEST_ASSERT_EQUAL(40, (int)al.mean);
+    TEST_ASSERT_EQUAL(0, prod_alert_learn_threshold(&al, 20));
+    TEST_ASSERT_GREATER_THAN(47, (int)al.learned_threshold);
+
+    /* US-106 / US-107 Performance Monitor Consolidation */
+    TEST_ASSERT_GREATER_THAN(0, prod_perf_monitor_eval(&m, &a, &pm, out_buf, sizeof(out_buf)));
+    TEST_ASSERT_EQUAL(100, (int)pm.overall_health_score);
+    TEST_ASSERT_EQUAL(0, (int)pm.active_alerts);
+    TEST_ASSERT_EQUAL(1, pm.system_status_ok);
+    TEST_ASSERT_NOT_NULL(strstr(out_buf, "perf-monitor health 100 active_alerts 0"));
+    TEST_ASSERT_NOT_NULL(strstr(out_buf, "status ok_healthy"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_metrics_ring_stats_and_prediction);
@@ -229,6 +259,7 @@ int main(void) {
     RUN_TEST(test_baseline_feedback_usage);
     RUN_TEST(test_state_save_load);
     RUN_TEST(test_phase8_offline_extensions);
+    RUN_TEST(test_smart_alerts_and_perf_monitor);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

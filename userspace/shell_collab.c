@@ -226,6 +226,42 @@ int shell_collab_line(const char* line) {
         print_string(g_out);
         return 0;
     }
+    if (s_eq(cmd, "collab-pay-convert")) {
+        uint32_t pts, conv = 0;
+        rest = word(rest, b, 48);
+        if (num(a, &pts) || !b[0]) { print_string("collab-pay-convert error usage: POINTS CURRENCY\n"); return 1; }
+        collab_point_convert(pts, b, &conv);
+        print_string("collab-pay-convert ok points "); put_u(pts); print_string(" currency "); print_string(b); print_string(" amount "); put_u(conv); print_string("\n");
+        return 0;
+    }
+    if (s_eq(cmd, "collab-escrow-create")) {
+        uint32_t payee_id, arbiter_id, amt;
+        rest = word(rest, b, 48); rest = word(rest, c, 48);
+        payee_id = peer_id(a);
+        arbiter_id = peer_id(b);
+        if (!payee_id || num(c, &amt)) return emitted(cmd, -1);
+        return emitted(cmd, collab_escrow_create(&g_c, &g_h, payee_id, arbiter_id, amt));
+    }
+    if (s_eq(cmd, "collab-escrow-release")) {
+        if (num(a, &x)) return emitted(cmd, -1);
+        return emitted(cmd, collab_escrow_release(&g_c, &g_h, x));
+    }
+    if (s_eq(cmd, "collab-escrow-refund")) {
+        if (num(a, &x)) return emitted(cmd, -1);
+        return emitted(cmd, collab_escrow_refund(&g_c, &g_h, x));
+    }
+    if (s_eq(cmd, "collab-ticket-route")) {
+        rest = word(rest, b, 48);
+        if (num(a, &x)) return emitted(cmd, -1);
+        y = peer_id(b);
+        if (!y) (void)num(b, &y);
+        return emitted(cmd, collab_ticket_route(&g_c, &g_h, x, y));
+    }
+    if (s_eq(cmd, "collab-ticket-assign")) {
+        rest = word(rest, b, 48);
+        if (num(a, &x) || !b[0]) return emitted(cmd, -1);
+        return emitted(cmd, collab_ticket_assign(&g_c, &g_h, x, b));
+    }
     if (s_eq(cmd, "collab-market-bid")) {
         rest = word(rest, b, 48);
         if (num(a, &x) || num(b, &y)) return emitted(cmd, -1);

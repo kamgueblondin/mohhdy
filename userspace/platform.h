@@ -32,6 +32,7 @@ typedef struct {
     int portrait;
 } plat_layout_t;
 int plat_layout(int width_px, int height_px, plat_layout_t* out);
+int plat_layout_resize(plat_layout_t* layout, int new_w, int new_h);
 const char* plat_form_name(int form);
 
 /* ---- touch gestures from pointer samples (US-079, single pointer & multi-touch) ---- */
@@ -73,10 +74,43 @@ int plat_power_status_report(uint32_t busy_percent, int battery_pct, char* out, 
 
 /* ---- device registry (US-085) ---- */
 #define PLAT_DEVICES 12
+#define PLAT_DEV_RULES 8
 typedef struct { char name[16]; char cls[12]; int present; char detail[48]; } plat_device_t;
 typedef struct { plat_device_t d[PLAT_DEVICES]; int n; } plat_devices_t;
+typedef struct {
+    char name_pattern[16];
+    char cls_pattern[12];
+    char action_cmd[32];
+    int enabled;
+} plat_dev_rule_t;
+typedef struct {
+    plat_dev_rule_t rules[PLAT_DEV_RULES];
+    int n_rules;
+    uint32_t hotplug_events;
+} plat_dev_rules_t;
+
 int plat_dev_add(plat_devices_t* r, const char* name, const char* cls, int present, const char* detail);
 int plat_dev_report(const plat_devices_t* r, const char* name, char* out, int cap);
+int plat_dev_rule_add(plat_dev_rules_t* r, const char* name_pat, const char* cls_pat, const char* action);
+int plat_dev_hotplug_event(plat_devices_t* dev_reg, plat_dev_rules_t* rule_reg, const char* dev_name, const char* cls, int present, const char* detail, char* out_action, int cap);
+
+/* ---- multi-node administration view (US-089) ---- */
+#define PLAT_ADMIN_MAX_NODES 8
+typedef struct {
+    uint32_t node_id;
+    char name[16];
+    char arch[16];
+    uint32_t mem_free_kib;
+    uint32_t busy_percent;
+    int active;
+} plat_admin_node_t;
+typedef struct {
+    plat_admin_node_t nodes[PLAT_ADMIN_MAX_NODES];
+    int count;
+} plat_admin_nodes_t;
+
+int plat_admin_node_add(plat_admin_nodes_t* an, uint32_t id, const char* name, const char* arch, uint32_t mem_free, uint32_t busy);
+int plat_admin_nodes_report(const plat_admin_nodes_t* an, char* out, int cap);
 
 /* ---- application compatibility (US-087) ---- */
 typedef struct { int ok; const char* reason; uint32_t entry; uint32_t phnum; uint32_t machine; } plat_compat_t;

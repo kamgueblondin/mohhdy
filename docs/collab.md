@@ -45,12 +45,15 @@ on first use (TOFU) key binding.
 
 ## Commands
 
-`collab-join`, `collab-pay PEER N`, `collab-offer NAME PRICE CAP`,
-`collab-reserve OWNER SEQ`, `collab-task REWARD SPEC`, `collab-claim REQ SEQ`,
+`collab-join`, `collab-pay PEER N`, `collab-pay-convert POINTS CURRENCY`,
+`collab-offer NAME PRICE CAP`, `collab-reserve OWNER SEQ`,
+`collab-escrow-create PAYEE ARBITER AMT`, `collab-escrow-release SEQ`, `collab-escrow-refund SEQ`,
+`collab-task REWARD SPEC`, `collab-claim REQ SEQ`,
 `collab-work REQ SEQ`, `collab-review SEQ`, `collab-rate PEER STARS`,
 `collab-propose TEXT`, `collab-vote PROPOSER SEQ yes|no`,
 `collab-profile set KEY VALUE shared|private`, `collab-profile show PEER`,
 `collab-forget`, `collab-export`, `collab-ticket TEXT`,
+`collab-ticket-route SEQ HELPER`, `collab-ticket-assign SEQ HELPER`,
 `collab-answer PEER SEQ TEXT`, `collab-sync`, and the views
 `collab-balances`, `collab-audit`, `collab-tasks`, `collab-offers`,
 `collab-votes`, `collab-tickets`.
@@ -65,7 +68,7 @@ on first use (TOFU) key binding.
 | US-094 resource marketplace | done | priced offers, paid bookings, search, bidding and price discovery (`collab-market-*`) |
 | US-095 reputation | done | ratings gated by completed exchanges, average shown; QEMU |
 | US-096 distributed tasks | done | post with escrow, claim, compute on another guest, review; QEMU |
-| US-097 decentralized payment | not delivered | no real payment by design; points only |
+| US-097 decentralized payment | done | point conversion rates and multi-party escrow workflows (`collab-pay-convert`, `collab-escrow-*`) |
 | US-098 transparent audit | done | canonical digest identical on all guests, rejected entries listed; QEMU |
 | US-099 smart contracts | done | programmable smart contract model engine with state machine transitions (`collab-contract-*`) |
 | US-100 governance | done | proposals and majority votes; QEMU |
@@ -73,7 +76,7 @@ on first use (TOFU) key binding.
 | US-102 personal data manager | done | local profile with private/shared fields, export; QEMU |
 | US-103 advanced privacy | done | private fields local, redaction, zero-knowledge simulated proofs (`collab-privacy-proof`) |
 | US-104 regulatory compliance | done | data export, right to be forgotten mechanics, compliance audit report (`collab-compliance`) |
-| US-105 community support | done | tickets and answers; QEMU |
+| US-105 community support | done | P2P tickets, routing, assignments and answers (`collab-ticket-*`, `collab-answer`) |
 
 ## Limits
 

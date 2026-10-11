@@ -824,3 +824,43 @@ int collab_compliance_report(const collab_t* c, char* out, int cap) {
     s_cat(out, "compliance ok status verified\n", cap);
     return s_len(out);
 }
+
+/* --------------------------------------------------- US-097 Payment & Escrow */
+int collab_point_convert(uint32_t points, const char* target_currency, uint32_t* converted_amount) {
+    if (!converted_amount) return -1;
+    if (target_currency && (s_eq(target_currency, "USD") || s_eq(target_currency, "usd"))) {
+        *converted_amount = points / 10U;
+    } else if (target_currency && (s_eq(target_currency, "EUR") || s_eq(target_currency, "eur"))) {
+        *converted_amount = points * 9U / 100U;
+    } else if (target_currency && (s_eq(target_currency, "TOKEN") || s_eq(target_currency, "token"))) {
+        *converted_amount = points * 2U;
+    } else {
+        *converted_amount = points;
+    }
+    return 0;
+}
+
+int collab_escrow_create(collab_t* c, const collab_host_t* h, uint32_t payee, uint32_t arbiter, uint32_t amount) {
+    return collab_emit(c, h, CE_TASK, payee, arbiter, amount, 1U, "escrow:open");
+}
+
+int collab_escrow_release(collab_t* c, const collab_host_t* h, uint32_t escrow_seq) {
+    return collab_emit(c, h, CE_ACCEPT, 0, escrow_seq, 0, 0, "escrow:released");
+}
+
+int collab_escrow_refund(collab_t* c, const collab_host_t* h, uint32_t escrow_seq) {
+    return collab_emit(c, h, CE_REJECT, 0, escrow_seq, 0, 0, "escrow:refunded");
+}
+
+/* --------------------------------------------------- US-105 Ticket Routing */
+int collab_ticket_route(collab_t* c, const collab_host_t* h, uint32_t ticket_seq, uint32_t helper_id) {
+    return collab_emit(c, h, CE_ANSWER, helper_id, ticket_seq, 0, 0, "ticket:routed");
+}
+
+int collab_ticket_assign(collab_t* c, const collab_host_t* h, uint32_t ticket_seq, const char* helper_name) {
+    char desc[COLLAB_TEXT];
+    desc[0] = 0;
+    s_cat(desc, "assign:", COLLAB_TEXT);
+    s_cat(desc, helper_name ? helper_name : "agent", COLLAB_TEXT);
+    return collab_emit(c, h, CE_ANSWER, 0, ticket_seq, 0, 0, desc);
+}

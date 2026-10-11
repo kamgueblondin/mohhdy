@@ -75,10 +75,10 @@ static void join(char* d, const char* dir, const char* name, int cap) {
 }
 
 static const char* k_cmds[] = {
-    "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
+    "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts", "prod-alert-learn",
     "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
     "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "prod-integrity", "prod-bench", "prod-diag",
-    "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "prod-perf-tune", "prod-maint-predict", "prod-support-bundle", "prod-biz-metrics",
+    "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "prod-perf-tune", "prod-maint-predict", "prod-support-bundle", "prod-biz-metrics", "prod-perf-monitor",
     "prod-cicd", "prod-pipeline", "prod-autoscale-workload", "prod-sec-scan", 0
 };
 int shell_prod_is(const char* l) {
@@ -609,6 +609,37 @@ int shell_prod_line(const char* l) {
         prod_pipeline_t pipe;
         word(rest, a, 64);
         prod_pipeline_run(&pipe, a[0] ? a : "/", g_out, (int)sizeof(g_out));
+        out(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "prod-alert-learn")) {
+        prod_alert_learn_t al;
+        int mid = PM_BUSY;
+        uint32_t margin = 20U;
+        rest = word(rest, a, 64);
+        if (a[0]) {
+            int parsed_id = prod_metric_id(a);
+            if (parsed_id >= 0) mid = parsed_id;
+            rest = word(rest, b, 64);
+            if (b[0]) (void)to_u(b, &margin);
+        }
+        if (prod_alert_learn_update(&al, &g_m, mid) == 0) {
+            prod_alert_learn_threshold(&al, margin);
+            g_out[0] = 0; s_cat(g_out, "prod-alert-learn metric ", 4096); s_cat(g_out, prod_metric_name(mid), 4096);
+            s_cat(g_out, " samples ", 4096); cat_u(g_out, al.sample_count, 4096);
+            s_cat(g_out, " mean ", 4096); cat_u(g_out, al.mean, 4096);
+            s_cat(g_out, " margin_pct ", 4096); cat_u(g_out, margin, 4096);
+            s_cat(g_out, " learned_threshold ", 4096); cat_u(g_out, al.learned_threshold, 4096);
+            s_cat(g_out, " ok\n", 4096);
+            out(g_out);
+            return 0;
+        }
+        out("prod-alert-learn error no metric samples\n");
+        return 1;
+    }
+    if (s_eq(cmd, "prod-perf-monitor")) {
+        prod_perf_monitor_t pm;
+        prod_perf_monitor_eval(&g_m, &g_a, &pm, g_out, (int)sizeof(g_out));
         out(g_out);
         return 0;
     }

@@ -139,6 +139,29 @@ void prod_usage_sort(prod_usage_t* u);
 
 int prod_biz_metrics_get(const prod_usage_t* u, uint32_t uptime_ticks, prod_biz_metrics_t* bm);
 
+/* US-114 Dynamic Threshold Learning */
+typedef struct {
+    uint32_t sample_count;
+    uint32_t mean;
+    uint32_t std_dev;
+    uint32_t learned_threshold;
+} prod_alert_learn_t;
+
+int prod_alert_learn_update(prod_alert_learn_t* al, const prod_metrics_t* m, int metric_id);
+int prod_alert_learn_threshold(prod_alert_learn_t* al, uint32_t margin_pct);
+
+/* US-106 / US-107 Performance Monitor Consolidation */
+typedef struct {
+    uint32_t overall_health_score;
+    uint32_t active_alerts;
+    uint32_t sample_count;
+    uint32_t avg_busy_pct;
+    uint32_t free_mem_kib;
+    int system_status_ok;
+} prod_perf_monitor_t;
+
+int prod_perf_monitor_eval(const prod_metrics_t* m, const prod_alerts_t* a, prod_perf_monitor_t* pm, char* out, int cap);
+
 /* Persistence (consolidation lot): compact serialization of the in-RAM
  * state; the shell stores it on the disk-backed overlay. Metrics keep the
  * newest 16 samples and alerts the newest 8 events. */

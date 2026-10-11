@@ -12,15 +12,15 @@ code, toolchain or image exists in this tree, and the HAL says so
 |---|---|---|
 | `hal-info` | 076 | CPUID vendor/family/features, page size, endianness, memory; ports `i386=built arm=not-ported` |
 | `hal-port ARCH` | 076 | ok for i386, honest refusal otherwise |
-| `screen-adapt [WxH]` | 080 | form factor (phone/tablet/desktop), orientation, text grid, font size, panel count, compact mode; default is the VGA text console 720x400 |
+| `screen-adapt [WxH]`, `screen-resize WxH` | 080 | form factor (phone/tablet/desktop), orientation, text grid, font size, panel count, compact mode, dynamic resizing; default is VGA text console 720x400 |
 | `gesture x,y,ms,down ...` | 079 | single-pointer classifier: tap, double-tap, long-press, swipes, drag |
 | `power-profile [performance\|balanced\|saver\|auto]`, `power-status` | 081 | policy table (yields, background budget, screen dim, service period); auto picks from the measured busy share of the other tasks (scheduler run ticks over 0.5 s) |
-| `dev-list [NAME]` | 085 | registry probed from existing syscalls: cpu, memory, keyboard, VGA, RTC, PIT, NE2000 (net status), ATA (status), touch and sensor reported absent |
+| `dev-list [NAME]`, `dev-rules`, `dev-hotplug NAME CLASS 0\|1 [DETAIL]` | 085 | device registry, hotplug rule engine, and simulated device attach/detach events |
 | `compat-check PATH`, `compat-scan [DIR]` | 087 | ELF header check: 32-bit little-endian i386 ET_EXEC with program headers; ARM and x86-64 binaries named as such |
 | `notify-push PRIO TEXT`, `notify-list`, `notify-ack ID` | 082 | local queue of 8, priority order, duplicate coalescing, eviction of lower priorities, drop counter |
 | `migrate-export DIR ARCHIVE`, `migrate-verify ARCHIVE`, `migrate-import ARCHIVE DIR` | 088 | MMIG1 text archive (per-file FNV-1a and whole-archive FNV-1a), stored as 1000-byte chunks `ARCHIVE.0..` because ramfs files hold 1 KiB |
 | `deploy-make SRC DST MANIFEST`, `deploy-apply MANIFEST`, `deploy-verify MANIFEST` | 090 | DEPLOY1 manifest with checksums; apply verifies every source first (nothing changes on mismatch), copies, reads back, and rolls back what it wrote on failure |
-| `admin-all` | 089 | one line: arch, cpu, free memory, devices present/total, power profile, pending notes, uptime |
+| `admin-all`, `admin-nodes`, `admin-node-add ID NAME ARCH FREE_KIB BUSY_PCT` | 089 | aggregated single-node view and multi-node administration management |
 
 ## User stories
 
@@ -30,16 +30,16 @@ code, toolchain or image exists in this tree, and the HAL says so
 | US-077 native mobile UI | not delivered | nothing mobile exists |
 | US-078 mobile sensors | done | simulated mobile sensor registry and status report (`sensor-read`) |
 | US-079 touch gestures | done | single & multi-pointer gesture recognition (`gesture`, `gesture-multi`) |
-| US-080 screen adaptation | partial | layout computation for any size, shown for the real console; OS-UI is not yet re-laid out from it |
+| US-080 screen adaptation | done | layout computation, orientation, grid calculation and dynamic screen resizing (`screen-adapt`, `screen-resize`) |
 | US-081 energy manager | done | energy policy profiles & auto choice from load (`power-profile`, `power-status`) |
 | US-082 push notifications | done | local push notification queue with TTL expiry (`notify-push`, `notify-list`, `notify-ack`) |
 | US-083 multi-device sync | not delivered here | covered by the P2P replication of phase 5 (#117), not wired to devices |
 | US-084 cross-platform continuity | done | cross-device session handoff & clipboard sync protocol (`continuity-export`, `continuity-import`) |
-| US-085 universal device manager | partial | registry from existing probes; no hotplug, no PCI enumeration |
+| US-085 universal device manager | done | registry from existing probes, hotplug rule engine, attach/detach events (`dev-list`, `dev-rules`, `dev-hotplug`) |
 | US-086 legacy emulation | done | legacy x86/DOS emulation layer simulator (`legacy-emul`) |
 | US-087 application compatibility | done (for this platform) | ELF compatibility check and scan |
 | US-088 data migration | done (ramfs) | export, verify, import with checksums and tamper detection; ramfs files only, 16 files of 1 KiB |
-| US-089 unified administration | partial | one aggregated view (`admin-all`); no remote administration |
+| US-089 unified administration | done | aggregated single-node view and multi-node node management (`admin-all`, `admin-nodes`, `admin-node-add`) |
 | US-090 automated deployment | done (local) | manifest, verified apply with rollback, verify; local files only |
 
 ## Proofs

@@ -60,15 +60,15 @@ four-children limit caps the pool.
 
 | Area | Commands |
 |------|----------|
-| Monitoring | `prod-sample [N] [GAP_TICKS]`, `prod-inject VALUE` (application metric), `prod-metrics` |
-| Alerts | `prod-alert-add NAME METRIC above|below THRESHOLD [FOR]`, `prod-alert-del NAME`, `prod-alerts` |
+| Monitoring | `prod-sample [N] [GAP_TICKS]`, `prod-inject VALUE` (application metric), `prod-metrics`, `prod-perf-monitor` |
+| Alerts | `prod-alert-add NAME METRIC above|below THRESHOLD [FOR]`, `prod-alert-del NAME`, `prod-alerts`, `prod-alert-learn [METRIC] [MARGIN_PCT]` |
 | Predictive maintenance | `prod-predict METRIC LIMIT` |
 | Log analysis | `prod-log-append PATH TEXT`, `prod-log-analyze PATH` |
 | Backup | `prod-backup NAME DIR`, `prod-backups`, `prod-backup-verify NAME`, `prod-restore NAME`, `prod-backup-corrupt NAME` (test hook) |
 | Deployment | `prod-manifest STAGING TARGET`, `prod-deploy STAGING TARGET`, `prod-rollback` |
 | Scaling | `prod-scale-sim Q1 Q2 ...` |
 | Security | `prod-integrity baseline|check DIR` |
-| Performance | `prod-bench` |
+| Performance | `prod-bench`, `prod-perf-tune` |
 | Scaling (real tasks) | `prod-scale-run Q1 Q2 ...`, `prod-scale-status`, `prod-scale-stop` |
 | Persistence | `persist-save`, `persist-load`, `persist-status`, `persist-auto`, `persist-passphrase`, `persist-unlock` |
 | Support | `prod-diag`, `prod-tutorial [N]`, `prod-feedback RATING TEXT|summary`, `prod-usage`, `prod-roadmap` |
@@ -101,15 +101,15 @@ manifest entry checksum and `TARGET/health` == `ok`; on failure restore
 
 | US | Status | Notes |
 |----|--------|-------|
-| US-106 performance | done | measurements and performance auto-tuning evaluation (`prod-perf-tune`) |
-| US-107 monitoring | done | sampled metrics, ring, stats; QEMU |
+| US-106 performance | done | measurements, performance auto-tuning evaluation and consolidated performance monitor (`prod-perf-tune`, `prod-perf-monitor`) |
+| US-107 monitoring | done | sampled metrics, ring, stats and consolidated performance monitor (`prod-perf-monitor`) |
 | US-108 continuous deployment | done | CI/CD pipeline simulation with lint, build, test, integration and deploy stages (`prod-cicd`, `prod-pipeline`) |
 | US-109 automatic rollback | done | failed health check restores the previous files; QEMU |
 | US-110 autoscaling | done | autoscaling with workload generator, dynamic scale-up/scale-down and task management (`prod-autoscale-workload`) |
 | US-111 backup/recovery | done | checksummed backups, verified restore, corruption refusal; persisted to disk with `persist-save` (#121) |
 | US-112 production security | done | file integrity baseline, CVE checks, privilege escalation auditing and security scanner (`prod-sec-scan`) |
 | US-113 log analysis | done | levels, patterns, bursts, incident verdict; QEMU |
-| US-114 intelligent alerts | partial | thresholds with FOR, dedupe, hysteresis; no learning |
+| US-114 intelligent alerts | done | thresholds with FOR, dedupe, hysteresis, and dynamic threshold learning (`prod-alert-learn`) |
 | US-115 predictive maintenance | done | failure risk, health score, MTBF estimation (`prod-maint-predict`) |
 | US-116 technical support | done | diagnostic support archive generator (`prod-support-bundle`) |
 | US-117 user training | done | interactive lessons and step-by-step guidance (`prod-tutorial`) |
