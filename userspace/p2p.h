@@ -52,7 +52,7 @@ typedef struct {
     uint8_t pub[32];
     uint8_t key[16];
     uint8_t iv[4];
-    uint32_t tx_counter, rx_counter;
+    uint32_t tx_counter, rx_counter, rx_window;
     uint32_t last_seen, ping_sent_at, rtt_ticks;
     uint32_t sync_at;      /* last SYNC_REQ sent by p2p_sync */
     uint8_t sync_retries;  /* re-sends left until SYNC_ITEMS arrives */
@@ -89,6 +89,7 @@ typedef struct {
 typedef enum { P2P_RAFT_FOLLOWER = 0, P2P_RAFT_CANDIDATE = 1, P2P_RAFT_LEADER = 2 } p2p_raft_role_t;
 
 typedef struct {
+    uint8_t active;           /* 1 if Raft consensus mode is active */
     uint8_t role;             /* Follower (0), Candidate (1), Leader (2) */
     uint32_t term;            /* current Raft term */
     uint32_t voted_for;       /* candidate ID voted for in current term (0 if none) */

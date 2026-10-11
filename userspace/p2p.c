@@ -566,6 +566,7 @@ int p2p_up_step(p2p_node_t* n, int step, const char* name, const uint8_t ip[4], 
         n->last_hello = now(h) - P2P_HELLO_TICKS;
         n->last_ping = now(h);
         n->qos.window_size = 4;
+        n->raft.active = 0;
         n->raft.role = P2P_RAFT_FOLLOWER;
         n->raft.term = 1;
         n->raft.election_tick = now(h);
@@ -601,7 +602,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
     if (t - n->last_hello >= P2P_HELLO_TICKS) { n->last_hello = t; send_hello(n, h); }
 
     /* Raft Consensus Engine (US-064): Follower election timeout / Leader heartbeat */
-    if (n->raft.role == P2P_RAFT_LEADER) {
+    if (n->raft.active && n->raft.role == P2P_RAFT_LEADER) {
         if (t - n->raft.heartbeat_tick >= P2P_HZ) {
             n->raft.heartbeat_tick = t;
             put32(b, n->raft.term); put32(b + 4, n->id);
@@ -612,7 +613,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
                 }
             }
         }
-    } else if (t - n->raft.election_tick >= 5U * P2P_HZ) {
+    } else if (n->raft.active && t - n->raft.election_tick >= 5U * P2P_HZ) {
         /* Election timeout triggered */
         (void)p2p_raft_elect(n, h);
     }
@@ -803,6 +804,7 @@ int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h) {
     uint8_t b[16];
     int i, sent = 0;
     if (!n || !n->up) return -1;
+    n->raft.active = 1;
     n->raft.role = P2P_RAFT_CANDIDATE;
     n->raft.term++;
     n->raft.term_changes++;
