@@ -1063,7 +1063,7 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
             if (!p->used) continue;
 #define FIND(cond, kind, label, val, hint) if (cond) { s_cat(out, "p2p analyze finding ", cap); s_cat(out, p->name, cap); s_cat(out, " " label " ", cap); cat_u(out, (val), cap); s_cat(out, " (" hint ")\n", cap); kind++; shown++; }
             FIND(p->auth_fail > 0, suspicious, "auth-failures", p->auth_fail, "wrong network key or tampering")
-            FIND(p->replay > 0, suspicious, "replays", p->replay, "old frames re-sent")
+            FIND(p->replay > 0, degraded, "replays", p->replay, "old frames re-sent")
             FIND(p->throttled > 0, degraded, "throttled", p->throttled, "sender above p2p-limit")
             FIND(p->down_events >= 2, degraded, "down-events", p->down_events, "unstable link")
             FIND(p->up && p->rtt_ticks * (1000U / P2P_HZ) > 500U, degraded, "rtt-ms", p->rtt_ticks * (1000U / P2P_HZ), "high latency")
