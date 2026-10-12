@@ -49,6 +49,7 @@ static const char *const k_cmds[] = {
     "browser-tab-rename", "browser-tab-pin", "browser-tab-duplicate", "browser-tab-next", "browser-tab-prev", "browser-tabs",
     "browser-fs-save", "browser-fs-load", "browser-fs-sync",
     "browser-navigate", "browser-back", "browser-forward", "browser-dom-tree", "browser-eval", "browser-pm-run",
+    "browser-navigate", "browser-back", "browser-forward", "browser-dom-tree", "browser-eval",
     "browser-form-fill", "browser-dom-act", "browser-fetch", "fetch-sim",
     "browser-storage-set", "browser-storage-get", "tab-storage",
     "mcp-invoice", "mcp-invoke", "mcp-list", "mcp-status", "mcp-auth", "mcp-credentials",
@@ -2785,6 +2786,7 @@ int osui_web_load_state(const char *buf, int len) {
         if (buf[p] == '\n') p++;
         if (s_ncmp(line, "TAB ", 4) == 0) {
             char tid[12] = {0}, url[64] = {0}, title[32] = {0}, origin[32] = "self", kind[16] = "web";
+            char tid[12] = {0}, url[64] = {0}, title[32] = {0}, kind[16] = "web";
             int pinned = 0;
             const char *s;
             if ((s = s_find(line, "id=")) != 0) copy_word_val(s + 3, tid, sizeof(tid));
