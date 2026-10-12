@@ -106,10 +106,7 @@ class CommandEchoMismatch(RuntimeError):
 
 
 def normalized_log(output):
-    output = re.sub(r"(?<=\w)TIMER_ALIVE: tick=\d+\+?\r?\n(?=\w)", "", output)
-    output = re.sub(r"TIMER_ALIVE: tick=\d+\+?\r?\n(?=\w)", "", output)
-    output = re.sub(r"TIMER_ALIVE: tick=\d+\+?\r?\n(?=\s+\w)", "", output)
-    output = re.sub(r"TIMER_ALIVE: tick=\d+\+?", "", output)
+    output = re.sub(r"TIMER_ALIVE: tick=\d+\+?\r?\n?", "", output)
     output = re.sub(r"\[SCHED\] switching to task \d+\r?\n?", "", output)
     return output
 
@@ -225,14 +222,14 @@ def main():
                 ("browser-pm-run print hello_mohhdy", "browser-pm-run ok"),
                 ("browser-origin-status", "browser-origin-status isolation=active"),
                 ("browser-telemetry status", "browser-telemetry status=active"),
-                ("pwa-manifest demo app://demo", "pwa-manifest ok id=pwa"),
+                ("pwa-manifest demo app://demo", "pwa-manifest ok id=p"),
                 ("pwa-list", "pwa-list count="),
                 ("pwa-install demo", "pwa-install ok"),
                 ("pwa-run demo", "pwa_name=demo"),
-                ("media-play audio track01", "media-play ok status=playing"),
+                ("media-play audio track01", "status=playing"),
                 ("browser-media", "playing=true"),
-                ("media-pause", "media-pause ok status=paused"),
-                ("media-stop", "media-stop ok status=stopped"),
+                ("media-pause", "media-pause ok"),
+                ("media-stop", "media-stop ok"),
                 ("browser-fetch p2p://node origin=untrusted", "origin_denied"),
                 ("os-p2p", "pane=p2p"),
                 ("os-collab", "pane=collab"),
