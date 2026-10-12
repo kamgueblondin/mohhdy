@@ -135,6 +135,8 @@ int shell_p2p_line(const char* line) {
     const char* rest;
     int rc;
     g_host.ctx = 0; g_host.send = h_send; g_host.recv = h_recv; g_host.ticks = h_ticks; g_host.out = h_out;
+    /* Apply datagrams queued while the line was typed before any report. */
+    if (g_node.up) shell_p2p_poll();
     rest = word(line, cmd, (int)sizeof(cmd));
     if (s_eq(cmd, "p2p-up")) {
         uint8_t ip[4], seed[32];

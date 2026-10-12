@@ -203,6 +203,19 @@ static void test_vbe_p2p_collab_prod_panes(void) {
     TEST_ASSERT_EQUAL(OS_FB_PANE_PROD, g_scene.pane);
 }
 
+static void test_gui_media_rendering(void) {
+    setup();
+    run_line("media-play audio stream1");
+    osui_gui_render(g_cells);
+    osui_gui_ascii_row(g_cells, 9, g_row, (int)sizeof(g_row));
+    TEST_ASSERT(strstr(g_row, "MEDIA PLAY stream1") != NULL);
+
+    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
+    TEST_ASSERT(strstr(g_snap, "media=playing:stream1") != NULL);
+
+    run_line("media-stop");
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_gui_command_canonical);
@@ -213,6 +226,7 @@ int main(void) {
     RUN_TEST(test_gui_feed_slash_and_esc);
     RUN_TEST(test_gui_live_shell_eval);
     RUN_TEST(test_vbe_p2p_collab_prod_panes);
+    RUN_TEST(test_gui_media_rendering);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

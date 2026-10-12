@@ -39,4 +39,13 @@ int osui_gui_should_leave(void);
 void osui_gui_ack_leave(void);
 int osui_stage_tick(char *out, int out_max);
 
+int osui_get_media_active(void);
+int osui_get_media_paused(void);
+const char *osui_get_media_type(void);
+const char *osui_get_media_title(void);
+const char *osui_get_media_url(void);
+unsigned osui_get_media_ticks(void);
+int osui_get_pwa_count(void);
+unsigned osui_get_telemetry_commands(void);
+
 #endif

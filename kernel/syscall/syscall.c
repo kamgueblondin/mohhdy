@@ -1385,14 +1385,20 @@ void syscall_handler(cpu_state_t* cpu) {
             
         case SYS_GETC:
             {
-                // Réactiver les interruptions avant de lire le clavier
+                char c = 0;
+                /* Reactiver les interruptions avant de lire le clavier. */
                 asm volatile("sti");
-                
-                // Lecture clavier (ASCII)
-                char c = keyboard_getc();
-                cpu->eax = c;
-                
-                // Log uniquement si caractère non nul pour éviter le bruit
+                /* ebx=1: one poll, then return 0 if the buffer is empty.
+                 * keyboard_getc busy-waits here, and IRQ0 does not preempt a
+                 * syscall, so a P2P shell misses hellos while ticks still
+                 * advance past the peer-down threshold. */
+                if (cpu->ebx == 1) {
+                    if (!keyboard_poll_char(&c)) c = 0;
+                } else {
+                    c = keyboard_getc();
+                }
+                cpu->eax = (unsigned char)c;
+
                 if (c != 0) {
                     print_string_serial("SYS_GETC: caractère retourné: '");
                     write_serial(c);

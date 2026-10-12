@@ -106,10 +106,7 @@ class CommandEchoMismatch(RuntimeError):
 
 
 def normalized_log(output):
-    output = re.sub(r"(?<=\w)TIMER_ALIVE: tick=\d+\+?\r?\n(?=\w)", "", output)
-    output = re.sub(r"TIMER_ALIVE: tick=\d+\+?\r?\n(?=\w)", "", output)
-    output = re.sub(r"TIMER_ALIVE: tick=\d+\+?\r?\n(?=\s+\w)", "", output)
-    output = re.sub(r"TIMER_ALIVE: tick=\d+\+?", "", output)
+    output = re.sub(r"TIMER_ALIVE: tick=\d+\+?\r?\n?", "", output)
     output = re.sub(r"\[SCHED\] switching to task \d+\r?\n?", "", output)
     return output
 
@@ -224,6 +221,16 @@ def main():
                 ("browser-fs-load /web.json", "browser-fs-load ok"),
                 ("browser-pm-run print hello_mohhdy", "browser-pm-run ok"),
                 ("browser-origin-status", "browser-origin-status isolation=active"),
+                ("browser-telemetry status", "browser-telemetry status=active"),
+                # make_id emits p0002 (seed MohhdyApp is pwa0001, next id starts at 1).
+                ("pwa-manifest demo app://demo", "pwa-manifest ok id=p0002 name=demo"),
+                ("pwa-list", "pwa-list count="),
+                ("pwa-install demo", "pwa-install ok"),
+                ("pwa-run demo", "pwa_name=demo"),
+                ("media-play audio track01", "media-play ok type=audio title=track01 status=playing"),
+                ("browser-media", "playing=true"),
+                ("media-pause", "media-pause ok status=paused"),
+                ("media-stop", "media-stop ok status=stopped"),
                 ("browser-fetch p2p://node origin=untrusted", "origin_denied"),
                 ("os-p2p", "pane=p2p"),
                 ("os-collab", "pane=collab"),

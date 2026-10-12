@@ -49,6 +49,28 @@ Consolidation globale et finalisation des phases ouvertes (Phase 5 P2P, Phase 6 
 
 Resultat : compilation reussie, validation de la suite unitaire et robustesse (`make test-all`) a **748/748** tests reussis (0 echec, 0 ignore), alignement du registre de commandes a 329 noms (`python3 scripts/extract_guest_commands.py --check`), et validation de tous les contrats QEMU de bout en bout (`make qemu-p2p`, `make qemu-platform`, `make qemu-collab`, `make qemu-production`, `make qemu-persistence`).
 
+## Lot #136 valide le 12 octobre 2026
+
+Integration du moteur promptmessage dans l'OS-UI Runtime C freestanding (`userspace/osui_runtime.c`). Ajout de la commande `browser-pm-run`, execution automatique lors des navigations d'onglets vers des fichiers/URL `.pm` ou `pm://`, et routage unifie des workflows agentiques (`workflow=pm`, `/pm`, `pm-run`). Attribution d'origine par onglet (`origin`), isolation stricte du stockage local par onglet, filtrage des requetes `browser-fetch` et des sockets P2P/Peer (`SYS_PEER_DATA`). Acces inter-origines non autorises retournent 403 (`origin_denied`) et enregistres dans le journal d'audit (`osui-audit`). Ajout de `browser-origin-status` (`/origin-status`).
+
+## Lot #137 en cours le 12 octobre 2026
+
+Pas merge. Le run CI 38232561645 sur eebc324 avait 6 jobs verts et 2 rouges (`make qemu-osui-runtime`, `make qemu-p2p`). Cette revision corrige le marqueur QEMU du manifeste PWA (`id=p0002`, pas `id=pwa`) et le faux "peer down" pendant la lecture clavier. Le CI GitHub de cette revision n'est pas declare vert ici.
+
+Preuves locales rejouees sur cette revision :
+- `make qemu-p2p` : PASS (scenario 1 compris, `p2p peers ok 2 up 2` inchange), 127 s, frames=661 hello=159 sealed=502 plaintext=0.
+- `make qemu-osui-runtime` : contrat passe, y compris `pwa-manifest ok id=p0002 name=demo` et `media-play ok type=audio title=track01 status=playing`.
+- `make test-all` : 756 passes, 0 echec, 0 ignore ; registre guest 353 noms.
+- `make strict-image-check` : OK. `make secrets-check` : OK, aucun secret dans 3 images.
+- `make tree-clean-check` : cible absente du Makefile.
+
+Tableau de bord de telemetrie, moteur de manifestes PWA simules et gestionnaires de flux medias / audio / video freestanding dans l'OS-UI VBE GUI et le Web Runtime C :
+- **Telemetrie OS-UI** : Suivi dynamique des metriques d'execution (commandes, requetes fetch, IPC, ticks media, executions PWA, erreurs). Commande `browser-telemetry` (`/telemetry`, `osui-telemetry`) supportant `status`, `export` (JSON) et `reset`.
+- **Manifestes PWA & Applications Web simulees** : Moteur de manifestes applicatifs (`pwa-manifest`, `pwa-install`, `pwa-list`, `pwa-run`). Enregistrement, installation, listage et lancement d'applications web natives simulees dans les onglets du Web Runtime avec manifeste par defaut `MohhdyApp` (`pwa0001`).
+- **Flux Medias Freestanding** : Gestionnaire de lecture et streaming audio/video (`browser-media`, `media-play`, `media-pause`, `media-stop`, `media-stream`). Inclusion des ticks de lecture media dans la boucle de rendu et d'execution.
+- **Rendu GUI VBE Desktop** : Affichage d'un indicateur de statut et visualiseur de lecture media dans la scene du bureau VBE (`userspace/osui_gui.c`) et suivi de l'etat media dans les instantanes d'ecran (`OSUI-SNAP`).
+- **Registre de commandes guest et tests** : Registre aligne a **353 commandes guest** (`python3 scripts/extract_guest_commands.py --check`). Le job CI "Build, tests, QEMU smoke" du run 38232561645 etait vert (suite unitaire, `strict-image-check`, `secrets-check`). Les contrats QEMU OS-UI et P2P de ce lot ne l'etaient pas sur ce commit.
+
 ## Feuille de route opérationnelle après la baseline
 
 L'ordre suivant est la suite d'implémentation retenue ; il ne transforme pas les fonctions futures en fonctions livrées :

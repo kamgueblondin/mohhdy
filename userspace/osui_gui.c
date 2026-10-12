@@ -207,7 +207,8 @@ static void sys_vga_leave(void) {
 
 static int sys_getc_gui(void) {
     int c;
-    asm volatile("int $0x80" : "=a"(c) : "a"(SYS_GETC));
+    /* ebx=0 keeps the blocking read. The shell passes ebx=1. */
+    asm volatile("int $0x80" : "=a"(c) : "a"(SYS_GETC), "b"(0));
     return c;
 }
 
@@ -315,6 +316,12 @@ void osui_gui_write_snap(char *dst, int max) {
     }
     snap_add(dst, max, &p, " input=");
     snap_add(dst, max, &p, g_input);
+    if (osui_get_media_active()) {
+        snap_add(dst, max, &p, " media=");
+        snap_add(dst, max, &p, osui_get_media_paused() ? "paused" : "playing");
+        snap_add(dst, max, &p, ":");
+        snap_add(dst, max, &p, osui_get_media_title());
+    }
     snap_add(dst, max, &p, "\n");
     for (i = 0; i < n; i++) {
         char msg[160];
@@ -403,6 +410,18 @@ void osui_gui_render(uint16_t *cells) {
     put_text(cells, 0, 7,
         " guest_html_stage=false  python_facade=false  display_host=false",
         ATTR_DIM);
+    if (osui_get_media_active()) {
+        char media_buf[80];
+        scpy(media_buf, 80, " [MEDIA ");
+        if (osui_get_media_paused()) {
+            scpy(media_buf + slen(media_buf), 80 - slen(media_buf), "PAUSED ");
+        } else {
+            scpy(media_buf + slen(media_buf), 80 - slen(media_buf), "PLAY ");
+        }
+        scpy(media_buf + slen(media_buf), 80 - slen(media_buf), osui_get_media_title());
+        scpy(media_buf + slen(media_buf), 80 - slen(media_buf), "]");
+        put_text(cells, 0, 9, media_buf, ATTR_TITLE);
+    }
 }
 
 int osui_gui_feed_key(int key, char *out, int out_max) {

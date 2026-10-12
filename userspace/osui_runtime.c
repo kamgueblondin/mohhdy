@@ -51,6 +51,8 @@ static const char *const k_cmds[] = {
     "browser-navigate", "browser-back", "browser-forward", "browser-dom-tree", "browser-eval", "browser-pm-run",
     "browser-form-fill", "browser-dom-act", "browser-fetch", "fetch-sim",
     "browser-storage-set", "browser-storage-get", "tab-storage",
+    "browser-telemetry", "osui-telemetry", "pwa-manifest", "pwa-install", "pwa-list", "pwa-run",
+    "browser-media", "media-play", "media-pause", "media-stop", "media-stream",
     "mcp-invoice", "mcp-invoke", "mcp-list", "mcp-status", "mcp-auth", "mcp-credentials",
     "fs-list", "fs-read", "fs-write",
     "stage", "stage-prompt",
@@ -134,6 +136,27 @@ typedef struct {
 #define OSUI_MAX_TAB_HISTORY 8
 #define OSUI_MAX_MCP_CREDS 4
 #define OSUI_MAX_AUDIT 16
+#define OSUI_MAX_PWA 8
+
+typedef struct {
+    int used;
+    char id[OSUI_ID];
+    char name[32];
+    char start_url[64];
+    char scope[32];
+    char theme_color[16];
+    char display[16];
+    int installed;
+} osui_pwa_t;
+
+typedef struct {
+    int active;
+    int paused;
+    char type[16];
+    char title[32];
+    char url[64];
+    unsigned ticks;
+} osui_media_stream_t;
 
 typedef struct {
     int used;
@@ -220,6 +243,17 @@ typedef struct {
     int n_mcp_creds;
     osui_audit_entry_t audit_log[OSUI_MAX_AUDIT];
     int n_audit;
+    /* Lot #137: Telemetry, PWA, and Media stream state */
+    unsigned telemetry_commands;
+    unsigned telemetry_fetches;
+    unsigned telemetry_ipc_msgs;
+    unsigned telemetry_media_ticks;
+    unsigned telemetry_pwa_runs;
+    unsigned telemetry_errors;
+    osui_pwa_t pwas[OSUI_MAX_PWA];
+    int n_pwas;
+    unsigned next_pwa_id;
+    osui_media_stream_t media;
 } osui_state_t;
 
 static osui_state_t G;
@@ -1272,6 +1306,259 @@ static int cmd_os_status(char *out, int max) {
         out_add(out, max, &p, st_name(s->status));
     }
     out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_browser_navigate(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max);
+
+/* Lot #137: Telemetry dashboard, PWA manifest engine, and Media stream handlers */
+static int cmd_browser_telemetry(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    const char *sub = (narg > 0 && args[0][0]) ? args[0] : "status";
+    if (s_cmp(sub, "reset") == 0) {
+        G.telemetry_commands = 0U;
+        G.telemetry_fetches = 0U;
+        G.telemetry_ipc_msgs = 0U;
+        G.telemetry_media_ticks = 0U;
+        G.telemetry_pwa_runs = 0U;
+        G.telemetry_errors = 0U;
+        out_add(out, max, &p, "osui browser-telemetry reset ok\n");
+        return OSUI_OK;
+    }
+    if (s_cmp(sub, "export") == 0) {
+        out_add(out, max, &p, "osui browser-telemetry export ok json={\"commands\":");
+        out_u(out, max, &p, G.telemetry_commands);
+        out_add(out, max, &p, ",\"fetches\":");
+        out_u(out, max, &p, G.telemetry_fetches);
+        out_add(out, max, &p, ",\"ipc\":");
+        out_u(out, max, &p, G.telemetry_ipc_msgs);
+        out_add(out, max, &p, ",\"media_ticks\":");
+        out_u(out, max, &p, G.telemetry_media_ticks);
+        out_add(out, max, &p, ",\"pwa_runs\":");
+        out_u(out, max, &p, G.telemetry_pwa_runs);
+        out_add(out, max, &p, ",\"errors\":");
+        out_u(out, max, &p, G.telemetry_errors);
+        out_add(out, max, &p, "}\n");
+        return OSUI_OK;
+    }
+    out_add(out, max, &p, "osui browser-telemetry status=active commands=");
+    out_u(out, max, &p, G.telemetry_commands);
+    out_add(out, max, &p, " fetches=");
+    out_u(out, max, &p, G.telemetry_fetches);
+    out_add(out, max, &p, " ipc=");
+    out_u(out, max, &p, G.telemetry_ipc_msgs);
+    out_add(out, max, &p, " media_ticks=");
+    out_u(out, max, &p, G.telemetry_media_ticks);
+    out_add(out, max, &p, " pwa_runs=");
+    out_u(out, max, &p, G.telemetry_pwa_runs);
+    out_add(out, max, &p, " errors=");
+    out_u(out, max, &p, G.telemetry_errors);
+    out_add(out, max, &p, " active_tabs=");
+    out_u(out, max, &p, (unsigned)G.n_tabs);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_pwa_manifest(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0, i;
+    const char *name = (narg > 0 && args[0][0]) ? args[0] : "MohhdyApp";
+    const char *url = (narg > 1 && args[1][0]) ? args[1] : "app://local";
+    const char *scope = (narg > 2 && args[2][0]) ? args[2] : url;
+    const char *display = (narg > 3 && args[3][0]) ? args[3] : "standalone";
+    osui_pwa_t *app = 0;
+
+    for (i = 0; i < OSUI_MAX_PWA; i++) {
+        if (G.pwas[i].used && s_cmp(G.pwas[i].name, name) == 0) {
+            app = &G.pwas[i];
+            break;
+        }
+    }
+    if (!app) {
+        for (i = 0; i < OSUI_MAX_PWA; i++) {
+            if (!G.pwas[i].used) {
+                app = &G.pwas[i];
+                app->used = 1;
+                G.next_pwa_id++;
+            make_id(app->id, 'p', G.next_pwa_id);
+                G.n_pwas++;
+                break;
+            }
+        }
+    }
+    if (!app) {
+        out_add(out, max, &p, "osui pwa-manifest error=capacity_reached\n");
+        return OSUI_ERR;
+    }
+    s_cpy(app->name, 32, name);
+    s_cpy(app->start_url, 64, url);
+    s_cpy(app->scope, 32, scope);
+    s_cpy(app->theme_color, 16, "#007acc");
+    s_cpy(app->display, 16, display);
+
+    out_add(out, max, &p, "osui pwa-manifest ok id=");
+    out_add(out, max, &p, app->id);
+    out_add(out, max, &p, " name=");
+    out_add(out, max, &p, app->name);
+    out_add(out, max, &p, " start_url=");
+    out_add(out, max, &p, app->start_url);
+    out_add(out, max, &p, " display=");
+    out_add(out, max, &p, app->display);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_pwa_install(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0, i;
+    const char *target = (narg > 0 && args[0][0]) ? args[0] : "";
+    osui_pwa_t *app = 0;
+    if (!target[0]) {
+        out_add(out, max, &p, "osui pwa-install error=missing_target\n");
+        return OSUI_ERR;
+    }
+    for (i = 0; i < OSUI_MAX_PWA; i++) {
+        if (G.pwas[i].used && (s_cmp(G.pwas[i].id, target) == 0 || s_cmp(G.pwas[i].name, target) == 0)) {
+            app = &G.pwas[i];
+            break;
+        }
+    }
+    if (!app) {
+        out_add(out, max, &p, "osui pwa-install error=not_found target=");
+        out_add(out, max, &p, target);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+    app->installed = 1;
+    out_add(out, max, &p, "osui pwa-install ok id=");
+    out_add(out, max, &p, app->id);
+    out_add(out, max, &p, " name=");
+    out_add(out, max, &p, app->name);
+    out_add(out, max, &p, " status=installed\n");
+    return OSUI_OK;
+}
+
+static int cmd_pwa_list(char *out, int max) {
+    int p = 0, i, cnt = 0;
+    out_add(out, max, &p, "osui pwa-list count=");
+    out_u(out, max, &p, (unsigned)G.n_pwas);
+    out_add(out, max, &p, " pwas=");
+    for (i = 0; i < OSUI_MAX_PWA; i++) {
+        if (G.pwas[i].used) {
+            if (cnt > 0) out_add(out, max, &p, ",");
+            out_add(out, max, &p, G.pwas[i].id);
+            out_add(out, max, &p, ":");
+            out_add(out, max, &p, G.pwas[i].name);
+            out_add(out, max, &p, ":");
+            out_add(out, max, &p, G.pwas[i].installed ? "installed" : "manifest");
+            cnt++;
+        }
+    }
+    if (cnt == 0) out_add(out, max, &p, "none");
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_pwa_run(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0, i;
+    const char *target = (narg > 0 && args[0][0]) ? args[0] : "";
+    osui_pwa_t *app = 0;
+    char nav_args[OSUI_MAX_ARGS][96];
+    if (!target[0]) {
+        out_add(out, max, &p, "osui pwa-run error=missing_target\n");
+        return OSUI_ERR;
+    }
+    for (i = 0; i < OSUI_MAX_PWA; i++) {
+        if (G.pwas[i].used && (s_cmp(G.pwas[i].id, target) == 0 || s_cmp(G.pwas[i].name, target) == 0)) {
+            app = &G.pwas[i];
+            break;
+        }
+    }
+    if (!app) {
+        out_add(out, max, &p, "osui pwa-run error=not_found target=");
+        out_add(out, max, &p, target);
+        out_add(out, max, &p, "\n");
+        return OSUI_ERR;
+    }
+    G.telemetry_pwa_runs++;
+    s_cpy(nav_args[0], 96, app->start_url);
+    s_cpy(nav_args[1], 96, app->name);
+    cmd_browser_navigate(nav_args, 2, out, max);
+    p = s_len(out);
+    if (p > 0 && out[p - 1] == '\n') p--;
+    out_add(out, max, &p, " pwa_run_id=");
+    out_add(out, max, &p, app->id);
+    out_add(out, max, &p, " pwa_name=");
+    out_add(out, max, &p, app->name);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_browser_media(char *out, int max) {
+    int p = 0;
+    out_add(out, max, &p, "osui browser-media status=");
+    out_add(out, max, &p, G.media.active ? "active" : "idle");
+    out_add(out, max, &p, " playing=");
+    out_add(out, max, &p, (G.media.active && !G.media.paused) ? "true" : "false");
+    out_add(out, max, &p, " type=");
+    out_add(out, max, &p, G.media.type[0] ? G.media.type : "audio");
+    out_add(out, max, &p, " title=");
+    out_add(out, max, &p, G.media.title[0] ? G.media.title : "stream01");
+    out_add(out, max, &p, " ticks=");
+    out_u(out, max, &p, G.media.ticks);
+    out_add(out, max, &p, " url=");
+    out_add(out, max, &p, G.media.url[0] ? G.media.url : "none");
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_media_play(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    const char *type = (narg > 0 && args[0][0]) ? args[0] : "audio";
+    const char *title = (narg > 1 && args[1][0]) ? args[1] : "stream01";
+    G.media.active = 1;
+    G.media.paused = 0;
+    s_cpy(G.media.type, 16, type);
+    s_cpy(G.media.title, 32, title);
+    if (!G.media.url[0]) s_cpy(G.media.url, 64, "media://stream1");
+    out_add(out, max, &p, "osui media-play ok type=");
+    out_add(out, max, &p, G.media.type);
+    out_add(out, max, &p, " title=");
+    out_add(out, max, &p, G.media.title);
+    out_add(out, max, &p, " status=playing\n");
+    return OSUI_OK;
+}
+
+static int cmd_media_pause(char *out, int max) {
+    int p = 0;
+    if (G.media.active) G.media.paused = 1;
+    out_add(out, max, &p, "osui media-pause ok status=");
+    out_add(out, max, &p, G.media.paused ? "paused" : "idle");
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_media_stop(char *out, int max) {
+    int p = 0;
+    G.media.active = 0;
+    G.media.paused = 0;
+    G.media.ticks = 0;
+    out_add(out, max, &p, "osui media-stop ok status=stopped\n");
+    return OSUI_OK;
+}
+
+static int cmd_media_stream(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0;
+    const char *url = (narg > 0 && args[0][0]) ? args[0] : "media://stream1";
+    const char *type = (narg > 1 && args[1][0]) ? args[1] : "stream";
+    G.media.active = 1;
+    G.media.paused = 0;
+    s_cpy(G.media.url, 64, url);
+    s_cpy(G.media.type, 16, type);
+    s_cpy(G.media.title, 32, "live_stream");
+    out_add(out, max, &p, "osui media-stream ok url=");
+    out_add(out, max, &p, G.media.url);
+    out_add(out, max, &p, " type=");
+    out_add(out, max, &p, G.media.type);
+    out_add(out, max, &p, " status=streaming\n");
     return OSUI_OK;
 }
 
@@ -3429,6 +3716,9 @@ static int map_slash(const char *cmd, char *mapped, int max) {
     if (s_cmp(cmd, "provider") == 0) { s_cpy(mapped, max, "osui-provider"); return 1; }
     if (s_cmp(cmd, "plan") == 0) { s_cpy(mapped, max, "stage-prompt"); return 1; }
     if (s_cmp(cmd, "draw") == 0) { s_cpy(mapped, max, "stage-prompt"); return 1; }
+    if (s_cmp(cmd, "telemetry") == 0) { s_cpy(mapped, max, "browser-telemetry"); return 1; }
+    if (s_cmp(cmd, "pwa") == 0) { s_cpy(mapped, max, "pwa-list"); return 1; }
+    if (s_cmp(cmd, "media") == 0) { s_cpy(mapped, max, "browser-media"); return 1; }
     if (s_cmp(cmd, "stage") == 0) { s_cpy(mapped, max, "stage-prompt"); return 1; }
     if (s_cmp(cmd, "guest") == 0) { s_cpy(mapped, max, "guest-status"); return 1; }
     if (s_cmp(cmd, "gui") == 0 || s_cmp(cmd, "graphics") == 0 || s_cmp(cmd, "desktop") == 0)
@@ -4013,6 +4303,16 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "browser-type") == 0) return cmd_browser_type(args, narg, out, max);
     if (s_cmp(cmd, "browser-pointer") == 0) return cmd_browser_pointer(args, narg, out, max);
     if (s_cmp(cmd, "browser-status") == 0) return cmd_browser_status(out, max);
+    if (s_cmp(cmd, "browser-telemetry") == 0 || s_cmp(cmd, "osui-telemetry") == 0) return cmd_browser_telemetry(args, narg, out, max);
+    if (s_cmp(cmd, "pwa-manifest") == 0) return cmd_pwa_manifest(args, narg, out, max);
+    if (s_cmp(cmd, "pwa-install") == 0) return cmd_pwa_install(args, narg, out, max);
+    if (s_cmp(cmd, "pwa-list") == 0) return cmd_pwa_list(out, max);
+    if (s_cmp(cmd, "pwa-run") == 0) return cmd_pwa_run(args, narg, out, max);
+    if (s_cmp(cmd, "browser-media") == 0 || s_cmp(cmd, "media-status") == 0) return cmd_browser_media(out, max);
+    if (s_cmp(cmd, "media-play") == 0) return cmd_media_play(args, narg, out, max);
+    if (s_cmp(cmd, "media-pause") == 0) return cmd_media_pause(out, max);
+    if (s_cmp(cmd, "media-stop") == 0) return cmd_media_stop(out, max);
+    if (s_cmp(cmd, "media-stream") == 0) return cmd_media_stream(args, narg, out, max);
     if (s_cmp(cmd, "browser-origin-status") == 0 || s_cmp(cmd, "origin-status") == 0) return cmd_browser_origin_status(out, max);
     if (s_cmp(cmd, "browser-tab-new") == 0) return cmd_browser_tab_new(args, narg, out, max);
     if (s_cmp(cmd, "browser-tab-use") == 0) return cmd_browser_tab_use(args, narg, out, max);
@@ -4147,6 +4447,18 @@ void osui_runtime_init(void) {
     fs_seed();
     alloc_session("default");
     stage_render("");
+
+    /* Seed default PWA manifest */
+    G.next_pwa_id = 1;
+    s_cpy(G.pwas[0].id, OSUI_ID, "pwa0001");
+    s_cpy(G.pwas[0].name, 32, "MohhdyApp");
+    s_cpy(G.pwas[0].start_url, 64, "app://mohhdy");
+    s_cpy(G.pwas[0].scope, 32, "app://mohhdy/");
+    s_cpy(G.pwas[0].theme_color, 16, "#007acc");
+    s_cpy(G.pwas[0].display, 16, "standalone");
+    G.pwas[0].installed = 1;
+    G.pwas[0].used = 1;
+    G.n_pwas = 1;
 }
 
 int osui_is_command(const char *cmd) {
@@ -4190,10 +4502,18 @@ int osui_dispatch_line(const char *line, char *out, int out_max) {
         osui_session_t *s = cur();
         if (s && s->status != ST_CLOSED) s->last_active = osui_now();
     }
+    G.telemetry_commands++;
+    if (s_cmp(cmd, "browser-fetch") == 0 || s_cmp(cmd, "fetch-sim") == 0)
+        G.telemetry_fetches++;
+    if (G.media.active && !G.media.paused) {
+        G.media.ticks++;
+        G.telemetry_media_ticks++;
+    }
     if (s_cmp(cmd, "prompt") == 0)
         return cmd_prompt(args, narg, line, out, out_max);
     rc = dispatch_cmd(cmd, args, narg, out, out_max);
     if (rc < 0) {
+        G.telemetry_errors++;
         p = 0;
         out_add(out, out_max, &p, "osui error=commande inconnue. os-help pour la liste.\n");
         return OSUI_ERR;
@@ -4260,9 +4580,22 @@ void osui_gui_closed(void) { G.gui_live = 0; G.gui_leave = 0; }
 
 int osui_stage_tick(char *out, int out_max) {
     if (out && out_max > 0) out[0] = 0;
+    if (G.media.active && !G.media.paused) {
+        G.media.ticks++;
+        G.telemetry_media_ticks++;
+    }
     if (!G.stage_autonomous) return 0;
     G.stage_tick++;
     canvas_sim(G.stage_tick);
     s_cpy(G.stage_mode, 16, G.stage_tick > 4 ? "presenting" : "acting");
     return 0;
 }
+
+int osui_get_media_active(void) { return G.media.active; }
+int osui_get_media_paused(void) { return G.media.paused; }
+const char *osui_get_media_type(void) { return G.media.type[0] ? G.media.type : "audio"; }
+const char *osui_get_media_title(void) { return G.media.title[0] ? G.media.title : "none"; }
+const char *osui_get_media_url(void) { return G.media.url[0] ? G.media.url : "none"; }
+unsigned osui_get_media_ticks(void) { return G.media.ticks; }
+int osui_get_pwa_count(void) { return G.n_pwas; }
+unsigned osui_get_telemetry_commands(void) { return G.telemetry_commands; }

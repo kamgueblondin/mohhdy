@@ -552,6 +552,15 @@ def main():
             send_command_until(
                 monitor, "/center", "chat_mode=center", proc, mode="getc", wait_prompt=False
             )
+            say("typing media-play audio stream1 in gui ...")
+            send_command_until(
+                monitor, "media-play audio stream1", "status=playing", proc, mode="getc", wait_prompt=False
+            )
+            wait_for(proc, "media=playing:stream1", CMD_TIMEOUT)
+            say("typing media-stop in gui ...")
+            send_command_until(
+                monitor, "media-stop", "status=stopped", proc, mode="getc", wait_prompt=False
+            )
             # Roadmap step 2, end to end inside the open GUI: request to the
             # local GPT-2 session, its answer (or, without packed weights,
             # the distinct no-model state), explicit session end, close.

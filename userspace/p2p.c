@@ -634,6 +634,9 @@ static void on_datagram(p2p_node_t* n, const p2p_host_t* h, uint8_t* b, int len,
         p->rx_counter = ctr;
         p->received++;
         p->via = !meq(mac, p->mac, 6);
+        /* A direct authenticated frame is liveness. A relayed copy is not:
+         * the direct link can be down while beta still forwards. */
+        if (!p->via) p->last_seen = now(h);
         if (plain[0] < P2P_I_PING || plain[0] >= P2P_I_COUNT) return;
         on_sealed(n, h, p, plain[0], plain + 1, clen - 1);
     }
@@ -698,12 +701,25 @@ void p2p_down(p2p_node_t* n) { if (n) { mzero(n->secret, 32); n->up = 0; } }
 void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
     uint8_t b[P2P_DATAGRAM_MAX + 16], ip[4], mac[6];
     uint32_t t;
-    int i, got;
+    int i, got, queued = 0;
     if (!n || !n->up) return;
     while (budget-- > 0 && h && h->recv) {
         got = h->recv(h->ctx, ip, mac, b, (uint16_t)sizeof(b));
-        if (got <= 0) break;
+        if (got <= 0) { queued = 0; break; }
         on_datagram(n, h, b, got, mac);
+        queued = 1;
+    }
+    /* Budget can stop while a hello is still queued. Apply that leftover
+     * before the down check, or the peer is marked down and comes back up
+     * on the next poll. If the cap is hit with data still waiting, skip the
+     * down transition for this tick. */
+    if (queued && h && h->recv) {
+        int extra = 32;
+        while (extra-- > 0) {
+            got = h->recv(h->ctx, ip, mac, b, (uint16_t)sizeof(b));
+            if (got <= 0) { queued = 0; break; }
+            on_datagram(n, h, b, got, mac);
+        }
     }
     t = now(h);
     if (t - n->last_hello >= P2P_HELLO_TICKS) { n->last_hello = t; send_hello(n, h); }
@@ -727,6 +743,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
     for (i = 0; i < P2P_PEERS; i++) {
         p2p_peer_t* p = &n->peers[i];
         if (!p->used || !p->up) continue;
+        if (queued) continue;
         if (t - p->last_seen >= P2P_DOWN_TICKS) {
             char line[64];
             p->up = 0; p->down_events++;
