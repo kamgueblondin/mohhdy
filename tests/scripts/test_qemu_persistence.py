@@ -20,13 +20,28 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import qemu_key_pace as pace  # noqa: E402
 import test_qemu_p2p as p2p  # noqa: E402
 
 base = p2p.base
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 LOG_DIR = os.path.join(ROOT, "test_logs")
 DISK = os.path.join(LOG_DIR, "persistence-disk.img")
-cmd, log, say = p2p.cmd, p2p.log, p2p.say
+log, say = p2p.log, p2p.say
+# Same scancode names as the production contract. Pacing replaces the 0.2 s
+# gap in p2p.type_line, which made this two-boot contract about 4 min on CI.
+ALIASES = {" ": "spc", "-": "minus", "/": "slash", ".": "dot", "=": "equal"}
+
+
+def cmd(node, line, needle, timeout=60):
+    start = len(base.log_text(node["log"]))
+    pace.send_paced(node["client"], node["proc"], lambda: base.log_text(node["log"]),
+                    line, base.KEY_HOLD_MS, ALIASES)
+    try:
+        p2p.wait_log(node, needle, timeout, start)
+    except RuntimeError as error:
+        raise RuntimeError("%s: %r did not print %r: %s" % (node["label"], line, needle, error))
+    return start
 
 
 def node_for(boot):

@@ -33,6 +33,7 @@ initrd_content/bin/*
 
 # Build and QEMU artefacts
 /build/
+/.apt-cache/
 /my_initrd.tar
 /test_logs/
 *.iso
