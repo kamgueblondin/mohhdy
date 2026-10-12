@@ -14,6 +14,8 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import qemu_key_pace as pace  # noqa: E402
 import test_qemu_net_worker as nw  # noqa: E402
 from test_qemu_vfs_service import normalized_log  # noqa: E402
 
@@ -23,13 +25,13 @@ nw.ERR = os.path.join(nw.LOG_DIR, "production.err")
 nw.MON = os.path.join(nw.LOG_DIR, "production-monitor.sock")
 KERNEL = os.path.join(ROOT, "build", "mohhdy.bin")
 KEYS = {" ": "spc", "-": "minus", "/": "slash", ".": "dot", ",": "comma", "=": "equal"}
+GUEST = {"proc": None}
 
 
 def send_command(client, command):
-    for char in command:
-        client.sendall(("sendkey %s %d\n" % (KEYS.get(char, char.lower()), nw.KEY_HOLD_MS)).encode("ascii"))
-        time.sleep(0.3)
-    client.sendall(("sendkey ret %d\n" % nw.KEY_HOLD_MS).encode("ascii"))
+    # Echo-paced. A fixed 0.3 s gap made this contract about 6.5 min on CI
+    # (run 38249068719) and, after a 12 min apt, the job timed out.
+    pace.send_paced(client, GUEST["proc"], nw.log_text, command, nw.KEY_HOLD_MS, KEYS)
 
 
 nw.send_command = send_command
@@ -88,6 +90,7 @@ def main():
     t0 = time.time()
     with open(nw.ERR, "wb") as err_handle:
         proc = subprocess.Popen(command, stdout=err_handle, stderr=err_handle)
+        GUEST["proc"] = proc
         mon = None
         try:
             nw.wait_for("[0m : ", proc, timeout=90)

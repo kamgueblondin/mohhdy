@@ -53,23 +53,49 @@ Resultat : compilation reussie, validation de la suite unitaire et robustesse (`
 
 Integration du moteur promptmessage dans l'OS-UI Runtime C freestanding (`userspace/osui_runtime.c`). Ajout de la commande `browser-pm-run`, execution automatique lors des navigations d'onglets vers des fichiers/URL `.pm` ou `pm://`, et routage unifie des workflows agentiques (`workflow=pm`, `/pm`, `pm-run`). Attribution d'origine par onglet (`origin`), isolation stricte du stockage local par onglet, filtrage des requetes `browser-fetch` et des sockets P2P/Peer (`SYS_PEER_DATA`). Acces inter-origines non autorises retournent 403 (`origin_denied`) et enregistres dans le journal d'audit (`osui-audit`). Ajout de `browser-origin-status` (`/origin-status`).
 
-## Lot #137 en cours le 12 octobre 2026
+## Lot #137 merged le 12 octobre 2026
 
-Pas merge. Le run CI 38232561645 sur eebc324 avait 6 jobs verts et 2 rouges (`make qemu-osui-runtime`, `make qemu-p2p`). Cette revision corrige le marqueur QEMU du manifeste PWA (`id=p0002`, pas `id=pwa`) et le faux "peer down" pendant la lecture clavier. Le CI GitHub de cette revision n'est pas declare vert ici.
+Merged. Pull request #137, head `a3cd28f`, merged into `main` as `46f04ea` at 2026-10-12T12:26:44Z.
 
-Preuves locales rejouees sur cette revision :
-- `make qemu-p2p` : PASS (scenario 1 compris, `p2p peers ok 2 up 2` inchange), 127 s, frames=661 hello=159 sealed=502 plaintext=0.
-- `make qemu-osui-runtime` : contrat passe, y compris `pwa-manifest ok id=p0002 name=demo` et `media-play ok type=audio title=track01 status=playing`.
-- `make test-all` : 756 passes, 0 echec, 0 ignore ; registre guest 353 noms.
-- `make strict-image-check` : OK. `make secrets-check` : OK, aucun secret dans 3 images.
-- `make tree-clean-check` : cible absente du Makefile.
+Branch CI on `a3cd28f` was green: pull_request run 38239440621 and workflow_dispatch run 38239549781, all 8 jobs success. The earlier red run 38232561645 was on `eebc324` (6 jobs green, `make qemu-osui-runtime` and `make qemu-p2p` red). That failure was fixed before the merge (`id=p0002` instead of `id=pwa`, and no false "peer down" during shell key reads).
 
-Tableau de bord de telemetrie, moteur de manifestes PWA simules et gestionnaires de flux medias / audio / video freestanding dans l'OS-UI VBE GUI et le Web Runtime C :
-- **Telemetrie OS-UI** : Suivi dynamique des metriques d'execution (commandes, requetes fetch, IPC, ticks media, executions PWA, erreurs). Commande `browser-telemetry` (`/telemetry`, `osui-telemetry`) supportant `status`, `export` (JSON) et `reset`.
-- **Manifestes PWA & Applications Web simulees** : Moteur de manifestes applicatifs (`pwa-manifest`, `pwa-install`, `pwa-list`, `pwa-run`). Enregistrement, installation, listage et lancement d'applications web natives simulees dans les onglets du Web Runtime avec manifeste par defaut `MohhdyApp` (`pwa0001`).
-- **Flux Medias Freestanding** : Gestionnaire de lecture et streaming audio/video (`browser-media`, `media-play`, `media-pause`, `media-stop`, `media-stream`). Inclusion des ticks de lecture media dans la boucle de rendu et d'execution.
-- **Rendu GUI VBE Desktop** : Affichage d'un indicateur de statut et visualiseur de lecture media dans la scene du bureau VBE (`userspace/osui_gui.c`) et suivi de l'etat media dans les instantanes d'ecran (`OSUI-SNAP`).
-- **Registre de commandes guest et tests** : Registre aligne a **353 commandes guest** (`python3 scripts/extract_guest_commands.py --check`). Le job CI "Build, tests, QEMU smoke" du run 38232561645 etait vert (suite unitaire, `strict-image-check`, `secrets-check`). Les contrats QEMU OS-UI et P2P de ce lot ne l'etaient pas sur ce commit.
+Post-merge main run 38249068719:
+- Attempt 1: seven jobs green. `QEMU production + persistence across reboot` was cancelled at `timeout-minutes: 20`. Install dependencies took 12 min 0 s (12:26:54Z to 12:38:53Z). Build took 21 s. `make qemu-production` passed in 6 min 28 s. `make qemu-persistence` was still running when the job was killed (started 12:45:42Z, cancelled 12:47:06Z). `make qemu-osui-web` did not start.
+- Attempt 2 (failed-job re-run, apt fast at 16 s): the production job succeeded. Wall 13 min 33 s (13:47:28Z to 14:01:01Z). `make qemu-production` 6 min 28 s, `make qemu-persistence` 4 min 4 s, `make qemu-osui-web` 2 min 15 s. The run is green. It does not have room for another 12 min apt install. Lot #138 is that headroom.
+
+Local proofs recorded on `a3cd28f` before the merge (not re-run as part of the merge commit itself):
+- `make qemu-p2p`: PASS (scenario 1 included, `p2p peers ok 2 up 2` unchanged), 127 s, frames=661 hello=159 sealed=502 plaintext=0.
+- `make qemu-osui-runtime`: contract passed, including `pwa-manifest ok id=p0002 name=demo` and `media-play ok type=audio title=track01 status=playing`.
+- `make test-all`: 756 passes, 0 fail, 0 skip; guest command register 353 names.
+- `make strict-image-check`: OK. `make secrets-check`: OK, no secret in 3 images.
+- `make tree-clean-check`: target absent from the Makefile.
+
+Telemetry dashboard, simulated PWA manifests, and freestanding audio/video stream handlers in the OS-UI VBE GUI and the C web runtime:
+- OS-UI telemetry: command, fetch, IPC, media tick, PWA execution, and error counters. Command `browser-telemetry` (`/telemetry`, `osui-telemetry`) supports `status`, `export` (JSON), and `reset`.
+- Simulated PWA manifests: `pwa-manifest`, `pwa-install`, `pwa-list`, `pwa-run`. Default manifest `MohhdyApp` (`pwa0001`).
+- Freestanding media: `browser-media`, `media-play`, `media-pause`, `media-stop`, `media-stream`, with ticks in the render loop.
+- VBE desktop: media status in `userspace/osui_gui.c` and in screen snapshots (`OSUI-SNAP`).
+- Guest command register: 353 names (`python3 scripts/extract_guest_commands.py --check`).
+
+## Lot #138 en cours le 12 octobre 2026
+
+CI headroom for the production job. Not a product feature. No new guest command.
+
+Root cause of run 38249068719 attempt 1, same code as the green attempt 2:
+- Apt: `sudo apt-get update` plus install took 12 min on that runner (16 s to 39 s on the other jobs and on attempt 2).
+- Typing: `make qemu-production` sleeps 0.3 s per scancode (about 1300 characters, about 6.5 min). `make qemu-persistence` sleeps 0.2 s per scancode (about 1000 characters, about 4 min). The guest assertions are the same work either way.
+- Initrd: `pack-initrd` was phony via `userspace-all`, so `make qemu-production`, `make qemu-persistence`, and `make qemu-osui-web` each repacked the initrd after `make all`.
+
+What this lot changes, without dropping a contract or raising `timeout-minutes`:
+- `scripts/ci-install-deps.sh` plus `actions/cache` on `.apt-cache`. A warm cache uses `dpkg -i` and does not call `apt-get update`. A cache miss still installs, with a 30 s acquire stall timeout and 3 retries. The script installs the superset used by every job (including `python3-cryptography`).
+- `tests/scripts/qemu_key_pace.py` types on the SYS_GETS / SYS_GETC serial echo and waits at least `MOHHDY_KEY_GAP` (default 0.03 s, the sendkey hold is 10 ms). A doubled scancode is backspaced before Enter. Production still requires the submitted line to match (`send_exact`). Persistence still requires each command needle, both boots, the encrypted key, the ledger digest, and the corrupt-chunk refusal.
+- `build/.initrd-stamp`: `pack-initrd` runs the userspace Makefile every time (incremental) and retars only when an initrd input is newer than the stamp.
+
+`make qemu-osui-web` stays in the same job (HTTPS handshake, not the key gap). The Build job on attempt 1 was 10 min 39 s (smoke about 9 min, already echo-paced at 0.05 s plus a duplicate settle). It is under 15 min when apt is fast. The apt cache covers that job too. Smoke was not retimed here.
+
+Local wall times for `make test-all`, `make qemu-production`, and `make qemu-persistence` on this revision are recorded after those commands, in the paragraph below. They are not claimed yet.
+
+Still absent, unchanged by this lot: Chromium/WebKit, `phase3_complete=false`, `us031_complete=false`, public Internet, a real conversational model, NAT traversal as a delivered network, real gRPC, real payment, a certificate authority. Coverage is not measured.
 
 ## Feuille de route opérationnelle après la baseline
 

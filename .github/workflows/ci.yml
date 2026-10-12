@@ -1,4 +1,4 @@
-# MOHHDY CI — build, unit tests, QEMU smoke boot
+# MOHHDY CI - build, unit tests, QEMU smoke boot
 # Default branch is master (main is listed so a rename would still work).
 
 name: CI
@@ -16,6 +16,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write
 
 env:
   DEBIAN_FRONTEND: noninteractive
@@ -30,16 +31,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            gcc-multilib \
-            libc6-dev-i386 \
-            nasm \
-            python3-cryptography \
-            qemu-system-x86
+        run: bash scripts/ci-install-deps.sh
 
       - name: Build OS image
         run: make all
@@ -93,15 +93,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            gcc-multilib \
-            libc6-dev-i386 \
-            nasm \
-            qemu-system-x86
+        run: bash scripts/ci-install-deps.sh
 
       - name: Build OS image
         run: make all
@@ -145,15 +145,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            gcc-multilib \
-            libc6-dev-i386 \
-            nasm \
-            qemu-system-x86
+        run: bash scripts/ci-install-deps.sh
 
       - name: Build OS image
         run: make all
@@ -173,6 +173,9 @@ jobs:
           path: |
             test_logs/
 
+  # Headroom: cached apt debs (scripts/ci-install-deps.sh), one initrd
+  # pack per job (build/.initrd-stamp), and echo-paced PS/2 input in
+  # qemu-production / qemu-persistence. timeout-minutes stays 20.
   production:
     name: QEMU production + persistence across reboot
     runs-on: ubuntu-latest
@@ -182,15 +185,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            gcc-multilib \
-            libc6-dev-i386 \
-            nasm \
-            qemu-system-x86
+        run: bash scripts/ci-install-deps.sh
 
       - name: Build OS image
         run: make all
@@ -222,15 +225,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            gcc-multilib \
-            libc6-dev-i386 \
-            nasm \
-            qemu-system-x86
+        run: bash scripts/ci-install-deps.sh
 
       - name: Build OS image
         run: make all
@@ -259,15 +262,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            gcc-multilib \
-            libc6-dev-i386 \
-            nasm \
-            qemu-system-x86
+        run: bash scripts/ci-install-deps.sh
 
       - name: Build OS image
         run: make all
@@ -302,16 +305,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            gcc-multilib \
-            libc6-dev-i386 \
-            nasm \
-            qemu-system-x86 \
-            python3-cryptography
+        run: bash scripts/ci-install-deps.sh
 
       - name: Build OS image
         run: make all
@@ -362,16 +364,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            gcc-multilib \
-            libc6-dev-i386 \
-            nasm \
-            python3-cryptography \
-            qemu-system-x86
+        run: bash scripts/ci-install-deps.sh
 
       - name: Build OS image
         run: make all

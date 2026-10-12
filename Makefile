@@ -487,13 +487,27 @@ build/userspace_switch.o: boot/userspace_switch.s
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
-# Toujours recompiler le userspace : les ELF commités sont périmés (même mtime au checkout CI).
-.PHONY: userspace-all
+# Userspace ELFs are gitignored. Always ask the userspace Makefile (incremental).
+# The tar is stamped: make qemu-production, qemu-persistence and qemu-osui-web
+# each depend on pack-initrd, and a phony recipe was repacking the same
+# initrd on every one of those targets inside a single CI job.
+.PHONY: userspace-all pack-initrd pack-initrd-now
 userspace-all:
 	$(MAKE) -C userspace all
 
-# Règle pour empaqueter l'initrd automatiquement
 pack-initrd: userspace-all
+	@mkdir -p build
+	@paths="userspace promptmessage/examples"; \
+	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
+	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && \
+	    [ -z "$$(find $$paths -type f -newer build/.initrd-stamp -print -quit 2>/dev/null)" ]; then \
+		echo "[mkinitrd] initrd unchanged"; \
+	else \
+		$(MAKE) --no-print-directory pack-initrd-now; \
+	fi
+
+# Règle pour empaqueter l'initrd automatiquement
+pack-initrd-now:
 	@echo "[mkinitrd] Création de l'initrd MOHHDY v7..."
 	@mkdir -p $(BIN_DEST_DIR) $(INITRD_DIR)/models
 	@echo "Ceci est un fichier de test depuis l'initrd !" > $(INITRD_DIR)/test.txt
@@ -565,6 +579,8 @@ pack-initrd: userspace-all
 	@cp -f userspace/ggufclient $(BIN_DEST_DIR)/ggufclient
 	@cp -f userspace/ggufpause $(BIN_DEST_DIR)/ggufpause
 	@tar -C $(INITRD_DIR) -cf $(INITRD_IMAGE) .
+	@mkdir -p build
+	@touch build/.initrd-stamp
 	@echo "[mkinitrd] Packed executables into $(INITRD_IMAGE)"
 
 # ===== ISO (GRUB) Build =====
