@@ -111,6 +111,8 @@ GitHub pull_request run 38260083464, job `QEMU production + persistence across r
 
 A representative run is 4 min 55 s, about 10 min under a 15 min wall. A 12 min apt plus the 4 min 31 s of build and contracts on this run is about 16.5 min, inside `timeout-minutes: 20`. The cache post-step saved `.apt-cache` for the next run. The 4 min 55 s figure does not depend on a warm cache.
 
+Follow-up pull_request run 38261049744 (this documentation revision) finished with all 8 jobs success. Production job wall 4 min 42 s, install dependencies 6 s from the apt cache. Build job 11 min 15 s, install 4 s. The longest job was the vfs integration shard at 11 min 59 s. Local `make qemu-osui-web` on the same tree: PASS in 123 s (the two HTTPS handshakes took 101 s).
+
 Still absent, unchanged by this lot: Chromium/WebKit, `phase3_complete=false`, `us031_complete=false`, public Internet, a real conversational model, NAT traversal as a delivered network, real gRPC, real payment, a certificate authority. Coverage is not measured.
 
 ## Feuille de route opérationnelle après la baseline
