@@ -227,7 +227,7 @@ def main():
                 ("pwa-list", "pwa-list count="),
                 ("pwa-install demo", "pwa-install ok"),
                 ("pwa-run demo", "pwa_name=demo"),
-                ("media-play audio track01", "media-play ok status=playing"),
+                ("media-play audio track01", "media-play ok type=audio title=track01 status=playing"),
                 ("browser-media", "playing=true"),
                 ("media-pause", "media-pause ok status=paused"),
                 ("media-stop", "media-stop ok status=stopped"),
