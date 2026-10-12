@@ -3,6 +3,9 @@
 #include <string.h>
 #include <stdio.h>
 #include "../../../userspace/collab.h"
+#include "../../../userspace/csig.h"
+#include "../../../kernel/sha256.h"
+#include "../../../kernel/aes_gcm.h"
 
 #define N 3
 static collab_t g_c[N];
@@ -363,6 +366,69 @@ void test_collab_consolidation_and_fallback(void) {
     TEST_ASSERT_EQUAL(0, collab_market_price(&g_c[0], "missing-item", &price));
 }
 
+void test_crypto_schnorr_pbkdf2_aes_gcm_pipeline(void) {
+    uint8_t seed1[32], seed2[32];
+    uint8_t sk1[CSIG_SK], pk1[CSIG_PK];
+    uint8_t sk2[CSIG_SK], pk2[CSIG_PK];
+    uint8_t sig[CSIG_SIG];
+    const uint8_t msg[] = "MOHHDY Cryptographic Stack Verification 2026";
+    int msg_len = (int)sizeof(msg) - 1;
+
+    memset(seed1, 0xA5, sizeof(seed1));
+    memset(seed2, 0x5A, sizeof(seed2));
+
+    /* Key generation and validation */
+    TEST_ASSERT_EQUAL(0, csig_keypair(seed1, sk1, pk1));
+    TEST_ASSERT_EQUAL(0, csig_keypair(seed2, sk2, pk2));
+    TEST_ASSERT_EQUAL(1, csig_pk_valid(pk1));
+    TEST_ASSERT_EQUAL(1, csig_pk_valid(pk2));
+
+    /* Schnorr signature creation & verification */
+    TEST_ASSERT_EQUAL(0, csig_sign(sk1, msg, msg_len, sig));
+    TEST_ASSERT_EQUAL(1, csig_verify(pk1, msg, msg_len, sig));
+    TEST_ASSERT_EQUAL(0, csig_verify(pk2, msg, msg_len, sig)); /* WRONG PK */
+
+    /* Alter message -> verify fail */
+    TEST_ASSERT_EQUAL(0, csig_verify(pk1, (const uint8_t*)"Corrupted message", 17, sig));
+
+    /* Alter signature -> verify fail */
+    sig[0] ^= 0xFF;
+    TEST_ASSERT_EQUAL(0, csig_verify(pk1, msg, msg_len, sig));
+    sig[0] ^= 0xFF; /* restore */
+
+    /* PBKDF2-HMAC-SHA256 & AES-128-GCM Key wrap test for secret storage */
+    {
+        const char *passphrase = "SecretPassphrase2026";
+        uint8_t salt[16] = {0x10,0x20,0x30,0x40,0x50,0x60,0x70,0x80,0x90,0xA0,0xB0,0xC0,0xD0,0xE0,0xF0,0x00};
+        uint8_t key[16], fixed_iv[4] = {1,2,3,4}, nonce[8] = {5,6,7,8,9,10,11,12}, tag[16], aad[4] = {'A','E','S','1'};
+        uint8_t ciphertext[CSIG_SK], decrypted[CSIG_SK];
+        uint8_t hmac_input[20], u[32], acc[32];
+        int i, k, pl = strlen(passphrase);
+
+        /* PBKDF2 derivation (1 block, 2000 iterations, 16 bytes) */
+        memcpy(hmac_input, salt, 16);
+        hmac_input[16] = 0; hmac_input[17] = 0; hmac_input[18] = 0; hmac_input[19] = 1;
+        hmac_sha256((const uint8_t*)passphrase, pl, hmac_input, 20, u);
+        memcpy(acc, u, 32);
+        for (k = 1; k < 2000; k++) {
+            hmac_sha256((const uint8_t*)passphrase, pl, u, 32, u);
+            for (i = 0; i < 32; i++) acc[i] ^= u[i];
+        }
+        memcpy(key, acc, 16);
+
+        /* AES-128-GCM encrypt signing secret key */
+        TEST_ASSERT_EQUAL(0, aes128_gcm_encrypt(key, fixed_iv, nonce, aad, 4, sk1, CSIG_SK, ciphertext, tag));
+
+        /* AES-128-GCM decrypt with correct key */
+        TEST_ASSERT_EQUAL(0, aes128_gcm_decrypt(key, fixed_iv, nonce, aad, 4, ciphertext, CSIG_SK, tag, decrypted));
+        TEST_ASSERT_EQUAL_MEMORY(sk1, decrypted, CSIG_SK);
+
+        /* AES-128-GCM decrypt with corrupted tag -> fail */
+        tag[0] ^= 0x01;
+        TEST_ASSERT_NOT_EQUAL(0, aes128_gcm_decrypt(key, fixed_iv, nonce, aad, 4, ciphertext, CSIG_SK, tag, decrypted));
+    }
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_points_transfer_overdraft_and_convergence);
@@ -377,6 +443,7 @@ int main(void) {
     RUN_TEST(test_marketplace_contracts_disputes_privacy_compliance);
     RUN_TEST(test_payment_conversion_escrow_and_ticket_routing);
     RUN_TEST(test_collab_consolidation_and_fallback);
+    RUN_TEST(test_crypto_schnorr_pbkdf2_aes_gcm_pipeline);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

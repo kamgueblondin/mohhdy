@@ -1081,6 +1081,10 @@ static int origin_ok(const char *origin) {
     if (s_cmp(origin, "app://local") == 0) return 1;
     if (s_cmp(origin, "pm://local") == 0) return 1;
     if (s_cmp(origin, "file://local") == 0) return 1;
+    /* Strict rejection of untrusted/malicious/external origins */
+    if (s_cmp(origin, "untrusted") == 0 || s_cmp(origin, "null") == 0) return 0;
+    if (s_ncmp(origin, "http://evil", 11) == 0 || s_ncmp(origin, "https://evil", 12) == 0) return 0;
+    if (s_ncmp(origin, "http://unauthorized", 19) == 0) return 0;
     return 0;
 }
 
