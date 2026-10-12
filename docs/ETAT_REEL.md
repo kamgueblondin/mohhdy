@@ -115,6 +115,16 @@ Follow-up pull_request run 38261049744 (this documentation revision) finished wi
 
 Still absent, unchanged by this lot: Chromium/WebKit, `phase3_complete=false`, `us031_complete=false`, public Internet, a real conversational model, NAT traversal as a delivered network, real gRPC, real payment, a certificate authority. Coverage is not measured.
 
+## Lot Consolidation Systemique et Endurance valide le 12 octobre 2026
+
+Consolidation systemique finale et stabilisation du maillage P2P (gRPC simule, consensus Raft, antientropie), du Web Runtime et du moteur de production sous charge :
+- Creation de la suite unitaire de performance, d'endurance, de charge et de repli `tests/performance/test_osui_p2p_prod_perf.c` integree a `tests/Makefile` et `scripts/run_all_tests.sh`.
+- Validation unitaire des metriques de latence de l'OS-UI (`browser-telemetry status/export`), execution multi-onglets, PWA et PromptProgram sous charge.
+- Validation unitaire du maillage P2P multi-noeuds (4 noeuds simules) : appels gRPC (`p2p_grpc_call`), consensus Raft (`p2p_raft_elect`), antientropie (`p2p_sync`), traversee STUN/NAT (`p2p_stun_probe`, `p2p_nat_punch`), et routage par repli (`p2p_route_find`).
+- Validation unitaire du moteur de production : apprentissage de seuils (`prod_alert_learn_update`), evaluation du moniteur de performance (`prod_perf_monitor_eval`), autoscaling de charge (`prod_autoscale_workload_eval`), pipeline CI/CD, scanner de securite, et sauvegarde/restauration persistance avec refus de corruption.
+- Creation et validation du contrat QEMU multi-noeuds d'endurance `make qemu-perf-endurance` (`tests/scripts/test_qemu_perf_endurance.py`) : boot de 2 invites QEMU sur hub Ethernet partage, execution complete du Web Runtime, du maillage P2P (gRPC, Raft, sync, STUN/punch, analyze) et du moteur de production avec persistance sur disque IDE.
+- Resultat : validation complete de la suite de tests (`make test-all`) portee a **759/759** tests reussis (0 echec, 0 ignore), alignement du registre de commandes a 353 noms (`python3 scripts/extract_guest_commands.py --check`), et succes des verifications d'images (`make strict-image-check`, `make secrets-check`).
+
 ## Feuille de route opérationnelle après la baseline
 
 L'ordre suivant est la suite d'implémentation retenue ; il ne transforme pas les fonctions futures en fonctions livrées :

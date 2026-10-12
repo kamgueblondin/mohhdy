@@ -743,6 +743,9 @@ qemu-persistence: $(OS_IMAGE) pack-initrd
 qemu-production: $(OS_IMAGE) pack-initrd
 	@python3 tests/integration/test_qemu_production.py
 
+qemu-perf-endurance: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_perf_endurance.py
+
 test-all:
 	@echo "=== Suite complète de tests de non-régression ==="
 	@$(MAKE) -C tests test
