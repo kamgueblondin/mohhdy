@@ -300,6 +300,41 @@ static void test_p2p_collab_prod_panes_drawing(void) {
     TEST_ASSERT(count_near(40, 70, 400, 110, 28, 44, 56, 40) > 30);
 }
 
+static void test_vbe_layout_automation_under_load(void) {
+    gfx_desktop_layout_t layout;
+    int resolutions[][2] = {
+        {640, 480}, {800, 600}, {1024, 768}, {1280, 720}, {1920, 1080}
+    };
+    int num_res = (int)(sizeof(resolutions) / sizeof(resolutions[0]));
+    int i, step;
+
+    blank_scene();
+    /* Repeated resolution changes, pane switches and chat window movement simulation */
+    for (step = 0; step < 50; step++) {
+        int w = resolutions[step % num_res][0];
+        int h = resolutions[step % num_res][1];
+
+        g_scene.chat_mode = (step % 2 == 0) ? OS_FB_CHAT_CENTER : OS_FB_CHAT_FLOAT;
+        g_scene.pane = (uint8_t)(step % 10);
+        g_scene.chat_x = (uint16_t)((step * 3) % 60);
+        g_scene.chat_y = (uint16_t)((step * 2) % 15);
+
+        gfx_desktop_get_layout(&g_scene, w, h, &layout);
+
+        /* Invariant checks on calculated layout */
+        TEST_ASSERT(layout.bar_h >= 24 && layout.bar_h <= 60);
+        TEST_ASSERT_EQUAL(7, layout.menu_count);
+        TEST_ASSERT(layout.dock.box.w > 0 && layout.dock.box.h > 0);
+        TEST_ASSERT(layout.chat_win.box.w > 0 && layout.chat_win.box.h > 0);
+        TEST_ASSERT(layout.chat_win.send_btn.w > 0);
+
+        for (i = 0; i < layout.menu_count; i++) {
+            TEST_ASSERT(layout.menu_items[i].w > 0);
+            TEST_ASSERT(layout.menu_items[i].h > 0);
+        }
+    }
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -314,6 +349,7 @@ int main(void) {
     RUN_TEST(test_desktop_layout_and_hit_test);
     RUN_TEST(test_hit_regions_dock_menu_stage_close);
     RUN_TEST(test_p2p_collab_prod_panes_drawing);
+    RUN_TEST(test_vbe_layout_automation_under_load);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

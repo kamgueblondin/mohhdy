@@ -171,6 +171,18 @@ static void test_origin_denied(void) {
     TEST_ASSERT(strstr(g_out, "request_id=") != NULL);
     TEST_ASSERT(strstr(g_out, "status=403") != NULL);
 
+    rc = run_line("origin-check http://evil.com");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "origin_denied") != NULL);
+
+    rc = run_line("origin-check null");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "origin_denied") != NULL);
+
+    rc = run_line("origin-check untrusted");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "origin_denied") != NULL);
+
     rc = run_line("origin-check self");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "origin-check ok") != NULL);
