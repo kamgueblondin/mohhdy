@@ -77,12 +77,12 @@ Telemetry dashboard, simulated PWA manifests, and freestanding audio/video strea
 - VBE desktop: media status in `userspace/osui_gui.c` and in screen snapshots (`OSUI-SNAP`).
 - Guest command register: 353 names (`python3 scripts/extract_guest_commands.py --check`).
 
-## Lot #138 en cours le 12 octobre 2026
+## Lot #138 le 12 octobre 2026
 
 CI headroom for the production job. Not a product feature. No new guest command.
 
 Root cause of run 38249068719 attempt 1, same code as the green attempt 2:
-- Apt: `sudo apt-get update` plus install took 12 min on that runner (16 s to 39 s on the other jobs and on attempt 2).
+- Apt: `sudo apt-get update` plus install took 12 min on that runner (14 s to 39 s on the other jobs of the same attempt, 16 s on the re-run).
 - Typing: `make qemu-production` sleeps 0.3 s per scancode (about 1300 characters, about 6.5 min). `make qemu-persistence` sleeps 0.2 s per scancode (about 1000 characters, about 4 min). The guest assertions are the same work either way.
 - Initrd: `pack-initrd` was phony via `userspace-all`, so `make qemu-production`, `make qemu-persistence`, and `make qemu-osui-web` each repacked the initrd after `make all`.
 
@@ -91,9 +91,25 @@ What this lot changes, without dropping a contract or raising `timeout-minutes`:
 - `tests/scripts/qemu_key_pace.py` types on the SYS_GETS / SYS_GETC serial echo and waits at least `MOHHDY_KEY_GAP` (default 0.03 s, the sendkey hold is 10 ms). A doubled scancode is backspaced before Enter. Production still requires the submitted line to match (`send_exact`). Persistence still requires each command needle, both boots, the encrypted key, the ledger digest, and the corrupt-chunk refusal.
 - `build/.initrd-stamp`: `pack-initrd` runs the userspace Makefile every time (incremental) and retars only when an initrd input is newer than the stamp.
 
-`make qemu-osui-web` stays in the same job (HTTPS handshake, not the key gap). The Build job on attempt 1 was 10 min 39 s (smoke about 9 min, already echo-paced at 0.05 s plus a duplicate settle). It is under 15 min when apt is fast. The apt cache covers that job too. Smoke was not retimed here.
+`make qemu-osui-web` stays in the same job (HTTPS handshake, not the key gap). The Build job on main attempt 1 was 10 min 39 s (smoke about 9 min, already echo-paced at 0.05 s plus a duplicate settle). It is under 15 min when apt is fast. The apt cache covers that job too. Smoke was not retimed and its assertions were not changed.
 
-Local wall times for `make test-all`, `make qemu-production`, and `make qemu-persistence` on this revision are recorded after those commands, in the paragraph below. They are not claimed yet.
+Measured on this revision (local workspace, then the pull_request run):
+
+Local:
+- `make all` cold: 24 s. The next `make pack-initrd` prints `initrd unchanged` in under 1 s.
+- `make test-all`: 756 passes, 0 fail, 0 skip. The runner reports 67 s. Wall including make was 110 s. Guest command register 353 names. Coverage: not measured.
+- `make strict-image-check` and `make secrets-check`: OK, wall 8 s.
+- `make qemu-production`: PASS in 47 s. The line check did not retype any command.
+- `make qemu-persistence`: PASS in 72 s (boot 1 saved at 44 s). Digest and signing key matched across the reboot.
+
+GitHub pull_request run 38260083464, job `QEMU production + persistence across reboot` (114848038552), success. This was a cache miss (apt still ran). Job wall 4 min 55 s (14:03:11Z to 14:08:06Z):
+- Install dependencies 24 s.
+- Build 20 s.
+- `make qemu-production` 47 s (was 6 min 28 s on main).
+- `make qemu-persistence` 1 min 13 s (was 4 min 4 s on main).
+- `make qemu-osui-web` 2 min 5 s (was 2 min 15 s on main; not retimed by the key pacer).
+
+A representative run is 4 min 55 s, about 10 min under a 15 min wall. A 12 min apt plus the 4 min 31 s of build and contracts on this run is about 16.5 min, inside `timeout-minutes: 20`. The cache post-step saved `.apt-cache` for the next run. The 4 min 55 s figure does not depend on a warm cache.
 
 Still absent, unchanged by this lot: Chromium/WebKit, `phase3_complete=false`, `us031_complete=false`, public Internet, a real conversational model, NAT traversal as a delivered network, real gRPC, real payment, a certificate authority. Coverage is not measured.
 
