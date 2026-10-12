@@ -53,14 +53,16 @@ Resultat : compilation reussie, validation de la suite unitaire et robustesse (`
 
 Integration du moteur promptmessage dans l'OS-UI Runtime C freestanding (`userspace/osui_runtime.c`). Ajout de la commande `browser-pm-run`, execution automatique lors des navigations d'onglets vers des fichiers/URL `.pm` ou `pm://`, et routage unifie des workflows agentiques (`workflow=pm`, `/pm`, `pm-run`). Attribution d'origine par onglet (`origin`), isolation stricte du stockage local par onglet, filtrage des requetes `browser-fetch` et des sockets P2P/Peer (`SYS_PEER_DATA`). Acces inter-origines non autorises retournent 403 (`origin_denied`) et enregistres dans le journal d'audit (`osui-audit`). Ajout de `browser-origin-status` (`/origin-status`).
 
-## Lot #137 valide le 12 octobre 2026
+## Lot #137 en cours le 12 octobre 2026
+
+Pas merge. Le run CI 38232561645 sur eebc324 avait 6 jobs verts et 2 rouges (`make qemu-osui-runtime`, `make qemu-p2p`). Cette revision corrige le marqueur QEMU du manifeste PWA et le faux "peer down" pendant la lecture clavier. Elle ne pretend pas qu'un CI vert ou un merge a ete observe. Les commandes locales rejouees sur cette revision sont notees seulement apres un succes reel.
 
 Tableau de bord de telemetrie, moteur de manifestes PWA simules et gestionnaires de flux medias / audio / video freestanding dans l'OS-UI VBE GUI et le Web Runtime C :
 - **Telemetrie OS-UI** : Suivi dynamique des metriques d'execution (commandes, requetes fetch, IPC, ticks media, executions PWA, erreurs). Commande `browser-telemetry` (`/telemetry`, `osui-telemetry`) supportant `status`, `export` (JSON) et `reset`.
 - **Manifestes PWA & Applications Web simulees** : Moteur de manifestes applicatifs (`pwa-manifest`, `pwa-install`, `pwa-list`, `pwa-run`). Enregistrement, installation, listage et lancement d'applications web natives simulees dans les onglets du Web Runtime avec manifeste par defaut `MohhdyApp` (`pwa0001`).
 - **Flux Medias Freestanding** : Gestionnaire de lecture et streaming audio/video (`browser-media`, `media-play`, `media-pause`, `media-stop`, `media-stream`). Inclusion des ticks de lecture media dans la boucle de rendu et d'execution.
 - **Rendu GUI VBE Desktop** : Affichage d'un indicateur de statut et visualiseur de lecture media dans la scene du bureau VBE (`userspace/osui_gui.c`) et suivi de l'etat media dans les instantanes d'ecran (`OSUI-SNAP`).
-- **Registre de commandes guest et tests** : Registre aligne a **353 commandes guest** (`python3 scripts/extract_guest_commands.py --check`), suite unitaire passee **756/756 tests**, images strictes et absence de secrets valides (`make strict-image-check`, `make secrets-check`).
+- **Registre de commandes guest et tests** : Registre aligne a **353 commandes guest** (`python3 scripts/extract_guest_commands.py --check`). Le job CI "Build, tests, QEMU smoke" du run 38232561645 etait vert (suite unitaire, `strict-image-check`, `secrets-check`). Les contrats QEMU OS-UI et P2P de ce lot ne l'etaient pas sur ce commit.
 
 ## Feuille de route opérationnelle après la baseline
 
