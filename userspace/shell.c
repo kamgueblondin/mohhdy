@@ -166,7 +166,10 @@ void gets(char* buffer, int size) {
 
 int sys_getchar(void) {
     int c;
-    asm volatile("int $0x80" : "=a"(c) : "a"(2));
+    /* ebx=1: return at once when no key is waiting. keyboard_getc spins
+     * inside the syscall, and IRQ0 does not preempt that frame, so the
+     * networker and p2p_tick stay frozen while the peer-down timer runs. */
+    asm volatile("int $0x80" : "=a"(c) : "a"(2), "b"(1));
     return c;
 }
 
@@ -6819,6 +6822,8 @@ void shell_main_loop(shell_context_t* ctx) {
                 }
                 if (c > 0) {
                     if (len < (int)sizeof(buf) - 1) { buf[len++] = (char)c; putc((char)c); }
+                    /* A burst of buffered keys must not skip liveness. */
+                    shell_p2p_poll();
                     continue;
                 }
                 if (osui_web_active() && osui_web_poll(web_log, (int)sizeof(web_log)) > 0) print_string(web_log);

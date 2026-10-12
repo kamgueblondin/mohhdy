@@ -207,7 +207,8 @@ static void sys_vga_leave(void) {
 
 static int sys_getc_gui(void) {
     int c;
-    asm volatile("int $0x80" : "=a"(c) : "a"(SYS_GETC));
+    /* ebx=0 keeps the blocking read. The shell passes ebx=1. */
+    asm volatile("int $0x80" : "=a"(c) : "a"(SYS_GETC), "b"(0));
     return c;
 }
 
