@@ -896,6 +896,49 @@ static void test_agentic_workflows_p2p_collab_prod(void) {
     TEST_ASSERT(strstr(g_out, "pane=prod") != NULL);
 }
 
+static void test_browser_pm_run_and_navigation(void) {
+    setup();
+    int rc = run_line("browser-pm-run print \"hello_mohhdy\"");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "browser-pm-run ok") != NULL);
+    TEST_ASSERT(strstr(g_out, "output=") != NULL);
+
+    rc = run_line("browser-tab-new about:blank");
+    TEST_ASSERT_EQUAL(0, rc);
+
+    rc = run_line("browser-navigate pm://script.pm");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "kind=pm") != NULL);
+
+    rc = run_line("chat pm run script.pm");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "workflow=pm") != NULL);
+}
+
+static void test_multi_origin_security_and_p2p_socket_isolation(void) {
+    setup();
+    int rc = run_line("browser-origin-status");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "isolation=active") != NULL);
+    TEST_ASSERT(strstr(g_out, "allowed=") != NULL);
+
+    rc = run_line("browser-fetch p2p://node/data origin=untrusted");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "origin_denied") != NULL);
+    TEST_ASSERT(strstr(g_out, "status=403") != NULL);
+
+    rc = run_line("browser-tab-new http://127.0.0.1/app");
+    TEST_ASSERT_EQUAL(0, rc);
+
+    rc = run_line("browser-storage-set key val origin=untrusted");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "origin_denied") != NULL);
+
+    rc = run_line("browser-storage-get key origin=untrusted");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "origin_denied") != NULL);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -924,6 +967,8 @@ int main(void) {
     RUN_TEST(test_browser_navigation_dom_tree_and_audit);
     RUN_TEST(test_browser_tab_extensions_and_fs_web_persistence);
     RUN_TEST(test_agentic_workflows_p2p_collab_prod);
+    RUN_TEST(test_browser_pm_run_and_navigation);
+    RUN_TEST(test_multi_origin_security_and_p2p_socket_isolation);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

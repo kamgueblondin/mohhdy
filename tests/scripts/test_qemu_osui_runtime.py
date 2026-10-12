@@ -22,10 +22,10 @@ MON_SOCK = os.environ.get("OSUI_MON_SOCK", os.path.join(LOG_DIR, "qemu-osui-runt
 TEST_DISK = os.environ.get("OVERLAY_DISK", os.path.join(LOG_DIR, "qemu-osui-runtime-overlay.img"))
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "75"))
 CMD_TIMEOUT = float(os.environ.get("CMD_TIMEOUT", "120"))
-KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.05"))
+KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.01"))
 KEY_HOLD_MS = int(os.environ.get("KEY_HOLD_MS", "10"))
 KEY_ECHO_TIMEOUT = float(os.environ.get("KEY_ECHO_TIMEOUT", "3"))
-KEY_DUPLICATE_SETTLE_DELAY = float(os.environ.get("KEY_DUPLICATE_SETTLE_DELAY", "0.25"))
+KEY_DUPLICATE_SETTLE_DELAY = float(os.environ.get("KEY_DUPLICATE_SETTLE_DELAY", "0.02"))
 KEY_CHAR_RETRIES = int(os.environ.get("KEY_CHAR_RETRIES", "3"))
 
 
@@ -124,7 +124,7 @@ def key_echo_count(output, char):
 
 
 def send_command_once(client, command, proc):
-    aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash", ":": "shift-semicolon", "_": "shift-minus"}
+    aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash", ":": "shift-semicolon", "_": "shift-minus", "=": "equal"}
     for char in command:
         count = 0
         for _ in range(KEY_CHAR_RETRIES):
@@ -222,12 +222,16 @@ def main():
                 ("browser-tabs", "count=2"),
                 ("browser-fs-save /web.json", "browser-fs-save ok"),
                 ("browser-fs-load /web.json", "browser-fs-load ok"),
+                ("browser-pm-run print hello_mohhdy", "browser-pm-run ok"),
+                ("browser-origin-status", "browser-origin-status isolation=active"),
+                ("browser-fetch p2p://node origin=untrusted", "origin_denied"),
                 ("os-p2p", "pane=p2p"),
                 ("os-collab", "pane=collab"),
                 ("os-prod", "pane=prod"),
                 ("chat p2p status", "workflow=p2p"),
                 ("chat collab points", "workflow=collab"),
                 ("chat prod metrics", "workflow=prod"),
+                ("chat pm run app.pm", "workflow=pm"),
                 # With weights packed: a real answer; without (CI): the
                 # distinct no-model state, never a fake answer.
                 ("chat ai a", AI_READY_MARKER),

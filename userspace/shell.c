@@ -3176,7 +3176,7 @@ static int is_builtin(const char* cmd) {
         "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
         "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",
-        "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status",
+        "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status", "browser-origin-status", "browser-pm-run",
         "browser-tab-rename", "browser-tab-pin", "browser-tab-duplicate", "browser-tab-next", "browser-tab-prev", "browser-tabs",
         "browser-fs-save", "browser-fs-load", "browser-fs-sync",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
