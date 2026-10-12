@@ -49,7 +49,6 @@ static const char *const k_cmds[] = {
     "browser-tab-rename", "browser-tab-pin", "browser-tab-duplicate", "browser-tab-next", "browser-tab-prev", "browser-tabs",
     "browser-fs-save", "browser-fs-load", "browser-fs-sync",
     "browser-navigate", "browser-back", "browser-forward", "browser-dom-tree", "browser-eval", "browser-pm-run",
-    "browser-navigate", "browser-back", "browser-forward", "browser-dom-tree", "browser-eval",
     "browser-form-fill", "browser-dom-act", "browser-fetch", "fetch-sim",
     "browser-storage-set", "browser-storage-get", "tab-storage",
     "mcp-invoice", "mcp-invoke", "mcp-list", "mcp-status", "mcp-auth", "mcp-credentials",
@@ -2236,11 +2235,15 @@ static int cmd_browser_tab_prev(char *out, int max) {
 }
 
 static osui_fs_t *fs_find(const char *path);
+static const char *s_find(const char *h, const char *n);
 extern int sys_readfile(const char *path, char *buf, int max);
 extern int sys_writefile(const char *path, const char *buf, int n);
 
 static char g_osui_pm_out_buf[1024];
 static int g_osui_pm_out_pos = 0;
+static char g_osui_pm_src[PM_SRC_MAX];
+static pm_program_t g_osui_pm_prog;
+static pm_vm_t g_osui_pm_vm;
 
 static int osui_pm_read(void* ctx, const char* path, char* buf, int cap) {
     (void)ctx;
@@ -2284,18 +2287,15 @@ static const pm_host_t g_osui_pm_host = { 0, osui_pm_read, osui_pm_write, osui_p
 static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0;
     const char *path = narg > 0 ? args[0] : "demo/app.pm";
-    char src[PM_SRC_MAX];
-    pm_program_t prog;
-    pm_vm_t vm;
     int len, rc;
 
     g_osui_pm_out_buf[0] = 0;
     g_osui_pm_out_pos = 0;
 
-    len = osui_pm_read(0, path, src, sizeof(src));
+    len = osui_pm_read(0, path, g_osui_pm_src, sizeof(g_osui_pm_src));
     if (len < 0) {
-        rest_from(args, narg, 0, src, sizeof(src));
-        len = s_len(src);
+        rest_from(args, narg, 0, g_osui_pm_src, sizeof(g_osui_pm_src));
+        len = s_len(g_osui_pm_src);
         if (len == 0) {
             out_add(out, max, &p, "osui browser-pm-run error=file_not_found path=");
             out_add(out, max, &p, path);
@@ -2304,25 +2304,33 @@ static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out,
         }
     }
 
-    rc = pm_compile(src, len, &prog, &g_osui_pm_host);
+    rc = pm_compile(g_osui_pm_src, len, &g_osui_pm_prog, &g_osui_pm_host);
+    if (rc != PM_OK && s_ncmp(g_osui_pm_src, "print ", 6) == 0 && !s_find(g_osui_pm_src, "\"")) {
+        char auto_src[PM_SRC_MAX];
+        int ap = 0;
+        out_add(auto_src, sizeof(auto_src), &ap, "print \"");
+        out_add(auto_src, sizeof(auto_src), &ap, g_osui_pm_src + 6);
+        out_add(auto_src, sizeof(auto_src), &ap, "\"");
+        rc = pm_compile(auto_src, s_len(auto_src), &g_osui_pm_prog, &g_osui_pm_host);
+    }
     if (rc != PM_OK) {
         out_add(out, max, &p, "osui browser-pm-run error=compile_failed line=");
-        out_u(out, max, &p, (unsigned)prog.err_line);
+        out_u(out, max, &p, (unsigned)g_osui_pm_prog.err_line);
         out_add(out, max, &p, " msg=");
-        out_add(out, max, &p, prog.err);
+        out_add(out, max, &p, g_osui_pm_prog.err);
         out_add(out, max, &p, "\n");
         return OSUI_ERR;
     }
 
-    pm_vm_reset(&vm);
-    rc = pm_run(&prog, &vm, &g_osui_pm_host);
+    pm_vm_reset(&g_osui_pm_vm);
+    rc = pm_run(&g_osui_pm_prog, &g_osui_pm_vm, &g_osui_pm_host);
     audit_log_add("pm_run", path);
 
     if (rc != PM_OK && rc != PM_BREAK) {
         out_add(out, max, &p, "osui browser-pm-run error=runtime_failed path=");
         out_add(out, max, &p, path);
         out_add(out, max, &p, " err=");
-        out_add(out, max, &p, vm.err);
+        out_add(out, max, &p, g_osui_pm_vm.err);
         out_add(out, max, &p, "\n");
         return OSUI_ERR;
     }
@@ -2330,9 +2338,9 @@ static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out,
     out_add(out, max, &p, "osui browser-pm-run ok path=");
     out_add(out, max, &p, path);
     out_add(out, max, &p, " statements=");
-    out_u(out, max, &p, (unsigned)prog.statements);
+    out_u(out, max, &p, (unsigned)g_osui_pm_prog.statements);
     out_add(out, max, &p, " prints=");
-    out_u(out, max, &p, (unsigned)vm.prints);
+    out_u(out, max, &p, (unsigned)g_osui_pm_vm.prints);
     out_add(out, max, &p, " output=");
     out_add(out, max, &p, g_osui_pm_out_buf[0] ? g_osui_pm_out_buf : "void");
     out_add(out, max, &p, "\n");
@@ -2786,7 +2794,6 @@ int osui_web_load_state(const char *buf, int len) {
         if (buf[p] == '\n') p++;
         if (s_ncmp(line, "TAB ", 4) == 0) {
             char tid[12] = {0}, url[64] = {0}, title[32] = {0}, origin[32] = "self", kind[16] = "web";
-            char tid[12] = {0}, url[64] = {0}, title[32] = {0}, kind[16] = "web";
             int pinned = 0;
             const char *s;
             if ((s = s_find(line, "id=")) != 0) copy_word_val(s + 3, tid, sizeof(tid));

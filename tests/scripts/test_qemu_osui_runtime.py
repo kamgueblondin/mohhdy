@@ -22,10 +22,10 @@ MON_SOCK = os.environ.get("OSUI_MON_SOCK", os.path.join(LOG_DIR, "qemu-osui-runt
 TEST_DISK = os.environ.get("OVERLAY_DISK", os.path.join(LOG_DIR, "qemu-osui-runtime-overlay.img"))
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "75"))
 CMD_TIMEOUT = float(os.environ.get("CMD_TIMEOUT", "120"))
-KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.05"))
+KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.01"))
 KEY_HOLD_MS = int(os.environ.get("KEY_HOLD_MS", "10"))
 KEY_ECHO_TIMEOUT = float(os.environ.get("KEY_ECHO_TIMEOUT", "3"))
-KEY_DUPLICATE_SETTLE_DELAY = float(os.environ.get("KEY_DUPLICATE_SETTLE_DELAY", "0.25"))
+KEY_DUPLICATE_SETTLE_DELAY = float(os.environ.get("KEY_DUPLICATE_SETTLE_DELAY", "0.02"))
 KEY_CHAR_RETRIES = int(os.environ.get("KEY_CHAR_RETRIES", "3"))
 
 
@@ -124,7 +124,7 @@ def key_echo_count(output, char):
 
 
 def send_command_once(client, command, proc):
-    aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash", ":": "shift-semicolon", "_": "shift-minus"}
+    aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash", ":": "shift-semicolon", "_": "shift-minus", "=": "equal"}
     for char in command:
         count = 0
         for _ in range(KEY_CHAR_RETRIES):

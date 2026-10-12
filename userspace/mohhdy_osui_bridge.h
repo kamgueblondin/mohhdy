@@ -15,7 +15,6 @@
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
 #define MOHHDY_SHELL_COMMAND_COUNT 343
-#define MOHHDY_SHELL_COMMAND_COUNT 341
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
