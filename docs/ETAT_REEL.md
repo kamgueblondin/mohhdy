@@ -55,7 +55,14 @@ Integration du moteur promptmessage dans l'OS-UI Runtime C freestanding (`usersp
 
 ## Lot #137 en cours le 12 octobre 2026
 
-Pas merge. Le run CI 38232561645 sur eebc324 avait 6 jobs verts et 2 rouges (`make qemu-osui-runtime`, `make qemu-p2p`). Cette revision corrige le marqueur QEMU du manifeste PWA et le faux "peer down" pendant la lecture clavier. Elle ne pretend pas qu'un CI vert ou un merge a ete observe. Les commandes locales rejouees sur cette revision sont notees seulement apres un succes reel.
+Pas merge. Le run CI 38232561645 sur eebc324 avait 6 jobs verts et 2 rouges (`make qemu-osui-runtime`, `make qemu-p2p`). Cette revision corrige le marqueur QEMU du manifeste PWA (`id=p0002`, pas `id=pwa`) et le faux "peer down" pendant la lecture clavier. Le CI GitHub de cette revision n'est pas declare vert ici.
+
+Preuves locales rejouees sur cette revision :
+- `make qemu-p2p` : PASS (scenario 1 compris, `p2p peers ok 2 up 2` inchange), 127 s, frames=661 hello=159 sealed=502 plaintext=0.
+- `make qemu-osui-runtime` : contrat passe, y compris `pwa-manifest ok id=p0002 name=demo` et `media-play ok type=audio title=track01 status=playing`.
+- `make test-all` : 756 passes, 0 echec, 0 ignore ; registre guest 353 noms.
+- `make strict-image-check` : OK. `make secrets-check` : OK, aucun secret dans 3 images.
+- `make tree-clean-check` : cible absente du Makefile.
 
 Tableau de bord de telemetrie, moteur de manifestes PWA simules et gestionnaires de flux medias / audio / video freestanding dans l'OS-UI VBE GUI et le Web Runtime C :
 - **Telemetrie OS-UI** : Suivi dynamique des metriques d'execution (commandes, requetes fetch, IPC, ticks media, executions PWA, erreurs). Commande `browser-telemetry` (`/telemetry`, `osui-telemetry`) supportant `status`, `export` (JSON) et `reset`.
