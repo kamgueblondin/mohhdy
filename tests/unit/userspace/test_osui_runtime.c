@@ -939,6 +939,77 @@ static void test_multi_origin_security_and_p2p_socket_isolation(void) {
     TEST_ASSERT(strstr(g_out, "origin_denied") != NULL);
 }
 
+static void test_telemetry_pwa_and_media(void) {
+    int rc;
+    setup();
+
+    /* Telemetry initial status */
+    rc = run_line("browser-telemetry status");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "status=active") != NULL);
+    TEST_ASSERT(strstr(g_out, "commands=") != NULL);
+
+    /* Telemetry export */
+    rc = run_line("browser-telemetry export");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "json={\"commands\":") != NULL);
+
+    /* Telemetry reset */
+    rc = run_line("browser-telemetry reset");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "browser-telemetry reset ok") != NULL);
+
+    /* PWA Manifest */
+    rc = run_line("pwa-manifest TestApp app://test/start app://test/ standalone");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "pwa-manifest ok") != NULL);
+    TEST_ASSERT(strstr(g_out, "name=TestApp") != NULL);
+
+    /* PWA List */
+    rc = run_line("pwa-list");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "TestApp") != NULL);
+
+    /* PWA Install */
+    rc = run_line("pwa-install TestApp");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "status=installed") != NULL);
+
+    /* PWA Run */
+    rc = run_line("pwa-run TestApp");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "pwa_name=TestApp") != NULL);
+
+    /* Media Stream Play */
+    rc = run_line("media-play audio track1");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "status=playing") != NULL);
+    TEST_ASSERT_EQUAL(1, osui_get_media_active());
+    TEST_ASSERT_EQUAL(0, osui_get_media_paused());
+
+    /* Media Status */
+    rc = run_line("browser-media");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "playing=true") != NULL);
+
+    /* Media Pause */
+    rc = run_line("media-pause");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "status=paused") != NULL);
+    TEST_ASSERT_EQUAL(1, osui_get_media_paused());
+
+    /* Media Stream */
+    rc = run_line("media-stream http://127.0.0.1/live.mp3 video");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "status=streaming") != NULL);
+
+    /* Media Stop */
+    rc = run_line("media-stop");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "status=stopped") != NULL);
+    TEST_ASSERT_EQUAL(0, osui_get_media_active());
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -969,6 +1040,7 @@ int main(void) {
     RUN_TEST(test_agentic_workflows_p2p_collab_prod);
     RUN_TEST(test_browser_pm_run_and_navigation);
     RUN_TEST(test_multi_origin_security_and_p2p_socket_isolation);
+    RUN_TEST(test_telemetry_pwa_and_media);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

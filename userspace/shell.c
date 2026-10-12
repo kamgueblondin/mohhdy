@@ -3179,6 +3179,8 @@ static int is_builtin(const char* cmd) {
         "origin-check", "browser-click", "browser-type", "browser-pointer", "browser-status", "browser-origin-status", "browser-pm-run",
         "browser-tab-rename", "browser-tab-pin", "browser-tab-duplicate", "browser-tab-next", "browser-tab-prev", "browser-tabs",
         "browser-fs-save", "browser-fs-load", "browser-fs-sync",
+        "browser-telemetry", "pwa-manifest", "pwa-install", "pwa-list", "pwa-run",
+        "browser-media", "media-play", "media-pause", "media-stop", "media-stream",
         "mcp-invoice", "mcp-invoke", "fs-list", "fs-read", "fs-write",
         "stage", "stage-prompt", "os-help", "os-status", "os-browser", "os-shell",
         "os-admin", "os-support", "os-fs", "os-p2p", "os-collab", "os-prod", "os-center", "os-close",

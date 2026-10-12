@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 343
+#define MOHHDY_SHELL_COMMAND_COUNT 353
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -59,6 +59,7 @@ static const char * const mohhdy_shell_commands[] = {
     "browser-fs-load",
     "browser-fs-save",
     "browser-fs-sync",
+    "browser-media",
     "browser-origin-status",
     "browser-pm-run",
     "browser-pointer",
@@ -69,6 +70,7 @@ static const char * const mohhdy_shell_commands[] = {
     "browser-tab-prev",
     "browser-tab-rename",
     "browser-tabs",
+    "browser-telemetry",
     "browser-type",
     "cap-token",
     "cat",
@@ -160,6 +162,10 @@ static const char * const mohhdy_shell_commands[] = {
     "mcp-invoice",
     "mcp-invoice-void",
     "mcp-invoke",
+    "media-pause",
+    "media-play",
+    "media-stop",
+    "media-stream",
     "mem",
     "memory",
     "migrate-export",
@@ -260,6 +266,10 @@ static const char * const mohhdy_shell_commands[] = {
     "prod-usage",
     "prompt",
     "ps",
+    "pwa-install",
+    "pwa-list",
+    "pwa-manifest",
+    "pwa-run",
     "pwd",
     "quit",
     "rc",
