@@ -510,6 +510,20 @@ static void draw_stage_body(uint32_t *fb, int w, int h, int x, int y, int rw, in
         draw_circle_kind(fb, w, h, x + rw / 2, y + 40, 28, RGB(122, 212, 196));
         return;
     }
+    if (kind == OS_FB_KIND_MEDIA) {
+        int paused = sc && (sc->reserved & 0x40);
+        uint8_t ticks = sc ? (sc->reserved & 0x3F) : 0;
+        int i;
+        int bar_w = (rw - 48) / 10;
+        if (bar_w < 4) bar_w = 4;
+        pill(fb, w, h, x + 8, y + 8, 72, 28, paused ? RGB(201, 162, 39) : RGB(61, 154, 138), paused ? "PAUSED" : "PLAYING", 0);
+        draw_text(fb, w, h, x + 88, y + 16, "Media Stream Active", RGB(232, 238, 244));
+        for (i = 0; i < 10; i++) {
+            int h_bar = paused ? 12 : (6 + ((ticks + i * 5) % 22));
+            fill_rect(fb, w, h, x + 12 + i * (bar_w + 3), y + 68 - h_bar, bar_w, h_bar, RGB(122, 212, 196));
+        }
+        return;
+    }
     if (kind == OS_FB_KIND_SIM || mode == OS_FB_STAGE_ACTING) {
         pill(fb, w, h, x + 16, y + 12, 70, 32, RGB(61, 154, 138), "1", 0);
         pill(fb, w, h, x + 110, y + 28, 70, 32, RGB(201, 162, 39), "2", 0);

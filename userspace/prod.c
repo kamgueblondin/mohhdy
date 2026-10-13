@@ -322,9 +322,12 @@ int prod_pipeline_run(prod_pipeline_t* pipe, const char* repo_path, char* out, i
 /* --------------------------------------------- US-110 Autoscaling Workload */
 int prod_autoscale_workload_eval(prod_scaler_t* s, prod_autoscale_workload_t* wl, uint32_t now_tick, char* out, int cap) {
     int old_workers, new_workers;
+    uint32_t effective_load;
     if (!s || !wl || !out) return -1;
     old_workers = s->cur;
-    new_workers = prod_scaler_step(s, wl->queue_depth, now_tick);
+    effective_load = wl->queue_depth > 0 ? wl->queue_depth : (wl->cpu_load_pct / 10U);
+    if (effective_load == 0 && wl->cpu_load_pct > 80U) effective_load = 10U;
+    new_workers = prod_scaler_step(s, effective_load, now_tick);
     if (new_workers != old_workers) wl->scale_events++;
     wl->active_workers = (uint32_t)new_workers;
     out[0] = 0;

@@ -373,7 +373,7 @@ static int cc_stmt(pm_cc_t* c, pm_tok_t* t, int i, int n, const char* ls) {
         slot = var_slot(c, t[i].p, t[i].len, 1);
         if (slot < 0) return cc_fail(c, col_of(t, i, n, ls), "bad or too many variables");
         i++;
-        if (i >= n || !tok_is(&t[i], "to")) return cc_fail(c, col_of(t, i, n, ls), "expected 'to'");
+        if (i >= n || (!tok_is(&t[i], "to") && !tok_is(&t[i], "="))) return cc_fail(c, col_of(t, i, n, ls), "expected 'to'");
         i++;
         if ((st = cc_expr(c, t, &i, n, ls)) != 0) return st;
         if (emit_op(c, OP_STORE) || emit8(c, slot)) return PM_ERR_LIMIT;
@@ -458,11 +458,15 @@ static int cc_stmt(pm_cc_t* c, pm_tok_t* t, int i, int n, const char* ls) {
         patch_here(c, jz);
         return PM_OK;
     } else if (tok_is(&t[i], "repeat")) {
-        char name[4];
+        char name[8];
         int head, jz;
         i++;
-        name[0] = '#'; name[1] = (char)('0' + c->nblocks); name[2] = (char)('0' + c->depth); name[3] = 0;
-        slot = var_slot(c, name, 3, 1);
+        name[0] = '#';
+        name[1] = (char)('a' + (c->nblocks & 7));
+        name[2] = (char)('a' + (c->depth & 7));
+        name[3] = (char)('a' + (c->prog->code_len & 15));
+        name[4] = 0;
+        slot = var_slot(c, name, 4, 1);
         if (slot < 0) return cc_limit(c, "too many variables");
         if ((st = cc_expr(c, t, &i, n, ls)) != 0) return st;
         if (i >= n || !tok_is(&t[i], "times")) return cc_fail(c, col_of(t, i, n, ls), "expected 'times'");
@@ -485,9 +489,10 @@ static int cc_stmt(pm_cc_t* c, pm_tok_t* t, int i, int n, const char* ls) {
         int jmp;
         if (c->nblocks) return cc_fail(c, col_of(t, i, n, ls), "when must be at top level");
         i++;
-        if (i + 1 >= n || !tok_is(&t[i], "user") || !(tok_is(&t[i + 1], "says") || tok_is(&t[i + 1], "dit")))
-            return cc_fail(c, col_of(t, i, n, ls), "expected 'user says'");
-        i += 2;
+        if (i < n && tok_is(&t[i], "user")) {
+            i++;
+            if (i < n && (tok_is(&t[i], "says") || tok_is(&t[i], "dit") || tok_is(&t[i], "triggers"))) i++;
+        }
         if (i >= n || t[i].type != T_STR) return cc_fail(c, col_of(t, i, n, ls), "phrase string expected");
         if (c->prog->ntrig >= PM_TRIGGERS) return cc_limit(c, "too many triggers");
         at = pool_add(c, t[i].p, t[i].len);

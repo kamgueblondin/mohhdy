@@ -420,6 +420,7 @@ typedef struct {
 #define OS_FB_KIND_TREE 4
 #define OS_FB_KIND_CLOCK 5
 #define OS_FB_KIND_SIM 6
+#define OS_FB_KIND_MEDIA 7
 #define OS_FB_MSG_MAX 6
 #define OS_FB_MSG_LEN 120
 #define OS_FB_INPUT_LEN 96
