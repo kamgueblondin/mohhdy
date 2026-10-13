@@ -876,12 +876,20 @@ static void test_browser_tab_extensions_and_fs_web_persistence(void) {
 
     TEST_ASSERT_EQUAL(0, run_line("browser-fs-save /web_test.json"));
     TEST_ASSERT(strstr(g_out, "browser-fs-save ok") != NULL);
+    TEST_ASSERT(strstr(g_out, "encrypted=true") != NULL);
 
     TEST_ASSERT_EQUAL(0, run_line("browser-fs-load /web_test.json"));
     TEST_ASSERT(strstr(g_out, "browser-fs-load ok") != NULL);
 
     TEST_ASSERT_EQUAL(0, run_line("browser-fs-sync"));
     TEST_ASSERT(strstr(g_out, "browser-fs-save ok") != NULL);
+
+    /* Test PWA isolated origin execution & storage isolation */
+    TEST_ASSERT_EQUAL(0, run_line("pwa-run pwa0001"));
+    TEST_ASSERT(strstr(g_out, "pwa_run_id=pwa0001") != NULL);
+
+    run_line("browser-storage-set secret_key secret_val origin=http://evil");
+    TEST_ASSERT(strstr(g_out, "origin_denied") != NULL);
 }
 
 static void test_agentic_workflows_p2p_collab_prod(void) {

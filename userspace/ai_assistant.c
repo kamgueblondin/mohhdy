@@ -16,6 +16,18 @@ int strcmp(const char* a, const char* b) {
     int i = 0; while (a[i] && b[i] && a[i] == b[i]) i++; return (unsigned char)a[i] - (unsigned char)b[i];
 }
 
+const char* find_str(const char* h, const char* n) {
+    if (!h || !n || !n[0]) return 0;
+    int i, j;
+    for (i = 0; h[i]; i++) {
+        for (j = 0; n[j]; j++) {
+            if (h[i + j] != n[j]) break;
+        }
+        if (!n[j]) return h + i;
+    }
+    return 0;
+}
+
 void print_string(const char* s) {
     for (int i = 0; s[i] != '\0'; i++) putc(s[i]);
 }
@@ -43,11 +55,22 @@ void main(int argc, char* argv[]) {
             i++;
         }
         if (has_bonjour || has_hello) {
-            print_string("AI: bonjour\n");
+            print_string("AI (instruction): bonjour, comment puis-je vous aider ?\n");
             print_string("[AI] end\n");
             exit_program(0);
         }
-        print_string("AI: received\n");
+        // Check instruction vs completion prompt
+        int is_instruct = 0;
+        if (q[0]=='i' && q[1]=='n' && q[2]=='s' && q[3]=='t' && q[4]=='r' && q[5]=='u' && q[6]=='c' && q[7]=='t') is_instruct = 1;
+        if (find_str(q, "?") != 0 || find_str(q, "help") != 0 || find_str(q, "explain") != 0 || find_str(q, "summary") != 0) is_instruct = 1;
+
+        if (is_instruct) {
+            print_string("AI (instruction): instruction executee avec succes\n");
+            print_string("[AI] end\n");
+            exit_program(0);
+        }
+
+        print_string("AI (completion): received\n");
         print_string("[AI] end\n");
         exit_program(0);
     }

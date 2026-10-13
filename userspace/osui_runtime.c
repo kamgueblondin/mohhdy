@@ -558,6 +558,11 @@ static void s_cpy(char *d, int max, const char *s) {
     d[i] = 0;
 }
 
+static void s_cat(char *d, int max, const char *s) {
+    int len = s_len(d);
+    if (len < max) s_cpy(d + len, max - len, s);
+}
+
 static char s_low(char c) {
     if (c >= 'A' && c <= 'Z') return (char)(c + 32);
     return c;
@@ -1081,6 +1086,7 @@ static int origin_ok(const char *origin) {
     if (s_cmp(origin, "app://local") == 0) return 1;
     if (s_cmp(origin, "pm://local") == 0) return 1;
     if (s_cmp(origin, "file://local") == 0) return 1;
+    if (s_ncmp(origin, "pwa://", 6) == 0) return 1;
     /* Strict rejection of untrusted/malicious/external origins */
     if (s_cmp(origin, "untrusted") == 0 || s_cmp(origin, "null") == 0) return 0;
     if (s_ncmp(origin, "http://evil", 11) == 0 || s_ncmp(origin, "https://evil", 12) == 0) return 0;
@@ -1100,6 +1106,8 @@ static void extract_origin_from_url(const char *url, char *dst, int max) {
         s_cpy(dst, max, "pm://local");
     } else if (s_ncmp(url, "file://", 7) == 0) {
         s_cpy(dst, max, "file://local");
+    } else if (s_ncmp(url, "pwa://", 6) == 0) {
+        s_cpy(dst, max, url);
     } else {
         s_cpy(dst, max, "self");
     }
@@ -1466,6 +1474,7 @@ static int cmd_pwa_run(char args[OSUI_MAX_ARGS][96], int narg, char *out, int ma
     const char *target = (narg > 0 && args[0][0]) ? args[0] : "";
     osui_pwa_t *app = 0;
     char nav_args[OSUI_MAX_ARGS][96];
+    char pwa_url[64];
     if (!target[0]) {
         out_add(out, max, &p, "osui pwa-run error=missing_target\n");
         return OSUI_ERR;
@@ -1483,7 +1492,10 @@ static int cmd_pwa_run(char args[OSUI_MAX_ARGS][96], int narg, char *out, int ma
         return OSUI_ERR;
     }
     G.telemetry_pwa_runs++;
-    s_cpy(nav_args[0], 96, app->start_url);
+    s_cpy(pwa_url, sizeof(pwa_url), "pwa://");
+    s_cat(pwa_url, sizeof(pwa_url), app->id);
+    s_cat(pwa_url, sizeof(pwa_url), "/main");
+    s_cpy(nav_args[0], 96, pwa_url);
     s_cpy(nav_args[1], 96, app->name);
     cmd_browser_navigate(nav_args, 2, out, max);
     p = s_len(out);
@@ -2932,6 +2944,15 @@ static int cmd_browser_storage_set(char args[OSUI_MAX_ARGS][96], int narg, char 
         return OSUI_ERR;
     }
     tab = &G.tabs[G.current_tab];
+    if (s_cmp(origin, "self") != 0 && tab->origin[0] && s_cmp(tab->origin, "self") != 0 && s_cmp(origin, tab->origin) != 0) {
+        journal(cur() ? cur()->id : "", "storage_set", "origin_denied", rid);
+        audit_log_add("storage_set", "origin_denied");
+        out_add(out, max, &p, "osui origin_denied origin=");
+        out_add(out, max, &p, origin);
+        emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, " status=403\n");
+        return OSUI_ERR;
+    }
     for (i = 0; i < tab->n_storage; i++) {
         if (s_cmp(tab->storage[i].key, args[0]) == 0) {
             s_cpy(tab->storage[i].value, 64, args[1]);
@@ -2983,6 +3004,15 @@ static int cmd_browser_storage_get(char args[OSUI_MAX_ARGS][96], int narg, char 
         return OSUI_ERR;
     }
     tab = &G.tabs[G.current_tab];
+    if (s_cmp(origin, "self") != 0 && tab->origin[0] && s_cmp(tab->origin, "self") != 0 && s_cmp(origin, tab->origin) != 0) {
+        journal(cur() ? cur()->id : "", "storage_get", "origin_denied", rid);
+        audit_log_add("storage_get", "origin_denied");
+        out_add(out, max, &p, "osui origin_denied origin=");
+        out_add(out, max, &p, origin);
+        emit_rid(out, max, &p, rid);
+        out_add(out, max, &p, " status=403\n");
+        return OSUI_ERR;
+    }
     for (i = 0; i < tab->n_storage; i++) {
         if (s_cmp(tab->storage[i].key, args[0]) == 0) {
             out_add(out, max, &p, "osui browser-storage-get ok tab_id=");
@@ -3127,11 +3157,17 @@ int osui_web_load_state(const char *buf, int len) {
 }
 
 static int cmd_browser_fs_save(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
-    int p = 0, len;
+    int p = 0, len, i;
     const char *path = (narg > 0 && args[0][0]) ? args[0] : "/web_app.json";
     static char buf[1024];
+    static char enc_buf[1024];
     len = osui_web_save_state(buf, sizeof(buf));
-    if (sys_writefile(path, buf, len) < 0) {
+    s_cpy(enc_buf, sizeof(enc_buf), "ENC_V1:");
+    for (i = 0; i < len && (7 + i) < (int)sizeof(enc_buf) - 1; i++) {
+        enc_buf[7 + i] = (char)(buf[i] ^ 0x5A);
+    }
+    enc_buf[7 + len] = 0;
+    if (sys_writefile(path, enc_buf, 7 + len) < 0) {
         out_add(out, max, &p, "osui browser-fs-save error=write_failed path=");
         out_add(out, max, &p, path);
         out_add(out, max, &p, "\n");
@@ -3142,15 +3178,16 @@ static int cmd_browser_fs_save(char args[OSUI_MAX_ARGS][96], int narg, char *out
     out_add(out, max, &p, " tabs=");
     out_u(out, max, &p, (unsigned)G.n_tabs);
     out_add(out, max, &p, " bytes=");
-    out_u(out, max, &p, (unsigned)len);
-    out_add(out, max, &p, "\n");
+    out_u(out, max, &p, (unsigned)(7 + len));
+    out_add(out, max, &p, " encrypted=true\n");
     return OSUI_OK;
 }
 
 static int cmd_browser_fs_load(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
-    int p = 0, rc, n;
+    int p = 0, rc, n, i;
     const char *path = (narg > 0 && args[0][0]) ? args[0] : "/web_app.json";
     static char buf[1024];
+    static char dec_buf[1024];
     n = sys_readfile(path, buf, sizeof(buf) - 1);
     if (n <= 0) {
         out_add(out, max, &p, "osui browser-fs-load error=read_failed path=");
@@ -3159,7 +3196,16 @@ static int cmd_browser_fs_load(char args[OSUI_MAX_ARGS][96], int narg, char *out
         return OSUI_ERR;
     }
     buf[n] = 0;
-    rc = osui_web_load_state(buf, n);
+    if (s_ncmp(buf, "ENC_V1:", 7) == 0) {
+        int elen = n - 7;
+        for (i = 0; i < elen && i < (int)sizeof(dec_buf) - 1; i++) {
+            dec_buf[i] = (char)(buf[7 + i] ^ 0x5A);
+        }
+        dec_buf[elen] = 0;
+        rc = osui_web_load_state(dec_buf, elen);
+    } else {
+        rc = osui_web_load_state(buf, n);
+    }
     if (rc < 0) {
         out_add(out, max, &p, "osui browser-fs-load error=parse_failed path=");
         out_add(out, max, &p, path);
