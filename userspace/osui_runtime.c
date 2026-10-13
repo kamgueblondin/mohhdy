@@ -7,6 +7,20 @@
 #include "mohhdy_osui_bridge.h"
 #include "os_syscalls.h"
 #include "promptmessage.h"
+#include "csig.h"
+#include "../kernel/sha256.h"
+
+static int pm_hexval(char c) {
+    return (c >= '0' && c <= '9') ? c - '0' : (c >= 'a' && c <= 'f') ? c - 'a' + 10 : -1;
+}
+
+static void pm_sig_digest(const char* src, int len, uint8_t d[32]) {
+    sha256_ctx_t h;
+    sha256_init(&h);
+    sha256_update(&h, (const uint8_t*)"pmcert1", 7);
+    sha256_update(&h, (const uint8_t*)src, (uint32_t)len);
+    sha256_final(&h, d);
+}
 
 #define OSUI_MAX_SESSIONS 8
 #define OSUI_MAX_TABS 4
@@ -2604,6 +2618,39 @@ static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out,
             out_add(out, max, &p, path);
             out_add(out, max, &p, "\n");
             return OSUI_ERR;
+        }
+    }
+
+    /* Hardening: Schnorr (.sig) formal signature verification for certified programs */
+    {
+        char sig_path[128];
+        char sig_buf[400];
+        int sig_len;
+        s_cpy(sig_path, sizeof(sig_path), path);
+        s_cat(sig_path, (int)sizeof(sig_path), ".sig");
+        sig_len = osui_pm_read(0, sig_path, sig_buf, sizeof(sig_buf) - 1);
+        if (sig_len >= 10 + 2 * CSIG_PK + 5 + 2 * CSIG_SIG && s_ncmp(sig_buf, "pmsig1 pk=", 10) == 0) {
+            uint8_t pk[CSIG_PK], sig[CSIG_SIG], d[32];
+            int j, bad = 0;
+            sig_buf[sig_len] = 0;
+            for (j = 0; !bad && j < CSIG_PK; j++) {
+                int a = pm_hexval(sig_buf[10 + 2 * j]), b = pm_hexval(sig_buf[11 + 2 * j]);
+                if (a < 0 || b < 0) bad = 1; else pk[j] = (uint8_t)(a * 16 + b);
+            }
+            for (j = 0; !bad && j < CSIG_SIG; j++) {
+                int o = 10 + 2 * CSIG_PK + 5;
+                int a = pm_hexval(sig_buf[o + 2 * j]), b = pm_hexval(sig_buf[o + 1 + 2 * j]);
+                if (a < 0 || b < 0) bad = 1; else sig[j] = (uint8_t)(a * 16 + b);
+            }
+            pm_sig_digest(g_osui_pm_src, len, d);
+            if (bad || !csig_pk_valid(pk) || !csig_verify(pk, d, 32, sig)) {
+                audit_log_add("pm_run_signature_denied", path);
+                out_add(out, max, &p, "osui browser-pm-run error=signature_denied path=");
+                out_add(out, max, &p, path);
+                out_add(out, max, &p, "\n");
+                return OSUI_ERR;
+            }
+            audit_log_add("pm_run_certified", path);
         }
     }
 

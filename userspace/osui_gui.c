@@ -371,6 +371,13 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         else if (scmp(kind, "tree") == 0) scene->stage_kind = OS_FB_KIND_TREE;
         else if (scmp(kind, "clock") == 0) scene->stage_kind = OS_FB_KIND_CLOCK;
         else if (scmp(kind, "sim") == 0) scene->stage_kind = OS_FB_KIND_SIM;
+        else if (scmp(kind, "media") == 0) scene->stage_kind = OS_FB_KIND_MEDIA;
+    }
+    if (osui_get_media_active()) {
+        scene->stage_kind = OS_FB_KIND_MEDIA;
+        scene->reserved = (uint8_t)((1U << 7) | (osui_get_media_paused() ? (1U << 6) : 0U) | (osui_get_media_ticks() & 0x3FU));
+    } else {
+        scene->reserved = 0U;
     }
     scene->chat_x = (uint16_t)osui_get_chat_x();
     scene->chat_y = (uint16_t)osui_get_chat_y();
