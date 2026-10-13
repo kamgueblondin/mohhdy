@@ -338,6 +338,7 @@ static void power_line(void) {
     s_cat(g_out, " poll_budget ", 4096); cat_u(g_out, p.poll_budget, 4096);
     s_cat(g_out, " screen_dim_s ", 4096); cat_u(g_out, p.screen_dim_s, 4096);
     s_cat(g_out, " background_ms ", 4096); cat_u(g_out, p.background_ms, 4096);
+    s_cat(g_out, " refresh_hz ", 4096); cat_u(g_out, p.refresh_hz, 4096);
     s_cat(g_out, "\n", 4096);
     print_string(g_out);
 }
