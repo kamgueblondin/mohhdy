@@ -3809,37 +3809,51 @@ int sys_writefile_historical(const char* path, const char* buf, uint32_t n) {
 }
 
 int sys_mkdir(const char* path) {
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     if (!path) return -1;
     return ovs_mkdir(path);
 }
 
 int sys_unlink(const char* path) {
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     if (!path) return -1;
     return ovs_unlink(path);
 }
 
 int sys_writefile(const char* path, const char* buf, uint32_t n) {
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     if (!path || (n > 0 && !buf)) return -1;
     return ovs_write(path, buf, n);
 }
 
 int sys_stat(const char* path, os_dirent_t* out) {
     if (!path || !out) return -1;
-    if (ovs_stat(path, out) == OV_OK) return 0;
+    if (current_task && service_registry_ata_overlay_io_via_worker(current_task->id)) {
+        if (ovs_stat(path, out) == OV_OK) return 0;
+    }
     return initrd_stat(path, out);
 }
 
 int sys_rename(const char* oldpath, const char* newpath) {
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     if (!oldpath || !newpath) return -1;
     return ovs_rename(oldpath, newpath);
 }
 
 int sys_copy(const char* src, const char* dst) {
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     if (!src || !dst) return -1;
     return ovs_copy(src, dst);
 }
 
 int sys_append(const char* path, const char* buf, uint32_t n) {
+    if (!current_task || !service_registry_ata_overlay_io_via_worker(current_task->id))
+        return OS_VFS_BACKEND_WORKER_REQUIRED;
     if (!path || (n > 0 && !buf)) return -1;
     return ovs_append(path, buf, n);
 }

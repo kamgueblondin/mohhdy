@@ -897,7 +897,9 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         int ww = clampi(w - (w >= 780 ? 420 : 48), 240, w - 48);
         int wh = clampi(h - 220, 160, h - bar_h - 80);
         const char *body = "Cerveau = osui_runtime.c. Pas Chromium.";
-        if (pane == OS_FB_PANE_STATUS) body = "chrome=qemu_fb display_surface=vbe_lfb";
+        if (pane == OS_FB_PANE_BROWSER) body = "Browser-OS : FS-as-web, onglets, storage par onglet, DOM tree, JS eval";
+        else if (pane == OS_FB_PANE_FS) body = "Inspection VFS Sandboxee (FS-as-web) : initrd/, overlay/, fat16/, fat32/";
+        else if (pane == OS_FB_PANE_STATUS) body = "chrome=qemu_fb display_surface=vbe_lfb";
         else if (pane == OS_FB_PANE_P2P) body = "Noeud P2P actif : decouverte, routes, consensus Raft, encrypted LWW";
         else if (pane == OS_FB_PANE_COLLAB) body = "Economie Collab : points, sequestres, marketplace, gouvernance, Schnorr";
         else if (pane == OS_FB_PANE_PROD) body = "Production : metriques, alertes, autoscale, pipeline CI/CD, maintenance";
