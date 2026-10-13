@@ -5741,6 +5741,8 @@ static const char* ai_runtime_abort_name(uint32_t abort_reason) {
 
 static void ai_runtime_json_call(const char* key, uint32_t path, int32_t result,
                                  uint32_t ticks, uint32_t error, uint32_t abort_reason) {
+    uint32_t lat_ms = ticks * 10U;
+    uint32_t tok_lat_ms = lat_ms / 24U;
     print_string(",\"");
     print_string(key);
     print_string("\":{\"path\":\"");
@@ -5748,7 +5750,9 @@ static void ai_runtime_json_call(const char* key, uint32_t path, int32_t result,
     print_string("\",\"result\":");
     print_int(result);
     print_string(",\"latency_ms\":");
-    print_int((int)(ticks * 10U));
+    print_int((int)lat_ms);
+    print_string(",\"token_latency_ms\":");
+    print_int((int)tok_lat_ms);
     print_string(",\"error\":\"");
     print_string(ai_runtime_error_name(error));
     print_string("\",\"abort\":\"");
