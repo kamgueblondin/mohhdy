@@ -9,8 +9,8 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 
 ### Suite de Tests
 - `make test-all` rejoue la suite de non-regression sur l'arbre courant :
-  - **762 tests executes / 762 tests reussis** (0 echec, 0 ignore). Journal `test_logs/test_results_20261014_044925.log`.
-  - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. La couverture n'est pas mesuree.
+  - **766 tests executes / 766 tests reussis** (0 echec, 0 ignore). Journal `test_logs/test_results_20261014_165218.log`.
+  - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. La couverture n'est pas mesuree : `ENABLE_COVERAGE=1` ne passe pas `-fprofile-arcs` ni `-ftest-coverage`, et gcov ne produit aucun pourcentage.
 - Les compteurs plus anciens de ce fichier (563/563 et autres) decrivent la livraison de leur paragraphe, pas l'arbre courant.
 - `make strict-image-check`, `make secrets-check` et `make tree-clean-check` sont les gardes d'image et d'arbre.
 
@@ -37,10 +37,24 @@ Elle confirme visuellement :
 ## 3. Descriptif des Prochaines Tranches d'Implémentation (Priorités 1 à 3)
 
 ### Etape 1 : Tranche 4, ce qui reste Ring 0
+- Lot 1 is not delivered. Pull request #147 does not move ATA or Raft. Baseline on `main` is `7ae6bb1` (pull request #146).
 - Le pilote Ring 3 `atadriver` monte le FAT de boot et charge la fenetre overlay (`OS_ATA_FS_INSTALL`) sur l'image stricte. `ne2k_probe` n'est pas lie dans `build/mohhdy.bin`.
-- Restent Ring 0 : IDENTIFY ATA, PIO FAT apres la mort du pilote, IRQ et pilotes PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`.
-- US-064 est un journal Raft dans le guest (pas Paxos). US-067 est un RPC type sur le canal chiffre, pas gRPC HTTP/2. US-074 reste un STUN/NAT simule.
-- Validation courante : `make test-all` (762/762). Le contrat QEMU `make qemu-p2p` couvre election, replication et rattrapage. `make qemu-ata-driver` exige `fatkpio` a 0 au store ready.
+- US-001 reste ouvert. Restent Ring 0 : IDENTIFY ATA (`ata_init`, commande 0xEC), PIO FAT de repli apres la mort du pilote, IRQ et pilotes PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`. Pas de respawn supervise de `bin/atadriver`.
+- US-064 est un journal Raft dans le guest (pas Paxos). Capacite 8 entrees (`P2P_RAFT_LOG`). Pas de pre-vote, pas de compaction, pas de lease de leader. La preuve de partition est une chute de trames `p2p-block` (scenario QEMU 2b), pas une coupure NIC (`set_link`). US-067 est un RPC type sur le canal chiffre, pas gRPC HTTP/2. US-074 reste un STUN/NAT simule.
+- Validation courante : `make test-all` (766/766). Le contrat QEMU `make qemu-p2p` couvre election, replication et rattrapage. `make qemu-ata-driver` exige `fatkpio` a 0 au store ready.
+
+### Etape 1b : Phase 4, ce que la pull request #147 livre vraiment
+- US-050 reste partiel. `pm-ide` est l'editeur de lignes `pm-edit` (`userspace/shell.c`) : numeros (`.l`), controle syntaxique (`.c`), execution VM (`.r`), sauvegarde (`.`), abandon (`.q`). Pas un IDE plein ecran. Pas dans `userspace/osui_runtime.c`.
+- US-059 reste partiel. `pm-catalog-search` filtre les fichiers locaux `/pm/*.pm`. `pm-catalog-fetch` copie un programme local qui compile (meme depot que `pm-install`). Pas de marketplace reseau.
+- US-060 reste partiel. `pm-ca-init`, `pm-ca-sign`, `pm-ca-verify` : cle Schnorr locale, `/etc/pm_ca.pub`, cle privee en clair `/etc/pm_ca.key`, signature `FILE.ca`. Pas une autorite de certification publique, pas de revocation. `pm-certify` / `pm-verify` restent le registre FNV-1a et le `.sig` du noeud.
+- Non livres : US-055 compilateur croise, US-058 assistance IA.
+- Preuve : `make qemu-promptmessage`.
+
+### Etape 1c : Phase 3, le rendu texte de la pull request #147
+- `browser-html-render` est un imprimeur texte. Liste plate d'au plus 32 balises, pas de liens parent, pas de boites de mise en page. `osui_css_apply_styles` ignore le texte CSS et applique quelques regles fixes (h1/b, lien bleu, bouton gris, marge 8 si id `app`). `phase3_complete` reste false. Pas US-031.
+- `bigint_modexp` saute les bits de poids fort a zero du membre haut. Primitive partagee, pas un changement de poignee de main TLS a lui seul. Preuve `test_bigint_modexp_leading_zeros`.
+- La table fil du worker (`kernel/net_wire.c`) accepte une ecoute `0.0.0.0` port distant 0 et prefere un 4-tuple precis. La pompe `web-serve` de `kernel/net_llm_client.c` est une autre table : elle compte et jette encore les trames dont le port de destination n'est pas le sien.
+- La couverture n'est pas mesuree.
 
 ### Étape 2 : Moteur de session et conteneurisation du Navigateur-OS (US-031)
 - **Objectif** : Faire évoluer le simulateur DOM vers la première version du conteneur d'onglets du Navigateur-OS avec persistance des sessions par site et intégration des vues d'inspection VFS (FS-as-web).
