@@ -375,7 +375,8 @@ generate_coverage_report() {
     print_header "Code Coverage Analysis"
 
     if [ "${ENABLE_COVERAGE:-0}" = "1" ]; then
-        echo "Coverage: measured using gcov instrumentation."
+        echo "Coverage: not measured. ENABLE_COVERAGE does not pass -fprofile-arcs or -ftest-coverage."
+        echo "gcov has no .gcda from this run. No percentage is reported."
     else
         echo "Coverage: not measured (no gcov/lcov instrumentation in this runner)."
         echo "No percentage is reported; see test counts above for what was run."

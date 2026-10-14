@@ -417,10 +417,10 @@ coverage-report:
 	@echo "Generating coverage report..."
 	@mkdir -p $(LOG_DIR)
 	@if [ "$(ENABLE_COVERAGE)" = "1" ]; then \
+		echo "Coverage: not measured. CFLAGS do not pass -fprofile-arcs or -ftest-coverage, so this run writes no .gcda and gcov reports no percentage." > $(LOG_DIR)/coverage_report.txt; \
 		gcov -b $(USERSPACE_TESTS) || true; \
-		echo "Coverage analysis generated with gcov." > $(LOG_DIR)/coverage_report.txt; \
 	else \
-		echo "Coverage analysis not measured (no gcov instrumentation by default)." > $(LOG_DIR)/coverage_report.txt; \
+		echo "Coverage: not measured (no gcov instrumentation by default)." > $(LOG_DIR)/coverage_report.txt; \
 	fi
 
 test-report:
