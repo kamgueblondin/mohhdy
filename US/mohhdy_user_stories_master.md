@@ -135,10 +135,12 @@ Le développement MOHHDY est organisé en 8 phases principales :
 - US-074 : Développement du gestionnaire de NAT traversal
 - US-075 : Création du système d'analyse de trafic intelligent
 
-Etat Phase 5 (10 octobre 2026, lot P2P ; detail et limites dans `docs/p2p.md`) :
+Etat Phase 5 (14 octobre 2026; detail and limits in `docs/p2p.md`):
 - Fait (preuve QEMU trois invites `make qemu-p2p` + unitaires) : US-061 protocole, US-062 decouverte, US-065 replication (LWW), US-066 chiffrement (X25519 + AES-128-GCM par paire, cle de reseau, anti-rejeu ; hub verifie l'absence de clair), US-071 synchronisation (anti-entropie apres partition), US-072 moniteur de sante (RTT, vu, erreurs, pannes).
-- Partiel : US-063 routage (un relais choisi via les voisins, QEMU ; pas de cout multi-sauts), US-064 consensus (vote majoritaire a un tour, QEMU ; pas Raft/Paxos), US-069 tolerance aux pannes (detection + reroutage + resync, QEMU ; magasin cle/valeur et identite persistes au redemarrage depuis le lot de consolidation #121), US-070 cache distribue (lecture distante, QEMU), US-068 bande passante et US-073 QoS (budget par pair, controle prioritaire ; unitaires seulement, pas adaptatif), US-075 analyse de trafic (compteurs par type + `p2p-analyze` a regles fixes avec verdict depuis #121, QEMU ; pas d'apprentissage).
-- Non livre : US-067 gRPC, US-074 NAT traversal (segment unique sans NAT dans le labo).
+- US-064 : journal Raft reel dans le guest (append entries, index de commit, rattrapage apres partition par `p2p-block`, terme et vote persistes dans le trailer du blob p2pkv). Pas Paxos. Journal borne a 8 entrees. Preuve unitaire et scenario QEMU 2b.
+- US-067 : RPC type sur le canal chiffre (identifiant de requete, type, code de statut, echeance). Ce n'est pas gRPC HTTP/2.
+- US-074 : toujours simule (STUN virtuel, full cone, punch). Pas de NAT reel.
+- Partiel : US-063 routage (un relais choisi via les voisins, QEMU), US-069 tolerance aux pannes (detection + reroutage + resync, QEMU ; magasin cle/valeur, identite, terme et vote persistes), US-070 cache distribue (lecture distante, QEMU), US-068 bande passante et US-073 QoS (budget par pair, controle prioritaire ; unitaires seulement, pas adaptatif), US-075 analyse de trafic (compteurs par type + `p2p-analyze` a regles fixes avec verdict, QEMU ; pas d'apprentissage).
 
 ### Phase 6 - Multi-Platform (US-076 à US-090)
 - US-076 : Adaptation du noyau pour architecture ARM
@@ -333,7 +335,7 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 
 ### Règle de progression
 
-Une étape ne passe à l'état livré qu'après implémentation, test ciblé, test de régression (`make test-all`) et mise à jour de `docs/ETAT_REEL.md`. Les compteurs historiques de ce document sont conservés pour la traçabilité ; le compteur vivant de la baseline courante est **678/678**.
+Une étape ne passe à l'état livré qu'après implémentation, test ciblé, test de régression (`make test-all`) et mise à jour de `docs/ETAT_REEL.md`. Les compteurs historiques de ce document sont conservés pour la traçabilité ; le compteur vivant de la baseline courante est **762/762**.
 
 ## Regles obligatoires du backlog
 

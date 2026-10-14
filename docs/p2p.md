@@ -43,7 +43,9 @@ certificates: a node that knows the network key is a member.
 `p2p-up NAME IP [NETKEY]`, `p2p-down`, `p2p-peers`, `p2p-health`,
 `p2p-stats`, `p2p-kv`, `p2p-send PEER TEXT`, `p2p-put K V`, `p2p-get K`,
 `p2p-sync [PEER]`, `p2p-propose K V`, `p2p-block PEER`, `p2p-unblock PEER`,
-`p2p-limit N`, `p2p-poll SECONDS`. While a node is up the console reads
+`p2p-limit N`, `p2p-poll SECONDS`, `p2p-raft [elect]`, `p2p-raft-put KEY VALUE`,
+`p2p-grpc PEER SERVICE METHOD [PAYLOAD]`, `p2p-stun [PEER]`, `p2p-punch PEER`,
+`p2p-cache`, `p2p-route`. While a node is up the console reads
 keys without blocking and pumps the node between keys (same mechanism as
 background `web-serve`); events print asynchronously (`p2p peer X up`,
 `p2p msg from X: ...`, `p2p kv replicated ...`).
@@ -55,17 +57,17 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
 | US-061 protocol | done | framing + header + types above; QEMU 3 guests |
 | US-062 discovery | done | authenticated HELLO, peer table, up/down; QEMU |
 | US-063 routing | done | multi-hop P2P routing with path costs (hop count, RTT, load weight) and route discovery (`p2p-route`) |
-| US-064 consensus | done | Raft consensus with terms, candidate leader election, heartbeats, and majority vote (`p2p-raft`); QEMU |
+| US-064 consensus | partial | Raft log in the guest: terms, vote, append entries, commit index, catch-up after a dropped-frame partition, term and vote persisted in the p2pkv trailer. Not Paxos. Log cap 8. `p2p-raft`, `p2p-raft-put` |
 | US-065 replication | done | put pushed to all peers, last writer wins (version, origin); QEMU |
 | US-066 encryption | done | X25519 + AES-128-GCM per pair, PSK-authenticated, replay protection; QEMU checks no plaintext on the wire |
-| US-067 gRPC | done | gRPC/RPC simulation over sealed P2P frames, service dispatch and status codes (`p2p-grpc`) |
+| US-067 gRPC | partial | typed RPC over sealed frames: request id, type, status, deadline. Not HTTP/2 gRPC. `p2p-grpc` |
 | US-068 bandwidth | done | per-peer message budget per second (`p2p-limit`), dynamic congestion window scaling, throttle counters |
-| US-069 fault tolerance | done | failure detection (10 s), Raft failover, relay rerouting, resync after partition; QEMU. The key/value store and node identity persist across a reboot (`persist-*`, consolidation lot) |
+| US-069 fault tolerance | done | failure detection (10 s), Raft retry, relay rerouting, resync after partition; QEMU. The key/value store, node identity, and Raft term/vote persist across a reboot (`persist-*`) |
 | US-070 distributed cache | done | remote get with miss reporting, local TTL cache with hits/misses and invalidation (`p2p-cache`) |
 | US-071 synchronization | done | two-way digest anti-entropy (`p2p-sync`); QEMU after a partition |
 | US-072 health monitor | done | per-peer RTT, last seen, sent/recv, auth failures, replays, throttled, down events; QEMU |
 | US-073 adaptive QoS | done | priority queues for control/heartbeat vs data frames (`priority_high_tx`) and adaptive QoS counters |
-| US-074 NAT traversal | done | virtual NAT / STUN binding discovery (`p2p-stun`) and hole punching simulation (`p2p-punch`) |
+| US-074 NAT traversal | simulated | virtual NAT / STUN binding (`p2p-stun`) and hole punching (`p2p-punch`). Not a real NAT |
 | US-075 traffic analysis | done | per-type tx/rx counters, bytes, relayed, duplicates, foreign frames (`p2p-stats`); `p2p-analyze` applies automated rules and gives a verdict; QEMU |
 
 ## Limits (honest)
@@ -73,10 +75,16 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
 * Key seed in the guest is TSC + ticks mixed with SHA-256: weak entropy in
   emulation, fine for a lab, not a CSPRNG.
 * At most 6 peers, 16 replicated items (key < 20 bytes, value < 48).
-* Datagrams are not retransmitted: user messages may be lost; replication
-  is repaired by `p2p-sync`, consensus by timeout.
+* Raft log holds 8 entries. Append entries are retried by the leader.
+  User datagrams are still not retransmitted; replication is repaired by
+  `p2p-sync`, the one-round proposal by timeout.
+* Typed RPC is not HTTP/2 gRPC. Deadlines are guest ticks. A repeated
+  request id replays the last reply (`rpc_replays`).
+* STUN and NAT punch stay virtual. There is no public internet and no
+  real NAT on the QEMU hub.
 * The membership secret is a shared key typed on the console; it is not
-  stored by the guest.
+  stored by the guest. Raft term and vote are stored in the p2pkv blob
+  trailer (`R` `F`, version 1). Old blobs without the trailer still load.
 
 ## Proofs
 
@@ -85,9 +93,9 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
   discovery and pair keys, wrong network key, encryption/tamper/replay,
   replication + LWW + partition sync + remote get, consensus commit /
   reject / timeout, failure detection + relay + heal, rate limit + stats,
-  bad inputs.
+  bad inputs, Raft log replication and catch-up, typed RPC id and deadline.
 * `tests/scripts/test_qemu_p2p.py` (`make qemu-p2p`, CI job "QEMU P2P three
   guests"): three guests with the Ring 3 networker on the strict kernel;
   discovery, encrypted message (hub asserts no plaintext), health, stats,
-  replication, partition then sync, majority commit, link failure detection
-  and relayed delivery.
+  replication, partition then sync, majority commit, Raft elect plus
+  log catch-up after `p2p-block`, link failure detection and relayed delivery.
