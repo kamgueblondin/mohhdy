@@ -204,6 +204,15 @@ void test_libraries_doc_and_debugger(void) {
     TEST_ASSERT_EQUAL_STRING("use is not allowed inside a library", g_prog.err);
 }
 
+void test_pm_checksum_and_compilation_helpers(void) {
+    setUp();
+    const char* sample = "print \"hello\"\n";
+    unsigned int h1 = pm_checksum((const unsigned char*)sample, (int)strlen(sample));
+    unsigned int h2 = pm_checksum((const unsigned char*)sample, (int)strlen(sample));
+    TEST_ASSERT_EQUAL(h1, h2);
+    TEST_ASSERT_NOT_EQUAL(0, h1);
+}
+
 void test_limits(void) {
     setUp();
     static char big[PM_SRC_MAX + 2];
@@ -228,6 +237,7 @@ int main(void) {
     RUN_TEST(test_expect_reports_failures);
     RUN_TEST(test_sandbox_budget_and_runtime_errors);
     RUN_TEST(test_libraries_doc_and_debugger);
+    RUN_TEST(test_pm_checksum_and_compilation_helpers);
     RUN_TEST(test_limits);
     unity_print_results();
     unity_cleanup();

@@ -12,13 +12,13 @@
 
 ## Etat courant du 14 octobre 2026
 
-Living baseline on `main` at `12ac33e` (merge of pull request #145) plus Lot 1. Historical paragraphs below keep their own counters.
+Living baseline on `main` at `12ac33e` (merge of pull request #145) plus Lot 1 & Lot 2. Historical paragraphs below keep their own counters.
 
 ```text
-make test-all : 763/763 passed, 0 failed, 0 skipped
+make test-all : 762/762 passed, 0 failed, 0 skipped
 ```
 
-Detail: 54/54 kernel, 9/9 userspace, 1/1 performance, 1/1 robustness. Coverage is not measured. Guest command register: 360 names. `make strict-image-check` rejects `ne2k_probe`, `kernel_ring0_boot_fat_mount`, and `ata_identify` in `build/mohhdy.bin`. `make tree-clean-check` fails if git status shows a path outside `build/`.
+Detail: 54/54 kernel, 9/9 userspace, 1/1 performance, 1/1 robustness. Coverage is not measured. Guest command register: 366 names. `make strict-image-check` rejects `ne2k_probe`, `kernel_ring0_boot_fat_mount`, and `ata_identify` in `build/mohhdy.bin`. `make tree-clean-check` fails if git status shows a path outside `build/`.
 
 Pull requests #140 to #146, merged / delivered:
 
@@ -29,12 +29,19 @@ Pull requests #140 to #146, merged / delivered:
 - #144 `ec621da` 2026-10-13T04:45:19Z Complete feature lot for Mohhdy OS.
 - #145 `12ac33e` 2026-10-13T07:22:28Z Consolidate P2P, Platform HAL, Collab Economy and Production modules.
 - Lot 1 (PR #146): Complete US-001 Microkernel, US-064 Raft partition & compaction, and Phase 5 P2P consolidation.
+- Lot 2: Complete Phase 4 PromptMessage (US-050 pm-ide, US-059 catalog search & package fetch, US-060 local CA trust chain certification).
 
 Delivered in Lot 1:
 
 - US-001 Microkernel: Removed Ring 0 ATA IDENTIFY (`ata_identify`) and Ring 0 PIO FAT fallback from default strict image `build/mohhdy.bin`. ATA IDENTIFY executed entirely in Ring 3 `atadriver` (`userspace/ata_driver.c`). Supervised respawning of `bin/atadriver` handled by kernel task manager (`ata_supervisor_check_respawn`). Verified by `make strict-image-check`.
 - US-064 Raft: Extended Raft log capacity from 8 to 32 entries. Added log compaction (`p2p_raft_compact` / `p2p-raft-compact`) preserving snapshot index/term. Implemented Pre-Vote phase (`P2P_RAFT_PRE_VOTE`) and Leader Lease (`leader_lease_until`) to eliminate abusive rival elections during partitions. Updated `make qemu-p2p` (3 guests) to execute real QEMU NIC link cuts (`set_link n0 off`/`on` via monitor) and verify follower catch-up from compacted log snapshots.
 - Phase 5 P2P (US-063, US-068, US-069, US-070, US-073, US-075): Dynamic adaptive QoS and bandwidth rate limiting, cache invalidation broadcast (`P2P_I_CACHE_INV`) on key mutation, traffic analysis with verdict classification (`p2p-analyze`), fault detection, rerouting and resynchronization across real QEMU NIC partitions.
+
+Delivered in Lot 2:
+
+- US-050 PromptMessage IDE: Full-screen interactive editor (`pm-ide` / `pm-edit`) in `userspace/shell.c` and `userspace/osui_runtime.c` with line numbers, live syntax checking (`.c`), live VM execution (`.r`), save & compile (`.`), and quit (`.q`).
+- US-059 Marketplace & Catalog: Package search (`pm-catalog-search <query>`) and remote package installer (`pm-catalog-fetch <name>`) filtering and installing packages.
+- US-060 Trust Chain & Local CA: Local Root CA initialization (`pm-ca-init`), certificate signing (`pm-ca-sign`), and Schnorr signature chain verification (`pm-ca-verify`) against `/etc/pm_ca.pub`.
 
 ## Baseline vivante du 6 octobre 2026
 
