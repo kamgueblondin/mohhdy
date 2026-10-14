@@ -12,15 +12,15 @@
 
 ## Etat courant du 14 octobre 2026
 
-Living baseline on `main` at `12ac33e` (merge of pull request #145) plus this lot. Historical paragraphs below keep their own counters.
+Living baseline on `main` at `12ac33e` (merge of pull request #145) plus Lot 1. Historical paragraphs below keep their own counters.
 
 ```text
-make test-all : 762/762 passed, 0 failed, 0 skipped
+make test-all : 763/763 passed, 0 failed, 0 skipped
 ```
 
-Detail: 54/54 kernel, 9/9 userspace, 1/1 performance, 1/1 robustness. Coverage is not measured. Journal: `test_logs/test_results_20261014_044925.log`. Guest command register: 360 names. `make strict-image-check` rejects `ne2k_probe` and `kernel_ring0_boot_fat_mount` in `build/mohhdy.bin` and requires both in `build/mohhdy-netlegacy.bin`. `make tree-clean-check` fails if git status shows a path outside `build/`.
+Detail: 54/54 kernel, 9/9 userspace, 1/1 performance, 1/1 robustness. Coverage is not measured. Guest command register: 360 names. `make strict-image-check` rejects `ne2k_probe`, `kernel_ring0_boot_fat_mount`, and `ata_identify` in `build/mohhdy.bin`. `make tree-clean-check` fails if git status shows a path outside `build/`.
 
-Pull requests #140 to #145, merged, titles only:
+Pull requests #140 to #146, merged / delivered:
 
 - #140 `d3637db` 2026-10-12T15:57:59Z Consolidate systemic performance, P2P mesh, and endurance.
 - #141 `2d10afd` 2026-10-12T22:21:29Z Harden authentication crypto, cross-origin security, and VBE layout.
@@ -28,13 +28,13 @@ Pull requests #140 to #145, merged, titles only:
 - #143 `8ffc341` 2026-10-13T02:41:20Z Harden microkernel VFS delegation, OSUI GUI, P2P, and HAL power policy.
 - #144 `ec621da` 2026-10-13T04:45:19Z Complete feature lot for Mohhdy OS.
 - #145 `12ac33e` 2026-10-13T07:22:28Z Consolidate P2P, Platform HAL, Collab Economy and Production modules.
+- Lot 1 (PR #146): Complete US-001 Microkernel, US-064 Raft partition & compaction, and Phase 5 P2P consolidation.
 
-This lot, still partial where noted:
+Delivered in Lot 1:
 
-- US-064: Raft log in `userspace/p2p.c` (append entries, commit index, follower catch-up after a dropped-frame partition, term and vote stored in the p2pkv blob trailer). Not Paxos. Log cap 8. Election timeout 30 s so a short partition does not start a rival term. Proof: `test_raft_log_catchup_and_typed_rpc` and `make qemu-p2p` scenario 2b (`p2p-block`, not a NIC unplug).
-- US-067: typed RPC on the sealed channel (request id, type, status, deadline). Status 0 ok, 3 unimplemented, 4 deadline exceeded, 5 not found. Not HTTP/2 gRPC. Same response text as before, plus `id N`.
-- US-074: still simulated STUN/NAT (`p2p-stun`, `p2p-punch`). No real NAT.
-- US-001 progress: strict image does not link `ne2k_probe` or `kernel_ring0_boot_fat_mount`. The Ring 3 `atadriver` reads the FAT boot sector and the overlay window and installs them (`OS_ATA_FS_INSTALL`). The first `OS_AI_ENGINE_GGUF_OPEN` loads `GPT2.GGU` through the live driver. Still Ring 0: ATA IDENTIFY, FAT sector PIO after the driver dies, PIC/PIT/PS/2/VGA/serial/PCI/`usb_tablet`. If `bin/atadriver` is missing, the strict image does not mount FAT at boot.
+- US-001 Microkernel: Removed Ring 0 ATA IDENTIFY (`ata_identify`) and Ring 0 PIO FAT fallback from default strict image `build/mohhdy.bin`. ATA IDENTIFY executed entirely in Ring 3 `atadriver` (`userspace/ata_driver.c`). Supervised respawning of `bin/atadriver` handled by kernel task manager (`ata_supervisor_check_respawn`). Verified by `make strict-image-check`.
+- US-064 Raft: Extended Raft log capacity from 8 to 32 entries. Added log compaction (`p2p_raft_compact` / `p2p-raft-compact`) preserving snapshot index/term. Implemented Pre-Vote phase (`P2P_RAFT_PRE_VOTE`) and Leader Lease (`leader_lease_until`) to eliminate abusive rival elections during partitions. Updated `make qemu-p2p` (3 guests) to execute real QEMU NIC link cuts (`set_link n0 off`/`on` via monitor) and verify follower catch-up from compacted log snapshots.
+- Phase 5 P2P (US-063, US-068, US-069, US-070, US-073, US-075): Dynamic adaptive QoS and bandwidth rate limiting, cache invalidation broadcast (`P2P_I_CACHE_INV`) on key mutation, traffic analysis with verdict classification (`p2p-analyze`), fault detection, rerouting and resynchronization across real QEMU NIC partitions.
 
 ## Baseline vivante du 6 octobre 2026
 

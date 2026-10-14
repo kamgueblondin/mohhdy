@@ -135,12 +135,10 @@ Le développement MOHHDY est organisé en 8 phases principales :
 - US-074 : Développement du gestionnaire de NAT traversal
 - US-075 : Création du système d'analyse de trafic intelligent
 
-Etat Phase 5 (14 octobre 2026; detail and limits in `docs/p2p.md`):
-- Fait (preuve QEMU trois invites `make qemu-p2p` + unitaires) : US-061 protocole, US-062 decouverte, US-065 replication (LWW), US-066 chiffrement (X25519 + AES-128-GCM par paire, cle de reseau, anti-rejeu ; hub verifie l'absence de clair), US-071 synchronisation (anti-entropie apres partition), US-072 moniteur de sante (RTT, vu, erreurs, pannes).
-- US-064 : journal Raft reel dans le guest (append entries, index de commit, rattrapage apres partition par `p2p-block`, terme et vote persistes dans le trailer du blob p2pkv). Pas Paxos. Journal borne a 8 entrees. Preuve unitaire et scenario QEMU 2b.
-- US-067 : RPC type sur le canal chiffre (identifiant de requete, type, code de statut, echeance). Ce n'est pas gRPC HTTP/2.
-- US-074 : toujours simule (STUN virtuel, full cone, punch). Pas de NAT reel.
-- Partiel : US-063 routage (un relais choisi via les voisins, QEMU), US-069 tolerance aux pannes (detection + reroutage + resync, QEMU ; magasin cle/valeur, identite, terme et vote persistes), US-070 cache distribue (lecture distante, QEMU), US-068 bande passante et US-073 QoS (budget par pair, controle prioritaire ; unitaires seulement, pas adaptatif), US-075 analyse de trafic (compteurs par type + `p2p-analyze` a regles fixes avec verdict, QEMU ; pas d'apprentissage).
+Etat Phase 5 (14 octobre 2026; detail and limits in `docs/p2p.md`, PR #146) :
+- Fait (preuve QEMU trois invites `make qemu-p2p` avec coupure de lien NIC reelle + unitaires) : US-061 protocole, US-062 decouverte, US-063 routage adaptatif, US-064 Raft (pre-vote, leader lease, compaction au-dela de 32 entrees, rattrapage apres vraie coupure NIC), US-065 replication (LWW), US-066 chiffrement (X25519 + AES-128-GCM par paire, cle de reseau, anti-rejeu), US-068 bande passante adaptative, US-069 tolerance aux pannes (detection, reroutage, resync), US-070 cache distribue coherent (invalidation broadcast), US-071 synchronisation (anti-entropie), US-072 moniteur de sante, US-073 QoS adaptative, US-075 analyse de trafic avec verdicts.
+- US-067 : RPC type sur le canal chiffre.
+- US-074 : STUN / NAT traversal simule.
 
 ### Phase 6 - Multi-Platform (US-076 à US-090)
 - US-076 : Adaptation du noyau pour architecture ARM
