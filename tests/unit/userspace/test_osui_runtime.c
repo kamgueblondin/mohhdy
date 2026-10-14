@@ -1030,6 +1030,29 @@ static void test_telemetry_pwa_and_media(void) {
     TEST_ASSERT_EQUAL(0, osui_get_media_active());
 }
 
+void test_html_css_rendering(void) {
+    int rc;
+    setup();
+    rc = osui_dispatch_line("browser-html-render", g_out, sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "MOHHDY Web Runtime") != NULL);
+    TEST_ASSERT(strstr(g_out, "browser-html-render ok") != NULL);
+    TEST_ASSERT(strstr(g_out, "===") == NULL);
+    /* Flat text printer: tags, one id rule (margin), not a CSS engine. */
+    rc = run_line("browser-html-render <h1 id=\"app\">Title</h1><p>Hello</p><a class=\"x\">docs</a><li>item</li><button>Go</button>");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "=== Title ===") != NULL);
+    TEST_ASSERT(strstr(g_out, "Hello") != NULL);
+    TEST_ASSERT(strstr(g_out, "[link] docs") != NULL);
+    TEST_ASSERT(strstr(g_out, "* item") != NULL);
+    TEST_ASSERT(strstr(g_out, "[ Go ]") != NULL);
+    TEST_ASSERT(strstr(g_out, "margin=8") != NULL);
+    rc = run_line("browser-html-render");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "=== Title ===") == NULL);
+    TEST_ASSERT(strstr(g_out, "margin=8") == NULL);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -1061,6 +1084,7 @@ int main(void) {
     RUN_TEST(test_browser_pm_run_and_navigation);
     RUN_TEST(test_multi_origin_security_and_p2p_socket_isolation);
     RUN_TEST(test_telemetry_pwa_and_media);
+    RUN_TEST(test_html_css_rendering);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

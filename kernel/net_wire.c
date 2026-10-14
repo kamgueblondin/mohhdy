@@ -67,13 +67,25 @@ void net_wire_reset(void) {
 int net_wire_bind(int socket_id, const uint8_t local_ip[4], const uint8_t remote_ip[4],
                   uint16_t local_port, uint16_t remote_port) {
     uint32_t i;
+    int listen;
     if (socket_id < 0 || (uint32_t)socket_id >= NET_WIRE_BINDINGS || !local_ip || !remote_ip ||
-        ip_zero(local_ip) || ip_zero(remote_ip) || local_port == 0U || remote_port == 0U)
+        ip_zero(local_ip) || local_port == 0U)
         return -1;
-    /* A 4-tuple is owned by one socket only, so the demux is unambiguous. */
+    /* A listen binding is remote 0.0.0.0 and remote port 0 together.
+     * A zero port with a real peer, or a zero peer with a real port, is refused. */
+    listen = (remote_port == 0U && ip_zero(remote_ip));
+    if (!listen && (remote_port == 0U || ip_zero(remote_ip))) return -1;
+    /* A 4-tuple is owned by one socket only, so the demux is unambiguous.
+     * A second listen on the same local address and port is refused too. */
     for (i = 0U; i < NET_WIRE_BINDINGS; i++) {
+        int other_listen;
         if ((int)i == socket_id || !g_bind[i].bound) continue;
-        if (g_bind[i].local_port == local_port && g_bind[i].remote_port == remote_port &&
+        other_listen = (g_bind[i].remote_port == 0U && ip_zero(g_bind[i].remote_ip));
+        if (listen && other_listen && g_bind[i].local_port == local_port &&
+            ip_eq(g_bind[i].local_ip, local_ip))
+            return -2;
+        if (!listen && !other_listen &&
+            g_bind[i].local_port == local_port && g_bind[i].remote_port == remote_port &&
             ip_eq(g_bind[i].local_ip, local_ip) && ip_eq(g_bind[i].remote_ip, remote_ip))
             return -2;
     }
@@ -138,15 +150,33 @@ int net_wire_demux(const uint8_t* frame, uint16_t length, uint16_t* tcp_offset,
     if ((ip[6] & 0x3fU) != 0U || ip[7] != 0U) return NET_WIRE_DEMUX_DROP;
     src_port = (uint16_t)(((uint16_t)ip[ihl] << 8) | ip[ihl + 1U]);
     dst_port = (uint16_t)(((uint16_t)ip[ihl + 2U] << 8) | ip[ihl + 3U]);
-    for (i = 0U; i < NET_WIRE_BINDINGS; i++) {
-        if (!g_bind[i].bound) continue;
-        if (g_bind[i].local_port != dst_port || g_bind[i].remote_port != src_port) continue;
-        if (!ip_eq(ip + 16U, g_bind[i].local_ip) || !ip_eq(ip + 12U, g_bind[i].remote_ip)) continue;
+    {
+        int specific = -1, wildcard = -1;
+        /* A connected 4-tuple wins over a listen on the same local port.
+         * A listen is remote 0.0.0.0 (all four bytes) and remote port 0.
+         * This table is the worker wire path. The OS-UI web-serve pump in
+         * net_llm_client.c is a separate table and still drops other ports. */
+        for (i = 0U; i < NET_WIRE_BINDINGS; i++) {
+            int is_listen;
+            if (!g_bind[i].bound) continue;
+            if (g_bind[i].local_port != dst_port) continue;
+            if (!ip_eq(ip + 16U, g_bind[i].local_ip)) continue;
+            is_listen = (g_bind[i].remote_port == 0U && ip_zero(g_bind[i].remote_ip));
+            if (is_listen) {
+                if (wildcard < 0) wildcard = (int)i;
+                continue;
+            }
+            if (g_bind[i].remote_port != src_port) continue;
+            if (!ip_eq(ip + 12U, g_bind[i].remote_ip)) continue;
+            specific = (int)i;
+            break;
+        }
+        if (specific < 0) specific = wildcard;
+        if (specific < 0) return NET_WIRE_DEMUX_DROP;
         if (tcp_offset) *tcp_offset = (uint16_t)(NET_ETHERNET_HEADER_SIZE + ihl);
         if (tcp_length) *tcp_length = (uint16_t)(ip_length - ihl);
-        return (int)i;
+        return specific;
     }
-    return NET_WIRE_DEMUX_DROP;
 }
 
 void net_wire_note_refused(void) {

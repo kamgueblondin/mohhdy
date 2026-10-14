@@ -101,6 +101,12 @@ Le développement MOHHDY est organisé en 8 phases principales :
 - US-044 : Création du système d'accessibilité web
 - US-045 : Implémentation du débogueur web intégré
 
+Etat Phase 3 (14 octobre 2026; detail in `docs/ETAT_REEL.md`). Pull request #147 does not deliver US-031. `phase3_complete` stays false. Chromium and WebKit are not present.
+- `browser-html-render` is a text-mode printer in `userspace/osui_runtime.c`. It parses a flat list of at most 32 tags (name, id, class, text) and prints headings, lists, links, buttons, inputs, and other text. `osui_css_apply_styles` is not a selector engine: the CSS text is ignored. h1 and b get font-weight 700, links are marked blue, buttons get a gray background and padding 4, and a node whose id is `app` gets margin 8 and padding 8 when the CSS pointer is non-NULL. No parent links, no layout boxes. Proof: `test_html_css_rendering`.
+- `bigint_modexp` skips leading zero bits of the highest limb. That is the shared modular exponentiation primitive, not an RSA or TLS handshake change by itself. Proof: `test_bigint_modexp_leading_zeros`.
+- The worker wire table in `kernel/net_wire.c` accepts a full wildcard listen and prefers a specific 4-tuple. The OS-UI `web-serve` pump in `kernel/net_llm_client.c` is a separate table and still drops other destination ports.
+- Coverage is not measured. `ENABLE_COVERAGE=1` does not pass `-fprofile-arcs` or `-ftest-coverage`, and gcov reports no percentage.
+
 ### Phase 4 - PromptMessage (US-046 à US-060)
 - US-046 : Conception du langage PromptMessage
 - US-047 : Développement du compilateur PromptMessage
@@ -135,9 +141,9 @@ Le développement MOHHDY est organisé en 8 phases principales :
 - US-074 : Développement du gestionnaire de NAT traversal
 - US-075 : Création du système d'analyse de trafic intelligent
 
-Etat Phase 5 (14 octobre 2026; detail and limits in `docs/p2p.md`):
+Etat Phase 5 (14 octobre 2026; detail and limits in `docs/p2p.md`). Lot 1 is not delivered. Pull request #147 does not change this phase:
 - Fait (preuve QEMU trois invites `make qemu-p2p` + unitaires) : US-061 protocole, US-062 decouverte, US-065 replication (LWW), US-066 chiffrement (X25519 + AES-128-GCM par paire, cle de reseau, anti-rejeu ; hub verifie l'absence de clair), US-071 synchronisation (anti-entropie apres partition), US-072 moniteur de sante (RTT, vu, erreurs, pannes).
-- US-064 : journal Raft reel dans le guest (append entries, index de commit, rattrapage apres partition par `p2p-block`, terme et vote persistes dans le trailer du blob p2pkv). Pas Paxos. Journal borne a 8 entrees. Preuve unitaire et scenario QEMU 2b.
+- US-064 : journal Raft reel dans le guest (append entries, index de commit, rattrapage apres partition par `p2p-block` frame drop, pas une coupure NIC). Terme et vote persistes dans le trailer du blob p2pkv. Pas Paxos. Journal borne a 8 entrees. Pas de pre-vote, pas de leader lease, pas de compaction. Preuve unitaire et scenario QEMU 2b.
 - US-067 : RPC type sur le canal chiffre (identifiant de requete, type, code de statut, echeance). Ce n'est pas gRPC HTTP/2.
 - US-074 : toujours simule (STUN virtuel, full cone, punch). Pas de NAT reel.
 - Partiel : US-063 routage (un relais choisi via les voisins, QEMU), US-069 tolerance aux pannes (detection + reroutage + resync, QEMU ; magasin cle/valeur, identite, terme et vote persistes), US-070 cache distribue (lecture distante, QEMU), US-068 bande passante et US-073 QoS (budget par pair, controle prioritaire ; unitaires seulement, pas adaptatif), US-075 analyse de trafic (compteurs par type + `p2p-analyze` a regles fixes avec verdict, QEMU ; pas d'apprentissage).
@@ -331,11 +337,11 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 
 #### Phase 4 - PromptMessage (ouverte le 10 octobre 2026)
 
-**Etat du lot phase 4 du 10 octobre 2026 :** livres dans le shell guest QEMU (C, Ring 3), voir `docs/promptmessage.md` : US-046 langage (grammaire a mots fixes, exemples de la synthese executables), US-047 compilateur (bytecode, image PMC1 avec somme de controle), US-048 interpreteur (VM bornee, `pm-run`, `pm`, declencheurs `pm-say`), US-049 validation syntaxique (ligne et colonne), US-050 editeur de lignes integre `pm-edit` (partiel : pas d'IDE plein ecran), US-051 documentation automatique `pm-doc`, US-052 debogueur (`pm-debug` trace et point d'arret, `pm-disasm`), US-053 bibliotheques (`use`, un niveau), US-054 versions (`pm-version`, `pm-versions`, 9 instantanes), US-056 optimiseur (repli de constantes), US-057 tests automatises (`expect`, `pm-test`), US-059 partiel (catalogue local `pm-catalog`/`pm-install`, pas de marketplace reseau), US-060 partiel (`pm-certify`/`pm-verify` : enregistrement local, somme FNV-1a et tests passes, pas une signature). Non livres : US-055 compilateur croise, US-058 assistance IA (pas de modele instruit hors ligne). Preuves : `test_promptmessage` et `make qemu-promptmessage` en CI. Depuis le lot de consolidation #121 : US-060 ajoute un fichier `.sig` (signature Schnorr de la cle du noeud, verifiee par `pm-verify`), sans autorite de certification.
+**Etat du lot phase 4 du 10 octobre 2026 :** livres dans le shell guest QEMU (C, Ring 3), voir `docs/promptmessage.md` : US-046 langage (grammaire a mots fixes, exemples de la synthese executables), US-047 compilateur (bytecode, image PMC1 avec somme de controle), US-048 interpreteur (VM bornee, `pm-run`, `pm`, declencheurs `pm-say`), US-049 validation syntaxique (ligne et colonne), US-050 editeur de lignes integre `pm-edit` (partiel : pas d'IDE plein ecran), US-051 documentation automatique `pm-doc`, US-052 debogueur (`pm-debug` trace et point d'arret, `pm-disasm`), US-053 bibliotheques (`use`, un niveau), US-054 versions (`pm-version`, `pm-versions`, 9 instantanes), US-056 optimiseur (repli de constantes), US-057 tests automatises (`expect`, `pm-test`), US-059 partiel (catalogue local `pm-catalog`/`pm-install`, pas de marketplace reseau), US-060 partiel (`pm-certify`/`pm-verify` : enregistrement local, somme FNV-1a et tests passes, pas une signature). Non livres : US-055 compilateur croise, US-058 assistance IA (pas de modele instruit hors ligne). Preuves : `test_promptmessage` et `make qemu-promptmessage` en CI. Depuis le lot de consolidation #121 : US-060 ajoute un fichier `.sig` (signature Schnorr de la cle du noeud, verifiee par `pm-verify`), sans autorite de certification. Pull request #147 ne ferme pas US-050, US-059 ni US-060 : `pm-ide` reste l'editeur de lignes (`pm-edit`, avec `.l`, `.c` et `.r`), pas un IDE plein ecran ; `pm-catalog-search` et `pm-catalog-fetch` restent un filtre et une copie du catalogue local `/pm`, pas un marketplace reseau ; `pm-ca-init`, `pm-ca-sign` et `pm-ca-verify` posent une chaine Schnorr locale (`/etc/pm_ca.pub`, cle privee en clair), pas une autorite publique. US-055 et US-058 restent non livres. Lot 1 (US-001, US-064) n'est pas livre : IDENTIFY ATA et le PIO FAT de repli restent en Ring 0 ; le journal Raft reste a 8 entrees, sans pre-vote ni compaction, et la preuve de partition est `p2p-block` (chute de trames), pas une coupure NIC.
 
 ### Règle de progression
 
-Une étape ne passe à l'état livré qu'après implémentation, test ciblé, test de régression (`make test-all`) et mise à jour de `docs/ETAT_REEL.md`. Les compteurs historiques de ce document sont conservés pour la traçabilité ; le compteur vivant de la baseline courante est **762/762**.
+Une étape ne passe à l'état livré qu'après implémentation, test ciblé, test de régression (`make test-all`) et mise à jour de `docs/ETAT_REEL.md`. Les compteurs historiques de ce document sont conservés pour la traçabilité ; le compteur vivant de la baseline courante est **766/766**.
 
 ## Regles obligatoires du backlog
 

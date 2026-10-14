@@ -416,7 +416,12 @@ test-valgrind: $(USERSPACE_TEST_BINS)
 coverage-report:
 	@echo "Generating coverage report..."
 	@mkdir -p $(LOG_DIR)
-	@echo "Coverage analysis not yet implemented" > $(LOG_DIR)/coverage_report.txt
+	@if [ "$(ENABLE_COVERAGE)" = "1" ]; then \
+		echo "Coverage: not measured. CFLAGS do not pass -fprofile-arcs or -ftest-coverage, so this run writes no .gcda and gcov reports no percentage." > $(LOG_DIR)/coverage_report.txt; \
+		gcov -b $(USERSPACE_TESTS) || true; \
+	else \
+		echo "Coverage: not measured (no gcov instrumentation by default)." > $(LOG_DIR)/coverage_report.txt; \
+	fi
 
 test-report:
 	@echo "Generating test report..."

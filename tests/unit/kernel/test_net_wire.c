@@ -89,6 +89,29 @@ static void test_demux(void) {
     TEST_ASSERT_EQUAL(NET_WIRE_DEMUX_DROP, net_wire_demux(f, n, &off, &len));
 }
 
+/* Worker wire table only. OS-UI web-serve (net_llm_client.c) still drops
+ * frames whose destination port is not its own listen port. */
+static void test_demux_listen_beside_specific(void) {
+    net_wire_reset();
+    uint8_t f[128];
+    uint16_t n;
+    const uint8_t any_ip[4] = {0, 0, 0, 0};
+    const uint8_t peer[4] = {10, 32, 0, 9};
+    TEST_ASSERT_EQUAL(-1, net_wire_bind(1, k_local, k_remote, 8080, 0));
+    TEST_ASSERT_EQUAL(-1, net_wire_bind(1, k_local, any_ip, 8080, 4000));
+    TEST_ASSERT_EQUAL(0, net_wire_bind(1, k_local, any_ip, 8080, 0));
+    TEST_ASSERT_EQUAL(-2, net_wire_bind(3, k_local, any_ip, 8080, 0));
+    TEST_ASSERT_EQUAL(0, net_wire_bind(2, k_local, k_remote, 8080, 4000));
+    n = tcp_frame(f, k_remote, k_local, 4000, 8080, 0);
+    TEST_ASSERT_EQUAL(2, net_wire_demux(f, n, 0, 0));
+    n = tcp_frame(f, peer, k_local, 4000, 8080, 0);
+    TEST_ASSERT_EQUAL(1, net_wire_demux(f, n, 0, 0));
+    n = tcp_frame(f, peer, k_local, 4000, 8081, 0);
+    TEST_ASSERT_EQUAL(NET_WIRE_DEMUX_DROP, net_wire_demux(f, n, 0, 0));
+    n = tcp_frame(f, peer, k_remote, 4000, 8080, 0);
+    TEST_ASSERT_EQUAL(NET_WIRE_DEMUX_DROP, net_wire_demux(f, n, 0, 0));
+}
+
 static void test_demux_arp(void) {
     net_wire_reset();
     uint8_t f[64];
@@ -271,6 +294,7 @@ int main(void) {
     unity_init();
     RUN_TEST(test_bind_rules);
     RUN_TEST(test_demux);
+    RUN_TEST(test_demux_listen_beside_specific);
     RUN_TEST(test_demux_arp);
     RUN_TEST(test_status_and_refused);
     RUN_TEST(test_ops_without_device);
