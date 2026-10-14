@@ -48,6 +48,7 @@ void ata_job_fill_status(os_ata_status_t* out, int32_t live_driver);
 
 /* Client write fences (FAT areas) computed by the kernel at boot. */
 void ata_job_set_fences(uint32_t client_min_lba, uint32_t slave_locked);
+void ata_job_set_boot_flags(uint32_t deferred, uint32_t slave_present);
 /* 1 if a client (not the kernel job) may write this drive/LBA. */
 int ata_job_client_write_allowed(uint32_t drive, uint32_t lba);
 

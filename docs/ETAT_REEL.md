@@ -10,6 +10,32 @@
 
 ## État courant vérifié
 
+## Etat courant du 14 octobre 2026
+
+Living baseline on `main` at `12ac33e` (merge of pull request #145) plus this lot. Historical paragraphs below keep their own counters.
+
+```text
+make test-all : 762/762 passed, 0 failed, 0 skipped
+```
+
+Detail: 54/54 kernel, 9/9 userspace, 1/1 performance, 1/1 robustness. Coverage is not measured. Journal: `test_logs/test_results_20261014_044925.log`. Guest command register: 360 names. `make strict-image-check` rejects `ne2k_probe` and `kernel_ring0_boot_fat_mount` in `build/mohhdy.bin` and requires both in `build/mohhdy-netlegacy.bin`. `make tree-clean-check` fails if git status shows a path outside `build/`.
+
+Pull requests #140 to #145, merged, titles only:
+
+- #140 `d3637db` 2026-10-12T15:57:59Z Consolidate systemic performance, P2P mesh, and endurance.
+- #141 `2d10afd` 2026-10-12T22:21:29Z Harden authentication crypto, cross-origin security, and VBE layout.
+- #142 `0141084` 2026-10-13T00:34:17Z Implement AI Engine, Web Runtime, P2P Mesh, and Production Engine Batch.
+- #143 `8ffc341` 2026-10-13T02:41:20Z Harden microkernel VFS delegation, OSUI GUI, P2P, and HAL power policy.
+- #144 `ec621da` 2026-10-13T04:45:19Z Complete feature lot for Mohhdy OS.
+- #145 `12ac33e` 2026-10-13T07:22:28Z Consolidate P2P, Platform HAL, Collab Economy and Production modules.
+
+This lot, still partial where noted:
+
+- US-064: Raft log in `userspace/p2p.c` (append entries, commit index, follower catch-up after a dropped-frame partition, term and vote stored in the p2pkv blob trailer). Not Paxos. Log cap 8. Election timeout 30 s so a short partition does not start a rival term. Proof: `test_raft_log_catchup_and_typed_rpc` and `make qemu-p2p` scenario 2b (`p2p-block`, not a NIC unplug).
+- US-067: typed RPC on the sealed channel (request id, type, status, deadline). Status 0 ok, 3 unimplemented, 4 deadline exceeded, 5 not found. Not HTTP/2 gRPC. Same response text as before, plus `id N`.
+- US-074: still simulated STUN/NAT (`p2p-stun`, `p2p-punch`). No real NAT.
+- US-001 progress: strict image does not link `ne2k_probe` or `kernel_ring0_boot_fat_mount`. The Ring 3 `atadriver` reads the FAT boot sector and the overlay window and installs them (`OS_ATA_FS_INSTALL`). The first `OS_AI_ENGINE_GGUF_OPEN` loads `GPT2.GGU` through the live driver. Still Ring 0: ATA IDENTIFY, FAT sector PIO after the driver dies, PIC/PIT/PS/2/VGA/serial/PCI/`usb_tablet`. If `bin/atadriver` is missing, the strict image does not mount FAT at boot.
+
 ## Baseline vivante du 6 octobre 2026
 
 La branche `main` a été réalignée sur `origin/main` au commit `dcc248a` (`Merge pull request #106 from kamgueblondin/cursor/gpt2-phrases-lisibles-1988`). La baseline a été exécutée depuis un arbre Git propre :

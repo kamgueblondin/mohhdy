@@ -22,6 +22,8 @@
 #include "input/usb_tablet.h"
 #include "service_registry.h"
 #include "ata_job.h"
+#include "nic_boot.h"
+#include "boot_storage.h"
 #include "vga_console.h"
 #include "ne2k.h"
 #include "net_socket.h"
@@ -45,6 +47,7 @@ void print_string(const char* str);
 static ne2k_device_t boot_ne2k_device;
 static ne2k_io_t boot_ne2k_io;
 static uint8_t boot_ne2k_present;
+static task_t* g_boot_ata_task;
 /* Tranche 5 suite: while the Ring 3 worker owns the NE2000, IRQ3 is only
  * counted for it (the worker reads and acks the ISR with its own PIO); the
  * PIC EOI stays in the stub. */
@@ -77,10 +80,11 @@ int kernel_net_utc(char* out, uint16_t capacity) {
 
 /* Strict kernel (NET_RING0_FALLBACK=0): the NE2000 boot probe, reset, MAC
  * read and the reset after a worker loss all run in the Ring 3 networker.
- * The kernel only learns the result (OS_NET_NIC_REPORT). */
+ * The kernel only learns the result (OS_NET_NIC_REPORT). The probe call
+ * itself lives in nic_boot_strict.c so ne2k_probe is not linked here. */
 static uint8_t boot_ne2k_deferred;
 
-static void ne2k_boot_probe(void) {
+void kernel_nic_prepare_io(void) {
     net_llm_client_bind(&boot_ne2k_device, &boot_ne2k_io, 0);
     net_llm_client_reset();
     boot_ne2k_present = 0U;
@@ -89,33 +93,13 @@ static void ne2k_boot_probe(void) {
     boot_ne2k_io.context = 0;
     boot_ne2k_io.inb = kernel_nic_inb;
     boot_ne2k_io.outb = kernel_nic_outb;
-    if (!syscall_net_ring0_fallback_enabled()) {
-        boot_ne2k_deferred = 1U;
-        print_string("NE2000 : sonde et reset delegues au networker Ring 3 (noyau strict).\n");
-        print_string_serial("[NET] NE2000 probe deferred to the Ring 3 networker\n");
-        return;
-    }
-    if (ne2k_probe(&boot_ne2k_device, 0x300U, &boot_ne2k_io) != 0) {
-        print_string("NE2000 ISA absent; reseau reste desactive.\\n");
-        return;
-    }
-    if (ne2k_prepare(&boot_ne2k_device, &boot_ne2k_io) != 0 ||
-        ne2k_read_mac(&boot_ne2k_device, &boot_ne2k_io) != 0 ||
-        ne2k_configure_rings(&boot_ne2k_device, &boot_ne2k_io) != 0) {
-        print_string("NE2000 detecte mais initialisation ou MAC incomplete.\\n");
-        return;
-    }
-    if (ne2k_irq_attach(&boot_ne2k_device, &boot_ne2k_io) != 0) {
-        print_string("NE2000 detecte mais IRQ non attachee.\\n");
-        return;
-    }
-    boot_ne2k_present = 1U;
-    net_llm_client_bind(&boot_ne2k_device, &boot_ne2k_io, 1);
-    print_string("NE2000 ISA detecte, MAC valide et anneaux RX/TX configures.\\n");
-    print_string(boot_llm_test_trust_anchor_ready ?
-        "Ancre TLS de test locale prete (example.com).\n" :
-        "Ancre TLS de test locale indisponible.\n");
 }
+ne2k_device_t* kernel_nic_device(void) { return &boot_ne2k_device; }
+ne2k_io_t* kernel_nic_io(void) { return &boot_ne2k_io; }
+void kernel_nic_set_present(int present) { boot_ne2k_present = present ? 1U : 0U; }
+void kernel_nic_set_deferred(int deferred) { boot_ne2k_deferred = deferred ? 1U : 0U; }
+int kernel_nic_deferred(void) { return boot_ne2k_deferred ? 1 : 0; }
+int kernel_nic_io_ready(void) { return boot_ne2k_io.inb != 0; }
 
 uint32_t kernel_net_status(void) {
     return boot_ne2k_present ? 3U : 0U;
@@ -282,15 +266,10 @@ int kernel_net_nic_reclaim(void) {
         print_string_serial("[NET] NE2000 released after worker loss; reset left to the next Ring 3 networker\n");
         return 0;
     }
-    if (ne2k_probe(&boot_ne2k_device, 0x300U, &boot_ne2k_io) != 0 ||
-        ne2k_prepare(&boot_ne2k_device, &boot_ne2k_io) != 0 ||
-        ne2k_read_mac(&boot_ne2k_device, &boot_ne2k_io) != 0 ||
-        ne2k_configure_rings(&boot_ne2k_device, &boot_ne2k_io) != 0) {
+    if (kernel_nic_reclaim_hw() != 0) {
         print_string_serial("[NET] NE2000 reclaim failed\n");
         return -1;
     }
-    boot_ne2k_io.outb(boot_ne2k_io.context, (uint16_t)(0x300U + 0x0FU), 0x00U); /* IMR off */
-    (void)ne2k_irq_attach(&boot_ne2k_device, &boot_ne2k_io);
     print_string_serial("[NET] NE2000 back in Ring 0 after worker loss\n");
     return 0;
 }
@@ -338,7 +317,6 @@ int kernel_net_wire_close(int socket_id) {
 
 
 
-#define FAT16_ATA_READ_WINDOW_SECTORS 16U
 static uint8_t fat16_ata_read_window[FAT16_ATA_READ_WINDOW_SECTORS * 512U];
 
 /* Tranche 4 slice 3: FAT16/FAT32 sector I/O goes through the Ring 3
@@ -354,24 +332,54 @@ static int fat_disk_io(uint8_t drive, uint32_t lba, uint32_t count, void* buffer
     return rc;
 }
 
-static int fat16_ata_read_sector(uint32_t lba, void* buffer) {
+int kernel_fat16_ata_read_sector(uint32_t lba, void* buffer) {
     return fat_disk_io(ATA_DRIVE_MASTER, lba, 1U, buffer, 0);
 }
 
-static int fat16_ata_read_sectors(uint32_t lba, uint32_t count, void* buffer) {
+int kernel_fat16_ata_read_sectors(uint32_t lba, uint32_t count, void* buffer) {
     return fat_disk_io(ATA_DRIVE_MASTER, lba, count, buffer, 0);
 }
 
-static int fat16_ata_write_sector(uint32_t lba, const void* buffer) {
+int kernel_fat16_ata_write_sector(uint32_t lba, const void* buffer) {
     return fat_disk_io(ATA_DRIVE_MASTER, lba, 1U, (void*)buffer, 1);
 }
 
-static int fat32_ata_slave_read_sector(uint32_t lba, void* buffer) {
+int kernel_fat32_ata_slave_read_sector(uint32_t lba, void* buffer) {
     return fat_disk_io(ATA_DRIVE_SLAVE, lba, 1U, buffer, 0);
 }
 
-static int fat32_ata_slave_write_sector(uint32_t lba, const void* buffer) {
+int kernel_fat32_ata_slave_write_sector(uint32_t lba, const void* buffer) {
     return fat_disk_io(ATA_DRIVE_SLAVE, lba, 1U, (void*)buffer, 1);
+}
+
+void kernel_fat16_bind_io(void) {
+    fat16_volume_t* volume = fat16_root();
+    if (!volume || !volume->mounted) return;
+    volume->read_sector = kernel_fat16_ata_read_sector;
+    if (fat16_attach_read_window(volume, kernel_fat16_ata_read_sectors,
+                                 fat16_ata_read_window,
+                                 sizeof(fat16_ata_read_window)) != 0) {
+        print_string("FAT16: cache multi-secteurs indisponible; repli secteur.\n");
+    }
+    if (fat16_attach_writer(volume, kernel_fat16_ata_write_sector) != 0) {
+        print_string("FAT16: writer ATA indisponible; creation desactivee.\n");
+    }
+}
+
+void kernel_fat32_bind_io(void) {
+    fat32_volume_t* volume = fat32_root();
+    if (!volume || !fat32_is_mounted(volume)) return;
+    volume->read_sector = kernel_fat32_ata_slave_read_sector;
+    if (fat32_attach_writer(volume, kernel_fat32_ata_slave_write_sector) != 0) {
+        print_string("FAT32: writer ATA esclave indisponible; creation desactivee.\n");
+    }
+}
+
+void kernel_storage_refresh_fences(void) {
+    ata_job_set_fences(fat16_root()->mounted ?
+                           fat16_root()->base_lba + fat16_root()->total_sectors :
+                           OS_ATA_KERNEL_RESERVED_LBAS,
+                       (uint32_t)fat32_is_mounted(fat32_root()));
 }
 
 void serial_init() {
@@ -827,7 +835,7 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     asm volatile("sti");
     
     print_string("=== Systeme interruptions PRET ===\n");
-    ne2k_boot_probe();
+    kernel_nic_boot_probe();
     usb_tablet_init();
     print_string("IRQ0 (timer): OK\n");
     print_string("IRQ1 (keyboard): OK\n");
@@ -895,49 +903,13 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     nic_owner_init();
     syscall_ata_bridge_init();
     if (ata_init() == 0) {
-        if (overlay_load_disk() == 0) {
-            print_string("Overlay FS charge depuis le disque IDE.\n");
-        } else {
-            print_string("Overlay FS initialise (disque IDE vide).\n");
-        }
-        if (ata_present_drive(ATA_DRIVE_SLAVE) &&
-            fat32_mount(fat32_root(), fat32_ata_slave_read_sector, 0U) == 0) {
-            if (fat32_attach_writer(fat32_root(), fat32_ata_slave_write_sector) != 0) {
-                print_string("FAT32: writer ATA esclave indisponible; creation desactivee.\n");
-            }
-            print_string("FAT32 secondaire monte.\n");
-        }
-        if (fat16_mount(fat16_root(), fat16_ata_read_sector, 64U) == 0) {
-            if (fat16_attach_read_window(fat16_root(), fat16_ata_read_sectors,
-                                          fat16_ata_read_window,
-                                          sizeof(fat16_ata_read_window)) != 0) {
-                print_string("FAT16: cache multi-secteurs indisponible; repli secteur.\n");
-            }
-            if (fat16_attach_writer(fat16_root(), fat16_ata_write_sector) != 0) {
-                print_string("FAT16: writer ATA indisponible; creation desactivee.\n");
-            }
-            print_string(fat16_status());
-            print_string("\n");
-            if (gpt2_gguf_infer_init_fat16(fat16_root(), "GPT2.GGU") == 0) {
-                print_string(gpt2_gguf_infer_status());
-                print_string("\n");
-            } else {
-                print_string("GGUF FAT16 optionnel indisponible; profil .gguf desactive.\n");
-            }
-        } else {
-            print_string(fat16_status());
-            print_string("\n");
-        }
+        /* Strict image: IDENTIFY stays here. The FAT mount and the overlay
+         * load run in the Ring 3 atadriver (kernel_boot_storage). */
+        kernel_boot_storage();
     } else {
         print_string("Overlay FS initialise (mkdir/rm en RAM).\n");
+        kernel_storage_refresh_fences();
     }
-
-    /* Tranche 4 slice 2: client write fences for the Ring 3 atadriver: the
-     * FAT16 volume on the master and a FAT32 slave stay kernel-only. */
-    ata_job_set_fences(fat16_root()->mounted ?
-                           fat16_root()->base_lba + fat16_root()->total_sectors :
-                           OS_ATA_KERNEL_RESERVED_LBAS,
-                       (uint32_t)fat32_is_mounted(fat32_root()));
 
     // NOUVEAU: Initialisation du système de tâches
     print_string("Initialisation du systeme de taches...\n");
@@ -1014,6 +986,7 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
             ata_driver_task->boot_service = 1U;
             task_queue_move_first_user(ata_driver_task);
             syscall_ata_set_boot_driver(ata_driver_task->id);
+            g_boot_ata_task = ata_driver_task;
             print_string_serial("[ATA] boot atadriver spawned\n");
         } else {
             print_string_serial("[ATA] boot atadriver unavailable; Ring 0 PIO path\n");
@@ -1061,6 +1034,10 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
             print_string_serial("[AI] boot aiworker unavailable; Ring 0 GPT-2 path\n");
         }
     }
+
+    /* The driver must install the boot FAT before aiworker opens GPT2.GGU.
+     * Later spawns move themselves first; put atadriver back in front. */
+    if (g_boot_ata_task) task_queue_move_first_user(g_boot_ata_task);
 
     print_string("Tache shell prete. Demarrage du timer...\n");
     timer_init(100);

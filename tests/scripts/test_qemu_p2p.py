@@ -192,6 +192,34 @@ def main():
             raise RuntimeError("missing votes")
         say("scenario 2 ok: majority consensus committed (%.0fs)" % (time.monotonic() - t0))
 
+        # US-064: Raft log on three guests. Partition is p2p-block (frames
+        # dropped), then the follower catches the missing entry back up.
+        cmd(a, "p2p-raft elect", "p2p-raft election started")
+        cmd(a, "p2p-poll 1", "p2p-poll ok")
+        cmd(b, "p2p-poll 1", "p2p-poll ok")
+        cmd(c, "p2p-poll 1", "p2p-poll ok")
+        cmd(a, "p2p-raft", "p2p raft role leader")
+        cmd(a, "p2p-raft-put tone blue", "p2p-raft-put ok index 1")
+        cmd(a, "p2p-poll 1", "p2p-poll ok")
+        cmd(b, "p2p-poll 1", "p2p-poll ok")
+        cmd(c, "p2p-poll 1", "p2p-poll ok")
+        wait_log(b, "p2p raft commit index 1 tone=blue", 30)
+        wait_log(c, "p2p raft commit index 1 tone=blue", 30)
+        cmd(c, "p2p-block alpha", "p2p-block ok alpha")
+        cmd(c, "p2p-block beta", "p2p-block ok beta")
+        cmd(a, "p2p-raft-put late yes", "p2p-raft-put ok index 2")
+        cmd(a, "p2p-poll 1", "p2p-poll ok")
+        cmd(b, "p2p-poll 1", "p2p-poll ok")
+        wait_log(b, "p2p raft commit index 2 late=yes", 30)
+        if "late=yes" in log(c):
+            raise RuntimeError("gamma applied late=yes while partitioned")
+        cmd(c, "p2p-unblock alpha", "p2p-unblock ok alpha")
+        cmd(c, "p2p-unblock beta", "p2p-unblock ok beta")
+        cmd(a, "p2p-poll 2", "p2p-poll ok")
+        cmd(c, "p2p-poll 2", "p2p-poll ok")
+        wait_log(c, "p2p raft commit index 2 late=yes", 30)
+        say("scenario 2b: raft replicate and catch-up ok (%.0fs)" % (time.monotonic() - t0))
+
         # Scenario 3: link alpha<->gamma fails; detection, then relay via beta.
         cmd(a, "p2p-block gamma", "p2p-block ok gamma")
         cmd(c, "p2p-block alpha", "p2p-block ok alpha")

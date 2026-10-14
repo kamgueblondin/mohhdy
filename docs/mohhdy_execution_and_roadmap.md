@@ -8,9 +8,11 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
 ### Suite de Tests
-- `make test-all` réexécute l'intégralité de la suite de non-régression :
-  - **563 tests exécutés / 563 tests réussis** (100% succès, 0 échecs).
-  - Validation couverte sur 39 modules kernel, 4 modules userspace, et les tests de robustesse.
+- `make test-all` rejoue la suite de non-regression sur l'arbre courant :
+  - **762 tests executes / 762 tests reussis** (0 echec, 0 ignore). Journal `test_logs/test_results_20261014_044925.log`.
+  - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. La couverture n'est pas mesuree.
+- Les compteurs plus anciens de ce fichier (563/563 et autres) decrivent la livraison de leur paragraphe, pas l'arbre courant.
+- `make strict-image-check`, `make secrets-check` et `make tree-clean-check` sont les gardes d'image et d'arbre.
 
 ### Contrats d'Intégration QEMU OS-UI
 - `python3 tests/scripts/test_qemu_osui_runtime.py` : **PASSED** (Contrat Ring 3, origin checking, IPC VFS, MCP invoice).
@@ -34,11 +36,11 @@ Elle confirme visuellement :
 
 ## 3. Descriptif des Prochaines Tranches d'Implémentation (Priorités 1 à 3)
 
-### Étape 1 : Finalisation de la Tranche 4 Microkernel (Externalisation complète des drivers de stockage)
-- **Objectif** : Déplacer les routines d'accès secteur bas niveau ATA PIO du Ring 0 vers un pilote Ring 3 dédié communiquant par IPC avec `vfsserver`.
-- **Isolation ATA PIO** : Transférer les commandes d'accès secteur (`ata_read_sectors_drive`, `ata_write_sectors_drive`) vers le worker Ring 3 (`userspace/vfs_virtual_worker.c`).
-- **Fermeture des passe-droits noyau** : Verrouiller tous les accès disques bruts (`Overlay`, `FAT16`, `FAT32`) pour qu'ils passent exclusivement par les capacités contrôlées (`grant`/`revoke`) du service `vfs-virtual`, en restreignant les I/O directes au seul PID du worker enregistré (`service_registry_ata_overlay_io_via_worker`).
-- **Validation** : Rejeu de la suite complète `make test-all` (563 tests) et `python3 tests/scripts/test_qemu_osui_runtime.py`.
+### Etape 1 : Tranche 4, ce qui reste Ring 0
+- Le pilote Ring 3 `atadriver` monte le FAT de boot et charge la fenetre overlay (`OS_ATA_FS_INSTALL`) sur l'image stricte. `ne2k_probe` n'est pas lie dans `build/mohhdy.bin`.
+- Restent Ring 0 : IDENTIFY ATA, PIO FAT apres la mort du pilote, IRQ et pilotes PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`.
+- US-064 est un journal Raft dans le guest (pas Paxos). US-067 est un RPC type sur le canal chiffre, pas gRPC HTTP/2. US-074 reste un STUN/NAT simule.
+- Validation courante : `make test-all` (762/762). Le contrat QEMU `make qemu-p2p` couvre election, replication et rattrapage. `make qemu-ata-driver` exige `fatkpio` a 0 au store ready.
 
 ### Étape 2 : Moteur de session et conteneurisation du Navigateur-OS (US-031)
 - **Objectif** : Faire évoluer le simulateur DOM vers la première version du conteneur d'onglets du Navigateur-OS avec persistance des sessions par site et intégration des vues d'inspection VFS (FS-as-web).

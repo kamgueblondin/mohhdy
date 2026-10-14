@@ -352,6 +352,10 @@ def boot1():
         #     code and took the overlay store over (one kernel handover).
         store = search_after(STORE_SPEC, 0, "driver store ready", monitor, proc)
         st = ata_status(monitor, proc)
+        if "[ATA] boot FAT mount deferred to the Ring 3 atadriver" not in log_text():
+            raise RuntimeError("boot FAT mount was not deferred to Ring 3")
+        if st["fatkpio"] != 0:
+            raise RuntimeError("boot FAT mount used Ring 0 PIO: %r" % st)
         if (store[0] != STORE_FAT16_OVERLAY or store[1] != 1 or store[3] != 1 or
                 store[4] <= 16 or st["store"] != STORE_FAT16_OVERLAY or
                 st["handovers"] != 1 or st["fskernel"] != 0):
@@ -438,8 +442,8 @@ def boot1():
 def boot2():
     proc, monitor = boot(LOG_BOOT2)
     try:
-        # 7. Cold reboot: the kernel loads the snapshot at boot (Ring 0, no
-        #    task yet) and the boot driver is live again.
+        # 7. Cold reboot: the Ring 3 atadriver installs the snapshot (the
+        #    strict kernel does not mount it in Ring 0) and is live again.
         wait_for("Overlay FS charge depuis le disque IDE", proc)
         wait_for("[ATA] boot driver registered; kernel boot load kept", proc)
         send_command_until(monitor, "cat t4s2", "viadrv", proc)

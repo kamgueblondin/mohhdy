@@ -63,6 +63,7 @@ int ne2k_rx_poll(ne2k_device_t* device, const ne2k_io_t* io,
     return 0;
 }
 
+#ifndef MOHHDY_OMIT_NE2K_PROBE
 int ne2k_probe(ne2k_device_t* device, uint16_t base_port, const ne2k_io_t* io) {
     uint8_t reset_value;
     uint8_t isr_value;
@@ -84,6 +85,7 @@ int ne2k_probe(ne2k_device_t* device, uint16_t base_port, const ne2k_io_t* io) {
     if (reset_value == 0xffU || isr_value == 0xffU) return -3;
     return 0;
 }
+#endif
 
 int ne2k_configure_rings(ne2k_device_t* device, const ne2k_io_t* io) {
     uint16_t base;

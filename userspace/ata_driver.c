@@ -156,6 +156,19 @@ static int pio_transfer(uint8_t drive, uint32_t lba, uint8_t count, uint8_t* buf
     }
     return wait_bsy_patient();
 }
+static int pio_transfer_boot(uint8_t drive, uint32_t lba, uint8_t count, uint8_t* buf) {
+    uint32_t s;
+    if (count == 0U) return -1;
+    if (wait_bsy() < 0) return -1;
+    select_lba_count(drive, lba, count);
+    outb(ATA_CMD, 0x20);
+    for (s = 0; s < count; s++) {
+        if (wait_drq() < 0) return -1;
+        pio_insw(buf + s * 512U, 256U);
+    }
+    return wait_bsy();
+}
+
 static int pio_read(uint8_t drive, uint32_t lba, uint8_t* out) {
     return pio_transfer(drive, lba, 1U, out, 0);
 }
@@ -337,6 +350,28 @@ static int v16_write(uint32_t lba, const void* buf) { return drv_write(0, lba, b
 static int v32_read(uint32_t lba, void* buf) { return drv_read(1, lba, buf); }
 static int v32_write(uint32_t lba, const void* buf) { return drv_write(1, lba, buf); }
 
+/* Strict kernel: Ring 0 did not mount FAT. Read the boot sector and the
+ * overlay window here, then hand the bytes to the kernel. The short wait
+ * does not yield, so this finishes before any other Ring 3 task opens the disk. */
+static void fs_install_boot(void) {
+    os_ata_status_t ks;
+    uint32_t i;
+    if (sc1(SYS_ATA_STATUS, (uint32_t)&ks) != 0 || ks.boot_mount_deferred == 0U) return;
+    claim();
+    if (pio_transfer_boot(0, 64U, 1U, sector) == 0)
+        (void)sc4(SYS_ATA_FS, OS_ATA_FS_INSTALL, OS_ATA_FS_INSTALL_FAT16, (uint32_t)sector, 512U);
+    if (ks.slave_present && pio_transfer_boot(1, 0U, 1U, sector) == 0)
+        (void)sc4(SYS_ATA_FS, OS_ATA_FS_INSTALL, OS_ATA_FS_INSTALL_FAT32, (uint32_t)sector, 512U);
+    ov_disk_known = 1;
+    for (i = 0; i < OV_DISK_SECTORS_DRV; i++) {
+        if (pio_transfer_boot(0, i, 1U, ov_disk + i * 512U) != 0) { ov_disk_known = 0; break; }
+    }
+    release();
+    if (ov_disk_known)
+        (void)sc4(SYS_ATA_FS, OS_ATA_FS_INSTALL, OS_ATA_FS_INSTALL_OVERLAY,
+                  (uint32_t)ov_disk, (uint32_t)sizeof(ov_disk));
+}
+
 static void fs_mount(void) {
     uint8_t st;
     os_ata_status_t ks;
@@ -494,6 +529,7 @@ void main(void) {
     else puts("atadriver ring3 pio ready");
     print_counters();
     puts("\n");
+    fs_install_boot();
     fs_mount();
     for (;;) {
         int client, served = 0;

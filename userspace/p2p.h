@@ -32,7 +32,8 @@ enum {
     P2P_I_PING = 10, P2P_I_PONG, P2P_I_MSG, P2P_I_PUT, P2P_I_SYNC_REQ, P2P_I_SYNC_ITEMS,
     P2P_I_GET_REQ, P2P_I_GET_RESP, P2P_I_PROPOSE, P2P_I_VOTE, P2P_I_COMMIT, P2P_I_APP,
     P2P_I_RAFT_VOTE_REQ, P2P_I_RAFT_VOTE_RESP, P2P_I_RAFT_HEARTBEAT, P2P_I_CACHE_INV,
-    P2P_I_GRPC_REQ, P2P_I_GRPC_RESP, P2P_I_STUN_REQ, P2P_I_STUN_RESP, P2P_I_NAT_PUNCH, P2P_I_COUNT
+    P2P_I_GRPC_REQ, P2P_I_GRPC_RESP, P2P_I_STUN_REQ, P2P_I_STUN_RESP, P2P_I_NAT_PUNCH,
+    P2P_I_RAFT_APPEND, P2P_I_RAFT_APPEND_RESP, P2P_I_COUNT
 };
 
 typedef struct {
@@ -61,6 +62,9 @@ typedef struct {
     uint32_t neighbors[P2P_PEERS];
     uint32_t sent, received, auth_fail, replay, throttled, down_events;
     uint32_t bucket_tick, bucket_used;
+    uint32_t raft_next;   /* next log index to send (1-based, 0 = unset) */
+    uint32_t raft_match;  /* highest index known replicated */
+    uint32_t raft_commit_sent; /* leader_commit last sent to this peer */
 } p2p_peer_t;
 
 typedef struct {
@@ -89,6 +93,14 @@ typedef struct {
 
 typedef enum { P2P_RAFT_FOLLOWER = 0, P2P_RAFT_CANDIDATE = 1, P2P_RAFT_LEADER = 2 } p2p_raft_role_t;
 
+#define P2P_RAFT_LOG 8
+#define P2P_RAFT_ELECTION_TICKS (30U * P2P_HZ)
+typedef struct {
+    uint32_t term;
+    char key[P2P_KEY_MAX];
+    char value[P2P_VAL_MAX];
+} p2p_raft_entry_t;
+
 typedef struct {
     uint8_t active;           /* 1 if Raft consensus mode is active */
     uint8_t role;             /* Follower (0), Candidate (1), Leader (2) */
@@ -99,6 +111,10 @@ typedef struct {
     uint32_t election_tick;   /* election timeout tick */
     uint32_t heartbeat_tick;  /* next heartbeat tick if leader */
     uint32_t term_changes;    /* term change counter */
+    p2p_raft_entry_t log[P2P_RAFT_LOG];
+    uint32_t log_count;       /* entries in log, indexes are 1-based */
+    uint32_t commit_index;    /* highest committed index, 0 = none */
+    uint32_t last_applied;    /* highest applied index */
 } p2p_raft_state_t;
 
 #define P2P_CACHE_MAX 8
@@ -157,6 +173,13 @@ typedef struct {
     uint32_t tx_type[P2P_I_COUNT], rx_type[P2P_I_COUNT];
     uint32_t tx_bytes, rx_bytes, relayed, bad_hello, foreign, dup;
     char last_msg[P2P_TEXT_MAX];
+    /* Typed RPC over the sealed channel (not HTTP/2 gRPC). */
+#define P2P_RPC_SLOTS 4
+#define P2P_GRPC_DEADLINE_TICKS (10U * P2P_HZ)
+    uint32_t rpc_seq;
+    uint32_t rpc_replays;
+    struct { uint8_t used; uint32_t id; uint32_t deadline; } rpc_wait[P2P_RPC_SLOTS];
+    struct { uint8_t used; uint32_t peer; uint32_t id; int len; uint8_t bytes[128]; } rpc_cache[P2P_RPC_SLOTS];
     /* Application payloads (Phase 7 collab) carried in sealed P2P_I_APP. */
     void (*app)(void* app_ctx, uint32_t from_id, const uint8_t* data, int length);
     void* app_ctx;
@@ -178,10 +201,18 @@ int p2p_sync(p2p_node_t* n, const p2p_host_t* h, const char* peer);
 int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 int p2p_block(p2p_node_t* n, const char* peer, int blocked);
 int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h);
+/* Append one log entry. Returns the 1-based index, or -1 if not leader. */
+int p2p_raft_append(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
+/* 12-byte term/vote trailer ('R','F', version 1). Returns 12 or -1. */
+int p2p_raft_vote_export(const p2p_node_t* n, uint8_t* out, int cap);
+int p2p_raft_vote_import(p2p_node_t* n, const uint8_t* in, int len);
 const p2p_item_t* p2p_cache_get(p2p_node_t* n, const char* key, uint32_t current_tick);
 int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t ttl_ticks, uint32_t current_tick);
 int p2p_route_find(const p2p_node_t* n, uint32_t dest_id, uint32_t* next_hop, uint32_t* total_cost);
 int p2p_grpc_call(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* service, const char* method, const char* payload);
+/* timeout_ticks 0 is already expired. fixed_id 0 allocates a new id. */
+int p2p_grpc_call_deadline(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* service,
+                           const char* method, const char* payload, uint32_t timeout_ticks, uint32_t fixed_id);
 int p2p_stun_probe(p2p_node_t* n, const p2p_host_t* h, const char* stun_server_peer);
 int p2p_nat_punch(p2p_node_t* n, const p2p_host_t* h, const char* peer);
 /* Report lines into out (peers, health, stats, kv). */

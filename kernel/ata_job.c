@@ -26,6 +26,8 @@ static uint32_t g_io_op, g_io_drive, g_io_lba, g_io_count, g_io_gen;
 static uint8_t g_io_buf[OS_ATA_JOB_MAX_SECTORS * 512U];
 static uint32_t g_io_flags;
 static uint32_t g_debug_crash_armed;
+static uint32_t g_boot_mount_deferred;
+static uint32_t g_slave_present;
 
 void ata_job_init(ata_job_snapshot_fn snapshot, ata_job_restore_fn restore) {
     uint32_t i;
@@ -313,6 +315,11 @@ void ata_job_set_fences(uint32_t client_min_lba, uint32_t slave_locked) {
     g_slave_locked = slave_locked ? 1U : 0U;
 }
 
+void ata_job_set_boot_flags(uint32_t deferred, uint32_t slave_present) {
+    g_boot_mount_deferred = deferred ? 1U : 0U;
+    g_slave_present = slave_present ? 1U : 0U;
+}
+
 int ata_job_client_write_allowed(uint32_t drive, uint32_t lba) {
     if (drive == 0U) return lba >= g_client_min_lba;
     if (drive == 1U) return !g_slave_locked;
@@ -328,4 +335,6 @@ void ata_job_fill_status(os_ata_status_t* out, int32_t live_driver) {
     out->client_min_lba = g_client_min_lba;
     out->slave_write_locked = g_slave_locked;
     out->debug_crash_armed = g_debug_crash_armed;
+    out->boot_mount_deferred = g_boot_mount_deferred;
+    out->slave_present = g_slave_present;
 }
