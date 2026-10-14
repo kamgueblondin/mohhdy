@@ -140,8 +140,10 @@ int net_wire_demux(const uint8_t* frame, uint16_t length, uint16_t* tcp_offset,
     dst_port = (uint16_t)(((uint16_t)ip[ihl + 2U] << 8) | ip[ihl + 3U]);
     for (i = 0U; i < NET_WIRE_BINDINGS; i++) {
         if (!g_bind[i].bound) continue;
-        if (g_bind[i].local_port != dst_port || g_bind[i].remote_port != src_port) continue;
-        if (!ip_eq(ip + 16U, g_bind[i].local_ip) || !ip_eq(ip + 12U, g_bind[i].remote_ip)) continue;
+        if (g_bind[i].local_port != dst_port) continue;
+        if (g_bind[i].remote_port != 0 && g_bind[i].remote_port != src_port) continue;
+        if (!ip_eq(ip + 16U, g_bind[i].local_ip)) continue;
+        if (g_bind[i].remote_ip[0] != 0 && !ip_eq(ip + 12U, g_bind[i].remote_ip)) continue;
         if (tcp_offset) *tcp_offset = (uint16_t)(NET_ETHERNET_HEADER_SIZE + ihl);
         if (tcp_length) *tcp_length = (uint16_t)(ip_length - ihl);
         return (int)i;

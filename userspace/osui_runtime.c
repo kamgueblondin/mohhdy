@@ -2785,8 +2785,161 @@ static int cmd_browser_forward(char *out, int max) {
     return OSUI_OK;
 }
 
+#define OSUI_DOM_MAX_NODES 32
+#define OSUI_DOM_STR_LEN 64
+
+typedef struct {
+    int used;
+    int parent_idx;
+    char tag[16];
+    char id[32];
+    char class_name[32];
+    char text[OSUI_DOM_STR_LEN];
+    char color[16];
+    char background[16];
+    int margin;
+    int padding;
+    int font_weight;
+    int display; /* 0: block, 1: inline, 2: none */
+} osui_dom_node_t;
+
+static osui_dom_node_t g_dom_nodes[OSUI_DOM_MAX_NODES];
+static int g_dom_node_count = 0;
+
+static int osui_dom_parse_html(const char *html) {
+    int i = 0, count = 0, k;
+    for (k = 0; k < OSUI_DOM_MAX_NODES; k++) {
+        unsigned char *p = (unsigned char*)&g_dom_nodes[k];
+        for (int b = 0; b < (int)sizeof(osui_dom_node_t); b++) p[b] = 0;
+    }
+    if (!html) return 0;
+
+    while (html[i] && count < OSUI_DOM_MAX_NODES) {
+        if (html[i] == '<') {
+            if (html[i + 1] == '/') {
+                while (html[i] && html[i] != '>') i++;
+                if (html[i]) i++;
+                continue;
+            }
+            i++;
+            int t_idx = 0;
+            osui_dom_node_t *node = &g_dom_nodes[count];
+            node->used = 1;
+            node->display = 0;
+            node->font_weight = 400;
+            s_cpy(node->color, sizeof(node->color), "black");
+            s_cpy(node->background, sizeof(node->background), "transparent");
+
+            while (html[i] && html[i] != ' ' && html[i] != '>' && t_idx < 15) {
+                node->tag[t_idx++] = html[i++];
+            }
+            node->tag[t_idx] = 0;
+
+            /* Parse attributes id, class, style */
+            while (html[i] && html[i] != '>') {
+                if (s_ncmp(html + i, "id=\"", 4) == 0) {
+                    i += 4;
+                    int id_i = 0;
+                    while (html[i] && html[i] != '"' && id_i < 31) node->id[id_i++] = html[i++];
+                    node->id[id_i] = 0;
+                    if (html[i] == '"') i++;
+                } else if (s_ncmp(html + i, "class=\"", 7) == 0) {
+                    i += 7;
+                    int cl_i = 0;
+                    while (html[i] && html[i] != '"' && cl_i < 31) node->class_name[cl_i++] = html[i++];
+                    node->class_name[cl_i] = 0;
+                    if (html[i] == '"') i++;
+                } else {
+                    i++;
+                }
+            }
+            if (html[i] == '>') i++;
+
+            /* Capture text inside tag */
+            int txt_i = 0;
+            while (html[i] && html[i] != '<' && txt_i < OSUI_DOM_STR_LEN - 1) {
+                if (html[i] != '\n' && html[i] != '\r') {
+                    node->text[txt_i++] = html[i];
+                }
+                i++;
+            }
+            node->text[txt_i] = 0;
+            count++;
+        } else {
+            i++;
+        }
+    }
+    g_dom_node_count = count;
+    return count;
+}
+
+static int osui_css_apply_styles(const char *css) {
+    int i;
+    for (i = 0; i < g_dom_node_count; i++) {
+        osui_dom_node_t *n = &g_dom_nodes[i];
+        if (!n->used) continue;
+        if (s_cmp(n->tag, "h1") == 0 || s_cmp(n->tag, "b") == 0) n->font_weight = 700;
+        if (s_cmp(n->tag, "a") == 0) s_cpy(n->color, sizeof(n->color), "blue");
+        if (s_cmp(n->tag, "button") == 0) {
+            s_cpy(n->background, sizeof(n->background), "gray");
+            n->padding = 4;
+        }
+        if (css && s_cmp(n->id, "app") == 0) {
+            n->margin = 8;
+            n->padding = 8;
+        }
+    }
+    return 0;
+}
+
+static int cmd_browser_html_render(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    int p = 0, i;
+    (void)narg; (void)args;
+    osui_tab_t *tab = (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) ? &G.tabs[G.current_tab] : 0;
+    out_add(out, max, &p, "osui browser-html-render ok tab_id=");
+    out_add(out, max, &p, tab ? tab->id : "none");
+    out_add(out, max, &p, " url=");
+    out_add(out, max, &p, tab ? tab->url : "about:blank");
+    out_add(out, max, &p, "\n");
+    out_add(out, max, &p, "+--------------------------------------------------+\n");
+    out_add(out, max, &p, "| [MOHHDY Web Runtime - HTML/CSS Layout Renderer]  |\n");
+    out_add(out, max, &p, "+--------------------------------------------------+\n");
+
+    for (i = 0; i < g_dom_node_count; i++) {
+        osui_dom_node_t *n = &g_dom_nodes[i];
+        if (!n->used) continue;
+        if (s_cmp(n->tag, "h1") == 0 || s_cmp(n->tag, "h2") == 0) {
+            out_add(out, max, &p, "=== ");
+            out_add(out, max, &p, n->text[0] ? n->text : "Heading");
+            out_add(out, max, &p, " ===\n");
+        } else if (s_cmp(n->tag, "li") == 0) {
+            out_add(out, max, &p, "  * ");
+            out_add(out, max, &p, n->text);
+            out_add(out, max, &p, "\n");
+        } else if (s_cmp(n->tag, "a") == 0) {
+            out_add(out, max, &p, "  [link] ");
+            out_add(out, max, &p, n->text);
+            out_add(out, max, &p, "\n");
+        } else if (s_cmp(n->tag, "button") == 0) {
+            out_add(out, max, &p, "  [ ");
+            out_add(out, max, &p, n->text[0] ? n->text : "Button");
+            out_add(out, max, &p, " ]\n");
+        } else if (s_cmp(n->tag, "input") == 0) {
+            out_add(out, max, &p, "  [ Input: ");
+            out_add(out, max, &p, n->id[0] ? n->id : "text");
+            out_add(out, max, &p, " ]\n");
+        } else if (n->text[0]) {
+            out_add(out, max, &p, "  ");
+            out_add(out, max, &p, n->text);
+            out_add(out, max, &p, "\n");
+        }
+    }
+    out_add(out, max, &p, "+--------------------------------------------------+\n");
+    return OSUI_OK;
+}
+
 static int cmd_browser_dom_tree(char *out, int max) {
-    int p = 0;
+    int p = 0, i;
     osui_tab_t *tab = (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) ? &G.tabs[G.current_tab] : 0;
     out_add(out, max, &p, "osui browser-dom-tree ok tab_id=");
     out_add(out, max, &p, tab ? tab->id : "none");
@@ -2803,6 +2956,29 @@ static int cmd_browser_dom_tree(char *out, int max) {
     out_add(out, max, &p, "\" />\n");
     out_add(out, max, &p, "        <button id=\"invoice-submit\">Submit</button>\n");
     out_add(out, max, &p, "      </form>\n    </div>\n  </body>\n</html>\n");
+
+    /* Parse DOM and apply styles */
+    osui_dom_parse_html(out);
+    osui_css_apply_styles("div#app { margin: 8px; }");
+    out_add(out, max, &p, "dom_nodes_parsed=");
+    out_u(out, max, &p, (unsigned)g_dom_node_count);
+    out_add(out, max, &p, "\n");
+    for (i = 0; i < g_dom_node_count && i < 8; i++) {
+        if (!g_dom_nodes[i].used) continue;
+        out_add(out, max, &p, "node[");
+        out_u(out, max, &p, (unsigned)i);
+        out_add(out, max, &p, "]=");
+        out_add(out, max, &p, g_dom_nodes[i].tag);
+        if (g_dom_nodes[i].id[0]) {
+            out_add(out, max, &p, "#");
+            out_add(out, max, &p, g_dom_nodes[i].id);
+        }
+        out_add(out, max, &p, " color=");
+        out_add(out, max, &p, g_dom_nodes[i].color);
+        out_add(out, max, &p, " fw=");
+        out_u(out, max, &p, (unsigned)g_dom_nodes[i].font_weight);
+        out_add(out, max, &p, "\n");
+    }
     return OSUI_OK;
 }
 
@@ -4427,6 +4603,7 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "browser-back") == 0) return cmd_browser_back(out, max);
     if (s_cmp(cmd, "browser-forward") == 0) return cmd_browser_forward(out, max);
     if (s_cmp(cmd, "browser-dom-tree") == 0) return cmd_browser_dom_tree(out, max);
+    if (s_cmp(cmd, "browser-html-render") == 0 || s_cmp(cmd, "browser-render") == 0) return cmd_browser_html_render(args, narg, out, max);
     if (s_cmp(cmd, "browser-eval") == 0) return cmd_browser_eval(args, narg, out, max);
     if (s_cmp(cmd, "browser-form-fill") == 0) return cmd_browser_form_fill(args, narg, out, max);
     if (s_cmp(cmd, "browser-dom-act") == 0) return cmd_browser_dom_act(args, narg, out, max);

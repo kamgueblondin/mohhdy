@@ -168,9 +168,15 @@ int bigint_modexp(bigint_t* output,const bigint_t* base,const bigint_t* exponent
     if(bigint_mod_reduce(&current,base,modulus)!=0)return -4;
     for(index=exponent->length;index>0U;index--){
         uint32_t limb=exponent->limbs[index-1U];
-        for(bit=32U;bit>0U;bit--){
-            if(bigint_mod_multiply(&product,&result,&result,modulus,&temporary)!=0)return -5;
-            bigint_copy(&result,&product);
+        uint16_t start_bit = 32U;
+        if (index == exponent->length) {
+            while (start_bit > 0U && !((limb >> (start_bit - 1U)) & 1U)) start_bit--;
+        }
+        for(bit=start_bit;bit>0U;bit--){
+            if (index != exponent->length || bit != start_bit) {
+                if(bigint_mod_multiply(&product,&result,&result,modulus,&temporary)!=0)return -5;
+                bigint_copy(&result,&product);
+            }
             if((limb>>(bit-1U))&1U){
                 if(bigint_mod_multiply(&product,&result,&current,modulus,&temporary)!=0)return -6;
                 bigint_copy(&result,&product);

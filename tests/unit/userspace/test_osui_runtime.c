@@ -1030,6 +1030,15 @@ static void test_telemetry_pwa_and_media(void) {
     TEST_ASSERT_EQUAL(0, osui_get_media_active());
 }
 
+void test_html_css_rendering(void) {
+    int rc;
+    setup();
+    rc = osui_dispatch_line("browser-html-render", g_out, sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "MOHHDY Web Runtime") != NULL);
+    TEST_ASSERT(strstr(g_out, "browser-html-render ok") != NULL);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -1061,6 +1070,7 @@ int main(void) {
     RUN_TEST(test_browser_pm_run_and_navigation);
     RUN_TEST(test_multi_origin_security_and_p2p_socket_isolation);
     RUN_TEST(test_telemetry_pwa_and_media);
+    RUN_TEST(test_html_css_rendering);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

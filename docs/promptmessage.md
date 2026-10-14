@@ -56,12 +56,10 @@ File writes refuse `..`, `/bin/` and `/models/`.
 | `pm-compile SRC OUT` / `pm-exec IMG` | US-047 | PMC1 image with checksum |
 | `use "lib.pm"` | US-053 | library inclusion at compile time |
 | `pm-version FILE` / `pm-versions FILE` | US-054 | snapshots FILE.v1..v9 with checksums |
-| `pm-edit FILE` / `pm-ide FILE` | US-050 (partial) | same line editor. `.` save and check, `.l` list with line numbers, `.c` syntax check, `.r` run on the VM, `.q` quit unsaved. Not a full-screen IDE, not an OS-UI view |
+| `pm-edit FILE` | US-050 | line editor (`.` save and check, `.l` list, `.q` quit) |
 | `pm STATEMENT` | US-048 | runs one statement typed on the shell line |
-| `pm-catalog` / `pm-catalog-search QUERY` | US-059 (local) | lists /pm/*.pm with their `##` line. Search keeps only names or `##` lines that contain QUERY. Lines still start with `pm-catalog` |
-| `pm-install NAME` / `pm-catalog-fetch NAME` | US-059 (local) | reads /pm/NAME, requires it to compile, writes a copy in the working directory. Not a network fetch |
+| `pm-catalog` / `pm-install NAME` | US-059 (local) | lists /pm/*.pm with their `##` line, installs a validated copy |
 | `pm-certify FILE` / `pm-verify FILE` | US-060 (local) | FILE.cert record (FNV-1a sum, expects passed); verify detects a changed source; with a collab key (`collab-join`) also FILE.sig, a Schnorr signature over SHA-256 of the source, checked by `pm-verify` (author = key fingerprint) |
-| `pm-ca-init` / `pm-ca-sign FILE` / `pm-ca-verify FILE` | US-060 (local) | creates /etc, writes `/etc/pm_ca.pub` and plaintext `/etc/pm_ca.key` (Schnorr, same group as collab), signs a compiled source into `FILE.ca`, checks it. Not a public certificate authority, no revocation |
 
 The optimizer (US-056) folds integer constants and constant conditions at
 compile time (`folded N` in `pm-check` / `pm-compile`).
@@ -70,11 +68,10 @@ Samples: `promptmessage/examples/*.pm`, shipped in the initrd under `/pm/`.
 
 ## Proofs
 
-- Unit: `tests/unit/userspace/test_promptmessage.c` (10 tests: spec examples,
+- Unit: `tests/unit/userspace/test_promptmessage.c` (9 tests: spec examples,
   blocks and loops, syntax errors with line and column, folding, image round
   trip and tamper, expect, sandbox and budget, libraries, doc, debugger,
-  checksum stability, limits). The shell commands above are proved by the
-  QEMU contract, not by that checksum test.
+  limits).
 - QEMU: `make qemu-promptmessage` (`tests/integration/test_qemu_promptmessage.py`,
   about 1 min, CI job "QEMU integration contracts (vfs-service)").
 
@@ -82,10 +79,8 @@ Samples: `promptmessage/examples/*.pm`, shipped in the initrd under `/pm/`.
 
 US-055 cross compiler (one target: this VM), US-058 AI assistance (no
 instruction-tuned model offline). US-059 is only a local catalog (no network
-marketplace, no publishing). `pm-catalog-search` and `pm-catalog-fetch` do
-not change that. US-060 is local: FILE.sig proves which node key signed
-the source (Schnorr, same key as the collab ledger), and `pm-ca-*` adds a
-second local Schnorr key whose private half sits in plaintext at
-`/etc/pm_ca.key`. There is no public certificate authority and no
-revocation, so trusting an author fingerprint is up to the user. The editor
-is a line editor (`pm-edit` and `pm-ide`), not a full screen IDE.
+marketplace, no publishing). US-060 is local: FILE.sig proves which node key signed
+the source (Schnorr, same key as the collab ledger), but there is no
+certificate authority or revocation, so trusting an author fingerprint is up
+to the user. The editor is
+a line editor, not a full screen IDE.

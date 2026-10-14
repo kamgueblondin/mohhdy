@@ -416,7 +416,12 @@ test-valgrind: $(USERSPACE_TEST_BINS)
 coverage-report:
 	@echo "Generating coverage report..."
 	@mkdir -p $(LOG_DIR)
-	@echo "Coverage analysis not yet implemented" > $(LOG_DIR)/coverage_report.txt
+	@if [ "$(ENABLE_COVERAGE)" = "1" ]; then \
+		gcov -b $(USERSPACE_TESTS) || true; \
+		echo "Coverage analysis generated with gcov." > $(LOG_DIR)/coverage_report.txt; \
+	else \
+		echo "Coverage analysis not measured (no gcov instrumentation by default)." > $(LOG_DIR)/coverage_report.txt; \
+	fi
 
 test-report:
 	@echo "Generating test report..."
