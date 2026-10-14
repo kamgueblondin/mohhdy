@@ -1037,6 +1037,20 @@ void test_html_css_rendering(void) {
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "MOHHDY Web Runtime") != NULL);
     TEST_ASSERT(strstr(g_out, "browser-html-render ok") != NULL);
+    TEST_ASSERT(strstr(g_out, "===") == NULL);
+    /* Flat text printer: tags, one id rule (margin), not a CSS engine. */
+    rc = run_line("browser-html-render <h1 id=\"app\">Title</h1><p>Hello</p><a class=\"x\">docs</a><li>item</li><button>Go</button>");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "=== Title ===") != NULL);
+    TEST_ASSERT(strstr(g_out, "Hello") != NULL);
+    TEST_ASSERT(strstr(g_out, "[link] docs") != NULL);
+    TEST_ASSERT(strstr(g_out, "* item") != NULL);
+    TEST_ASSERT(strstr(g_out, "[ Go ]") != NULL);
+    TEST_ASSERT(strstr(g_out, "margin=8") != NULL);
+    rc = run_line("browser-html-render");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "=== Title ===") == NULL);
+    TEST_ASSERT(strstr(g_out, "margin=8") == NULL);
 }
 
 int main(void) {

@@ -2894,8 +2894,20 @@ static int osui_css_apply_styles(const char *css) {
 
 static int cmd_browser_html_render(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0, i;
-    (void)narg; (void)args;
+    char html[OSUI_TEXT];
     osui_tab_t *tab = (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) ? &G.tabs[G.current_tab] : 0;
+    /* Text printer for a flat tag list. Not a layout engine and not US-031.
+     * With HTML arguments, parse them and apply the tiny tag/id rules.
+     * With no arguments, print the banner only (do not reuse a previous DOM). */
+    if (narg > 0) {
+        rest_from(args, narg, 0, html, OSUI_TEXT);
+        osui_dom_parse_html(html);
+        /* The style helper ignores the CSS text. A non-NULL pointer only
+         * sets margin and padding on a node whose id is "app". */
+        osui_css_apply_styles("#app { margin: 8px; }");
+    } else {
+        g_dom_node_count = 0;
+    }
     out_add(out, max, &p, "osui browser-html-render ok tab_id=");
     out_add(out, max, &p, tab ? tab->id : "none");
     out_add(out, max, &p, " url=");
@@ -2908,6 +2920,11 @@ static int cmd_browser_html_render(char args[OSUI_MAX_ARGS][96], int narg, char 
     for (i = 0; i < g_dom_node_count; i++) {
         osui_dom_node_t *n = &g_dom_nodes[i];
         if (!n->used) continue;
+        if (n->margin) {
+            out_add(out, max, &p, "margin=");
+            out_u(out, max, &p, (unsigned)n->margin);
+            out_add(out, max, &p, "\n");
+        }
         if (s_cmp(n->tag, "h1") == 0 || s_cmp(n->tag, "h2") == 0) {
             out_add(out, max, &p, "=== ");
             out_add(out, max, &p, n->text[0] ? n->text : "Heading");
