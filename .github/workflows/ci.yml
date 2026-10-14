@@ -71,6 +71,9 @@ jobs:
       - name: QEMU smoke (systeme)
         run: make qemu-smoke
 
+      - name: Tree clean outside build/
+        run: make tree-clean-check
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

@@ -1162,7 +1162,11 @@ typedef struct {
 #define OS_ATA_FS_INITRD_READ 7U /* ECX=path, EDX=buffer, ESI=max -> bytes */
 #define OS_ATA_FS_STATUS      8U /* public: ECX=os_ata_status_t* (same as SYS_ATA_STATUS) */
 #define OS_ATA_FS_LOG         9U /* live driver: ECX=text, EDX=length, one atomic line */
+#define OS_ATA_FS_INSTALL    10U /* driver: ECX=kind, EDX=buffer, ESI=length */
 #define OS_ATA_FS_LOG_MAX     192U
+#define OS_ATA_FS_INSTALL_FAT16   1U
+#define OS_ATA_FS_INSTALL_FAT32   2U
+#define OS_ATA_FS_INSTALL_OVERLAY 3U
 
 /* Store flags: what the driver serves from its own code. */
 #define OS_ATA_FS_STORE_FAT16   1U
@@ -1507,6 +1511,8 @@ typedef struct {
     uint32_t fs_publishes;     /* overlay images published into the kernel mirror */
     uint32_t fs_handovers;     /* store handovers kernel -> driver */
     uint32_t fs_restores;      /* kernel store restored from the mirror after driver loss */
+    uint32_t boot_mount_deferred; /* 1: strict boot left FAT mount to the Ring 3 driver */
+    uint32_t slave_present;       /* 1: IDENTIFY saw the slave drive (FAT32 candidate) */
 } os_ata_status_t;
 #define OS_TASK_SUPERVISION_EVENT_SIZE 24U
 

@@ -27,6 +27,7 @@
 #include "../net_wire.h"
 #include "../net_stack_exec.h"
 #include "../ata.h"
+#include "../boot_storage.h"
 #include "../gdt.h"
 #include "../fs/fat16.h"
 #include "../fs/fat32.h"
@@ -707,6 +708,9 @@ static int32_t sys_ata_fs(cpu_state_t* cpu) {
             }
             return rc;
         }
+        case OS_ATA_FS_INSTALL:
+            if (!syscall_user_range((const void*)cpu->edx, cpu->esi, 0)) return OS_ATA_JOB_STALE;
+            return kernel_boot_storage_install(cpu->ecx, (const uint8_t*)cpu->edx, cpu->esi);
         case OS_ATA_FS_LOG: {
             /* Same discipline as OS_NET_NIC_LOG: the whole counter line is
              * printed inside one syscall, so IRQ0 can no longer cut shell
@@ -3303,6 +3307,12 @@ static uint32_t g_ai_gguf_loaded;
 static int ai_engine_gguf_open(int32_t pid, os_ai_engine_map_t* out) {
     uint32_t size = gpt2_gguf_infer_resident_size();
     uint32_t pages, i;
+    /* Strict boot no longer loads GPT2.GGU in Ring 0. The first open reads
+     * it through the live atadriver (fat_disk_io RPC). */
+    if (size == 0U && fat16_is_mounted(fat16_root())) {
+        (void)gpt2_gguf_infer_init_fat16(fat16_root(), "GPT2.GGU");
+        size = gpt2_gguf_infer_resident_size();
+    }
     if (size == 0U || size > OS_AI_ENGINE_GGUF_WINDOW_MAX) return OS_AI_ENGINE_NO_MODEL;
     if (g_ai_gguf_pid != pid) {
         g_ai_gguf_pid = pid;

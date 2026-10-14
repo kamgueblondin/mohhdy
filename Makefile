@@ -116,7 +116,7 @@ $(GGUF_FLAG_STAMP):
 	@rm -f build/.gguf-ring0-fallback-*
 	@touch $@
 NETLEGACY_IMAGE = build/mohhdy-netlegacy.bin
-NETLEGACY_OBJECTS = $(filter-out build/syscall.o,$(OBJECTS)) build/syscall-netlegacy.o
+NETLEGACY_OBJECTS = $(filter-out build/syscall.o build/ne2k_hw.o,$(OBJECTS)) build/syscall-netlegacy.o build/ne2k_hw-full.o build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o
 
 build/syscall-netlegacy.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h $(GGUF_FLAG_STAMP)
 	@mkdir -p $(dir $@)
@@ -140,11 +140,11 @@ NET_STACK_OBJECTS = build/net_ethernet_arp.o build/net_dhcp.o build/net_ipv4_udp
 build/net_ring0_absent.o: kernel/net_ring0_absent.c kernel/net_llm_client.h kernel/net_wire.h kernel/net_stack_exec.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
-STRICT_OBJECTS = $(filter-out $(NET_STACK_OBJECTS),$(OBJECTS)) build/net_ring0_absent.o
+STRICT_OBJECTS = $(filter-out $(NET_STACK_OBJECTS),$(OBJECTS)) build/net_ring0_absent.o build/nic_boot_strict.o build/boot_storage_strict.o build/boot_storage_install.o
 ifeq ($(NET_RING0_FALLBACK),0)
 IMAGE_OBJECTS = $(STRICT_OBJECTS)
 else
-IMAGE_OBJECTS = $(OBJECTS)
+IMAGE_OBJECTS = $(OBJECTS) build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o
 endif
 $(OS_IMAGE): $(IMAGE_OBJECTS)
 	@mkdir -p $(dir $@)
@@ -303,7 +303,36 @@ build/ne2k.o: kernel/ne2k.c kernel/ne2k.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Tranche 5 suite: NE2000 hardware core shared with the Ring 3 networker.
-build/ne2k_hw.o: kernel/ne2k_hw.c kernel/ne2k.h
+# The strict image compiles ne2k_probe out. The legacy image keeps it.
+build/ne2k_hw.o: kernel/ne2k_hw.c kernel/ne2k.h $(NET_FLAG_STAMP)
+	@mkdir -p $(dir $@)
+ifeq ($(NET_RING0_FALLBACK),0)
+	$(CC) $(CFLAGS) -DMOHHDY_OMIT_NE2K_PROBE -c $< -o $@
+else
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+build/ne2k_hw-full.o: kernel/ne2k_hw.c kernel/ne2k.h $(NET_FLAG_STAMP)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/nic_boot_strict.o: kernel/nic_boot_strict.c kernel/nic_boot.h kernel/ne2k.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/nic_boot_legacy.o: kernel/nic_boot_legacy.c kernel/nic_boot.h kernel/ne2k.h kernel/net_llm_client.h kernel/syscall/syscall.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/boot_storage_strict.o: kernel/boot_storage_strict.c kernel/boot_storage.h kernel/ata.h kernel/ata_job.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/boot_storage_legacy.o: kernel/boot_storage_legacy.c kernel/boot_storage.h kernel/ata.h kernel/ata_job.h kernel/fs/fat16.h kernel/fs/fat32.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/boot_storage_install.o: kernel/boot_storage_install.c kernel/boot_storage.h kernel/fs/fat16.h kernel/fs/fat32.h fs/overlay.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -887,7 +916,7 @@ qemu-ai-gguf: $(OS_IMAGE) pack-initrd
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
 
-.PHONY: qemu-osui-web qemu-osui-peer qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit osui-registry-check secrets-check strict-image-check
+.PHONY: qemu-osui-web qemu-osui-peer qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit osui-registry-check secrets-check strict-image-check tree-clean-check
 # Roadmap step 4 guardrail: no provider secret built into any image.
 secrets-check: $(OS_IMAGE) pack-initrd kernel-netlegacy
 	@python3 scripts/check_no_secrets.py
@@ -897,8 +926,20 @@ strict-image-check: $(OS_IMAGE) kernel-netlegacy
 	@size $(OS_IMAGE) $(NETLEGACY_IMAGE)
 	@if nm $(OS_IMAGE) | grep -E ' (net_tls_record_|net_tcp_|x509_|net_dhcp_|ne2k_llm_|net_wire_demux)' >/dev/null; then \
 		echo "FAIL: Ring 0 network stack linked in the strict image"; exit 1; fi
+	@if nm $(OS_IMAGE) | grep -E ' (ne2k_probe|kernel_ring0_boot_fat_mount)$$' >/dev/null; then \
+		echo "FAIL: Ring 0 NIC probe or FAT boot mount linked in the strict image"; exit 1; fi
 	@nm $(NETLEGACY_IMAGE) | grep -q ' net_tls_record_' || { echo "FAIL: legacy image lost its stack"; exit 1; }
+	@nm $(NETLEGACY_IMAGE) | grep -q ' ne2k_probe$$' || { echo "FAIL: legacy image lost ne2k_probe"; exit 1; }
+	@nm $(NETLEGACY_IMAGE) | grep -q ' kernel_ring0_boot_fat_mount$$' || { echo "FAIL: legacy image lost the Ring 0 FAT mount"; exit 1; }
+	@nm $(OS_IMAGE) | grep -q ' kernel_boot_storage$$' || { echo "FAIL: strict image lost kernel_boot_storage"; exit 1; }
+	@nm $(OS_IMAGE) | grep -q ' kernel_nic_boot_probe$$' || { echo "FAIL: strict image lost kernel_nic_boot_probe"; exit 1; }
 	@echo "OK strict image without Ring 0 network stack; legacy image keeps it"
+
+# Fail if a build or a test rewrote a tracked file, or left an untracked
+# file, outside build/. Ignored products (build/, initrd tarball, logs)
+# are not listed by git status.
+tree-clean-check:
+	@python3 scripts/check_tree_clean.py
 
 osui-registry-check:
 	@python3 scripts/extract_guest_commands.py --check
