@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""QEMU contract, phase 4 PromptMessage (US-046..US-057) in the guest shell.
+"""QEMU contract, phase 4 PromptMessage (US-046..US-060) in the guest shell.
 
 Boots the default image, then from the Multiboot shell: validates the
 /pm/*.pm samples shipped in the initrd, runs a program that uses a library,
 writes files and registers triggers, fires a trigger, runs the automated
 tests, prints the documentation, compiles to a PMC1 image and executes the
 image, rejects a tampered image, breaks in the debugger, versions a source,
-runs an inline statement and authors a program with the integrated editor.
-No network, no model.
+runs an inline statement and authors a program with the line editor.
+Also covers the partial US-050/059/060 commands added on this branch:
+pm-ide (same line editor, with .c and .r), local catalog search and fetch,
+and a local Schnorr CA (pm-ca-init, pm-ca-sign, pm-ca-verify).
+No network, no model, no marketplace, no public certificate authority.
 """
 import os
 import re
@@ -149,6 +152,32 @@ def main():
             out = run(client, proc, "pm-verify tests.pm", "pm-verify mismatch")
             out = run(client, proc, "pm-certify /pm/lib.pm", "pm-certify refused")
             expect(out, "no expect")
+            # US-050 partial: pm-ide is the line editor, not a full-screen IDE.
+            run(client, proc, "pm-ide ide.pm", "pm-ide>")
+            run(client, proc, "set n to 7", "pm-ide>")
+            out = run(client, proc, ".l", "1: set n to 7")
+            out = run(client, proc, ".c", "pm-ide check ok")
+            expect(out, "statements")
+            out = run(client, proc, ".r", "pm-ide run ok")
+            out = run(client, proc, ".", "pm-ide saved ide.pm")
+            expect(out, "pm-ide check ok")
+            out = run(client, proc, "pm-run ide.pm", "pm-run ok")
+            # US-059 partial: local name filter and local copy, not a marketplace.
+            out = run(client, proc, "pm-catalog-search lib", "pm-catalog ok 1")
+            expect(out, "pm-catalog lib.pm")
+            if "hello.pm" in out or "tests.pm" in out or "bad.pm" in out:
+                raise RuntimeError("catalog search was not filtered: %s" % out[-800:])
+            out = run(client, proc, "pm-catalog-fetch lib.pm", "pm-catalog-fetch ok")
+            expect(out, "pm-catalog-fetch ok lib.pm")
+            # US-060 partial: local Schnorr CA. Modexp is slow under TCG.
+            out = run(client, proc, "pm-ca-init", "pm-ca-init ok", timeout=180)
+            expect(out, "/etc/pm_ca.pub")
+            out = run(client, proc, "pm-ca-sign ide.pm", "pm-ca-sign ok", timeout=180)
+            expect(out, "ide.pm.ca")
+            out = run(client, proc, "pm-ca-verify ide.pm", "pm-ca-verify ok", timeout=180)
+            expect(out, "trust_chain verified ide.pm")
+            out = run(client, proc, "append ide.pm set z to 1", "append ok")
+            out = run(client, proc, "pm-ca-verify ide.pm", "pm-ca-verify error signature invalid", timeout=180)
             print("PromptMessage QEMU contract passed in %.0f s" % (time.monotonic() - t0))
             return 0
         finally:

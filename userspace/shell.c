@@ -29,6 +29,16 @@ int shell_collab_sign(const uint8_t* m, int len, uint8_t sig[40], uint8_t pk[128
  * SHA-256("pmcert1" || source) with the node's collab key */
 static char g_pm_sigrec[400];
 static int pm_hexval(char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1; }
+static int pm_hex_load(const char* s, int nbytes, uint8_t* out) {
+    int i;
+    for (i = 0; i < nbytes; i++) {
+        int a = pm_hexval(s[2 * i]);
+        int b = pm_hexval(s[2 * i + 1]);
+        if (a < 0 || b < 0) return -1;
+        out[i] = (uint8_t)(a * 16 + b);
+    }
+    return 0;
+}
 static void pm_sig_digest(const char* src, int len, uint8_t d[32]) {
     sha256_ctx_t h;
     sha256_init(&h); sha256_update(&h, (const uint8_t*)"pmcert1", 7); sha256_update(&h, (const uint8_t*)src, (uint32_t)len); sha256_final(&h, d);
@@ -2895,6 +2905,29 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         ctx->last_rc = 0;
         return;
     }
+    if (strcmp(command, "pm-ca-init") == 0) {
+        /* Local CA (US-060, partial): Schnorr key pair on the collab group.
+         * Private key is stored in plaintext. Not a public authority. */
+        uint8_t seed[32], sk[CSIG_SK], pk[CSIG_PK];
+        char rec[384];
+        const char* h;
+        int q, i;
+        uint32_t t = (uint32_t)sys_ticks();
+        for (i = 0; i < 32; i++) seed[i] = (uint8_t)(i * 13 + (int)t);
+        if (csig_keypair(seed, sk, pk) != 0) { print_string("pm-ca-init error keygen failed\n"); return; }
+        (void)sys_mkdir("/etc");
+        q = 0; h = "pmca1 pub="; while (*h) rec[q++] = *h++;
+        for (i = 0; i < CSIG_PK; i++) { rec[q++] = "0123456789abcdef"[pk[i] >> 4]; rec[q++] = "0123456789abcdef"[pk[i] & 15]; }
+        rec[q++] = '\n';
+        if (pm_host_write(0, "/etc/pm_ca.pub", rec, q, 0) < 0) { print_string("pm-ca-init error write pub failed\n"); return; }
+        q = 0; h = "pmca1 key="; while (*h) rec[q++] = *h++;
+        for (i = 0; i < CSIG_SK; i++) { rec[q++] = "0123456789abcdef"[sk[i] >> 4]; rec[q++] = "0123456789abcdef"[sk[i] & 15]; }
+        rec[q++] = '\n';
+        if (pm_host_write(0, "/etc/pm_ca.key", rec, q, 0) < 0) { print_string("pm-ca-init error write key failed\n"); return; }
+        print_string("pm-ca-init ok /etc/pm_ca.pub\n");
+        ctx->last_rc = 0;
+        return;
+    }
     if (arg_count < 1) { print_string("usage: "); print_string(command); print_string(" FICHIER\n"); return; }
     if (strcmp(command, "pm-exec") == 0) {
         len = pm_host_read(0, args[0], (char*)g_pm_img, PM_IMAGE_MAX);
@@ -2929,8 +2962,9 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         return;
     }
     if (strcmp(command, "pm-edit") == 0 || strcmp(command, "pm-ide") == 0) {
-        /* Integrated PromptMessage IDE (US-050): multi-line editor, line numbers,
-         * live syntax check (.c), live execution (.r), '.' save and validate, '.q' quit. */
+        /* US-050 stays a line editor. pm-ide is the same editor as pm-edit:
+         * line numbers (.l), syntax check (.c), VM run (.r), save (.), quit (.q).
+         * Not a full-screen IDE and not an OS-UI surface. */
         char line[MAX_COMMAND_LENGTH];
         const char* tag = strcmp(command, "pm-ide") == 0 ? "pm-ide" : "pm-edit";
         int n = pm_host_read(0, args[0], g_pm_src, PM_SRC_MAX - 1);
@@ -2944,22 +2978,20 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
             if (strcmp(line, ".q") == 0) { print_string(tag); print_string(" quit unsaved\n"); return; }
             if (strcmp(line, ".c") == 0) {
                 g_pm_src[n] = 0;
-                if (pm_compile_report("pm-ide check", n, &g_pm_tmp) == 0) {
+                if (pm_compile_report(tag, n, &g_pm_tmp) == 0) {
                     print_string(tag); print_string(" check ok statements "); print_int(g_pm_tmp.statements); print_string("\n");
                 }
                 continue;
             }
             if (strcmp(line, ".r") == 0) {
+                pm_vm_t vm;
+                int rst;
                 g_pm_src[n] = 0;
-                if (pm_compile_report("pm-ide run", n, &g_pm_tmp) == 0) {
-                    pm_host_t h;
-                    pm_vm_t vm;
-                    int st;
-                    h.ctx = 0; h.read_file = pm_host_read; h.write_file = pm_host_write;
-                    h.mem_used_pct = pm_host_mem; h.out = pm_host_out;
+                if (pm_compile_report(tag, n, &g_pm_tmp) == 0) {
                     pm_vm_reset(&vm);
-                    st = pm_run(&g_pm_tmp, &vm, &h);
-                    print_string(st == PM_OK ? "pm-ide run ok\n" : "pm-ide run fail\n");
+                    rst = pm_run(&g_pm_tmp, &vm, &g_pm_host);
+                    print_string(tag);
+                    print_string(rst == PM_OK ? " run ok\n" : " run fail\n");
                 }
                 continue;
             }
@@ -2987,7 +3019,7 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         }
         if (pm_host_write(0, args[0], g_pm_src, n, 0) < 0) { print_string(tag); print_string(" error write failed\n"); return; }
         print_string(tag); print_string(" saved "); print_string(args[0]); print_string(" bytes "); print_int(n); print_string("\n");
-        if (pm_compile_report("pm-edit check", n, &g_pm_tmp) == 0) {
+        if (pm_compile_report(tag, n, &g_pm_tmp) == 0) {
             print_string(tag); print_string(" check ok statements "); print_int(g_pm_tmp.statements); print_string("\n");
             ctx->last_rc = 0;
         }
@@ -3081,36 +3113,21 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         ctx->last_rc = 0;
         return;
     }
-    if (strcmp(command, "pm-ca-init") == 0) {
-        uint8_t seed[32], sk[CSIG_SK], pk[CSIG_PK]; char path_pub[64] = "/etc/pm_ca.pub", path_key[64] = "/etc/pm_ca.key";
-        char rec[512]; int q = 0, i;
-        uint32_t t = (uint32_t)sys_ticks();
-        for (i = 0; i < 32; i++) seed[i] = (uint8_t)(i * 13 + t);
-        if (csig_keypair(seed, sk, pk) != 0) { print_string("pm-ca-init error keygen failed\n"); return; }
-        const char* h = "pmca1 pub="; while (*h) rec[q++] = *h++;
-        for (i = 0; i < CSIG_PK; i++) { rec[q++] = "0123456789abcdef"[pk[i] >> 4]; rec[q++] = "0123456789abcdef"[pk[i] & 15]; }
-        rec[q++] = '\n';
-        if (pm_host_write(0, path_pub, rec, q, 0) < 0) { print_string("pm-ca-init error write pub failed\n"); return; }
-        q = 0; h = "pmca1 key="; while (*h) rec[q++] = *h++;
-        for (i = 0; i < CSIG_SK; i++) { rec[q++] = "0123456789abcdef"[sk[i] >> 4]; rec[q++] = "0123456789abcdef"[sk[i] & 15]; }
-        rec[q++] = '\n';
-        if (pm_host_write(0, path_key, rec, q, 0) < 0) { print_string("pm-ca-init error write key failed\n"); return; }
-        print_string("pm-ca-init ok /etc/pm_ca.pub\n");
-        ctx->last_rc = 0;
-        return;
-    }
     if (strcmp(command, "pm-ca-sign") == 0) {
         uint8_t sk[CSIG_SK], sig[CSIG_SIG], d[32];
-        char kbuf[128], path_ca[RAMFS_PATH_MAX], rec[256]; int n, i, q = 0, k = 0;
+        char kbuf[80], path_ca[RAMFS_PATH_MAX], rec[160];
+        const char* h;
+        int n, i, q = 0, k = 0;
         if (pm_load_source("pm-ca-sign", args[0], &len) != 0) return;
         n = pm_host_read(0, "/etc/pm_ca.key", kbuf, (int)sizeof(kbuf) - 1);
-        if (n < 40 || strncmp(kbuf, "pmca1 key=", 10) != 0) { print_string("pm-ca-sign error no CA key (run pm-ca-init)\n"); return; }
-        for (i = 0; i < CSIG_SK; i++) { int a = pm_hexval(kbuf[10 + 2 * i]), b = pm_hexval(kbuf[11 + 2 * i]); sk[i] = (uint8_t)(a * 16 + b); }
+        if (n < 10 + 2 * CSIG_SK || strncmp(kbuf, "pmca1 key=", 10) != 0) { print_string("pm-ca-sign error no CA key (run pm-ca-init)\n"); return; }
+        kbuf[n] = 0;
+        if (pm_hex_load(kbuf + 10, CSIG_SK, sk) != 0) { print_string("pm-ca-sign error bad CA key\n"); return; }
         pm_sig_digest(g_pm_src, len, d);
         if (csig_sign(sk, d, 32, sig) != 0) { print_string("pm-ca-sign error sign failed\n"); return; }
         while (args[0][k] && k < RAMFS_PATH_MAX - 4) { path_ca[k] = args[0][k]; k++; }
         path_ca[k++] = '.'; path_ca[k++] = 'c'; path_ca[k++] = 'a'; path_ca[k] = 0;
-        const char* h = "pmca1sig sig="; while (*h) rec[q++] = *h++;
+        h = "pmca1sig sig="; while (*h) rec[q++] = *h++;
         for (i = 0; i < CSIG_SIG; i++) { rec[q++] = "0123456789abcdef"[sig[i] >> 4]; rec[q++] = "0123456789abcdef"[sig[i] & 15]; }
         rec[q++] = '\n';
         if (pm_host_write(0, path_ca, rec, q, 0) < 0) { print_string("pm-ca-sign error write failed\n"); return; }
@@ -3120,16 +3137,19 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
     }
     if (strcmp(command, "pm-ca-verify") == 0) {
         uint8_t pk[CSIG_PK], sig[CSIG_SIG], d[32];
-        char pbuf[128], sbuf[256], path_ca[RAMFS_PATH_MAX]; int n, m, i, k = 0;
+        char pbuf[288], sbuf[160], path_ca[RAMFS_PATH_MAX];
+        int n, m, k = 0;
         if (pm_load_source("pm-ca-verify", args[0], &len) != 0) return;
         n = pm_host_read(0, "/etc/pm_ca.pub", pbuf, (int)sizeof(pbuf) - 1);
-        if (n < 64 || strncmp(pbuf, "pmca1 pub=", 10) != 0) { print_string("pm-ca-verify error no CA pub (run pm-ca-init)\n"); return; }
-        for (i = 0; i < CSIG_PK; i++) { int a = pm_hexval(pbuf[10 + 2 * i]), b = pm_hexval(pbuf[11 + 2 * i]); pk[i] = (uint8_t)(a * 16 + b); }
+        if (n < 10 + 2 * CSIG_PK || strncmp(pbuf, "pmca1 pub=", 10) != 0) { print_string("pm-ca-verify error no CA pub (run pm-ca-init)\n"); return; }
+        pbuf[n] = 0;
+        if (pm_hex_load(pbuf + 10, CSIG_PK, pk) != 0) { print_string("pm-ca-verify error bad CA pub\n"); return; }
         while (args[0][k] && k < RAMFS_PATH_MAX - 4) { path_ca[k] = args[0][k]; k++; }
         path_ca[k++] = '.'; path_ca[k++] = 'c'; path_ca[k++] = 'a'; path_ca[k] = 0;
         m = pm_host_read(0, path_ca, sbuf, (int)sizeof(sbuf) - 1);
-        if (m < 64 || strncmp(sbuf, "pmca1sig sig=", 13) != 0) { print_string("pm-ca-verify error no CA cert record\n"); return; }
-        for (i = 0; i < CSIG_SIG; i++) { int a = pm_hexval(sbuf[13 + 2 * i]), b = pm_hexval(sbuf[14 + 2 * i]); sig[i] = (uint8_t)(a * 16 + b); }
+        if (m < 13 + 2 * CSIG_SIG || strncmp(sbuf, "pmca1sig sig=", 13) != 0) { print_string("pm-ca-verify error no CA cert record\n"); return; }
+        sbuf[m] = 0;
+        if (pm_hex_load(sbuf + 13, CSIG_SIG, sig) != 0) { print_string("pm-ca-verify error bad CA cert record\n"); return; }
         pm_sig_digest(g_pm_src, len, d);
         if (!csig_pk_valid(pk) || !csig_verify(pk, d, 32, sig)) { print_string("pm-ca-verify error signature invalid\n"); return; }
         print_string("pm-ca-verify ok trust_chain verified "); print_string(args[0]); print_string("\n");
