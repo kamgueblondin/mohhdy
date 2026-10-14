@@ -318,6 +318,53 @@ void test_raft_and_cache(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p cache hits 1 misses 1"));
 }
 
+void test_raft_log_catchup_and_typed_rpc(void) {
+    const p2p_item_t* it;
+    uint8_t blob[12];
+    setup(3, 0);
+    run(3, 300);
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 40);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    TEST_ASSERT_EQUAL(1, p2p_raft_append(&g_n[0], &g_h[0], "tone", "blue"));
+    run(3, 40);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "p2p raft commit index 1 tone=blue"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[2], "p2p raft commit index 1 tone=blue"));
+    it = p2p_get_local(&g_n[2], "tone");
+    TEST_ASSERT_NOT_NULL(it);
+    TEST_ASSERT_EQUAL_STRING("blue", it->value);
+    /* Partition gamma: frames from alpha and beta never arrive. */
+    g_cut[0][2] = 1;
+    g_cut[1][2] = 1;
+    TEST_ASSERT_EQUAL(2, p2p_raft_append(&g_n[0], &g_h[0], "late", "yes"));
+    run(3, 40);
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[1], "late"));
+    TEST_ASSERT_NULL(p2p_get_local(&g_n[2], "late"));
+    g_cut[0][2] = 0;
+    g_cut[1][2] = 0;
+    run(3, 80);
+    it = p2p_get_local(&g_n[2], "late");
+    TEST_ASSERT_NOT_NULL(it);
+    TEST_ASSERT_EQUAL_STRING("yes", it->value);
+    TEST_ASSERT_EQUAL(12, p2p_raft_vote_export(&g_n[0], blob, 12));
+    TEST_ASSERT_EQUAL(0, p2p_raft_vote_import(&g_n[1], blob, 12));
+    TEST_ASSERT_EQUAL(g_n[0].raft.term, g_n[1].raft.term);
+    TEST_ASSERT_EQUAL(g_n[0].raft.voted_for, g_n[1].raft.voted_for);
+
+    g_out[0][0] = 0;
+    TEST_ASSERT_EQUAL(0, p2p_grpc_call(&g_n[0], &g_h[0], "beta", "echo.EchoService", "SayHello", "World"));
+    run(3, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p grpc resp status 0 payload Hello World from beta id "));
+    TEST_ASSERT_EQUAL(0, p2p_grpc_call_deadline(&g_n[0], &g_h[0], "beta", "echo.EchoService", "SayHello", "World",
+                                                P2P_GRPC_DEADLINE_TICKS, 1));
+    run(3, 30);
+    TEST_ASSERT_TRUE(g_n[1].rpc_replays >= 1U);
+    g_out[0][0] = 0;
+    TEST_ASSERT_EQUAL(0, p2p_grpc_call_deadline(&g_n[0], &g_h[0], "beta", "echo.EchoService", "SayHello", "World", 0, 0));
+    run(3, 20);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "status 4"));
+}
+
 void test_routing_grpc_and_stun(void) {
     char rep[512];
     uint32_t nh = 0, cost = 0;
@@ -382,6 +429,7 @@ int main(void) {
     RUN_TEST(test_traffic_analysis);
     RUN_TEST(test_bad_inputs);
     RUN_TEST(test_raft_and_cache);
+    RUN_TEST(test_raft_log_catchup_and_typed_rpc);
     RUN_TEST(test_routing_grpc_and_stun);
     RUN_TEST(test_p2p_consolidation_and_fallback);
     unity_print_results();
