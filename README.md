@@ -85,6 +85,8 @@ make run
 | `make qemu-net-peer-tls-worker` | Deux invites QEMU sur le noyau strict par defaut, Ethernet partage (hub local, sans TAP ni Internet) : poignee de main TLS 1.2 invite-invite (B serveur, A client, PKI de test du depot) puis echange METIER chiffre dans les deux sens, chaque appel pair/LLM servi par `networker` (`net-driver relay op`), aucun `METIER` en clair sur le fil. Job CI `net-peer-tls`. |
 | `make qemu-ai-worker` | Inventaire point 4 : fixture GPT-2 synthetique dans l'initrd ; `aiworker` Ring 3 (service `ai-engine`) sert `SYS_GPT2_GENERATE` relaye ; memes jetons sur les chemins worker, noyau et repli apres mort du worker ; REPLY forgee refusee ; compteurs `kernel_infer_while_live 0` ; pas de poids 124M en CI |
 | `make qemu-ai-gguf` | Tranche GGUF : GGUF synthetique K-quant (4024704 octets) sur disque FAT16 IDE ; `aiworker` lit sa copie sur le disque et sert les pas 109-110 ainsi que la tokenisation et la session (`OS_AI_JOB_GGUF_SESSION`) ; `GGUF_READY` libere l'instantane noyau ; sans worker, 109/110 rendent -148 (`path none`) ; session reprise par un nouveau worker (`ggufpause`) ; job CI dedie `ai-gguf` ; GGUF_OPEN/READ/READY refuses a `airogue` ; `gguf_kernel_while_live 0` ; pas de GGUF reel en CI |
+| `make qemu-ai-gguf-only` | Initrd avec le seul tokenizer synthetique (pas de checkpoint FP32), GGUF synthetique sur disque FAT16 : `aiworker` est lance au boot, lit `GPT2.GGU` via `atadriver` et sert tous les pas 109/110 (jamais -148) ; aussi joue par `make qemu-ai-gguf` |
+| `make run-gpt2` | Telecharge les actifs GPT-2 manquants (release `gpt2-124m-assets`), construit l'image et le disque GGUF, lance QEMU GTK (KVM si `/dev/kvm` est accessible, sinon TCG) |
 | `make qemu-ipc-foundation` | Lance `ipcserver`, envoie un message et vérifie sa réception |
 | `make qemu-vfs-service` | Lance `vfsvirtual` puis `vfsserver`, vérifie l'autorité Ring 3 corrélée des alias add/remove et I/O (`read`, `stat`, liste, pages et observation), la révocation complète de la capacité mono-source après chaque transaction, la purge du miroir après remplacement worker, l'échec `INVALID` sans rejeu d'une lecture d'alias expirée, deux volumes IDE FAT16/FAT32, les capacités et refus, les mutations overlay et les cycles FAT racine/LFN ainsi que `mkdir`, écriture, `stat`, liste, renommage, refus `rmdir` non vide, suppression et `rmdir` d'un sous-répertoire 8.3 ; un renommage tenté vers son voisin hors préfixe est refusé par le backend avant mutation, sans divulguer la borne interne |
 | `make qemu-service-grant` | Publie `demo`, observe l'événement de transfert et de purge, puis vérifie son nettoyage |
@@ -137,10 +139,31 @@ models/
 mkdir -p models
 curl -L -o models/gpt2_124M.bin https://github.com/kamgueblondin/mohhdy/releases/download/gpt2-124m-assets/gpt2_124M.bin
 curl -L -o models/gpt2_tokenizer.bin https://github.com/kamgueblondin/mohhdy/releases/download/gpt2-124m-assets/gpt2_tokenizer.bin
+curl -L -o models/gpt2-Q3_K_M.gguf https://github.com/kamgueblondin/mohhdy/releases/download/gpt2-124m-assets/gpt2-Q3_K_M.gguf
 curl -L -o models/gpt2-124m-assets.sha256 https://github.com/kamgueblondin/mohhdy/releases/download/gpt2-124m-assets/gpt2-124m-assets.sha256
-(cd models && sha256sum -c gpt2-124m-assets.sha256)
+(cd models && sha256sum -c --ignore-missing gpt2-124m-assets.sha256)
 make all
 ```
+
+### Tester GPT-2 en local en une commande
+
+```bash
+scripts/bootstrap-dev.sh          # paquets Debian/Ubuntu (gcc-multilib, nasm, qemu-system-x86)
+sudo apt-get install -y qemu-system-gui   # fenetre GTK (Debian 13 la separe de qemu-system-x86)
+make run-gpt2
+```
+
+`make run-gpt2` (script `scripts/run_gpt2.sh`) telecharge depuis la release `gpt2-124m-assets` les fichiers absents de `models/` (tokenizer et `gpt2-Q3_K_M.gguf`, environ 98 Mo), verifie les SHA-256, construit l'image et le disque FAT16 `GPT2.GGU`, puis ouvre QEMU dans une fenetre GTK. Dans l'invite :
+
+```
+ai-model use gpt2.gguf
+ai the capital of france is
+ai-continue
+```
+
+Options : `GPT2_PROFILE=fp32` ajoute le checkpoint FP32 de 475 Mio dans l'initrd (le `ai` par defaut l'utilise alors), `GPT2_DISPLAY=curses` ou `none` (serie sur la console), `QEMU_ACCEL=kvm|tcg`. KVM est choisi seulement si `/dev/kvm` est lisible et inscriptible par l'utilisateur ; sinon QEMU emule (TCG) et une phrase prend environ 70 s. Sous Linux, `sudo usermod -aG kvm $USER` puis une nouvelle session donne l'acces. Sous Windows, passer par WSL2 (KVM seulement si la virtualisation imbriquee est active). Sous macOS, pas de KVM : TCG uniquement. GPT-2 continue un texte anglais, ce n'est pas un assistant.
+
+Le profil GGUF seul (tokenizer dans l'initrd, poids sur le disque) est couvert par `make qemu-ai-gguf-only` : depuis que la FAT est montee par `atadriver` en Ring 3, le noyau lance `aiworker` des que le tokenizer et le pilote disque sont presents, et le worker lit `GPT2.GGU` lui-meme.
 
 QEMU nécessite **1 Gio** de RAM quand le checkpoint FP32 est dans l'initrd. Le profil par défaut de `ai` est ce checkpoint. La sortie est une continuation anglaise, pas une réponse factuelle. Le GELU FP32 est celui d'OpenAI, `0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 x^3)))`. Avec ce checkpoint, le guest a répondu à `ai my name is` par `a little bit different, but I'm not sure if it's because of the fact that I'm from the same country`. En glouton, `The capital of France is` continue par `the capital of the French Republic, and the capital of`. Une phrase échantillonnée (température 0,2, pénalité 1,2, top-k 8) peut être grammaticale et fausse.
 

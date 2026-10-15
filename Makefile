@@ -912,6 +912,13 @@ qemu-ai-worker: $(OS_IMAGE) pack-initrd
 # bulk read, token equality worker / Ring 0 / fallback).
 qemu-ai-gguf: $(OS_IMAGE) pack-initrd
 	@python3 tests/integration/test_qemu_ai_gguf.py
+	@python3 tests/integration/test_qemu_ai_gguf_only.py
+
+# GGUF-only initrd (tokenizer, no FP32 checkpoint): the boot aiworker must
+# still be spawned and serve 109/110 from the disk GGUF (no -148).
+.PHONY: qemu-ai-gguf-only
+qemu-ai-gguf-only: $(OS_IMAGE) pack-initrd
+	@python3 tests/integration/test_qemu_ai_gguf_only.py
 
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
@@ -1098,6 +1105,11 @@ help:
 
 .PHONY: all kernel-only run run-gui run-qemu-gtk test-build info-initrd info-user user-program userspace-all clean distclean help pack-initrd test-setup test-quick test-kernel test-userspace test-all test-performance test-valgrind test-clean pre-commit-tests ci-tests qemu-smoke qemu-ne2k-acquire qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-close qemu-ne2k-tls-next qemu-ne2k-tls-multipair gpt2-recovery gpt2-benchmark gpt2-tests qemu-gguf-smoke gguf-benchmark gguf-benchmark-check gguf-kvm-benchmark gguf-kvm-benchmark-check ci deps disk gui-captures gui-record
 
+
+# One command local GPT-2 chat: release assets, image, GGUF disk, QEMU GTK.
+.PHONY: run-gpt2
+run-gpt2:
+	@scripts/run_gpt2.sh
 
 gguf-disk:
 	@python3 scripts/make_gguf_fat16_image.py --model $(GPT2_GGUF_DEPLOY_MODEL) --image $(GGUF_DISK_IMAGE)

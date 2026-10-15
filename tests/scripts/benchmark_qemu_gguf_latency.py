@@ -23,7 +23,7 @@ INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd.tar"))
 DISK = os.environ.get("OVERLAY_DISK", os.path.join(ROOT, "build", "gpt2_gguf_fat16.img"))
 LOG_DIR = os.path.join(ROOT, "test_logs")
 RUNS = int(os.environ.get("GGUF_BENCH_RUNS", "3"))
-BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "90"))
+BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "300"))
 GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "1200"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.65"))
 MAX_SPREAD_RATIO = float(os.environ.get("GGUF_BENCH_MAX_SPREAD_RATIO", "0"))
@@ -112,7 +112,7 @@ def run_once(index):
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
                 "-drive", "file=%s,format=raw,if=ide,cache=writethrough" % DISK,
             ], cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, log, "GGUF: profil local FAT16 pret", BOOT_TIMEOUT)
+            wait_for(proc, log, "aiworker gguf ready bytes", BOOT_TIMEOUT)
             wait_for(proc, log, "[0m : ", BOOT_TIMEOUT)
             client = connect_monitor(monitor_path)
             start = len(read_text(log))

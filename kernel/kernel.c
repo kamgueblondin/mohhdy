@@ -1023,8 +1023,13 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
      * disk and serves the 109/110 sampling steps. The default build refuses
      * 109/110 when that worker is absent; GGUF_READY releases the kernel
      * snapshot. The FP32 Ring 0 fallback stays. */
+    /* Strict boot defers the FAT mount to the Ring 3 atadriver, so a
+     * GGUF-only initrd has no resident GGUF yet at this point. The worker
+     * opens GPT2.GGU itself through that driver (OS_AI_ENGINE_GGUF_OPEN)
+     * and exits cleanly when neither model is usable. */
     if (gpt2_tokenizer_ready() &&
-        (gpt2_model_current()->ready || gpt2_gguf_infer_resident_size() != 0U)) {
+        (gpt2_model_current()->ready || gpt2_gguf_infer_resident_size() != 0U ||
+         g_boot_ata_task != 0)) {
         task_t* ai_worker_task = create_task_from_initrd_file("bin/aiworker");
         if (ai_worker_task) {
             ai_worker_task->boot_service = 1U;

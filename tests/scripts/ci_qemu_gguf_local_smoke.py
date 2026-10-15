@@ -23,6 +23,7 @@ ERR = os.environ.get("QEMU_ERR", os.path.join(ROOT, "test_logs", "ci-qemu-gguf-l
 MON = os.environ.get("QEMU_MON_SOCK", os.path.join(ROOT, "test_logs", "qemu-gguf-monitor.sock"))
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "90"))
 GENERATION_TIMEOUT = float(os.environ.get("GGUF_GENERATION_TIMEOUT", "1200"))
+MODEL_TIMEOUT = float(os.environ.get("GGUF_MODEL_TIMEOUT", "300"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.65"))
 
 
@@ -94,7 +95,12 @@ def main():
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
                 "-drive", "file=%s,format=raw,if=ide,cache=writethrough" % DISK,
             ], cwd=ROOT, stdout=err, stderr=err)
-            wait_for(proc, "GGUF: profil local FAT16 pret", BOOT_TIMEOUT)
+            # Strict boot: the Ring 3 atadriver mounts the FAT, then the
+            # boot aiworker reads GPT2.GGU through it (first open). The old
+            # Ring 0 boot line "GGUF: profil local FAT16 pret" is gone.
+            wait_for(proc, "[AI] boot aiworker spawned", BOOT_TIMEOUT)
+            wait_for(proc, "aiworker gguf ready bytes", MODEL_TIMEOUT)
+            wait_for(proc, "[AI] ai-engine GGUF ready in Ring 3", BOOT_TIMEOUT)
             wait_for(proc, "[0m : ", BOOT_TIMEOUT)
             client = monitor()
             start = len(text())
@@ -106,6 +112,11 @@ def main():
             wait_for(proc, "[GPT-2 GGUF local]", GENERATION_TIMEOUT, start)
             if "[GPT-2 GGUF local] indisponible" in text()[start:]:
                 raise RuntimeError("GGUF local rejected generation: %s" % text()[start:][-1000:])
+            head = text().index("[GPT-2 GGUF local]", start)
+            wait_for(proc, "\n", BOOT_TIMEOUT, head)
+            reply = text()[head:].split("\n", 1)[0]
+            if not reply.split("[0m", 1)[-1].strip():
+                raise RuntimeError("GGUF local produced an empty completion: %r" % reply)
             first_token_elapsed = time.monotonic() - started
             start = len(text())
             continued = time.monotonic()
@@ -114,6 +125,7 @@ def main():
             if "session indisponible" in text()[start:]:
                 raise RuntimeError("GGUF continuation rejected: %s" % text()[start:][-1000:])
             continue_elapsed = time.monotonic() - continued
+        print("GGUF completion: %s" % reply.split("[0m", 1)[-1].strip())
         print("QEMU GGUF local smoke passed: phrase %.2fs, suite %.2fs." %
               (first_token_elapsed, continue_elapsed))
         return 0
