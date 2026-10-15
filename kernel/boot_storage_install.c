@@ -1,6 +1,7 @@
 /* Both images: install a boot sector or overlay snapshot copied by Ring 3.
  * The read callback serves that one buffer, then the volume is rebound to
- * the real Ring 0 fallback so a later driver death still sees the disk. */
+ * the kernel disk callbacks. The legacy image serves those with Ring 0 PIO.
+ * The strict image refuses them; a later driver death respawns bin/atadriver. */
 #include "boot_storage.h"
 #include "fs/fat16.h"
 #include "fs/fat32.h"

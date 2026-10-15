@@ -27,6 +27,7 @@
 #include "../net_wire.h"
 #include "../net_stack_exec.h"
 #include "../ata.h"
+#include "../fat_pio_fallback.h"
 #include "../boot_storage.h"
 #include "../gdt.h"
 #include "../fs/fat16.h"
@@ -160,22 +161,27 @@ static int32_t sys_ai_engine(cpu_state_t* cpu);
  * marks T ready and the scheduler resumes T inside its syscall. While T is
  * blocked only the driver is scheduled, and any other task entering a
  * syscall is rewound and retried later, so FAT static buffers are never
- * re-entered. If the driver dies (purge) or stalls (no progress for
- * ATA_RPC_TIMEOUT_TICKS), the RPC is aborted and the callback falls back to
- * the Ring 0 PIO path (only possible once the driver no longer holds the
- * controller claim). */
+ * re-entered. If the driver dies or stalls, the strict image respawns
+ * bin/atadriver and retries the operation in Ring 3. The legacy image
+ * (kernel_fat_pio_fallback_enabled) still falls back to Ring 0 FAT PIO. */
 #define ATA_RPC_TIMEOUT_TICKS 300U
+#define ATA_RESPAWN_WAIT_TICKS 3000U
+#define ATA_RESPAWN_LIMIT 4U
 #define ATA_RPC_IO 1
 #define ATA_RPC_FLUSH 2
 /* Tranche 4 suite: a whole FAT16/FAT32/overlay operation served by the
  * driver's own filesystem code (kernel/ata_fsop.c). */
 #define ATA_RPC_FSOP 3
+#define ATA_RPC_WAIT_STORE 4
 static task_t* g_rpc_waiter;
 static int g_rpc_kind;
 static uint32_t g_rpc_started;
 static int g_rpc_aborted;
 static int32_t g_boot_driver_pid;
 static int g_boot_driver_registered;
+static int32_t g_respawn_pid;
+static uint32_t g_respawn_count;
+static int32_t g_purge_pid;
 
 static void ata_rpc_abort(void) {
     task_t* waiter = g_rpc_waiter;
@@ -194,10 +200,21 @@ static void ata_rpc_sched_hook(uint32_t now) {
     task_t* waiter = g_rpc_waiter;
     task_t* driver;
     if (!waiter || waiter->state != TASK_BLOCKED_KERNEL) return;
+    if (g_rpc_kind == ATA_RPC_WAIT_STORE) {
+        /* The respawned task is queued, then spends a long time in syscalls
+         * before OS_ATA_FS_READY. A missed lookup is not death. The deadline
+         * is the only fail-closed exit; the handover wakes the waiter. */
+        if (now - g_rpc_started > ATA_RESPAWN_WAIT_TICKS) {
+            print_string_serial("[ATA] sector rpc aborted\n");
+            ata_rpc_abort();
+        }
+        return;
+    }
     driver = task_sched_only;
     if (now - g_rpc_started > ATA_RPC_TIMEOUT_TICKS ||
         !driver || driver->state == TASK_TERMINATED ||
-        (driver->state != TASK_READY && driver->state != TASK_RUNNING)) {
+        (driver->state != TASK_READY && driver->state != TASK_RUNNING &&
+         driver->state != TASK_BLOCKED_IPC)) {
         print_string_serial("[ATA] sector rpc aborted\n");
         ata_rpc_abort();
     }
@@ -268,13 +285,9 @@ int syscall_ata_fat_io(uint32_t drive, uint32_t lba, uint32_t count, void* buf,
         driver_pid = ata_live_driver();
         driver = driver_pid > 0 ? get_task_by_id(driver_pid) : NULL;
         if (done < count && (!driver || driver->state != TASK_READY)) {
-            /* Remaining sectors through the fallback path. */
-            int rc = write ? ata_write_sectors_drive((uint8_t)drive, lba + done, count - done,
-                                                     (const uint8_t*)buf + done * 512U)
-                           : ata_read_sectors_drive((uint8_t)drive, lba + done, count - done,
-                                                    (uint8_t*)buf + done * 512U);
-            if (rc == 0) ata_job_note_fat_kernel_pio(count - done, ata_live_driver() > 0);
-            *out_rc = rc;
+            /* Strict image: do not finish the burst with Ring 0 FAT PIO. */
+            *out_rc = kernel_fat_sector_fallback((uint8_t)drive, lba + done, count - done,
+                                                 (uint8_t*)buf + done * 512U, write);
             return 1;
         }
     }
@@ -292,12 +305,94 @@ void syscall_ata_set_boot_driver(int32_t pid) {
     ata_job_set_boot_driver(pid);
 }
 
+static void ata_serial_u32(uint32_t v) {
+    char b[11];
+    int n = 0;
+    do { b[n++] = (char)('0' + (v % 10U)); v /= 10U; } while (v && n < 10);
+    while (n) write_serial(b[--n]);
+}
+
+/* Strict image: after the live driver dies, spawn bin/atadriver again.
+ * The new task is a boot service so it runs during the shell's keyboard wait.
+ * Budget stops a crash loop from filling the task table. Returns 0 if a
+ * live or freshly spawned driver exists. */
+static int ata_supervisor_respawn(void) {
+    task_t* existing;
+    task_t* born;
+    if (kernel_fat_pio_fallback_enabled()) return -1;
+    if (ata_live_driver() > 0) return 0;
+    if (g_respawn_pid > 0) {
+        existing = get_task_by_id(g_respawn_pid);
+        if (existing && existing->type == TASK_TYPE_USER &&
+            existing->state != TASK_TERMINATED &&
+            (int32_t)existing->id != g_purge_pid) return 0;
+    }
+    if (g_respawn_count >= ATA_RESPAWN_LIMIT) {
+        print_string_serial("[ATA] supervised respawn budget exhausted\n");
+        return -1;
+    }
+    born = create_task_from_initrd_file("bin/atadriver");
+    if (!born) {
+        print_string_serial("[ATA] supervised respawn failed\n");
+        return -1;
+    }
+    born->boot_service = 1U;
+    task_queue_move_first_user(born);
+    g_respawn_pid = (int32_t)born->id;
+    g_respawn_count++;
+    ata_job_note_respawn();
+    print_string_serial("[ATA] supervised respawn bin/atadriver pid ");
+    ata_serial_u32((uint32_t)born->id);
+    print_string_serial("\n");
+    return 0;
+}
+
+/* Block until the respawned driver has taken the store, or the wait times out.
+ * Returns 1 when the store covers `store`. */
+static int ata_wait_store(uint32_t store) {
+    task_t* self = current_task;
+    uint32_t started = timer_get_ticks();
+    if (!self || kernel_fat_pio_fallback_enabled()) return 0;
+    while ((ata_fsop_store_flags(ata_live_driver()) & store) == 0U) {
+        task_t* drv;
+        int32_t pid = ata_live_driver();
+        if (pid <= 0) pid = g_respawn_pid;
+        drv = pid > 0 ? get_task_by_id(pid) : 0;
+        if (!drv || drv->type != TASK_TYPE_USER || drv->state == TASK_TERMINATED) {
+            if (ata_supervisor_respawn() != 0) return 0;
+            drv = get_task_by_id(g_respawn_pid);
+            if (!drv) return 0;
+        }
+        if (timer_get_ticks() - started > ATA_RESPAWN_WAIT_TICKS) {
+            print_string_serial("[ATA] supervised respawn timed out\n");
+            return 0;
+        }
+        g_rpc_kind = ATA_RPC_WAIT_STORE;
+        g_rpc_waiter = self;
+        g_rpc_aborted = 0;
+        g_rpc_started = started;
+        task_sched_only = drv;
+        self->state = TASK_BLOCKED_KERNEL;
+        self->kctx_valid = 1U;
+        if (kctx_save(self->kctx) == 0) {
+            schedule(self->syscall_frame);
+        }
+        g_rpc_waiter = 0;
+        task_sched_only = 0;
+        self->kctx_valid = 0U;
+        if (g_rpc_aborted) return 0;
+    }
+    return 1;
+}
+
 /* Called after a service purge: if the driver vanished with a queued or
- * in-flight flush, persist through the Ring 0 PIO fallback right away; a
- * task blocked on a sector RPC is resumed and falls back too. */
+ * in-flight flush, the legacy image persists through Ring 0 PIO. The strict
+ * image parks the mirror and respawns bin/atadriver. A task blocked on a
+ * sector RPC is resumed either way. */
 static void ata_bridge_after_purge(void) {
     int in_use;
     int persist = 0;
+    int strict = !kernel_fat_pio_fallback_enabled();
     if (ata_live_driver() > 0) return;
     ata_rpc_abort();
     in_use = ata_job_controller_in_use();
@@ -305,6 +400,20 @@ static void ata_bridge_after_purge(void) {
         /* The dead driver may have stopped mid-transfer: reset the channel. */
         if (ata_channel_reset() == 0) print_string_serial("[ATA] channel reset after driver loss\n");
         ata_job_note_channel_reset();
+    }
+    if (strict) {
+        if (ata_fsop_store_pid() > 0) {
+            uint32_t size = 0U;
+            const uint8_t* image = ata_fsop_mirror(&size);
+            uint32_t flags = ata_fsop_store_flags(ata_fsop_store_pid());
+            ata_fsop_store_drop();
+            fat16_invalidate_caches(fat16_root());
+            if ((flags & OS_ATA_FS_STORE_OVERLAY) != 0U && image)
+                (void)overlay_restore(image, size);
+            print_string_serial("[ATA] store parked for supervised respawn\n");
+        }
+        (void)ata_supervisor_respawn();
+        return;
     }
     /* Tranche 4 suite: the store served by the dead driver comes back to the
      * kernel (fallback). The overlay is restored from the last image the
@@ -347,11 +456,13 @@ static void ata_bridge_after_purge(void) {
  *  - driver cannot serve (suspended, RPC busy): OS_ATA_FS_UNAVAILABLE, the
  *    stale kernel copy is never used instead (fail closed);
  *  - driver stalled past the timeout: OS_ATA_FS_TIMEOUT (outcome unknown);
- *  - driver died: the store is back in Ring 0 (ata_bridge_after_purge); an
- *    overlay op the driver already published returns its published result,
- *    anything else that committed nothing is redone by Ring 0 once; a FAT
- *    mutation that completed at least one sector write returns
- *    OS_ATA_FS_ABORTED (no replay of an uncertain mutation).
+ *  - driver died, legacy image: the store is back in Ring 0; an overlay op
+ *    the driver already published returns its published result, anything else
+ *    that committed nothing is redone by Ring 0 once; a FAT mutation that
+ *    completed at least one sector write returns OS_ATA_FS_ABORTED;
+ *  - driver died, strict image: the same committed-sector rule, otherwise
+ *    the kernel respawns bin/atadriver and retries the operation in Ring 3.
+ *    fatkpio does not move. There is no Ring 0 redo.
  * ========================================================================== */
 #define ATA_FS_LOCAL 0
 #define ATA_FS_DONE 1
@@ -361,14 +472,28 @@ static uint8_t g_fsop_out[OS_ATA_FSOP_BUFFER_SIZE];
 static int ata_fs_relay(uint32_t op, uint32_t arg0, uint32_t arg1, const char* path,
                         const char* path2, const void* in, uint32_t in_len, void* out,
                         uint32_t out_cap, int32_t* rc) {
-    int32_t driver_pid = ata_live_driver();
+    int32_t driver_pid;
     uint32_t store = fsop_store_for(op);
     uint32_t flags = 0U;
     task_t* driver;
     os_ata_fsop_reply_t reply;
     int len, st, committed, published;
     int32_t published_result = 0;
-    if (store == 0U || (ata_fsop_store_flags(driver_pid) & store) == 0U) return ATA_FS_LOCAL;
+    int tries = 0;
+retry:
+    tries++;
+    driver_pid = ata_live_driver();
+    if (store == 0U || (ata_fsop_store_flags(driver_pid) & store) == 0U) {
+        if (!kernel_fat_pio_fallback_enabled()) {
+            if (tries >= 3 || !ata_wait_store(store)) {
+                ata_fsop_note_unavailable();
+                *rc = OS_ATA_FS_UNAVAILABLE;
+                return ATA_FS_DONE;
+            }
+            goto retry;
+        }
+        return ATA_FS_LOCAL;
+    }
     driver = ata_rpc_driver_for_current();
     if (!driver) {
         ata_fsop_note_unavailable();
@@ -389,6 +514,10 @@ static int ata_fs_relay(uint32_t op, uint32_t arg0, uint32_t arg1, const char* p
         ata_fsop_note_kernel_live();
         return ATA_FS_LOCAL;
     }
+    /* Zero on every retry. flags lives across kctx_save, and the retry label
+     * sits below the initializer, so a respawn would otherwise resubmit the
+     * one-shot debug crash. */
+    flags = 0U;
     if (fsop_is_fat_mutation(op) && ata_job_debug_take_crash()) flags = OS_ATA_JOB_FLAG_DEBUG_CRASH;
     if (ata_fsop_submit((uint32_t)len, op, driver_pid, flags) < 0) {
         ata_fsop_note_unavailable();
@@ -417,21 +546,26 @@ static int ata_fs_relay(uint32_t op, uint32_t arg0, uint32_t arg1, const char* p
         *rc = OS_ATA_FS_TIMEOUT;
         return ATA_FS_DONE;
     }
-    /* Driver died: ata_bridge_after_purge already took the store back. */
-    if (store == OS_ATA_FS_STORE_OVERLAY) {
-        if (published && fsop_is_mutation(op)) {
-            *rc = published_result;
+    /* Driver died. A mutation that already wrote a sector is not replayed. */
+    if (store == OS_ATA_FS_STORE_OVERLAY && published && fsop_is_mutation(op)) {
+        *rc = published_result;
+        return ATA_FS_DONE;
+    }
+    if (store != OS_ATA_FS_STORE_OVERLAY) {
+        fat16_invalidate_caches(fat16_root());
+        if (committed && fsop_is_mutation(op)) {
+            print_string_serial("[ATA] fs op aborted after a committed sector\n");
+            *rc = OS_ATA_FS_ABORTED;
             return ATA_FS_DONE;
         }
-        ata_fsop_note_redone();
-        print_string_serial("[ATA] fs op redone in Ring 0 after driver loss\n");
-        return ATA_FS_LOCAL;
     }
-    fat16_invalidate_caches(fat16_root());
-    if (committed && fsop_is_mutation(op)) {
-        print_string_serial("[ATA] fs op aborted after a committed sector\n");
-        *rc = OS_ATA_FS_ABORTED;
-        return ATA_FS_DONE;
+    if (!kernel_fat_pio_fallback_enabled()) {
+        if (tries >= 3 || !ata_wait_store(store)) {
+            ata_fsop_note_unavailable();
+            *rc = OS_ATA_FS_UNAVAILABLE;
+            return ATA_FS_DONE;
+        }
+        goto retry;
     }
     ata_fsop_note_redone();
     print_string_serial("[ATA] fs op redone in Ring 0 after driver loss\n");
@@ -654,6 +788,13 @@ static int sys_ata_fs_ready(uint32_t flags, uint8_t* image, uint32_t capacity) {
     fat16_invalidate_caches(fat16_root());
     ata_fsop_note_handover();
     print_string_serial("[ATA] store handed to the Ring 3 driver\n");
+    /* A syscall waiting for this handover resumes on the driver's next yield.
+     * schedule() from inside this syscall would drop the driver's return. */
+    if (g_rpc_waiter && g_rpc_waiter->state == TASK_BLOCKED_KERNEL &&
+        g_rpc_kind == ATA_RPC_WAIT_STORE) {
+        g_rpc_waiter->state = TASK_READY;
+        task_sched_only = g_rpc_waiter;
+    }
     return (int)size;
 }
 
@@ -745,6 +886,7 @@ static void service_notify_purge_pid(int32_t pid) {
     service_registry_entry_t owned[SERVICE_REGISTRY_CAPACITY];
     int count = service_registry_collect_owned(pid, owned, SERVICE_REGISTRY_CAPACITY);
     int i;
+    g_purge_pid = pid;
     if (count > 0) {
         for (i = 0; i < count && i < (int)SERVICE_REGISTRY_CAPACITY; i++) {
             service_notify_change(owned[i].name, pid, 0, OS_SERVICE_EVENT_PURGED);
@@ -1293,11 +1435,14 @@ void syscall_handler(cpu_state_t* cpu) {
     asm volatile("sti");
 
     if (current_task) current_task->syscall_frame = cpu;
-    /* Tranche 4 slice 3: while a task is blocked mid-FAT on a sector RPC,
-     * any other task (except the driver) retries its syscall later: rewind
-     * over "int 0x80" (2 bytes) and yield. */
+    /* While a task is blocked mid-FAT, only the live driver or the supervised
+     * respawn (not registered yet, so not ata_live_driver) may enter a
+     * syscall. Everyone else is rewound over int 0x80 and yields. Rewinding
+     * the respawn livelocks: it never reaches OS_ATA_FS_READY. */
     if (g_rpc_waiter && current_task && current_task != g_rpc_waiter &&
-        (int32_t)current_task->id != ata_live_driver()) {
+        current_task != task_sched_only &&
+        (int32_t)current_task->id != ata_live_driver() &&
+        (int32_t)current_task->id != g_respawn_pid) {
         cpu->eip -= 2U;
         schedule(cpu);
         return;

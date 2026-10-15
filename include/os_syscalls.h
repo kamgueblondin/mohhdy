@@ -262,7 +262,8 @@
 #define SYS_ATA_STATUS 135
 /* Tranche 4 test hook (root shell only): EBX = OS_ATA_DEBUG_CRASH_FAT_WRITE
  * arms a one-shot crash of the driver in the middle of its next FAT write
- * job, to prove the Ring 0 fallback after a driver death mid-transfer. */
+ * job. The strict image respawns bin/atadriver and redoes the write in
+ * Ring 3. The legacy image still redoes it with Ring 0 FAT PIO. */
 #define SYS_ATA_DEBUG 136
 /* Tranche 5 slice 2 (net IPC relay). 137 is reserved to the live net-driver
  * worker: EBX = const os_net_relay_reply_t*, answers the relayed request
@@ -1512,7 +1513,8 @@ typedef struct {
     uint32_t fs_handovers;     /* store handovers kernel -> driver */
     uint32_t fs_restores;      /* kernel store restored from the mirror after driver loss */
     uint32_t boot_mount_deferred; /* 1: strict boot left FAT mount to the Ring 3 driver */
-    uint32_t slave_present;       /* 1: IDENTIFY saw the slave drive (FAT32 candidate) */
+    uint32_t slave_present;       /* 1: status probe saw the slave (not IDENTIFY) */
+    uint32_t supervised_respawns; /* strict image: bin/atadriver spawned again after death */
 } os_ata_status_t;
 #define OS_TASK_SUPERVISION_EVENT_SIZE 24U
 

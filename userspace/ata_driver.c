@@ -88,6 +88,29 @@ static uint8_t job_buf[OS_ATA_JOB_MAX_SECTORS * 512U];
 static uint32_t fat_rd, fat_wr, fat_reported_rd, fat_reported_wr;
 
 static void delay(void) { (void)inb(ATA_ALT); (void)inb(ATA_ALT); (void)inb(ATA_ALT); (void)inb(ATA_ALT); }
+static int wait_bsy(void);
+static int wait_drq(void);
+
+/* IDENTIFY (0xEC) belongs to this task. Ring 0 on the strict image never
+ * sends it. Drain the 256-word payload; the model string is not parsed. */
+static int identify_master(void) {
+    uint32_t i;
+    uint8_t st;
+    outb(ATA_DRIVE, 0xA0);
+    delay();
+    if (wait_bsy() < 0) return -1;
+    outb(ATA_SECCOUNT, 0);
+    outb(ATA_LBA0, 0);
+    outb(ATA_LBA1, 0);
+    outb(ATA_LBA2, 0);
+    outb(ATA_CMD, 0xEC);
+    delay();
+    st = inb(ATA_CMD);
+    if (st == 0x00 || st == 0xFF) return -1;
+    if (wait_drq() < 0) return -1;
+    for (i = 0; i < 256U; i++) (void)inw(ATA_DATA);
+    return 0;
+}
 
 static int wait_bsy(void) {
     uint32_t i;
@@ -524,6 +547,12 @@ void main(void) {
     }
     claim();
     status = inb(ATA_CMD);
+    if (status != 0xFF && status != 0x00 && identify_master() != 0) {
+        release();
+        puts("atadriver identify failed\n");
+        for (;;) yield();
+    }
+    if (status != 0xFF && status != 0x00) puts("atadriver identify ok\n");
     release();
     if (status == 0xFF || status == 0x00) puts("atadriver ring3 pio no-disk");
     else puts("atadriver ring3 pio ready");

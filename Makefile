@@ -116,7 +116,7 @@ $(GGUF_FLAG_STAMP):
 	@rm -f build/.gguf-ring0-fallback-*
 	@touch $@
 NETLEGACY_IMAGE = build/mohhdy-netlegacy.bin
-NETLEGACY_OBJECTS = $(filter-out build/syscall.o build/ne2k_hw.o,$(OBJECTS)) build/syscall-netlegacy.o build/ne2k_hw-full.o build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o
+NETLEGACY_OBJECTS = $(filter-out build/syscall.o build/ne2k_hw.o,$(OBJECTS)) build/syscall-netlegacy.o build/ne2k_hw-full.o build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o build/ata_identify_ring0.o build/fat_pio_fallback_legacy.o
 
 build/syscall-netlegacy.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h $(GGUF_FLAG_STAMP)
 	@mkdir -p $(dir $@)
@@ -140,11 +140,11 @@ NET_STACK_OBJECTS = build/net_ethernet_arp.o build/net_dhcp.o build/net_ipv4_udp
 build/net_ring0_absent.o: kernel/net_ring0_absent.c kernel/net_llm_client.h kernel/net_wire.h kernel/net_stack_exec.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
-STRICT_OBJECTS = $(filter-out $(NET_STACK_OBJECTS),$(OBJECTS)) build/net_ring0_absent.o build/nic_boot_strict.o build/boot_storage_strict.o build/boot_storage_install.o
+STRICT_OBJECTS = $(filter-out $(NET_STACK_OBJECTS),$(OBJECTS)) build/net_ring0_absent.o build/nic_boot_strict.o build/boot_storage_strict.o build/boot_storage_install.o build/ata_identify_absent.o build/fat_pio_fallback_absent.o
 ifeq ($(NET_RING0_FALLBACK),0)
 IMAGE_OBJECTS = $(STRICT_OBJECTS)
 else
-IMAGE_OBJECTS = $(OBJECTS) build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o
+IMAGE_OBJECTS = $(OBJECTS) build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o build/ata_identify_ring0.o build/fat_pio_fallback_legacy.o
 endif
 $(OS_IMAGE): $(IMAGE_OBJECTS)
 	@mkdir -p $(dir $@)
@@ -333,6 +333,22 @@ build/boot_storage_legacy.o: kernel/boot_storage_legacy.c kernel/boot_storage.h 
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/boot_storage_install.o: kernel/boot_storage_install.c kernel/boot_storage.h kernel/fs/fat16.h kernel/fs/fat32.h fs/overlay.h include/os_syscalls.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/ata_identify_absent.o: kernel/ata_identify_absent.c kernel/ata.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/ata_identify_ring0.o: kernel/ata_identify_ring0.c kernel/ata.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/fat_pio_fallback_absent.o: kernel/fat_pio_fallback_absent.c kernel/fat_pio_fallback.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/fat_pio_fallback_legacy.o: kernel/fat_pio_fallback_legacy.c kernel/fat_pio_fallback.h kernel/ata.h kernel/syscall/syscall.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -935,9 +951,13 @@ strict-image-check: $(OS_IMAGE) kernel-netlegacy
 		echo "FAIL: Ring 0 network stack linked in the strict image"; exit 1; fi
 	@if nm $(OS_IMAGE) | grep -E ' (ne2k_probe|kernel_ring0_boot_fat_mount)$$' >/dev/null; then \
 		echo "FAIL: Ring 0 NIC probe or FAT boot mount linked in the strict image"; exit 1; fi
+	@if nm $(OS_IMAGE) | grep -E ' (kernel_ring0_ata_identify|kernel_ring0_fat_pio_fallback)$$' >/dev/null; then \
+		echo "FAIL: Ring 0 ATA IDENTIFY or FAT PIO fallback linked in the strict image"; exit 1; fi
 	@nm $(NETLEGACY_IMAGE) | grep -q ' net_tls_record_' || { echo "FAIL: legacy image lost its stack"; exit 1; }
 	@nm $(NETLEGACY_IMAGE) | grep -q ' ne2k_probe$$' || { echo "FAIL: legacy image lost ne2k_probe"; exit 1; }
 	@nm $(NETLEGACY_IMAGE) | grep -q ' kernel_ring0_boot_fat_mount$$' || { echo "FAIL: legacy image lost the Ring 0 FAT mount"; exit 1; }
+	@nm $(NETLEGACY_IMAGE) | grep -q ' kernel_ring0_ata_identify$$' || { echo "FAIL: legacy image lost Ring 0 ATA IDENTIFY"; exit 1; }
+	@nm $(NETLEGACY_IMAGE) | grep -q ' kernel_ring0_fat_pio_fallback$$' || { echo "FAIL: legacy image lost Ring 0 FAT PIO fallback"; exit 1; }
 	@nm $(OS_IMAGE) | grep -q ' kernel_boot_storage$$' || { echo "FAIL: strict image lost kernel_boot_storage"; exit 1; }
 	@nm $(OS_IMAGE) | grep -q ' kernel_nic_boot_probe$$' || { echo "FAIL: strict image lost kernel_nic_boot_probe"; exit 1; }
 	@echo "OK strict image without Ring 0 network stack; legacy image keeps it"

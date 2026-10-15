@@ -82,5 +82,6 @@ void ata_job_note_rpc_abort(void);
  * ata_job_driver_gone to know whether the channel may be mid-command). */
 int ata_job_controller_in_use(void);
 void ata_job_note_channel_reset(void);
+void ata_job_note_respawn(void);
 
 #endif

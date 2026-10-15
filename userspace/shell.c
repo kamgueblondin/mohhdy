@@ -4908,6 +4908,7 @@ static void cmd_ata_status(shell_context_t* ctx, char args[][128], int arg_count
     print_string(" publishes "); print_uint(st.fs_publishes);
     print_string(" handovers "); print_uint(st.fs_handovers);
     print_string(" restores "); print_uint(st.fs_restores);
+    print_string(" respawns "); print_uint(st.supervised_respawns);
     print_string(" end\n");
 }
 

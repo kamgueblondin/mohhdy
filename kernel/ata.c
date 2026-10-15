@@ -22,7 +22,6 @@ extern void outb(unsigned short port, unsigned char data);
 
 #define ATA_CMD_READ_PIO  0x20
 #define ATA_CMD_WRITE_PIO 0x30
-#define ATA_CMD_IDENTIFY  0xEC
 
 /* Status polls per wait. Each poll is a port read trapped by the
  * hypervisor; with cache=writethrough a sector write includes a host
@@ -32,17 +31,6 @@ extern void outb(unsigned short port, unsigned char data);
 
 static int g_ata_present;
 static uint8_t g_ata_drive_present[2];
-
-#ifndef ATA_PIO_HOST_HOOKS
-static unsigned short ata_inw(unsigned short port) {
-    unsigned short ret;
-    asm volatile ("inw %1, %0" : "=a"(ret) : "dN"(port));
-    return ret;
-}
-#else
-unsigned short ata_host_inw(unsigned short port);
-#define ata_inw ata_host_inw
-#endif
 
 #ifndef ATA_PIO_HOST_HOOKS
 /* Les transferts PIO d'un secteur sont contigus : rep insw/outsw evite une
@@ -119,9 +107,17 @@ int ata_present_drive(uint8_t drive) {
     return drive < 2U && g_ata_drive_present[drive];
 }
 
+/* Strict image: ata_identify_absent.c returns 0 (no 0xEC).
+ * Legacy image: kernel_ring0_ata_identify drains the IDENTIFY payload.
+ * The unit-test host model has no IDENTIFY data; presence is the status probe. */
+#ifdef ATA_PIO_HOST_HOOKS
+static int ata_boot_identify(void) { return 0; }
+#else
+int ata_boot_identify(void);
+#endif
+
 int ata_init(void) {
     int st;
-    uint32_t i;
 
     g_ata_present = 0;
     g_ata_drive_present[0] = 0U; g_ata_drive_present[1] = 0U;
@@ -129,24 +125,10 @@ int ata_init(void) {
     outb(ATA_DRIVE, 0xA0);
     ata_io_delay();
     st = inb(ATA_STATUS);
-    /* No controller / no drive: fail immediately so QEMU without -hda does not hang. */
+    /* No controller / no drive: fail immediately so QEMU without -hda does not hang.
+     * This read is not IDENTIFY. IDENTIFY (0xEC) is ata_boot_identify. */
     if (st == 0x00 || st == 0xFF) return -1;
-
-    outb(ATA_SECCOUNT, 0);
-    outb(ATA_LBA0, 0);
-    outb(ATA_LBA1, 0);
-    outb(ATA_LBA2, 0);
-    outb(ATA_CMD, ATA_CMD_IDENTIFY);
-    ata_io_delay();
-
-    st = inb(ATA_STATUS);
-    if (st == 0x00 || st == 0xFF) return -1;
-    if (ata_wait_not_busy() < 0) return -1;
-    if (ata_wait_drq() < 0) return -1;
-
-    for (i = 0; i < 256; i++) {
-        (void)ata_inw(ATA_DATA);
-    }
+    if (ata_boot_identify() != 0) return -1;
 
     g_ata_present = 1;
     g_ata_drive_present[0] = 1U;
