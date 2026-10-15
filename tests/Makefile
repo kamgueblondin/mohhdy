@@ -5,8 +5,15 @@ CC = gcc
 CFLAGS_BASE = -Wall -Wextra -std=c99 -I. -I.. -I../kernel -I../include -DKERNEL_TEST=1
 # Les mocks de syscall reproduisent des registres i386 32 bits. Sans cette
 # base non-PIE, des pointeurs hôte PIE 64 bits seraient tronqués dans EBX/ECX.
-CFLAGS_KERNEL = $(CFLAGS_BASE) -DUSE_INLINE_ASM -g -m32 -fno-pie -no-pie -msse2 -mfpmath=sse
-CFLAGS_USER = $(CFLAGS_BASE) -DMOHHDY_OSUI_HOST_TEST=1 -g -m32 -fno-pie -no-pie
+# ENABLE_COVERAGE=1 passes --coverage (-fprofile-arcs -ftest-coverage).
+# Notes land next to the test binary under build/, because -o is ../build/...
+ifeq ($(ENABLE_COVERAGE),1)
+CFLAGS_COVERAGE = --coverage
+else
+CFLAGS_COVERAGE =
+endif
+CFLAGS_KERNEL = $(CFLAGS_BASE) -DUSE_INLINE_ASM -g -m32 -fno-pie -no-pie -msse2 -mfpmath=sse $(CFLAGS_COVERAGE)
+CFLAGS_USER = $(CFLAGS_BASE) -DMOHHDY_OSUI_HOST_TEST=1 -g -m32 -fno-pie -no-pie $(CFLAGS_COVERAGE)
 
 # Répertoires
 TEST_DIR = .
@@ -417,10 +424,10 @@ coverage-report:
 	@echo "Generating coverage report..."
 	@mkdir -p $(LOG_DIR)
 	@if [ "$(ENABLE_COVERAGE)" = "1" ]; then \
-		echo "Coverage: not measured. CFLAGS do not pass -fprofile-arcs or -ftest-coverage, so this run writes no .gcda and gcov reports no percentage." > $(LOG_DIR)/coverage_report.txt; \
-		gcov -b $(USERSPACE_TESTS) || true; \
+		python3 ../scripts/gcov_host_summary.py | tee $(LOG_DIR)/coverage_report.txt; \
 	else \
-		echo "Coverage: not measured (no gcov instrumentation by default)." > $(LOG_DIR)/coverage_report.txt; \
+		echo "Coverage: not measured (no gcov instrumentation by default). Rebuild with ENABLE_COVERAGE=1." > $(LOG_DIR)/coverage_report.txt; \
+		cat $(LOG_DIR)/coverage_report.txt; \
 	fi
 
 test-report:
@@ -456,6 +463,7 @@ install-deps:
 clean:
 	@echo "Cleaning test binaries and logs..."
 	@rm -rf $(BUILD_DIR)/unit $(BUILD_DIR)/integration $(BUILD_DIR)/system $(BUILD_DIR)/performance $(BUILD_DIR)/robustness
+	@rm -f $(BUILD_DIR)/test_* $(BUILD_DIR)/*.gcda $(BUILD_DIR)/*.gcno
 	@rm -f $(LOG_DIR)/test_results_*.log
 	@echo "Clean completed"
 
