@@ -11,6 +11,7 @@
 #include "../fs/initrd.h"
 #include "../fs/overlay.h"
 #include "ata.h"
+#include "fat_pio_fallback.h"
 #include "fs/fat16.h"
 #include "fs/fat32.h"
 #include "llm/gpt2_model.h"
@@ -319,17 +320,13 @@ int kernel_net_wire_close(int socket_id) {
 
 static uint8_t fat16_ata_read_window[FAT16_ATA_READ_WINDOW_SECTORS * 512U];
 
-/* Tranche 4 slice 3: FAT16/FAT32 sector I/O goes through the Ring 3
- * atadriver when it is live (synchronous sector RPC from the calling
- * syscall, see syscall_ata_fat_io); Ring 0 PIO only at boot (mount, before
- * any task) or as the fallback when the driver is absent or dead. */
+/* FAT16/FAT32 sector I/O goes through the Ring 3 atadriver when it is live.
+ * The strict image refuses Ring 0 FAT PIO (kernel_fat_sector_fallback returns
+ * -1). The legacy image still counts those sectors in fatkpio. */
 static int fat_disk_io(uint8_t drive, uint32_t lba, uint32_t count, void* buffer, int write) {
     int rc;
     if (syscall_ata_fat_io(drive, lba, count, buffer, write, &rc)) return rc;
-    rc = write ? ata_write_sectors_drive(drive, lba, count, buffer)
-               : ata_read_sectors_drive(drive, lba, count, buffer);
-    if (rc == 0) syscall_ata_note_fat_kernel_pio(count);
-    return rc;
+    return kernel_fat_sector_fallback(drive, lba, count, buffer, write);
 }
 
 int kernel_fat16_ata_read_sector(uint32_t lba, void* buffer) {
@@ -974,7 +971,8 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
 
     /* Tranche 4 slice 3: the Ring 3 atadriver is spawned at boot when an IDE
      * disk is present, so FAT and overlay disk I/O take the driver path by
-     * default; Ring 0 PIO stays the fallback when it is absent or dead. It is
+     * default. The strict image respawns it after death (no Ring 0 FAT PIO).
+     * The legacy image still falls back to Ring 0 PIO. It is
      * created after the shell (the shell keeps PID 1) but runs first so it
      * registers before the shell reaches its input loop. It has no user
      * parent; only the root shell may stop it (kill). The overlay snapshot

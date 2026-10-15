@@ -6,6 +6,7 @@ P2P node (p2p-up). The hub only floods frames between the guests (no DHCP,
 DNS, TLS or public internet). Scenarios:
   1. discovery + encrypted message + health/stats (no plaintext on wire);
   2. replication, partition then anti-entropy sync, majority consensus;
+  2b. Raft pre-vote, hub wire cut, journal compaction, one entry past the prefix;
   3. link failure detection and relayed (routed) delivery.
 """
 from __future__ import print_function
@@ -42,7 +43,11 @@ NODES = [
 
 
 class P2pHub(SharedEthernetHub):
-    """Flood-only hub that records the P2P datagrams it carries."""
+    """Flood-only hub that records the P2P datagrams it carries.
+
+    cut_pair drops frames between two learned guest MACs in both directions.
+    That is a wire cut on the shared segment, not an application p2p-block.
+    """
 
     def __init__(self):
         SharedEthernetHub.__init__(self, respond=False, full_tls=False, proxy_peer_syn_ack=False)
@@ -50,6 +55,34 @@ class P2pHub(SharedEthernetHub):
         self.p2p_plaintext = 0
         self.p2p_sealed = 0
         self.p2p_hello = 0
+        self._mac_of = {}
+        self.cut = set()
+
+    def cut_pair(self, mac_a, mac_b):
+        self.cut.add((mac_a, mac_b))
+        self.cut.add((mac_b, mac_a))
+
+    def heal_pair(self, mac_a, mac_b):
+        self.cut.discard((mac_a, mac_b))
+        self.cut.discard((mac_b, mac_a))
+
+    def _flood(self, source, frame):
+        src = None
+        if len(frame) >= 12:
+            src = ":".join("%02x" % b for b in bytearray(frame[6:12]))
+            self._mac_of[id(source)] = src
+        with self._lock:
+            clients = list(self._clients)
+        for connection in clients:
+            if connection is source:
+                continue
+            dst = self._mac_of.get(id(connection))
+            if src and dst and (src, dst) in self.cut:
+                continue
+            try:
+                self._send_frame(connection, frame)
+            except OSError:
+                pass
 
     def _handle_frame(self, connection, frame):
         if len(frame) >= 42 and frame[12:14] == b"\x08\x00" and frame[23] == 17:
@@ -192,12 +225,16 @@ def main():
             raise RuntimeError("missing votes")
         say("scenario 2 ok: majority consensus committed (%.0fs)" % (time.monotonic() - t0))
 
-        # US-064: Raft log on three guests. Partition is p2p-block (frames
-        # dropped), then the follower catches the missing entry back up.
+        # US-064: Raft log on three guests. Pre-vote, then a hub wire cut
+        # between gamma and the other two (not p2p-block), then compaction
+        # and one more entry past the compacted prefix.
         cmd(a, "p2p-raft elect", "p2p-raft election started")
+        if "p2p raft prevote started" not in log(a):
+            raise RuntimeError("alpha did not start a pre-vote")
         cmd(a, "p2p-poll 1", "p2p-poll ok")
         cmd(b, "p2p-poll 1", "p2p-poll ok")
         cmd(c, "p2p-poll 1", "p2p-poll ok")
+        cmd(a, "p2p-poll 1", "p2p-poll ok")
         cmd(a, "p2p-raft", "p2p raft role leader")
         cmd(a, "p2p-raft-put tone blue", "p2p-raft-put ok index 1")
         cmd(a, "p2p-poll 1", "p2p-poll ok")
@@ -205,20 +242,28 @@ def main():
         cmd(c, "p2p-poll 1", "p2p-poll ok")
         wait_log(b, "p2p raft commit index 1 tone=blue", 30)
         wait_log(c, "p2p raft commit index 1 tone=blue", 30)
-        cmd(c, "p2p-block alpha", "p2p-block ok alpha")
-        cmd(c, "p2p-block beta", "p2p-block ok beta")
+        hub.cut_pair(a["mac"], c["mac"])
+        hub.cut_pair(b["mac"], c["mac"])
+        gamma_at_cut = len(base.log_text(c["log"]))
         cmd(a, "p2p-raft-put late yes", "p2p-raft-put ok index 2")
         cmd(a, "p2p-poll 1", "p2p-poll ok")
         cmd(b, "p2p-poll 1", "p2p-poll ok")
         wait_log(b, "p2p raft commit index 2 late=yes", 30)
-        if "late=yes" in log(c):
-            raise RuntimeError("gamma applied late=yes while partitioned")
-        cmd(c, "p2p-unblock alpha", "p2p-unblock ok alpha")
-        cmd(c, "p2p-unblock beta", "p2p-unblock ok beta")
+        if "late=yes" in log(c, gamma_at_cut):
+            raise RuntimeError("gamma applied late=yes during the hub cut")
+        hub.heal_pair(a["mac"], c["mac"])
+        hub.heal_pair(b["mac"], c["mac"])
         cmd(a, "p2p-poll 2", "p2p-poll ok")
         cmd(c, "p2p-poll 2", "p2p-poll ok")
         wait_log(c, "p2p raft commit index 2 late=yes", 30)
-        say("scenario 2b: raft replicate and catch-up ok (%.0fs)" % (time.monotonic() - t0))
+        cmd(a, "p2p-raft-compact", "p2p-raft-compact ok index 2")
+        cmd(a, "p2p-raft-put next ok", "p2p-raft-put ok index 3")
+        cmd(a, "p2p-poll 1", "p2p-poll ok")
+        cmd(b, "p2p-poll 1", "p2p-poll ok")
+        cmd(c, "p2p-poll 1", "p2p-poll ok")
+        wait_log(b, "p2p raft commit index 3 next=ok", 30)
+        wait_log(c, "p2p raft commit index 3 next=ok", 30)
+        say("scenario 2b: raft prevote, hub cut, compact ok (%.0fs)" % (time.monotonic() - t0))
 
         # Scenario 3: link alpha<->gamma fails; detection, then relay via beta.
         cmd(a, "p2p-block gamma", "p2p-block ok gamma")
@@ -230,9 +275,14 @@ def main():
         relayed = re.search(r"relayed (\d+)", log(b, start_b))
         if not relayed or int(relayed.group(1)) < 1:
             raise RuntimeError("beta relayed nothing: %s" % log(b, start_b)[-400:])
-        cmd(a, "p2p-health", "p2p health ok 2 up 1")
-        if "p2p health gamma down blocked" not in log(a) or "down_events 1" not in log(a):
-            raise RuntimeError("alpha health lacks the failed link: %s" % log(a)[-800:])
+        start_h = cmd(a, "p2p-health", "p2p health ok 2 up 1")
+        health = log(a, start_h)
+        # The hub cut in scenario 2b can mark gamma down before this block,
+        # so down_events is at least 1 and may be higher. The blocked line
+        # is the scenario 3 proof.
+        down = re.search(r"p2p health gamma down blocked\b[^\n]*\bdown_events ([1-9][0-9]*)", health)
+        if not down:
+            raise RuntimeError("alpha health lacks the failed link: %s" % health[-800:])
         if hub.p2p_plaintext:
             raise RuntimeError("plaintext secret seen on the wire")
         for node in NODES:

@@ -176,6 +176,8 @@ int ata_job_controller_in_use(void) {
 
 void ata_job_note_channel_reset(void) { g_stats.channel_resets++; }
 
+void ata_job_note_respawn(void) { g_stats.supervised_respawns++; }
+
 static uint32_t chunk_count(void) {
     uint32_t left = OS_ATA_OVERLAY_SECTORS - g_cursor;
     return left < OS_ATA_JOB_MAX_SECTORS ? left : OS_ATA_JOB_MAX_SECTORS;

@@ -3285,7 +3285,7 @@ static int is_builtin(const char* cmd) {
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
         "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-kv", "p2p-poll",
         "p2p-send", "p2p-put", "p2p-get", "p2p-sync", "p2p-propose", "p2p-block", "p2p-unblock", "p2p-limit",
-        "p2p-raft", "p2p-raft-put", "p2p-grpc", "p2p-stun", "p2p-punch", "p2p-cache", "p2p-route",
+        "p2p-raft", "p2p-raft-compact", "p2p-raft-put", "p2p-grpc", "p2p-stun", "p2p-punch", "p2p-cache", "p2p-route",
         "collab-join", "collab-pay", "collab-offer", "collab-reserve", "collab-task", "collab-claim", "collab-work",
         "collab-review", "collab-rate", "collab-propose", "collab-vote", "collab-profile", "collab-forget",
         "collab-export", "collab-ticket", "collab-answer", "collab-sync", "collab-balances", "collab-audit",
@@ -4908,6 +4908,7 @@ static void cmd_ata_status(shell_context_t* ctx, char args[][128], int arg_count
     print_string(" publishes "); print_uint(st.fs_publishes);
     print_string(" handovers "); print_uint(st.fs_handovers);
     print_string(" restores "); print_uint(st.fs_restores);
+    print_string(" respawns "); print_uint(st.supervised_respawns);
     print_string(" end\n");
 }
 

@@ -191,6 +191,12 @@ int shell_p2p_line(const char* line) {
     if (s_eq(cmd, "p2p-stats")) { report("stats"); return 0; }
     if (s_eq(cmd, "p2p-analyze")) { report("analyze"); return 0; }
     if (s_eq(cmd, "p2p-kv")) { report("kv"); return 0; }
+    if (s_eq(cmd, "p2p-raft-compact")) {
+        rc = p2p_raft_compact(&g_node);
+        if (rc < 0) { print_string("p2p-raft-compact error no raft log\n"); return 1; }
+        say_rc("p2p-raft-compact ok index ", rc);
+        return 0;
+    }
     if (s_eq(cmd, "p2p-raft-put")) {
         rest = word(rest, a, (int)sizeof(a));
         rest = word(rest, b, (int)sizeof(b));

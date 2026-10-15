@@ -16,16 +16,20 @@ Slice 3: the kernel spawns atadriver at boot (default path, no manual
 spawn); a second driver instance cannot take the service. FAT16 sector I/O
 (vfs-write/vfs-read through the VFS worker) goes through the driver: driver
 counters rd/wr grow, the kernel FAT PIO counter does not move and the
-"FAT PIO while a driver is live" counter stays 0. After the root shell kills
-the boot driver, FAT and overlay writes fall back to Ring 0 PIO and persist
-(checked after a cold reboot, where the boot driver is live again).
+"FAT PIO while a driver is live" counter stays 0. The strict image does not
+send ATA IDENTIFY from Ring 0; the driver prints "atadriver identify ok".
+
+After the root shell kills the boot driver, the strict kernel parks the
+store and respawns bin/atadriver. fatkpio stays 0. The new driver serves the
+next FAT and overlay writes. The payload is still on disk after a cold
+reboot. There is no "store back in Ring 0" and no Ring 0 redo.
 
 Crash proof: with a test hook armed by the root shell (SYS_ATA_DEBUG, refused
 to any other task), the driver dies with #GP in the middle of a FAT write
 job (write command issued, half of the sector pushed, claim held). The
-kernel resets the ATA channel, resumes the blocked VFS worker and redoes the
-request through Ring 0 PIO: the write succeeds, earlier files are intact
-and the payload is on disk (host check), with no hang.
+kernel resets the ATA channel, aborts the RPC, respawns bin/atadriver and
+the blocked VFS worker retries in Ring 3. fatkpio and fsredo do not move.
+Earlier files stay intact and the payload is on disk (host check).
 """
 import os
 import re
@@ -168,7 +172,7 @@ STATUS_KEYS = ("driver", "boot", "fatrd", "fatwr", "fatkpio", "fatkpiolive",
                "aborts", "flushes", "kpio", "resets",
                # Tranche 4 suite: FAT/overlay code served by the driver itself.
                "store", "fsops", "fskernel", "fsaborts", "fsredo", "fsunavail",
-               "publishes", "handovers", "restores")
+               "publishes", "handovers", "restores", "respawns")
 STORE_SPEC = ("atadriver store ready", ("flags", "fat16", "fat32", "overlay", "image"))
 # OS_ATA_FS_STORE_FAT16 | OS_ATA_FS_STORE_OVERLAY (no FAT32 slave here).
 STORE_FAT16_OVERLAY = 5
@@ -340,6 +344,7 @@ def boot1():
         #    the shell prompt; the snapshot was loaded by the kernel at boot
         #    (no task yet), so the boot driver does not reload it.
         wait_for("[ATA] boot atadriver spawned", proc)
+        wait_for("atadriver identify ok", proc)
         wait_for("[ATA] boot driver registered; kernel boot load kept", proc)
         ready = search_after(READY_SPEC, 0, "driver ready counters", monitor, proc)
         st = ata_status(monitor, proc)
@@ -414,20 +419,30 @@ def boot1():
                 after["fskernel"] != 0 or after["store"] != STORE_FAT16_OVERLAY):
             raise RuntimeError("FAT not via driver: before=%r after=%r driver=%r" %
                                (before, after, fatio))
-        # 6. Kill the boot driver (root shell): FAT and overlay writes fall
-        #    back to Ring 0 PIO.
+        # 6. Kill the boot driver (root shell). The strict kernel parks the
+        #    store and respawns bin/atadriver. The next FAT write is served
+        #    in Ring 3: fatkpio stays 0, the new pid owns the store.
+        killed = len(log_text())
         kill(monitor, proc, driver_pid)
-        send_command_until(monitor, "service-find ata-driver",
-                           "service-find: service indisponible", proc)
+        wait_for("[ATA] store parked for supervised respawn", proc, killed)
+        wait_for("[ATA] supervised respawn bin/atadriver", proc, killed)
         vfs_write_read(monitor, proc, "fat16/t4fb.txt", "viakernel")
+        wait_for("atadriver identify ok", proc, killed)
+        search_after(STORE_SPEC, killed, "respawned driver store ready", monitor, proc, rounds=16)
         fallback = ata_status(monitor, proc)
-        # Tranche 4 suite: the store came back to Ring 0 from the mirror.
-        if "[ATA] store back in Ring 0 (overlay from driver mirror)" not in log_text():
-            raise RuntimeError("store not taken back after driver loss")
-        if fallback["store"] != 0 or fallback["restores"] != 1:
-            raise RuntimeError("store fallback not clean: %r" % fallback)
-        if fallback["driver"] != 0 or fallback["fatkpio"] <= after["fatkpio"]:
-            raise RuntimeError("FAT fallback not via Ring 0: %r" % fallback)
+        new_pid = str(fallback["driver"])
+        send_command_until(monitor, "service-find ata-driver",
+                           "service-find ok ata-driver %s" % new_pid, proc)
+        if ("[ATA] store back in Ring 0" in log_text()[killed:] or
+                "[ATA] fs op redone in Ring 0 after driver loss" in log_text()[killed:]):
+            raise RuntimeError("strict image redid FAT I/O in Ring 0")
+        if (fallback["driver"] <= 0 or new_pid == driver_pid or
+                fallback["respawns"] < 1 or fallback["fatkpio"] != after["fatkpio"] or
+                fallback["fatkpiolive"] != 0 or fallback["kpio"] != 0 or
+                fallback["fsredo"] != after["fsredo"] or fallback["restores"] != 0 or
+                fallback["store"] != STORE_FAT16_OVERLAY or
+                fallback["handovers"] != after["handovers"] + 1):
+            raise RuntimeError("supervised respawn did not keep Ring 3 I/O: %r" % fallback)
         # Plain overlay writes are reserved to vfsvirtual while it is live
         # (AOS-2178): stop the VFS pair first.
         for pid in vfs_pids:
@@ -460,8 +475,9 @@ def boot2():
         #    armed by the root shell; the boot driver has no user parent, so
         #    no exit notice lands in the shell mailbox mid-command). The
         #    driver starts the sector write, pushes half of the data and
-        #    takes a #GP while holding the claim. The kernel resets the channel, resumes the blocked VFS worker and
-        #    redoes the request through Ring 0 PIO: no hang, no data loss.
+        #    takes a #GP while holding the claim. The kernel resets the
+        #    channel, respawns bin/atadriver and the VFS worker retries in
+        #    Ring 3: no hang, no Ring 0 redo, no data loss.
         vfs_pids = start_vfs(monitor, proc)
         before = ata_status(monitor, proc)
         send_command_until(monitor, "ata-debug-crash", "ata-debug-crash ok armed", proc)
@@ -469,39 +485,39 @@ def boot2():
         wait_for("atadriver debug crash mid-job", proc, start, timeout=10)
         wait_for(GP_FAULT, proc, start, timeout=10)
         wait_for("[ATA] channel reset after driver loss", proc, start, timeout=10)
-        send_command_until(monitor, "service-find ata-driver",
-                           "service-find: service indisponible", proc)
+        wait_for("[ATA] supervised respawn bin/atadriver", proc, start, timeout=20)
+        wait_for("atadriver snapshot load ok", proc, start, timeout=20)
+        load = search_after(LOAD_SPEC, start, "driver load counters", monitor, proc, rounds=16)
+        if load[2] < 1:
+            raise RuntimeError("load not via the respawned driver: %r" % load)
+        search_after(STORE_SPEC, start, "respawned driver store ready", monitor, proc, rounds=16)
         crash = ata_status(monitor, proc)
-        if (crash["driver"] != 0 or crash["aborts"] != before["aborts"] + 1 or
+        if (crash["driver"] <= 0 or crash["driver"] == before["driver"] or
+                crash["aborts"] != before["aborts"] + 1 or
                 crash["resets"] != before["resets"] + 1 or
-                crash["fatkpio"] <= before["fatkpio"] or
-                # Tranche 4 suite: the crash hit the driver's own FAT code
-                # before any sector completed, so Ring 0 redid it once.
+                crash["fatkpio"] != before["fatkpio"] or crash["respawns"] < 1 or
                 crash["fsaborts"] != before["fsaborts"] + 1 or
-                crash["fsredo"] != before["fsredo"] + 1 or crash["store"] != 0 or
-                "[ATA] fs op redone in Ring 0 after driver loss" not in log_text()[start:]):
-            raise RuntimeError("crash fallback not clean: before=%r after=%r" % (before, crash))
+                crash["fsredo"] != before["fsredo"] or
+                crash["store"] != STORE_FAT16_OVERLAY or
+                crash["handovers"] != before["handovers"] + 1 or
+                "[ATA] fs op redone in Ring 0 after driver loss" in log_text()[start:] or
+                "[ATA] store back in Ring 0" in log_text()[start:]):
+            raise RuntimeError("crash respawn not clean: before=%r after=%r" % (before, crash))
+        send_command_until(monitor, "service-find ata-driver",
+                           "service-find ok ata-driver %s" % crash["driver"], proc)
         # Files written before the crash are intact.
         vfs_read_payload(monitor, proc, "fat16/t4s3.txt", "viadrvfat")
         vfs_read_payload(monitor, proc, "fat16/t4fb.txt", "viakernel")
         # Plain overlay reads/writes are reserved to vfsvirtual while live.
         for pid in vfs_pids:
             kill(monitor, proc, pid)
-        # 10. Respawned driver: loads the snapshot back through its Ring 3 PIO.
-        driver_pid, start = spawn(monitor, proc, "atadriver")
-        wait_child(monitor, proc, "atadriver snapshot load ok", start, rounds=16)
-        load = search_after(LOAD_SPEC, start, "driver load counters", monitor, proc)
-        if load[2] < 1:
-            raise RuntimeError("load not via driver: %r" % load)
-        # Tranche 4 suite: after the load job the respawned driver takes the
-        # store over again, and the next overlay read runs in Ring 3.
-        search_after(STORE_SPEC, start, "respawned driver store ready", monitor, proc, rounds=16)
-        again = ata_status(monitor, proc)
+        # 10. The supervised respawn already loaded the snapshot and holds
+        #     the store. A second manual spawn must not be required.
         send_command_until(monitor, "cat t4s2", "viadrv", proc)
         served = ata_status(monitor, proc)
-        if (again["store"] != STORE_FAT16_OVERLAY or again["handovers"] != crash["handovers"] + 1 or
-                served["fsops"] <= again["fsops"] or served["fskernel"] != 0):
-            raise RuntimeError("respawned driver store not live: %r %r" % (again, served))
+        if (served["driver"] != crash["driver"] or served["fsops"] <= crash["fsops"] or
+                served["fskernel"] != 0 or served["fatkpio"] != crash["fatkpio"]):
+            raise RuntimeError("respawned driver store not live: %r %r" % (crash, served))
         return load, before, crash
     finally:
         shutdown(proc, monitor)

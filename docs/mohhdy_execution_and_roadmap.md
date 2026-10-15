@@ -37,11 +37,11 @@ Elle confirme visuellement :
 ## 3. Descriptif des Prochaines Tranches d'Implémentation (Priorités 1 à 3)
 
 ### Etape 1 : Tranche 4, ce qui reste Ring 0
-- Lot 1 is not delivered. Pull request #147 does not move ATA or Raft. Baseline on `main` is `7ae6bb1` (pull request #146).
-- Le pilote Ring 3 `atadriver` monte le FAT de boot et charge la fenetre overlay (`OS_ATA_FS_INSTALL`) sur l'image stricte. `ne2k_probe` n'est pas lie dans `build/mohhdy.bin`.
-- US-001 reste ouvert. Restent Ring 0 : IDENTIFY ATA (`ata_init`, commande 0xEC), PIO FAT de repli apres la mort du pilote, IRQ et pilotes PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`. Pas de respawn supervise de `bin/atadriver`.
-- US-064 est un journal Raft dans le guest (pas Paxos). Capacite 8 entrees (`P2P_RAFT_LOG`). Pas de pre-vote, pas de compaction, pas de lease de leader. La preuve de partition est une chute de trames `p2p-block` (scenario QEMU 2b), pas une coupure NIC (`set_link`). US-067 est un RPC type sur le canal chiffre, pas gRPC HTTP/2. US-074 reste un STUN/NAT simule.
-- Validation courante : `make test-all` (766/766). Le contrat QEMU `make qemu-p2p` couvre election, replication et rattrapage. `make qemu-ata-driver` exige `fatkpio` a 0 au store ready.
+- Lot 1 avance sur US-001 et US-064. Les deux restent ouverts. Base de ce lot : `e932c904` (merge #148). Le compteur du 14 octobre (766/766) reste dans `docs/ETAT_REEL.md`.
+- Le pilote Ring 3 `atadriver` monte le FAT de boot, envoie IDENTIFY, et charge la fenetre overlay (`OS_ATA_FS_INSTALL`) sur l'image stricte. `ne2k_probe`, `kernel_ring0_ata_identify` et `kernel_ring0_fat_pio_fallback` ne sont pas lies dans `build/mohhdy.bin`.
+- US-001 reste ouvert. L'image stricte respawn `bin/atadriver` apres sa mort (budget 4) et rejoue le FAT en Ring 3 (`fatkpio` reste 0). L'image legacy garde IDENTIFY et le PIO FAT de repli en Ring 0. Restent Ring 0 sur les deux images : journaux, persistance overlay, PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`.
+- US-064 est un journal Raft dans le guest (pas Paxos). Fenetre physique 16 (`P2P_RAFT_LOG`), pre-vote, compaction (`p2p-raft-compact`), pas d'InstallSnapshot, pas de lease. Le scenario QEMU 2b coupe le fil du hub (pas `p2p-block`, pas `set_link`). Le scenario 2 garde `p2p-block`. US-067 est un RPC type, pas gRPC HTTP/2. US-074 reste un STUN/NAT simule. US-068 et US-073 restent des budgets unitaires. US-069, US-070 et US-075 gardent leurs preuves QEMU deja en place, sans fermeture.
+- Validation de ce lot : `make test-all` (768/768). `make qemu-ata-driver` exige `fatkpio` a 0 au store ready et au respawn. `make qemu-p2p` couvre pre-vote, coupure hub, compaction et index 3.
 
 ### Etape 1b : Phase 4, ce que la pull request #147 livre vraiment
 - US-050 reste partiel. `pm-ide` est l'editeur de lignes `pm-edit` (`userspace/shell.c`) : numeros (`.l`), controle syntaxique (`.c`), execution VM (`.r`), sauvegarde (`.`), abandon (`.q`). Pas un IDE plein ecran. Pas dans `userspace/osui_runtime.c`.
