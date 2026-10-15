@@ -10,9 +10,25 @@
 
 ## État courant vérifié
 
+## Etat courant du 15 octobre 2026
+
+Living baseline for this lot, branched from `e932c904` (merge of pull request #148). The 14 October section below keeps its own counter. Lot 1 is advanced. US-001 and US-064 stay open.
+
+```text
+make test-all : 768/768 passed, 0 failed, 0 skipped
+```
+
+Detail: 54/54 kernel, 9/9 userspace, 1/1 performance, 1/1 robustness. The runner sums Unity `Tests Run` lines (768, was 766 before the two Raft cases). Coverage: not measured. `tests/Makefile` CFLAGS do not pass `-fprofile-arcs` or `-ftest-coverage`. Journal: `test_logs/test_results_20261015_084902.log`. Guest command register: 367 names (`p2p-raft-compact` added). `make strict-image-check` rejects `ne2k_probe`, `kernel_ring0_boot_fat_mount`, `kernel_ring0_ata_identify` and `kernel_ring0_fat_pio_fallback` in `build/mohhdy.bin` and requires those symbols in `build/mohhdy-netlegacy.bin`.
+
+Measured in this lot:
+
+- US-001 stays open. On the strict image, ATA IDENTIFY (command 0xEC) and the fallback FAT sector PIO are not linked (`kernel/ata_identify_absent.c`, `kernel/fat_pio_fallback_absent.c`). The Ring 3 `atadriver` sends IDENTIFY and prints `atadriver identify ok`. If that driver dies, the strict kernel resets the channel when a transfer was open, parks the store in RAM, and respawns `bin/atadriver` (budget 4). The blocked FAT operation is retried in Ring 3. `fatkpio` stays 0. A sector the driver already committed is not replayed (`OS_ATA_FS_ABORTED`). Proof this run: `make qemu-ata-driver` in 269 s (boot `fatkpio` 0 at store ready, kill path, mid-job #GP with `aborts` 0 to 1, `resets` 0 to 1, `fatkpio` 0 to 0, payload on disk after reboot). The legacy image still links Ring 0 IDENTIFY and the Ring 0 FAT redo. Still Ring 0 on both images: journal and overlay persist PIO, PIC, PIT, PS/2, VGA, serial, PCI, `usb_tablet`.
+- US-064 stays open. Raft in `userspace/p2p.c`: pre-vote (a refused pre-vote does not bump the term), membership quorum, physical window 16 (`P2P_RAFT_LOG`), compaction of the applied prefix (`p2p-raft-compact`), logical index 17 in `test_raft_compact_past_physical_window`. No InstallSnapshot and no leader lease. Partition proof: `make qemu-p2p` scenario 2b cuts the hub wire between gamma and the other two guests (not `p2p-block`, not `set_link`, no public Internet), then compacts and commits index 3. Scenario 2 still uses `p2p-block` for replication. This run: `make qemu-p2p` PASS in 188 s. Not Paxos.
+- Phase 5 was not hardened further. US-067 stays typed RPC, not HTTP/2 gRPC. US-074 stays simulated STUN/NAT. US-063 stays one relay. US-069, US-070 and US-075 keep the QEMU proofs they already had (`make qemu-p2p` scenarios 2 and 3, including `p2p-analyze`). US-068 and US-073 stay unit-level budgets, not an adaptive controller. Those stories are not closed.
+
 ## Etat courant du 14 octobre 2026
 
-Living baseline on `main` at `7ae6bb1` (merge of pull request #146) plus pull request #147. Historical paragraphs below keep their own counters. Lot 1 is not delivered.
+Previous baseline (14 October 2026), kept for its counter. Superseded by the 15 October section above. It described `main` at `7ae6bb1` (merge of pull request #146) plus pull request #147. Historical paragraphs below keep their own counters. Lot 1 was not delivered then.
 
 ```text
 make test-all : 766/766 passed, 0 failed, 0 skipped

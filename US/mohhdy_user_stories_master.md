@@ -67,6 +67,8 @@ Le développement MOHHDY est organisé en 8 phases principales :
 - US-014 : Création du framework de test automatisé
 - US-015 : Développement de la documentation interactive
 
+Etat US-001 (15 octobre 2026). Ouvert. Sur l'image stricte, IDENTIFY ATA (commande 0xEC) et le PIO FAT de repli ne sont plus lies (`kernel_ring0_ata_identify` et `kernel_ring0_fat_pio_fallback` absents de `build/mohhdy.bin`, presents dans `build/mohhdy-netlegacy.bin`). `bin/atadriver` envoie IDENTIFY. Apres sa mort le noyau strict rearme le canal, gare le store et relance `bin/atadriver` (budget 4) ; l'operation FAT bloquee est rejouee en Ring 3 et `fatkpio` reste 0. Preuve : `make qemu-ata-driver`. Restent Ring 0 : journaux, persistance overlay, PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`.
+
 ### Phase 2 - AI Core (US-016 à US-030)
 - US-016 : Intégration du moteur IA local TensorFlow Lite
 - US-017 : Développement du système de compréhension du langage naturel
@@ -141,12 +143,12 @@ Etat Phase 3 (14 octobre 2026; detail in `docs/ETAT_REEL.md`). Pull request #147
 - US-074 : Développement du gestionnaire de NAT traversal
 - US-075 : Création du système d'analyse de trafic intelligent
 
-Etat Phase 5 (14 octobre 2026; detail and limits in `docs/p2p.md`). Lot 1 is not delivered. Pull request #147 does not change this phase:
+Etat Phase 5 (15 octobre 2026; detail and limits in `docs/p2p.md`). US-064 avance, pas ferme. Pas de durcissement supplementaire de US-068 a US-075 dans ce lot.
 - Fait (preuve QEMU trois invites `make qemu-p2p` + unitaires) : US-061 protocole, US-062 decouverte, US-065 replication (LWW), US-066 chiffrement (X25519 + AES-128-GCM par paire, cle de reseau, anti-rejeu ; hub verifie l'absence de clair), US-071 synchronisation (anti-entropie apres partition), US-072 moniteur de sante (RTT, vu, erreurs, pannes).
-- US-064 : journal Raft reel dans le guest (append entries, index de commit, rattrapage apres partition par `p2p-block` frame drop, pas une coupure NIC). Terme et vote persistes dans le trailer du blob p2pkv. Pas Paxos. Journal borne a 8 entrees. Pas de pre-vote, pas de leader lease, pas de compaction. Preuve unitaire et scenario QEMU 2b.
+- US-064 : journal Raft dans le guest. Pre-vote (un refus ne fait pas monter le terme), quorum d'appartenance, fenetre physique 16, compaction du prefixe applique (`p2p-raft-compact`), index logique 17 en unitaire. Pas d'InstallSnapshot, pas de lease de leader, pas Paxos. Partition du scenario QEMU 2b : coupure du hub entre gamma et les deux autres invites (pas `p2p-block`, pas `set_link`, pas d'Internet public), puis compaction et commit de l'index 3. Le scenario 2 garde `p2p-block` pour la replication. Terme et vote restent dans le trailer du blob p2pkv.
 - US-067 : RPC type sur le canal chiffre (identifiant de requete, type, code de statut, echeance). Ce n'est pas gRPC HTTP/2.
 - US-074 : toujours simule (STUN virtuel, full cone, punch). Pas de NAT reel.
-- Partiel : US-063 routage (un relais choisi via les voisins, QEMU), US-069 tolerance aux pannes (detection + reroutage + resync, QEMU ; magasin cle/valeur, identite, terme et vote persistes), US-070 cache distribue (lecture distante, QEMU), US-068 bande passante et US-073 QoS (budget par pair, controle prioritaire ; unitaires seulement, pas adaptatif), US-075 analyse de trafic (compteurs par type + `p2p-analyze` a regles fixes avec verdict, QEMU ; pas d'apprentissage).
+- Partiel, inchanges par ce lot : US-063 routage (un relais choisi via les voisins, QEMU), US-069 tolerance aux pannes (detection + reroutage + resync, QEMU ; magasin cle/valeur, identite, terme et vote persistes), US-070 cache distribue (lecture distante, QEMU), US-068 bande passante et US-073 QoS (budget par pair, controle prioritaire ; unitaires seulement, pas adaptatif), US-075 analyse de trafic (compteurs par type + `p2p-analyze` a regles fixes avec verdict, QEMU ; pas d'apprentissage).
 
 ### Phase 6 - Multi-Platform (US-076 à US-090)
 - US-076 : Adaptation du noyau pour architecture ARM
