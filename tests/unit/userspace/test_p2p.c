@@ -12,7 +12,7 @@ static dgram_t g_q[NODES][QLEN];
 static int g_qh[NODES], g_qt[NODES];
 static int g_cut[NODES][NODES];      /* 1: frames from i never reach j */
 static uint32_t g_ticks;
-static char g_out[NODES][16384];
+static char g_out[NODES][65536];
 static p2p_node_t g_n[NODES];
 static ctx_t g_ctx[NODES];
 static p2p_host_t g_h[NODES];
@@ -305,7 +305,7 @@ void test_raft_and_cache(void) {
     run(3, 300);
     /* Trigger Raft election */
     TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
-    run(3, 30);
+    run(3, 80);
     TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
     p2p_report(&g_n[0], &g_h[0], "raft", rep, sizeof(rep));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p raft role leader term 2"));
@@ -324,7 +324,7 @@ void test_raft_log_catchup_and_typed_rpc(void) {
     setup(3, 0);
     run(3, 300);
     TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
-    run(3, 40);
+    run(3, 80);
     TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
     TEST_ASSERT_EQUAL(1, p2p_raft_append(&g_n[0], &g_h[0], "tone", "blue"));
     run(3, 40);
@@ -363,6 +363,60 @@ void test_raft_log_catchup_and_typed_rpc(void) {
     TEST_ASSERT_EQUAL(0, p2p_grpc_call_deadline(&g_n[0], &g_h[0], "beta", "echo.EchoService", "SayHello", "World", 0, 0));
     run(3, 20);
     TEST_ASSERT_NOT_NULL(strstr(g_out[0], "status 4"));
+}
+
+void test_raft_prevote_does_not_bump_a_healthy_term(void) {
+    uint32_t term;
+    setup(3, 0);
+    run(3, 300);
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p raft prevote started"));
+    term = g_n[0].raft.term;
+    TEST_ASSERT_EQUAL(2, (int)term);
+    /* gamma asks for a pre-vote while alpha is still leader and heartbeats
+     * are fresh. Followers refuse, so the cluster term stays put. */
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[2], &g_h[2]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(term, g_n[0].raft.term);
+    TEST_ASSERT_EQUAL(term, g_n[1].raft.term);
+    TEST_ASSERT_EQUAL(term, g_n[2].raft.term);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    TEST_ASSERT_TRUE(g_n[2].raft.role != P2P_RAFT_LEADER);
+}
+
+void test_raft_compact_past_physical_window(void) {
+    int i;
+    char val[16];
+    const p2p_item_t* it;
+    setup(3, 0);
+    run(3, 300);
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    for (i = 0; i < P2P_RAFT_LOG; i++) {
+        snprintf(val, sizeof(val), "v%d", i);
+        TEST_ASSERT_EQUAL(i + 1, p2p_raft_append(&g_n[0], &g_h[0], "k", val));
+        run(3, 60);
+    }
+    TEST_ASSERT_EQUAL(P2P_RAFT_LOG, (int)g_n[0].raft.log_count);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LOG, (int)g_n[0].raft.last_applied);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LOG, (int)g_n[1].raft.last_applied);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LOG, (int)g_n[2].raft.last_applied);
+    TEST_ASSERT_EQUAL(-1, p2p_raft_append(&g_n[0], &g_h[0], "k", "overflow"));
+    TEST_ASSERT_EQUAL(P2P_RAFT_LOG, p2p_raft_compact(&g_n[0]));
+    TEST_ASSERT_EQUAL(P2P_RAFT_LOG, p2p_raft_compact(&g_n[1]));
+    TEST_ASSERT_EQUAL(P2P_RAFT_LOG, p2p_raft_compact(&g_n[2]));
+    TEST_ASSERT_EQUAL(P2P_RAFT_LOG + 1, p2p_raft_append(&g_n[0], &g_h[0], "k", "past"));
+    run(3, 80);
+    it = p2p_get_local(&g_n[1], "k");
+    TEST_ASSERT_NOT_NULL(it);
+    TEST_ASSERT_EQUAL_STRING("past", it->value);
+    it = p2p_get_local(&g_n[2], "k");
+    TEST_ASSERT_NOT_NULL(it);
+    TEST_ASSERT_EQUAL_STRING("past", it->value);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LOG + 1, (int)g_n[2].raft.commit_index);
 }
 
 void test_routing_grpc_and_stun(void) {
@@ -430,6 +484,8 @@ int main(void) {
     RUN_TEST(test_bad_inputs);
     RUN_TEST(test_raft_and_cache);
     RUN_TEST(test_raft_log_catchup_and_typed_rpc);
+    RUN_TEST(test_raft_prevote_does_not_bump_a_healthy_term);
+    RUN_TEST(test_raft_compact_past_physical_window);
     RUN_TEST(test_routing_grpc_and_stun);
     RUN_TEST(test_p2p_consolidation_and_fallback);
     unity_print_results();

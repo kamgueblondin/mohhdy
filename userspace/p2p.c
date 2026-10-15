@@ -10,7 +10,8 @@ static const char* const k_names[P2P_I_COUNT] = {
     "?", "hello", "sealed", "?", "?", "?", "?", "?", "?", "?",
     "ping", "pong", "msg", "put", "sync-req", "sync-items", "get-req", "get-resp", "propose", "vote", "commit", "app",
     "raft-req", "raft-resp", "raft-hb", "cache-inv",
-    "grpc-req", "grpc-resp", "stun-req", "stun-resp", "nat-punch", "raft-append", "raft-append-resp"
+    "grpc-req", "grpc-resp", "stun-req", "stun-resp", "nat-punch", "raft-append", "raft-append-resp",
+    "raft-prevote-req", "raft-prevote-resp"
 };
 const char* p2p_type_name(int t) { return (t > 0 && t < P2P_I_COUNT) ? k_names[t] : "?"; }
 
@@ -306,8 +307,49 @@ static int digest_encode(const p2p_node_t* n, uint8_t* b, int reply) {
 
 /* --------------------------------------------------------------- Raft log */
 static int raft_send_one(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p);
+static int raft_start_election(p2p_node_t* n, const p2p_host_t* h);
+
+/* Quorum is over discovered keyed members, including self. A peer that is
+ * only down still counts, so a lone node cannot elect or commit while the
+ * others are partitioned. */
+static uint32_t raft_members(const p2p_node_t* n) {
+    uint32_t c = 1U;
+    int i;
+    for (i = 0; i < P2P_PEERS; i++)
+        if (n->peers[i].used && n->peers[i].keyed) c++;
+    return c;
+}
 static uint32_t raft_majority(const p2p_node_t* n) {
-    return (up_count(n) + 1U) / 2U + 1U;
+    return raft_members(n) / 2U + 1U;
+}
+static p2p_raft_entry_t* raft_log_slot(p2p_node_t* n, uint32_t index) {
+    uint32_t slot;
+    if (index == 0U || index <= n->raft.snapshot_index) return 0;
+    slot = index - n->raft.snapshot_index - 1U;
+    if (slot >= P2P_RAFT_LOG) return 0;
+    return &n->raft.log[slot];
+}
+static p2p_raft_entry_t* raft_log_at(p2p_node_t* n, uint32_t index) {
+    if (index > n->raft.log_count) return 0;
+    return raft_log_slot(n, index);
+}
+static uint32_t raft_last_term(const p2p_node_t* n) {
+    uint32_t index = n->raft.log_count;
+    uint32_t slot;
+    if (index == 0U) return 0U;
+    if (index <= n->raft.snapshot_index) return n->raft.snapshot_term;
+    slot = index - n->raft.snapshot_index - 1U;
+    if (slot >= P2P_RAFT_LOG) return 0U;
+    return n->raft.log[slot].term;
+}
+static int raft_prev_ok(const p2p_node_t* n, uint32_t prev_i, uint32_t prev_t) {
+    uint32_t slot;
+    if (prev_i > n->raft.log_count || prev_i < n->raft.snapshot_index) return 0;
+    if (prev_i == 0U) return prev_t == 0U;
+    if (prev_i == n->raft.snapshot_index) return prev_t == n->raft.snapshot_term;
+    slot = prev_i - n->raft.snapshot_index - 1U;
+    if (slot >= P2P_RAFT_LOG) return 0;
+    return n->raft.log[slot].term == prev_t;
 }
 static void raft_step_down(p2p_node_t* n, uint32_t term) {
     if (term > n->raft.term) n->raft.term_changes++;
@@ -321,7 +363,9 @@ static void raft_apply(p2p_node_t* n, const p2p_host_t* h) {
     while (n->raft.last_applied < n->raft.commit_index && n->raft.last_applied < n->raft.log_count) {
         p2p_raft_entry_t* e;
         n->raft.last_applied++;
-        e = &n->raft.log[n->raft.last_applied - 1U];
+        if (n->raft.last_applied <= n->raft.snapshot_index) continue;
+        e = raft_log_at(n, n->raft.last_applied);
+        if (!e) break;
         (void)kv_apply(n, e->key, e->value, n->raft.last_applied, n->id);
         line[0] = 0;
         s_cat(line, "p2p raft commit index ", 160);
@@ -349,7 +393,8 @@ static void raft_maybe_commit(p2p_node_t* n, const p2p_host_t* h) {
     before = n->raft.commit_index;
     need = raft_majority(n);
     for (i = n->raft.commit_index + 1U; i <= n->raft.log_count; i++) {
-        if (n->raft.log[i - 1U].term != n->raft.term) continue;
+        p2p_raft_entry_t* ent = raft_log_at(n, i);
+        if (!ent || ent->term != n->raft.term) continue;
         c = 1U;
         for (k = 0; k < P2P_PEERS; k++)
             if (n->peers[k].used && n->peers[k].up && n->peers[k].raft_match >= i) c++;
@@ -364,12 +409,19 @@ static int raft_send_one(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
     int pos;
     p2p_raft_entry_t* e;
     if (!p->used || !p->keyed || !p->up) return -1;
-    if (p->raft_next == 0U) p->raft_next = 1U;
+    if (p->raft_next == 0U) p->raft_next = n->raft.snapshot_index + 1U;
+    if (p->raft_next <= n->raft.snapshot_index) p->raft_next = n->raft.snapshot_index + 1U;
     next = p->raft_next;
-    if (next > n->raft.log_count || next == 0U || next > P2P_RAFT_LOG) return 0;
-    e = &n->raft.log[next - 1U];
+    if (next > n->raft.log_count || next == 0U) return 0;
+    e = raft_log_at(n, next);
+    if (!e) return 0; /* follower is behind the snapshot: no InstallSnapshot */
     prev_i = next - 1U;
-    prev_t = prev_i ? n->raft.log[prev_i - 1U].term : 0U;
+    if (prev_i == 0U) prev_t = 0U;
+    else if (prev_i == n->raft.snapshot_index) prev_t = n->raft.snapshot_term;
+    else {
+        p2p_raft_entry_t* prev = raft_log_at(n, prev_i);
+        prev_t = prev ? prev->term : 0U;
+    }
     put32(b, n->raft.term); put32(b + 4, n->id);
     put32(b + 8, prev_i); put32(b + 12, prev_t);
     put32(b + 16, n->raft.commit_index);
@@ -589,6 +641,36 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
     case P2P_I_APP:
         if (n->app) n->app(n->app_ctx, p->id, m, len);
         break;
+    case P2P_I_RAFT_PREVOTE_REQ: {
+        uint32_t req_term, last_idx, last_term, my_idx, my_term;
+        int log_ok, grant, timer_expired;
+        if (len < 16) break;
+        req_term = get32(m); last_idx = get32(m + 8); last_term = get32(m + 12);
+        my_idx = n->raft.log_count;
+        my_term = raft_last_term(n);
+        log_ok = !(last_term < my_term || (last_term == my_term && last_idx < my_idx));
+        timer_expired = now(h) - n->raft.election_tick >= P2P_RAFT_ELECTION_TICKS;
+        /* A pre-vote does not bump the term and does not consume voted_for.
+         * A follower that still has a leader and a fresh heartbeat refuses,
+         * so a short partition cannot start a new term. */
+        grant = log_ok && req_term > n->raft.term && n->raft.role != P2P_RAFT_LEADER &&
+                (n->raft.leader_id == 0U || timer_expired);
+        b[0] = (uint8_t)(grant ? 1 : 0);
+        put32(b + 1, n->raft.term);
+        (void)seal_send(n, h, p, P2P_I_RAFT_PREVOTE_RESP, b, 5);
+        break;
+    }
+    case P2P_I_RAFT_PREVOTE_RESP: {
+        uint32_t resp_term;
+        if (len < 5) break;
+        resp_term = get32(m + 1);
+        if (resp_term > n->raft.term) { raft_step_down(n, resp_term); break; }
+        if (n->raft.role == P2P_RAFT_PRE_CANDIDATE && resp_term == n->raft.term && m[0] == 1) {
+            n->raft.votes_granted++;
+            if (n->raft.votes_granted >= raft_majority(n)) (void)raft_start_election(n, h);
+        }
+        break;
+    }
     case P2P_I_RAFT_VOTE_REQ: {
         uint32_t req_term, cand_id, last_idx = 0, last_term = 0, my_idx, my_term;
         int log_ok = 1;
@@ -598,7 +680,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         if (req_term > n->raft.term) raft_step_down(n, req_term);
         if (len >= 16) {
             my_idx = n->raft.log_count;
-            my_term = my_idx ? n->raft.log[my_idx - 1U].term : 0U;
+            my_term = raft_last_term(n);
             if (last_term < my_term || (last_term == my_term && last_idx < my_idx)) log_ok = 0;
         }
         b[0] = (uint8_t)(log_ok && req_term == n->raft.term &&
@@ -653,26 +735,37 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         n->raft.role = P2P_RAFT_FOLLOWER;
         n->raft.leader_id = leader;
         n->raft.election_tick = now(h);
-        if (prev_i > n->raft.log_count || (prev_i && n->raft.log[prev_i - 1U].term != prev_t) ||
-            eindex == 0U || eindex > P2P_RAFT_LOG) {
+        if (!raft_prev_ok(n, prev_i, prev_t) || eindex == 0U ||
+            eindex > n->raft.snapshot_index + P2P_RAFT_LOG) {
             put32(b, n->raft.term); b[4] = 0; put32(b + 5, 0);
             (void)seal_send(n, h, p, P2P_I_RAFT_APPEND_RESP, b, 9);
             break;
         }
-        if (eindex <= n->raft.log_count && n->raft.log[eindex - 1U].term != eterm) {
-            n->raft.log_count = eindex - 1U;
-            if (n->raft.commit_index > n->raft.log_count) n->raft.commit_index = n->raft.log_count;
-            if (n->raft.last_applied > n->raft.log_count) n->raft.last_applied = n->raft.log_count;
-        }
-        if (eindex == n->raft.log_count + 1U) {
-            p2p_raft_entry_t* e = &n->raft.log[n->raft.log_count];
-            e->term = eterm;
-            s_copy(e->key, key, P2P_KEY_MAX);
-            s_copy(e->value, val, P2P_VAL_MAX);
-            n->raft.log_count++;
+        if (eindex <= n->raft.snapshot_index) {
             ok = 1;
-        } else if (eindex <= n->raft.log_count && n->raft.log[eindex - 1U].term == eterm) {
-            ok = 1;
+        } else {
+            p2p_raft_entry_t* have = raft_log_at(n, eindex);
+            if (have && have->term != eterm) {
+                n->raft.log_count = eindex - 1U;
+                if (n->raft.commit_index > n->raft.log_count) n->raft.commit_index = n->raft.log_count;
+                if (n->raft.last_applied > n->raft.log_count) n->raft.last_applied = n->raft.log_count;
+                have = 0;
+            }
+            if (eindex == n->raft.log_count + 1U) {
+                p2p_raft_entry_t* e = raft_log_slot(n, eindex);
+                if (!e) {
+                    put32(b, n->raft.term); b[4] = 0; put32(b + 5, 0);
+                    (void)seal_send(n, h, p, P2P_I_RAFT_APPEND_RESP, b, 9);
+                    break;
+                }
+                e->term = eterm;
+                s_copy(e->key, key, P2P_KEY_MAX);
+                s_copy(e->value, val, P2P_VAL_MAX);
+                n->raft.log_count = eindex;
+                ok = 1;
+            } else if (have && have->term == eterm) {
+                ok = 1;
+            }
         }
         if (ok) {
             if (lcommit > n->raft.commit_index) {
@@ -706,7 +799,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
             } else {
                 (void)raft_send_one(n, h, p);
             }
-        } else if (p->raft_next > 1U) {
+        } else if (p->raft_next > n->raft.snapshot_index + 1U) {
             p->raft_next--;
             (void)raft_send_one(n, h, p);
         }
@@ -1223,20 +1316,18 @@ int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char*
     return propose_send(n, h, 0);
 }
 
-int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h) {
+static int raft_start_election(p2p_node_t* n, const p2p_host_t* h) {
     uint8_t b[16];
     int i, sent = 0;
-    if (!n || !n->up) return -1;
-    n->raft.active = 1;
     n->raft.role = P2P_RAFT_CANDIDATE;
     n->raft.term++;
     n->raft.term_changes++;
     n->raft.voted_for = n->id;
-    n->raft.votes_granted = 1; /* vote for self */
+    n->raft.votes_granted = 1;
     n->raft.election_tick = now(h);
     put32(b, n->raft.term); put32(b + 4, n->id);
     put32(b + 8, n->raft.log_count);
-    put32(b + 12, n->raft.log_count ? n->raft.log[n->raft.log_count - 1U].term : 0U);
+    put32(b + 12, raft_last_term(n));
     for (i = 0; i < P2P_PEERS; i++) {
         p2p_peer_t* p = &n->peers[i];
         if (!p->used || !p->keyed || !p->up) continue;
@@ -1248,19 +1339,70 @@ int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h) {
     return sent;
 }
 
+int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h) {
+    uint8_t b[16];
+    int i, sent = 0;
+    if (!n || !n->up) return -1;
+    /* Pre-vote: ask with term+1 but do not bump term or voted_for. A majority
+     * starts the real election inside the following p2p_tick. */
+    n->raft.active = 1;
+    n->raft.role = P2P_RAFT_PRE_CANDIDATE;
+    n->raft.votes_granted = 1;
+    n->raft.election_tick = now(h);
+    put32(b, n->raft.term + 1U); put32(b + 4, n->id);
+    put32(b + 8, n->raft.log_count);
+    put32(b + 12, raft_last_term(n));
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        if (!p->used || !p->keyed || !p->up) continue;
+        if (seal_send(n, h, p, P2P_I_RAFT_PREVOTE_REQ, b, 16) == 0) {
+            sent++;
+            n->qos.priority_high_tx++;
+        }
+    }
+    say(h, "p2p raft prevote started");
+    return sent;
+}
+
 int p2p_raft_append(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value) {
     p2p_raft_entry_t* e;
+    uint32_t index;
     if (!n || !n->up || n->raft.role != P2P_RAFT_LEADER) return -1;
     if (!key || !key[0] || s_len(key) >= P2P_KEY_MAX || !value || s_len(value) >= P2P_VAL_MAX) return -1;
-    if (n->raft.log_count >= P2P_RAFT_LOG) return -1;
-    e = &n->raft.log[n->raft.log_count];
+    if (n->raft.log_count - n->raft.snapshot_index >= P2P_RAFT_LOG) return -1;
+    index = n->raft.log_count + 1U;
+    e = raft_log_slot(n, index);
+    if (!e) return -1;
     e->term = n->raft.term;
     s_copy(e->key, key, P2P_KEY_MAX);
     s_copy(e->value, value, P2P_VAL_MAX);
-    n->raft.log_count++;
+    n->raft.log_count = index;
     raft_replicate(n, h);
     raft_maybe_commit(n, h);
     return (int)n->raft.log_count;
+}
+
+int p2p_raft_compact(p2p_node_t* n) {
+    uint32_t base, keep, i, term;
+    p2p_raft_entry_t* e;
+    p2p_raft_entry_t kept[P2P_RAFT_LOG];
+    if (!n) return -1;
+    if (n->raft.last_applied <= n->raft.snapshot_index) return (int)n->raft.snapshot_index;
+    base = n->raft.last_applied;
+    e = raft_log_at(n, base);
+    if (!e) return -1;
+    term = e->term;
+    keep = n->raft.log_count - base;
+    if (keep > P2P_RAFT_LOG) return -1;
+    for (i = 0; i < keep; i++) {
+        p2p_raft_entry_t* src = raft_log_at(n, base + 1U + i);
+        if (!src) return -1;
+        kept[i] = *src;
+    }
+    for (i = 0; i < keep; i++) n->raft.log[i] = kept[i];
+    n->raft.snapshot_index = base;
+    n->raft.snapshot_term = term;
+    return (int)base;
 }
 
 int p2p_raft_vote_export(const p2p_node_t* n, uint8_t* out, int cap) {
@@ -1411,7 +1553,9 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
     }
     if (s_eq(what, "raft")) {
         s_cat(out, "p2p raft role ", cap);
-        s_cat(out, n->raft.role == P2P_RAFT_LEADER ? "leader" : n->raft.role == P2P_RAFT_CANDIDATE ? "candidate" : "follower", cap);
+        s_cat(out, n->raft.role == P2P_RAFT_LEADER ? "leader" :
+              n->raft.role == P2P_RAFT_CANDIDATE ? "candidate" :
+              n->raft.role == P2P_RAFT_PRE_CANDIDATE ? "prevote" : "follower", cap);
         s_cat(out, " term ", cap); cat_u(out, n->raft.term, cap);
         s_cat(out, " leader_id ", cap); cat_hex32(out, n->raft.leader_id, cap);
         s_cat(out, " voted_for ", cap); cat_hex32(out, n->raft.voted_for, cap);

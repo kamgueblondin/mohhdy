@@ -33,7 +33,8 @@ enum {
     P2P_I_GET_REQ, P2P_I_GET_RESP, P2P_I_PROPOSE, P2P_I_VOTE, P2P_I_COMMIT, P2P_I_APP,
     P2P_I_RAFT_VOTE_REQ, P2P_I_RAFT_VOTE_RESP, P2P_I_RAFT_HEARTBEAT, P2P_I_CACHE_INV,
     P2P_I_GRPC_REQ, P2P_I_GRPC_RESP, P2P_I_STUN_REQ, P2P_I_STUN_RESP, P2P_I_NAT_PUNCH,
-    P2P_I_RAFT_APPEND, P2P_I_RAFT_APPEND_RESP, P2P_I_COUNT
+    P2P_I_RAFT_APPEND, P2P_I_RAFT_APPEND_RESP,
+    P2P_I_RAFT_PREVOTE_REQ, P2P_I_RAFT_PREVOTE_RESP, P2P_I_COUNT
 };
 
 typedef struct {
@@ -91,9 +92,15 @@ typedef struct {
 #define P2P_PROPOSE_RESEND_TICKS (2U * P2P_HZ)
 #define P2P_SYNC_RESEND_TICKS (2U * P2P_HZ)
 
-typedef enum { P2P_RAFT_FOLLOWER = 0, P2P_RAFT_CANDIDATE = 1, P2P_RAFT_LEADER = 2 } p2p_raft_role_t;
+typedef enum {
+    P2P_RAFT_FOLLOWER = 0, P2P_RAFT_CANDIDATE = 1, P2P_RAFT_LEADER = 2,
+    P2P_RAFT_PRE_CANDIDATE = 3
+} p2p_raft_role_t;
 
-#define P2P_RAFT_LOG 8
+/* Physical window. Logical indexes continue past this after compaction.
+ * One uncompacted burst still fits 16 entries. There is no InstallSnapshot:
+ * a follower whose log is behind snapshot_index is a gap. */
+#define P2P_RAFT_LOG 16
 #define P2P_RAFT_ELECTION_TICKS (30U * P2P_HZ)
 typedef struct {
     uint32_t term;
@@ -103,7 +110,7 @@ typedef struct {
 
 typedef struct {
     uint8_t active;           /* 1 if Raft consensus mode is active */
-    uint8_t role;             /* Follower (0), Candidate (1), Leader (2) */
+    uint8_t role;             /* follower, candidate, leader, or pre-candidate */
     uint32_t term;            /* current Raft term */
     uint32_t voted_for;       /* candidate ID voted for in current term (0 if none) */
     uint32_t leader_id;       /* current leader ID */
@@ -112,9 +119,11 @@ typedef struct {
     uint32_t heartbeat_tick;  /* next heartbeat tick if leader */
     uint32_t term_changes;    /* term change counter */
     p2p_raft_entry_t log[P2P_RAFT_LOG];
-    uint32_t log_count;       /* entries in log, indexes are 1-based */
+    uint32_t log_count;       /* highest logical index, 1-based, 0 = empty */
     uint32_t commit_index;    /* highest committed index, 0 = none */
     uint32_t last_applied;    /* highest applied index */
+    uint32_t snapshot_index;  /* discarded applied prefix, 0 = none */
+    uint32_t snapshot_term;   /* term of snapshot_index */
 } p2p_raft_state_t;
 
 #define P2P_CACHE_MAX 8
@@ -201,6 +210,8 @@ int p2p_sync(p2p_node_t* n, const p2p_host_t* h, const char* peer);
 int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 int p2p_block(p2p_node_t* n, const char* peer, int blocked);
 int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h);
+/* Drop the applied prefix through last_applied. Returns the new snapshot index. */
+int p2p_raft_compact(p2p_node_t* n);
 /* Append one log entry. Returns the 1-based index, or -1 if not leader. */
 int p2p_raft_append(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 /* 12-byte term/vote trailer ('R','F', version 1). Returns 12 or -1. */
