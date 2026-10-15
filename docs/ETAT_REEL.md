@@ -10,9 +10,31 @@
 
 ## État courant vérifié
 
-## Etat courant du 15 octobre 2026
+## Etat courant du 15 octobre 2026 (lot 2)
 
-Living baseline for this lot, branched from `e932c904` (merge of pull request #148). The 14 October section below keeps its own counter. Lot 1 is advanced. US-001 and US-064 stay open.
+Living baseline. Branched from `708917b` (merge of pull request #149). The lot 1 section below keeps its own counter (768/768). US-001 stays open. US-064 is closed for the guest Raft log described here. It is not Paxos.
+
+```text
+make test-all : 770/770 passed, 0 failed, 0 skipped
+```
+
+Detail: 54/54 kernel, 9/9 userspace, 1/1 performance, 1/1 robustness. The runner sums Unity `Tests Run` lines (770; was 768 before the snapshot case and the QoS case). Journal: `test_logs/test_results_20261015_112957.log`. Guest command register: 367 names (unchanged).
+
+Coverage, measured by `make coverage` (not part of `make test-all` or CI): 79.55% lines executed (24434/30716) across 143 source files, 572 `.gcda`. Flags: `--coverage` (`-fprofile-arcs -ftest-coverage`) on the host unit-test binaries that `tests/scripts/run_all_tests.sh` compiles and runs. Scope: those translation units. Not the guest image. Report: `test_logs/coverage_report.txt`.
+
+Measured in this lot:
+
+- US-001 stays open. Both images link `kernel/ata_identify_absent.c` and `kernel/fat_pio_fallback_absent.c`. `kernel_ring0_ata_identify` and `kernel_ring0_fat_pio_fallback` are absent from `build/mohhdy.bin` and from `build/mohhdy-netlegacy.bin`. The legacy image still links the Ring 0 NIC (`ne2k_probe`, `net_tls_record_`) and `kernel_ring0_boot_fat_mount`. That boot FAT mount is the network-legacy contract. The Ring 3 `atadriver` sends IDENTIFY. After it dies, the kernel resets the channel when BSY or DRQ is set. An idle channel is not reset, so a clean kill does not bump `resets`. The kernel parks the store and respawns `bin/atadriver` (budget 4). The budget returns to 0 when that pid publishes the store (`[ATA] supervised respawn budget restored`). The blocked FAT operation is retried in Ring 3. `fatkpio` stays 0. A sector the driver already committed is not replayed (`OS_ATA_FS_ABORTED`). Steady-state journal sector I/O (`kernel_journal_sector_io`) uses the driver RPC when the driver is live and the caller can block. A boot journal read, before any driver exists, stays Ring 0. If the driver is live but the caller cannot block, the write returns -1 and stays in RAM. Overlay snapshot load at boot stays Ring 0 because no task can run yet. Still Ring 0 on both images: that boot journal read, that boot overlay load, PIC, PIT, PS/2, VGA, serial, PCI, `usb_tablet`, and the legacy boot FAT mount. Proof this run: `make strict-image-check` and `make qemu-ata-driver` in 269 s (boot `fatkpio` 0, kill path, mid-job #GP with `aborts` 0 to 1, `resets` 0 to 1, `fatkpio` 0 to 0).
+- US-064 is closed for this guest Raft log. Not Paxos. `userspace/p2p.c`: pre-vote, membership quorum, physical window 16, compaction (`p2p-raft-compact`), InstallSnapshot (`P2P_I_RAFT_SNAPSHOT`) for a follower whose match is behind `snapshot_index`, and a leader lease of 10 s (`P2P_RAFT_LEASE_TICKS`). A heartbeat that reaches a peer renews the leader lease. A follower that still holds the lease does not start an election (`p2p raft lease held`). Term and vote stay in the p2pkv trailer. Proof: `test_raft_snapshot_installs_for_a_lagging_follower`, `test_raft_prevote_does_not_bump_a_healthy_term`, and `make qemu-p2p` in 183 s. Scenario 2 cuts the hub wire (`cut_pair`, not `p2p-block`, not `set_link`) and syncs after heal. Scenario 2b compacts index 2 while gamma is cut, then gamma installs that snapshot and commits index 3 after the wire is healed.
+- US-068 and US-073 stay partial. `admit()` caps data when a rate limit is set or the window is below 16. The window starts at 16, halves on a rejected raft append, and grows by one on success. Control frames are not capped. Proof: `test_qos_window_and_cache_invalidate`. This is not a full adaptive controller.
+- US-069 stays partial. Scenario 2 is a real hub wire cut. Scenario 3 still detects a blocked link and relays. Not a complete fault-tolerance system.
+- US-070 stays partial. `p2p_cache_invalidate` clears the local entry and sends `P2P_I_CACHE_INV`. Remote get was already in QEMU. Not a coherent distributed cache. Proof: the same unit test.
+- US-075 stays partial. `p2p-analyze` adds a fixed rule `congestion` when `qos.loss_count` is greater than 0. No learning. QEMU scenario 3 still names the dead link.
+- US-067 stays typed RPC, not HTTP/2. US-074 stays simulated STUN/NAT. US-063 stays one relay.
+
+## Etat courant du 15 octobre 2026 (lot 1)
+
+Previous baseline for lot 1, branched from `e932c904` (merge of pull request #148). Superseded by the lot 2 section above. The 14 October section below keeps its own counter. US-001 and US-064 were still open in this section.
 
 ```text
 make test-all : 768/768 passed, 0 failed, 0 skipped

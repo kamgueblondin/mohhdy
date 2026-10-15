@@ -1,5 +1,10 @@
 # Tranche 4 - Ring 3 ATA PIO driver behind IPC (slices 1, 2 and 3)
 
+Note (15 October 2026, lot 2): the paragraphs below are the slice history.
+Both images now link the absent IDENTIFY and FAT PIO objects. There is no
+Ring 0 command 0xEC and no Ring 0 FAT redo. The boot overlay load and the
+boot journal read are still Ring 0. See `docs/ETAT_REEL.md`. US-001 stays open.
+
 Status: slices 1, 2 and 3 delivered. The storage driver is still NOT fully
 out of Ring 0: the kernel keeps a complete PIO path, used at boot (overlay
 load and FAT mounts, before any task exists) and as the fallback when the
