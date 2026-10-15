@@ -312,14 +312,51 @@ static void ata_serial_u32(uint32_t v) {
     while (n) write_serial(b[--n]);
 }
 
+/* 1 when a Ring 3 driver is alive or a supervised respawn is already queued.
+ * A guest with no IDE disk never has one: overlay stays in the kernel. */
+static int ata_ring3_store_pending(void) {
+    task_t* born;
+    if (!ata_present()) return 0;
+    if (ata_live_driver() > 0) return 1;
+    if (g_respawn_pid > 0) {
+        born = get_task_by_id(g_respawn_pid);
+        if (born && born->type == TASK_TYPE_USER && born->state != TASK_TERMINATED &&
+            (int32_t)born->id != g_purge_pid) return 1;
+    }
+    if (g_boot_driver_pid > 0 && !g_boot_driver_registered) {
+        born = get_task_by_id(g_boot_driver_pid);
+        if (born && born->type == TASK_TYPE_USER && born->state != TASK_TERMINATED &&
+            (int32_t)born->id != g_purge_pid) return 1;
+    }
+    return 0;
+}
+
+static int ata_cstr_eq(const char* a, const char* b) {
+    if (!a || !b) return 0;
+    while (*a && *a == *b) { a++; b++; }
+    return *a == *b;
+}
+
+/* The purged pid owned ata-driver, or it is the boot/respawn/store pid.
+ * Any other exit must not spawn a driver. */
+static int ata_purge_is_driver(int32_t pid, const service_registry_entry_t* owned, int count) {
+    int i;
+    if (pid > 0 && (pid == g_boot_driver_pid || pid == g_respawn_pid || pid == ata_fsop_store_pid()))
+        return 1;
+    for (i = 0; i < count; i++) {
+        if (ata_cstr_eq(owned[i].name, "ata-driver")) return 1;
+    }
+    return 0;
+}
+
 /* Strict image: after the live driver dies, spawn bin/atadriver again.
  * The new task is a boot service so it runs during the shell's keyboard wait.
  * Budget stops a crash loop from filling the task table. Returns 0 if a
- * live or freshly spawned driver exists. */
+ * live or freshly spawned driver exists. No disk: nothing to respawn. */
 static int ata_supervisor_respawn(void) {
     task_t* existing;
     task_t* born;
-    if (kernel_fat_pio_fallback_enabled()) return -1;
+    if (kernel_fat_pio_fallback_enabled() || !ata_present()) return -1;
     if (ata_live_driver() > 0) return 0;
     if (g_respawn_pid > 0) {
         existing = get_task_by_id(g_respawn_pid);
@@ -389,11 +426,14 @@ static int ata_wait_store(uint32_t store) {
  * in-flight flush, the legacy image persists through Ring 0 PIO. The strict
  * image parks the mirror and respawns bin/atadriver. A task blocked on a
  * sector RPC is resumed either way. */
-static void ata_bridge_after_purge(void) {
+static void ata_bridge_after_purge(int driver_died) {
     int in_use;
     int persist = 0;
     int strict = !kernel_fat_pio_fallback_enabled();
-    if (ata_live_driver() > 0) return;
+    /* Unrelated exits (shell children, workers) are not a lost ata-driver.
+     * Respawning here filled the task table on a diskless guest and made
+     * overlay syscalls wait for a store that never arrives. */
+    if (!driver_died || ata_live_driver() > 0) return;
     ata_rpc_abort();
     in_use = ata_job_controller_in_use();
     if (in_use) {
@@ -484,7 +524,9 @@ retry:
     tries++;
     driver_pid = ata_live_driver();
     if (store == 0U || (ata_fsop_store_flags(driver_pid) & store) == 0U) {
-        if (!kernel_fat_pio_fallback_enabled()) {
+        /* Strict image, driver alive or coming back: wait for its store.
+         * No disk and no driver: the kernel overlay (RAM) still serves. */
+        if (!kernel_fat_pio_fallback_enabled() && ata_ring3_store_pending()) {
             if (tries >= 3 || !ata_wait_store(store)) {
                 ata_fsop_note_unavailable();
                 *rc = OS_ATA_FS_UNAVAILABLE;
@@ -886,14 +928,16 @@ static void service_notify_purge_pid(int32_t pid) {
     service_registry_entry_t owned[SERVICE_REGISTRY_CAPACITY];
     int count = service_registry_collect_owned(pid, owned, SERVICE_REGISTRY_CAPACITY);
     int i;
+    int driver_died;
     g_purge_pid = pid;
+    driver_died = ata_purge_is_driver(pid, owned, count);
     if (count > 0) {
         for (i = 0; i < count && i < (int)SERVICE_REGISTRY_CAPACITY; i++) {
             service_notify_change(owned[i].name, pid, 0, OS_SERVICE_EVENT_PURGED);
         }
         (void)service_registry_remove_pid(pid);
     }
-    ata_bridge_after_purge();
+    ata_bridge_after_purge(driver_died);
     /* Tranche 5 suite: a dead NIC owner gives the card back to Ring 0. */
     if (nic_owner_drop_if_gone(sys_service_lookup("net-driver"))) {
         tss_set_nic_io(0);
