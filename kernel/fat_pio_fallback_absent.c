@@ -1,4 +1,4 @@
-/* Strict image: no Ring 0 FAT sector fallback. A dead atadriver is respawned
+/* Both images: no Ring 0 FAT sector fallback. A dead atadriver is respawned
  * instead. This file deliberately does not define kernel_ring0_fat_pio_fallback. */
 #include "fat_pio_fallback.h"
 
