@@ -52,6 +52,15 @@ What pull request #147 adds in Phase 3. This is not a web engine and it does not
 - `bigint_modexp` in `kernel/bigint.c` skips leading zero bits of the highest exponent limb and skips the first square (the accumulator starts at 1). It is the shared modular exponentiation primitive. It is not, by itself, a change to the RSA or TLS handshake. Proof: `test_bigint_modexp_leading_zeros` against `pow(base, exp, mod)` vectors, including a zero exponent, a single set bit, a high limb, and a zero high limb.
 - `net_wire_bind` / `net_wire_demux` in `kernel/net_wire.c` accept one listen binding (remote `0.0.0.0` and remote port 0 together), refuse a half wildcard, refuse a second listen on the same local address and port, and prefer a specific 4-tuple over that listen. Proof: `test_demux_listen_beside_specific`. This is the worker wire table. The OS-UI `web-serve` pump in `kernel/net_llm_client.c` is a separate table and still drops frames whose destination port is not its own listen port.
 
+## Lot GPT-2 local du 15 octobre 2026
+
+Base: `main` at `1b55273` (merge of pull request #147).
+
+- Regression found on main after #146: the boot `aiworker` was spawned only when a FP32 checkpoint or a resident GGUF existed. Since the FAT is mounted by the Ring 3 `atadriver`, no GGUF is resident at that point, so a GGUF-only initrd answered -148 to every 109/110 step. `kernel/kernel.c` now also spawns the worker when the tokenizer and the boot `atadriver` are present; the worker reads `GPT2.GGU` itself and exits cleanly if no model is usable. Proof: `make qemu-ai-gguf-only` (synthetic tokenizer only, synthetic GGUF on disk), also run by `make qemu-ai-gguf` in CI. The contract fails without the fix (`missing output: [AI] boot aiworker spawned`).
+- `make qemu-gguf-smoke` waited for the Ring 0 boot line `GGUF: profil local FAT16 pret`, which strict boot no longer prints. It now waits for `aiworker gguf ready bytes` and `[AI] ai-engine GGUF ready in Ring 3`, and still requires a non-empty real completion and `ai-continue`. Same marker change in `test_gpt2_sentences.py` and the two GGUF benchmarks (boot timeout 300 s).
+- The release `gpt2-124m-assets` cited by the README did not exist. It now holds `gpt2_124M.bin`, `gpt2_tokenizer.bin`, `gpt2-Q3_K_M.gguf` and `gpt2-124m-assets.sha256`.
+- `make run-gpt2` (`scripts/run_gpt2.sh`): fetches missing assets, checks SHA-256, builds the image and the GGUF FAT16 disk, launches QEMU GTK with KVM when `/dev/kvm` is usable, else TCG. Real GGUF Q3_K_M under TCG on the dev box: about 71 s per sentence, 67 s for `ai-continue`. Not run in CI (no real weights in CI).
+
 ## Baseline vivante du 6 octobre 2026
 
 La branche `main` a été réalignée sur `origin/main` au commit `dcc248a` (`Merge pull request #106 from kamgueblondin/cursor/gpt2-phrases-lisibles-1988`). La baseline a été exécutée depuis un arbre Git propre :

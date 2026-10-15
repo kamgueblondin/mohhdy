@@ -30,7 +30,7 @@ mkdir -p models
 curl -L -o models/gpt2_124M.bin https://github.com/kamgueblondin/mohhdy/releases/download/gpt2-124m-assets/gpt2_124M.bin
 curl -L -o models/gpt2_tokenizer.bin https://github.com/kamgueblondin/mohhdy/releases/download/gpt2-124m-assets/gpt2_tokenizer.bin
 curl -L -o models/gpt2-124m-assets.sha256 https://github.com/kamgueblondin/mohhdy/releases/download/gpt2-124m-assets/gpt2-124m-assets.sha256
-(cd models && sha256sum -c gpt2-124m-assets.sha256)
+(cd models && sha256sum -c --ignore-missing gpt2-124m-assets.sha256)
 ```
 
 Les empreintes attendues sont les suivantes :
