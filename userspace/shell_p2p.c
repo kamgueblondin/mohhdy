@@ -209,7 +209,8 @@ int shell_p2p_line(const char* line) {
     if (s_eq(cmd, "p2p-raft")) {
         rest = word(rest, a, (int)sizeof(a));
         if (s_eq(a, "elect")) {
-            p2p_raft_elect(&g_node, &g_host);
+            rc = p2p_raft_elect(&g_node, &g_host);
+            if (rc == -2) { print_string("p2p-raft lease held\n"); return 0; }
             print_string("p2p-raft election started\n");
             return 0;
         }

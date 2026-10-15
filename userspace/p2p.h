@@ -34,7 +34,8 @@ enum {
     P2P_I_RAFT_VOTE_REQ, P2P_I_RAFT_VOTE_RESP, P2P_I_RAFT_HEARTBEAT, P2P_I_CACHE_INV,
     P2P_I_GRPC_REQ, P2P_I_GRPC_RESP, P2P_I_STUN_REQ, P2P_I_STUN_RESP, P2P_I_NAT_PUNCH,
     P2P_I_RAFT_APPEND, P2P_I_RAFT_APPEND_RESP,
-    P2P_I_RAFT_PREVOTE_REQ, P2P_I_RAFT_PREVOTE_RESP, P2P_I_COUNT
+    P2P_I_RAFT_PREVOTE_REQ, P2P_I_RAFT_PREVOTE_RESP,
+    P2P_I_RAFT_SNAPSHOT, P2P_I_RAFT_SNAPSHOT_RESP, P2P_I_COUNT
 };
 
 typedef struct {
@@ -66,6 +67,8 @@ typedef struct {
     uint32_t raft_next;   /* next log index to send (1-based, 0 = unset) */
     uint32_t raft_match;  /* highest index known replicated */
     uint32_t raft_commit_sent; /* leader_commit last sent to this peer */
+    uint32_t raft_snap_gen; /* snapshot_index this peer is receiving */
+    uint8_t raft_snap_off;  /* next kv item index to send */
 } p2p_peer_t;
 
 typedef struct {
@@ -98,10 +101,15 @@ typedef enum {
 } p2p_raft_role_t;
 
 /* Physical window. Logical indexes continue past this after compaction.
- * One uncompacted burst still fits 16 entries. There is no InstallSnapshot:
- * a follower whose log is behind snapshot_index is a gap. */
+ * One uncompacted burst still fits 16 entries. A follower whose match is
+ * behind snapshot_index receives InstallSnapshot (the kv image taken at
+ * compact time), then ordinary appends. */
 #define P2P_RAFT_LOG 16
 #define P2P_RAFT_ELECTION_TICKS (30U * P2P_HZ)
+/* Followers that heard the leader refuse votes and campaigns until this
+ * window ends. Shorter than the election timeout. */
+#define P2P_RAFT_LEASE_TICKS (10U * P2P_HZ)
+#define P2P_QOS_WINDOW_MAX 16U
 typedef struct {
     uint32_t term;
     char key[P2P_KEY_MAX];
@@ -124,6 +132,12 @@ typedef struct {
     uint32_t last_applied;    /* highest applied index */
     uint32_t snapshot_index;  /* discarded applied prefix, 0 = none */
     uint32_t snapshot_term;   /* term of snapshot_index */
+    uint32_t lease_until;     /* ticks: votes and campaigns wait until then */
+    uint8_t snap_kv_n;        /* kv image captured at the last compact */
+    uint8_t snap_in_n;        /* snapshot chunks received so far */
+    uint32_t snap_in_index;   /* snapshot_index those chunks belong to */
+    p2p_item_t snap_kv[P2P_KV];
+    p2p_item_t snap_in[P2P_KV];
 } p2p_raft_state_t;
 
 #define P2P_CACHE_MAX 8
@@ -219,6 +233,11 @@ int p2p_raft_vote_export(const p2p_node_t* n, uint8_t* out, int cap);
 int p2p_raft_vote_import(p2p_node_t* n, const uint8_t* in, int len);
 const p2p_item_t* p2p_cache_get(p2p_node_t* n, const char* key, uint32_t current_tick);
 int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t ttl_ticks, uint32_t current_tick);
+/* Drop a local cache line and tell every up keyed peer. Returns how many were told. */
+int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key);
+/* AIMD on the data window. Control frames do not pass through it. */
+void p2p_qos_note_loss(p2p_node_t* n);
+void p2p_qos_note_ack(p2p_node_t* n);
 int p2p_route_find(const p2p_node_t* n, uint32_t dest_id, uint32_t* next_hop, uint32_t* total_cost);
 int p2p_grpc_call(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* service, const char* method, const char* payload);
 /* timeout_ticks 0 is already expired. fixed_id 0 allocates a new id. */
