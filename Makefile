@@ -116,7 +116,7 @@ $(GGUF_FLAG_STAMP):
 	@rm -f build/.gguf-ring0-fallback-*
 	@touch $@
 NETLEGACY_IMAGE = build/mohhdy-netlegacy.bin
-NETLEGACY_OBJECTS = $(filter-out build/syscall.o build/ne2k_hw.o,$(OBJECTS)) build/syscall-netlegacy.o build/ne2k_hw-full.o build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o build/ata_identify_ring0.o build/fat_pio_fallback_legacy.o
+NETLEGACY_OBJECTS = $(filter-out build/syscall.o build/ne2k_hw.o,$(OBJECTS)) build/syscall-netlegacy.o build/ne2k_hw-full.o build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o build/ata_identify_absent.o build/fat_pio_fallback_absent.o
 
 build/syscall-netlegacy.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h $(GGUF_FLAG_STAMP)
 	@mkdir -p $(dir $@)
@@ -144,7 +144,7 @@ STRICT_OBJECTS = $(filter-out $(NET_STACK_OBJECTS),$(OBJECTS)) build/net_ring0_a
 ifeq ($(NET_RING0_FALLBACK),0)
 IMAGE_OBJECTS = $(STRICT_OBJECTS)
 else
-IMAGE_OBJECTS = $(OBJECTS) build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o build/ata_identify_ring0.o build/fat_pio_fallback_legacy.o
+IMAGE_OBJECTS = $(OBJECTS) build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o build/ata_identify_absent.o build/fat_pio_fallback_absent.o
 endif
 $(OS_IMAGE): $(IMAGE_OBJECTS)
 	@mkdir -p $(dir $@)
@@ -340,15 +340,7 @@ build/ata_identify_absent.o: kernel/ata_identify_absent.c kernel/ata.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/ata_identify_ring0.o: kernel/ata_identify_ring0.c kernel/ata.h
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
 build/fat_pio_fallback_absent.o: kernel/fat_pio_fallback_absent.c kernel/fat_pio_fallback.h
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-build/fat_pio_fallback_legacy.o: kernel/fat_pio_fallback_legacy.c kernel/fat_pio_fallback.h kernel/ata.h kernel/syscall/syscall.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -797,6 +789,13 @@ test-all:
 	@python3 scripts/extract_guest_commands.py --check
 	@python3 tests/scripts/test_python_facade_removed.py
 
+# Host unit tests rebuilt with --coverage, then one gcov line percentage.
+# Not part of test-all or CI: the notes stay under build/.
+coverage:
+	@$(MAKE) -C tests clean
+	@$(MAKE) -C tests ENABLE_COVERAGE=1 test
+	@$(MAKE) -C tests ENABLE_COVERAGE=1 coverage-report
+
 test-performance:
 	@echo "=== Tests de performance et benchmarks ==="
 	@$(MAKE) -C tests benchmark
@@ -956,11 +955,11 @@ strict-image-check: $(OS_IMAGE) kernel-netlegacy
 	@nm $(NETLEGACY_IMAGE) | grep -q ' net_tls_record_' || { echo "FAIL: legacy image lost its stack"; exit 1; }
 	@nm $(NETLEGACY_IMAGE) | grep -q ' ne2k_probe$$' || { echo "FAIL: legacy image lost ne2k_probe"; exit 1; }
 	@nm $(NETLEGACY_IMAGE) | grep -q ' kernel_ring0_boot_fat_mount$$' || { echo "FAIL: legacy image lost the Ring 0 FAT mount"; exit 1; }
-	@nm $(NETLEGACY_IMAGE) | grep -q ' kernel_ring0_ata_identify$$' || { echo "FAIL: legacy image lost Ring 0 ATA IDENTIFY"; exit 1; }
-	@nm $(NETLEGACY_IMAGE) | grep -q ' kernel_ring0_fat_pio_fallback$$' || { echo "FAIL: legacy image lost Ring 0 FAT PIO fallback"; exit 1; }
+	@if nm $(NETLEGACY_IMAGE) | grep -E ' (kernel_ring0_ata_identify|kernel_ring0_fat_pio_fallback)$$' >/dev/null; then \
+		echo "FAIL: legacy image still links Ring 0 ATA IDENTIFY or FAT PIO fallback"; exit 1; fi
 	@nm $(OS_IMAGE) | grep -q ' kernel_boot_storage$$' || { echo "FAIL: strict image lost kernel_boot_storage"; exit 1; }
 	@nm $(OS_IMAGE) | grep -q ' kernel_nic_boot_probe$$' || { echo "FAIL: strict image lost kernel_nic_boot_probe"; exit 1; }
-	@echo "OK strict image without Ring 0 network stack; legacy image keeps it"
+	@echo "OK strict image without Ring 0 network stack; legacy image keeps the NIC and the boot FAT mount, not ATA IDENTIFY or the FAT PIO fallback"
 
 # Fail if a build or a test rewrote a tracked file, or left an untracked
 # file, outside build/. Ignored products (build/, initrd tarball, logs)
@@ -1123,7 +1122,7 @@ help:
 	@echo "  make test-quick           # Tests pendant développement"
 	@echo "  make test-all             # 497 tests de non-régression avant push"
 
-.PHONY: all kernel-only run run-gui run-qemu-gtk test-build info-initrd info-user user-program userspace-all clean distclean help pack-initrd test-setup test-quick test-kernel test-userspace test-all test-performance test-valgrind test-clean pre-commit-tests ci-tests qemu-smoke qemu-ne2k-acquire qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-close qemu-ne2k-tls-next qemu-ne2k-tls-multipair gpt2-recovery gpt2-benchmark gpt2-tests qemu-gguf-smoke gguf-benchmark gguf-benchmark-check gguf-kvm-benchmark gguf-kvm-benchmark-check ci deps disk gui-captures gui-record
+.PHONY: all kernel-only run run-gui run-qemu-gtk test-build info-initrd info-user user-program userspace-all clean distclean help pack-initrd test-setup test-quick test-kernel test-userspace test-all coverage test-performance test-valgrind test-clean pre-commit-tests ci-tests qemu-smoke qemu-ne2k-acquire qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-close qemu-ne2k-tls-next qemu-ne2k-tls-multipair gpt2-recovery gpt2-benchmark gpt2-tests qemu-gguf-smoke gguf-benchmark gguf-benchmark-check gguf-kvm-benchmark gguf-kvm-benchmark-check ci deps disk gui-captures gui-record
 
 
 # One command local GPT-2 chat: release assets, image, GGUF disk, QEMU GTK.

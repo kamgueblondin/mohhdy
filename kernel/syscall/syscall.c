@@ -161,9 +161,9 @@ static int32_t sys_ai_engine(cpu_state_t* cpu);
  * marks T ready and the scheduler resumes T inside its syscall. While T is
  * blocked only the driver is scheduled, and any other task entering a
  * syscall is rewound and retried later, so FAT static buffers are never
- * re-entered. If the driver dies or stalls, the strict image respawns
- * bin/atadriver and retries the operation in Ring 3. The legacy image
- * (kernel_fat_pio_fallback_enabled) still falls back to Ring 0 FAT PIO. */
+ * re-entered. If the driver dies or stalls, every image respawns
+ * bin/atadriver and retries the operation in Ring 3.
+ * kernel_fat_pio_fallback_enabled is 0 on every linked image. */
 #define ATA_RPC_TIMEOUT_TICKS 300U
 #define ATA_RESPAWN_WAIT_TICKS 3000U
 #define ATA_RESPAWN_LIMIT 4U
@@ -331,6 +331,20 @@ static int ata_ring3_store_pending(void) {
     return 0;
 }
 
+/* Strong copy. The weak copy in service_registry.c is for host tests. */
+int kernel_journal_sector_io(uint32_t lba, uint32_t count, void* buf, int write) {
+    int rc = -1;
+    if (!buf || count == 0U) return -1;
+    if (ata_live_driver() > 0) {
+        if (syscall_ata_fat_io(ATA_DRIVE_MASTER, lba, count, buf, write, &rc)) return rc;
+        return -1;
+    }
+    if (kernel_fat_pio_fallback_enabled() || !ata_ring3_store_pending()) {
+        return write ? ata_write_sectors(lba, count, buf) : ata_read_sectors(lba, count, buf);
+    }
+    return -1;
+}
+
 static int ata_cstr_eq(const char* a, const char* b) {
     if (!a || !b) return 0;
     while (*a && *a == *b) { a++; b++; }
@@ -436,8 +450,10 @@ static void ata_bridge_after_purge(int driver_died) {
     if (!driver_died || ata_live_driver() > 0) return;
     ata_rpc_abort();
     in_use = ata_job_controller_in_use();
-    if (in_use) {
-        /* The dead driver may have stopped mid-transfer: reset the channel. */
+    /* in_use covers a claim the kernel still holds. ata_channel_busy covers
+     * DRQ/BSY left after that claim was already dropped. An idle channel
+     * is not reset: a clean kill must not bump the reset counter. */
+    if (in_use || ata_channel_busy()) {
         if (ata_channel_reset() == 0) print_string_serial("[ATA] channel reset after driver loss\n");
         ata_job_note_channel_reset();
     }
@@ -830,6 +846,12 @@ static int sys_ata_fs_ready(uint32_t flags, uint8_t* image, uint32_t capacity) {
     fat16_invalidate_caches(fat16_root());
     ata_fsop_note_handover();
     print_string_serial("[ATA] store handed to the Ring 3 driver\n");
+    /* A driver that reached the store is healthy. The crash-loop budget
+     * counts deaths that never publish, not a later unrelated fault. */
+    if (g_respawn_count > 0U && pid == g_respawn_pid) {
+        g_respawn_count = 0U;
+        print_string_serial("[ATA] supervised respawn budget restored\n");
+    }
     /* A syscall waiting for this handover resumes on the driver's next yield.
      * schedule() from inside this syscall would drop the driver's return. */
     if (g_rpc_waiter && g_rpc_waiter->state == TASK_BLOCKED_KERNEL &&

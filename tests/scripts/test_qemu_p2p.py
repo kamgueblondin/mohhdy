@@ -5,8 +5,8 @@ Each guest spawns the Ring 3 networker (strict default kernel) and runs a
 P2P node (p2p-up). The hub only floods frames between the guests (no DHCP,
 DNS, TLS or public internet). Scenarios:
   1. discovery + encrypted message + health/stats (no plaintext on wire);
-  2. replication, partition then anti-entropy sync, majority consensus;
-  2b. Raft pre-vote, hub wire cut, journal compaction, one entry past the prefix;
+  2. replication, hub wire cut, then anti-entropy sync, majority consensus;
+  2b. Raft pre-vote, leader lease, hub wire cut, InstallSnapshot, index 3;
   3. link failure detection and relayed (routed) delivery.
 """
 from __future__ import print_function
@@ -194,19 +194,19 @@ def main():
                                % (hub.p2p_sealed, hub.p2p_hello, hub.p2p_plaintext))
         say("scenario 1 ok: encrypted message, health, stats (%.0fs)" % (time.monotonic() - t0))
 
-        # Scenario 2: replication, partition + sync, consensus.
+        # Scenario 2: replication, then a real hub wire cut (not p2p-block).
         cmd(a, "p2p-put color blue", "p2p-put ok color sent 2")
         wait_log(b, "p2p kv replicated color=blue v1 from alpha", 60)
         wait_log(c, "p2p kv replicated color=blue v1 from alpha", 60)
-        cmd(c, "p2p-block alpha", "p2p-block ok alpha")
-        cmd(c, "p2p-block beta", "p2p-block ok beta")
+        hub.cut_pair(a["mac"], c["mac"])
+        hub.cut_pair(b["mac"], c["mac"])
         start_c = len(base.log_text(c["log"]))
         cmd(a, "p2p-put mode eco", "p2p-put ok mode")
         wait_log(b, "p2p kv replicated mode=eco v1 from alpha", 60)
-        cmd(c, "p2p-unblock alpha", "p2p-unblock ok alpha")
-        cmd(c, "p2p-unblock beta", "p2p-unblock ok beta")
         if "mode=eco" in log(c, start_c):
-            raise RuntimeError("gamma received mode=eco while partitioned")
+            raise RuntimeError("gamma received mode=eco during the hub cut")
+        hub.heal_pair(a["mac"], c["mac"])
+        hub.heal_pair(b["mac"], c["mac"])
         cmd(c, "p2p-poll 5", "p2p-poll ok", timeout=30)
         cmd(c, "p2p-sync alpha", "p2p-sync ok asked 1")
         wait_log(c, "p2p kv synced mode=eco v1 from alpha", 60, start_c)
@@ -216,7 +216,7 @@ def main():
         wait_log(a, "p2p kv miss nokey at beta", 60)
         wait_log(a, "p2p kv miss nokey at gamma", 60)
         cmd(c, "p2p-get color", "p2p-get ok local color=blue v1")
-        say("scenario 2: replication + partition sync ok (%.0fs)" % (time.monotonic() - t0))
+        say("scenario 2: replication + hub wire cut sync ok (%.0fs)" % (time.monotonic() - t0))
         cmd(b, "p2p-propose leader beta", "p2p-propose ok leader sent 2")
         wait_log(b, "p2p propose committed leader=beta", 90)
         wait_log(a, "p2p kv committed leader=beta", 60)
@@ -225,9 +225,9 @@ def main():
             raise RuntimeError("missing votes")
         say("scenario 2 ok: majority consensus committed (%.0fs)" % (time.monotonic() - t0))
 
-        # US-064: Raft log on three guests. Pre-vote, then a hub wire cut
-        # between gamma and the other two (not p2p-block), then compaction
-        # and one more entry past the compacted prefix.
+        # US-064: Raft log on three guests. Pre-vote and a leader lease, then
+        # a hub wire cut. The leader compacts the entry gamma missed and
+        # gamma installs that snapshot after the wire is healed.
         cmd(a, "p2p-raft elect", "p2p-raft election started")
         if "p2p raft prevote started" not in log(a):
             raise RuntimeError("alpha did not start a pre-vote")
@@ -236,6 +236,11 @@ def main():
         cmd(c, "p2p-poll 1", "p2p-poll ok")
         cmd(a, "p2p-poll 1", "p2p-poll ok")
         cmd(a, "p2p-raft", "p2p raft role leader")
+        if "lease 1" not in log(a):
+            raise RuntimeError("leader report has no lease: %s" % log(a)[-400:])
+        start_b = cmd(b, "p2p-raft", "p2p raft role follower")
+        if "lease 1" not in log(b, start_b):
+            raise RuntimeError("follower report has no lease: %s" % log(b, start_b)[-400:])
         cmd(a, "p2p-raft-put tone blue", "p2p-raft-put ok index 1")
         cmd(a, "p2p-poll 1", "p2p-poll ok")
         cmd(b, "p2p-poll 1", "p2p-poll ok")
@@ -251,19 +256,20 @@ def main():
         wait_log(b, "p2p raft commit index 2 late=yes", 30)
         if "late=yes" in log(c, gamma_at_cut):
             raise RuntimeError("gamma applied late=yes during the hub cut")
-        hub.heal_pair(a["mac"], c["mac"])
-        hub.heal_pair(b["mac"], c["mac"])
-        cmd(a, "p2p-poll 2", "p2p-poll ok")
-        cmd(c, "p2p-poll 2", "p2p-poll ok")
-        wait_log(c, "p2p raft commit index 2 late=yes", 30)
         cmd(a, "p2p-raft-compact", "p2p-raft-compact ok index 2")
         cmd(a, "p2p-raft-put next ok", "p2p-raft-put ok index 3")
-        cmd(a, "p2p-poll 1", "p2p-poll ok")
-        cmd(b, "p2p-poll 1", "p2p-poll ok")
-        cmd(c, "p2p-poll 1", "p2p-poll ok")
+        hub.heal_pair(a["mac"], c["mac"])
+        hub.heal_pair(b["mac"], c["mac"])
+        # Two rounds: the leader sends the snapshot, the follower answers,
+        # then the leader sends index 3. One round leaves that reply queued.
+        for _round in range(2):
+            cmd(a, "p2p-poll 2", "p2p-poll ok")
+            cmd(b, "p2p-poll 2", "p2p-poll ok")
+            cmd(c, "p2p-poll 2", "p2p-poll ok")
+        wait_log(c, "p2p raft snapshot installed index 2", 40)
         wait_log(b, "p2p raft commit index 3 next=ok", 30)
         wait_log(c, "p2p raft commit index 3 next=ok", 30)
-        say("scenario 2b: raft prevote, hub cut, compact ok (%.0fs)" % (time.monotonic() - t0))
+        say("scenario 2b: raft prevote, lease, snapshot, hub cut ok (%.0fs)" % (time.monotonic() - t0))
 
         # Scenario 3: link alpha<->gamma fails; detection, then relay via beta.
         cmd(a, "p2p-block gamma", "p2p-block ok gamma")

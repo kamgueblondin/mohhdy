@@ -103,13 +103,24 @@ int ata_channel_reset(void) {
     return ata_wait_not_busy() < 0 ? -1 : 0;
 }
 
+/* 1 when a transfer is still sitting on the bus (BSY or DRQ). A driver
+ * can die after DRQ is set and after the kernel has already dropped its
+ * claim. The supervisor resets in that case too. */
+int ata_channel_busy(void) {
+    uint8_t st;
+    if (!g_ata_present) return 0;
+    st = inb(ATA_STATUS);
+    if (st == 0x00 || st == 0xFF) return 0;
+    return (st & (ATA_SR_BSY | ATA_SR_DRQ)) != 0U;
+}
+
 int ata_present_drive(uint8_t drive) {
     return drive < 2U && g_ata_drive_present[drive];
 }
 
-/* Strict image: ata_identify_absent.c returns 0 (no 0xEC).
- * Legacy image: kernel_ring0_ata_identify drains the IDENTIFY payload.
- * The unit-test host model has no IDENTIFY data; presence is the status probe. */
+/* Both images link ata_identify_absent.c (no command 0xEC).
+ * The Ring 3 atadriver sends IDENTIFY. The host test model has no
+ * IDENTIFY data; presence is the status probe. */
 #ifdef ATA_PIO_HOST_HOOKS
 static int ata_boot_identify(void) { return 0; }
 #else

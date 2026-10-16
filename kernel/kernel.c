@@ -321,8 +321,8 @@ int kernel_net_wire_close(int socket_id) {
 static uint8_t fat16_ata_read_window[FAT16_ATA_READ_WINDOW_SECTORS * 512U];
 
 /* FAT16/FAT32 sector I/O goes through the Ring 3 atadriver when it is live.
- * The strict image refuses Ring 0 FAT PIO (kernel_fat_sector_fallback returns
- * -1). The legacy image still counts those sectors in fatkpio. */
+ * kernel_fat_sector_fallback returns -1 on every image. A dead driver is
+ * respawned. There is no Ring 0 FAT redo and fatkpio stays 0. */
 static int fat_disk_io(uint8_t drive, uint32_t lba, uint32_t count, void* buffer, int write) {
     int rc;
     if (syscall_ata_fat_io(drive, lba, count, buffer, write, &rc)) return rc;
@@ -971,13 +971,12 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
 
     /* Tranche 4 slice 3: the Ring 3 atadriver is spawned at boot when an IDE
      * disk is present, so FAT and overlay disk I/O take the driver path by
-     * default. The strict image respawns it after death (no Ring 0 FAT PIO).
-     * The legacy image still falls back to Ring 0 PIO. It is
-     * created after the shell (the shell keeps PID 1) but runs first so it
-     * registers before the shell reaches its input loop. It has no user
-     * parent; only the root shell may stop it (kill). The overlay snapshot
-     * was already loaded above by Ring 0 PIO (no task could run yet); the
-     * boot driver does not reload it (see sys_service_register). */
+     * default. Every image respawns it after death (no Ring 0 FAT PIO, no
+     * Ring 0 IDENTIFY). It is created after the shell (the shell keeps PID 1)
+     * but runs first so it registers before the shell reaches its input loop.
+     * It has no user parent; only the root shell may stop it (kill). The
+     * overlay snapshot was already loaded above by Ring 0 PIO (no task could
+     * run yet); the boot driver does not reload it (see sys_service_register). */
     if (ata_present()) {
         task_t* ata_driver_task = create_task_from_initrd_file("bin/atadriver");
         if (ata_driver_task) {

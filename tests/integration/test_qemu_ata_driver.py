@@ -426,6 +426,7 @@ def boot1():
         kill(monitor, proc, driver_pid)
         wait_for("[ATA] store parked for supervised respawn", proc, killed)
         wait_for("[ATA] supervised respawn bin/atadriver", proc, killed)
+        wait_for("[ATA] supervised respawn budget restored", proc, killed)
         vfs_write_read(monitor, proc, "fat16/t4fb.txt", "viakernel")
         wait_for("atadriver identify ok", proc, killed)
         search_after(STORE_SPEC, killed, "respawned driver store ready", monitor, proc, rounds=16)
@@ -486,6 +487,7 @@ def boot2():
         wait_for(GP_FAULT, proc, start, timeout=10)
         wait_for("[ATA] channel reset after driver loss", proc, start, timeout=10)
         wait_for("[ATA] supervised respawn bin/atadriver", proc, start, timeout=20)
+        wait_for("[ATA] supervised respawn budget restored", proc, start, timeout=30)
         wait_for("atadriver snapshot load ok", proc, start, timeout=20)
         load = search_after(LOAD_SPEC, start, "driver load counters", monitor, proc, rounds=16)
         if load[2] < 1:

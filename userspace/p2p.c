@@ -11,7 +11,7 @@ static const char* const k_names[P2P_I_COUNT] = {
     "ping", "pong", "msg", "put", "sync-req", "sync-items", "get-req", "get-resp", "propose", "vote", "commit", "app",
     "raft-req", "raft-resp", "raft-hb", "cache-inv",
     "grpc-req", "grpc-resp", "stun-req", "stun-resp", "nat-punch", "raft-append", "raft-append-resp",
-    "raft-prevote-req", "raft-prevote-resp"
+    "raft-prevote-req", "raft-prevote-resp", "raft-snapshot", "raft-snapshot-resp"
 };
 const char* p2p_type_name(int t) { return (t > 0 && t < P2P_I_COUNT) ? k_names[t] : "?"; }
 
@@ -234,14 +234,34 @@ static int seal_send(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inne
     return emit(n, h, ip, b, pos);
 }
 
-/* Per-peer budget for user traffic (US-068/073). Control frames bypass it. */
+/* Per-peer budget for user traffic (US-068/073). Control frames bypass it.
+ * The window starts at 16 (no cap beyond an explicit p2p-limit). A lost
+ * raft append halves it; a successful append grows it by one. While the
+ * window is below 16, data frames share that cap with the rate limit. */
 static int admit(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
     uint32_t t = now(h);
-    if (!n->rate_limit) return 1;
-    if (t - p->bucket_tick >= P2P_HZ) { p->bucket_tick = t; p->bucket_used = 0; }
-    if (p->bucket_used >= n->rate_limit) { p->throttled++; return 0; }
-    p->bucket_used++;
+    uint32_t cap = n->qos.window_size ? n->qos.window_size : 1U;
+    int limited;
+    if (n->rate_limit && n->rate_limit < cap) cap = n->rate_limit;
+    limited = n->rate_limit != 0U || cap < P2P_QOS_WINDOW_MAX;
+    if (limited) {
+        if (t - p->bucket_tick >= P2P_HZ) { p->bucket_tick = t; p->bucket_used = 0; }
+        if (p->bucket_used >= cap) { p->throttled++; return 0; }
+        p->bucket_used++;
+    }
+    n->qos.priority_low_tx++;
     return 1;
+}
+
+void p2p_qos_note_loss(p2p_node_t* n) {
+    if (!n) return;
+    n->qos.loss_count++;
+    if (n->qos.window_size > 1U) n->qos.window_size /= 2U;
+}
+
+void p2p_qos_note_ack(p2p_node_t* n) {
+    if (!n) return;
+    if (n->qos.window_size < P2P_QOS_WINDOW_MAX) n->qos.window_size++;
 }
 
 /* ------------------------------------------------------------ handlers */
@@ -403,18 +423,82 @@ static void raft_maybe_commit(p2p_node_t* n, const p2p_host_t* h) {
     if (n->raft.commit_index != before) raft_push_commit(n, h);
     raft_apply(n, h);
 }
+static void raft_note_lease(p2p_node_t* n, const p2p_host_t* h) {
+    n->raft.lease_until = now(h) + P2P_RAFT_LEASE_TICKS;
+}
+static int raft_lease_valid(const p2p_node_t* n, const p2p_host_t* h) {
+    return n->raft.lease_until != 0U && now(h) < n->raft.lease_until;
+}
+static int raft_send_snapshot(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
+    uint8_t b[400];
+    uint32_t off;
+    int pos, nitems = 0, last;
+    if (p->raft_snap_gen != n->raft.snapshot_index) {
+        p->raft_snap_gen = n->raft.snapshot_index;
+        p->raft_snap_off = 0;
+    }
+    off = p->raft_snap_off;
+    if (off > n->raft.snap_kv_n) off = 0;
+    put32(b, n->raft.term); put32(b + 4, n->id);
+    put32(b + 8, n->raft.snapshot_index); put32(b + 12, n->raft.snapshot_term);
+    b[16] = 0; b[17] = (uint8_t)off; b[18] = 0;
+    pos = 19;
+    while ((uint32_t)(off + (uint32_t)nitems) < n->raft.snap_kv_n && nitems < 4) {
+        int np = item_encode(b, pos, 360, &n->raft.snap_kv[off + (uint32_t)nitems]);
+        if (np < 0) break;
+        pos = np;
+        nitems++;
+    }
+    last = (uint32_t)(off + (uint32_t)nitems) >= n->raft.snap_kv_n;
+    b[16] = (uint8_t)(last ? 1 : 0);
+    b[18] = (uint8_t)nitems;
+    return seal_send(n, h, p, P2P_I_RAFT_SNAPSHOT, b, pos);
+}
+static void raft_install_snapshot(p2p_node_t* n, const p2p_host_t* h, uint32_t index, uint32_t term) {
+    p2p_raft_entry_t kept[P2P_RAFT_LOG];
+    uint32_t keep = 0, i;
+    int gap = 0;
+    char line[80];
+    if (n->raft.log_count > index) {
+        for (i = index + 1U; i <= n->raft.log_count && keep < P2P_RAFT_LOG; i++) {
+            p2p_raft_entry_t* e = raft_log_at(n, i);
+            if (!e) { gap = 1; break; }
+            kept[keep++] = *e;
+        }
+    }
+    if (gap) keep = 0;
+    for (i = 0; i < P2P_RAFT_LOG; i++) mzero(&n->raft.log[i], (int)sizeof(n->raft.log[i]));
+    for (i = 0; i < keep; i++) n->raft.log[i] = kept[i];
+    n->raft.snapshot_index = index;
+    n->raft.snapshot_term = term;
+    if (keep == 0U) n->raft.log_count = index;
+    if (n->raft.commit_index < index) n->raft.commit_index = index;
+    if (n->raft.commit_index > n->raft.log_count) n->raft.commit_index = n->raft.log_count;
+    if (n->raft.last_applied < index) n->raft.last_applied = index;
+    if (n->raft.last_applied > n->raft.log_count) n->raft.last_applied = n->raft.log_count;
+    for (i = 0; i < n->raft.snap_in_n && i < P2P_KV; i++) {
+        p2p_item_t* it = &n->raft.snap_in[i];
+        (void)kv_apply(n, it->key, it->value, it->version, it->origin);
+    }
+    line[0] = 0;
+    s_cat(line, "p2p raft snapshot installed index ", 80);
+    cat_u(line, index, 80);
+    say(h, line);
+}
 static int raft_send_one(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
     uint8_t b[P2P_DATAGRAM_MAX];
     uint32_t next, prev_i, prev_t;
     int pos;
     p2p_raft_entry_t* e;
     if (!p->used || !p->keyed || !p->up) return -1;
+    if (n->raft.snapshot_index > 0U && p->raft_match < n->raft.snapshot_index)
+        return raft_send_snapshot(n, h, p);
     if (p->raft_next == 0U) p->raft_next = n->raft.snapshot_index + 1U;
     if (p->raft_next <= n->raft.snapshot_index) p->raft_next = n->raft.snapshot_index + 1U;
     next = p->raft_next;
     if (next > n->raft.log_count || next == 0U) return 0;
     e = raft_log_at(n, next);
-    if (!e) return 0; /* follower is behind the snapshot: no InstallSnapshot */
+    if (!e) return 0;
     prev_i = next - 1U;
     if (prev_i == 0U) prev_t = 0U;
     else if (prev_i == n->raft.snapshot_index) prev_t = n->raft.snapshot_term;
@@ -445,6 +529,7 @@ static void raft_become_leader(p2p_node_t* n, const p2p_host_t* h) {
     n->raft.role = P2P_RAFT_LEADER;
     n->raft.leader_id = n->id;
     n->raft.heartbeat_tick = 0;
+    raft_note_lease(n, h);
     for (i = 0; i < P2P_PEERS; i++) {
         n->peers[i].raft_next = n->raft.log_count + 1U;
         n->peers[i].raft_match = 0;
@@ -654,6 +739,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
          * A follower that still has a leader and a fresh heartbeat refuses,
          * so a short partition cannot start a new term. */
         grant = log_ok && req_term > n->raft.term && n->raft.role != P2P_RAFT_LEADER &&
+                !raft_lease_valid(n, h) &&
                 (n->raft.leader_id == 0U || timer_expired);
         b[0] = (uint8_t)(grant ? 1 : 0);
         put32(b + 1, n->raft.term);
@@ -677,6 +763,13 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         if (len < 8) break;
         req_term = get32(m); cand_id = get32(m + 4);
         if (len >= 16) { last_idx = get32(m + 8); last_term = get32(m + 12); }
+        /* A live lease keeps the current leader. A higher term is ignored
+         * until the lease ends, so a partitioned rival cannot depose it. */
+        if (raft_lease_valid(n, h) && n->raft.leader_id != 0U && cand_id != n->raft.leader_id) {
+            b[0] = 0; put32(b + 1, n->raft.term);
+            (void)seal_send(n, h, p, P2P_I_RAFT_VOTE_RESP, b, 5);
+            break;
+        }
         if (req_term > n->raft.term) raft_step_down(n, req_term);
         if (len >= 16) {
             my_idx = n->raft.log_count;
@@ -712,6 +805,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
             n->raft.leader_id = ldr_id;
             n->raft.voted_for = 0;
             n->raft.election_tick = now(h);
+            raft_note_lease(n, h);
         }
         break;
     }
@@ -726,6 +820,12 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         if (pos < 0) break;
         pos = get_str(m, pos, len, val, P2P_VAL_MAX);
         if (pos < 0) break;
+        if (raft_lease_valid(n, h) && n->raft.leader_id != 0U && leader != n->raft.leader_id &&
+            term > n->raft.term) {
+            put32(b, n->raft.term); b[4] = 0; put32(b + 5, 0);
+            (void)seal_send(n, h, p, P2P_I_RAFT_APPEND_RESP, b, 9);
+            break;
+        }
         if (term > n->raft.term) raft_step_down(n, term);
         if (term < n->raft.term) {
             put32(b, n->raft.term); b[4] = 0; put32(b + 5, 0);
@@ -735,6 +835,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         n->raft.role = P2P_RAFT_FOLLOWER;
         n->raft.leader_id = leader;
         n->raft.election_tick = now(h);
+        raft_note_lease(n, h);
         if (!raft_prev_ok(n, prev_i, prev_t) || eindex == 0U ||
             eindex > n->raft.snapshot_index + P2P_RAFT_LOG) {
             put32(b, n->raft.term); b[4] = 0; put32(b + 5, 0);
@@ -787,6 +888,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         if (n->raft.role != P2P_RAFT_LEADER || term != n->raft.term) break;
         if (m[4]) {
             uint32_t saved;
+            p2p_qos_note_ack(n);
             if (match > p->raft_match) p->raft_match = match;
             p->raft_next = p->raft_match + 1U;
             raft_maybe_commit(n, h);
@@ -801,7 +903,84 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
             }
         } else if (p->raft_next > n->raft.snapshot_index + 1U) {
             p->raft_next--;
+            p2p_qos_note_loss(n);
             (void)raft_send_one(n, h, p);
+        } else if (n->raft.snapshot_index > 0U && p->raft_match < n->raft.snapshot_index) {
+            (void)raft_send_snapshot(n, h, p);
+        }
+        break;
+    }
+    case P2P_I_RAFT_SNAPSHOT: {
+        uint32_t term, leader, snap_i, snap_t;
+        uint8_t last, off, nitems;
+        int spos, si;
+        if (len < 19) break;
+        term = get32(m); leader = get32(m + 4); snap_i = get32(m + 8); snap_t = get32(m + 12);
+        last = m[16]; off = m[17]; nitems = m[18];
+        if (raft_lease_valid(n, h) && n->raft.leader_id != 0U && leader != n->raft.leader_id &&
+            term > n->raft.term) {
+            put32(b, n->raft.term); b[4] = 0; put32(b + 5, 0); b[9] = 0;
+            (void)seal_send(n, h, p, P2P_I_RAFT_SNAPSHOT_RESP, b, 10);
+            break;
+        }
+        if (term > n->raft.term) raft_step_down(n, term);
+        if (term < n->raft.term || snap_i == 0U) {
+            put32(b, n->raft.term); b[4] = 0; put32(b + 5, 0); b[9] = 0;
+            (void)seal_send(n, h, p, P2P_I_RAFT_SNAPSHOT_RESP, b, 10);
+            break;
+        }
+        n->raft.role = P2P_RAFT_FOLLOWER;
+        n->raft.leader_id = leader;
+        n->raft.election_tick = now(h);
+        raft_note_lease(n, h);
+        if (snap_i <= n->raft.snapshot_index && n->raft.last_applied >= snap_i) {
+            put32(b, n->raft.term); b[4] = 1; put32(b + 5, snap_i); b[9] = (uint8_t)(off + nitems);
+            (void)seal_send(n, h, p, P2P_I_RAFT_SNAPSHOT_RESP, b, 10);
+            break;
+        }
+        if (off == 0U || n->raft.snap_in_index != snap_i) {
+            n->raft.snap_in_n = 0;
+            n->raft.snap_in_index = snap_i;
+        }
+        if (off != n->raft.snap_in_n) {
+            put32(b, n->raft.term); b[4] = 0; put32(b + 5, 0); b[9] = n->raft.snap_in_n;
+            (void)seal_send(n, h, p, P2P_I_RAFT_SNAPSHOT_RESP, b, 10);
+            break;
+        }
+        spos = 19;
+        for (si = 0; si < (int)nitems; si++) {
+            p2p_item_t it;
+            mzero(&it, (int)sizeof(it));
+            spos = item_decode(m, spos, len, &it);
+            if (spos < 0 || n->raft.snap_in_n >= P2P_KV) {
+                put32(b, n->raft.term); b[4] = 0; put32(b + 5, 0); b[9] = n->raft.snap_in_n;
+                (void)seal_send(n, h, p, P2P_I_RAFT_SNAPSHOT_RESP, b, 10);
+                return;
+            }
+            it.used = 1;
+            n->raft.snap_in[n->raft.snap_in_n++] = it;
+        }
+        if (last) raft_install_snapshot(n, h, snap_i, snap_t);
+        put32(b, n->raft.term); b[4] = 1;
+        put32(b + 5, last ? snap_i : 0U);
+        b[9] = n->raft.snap_in_n;
+        (void)seal_send(n, h, p, P2P_I_RAFT_SNAPSHOT_RESP, b, 10);
+        break;
+    }
+    case P2P_I_RAFT_SNAPSHOT_RESP: {
+        uint32_t term, match;
+        if (len < 10) break;
+        term = get32(m); match = get32(m + 5);
+        if (term > n->raft.term) { raft_step_down(n, term); break; }
+        if (n->raft.role != P2P_RAFT_LEADER || term != n->raft.term || !m[4]) break;
+        if (m[9] > p->raft_snap_off) p->raft_snap_off = m[9];
+        if (n->raft.snapshot_index > 0U && match >= n->raft.snapshot_index &&
+            p->raft_snap_off >= n->raft.snap_kv_n) {
+            if (p->raft_match < n->raft.snapshot_index) p->raft_match = n->raft.snapshot_index;
+            p->raft_next = n->raft.snapshot_index + 1U;
+            (void)raft_send_one(n, h, p);
+        } else {
+            (void)raft_send_snapshot(n, h, p);
         }
         break;
     }
@@ -1021,7 +1200,7 @@ int p2p_up_step(p2p_node_t* n, int step, const char* name, const uint8_t ip[4], 
         n->up = 1;
         n->last_hello = now(h) - P2P_HELLO_TICKS;
         n->last_ping = now(h);
-        n->qos.window_size = 4;
+        n->qos.window_size = P2P_QOS_WINDOW_MAX;
         n->raft.active = 0;
         n->raft.role = P2P_RAFT_FOLLOWER;
         n->raft.term = 1;
@@ -1075,17 +1254,23 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
     if (n->raft.active && n->raft.role == P2P_RAFT_LEADER) {
         raft_replicate(n, h);
         if (t - n->raft.heartbeat_tick >= P2P_HZ) {
+            int hb_sent = 0;
             n->raft.heartbeat_tick = t;
             put32(b, n->raft.term); put32(b + 4, n->id);
             for (i = 0; i < P2P_PEERS; i++) {
                 if (n->peers[i].used && n->peers[i].keyed && n->peers[i].up) {
-                    (void)seal_send(n, h, &n->peers[i], P2P_I_RAFT_HEARTBEAT, b, 8);
+                    if (seal_send(n, h, &n->peers[i], P2P_I_RAFT_HEARTBEAT, b, 8) == 0)
+                        hb_sent++;
                     n->qos.priority_high_tx++;
                 }
             }
+            /* A contacted follower refreshes the leader lease. A leader
+             * cut off from every peer does not extend it. */
+            if (hb_sent > 0) raft_note_lease(n, h);
         }
-    } else if (n->raft.active && t - n->raft.election_tick >= P2P_RAFT_ELECTION_TICKS) {
-        /* Election timeout triggered */
+    } else if (n->raft.active && !raft_lease_valid(n, h) &&
+               t - n->raft.election_tick >= P2P_RAFT_ELECTION_TICKS) {
+        /* Election timeout triggered. A live lease waits. */
         (void)p2p_raft_elect(n, h);
     }
     for (i = 0; i < P2P_PEERS; i++) {
@@ -1343,6 +1528,11 @@ int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h) {
     uint8_t b[16];
     int i, sent = 0;
     if (!n || !n->up) return -1;
+    /* A follower that still holds the leader's lease does not campaign. */
+    if (raft_lease_valid(n, h) && n->raft.leader_id != 0U && n->raft.role != P2P_RAFT_LEADER) {
+        say(h, "p2p raft lease held");
+        return -2;
+    }
     /* Pre-vote: ask with term+1 but do not bump term or voted_for. A majority
      * starts the real election inside the following p2p_tick. */
     n->raft.active = 1;
@@ -1402,6 +1592,14 @@ int p2p_raft_compact(p2p_node_t* n) {
     for (i = 0; i < keep; i++) n->raft.log[i] = kept[i];
     n->raft.snapshot_index = base;
     n->raft.snapshot_term = term;
+    /* Kv image at this index. Later appends change n->kv and must not
+     * rewrite the snapshot a lagging follower will install. */
+    n->raft.snap_kv_n = 0;
+    for (i = 0; i < P2P_KV; i++) {
+        if (!n->kv[i].used) continue;
+        if (n->raft.snap_kv_n >= P2P_KV) break;
+        n->raft.snap_kv[n->raft.snap_kv_n++] = n->kv[i];
+    }
     return (int)base;
 }
 
@@ -1439,6 +1637,27 @@ const p2p_item_t* p2p_cache_get(p2p_node_t* n, const char* key, uint32_t current
     }
     n->cache.total_misses++;
     return 0;
+}
+
+int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key) {
+    uint8_t b[64];
+    int i, pos, sent = 0;
+    if (!n || !key || !key[0]) return -1;
+    for (i = 0; i < P2P_CACHE_MAX; i++) {
+        if (n->cache.entries[i].used && s_eq(n->cache.entries[i].key, key)) {
+            n->cache.entries[i].used = 0;
+            n->cache.invalidations++;
+        }
+    }
+    if (!n->up || !h) return 0;
+    pos = put_str(b, 0, 64, key);
+    if (pos < 0) return -1;
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        if (!p->used || !p->keyed || !p->up) continue;
+        if (seal_send(n, h, p, P2P_I_CACHE_INV, b, pos) == 0) sent++;
+    }
+    return sent;
 }
 
 int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t ttl_ticks, uint32_t current_tick) {
@@ -1533,6 +1752,7 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         NFIND(n->foreign > 0, degraded, "foreign", n->foreign, "non P2P frames on the segment")
         NFIND(rx_all >= 10U && n->dup * 10U > rx_all, degraded, "duplicates", n->dup, "more than 10 percent of received")
         NFIND(n->relayed > 0, degraded, "relayed", n->relayed, "a direct link is down, relay in use")
+        NFIND(n->qos.loss_count > 0, degraded, "congestion", n->qos.loss_count, "raft append loss halved the data window")
 #undef NFIND
         s_cat(out, "p2p analyze ok findings ", cap); cat_u(out, (uint32_t)shown, cap);
         s_cat(out, suspicious ? " verdict suspicious\n" : degraded ? " verdict degraded\n" : " verdict healthy\n", cap);
@@ -1562,6 +1782,7 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " term_changes ", cap); cat_u(out, n->raft.term_changes, cap);
         s_cat(out, " commit ", cap); cat_u(out, n->raft.commit_index, cap);
         s_cat(out, " log ", cap); cat_u(out, n->raft.log_count, cap);
+        s_cat(out, " lease ", cap); cat_u(out, raft_lease_valid(n, h) ? 1U : 0U, cap);
         s_cat(out, "\n", cap);
     } else if (s_eq(what, "cache")) {
         s_cat(out, "p2p cache hits ", cap); cat_u(out, n->cache.total_hits, cap);

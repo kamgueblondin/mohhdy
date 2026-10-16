@@ -57,19 +57,19 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
 |----|--------|-------------|
 | US-061 protocol | done | framing + header + types above; QEMU 3 guests |
 | US-062 discovery | done | authenticated HELLO, peer table, up/down; QEMU |
-| US-063 routing | done | multi-hop P2P routing with path costs (hop count, RTT, load weight) and route discovery (`p2p-route`) |
-| US-064 consensus | partial | Raft log in the guest: pre-vote, membership quorum, append entries, commit index, compaction of the applied prefix, logical index past the physical window. Term and vote persisted in the p2pkv trailer. Not Paxos. No InstallSnapshot, no leader lease. Physical window 16. `p2p-raft`, `p2p-raft-compact`, `p2p-raft-put` |
+| US-063 routing | partial | one relay chosen through neighbors (direct or one hop); QEMU scenario 3. Not a general multi-hop fabric |
+| US-064 consensus | done | Raft log in the guest: pre-vote, membership quorum, append entries, commit index, compaction, InstallSnapshot for a follower behind the snapshot, leader lease of 10 s renewed when a heartbeat reaches a peer. Term and vote persisted in the p2pkv trailer. Not Paxos. Physical window 16. `p2p-raft`, `p2p-raft-compact`, `p2p-raft-put` |
 | US-065 replication | done | put pushed to all peers, last writer wins (version, origin); QEMU |
 | US-066 encryption | done | X25519 + AES-128-GCM per pair, PSK-authenticated, replay protection; QEMU checks no plaintext on the wire |
 | US-067 gRPC | partial | typed RPC over sealed frames: request id, type, status, deadline. Not HTTP/2 gRPC. `p2p-grpc` |
-| US-068 bandwidth | done | per-peer message budget per second (`p2p-limit`), dynamic congestion window scaling, throttle counters |
-| US-069 fault tolerance | done | failure detection (10 s), Raft retry, relay rerouting, resync after partition; QEMU. The key/value store, node identity, and Raft term/vote persist across a reboot (`persist-*`) |
-| US-070 distributed cache | done | remote get with miss reporting, local TTL cache with hits/misses and invalidation (`p2p-cache`) |
+| US-068 bandwidth | partial | per-peer message budget (`p2p-limit`) and a data window that starts at 16, halves on raft append loss, and grows by one on success. Control frames are not capped. Unit proof only. Not a full adaptive controller |
+| US-069 fault tolerance | partial | failure detection (10 s), relay, resync. QEMU scenario 2 is a hub wire cut (`cut_pair`), scenario 3 is a blocked link. The key/value store, node identity, and Raft term/vote persist across a reboot (`persist-*`). Not a complete fault-tolerance system |
+| US-070 distributed cache | partial | remote get with miss reporting, local TTL cache, and `p2p_cache_invalidate` which sends `P2P_I_CACHE_INV`. Not a coherent distributed cache |
 | US-071 synchronization | done | two-way digest anti-entropy (`p2p-sync`); QEMU after a partition |
 | US-072 health monitor | done | per-peer RTT, last seen, sent/recv, auth failures, replays, throttled, down events; QEMU |
-| US-073 adaptive QoS | done | priority queues for control/heartbeat vs data frames (`priority_high_tx`) and adaptive QoS counters |
+| US-073 adaptive QoS | partial | control frames bypass `admit()`; data uses the window in US-068. Unit proof only. Not a full adaptive controller |
 | US-074 NAT traversal | simulated | virtual NAT / STUN binding (`p2p-stun`) and hole punching (`p2p-punch`). Not a real NAT |
-| US-075 traffic analysis | done | per-type tx/rx counters, bytes, relayed, duplicates, foreign frames (`p2p-stats`); `p2p-analyze` applies automated rules and gives a verdict; QEMU |
+| US-075 traffic analysis | partial | per-type counters (`p2p-stats`) and `p2p-analyze` with fixed rules, including `congestion` when `qos.loss_count` is greater than 0. QEMU names the dead link. No learning |
 
 ## Limits (honest)
 
@@ -78,10 +78,13 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
 * At most 6 peers, 16 replicated items (key < 20 bytes, value < 48).
 * Raft keeps a physical window of 16 entries. `p2p-raft-compact` drops the
   applied prefix and the next index can pass 16 (unit proof: index 17).
-  There is no InstallSnapshot: a follower whose log is behind the snapshot
-  is a gap. Append entries are retried by the leader. User datagrams are
-  still not retransmitted; replication is repaired by `p2p-sync`, the
-  one-round proposal by timeout.
+  A follower whose match is behind `snapshot_index` receives InstallSnapshot
+  (chunks of the kv image taken at compact time) and then the later entries.
+  The leader lease is 10 s. It is renewed when a heartbeat reaches a peer.
+  A fully cut leader does not extend it. A follower that still holds the
+  lease does not campaign. Append entries are retried by the leader. User
+  datagrams are still not retransmitted; replication is repaired by
+  `p2p-sync`, the one-round proposal by timeout.
 * Typed RPC is not HTTP/2 gRPC. Deadlines are guest ticks. A repeated
   request id replays the last reply (`rpc_replays`).
 * STUN and NAT punch stay virtual. There is no public internet and no
@@ -97,11 +100,13 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
   discovery and pair keys, wrong network key, encryption/tamper/replay,
   replication + LWW + partition sync + remote get, consensus commit /
   reject / timeout, failure detection + relay + heal, rate limit + stats,
-  bad inputs, Raft log replication and catch-up, typed RPC id and deadline.
+  bad inputs, Raft log replication and catch-up, InstallSnapshot, leader
+  lease kept alive by heartbeats, QoS window and cache invalidation,
+  typed RPC id and deadline.
 * `tests/scripts/test_qemu_p2p.py` (`make qemu-p2p`, CI job "QEMU P2P three
   guests"): three guests with the Ring 3 networker on the strict kernel;
   discovery, encrypted message (hub asserts no plaintext), health, stats,
-  replication, partition then sync, majority commit, Raft pre-vote,
-  hub wire cut (scenario 2b, not `p2p-block`), compaction and commit of
-  index 3, link failure detection and relayed delivery. Scenario 2 still
-  uses `p2p-block`.
+  replication, hub wire cut then sync (scenario 2, `cut_pair`, not
+  `p2p-block`), majority commit, Raft pre-vote, leader lease, hub wire
+  cut with compaction and InstallSnapshot (scenario 2b), commit of index
+  3, link failure detection and relayed delivery.

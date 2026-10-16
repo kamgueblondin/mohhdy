@@ -88,6 +88,11 @@ run_test() {
     # Flags de compilation spécialisés selon le type de test
     local cflags="-I$TEST_DIR -I$BASE_DIR -I$BASE_DIR/kernel -I$BASE_DIR/include -Wall -Wextra -std=c99 -DKERNEL_TEST=1"
     local extra_src="$BASE_DIR/fs/overlay.c"
+    # make coverage exports ENABLE_COVERAGE=1. These are the binaries this
+    # runner actually executes (it recompiles; the Makefile copies are not).
+    if [ "${ENABLE_COVERAGE:-0}" = "1" ]; then
+        cflags="$cflags --coverage"
+    fi
     
     if [ "$test_type" == "kernel" ] || [ "$(basename "$test_file")" = "test_fat16.c" ] || [ "$(basename "$test_file")" = "test_gpt2_gguf.c" ] || [ "$(basename "$test_file")" = "test_gpt2_gguf_infer.c" ] || [ "$(basename "$test_file")" = "test_gpt2_quant.c" ]; then
         cflags="$cflags -m32 -fno-pie -msse2 -mfpmath=sse"
@@ -375,8 +380,7 @@ generate_coverage_report() {
     print_header "Code Coverage Analysis"
 
     if [ "${ENABLE_COVERAGE:-0}" = "1" ]; then
-        echo "Coverage: not measured. ENABLE_COVERAGE does not pass -fprofile-arcs or -ftest-coverage."
-        echo "gcov has no .gcda from this run. No percentage is reported."
+        echo "Coverage: --coverage is on for this runner. The line percentage is printed by scripts/gcov_host_summary.py."
     else
         echo "Coverage: not measured (no gcov/lcov instrumentation in this runner)."
         echo "No percentage is reported; see test counts above for what was run."

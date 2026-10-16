@@ -31,6 +31,13 @@ static int mount_insert(const char* service_name, const char* prefix, uint32_t s
 static int mount_journal_load(void);
 static void event_journal_flush(void);
 static int event_journal_load(void);
+/* Host tests link this file without syscall.c. The kernel image uses the
+ * strong copy in syscall.c, which sends the sectors through atadriver
+ * once that driver is live. */
+__attribute__((weak)) int kernel_journal_sector_io(uint32_t lba, uint32_t count, void* buf, int write) {
+    if (write) return ata_write_sectors(lba, count, buf);
+    return ata_read_sectors(lba, count, buf);
+}
 static void event_journal_bind(const char* name, int32_t pid);
 static void ipc_spill_clear_pid(int32_t pid);
 static void ipc_spill_reset(void);
@@ -632,11 +639,11 @@ int service_registry_mount_journal_import(const uint8_t* buf, uint32_t len) {
 
 static void mount_journal_flush(void) {
     if (service_registry_mount_journal_export(mount_journal_buf, MOUNT_JOURNAL_BYTES) != 0) return;
-    (void)ata_write_sectors(MOUNT_JOURNAL_LBA, MOUNT_JOURNAL_BYTES / 512U, mount_journal_buf);
+    (void)kernel_journal_sector_io(MOUNT_JOURNAL_LBA, MOUNT_JOURNAL_BYTES / 512U, mount_journal_buf, 1);
 }
 
 static int mount_journal_load(void) {
-    if (ata_read_sectors(MOUNT_JOURNAL_LBA, MOUNT_JOURNAL_BYTES / 512U, mount_journal_buf) != 0) return -1;
+    if (kernel_journal_sector_io(MOUNT_JOURNAL_LBA, MOUNT_JOURNAL_BYTES / 512U, mount_journal_buf, 0) != 0) return -1;
     return service_registry_mount_journal_import(mount_journal_buf, MOUNT_JOURNAL_BYTES);
 }
 
@@ -754,11 +761,11 @@ int service_registry_event_journal_import(const uint8_t* buf, uint32_t len) {
 static void event_journal_flush(void) {
     if (!service_registry_event_journal_allowed()) return;
     if (service_registry_event_journal_export(event_journal_buf, EVENT_JOURNAL_BYTES) != 0) return;
-    (void)ata_write_sectors(EVENT_JOURNAL_LBA, EVENT_JOURNAL_BYTES / 512U, event_journal_buf);
+    (void)kernel_journal_sector_io(EVENT_JOURNAL_LBA, EVENT_JOURNAL_BYTES / 512U, event_journal_buf, 1);
 }
 
 static int event_journal_load(void) {
-    if (ata_read_sectors(EVENT_JOURNAL_LBA, EVENT_JOURNAL_BYTES / 512U, event_journal_buf) != 0) return -1;
+    if (kernel_journal_sector_io(EVENT_JOURNAL_LBA, EVENT_JOURNAL_BYTES / 512U, event_journal_buf, 0) != 0) return -1;
     return service_registry_event_journal_import(event_journal_buf, EVENT_JOURNAL_BYTES);
 }
 

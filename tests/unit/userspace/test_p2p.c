@@ -375,15 +375,96 @@ void test_raft_prevote_does_not_bump_a_healthy_term(void) {
     TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p raft prevote started"));
     term = g_n[0].raft.term;
     TEST_ASSERT_EQUAL(2, (int)term);
-    /* gamma asks for a pre-vote while alpha is still leader and heartbeats
-     * are fresh. Followers refuse, so the cluster term stays put. */
+    /* gamma still holds the leader lease, so it does not campaign at all. */
+    TEST_ASSERT_EQUAL(-2, p2p_raft_elect(&g_n[2], &g_h[2]));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[2], "p2p raft lease held"));
+    TEST_ASSERT_EQUAL(term, g_n[2].raft.term);
+    /* Heartbeats keep the leader lease alive past the original 10 s. */
+    {
+        char rep[2048];
+        run(3, P2P_RAFT_LEASE_TICKS + (2U * P2P_HZ));
+        p2p_report(&g_n[0], &g_h[0], "raft", rep, (int)sizeof(rep));
+        TEST_ASSERT_NOT_NULL(strstr(rep, " lease 1"));
+        g_out[2][0] = 0;
+        TEST_ASSERT_EQUAL(-2, p2p_raft_elect(&g_n[2], &g_h[2]));
+        TEST_ASSERT_NOT_NULL(strstr(g_out[2], "p2p raft lease held"));
+    }
+    /* Past the lease, still inside the election timeout. A pre-vote is sent
+     * and refused, and the cluster term stays put. */
+    g_ticks += P2P_RAFT_LEASE_TICKS + (5U * P2P_HZ);
+    g_out[2][0] = 0;
     TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[2], &g_h[2]));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[2], "p2p raft prevote started"));
     run(3, 80);
     TEST_ASSERT_EQUAL(term, g_n[0].raft.term);
     TEST_ASSERT_EQUAL(term, g_n[1].raft.term);
     TEST_ASSERT_EQUAL(term, g_n[2].raft.term);
     TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
     TEST_ASSERT_TRUE(g_n[2].raft.role != P2P_RAFT_LEADER);
+}
+
+void test_raft_snapshot_installs_for_a_lagging_follower(void) {
+    const p2p_item_t* it;
+    setup(3, 0);
+    run(3, 300);
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    TEST_ASSERT_EQUAL(1, p2p_raft_append(&g_n[0], &g_h[0], "tone", "blue"));
+    run(3, 40);
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[2], "tone"));
+    g_cut[0][2] = 1;
+    g_cut[1][2] = 1;
+    TEST_ASSERT_EQUAL(2, p2p_raft_append(&g_n[0], &g_h[0], "late", "yes"));
+    run(3, 40);
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[1], "late"));
+    TEST_ASSERT_NULL(p2p_get_local(&g_n[2], "late"));
+    TEST_ASSERT_EQUAL(2, p2p_raft_compact(&g_n[0]));
+    TEST_ASSERT_EQUAL(3, p2p_raft_append(&g_n[0], &g_h[0], "next", "ok"));
+    g_cut[0][2] = 0;
+    g_cut[1][2] = 0;
+    g_out[2][0] = 0;
+    run(3, 160);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[2], "p2p raft snapshot installed index 2"));
+    it = p2p_get_local(&g_n[2], "late");
+    TEST_ASSERT_NOT_NULL(it);
+    TEST_ASSERT_EQUAL_STRING("yes", it->value);
+    it = p2p_get_local(&g_n[2], "next");
+    TEST_ASSERT_NOT_NULL(it);
+    TEST_ASSERT_EQUAL_STRING("ok", it->value);
+    TEST_ASSERT_EQUAL(3, (int)g_n[2].raft.commit_index);
+    TEST_ASSERT_EQUAL(2, (int)g_n[2].raft.snapshot_index);
+}
+
+void test_qos_window_and_cache_invalidate(void) {
+    char rep[512];
+    int i, ok = 0, throttled = 0;
+    setup(2, 0);
+    run(2, 300);
+    TEST_ASSERT_EQUAL(P2P_QOS_WINDOW_MAX, g_n[0].qos.window_size);
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_n[1], "k", "v", 500, g_ticks));
+    TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_n[1], "k", g_ticks));
+    TEST_ASSERT_EQUAL(1, p2p_cache_invalidate(&g_n[0], &g_h[0], "k"));
+    run(2, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "p2p cache invalidated k"));
+    TEST_ASSERT_NULL(p2p_cache_get(&g_n[1], "k", g_ticks));
+    p2p_qos_note_loss(&g_n[0]);
+    TEST_ASSERT_EQUAL(P2P_QOS_WINDOW_MAX / 2U, g_n[0].qos.window_size);
+    p2p_qos_note_ack(&g_n[0]);
+    TEST_ASSERT_EQUAL(P2P_QOS_WINDOW_MAX / 2U + 1U, g_n[0].qos.window_size);
+    p2p_qos_note_loss(&g_n[0]);
+    p2p_qos_note_loss(&g_n[0]);
+    TEST_ASSERT_TRUE(g_n[0].qos.window_size < P2P_QOS_WINDOW_MAX);
+    for (i = 0; i < (int)g_n[0].qos.window_size + 2; i++) {
+        int rc = p2p_send_text(&g_n[0], &g_h[0], "beta", "burst");
+        if (rc == 0) ok++; else if (rc == -2) throttled++;
+    }
+    TEST_ASSERT_EQUAL((int)g_n[0].qos.window_size, ok);
+    TEST_ASSERT_EQUAL(2, throttled);
+    TEST_ASSERT_TRUE(g_n[0].qos.priority_low_tx >= (uint32_t)ok);
+    p2p_report(&g_n[0], &g_h[0], "analyze", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze finding node congestion "));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "verdict degraded"));
 }
 
 void test_raft_compact_past_physical_window(void) {
@@ -486,6 +567,8 @@ int main(void) {
     RUN_TEST(test_raft_log_catchup_and_typed_rpc);
     RUN_TEST(test_raft_prevote_does_not_bump_a_healthy_term);
     RUN_TEST(test_raft_compact_past_physical_window);
+    RUN_TEST(test_raft_snapshot_installs_for_a_lagging_follower);
+    RUN_TEST(test_qos_window_and_cache_invalidate);
     RUN_TEST(test_routing_grpc_and_stun);
     RUN_TEST(test_p2p_consolidation_and_fallback);
     unity_print_results();

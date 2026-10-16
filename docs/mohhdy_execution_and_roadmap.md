@@ -9,8 +9,8 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 
 ### Suite de Tests
 - `make test-all` rejoue la suite de non-regression sur l'arbre courant :
-  - **766 tests executes / 766 tests reussis** (0 echec, 0 ignore). Journal `test_logs/test_results_20261014_165218.log`.
-  - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. La couverture n'est pas mesuree : `ENABLE_COVERAGE=1` ne passe pas `-fprofile-arcs` ni `-ftest-coverage`, et gcov ne produit aucun pourcentage.
+  - **770 tests executes / 770 tests reussis** (0 echec, 0 ignore). Journal `test_logs/test_results_20261015_112957.log`. Le compteur 766/766 du 14 octobre reste historique.
+  - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. Couverture hote mesuree par `make coverage` : 79.55% de lignes (24434/30716). Pas l'image guest. Pas dans `make test-all`.
 - Les compteurs plus anciens de ce fichier (563/563 et autres) decrivent la livraison de leur paragraphe, pas l'arbre courant.
 - `make strict-image-check`, `make secrets-check` et `make tree-clean-check` sont les gardes d'image et d'arbre.
 
@@ -37,11 +37,11 @@ Elle confirme visuellement :
 ## 3. Descriptif des Prochaines Tranches d'Implémentation (Priorités 1 à 3)
 
 ### Etape 1 : Tranche 4, ce qui reste Ring 0
-- Lot 1 avance sur US-001 et US-064. Les deux restent ouverts. Base de ce lot : `e932c904` (merge #148). Le compteur du 14 octobre (766/766) reste dans `docs/ETAT_REEL.md`.
-- Le pilote Ring 3 `atadriver` monte le FAT de boot, envoie IDENTIFY, et charge la fenetre overlay (`OS_ATA_FS_INSTALL`) sur l'image stricte. `ne2k_probe`, `kernel_ring0_ata_identify` et `kernel_ring0_fat_pio_fallback` ne sont pas lies dans `build/mohhdy.bin`.
-- US-001 reste ouvert. L'image stricte respawn `bin/atadriver` apres sa mort (budget 4) et rejoue le FAT en Ring 3 (`fatkpio` reste 0). L'image legacy garde IDENTIFY et le PIO FAT de repli en Ring 0. Restent Ring 0 sur les deux images : journaux, persistance overlay, PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`.
-- US-064 est un journal Raft dans le guest (pas Paxos). Fenetre physique 16 (`P2P_RAFT_LOG`), pre-vote, compaction (`p2p-raft-compact`), pas d'InstallSnapshot, pas de lease. Le scenario QEMU 2b coupe le fil du hub (pas `p2p-block`, pas `set_link`). Le scenario 2 garde `p2p-block`. US-067 est un RPC type, pas gRPC HTTP/2. US-074 reste un STUN/NAT simule. US-068 et US-073 restent des budgets unitaires. US-069, US-070 et US-075 gardent leurs preuves QEMU deja en place, sans fermeture.
-- Validation de ce lot : `make test-all` (768/768). `make qemu-ata-driver` exige `fatkpio` a 0 au store ready et au respawn. `make qemu-p2p` couvre pre-vote, coupure hub, compaction et index 3.
+- Lot 2 part de `708917b` (merge #149). `make test-all` : 770/770. Le compteur du lot 1 (768/768) reste dans `docs/ETAT_REEL.md`.
+- US-001 reste ouvert. IDENTIFY Ring 0 et le PIO FAT de repli ne sont lies dans aucune image. L'image legacy garde le NIC et `kernel_ring0_boot_fat_mount`. Le respawn de `bin/atadriver` (budget 4) rend le budget quand le pid publie le store, et ne rearme le canal que s'il est BSY ou DRQ. Le journal de regime permanent passe par le pilote quand l'appelant peut attendre. Restent Ring 0 : lecture du journal au boot, chargement overlay au boot, PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`, montage FAT de boot legacy. Preuve : `make strict-image-check`, `make qemu-ata-driver` (269 s).
+- US-064 est ferme pour le journal Raft du guest (pas Paxos). InstallSnapshot, lease de leader 10 s, pre-vote, fenetre 16, compaction. Le scenario QEMU 2 coupe le fil du hub (`cut_pair`, pas `p2p-block`). Le scenario 2b installe le snapshot puis commit l'index 3. Preuve : `make qemu-p2p` (183 s).
+- US-068 et US-073 restent partiels (fenetre AIMD, unitaire). US-069, US-070 et US-075 restent partiels (coupure hub, invalidation de cache, regle fixe `congestion`). US-067 reste un RPC type. US-074 reste un STUN/NAT simule. US-063 reste un relais.
+- Couverture hote mesuree par `make coverage` : 79.55% de lignes (24434/30716), 143 fichiers, 572 `.gcda`. Pas l'image guest. Pas dans CI.
 
 ### Etape 1b : Phase 4, ce que la pull request #147 livre vraiment
 - US-050 reste partiel. `pm-ide` est l'editeur de lignes `pm-edit` (`userspace/shell.c`) : numeros (`.l`), controle syntaxique (`.c`), execution VM (`.r`), sauvegarde (`.`), abandon (`.q`). Pas un IDE plein ecran. Pas dans `userspace/osui_runtime.c`.
