@@ -82,6 +82,63 @@ void test_bigint_modexp_leading_zeros(void) {
     TEST_ASSERT_EQUAL(16U, output.limbs[0]);
 }
 
+void test_bigint_robustness_even_modulus_base_larger_exponents(void) {
+    uint32_t base_limbs[2], exp_limbs[1], mod_limbs[1], out_limbs[1], workspace[4];
+    bigint_t base, exponent, modulus, output;
+
+    /* 1. Even modulus and base larger than modulus */
+    /* 25^3 mod 10 = 125 mod 10 = 5 */
+    modexp_u32(25U, 3U, 10U, 5U);
+    /* 14^4 mod 10 = 6 */
+    modexp_u32(14U, 4U, 10U, 6U);
+    /* 8^3 mod 14 = 512 mod 14 = 8 */
+    modexp_u32(8U, 3U, 14U, 8U);
+
+    /* 2. Base larger than modulus with odd/even modulus */
+    /* 105^2 mod 13 = 1 (105 mod 13 = 1) */
+    modexp_u32(105U, 2U, 13U, 1U);
+    /* 100^3 mod 7 = 1 */
+    modexp_u32(100U, 3U, 7U, 1U);
+
+    /* 3. Exponent equal to 0 */
+    /* 7^0 mod 10 = 1 */
+    modexp_u32(7U, 0U, 10U, 1U);
+    /* 25^0 mod 10 = 1 */
+    modexp_u32(25U, 0U, 10U, 1U);
+    /* 123^0 mod 14 = 1 */
+    modexp_u32(123U, 0U, 14U, 1U);
+
+    /* 4. Exponent equal to 1 */
+    /* 7^1 mod 10 = 7 */
+    modexp_u32(7U, 1U, 10U, 7U);
+    /* 25^1 mod 10 = 5 (since 25 mod 10 = 5) */
+    modexp_u32(25U, 1U, 10U, 5U);
+    /* 123^1 mod 14 = 11 (since 123 mod 14 = 11) */
+    modexp_u32(123U, 1U, 14U, 11U);
+
+    /* 5. Multi-limb base larger than an even modulus with exp 0 and exp 1 */
+    TEST_ASSERT_EQUAL(0, bigint_init(&base, base_limbs, 2));
+    TEST_ASSERT_EQUAL(0, bigint_init(&exponent, exp_limbs, 1));
+    TEST_ASSERT_EQUAL(0, bigint_init(&modulus, mod_limbs, 1));
+    TEST_ASSERT_EQUAL(0, bigint_init(&output, out_limbs, 1));
+
+    /* base = 2 * 2^32 + 5 = 8589934597. 8589934597 mod 10 = 7. */
+    base.limbs[0] = 5U; base.limbs[1] = 2U; base.length = 2U;
+    modulus.limbs[0] = 10U; modulus.length = 1U;
+
+    /* exp = 0 */
+    exponent.length = 0U;
+    TEST_ASSERT_EQUAL(0, bigint_modexp(&output, &base, &exponent, &modulus, workspace, 4U));
+    TEST_ASSERT_EQUAL(1U, output.length);
+    TEST_ASSERT_EQUAL(1U, output.limbs[0]);
+
+    /* exp = 1 */
+    exponent.limbs[0] = 1U; exponent.length = 1U;
+    TEST_ASSERT_EQUAL(0, bigint_modexp(&output, &base, &exponent, &modulus, workspace, 4U));
+    TEST_ASSERT_EQUAL(1U, output.length);
+    TEST_ASSERT_EQUAL(7U, output.limbs[0]);
+}
+
 void test_bigint_constant_width_modular_primitives(void){uint32_t a_limbs[1],b_limbs[1],m_limbs[1],legacy_limbs[1],ct_limbs[1],temporary_limbs[1];bigint_t a,b,m,legacy,ct,temporary;TEST_ASSERT_EQUAL(0,bigint_init(&a,a_limbs,1));TEST_ASSERT_EQUAL(0,bigint_init(&b,b_limbs,1));TEST_ASSERT_EQUAL(0,bigint_init(&m,m_limbs,1));TEST_ASSERT_EQUAL(0,bigint_init(&legacy,legacy_limbs,1));TEST_ASSERT_EQUAL(0,bigint_init(&ct,ct_limbs,1));TEST_ASSERT_EQUAL(0,bigint_init(&temporary,temporary_limbs,1));a.limbs[0]=5U;a.length=1U;b.limbs[0]=11U;b.length=1U;m.limbs[0]=13U;m.length=1U;TEST_ASSERT_EQUAL(0,bigint_mod_add(&legacy,&a,&b,&m));TEST_ASSERT_EQUAL(0,bigint_mod_add_ct(&ct,&a,&b,&m));TEST_ASSERT_EQUAL(legacy.limbs[0],ct.limbs[0]);TEST_ASSERT_EQUAL(0,bigint_mod_subtract_ct(&ct,&a,&b,&m));TEST_ASSERT_EQUAL(7U,ct.limbs[0]);TEST_ASSERT_EQUAL(0,bigint_mod_multiply(&legacy,&a,&b,&m,&temporary));TEST_ASSERT_EQUAL(0,bigint_mod_multiply_ct(&ct,&a,&b,&m,&temporary));TEST_ASSERT_EQUAL(legacy.limbs[0],ct.limbs[0]);TEST_ASSERT_EQUAL(3U,ct.limbs[0]);}
 
-int main(void){unity_init();RUN_TEST(test_bigint_arithmetic_and_modexp);RUN_TEST(test_bigint_modexp_multilimb);RUN_TEST(test_bigint_modexp_leading_zeros);RUN_TEST(test_bigint_constant_width_modular_primitives);unity_print_results();unity_cleanup();return unity_stats.tests_failed==0?0:1;}
+int main(void){unity_init();RUN_TEST(test_bigint_arithmetic_and_modexp);RUN_TEST(test_bigint_modexp_multilimb);RUN_TEST(test_bigint_modexp_leading_zeros);RUN_TEST(test_bigint_robustness_even_modulus_base_larger_exponents);RUN_TEST(test_bigint_constant_width_modular_primitives);unity_print_results();unity_cleanup();return unity_stats.tests_failed==0?0:1;}
