@@ -199,6 +199,7 @@ def main():
             # Default strict network kernel: networker starts at boot even
             # without a NE2000 (loopback-only Ring 3 socket stack).
             boot_tasks += 1 if "[NET] boot networker spawned" in log_text() else 0
+            boot_tasks += 1 if "[PCI] boot pcidriver spawned" in log_text() else 0
             send_command_until(monitor, "task-capacity", "task-capacity ok %d 16 %d" %
                                (boot_tasks + 1, 16 - boot_tasks - 1), proc)
 
