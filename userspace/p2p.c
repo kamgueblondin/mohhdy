@@ -1955,11 +1955,14 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         NFIND(n->relayed > 0, degraded, "relayed", n->relayed, "a direct link is down, relay in use")
         NFIND(n->qos.loss_count > 0, degraded, "congestion", n->qos.loss_count, "loss halved the data window")
         NFIND(n->qos.delay_backoffs > 0, degraded, "queue-delay", n->qos.delay_backoffs, "rtt above twice the minimum, window cut by a quarter")
-        NFIND(n->anomalies > 0, suspicious, "rate-anomaly", n->anomalies, "rx rate above 4x the learned baseline")
+        /* Statistical, not evidence: a solicited burst (raft snapshot after
+         * a cut) trips it too, seen in QEMU. Only crypto failures make the
+         * verdict suspicious. */
+        NFIND(n->anomalies > 0, degraded, "rate-anomaly", n->anomalies, "rx rate above 4x the learned baseline")
         if (n->anomalies > 0) {
             s_cat(out, "p2p analyze anomaly type ", cap); s_cat(out, p2p_type_name((int)n->last_anomaly_type), cap);
             s_cat(out, " rate ", cap); cat_u(out, n->last_anomaly_rate, cap);
-            s_cat(out, " baseline16 ", cap); cat_u(out, n->base_rate16[n->last_anomaly_type], cap);
+            s_cat(out, " baseline_x16 ", cap); cat_u(out, n->base_rate16[n->last_anomaly_type], cap);
             s_cat(out, "\n", cap);
         }
 #undef NFIND

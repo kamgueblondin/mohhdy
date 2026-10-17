@@ -667,7 +667,8 @@ void test_traffic_baseline_anomaly(void) {
     p2p_report(&g_n[1], &g_h[1], "analyze", rep, sizeof(rep));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze finding node rate-anomaly "));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze anomaly type msg rate "));
-    TEST_ASSERT_NOT_NULL(strstr(rep, "verdict suspicious"));
+    /* A rate anomaly alone is a warning, not proof of an attack. */
+    TEST_ASSERT_NOT_NULL(strstr(rep, "verdict degraded"));
 }
 
 int main(void) {
