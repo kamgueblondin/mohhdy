@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 385
+#define MOHHDY_SHELL_COMMAND_COUNT 386
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -142,6 +142,7 @@ static const char * const mohhdy_shell_commands[] = {
     "graphics",
     "grep",
     "grpc-call",
+    "grpc-calls",
     "grpc-serve",
     "grpc-wire",
     "guest-status",
