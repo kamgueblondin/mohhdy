@@ -1,0 +1,14 @@
+<html lang="en"><head><title>Theme and components</title>
+<style>
+:root { --accent: #ff00ff; --ink: #000080 }
+body { margin: 8px; color: var(--ink) }
+.tag { background: var(--accent); width: 120px; height: 20px }
+@media (max-width: 400px) { .tag { background: #00ff00 } }
+@media (min-width: 600px) { h2 { color: #800000 } }
+</style></head>
+<body>
+<template id="x-card"><div class="tag"><slot></slot></div></template>
+<h2>Responsive, themed, component</h2>
+<x-card>card</x-card>
+<p>var() resolved, one @media kept, one dropped, one template expanded.</p>
+</body></html>
