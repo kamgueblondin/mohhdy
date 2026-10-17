@@ -98,7 +98,16 @@ typedef struct {
     uint8_t key_block[NET_TLS_AES_128_GCM_KEY_BLOCK_LENGTH];
     uint8_t peer_identity_validated;
     uint8_t complete;
+    /* Reprise sur perte : sondages sans trame, seuil courant (backoff),
+     * retransmissions emises et segments doublons/hors-ordre ignores. */
+    uint8_t idle_polls;
+    uint8_t rto_polls;
+    uint8_t retransmits;
+    uint16_t ignored_segments;
 } ne2k_tls_client_t;
+
+#define NE2K_TLS_RTO_INITIAL_POLLS 2U
+#define NE2K_TLS_RTO_MAX_POLLS 16U
 
 /* Sonde le registre reset et prépare le mode arrêt/word pour une init ultérieure. */
 int ne2k_probe(ne2k_device_t* device, uint16_t base_port, const ne2k_io_t* io);
@@ -522,6 +531,15 @@ int ne2k_llm_connection_poll_sse(ne2k_device_t* device,const ne2k_io_t* io,const
                                  uint8_t* text,uint16_t text_capacity,uint16_t* text_length,uint16_t* consumed);
 /* Polling NE2000 : authentifie les messages serveur, valide l’ancre/hostname, émet le flight X25519 puis traite le post-flight. */
 /* Polling TLS authentifié au-dessus d’un socket : fragments serveur, ACK, X25519 et post-flight. */
+/* Filtre un segment recu sur un socket : 0 = a traiter (eventuellement
+ * rogne), 1 = ignore (doublon, hors ordre ou etranger ; ACK renvoye si utile). */
+int ne2k_socket_segment_gate(ne2k_device_t* device, const ne2k_io_t* io, const net_arp_cache_t* cache,
+                             uint8_t* tx_frame, uint16_t tx_capacity, const uint8_t local_ip[4],
+                             const uint8_t remote_ip[4], int socket_id, net_tcp_view_t* view);
+/* Sondage sans trame : retransmet le dernier envoi non acquitte avec backoff. */
+int ne2k_socket_tls_idle(ne2k_device_t* device, const ne2k_io_t* io, const net_arp_cache_t* cache,
+                         uint8_t* tx_frame, uint16_t tx_capacity, const uint8_t local_ip[4],
+                         const uint8_t remote_ip[4], int socket_id, ne2k_tls_client_t* client);
 int ne2k_socket_tls_poll(ne2k_device_t* device,const ne2k_io_t* io,const net_arp_cache_t* cache,
                          uint8_t* rx_frame,uint16_t rx_capacity,uint8_t* tx_frame,uint16_t tx_capacity,
                          const uint8_t local_ip[4],const uint8_t remote_ip[4],int socket_id,

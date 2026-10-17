@@ -1171,6 +1171,47 @@ static int ne2k_tls_client_poll_internal(ne2k_device_t* device,const ne2k_io_t* 
 rollback:
     *client=previous_client;*connection=previous_connection;*consumed=0U;*flight_records_length=0U;return -2;
 }
+int ne2k_socket_segment_gate(ne2k_device_t* device, const ne2k_io_t* io, const net_arp_cache_t* cache,
+                             uint8_t* tx_frame, uint16_t tx_capacity, const uint8_t local_ip[4],
+                             const uint8_t remote_ip[4], int socket_id, net_tcp_view_t* view) {
+    net_tcp_connection_t connection; int kind;
+    if (!view) return -1;
+    if (net_socket_connection_snapshot(socket_id, &connection) != 0) return -2;
+    kind = net_tcp_connection_classify_segment(&connection, view);
+    if (kind < 0) return -3;
+    if (kind == NET_TCP_SEGMENT_IN_ORDER) return 0;
+    if (kind == NET_TCP_SEGMENT_OVERLAP) return net_tcp_connection_trim_segment(&connection, view) == 0 ? 0 : -4;
+    if (kind == NET_TCP_SEGMENT_FOREIGN) return 1;
+    /* Doublon ou trou : un ACK de la sequence attendue (ACK duplique)
+     * signale au pair ce qui manque, comme une pile TCP reelle. */
+    (void)ne2k_socket_ack(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip, socket_id);
+    return 1;
+}
+
+int ne2k_socket_tls_idle(ne2k_device_t* device, const ne2k_io_t* io, const net_arp_cache_t* cache,
+                         uint8_t* tx_frame, uint16_t tx_capacity, const uint8_t local_ip[4],
+                         const uint8_t remote_ip[4], int socket_id, ne2k_tls_client_t* client) {
+    net_tcp_connection_t connection; uint8_t threshold;
+    if (!client) return -1;
+    /* Seuls les etats ou le client attend une reponse du serveur a son
+     * dernier envoi (ClientHello, puis le vol ClientKeyExchange..Finished). */
+    if (client->handshake.state != NET_TLS_HANDSHAKE_CLIENT_HELLO_SENT &&
+        client->handshake.state != NET_TLS_HANDSHAKE_FINISHED_SENT) return 0;
+    if (net_socket_connection_snapshot(socket_id, &connection) != 0) return -2;
+    if (!net_tcp_connection_retransmit_allowed(&connection)) return 0;
+    threshold = client->rto_polls ? client->rto_polls : (uint8_t)NE2K_TLS_RTO_INITIAL_POLLS;
+    if (client->idle_polls < 0xffU) client->idle_polls++;
+    if (client->idle_polls < threshold) return 0;
+    if (ne2k_tcp_retransmit(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip, &connection) != 0)
+        return -3;
+    if (net_socket_connection_restore(socket_id, &connection) != 0) return -4;
+    client->idle_polls = 0U;
+    client->rto_polls = threshold >= NE2K_TLS_RTO_MAX_POLLS / 2U ? (uint8_t)NE2K_TLS_RTO_MAX_POLLS
+                                                                : (uint8_t)(threshold * 2U);
+    if (client->retransmits < 0xffU) client->retransmits++;
+    return 1;
+}
+
 int ne2k_socket_tls_poll(ne2k_device_t* device,const ne2k_io_t* io,const net_arp_cache_t* cache,
                          uint8_t* rx_frame,uint16_t rx_capacity,uint8_t* tx_frame,uint16_t tx_capacity,
                          const uint8_t local_ip[4],const uint8_t remote_ip[4],int socket_id,
@@ -1210,8 +1251,19 @@ int ne2k_socket_tls_poll(ne2k_device_t* device,const ne2k_io_t* io,const net_arp
             client->handshake.state == NET_TLS_HANDSHAKE_SERVER_HELLO_DONE_RECEIVED &&
             client->peer_identity_validated && !client->handshake.certificate_requested)
             goto after_handshake_message;
+        if (status == 1)
+            (void)ne2k_socket_tls_idle(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip,
+                                       socket_id, client);
         return status;
     }
+    status = ne2k_socket_segment_gate(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip,
+                                      socket_id, &view);
+    if (status < 0) goto rollback_socket;
+    if (status == 1) {
+        if (client->ignored_segments < 0xffffU) client->ignored_segments++;
+        return 1;
+    }
+    client->idle_polls = 0U;
     if (client->handshake.state == NET_TLS_HANDSHAKE_FINISHED_SENT ||
         client->handshake.state == NET_TLS_HANDSHAKE_SERVER_CHANGE_CIPHER_SPEC_RECEIVED) {
         status = net_socket_accept_tls_x25519_postflight(socket_id, &client->handshake,
@@ -1346,6 +1398,9 @@ int ne2k_socket_llm_poll_response(ne2k_device_t* device,const ne2k_io_t* io,cons
     *consumed = 0U;
     status = ne2k_rx_poll_tcp(device, io, rx_frame, rx_capacity, &frame_length, &view);
     if (status != 0) return status;
+    status = ne2k_socket_segment_gate(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip,
+                                      socket_id, &view);
+    if (status != 0) return status < 0 ? -3 : 1;
     if (net_socket_connection_snapshot(socket_id, &previous_connection) != 0) return -2;
     previous_session = *session; previous_accumulator = *accumulator; previous_response = *response;
     status = net_llm_socket_open_response(socket_id, session, &view, plaintext, plaintext_capacity,
@@ -1373,6 +1428,9 @@ int ne2k_socket_llm_poll_sse(ne2k_device_t* device,const ne2k_io_t* io,const net
     *text_length = 0U; *consumed = 0U;
     status = ne2k_rx_poll_tcp(device, io, rx_frame, rx_capacity, &frame_length, &view);
     if (status != 0) return status;
+    status = ne2k_socket_segment_gate(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip,
+                                      socket_id, &view);
+    if (status != 0) return status < 0 ? -3 : 1;
     if (net_socket_connection_snapshot(socket_id, &previous_connection) != 0) return -2;
     previous_session = *session; previous_response = *response;
     status = net_llm_socket_open_sse(socket_id, session, &view, plaintext, plaintext_capacity,
