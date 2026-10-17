@@ -21,6 +21,9 @@ typedef int (*osui_ide_exec_t)(int action, const char *file, const char *src, in
 void osui_gui_set_ide_ops(osui_ide_load_t load, osui_ide_save_t save, osui_ide_exec_t exec);
 int osui_gui_ide_active(void);
 void osui_gui_ide_frame_row(int r, char *dst, int max);
+/* Program output of an OSUI_IDE_RUN, called by exec while the VM runs:
+ * goes to the editor output pane. */
+void osui_gui_ide_output(const char *text);
 void osui_gui_term_reset(void);
 int osui_gui_term_count(void);
 void osui_gui_term_at(int i, char *dst, int max);

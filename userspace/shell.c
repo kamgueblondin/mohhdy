@@ -2816,6 +2816,10 @@ static int pm_host_mem(void* c) {
 }
 static void pm_host_out(void* c, const char* s) { (void)c; print_string(s); print_string("\n"); }
 static const pm_host_t g_pm_host = {0, pm_host_read, pm_host_write, pm_host_mem, pm_host_out};
+/* US-050: pm-ide run sends the program output to the editor output pane
+ * (and to the console, so the serial log keeps it). */
+static void pm_ide_host_out(void* c, const char* s) { pm_host_out(c, s); osui_gui_ide_output(s); }
+static const pm_host_t g_pm_ide_host = {0, pm_host_read, pm_host_write, pm_host_mem, pm_ide_host_out};
 
 static void pm_print_hex(unsigned int v) {
     const char* h = "0123456789abcdef";
@@ -2876,7 +2880,7 @@ static int shell_ide_exec(int action, const char* file, const char* src, int len
         return 0;
     }
     pm_vm_reset(&g_pm_vm);
-    st = pm_run(&g_pm_tmp, &g_pm_vm, &g_pm_host);
+    st = pm_run(&g_pm_tmp, &g_pm_vm, &g_pm_ide_host);
     ide_msg_add(msg, max, &n, st == PM_OK ? "ok" : (st == PM_ERR_EXPECT ? "fail" : "error"));
     ide_msg_add(msg, max, &n, " line "); ide_msg_int(msg, max, &n, g_pm_vm.line);
     ide_msg_add(msg, max, &n, " prints "); ide_msg_int(msg, max, &n, (int)g_pm_vm.prints);

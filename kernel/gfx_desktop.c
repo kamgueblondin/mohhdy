@@ -564,6 +564,31 @@ static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh
 /* US-050: full-screen pm-ide. term[0] title, term[1..n-2] text rows with
  * a line-number gutter ('>' marks the cursor line), term[n-1] status.
  * The frame text comes from the Ring 3 editor (userspace/osui_ide.c). */
+/* US-050: pm-ide syntax colors, one per class of os_fb_scene_t.term_attr. */
+static uint32_t ide_class_rgb(uint8_t cls) {
+    switch (cls) {
+    case 1: return RGB(122, 180, 255);  /* keyword */
+    case 2: return RGB(243, 190, 120);  /* string */
+    case 3: return RGB(196, 160, 255);  /* number */
+    case 4: return RGB(112, 132, 142);  /* comment */
+    case 5: return RGB(96, 118, 128);   /* gutter */
+    case 6: return RGB(232, 238, 244);  /* program output */
+    case 7: return RGB(61, 154, 138);   /* output rule */
+    default: return RGB(201, 232, 223);
+    }
+}
+
+static void draw_ide_colored(uint32_t *fb, int w, int h, int x, int y, const char *text,
+                             const uint8_t *attr, int maxc) {
+    int k = 0;
+    while (k < maxc && k < OS_FB_TERM_LEN && text[k]) {
+        int e = k;
+        while (e < maxc && e < OS_FB_TERM_LEN && text[e] && attr[e] == attr[k]) e++;
+        draw_text_n(fb, w, h, x + k * 8, y, text + k, e - k, ide_class_rgb(attr[k]));
+        k = e;
+    }
+}
+
 static void draw_ide(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
     int n = sc ? (int)sc->nterm : 0, i, ty, maxc, row_h = 20;
     if (n > OS_FB_TERM_MAX) n = OS_FB_TERM_MAX;
@@ -577,8 +602,11 @@ static void draw_ide(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, c
     ty = y + 48;
     for (i = 1; i < n - 1; i++) {
         if (ty + row_h > y + rh - 40) break;
-        if (sc->term[i][3] == '>') fill_rect(fb, w, h, x + 10, ty - 4, rw - 20, row_h, RGB(24, 40, 48));
-        draw_text_n(fb, w, h, x + 18, ty, sc->term[i], maxc, RGB(201, 232, 223));
+        if (sc->version >= 3 && (sc->term_attr[i][0] == 7 || sc->term_attr[i][5] == 6 || sc->term_attr[i][4] == 6))
+            fill_rect(fb, w, h, x + 10, ty - 4, rw - 20, row_h, RGB(16, 22, 30));
+        else if (sc->term[i][3] == '>') fill_rect(fb, w, h, x + 10, ty - 4, rw - 20, row_h, RGB(24, 40, 48));
+        if (sc->version >= 3) draw_ide_colored(fb, w, h, x + 18, ty, sc->term[i], sc->term_attr[i], maxc);
+        else draw_text_n(fb, w, h, x + 18, ty, sc->term[i], maxc, RGB(201, 232, 223));
         ty += row_h;
     }
     if (n > 1) {

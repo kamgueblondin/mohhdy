@@ -449,6 +449,10 @@ typedef struct {
     char input[OS_FB_INPUT_LEN];
     char messages[OS_FB_MSG_MAX][OS_FB_MSG_LEN];
     char term[OS_FB_TERM_MAX][OS_FB_TERM_LEN];
+    /* version >= 3: per character class of term[] for the pm-ide pane
+     * (OS_FB_PANE_IDE): 0 text, 1 keyword, 2 string, 3 number, 4 comment,
+     * 5 gutter, 6 program output, 7 output rule. */
+    uint8_t term_attr[OS_FB_TERM_MAX][OS_FB_TERM_LEN];
 } os_fb_scene_t;
 
 typedef struct {

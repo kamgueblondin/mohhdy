@@ -323,7 +323,7 @@ def key_echo_count(output, char, mode):
     return len(re.findall(pattern, normalized_log(output)))
 
 
-def send_command_once(client, command, proc, mode):
+def send_command_once(client, command, proc, mode, enter=True):
     aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash", "=": "equal"}
     for char in command:
         count = 0
@@ -347,7 +347,8 @@ def send_command_once(client, command, proc, mode):
         for _ in range(count - 1):
             send_key(client, "backspace")
             time.sleep(KEY_DUPLICATE_SETTLE_DELAY)
-    send_key(client, "ret")
+    if enter:
+        send_key(client, "ret")
 
 
 def command_echoed(output, command, mode):
@@ -588,21 +589,32 @@ def main():
             ide_start = len(log_text())
             send_command_once(monitor, "expect 4 == 4", proc, "getc")
             wait_for(proc, " ide=ide.pm ide_ln=2 ide_col=1 ide_lines=2 ide_mod=1", CMD_TIMEOUT, ide_start)
+            # Tab completion: "sa" + Tab gives "say" (say/says common prefix).
+            send_command_once(monitor, "sa", proc, "getc", enter=False)
+            tab_at = len(log_text())
+            send_key(monitor, "tab")
+            wait_for(proc, " ide_tabs=1", CMD_TIMEOUT, tab_at)
+            wait_for(proc, "status=complete: say says", CMD_TIMEOUT, tab_at)
+            send_command_once(monitor, " 7", proc, "getc")
+            wait_for(proc, " ide_ln=3 ide_col=1 ide_lines=3 ide_mod=1", CMD_TIMEOUT, tab_at)
             for key, marker in (("w", "osui pm-ide saved file=ide.pm"),
-                                ("c", "osui pm-ide check ok statements 1"),
-                                ("r", "osui pm-ide run ok line "),
+                                ("c", "osui pm-ide check ok statements 2"),
+                                ("r", "osui pm-ide run ok line 2 prints 1 expects 1 failed 0 output 1"),
                                 ("q", "osui pm-ide quit file=ide.pm")):
                 step = len(log_text())
                 send_key(monitor, "esc")
                 time.sleep(0.3)
                 send_key(monitor, key)
                 wait_for(proc, marker, CMD_TIMEOUT, step)
+                if key == "r":
+                    # Program output pane: the say line is in the editor.
+                    wait_for(proc, " ide_out=1 ide_pane=1 ", CMD_TIMEOUT, step)
             quit_at = log_text().find("osui pm-ide quit file=ide.pm", ide_start)
             wait_for(proc, "OSUI-SNAP", CMD_TIMEOUT, quit_at)
             snap = log_text()[quit_at:].split("OSUI-SNAP", 1)[1].split("\n", 1)[0]
             if " ide=" in snap or "pane=" not in snap:
                 raise RuntimeError("pm-ide still active after ESC q: %s" % snap)
-            say("pm-ide fullscreen: saved, checked, ran, quit")
+            say("pm-ide fullscreen: completion, saved, checked, ran with output pane, quit")
             say("typing console ...")
             send_command_until(
                 monitor, "console", "chrome=text", proc, mode="getc", wait_prompt=True
