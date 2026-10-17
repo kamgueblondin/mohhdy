@@ -1749,6 +1749,7 @@ typedef struct {
 #define OS_DEV_OP_SERIAL_TAKE 5U
 #define OS_DEV_OP_SERIAL_RX 6U
 #define OS_DEV_OP_STATUS 7U
+#define OS_DEV_OP_PS2_MODS 8U   /* Lot 6: kernel Shift/Caps state (bit0 shift, bit1 caps) */
 #define OS_DEV_DENIED (-180)
 #define OS_DEV_BAD_REQUEST (-181)
 #define OS_INPUT_MAX_EVENTS 32U
@@ -1757,6 +1758,9 @@ typedef struct {
 #define OS_INPUT_EV_ESC 2U    /* Escape key press */
 #define OS_INPUT_EV_EXT 3U    /* code = E0-prefixed make code (arrows, pages) */
 #define OS_INPUT_EV_MOUSE 4U  /* code = buttons, dx/dy = motion (y up) */
+#define OS_INPUT_EV_MODS 5U   /* Lot 6: code = bit0 shift, bit1 caps (after a change) */
+#define OS_INPUT_MOD_SHIFT 1U
+#define OS_INPUT_MOD_CAPS 2U
 typedef struct {
     uint8_t type;
     uint8_t code;
@@ -1779,6 +1783,13 @@ typedef struct {
     uint32_t serial_respawns;
     uint32_t ps2_handed_off;
     uint32_t serial_handed_off;
+    /* Lot 6: PS/2 mouse packets applied (Ring 3 events and Ring 0 path),
+     * summed motion (y up) and last buttons; kernel modifier bits. */
+    uint32_t mouse_packets;
+    int32_t mouse_dx;
+    int32_t mouse_dy;
+    uint32_t mouse_buttons;
+    uint32_t kbd_mods;
 } os_device_status_t;
 
 #endif

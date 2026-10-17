@@ -36,5 +36,11 @@ void print_hex_byte_serial(uint8_t byte);
 uint32_t keyboard_ring0_drain(void);
 void keyboard_apply_event(const os_input_event_t* e);
 
+/* Lot 6 (US-001): modifier bits (OS_INPUT_MOD_*), driver loss resync and
+ * mouse statistics for SYS_DEVICE_SERVICE. */
+uint32_t keyboard_mods(void);
+void keyboard_driver_lost(void);
+void keyboard_mouse_stats(uint32_t* packets, int32_t* dx, int32_t* dy, uint32_t* buttons);
+
 #endif
 

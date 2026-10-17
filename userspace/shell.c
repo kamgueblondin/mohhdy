@@ -5163,6 +5163,11 @@ static void cmd_devices(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string(" overflows "); print_uint(st.serial_overflows);
     print_string(" rx "); print_uint(st.serial_rx_bytes);
     print_string(" respawns "); print_uint(st.serial_respawns);
+    print_string(" mouse packets "); print_uint(st.mouse_packets);
+    print_string(" dx "); print_int(st.mouse_dx);
+    print_string(" dy "); print_int(st.mouse_dy);
+    print_string(" buttons "); print_uint(st.mouse_buttons);
+    print_string(" mods "); print_uint(st.kbd_mods);
     print_string(" end\n");
 }
 

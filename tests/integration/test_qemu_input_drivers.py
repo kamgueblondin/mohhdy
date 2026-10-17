@@ -12,8 +12,16 @@
    the supervisor respawns bin/ps2driver (respawns 1), which claims again.
 5. Kill serialdriver: the log keeps flowing (Ring 0 fallback, counted), the
    supervisor respawns bin/serialdriver (respawns 1), which claims again.
-The PS/2 mouse decoder is proven by unit tests only (QEMU uses usb-tablet).
+6. Lot 6 mouse: QMP relative motion and a button reach the PS/2 aux port
+   (no usb-tablet here), ps2driver decodes the packets, `devices` shows the
+   summed motion (y up) and the buttons.
+7. Lot 6 Shift across a driver death: Shift is held (QMP key down) while
+   ps2driver is killed; the respawned driver seeds its decoder from the
+   kernel state, so the next key is upper case, and lower case after the
+   release.
 """
+import json
+import socket
 import os
 import re
 import subprocess
@@ -27,13 +35,15 @@ from test_qemu_vfs_service import normalized_log  # noqa: E402
 ata.LOG = os.path.join(ata.LOG_DIR, "input-drivers.log")
 ata.ERR = os.path.join(ata.LOG_DIR, "input-drivers.err")
 ata.MON = os.path.join(ata.LOG_DIR, "input-drivers-monitor.sock")
+QMP = os.path.join(ata.LOG_DIR, "input-drivers-qmp.sock")
 KERNEL = os.environ.get("MOHHDY_INPUT_KERNEL", os.path.join(ata.ROOT, "build", "mohhdy.bin"))
 KEYS = ("ps2_owner", "ps2_handed", "irqs", "events", "ps2_ring0", "ps2_stalls", "ps2_respawns",
         "serial_owner", "serial_handed", "ring3", "serial_ring0", "serial_stalls", "overflows",
-        "rx", "serial_respawns")
+        "rx", "serial_respawns", "mouse_packets", "mouse_dx", "mouse_dy", "mouse_buttons", "mods")
 STATUS_RE = (r"devices ok ps2 owner (-?\d+) handed (\d+) irqs (\d+) events (\d+) ring0 (\d+) "
              r"stalls (\d+) respawns (\d+) serial owner (-?\d+) handed (\d+) ring3 (\d+) "
-             r"ring0 (\d+) stalls (\d+) overflows (\d+) rx (\d+) respawns (\d+) end")
+             r"ring0 (\d+) stalls (\d+) overflows (\d+) rx (\d+) respawns (\d+) "
+             r"mouse packets (\d+) dx (-?\d+) dy (-?\d+) buttons (\d+) mods (\d+) end")
 
 
 def devices(client, proc):
@@ -49,6 +59,44 @@ def devices(client, proc):
     return dict(zip(KEYS, (int(v) for v in match.groups())))
 
 
+class Qmp:
+    def __init__(self, path):
+        deadline = time.time() + 5
+        while True:
+            try:
+                self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                self.sock.connect(path)
+                break
+            except OSError:
+                if time.time() > deadline:
+                    raise RuntimeError("QMP unavailable")
+                time.sleep(0.1)
+        self.file = self.sock.makefile("r")
+        json.loads(self.file.readline())                       # greeting
+        self.call("qmp_capabilities")
+
+    def call(self, command, arguments=None):
+        msg = {"execute": command}
+        if arguments is not None:
+            msg["arguments"] = arguments
+        self.sock.sendall((json.dumps(msg) + "\n").encode("ascii"))
+        while True:
+            reply = json.loads(self.file.readline())
+            if "return" in reply:
+                return reply["return"]
+            if "error" in reply:
+                raise RuntimeError("QMP %s: %r" % (command, reply["error"]))
+
+    def events(self, events):
+        return self.call("input-send-event", {"events": events})
+
+    def key(self, qcode, down):
+        return self.events([{"type": "key", "data": {"down": down, "key": {"type": "qcode", "data": qcode}}}])
+
+    def close(self):
+        self.sock.close()
+
+
 def wait_status(client, proc, check, what, rounds=10):
     st = None
     for _ in range(rounds):
@@ -61,7 +109,7 @@ def wait_status(client, proc, check, what, rounds=10):
 
 def main():
     os.makedirs(ata.LOG_DIR, exist_ok=True)
-    for path in (ata.LOG, ata.ERR, ata.MON):
+    for path in (ata.LOG, ata.ERR, ata.MON, QMP):
         try:
             os.remove(path)
         except OSError:
@@ -70,9 +118,10 @@ def main():
         "qemu-system-i386", "-kernel", KERNEL, "-initrd", ata.INITRD,
         "-m", "1024M", "-display", "none", "-vga", "std",
         "-serial", "file:" + ata.LOG, "-monitor", "unix:%s,server,nowait" % ata.MON,
+        "-qmp", "unix:%s,server,nowait" % QMP,
         "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
     ]
-    proc = client = None
+    proc = client = qmp = None
     try:
         with open(ata.ERR, "ab") as err:
             proc = subprocess.Popen(command, stdout=err, stderr=err)
@@ -125,6 +174,50 @@ def main():
         st6 = devices(client, proc)
         if st6["ring3"] <= st5["ring3"] or st6["serial_owner"] != st5["serial_owner"]:
             raise RuntimeError("respawned serialdriver does not write: %r -> %r" % (st5, st6))
+        # 6. PS/2 mouse through ps2driver (QMP relative motion and a button).
+        qmp = Qmp(QMP)
+        qmp.events([{"type": "rel", "data": {"axis": "x", "value": 20}},
+                    {"type": "rel", "data": {"axis": "y", "value": 10}},
+                    {"type": "btn", "data": {"down": True, "button": "left"}}])
+        time.sleep(0.5)
+        st7 = wait_status(client, proc, lambda s: s["mouse_packets"] > st6["mouse_packets"]
+                          and s["mouse_buttons"] & 1, "no PS/2 mouse packet decoded")
+        qmp.events([{"type": "btn", "data": {"down": False, "button": "left"}}])
+        st8 = wait_status(client, proc, lambda s: s["mouse_buttons"] == 0, "left button not released")
+        if (st8["mouse_dx"] - st6["mouse_dx"], st8["mouse_dy"] - st6["mouse_dy"]) != (20, -10):
+            raise RuntimeError("mouse motion not summed as sent (+20, y up -10): %r -> %r" % (st6, st8))
+        if st8["events"] <= st6["events"]:
+            raise RuntimeError("mouse packets did not go through ps2driver: %r" % st8)
+        # 7. Shift held across a ps2driver death. "kill N" is typed without
+        # Enter, Shift goes down (QMP), Enter runs the kill with Shift held.
+        ps2_now = st8["ps2_owner"]
+        for char in "kill %d" % ps2_now:
+            client.sendall(("sendkey %s %d\n" % ({" ": "spc"}.get(char, char), ata.KEY_HOLD_MS)).encode("ascii"))
+            time.sleep(0.35)
+        qmp.key("shift", True)
+        time.sleep(0.5)
+        mark = len(ata.log_text())
+        client.sendall(("sendkey ret %d\n" % ata.KEY_HOLD_MS).encode("ascii"))
+        ata.wait_for("Processus %d termine" % ps2_now, proc, mark, timeout=10)
+        ata.wait_for("[PS2] Ring 3 ps2driver claimed the controller pid", proc, mark, timeout=20)
+        mark = len(ata.log_text())
+        qmp.key("b", True); time.sleep(0.1); qmp.key("b", False)
+        ata.wait_for("SYS_GETS: caract\u00e8re ajout\u00e9: 'B'", proc, mark, timeout=5)
+        qmp.key("shift", False)
+        time.sleep(0.3)
+        mark = len(ata.log_text())
+        qmp.key("b", True); time.sleep(0.1); qmp.key("b", False)
+        ata.wait_for("SYS_GETS: caract\u00e8re ajout\u00e9: 'b'", proc, mark, timeout=5)
+        for _ in range(2):
+            client.sendall(("sendkey backspace %d\n" % ata.KEY_HOLD_MS).encode("ascii"))
+            time.sleep(0.35)
+        st9 = devices(client, proc)
+        if st9["ps2_respawns"] != 2 or st9["ps2_owner"] in (ps2_now, 0) or st9["mods"] != 0:
+            raise RuntimeError("shift across driver death: %r" % st9)
+        print("mouse: %d packets dx %+d dy %+d via ps2driver; shift held across ps2driver death "
+              "(respawn %d) kept upper case, released to lower case" %
+              (st8["mouse_packets"] - st6["mouse_packets"], st8["mouse_dx"] - st6["mouse_dx"],
+               st8["mouse_dy"] - st6["mouse_dy"], st9["ps2_owner"]))
         print("input drivers: ps2driver pid %d (%d events, %d irqs), serialdriver pid %d (%d bytes); "
               "rogue refused (#GP); ps2 respawned as %d (ring0 fallback %d bytes), serial respawned "
               "as %d (ring0 fallback %d bytes)" %
@@ -133,6 +226,8 @@ def main():
         print("QEMU Ring 3 PS/2 and serial driver contract passed.")
         return 0
     finally:
+        if qmp is not None:
+            qmp.close()
         if client is not None:
             client.close()
         if proc is not None and proc.poll() is None:

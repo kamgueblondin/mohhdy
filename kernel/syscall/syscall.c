@@ -922,6 +922,7 @@ void device_watchdog_tick(uint32_t now) {
         for (dev = 0; dev < DEV_COUNT; dev++) {
             if (devsvc_owner(dev) > 0 && !device_owner_alive(dev)) {
                 devsvc_owner_gone(dev);
+                if (dev == DEV_PS2) keyboard_driver_lost();
                 if (dev == DEV_SERIAL) act |= DEVSVC_W_SERIAL_FLUSH;
                 else act |= DEVSVC_W_PS2_DRAIN;
             }
@@ -939,6 +940,7 @@ void device_supervise(void) {
         if (devsvc_owner(dev) > 0) {
             if (device_owner_alive(dev)) continue;
             devsvc_owner_gone(dev);
+                if (dev == DEV_PS2) keyboard_driver_lost();
         }
         if (g_dev_respawn_pid[dev] > 0) {
             born = get_task_by_id((uint32_t)g_dev_respawn_pid[dev]);
@@ -1079,11 +1081,16 @@ static int sys_device_service(uint32_t op, uint32_t a, uint32_t b, uint32_t c) {
         devsvc_serial_note_rx(b);
         return (int)b;
     }
+    case OS_DEV_OP_PS2_MODS:
+        if (device_live_driver(DEV_PS2) != pid) return OS_DEV_DENIED;
+        return (int)keyboard_mods();
     case OS_DEV_OP_STATUS: {
         os_device_status_t st;
         device_supervise();
         if (!syscall_user_range((const void*)a, sizeof(st), 1)) return OS_DEV_BAD_REQUEST;
         devsvc_status(&st);
+        keyboard_mouse_stats(&st.mouse_packets, &st.mouse_dx, &st.mouse_dy, &st.mouse_buttons);
+        st.kbd_mods = keyboard_mods();
         *(os_device_status_t*)a = st;
         return 0;
     }

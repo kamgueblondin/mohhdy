@@ -19,5 +19,8 @@ void ps2_decoder_init(ps2_decoder_t* d);
  * was produced. */
 int ps2_decode_byte(ps2_decoder_t* d, uint8_t byte, int aux, os_input_event_t* out, uint32_t* n, uint32_t cap);
 /* Character of a make code with the current Shift/Caps state (0: none). */
+/* Lot 6: start from the kernel modifier state (OS_DEV_OP_PS2_MODS). */
+void ps2_decoder_seed(ps2_decoder_t* d, uint32_t mods);
+/* Character of a make code with the current Shift/Caps state (0: none). */
 char ps2_map(const ps2_decoder_t* d, uint8_t make);
 #endif
