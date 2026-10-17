@@ -12,6 +12,7 @@ const p2p_host_t* shell_p2p_host(void);
 static collab_t g_c;
 static int g_joined;
 static char g_out[8192];
+unsigned int sys_ticks(void);
 
 static int c_send(void* ctx, uint32_t to, const uint8_t* d, int len) {
     (void)ctx;
@@ -368,6 +369,47 @@ int shell_collab_line(const char* line) {
         print_string(wrong_msg ? " wrong-message accepted" : " wrong-message rejected");
         print_string(wrong_pub ? " wrong-public accepted" : " wrong-public rejected");
         print_string(" (Schnorr NIZK, 62-bit toy group: simule strength)\n");
+        return 0;
+    }
+    if (s_eq(cmd, "collab-zk-strong")) {
+        /* US-103 (Lot 9): the same NIZK in a 2048-bit group with a 256-bit
+         * subgroup (csig_zk_*); the secret only seeds the key here */
+        static uint8_t zsk[CSIG_ZK_SK], zpk[CSIG_ZK_PK], zpr[CSIG_ZK_PROOF], zbad[CSIG_ZK_PROOF];
+        static uint8_t zsk2[CSIG_ZK_SK], zpk2[CSIG_ZK_PK];
+        uint8_t seed[32];
+        sha256_ctx_t h;
+        unsigned int t0, t1, t2;
+        int i, group, ok, tamper, wrong_msg, wrong_pub, ml;
+        rest = word(rest, b, 48);
+        if (!a[0] || !b[0]) { print_string("collab-zk-strong error usage: SECRET MESSAGE\n"); return 1; }
+        ml = 0; while (b[ml]) ml++;
+        sha256_init(&h); sha256_update(&h, (const uint8_t*)"collab-zk", 9);
+        { int al = 0; while (a[al]) al++; sha256_update(&h, (const uint8_t*)a, (uint32_t)al); }
+        sha256_final(&h, seed);
+        group = csig_zk_group_check();
+        if (!group || csig_zk_keypair(seed, zsk, zpk) != 0) { print_string("collab-zk-strong error group or key\n"); return 1; }
+        t0 = sys_ticks();
+        if (csig_zk_prove(zsk, (const uint8_t*)b, ml, zpr) != 0) { print_string("collab-zk-strong error prove\n"); return 1; }
+        t1 = sys_ticks();
+        ok = csig_zk_verify(zpk, (const uint8_t*)b, ml, zpr);
+        t2 = sys_ticks();
+        for (i = 0; i < CSIG_ZK_PROOF; i++) zbad[i] = zpr[i];
+        zbad[CSIG_ZK_PROOF - 1] ^= 1U;
+        tamper = csig_zk_verify(zpk, (const uint8_t*)b, ml, zbad);
+        wrong_msg = csig_zk_verify(zpk, (const uint8_t*)"other", 5, zpr);
+        seed[0] ^= 0x5AU;
+        csig_zk_keypair(seed, zsk2, zpk2);
+        wrong_pub = csig_zk_verify(zpk2, (const uint8_t*)b, ml, zpr);
+        print_string("collab-zk-strong group p2048 q256 check ok public ");
+        for (i = 0; i < 8; i++) { char hx[3]; hx[0] = "0123456789abcdef"[zpk[i] >> 4]; hx[1] = "0123456789abcdef"[zpk[i] & 15]; hx[2] = 0; print_string(hx); }
+        print_string(" proof_bytes 288");
+        print_string(ok ? " verify ok" : " verify FAILED");
+        print_string(tamper ? " tampered accepted" : " tampered rejected");
+        print_string(wrong_msg ? " wrong-message accepted" : " wrong-message rejected");
+        print_string(wrong_pub ? " wrong-public accepted" : " wrong-public rejected");
+        print_string(" prove_ms "); put_u((t1 - t0) * 10U);
+        print_string(" verify_ms "); put_u((t2 - t1) * 10U);
+        print_string(" (Schnorr NIZK, about 112-bit group, not constant time)\n");
         return 0;
     }
     if (s_eq(cmd, "collab-compliance")) {

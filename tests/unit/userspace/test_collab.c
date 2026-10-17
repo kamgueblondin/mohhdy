@@ -557,6 +557,43 @@ void test_crypto_schnorr_pbkdf2_aes_gcm_pipeline(void) {
 
 
 /* Lot 8 US-103: Schnorr NIZK over the 62-bit safe-prime group. */
+/* Lot 9 (US-103): the same proof in a 2048-bit group, 256-bit subgroup.
+ * The expected bytes come from an independent Python big-integer run of
+ * the same equations (see docs/collab.md). */
+void test_zk_schnorr_2048(void) {
+    uint8_t seed[32], sk[CSIG_ZK_SK], pk[CSIG_ZK_PK], pr[CSIG_ZK_PROOF], bad[CSIG_ZK_PROOF];
+    uint8_t sk2[CSIG_ZK_SK], pk2[CSIG_ZK_PK];
+    int i;
+    for (i = 0; i < 32; i++) seed[i] = (uint8_t)i;
+    TEST_ASSERT_EQUAL(1, csig_zk_group_check());
+    TEST_ASSERT_EQUAL(0, csig_zk_keypair(seed, sk, pk));
+    TEST_ASSERT_EQUAL(0, csig_zk_prove(sk, (const uint8_t*)"pay 10", 6, pr));
+    TEST_ASSERT_EQUAL(1, csig_zk_verify(pk, (const uint8_t*)"pay 10", 6, pr));
+    {   /* known answer from the Python reference */
+        static const uint8_t kpk[8] = { 0x16, 0xb2, 0x63, 0xd5, 0x47, 0xc6, 0x31, 0x5c };
+        static const uint8_t kt[8] = { 0x38, 0xae, 0x04, 0x83, 0x02, 0xbe, 0x85, 0xbc };
+        static const uint8_t ks[8] = { 0xc5, 0x93, 0xaf, 0x76, 0xe0, 0x8f, 0x56, 0x26 };
+        TEST_ASSERT_EQUAL(0, memcmp(pk, kpk, 8));
+        TEST_ASSERT_EQUAL(0, memcmp(pr, kt, 8));
+        TEST_ASSERT_EQUAL(0, memcmp(pr + CSIG_ZK_PROOF - 8, ks, 8));
+    }
+    TEST_ASSERT_EQUAL(0, csig_zk_verify(pk, (const uint8_t*)"pay 11", 6, pr));   /* bound to the message */
+    for (i = 0; i < CSIG_ZK_PROOF; i++) bad[i] = pr[i];
+    bad[300 - 20] ^= 1U;                                                     /* s */
+    TEST_ASSERT_EQUAL(0, csig_zk_verify(pk, (const uint8_t*)"pay 10", 6, bad));
+    for (i = 0; i < CSIG_ZK_PROOF; i++) bad[i] = pr[i];
+    bad[100] ^= 1U;                                                          /* t */
+    TEST_ASSERT_EQUAL(0, csig_zk_verify(pk, (const uint8_t*)"pay 10", 6, bad));
+    seed[0] = 99;
+    TEST_ASSERT_EQUAL(0, csig_zk_keypair(seed, sk2, pk2));
+    TEST_ASSERT_EQUAL(0, csig_zk_verify(pk2, (const uint8_t*)"pay 10", 6, pr)); /* other key */
+    for (i = 0; i < CSIG_ZK_PK; i++) pk2[i] = 0;
+    pk2[CSIG_ZK_PK - 1] = 1;
+    TEST_ASSERT_EQUAL(0, csig_zk_verify(pk2, (const uint8_t*)"pay 10", 6, pr)); /* y = 1 refused */
+    for (i = 0; i < CSIG_ZK_SK; i++) sk2[i] = 0;
+    TEST_ASSERT_EQUAL(-1, csig_zk_prove(sk2, (const uint8_t*)"x", 1, pr));      /* x = 0 */
+}
+
 void test_zk_schnorr_proof(void) {
     collab_zk_proof_t pr, bad;
     uint64_t y = collab_zk_public(123456789ULL);
@@ -677,6 +714,7 @@ void test_contract_language_in_the_ledger(void) {
 int main(void) {
     unity_init();
     RUN_TEST(test_zk_schnorr_proof);
+    RUN_TEST(test_zk_schnorr_2048);
     RUN_TEST(test_points_transfer_overdraft_and_convergence);
     RUN_TEST(test_resources_marketplace_and_reputation);
     RUN_TEST(test_distributed_task_escrow_and_arbitration);

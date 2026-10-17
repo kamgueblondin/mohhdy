@@ -7226,9 +7226,20 @@ static const char* get_basename(const char* path) {
 }
 
 void display_prompt(shell_context_t* ctx) {
+    /* One write: a kernel line printed by another task (PCI inventory,
+     * driver claims) can land before or after the prompt, never inside
+     * it, so the harness needle "ESC[0m : " stays whole. */
     const char* folder = get_basename(ctx->current_dir);
-    print_colored(folder, COLOR_BRIGHT);
-    print_string(" : ");
+    char line[160];
+    int n = 0, k;
+    const char* parts[4];
+    parts[0] = COLOR_BRIGHT; parts[1] = folder; parts[2] = COLOR_RESET; parts[3] = " : ";
+    for (k = 0; k < 4; k++) {
+        const char* q = parts[k];
+        while (*q && n < (int)sizeof(line) - 1) line[n++] = *q++;
+    }
+    line[n] = 0;
+    print_string(line);
 }
 
 void handle_line(shell_context_t* ctx, char* input_buffer) {

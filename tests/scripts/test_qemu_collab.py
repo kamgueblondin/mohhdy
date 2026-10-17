@@ -50,6 +50,8 @@ def wait_log(node, needle, timeout):
 
 
 def main():
+    # own CI job since lot 9: nothing else has created test_logs yet
+    os.makedirs(p2p.LOG_DIR, exist_ok=True)
     hub = p2p.P2pHub()
     hub.start()
     t0 = time.monotonic()
@@ -287,6 +289,14 @@ def main():
         out = log(b, start)
         if "verify ok tampered rejected wrong-message rejected wrong-public rejected" not in out:
             raise RuntimeError("zk proof: %s" % out[-600:])
+        # Lot 9 US-103: the same proof in a 2048-bit group, 256-bit subgroup.
+        start = cmd(b, "collab-zk-strong 4242 pay10", "about 112-bit group, not constant time", timeout=120)
+        out = log(b, start)
+        if ("collab-zk-strong group p2048 q256 check ok public " not in out
+                or "proof_bytes 288 verify ok tampered rejected wrong-message rejected wrong-public rejected" not in out):
+            raise RuntimeError("zk strong proof: %s" % out[-600:])
+        m = re.search(r"prove_ms (\d+) verify_ms (\d+)", out)
+        say("zk 2048/256 proof in the guest: prove %s ms verify %s ms" % (m.group(1), m.group(2)) if m else "zk timings missing")
         start = cmd(a, "collab-auctions", "collab auctions ok 1")
         needle = "collab auction gamma#%d 'lamp' reserve 10 best 15 bidder beta bids 2 state sold" % au
         if needle not in log(a, start):
