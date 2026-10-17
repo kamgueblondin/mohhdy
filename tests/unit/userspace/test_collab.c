@@ -290,11 +290,29 @@ void test_save_load_roundtrip(void) {
     buf[0] ^= 1; TEST_ASSERT_EQUAL(-1, collab_load(&copy, buf, n));
 }
 
+static int bal(int node, const char* who) {
+    char needle[48];
+    const char* p;
+    report(node, "balances", 0);
+    snprintf(needle, sizeof(needle), "collab acct %s balance ", who);
+    p = strstr(rep, needle);
+    if (!p) return -9999;
+    {
+        int v = 0, neg = 0;
+        p += strlen(needle);
+        if (*p == '-') { neg = 1; p++; }
+        while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
+        return neg ? -v : v;
+    }
+}
+
 void test_marketplace_contracts_disputes_privacy_compliance(void) {
     uint32_t price = 0, blinded = 0;
-    uint8_t zk_proof[32];
+    uint8_t proof[32];
     collab_compliance_t comp;
+    g_sign = 1;
     setup();
+    g_sign = 0;
 
     /* US-094 Marketplace search & price */
     collab_emit(&g_c[0], &g_h[0], CE_OFFER, 0, 0, 15, 2, "compute-node"); deliver();
@@ -303,66 +321,143 @@ void test_marketplace_contracts_disputes_privacy_compliance(void) {
     TEST_ASSERT_EQUAL(1, collab_market_price(&g_c[0], "compute", &price));
     TEST_ASSERT_EQUAL(15, (int)price);
 
-    /* US-099 Smart Contracts */
-    TEST_ASSERT_GREATER_THAN(0, collab_contract_create(&g_c[0], &g_h[0], "service1", k_id[1], 10, 1)); deliver();
-    TEST_ASSERT_GREATER_THAN(0, collab_contract_exec(&g_c[0], &g_h[0], 3, 1)); deliver();
-
-    /* US-101 Dispute arbitration */
-    TEST_ASSERT_GREATER_THAN(0, collab_dispute_open(&g_c[0], &g_h[0], 3, "failed delivery")); deliver();
-    TEST_ASSERT_GREATER_THAN(0, collab_dispute_vote(&g_c[1], &g_h[1], 4, 1)); deliver();
-    TEST_ASSERT_GREATER_THAN(0, collab_dispute_settle(&g_c[0], &g_h[0], 4)); deliver();
-
-    /* US-103 Privacy & ZK proofs */
-    TEST_ASSERT_EQUAL(0, collab_privacy_proof_gen(100, 1234, zk_proof));
-    TEST_ASSERT_EQUAL(0, collab_privacy_proof_verify(100, zk_proof));
+    /* US-103: hash commitment opened with value and secret; anything else fails */
+    TEST_ASSERT_EQUAL(0, collab_privacy_proof_gen(100, 1234, proof));
+    TEST_ASSERT_EQUAL(0, collab_privacy_proof_verify(100, 1234, proof));
+    TEST_ASSERT_EQUAL(-1, collab_privacy_proof_verify(101, 1234, proof));
+    TEST_ASSERT_EQUAL(-1, collab_privacy_proof_verify(100, 1235, proof));
+    proof[31] ^= 1;
+    TEST_ASSERT_EQUAL(-1, collab_privacy_proof_verify(100, 1234, proof));
     TEST_ASSERT_EQUAL(0, collab_anonymize_id(k_id[0], 99, &blinded));
     TEST_ASSERT_NOT_EQUAL(k_id[0], blinded);
 
-    /* US-104 Compliance audit */
+    /* US-104: computed checks; signed ledger and no leak: 4/4 */
     TEST_ASSERT_EQUAL(0, collab_compliance_check(&g_c[0], &comp));
+    TEST_ASSERT_EQUAL(1, comp.signing_on);
+    TEST_ASSERT_EQUAL(1, comp.all_signed);
+    TEST_ASSERT_EQUAL(1, comp.private_kept_local);
     TEST_ASSERT_EQUAL(100, (int)comp.compliance_score);
-    TEST_ASSERT_EQUAL(1, comp.gdpr_export_ready);
     TEST_ASSERT_GREATER_THAN(0, collab_compliance_report(&g_c[0], rep, sizeof(rep)));
-    TEST_ASSERT_NOT_NULL(strstr(rep, "compliance score 100 gdpr_export ok"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "compliance signing on all_signed yes forged_applied 0 private_local yes"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "score 100 passed 4/4 (self-check, not a certification)"));
+    /* a private value that leaked into a shared entry is detected */
+    TEST_ASSERT_EQUAL(0, collab_profile_set(&g_c[0], "phone", "5550101", 0));
+    collab_emit(&g_c[0], &g_h[0], CE_TICKET, 0, 0, 0, 0, "call me 5550101"); deliver();
+    TEST_ASSERT_EQUAL(0, collab_compliance_check(&g_c[0], &comp));
+    TEST_ASSERT_EQUAL(0, comp.private_kept_local);
+    TEST_ASSERT_EQUAL(75, (int)comp.compliance_score);
+    /* an unsigned node fails the signing checks */
+    setup();
+    TEST_ASSERT_EQUAL(0, collab_compliance_check(&g_c[0], &comp));
+    TEST_ASSERT_EQUAL(0, comp.signing_on);
+    TEST_ASSERT_EQUAL(50, (int)comp.compliance_score);
+}
+
+/* US-099: escrow contract; US-101: dispute decided by rulings. */
+void test_escrow_contracts_and_disputes(void) {
+    int s1, s2, s3;
+    setup();                                       /* 100 points each */
+    /* alpha pays beta 30 through an escrow arbitrated by gamma */
+    s1 = collab_escrow_create(&g_c[0], &g_h[0], k_id[1], k_id[2], 30, "gpu-job"); deliver();
+    TEST_ASSERT_EQUAL(2, s1);
+    TEST_ASSERT_EQUAL(70, bal(1, "alpha"));        /* locked */
+    /* the payee cannot release to itself; gamma (arbiter) or alpha can */
+    collab_escrow_settle(&g_c[1], &g_h[1], k_id[0], 2, 1); deliver();
+    TEST_ASSERT_EQUAL(100, bal(2, "beta"));
+    collab_escrow_settle(&g_c[0], &g_h[0], k_id[0], 2, 1); deliver();
+    TEST_ASSERT_EQUAL(130, bal(2, "beta"));
+    /* settled once: a later refund is rejected */
+    collab_escrow_settle(&g_c[2], &g_h[2], k_id[0], 2, 0); deliver();
+    TEST_ASSERT_EQUAL(70, bal(1, "alpha"));
+    report(0, "escrows", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab escrow alpha#2 'gpu-job' payee beta arbiter gamma amount 30 state released"));
+    report(0, "audit", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "reason not-allowed"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "reason bad-state"));
+    /* refund by the payee, insufficient funds rejected */
+    s2 = collab_escrow_create(&g_c[1], &g_h[1], k_id[0], 0, 500, "too-much"); deliver();
+    TEST_ASSERT_EQUAL(130, bal(0, "beta"));
+    (void)s2;
+    /* beta pays alpha 20, no arbiter; alpha disputes; gamma is the only
+     * eligible member (quorum 1) and rules for the payer: beta refunded */
+    s3 = collab_escrow_create(&g_c[1], &g_h[1], k_id[0], 0, 20, "delivery"); deliver();
+    TEST_ASSERT_EQUAL(110, bal(0, "beta"));
+    collab_dispute_open(&g_c[0], &g_h[0], k_id[1], (uint32_t)s3, "never delivered"); deliver();
+    /* frozen: release refused while disputed */
+    collab_escrow_settle(&g_c[1], &g_h[1], k_id[1], (uint32_t)s3, 1); deliver();
+    TEST_ASSERT_EQUAL(70, bal(0, "alpha"));
+    /* parties cannot rule */
+    collab_dispute_vote(&g_c[0], &g_h[0], k_id[1], (uint32_t)s3, 0); deliver();
+    TEST_ASSERT_EQUAL(70, bal(0, "alpha"));
+    collab_dispute_vote(&g_c[2], &g_h[2], k_id[1], (uint32_t)s3, 1); deliver();
+    TEST_ASSERT_EQUAL(130, bal(0, "beta"));
+    TEST_ASSERT_EQUAL(70, bal(0, "alpha"));
+    report(2, "escrows", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "'delivery' payee alpha arbiter none amount 20 state refunded rulings payer 1 payee 0"));
+    /* a second ruling after the decision is rejected; points conserved */
+    collab_dispute_vote(&g_c[2], &g_h[2], k_id[1], (uint32_t)s3, 0); deliver();
+    TEST_ASSERT_EQUAL(300, bal(0, "alpha") + bal(0, "beta") + bal(0, "gamma"));
+    same_digest();
+}
+
+/* US-094: auctions with locked bids. */
+void test_auctions(void) {
+    int a;
+    setup();
+    a = collab_auction_open(&g_c[2], &g_h[2], "lamp", 10); deliver();
+    collab_auction_bid(&g_c[0], &g_h[0], k_id[2], (uint32_t)a, 9); deliver();     /* below reserve */
+    collab_auction_bid(&g_c[0], &g_h[0], k_id[2], (uint32_t)a, 12); deliver();
+    TEST_ASSERT_EQUAL(88, bal(1, "alpha"));                                      /* locked */
+    collab_auction_bid(&g_c[1], &g_h[1], k_id[2], (uint32_t)a, 15); deliver();
+    TEST_ASSERT_EQUAL(100, bal(1, "alpha"));                                     /* outbid: repaid */
+    TEST_ASSERT_EQUAL(85, bal(1, "beta"));
+    collab_auction_bid(&g_c[0], &g_h[0], k_id[2], (uint32_t)a, 14); deliver();    /* does not beat 15 */
+    collab_auction_bid(&g_c[2], &g_h[2], k_id[2], (uint32_t)a, 50); deliver();    /* seller cannot bid */
+    collab_auction_close(&g_c[1], &g_h[1], (uint32_t)a); deliver();              /* only the seller closes */
+    report(0, "auctions", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "collab auction gamma#2 'lamp' reserve 10 best 15 bidder beta bids 2 state open"));
+    collab_auction_close(&g_c[2], &g_h[2], (uint32_t)a); deliver();
+    TEST_ASSERT_EQUAL(115, bal(0, "gamma"));
+    report(1, "auctions", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "state sold"));
+    collab_auction_bid(&g_c[0], &g_h[0], k_id[2], (uint32_t)a, 40); deliver();    /* closed */
+    TEST_ASSERT_EQUAL(100, bal(2, "alpha"));
+    report(0, "audit", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "reason bid-too-low"));
+    TEST_ASSERT_EQUAL(300, bal(0, "alpha") + bal(0, "beta") + bal(0, "gamma"));
+    /* no bid: unsold, nobody paid */
+    a = collab_auction_open(&g_c[0], &g_h[0], "chair", 5); deliver();
+    collab_auction_close(&g_c[0], &g_h[0], (uint32_t)a); deliver();
+    report(2, "auctions", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "'chair' reserve 5 best 0 bidder none bids 0 state unsold"));
+    same_digest();
 }
 
 void test_payment_conversion_escrow_and_ticket_routing(void) {
     uint32_t conv = 0;
     setup();
-
-    /* US-097 Payment conversion */
+    /* US-097: fixed-rate conversion only (simule, no payment) */
     TEST_ASSERT_EQUAL(0, collab_point_convert(100, "USD", &conv));
     TEST_ASSERT_EQUAL(10, (int)conv);
     TEST_ASSERT_EQUAL(0, collab_point_convert(100, "TOKEN", &conv));
     TEST_ASSERT_EQUAL(200, (int)conv);
-
-    /* US-097 Escrow workflow */
-    TEST_ASSERT_GREATER_THAN(0, collab_escrow_create(&g_c[0], &g_h[0], k_id[1], k_id[2], 25)); deliver();
-    TEST_ASSERT_GREATER_THAN(0, collab_escrow_release(&g_c[0], &g_h[0], 2)); deliver();
-    TEST_ASSERT_GREATER_THAN(0, collab_escrow_refund(&g_c[0], &g_h[0], 2)); deliver();
-
     /* US-105 Ticket routing */
     collab_emit(&g_c[0], &g_h[0], CE_TICKET, 0, 0, 0, 0, "network issue"); deliver();
-    TEST_ASSERT_GREATER_THAN(0, collab_ticket_route(&g_c[1], &g_h[1], 5, k_id[2])); deliver();
-    TEST_ASSERT_GREATER_THAN(0, collab_ticket_assign(&g_c[2], &g_h[2], 5, "agent_beta")); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_ticket_route(&g_c[1], &g_h[1], 2, k_id[2])); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_ticket_assign(&g_c[2], &g_h[2], 2, "agent_beta")); deliver();
 }
 
 void test_collab_consolidation_and_fallback(void) {
     uint32_t price = 0;
     setup();
-
-    /* Escrow edge case fallback */
-    TEST_ASSERT_GREATER_THAN(0, collab_escrow_release(&g_c[0], &g_h[0], 999)); /* non-existent seq handled */
-    TEST_ASSERT_GREATER_THAN(0, collab_escrow_refund(&g_c[0], &g_h[0], 999));
-
-    /* Ticket routing / assign edge case */
+    /* references to unknown escrows and auctions are rejected by the fold */
+    collab_escrow_settle(&g_c[0], &g_h[0], k_id[1], 999, 1); deliver();
+    collab_dispute_open(&g_c[0], &g_h[0], k_id[1], 999, "unknown"); deliver();
+    collab_auction_bid(&g_c[0], &g_h[0], k_id[1], 999, 5); deliver();
+    report(1, "audit", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "rejected 3"));
     TEST_ASSERT_GREATER_THAN(0, collab_ticket_route(&g_c[0], &g_h[0], 999, k_id[1]));
     TEST_ASSERT_GREATER_THAN(0, collab_ticket_assign(&g_c[0], &g_h[0], 999, "none"));
-
-    /* Dispute arbitration on unknown seq */
-    TEST_ASSERT_GREATER_THAN(0, collab_dispute_open(&g_c[0], &g_h[0], 999, "unknown"));
-
-    /* Market price query for missing item fallback */
     TEST_ASSERT_EQUAL(0, collab_market_price(&g_c[0], "missing-item", &price));
 }
 
@@ -441,6 +536,8 @@ int main(void) {
     RUN_TEST(test_signed_entries_forgery_and_redaction);
     RUN_TEST(test_save_load_roundtrip);
     RUN_TEST(test_marketplace_contracts_disputes_privacy_compliance);
+    RUN_TEST(test_escrow_contracts_and_disputes);
+    RUN_TEST(test_auctions);
     RUN_TEST(test_payment_conversion_escrow_and_ticket_routing);
     RUN_TEST(test_collab_consolidation_and_fallback);
     RUN_TEST(test_crypto_schnorr_pbkdf2_aes_gcm_pipeline);

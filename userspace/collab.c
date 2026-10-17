@@ -5,14 +5,16 @@
 
 static const char* const k_types[CE_COUNT] = {
     "?", "join", "transfer", "offer", "reserve", "task", "claim", "done", "accept", "reject",
-    "rate", "propose", "vote", "profile", "redact", "ticket", "answer"
+    "rate", "propose", "vote", "profile", "redact", "ticket", "answer",
+    "escrow", "settle", "dispute", "ruling", "auction", "bid", "close"
 };
 static const char* const k_reasons[] = {
     "ok", "not-joined", "insufficient-points", "unknown-ref", "capacity-full", "bad-state",
-    "not-allowed", "wrong-result", "duplicate", "no-rating-right", "bad-amount", "table-full"
+    "not-allowed", "wrong-result", "duplicate", "no-rating-right", "bad-amount", "table-full",
+    "bid-too-low"
 };
 const char* collab_type_name(int t) { return (t > 0 && t < CE_COUNT) ? k_types[t] : "?"; }
-const char* collab_reason(int r) { return (r >= 0 && r <= 11) ? k_reasons[r] : "?"; }
+const char* collab_reason(int r) { return (r >= 0 && r <= 12) ? k_reasons[r] : "?"; }
 
 static int s_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
@@ -356,6 +358,18 @@ static rating_t g_rate[32]; static int g_nrate;
 static uint32_t g_tickets, g_answered;
 typedef struct { uint32_t origin, seq; int answered; } ticket_t;
 static ticket_t g_tick[16]; static int g_ntick;
+/* Lot 7: escrow (1 open 2 released 3 refunded 4 disputed), auction (1 open 2 sold 3 unsold) */
+typedef struct {
+    uint32_t payer, seq, payee, arbiter, amount;
+    int state;
+    uint32_t for_payer, for_payee, voters[COLLAB_NODES];
+    int nv;
+} escrow_t;
+typedef struct { uint32_t seller, seq, reserve, best, bidder; int state; uint32_t bids; } auction_t;
+static escrow_t g_esc[16]; static int g_nesc;
+static auction_t g_auc[8]; static int g_nauc;
+static escrow_t* escrow_of(uint32_t payer, uint32_t seq) { int i; for (i = 0; i < g_nesc; i++) if (g_esc[i].payer == payer && g_esc[i].seq == seq) return &g_esc[i]; return 0; }
+static auction_t* auction_of(uint32_t seller, uint32_t seq) { int i; for (i = 0; i < g_nauc; i++) if (g_auc[i].seller == seller && g_auc[i].seq == seq) return &g_auc[i]; return 0; }
 static int g_order[COLLAB_ENTRIES];
 
 static collab_account_t* acct(collab_state_t* s, uint32_t id, int create) {
@@ -536,6 +550,97 @@ static int apply(collab_state_t* s, const collab_entry_t* e) {
         if (!g_tick[i].answered) g_answered++;
         g_tick[i].answered = 1;
         return 0;
+    case CE_ESCROW:
+        p = acct(s, e->peer, 0);
+        if (!p || !p->joined || p == o) return 6;
+        if (e->aux && (e->aux == e->origin || e->aux == e->peer || !acct(s, e->aux, 0))) return 6;
+        if (e->amount == 0 || e->amount > 1000000U) return 10;
+        if (o->balance < (int32_t)e->amount) return 2;
+        if (g_nesc >= 16) return 11;
+        o->balance -= (int32_t)e->amount;                 /* locked in the contract */
+        mzero(&g_esc[g_nesc], (int)sizeof(g_esc[0]));
+        g_esc[g_nesc].payer = e->origin; g_esc[g_nesc].seq = e->seq; g_esc[g_nesc].payee = e->peer;
+        g_esc[g_nesc].arbiter = e->aux; g_esc[g_nesc].amount = e->amount; g_esc[g_nesc].state = 1;
+        g_nesc++;
+        return 0;
+    case CE_SETTLE: {
+        escrow_t* x = escrow_of(e->peer, e->ref);
+        if (!x) return 3;
+        if (x->state != 1) return 5;                      /* settled or disputed */
+        if (e->amount) {                                  /* release */
+            if (e->origin != x->payer && e->origin != x->arbiter) return 6;
+            p = acct(s, x->payee, 0); if (!p) return 3;
+            p->balance += (int32_t)x->amount; x->state = 2;
+        } else {                                          /* refund */
+            if (e->origin != x->payee && e->origin != x->arbiter) return 6;
+            p = acct(s, x->payer, 0); if (!p) return 3;
+            p->balance += (int32_t)x->amount; x->state = 3;
+        }
+        return 0;
+    }
+    case CE_DISPUTE: {
+        escrow_t* x = escrow_of(e->peer, e->ref);
+        if (!x) return 3;
+        if (e->origin != x->payer && e->origin != x->payee) return 6;
+        if (x->state != 1) return 5;
+        x->state = 4;
+        return 0;
+    }
+    case CE_RULING: {
+        escrow_t* x = escrow_of(e->peer, e->ref);
+        uint32_t eligible = 0, quorum;
+        int v, decided = -1;
+        if (!x) return 3;
+        if (x->state != 4) return 5;
+        if (e->origin == x->payer || e->origin == x->payee) return 6;
+        for (v = 0; v < x->nv; v++) if (x->voters[v] == e->origin) return 8;
+        if (x->nv >= COLLAB_NODES) return 11;
+        x->voters[x->nv++] = e->origin;
+        if (e->amount) x->for_payer++; else x->for_payee++;
+        if (x->arbiter) {
+            if (e->origin == x->arbiter) decided = e->amount ? 1 : 0;
+        } else {
+            for (v = 0; v < s->nacc; v++)
+                if (s->acc[v].joined && s->acc[v].id != x->payer && s->acc[v].id != x->payee) eligible++;
+            quorum = eligible / 2U + 1U;
+            if (x->for_payer >= quorum) decided = 1;
+            else if (x->for_payee >= quorum) decided = 0;
+        }
+        if (decided >= 0) {
+            p = acct(s, decided ? x->payer : x->payee, 0);
+            if (!p) return 3;
+            p->balance += (int32_t)x->amount;
+            x->state = decided ? 3 : 2;
+        }
+        return 0;
+    }
+    case CE_AUCTION:
+        if (!e->text[0] || e->amount == 0 || e->amount > 1000000U) return 10;
+        if (g_nauc >= 8) return 11;
+        mzero(&g_auc[g_nauc], (int)sizeof(g_auc[0]));
+        g_auc[g_nauc].seller = e->origin; g_auc[g_nauc].seq = e->seq; g_auc[g_nauc].reserve = e->amount;
+        g_auc[g_nauc].state = 1; g_nauc++;
+        return 0;
+    case CE_BID: {
+        auction_t* u = auction_of(e->peer, e->ref);
+        if (!u) return 3;
+        if (u->state != 1) return 5;
+        if (e->origin == u->seller) return 6;
+        if (e->amount < u->reserve || e->amount <= u->best || e->amount > 1000000U) return 12;
+        if (o->balance < (int32_t)e->amount) return 2;
+        o->balance -= (int32_t)e->amount;                 /* locked */
+        if (u->bidder) { p = acct(s, u->bidder, 0); if (p) p->balance += (int32_t)u->best; }
+        u->best = e->amount; u->bidder = e->origin; u->bids++;
+        return 0;
+    }
+    case CE_CLOSE: {
+        auction_t* u = auction_of(e->origin, e->ref);
+        if (!u) return 3;
+        if (u->state != 1) return 5;
+        if (u->bidder) { o->balance += (int32_t)u->best; u->state = 2; add_right(u->seller, u->bidder); }
+        else u->state = 3;
+        return 0;
+    }
     default:
         return 5;
     }
@@ -547,6 +652,7 @@ void collab_fold(collab_t* c, collab_state_t* s) {
     int i, j;
     mzero(s, (int)sizeof(*s));
     g_noff = g_ntask = g_nprop = g_nright = g_nrate = g_ntick = 0; g_tickets = g_answered = 0;
+    g_nesc = g_nauc = 0;
     for (i = 0; i < c->n; i++) g_order[i] = i;
     for (i = 1; i < c->n; i++) { /* insertion sort, canonical order */
         int k = g_order[i];
@@ -614,6 +720,34 @@ int collab_report(collab_t* c, const collab_host_t* h, const char* what, uint32_
             s_cat(out, "\n", cap);
         }
         s_cat(out, "collab tasks ok ", cap); cat_u(out, (uint32_t)g_ntask, cap); s_cat(out, "\n", cap);
+    } else if (s_eq(what, "escrows")) {
+        static const char* const es[] = {"?", "open", "released", "refunded", "disputed"};
+        for (i = 0; i < g_nesc; i++) {
+            int k = find(c, g_esc[i].payer, g_esc[i].seq);
+            s_cat(out, "collab escrow ", cap); s_cat(out, nm(h, g_esc[i].payer), cap); s_cat(out, "#", cap); cat_u(out, g_esc[i].seq, cap);
+            s_cat(out, " '", cap); s_cat(out, k >= 0 ? c->e[k].text : "?", cap);
+            s_cat(out, "' payee ", cap); s_cat(out, nm(h, g_esc[i].payee), cap);
+            s_cat(out, " arbiter ", cap); s_cat(out, g_esc[i].arbiter ? nm(h, g_esc[i].arbiter) : "none", cap);
+            s_cat(out, " amount ", cap); cat_u(out, g_esc[i].amount, cap);
+            s_cat(out, " state ", cap); s_cat(out, es[g_esc[i].state >= 1 && g_esc[i].state <= 4 ? g_esc[i].state : 0], cap);
+            s_cat(out, " rulings payer ", cap); cat_u(out, g_esc[i].for_payer, cap);
+            s_cat(out, " payee ", cap); cat_u(out, g_esc[i].for_payee, cap); s_cat(out, "\n", cap);
+        }
+        s_cat(out, "collab escrows ok ", cap); cat_u(out, (uint32_t)g_nesc, cap); s_cat(out, "\n", cap);
+    } else if (s_eq(what, "auctions")) {
+        static const char* const as[] = {"?", "open", "sold", "unsold"};
+        for (i = 0; i < g_nauc; i++) {
+            int k = find(c, g_auc[i].seller, g_auc[i].seq);
+            s_cat(out, "collab auction ", cap); s_cat(out, nm(h, g_auc[i].seller), cap); s_cat(out, "#", cap); cat_u(out, g_auc[i].seq, cap);
+            s_cat(out, " '", cap); s_cat(out, k >= 0 ? c->e[k].text : "?", cap);
+            s_cat(out, "' reserve ", cap); cat_u(out, g_auc[i].reserve, cap);
+            s_cat(out, " best ", cap); cat_u(out, g_auc[i].best, cap);
+            s_cat(out, " bidder ", cap); s_cat(out, g_auc[i].bidder ? nm(h, g_auc[i].bidder) : "none", cap);
+            s_cat(out, " bids ", cap); cat_u(out, g_auc[i].bids, cap);
+            s_cat(out, " state ", cap); s_cat(out, as[g_auc[i].state >= 1 && g_auc[i].state <= 3 ? g_auc[i].state : 0], cap);
+            s_cat(out, "\n", cap);
+        }
+        s_cat(out, "collab auctions ok ", cap); cat_u(out, (uint32_t)g_nauc, cap); s_cat(out, "\n", cap);
     } else if (s_eq(what, "offers")) {
         for (i = 0; i < g_noff; i++) {
             int k = find(c, g_off[i].owner, g_off[i].seq);
@@ -723,10 +857,6 @@ int collab_market_search(collab_t* c, const collab_host_t* h, const char* query,
     return count;
 }
 
-int collab_market_bid(collab_t* c, const collab_host_t* h, uint32_t offer_seq, uint32_t bid_amount) {
-    return collab_emit(c, h, CE_RESERVE, 0, offer_seq, bid_amount, 0, "bid");
-}
-
 int collab_market_price(collab_t* c, const char* item, uint32_t* avg_price) {
     static collab_state_t st;
     int i, count = 0;
@@ -745,34 +875,32 @@ int collab_market_price(collab_t* c, const char* item, uint32_t* avg_price) {
     return count;
 }
 
-/* ------------------------------------------------- US-099 Smart Contracts */
-int collab_contract_create(collab_t* c, const collab_host_t* h, const char* name, uint32_t target, uint32_t amount, uint32_t trigger_type) {
-    char desc[COLLAB_TEXT];
-    desc[0] = 0;
-    s_cat(desc, "contract:", COLLAB_TEXT);
-    s_cat(desc, name ? name : "escrow", COLLAB_TEXT);
-    return collab_emit(c, h, CE_TASK, target, 0, amount, trigger_type, desc);
+/* ------------------------- Lot 7: contracts, disputes, auctions (folded) */
+int collab_escrow_create(collab_t* c, const collab_host_t* h, uint32_t payee, uint32_t arbiter, uint32_t amount,
+                         const char* name) {
+    return collab_emit(c, h, CE_ESCROW, payee, 0, amount, arbiter, name && name[0] ? name : "escrow");
 }
-
-int collab_contract_exec(collab_t* c, const collab_host_t* h, uint32_t ref_seq, uint32_t action) {
-    return collab_emit(c, h, action == 1 ? CE_ACCEPT : CE_REJECT, 0, ref_seq, 0, 0, "contract exec");
+int collab_escrow_settle(collab_t* c, const collab_host_t* h, uint32_t payer, uint32_t escrow_seq, int release) {
+    return collab_emit(c, h, CE_SETTLE, payer, escrow_seq, release ? 1U : 0U, 0, release ? "release" : "refund");
 }
-
-/* ----------------------------------------------- US-101 Dispute Arbitration */
-int collab_dispute_open(collab_t* c, const collab_host_t* h, uint32_t target_seq, const char* evidence) {
-    char text[COLLAB_TEXT];
-    text[0] = 0;
-    s_cat(text, "dispute: ", COLLAB_TEXT);
-    s_cat(text, evidence ? evidence : "none", COLLAB_TEXT);
-    return collab_emit(c, h, CE_PROPOSE, 0, target_seq, 0, 0, text);
+int collab_dispute_open(collab_t* c, const collab_host_t* h, uint32_t payer, uint32_t escrow_seq, const char* evidence) {
+    char t[COLLAB_TEXT];
+    s_copy(t, evidence && evidence[0] ? evidence : "dispute", COLLAB_TEXT);
+    return collab_emit(c, h, CE_DISPUTE, payer, escrow_seq, 0, 0, t);
 }
-
-int collab_dispute_vote(collab_t* c, const collab_host_t* h, uint32_t dispute_seq, int vote_claimant) {
-    return collab_emit(c, h, CE_VOTE, 0, dispute_seq, (uint32_t)(vote_claimant ? 1 : 0), 0, "dispute vote");
+int collab_dispute_vote(collab_t* c, const collab_host_t* h, uint32_t payer, uint32_t escrow_seq, int for_payer) {
+    return collab_emit(c, h, CE_RULING, payer, escrow_seq, for_payer ? 1U : 0U, 0, for_payer ? "for payer" : "for payee");
 }
-
-int collab_dispute_settle(collab_t* c, const collab_host_t* h, uint32_t dispute_seq) {
-    return collab_emit(c, h, CE_ANSWER, 0, dispute_seq, 0, 0, "settled");
+int collab_auction_open(collab_t* c, const collab_host_t* h, const char* item, uint32_t reserve) {
+    char t[COLLAB_TEXT];
+    s_copy(t, item ? item : "", COLLAB_TEXT);
+    return collab_emit(c, h, CE_AUCTION, 0, 0, reserve, 0, t);
+}
+int collab_auction_bid(collab_t* c, const collab_host_t* h, uint32_t seller, uint32_t auction_seq, uint32_t amount) {
+    return collab_emit(c, h, CE_BID, seller, auction_seq, amount, 0, "bid");
+}
+int collab_auction_close(collab_t* c, const collab_host_t* h, uint32_t auction_seq) {
+    return collab_emit(c, h, CE_CLOSE, 0, auction_seq, 0, 0, "close");
 }
 
 /* --------------------------------------------------- US-103 Privacy Proofs */
@@ -781,15 +909,17 @@ int collab_privacy_proof_gen(uint32_t value, uint32_t secret, uint8_t proof_out[
     uint8_t buf[8];
     if (!proof_out) return -1;
     put32(buf, value); put32(buf + 4, secret);
-    sha256_init(&ctx); sha256_update(&ctx, (const uint8_t*)"mohhdy-zk-v1", 12);
+    sha256_init(&ctx); sha256_update(&ctx, (const uint8_t*)"mohhdy-commit-v1", 16);
     sha256_update(&ctx, buf, 8); sha256_final(&ctx, proof_out);
     return 0;
 }
 
-int collab_privacy_proof_verify(uint32_t value, const uint8_t proof[32]) {
-    (void)value;
-    if (!proof) return -1;
-    return proof[0] != 0 ? 0 : -1;
+int collab_privacy_proof_verify(uint32_t value, uint32_t secret, const uint8_t proof[32]) {
+    uint8_t d[32];
+    int i, diff = 0;
+    if (!proof || collab_privacy_proof_gen(value, secret, d) != 0) return -1;
+    for (i = 0; i < 32; i++) diff |= d[i] ^ proof[i];
+    return diff ? -1 : 0;
 }
 
 int collab_anonymize_id(uint32_t raw_id, uint32_t salt, uint32_t* blinded_id) {
@@ -804,13 +934,24 @@ int collab_anonymize_id(uint32_t raw_id, uint32_t salt, uint32_t* blinded_id) {
 
 /* --------------------------------------------------- US-104 Compliance Audit */
 int collab_compliance_check(const collab_t* c, collab_compliance_t* comp) {
-    int i, redacted_count = 0;
+    int i, k, signed_n = 0, leak = 0;
     if (!c || !comp) return -1;
-    comp->gdpr_export_ready = 1;
-    comp->data_minimized = 1;
-    for (i = 0; i < c->n; i++) if (is_redacted(&c->e[i])) redacted_count++;
-    comp->right_to_be_forgotten = redacted_count >= 0 ? 1 : 0;
-    comp->compliance_score = 100U;
+    mzero(comp, (int)sizeof(*comp));
+    comp->signing_on = c->signing ? 1 : 0;
+    for (i = 0; i < c->n; i++) {
+        if (c->has_sig[i]) signed_n++;
+        if (is_redacted(&c->e[i]) || c->e[i].type == CE_REDACT) comp->redactions++;
+        /* a private profile value must never travel in an entry */
+        for (k = 0; k < COLLAB_FIELDS; k++)
+            if (c->profile[k].key[0] && !c->profile[k].shared && c->profile[k].value[0] &&
+                str_str(c->e[i].text, c->profile[k].value)) leak = 1;
+    }
+    comp->all_signed = c->n > 0 && signed_n == c->n;
+    comp->no_forgery_accepted = 1;     /* forged entries never enter e[] (rejected on receipt) */
+    comp->private_kept_local = !leak;
+    comp->checks = 4;
+    comp->passed = comp->signing_on + comp->all_signed + comp->no_forgery_accepted + comp->private_kept_local;
+    comp->compliance_score = (uint32_t)(comp->passed * 100 / comp->checks);
     collab_key_fpr(c->pk, comp->cert_hash);
     return 0;
 }
@@ -819,9 +960,16 @@ int collab_compliance_report(const collab_t* c, char* out, int cap) {
     collab_compliance_t comp;
     if (collab_compliance_check(c, &comp) != 0 || !out) return -1;
     out[0] = 0;
-    s_cat(out, "compliance score 100 gdpr_export ok right_to_be_forgotten ok\n", cap);
-    s_cat(out, "compliance cert_hash ", cap); s_cat(out, comp.cert_hash, cap); s_cat(out, "\n", cap);
-    s_cat(out, "compliance ok status verified\n", cap);
+    s_cat(out, "compliance signing ", cap); s_cat(out, comp.signing_on ? "on" : "off", cap);
+    s_cat(out, " all_signed ", cap); s_cat(out, comp.all_signed ? "yes" : "no", cap);
+    s_cat(out, " forged_applied ", cap); s_cat(out, comp.no_forgery_accepted ? "0" : "?", cap);
+    s_cat(out, " private_local ", cap); s_cat(out, comp.private_kept_local ? "yes" : "no", cap);
+    s_cat(out, " redactions ", cap); cat_u(out, (uint32_t)comp.redactions, cap);
+    s_cat(out, " forged_rejected ", cap); cat_u(out, c->forged, cap); s_cat(out, "\n", cap);
+    s_cat(out, "compliance key ", cap); s_cat(out, comp.cert_hash, cap);
+    s_cat(out, " score ", cap); cat_u(out, comp.compliance_score, cap);
+    s_cat(out, " passed ", cap); cat_u(out, (uint32_t)comp.passed, cap); s_cat(out, "/", cap); cat_u(out, (uint32_t)comp.checks, cap);
+    s_cat(out, " (self-check, not a certification)\n", cap);
     return s_len(out);
 }
 
@@ -838,18 +986,6 @@ int collab_point_convert(uint32_t points, const char* target_currency, uint32_t*
         *converted_amount = points;
     }
     return 0;
-}
-
-int collab_escrow_create(collab_t* c, const collab_host_t* h, uint32_t payee, uint32_t arbiter, uint32_t amount) {
-    return collab_emit(c, h, CE_TASK, payee, arbiter, amount, 1U, "escrow:open");
-}
-
-int collab_escrow_release(collab_t* c, const collab_host_t* h, uint32_t escrow_seq) {
-    return collab_emit(c, h, CE_ACCEPT, 0, escrow_seq, 0, 0, "escrow:released");
-}
-
-int collab_escrow_refund(collab_t* c, const collab_host_t* h, uint32_t escrow_seq) {
-    return collab_emit(c, h, CE_REJECT, 0, escrow_seq, 0, 0, "escrow:refunded");
 }
 
 /* --------------------------------------------------- US-105 Ticket Routing */

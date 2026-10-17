@@ -7,7 +7,9 @@ points grant, shared resource booking with capacity, distributed task with
 escrow and deterministic arbitration (right result paid, wrong result
 refunded), reputation, governance vote, private vs shared profile with
 right to be forgotten, support ticket, anti-entropy sync, and the same
-audit digest on the three guests. No real payment exists anywhere.
+audit digest on the three guests. Lot 7 adds escrow contracts with an
+arbiter, a dispute settled by a ruling of the uninvolved member and an
+auction with a rejected low bid. No real payment exists anywhere.
 """
 from __future__ import print_function
 
@@ -194,6 +196,79 @@ def main():
             raise RuntimeError("task states wrong: %s" % log(c)[-800:])
         cmd(c, "collab-votes", "yes 2 no 0 members 3 status passed")
         cmd(b, "collab-tickets", "collab tickets ok open 0 answered 1")
+        say("phase 7 core ledger verified (%.0fs)" % (time.monotonic() - t0))
+
+        # Lot 7: escrow contracts (US-099), disputes with arbitration
+        # (US-101) and auctions (US-094), all folded from the shared ledger.
+        def emit(node, line, prefix):
+            start = cmd(node, line, prefix + " ok seq ")
+            match = re.search(re.escape(prefix) + r" ok seq (\d+)", log(node, start))
+            if not match:
+                raise RuntimeError("%s: no seq in %r" % (node["label"], log(node, start)[-300:]))
+            return int(match.group(1))
+
+        def seen(nodes, kind, origin, seq):
+            for node in nodes:
+                wait_log(node, "collab got %s from %s seq %d" % (kind, origin["name"], seq), 60)
+
+        s1 = emit(a, "collab-escrow-create beta gamma 30 design", "collab-escrow-create")
+        seen((b, c), "escrow", a, s1)
+        r1 = emit(a, "collab-escrow-release alpha %d" % s1, "collab-escrow-release")
+        seen((b, c), "settle", a, r1)
+        s2 = emit(b, "collab-contract-create alpha none 20 repair", "collab-contract-create")
+        seen((a, c), "escrow", b, s2)
+        d2 = emit(a, "collab-dispute-open beta %d work not delivered" % s2, "collab-dispute-open")
+        seen((b, c), "dispute", a, d2)
+        v2 = emit(c, "collab-dispute-vote beta %d payer" % s2, "collab-dispute-vote")
+        seen((a, b), "ruling", c, v2)
+        au = emit(c, "collab-auction lamp 10", "collab-auction")
+        seen((a, b), "auction", c, au)
+        b1 = emit(a, "collab-market-bid gamma %d 12" % au, "collab-market-bid")
+        seen((b, c), "bid", a, b1)
+        b2 = emit(b, "collab-market-bid gamma %d 15" % au, "collab-market-bid")
+        seen((a, c), "bid", b, b2)
+        b3 = emit(a, "collab-market-bid gamma %d 14" % au, "collab-market-bid")
+        seen((b, c), "bid", a, b3)
+        cl = emit(c, "collab-auction-close %d" % au, "collab-auction-close")
+        seen((a, b), "close", c, cl)
+        say("escrow, dispute and auction entries emitted (%.0fs)" % (time.monotonic() - t0))
+        digests = []
+        for attempt in range(5):
+            for node in NODES:
+                cmd(node, "collab-sync", "collab-sync ok asked ")
+            for node in NODES:
+                cmd(node, "p2p-poll 4", "p2p-poll ok", timeout=30)
+            digests = []
+            for node in NODES:
+                start = cmd(node, "collab-audit", "collab audit entries ")
+                match = re.search(r"collab audit entries (\d+) applied (\d+) rejected (\d+) digest ([0-9a-f]{16})", log(node, start))
+                if not match:
+                    raise RuntimeError("audit line missing on %s" % node["label"])
+                digests.append((match.group(1), match.group(4)))
+            say("lot 7 audit round %d: %r" % (attempt + 1, digests))
+            if all(d[0] == "33" for d in digests):
+                break
+        if any(d[0] != "33" for d in digests) or len(set(digests)) != 1:
+            raise RuntimeError("ledger diverged after lot 7 phase: %r" % digests)
+        digests = [d[1] for d in digests]
+        if "collab rejected bid alpha seq %d reason bid-too-low" % b3 not in log(a):
+            raise RuntimeError("low bid not rejected in audit")
+        for node in NODES:
+            start = cmd(node, "collab-balances", "collab balances ok members 3")
+            out = log(node, start)
+            for needle in ("collab acct alpha balance 60 ", "collab acct beta balance 105 ", "collab acct gamma balance 135 "):
+                if needle not in out:
+                    raise RuntimeError("lot 7 balance missing %r on %s: %s" % (needle, node["label"], out[-600:]))
+        start = cmd(b, "collab-escrows", "collab escrows ok 2")
+        out = log(b, start)
+        for needle in ("collab escrow alpha#%d 'design' payee beta arbiter gamma amount 30 state released rulings payer 0 payee 0" % s1,
+                       "collab escrow beta#%d 'repair' payee alpha arbiter none amount 20 state refunded rulings payer 1 payee 0" % s2):
+            if needle not in out:
+                raise RuntimeError("escrow view missing %r: %s" % (needle, out[-600:]))
+        start = cmd(a, "collab-auctions", "collab auctions ok 1")
+        needle = "collab auction gamma#%d 'lamp' reserve 10 best 15 bidder beta bids 2 state sold" % au
+        if needle not in log(a, start):
+            raise RuntimeError("auction view missing %r: %s" % (needle, log(a, start)[-600:]))
         if hub.p2p_plaintext:
             raise RuntimeError("plaintext seen on the wire (%d frames)" % hub.p2p_plaintext)
         say("PASS digest %s sealed=%d plaintext=0 in %.0fs" % (digests[0], hub.p2p_sealed, time.monotonic() - t0))

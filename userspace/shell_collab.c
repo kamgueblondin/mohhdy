@@ -231,24 +231,57 @@ int shell_collab_line(const char* line) {
         rest = word(rest, b, 48);
         if (num(a, &pts) || !b[0]) { print_string("collab-pay-convert error usage: POINTS CURRENCY\n"); return 1; }
         collab_point_convert(pts, b, &conv);
-        print_string("collab-pay-convert ok points "); put_u(pts); print_string(" currency "); print_string(b); print_string(" amount "); put_u(conv); print_string("\n");
+        print_string("collab-pay-convert simule points "); put_u(pts); print_string(" currency "); print_string(b);
+        print_string(" amount "); put_u(conv); print_string(" (fixed rate, no payment)\n");
         return 0;
     }
-    if (s_eq(cmd, "collab-escrow-create")) {
-        uint32_t payee_id, arbiter_id, amt;
+    /* Lot 7 (US-099): escrow contracts folded from the ledger */
+    if (s_eq(cmd, "collab-escrow-create") || s_eq(cmd, "collab-contract-create")) {
+        uint32_t payee_id, arbiter_id = 0, amt;
         rest = word(rest, b, 48); rest = word(rest, c, 48);
         payee_id = peer_id(a);
-        arbiter_id = peer_id(b);
-        if (!payee_id || num(c, &amt)) return emitted(cmd, -1);
-        return emitted(cmd, collab_escrow_create(&g_c, &g_h, payee_id, arbiter_id, amt));
+        if (!s_eq(b, "none")) arbiter_id = peer_id(b);
+        if (!payee_id || (!arbiter_id && !s_eq(b, "none")) || num(c, &amt)) {
+            print_string(cmd); print_string(" error usage: PAYEE ARBITER|none AMOUNT [NAME]\n");
+            return 1;
+        }
+        return emitted(cmd, collab_escrow_create(&g_c, &g_h, payee_id, arbiter_id, amt, rest));
     }
-    if (s_eq(cmd, "collab-escrow-release")) {
-        if (num(a, &x)) return emitted(cmd, -1);
-        return emitted(cmd, collab_escrow_release(&g_c, &g_h, x));
+    if (s_eq(cmd, "collab-escrow-release") || s_eq(cmd, "collab-escrow-refund") || s_eq(cmd, "collab-contract-exec")) {
+        int release = s_eq(cmd, "collab-escrow-release");
+        rest = word(rest, b, 48);
+        if (s_eq(cmd, "collab-contract-exec")) { rest = word(rest, c, 48); release = s_eq(c, "release"); if (!release && !s_eq(c, "refund")) b[0] = 0; }
+        if (!(pid = peer_id(a)) || num(b, &x)) { print_string(cmd); print_string(" error usage: PAYER SEQ\n"); return 1; }
+        return emitted(cmd, collab_escrow_settle(&g_c, &g_h, pid, x, release));
     }
-    if (s_eq(cmd, "collab-escrow-refund")) {
-        if (num(a, &x)) return emitted(cmd, -1);
-        return emitted(cmd, collab_escrow_refund(&g_c, &g_h, x));
+    /* US-101 */
+    if (s_eq(cmd, "collab-dispute-open")) {
+        rest = word(rest, b, 48);
+        if (!(pid = peer_id(a)) || num(b, &x)) { print_string("collab-dispute-open error usage: PAYER SEQ EVIDENCE\n"); return 1; }
+        return emitted(cmd, collab_dispute_open(&g_c, &g_h, pid, x, rest));
+    }
+    if (s_eq(cmd, "collab-dispute-vote")) {
+        rest = word(rest, b, 48); rest = word(rest, c, 48);
+        if (!(pid = peer_id(a)) || num(b, &x) || (!s_eq(c, "payer") && !s_eq(c, "payee"))) {
+            print_string("collab-dispute-vote error usage: PAYER SEQ payer|payee\n");
+            return 1;
+        }
+        return emitted(cmd, collab_dispute_vote(&g_c, &g_h, pid, x, s_eq(c, "payer")));
+    }
+    /* US-094 auctions */
+    if (s_eq(cmd, "collab-auction")) {
+        rest = word(rest, b, 48);
+        if (!a[0] || num(b, &x)) { print_string("collab-auction error usage: ITEM RESERVE\n"); return 1; }
+        return emitted(cmd, collab_auction_open(&g_c, &g_h, a, x));
+    }
+    if (s_eq(cmd, "collab-market-bid")) {
+        rest = word(rest, b, 48); rest = word(rest, c, 48);
+        if (!(pid = peer_id(a)) || num(b, &x) || num(c, &y)) { print_string("collab-market-bid error usage: SELLER SEQ AMOUNT\n"); return 1; }
+        return emitted(cmd, collab_auction_bid(&g_c, &g_h, pid, x, y));
+    }
+    if (s_eq(cmd, "collab-auction-close")) {
+        if (num(a, &x)) { print_string("collab-auction-close error usage: SEQ\n"); return 1; }
+        return emitted(cmd, collab_auction_close(&g_c, &g_h, x));
     }
     if (s_eq(cmd, "collab-ticket-route")) {
         rest = word(rest, b, 48);
@@ -262,11 +295,6 @@ int shell_collab_line(const char* line) {
         if (num(a, &x) || !b[0]) return emitted(cmd, -1);
         return emitted(cmd, collab_ticket_assign(&g_c, &g_h, x, b));
     }
-    if (s_eq(cmd, "collab-market-bid")) {
-        rest = word(rest, b, 48);
-        if (num(a, &x) || num(b, &y)) return emitted(cmd, -1);
-        return emitted(cmd, collab_market_bid(&g_c, &g_h, x, y));
-    }
     if (s_eq(cmd, "collab-market-price")) {
         uint32_t avg = 0;
         if (!a[0]) { print_string("collab-market-price error usage: ITEM\n"); return 1; }
@@ -274,38 +302,16 @@ int shell_collab_line(const char* line) {
         print_string("market price avg "); put_u(avg); print_string("\n");
         return 0;
     }
-    if (s_eq(cmd, "collab-contract-create")) {
-        rest = word(rest, b, 48); rest = word(rest, c, 48);
-        const char* r2 = word(rest, g_out, 64);
-        uint32_t trig = r2[0] ? (uint32_t)r2[0] : 1U;
-        if (!(pid = peer_id(b)) || num(c, &x)) return emitted(cmd, -1);
-        return emitted(cmd, collab_contract_create(&g_c, &g_h, a, pid, x, trig));
-    }
-    if (s_eq(cmd, "collab-contract-exec")) {
-        rest = word(rest, b, 48);
-        if (num(a, &x) || num(b, &y)) return emitted(cmd, -1);
-        return emitted(cmd, collab_contract_exec(&g_c, &g_h, x, y));
-    }
-    if (s_eq(cmd, "collab-dispute-open")) {
-        if (num(a, &x)) return emitted(cmd, -1);
-        return emitted(cmd, collab_dispute_open(&g_c, &g_h, x, rest));
-    }
-    if (s_eq(cmd, "collab-dispute-vote")) {
-        rest = word(rest, b, 48);
-        if (num(a, &x) || (!s_eq(b, "yes") && !s_eq(b, "no"))) return emitted(cmd, -1);
-        return emitted(cmd, collab_dispute_vote(&g_c, &g_h, x, s_eq(b, "yes") ? 1 : 0));
-    }
-    if (s_eq(cmd, "collab-dispute-settle")) {
-        if (num(a, &x)) return emitted(cmd, -1);
-        return emitted(cmd, collab_dispute_settle(&g_c, &g_h, x));
-    }
     if (s_eq(cmd, "collab-privacy-proof")) {
         uint8_t proof[32];
         rest = word(rest, b, 48);
         if (num(a, &x) || num(b, &y)) { print_string("collab-privacy-proof error usage: VALUE SECRET\n"); return 1; }
         collab_privacy_proof_gen(x, y, proof);
-        if (collab_privacy_proof_verify(x, proof) == 0) print_string("collab-privacy-proof ok zk_verified\n");
-        else print_string("collab-privacy-proof error failed\n");
+        print_string("collab-privacy-proof commitment ");
+        { int i; for (i = 0; i < 8; i++) { char hx[3]; hx[0] = "0123456789abcdef"[proof[i] >> 4]; hx[1] = "0123456789abcdef"[proof[i] & 15]; hx[2] = 0; print_string(hx); } }
+        print_string(collab_privacy_proof_verify(x, y, proof) == 0 ? " opened ok" : " open failed");
+        print_string(collab_privacy_proof_verify(x + 1U, y, proof) == 0 ? " wrong-value accepted" : " wrong-value rejected");
+        print_string(" (hash commitment, not zero-knowledge)\n");
         return 0;
     }
     if (s_eq(cmd, "collab-compliance")) {
@@ -317,7 +323,7 @@ int shell_collab_line(const char* line) {
         static const char* const views[][2] = {
             {"collab-balances", "balances"}, {"collab-audit", "audit"}, {"collab-tasks", "tasks"},
             {"collab-offers", "offers"}, {"collab-votes", "votes"}, {"collab-tickets", "tickets"},
-            {"collab-export", "export"}, {0, 0}
+            {"collab-export", "export"}, {"collab-escrows", "escrows"}, {"collab-auctions", "auctions"}, {0, 0}
         };
         int i;
         for (i = 0; views[i][0]; i++)
