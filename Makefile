@@ -140,7 +140,8 @@ NET_STACK_OBJECTS = build/net_ethernet_arp.o build/net_dhcp.o build/net_ipv4_udp
 build/net_ring0_absent.o: kernel/net_ring0_absent.c kernel/net_llm_client.h kernel/net_wire.h kernel/net_stack_exec.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
-STRICT_OBJECTS = $(filter-out $(NET_STACK_OBJECTS),$(OBJECTS)) build/net_ring0_absent.o build/nic_boot_strict.o build/boot_storage_strict.o build/boot_storage_install.o build/ata_identify_absent.o build/fat_pio_fallback_absent.o
+# Lot 6: sha256/aes_gcm are generic crypto used by kernel key sealing.
+STRICT_OBJECTS = $(filter-out $(NET_STACK_OBJECTS),$(OBJECTS)) build/sha256.o build/aes_gcm.o build/net_ring0_absent.o build/nic_boot_strict.o build/boot_storage_strict.o build/boot_storage_install.o build/ata_identify_absent.o build/fat_pio_fallback_absent.o
 ifeq ($(NET_RING0_FALLBACK),0)
 IMAGE_OBJECTS = $(STRICT_OBJECTS)
 else
