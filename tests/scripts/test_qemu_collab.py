@@ -50,6 +50,8 @@ def wait_log(node, needle, timeout):
 
 
 def main():
+    # own CI job since lot 9: nothing else has created test_logs yet
+    os.makedirs(p2p.LOG_DIR, exist_ok=True)
     hub = p2p.P2pHub()
     hub.start()
     t0 = time.monotonic()
@@ -232,6 +234,19 @@ def main():
         cl = emit(c, "collab-auction-close %d" % au, "collab-auction-close")
         seen((a, b), "close", c, cl)
         say("escrow, dispute and auction entries emitted (%.0fs)" % (time.monotonic() - t0))
+        # Lot 9 US-099: contracts with a program, executed by the fold on
+        # every guest once the conditions hold (sign-offs).
+        k1 = emit(a, "collab-contract-deploy beta gamma 10 pay if payee arb", "collab-contract-deploy")
+        seen((b, c), "contract", a, k1)
+        o1 = emit(b, "collab-signoff alpha %d" % k1, "collab-signoff")
+        seen((a, c), "signoff", b, o1)
+        o2 = emit(c, "collab-signoff alpha %d" % k1, "collab-signoff")
+        seen((a, b), "signoff", c, o2)
+        k2 = emit(c, "collab-contract-deploy alpha none 20 split 25 if sigs 1", "collab-contract-deploy")
+        seen((a, b), "contract", c, k2)
+        o3 = emit(b, "collab-signoff gamma %d" % k2, "collab-signoff")
+        seen((a, c), "signoff", b, o3)
+        say("contract programs deployed and signed off (%.0fs)" % (time.monotonic() - t0))
         digests = []
         for attempt in range(5):
             for node in NODES:
@@ -246,9 +261,9 @@ def main():
                     raise RuntimeError("audit line missing on %s" % node["label"])
                 digests.append((match.group(1), match.group(4)))
             say("lot 7 audit round %d: %r" % (attempt + 1, digests))
-            if all(d[0] == "33" for d in digests):
+            if all(d[0] == "38" for d in digests):
                 break
-        if any(d[0] != "33" for d in digests) or len(set(digests)) != 1:
+        if any(d[0] != "38" for d in digests) or len(set(digests)) != 1:
             raise RuntimeError("ledger diverged after lot 7 phase: %r" % digests)
         digests = [d[1] for d in digests]
         if "collab rejected bid alpha seq %d reason bid-too-low" % b3 not in log(a):
@@ -256,12 +271,16 @@ def main():
         for node in NODES:
             start = cmd(node, "collab-balances", "collab balances ok members 3")
             out = log(node, start)
-            for needle in ("collab acct alpha balance 60 ", "collab acct beta balance 105 ", "collab acct gamma balance 135 "):
+            for needle in ("collab acct alpha balance 55 ", "collab acct beta balance 115 ", "collab acct gamma balance 130 "):
                 if needle not in out:
                     raise RuntimeError("lot 7 balance missing %r on %s: %s" % (needle, node["label"], out[-600:]))
-        start = cmd(b, "collab-escrows", "collab escrows ok 2")
+        start = cmd(b, "collab-escrows", "collab escrows ok 4")
         out = log(b, start)
-        for needle in ("collab escrow alpha#%d 'design' payee beta arbiter gamma amount 30 state released rulings payer 0 payee 0" % s1,
+        for needle in ("collab escrow alpha#%d 'pay if payee arb' payee beta arbiter gamma amount 10 state released "
+                       "program clauses 1 signoffs 2 fired 1 to_payee 10 rulings payer 0 payee 0" % k1,
+                       "collab escrow gamma#%d 'split 25 if sigs 1' payee alpha arbiter none amount 20 state split "
+                       "program clauses 1 signoffs 1 fired 1 to_payee 5 rulings payer 0 payee 0" % k2,
+                       "collab escrow alpha#%d 'design' payee beta arbiter gamma amount 30 state released rulings payer 0 payee 0" % s1,
                        "collab escrow beta#%d 'repair' payee alpha arbiter none amount 20 state refunded rulings payer 1 payee 0" % s2):
             if needle not in out:
                 raise RuntimeError("escrow view missing %r: %s" % (needle, out[-600:]))
@@ -270,6 +289,14 @@ def main():
         out = log(b, start)
         if "verify ok tampered rejected wrong-message rejected wrong-public rejected" not in out:
             raise RuntimeError("zk proof: %s" % out[-600:])
+        # Lot 9 US-103: the same proof in a 2048-bit group, 256-bit subgroup.
+        start = cmd(b, "collab-zk-strong 4242 pay10", "about 112-bit group, not constant time", timeout=120)
+        out = log(b, start)
+        if ("collab-zk-strong group p2048 q256 check ok public " not in out
+                or "proof_bytes 288 verify ok tampered rejected wrong-message rejected wrong-public rejected" not in out):
+            raise RuntimeError("zk strong proof: %s" % out[-600:])
+        m = re.search(r"prove_ms (\d+) verify_ms (\d+)", out)
+        say("zk 2048/256 proof in the guest: prove %s ms verify %s ms" % (m.group(1), m.group(2)) if m else "zk timings missing")
         start = cmd(a, "collab-auctions", "collab auctions ok 1")
         needle = "collab auction gamma#%d 'lamp' reserve 10 best 15 bidder beta bids 2 state sold" % au
         if needle not in log(a, start):

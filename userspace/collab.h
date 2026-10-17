@@ -25,7 +25,9 @@ enum {
     CE_JOIN = 1, CE_TRANSFER, CE_OFFER, CE_RESERVE, CE_TASK, CE_CLAIM, CE_DONE, CE_ACCEPT, CE_REJECT,
     CE_RATE, CE_PROPOSE, CE_VOTE, CE_PROFILE, CE_REDACT, CE_TICKET, CE_ANSWER,
     /* Lot 7: escrow contracts (US-099), disputes (US-101), auctions (US-094) */
-    CE_ESCROW, CE_SETTLE, CE_DISPUTE, CE_RULING, CE_AUCTION, CE_BID, CE_CLOSE, CE_COUNT
+    CE_ESCROW, CE_SETTLE, CE_DISPUTE, CE_RULING, CE_AUCTION, CE_BID, CE_CLOSE,
+    /* Lot 9: contracts with a program (US-099) and member sign-offs */
+    CE_CONTRACT, CE_SIGNOFF, CE_COUNT
 };
 
 typedef struct {
@@ -144,6 +146,48 @@ int collab_auction_open(collab_t* c, const collab_host_t* h, const char* item, u
 int collab_auction_bid(collab_t* c, const collab_host_t* h, uint32_t seller, uint32_t auction_seq, uint32_t amount);
 int collab_auction_close(collab_t* c, const collab_host_t* h, uint32_t auction_seq);
 
+/* US-099 contract language (Lot 9). A contract is an escrow (the payer
+ * locks AMOUNT for PAYEE, optional arbiter) whose entry text is a small
+ * program, compiled when the entry is applied (a program that does not
+ * compile rejects the entry with reason bad-contract on every node) and
+ * evaluated in the canonical fold after every entry, so every member
+ * executes it at the same point of the ledger.
+ *   program := clause { (";" | "else") clause }  (1 to 3 clauses)
+ *   clause  := action "if" cond { ["&"] cond }     (1 to 3 conditions, all must hold)
+ *   action  := "pay" | "refund" | "split" PCT    (PCT 1..99 to the payee)
+ *   cond    := "payee"                           (the payee signed the contract off)
+ *            | "arb"                             (the arbiter signed it off; needs an arbiter)
+ *            | "sigs" K                          (K distinct sign-offs, payer excluded)
+ *            | "after" L                         (ledger clock >= contract lamport + L)
+ * Roles, not node ids, so a program fits the 39-character entry text.
+ * The first clause whose conditions all hold fires once; the escrow
+ * settlement and dispute rules still apply until then. Example:
+ *   "pay if payee&arb;refund if after 20"
+ *   "pay if payee arb else refund if after 9" (same, keyboard friendly) */
+#define COLLAB_MCL_CLAUSES 3
+#define COLLAB_MCL_CONDS 3
+enum { MCL_PAY = 1, MCL_REFUND, MCL_SPLIT };
+enum { MCL_PAYEE = 1, MCL_ARB, MCL_SIGS, MCL_AFTER };
+typedef struct { uint8_t kind; uint32_t arg; } collab_mcl_cond_t;
+typedef struct {
+    uint8_t action; uint32_t pct;
+    collab_mcl_cond_t cond[COLLAB_MCL_CONDS]; int nc;
+} collab_mcl_clause_t;
+typedef struct { collab_mcl_clause_t cl[COLLAB_MCL_CLAUSES]; int n; } collab_mcl_t;
+/* facts seen by a program */
+typedef struct {
+    uint32_t signers[COLLAB_NODES]; int ns;   /* distinct sign-offs, payer excluded */
+    uint32_t payee, arbiter;                  /* roles of the contract (arbiter 0 = none) */
+    uint32_t elapsed;                         /* ledger lamport - contract lamport */
+} collab_mcl_facts_t;
+/* 0 on success, else -(1-based character offset of the error) */
+int collab_mcl_compile(const char* src, collab_mcl_t* out);
+/* index of the first clause that holds, -1 when none */
+int collab_mcl_eval(const collab_mcl_t* prog, const collab_mcl_facts_t* facts);
+int collab_contract_deploy(collab_t* c, const collab_host_t* h, uint32_t payee, uint32_t arbiter, uint32_t amount,
+                           const char* program);
+int collab_contract_signoff(collab_t* c, const collab_host_t* h, uint32_t payer, uint32_t contract_seq);
+
 /* US-103 privacy (Lot 7, honest): a hash commitment, NOT a zero-knowledge
  * proof. commit = SHA-256("mohhdy-commit-v1" || value || secret); opening
  * it reveals both value and secret to the verifier, which recomputes it. */
@@ -169,18 +213,23 @@ int collab_zk_prove(uint64_t secret, const char* msg, collab_zk_proof_t* out);
 /* 0 when the proof shows knowledge of log_g(y) for this message */
 int collab_zk_verify(uint64_t y, const char* msg, const collab_zk_proof_t* pr);
 
-/* US-104 compliance self-check (Lot 7: computed, not asserted). Each check
- * is a fact of the local node and ledger: entries signed by their origin,
- * no forged entry accepted, redaction available (export and forget
- * commands exist and the ledger keeps text hashes), private profile fields
- * kept local (never in a shared entry). Score = passed * 100 / checks. It
- * is a self-assessment, not a GDPR certification. */
+/* US-104 compliance self-check (Lot 7 computed, Lot 9 recomputed from the
+ * stored ledger). Six checks: signing on; every stored entry signed; every
+ * signature verifies again with the key bound to its origin (none forged
+ * or altered at rest); private profile fields never in a shared entry;
+ * erasure effective (after a redaction, no earlier profile text of that
+ * origin is left); a key bound for every origin. Score = passed * 100 /
+ * checks. Mapped to GDPR articles in the report; it is a self-assessment,
+ * not a GDPR certification. */
 typedef struct {
     int signing_on;
     int all_signed;            /* every stored entry has a signature */
-    int no_forgery_accepted;   /* forged entries rejected, none applied */
+    int no_forgery_accepted;   /* every stored signature verifies again */
     int private_kept_local;    /* no private profile field appears in a shared entry */
+    int erasure_effective;     /* redactions really removed the earlier texts */
+    int keys_bound;            /* every origin has a bound public key */
     int redactions;            /* redaction entries in the ledger */
+    int verified, bad_signatures, unerased;
     int checks, passed;
     uint32_t compliance_score;
     char cert_hash[17];        /* own public key fingerprint */

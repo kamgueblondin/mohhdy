@@ -4,6 +4,8 @@ static const char* k_apps[MUI_APPS] = { "chat", "shell", "browser", "files", "p2
 static const uint32_t k_colors[MUI_APPS] = { 0x2E7D32U, 0x263238U, 0x1565C0U, 0xEF6C00U,
                                              0x6A1B9AU, 0x00838FU, 0x546E7AU, 0xC62828U };
 
+static int slen_mui(const char* s) { int n = 0; while (s[n]) n++; return n; }
+
 const char* mui_app_name(int id) { return (id >= 0 && id < MUI_APPS) ? k_apps[id] : "?"; }
 
 const char* mui_action_name(int a) {
@@ -181,4 +183,67 @@ uint32_t mui_frame_hash(const mui_layout_t* l, const mui_state_t* s) {
             h = (h ^ ((p >> 16) & 0xFFU)) * 16777619U;
         }
     return h;
+}
+
+/* ------------------------------------------- Lot 9: US-077 display list */
+static int dl_rect(os_fb_web_item_t* o, int n, int max, int x, int y, int w, int h, uint32_t c) {
+    os_fb_web_item_t* it;
+    if (n >= max || w <= 0 || h <= 0) return n;
+    it = &o[n];
+    it->kind = OS_FB_WEB_RECT; it->bold = 0;
+    it->x = (int16_t)x; it->y = (int16_t)y; it->w = (uint16_t)w; it->h = (uint16_t)h;
+    it->pad = 0; it->color = c; it->text[0] = 0;
+    return n + 1;
+}
+
+static int dl_text(os_fb_web_item_t* o, int n, int max, int x, int y, const char* t, uint32_t c) {
+    os_fb_web_item_t* it;
+    int k = 0;
+    if (n >= max) return n;
+    it = &o[n];
+    it->kind = OS_FB_WEB_TEXT; it->bold = 0;
+    it->x = (int16_t)x; it->y = (int16_t)y; it->h = 8; it->pad = 0; it->color = c;
+    while (t[k] && k < OS_FB_WEB_TEXT_LEN - 1) { it->text[k] = t[k]; k++; }
+    it->text[k] = 0;
+    it->w = (uint16_t)(k * 8);
+    return n + 1;
+}
+
+int mui_display_list(const mui_layout_t* l, const mui_state_t* s, os_fb_web_item_t* o, int max) {
+    int n = 0, i, w, h, third;
+    if (!l || !s || !o || max <= 0) return -1;
+    w = l->w; h = l->h; third = w / 3;
+    if (s->screen == MUI_SCREEN_APP && s->app >= 0) {
+        n = dl_rect(o, n, max, 0, l->status_h, w, h - l->status_h - l->nav_h, 0xFAFAFAU);
+        n = dl_rect(o, n, max, 0, l->status_h, w, 48, k_colors[s->app]);
+        n = dl_text(o, n, max, 16, l->status_h + 20, mui_app_name(s->app), 0xFFFFFFU);
+        n = dl_text(o, n, max, 16, l->status_h + 72, "app surface (simule)", 0x212121U);
+    } else if (s->screen == MUI_SCREEN_RECENTS) {
+        int card = l->status_h + 24 + s->depth * 12;
+        n = dl_rect(o, n, max, 0, l->status_h, w, h - l->status_h - l->nav_h, 0x212121U);
+        n = dl_rect(o, n, max, 25, card + 1, w - 49, h / 3 - 1, 0xCFD8DCU);
+        if (s->app >= 0) n = dl_text(o, n, max, 33, card + 9, mui_app_name(s->app), 0x212121U);
+    } else {
+        n = dl_rect(o, n, max, 0, l->status_h, w, h - l->status_h - l->nav_h, 0x0D47A1U);
+        for (i = 0; i < l->ntargets; i++) {
+            const mui_target_t* t = &l->t[i];
+            if (t->id >= MUI_APPS) continue;
+            n = dl_rect(o, n, max, t->x, t->y, t->w, t->h, k_colors[t->id]);
+            n = dl_text(o, n, max, t->x + t->w / 2 - 4 * slen_mui(mui_app_name(t->id)),
+                        t->y + t->h + 2, mui_app_name(t->id), 0xFFFFFFU);
+        }
+    }
+    n = dl_rect(o, n, max, 0, 0, w, l->status_h, 0x101010U);
+    n = dl_text(o, n, max, 8, 8, "mohhdy mobile", 0xFFFFFFU);
+    n = dl_rect(o, n, max, 0, h - l->nav_h, w, l->nav_h, 0x000000U);
+    for (i = 0; i < 3; i++) {
+        int cx = i * third + w / 6, cy = h - l->nav_h / 2;
+        n = dl_rect(o, n, max, cx - 9, cy - 9, 19, 19, 0xE0E0E0U);
+    }
+    if (s->shade) {
+        n = dl_rect(o, n, max, 0, 0, w, h / 3 - 2, 0x37474FU);
+        n = dl_rect(o, n, max, 0, h / 3 - 2, w, 2, 0xFFFFFFU);
+        n = dl_text(o, n, max, 16, 32, "notifications", 0xFFFFFFU);
+    }
+    return n;
 }

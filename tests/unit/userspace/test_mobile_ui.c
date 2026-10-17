@@ -127,6 +127,55 @@ void test_pixels_follow_state(void) {
     TEST_ASSERT_TRUE(mui_pixel(&l, &s, -1, 0) == 0U);
 }
 
+/* Lot 9 (US-077): the display list sent to the OS-UI VBE screen rasterizes
+ * to exactly the pixel model, for every screen of the phone and the tablet. */
+static uint32_t g_ras[800 * 600];
+static os_fb_web_item_t g_dl[OS_FB_WEB_ITEMS];
+
+static int raster_matches(const mui_layout_t* l, const mui_state_t* s, int* nitems, int* ntext) {
+    int n = mui_display_list(l, s, g_dl, OS_FB_WEB_ITEMS), i, x, y, bad = 0;
+    *nitems = n; *ntext = 0;
+    if (n <= 0) return 0;
+    for (i = 0; i < l->w * l->h; i++) g_ras[i] = 0xDEADU;
+    for (i = 0; i < n; i++) {
+        const os_fb_web_item_t* it = &g_dl[i];
+        if (it->kind == OS_FB_WEB_TEXT) { (*ntext)++; continue; }
+        if (it->kind != OS_FB_WEB_RECT) return 0;
+        for (y = it->y; y < it->y + it->h; y++)
+            for (x = it->x; x < it->x + it->w; x++)
+                if (x >= 0 && y >= 0 && x < l->w && y < l->h) g_ras[y * l->w + x] = it->color;
+    }
+    for (y = 0; y < l->h; y++)
+        for (x = 0; x < l->w; x++)
+            if (g_ras[y * l->w + x] != mui_pixel(l, s, x, y)) bad++;
+    return bad == 0;
+}
+
+void test_display_list_matches_pixel_model(void) {
+    static const int sizes[2][2] = { { 320, 448 }, { 800, 600 } };
+    int k, n, nt;
+    for (k = 0; k < 2; k++) {
+        mui_layout_t l;
+        mui_state_t s;
+        TEST_ASSERT_EQUAL(0, mui_layout(sizes[k][0], sizes[k][1], &l));
+        mui_init(&s);
+        TEST_ASSERT_TRUE(raster_matches(&l, &s, &n, &nt));
+        TEST_ASSERT_TRUE(nt >= MUI_APPS + 1);       /* app labels + status text */
+        TEST_ASSERT_TRUE(n <= OS_FB_WEB_ITEMS);
+        TEST_ASSERT_EQUAL(MUI_ACT_OPEN, mui_tap(&s, &l, l.t[2].x + 4, l.t[2].y + 4));
+        TEST_ASSERT_TRUE(raster_matches(&l, &s, &n, &nt));
+        TEST_ASSERT_EQUAL_STRING("browser", g_dl[2].text);
+        TEST_ASSERT_EQUAL(MUI_ACT_RECENTS, mui_tap(&s, &l, l.w - 8, l.h - 8));
+        TEST_ASSERT_TRUE(raster_matches(&l, &s, &n, &nt));
+        s.shade = 1;
+        TEST_ASSERT_TRUE(raster_matches(&l, &s, &n, &nt));
+        s.shade = 0;
+        TEST_ASSERT_EQUAL(MUI_ACT_HOME, mui_tap(&s, &l, l.w / 2, l.h - 8));
+        TEST_ASSERT_TRUE(raster_matches(&l, &s, &n, &nt));
+    }
+    TEST_ASSERT_EQUAL(-1, mui_display_list(0, 0, g_dl, 4));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_phone_portrait_layout_keeps_touch_targets);
@@ -134,6 +183,7 @@ int main(void) {
     RUN_TEST(test_tap_open_back_home_recents);
     RUN_TEST(test_gestures_shade_home_back);
     RUN_TEST(test_pixels_follow_state);
+    RUN_TEST(test_display_list_matches_pixel_model);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

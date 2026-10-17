@@ -73,16 +73,61 @@ def check_guest(inst, run_command, peer_alive_check):
     return rel, m.group(0)
 
 
+GRPC_CALLS = 2
+
+
+def grpc_over_tls(guest_a, guest_b, run_command, peer_alive_check, hub):
+    """Lot 9 (US-067): gRPC (HTTP/2 engine of userspace/grpcwire.c) inside
+    the guest-guest TLS 1.2 session opened above. B serves on its accepted
+    TLS session, A calls on its client TLS session; the hub must see TLS
+    application_data records only, never the HTTP/2 preface or gRPC text."""
+    before_client = hub.events["guest_client_app_data"]
+    before_server = hub.events["guest_app_data"]
+    start_b = len(h.log_text(guest_b["log"]))
+    with h.INJECT_LOCK:
+        h.send_command_once(guest_b["client"], "grpc-tls-serve %d 180" % GRPC_CALLS,
+                            guest_b["proc"], guest_b["log"])
+    h.wait_for(guest_b["proc"], guest_b["log"], "grpc-tls-serve ready", 30, start_b)
+    start_a = run_command(guest_a, "grpc-tls-call %d mohhdy.echo hello tls" % GRPC_CALLS,
+                          "grpc-tls-call ", peer_alive_check, timeout=200)
+    h.wait_for(guest_a["proc"], guest_a["log"], "[0m : ", 240, start_a)
+    out_a = h.normalized_log(h.log_text(guest_a["log"])[start_a:])
+    want = ["grpc-tls-call stream %d ok http 200 grpc-status 0 message Hello tls-%d from guest over tls "
+            "transport=tls" % (1 + 2 * i, i + 1) for i in range(GRPC_CALLS)]
+    want.append("grpc-tls-call ok calls %d succeeded %d server_settings 1" % (GRPC_CALLS, GRPC_CALLS))
+    for w in want:
+        if w not in out_a:
+            raise RuntimeError("grpc-tls-call A: missing %r in %s" % (w, out_a[-1500:]))
+    h.wait_for(guest_b["proc"], guest_b["log"], "grpc-tls-serve ok served %d" % GRPC_CALLS, 240, start_b)
+    h.wait_for(guest_b["proc"], guest_b["log"], "[0m : ", 60, start_b)
+    out_b = h.normalized_log(h.log_text(guest_b["log"])[start_b:])
+    for sid in range(GRPC_CALLS):
+        need = "stream %d path /mohhdy.echo/hello client_settings 1" % (1 + 2 * sid)
+        if need not in out_b:
+            raise RuntimeError("grpc-tls-serve B: missing %r in %s" % (need, out_b[-1500:]))
+    if "cipher=aes128-gcm transport=tls" not in out_b:
+        raise RuntimeError("grpc-tls-serve B: no TLS summary in %s" % out_b[-800:])
+    ev = hub.events
+    if ev["guest_client_app_data"] <= before_client or ev["guest_app_data"] <= before_server:
+        raise RuntimeError("hub: no new TLS application records for gRPC %r" % ev)
+    if ev["guest_plaintext_grpc"] != 0:
+        raise RuntimeError("hub: gRPC/HTTP2 plaintext seen on the wire %r" % ev)
+    h.say("[net-peer-tls-worker] gRPC over TLS: %d calls ok, new client records %d, server records %d, "
+          "plaintext gRPC frames 0" % (GRPC_CALLS, ev["guest_client_app_data"] - before_client,
+                                       ev["guest_app_data"] - before_server))
+
+
 def post_check(instances, run_command, peer_alive_check, hub):
     guest_a, guest_b = instances
+    grpc_over_tls(guest_a, guest_b, run_command, peer_alive_check, hub)
     rel_a, st_a = check_guest(guest_a, run_command, peer_alive_check)
     rel_b, st_b = check_guest(guest_b, run_command, peer_alive_check)
     ops_b = [(op, rc) for op, rc, _ in rel_b]
     ops_a = [(op, rc) for op, rc, _ in rel_a]
-    for need in ((128, 0), (129, 1), (129, 0), (130, 1), (130, 7), (130, 10)):
+    for need in ((128, 0), (129, 1), (129, 0), (130, 1), (130, 7), (130, 10), (156, 0)):
         if need not in ops_b:
             raise RuntimeError("guest b: relayed %r missing from %r" % (need, ops_b))
-    for need in ((91, 0), (130, 12), (130, 10)):
+    for need in ((91, 0), (130, 12), (130, 10), (156, 0)):
         if need not in ops_a:
             raise RuntimeError("guest a: relayed %r missing from %r" % (need, ops_a))
     if not any(op == 92 for op, _ in ops_a):
@@ -104,7 +149,7 @@ def main():
     h.POST_CHECK = post_check
     rc = h.main()
     if rc == 0:
-        print("QEMU guest-guest TLS + encrypted peer chat through networker "
+        print("QEMU guest-guest TLS + encrypted peer chat + gRPC over TLS through networker "
               "(strict kernel) passed", flush=True)
     return rc
 

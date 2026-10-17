@@ -39,6 +39,8 @@ static we_doc_t g_web;
 static int g_web_active;
 static int g_web_scroll;
 static char g_web_file[40];
+static int g_web_mobile;
+static osui_mobile_op_t g_mobile_op;
 static char g_web_src[OSUI_WEB_SRC_MAX];
 
 static int slen(const char *s) {
@@ -167,9 +169,31 @@ static void web_open_line(const char *line, char *out, int out_max) {
     if (osui_gui_web_load(f, status, (int)sizeof(status)) == 0) {
         scpy(g_web_file, (int)sizeof(g_web_file), f);
         g_web_active = 1;
+        g_web_mobile = 0;
         g_web_scroll = 0;
     }
     if (out) { scpy(out, out_max, status); scpy(out + slen(out), out_max - slen(out), "\n"); }
+}
+
+void osui_gui_set_mobile_op(osui_mobile_op_t fn) { g_mobile_op = fn; }
+int osui_gui_mobile_active(void) { return g_web_active && g_web_mobile; }
+
+int osui_gui_show_items(const char *title, const os_fb_web_item_t *items, int n, int page_w, int page_h) {
+    int k;
+    if (!items || n < 0) return -1;
+    if (n > OS_FB_WEB_ITEMS) n = OS_FB_WEB_ITEMS;
+    for (k = 0; k < n; k++) g_web.items[k] = items[k];
+    g_web.nitems = (uint32_t)n;
+    g_web.perf.page_w = (uint32_t)page_w;
+    g_web.perf.page_h = (uint32_t)page_h;
+    g_web.perf.items = (uint32_t)n;
+    g_web.perf.items_dropped = 0;
+    scpy(g_web.title, (int)sizeof(g_web.title), title ? title : "");
+    scpy(g_web_file, (int)sizeof(g_web_file), "mobile");
+    g_web_active = 1;
+    g_web_mobile = 1;
+    g_web_scroll = 0;
+    return n;
 }
 
 void osui_gui_set_ide_ops(osui_ide_load_t load, osui_ide_save_t save, osui_ide_exec_t exec) {
@@ -636,7 +660,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
             scpy(scene->web_title + slen(scene->web_title), OS_FB_TERM_LEN - slen(scene->web_title), g_web.title);
         }
         for (k = 0; k < g_web.nitems && k < OS_FB_WEB_ITEMS; k++) scene->web[k] = g_web.items[k];
-        scene->input[0] = 0;
+        if (!g_web_mobile) scene->input[0] = 0;
     }
     if (g_ide.active) {
         /* US-050: the editor takes the whole desktop (OS_FB_PANE_IDE). */
@@ -687,10 +711,12 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         osui_stage_tick(out, out_max);
         return 0;
     }
-    if (g_web_active) {
-        /* Lot 6: the web pane takes the desktop; arrows scroll, ESC closes. */
+    if (g_web_active && !(g_web_mobile && key != OS_VGA_KEY_ESC && key != OS_VGA_KEY_UP && key != OS_VGA_KEY_DOWN)) {
+        /* Lot 6: the web pane takes the desktop; arrows scroll, ESC closes.
+         * Lot 9: the mobile pane lets text keys reach the input line. */
         if (key == OS_VGA_KEY_ESC) {
             g_web_active = 0;
+            g_web_mobile = 0;
             if (out) { scpy(out, out_max, "osui web close file="); scpy(out + slen(out), out_max - slen(out), g_web_file); scpy(out + slen(out), out_max - slen(out), "\n"); }
         } else if (key == OS_VGA_KEY_DOWN) {
             if (g_web_scroll + 20 < (int)g_web.perf.page_h) g_web_scroll += 20;
@@ -743,6 +769,16 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             g_input[0] = 0;
             if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=qemu_fb\n");
             return 1;
+        }
+        if (g_mobile_op && g_input[0] == 'm' && g_input[1] == 'o' && g_input[2] == 'b' && g_input[3] == 'i' &&
+            g_input[4] == 'l' && g_input[5] == 'e' && g_input[6] == '-' && g_input[7] == 'u' && g_input[8] == 'i' &&
+            (g_input[9] == ' ' || g_input[9] == 0)) {
+            const char *a = g_input + 9;
+            while (*a == ' ') a++;
+            (void)g_mobile_op(a, out, out_max);
+            g_ilen = 0;
+            g_input[0] = 0;
+            return 0;
         }
         if (g_input[0] == 'w' && g_input[1] == 'e' && g_input[2] == 'b' && (g_input[3] == ' ' || g_input[3] == 0)) {
             web_open_line(g_input, out, out_max);
@@ -818,6 +854,7 @@ void osui_gui_run(void) {
     g_input[0] = 0;
     g_ide.active = 0;
     g_web_active = 0;
+    g_web_mobile = 0;
     osui_gui_term_reset();
     osui_gui_ack_enter();
     serial_puts("osui gui live chrome=qemu_fb display_surface=vbe_lfb us031_complete=false\n");

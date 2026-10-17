@@ -116,3 +116,14 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
   3, link failure detection and relayed delivery, `p2p-qos` after the
   cut (scenario 3), acked cache invalidation relayed through beta
   (scenario 4).
+
+## Lot 9
+
+- US-083 transport: `devsync-pull DEV PEER REMOTE_DEV [SECONDS]` sends the
+  local version vector to a peer guest over the sealed P2P channel (app
+  payload `D Q`); the peer answers with the delta of the entries not seen
+  (`D R`, at most 396 bytes) and the puller applies it. Proven both ways in
+  `make qemu-p2p` scenario 1b, with a concurrent write resolved by
+  last-writer-wins and no plaintext on the wire.
+- US-067: gRPC over the guest TLS session, see `make qemu-net-peer-tls-worker`
+  (`grpc-tls-serve`, `grpc-tls-call`).

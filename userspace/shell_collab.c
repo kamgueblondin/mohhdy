@@ -12,6 +12,7 @@ const p2p_host_t* shell_p2p_host(void);
 static collab_t g_c;
 static int g_joined;
 static char g_out[8192];
+unsigned int sys_ticks(void);
 
 static int c_send(void* ctx, uint32_t to, const uint8_t* d, int len) {
     (void)ctx;
@@ -21,7 +22,15 @@ static void c_out(void* ctx, const char* s) { (void)ctx; print_string(s); print_
 static const char* c_name(void* ctx, uint32_t id) { (void)ctx; return p2p_peer_name(shell_p2p_node(), id); }
 static uint32_t c_members(void* ctx) { (void)ctx; return p2p_member_count(shell_p2p_node()); }
 static const collab_host_t g_h = {0, c_send, c_out, c_name, c_members};
-static void on_app(void* ctx, uint32_t from, const uint8_t* d, int len) { (void)ctx; collab_receive(&g_c, &g_h, from, d, len); }
+void shell_devsync_app(uint32_t from, const uint8_t* d, int len);
+/* One application hook for the P2P node: devsync payloads start with 'D'
+ * (Lot 9, US-083), everything else is the collab ledger. */
+void shell_p2p_app(void* ctx, uint32_t from, const uint8_t* d, int len) {
+    (void)ctx;
+    if (len > 0 && d[0] == 'D') { shell_devsync_app(from, d, len); return; }
+    if (g_joined) collab_receive(&g_c, &g_h, from, d, len);
+}
+#define on_app shell_p2p_app
 
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
 static int s_len(const char* s) { int n = 0; while (s[n]) n++; return n; }
@@ -254,6 +263,31 @@ int shell_collab_line(const char* line) {
         if (!(pid = peer_id(a)) || num(b, &x)) { print_string(cmd); print_string(" error usage: PAYER SEQ\n"); return 1; }
         return emitted(cmd, collab_escrow_settle(&g_c, &g_h, pid, x, release));
     }
+    /* Lot 9 (US-099): contract with a program (contract language in collab.h) */
+    if (s_eq(cmd, "collab-contract-deploy")) {
+        uint32_t payee_id, arbiter_id = 0, amt;
+        collab_mcl_t prog;
+        int rc;
+        rest = word(rest, b, 48); rest = word(rest, c, 48);
+        payee_id = peer_id(a);
+        if (!s_eq(b, "none")) arbiter_id = peer_id(b);
+        if (!payee_id || (!arbiter_id && !s_eq(b, "none")) || num(c, &amt) || !rest[0]) {
+            print_string("collab-contract-deploy error usage: PAYEE ARBITER|none AMOUNT PROGRAM\n");
+            return 1;
+        }
+        rc = collab_mcl_compile(rest, &prog);
+        if (rc != 0) {
+            print_string("collab-contract-deploy error compile at "); put_u((uint32_t)-rc); print_string("\n");
+            return 1;
+        }
+        print_string("collab-contract-deploy compiled clauses "); put_u((uint32_t)prog.n); print_string("\n");
+        return emitted(cmd, collab_contract_deploy(&g_c, &g_h, payee_id, arbiter_id, amt, rest));
+    }
+    if (s_eq(cmd, "collab-signoff")) {
+        rest = word(rest, b, 48);
+        if (!(pid = peer_id(a)) || num(b, &x)) { print_string("collab-signoff error usage: PAYER SEQ\n"); return 1; }
+        return emitted(cmd, collab_contract_signoff(&g_c, &g_h, pid, x));
+    }
     /* US-101 */
     if (s_eq(cmd, "collab-dispute-open")) {
         rest = word(rest, b, 48);
@@ -335,6 +369,47 @@ int shell_collab_line(const char* line) {
         print_string(wrong_msg ? " wrong-message accepted" : " wrong-message rejected");
         print_string(wrong_pub ? " wrong-public accepted" : " wrong-public rejected");
         print_string(" (Schnorr NIZK, 62-bit toy group: simule strength)\n");
+        return 0;
+    }
+    if (s_eq(cmd, "collab-zk-strong")) {
+        /* US-103 (Lot 9): the same NIZK in a 2048-bit group with a 256-bit
+         * subgroup (csig_zk_*); the secret only seeds the key here */
+        static uint8_t zsk[CSIG_ZK_SK], zpk[CSIG_ZK_PK], zpr[CSIG_ZK_PROOF], zbad[CSIG_ZK_PROOF];
+        static uint8_t zsk2[CSIG_ZK_SK], zpk2[CSIG_ZK_PK];
+        uint8_t seed[32];
+        sha256_ctx_t h;
+        unsigned int t0, t1, t2;
+        int i, group, ok, tamper, wrong_msg, wrong_pub, ml;
+        rest = word(rest, b, 48);
+        if (!a[0] || !b[0]) { print_string("collab-zk-strong error usage: SECRET MESSAGE\n"); return 1; }
+        ml = 0; while (b[ml]) ml++;
+        sha256_init(&h); sha256_update(&h, (const uint8_t*)"collab-zk", 9);
+        { int al = 0; while (a[al]) al++; sha256_update(&h, (const uint8_t*)a, (uint32_t)al); }
+        sha256_final(&h, seed);
+        group = csig_zk_group_check();
+        if (!group || csig_zk_keypair(seed, zsk, zpk) != 0) { print_string("collab-zk-strong error group or key\n"); return 1; }
+        t0 = sys_ticks();
+        if (csig_zk_prove(zsk, (const uint8_t*)b, ml, zpr) != 0) { print_string("collab-zk-strong error prove\n"); return 1; }
+        t1 = sys_ticks();
+        ok = csig_zk_verify(zpk, (const uint8_t*)b, ml, zpr);
+        t2 = sys_ticks();
+        for (i = 0; i < CSIG_ZK_PROOF; i++) zbad[i] = zpr[i];
+        zbad[CSIG_ZK_PROOF - 1] ^= 1U;
+        tamper = csig_zk_verify(zpk, (const uint8_t*)b, ml, zbad);
+        wrong_msg = csig_zk_verify(zpk, (const uint8_t*)"other", 5, zpr);
+        seed[0] ^= 0x5AU;
+        csig_zk_keypair(seed, zsk2, zpk2);
+        wrong_pub = csig_zk_verify(zpk2, (const uint8_t*)b, ml, zpr);
+        print_string("collab-zk-strong group p2048 q256 check ok public ");
+        for (i = 0; i < 8; i++) { char hx[3]; hx[0] = "0123456789abcdef"[zpk[i] >> 4]; hx[1] = "0123456789abcdef"[zpk[i] & 15]; hx[2] = 0; print_string(hx); }
+        print_string(" proof_bytes 288");
+        print_string(ok ? " verify ok" : " verify FAILED");
+        print_string(tamper ? " tampered accepted" : " tampered rejected");
+        print_string(wrong_msg ? " wrong-message accepted" : " wrong-message rejected");
+        print_string(wrong_pub ? " wrong-public accepted" : " wrong-public rejected");
+        print_string(" prove_ms "); put_u((t1 - t0) * 10U);
+        print_string(" verify_ms "); put_u((t2 - t1) * 10U);
+        print_string(" (Schnorr NIZK, about 112-bit group, not constant time)\n");
         return 0;
     }
     if (s_eq(cmd, "collab-compliance")) {

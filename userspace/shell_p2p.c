@@ -153,6 +153,7 @@ static void report(const char* what) {
 }
 
 int shell_p2p_active(void) { return g_node.up; }
+void shell_p2p_app(void* ctx, uint32_t from, const uint8_t* d, int len);
 void shell_p2p_poll(void) { if (g_node.up) p2p_tick(&g_node, &g_host, 4); }
 
 int shell_p2p_line(const char* line) {
@@ -184,6 +185,9 @@ int shell_p2p_line(const char* line) {
         if (p2p_up_step(&g_node, 4, a, ip, key, seed, &g_host) != 0) { print_string("p2p-up error hello\n"); return 1; }
         print_string("p2p-up ok name "); print_string(a); print_string(" ip "); print_string(b);
         print_string(" port 7700 crypto x25519+aes128gcm\n");
+        /* Lot 9: application payloads (devsync, collab) are dispatched
+         * from the start, so a peer can answer devsync-pull at its prompt */
+        if (!g_node.app) { g_node.app = shell_p2p_app; g_node.app_ctx = 0; }
         kv_apply_pending();
         if (g_raft_blob_ok) {
             (void)p2p_raft_vote_import(&g_node, g_raft_blob, 12);

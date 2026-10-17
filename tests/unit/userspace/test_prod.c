@@ -411,6 +411,105 @@ void test_roadmap_parse(void) {
     TEST_ASSERT_EQUAL(-1, prod_roadmap_parse(0, 0, &rm));
 }
 
+
+/* Lot 9 (US-112): signature database parse and match. */
+void test_secdb_parse_and_match(void) {
+    static prod_secdb_t db;
+    static uint8_t file[256];
+    int hits[8], n;
+    TEST_ASSERT_EQUAL(5, prod_secdb_parse(prod_secdb_builtin, &db));
+    TEST_ASSERT_EQUAL(0, db.bad_lines);
+    TEST_ASSERT_EQUAL_STRING("MSA-2026-0001", db.r[0].id);
+    TEST_ASSERT_EQUAL(PROD_SEV_HIGH, db.r[0].severity);
+    TEST_ASSERT_EQUAL(PROD_SIG_HEX, db.r[0].kind);
+    TEST_ASSERT_EQUAL(15, db.r[0].plen);
+    TEST_ASSERT_EQUAL(PROD_SIG_FNV, db.r[4].kind);
+    TEST_ASSERT_TRUE(db.r[4].hash == 0xdeadbeefU);
+    TEST_ASSERT_EQUAL(4096, db.r[4].size);
+    /* the database text itself never matches (hex patterns) */
+    TEST_ASSERT_EQUAL(0, prod_secdb_match(&db, (const uint8_t*)prod_secdb_builtin, (int)strlen(prod_secdb_builtin),
+                                          (uint32_t)strlen(prod_secdb_builtin), 1U, hits, 8));
+    /* pattern at the very end of a binary blob with zero bytes before it */
+    memset(file, 0, sizeof(file));
+    memcpy(file + sizeof(file) - 14, "pcirogue claim", 14);
+    n = prod_secdb_match(&db, file, (int)sizeof(file), sizeof(file), prod_fnv1a(file, (int)sizeof(file)), hits, 8);
+    TEST_ASSERT_EQUAL(1, n);
+    TEST_ASSERT_EQUAL_STRING("MSA-2026-0002", db.r[hits[0]].id);
+    /* one byte short: no match */
+    TEST_ASSERT_EQUAL(0, prod_secdb_match(&db, file, (int)sizeof(file) - 1, sizeof(file), 0U, hits, 8));
+    /* two patterns in one file, hash record by size and hash */
+    memcpy(file + 10, "devrogue unseal", 15);
+    TEST_ASSERT_EQUAL(2, prod_secdb_match(&db, file, (int)sizeof(file), sizeof(file), 0U, hits, 8));
+    TEST_ASSERT_EQUAL(1, prod_secdb_match(&db, file, 0, 4096U, 0xdeadbeefU, hits, 8));
+    TEST_ASSERT_EQUAL(0, prod_secdb_match(&db, file, 0, 4095U, 0xdeadbeefU, hits, 8));
+    /* malformed lines are counted, comments and blank lines skipped */
+    TEST_ASSERT_EQUAL(2, prod_secdb_parse("# c\n\nX1 low hex 41424344\r\nX2 severe hex 41424344\n"
+                                          "X3 low hex 414243\nX4 low hex 4142434g\nX5 low fnv 1234 9\n"
+                                          "X6 critical fnv 0000abcd 12\nX7 low hex 41424344 extra\n"
+                                          "X8 low zip 41424344\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAA low hex 41424344\n", &db));
+    TEST_ASSERT_EQUAL(7, db.bad_lines);
+    TEST_ASSERT_EQUAL_STRING("X6", db.r[1].id);
+    TEST_ASSERT_EQUAL(12, db.r[1].size);
+    TEST_ASSERT_EQUAL_STRING("critical", prod_sev_name(PROD_SEV_CRITICAL));
+    TEST_ASSERT_EQUAL(60, prod_sev_weight(PROD_SEV_CRITICAL));
+}
+
+/* Lot 9 (US-115): learned failure predictor. */
+static void push_custom(prod_metrics_t* m, uint32_t t, uint32_t custom, uint32_t busy) {
+    prod_sample_t s;
+    memset(&s, 0, sizeof(s));
+    s.tick = t; s.v[PM_MEM_USED] = 400; s.v[PM_MEM_FREE] = 600; s.v[PM_BUSY] = busy; s.v[PM_PROCS] = 3; s.v[PM_CUSTOM] = custom;
+    prod_metrics_push(m, &s);
+}
+void test_maint_learned_model(void) {
+    static prod_metrics_t m;
+    static prod_maint_model_t mm;
+    int32_t x[PROD_MM_FEAT];
+    int i, k, n, r;
+    uint32_t t = 0;
+    TEST_ASSERT_EQUAL(1, prod_sigmoid_q12(-40000));
+    TEST_ASSERT_EQUAL(2048, prod_sigmoid_q12(0));
+    TEST_ASSERT_EQUAL(4095, prod_sigmoid_q12(40000));
+    TEST_ASSERT_TRUE(prod_sigmoid_q12(4096) >= 2991 && prod_sigmoid_q12(4096) <= 2997);         /* sigmoid(1) = 0.731 */
+    TEST_ASSERT_TRUE(prod_sigmoid_q12(-4096) >= 1099 && prod_sigmoid_q12(-4096) <= 1105);
+    prod_metrics_init(&m);
+    TEST_ASSERT_EQUAL(-1, prod_maint_train(&mm, &m, 100, 0, 3, 60));          /* no data */
+    /* history: three cycles of a stable period then a degradation that
+     * ends in a failure (custom >= 100), then recovery */
+    for (k = 0; k < 3; k++) {
+        for (i = 0; i < 8; i++) push_custom(&m, t += 10, 10U + (uint32_t)(i & 1) * 5U, 20);
+        for (i = 0; i < 6; i++) push_custom(&m, t += 10, 30U + (uint32_t)i * 15U, 40U + (uint32_t)i * 8U);
+        push_custom(&m, t += 10, 110, 95);
+    }
+    TEST_ASSERT_EQUAL(-1, prod_maint_train(&mm, &m, 100, 0, 0, 60));          /* bad horizon */
+    TEST_ASSERT_EQUAL(-1, prod_maint_train(&mm, &m, 1000, 0, 3, 60));         /* no positive */
+    n = prod_maint_train(&mm, &m, 100, 0, 3, 60);
+    TEST_ASSERT_GREATER_THAN(20, n);
+    TEST_ASSERT_EQUAL(1, mm.trained);
+    TEST_ASSERT_GREATER_THAN(5, (int)mm.positives);
+    TEST_ASSERT_TRUE(mm.correct * 100U / mm.windows >= 90U);
+    TEST_ASSERT_GREATER_THAN(0, mm.w[0]);                                     /* level raises the risk */
+    TEST_ASSERT_EQUAL(0, prod_maint_features(&m, &mm, m.n - 1, x));
+    TEST_ASSERT_EQUAL(4096, x[4]);
+    /* a fresh degradation: high risk; a stable period: low risk */
+    for (i = 0; i < 8; i++) push_custom(&m, t += 10, 12, 20);
+    r = prod_maint_model_risk(&mm, &m);
+    TEST_ASSERT_TRUE(r >= 0 && r < 20);
+    for (i = 0; i < 5; i++) push_custom(&m, t += 10, 30U + (uint32_t)i * 15U, 40U + (uint32_t)i * 8U);
+    r = prod_maint_model_risk(&mm, &m);
+    TEST_ASSERT_GREATER_THAN(70, r);
+    /* deterministic training */
+    {
+        static prod_maint_model_t m2;
+        prod_maint_train(&mm, &m, 100, 0, 3, 60);
+        prod_maint_train(&m2, &m, 100, 0, 3, 60);
+        TEST_ASSERT_EQUAL_MEMORY(mm.w, m2.w, sizeof(mm.w));
+    }
+    /* untrained */
+    memset(&mm, 0, sizeof(mm));
+    TEST_ASSERT_EQUAL(-1, prod_maint_model_risk(&mm, &m));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -424,6 +523,8 @@ int main(void) {
     RUN_TEST(test_state_save_load);
     RUN_TEST(test_phase8_offline_extensions);
     RUN_TEST(test_sec_scan_real);
+    RUN_TEST(test_secdb_parse_and_match);
+    RUN_TEST(test_maint_learned_model);
     RUN_TEST(test_smart_alerts_and_perf_monitor);
     RUN_TEST(test_prod_consolidation_and_fallback);
     unity_print_results();

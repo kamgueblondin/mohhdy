@@ -11,8 +11,14 @@
  *     (Lot 7): CALLS unary calls pipelined on ONE connection (streams 1, 3,
  *     5, ...) with a stream receive window of WINDOW bytes, so the server
  *     holds its DATA until our WINDOW_UPDATE frames reopen the window.
- * Cleartext HTTP/2 (h2c with prior knowledge), no TLS. The connection
- * engine (flow control, several streams) is userspace/grpcwire.c. */
+ *   grpc-tls-serve [CALLS] [SECONDS] / grpc-tls-call CALLS SERVICE METHOD
+ *     [PAYLOAD] (Lot 9): the same HTTP/2 engine inside the guest-guest TLS
+ *     1.2 session (AES-128-GCM records sealed and opened by the networker,
+ *     SYS_PEER_DATA OS_PEER_TLS_APP_*): server on the accepted peer session
+ *     (slot 0), client on the ai-acquire/ai-tls-poll session (slot 1).
+ * grpc-serve/grpc-call/grpc-calls are cleartext HTTP/2 (h2c with prior
+ * knowledge). The connection engine (flow control, several streams) is
+ * userspace/grpcwire.c. */
 #include "shell_grpc.h"
 #include "grpcwire.h"
 #include "../include/os_syscalls.h"
@@ -59,14 +65,19 @@ static void print_int(int rc) {
 }
 static void say(const char* a, int v, const char* b) { print_string(a); print_int(v); print_string(b); }
 
+static const char* g_over = " from guest over tcp";
+static const char* g_tr = " transport=tcp\n";
+
 static int handler(const char* path, const char* payload, char* reply, int cap) {
     int k = 0;
     const char* h;
     reply[0] = 0;
-    if (s_eq(path, "/echo.EchoService/SayHello")) {
+    /* "/mohhdy.echo/hello" (Lot 9): same echo, lower-case name so the
+     * QEMU keyboard harnesses can type it */
+    if (s_eq(path, "/echo.EchoService/SayHello") || s_eq(path, "/mohhdy.echo/hello")) {
         h = "Hello "; while (*h && k < cap - 1) reply[k++] = *h++;
         while (*payload && k < cap - 1) reply[k++] = *payload++;
-        h = " from guest over tcp"; while (*h && k < cap - 1) reply[k++] = *h++;
+        h = g_over; while (*h && k < cap - 1) reply[k++] = *h++;
         reply[k] = 0;
         return 0;
     }
@@ -92,7 +103,7 @@ static int serve_handler(const char* path, const char* payload, char* reply, int
     say(" stream ", (int)g_cur_conn->cur_stream, " path ");
     print_string(path);
     say(" client_settings ", g_cur_conn->settings_seen, "");
-    say(" peer_window ", g_cur_conn->peer_init_win, " transport=tcp\n");
+    say(" peer_window ", g_cur_conn->peer_init_win, g_tr);
     return handler(path, payload, reply, cap);
 }
 
@@ -355,17 +366,182 @@ static int run_calls(const char* tag, const char* rest, int multi) {
 static int grpc_call(const char* rest) { return run_calls("grpc-call", rest, 0); }
 static int grpc_calls(const char* rest) { return run_calls("grpc-calls", rest, 1); }
 
+
+/* ----------------------------------------------- Lot 9: gRPC inside TLS */
+static int g_tls_rec_sent, g_tls_rec_recv, g_tls_bytes_sent, g_tls_bytes_recv;
+
+/* One application_data record per OS_PEER_TLS_APP_MAX bytes. */
+static int tls_send_all(int slot, const unsigned char* b, int n) {
+    int i, k, j, rc;
+    for (i = 0; i < n; i += (int)OS_PEER_TLS_APP_MAX) {
+        k = n - i > (int)OS_PEER_TLS_APP_MAX ? (int)OS_PEER_TLS_APP_MAX : n - i;
+        for (j = 0; j < k; j++) g_io.data[j] = b[i + j];
+        g_io.length = (uint16_t)k;
+        rc = web(OS_PEER_TLS_APP_SEND, slot);
+        if (rc != 0) return rc;
+        g_tls_rec_sent++;
+        g_tls_bytes_sent += k;
+    }
+    return 0;
+}
+
+/* 0 = data appended, 1 = nothing yet, <0 = error. */
+static int tls_recv(int slot, unsigned char* rx, int* rlen, int cap) {
+    int rc, k;
+    g_io.attempts = 24U;
+    rc = web(OS_PEER_TLS_APP_RECV, slot);
+    if (rc != 0) return rc;
+    if (*rlen + (int)g_io.length > cap) return GW_ERR_LIMIT;
+    for (k = 0; k < g_io.length; k++) rx[(*rlen)++] = g_io.data[k];
+    g_tls_rec_recv++;
+    g_tls_bytes_recv += g_io.length;
+    return 0;
+}
+
+static void tls_counters(void) {
+    say(" records_sent ", g_tls_rec_sent, "");
+    say(" records_recv ", g_tls_rec_recv, "");
+    say(" bytes_sent ", g_tls_bytes_sent, "");
+    say(" bytes_recv ", g_tls_bytes_recv, "");
+}
+
+static int grpc_tls_serve(const char* rest) {
+    char a[16], b[16];
+    static unsigned char out[OS_PEER_DATA_MAX];
+    gw_conn_t* cn = &g_conn[0];
+    int want, secs, served = 0, rc, k, used, m, before, rlen = 0;
+    unsigned t0, linger = 0;
+    rest = word(rest, a, (int)sizeof(a));
+    rest = word(rest, b, (int)sizeof(b));
+    want = a[0] ? to_int(a) : 1;
+    secs = b[0] ? to_int(b) : 120;
+    if (want <= 0 || want > GW_MAX_STREAMS || secs <= 0 || secs > 600) {
+        print_string("grpc-tls-serve error usage: grpc-tls-serve [CALLS] [SECONDS]\n");
+        return 1;
+    }
+    g_tls_rec_sent = g_tls_rec_recv = g_tls_bytes_sent = g_tls_bytes_recv = 0;
+    g_over = " from guest over tls"; g_tr = " transport=tls\n";
+    gw_conn_init(cn, 1, GW_WIN_DEFAULT, serve_handler);
+    g_cur_slot = 0; g_cur_conn = cn;
+    print_string("grpc-tls-serve ready session=peer-tls12 transport=tls\n");
+    t0 = ticks();
+    for (;;) {
+        unsigned now = ticks();
+        if (now - t0 >= (unsigned)secs * 100U) break;
+        if (served >= want) {
+            if (cn->goaway) break;
+            if (!linger) linger = now;
+            else if (now - linger > 300U) break;
+        }
+        rc = tls_recv(0, g_rx[0], &rlen, GS_BUF);
+        if (rc == 1) { nap(); continue; }
+        if (rc != 0) { say("grpc-tls-serve error recv rc ", rc, "\n"); break; }
+        before = cn->calls_done;
+        m = gw_conn_feed(cn, g_rx[0], rlen, &used, out, (int)sizeof(out));
+        if (m < 0) { say("grpc-tls-serve error stream rc ", m, "\n"); break; }
+        for (k = used; k < rlen; k++) g_rx[0][k - used] = g_rx[0][k];
+        rlen -= used;
+        if (m > 0 && (rc = tls_send_all(0, out, m)) != 0) { say("grpc-tls-serve error send rc ", rc, "\n"); break; }
+        served += cn->calls_done - before;
+    }
+    g_over = " from guest over tcp"; g_tr = " transport=tcp\n";
+    print_string(served == want ? "grpc-tls-serve ok" : "grpc-tls-serve incomplete");
+    say(" served ", served, "");
+    say(" window_updates_sent ", cn->wu_sent, "");
+    say(" goaway ", cn->goaway, "");
+    tls_counters();
+    print_string(" cipher=aes128-gcm transport=tls\n");
+    return served == want ? 0 : 2;
+}
+
+static int grpc_tls_call(const char* rest) {
+    char ns[8], svc[48], meth[32], pay[48];
+    static unsigned char buf[OS_PEER_DATA_MAX], rx[1024];
+    int calls, n, k, i, rc = 0, rounds, idle = 0, rlen = 0, used, ok = 0;
+    unsigned t0;
+    rest = word(rest, ns, (int)sizeof(ns));
+    rest = word(rest, svc, (int)sizeof(svc));
+    rest = word(rest, meth, (int)sizeof(meth));
+    rest = word(rest, pay, (int)sizeof(pay));
+    calls = to_int(ns);
+    if (calls < 1 || calls > GW_MAX_STREAMS || !svc[0] || !meth[0]) {
+        print_string("grpc-tls-call error usage: grpc-tls-call CALLS SERVICE METHOD [PAYLOAD]\n");
+        return 1;
+    }
+    g_tls_rec_sent = g_tls_rec_recv = g_tls_bytes_sent = g_tls_bytes_recv = 0;
+    gw_conn_init(&g_cc, 0, GW_WIN_DEFAULT, 0);
+    n = gw_conn_start(&g_cc, buf, (int)sizeof(buf));
+    for (i = 0; i < calls && n > 0; i++) {
+        char p[56];
+        int m = 0, j;
+        for (j = 0; pay[j] && m < 40; j++) p[m++] = pay[j];
+        p[m++] = '-'; p[m++] = (char)('1' + i); p[m] = 0;
+        k = gw_conn_call(&g_cc, svc, meth, p, buf + n, (int)sizeof(buf) - n);
+        n = k < 0 ? k : n + k;
+    }
+    if (n < 0) { say("grpc-tls-call error encode ", n, "\n"); return 1; }
+    t0 = ticks();
+    rc = tls_send_all(1, buf, n);
+    if (rc != 0) { say("grpc-tls-call error send rc ", rc, "\n"); return 1; }
+    say("grpc-tls-call sent request_bytes ", n, "");
+    say(" records ", g_tls_rec_sent, "");
+    say(" calls ", calls, " session=llm-tls12 transport=tls\n");
+    for (rounds = 0; rounds < 600 && g_cc.calls_done < g_cc.calls_started && idle < 120; rounds++) {
+        rc = tls_recv(1, rx, &rlen, (int)sizeof(rx));
+        if (rc == 1) { idle++; nap(); continue; }
+        if (rc != 0) break;
+        idle = 0;
+        n = gw_conn_feed(&g_cc, rx, rlen, &used, buf, (int)sizeof(buf));
+        if (n < 0) { rc = n; break; }
+        for (k = used; k < rlen; k++) rx[k - used] = rx[k];
+        rlen -= used;
+        if (n > 0 && (rc = tls_send_all(1, buf, n)) != 0) break;
+        rc = 0;
+    }
+    if (g_cc.calls_done == g_cc.calls_started) {
+        n = gw_conn_goaway(&g_cc, buf, (int)sizeof(buf));
+        if (n > 0) (void)tls_send_all(1, buf, n);
+    } else {
+        say("grpc-tls-call error response incomplete calls_done ", g_cc.calls_done, "");
+        say(" rc ", rc, "");
+        tls_counters();
+        print_string("\n");
+        return 2;
+    }
+    for (i = 0; i < calls; i++) {
+        gw_h2stream_t* s = gw_conn_stream(&g_cc, (unsigned)(1 + 2 * i));
+        if (!s) continue;
+        say("grpc-tls-call stream ", (int)s->id, "");
+        say(" ok http ", s->http_status, "");
+        say(" grpc-status ", s->grpc_status, "");
+        print_string(" message ");
+        print_string(s->message);
+        print_string(" transport=tls\n");
+        if (s->http_status == 200 && s->grpc_status == 0) ok++;
+    }
+    say("grpc-tls-call ok calls ", calls, "");
+    say(" succeeded ", ok, "");
+    say(" server_settings ", g_cc.settings_seen, "");
+    tls_counters();
+    say(" ms ", (int)((ticks() - t0) * 10U), " cipher=aes128-gcm transport=tls\n");
+    return ok == calls ? 0 : 3;
+}
+
 int shell_grpc_is(const char* line) {
-    return (s_pre(line, "grpc-serve") && (line[10] == ' ' || !line[10])) ||
+    return (s_pre(line, "grpc-tls-serve") && (line[14] == ' ' || !line[14])) ||
+           (s_pre(line, "grpc-tls-call") && (line[13] == ' ' || !line[13])) ||
+           (s_pre(line, "grpc-serve") && (line[10] == ' ' || !line[10])) ||
            (s_pre(line, "grpc-calls") && (line[10] == ' ' || !line[10])) ||
            (s_pre(line, "grpc-call") && (line[9] == ' ' || !line[9]));
 }
 
 int shell_grpc_line(const char* line) {
-    char cmd[16];
+    char cmd[20];
     const char* rest = word(line, cmd, (int)sizeof(cmd));
     if (s_eq(cmd, "grpc-serve")) return grpc_serve(rest);
     if (s_eq(cmd, "grpc-call")) return grpc_call(rest);
     if (s_eq(cmd, "grpc-calls")) return grpc_calls(rest);
+    if (s_eq(cmd, "grpc-tls-serve")) return grpc_tls_serve(rest);
+    if (s_eq(cmd, "grpc-tls-call")) return grpc_tls_call(rest);
     return 1;
 }

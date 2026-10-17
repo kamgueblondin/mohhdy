@@ -1034,6 +1034,47 @@ static int kernel_p2p_op(os_peer_data_request_t* r) {
 }
 
 /* Plain data on the accepted peer socket (see SYS_PEER_DATA). */
+/* Lot 9 (US-067): application_data records on the guest-guest TLS
+ * sessions (see OS_PEER_TLS_APP_* in os_syscalls.h). */
+static int kernel_peer_tls_app(os_peer_data_request_t* r) {
+    net_tls_aes_gcm_session_t* session;
+    const uint8_t* ip;
+    uint16_t attempts, rx = 0U, i;
+    int sock;
+    if (r->slot == 0U) {
+        if (boot_peer_tls_step < 7U || boot_peer_listen_socket < 0) return OS_PEER_NOT_LISTENING;
+        if (boot_peer_remote_ip[0] == 0U && kernel_peer_capture_remote_ip() != 0) return OS_PEER_FAILED;
+        sock = boot_peer_listen_socket;
+        session = &boot_peer_tls_server.session;
+        ip = boot_peer_remote_ip;
+    } else if (r->slot == 1U) {
+        if (boot_llm_socket_session.state.phase != NE2K_LLM_CONNECTION_TLS_COMPLETE ||
+            boot_llm_socket_session.socket_id < 0)
+            return OS_PEER_NOT_LISTENING;
+        sock = boot_llm_socket_session.socket_id;
+        session = &boot_llm_tls_client.session;
+        ip = boot_llm_socket_session.state.remote_ip;
+    } else {
+        return OS_PEER_BAD_REQUEST;
+    }
+    if (r->op == OS_PEER_TLS_APP_SEND) {
+        if (r->length == 0U || r->length > OS_PEER_TLS_APP_MAX) return OS_PEER_BAD_REQUEST;
+        return kernel_tls_app_send(sock, session, ip, r->data, r->length) == 0 ? 0 : OS_PEER_FAILED;
+    }
+    attempts = r->attempts ? r->attempts : 32U;
+    r->length = 0U;
+    while (attempts--) {
+        rx = 0U;
+        if (kernel_tls_app_recv(sock, session, boot_llm_plaintext, sizeof(boot_llm_plaintext), &rx) == 0 && rx) {
+            if (rx > OS_PEER_DATA_MAX) return OS_PEER_FAILED;
+            for (i = 0U; i < rx; i++) r->data[i] = boot_llm_plaintext[i];
+            r->length = rx;
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int kernel_peer_data(os_peer_data_request_t* r) {
     uint8_t state = 0U;
     uint16_t attempts, n = 0U, segment_length = 0U;
@@ -1042,6 +1083,7 @@ int kernel_peer_data(os_peer_data_request_t* r) {
     if (!g_llm_present) return OS_PEER_UNAVAILABLE;
     if (r->op == OS_PEER_P2P_SEND || r->op == OS_PEER_P2P_RECV) return kernel_p2p_op(r);
     if (!boot_llm_lease.valid) return OS_PEER_NO_LEASE;
+    if (r->op == OS_PEER_TLS_APP_SEND || r->op == OS_PEER_TLS_APP_RECV) return kernel_peer_tls_app(r);
     if (r->op >= OS_PEER_WEB_OPEN) return kernel_web_op(r);
     if (boot_peer_listen_socket < 0) return OS_PEER_NOT_LISTENING;
     if (net_socket_get_state(boot_peer_listen_socket, &state) != 0) return OS_PEER_FAILED;

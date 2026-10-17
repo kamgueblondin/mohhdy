@@ -98,6 +98,8 @@ Etat US-001 (15 octobre 2026, lot 2). Ouvert. Les deux images lient `ata_identif
 - US-029 : Développement du système d'analyse prédictive
 - US-030 : Création de l'IA de support utilisateur
 
+Etat Phase 2 (17 octobre 2026, lot 9; inventaire dans `docs/lot9_plan.md`). US-016 a US-030 restent ouverts : specifications seulement (TensorFlow Lite, NLU a 90 %, modeles distribues, apprentissage federe, cloud-edge, services IA au-dela de l'assistant GPT-2 local). Non faisables hors ligne dans ce lot.
+
 ### Phase 3 - Web Runtime (US-031 à US-045)
 - US-031 : Développement du navigateur-OS intégré
 - US-032 : Création du gestionnaire d'applications web natives
@@ -161,6 +163,8 @@ Etat Phase 3 (14 octobre 2026; detail in `docs/ETAT_REEL.md`). Pull request #147
 - US-074 : Développement du gestionnaire de NAT traversal
 - US-075 : Création du système d'analyse de trafic intelligent
 
+Etat Phase 5 (17 octobre 2026, lot 9). US-067 ferme : appels gRPC (trames HTTP/2, sous-ensemble HPACK, protobuf) transportes dans les enregistrements applicatifs de la session TLS 1.2 entre deux invites (`grpc-tls-serve`, `grpc-tls-call`, AES-128-GCM), aucun gRPC en clair sur le fil ; preuve `make qemu-net-peer-tls-worker`. HPACK reste un sous-ensemble. US-063, US-068/US-073, US-069, US-070, US-074, US-075 restent partiels (reseau de laboratoire).
+
 Etat Phase 4 et 5 (17 octobre 2026, lot 6; detail dans `docs/ETAT_REEL.md`). US-059/US-060 : la cle privee de la CA n'est plus stockee en clair, elle est scellee par le noyau (`SYS_KEY_SEAL`, AES-128-GCM lie au nom de la tache) ; simule : cle de scellement par boot (pas de TPM), la cle scellee ne survit pas au redemarrage ; CA et catalogue restent locaux, partiels. US-067 : appel gRPC unaire sur une vraie connexion TCP entre deux invites (`grpc-serve`, `grpc-call`, h2c en clair, un appel par connexion, sans controle de flux), `make qemu-grpc-guests` ; partiel au sens gRPC complet. US-068/US-073 : file de lissage au lieu de rejet, debits mesures (QEMU scenario 1b). US-070 : lignes de cache via le journal Raft (QEMU scenario 2b). US-075 : base par pair, anomalie attribuee a sa source, rafales sollicitees ignorees (QEMU scenario 1c) ; statistique, pas d'apprentissage. Ces trois restent partiels (reseau de laboratoire, pas de WAN).
 
 Etat Phase 4 et 5 (17 octobre 2026, lot 5; detail dans `docs/ETAT_REEL.md`). US-055 partiel : `pm-cross` traduit le bytecode PMC1 en un programme C99 (une seule cible), compile et compare par le compilateur hote. US-058 partiel : `pm-assist` a regles, sans modele. US-059/US-060 partiels : liste de revocation locale `/etc/pm_ca.crl` (`pm-ca-revoke`), verification CA a la recuperation du catalogue local. US-067 partiel : appel gRPC unaire encode en trames HTTP/2 (sous-ensemble HPACK, protobuf) dans `userspace/grpcwire.c`, commande `grpc-wire` en memoire, pas de connexion TCP HTTP/2. US-068/US-073, US-070, US-075 inchanges dans ce lot.
@@ -195,6 +199,8 @@ Etat Phase 5 (15 octobre 2026, lot 2; detail and limits in `docs/p2p.md` and `do
 - US-089 : Développement de l'interface d'administration unifiée
 - US-090 : Création du système de déploiement automatisé
 
+Etat Phase 6 (17 octobre 2026, lot 9). US-083 ferme : `devsync-pull` entre deux invites par le canal P2P scelle (vecteur de versions, delta, dernier ecrivain gagne, empreintes egales, rien en clair ; `make qemu-p2p` scenario 1b). US-077 ferme : `mobile-ui` tape dans le bureau OS-UI VBE peint l'ecran du telephone par la liste d'affichage du volet web, verifie pixel par pixel (`test_mobile_ui`, `make qemu-osui-gui`) ; entree tactile simule. US-076, US-080, US-081 partiels ; US-078 simule.
+
 Etat Phase 6 (17 octobre 2026, lot 8). US-076 partiel : noyau de base ARMv7-A (`arch/arm`, QEMU `-M virt` cortex-a15) avec MMU (section noyau PL1 seule), GIC, minuterie generique, taches en mode USR par SVC, preemption, IPC `kernel/ipc.c` et `kernel/sha256.c` compiles tels quels ; pilotes, FS, IA, shell et OS-UI non portes ; job CI isole `arm-port` (`make qemu-arm-boot`). US-077 partiel : coquille mobile du guest (`mobile_ui.c`, commande `mobile-ui`) : disposition telephone/tablette, cibles tactiles >= 48 px, navigation, gestes, modele de pixels hache ; pas de materiel tactile (entree simule), pas affichee sur l'ecran VBE. US-083 partiel : synchronisation multi-appareils (`devsync.c`) : carte LWW (horloge de Lamport, departage par appareil, pierres tombales), vecteurs de version, deltas texte verifies par FNV ; trois appareils dans un meme invite (simule), transport entre invites non branche.
 
 Etat Phase 6 (17 octobre 2026, lot 7; inventaire dans `docs/lot7_inventory.md`). US-086 livre (sous-ensemble 8086) : interpreteur reel de programmes .COM (`legacy-emul`, `dosemu.c`), le stub `ok_simulated` est retire. US-078 marque simule (`sensor-read` le dit). US-081 : profils reels, pas de batterie (`battery none`). Ouverts : US-076, US-077, US-083.
@@ -220,6 +226,8 @@ Etat Phase 6 (10 octobre 2026, socle i386 ; detail dans `docs/platform.md`, preu
 - US-103 : Intégration du système de confidentialité avancée
 - US-104 : Développement du système de conformité réglementaire
 - US-105 : Création du système de support communautaire
+
+Etat Phase 7 (17 octobre 2026, lot 9). US-099 ferme : langage de contrats MCL dans le registre (`collab-contract-deploy`, `collab-signoff`), evalue de facon deterministe sur chaque replique. US-104 ferme comme auto-controle verifie (six controles calcules, signatures reverifiees, effacement verifie, carte RGPD ; pas une certification). US-103 ferme : preuve Schnorr NIZK dans un groupe de 2048 bits a sous-groupe de 256 bits (`collab-zk-strong`, parametres de `scripts/gen_zk_group.py`, test a reponse connue), pas en temps constant. US-097 reste simule (aucun paiement reel).
 
 Etat Phase 7 (17 octobre 2026, lot 8). US-103 partiel, plus fort : preuve a divulgation nulle de connaissance de Schnorr (non interactive, Fiat-Shamir SHA-256, liee au message, verification de sous-groupe) dans `collab.c` (`collab-zk-prove`) ; groupe de 62 bits de taille jouet (force simule). US-099 et US-104 inchanges (partiels).
 
@@ -247,6 +255,8 @@ Etat Phase 7 (10 octobre 2026, PR #119 empilee sur #117 ; detail dans `docs/coll
 - US-118 : Intégration du système de feedback continu
 - US-119 : Développement du système de métriques business
 - US-120 : Création du système de roadmap évolutive
+
+Etat Phase 8 (17 octobre 2026, lot 9). US-112 ferme : base de signatures hors ligne (integree ou fichier, motifs hexadecimaux et empreintes FNV, severites, `prod-sec-db`), sans flux CVE en ligne. US-115 ferme : regression logistique Q12 entrainee dans l'invite (`prod-maint-train`, verdict appris de `prod-maint-predict`). US-120 reste partiel (fichier d'etat tenu a la main).
 
 Etat Phase 8 (17 octobre 2026, lot 8). US-120 partiel : `prod-roadmap` calcule l'avancement par phase depuis `/roadmap.txt` (initrd, une ligne par US), plus de texte fige ; le fichier est tenu a la main. US-112 et US-115 inchanges (partiels).
 

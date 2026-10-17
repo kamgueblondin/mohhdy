@@ -406,6 +406,80 @@ def read_ppm(path):
     return int(fields[1]), int(fields[2]), data[pos:]
 
 
+def screendump_rgb(monitor, name):
+    dump = os.path.join(LOG_DIR, name)
+    try:
+        os.remove(dump)
+    except OSError:
+        pass
+    monitor.sendall(("screendump %s\n" % dump).encode("ascii"))
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if os.path.isfile(dump) and os.path.getsize(dump) > 10000:
+            break
+        time.sleep(0.2)
+    time.sleep(0.3)
+    return read_ppm(dump)
+
+
+def color_box(width, height, rgb, color):
+    """Count and bounding box of the pixels of one exact color."""
+    want = bytes(((color >> 16) & 255, (color >> 8) & 255, color & 255))
+    n = 0
+    x0 = y0 = 1 << 30
+    x1 = y1 = -1
+    for y in range(height):
+        row = rgb[y * width * 3:(y + 1) * width * 3]
+        x = row.find(want)
+        while x >= 0:
+            if x % 3 == 0:
+                px = x // 3
+                n += 1
+                x0 = min(x0, px)
+                x1 = max(x1, px)
+                y0 = min(y0, y)
+                y1 = max(y1, y)
+                x = row.find(want, x + 3)
+            else:
+                x = row.find(want, x + 1)
+    if n == 0:
+        return 0, 0, 0
+    return n, x1 - x0 + 1, y1 - y0 + 1
+
+
+MUI_ICON_COLORS = (0x2E7D32, 0x263238, 0x1565C0, 0xEF6C00, 0x6A1B9A, 0x00838F, 0x546E7A, 0xC62828)
+
+
+def check_mobile_home_pixels(monitor):
+    """Lot 9 (US-077): the 320x448 phone home screen painted by the kernel
+    on the VBE framebuffer from the guest mobile display list: wallpaper
+    320x368 around eight 64x64 icons, one per app color."""
+    width, height, rgb = screendump_rgb(monitor, "qemu-osui-gui-mobile-home.ppm")
+    n, bw, bh = color_box(width, height, rgb, 0x0D47A1)
+    say("mobile home: wallpaper %d px box %dx%d" % (n, bw, bh))
+    if (bw, bh) != (320, 368):
+        raise RuntimeError("mobile home: wallpaper box %dx%d, expected 320x368" % (bw, bh))
+    # 320*368 minus 8 icons of 64x64, minus the white label glyphs
+    if n > 320 * 368 - 8 * 64 * 64 or n < 320 * 368 - 8 * 64 * 64 - 8 * 8 * 64:
+        raise RuntimeError("mobile home: wallpaper pixel count %d" % n)
+    for c in MUI_ICON_COLORS:
+        cn, cw, ch = color_box(width, height, rgb, c)
+        if cn < 64 * 64 or cw < 64 or ch < 64:
+            raise RuntimeError("mobile home: icon #%06x has %d px box %dx%d" % (c, cn, cw, ch))
+
+
+def check_mobile_app_pixels(monitor):
+    """After the tap on the chat icon: green app bar 320x48, no wallpaper."""
+    width, height, rgb = screendump_rgb(monitor, "qemu-osui-gui-mobile-app.ppm")
+    n, bw, bh = color_box(width, height, rgb, 0x2E7D32)
+    wall, _, _ = color_box(width, height, rgb, 0x0D47A1)
+    say("mobile app: app bar %d px box %dx%d, wallpaper %d px" % (n, bw, bh, wall))
+    if (bw, bh) != (320, 48) or n < 320 * 48 - 4 * 64 or n > 320 * 48:
+        raise RuntimeError("mobile app: app bar %d px box %dx%d, expected 320x48" % (n, bw, bh))
+    if wall != 0:
+        raise RuntimeError("mobile app: wallpaper still on screen (%d px)" % wall)
+
+
 def check_web_pixels(monitor):
     """Lot 6 (US-031): find the #hero box (pure red, 208x48 in the layout)
     and the yellow centered paragraph and the blue border on the dump."""
@@ -742,6 +816,27 @@ def main():
             step = len(log_text())
             send_key(monitor, "esc")
             wait_for(proc, "osui web close file=/web/demo.html", CMD_TIMEOUT, step)
+            # Lot 9 (US-077): the mobile shell on the OS-UI VBE screen.
+            say("typing mobile-ui 320x448 in gui ...")
+            send_command_until(
+                monitor, "mobile-ui 320x448", "mobile-ui vbe pane web items", proc,
+                mode="getc", wait_prompt=False
+            )
+            wait_for(proc, "mobile-ui ok form phone portrait grid 4x2 icon 64", CMD_TIMEOUT, step)
+            time.sleep(1.0)
+            check_mobile_home_pixels(monitor)
+            step = len(log_text())
+            send_command_until(
+                monitor, "mobile-ui app chat", "title phone chat", proc,
+                mode="getc", wait_prompt=False
+            )
+            wait_for(proc, "mobile-ui tap action open screen app app chat", CMD_TIMEOUT, step)
+            time.sleep(1.0)
+            check_mobile_app_pixels(monitor)
+            step = len(log_text())
+            send_key(monitor, "esc")
+            wait_for(proc, "osui web close file=mobile", CMD_TIMEOUT, step)
+            say("mobile shell rendered on the VBE screen: home grid, tap, app bar")
             say("typing console ...")
             send_command_until(
                 monitor, "console", "chrome=text", proc, mode="getc", wait_prompt=True

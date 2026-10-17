@@ -369,6 +369,56 @@ static void test_gui_web_pane_pipeline(void) {
     osui_gui_set_ide_ops(0, 0, 0);
 }
 
+/* Lot 9 (US-077): "mobile-ui ARGS" on the desktop goes to the hook, the
+ * hook's display list fills the web pane, typed keys still reach the input
+ * line (taps), ESC closes. */
+static char g_mobile_args[64];
+static int g_mobile_calls;
+static int fake_mobile(const char *args, char *out, int out_max) {
+    os_fb_web_item_t it[2];
+    memset(it, 0, sizeof(it));
+    strncpy(g_mobile_args, args, sizeof(g_mobile_args) - 1);
+    g_mobile_calls++;
+    it[0].kind = OS_FB_WEB_RECT; it[0].w = 320; it[0].h = 24; it[0].color = 0x101010U;
+    it[1].kind = OS_FB_WEB_TEXT; it[1].w = 48; it[1].h = 8; it[1].color = 0xFFFFFFU; strcpy(it[1].text, "mobile");
+    osui_gui_show_items("phone home", it, 2, 320, 448);
+    snprintf(out, (size_t)out_max, "mobile-ui fake %s\n", args);
+    return 0;
+}
+
+static void test_gui_mobile_pane(void) {
+    setup();
+    g_mobile_calls = 0;
+    feed_str("mobile-ui 320x448");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, g_mobile_calls);          /* no hook: not taken */
+    TEST_ASSERT_EQUAL(0, osui_gui_mobile_active());
+    osui_gui_set_mobile_op(fake_mobile);
+    feed_str("mobile-ui 320x448");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, g_mobile_calls);
+    TEST_ASSERT_EQUAL_STRING("320x448", g_mobile_args);
+    TEST_ASSERT_EQUAL(1, osui_gui_mobile_active());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_WEB, g_scene.pane);
+    TEST_ASSERT_EQUAL(2, g_scene.nweb);
+    TEST_ASSERT_EQUAL(448, g_scene.web_page_h);
+    TEST_ASSERT_NOT_NULL(strstr(g_scene.web_title, "web mobile - phone home"));
+    TEST_ASSERT_EQUAL_STRING("mobile", g_scene.web[1].text);
+    feed_str("mobile-ui tap 40 60");
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_NOT_NULL(strstr(g_scene.input, "mobile-ui tap 40 60"));
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(2, g_mobile_calls);
+    TEST_ASSERT_EQUAL_STRING("tap 40 60", g_mobile_args);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "mobile-ui fake tap 40 60"));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web close file=mobile"));
+    TEST_ASSERT_EQUAL(0, osui_gui_mobile_active());
+    TEST_ASSERT_EQUAL(0, osui_gui_web_active());
+    osui_gui_set_mobile_op(0);
+}
+
 /* Lot 7 (US-039): the page sanitizer runs first in the web pipeline:
  * script, iframe, on* handlers, javascript: URLs and unsafe CSS never
  * reach the engine nor the display list. */
@@ -414,6 +464,7 @@ int main(void) {
     RUN_TEST(test_gui_pm_ide_fullscreen);
     RUN_TEST(test_gui_web_pane_pipeline);
     RUN_TEST(test_gui_web_pipeline_sanitized);
+    RUN_TEST(test_gui_mobile_pane);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
