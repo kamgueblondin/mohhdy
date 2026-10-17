@@ -862,13 +862,14 @@ def main():
             send_command_until(monitor, "vfs-list-page assets/ 4",
                                "vfsserver delegated alias list page", proc)
             wait_for("vfsvirtual alias list page assets/", proc, before_alias_page_end)
-            # assets/ aliases the initrd root: 9 entries since initrd/pm/.
+            # assets/ aliases the initrd root: 9 entries since initrd/pm/,
+            # 10 since initrd/web/ (Lot 6).
             wait_for("vfs-list-page partiel count 4 next 8", proc, before_alias_page_end)
             before_alias_page_last = len(log_text())
             send_command_until(monitor, "vfs-list-page assets/ 8",
                                "vfsserver delegated alias list page", proc)
             wait_for("vfsvirtual alias list page assets/", proc, before_alias_page_last)
-            wait_for("vfs-list-page ok count 1 next end", proc, before_alias_page_last)
+            wait_for("vfs-list-page ok count 2 next end", proc, before_alias_page_last)
             before_alias_observe = len(log_text())
             send_command_until(monitor, "vfs-list-observe assets/ 0 0",
                                "vfsserver delegated alias list observe", proc)
@@ -883,7 +884,7 @@ def main():
             send_command_until(monitor, "vfs-list-observe assets/ 8 0",
                                "vfsserver delegated alias list observe", proc)
             wait_for("vfsvirtual alias list page assets/", proc, before_alias_observe_last)
-            wait_for("vfs-list-observe ok count 1 next end generation", proc, before_alias_observe_last)
+            wait_for("vfs-list-observe ok count 2 next end generation", proc, before_alias_observe_last)
             before_alias_read_revoked = len(log_text())
             send_command_until(monitor, "vfs-backend-status %s" % worker_pid,
                                "vfsserver backend status request", proc)
