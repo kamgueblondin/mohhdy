@@ -142,10 +142,13 @@ uint32_t devsvc_watchdog(uint32_t now) {
         if (g_dev[DEV_SERIAL].owner <= 0) {
             act |= DEVSVC_W_SERIAL_FLUSH;              /* driver gone: leftovers */
         } else if (g_ser.inflight) {
+            /* A chunk the driver took and has not finished: flushing the
+             * queue from Ring 0 now would print later bytes before it.
+             * Count the stall and keep the order; a dead driver is found
+             * by the owner check, which flushes the leftovers. */
             if (now - g_ser.inflight_since >= DEVICE_INFLIGHT_STALE) {
-                act |= DEVSVC_W_SERIAL_FLUSH;
                 g_ser.stalls++;
-                g_ser.inflight = 0;
+                g_ser.inflight_since = now;
             }
         } else if (now - g_ser.last_take >= DEVICE_STALL_TICKS) {
             act |= DEVSVC_W_SERIAL_FLUSH;

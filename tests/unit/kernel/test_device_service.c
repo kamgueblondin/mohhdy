@@ -112,12 +112,14 @@ static void test_serial_stall_death_and_overflow(void) {
     TEST_ASSERT_EQUAL(DEVSVC_W_SERIAL_FLUSH, devsvc_watchdog(DEVICE_STALL_TICKS) & DEVSVC_W_SERIAL_FLUSH);
     TEST_ASSERT_EQUAL(1, devsvc_serial_pop_ring0(&c));
     TEST_ASSERT_EQUAL('x', c);
-    /* a chunk taken but never completed (driver killed mid-write) */
+    /* a chunk taken but not completed: the stall is counted, but Ring 0
+     * never prints the later bytes ahead of it (order is kept) */
     TEST_ASSERT_EQUAL(DEVSVC_QUEUED, devsvc_serial_put('y'));
     TEST_ASSERT_EQUAL(DEVSVC_QUEUED, devsvc_serial_put('z'));
     TEST_ASSERT_EQUAL(1U, devsvc_serial_take(&c, 1, 100));
     TEST_ASSERT_EQUAL(0U, devsvc_watchdog(100 + DEVICE_INFLIGHT_STALE - 1U) & DEVSVC_W_SERIAL_FLUSH);
-    TEST_ASSERT_EQUAL(DEVSVC_W_SERIAL_FLUSH, devsvc_watchdog(100 + DEVICE_INFLIGHT_STALE) & DEVSVC_W_SERIAL_FLUSH);
+    TEST_ASSERT_EQUAL(0U, devsvc_watchdog(100 + DEVICE_INFLIGHT_STALE) & DEVSVC_W_SERIAL_FLUSH);
+    TEST_ASSERT_EQUAL(0U, devsvc_watchdog(100 + 3U * DEVICE_INFLIGHT_STALE / 2U) & DEVSVC_W_SERIAL_FLUSH);
     /* owner gone with leftovers: they go out first, in order */
     devsvc_owner_gone(DEV_SERIAL);
     TEST_ASSERT_EQUAL(DEVSVC_FLUSH, devsvc_serial_put('w'));

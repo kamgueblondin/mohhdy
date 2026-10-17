@@ -258,6 +258,13 @@ void task_queue_move_first_user(task_t* task) {
 // Déclaration de la fonction assembleur pour le changement de contexte
 extern void jump_to_task(cpu_state_t* next_state);
 static void unlink_task(task_t* task);
+/* Lot 5: round-robin anchor below OS_TASK_PRIORITY_HIGH. The Ring 3
+ * device drivers run HIGH and block after a few instructions; scanning from
+ * the driver would always hand the CPU back to the task queued right after
+ * it (a busy `spin` starved the shell). After a HIGH task, the scan resumes
+ * from the last lower-priority task that ran, so equal tasks keep turns. */
+static task_t* g_rr_anchor = NULL;
+
 
 static int task_destroy_user_vmm(vmm_directory_t* dir) {
     if (!dir) return 0;
@@ -296,6 +303,7 @@ void remove_task(task_t* task) {
 
 static void unlink_task(task_t* task) {
     if (!task_queue || !task) return;
+    if (g_rr_anchor == task) g_rr_anchor = NULL;
     if (task->next == task) {
         // Single element in queue
         task_queue = NULL;
@@ -346,7 +354,10 @@ void schedule(cpu_state_t* cpu) {
      * cadre utilisateur. */
     {
         task_t* start = current_task ? current_task : task_queue;
-        task_t* t = start;
+        task_t* t;
+        if (current_task && current_task->priority >= OS_TASK_PRIORITY_HIGH && g_rr_anchor)
+            start = g_rr_anchor;
+        t = start;
         task_t* next_task = start;
         uint32_t best_priority = 0U;
         int found_user = 0;
@@ -388,6 +399,8 @@ void schedule(cpu_state_t* cpu) {
         }
 
         current_task = next_task;
+        if (next_task->type == TASK_TYPE_USER && next_task->priority < OS_TASK_PRIORITY_HIGH)
+            g_rr_anchor = next_task;
     }
 
     current_task->state = TASK_RUNNING;

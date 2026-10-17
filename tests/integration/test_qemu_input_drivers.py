@@ -99,7 +99,7 @@ def main():
         if "devrogue unexpected" in normalized_log(ata.log_text()[start:]):
             raise RuntimeError("devrogue reached a device port")
         # 4. Kill ps2driver: keys still arrive (Ring 0 until the new claim), then
-   supervised respawn.
+        # supervised respawn.
         mark = len(ata.log_text())
         ata.kill(client, proc, str(ps2_pid))
         st3 = wait_status(client, proc, lambda s: s["ps2_respawns"] == 1 and s["ps2_owner"] > 0
