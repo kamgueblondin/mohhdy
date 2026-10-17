@@ -40,3 +40,14 @@ void io_bitmap_apply_pci(uint8_t* map, uint32_t len, int allow) {
     for (port = IO_BITMAP_PCI_BASE; port <= IO_BITMAP_PCI_LAST; port++)
         io_bitmap_set_port(map, len, (uint16_t)port, allow);
 }
+
+void io_bitmap_apply_ps2(uint8_t* map, uint32_t len, int allow) {
+    io_bitmap_set_port(map, len, (uint16_t)IO_BITMAP_PS2_DATA, allow);
+    io_bitmap_set_port(map, len, (uint16_t)IO_BITMAP_PS2_CMD, allow);
+}
+
+void io_bitmap_apply_serial(uint8_t* map, uint32_t len, int allow) {
+    uint32_t port;
+    for (port = IO_BITMAP_COM1_BASE; port <= IO_BITMAP_COM1_LAST; port++)
+        io_bitmap_set_port(map, len, (uint16_t)port, allow);
+}

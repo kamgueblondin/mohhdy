@@ -112,22 +112,6 @@ jobs:
       - name: Run QEMU integration shard (vfs-service)
         run: make integration-qemu-vfs
 
-      - name: QEMU phase 4 PromptMessage (guest shell, about 1 min)
-        run: make qemu-promptmessage
-
-      # Strict network kernel (NET_RING0_FALLBACK=0): networker is the only
-      # network path, no Ring 0 fallback after its death (about 1 min).
-      - name: QEMU strict network build, no Ring 0 fallback
-        run: make qemu-net-no-ring0
-
-      # Guest TCP/TLS loss recovery: dropped ClientHello and Certificate,
-      # duplicated ServerKeyExchange (about 2 min).
-      - name: QEMU TCP/TLS loss recovery (frame drop)
-        run: make qemu-net-loss-recovery
-
-      - name: QEMU strict network build, loopback-only worker (no NE2000)
-        run: make qemu-net-loopback-worker
-
       - name: Upload integration logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -220,6 +204,11 @@ jobs:
       - name: QEMU Ring 3 PCI driver (supervised restart)
         run: make qemu-pci-driver
 
+      # Lot 5 (US-001): PS/2 and COM1 Ring 3 drivers, rogue #GP, kill and
+      # supervised respawn of both (about 1 min).
+      - name: QEMU Ring 3 PS/2 and serial drivers (supervised restart)
+        run: make qemu-input-drivers
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -262,7 +251,7 @@ jobs:
             test_logs/coverage_report.txt
 
   p2p-mesh:
-    name: QEMU P2P four guests (multi-hop, crash, rejoin)
+    name: QEMU P2P four guests + strict network contracts
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -286,6 +275,25 @@ jobs:
       # US-063 two relays, US-069 relay crash + reboot + rejoin (about 2 min).
       - name: QEMU P2P four guests (two-relay path, crash, rejoin)
         run: make qemu-p2p-mesh
+
+      # Moved from the vfs-service job (lot 5) for headroom under 15 min:
+      # PromptMessage, strict network, loss recovery, loopback worker
+      # (about 4 min together).
+      - name: QEMU phase 4 PromptMessage (guest shell, about 1 min)
+        run: make qemu-promptmessage
+
+      # Strict network kernel (NET_RING0_FALLBACK=0): networker is the only
+      # network path, no Ring 0 fallback after its death (about 1 min).
+      - name: QEMU strict network build, no Ring 0 fallback
+        run: make qemu-net-no-ring0
+
+      # Guest TCP/TLS loss recovery: dropped ClientHello and Certificate,
+      # duplicated ServerKeyExchange (about 2 min).
+      - name: QEMU TCP/TLS loss recovery (frame drop)
+        run: make qemu-net-loss-recovery
+
+      - name: QEMU strict network build, loopback-only worker (no NE2000)
+        run: make qemu-net-loopback-worker
 
       - name: Upload logs
         if: always()

@@ -36,6 +36,7 @@
 #include "../vga_console.h"
 #include "../gfx_fb.h"
 #include "../pci_service.h"
+#include "../device_service.h"
 /* Completions locales : BPE, top-k basse temperature, arret EOT ou repetition,
  * et newline ou fin de phrase une fois 80 caracteres ecrits. */
 
@@ -862,6 +863,235 @@ static int sys_pci_service(uint32_t op, uint32_t arg, uint32_t count) {
     return OS_PCI_BAD_REQUEST;
 }
 
+/* Lot 5 (US-001): Ring 3 PS/2 (bin/ps2driver, "ps2-driver") and COM1
+ * (bin/serialdriver, "serial-driver") drivers. The bookkeeping is in
+ * kernel/device_service.c; this is the task/port glue. Ring 0 keeps the
+ * device before the handoff, after a death (until the respawn) and on a
+ * stall (watchdog in timer.c); every such byte is counted. */
+static int32_t g_dev_respawn_pid[DEV_COUNT];
+
+static const char* device_service_name(int dev) { return dev == DEV_PS2 ? "ps2-driver" : "serial-driver"; }
+static const char* device_task_name(int dev) { return dev == DEV_PS2 ? "ps2driver" : "serialdriver"; }
+
+static int32_t device_live_driver(int dev) {
+    int32_t pid = service_registry_lookup(device_service_name(dev));
+    task_t* owner;
+    if (pid <= 0) return 0;
+    owner = get_task_by_id((uint32_t)pid);
+    if (!owner || owner->type != TASK_TYPE_USER || owner->state == TASK_TERMINATED ||
+        strcmp(owner->name, device_task_name(dev)) != 0) return 0;
+    return pid;
+}
+
+/* Owner still a running task with the right binary (IRQ0 safe: no registry). */
+static int device_owner_alive(int dev) {
+    int32_t pid = devsvc_owner(dev);
+    task_t* t;
+    if (pid <= 0) return 0;
+    t = get_task_by_id((uint32_t)pid);
+    return t && t->type == TASK_TYPE_USER && t->state != TASK_TERMINATED &&
+           strcmp(t->name, device_task_name(dev)) == 0;
+}
+
+static void device_wake_owner(int dev) {
+    int32_t pid = devsvc_owner(dev);
+    task_t* t;
+    if (pid <= 0) return;
+    t = get_task_by_id((uint32_t)pid);
+    if (t && t->state == TASK_BLOCKED_IPC && ipc_wait_on_message(&t->ipc_wait))
+        t->state = TASK_READY;
+}
+
+void device_ps2_irq_notify(void) {
+    (void)devsvc_ps2_irq(timer_get_ticks());
+    device_wake_owner(DEV_PS2);
+}
+
+void device_serial_wake(void) {
+    if (current_task && (int32_t)current_task->id == devsvc_owner(DEV_SERIAL)) return;
+    device_wake_owner(DEV_SERIAL);
+}
+
+extern void serial_ring0_flush(void);
+
+/* IRQ0 (timer.c): Ring 0 fallbacks while a driver is stalled or gone. */
+void device_watchdog_tick(uint32_t now) {
+    uint32_t act = devsvc_watchdog(now);
+    if (act & DEVSVC_W_CHECK_OWNERS) {
+        int dev;
+        for (dev = 0; dev < DEV_COUNT; dev++) {
+            if (devsvc_owner(dev) > 0 && !device_owner_alive(dev)) {
+                devsvc_owner_gone(dev);
+                if (dev == DEV_SERIAL) act |= DEVSVC_W_SERIAL_FLUSH;
+                else act |= DEVSVC_W_PS2_DRAIN;
+            }
+        }
+    }
+    if (act & DEVSVC_W_PS2_DRAIN) devsvc_ps2_note_ring0(keyboard_ring0_drain());
+    if (act & DEVSVC_W_SERIAL_FLUSH) serial_ring0_flush();
+}
+
+void device_supervise(void) {
+    int dev;
+    for (dev = 0; dev < DEV_COUNT; dev++) {
+        int pending = 0;
+        task_t* born;
+        if (devsvc_owner(dev) > 0) {
+            if (device_owner_alive(dev)) continue;
+            devsvc_owner_gone(dev);
+        }
+        if (g_dev_respawn_pid[dev] > 0) {
+            born = get_task_by_id((uint32_t)g_dev_respawn_pid[dev]);
+            pending = born && born->type == TASK_TYPE_USER && born->state != TASK_TERMINATED;
+        }
+        if (!devsvc_should_respawn(dev, pending)) continue;
+        born = create_task_from_initrd_file(dev == DEV_PS2 ? "bin/ps2driver" : "bin/serialdriver");
+        print_string_serial(dev == DEV_PS2 ? "[PS2] " : "[SERIAL] ");
+        if (!born) {
+            print_string_serial("supervised respawn failed\n");
+            devsvc_note_respawn(dev);   /* the budget bounds the retries */
+            continue;
+        }
+        born->boot_service = 1U;
+        born->priority = OS_TASK_PRIORITY_HIGH;
+        g_dev_respawn_pid[dev] = (int32_t)born->id;
+        devsvc_note_respawn(dev);
+        print_string_serial("supervised respawn bin/");
+        print_string_serial(device_task_name(dev));
+        print_string_serial(" pid ");
+        ata_serial_u32((uint32_t)born->id);
+        print_string_serial("\n");
+    }
+}
+
+/* Sleep in TASK_BLOCKED_IPC until device_wake_owner or the deadline.
+ * Returns 1 if woken by the device, 0 on timeout (or when the task may
+ * not block). `ready` is re-checked after every wake. */
+/* Cheap call site for the input loops: at most every 10 ticks. */
+static void device_supervise_throttled(void) {
+    static uint32_t last;
+    uint32_t now = timer_get_ticks();
+    if (now - last < 10U) return;
+    last = now;
+    device_supervise();
+}
+
+static int device_block(uint32_t timeout, int (*ready)(void)) {
+    task_t* self = current_task;
+    int out = 0;
+    if (ready()) return 1;
+    if (timeout == 0U || !self || !self->syscall_frame || self->kctx_valid ||
+        g_rpc_waiter || task_sched_only) return ready();
+    ipc_wait_begin(&self->ipc_wait, timer_get_ticks(), timeout, 0xFFFFFFFFU);
+    for (;;) {
+        self->state = TASK_BLOCKED_IPC;
+        self->kctx_valid = 1U;
+        if (kctx_save(self->kctx) == 0) {
+            schedule(self->syscall_frame); /* never returns; resumed below */
+        }
+        self->kctx_valid = 0U;
+        if (ipc_wait_after_wake(&self->ipc_wait, ready() ? 1 : 0, 0, 0, timer_get_ticks(), &out) ==
+            IPC_WAIT_RETURN) return out;
+    }
+}
+
+/* End of a syscall: hand the CPU to a READY device driver with work. */
+static int device_driver_wants_cpu(const task_t* self) {
+    uint32_t now = timer_get_ticks();
+    int dev;
+    if (!self || self->type != TASK_TYPE_USER || g_rpc_waiter || task_sched_only) return 0;
+    for (dev = 0; dev < DEV_COUNT; dev++) {
+        int32_t pid = devsvc_owner(dev);
+        task_t* t;
+        if (pid <= 0 || pid == (int32_t)self->id || !devsvc_wants_cpu(dev, now)) continue;
+        t = get_task_by_id((uint32_t)pid);
+        if (t && t->state == TASK_READY) return 1;
+    }
+    return 0;
+}
+
+static int device_ps2_ready(void) { return devsvc_ps2_pending(); }
+static int device_serial_ready(void) { return devsvc_serial_queued() != 0U; }
+
+static int sys_device_service(uint32_t op, uint32_t a, uint32_t b, uint32_t c) {
+    int32_t pid = current_task ? (int32_t)current_task->id : 0;
+    if (!current_task || current_task->type != TASK_TYPE_USER) return OS_DEV_DENIED;
+    switch (op) {
+    case OS_DEV_OP_PS2_CLAIM:
+        if (device_live_driver(DEV_PS2) != pid) return OS_DEV_DENIED;
+        devsvc_set_owner(DEV_PS2, pid);
+        tss_set_ps2_io(1);   /* back to Ring 3 without a switch */
+        print_string_serial("[PS2] Ring 3 ps2driver claimed the controller pid ");
+        ata_serial_u32((uint32_t)pid);
+        print_string_serial("\n");
+        return 0;
+    case OS_DEV_OP_PS2_WAIT:
+        if (devsvc_owner(DEV_PS2) != pid) return OS_DEV_DENIED;
+        (void)device_block(a, device_ps2_ready);
+        return (int)devsvc_ps2_seq();
+    case OS_DEV_OP_PS2_SUBMIT: {
+        os_input_event_t ev[OS_INPUT_MAX_EVENTS];
+        uint32_t i;
+        if (devsvc_owner(DEV_PS2) != pid) return OS_DEV_DENIED;
+        if (b > OS_INPUT_MAX_EVENTS ||
+            (b && !syscall_user_range((const void*)a, b * (uint32_t)sizeof(os_input_event_t), 0)))
+            return OS_DEV_BAD_REQUEST;
+        for (i = 0; i < b; i++) ev[i] = ((const os_input_event_t*)a)[i];
+        for (i = 0; i < b; i++) keyboard_apply_event(&ev[i]);
+        (void)devsvc_ps2_served(c, b, timer_get_ticks());
+        return (int)b;
+    }
+    case OS_DEV_OP_SERIAL_CLAIM:
+        if (device_live_driver(DEV_SERIAL) != pid) return OS_DEV_DENIED;
+        tss_set_serial_io(1);
+        print_string_serial("[SERIAL] Ring 3 serialdriver claimed COM1 pid ");
+        ata_serial_u32((uint32_t)pid);
+        print_string_serial("\n");
+        /* after the message: Ring 0 wrote it, everything after is queued */
+        devsvc_set_owner(DEV_SERIAL, pid);
+        return 0;
+    case OS_DEV_OP_SERIAL_TAKE: {
+        uint8_t chunk[OS_SERIAL_CHUNK];
+        uint32_t n, i, flags;
+        if (devsvc_owner(DEV_SERIAL) != pid) return OS_DEV_DENIED;
+        if (b == 0U || b > OS_SERIAL_CHUNK || !syscall_user_range((const void*)a, b, 1))
+            return OS_DEV_BAD_REQUEST;
+        devsvc_serial_done(timer_get_ticks());
+        (void)device_block(c, device_serial_ready);
+        __asm__ volatile("pushfl; popl %0; cli" : "=r"(flags) :: "memory");
+        n = devsvc_serial_take(chunk, b, timer_get_ticks());
+        if (flags & 0x200U) __asm__ volatile("sti" ::: "memory");
+        for (i = 0; i < n; i++) ((uint8_t*)a)[i] = chunk[i];
+        return (int)n;
+    }
+    case OS_DEV_OP_SERIAL_RX: {
+        uint32_t i;
+        if (devsvc_owner(DEV_SERIAL) != pid) return OS_DEV_DENIED;
+        if (b > OS_SERIAL_CHUNK || (b && !syscall_user_range((const void*)a, b, 0)))
+            return OS_DEV_BAD_REQUEST;
+        for (i = 0; i < b; i++) {
+            char sc = (char)((const uint8_t*)a)[i];
+            /* same filter as the Ring 0 COM1 display bridge (keyboard_getc) */
+            if ((sc >= 32 && sc <= 126) || sc == '\n' || sc == '\r' || sc == '\t' || sc == '\b' ||
+                sc == (char)OS_VGA_KEY_ESC)
+                kbd_put_char(sc);
+        }
+        devsvc_serial_note_rx(b);
+        return (int)b;
+    }
+    case OS_DEV_OP_STATUS: {
+        os_device_status_t st;
+        device_supervise();
+        if (!syscall_user_range((const void*)a, sizeof(st), 1)) return OS_DEV_BAD_REQUEST;
+        devsvc_status(&st);
+        *(os_device_status_t*)a = st;
+        return 0;
+    }
+    default:
+        return OS_DEV_BAD_REQUEST;
+    }
+}
+
 static int sys_ata_claim(void) {
     int rc;
     if (!current_task || current_task->type != TASK_TYPE_USER) return OS_ATA_DRIVER_REQUIRED;
@@ -1595,6 +1825,7 @@ void syscall_handler(cpu_state_t* cpu) {
     // Réactive les interruptions pour permettre au clavier de fonctionner
     asm volatile("sti");
 
+    task_t* syscall_entry_task = current_task;
     if (current_task) current_task->syscall_frame = cpu;
     /* While a task is blocked mid-FAT, only the live driver or the supervised
      * respawn (not registered yet, so not ata_live_driver) may enter a
@@ -1702,8 +1933,23 @@ void syscall_handler(cpu_state_t* cpu) {
                  * keyboard_getc busy-waits here, and IRQ0 does not preempt a
                  * syscall, so a P2P shell misses hellos while ticks still
                  * advance past the peer-down threshold. */
+                device_supervise_throttled();
                 if (cpu->ebx == 1) {
                     if (!keyboard_poll_char(&c)) c = 0;
+                } else if (devsvc_owner(DEV_PS2) > 0 && current_task &&
+                           current_task->syscall_frame && !current_task->kctx_valid) {
+                    /* Lot 5: the keys come from the Ring 3 ps2driver, which
+                     * cannot run while this syscall spins; wait cooperatively
+                     * (about 10 ticks), then return 0 like a getc timeout. */
+                    task_t* self = current_task;
+                    uint32_t start = timer_get_ticks();
+                    while (!keyboard_poll_char(&c)) {
+                        c = 0;
+                        if (timer_get_ticks() - start >= 10U) break;
+                        self->kctx_valid = 1U;
+                        if (kctx_save(self->kctx) == 0) schedule(self->syscall_frame);
+                        self->kctx_valid = 0U;
+                    }
                 } else {
                     c = keyboard_getc();
                 }
@@ -2252,6 +2498,9 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_PEER_TLS_POLL:
             cpu->eax = (uint32_t)kernel_peer_tls_poll((const os_peer_tls_poll_request_t*)cpu->ebx);
             break;
+        case SYS_DEVICE_SERVICE:
+            cpu->eax = (uint32_t)sys_device_service(cpu->ebx, cpu->ecx, cpu->edx, cpu->esi);
+            break;
         case SYS_PCI_SERVICE:
             cpu->eax = (uint32_t)sys_pci_service(cpu->ebx, cpu->ecx, cpu->edx);
             break;
@@ -2339,6 +2588,14 @@ void syscall_handler(cpu_state_t* cpu) {
 
             // Syscall inconnu
             break;
+    }
+    /* Lot 5 (US-001): IRQ0 does not preempt a syscall, so a task that
+     * spends its time in the kernel (console output) would starve the Ring
+     * 3 ps2driver/serialdriver into the Ring 0 fallback. The result is in
+     * the frame already: yield like SYS_YIELD. */
+    if (current_task && current_task == syscall_entry_task &&
+        current_task->state == TASK_RUNNING && device_driver_wants_cpu(current_task)) {
+        task_yield_to_driver(cpu);
     }
 }
 
@@ -3954,6 +4211,7 @@ static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu) 
         char c = 0;
         if (!keyboard_poll_char(&c)) {
             task_t* self = current_task;
+            device_supervise_throttled();
             /* Save the kernel continuation. schedule(cpu) would store the
              * user int 0x80 frame and re-enter SYS_GETS from scratch. */
             if (self && self->syscall_frame && !self->kctx_valid) {

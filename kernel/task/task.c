@@ -13,6 +13,8 @@
 #include "service_registry.h"
 #include "kernel/timer.h"
 #include "kernel/pci_service.h"
+#include "kernel/device_service.h"
+#include "kernel/sched_quantum.h"
 
 extern void write_serial(char c);
 
@@ -257,6 +259,21 @@ void task_queue_move_first_user(task_t* task) {
 // Déclaration de la fonction assembleur pour le changement de contexte
 extern void jump_to_task(cpu_state_t* next_state);
 static void unlink_task(task_t* task);
+/* Lot 5: round-robin anchor below OS_TASK_PRIORITY_HIGH. The Ring 3
+ * device drivers run HIGH and block after a few instructions; scanning from
+ * the driver would always hand the CPU back to the task queued right after
+ * it (a busy `spin` starved the shell). After a HIGH task, the scan resumes
+ * from the last lower-priority task that ran, so equal tasks keep turns. */
+static task_t* g_rr_anchor = NULL;
+/* Task that handed the CPU to a Ring 3 driver mid-quantum (task_yield_to_
+ * driver), resumed once the driver is done; a plain yield is not. */
+static task_t* g_resume_after_high = NULL;
+
+void task_yield_to_driver(cpu_state_t* cpu) {
+    g_resume_after_high = current_task;
+    schedule(cpu);
+}
+
 
 static int task_destroy_user_vmm(vmm_directory_t* dir) {
     if (!dir) return 0;
@@ -295,6 +312,8 @@ void remove_task(task_t* task) {
 
 static void unlink_task(task_t* task) {
     if (!task_queue || !task) return;
+    if (g_rr_anchor == task) g_rr_anchor = NULL;
+    if (g_resume_after_high == task) g_resume_after_high = NULL;
     if (task->next == task) {
         // Single element in queue
         task_queue = NULL;
@@ -309,6 +328,7 @@ static void unlink_task(task_t* task) {
 
 void schedule(cpu_state_t* cpu) {
     uint32_t now = timer_get_ticks();
+    int resume_anchor = 0;
     asm volatile("cli"); // Désactiver les interruptions pour la planification
     task_reap_deferred();
     if (task_sched_hook) task_sched_hook(now);
@@ -345,7 +365,10 @@ void schedule(cpu_state_t* cpu) {
      * cadre utilisateur. */
     {
         task_t* start = current_task ? current_task : task_queue;
-        task_t* t = start;
+        task_t* t;
+        if (current_task && current_task->priority >= OS_TASK_PRIORITY_HIGH && g_rr_anchor)
+            start = g_rr_anchor;
+        t = start;
         task_t* next_task = start;
         uint32_t best_priority = 0U;
         int found_user = 0;
@@ -382,15 +405,34 @@ void schedule(cpu_state_t* cpu) {
         /* Tranche 4 slice 3: while a task is blocked on an ATA sector RPC,
          * only the atadriver (then the resumed waiter) is run, so no other
          * task can re-enter FAT code whose static buffers are in use. */
+        /* Lot 5: a HIGH driver that ran for an instant (post-syscall yield,
+         * IRQ wake) gives the CPU back to the task it interrupted while that
+         * task's quantum is not spent; the quantum keeps its first stamp.
+         * Without this a shell printing one putc per syscall was cut in the
+         * middle of a line by every other task on each driver turn. */
+        if (current_task && current_task->priority >= OS_TASK_PRIORITY_HIGH &&
+            next_task->priority < OS_TASK_PRIORITY_HIGH && g_rr_anchor &&
+            g_rr_anchor == g_resume_after_high &&
+            g_rr_anchor != next_task && g_rr_anchor->state == TASK_READY &&
+            g_rr_anchor->type == TASK_TYPE_USER && task_sched_allowed(g_rr_anchor) &&
+            (uint32_t)(now - g_rr_anchor->last_scheduled_ticks) < TIMER_PREEMPT_QUANTUM) {
+            next_task = g_rr_anchor;
+            resume_anchor = 1;
+        }
         if (task_sched_only && task_sched_only->state == TASK_READY) {
             next_task = task_sched_only;
+            resume_anchor = 0;
         }
 
         current_task = next_task;
+        if (next_task->type == TASK_TYPE_USER && next_task->priority < OS_TASK_PRIORITY_HIGH) {
+            g_rr_anchor = next_task;
+            g_resume_after_high = NULL;
+        }
     }
 
     current_task->state = TASK_RUNNING;
-    current_task->last_scheduled_ticks = now;
+    if (!resume_anchor) current_task->last_scheduled_ticks = now;
     current_task->switch_count++;
 
     // Mettre à jour le TSS avec la pile noyau de la nouvelle tâche
@@ -408,6 +450,11 @@ void schedule(cpu_state_t* cpu) {
     /* Lot 4 (US-001): PCI config ports only for the live pcidriver. */
     tss_set_pci_io(current_task->type == TASK_TYPE_USER &&
                    pci_live_driver() == (int32_t)current_task->id);
+    /* Lot 5 (US-001): PS/2 and COM1 only for the driver that claimed them. */
+    tss_set_ps2_io(current_task->type == TASK_TYPE_USER &&
+                   devsvc_owner(DEV_PS2) == (int32_t)current_task->id);
+    tss_set_serial_io(current_task->type == TASK_TYPE_USER &&
+                      devsvc_owner(DEV_SERIAL) == (int32_t)current_task->id);
     tss_set_nic_io(current_task->type == TASK_TYPE_USER && nic_owner_pid() != 0 &&
                    nic_owner_ports_open((int32_t)current_task->id,
                                         service_registry_lookup("net-driver")));

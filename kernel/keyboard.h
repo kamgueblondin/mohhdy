@@ -31,5 +31,10 @@ void kbd_put_string(const char *s);
 // Helper function pour afficher un byte en hexadécimal
 void print_hex_byte_serial(uint8_t byte);
 
+/* Lot 5 (US-001): Ring 0 fallback drain and events from the Ring 3 ps2driver. */
+#include "os_syscalls.h"
+uint32_t keyboard_ring0_drain(void);
+void keyboard_apply_event(const os_input_event_t* e);
+
 #endif
 

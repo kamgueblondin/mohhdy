@@ -3,6 +3,7 @@
 #include "timer.h"
 
 extern void write_serial(char c);
+extern void serial_panic_mode(void);
 extern void print_hex_serial(unsigned int n);
 
 // Déclaration pour le nouveau handler
@@ -60,6 +61,8 @@ void fault_handler_c(registers_t *r) {
         fault_kill_user_task(r);
         return;
     }
+    /* Lot 5: the Ring 3 serialdriver will never run again; Ring 0 writes. */
+    serial_panic_mode();
     print_string_serial("\n!!! KERNEL EXCEPTION !!!\n");
     print_string_serial("Interrupt: ");
     print_hex_serial(r->int_no);

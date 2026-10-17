@@ -22,6 +22,7 @@ int shell_collab_line(const char* line);
 #include "osui_gui.h"
 #include "osui_ide.h"
 #include "promptmessage.h"
+#include "grpcwire.h"
 #include "csig.h"
 #include "collab.h"
 #include "../kernel/sha256.h"
@@ -44,6 +45,8 @@ static void pm_sig_digest(const char* src, int len, uint8_t d[32]) {
     sha256_ctx_t h;
     sha256_init(&h); sha256_update(&h, (const uint8_t*)"pmcert1", 7); sha256_update(&h, (const uint8_t*)src, (uint32_t)len); sha256_final(&h, d);
 }
+/* Lot 5 US-060: is this source digest on the local revocation list? */
+static int pm_crl_revoked(const uint8_t d[32]);
 static void pm_sig_path(const char* f, char* out) {
     int k = 0;
     while (f[k] && k < RAMFS_PATH_MAX - 5) { out[k] = f[k]; k++; }
@@ -2911,6 +2914,77 @@ static void pm_copy_prog(pm_program_t* d, const pm_program_t* s) {
 /* pm-check FILE | pm-run FILE | pm-test FILE | pm-doc FILE | pm-disasm FILE
  * pm-debug FILE [LINE] | pm-compile SRC OUT | pm-exec IMG | pm-say PHRASE...
  * pm-version FILE | pm-versions FILE | pm-edit FILE | pm STATEMENT (raw line) */
+/* US-067 partial: one unary gRPC call encoded as real HTTP/2 frames (HPACK
+ * subset, Length-Prefixed-Message, protobuf field 1), served and parsed in
+ * memory. No TCP HTTP/2 connection. */
+static int grpc_wire_handler(const char* path, const char* payload, char* reply, int cap) {
+    int k = 0;
+    const char* h;
+    reply[0] = 0;
+    if (strcmp(path, "/echo.EchoService/SayHello") == 0) {
+        h = "Hello "; while (*h && k < cap - 1) reply[k++] = *h++;
+        while (*payload && k < cap - 1) reply[k++] = *payload++;
+        reply[k] = 0;
+        return 0;
+    }
+    if (strcmp(path, "/status.StatusService/GetStatus") == 0) {
+        h = "p2p_node_active"; while (*h && k < cap - 1) reply[k++] = *h++;
+        reply[k] = 0;
+        return 0;
+    }
+    h = "unimplemented"; while (*h && k < cap - 1) reply[k++] = *h++;
+    reply[k] = 0;
+    return 12;
+}
+static void cmd_grpc_wire(shell_context_t* ctx, char args[][128], int arg_count) {
+    static unsigned char req[512], resp[512];
+    char path[64], msg[160];
+    int n, m, hs = 0, gs = 0, frames = 0, pre;
+    ctx->last_rc = 1;
+    if (arg_count < 2) { print_string("usage: grpc-wire SERVICE METHOD [PAYLOAD]\n"); return; }
+    pre = gw_h2_preface(req, (int)sizeof(req));
+    n = gw_build_request(req, (int)sizeof(req), args[0], args[1], arg_count > 2 ? args[2] : "");
+    if (pre < 0 || n < 0) { print_string("grpc-wire error encode\n"); return; }
+    m = gw_serve(req, n, grpc_wire_handler, resp, (int)sizeof(resp), path, (int)sizeof(path));
+    if (m < 0) { print_string("grpc-wire error serve "); print_int(m); print_string("\n"); return; }
+    if (gw_parse_response(resp, m, &hs, &gs, msg, (int)sizeof(msg), &frames) != GW_OK) {
+        print_string("grpc-wire error parse\n"); return;
+    }
+    print_string("grpc-wire ok path "); print_string(path);
+    print_string(" http "); print_int(hs);
+    print_string(" grpc-status "); print_int(gs);
+    print_string(" frames "); print_int(frames);
+    print_string(" request_bytes "); print_int(n);
+    print_string(" response_bytes "); print_int(m);
+    print_string(" message "); print_string(msg);
+    print_string(" transport=memory\n");
+    ctx->last_rc = gs == 0 ? 0 : 2;
+}
+
+static int pm_crl_revoked(const uint8_t d[32]) {
+    static char crl[400];
+    int n = pm_host_read(0, "/etc/pm_ca.crl", crl, (int)sizeof(crl));
+    return n > 0 && pm_crl_has(crl, n, d);
+}
+/* 0 verified, -1 no CA pub, -2 no FILE.ca record, -3 bad signature. */
+static int pm_ca_check(const char* file, const uint8_t d[32]) {
+    uint8_t pk[CSIG_PK], sig[CSIG_SIG];
+    char pbuf[288], sbuf[160], path_ca[RAMFS_PATH_MAX];
+    int n, m, k = 0;
+    n = pm_host_read(0, "/etc/pm_ca.pub", pbuf, (int)sizeof(pbuf) - 1);
+    if (n < 10 + 2 * CSIG_PK || strncmp(pbuf, "pmca1 pub=", 10) != 0) return -1;
+    pbuf[n] = 0;
+    if (pm_hex_load(pbuf + 10, CSIG_PK, pk) != 0) return -1;
+    while (file[k] && k < RAMFS_PATH_MAX - 4) { path_ca[k] = file[k]; k++; }
+    path_ca[k++] = '.'; path_ca[k++] = 'c'; path_ca[k++] = 'a'; path_ca[k] = 0;
+    m = pm_host_read(0, path_ca, sbuf, (int)sizeof(sbuf) - 1);
+    if (m < 13 + 2 * CSIG_SIG || strncmp(sbuf, "pmca1sig sig=", 13) != 0) return -2;
+    sbuf[m] = 0;
+    if (pm_hex_load(sbuf + 13, CSIG_SIG, sig) != 0) return -3;
+    if (!csig_pk_valid(pk) || !csig_verify(pk, d, 32, sig)) return -3;
+    return 0;
+}
+
 static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], int arg_count) {
     int len = 0, st;
     g_pm_ctx = ctx;
@@ -3086,12 +3160,25 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         while (pre[k]) { src[k] = pre[k]; k++; }
         while (args[0][j] && k < RAMFS_PATH_MAX - 1) src[k++] = args[0][j++];
         src[k] = 0;
+        const char* ca = "unsigned";
         if (pm_load_source(tag, src, &len) != 0) return;
         if (pm_compile_report(tag, len, &g_pm_tmp) != 0) return;
+        {
+            /* US-060 partial: a revoked source is refused; a local CA record
+             * NAME.ca, when present, must verify against /etc/pm_ca.pub. */
+            uint8_t d[32];
+            int rc;
+            pm_sig_digest(g_pm_src, len, d);
+            if (pm_crl_revoked(d)) { print_string(tag); print_string(" refused "); print_string(args[0]); print_string(" revoked\n"); return; }
+            rc = pm_ca_check(args[0], d);
+            if (rc == -3) { print_string(tag); print_string(" refused "); print_string(args[0]); print_string(" signature invalid\n"); return; }
+            if (rc == 0) ca = "verified";
+        }
         if (pm_host_write(0, args[0], g_pm_src, len, 0) < 0) { print_string(tag); print_string(" error write failed\n"); return; }
         print_string(tag); print_string(" ok "); print_string(args[0]);
         print_string(" bytes "); print_int(len);
         print_string(" checksum "); pm_print_hex(pm_checksum((const unsigned char*)g_pm_src, len));
+        print_string(" ca="); print_string(ca);
         print_string("\n");
         ctx->last_rc = 0;
         return;
@@ -3137,6 +3224,15 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         return;
     }
     if (pm_load_source(command, args[0], &len) != 0) return;
+    if (strcmp(command, "pm-assist") == 0) {
+        /* US-058 (partial): rule based assistant, no language model. */
+        static char abuf[1024];
+        int hints = 0;
+        st = pm_assist(g_pm_src, len, &g_pm_host, abuf, (int)sizeof(abuf), &hints);
+        print_string(abuf);
+        ctx->last_rc = st == PM_OK ? 0 : 1;
+        return;
+    }
     if (strcmp(command, "pm-version") == 0) {
         char path[RAMFS_PATH_MAX]; int v, k;
         for (v = 1; v <= 9; v++) {
@@ -3155,6 +3251,21 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         return;
     }
     if (pm_compile_report(command, len, &g_pm_tmp) != 0) return;
+    if (strcmp(command, "pm-cross") == 0) {
+        /* US-055 (partial): PMC1 bytecode to a portable C99 program. The
+         * text goes to the console between markers (the file store caps a
+         * file at 1 KB); the host build of it is checked by unit tests. */
+        static char cbuf[16384];
+        int instr = 0, n = pm_cross_c(&g_pm_tmp, cbuf, (int)sizeof(cbuf), &instr);
+        if (n < 0) { print_string("pm-cross error program too large for the C target\n"); return; }
+        print_string("pm-cross begin\n");
+        print_string(cbuf);
+        print_string("pm-cross end\n");
+        print_string("pm-cross ok target=c99 bytes="); print_int(n);
+        print_string(" instructions="); print_int(instr); print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
     if (strcmp(command, "pm-check") == 0) {
         print_string("pm-check ok "); print_string(args[0]);
         print_string(" statements "); print_int(g_pm_tmp.statements);
@@ -3188,23 +3299,34 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         return;
     }
     if (strcmp(command, "pm-ca-verify") == 0) {
-        uint8_t pk[CSIG_PK], sig[CSIG_SIG], d[32];
-        char pbuf[288], sbuf[160], path_ca[RAMFS_PATH_MAX];
-        int n, m, k = 0;
+        uint8_t d[32];
+        int rc;
         if (pm_load_source("pm-ca-verify", args[0], &len) != 0) return;
-        n = pm_host_read(0, "/etc/pm_ca.pub", pbuf, (int)sizeof(pbuf) - 1);
-        if (n < 10 + 2 * CSIG_PK || strncmp(pbuf, "pmca1 pub=", 10) != 0) { print_string("pm-ca-verify error no CA pub (run pm-ca-init)\n"); return; }
-        pbuf[n] = 0;
-        if (pm_hex_load(pbuf + 10, CSIG_PK, pk) != 0) { print_string("pm-ca-verify error bad CA pub\n"); return; }
-        while (args[0][k] && k < RAMFS_PATH_MAX - 4) { path_ca[k] = args[0][k]; k++; }
-        path_ca[k++] = '.'; path_ca[k++] = 'c'; path_ca[k++] = 'a'; path_ca[k] = 0;
-        m = pm_host_read(0, path_ca, sbuf, (int)sizeof(sbuf) - 1);
-        if (m < 13 + 2 * CSIG_SIG || strncmp(sbuf, "pmca1sig sig=", 13) != 0) { print_string("pm-ca-verify error no CA cert record\n"); return; }
-        sbuf[m] = 0;
-        if (pm_hex_load(sbuf + 13, CSIG_SIG, sig) != 0) { print_string("pm-ca-verify error bad CA cert record\n"); return; }
         pm_sig_digest(g_pm_src, len, d);
-        if (!csig_pk_valid(pk) || !csig_verify(pk, d, 32, sig)) { print_string("pm-ca-verify error signature invalid\n"); return; }
+        if (pm_crl_revoked(d)) { print_string("pm-ca-verify error revoked "); print_string(args[0]); print_string("\n"); return; }
+        rc = pm_ca_check(args[0], d);
+        if (rc == -1) { print_string("pm-ca-verify error no CA pub (run pm-ca-init)\n"); return; }
+        if (rc == -2) { print_string("pm-ca-verify error no CA cert record\n"); return; }
+        if (rc != 0) { print_string("pm-ca-verify error signature invalid\n"); return; }
         print_string("pm-ca-verify ok trust_chain verified "); print_string(args[0]); print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (strcmp(command, "pm-ca-revoke") == 0) {
+        /* US-060 partial: local revocation list /etc/pm_ca.crl. */
+        static char crl[400];
+        uint8_t d[32];
+        int n;
+        if (pm_load_source("pm-ca-revoke", args[0], &len) != 0) return;
+        pm_sig_digest(g_pm_src, len, d);
+        n = pm_host_read(0, "/etc/pm_ca.crl", crl, (int)sizeof(crl));
+        if (n < 0) n = 0;
+        n = pm_crl_add(crl, n, 384, d);
+        if (n < 0) { print_string("pm-ca-revoke error crl full\n"); return; }
+        (void)sys_mkdir("/etc");
+        if (pm_host_write(0, "/etc/pm_ca.crl", crl, n, 0) < 0) { print_string("pm-ca-revoke error write failed\n"); return; }
+        print_string("pm-ca-revoke ok "); print_string(args[0]);
+        print_string(" entries "); print_int(n / (8 + 2 * PM_CRL_DIGEST)); print_string(" /etc/pm_ca.crl\n");
         ctx->last_rc = 0;
         return;
     }
@@ -3318,10 +3440,10 @@ static void cmd_pm_inline(shell_context_t* ctx, const char* stmt) {
 
 static int is_builtin(const char* cmd) {
     static const char* names[] = {
-        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
+        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "grpc-wire",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -5017,6 +5139,33 @@ static void cmd_lspci(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string(" end\n");
 }
 
+/* Lot 5 (US-001): Ring 3 PS/2 and COM1 driver counters. */
+static void cmd_devices(shell_context_t* ctx, char args[][128], int arg_count) {
+    os_device_status_t st;
+    int rc;
+    (void)ctx; (void)args;
+    if (arg_count != 0) { print_error("Usage: devices"); return; }
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_DEVICE_SERVICE), "b"(OS_DEV_OP_STATUS),
+                 "c"((uint32_t)&st), "d"(0), "S"(0) : "memory");
+    if (rc != 0) { print_string("devices: statut indisponible rc "); print_int(rc); print_string("\n"); return; }
+    print_string("devices ok ps2 owner "); print_int(st.ps2_owner);
+    print_string(" handed "); print_uint(st.ps2_handed_off);
+    print_string(" irqs "); print_uint(st.ps2_irqs);
+    print_string(" events "); print_uint(st.ps2_events);
+    print_string(" ring0 "); print_uint(st.ps2_ring0_bytes);
+    print_string(" stalls "); print_uint(st.ps2_stalls);
+    print_string(" respawns "); print_uint(st.ps2_respawns);
+    print_string(" serial owner "); print_int(st.serial_owner);
+    print_string(" handed "); print_uint(st.serial_handed_off);
+    print_string(" ring3 "); print_uint(st.serial_ring3_bytes);
+    print_string(" ring0 "); print_uint(st.serial_ring0_bytes);
+    print_string(" stalls "); print_uint(st.serial_stalls);
+    print_string(" overflows "); print_uint(st.serial_overflows);
+    print_string(" rx "); print_uint(st.serial_rx_bytes);
+    print_string(" respawns "); print_uint(st.serial_respawns);
+    print_string(" end\n");
+}
+
 static void cmd_pci_rescan(shell_context_t* ctx, char args[][128], int arg_count) {
     os_ipc_payload_t payload;
     int target, rc;
@@ -6514,6 +6663,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
     } else if (strcmp(command, "cat") == 0) {
         cmd_cat(ctx, args, arg_count);
         return 1;
+    } else if (strcmp(command, "grpc-wire") == 0) {
+        cmd_grpc_wire(ctx, args, arg_count);
+        return 1;
     } else if (strncmp(command, "pm-", 3) == 0 &&
                (strcmp(command, "pm-check") == 0 || strcmp(command, "pm-run") == 0 ||
                 strcmp(command, "pm-test") == 0 || strcmp(command, "pm-doc") == 0 ||
@@ -6523,7 +6675,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
                 strcmp(command, "pm-versions") == 0 || strcmp(command, "pm-edit") == 0 || strcmp(command, "pm-ide") == 0 ||
                 strcmp(command, "pm-catalog") == 0 || strcmp(command, "pm-catalog-search") == 0 || strcmp(command, "pm-catalog-fetch") == 0 || strcmp(command, "pm-install") == 0 ||
                 strcmp(command, "pm-certify") == 0 || strcmp(command, "pm-verify") == 0 ||
-                strcmp(command, "pm-ca-init") == 0 || strcmp(command, "pm-ca-sign") == 0 || strcmp(command, "pm-ca-verify") == 0)) {
+                strcmp(command, "pm-ca-init") == 0 || strcmp(command, "pm-ca-sign") == 0 || strcmp(command, "pm-ca-verify") == 0 ||
+                strcmp(command, "pm-cross") == 0 || strcmp(command, "pm-assist") == 0 ||
+                strcmp(command, "pm-ca-revoke") == 0)) {
         cmd_pm(ctx, command, args, arg_count);
         return 1;
     } else if (strcmp(command, "stat") == 0) {
@@ -6714,6 +6868,8 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
     } else if (strcmp(command, "ata-status") == 0) {
         cmd_ata_status(ctx, args, arg_count);
         return 1;
+    } else if (strcmp(command, "devices") == 0) {
+        cmd_devices(ctx, args, arg_count);
     } else if (strcmp(command, "lspci") == 0) {
         cmd_lspci(ctx, args, arg_count);
     } else if (strcmp(command, "pci-rescan") == 0) {

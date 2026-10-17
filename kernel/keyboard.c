@@ -12,6 +12,9 @@ extern unsigned char inb(unsigned short port);
 extern void outb(unsigned short port, unsigned char value);
 extern void print_char_vga(char c, int x, int y, char color);
 extern void write_serial(char c);
+#include "device_service.h"
+/* Lot 5 (US-001): glue in syscall.c (wakes the Ring 3 ps2driver). */
+extern void device_ps2_irq_notify(void);
 extern int vga_x, vga_y;
 
 // Buffer clavier hybride (interruption + polling)
@@ -225,7 +228,8 @@ void keyboard_poll_check() {
     // Polling plus agressif en console si pas d'IRQ, mais avec moins de pauses
     int poll_freq = (debug_interrupt_count > 0) ? 20000 : 500; // fréquence d'essai
     
-    if (poll_counter % poll_freq == 0) {
+    /* Lot 5: no Ring 0 port polling while the Ring 3 ps2driver is live. */
+    if (devsvc_owner(DEV_PS2) <= 0 && poll_counter % poll_freq == 0) {
         /* Status check and data read must be atomic against IRQ1: if the
          * IRQ handler consumed the byte between them, port 0x60 returns the
          * same scancode again and the key is doubled (CI: 'prod-innject'). */
@@ -287,22 +291,10 @@ void keyboard_poll_check() {
     }
 }
 
-// Handler d'interruption optimisé
-void keyboard_interrupt_handler() {
-    debug_interrupt_count++;
-    usb_tablet_poll();
-    
-    // Debug interruptions
-    if (debug_interrupt_count <= 3) {
-        print_string_serial("KBD_IRQ: #");
-        write_serial('0' + (debug_interrupt_count % 10));
-        print_string_serial("\n");
-    }
-    
-    uint8_t status = inb(0x64);
-    if (!(status & 0x01)) return; // Pas de données
-    
-    uint8_t scancode = inb(0x60);
+/* Ring 0 handling of one byte read from port 0x60 (status from 0x64):
+ * before the Ring 3 ps2driver claimed the controller, after its death and
+ * on a stall (Lot 5, US-001). */
+static void kbd_ring0_byte(uint8_t status, uint8_t scancode) {
     if (status & 0x20) {
         mouse_handle_byte(scancode);
         return;
@@ -341,6 +333,60 @@ void keyboard_interrupt_handler() {
         } else if (vga_desktop_active() && scancode == 0x01) {
             kbd_put_char((char)OS_VGA_KEY_ESC);
         }
+    }
+}
+
+// Handler d'interruption optimisé
+void keyboard_interrupt_handler() {
+    debug_interrupt_count++;
+    usb_tablet_poll();
+    
+    // Debug interruptions
+    if (debug_interrupt_count <= 3) {
+        print_string_serial("KBD_IRQ: #");
+        write_serial('0' + (debug_interrupt_count % 10));
+        print_string_serial("\n");
+    }
+
+    /* Lot 5: the Ring 3 ps2driver owns ports 0x60/0x64. Count and wake it;
+     * the byte stays in the controller until the driver reads it. */
+    if (devsvc_owner(DEV_PS2) > 0) {
+        device_ps2_irq_notify();
+        return;
+    }
+    
+    uint8_t status = inb(0x64);
+    if (!(status & 0x01)) return; // Pas de données
+    
+    uint8_t scancode = inb(0x60);
+    kbd_ring0_byte(status, scancode);
+}
+
+/* Watchdog takeover (driver not scheduled for DEVICE_STALL_TICKS, e.g. a
+ * long syscall such as a Ring 0 GPT-2 generation waiting for ESC). */
+uint32_t keyboard_ring0_drain(void) {
+    uint32_t n = 0;
+    while (n < 16U) {
+        uint8_t status = inb(0x64);
+        if (!(status & 0x01)) break;
+        kbd_ring0_byte(status, inb(0x60));
+        n++;
+    }
+    return n;
+}
+
+/* Event decoded by the Ring 3 ps2driver (userspace/ps2_decode.c). */
+void keyboard_apply_event(const os_input_event_t* e) {
+    if (!e) return;
+    if (e->type == OS_INPUT_EV_CHAR) {
+        kbd_put_char((char)e->code);
+    } else if (e->type == OS_INPUT_EV_ESC) {
+        if (syscall_ai_cancel_key()) return;
+        if (vga_desktop_active()) kbd_put_char((char)OS_VGA_KEY_ESC);
+    } else if (e->type == OS_INPUT_EV_EXT) {
+        (void)kbd_handle_extended(e->code);
+    } else if (e->type == OS_INPUT_EV_MOUSE) {
+        gfx_desktop_move_mouse((int)e->dx, -(int)e->dy, (uint8_t)(e->code & 0x07U));
     }
 }
 

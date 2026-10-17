@@ -900,3 +900,321 @@ int pm_disasm(const pm_program_t* prog, char* out, int cap) {
     }
     return s_len(out);
 }
+
+/* ------------------------------------------------- US-055 cross compiler */
+/* Lot 5: PMC1 bytecode -> one portable C99 translation unit. Every
+ * instruction becomes a labelled statement, jumps become goto, the value
+ * stack and the semantics are those of vm_exec (same step budget, same path
+ * rule, same "pm> " output). system.memory reads MOHHDY_MEM on the target.
+ * One target only (C99 source); no native code generator. */
+typedef struct { char* o; int n, cap, over; } pm_xo_t;
+static void xo_s(pm_xo_t* x, const char* s) {
+    while (*s) {
+        if (x->n >= x->cap - 1) { x->over = 1; return; }
+        x->o[x->n++] = *s++;
+    }
+    x->o[x->n] = 0;
+}
+static void xo_i(pm_xo_t* x, int v) { char n[12]; s_int(n, v, 12); xo_s(x, n); }
+
+static const char k_pm_c_prelude[] =
+    "/* PromptMessage -> C99 (pm-cross, MOHHDY). Build: cc -std=c99 -o app app.c\n"
+    "   Run: ./app (main program) or ./app \"phrase\" (trigger). system.memory\n"
+    "   reads the MOHHDY_MEM environment variable (default 0). */\n"
+    "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n"
+    "typedef struct { int s, n; char t[192]; } V;\n"
+    "static V S[12]; static int sp, xf, trig; static unsigned long steps;\n"
+    "static int die(const char* m) { fflush(stdout); fprintf(stderr, \"pm error: %s\\n\", m); exit(3); return 3; }\n"
+    "static void txt(const V* v, char* o) { if (v->s) { strncpy(o, v->t, 191); o[191] = 0; } else sprintf(o, \"%d\", v->n); }\n"
+    "static int tru(const V* v) { return v->s ? v->t[0] != 0 : v->n != 0; }\n"
+    "static int low(int c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }\n"
+    "static int ieq(const char* a, const char* b) { while (*a && low(*a) == low(*b)) { a++; b++; } return *a == *b; }\n"
+    "static V* top(void) { if (sp < 1) die(\"stack underflow\"); return &S[sp - 1]; }\n"
+    "static V* push(void) { if (sp >= 12) die(\"stack overflow\"); return &S[sp++]; }\n"
+    "static void pi(int n) { V* v = push(); v->s = 0; v->n = n; }\n"
+    "static void sysmem(void) { const char* e = getenv(\"MOHHDY_MEM\"); pi(e ? atoi(e) : 0); }\n"
+    "static void add(void) { V *l, *r; char a[192], b[192]; if (sp < 2) die(\"stack underflow\"); l = &S[sp - 2]; r = &S[sp - 1];\n"
+    "  if (!l->s && !r->s) l->n = l->n + r->n; else { txt(l, a); txt(r, b); strncat(a, b, 191 - strlen(a)); l->s = 1; strcpy(l->t, a); } sp--; }\n"
+    "static void cmp(int c) { V *l, *r; char a[192], b[192]; int x; if (sp < 2) die(\"stack underflow\"); l = &S[sp - 2]; r = &S[sp - 1];\n"
+    "  if (c == 6) { txt(l, a); txt(r, b); x = strstr(a, b) != 0; }\n"
+    "  else if (!l->s && !r->s) { int p = l->n, q = r->n; x = c == 0 ? p == q : c == 1 ? p != q : c == 2 ? p < q : c == 3 ? p > q : c == 4 ? p <= q : p >= q; }\n"
+    "  else { txt(l, a); txt(r, b); if (c == 0) x = strcmp(a, b) == 0; else if (c == 1) x = strcmp(a, b) != 0; else x = die(\"order compare on text\"); }\n"
+    "  l->s = 0; l->n = x; sp--; }\n"
+    "static void logic(int both) { V *l, *r; int x, y; if (sp < 2) die(\"stack underflow\"); l = &S[sp - 2]; r = &S[sp - 1];\n"
+    "  x = tru(l); y = tru(r); l->s = 0; l->n = both ? (x && y) : (x || y); sp--; }\n"
+    "static void not_(void) { V* v = top(); int a = !tru(v); v->s = 0; v->n = a; }\n"
+    "static void fexists(void) { V* v = top(); char p[192]; FILE* f; txt(v, p); f = fopen(p, \"rb\"); v->s = 0; v->n = f != 0; if (f) fclose(f); }\n"
+    "static int jz(void) { V* v = top(); sp--; return !tru(v); }\n"
+    "static void print_(void) { char t[192]; txt(top(), t); printf(\"pm> %s\\n\", t); sp--; }\n"
+    "static int allowed(const char* p) { return p[0] && !strstr(p, \"..\") && strncmp(p, \"/bin/\", 5) && strncmp(p, \"/models/\", 8)\n"
+    "  && strncmp(p, \"bin/\", 4) && strncmp(p, \"models/\", 7); }\n"
+    "static void write_(int app) { char p[192], c[193]; FILE* f; size_t n; if (sp < 2) die(\"stack underflow\"); txt(&S[sp - 2], p); txt(&S[sp - 1], c); sp -= 2;\n"
+    "  if (!allowed(p)) die(\"path denied\"); n = strlen(c); if (n < 191) { c[n++] = '\\n'; c[n] = 0; }\n"
+    "  f = fopen(p, app ? \"ab\" : \"wb\"); if (!f || fwrite(c, 1, n, f) != n) die(\"write failed\"); fclose(f); }\n"
+    "static void show(void) { char p[192], b[192]; FILE* f; int n, i, s = 0; txt(top(), p); sp--; f = fopen(p, \"rb\"); if (!f) die(\"file not found\");\n"
+    "  n = (int)fread(b, 1, 191, f); fclose(f); b[n] = 0;\n"
+    "  for (i = 0; i <= n; i++) if (b[i] == '\\n' || b[i] == 0) { char c0 = b[i]; b[i] = 0; if (i > s || c0 == '\\n') printf(\"pm> %s\\n\", b + s); s = i + 1; } }\n"
+    "static void expect(int line) { V* v = top(); if (!tru(v)) { xf++; printf(\"pm-expect failed line %d\\n\", line); } sp--; }\n"
+    "static int fin(void) { fflush(stdout); return xf ? 2 : 0; }\n"
+    "#define T if (++steps > 20000UL) die(\"step budget exhausted\");\n";
+
+int pm_cross_c(const pm_program_t* prog, char* out, int cap, int* instructions) {
+    pm_xo_t x;
+    int pc = 0, i, count = 0;
+    if (instructions) *instructions = 0;
+    if (!prog || !out || cap < 64 || prog->code_len == 0) return PM_ERR_LIMIT;
+    x.o = out; x.n = 0; x.cap = cap; x.over = 0; out[0] = 0;
+    xo_s(&x, k_pm_c_prelude);
+    xo_s(&x, "static V R["); xo_i(&x, prog->nvars ? prog->nvars : 1); xo_s(&x, "];\n");
+    xo_s(&x, "static const char P[] = \"");
+    for (i = 0; i < prog->pool_len; i++) {
+        unsigned char c = (unsigned char)prog->pool[i];
+        if (c >= 32 && c < 127 && c != '"' && c != '\\' && c != '?') {
+            char one[2]; one[0] = (char)c; one[1] = 0; xo_s(&x, one);
+        } else {
+            char esc[5];
+            esc[0] = '\\'; esc[1] = (char)('0' + ((c >> 6) & 7)); esc[2] = (char)('0' + ((c >> 3) & 7));
+            esc[3] = (char)('0' + (c & 7)); esc[4] = 0;
+            xo_s(&x, esc);
+        }
+        if ((i & 63) == 63) xo_s(&x, "\"\n  \"");
+    }
+    xo_s(&x, "\";\n");
+    xo_s(&x, "static void ps(int a) { V* v = push(); v->s = 1; strncpy(v->t, P + a, 191); v->t[191] = 0; }\n");
+    xo_s(&x, "static void ld(int a) { *push() = R[a]; }\n");
+    xo_s(&x, "static void st(int a) { R[a] = *top(); sp--; }\n");
+    /* `./app PHRASE` mirrors `pm-run` followed by `pm-say PHRASE`: the
+     * main program runs first, so the trigger sees its variables. */
+    xo_s(&x, "static const char* phrase;\n");
+    xo_s(&x, "int main(int argc, char** argv) {\n  if (argc > 1) phrase = argv[1];\n  goto L0;\n");
+    while (pc < prog->code_len) {
+        int op = prog->code[pc], at = pc, a = 0;
+        if (op >= OP_COUNT) return PM_ERR_IMAGE;
+        pc++;
+        if (op == OP_PUSHI) { if (pc + 4 > prog->code_len) return PM_ERR_IMAGE; a = rd32(prog->code + pc); pc += 4; }
+        else if (op == OP_LINE || op == OP_PUSHS || op == OP_JMP || op == OP_JZ || op == OP_EXPECT) {
+            if (pc + 2 > prog->code_len) return PM_ERR_IMAGE;
+            a = rd16(prog->code + pc); pc += 2;
+        } else if (op == OP_LOAD || op == OP_STORE || op == OP_CMP) {
+            if (pc + 1 > prog->code_len) return PM_ERR_IMAGE;
+            a = prog->code[pc++];
+        }
+        if ((op == OP_JMP || op == OP_JZ) && a >= prog->code_len) return PM_ERR_IMAGE;
+        if ((op == OP_LOAD || op == OP_STORE) && a >= prog->nvars) return PM_ERR_IMAGE;
+        if (op == OP_PUSHS && a >= prog->pool_len) return PM_ERR_IMAGE;
+        count++;
+        xo_s(&x, "L"); xo_i(&x, at); xo_s(&x, ": T ");
+        switch (op) {
+        case OP_HALT: xo_s(&x, "if (phrase && !trig) goto DISPATCH; return fin();"); break;
+        case OP_RET: xo_s(&x, "if (!trig) die(\"ret outside trigger\"); return fin();"); break;
+        case OP_LINE: xo_s(&x, "; /* line "); xo_i(&x, a); xo_s(&x, " */"); break;
+        case OP_PUSHI: xo_s(&x, "pi("); xo_i(&x, a); xo_s(&x, ");"); break;
+        case OP_PUSHS: xo_s(&x, "ps("); xo_i(&x, a); xo_s(&x, ");"); break;
+        case OP_LOAD: xo_s(&x, "ld("); xo_i(&x, a); xo_s(&x, ");"); break;
+        case OP_STORE: xo_s(&x, "st("); xo_i(&x, a); xo_s(&x, ");"); break;
+        case OP_SYSMEM: xo_s(&x, "sysmem();"); break;
+        case OP_ADD: xo_s(&x, "add();"); break;
+        case OP_CMP: xo_s(&x, "cmp("); xo_i(&x, a); xo_s(&x, ");"); break;
+        case OP_AND: xo_s(&x, "logic(1);"); break;
+        case OP_OR: xo_s(&x, "logic(0);"); break;
+        case OP_NOT: xo_s(&x, "not_();"); break;
+        case OP_FEXISTS: xo_s(&x, "fexists();"); break;
+        case OP_JMP: xo_s(&x, "goto L"); xo_i(&x, a); xo_s(&x, ";"); break;
+        case OP_JZ: xo_s(&x, "if (jz()) goto L"); xo_i(&x, a); xo_s(&x, ";"); break;
+        case OP_PRINT: xo_s(&x, "print_();"); break;
+        case OP_WRITE: xo_s(&x, "write_(0);"); break;
+        case OP_APPEND: xo_s(&x, "write_(1);"); break;
+        case OP_SHOW: xo_s(&x, "show();"); break;
+        case OP_EXPECT: xo_s(&x, "expect("); xo_i(&x, a); xo_s(&x, ");"); break;
+        default: return PM_ERR_IMAGE;
+        }
+        xo_s(&x, "\n");
+        if (x.over) return PM_ERR_LIMIT;
+    }
+    xo_s(&x, "  if (phrase && !trig) goto DISPATCH;\n  return fin();\nDISPATCH:\n  trig = 1;\n");
+    for (i = 0; i < prog->ntrig; i++) {
+        xo_s(&x, "  if (ieq(phrase, P + "); xo_i(&x, prog->triggers[i].phrase);
+        xo_s(&x, ")) goto L"); xo_i(&x, prog->triggers[i].addr); xo_s(&x, ";\n");
+    }
+    xo_s(&x, "  return die(\"no trigger\");\n}\n");
+    if (x.over) return PM_ERR_LIMIT;
+    if (instructions) *instructions = count;
+    return x.n;
+}
+
+/* ------------------------------------------- US-058 development assistant */
+/* Lot 5: local, rule based (no language model). On a compile error it
+ * names the nearest keyword (edit distance <= 2) to the first word of the
+ * failing line, and points out a missing `then`, `to` or `times`; on a
+ * clean program it lints: variables set but never read, `if` without
+ * `else` writing files, triggers without output. */
+static const char* const k_pm_keywords[] = {
+    "print", "say", "set", "to", "create", "file", "with", "content", "append", "show",
+    "expect", "stop", "use", "if", "then", "else", "end", "repeat", "times", "when",
+    "user", "says", 0
+};
+
+static int pm_edit_distance(const char* a, int al, const char* b) {
+    int bl = s_len(b), i, j, prev[24], cur[24];
+    if (al > 22 || bl > 22) return 99;
+    for (j = 0; j <= bl; j++) prev[j] = j;
+    for (i = 1; i <= al; i++) {
+        cur[0] = i;
+        for (j = 1; j <= bl; j++) {
+            int c = prev[j - 1] + (lower(a[i - 1]) == b[j - 1] ? 0 : 1);
+            if (prev[j] + 1 < c) c = prev[j] + 1;
+            if (cur[j - 1] + 1 < c) c = cur[j - 1] + 1;
+            cur[j] = c;
+        }
+        for (j = 0; j <= bl; j++) prev[j] = cur[j];
+    }
+    return prev[bl];
+}
+
+/* line `want` (1-based) of src into buf */
+static void pm_src_line(const char* src, int len, int want, char* buf, int cap) {
+    int i = 0, line = 1, k = 0;
+    buf[0] = 0;
+    while (i < len && line < want) { if (src[i] == '\n') line++; i++; }
+    while (i < len && src[i] != '\n' && k < cap - 1) buf[k++] = src[i++];
+    buf[k] = 0;
+}
+
+static int pm_word_in(const char* line, const char* w) {
+    int i = 0, n = s_len(w);
+    while (line[i]) {
+        int j;
+        while (line[i] == ' ' || line[i] == '\t') i++;
+        for (j = 0; j < n && lower(line[i + j]) == w[j]; j++) {}
+        if (j == n && (line[i + j] == 0 || line[i + j] == ' ' || line[i + j] == '\t')) return 1;
+        while (line[i] && line[i] != ' ' && line[i] != '\t') {
+            if (line[i] == '"') { i++; while (line[i] && line[i] != '"') i++; if (line[i]) i++; }
+            else i++;
+        }
+    }
+    return 0;
+}
+
+int pm_assist(const char* src, int len, const pm_host_t* host, char* out, int cap, int* hints) {
+    static pm_program_t prog;
+    char line[PM_VAL_MAX], n[12];
+    int st, count = 0;
+    if (!out || cap <= 0) return PM_ERR_LIMIT;
+    out[0] = 0;
+    st = pm_compile(src, len, &prog, host);
+    if (st != PM_OK) {
+        int s = 0, e, k, best = -1, bestd = 3;
+        s_cat(out, "pm-assist error line ", cap); s_int(n, prog.err_line, 12); s_cat(out, n, cap);
+        s_cat(out, ": ", cap); s_cat(out, prog.err, cap); s_cat(out, "\n", cap);
+        pm_src_line(src, len, prog.err_line, line, (int)sizeof(line));
+        while (line[s] == ' ' || line[s] == '\t') s++;
+        e = s;
+        while (line[e] && line[e] != ' ' && line[e] != '\t') e++;
+        for (k = 0; k_pm_keywords[k]; k++) {
+            int d = pm_edit_distance(line + s, e - s, k_pm_keywords[k]);
+            if (d < bestd) { bestd = d; best = k; }
+        }
+        if (best >= 0 && bestd > 0) {
+            s_cat(out, "pm-assist hint: did you mean '", cap); s_cat(out, k_pm_keywords[best], cap);
+            s_cat(out, "' instead of '", cap);
+            { char w[24]; int m = e - s < 23 ? e - s : 23; for (k = 0; k < m; k++) w[k] = line[s + k]; w[m] = 0; s_cat(out, w, cap); }
+            s_cat(out, "'\n", cap);
+            count++;
+        }
+        if ((pm_word_in(line, "if") || pm_word_in(line, "when")) && !pm_word_in(line, "then")) {
+            s_cat(out, "pm-assist hint: add 'then' after the condition\n", cap); count++;
+        }
+        if (pm_word_in(line, "set") && !pm_word_in(line, "to") && !s_has(line, "=")) {
+            s_cat(out, "pm-assist hint: write 'set NAME to VALUE'\n", cap); count++;
+        }
+        if (pm_word_in(line, "repeat") && !pm_word_in(line, "times")) {
+            s_cat(out, "pm-assist hint: write 'repeat N times'\n", cap); count++;
+        }
+        if (count == 0) { s_cat(out, "pm-assist hint: check quotes and the block 'end' lines\n", cap); count++; }
+        if (hints) *hints = count;
+        return PM_ERR_SYNTAX;
+    }
+    {   /* lint: variables set but never read (LOAD) */
+        int used[PM_VARS], v, pc = 0;
+        for (v = 0; v < PM_VARS; v++) used[v] = 0;
+        while (pc < prog.code_len) {
+            int op = prog.code[pc++];
+            if (op == OP_PUSHI) pc += 4;
+            else if (op == OP_LINE || op == OP_PUSHS || op == OP_JMP || op == OP_JZ || op == OP_EXPECT) pc += 2;
+            else if (op == OP_LOAD) { if (prog.code[pc] < PM_VARS) used[prog.code[pc]] = 1; pc++; }
+            else if (op == OP_STORE || op == OP_CMP) pc++;
+        }
+        for (v = 0; v < prog.nvars; v++) {
+            if (prog.vars[v][0] == '#' || used[v]) continue;
+            s_cat(out, "pm-assist lint: variable ", cap); s_cat(out, prog.vars[v], cap);
+            s_cat(out, " is set but never read\n", cap);
+            count++;
+        }
+    }
+    {   /* lint: triggers whose code never prints or writes before RET */
+        int t;
+        for (t = 0; t < prog.ntrig; t++) {
+            int pc = prog.triggers[t].addr, effect = 0;
+            while (pc < prog.code_len) {
+                int op = prog.code[pc++];
+                if (op == OP_PRINT || op == OP_WRITE || op == OP_APPEND || op == OP_SHOW) effect = 1;
+                if (op == OP_RET || op == OP_HALT) break;
+                if (op == OP_PUSHI) pc += 4;
+                else if (op == OP_LINE || op == OP_PUSHS || op == OP_JMP || op == OP_JZ || op == OP_EXPECT) pc += 2;
+                else if (op == OP_LOAD || op == OP_STORE || op == OP_CMP) pc++;
+            }
+            if (!effect) {
+                s_cat(out, "pm-assist lint: trigger \"", cap); s_cat(out, prog.pool + prog.triggers[t].phrase, cap);
+                s_cat(out, "\" has no visible effect\n", cap);
+                count++;
+            }
+        }
+    }
+    s_cat(out, "pm-assist ok statements ", cap); s_int(n, prog.statements, 12); s_cat(out, n, cap);
+    s_cat(out, " hints ", cap); s_int(n, count, 12); s_cat(out, n, cap); s_cat(out, " engine=rules\n", cap);
+    if (hints) *hints = count;
+    return PM_OK;
+}
+
+/* ------------------------------------------- US-060 revocation list (CRL) */
+/* Lot 5: local revocation list for the local PromptMessage CA. One line
+ * per revoked source, "pmcrl1 <32 hex>\n", the first 16 bytes of the
+ * pm_sig_digest of the revoked source. Local file, no distribution. */
+static int crl_hex(const unsigned char* d, char* out) {
+    int i;
+    for (i = 0; i < PM_CRL_DIGEST; i++) {
+        out[2 * i] = "0123456789abcdef"[d[i] >> 4];
+        out[2 * i + 1] = "0123456789abcdef"[d[i] & 15];
+    }
+    return 2 * PM_CRL_DIGEST;
+}
+
+int pm_crl_has(const char* crl, int len, const unsigned char* digest) {
+    char want[2 * PM_CRL_DIGEST];
+    int i = 0, k;
+    if (!crl || len <= 0 || !digest) return 0;
+    crl_hex(digest, want);
+    while (i + 7 + 2 * PM_CRL_DIGEST <= len) {
+        int match = 1;
+        const char* tag = "pmcrl1 ";
+        for (k = 0; k < 7; k++) if (crl[i + k] != tag[k]) { match = 0; break; }
+        if (match) {
+            for (k = 0; k < 2 * PM_CRL_DIGEST; k++) if (crl[i + 7 + k] != want[k]) { match = 0; break; }
+            if (match) return 1;
+        }
+        while (i < len && crl[i] != '\n') i++;
+        i++;
+    }
+    return 0;
+}
+
+int pm_crl_add(char* crl, int len, int cap, const unsigned char* digest) {
+    int need = 7 + 2 * PM_CRL_DIGEST + 1;
+    if (!crl || len < 0 || !digest) return PM_ERR_LIMIT;
+    if (pm_crl_has(crl, len, digest)) return len;
+    if (len + need > cap) return PM_ERR_LIMIT;
+    { const char* tag = "pmcrl1 "; int k; for (k = 0; k < 7; k++) crl[len + k] = tag[k]; }
+    crl_hex(digest, crl + len + 7);
+    crl[len + need - 1] = '\n';
+    return len + need;
+}

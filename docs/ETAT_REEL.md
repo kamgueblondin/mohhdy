@@ -10,6 +10,37 @@
 
 ## État courant vérifié
 
+## Etat courant du 17 octobre 2026 (lot 5)
+
+Living baseline. Branched from `c4fb0c8` (merge of pull request #153), branch `cursor/lot5-geant`, pull request #154. The lot 4 section below keeps its own counter (802/802).
+
+```text
+make test-all : 830/830 passed, 0 failed, 0 skipped
+```
+
+New unit files: `test_device_service` (6), `test_ps2_decode` (5), `test_webrt` (8), `test_grpcwire` (4); new cases in `test_io_bitmap` (PS/2 and COM1 ports), `test_promptmessage` (C99 target built by the host compiler, assistant, revocation list) and `test_osui_runtime` (web commands).
+
+- CI rebalance: four contracts moved from the vfs-service job to the p2p-mesh job (the vfs-service job was at 13 min).
+- US-001 stays open, narrower. The PS/2 keyboard/mouse controller and COM1 are driven by supervised Ring 3 drivers: `bin/ps2driver` (service `ps2-driver`) and `bin/serialdriver` (service `serial-driver`), pinned to their binaries, spawned at boot with priority HIGH, and given only ports 0x60/0x64 and 0x3F8-0x3FF in their TSS I/O bitmap after `SYS_DEVICE_SERVICE` claims. IRQ1 only wakes the PS/2 driver, which reads the controller and submits the bytes; the kernel keeps the keyboard decoder and the input queue. Kernel serial output goes into an 8 KiB queue that the serial driver writes; COM1 receive is polled by the driver. A rogue task (`bin/devrogue`) is refused the claim (-180) and faults on the ports. The supervisor respawns a dead driver (budget 4). Honest Ring 0 fallback: before the drivers claim (early boot), after a driver death until the respawn claims, when a driver stalls (PS/2 IRQ pending 5 ticks, serial queue idle 5 ticks), when the queue is full, and on CPU faults (panic mode writes COM1 directly). A chunk the serial driver took is never bypassed by a Ring 0 flush (order kept; the stall is counted). The scheduler resumes the interrupted task after a HIGH driver turn while its quantum lasts, and after a quantum expiry rotates from the last lower priority task (a `spin` task no longer starves the shell). `devices` prints owners, IRQs, events, Ring 0 bytes, stalls, overflows and respawns. Mouse packets: decoder proven by unit tests only. Known limit: if the PS/2 driver dies between a shift press and its release, the shift state can desynchronise until the next key. Proof: `make qemu-input-drivers` (CI production job), `test_device_service`, `test_ps2_decode`, `test_io_bitmap`, plus `qemu-irq0-preemption` and `qemu-foundation-steps`.
+- Phase 3, partial, not a web engine (no JavaScript, no layout engine, no Chromium/WebKit; US-031 not delivered, `phase3_complete` stays false). `userspace/webrt.c` (guest C, no libc) with OS-UI runtime commands:
+  - US-038 partial: HTTP cache (Cache-Control max-age, no-store, no-cache, ETag, revalidation by 304, LRU eviction). `web-cache` runs it against a scripted origin (`origin=simule`), not the network.
+  - US-039 partial: Content-Security-Policy parser and check (default-src fallback, 'self', 'none', *, scheme, host, *.host, 'unsafe-inline') and an HTML sanitizer (script, iframe, object, embed and style elements, on* attributes, javascript: URLs). `web-csp`, `web-sanitize`.
+  - US-040 partial: media queries (min/max width/height, orientation, prefers-color-scheme, and/comma) and flattening of `@media` blocks for a viewport. `web-responsive [w h]`.
+  - US-041 partial: CSS custom properties (`--x`, `var(--x, fallback)`; an unknown variable without fallback becomes empty and is counted as unresolved) with dark/light themes. `web-theme [dark|light]`.
+  - US-042 partial: `<template id=x-name>` components with `<slot>` expanded in the page. `web-components`. Not Custom Elements with script.
+  - US-044 partial: accessibility audit (lang, img alt, heading order, link and button text, form labels). `web-a11y`.
+  - Not done: US-031, US-043, US-045. US-032 to US-037 unchanged from the earlier lots.
+  Proof: `test_webrt`, `test_osui_runtime`, `make qemu-osui-runtime`.
+- Phase 4:
+  - US-055 partial: `pm-cross FILE` translates the PMC1 bytecode to one portable C99 program (same output, step budget, path rule; `./app PHRASE` runs the program then the trigger). The guest prints the C between markers (the file store caps a file at 1 KB); the host compiler builds it. Proof: `test_cross_compile_c99_matches_vm` builds the C with `cc` and compares with the VM output, and `make qemu-promptmessage` builds the C printed by the guest and runs it. One target only (C99), no native guest code generation.
+  - US-058 partial: `pm-assist FILE` is a rule based assistant (nearest keyword by edit distance, missing to/then/times, variables set but never read, triggers without effect). No language model (`engine=rules`).
+  - US-059 partial: `pm-catalog-fetch`/`pm-install` refuse a revoked source and verify a local `NAME.ca` record when present (`ca=verified`, else `ca=unsigned`). Still local, no network marketplace.
+  - US-060 partial: `pm-ca-revoke FILE` adds the source digest to `/etc/pm_ca.crl`; `pm-ca-verify` and the fetch refuse it. Local CA only, private key in plaintext, not a public authority.
+  Proof: `test_promptmessage`, `make qemu-promptmessage`.
+- Phase 5:
+  - US-067 partial: `userspace/grpcwire.c` encodes one unary gRPC call as HTTP/2 frames (HEADERS, DATA, trailers on stream 1, client preface and SETTINGS), HPACK subset (static table, literals without indexing, no Huffman, no dynamic table), gRPC Length-Prefixed-Message and protobuf fields. `grpc-wire SERVICE METHOD [PAYLOAD]` serves and parses it in guest memory (`transport=memory`). Not over a TCP HTTP/2 connection; the P2P `p2p-grpc` path keeps its typed RPC datagrams. Proof: `test_grpcwire` (protobuf and RFC 7541 C.2 vectors, round trip); the frames were also decoded once by a reference HPACK decoder (Python `hpack`, outside CI); `make qemu-promptmessage` runs `grpc-wire`.
+  - US-068/US-073, US-070, US-075: unchanged in this lot (see lot 3 and lot 4). Not closed.
+
 ## Etat courant du 17 octobre 2026 (lot 4)
 
 Living baseline. Branched from `0254a81` (merge of pull request #152), branch `cursor/lot4-geant`, pull request #153. The lot 3 section below keeps its own counter (783/783).

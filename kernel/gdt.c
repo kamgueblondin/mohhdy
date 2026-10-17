@@ -15,6 +15,8 @@ tss_full_t tss_full;
 static int g_tss_ata_granted = -1;
 static int g_tss_nic_granted = -1;
 static int g_tss_pci_granted = -1;
+static int g_tss_ps2_granted = -1;
+static int g_tss_serial_granted = -1;
 
 // External assembly functions
 extern void gdt_flush(uint32_t);
@@ -63,6 +65,8 @@ void gdt_init() {
     g_tss_ata_granted = 0;
     g_tss_nic_granted = 0;
     g_tss_pci_granted = 0;
+    g_tss_ps2_granted = 0;
+    g_tss_serial_granted = 0;
 
     // Flush GDT and TSS
     gdt_flush((uint32_t)&gdt_ptr);
@@ -98,4 +102,19 @@ void tss_set_pci_io(int grant) {
     if (g_tss_pci_granted == grant) return;
     io_bitmap_apply_pci(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
     g_tss_pci_granted = grant;
+}
+
+/* Lot 5 (US-001): PS/2 and COM1 ports only for their live Ring 3 driver. */
+void tss_set_ps2_io(int grant) {
+    grant = grant ? 1 : 0;
+    if (g_tss_ps2_granted == grant) return;
+    io_bitmap_apply_ps2(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
+    g_tss_ps2_granted = grant;
+}
+
+void tss_set_serial_io(int grant) {
+    grant = grant ? 1 : 0;
+    if (g_tss_serial_granted == grant) return;
+    io_bitmap_apply_serial(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
+    g_tss_serial_granted = grant;
 }

@@ -100,6 +100,30 @@ static void test_pci_grant_opens_only_config_ports(void) {
     TEST_ASSERT_TRUE(io_bitmap_port_allowed(map, sizeof(map), 0x1F0));
 }
 
+/* Lot 5 (US-001): ps2driver gets 0x60/0x64 only, serialdriver 0x3F8-0x3FF. */
+static void test_ps2_and_serial_grants_are_narrow(void) {
+    uint32_t port;
+    io_bitmap_deny_all(map, sizeof(map));
+    io_bitmap_apply_ps2(map, sizeof(map), 1);
+    TEST_ASSERT_TRUE(io_bitmap_port_allowed(map, sizeof(map), 0x60));
+    TEST_ASSERT_TRUE(io_bitmap_port_allowed(map, sizeof(map), 0x64));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x61));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x20));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3F8));
+    io_bitmap_apply_serial(map, sizeof(map), 1);
+    for (port = 0x3F8U; port <= 0x3FFU; port++)
+        TEST_ASSERT_TRUE(io_bitmap_port_allowed(map, sizeof(map), (uint16_t)port));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3F7));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x2F8));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3F6));
+    io_bitmap_apply_ps2(map, sizeof(map), 0);
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x60));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x64));
+    TEST_ASSERT_TRUE(io_bitmap_port_allowed(map, sizeof(map), 0x3F8));
+    io_bitmap_apply_serial(map, sizeof(map), 0);
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3FD));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_deny_all_blocks_every_probe_port);
@@ -109,6 +133,7 @@ int main(void) {
     RUN_TEST(test_ne2k_grant_opens_only_nic_window);
     RUN_TEST(test_ne2k_and_ata_grants_are_independent);
     RUN_TEST(test_pci_grant_opens_only_config_ports);
+    RUN_TEST(test_ps2_and_serial_grants_are_narrow);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

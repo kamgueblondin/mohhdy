@@ -235,6 +235,14 @@ def main():
                 # CSS cascade in the guest text renderer (not a layout engine).
                 ("browser-css-demo", "author_rules=7 total_rules=19 errors=0 hidden=1"),
                 ("browser-css-demo", "lead {color:red; fw:700}"),
+                # Lot 5 Phase 3 blocks (webrt.c) on built-in pages.
+                ("web-cache", "verdicts=fresh,stale,fresh,miss"),
+                ("web-csp", "web-csp ok directives=4 allowed=5 blocked=3"),
+                ("web-sanitize", "removed=5 active_left=0"),
+                ("web-responsive 360", "web-responsive ok width=360 height=768 kept=1 dropped=2"),
+                ("web-theme dark", "scheme=dark vars=2 unresolved=0 h1_color=white"),
+                ("web-components", "web-components ok defined=1 expanded=2"),
+                ("web-a11y", "lang_missing=1 issues=5"),
                 ("os-p2p", "pane=p2p"),
                 ("os-collab", "pane=collab"),
                 ("os-prod", "pane=prod"),

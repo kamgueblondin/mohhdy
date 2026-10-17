@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 370
+#define MOHHDY_SHELL_COMMAND_COUNT 375
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -124,6 +124,7 @@ static const char * const mohhdy_shell_commands[] = {
     "desktop",
     "detach",
     "dev-list",
+    "devices",
     "dir",
     "echo",
     "env",
@@ -140,6 +141,7 @@ static const char * const mohhdy_shell_commands[] = {
     "grant",
     "graphics",
     "grep",
+    "grpc-wire",
     "guest-status",
     "gui",
     "gui-exit",
@@ -229,7 +231,9 @@ static const char * const mohhdy_shell_commands[] = {
     "persist-status",
     "persist-unlock",
     "pm",
+    "pm-assist",
     "pm-ca-init",
+    "pm-ca-revoke",
     "pm-ca-sign",
     "pm-ca-verify",
     "pm-catalog",
@@ -238,6 +242,7 @@ static const char * const mohhdy_shell_commands[] = {
     "pm-certify",
     "pm-check",
     "pm-compile",
+    "pm-cross",
     "pm-debug",
     "pm-disasm",
     "pm-doc",
