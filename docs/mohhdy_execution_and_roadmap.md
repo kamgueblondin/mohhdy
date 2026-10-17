@@ -37,6 +37,9 @@ Elle confirme visuellement :
 ## 3. Descriptif des Prochaines Tranches d'Implémentation (Priorités 1 à 3)
 
 ### Etape 1 : Tranche 4, ce qui reste Ring 0
+- Lot 4 part de `0254a81` (merge #152), PR #153. `make test-all` : 801/801. Reprise sur perte TCP/TLS du client guest (doublons, segments futurs, retransmission du ClientHello et du vol Finished avec recul), prouvee par `make qemu-net-loss-recovery` (pertes et doublon de trames voulus).
+- US-001 reste ouvert : enumeration PCI en worker Ring 3 `bin/pcidriver` supervise (relance paresseuse, budget 4), lectures de config Ring 0 fermees apres la remise. Restent Ring 0 : sondes de debut de boot, PIC, PIT, PS/2, VGA texte, serie.
+- Phase 5 : US-063 deux relais et US-069 crash/rejoin prouves en QEMU (`make qemu-p2p-mesh`, 4 invites), US-074 vrai codec STUN sur NAT simule. Phase 4 : US-050 coloration, completion, volet de sortie.
 - Lot 3 part de `7cfcf0b` (merge #151), PR #152. `make test-all` : 783/783. `make coverage COVERAGE_MIN=78` tourne en CI (79.82% mesure).
 - US-001 reste ouvert, plus etroit : journaux de montage et d'evenements lus par `bin/atadriver` Ring 3 (`jkread 0`), image legacy sans montage FAT Ring 0 (elle garde seulement le NIC Ring 0, noyau de comparaison). Restent Ring 0 : PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`.
 - Phase 5 (partiels, plus avances) : US-063 multi-relais (unitaire 4 noeuds), US-068/073 controleur adaptatif (QEMU), US-070 cache versionne a invalidation acquittee (QEMU), US-075 base EWMA (pas de ML). Phase 4 : US-050 IDE plein ecran dans le bureau OS-UI (partiel). Phase 3 : vrai moteur de regles CSS (cascade, specificite, heritage).
