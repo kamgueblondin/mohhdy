@@ -211,6 +211,7 @@ def main():
                 raise RuntimeError("catalog search was not filtered: %s" % out[-800:])
             out = run(client, proc, "pm-catalog-fetch lib.pm", "pm-catalog-fetch ok")
             expect(out, "pm-catalog-fetch ok lib.pm")
+            expect(out, "ca=unsigned")
             # US-060 partial: local Schnorr CA. Modexp is slow under TCG.
             out = run(client, proc, "pm-ca-init", "pm-ca-init ok", timeout=180)
             expect(out, "/etc/pm_ca.pub")
@@ -220,6 +221,13 @@ def main():
             expect(out, "trust_chain verified ide.pm")
             out = run(client, proc, "append ide.pm set z to 1", "append ok")
             out = run(client, proc, "pm-ca-verify ide.pm", "pm-ca-verify error signature invalid", timeout=180)
+            # US-060 partial: local revocation list, checked before any
+            # signature work (fetch and verify refuse a revoked source).
+            out = run(client, proc, "pm-ca-revoke lib.pm", "pm-ca-revoke ok")
+            expect(out, "pm-ca-revoke ok lib.pm entries 1 /etc/pm_ca.crl")
+            out = run(client, proc, "pm-catalog-fetch lib.pm", "pm-catalog-fetch refused")
+            expect(out, "pm-catalog-fetch refused lib.pm revoked")
+            out = run(client, proc, "pm-ca-verify lib.pm", "pm-ca-verify error revoked")
             print("PromptMessage QEMU contract passed in %.0f s" % (time.monotonic() - t0))
             return 0
         finally:

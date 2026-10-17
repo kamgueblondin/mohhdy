@@ -44,6 +44,8 @@ static void pm_sig_digest(const char* src, int len, uint8_t d[32]) {
     sha256_ctx_t h;
     sha256_init(&h); sha256_update(&h, (const uint8_t*)"pmcert1", 7); sha256_update(&h, (const uint8_t*)src, (uint32_t)len); sha256_final(&h, d);
 }
+/* Lot 5 US-060: is this source digest on the local revocation list? */
+static int pm_crl_revoked(const uint8_t d[32]);
 static void pm_sig_path(const char* f, char* out) {
     int k = 0;
     while (f[k] && k < RAMFS_PATH_MAX - 5) { out[k] = f[k]; k++; }
@@ -2911,6 +2913,30 @@ static void pm_copy_prog(pm_program_t* d, const pm_program_t* s) {
 /* pm-check FILE | pm-run FILE | pm-test FILE | pm-doc FILE | pm-disasm FILE
  * pm-debug FILE [LINE] | pm-compile SRC OUT | pm-exec IMG | pm-say PHRASE...
  * pm-version FILE | pm-versions FILE | pm-edit FILE | pm STATEMENT (raw line) */
+static int pm_crl_revoked(const uint8_t d[32]) {
+    static char crl[400];
+    int n = pm_host_read(0, "/etc/pm_ca.crl", crl, (int)sizeof(crl));
+    return n > 0 && pm_crl_has(crl, n, d);
+}
+/* 0 verified, -1 no CA pub, -2 no FILE.ca record, -3 bad signature. */
+static int pm_ca_check(const char* file, const uint8_t d[32]) {
+    uint8_t pk[CSIG_PK], sig[CSIG_SIG];
+    char pbuf[288], sbuf[160], path_ca[RAMFS_PATH_MAX];
+    int n, m, k = 0;
+    n = pm_host_read(0, "/etc/pm_ca.pub", pbuf, (int)sizeof(pbuf) - 1);
+    if (n < 10 + 2 * CSIG_PK || strncmp(pbuf, "pmca1 pub=", 10) != 0) return -1;
+    pbuf[n] = 0;
+    if (pm_hex_load(pbuf + 10, CSIG_PK, pk) != 0) return -1;
+    while (file[k] && k < RAMFS_PATH_MAX - 4) { path_ca[k] = file[k]; k++; }
+    path_ca[k++] = '.'; path_ca[k++] = 'c'; path_ca[k++] = 'a'; path_ca[k] = 0;
+    m = pm_host_read(0, path_ca, sbuf, (int)sizeof(sbuf) - 1);
+    if (m < 13 + 2 * CSIG_SIG || strncmp(sbuf, "pmca1sig sig=", 13) != 0) return -2;
+    sbuf[m] = 0;
+    if (pm_hex_load(sbuf + 13, CSIG_SIG, sig) != 0) return -3;
+    if (!csig_pk_valid(pk) || !csig_verify(pk, d, 32, sig)) return -3;
+    return 0;
+}
+
 static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], int arg_count) {
     int len = 0, st;
     g_pm_ctx = ctx;
@@ -3086,12 +3112,25 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         while (pre[k]) { src[k] = pre[k]; k++; }
         while (args[0][j] && k < RAMFS_PATH_MAX - 1) src[k++] = args[0][j++];
         src[k] = 0;
+        const char* ca = "unsigned";
         if (pm_load_source(tag, src, &len) != 0) return;
         if (pm_compile_report(tag, len, &g_pm_tmp) != 0) return;
+        {
+            /* US-060 partial: a revoked source is refused; a local CA record
+             * NAME.ca, when present, must verify against /etc/pm_ca.pub. */
+            uint8_t d[32];
+            int rc;
+            pm_sig_digest(g_pm_src, len, d);
+            if (pm_crl_revoked(d)) { print_string(tag); print_string(" refused "); print_string(args[0]); print_string(" revoked\n"); return; }
+            rc = pm_ca_check(args[0], d);
+            if (rc == -3) { print_string(tag); print_string(" refused "); print_string(args[0]); print_string(" signature invalid\n"); return; }
+            if (rc == 0) ca = "verified";
+        }
         if (pm_host_write(0, args[0], g_pm_src, len, 0) < 0) { print_string(tag); print_string(" error write failed\n"); return; }
         print_string(tag); print_string(" ok "); print_string(args[0]);
         print_string(" bytes "); print_int(len);
         print_string(" checksum "); pm_print_hex(pm_checksum((const unsigned char*)g_pm_src, len));
+        print_string(" ca="); print_string(ca);
         print_string("\n");
         ctx->last_rc = 0;
         return;
@@ -3212,23 +3251,34 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         return;
     }
     if (strcmp(command, "pm-ca-verify") == 0) {
-        uint8_t pk[CSIG_PK], sig[CSIG_SIG], d[32];
-        char pbuf[288], sbuf[160], path_ca[RAMFS_PATH_MAX];
-        int n, m, k = 0;
+        uint8_t d[32];
+        int rc;
         if (pm_load_source("pm-ca-verify", args[0], &len) != 0) return;
-        n = pm_host_read(0, "/etc/pm_ca.pub", pbuf, (int)sizeof(pbuf) - 1);
-        if (n < 10 + 2 * CSIG_PK || strncmp(pbuf, "pmca1 pub=", 10) != 0) { print_string("pm-ca-verify error no CA pub (run pm-ca-init)\n"); return; }
-        pbuf[n] = 0;
-        if (pm_hex_load(pbuf + 10, CSIG_PK, pk) != 0) { print_string("pm-ca-verify error bad CA pub\n"); return; }
-        while (args[0][k] && k < RAMFS_PATH_MAX - 4) { path_ca[k] = args[0][k]; k++; }
-        path_ca[k++] = '.'; path_ca[k++] = 'c'; path_ca[k++] = 'a'; path_ca[k] = 0;
-        m = pm_host_read(0, path_ca, sbuf, (int)sizeof(sbuf) - 1);
-        if (m < 13 + 2 * CSIG_SIG || strncmp(sbuf, "pmca1sig sig=", 13) != 0) { print_string("pm-ca-verify error no CA cert record\n"); return; }
-        sbuf[m] = 0;
-        if (pm_hex_load(sbuf + 13, CSIG_SIG, sig) != 0) { print_string("pm-ca-verify error bad CA cert record\n"); return; }
         pm_sig_digest(g_pm_src, len, d);
-        if (!csig_pk_valid(pk) || !csig_verify(pk, d, 32, sig)) { print_string("pm-ca-verify error signature invalid\n"); return; }
+        if (pm_crl_revoked(d)) { print_string("pm-ca-verify error revoked "); print_string(args[0]); print_string("\n"); return; }
+        rc = pm_ca_check(args[0], d);
+        if (rc == -1) { print_string("pm-ca-verify error no CA pub (run pm-ca-init)\n"); return; }
+        if (rc == -2) { print_string("pm-ca-verify error no CA cert record\n"); return; }
+        if (rc != 0) { print_string("pm-ca-verify error signature invalid\n"); return; }
         print_string("pm-ca-verify ok trust_chain verified "); print_string(args[0]); print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (strcmp(command, "pm-ca-revoke") == 0) {
+        /* US-060 partial: local revocation list /etc/pm_ca.crl. */
+        static char crl[400];
+        uint8_t d[32];
+        int n;
+        if (pm_load_source("pm-ca-revoke", args[0], &len) != 0) return;
+        pm_sig_digest(g_pm_src, len, d);
+        n = pm_host_read(0, "/etc/pm_ca.crl", crl, (int)sizeof(crl));
+        if (n < 0) n = 0;
+        n = pm_crl_add(crl, n, 384, d);
+        if (n < 0) { print_string("pm-ca-revoke error crl full\n"); return; }
+        (void)sys_mkdir("/etc");
+        if (pm_host_write(0, "/etc/pm_ca.crl", crl, n, 0) < 0) { print_string("pm-ca-revoke error write failed\n"); return; }
+        print_string("pm-ca-revoke ok "); print_string(args[0]);
+        print_string(" entries "); print_int(n / (8 + 2 * PM_CRL_DIGEST)); print_string(" /etc/pm_ca.crl\n");
         ctx->last_rc = 0;
         return;
     }
@@ -3345,7 +3395,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -6575,7 +6625,8 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
                 strcmp(command, "pm-catalog") == 0 || strcmp(command, "pm-catalog-search") == 0 || strcmp(command, "pm-catalog-fetch") == 0 || strcmp(command, "pm-install") == 0 ||
                 strcmp(command, "pm-certify") == 0 || strcmp(command, "pm-verify") == 0 ||
                 strcmp(command, "pm-ca-init") == 0 || strcmp(command, "pm-ca-sign") == 0 || strcmp(command, "pm-ca-verify") == 0 ||
-                strcmp(command, "pm-cross") == 0 || strcmp(command, "pm-assist") == 0)) {
+                strcmp(command, "pm-cross") == 0 || strcmp(command, "pm-assist") == 0 ||
+                strcmp(command, "pm-ca-revoke") == 0)) {
         cmd_pm(ctx, command, args, arg_count);
         return 1;
     } else if (strcmp(command, "stat") == 0) {

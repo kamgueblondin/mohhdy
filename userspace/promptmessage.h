@@ -115,4 +115,10 @@ int pm_cross_c(const pm_program_t* prog, char* out, int cap, int* instructions);
  * PM_OK (lint) or PM_ERR_SYNTAX (error with hints). */
 int pm_assist(const char* src, int len, const pm_host_t* host, char* out, int cap, int* hints);
 
+/* Lot 5 US-060: local CA revocation list ("pmcrl1 <hex>" lines). */
+#define PM_CRL_DIGEST 16
+int pm_crl_has(const char* crl, int len, const unsigned char* digest);
+/* Returns the new length (unchanged if already listed) or PM_ERR_LIMIT. */
+int pm_crl_add(char* crl, int len, int cap, const unsigned char* digest);
+
 #endif

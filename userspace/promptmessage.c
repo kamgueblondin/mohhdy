@@ -1175,3 +1175,46 @@ int pm_assist(const char* src, int len, const pm_host_t* host, char* out, int ca
     if (hints) *hints = count;
     return PM_OK;
 }
+
+/* ------------------------------------------- US-060 revocation list (CRL) */
+/* Lot 5: local revocation list for the local PromptMessage CA. One line
+ * per revoked source, "pmcrl1 <32 hex>\n", the first 16 bytes of the
+ * pm_sig_digest of the revoked source. Local file, no distribution. */
+static int crl_hex(const unsigned char* d, char* out) {
+    int i;
+    for (i = 0; i < PM_CRL_DIGEST; i++) {
+        out[2 * i] = "0123456789abcdef"[d[i] >> 4];
+        out[2 * i + 1] = "0123456789abcdef"[d[i] & 15];
+    }
+    return 2 * PM_CRL_DIGEST;
+}
+
+int pm_crl_has(const char* crl, int len, const unsigned char* digest) {
+    char want[2 * PM_CRL_DIGEST];
+    int i = 0, k;
+    if (!crl || len <= 0 || !digest) return 0;
+    crl_hex(digest, want);
+    while (i + 7 + 2 * PM_CRL_DIGEST <= len) {
+        int match = 1;
+        const char* tag = "pmcrl1 ";
+        for (k = 0; k < 7; k++) if (crl[i + k] != tag[k]) { match = 0; break; }
+        if (match) {
+            for (k = 0; k < 2 * PM_CRL_DIGEST; k++) if (crl[i + 7 + k] != want[k]) { match = 0; break; }
+            if (match) return 1;
+        }
+        while (i < len && crl[i] != '\n') i++;
+        i++;
+    }
+    return 0;
+}
+
+int pm_crl_add(char* crl, int len, int cap, const unsigned char* digest) {
+    int need = 7 + 2 * PM_CRL_DIGEST + 1;
+    if (!crl || len < 0 || !digest) return PM_ERR_LIMIT;
+    if (pm_crl_has(crl, len, digest)) return len;
+    if (len + need > cap) return PM_ERR_LIMIT;
+    { const char* tag = "pmcrl1 "; int k; for (k = 0; k < 7; k++) crl[len + k] = tag[k]; }
+    crl_hex(digest, crl + len + 7);
+    crl[len + need - 1] = '\n';
+    return len + need;
+}

@@ -331,6 +331,30 @@ void test_assist_hints_and_lint(void) {
     TEST_ASSERT_EQUAL(2, hints);
 }
 
+/* Lot 5 US-060: local revocation list. */
+void test_crl_add_and_lookup(void) {
+    char crl[96];
+    unsigned char a[32], b[32];
+    int n, i;
+    for (i = 0; i < 32; i++) { a[i] = (unsigned char)i; b[i] = (unsigned char)(255 - i); }
+    TEST_ASSERT_EQUAL(0, pm_crl_has(crl, 0, a));
+    n = pm_crl_add(crl, 0, (int)sizeof(crl), a);
+    TEST_ASSERT_EQUAL(40, n);
+    TEST_ASSERT_EQUAL(0, strncmp(crl, "pmcrl1 000102030405060708090a0b0c0d0e0f\n", 40));
+    TEST_ASSERT_EQUAL(1, pm_crl_has(crl, n, a));
+    TEST_ASSERT_EQUAL(0, pm_crl_has(crl, n, b));
+    TEST_ASSERT_EQUAL(40, pm_crl_add(crl, n, (int)sizeof(crl), a));   /* no duplicate */
+    n = pm_crl_add(crl, n, (int)sizeof(crl), b);
+    TEST_ASSERT_EQUAL(80, n);
+    TEST_ASSERT_EQUAL(1, pm_crl_has(crl, n, b));
+    b[0] ^= 1;
+    TEST_ASSERT_EQUAL(0, pm_crl_has(crl, n, b));
+    TEST_ASSERT_EQUAL(PM_ERR_LIMIT, pm_crl_add(crl, n, (int)sizeof(crl), b));   /* full */
+    /* only whole tagged lines count */
+    memcpy(crl, "xxxxxx 000102030405060708090a0b0c0d0e0f\n", 40);
+    TEST_ASSERT_EQUAL(0, pm_crl_has(crl, 40, a));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_spec_examples_run);
@@ -345,6 +369,7 @@ int main(void) {
     RUN_TEST(test_limits);
     RUN_TEST(test_cross_compile_c99_matches_vm);
     RUN_TEST(test_assist_hints_and_lint);
+    RUN_TEST(test_crl_add_and_lookup);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
