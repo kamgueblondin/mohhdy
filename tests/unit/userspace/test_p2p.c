@@ -245,22 +245,38 @@ void test_rate_limit_and_stats(void) {
     setup(2, 0);
     run(2, 300);
     g_n[0].rate_limit = 3;
+    /* Lot 6: shaping. Messages above the budget wait in the queue (rc 1)
+     * and leave when the next one-second budget opens; none is lost. */
     for (i = 0; i < 6; i++) {
         int rc = p2p_send_text(&g_n[0], &g_h[0], "beta", "burst");
-        if (rc == 0) ok++; else if (rc == -2) throttled++;
+        if (rc == 0) ok++; else if (rc == 1) throttled++;
     }
     TEST_ASSERT_EQUAL(3, ok);
     TEST_ASSERT_EQUAL(3, throttled);
     TEST_ASSERT_EQUAL(3, (int)p2p_find(&g_n[0], "beta")->throttled);
+    TEST_ASSERT_EQUAL(3U, g_n[0].qos.shaped_queued);
+    run(2, 120);
+    TEST_ASSERT_EQUAL(3U, g_n[0].qos.shaped_sent);
     run(2, 120);
     TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "beta", "later"));
     run(2, 20);
     p2p_report(&g_n[1], &g_h[1], "stats", rep, sizeof(rep));
-    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p stats msg tx 0 rx 4"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p stats msg tx 0 rx 7"));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p stats hello tx "));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p stats ping"));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p stats ok tx_bytes "));
     TEST_ASSERT_EQUAL(-1, p2p_send_text(&g_n[0], &g_h[0], "nobody", "x"));
+    /* queue full: the ninth waiting message is refused and counted */
+    g_n[0].rate_limit = 1;
+    run(2, 120);
+    for (i = 0; i < 10; i++) (void)p2p_send_text(&g_n[0], &g_h[0], "beta", "q");
+    TEST_ASSERT_EQUAL(1U, g_n[0].qos.shaped_dropped);
+    TEST_ASSERT_EQUAL(-2, p2p_send_text(&g_n[0], &g_h[0], "beta", "full"));
+    g_n[0].rate_limit = 0;
+    run(2, 200);
+    TEST_ASSERT_EQUAL(11U, g_n[0].qos.shaped_sent);
+    p2p_report(&g_n[0], &g_h[0], "qos", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, " queued 11 shaped_sent 11 shaped_dropped 2"));
 }
 
 void test_traffic_analysis(void) {
@@ -461,7 +477,7 @@ void test_qos_window_and_cache_invalidate(void) {
     TEST_ASSERT_TRUE(g_n[0].qos.window_size < P2P_QOS_WINDOW_MAX);
     for (i = 0; i < (int)g_n[0].qos.window_size + 2; i++) {
         int rc = p2p_send_text(&g_n[0], &g_h[0], "beta", "burst");
-        if (rc == 0) ok++; else if (rc == -2) throttled++;
+        if (rc == 0) ok++; else if (rc == 1) throttled++; /* Lot 6: queued (shaping) */
     }
     TEST_ASSERT_EQUAL((int)g_n[0].qos.window_size, ok);
     TEST_ASSERT_EQUAL(2, throttled);
@@ -676,6 +692,71 @@ void test_traffic_baseline_anomaly(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "verdict degraded"));
 }
 
+/* Lot 6 (US-075): the anomaly names the peer above its own baseline; a
+ * reply burst we asked for (sync) is skipped. (US-068/073): measured byte
+ * rates follow the traffic. */
+void test_anomaly_peer_attribution_and_solicited(void) {
+    char rep[2048];
+    int i;
+    setup(3, 0);
+    run(3, 8000);
+    TEST_ASSERT_TRUE(g_n[1].qos.meas_rx_bps > 0U);
+    TEST_ASSERT_TRUE(g_n[1].qos.meas_tx_bps > 0U);
+    for (i = 0; i < 14; i++) { (void)p2p_send_text(&g_n[2], &g_h[2], "beta", "flood"); run(3, 10); }
+    run(3, 1100);
+    TEST_ASSERT_EQUAL(g_n[2].id, g_n[1].last_anomaly_peer);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[1], "gamma")->anomalies >= 1U);
+    TEST_ASSERT_EQUAL(0U, p2p_find(&g_n[1], "alpha")->anomalies);
+    p2p_report(&g_n[1], &g_h[1], "analyze", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze finding gamma rate-anomaly "));
+    TEST_ASSERT_NOT_NULL(strstr(rep, " peer gamma solicited_skipped 0"));
+    /* solicited: once the baseline has settled again, beta asks, then the
+     * same burst arrives within the window, not counted */
+    run(3, 8000);
+    TEST_ASSERT_TRUE(p2p_sync(&g_n[1], &g_h[1], "gamma") >= 0);
+    {
+        uint32_t before = p2p_find(&g_n[1], "gamma")->anomalies;
+        for (i = 0; i < 20; i++) { (void)p2p_send_text(&g_n[2], &g_h[2], "beta", "flood"); if (i & 1) run(3, 10); }
+        run(3, 300);
+        TEST_ASSERT_EQUAL(before, p2p_find(&g_n[1], "gamma")->anomalies);
+        TEST_ASSERT_TRUE(g_n[1].solicited_skipped >= 1U);
+    }
+}
+
+/* Lot 6 (US-070): a cache write through the Raft log reaches every node
+ * with the log index as version; an older fill is refused by the fence. */
+void test_cache_through_raft(void) {
+    char rep[512];
+    int idx, i;
+    setup(3, 0);
+    run(3, 300);
+    TEST_ASSERT_EQUAL(-1, p2p_cache_raft_put(&g_n[1], &g_h[1], "cfg", "x")); /* not leader */
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    idx = p2p_cache_raft_put(&g_n[0], &g_h[0], "cfg", "blue");
+    TEST_ASSERT_TRUE(idx >= 1);
+    run(3, 300);
+    for (i = 0; i < 3; i++) {
+        const p2p_item_t* it = p2p_cache_get(&g_n[i], "cfg", g_ticks);
+        TEST_ASSERT_NOT_NULL(it);
+        TEST_ASSERT_EQUAL(0, strcmp(it->value, "blue"));
+        {   /* p2p_cache_get returns the line; read its version field */
+            int k;
+            uint32_t v = 0;
+            for (k = 0; k < P2P_CACHE_MAX; k++)
+                if (g_n[i].cache.entries[k].used && strcmp(g_n[i].cache.entries[k].key, "cfg") == 0) v = g_n[i].cache.entries[k].version;
+            TEST_ASSERT_EQUAL((uint32_t)idx, v);
+        }
+        TEST_ASSERT_EQUAL(1U, g_n[i].cache_raft_applied);
+        TEST_ASSERT_NOT_NULL(strstr(g_out[i], "p2p cache raft cfg=blue v"));
+    }
+    /* a fill at or below the committed index is refused on a follower */
+    TEST_ASSERT_TRUE(p2p_cache_put_v(&g_n[2], "cfg", "old", (uint32_t)idx, 0, g_ticks) != 0);
+    TEST_ASSERT_EQUAL(0, strcmp(p2p_cache_get(&g_n[2], "cfg", g_ticks)->value, "blue"));
+    p2p_report(&g_n[2], &g_h[2], "cache", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "stale_refused 1"));
+}
+
 /* US-069: node crash (silent, all frames lost), reroute around it, then
  * reboot under a fresh identity: rejoin and anti-entropy push of the kv. */
 void test_crash_reroute_and_rejoin(void) {
@@ -781,6 +862,8 @@ int main(void) {
     RUN_TEST(test_qos_adaptive_controller);
     RUN_TEST(test_cache_versioned_acked_invalidation);
     RUN_TEST(test_traffic_baseline_anomaly);
+    RUN_TEST(test_anomaly_peer_attribution_and_solicited);
+    RUN_TEST(test_cache_through_raft);
     RUN_TEST(test_wrong_network_key_is_kept_out);
     RUN_TEST(test_encrypted_message_tamper_and_replay);
     RUN_TEST(test_replication_lww_get_and_sync);
