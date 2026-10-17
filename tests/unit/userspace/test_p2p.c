@@ -748,6 +748,31 @@ void test_stun_behind_simulated_nat(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, " bad 0"));
 }
 
+/* US-063: fewest hops first. A slow direct link must not lose to a
+ * neighbor that advertises the destination (its route may come back
+ * through us: the loop seen in QEMU under CI load). */
+void test_route_prefers_direct_over_cheaper_relay(void) {
+    uint32_t nh = 1, cost = 0;
+    p2p_peer_t *gamma, *alpha;
+    int j;
+    setup(3, 0);
+    run(3, 300);
+    gamma = p2p_find(&g_n[1], "gamma");
+    alpha = p2p_find(&g_n[1], "alpha");
+    TEST_ASSERT_NOT_NULL(gamma);
+    TEST_ASSERT_NOT_NULL(alpha);
+    gamma->rtt_ticks = 50;            /* slow direct link */
+    alpha->rtt_ticks = 0;
+    for (j = 0; j < P2P_PEERS; j++)
+        if (alpha->neighbors[j] == gamma->id) alpha->nb_hops[j] = 2;  /* alpha: gamma at 2 hops */
+    TEST_ASSERT_EQUAL(0, p2p_route_find(&g_n[1], gamma->id, &nh, &cost));
+    TEST_ASSERT_EQUAL(0, (int)nh);
+    /* with the direct link down, the relay is used */
+    gamma->up = 0;
+    TEST_ASSERT_EQUAL(0, p2p_route_find(&g_n[1], gamma->id, &nh, &cost));
+    TEST_ASSERT_EQUAL((int)alpha->id, (int)nh);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -772,6 +797,7 @@ int main(void) {
     RUN_TEST(test_qos_window_and_cache_invalidate);
     RUN_TEST(test_routing_grpc_and_stun);
     RUN_TEST(test_stun_behind_simulated_nat);
+    RUN_TEST(test_route_prefers_direct_over_cheaper_relay);
     RUN_TEST(test_p2p_consolidation_and_fallback);
     unity_print_results();
     unity_cleanup();

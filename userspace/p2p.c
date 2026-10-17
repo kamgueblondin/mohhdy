@@ -201,22 +201,29 @@ static uint32_t link_cost(const p2p_peer_t* p) {
     return 10U + rtt_ms + load;
 }
 
+/* Fewest hops first, link cost (RTT, load) between routes of the same
+ * length. The HELLO vector carries hop counts, not next hops, so a pure
+ * cost order let a slow direct link lose to a neighbor whose own route
+ * went back through us (a two-node loop seen in QEMU under CI load). */
 int p2p_route_find(const p2p_node_t* n, uint32_t dest_id, uint32_t* next_hop, uint32_t* total_cost) {
     int i, j;
-    uint32_t min_cost = 0xffffffffU, best_hop = 0xffffffffU;
+    uint32_t min_cost = 0xffffffffU, best_hop = 0xffffffffU, min_hops = 0xffU;
     if (!n || !dest_id) return -1;
     for (i = 0; i < P2P_PEERS; i++) {
         const p2p_peer_t* p = &n->peers[i];
         if (!p->used || !p->up || p->blocked) continue;
         if (p->id == dest_id) {
             uint32_t c = link_cost(p);
-            if (c < min_cost) { min_cost = c; best_hop = 0; }
+            if (min_hops > 1U || c < min_cost) { min_cost = c; best_hop = 0; min_hops = 1U; }
         } else {
             for (j = 0; j < P2P_PEERS; j++) {
                 if (p->neighbors[j] == dest_id && p->nb_hops[j] && p->nb_hops[j] <= P2P_MAX_HOPS - 1U) {
                     /* 15 per extra hop: one relay costs 15, two cost 30. */
                     uint32_t c = link_cost(p) + 15U * (uint32_t)p->nb_hops[j];
-                    if (c < min_cost) { min_cost = c; best_hop = p->id; }
+                    uint32_t hc = (uint32_t)p->nb_hops[j] + 1U;
+                    if (hc < min_hops || (hc == min_hops && c < min_cost)) {
+                        min_cost = c; best_hop = p->id; min_hops = hc;
+                    }
                 }
             }
         }
