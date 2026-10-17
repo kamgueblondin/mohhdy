@@ -110,3 +110,22 @@ origin's first entry could bind its own key; keys are not certified); the
 1024/160 group is legacy strength; signing and verification are not constant
 time; the secret key is kept in RAM and, with `persist-save`, in clear on the
 disk.
+
+## Lot 9
+
+- US-099: contract language MCL. `collab-contract-deploy PAYEE ARBITER|none AMOUNT PROGRAM`
+  compiles a program of clauses `pay|refund|split N if COND...` (conditions:
+  `sigs N`, `payee`, `arb`, `after N` Lamport ticks); `collab-signoff PAYER SEQ`
+  adds a sign-off. Every replica evaluates the program after each entry, so the
+  outcome is the same everywhere (`collab-escrows` shows `program clauses N
+  signoffs N fired K to_payee N`). No real money: points only.
+- US-104: `collab-compliance` runs six computed checks (signing on, all
+  signed, no forgery accepted with signatures re-verified, private data kept
+  local, erasure effective, keys bound) and prints a GDPR article map. It is a
+  self-check, not a certification.
+- US-103: `collab-zk-strong SECRET MESSAGE` proves knowledge of a discrete log
+  in a 2048-bit group with a 256-bit prime-order subgroup (`csig_zk_*` in
+  `userspace/csig.c`). Parameters come from `scripts/gen_zk_group.py` (fixed
+  labels, re-run to check) and are re-checked in the guest (q | p-1, g^q = 1,
+  Fermat on p). Known answer test against an independent Python run. Not
+  constant time. `collab-zk-prove` (62-bit toy group) is kept for comparison.

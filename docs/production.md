@@ -117,3 +117,15 @@ manifest entry checksum and `TARGET/health` == `ok`; on failure restore
 | US-118 continuous feedback | done | ratings and comments with summary; RAM only |
 | US-119 business metrics | done (local) | Lot 7: commands per minute, command and distinct counts, uptime, one console session (`prod-biz-metrics`); QEMU |
 | US-120 evolving roadmap | partial | `prod-roadmap` prints a static phase list pointing to the docs, not a live matrix |
+
+## Lot 9
+
+- US-112: `prod-sec-db DIR [DBFILE]` scans executables against an offline
+  signature database (built in, or a file with one `ID SEVERITY hex PATTERN`
+  or `ID SEVERITY fnv HASH SIZE` record per line). Prints hits, worst severity and a risk
+  score. No online CVE feed.
+- US-115: `prod-maint-train FAIL_AT [HORIZON] [MEM_FREE_PCT]` trains a Q12
+  logistic regression on labelled windows of the sample history (five
+  features); `prod-maint-predict` then adds a learned failure probability and
+  verdict next to the heuristic one.
+- US-120: `/roadmap.txt` updated for lot 9 (phase 6 73%, phase 7 93%, phase 8 93%).
