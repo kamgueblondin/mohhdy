@@ -194,6 +194,44 @@ def main():
                                % (hub.p2p_sealed, hub.p2p_hello, hub.p2p_plaintext))
         say("scenario 1 ok: encrypted message, health, stats (%.0fs)" % (time.monotonic() - t0))
 
+        # Lot 6 (US-068/073): shaping. With 2 data messages per second
+        # allowed, a burst of 6 is queued, not dropped, and drained by the
+        # pump; beta gets all six. Measured byte rates are non zero.
+        cmd(a, "p2p-limit 2", "p2p-limit ok per_second 2")
+        start_burst = len(base.log_text(b["log"]))
+        start_q = cmd(a, "p2p-burst beta 6 shaped-msg", "p2p-burst sent ")
+        burst = re.search(r"p2p-burst sent (\d+) queued (\d+) refused (\d+)", log(a, start_q))
+        if not burst or int(burst.group(2)) < 1 or int(burst.group(3)) != 0:
+            raise RuntimeError("alpha burst was not shaped: %s" % log(a, start_q)[-400:])
+        for _round in range(4):
+            cmd(a, "p2p-poll 2", "p2p-poll ok")
+            cmd(b, "p2p-poll 2", "p2p-poll ok")
+        deadline = time.monotonic() + 60
+        while log(b, start_burst).count("p2p msg from alpha: shaped-msg") < 6:
+            if time.monotonic() > deadline:
+                raise RuntimeError("beta got %d of 6 shaped messages" % log(b, start_burst).count("p2p msg from alpha: shaped-msg"))
+            cmd(a, "p2p-poll 2", "p2p-poll ok")
+            cmd(b, "p2p-poll 2", "p2p-poll ok")
+        cmd(a, "p2p-limit 0", "p2p-limit ok per_second 0")
+        start_q = cmd(a, "p2p-qos", "p2p qos window ")
+        shaped = re.search(r"meas_tx_bps (\d+) meas_rx_bps (\d+) queued (\d+) shaped_sent (\d+) shaped_dropped (\d+)", log(a, start_q))
+        if not shaped or int(shaped.group(1)) == 0 or int(shaped.group(4)) < int(burst.group(2)) or int(shaped.group(5)) != 0:
+            raise RuntimeError("alpha qos shaping counters: %s" % log(a, start_q)[-400:])
+        say("scenario 1b ok: burst of 6 shaped (queued %s), all delivered, meas_tx_bps %s" % (burst.group(2), shaped.group(1)))
+        # Lot 6 (US-075): a flood from gamma is attributed to gamma by
+        # beta's per-peer baseline. Gamma plays a misbehaving sender that
+        # ignores its own QoS controller (a well-behaved burst is shaped
+        # by the adaptive window, as scenario 1b shows).
+        start_f = cmd(c, "p2p-flood beta 40", "p2p-flood sent ")
+        if "p2p-flood sent 40 unshaped" not in log(c, start_f):
+            raise RuntimeError("gamma flood not sent: %s" % log(c, start_f)[-400:])
+        for _round in range(3):
+            cmd(b, "p2p-poll 3", "p2p-poll ok")
+        start_an = cmd(b, "p2p-analyze", "p2p analyze ok findings ")
+        if "p2p analyze finding gamma rate-anomaly " not in log(b, start_an) or " peer gamma " not in log(b, start_an):
+            raise RuntimeError("beta did not attribute the flood to gamma: %s" % log(b, start_an)[-800:])
+        say("scenario 1c ok: flood attributed to gamma")
+
         # Scenario 2: replication, then a real hub wire cut (not p2p-block).
         cmd(a, "p2p-put color blue", "p2p-put ok color sent 2")
         wait_log(b, "p2p kv replicated color=blue v1 from alpha", 60)
@@ -269,6 +307,18 @@ def main():
         wait_log(c, "p2p raft snapshot installed index 2", 40)
         wait_log(b, "p2p raft commit index 3 next=ok", 30)
         wait_log(c, "p2p raft commit index 3 next=ok", 30)
+        # Lot 6 (US-070): cache line written through the Raft log, same
+        # value and version on the three guests, older fill refused.
+        start_cr = cmd(a, "p2p-cache raft cfg2 green", "p2p-cache raft ok cfg2 index ")
+        idx = re.search(r"p2p-cache raft ok cfg2 index (\d+)", log(a, start_cr)).group(1)
+        for _round in range(2):
+            cmd(a, "p2p-poll 2", "p2p-poll ok")
+            cmd(b, "p2p-poll 2", "p2p-poll ok")
+            cmd(c, "p2p-poll 2", "p2p-poll ok")
+        for node in (a, b, c):
+            wait_log(node, "p2p cache raft cfg2=green v%s" % idx, 40)
+        cmd(c, "p2p-cache get cfg2", "p2p-cache ok cfg2=green")
+        cmd(c, "p2p-cache putv cfg2 old %s" % idx, "p2p-cache stale refused cfg2")
         say("scenario 2b: raft prevote, lease, snapshot, hub cut ok (%.0fs)" % (time.monotonic() - t0))
 
         # Scenario 3: link alpha<->gamma fails; detection, then relay via beta.

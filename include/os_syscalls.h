@@ -412,6 +412,7 @@ typedef struct {
 #define OS_FB_PANE_COLLAB 8
 #define OS_FB_PANE_PROD 9
 #define OS_FB_PANE_IDE 10 /* US-050: full-screen pm-ide, term[] = editor frame */
+#define OS_FB_PANE_WEB 11 /* Lot 6 US-031: page painted from web[] (guest web engine) */
 #define OS_FB_STAGE_REFLECTING 0
 #define OS_FB_STAGE_ACTING 1
 #define OS_FB_STAGE_PRESENTING 2
@@ -433,6 +434,27 @@ typedef struct {
     uint16_t cells[OS_VGA_ROWS * OS_VGA_COLS];
 } os_vga_frame_t;
 
+/* Lot 6 (US-031): one display item of the guest web engine
+ * (userspace/webeng.c). Coordinates are page pixels from the page origin;
+ * the kernel adds the pane origin and clips. RECT fills, BORDER strokes
+ * (thickness = bold), TEXT draws the 8x8 font (bold = 1 draws twice). */
+#define OS_FB_WEB_RECT 1
+#define OS_FB_WEB_TEXT 2
+#define OS_FB_WEB_BORDER 3
+#define OS_FB_WEB_ITEMS 96
+#define OS_FB_WEB_TEXT_LEN 48
+typedef struct {
+    uint8_t kind;
+    uint8_t bold;
+    int16_t x;
+    int16_t y;
+    uint16_t w;
+    uint16_t h;
+    uint16_t pad;
+    uint32_t color;
+    char text[OS_FB_WEB_TEXT_LEN];
+} os_fb_web_item_t;
+
 typedef struct {
     uint32_t magic;
     uint16_t version;
@@ -453,6 +475,13 @@ typedef struct {
      * (OS_FB_PANE_IDE): 0 text, 1 keyword, 2 string, 3 number, 4 comment,
      * 5 gutter, 6 program output, 7 output rule. */
     uint8_t term_attr[OS_FB_TERM_MAX][OS_FB_TERM_LEN];
+    /* version >= 4: display list of the web pane (OS_FB_PANE_WEB). */
+    uint16_t nweb;
+    uint16_t web_page_w;
+    uint16_t web_page_h;
+    uint16_t web_scroll;
+    char web_title[OS_FB_TERM_LEN];
+    os_fb_web_item_t web[OS_FB_WEB_ITEMS];
 } os_fb_scene_t;
 
 typedef struct {
@@ -1749,6 +1778,29 @@ typedef struct {
 #define OS_DEV_OP_SERIAL_TAKE 5U
 #define OS_DEV_OP_SERIAL_RX 6U
 #define OS_DEV_OP_STATUS 7U
+#define OS_DEV_OP_PS2_MODS 8U   /* Lot 6: kernel Shift/Caps state (bit0 shift, bit1 caps) */
+/* Lot 6 (US-059/060): kernel key sealing. The sealing key lives in kernel
+ * memory only (derived per boot from TSC/PIT jitter, no TPM: simule).
+ * EBX = op, ECX = input, EDX = input length, ESI = output, EDI = capacity.
+ *   SEAL: output = nonce(8) | AES-128-GCM ciphertext | tag(16), bound to
+ *         the caller task name. Returns the blob length.
+ *   UNSEAL: returns the plaintext length; another task name or a modified
+ *         blob gives OS_SEAL_AUTH.
+ *   STATUS (ESI = os_seal_status_t*). */
+#define SYS_KEY_SEAL 159
+#define OS_SEAL_OP_SEAL 1U
+#define OS_SEAL_OP_UNSEAL 2U
+#define OS_SEAL_OP_STATUS 3U
+#define OS_SEAL_OVERHEAD 24U
+#define OS_SEAL_MAX_PLAIN 256U
+#define OS_SEAL_BAD_REQUEST (-190)
+#define OS_SEAL_AUTH (-191)
+typedef struct {
+    uint32_t ready;
+    uint32_t seals;
+    uint32_t unseals;
+    uint32_t failures;
+} os_seal_status_t;
 #define OS_DEV_DENIED (-180)
 #define OS_DEV_BAD_REQUEST (-181)
 #define OS_INPUT_MAX_EVENTS 32U
@@ -1757,6 +1809,9 @@ typedef struct {
 #define OS_INPUT_EV_ESC 2U    /* Escape key press */
 #define OS_INPUT_EV_EXT 3U    /* code = E0-prefixed make code (arrows, pages) */
 #define OS_INPUT_EV_MOUSE 4U  /* code = buttons, dx/dy = motion (y up) */
+#define OS_INPUT_EV_MODS 5U   /* Lot 6: code = bit0 shift, bit1 caps (after a change) */
+#define OS_INPUT_MOD_SHIFT 1U
+#define OS_INPUT_MOD_CAPS 2U
 typedef struct {
     uint8_t type;
     uint8_t code;
@@ -1779,6 +1834,13 @@ typedef struct {
     uint32_t serial_respawns;
     uint32_t ps2_handed_off;
     uint32_t serial_handed_off;
+    /* Lot 6: PS/2 mouse packets applied (Ring 3 events and Ring 0 path),
+     * summed motion (y up) and last buttons; kernel modifier bits. */
+    uint32_t mouse_packets;
+    int32_t mouse_dx;
+    int32_t mouse_dy;
+    uint32_t mouse_buttons;
+    uint32_t kbd_mods;
 } os_device_status_t;
 
 #endif

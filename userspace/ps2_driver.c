@@ -44,6 +44,10 @@ void main(void) {
         return;
     }
     ps2_decoder_init(&dec);
+    /* Lot 6: a respawned driver starts from the live modifier state (Shift
+     * held across the death of the previous driver stays held). */
+    rc = dev_op(OS_DEV_OP_PS2_MODS, 0U, 0U, 0U);
+    if (rc >= 0) ps2_decoder_seed(&dec, (uint32_t)rc);
     for (;;) {
         uint32_t n = 0U, reads = 0U;
         int seq = dev_op(OS_DEV_OP_PS2_WAIT, 50U, 0U, 0U);

@@ -156,12 +156,53 @@ static void test_unary_call_round_trip(void) {
     TEST_ASSERT_EQUAL(GW_ERR_FORMAT, gw_parse_response(resp, r - 24, &hs, &gs, msg, 128, &frames));
 }
 
+/* Lot 6 US-067: connection-level bytes, fed in TCP-sized pieces. */
+static void test_connection_stream(void) {
+    unsigned char c[512], s[512];
+    char path[64], msg[128];
+    int n, i, r, hs, gs, frames, cs, ss, acks;
+    n = gw_client_stream(c, (int)sizeof(c), "echo.EchoService", "SayHello", "guest-a");
+    TEST_ASSERT_TRUE(n > 33);
+    TEST_ASSERT_EQUAL(0, memcmp(c, "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n", 24));
+    /* incomplete at every split point, complete only with the last byte */
+    for (i = 0; i < n; i++) TEST_ASSERT_EQUAL(0, gw_stream_complete(c, i, 1));
+    TEST_ASSERT_EQUAL(1, gw_stream_complete(c, n, 1));
+    TEST_ASSERT_EQUAL(GW_ERR_SHORT, gw_serve_stream(c, 10, handler, s, 512, path, 64, &cs));
+    r = gw_serve_stream(c, n, handler, s, (int)sizeof(s), path, 64, &cs);
+    TEST_ASSERT_TRUE(r > 18);
+    TEST_ASSERT_EQUAL(1, cs);
+    TEST_ASSERT_EQUAL_STRING("/echo.EchoService/SayHello", path);
+    /* server: SETTINGS then SETTINGS ACK on stream 0 first */
+    TEST_ASSERT_EQUAL(GW_H2_SETTINGS, s[3]); TEST_ASSERT_EQUAL(0, s[4]);
+    TEST_ASSERT_EQUAL(GW_H2_SETTINGS, s[12]); TEST_ASSERT_EQUAL(1, s[13]);
+    for (i = 0; i < r; i++) TEST_ASSERT_EQUAL(0, gw_stream_complete(s, i, 0));
+    TEST_ASSERT_EQUAL(1, gw_stream_complete(s, r, 0));
+    TEST_ASSERT_EQUAL(GW_OK, gw_parse_stream_response(s, r, &hs, &gs, msg, 128, &frames, &ss, &acks));
+    TEST_ASSERT_EQUAL(200, hs); TEST_ASSERT_EQUAL(0, gs); TEST_ASSERT_EQUAL(3, frames);
+    TEST_ASSERT_EQUAL(1, ss); TEST_ASSERT_EQUAL(1, acks);
+    TEST_ASSERT_EQUAL_STRING("Hello guest-a", msg);
+    /* bad preface, missing client SETTINGS, foreign stream are refused */
+    c[0] = 'X';
+    TEST_ASSERT_EQUAL(GW_ERR_FORMAT, gw_stream_complete(c, n, 1));
+    TEST_ASSERT_EQUAL(GW_ERR_FORMAT, gw_serve_stream(c, n, handler, s, 512, path, 64, &cs));
+    c[0] = 'P';
+    TEST_ASSERT_EQUAL(GW_ERR_FORMAT, gw_serve_stream(c, 24, handler, s, 512, path, 64, &cs));
+    {
+        unsigned char d[512];
+        memcpy(d, c, 33);
+        r = gw_build_request(d + 33, 400, "a.B", "C", "x");
+        d[33 + 8] = 3;                     /* HEADERS on stream 3 */
+        TEST_ASSERT_EQUAL(GW_ERR_FORMAT, gw_serve_stream(d, 33 + r, handler, s, 512, path, 64, &cs));
+    }
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_protobuf_wire);
     RUN_TEST(test_lpm_and_h2_frames);
     RUN_TEST(test_hpack_rfc7541_vectors);
     RUN_TEST(test_unary_call_round_trip);
+    RUN_TEST(test_connection_stream);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

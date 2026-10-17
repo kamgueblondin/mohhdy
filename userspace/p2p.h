@@ -70,6 +70,8 @@ typedef struct {
     uint8_t nb_hops[P2P_PEERS];  /* hops from that neighbor to neighbors[i] (1..P2P_MAX_HOPS) */
     uint32_t sent, received, auth_fail, replay, throttled, down_events;
     uint32_t bucket_tick, bucket_used;
+    uint32_t rx_win_last, rx_base16; /* Lot 6 (US-075): per-peer frames/s baseline */
+    uint32_t anomalies;              /* windows above 4x that baseline + 8 */
     uint32_t raft_next;   /* next log index to send (1-based, 0 = unset) */
     uint32_t raft_match;  /* highest index known replicated */
     uint32_t raft_commit_sent; /* leader_commit last sent to this peer */
@@ -147,6 +149,8 @@ typedef struct {
 } p2p_raft_state_t;
 
 #define P2P_CACHE_MAX 8
+/* Lot 6 (US-070): a line written through Raft stays until replaced (about 124 days at 100 Hz). */
+#define P2P_CACHE_RAFT_TTL 0x40000000U
 typedef struct {
     uint8_t used;
     char key[P2P_KEY_MAX];
@@ -188,7 +192,15 @@ typedef struct {
     uint32_t loss_count;      /* total detected losses / retransmissions */
     uint32_t priority_high_tx;/* high-priority control frames sent */
     uint32_t priority_low_tx; /* low-priority data frames sent */
+    /* Lot 6: shaping instead of policing. A data message above the budget
+     * waits in a small queue drained by p2p_tick when tokens come back. */
+    uint32_t shaped_queued, shaped_sent, shaped_dropped;
+    /* Lot 6: measured byte rates (EWMA 1/4 of 1 s windows), not a model. */
+    uint32_t meas_tx_bps, meas_rx_bps;
+    uint32_t meas_tick, meas_tx_last, meas_rx_last;
 } p2p_qos_t;
+#define P2P_SHAPE_Q 8
+#define P2P_SHAPE_BODY 404
 
 typedef struct {
     uint8_t nat_type; /* STUN_NAT_* (stun.h): mapping behaviour seen so far */
@@ -234,6 +246,14 @@ typedef struct {
     uint32_t base_rate16[P2P_I_COUNT];
     uint32_t last_rx[P2P_I_COUNT];
     uint32_t analyze_tick, analyze_windows, anomalies, last_anomaly_type, last_anomaly_rate;
+    uint32_t last_anomaly_peer;   /* Lot 6: id of the peer above its own baseline */
+    uint32_t solicited_until;     /* Lot 6: a reply burst we asked for (sync, snapshot) is expected until then */
+    uint32_t solicited_skipped;   /* anomaly windows not counted because solicited */
+    uint32_t unshaped_tx;         /* messages sent by p2p_send_unshaped (flood proof) */
+    /* Lot 6 (US-068/073): data messages waiting for budget */
+    struct { uint8_t used; uint32_t peer; uint8_t inner; uint16_t len; uint8_t body[P2P_SHAPE_BODY]; } shape_q[P2P_SHAPE_Q];
+    /* Lot 6 (US-070): cache lines written through the Raft log */
+    uint32_t cache_raft_applied;
     char last_msg[P2P_TEXT_MAX];
     /* Typed RPC over the sealed channel (not HTTP/2 gRPC). */
 #define P2P_RPC_SLOTS 4
@@ -256,6 +276,8 @@ void p2p_down(p2p_node_t* n);
 void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget);
 p2p_peer_t* p2p_find(p2p_node_t* n, const char* name);
 int p2p_send_text(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* text);
+/* Lot 6: bypasses admit/shaping (flood proof only, see p2p.c) */
+int p2p_send_unshaped(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* text);
 int p2p_put(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 const p2p_item_t* p2p_get_local(const p2p_node_t* n, const char* key);
 int p2p_get_remote(p2p_node_t* n, const p2p_host_t* h, const char* key);
@@ -277,6 +299,10 @@ void p2p_qos_note_rtt(p2p_node_t* n, uint32_t sample_ms);
 int p2p_cache_invalidate_v(p2p_node_t* n, const p2p_host_t* h, const char* key, uint32_t version);
 int p2p_cache_put_v(p2p_node_t* n, const char* key, const char* value, uint32_t version, uint32_t ttl_ticks, uint32_t current_tick);
 int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key);
+/* Lot 6 (US-070): cache write through the Raft log (leader only). Every
+ * node applies it at commit: line value, version = log index, fence below.
+ * Returns the log index or -1. */
+int p2p_cache_raft_put(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 /* AIMD on the data window. Control frames do not pass through it. */
 void p2p_qos_note_loss(p2p_node_t* n);
 void p2p_qos_note_ack(p2p_node_t* n);

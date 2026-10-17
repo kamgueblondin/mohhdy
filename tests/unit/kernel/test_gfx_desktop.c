@@ -335,6 +335,43 @@ static void test_vbe_layout_automation_under_load(void) {
     }
 }
 
+/* Lot 6 (US-031): the web pane paints the engine display list, clipped
+ * to the page area, from the origin given by gfx_desktop_web_origin. */
+static void test_web_pane_display_list(void) {
+    int ox, oy, pw, ph;
+    memset(&g_scene, 0, sizeof(g_scene));
+    g_scene.magic = OS_FB_MAGIC;
+    g_scene.version = 4;
+    g_scene.pane = OS_FB_PANE_WEB;
+    strcpy(g_scene.web_title, "web demo.html");
+    g_scene.nweb = 4;
+    g_scene.web[0].kind = OS_FB_WEB_RECT; g_scene.web[0].x = 10; g_scene.web[0].y = 10;
+    g_scene.web[0].w = 30; g_scene.web[0].h = 20; g_scene.web[0].color = 0xFF0000;
+    g_scene.web[1].kind = OS_FB_WEB_BORDER; g_scene.web[1].x = 100; g_scene.web[1].y = 10;
+    g_scene.web[1].w = 40; g_scene.web[1].h = 40; g_scene.web[1].bold = 3; g_scene.web[1].color = 0x0000FF;
+    g_scene.web[2].kind = OS_FB_WEB_TEXT; g_scene.web[2].x = 10; g_scene.web[2].y = 60;
+    g_scene.web[2].color = 0x00AA00; strcpy(g_scene.web[2].text, "HELLO");
+    /* far outside the page: clipped */
+    g_scene.web[3].kind = OS_FB_WEB_RECT; g_scene.web[3].x = -500; g_scene.web[3].y = 2000;
+    g_scene.web[3].w = 3000; g_scene.web[3].h = 30; g_scene.web[3].color = 0xFF00FF;
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    gfx_desktop_web_origin(W, H, &ox, &oy, &pw, &ph);
+    TEST_ASSERT_EQUAL(16, ox);
+    TEST_ASSERT_TRUE(oy > 28 && oy < 100);
+    TEST_ASSERT_EQUAL(30 * 20, count_near(ox + 10, oy + 10, ox + 40, oy + 30, 255, 0, 0, 0));
+    TEST_ASSERT_EQUAL(0, count_near(ox + 41, oy + 10, ox + 60, oy + 30, 255, 0, 0, 0));
+    TEST_ASSERT_TRUE(near_rgb(gfx_desktop_pixel(g_fb, W, H, ox + 5, oy + 5), 255, 255, 255, 0));
+    /* border: 3 px frame, white inside */
+    TEST_ASSERT_EQUAL(40 * 3, count_near(ox + 100, oy + 10, ox + 140, oy + 13, 0, 0, 255, 0));
+    TEST_ASSERT_TRUE(near_rgb(gfx_desktop_pixel(g_fb, W, H, ox + 120, oy + 30), 255, 255, 255, 0));
+    TEST_ASSERT_TRUE(count_near(ox + 10, oy + 60, ox + 50, oy + 68, 0, 0xAA, 0, 0) > 20);
+    TEST_ASSERT_EQUAL(0, count_near(0, 0, W, H, 255, 0, 255, 0));
+    /* version 3 scene: the web list is ignored */
+    g_scene.version = 3;
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    TEST_ASSERT_EQUAL(0, count_near(ox + 10, oy + 10, ox + 40, oy + 30, 255, 0, 0, 0));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -350,6 +387,7 @@ int main(void) {
     RUN_TEST(test_hit_regions_dock_menu_stage_close);
     RUN_TEST(test_p2p_collab_prod_panes_drawing);
     RUN_TEST(test_vbe_layout_automation_under_load);
+    RUN_TEST(test_web_pane_display_list);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

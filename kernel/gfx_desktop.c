@@ -615,6 +615,64 @@ static void draw_ide(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, c
     }
 }
 
+/* Lot 6 (US-031): page painted from the display list of the guest web
+ * engine (userspace/webeng.c). The page origin is x + 8, y + 40; items are
+ * clipped to the page area. Text uses the 8x8 font without shadow. */
+static void web_fill_clip(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, uint32_t c,
+                          int cx0, int cy0, int cx1, int cy1) {
+    int x1 = x + rw, y1 = y + rh;
+    if (x < cx0) x = cx0;
+    if (y < cy0) y = cy0;
+    if (x1 > cx1) x1 = cx1;
+    if (y1 > cy1) y1 = cy1;
+    if (x1 > x && y1 > y) fill_rect(fb, w, h, x, y, x1 - x, y1 - y, c);
+}
+
+void gfx_desktop_web_origin(int w, int h, int *ox, int *oy, int *pw, int *ph) {
+    int bar_h = clampi(h / 22, 28, 40);
+    if (ox) *ox = 16;
+    if (oy) *oy = bar_h + 48;
+    if (pw) *pw = w - 32;
+    if (ph) *ph = h - (bar_h + 48) - 16;
+}
+
+static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
+    int ox, oy, pw, ph, i, n, cx1, cy1;
+    int bar_h = clampi(h / 22, 28, 40);
+    gfx_desktop_web_origin(w, h, &ox, &oy, &pw, &ph);
+    round_rect_a(fb, w, h, 8, bar_h + 8, w - 16, h - bar_h - 16, 10, RGB(10, 14, 18), 250);
+    fill_rect(fb, w, h, 8, bar_h + 8, w - 16, 32, RGB(28, 44, 56));
+    traffic(fb, w, h, 16, bar_h + 16);
+    draw_text_n(fb, w, h, 64, bar_h + 20, sc->web_title, (w - 96) / 8, RGB(232, 238, 244));
+    fill_rect(fb, w, h, ox, oy, pw, ph, RGB(255, 255, 255));
+    cx1 = ox + pw;
+    cy1 = oy + ph;
+    n = sc->nweb > OS_FB_WEB_ITEMS ? OS_FB_WEB_ITEMS : (int)sc->nweb;
+    for (i = 0; i < n; i++) {
+        const os_fb_web_item_t *it = &sc->web[i];
+        int x = ox + it->x, y = oy + it->y - (int)sc->web_scroll;
+        uint32_t c = it->color & 0xFFFFFFu;
+        if (it->kind == OS_FB_WEB_RECT) {
+            web_fill_clip(fb, w, h, x, y, it->w, it->h, c, ox, oy, cx1, cy1);
+        } else if (it->kind == OS_FB_WEB_BORDER) {
+            int t = it->bold ? it->bold : 1;
+            web_fill_clip(fb, w, h, x, y, it->w, t, c, ox, oy, cx1, cy1);
+            web_fill_clip(fb, w, h, x, y + it->h - t, it->w, t, c, ox, oy, cx1, cy1);
+            web_fill_clip(fb, w, h, x, y, t, it->h, c, ox, oy, cx1, cy1);
+            web_fill_clip(fb, w, h, x + it->w - t, y, t, it->h, c, ox, oy, cx1, cy1);
+        } else if (it->kind == OS_FB_WEB_TEXT) {
+            int k;
+            if (y < oy || y + 8 > cy1) continue;
+            for (k = 0; k < OS_FB_WEB_TEXT_LEN && it->text[k]; k++) {
+                int gx = x + k * 8;
+                if (gx < ox || gx + 9 > cx1) continue;
+                draw_char_bits(fb, w, h, gx, y, it->text[k], c);
+                if (it->bold) draw_char_bits(fb, w, h, gx + 1, y, it->text[k], c);
+            }
+        }
+    }
+}
+
 static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
     int ty, term_h, i, maxc, prompt_y, n;
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 16, 20), 240);
@@ -690,7 +748,7 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
 }
 
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *out) {
-    os_fb_scene_t def;
+    static os_fb_scene_t def; /* Lot 6: the scene carries the web display list, keep it off the 16 KB kernel stack */
     const os_fb_scene_t *sc = scene;
     int bar_h, chat_w, chat_h, chat_x, chat_y, scene_w, scene_h, scene_x, scene_y;
     int dock_w, dock_x, dock_y, bw, i, mx, ty, gap, flag_w;
@@ -850,7 +908,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
 }
 
 void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
-    os_fb_scene_t def;
+    static os_fb_scene_t def;
     const os_fb_scene_t *sc = scene;
     int bar_h, chat_w, chat_h, chat_x, chat_y, scene_w, scene_h, scene_x, scene_y;
     int dock_w, dock_x, dock_y, i;
@@ -961,6 +1019,10 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     pane = sc->pane;
     if (pane == OS_FB_PANE_IDE) {
         draw_ide(fb, w, h, 8, bar_h + 8, w - 16, h - bar_h - 16, sc);
+        return;
+    }
+    if (pane == OS_FB_PANE_WEB && sc->version >= 4) {
+        draw_web(fb, w, h, sc);
         return;
     }
     ptitle = pane_title(pane);

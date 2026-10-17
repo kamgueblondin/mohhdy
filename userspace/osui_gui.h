@@ -24,6 +24,12 @@ void osui_gui_ide_frame_row(int r, char *dst, int max);
 /* Program output of an OSUI_IDE_RUN, called by exec while the VM runs:
  * goes to the editor output pane. */
 void osui_gui_ide_output(const char *text);
+/* Lot 6 (US-031): "web FILE" on the desktop renders FILE with the guest
+ * web engine (userspace/webeng.c) into the web pane. Uses the IDE loader. */
+#define OSUI_WEB_SRC_MAX 4096
+#define OSUI_WEB_VIEWPORT 640
+int osui_gui_web_load(const char *file, char *status, int max);
+int osui_gui_web_active(void);
 void osui_gui_term_reset(void);
 int osui_gui_term_count(void);
 void osui_gui_term_at(int i, char *dst, int max);

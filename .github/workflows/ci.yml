@@ -295,6 +295,9 @@ jobs:
       - name: QEMU strict network build, loopback-only worker (no NE2000)
         run: make qemu-net-loopback-worker
 
+      - name: QEMU gRPC over guest TCP between two guests (Lot 6 US-067, about 1 min)
+        run: make qemu-grpc-guests
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

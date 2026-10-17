@@ -40,6 +40,8 @@ typedef struct {
     } dock;
 } gfx_desktop_layout_t;
 
+/* Lot 6 (US-031): page origin and size of the web pane. */
+void gfx_desktop_web_origin(int w, int h, int *ox, int *oy, int *pw, int *ph);
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *layout);
 void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h);
 void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w, int h);

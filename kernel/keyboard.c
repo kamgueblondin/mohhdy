@@ -40,6 +40,18 @@ static volatile int g_e0_prefix = 0;
 
 static uint8_t mouse_cycle = 0;
 static uint8_t mouse_bytes[3];
+/* Lot 6 (US-001): mouse packets applied from either path, for `devices`. */
+static uint32_t g_mouse_packets = 0;
+static int32_t g_mouse_dx = 0, g_mouse_dy = 0;
+static uint32_t g_mouse_buttons = 0;
+
+static void mouse_apply(int dx, int dy, uint8_t buttons) {
+    g_mouse_packets++;
+    g_mouse_dx += dx;
+    g_mouse_dy += dy;
+    g_mouse_buttons = buttons;
+    gfx_desktop_move_mouse(dx, -dy, buttons);
+}
 
 void mouse_handle_byte(uint8_t b) {
     if (mouse_cycle == 0) {
@@ -56,7 +68,7 @@ void mouse_handle_byte(uint8_t b) {
         int dx = (int)(int8_t)mouse_bytes[1];
         int dy = (int)(int8_t)mouse_bytes[2];
         uint8_t buttons = flags & 0x07;
-        gfx_desktop_move_mouse(dx, -dy, buttons);
+        mouse_apply(dx, dy, buttons);
     }
 }
 
@@ -386,8 +398,27 @@ void keyboard_apply_event(const os_input_event_t* e) {
     } else if (e->type == OS_INPUT_EV_EXT) {
         (void)kbd_handle_extended(e->code);
     } else if (e->type == OS_INPUT_EV_MOUSE) {
-        gfx_desktop_move_mouse((int)e->dx, -(int)e->dy, (uint8_t)(e->code & 0x07U));
+        mouse_apply((int)e->dx, (int)e->dy, (uint8_t)(e->code & 0x07U));
+    } else if (e->type == OS_INPUT_EV_MODS) {
+        g_shift_pressed = (e->code & OS_INPUT_MOD_SHIFT) ? 1 : 0;
+        g_caps_lock = (e->code & OS_INPUT_MOD_CAPS) ? 1 : 0;
     }
+}
+
+uint32_t keyboard_mods(void) {
+    return (g_shift_pressed ? OS_INPUT_MOD_SHIFT : 0U) | (g_caps_lock ? OS_INPUT_MOD_CAPS : 0U);
+}
+
+/* Lot 6: the driver died: a half read E0 sequence or mouse packet is
+ * dropped (the next mouse packet resyncs on bit 3); Shift/Caps stay as
+ * the driver last reported them. */
+void keyboard_driver_lost(void) {
+    g_e0_prefix = 0;
+    mouse_cycle = 0;
+}
+
+void keyboard_mouse_stats(uint32_t* packets, int32_t* dx, int32_t* dy, uint32_t* buttons) {
+    *packets = g_mouse_packets; *dx = g_mouse_dx; *dy = g_mouse_dy; *buttons = g_mouse_buttons;
 }
 
 // Initialisation clavier hybride optimisée pour QEMU

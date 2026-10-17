@@ -1,3 +1,4 @@
+#include <stdio.h>
 /* test_osui_gui.c - Commande gui, bureau VBE QEMU, chat float. */
 
 #include "../../framework/unity.h"
@@ -218,7 +219,7 @@ static void test_gui_media_rendering(void) {
 }
 
 /* US-050: pm-ide typed on the desktop opens the full-screen editor. */
-static char g_fake_file[256];
+static char g_fake_file[512];
 static int g_fake_len = -1;
 static int g_fake_exec_action;
 static int fake_load(const char *file, char *buf, int max) {
@@ -261,8 +262,9 @@ static void test_gui_pm_ide_fullscreen(void) {
     TEST_ASSERT_EQUAL(OSUI_IDE_FRAME, g_scene.nterm);
     TEST_ASSERT_EQUAL(0, strncmp(g_scene.term[0], "pm-ide t.pm Ln 1 Col 1 /1", 25));
     TEST_ASSERT_EQUAL_STRING("  1> say 1", g_scene.term[1]); /* cursor on s: Ln/Col in the title */
-    /* scene v3 carries the syntax classes: gutter, keyword, number */
-    TEST_ASSERT_EQUAL(3, g_scene.version);
+    /* scene v3 carries the syntax classes: gutter, keyword, number (v4
+     * keeps them and adds the web display list, Lot 6) */
+    TEST_ASSERT_EQUAL(4, g_scene.version);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_GUTTER, g_scene.term_attr[1][0]);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_KEYWORD, g_scene.term_attr[1][5]);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_NUMBER, g_scene.term_attr[1][9]);
@@ -322,6 +324,51 @@ static void test_gui_pm_ide_fullscreen(void) {
     osui_gui_set_ide_ops(0, 0, 0);
 }
 
+/* Lot 6 (US-031, US-040, US-041, US-042): "web FILE" on the desktop runs
+ * the page pipeline (components, @media, var()) and the guest web engine,
+ * and the scene carries the display list for the web pane. */
+static void test_gui_web_pane_pipeline(void) {
+    uint32_t i;
+    int red = 0, bold_yo = 0;
+    setup();
+    osui_gui_set_ide_ops(fake_load, fake_save, fake_exec);
+    strcpy(g_fake_file,
+           "<style>:root{--c:#ff0000} #a{background:var(--c);height:10px}"
+           " @media (max-width:100px){#a{background:#00ff00}}</style>"
+           "<template id=x-hi><b><slot></slot></b></template><div id=a>x</div><x-hi>yo</x-hi>");
+    g_fake_len = (int)strlen(g_fake_file);
+    feed_str("web t.html");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web render file=t.html"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, " components 1"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, " media_kept 0 media_dropped 1"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, " vars 1"));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_active());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_WEB, g_scene.pane);
+    TEST_ASSERT_EQUAL(4, g_scene.version);
+    TEST_ASSERT_TRUE(g_scene.nweb > 0);
+    TEST_ASSERT_NOT_NULL(strstr(g_scene.web_title, "web t.html"));
+    for (i = 0; i < g_scene.nweb; i++) {
+        if (g_scene.web[i].kind == OS_FB_WEB_RECT && g_scene.web[i].color == 0xFF0000U && g_scene.web[i].h == 10) red = 1;
+        if (g_scene.web[i].kind == OS_FB_WEB_TEXT && strcmp(g_scene.web[i].text, "yo") == 0 && g_scene.web[i].bold) bold_yo = 1;
+    }
+    TEST_ASSERT_EQUAL(1, red);
+    TEST_ASSERT_EQUAL(1, bold_yo);
+    osui_gui_feed_key(OS_VGA_KEY_DOWN, g_out, (int)sizeof(g_out));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web close file=t.html"));
+    TEST_ASSERT_EQUAL(0, osui_gui_web_active());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_TRUE(g_scene.pane != OS_FB_PANE_WEB);
+    g_fake_len = -1;
+    feed_str("web missing.html");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web error=not_found file=missing.html"));
+    TEST_ASSERT_EQUAL(0, osui_gui_web_active());
+    osui_gui_set_ide_ops(0, 0, 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_gui_command_canonical);
@@ -334,6 +381,7 @@ int main(void) {
     RUN_TEST(test_vbe_p2p_collab_prod_panes);
     RUN_TEST(test_gui_media_rendering);
     RUN_TEST(test_gui_pm_ide_fullscreen);
+    RUN_TEST(test_gui_web_pane_pipeline);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -60,6 +60,13 @@ static int parse_ip(const char* s, uint8_t ip[4]) {
     return part == 4 ? 0 : -1;
 }
 static int to_int(const char* s) { int v = 0; while (*s >= '0' && *s <= '9') v = v * 10 + (*s++ - '0'); return v; }
+static void print_int(int rc) {
+    char n[12]; int i = 0, k; unsigned v = (unsigned)(rc < 0 ? -rc : rc);
+    char t[12];
+    do { t[i++] = (char)('0' + v % 10U); v /= 10U; } while (v);
+    k = 0; if (rc < 0) n[k++] = '-'; while (i) n[k++] = t[--i]; n[k] = 0;
+    print_string(n);
+}
 static void say_rc(const char* what, int rc) {
     char n[12]; int i = 0, k; unsigned v = (unsigned)(rc < 0 ? -rc : rc);
     char t[12];
@@ -237,6 +244,15 @@ int shell_p2p_line(const char* line) {
             say_rc("p2p-cache inv sent peers ", rc);
             return 0;
         }
+        if (s_eq(a, "raft")) {
+            /* Lot 6 (US-070): write through the Raft log (leader only) */
+            char val[P2P_VAL_MAX];
+            (void)word(rest, val, (int)sizeof(val));
+            rc = p2p_cache_raft_put(&g_node, &g_host, b, val);
+            if (rc < 0) { print_string("p2p-cache raft error not leader\n"); return 1; }
+            print_string("p2p-cache raft ok "); print_string(b); print_string(" index "); print_int(rc); print_string("\n");
+            return 0;
+        }
         if (s_eq(a, "putv")) {
             char val[P2P_VAL_MAX], ver[12];
             const char* r2 = word(rest, val, (int)sizeof(val));
@@ -304,8 +320,38 @@ int shell_p2p_line(const char* line) {
         if (!a[0] || !*rest) { print_string("p2p-send error usage: p2p-send PEER TEXT\n"); return 1; }
         rc = p2p_send_text(&g_node, &g_host, a, rest);
         if (rc == 0) { print_string("p2p-send ok to "); print_string(a); print_string("\n"); return 0; }
-        print_string(rc == -2 ? "p2p-send error throttled\n" : rc == -3 ? "p2p-send error no route\n" : "p2p-send error unknown peer\n");
+        /* Lot 6 (US-068/073): over budget the message waits (shaping) */
+        if (rc == 1) { print_string("p2p-send queued to "); print_string(a); print_string(" (shaped)\n"); return 0; }
+        print_string(rc == -2 ? "p2p-send error queue full\n" : rc == -3 ? "p2p-send error no route\n" : "p2p-send error unknown peer\n");
         return 1;
+    }
+    if (s_eq(cmd, "p2p-burst")) {
+        /* Lot 6: N messages at once (shaping and anomaly proofs) */
+        int count, k, sent = 0, queued = 0, refused = 0;
+        rest = word(rest, a, (int)sizeof(a));
+        rest = word(rest, b, (int)sizeof(b));
+        count = to_int(b);
+        if (!a[0] || count < 1 || count > 64) { print_string("p2p-burst error usage: p2p-burst PEER N [TEXT]\n"); return 1; }
+        for (k = 0; k < count; k++) {
+            rc = p2p_send_text(&g_node, &g_host, a, *rest ? rest : "burst");
+            if (rc == 0) sent++; else if (rc == 1) queued++; else refused++;
+        }
+        print_string("p2p-burst sent "); print_int(sent); print_string(" queued "); print_int(queued);
+        print_string(" refused "); print_int(refused); print_string("\n");
+        return refused == count ? 1 : 0;
+    }
+    if (s_eq(cmd, "p2p-flood")) {
+        /* Lot 6 (US-075 proof): a sender ignoring its own QoS controller */
+        int count, k, sent = 0;
+        unsigned t0 = ticks();
+        rest = word(rest, a, (int)sizeof(a));
+        rest = word(rest, b, (int)sizeof(b));
+        count = to_int(b);
+        if (!a[0] || count < 1 || count > 64) { print_string("p2p-flood error usage: p2p-flood PEER N\n"); return 1; }
+        for (k = 0; k < count; k++) if (p2p_send_unshaped(&g_node, &g_host, a, "flood") == 0) sent++;
+        print_string("p2p-flood sent "); print_int(sent); print_string(" unshaped ms ");
+        print_int((int)((ticks() - t0) * (1000U / P2P_HZ))); print_string("\n");
+        return sent ? 0 : 1;
     }
     if (s_eq(cmd, "p2p-put") || s_eq(cmd, "p2p-propose")) {
         rest = word(rest, a, (int)sizeof(a));

@@ -164,6 +164,7 @@ uint32_t devsvc_watchdog(uint32_t now) {
 
 void devsvc_status(os_device_status_t* out) {
     if (!out) return;
+    out->mouse_packets = 0; out->mouse_dx = 0; out->mouse_dy = 0; out->mouse_buttons = 0; out->kbd_mods = 0;
     out->ps2_owner = g_dev[DEV_PS2].owner;
     out->serial_owner = g_dev[DEV_SERIAL].owner;
     out->ps2_irqs = g_ps2.irqs;

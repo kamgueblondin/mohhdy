@@ -295,6 +295,42 @@ static int admit(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
     return 1;
 }
 
+/* Lot 6 (US-068/073): a data message over budget is queued (shaping),
+ * not dropped. Returns 1 when queued, -2 when the queue is full. */
+static int shape_enqueue(p2p_node_t* n, p2p_peer_t* p, int inner, const uint8_t* body, int len) {
+    int i;
+    if (len > P2P_SHAPE_BODY) return -2;
+    for (i = 0; i < P2P_SHAPE_Q; i++) {
+        if (n->shape_q[i].used) continue;
+        n->shape_q[i].used = 1;
+        n->shape_q[i].peer = p->id;
+        n->shape_q[i].inner = (uint8_t)inner;
+        n->shape_q[i].len = (uint16_t)len;
+        mcopy(n->shape_q[i].body, body, len);
+        n->qos.shaped_queued++;
+        return 1;
+    }
+    n->qos.shaped_dropped++;
+    return -2;
+}
+
+/* FIFO per call order: the lowest slot is not always the oldest, so keep
+ * a send pass in slot order; each peer keeps its own order because a slot
+ * is reused only after it was sent. */
+static void shape_drain(p2p_node_t* n, const p2p_host_t* h) {
+    int i;
+    for (i = 0; i < P2P_SHAPE_Q; i++) {
+        p2p_peer_t* p;
+        if (!n->shape_q[i].used) continue;
+        p = by_id(n, n->shape_q[i].peer);
+        if (!p || !p->keyed) { n->shape_q[i].used = 0; n->qos.shaped_dropped++; continue; }
+        if (!admit(n, h, p)) continue;
+        if (seal_send(n, h, p, n->shape_q[i].inner, n->shape_q[i].body, n->shape_q[i].len) == 0) n->qos.shaped_sent++;
+        else n->qos.shaped_dropped++;
+        n->shape_q[i].used = 0;
+    }
+}
+
 static void qos_rate(p2p_node_t* n) {
     uint32_t srtt = n->qos.rtt_avg_ms < 10U ? 10U : n->qos.rtt_avg_ms;
     n->qos.rate_est_bps = n->qos.window_size * (uint32_t)P2P_DATAGRAM_MAX * 1000U / srtt;
@@ -454,6 +490,19 @@ static void raft_apply(p2p_node_t* n, const p2p_host_t* h) {
         e = raft_log_at(n, n->raft.last_applied);
         if (!e) break;
         (void)kv_apply(n, e->key, e->value, n->raft.last_applied, n->id);
+        if (e->key[0] == 'c' && e->key[1] == '/' && e->key[2]) {
+            /* Lot 6 (US-070): consensus-backed cache line. Same value and
+             * version on every node that applied the index; any fill at or
+             * below it is refused by the fence. */
+            uint32_t idx = n->raft.last_applied;
+            (void)p2p_cache_put_v(n, e->key + 2, e->value, idx, P2P_CACHE_RAFT_TTL, now(h));
+            cache_fence(n, e->key + 2, idx);
+            n->cache_raft_applied++;
+            line[0] = 0;
+            s_cat(line, "p2p cache raft ", 160); s_cat(line, e->key + 2, 160); s_cat(line, "=", 160);
+            s_cat(line, e->value, 160); s_cat(line, " v", 160); cat_u(line, idx, 160);
+            say(h, line);
+        }
         line[0] = 0;
         s_cat(line, "p2p raft commit index ", 160);
         cat_u(line, n->raft.last_applied, 160);
@@ -1012,6 +1061,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         if (off == 0U || n->raft.snap_in_index != snap_i) {
             n->raft.snap_in_n = 0;
             n->raft.snap_in_index = snap_i;
+            n->solicited_until = now(h) + 3U * P2P_HZ; /* Lot 6: catch-up burst expected */
         }
         if (off != n->raft.snap_in_n) {
             put32(b, n->raft.term); b[4] = 0; put32(b + 5, 0); b[9] = n->raft.snap_in_n;
@@ -1467,8 +1517,37 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
             }
             n->base_rate16[k] = n->analyze_windows ? (n->base_rate16[k] * 7U + rate * 16U) / 8U : rate * 16U;
         }
+        /* Lot 6 (US-075): per-peer baseline, so an anomaly names its
+         * source. A reply burst we solicited (sync, snapshot) is skipped. */
+        for (i = 0; i < P2P_PEERS; i++) {
+            p2p_peer_t* p = &n->peers[i];
+            uint32_t rate;
+            if (!p->used) continue;
+            rate = p->received - p->rx_win_last;
+            p->rx_win_last = p->received;
+            if (n->analyze_windows >= P2P_ANALYZE_WARMUP && rate * 16U > 4U * p->rx_base16 + 8U * 16U) {
+                if ((int32_t)(n->solicited_until - t) > 0) n->solicited_skipped++;
+                else { p->anomalies++; n->last_anomaly_peer = p->id; }
+            }
+            p->rx_base16 = n->analyze_windows ? (p->rx_base16 * 7U + rate * 16U) / 8U : rate * 16U;
+        }
+        /* Lot 6 (US-068/073): measured byte rates, EWMA 1/4 */
+        {
+            uint32_t tx = n->tx_bytes - n->qos.meas_tx_last, rx = n->rx_bytes - n->qos.meas_rx_last;
+            uint32_t dt = t - n->qos.meas_tick;
+            n->qos.meas_tx_last = n->tx_bytes;
+            n->qos.meas_rx_last = n->rx_bytes;
+            n->qos.meas_tick = t;
+            if (dt > 0U) {
+                tx = tx * P2P_HZ / dt;
+                rx = rx * P2P_HZ / dt;
+                n->qos.meas_tx_bps = n->analyze_windows ? (n->qos.meas_tx_bps * 3U + tx) / 4U : tx;
+                n->qos.meas_rx_bps = n->analyze_windows ? (n->qos.meas_rx_bps * 3U + rx) / 4U : rx;
+            }
+        }
         n->analyze_windows++;
     }
+    shape_drain(n, h);
     if (t - n->last_ping >= P2P_PING_TICKS) {
         n->last_ping = t;
         for (i = 0; i < P2P_PEERS; i++) {
@@ -1547,9 +1626,23 @@ int p2p_send_text(p2p_node_t* n, const p2p_host_t* h, const char* peer, const ch
     p2p_peer_t* p = p2p_find(n, peer);
     int pos;
     if (!n->up || !p) return -1;
-    if (!admit(n, h, p)) return -2;
     pos = put_str(b, 0, 400, text);
     if (pos < 0) return -1;
+    if (!admit(n, h, p)) return shape_enqueue(n, p, P2P_I_MSG, b, pos);
+    return seal_send(n, h, p, P2P_I_MSG, b, pos);
+}
+
+/* Lot 6 (US-075 proof): a misbehaving sender that ignores its own QoS
+ * controller and rate limit (no admit, no shaping queue). Used to show the
+ * receiver attributes a flood; a well-behaved node never calls it. */
+int p2p_send_unshaped(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* text) {
+    uint8_t b[P2P_DATAGRAM_MAX];
+    p2p_peer_t* p = p2p_find(n, peer);
+    int pos;
+    if (!n->up || !p) return -1;
+    pos = put_str(b, 0, 400, text);
+    if (pos < 0) return -1;
+    n->unshaped_tx++;
     return seal_send(n, h, p, P2P_I_MSG, b, pos);
 }
 
@@ -1588,6 +1681,7 @@ int p2p_get_remote(p2p_node_t* n, const p2p_host_t* h, const char* key) {
 }
 
 int p2p_sync(p2p_node_t* n, const p2p_host_t* h, const char* peer) {
+    n->solicited_until = now(h) + 3U * P2P_HZ; /* Lot 6: expected reply burst */
     uint8_t b[P2P_DATAGRAM_MAX];
     int i, len, sent = 0;
     len = digest_encode(n, b, 0);
@@ -1926,6 +2020,14 @@ int p2p_cache_put_v(p2p_node_t* n, const char* key, const char* value, uint32_t 
     return 0;
 }
 
+int p2p_cache_raft_put(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value) {
+    char k[P2P_KEY_MAX];
+    if (!n || !key || !key[0] || s_len(key) + 2 >= P2P_KEY_MAX) return -1;
+    k[0] = 'c'; k[1] = '/';
+    s_copy(k + 2, key, P2P_KEY_MAX - 2);
+    return p2p_raft_append(n, h, k, value);
+}
+
 int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t ttl_ticks, uint32_t current_tick) {
     int i, slot = -1;
     uint32_t oldest_expire = 0xffffffffU;
@@ -2009,6 +2111,7 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
             FIND(p->auth_fail > 0, suspicious, "auth-failures", p->auth_fail, "wrong network key or tampering")
             FIND(p->replay > 0, degraded, "replays", p->replay, "old frames re-sent")
             FIND(p->throttled > 0, degraded, "throttled", p->throttled, "sender above p2p-limit")
+            FIND(p->anomalies > 0, degraded, "rate-anomaly", p->anomalies, "frames/s from this peer above 4x its learned baseline")
             FIND(p->down_events >= 2, degraded, "down-events", p->down_events, "unstable link")
             FIND(p->up && p->rtt_ticks * (1000U / P2P_HZ) > 500U, degraded, "rtt-ms", p->rtt_ticks * (1000U / P2P_HZ), "high latency")
             FIND(!p->up, degraded, "down-for-s", (t - p->last_seen) / P2P_HZ, "peer unreachable")
@@ -2029,6 +2132,8 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
             s_cat(out, "p2p analyze anomaly type ", cap); s_cat(out, p2p_type_name((int)n->last_anomaly_type), cap);
             s_cat(out, " rate ", cap); cat_u(out, n->last_anomaly_rate, cap);
             s_cat(out, " baseline_x16 ", cap); cat_u(out, n->base_rate16[n->last_anomaly_type], cap);
+            if (n->last_anomaly_peer) { s_cat(out, " peer ", cap); s_cat(out, p2p_peer_name(n, n->last_anomaly_peer), cap); }
+            s_cat(out, " solicited_skipped ", cap); cat_u(out, n->solicited_skipped, cap);
             s_cat(out, "\n", cap);
         }
 #undef NFIND
@@ -2062,6 +2167,11 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " rate_bps ", cap); cat_u(out, n->qos.rate_est_bps, cap);
         s_cat(out, " high_tx ", cap); cat_u(out, n->qos.priority_high_tx, cap);
         s_cat(out, " low_tx ", cap); cat_u(out, n->qos.priority_low_tx, cap);
+        s_cat(out, " meas_tx_bps ", cap); cat_u(out, n->qos.meas_tx_bps, cap);
+        s_cat(out, " meas_rx_bps ", cap); cat_u(out, n->qos.meas_rx_bps, cap);
+        s_cat(out, " queued ", cap); cat_u(out, n->qos.shaped_queued, cap);
+        s_cat(out, " shaped_sent ", cap); cat_u(out, n->qos.shaped_sent, cap);
+        s_cat(out, " shaped_dropped ", cap); cat_u(out, n->qos.shaped_dropped, cap);
         s_cat(out, "\n", cap);
     } else if (s_eq(what, "cache")) {
         out[0] = 0;
