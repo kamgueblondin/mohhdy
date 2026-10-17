@@ -26,14 +26,14 @@ code, toolchain or image exists in this tree, and the HAL says so
 
 | US | Status | Notes |
 |----|--------|-------|
-| US-076 ARM kernel | partial (groundwork only) | HAL description of the i386 port; no ARM code. Porting is not started |
-| US-077 native mobile UI | not delivered | nothing mobile exists |
+| US-076 ARM kernel | partial (lot 8) | ARMv7-A kernel core in `arch/arm` on QEMU `-M virt`: MMU with a PL1-only kernel section, GICv2, generic timer, USR tasks via SVC, preemption, portable `kernel/ipc.c` and `kernel/sha256.c`. Drivers, FS, AI, shell and OS-UI are not ported. Proof: `make qemu-arm-boot`, `test_arm_mmu`, CI job `arm-port` |
+| US-077 native mobile UI | partial (lot 8) | `mobile_ui.c` + `mobile-ui`: phone/tablet layout, touch targets >= 48 px, nav bar, back stack, shade, gestures through US-079, hashed pixel model. No touch hardware (input simule), not painted on the VBE screen. Proof: `test_mobile_ui`, `make qemu-platform` |
 | US-078 mobile sensors | partial (simule) | fixed values, the report says `status simule (no sensor hardware on i386, fixed values)` (`sensor-read`); no real sensor exists in QEMU i386 |
 | US-079 touch gestures | done | single & multi-pointer gesture recognition (`gesture`, `gesture-multi`) |
 | US-080 screen adaptation | done | layout computation, orientation, grid calculation and dynamic screen resizing (`screen-adapt`, `screen-resize`) |
 | US-081 energy manager | done (no battery) | energy policy profiles and auto choice from the measured busy share (`power-profile`, `power-status` prints `battery none`) |
 | US-082 push notifications | done | local push notification queue with TTL expiry (`notify-push`, `notify-list`, `notify-ack`) |
-| US-083 multi-device sync | not delivered here | covered by the P2P replication of phase 5 (#117), not wired to devices |
+| US-083 multi-device sync | partial (lot 8) | `devsync.c` + `devsync-*`: LWW map (Lamport clock, device tie break, tombstones), version vectors, FNV-checked text deltas; three device replicas in one guest (simule), no inter-guest transport. Proof: `test_devsync`, `make qemu-platform` |
 | US-084 cross-platform continuity | done | cross-device session handoff & clipboard sync protocol (`continuity-export`, `continuity-import`) |
 | US-085 universal device manager | done | registry from existing probes, hotplug rule engine, attach/detach events (`dev-list`, `dev-rules`, `dev-hotplug`) |
 | US-086 legacy emulation | done (8086 subset) | Lot 7: real interpreter of an 8086 subset with INT 21h basics running .COM files from `/dos` (`legacy-emul FILE [MAX_STEPS]`, `dosemu.c`); not a full DOS or BIOS |

@@ -3608,6 +3608,7 @@ static int is_builtin(const char* cmd) {
         "collab-escrow-create", "collab-escrow-release", "collab-escrow-refund", "collab-dispute-open", "collab-dispute-vote",
         "collab-auction", "collab-market-bid", "collab-auction-close", "collab-escrows", "collab-auctions",
         "hal-info", "hal-port", "screen-adapt", "gesture", "power-profile", "power-status", "dev-list",
+        "mobile-ui", "devsync-set", "devsync-del", "devsync-sync", "devsync-show",
         "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
         "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
         "chat", "prompt", "grant", "revoke", "escalate", "takeover", "admin-status",

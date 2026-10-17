@@ -4,6 +4,8 @@
 #include "shell_platform.h"
 #include "platform.h"
 #include "dosemu.h"
+#include "mobile_ui.h"
+#include "devsync.h"
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
@@ -72,7 +74,8 @@ static const char* k_cmds[] = {
     "dev-rules", "dev-hotplug", "admin-nodes", "admin-node-add",
     "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
     "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
-    "sensor-read", "continuity-export", "continuity-import", "legacy-emul", 0
+    "sensor-read", "continuity-export", "continuity-import", "legacy-emul",
+    "mobile-ui", "devsync-set", "devsync-del", "devsync-sync", "devsync-show", 0
 };
 int shell_platform_is(const char* line) {
     char w[24];
@@ -386,6 +389,169 @@ static void power_line(void) {
     print_string(g_out);
 }
 
+
+/* ------------------------------------------------- Lot 8: US-077 mobile */
+static mui_layout_t g_mui;
+static mui_state_t g_mui_state;
+static int g_mui_on;
+
+static void mui_line(const char* what, int act) {
+    g_out[0] = 0;
+    s_cat(g_out, "mobile-ui ", 4096); s_cat(g_out, what, 4096);
+    s_cat(g_out, " action ", 4096); s_cat(g_out, mui_action_name(act), 4096);
+    s_cat(g_out, " screen ", 4096);
+    s_cat(g_out, g_mui_state.screen == MUI_SCREEN_HOME ? "home" : g_mui_state.screen == MUI_SCREEN_APP ? "app" : "recents", 4096);
+    if (g_mui_state.screen == MUI_SCREEN_APP) { s_cat(g_out, " app ", 4096); s_cat(g_out, mui_app_name(g_mui_state.app), 4096); }
+    s_cat(g_out, " depth ", 4096); cat_u(g_out, (uint32_t)g_mui_state.depth, 4096);
+    s_cat(g_out, g_mui_state.shade ? " shade 1" : " shade 0", 4096);
+    s_cat(g_out, " frame ", 4096); cat_hex(g_out, mui_frame_hash(&g_mui, &g_mui_state), 4096);
+    s_cat(g_out, "\n", 4096);
+    print_string(g_out);
+}
+
+/* mobile-ui WxH | mobile-ui tap X Y | mobile-ui swipe X0 Y0 X1 Y1 |
+ * mobile-ui app NAME (taps the icon of NAME) */
+static int cmd_mobile(const char* rest) {
+    char w[24], a[16], b[16], c[16], d[16];
+    int ok1, ok2, ok3, ok4;
+    rest = word(rest, w, (int)sizeof(w));
+    if (w[0] >= '0' && w[0] <= '9') {
+        int i = 0, W, H;
+        char ws[8], hs[8];
+        int j = 0;
+        while (w[i] && w[i] != 'x' && j < 7) ws[j++] = w[i++];
+        ws[j] = 0;
+        if (w[i] == 'x') i++;
+        j = 0;
+        while (w[i] && j < 7) hs[j++] = w[i++];
+        hs[j] = 0;
+        W = to_int(ws, &ok1); H = to_int(hs, &ok2);
+        if (!ok1 || !ok2 || mui_layout(W, H, &g_mui) != 0) { print_string("mobile-ui error screen too small or bad size\n"); return 1; }
+        mui_init(&g_mui_state);
+        g_mui_on = 1;
+        g_out[0] = 0;
+        s_cat(g_out, "mobile-ui ok form ", 4096); s_cat(g_out, plat_form_name(g_mui.form), 4096);
+        s_cat(g_out, g_mui.portrait ? " portrait" : " landscape", 4096);
+        s_cat(g_out, " grid ", 4096); cat_u(g_out, (uint32_t)g_mui.cols, 4096); s_cat(g_out, "x", 4096); cat_u(g_out, (uint32_t)g_mui.rows, 4096);
+        s_cat(g_out, " icon ", 4096); cat_u(g_out, (uint32_t)g_mui.icon, 4096);
+        s_cat(g_out, " min_target ", 4096); cat_u(g_out, (uint32_t)g_mui.min_target, 4096);
+        s_cat(g_out, " targets ", 4096); cat_u(g_out, (uint32_t)g_mui.ntargets, 4096);
+        s_cat(g_out, " status ", 4096); cat_u(g_out, (uint32_t)g_mui.status_h, 4096);
+        s_cat(g_out, " nav ", 4096); cat_u(g_out, (uint32_t)g_mui.nav_h, 4096);
+        s_cat(g_out, " frame ", 4096); cat_hex(g_out, mui_frame_hash(&g_mui, &g_mui_state), 4096);
+        s_cat(g_out, " input simule (no touch hardware)\n", 4096);
+        print_string(g_out);
+        return 0;
+    }
+    if (!g_mui_on) { print_string("mobile-ui error usage: mobile-ui WxH first\n"); return 1; }
+    if (s_eq(w, "tap")) {
+        rest = word(rest, a, 16); rest = word(rest, b, 16);
+        int x = to_int(a, &ok1), y = to_int(b, &ok2);
+        if (!ok1 || !ok2) { print_string("mobile-ui error usage: mobile-ui tap X Y\n"); return 1; }
+        mui_line("tap", mui_tap(&g_mui_state, &g_mui, x, y));
+        return 0;
+    }
+    if (s_eq(w, "app")) {
+        int i, id = -1;
+        rest = word(rest, a, 16);
+        for (i = 0; i < MUI_APPS; i++) if (s_eq(a, mui_app_name(i))) id = i;
+        if (id < 0) { print_string("mobile-ui error unknown app\n"); return 1; }
+        mui_line("tap", mui_tap(&g_mui_state, &g_mui, g_mui.t[id].x + g_mui.t[id].w / 2, g_mui.t[id].y + g_mui.t[id].h / 2));
+        return 0;
+    }
+    if (s_eq(w, "swipe")) {
+        plat_point_t p[4];
+        int x0, y0, x1, y1;
+        rest = word(rest, a, 16); rest = word(rest, b, 16); rest = word(rest, c, 16); rest = word(rest, d, 16);
+        x0 = to_int(a, &ok1); y0 = to_int(b, &ok2); x1 = to_int(c, &ok3); y1 = to_int(d, &ok4);
+        if (!ok1 || !ok2 || !ok3 || !ok4) { print_string("mobile-ui error usage: mobile-ui swipe X0 Y0 X1 Y1\n"); return 1; }
+        p[0].x = x0; p[0].y = y0; p[0].t_ms = 0U; p[0].down = 1;
+        p[1].x = (x0 + x1) / 2; p[1].y = (y0 + y1) / 2; p[1].t_ms = 80U; p[1].down = 1;
+        p[2].x = x1; p[2].y = y1; p[2].t_ms = 160U; p[2].down = 1;
+        p[3].x = x1; p[3].y = y1; p[3].t_ms = 170U; p[3].down = 0;
+        mui_line("swipe", mui_gesture(&g_mui_state, &g_mui, p, 4));
+        return 0;
+    }
+    print_string("mobile-ui error usage: mobile-ui WxH | tap X Y | app NAME | swipe X0 Y0 X1 Y1\n");
+    return 1;
+}
+
+/* ------------------------------------------------ Lot 8: US-083 devsync */
+static ds_replica_t g_ds[3];
+static int g_ds_ready;
+
+static ds_replica_t* ds_dev(const char* name) {
+    int i;
+    if (!g_ds_ready) { for (i = 0; i < 3; i++) ds_init(&g_ds[i], i + 1); g_ds_ready = 1; }
+    if (name[0] >= 'A' && name[0] <= 'C' && !name[1]) return &g_ds[name[0] - 'A'];
+    return 0;
+}
+
+static void ds_show(const char* name, ds_replica_t* r) {
+    int i;
+    g_out[0] = 0;
+    s_cat(g_out, "devsync-show ", 4096); s_cat(g_out, name, 4096);
+    s_cat(g_out, " live ", 4096); cat_u(g_out, (uint32_t)ds_live(r), 4096);
+    s_cat(g_out, " clock ", 4096); cat_u(g_out, r->clock, 4096);
+    s_cat(g_out, " vv ", 4096);
+    for (i = 1; i <= 3; i++) { cat_u(g_out, r->vv[i], 4096); if (i < 3) s_cat(g_out, ",", 4096); }
+    s_cat(g_out, " conflicts ", 4096); cat_u(g_out, r->conflicts, 4096);
+    s_cat(g_out, " digest ", 4096); cat_hex(g_out, ds_digest(r), 4096);
+    for (i = 0; i < r->n; i++) {
+        if (r->e[i].dead) continue;
+        s_cat(g_out, " ", 4096); s_cat(g_out, r->e[i].key, 4096);
+        s_cat(g_out, "=", 4096); s_cat(g_out, r->e[i].val, 4096);
+    }
+    s_cat(g_out, "\n", 4096);
+    print_string(g_out);
+}
+
+/* devsync-set DEV KEY VAL, devsync-del DEV KEY, devsync-sync SRC DST,
+ * devsync-show DEV. DEV is A, B or C (or a, b, c): three device replicas inside this
+ * guest (the devices are simule; the merge and the wire delta are real). */
+static int cmd_devsync(const char* cmd, const char* rest) {
+    char dv[8], k[DS_KEY_LEN + 4], v[DS_VAL_LEN + 4];
+    ds_replica_t* r;
+    rest = word(rest, dv, 8);
+    if (dv[0] >= 'a' && dv[0] <= 'z') dv[0] = (char)(dv[0] - 32);   /* sendkey types lower case */
+    r = ds_dev(dv);
+    if (!r) { print_string("devsync error device must be A, B or C\n"); return 1; }
+    if (s_eq(cmd, "devsync-set")) {
+        rest = word(rest, k, (int)sizeof(k)); rest = word(rest, v, (int)sizeof(v));
+        if (ds_set(r, k, v) != 0) { print_string("devsync-set error bad key or value\n"); return 1; }
+        g_out[0] = 0; s_cat(g_out, "devsync-set ok ", 4096); s_cat(g_out, dv, 4096);
+        s_cat(g_out, " clock ", 4096); cat_u(g_out, r->clock, 4096); s_cat(g_out, "\n", 4096);
+        print_string(g_out);
+        return 0;
+    }
+    if (s_eq(cmd, "devsync-del")) {
+        rest = word(rest, k, (int)sizeof(k));
+        if (ds_del(r, k) != 0) { print_string("devsync-del error unknown key\n"); return 1; }
+        print_string("devsync-del ok\n");
+        return 0;
+    }
+    if (s_eq(cmd, "devsync-sync")) {
+        ds_replica_t* dst;
+        int n, rc;
+        rest = word(rest, k, 8);
+        if (k[0] >= 'a' && k[0] <= 'z') k[0] = (char)(k[0] - 32);
+        dst = ds_dev(k);
+        if (!dst || dst == r) { print_string("devsync-sync error usage: devsync-sync SRC DST\n"); return 1; }
+        n = ds_export(r, dst->vv, g_big, (int)sizeof(g_big));
+        rc = n > 0 ? ds_import(dst, g_big) : -1;
+        g_out[0] = 0; s_cat(g_out, "devsync-sync ", 4096); s_cat(g_out, dv, 4096); s_cat(g_out, " to ", 4096);
+        s_cat(g_out, k, 4096);
+        if (rc < 0) { s_cat(g_out, " error import rc ", 4096); s_cat(g_out, rc == -2 ? "sum" : "format", 4096); s_cat(g_out, "\n", 4096); print_string(g_out); return 1; }
+        s_cat(g_out, " ok delta_bytes ", 4096); cat_u(g_out, (uint32_t)n, 4096);
+        s_cat(g_out, " applied ", 4096); cat_u(g_out, (uint32_t)rc, 4096);
+        s_cat(g_out, "\n", 4096);
+        print_string(g_out);
+        return 0;
+    }
+    ds_show(dv, r);
+    return 0;
+}
+
 int shell_platform_line(const char* line) {
     char cmd[24], a[64];
     const char* rest = word(line, cmd, (int)sizeof(cmd));
@@ -509,6 +675,9 @@ int shell_platform_line(const char* line) {
         return 1;
     }
     if (s_eq(cmd, "gesture")) return cmd_gesture(rest);
+    if (s_eq(cmd, "mobile-ui")) return cmd_mobile(rest);
+    if (s_eq(cmd, "devsync-set") || s_eq(cmd, "devsync-del") || s_eq(cmd, "devsync-sync") || s_eq(cmd, "devsync-show"))
+        return cmd_devsync(cmd, rest);
     if (s_eq(cmd, "gesture-multi")) {
         plat_point_t p1[16], p2[16];
         int n = 0, g;

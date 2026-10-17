@@ -922,6 +922,86 @@ int collab_privacy_proof_verify(uint32_t value, uint32_t secret, const uint8_t p
     return diff ? -1 : 0;
 }
 
+/* ------------------------------------------- US-103 Schnorr NIZK (Lot 8) */
+/* 64-bit remainder by shift and subtract (no libgcc __umoddi3 in the guest) */
+static uint64_t zk_mod(uint64_t a, uint64_t m) {
+    uint64_t r = 0U;
+    int i;
+    for (i = 63; i >= 0; i--) {
+        r = (r << 1) | ((a >> i) & 1U);       /* r < 2m < 2^63 */
+        if (r >= m) r -= m;
+    }
+    return r;
+}
+static uint64_t zk_addmod(uint64_t a, uint64_t b, uint64_t m) {
+    uint64_t r = a + b;                       /* a, b < m < 2^62: no overflow */
+    return r >= m ? r - m : r;
+}
+static uint64_t zk_mulmod(uint64_t a, uint64_t b, uint64_t m) {
+    uint64_t r = 0U;
+    a = zk_mod(a, m);
+    while (b) {
+        if (b & 1U) r = zk_addmod(r, a, m);
+        a = zk_addmod(a, a, m);
+        b >>= 1;
+    }
+    return r;
+}
+uint64_t collab_zk_powmod(uint64_t base, uint64_t exp) {
+    uint64_t r = 1U;
+    base = zk_mod(base, COLLAB_ZK_P);
+    while (exp) {
+        if (exp & 1U) r = zk_mulmod(r, base, COLLAB_ZK_P);
+        base = zk_mulmod(base, base, COLLAB_ZK_P);
+        exp >>= 1;
+    }
+    return r;
+}
+static void zk_put64(uint8_t* b, uint64_t v) { int i; for (i = 0; i < 8; i++) b[i] = (uint8_t)(v >> (56 - 8 * i)); }
+static uint64_t zk_hash_mod_q(const char* tag, uint64_t a, uint64_t b, uint64_t c, const char* msg) {
+    sha256_ctx_t ctx;
+    uint8_t buf[24], d[32];
+    uint64_t h = 0U;
+    int i, n = 0;
+    while (msg && msg[n]) n++;
+    zk_put64(buf, a); zk_put64(buf + 8, b); zk_put64(buf + 16, c);
+    sha256_init(&ctx);
+    sha256_update(&ctx, (const uint8_t*)tag, 12);
+    sha256_update(&ctx, buf, 24);
+    sha256_update(&ctx, (const uint8_t*)msg, (uint32_t)n);
+    sha256_final(&ctx, d);
+    for (i = 0; i < 8; i++) h = (h << 8) | d[i];
+    return zk_mod(h, COLLAB_ZK_Q);
+}
+uint64_t collab_zk_public(uint64_t secret) {
+    return collab_zk_powmod(COLLAB_ZK_G, zk_mod(secret, COLLAB_ZK_Q));
+}
+int collab_zk_prove(uint64_t secret, const char* msg, collab_zk_proof_t* out) {
+    uint64_t x, y, k, c;
+    if (!out || !msg) return -1;
+    x = zk_mod(secret, COLLAB_ZK_Q);
+    if (x == 0U) return -1;
+    y = collab_zk_public(x);
+    /* deterministic nonce from the secret and the message (no RNG) */
+    k = zk_hash_mod_q("mohhdy-zk-k1", x, y, 0U, msg);
+    if (k == 0U) k = 1U;
+    out->t = collab_zk_powmod(COLLAB_ZK_G, k);
+    c = zk_hash_mod_q("mohhdy-zk-c1", COLLAB_ZK_G, y, out->t, msg);
+    out->s = zk_addmod(k, zk_mulmod(c, x, COLLAB_ZK_Q), COLLAB_ZK_Q);
+    return 0;
+}
+int collab_zk_verify(uint64_t y, const char* msg, const collab_zk_proof_t* pr) {
+    uint64_t c, lhs, rhs;
+    if (!pr || !msg) return -1;
+    if (y <= 1U || y >= COLLAB_ZK_P || pr->t <= 1U || pr->t >= COLLAB_ZK_P || pr->s >= COLLAB_ZK_Q) return -1;
+    /* y and t must lie in the order-q subgroup */
+    if (collab_zk_powmod(y, COLLAB_ZK_Q) != 1U || collab_zk_powmod(pr->t, COLLAB_ZK_Q) != 1U) return -1;
+    c = zk_hash_mod_q("mohhdy-zk-c1", COLLAB_ZK_G, y, pr->t, msg);
+    lhs = collab_zk_powmod(COLLAB_ZK_G, pr->s);
+    rhs = zk_mulmod(pr->t, collab_zk_powmod(y, c), COLLAB_ZK_P);
+    return lhs == rhs ? 0 : -1;
+}
+
 int collab_anonymize_id(uint32_t raw_id, uint32_t salt, uint32_t* blinded_id) {
     sha256_ctx_t ctx;
     uint8_t buf[8], d[32];

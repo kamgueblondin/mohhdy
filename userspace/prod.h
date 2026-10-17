@@ -206,4 +206,13 @@ int prod_state_load(const prod_state_ref_t* r, const uint8_t* in, int len);
  * when cap is too small. The shell writes it to the overlay and verifies it. */
 int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, const prod_usage_t* u,
                              const prod_feedback_t* f, uint32_t tick, char* out, int cap);
+/* US-120 (Lot 8): roadmap computed from a status file (/roadmap.txt in the
+ * initrd): one "US-NNN PHASE STATUS NOTE" line per story. */
+#define PROD_RM_PHASES 9
+typedef struct {
+    uint32_t done[PROD_RM_PHASES], partial[PROD_RM_PHASES], simule[PROD_RM_PHASES], open[PROD_RM_PHASES];
+    uint32_t entries, bad;
+    char next[256];              /* stories not done, in file order */
+} prod_roadmap_t;
+int prod_roadmap_parse(const char* text, int len, prod_roadmap_t* rm);
 #endif
