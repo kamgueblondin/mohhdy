@@ -29,7 +29,7 @@ static void test_registry_handles_capacity(void) {
     name[2] = '\0';
     for (i = 0U; i < SERVICE_REGISTRY_CAPACITY; i++) {
         name[0] = 's';
-        name[1] = (char)('0' + i);
+        name[1] = (char)('a' + i);   /* letters: valid for any capacity up to 26 */
         TEST_ASSERT_EQUAL(0, service_registry_register(name, (int32_t)(i + 1U)));
     }
     TEST_ASSERT_EQUAL(OS_SERVICE_FULL, service_registry_register("extra", 42));
