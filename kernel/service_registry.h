@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "os_syscalls.h"
 
-#define SERVICE_REGISTRY_CAPACITY 8U
+#define SERVICE_REGISTRY_CAPACITY 12U  /* lot 5: +ps2-driver, +serial-driver at boot */
 #define SERVICE_REGISTRY_WATCH_CAPACITY 8U
 #define SERVICE_REGISTRY_BACKEND_CAPACITY OS_SERVICE_BACKEND_CAPACITY
 #define SERVICE_BACKEND_RIGHT_READ 1U
