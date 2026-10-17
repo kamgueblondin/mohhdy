@@ -751,11 +751,30 @@ int shell_prod_line(const char* l) {
         out(g_out); return 0;
     }
     if (s_eq(cmd, "prod-roadmap")) {
-        out("prod-roadmap phase 1-3 delivered (see docs/ETAT_REEL.md)\n");
-        out("prod-roadmap phase 4 promptmessage delivered #116\n");
-        out("prod-roadmap phase 5 p2p #117, phase 6 platform #118, phase 7 collab #119, lot 7 #156 (status: docs/lot7_inventory.md)\n");
-        out("prod-roadmap phase 8 production this build (docs/production.md)\n");
-        out("prod-roadmap ok phases 8\n");
+        /* US-120 (Lot 8): computed from /roadmap.txt, not printed text */
+        static char rmbuf[4096];
+        static prod_roadmap_t rm;
+        int n = sys_readfile("/roadmap.txt", rmbuf, (int)sizeof(rmbuf) - 1), ph;
+        if (n <= 0) { out("prod-roadmap error /roadmap.txt missing\n"); return 1; }
+        rmbuf[n] = 0;
+        prod_roadmap_parse(rmbuf, n, &rm);
+        for (ph = 1; ph < PROD_RM_PHASES; ph++) {
+            uint32_t tot = rm.done[ph] + rm.partial[ph] + rm.simule[ph] + rm.open[ph];
+            if (!tot) continue;
+            g_out[0] = 0;
+            s_cat(g_out, "prod-roadmap phase ", 4096); cat_u(g_out, (uint32_t)ph, 4096);
+            s_cat(g_out, " done ", 4096); cat_u(g_out, rm.done[ph], 4096);
+            s_cat(g_out, " partial ", 4096); cat_u(g_out, rm.partial[ph], 4096);
+            s_cat(g_out, " simule ", 4096); cat_u(g_out, rm.simule[ph], 4096);
+            s_cat(g_out, " open ", 4096); cat_u(g_out, rm.open[ph], 4096);
+            s_cat(g_out, " progress ", 4096); cat_u(g_out, rm.done[ph] * 100U / tot, 4096); s_cat(g_out, "%\n", 4096);
+            out(g_out);
+        }
+        g_out[0] = 0;
+        s_cat(g_out, "prod-roadmap next ", 4096); s_cat(g_out, rm.next, 4096); s_cat(g_out, "\n", 4096);
+        s_cat(g_out, "prod-roadmap ok source /roadmap.txt entries ", 4096); cat_u(g_out, rm.entries, 4096);
+        s_cat(g_out, " bad ", 4096); cat_u(g_out, rm.bad, 4096); s_cat(g_out, "\n", 4096);
+        out(g_out);
         return 0;
     }
     if (s_eq(cmd, "prod-perf-tune")) {

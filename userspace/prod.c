@@ -678,3 +678,42 @@ int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, co
     s_cat(out, "feedback total ", cap); cat_u(out, f ? f->total : 0, cap); s_cat(out, "\nend\n", cap);
     return s_len(out) < cap - 1 ? s_len(out) : -1;
 }
+
+/* ------------------------------------------------ US-120 roadmap (Lot 8) */
+static int rm_word(const char* t, int len, int* pos, char* w, int cap) {
+    int n = 0;
+    while (*pos < len && t[*pos] == ' ') (*pos)++;
+    while (*pos < len && t[*pos] != ' ' && t[*pos] != '\n') { if (n < cap - 1) w[n++] = t[*pos]; (*pos)++; }
+    w[n] = 0;
+    return n;
+}
+int prod_roadmap_parse(const char* t, int len, prod_roadmap_t* rm) {
+    int pos = 0;
+    if (!t || !rm || len < 0) return -1;
+    mzero(rm, (int)sizeof(*rm));
+    while (pos < len) {
+        char us[12], ph[4], st[12];
+        int start = pos, phase;
+        if (t[pos] == '#' || t[pos] == '\n') {
+            while (pos < len && t[pos] != '\n') pos++;
+            pos++;
+            continue;
+        }
+        rm_word(t, len, &pos, us, 12); rm_word(t, len, &pos, ph, 4); rm_word(t, len, &pos, st, 12);
+        while (pos < len && t[pos] != '\n') pos++;
+        pos++;
+        phase = (ph[0] >= '1' && ph[0] <= '8' && !ph[1]) ? ph[0] - '0' : -1;
+        if (us[0] != 'U' || us[1] != 'S' || us[2] != '-' || phase < 0 || start == pos) { rm->bad++; continue; }
+        if (s_eq(st, "done")) rm->done[phase]++;
+        else if (s_eq(st, "partial")) rm->partial[phase]++;
+        else if (s_eq(st, "simule")) rm->simule[phase]++;
+        else if (s_eq(st, "open")) rm->open[phase]++;
+        else { rm->bad++; continue; }
+        rm->entries++;
+        if (!s_eq(st, "done")) {
+            s_cat(rm->next, rm->next[0] ? " " : "", (int)sizeof(rm->next));
+            s_cat(rm->next, us, (int)sizeof(rm->next));
+        }
+    }
+    return (int)rm->entries;
+}

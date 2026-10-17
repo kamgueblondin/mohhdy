@@ -265,6 +265,11 @@ def main():
                        "collab escrow beta#%d 'repair' payee alpha arbiter none amount 20 state refunded rulings payer 1 payee 0" % s2):
             if needle not in out:
                 raise RuntimeError("escrow view missing %r: %s" % (needle, out[-600:]))
+        # Lot 8 US-103: Schnorr NIZK in the guest (secret stays on the node).
+        start = cmd(b, "collab-zk-prove 4242 pay10", "collab-zk-prove public ")
+        out = log(b, start)
+        if "verify ok tampered rejected wrong-message rejected wrong-public rejected" not in out:
+            raise RuntimeError("zk proof: %s" % out[-600:])
         start = cmd(a, "collab-auctions", "collab auctions ok 1")
         needle = "collab auction gamma#%d 'lamp' reserve 10 best 15 bidder beta bids 2 state sold" % au
         if needle not in log(a, start):

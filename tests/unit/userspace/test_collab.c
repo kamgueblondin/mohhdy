@@ -524,8 +524,32 @@ void test_crypto_schnorr_pbkdf2_aes_gcm_pipeline(void) {
     }
 }
 
+
+/* Lot 8 US-103: Schnorr NIZK over the 62-bit safe-prime group. */
+void test_zk_schnorr_proof(void) {
+    collab_zk_proof_t pr, bad;
+    uint64_t y = collab_zk_public(123456789ULL);
+    TEST_ASSERT_TRUE(collab_zk_powmod(COLLAB_ZK_G, COLLAB_ZK_Q) == 1ULL);   /* g has order q */
+    TEST_ASSERT_TRUE(collab_zk_powmod(2ULL, COLLAB_ZK_P - 1ULL) == 1ULL);    /* Fermat on p */
+    TEST_ASSERT_TRUE(collab_zk_powmod(3ULL, 5ULL) == 243ULL);
+    TEST_ASSERT_EQUAL(0, collab_zk_prove(123456789ULL, "pay 10", &pr));
+    TEST_ASSERT_EQUAL(0, collab_zk_verify(y, "pay 10", &pr));
+    TEST_ASSERT_EQUAL(-1, collab_zk_verify(y, "pay 11", &pr));             /* bound to the message */
+    TEST_ASSERT_EQUAL(-1, collab_zk_verify(collab_zk_public(987654321ULL), "pay 10", &pr));
+    bad = pr; bad.s ^= 1ULL;
+    TEST_ASSERT_EQUAL(-1, collab_zk_verify(y, "pay 10", &bad));
+    bad = pr; bad.t = 2ULL;                                                 /* not in the subgroup */
+    TEST_ASSERT_EQUAL(-1, collab_zk_verify(y, "pay 10", &bad));
+    TEST_ASSERT_EQUAL(-1, collab_zk_verify(1ULL, "pay 10", &pr));
+    TEST_ASSERT_EQUAL(-1, collab_zk_prove(0ULL, "x", &pr));
+    TEST_ASSERT_EQUAL(-1, collab_zk_prove(COLLAB_ZK_Q, "x", &pr));         /* x = 0 mod q */
+    /* the proof does not contain the secret */
+    TEST_ASSERT_TRUE(pr.s != 123456789ULL && pr.t != 123456789ULL);
+}
+
 int main(void) {
     unity_init();
+    RUN_TEST(test_zk_schnorr_proof);
     RUN_TEST(test_points_transfer_overdraft_and_convergence);
     RUN_TEST(test_resources_marketplace_and_reputation);
     RUN_TEST(test_distributed_task_escrow_and_arbitration);

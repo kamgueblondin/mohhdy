@@ -487,18 +487,21 @@ def main():
             wait_for(proc, "[0m : ", BOOT_TIMEOUT)
             wait_for(
                 proc,
-                "USB Tablet: Controller UHCI initialise et enumere",
+                "usbdriver tablet enumerated port ",
                 CMD_TIMEOUT,
                 fail_needles=[
-                    "Enumeration non terminee",
-                    "Controller UHCI non trouve",
+                    "usbdriver enumeration failed",
+                    "usbdriver claim refused",
+                    "usbdriver no device on the root ports",
+                    "USB Tablet: Controller UHCI non trouve",
                     "BAR4 non-IO",
-                    "Aucun peripherique USB detecte",
                 ],
             )
+            # Lot 8 (US-001): the tablet is enumerated by the Ring 3
+            # usbdriver; the kernel only owns the schedule and checks TDs.
             log = log_text()
-            if "Enumeration non terminee" in log or "Controller UHCI non trouve" in log:
-                raise RuntimeError("USB tablet enumeration failed in serial log")
+            if "[USB] Ring 3 usbdriver claimed the UHCI controller pid " not in log:
+                raise RuntimeError("USB controller not claimed by the Ring 3 driver")
             monitor = monitor_connect()
             qmp = qmp_connect()
             time.sleep(0.6)
@@ -631,6 +634,8 @@ def main():
                 "osui gui line=/shell",
                 extra_marker="live_eval=true",
             )
+            if "usbdriver first report applied" not in log_text():
+                raise RuntimeError("tablet clicks did not go through the Ring 3 usbdriver")
             say("typing /browser in gui ...")
             send_command_until(
                 monitor, "/browser", "chat_mode=float", proc, mode="getc", wait_prompt=False

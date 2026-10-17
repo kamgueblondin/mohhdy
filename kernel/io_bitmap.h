@@ -48,4 +48,10 @@ void io_bitmap_apply_serial(uint8_t* map, uint32_t len, int allow);
 #define IO_BITMAP_VGA_CRTC_DATA 0x3D5U
 void io_bitmap_apply_vga(uint8_t* map, uint32_t len, int allow);
 
+/* Lot 8 (US-001): UHCI registers the Ring 3 usbdriver may touch: USBSTS
+ * (base+2), USBINTR (+4), FRNUM (+6), PORTSC1/2 (+0x10..+0x13). USBCMD and
+ * FLBASEADD stay closed (the kernel runs the controller and owns the frame
+ * list address). */
+void io_bitmap_apply_usb(uint8_t* map, uint32_t len, uint16_t base, int allow);
+
 #endif

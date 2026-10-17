@@ -9,6 +9,7 @@ manifest apply/verify with refusal on a changed source, unified admin view.
 No network service is used (user netdev restricted, NE2000 only probed).
 """
 import os
+import re
 import subprocess
 import sys
 import time
@@ -136,6 +137,34 @@ def main():
             # Tampered archive is refused.
             run(mon, proc, "write /arc.0 broken", "[0m : ")
             run(mon, proc, "migrate-verify /arc", "migrate-verify error bad archive", attempts=2)
+            # Lot 8 US-077: mobile shell (layout, touch targets, taps, gestures).
+            run(mon, proc, "mobile-ui 412x732", "mobile-ui ok form phone portrait grid 4x2 icon 87 min_target 56 targets 11 status 24 nav 56 frame ", attempts=2)
+            run(mon, proc, "mobile-ui app shell", "mobile-ui tap action open screen app app shell depth 0 shade 0 frame ", attempts=2)
+            run(mon, proc, "mobile-ui tap 205 704", "mobile-ui tap action home screen home depth 0 shade 0", attempts=2)
+            run(mon, proc, "mobile-ui app p2p", "mobile-ui tap action open screen app app p2p", attempts=2)
+            run(mon, proc, "mobile-ui swipe 4 300 200 300", "mobile-ui swipe action back screen home", attempts=2)
+            run(mon, proc, "mobile-ui swipe 200 5 200 300", "mobile-ui swipe action shade-open screen home depth 0 shade 1", attempts=2)
+            run(mon, proc, "mobile-ui tap 10 400", "mobile-ui tap action shade-close screen home depth 0 shade 0", attempts=2)
+            run(mon, proc, "mobile-ui 100x100", "mobile-ui error screen too small", attempts=2)
+            # Lot 8 US-083: device replicas converge through checked deltas.
+            run(mon, proc, "devsync-set a theme dark", "devsync-set ok A clock 1", attempts=2)
+            run(mon, proc, "devsync-set b theme light", "devsync-set ok B clock 1", attempts=2)
+            run(mon, proc, "devsync-set b lang fr", "devsync-set ok B clock 2", attempts=2)
+            run(mon, proc, "devsync-sync a b", "devsync-sync A to B ok delta_bytes ", attempts=2)
+            run(mon, proc, "devsync-sync b a", "devsync-sync B to A ok delta_bytes ", attempts=2)
+            run(mon, proc, "devsync-sync b c", "devsync-sync B to C ok delta_bytes ", attempts=2)
+            run(mon, proc, "devsync-del c lang", "devsync-del ok", attempts=2)
+            run(mon, proc, "devsync-sync c a", "applied 1", attempts=2)
+            outs = []
+            for dev in ("A", "C"):
+                out = run(mon, proc, "devsync-show " + dev.lower(), "devsync-show %s live 1 " % dev, attempts=2)
+                m = re.search(r"devsync-show %s live 1 clock \d+ vv [\d,]+ conflicts \d+ digest ([0-9a-f]{8}) theme=light\b" % dev, out)
+                if not m:
+                    raise RuntimeError("devsync-show %s: %s" % (dev, out[-400:]))
+                outs.append(m.group(1))
+            if outs[0] != outs[1]:
+                raise RuntimeError("devices did not converge: %r" % outs)
+            run(mon, proc, "devsync-set d k v", "devsync error device must be A, B or C", attempts=2)
             # US-089 unified admin view.
             run(mon, proc, "admin-all", "admin-all arch i386 cpu ", attempts=2)
             if "power " not in normalized_log(nw.log_text()):

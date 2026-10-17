@@ -399,8 +399,21 @@ void test_prod_consolidation_and_fallback(void) {
     TEST_ASSERT_NOT_NULL(strstr(out_buf, "status ok_healthy"));
 }
 
+
+/* Lot 8 US-120: roadmap counted from a status file. */
+void test_roadmap_parse(void) {
+    static prod_roadmap_t rm;
+    const char* t = "# comment\nUS-076 6 partial arm\nUS-079 6 done g\nUS-097 7 simule pay\n\nbogus line\nUS-120 8 open x\nUS-121 9 done y\nUS-001 1 maybe z\n";
+    TEST_ASSERT_EQUAL(4, prod_roadmap_parse(t, (int)strlen(t), &rm));
+    TEST_ASSERT_TRUE(rm.partial[6] == 1U && rm.done[6] == 1U && rm.simule[7] == 1U && rm.open[8] == 1U);
+    TEST_ASSERT_TRUE(rm.bad == 3U);
+    TEST_ASSERT_EQUAL(0, strcmp(rm.next, "US-076 US-097 US-120"));
+    TEST_ASSERT_EQUAL(-1, prod_roadmap_parse(0, 0, &rm));
+}
+
 int main(void) {
     unity_init();
+    RUN_TEST(test_roadmap_parse);
     RUN_TEST(test_metrics_ring_stats_and_prediction);
     RUN_TEST(test_alerts_for_n_dedupe_and_hysteresis);
     RUN_TEST(test_log_analysis);

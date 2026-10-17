@@ -186,7 +186,12 @@ def main():
             run(mon, proc, "prod-feedback 3 slow boot", "prod-feedback ok total 2")
             run(mon, proc, "prod-feedback summary", ["prod-feedback total 2 avg 4.0 r1=0 r2=0 r3=1 r4=0 r5=1"], attempts=2)
             run(mon, proc, "prod-usage", ["prod-usage prod-inject ", "prod-usage ok commands "], attempts=2)
-            run(mon, proc, "prod-roadmap", "prod-roadmap ok phases 8", attempts=2)
+            # Lot 8 US-120: computed from /roadmap.txt (initrd), not fixed text.
+            run(mon, proc, "prod-roadmap", ["prod-roadmap phase 6 done 9 partial 5 simule 1 open 0 progress 60%",
+                                            "prod-roadmap phase 7 done 11 partial 3 simule 1 open 0 progress 73%",
+                                            "prod-roadmap phase 8 done 12 partial 3 simule 0 open 0 progress 80%",
+                                            "prod-roadmap next US-076 US-077 US-078",
+                                            "prod-roadmap ok source /roadmap.txt entries 45 bad 0"], attempts=2)
             # US-106 (Lot 7): auto-tuning from rates measured now and the
             # recorded busy average; an explicit mode is honoured.
             out = run(mon, proc, "prod-perf-tune", ["prod-perf-tune measured alu_ops_s ", " ok"], attempts=2, timeout=60)

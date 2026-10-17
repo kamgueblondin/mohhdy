@@ -50,6 +50,22 @@ void main(void) {
     iw_puts(" take rc ");
     iw_print_int(dev_op(OS_DEV_OP_VGA_TAKE, 0U, 0U, 0U));
     iw_putc('\n');
+    /* Lot 8: no UHCI claim, TD, run or report for a task that is not the
+     * live usbdriver (no DMA programming from here). */
+    {
+        os_usb_td_req_t r;
+        r.slot = 0U; r.pid = OS_USB_PID_IN; r.dev_addr = 2U; r.endpoint = 1U; r.toggle = 0U;
+        r.low_speed = 0U; r.next = OS_USB_TD_END; r.pad = 0U; r.buf_offset = 0U; r.length = 8U;
+        iw_puts("devrogue usb claim rc ");
+        iw_print_int(dev_op(OS_DEV_OP_USB_CLAIM, 0U, 0U, 0U));
+        iw_puts(" td rc ");
+        iw_print_int(dev_op(OS_DEV_OP_USB_TD, (uint32_t)&r, 0U, 0U));
+        iw_puts(" run rc ");
+        iw_print_int(dev_op(OS_DEV_OP_USB_RUN, 0U, 0U, 0U));
+        iw_puts(" report rc ");
+        iw_print_int(dev_op(OS_DEV_OP_USB_REPORT, 1U, 1U, 1U));
+        iw_putc('\n');
+    }
     iw_puts("devrogue in 0x64\n");
     asm volatile("inb %1, %0" : "=a"(v) : "Nd"((uint16_t)0x64));
     iw_puts("devrogue unexpected port access ");

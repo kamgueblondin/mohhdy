@@ -235,7 +235,6 @@ static int kbd_take_extended_prefix(uint8_t scancode) {
 void keyboard_poll_check() {
     static uint32_t poll_counter = 0;
     poll_counter++;
-    usb_tablet_poll();
     
     // Polling plus agressif en console si pas d'IRQ, mais avec moins de pauses
     int poll_freq = (debug_interrupt_count > 0) ? 20000 : 500; // fréquence d'essai
@@ -351,7 +350,6 @@ static void kbd_ring0_byte(uint8_t status, uint8_t scancode) {
 // Handler d'interruption optimisé
 void keyboard_interrupt_handler() {
     debug_interrupt_count++;
-    usb_tablet_poll();
     
     // Debug interruptions
     if (debug_interrupt_count <= 3) {

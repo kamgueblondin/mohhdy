@@ -211,6 +211,34 @@ static void test_vga_stall_and_death_fall_back_to_ring0(void) {
     TEST_ASSERT_EQUAL(DEVSVC_W_CHECK_OWNERS, devsvc_watchdog(200) & DEVSVC_W_CHECK_OWNERS);
 }
 
+/* Lot 8: USB driver bookkeeping (no Ring 0 fallback, wake on TD done). */
+void test_usb_owner_done_and_counters(void) {
+    os_device_status_t st;
+    devsvc_reset();
+    devsvc_usb_set_present(1);
+    devsvc_usb_set_done(1);                 /* no owner yet: ignored */
+    TEST_ASSERT_EQUAL(0, devsvc_usb_done());
+    TEST_ASSERT_EQUAL(0, devsvc_wants_cpu(DEV_USB, 10U));
+    devsvc_set_owner(DEV_USB, 9);
+    devsvc_usb_set_done(1);
+    TEST_ASSERT_EQUAL(1, devsvc_wants_cpu(DEV_USB, 10U));
+    devsvc_usb_note_td(1); devsvc_usb_note_td(1); devsvc_usb_note_td(0);
+    devsvc_usb_note_report();
+    TEST_ASSERT_TRUE((devsvc_watchdog(20U) & DEVSVC_W_CHECK_OWNERS) != 0U);
+    devsvc_owner_gone(DEV_USB);
+    devsvc_usb_note_stop();
+    TEST_ASSERT_EQUAL(0, devsvc_usb_done());
+    TEST_ASSERT_EQUAL(1, devsvc_should_respawn(DEV_USB, 0));
+    devsvc_status(&st);
+    TEST_ASSERT_EQUAL(0, st.usb_owner);
+    TEST_ASSERT_EQUAL(1, (int)st.usb_handed_off);
+    TEST_ASSERT_EQUAL(1, (int)st.usb_present);
+    TEST_ASSERT_EQUAL(2, (int)st.usb_tds);
+    TEST_ASSERT_EQUAL(1, (int)st.usb_rejected);
+    TEST_ASSERT_EQUAL(1, (int)st.usb_reports);
+    TEST_ASSERT_EQUAL(1, (int)st.usb_stops);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_owner_handoff_and_respawn_budget);
@@ -221,6 +249,7 @@ int main(void) {
     RUN_TEST(test_owner_check_period);
     RUN_TEST(test_vga_direct_before_claim_then_ring3);
     RUN_TEST(test_vga_stall_and_death_fall_back_to_ring0);
+    RUN_TEST(test_usb_owner_done_and_counters);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

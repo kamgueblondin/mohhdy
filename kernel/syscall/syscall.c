@@ -34,6 +34,7 @@
 #include "../fs/fat32.h"
 #include "../net_socket.h"
 #include "../vga_console.h"
+#include "../input/usb_tablet.h"
 #include "../gfx_fb.h"
 #include "../pci_service.h"
 #include "../device_service.h"
@@ -872,16 +873,16 @@ static int sys_pci_service(uint32_t op, uint32_t arg, uint32_t count) {
 static int32_t g_dev_respawn_pid[DEV_COUNT];
 
 static const char* device_service_name(int dev) {
-    return dev == DEV_PS2 ? "ps2-driver" : dev == DEV_VGA ? "vga-driver" : "serial-driver";
+    return dev == DEV_PS2 ? "ps2-driver" : dev == DEV_VGA ? "vga-driver" : dev == DEV_USB ? "usb-driver" : "serial-driver";
 }
 static const char* device_task_name(int dev) {
-    return dev == DEV_PS2 ? "ps2driver" : dev == DEV_VGA ? "vgadriver" : "serialdriver";
+    return dev == DEV_PS2 ? "ps2driver" : dev == DEV_VGA ? "vgadriver" : dev == DEV_USB ? "usbdriver" : "serialdriver";
 }
 static const char* device_binary(int dev) {
-    return dev == DEV_PS2 ? "bin/ps2driver" : dev == DEV_VGA ? "bin/vgadriver" : "bin/serialdriver";
+    return dev == DEV_PS2 ? "bin/ps2driver" : dev == DEV_VGA ? "bin/vgadriver" : dev == DEV_USB ? "bin/usbdriver" : "bin/serialdriver";
 }
 static const char* device_log_tag(int dev) {
-    return dev == DEV_PS2 ? "[PS2] " : dev == DEV_VGA ? "[VGA] " : "[SERIAL] ";
+    return dev == DEV_PS2 ? "[PS2] " : dev == DEV_VGA ? "[VGA] " : dev == DEV_USB ? "[USB] " : "[SERIAL] ";
 }
 
 static int32_t device_live_driver(int dev) {
@@ -958,6 +959,7 @@ void device_watchdog_tick(uint32_t now) {
                 if (dev == DEV_PS2) keyboard_driver_lost();
                 if (dev == DEV_SERIAL) act |= DEVSVC_W_SERIAL_FLUSH;
                 else if (dev == DEV_VGA) act |= DEVSVC_W_VGA_REPAINT;
+                else if (dev == DEV_USB) usb_hc_stop();   /* no DMA after death */
                 else act |= DEVSVC_W_PS2_DRAIN;
             }
         }
@@ -965,6 +967,8 @@ void device_watchdog_tick(uint32_t now) {
     if (act & DEVSVC_W_PS2_DRAIN) devsvc_ps2_note_ring0(keyboard_ring0_drain());
     if (act & DEVSVC_W_SERIAL_FLUSH) serial_ring0_flush();
     if (act & DEVSVC_W_VGA_REPAINT) vga_ring0_repaint();
+    /* Lot 8: wake the usbdriver when the TD it waits on is done. */
+    if (devsvc_owner(DEV_USB) > 0 && usb_hc_watch_done()) device_wake_owner(DEV_USB);
 }
 
 void device_supervise(void) {
@@ -977,7 +981,9 @@ void device_supervise(void) {
             devsvc_owner_gone(dev);
             if (dev == DEV_PS2) keyboard_driver_lost();
             if (dev == DEV_VGA) vga_ring0_repaint();
+            if (dev == DEV_USB) usb_hc_stop();
         }
+        if (dev == DEV_USB && !usb_hc_present()) continue;
         if (g_dev_respawn_pid[dev] > 0) {
             born = get_task_by_id((uint32_t)g_dev_respawn_pid[dev]);
             pending = born && born->type == TASK_TYPE_USER && born->state != TASK_TERMINATED;
@@ -1051,6 +1057,7 @@ static int device_driver_wants_cpu(const task_t* self) {
 static int device_ps2_ready(void) { return devsvc_ps2_pending(); }
 static int device_serial_ready(void) { return devsvc_serial_queued() != 0U; }
 static int device_vga_ready(void) { return devsvc_vga_pending(); }
+static int device_usb_ready(void) { return devsvc_usb_done() || usb_hc_watch_done(); }
 
 /* Lot 6 (US-059/060): kernel key sealing. First use mixes TSC samples
  * taken around port I/O and the PIT counter into the per-boot key. */
@@ -1069,6 +1076,7 @@ static void key_seal_ensure(void) {
     for (i = 0; i < 34U; i++) ((volatile uint32_t*)pool)[i] = 0U;
 }
 
+static int sys_rtc_utc(char* out);
 static int sys_key_seal(uint32_t op, uint32_t in, uint32_t in_len, uint32_t out, uint32_t cap) {
     static uint8_t src[OS_SEAL_MAX_PLAIN + OS_SEAL_OVERHEAD];
     static uint8_t dst[OS_SEAL_MAX_PLAIN + OS_SEAL_OVERHEAD];
@@ -1198,6 +1206,39 @@ static int sys_device_service(uint32_t op, uint32_t a, uint32_t b, uint32_t c) {
         if (got) *(os_vga_driver_frame_t*)a = fr;
         return got;
     }
+    case OS_DEV_OP_USB_CLAIM: {
+        int rc;
+        if (!usb_hc_present()) return OS_DEV_DENIED;
+        if (device_live_driver(DEV_USB) != pid) return OS_DEV_DENIED;
+        rc = usb_hc_claim(current_task->vmm_dir);
+        if (rc != 0) return OS_DEV_BAD_REQUEST;
+        devsvc_set_owner(DEV_USB, pid);
+        tss_set_usb_io(1, usb_hc_io_base());
+        print_string_serial("[USB] Ring 3 usbdriver claimed the UHCI controller pid ");
+        ata_serial_u32((uint32_t)pid);
+        print_string_serial("\n");
+        return (int)usb_hc_io_base();
+    }
+    case OS_DEV_OP_USB_TD: {
+        os_usb_td_req_t r;
+        if (devsvc_owner(DEV_USB) != pid) return OS_DEV_DENIED;
+        if (!syscall_user_range((const void*)a, sizeof(r), 0)) return OS_DEV_BAD_REQUEST;
+        r = *(const os_usb_td_req_t*)a;
+        return usb_hc_td(&r) == 0 ? 0 : OS_DEV_BAD_REQUEST;
+    }
+    case OS_DEV_OP_USB_RUN: {
+        int rc;
+        if (devsvc_owner(DEV_USB) != pid) return OS_DEV_DENIED;
+        rc = usb_hc_run((uint8_t)(a & 0xFFU), (uint8_t)(b & 0xFFU));
+        return rc < 0 ? OS_DEV_BAD_REQUEST : rc;
+    }
+    case OS_DEV_OP_USB_WAIT:
+        if (devsvc_owner(DEV_USB) != pid) return OS_DEV_DENIED;
+        return device_block(a, device_usb_ready);
+    case OS_DEV_OP_USB_REPORT:
+        if (devsvc_owner(DEV_USB) != pid) return OS_DEV_DENIED;
+        usb_hc_report(a, b, c);
+        return 0;
     case OS_DEV_OP_PS2_MODS:
         if (device_live_driver(DEV_PS2) != pid) return OS_DEV_DENIED;
         return (int)keyboard_mods();
@@ -2625,6 +2666,9 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_DEVICE_SERVICE:
             cpu->eax = (uint32_t)sys_device_service(cpu->ebx, cpu->ecx, cpu->edx, cpu->esi);
             break;
+        case SYS_RTC_UTC:
+            cpu->eax = (uint32_t)sys_rtc_utc((char*)cpu->ecx);
+            break;
         case SYS_KEY_SEAL:
             cpu->eax = (uint32_t)sys_key_seal(cpu->ebx, cpu->ecx, cpu->edx, cpu->esi, cpu->edi);
             break;
@@ -3002,6 +3046,15 @@ static int syscall_user_range(const void* pointer, uint32_t length, int write) {
         if (address > 0xffffffffU - PAGE_SIZE) return 0;
     }
     return 1;
+}
+
+static int sys_rtc_utc(char* out) {
+    char text[16];
+    uint32_t i;
+    if (!syscall_user_range(out, 16U, 1)) return OS_RTC_BAD_ARGUMENT;
+    if (kernel_net_utc(text, (uint16_t)sizeof(text)) != 0) return OS_RTC_UNSTABLE;
+    for (i = 0U; i < 16U; i++) out[i] = text[i];
+    return 0;
 }
 
 int sys_socket_open(uint16_t local_port, uint16_t remote_port, uint32_t local_sequence) {

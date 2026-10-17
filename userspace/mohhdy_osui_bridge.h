@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 396
+#define MOHHDY_SHELL_COMMAND_COUNT 402
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -135,6 +135,10 @@ static const char * const mohhdy_shell_commands[] = {
     "detach",
     "dev-list",
     "devices",
+    "devsync-del",
+    "devsync-set",
+    "devsync-show",
+    "devsync-sync",
     "dir",
     "echo",
     "env",
@@ -188,6 +192,7 @@ static const char * const mohhdy_shell_commands[] = {
     "migrate-import",
     "migrate-verify",
     "mkdir",
+    "mobile-ui",
     "mount-journal",
     "mount-journal-add",
     "mv",
@@ -316,6 +321,7 @@ static const char * const mohhdy_shell_commands[] = {
     "right-token",
     "rm",
     "rmdir",
+    "rtc-check",
     "screen-adapt",
     "service-event-pull",
     "service-find",

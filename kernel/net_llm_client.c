@@ -1403,6 +1403,9 @@ int kernel_llm_poll_sse(os_llm_text_result_t* result) {
     return status;
 }
 
+/* Why the last poll answered OS_LLM_TLS_FAILED (read and cleared by the
+ * networker log): the clock read for X.509 dates, or the handshake. */
+int net_llm_tls_fail_stage;
 int kernel_llm_poll_tls(void) {
     uint16_t consumed = 0U;
     char utc_time[RTC_UTC_BUFFER_LENGTH];
@@ -1423,7 +1426,8 @@ int kernel_llm_poll_tls(void) {
          * publie un succès normalisé lorsque la phase TLS est effectivement démarrée. */
         return status < 0 ? OS_LLM_TLS_FAILED : 0;
     }
-    if (net_llm_client_utc(&boot_llm_rtc_io, utc_time, sizeof(utc_time)) != 0) return OS_LLM_TLS_FAILED;
+    status = net_llm_client_utc(&boot_llm_rtc_io, utc_time, sizeof(utc_time));
+    if (status != 0) { net_llm_tls_fail_stage = NET_LLM_TLS_FAIL_CLOCK; return OS_LLM_TLS_FAILED; }
     status = ne2k_llm_socket_session_poll_tls(
         g_llm_dev, g_llm_io, &boot_llm_arp_cache,
         boot_llm_arp_rx, sizeof(boot_llm_arp_rx), boot_llm_frame, sizeof(boot_llm_frame),
@@ -1434,7 +1438,7 @@ int kernel_llm_poll_tls(void) {
         sizeof(boot_llm_prf_workspace), boot_llm_tcp_segment, sizeof(boot_llm_tcp_segment),
         boot_llm_flight_records, sizeof(boot_llm_flight_records), &boot_llm_flight_records_length,
         boot_llm_plaintext, sizeof(boot_llm_plaintext), 4U, &consumed);
-    if (status < 0) return OS_LLM_TLS_FAILED;
+    if (status < 0) { net_llm_tls_fail_stage = NET_LLM_TLS_FAIL_HANDSHAKE; return OS_LLM_TLS_FAILED; }
     if (status == 0 && boot_llm_socket_session.state.phase == NE2K_LLM_CONNECTION_TLS_COMPLETE &&
         boot_llm_application_recovery.pending) {
         if (!boot_llm_application_recovery.is_sse_resume) {

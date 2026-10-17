@@ -209,6 +209,11 @@ jobs:
       - name: QEMU Ring 3 PS/2 and serial drivers (supervised restart)
         run: make qemu-input-drivers
 
+      # Lot 8 (US-001): UHCI USB tablet driver in Ring 3, kernel-checked
+      # DMA, kill and supervised respawn (about 1 min).
+      - name: QEMU Ring 3 UHCI USB tablet driver (supervised restart)
+        run: make qemu-usb-driver
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -249,6 +254,33 @@ jobs:
           if-no-files-found: ignore
           path: |
             test_logs/coverage_report.txt
+
+  # Lot 8 (US-076): ARMv7-A kernel core on qemu-system-arm -M virt. Own
+  # job: its toolchain is separate from the i386 one (about 2 min).
+  arm-port:
+    name: ARM kernel core (qemu-system-arm virt)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ARM toolchain and QEMU
+        run: |
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi qemu-system-arm
+
+      - name: Build and boot the ARM kernel (make qemu-arm-boot)
+        run: make arm-kernel qemu-arm-boot
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm-logs
+          if-no-files-found: ignore
+          path: test_logs/arm-boot.log
 
   p2p-mesh:
     name: QEMU P2P four guests + strict network contracts

@@ -969,6 +969,8 @@ int service_registry_ata_driver_name_allowed(const char* service_name, const cha
     /* Lot 7 (US-001): the VGA text console driver (text page + CRTC). */
     if (name_equal(service_name, "vga-driver"))
         return task_name && name_equal(task_name, "vgadriver");
+    if (name_equal(service_name, "usb-driver"))
+        return task_name && name_equal(task_name, "usbdriver");
     return 1;
 }
 

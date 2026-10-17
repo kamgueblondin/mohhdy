@@ -67,6 +67,8 @@ Le développement MOHHDY est organisé en 8 phases principales :
 - US-014 : Création du framework de test automatisé
 - US-015 : Développement de la documentation interactive
 
+Etat US-001 (17 octobre 2026, lot 8). Ferme sur l'image par defaut (decision argumentee, a valider par le proprietaire). Le dernier pilote de peripherique a chemin de donnees encore en Ring 0, la tablette USB UHCI, tourne en Ring 3 (`bin/usbdriver`, service `usb-driver` epingle a ce binaire). DMA borne sans IOMMU : le noyau possede la liste de trames et la page d'ordonnancement (QH + 8 TD), ecrit chaque TD apres verification (tampon dans la page de donnees du pilote, liens dans la page d'ordonnancement, pas de cycle), USBCMD et FLBASEADD restent hors du bitmap d'E/S du pilote ; a la mort du pilote le noyau arrete le controleur puis le superviseur relance le pilote (budget 4). Plus aucun sondage Ring 0 de la tablette. Restent noyau, par conception : PIC, PIT, entrees d'IRQ, console du debut de boot, mode panique, sondes PCI de debut de boot (UHCI, NE2000). L'image legacy de comparaison garde le NIC Ring 0 (non livree). Preuve : `make qemu-usb-driver` (sonde de bornes refusee, rapports QMP, devrogue -180, kill : arret puis relance), `make qemu-osui-gui` (clics tablette via le pilote Ring 3), `test_usb_dma`, `test_device_service`.
+
 Etat US-001 (17 octobre 2026, lot 7). Ouvert, plus etroit, decision de non-fermeture documentee. La console texte VGA est peinte par le pilote Ring 3 `bin/vgadriver` (service `vga-driver`) : page texte 0xB8000 mappee en ecriture dans sa seule tache, ports CRTC 0x3D4/0x3D5 dans son bitmap d'E/S TSS, trames prises par `OS_DEV_OP_VGA_TAKE`. Repli Ring 0 honnete : debut du boot (avant la reclamation), apres la mort du pilote jusqu'a la reclamation du pilote relance, blocage de 5 ticks, faute noyau ; trames comptees. Le modele de console (lignes, historique, curseur) reste noyau. Restent Ring 0 : pilote UHCI de la tablette USB (DMA, non deplace), chemin NE2000 de l'image legacy de comparaison. Noyau irreductible assume : PIC, PIT, entrees d'IRQ, peinture du debut de boot, mode panique. Preuve : `make qemu-input-drivers` (etape 8, memoire video relue par `pmemsave`), `test_device_service`, `test_io_bitmap`, `test_vga_console`.
 
 Etat US-001 (17 octobre 2026, lot 6). Ouvert, plus etroit. Souris PS/2 prouvee en QEMU (mouvement relatif et bouton QMP, paquets via `bin/ps2driver`, sommes verifiees dans `devices`). Desynchronisation de Shift a la mort du pilote corrigee : le pilote publie Shift/Caps (evenements `OS_INPUT_EV_MODS`), le noyau les garde a la mort du pilote et le pilote relance repart de cet etat ; QEMU : Shift tenu pendant le `kill` du pilote donne `B`, puis `b` apres relache. Restent Ring 0 : PIC, PIT, VGA texte, sondes de debut de boot. Preuve : `make qemu-input-drivers`, `test_ps2_decode`.
@@ -193,6 +195,8 @@ Etat Phase 5 (15 octobre 2026, lot 2; detail and limits in `docs/p2p.md` and `do
 - US-089 : Développement de l'interface d'administration unifiée
 - US-090 : Création du système de déploiement automatisé
 
+Etat Phase 6 (17 octobre 2026, lot 8). US-076 partiel : noyau de base ARMv7-A (`arch/arm`, QEMU `-M virt` cortex-a15) avec MMU (section noyau PL1 seule), GIC, minuterie generique, taches en mode USR par SVC, preemption, IPC `kernel/ipc.c` et `kernel/sha256.c` compiles tels quels ; pilotes, FS, IA, shell et OS-UI non portes ; job CI isole `arm-port` (`make qemu-arm-boot`). US-077 partiel : coquille mobile du guest (`mobile_ui.c`, commande `mobile-ui`) : disposition telephone/tablette, cibles tactiles >= 48 px, navigation, gestes, modele de pixels hache ; pas de materiel tactile (entree simule), pas affichee sur l'ecran VBE. US-083 partiel : synchronisation multi-appareils (`devsync.c`) : carte LWW (horloge de Lamport, departage par appareil, pierres tombales), vecteurs de version, deltas texte verifies par FNV ; trois appareils dans un meme invite (simule), transport entre invites non branche.
+
 Etat Phase 6 (17 octobre 2026, lot 7; inventaire dans `docs/lot7_inventory.md`). US-086 livre (sous-ensemble 8086) : interpreteur reel de programmes .COM (`legacy-emul`, `dosemu.c`), le stub `ok_simulated` est retire. US-078 marque simule (`sensor-read` le dit). US-081 : profils reels, pas de batterie (`battery none`). Ouverts : US-076, US-077, US-083.
 
 Etat Phase 6 (10 octobre 2026, socle i386 ; detail dans `docs/platform.md`, preuve `make qemu-platform`) :
@@ -216,6 +220,8 @@ Etat Phase 6 (10 octobre 2026, socle i386 ; detail dans `docs/platform.md`, preu
 - US-103 : Intégration du système de confidentialité avancée
 - US-104 : Développement du système de conformité réglementaire
 - US-105 : Création du système de support communautaire
+
+Etat Phase 7 (17 octobre 2026, lot 8). US-103 partiel, plus fort : preuve a divulgation nulle de connaissance de Schnorr (non interactive, Fiat-Shamir SHA-256, liee au message, verification de sous-groupe) dans `collab.c` (`collab-zk-prove`) ; groupe de 62 bits de taille jouet (force simule). US-099 et US-104 inchanges (partiels).
 
 Etat Phase 7 (17 octobre 2026, lot 7). Contrats sequestre avec arbitre, litiges tranches par l'arbitre ou la majorite des membres non impliques, encheres, plies a l'identique sur les 3 invites (`make qemu-collab`, 33 entrees, meme empreinte). US-094 et US-101 livres ; US-099 partiel (modeles fixes, pas de langage de contrat) ; US-103 partiel (engagement par hachage, pas de preuve a divulgation nulle) ; US-104 partiel (4 controles calcules) ; US-097 partiel (conversion simule, pas de paiement reel).
 
@@ -241,6 +247,8 @@ Etat Phase 7 (10 octobre 2026, PR #119 empilee sur #117 ; detail dans `docs/coll
 - US-118 : Intégration du système de feedback continu
 - US-119 : Développement du système de métriques business
 - US-120 : Création du système de roadmap évolutive
+
+Etat Phase 8 (17 octobre 2026, lot 8). US-120 partiel : `prod-roadmap` calcule l'avancement par phase depuis `/roadmap.txt` (initrd, une ligne par US), plus de texte fige ; le fichier est tenu a la main. US-112 et US-115 inchanges (partiels).
 
 Etat Phase 8 (17 octobre 2026, lot 7). Sorties figees remplacees par du code invite reel et prouve en QEMU : US-112 partiel (audit ELF32 W^X/pile/entree et ligne de base taille+FNV, pas de base CVE), US-108 livre en local (`prod-cicd` : lint, compilation, tests, deploiement, verification d'un programme PromptMessage), US-106 (`prod-perf-tune` mesure), US-115 partiel (heuristique), US-116 (paquet texte verifie), US-119 (compteurs observes). US-120 partiel (feuille de route statique).
 

@@ -37,7 +37,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/kctx.o build/userspace_switch.o \
           build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/ata_fsop.o build/fsop_exec.o build/net_relay.o build/ai_relay.o build/net_nic_owner.o build/net_wire.o build/net_p2p.o build/gdt.o build/idt.o build/vmm.o build/vmm_share.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_gguf_session.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/gpt2_generate.o build/interrupts.o \
-          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/pci_service.o build/device_service.o build/key_seal.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
+          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/pci_service.o build/device_service.o build/usb_dma.o build/key_seal.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
 
 # L'ABI partagée influence notamment la taille de task_t et des messages IPC.
 # Une évolution de structure doit donc reconstruire toute l'image, pas seulement ipc.o.
@@ -227,7 +227,11 @@ build/kbd_buffer.o: kernel/input/kbd_buffer.c kernel/input/kbd_buffer.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/usb_tablet.o: kernel/input/usb_tablet.c kernel/input/usb_tablet.h
+build/usb_tablet.o: kernel/input/usb_tablet.c kernel/input/usb_tablet.h kernel/usb_dma.h include/os_syscalls.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/usb_dma.o: kernel/usb_dma.c kernel/usb_dma.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -609,6 +613,7 @@ pack-initrd-now:
 	@cp -f userspace/ps2driver $(BIN_DEST_DIR)/ps2driver
 	@cp -f userspace/serialdriver $(BIN_DEST_DIR)/serialdriver
 	@cp -f userspace/vgadriver $(BIN_DEST_DIR)/vgadriver
+	@cp -f userspace/usbdriver $(BIN_DEST_DIR)/usbdriver
 	@cp -f userspace/devrogue $(BIN_DEST_DIR)/devrogue
 	@cp -f userspace/ataclient $(BIN_DEST_DIR)/ataclient
 	@cp -f userspace/atarogue $(BIN_DEST_DIR)/atarogue
@@ -867,7 +872,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-p2p-mesh qemu-promptmessage qemu-net-no-ring0 qemu-net-loss-recovery qemu-pci-driver qemu-input-drivers qemu-net-loopback-worker qemu-net-peer-tls-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
+.PHONY: integration-qemu qemu-p2p-mesh qemu-promptmessage qemu-net-no-ring0 qemu-net-loss-recovery qemu-pci-driver qemu-input-drivers qemu-usb-driver qemu-net-loopback-worker qemu-net-peer-tls-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -1214,6 +1219,45 @@ qemu-pci-driver: $(OS_IMAGE) pack-initrd
 # supervised respawn of both).
 qemu-input-drivers: $(OS_IMAGE) pack-initrd
 	@python3 tests/integration/test_qemu_input_drivers.py
+
+# Lot 8 (US-076): ARMv7-A kernel core (QEMU -M virt, cortex-a15). Needs
+# gcc-arm-none-eabi and qemu-system-arm; portable kernel/ipc.c and
+# kernel/sha256.c are compiled unchanged.
+ARM_CC ?= arm-none-eabi-gcc
+ARM_CFLAGS = -mcpu=cortex-a15 -marm -mfloat-abi=soft -ffreestanding -fno-builtin \
+	-fno-tree-loop-distribute-patterns -nostdlib -O2 -Wall -Wextra -std=c99 \
+	-Iarch/arm -Ikernel -Iinclude
+ARM_DIR = build/arm
+ARM_IMAGE = $(ARM_DIR)/mohhdy-arm.elf
+ARM_OBJS = $(ARM_DIR)/boot.o $(ARM_DIR)/arm_kernel.o $(ARM_DIR)/arm_mmu.o \
+	$(ARM_DIR)/ipc.o $(ARM_DIR)/sha256.o $(ARM_DIR)/user_tasks.o
+
+$(ARM_DIR)/%.o: arch/arm/%.S
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
+$(ARM_DIR)/%.o: arch/arm/%.c arch/arm/arm_mmu.h include/os_syscalls.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
+$(ARM_DIR)/ipc.o: kernel/ipc.c kernel/ipc.h include/os_syscalls.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
+$(ARM_DIR)/sha256.o: kernel/sha256.c kernel/sha256.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
+$(ARM_IMAGE): $(ARM_OBJS) arch/arm/arm.ld
+	$(ARM_CC) $(ARM_CFLAGS) -T arch/arm/arm.ld -o $@ $(ARM_OBJS) -lgcc
+
+.PHONY: arm-kernel qemu-arm-boot
+arm-kernel: $(ARM_IMAGE)
+
+qemu-arm-boot: $(ARM_IMAGE)
+	@python3 tests/integration/test_qemu_arm_boot.py
+
+# Lot 8 (US-001): UHCI USB tablet driver in Ring 3 (claim, kernel-checked
+# TDs with a refused bounds probe, QMP tablet reports, rogue refused, kill:
+# controller stopped by the kernel, supervised respawn re-enumerates).
+qemu-usb-driver: $(OS_IMAGE) pack-initrd
+	@python3 tests/integration/test_qemu_usb_driver.py
 
 # Guest TCP/TLS loss recovery: the controlled peer drops the first
 # ClientHello and Certificate and duplicates ServerKeyExchange.

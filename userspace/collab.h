@@ -152,6 +152,23 @@ int collab_privacy_proof_gen(uint32_t value, uint32_t secret, uint8_t proof_out[
 int collab_privacy_proof_verify(uint32_t value, uint32_t secret, const uint8_t proof[32]);
 int collab_anonymize_id(uint32_t raw_id, uint32_t salt, uint32_t* blinded_id);
 
+/* US-103 (Lot 8): zero-knowledge proof of knowledge of a secret x behind
+ * the public value y = g^x mod p (Schnorr, non-interactive by
+ * Fiat-Shamir with SHA-256, bound to a message). The verifier learns y,
+ * the proof (t, s) and the message, never x. Group: safe prime
+ * p = 0x3fffffffffffd6bb (62 bits), subgroup of prime order q = (p-1)/2,
+ * g = 4. The protocol is real; the 62-bit group is a toy size (simule
+ * strength, breakable by a discrete log computation), not production. */
+#define COLLAB_ZK_P 0x3fffffffffffd6bbULL
+#define COLLAB_ZK_Q 0x1fffffffffffeb5dULL
+#define COLLAB_ZK_G 4ULL
+typedef struct { uint64_t t; uint64_t s; } collab_zk_proof_t;
+uint64_t collab_zk_powmod(uint64_t base, uint64_t exp);
+uint64_t collab_zk_public(uint64_t secret);
+int collab_zk_prove(uint64_t secret, const char* msg, collab_zk_proof_t* out);
+/* 0 when the proof shows knowledge of log_g(y) for this message */
+int collab_zk_verify(uint64_t y, const char* msg, const collab_zk_proof_t* pr);
+
 /* US-104 compliance self-check (Lot 7: computed, not asserted). Each check
  * is a fact of the local node and ledger: entries signed by their origin,
  * no forged entry accepted, redaction available (export and forget

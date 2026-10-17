@@ -1792,6 +1792,70 @@ typedef struct {
  * after a kernel exception; frames painted after the handoff are counted. */
 #define OS_DEV_OP_VGA_CLAIM 9U
 #define OS_DEV_OP_VGA_TAKE 10U
+/* Lot 8 (US-001): UHCI USB host controller owned by the Ring 3
+ * "usb-driver" (binary usbdriver). The kernel never drives the USB tablet:
+ * at boot it only finds the controller, enables I/O + bus mastering, resets
+ * and stops it. DMA stays bounded without an IOMMU because the controller
+ * only ever reads structures the kernel wrote:
+ *   - the frame list and the schedule page (one QH + OS_USB_TD_SLOTS TDs)
+ *     are kernel pages; the schedule page is mapped read-only in the driver
+ *     at OS_USB_SCHED_WINDOW (it reads TD status there);
+ *   - every TD buffer pointer the kernel writes lies inside one data page
+ *     (OS_USB_DATA_SIZE bytes) mapped writable at OS_USB_DMA_WINDOW;
+ *   - the driver's IOPB opens USBSTS, USBINTR, FRNUM and PORTSC1/2 only:
+ *     USBCMD (run, reset) and FLBASEADD stay with the kernel.
+ * Ops (EBX), owner only:
+ *   USB_CLAIM: returns the controller I/O base; maps both windows.
+ *   USB_TD (ECX = os_usb_td_req_t*): validated, written to slot req->slot.
+ *   USB_RUN (ECX = first slot or OS_USB_TD_END, EDX = slot to watch):
+ *     links the chain under the QH (cycle-checked) and runs the controller.
+ *   USB_WAIT (ECX = timeout ticks): blocks until the watched TD is done.
+ *   USB_REPORT (ECX = x, EDX = y in 0..32767, ESI = buttons): absolute
+ *     pointer report applied to the desktop pointer.
+ * When the owner dies the kernel stops the controller before anything
+ * else (no DMA into a dead task's page) and the supervisor respawns it. */
+#define OS_DEV_OP_USB_CLAIM 11U
+#define OS_DEV_OP_USB_TD 12U
+#define OS_DEV_OP_USB_RUN 13U
+#define OS_DEV_OP_USB_WAIT 14U
+#define OS_DEV_OP_USB_REPORT 15U
+#define OS_USB_DMA_WINDOW 0xAB000000U
+#define OS_USB_SCHED_WINDOW 0xAB001000U
+#define OS_USB_DATA_SIZE 4096U
+#define OS_USB_TD_SLOTS 8U
+#define OS_USB_TD_MAX_LEN 64U
+#define OS_USB_TD_END 0xFFU
+#define OS_USB_PID_SETUP 0x2DU
+#define OS_USB_PID_IN 0x69U
+#define OS_USB_PID_OUT 0xE1U
+typedef struct {
+    uint8_t slot;
+    uint8_t pid;
+    uint8_t dev_addr;
+    uint8_t endpoint;
+    uint8_t toggle;
+    uint8_t low_speed;
+    uint8_t next;        /* next slot in the chain or OS_USB_TD_END */
+    uint8_t pad;
+    uint16_t buf_offset; /* in the data page */
+    uint16_t length;     /* 0..OS_USB_TD_MAX_LEN */
+} os_usb_td_req_t;
+/* Schedule page layout as the driver sees it (read-only). */
+typedef struct {
+    uint32_t link;
+    uint32_t status;
+    uint32_t token;
+    uint32_t buffer;
+    uint32_t reserved[4];
+} os_usb_td_t;
+typedef struct {
+    uint32_t head;
+    uint32_t element;
+    uint32_t pad[2];
+    os_usb_td_t td[OS_USB_TD_SLOTS];
+} os_usb_sched_t;
+#define OS_USB_TD_ACTIVE 0x00800000U
+#define OS_USB_TD_ERRORS 0x007E0000U
 #define OS_VGA_DRIVER_WINDOW 0xAA000000U
 #define OS_VGA_CELLS 2000U
 typedef struct {
@@ -1817,6 +1881,12 @@ typedef struct {
 #define OS_SEAL_MAX_PLAIN 256U
 #define OS_SEAL_BAD_REQUEST (-190)
 #define OS_SEAL_AUTH (-191)
+/* Lot 8: wall clock for every task. ECX = char[16], filled with
+ * YYYYMMDDHHMMSSZ + NUL from a stable CMOS snapshot (two equal reads, each
+ * started with UIP clear). Returns 0, OS_RTC_BAD_ARGUMENT or OS_RTC_UNSTABLE. */
+#define SYS_RTC_UTC 160
+#define OS_RTC_BAD_ARGUMENT (-192)
+#define OS_RTC_UNSTABLE (-193)
 typedef struct {
     uint32_t ready;
     uint32_t seals;
@@ -1870,6 +1940,15 @@ typedef struct {
     uint32_t vga_ring0_frames;   /* frames Ring 0 painted after the handoff */
     uint32_t vga_stalls;
     uint32_t vga_respawns;
+    /* Lot 8: UHCI USB tablet driver. */
+    int32_t usb_owner;
+    uint32_t usb_handed_off;
+    uint32_t usb_present;        /* controller found at boot */
+    uint32_t usb_tds;            /* TDs written for the driver */
+    uint32_t usb_rejected;       /* TD/RUN requests refused (bounds, cycle) */
+    uint32_t usb_reports;        /* pointer reports applied */
+    uint32_t usb_stops;          /* controller stopped after an owner loss */
+    uint32_t usb_respawns;
 } os_device_status_t;
 
 #endif

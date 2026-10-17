@@ -75,3 +75,4 @@ userspace/netrelay
 userspace/netwire
 /initrd_content/pm/
 /initrd_content/dos/
+userspace/usbdriver

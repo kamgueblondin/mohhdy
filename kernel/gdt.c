@@ -18,6 +18,8 @@ static int g_tss_pci_granted = -1;
 static int g_tss_ps2_granted = -1;
 static int g_tss_serial_granted = -1;
 static int g_tss_vga_granted = -1;
+static int g_tss_usb_granted = -1;
+static uint16_t g_tss_usb_base;
 
 // External assembly functions
 extern void gdt_flush(uint32_t);
@@ -69,6 +71,7 @@ void gdt_init() {
     g_tss_ps2_granted = 0;
     g_tss_serial_granted = 0;
     g_tss_vga_granted = 0;
+    g_tss_usb_granted = 0;
 
     // Flush GDT and TSS
     gdt_flush((uint32_t)&gdt_ptr);
@@ -120,6 +123,18 @@ void tss_set_vga_io(int grant) {
     if (g_tss_vga_granted == grant) return;
     io_bitmap_apply_vga(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
     g_tss_vga_granted = grant;
+}
+
+/* Lot 8 (US-001): UHCI STS/INTR/FRNUM/PORTSC only for the live usbdriver
+ * (USBCMD and FLBASEADD stay closed). */
+void tss_set_usb_io(int grant, uint16_t base) {
+    grant = (grant && base) ? 1 : 0;
+    if (g_tss_usb_granted == grant && (!grant || g_tss_usb_base == base)) return;
+    if (g_tss_usb_granted == 1 && g_tss_usb_base)
+        io_bitmap_apply_usb(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, g_tss_usb_base, 0);
+    if (grant) io_bitmap_apply_usb(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, base, 1);
+    g_tss_usb_granted = grant;
+    g_tss_usb_base = base;
 }
 
 void tss_set_serial_io(int grant) {

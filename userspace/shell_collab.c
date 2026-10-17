@@ -314,6 +314,29 @@ int shell_collab_line(const char* line) {
         print_string(" (hash commitment, not zero-knowledge)\n");
         return 0;
     }
+    if (s_eq(cmd, "collab-zk-prove")) {
+        /* US-103 (Lot 8): Schnorr NIZK; the secret never leaves this call */
+        collab_zk_proof_t pr, bad;
+        uint64_t pub;
+        int ok, tamper, wrong_msg, wrong_pub;
+        rest = word(rest, b, 48);
+        if (num(a, &x) || !b[0]) { print_string("collab-zk-prove error usage: SECRET MESSAGE\n"); return 1; }
+        if (collab_zk_prove((uint64_t)x * 2654435761ULL + 12345ULL, b, &pr) != 0) { print_string("collab-zk-prove error bad secret\n"); return 1; }
+        pub = collab_zk_public((uint64_t)x * 2654435761ULL + 12345ULL);
+        ok = collab_zk_verify(pub, b, &pr) == 0;
+        bad = pr; bad.s = bad.s ? bad.s - 1U : 1U;
+        tamper = collab_zk_verify(pub, b, &bad) == 0;
+        wrong_msg = collab_zk_verify(pub, "other", &pr) == 0;
+        wrong_pub = collab_zk_verify(collab_zk_public(7U), b, &pr) == 0;
+        print_string("collab-zk-prove public ");
+        { int i; for (i = 60; i >= 0; i -= 4) { char hx[2]; hx[0] = "0123456789abcdef"[(uint32_t)(pub >> i) & 15U]; hx[1] = 0; print_string(hx); } }
+        print_string(ok ? " verify ok" : " verify FAILED");
+        print_string(tamper ? " tampered accepted" : " tampered rejected");
+        print_string(wrong_msg ? " wrong-message accepted" : " wrong-message rejected");
+        print_string(wrong_pub ? " wrong-public accepted" : " wrong-public rejected");
+        print_string(" (Schnorr NIZK, 62-bit toy group: simule strength)\n");
+        return 0;
+    }
     if (s_eq(cmd, "collab-compliance")) {
         collab_compliance_report(&g_c, g_out, (int)sizeof(g_out));
         print_string(g_out);
