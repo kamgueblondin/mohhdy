@@ -412,6 +412,7 @@ typedef struct {
 #define OS_FB_PANE_COLLAB 8
 #define OS_FB_PANE_PROD 9
 #define OS_FB_PANE_IDE 10 /* US-050: full-screen pm-ide, term[] = editor frame */
+#define OS_FB_PANE_WEB 11 /* Lot 6 US-031: page painted from web[] (guest web engine) */
 #define OS_FB_STAGE_REFLECTING 0
 #define OS_FB_STAGE_ACTING 1
 #define OS_FB_STAGE_PRESENTING 2
@@ -433,6 +434,27 @@ typedef struct {
     uint16_t cells[OS_VGA_ROWS * OS_VGA_COLS];
 } os_vga_frame_t;
 
+/* Lot 6 (US-031): one display item of the guest web engine
+ * (userspace/webeng.c). Coordinates are page pixels from the page origin;
+ * the kernel adds the pane origin and clips. RECT fills, BORDER strokes
+ * (thickness = bold), TEXT draws the 8x8 font (bold = 1 draws twice). */
+#define OS_FB_WEB_RECT 1
+#define OS_FB_WEB_TEXT 2
+#define OS_FB_WEB_BORDER 3
+#define OS_FB_WEB_ITEMS 96
+#define OS_FB_WEB_TEXT_LEN 48
+typedef struct {
+    uint8_t kind;
+    uint8_t bold;
+    int16_t x;
+    int16_t y;
+    uint16_t w;
+    uint16_t h;
+    uint16_t pad;
+    uint32_t color;
+    char text[OS_FB_WEB_TEXT_LEN];
+} os_fb_web_item_t;
+
 typedef struct {
     uint32_t magic;
     uint16_t version;
@@ -453,6 +475,13 @@ typedef struct {
      * (OS_FB_PANE_IDE): 0 text, 1 keyword, 2 string, 3 number, 4 comment,
      * 5 gutter, 6 program output, 7 output rule. */
     uint8_t term_attr[OS_FB_TERM_MAX][OS_FB_TERM_LEN];
+    /* version >= 4: display list of the web pane (OS_FB_PANE_WEB). */
+    uint16_t nweb;
+    uint16_t web_page_w;
+    uint16_t web_page_h;
+    uint16_t web_scroll;
+    char web_title[OS_FB_TERM_LEN];
+    os_fb_web_item_t web[OS_FB_WEB_ITEMS];
 } os_fb_scene_t;
 
 typedef struct {

@@ -389,7 +389,7 @@ void gfx_fb_update_cursor(void) {
 int gfx_fb_present(const os_fb_scene_t *scene) {
     uint32_t *dst;
     uint32_t n, i;
-    os_fb_scene_t local;
+    static os_fb_scene_t local; /* Lot 6: too large for the kernel stack */
     int nw, nh;
     int mx = 0, my = 0;
     uint8_t btn = 0;

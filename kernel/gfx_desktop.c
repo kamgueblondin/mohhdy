@@ -690,7 +690,7 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
 }
 
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *out) {
-    os_fb_scene_t def;
+    static os_fb_scene_t def; /* Lot 6: the scene carries the web display list, keep it off the 16 KB kernel stack */
     const os_fb_scene_t *sc = scene;
     int bar_h, chat_w, chat_h, chat_x, chat_y, scene_w, scene_h, scene_x, scene_y;
     int dock_w, dock_x, dock_y, bw, i, mx, ty, gap, flag_w;
@@ -850,7 +850,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
 }
 
 void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
-    os_fb_scene_t def;
+    static os_fb_scene_t def;
     const os_fb_scene_t *sc = scene;
     int bar_h, chat_w, chat_h, chat_x, chat_y, scene_w, scene_h, scene_x, scene_y;
     int dock_w, dock_x, dock_y, i;
