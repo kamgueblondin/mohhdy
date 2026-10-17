@@ -56,3 +56,10 @@ void io_bitmap_apply_vga(uint8_t* map, uint32_t len, int allow) {
     io_bitmap_set_port(map, len, (uint16_t)IO_BITMAP_VGA_CRTC_INDEX, allow);
     io_bitmap_set_port(map, len, (uint16_t)IO_BITMAP_VGA_CRTC_DATA, allow);
 }
+
+void io_bitmap_apply_usb(uint8_t* map, uint32_t len, uint16_t base, int allow) {
+    static const uint8_t offsets[] = {0x02U, 0x03U, 0x04U, 0x05U, 0x06U, 0x07U, 0x10U, 0x11U, 0x12U, 0x13U};
+    uint32_t i;
+    if (base == 0U) return;
+    for (i = 0U; i < sizeof(offsets); i++) io_bitmap_set_port(map, len, (uint16_t)(base + offsets[i]), allow);
+}

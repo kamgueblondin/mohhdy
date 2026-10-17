@@ -309,6 +309,9 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_device_service.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/device_service.c"
     fi
+    if [ "$(basename "$test_file")" = "test_usb_dma.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/usb_dma.c $BASE_DIR/kernel/io_bitmap.c"
+    fi
     if [ "$(basename "$test_file")" = "test_io_bitmap.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/io_bitmap.c"
     fi

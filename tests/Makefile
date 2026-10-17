@@ -296,6 +296,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_device_service: $(UNIT_DIR)/kernel/test_dev
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/device_service.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_usb_dma: $(UNIT_DIR)/kernel/test_usb_dma.c ../kernel/usb_dma.c ../kernel/usb_dma.h ../kernel/io_bitmap.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/usb_dma.c ../kernel/io_bitmap.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled kernel test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_io_bitmap: $(UNIT_DIR)/kernel/test_io_bitmap.c ../kernel/io_bitmap.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/io_bitmap.c $(FRAMEWORK_SOURCES)
