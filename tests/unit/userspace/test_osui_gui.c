@@ -5,6 +5,7 @@
 #include "osui_runtime.h"
 #include "osui_gui.h"
 #include "os_syscalls.h"
+#include "osui_ide.h"
 #include <string.h>
 
 static uint16_t g_cells[OS_VGA_ROWS * OS_VGA_COLS];
@@ -216,6 +217,93 @@ static void test_gui_media_rendering(void) {
     run_line("media-stop");
 }
 
+/* US-050: pm-ide typed on the desktop opens the full-screen editor. */
+static char g_fake_file[256];
+static int g_fake_len = -1;
+static int g_fake_exec_action;
+static int fake_load(const char *file, char *buf, int max) {
+    (void)file;
+    if (g_fake_len < 0 || g_fake_len > max) return -1;
+    memcpy(buf, g_fake_file, (size_t)g_fake_len);
+    return g_fake_len;
+}
+static int fake_save(const char *file, const char *buf, int len) {
+    (void)file;
+    if (len >= (int)sizeof(g_fake_file)) return -1;
+    memcpy(g_fake_file, buf, (size_t)len);
+    g_fake_file[len] = 0;
+    g_fake_len = len;
+    return 0;
+}
+static int fake_exec(int action, const char *file, const char *src, int len, char *msg, int max) {
+    (void)file; (void)src; (void)len;
+    g_fake_exec_action = action;
+    strncpy(msg, action == OSUI_IDE_CHECK ? "ok statements 2" : "ok line 2 prints 1 expects 1 failed 0", (size_t)max - 1);
+    msg[max - 1] = 0;
+    return 0;
+}
+static void feed_str(const char *s) {
+    while (*s) osui_gui_feed_key(*s++, g_out, (int)sizeof(g_out));
+}
+static void test_gui_pm_ide_fullscreen(void) {
+    int i;
+    setup();
+    osui_gui_set_ide_ops(fake_load, fake_save, fake_exec);
+    strcpy(g_fake_file, "say 1\n");
+    g_fake_len = 6;
+    feed_str("pm-ide t.pm");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui pm-ide open fullscreen file=t.pm"));
+    TEST_ASSERT_EQUAL(1, osui_gui_ide_active());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_IDE, g_scene.pane);
+    TEST_ASSERT_EQUAL(OSUI_IDE_FRAME, g_scene.nterm);
+    TEST_ASSERT_EQUAL(0, strncmp(g_scene.term[0], "pm-ide t.pm Ln 1 Col 1 /1", 25));
+    TEST_ASSERT_EQUAL_STRING("  1> say 1", g_scene.term[1]); /* cursor on s: Ln/Col in the title */
+    /* Arrows and ESC belong to the editor, not to the chat or the desktop. */
+    osui_gui_feed_key(OS_VGA_KEY_DOWN, g_out, (int)sizeof(g_out));
+    for (i = 0; i < 5; i++) osui_gui_feed_key(OS_VGA_KEY_RIGHT, g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    feed_str("expect 1 == 1");
+    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
+    TEST_ASSERT_NOT_NULL(strstr(g_snap, " ide=t.pm ide_ln=2 ide_col=14 ide_lines=2 ide_mod=1"));
+    TEST_ASSERT_NOT_NULL(strstr(g_snap, "cursor_row=  2> expect 1 == 1_"));
+    TEST_ASSERT_EQUAL(0, osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(1, osui_gui_ide_active());
+    osui_gui_feed_key('c', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(OSUI_IDE_CHECK, g_fake_exec_action);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui pm-ide check ok statements 2"));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('q', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_ide_active());   /* unsaved: refused */
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('w', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui pm-ide saved file=t.pm"));
+    TEST_ASSERT_EQUAL_STRING("say 1\nexpect 1 == 1\n", g_fake_file);
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('r', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(OSUI_IDE_RUN, g_fake_exec_action);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui pm-ide run ok line 2"));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('q', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui pm-ide quit file=t.pm"));
+    TEST_ASSERT_EQUAL(0, osui_gui_ide_active());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_TRUE(g_scene.pane != OS_FB_PANE_IDE);
+    /* Missing file opens an empty buffer; no file name is a usage error. */
+    g_fake_len = -1;
+    feed_str("pm-ide n.pm");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "open fullscreen new file=n.pm"));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('q', g_out, (int)sizeof(g_out));
+    feed_str("pm-ide");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "error=usage"));
+    TEST_ASSERT_EQUAL(0, osui_gui_ide_active());
+    osui_gui_set_ide_ops(0, 0, 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_gui_command_canonical);
@@ -227,6 +315,7 @@ int main(void) {
     RUN_TEST(test_gui_live_shell_eval);
     RUN_TEST(test_vbe_p2p_collab_prod_panes);
     RUN_TEST(test_gui_media_rendering);
+    RUN_TEST(test_gui_pm_ide_fullscreen);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

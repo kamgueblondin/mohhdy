@@ -20,6 +20,7 @@ void shell_prod_count(const char* line);
 int shell_collab_line(const char* line);
 #include "shell_platform.h"
 #include "osui_gui.h"
+#include "osui_ide.h"
 #include "promptmessage.h"
 #include "csig.h"
 #include "collab.h"
@@ -2837,6 +2838,53 @@ static int pm_compile_report(const char* who, int len, pm_program_t* prog) {
     print_string(": "); print_string(prog->err); print_string("\n");
     return -1;
 }
+/* US-050: file and VM operations behind the full-screen OS-UI pm-ide
+ * (userspace/osui_ide.c, userspace/osui_gui.c). Same store and VM as
+ * pm-edit; the verdict is one status line on the IDE frame. */
+static void ide_msg_add(char* msg, int max, int* n, const char* s) {
+    while (s && *s && *n < max - 1) msg[(*n)++] = *s++;
+    msg[*n] = 0;
+}
+static void ide_msg_int(char* msg, int max, int* n, int v) {
+    char b[12]; int k = 0;
+    unsigned u = v < 0 ? (unsigned)(-v) : (unsigned)v;
+    if (v < 0) ide_msg_add(msg, max, n, "-");
+    do { b[k++] = (char)('0' + u % 10U); u /= 10U; } while (u && k < 11);
+    while (k--) { char c[2]; c[0] = b[k]; c[1] = 0; ide_msg_add(msg, max, n, c); }
+}
+static int shell_ide_load(const char* file, char* buf, int max) {
+    return pm_host_read(0, file, buf, max);
+}
+static int shell_ide_save(const char* file, const char* buf, int len) {
+    return pm_host_write(0, file, buf, len, 0) < 0 ? -1 : 0;
+}
+static int shell_ide_exec(int action, const char* file, const char* src, int len, char* msg, int max) {
+    int i, st, n = 0;
+    (void)file;
+    if (len > PM_SRC_MAX - 1) { ide_msg_add(msg, max, &n, "error source too large"); return -1; }
+    for (i = 0; i < len; i++) g_pm_src[i] = src[i];
+    g_pm_src[len] = 0;
+    st = pm_compile(g_pm_src, len, &g_pm_tmp, &g_pm_host);
+    if (st != PM_OK) {
+        ide_msg_add(msg, max, &n, "error line "); ide_msg_int(msg, max, &n, g_pm_tmp.err_line);
+        ide_msg_add(msg, max, &n, " col "); ide_msg_int(msg, max, &n, g_pm_tmp.err_col);
+        ide_msg_add(msg, max, &n, ": "); ide_msg_add(msg, max, &n, g_pm_tmp.err);
+        return -1;
+    }
+    if (action == OSUI_IDE_CHECK) {
+        ide_msg_add(msg, max, &n, "ok statements "); ide_msg_int(msg, max, &n, g_pm_tmp.statements);
+        return 0;
+    }
+    pm_vm_reset(&g_pm_vm);
+    st = pm_run(&g_pm_tmp, &g_pm_vm, &g_pm_host);
+    ide_msg_add(msg, max, &n, st == PM_OK ? "ok" : (st == PM_ERR_EXPECT ? "fail" : "error"));
+    ide_msg_add(msg, max, &n, " line "); ide_msg_int(msg, max, &n, g_pm_vm.line);
+    ide_msg_add(msg, max, &n, " prints "); ide_msg_int(msg, max, &n, (int)g_pm_vm.prints);
+    ide_msg_add(msg, max, &n, " expects "); ide_msg_int(msg, max, &n, (int)g_pm_vm.expects);
+    ide_msg_add(msg, max, &n, " failed "); ide_msg_int(msg, max, &n, (int)g_pm_vm.expect_failed);
+    return st == PM_OK ? 0 : -1;
+}
+
 static void pm_vm_report(const char* who, int st) {
     print_string(who);
     if (st == PM_OK) print_string(" ok");
@@ -4894,6 +4942,8 @@ static void cmd_ata_status(shell_context_t* ctx, char args[][128], int arg_count
     print_string(" fatwr "); print_uint(st.fat_driver_write_sectors);
     print_string(" fatkpio "); print_uint(st.fat_kernel_pio_sectors);
     print_string(" fatkpiolive "); print_uint(st.fat_kernel_pio_live);
+    print_string(" jkread "); print_uint(st.journal_kernel_pio_reads);
+    print_string(" jinst "); print_uint(st.journal_installs);
     print_string(" aborts "); print_uint(st.fat_rpc_aborts);
     print_string(" flushes "); print_uint(st.flush_done);
     print_string(" kpio "); print_uint(st.kernel_overlay_writes);
@@ -6973,6 +7023,7 @@ void main() {
     init_shell_context(&shell_ctx);
     g_live_ctx = &shell_ctx;
     osui_gui_set_program_eval(shell_gui_eval);
+    osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
     
     // Affichage de bienvenue moderne
     cmd_clear(&shell_ctx, NULL, 0);

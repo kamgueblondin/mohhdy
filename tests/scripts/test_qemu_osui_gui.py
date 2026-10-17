@@ -324,7 +324,7 @@ def key_echo_count(output, char, mode):
 
 
 def send_command_once(client, command, proc, mode):
-    aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash"}
+    aliases = {" ": "spc", "-": "minus", ".": "dot", "/": "slash", "=": "equal"}
     for char in command:
         count = 0
         for _ in range(KEY_CHAR_RETRIES):
@@ -577,12 +577,40 @@ def main():
                 monitor, "session-end", "history=cleared", proc, mode="getc", wait_prompt=False
             )
             wait_for(proc, "ai=ended", CMD_TIMEOUT, end_start)
+            # US-050: full-screen pm-ide on the desktop. The editor owns
+            # every key (ESC is its command prefix), saves to the shell
+            # store, and checks/runs on the PromptMessage VM.
+            say("typing pm-ide ide.pm in gui ...")
+            send_command_until(
+                monitor, "pm-ide ide.pm", "osui pm-ide open fullscreen", proc, mode="getc", wait_prompt=False
+            )
+            wait_for(proc, " ide=ide.pm ide_ln=1", CMD_TIMEOUT)
+            ide_start = len(log_text())
+            send_command_once(monitor, "expect 4 == 4", proc, "getc")
+            wait_for(proc, " ide=ide.pm ide_ln=2 ide_col=1 ide_lines=2 ide_mod=1", CMD_TIMEOUT, ide_start)
+            for key, marker in (("w", "osui pm-ide saved file=ide.pm"),
+                                ("c", "osui pm-ide check ok statements 1"),
+                                ("r", "osui pm-ide run ok line "),
+                                ("q", "osui pm-ide quit file=ide.pm")):
+                step = len(log_text())
+                send_key(monitor, "esc")
+                time.sleep(0.3)
+                send_key(monitor, key)
+                wait_for(proc, marker, CMD_TIMEOUT, step)
+            quit_at = log_text().find("osui pm-ide quit file=ide.pm", ide_start)
+            wait_for(proc, "OSUI-SNAP", CMD_TIMEOUT, quit_at)
+            snap = log_text()[quit_at:].split("OSUI-SNAP", 1)[1].split("\n", 1)[0]
+            if " ide=" in snap or "pane=" not in snap:
+                raise RuntimeError("pm-ide still active after ESC q: %s" % snap)
+            say("pm-ide fullscreen: saved, checked, ran, quit")
             say("typing console ...")
             send_command_until(
                 monitor, "console", "chrome=text", proc, mode="getc", wait_prompt=True
             )
             say("typing gui-status after close ...")
             send_command_until(monitor, "gui-status", "gui_live=false", proc)
+            # The file the desktop editor saved is in the shell store.
+            send_command_until(monitor, "pm-check ide.pm", "pm-check ok ide.pm", proc)
         say("QEMU OS-UI GUI contract passed.")
         return 0
     finally:

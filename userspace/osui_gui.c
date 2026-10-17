@@ -5,6 +5,7 @@
 
 #include "osui_gui.h"
 #include "osui_runtime.h"
+#include "osui_ide.h"
 #include "os_syscalls.h"
 
 #define COLS OS_VGA_COLS
@@ -23,6 +24,11 @@ static int g_ilen;
 static int g_leave;
 static int g_idle;
 static osui_program_eval_t g_eval;
+static osui_ide_t g_ide;
+static osui_ide_load_t g_ide_load;
+static osui_ide_save_t g_ide_save;
+static osui_ide_exec_t g_ide_exec;
+static char g_ide_buf[OSUI_IDE_TEXT_MAX + 1];
 static char g_term[GUI_TERM_MAX][GUI_TERM_LEN];
 static int g_term_i;
 static int g_term_n;
@@ -54,6 +60,70 @@ static int scmp(const char *a, const char *b) {
         i++;
     }
     return a[i] - b[i];
+}
+
+void osui_gui_set_ide_ops(osui_ide_load_t load, osui_ide_save_t save, osui_ide_exec_t exec) {
+    g_ide_load = load;
+    g_ide_save = save;
+    g_ide_exec = exec;
+}
+
+int osui_gui_ide_active(void) { return g_ide.active; }
+
+void osui_gui_ide_frame_row(int r, char *dst, int max) { osui_ide_frame_row(&g_ide, r, dst, max); }
+
+static void ide_out(char *out, int out_max, const char *a, const char *b) {
+    if (!out || out_max <= 0) return;
+    scpy(out, out_max, a);
+    if (b) scpy(out + slen(out), out_max - slen(out), b);
+    scpy(out + slen(out), out_max - slen(out), "\n");
+}
+
+/* "pm-ide FILE" typed on the desktop opens the editor full screen. */
+static int ide_open_line(const char *line, char *out, int out_max) {
+    const char *f = line + 6;
+    int n = -1;
+    while (*f == ' ') f++;
+    if (!*f) { ide_out(out, out_max, "osui pm-ide error=usage pm-ide FILE", 0); return 1; }
+    if (slen(f) >= (int)sizeof(g_ide.file)) { ide_out(out, out_max, "osui pm-ide error=name_too_long", 0); return 1; }
+    if (g_ide_load) n = g_ide_load(f, g_ide_buf, OSUI_IDE_TEXT_MAX);
+    osui_ide_open(&g_ide, f, n > 0 ? g_ide_buf : "", n > 0 ? n : 0);
+    ide_out(out, out_max, n >= 0 ? "osui pm-ide open fullscreen file=" : "osui pm-ide open fullscreen new file=", f);
+    return 0;
+}
+
+static void ide_action(int act, char *out, int out_max) {
+    char msg[OSUI_IDE_ROW_LEN];
+    int len;
+    if (act == OSUI_IDE_QUIT) {
+        ide_out(out, out_max, "osui pm-ide quit file=", g_ide.file);
+        g_ide.active = 0;
+        return;
+    }
+    len = osui_ide_text(&g_ide, g_ide_buf, (int)sizeof(g_ide_buf));
+    if (len < 0) { osui_ide_set_status(&g_ide, "buffer too large"); return; }
+    if (act == OSUI_IDE_SAVE) {
+        if (!g_ide_save || g_ide_save(g_ide.file, g_ide_buf, len) != 0) {
+            osui_ide_set_status(&g_ide, "save failed");
+            ide_out(out, out_max, "osui pm-ide save error file=", g_ide.file);
+            return;
+        }
+        g_ide.modified = 0;
+        scpy(msg, (int)sizeof(msg), "saved ");
+        scpy(msg + slen(msg), (int)sizeof(msg) - slen(msg), g_ide.file);
+        osui_ide_set_status(&g_ide, msg);
+        ide_out(out, out_max, "osui pm-ide saved file=", g_ide.file);
+        return;
+    }
+    msg[0] = 0;
+    if (!g_ide_exec) {
+        osui_ide_set_status(&g_ide, "no PromptMessage VM in this binary");
+        ide_out(out, out_max, "osui pm-ide exec=missing", 0);
+        return;
+    }
+    (void)g_ide_exec(act, g_ide.file, g_ide_buf, len, msg, (int)sizeof(msg));
+    osui_ide_set_status(&g_ide, msg);
+    ide_out(out, out_max, act == OSUI_IDE_CHECK ? "osui pm-ide check " : "osui pm-ide run ", msg);
 }
 
 void osui_gui_set_program_eval(osui_program_eval_t fn) {
@@ -316,6 +386,24 @@ void osui_gui_write_snap(char *dst, int max) {
     }
     snap_add(dst, max, &p, " input=");
     snap_add(dst, max, &p, g_input);
+    if (g_ide.active) {
+        char row[OSUI_IDE_ROW_LEN];
+        snap_add(dst, max, &p, " ide=");
+        snap_add(dst, max, &p, g_ide.file);
+        snap_add(dst, max, &p, " ide_ln=");
+        snap_u(dst, max, &p, (unsigned)(g_ide.row + 1));
+        snap_add(dst, max, &p, " ide_col=");
+        snap_u(dst, max, &p, (unsigned)(g_ide.col + 1));
+        snap_add(dst, max, &p, " ide_lines=");
+        snap_u(dst, max, &p, (unsigned)g_ide.nlines);
+        snap_add(dst, max, &p, " ide_mod=");
+        snap_u(dst, max, &p, (unsigned)g_ide.modified);
+        snap_add(dst, max, &p, "\nOSUI-IDE status=");
+        snap_add(dst, max, &p, g_ide.status);
+        osui_ide_frame_row(&g_ide, 1 + g_ide.row - g_ide.top, row, (int)sizeof(row));
+        snap_add(dst, max, &p, " cursor_row=");
+        snap_add(dst, max, &p, row);
+    }
     if (osui_get_media_active()) {
         snap_add(dst, max, &p, " media=");
         snap_add(dst, max, &p, osui_get_media_paused() ? "paused" : "playing");
@@ -398,6 +486,14 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         for (i = 0; i < n; i++) osui_gui_term_at(i, scene->term[i], OS_FB_TERM_LEN);
     }
     scene->nterm = (uint8_t)n;
+    if (g_ide.active) {
+        /* US-050: the editor takes the whole desktop (OS_FB_PANE_IDE). */
+        scene->pane = OS_FB_PANE_IDE;
+        for (i = 0; i < OSUI_IDE_FRAME && i < OS_FB_TERM_MAX; i++)
+            osui_ide_frame_row(&g_ide, i, scene->term[i], OS_FB_TERM_LEN);
+        scene->nterm = (uint8_t)i;
+        scene->input[0] = 0;
+    }
 }
 
 void osui_gui_render(uint16_t *cells) {
@@ -437,6 +533,13 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         osui_stage_tick(out, out_max);
         return 0;
     }
+    if (g_ide.active) {
+        /* Full screen: every key goes to the editor, ESC is its command
+         * prefix and does not leave the desktop. */
+        int act = osui_ide_key(&g_ide, key);
+        if (act != OSUI_IDE_NONE) ide_action(act, out, out_max);
+        return 0;
+    }
     if (key == OS_VGA_KEY_ESC) {
         g_leave = 1;
         if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=qemu_fb\n");
@@ -474,6 +577,13 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             g_input[0] = 0;
             if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=qemu_fb\n");
             return 1;
+        }
+        if (g_input[0] == 'p' && g_input[1] == 'm' && g_input[2] == '-' && g_input[3] == 'i' &&
+            g_input[4] == 'd' && g_input[5] == 'e' && (g_input[6] == ' ' || g_input[6] == 0)) {
+            (void)ide_open_line(g_input, out, out_max);
+            g_ilen = 0;
+            g_input[0] = 0;
+            return 0;
         }
         {
             char tok[32];
@@ -534,6 +644,7 @@ void osui_gui_run(void) {
     g_ilen = 0;
     g_idle = 0;
     g_input[0] = 0;
+    g_ide.active = 0;
     osui_gui_term_reset();
     osui_gui_ack_enter();
     serial_puts("osui gui live chrome=qemu_fb display_surface=vbe_lfb us031_complete=false\n");
