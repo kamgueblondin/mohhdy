@@ -7,6 +7,7 @@
 #include "osui_runtime.h"
 #include "osui_ide.h"
 #include "webeng.h"
+#include "webrt.h"
 #include "os_syscalls.h"
 
 #define COLS OS_VGA_COLS
@@ -81,6 +82,40 @@ static void web_num(char *d, int max, const char *label, int v) {
     d[n] = 0;
 }
 
+/* Lot 6: page pipeline. US-042 <template> components are expanded in the
+ * HTML, then the engine parses; the collected CSS goes through US-040
+ * @media flattening for the viewport and US-041 var() resolution before the
+ * cascade. Counters are kept for the status line. */
+static int g_web_components, g_web_media_kept, g_web_media_dropped, g_web_vars, g_web_vars_unresolved;
+static char g_web_tmp[OSUI_WEB_SRC_MAX];
+static int osui_web_pipeline(const char *src, int n) {
+    int defined = 0, expanded = 0, kept = 0, dropped = 0, vdef = 0, unres = 0, m, rc, k;
+    webrt_viewport_t vp;
+    static char css1[WE_CSS_MAX], css2[WE_CSS_MAX];
+    g_web_components = g_web_media_kept = g_web_media_dropped = g_web_vars = g_web_vars_unresolved = 0;
+    m = webrt_components_expand(src, g_web_tmp, OSUI_WEB_SRC_MAX, &defined, &expanded);
+    if (m > 0 && expanded > 0) { src = g_web_tmp; n = m; g_web_components = expanded; }
+    rc = we_parse(&g_web, src, n);
+    if (rc != 0) return rc;
+    if (g_web.css_len > 0) {
+        g_web.css[g_web.css_len < WE_CSS_MAX ? g_web.css_len : WE_CSS_MAX - 1] = 0;
+        vp.width = OSUI_WEB_VIEWPORT; vp.height = 480; vp.dark = 0;
+        m = webrt_css_flatten_media(g_web.css, &vp, css1, WE_CSS_MAX, &kept, &dropped);
+        if (m >= 0) {
+            m = webrt_css_resolve_vars(css1, css2, WE_CSS_MAX, &vdef, &unres);
+            if (m >= 0) {
+                for (k = 0; k < m && k < WE_CSS_MAX - 1; k++) g_web.css[k] = css2[k];
+                g_web.css_len = (uint32_t)k;
+            }
+        }
+        g_web_media_kept = kept; g_web_media_dropped = dropped;
+        g_web_vars = vdef; g_web_vars_unresolved = unres;
+    }
+    rc = we_style(&g_web);
+    if (rc != 0) return rc;
+    return we_layout(&g_web, OSUI_WEB_VIEWPORT);
+}
+
 we_doc_t *osui_gui_web_doc(void) { return &g_web; }
 int osui_gui_web_active(void) { return g_web_active; }
 
@@ -90,7 +125,7 @@ int osui_gui_web_load(const char *file, char *status, int max) {
     if (g_ide_load) n = g_ide_load(file, g_web_src, OSUI_WEB_SRC_MAX - 1);
     if (n < 0) { if (status) { scpy(status, max, "osui web error=not_found file="); scpy(status + slen(status), max - slen(status), file); } return -1; }
     g_web_src[n] = 0;
-    rc = we_render(&g_web, g_web_src, n, OSUI_WEB_VIEWPORT);
+    rc = osui_web_pipeline(g_web_src, n);
     if (status) {
         scpy(status, max, rc == 0 ? "osui web render file=" : "osui web error=render file=");
         scpy(status + slen(status), max - slen(status), file);
@@ -103,13 +138,17 @@ int osui_gui_web_load(const char *file, char *status, int max) {
         web_num(status, max, " page ", (int)g_web.perf.page_w);
         web_num(status, max, "x", (int)g_web.perf.page_h);
         web_num(status, max, " diag ", (int)g_web.ndiag);
+        web_num(status, max, " components ", g_web_components);
+        web_num(status, max, " media_kept ", g_web_media_kept);
+        web_num(status, max, " media_dropped ", g_web_media_dropped);
+        web_num(status, max, " vars ", g_web_vars);
     }
     return rc;
 }
 
 static void web_open_line(const char *line, char *out, int out_max) {
     const char *f = line + 4;
-    char status[200];
+    char status[320];
     while (*f == ' ') f++;
     if (!*f || slen(f) >= (int)sizeof(g_web_file)) {
         if (out) scpy(out, out_max, "osui web error=usage web FILE\n");

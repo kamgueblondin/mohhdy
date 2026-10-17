@@ -528,6 +528,16 @@ def main():
             out = normalized_log(log_text()[start:])
             if "script ignored (no JavaScript)" not in out or "scripts_skipped 1" not in out:
                 raise RuntimeError("web-console: %s" % out[-800:])
+            # US-040/041/042 in the engine pipeline, US-044 audit
+            start = send_command_until(monitor, "web-render /web/theme.html", "web-render ok", proc)
+            out = normalized_log(log_text()[start:])
+            if ("components 1 media_kept 1 media_dropped 1 vars 2" not in out
+                    or "web item rect 8 " not in out or "#00ff00ff" not in out or "#00800000" not in out):
+                raise RuntimeError("theme pipeline: %s" % out[-1500:])
+            start = send_command_until(monitor, "web-console /web/theme.html", "web-console a11y issues", proc)
+            out = normalized_log(log_text()[start:])
+            if "web-console a11y issues 0" not in out:
+                raise RuntimeError("theme a11y: %s" % out[-800:])
             start = send_command_until(monitor, "web-perf /web/demo.html 5", "web-perf runs 5", proc)
             wait_for(proc, " budget ", CMD_TIMEOUT, start)
             out = normalized_log(log_text()[start:])

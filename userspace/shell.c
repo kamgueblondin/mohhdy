@@ -27,6 +27,7 @@ int shell_collab_line(const char* line);
 #include "collab.h"
 #include "../kernel/sha256.h"
 #include "webeng.h"
+#include "webrt.h"
 int shell_collab_sign(const uint8_t* m, int len, uint8_t sig[40], uint8_t pk[128]);
 /* US-060: FILE.sig = "pmsig1 pk=<hex> sig=<hex>", Schnorr over
  * SHA-256("pmcert1" || source) with the node's collab key */
@@ -2946,7 +2947,7 @@ static int grpc_wire_handler(const char* path, const char* payload, char* reply,
 extern we_doc_t* osui_gui_web_doc(void);
 static void web_out(void* c, const char* s) { (void)c; print_string(s); }
 static void cmd_web(shell_context_t* ctx, const char* command, char args[][128], int arg_count) {
-    char status[200];
+    char status[320];
     we_doc_t* d = osui_gui_web_doc();
     uint32_t i;
     if (arg_count < 1 || (strcmp(command, "web-inspect") == 0 && arg_count < 2)) {
@@ -3013,6 +3014,19 @@ static void cmd_web(shell_context_t* ctx, const char* command, char args[][128],
         print_string(" dropped "); print_int((int)d->diag_dropped);
         print_string(" unknown_props "); print_int((int)d->perf.unknown_props);
         print_string(" scripts_skipped "); print_int((int)d->perf.scripts_skipped); print_string("\n");
+        {   /* US-044: accessibility audit of the same source */
+            static char src[OSUI_WEB_SRC_MAX];
+            webrt_a11y_t a;
+            int n = pm_host_read(0, args[0], src, OSUI_WEB_SRC_MAX - 1);
+            if (n >= 0) {
+                src[n] = 0;
+                (void)webrt_a11y_audit(src, &a);
+                print_string("web-console a11y issues "); print_int(a.issues);
+                print_string(" img_no_alt "); print_int(a.img_no_alt);
+                print_string(" heading_skips "); print_int(a.heading_skips);
+                print_string(" lang_missing "); print_int(a.lang_missing); print_string("\n");
+            }
+        }
     }
     ctx->last_rc = 0;
 }
