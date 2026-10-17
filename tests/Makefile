@@ -424,7 +424,7 @@ coverage-report:
 	@echo "Generating coverage report..."
 	@mkdir -p $(LOG_DIR)
 	@if [ "$(ENABLE_COVERAGE)" = "1" ]; then \
-		python3 ../scripts/gcov_host_summary.py | tee $(LOG_DIR)/coverage_report.txt; \
+		set -o pipefail 2>/dev/null; python3 ../scripts/gcov_host_summary.py | tee $(LOG_DIR)/coverage_report.txt; \
 	else \
 		echo "Coverage: not measured (no gcov instrumentation by default). Rebuild with ENABLE_COVERAGE=1." > $(LOG_DIR)/coverage_report.txt; \
 		cat $(LOG_DIR)/coverage_report.txt; \

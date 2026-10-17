@@ -219,6 +219,38 @@ jobs:
           path: |
             test_logs/
 
+  coverage:
+    name: Host unit-test coverage (gcov floor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      # Measured 79.56% on 2026-10-17. The floor fails the job on a drop.
+      - name: make coverage (host unit tests, gcov line floor)
+        run: make coverage COVERAGE_MIN=78
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          if-no-files-found: ignore
+          path: |
+            test_logs/coverage_report.txt
+
   p2p:
     name: QEMU P2P and collab three guests
     runs-on: ubuntu-latest

@@ -790,11 +790,13 @@ test-all:
 	@python3 tests/scripts/test_python_facade_removed.py
 
 # Host unit tests rebuilt with --coverage, then one gcov line percentage.
-# Not part of test-all or CI: the notes stay under build/.
+# Not part of test-all. CI job "coverage" runs it with COVERAGE_MIN, a floor
+# below the measured value: a drop under the floor fails the job.
+COVERAGE_MIN ?=
 coverage:
 	@$(MAKE) -C tests clean
 	@$(MAKE) -C tests ENABLE_COVERAGE=1 test
-	@$(MAKE) -C tests ENABLE_COVERAGE=1 coverage-report
+	@COVERAGE_MIN="$(COVERAGE_MIN)" $(MAKE) -C tests ENABLE_COVERAGE=1 coverage-report
 
 test-performance:
 	@echo "=== Tests de performance et benchmarks ==="
