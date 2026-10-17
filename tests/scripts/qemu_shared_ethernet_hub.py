@@ -236,6 +236,10 @@ class SharedEthernetHub(object):
             # METIER plaintext marker in clear (must stay 0: encrypted chat).
             "guest_client_app_data": 0,
             "guest_plaintext_metier": 0,
+            # Lot 9 (US-067): guest -> guest TCP payloads carrying gRPC /
+            # HTTP/2 plaintext (preface, path, message); must stay 0 when
+            # gRPC runs inside the TLS session.
+            "guest_plaintext_grpc": 0,
             "peer_dns": 0,
         }
         self.source_macs = set()
@@ -419,6 +423,14 @@ class SharedEthernetHub(object):
                 and b"METIER" in payload
             ):
                 self.events["guest_plaintext_metier"] += 1
+            if (
+                owner_mac is not None
+                and peer_mac is not None
+                and dest_ip != source_ip
+                and (b"PRI * HTTP/2.0" in payload or b"mohhdy.echo" in payload
+                     or b"from guest over" in payload)
+            ):
+                self.events["guest_plaintext_grpc"] += 1
             # SYN-ACK emis par un invite loue (pas un proxy hub).
             if (
                 owner_mac is not None
