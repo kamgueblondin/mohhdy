@@ -576,6 +576,10 @@ void main(void) {
         puts(" total ");
         put_uint(relayed);
         if (wire_calls) { puts(" wire "); put_uint(wire_calls); }
+        if (reply.result < 0 && net_llm_tls_fail_stage) {
+            puts(net_llm_tls_fail_stage == NET_LLM_TLS_FAIL_CLOCK ? " tls-fail clock" : " tls-fail handshake");
+            net_llm_tls_fail_stage = 0;
+        }
         putc('\n');
         if (nic_owned) {
             stack_publish();

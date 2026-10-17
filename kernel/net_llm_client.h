@@ -18,6 +18,9 @@ void net_llm_client_bind(ne2k_device_t* device, const ne2k_io_t* io, int present
 void net_llm_client_reset(void);
 /* UTC for certificate validity: CMOS in Ring 0, SYS_NET_NIC UTC in Ring 3. */
 int net_llm_client_utc(rtc_io_t* io, char* out, uint16_t capacity);
+#define NET_LLM_TLS_FAIL_CLOCK 1
+#define NET_LLM_TLS_FAIL_HANDSHAKE 2
+extern int net_llm_tls_fail_stage;
 
 uint32_t kernel_llm_session_status(void);
 int kernel_llm_acquire_start(const os_llm_acquire_start_request_t* request);

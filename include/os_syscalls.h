@@ -1817,6 +1817,12 @@ typedef struct {
 #define OS_SEAL_MAX_PLAIN 256U
 #define OS_SEAL_BAD_REQUEST (-190)
 #define OS_SEAL_AUTH (-191)
+/* Lot 8: wall clock for every task. ECX = char[16], filled with
+ * YYYYMMDDHHMMSSZ + NUL from a stable CMOS snapshot (two equal reads, each
+ * started with UIP clear). Returns 0, OS_RTC_BAD_ARGUMENT or OS_RTC_UNSTABLE. */
+#define SYS_RTC_UTC 160
+#define OS_RTC_BAD_ARGUMENT (-192)
+#define OS_RTC_UNSTABLE (-193)
 typedef struct {
     uint32_t ready;
     uint32_t seals;

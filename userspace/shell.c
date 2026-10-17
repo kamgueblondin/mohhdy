@@ -3590,7 +3590,7 @@ static int is_builtin(const char* cmd) {
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
         "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
-        "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "right-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "whoami",
+        "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "right-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "rtc-check", "whoami",
         "alias", "unalias", "export", "which", "rc",
         "grep", "wc", "sort", "head", "tail",
         "logout", "reboot", "shutdown",
@@ -5383,25 +5383,55 @@ static void cmd_uptime(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string(")\n");
 }
 
+static int sys_rtc_utc(char out[16]) {
+    int rc;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_RTC_UTC), "c"(out) : "memory");
+    return rc;
+}
+
+/* Real wall clock (CMOS RTC through SYS_RTC_UTC); it used to print a fixed
+ * date built from the tick counter. */
 static void cmd_date(shell_context_t* ctx, char args[][128], int arg_count) {
-    unsigned int ticks = sys_ticks();
-    int sec = (int)((ticks / 100) % 86400);
-    int h = 5 + (sec / 3600);
-    int m = (sec % 3600) / 60;
-    int s = sec % 60;
+    char utc[16];
+    int rc;
     (void)ctx; (void)args; (void)arg_count;
-    if (h >= 24) h %= 24;
-    print_string("Thu Aug 13 ");
-    if (h < 10) putc('0');
-    print_int(h);
-    print_string(":");
-    if (m < 10) putc('0');
-    print_int(m);
-    print_string(":");
-    if (s < 10) putc('0');
-    print_int(s);
-    print_string(" UTC 2026\n");
-    print_string("date ok\n");
+    rc = sys_rtc_utc(utc);
+    if (rc != 0) {
+        print_string("date failed ");
+        print_int(rc);
+        print_string("\n");
+        return;
+    }
+    print_string("date ok ");
+    putc(utc[0]); putc(utc[1]); putc(utc[2]); putc(utc[3]); putc('-');
+    putc(utc[4]); putc(utc[5]); putc('-'); putc(utc[6]); putc(utc[7]); putc(' ');
+    putc(utc[8]); putc(utc[9]); putc(':'); putc(utc[10]); putc(utc[11]); putc(':');
+    putc(utc[12]); putc(utc[13]);
+    print_string(" UTC\n");
+}
+
+/* Regression for the NE2000 TLS flake: read the clock back to back across
+ * two second boundaries (the CMOS update window) and count failed reads.
+ * The old 3-attempt reader failed about 1 read in 1200 there. */
+static void cmd_rtc_check(shell_context_t* ctx, char args[][128], int arg_count) {
+    char utc[16];
+    char last = 0;
+    unsigned int start = sys_ticks();
+    unsigned int reads = 0U, fails = 0U, boundaries = 0U;
+    (void)ctx; (void)args; (void)arg_count;
+    while (boundaries < 3U && sys_ticks() - start < 600U) {
+        reads++;
+        if (sys_rtc_utc(utc) != 0) { fails++; continue; }
+        if (last && utc[13] != last) boundaries++;
+        last = utc[13];
+    }
+    print_string(fails == 0U && boundaries >= 2U ? "rtc-check ok reads " : "rtc-check failed reads ");
+    print_uint(reads);
+    print_string(" boundaries ");
+    print_uint(boundaries);
+    print_string(" fail ");
+    print_uint(fails);
+    print_string("\n");
 }
 
 static void cmd_whoami(shell_context_t* ctx, char args[][128], int arg_count) {
@@ -7045,6 +7075,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "date") == 0) {
         cmd_date(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "rtc-check") == 0) {
+        cmd_rtc_check(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "whoami") == 0) {
         cmd_whoami(ctx, args, arg_count);

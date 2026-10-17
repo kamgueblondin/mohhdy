@@ -1069,6 +1069,7 @@ static void key_seal_ensure(void) {
     for (i = 0; i < 34U; i++) ((volatile uint32_t*)pool)[i] = 0U;
 }
 
+static int sys_rtc_utc(char* out);
 static int sys_key_seal(uint32_t op, uint32_t in, uint32_t in_len, uint32_t out, uint32_t cap) {
     static uint8_t src[OS_SEAL_MAX_PLAIN + OS_SEAL_OVERHEAD];
     static uint8_t dst[OS_SEAL_MAX_PLAIN + OS_SEAL_OVERHEAD];
@@ -2625,6 +2626,9 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_DEVICE_SERVICE:
             cpu->eax = (uint32_t)sys_device_service(cpu->ebx, cpu->ecx, cpu->edx, cpu->esi);
             break;
+        case SYS_RTC_UTC:
+            cpu->eax = (uint32_t)sys_rtc_utc((char*)cpu->ecx);
+            break;
         case SYS_KEY_SEAL:
             cpu->eax = (uint32_t)sys_key_seal(cpu->ebx, cpu->ecx, cpu->edx, cpu->esi, cpu->edi);
             break;
@@ -3002,6 +3006,15 @@ static int syscall_user_range(const void* pointer, uint32_t length, int write) {
         if (address > 0xffffffffU - PAGE_SIZE) return 0;
     }
     return 1;
+}
+
+static int sys_rtc_utc(char* out) {
+    char text[16];
+    uint32_t i;
+    if (!syscall_user_range(out, 16U, 1)) return OS_RTC_BAD_ARGUMENT;
+    if (kernel_net_utc(text, (uint16_t)sizeof(text)) != 0) return OS_RTC_UNSTABLE;
+    for (i = 0U; i < 16U; i++) out[i] = text[i];
+    return 0;
 }
 
 int sys_socket_open(uint16_t local_port, uint16_t remote_port, uint32_t local_sequence) {

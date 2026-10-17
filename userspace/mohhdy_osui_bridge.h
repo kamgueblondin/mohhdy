@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 396
+#define MOHHDY_SHELL_COMMAND_COUNT 397
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -316,6 +316,7 @@ static const char * const mohhdy_shell_commands[] = {
     "right-token",
     "rm",
     "rmdir",
+    "rtc-check",
     "screen-adapt",
     "service-event-pull",
     "service-find",

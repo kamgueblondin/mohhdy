@@ -203,7 +203,10 @@ def main():
             ("jobs", ["j", "o", "b", "s", "ret"], "jobs ok"),
             ("top", ["t", "o", "p", "ret"], "top ok"),
             ("env", ["e", "n", "v", "ret"], "env ok"),
-            ("date", ["d", "a", "t", "e", "ret"], "date ok"),
+            ("date", ["d", "a", "t", "e", "ret"], "date ok 20"),
+            # Lot 8 regression (NE2000 TLS flake): clock reads across the
+            # CMOS update window never fail.
+            ("rtc-check", ["r", "t", "c", "minus", "c", "h", "e", "c", "k", "ret"], "rtc-check ok reads"),
             ("echo hi", ["e", "c", "h", "o", "spc", "h", "i", "ret"], "echo ok"),
             ("task-priority 1 3",
              ["t", "a", "s", "k", "minus", "p", "r", "i", "o", "r", "i", "t", "y", "spc", "1", "spc", "3", "ret"],
@@ -232,7 +235,8 @@ def main():
             ("jobs", "jobs ok"),
             ("top", "top ok"),
             ("env", "env ok"),
-            ("date", "date ok"),
+            ("date", "date ok 20"),
+            ("rtc-check", "rtc-check ok reads"),
             ("echo", "echo ok"),
             ("task priority", "task-priority ok 1 3"),
             ("task metrics priority", "task-metrics ok 1 3"),
