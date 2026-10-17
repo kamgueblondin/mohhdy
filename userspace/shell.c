@@ -22,6 +22,7 @@ int shell_collab_line(const char* line);
 #include "osui_gui.h"
 #include "osui_ide.h"
 #include "promptmessage.h"
+#include "grpcwire.h"
 #include "csig.h"
 #include "collab.h"
 #include "../kernel/sha256.h"
@@ -2913,6 +2914,53 @@ static void pm_copy_prog(pm_program_t* d, const pm_program_t* s) {
 /* pm-check FILE | pm-run FILE | pm-test FILE | pm-doc FILE | pm-disasm FILE
  * pm-debug FILE [LINE] | pm-compile SRC OUT | pm-exec IMG | pm-say PHRASE...
  * pm-version FILE | pm-versions FILE | pm-edit FILE | pm STATEMENT (raw line) */
+/* US-067 partial: one unary gRPC call encoded as real HTTP/2 frames (HPACK
+ * subset, Length-Prefixed-Message, protobuf field 1), served and parsed in
+ * memory. No TCP HTTP/2 connection. */
+static int grpc_wire_handler(const char* path, const char* payload, char* reply, int cap) {
+    int k = 0;
+    const char* h;
+    reply[0] = 0;
+    if (strcmp(path, "/echo.EchoService/SayHello") == 0) {
+        h = "Hello "; while (*h && k < cap - 1) reply[k++] = *h++;
+        while (*payload && k < cap - 1) reply[k++] = *payload++;
+        reply[k] = 0;
+        return 0;
+    }
+    if (strcmp(path, "/status.StatusService/GetStatus") == 0) {
+        h = "p2p_node_active"; while (*h && k < cap - 1) reply[k++] = *h++;
+        reply[k] = 0;
+        return 0;
+    }
+    h = "unimplemented"; while (*h && k < cap - 1) reply[k++] = *h++;
+    reply[k] = 0;
+    return 12;
+}
+static void cmd_grpc_wire(shell_context_t* ctx, char args[][128], int arg_count) {
+    static unsigned char req[512], resp[512];
+    char path[64], msg[160];
+    int n, m, hs = 0, gs = 0, frames = 0, pre;
+    ctx->last_rc = 1;
+    if (arg_count < 2) { print_string("usage: grpc-wire SERVICE METHOD [PAYLOAD]\n"); return; }
+    pre = gw_h2_preface(req, (int)sizeof(req));
+    n = gw_build_request(req, (int)sizeof(req), args[0], args[1], arg_count > 2 ? args[2] : "");
+    if (pre < 0 || n < 0) { print_string("grpc-wire error encode\n"); return; }
+    m = gw_serve(req, n, grpc_wire_handler, resp, (int)sizeof(resp), path, (int)sizeof(path));
+    if (m < 0) { print_string("grpc-wire error serve "); print_int(m); print_string("\n"); return; }
+    if (gw_parse_response(resp, m, &hs, &gs, msg, (int)sizeof(msg), &frames) != GW_OK) {
+        print_string("grpc-wire error parse\n"); return;
+    }
+    print_string("grpc-wire ok path "); print_string(path);
+    print_string(" http "); print_int(hs);
+    print_string(" grpc-status "); print_int(gs);
+    print_string(" frames "); print_int(frames);
+    print_string(" request_bytes "); print_int(n);
+    print_string(" response_bytes "); print_int(m);
+    print_string(" message "); print_string(msg);
+    print_string(" transport=memory\n");
+    ctx->last_rc = gs == 0 ? 0 : 2;
+}
+
 static int pm_crl_revoked(const uint8_t d[32]) {
     static char crl[400];
     int n = pm_host_read(0, "/etc/pm_ca.crl", crl, (int)sizeof(crl));
@@ -3395,7 +3443,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "grpc-wire",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -6614,6 +6662,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "cat") == 0) {
         cmd_cat(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "grpc-wire") == 0) {
+        cmd_grpc_wire(ctx, args, arg_count);
         return 1;
     } else if (strncmp(command, "pm-", 3) == 0 &&
                (strcmp(command, "pm-check") == 0 || strcmp(command, "pm-run") == 0 ||

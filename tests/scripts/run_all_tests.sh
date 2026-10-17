@@ -113,6 +113,9 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_collab.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/collab.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c"
     fi
+    if [ "$(basename "$test_file")" = "test_grpcwire.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/grpcwire.c"
+    fi
     if [ "$(basename "$test_file")" = "test_webrt.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/webrt.c"
     fi

@@ -183,6 +183,14 @@ def main():
             expect(out, "write 'set NAME to VALUE'")
             out = run(client, proc, "pm-assist /pm/hello.pm", "pm-assist ok")
             expect(out, "engine=rules")
+            # US-067 partial (rides on this boot to save CI time): one unary
+            # gRPC call as HTTP/2 frames (HPACK subset), in guest memory.
+            out = run(client, proc, "grpc-wire echo.EchoService SayHello mohhdy", "grpc-wire ok")
+            for needle in ("path /echo.EchoService/SayHello http 200 grpc-status 0 frames 3",
+                           "message Hello mohhdy transport=memory"):
+                expect(out, needle)
+            out = run(client, proc, "grpc-wire x.Y Z", "grpc-wire ok")
+            expect(out, "grpc-status 12 frames 2")
             # Local catalog, install, certification record (US-059/060 local).
             out = run(client, proc, "pm-catalog", "pm-catalog ok 4")
             expect(out, "pm-catalog hello.pm - PromptMessage demo")

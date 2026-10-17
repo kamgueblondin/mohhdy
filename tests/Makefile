@@ -348,6 +348,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ps2_decode: $(UNIT_DIR)/userspace/test_p
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/ps2_decode.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_grpcwire: $(UNIT_DIR)/userspace/test_grpcwire.c ../userspace/grpcwire.c ../userspace/grpcwire.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/grpcwire.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webrt: $(UNIT_DIR)/userspace/test_webrt.c ../userspace/webrt.c ../userspace/webrt.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/webrt.c $(FRAMEWORK_SOURCES)
