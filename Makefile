@@ -1220,6 +1220,39 @@ qemu-pci-driver: $(OS_IMAGE) pack-initrd
 qemu-input-drivers: $(OS_IMAGE) pack-initrd
 	@python3 tests/integration/test_qemu_input_drivers.py
 
+# Lot 8 (US-076): ARMv7-A kernel core (QEMU -M virt, cortex-a15). Needs
+# gcc-arm-none-eabi and qemu-system-arm; portable kernel/ipc.c and
+# kernel/sha256.c are compiled unchanged.
+ARM_CC ?= arm-none-eabi-gcc
+ARM_CFLAGS = -mcpu=cortex-a15 -marm -mfloat-abi=soft -ffreestanding -fno-builtin \
+	-fno-tree-loop-distribute-patterns -nostdlib -O2 -Wall -Wextra -std=c99 \
+	-Iarch/arm -Ikernel -Iinclude
+ARM_DIR = build/arm
+ARM_IMAGE = $(ARM_DIR)/mohhdy-arm.elf
+ARM_OBJS = $(ARM_DIR)/boot.o $(ARM_DIR)/arm_kernel.o $(ARM_DIR)/arm_mmu.o \
+	$(ARM_DIR)/ipc.o $(ARM_DIR)/sha256.o $(ARM_DIR)/user_tasks.o
+
+$(ARM_DIR)/%.o: arch/arm/%.S
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
+$(ARM_DIR)/%.o: arch/arm/%.c arch/arm/arm_mmu.h include/os_syscalls.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
+$(ARM_DIR)/ipc.o: kernel/ipc.c kernel/ipc.h include/os_syscalls.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
+$(ARM_DIR)/sha256.o: kernel/sha256.c kernel/sha256.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
+$(ARM_IMAGE): $(ARM_OBJS) arch/arm/arm.ld
+	$(ARM_CC) $(ARM_CFLAGS) -T arch/arm/arm.ld -o $@ $(ARM_OBJS) -lgcc
+
+.PHONY: arm-kernel qemu-arm-boot
+arm-kernel: $(ARM_IMAGE)
+
+qemu-arm-boot: $(ARM_IMAGE)
+	@python3 tests/integration/test_qemu_arm_boot.py
+
 # Lot 8 (US-001): UHCI USB tablet driver in Ring 3 (claim, kernel-checked
 # TDs with a refused bounds probe, QMP tablet reports, rogue refused, kill:
 # controller stopped by the kernel, supervised respawn re-enumerates).
