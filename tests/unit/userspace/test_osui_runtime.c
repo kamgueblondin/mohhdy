@@ -1053,9 +1053,60 @@ void test_html_css_rendering(void) {
     TEST_ASSERT(strstr(g_out, "margin=8") == NULL);
 }
 
+void test_css_cascade_engine(void) {
+    int rc;
+    setup();
+    /* Inline <style>: class beats type, id beats class, later rule wins. */
+    rc = run_line("browser-html-render <style>p{color:green}.n{color:orange}#a{color:red}</style><p id=\"a\" class=\"n\">x</p><p class=\"n\">y</p><p>z</p>");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "  x {color:red}") != NULL);
+    TEST_ASSERT(strstr(g_out, "  y {color:orange}") != NULL);
+    TEST_ASSERT(strstr(g_out, "  z {color:green}") != NULL);
+    TEST_ASSERT(strstr(g_out, "css author_rules=3") != NULL);
+    /* display:none hides the node and its descendants; inline style wins. */
+    rc = run_line("browser-html-render <style>.h{display:none}</style><div class=\"h\"><p>gone</p></div><p style=\"color:teal\">kept</p>");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "gone") == NULL);
+    TEST_ASSERT(strstr(g_out, "  kept {color:teal}") != NULL);
+    TEST_ASSERT(strstr(g_out, "hidden=2") != NULL);
+    /* Descendant selector matches only inside the ancestor; inheritance. */
+    rc = run_line("browser-html-render <style>div p{font-weight:bold}div{color:navy}</style><div><p>in</p></div><p>out</p>");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "  in {color:navy; fw:700}") != NULL);
+    TEST_ASSERT(strstr(g_out, "  out\n") != NULL);
+}
+
+void test_css_parser_rules_and_errors(void) {
+    int before;
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("browser-css-demo"));
+    TEST_ASSERT(strstr(g_out, "browser-css-demo ok") != NULL);
+    TEST_ASSERT(strstr(g_out, "=== CSS demo === {fw:700}") != NULL);
+    TEST_ASSERT(strstr(g_out, "  lead {color:red; fw:700}") != NULL);
+    TEST_ASSERT(strstr(g_out, "  note {color:orange; fw:700}") != NULL);
+    TEST_ASSERT(strstr(g_out, "secret") == NULL);
+    /* !important author rule beats the inline style; uppercase inherits. */
+    TEST_ASSERT(strstr(g_out, "  * FIRST {color:navy}") != NULL);
+    TEST_ASSERT(strstr(g_out, "  * SECOND\n") != NULL);
+    TEST_ASSERT(strstr(g_out, "  inline {color:purple}") != NULL);
+    TEST_ASSERT(strstr(g_out, "author_rules=7 total_rules=19 errors=0 hidden=1") != NULL);
+    TEST_ASSERT(strstr(g_out, "errors=0") != NULL);
+    /* Direct parser: comma groups, comments, malformed input counted. */
+    before = osui_css_rule_count();
+    TEST_ASSERT_EQUAL(4, osui_css_parse("/* c */ h1, h2 , .x { color: red; margin: 4px } p{padding:2px}"));
+    TEST_ASSERT_EQUAL(before + 4, osui_css_rule_count());
+    before = osui_css_error_count();
+    TEST_ASSERT_EQUAL(0, osui_css_parse("p..x{color:red} @media x{p{color:red}} q{nocolon}"));
+    TEST_ASSERT(osui_css_error_count() >= before + 3);
+    /* CSS Syntax: a block left open at end of input is closed there. */
+    TEST_ASSERT_EQUAL(1, osui_css_parse("p{color:red"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
+    RUN_TEST(test_css_cascade_engine);
+    RUN_TEST(test_css_parser_rules_and_errors);
     RUN_TEST(test_slash_help_and_linux_trap);
     RUN_TEST(test_prompt_chat_and_stage);
     RUN_TEST(test_sessions_isolated);

@@ -232,6 +232,9 @@ def main():
                 ("media-pause", "media-pause ok status=paused"),
                 ("media-stop", "media-stop ok status=stopped"),
                 ("browser-fetch p2p://node origin=untrusted", "origin_denied"),
+                # CSS cascade in the guest text renderer (not a layout engine).
+                ("browser-css-demo", "author_rules=7 total_rules=19 errors=0 hidden=1"),
+                ("browser-css-demo", "lead {color:red; fw:700}"),
                 ("os-p2p", "pane=p2p"),
                 ("os-collab", "pane=collab"),
                 ("os-prod", "pane=prod"),

@@ -63,6 +63,7 @@ static const char *const k_cmds[] = {
     "browser-tab-rename", "browser-tab-pin", "browser-tab-duplicate", "browser-tab-next", "browser-tab-prev", "browser-tabs",
     "browser-fs-save", "browser-fs-load", "browser-fs-sync",
     "browser-navigate", "browser-back", "browser-forward", "browser-dom-tree", "browser-eval", "browser-pm-run",
+    "browser-html-render", "browser-render", "browser-css-demo",
     "browser-form-fill", "browser-dom-act", "browser-fetch", "fetch-sim",
     "browser-storage-set", "browser-storage-get", "tab-storage",
     "browser-telemetry", "osui-telemetry", "pwa-manifest", "pwa-install", "pwa-list", "pwa-run",
@@ -2787,6 +2788,7 @@ static int cmd_browser_forward(char *out, int max) {
 
 #define OSUI_DOM_MAX_NODES 32
 #define OSUI_DOM_STR_LEN 64
+#define OSUI_DOM_DEPTH 8
 
 typedef struct {
     int used;
@@ -2794,6 +2796,7 @@ typedef struct {
     char tag[16];
     char id[32];
     char class_name[32];
+    char style[64];
     char text[OSUI_DOM_STR_LEN];
     char color[16];
     char background[16];
@@ -2801,53 +2804,362 @@ typedef struct {
     int padding;
     int font_weight;
     int display; /* 0: block, 1: inline, 2: none */
+    int uppercase;
+    int hidden;  /* display none on this node or an ancestor */
+    /* Cascade winners per property: specificity*4096 + source order. */
+    int w_color, w_background, w_margin, w_padding, w_weight, w_display, w_upper;
 } osui_dom_node_t;
 
 static osui_dom_node_t g_dom_nodes[OSUI_DOM_MAX_NODES];
 static int g_dom_node_count = 0;
+#define OSUI_DOM_SHEET 512
+static char g_dom_sheet[OSUI_DOM_SHEET];
+
+/* ---- CSS: stylesheet parser, selector matching, cascade ----------------
+ * Selectors: type, .class, #id, '*', compounds (p.note#a), descendant
+ * combinator (up to 3 compounds) and comma groups. Specificity id 100,
+ * class 10, type 1, inline style 1000, !important +10000. Later rules win
+ * on equal specificity. color, font-weight and text-transform inherit.
+ * Properties: color, background(-color), margin, padding (px), font-weight,
+ * display (block, inline, none), text-transform (uppercase, none). */
+#define OSUI_CSS_MAX_RULES 48
+#define OSUI_CSS_MAX_DECLS 96
+#define OSUI_CSS_PARTS 3
+
+typedef struct { char tag[16]; char id[32]; char cls[32]; } osui_css_compound_t;
+typedef struct {
+    osui_css_compound_t parts[OSUI_CSS_PARTS];
+    int nparts;
+    int spec;
+    int order;
+    int decl_start;
+    int decl_count;
+} osui_css_rule_t;
+typedef struct { char prop[20]; char value[24]; int important; } osui_css_decl_t;
+
+static osui_css_rule_t g_css_rules[OSUI_CSS_MAX_RULES];
+static osui_css_decl_t g_css_decls[OSUI_CSS_MAX_DECLS];
+static int g_css_nrules, g_css_ndecls, g_css_order, g_css_errors;
+
+static int css_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
+static char css_lower(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c; }
+static int css_ident(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
+}
+
+static int css_skip(const char *s, int i) {
+    for (;;) {
+        while (s[i] && css_ws(s[i])) i++;
+        if (s[i] == '/' && s[i + 1] == '*') {
+            i += 2;
+            while (s[i] && !(s[i] == '*' && s[i + 1] == '/')) i++;
+            if (s[i]) i += 2;
+            continue;
+        }
+        return i;
+    }
+}
+
+static void css_reset(void) {
+    g_css_nrules = 0;
+    g_css_ndecls = 0;
+    g_css_order = 0;
+    g_css_errors = 0;
+}
+
+/* One compound selector from sel[a..b): returns its specificity or -1. */
+static int css_compound(const char *s, int a, int b, osui_css_compound_t *c) {
+    int spec = 0, n;
+    char *dst;
+    int cap;
+    c->tag[0] = c->id[0] = c->cls[0] = 0;
+    if (a < b && s[a] == '*') a++;
+    else if (a < b && css_ident(s[a])) {
+        n = 0;
+        while (a < b && css_ident(s[a])) {
+            if (n < 15) c->tag[n++] = css_lower(s[a]);
+            a++;
+        }
+        c->tag[n] = 0;
+        spec += 1;
+    }
+    while (a < b) {
+        if (s[a] == '#') { dst = c->id; cap = 31; spec += 100; }
+        else if (s[a] == '.') { if (c->cls[0]) return -1; dst = c->cls; cap = 31; spec += 10; }
+        else return -1;
+        a++;
+        n = 0;
+        if (a >= b || !css_ident(s[a])) return -1;
+        while (a < b && css_ident(s[a])) {
+            if (n < cap) dst[n++] = s[a];
+            a++;
+        }
+        dst[n] = 0;
+    }
+    return spec;
+}
+
+/* Selector text sel[a..b) (no comma): compounds split on whitespace. */
+static int css_selector(const char *s, int a, int b, osui_css_rule_t *r) {
+    int spec = 0, k;
+    r->nparts = 0;
+    while (a < b) {
+        while (a < b && css_ws(s[a])) a++;
+        if (a >= b) break;
+        k = a;
+        while (k < b && !css_ws(s[k])) k++;
+        if (r->nparts >= OSUI_CSS_PARTS) return -1;
+        {
+            int sp = css_compound(s, a, k, &r->parts[r->nparts]);
+            if (sp < 0) return -1;
+            spec += sp;
+        }
+        r->nparts++;
+        a = k;
+    }
+    if (r->nparts == 0) return -1;
+    r->spec = spec;
+    return 0;
+}
+
+/* Declarations s[a..b): "prop: value [!important]; ..." */
+static int css_decls(const char *s, int a, int b, int *start) {
+    int count = 0;
+    *start = g_css_ndecls;
+    while (a < b) {
+        int ps, pe, vs, ve, n;
+        osui_css_decl_t *d;
+        while (a < b && (css_ws(s[a]) || s[a] == ';')) a++;
+        if (a >= b) break;
+        ps = a;
+        while (a < b && s[a] != ':' && s[a] != ';') a++;
+        if (a >= b || s[a] != ':') { g_css_errors++; while (a < b && s[a] != ';') a++; continue; }
+        pe = a;
+        while (pe > ps && css_ws(s[pe - 1])) pe--;
+        a++;
+        while (a < b && css_ws(s[a])) a++;
+        vs = a;
+        while (a < b && s[a] != ';') a++;
+        ve = a;
+        while (ve > vs && css_ws(s[ve - 1])) ve--;
+        if (pe <= ps || ve <= vs || g_css_ndecls >= OSUI_CSS_MAX_DECLS) { g_css_errors++; continue; }
+        d = &g_css_decls[g_css_ndecls];
+        d->important = 0;
+        if (ve - vs >= 10 && s_ncmp(s + ve - 10, "!important", 10) == 0) {
+            d->important = 1;
+            ve -= 10;
+            while (ve > vs && css_ws(s[ve - 1])) ve--;
+        }
+        for (n = 0; ps < pe && n < 19; ps++) d->prop[n++] = css_lower(s[ps]);
+        d->prop[n] = 0;
+        for (n = 0; vs < ve && n < 23; vs++) d->value[n++] = css_lower(s[vs]);
+        d->value[n] = 0;
+        g_css_ndecls++;
+        count++;
+    }
+    return count;
+}
+
+/* Parse a stylesheet; returns the number of rules added. */
+int osui_css_parse(const char *css) {
+    int i = 0, added = 0;
+    if (!css) return 0;
+    for (;;) {
+        int sel_a, sel_b, body_a, body_b, start, ndecl, g;
+        i = css_skip(css, i);
+        if (!css[i]) break;
+        if (css[i] == '@') { /* at-rules are skipped, block included */
+            int depth = 0;
+            while (css[i] && !(depth == 0 && css[i] == ';')) {
+                if (css[i] == '{') depth++;
+                if (css[i] == '}') { depth--; if (depth <= 0) break; }
+                i++;
+            }
+            if (css[i]) i++;
+            g_css_errors++;
+            continue;
+        }
+        sel_a = i;
+        while (css[i] && css[i] != '{') i++;
+        if (!css[i]) { g_css_errors++; break; }
+        sel_b = i;
+        body_a = ++i;
+        while (css[i] && css[i] != '}') i++;
+        body_b = i;
+        if (css[i]) i++;
+        ndecl = css_decls(css, body_a, body_b, &start);
+        if (ndecl == 0) continue;
+        g = sel_a;
+        while (g < sel_b) {
+            int e = g;
+            osui_css_rule_t *r;
+            while (e < sel_b && css[e] != ',') e++;
+            if (g_css_nrules < OSUI_CSS_MAX_RULES) {
+                r = &g_css_rules[g_css_nrules];
+                if (css_selector(css, g, e, r) == 0) {
+                    r->order = ++g_css_order;
+                    r->decl_start = start;
+                    r->decl_count = ndecl;
+                    g_css_nrules++;
+                    added++;
+                } else {
+                    g_css_errors++;
+                }
+            } else {
+                g_css_errors++;
+            }
+            g = e + 1;
+        }
+    }
+    return added;
+}
+
+int osui_css_rule_count(void) { return g_css_nrules; }
+int osui_css_error_count(void) { return g_css_errors; }
+
+static int css_has_class(const char *list, const char *cls) {
+    int i = 0, n = s_len(cls);
+    if (!cls[0]) return 1;
+    while (list[i]) {
+        while (list[i] == ' ') i++;
+        if (s_ncmp(list + i, cls, n) == 0 && (list[i + n] == 0 || list[i + n] == ' ')) return 1;
+        while (list[i] && list[i] != ' ') i++;
+    }
+    return 0;
+}
+
+static int css_match_compound(const osui_dom_node_t *n, const osui_css_compound_t *c) {
+    if (c->tag[0] && s_cmp(c->tag, n->tag) != 0) return 0;
+    if (c->id[0] && s_cmp(c->id, n->id) != 0) return 0;
+    return css_has_class(n->class_name, c->cls);
+}
+
+static int css_match(int idx, const osui_css_rule_t *r) {
+    int k = r->nparts - 1, p;
+    if (!css_match_compound(&g_dom_nodes[idx], &r->parts[k])) return 0;
+    p = g_dom_nodes[idx].parent_idx;
+    for (k--; k >= 0; k--) {
+        while (p >= 0 && !css_match_compound(&g_dom_nodes[p], &r->parts[k])) p = g_dom_nodes[p].parent_idx;
+        if (p < 0) return 0;
+        p = g_dom_nodes[p].parent_idx;
+    }
+    return 1;
+}
+
+static int css_px(const char *v) {
+    int n = 0, any = 0;
+    while (*v >= '0' && *v <= '9') { n = n * 10 + (*v - '0'); v++; any = 1; }
+    if (!any) return -1;
+    if (*v == 0 || s_cmp(v, "px") == 0) return n > 999 ? 999 : n;
+    return -1;
+}
+
+static void css_declare(osui_dom_node_t *n, const osui_css_decl_t *d, int weight) {
+    int v;
+    if (d->important) weight += 10000 * 4096;
+    if (s_cmp(d->prop, "color") == 0 && weight >= n->w_color) {
+        s_cpy(n->color, sizeof(n->color), d->value); n->w_color = weight;
+    } else if ((s_cmp(d->prop, "background") == 0 || s_cmp(d->prop, "background-color") == 0) &&
+               weight >= n->w_background) {
+        s_cpy(n->background, sizeof(n->background), d->value); n->w_background = weight;
+    } else if (s_cmp(d->prop, "margin") == 0 && (v = css_px(d->value)) >= 0 && weight >= n->w_margin) {
+        n->margin = v; n->w_margin = weight;
+    } else if (s_cmp(d->prop, "padding") == 0 && (v = css_px(d->value)) >= 0 && weight >= n->w_padding) {
+        n->padding = v; n->w_padding = weight;
+    } else if (s_cmp(d->prop, "font-weight") == 0 && weight >= n->w_weight) {
+        if (s_cmp(d->value, "bold") == 0) v = 700;
+        else if (s_cmp(d->value, "normal") == 0) v = 400;
+        else v = css_px(d->value);
+        if (v >= 100 && v <= 900) { n->font_weight = v; n->w_weight = weight; }
+    } else if (s_cmp(d->prop, "display") == 0 && weight >= n->w_display) {
+        if (s_cmp(d->value, "block") == 0) v = 0;
+        else if (s_cmp(d->value, "inline") == 0) v = 1;
+        else if (s_cmp(d->value, "none") == 0) v = 2;
+        else v = -1;
+        if (v >= 0) { n->display = v; n->w_display = weight; }
+    } else if (s_cmp(d->prop, "text-transform") == 0 && weight >= n->w_upper) {
+        if (s_cmp(d->value, "uppercase") == 0) { n->uppercase = 1; n->w_upper = weight; }
+        else if (s_cmp(d->value, "none") == 0) { n->uppercase = 0; n->w_upper = weight; }
+    }
+}
+
+/* User-agent sheet, parsed like any author sheet (lowest order). */
+static const char osui_css_ua_sheet[] =
+    "h1, h2, b, strong { font-weight: bold }"
+    "a { color: blue }"
+    "button { background: gray; padding: 4px }"
+    "span, a, b, strong, em { display: inline }"
+    "#app { margin: 8px; padding: 8px }";
 
 static int osui_dom_parse_html(const char *html) {
-    int i = 0, count = 0, k;
+    int i = 0, count = 0, k, depth = 0;
+    int stack[OSUI_DOM_DEPTH];
+    int sheet = 0;
     for (k = 0; k < OSUI_DOM_MAX_NODES; k++) {
         unsigned char *p = (unsigned char*)&g_dom_nodes[k];
         for (int b = 0; b < (int)sizeof(osui_dom_node_t); b++) p[b] = 0;
     }
+    g_dom_sheet[0] = 0;
     if (!html) return 0;
 
     while (html[i] && count < OSUI_DOM_MAX_NODES) {
         if (html[i] == '<') {
             if (html[i + 1] == '/') {
+                char ctag[16];
+                int c = 0;
+                i += 2;
+                while (html[i] && html[i] != '>' && c < 15) ctag[c++] = css_lower(html[i++]);
+                ctag[c] = 0;
                 while (html[i] && html[i] != '>') i++;
                 if (html[i]) i++;
+                /* Pop to the matching open element (unmatched close: ignored). */
+                for (c = depth - 1; c >= 0; c--) {
+                    if (s_cmp(g_dom_nodes[stack[c]].tag, ctag) == 0) { depth = c; break; }
+                }
                 continue;
             }
             i++;
             int t_idx = 0;
             osui_dom_node_t *node = &g_dom_nodes[count];
+            char tag[16];
+            while (html[i] && html[i] != ' ' && html[i] != '>' && html[i] != '/' && t_idx < 15) {
+                tag[t_idx++] = css_lower(html[i++]);
+            }
+            tag[t_idx] = 0;
+            if (s_cmp(tag, "style") == 0) {
+                /* Author stylesheet: collected, not a DOM node. */
+                while (html[i] && html[i] != '>') i++;
+                if (html[i]) i++;
+                while (html[i] && !(html[i] == '<' && html[i + 1] == '/')) {
+                    if (sheet < OSUI_DOM_SHEET - 1) g_dom_sheet[sheet++] = html[i];
+                    i++;
+                }
+                g_dom_sheet[sheet] = 0;
+                continue;
+            }
             node->used = 1;
             node->display = 0;
             node->font_weight = 400;
+            node->parent_idx = depth > 0 ? stack[depth - 1] : -1;
             s_cpy(node->color, sizeof(node->color), "black");
             s_cpy(node->background, sizeof(node->background), "transparent");
-
-            while (html[i] && html[i] != ' ' && html[i] != '>' && t_idx < 15) {
-                node->tag[t_idx++] = html[i++];
-            }
-            node->tag[t_idx] = 0;
+            s_cpy(node->tag, sizeof(node->tag), tag);
 
             /* Parse attributes id, class, style */
             while (html[i] && html[i] != '>') {
-                if (s_ncmp(html + i, "id=\"", 4) == 0) {
-                    i += 4;
-                    int id_i = 0;
-                    while (html[i] && html[i] != '"' && id_i < 31) node->id[id_i++] = html[i++];
-                    node->id[id_i] = 0;
-                    if (html[i] == '"') i++;
-                } else if (s_ncmp(html + i, "class=\"", 7) == 0) {
-                    i += 7;
-                    int cl_i = 0;
-                    while (html[i] && html[i] != '"' && cl_i < 31) node->class_name[cl_i++] = html[i++];
-                    node->class_name[cl_i] = 0;
+                char *dst = 0;
+                int cap = 0, skip = 0;
+                if (s_ncmp(html + i, "id=\"", 4) == 0) { dst = node->id; cap = 31; skip = 4; }
+                else if (s_ncmp(html + i, "class=\"", 7) == 0) { dst = node->class_name; cap = 31; skip = 7; }
+                else if (s_ncmp(html + i, "style=\"", 7) == 0) { dst = node->style; cap = 63; skip = 7; }
+                if (dst) {
+                    int n = 0;
+                    i += skip;
+                    while (html[i] && html[i] != '"') {
+                        if (n < cap) dst[n++] = html[i];
+                        i++;
+                    }
+                    dst[n] = 0;
                     if (html[i] == '"') i++;
                 } else {
                     i++;
@@ -2864,6 +3176,11 @@ static int osui_dom_parse_html(const char *html) {
                 i++;
             }
             node->text[txt_i] = 0;
+            if (s_cmp(tag, "input") != 0 && s_cmp(tag, "br") != 0 && s_cmp(tag, "img") != 0 &&
+                s_cmp(tag, "hr") != 0 && s_cmp(tag, "meta") != 0 && s_cmp(tag, "link") != 0 &&
+                depth < OSUI_DOM_DEPTH) {
+                stack[depth++] = count;
+            }
             count++;
         } else {
             i++;
@@ -2873,42 +3190,100 @@ static int osui_dom_parse_html(const char *html) {
     return count;
 }
 
-static int osui_css_apply_styles(const char *css) {
-    int i;
+/* Cascade: UA sheet, then author sheet (from <style> plus extra), then
+ * inline style attributes. Returns the number of author rules parsed. */
+static int osui_css_cascade(const char *extra) {
+    int i, r, d, author;
+    css_reset();
+    osui_css_parse(osui_css_ua_sheet);
+    author = g_css_nrules;
+    osui_css_parse(g_dom_sheet);
+    if (extra) osui_css_parse(extra);
+    author = g_css_nrules - author;
     for (i = 0; i < g_dom_node_count; i++) {
         osui_dom_node_t *n = &g_dom_nodes[i];
-        if (!n->used) continue;
-        if (s_cmp(n->tag, "h1") == 0 || s_cmp(n->tag, "b") == 0) n->font_weight = 700;
-        if (s_cmp(n->tag, "a") == 0) s_cpy(n->color, sizeof(n->color), "blue");
-        if (s_cmp(n->tag, "button") == 0) {
-            s_cpy(n->background, sizeof(n->background), "gray");
-            n->padding = 4;
+        n->w_color = n->w_background = n->w_margin = n->w_padding = 0;
+        n->w_weight = n->w_display = n->w_upper = 0;
+        for (r = 0; r < g_css_nrules; r++) {
+            const osui_css_rule_t *rule = &g_css_rules[r];
+            if (!css_match(i, rule)) continue;
+            for (d = 0; d < rule->decl_count; d++)
+                css_declare(n, &g_css_decls[rule->decl_start + d], (rule->spec + 1) * 4096 + rule->order);
         }
-        if (css && s_cmp(n->id, "app") == 0) {
-            n->margin = 8;
-            n->padding = 8;
+        if (n->style[0]) {
+            int start, cnt, saved = g_css_ndecls;
+            cnt = css_decls(n->style, 0, s_len(n->style), &start);
+            for (d = 0; d < cnt; d++) css_declare(n, &g_css_decls[start + d], 1001 * 4096 + 4095);
+            g_css_ndecls = saved;
         }
+        /* Inheritance (parents are earlier in document order). */
+        if (n->parent_idx >= 0) {
+            const osui_dom_node_t *pn = &g_dom_nodes[n->parent_idx];
+            if (!n->w_color) s_cpy(n->color, sizeof(n->color), pn->color);
+            if (!n->w_weight) n->font_weight = pn->font_weight;
+            if (!n->w_upper) n->uppercase = pn->uppercase;
+            n->hidden = pn->hidden;
+        }
+        if (n->display == 2) n->hidden = 1;
     }
-    return 0;
+    return author;
+}
+
+static int osui_css_apply_styles(const char *css) {
+    return osui_css_cascade(css);
+}
+
+static int osui_render_dom(osui_tab_t *tab, int author, char *out, int max, int *pp, int *hidden_out, const char *name);
+
+static void css_text(char *out, int max, int *p, const osui_dom_node_t *n, const char *fallback) {
+    char buf[OSUI_DOM_STR_LEN];
+    int i;
+    s_cpy(buf, sizeof(buf), n->text[0] ? n->text : fallback);
+    if (n->uppercase) {
+        for (i = 0; buf[i]; i++) if (buf[i] >= 'a' && buf[i] <= 'z') buf[i] = (char)(buf[i] - 'a' + 'A');
+    }
+    out_add(out, max, p, buf);
+}
+
+/* Computed style suffix, only for values that differ from the defaults. */
+static void css_suffix(char *out, int max, int *p, const osui_dom_node_t *n) {
+    int any = 0;
+    if (s_cmp(n->color, "black") != 0) { out_add(out, max, p, " {color:"); out_add(out, max, p, n->color); any = 1; }
+    if (s_cmp(n->background, "transparent") != 0) {
+        out_add(out, max, p, any ? "; bg:" : " {bg:"); out_add(out, max, p, n->background); any = 1;
+    }
+    if (n->font_weight != 400) {
+        out_add(out, max, p, any ? "; fw:" : " {fw:"); out_u(out, max, p, (unsigned)n->font_weight); any = 1;
+    }
+    if (n->padding) {
+        out_add(out, max, p, any ? "; pad:" : " {pad:"); out_u(out, max, p, (unsigned)n->padding); any = 1;
+    }
+    if (any) out_add(out, max, p, "}");
 }
 
 static int cmd_browser_html_render(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
-    int p = 0, i;
+    int p = 0, author = 0, hidden = 0;
     char html[OSUI_TEXT];
     osui_tab_t *tab = (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) ? &G.tabs[G.current_tab] : 0;
-    /* Text printer for a flat tag list. Not a layout engine and not US-031.
-     * With HTML arguments, parse them and apply the tiny tag/id rules.
-     * With no arguments, print the banner only (do not reuse a previous DOM). */
+    /* Text-mode renderer. Not a layout engine and not US-031: no boxes, no
+     * fonts, no reflow. HTML arguments are parsed into a DOM (nesting kept),
+     * <style> blocks and style="" attributes go through the CSS cascade
+     * (osui_css_parse). With no arguments, print the banner only. */
     if (narg > 0) {
         rest_from(args, narg, 0, html, OSUI_TEXT);
         osui_dom_parse_html(html);
-        /* The style helper ignores the CSS text. A non-NULL pointer only
-         * sets margin and padding on a node whose id is "app". */
-        osui_css_apply_styles("#app { margin: 8px; }");
+        author = osui_css_cascade(0);
     } else {
         g_dom_node_count = 0;
     }
-    out_add(out, max, &p, "osui browser-html-render ok tab_id=");
+    return osui_render_dom(tab, author, out, max, &p, &hidden, "browser-html-render");
+}
+
+static int osui_render_dom(osui_tab_t *tab, int author, char *out, int max, int *pp, int *hidden_out, const char *name) {
+    int i, hidden = 0, p = *pp;
+    out_add(out, max, &p, "osui ");
+    out_add(out, max, &p, name);
+    out_add(out, max, &p, " ok tab_id=");
     out_add(out, max, &p, tab ? tab->id : "none");
     out_add(out, max, &p, " url=");
     out_add(out, max, &p, tab ? tab->url : "about:blank");
@@ -2920,6 +3295,7 @@ static int cmd_browser_html_render(char args[OSUI_MAX_ARGS][96], int narg, char 
     for (i = 0; i < g_dom_node_count; i++) {
         osui_dom_node_t *n = &g_dom_nodes[i];
         if (!n->used) continue;
+        if (n->hidden) { hidden++; continue; }
         if (n->margin) {
             out_add(out, max, &p, "margin=");
             out_u(out, max, &p, (unsigned)n->margin);
@@ -2927,32 +3303,69 @@ static int cmd_browser_html_render(char args[OSUI_MAX_ARGS][96], int narg, char 
         }
         if (s_cmp(n->tag, "h1") == 0 || s_cmp(n->tag, "h2") == 0) {
             out_add(out, max, &p, "=== ");
-            out_add(out, max, &p, n->text[0] ? n->text : "Heading");
-            out_add(out, max, &p, " ===\n");
+            css_text(out, max, &p, n, "Heading");
+            out_add(out, max, &p, " ===");
         } else if (s_cmp(n->tag, "li") == 0) {
             out_add(out, max, &p, "  * ");
-            out_add(out, max, &p, n->text);
-            out_add(out, max, &p, "\n");
+            css_text(out, max, &p, n, "");
         } else if (s_cmp(n->tag, "a") == 0) {
             out_add(out, max, &p, "  [link] ");
-            out_add(out, max, &p, n->text);
-            out_add(out, max, &p, "\n");
+            css_text(out, max, &p, n, "");
         } else if (s_cmp(n->tag, "button") == 0) {
             out_add(out, max, &p, "  [ ");
-            out_add(out, max, &p, n->text[0] ? n->text : "Button");
-            out_add(out, max, &p, " ]\n");
+            css_text(out, max, &p, n, "Button");
+            out_add(out, max, &p, " ]");
         } else if (s_cmp(n->tag, "input") == 0) {
             out_add(out, max, &p, "  [ Input: ");
             out_add(out, max, &p, n->id[0] ? n->id : "text");
-            out_add(out, max, &p, " ]\n");
+            out_add(out, max, &p, " ]");
         } else if (n->text[0]) {
             out_add(out, max, &p, "  ");
-            out_add(out, max, &p, n->text);
-            out_add(out, max, &p, "\n");
+            css_text(out, max, &p, n, "");
+        } else {
+            continue;
         }
+        css_suffix(out, max, &p, n);
+        out_add(out, max, &p, "\n");
     }
     out_add(out, max, &p, "+--------------------------------------------------+\n");
+    if (g_dom_node_count > 0) {
+        out_add(out, max, &p, "css author_rules=");
+        out_u(out, max, &p, (unsigned)author);
+        out_add(out, max, &p, " total_rules=");
+        out_u(out, max, &p, (unsigned)g_css_nrules);
+        out_add(out, max, &p, " errors=");
+        out_u(out, max, &p, (unsigned)g_css_errors);
+        out_add(out, max, &p, " hidden=");
+        out_u(out, max, &p, (unsigned)hidden);
+        out_add(out, max, &p, "\n");
+    }
+    *pp = p;
+    if (hidden_out) *hidden_out = hidden;
     return OSUI_OK;
+}
+
+/* Built-in page with a real stylesheet: descendant selector, class and id
+ * specificity, source order, !important, inline style, display none,
+ * inheritance. The command line is capped at 160 characters, this page is
+ * not. */
+static const char osui_css_demo_page[] =
+    "<style>"
+    "p{color:green} .note{color:orange} #lead{color:red} "
+    "div p{font-weight:bold} .hide{display:none} "
+    "ul li{text-transform:uppercase} li.keep{color:navy!important} "
+    "</style>"
+    "<div><h1>CSS demo</h1><p id=\"lead\" class=\"note\">lead</p>"
+    "<p class=\"note\">note</p><p class=\"hide\">secret</p></div>"
+    "<ul><li class=\"keep\" style=\"color:teal\">first</li><li>second</li></ul>"
+    "<p style=\"color:purple\">inline</p>";
+
+static int cmd_browser_css_demo(char *out, int max) {
+    int p = 0, author, hidden = 0;
+    osui_tab_t *tab = (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) ? &G.tabs[G.current_tab] : 0;
+    osui_dom_parse_html(osui_css_demo_page);
+    author = osui_css_cascade(0);
+    return osui_render_dom(tab, author, out, max, &p, &hidden, "browser-css-demo");
 }
 
 static int cmd_browser_dom_tree(char *out, int max) {
@@ -4621,6 +5034,7 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "browser-forward") == 0) return cmd_browser_forward(out, max);
     if (s_cmp(cmd, "browser-dom-tree") == 0) return cmd_browser_dom_tree(out, max);
     if (s_cmp(cmd, "browser-html-render") == 0 || s_cmp(cmd, "browser-render") == 0) return cmd_browser_html_render(args, narg, out, max);
+    if (s_cmp(cmd, "browser-css-demo") == 0) return cmd_browser_css_demo(out, max);
     if (s_cmp(cmd, "browser-eval") == 0) return cmd_browser_eval(args, narg, out, max);
     if (s_cmp(cmd, "browser-form-fill") == 0) return cmd_browser_form_fill(args, narg, out, max);
     if (s_cmp(cmd, "browser-dom-act") == 0) return cmd_browser_dom_act(args, narg, out, max);
