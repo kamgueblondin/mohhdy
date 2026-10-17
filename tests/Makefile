@@ -286,6 +286,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_pci_service: $(UNIT_DIR)/kernel/test_pci_se
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/pci_service.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_device_service: $(UNIT_DIR)/kernel/test_device_service.c ../kernel/device_service.c ../kernel/device_service.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/device_service.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled kernel test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_io_bitmap: $(UNIT_DIR)/kernel/test_io_bitmap.c ../kernel/io_bitmap.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/io_bitmap.c $(FRAMEWORK_SOURCES)
@@ -336,6 +341,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_%: $(UNIT_DIR)/kernel/test_%.c $(FRAMEWORK_
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ramfs: $(UNIT_DIR)/userspace/test_ramfs.c ../userspace/ramfs.c ../userspace/procsim.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/ramfs.c ../userspace/procsim.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ps2_decode: $(UNIT_DIR)/userspace/test_ps2_decode.c ../userspace/ps2_decode.c ../userspace/ps2_decode.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/ps2_decode.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_stun: $(UNIT_DIR)/userspace/test_stun.c ../userspace/stun.c ../userspace/stun.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)

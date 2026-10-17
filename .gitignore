@@ -64,6 +64,9 @@ userspace/atarogue
 # Lot 4 (US-001): Ring 3 PCI driver binaries (not versioned).
 userspace/pcidriver
 userspace/pcirogue
+userspace/ps2driver
+userspace/serialdriver
+userspace/devrogue
 # Tranche 5: built net worker binaries (not versioned).
 userspace/networker
 userspace/netclaim

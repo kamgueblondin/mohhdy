@@ -13,6 +13,7 @@
 #include "service_registry.h"
 #include "kernel/timer.h"
 #include "kernel/pci_service.h"
+#include "kernel/device_service.h"
 
 extern void write_serial(char c);
 
@@ -408,6 +409,11 @@ void schedule(cpu_state_t* cpu) {
     /* Lot 4 (US-001): PCI config ports only for the live pcidriver. */
     tss_set_pci_io(current_task->type == TASK_TYPE_USER &&
                    pci_live_driver() == (int32_t)current_task->id);
+    /* Lot 5 (US-001): PS/2 and COM1 only for the driver that claimed them. */
+    tss_set_ps2_io(current_task->type == TASK_TYPE_USER &&
+                   devsvc_owner(DEV_PS2) == (int32_t)current_task->id);
+    tss_set_serial_io(current_task->type == TASK_TYPE_USER &&
+                      devsvc_owner(DEV_SERIAL) == (int32_t)current_task->id);
     tss_set_nic_io(current_task->type == TASK_TYPE_USER && nic_owner_pid() != 0 &&
                    nic_owner_ports_open((int32_t)current_task->id,
                                         service_registry_lookup("net-driver")));

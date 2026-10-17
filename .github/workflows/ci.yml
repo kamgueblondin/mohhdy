@@ -204,6 +204,11 @@ jobs:
       - name: QEMU Ring 3 PCI driver (supervised restart)
         run: make qemu-pci-driver
 
+      # Lot 5 (US-001): PS/2 and COM1 Ring 3 drivers, rogue #GP, kill and
+      # supervised respawn of both (about 1 min).
+      - name: QEMU Ring 3 PS/2 and serial drivers (supervised restart)
+        run: make qemu-input-drivers
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

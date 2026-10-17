@@ -961,6 +961,11 @@ int service_registry_ata_driver_name_allowed(const char* service_name, const cha
     /* Lot 4 (US-001): "pci-driver" opens the PCI config ports (IOPB). */
     if (name_equal(service_name, "pci-driver"))
         return task_name && name_equal(task_name, "pcidriver");
+    /* Lot 5 (US-001): the PS/2 and COM1 drivers. */
+    if (name_equal(service_name, "ps2-driver"))
+        return task_name && name_equal(task_name, "ps2driver");
+    if (name_equal(service_name, "serial-driver"))
+        return task_name && name_equal(task_name, "serialdriver");
     return 1;
 }
 

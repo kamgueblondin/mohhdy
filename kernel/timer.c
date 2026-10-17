@@ -60,6 +60,13 @@ void timer_handler(cpu_state_t* cpu) {
     /* SYS_IPC_RECV_WAIT deadlines: expired sleepers become READY here. */
     task_ipc_wait_tick(timer_ticks);
 
+    /* Lot 5 (US-001): Ring 0 fallback for a stalled or dead Ring 3
+     * ps2driver/serialdriver (syscall.c, device_service.c). */
+    {
+        extern void device_watchdog_tick(uint32_t now);
+        device_watchdog_tick(timer_ticks);
+    }
+
     /* Inventory item 4: a relayed GPT-2 job whose aiworker died or stalled
      * wakes its caller for the Ring 0 fallback. If only the idle kernel task
      * was running, switch now (same path as the boot hand-off). */

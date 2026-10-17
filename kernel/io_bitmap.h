@@ -34,4 +34,13 @@ void io_bitmap_apply_ne2k(uint8_t* map, uint32_t len, int allow);
 #define IO_BITMAP_PCI_LAST 0xCFFU
 void io_bitmap_apply_pci(uint8_t* map, uint32_t len, int allow);
 
+/* Lot 5 (US-001): PS/2 controller (data 0x60, status/command 0x64) for the
+ * live Ring 3 ps2driver, COM1 (0x3F8-0x3FF) for the live serialdriver. */
+#define IO_BITMAP_PS2_DATA 0x60U
+#define IO_BITMAP_PS2_CMD 0x64U
+#define IO_BITMAP_COM1_BASE 0x3F8U
+#define IO_BITMAP_COM1_LAST 0x3FFU
+void io_bitmap_apply_ps2(uint8_t* map, uint32_t len, int allow);
+void io_bitmap_apply_serial(uint8_t* map, uint32_t len, int allow);
+
 #endif

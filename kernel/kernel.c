@@ -1,4 +1,5 @@
 #include "gdt.h"
+#include "device_service.h"
 #include "idt.h"
 #include "interrupts.h"
 #include "multiboot.h"
@@ -399,9 +400,40 @@ int is_transmit_empty() {
     return inb(0x3F8 + 5) & 0x20;
 }
 
-void write_serial(char a) {
+static void serial_ring0_out(char a) {
     while (!is_transmit_empty());
     outb(0x3F8, a);
+}
+
+/* Lot 5 (US-001): once the Ring 3 serialdriver claimed COM1 the byte is
+ * queued for it (single FIFO, order kept). Ring 0 writes itself before the
+ * handoff, after the driver's death, when the queue is full and on a
+ * watchdog stall; those bytes are counted (device_service.c). */
+extern void device_serial_wake(void);
+static volatile int g_serial_panic;
+void serial_panic_mode(void) { g_serial_panic = 1; }
+
+void serial_ring0_flush(void) {
+    uint8_t c;
+    while (devsvc_serial_pop_ring0(&c)) serial_ring0_out((char)c);
+}
+
+void write_serial(char a) {
+    uint32_t flags;
+    int verdict;
+    if (g_serial_panic) { serial_ring0_flush(); serial_ring0_out(a); return; }
+    __asm__ volatile("pushfl; popl %0; cli" : "=r"(flags) :: "memory");
+    verdict = devsvc_serial_put((uint8_t)a);
+    if (verdict == DEVSVC_FLUSH) {
+        if (devsvc_owner(DEV_SERIAL) > 0) devsvc_serial_note_overflow();
+        serial_ring0_flush();
+        verdict = devsvc_serial_put((uint8_t)a);
+        if (verdict == DEVSVC_DIRECT) serial_ring0_out(a);
+    } else if (verdict == DEVSVC_DIRECT) {
+        serial_ring0_out(a);
+    }
+    if (flags & 0x200U) __asm__ volatile("sti" ::: "memory");
+    if (verdict != DEVSVC_DIRECT) device_serial_wake();
 }
 
 // Fonction pour vérifier si des données sont disponibles en lecture sur le port série
@@ -411,6 +443,9 @@ int is_receive_ready() {
 
 // Fonction pour lire un caractère depuis le port série (non-bloquante)
 char read_serial() {
+    /* Lot 5: COM1 RX belongs to the Ring 3 serialdriver (it pushes the
+     * bytes into the keyboard queue, OS_DEV_OP_SERIAL_RX). */
+    if (devsvc_owner(DEV_SERIAL) > 0) return 0;
     if (is_receive_ready()) {
         return inb(0x3F8);
     }
@@ -786,6 +821,7 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
     vga_console_init(color);
 
     // Initialisation du port série
+    devsvc_reset();
     serial_init();
 
     // Initialisation de la GDT et du TSS
@@ -1047,6 +1083,29 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
             print_string_serial("[PCI] boot pcidriver spawned\n");
         } else {
             print_string_serial("[PCI] boot pcidriver unavailable; Ring 0 PCI path\n");
+        }
+    }
+
+    /* Lot 5 (US-001): PS/2 keyboard/mouse and COM1 move to Ring 3 drivers.
+     * Until each claims its device (and after a death, until the supervised
+     * respawn) Ring 0 keeps driving it: the early boot console is Ring 0. */
+    {
+        task_t* ps2_task = create_task_from_initrd_file("bin/ps2driver");
+        task_t* ser_task;
+        if (ps2_task) {
+            ps2_task->boot_service = 1U;
+            ps2_task->priority = OS_TASK_PRIORITY_HIGH;
+            print_string_serial("[PS2] boot ps2driver spawned\n");
+        } else {
+            print_string_serial("[PS2] boot ps2driver unavailable; Ring 0 keyboard path\n");
+        }
+        ser_task = create_task_from_initrd_file("bin/serialdriver");
+        if (ser_task) {
+            ser_task->boot_service = 1U;
+            ser_task->priority = OS_TASK_PRIORITY_HIGH;
+            print_string_serial("[SERIAL] boot serialdriver spawned\n");
+        } else {
+            print_string_serial("[SERIAL] boot serialdriver unavailable; Ring 0 COM1 path\n");
         }
     }
 

@@ -1724,4 +1724,61 @@ typedef struct {
     uint32_t handed_off;
 } os_pci_status_t;
 
+
+/* Lot 5 (US-001): PS/2 (keyboard, mouse) and COM1 serial owned by Ring 3
+ * drivers "ps2-driver" (binary ps2driver) and "serial-driver" (binary
+ * serialdriver). The live owner gets its ports in the TSS IOPB (PS/2 0x60
+ * and 0x64, COM1 0x3F8-0x3FF). IRQ1 entry stays in Ring 0 (the CPU needs
+ * it) but no longer reads port 0x60: it counts the interrupt and wakes the
+ * driver. Ring 0 still drives the device before the handoff, after the
+ * driver died (until the supervised respawn), and on a stall (driver not
+ * scheduled for DEVICE_STALL_TICKS, for example during a long syscall);
+ * every such byte is counted. EBX = op, ECX/EDX/ESI args:
+ *   PS2_CLAIM / SERIAL_CLAIM: live owner only, opens its IOPB window.
+ *   PS2_WAIT (ECX = timeout ticks): blocks until IRQ1; returns the IRQ seq.
+ *   PS2_SUBMIT (ECX = os_input_event_t*, EDX = count, ESI = seq seen).
+ *   SERIAL_TAKE (ECX = buffer, EDX = capacity, ESI = timeout ticks): bytes
+ *     queued by the kernel for COM1; blocks while the queue is empty.
+ *   SERIAL_RX (ECX = buffer, EDX = count): bytes read from COM1 RX.
+ *   STATUS (ECX = os_device_status_t*): also runs the supervisor. */
+#define SYS_DEVICE_SERVICE 158
+#define OS_DEV_OP_PS2_CLAIM 1U
+#define OS_DEV_OP_PS2_WAIT 2U
+#define OS_DEV_OP_PS2_SUBMIT 3U
+#define OS_DEV_OP_SERIAL_CLAIM 4U
+#define OS_DEV_OP_SERIAL_TAKE 5U
+#define OS_DEV_OP_SERIAL_RX 6U
+#define OS_DEV_OP_STATUS 7U
+#define OS_DEV_DENIED (-180)
+#define OS_DEV_BAD_REQUEST (-181)
+#define OS_INPUT_MAX_EVENTS 32U
+#define OS_SERIAL_CHUNK 64U
+#define OS_INPUT_EV_CHAR 1U   /* code = character */
+#define OS_INPUT_EV_ESC 2U    /* Escape key press */
+#define OS_INPUT_EV_EXT 3U    /* code = E0-prefixed make code (arrows, pages) */
+#define OS_INPUT_EV_MOUSE 4U  /* code = buttons, dx/dy = motion (y up) */
+typedef struct {
+    uint8_t type;
+    uint8_t code;
+    int8_t dx;
+    int8_t dy;
+} os_input_event_t;
+typedef struct {
+    int32_t ps2_owner;
+    int32_t serial_owner;
+    uint32_t ps2_irqs;          /* IRQ1 counted for the driver */
+    uint32_t ps2_events;        /* events submitted by the Ring 3 driver */
+    uint32_t ps2_ring0_bytes;   /* bytes Ring 0 read after the handoff */
+    uint32_t ps2_stalls;        /* watchdog takeovers */
+    uint32_t ps2_respawns;
+    uint32_t serial_ring3_bytes; /* bytes taken by the Ring 3 driver */
+    uint32_t serial_ring0_bytes; /* bytes Ring 0 wrote after the handoff */
+    uint32_t serial_stalls;
+    uint32_t serial_overflows;
+    uint32_t serial_rx_bytes;
+    uint32_t serial_respawns;
+    uint32_t ps2_handed_off;
+    uint32_t serial_handed_off;
+} os_device_status_t;
+
 #endif

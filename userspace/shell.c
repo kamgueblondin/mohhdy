@@ -3318,7 +3318,7 @@ static void cmd_pm_inline(shell_context_t* ctx, const char* stmt) {
 
 static int is_builtin(const char* cmd) {
     static const char* names[] = {
-        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
+        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
         "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify",
@@ -5014,6 +5014,33 @@ static void cmd_lspci(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string(" respawns "); print_uint(st.respawns);
     print_string(" ring0denied "); print_uint(st.ring0_denied);
     print_string(" rejected "); print_uint(st.rejected_publish);
+    print_string(" end\n");
+}
+
+/* Lot 5 (US-001): Ring 3 PS/2 and COM1 driver counters. */
+static void cmd_devices(shell_context_t* ctx, char args[][128], int arg_count) {
+    os_device_status_t st;
+    int rc;
+    (void)ctx; (void)args;
+    if (arg_count != 0) { print_error("Usage: devices"); return; }
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_DEVICE_SERVICE), "b"(OS_DEV_OP_STATUS),
+                 "c"((uint32_t)&st), "d"(0), "S"(0) : "memory");
+    if (rc != 0) { print_string("devices: statut indisponible rc "); print_int(rc); print_string("\n"); return; }
+    print_string("devices ok ps2 owner "); print_int(st.ps2_owner);
+    print_string(" handed "); print_uint(st.ps2_handed_off);
+    print_string(" irqs "); print_uint(st.ps2_irqs);
+    print_string(" events "); print_uint(st.ps2_events);
+    print_string(" ring0 "); print_uint(st.ps2_ring0_bytes);
+    print_string(" stalls "); print_uint(st.ps2_stalls);
+    print_string(" respawns "); print_uint(st.ps2_respawns);
+    print_string(" serial owner "); print_int(st.serial_owner);
+    print_string(" handed "); print_uint(st.serial_handed_off);
+    print_string(" ring3 "); print_uint(st.serial_ring3_bytes);
+    print_string(" ring0 "); print_uint(st.serial_ring0_bytes);
+    print_string(" stalls "); print_uint(st.serial_stalls);
+    print_string(" overflows "); print_uint(st.serial_overflows);
+    print_string(" rx "); print_uint(st.serial_rx_bytes);
+    print_string(" respawns "); print_uint(st.serial_respawns);
     print_string(" end\n");
 }
 
@@ -6714,6 +6741,8 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
     } else if (strcmp(command, "ata-status") == 0) {
         cmd_ata_status(ctx, args, arg_count);
         return 1;
+    } else if (strcmp(command, "devices") == 0) {
+        cmd_devices(ctx, args, arg_count);
     } else if (strcmp(command, "lspci") == 0) {
         cmd_lspci(ctx, args, arg_count);
     } else if (strcmp(command, "pci-rescan") == 0) {

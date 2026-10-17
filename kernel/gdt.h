@@ -64,5 +64,7 @@ void tss_set_ata_io(int grant);
 /* Tranche 5 suite: NE2000 ports 0x300-0x31F for the NIC-owning worker. */
 void tss_set_nic_io(int grant);
 void tss_set_pci_io(int grant);
+void tss_set_ps2_io(int grant);
+void tss_set_serial_io(int grant);
 
 #endif
