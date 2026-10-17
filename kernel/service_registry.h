@@ -29,6 +29,8 @@ typedef struct {
 } service_registry_watch_t;
 
 void service_registry_init(void);
+int service_registry_boot_journal_install(int which, const uint8_t* buf, uint32_t len);
+int service_registry_boot_journal_pending(void);
 int service_registry_register(const char* name, int32_t pid);
 int service_registry_lookup(const char* name);
 int service_registry_remove(const char* name, int32_t pid);

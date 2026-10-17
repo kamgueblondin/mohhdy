@@ -34,6 +34,11 @@ static int event_journal_load(void);
 /* Host tests link this file without syscall.c. The kernel image uses the
  * strong copy in syscall.c, which sends the sectors through atadriver
  * once that driver is live. */
+/* Strict image: the boot journals are read by the Ring 3 atadriver and
+ * handed over (service_registry_boot_journal_install). Weak 0 for host
+ * tests and the legacy image, which read them with Ring 0 PIO at init. */
+__attribute__((weak)) int kernel_boot_journal_deferred(void) { return 0; }
+static uint8_t boot_journal_pending; /* bit 0 mount, bit 1 event */
 __attribute__((weak)) int kernel_journal_sector_io(uint32_t lba, uint32_t count, void* buf, int write) {
     if (write) return ata_write_sectors(lba, count, buf);
     return ata_read_sectors(lba, count, buf);
@@ -216,13 +221,14 @@ void service_registry_init(void) {
     /* Defauts seulement si le journal disque est absent ou illisible.
      * L'ajout par defaut n'ecrit pas le disque : un reboot sans montage
      * custom retrouve ces quatre entrees, pas un journal vide. */
-    if (mount_journal_load() != 0) {
+    boot_journal_pending = kernel_boot_journal_deferred() ? 3U : 0U;
+    if (boot_journal_pending || mount_journal_load() != 0) {
         (void)mount_insert("vfs", "initrd/", OS_SERVICE_BACKEND_SOURCE_INITRD);
         (void)mount_insert("vfs", "overlay/", OS_SERVICE_BACKEND_SOURCE_OVERLAY);
         (void)mount_insert("vfs", "fat16/", OS_SERVICE_BACKEND_SOURCE_FAT16);
         (void)mount_insert("vfs", "fat32/", OS_SERVICE_BACKEND_SOURCE_FAT32);
     }
-    (void)event_journal_load();
+    if (!boot_journal_pending) (void)event_journal_load();
     ipc_spill_reset();
 }
 
@@ -638,9 +644,29 @@ int service_registry_mount_journal_import(const uint8_t* buf, uint32_t len) {
 }
 
 static void mount_journal_flush(void) {
+    /* Not before the driver handed the disk copy over: that would
+     * overwrite the journal with the boot defaults. */
+    if (boot_journal_pending & 1U) return;
     if (service_registry_mount_journal_export(mount_journal_buf, MOUNT_JOURNAL_BYTES) != 0) return;
     (void)kernel_journal_sector_io(MOUNT_JOURNAL_LBA, MOUNT_JOURNAL_BYTES / 512U, mount_journal_buf, 1);
 }
+
+/* Boot journal bytes read by the Ring 3 driver. Accepted once per boot and
+ * only while that journal is still pending: a later respawned driver
+ * cannot replace live state. A journal that fails validation keeps the
+ * defaults, like a failed Ring 0 read. Returns 0 if imported, 1 if the
+ * journal was empty or invalid, -1 if refused. */
+int service_registry_boot_journal_install(int which, const uint8_t* buf, uint32_t len) {
+    uint8_t bit = which == 0 ? 1U : 2U;
+    int rc;
+    if (!(boot_journal_pending & bit) || !buf) return -1;
+    boot_journal_pending &= (uint8_t)~bit;
+    if (which == 0) rc = service_registry_mount_journal_import(buf, len);
+    else rc = service_registry_event_journal_import(buf, len);
+    return rc == 0 ? 0 : 1;
+}
+
+int service_registry_boot_journal_pending(void) { return boot_journal_pending; }
 
 static int mount_journal_load(void) {
     if (kernel_journal_sector_io(MOUNT_JOURNAL_LBA, MOUNT_JOURNAL_BYTES / 512U, mount_journal_buf, 0) != 0) return -1;
@@ -759,6 +785,7 @@ int service_registry_event_journal_import(const uint8_t* buf, uint32_t len) {
 }
 
 static void event_journal_flush(void) {
+    if (boot_journal_pending & 2U) return;
     if (!service_registry_event_journal_allowed()) return;
     if (service_registry_event_journal_export(event_journal_buf, EVENT_JOURNAL_BYTES) != 0) return;
     (void)kernel_journal_sector_io(EVENT_JOURNAL_LBA, EVENT_JOURNAL_BYTES / 512U, event_journal_buf, 1);

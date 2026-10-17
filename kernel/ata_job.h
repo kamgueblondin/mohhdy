@@ -70,6 +70,8 @@ int ata_job_io_take(uint8_t* out, uint32_t capacity);
 /* Abort (driver stalled): frees the slot, a late completion is stale. */
 void ata_job_io_cancel(void);
 void ata_job_note_fat_kernel_pio(uint32_t sectors, int driver_live);
+void ata_job_note_journal_kernel_read(uint32_t sectors);
+void ata_job_note_journal_install(void);
 void ata_job_set_boot_driver(int32_t pid);
 /* Test hook: the next FAT write job carries OS_ATA_JOB_FLAG_DEBUG_CRASH. */
 void ata_job_debug_arm_crash(void);

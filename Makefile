@@ -116,7 +116,7 @@ $(GGUF_FLAG_STAMP):
 	@rm -f build/.gguf-ring0-fallback-*
 	@touch $@
 NETLEGACY_IMAGE = build/mohhdy-netlegacy.bin
-NETLEGACY_OBJECTS = $(filter-out build/syscall.o build/ne2k_hw.o,$(OBJECTS)) build/syscall-netlegacy.o build/ne2k_hw-full.o build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o build/ata_identify_absent.o build/fat_pio_fallback_absent.o
+NETLEGACY_OBJECTS = $(filter-out build/syscall.o build/ne2k_hw.o,$(OBJECTS)) build/syscall-netlegacy.o build/ne2k_hw-full.o build/nic_boot_legacy.o build/boot_storage_strict.o build/boot_storage_install.o build/ata_identify_absent.o build/fat_pio_fallback_absent.o
 
 build/syscall-netlegacy.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h kernel/task/task.h $(GGUF_FLAG_STAMP)
 	@mkdir -p $(dir $@)
@@ -144,7 +144,7 @@ STRICT_OBJECTS = $(filter-out $(NET_STACK_OBJECTS),$(OBJECTS)) build/net_ring0_a
 ifeq ($(NET_RING0_FALLBACK),0)
 IMAGE_OBJECTS = $(STRICT_OBJECTS)
 else
-IMAGE_OBJECTS = $(OBJECTS) build/nic_boot_legacy.o build/boot_storage_legacy.o build/boot_storage_install.o build/ata_identify_absent.o build/fat_pio_fallback_absent.o
+IMAGE_OBJECTS = $(OBJECTS) build/nic_boot_legacy.o build/boot_storage_strict.o build/boot_storage_install.o build/ata_identify_absent.o build/fat_pio_fallback_absent.o
 endif
 $(OS_IMAGE): $(IMAGE_OBJECTS)
 	@mkdir -p $(dir $@)
@@ -328,11 +328,7 @@ build/boot_storage_strict.o: kernel/boot_storage_strict.c kernel/boot_storage.h 
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/boot_storage_legacy.o: kernel/boot_storage_legacy.c kernel/boot_storage.h kernel/ata.h kernel/ata_job.h kernel/fs/fat16.h kernel/fs/fat32.h
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-build/boot_storage_install.o: kernel/boot_storage_install.c kernel/boot_storage.h kernel/fs/fat16.h kernel/fs/fat32.h fs/overlay.h include/os_syscalls.h
+build/boot_storage_install.o: kernel/boot_storage_install.c kernel/boot_storage.h kernel/ata_job.h kernel/service_registry.h kernel/fs/fat16.h kernel/fs/fat32.h fs/overlay.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -956,12 +952,15 @@ strict-image-check: $(OS_IMAGE) kernel-netlegacy
 		echo "FAIL: Ring 0 ATA IDENTIFY or FAT PIO fallback linked in the strict image"; exit 1; fi
 	@nm $(NETLEGACY_IMAGE) | grep -q ' net_tls_record_' || { echo "FAIL: legacy image lost its stack"; exit 1; }
 	@nm $(NETLEGACY_IMAGE) | grep -q ' ne2k_probe$$' || { echo "FAIL: legacy image lost ne2k_probe"; exit 1; }
-	@nm $(NETLEGACY_IMAGE) | grep -q ' kernel_ring0_boot_fat_mount$$' || { echo "FAIL: legacy image lost the Ring 0 FAT mount"; exit 1; }
+	@if nm $(NETLEGACY_IMAGE) | grep -E ' kernel_ring0_boot_fat_mount$$' >/dev/null; then \
+		echo "FAIL: legacy image links the Ring 0 boot FAT mount (US-001: Ring 3 atadriver on both images)"; exit 1; fi
+	@nm $(NETLEGACY_IMAGE) | grep -q ' kernel_boot_journal_deferred$$' || { echo "FAIL: legacy image reads the boot journals in Ring 0"; exit 1; }
+	@nm $(OS_IMAGE) | grep -q ' kernel_boot_journal_deferred$$' || { echo "FAIL: strict image reads the boot journals in Ring 0"; exit 1; }
 	@if nm $(NETLEGACY_IMAGE) | grep -E ' (kernel_ring0_ata_identify|kernel_ring0_fat_pio_fallback)$$' >/dev/null; then \
 		echo "FAIL: legacy image still links Ring 0 ATA IDENTIFY or FAT PIO fallback"; exit 1; fi
 	@nm $(OS_IMAGE) | grep -q ' kernel_boot_storage$$' || { echo "FAIL: strict image lost kernel_boot_storage"; exit 1; }
 	@nm $(OS_IMAGE) | grep -q ' kernel_nic_boot_probe$$' || { echo "FAIL: strict image lost kernel_nic_boot_probe"; exit 1; }
-	@echo "OK strict image without Ring 0 network stack; legacy image keeps the NIC and the boot FAT mount, not ATA IDENTIFY or the FAT PIO fallback"
+	@echo "OK strict image without Ring 0 network stack; legacy image keeps only the Ring 0 NIC path; both images: boot FAT mount, overlay and journals by the Ring 3 atadriver, no ATA IDENTIFY or FAT PIO fallback"
 
 # Fail if a build or a test rewrote a tracked file, or left an untracked
 # file, outside build/. Ignored products (build/, initrd tarball, logs)
