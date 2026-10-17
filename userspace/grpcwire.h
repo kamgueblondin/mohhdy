@@ -56,4 +56,18 @@ int gw_parse_response(const unsigned char* in, int len, int* http_status, int* g
 /* Client connection preface + empty SETTINGS frame (RFC 9113 3.4). */
 int gw_h2_preface(unsigned char* out, int cap);
 
+/* Connection level (Lot 6, US-067): the bytes each side writes on one TCP
+ * connection. Client: preface + SETTINGS + request (stream 1). Server:
+ * SETTINGS + SETTINGS ACK + response. No flow control, one unary call per
+ * connection, no PING/GOAWAY/WINDOW_UPDATE. */
+int gw_client_stream(unsigned char* out, int cap, const char* service, const char* method,
+                     const char* payload);
+/* 1 when stream 1 ended (END_STREAM seen), 0 need more bytes, <0 error. */
+int gw_stream_complete(const unsigned char* in, int len, int expect_preface);
+int gw_serve_stream(const unsigned char* in, int len, gw_handler_t handler, unsigned char* out,
+                    int cap, char* path, int path_cap, int* client_settings);
+int gw_parse_stream_response(const unsigned char* in, int len, int* http_status, int* grpc_status,
+                             char* message, int cap, int* frames, int* server_settings,
+                             int* settings_acks);
+
 #endif

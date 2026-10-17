@@ -443,3 +443,98 @@ int gw_parse_response(const unsigned char* in, int len, int* http_status, int* g
     if (!end_stream || *http_status < 0 || *grpc_status < 0) return GW_ERR_FORMAT;
     return GW_OK;
 }
+
+/* ---------------------------------------------- connection level (Lot 6) */
+static const char k_preface[] = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+#define GW_PREFACE_LEN 24
+#define GW_H2_FLAG_ACK 0x1
+
+int gw_client_stream(unsigned char* out, int cap, const char* service, const char* method,
+                     const char* payload) {
+    int p = gw_h2_preface(out, cap), n;
+    if (p < 0) return p;
+    n = gw_build_request(out + p, cap - p, service, method, payload);
+    return n < 0 ? n : p + n;
+}
+
+static int preface_check(const unsigned char* in, int len) {
+    int i;
+    for (i = 0; i < GW_PREFACE_LEN && i < len; i++)
+        if (in[i] != (unsigned char)k_preface[i]) return GW_ERR_FORMAT;
+    return len < GW_PREFACE_LEN ? 0 : GW_PREFACE_LEN;
+}
+
+int gw_stream_complete(const unsigned char* in, int len, int expect_preface) {
+    int pos = 0;
+    if (expect_preface) {
+        pos = preface_check(in, len);
+        if (pos <= 0) return pos;
+    }
+    while (pos < len) {
+        int type, flags, plen, used;
+        unsigned int stream;
+        const unsigned char* p;
+        used = gw_h2_frame_get(in + pos, len - pos, &type, &flags, &stream, &p, &plen);
+        if (used == GW_ERR_SHORT) return 0;
+        if (used < 0) return used;
+        pos += used;
+        if (stream == 1U && (flags & GW_H2_FLAG_END_STREAM)) return 1;
+    }
+    return 0;
+}
+
+/* Splits stream-0 control frames from stream-1 frames. Returns the stream-1
+ * byte count copied to s1 (cap), counts SETTINGS (non ACK) and ACKs. */
+static int split_streams(const unsigned char* in, int len, unsigned char* s1, int cap,
+                         int* settings, int* acks) {
+    int pos = 0, o = 0;
+    *settings = 0; *acks = 0;
+    while (pos < len) {
+        int type, flags, plen, used;
+        unsigned int stream;
+        const unsigned char* p;
+        used = gw_h2_frame_get(in + pos, len - pos, &type, &flags, &stream, &p, &plen);
+        if (used < 0) return used;
+        if (stream == 0U) {
+            if (type == GW_H2_SETTINGS) {
+                if (flags & GW_H2_FLAG_ACK) (*acks)++; else (*settings)++;
+            }
+        } else if (stream == 1U) {
+            if (o + used > cap) return GW_ERR_LIMIT;
+            g_put(s1 + o, cap - o, 0, in + pos, used);
+            o += used;
+        } else {
+            return GW_ERR_FORMAT;
+        }
+        pos += used;
+    }
+    return o;
+}
+
+int gw_serve_stream(const unsigned char* in, int len, gw_handler_t handler, unsigned char* out,
+                    int cap, char* path, int path_cap, int* client_settings) {
+    unsigned char s1[512];
+    int pre = preface_check(in, len), n, acks, o, m;
+    *client_settings = 0;
+    if (pre == 0) return GW_ERR_SHORT;
+    if (pre < 0) return pre;
+    n = split_streams(in + pre, len - pre, s1, (int)sizeof(s1), client_settings, &acks);
+    if (n < 0) return n;
+    if (*client_settings < 1) return GW_ERR_FORMAT;   /* RFC 9113 3.4: SETTINGS first */
+    o = gw_h2_frame_put(out, cap, GW_H2_SETTINGS, 0, 0U, 0, 0);
+    if (o < 0) return o;
+    m = gw_h2_frame_put(out + o, cap - o, GW_H2_SETTINGS, GW_H2_FLAG_ACK, 0U, 0, 0);
+    if (m < 0) return m;
+    o += m;
+    m = gw_serve(s1, n, handler, out + o, cap - o, path, path_cap);
+    return m < 0 ? m : o + m;
+}
+
+int gw_parse_stream_response(const unsigned char* in, int len, int* http_status, int* grpc_status,
+                             char* message, int cap, int* frames, int* server_settings,
+                             int* settings_acks) {
+    unsigned char s1[512];
+    int n = split_streams(in, len, s1, (int)sizeof(s1), server_settings, settings_acks);
+    if (n < 0) return n;
+    return gw_parse_response(s1, n, http_status, grpc_status, message, cap, frames);
+}

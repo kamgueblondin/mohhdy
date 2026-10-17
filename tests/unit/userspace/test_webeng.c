@@ -1,7 +1,7 @@
 /* Lot 6 (US-031, US-043, US-045): guest web engine, parse + style + layout
  * + display list, inspector and diagnostics. */
 #include "../../framework/unity.h"
-#include "webeng.h"
+#include "../../../userspace/webeng.h"
 #include <string.h>
 
 static we_doc_t g_doc;
