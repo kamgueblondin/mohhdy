@@ -47,7 +47,11 @@ on first use (TOFU) key binding.
 
 `collab-join`, `collab-pay PEER N`, `collab-pay-convert POINTS CURRENCY`,
 `collab-offer NAME PRICE CAP`, `collab-reserve OWNER SEQ`,
-`collab-escrow-create PAYEE ARBITER AMT`, `collab-escrow-release SEQ`, `collab-escrow-refund SEQ`,
+`collab-escrow-create PAYEE ARBITER|none AMOUNT [NAME]` (alias `collab-contract-create`),
+`collab-escrow-release PAYER SEQ`, `collab-escrow-refund PAYER SEQ`, `collab-contract-exec PAYER SEQ release|refund`,
+`collab-dispute-open PAYER SEQ EVIDENCE`, `collab-dispute-vote PAYER SEQ payer|payee`,
+`collab-auction ITEM RESERVE`, `collab-market-bid SELLER SEQ AMOUNT`, `collab-auction-close SEQ`,
+`collab-market-search`, `collab-market-price`, `collab-privacy-proof`, `collab-compliance`,
 `collab-task REWARD SPEC`, `collab-claim REQ SEQ`,
 `collab-work REQ SEQ`, `collab-review SEQ`, `collab-rate PEER STARS`,
 `collab-propose TEXT`, `collab-vote PROPOSER SEQ yes|no`,
@@ -56,7 +60,8 @@ on first use (TOFU) key binding.
 `collab-ticket-route SEQ HELPER`, `collab-ticket-assign SEQ HELPER`,
 `collab-answer PEER SEQ TEXT`, `collab-sync`, and the views
 `collab-balances`, `collab-audit`, `collab-tasks`, `collab-offers`,
-`collab-votes`, `collab-tickets`.
+`collab-votes`, `collab-tickets`, `collab-escrows`, `collab-auctions`.
+`collab-pay-convert` uses fixed rates: simule, no real money.
 
 ## User stories
 
@@ -65,17 +70,17 @@ on first use (TOFU) key binding.
 | US-091 points | done | grant, transfers, overdraft refused; QEMU |
 | US-092 shared resources | done | offers with capacity, bookings; QEMU |
 | US-093 distributed authentication | done | membership by network key + per-pair AEAD (phase 5) and per-node Schnorr signatures (#121) |
-| US-094 resource marketplace | done | priced offers, paid bookings, search, bidding and price discovery (`collab-market-*`) |
+| US-094 resource marketplace | done | priced offers, paid bookings, search, price; Lot 7: auctions folded from the ledger (best bid locked, outbid refunded, low bid rejected `bid-too-low`, close pays the seller); QEMU |
 | US-095 reputation | done | ratings gated by completed exchanges, average shown; QEMU |
 | US-096 distributed tasks | done | post with escrow, claim, compute on another guest, review; QEMU |
-| US-097 decentralized payment | done | point conversion rates and multi-party escrow workflows (`collab-pay-convert`, `collab-escrow-*`) |
+| US-097 decentralized payment | partial | points and escrow are real ledger state; `collab-pay-convert` uses fixed rates and is labelled simule; no real money or chain |
 | US-098 transparent audit | done | canonical digest identical on all guests, rejected entries listed; QEMU |
-| US-099 smart contracts | done | programmable smart contract model engine with state machine transitions (`collab-contract-*`) |
+| US-099 smart contracts | partial | Lot 7: escrow contracts with optional arbiter, state machine open/released/refunded/disputed folded from the ledger (`collab-escrow-*`, `collab-contract-*`); QEMU. Fixed templates, not a programmable contract language |
 | US-100 governance | done | proposals and majority votes; QEMU |
-| US-101 conflict resolution | done | dispute arbitration workflow with evidence submission and referee voting (`collab-dispute-*`) |
+| US-101 conflict resolution | done | Lot 7: dispute freezes an escrow, ruling by the arbiter or a majority of uninvolved members settles it (`collab-dispute-open`, `collab-dispute-vote`); QEMU |
 | US-102 personal data manager | done | local profile with private/shared fields, export; QEMU |
-| US-103 advanced privacy | done | private fields local, redaction, zero-knowledge simulated proofs (`collab-privacy-proof`) |
-| US-104 regulatory compliance | done | data export, right to be forgotten mechanics, compliance audit report (`collab-compliance`) |
+| US-103 advanced privacy | partial | private fields stay local, redaction; Lot 7: `collab-privacy-proof` is a hash commitment (open with value and secret, wrong value rejected), not a zero-knowledge proof |
+| US-104 regulatory compliance | partial | export and right to be forgotten; Lot 7: `collab-compliance` computes 4 checks (signing on, all entries signed, no forgery accepted, private fields local); not a legal audit |
 | US-105 community support | done | P2P tickets, routing, assignments and answers (`collab-ticket-*`, `collab-answer`) |
 
 ## Limits

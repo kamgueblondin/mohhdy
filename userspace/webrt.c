@@ -310,12 +310,50 @@ static int tag_end(const char* s, int i, int n) {
     return n;
 }
 
-static int dangerous_element(const char* name) {
+static int dangerous_element(const char* name, int keep_style) {
     return w_eq(name, "script") || w_eq(name, "iframe") || w_eq(name, "object") ||
-           w_eq(name, "embed") || w_eq(name, "style");
+           w_eq(name, "embed") || (!keep_style && w_eq(name, "style"));
 }
 
+/* Lot 7 (US-039): CSS kept by the page sanitizer is filtered too. A rule or
+ * declaration that would fetch (@import, url()) or run script
+ * (javascript:, expression(), behavior:) is dropped. Returns bytes out. */
+static int css_unsafe(const char* s, int n) {
+    return w_find_ci(s, n, "javascript:") >= 0 || w_find_ci(s, n, "expression(") >= 0 ||
+           w_find_ci(s, n, "url(") >= 0 || w_find_ci(s, n, "behavior") >= 0 ||
+           w_find_ci(s, n, "-moz-binding") >= 0;
+}
+static void css_filter(w_out_t* w, const char* s, int n, int* rm) {
+    int i = 0;
+    while (i < n) {
+        int j;
+        while (i < n && w_space(s[i])) o_putn(w, s + i++, 1);
+        if (i >= n) break;
+        if (s[i] == '@' && n - i >= 7 && w_ieqn(s + i, "@import", 7)) {
+            j = i; while (j < n && s[j] != ';') j++;
+            (*rm)++; i = j < n ? j + 1 : n; continue;
+        }
+        /* one declaration or selector chunk up to ; { or } */
+        j = i; while (j < n && s[j] != ';' && s[j] != '{' && s[j] != '}') j++;
+        if (j < n && s[j] != '{' && css_unsafe(s + i, j - i)) {
+            (*rm)++;
+            i = s[j] == ';' ? j + 1 : j;          /* keep the closing brace */
+            continue;
+        }
+        o_putn(w, s + i, (j < n ? j + 1 : n) - i);
+        i = j < n ? j + 1 : n;
+    }
+}
+
+static int sanitize(const char* in, char* out, int max, int* removed, int keep_style);
 int webrt_sanitize_html(const char* in, char* out, int max, int* removed) {
+    return sanitize(in, out, max, removed, 0);
+}
+int webrt_sanitize_page(const char* in, char* out, int max, int* removed) {
+    return sanitize(in, out, max, removed, 1);
+}
+
+static int sanitize(const char* in, char* out, int max, int* removed, int keep_style) {
     w_out_t w;
     int i = 0, n = w_len(in), rm = 0;
     o_init(&w, out, max);
@@ -327,7 +365,17 @@ int webrt_sanitize_html(const char* in, char* out, int max, int* removed) {
             int nl = tag_name(in, ns, n, name, sizeof(name));
             int te = tag_end(in, i, n);
             if (nl == 0) { o_putn(&w, in + i, 1); i++; continue; }
-            if (dangerous_element(name)) {
+            if (keep_style && !closing && w_eq(name, "style")) {
+                /* copy <style ...> as is, filter the CSS, then </style> */
+                int rest = te < n ? te + 1 : n, c;
+                o_putn(&w, in + i, rest - i);
+                c = w_find_ci(in + rest, n - rest, "</style");
+                if (c < 0) c = n - rest;
+                css_filter(&w, in + rest, c, &rm);
+                i = rest + c;
+                continue;
+            }
+            if (dangerous_element(name, keep_style)) {
                 rm++;
                 if (!closing) {
                     /* skip to the matching close tag */
@@ -382,6 +430,9 @@ int webrt_sanitize_html(const char* in, char* out, int max, int* removed) {
                         while (v < ve && (w_space(in[v]) || (unsigned char)in[v] < 32)) v++;
                         if (ve - v >= 11 && w_ieqn(in + v, "javascript:", 11)) drop = 1;
                     }
+                    if (!drop && vs >= 0 && an == 5 && w_ieqn(in + as, "style", 5) && css_unsafe(in + vs, ve - vs))
+                        drop = 1;
+                    if (!drop && vs >= 0 && an == 6 && w_ieqn(in + as, "srcdoc", 6)) drop = 1;
                     if (drop) { rm++; continue; }
                     o_putn(&w, " ", 1);
                     o_putn(&w, in + as, ae - as);

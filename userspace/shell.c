@@ -3014,7 +3014,8 @@ static void cmd_web(shell_context_t* ctx, const char* command, char args[][128],
         print_string("web-console ok diag "); print_int((int)d->ndiag);
         print_string(" dropped "); print_int((int)d->diag_dropped);
         print_string(" unknown_props "); print_int((int)d->perf.unknown_props);
-        print_string(" scripts_skipped "); print_int((int)d->perf.scripts_skipped); print_string("\n");
+        print_string(" scripts_skipped "); print_int((int)d->perf.scripts_skipped);
+        print_string(" sanitized "); print_int(osui_gui_web_sanitized()); print_string("\n");
         {   /* US-044: accessibility audit of the same source */
             static char src[OSUI_WEB_SRC_MAX];
             webrt_a11y_t a;
@@ -3583,7 +3584,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -3604,6 +3605,8 @@ static int is_builtin(const char* cmd) {
         "collab-review", "collab-rate", "collab-propose", "collab-vote", "collab-profile", "collab-forget",
         "collab-export", "collab-ticket", "collab-answer", "collab-sync", "collab-balances", "collab-audit",
         "collab-tasks", "collab-offers", "collab-votes", "collab-tickets", "collab-keys", "collab-forge",
+        "collab-escrow-create", "collab-escrow-release", "collab-escrow-refund", "collab-dispute-open", "collab-dispute-vote",
+        "collab-auction", "collab-market-bid", "collab-auction-close", "collab-escrows", "collab-auctions",
         "hal-info", "hal-port", "screen-adapt", "gesture", "power-profile", "power-status", "dev-list",
         "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
         "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
@@ -5308,6 +5311,13 @@ static void cmd_devices(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string(" dy "); print_int(st.mouse_dy);
     print_string(" buttons "); print_uint(st.mouse_buttons);
     print_string(" mods "); print_uint(st.kbd_mods);
+    print_string(" end\n");
+    print_string("devices vga owner "); print_int(st.vga_owner);
+    print_string(" handed "); print_uint(st.vga_handed_off);
+    print_string(" ring3 "); print_uint(st.vga_ring3_frames);
+    print_string(" ring0 "); print_uint(st.vga_ring0_frames);
+    print_string(" stalls "); print_uint(st.vga_stalls);
+    print_string(" respawns "); print_uint(st.vga_respawns);
     print_string(" end\n");
 }
 

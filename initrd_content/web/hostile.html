@@ -1,0 +1,14 @@
+<html lang="en"><head><title>Sanitizer proof</title>
+<style>
+@import "http://evil.example/x.css";
+p { color: #000080; background: url(http://evil.example/track.png) }
+.w { width: expression(alert(1)); height: 12px; background: #00ff00 }
+</style></head>
+<body>
+<p onclick="steal()">clean paragraph</p>
+<a href="javascript:steal()">bad link</a>
+<iframe src="http://evil.example/"></iframe>
+<object data="x.swf"></object>
+<div class="w" style="background:url(javascript:x)">w</div>
+<script>document.write("pwned")</script>
+</body></html>

@@ -17,6 +17,7 @@ static int g_tss_nic_granted = -1;
 static int g_tss_pci_granted = -1;
 static int g_tss_ps2_granted = -1;
 static int g_tss_serial_granted = -1;
+static int g_tss_vga_granted = -1;
 
 // External assembly functions
 extern void gdt_flush(uint32_t);
@@ -67,6 +68,7 @@ void gdt_init() {
     g_tss_pci_granted = 0;
     g_tss_ps2_granted = 0;
     g_tss_serial_granted = 0;
+    g_tss_vga_granted = 0;
 
     // Flush GDT and TSS
     gdt_flush((uint32_t)&gdt_ptr);
@@ -110,6 +112,14 @@ void tss_set_ps2_io(int grant) {
     if (g_tss_ps2_granted == grant) return;
     io_bitmap_apply_ps2(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
     g_tss_ps2_granted = grant;
+}
+
+/* Lot 7 (US-001): VGA CRTC ports only for the live Ring 3 vgadriver. */
+void tss_set_vga_io(int grant) {
+    grant = grant ? 1 : 0;
+    if (g_tss_vga_granted == grant) return;
+    io_bitmap_apply_vga(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
+    g_tss_vga_granted = grant;
 }
 
 void tss_set_serial_io(int grant) {

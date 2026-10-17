@@ -147,7 +147,7 @@ def main():
         cmd(alpha, "prod-backup perf /cfg", "prod-backup ok perf files 1 bytes ")
         cmd(alpha, "prod-perf-monitor", "perf-monitor health ")
         cmd(alpha, "prod-autoscale-workload 20", "autoscale workload workers ")
-        cmd(alpha, "prod-sec-scan", "sec-scan status ok_clean")
+        cmd(alpha, "prod-sec-scan /cfg", "baseline none risk_score 0 status clean")
         cmd(alpha, "prod-bench", "prod-bench ok checksum ")
 
         cmd(alpha, "persist-save", "persist-save ok", timeout=120)

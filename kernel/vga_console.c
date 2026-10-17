@@ -14,38 +14,54 @@ static int cur_y;
 static uint16_t blank_cell;
 static int desktop_on;
 
-#ifdef KERNEL_TEST
-uint16_t vga_test_fb[VGA_ROWS * VGA_COLS];
+/* Lot 7 (US-001): every update renders into `frame` (cells and cursor);
+ * present() then hands it to the Ring 3 vgadriver when one owns the console
+ * (vga_route_frame, kernel glue in syscall.c) or paints it from Ring 0:
+ * early boot before the claim, after a driver death, on a stall and after a
+ * kernel exception. */
+static uint16_t frame[VGA_ROWS * VGA_COLS];
+static int frame_cx, frame_cy, frame_cvis;
 
 static void hw_put(int index, uint16_t cell) {
-    vga_test_fb[index] = cell;
+    frame[index] = cell;
 }
 
 static void hw_cursor(int x, int y, int visible) {
-    (void)x;
-    (void)y;
-    (void)visible;
-}
-#else
-static volatile uint16_t* const vga_hw = (volatile uint16_t*)0xB8000;
-
-static void hw_put(int index, uint16_t cell) {
-    vga_hw[index] = cell;
-}
-
-static void hw_cursor(int x, int y, int visible) {
-    uint16_t pos;
-
-    if (!visible) {
-        outb(0x3D4, 0x0A);
-        outb(0x3D5, 0x20);
-        return;
-    }
     if (x < 0) x = 0;
     if (y < 0) y = 0;
     if (x >= VGA_COLS) x = VGA_COLS - 1;
     if (y >= VGA_ROWS) y = VGA_ROWS - 1;
-    pos = (uint16_t)(y * VGA_COLS + x);
+    frame_cx = x;
+    frame_cy = y;
+    frame_cvis = visible ? 1 : 0;
+}
+
+#ifdef KERNEL_TEST
+uint16_t vga_test_fb[VGA_ROWS * VGA_COLS];
+int vga_test_route_ring3;
+int vga_test_ring0_paints;
+
+static int vga_route_frame(void) { return vga_test_route_ring3; }
+
+void vga_console_paint_ring0(void) {
+    int i;
+    for (i = 0; i < VGA_ROWS * VGA_COLS; i++) vga_test_fb[i] = frame[i];
+    vga_test_ring0_paints++;
+}
+#else
+extern int vga_route_frame(void);
+static volatile uint16_t* const vga_hw = (volatile uint16_t*)0xB8000;
+
+void vga_console_paint_ring0(void) {
+    int i;
+    uint16_t pos;
+    for (i = 0; i < VGA_ROWS * VGA_COLS; i++) vga_hw[i] = frame[i];
+    if (!frame_cvis) {
+        outb(0x3D4, 0x0A);
+        outb(0x3D5, 0x20);
+        return;
+    }
+    pos = (uint16_t)(frame_cy * VGA_COLS + frame_cx);
     outb(0x3D4, 0x0A);
     outb(0x3D5, 0x00);
     outb(0x3D4, 0x0B);
@@ -56,6 +72,19 @@ static void hw_cursor(int x, int y, int visible) {
     outb(0x3D5, (unsigned char)((pos >> 8) & 0xFF));
 }
 #endif
+
+static void present(void) {
+    if (vga_route_frame()) return;     /* the Ring 3 driver paints it */
+    vga_console_paint_ring0();
+}
+
+void vga_console_frame_copy(uint16_t* cells, uint32_t* cx, uint32_t* cy, uint32_t* visible) {
+    int i;
+    if (cells) for (i = 0; i < VGA_ROWS * VGA_COLS; i++) cells[i] = frame[i];
+    if (cx) *cx = (uint32_t)frame_cx;
+    if (cy) *cy = (uint32_t)frame_cy;
+    if (visible) *visible = (uint32_t)frame_cvis;
+}
 
 static uint16_t hist_get(int oldest_index, int col) {
     int idx = (hist_head + oldest_index) % VGA_HIST_MAX;
@@ -116,6 +145,7 @@ static void compose_visible(void) {
     } else {
         hw_cursor(0, 0, 0);
     }
+    present();
 }
 
 void vga_console_init(char color) {
@@ -147,6 +177,7 @@ void vga_console_view_live(void) {
         compose_visible();
     } else {
         hw_cursor(cur_x, cur_y, 1);
+        present();
     }
 }
 
@@ -274,6 +305,7 @@ void vga_desktop_set(int on) {
         desktop_on = 1;
         view_off = 0;
         hw_cursor(0, 0, 0);
+        present();
         return;
     }
     desktop_on = 0;
@@ -300,4 +332,5 @@ void vga_desktop_blit(const uint16_t *cells) {
         }
     }
     hw_cursor(0, 0, 0);
+    present();
 }

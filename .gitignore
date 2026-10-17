@@ -66,6 +66,7 @@ userspace/pcidriver
 userspace/pcirogue
 userspace/ps2driver
 userspace/serialdriver
+userspace/vgadriver
 userspace/devrogue
 # Tranche 5: built net worker binaries (not versioned).
 userspace/networker
@@ -73,3 +74,4 @@ userspace/netclaim
 userspace/netrelay
 userspace/netwire
 /initrd_content/pm/
+/initrd_content/dos/

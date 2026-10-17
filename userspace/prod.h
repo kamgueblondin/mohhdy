@@ -73,38 +73,46 @@ int prod_baseline_add(prod_baseline_t* b, const char* path, uint32_t fnv);
 /* status of one current file: 0 same, 1 changed, 2 new (not in baseline) */
 int prod_baseline_cmp(const prod_baseline_t* b, const char* path, uint32_t fnv);
 
+/* US-106 auto-tuning (Lot 7): the scores are rates measured in the guest by
+ * the shell (ALU loop, memory copy, syscall round trip, 512-byte file rw),
+ * the mode is chosen from the recorded busy average unless requested. */
 typedef struct {
-    uint32_t cpu_perf_score;   /* ops per second benchmark score */
-    uint32_t mem_perf_score;   /* kib per second benchmark score */
-    uint32_t sys_perf_score;   /* syscalls per second benchmark score */
-    uint32_t io_perf_score;    /* 512-byte rw ops per second benchmark score */
-    uint32_t tuning_mode;      /* 0 = default, 1 = high throughput, 2 = low latency */
+    uint32_t cpu_perf_score;   /* measured ALU ops per second */
+    uint32_t mem_perf_score;   /* measured KiB copied per second */
+    uint32_t sys_perf_score;   /* measured syscalls per second */
+    uint32_t io_perf_score;    /* measured 512-byte rw ops per second */
+    uint32_t busy_avg;         /* average of the recorded busy samples, 0 if none */
+    uint32_t samples;          /* busy samples behind busy_avg */
+    uint32_t tuning_mode;      /* 0 = balanced, 1 = high throughput, 2 = low latency */
+    uint32_t auto_chosen;      /* 1 when the mode came from the busy average */
 } prod_perf_tune_t;
 
+/* US-115 (Lot 7): failure risk from firing alerts plus the free-memory trend
+ * (prod_predict); exhaust_ticks is 0xFFFFFFFF when memory is not trending to
+ * zero. A heuristic, not a learned model. */
 typedef struct {
-    uint32_t mtbf_ticks;       /* estimated mean time between failures in ticks */
-    uint32_t failure_risk;     /* 0-100 percentage risk */
-    uint32_t health_score;     /* 0-100 percentage overall health */
+    uint32_t exhaust_ticks;    /* predicted ticks until free memory reaches 0 */
+    uint32_t firing_alerts;
+    uint32_t failure_risk;     /* 0-100 */
+    uint32_t health_score;     /* 100 - failure_risk */
 } prod_maint_t;
 
+/* US-119 (Lot 7): counters observed in this guest; one console session. */
 typedef struct {
-    uint32_t total_tasks_executed;
+    uint32_t total_tasks_executed;   /* shell command words counted */
+    uint32_t distinct_commands;
     uint32_t uptime_seconds;
-    uint32_t active_users;
-    uint32_t business_kpi_score;
+    uint32_t business_kpi_score;     /* commands per minute of uptime */
 } prod_biz_metrics_t;
 
-int prod_perf_tune_eval(prod_perf_tune_t* pt, uint32_t mode);
+/* requested_mode < 0 lets the busy average choose. */
+int prod_perf_tune_eval(prod_perf_tune_t* pt, const prod_metrics_t* m, uint32_t alu, uint32_t mem,
+                        uint32_t sys, uint32_t io, int requested_mode);
+const char* prod_perf_tune_mode_name(uint32_t mode);
 int prod_maint_predict(const prod_metrics_t* m, const prod_alerts_t* a, prod_maint_t* pm);
 
-/* US-108 CI/CD pipeline simulation */
-typedef struct {
-    int stage; /* 1: lint, 2: build, 3: unit-test, 4: integration, 5: deploy, 6: success, -1: failed */
-    int total_steps;
-    int passed_steps;
-    char last_error[64];
-} prod_pipeline_t;
-int prod_pipeline_run(prod_pipeline_t* pipe, const char* repo_path, char* out, int cap);
+/* US-108 CI/CD: real local pipeline in cicd.h (Lot 7; the former
+ * prod_pipeline_run printed 5/5 and ran nothing). */
 
 /* US-110 Autoscaling with workload generator */
 typedef struct {
@@ -115,15 +123,37 @@ typedef struct {
 } prod_autoscale_workload_t;
 int prod_autoscale_workload_eval(prod_scaler_t* s, prod_autoscale_workload_t* wl, uint32_t now_tick, char* out, int cap);
 
-/* US-112 Security & Vulnerability scanner */
+/* US-112 security scanner (Lot 7, real checks; no CVE database):
+ * ELF32 program headers of each file (W+X PT_LOAD segments, executable
+ * PT_GNU_STACK, entry point outside an executable segment) and an
+ * integrity diff against a baseline (size + FNV-1a of the first 64 KiB). */
+#define PROD_SEC_HASH_MAX 65536
 typedef struct {
-    uint32_t vulnerabilities_found;
-    uint32_t cve_checks_passed;
-    uint32_t privilege_escalations_detected;
-    uint32_t open_ports_audited;
-    uint32_t risk_score; /* 0-100 */
+    int is_elf;
+    int load_segments, exec_segments, wx_segments;
+    int stack_exec;
+    int entry_ok;
+    uint32_t entry;
+} prod_elf_audit_t;
+/* 0 audited, -1 not an ELF32 i386 image or truncated headers */
+int prod_elf_audit(const uint8_t* b, int len, prod_elf_audit_t* r);
+uint32_t prod_fnv1a(const uint8_t* b, int len);
+/* baseline text: one "NAME SIZE HASHHEX" line per file */
+int prod_sec_baseline_line(char* out, int cap, const char* name, uint32_t size, uint32_t hash);
+int prod_sec_baseline_find(const char* text, const char* name, uint32_t* size, uint32_t* hash);
+int prod_sec_baseline_count(const char* text);
+typedef struct {
+    uint32_t files, elf, not_elf;
+    uint32_t wx, stack_exec, bad_entry;
+    uint32_t baseline, changed, added, missing;
+    uint32_t risk_score;   /* 0-100, from the findings above */
 } prod_sec_scan_t;
-int prod_sec_scan_run(prod_sec_scan_t* scan, char* out, int cap);
+void prod_sec_scan_init(prod_sec_scan_t* s);
+/* folds one file: audit result (or not ELF) and baseline comparison
+ * (in_baseline 0/1, same 0/1) */
+void prod_sec_scan_file(prod_sec_scan_t* s, int audited, const prod_elf_audit_t* a, int in_baseline, int same);
+void prod_sec_scan_finish(prod_sec_scan_t* s, int baseline_entries);
+int prod_sec_scan_report(const prod_sec_scan_t* s, char* out, int cap);
 
 #define PROD_FEEDBACK 16
 typedef struct { uint8_t rating; char text[48]; } prod_fb_t;
@@ -171,4 +201,9 @@ typedef struct {
 int prod_state_save(const prod_state_ref_t* r, uint8_t* out, int cap);
 /* returns 0, or -1 on a malformed blob (state then reset) */
 int prod_state_load(const prod_state_ref_t* r, const uint8_t* in, int len);
+/* US-116 support bundle (Lot 7): plain-text diagnostic report built from the
+ * live metrics, alerts, events, usage and feedback; returns its length or -1
+ * when cap is too small. The shell writes it to the overlay and verifies it. */
+int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, const prod_usage_t* u,
+                             const prod_feedback_t* f, uint32_t tick, char* out, int cap);
 #endif

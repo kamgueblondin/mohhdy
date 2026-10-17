@@ -159,6 +159,20 @@ int vmm_map_borrowed_user_page(vmm_directory_t *dir, void *physaddr, void *virtu
     return 0;
 }
 
+/* Lot 7 (US-001): device memory (VGA text page) writable by one driver
+ * task; borrowed, so destroying the task never frees the frame. */
+int vmm_map_borrowed_user_page_rw(vmm_directory_t *dir, void *physaddr, void *virtualaddr) {
+    page_t *page;
+    int rc;
+    if (!dir || dir == kernel_directory) return -1;
+    rc = vmm_map_page_in_directory(dir, physaddr, virtualaddr, PAGE_PRESENT | PAGE_USER | PAGE_WRITE);
+    if (rc != 0) return rc;
+    page = vmm_get_page((uint32_t)virtualaddr, 0, dir);
+    if (!page) return -3;
+    *(uint32_t*)page |= PAGE_BORROWED;
+    return 0;
+}
+
 int vmm_destroy_user_directory(vmm_directory_t *dir) {
     uint32_t table_index, page_index;
     if (!dir || dir == kernel_directory || dir == current_directory) return -1;

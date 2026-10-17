@@ -1,0 +1,5 @@
+# hello.com: INT 21h AH=09 prints a $-terminated string, AH=4C exits 0.
+# 0100 mov dx,010Ch / mov ah,09 / int 21h / mov ax,4C00h / int 21h
+BA 0C 01  B4 09  CD 21  B8 00 4C  CD 21
+# 010C "Hello from a DOS .COM program\r\n$"
+48 65 6C 6C 6F 20 66 72 6F 6D 20 61 20 44 4F 53 20 2E 43 4F 4D 20 70 72 6F 67 72 61 6D 0D 0A 24

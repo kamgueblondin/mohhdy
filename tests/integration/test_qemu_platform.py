@@ -85,6 +85,8 @@ def main():
             run(mon, proc, "power-profile saver", "power profile saver mode manual idle_yields 8 poll_budget 1", attempts=2)
             run(mon, proc, "power-profile auto", ["power-profile auto busy_percent ", "mode auto"], attempts=2)
             run(mon, proc, "power-status", ["power-status busy_percent ", "battery none", "power profile "], attempts=2)
+            # US-078: no sensor hardware, the registry says so.
+            run(mon, proc, "sensor-read", "sensor ok status simule (no sensor hardware on i386, fixed values)", attempts=2)
             # US-085 devices.
             out = run(mon, proc, "dev-list", ["dev ok count 10 present ", "dev cpu0 class cpu present ",
                                               "dev eth0 class net present ne2000 isa 0x300",
@@ -97,6 +99,16 @@ def main():
             if " ok i386 ET_EXEC entry 0x" not in out:
                 raise RuntimeError("no compatible binary reported: %s" % out[-600:])
             run(mon, proc, "compat-check /bin/shell", "compat /bin/shell ok i386 ET_EXEC", attempts=2)
+            # US-086 (Lot 7): real 8086 interpreter running DOS .COM files
+            # from the initrd (/dos), output produced by the program itself.
+            run(mon, proc, "legacy-emul hello.com", ["Hello from a DOS .COM program",
+                "legacy-emul ok file /dos/hello.com status exited exit_code 0 steps 5 ints 2 bytes 44"], attempts=2)
+            run(mon, proc, "legacy-emul count.com", ["0123456789",
+                "legacy-emul ok file /dos/count.com status exited exit_code 186 steps 250 ints 13 bytes 34"], attempts=2)
+            run(mon, proc, "legacy-emul /dos/upper.com", ["MOHHDY DOS OK",
+                "legacy-emul ok file /dos/upper.com status exited exit_code 7 "], attempts=2)
+            run(mon, proc, "legacy-emul count.com 100", "legacy-emul error file /dos/count.com status step_limit", attempts=2)
+            run(mon, proc, "legacy-emul nope.com", "legacy-emul error cannot read /dos/nope.com", attempts=2)
             # US-082 notifications (local).
             run(mon, proc, "notify-push 1 backup done", "notify-push ok id 1")
             run(mon, proc, "notify-push 3 disk full", "notify-push ok id 2")

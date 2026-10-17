@@ -262,38 +262,48 @@ int prod_baseline_cmp(const prod_baseline_t* b, const char* path, uint32_t fnv) 
     return 2;
 }
 
-int prod_perf_tune_eval(prod_perf_tune_t* pt, uint32_t mode) {
-    if (!pt) return -1;
-    pt->tuning_mode = mode;
-    pt->cpu_perf_score = 100000;
-    pt->mem_perf_score = 250000;
-    pt->sys_perf_score = 50000;
-    pt->io_perf_score = 10000;
+int prod_perf_tune_eval(prod_perf_tune_t* pt, const prod_metrics_t* m, uint32_t alu, uint32_t mem,
+                        uint32_t sys, uint32_t io, int requested_mode) {
+    prod_stat_t st;
+    if (!pt || requested_mode > 2) return -1;
+    mzero(pt, (int)sizeof(*pt));
+    pt->cpu_perf_score = alu; pt->mem_perf_score = mem; pt->sys_perf_score = sys; pt->io_perf_score = io;
+    if (m && prod_metric_stat(m, PM_BUSY, &st) == 0 && st.n > 0) { pt->busy_avg = st.avg; pt->samples = (uint32_t)st.n; }
+    if (requested_mode >= 0) { pt->tuning_mode = (uint32_t)requested_mode; return 0; }
+    pt->auto_chosen = 1;
+    if (pt->samples == 0) pt->tuning_mode = 0;
+    else if (pt->busy_avg >= 70U) pt->tuning_mode = 1;      /* saturated: batch work */
+    else if (pt->busy_avg <= 20U) pt->tuning_mode = 2;      /* mostly idle: favour latency */
+    else pt->tuning_mode = 0;
     return 0;
+}
+const char* prod_perf_tune_mode_name(uint32_t mode) {
+    return mode == 1 ? "high-throughput" : mode == 2 ? "low-latency" : "balanced";
 }
 
 int prod_maint_predict(const prod_metrics_t* m, const prod_alerts_t* a, prod_maint_t* pm) {
-    uint32_t active_alerts = 0;
+    int32_t slope;
+    uint32_t left = 0xFFFFFFFFU, risk;
     int i;
     if (!pm) return -1;
-    if (a) {
-        for (i = 0; i < PROD_RULES; i++) {
-            if (a->r[i].used && a->r[i].firing) active_alerts++;
-        }
-    }
-    pm->mtbf_ticks = (active_alerts > 0) ? (10000U / (active_alerts + 1U)) : 50000U;
-    pm->failure_risk = (active_alerts * 25U > 100U) ? 100U : active_alerts * 25U;
-    pm->health_score = (100U > pm->failure_risk) ? (100U - pm->failure_risk) : 0U;
-    (void)m;
+    mzero(pm, (int)sizeof(*pm));
+    if (a) for (i = 0; i < PROD_RULES; i++) if (a->r[i].used && a->r[i].firing) pm->firing_alerts++;
+    if (m && prod_predict(m, PM_MEM_FREE, 0U, &slope, &left) != 0) left = 0xFFFFFFFFU;
+    pm->exhaust_ticks = left;
+    risk = pm->firing_alerts * 25U;
+    if (left != 0xFFFFFFFFU) risk += left < 6000U ? 50U : left < 60000U ? 25U : 0U;  /* < 1 min, < 10 min at 100 Hz */
+    pm->failure_risk = risk > 100U ? 100U : risk;
+    pm->health_score = 100U - pm->failure_risk;
     return 0;
 }
 
 int prod_biz_metrics_get(const prod_usage_t* u, uint32_t uptime_ticks, prod_biz_metrics_t* bm) {
     if (!bm) return -1;
+    mzero(bm, (int)sizeof(*bm));
     bm->uptime_seconds = uptime_ticks / 100U;
     bm->total_tasks_executed = u ? u->total : 0;
-    bm->active_users = 1;
-    bm->business_kpi_score = (bm->total_tasks_executed * 10U) + (bm->uptime_seconds / 10U);
+    bm->distinct_commands = u ? (uint32_t)u->n : 0;
+    bm->business_kpi_score = uptime_ticks >= 100U ? bm->total_tasks_executed * 60U / bm->uptime_seconds : 0;
     return 0;
 }
 
@@ -303,20 +313,6 @@ static void cat_u(char* d, uint32_t v, int cap) {
     do { t[n++] = (char)('0' + v % 10U); v /= 10U; } while (v);
     while (n) r[i++] = t[--n];
     r[i] = 0; s_cat(d, r, cap);
-}
-
-/* ---------------------------------------------------- US-108 CI/CD Pipeline */
-int prod_pipeline_run(prod_pipeline_t* pipe, const char* repo_path, char* out, int cap) {
-    if (!pipe || !out) return -1;
-    pipe->total_steps = 5;
-    pipe->passed_steps = 5;
-    pipe->stage = 6; /* Success */
-    pipe->last_error[0] = 0;
-    out[0] = 0;
-    s_cat(out, "cicd pipeline repo ", cap); s_cat(out, repo_path ? repo_path : "/", cap);
-    s_cat(out, " steps 5/5 status success\n", cap);
-    s_cat(out, "cicd stages: [1/5 lint ok] [2/5 build ok] [3/5 unit-test ok] [4/5 integration ok] [5/5 deploy ok]\n", cap);
-    return 0;
 }
 
 /* --------------------------------------------- US-110 Autoscaling Workload */
@@ -340,16 +336,144 @@ int prod_autoscale_workload_eval(prod_scaler_t* s, prod_autoscale_workload_t* wl
 }
 
 /* --------------------------------------------- US-112 Security Scanner */
-int prod_sec_scan_run(prod_sec_scan_t* scan, char* out, int cap) {
-    if (!scan || !out) return -1;
-    scan->cve_checks_passed = 120;
-    scan->vulnerabilities_found = 0;
-    scan->privilege_escalations_detected = 0;
-    scan->open_ports_audited = 2; /* 7700 P2P, 8080 Web */
-    scan->risk_score = 0; /* Safe */
+static uint32_t le32(const uint8_t* p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
+static uint32_t le16(const uint8_t* p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8); }
+
+int prod_elf_audit(const uint8_t* b, int len, prod_elf_audit_t* r) {
+    uint32_t phoff, phent, phnum, i;
+    int k;
+    for (k = 0; k < (int)sizeof(*r); k++) ((uint8_t*)r)[k] = 0;
+    if (!b || len < 52 || b[0] != 0x7F || b[1] != 'E' || b[2] != 'L' || b[3] != 'F' || b[4] != 1 || b[5] != 1)
+        return -1;
+    if (le16(b + 18) != 3U) return -1;                    /* EM_386 */
+    r->is_elf = 1;
+    r->entry = le32(b + 24);
+    phoff = le32(b + 28); phent = le16(b + 42); phnum = le16(b + 44);
+    if (phent < 32U || phnum > 64U || phoff > (uint32_t)len || phoff + phent * phnum > (uint32_t)len) return -1;
+    for (i = 0; i < phnum; i++) {
+        const uint8_t* ph = b + phoff + i * phent;
+        uint32_t type = le32(ph), vaddr = le32(ph + 8), memsz = le32(ph + 20), flags = le32(ph + 24);
+        if (type == 1U) {
+            r->load_segments++;
+            if (flags & 1U) {
+                r->exec_segments++;
+                if (r->entry >= vaddr && r->entry < vaddr + memsz) r->entry_ok = 1;
+            }
+            if ((flags & 3U) == 3U) r->wx_segments++;
+        } else if (type == 0x6474E551U && (flags & 1U)) {
+            r->stack_exec = 1;
+        }
+    }
+    return 0;
+}
+
+uint32_t prod_fnv1a(const uint8_t* b, int len) {
+    uint32_t h = 2166136261U;
+    int i;
+    for (i = 0; i < len; i++) { h ^= b[i]; h *= 16777619U; }
+    return h;
+}
+
+static void cat_hex8(char* d, uint32_t v, int cap) {
+    char t[9];
+    int i;
+    for (i = 7; i >= 0; i--) { t[i] = "0123456789abcdef"[v & 15U]; v >>= 4; }
+    t[8] = 0;
+    s_cat(d, t, cap);
+}
+
+int prod_sec_baseline_line(char* out, int cap, const char* name, uint32_t size, uint32_t hash) {
+    s_cat(out, name, cap); s_cat(out, " ", cap); cat_u(out, size, cap); s_cat(out, " ", cap);
+    cat_hex8(out, hash, cap); s_cat(out, "\n", cap);
+    return s_len(out) < cap - 1 ? 0 : -1;
+}
+
+static const char* bl_field(const char* p, char* w, int cap) {
+    int n = 0;
+    while (*p == ' ') p++;
+    while (*p && *p != ' ' && *p != '\n') { if (n < cap - 1) w[n++] = *p; p++; }
+    w[n] = 0;
+    return p;
+}
+
+int prod_sec_baseline_find(const char* text, const char* name, uint32_t* size, uint32_t* hash) {
+    const char* p = text;
+    while (p && *p) {
+        char n[64], sz[16], hx[16];
+        const char* q = bl_field(p, n, 64);
+        q = bl_field(q, sz, 16);
+        q = bl_field(q, hx, 16);
+        if (s_eq(n, name)) {
+            uint32_t v = 0, h = 0;
+            int i;
+            for (i = 0; sz[i] >= '0' && sz[i] <= '9'; i++) v = v * 10U + (uint32_t)(sz[i] - '0');
+            for (i = 0; hx[i]; i++) {
+                char c = hx[i];
+                h = (h << 4) | (uint32_t)(c >= 'a' ? c - 'a' + 10 : c - '0');
+            }
+            *size = v; *hash = h;
+            return 1;
+        }
+        while (*q && *q != '\n') q++;
+        p = *q ? q + 1 : q;
+    }
+    return 0;
+}
+
+int prod_sec_baseline_count(const char* text) {
+    int n = 0;
+    for (; text && *text; text++) if (*text == '\n') n++;
+    return n;
+}
+
+void prod_sec_scan_init(prod_sec_scan_t* s) {
+    int k;
+    for (k = 0; k < (int)sizeof(*s); k++) ((uint8_t*)s)[k] = 0;
+}
+
+void prod_sec_scan_file(prod_sec_scan_t* s, int audited, const prod_elf_audit_t* a, int in_baseline, int same) {
+    s->files++;
+    if (audited && a && a->is_elf) {
+        s->elf++;
+        if (a->wx_segments) s->wx++;
+        if (a->stack_exec) s->stack_exec++;
+        if (!a->entry_ok) s->bad_entry++;
+    } else {
+        s->not_elf++;
+    }
+    if (s->baseline) {
+        if (!in_baseline) s->added++;
+        else if (!same) s->changed++;
+    }
+}
+
+void prod_sec_scan_finish(prod_sec_scan_t* s, int baseline_entries) {
+    uint32_t seen, r;
+    if (s->baseline) {
+        seen = s->files - s->added;
+        s->missing = (uint32_t)baseline_entries > seen ? (uint32_t)baseline_entries - seen : 0U;
+    }
+    r = 30U * s->wx + 20U * s->stack_exec + 20U * s->bad_entry + 25U * s->changed + 10U * s->added + 10U * s->missing;
+    s->risk_score = r > 100U ? 100U : r;
+}
+
+int prod_sec_scan_report(const prod_sec_scan_t* s, char* out, int cap) {
     out[0] = 0;
-    s_cat(out, "sec-scan cve_passed 120 vulns 0 priv_esc 0 ports_audited 2 risk_score 0 (safe)\n", cap);
-    s_cat(out, "sec-scan status ok_clean\n", cap);
+    s_cat(out, "sec-scan files ", cap); cat_u(out, s->files, cap);
+    s_cat(out, " elf ", cap); cat_u(out, s->elf, cap);
+    s_cat(out, " wx_segments ", cap); cat_u(out, s->wx, cap);
+    s_cat(out, " exec_stack ", cap); cat_u(out, s->stack_exec, cap);
+    s_cat(out, " bad_entry ", cap); cat_u(out, s->bad_entry, cap);
+    if (s->baseline) {
+        s_cat(out, " changed ", cap); cat_u(out, s->changed, cap);
+        s_cat(out, " added ", cap); cat_u(out, s->added, cap);
+        s_cat(out, " missing ", cap); cat_u(out, s->missing, cap);
+    } else {
+        s_cat(out, " baseline none", cap);
+    }
+    s_cat(out, " risk_score ", cap); cat_u(out, s->risk_score, cap);
+    s_cat(out, s->risk_score ? " status findings" : " status clean", cap);
+    s_cat(out, " (no CVE database)\n", cap);
     return 0;
 }
 
@@ -521,4 +645,36 @@ int prod_state_load(const prod_state_ref_t* r, const uint8_t* in, int len) {
         return -1;
     }
     return 0;
+}
+
+/* ------------------------------------------------ US-116 support bundle */
+int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, const prod_usage_t* u,
+                             const prod_feedback_t* f, uint32_t tick, char* out, int cap) {
+    int i;
+    if (!out || cap < 64) return -1;
+    out[0] = 0;
+    s_cat(out, "mohhdy support bundle v1 tick ", cap); cat_u(out, tick, cap); s_cat(out, "\n", cap);
+    s_cat(out, "metrics samples ", cap); cat_u(out, m ? (uint32_t)m->n : 0, cap);
+    s_cat(out, " total ", cap); cat_u(out, m ? m->total : 0, cap); s_cat(out, "\n", cap);
+    for (i = 0; m && i < PM_COUNT; i++) {
+        prod_stat_t st;
+        if (prod_metric_stat(m, i, &st) != 0 || st.n == 0) continue;
+        s_cat(out, "metric ", cap); s_cat(out, prod_metric_name(i), cap);
+        s_cat(out, " min ", cap); cat_u(out, st.min, cap); s_cat(out, " max ", cap); cat_u(out, st.max, cap);
+        s_cat(out, " avg ", cap); cat_u(out, st.avg, cap); s_cat(out, " last ", cap); cat_u(out, st.last, cap); s_cat(out, "\n", cap);
+    }
+    for (i = 0; a && i < PROD_RULES; i++) if (a->r[i].used) {
+        s_cat(out, "alert ", cap); s_cat(out, a->r[i].name, cap); s_cat(out, " ", cap); s_cat(out, prod_metric_name(a->r[i].metric), cap);
+        s_cat(out, a->r[i].above ? " > " : " < ", cap); cat_u(out, a->r[i].threshold, cap);
+        s_cat(out, a->r[i].firing ? " firing\n" : " ok\n", cap);
+    }
+    if (a) {
+        s_cat(out, "events fired ", cap); cat_u(out, a->fired_total, cap); s_cat(out, " resolved ", cap); cat_u(out, a->resolved_total, cap);
+        s_cat(out, " suppressed ", cap); cat_u(out, a->suppressed, cap); s_cat(out, "\n", cap);
+    }
+    for (i = 0; u && i < u->n && i < 8; i++) {
+        s_cat(out, "usage ", cap); s_cat(out, u->u[i].name, cap); s_cat(out, " ", cap); cat_u(out, u->u[i].count, cap); s_cat(out, "\n", cap);
+    }
+    s_cat(out, "feedback total ", cap); cat_u(out, f ? f->total : 0, cap); s_cat(out, "\nend\n", cap);
+    return s_len(out) < cap - 1 ? s_len(out) : -1;
 }

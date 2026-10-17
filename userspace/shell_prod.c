@@ -1,12 +1,14 @@
 /* userspace/shell_prod.c - prod-* shell commands (Phase 8, docs/production.md).
  * Probes use existing syscalls only (meminfo, ps, task metrics, ticks, files). */
 #include "prod.h"
+#include "cicd.h"
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
 int sys_listdir(const char* path, os_dirent_t* out, int max_n);
 int sys_readfile(const char* path, char* buf, int max);
 int sys_writefile(const char* path, const char* buf, int n);
+int sys_append(const char* path, const char* buf, int n);
 int sys_mkdir(const char* path);
 int sys_meminfo(os_meminfo_t* info);
 int sys_ps(os_proc_t* out, int max_n);
@@ -74,12 +76,147 @@ static void join(char* d, const char* dir, const char* name, int cap) {
     s_cat(d, name, cap);
 }
 
+/* US-112 (Lot 7): real scanner. prod-sec-baseline DIR NAME records size
+ * and FNV-1a (first 64 KiB) of every file in DIR into NAME.0, NAME.1, ...
+ * (384-byte chunks, the overlay file size); prod-sec-scan DIR [NAME] audits the ELF32 program
+ * headers of each file and diffs against the baseline. */
+static uint8_t g_sec_file[PROD_SEC_HASH_MAX];
+#define SEC_CHUNK 384 /* one overlay file holds at most OV_SNAP_DATA = 384 bytes */
+static char g_sec_base[8192];
+static os_dirent_t g_sec_ents[64];
+static int sec_load(const char* name) {
+    char path[96], num[12];
+    int k, total = 0, n;
+    for (k = 0; k < 16; k++) {
+        path[0] = 0; s_cat(path, name, 96); s_cat(path, ".", 96); num[0] = 0; cat_u(num, (uint32_t)k, 12); s_cat(path, num, 96);
+        n = sys_readfile(path, g_sec_base + total, (int)sizeof(g_sec_base) - total - 1);
+        if (n < 0) break;
+        total += n;
+        if (n < SEC_CHUNK) { k++; break; }
+    }
+    g_sec_base[total] = 0;
+    return k == 0 ? -1 : total;
+}
+static int cmd_sec_scan(const char* rest, int make_baseline) {
+    char dir[64], name[64], path[160];
+    prod_sec_scan_t sc;
+    int n, i, entries = 0, len, k;
+    const char* cmd = make_baseline ? "prod-sec-baseline" : "prod-sec-scan";
+    rest = word(rest, dir, 64); rest = word(rest, name, 64);
+    if (!dir[0] || (make_baseline && !name[0])) {
+        out(cmd); out(make_baseline ? " error usage: prod-sec-baseline DIR NAME\n" : " error usage: prod-sec-scan DIR [BASELINE]\n");
+        return 1;
+    }
+    prod_sec_scan_init(&sc);
+    g_sec_base[0] = 0;
+    if (!make_baseline && name[0]) {
+        int got = sec_load(name);
+        if (got < 0) { out(cmd); out(" error baseline not found\n"); return 1; }
+        sc.baseline = 1;
+        entries = prod_sec_baseline_count(g_sec_base);
+        line("sec-scan baseline bytes ", (uint32_t)got, "");
+        line(" entries ", (uint32_t)entries, "\n");
+    }
+    n = sys_listdir(dir, g_sec_ents, 64);
+    if (n < 0) { out(cmd); out(" error no such directory\n"); return 1; }
+    for (i = 0; i < n; i++) {
+        prod_elf_audit_t a;
+        uint32_t h, bs = 0, bh = 0;
+        int got, audited, inb = 0;
+        if (g_sec_ents[i].flags == OS_DIRENT_DIR) continue;
+        join(path, dir, g_sec_ents[i].name, 160);
+        got = sys_readfile(path, (char*)g_sec_file, PROD_SEC_HASH_MAX);
+        if (got < 0) { out(cmd); out(" error unreadable "); out(path); out("\n"); return 1; }
+        h = prod_fnv1a(g_sec_file, got);
+        if (make_baseline) {
+            if (prod_sec_baseline_line(g_sec_base, (int)sizeof(g_sec_base), g_sec_ents[i].name, g_sec_ents[i].size, h) != 0) {
+                out(cmd); out(" error too many files\n"); return 1;
+            }
+            sc.files++;
+            continue;
+        }
+        audited = prod_elf_audit(g_sec_file, got, &a) == 0;
+        if (sc.baseline) inb = prod_sec_baseline_find(g_sec_base, g_sec_ents[i].name, &bs, &bh);
+        prod_sec_scan_file(&sc, audited, &a, inb, inb && bs == g_sec_ents[i].size && bh == h);
+        if (audited && (a.wx_segments || a.stack_exec || !a.entry_ok)) {
+            g_out[0] = 0; s_cat(g_out, "sec-scan finding ", 4096); s_cat(g_out, path, 4096);
+            if (a.wx_segments) s_cat(g_out, " wx_segment", 4096);
+            if (a.stack_exec) s_cat(g_out, " exec_stack", 4096);
+            if (!a.entry_ok) s_cat(g_out, " entry_outside_text", 4096);
+            s_cat(g_out, "\n", 4096); out(g_out);
+        }
+        if (sc.baseline && !inb) { out("sec-scan finding "); out(path); out(" added\n"); }
+        else if (sc.baseline && (bs != g_sec_ents[i].size || bh != h)) { out("sec-scan finding "); out(path); out(" changed\n"); }
+    }
+    if (make_baseline) {
+        len = s_len(g_sec_base);
+        if (len > 16 * SEC_CHUNK) { out(cmd); out(" error baseline too large\n"); return 1; }
+        for (k = 0; k * SEC_CHUNK < len || k == 0; k++) {
+            int part = len - k * SEC_CHUNK > SEC_CHUNK ? SEC_CHUNK : len - k * SEC_CHUNK;
+            char num[12];
+            path[0] = 0; s_cat(path, name, 160); s_cat(path, ".", 160); num[0] = 0; cat_u(num, (uint32_t)k, 12); s_cat(path, num, 160);
+            if (sys_writefile(path, g_sec_base + k * SEC_CHUNK, part) != part) { out(cmd); out(" error write\n"); return 1; }
+        }
+        line("prod-sec-baseline ok files ", sc.files, "");
+        line(" bytes ", (uint32_t)len, "");
+        line(" chunks ", (uint32_t)k, "\n");
+        return 0;
+    }
+    prod_sec_scan_finish(&sc, entries);
+    prod_sec_scan_report(&sc, g_out, (int)sizeof(g_out));
+    out(g_out);
+    return sc.risk_score ? 2 : 0;
+}
+
+/* US-108 (Lot 7): prod-cicd SOURCE.pm TESTS.pm DEPLOY_PATH runs the real
+ * local pipeline (cicd.c): lint, build, test, deploy, verify. */
+/* relative PromptMessage paths are taken from the root */
+static const char* h_path(const char* p, char* buf) {
+    if (p[0] == '/') return p;
+    buf[0] = '/'; buf[1] = 0; s_cat(buf, p, 96);
+    return buf;
+}
+static int h_read(void* c, const char* p, char* buf, int cap) { char t[96]; (void)c; return sys_readfile(h_path(p, t), buf, cap); }
+static int h_write(void* c, const char* p, const char* data, int len, int append) {
+    char t[96];
+    const char* path = h_path(p, t);
+    (void)c;
+    int n;
+    if (append) return sys_append(path, data, len);
+    n = sys_writefile(path, data, len);
+    return n == len ? n : -1;                /* the overlay truncates silently at 384 bytes */
+}
+static int h_mem(void* c) {
+    os_meminfo_t mi;
+    (void)c;
+    if (sys_meminfo(&mi) != 0 || mi.total_pages == 0U) return 0;
+    return (int)(mi.used_pages * 100U / mi.total_pages);
+}
+static void h_out(void* c, const char* t) { (void)c; out("cicd program: "); out(t); out("\n"); }
+static char g_cicd_src[PM_SRC_MAX], g_cicd_test[PM_SRC_MAX];
+static int cmd_cicd(const char* cmd, const char* rest) {
+    char src[64], tst[64], dst[64];
+    pm_host_t host;
+    cicd_result_t r;
+    int n, m, rc;
+    rest = word(rest, src, 64); rest = word(rest, tst, 64); rest = word(rest, dst, 64);
+    if (!src[0] || !tst[0] || !dst[0]) { out(cmd); out(" error usage: prod-cicd SOURCE.pm TESTS.pm DEPLOY_PATH\n"); return 1; }
+    n = sys_readfile(src, g_cicd_src, PM_SRC_MAX - 1);
+    m = sys_readfile(tst, g_cicd_test, PM_SRC_MAX - 1);
+    if (n < 0 || m < 0) { out(cmd); out(" error cannot read "); out(n < 0 ? src : tst); out("\n"); return 1; }
+    g_cicd_src[n] = 0; g_cicd_test[m] = 0;
+    host.ctx = 0; host.read_file = h_read; host.write_file = h_write; host.mem_used_pct = h_mem; host.out = h_out;
+    rc = cicd_run(g_cicd_src, n, g_cicd_test, m, &host, dst, &r, g_out, (int)sizeof(g_out));
+    out(g_out);
+    return rc == 0 ? 0 : 2;
+}
+
 static const char* k_cmds[] = {
     "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts", "prod-alert-learn",
     "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
     "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "prod-integrity", "prod-bench", "prod-diag",
     "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "prod-perf-tune", "prod-maint-predict", "prod-support-bundle", "prod-biz-metrics", "prod-perf-monitor",
-    "prod-cicd", "prod-pipeline", "prod-autoscale-workload", "prod-sec-scan", 0
+    "prod-cicd", "prod-pipeline", "prod-autoscale-workload", "prod-sec-scan", "prod-sec-baseline", 0
 };
 int shell_prod_is(const char* l) {
     char w[24]; int i;
@@ -179,32 +316,37 @@ static int restore_slot(int s) {
 }
 
 /* ------------------------------------------------------------- bench */
-static void bench(void) {
+/* Measures four rates in this guest over `span` ticks each: ALU ops/s,
+ * KiB/s copied, syscalls/s and 512-byte file write+read pairs/s. */
+static uint32_t bench_rates(uint32_t r[4], uint32_t span) {
     static uint8_t a[16384], b[16384];
     volatile uint32_t acc = 0;
     uint32_t t0, t, i, k, iters;
-    char tl[160];
-    /* integer ALU */
     t0 = sys_ticks(); iters = 0;
-    while ((t = sys_ticks() - t0) < 20U) { for (i = 0; i < 20000U; i++) acc = acc * 1664525U + 1013904223U; iters += 20000U; }
-    tl[0] = 0; s_cat(tl, "prod-bench alu ops_per_s ", 160); cat_u(tl, iters / t * 100U, 160); s_cat(tl, "\n", 160); out(tl);
-    /* memory copy */
+    while ((t = sys_ticks() - t0) < span) { for (i = 0; i < 20000U; i++) acc = acc * 1664525U + 1013904223U; iters += 20000U; }
+    r[0] = iters / t * 100U;
     t0 = sys_ticks(); iters = 0;
-    while ((t = sys_ticks() - t0) < 20U) { for (k = 0; k < 4; k++) for (i = 0; i < sizeof(a); i++) b[i] = a[i] ^ (uint8_t)k; iters += 4U; }
-    tl[0] = 0; s_cat(tl, "prod-bench memcpy kib_per_s ", 160); cat_u(tl, iters * 16U / t * 100U, 160); s_cat(tl, "\n", 160); out(tl);
-    /* syscall round trip */
+    while ((t = sys_ticks() - t0) < span) { for (k = 0; k < 4; k++) for (i = 0; i < sizeof(a); i++) b[i] = a[i] ^ (uint8_t)k; iters += 4U; }
+    r[1] = iters * 16U / t * 100U;
     t0 = sys_ticks(); iters = 0;
-    while ((t = sys_ticks() - t0) < 20U) { for (i = 0; i < 200U; i++) (void)sys_ticks(); iters += 200U; }
-    tl[0] = 0; s_cat(tl, "prod-bench syscall calls_per_s ", 160); cat_u(tl, iters / t * 100U, 160); s_cat(tl, "\n", 160); out(tl);
-    /* small file write + read */
+    while ((t = sys_ticks() - t0) < span) { for (i = 0; i < 200U; i++) (void)sys_ticks(); iters += 200U; }
+    r[2] = iters / t * 100U;
     (void)sys_mkdir("/tmp");
     t0 = sys_ticks(); iters = 0;
-    while ((t = sys_ticks() - t0) < 20U) {
+    while ((t = sys_ticks() - t0) < span) {
         for (i = 0; i < 8U; i++) { (void)sys_writefile("/tmp/bench.dat", (const char*)a, 512); (void)sys_readfile("/tmp/bench.dat", (char*)b, 512); }
         iters += 8U;
     }
-    tl[0] = 0; s_cat(tl, "prod-bench file512 rw_per_s ", 160); cat_u(tl, iters / t * 100U, 160); s_cat(tl, "\n", 160); out(tl);
-    line("prod-bench ok checksum ", acc & 0xFFU, "\n");
+    r[3] = iters / t * 100U;
+    return acc & 0xFFU;
+}
+static void bench(void) {
+    uint32_t r[4], sum = bench_rates(r, 20U);
+    line("prod-bench alu ops_per_s ", r[0], "\n");
+    line("prod-bench memcpy kib_per_s ", r[1], "\n");
+    line("prod-bench syscall calls_per_s ", r[2], "\n");
+    line("prod-bench file512 rw_per_s ", r[3], "\n");
+    line("prod-bench ok checksum ", sum, "\n");
 }
 
 static void show_alerts(void) {
@@ -227,6 +369,43 @@ static void show_alerts(void) {
     s_cat(g_tmp, " resolved ", 4096); cat_u(g_tmp, g_a.resolved_total, 4096);
     s_cat(g_tmp, " deduped ", 4096); cat_u(g_tmp, g_a.suppressed, 4096); s_cat(g_tmp, "\n", 4096);
     out(g_tmp);
+}
+
+/* US-116: the bundle is written as NAME.0, NAME.1, ... (384-byte overlay
+ * files), read back and verified with FNV-1a before reporting ok. */
+static char g_bundle[4096], g_bundle_rd[4096];
+static int cmd_support_bundle(const char* rest) {
+    char name[64], path[96], num[12];
+    int len, k, total = 0;
+    uint32_t h1, h2;
+    rest = word(rest, name, 64);
+    if (!name[0]) s_copy(name, "/support", 64);
+    if (name[0] != '/') { out("prod-support-bundle error usage: [/NAME]\n"); return 1; }
+    len = prod_support_bundle_text(&g_m, &g_a, &g_use, &g_fb, sys_ticks(), g_bundle, (int)sizeof(g_bundle));
+    if (len < 0 || len > 16 * SEC_CHUNK) { out("prod-support-bundle error bundle too large\n"); return 1; }
+    for (k = 0; k * SEC_CHUNK < len; k++) {
+        int part = len - k * SEC_CHUNK > SEC_CHUNK ? SEC_CHUNK : len - k * SEC_CHUNK;
+        path[0] = 0; s_cat(path, name, 96); s_cat(path, ".", 96); num[0] = 0; cat_u(num, (uint32_t)k, 12); s_cat(path, num, 96);
+        if (sys_writefile(path, g_bundle + k * SEC_CHUNK, part) != part) { out("prod-support-bundle error write "); out(path); out("\n"); return 1; }
+    }
+    for (k = 0; total < len; k++) {
+        int n;
+        path[0] = 0; s_cat(path, name, 96); s_cat(path, ".", 96); num[0] = 0; cat_u(num, (uint32_t)k, 12); s_cat(path, num, 96);
+        n = sys_readfile(path, g_bundle_rd + total, (int)sizeof(g_bundle_rd) - total);
+        if (n <= 0) break;
+        total += n;
+    }
+    h1 = prod_fnv1a((const uint8_t*)g_bundle, len);
+    h2 = prod_fnv1a((const uint8_t*)g_bundle_rd, total);
+    g_out[0] = 0; s_cat(g_out, "prod-support-bundle ", 4096);
+    s_cat(g_out, total == len && h1 == h2 ? "ok " : "error verify ", 4096); s_cat(g_out, name, 4096);
+    s_cat(g_out, ".0.. chunks ", 4096); cat_u(g_out, (uint32_t)k, 4096);
+    s_cat(g_out, " bytes ", 4096); cat_u(g_out, (uint32_t)len, 4096);
+    s_cat(g_out, " read ", 4096); cat_u(g_out, (uint32_t)total, 4096);
+    s_cat(g_out, " fnv ", 4096); cat_hex(g_out, h1, 4096);
+    s_cat(g_out, total == len && h1 == h2 ? " verified (plain text, not compressed)\n" : "\n", 4096);
+    out(g_out);
+    return total == len && h1 == h2 ? 0 : 1;
 }
 
 int shell_prod_line(const char* l) {
@@ -574,52 +753,47 @@ int shell_prod_line(const char* l) {
     if (s_eq(cmd, "prod-roadmap")) {
         out("prod-roadmap phase 1-3 delivered (see docs/ETAT_REEL.md)\n");
         out("prod-roadmap phase 4 promptmessage delivered #116\n");
-        out("prod-roadmap phase 5 p2p #117, phase 6 platform #118, phase 7 collab #119 (open)\n");
+        out("prod-roadmap phase 5 p2p #117, phase 6 platform #118, phase 7 collab #119, lot 7 #156 (status: docs/lot7_inventory.md)\n");
         out("prod-roadmap phase 8 production this build (docs/production.md)\n");
         out("prod-roadmap ok phases 8\n");
         return 0;
     }
     if (s_eq(cmd, "prod-perf-tune")) {
         prod_perf_tune_t pt;
-        uint32_t mode = 0;
+        uint32_t r[4], mode = 0;
+        int req = -1;
         rest = word(rest, a, 64);
-        if (a[0]) (void)to_u(a, &mode);
-        prod_perf_tune_eval(&pt, mode);
-        g_out[0] = 0; s_cat(g_out, "prod-perf-tune mode ", 4096); cat_u(g_out, pt.tuning_mode, 4096);
-        s_cat(g_out, " cpu_score ", 4096); cat_u(g_out, pt.cpu_perf_score, 4096);
-        s_cat(g_out, " mem_score ", 4096); cat_u(g_out, pt.mem_perf_score, 4096);
+        if (a[0]) {
+            if (s_eq(a, "balanced")) req = 0; else if (s_eq(a, "throughput")) req = 1; else if (s_eq(a, "latency")) req = 2;
+            else if (!to_u(a, &mode) && mode <= 2U) req = (int)mode;
+            else { out("prod-perf-tune error usage: [balanced|throughput|latency|0-2]\n"); return 1; }
+        }
+        (void)bench_rates(r, 10U);
+        prod_perf_tune_eval(&pt, &g_m, r[0], r[1], r[2], r[3], req);
+        g_out[0] = 0; s_cat(g_out, "prod-perf-tune measured alu_ops_s ", 4096); cat_u(g_out, pt.cpu_perf_score, 4096);
+        s_cat(g_out, " mem_kib_s ", 4096); cat_u(g_out, pt.mem_perf_score, 4096);
+        s_cat(g_out, " syscalls_s ", 4096); cat_u(g_out, pt.sys_perf_score, 4096);
+        s_cat(g_out, " file_rw_s ", 4096); cat_u(g_out, pt.io_perf_score, 4096);
+        s_cat(g_out, "\nprod-perf-tune busy_avg ", 4096); cat_u(g_out, pt.busy_avg, 4096);
+        s_cat(g_out, " samples ", 4096); cat_u(g_out, pt.samples, 4096);
+        s_cat(g_out, " mode ", 4096); s_cat(g_out, prod_perf_tune_mode_name(pt.tuning_mode), 4096);
+        s_cat(g_out, pt.auto_chosen ? " (auto)" : " (requested)", 4096);
         s_cat(g_out, " ok\n", 4096);
         out(g_out); return 0;
     }
     if (s_eq(cmd, "prod-maint-predict")) {
         prod_maint_t pm;
         prod_maint_predict(&g_m, &g_a, &pm);
-        g_out[0] = 0; s_cat(g_out, "prod-maint-predict health ", 4096); cat_u(g_out, pm.health_score, 4096);
+        g_out[0] = 0; s_cat(g_out, "prod-maint-predict firing_alerts ", 4096); cat_u(g_out, pm.firing_alerts, 4096);
+        s_cat(g_out, " mem_exhaust_ticks ", 4096);
+        if (pm.exhaust_ticks == 0xFFFFFFFFU) s_cat(g_out, "none", 4096); else cat_u(g_out, pm.exhaust_ticks, 4096);
         s_cat(g_out, " risk ", 4096); cat_u(g_out, pm.failure_risk, 4096);
-        s_cat(g_out, " mtbf_ticks ", 4096); cat_u(g_out, pm.mtbf_ticks, 4096);
-        s_cat(g_out, " ok\n", 4096);
+        s_cat(g_out, " health ", 4096); cat_u(g_out, pm.health_score, 4096);
+        s_cat(g_out, " (heuristic) ok\n", 4096);
         out(g_out); return 0;
     }
-    if (s_eq(cmd, "prod-support-bundle")) {
-        uint32_t samples = g_m.total;
-        uint32_t checksum = (samples * 1103515245U + 12345U) & 0x7fffffffU;
-        out("prod-support-bundle generating diagnostic archive...\n");
-        g_out[0] = 0;
-        s_cat(g_out, "prod-support-bundle ok /var/support_bundle.tar.gz created samples=", 4096);
-        cat_u(g_out, samples, 4096);
-        s_cat(g_out, " checksum=", 4096);
-        cat_u(g_out, checksum, 4096);
-        s_cat(g_out, " verified=true\n", 4096);
-        out(g_out);
-        return 0;
-    }
-    if (s_eq(cmd, "prod-cicd") || s_eq(cmd, "prod-pipeline")) {
-        prod_pipeline_t pipe;
-        word(rest, a, 64);
-        prod_pipeline_run(&pipe, a[0] ? a : "/", g_out, (int)sizeof(g_out));
-        out(g_out);
-        return 0;
-    }
+    if (s_eq(cmd, "prod-support-bundle")) return cmd_support_bundle(rest);
+    if (s_eq(cmd, "prod-cicd") || s_eq(cmd, "prod-pipeline")) return cmd_cicd(cmd, rest);
     if (s_eq(cmd, "prod-alert-learn")) {
         prod_alert_learn_t al;
         int mid = PM_BUSY;
@@ -659,17 +833,15 @@ int shell_prod_line(const char* l) {
         out(g_out);
         return 0;
     }
-    if (s_eq(cmd, "prod-sec-scan")) {
-        prod_sec_scan_t scan;
-        prod_sec_scan_run(&scan, g_out, (int)sizeof(g_out));
-        out(g_out);
-        return 0;
-    }
+    if (s_eq(cmd, "prod-sec-scan")) return cmd_sec_scan(rest, 0);
+    if (s_eq(cmd, "prod-sec-baseline")) return cmd_sec_scan(rest, 1);
     if (s_eq(cmd, "prod-biz-metrics")) {
         prod_biz_metrics_t bm;
         prod_biz_metrics_get(&g_use, sys_ticks(), &bm);
-        g_out[0] = 0; s_cat(g_out, "prod-biz-metrics kpi_score ", 4096); cat_u(g_out, bm.business_kpi_score, 4096);
-        s_cat(g_out, " tasks ", 4096); cat_u(g_out, bm.total_tasks_executed, 4096);
+        g_out[0] = 0; s_cat(g_out, "prod-biz-metrics commands_per_min ", 4096); cat_u(g_out, bm.business_kpi_score, 4096);
+        s_cat(g_out, " commands ", 4096); cat_u(g_out, bm.total_tasks_executed, 4096);
+        s_cat(g_out, " distinct ", 4096); cat_u(g_out, bm.distinct_commands, 4096);
+        s_cat(g_out, " sessions 1", 4096);
         s_cat(g_out, " uptime_s ", 4096); cat_u(g_out, bm.uptime_seconds, 4096);
         s_cat(g_out, " ok\n", 4096);
         out(g_out); return 0;

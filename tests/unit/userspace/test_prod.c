@@ -177,7 +177,6 @@ void test_phase8_offline_extensions(void) {
     prod_metrics_t m;
     prod_alerts_t a;
     prod_usage_t u;
-    prod_pipeline_t pipe;
     prod_scaler_t sc;
     prod_autoscale_workload_t wl;
     prod_sec_scan_t scan;
@@ -187,21 +186,69 @@ void test_phase8_offline_extensions(void) {
     prod_alerts_init(&a);
     memset(&u, 0, sizeof(u));
 
-    TEST_ASSERT_EQUAL(0, prod_perf_tune_eval(&pt, 1));
+    /* US-106: measured rates are carried, the mode follows the busy average */
+    TEST_ASSERT_EQUAL(0, prod_perf_tune_eval(&pt, &m, 111, 222, 333, 44, 1));
     TEST_ASSERT_EQUAL(1, (int)pt.tuning_mode);
-    TEST_ASSERT_EQUAL(100000, (int)pt.cpu_perf_score);
+    TEST_ASSERT_EQUAL(0, (int)pt.auto_chosen);
+    TEST_ASSERT_EQUAL(111, (int)pt.cpu_perf_score);
+    TEST_ASSERT_EQUAL(44, (int)pt.io_perf_score);
+    TEST_ASSERT_EQUAL(0, prod_perf_tune_eval(&pt, &m, 1, 1, 1, 1, -1));
+    TEST_ASSERT_EQUAL(0, (int)pt.tuning_mode);          /* no samples: balanced */
+    TEST_ASSERT_EQUAL(1, (int)pt.auto_chosen);
+    TEST_ASSERT_EQUAL(-1, prod_perf_tune_eval(&pt, &m, 1, 1, 1, 1, 3));
+    {
+        prod_metrics_t busy;
+        prod_sample_t smp;
+        int k;
+        prod_metrics_init(&busy);
+        memset(&smp, 0, sizeof(smp));
+        for (k = 0; k < 6; k++) { smp.tick = (uint32_t)k * 100U; smp.v[PM_BUSY] = 90; smp.v[PM_MEM_FREE] = 1000U - (uint32_t)k * 100U; prod_metrics_push(&busy, &smp); }
+        TEST_ASSERT_EQUAL(0, prod_perf_tune_eval(&pt, &busy, 1, 1, 1, 1, -1));
+        TEST_ASSERT_EQUAL(90, (int)pt.busy_avg);
+        TEST_ASSERT_EQUAL(6, (int)pt.samples);
+        TEST_ASSERT_EQUAL(1, (int)pt.tuning_mode);
+        TEST_ASSERT_EQUAL_STRING("high-throughput", prod_perf_tune_mode_name(pt.tuning_mode));
+        /* US-115: free memory falls 1 per tick, 500 left: exhaustion soon */
+        TEST_ASSERT_EQUAL(0, prod_maint_predict(&busy, &a, &pm));
+        TEST_ASSERT_TRUE(pm.exhaust_ticks != 0xFFFFFFFFU && pm.exhaust_ticks < 6000U);
+        TEST_ASSERT_EQUAL(50, (int)pm.failure_risk);
+        TEST_ASSERT_EQUAL(50, (int)pm.health_score);
+        for (k = 0; k < 6; k++) { smp.tick = 600U + (uint32_t)k * 100U; smp.v[PM_BUSY] = 10; prod_metrics_push(&busy, &smp); }
+        TEST_ASSERT_EQUAL(0, prod_perf_tune_eval(&pt, &busy, 1, 1, 1, 1, -1));
+        TEST_ASSERT_EQUAL(50, (int)pt.busy_avg);
+        TEST_ASSERT_EQUAL(0, (int)pt.tuning_mode);
+    }
 
     TEST_ASSERT_EQUAL(0, prod_maint_predict(&m, &a, &pm));
     TEST_ASSERT_EQUAL(100, (int)pm.health_score);
     TEST_ASSERT_EQUAL(0, (int)pm.failure_risk);
+    TEST_ASSERT_TRUE(pm.exhaust_ticks == 0xFFFFFFFFU);
 
     TEST_ASSERT_EQUAL(0, prod_biz_metrics_get(&u, 10000, &bm));
     TEST_ASSERT_EQUAL(100, (int)bm.uptime_seconds);
+    u.total = 50; u.n = 3;
+    TEST_ASSERT_EQUAL(0, prod_biz_metrics_get(&u, 12000, &bm));
+    TEST_ASSERT_EQUAL(25, (int)bm.business_kpi_score);   /* 50 commands in 2 minutes */
+    TEST_ASSERT_EQUAL(3, (int)bm.distinct_commands);
+    u.total = 0; u.n = 0;
 
-    /* US-108 CI/CD Pipeline */
-    TEST_ASSERT_EQUAL(0, prod_pipeline_run(&pipe, "/mohhdy", out_buf, sizeof(out_buf)));
-    TEST_ASSERT_EQUAL(6, pipe.stage);
-    TEST_ASSERT_NOT_NULL(strstr(out_buf, "cicd pipeline repo /mohhdy steps 5/5 status success"));
+    /* US-116: the bundle reflects live state */
+    {
+        static char bundle[2048];
+        prod_feedback_t fb;
+        int blen;
+        memset(&fb, 0, sizeof(fb)); fb.total = 2;
+        prod_alert_add(&a, "hot", PM_BUSY, 1, 80, 1);
+        blen = prod_support_bundle_text(&m, &a, &u, &fb, 4242, bundle, (int)sizeof(bundle));
+        TEST_ASSERT_TRUE(blen > 0);
+        TEST_ASSERT_NOT_NULL(strstr(bundle, "mohhdy support bundle v1 tick 4242\n"));
+        TEST_ASSERT_NOT_NULL(strstr(bundle, "alert hot busy > 80 ok\n"));
+        TEST_ASSERT_NOT_NULL(strstr(bundle, "feedback total 2\nend\n"));
+        TEST_ASSERT_EQUAL(-1, prod_support_bundle_text(&m, &a, &u, &fb, 1, bundle, 70));
+        prod_alert_remove(&a, "hot");
+    }
+
+    /* US-108 CI/CD: real pipeline tested in test_cicd.c */
 
     /* US-110 Autoscaling Workload */
     prod_scaler_init(&sc, 1, 4, 4000U, 1000U, 2U);
@@ -211,11 +258,95 @@ void test_phase8_offline_extensions(void) {
     TEST_ASSERT_GREATER_THAN(0, (int)wl.active_workers);
     TEST_ASSERT_NOT_NULL(strstr(out_buf, "autoscale workload workers "));
 
-    /* US-112 Security Scanner */
-    TEST_ASSERT_EQUAL(0, prod_sec_scan_run(&scan, out_buf, sizeof(out_buf)));
-    TEST_ASSERT_EQUAL(0, (int)scan.vulnerabilities_found);
-    TEST_ASSERT_EQUAL(120, (int)scan.cve_checks_passed);
-    TEST_ASSERT_NOT_NULL(strstr(out_buf, "sec-scan status ok_clean"));
+    /* US-112 security scanner: see test_sec_scan_real */
+    (void)scan;
+}
+
+/* Lot 7 (US-112): ELF32 header audit and baseline integrity diff. */
+static void put32(uint8_t* p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
+static int mk_elf(uint8_t* b, uint32_t entry, uint32_t text_flags, uint32_t data_flags, uint32_t stack_flags) {
+    memset(b, 0, 52 + 3 * 32);
+    b[0] = 0x7F; b[1] = 'E'; b[2] = 'L'; b[3] = 'F'; b[4] = 1; b[5] = 1; b[6] = 1;
+    b[16] = 2; b[18] = 3; b[20] = 1;
+    put32(b + 24, entry); put32(b + 28, 52);
+    b[42] = 32; b[44] = 3;
+    put32(b + 52, 1); put32(b + 52 + 8, 0x40000000U); put32(b + 52 + 20, 0x1000); put32(b + 52 + 24, text_flags);
+    put32(b + 84, 1); put32(b + 84 + 8, 0x40001000U); put32(b + 84 + 20, 0x1000); put32(b + 84 + 24, data_flags);
+    put32(b + 116, 0x6474E551U); put32(b + 116 + 24, stack_flags);
+    return 52 + 3 * 32;
+}
+void test_sec_scan_real(void) {
+    uint8_t b[256];
+    prod_elf_audit_t a;
+    prod_sec_scan_t sc;
+    char base[512], out_buf[512];
+    uint32_t sz, h;
+    int n;
+    /* clean W^X image: R+X text, R+W data, RW stack */
+    n = mk_elf(b, 0x40000010U, 5, 6, 6);
+    TEST_ASSERT_EQUAL(0, prod_elf_audit(b, n, &a));
+    TEST_ASSERT_EQUAL(2, a.load_segments);
+    TEST_ASSERT_EQUAL(1, a.exec_segments);
+    TEST_ASSERT_EQUAL(0, a.wx_segments);
+    TEST_ASSERT_EQUAL(0, a.stack_exec);
+    TEST_ASSERT_EQUAL(1, a.entry_ok);
+    /* RWX data, executable stack, entry in the data segment */
+    n = mk_elf(b, 0x40001004U, 5, 7, 7);
+    TEST_ASSERT_EQUAL(0, prod_elf_audit(b, n, &a));
+    TEST_ASSERT_EQUAL(1, a.wx_segments);
+    TEST_ASSERT_EQUAL(1, a.stack_exec);
+    TEST_ASSERT_EQUAL(1, a.entry_ok);          /* RWX data is executable */
+    n = mk_elf(b, 0x40001004U, 5, 6, 6);
+    TEST_ASSERT_EQUAL(0, prod_elf_audit(b, n, &a));
+    TEST_ASSERT_EQUAL(0, a.entry_ok);
+    /* not ELF, truncated program headers, wrong machine */
+    TEST_ASSERT_EQUAL(-1, prod_elf_audit((const uint8_t*)"hello world, not an elf file at all......................", 60, &a));
+    n = mk_elf(b, 0x40000010U, 5, 6, 6);
+    TEST_ASSERT_EQUAL(-1, prod_elf_audit(b, 100, &a));
+    b[18] = 0x28;
+    TEST_ASSERT_EQUAL(-1, prod_elf_audit(b, n, &a));
+    /* FNV-1a reference values */
+    TEST_ASSERT_TRUE(0x811C9DC5U == prod_fnv1a((const uint8_t*)"", 0));
+    TEST_ASSERT_TRUE(0xE40C292CU == prod_fnv1a((const uint8_t*)"a", 1));
+    /* baseline text round trip */
+    base[0] = 0;
+    TEST_ASSERT_EQUAL(0, prod_sec_baseline_line(base, sizeof(base), "shell", 750768U, 0xdeadbeefU));
+    TEST_ASSERT_EQUAL(0, prod_sec_baseline_line(base, sizeof(base), "ok", 13012U, 0x0000abcdU));
+    TEST_ASSERT_EQUAL_STRING("shell 750768 deadbeef\nok 13012 0000abcd\n", base);
+    TEST_ASSERT_EQUAL(2, prod_sec_baseline_count(base));
+    TEST_ASSERT_EQUAL(1, prod_sec_baseline_find(base, "ok", &sz, &h));
+    TEST_ASSERT_EQUAL(13012, (int)sz);
+    TEST_ASSERT_TRUE(0xabcdU == h);
+    TEST_ASSERT_EQUAL(0, prod_sec_baseline_find(base, "o", &sz, &h));
+    /* folding: 3 files against a 3-entry baseline: one same, one changed,
+     * one added (so one baseline entry is missing), one W+X ELF */
+    prod_sec_scan_init(&sc);
+    sc.baseline = 1;
+    n = mk_elf(b, 0x40000010U, 5, 6, 6);
+    prod_elf_audit(b, n, &a);
+    prod_sec_scan_file(&sc, 1, &a, 1, 1);
+    n = mk_elf(b, 0x40000010U, 7, 6, 6);
+    prod_elf_audit(b, n, &a);
+    prod_sec_scan_file(&sc, 1, &a, 1, 0);
+    prod_sec_scan_file(&sc, 0, &a, 0, 0);
+    prod_sec_scan_finish(&sc, 3);
+    TEST_ASSERT_EQUAL(3, (int)sc.files);
+    TEST_ASSERT_EQUAL(2, (int)sc.elf);
+    TEST_ASSERT_EQUAL(1, (int)sc.wx);
+    TEST_ASSERT_EQUAL(1, (int)sc.changed);
+    TEST_ASSERT_EQUAL(1, (int)sc.added);
+    TEST_ASSERT_EQUAL(1, (int)sc.missing);
+    TEST_ASSERT_EQUAL(30 + 25 + 10 + 10, (int)sc.risk_score);
+    prod_sec_scan_report(&sc, out_buf, sizeof(out_buf));
+    TEST_ASSERT_NOT_NULL(strstr(out_buf, "sec-scan files 3 elf 2 wx_segments 1 exec_stack 0 bad_entry 0 changed 1 added 1 missing 1 risk_score 75 status findings (no CVE database)"));
+    /* clean scan without baseline */
+    prod_sec_scan_init(&sc);
+    n = mk_elf(b, 0x40000010U, 5, 6, 6);
+    prod_elf_audit(b, n, &a);
+    prod_sec_scan_file(&sc, 1, &a, 0, 0);
+    prod_sec_scan_finish(&sc, 0);
+    prod_sec_scan_report(&sc, out_buf, sizeof(out_buf));
+    TEST_ASSERT_NOT_NULL(strstr(out_buf, "baseline none risk_score 0 status clean"));
 }
 
 void test_smart_alerts_and_perf_monitor(void) {
@@ -279,6 +410,7 @@ int main(void) {
     RUN_TEST(test_baseline_feedback_usage);
     RUN_TEST(test_state_save_load);
     RUN_TEST(test_phase8_offline_extensions);
+    RUN_TEST(test_sec_scan_real);
     RUN_TEST(test_smart_alerts_and_perf_monitor);
     RUN_TEST(test_prod_consolidation_and_fallback);
     unity_print_results();

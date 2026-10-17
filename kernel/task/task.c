@@ -455,6 +455,9 @@ void schedule(cpu_state_t* cpu) {
                    devsvc_owner(DEV_PS2) == (int32_t)current_task->id);
     tss_set_serial_io(current_task->type == TASK_TYPE_USER &&
                       devsvc_owner(DEV_SERIAL) == (int32_t)current_task->id);
+    /* Lot 7 (US-001): VGA CRTC ports only for the vgadriver owner. */
+    tss_set_vga_io(current_task->type == TASK_TYPE_USER &&
+                   devsvc_owner(DEV_VGA) == (int32_t)current_task->id);
     tss_set_nic_io(current_task->type == TASK_TYPE_USER && nic_owner_pid() != 0 &&
                    nic_owner_ports_open((int32_t)current_task->id,
                                         service_registry_lookup("net-driver")));

@@ -9,13 +9,13 @@ ASFLAGS = --32
 
 # Programmes à compiler
 PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver vfsvirtual networker vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim vfshistclaim waitchild ok
-USER_HEADERS = webeng.h webrt.h grpcwire.h promptmessage.h ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h osui_ide.h p2p.h shell_p2p.h shell_grpc.h collab.h prod.h csig.h
+USER_HEADERS = webeng.h dosemu.h cicd.h webrt.h grpcwire.h promptmessage.h ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h osui_ide.h p2p.h shell_p2p.h shell_grpc.h collab.h prod.h csig.h
 # Tranche 4: Ring 3 ATA driver + proofs.
 PROGRAMS += atadriver ataclient atarogue
 # Lot 4 (US-001): Ring 3 PCI enumeration worker + rogue proof.
 PROGRAMS += pcidriver pcirogue
 # Lot 5 (US-001): Ring 3 PS/2 and COM1 drivers + rogue proof.
-PROGRAMS += ps2driver serialdriver devrogue
+PROGRAMS += ps2driver serialdriver vgadriver devrogue
 # Tranche 5: net-driver gate proof client.
 PROGRAMS += netclaim
 # Tranche 5 slice 2: net IPC relay proof client.
@@ -58,7 +58,7 @@ ai_gguf_pause.o: ai_gguf_client.c
 	$(CC) $(CFLAGS) -DGGUF_PAUSE -c -o $@ $<
 ai_client.o ai_stat.o ai_rogue.o ai_gguf_client.o ai_gguf_pause.o: ai_common.h $(USER_HEADERS)
 
-shell: shell.o ramfs.o procsim.o osui_runtime.o webrt.o grpcwire.o osui_gui.o webeng.o osui_ide.o promptmessage.o shell_p2p.o shell_grpc.o shell_collab.o collab.o p2p.o stun.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o shell_prod.o prod.o shell_persist.o csig.o shell_platform.o platform.o start.o
+shell: shell.o ramfs.o procsim.o osui_runtime.o webrt.o grpcwire.o osui_gui.o webeng.o osui_ide.o promptmessage.o shell_p2p.o shell_grpc.o shell_collab.o collab.o p2p.o stun.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o shell_prod.o prod.o cicd.o shell_persist.o csig.o shell_platform.o platform.o dosemu.o start.o
 	@echo "Linking shell..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
@@ -156,6 +156,9 @@ ps2driver: ps2_driver.o ps2_decode.o start.o
 serialdriver: serial_driver.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
+vgadriver: vga_driver.o start.o
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
 devrogue: dev_rogue.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
@@ -232,5 +235,5 @@ start.o: start.s
 clean:
 	@echo "Cleaning userspace..."
 	rm -f *.o $(PROGRAMS)
-ipc_wait_server.o ipc_wait_poke.o pci_driver.o pci_rogue.o ps2_driver.o serial_driver.o dev_rogue.o: ipc_wait_common.h
+ipc_wait_server.o ipc_wait_poke.o pci_driver.o pci_rogue.o ps2_driver.o serial_driver.o vga_driver.o dev_rogue.o: ipc_wait_common.h
 ps2_driver.o ps2_decode.o: ps2_decode.h

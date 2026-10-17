@@ -526,8 +526,15 @@ def main():
                 raise RuntimeError("web-inspect hero: %s" % out[-800:])
             start = send_command_until(monitor, "web-console /web/demo.html", "web-console ok", proc)
             out = normalized_log(log_text()[start:])
-            if "script ignored (no JavaScript)" not in out or "scripts_skipped 1" not in out:
+            # Lot 7 (US-039): the sanitizer removes the script before the
+            # engine sees it (the engine skip stays as a second line).
+            if "scripts_skipped 0 sanitized 1" not in out:
                 raise RuntimeError("web-console: %s" % out[-800:])
+            start = send_command_until(monitor, "web-render /web/hostile.html", "web-render ok", proc)
+            out = normalized_log(log_text()[start:])
+            if (" sanitized 9" not in out or "\"clean paragraph\"" not in out or "pwned" in out
+                    or "bad link" not in out or "#0000ff00" not in out):
+                raise RuntimeError("hostile page: %s" % out[-1500:])
             # US-040/041/042 in the engine pipeline, US-044 audit
             start = send_command_until(monitor, "web-render /web/theme.html", "web-render ok", proc)
             out = normalized_log(log_text()[start:])

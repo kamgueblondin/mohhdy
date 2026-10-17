@@ -13,6 +13,7 @@ no TLS. Out of make ci; target make qemu-grpc-guests.
 from __future__ import print_function
 
 import os
+import re
 import struct
 import sys
 import time
@@ -93,8 +94,17 @@ def watch(hub):
                     WIRE["syn_ack"] += 1
                 if dport == PORT and payload.startswith(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"):
                     WIRE["preface"] += 1
-                if sport == PORT and len(payload) >= 27 and payload[3] == 4 and payload[21] == 1:
-                    WIRE["h2_headers_back"] += 1
+                if sport == PORT and len(payload) >= 9:
+                    # walk the HTTP/2 frames of the server segment (the
+                    # server writes whole frames per segment) and count
+                    # HEADERS frames on a client stream
+                    pos = 0
+                    while pos + 9 <= len(payload):
+                        flen = (payload[pos] << 16) | (payload[pos + 1] << 8) | payload[pos + 2]
+                        sid = struct.unpack("!I", payload[pos + 5:pos + 9])[0] & 0x7FFFFFFF
+                        if payload[pos + 3] == 1 and sid != 0:
+                            WIRE["h2_headers_back"] += 1
+                        pos += 9 + flen
         except Exception:  # never break the hub on a parse error
             pass
         return original(connection, frame)
@@ -146,7 +156,7 @@ def main():
         # B serves two calls (one ok, one unimplemented) and blocks its shell.
         start_b = len(base.log_text(b["log"]))
         with base.INJECT_LOCK:
-            send_command_once(b["client"], "grpc-serve %d 2 300" % PORT, b["proc"], b["log"])
+            send_command_once(b["client"], "grpc-serve %d 5 300" % PORT, b["proc"], b["log"])
         base.wait_for(b["proc"], b["log"], "grpc-serve listening port %d" % PORT, 30, start_b)
 
         start_a = base.run_command(
@@ -169,10 +179,36 @@ def main():
         if "grpc-call ok http 200 grpc-status 12 frames 2" not in out_a or "message unknown method" not in out_a:
             raise RuntimeError("grpc-call A unimplemented: %s" % out_a[-1500:])
 
-        base.wait_for(b["proc"], b["log"], "grpc-serve ok served 2 failed 0", 60, start_b)
+        # Lot 7 (US-067): three calls pipelined on ONE connection (streams
+        # 1, 3, 5) with a 16-byte stream window: the server must hold its
+        # DATA and split it until the client WINDOW_UPDATE frames reopen it.
+        start_a = base.run_command(
+            a, "grpc-calls %s %s %d 3 16 echo.EchoService SayHello multi" % (leases["a"], leases["b"], PORT),
+            "grpc-calls ", alive, timeout=240)
+        base.wait_for(a["proc"], a["log"], "[0m : ", 300, start_a)
+        out_a = base.normalized_log(base.log_text(a["log"])[start_a:])
+        want = ["grpc-calls stream %d ok http 200 grpc-status 0 frames 5 message Hello multi-%d from guest over tcp"
+                % (1 + 2 * i, i + 1) for i in range(3)]
+        want.append("grpc-calls ok calls 3 succeeded 3 connections 1 window 16")
+        for w in want:
+            if w not in out_a:
+                raise RuntimeError("grpc-calls A: missing %r in %s; wire %r" % (w, out_a[-2000:], WIRE))
+        m = re.search(r"window_updates_sent (\d+) window_updates_recv (\d+) data_frames_recv (\d+)", out_a)
+        if not m or int(m.group(1)) < 6 or int(m.group(2)) < 3 or int(m.group(3)) < 9:
+            raise RuntimeError("grpc-calls A flow control counters: %s" % out_a[-1200:])
+        base.say("[grpc-guests] 3 calls on one connection ok, window 16 (%ds)" % (time.monotonic() - t0))
+
+        base.wait_for(b["proc"], b["log"], "grpc-serve ok served 5 failed 0 connections 3", 60, start_b)
         out_b = base.normalized_log(base.log_text(b["log"])[start_b:])
         if "path /echo.EchoService/SayHello client_settings 1" not in out_b or "path /x.Nope/Missing" not in out_b:
             raise RuntimeError("grpc-serve B: %s" % out_b[-1500:])
+        for sid in (1, 3, 5):
+            if "stream %d path /echo.EchoService/SayHello client_settings 1 peer_window 16" % sid not in out_b:
+                raise RuntimeError("grpc-serve B stream %d: %s" % (sid, out_b[-1500:]))
+        m = re.search(r"connection slot \d+ calls 3 window_updates_sent \d+ window_updates_recv (\d+) "
+                      r"data_frames_sent (\d+) blocked (\d+) goaway 1", out_b)
+        if not m or int(m.group(1)) < 6 or int(m.group(2)) < 6 or int(m.group(3)) < 3:
+            raise RuntimeError("grpc-serve B flow control: %s" % out_b[-1500:])
         if WIRE["syn"] < 2 or WIRE["syn_ack"] < 2 or WIRE["preface"] < 2 or WIRE["h2_headers_back"] < 2:
             raise RuntimeError("wire counters %r" % WIRE)
         if hub.events.get("cross_syn_ack", 0) != 0:

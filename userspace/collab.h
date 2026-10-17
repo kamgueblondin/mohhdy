@@ -23,7 +23,9 @@
 
 enum {
     CE_JOIN = 1, CE_TRANSFER, CE_OFFER, CE_RESERVE, CE_TASK, CE_CLAIM, CE_DONE, CE_ACCEPT, CE_REJECT,
-    CE_RATE, CE_PROPOSE, CE_VOTE, CE_PROFILE, CE_REDACT, CE_TICKET, CE_ANSWER, CE_COUNT
+    CE_RATE, CE_PROPOSE, CE_VOTE, CE_PROFILE, CE_REDACT, CE_TICKET, CE_ANSWER,
+    /* Lot 7: escrow contracts (US-099), disputes (US-101), auctions (US-094) */
+    CE_ESCROW, CE_SETTLE, CE_DISPUTE, CE_RULING, CE_AUCTION, CE_BID, CE_CLOSE, CE_COUNT
 };
 
 typedef struct {
@@ -116,48 +118,62 @@ int collab_load(collab_t* c, const uint8_t* in, int len);
 
 /* US-094 marketplace extensions */
 int collab_market_search(collab_t* c, const collab_host_t* h, const char* query, char* out, int cap);
-int collab_market_bid(collab_t* c, const collab_host_t* h, uint32_t offer_seq, uint32_t bid_amount);
 int collab_market_price(collab_t* c, const char* item, uint32_t* avg_price);
 
-/* US-099 smart contracts */
-int collab_contract_create(collab_t* c, const collab_host_t* h, const char* name, uint32_t target, uint32_t amount, uint32_t trigger_type);
-int collab_contract_exec(collab_t* c, const collab_host_t* h, uint32_t ref_seq, uint32_t action);
+/* Lot 7: contracts, disputes and auctions are ledger state machines folded
+ * by every node in the same canonical order (no "done" by assertion).
+ * Escrow contract (US-099): the payer locks AMOUNT for PAYEE, optional
+ * ARBITER (0 = none). Settle: release (payee paid) by the payer or the
+ * arbiter; refund (payer repaid) by the payee or the arbiter; once.
+ * Dispute (US-101): a party freezes an open escrow; then only rulings
+ * decide: the arbiter's ruling at once, else a majority of the joined
+ * members that are not parties (quorum floor(n/2)+1); the funds move in the
+ * fold when the deciding ruling is applied.
+ * Auction (US-094): the seller lists ITEM with a reserve price; each bid
+ * must reach the reserve, beat the best bid and be covered: the bidder's
+ * points are locked and the previous best bidder is repaid; the seller
+ * closes: sold to the best bidder (seller paid) or unsold. */
+int collab_escrow_create(collab_t* c, const collab_host_t* h, uint32_t payee, uint32_t arbiter, uint32_t amount,
+                         const char* name);
+/* release 1: pay the payee, 0: refund the payer */
+int collab_escrow_settle(collab_t* c, const collab_host_t* h, uint32_t payer, uint32_t escrow_seq, int release);
+int collab_dispute_open(collab_t* c, const collab_host_t* h, uint32_t payer, uint32_t escrow_seq, const char* evidence);
+/* for_payer 1: refund the payer, 0: pay the payee */
+int collab_dispute_vote(collab_t* c, const collab_host_t* h, uint32_t payer, uint32_t escrow_seq, int for_payer);
+int collab_auction_open(collab_t* c, const collab_host_t* h, const char* item, uint32_t reserve);
+int collab_auction_bid(collab_t* c, const collab_host_t* h, uint32_t seller, uint32_t auction_seq, uint32_t amount);
+int collab_auction_close(collab_t* c, const collab_host_t* h, uint32_t auction_seq);
 
-/* US-101 dispute arbitration */
-int collab_dispute_open(collab_t* c, const collab_host_t* h, uint32_t target_seq, const char* evidence);
-int collab_dispute_vote(collab_t* c, const collab_host_t* h, uint32_t dispute_seq, int vote_claimant);
-int collab_dispute_settle(collab_t* c, const collab_host_t* h, uint32_t dispute_seq);
-
-/* US-103 privacy proofs */
+/* US-103 privacy (Lot 7, honest): a hash commitment, NOT a zero-knowledge
+ * proof. commit = SHA-256("mohhdy-commit-v1" || value || secret); opening
+ * it reveals both value and secret to the verifier, which recomputes it. */
 int collab_privacy_proof_gen(uint32_t value, uint32_t secret, uint8_t proof_out[32]);
-int collab_privacy_proof_verify(uint32_t value, const uint8_t proof[32]);
+/* 0 when (value, secret) opens the commitment, -1 otherwise */
+int collab_privacy_proof_verify(uint32_t value, uint32_t secret, const uint8_t proof[32]);
 int collab_anonymize_id(uint32_t raw_id, uint32_t salt, uint32_t* blinded_id);
 
-/* US-104 compliance audit */
+/* US-104 compliance self-check (Lot 7: computed, not asserted). Each check
+ * is a fact of the local node and ledger: entries signed by their origin,
+ * no forged entry accepted, redaction available (export and forget
+ * commands exist and the ledger keeps text hashes), private profile fields
+ * kept local (never in a shared entry). Score = passed * 100 / checks. It
+ * is a self-assessment, not a GDPR certification. */
 typedef struct {
-    int gdpr_export_ready;
-    int right_to_be_forgotten;
-    int data_minimized;
+    int signing_on;
+    int all_signed;            /* every stored entry has a signature */
+    int no_forgery_accepted;   /* forged entries rejected, none applied */
+    int private_kept_local;    /* no private profile field appears in a shared entry */
+    int redactions;            /* redaction entries in the ledger */
+    int checks, passed;
     uint32_t compliance_score;
-    char cert_hash[17];
+    char cert_hash[17];        /* own public key fingerprint */
 } collab_compliance_t;
 int collab_compliance_check(const collab_t* c, collab_compliance_t* comp);
 int collab_compliance_report(const collab_t* c, char* out, int cap);
 
-/* US-097 decentralized payment & escrow */
-typedef struct {
-    uint32_t escrow_id;
-    uint32_t payer;
-    uint32_t payee;
-    uint32_t arbiter;
-    uint32_t amount;
-    int status; /* 1 open, 2 released, 3 refunded */
-} collab_escrow_t;
-
+/* US-097: no payment. collab_point_convert multiplies by fixed rates
+ * (simule, no exchange, no money). */
 int collab_point_convert(uint32_t points, const char* target_currency, uint32_t* converted_amount);
-int collab_escrow_create(collab_t* c, const collab_host_t* h, uint32_t payee, uint32_t arbiter, uint32_t amount);
-int collab_escrow_release(collab_t* c, const collab_host_t* h, uint32_t escrow_seq);
-int collab_escrow_refund(collab_t* c, const collab_host_t* h, uint32_t escrow_seq);
 
 /* US-105 P2P ticket routing */
 int collab_ticket_route(collab_t* c, const collab_host_t* h, uint32_t ticket_seq, uint32_t helper_id);

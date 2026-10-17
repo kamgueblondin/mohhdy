@@ -7,8 +7,12 @@
  *   grpc-call LOCAL_IP REMOTE_IP PORT SERVICE METHOD [PAYLOAD]: client side
  *     with SYS_SOCKET_CONNECT / SEND / RECEIVE / CLOSE (relayed to the
  *     networker, real TCP over the NE2000).
- * Cleartext HTTP/2 (h2c with prior knowledge), one call per connection, no
- * flow control, no TLS. The encoder is userspace/grpcwire.c. */
+ *   grpc-calls LOCAL_IP REMOTE_IP PORT CALLS WINDOW SERVICE METHOD [PAYLOAD]
+ *     (Lot 7): CALLS unary calls pipelined on ONE connection (streams 1, 3,
+ *     5, ...) with a stream receive window of WINDOW bytes, so the server
+ *     holds its DATA until our WINDOW_UPDATE frames reopen the window.
+ * Cleartext HTTP/2 (h2c with prior knowledge), no TLS. The connection
+ * engine (flow control, several streams) is userspace/grpcwire.c. */
 #include "shell_grpc.h"
 #include "grpcwire.h"
 #include "../include/os_syscalls.h"
@@ -76,157 +80,284 @@ static int web(unsigned op, int slot) { g_io.op = (uint8_t)op; g_io.slot = (uint
 #define GS_BUF 768
 static unsigned char g_rx[OS_PEER_WEB_SLOTS][GS_BUF];
 static int g_rx_len[OS_PEER_WEB_SLOTS];
+/* Lot 7: one HTTP/2 connection engine per slot (several calls per
+ * connection, flow control). */
+static gw_conn_t g_conn[OS_PEER_WEB_SLOTS];
+static int g_conn_on[OS_PEER_WEB_SLOTS];
+static int g_cur_slot;
+static gw_conn_t* g_cur_conn;
+
+static int serve_handler(const char* path, const char* payload, char* reply, int cap) {
+    say("grpc-serve call slot ", g_cur_slot, "");
+    say(" stream ", (int)g_cur_conn->cur_stream, " path ");
+    print_string(path);
+    say(" client_settings ", g_cur_conn->settings_seen, "");
+    say(" peer_window ", g_cur_conn->peer_init_win, " transport=tcp\n");
+    return handler(path, payload, reply, cap);
+}
+
+static void conn_end(int i, int* conns, int* wu_s, int* wu_r, int* blocked) {
+    if (!g_conn_on[i]) return;
+    say("grpc-serve connection slot ", i, "");
+    say(" calls ", g_conn[i].calls_done, "");
+    say(" window_updates_sent ", g_conn[i].wu_sent, "");
+    say(" window_updates_recv ", g_conn[i].wu_recv, "");
+    say(" data_frames_sent ", g_conn[i].data_sent, "");
+    say(" blocked ", g_conn[i].blocked, "");
+    say(" goaway ", g_conn[i].goaway, "\n");
+    (*conns)++;
+    *wu_s += g_conn[i].wu_sent; *wu_r += g_conn[i].wu_recv; *blocked += g_conn[i].blocked;
+    g_conn_on[i] = 0;
+    g_rx_len[i] = 0;
+}
 
 static int grpc_serve(const char* rest) {
     char a[16], b[16], c[16];
-    static unsigned char out[512];
-    char path[64];
-    int port, want, secs, served = 0, failed = 0, rc, i, k;
-    unsigned t0;
+    static unsigned char out[OS_PEER_DATA_MAX];
+    int port, want, secs, served = 0, failed = 0, rc, i, k, conns = 0, wu_s = 0, wu_r = 0, blocked = 0;
+    unsigned t0, linger = 0;
     rest = word(rest, a, (int)sizeof(a));
     rest = word(rest, b, (int)sizeof(b));
     rest = word(rest, c, (int)sizeof(c));
     port = to_int(a);
     want = b[0] ? to_int(b) : 1;
     secs = c[0] ? to_int(c) : 120;
-    if (port <= 0 || port > 65535 || want <= 0 || want > 16 || secs <= 0 || secs > 600) {
-        print_string("grpc-serve error usage: grpc-serve PORT [N] [SECONDS]\n");
+    if (port <= 0 || port > 65535 || want <= 0 || want > 64 || secs <= 0 || secs > 600) {
+        print_string("grpc-serve error usage: grpc-serve PORT [CALLS] [SECONDS]\n");
         return 1;
     }
     g_io.port = (uint16_t)port; g_io.flags = 0U;
     rc = web(OS_PEER_WEB_OPEN, 0);
     if (rc != 0) { say("grpc-serve error listen rc ", rc, "\n"); return 1; }
-    for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) g_rx_len[i] = 0;
+    for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) { g_rx_len[i] = 0; g_conn_on[i] = 0; }
     say("grpc-serve listening port ", port, " transport=tcp h2c\n");
     t0 = ticks();
-    while (served + failed < want && ticks() - t0 < (unsigned)secs * 100U) {
+    for (;;) {
+        unsigned now = ticks();
+        int open = 0;
+        for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) open += g_conn_on[i];
+        if (now - t0 >= (unsigned)secs * 100U) break;
+        /* all calls answered: linger (2 s at most) until the clients send
+         * GOAWAY or close, so their last WINDOW_UPDATE frames still land */
+        if (served + failed >= want) {
+            if (!open) break;
+            if (!linger) linger = now;
+            else if (now - linger > 200U) break;
+        }
         unsigned char st[OS_PEER_WEB_SLOTS];
         g_io.attempts = 16U;
         rc = web(OS_PEER_WEB_POLL, 0);
         for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) st[i] = rc == 0 ? g_io.data[i] : 0U;
-        for (i = 0; i < (int)OS_PEER_WEB_SLOTS && served + failed < want; i++) {
-            int done = 0, cs = 0, m;
+        for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) {
+            int used = 0, m, before;
+            gw_conn_t* cn = &g_conn[i];
             if (!(st[i] & OS_PEER_SLOT_DATA)) {
-                if ((st[i] & (OS_PEER_SLOT_PEER_CLOSED | OS_PEER_SLOT_FAILED)) && g_rx_len[i] > 0) {
-                    say("grpc-serve slot ", i, " closed before a full request\n");
-                    g_rx_len[i] = 0; failed++;
+                if ((st[i] & (OS_PEER_SLOT_PEER_CLOSED | OS_PEER_SLOT_FAILED)) && g_conn_on[i]) {
+                    if (gw_conn_busy(cn)) { say("grpc-serve slot ", i, " closed with calls in flight\n"); failed++; }
+                    conn_end(i, &conns, &wu_s, &wu_r, &blocked);
                     (void)web(OS_PEER_WEB_CLOSE, i);
                 }
                 continue;
             }
             rc = web(OS_PEER_WEB_RECV, i);
             if (rc != 0) continue;
+            if (!g_conn_on[i]) { gw_conn_init(cn, 1, GW_WIN_DEFAULT, serve_handler); g_conn_on[i] = 1; g_rx_len[i] = 0; }
             for (k = 0; k < g_io.length && g_rx_len[i] < GS_BUF; k++) g_rx[i][g_rx_len[i]++] = g_io.data[k];
-            done = gw_stream_complete(g_rx[i], g_rx_len[i], 1);
-            if (done == 0 && g_rx_len[i] < GS_BUF) continue;
-            m = done == 1 ? gw_serve_stream(g_rx[i], g_rx_len[i], handler, out, (int)sizeof(out), path,
-                                            (int)sizeof(path), &cs)
-                          : (done < 0 ? done : GW_ERR_LIMIT);
-            if (m < 0) {
+            g_cur_slot = i; g_cur_conn = cn;
+            before = cn->calls_done;
+            m = gw_conn_feed(cn, g_rx[i], g_rx_len[i], &used, out, (int)sizeof(out));
+            if (m < 0 || (used == 0 && g_rx_len[i] >= GS_BUF)) {
                 say("grpc-serve slot ", i, " bad stream rc ");
-                say("", m, "\n");
+                say("", m < 0 ? m : GW_ERR_LIMIT, "\n");
                 failed++;
-            } else {
+                conn_end(i, &conns, &wu_s, &wu_r, &blocked);
+                (void)web(OS_PEER_WEB_CLOSE, i);
+                continue;
+            }
+            for (k = used; k < g_rx_len[i]; k++) g_rx[i][k - used] = g_rx[i][k];
+            g_rx_len[i] -= used;
+            if (m > 0) {
                 for (k = 0; k < m; k++) g_io.data[k] = out[k];
                 g_io.length = (uint16_t)m;
                 rc = web(OS_PEER_WEB_SEND, i);
-                say("grpc-serve call slot ", i, " path ");
-                print_string(path);
-                say(" client_settings ", cs, "");
-                say(" request_bytes ", g_rx_len[i], "");
-                say(" response_bytes ", m, "");
-                say(" send rc ", rc, " transport=tcp\n");
-                if (rc == 0) served++; else failed++;
+                if (rc != 0) {
+                    say("grpc-serve slot ", i, " send rc ");
+                    say("", rc, "\n");
+                    failed += gw_conn_busy(cn) + (cn->calls_done - before);
+                    conn_end(i, &conns, &wu_s, &wu_r, &blocked);
+                    (void)web(OS_PEER_WEB_CLOSE, i);
+                    continue;
+                }
             }
-            g_rx_len[i] = 0;
-            (void)web(OS_PEER_WEB_CLOSE, i);
+            served += cn->calls_done - before;
+            if (cn->goaway && !gw_conn_busy(cn)) {
+                conn_end(i, &conns, &wu_s, &wu_r, &blocked);
+                (void)web(OS_PEER_WEB_CLOSE, i);
+            }
         }
         nap();
     }
+    for (i = 0; i < (int)OS_PEER_WEB_SLOTS; i++) conn_end(i, &conns, &wu_s, &wu_r, &blocked);
     (void)web(OS_PEER_WEB_STOP, 0);
     say("grpc-serve ok served ", served, "");
-    say(" failed ", failed, "\n");
+    say(" failed ", failed, "");
+    say(" connections ", conns, "");
+    say(" window_updates_sent ", wu_s, "");
+    say(" window_updates_recv ", wu_r, "");
+    say(" blocked ", blocked, "\n");
     return served == want ? 0 : 2;
 }
 
+/* ------------------------------------------------------------ client side */
 #define GC_PIECE ((int)OS_NET_RELAY_MAX_IN)
-static int grpc_call(const char* rest) {
-    char lip[20], rip[20], ps[8], svc[48], meth[32], pay[64];
-    static unsigned char req[512], seg[640], rx[768];
-    os_socket_connect_request_t c;
+static gw_conn_t g_cc;
+static int g_segs;
+
+/* The relayed SYS_SOCKET_SEND carries up to OS_NET_RELAY_MAX_IN bytes: one
+ * TCP segment per piece, the peer reassembles the stream. */
+static int send_all(int sid, const unsigned char* b, int n) {
+    static unsigned char seg[640];
     os_socket_send_request_t s;
+    uint16_t seg_len = 0U;
+    int i, rc;
+    for (i = 0; i < n; i += GC_PIECE) {
+        int k = n - i > GC_PIECE ? GC_PIECE : n - i;
+        s.socket_id = sid; s.payload = b + i; s.length = (uint16_t)k;
+        s.segment = seg; s.capacity = sizeof(seg); s.out_length = &seg_len;
+        rc = sys1(SYS_SOCKET_SEND, &s);
+        if (rc != 0) return rc;
+        g_segs++;
+    }
+    return 0;
+}
+
+/* Opens the connection, runs `calls` unary calls (pipelined, streams 1, 3,
+ * ...) with stream receive window `window`, closes with GOAWAY. */
+static int run_calls(const char* tag, const char* rest, int multi) {
+    char lip[20], rip[20], ps[8], ns[8], ws[8], svc[48], meth[32], pay[48];
+    static unsigned char buf[OS_PEER_DATA_MAX], rx[1024];
+    os_socket_connect_request_t c;
     os_socket_receive_request_t r;
-    uint16_t seg_len = 0U, got = 0U;
-    int port, n, sid, rc, i, total = 0, rounds, done = 0, hs, gs, frames, ss, acks, segs = 0;
-    char msg[160];
+    uint16_t got = 0U;
+    int port, sid, rc = 0, i, k, rounds, idle = 0, rlen = 0, calls = 1, window = GW_WIN_DEFAULT, n, used, ok = 0;
+    int rx_bytes = 0, req_bytes = 0, send_fail = 0;
     unsigned t0;
     rest = word(rest, lip, (int)sizeof(lip));
     rest = word(rest, rip, (int)sizeof(rip));
     rest = word(rest, ps, (int)sizeof(ps));
+    if (multi) {
+        rest = word(rest, ns, (int)sizeof(ns));
+        rest = word(rest, ws, (int)sizeof(ws));
+        calls = to_int(ns);
+        window = to_int(ws);
+    }
     rest = word(rest, svc, (int)sizeof(svc));
     rest = word(rest, meth, (int)sizeof(meth));
     rest = word(rest, pay, (int)sizeof(pay));
     for (i = 0; i < (int)sizeof(c); i++) ((uint8_t*)&c)[i] = 0U;
     port = to_int(ps);
     if (parse_ip(lip, c.local_ip) != 0 || parse_ip(rip, c.remote_ip) != 0 || port <= 0 || port > 65535 ||
-        !svc[0] || !meth[0]) {
-        print_string("grpc-call error usage: grpc-call LOCAL_IP REMOTE_IP PORT SERVICE METHOD [PAYLOAD]\n");
+        !svc[0] || !meth[0] || calls < 1 || calls > GW_MAX_STREAMS || window < 1 || window > GW_WIN_DEFAULT) {
+        print_string(tag);
+        print_string(multi ? " error usage: grpc-calls LOCAL_IP REMOTE_IP PORT CALLS WINDOW SERVICE METHOD [PAYLOAD]\n"
+                           : " error usage: grpc-call LOCAL_IP REMOTE_IP PORT SERVICE METHOD [PAYLOAD]\n");
         return 1;
     }
-    n = gw_client_stream(req, (int)sizeof(req), svc, meth, pay);
-    if (n < 0) { say("grpc-call error encode ", n, "\n"); return 1; }
+    gw_conn_init(&g_cc, 0, window, 0);
+    n = gw_conn_start(&g_cc, buf, (int)sizeof(buf));
+    for (i = 0; i < calls && n > 0; i++) {
+        char p[56];
+        int m = 0, j;
+        for (j = 0; pay[j] && m < 40; j++) p[m++] = pay[j];
+        if (multi) { p[m++] = '-'; p[m++] = (char)('1' + i); }
+        p[m] = 0;
+        k = gw_conn_call(&g_cc, svc, meth, p, buf + n, (int)sizeof(buf) - n);
+        n = k < 0 ? k : n + k;
+    }
+    if (n < 0) { print_string(tag); say(" error encode ", n, "\n"); return 1; }
     t0 = ticks();
+    g_segs = 0;
     c.local_port = (uint16_t)(41000U + (t0 & 0x3FFU));
     c.remote_port = (uint16_t)port;
     c.local_sequence = 0x67A00000U ^ (t0 << 8);
     c.attempts = 400U;
     sid = sys1(SYS_SOCKET_CONNECT, &c);
-    if (sid < 0) { say("grpc-call error connect rc ", sid, "\n"); return 1; }
-    say("grpc-call connected socket ", sid, "");
-    say(" local_port ", c.local_port, "\n");
-    /* The relayed SYS_SOCKET_SEND carries up to OS_NET_RELAY_MAX_IN bytes:
-     * one TCP segment per piece, the server reassembles the stream. */
-    for (i = 0; i < n; i += GC_PIECE) {
-        int k = n - i > GC_PIECE ? GC_PIECE : n - i;
-        s.socket_id = sid; s.payload = req + i; s.length = (uint16_t)k;
-        s.segment = seg; s.capacity = sizeof(seg); s.out_length = &seg_len;
-        rc = sys1(SYS_SOCKET_SEND, &s);
-        if (rc != 0) { say("grpc-call error send rc ", rc, "\n"); (void)sys1(SYS_SOCKET_CLOSE, (void*)sid); return 1; }
-        segs++;
-    }
-    say("grpc-call sent request_bytes ", n, "");
-    say(" segments ", segs, "\n");
-    for (rounds = 0; rounds < 60 && !done; rounds++) {
+    if (sid < 0) { print_string(tag); say(" error connect rc ", sid, "\n"); return 1; }
+    print_string(tag); say(" connected socket ", sid, ""); say(" local_port ", c.local_port, "\n");
+    rc = send_all(sid, buf, n);
+    if (rc != 0) { print_string(tag); say(" error send rc ", rc, "\n"); (void)sys1(SYS_SOCKET_CLOSE, (void*)sid); return 1; }
+    req_bytes = n;
+    print_string(tag); say(" sent request_bytes ", n, ""); say(" segments ", g_segs, ""); say(" calls ", calls, "\n");
+    for (rounds = 0; rounds < 400 && g_cc.calls_done < g_cc.calls_started && idle < 60; rounds++) {
         got = 0U;
-        r.socket_id = sid; r.buffer = rx + total; r.capacity = (uint16_t)(sizeof(rx) - (unsigned)total);
+        r.socket_id = sid; r.buffer = rx + rlen; r.capacity = (uint16_t)(sizeof(rx) - (unsigned)rlen);
+        if (r.capacity > 256U) r.capacity = 256U;
         r.out_length = &got;
         rc = sys1(SYS_SOCKET_RECEIVE, &r);
         if (rc != 0 && rc != OS_NET_WIRE_TIMEOUT) break;
-        total += got;
-        done = gw_stream_complete(rx, total, 0);
-        if (done < 0 || total >= (int)sizeof(rx)) break;
+        if (got == 0U) { idle++; continue; }
+        idle = 0;
+        rlen += got; rx_bytes += got;
+        n = gw_conn_feed(&g_cc, rx, rlen, &used, buf, (int)sizeof(buf));
+        if (n < 0) { rc = n; break; }
+        for (k = used; k < rlen; k++) rx[k - used] = rx[k];
+        rlen -= used;
+        /* a failed WINDOW_UPDATE send is not fatal: the rest of the
+         * response may already be on its way */
+        if (n > 0 && send_all(sid, buf, n) != 0) send_fail++;
+        if (rlen >= (int)sizeof(rx)) { rc = GW_ERR_LIMIT; break; }
+    }
+    if (g_cc.calls_done == g_cc.calls_started) {
+        n = gw_conn_goaway(&g_cc, buf, (int)sizeof(buf));
+        if (n > 0) (void)send_all(sid, buf, n);
     }
     (void)sys1(SYS_SOCKET_CLOSE, (void*)sid);
-    if (done != 1) { say("grpc-call error response incomplete bytes ", total, ""); say(" rc ", rc, "\n"); return 2; }
-    if (gw_parse_stream_response(rx, total, &hs, &gs, msg, (int)sizeof(msg), &frames, &ss, &acks) != GW_OK) {
-        say("grpc-call error parse bytes ", total, "\n");
+    if (g_cc.calls_done != g_cc.calls_started) {
+        print_string(tag); say(" error response incomplete calls_done ", g_cc.calls_done, "");
+        say(" bytes ", rx_bytes, ""); say(" send_fail ", send_fail, ""); say(" rc ", rc, "\n");
         return 2;
     }
-    say("grpc-call ok http ", hs, "");
-    say(" grpc-status ", gs, "");
-    say(" frames ", frames, "");
-    say(" server_settings ", ss, "");
-    say(" settings_ack ", acks, "");
-    say(" response_bytes ", total, "");
-    say(" ms ", (int)((ticks() - t0) * 10U), "");
-    print_string(" message ");
-    print_string(msg);
-    print_string(" transport=tcp\n");
-    return gs == 0 ? 0 : 3;
+    for (i = 0; i < calls; i++) {
+        gw_h2stream_t* s = gw_conn_stream(&g_cc, (unsigned)(1 + 2 * i));
+        if (!s) continue;
+        print_string(tag);
+        if (multi) say(" stream ", (int)s->id, "");
+        say(" ok http ", s->http_status, "");
+        say(" grpc-status ", s->grpc_status, "");
+        say(" frames ", s->frames, "");
+        if (!multi) {
+            say(" server_settings ", g_cc.settings_seen, "");
+            say(" settings_ack ", g_cc.settings_acks, "");
+            say(" response_bytes ", rx_bytes, "");
+            say(" ms ", (int)((ticks() - t0) * 10U), "");
+        }
+        print_string(" message ");
+        print_string(s->message);
+        print_string(" transport=tcp\n");
+        if (s->http_status == 200 && s->grpc_status == 0) ok++;
+    }
+    if (multi) {
+        print_string(tag);
+        say(" ok calls ", calls, "");
+        say(" succeeded ", ok, "");
+        say(" connections 1 window ", window, "");
+        say(" request_bytes ", req_bytes, "");
+        say(" response_bytes ", rx_bytes, "");
+        say(" window_updates_sent ", g_cc.wu_sent, "");
+        say(" window_updates_recv ", g_cc.wu_recv, "");
+        say(" data_frames_recv ", g_cc.data_recv, "");
+        say(" server_settings ", g_cc.settings_seen, "");
+        say(" ms ", (int)((ticks() - t0) * 10U), " transport=tcp\n");
+    }
+    return ok == calls ? 0 : 3;
 }
+
+static int grpc_call(const char* rest) { return run_calls("grpc-call", rest, 0); }
+static int grpc_calls(const char* rest) { return run_calls("grpc-calls", rest, 1); }
 
 int shell_grpc_is(const char* line) {
     return (s_pre(line, "grpc-serve") && (line[10] == ' ' || !line[10])) ||
+           (s_pre(line, "grpc-calls") && (line[10] == ' ' || !line[10])) ||
            (s_pre(line, "grpc-call") && (line[9] == ' ' || !line[9]));
 }
 
@@ -235,5 +366,6 @@ int shell_grpc_line(const char* line) {
     const char* rest = word(line, cmd, (int)sizeof(cmd));
     if (s_eq(cmd, "grpc-serve")) return grpc_serve(rest);
     if (s_eq(cmd, "grpc-call")) return grpc_call(rest);
+    if (s_eq(cmd, "grpc-calls")) return grpc_calls(rest);
     return 1;
 }

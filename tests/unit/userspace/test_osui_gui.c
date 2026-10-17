@@ -369,6 +369,37 @@ static void test_gui_web_pane_pipeline(void) {
     osui_gui_set_ide_ops(0, 0, 0);
 }
 
+/* Lot 7 (US-039): the page sanitizer runs first in the web pipeline:
+ * script, iframe, on* handlers, javascript: URLs and unsafe CSS never
+ * reach the engine nor the display list. */
+static void test_gui_web_pipeline_sanitized(void) {
+    uint32_t i;
+    int pwned = 0, clean = 0, red = 0;
+    setup();
+    osui_gui_set_ide_ops(fake_load, fake_save, fake_exec);
+    strcpy(g_fake_file,
+           "<style>@import 'e.css'; #a{background:#ff0000;height:6px} #b{background:url(http://t/x)}</style>"
+           "<div id=a onclick=\"x()\">clean</div><a href=\"javascript:x()\">l</a>"
+           "<iframe src=\"http://e/\"></iframe><script>document.write('pwned')</script>");
+    g_fake_len = (int)strlen(g_fake_file);
+    feed_str("web h.html");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web render file=h.html"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, " sanitized 6"));
+    TEST_ASSERT_EQUAL(6, osui_gui_web_sanitized());
+    osui_gui_fill_scene(&g_scene);
+    for (i = 0; i < g_scene.nweb; i++) {
+        if (g_scene.web[i].kind == OS_FB_WEB_TEXT && strstr(g_scene.web[i].text, "pwned")) pwned = 1;
+        if (g_scene.web[i].kind == OS_FB_WEB_TEXT && strcmp(g_scene.web[i].text, "clean") == 0) clean = 1;
+        if (g_scene.web[i].kind == OS_FB_WEB_RECT && g_scene.web[i].color == 0xFF0000U && g_scene.web[i].h == 6) red = 1;
+    }
+    TEST_ASSERT_EQUAL(0, pwned);
+    TEST_ASSERT_EQUAL(1, clean);
+    TEST_ASSERT_EQUAL(1, red);
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_ide_ops(0, 0, 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_gui_command_canonical);
@@ -382,6 +413,7 @@ int main(void) {
     RUN_TEST(test_gui_media_rendering);
     RUN_TEST(test_gui_pm_ide_fullscreen);
     RUN_TEST(test_gui_web_pane_pipeline);
+    RUN_TEST(test_gui_web_pipeline_sanitized);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

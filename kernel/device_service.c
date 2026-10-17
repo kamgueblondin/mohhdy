@@ -1,5 +1,5 @@
-/* Lot 5 (US-001): Ring 3 PS/2 and serial driver bookkeeping. See
- * device_service.h. */
+/* Lot 5 (US-001): Ring 3 PS/2 and serial driver bookkeeping; Lot 7 adds
+ * the VGA text console driver. See device_service.h. */
 #include "device_service.h"
 
 typedef struct {
@@ -22,6 +22,11 @@ static struct {
     uint32_t ring3_bytes, ring0_bytes, stalls, overflows, rx_bytes;
 } g_ser;
 
+static struct {
+    uint32_t pending, pending_since, seq;
+    uint32_t ring3_frames, ring0_frames, stalls;
+} g_vga;
+
 static uint32_t g_last_owner_check;
 
 void devsvc_reset(void) {
@@ -30,6 +35,7 @@ void devsvc_reset(void) {
     p = (uint8_t*)g_dev; for (i = 0; i < sizeof(g_dev); i++) p[i] = 0;
     p = (uint8_t*)&g_ps2; for (i = 0; i < sizeof(g_ps2); i++) p[i] = 0;
     p = (uint8_t*)&g_ser; for (i = 0; i < sizeof(g_ser); i++) p[i] = 0;
+    p = (uint8_t*)&g_vga; for (i = 0; i < sizeof(g_vga); i++) p[i] = 0;
     g_last_owner_check = 0;
 }
 
@@ -39,6 +45,7 @@ void devsvc_set_owner(int dev, int32_t pid) {
     if (pid > 0) g_dev[dev].handed_off = 1U;
     if (dev == DEV_PS2) g_ps2.pending = 0;
     if (dev == DEV_SERIAL) g_ser.inflight = 0;
+    if (dev == DEV_VGA) g_vga.pending = pid > 0 ? 1U : 0U;   /* the new owner paints the current frame */
 }
 
 int32_t devsvc_owner(int dev) { return (dev >= 0 && dev < DEV_COUNT) ? g_dev[dev].owner : 0; }
@@ -47,6 +54,7 @@ void devsvc_owner_gone(int dev) {
     if (dev < 0 || dev >= DEV_COUNT) return;
     g_dev[dev].owner = 0;
     if (dev == DEV_SERIAL) g_ser.inflight = 0;
+    if (dev == DEV_VGA) g_vga.pending = 0;
 }
 
 int devsvc_handed_off(int dev) { return (dev >= 0 && dev < DEV_COUNT) ? (int)g_dev[dev].handed_off : 0; }
@@ -127,6 +135,8 @@ void devsvc_serial_note_rx(uint32_t bytes) { g_ser.rx_bytes += bytes; }
 int devsvc_wants_cpu(int dev, uint32_t now) {
     if (dev < 0 || dev >= DEV_COUNT || g_dev[dev].owner <= 0) return 0;
     if (dev == DEV_PS2) return g_ps2.pending ? 1 : 0;
+    /* frames coalesce: hand over the CPU once one waited 2 ticks */
+    if (dev == DEV_VGA) return g_vga.pending && now - g_vga.pending_since >= 2U;
     if (g_ser.head == g_ser.tail || g_ser.inflight) return 0;
     return devsvc_serial_queued() >= DEVSVC_SERIAL_BATCH || now - g_ser.last_take >= 2U;
 }
@@ -155,12 +165,40 @@ uint32_t devsvc_watchdog(uint32_t now) {
             g_ser.stalls++;
         }
     }
+    if (g_dev[DEV_VGA].owner > 0 && g_vga.pending && now - g_vga.pending_since >= DEVICE_STALL_TICKS) {
+        act |= DEVSVC_W_VGA_REPAINT;    /* frame not taken: Ring 0 paints it */
+        g_vga.stalls++;
+        g_vga.pending = 0;
+    }
     if (now - g_last_owner_check >= 10U) {
         g_last_owner_check = now;
-        if (g_dev[DEV_PS2].owner > 0 || g_dev[DEV_SERIAL].owner > 0) act |= DEVSVC_W_CHECK_OWNERS;
+        if (g_dev[DEV_PS2].owner > 0 || g_dev[DEV_SERIAL].owner > 0 || g_dev[DEV_VGA].owner > 0)
+            act |= DEVSVC_W_CHECK_OWNERS;
     }
     return act;
 }
+
+int devsvc_vga_present(uint32_t now) {
+    g_vga.seq++;
+    if (g_dev[DEV_VGA].owner <= 0) {
+        if (g_dev[DEV_VGA].handed_off) g_vga.ring0_frames++;
+        return DEVSVC_DIRECT;
+    }
+    if (!g_vga.pending) { g_vga.pending = 1U; g_vga.pending_since = now; }
+    return DEVSVC_QUEUED;
+}
+
+int devsvc_vga_pending(void) { return (int)g_vga.pending; }
+
+int devsvc_vga_take(uint32_t now) {
+    (void)now;
+    if (!g_vga.pending || g_dev[DEV_VGA].owner <= 0) return 0;
+    g_vga.pending = 0;
+    g_vga.ring3_frames++;
+    return 1;
+}
+
+void devsvc_vga_note_ring0(void) { g_vga.ring0_frames++; }
 
 void devsvc_status(os_device_status_t* out) {
     if (!out) return;
@@ -180,4 +218,10 @@ void devsvc_status(os_device_status_t* out) {
     out->serial_respawns = g_dev[DEV_SERIAL].respawns;
     out->ps2_handed_off = g_dev[DEV_PS2].handed_off;
     out->serial_handed_off = g_dev[DEV_SERIAL].handed_off;
+    out->vga_owner = g_dev[DEV_VGA].owner;
+    out->vga_handed_off = g_dev[DEV_VGA].handed_off;
+    out->vga_ring3_frames = g_vga.ring3_frames;
+    out->vga_ring0_frames = g_vga.ring0_frames;
+    out->vga_stalls = g_vga.stalls;
+    out->vga_respawns = g_dev[DEV_VGA].respawns;
 }

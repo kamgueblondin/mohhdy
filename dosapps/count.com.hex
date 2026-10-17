@@ -1,0 +1,18 @@
+# count.com: a LOOP prints the digits 0-9 (INT 21h AH=02), a second LOOP
+# sums 1..100 in AX = 5050 = 13BAh, then AH=4C exits with AL = 186.
+B9 0A 00   # 0100 mov cx,10
+B2 30      # 0103 mov dl,'0'
+B4 02      # 0105 mov ah,2
+CD 21      # 0107 int 21h
+FE C2      # 0109 inc dl
+E2 F8      # 010B loop 0105
+B2 0D      # 010D mov dl,0Dh
+CD 21      # 010F int 21h
+B2 0A      # 0111 mov dl,0Ah
+CD 21      # 0113 int 21h
+31 C0      # 0115 xor ax,ax
+B9 64 00   # 0117 mov cx,100
+01 C8      # 011A add ax,cx
+E2 FC      # 011C loop 011A
+B4 4C      # 011E mov ah,4Ch
+CD 21      # 0120 int 21h

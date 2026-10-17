@@ -51,3 +51,8 @@ void io_bitmap_apply_serial(uint8_t* map, uint32_t len, int allow) {
     for (port = IO_BITMAP_COM1_BASE; port <= IO_BITMAP_COM1_LAST; port++)
         io_bitmap_set_port(map, len, (uint16_t)port, allow);
 }
+
+void io_bitmap_apply_vga(uint8_t* map, uint32_t len, int allow) {
+    io_bitmap_set_port(map, len, (uint16_t)IO_BITMAP_VGA_CRTC_INDEX, allow);
+    io_bitmap_set_port(map, len, (uint16_t)IO_BITMAP_VGA_CRTC_DATA, allow);
+}

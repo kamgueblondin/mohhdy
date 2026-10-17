@@ -116,6 +116,12 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_grpcwire.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/grpcwire.c"
     fi
+    if [ "$(basename "$test_file")" = "test_cicd.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/cicd.c $BASE_DIR/userspace/promptmessage.c"
+    fi
+    if [ "$(basename "$test_file")" = "test_dosemu.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/dosemu.c"
+    fi
     if [ "$(basename "$test_file")" = "test_webeng.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/webeng.c"
     fi

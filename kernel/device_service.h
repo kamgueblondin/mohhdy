@@ -12,7 +12,7 @@
 #define DEVICE_INFLIGHT_STALE 50U     /* a taken chunk never completed (driver dead) */
 #define DEVICE_SERIAL_RING 8192U      /* power of two */
 
-enum { DEV_PS2 = 0, DEV_SERIAL = 1, DEV_COUNT = 2 };
+enum { DEV_PS2 = 0, DEV_SERIAL = 1, DEV_VGA = 2, DEV_COUNT = 3 };
 
 /* Serial queue verdicts for devsvc_serial_put. */
 #define DEVSVC_QUEUED 0
@@ -23,6 +23,7 @@ enum { DEV_PS2 = 0, DEV_SERIAL = 1, DEV_COUNT = 2 };
 #define DEVSVC_W_PS2_DRAIN 1U     /* read pending PS/2 bytes from Ring 0 */
 #define DEVSVC_W_SERIAL_FLUSH 2U  /* drain the serial queue from Ring 0 */
 #define DEVSVC_W_CHECK_OWNERS 4U  /* re-check that the owners are alive */
+#define DEVSVC_W_VGA_REPAINT 8U   /* Ring 0 paints the current VGA frame */
 
 void devsvc_reset(void);
 /* Owner management: claim by the live service owner, loss on death. */
@@ -62,6 +63,15 @@ void devsvc_serial_note_rx(uint32_t bytes);
 #define DEVSVC_SERIAL_BATCH 64U
 int devsvc_wants_cpu(int dev, uint32_t now);
 uint32_t devsvc_watchdog(uint32_t now);
+
+/* Lot 7 VGA text console: the kernel renders a frame; with a live owner it
+ * is marked pending for the driver (DEVSVC_QUEUED), otherwise Ring 0 paints
+ * it (DEVSVC_DIRECT, counted once the device was handed off). */
+int devsvc_vga_present(uint32_t now);
+int devsvc_vga_pending(void);
+/* Driver takes the pending frame: 1 when there was one. */
+int devsvc_vga_take(uint32_t now);
+void devsvc_vga_note_ring0(void);
 void devsvc_status(os_device_status_t* out);
 
 #endif

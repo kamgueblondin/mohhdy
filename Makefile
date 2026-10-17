@@ -543,7 +543,7 @@ userspace-all:
 
 pack-initrd: userspace-all
 	@mkdir -p build
-	@paths="userspace promptmessage/examples webpages"; \
+	@paths="userspace promptmessage/examples webpages dosapps"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
 	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && \
 	    [ -z "$$(find $$paths -type f -newer build/.initrd-stamp -print -quit 2>/dev/null)" ]; then \
@@ -561,6 +561,7 @@ pack-initrd-now:
 	@echo "Configuration du systeme MOHHDY v7" > $(INITRD_DIR)/config.cfg
 	@mkdir -p $(INITRD_DIR)/pm && cp -f promptmessage/examples/*.pm $(INITRD_DIR)/pm/
 	@mkdir -p $(INITRD_DIR)/web && cp -f webpages/*.html $(INITRD_DIR)/web/
+	@python3 scripts/com_from_hex.py dosapps $(INITRD_DIR)/dos
 	@echo "#!/bin/sh" > $(INITRD_DIR)/startup.sh
 	@echo "echo 'Script de demarrage MOHHDY v7'" >> $(INITRD_DIR)/startup.sh
 	@echo "Donnees de demonstration pour l'intelligence artificielle locale" > $(INITRD_DIR)/ai_data.txt
@@ -607,6 +608,7 @@ pack-initrd-now:
 	@cp -f userspace/pcirogue $(BIN_DEST_DIR)/pcirogue
 	@cp -f userspace/ps2driver $(BIN_DEST_DIR)/ps2driver
 	@cp -f userspace/serialdriver $(BIN_DEST_DIR)/serialdriver
+	@cp -f userspace/vgadriver $(BIN_DEST_DIR)/vgadriver
 	@cp -f userspace/devrogue $(BIN_DEST_DIR)/devrogue
 	@cp -f userspace/ataclient $(BIN_DEST_DIR)/ataclient
 	@cp -f userspace/atarogue $(BIN_DEST_DIR)/atarogue

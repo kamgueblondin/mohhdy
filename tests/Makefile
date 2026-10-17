@@ -363,6 +363,16 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_grpcwire: $(UNIT_DIR)/userspace/test_grp
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/grpcwire.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_dosemu: $(UNIT_DIR)/userspace/test_dosemu.c ../userspace/dosemu.c ../userspace/dosemu.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/dosemu.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_cicd: $(UNIT_DIR)/userspace/test_cicd.c ../userspace/cicd.c ../userspace/cicd.h ../userspace/promptmessage.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/cicd.c ../userspace/promptmessage.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webrt: $(UNIT_DIR)/userspace/test_webrt.c ../userspace/webrt.c ../userspace/webrt.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/webrt.c $(FRAMEWORK_SOURCES)

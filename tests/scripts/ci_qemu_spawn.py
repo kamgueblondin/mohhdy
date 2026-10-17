@@ -202,6 +202,7 @@ def main():
             boot_tasks += 1 if "[PCI] boot pcidriver spawned" in log_text() else 0
             boot_tasks += 1 if "[PS2] boot ps2driver spawned" in log_text() else 0
             boot_tasks += 1 if "[SERIAL] boot serialdriver spawned" in log_text() else 0
+            boot_tasks += 1 if "[VGA] boot vgadriver spawned" in log_text() else 0
             send_command_until(monitor, "task-capacity", "task-capacity ok %d 16 %d" %
                                (boot_tasks + 1, 16 - boot_tasks - 1), proc)
 

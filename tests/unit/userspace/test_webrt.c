@@ -85,6 +85,27 @@ static void test_sanitizer(void) {
     TEST_ASSERT_EQUAL_STRING("a", out);
 }
 
+/* Lot 7 US-039: page mode keeps <style> but filters what would fetch or run */
+static void test_sanitize_page(void) {
+    int removed = -1;
+    webrt_sanitize_page("<style>@import 'x.css';\np { color: red; background: url(http://x/t.png) }\n"
+                        ".a { width: expression(alert(1)); height: 4px }</style>"
+                        "<p style=\"color:blue\">ok</p><p style=\"background:url(javascript:x)\">bad</p>"
+                        "<script>x()</script><iframe srcdoc=\"<b>\"></iframe><div srcdoc=\"y\">d</div>",
+                        out, sizeof(out), &removed);
+    TEST_ASSERT_EQUAL_STRING("<style>\np { color: red; }\n.a {  height: 4px }</style>"
+                             "<p style=\"color:blue\">ok</p><p>bad</p><div>d</div>", out);
+    TEST_ASSERT_EQUAL(7, removed);
+    /* an @import after leading whitespace is dropped too */
+    webrt_sanitize_page("<style>\n  @import \"e.css\";\nb{color:red}</style>", out, sizeof(out), &removed);
+    TEST_ASSERT_EQUAL_STRING("<style>\n  \nb{color:red}</style>", out);
+    TEST_ASSERT_EQUAL(1, removed);
+    /* the strict mode still drops <style> */
+    webrt_sanitize_html("<style>p{}</style>t", out, sizeof(out), &removed);
+    TEST_ASSERT_EQUAL_STRING("t", out);
+    TEST_ASSERT_EQUAL(1, removed);
+}
+
 /* US-040 */
 static void test_media_queries(void) {
     webrt_viewport_t phone = {360, 640, 0}, desk = {1024, 768, 1};
@@ -162,6 +183,7 @@ int main(void) {
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
     RUN_TEST(test_csp_parse_and_sources);
     RUN_TEST(test_sanitizer);
+    RUN_TEST(test_sanitize_page);
     RUN_TEST(test_media_queries);
     RUN_TEST(test_flatten_media);
     RUN_TEST(test_custom_properties);

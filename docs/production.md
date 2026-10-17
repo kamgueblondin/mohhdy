@@ -62,16 +62,17 @@ four-children limit caps the pool.
 |------|----------|
 | Monitoring | `prod-sample [N] [GAP_TICKS]`, `prod-inject VALUE` (application metric), `prod-metrics`, `prod-perf-monitor` |
 | Alerts | `prod-alert-add NAME METRIC above|below THRESHOLD [FOR]`, `prod-alert-del NAME`, `prod-alerts`, `prod-alert-learn [METRIC] [MARGIN_PCT]` |
-| Predictive maintenance | `prod-predict METRIC LIMIT` |
+| Predictive maintenance | `prod-predict METRIC LIMIT`, `prod-maint-predict` (heuristic) |
 | Log analysis | `prod-log-append PATH TEXT`, `prod-log-analyze PATH` |
 | Backup | `prod-backup NAME DIR`, `prod-backups`, `prod-backup-verify NAME`, `prod-restore NAME`, `prod-backup-corrupt NAME` (test hook) |
 | Deployment | `prod-manifest STAGING TARGET`, `prod-deploy STAGING TARGET`, `prod-rollback` |
 | Scaling | `prod-scale-sim Q1 Q2 ...` |
-| Security | `prod-integrity baseline|check DIR` |
-| Performance | `prod-bench`, `prod-perf-tune` |
+| Security | `prod-integrity baseline|check DIR`, `prod-sec-baseline DIR NAME`, `prod-sec-scan DIR [NAME]` (ELF32 audit, baseline diff, no CVE database) |
+| CI/CD | `prod-cicd SRC.pm TESTS.pm DEST.pmc` (lint, build, test, deploy, verify) |
+| Performance | `prod-bench`, `prod-perf-tune [balanced|throughput|latency]` (measured) |
 | Scaling (real tasks) | `prod-scale-run Q1 Q2 ...`, `prod-scale-status`, `prod-scale-stop` |
 | Persistence | `persist-save`, `persist-load`, `persist-status`, `persist-auto`, `persist-passphrase`, `persist-unlock` |
-| Support | `prod-diag`, `prod-tutorial [N]`, `prod-feedback RATING TEXT|summary`, `prod-usage`, `prod-roadmap` |
+| Support | `prod-diag`, `prod-tutorial [N]`, `prod-feedback RATING TEXT|summary`, `prod-usage`, `prod-roadmap`, `prod-support-bundle [/NAME]`, `prod-biz-metrics` |
 
 Metrics: `mem_used`, `mem_free` (KiB, from `SYS_MEMINFO`), `procs` (`SYS_PS`),
 `busy` (share of scheduler run ticks of all tasks since the previous sample,
@@ -101,18 +102,18 @@ manifest entry checksum and `TARGET/health` == `ok`; on failure restore
 
 | US | Status | Notes |
 |----|--------|-------|
-| US-106 performance | done | measurements, performance auto-tuning evaluation and consolidated performance monitor (`prod-perf-tune`, `prod-perf-monitor`) |
+| US-106 performance | done | `prod-bench`; Lot 7: `prod-perf-tune` measures ALU, copy, syscall and file rates in the guest and chooses the mode from the recorded busy average (or the requested one); QEMU |
 | US-107 monitoring | done | sampled metrics, ring, stats and consolidated performance monitor (`prod-perf-monitor`) |
-| US-108 continuous deployment | done | CI/CD pipeline simulation with lint, build, test, integration and deploy stages (`prod-cicd`, `prod-pipeline`) |
+| US-108 continuous deployment | done (local) | Lot 7: `prod-cicd SRC TESTS DEST` really lints, compiles, runs the `expect` tests, deploys and verifies a PromptMessage program (`cicd.c`); a lint failure deploys nothing; QEMU |
 | US-109 automatic rollback | done | failed health check restores the previous files; QEMU |
 | US-110 autoscaling | done | autoscaling with workload generator, dynamic scale-up/scale-down and task management (`prod-autoscale-workload`) |
 | US-111 backup/recovery | done | checksummed backups, verified restore, corruption refusal; persisted to disk with `persist-save` (#121) |
-| US-112 production security | done | file integrity baseline, CVE checks, privilege escalation auditing and security scanner (`prod-sec-scan`) |
+| US-112 production security | partial | Lot 7: `prod-sec-scan` audits ELF32 program headers (W^X, executable stack, entry in text) and diffs a size+FNV baseline (`prod-sec-baseline`); no CVE database (stated in the output); QEMU |
 | US-113 log analysis | done | levels, patterns, bursts, incident verdict; QEMU |
 | US-114 intelligent alerts | done | thresholds with FOR, dedupe, hysteresis, and dynamic threshold learning (`prod-alert-learn`) |
-| US-115 predictive maintenance | done | failure risk, health score, MTBF estimation (`prod-maint-predict`) |
-| US-116 technical support | done | diagnostic support archive generator (`prod-support-bundle`) |
+| US-115 predictive maintenance | partial (heuristic) | Lot 7: risk from firing alerts plus the free-memory trend to exhaustion (`prod-maint-predict`, labelled heuristic); no learned model |
+| US-116 technical support | done | Lot 7: `prod-support-bundle` writes a plain-text bundle (metrics, alerts, events, usage, feedback) in 384-byte overlay files, reads it back and verifies FNV; QEMU |
 | US-117 user training | done | interactive lessons and step-by-step guidance (`prod-tutorial`) |
 | US-118 continuous feedback | done | ratings and comments with summary; RAM only |
-| US-119 business metrics | done | KPI score, uptime, task counters (`prod-biz-metrics`) |
-| US-120 evolving roadmap | done | live roadmap & phase capability status matrix (`prod-roadmap`) |
+| US-119 business metrics | done (local) | Lot 7: commands per minute, command and distinct counts, uptime, one console session (`prod-biz-metrics`); QEMU |
+| US-120 evolving roadmap | partial | `prod-roadmap` prints a static phase list pointing to the docs, not a live matrix |
