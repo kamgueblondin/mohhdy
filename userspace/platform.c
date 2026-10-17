@@ -123,7 +123,7 @@ int plat_sensor_report(const plat_sensors_t* s, char* out, int cap) {
     s_cat(out, " proximity_cm ", cap); cat_u(out, (uint32_t)s->proximity_cm, cap);
     s_cat(out, " battery_pct ", cap); cat_u(out, (uint32_t)s->battery_pct, cap);
     s_cat(out, s->charging ? " charging yes\n" : " charging no\n", cap);
-    s_cat(out, "sensor ok status active\n", cap);
+    s_cat(out, "sensor ok status simule (no sensor hardware on i386, fixed values)\n", cap);
     return s_len(out);
 }
 int plat_gesture(const plat_point_t* p, int n) {

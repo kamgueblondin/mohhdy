@@ -85,6 +85,8 @@ def main():
             run(mon, proc, "power-profile saver", "power profile saver mode manual idle_yields 8 poll_budget 1", attempts=2)
             run(mon, proc, "power-profile auto", ["power-profile auto busy_percent ", "mode auto"], attempts=2)
             run(mon, proc, "power-status", ["power-status busy_percent ", "battery none", "power profile "], attempts=2)
+            # US-078: no sensor hardware, the registry says so.
+            run(mon, proc, "sensor-read", "sensor ok status simule (no sensor hardware on i386, fixed values)", attempts=2)
             # US-085 devices.
             out = run(mon, proc, "dev-list", ["dev ok count 10 present ", "dev cpu0 class cpu present ",
                                               "dev eth0 class net present ne2000 isa 0x300",

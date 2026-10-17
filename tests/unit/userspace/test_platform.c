@@ -175,7 +175,7 @@ void test_sensors_multi_touch_continuity_and_emul(void) {
     TEST_ASSERT_EQUAL(350, s.light_lux);
     TEST_ASSERT_EQUAL(95, s.battery_pct);
     TEST_ASSERT_GREATER_THAN(0, plat_sensor_report(&s, out, sizeof(out)));
-    TEST_ASSERT_NOT_NULL(strstr(out, "sensor ok status active"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "sensor ok status simule (no sensor hardware on i386, fixed values)"));
 
     /* Multi-touch gestures US-079 */
     TEST_ASSERT_EQUAL(PLAT_G_PINCH_IN, plat_gesture_multi(p1_start, p2_start, 2));
