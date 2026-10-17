@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include "platform.h"
+#include "../include/os_syscalls.h"
 
 #define MUI_MIN_TARGET 48        /* px, touch target floor */
 #define MUI_APPS 8
@@ -50,5 +51,11 @@ int mui_gesture(mui_state_t* s, const mui_layout_t* l, const plat_point_t* p, in
 const char* mui_action_name(int a);
 uint32_t mui_pixel(const mui_layout_t* l, const mui_state_t* s, int x, int y);
 uint32_t mui_frame_hash(const mui_layout_t* l, const mui_state_t* s);
+/* Lot 9 (US-077): display list of the same frame for the OS-UI web pane
+ * (RECT and TEXT items, page coordinates = layout coordinates). Every RECT
+ * covers pixels whose mui_pixel color is the RECT color, so the VBE screen
+ * and the pixel model agree; TEXT items (labels) are drawn on top and are
+ * not part of the pixel model. Returns the item count or -1. */
+int mui_display_list(const mui_layout_t* l, const mui_state_t* s, os_fb_web_item_t* out, int max);
 
 #endif

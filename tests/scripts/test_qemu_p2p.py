@@ -23,7 +23,7 @@ from qemu_shared_ethernet_hub import SharedEthernetHub  # noqa: E402
 
 LOG_DIR = base.LOG_DIR
 NETKEY = "mohhdy-lab-key"
-SECRETS = (b"hello-secret-beta", b"via-relay-msg")
+SECRETS = (b"hello-secret-beta", b"via-relay-msg", b"devsyncnote")
 
 
 def inst(label, mac, name, ip):
@@ -193,6 +193,40 @@ def main():
             raise RuntimeError("wire check failed: sealed=%d hello=%d plaintext=%d"
                                % (hub.p2p_sealed, hub.p2p_hello, hub.p2p_plaintext))
         say("scenario 1 ok: encrypted message, health, stats (%.0fs)" % (time.monotonic() - t0))
+
+        # Lot 9 (US-083): devsync between two guests over the sealed P2P
+        # link. alpha is device A, beta device B; each pulls the other's
+        # delta (version vector request, delta reply answered by the idle
+        # pump), then a concurrent write converges by last-writer-wins.
+        cmd(a, "devsync-set a note devsyncnote", "devsync-set ok A clock 1")
+        cmd(a, "devsync-set a mode eco", "devsync-set ok A clock 2")
+        cmd(b, "devsync-set b color blue", "devsync-set ok B clock 1")
+        start = cmd(b, "devsync-pull b alpha a", "devsync-pull ", timeout=60)
+        if "devsync-pull B from alpha:A ok delta_bytes " not in log(b, start) or " applied 2 " not in log(b, start):
+            raise RuntimeError("beta pull from alpha: %s" % log(b, start)[-600:])
+        start = cmd(a, "devsync-pull a beta b", "devsync-pull ", timeout=60)
+        if "devsync-pull A from beta:B ok" not in log(a, start) or " applied 1 " not in log(a, start):
+            raise RuntimeError("alpha pull from beta: %s" % log(a, start)[-600:])
+        # nothing new: an empty delta
+        start = cmd(a, "devsync-pull a beta b", "devsync-pull ", timeout=60)
+        if " applied 0 " not in log(a, start):
+            raise RuntimeError("alpha second pull not empty: %s" % log(a, start)[-600:])
+        cmd(a, "devsync-set a mode fast", "devsync-set ok A")
+        cmd(b, "devsync-set b mode slow", "devsync-set ok B")
+        cmd(a, "devsync-pull a beta b", "devsync-pull A from beta:B ok", timeout=60)
+        cmd(b, "devsync-pull b alpha a", "devsync-pull B from alpha:A ok", timeout=60)
+        digests = []
+        for node, dev in ((a, "a"), (b, "b")):
+            start = cmd(node, "devsync-show %s" % dev, "devsync-show ")
+            m = re.search(r"devsync-show [AB] live 3 clock \d+ vv [\d,]+ conflicts \d+ digest ([0-9a-f]{8})(.*)", log(node, start))
+            if not m or "note=devsyncnote" not in m.group(2) or "color=blue" not in m.group(2):
+                raise RuntimeError("%s devsync state: %s" % (node["label"], log(node, start)[-600:]))
+            digests.append((m.group(1), "mode=fast" in m.group(2), "mode=slow" in m.group(2)))
+        if digests[0] != digests[1] or digests[0][1] == digests[0][2]:
+            raise RuntimeError("devsync did not converge: %r" % digests)
+        if hub.p2p_plaintext:
+            raise RuntimeError("devsync plaintext seen on the wire")
+        say("scenario 1b ok: devsync A<->B over sealed p2p, digest %s (%.0fs)" % (digests[0][0], time.monotonic() - t0))
 
         # Lot 6 (US-068/073): shaping. With 2 data messages per second
         # allowed, a burst of 6 is queued, not dropped, and drained by the

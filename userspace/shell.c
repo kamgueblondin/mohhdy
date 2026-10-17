@@ -7443,6 +7443,7 @@ void main() {
     g_live_ctx = &shell_ctx;
     osui_gui_set_program_eval(shell_gui_eval);
     osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
+    osui_gui_set_mobile_op(shell_mobile_gui);
     
     // Affichage de bienvenue moderne
     cmd_clear(&shell_ctx, NULL, 0);

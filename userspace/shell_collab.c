@@ -21,7 +21,15 @@ static void c_out(void* ctx, const char* s) { (void)ctx; print_string(s); print_
 static const char* c_name(void* ctx, uint32_t id) { (void)ctx; return p2p_peer_name(shell_p2p_node(), id); }
 static uint32_t c_members(void* ctx) { (void)ctx; return p2p_member_count(shell_p2p_node()); }
 static const collab_host_t g_h = {0, c_send, c_out, c_name, c_members};
-static void on_app(void* ctx, uint32_t from, const uint8_t* d, int len) { (void)ctx; collab_receive(&g_c, &g_h, from, d, len); }
+void shell_devsync_app(uint32_t from, const uint8_t* d, int len);
+/* One application hook for the P2P node: devsync payloads start with 'D'
+ * (Lot 9, US-083), everything else is the collab ledger. */
+void shell_p2p_app(void* ctx, uint32_t from, const uint8_t* d, int len) {
+    (void)ctx;
+    if (len > 0 && d[0] == 'D') { shell_devsync_app(from, d, len); return; }
+    if (g_joined) collab_receive(&g_c, &g_h, from, d, len);
+}
+#define on_app shell_p2p_app
 
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
 static int s_len(const char* s) { int n = 0; while (s[n]) n++; return n; }

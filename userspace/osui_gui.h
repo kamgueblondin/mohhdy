@@ -31,6 +31,14 @@ void osui_gui_ide_output(const char *text);
 int osui_gui_web_load(const char *file, char *status, int max);
 int osui_gui_web_active(void);
 int osui_gui_web_sanitized(void); /* Lot 7 US-039: items removed by the page sanitizer */
+/* Lot 9 (US-077): a display list made elsewhere (the mobile shell) shown
+ * in the web pane of the VBE desktop. "mobile-ui ARGS" typed on the
+ * desktop goes to the hook, which calls osui_gui_show_items; while that
+ * pane is up the desktop keeps the input line so taps can be typed. */
+typedef int (*osui_mobile_op_t)(const char *args, char *out, int out_max);
+void osui_gui_set_mobile_op(osui_mobile_op_t fn);
+int osui_gui_show_items(const char *title, const os_fb_web_item_t *items, int n, int page_w, int page_h);
+int osui_gui_mobile_active(void);
 void osui_gui_term_reset(void);
 int osui_gui_term_count(void);
 void osui_gui_term_at(int i, char *dst, int max);
