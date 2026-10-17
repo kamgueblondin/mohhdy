@@ -67,6 +67,8 @@ Le développement MOHHDY est organisé en 8 phases principales :
 - US-014 : Création du framework de test automatisé
 - US-015 : Développement de la documentation interactive
 
+Etat US-001 (17 octobre 2026, lot 7). Ouvert, plus etroit, decision de non-fermeture documentee. La console texte VGA est peinte par le pilote Ring 3 `bin/vgadriver` (service `vga-driver`) : page texte 0xB8000 mappee en ecriture dans sa seule tache, ports CRTC 0x3D4/0x3D5 dans son bitmap d'E/S TSS, trames prises par `OS_DEV_OP_VGA_TAKE`. Repli Ring 0 honnete : debut du boot (avant la reclamation), apres la mort du pilote jusqu'a la reclamation du pilote relance, blocage de 5 ticks, faute noyau ; trames comptees. Le modele de console (lignes, historique, curseur) reste noyau. Restent Ring 0 : pilote UHCI de la tablette USB (DMA, non deplace), chemin NE2000 de l'image legacy de comparaison. Noyau irreductible assume : PIC, PIT, entrees d'IRQ, peinture du debut de boot, mode panique. Preuve : `make qemu-input-drivers` (etape 8, memoire video relue par `pmemsave`), `test_device_service`, `test_io_bitmap`, `test_vga_console`.
+
 Etat US-001 (17 octobre 2026, lot 6). Ouvert, plus etroit. Souris PS/2 prouvee en QEMU (mouvement relatif et bouton QMP, paquets via `bin/ps2driver`, sommes verifiees dans `devices`). Desynchronisation de Shift a la mort du pilote corrigee : le pilote publie Shift/Caps (evenements `OS_INPUT_EV_MODS`), le noyau les garde a la mort du pilote et le pilote relance repart de cet etat ; QEMU : Shift tenu pendant le `kill` du pilote donne `B`, puis `b` apres relache. Restent Ring 0 : PIC, PIT, VGA texte, sondes de debut de boot. Preuve : `make qemu-input-drivers`, `test_ps2_decode`.
 
 Etat US-001 (17 octobre 2026, lot 5). Ouvert, plus etroit. Le controleur PS/2 (clavier/souris) et COM1 sont pilotes par des pilotes Ring 3 supervises : `bin/ps2driver` (service `ps2-driver`) et `bin/serialdriver` (service `serial-driver`), lies a leurs binaires, lances au boot en priorite HIGH, avec seulement les ports 0x60/0x64 et 0x3F8-0x3FF dans leur bitmap d'E/S TSS apres la reclamation `SYS_DEVICE_SERVICE`. Repli Ring 0 honnete : avant la reclamation (debut du boot), apres la mort d'un pilote jusqu'a la reclamation du pilote relance, pilote bloque (5 ticks), file pleine, et fautes CPU (mode panique). Souris : decodeur prouve par tests unitaires seulement. Preuve : `make qemu-input-drivers`, `test_device_service`, `test_ps2_decode`, `test_io_bitmap`.
@@ -110,6 +112,8 @@ Etat US-001 (15 octobre 2026, lot 2). Ouvert. Les deux images lient `ata_identif
 - US-043 : Développement du gestionnaire de performances web
 - US-044 : Création du système d'accessibilité web
 - US-045 : Implémentation du débogueur web intégré
+
+Etat Phase 3 (17 octobre 2026, lot 7). US-039 : l'assainisseur tourne en tete du pipeline du moteur web (`sanitized N`, page hostile prouvee en QEMU) ; CSP analysee mais sans ressource externe a filtrer : reste partiel. US-038 inchange (origine `simule`). `phase3_complete` reste false.
 
 Etat Phase 3 (17 octobre 2026, lot 6; detail dans `docs/ETAT_REEL.md`). US-031 livre comme moteur web minimal en C guest (`userspace/webeng.c` : analyse HTML, cascade CSS, mise en page bloc/ligne, liste d'affichage peinte dans le volet OS-UI `OS_FB_PANE_WEB`), sans JavaScript, sans images, sans flottants ni flex, police fixe 8x10, fichiers locaux seulement. US-043 livre (minimal) : `web-perf`. US-045 livre (minimal) : `web-dom`, `web-inspect`, `web-console`. US-040, US-041, US-042, US-044 appliques dans le pipeline du moteur (composants, `@media` pour 640x480, `var()`, audit a11y dans `web-console`). US-038 (origine `simule`) et US-039 (assainisseur hors pipeline) restent partiels. `phase3_complete` reste false (pas de chargement reseau dans le moteur, pas de script).
 
@@ -159,6 +163,8 @@ Etat Phase 4 et 5 (17 octobre 2026, lot 6; detail dans `docs/ETAT_REEL.md`). US-
 
 Etat Phase 4 et 5 (17 octobre 2026, lot 5; detail dans `docs/ETAT_REEL.md`). US-055 partiel : `pm-cross` traduit le bytecode PMC1 en un programme C99 (une seule cible), compile et compare par le compilateur hote. US-058 partiel : `pm-assist` a regles, sans modele. US-059/US-060 partiels : liste de revocation locale `/etc/pm_ca.crl` (`pm-ca-revoke`), verification CA a la recuperation du catalogue local. US-067 partiel : appel gRPC unaire encode en trames HTTP/2 (sous-ensemble HPACK, protobuf) dans `userspace/grpcwire.c`, commande `grpc-wire` en memoire, pas de connexion TCP HTTP/2. US-068/US-073, US-070, US-075 inchanges dans ce lot.
 
+Etat Phase 5 (17 octobre 2026, lot 7). US-067 : moteur de connexion HTTP/2 (plusieurs appels par connexion, flux impairs, fenetres de controle de flux connexion et flux, WINDOW_UPDATE, SETTINGS, PING, GOAWAY, RST_STREAM) ; `grpc-calls` enchaine 3 appels sur une connexion TCP avec une fenetre de 16 octets entre deux invites QEMU (`make qemu-grpc-guests`). Reste partiel : h2c en clair, HPACK partiel, pas de TLS.
+
 Etat Phase 5 (17 octobre 2026, lot 4; detail dans `docs/ETAT_REEL.md` et `docs/p2p.md`). US-063 partiel, prouve en QEMU avec deux relais (`make qemu-p2p-mesh`, 4 invites, ligne alpha-beta-gamma-delta). US-069 partiel : crash d'un relais (processus QEMU tue), reroutage, redemarrage sous une nouvelle identite, reprise du slot (`rejoins`) et store repousse, en QEMU. US-074 partiel (n'est plus seulement simule) : vrai codec STUN RFC 5389 (Binding, XOR-MAPPED-ADDRESS, vecteur RFC 5769) dans le lien chiffre, classification `direct` / `endpoint_independent` / `endpoint_dependent` ; QEMU prouve `direct` entre invites ; le NAT reste simule (reecriture d'adresse sur le bus des tests unitaires) et le percage (`p2p-punch`) reste simule. Pas de NAT reel.
 
 Etat Phase 5 (17 octobre 2026, lot 3; detail dans `docs/ETAT_REEL.md` et `docs/p2p.md`). Toujours partiels, plus avances : US-063 vecteur de distances, relais saut par saut jusqu'a 3 sauts (unitaire sur 4 noeuds; QEMU 3 invites = un relais). US-068/US-073 controleur adaptatif (RTT lisse, RTT minimum, coupe d'un quart sur delai, moitie sur perte), prouve en QEMU scenario 3. US-070 cache versionne, barrieres anti-ecriture perimee, invalidation acquittee et re-emise, QEMU scenario 4. US-075 base apprise par EWMA par type (pas de ML), anomalie classee `degraded`. US-069 inchange.
@@ -187,6 +193,8 @@ Etat Phase 5 (15 octobre 2026, lot 2; detail and limits in `docs/p2p.md` and `do
 - US-089 : Développement de l'interface d'administration unifiée
 - US-090 : Création du système de déploiement automatisé
 
+Etat Phase 6 (17 octobre 2026, lot 7; inventaire dans `docs/lot7_inventory.md`). US-086 livre (sous-ensemble 8086) : interpreteur reel de programmes .COM (`legacy-emul`, `dosemu.c`), le stub `ok_simulated` est retire. US-078 marque simule (`sensor-read` le dit). US-081 : profils reels, pas de batterie (`battery none`). Ouverts : US-076, US-077, US-083.
+
 Etat Phase 6 (10 octobre 2026, socle i386 ; detail dans `docs/platform.md`, preuve `make qemu-platform`) :
 - Fait (sur cette plate-forme) : US-087 compatibilite applicative (ELF), US-088 migration de donnees (ramfs, archive verifiee), US-090 deploiement automatise (manifeste local, retour arriere).
 - Partiel : US-076 (socle HAL i386 seulement, aucun portage ARM), US-079 gestes (classifieur, pas de peripherique tactile), US-080 adaptation d'ecran (calcul, OS-UI non re-agence), US-081 energie (profils et choix auto, politique non appliquee, pas de batterie), US-082 notifications (file locale), US-085 peripheriques (registre a partir des sondes existantes), US-089 administration (vue agregee).
@@ -208,6 +216,8 @@ Etat Phase 6 (10 octobre 2026, socle i386 ; detail dans `docs/platform.md`, preu
 - US-103 : Intégration du système de confidentialité avancée
 - US-104 : Développement du système de conformité réglementaire
 - US-105 : Création du système de support communautaire
+
+Etat Phase 7 (17 octobre 2026, lot 7). Contrats sequestre avec arbitre, litiges tranches par l'arbitre ou la majorite des membres non impliques, encheres, plies a l'identique sur les 3 invites (`make qemu-collab`, 33 entrees, meme empreinte). US-094 et US-101 livres ; US-099 partiel (modeles fixes, pas de langage de contrat) ; US-103 partiel (engagement par hachage, pas de preuve a divulgation nulle) ; US-104 partiel (4 controles calcules) ; US-097 partiel (conversion simule, pas de paiement reel).
 
 Etat Phase 7 (10 octobre 2026, PR #119 empilee sur #117 ; detail dans `docs/collab.md`, preuve `make qemu-collab`) :
 - Fait : US-091 points, US-092 ressources partagees, US-095 reputation, US-096 taches distribuees, US-098 audit, US-100 gouvernance, US-102 donnees personnelles, US-105 support.
@@ -231,6 +241,8 @@ Etat Phase 7 (10 octobre 2026, PR #119 empilee sur #117 ; detail dans `docs/coll
 - US-118 : Intégration du système de feedback continu
 - US-119 : Développement du système de métriques business
 - US-120 : Création du système de roadmap évolutive
+
+Etat Phase 8 (17 octobre 2026, lot 7). Sorties figees remplacees par du code invite reel et prouve en QEMU : US-112 partiel (audit ELF32 W^X/pile/entree et ligne de base taille+FNV, pas de base CVE), US-108 livre en local (`prod-cicd` : lint, compilation, tests, deploiement, verification d'un programme PromptMessage), US-106 (`prod-perf-tune` mesure), US-115 partiel (heuristique), US-116 (paquet texte verifie), US-119 (compteurs observes). US-120 partiel (feuille de route statique).
 
 Etat Phase 8 (10 octobre 2026, PR #120 ; detail dans `docs/production.md`, preuve `make qemu-production`) :
 - Fait : US-107 monitoring, US-109 retour arriere automatique, US-111 sauvegarde/restauration (RAM), US-113 analyse de journaux, US-118 retours.

@@ -45,7 +45,24 @@ renamed and marked `simule`, or removed from the claims).
 - US-077 native mobile UI, US-078 real sensors: no mobile hardware.
 - US-097 real decentralized payment: excluded (no money, no chain).
 
-## Plan of this lot
+## Outcome of this lot
 
-See the PR description; each item gets a unit test and, when it runs in the
-guest, a QEMU proof.
+| US | Now | Proof |
+|----|-----|-------|
+| US-078 sensors | output says `simule (no sensor hardware on i386, fixed values)` | `test_platform`, `qemu-platform` |
+| US-081 energy | profiles from measured busy share, `battery none` (the constant battery is not shown) | `qemu-platform` |
+| US-086 legacy emulation | 8086 subset interpreter runs .COM files from `/dos` | `test_dosemu`, `qemu-platform` |
+| US-097 payment | conversion labelled simule; points and escrow are ledger state | `test_collab` |
+| US-099 contracts | escrow entries with arbiter, state machine folded from the ledger (partial: fixed templates) | `test_collab`, `qemu-collab` |
+| US-101 conflicts | dispute freezes escrow, ruling settles it | `test_collab`, `qemu-collab` |
+| US-094 marketplace | auctions: locked best bid, refund, `bid-too-low`, close | `test_collab`, `qemu-collab` |
+| US-103 privacy | hash commitment, wrong value rejected (partial: not zero knowledge) | `test_collab` |
+| US-104 compliance | 4 computed checks (partial) | `test_collab` |
+| US-108 CI/CD | real lint, build, test, deploy, verify of a PromptMessage program | `test_cicd`, `qemu-production` |
+| US-112 security | ELF32 W^X/stack/entry audit and size+FNV baseline (partial: no CVE database) | `test_prod`, `qemu-production` |
+| US-115 maintenance | heuristic: firing alerts plus memory exhaustion trend (partial) | `test_prod`, `qemu-production` |
+| US-119 business metrics | observed counters, one console session | `test_prod`, `qemu-production` |
+| US-106 tuning (also fixed) | measured rates, mode from busy average | `test_prod`, `qemu-production` |
+| US-116 support (also fixed: claimed a tar.gz that did not exist) | plain-text bundle written, read back, FNV verified | `test_prod`, `qemu-production` |
+
+Still open: US-076, US-077, US-083, US-097 (real payment), US-120 (static roadmap text).

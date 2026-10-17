@@ -47,7 +47,11 @@ on first use (TOFU) key binding.
 
 `collab-join`, `collab-pay PEER N`, `collab-pay-convert POINTS CURRENCY`,
 `collab-offer NAME PRICE CAP`, `collab-reserve OWNER SEQ`,
-`collab-escrow-create PAYEE ARBITER AMT`, `collab-escrow-release SEQ`, `collab-escrow-refund SEQ`,
+`collab-escrow-create PAYEE ARBITER|none AMOUNT [NAME]` (alias `collab-contract-create`),
+`collab-escrow-release PAYER SEQ`, `collab-escrow-refund PAYER SEQ`, `collab-contract-exec PAYER SEQ release|refund`,
+`collab-dispute-open PAYER SEQ EVIDENCE`, `collab-dispute-vote PAYER SEQ payer|payee`,
+`collab-auction ITEM RESERVE`, `collab-market-bid SELLER SEQ AMOUNT`, `collab-auction-close SEQ`,
+`collab-market-search`, `collab-market-price`, `collab-privacy-proof`, `collab-compliance`,
 `collab-task REWARD SPEC`, `collab-claim REQ SEQ`,
 `collab-work REQ SEQ`, `collab-review SEQ`, `collab-rate PEER STARS`,
 `collab-propose TEXT`, `collab-vote PROPOSER SEQ yes|no`,
@@ -56,7 +60,8 @@ on first use (TOFU) key binding.
 `collab-ticket-route SEQ HELPER`, `collab-ticket-assign SEQ HELPER`,
 `collab-answer PEER SEQ TEXT`, `collab-sync`, and the views
 `collab-balances`, `collab-audit`, `collab-tasks`, `collab-offers`,
-`collab-votes`, `collab-tickets`.
+`collab-votes`, `collab-tickets`, `collab-escrows`, `collab-auctions`.
+`collab-pay-convert` uses fixed rates: simule, no real money.
 
 ## User stories
 

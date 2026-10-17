@@ -62,16 +62,17 @@ four-children limit caps the pool.
 |------|----------|
 | Monitoring | `prod-sample [N] [GAP_TICKS]`, `prod-inject VALUE` (application metric), `prod-metrics`, `prod-perf-monitor` |
 | Alerts | `prod-alert-add NAME METRIC above|below THRESHOLD [FOR]`, `prod-alert-del NAME`, `prod-alerts`, `prod-alert-learn [METRIC] [MARGIN_PCT]` |
-| Predictive maintenance | `prod-predict METRIC LIMIT` |
+| Predictive maintenance | `prod-predict METRIC LIMIT`, `prod-maint-predict` (heuristic) |
 | Log analysis | `prod-log-append PATH TEXT`, `prod-log-analyze PATH` |
 | Backup | `prod-backup NAME DIR`, `prod-backups`, `prod-backup-verify NAME`, `prod-restore NAME`, `prod-backup-corrupt NAME` (test hook) |
 | Deployment | `prod-manifest STAGING TARGET`, `prod-deploy STAGING TARGET`, `prod-rollback` |
 | Scaling | `prod-scale-sim Q1 Q2 ...` |
-| Security | `prod-integrity baseline|check DIR` |
-| Performance | `prod-bench`, `prod-perf-tune` |
+| Security | `prod-integrity baseline|check DIR`, `prod-sec-baseline DIR NAME`, `prod-sec-scan DIR [NAME]` (ELF32 audit, baseline diff, no CVE database) |
+| CI/CD | `prod-cicd SRC.pm TESTS.pm DEST.pmc` (lint, build, test, deploy, verify) |
+| Performance | `prod-bench`, `prod-perf-tune [balanced|throughput|latency]` (measured) |
 | Scaling (real tasks) | `prod-scale-run Q1 Q2 ...`, `prod-scale-status`, `prod-scale-stop` |
 | Persistence | `persist-save`, `persist-load`, `persist-status`, `persist-auto`, `persist-passphrase`, `persist-unlock` |
-| Support | `prod-diag`, `prod-tutorial [N]`, `prod-feedback RATING TEXT|summary`, `prod-usage`, `prod-roadmap` |
+| Support | `prod-diag`, `prod-tutorial [N]`, `prod-feedback RATING TEXT|summary`, `prod-usage`, `prod-roadmap`, `prod-support-bundle [/NAME]`, `prod-biz-metrics` |
 
 Metrics: `mem_used`, `mem_free` (KiB, from `SYS_MEMINFO`), `procs` (`SYS_PS`),
 `busy` (share of scheduler run ticks of all tasks since the previous sample,
