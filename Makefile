@@ -905,6 +905,11 @@ qemu-ne2k-guest-tls-chat: $(OS_IMAGE) pack-initrd
 qemu-ne2k-guest-tls-server: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_ne2k_guest_tls_server.py
 
+# Lot 6 US-067: gRPC unary call over real guest TCP between two guests.
+.PHONY: qemu-grpc-guests
+qemu-grpc-guests: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_grpc_guests.py
+
 # Chat metier chiffre sur la session TLS guest-guest (hors ci).
 qemu-ne2k-guest-tls-metier: $(OS_IMAGE) pack-initrd
 	@METIER=1 python3 tests/scripts/test_qemu_ne2k_guest_tls_server.py
