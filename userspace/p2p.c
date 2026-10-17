@@ -1,5 +1,6 @@
 /* userspace/p2p.c - Phase 5 P2P node. See p2p.h and docs/p2p.md. */
 #include "p2p.h"
+#include "stun.h"
 #include "../kernel/sha256.h"
 #include "../kernel/aes_gcm.h"
 #include "../kernel/x25519.h"
@@ -1136,23 +1137,39 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         break;
     }
     case P2P_I_STUN_REQ: {
-        uint16_t map_port = (uint16_t)(7700U + (p->id & 0xFFU));
-        mcopy(b, p->ip, 4);
-        b[4] = (uint8_t)(map_port >> 8); b[5] = (uint8_t)(map_port & 0xFFU);
-        b[6] = 1; /* 1: FullCone */
-        (void)seal_send(n, h, p, P2P_I_STUN_RESP, b, 7);
+        /* STUN server side: answer a real Binding request with the source
+         * address the datagram arrived from (XOR-MAPPED-ADDRESS). The
+         * datagram API exposes no UDP source port; P2P_PORT is used. */
+        uint16_t type;
+        uint8_t txid[12];
+        int rl;
+        if (stun_parse_header(m, len, &type, txid) != 0 || type != STUN_BINDING_REQUEST) { n->nat.stun_bad++; break; }
+        rl = stun_build_binding_success(b, 64, txid, n->last_src_ip, (uint16_t)P2P_PORT);
+        if (rl > 0) (void)seal_send(n, h, p, P2P_I_STUN_RESP, b, rl);
         break;
     }
     case P2P_I_STUN_RESP: {
-        if (len < 7) break;
-        mcopy(n->nat.mapped_ip, m, 4);
-        n->nat.mapped_port = ((uint16_t)m[4] << 8) | m[5];
-        n->nat.nat_type = m[6];
+        uint8_t mip[4];
+        uint16_t mport;
+        int slot, kind;
+        for (slot = 0; slot < 2; slot++) if (n->nat.srv[slot].pending && n->nat.srv[slot].server == p->id) break;
+        if (slot == 2 || stun_parse_mapped(m, len, n->nat.srv[slot].txid, mip, &mport) != 0) { n->nat.stun_bad++; break; }
+        n->nat.srv[slot].pending = 0; n->nat.srv[slot].valid = 1;
+        mcopy(n->nat.srv[slot].ip, mip, 4); n->nat.srv[slot].port = mport;
+        mcopy(n->nat.mapped_ip, mip, 4); n->nat.mapped_port = mport;
+        {
+            int other = slot ^ 1, two = n->nat.srv[other].valid;
+            kind = stun_nat_classify(n->ip, (uint16_t)P2P_PORT, mip, mport, two,
+                                     n->nat.srv[other].ip, n->nat.srv[other].port);
+        }
+        n->nat.nat_type = (uint8_t)kind;
         s_cat(line, "p2p stun mapped_ip ", 200);
-        cat_u(line, m[0], 200); s_cat(line, ".", 200); cat_u(line, m[1], 200); s_cat(line, ".", 200);
-        cat_u(line, m[2], 200); s_cat(line, ".", 200); cat_u(line, m[3], 200);
-        s_cat(line, " port ", 200); cat_u(line, n->nat.mapped_port, 200);
-        s_cat(line, " nat_type full_cone", 200);
+        cat_u(line, mip[0], 200); s_cat(line, ".", 200); cat_u(line, mip[1], 200); s_cat(line, ".", 200);
+        cat_u(line, mip[2], 200); s_cat(line, ".", 200); cat_u(line, mip[3], 200);
+        s_cat(line, " port ", 200); cat_u(line, mport, 200);
+        s_cat(line, " from ", 200); s_cat(line, p->name, 200);
+        s_cat(line, " nat_type ", 200); s_cat(line, stun_nat_name(kind), 200);
+        s_cat(line, " servers ", 200); cat_u(line, (uint32_t)(n->nat.srv[0].valid + n->nat.srv[1].valid), 200);
         say(h, line);
         break;
     }
@@ -1359,6 +1376,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
     while (budget-- > 0 && h && h->recv) {
         got = h->recv(h->ctx, ip, mac, b, (uint16_t)sizeof(b));
         if (got <= 0) { queued = 0; break; }
+        mcopy(n->last_src_ip, ip, 4);
         on_datagram(n, h, b, got, mac);
         queued = 1;
     }
@@ -1371,6 +1389,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
         while (extra-- > 0) {
             got = h->recv(h->ctx, ip, mac, b, (uint16_t)sizeof(b));
             if (got <= 0) { queued = 0; break; }
+            mcopy(n->last_src_ip, ip, 4);
             on_datagram(n, h, b, got, mac);
         }
     }
@@ -1629,12 +1648,26 @@ int p2p_grpc_call(p2p_node_t* n, const p2p_host_t* h, const char* peer, const ch
 }
 
 int p2p_stun_probe(p2p_node_t* n, const p2p_host_t* h, const char* stun_server_peer) {
-    uint8_t b[8];
+    uint8_t b[STUN_HEADER];
     p2p_peer_t* p = p2p_find(n, stun_server_peer);
     if (!n || !n->up || !p) return -1;
-    n->nat.stun_probes++;
-    b[0] = 1;
-    return seal_send(n, h, p, P2P_I_STUN_REQ, b, 1);
+    {
+        int slot, rl;
+        uint32_t t = now(h);
+        for (slot = 0; slot < 2; slot++) if (n->nat.srv[slot].server == p->id) break;
+        if (slot == 2) slot = !n->nat.srv[0].server ? 0 : !n->nat.srv[1].server ? 1 : (int)(n->nat.stun_probes & 1U);
+        n->nat.stun_probes++;
+        n->nat.srv[slot].server = p->id;
+        /* Transaction id: node id, server id, probe count and clock. */
+        put32(n->nat.srv[slot].txid, n->id ^ t);
+        put32(n->nat.srv[slot].txid + 4, p->id);
+        put32(n->nat.srv[slot].txid + 8, n->nat.stun_probes * 2654435761U);
+        n->nat.srv[slot].pending = 1;
+        n->nat.srv[slot].valid = 0;
+        rl = stun_build_binding_request(b, (int)sizeof(b), n->nat.srv[slot].txid);
+        if (rl <= 0) return -1;
+        return seal_send(n, h, p, P2P_I_STUN_REQ, b, rl);
+    }
 }
 
 int p2p_nat_punch(p2p_node_t* n, const p2p_host_t* h, const char* peer) {
@@ -2070,13 +2103,14 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, "p2p route ok\n", cap);
     } else if (s_eq(what, "nat") || s_eq(what, "stun")) {
         s_cat(out, "p2p nat type ", cap);
-        s_cat(out, n->nat.nat_type == 1 ? "full_cone" : n->nat.nat_type == 2 ? "restricted_cone" : n->nat.nat_type == 3 ? "symmetric" : "direct", cap);
+        s_cat(out, n->nat.srv[0].valid || n->nat.srv[1].valid ? stun_nat_name(n->nat.nat_type) : "unprobed", cap);
         s_cat(out, " mapped_ip ", cap);
         cat_u(out, n->nat.mapped_ip[0], cap); s_cat(out, ".", cap); cat_u(out, n->nat.mapped_ip[1], cap); s_cat(out, ".", cap);
         cat_u(out, n->nat.mapped_ip[2], cap); s_cat(out, ".", cap); cat_u(out, n->nat.mapped_ip[3], cap);
         s_cat(out, " port ", cap); cat_u(out, n->nat.mapped_port, cap);
         s_cat(out, " probes ", cap); cat_u(out, n->nat.stun_probes, cap);
         s_cat(out, " punches ", cap); cat_u(out, n->nat.nat_punches, cap);
+        s_cat(out, " bad ", cap); cat_u(out, n->nat.stun_bad, cap);
         s_cat(out, "\n", cap);
     }
     return s_len(out);

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Phase 5 P2P on four QEMU guests (US-063 multi-hop, US-069 crash/rejoin).
 
-Same shared Ethernet hub as qemu-p2p, one more guest (delta). The hub
+Same shared Ethernet hub as qemu-p2p, one more guest (delta). First a
+real STUN Binding exchange (US-074) from delta to two guests. The hub
 imposes the topology by dropping frames between guest MACs (wire cuts):
   1. line alpha - beta - gamma - delta: alpha reaches delta through two
      relays (beta forwards to a further relay, gamma delivers);
@@ -55,6 +56,19 @@ def stat(node, name):
     return int(match.group(1))
 
 
+def wait_route(node, dest, via, timeout=90):
+    """Poll p2p-route until the distance vector converged on dest via via."""
+    want = "p2p route dest %s via %s cost " % (dest, via)
+    deadline = time.monotonic() + timeout
+    while True:
+        start = p3.cmd(node, "p2p-route", "p2p route ok")
+        if want in p3.log(node, start):
+            return
+        if time.monotonic() > deadline:
+            raise RuntimeError("%s: no route %r: %s" % (node["label"], want, p3.log(node, start)[-400:]))
+        time.sleep(3)
+
+
 def boot(node, hub, alive):
     base.wait_for(node["proc"], node["log"], "[0m : ", base.BOOT_TIMEOUT)
     node["client"] = base.monitor_connect(node["mon"])
@@ -102,6 +116,15 @@ def main():
                     p3.wait_log(node, "p2p peer %s up id " % other["name"], 180)
         say("4 guests discovered and keyed (%.0fs)" % (time.monotonic() - t0))
 
+        # 0. Real STUN Binding (US-074) between guests: delta asks gamma and
+        # beta for its mapped address; the servers read the IPv4 source of
+        # the received frame. Shared segment, no NAT: "direct".
+        p3.cmd(d, "p2p-stun gamma", "p2p-stun ok probe sent to gamma")
+        p3.wait_log(d, "p2p stun mapped_ip 10.77.0.4 port 7700 from gamma nat_type direct servers 1", 60)
+        p3.cmd(d, "p2p-stun beta", "p2p-stun ok probe sent to beta")
+        p3.wait_log(d, "p2p stun mapped_ip 10.77.0.4 port 7700 from beta nat_type direct servers 2", 60)
+        say("scenario 0 ok: STUN binding from two guests, nat_type direct (%.0fs)" % (time.monotonic() - t0))
+
         # 1. Line topology: two relays between alpha and delta (US-063).
         mark = {n["label"]: len(base.log_text(n["log"])) for n in NODES}
         hub.cut_pair(a["mac"], c["mac"])
@@ -110,6 +133,8 @@ def main():
         p3.wait_log(a, "p2p peer delta down", 90, mark["a"])
         p3.wait_log(a, "p2p peer gamma down", 90, mark["a"])
         p3.wait_log(b, "p2p peer delta down", 90, mark["b"])
+        wait_route(b, "delta", "gamma")
+        wait_route(a, "delta", "beta")
         p3.cmd(a, "p2p-send delta two-relays-msg", "p2p-send ok to delta")
         p3.wait_log(d, "p2p msg from alpha: two-relays-msg (relayed)", 60)
         multi = stat(b, "relayed_multi")
