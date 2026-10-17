@@ -38,7 +38,7 @@ def main():
         raise RuntimeError("missing %s (make arm-kernel)" % IMAGE)
     with open(LOG, "wb") as out:
         proc = subprocess.Popen(["qemu-system-arm", "-M", "virt", "-cpu", "cortex-a15", "-m", "256M",
-                                 "-nographic", "-monitor", "none", "-serial", "stdio",
+                                 "-nographic", "-nic", "none", "-monitor", "none", "-serial", "stdio",
                                  "-kernel", IMAGE], stdout=out, stderr=subprocess.STDOUT,
                                 stdin=subprocess.DEVNULL)
     try:
