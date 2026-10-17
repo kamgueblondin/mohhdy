@@ -1422,9 +1422,11 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
         for (i = 0; i < P2P_PEERS; i++) {
             p2p_peer_t* p = &n->peers[i];
             if (!p->used || !p->up || !p->keyed) continue;
-            if (p->ping_wait) { n->qos.ping_losses++; p2p_qos_note_loss(n); }
+            /* One loss event per outage: the first unanswered PING halves
+             * the window, later ones on the same silent peer do not. */
+            if (p->ping_wait == 1U) { n->qos.ping_losses++; p2p_qos_note_loss(n); p->ping_wait = 2U; }
             put32(b, t); p->ping_sent_at = t;
-            p->ping_wait = seal_send(n, h, p, P2P_I_PING, b, 4) == 0 ? 1 : 0;
+            if (seal_send(n, h, p, P2P_I_PING, b, 4) == 0 && !p->ping_wait) p->ping_wait = 1U;
         }
     }
     for (i = 0; i < P2P_PEERS; i++) {

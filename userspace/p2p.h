@@ -62,7 +62,7 @@ typedef struct {
     uint8_t iv[4];
     uint32_t tx_counter, rx_counter, rx_window;
     uint32_t last_seen, ping_sent_at, rtt_ticks;
-    uint8_t ping_wait;     /* a PING is outstanding (no PONG yet) */
+    uint8_t ping_wait;     /* 0 none, 1 PING outstanding, 2 outstanding and loss counted */
     uint32_t sync_at;      /* last SYNC_REQ sent by p2p_sync */
     uint8_t sync_retries;  /* re-sends left until SYNC_ITEMS arrives */
     uint32_t via;            /* 0: direct, else id of the relay node */

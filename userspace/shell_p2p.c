@@ -190,6 +190,7 @@ int shell_p2p_line(const char* line) {
     if (s_eq(cmd, "p2p-health")) { report("health"); return 0; }
     if (s_eq(cmd, "p2p-stats")) { report("stats"); return 0; }
     if (s_eq(cmd, "p2p-analyze")) { report("analyze"); return 0; }
+    if (s_eq(cmd, "p2p-qos")) { report("qos"); return 0; }
     if (s_eq(cmd, "p2p-kv")) { report("kv"); return 0; }
     if (s_eq(cmd, "p2p-raft-compact")) {
         rc = p2p_raft_compact(&g_node);
@@ -225,6 +226,25 @@ int shell_p2p_line(const char* line) {
             if (it) { print_string("p2p-cache ok "); print_string(b); print_string("="); print_string(it->value); print_string("\n"); }
             else { print_string("p2p-cache miss "); print_string(b); print_string("\n"); }
             return 0;
+        }
+        if (s_eq(a, "inv")) {
+            /* Versioned, acked invalidation (US-070). */
+            char ver[12];
+            (void)word(rest, ver, (int)sizeof(ver));
+            rc = ver[0] ? p2p_cache_invalidate_v(&g_node, &g_host, b, (uint32_t)to_int(ver))
+                        : p2p_cache_invalidate(&g_node, &g_host, b);
+            if (rc < 0) { print_string("p2p-cache error usage: inv KEY [VERSION]\n"); return 1; }
+            say_rc("p2p-cache inv sent peers ", rc);
+            return 0;
+        }
+        if (s_eq(a, "putv")) {
+            char val[P2P_VAL_MAX], ver[12];
+            const char* r2 = word(rest, val, (int)sizeof(val));
+            (void)word(r2, ver, (int)sizeof(ver));
+            rc = p2p_cache_put_v(&g_node, b, val, (uint32_t)to_int(ver), 6000U, ticks());
+            if (rc == -2) { print_string("p2p-cache stale refused "); print_string(b); print_string("\n"); return 0; }
+            print_string(rc == 0 ? "p2p-cache putv ok " : "p2p-cache error "); print_string(b); print_string("\n");
+            return rc == 0 ? 0 : 1;
         }
         if (s_eq(a, "put")) {
             char val[P2P_VAL_MAX];
