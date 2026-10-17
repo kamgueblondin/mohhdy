@@ -10,6 +10,34 @@
 
 ## État courant vérifié
 
+## Etat courant du 17 octobre 2026 (lot 6)
+
+Living baseline. Branched from `ca04007` (merge of pull request #154), branch `cursor/lot6-geant`, pull request #155. The lot 5 section below keeps its own counter (830/830).
+
+```text
+make test-all : 848/848 passed, 0 failed, 0 skipped
+```
+
+New unit files: `test_key_seal` (5), `test_webeng` (7); new cases in `test_gfx_desktop` (web pane), `test_osui_gui` (web pane, page pipeline), `test_p2p` (shaping, per-peer anomaly, Raft cache), `test_grpcwire` (connection-level stream), `test_ps2_decode` (MODS events, mouse).
+
+- US-001 (still open, narrower): the PS/2 mouse is proven in QEMU, not only by unit tests. `make qemu-input-drivers` sends QMP relative motion and a button: the packets go through `bin/ps2driver` (aux port), the kernel sums them (`devices` prints `mouse packets N dx X dy Y buttons B mods M`), motion is checked (+20, -10) and the button release. Shift desync on driver death fixed: the driver reports Shift/Caps in `OS_INPUT_EV_MODS` events, the kernel keeps them across a driver death (`keyboard_driver_lost` drops only a half read E0 sequence or mouse packet) and the respawned driver seeds its decoder from the kernel state. QEMU: Shift is held (QMP key down) while `kill` of the driver runs, the respawned driver gives `B`, after the release `b`. Remaining Ring 0: PIC, PIT, VGA text, early boot probes.
+- Phase 3, US-031 delivered as a minimal web engine in guest C (`userspace/webeng.c`, no libc, no Chromium/WebKit, no JavaScript):
+  - HTML tokenizer and tree builder (void elements, implied closes, entities, comments, `<script>` and `on*` ignored and counted), CSS parser (type, class, id, descendant and child selectors, specificity, inline `style`, `!important`), cascade with inheritance, block and inline layout (8 px characters, 10 px lines, margins, padding, borders, width/height, word wrap, `display:none`), display list of rectangles and text runs.
+  - OS-UI: `web FILE` in the `gui` desktop paints the display list in the new pane `OS_FB_PANE_WEB` (scene version 4, `kernel/gfx_desktop.c`); arrows scroll, ESC closes. Text console: `web-render`, `web-dom`, `web-inspect FILE ID`, `web-console`, `web-perf FILE [N]`. Pages in initrd `/web/` (`demo.html`, `theme.html`).
+  - Limits: fixed 8x10 bitmap font, no images (the `alt` text is drawn), no floats, no flex/grid, no margin collapse, no position, no JavaScript, local files only (no fetch in the engine).
+  - US-043 delivered (minimal): `web-perf` times parse, style and layout over N runs (PIT ticks), prints ms per render and a 100 ms budget verdict, with node, rule, declaration, box and item counts.
+  - US-045 delivered (minimal): `web-dom` (tree), `web-inspect` (computed style and box of an element by id), `web-console` (engine diagnostics: unknown properties, skipped scripts, dropped nodes, plus the accessibility audit).
+  - US-040, US-041, US-042, US-044 now run inside the engine pipeline (they were standalone commands in lot 5): `<template>`/`<slot>` expanded, `@media` flattened for the 640x480 viewport, `var()` resolved, then parse, style, layout. The status line prints `components C media_kept K media_dropped D vars V`; `web-console` prints `a11y issues`. US-038 (cache, origin `simule`) and US-039 (CSP, sanitizer; the engine ignores scripts and `on*` but does not run the sanitizer) stay partial.
+  - `phase3_complete` stays false (no network fetch in the engine, no script).
+  Proof: `test_webeng`, `test_gfx_desktop`, `test_osui_gui`, `make qemu-osui-gui` (text commands plus a screendump pixel check of a 208x48 box, and the `theme.html` pipeline counters).
+- Phase 4, US-059/US-060: the CA private key is no longer stored in clear. `SYS_KEY_SEAL` (159, `kernel/key_seal.c`) seals it with AES-128-GCM under a kernel key; the additional data binds the blob to the caller task name, so another task (`bin/devrogue`) is refused (`-191`). `pm-ca-init` writes `pmca2 sealed=HEX`, `pm-ca-sign` unseals in the kernel and refuses an old clear `pmca1 key=` record, `pm-ca-seal` prints the counters. Simule: the seal key is derived per boot from rdtsc/PIT entropy (no TPM, no persistent hardware key), so a sealed key does not survive a reboot (`pm-ca-init` again). The strict image now links `sha256.o` and `aes_gcm.o`. Still a local CA and a local catalogue (not a public authority, not a network marketplace): both stay partial. Proof: `test_key_seal`, `make qemu-promptmessage`.
+- Phase 5:
+  - US-067: one gRPC unary call over a real TCP connection between two guests. `grpc-serve PORT [N] [SECONDS]` (guest B, plain TCP listening slots of its Ring 3 networker) and `grpc-call LOCAL_IP REMOTE_IP PORT SERVICE METHOD [PAYLOAD]` (guest A, `SYS_SOCKET_CONNECT`/`SEND`/`RECEIVE` relayed to its networker). The client writes the HTTP/2 preface, SETTINGS, HEADERS and DATA; the server answers SETTINGS, SETTINGS ACK, HEADERS, DATA and trailers (`grpcwire.c` connection helpers). The web table now ACKs client data at once (RFC 1122), so a request split in relay-sized segments (72 bytes) is not stuck. Limits: cleartext h2c with prior knowledge, one call per connection, stream 1 only, no flow control, no PING/GOAWAY, HPACK subset, no TLS. Proof: `test_grpcwire`, `make qemu-grpc-guests` (two QEMU guests on the shared hub, the hub never answers TCP; it counts the guest SYN/SYN-ACK, the preface and the HEADERS back; one OK call and one UNIMPLEMENTED call; CI p2p-mesh job).
+  - US-068/US-073: messages over budget are queued (shaping queue of 8) instead of dropped, sent when the window allows; measured byte rates (EWMA) next to the window. `p2p-send` prints `queued ... (shaped)`, `p2p-burst PEER N`, `p2p-qos` adds `meas_tx_bps meas_rx_bps queued shaped_sent shaped_dropped`. QEMU scenario 1b: a burst of 6 under a limit of 2/s is shaped and all 6 arrive.
+  - US-070: cache lines through the Raft log (`p2p-cache raft KEY VAL`): the line is applied on commit with version = log index and a fence, so all replicas agree. QEMU scenario 2b.
+  - US-075: per-peer learned baseline, so an anomaly names its source; a reply burst the node asked for (sync, snapshot catch-up) is skipped and counted. QEMU scenario 1c: `p2p-flood` (a sender that ignores its own QoS controller, proof tool only) from gamma is attributed to gamma by beta. Still statistical (EWMA, thresholds), no machine learning.
+  - These three stay partial in the US list sense (lab network of 3 to 4 guests, no real WAN), but each capability above has a unit test and a QEMU proof.
+
 ## Etat courant du 17 octobre 2026 (lot 5)
 
 Living baseline. Branched from `c4fb0c8` (merge of pull request #153), branch `cursor/lot5-geant`, pull request #154. The lot 4 section below keeps its own counter (802/802).
