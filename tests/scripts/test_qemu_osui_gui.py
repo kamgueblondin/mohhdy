@@ -377,7 +377,7 @@ def send_command_until(client, command, marker, proc, mode="gets", wait_prompt=T
             wait_for(proc, marker, CMD_TIMEOUT, start)
             if wait_prompt:
                 wait_for(proc, "[0m : ", CMD_TIMEOUT, start)
-            return
+            return start
         if mode == "gets" and "SYS_GETS: ligne lue: " in output:
             raise CommandEchoMismatch("command echo altered: %s" % command)
         time.sleep(0.1)
