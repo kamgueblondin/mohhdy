@@ -3014,7 +3014,8 @@ static void cmd_web(shell_context_t* ctx, const char* command, char args[][128],
         print_string("web-console ok diag "); print_int((int)d->ndiag);
         print_string(" dropped "); print_int((int)d->diag_dropped);
         print_string(" unknown_props "); print_int((int)d->perf.unknown_props);
-        print_string(" scripts_skipped "); print_int((int)d->perf.scripts_skipped); print_string("\n");
+        print_string(" scripts_skipped "); print_int((int)d->perf.scripts_skipped);
+        print_string(" sanitized "); print_int(osui_gui_web_sanitized()); print_string("\n");
         {   /* US-044: accessibility audit of the same source */
             static char src[OSUI_WEB_SRC_MAX];
             webrt_a11y_t a;

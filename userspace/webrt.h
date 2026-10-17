@@ -58,6 +58,10 @@ int webrt_url_origin(const char* url, char* out, int max);
  * attributes and javascript: URLs. Returns the output length, *removed the
  * number of things removed. */
 int webrt_sanitize_html(const char* in, char* out, int max, int* removed);
+/* Lot 7 (US-039): same filter but <style> is kept, its CSS filtered
+ * (@import, url(), javascript:, expression(), behavior dropped), and unsafe
+ * inline style attributes removed. Used by the guest web engine pipeline. */
+int webrt_sanitize_page(const char* in, char* out, int max, int* removed);
 
 /* ---- US-040 responsive / US-041 themes ---- */
 typedef struct {

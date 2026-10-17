@@ -88,11 +88,19 @@ static void web_num(char *d, int max, const char *label, int v) {
  * cascade. Counters are kept for the status line. */
 static int g_web_components, g_web_media_kept, g_web_media_dropped, g_web_vars, g_web_vars_unresolved;
 static char g_web_tmp[OSUI_WEB_SRC_MAX];
+static char g_web_san[OSUI_WEB_SRC_MAX];
+static int g_web_sanitized;
 static int osui_web_pipeline(const char *src, int n) {
     int defined = 0, expanded = 0, kept = 0, dropped = 0, vdef = 0, unres = 0, m, rc, k;
     webrt_viewport_t vp;
     static char css1[WE_CSS_MAX], css2[WE_CSS_MAX];
     g_web_components = g_web_media_kept = g_web_media_dropped = g_web_vars = g_web_vars_unresolved = 0;
+    g_web_sanitized = 0;
+    /* Lot 7 (US-039): sanitizer first (script, iframe, object, embed, on*,
+     * javascript: URLs, unsafe CSS), then the rest of the pipeline. */
+    m = webrt_sanitize_page(src, g_web_san, OSUI_WEB_SRC_MAX, &g_web_sanitized);
+    if (m < 0 || m >= OSUI_WEB_SRC_MAX) return -1;
+    g_web_san[m] = 0; src = g_web_san; n = m;
     m = webrt_components_expand(src, g_web_tmp, OSUI_WEB_SRC_MAX, &defined, &expanded);
     if (m > 0 && expanded > 0) { src = g_web_tmp; n = m; g_web_components = expanded; }
     rc = we_parse(&g_web, src, n);
@@ -118,6 +126,7 @@ static int osui_web_pipeline(const char *src, int n) {
 
 we_doc_t *osui_gui_web_doc(void) { return &g_web; }
 int osui_gui_web_active(void) { return g_web_active; }
+int osui_gui_web_sanitized(void) { return g_web_sanitized; }
 
 int osui_gui_web_load(const char *file, char *status, int max) {
     int n = -1, rc;
@@ -142,6 +151,7 @@ int osui_gui_web_load(const char *file, char *status, int max) {
         web_num(status, max, " media_kept ", g_web_media_kept);
         web_num(status, max, " media_dropped ", g_web_media_dropped);
         web_num(status, max, " vars ", g_web_vars);
+        web_num(status, max, " sanitized ", g_web_sanitized);
     }
     return rc;
 }

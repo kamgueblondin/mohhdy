@@ -30,6 +30,7 @@ void osui_gui_ide_output(const char *text);
 #define OSUI_WEB_VIEWPORT 640
 int osui_gui_web_load(const char *file, char *status, int max);
 int osui_gui_web_active(void);
+int osui_gui_web_sanitized(void); /* Lot 7 US-039: items removed by the page sanitizer */
 void osui_gui_term_reset(void);
 int osui_gui_term_count(void);
 void osui_gui_term_at(int i, char *dst, int max);
