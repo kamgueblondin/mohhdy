@@ -37,6 +37,7 @@ Elle confirme visuellement :
 ## 3. Descriptif des Prochaines Tranches d'Implémentation (Priorités 1 à 3)
 
 ### Etape 1 : Tranche 4, ce qui reste Ring 0
+- Lot 5 part de `c4fb0c8` (merge #153), PR #154. `make test-all` : 830/830. US-001 : PS/2 et COM1 dans des pilotes Ring 3 supervises (repli Ring 0 honnete au boot, a la mort et au blocage d'un pilote, et en panique), `make qemu-input-drivers`. Phase 3 partiels US-038 a US-042 et US-044 (`userspace/webrt.c`, commandes `web-*`). Phase 4 : `pm-cross` (C99), `pm-assist` (regles), revocation CA locale. Phase 5 : `grpc-wire` (trames HTTP/2 et HPACK en memoire, US-067 partiel).
 - Lot 4 part de `0254a81` (merge #152), PR #153. `make test-all` : 801/801. Reprise sur perte TCP/TLS du client guest (doublons, segments futurs, retransmission du ClientHello et du vol Finished avec recul), prouvee par `make qemu-net-loss-recovery` (pertes et doublon de trames voulus).
 - US-001 reste ouvert : enumeration PCI en worker Ring 3 `bin/pcidriver` supervise (relance paresseuse, budget 4), lectures de config Ring 0 fermees apres la remise. Restent Ring 0 : sondes de debut de boot, PIC, PIT, PS/2, VGA texte, serie.
 - Phase 5 : US-063 deux relais et US-069 crash/rejoin prouves en QEMU (`make qemu-p2p-mesh`, 4 invites), US-074 vrai codec STUN sur NAT simule. Phase 4 : US-050 coloration, completion, volet de sortie.
