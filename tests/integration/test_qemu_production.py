@@ -9,6 +9,7 @@ autoscaling decisions, performance measurements, diagnostics, tutorial,
 feedback, usage metrics. No network service is used.
 """
 import os
+import re
 import subprocess
 import sys
 import time
@@ -158,12 +159,67 @@ def main():
                                           "prod-bench file512 rw_per_s ", "prod-bench ok checksum "], timeout=60)
             # US-116..US-120 support, training, feedback, usage, roadmap.
             run(mon, proc, "prod-diag", ["prod-diag uptime_ticks ", "prod-diag net_status ", "prod-diag ok"], attempts=2)
+            # US-112 (Lot 7): real scanner, ELF32 program headers of /bin
+            # (W^X, stack, entry) and a baseline integrity diff.
+            run(mon, proc, "prod-sec-baseline /bin /secbin", "prod-sec-baseline ok files ", attempts=2, timeout=60)
+            out = run(mon, proc, "prod-sec-scan /bin /secbin", "sec-scan files ", attempts=2, timeout=60)
+            m = re.search(r"sec-scan files (\d+) elf (\d+) wx_segments 0 exec_stack 0 bad_entry 0 changed 0 "
+                          r"added 0 missing 0 risk_score 0 status clean \(no CVE database\)", out)
+            if not m or int(m.group(1)) < 20 or m.group(1) != m.group(2):
+                raise RuntimeError("prod-sec-scan /bin: %s" % out[-800:])
+            run(mon, proc, "prod-sec-baseline /app /secapp", "prod-sec-baseline ok files 2", attempts=2)
+            run(mon, proc, "write /app/health tampered", "[0m : ")
+            run(mon, proc, "prod-sec-scan /app /secapp", ["sec-scan finding /app/health changed",
+                "sec-scan files 2 elf 0 wx_segments 0 exec_stack 0 bad_entry 0 changed 1 added 0 missing 0 risk_score 25 status findings"],
+                attempts=2)
+            run(mon, proc, "write /app/health ok", "[0m : ")
+            # US-108 (Lot 7): real local CI/CD of a PromptMessage program.
+            run(mon, proc, "prod-cicd /pm/hello.pm /pm/tests.pm /hello.pmc",
+                ["cicd stage 1/5 lint ok statements ", "cicd stage 3/5 test ok expects 3 failed 0",
+                 "cicd stage 5/5 verify ok read back identical, loads", "cicd pipeline status success passed 5/5 image /hello.pmc"])
+            run(mon, proc, "pm-exec /hello.pmc", "bonjour monde", attempts=2)
+            run(mon, proc, "prod-cicd /pm/bad.pm /pm/tests.pm /bad.pmc",
+                ["cicd stage 1/5 lint FAILED line 2", "cicd pipeline status failed stage lint passed 0/5"])
+            run(mon, proc, "cat /bad.pmc", "cat: ", attempts=2)
             run(mon, proc, "prod-tutorial 3", "prod-tutorial lesson 3 logs", attempts=2)
             run(mon, proc, "prod-feedback 5 great tool", "prod-feedback ok total 1")
             run(mon, proc, "prod-feedback 3 slow boot", "prod-feedback ok total 2")
             run(mon, proc, "prod-feedback summary", ["prod-feedback total 2 avg 4.0 r1=0 r2=0 r3=1 r4=0 r5=1"], attempts=2)
             run(mon, proc, "prod-usage", ["prod-usage prod-inject ", "prod-usage ok commands "], attempts=2)
             run(mon, proc, "prod-roadmap", "prod-roadmap ok phases 8", attempts=2)
+            # US-106 (Lot 7): auto-tuning from rates measured now and the
+            # recorded busy average; an explicit mode is honoured.
+            out = run(mon, proc, "prod-perf-tune", ["prod-perf-tune measured alu_ops_s ", " ok"], attempts=2, timeout=60)
+            m = re.search(r"prod-perf-tune measured alu_ops_s (\d+) mem_kib_s (\d+) syscalls_s (\d+) file_rw_s (\d+)\s*"
+                          r"prod-perf-tune busy_avg (\d+) samples (\d+) mode (\S+) \(auto\) ok", out)
+            if not m or 0 in [int(m.group(i)) for i in range(1, 5)] or int(m.group(6)) < 6:
+                raise RuntimeError("prod-perf-tune: %s" % out[-600:])
+            busy = int(m.group(5))
+            want = "high-throughput" if busy >= 70 else "low-latency" if busy <= 20 else "balanced"
+            if m.group(7) != want:
+                raise RuntimeError("prod-perf-tune mode %s for busy %d, want %s" % (m.group(7), busy, want))
+            run(mon, proc, "prod-perf-tune latency", "busy_avg ", attempts=2, timeout=60)
+            if " mode low-latency (requested) ok" not in normalized_log(nw.log_text()):
+                raise RuntimeError("prod-perf-tune latency not honoured")
+            # US-115 (Lot 7): heuristic from firing alerts and the memory trend.
+            out = run(mon, proc, "prod-maint-predict", "prod-maint-predict firing_alerts ", attempts=2)
+            m = re.search(r"prod-maint-predict firing_alerts 0 mem_exhaust_ticks (none|\d+) risk (\d+) health (\d+) \(heuristic\) ok", out)
+            if not m or int(m.group(2)) + int(m.group(3)) != 100:
+                raise RuntimeError("prod-maint-predict: %s" % out[-400:])
+            # US-119 (Lot 7): counters observed in this guest.
+            out = run(mon, proc, "prod-biz-metrics", "prod-biz-metrics commands_per_min ", attempts=2)
+            m = re.search(r"prod-biz-metrics commands_per_min (\d+) commands (\d+) distinct (\d+) sessions 1 uptime_s (\d+) ok", out)
+            if not m or int(m.group(2)) < 40 or int(m.group(3)) < 10 or int(m.group(4)) == 0 \
+                    or int(m.group(1)) != int(m.group(2)) * 60 // int(m.group(4)):
+                raise RuntimeError("prod-biz-metrics: %s" % out[-400:])
+            # US-116 (Lot 7): real plain-text bundle written, read back, verified.
+            out = run(mon, proc, "prod-support-bundle /support", "prod-support-bundle ", attempts=2)
+            m = re.search(r"prod-support-bundle ok /support\.0\.\. chunks (\d+) bytes (\d+) read (\d+) fnv ([0-9a-f]{8}) "
+                          r"verified \(plain text, not compressed\)", out)
+            if not m or m.group(2) != m.group(3) or int(m.group(1)) < 2:
+                raise RuntimeError("prod-support-bundle: %s" % out[-400:])
+            run(mon, proc, "cat /support.0", ["mohhdy support bundle v1 tick ", "metric mem_used min "], attempts=2)
+            run(mon, proc, "cat /support.%d" % (int(m.group(1)) - 1), "feedback total 2", attempts=2)
             out = normalized_log(nw.log_text())
             if "prod-alerts ok fired 1 resolved 1 deduped 1" not in out:
                 raise RuntimeError("alert counters missing")
