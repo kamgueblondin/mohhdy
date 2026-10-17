@@ -417,16 +417,8 @@ int plat_continuity_import(const char* in, plat_continuity_t* c) {
     return 0;
 }
 
-/* ------------------------------------------------------------- emulation */
-int plat_emul_run(const char* binary_name, const plat_emul_config_t* cfg, char* out, int cap) {
-    if (!binary_name || !out) return -1;
-    out[0] = 0;
-    s_cat(out, "legacy-emul binary ", cap); s_cat(out, binary_name, cap);
-    s_cat(out, (cfg && cfg->emulate_dos) ? " dos=active" : " dos=inactive", cap);
-    s_cat(out, (cfg && cfg->emulate_vga_mode13h) ? " vga=mode13h" : " vga=text", cap);
-    s_cat(out, " status ok_simulated\n", cap);
-    return 0;
-}
+/* Legacy emulation (US-086) moved to dosemu.c in Lot 7: the former
+ * plat_emul_run printed "ok_simulated" and ran nothing. */
 
 /* ----------------------------------------------------- migration, deploy */
 uint32_t plat_fnv(const uint8_t* b, int len) {

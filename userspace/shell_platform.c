@@ -3,6 +3,7 @@
  * ATA status, ramfs files) and the CPUID instruction (allowed at CPL 3). */
 #include "shell_platform.h"
 #include "platform.h"
+#include "dosemu.h"
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
@@ -160,6 +161,48 @@ static int load_chunks(const char* name, char* buf, int cap) {
     }
     buf[total] = 0;
     return k == 0 ? -1 : total;
+}
+
+/* US-086 (Lot 7): runs a DOS .COM file with the 8086 interpreter
+ * (dosemu.c). legacy-emul FILE [MAX_STEPS]; FILE without '/' is /dos/FILE. */
+static int cmd_legacy_emul(const char* rest) {
+    static unsigned char img[0xFE00];
+    static char out[1024];
+    char a[64], b[16], path[96];
+    dos_result_t r;
+    int n, max = 1000000, st;
+    rest = word(rest, a, 64); rest = word(rest, b, 16);
+    if (!a[0]) { print_string("legacy-emul error usage: legacy-emul FILE.COM [MAX_STEPS]\n"); return 1; }
+    if (b[0]) {
+        int i;
+        for (max = 0, i = 0; b[i] >= '0' && b[i] <= '9' && max < 10000000; i++) max = max * 10 + (b[i] - '0');
+        if (b[i] || max <= 0) { print_string("legacy-emul error bad MAX_STEPS\n"); return 1; }
+    }
+    path[0] = 0;
+    if (a[0] != '/') s_cat(path, "/dos/", 96);
+    s_cat(path, a, 96);
+    n = sys_readfile(path, (char*)img, (int)sizeof(img));
+    if (n <= 0) { print_string("legacy-emul error cannot read "); print_string(path); print_string("\n"); return 1; }
+    st = dos_run_com(img, n, out, (int)sizeof(out), (unsigned)max, &r);
+    if (r.out_len > 0) {
+        print_string(out);
+        if (out[r.out_len - 1] != '\n') print_string("\n");
+    }
+    g_out[0] = 0;
+    s_cat(g_out, st == DOS_EXITED ? "legacy-emul ok file " : "legacy-emul error file ", 4096);
+    s_cat(g_out, path, 4096);
+    s_cat(g_out, " status ", 4096); s_cat(g_out, dos_status_name(st), 4096);
+    s_cat(g_out, " exit_code ", 4096); cat_u(g_out, (uint32_t)r.exit_code, 4096);
+    s_cat(g_out, " steps ", 4096); cat_u(g_out, r.steps, 4096);
+    s_cat(g_out, " ints ", 4096); cat_u(g_out, r.ints, 4096);
+    s_cat(g_out, " bytes ", 4096); cat_u(g_out, (uint32_t)n, 4096);
+    if (st != DOS_EXITED) {
+        s_cat(g_out, " fault_ip ", 4096); cat_hex(g_out, r.fault_ip, 4096);
+        s_cat(g_out, " fault_op ", 4096); cat_hex(g_out, (uint32_t)r.fault_op, 4096);
+    }
+    s_cat(g_out, " cpu=8086-subset dos=int21-subset\n", 4096);
+    print_string(g_out);
+    return st == DOS_EXITED ? 0 : 2;
 }
 
 static int cmd_migrate_export(const char* rest) {
@@ -520,13 +563,7 @@ int shell_platform_line(const char* line) {
         print_string("continuity-import ok session "); print_string(c.session_id); print_string("\n");
         return 0;
     }
-    if (s_eq(cmd, "legacy-emul")) {
-        plat_emul_config_t cfg = {1, 1, 1};
-        word(rest, a, 64);
-        plat_emul_run(a[0] ? a : "app.exe", &cfg, g_out, (int)sizeof(g_out));
-        print_string(g_out);
-        return 0;
-    }
+    if (s_eq(cmd, "legacy-emul")) return cmd_legacy_emul(rest);
     if (s_eq(cmd, "power-profile")) {
         int p;
         word(rest, a, 64);

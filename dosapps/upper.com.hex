@@ -1,0 +1,23 @@
+# upper.com: CALL/RET, LODSB/STOSB, CMP/Jcc: upper-cases its own message in
+# place, prints it (AH=09) and exits with code 7.
+BE 27 01   # 0100 mov si,0127h
+89 F7      # 0103 mov di,si
+E8 0C 00   # 0105 call 0114h
+BA 27 01   # 0108 mov dx,0127h
+B4 09      # 010B mov ah,9
+CD 21      # 010D int 21h
+B8 07 4C   # 010F mov ax,4C07h
+CD 21      # 0112 int 21h
+AC         # 0114 lodsb
+3C 24      # 0115 cmp al,'$'
+74 0D      # 0117 je 0126h
+3C 61      # 0119 cmp al,'a'
+72 06      # 011B jb 0123h
+3C 7A      # 011D cmp al,'z'
+77 02      # 011F ja 0123h
+2C 20      # 0121 sub al,20h
+AA         # 0123 stosb
+EB EE      # 0124 jmp 0114h
+C3         # 0126 ret
+# 0127 "mohhdy dos ok\r\n$"
+6D 6F 68 68 64 79 20 64 6F 73 20 6F 6B 0D 0A 24

@@ -138,13 +138,7 @@ typedef struct {
 int plat_continuity_export(const plat_continuity_t* c, char* out, int cap);
 int plat_continuity_import(const char* in, plat_continuity_t* c);
 
-/* ---- legacy emulation layer (US-086) ---- */
-typedef struct {
-    int emulate_dos;
-    int emulate_bios;
-    int emulate_vga_mode13h;
-} plat_emul_config_t;
-int plat_emul_run(const char* binary_name, const plat_emul_config_t* cfg, char* out, int cap);
+/* ---- legacy emulation (US-086): see dosemu.h (real 8086 .COM interpreter) ---- */
 
 /* ---- migration archive (US-088) and deployment manifest (US-090) ---- */
 uint32_t plat_fnv(const uint8_t* b, int len);

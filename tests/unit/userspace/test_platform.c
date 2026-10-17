@@ -167,7 +167,6 @@ void test_deploy_manifest(void) {
 void test_sensors_multi_touch_continuity_and_emul(void) {
     plat_sensors_t s;
     plat_continuity_t c;
-    plat_emul_config_t cfg = {1, 1, 1};
     plat_point_t p1_start[] = {{100, 100, 0, 1}, {100, 100, 100, 1}};
     plat_point_t p2_start[] = {{200, 200, 0, 1}, {150, 150, 100, 1}};
 
@@ -194,10 +193,7 @@ void test_sensors_multi_touch_continuity_and_emul(void) {
     memset(&c, 0, sizeof(c));
     TEST_ASSERT_EQUAL(0, plat_continuity_import(out, &c));
     TEST_ASSERT_EQUAL_STRING("sess_imported", c.session_id);
-
-    /* Legacy emulation US-086 */
-    TEST_ASSERT_EQUAL(0, plat_emul_run("doom.exe", &cfg, out, sizeof(out)));
-    TEST_ASSERT_NOT_NULL(strstr(out, "legacy-emul binary doom.exe dos=active vga=mode13h status ok_simulated"));
+    /* Legacy emulation US-086: real interpreter tested in test_dosemu.c */
 }
 
 void test_resize_hotplug_and_admin_nodes(void) {
