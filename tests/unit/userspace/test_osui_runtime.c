@@ -1076,6 +1076,41 @@ void test_css_cascade_engine(void) {
     TEST_ASSERT(strstr(g_out, "  out\n") != NULL);
 }
 
+/* Lot 5 Phase 3 (US-038 to US-044, partial): webrt blocks in the guest. */
+void test_web_runtime_blocks_in_guest(void) {
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("web-cache"));
+    TEST_ASSERT(strstr(g_out, "web-cache ok origin=simule verdicts=fresh,stale,fresh,miss hits=2 misses=2 stale=1 revalidated=1 evictions=1 refused=1") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-csp"));
+    TEST_ASSERT(strstr(g_out, "script-src https://evil.example/x.js block") != NULL);
+    TEST_ASSERT(strstr(g_out, "style-src inline allow") != NULL);
+    TEST_ASSERT(strstr(g_out, "web-csp ok directives=4 allowed=5 blocked=3") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-csp script-src inline"));
+    TEST_ASSERT(strstr(g_out, "verdict=block") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-sanitize"));
+    TEST_ASSERT(strstr(g_out, "web-sanitize ok removed=5 active_left=0") != NULL);
+    TEST_ASSERT(strstr(g_out, "steal") == NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-responsive 360 640"));
+    TEST_ASSERT(strstr(g_out, "=== Titre === {color:red; fw:700}") != NULL);
+    TEST_ASSERT(strstr(g_out, "menu") == NULL);
+    TEST_ASSERT(strstr(g_out, "web-responsive ok width=360 height=640 kept=1 dropped=2") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-responsive 1280"));
+    TEST_ASSERT(strstr(g_out, "  aside {color:blue}") != NULL);
+    TEST_ASSERT(strstr(g_out, "  menu {color:green}") != NULL);
+    TEST_ASSERT(strstr(g_out, "kept=1 dropped=2") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-theme dark"));
+    TEST_ASSERT(strstr(g_out, "web-theme ok scheme=dark vars=2 unresolved=0 h1_color=white") != NULL);
+    TEST_ASSERT(strstr(g_out, "  texte {color:teal}") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-theme light"));
+    TEST_ASSERT(strstr(g_out, "h1_color=navy") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-components"));
+    TEST_ASSERT(strstr(g_out, "=== Bonjour === {color:purple; fw:700}") != NULL);
+    TEST_ASSERT(strstr(g_out, "=== Salut === {color:purple; fw:700}") != NULL);
+    TEST_ASSERT(strstr(g_out, "web-components ok defined=1 expanded=2") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("web-a11y"));
+    TEST_ASSERT(strstr(g_out, "web-a11y ok images=2 img_no_alt=1 inputs=2 input_no_label=1 buttons=2 button_no_text=1 heading_skips=1 lang_missing=1 issues=5") != NULL);
+}
+
 void test_css_parser_rules_and_errors(void) {
     int before;
     setup();
@@ -1106,6 +1141,7 @@ int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
     RUN_TEST(test_css_cascade_engine);
+    RUN_TEST(test_web_runtime_blocks_in_guest);
     RUN_TEST(test_css_parser_rules_and_errors);
     RUN_TEST(test_slash_help_and_linux_trap);
     RUN_TEST(test_prompt_chat_and_stage);

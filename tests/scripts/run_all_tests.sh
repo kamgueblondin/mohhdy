@@ -113,6 +113,9 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_collab.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/collab.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c"
     fi
+    if [ "$(basename "$test_file")" = "test_webrt.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/webrt.c"
+    fi
     if [ "$(basename "$test_file")" = "test_ps2_decode.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/ps2_decode.c"
     fi
@@ -132,15 +135,15 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/prod.c"
     fi
     if [ "$(basename "$test_file")" = "test_osui_p2p_prod_perf.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
         cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c"
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_gui.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c"
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_ide.c" ]; then

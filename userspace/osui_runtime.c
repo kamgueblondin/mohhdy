@@ -4,6 +4,7 @@
  */
 
 #include "osui_runtime.h"
+#include "webrt.h"
 #include "mohhdy_osui_bridge.h"
 #include "os_syscalls.h"
 #include "promptmessage.h"
@@ -64,6 +65,7 @@ static const char *const k_cmds[] = {
     "browser-fs-save", "browser-fs-load", "browser-fs-sync",
     "browser-navigate", "browser-back", "browser-forward", "browser-dom-tree", "browser-eval", "browser-pm-run",
     "browser-html-render", "browser-render", "browser-css-demo",
+    "web-cache", "web-csp", "web-sanitize", "web-responsive", "web-theme", "web-components", "web-a11y",
     "browser-form-fill", "browser-dom-act", "browser-fetch", "fetch-sim",
     "browser-storage-set", "browser-storage-get", "tab-storage",
     "browser-telemetry", "osui-telemetry", "pwa-manifest", "pwa-install", "pwa-list", "pwa-run",
@@ -3368,6 +3370,212 @@ static int cmd_browser_css_demo(char *out, int max) {
     return osui_render_dom(tab, author, out, max, &p, &hidden, "browser-css-demo");
 }
 
+/* ---- Lot 5 Phase 3 (US-038 to US-044, partial): webrt.c building blocks
+ * run on built-in pages through this text renderer. No network fetch, no
+ * JavaScript, no layout engine; the cache origin is simulated. ---- */
+static int webrt_render(const char *body, const char *css, const char *name, char *out, int max, int *p) {
+    int author, hidden = 0;
+    osui_tab_t *tab = (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) ? &G.tabs[G.current_tab] : 0;
+    osui_dom_parse_html(body);
+    author = osui_css_cascade(css);
+    return osui_render_dom(tab, author, out, max, p, &hidden, name);
+}
+
+static void out_kv(char *out, int max, int *p, const char *k, unsigned v) {
+    out_add(out, max, p, " ");
+    out_add(out, max, p, k);
+    out_add(out, max, p, "=");
+    out_u(out, max, p, v);
+}
+
+static int cmd_web_cache(char *out, int max) {
+    static webrt_cache_t c;
+    const char *etag = 0;
+    int p = 0, i, verdicts[4];
+    webrt_cache_init(&c);
+    /* scripted origin (simule): one stylesheet, one API, eight pages */
+    (void)webrt_cache_lookup(&c, "/app.css", 0, &etag);                       /* miss */
+    (void)webrt_cache_store(&c, "/app.css", "public, max-age=60", "\"v1\"", 512, 0);
+    verdicts[0] = webrt_cache_lookup(&c, "/app.css", 30, &etag);              /* fresh */
+    verdicts[1] = webrt_cache_lookup(&c, "/app.css", 60, &etag);              /* stale */
+    (void)webrt_cache_revalidated(&c, "/app.css", 304, "max-age=60", 0, 0, 60);
+    verdicts[2] = webrt_cache_lookup(&c, "/app.css", 61, &etag);              /* fresh again */
+    (void)webrt_cache_store(&c, "/api/me", "no-store", 0, 64, 61);            /* refused */
+    verdicts[3] = webrt_cache_lookup(&c, "/api/me", 62, &etag);               /* miss */
+    for (i = 0; i < WEBRT_CACHE_SLOTS; i++) {
+        char url[8] = {'/', 'p', (char)('0' + i), 0};
+        (void)webrt_cache_store(&c, url, "max-age=300", 0, 100, 70);
+    }
+    out_add(out, max, &p, "web-cache ok origin=simule verdicts=");
+    for (i = 0; i < 4; i++) {
+        out_add(out, max, &p, verdicts[i] == WEBRT_CACHE_FRESH ? "fresh" :
+                              verdicts[i] == WEBRT_CACHE_STALE ? "stale" : "miss");
+        if (i < 3) out_add(out, max, &p, ",");
+    }
+    out_kv(out, max, &p, "hits", c.hits);
+    out_kv(out, max, &p, "misses", c.misses);
+    out_kv(out, max, &p, "stale", c.stale);
+    out_kv(out, max, &p, "revalidated", c.revalidated);
+    out_kv(out, max, &p, "evictions", c.evictions);
+    out_kv(out, max, &p, "refused", c.refused);
+    out_add(out, max, &p, " etag=\"v1\"\n");
+    return OSUI_OK;
+}
+
+static const char k_web_csp[] =
+    "default-src 'self'; script-src 'self' https://cdn.mohhdy.local; img-src * data:; "
+    "style-src 'self' 'unsafe-inline'";
+
+static int cmd_web_csp(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    static const char *const checks[8][2] = {
+        {"script-src", "/js/app.js"}, {"script-src", "https://cdn.mohhdy.local/lib.js"},
+        {"script-src", "https://evil.example/x.js"}, {"script-src", "inline"},
+        {"style-src", "inline"}, {"img-src", "https://img.example/a.png"},
+        {"connect-src", "/api"}, {"connect-src", "https://tracker.example/p"}
+    };
+    webrt_csp_t pol;
+    int p = 0, i, allowed = 0, blocked = 0;
+    const char *page = "https://app.mohhdy.local";
+    webrt_csp_parse(&pol, k_web_csp);
+    if (narg >= 2) {
+        int ok = webrt_csp_allows(&pol, args[0], page, args[1]);
+        out_add(out, max, &p, "web-csp directive=");
+        out_add(out, max, &p, args[0]);
+        out_add(out, max, &p, " url=");
+        out_add(out, max, &p, args[1]);
+        out_add(out, max, &p, ok ? " verdict=allow\n" : " verdict=block\n");
+        return OSUI_OK;
+    }
+    for (i = 0; i < 8; i++) {
+        int ok = webrt_csp_allows(&pol, checks[i][0], page, checks[i][1]);
+        if (ok) allowed++; else blocked++;
+        out_add(out, max, &p, "  ");
+        out_add(out, max, &p, checks[i][0]);
+        out_add(out, max, &p, " ");
+        out_add(out, max, &p, checks[i][1]);
+        out_add(out, max, &p, ok ? " allow\n" : " block\n");
+    }
+    out_add(out, max, &p, "web-csp ok");
+    out_kv(out, max, &p, "directives", (unsigned)pol.count);
+    out_kv(out, max, &p, "allowed", (unsigned)allowed);
+    out_kv(out, max, &p, "blocked", (unsigned)blocked);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_web_sanitize(char *out, int max) {
+    static const char page[] =
+        "<h1 onclick=\"x()\">Article</h1><script>steal()</script><p>texte</p>"
+        "<a href=\"javascript:alert(1)\">clic</a><iframe src=\"https://ads\"></iframe>"
+        "<img src=\"a.png\" onerror=\"boom()\" alt=\"a\">";
+    char clean[512];
+    int p = 0, removed = 0, k, script = 0;
+    webrt_sanitize_html(page, clean, sizeof(clean), &removed);
+    for (k = 0; clean[k]; k++)
+        if (s_ncmp(clean + k, "<script", 7) == 0 || s_ncmp(clean + k, "javascript:", 11) == 0 ||
+            s_ncmp(clean + k, "onclick", 7) == 0 || s_ncmp(clean + k, "onerror", 7) == 0) script++;
+    webrt_render(clean, 0, "web-sanitize", out, max, &p);
+    out_add(out, max, &p, "web-sanitize ok");
+    out_kv(out, max, &p, "removed", (unsigned)removed);
+    out_kv(out, max, &p, "active_left", (unsigned)script);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int web_atoi(const char *s, int dflt) {
+    int v = 0, any = 0;
+    while (*s >= '0' && *s <= '9') { v = v * 10 + (*s - '0'); s++; any = 1; }
+    return any ? v : dflt;
+}
+
+static int cmd_web_responsive(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    static const char css[] =
+        "h1{color:black} .nav{color:green} "
+        "@media screen and (max-width: 600px){ .nav{display:none} h1{color:red} } "
+        "@media (min-width: 601px){ .side{color:blue} } "
+        "@media print{ h1{color:gray} }";
+    static const char body[] = "<h1>Titre</h1><p class=\"nav\">menu</p><p class=\"side\">aside</p>";
+    webrt_viewport_t v;
+    char flat[512];
+    int p = 0, kept = 0, dropped = 0;
+    v.width = narg > 0 ? web_atoi(args[0], 1024) : 1024;
+    v.height = narg > 1 ? web_atoi(args[1], 768) : 768;
+    v.dark = 0;
+    webrt_css_flatten_media(css, &v, flat, sizeof(flat), &kept, &dropped);
+    webrt_render(body, flat, "web-responsive", out, max, &p);
+    out_add(out, max, &p, "web-responsive ok");
+    out_kv(out, max, &p, "width", (unsigned)v.width);
+    out_kv(out, max, &p, "height", (unsigned)v.height);
+    out_kv(out, max, &p, "kept", (unsigned)kept);
+    out_kv(out, max, &p, "dropped", (unsigned)dropped);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_web_theme(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
+    static const char css[] =
+        "html{--fg: navy; --bg: white} "
+        "@media (prefers-color-scheme: dark){ html{--fg: white; --bg: black} } "
+        "h1{color: var(--fg); background: var(--bg)} p{color: var(--accent, teal)}";
+    static const char body[] = "<h1>Theme</h1><p>texte</p>";
+    webrt_viewport_t v;
+    char flat[512], resolved[512];
+    int p = 0, kept = 0, dropped = 0, defined = 0, unresolved = 0, i;
+    const char *h1 = "?";
+    v.width = 1024; v.height = 768;
+    v.dark = (narg > 0 && s_cmp(args[0], "dark") == 0) ? 1 : 0;
+    webrt_css_flatten_media(css, &v, flat, sizeof(flat), &kept, &dropped);
+    webrt_css_resolve_vars(flat, resolved, sizeof(resolved), &defined, &unresolved);
+    webrt_render(body, resolved, "web-theme", out, max, &p);
+    for (i = 0; i < g_dom_node_count; i++)
+        if (g_dom_nodes[i].used && s_cmp(g_dom_nodes[i].tag, "h1") == 0) { h1 = g_dom_nodes[i].color; break; }
+    out_add(out, max, &p, "web-theme ok scheme=");
+    out_add(out, max, &p, v.dark ? "dark" : "light");
+    out_kv(out, max, &p, "vars", (unsigned)defined);
+    out_kv(out, max, &p, "unresolved", (unsigned)unresolved);
+    out_add(out, max, &p, " h1_color=");
+    out_add(out, max, &p, h1);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_web_components(char *out, int max) {
+    static const char page[] =
+        "<template id=\"x-card\"><div class=\"card\"><h2><slot></slot></h2></div></template>"
+        "<x-card>Bonjour</x-card><x-card>Salut</x-card><p>fin</p>";
+    char expanded_html[512];
+    int p = 0, defined = 0, expanded = 0;
+    webrt_components_expand(page, expanded_html, sizeof(expanded_html), &defined, &expanded);
+    webrt_render(expanded_html, ".card h2{color:purple}", "web-components", out, max, &p);
+    out_add(out, max, &p, "web-components ok");
+    out_kv(out, max, &p, "defined", (unsigned)defined);
+    out_kv(out, max, &p, "expanded", (unsigned)expanded);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
+static int cmd_web_a11y(char *out, int max) {
+    static const char page[] =
+        "<html><h1>Accueil</h1><h3>Saut</h3><img src=\"logo.png\"><img src=\"d.png\" alt=\"\">"
+        "<label for=\"q\">Chercher</label><input id=\"q\"><input id=\"z\">"
+        "<button></button><button>OK</button><a href=\"/x\">lien</a></html>";
+    webrt_a11y_t r;
+    int p = 0;
+    webrt_a11y_audit(page, &r);
+    out_add(out, max, &p, "web-a11y ok");
+    out_kv(out, max, &p, "images", (unsigned)r.images);
+    out_kv(out, max, &p, "img_no_alt", (unsigned)r.img_no_alt);
+    out_kv(out, max, &p, "inputs", (unsigned)r.inputs);
+    out_kv(out, max, &p, "input_no_label", (unsigned)r.input_no_label);
+    out_kv(out, max, &p, "buttons", (unsigned)r.buttons);
+    out_kv(out, max, &p, "button_no_text", (unsigned)r.button_no_text);
+    out_kv(out, max, &p, "heading_skips", (unsigned)r.heading_skips);
+    out_kv(out, max, &p, "lang_missing", (unsigned)r.lang_missing);
+    out_kv(out, max, &p, "issues", (unsigned)r.issues);
+    out_add(out, max, &p, "\n");
+    return OSUI_OK;
+}
+
 static int cmd_browser_dom_tree(char *out, int max) {
     int p = 0, i;
     osui_tab_t *tab = (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) ? &G.tabs[G.current_tab] : 0;
@@ -5035,6 +5243,13 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "browser-dom-tree") == 0) return cmd_browser_dom_tree(out, max);
     if (s_cmp(cmd, "browser-html-render") == 0 || s_cmp(cmd, "browser-render") == 0) return cmd_browser_html_render(args, narg, out, max);
     if (s_cmp(cmd, "browser-css-demo") == 0) return cmd_browser_css_demo(out, max);
+    if (s_cmp(cmd, "web-cache") == 0) return cmd_web_cache(out, max);
+    if (s_cmp(cmd, "web-csp") == 0) return cmd_web_csp(args, narg, out, max);
+    if (s_cmp(cmd, "web-sanitize") == 0) return cmd_web_sanitize(out, max);
+    if (s_cmp(cmd, "web-responsive") == 0) return cmd_web_responsive(args, narg, out, max);
+    if (s_cmp(cmd, "web-theme") == 0) return cmd_web_theme(args, narg, out, max);
+    if (s_cmp(cmd, "web-components") == 0) return cmd_web_components(out, max);
+    if (s_cmp(cmd, "web-a11y") == 0) return cmd_web_a11y(out, max);
     if (s_cmp(cmd, "browser-eval") == 0) return cmd_browser_eval(args, narg, out, max);
     if (s_cmp(cmd, "browser-form-fill") == 0) return cmd_browser_form_fill(args, narg, out, max);
     if (s_cmp(cmd, "browser-dom-act") == 0) return cmd_browser_dom_act(args, narg, out, max);
