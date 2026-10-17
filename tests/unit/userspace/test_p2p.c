@@ -671,10 +671,57 @@ void test_traffic_baseline_anomaly(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "verdict degraded"));
 }
 
+/* US-069: node crash (silent, all frames lost), reroute around it, then
+ * reboot under a fresh identity: rejoin and anti-entropy push of the kv. */
+void test_crash_reroute_and_rejoin(void) {
+    char rep[1024];
+    uint8_t ip[4] = {10, 77, 0, 2}, seed[32];
+    int j;
+    setup(4, 0);
+    run(4, 400);
+    /* diamond: alpha-beta, alpha-gamma, beta-delta, gamma-delta */
+    g_cut[0][3] = g_cut[3][0] = 1;
+    g_cut[1][2] = g_cut[2][1] = 1;
+    run(4, 1500);
+    TEST_ASSERT_FALSE(p2p_find(&g_n[0], "delta")->up);
+    /* crash beta: nothing it sends arrives, nothing reaches it */
+    for (j = 0; j < NODES; j++) g_cut[1][j] = g_cut[j][1] = 1;
+    run(4, 1500);
+    TEST_ASSERT_FALSE(p2p_find(&g_n[0], "beta")->up);
+    TEST_ASSERT_TRUE(p2p_put(&g_n[0], &g_h[0], "after", "crash") >= 0);
+    TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "delta", "around beta"));
+    run(4, 60);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[3], "p2p msg from alpha: around beta (relayed)"));
+    TEST_ASSERT_TRUE(g_n[2].relayed >= 1U);
+    /* reboot beta: empty state, new seed, so a new key and id */
+    memset(&g_n[1], 0, sizeof(g_n[1]));
+    g_out[1][0] = 0;
+    memset(seed, 0x77, 32);
+    TEST_ASSERT_EQUAL(0, p2p_up(&g_n[1], "beta", ip, "mohhdy-net-key", seed, &g_h[1]));
+    for (j = 0; j < NODES; j++) g_cut[1][j] = g_cut[j][1] = 0;
+    g_cut[1][2] = g_cut[2][1] = 1;
+    run(4, 1200);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p peer beta rejoined id "));
+    TEST_ASSERT_EQUAL(1, (int)g_n[0].rejoins);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[0], "beta")->up);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[0], "beta")->id == g_n[1].id);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "p2p kv synced after=crash"));
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[1], "after"));
+    /* the rejoined member is reachable again (direct) */
+    TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "beta", "welcome back"));
+    run(4, 40);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "p2p msg from alpha: welcome back"));
+    p2p_report(&g_n[0], &g_h[0], "stats", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, " rejoins 1"));
+    /* a live member is never replaced by a newcomer with its name */
+    TEST_ASSERT_EQUAL(1, (int)g_n[3].rejoins);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
     RUN_TEST(test_multi_relay_chain);
+    RUN_TEST(test_crash_reroute_and_rejoin);
     RUN_TEST(test_qos_adaptive_controller);
     RUN_TEST(test_cache_versioned_acked_invalidation);
     RUN_TEST(test_traffic_baseline_anomaly);

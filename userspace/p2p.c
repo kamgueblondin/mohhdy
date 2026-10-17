@@ -1171,7 +1171,8 @@ static int propose_send(p2p_node_t* n, const p2p_host_t* h, int only_missing);
 static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int len, const uint8_t mac[6]) {
     uint8_t tag[32];
     p2p_peer_t* p;
-    uint32_t src = get32(b + 8);
+    uint32_t src = get32(b + 8), rejoined_from = 0;
+    uint8_t blocked = 0;
     int cnt, i, body = HDR + P2P_NAME_MAX + 4 + 32 + 1;
     char line[96];
     if (len < body + 16) { n->bad_hello++; return; }
@@ -1181,11 +1182,25 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
     if (!meq(tag, b + body + cnt * 5, 16)) { n->bad_hello++; return; }
     p = by_id(n, src);
     if (!p) {
-        for (i = 0; i < P2P_PEERS && n->peers[i].used; i++) {}
-        if (i == P2P_PEERS) return;
-        p = &n->peers[i];
+        /* US-069 crash/rejoin: a member that went down and rebooted comes
+         * back with a fresh identity (new key, new id) under the same name.
+         * Its stale slot is reused; a live member is never replaced. */
+        char hello_name[P2P_NAME_MAX];
+        p2p_peer_t* old;
+        s_copy(hello_name, (const char*)b + HDR, P2P_NAME_MAX);
+        hello_name[P2P_NAME_MAX - 1] = 0;
+        old = p2p_find(n, hello_name);
+        if (old && !old->up && old->id != src) {
+            rejoined_from = old->id;
+            blocked = old->blocked;
+            p = old;
+        } else {
+            for (i = 0; i < P2P_PEERS && n->peers[i].used; i++) {}
+            if (i == P2P_PEERS) return;
+            p = &n->peers[i];
+        }
         mzero(p, (int)sizeof(*p));
-        p->used = 1; p->id = src;
+        p->used = 1; p->id = src; p->blocked = blocked;
     }
     if (p->blocked) return;
     s_copy(p->name, (const char*)b + HDR, P2P_NAME_MAX);
@@ -1210,6 +1225,17 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
         s_cat(line, "p2p peer ", 96); s_cat(line, p->name, 96); s_cat(line, " up id ", 96); cat_hex32(line, p->id, 96);
         s_cat(line, p->keyed ? " keyed" : " unkeyed", 96);
         say(h, line);
+    }
+    if (rejoined_from) {
+        n->rejoins++;
+        line[0] = 0;
+        s_cat(line, "p2p peer ", 96); s_cat(line, p->name, 96); s_cat(line, " rejoined id ", 96);
+        cat_hex32(line, p->id, 96); s_cat(line, " was ", 96); cat_hex32(line, rejoined_from, 96);
+        say(h, line);
+        /* Push the replicated state back: anti-entropy with the restarted
+         * member, re-sent until it answers (it needs our HELLO first). */
+        p->sync_retries = 4U;
+        p->sync_at = now(h) - P2P_SYNC_RESEND_TICKS;
     }
 }
 
@@ -1981,6 +2007,8 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " dup ", cap); cat_u(out, n->dup, cap);
         s_cat(out, " bad_hello ", cap); cat_u(out, n->bad_hello, cap);
         s_cat(out, " foreign ", cap); cat_u(out, n->foreign, cap);
+        s_cat(out, " relayed_multi ", cap); cat_u(out, n->relayed_multi, cap);
+        s_cat(out, " rejoins ", cap); cat_u(out, n->rejoins, cap);
         s_cat(out, "\n", cap);
     }
     if (s_eq(what, "qos")) {

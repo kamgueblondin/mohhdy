@@ -222,6 +222,7 @@ typedef struct {
     uint32_t tx_type[P2P_I_COUNT], rx_type[P2P_I_COUNT];
     uint32_t tx_bytes, rx_bytes, relayed, bad_hello, foreign, dup;
     uint32_t relayed_multi; /* forwarded to a further relay, not to the destination */
+    uint32_t rejoins;       /* US-069: a known name came back under a new id after going down */
     /* Learned per-type receive baseline (US-075): EWMA of frames per
      * second, x16 fixed point, after P2P_ANALYZE_WARMUP windows. */
     uint32_t base_rate16[P2P_I_COUNT];
