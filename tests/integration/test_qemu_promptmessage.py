@@ -223,10 +223,28 @@ def main():
             # US-060 partial: local Schnorr CA. Modexp is slow under TCG.
             out = run(client, proc, "pm-ca-init", "pm-ca-init ok", timeout=180)
             expect(out, "/etc/pm_ca.pub")
+            # Lot 6 (US-059/060): the private key reaches the disk sealed by
+            # the kernel only (no clear "pmca1 key=" record).
+            expect(out, "pm-ca-init sealed key /etc/pm_ca.key")
+            out = run(client, proc, "cat /etc/pm_ca.key", "pmca2 sealed=")
+            if "pmca1 key=" in out:
+                raise RuntimeError("clear CA key on disk: %s" % out[-800:])
+            out = run(client, proc, "pm-ca-seal", "pm-ca-seal ready 1")
+            expect(out, "key sealed end")
+            # another task (devrogue) cannot unseal the shell blob
+            out = run(client, proc, "spawn devrogue", "devrogue unseal rc -191", timeout=60)
+            out = run(client, proc, "pm-ca-seal", "pm-ca-seal ready 1")
+            m = re.search(r"pm-ca-seal ready 1 seals (\d+) unseals (\d+) failures (\d+) key sealed end", out)
+            if not m or int(m.group(1)) < 1 or int(m.group(3)) < 1:
+                raise RuntimeError("seal status did not count the refused unseal: %s" % out[-800:])
             out = run(client, proc, "pm-ca-sign ide.pm", "pm-ca-sign ok", timeout=180)
             expect(out, "ide.pm.ca")
             out = run(client, proc, "pm-ca-verify ide.pm", "pm-ca-verify ok", timeout=180)
             expect(out, "trust_chain verified ide.pm")
+            out = run(client, proc, "pm-ca-seal", "pm-ca-seal ready 1")
+            m = re.search(r"unseals (\d+) failures", out)
+            if not m or int(m.group(1)) < 1:
+                raise RuntimeError("pm-ca-sign did not unseal through the kernel: %s" % out[-800:])
             out = run(client, proc, "append ide.pm set z to 1", "append ok")
             out = run(client, proc, "pm-ca-verify ide.pm", "pm-ca-verify error signature invalid", timeout=180)
             # US-060 partial: local revocation list, checked before any

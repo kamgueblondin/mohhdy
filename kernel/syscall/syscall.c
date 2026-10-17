@@ -37,6 +37,7 @@
 #include "../gfx_fb.h"
 #include "../pci_service.h"
 #include "../device_service.h"
+#include "../key_seal.h"
 /* Completions locales : BPE, top-k basse temperature, arret EOT ou repetition,
  * et newline ou fin de phrase une fois 80 caracteres ecrits. */
 
@@ -1014,6 +1015,53 @@ static int device_driver_wants_cpu(const task_t* self) {
 
 static int device_ps2_ready(void) { return devsvc_ps2_pending(); }
 static int device_serial_ready(void) { return devsvc_serial_queued() != 0U; }
+
+/* Lot 6 (US-059/060): kernel key sealing. First use mixes TSC samples
+ * taken around port I/O and the PIT counter into the per-boot key. */
+extern unsigned char inb(unsigned short port);
+static void key_seal_ensure(void) {
+    uint32_t pool[34];
+    uint32_t i, lo, hi;
+    if (keyseal_ready()) return;
+    for (i = 0; i < 32U; i++) {
+        asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
+        pool[i] = lo ^ (hi << 16) ^ ((uint32_t)inb(0x40) << 8);
+    }
+    pool[32] = timer_get_ticks();
+    pool[33] = current_task ? current_task->identity_key : 0U;
+    keyseal_init((const uint8_t*)pool, sizeof(pool));
+    for (i = 0; i < 34U; i++) ((volatile uint32_t*)pool)[i] = 0U;
+}
+
+static int sys_key_seal(uint32_t op, uint32_t in, uint32_t in_len, uint32_t out, uint32_t cap) {
+    static uint8_t src[OS_SEAL_MAX_PLAIN + OS_SEAL_OVERHEAD];
+    static uint8_t dst[OS_SEAL_MAX_PLAIN + OS_SEAL_OVERHEAD];
+    uint32_t i;
+    int rc;
+    if (!current_task || current_task->type != TASK_TYPE_USER) return OS_SEAL_BAD_REQUEST;
+    key_seal_ensure();
+    if (op == OS_SEAL_OP_STATUS) {
+        os_seal_status_t st;
+        if (!syscall_user_range((const void*)out, sizeof(st), 1)) return OS_SEAL_BAD_REQUEST;
+        st.ready = (uint32_t)keyseal_ready();
+        keyseal_stats(&st.seals, &st.unseals, &st.failures);
+        *(os_seal_status_t*)out = st;
+        return 0;
+    }
+    if (op != OS_SEAL_OP_SEAL && op != OS_SEAL_OP_UNSEAL) return OS_SEAL_BAD_REQUEST;
+    if (in_len == 0U || in_len > sizeof(src) || cap == 0U ||
+        !syscall_user_range((const void*)in, in_len, 0)) return OS_SEAL_BAD_REQUEST;
+    if (cap > sizeof(dst)) cap = sizeof(dst);
+    if (!syscall_user_range((const void*)out, cap, 1)) return OS_SEAL_BAD_REQUEST;
+    for (i = 0; i < in_len; i++) src[i] = ((const uint8_t*)in)[i];
+    if (op == OS_SEAL_OP_SEAL) rc = keyseal_seal(current_task->name, src, in_len, dst, cap);
+    else rc = keyseal_unseal(current_task->name, src, in_len, dst, cap);
+    for (i = 0; i < in_len; i++) src[i] = 0;
+    if (rc == KEYSEAL_E_AUTH) return OS_SEAL_AUTH;
+    if (rc < 0) return OS_SEAL_BAD_REQUEST;
+    for (i = 0; i < (uint32_t)rc; i++) { ((uint8_t*)out)[i] = dst[i]; dst[i] = 0; }
+    return rc;
+}
 
 static int sys_device_service(uint32_t op, uint32_t a, uint32_t b, uint32_t c) {
     int32_t pid = current_task ? (int32_t)current_task->id : 0;
@@ -2507,6 +2555,9 @@ void syscall_handler(cpu_state_t* cpu) {
             break;
         case SYS_DEVICE_SERVICE:
             cpu->eax = (uint32_t)sys_device_service(cpu->ebx, cpu->ecx, cpu->edx, cpu->esi);
+            break;
+        case SYS_KEY_SEAL:
+            cpu->eax = (uint32_t)sys_key_seal(cpu->ebx, cpu->ecx, cpu->edx, cpu->esi, cpu->edi);
             break;
         case SYS_PCI_SERVICE:
             cpu->eax = (uint32_t)sys_pci_service(cpu->ebx, cpu->ecx, cpu->edx);

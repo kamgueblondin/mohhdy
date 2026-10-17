@@ -286,6 +286,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_pci_service: $(UNIT_DIR)/kernel/test_pci_se
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/pci_service.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_key_seal: $(UNIT_DIR)/kernel/test_key_seal.c ../kernel/key_seal.c ../kernel/key_seal.h ../kernel/aes_gcm.c ../kernel/sha256.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/key_seal.c ../kernel/aes_gcm.c ../kernel/sha256.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled kernel test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_device_service: $(UNIT_DIR)/kernel/test_device_service.c ../kernel/device_service.c ../kernel/device_service.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/device_service.c $(FRAMEWORK_SOURCES)

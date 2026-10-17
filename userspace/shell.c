@@ -2967,6 +2967,12 @@ static int pm_crl_revoked(const uint8_t d[32]) {
     return n > 0 && pm_crl_has(crl, n, d);
 }
 /* 0 verified, -1 no CA pub, -2 no FILE.ca record, -3 bad signature. */
+/* Lot 6 (US-059/060): kernel sealing of the CA private key. */
+static int pm_seal_op(uint32_t op, const void* in, int in_len, void* out, int cap) {
+    int rc;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_KEY_SEAL), "b"(op), "c"(in), "d"(in_len), "S"(out), "D"(cap) : "memory");
+    return rc;
+}
 static int pm_ca_check(const char* file, const uint8_t d[32]) {
     uint8_t pk[CSIG_PK], sig[CSIG_SIG];
     char pbuf[288], sbuf[160], path_ca[RAMFS_PATH_MAX];
@@ -3031,25 +3037,51 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         ctx->last_rc = 0;
         return;
     }
+    if (strcmp(command, "pm-ca-seal") == 0) {
+        /* Lot 6: kernel sealing state and the key file format. */
+        os_seal_status_t st;
+        char kbuf[16];
+        int n;
+        if (pm_seal_op(OS_SEAL_OP_STATUS, 0, 0, &st, 0) != 0) { print_string("pm-ca-seal error status\n"); return; }
+        n = pm_host_read(0, "/etc/pm_ca.key", kbuf, (int)sizeof(kbuf) - 1);
+        print_string("pm-ca-seal ready "); print_int((int)st.ready);
+        print_string(" seals "); print_int((int)st.seals);
+        print_string(" unseals "); print_int((int)st.unseals);
+        print_string(" failures "); print_int((int)st.failures);
+        print_string(" key ");
+        if (n >= 13 && strncmp(kbuf, "pmca2 sealed=", 13) == 0) print_string("sealed");
+        else if (n >= 10 && strncmp(kbuf, "pmca1 key=", 10) == 0) print_string("clear");
+        else print_string("none");
+        print_string(" end\n");
+        ctx->last_rc = 0;
+        return;
+    }
     if (strcmp(command, "pm-ca-init") == 0) {
-        /* Local CA (US-060, partial): Schnorr key pair on the collab group.
-         * Private key is stored in plaintext. Not a public authority. */
-        uint8_t seed[32], sk[CSIG_SK], pk[CSIG_PK];
+        /* Local CA (US-060): Schnorr key pair on the collab group. Lot 6:
+         * the private key is sealed by the kernel (SYS_KEY_SEAL, AES-GCM
+         * bound to this task name, per-boot key: no TPM, simule) and only
+         * the sealed blob reaches /etc/pm_ca.key. Not a public authority. */
+        uint8_t seed[32], sk[CSIG_SK], pk[CSIG_PK], blob[CSIG_SK + OS_SEAL_OVERHEAD];
         char rec[384];
         const char* h;
-        int q, i;
+        int q, i, bn;
         uint32_t t = (uint32_t)sys_ticks();
         for (i = 0; i < 32; i++) seed[i] = (uint8_t)(i * 13 + (int)t);
         if (csig_keypair(seed, sk, pk) != 0) { print_string("pm-ca-init error keygen failed\n"); return; }
+        bn = pm_seal_op(OS_SEAL_OP_SEAL, sk, CSIG_SK, blob, (int)sizeof(blob));
+        for (i = 0; i < CSIG_SK; i++) ((volatile uint8_t*)sk)[i] = 0;
+        for (i = 0; i < 32; i++) ((volatile uint8_t*)seed)[i] = 0;
+        if (bn != CSIG_SK + (int)OS_SEAL_OVERHEAD) { print_string("pm-ca-init error seal failed\n"); return; }
         (void)sys_mkdir("/etc");
         q = 0; h = "pmca1 pub="; while (*h) rec[q++] = *h++;
         for (i = 0; i < CSIG_PK; i++) { rec[q++] = "0123456789abcdef"[pk[i] >> 4]; rec[q++] = "0123456789abcdef"[pk[i] & 15]; }
         rec[q++] = '\n';
         if (pm_host_write(0, "/etc/pm_ca.pub", rec, q, 0) < 0) { print_string("pm-ca-init error write pub failed\n"); return; }
-        q = 0; h = "pmca1 key="; while (*h) rec[q++] = *h++;
-        for (i = 0; i < CSIG_SK; i++) { rec[q++] = "0123456789abcdef"[sk[i] >> 4]; rec[q++] = "0123456789abcdef"[sk[i] & 15]; }
+        q = 0; h = "pmca2 sealed="; while (*h) rec[q++] = *h++;
+        for (i = 0; i < bn; i++) { rec[q++] = "0123456789abcdef"[blob[i] >> 4]; rec[q++] = "0123456789abcdef"[blob[i] & 15]; }
         rec[q++] = '\n';
         if (pm_host_write(0, "/etc/pm_ca.key", rec, q, 0) < 0) { print_string("pm-ca-init error write key failed\n"); return; }
+        print_string("pm-ca-init sealed key /etc/pm_ca.key\n");
         print_string("pm-ca-init ok /etc/pm_ca.pub\n");
         ctx->last_rc = 0;
         return;
@@ -3277,17 +3309,29 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         return;
     }
     if (strcmp(command, "pm-ca-sign") == 0) {
-        uint8_t sk[CSIG_SK], sig[CSIG_SIG], d[32];
-        char kbuf[80], path_ca[RAMFS_PATH_MAX], rec[160];
+        uint8_t sk[CSIG_SK], sig[CSIG_SIG], d[32], blob[CSIG_SK + OS_SEAL_OVERHEAD];
+        char kbuf[128], path_ca[RAMFS_PATH_MAX], rec[160];
         const char* h;
-        int n, i, q = 0, k = 0;
+        int n, i, q = 0, k = 0, rc;
         if (pm_load_source("pm-ca-sign", args[0], &len) != 0) return;
         n = pm_host_read(0, "/etc/pm_ca.key", kbuf, (int)sizeof(kbuf) - 1);
-        if (n < 10 + 2 * CSIG_SK || strncmp(kbuf, "pmca1 key=", 10) != 0) { print_string("pm-ca-sign error no CA key (run pm-ca-init)\n"); return; }
+        if (n >= 10 && strncmp(kbuf, "pmca1 key=", 10) == 0) {
+            /* Lot 6: a clear private key is refused (rerun pm-ca-init). */
+            print_string("pm-ca-sign error clear CA key refused (run pm-ca-init)\n");
+            return;
+        }
+        if (n < 13 + 2 * (int)sizeof(blob) || strncmp(kbuf, "pmca2 sealed=", 13) != 0) { print_string("pm-ca-sign error no CA key (run pm-ca-init)\n"); return; }
         kbuf[n] = 0;
-        if (pm_hex_load(kbuf + 10, CSIG_SK, sk) != 0) { print_string("pm-ca-sign error bad CA key\n"); return; }
+        if (pm_hex_load(kbuf + 13, (int)sizeof(blob), blob) != 0) { print_string("pm-ca-sign error bad CA key\n"); return; }
+        rc = pm_seal_op(OS_SEAL_OP_UNSEAL, blob, (int)sizeof(blob), sk, CSIG_SK);
+        if (rc != CSIG_SK) {
+            print_string("pm-ca-sign error unseal refused rc "); print_int(rc); print_string("\n");
+            return;
+        }
         pm_sig_digest(g_pm_src, len, d);
-        if (csig_sign(sk, d, 32, sig) != 0) { print_string("pm-ca-sign error sign failed\n"); return; }
+        rc = csig_sign(sk, d, 32, sig);
+        for (i = 0; i < CSIG_SK; i++) ((volatile uint8_t*)sk)[i] = 0;
+        if (rc != 0) { print_string("pm-ca-sign error sign failed\n"); return; }
         while (args[0][k] && k < RAMFS_PATH_MAX - 4) { path_ca[k] = args[0][k]; k++; }
         path_ca[k++] = '.'; path_ca[k++] = 'c'; path_ca[k++] = 'a'; path_ca[k] = 0;
         h = "pmca1sig sig="; while (*h) rec[q++] = *h++;
@@ -3443,7 +3487,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "grpc-wire",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -6682,7 +6726,7 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
                 strcmp(command, "pm-certify") == 0 || strcmp(command, "pm-verify") == 0 ||
                 strcmp(command, "pm-ca-init") == 0 || strcmp(command, "pm-ca-sign") == 0 || strcmp(command, "pm-ca-verify") == 0 ||
                 strcmp(command, "pm-cross") == 0 || strcmp(command, "pm-assist") == 0 ||
-                strcmp(command, "pm-ca-revoke") == 0)) {
+                strcmp(command, "pm-ca-revoke") == 0 || strcmp(command, "pm-ca-seal") == 0)) {
         cmd_pm(ctx, command, args, arg_count);
         return 1;
     } else if (strcmp(command, "stat") == 0) {

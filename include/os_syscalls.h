@@ -1750,6 +1750,28 @@ typedef struct {
 #define OS_DEV_OP_SERIAL_RX 6U
 #define OS_DEV_OP_STATUS 7U
 #define OS_DEV_OP_PS2_MODS 8U   /* Lot 6: kernel Shift/Caps state (bit0 shift, bit1 caps) */
+/* Lot 6 (US-059/060): kernel key sealing. The sealing key lives in kernel
+ * memory only (derived per boot from TSC/PIT jitter, no TPM: simule).
+ * EBX = op, ECX = input, EDX = input length, ESI = output, EDI = capacity.
+ *   SEAL: output = nonce(8) | AES-128-GCM ciphertext | tag(16), bound to
+ *         the caller task name. Returns the blob length.
+ *   UNSEAL: returns the plaintext length; another task name or a modified
+ *         blob gives OS_SEAL_AUTH.
+ *   STATUS (ESI = os_seal_status_t*). */
+#define SYS_KEY_SEAL 159
+#define OS_SEAL_OP_SEAL 1U
+#define OS_SEAL_OP_UNSEAL 2U
+#define OS_SEAL_OP_STATUS 3U
+#define OS_SEAL_OVERHEAD 24U
+#define OS_SEAL_MAX_PLAIN 256U
+#define OS_SEAL_BAD_REQUEST (-190)
+#define OS_SEAL_AUTH (-191)
+typedef struct {
+    uint32_t ready;
+    uint32_t seals;
+    uint32_t unseals;
+    uint32_t failures;
+} os_seal_status_t;
 #define OS_DEV_DENIED (-180)
 #define OS_DEV_BAD_REQUEST (-181)
 #define OS_INPUT_MAX_EVENTS 32U
