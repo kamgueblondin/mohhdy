@@ -154,6 +154,63 @@ static void test_owner_check_period(void) {
     TEST_ASSERT_EQUAL(DEVSVC_W_CHECK_OWNERS, devsvc_watchdog(50) & DEVSVC_W_CHECK_OWNERS);
 }
 
+/* Lot 7 (US-001): VGA text console frames. */
+static void test_vga_direct_before_claim_then_ring3(void) {
+    os_device_status_t st;
+    devsvc_reset();
+    /* early boot: Ring 0 paints, not counted (no handoff yet) */
+    TEST_ASSERT_EQUAL(DEVSVC_DIRECT, devsvc_vga_present(1));
+    TEST_ASSERT_EQUAL(0, devsvc_vga_pending());
+    TEST_ASSERT_EQUAL(0, devsvc_vga_take(1));
+    devsvc_set_owner(DEV_VGA, 7);
+    /* the claim makes the current frame pending for the new owner */
+    TEST_ASSERT_EQUAL(1, devsvc_vga_pending());
+    TEST_ASSERT_EQUAL(1, devsvc_vga_take(2));
+    TEST_ASSERT_EQUAL(0, devsvc_vga_take(2));
+    /* frames coalesce until the driver takes them */
+    TEST_ASSERT_EQUAL(DEVSVC_QUEUED, devsvc_vga_present(10));
+    TEST_ASSERT_EQUAL(DEVSVC_QUEUED, devsvc_vga_present(11));
+    TEST_ASSERT_EQUAL(0, devsvc_wants_cpu(DEV_VGA, 11));
+    TEST_ASSERT_EQUAL(1, devsvc_wants_cpu(DEV_VGA, 12));
+    TEST_ASSERT_EQUAL(1, devsvc_vga_take(12));
+    TEST_ASSERT_EQUAL(0, devsvc_wants_cpu(DEV_VGA, 20));
+    devsvc_status(&st);
+    TEST_ASSERT_EQUAL(7, st.vga_owner);
+    TEST_ASSERT_EQUAL(1U, st.vga_handed_off);
+    TEST_ASSERT_EQUAL(2U, st.vga_ring3_frames);
+    TEST_ASSERT_EQUAL(0U, st.vga_ring0_frames);
+    TEST_ASSERT_EQUAL(0U, st.vga_stalls);
+}
+
+static void test_vga_stall_and_death_fall_back_to_ring0(void) {
+    os_device_status_t st;
+    devsvc_reset();
+    devsvc_set_owner(DEV_VGA, 7);
+    TEST_ASSERT_EQUAL(1, devsvc_vga_take(0));
+    TEST_ASSERT_EQUAL(DEVSVC_QUEUED, devsvc_vga_present(100));
+    TEST_ASSERT_EQUAL(0U, devsvc_watchdog(100 + DEVICE_STALL_TICKS - 1) & DEVSVC_W_VGA_REPAINT);
+    TEST_ASSERT_EQUAL(DEVSVC_W_VGA_REPAINT, devsvc_watchdog(100 + DEVICE_STALL_TICKS) & DEVSVC_W_VGA_REPAINT);
+    devsvc_vga_note_ring0();                 /* the kernel glue repaints */
+    TEST_ASSERT_EQUAL(0, devsvc_vga_pending());
+    TEST_ASSERT_EQUAL(0, devsvc_vga_take(110));
+    /* death: frames go straight to Ring 0 and are counted */
+    devsvc_owner_gone(DEV_VGA);
+    TEST_ASSERT_EQUAL(DEVSVC_DIRECT, devsvc_vga_present(120));
+    TEST_ASSERT_EQUAL(DEVSVC_DIRECT, devsvc_vga_present(121));
+    TEST_ASSERT_EQUAL(1, devsvc_should_respawn(DEV_VGA, 0));
+    devsvc_note_respawn(DEV_VGA);
+    devsvc_set_owner(DEV_VGA, 9);
+    TEST_ASSERT_EQUAL(1, devsvc_vga_pending());
+    devsvc_status(&st);
+    TEST_ASSERT_EQUAL(9, st.vga_owner);
+    TEST_ASSERT_EQUAL(1U, st.vga_stalls);
+    TEST_ASSERT_EQUAL(3U, st.vga_ring0_frames);
+    TEST_ASSERT_EQUAL(1U, st.vga_ring3_frames);
+    TEST_ASSERT_EQUAL(1U, st.vga_respawns);
+    TEST_ASSERT_EQUAL(0, st.ps2_owner);
+    TEST_ASSERT_EQUAL(DEVSVC_W_CHECK_OWNERS, devsvc_watchdog(200) & DEVSVC_W_CHECK_OWNERS);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_owner_handoff_and_respawn_budget);
@@ -162,6 +219,8 @@ int main(void) {
     RUN_TEST(test_serial_direct_before_claim_and_queue_order);
     RUN_TEST(test_serial_stall_death_and_overflow);
     RUN_TEST(test_owner_check_period);
+    RUN_TEST(test_vga_direct_before_claim_then_ring3);
+    RUN_TEST(test_vga_stall_and_death_fall_back_to_ring0);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

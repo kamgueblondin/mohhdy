@@ -107,6 +107,34 @@ static void test_desktop_blit_and_restore(void) {
     TEST_ASSERT_EQUAL(' ', glyph_at(0, 0));
 }
 
+/* Lot 7 (US-001): with a Ring 3 owner the frame is rendered but not
+ * painted by Ring 0; the driver copy and a Ring 0 repaint see the same. */
+static void test_frame_routed_to_ring3_driver(void) {
+    uint16_t cells[VGA_ROWS * VGA_COLS];
+    uint32_t cx, cy, vis;
+    int before;
+    vga_test_route_ring3 = 0;
+    vga_console_init(0x07);
+    before = vga_test_ring0_paints;
+    vga_console_put_xy('Q', 0, 0, 0x07);
+    TEST_ASSERT_EQUAL(before + 1, vga_test_ring0_paints);
+    vga_test_route_ring3 = 1;
+    before = vga_test_ring0_paints;
+    vga_console_put_xy('Z', 5, 1, 0x1E);
+    vga_console_set_cursor(6, 1);
+    TEST_ASSERT_EQUAL(before, vga_test_ring0_paints);          /* Ring 0 did not paint */
+    TEST_ASSERT_EQUAL(' ', (char)(vga_test_fb[1 * VGA_COLS + 5] & 0xFF));
+    vga_console_frame_copy(cells, &cx, &cy, &vis);
+    TEST_ASSERT_EQUAL('Z', (char)(cells[1 * VGA_COLS + 5] & 0xFF));
+    TEST_ASSERT_EQUAL(0x1E, (int)(cells[1 * VGA_COLS + 5] >> 8));
+    TEST_ASSERT_EQUAL(6U, cx);
+    TEST_ASSERT_EQUAL(1U, cy);
+    TEST_ASSERT_EQUAL(1U, vis);
+    vga_console_paint_ring0();                                 /* stall or death */
+    TEST_ASSERT_EQUAL('Z', (char)(vga_test_fb[1 * VGA_COLS + 5] & 0xFF));
+    vga_test_route_ring3 = 0;
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_init_blanks_screen);
@@ -118,6 +146,7 @@ int main(void) {
     RUN_TEST(test_view_up_clamped_to_history);
     RUN_TEST(test_cursor_inverts_visible_cell);
     RUN_TEST(test_desktop_blit_and_restore);
+    RUN_TEST(test_frame_routed_to_ring3_driver);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

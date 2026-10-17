@@ -61,6 +61,7 @@ int vmm_map_page_in_directory(vmm_directory_t *dir, void *physaddr, void *virtua
 /* Maps a frame the task does not own (read-only, user, PAGE_BORROWED).
  * Returns 0, or negative like vmm_map_page_in_directory. */
 int vmm_map_borrowed_user_page(vmm_directory_t *dir, void *physaddr, void *virtualaddr);
+int vmm_map_borrowed_user_page_rw(vmm_directory_t *dir, void *physaddr, void *virtualaddr);
 /* 1 if the user page at virtualaddr is a borrowed (never freed) frame. */
 int vmm_page_is_borrowed(const page_t *page);
 /* Libère uniquement un répertoire utilisateur inactif et ses pages marquées utilisateur. */

@@ -5312,6 +5312,13 @@ static void cmd_devices(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string(" buttons "); print_uint(st.mouse_buttons);
     print_string(" mods "); print_uint(st.kbd_mods);
     print_string(" end\n");
+    print_string("devices vga owner "); print_int(st.vga_owner);
+    print_string(" handed "); print_uint(st.vga_handed_off);
+    print_string(" ring3 "); print_uint(st.vga_ring3_frames);
+    print_string(" ring0 "); print_uint(st.vga_ring0_frames);
+    print_string(" stalls "); print_uint(st.vga_stalls);
+    print_string(" respawns "); print_uint(st.vga_respawns);
+    print_string(" end\n");
 }
 
 static void cmd_pci_rescan(shell_context_t* ctx, char args[][128], int arg_count) {

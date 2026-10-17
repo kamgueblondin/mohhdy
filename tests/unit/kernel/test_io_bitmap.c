@@ -124,6 +124,23 @@ static void test_ps2_and_serial_grants_are_narrow(void) {
     TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3FD));
 }
 
+/* Lot 7 (US-001): vgadriver gets the CRTC index/data ports only. */
+static void test_vga_grant_is_crtc_only(void) {
+    io_bitmap_deny_all(map, sizeof(map));
+    io_bitmap_apply_vga(map, sizeof(map), 1);
+    TEST_ASSERT_TRUE(io_bitmap_port_allowed(map, sizeof(map), 0x3D4));
+    TEST_ASSERT_TRUE(io_bitmap_port_allowed(map, sizeof(map), 0x3D5));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3D3));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3D6));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3C0));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3F8));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x20));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x40));
+    io_bitmap_apply_vga(map, sizeof(map), 0);
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3D4));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x3D5));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_deny_all_blocks_every_probe_port);
@@ -134,6 +151,7 @@ int main(void) {
     RUN_TEST(test_ne2k_and_ata_grants_are_independent);
     RUN_TEST(test_pci_grant_opens_only_config_ports);
     RUN_TEST(test_ps2_and_serial_grants_are_narrow);
+    RUN_TEST(test_vga_grant_is_crtc_only);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

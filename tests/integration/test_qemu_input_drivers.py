@@ -19,6 +19,12 @@
    ps2driver is killed; the respawned driver seeds its decoder from the
    kernel state, so the next key is upper case, and lower case after the
    release.
+8. Lot 7 VGA text console: bin/vgadriver claims the console (text page
+   mapped in its address space, CRTC ports in its IOPB); a line echoed by
+   the shell is read back from guest video memory (QMP pmemsave of
+   0xB8000) while the frames are counted as painted by Ring 3. Killed, the
+   console keeps updating from Ring 0 (counted) until the supervised
+   respawn claims again and paints the next line.
 """
 import json
 import socket
@@ -44,6 +50,50 @@ STATUS_RE = (r"devices ok ps2 owner (-?\d+) handed (\d+) irqs (\d+) events (\d+)
              r"stalls (\d+) respawns (\d+) serial owner (-?\d+) handed (\d+) ring3 (\d+) "
              r"ring0 (\d+) stalls (\d+) overflows (\d+) rx (\d+) respawns (\d+) "
              r"mouse packets (\d+) dx (-?\d+) dy (-?\d+) buttons (\d+) mods (\d+) end")
+
+
+VGA_RE = r"devices vga owner (-?\d+) handed (\d+) ring3 (\d+) ring0 (\d+) stalls (\d+) respawns (\d+) end"
+VGA_KEYS = ("owner", "handed", "ring3", "ring0", "stalls", "respawns")
+VGA_DUMP = os.path.join(ata.LOG_DIR, "input-drivers-vga.bin")
+
+
+def vga_status(client, proc):
+    start = ata.send_command_until(client, "devices", "devices vga owner", proc)
+    deadline = time.monotonic() + 10
+    while True:
+        match = re.search(VGA_RE, normalized_log(ata.log_text()[start:]))
+        if match or time.monotonic() > deadline:
+            break
+        time.sleep(0.1)
+    if not match:
+        raise RuntimeError("unparsable devices vga: %s" % ata.log_text()[start:][-600:])
+    return dict(zip(VGA_KEYS, (int(v) for v in match.groups())))
+
+
+def vga_screen(qmp):
+    """Text of the 80x25 page in guest video memory (character bytes)."""
+    try:
+        os.remove(VGA_DUMP)
+    except OSError:
+        pass
+    qmp.call("pmemsave", {"val": 0xB8000, "size": 4000, "filename": VGA_DUMP})
+    deadline = time.monotonic() + 5
+    while (not os.path.exists(VGA_DUMP) or os.path.getsize(VGA_DUMP) < 4000) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    with open(VGA_DUMP, "rb") as handle:
+        data = handle.read()
+    return "\n".join(bytes(data[r * 160 + 2 * c] for c in range(80)).decode("latin-1") for r in range(25))
+
+
+def wait_screen(qmp, needle, timeout=10):
+    deadline = time.monotonic() + timeout
+    while True:
+        text = vga_screen(qmp)
+        if needle in text:
+            return text
+        if time.monotonic() > deadline:
+            raise RuntimeError("%r not in video memory:\n%s" % (needle, text))
+        time.sleep(0.2)
 
 
 def devices(client, proc):
@@ -145,6 +195,7 @@ def main():
         _, start = ata.spawn(client, proc, "devrogue")
         ata.wait_child(client, proc, "devrogue ps2 claim rc -180 serial claim rc -180 submit rc -180", start)
         ata.wait_child(client, proc, ata.GP_FAULT, start)
+        ata.wait_child(client, proc, "devrogue vga claim rc -180 take rc -180", start)
         if "devrogue unexpected" in normalized_log(ata.log_text()[start:]):
             raise RuntimeError("devrogue reached a device port")
         # 4. Kill ps2driver: keys still arrive (Ring 0 until the new claim), then
@@ -214,6 +265,40 @@ def main():
         st9 = devices(client, proc)
         if st9["ps2_respawns"] != 2 or st9["ps2_owner"] in (ps2_now, 0) or st9["mods"] != 0:
             raise RuntimeError("shift across driver death: %r" % st9)
+        # 8. VGA text console through bin/vgadriver, then Ring 0 across its death.
+        ata.wait_for("[VGA] boot vgadriver spawned", proc, timeout=5)
+        ata.wait_for("[VGA] Ring 3 vgadriver claimed the text console pid", proc, timeout=5)
+        v1 = vga_status(client, proc)
+        if v1["owner"] <= 0 or v1["handed"] != 1 or v1["ring3"] == 0:
+            raise RuntimeError("vgadriver did not take the console: %r" % v1)
+        ata.send_command_until(client, "echo vgamark1", "vgamark1", proc)
+        wait_screen(qmp, "vgamark1")
+        v2 = vga_status(client, proc)
+        if v2["owner"] != v1["owner"] or v2["ring3"] <= v1["ring3"]:
+            raise RuntimeError("frames not painted by vgadriver: %r -> %r" % (v1, v2))
+        if v2["ring0"] - v1["ring0"] > v2["stalls"] - v1["stalls"]:
+            raise RuntimeError("Ring 0 painted without a stall while vgadriver lived: %r -> %r" % (v1, v2))
+        mark = len(ata.log_text())
+        ata.kill(client, proc, str(v2["owner"]))
+        v3 = None
+        for _ in range(10):
+            v3 = vga_status(client, proc)
+            if v3["respawns"] == 1 and v3["owner"] > 0 and v3["owner"] != v2["owner"]:
+                break
+            ata.send_command_until(client, "yield", "yield ok", proc)
+        if not v3 or v3["respawns"] != 1 or v3["owner"] in (0, v2["owner"]):
+            raise RuntimeError("vgadriver not respawned: %r" % v3)
+        ata.wait_for("[VGA] supervised respawn bin/vgadriver pid", proc, mark, timeout=5)
+        if v3["ring0"] <= v2["ring0"]:
+            raise RuntimeError("no Ring 0 VGA fallback after the kill: %r -> %r" % (v2, v3))
+        ata.send_command_until(client, "echo vgamark2", "vgamark2", proc)
+        wait_screen(qmp, "vgamark2")
+        v4 = vga_status(client, proc)
+        if v4["owner"] != v3["owner"] or v4["ring3"] <= v3["ring3"]:
+            raise RuntimeError("respawned vgadriver does not paint: %r -> %r" % (v3, v4))
+        print("vga: vgadriver pid %d painted %d frames, killed: Ring 0 painted %d frames until "
+              "pid %d claimed (respawn 1), screen read back from 0xB8000" %
+              (v2["owner"], v2["ring3"], v3["ring0"] - v2["ring0"], v4["owner"]))
         print("mouse: %d packets dx %+d dy %+d via ps2driver; shift held across ps2driver death "
               "(respawn %d) kept upper case, released to lower case" %
               (st8["mouse_packets"] - st6["mouse_packets"], st8["mouse_dx"] - st6["mouse_dx"],
@@ -223,7 +308,7 @@ def main():
               "as %d (ring0 fallback %d bytes)" %
               (ps2_pid, st2["events"], st2["irqs"], ser_pid, st2["ring3"], st3["ps2_owner"],
                st3["ps2_ring0"], st5["serial_owner"], st5["serial_ring0"]))
-        print("QEMU Ring 3 PS/2 and serial driver contract passed.")
+        print("QEMU Ring 3 PS/2, serial and VGA driver contract passed.")
         return 0
     finally:
         if qmp is not None:

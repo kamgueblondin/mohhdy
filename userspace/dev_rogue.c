@@ -44,6 +44,12 @@ void main(void) {
     iw_puts(" submit rc ");
     iw_print_int(dev_op(OS_DEV_OP_PS2_SUBMIT, 0U, 0U, 0U));
     iw_putc('\n');
+    /* Lot 7: the VGA console claim and frame take are refused too */
+    iw_puts("devrogue vga claim rc ");
+    iw_print_int(dev_op(OS_DEV_OP_VGA_CLAIM, 0U, 0U, 0U));
+    iw_puts(" take rc ");
+    iw_print_int(dev_op(OS_DEV_OP_VGA_TAKE, 0U, 0U, 0U));
+    iw_putc('\n');
     iw_puts("devrogue in 0x64\n");
     asm volatile("inb %1, %0" : "=a"(v) : "Nd"((uint16_t)0x64));
     iw_puts("devrogue unexpected port access ");

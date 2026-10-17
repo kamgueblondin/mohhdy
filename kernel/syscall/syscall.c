@@ -871,8 +871,18 @@ static int sys_pci_service(uint32_t op, uint32_t arg, uint32_t count) {
  * stall (watchdog in timer.c); every such byte is counted. */
 static int32_t g_dev_respawn_pid[DEV_COUNT];
 
-static const char* device_service_name(int dev) { return dev == DEV_PS2 ? "ps2-driver" : "serial-driver"; }
-static const char* device_task_name(int dev) { return dev == DEV_PS2 ? "ps2driver" : "serialdriver"; }
+static const char* device_service_name(int dev) {
+    return dev == DEV_PS2 ? "ps2-driver" : dev == DEV_VGA ? "vga-driver" : "serial-driver";
+}
+static const char* device_task_name(int dev) {
+    return dev == DEV_PS2 ? "ps2driver" : dev == DEV_VGA ? "vgadriver" : "serialdriver";
+}
+static const char* device_binary(int dev) {
+    return dev == DEV_PS2 ? "bin/ps2driver" : dev == DEV_VGA ? "bin/vgadriver" : "bin/serialdriver";
+}
+static const char* device_log_tag(int dev) {
+    return dev == DEV_PS2 ? "[PS2] " : dev == DEV_VGA ? "[VGA] " : "[SERIAL] ";
+}
 
 static int32_t device_live_driver(int dev) {
     int32_t pid = service_registry_lookup(device_service_name(dev));
@@ -915,6 +925,28 @@ void device_serial_wake(void) {
 
 extern void serial_ring0_flush(void);
 
+/* Lot 7 (US-001): VGA text console glue. vga_console.c calls this after
+ * every render: 1 = the Ring 3 vgadriver will paint the frame. */
+static volatile int g_vga_panic;
+void vga_panic_mode(void) { g_vga_panic = 1; }
+
+int vga_route_frame(void) {
+    uint32_t flags;
+    int verdict;
+    if (g_vga_panic) return 0;
+    __asm__ volatile("pushfl; popl %0; cli" : "=r"(flags) :: "memory");
+    verdict = devsvc_vga_present(timer_get_ticks());
+    if (flags & 0x200U) __asm__ volatile("sti" ::: "memory");
+    if (verdict != DEVSVC_QUEUED) return 0;
+    if (!current_task || (int32_t)current_task->id != devsvc_owner(DEV_VGA)) device_wake_owner(DEV_VGA);
+    return 1;
+}
+
+static void vga_ring0_repaint(void) {
+    devsvc_vga_note_ring0();
+    vga_console_paint_ring0();
+}
+
 /* IRQ0 (timer.c): Ring 0 fallbacks while a driver is stalled or gone. */
 void device_watchdog_tick(uint32_t now) {
     uint32_t act = devsvc_watchdog(now);
@@ -925,12 +957,14 @@ void device_watchdog_tick(uint32_t now) {
                 devsvc_owner_gone(dev);
                 if (dev == DEV_PS2) keyboard_driver_lost();
                 if (dev == DEV_SERIAL) act |= DEVSVC_W_SERIAL_FLUSH;
+                else if (dev == DEV_VGA) act |= DEVSVC_W_VGA_REPAINT;
                 else act |= DEVSVC_W_PS2_DRAIN;
             }
         }
     }
     if (act & DEVSVC_W_PS2_DRAIN) devsvc_ps2_note_ring0(keyboard_ring0_drain());
     if (act & DEVSVC_W_SERIAL_FLUSH) serial_ring0_flush();
+    if (act & DEVSVC_W_VGA_REPAINT) vga_ring0_repaint();
 }
 
 void device_supervise(void) {
@@ -941,15 +975,16 @@ void device_supervise(void) {
         if (devsvc_owner(dev) > 0) {
             if (device_owner_alive(dev)) continue;
             devsvc_owner_gone(dev);
-                if (dev == DEV_PS2) keyboard_driver_lost();
+            if (dev == DEV_PS2) keyboard_driver_lost();
+            if (dev == DEV_VGA) vga_ring0_repaint();
         }
         if (g_dev_respawn_pid[dev] > 0) {
             born = get_task_by_id((uint32_t)g_dev_respawn_pid[dev]);
             pending = born && born->type == TASK_TYPE_USER && born->state != TASK_TERMINATED;
         }
         if (!devsvc_should_respawn(dev, pending)) continue;
-        born = create_task_from_initrd_file(dev == DEV_PS2 ? "bin/ps2driver" : "bin/serialdriver");
-        print_string_serial(dev == DEV_PS2 ? "[PS2] " : "[SERIAL] ");
+        born = create_task_from_initrd_file(device_binary(dev));
+        print_string_serial(device_log_tag(dev));
         if (!born) {
             print_string_serial("supervised respawn failed\n");
             devsvc_note_respawn(dev);   /* the budget bounds the retries */
@@ -1015,6 +1050,7 @@ static int device_driver_wants_cpu(const task_t* self) {
 
 static int device_ps2_ready(void) { return devsvc_ps2_pending(); }
 static int device_serial_ready(void) { return devsvc_serial_queued() != 0U; }
+static int device_vga_ready(void) { return devsvc_vga_pending(); }
 
 /* Lot 6 (US-059/060): kernel key sealing. First use mixes TSC samples
  * taken around port I/O and the PIT counter into the per-boot key. */
@@ -1128,6 +1164,39 @@ static int sys_device_service(uint32_t op, uint32_t a, uint32_t b, uint32_t c) {
         }
         devsvc_serial_note_rx(b);
         return (int)b;
+    }
+    case OS_DEV_OP_VGA_CLAIM: {
+        uint32_t off;
+        if (device_live_driver(DEV_VGA) != pid) return OS_DEV_DENIED;
+        /* the text page (4000 bytes at 0xB8000) writable in this task only */
+        for (off = 0U; off < 2U * OS_VGA_CELLS; off += PAGE_SIZE) {
+            if (vmm_map_borrowed_user_page_rw(current_task->vmm_dir, (void*)(0xB8000U + off),
+                                              (void*)(OS_VGA_DRIVER_WINDOW + off)) != 0)
+                return OS_DEV_BAD_REQUEST;
+        }
+        tss_set_vga_io(1);
+        print_string_serial("[VGA] Ring 3 vgadriver claimed the text console pid ");
+        ata_serial_u32((uint32_t)pid);
+        print_string_serial("\n");
+        devsvc_set_owner(DEV_VGA, pid);
+        return 0;
+    }
+    case OS_DEV_OP_VGA_TAKE: {
+        static os_vga_driver_frame_t fr;
+        uint32_t flags;
+        int got;
+        if (devsvc_owner(DEV_VGA) != pid) return OS_DEV_DENIED;
+        if (!syscall_user_range((const void*)a, sizeof(os_vga_driver_frame_t), 1)) return OS_DEV_BAD_REQUEST;
+        (void)device_block(c, device_vga_ready);
+        __asm__ volatile("pushfl; popl %0; cli" : "=r"(flags) :: "memory");
+        got = devsvc_vga_take(timer_get_ticks());
+        if (got) {
+            vga_console_frame_copy(fr.cells, &fr.cursor_x, &fr.cursor_y, &fr.cursor_visible);
+            fr.seq++;
+        }
+        if (flags & 0x200U) __asm__ volatile("sti" ::: "memory");
+        if (got) *(os_vga_driver_frame_t*)a = fr;
+        return got;
     }
     case OS_DEV_OP_PS2_MODS:
         if (device_live_driver(DEV_PS2) != pid) return OS_DEV_DENIED;

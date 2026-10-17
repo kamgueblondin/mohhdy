@@ -4,6 +4,7 @@
 
 extern void write_serial(char c);
 extern void serial_panic_mode(void);
+extern void vga_panic_mode(void);
 extern void print_hex_serial(unsigned int n);
 
 // Déclaration pour le nouveau handler
@@ -63,6 +64,7 @@ void fault_handler_c(registers_t *r) {
     }
     /* Lot 5: the Ring 3 serialdriver will never run again; Ring 0 writes. */
     serial_panic_mode();
+    vga_panic_mode();   /* Lot 7: Ring 0 paints the console from here on */
     print_string_serial("\n!!! KERNEL EXCEPTION !!!\n");
     print_string_serial("Interrupt: ");
     print_hex_serial(r->int_no);

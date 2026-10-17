@@ -1779,6 +1779,28 @@ typedef struct {
 #define OS_DEV_OP_SERIAL_RX 6U
 #define OS_DEV_OP_STATUS 7U
 #define OS_DEV_OP_PS2_MODS 8U   /* Lot 6: kernel Shift/Caps state (bit0 shift, bit1 caps) */
+/* Lot 7 (US-001): VGA text console owned by the Ring 3 "vga-driver"
+ * (binary vgadriver). The kernel keeps the console model (rows, scrollback,
+ * cursor) and renders an 80x25 frame; after VGA_CLAIM the driver gets the
+ * text page 0xB8000 mapped writable at OS_VGA_DRIVER_WINDOW and the CRTC
+ * ports 0x3D4/0x3D5 in its IOPB, and paints every frame itself.
+ *   VGA_CLAIM: live owner only.
+ *   VGA_TAKE (ECX = os_vga_driver_frame_t*, ESI = timeout ticks): blocks until a
+ *     new frame; returns 1 with the frame copied, 0 on timeout.
+ * Ring 0 paints before the claim (early boot), after a death until the
+ * respawn claims, on a stall (frame not taken for DEVICE_STALL_TICKS) and
+ * after a kernel exception; frames painted after the handoff are counted. */
+#define OS_DEV_OP_VGA_CLAIM 9U
+#define OS_DEV_OP_VGA_TAKE 10U
+#define OS_VGA_DRIVER_WINDOW 0xAA000000U
+#define OS_VGA_CELLS 2000U
+typedef struct {
+    uint16_t cells[OS_VGA_CELLS];
+    uint32_t cursor_x;
+    uint32_t cursor_y;
+    uint32_t cursor_visible;
+    uint32_t seq;
+} os_vga_driver_frame_t;
 /* Lot 6 (US-059/060): kernel key sealing. The sealing key lives in kernel
  * memory only (derived per boot from TSC/PIT jitter, no TPM: simule).
  * EBX = op, ECX = input, EDX = input length, ESI = output, EDI = capacity.
@@ -1841,6 +1863,13 @@ typedef struct {
     int32_t mouse_dy;
     uint32_t mouse_buttons;
     uint32_t kbd_mods;
+    /* Lot 7: VGA text console driver. */
+    int32_t vga_owner;
+    uint32_t vga_handed_off;
+    uint32_t vga_ring3_frames;   /* frames taken and painted by the Ring 3 driver */
+    uint32_t vga_ring0_frames;   /* frames Ring 0 painted after the handoff */
+    uint32_t vga_stalls;
+    uint32_t vga_respawns;
 } os_device_status_t;
 
 #endif

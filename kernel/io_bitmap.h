@@ -43,4 +43,9 @@ void io_bitmap_apply_pci(uint8_t* map, uint32_t len, int allow);
 void io_bitmap_apply_ps2(uint8_t* map, uint32_t len, int allow);
 void io_bitmap_apply_serial(uint8_t* map, uint32_t len, int allow);
 
+/* Lot 7 (US-001): VGA CRTC index/data (cursor) for the live vgadriver. */
+#define IO_BITMAP_VGA_CRTC_INDEX 0x3D4U
+#define IO_BITMAP_VGA_CRTC_DATA 0x3D5U
+void io_bitmap_apply_vga(uint8_t* map, uint32_t len, int allow);
+
 #endif

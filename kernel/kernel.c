@@ -1108,6 +1108,20 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
             print_string_serial("[SERIAL] boot serialdriver unavailable; Ring 0 COM1 path\n");
         }
     }
+    /* Lot 7 (US-001): the VGA text console moves to bin/vgadriver. Every
+     * line printed before its claim (this whole boot log) was painted by
+     * Ring 0: that early-boot path stays, as does the painting after a
+     * driver death, a stall or a kernel exception. */
+    {
+        task_t* vga_task = create_task_from_initrd_file("bin/vgadriver");
+        if (vga_task) {
+            vga_task->boot_service = 1U;
+            vga_task->priority = OS_TASK_PRIORITY_HIGH;
+            print_string_serial("[VGA] boot vgadriver spawned\n");
+        } else {
+            print_string_serial("[VGA] boot vgadriver unavailable; Ring 0 text console\n");
+        }
+    }
 
     /* The driver must install the boot FAT before aiworker opens GPT2.GGU.
      * Later spawns move themselves first; put atadriver back in front. */

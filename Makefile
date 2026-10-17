@@ -608,6 +608,7 @@ pack-initrd-now:
 	@cp -f userspace/pcirogue $(BIN_DEST_DIR)/pcirogue
 	@cp -f userspace/ps2driver $(BIN_DEST_DIR)/ps2driver
 	@cp -f userspace/serialdriver $(BIN_DEST_DIR)/serialdriver
+	@cp -f userspace/vgadriver $(BIN_DEST_DIR)/vgadriver
 	@cp -f userspace/devrogue $(BIN_DEST_DIR)/devrogue
 	@cp -f userspace/ataclient $(BIN_DEST_DIR)/ataclient
 	@cp -f userspace/atarogue $(BIN_DEST_DIR)/atarogue
