@@ -149,6 +149,7 @@ static int grpc_serve(const char* rest) {
     return served == want ? 0 : 2;
 }
 
+#define GC_PIECE ((int)OS_NET_RELAY_MAX_IN)
 static int grpc_call(const char* rest) {
     char lip[20], rip[20], ps[8], svc[48], meth[32], pay[64];
     static unsigned char req[512], seg[640], rx[768];
@@ -156,7 +157,7 @@ static int grpc_call(const char* rest) {
     os_socket_send_request_t s;
     os_socket_receive_request_t r;
     uint16_t seg_len = 0U, got = 0U;
-    int port, n, sid, rc, i, total = 0, rounds, done = 0, hs, gs, frames, ss, acks;
+    int port, n, sid, rc, i, total = 0, rounds, done = 0, hs, gs, frames, ss, acks, segs = 0;
     char msg[160];
     unsigned t0;
     rest = word(rest, lip, (int)sizeof(lip));
@@ -183,12 +184,18 @@ static int grpc_call(const char* rest) {
     if (sid < 0) { say("grpc-call error connect rc ", sid, "\n"); return 1; }
     say("grpc-call connected socket ", sid, "");
     say(" local_port ", c.local_port, "\n");
-    s.socket_id = sid; s.payload = req; s.length = (uint16_t)n;
-    s.segment = seg; s.capacity = sizeof(seg); s.out_length = &seg_len;
-    rc = sys1(SYS_SOCKET_SEND, &s);
-    if (rc != 0) { say("grpc-call error send rc ", rc, "\n"); (void)sys1(SYS_SOCKET_CLOSE, (void*)sid); return 1; }
+    /* The relayed SYS_SOCKET_SEND carries up to OS_NET_RELAY_MAX_IN bytes:
+     * one TCP segment per piece, the server reassembles the stream. */
+    for (i = 0; i < n; i += GC_PIECE) {
+        int k = n - i > GC_PIECE ? GC_PIECE : n - i;
+        s.socket_id = sid; s.payload = req + i; s.length = (uint16_t)k;
+        s.segment = seg; s.capacity = sizeof(seg); s.out_length = &seg_len;
+        rc = sys1(SYS_SOCKET_SEND, &s);
+        if (rc != 0) { say("grpc-call error send rc ", rc, "\n"); (void)sys1(SYS_SOCKET_CLOSE, (void*)sid); return 1; }
+        segs++;
+    }
     say("grpc-call sent request_bytes ", n, "");
-    say(" segment ", seg_len, "\n");
+    say(" segments ", segs, "\n");
     for (rounds = 0; rounds < 60 && !done; rounds++) {
         got = 0U;
         r.socket_id = sid; r.buffer = rx + total; r.capacity = (uint16_t)(sizeof(rx) - (unsigned)total);

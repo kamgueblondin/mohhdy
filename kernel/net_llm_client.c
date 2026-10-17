@@ -878,7 +878,18 @@ static int web_pump_one(void) {
         if (conn.remote_port != view.source_port || s->ip[0] != ip[0] || s->ip[1] != ip[1] ||
             s->ip[2] != ip[2] || s->ip[3] != ip[3])
             continue;
-        (void)net_socket_feed(s->sock, boot_llm_frame + tcp_off, (uint16_t)(ip_len - ihl));
+        {
+            uint16_t thl = (uint16_t)((boot_llm_frame[tcp_off + 12U] >> 4) * 4U);
+            int fed = net_socket_feed(s->sock, boot_llm_frame + tcp_off, (uint16_t)(ip_len - ihl));
+            /* Lot 6 (US-067): ACK client data right away (RFC 1122 4.2.3.2)
+             * so a client that waits for each segment to be acked (the
+             * guest wire socket) can send a request in several segments. */
+            if (fed == 0 && ip_len > (uint16_t)(ihl + thl) && !(view.flags & 0x01U) &&
+                net_socket_build_ack(s->sock, boot_peer_segment, sizeof(boot_peer_segment), &seg_len) == 0)
+                (void)ne2k_tcp_segment(g_llm_dev, g_llm_io, &boot_llm_arp_cache, boot_llm_frame,
+                                       sizeof(boot_llm_frame), boot_llm_lease.ipv4, s->ip,
+                                       boot_peer_segment, seg_len);
+        }
         if (view.flags & 0x01U) s->peer_closed = 1U;
         return 0;
     }
