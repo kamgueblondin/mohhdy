@@ -12,6 +12,7 @@
 #include "kernel/net_nic_owner.h"
 #include "service_registry.h"
 #include "kernel/timer.h"
+#include "kernel/pci_service.h"
 
 extern void write_serial(char c);
 
@@ -404,6 +405,9 @@ void schedule(cpu_state_t* cpu) {
                    ata_owner_ports_open(current_task->id, current_task->id));
     /* Tranche 5 suite: the NE2000 window only for the worker that claimed
      * the card, while it is still the live net-driver owner. */
+    /* Lot 4 (US-001): PCI config ports only for the live pcidriver. */
+    tss_set_pci_io(current_task->type == TASK_TYPE_USER &&
+                   pci_live_driver() == (int32_t)current_task->id);
     tss_set_nic_io(current_task->type == TASK_TYPE_USER && nic_owner_pid() != 0 &&
                    nic_owner_ports_open((int32_t)current_task->id,
                                         service_registry_lookup("net-driver")));

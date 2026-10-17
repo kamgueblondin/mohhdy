@@ -195,6 +195,37 @@ int net_tcp_connection_accept_data(net_tcp_connection_t* connection,const net_tc
     return 0;
 }
 
+int net_tcp_connection_classify_segment(const net_tcp_connection_t* connection,const net_tcp_view_t* view) {
+    int32_t start, end;
+    if (!connection || !view) return -1;
+    if (view->source_port != connection->remote_port || view->destination_port != connection->local_port)
+        return NET_TCP_SEGMENT_FOREIGN;
+    if (connection->state != NET_TCP_STATE_ESTABLISHED) return NET_TCP_SEGMENT_IN_ORDER;
+    /* Un RST reste traite par l'appelant (echec explicite). */
+    if ((view->flags & NET_TCP_FLAG_RST) != 0U) return NET_TCP_SEGMENT_IN_ORDER;
+    /* SYN-ACK retransmis par un pair qui n'a pas vu notre ACK. */
+    if ((view->flags & NET_TCP_FLAG_SYN) != 0U) return NET_TCP_SEGMENT_DUPLICATE;
+    /* Arithmetique modulo 2^32 (RFC 793) : robuste au rebouclage. */
+    start = (int32_t)(view->sequence - connection->remote_sequence);
+    end = start + (int32_t)view->payload_length;
+    if (start == 0) return NET_TCP_SEGMENT_IN_ORDER;
+    if (start > 0) return NET_TCP_SEGMENT_FUTURE;
+    if (end <= 0) return NET_TCP_SEGMENT_DUPLICATE;
+    return NET_TCP_SEGMENT_OVERLAP;
+}
+
+int net_tcp_connection_trim_segment(const net_tcp_connection_t* connection,net_tcp_view_t* view) {
+    uint32_t delta;
+    if (!connection || !view) return -1;
+    if (net_tcp_connection_classify_segment(connection, view) != NET_TCP_SEGMENT_OVERLAP) return -2;
+    delta = connection->remote_sequence - view->sequence;
+    if (delta == 0U || delta >= view->payload_length) return -3;
+    view->payload += delta;
+    view->payload_length = (uint16_t)(view->payload_length - delta);
+    view->sequence = connection->remote_sequence;
+    return 0;
+}
+
 int net_tcp_connection_accept_tls_record(net_tcp_connection_t* connection,const net_tcp_view_t* view,
                                          net_tls_record_view_t* record,uint16_t* consumed) {
     uint16_t accepted;

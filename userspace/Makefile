@@ -12,6 +12,8 @@ PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver
 USER_HEADERS = promptmessage.h ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h osui_ide.h p2p.h shell_p2p.h collab.h prod.h csig.h
 # Tranche 4: Ring 3 ATA driver + proofs.
 PROGRAMS += atadriver ataclient atarogue
+# Lot 4 (US-001): Ring 3 PCI enumeration worker + rogue proof.
+PROGRAMS += pcidriver pcirogue
 # Tranche 5: net-driver gate proof client.
 PROGRAMS += netclaim
 # Tranche 5 slice 2: net IPC relay proof client.
@@ -54,7 +56,7 @@ ai_gguf_pause.o: ai_gguf_client.c
 	$(CC) $(CFLAGS) -DGGUF_PAUSE -c -o $@ $<
 ai_client.o ai_stat.o ai_rogue.o ai_gguf_client.o ai_gguf_pause.o: ai_common.h $(USER_HEADERS)
 
-shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o osui_ide.o promptmessage.o shell_p2p.o shell_collab.o collab.o p2p.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o shell_prod.o prod.o shell_persist.o csig.o shell_platform.o platform.o start.o
+shell: shell.o ramfs.o procsim.o osui_runtime.o osui_gui.o osui_ide.o promptmessage.o shell_p2p.o shell_collab.o collab.o p2p.o stun.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o shell_prod.o prod.o shell_persist.o csig.o shell_platform.o platform.o start.o
 	@echo "Linking shell..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
@@ -140,6 +142,12 @@ ata_driver.o: ata_driver.c ../kernel/fs/fsop_exec.h ../fs/overlay.h $(USER_HEADE
 atadriver: ata_driver.o $(DRV_FS_OBJS) start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
+pcidriver: pci_driver.o start.o
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
+pcirogue: pci_rogue.o start.o
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
 ataclient: ata_client.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
@@ -213,4 +221,4 @@ start.o: start.s
 clean:
 	@echo "Cleaning userspace..."
 	rm -f *.o $(PROGRAMS)
-ipc_wait_server.o ipc_wait_poke.o: ipc_wait_common.h
+ipc_wait_server.o ipc_wait_poke.o pci_driver.o pci_rogue.o: ipc_wait_common.h

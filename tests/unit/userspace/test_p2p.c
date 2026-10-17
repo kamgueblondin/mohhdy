@@ -11,6 +11,9 @@ typedef struct { int idx; } ctx_t;
 static dgram_t g_q[NODES][QLEN];
 static int g_qh[NODES], g_qt[NODES];
 static int g_cut[NODES][NODES];      /* 1: frames from i never reach j */
+/* Simulated NAT (US-074 tests only): source IPv4 seen by j for frames from
+ * i; 0.0.0.0 = no translation. */
+static uint8_t g_nat[NODES][NODES][4];
 static uint32_t g_ticks;
 static char g_out[NODES][65536];
 static p2p_node_t g_n[NODES];
@@ -26,7 +29,8 @@ static int bus_send(void* c, const uint8_t ip[4], const uint8_t* d, uint16_t len
         dgram_t* q;
         if (j == from || g_cut[from][j] || (g_qt[j] + 1) % QLEN == g_qh[j]) continue;
         q = &g_q[j][g_qt[j]];
-        memcpy(q->ip, g_n[from].ip, 4);
+        if (g_nat[from][j][0]) memcpy(q->ip, g_nat[from][j], 4);
+        else memcpy(q->ip, g_n[from].ip, 4);
         memset(q->mac, 0, 6); q->mac[5] = (uint8_t)(from + 1);
         memcpy(q->data, d, len); q->len = len;
         g_qt[j] = (g_qt[j] + 1) % QLEN;
@@ -59,7 +63,7 @@ static void setup(int count, const char* key_c) {
     int i;
     static const char* names[NODES] = {"alpha", "beta", "gamma", "delta"};
     memset(g_q, 0, sizeof(g_q)); memset(g_qh, 0, sizeof(g_qh)); memset(g_qt, 0, sizeof(g_qt));
-    memset(g_cut, 0, sizeof(g_cut)); memset(g_out, 0, sizeof(g_out)); memset(g_n, 0, sizeof(g_n));
+    memset(g_cut, 0, sizeof(g_cut)); memset(g_nat, 0, sizeof(g_nat)); memset(g_out, 0, sizeof(g_out)); memset(g_n, 0, sizeof(g_n));
     g_ticks = 1000;
     for (i = 0; i < count; i++) {
         uint8_t ip[4] = {10, 77, 0, (uint8_t)(i + 1)}, seed[32];
@@ -522,9 +526,10 @@ void test_routing_grpc_and_stun(void) {
     /* Test US-074 STUN probe & NAT punch */
     TEST_ASSERT_EQUAL(0, p2p_stun_probe(&g_n[0], &g_h[0], "beta"));
     run(3, 30);
-    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p stun mapped_ip 10.77.0.1 port "));
+    /* Shared segment, no NAT: the real STUN mapping equals the local address. */
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p stun mapped_ip 10.77.0.1 port 7700 from beta nat_type direct servers 1"));
     p2p_report(&g_n[0], &g_h[0], "stun", rep, sizeof(rep));
-    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p nat type full_cone mapped_ip 10.77.0.1"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p nat type direct mapped_ip 10.77.0.1 port 7700"));
 
     TEST_ASSERT_EQUAL(0, p2p_nat_punch(&g_n[0], &g_h[0], "beta"));
     run(3, 30);
@@ -671,10 +676,108 @@ void test_traffic_baseline_anomaly(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "verdict degraded"));
 }
 
+/* US-069: node crash (silent, all frames lost), reroute around it, then
+ * reboot under a fresh identity: rejoin and anti-entropy push of the kv. */
+void test_crash_reroute_and_rejoin(void) {
+    char rep[1024];
+    uint8_t ip[4] = {10, 77, 0, 2}, seed[32];
+    int j;
+    setup(4, 0);
+    run(4, 400);
+    /* diamond: alpha-beta, alpha-gamma, beta-delta, gamma-delta */
+    g_cut[0][3] = g_cut[3][0] = 1;
+    g_cut[1][2] = g_cut[2][1] = 1;
+    run(4, 1500);
+    TEST_ASSERT_FALSE(p2p_find(&g_n[0], "delta")->up);
+    /* crash beta: nothing it sends arrives, nothing reaches it */
+    for (j = 0; j < NODES; j++) g_cut[1][j] = g_cut[j][1] = 1;
+    run(4, 1500);
+    TEST_ASSERT_FALSE(p2p_find(&g_n[0], "beta")->up);
+    TEST_ASSERT_TRUE(p2p_put(&g_n[0], &g_h[0], "after", "crash") >= 0);
+    TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "delta", "around beta"));
+    run(4, 60);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[3], "p2p msg from alpha: around beta (relayed)"));
+    TEST_ASSERT_TRUE(g_n[2].relayed >= 1U);
+    /* reboot beta: empty state, new seed, so a new key and id */
+    memset(&g_n[1], 0, sizeof(g_n[1]));
+    g_out[1][0] = 0;
+    memset(seed, 0x77, 32);
+    TEST_ASSERT_EQUAL(0, p2p_up(&g_n[1], "beta", ip, "mohhdy-net-key", seed, &g_h[1]));
+    for (j = 0; j < NODES; j++) g_cut[1][j] = g_cut[j][1] = 0;
+    g_cut[1][2] = g_cut[2][1] = 1;
+    run(4, 1200);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p peer beta rejoined id "));
+    TEST_ASSERT_EQUAL(1, (int)g_n[0].rejoins);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[0], "beta")->up);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[0], "beta")->id == g_n[1].id);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "p2p kv synced after=crash"));
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[1], "after"));
+    /* the rejoined member is reachable again (direct) */
+    TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "beta", "welcome back"));
+    run(4, 40);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[1], "p2p msg from alpha: welcome back"));
+    p2p_report(&g_n[0], &g_h[0], "stats", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, " rejoins 1"));
+    /* a live member is never replaced by a newcomer with its name */
+    TEST_ASSERT_EQUAL(1, (int)g_n[3].rejoins);
+}
+
+/* US-074: STUN Binding through the sealed link behind a simulated NAT
+ * (address rewrite on the test bus). Two servers classify the mapping. */
+void test_stun_behind_simulated_nat(void) {
+    char rep[512];
+    static const uint8_t pub_ip[4] = {203, 0, 113, 7};
+    int j;
+    setup(3, 0);
+    run(3, 300);
+    for (j = 1; j < 3; j++) memcpy(g_nat[0][j], pub_ip, 4);
+    TEST_ASSERT_EQUAL(0, p2p_stun_probe(&g_n[0], &g_h[0], "beta"));
+    run(3, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p stun mapped_ip 203.0.113.7 port 7700 from beta nat_type nat_unknown servers 1"));
+    TEST_ASSERT_EQUAL(0, p2p_stun_probe(&g_n[0], &g_h[0], "gamma"));
+    run(3, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "from gamma nat_type endpoint_independent servers 2"));
+    /* endpoint-dependent mapping: gamma now sees another public address */
+    g_nat[0][2][3] = 9;
+    TEST_ASSERT_EQUAL(0, p2p_stun_probe(&g_n[0], &g_h[0], "gamma"));
+    run(3, 30);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p stun mapped_ip 203.0.113.9 port 7700 from gamma nat_type endpoint_dependent"));
+    p2p_report(&g_n[0], &g_h[0], "nat", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p nat type endpoint_dependent mapped_ip 203.0.113.9"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, " probes 3 "));
+    TEST_ASSERT_NOT_NULL(strstr(rep, " bad 0"));
+}
+
+/* US-063: fewest hops first. A slow direct link must not lose to a
+ * neighbor that advertises the destination (its route may come back
+ * through us: the loop seen in QEMU under CI load). */
+void test_route_prefers_direct_over_cheaper_relay(void) {
+    uint32_t nh = 1, cost = 0;
+    p2p_peer_t *gamma, *alpha;
+    int j;
+    setup(3, 0);
+    run(3, 300);
+    gamma = p2p_find(&g_n[1], "gamma");
+    alpha = p2p_find(&g_n[1], "alpha");
+    TEST_ASSERT_NOT_NULL(gamma);
+    TEST_ASSERT_NOT_NULL(alpha);
+    gamma->rtt_ticks = 50;            /* slow direct link */
+    alpha->rtt_ticks = 0;
+    for (j = 0; j < P2P_PEERS; j++)
+        if (alpha->neighbors[j] == gamma->id) alpha->nb_hops[j] = 2;  /* alpha: gamma at 2 hops */
+    TEST_ASSERT_EQUAL(0, p2p_route_find(&g_n[1], gamma->id, &nh, &cost));
+    TEST_ASSERT_EQUAL(0, (int)nh);
+    /* with the direct link down, the relay is used */
+    gamma->up = 0;
+    TEST_ASSERT_EQUAL(0, p2p_route_find(&g_n[1], gamma->id, &nh, &cost));
+    TEST_ASSERT_EQUAL((int)alpha->id, (int)nh);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
     RUN_TEST(test_multi_relay_chain);
+    RUN_TEST(test_crash_reroute_and_rejoin);
     RUN_TEST(test_qos_adaptive_controller);
     RUN_TEST(test_cache_versioned_acked_invalidation);
     RUN_TEST(test_traffic_baseline_anomaly);
@@ -693,6 +796,8 @@ int main(void) {
     RUN_TEST(test_raft_snapshot_installs_for_a_lagging_follower);
     RUN_TEST(test_qos_window_and_cache_invalidate);
     RUN_TEST(test_routing_grpc_and_stun);
+    RUN_TEST(test_stun_behind_simulated_nat);
+    RUN_TEST(test_route_prefers_direct_over_cheaper_relay);
     RUN_TEST(test_p2p_consolidation_and_fallback);
     unity_print_results();
     unity_cleanup();

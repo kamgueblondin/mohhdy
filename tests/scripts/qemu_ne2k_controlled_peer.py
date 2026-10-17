@@ -9,12 +9,17 @@ SYN vers l’adresse A déterministe renvoyée par DNS.
 import socket
 import struct
 import threading
+import time
 
 from qemu_ne2k_tls12_server import CONTENT_ALERT, LocalTls12Server
 
 # Un record TLS peut s'assembler sur plusieurs segments ; au-dela de ~500 o
 # Ethernet, QEMU/NE2000 ISA laisse parfois la trame invisible au guest.
 MAX_TCP_PAYLOAD = 256
+# Retransmission cote pair comme une pile TCP reelle : donnees non
+# acquittees reemises apres PEER_RTO_SECONDS, backoff x2, PEER_RTO_MAX fois.
+PEER_RTO_SECONDS = 1.0
+PEER_RTO_MAX = 3
 SERVER_MAC = b"\x52\x54\x00\xa0\x20\x02"
 SERVER_IP = b"\x0a\x20\x00\x02"       # 10.32.0.2
 GUEST_IP = b"\x0a\x20\x00\x0f"        # 10.32.0.15
@@ -153,8 +158,19 @@ def _dns_reply(request_payload):
 class ControlledEthernetPeer:
     """Serveur socket QEMU non persistant avec compteurs de protocole publics."""
 
-    def __init__(self, full_tls=False, peer_close_after_sse=False):
+    def __init__(self, full_tls=False, peer_close_after_sse=False,
+                 loss_plan=(), duplicate_plan=(), rto=True):
         self.full_tls = full_tls
+        # loss_plan : etiquettes perdues une fois ("client_hello" = trame
+        # invitee ignoree ; "server_hello", "certificate", ... = trame
+        # serveur non emise). duplicate_plan : trames serveur emises 2 fois.
+        self.loss_plan = set(loss_plan)
+        self.duplicate_plan = set(duplicate_plan)
+        self.rto_enabled = rto
+        self.rto_count = 0
+        self.last_send_time = 0.0
+        self.guest_next = None
+        self.guest_acked = 0
         self.peer_close_after_sse = peer_close_after_sse
         self.events = {"discover": 0, "offer": 0, "request": 0, "ack": 0,
                        "arp": 0, "dns": 0, "syn": 0, "syn_ack": 0, "client_hello": 0,
@@ -286,9 +302,37 @@ class ControlledEthernetPeer:
         frame = _ethernet(dest_mac, 0x0800,
             _ipv4_tcp(REMOTE_IP, dest_ip, 443, dest_port, sequence, guest_ack, flags, payload))
         self.sent_sizes.append(len(frame))
+        self.last_send_time = time.monotonic()
         self._send_frame(connection, frame)
 
-    def _send_tcp(self, connection, dest_mac, dest_ip, dest_port, guest_ack, payload, flags=0x18):
+    def _bump(self, name):
+        # Cles creees a la demande : certains contrats verifient l'absence
+        # de compteurs nuls.
+        self.events[name] = self.events.get(name, 0) + 1
+
+    def _maybe_rto(self, connection):
+        if not self.rto_enabled or self.guest_mac is None or not self.last_payload:
+            return
+        if self.guest_acked >= self.last_sent_end or self.rto_count >= PEER_RTO_MAX:
+            return
+        if time.monotonic() - self.last_send_time < PEER_RTO_SECONDS * (2 ** self.rto_count):
+            return
+        self.rto_count += 1
+        self._bump("peer_rto")
+        self._retransmit_tcp(connection, self.guest_mac, self.guest_ip, self.guest_port,
+                             self.guest_next, self.guest_acked)
+
+    def _send_tcp(self, connection, dest_mac, dest_ip, dest_port, guest_ack, payload, flags=0x18,
+                  label=None):
+        drop = label is not None and label in self.loss_plan
+        if drop:
+            self.loss_plan.discard(label)
+            self._bump("dropped_" + label)
+        duplicate = label is not None and label in self.duplicate_plan
+        if duplicate:
+            self.duplicate_plan.discard(label)
+            self._bump("duplicated_" + label)
+        self.rto_count = 0
         if (not self.last_payload or
                 self.last_payload_sequence + len(self.last_payload) != self.server_sequence):
             self.last_payload = b""
@@ -300,8 +344,14 @@ class ControlledEthernetPeer:
                                  self.server_sequence, guest_ack, b"", flags)
         while offset < len(payload):
             chunk = payload[offset:offset + MAX_TCP_PAYLOAD]
-            self._send_tcp_chunk(connection, dest_mac, dest_ip, dest_port,
-                                 self.server_sequence, guest_ack, chunk, flags)
+            if drop:
+                self.last_send_time = time.monotonic()
+            else:
+                self._send_tcp_chunk(connection, dest_mac, dest_ip, dest_port,
+                                     self.server_sequence, guest_ack, chunk, flags)
+            if duplicate:
+                self._send_tcp_chunk(connection, dest_mac, dest_ip, dest_port,
+                                     self.server_sequence, guest_ack, chunk, flags)
             self.server_sequence += len(chunk)
             offset += len(chunk)
         self.last_sent_end = self.server_sequence
@@ -310,6 +360,11 @@ class ControlledEthernetPeer:
     def _retransmit_tcp(self, connection, dest_mac, dest_ip, dest_port, guest_ack,
                         acknowledgment=None):
         if not self.last_payload:
+            return
+        if acknowledgment is not None and acknowledgment >= self.last_payload_sequence + len(self.last_payload):
+            # Tout est acquitte : simple ACK de ce qui a ete recu.
+            self._send_tcp_chunk(connection, dest_mac, dest_ip, dest_port,
+                                 self.server_sequence, guest_ack, b"", 0x10)
             return
         if acknowledgment is None or acknowledgment < self.last_payload_sequence:
             offset = 0
@@ -342,14 +397,35 @@ class ControlledEthernetPeer:
                 _ipv4_tcp(REMOTE_IP, dest_ip, 443, dest_port, 0x10203040,
                           sequence + 1, 0x12)))
             self.events["syn_ack"] += 1
+            self.guest_next = sequence + 1
             return
+        if flags & 0x10:
+            self.guest_acked = max(self.guest_acked, acknowledgment)
+        if payload and self._tls_handshake_type(payload) == 1 and self.loss_plan:
+            self._bump("client_hello_frames")
+        if payload and self._tls_handshake_type(payload) == 1 and "client_hello" in self.loss_plan:
+            # Trame invitee perdue : seul un RTO invite peut la reemettre.
+            self.loss_plan.discard("client_hello")
+            self._bump("dropped_client_hello")
+            return
+        if payload and self.guest_next is not None and \
+                ((self.guest_next - sequence) & 0xffffffff) < 0x80000000 and \
+                sequence + len(payload) <= self.guest_next:
+            # Segment invite deja recu (retransmission) : ACK immediat et
+            # reemission de ce qui n'est pas acquitte, comme TCP.
+            self._bump("guest_retransmit")
+            self._retransmit_tcp(connection, dest_mac, dest_ip, dest_port,
+                                 self.guest_next, acknowledgment)
+            return
+        if payload:
+            self.guest_next = sequence + len(payload)
         if self._tls_handshake_type(payload) == 1 and self.tls_step == 0:
             self.events["client_hello"] += 1
             guest_ack = sequence + len(payload)
             if self.full_tls:
                 self.tls.note_client_hello(payload)
                 self._send_tcp(connection, dest_mac, dest_ip, dest_port, guest_ack,
-                               self.tls.server_hello_record())
+                               self.tls.server_hello_record(), label="server_hello")
             else:
                 self._send_tcp(connection, dest_mac, dest_ip, dest_port, guest_ack,
                                _tls_server_hello_record())
@@ -365,7 +441,8 @@ class ControlledEthernetPeer:
             self.tls.accept_client_flight(payload)
             self.events["client_flight"] += 1
             self._send_tcp(connection, dest_mac, dest_ip, dest_port,
-                           sequence + len(payload), self.tls.change_cipher_spec_record())
+                           sequence + len(payload), self.tls.change_cipher_spec_record(),
+                           label="change_cipher_spec")
             self.tls_step = 5
             return
         if self.full_tls and payload and self.peer_close_after_sse and self.tls_step == 8:
@@ -408,22 +485,22 @@ class ControlledEthernetPeer:
         guest_ack = sequence
         if self.tls_step == 1:
             self._send_tcp(connection, dest_mac, dest_ip, dest_port, guest_ack,
-                           self.tls.certificate_record())
+                           self.tls.certificate_record(), label="certificate")
             self.tls_step = 2
             self.events["certificate"] += 1
         elif self.tls_step == 2:
             self._send_tcp(connection, dest_mac, dest_ip, dest_port, guest_ack,
-                           self.tls.server_key_exchange_record())
+                           self.tls.server_key_exchange_record(), label="server_key_exchange")
             self.tls_step = 3
             self.events["server_key_exchange"] += 1
         elif self.tls_step == 3:
             self._send_tcp(connection, dest_mac, dest_ip, dest_port, guest_ack,
-                           self.tls.server_hello_done_record())
+                           self.tls.server_hello_done_record(), label="server_hello_done")
             self.tls_step = 4
             self.events["server_hello_done"] += 1
         elif self.tls_step == 5:
             self._send_tcp(connection, dest_mac, dest_ip, dest_port, guest_ack,
-                           self.tls.finished_record())
+                           self.tls.finished_record(), label="server_finished")
             self.tls_step = 6
             self.events["server_finished"] += 1
         elif self.tls_step == 7 and self.sse_pending:
@@ -463,6 +540,7 @@ class ControlledEthernetPeer:
                             self.deferred_ack = None
                             self._advance_tls_on_ack(connection, dest_mac, dest_ip,
                                                      dest_port, sequence, acknowledgment)
+                        self._maybe_rto(connection)
                         continue
                     if size_raw is None:
                         return

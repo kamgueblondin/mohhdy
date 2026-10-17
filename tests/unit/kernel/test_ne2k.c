@@ -461,6 +461,58 @@ void test_tx_submit_never_stops_the_chip(void) {
     TEST_ASSERT_GREATER_THAN(1, commands);
 }
 
+void test_ne2k_socket_tls_loss_recovery(void);
+
+void test_ne2k_socket_tls_loss_recovery(void){
+    fake_ne2k_t fake={0x12,NE2K_ISR_RESET|NE2K_ISR_RDC,0,0};ne2k_io_t io={&fake,fake_inb,fake_outb};
+    ne2k_device_t device;net_arp_cache_t cache;ne2k_tls_client_t client;net_tcp_connection_t connection,after;
+    net_tcp_view_t syn_ack={443U,49152U,700U,101U,NET_TCP_FLAG_SYN|NET_TCP_FLAG_ACK,0,0},view;
+    static const uint8_t data[8]={1,2,3,4,5,6,7,8};
+    uint8_t local_mac[6]={2,0,0,0,0,1},remote_mac[6]={0x52,0x54,0,0,0,2},local_ip[4]={10,0,2,15},remote_ip[4]={10,0,2,2};
+    uint8_t client_random[32]={0},record_buffer[256]={0},handshake_buffer[256]={0},transcript_buffer[512]={0};
+    uint8_t hello_record[256]={0},tcp_segment[512]={0},tx_frame[512]={0};int socket_id,length,i;
+    net_socket_reset_all();socket_id=net_socket_open(49152U,443U,100U);TEST_ASSERT_TRUE(socket_id>=0);
+    TEST_ASSERT_EQUAL(0,ne2k_probe(&device,0x300U,&io));TEST_ASSERT_EQUAL(0,ne2k_prepare(&device,&io));
+    TEST_ASSERT_EQUAL(0,ne2k_configure_rings(&device,&io));TEST_ASSERT_EQUAL(0,ne2k_set_mac(&device,local_mac));
+    TEST_ASSERT_EQUAL(0,net_arp_cache_init(&cache));TEST_ASSERT_EQUAL(0,net_arp_cache_put(&cache,remote_ip,remote_mac));
+    TEST_ASSERT_EQUAL(0,ne2k_tls_client_init(&client,record_buffer,sizeof(record_buffer),handshake_buffer,sizeof(handshake_buffer),transcript_buffer,sizeof(transcript_buffer)));
+    length=ne2k_socket_tls_accept_syn_ack_start(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&syn_ack,&client,client_random,hello_record,sizeof(hello_record),tcp_segment,sizeof(tcp_segment),2U);
+    TEST_ASSERT_GREATER_THAN(0,length);TEST_ASSERT_EQUAL(0,net_socket_connection_snapshot(socket_id,&connection));
+    /* ClientHello perdu : retransmission apres 2 sondages vides, puis 4 (backoff), puis plafond. */
+    memset(tx_frame,0,sizeof(tx_frame));
+    TEST_ASSERT_EQUAL(0,ne2k_socket_tls_idle(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&client));
+    TEST_ASSERT_EQUAL(0,tx_frame[54]);
+    TEST_ASSERT_EQUAL(1,ne2k_socket_tls_idle(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&client));
+    TEST_ASSERT_EQUAL(NET_TLS_CONTENT_HANDSHAKE,tx_frame[54]);
+    TEST_ASSERT_EQUAL(101U,((uint32_t)tx_frame[38]<<24)|((uint32_t)tx_frame[39]<<16)|((uint32_t)tx_frame[40]<<8)|tx_frame[41]);
+    TEST_ASSERT_EQUAL(0,net_socket_connection_snapshot(socket_id,&after));
+    TEST_ASSERT_EQUAL(connection.local_sequence,after.local_sequence);TEST_ASSERT_EQUAL(1U,after.retransmit_count);
+    TEST_ASSERT_EQUAL(1U,client.retransmits);TEST_ASSERT_EQUAL(4U,client.rto_polls);
+    for(i=0;i<3;i++)TEST_ASSERT_EQUAL(0,ne2k_socket_tls_idle(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&client));
+    TEST_ASSERT_EQUAL(1,ne2k_socket_tls_idle(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&client));
+    TEST_ASSERT_EQUAL(2U,client.retransmits);TEST_ASSERT_EQUAL(8U,client.rto_polls);
+    for(i=0;i<20;i++)TEST_ASSERT_EQUAL(0,ne2k_socket_tls_idle(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&client));
+    TEST_ASSERT_EQUAL(2U,client.retransmits);
+    /* Segments serveur : doublon et trou ignores (ACK duplique), etranger ignore, chevauchement rogne. */
+    view=(net_tcp_view_t){443U,49152U,690U,connection.local_sequence,NET_TCP_FLAG_ACK,data,8U};
+    memset(tx_frame,0,sizeof(tx_frame));
+    TEST_ASSERT_EQUAL(1,ne2k_socket_segment_gate(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&view));
+    TEST_ASSERT_EQUAL(NET_TCP_FLAG_ACK,tx_frame[47]);
+    TEST_ASSERT_EQUAL(701U,((uint32_t)tx_frame[42]<<24)|((uint32_t)tx_frame[43]<<16)|((uint32_t)tx_frame[44]<<8)|tx_frame[45]);
+    view.sequence=720U;
+    TEST_ASSERT_EQUAL(1,ne2k_socket_segment_gate(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&view));
+    view.sequence=701U;view.source_port=80U;
+    TEST_ASSERT_EQUAL(1,ne2k_socket_segment_gate(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&view));
+    view.source_port=443U;
+    TEST_ASSERT_EQUAL(0,ne2k_socket_segment_gate(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&view));
+    TEST_ASSERT_EQUAL(8U,view.payload_length);
+    view.sequence=698U;
+    TEST_ASSERT_EQUAL(0,ne2k_socket_segment_gate(&device,&io,&cache,tx_frame,sizeof(tx_frame),local_ip,remote_ip,socket_id,&view));
+    TEST_ASSERT_EQUAL(701U,view.sequence);TEST_ASSERT_EQUAL(5U,view.payload_length);TEST_ASSERT_EQUAL(4U,view.payload[0]);
+    TEST_ASSERT_EQUAL(0,net_socket_connection_snapshot(socket_id,&after));TEST_ASSERT_EQUAL(701U,after.remote_sequence);
+    TEST_ASSERT_EQUAL(0,net_socket_close(socket_id));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_probe_and_prepare_use_injected_io);RUN_TEST(test_ne2k_rom_read_and_tx_dma_order);RUN_TEST(test_ne2k_udp_via_gateway_preserves_ipv4_destination);    RUN_TEST(test_ne2k_tcp_syn_via_gateway_preserves_ipv4_destination); RUN_TEST(test_ne2k_tcp_segment_bridge); RUN_TEST(test_ne2k_tcp_syn_ack_via_gateway);RUN_TEST(test_ne2k_socket_syn_bridge);
@@ -471,7 +523,7 @@ RUN_TEST(test_ne2k_llm_network_context_lifecycle);RUN_TEST(test_ne2k_llm_network
     RUN_TEST(test_tcp_ack_is_emitted_from_connection_state);
     RUN_TEST(test_rx_extract_publishes_bounded_frame);
     RUN_TEST(test_probe_rejects_missing_reset_ack);
-    RUN_TEST(test_ne2k_tls_client_start_and_empty_poll);RUN_TEST(test_ne2k_llm_dns_syn_bootstrap_failure_is_transactional);RUN_TEST(test_ne2k_dhcp_acquire_guard_is_transactional);RUN_TEST(test_ne2k_syn_ack_tls_start_is_transactional);RUN_TEST(test_ne2k_socket_syn_ack_tls_start_is_transactional);RUN_TEST(test_ne2k_socket_tls_poll_empty_is_nonblocking_and_transactional);RUN_TEST(test_ne2k_socket_tls_poll_retries_flight_without_rx_after_hello_done);RUN_TEST(test_ne2k_socket_llm_orchestrator_is_transactional);RUN_TEST(test_ne2k_llm_socket_session_phases_are_transactional);RUN_TEST(test_ne2k_llm_socket_bootstrap_failure_releases_slot);RUN_TEST(test_ne2k_llm_connection_state_phase_guards);RUN_TEST(test_ne2k_llm_connection_tls_phase_guard);RUN_TEST(test_ne2k_llm_connection_response_phase_guard);RUN_TEST(test_ne2k_llm_connection_reset_for_request);RUN_TEST(test_ne2k_llm_connection_sse_phase_guard_and_nonblocking_progress);RUN_TEST(test_ne2k_https_llm_request_composes_provider_json_and_bearer);RUN_TEST(test_ne2k_https_llm_close_notify_guards);RUN_TEST(test_ne2k_sse_peer_close_notify_transitions_response_ready);RUN_TEST(test_ne2k_https_llm_close_notify_emits_tls_alert);RUN_TEST(test_ne2k_sse_resume_request_guards);RUN_TEST(test_ne2k_sse_retry_scheduler_adapter);RUN_TEST(test_ne2k_sse_terminal_classification);RUN_TEST(test_ne2k_sse_event_tick_schedules_retry_and_waits);RUN_TEST(test_ne2k_provider_rotation_budget);
+    RUN_TEST(test_ne2k_tls_client_start_and_empty_poll);RUN_TEST(test_ne2k_llm_dns_syn_bootstrap_failure_is_transactional);RUN_TEST(test_ne2k_dhcp_acquire_guard_is_transactional);RUN_TEST(test_ne2k_syn_ack_tls_start_is_transactional);RUN_TEST(test_ne2k_socket_syn_ack_tls_start_is_transactional);RUN_TEST(test_ne2k_socket_tls_loss_recovery);RUN_TEST(test_ne2k_socket_tls_poll_empty_is_nonblocking_and_transactional);RUN_TEST(test_ne2k_socket_tls_poll_retries_flight_without_rx_after_hello_done);RUN_TEST(test_ne2k_socket_llm_orchestrator_is_transactional);RUN_TEST(test_ne2k_llm_socket_session_phases_are_transactional);RUN_TEST(test_ne2k_llm_socket_bootstrap_failure_releases_slot);RUN_TEST(test_ne2k_llm_connection_state_phase_guards);RUN_TEST(test_ne2k_llm_connection_tls_phase_guard);RUN_TEST(test_ne2k_llm_connection_response_phase_guard);RUN_TEST(test_ne2k_llm_connection_reset_for_request);RUN_TEST(test_ne2k_llm_connection_sse_phase_guard_and_nonblocking_progress);RUN_TEST(test_ne2k_https_llm_request_composes_provider_json_and_bearer);RUN_TEST(test_ne2k_https_llm_close_notify_guards);RUN_TEST(test_ne2k_sse_peer_close_notify_transitions_response_ready);RUN_TEST(test_ne2k_https_llm_close_notify_emits_tls_alert);RUN_TEST(test_ne2k_sse_resume_request_guards);RUN_TEST(test_ne2k_sse_retry_scheduler_adapter);RUN_TEST(test_ne2k_sse_terminal_classification);RUN_TEST(test_ne2k_sse_event_tick_schedules_retry_and_waits);RUN_TEST(test_ne2k_provider_rotation_budget);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

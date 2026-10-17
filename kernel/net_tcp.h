@@ -98,6 +98,15 @@ int net_tcp_connection_build_tls_record(net_tcp_connection_t* connection,
                                         uint8_t content_type, const uint8_t* payload,
                                         uint16_t payload_length, uint8_t retransmit_limit);
 int net_tcp_connection_commit_send(net_tcp_connection_t* connection, uint16_t payload_length);
+/* Classification d'un segment recu par rapport a la sequence attendue
+ * (perte, doublon, retransmission du pair) : voir net_tcp_connection_classify_segment. */
+#define NET_TCP_SEGMENT_IN_ORDER 0
+#define NET_TCP_SEGMENT_FOREIGN 1
+#define NET_TCP_SEGMENT_DUPLICATE 2
+#define NET_TCP_SEGMENT_FUTURE 3
+#define NET_TCP_SEGMENT_OVERLAP 4
+int net_tcp_connection_classify_segment(const net_tcp_connection_t* connection,const net_tcp_view_t* view);
+int net_tcp_connection_trim_segment(const net_tcp_connection_t* connection,net_tcp_view_t* view);
 int net_tcp_connection_accept_data(net_tcp_connection_t* connection,
                                    const net_tcp_view_t* view,
                                    uint16_t* accepted_length);

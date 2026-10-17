@@ -1037,6 +1037,19 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
         }
     }
 
+    /* Lot 4 (US-001): PCI enumeration moves to the Ring 3 pcidriver. The
+     * early boot probes above (USB tablet, NE2000) still ran in Ring 0;
+     * once the worker publishes, Ring 0 config reads are refused. */
+    {
+        task_t* pci_task = create_task_from_initrd_file("bin/pcidriver");
+        if (pci_task) {
+            pci_task->boot_service = 1U;
+            print_string_serial("[PCI] boot pcidriver spawned\n");
+        } else {
+            print_string_serial("[PCI] boot pcidriver unavailable; Ring 0 PCI path\n");
+        }
+    }
+
     /* The driver must install the boot FAT before aiworker opens GPT2.GGU.
      * Later spawns move themselves first; put atadriver back in front. */
     if (g_boot_ata_task) task_queue_move_first_user(g_boot_ata_task);

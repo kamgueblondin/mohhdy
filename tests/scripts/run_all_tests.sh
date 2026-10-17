@@ -113,8 +113,11 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_collab.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/collab.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c"
     fi
+    if [ "$(basename "$test_file")" = "test_stun.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/stun.c"
+    fi
     if [ "$(basename "$test_file")" = "test_p2p.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+        extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/stun.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
     fi
     if [ "$(basename "$test_file")" = "test_platform.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/platform.c"
@@ -126,7 +129,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/prod.c"
     fi
     if [ "$(basename "$test_file")" = "test_osui_p2p_prod_perf.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
         cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
@@ -178,7 +181,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/vga_console.c"
     fi
     if [ "$(basename "$test_file")" = "test_gfx_desktop.c" ]; then
-        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/input/usb_tablet.c"
+        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/pci_service.c $BASE_DIR/kernel/input/usb_tablet.c"
     fi
     if [ "$(basename "$test_file")" = "test_ipc.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/ipc.c"
@@ -278,6 +281,9 @@ run_test() {
     fi
     if [ "$(basename "$test_file")" = "test_gpt2_gguf_bounds.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_gguf.c"
+    fi
+    if [ "$(basename "$test_file")" = "test_pci_service.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/pci_service.c"
     fi
     if [ "$(basename "$test_file")" = "test_io_bitmap.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/io_bitmap.c"

@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 368
+#define MOHHDY_SHELL_COMMAND_COUNT 370
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -159,6 +159,7 @@ static const char * const mohhdy_shell_commands[] = {
     "kill-children",
     "logout",
     "ls",
+    "lspci",
     "mcp-invoice",
     "mcp-invoice-void",
     "mcp-invoke",
@@ -220,6 +221,7 @@ static const char * const mohhdy_shell_commands[] = {
     "p2p-sync",
     "p2p-unblock",
     "p2p-up",
+    "pci-rescan",
     "persist-auto",
     "persist-load",
     "persist-passphrase",

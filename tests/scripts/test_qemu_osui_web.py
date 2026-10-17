@@ -228,7 +228,10 @@ def main():
 
         def https(name, raw):
             try:
-                t = TlsConn(peer.connect(8443)).handshake(240)
+                # The networker runs a server handshake's ECDHE/signature
+                # math in one step, so a second SYN can wait for the whole
+                # first handshake (59-110 s measured in CI): same 240 s budget.
+                t = TlsConn(peer.connect(8443, 240.0)).handshake(240)
                 t.send(raw)
                 results[name] = t.read_all(120)
             except Exception as exc:  # reported below with the guest log

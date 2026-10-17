@@ -1407,7 +1407,7 @@ int kernel_llm_poll_tls(void) {
             boot_llm_arp_rx, sizeof(boot_llm_arp_rx), boot_llm_frame, sizeof(boot_llm_frame),
             boot_llm_lease.ipv4, &boot_llm_socket_session, &boot_llm_tls_client, boot_llm_client_random,
             boot_llm_tls_hello, sizeof(boot_llm_tls_hello), boot_llm_tcp_segment,
-            sizeof(boot_llm_tcp_segment), 2U);
+            sizeof(boot_llm_tcp_segment), 4U);
         /* Le bridge retourne la longueur du ClientHello ; l’ABI publique
          * publie un succès normalisé lorsque la phase TLS est effectivement démarrée. */
         return status < 0 ? OS_LLM_TLS_FAILED : 0;
@@ -1422,7 +1422,7 @@ int kernel_llm_poll_tls(void) {
         boot_llm_x25519_workspace, KERNEL_LLM_TLS_WORKSPACE_WORDS, boot_llm_prf_workspace,
         sizeof(boot_llm_prf_workspace), boot_llm_tcp_segment, sizeof(boot_llm_tcp_segment),
         boot_llm_flight_records, sizeof(boot_llm_flight_records), &boot_llm_flight_records_length,
-        boot_llm_plaintext, sizeof(boot_llm_plaintext), 2U, &consumed);
+        boot_llm_plaintext, sizeof(boot_llm_plaintext), 4U, &consumed);
     if (status < 0) return OS_LLM_TLS_FAILED;
     if (status == 0 && boot_llm_socket_session.state.phase == NE2K_LLM_CONNECTION_TLS_COMPLETE &&
         boot_llm_application_recovery.pending) {

@@ -2816,6 +2816,10 @@ static int pm_host_mem(void* c) {
 }
 static void pm_host_out(void* c, const char* s) { (void)c; print_string(s); print_string("\n"); }
 static const pm_host_t g_pm_host = {0, pm_host_read, pm_host_write, pm_host_mem, pm_host_out};
+/* US-050: pm-ide run sends the program output to the editor output pane
+ * (and to the console, so the serial log keeps it). */
+static void pm_ide_host_out(void* c, const char* s) { pm_host_out(c, s); osui_gui_ide_output(s); }
+static const pm_host_t g_pm_ide_host = {0, pm_host_read, pm_host_write, pm_host_mem, pm_ide_host_out};
 
 static void pm_print_hex(unsigned int v) {
     const char* h = "0123456789abcdef";
@@ -2876,7 +2880,7 @@ static int shell_ide_exec(int action, const char* file, const char* src, int len
         return 0;
     }
     pm_vm_reset(&g_pm_vm);
-    st = pm_run(&g_pm_tmp, &g_pm_vm, &g_pm_host);
+    st = pm_run(&g_pm_tmp, &g_pm_vm, &g_pm_ide_host);
     ide_msg_add(msg, max, &n, st == PM_OK ? "ok" : (st == PM_ERR_EXPECT ? "fail" : "error"));
     ide_msg_add(msg, max, &n, " line "); ide_msg_int(msg, max, &n, g_pm_vm.line);
     ide_msg_add(msg, max, &n, " prints "); ide_msg_int(msg, max, &n, (int)g_pm_vm.prints);
@@ -3314,7 +3318,7 @@ static void cmd_pm_inline(shell_context_t* ctx, const char* stmt) {
 
 static int is_builtin(const char* cmd) {
     static const char* names[] = {
-        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
+        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
         "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify",
@@ -4979,6 +4983,54 @@ static void cmd_net_relay_status(shell_context_t* ctx, char args[][128], int arg
     print_string(" stale "); print_uint(st.stale);
     print_string(" pending "); print_uint(st.pending);
     print_string(" end\n");
+}
+
+/* Lot 4 (US-001): PCI inventory enumerated by the Ring 3 pcidriver. */
+static void cmd_lspci(shell_context_t* ctx, char args[][128], int arg_count) {
+    static os_pci_record_t records[OS_PCI_MAX_RECORDS];
+    os_pci_status_t st;
+    int rc, i;
+    (void)ctx; (void)args;
+    if (arg_count != 0) { print_error("Usage: lspci"); return; }
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_PCI_SERVICE), "b"(OS_PCI_OP_LIST),
+                 "c"((uint32_t)records), "d"(OS_PCI_MAX_RECORDS) : "memory");
+    if (rc < 0) { print_string("lspci: inventaire indisponible rc "); print_int(rc); print_string("\n"); return; }
+    for (i = 0; i < rc; i++) {
+        print_string("  pci "); print_uint(records[i].bus); print_string(":");
+        print_uint(records[i].slot); print_string("."); print_uint(records[i].function);
+        print_string(" id "); pm_print_hex(((unsigned int)records[i].vendor_id << 16) | records[i].device_id);
+        print_string(" classe "); print_uint(records[i].class_code); print_string(".");
+        print_uint(records[i].subclass);
+        print_string(" bar0 "); pm_print_hex(records[i].bar0); print_string("\n");
+    }
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_PCI_SERVICE), "b"(OS_PCI_OP_STATUS),
+                 "c"((uint32_t)&st) : "memory");
+    if (rc != 0) { print_error("lspci: statut indisponible"); return; }
+    print_string("lspci ok functions "); print_uint(st.count);
+    print_string(" owner "); print_int(st.owner_pid);
+    print_string(" publisher "); print_int(st.publisher_pid);
+    print_string(" gen "); print_uint(st.generation);
+    print_string(" stale "); print_uint(st.stale);
+    print_string(" respawns "); print_uint(st.respawns);
+    print_string(" ring0denied "); print_uint(st.ring0_denied);
+    print_string(" rejected "); print_uint(st.rejected_publish);
+    print_string(" end\n");
+}
+
+static void cmd_pci_rescan(shell_context_t* ctx, char args[][128], int arg_count) {
+    os_ipc_payload_t payload;
+    int target, rc;
+    uint32_t i;
+    (void)ctx; (void)args;
+    if (arg_count != 0) { print_error("Usage: pci-rescan"); return; }
+    target = sys_service_lookup("pci-driver");
+    if (target <= 0) { print_string("pci-rescan: aucun pcidriver vivant\n"); return; }
+    for (i = 0U; i < OS_IPC_MAX_DATA; i++) payload.data[i] = 0U;
+    payload.type = 1U; payload.request_id = 0U; payload.size = 6U;
+    payload.data[0] = 'r'; payload.data[1] = 'e'; payload.data[2] = 's';
+    payload.data[3] = 'c'; payload.data[4] = 'a'; payload.data[5] = 'n';
+    rc = sys_ipc_send(target, &payload);
+    print_string("pci-rescan sent rc "); print_int(rc); print_string(" to "); print_int(target); print_string("\n");
 }
 
 /* Tranche 5 slice 3: kernel counters of the worker-only NE2000 wire path. */
@@ -6662,6 +6714,10 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
     } else if (strcmp(command, "ata-status") == 0) {
         cmd_ata_status(ctx, args, arg_count);
         return 1;
+    } else if (strcmp(command, "lspci") == 0) {
+        cmd_lspci(ctx, args, arg_count);
+    } else if (strcmp(command, "pci-rescan") == 0) {
+        cmd_pci_rescan(ctx, args, arg_count);
     } else if (strcmp(command, "net-relay-status") == 0) {
         cmd_net_relay_status(ctx, args, arg_count);
         return 1;

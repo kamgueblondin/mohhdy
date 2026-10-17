@@ -191,11 +191,16 @@ typedef struct {
 } p2p_qos_t;
 
 typedef struct {
-    uint8_t nat_type; /* 0: Direct, 1: FullCone, 2: RestrictedCone, 3: Symmetric */
+    uint8_t nat_type; /* STUN_NAT_* (stun.h): mapping behaviour seen so far */
     uint8_t mapped_ip[4];
     uint16_t mapped_port;
     uint32_t stun_probes;
     uint32_t nat_punches;
+    /* US-074: real STUN (RFC 5389) Binding exchange inside the sealed link.
+     * One outstanding transaction per server, two servers kept. */
+    struct { uint32_t server; uint8_t txid[12]; uint8_t pending; uint8_t valid;
+             uint8_t ip[4]; uint16_t port; } srv[2];
+    uint32_t stun_bad;
 } p2p_nat_state_t;
 
 typedef struct {
@@ -222,6 +227,8 @@ typedef struct {
     uint32_t tx_type[P2P_I_COUNT], rx_type[P2P_I_COUNT];
     uint32_t tx_bytes, rx_bytes, relayed, bad_hello, foreign, dup;
     uint32_t relayed_multi; /* forwarded to a further relay, not to the destination */
+    uint32_t rejoins;       /* US-069: a known name came back under a new id after going down */
+    uint8_t last_src_ip[4]; /* source IPv4 of the datagram being handled (STUN server side) */
     /* Learned per-type receive baseline (US-075): EWMA of frames per
      * second, x16 fixed point, after P2P_ANALYZE_WARMUP windows. */
     uint32_t base_rate16[P2P_I_COUNT];

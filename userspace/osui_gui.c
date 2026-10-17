@@ -72,6 +72,8 @@ int osui_gui_ide_active(void) { return g_ide.active; }
 
 void osui_gui_ide_frame_row(int r, char *dst, int max) { osui_ide_frame_row(&g_ide, r, dst, max); }
 
+void osui_gui_ide_output(const char *text) { if (g_ide.active) osui_ide_out_append(&g_ide, text); }
+
 static void ide_out(char *out, int out_max, const char *a, const char *b) {
     if (!out || out_max <= 0) return;
     scpy(out, out_max, a);
@@ -121,9 +123,26 @@ static void ide_action(int act, char *out, int out_max) {
         ide_out(out, out_max, "osui pm-ide exec=missing", 0);
         return;
     }
+    if (act == OSUI_IDE_RUN) osui_ide_out_clear(&g_ide);
     (void)g_ide_exec(act, g_ide.file, g_ide_buf, len, msg, (int)sizeof(msg));
     osui_ide_set_status(&g_ide, msg);
-    ide_out(out, out_max, act == OSUI_IDE_CHECK ? "osui pm-ide check " : "osui pm-ide run ", msg);
+    if (act == OSUI_IDE_RUN) {
+        char line[OSUI_IDE_ROW_LEN + 16];
+        if (g_ide.out_total == 0) osui_ide_out_append(&g_ide, "(no output)");
+        else g_ide.out_visible = 1;
+        scpy(line, (int)sizeof(line), msg);
+        scpy(line + slen(line), (int)sizeof(line) - slen(line), " output ");
+        {
+            char num[12]; int k = 0, v = g_ide.out_total, j; char t[12];
+            do { t[k++] = (char)('0' + v % 10); v /= 10; } while (v && k < 11);
+            for (j = 0; j < k; j++) num[j] = t[k - 1 - j];
+            num[k] = 0;
+            scpy(line + slen(line), (int)sizeof(line) - slen(line), num);
+        }
+        ide_out(out, out_max, "osui pm-ide run ", line);
+        return;
+    }
+    ide_out(out, out_max, "osui pm-ide check ", msg);
 }
 
 void osui_gui_set_program_eval(osui_program_eval_t fn) {
@@ -398,6 +417,12 @@ void osui_gui_write_snap(char *dst, int max) {
         snap_u(dst, max, &p, (unsigned)g_ide.nlines);
         snap_add(dst, max, &p, " ide_mod=");
         snap_u(dst, max, &p, (unsigned)g_ide.modified);
+        snap_add(dst, max, &p, " ide_out=");
+        snap_u(dst, max, &p, (unsigned)g_ide.out_total);
+        snap_add(dst, max, &p, " ide_pane=");
+        snap_u(dst, max, &p, (unsigned)g_ide.out_visible);
+        snap_add(dst, max, &p, " ide_tabs=");
+        snap_u(dst, max, &p, (unsigned)g_ide.completions);
         snap_add(dst, max, &p, "\nOSUI-IDE status=");
         snap_add(dst, max, &p, g_ide.status);
         osui_ide_frame_row(&g_ide, 1 + g_ide.row - g_ide.top, row, (int)sizeof(row));
@@ -434,7 +459,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     if (!scene) return;
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
-    scene->version = 2;
+    scene->version = 3; /* 3: term_attr (pm-ide syntax classes) */
     scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
     scene->pane = OS_FB_PANE_NONE;
     if (pane) {
@@ -489,8 +514,10 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     if (g_ide.active) {
         /* US-050: the editor takes the whole desktop (OS_FB_PANE_IDE). */
         scene->pane = OS_FB_PANE_IDE;
-        for (i = 0; i < OSUI_IDE_FRAME && i < OS_FB_TERM_MAX; i++)
+        for (i = 0; i < OSUI_IDE_FRAME && i < OS_FB_TERM_MAX; i++) {
             osui_ide_frame_row(&g_ide, i, scene->term[i], OS_FB_TERM_LEN);
+            (void)osui_ide_frame_attr(&g_ide, i, scene->term_attr[i], OS_FB_TERM_LEN);
+        }
         scene->nterm = (uint8_t)i;
         scene->input[0] = 0;
     }

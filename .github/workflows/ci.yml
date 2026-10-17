@@ -120,6 +120,11 @@ jobs:
       - name: QEMU strict network build, no Ring 0 fallback
         run: make qemu-net-no-ring0
 
+      # Guest TCP/TLS loss recovery: dropped ClientHello and Certificate,
+      # duplicated ServerKeyExchange (about 2 min).
+      - name: QEMU TCP/TLS loss recovery (frame drop)
+        run: make qemu-net-loss-recovery
+
       - name: QEMU strict network build, loopback-only worker (no NE2000)
         run: make qemu-net-loopback-worker
 
@@ -210,6 +215,11 @@ jobs:
       - name: QEMU OS-UI local API over HTTP via networker (host HTTP client)
         run: make qemu-osui-web
 
+      # US-001: PCI enumeration by the Ring 3 pcidriver, rogue #GP,
+      # supervised respawn after kill (about 2 min).
+      - name: QEMU Ring 3 PCI driver (supervised restart)
+        run: make qemu-pci-driver
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -250,6 +260,41 @@ jobs:
           if-no-files-found: ignore
           path: |
             test_logs/coverage_report.txt
+
+  p2p-mesh:
+    name: QEMU P2P four guests (multi-hop, crash, rejoin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      # US-063 two relays, US-069 relay crash + reboot + rejoin (about 2 min).
+      - name: QEMU P2P four guests (two-relay path, crash, rejoin)
+        run: make qemu-p2p-mesh
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2p-mesh-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
 
   p2p:
     name: QEMU P2P and collab three guests

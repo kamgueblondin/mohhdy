@@ -1,4 +1,7 @@
 #include "pci.h"
+#ifndef KERNEL_TEST
+#include "pci_service.h"
+#endif
 
 static inline void pci_outl(uint16_t port, uint32_t value) {
     __asm__ volatile ("outl %0, %1" : : "a"(value), "Nd"(port));
@@ -26,14 +29,19 @@ void pci_decode_id(uint32_t value, pci_device_t* device) {
 }
 
 #ifdef KERNEL_TEST
+static int pci_ring0_locked(void) { return 0; }
 uint32_t pci_config_read32(uint8_t bus, uint8_t slot, uint8_t function,
                            uint8_t offset) {
     (void)bus; (void)slot; (void)function; (void)offset;
     return 0xffffffffU;
 }
 #else
+/* Lot 4 (US-001): once the Ring 3 pcidriver has published its inventory,
+ * the kernel no longer drives 0xCF8/0xCFC itself (refused and counted). */
+static int pci_ring0_locked(void) { return pci_service_handed_off(); }
 uint32_t pci_config_read32(uint8_t bus, uint8_t slot, uint8_t function,
                            uint8_t offset) {
+    if (pci_ring0_locked()) { pci_service_note_ring0_denied(); return 0xffffffffU; }
     if ((offset & 3U) != 0U) return 0xffffffffU;
     pci_outl(0xcf8U, pci_config_address(bus, slot, function, offset));
     return pci_inl(0xcfcU);
@@ -45,6 +53,7 @@ int pci_find_class_progif(uint8_t class_code, uint8_t subclass, uint8_t prog_if,
     uint32_t slot;
     uint32_t function;
     if (!out) return -1;
+    if (pci_ring0_locked()) { (void)pci_config_read32(0, 0, 0, 0); return -1; }
     for (bus = 0; bus < 256U; ++bus) {
         for (slot = 0; slot < 32U; ++slot) {
             for (function = 0; function < 8U; ++function) {
@@ -77,6 +86,7 @@ int pci_find_class(uint8_t class_code, uint8_t subclass, pci_device_t* out) {
     uint32_t slot;
     uint32_t function;
     if (!out) return -1;
+    if (pci_ring0_locked()) { (void)pci_config_read32(0, 0, 0, 0); return -1; }
     for (bus = 0; bus < 256U; ++bus) {
         for (slot = 0; slot < 32U; ++slot) {
             for (function = 0; function < 8U; ++function) {
@@ -108,6 +118,7 @@ int pci_find_device(uint16_t vendor_id, uint16_t device_id, pci_device_t* out) {
     uint32_t slot;
     uint32_t function;
     if (!out) return -1;
+    if (pci_ring0_locked()) { (void)pci_config_read32(0, 0, 0, 0); return -1; }
     for (bus = 0; bus < 256U; ++bus) {
         for (slot = 0; slot < 32U; ++slot) {
             for (function = 0; function < 8U; ++function) {

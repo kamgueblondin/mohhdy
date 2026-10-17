@@ -57,18 +57,18 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
 |----|--------|-------------|
 | US-061 protocol | done | framing + header + types above; QEMU 3 guests |
 | US-062 discovery | done | authenticated HELLO, peer table, up/down; QEMU |
-| US-063 routing | partial | distance vector in HELLO (peer id + hop count, at most 3 hops, also the frame TTL); frames relayed hop by hop (`relayed_multi`). Unit proof on a 4-node line (`test_multi_relay_chain`). QEMU has 3 guests, so it proves one relay. A destination must have been discovered and keyed once |
+| US-063 routing | partial | distance vector in HELLO (peer id + hop count, at most 3 hops, also the frame TTL); frames relayed hop by hop (`relayed_multi`). Unit proof on a 4-node line (`test_multi_relay_chain`) and QEMU proof with two relays (`make qemu-p2p-mesh`, 4 guests, line alpha-beta-gamma-delta by hub wire cuts). A destination must have been discovered and keyed once |
 | US-064 consensus | done | Raft log in the guest: pre-vote, membership quorum, append entries, commit index, compaction, InstallSnapshot for a follower behind the snapshot, leader lease of 10 s renewed when a heartbeat reaches a peer. Term and vote persisted in the p2pkv trailer. Not Paxos. Physical window 16. `p2p-raft`, `p2p-raft-compact`, `p2p-raft-put` |
 | US-065 replication | done | put pushed to all peers, last writer wins (version, origin); QEMU |
 | US-066 encryption | done | X25519 + AES-128-GCM per pair, PSK-authenticated, replay protection; QEMU checks no plaintext on the wire |
 | US-067 gRPC | partial | typed RPC over sealed frames: request id, type, status, deadline. Not HTTP/2 gRPC. `p2p-grpc` |
 | US-068 bandwidth | partial | per-peer message budget (`p2p-limit`) and the adaptive data window of US-073. Control frames are not capped. Not a bandwidth estimator |
-| US-069 fault tolerance | partial | failure detection (10 s), relay, resync. QEMU scenario 2 is a hub wire cut (`cut_pair`), scenario 3 is a blocked link. The key/value store, node identity, and Raft term/vote persist across a reboot (`persist-*`). Not a complete fault-tolerance system |
+| US-069 fault tolerance | partial | failure detection (10 s), relay, resync. QEMU scenario 2 is a hub wire cut (`cut_pair`), scenario 3 is a blocked link. The key/value store, node identity, and Raft term/vote persist across a reboot (`persist-*`). `make qemu-p2p-mesh`: a relay's QEMU process is killed, traffic reroutes, the node reboots under a new identity with the same name, the peers reuse its slot (`rejoins`) and push the store back. Not a complete fault-tolerance system |
 | US-070 distributed cache | partial | remote get with miss reporting, local TTL cache, versioned entries with fences (`p2p-cache putv KEY VAL VER`, a stale version is refused), invalidation `p2p-cache inv KEY [VER]` acked per peer (`P2P_I_CACHE_INV_ACK`), re-sent every second up to 5 times, `incomplete` when acks never come. QEMU scenario 4 (relayed through beta). Not a consensus-backed cache |
 | US-071 synchronization | done | two-way digest anti-entropy (`p2p-sync`); QEMU after a partition |
 | US-072 health monitor | done | per-peer RTT, last seen, sent/recv, auth failures, replays, throttled, down events; QEMU |
 | US-073 adaptive QoS | partial | EWMA smoothed RTT and minimum RTT; window cut by a quarter when RTT is above twice the minimum, halved on loss (one loss per outage), plus one per success; control frames bypass `admit()`. `p2p-qos`. Unit proof and QEMU scenario 3 (window below 16 after the gamma cut). Not a full congestion controller |
-| US-074 NAT traversal | simulated | virtual NAT / STUN binding (`p2p-stun`) and hole punching (`p2p-punch`). Not a real NAT |
+| US-074 NAT traversal | partial | real RFC 5389 STUN Binding codec (`userspace/stun.c`, XOR-MAPPED-ADDRESS, transaction id per server) inside the sealed link; the server answers with the frame's IPv4 source; two servers classify `direct` / `endpoint_independent` / `endpoint_dependent` (`p2p-stun PEER`). QEMU proves `direct` between guests. The NAT is simule (address rewrite on the unit bus); hole punching (`p2p-punch`) is still simulated. Not a real NAT traversal |
 | US-075 traffic analysis | partial | per-type counters (`p2p-stats`) and `p2p-analyze`: fixed rules (`congestion`, `queue-delay`, dead link, relay) plus a learned per-type receive baseline (EWMA x16, 5 windows of warm-up, anomaly above 4x baseline + 8 frames/s, finding `rate-anomaly`). This is an EWMA baseline, not machine learning. A rate anomaly ranks as `degraded`; only crypto failures make the verdict `suspicious` |
 
 ## Limits (honest)
@@ -87,8 +87,10 @@ background `web-serve`); events print asynchronously (`p2p peer X up`,
   `p2p-sync`, the one-round proposal by timeout.
 * Typed RPC is not HTTP/2 gRPC. Deadlines are guest ticks. A repeated
   request id replays the last reply (`rpc_replays`).
-* STUN and NAT punch stay virtual. There is no public internet and no
-  real NAT on the QEMU hub.
+* STUN messages are real RFC 5389 Binding messages, but the NAT is simule
+  (unit bus) and NAT punch stays virtual. There is no public internet, no
+  public STUN server and no real NAT on the QEMU hub. The mapped port is
+  `P2P_PORT` (the datagram API does not expose the UDP source port).
 * The membership secret is a shared key typed on the console; it is not
   stored by the guest. Raft term and vote are stored in the p2pkv blob
   trailer (`R` `F`, version 1). Old blobs without the trailer still load.

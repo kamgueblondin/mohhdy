@@ -238,6 +238,7 @@ static int fake_save(const char *file, const char *buf, int len) {
 static int fake_exec(int action, const char *file, const char *src, int len, char *msg, int max) {
     (void)file; (void)src; (void)len;
     g_fake_exec_action = action;
+    if (action == OSUI_IDE_RUN) osui_gui_ide_output("1");   /* the program's say */
     strncpy(msg, action == OSUI_IDE_CHECK ? "ok statements 2" : "ok line 2 prints 1 expects 1 failed 0", (size_t)max - 1);
     msg[max - 1] = 0;
     return 0;
@@ -260,6 +261,11 @@ static void test_gui_pm_ide_fullscreen(void) {
     TEST_ASSERT_EQUAL(OSUI_IDE_FRAME, g_scene.nterm);
     TEST_ASSERT_EQUAL(0, strncmp(g_scene.term[0], "pm-ide t.pm Ln 1 Col 1 /1", 25));
     TEST_ASSERT_EQUAL_STRING("  1> say 1", g_scene.term[1]); /* cursor on s: Ln/Col in the title */
+    /* scene v3 carries the syntax classes: gutter, keyword, number */
+    TEST_ASSERT_EQUAL(3, g_scene.version);
+    TEST_ASSERT_EQUAL(OSUI_IDE_TOK_GUTTER, g_scene.term_attr[1][0]);
+    TEST_ASSERT_EQUAL(OSUI_IDE_TOK_KEYWORD, g_scene.term_attr[1][5]);
+    TEST_ASSERT_EQUAL(OSUI_IDE_TOK_NUMBER, g_scene.term_attr[1][9]);
     /* Arrows and ESC belong to the editor, not to the chat or the desktop. */
     osui_gui_feed_key(OS_VGA_KEY_DOWN, g_out, (int)sizeof(g_out));
     for (i = 0; i < 5; i++) osui_gui_feed_key(OS_VGA_KEY_RIGHT, g_out, (int)sizeof(g_out));
@@ -284,6 +290,18 @@ static void test_gui_pm_ide_fullscreen(void) {
     osui_gui_feed_key('r', g_out, (int)sizeof(g_out));
     TEST_ASSERT_EQUAL(OSUI_IDE_RUN, g_fake_exec_action);
     TEST_ASSERT_NOT_NULL(strstr(g_out, "osui pm-ide run ok line 2"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, " output 1"));
+    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
+    TEST_ASSERT_NOT_NULL(strstr(g_snap, " ide_out=1 ide_pane=1 "));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL_STRING("---- output 1 line (ESC o hides) ----", g_scene.term[OSUI_IDE_VIEW - OSUI_IDE_OUT_VIEW]);
+    TEST_ASSERT_EQUAL_STRING("    : 1", g_scene.term[OSUI_IDE_VIEW - OSUI_IDE_OUT_VIEW + 1]);
+    TEST_ASSERT_EQUAL(OSUI_IDE_TOK_OUTPUT, g_scene.term_attr[OSUI_IDE_VIEW - OSUI_IDE_OUT_VIEW + 1][6]);
+    /* a check does not touch the output pane */
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('c', g_out, (int)sizeof(g_out));
+    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
+    TEST_ASSERT_NOT_NULL(strstr(g_snap, " ide_out=1 ide_pane=1 "));
     osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
     osui_gui_feed_key('q', g_out, (int)sizeof(g_out));
     TEST_ASSERT_NOT_NULL(strstr(g_out, "osui pm-ide quit file=t.pm"));

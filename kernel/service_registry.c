@@ -958,6 +958,9 @@ int service_registry_ata_driver_name_allowed(const char* service_name, const cha
      * may map the initrd checkpoint, so only the aiworker binary holds it. */
     if (name_equal(service_name, "ai-engine"))
         return task_name && name_equal(task_name, "aiworker");
+    /* Lot 4 (US-001): "pci-driver" opens the PCI config ports (IOPB). */
+    if (name_equal(service_name, "pci-driver"))
+        return task_name && name_equal(task_name, "pcidriver");
     return 1;
 }
 

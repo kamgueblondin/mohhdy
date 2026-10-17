@@ -1,5 +1,6 @@
 /* userspace/p2p.c - Phase 5 P2P node. See p2p.h and docs/p2p.md. */
 #include "p2p.h"
+#include "stun.h"
 #include "../kernel/sha256.h"
 #include "../kernel/aes_gcm.h"
 #include "../kernel/x25519.h"
@@ -200,22 +201,29 @@ static uint32_t link_cost(const p2p_peer_t* p) {
     return 10U + rtt_ms + load;
 }
 
+/* Fewest hops first, link cost (RTT, load) between routes of the same
+ * length. The HELLO vector carries hop counts, not next hops, so a pure
+ * cost order let a slow direct link lose to a neighbor whose own route
+ * went back through us (a two-node loop seen in QEMU under CI load). */
 int p2p_route_find(const p2p_node_t* n, uint32_t dest_id, uint32_t* next_hop, uint32_t* total_cost) {
     int i, j;
-    uint32_t min_cost = 0xffffffffU, best_hop = 0xffffffffU;
+    uint32_t min_cost = 0xffffffffU, best_hop = 0xffffffffU, min_hops = 0xffU;
     if (!n || !dest_id) return -1;
     for (i = 0; i < P2P_PEERS; i++) {
         const p2p_peer_t* p = &n->peers[i];
         if (!p->used || !p->up || p->blocked) continue;
         if (p->id == dest_id) {
             uint32_t c = link_cost(p);
-            if (c < min_cost) { min_cost = c; best_hop = 0; }
+            if (min_hops > 1U || c < min_cost) { min_cost = c; best_hop = 0; min_hops = 1U; }
         } else {
             for (j = 0; j < P2P_PEERS; j++) {
                 if (p->neighbors[j] == dest_id && p->nb_hops[j] && p->nb_hops[j] <= P2P_MAX_HOPS - 1U) {
                     /* 15 per extra hop: one relay costs 15, two cost 30. */
                     uint32_t c = link_cost(p) + 15U * (uint32_t)p->nb_hops[j];
-                    if (c < min_cost) { min_cost = c; best_hop = p->id; }
+                    uint32_t hc = (uint32_t)p->nb_hops[j] + 1U;
+                    if (hc < min_hops || (hc == min_hops && c < min_cost)) {
+                        min_cost = c; best_hop = p->id; min_hops = hc;
+                    }
                 }
             }
         }
@@ -1136,23 +1144,39 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         break;
     }
     case P2P_I_STUN_REQ: {
-        uint16_t map_port = (uint16_t)(7700U + (p->id & 0xFFU));
-        mcopy(b, p->ip, 4);
-        b[4] = (uint8_t)(map_port >> 8); b[5] = (uint8_t)(map_port & 0xFFU);
-        b[6] = 1; /* 1: FullCone */
-        (void)seal_send(n, h, p, P2P_I_STUN_RESP, b, 7);
+        /* STUN server side: answer a real Binding request with the source
+         * address the datagram arrived from (XOR-MAPPED-ADDRESS). The
+         * datagram API exposes no UDP source port; P2P_PORT is used. */
+        uint16_t type;
+        uint8_t txid[12];
+        int rl;
+        if (stun_parse_header(m, len, &type, txid) != 0 || type != STUN_BINDING_REQUEST) { n->nat.stun_bad++; break; }
+        rl = stun_build_binding_success(b, 64, txid, n->last_src_ip, (uint16_t)P2P_PORT);
+        if (rl > 0) (void)seal_send(n, h, p, P2P_I_STUN_RESP, b, rl);
         break;
     }
     case P2P_I_STUN_RESP: {
-        if (len < 7) break;
-        mcopy(n->nat.mapped_ip, m, 4);
-        n->nat.mapped_port = ((uint16_t)m[4] << 8) | m[5];
-        n->nat.nat_type = m[6];
+        uint8_t mip[4];
+        uint16_t mport;
+        int slot, kind;
+        for (slot = 0; slot < 2; slot++) if (n->nat.srv[slot].pending && n->nat.srv[slot].server == p->id) break;
+        if (slot == 2 || stun_parse_mapped(m, len, n->nat.srv[slot].txid, mip, &mport) != 0) { n->nat.stun_bad++; break; }
+        n->nat.srv[slot].pending = 0; n->nat.srv[slot].valid = 1;
+        mcopy(n->nat.srv[slot].ip, mip, 4); n->nat.srv[slot].port = mport;
+        mcopy(n->nat.mapped_ip, mip, 4); n->nat.mapped_port = mport;
+        {
+            int other = slot ^ 1, two = n->nat.srv[other].valid;
+            kind = stun_nat_classify(n->ip, (uint16_t)P2P_PORT, mip, mport, two,
+                                     n->nat.srv[other].ip, n->nat.srv[other].port);
+        }
+        n->nat.nat_type = (uint8_t)kind;
         s_cat(line, "p2p stun mapped_ip ", 200);
-        cat_u(line, m[0], 200); s_cat(line, ".", 200); cat_u(line, m[1], 200); s_cat(line, ".", 200);
-        cat_u(line, m[2], 200); s_cat(line, ".", 200); cat_u(line, m[3], 200);
-        s_cat(line, " port ", 200); cat_u(line, n->nat.mapped_port, 200);
-        s_cat(line, " nat_type full_cone", 200);
+        cat_u(line, mip[0], 200); s_cat(line, ".", 200); cat_u(line, mip[1], 200); s_cat(line, ".", 200);
+        cat_u(line, mip[2], 200); s_cat(line, ".", 200); cat_u(line, mip[3], 200);
+        s_cat(line, " port ", 200); cat_u(line, mport, 200);
+        s_cat(line, " from ", 200); s_cat(line, p->name, 200);
+        s_cat(line, " nat_type ", 200); s_cat(line, stun_nat_name(kind), 200);
+        s_cat(line, " servers ", 200); cat_u(line, (uint32_t)(n->nat.srv[0].valid + n->nat.srv[1].valid), 200);
         say(h, line);
         break;
     }
@@ -1171,7 +1195,8 @@ static int propose_send(p2p_node_t* n, const p2p_host_t* h, int only_missing);
 static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int len, const uint8_t mac[6]) {
     uint8_t tag[32];
     p2p_peer_t* p;
-    uint32_t src = get32(b + 8);
+    uint32_t src = get32(b + 8), rejoined_from = 0;
+    uint8_t blocked = 0;
     int cnt, i, body = HDR + P2P_NAME_MAX + 4 + 32 + 1;
     char line[96];
     if (len < body + 16) { n->bad_hello++; return; }
@@ -1181,11 +1206,25 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
     if (!meq(tag, b + body + cnt * 5, 16)) { n->bad_hello++; return; }
     p = by_id(n, src);
     if (!p) {
-        for (i = 0; i < P2P_PEERS && n->peers[i].used; i++) {}
-        if (i == P2P_PEERS) return;
-        p = &n->peers[i];
+        /* US-069 crash/rejoin: a member that went down and rebooted comes
+         * back with a fresh identity (new key, new id) under the same name.
+         * Its stale slot is reused; a live member is never replaced. */
+        char hello_name[P2P_NAME_MAX];
+        p2p_peer_t* old;
+        s_copy(hello_name, (const char*)b + HDR, P2P_NAME_MAX);
+        hello_name[P2P_NAME_MAX - 1] = 0;
+        old = p2p_find(n, hello_name);
+        if (old && !old->up && old->id != src) {
+            rejoined_from = old->id;
+            blocked = old->blocked;
+            p = old;
+        } else {
+            for (i = 0; i < P2P_PEERS && n->peers[i].used; i++) {}
+            if (i == P2P_PEERS) return;
+            p = &n->peers[i];
+        }
         mzero(p, (int)sizeof(*p));
-        p->used = 1; p->id = src;
+        p->used = 1; p->id = src; p->blocked = blocked;
     }
     if (p->blocked) return;
     s_copy(p->name, (const char*)b + HDR, P2P_NAME_MAX);
@@ -1210,6 +1249,17 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
         s_cat(line, "p2p peer ", 96); s_cat(line, p->name, 96); s_cat(line, " up id ", 96); cat_hex32(line, p->id, 96);
         s_cat(line, p->keyed ? " keyed" : " unkeyed", 96);
         say(h, line);
+    }
+    if (rejoined_from) {
+        n->rejoins++;
+        line[0] = 0;
+        s_cat(line, "p2p peer ", 96); s_cat(line, p->name, 96); s_cat(line, " rejoined id ", 96);
+        cat_hex32(line, p->id, 96); s_cat(line, " was ", 96); cat_hex32(line, rejoined_from, 96);
+        say(h, line);
+        /* Push the replicated state back: anti-entropy with the restarted
+         * member, re-sent until it answers (it needs our HELLO first). */
+        p->sync_retries = 4U;
+        p->sync_at = now(h) - P2P_SYNC_RESEND_TICKS;
     }
 }
 
@@ -1333,6 +1383,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
     while (budget-- > 0 && h && h->recv) {
         got = h->recv(h->ctx, ip, mac, b, (uint16_t)sizeof(b));
         if (got <= 0) { queued = 0; break; }
+        mcopy(n->last_src_ip, ip, 4);
         on_datagram(n, h, b, got, mac);
         queued = 1;
     }
@@ -1345,6 +1396,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
         while (extra-- > 0) {
             got = h->recv(h->ctx, ip, mac, b, (uint16_t)sizeof(b));
             if (got <= 0) { queued = 0; break; }
+            mcopy(n->last_src_ip, ip, 4);
             on_datagram(n, h, b, got, mac);
         }
     }
@@ -1603,12 +1655,26 @@ int p2p_grpc_call(p2p_node_t* n, const p2p_host_t* h, const char* peer, const ch
 }
 
 int p2p_stun_probe(p2p_node_t* n, const p2p_host_t* h, const char* stun_server_peer) {
-    uint8_t b[8];
+    uint8_t b[STUN_HEADER];
     p2p_peer_t* p = p2p_find(n, stun_server_peer);
     if (!n || !n->up || !p) return -1;
-    n->nat.stun_probes++;
-    b[0] = 1;
-    return seal_send(n, h, p, P2P_I_STUN_REQ, b, 1);
+    {
+        int slot, rl;
+        uint32_t t = now(h);
+        for (slot = 0; slot < 2; slot++) if (n->nat.srv[slot].server == p->id) break;
+        if (slot == 2) slot = !n->nat.srv[0].server ? 0 : !n->nat.srv[1].server ? 1 : (int)(n->nat.stun_probes & 1U);
+        n->nat.stun_probes++;
+        n->nat.srv[slot].server = p->id;
+        /* Transaction id: node id, server id, probe count and clock. */
+        put32(n->nat.srv[slot].txid, n->id ^ t);
+        put32(n->nat.srv[slot].txid + 4, p->id);
+        put32(n->nat.srv[slot].txid + 8, n->nat.stun_probes * 2654435761U);
+        n->nat.srv[slot].pending = 1;
+        n->nat.srv[slot].valid = 0;
+        rl = stun_build_binding_request(b, (int)sizeof(b), n->nat.srv[slot].txid);
+        if (rl <= 0) return -1;
+        return seal_send(n, h, p, P2P_I_STUN_REQ, b, rl);
+    }
 }
 
 int p2p_nat_punch(p2p_node_t* n, const p2p_host_t* h, const char* peer) {
@@ -1981,6 +2047,8 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " dup ", cap); cat_u(out, n->dup, cap);
         s_cat(out, " bad_hello ", cap); cat_u(out, n->bad_hello, cap);
         s_cat(out, " foreign ", cap); cat_u(out, n->foreign, cap);
+        s_cat(out, " relayed_multi ", cap); cat_u(out, n->relayed_multi, cap);
+        s_cat(out, " rejoins ", cap); cat_u(out, n->rejoins, cap);
         s_cat(out, "\n", cap);
     }
     if (s_eq(what, "qos")) {
@@ -2042,13 +2110,14 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, "p2p route ok\n", cap);
     } else if (s_eq(what, "nat") || s_eq(what, "stun")) {
         s_cat(out, "p2p nat type ", cap);
-        s_cat(out, n->nat.nat_type == 1 ? "full_cone" : n->nat.nat_type == 2 ? "restricted_cone" : n->nat.nat_type == 3 ? "symmetric" : "direct", cap);
+        s_cat(out, n->nat.srv[0].valid || n->nat.srv[1].valid ? stun_nat_name(n->nat.nat_type) : "unprobed", cap);
         s_cat(out, " mapped_ip ", cap);
         cat_u(out, n->nat.mapped_ip[0], cap); s_cat(out, ".", cap); cat_u(out, n->nat.mapped_ip[1], cap); s_cat(out, ".", cap);
         cat_u(out, n->nat.mapped_ip[2], cap); s_cat(out, ".", cap); cat_u(out, n->nat.mapped_ip[3], cap);
         s_cat(out, " port ", cap); cat_u(out, n->nat.mapped_port, cap);
         s_cat(out, " probes ", cap); cat_u(out, n->nat.stun_probes, cap);
         s_cat(out, " punches ", cap); cat_u(out, n->nat.nat_punches, cap);
+        s_cat(out, " bad ", cap); cat_u(out, n->nat.stun_bad, cap);
         s_cat(out, "\n", cap);
     }
     return s_len(out);
