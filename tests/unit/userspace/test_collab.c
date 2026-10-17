@@ -547,6 +547,102 @@ void test_zk_schnorr_proof(void) {
     TEST_ASSERT_TRUE(pr.s != 123456789ULL && pr.t != 123456789ULL);
 }
 
+
+/* Lot 9 (US-099): contract language, compiled and run in the fold. */
+void test_contract_language_compile(void) {
+    collab_mcl_t m;
+    collab_mcl_facts_t f;
+    TEST_ASSERT_EQUAL(0, collab_mcl_compile("pay if payee&arb;refund if after 20", &m));
+    TEST_ASSERT_EQUAL(2, m.n);
+    TEST_ASSERT_EQUAL(MCL_PAY, m.cl[0].action);
+    TEST_ASSERT_EQUAL(2, m.cl[0].nc);
+    TEST_ASSERT_EQUAL(MCL_ARB, m.cl[0].cond[1].kind);
+    TEST_ASSERT_EQUAL(MCL_AFTER, m.cl[1].cond[0].kind);
+    TEST_ASSERT_EQUAL(20, m.cl[1].cond[0].arg);
+    TEST_ASSERT_EQUAL(0, collab_mcl_compile("pay if payee arb else refund if after 9", &m));
+    TEST_ASSERT_EQUAL(2, m.n);
+    TEST_ASSERT_EQUAL(2, m.cl[0].nc);
+    TEST_ASSERT_EQUAL(0, collab_mcl_compile("split 25 if sigs 1", &m));
+    TEST_ASSERT_EQUAL(MCL_SPLIT, m.cl[0].action);
+    TEST_ASSERT_EQUAL(25, m.cl[0].pct);
+    /* errors carry the 1-based offset */
+    TEST_ASSERT_EQUAL(-1, collab_mcl_compile("send if payee", &m));
+    TEST_ASSERT_EQUAL(-5, collab_mcl_compile("pay payee", &m));
+    TEST_ASSERT_TRUE(collab_mcl_compile("split 0 if payee", &m) < 0);
+    TEST_ASSERT_TRUE(collab_mcl_compile("split 100 if payee", &m) < 0);
+    TEST_ASSERT_TRUE(collab_mcl_compile("pay if sigs 0", &m) < 0);
+    TEST_ASSERT_TRUE(collab_mcl_compile("pay if", &m) < 0);
+    TEST_ASSERT_TRUE(collab_mcl_compile("pay if payee;", &m) < 0);
+    TEST_ASSERT_TRUE(collab_mcl_compile("pay if payee x", &m) < 0);
+    TEST_ASSERT_TRUE(collab_mcl_compile("pay if payee arb after 1 sigs 2", &m) < 0);   /* 4 conditions */
+    TEST_ASSERT_TRUE(collab_mcl_compile("pay if payee;pay if arb;pay if sigs 1;refund if after 1", &m) < 0);
+    TEST_ASSERT_TRUE(collab_mcl_compile("payee if payee", &m) < 0);                /* keyword boundary */
+    /* evaluation: first clause that holds */
+    TEST_ASSERT_EQUAL(0, collab_mcl_compile("pay if payee&arb;refund if after 20", &m));
+    memset(&f, 0, sizeof(f));
+    f.payee = 7; f.arbiter = 9;
+    TEST_ASSERT_EQUAL(-1, collab_mcl_eval(&m, &f));
+    f.signers[f.ns++] = 7;
+    TEST_ASSERT_EQUAL(-1, collab_mcl_eval(&m, &f));
+    f.elapsed = 20;
+    TEST_ASSERT_EQUAL(1, collab_mcl_eval(&m, &f));
+    f.signers[f.ns++] = 9;
+    TEST_ASSERT_EQUAL(0, collab_mcl_eval(&m, &f));
+    f.arbiter = 0; f.signers[1] = 0;                                     /* no arbiter: arb never holds */
+    f.elapsed = 0;
+    TEST_ASSERT_EQUAL(-1, collab_mcl_eval(&m, &f));
+}
+
+void test_contract_language_in_the_ledger(void) {
+    int c1, c2, c3, c4;
+    setup();                                                  /* 100 points each */
+    /* alpha -> beta 40, arbiter gamma: paid when beta and gamma sign off */
+    c1 = collab_contract_deploy(&g_c[0], &g_h[0], k_id[1], k_id[2], 40, "pay if payee arb;refund if after 30");
+    TEST_ASSERT_GREATER_THAN(0, c1);
+    deliver();
+    TEST_ASSERT_EQUAL(60, bal(1, "alpha"));
+    collab_contract_signoff(&g_c[1], &g_h[1], k_id[0], (uint32_t)c1); deliver();
+    TEST_ASSERT_EQUAL(100, bal(2, "beta"));                    /* one condition only */
+    collab_contract_signoff(&g_c[0], &g_h[0], k_id[0], (uint32_t)c1); deliver();   /* payer cannot sign */
+    collab_contract_signoff(&g_c[1], &g_h[1], k_id[0], (uint32_t)c1); deliver();   /* duplicate */
+    collab_contract_signoff(&g_c[2], &g_h[2], k_id[0], (uint32_t)c1); deliver();
+    TEST_ASSERT_EQUAL(140, bal(0, "beta"));
+    TEST_ASSERT_EQUAL(140, bal(1, "beta"));
+    TEST_ASSERT_EQUAL(140, bal(2, "beta"));
+    report(0, "escrows", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "payee beta arbiter gamma amount 40 state released"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "program clauses 2 signoffs 2 fired 1 to_payee 40"));
+    /* fired once: a later sign-off is rejected (bad-state) */
+    collab_contract_signoff(&g_c[2], &g_h[2], k_id[0], (uint32_t)c1); deliver();
+    report(1, "audit", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "reason not-allowed"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "reason duplicate"));
+    /* split: gamma -> alpha 20, 25 percent after one sign-off */
+    c2 = collab_contract_deploy(&g_c[2], &g_h[2], k_id[0], 0, 20, "split 25 if sigs 1"); deliver();
+    collab_contract_signoff(&g_c[1], &g_h[1], k_id[2], (uint32_t)c2); deliver();
+    TEST_ASSERT_EQUAL(65, bal(0, "alpha"));
+    TEST_ASSERT_EQUAL(95, bal(0, "gamma"));
+    /* deadline: beta -> gamma 10, refunded once the ledger clock moves 3 */
+    c3 = collab_contract_deploy(&g_c[1], &g_h[1], k_id[2], 0, 10, "pay if payee;refund if after 3"); deliver();
+    TEST_ASSERT_EQUAL(130, bal(0, "beta"));
+    collab_emit(&g_c[0], &g_h[0], CE_TRANSFER, k_id[1], 0, 1, 0, ""); deliver();
+    collab_emit(&g_c[0], &g_h[0], CE_TRANSFER, k_id[1], 0, 1, 0, ""); deliver();
+    collab_emit(&g_c[0], &g_h[0], CE_TRANSFER, k_id[1], 0, 1, 0, ""); deliver();
+    collab_emit(&g_c[0], &g_h[0], CE_TRANSFER, k_id[1], 0, 1, 0, ""); deliver();
+    report(2, "escrows", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "payee gamma arbiter none amount 10 state refunded program clauses 2 signoffs 0 fired 2"));
+    (void)c3;
+    /* a program that names the arbiter without one is rejected everywhere,
+     * nothing is locked; a bad program is refused before emission */
+    c4 = collab_contract_deploy(&g_c[0], &g_h[0], k_id[1], 0, 5, "pay if arb"); deliver();
+    TEST_ASSERT_GREATER_THAN(0, c4);
+    report(1, "audit", 0);
+    TEST_ASSERT_NOT_NULL(strstr(rep, "reason bad-contract"));
+    TEST_ASSERT_EQUAL(-1, collab_contract_deploy(&g_c[0], &g_h[0], k_id[1], 0, 5, "pay when payee"));
+    TEST_ASSERT_EQUAL(300, bal(0, "alpha") + bal(0, "beta") + bal(0, "gamma"));
+    same_digest();
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_zk_schnorr_proof);
@@ -562,6 +658,8 @@ int main(void) {
     RUN_TEST(test_marketplace_contracts_disputes_privacy_compliance);
     RUN_TEST(test_escrow_contracts_and_disputes);
     RUN_TEST(test_auctions);
+    RUN_TEST(test_contract_language_compile);
+    RUN_TEST(test_contract_language_in_the_ledger);
     RUN_TEST(test_payment_conversion_escrow_and_ticket_routing);
     RUN_TEST(test_collab_consolidation_and_fallback);
     RUN_TEST(test_crypto_schnorr_pbkdf2_aes_gcm_pipeline);

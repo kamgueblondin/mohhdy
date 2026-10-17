@@ -254,6 +254,31 @@ int shell_collab_line(const char* line) {
         if (!(pid = peer_id(a)) || num(b, &x)) { print_string(cmd); print_string(" error usage: PAYER SEQ\n"); return 1; }
         return emitted(cmd, collab_escrow_settle(&g_c, &g_h, pid, x, release));
     }
+    /* Lot 9 (US-099): contract with a program (contract language in collab.h) */
+    if (s_eq(cmd, "collab-contract-deploy")) {
+        uint32_t payee_id, arbiter_id = 0, amt;
+        collab_mcl_t prog;
+        int rc;
+        rest = word(rest, b, 48); rest = word(rest, c, 48);
+        payee_id = peer_id(a);
+        if (!s_eq(b, "none")) arbiter_id = peer_id(b);
+        if (!payee_id || (!arbiter_id && !s_eq(b, "none")) || num(c, &amt) || !rest[0]) {
+            print_string("collab-contract-deploy error usage: PAYEE ARBITER|none AMOUNT PROGRAM\n");
+            return 1;
+        }
+        rc = collab_mcl_compile(rest, &prog);
+        if (rc != 0) {
+            print_string("collab-contract-deploy error compile at "); put_u((uint32_t)-rc); print_string("\n");
+            return 1;
+        }
+        print_string("collab-contract-deploy compiled clauses "); put_u((uint32_t)prog.n); print_string("\n");
+        return emitted(cmd, collab_contract_deploy(&g_c, &g_h, payee_id, arbiter_id, amt, rest));
+    }
+    if (s_eq(cmd, "collab-signoff")) {
+        rest = word(rest, b, 48);
+        if (!(pid = peer_id(a)) || num(b, &x)) { print_string("collab-signoff error usage: PAYER SEQ\n"); return 1; }
+        return emitted(cmd, collab_contract_signoff(&g_c, &g_h, pid, x));
+    }
     /* US-101 */
     if (s_eq(cmd, "collab-dispute-open")) {
         rest = word(rest, b, 48);
