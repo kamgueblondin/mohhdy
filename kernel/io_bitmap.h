@@ -28,4 +28,10 @@ void io_bitmap_apply_ata(uint8_t* map, uint32_t len, int allow);
 #define IO_BITMAP_NE2K_LAST 0x31FU
 void io_bitmap_apply_ne2k(uint8_t* map, uint32_t len, int allow);
 
+/* Lot 4 (US-001): PCI configuration mechanism #1 (address 0xCF8, data
+ * 0xCFC-0xCFF), opened only for the live Ring 3 pcidriver. */
+#define IO_BITMAP_PCI_BASE 0xCF8U
+#define IO_BITMAP_PCI_LAST 0xCFFU
+void io_bitmap_apply_pci(uint8_t* map, uint32_t len, int allow);
+
 #endif

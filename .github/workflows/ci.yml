@@ -215,6 +215,11 @@ jobs:
       - name: QEMU OS-UI local API over HTTP via networker (host HTTP client)
         run: make qemu-osui-web
 
+      # US-001: PCI enumeration by the Ring 3 pcidriver, rogue #GP,
+      # supervised respawn after kill (about 2 min).
+      - name: QEMU Ring 3 PCI driver (supervised restart)
+        run: make qemu-pci-driver
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

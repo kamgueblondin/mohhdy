@@ -83,6 +83,23 @@ static void test_ne2k_and_ata_grants_are_independent(void) {
     TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x1F7));
 }
 
+static void test_pci_grant_opens_only_config_ports(void) {
+    uint32_t port;
+    io_bitmap_deny_all(map, sizeof(map));
+    io_bitmap_apply_pci(map, sizeof(map), 1);
+    for (port = 0xCF8U; port <= 0xCFFU; port++)
+        TEST_ASSERT_TRUE(io_bitmap_port_allowed(map, sizeof(map), (uint16_t)port));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0xCF7));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0xD00));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x1F0));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0x300));
+    io_bitmap_apply_ata(map, sizeof(map), 1);
+    io_bitmap_apply_pci(map, sizeof(map), 0);
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0xCF8));
+    TEST_ASSERT_FALSE(io_bitmap_port_allowed(map, sizeof(map), 0xCFC));
+    TEST_ASSERT_TRUE(io_bitmap_port_allowed(map, sizeof(map), 0x1F0));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_deny_all_blocks_every_probe_port);
@@ -91,6 +108,7 @@ int main(void) {
     RUN_TEST(test_single_port_toggle);
     RUN_TEST(test_ne2k_grant_opens_only_nic_window);
     RUN_TEST(test_ne2k_and_ata_grants_are_independent);
+    RUN_TEST(test_pci_grant_opens_only_config_ports);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

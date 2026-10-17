@@ -1676,4 +1676,48 @@ typedef struct {
     uint16_t attempts;
 } os_socket_connect_request_t;
 
+/* Lot 4 (US-001): PCI enumeration by the Ring 3 worker "pci-driver"
+ * (binary pcidriver). While it is the live owner, the kernel opens ports
+ * 0xCF8-0xCFF in the TSS IOPB for that task only; once it has published
+ * an inventory, Ring 0 PCI config reads are refused (counted) and kernel
+ * users (framebuffer BAR) read the published inventory. EBX = op:
+ *   PUBLISH (ECX = os_pci_record_t*, EDX = count): live owner only.
+ *   LIST (ECX = os_pci_record_t*, EDX = capacity): count copied; also runs
+ *     the supervisor (respawn bin/pcidriver after its death, budgeted).
+ *   STATUS (ECX = os_pci_status_t*).
+ *   CLAIM: live owner only, opens the IOPB now (without a task switch). */
+#define SYS_PCI_SERVICE 157
+#define OS_PCI_OP_PUBLISH 1U
+#define OS_PCI_OP_LIST 2U
+#define OS_PCI_OP_STATUS 3U
+#define OS_PCI_OP_CLAIM 4U
+#define OS_PCI_MAX_RECORDS 32U
+#define OS_PCI_DENIED (-170)
+#define OS_PCI_BAD_REQUEST (-171)
+#define OS_PCI_NO_INVENTORY (-172)
+typedef struct {
+    uint8_t bus;
+    uint8_t slot;
+    uint8_t function;
+    uint8_t class_code;
+    uint8_t subclass;
+    uint8_t prog_if;
+    uint8_t header_type;
+    uint8_t reserved;
+    uint16_t vendor_id;
+    uint16_t device_id;
+    uint32_t bar0;
+} os_pci_record_t;
+typedef struct {
+    int32_t owner_pid;
+    int32_t publisher_pid;
+    uint32_t count;
+    uint32_t generation;
+    uint32_t respawns;
+    uint32_t ring0_denied;
+    uint32_t rejected_publish;
+    uint32_t stale;
+    uint32_t handed_off;
+} os_pci_status_t;
+
 #endif

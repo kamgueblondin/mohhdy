@@ -178,7 +178,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/vga_console.c"
     fi
     if [ "$(basename "$test_file")" = "test_gfx_desktop.c" ]; then
-        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/input/usb_tablet.c"
+        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/pci_service.c $BASE_DIR/kernel/input/usb_tablet.c"
     fi
     if [ "$(basename "$test_file")" = "test_ipc.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/ipc.c"
@@ -278,6 +278,9 @@ run_test() {
     fi
     if [ "$(basename "$test_file")" = "test_gpt2_gguf_bounds.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_gguf.c"
+    fi
+    if [ "$(basename "$test_file")" = "test_pci_service.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/pci_service.c"
     fi
     if [ "$(basename "$test_file")" = "test_io_bitmap.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/io_bitmap.c"

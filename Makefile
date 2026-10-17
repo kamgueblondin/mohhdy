@@ -37,7 +37,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/kctx.o build/userspace_switch.o \
           build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/ata_fsop.o build/fsop_exec.o build/net_relay.o build/ai_relay.o build/net_nic_owner.o build/net_wire.o build/net_p2p.o build/gdt.o build/idt.o build/vmm.o build/vmm_share.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_gguf_session.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/gpt2_generate.o build/interrupts.o \
-          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
+          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/pci_service.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
 
 # L'ABI partagée influence notamment la taille de task_t et des messages IPC.
 # Une évolution de structure doit donc reconstruire toute l'image, pas seulement ipc.o.
@@ -294,7 +294,11 @@ build/net_nic.o: kernel/net_nic.c kernel/net_nic.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/pci.o: kernel/pci.c kernel/pci.h
+build/pci.o: kernel/pci.c kernel/pci.h kernel/pci_service.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/pci_service.o: kernel/pci_service.c kernel/pci_service.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -589,6 +593,8 @@ pack-initrd-now:
 	@cp -f userspace/vfsvirtual $(BIN_DEST_DIR)/vfsvirtual
 	@cp -f userspace/networker $(BIN_DEST_DIR)/networker
 	@cp -f userspace/atadriver $(BIN_DEST_DIR)/atadriver
+	@cp -f userspace/pcidriver $(BIN_DEST_DIR)/pcidriver
+	@cp -f userspace/pcirogue $(BIN_DEST_DIR)/pcirogue
 	@cp -f userspace/ataclient $(BIN_DEST_DIR)/ataclient
 	@cp -f userspace/atarogue $(BIN_DEST_DIR)/atarogue
 	@cp -f userspace/netclaim $(BIN_DEST_DIR)/netclaim
@@ -846,7 +852,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-promptmessage qemu-net-no-ring0 qemu-net-loss-recovery qemu-net-loopback-worker qemu-net-peer-tls-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
+.PHONY: integration-qemu qemu-promptmessage qemu-net-no-ring0 qemu-net-loss-recovery qemu-pci-driver qemu-net-loopback-worker qemu-net-peer-tls-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -1173,6 +1179,11 @@ qemu-net-tls-worker: $(OS_IMAGE) pack-initrd
 qemu-net-no-ring0: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/qemu_ne2k_tls12_server.py
 	@python3 tests/scripts/test_qemu_net_no_ring0.py
+
+# US-001: PCI enumeration by the Ring 3 pcidriver (IOPB grant, rogue #GP,
+# supervised respawn after kill, IPC rescan).
+qemu-pci-driver: $(OS_IMAGE) pack-initrd
+	@python3 tests/integration/test_qemu_pci_driver.py
 
 # Guest TCP/TLS loss recovery: the controlled peer drops the first
 # ClientHello and Certificate and duplicates ServerKeyExchange.

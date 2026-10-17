@@ -11,6 +11,7 @@
 #include "mem/heap.h"
 #include "mem/string.h"
 #include "pci.h"
+#include "pci_service.h"
 #include "kernel.h"
 #endif
 
@@ -180,6 +181,13 @@ static int map_range(uint32_t phys, uint32_t bytes) {
 
 static uint32_t pci_vga_bar(void) {
     uint8_t slot, function;
+    /* Lot 4 (US-001): after the Ring 3 pcidriver published the inventory,
+     * the BAR comes from it; Ring 0 no longer scans config space. */
+    if (pci_service_handed_off()) {
+        os_pci_record_t vga;
+        if (pci_service_find_class(0x03U, 0U, 1U, &vga) != 0 || (vga.bar0 & 1U)) return 0;
+        return vga.bar0 & 0xfffffff0u;
+    }
     for (slot = 0; slot < 32; slot++) {
         for (function = 0; function < 8; function++) {
             uint32_t id = pci_config_read32(0, slot, function, 0);

@@ -14,6 +14,7 @@ tss_full_t tss_full;
 #define tss_entry (tss_full.tss)
 static int g_tss_ata_granted = -1;
 static int g_tss_nic_granted = -1;
+static int g_tss_pci_granted = -1;
 
 // External assembly functions
 extern void gdt_flush(uint32_t);
@@ -61,6 +62,7 @@ void gdt_init() {
     tss_full.io_bitmap_end = 0xFFU;
     g_tss_ata_granted = 0;
     g_tss_nic_granted = 0;
+    g_tss_pci_granted = 0;
 
     // Flush GDT and TSS
     gdt_flush((uint32_t)&gdt_ptr);
@@ -88,4 +90,12 @@ void tss_set_nic_io(int grant) {
     if (g_tss_nic_granted == grant) return;
     io_bitmap_apply_ne2k(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
     g_tss_nic_granted = grant;
+}
+
+/* Lot 4 (US-001): PCI config ports only for the live Ring 3 pcidriver. */
+void tss_set_pci_io(int grant) {
+    grant = grant ? 1 : 0;
+    if (g_tss_pci_granted == grant) return;
+    io_bitmap_apply_pci(tss_full.io_bitmap, TSS_IO_BITMAP_BYTES, grant);
+    g_tss_pci_granted = grant;
 }

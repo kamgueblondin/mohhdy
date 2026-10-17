@@ -34,3 +34,9 @@ void io_bitmap_apply_ne2k(uint8_t* map, uint32_t len, int allow) {
     for (port = IO_BITMAP_NE2K_BASE; port <= IO_BITMAP_NE2K_LAST; port++)
         io_bitmap_set_port(map, len, port, allow);
 }
+
+void io_bitmap_apply_pci(uint8_t* map, uint32_t len, int allow) {
+    uint32_t port;
+    for (port = IO_BITMAP_PCI_BASE; port <= IO_BITMAP_PCI_LAST; port++)
+        io_bitmap_set_port(map, len, (uint16_t)port, allow);
+}

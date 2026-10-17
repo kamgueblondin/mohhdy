@@ -136,9 +136,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_vga_console: $(UNIT_DIR)/kernel/test_vga_co
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/vga_console.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_gfx_desktop: $(UNIT_DIR)/kernel/test_gfx_desktop.c ../kernel/gfx_desktop.c ../kernel/gfx_fb.c ../kernel/input/usb_tablet.c ../kernel/gfx_desktop.h ../kernel/gfx_fb.h ../kernel/gfx_font8.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_gfx_desktop: $(UNIT_DIR)/kernel/test_gfx_desktop.c ../kernel/gfx_desktop.c ../kernel/gfx_fb.c ../kernel/pci_service.c ../kernel/input/usb_tablet.c ../kernel/gfx_desktop.h ../kernel/gfx_fb.h ../kernel/gfx_font8.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/gfx_desktop.c ../kernel/gfx_fb.c ../kernel/input/usb_tablet.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/gfx_desktop.c ../kernel/gfx_fb.c ../kernel/pci_service.c ../kernel/input/usb_tablet.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_net_ethernet_arp: $(UNIT_DIR)/kernel/test_net_ethernet_arp.c ../kernel/net_ethernet_arp.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
@@ -279,6 +279,11 @@ $(BUILD_DIR)/$(ROBUSTNESS_DIR)/test_gpt2_gguf_bounds: $(ROBUSTNESS_DIR)/test_gpt
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_rtc: $(UNIT_DIR)/kernel/test_rtc.c ../kernel/rtc.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/rtc.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled kernel test: $(notdir $@)"
+
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_pci_service: $(UNIT_DIR)/kernel/test_pci_service.c ../kernel/pci_service.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/pci_service.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_io_bitmap: $(UNIT_DIR)/kernel/test_io_bitmap.c ../kernel/io_bitmap.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)

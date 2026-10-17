@@ -35,6 +35,7 @@
 #include "../net_socket.h"
 #include "../vga_console.h"
 #include "../gfx_fb.h"
+#include "../pci_service.h"
 /* Completions locales : BPE, top-k basse temperature, arret EOT ou repetition,
  * et newline ou fin de phrase une fois 80 caracteres ecrits. */
 
@@ -768,6 +769,97 @@ static int fsr_fat_path(uint32_t op, const char* a, const char* b, int* handled)
     int32_t rc = -1;
     *handled = ata_fs_relay(op, 0U, 0U, a, b, 0, 0U, 0, 0U, &rc);
     return rc;
+}
+
+/* Lot 4 (US-001): Ring 3 PCI enumeration (bin/pcidriver, "pci-driver"). */
+static int32_t g_pci_respawn_pid;
+
+int32_t pci_live_driver(void) {
+    int32_t pid = service_registry_lookup("pci-driver");
+    task_t* owner;
+    if (pid <= 0) return 0;
+    owner = get_task_by_id((uint32_t)pid);
+    if (!owner || owner->type != TASK_TYPE_USER || owner->state == TASK_TERMINATED ||
+        strcmp(owner->name, "pcidriver") != 0) return 0;
+    return pid;
+}
+
+void pci_supervise(void) {
+    int32_t live = pci_live_driver();
+    int pending = 0;
+    task_t* born;
+    if (live > 0) return;
+    pci_service_owner_gone();
+    if (g_pci_respawn_pid > 0) {
+        born = get_task_by_id((uint32_t)g_pci_respawn_pid);
+        pending = born && born->type == TASK_TYPE_USER && born->state != TASK_TERMINATED;
+    }
+    if (!pci_service_should_respawn(live, pending)) return;
+    born = create_task_from_initrd_file("bin/pcidriver");
+    if (!born) {
+        print_string_serial("[PCI] supervised respawn failed\n");
+        return;
+    }
+    born->boot_service = 1U;
+    task_queue_move_first_user(born);
+    g_pci_respawn_pid = (int32_t)born->id;
+    pci_service_note_respawn();
+    print_string_serial("[PCI] supervised respawn bin/pcidriver pid ");
+    ata_serial_u32((uint32_t)born->id);
+    print_string_serial("\n");
+}
+
+static int syscall_user_range(const void* pointer, uint32_t length, int write);
+
+static int sys_pci_service(uint32_t op, uint32_t arg, uint32_t count) {
+    static os_pci_record_t records[OS_PCI_MAX_RECORDS];
+    int32_t pid = current_task ? (int32_t)current_task->id : 0;
+    int rc;
+    if (!current_task || current_task->type != TASK_TYPE_USER) return OS_PCI_DENIED;
+    if (op == OS_PCI_OP_PUBLISH) {
+        uint32_t i;
+        if (count == 0U || count > OS_PCI_MAX_RECORDS ||
+            !syscall_user_range((const void*)arg, count * (uint32_t)sizeof(os_pci_record_t), 0)) {
+            (void)pci_service_publish(pid, pci_live_driver(), 0, 0U);
+            return OS_PCI_BAD_REQUEST;
+        }
+        for (i = 0U; i < count; i++) records[i] = ((const os_pci_record_t*)arg)[i];
+        rc = pci_service_publish(pid, pci_live_driver(), records, count);
+        if (rc > 0) {
+            print_string_serial("[PCI] inventory published by Ring 3 pcidriver pid ");
+            ata_serial_u32((uint32_t)pid);
+            print_string_serial(" functions ");
+            ata_serial_u32((uint32_t)rc);
+            print_string_serial("; Ring 0 PCI config access closed\n");
+        }
+        return rc;
+    }
+    if (op == OS_PCI_OP_LIST) {
+        pci_supervise();
+        if (count > OS_PCI_MAX_RECORDS) count = OS_PCI_MAX_RECORDS;
+        if (count == 0U || !syscall_user_range((const void*)arg, count * (uint32_t)sizeof(os_pci_record_t), 1))
+            return OS_PCI_BAD_REQUEST;
+        rc = pci_service_list(records, count);
+        if (rc > 0) {
+            uint32_t i;
+            for (i = 0U; i < (uint32_t)rc; i++) ((os_pci_record_t*)arg)[i] = records[i];
+        }
+        return rc;
+    }
+    if (op == OS_PCI_OP_CLAIM) {
+        if (pci_live_driver() != pid) return OS_PCI_DENIED;
+        tss_set_pci_io(1);
+        return 0;
+    }
+    if (op == OS_PCI_OP_STATUS) {
+        os_pci_status_t status;
+        pci_supervise();
+        if (!syscall_user_range((const void*)arg, sizeof(status), 1)) return OS_PCI_BAD_REQUEST;
+        pci_service_status(pci_live_driver(), &status);
+        *(os_pci_status_t*)arg = status;
+        return 0;
+    }
+    return OS_PCI_BAD_REQUEST;
 }
 
 static int sys_ata_claim(void) {
@@ -2159,6 +2251,9 @@ void syscall_handler(cpu_state_t* cpu) {
             break;
         case SYS_PEER_TLS_POLL:
             cpu->eax = (uint32_t)kernel_peer_tls_poll((const os_peer_tls_poll_request_t*)cpu->ebx);
+            break;
+        case SYS_PCI_SERVICE:
+            cpu->eax = (uint32_t)sys_pci_service(cpu->ebx, cpu->ecx, cpu->edx);
             break;
         case SYS_ATA_CLAIM:
             cpu->eax = (uint32_t)sys_ata_claim();
