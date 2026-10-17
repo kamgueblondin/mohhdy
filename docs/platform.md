@@ -28,15 +28,15 @@ code, toolchain or image exists in this tree, and the HAL says so
 |----|--------|-------|
 | US-076 ARM kernel | partial (groundwork only) | HAL description of the i386 port; no ARM code. Porting is not started |
 | US-077 native mobile UI | not delivered | nothing mobile exists |
-| US-078 mobile sensors | done | simulated mobile sensor registry and status report (`sensor-read`) |
+| US-078 mobile sensors | partial (simule) | fixed values, the report says `status simule (no sensor hardware on i386, fixed values)` (`sensor-read`); no real sensor exists in QEMU i386 |
 | US-079 touch gestures | done | single & multi-pointer gesture recognition (`gesture`, `gesture-multi`) |
 | US-080 screen adaptation | done | layout computation, orientation, grid calculation and dynamic screen resizing (`screen-adapt`, `screen-resize`) |
-| US-081 energy manager | done | energy policy profiles & auto choice from load (`power-profile`, `power-status`) |
+| US-081 energy manager | done (no battery) | energy policy profiles and auto choice from the measured busy share (`power-profile`, `power-status` prints `battery none`) |
 | US-082 push notifications | done | local push notification queue with TTL expiry (`notify-push`, `notify-list`, `notify-ack`) |
 | US-083 multi-device sync | not delivered here | covered by the P2P replication of phase 5 (#117), not wired to devices |
 | US-084 cross-platform continuity | done | cross-device session handoff & clipboard sync protocol (`continuity-export`, `continuity-import`) |
 | US-085 universal device manager | done | registry from existing probes, hotplug rule engine, attach/detach events (`dev-list`, `dev-rules`, `dev-hotplug`) |
-| US-086 legacy emulation | done | legacy x86/DOS emulation layer simulator (`legacy-emul`) |
+| US-086 legacy emulation | done (8086 subset) | Lot 7: real interpreter of an 8086 subset with INT 21h basics running .COM files from `/dos` (`legacy-emul FILE [MAX_STEPS]`, `dosemu.c`); not a full DOS or BIOS |
 | US-087 application compatibility | done (for this platform) | ELF compatibility check and scan |
 | US-088 data migration | done (ramfs) | export, verify, import with checksums and tamper detection; ramfs files only, 16 files of 1 KiB |
 | US-089 unified administration | done | aggregated single-node view and multi-node node management (`admin-all`, `admin-nodes`, `admin-node-add`) |

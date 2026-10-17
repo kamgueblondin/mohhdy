@@ -205,7 +205,6 @@ void test_prod_engine_load_monitoring_and_fallback(void) {
     prod_perf_monitor_t pm;
     prod_scaler_t sc;
     prod_autoscale_workload_t wl;
-    prod_pipeline_t pipe;
     prod_sec_scan_t scan;
     char out_buf[512];
     int i;
@@ -236,13 +235,29 @@ void test_prod_engine_load_monitoring_and_fallback(void) {
     TEST_ASSERT_EQUAL(0, prod_autoscale_workload_eval(&sc, &wl, 100, out_buf, sizeof(out_buf)));
     TEST_ASSERT_GREATER_THAN(0, (int)wl.active_workers);
 
-    /* CI/CD pipeline simulation */
-    TEST_ASSERT_EQUAL(0, prod_pipeline_run(&pipe, "/mohhdy", out_buf, sizeof(out_buf)));
-    TEST_ASSERT_EQUAL(6, pipe.stage);
-
-    /* Security scanner */
-    TEST_ASSERT_EQUAL(0, prod_sec_scan_run(&scan, out_buf, sizeof(out_buf)));
-    TEST_ASSERT_EQUAL(0, (int)scan.vulnerabilities_found);
+    /* Security scanner under load (Lot 7: the former prod_pipeline_run and
+     * prod_sec_scan_run printed fixed results; the real pipeline is covered
+     * by test_cicd). 200 clean ELF images in the baseline, then one changed. */
+    {
+        prod_elf_audit_t ea;
+        memset(&ea, 0, sizeof(ea));
+        ea.is_elf = 1; ea.load_segments = 2; ea.exec_segments = 1; ea.entry_ok = 1;
+        prod_sec_scan_init(&scan);
+        scan.baseline = 1;
+        for (i = 0; i < 200; i++) prod_sec_scan_file(&scan, 1, &ea, 1, 1);
+        prod_sec_scan_finish(&scan, 200);
+        TEST_ASSERT_EQUAL(200, (int)scan.files);
+        TEST_ASSERT_EQUAL(0, (int)scan.risk_score);
+        TEST_ASSERT_EQUAL(0, prod_sec_scan_report(&scan, out_buf, sizeof(out_buf)));
+        TEST_ASSERT_NOT_NULL(strstr(out_buf, "status clean"));
+        prod_sec_scan_init(&scan);
+        scan.baseline = 1;
+        for (i = 0; i < 199; i++) prod_sec_scan_file(&scan, 1, &ea, 1, 1);
+        prod_sec_scan_file(&scan, 1, &ea, 1, 0);
+        prod_sec_scan_finish(&scan, 200);
+        TEST_ASSERT_EQUAL(1, (int)scan.changed);
+        TEST_ASSERT_GREATER_THAN(0, (int)scan.risk_score);
+    }
 
     /* Corrupt backup refusal and fallback test */
     {

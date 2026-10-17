@@ -753,7 +753,7 @@ int shell_prod_line(const char* l) {
     if (s_eq(cmd, "prod-roadmap")) {
         out("prod-roadmap phase 1-3 delivered (see docs/ETAT_REEL.md)\n");
         out("prod-roadmap phase 4 promptmessage delivered #116\n");
-        out("prod-roadmap phase 5 p2p #117, phase 6 platform #118, phase 7 collab #119 (open)\n");
+        out("prod-roadmap phase 5 p2p #117, phase 6 platform #118, phase 7 collab #119, lot 7 #156 (status: docs/lot7_inventory.md)\n");
         out("prod-roadmap phase 8 production this build (docs/production.md)\n");
         out("prod-roadmap ok phases 8\n");
         return 0;
