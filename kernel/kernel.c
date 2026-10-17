@@ -1122,6 +1122,18 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
             print_string_serial("[VGA] boot vgadriver unavailable; Ring 0 text console\n");
         }
     }
+    /* Lot 8 (US-001): the USB tablet is driven by bin/usbdriver (Ring 3).
+     * The kernel only found and stopped the UHCI controller at boot. */
+    if (usb_hc_present()) {
+        task_t* usb_task = create_task_from_initrd_file("bin/usbdriver");
+        if (usb_task) {
+            usb_task->boot_service = 1U;
+            usb_task->priority = OS_TASK_PRIORITY_HIGH;
+            print_string_serial("[USB] boot usbdriver spawned\n");
+        } else {
+            print_string_serial("[USB] boot usbdriver unavailable; tablet idle (PS/2 mouse only)\n");
+        }
+    }
 
     /* The driver must install the boot FAT before aiworker opens GPT2.GGU.
      * Later spawns move themselves first; put atadriver back in front. */

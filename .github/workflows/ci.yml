@@ -209,6 +209,11 @@ jobs:
       - name: QEMU Ring 3 PS/2 and serial drivers (supervised restart)
         run: make qemu-input-drivers
 
+      # Lot 8 (US-001): UHCI USB tablet driver in Ring 3, kernel-checked
+      # DMA, kill and supervised respawn (about 1 min).
+      - name: QEMU Ring 3 UHCI USB tablet driver (supervised restart)
+        run: make qemu-usb-driver
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

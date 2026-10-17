@@ -15,7 +15,7 @@ PROGRAMS += atadriver ataclient atarogue
 # Lot 4 (US-001): Ring 3 PCI enumeration worker + rogue proof.
 PROGRAMS += pcidriver pcirogue
 # Lot 5 (US-001): Ring 3 PS/2 and COM1 drivers + rogue proof.
-PROGRAMS += ps2driver serialdriver vgadriver devrogue
+PROGRAMS += ps2driver serialdriver vgadriver usbdriver devrogue
 # Tranche 5: net-driver gate proof client.
 PROGRAMS += netclaim
 # Tranche 5 slice 2: net IPC relay proof client.
@@ -159,6 +159,9 @@ serialdriver: serial_driver.o start.o
 vgadriver: vga_driver.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
+usbdriver: usb_driver.o start.o
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
 devrogue: dev_rogue.o start.o
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
@@ -235,5 +238,5 @@ start.o: start.s
 clean:
 	@echo "Cleaning userspace..."
 	rm -f *.o $(PROGRAMS)
-ipc_wait_server.o ipc_wait_poke.o pci_driver.o pci_rogue.o ps2_driver.o serial_driver.o vga_driver.o dev_rogue.o: ipc_wait_common.h
+ipc_wait_server.o ipc_wait_poke.o pci_driver.o pci_rogue.o ps2_driver.o serial_driver.o vga_driver.o usb_driver.o dev_rogue.o: ipc_wait_common.h
 ps2_driver.o ps2_decode.o: ps2_decode.h

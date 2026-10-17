@@ -53,7 +53,6 @@ void timer_handler(cpu_state_t* cpu) {
     
     
     if (vga_desktop_active()) {
-        usb_tablet_poll();
         gfx_fb_update_cursor();
     }
 

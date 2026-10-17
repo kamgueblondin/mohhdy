@@ -5319,6 +5319,15 @@ static void cmd_devices(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string(" stalls "); print_uint(st.vga_stalls);
     print_string(" respawns "); print_uint(st.vga_respawns);
     print_string(" end\n");
+    print_string("devices usb present "); print_uint(st.usb_present);
+    print_string(" owner "); print_int(st.usb_owner);
+    print_string(" handed "); print_uint(st.usb_handed_off);
+    print_string(" tds "); print_uint(st.usb_tds);
+    print_string(" rejected "); print_uint(st.usb_rejected);
+    print_string(" reports "); print_uint(st.usb_reports);
+    print_string(" stops "); print_uint(st.usb_stops);
+    print_string(" respawns "); print_uint(st.usb_respawns);
+    print_string(" end\n");
 }
 
 static void cmd_pci_rescan(shell_context_t* ctx, char args[][128], int arg_count) {

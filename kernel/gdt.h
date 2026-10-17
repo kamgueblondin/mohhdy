@@ -67,5 +67,6 @@ void tss_set_pci_io(int grant);
 void tss_set_ps2_io(int grant);
 void tss_set_serial_io(int grant);
 void tss_set_vga_io(int grant);
+void tss_set_usb_io(int grant, uint16_t base);
 
 #endif

@@ -14,6 +14,7 @@
 #include "kernel/timer.h"
 #include "kernel/pci_service.h"
 #include "kernel/device_service.h"
+#include "kernel/input/usb_tablet.h"
 #include "kernel/sched_quantum.h"
 
 extern void write_serial(char c);
@@ -458,6 +459,9 @@ void schedule(cpu_state_t* cpu) {
     /* Lot 7 (US-001): VGA CRTC ports only for the vgadriver owner. */
     tss_set_vga_io(current_task->type == TASK_TYPE_USER &&
                    devsvc_owner(DEV_VGA) == (int32_t)current_task->id);
+    /* Lot 8 (US-001): UHCI registers only for the usbdriver owner. */
+    tss_set_usb_io(current_task->type == TASK_TYPE_USER &&
+                   devsvc_owner(DEV_USB) == (int32_t)current_task->id, usb_hc_io_base());
     tss_set_nic_io(current_task->type == TASK_TYPE_USER && nic_owner_pid() != 0 &&
                    nic_owner_ports_open((int32_t)current_task->id,
                                         service_registry_lookup("net-driver")));

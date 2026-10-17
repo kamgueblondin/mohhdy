@@ -12,7 +12,7 @@
 #define DEVICE_INFLIGHT_STALE 50U     /* a taken chunk never completed (driver dead) */
 #define DEVICE_SERIAL_RING 8192U      /* power of two */
 
-enum { DEV_PS2 = 0, DEV_SERIAL = 1, DEV_VGA = 2, DEV_COUNT = 3 };
+enum { DEV_PS2 = 0, DEV_SERIAL = 1, DEV_VGA = 2, DEV_USB = 3, DEV_COUNT = 4 };
 
 /* Serial queue verdicts for devsvc_serial_put. */
 #define DEVSVC_QUEUED 0
@@ -72,6 +72,17 @@ int devsvc_vga_pending(void);
 /* Driver takes the pending frame: 1 when there was one. */
 int devsvc_vga_take(uint32_t now);
 void devsvc_vga_note_ring0(void);
+/* Lot 8 UHCI USB driver: no Ring 0 fallback. When the watched TD is done
+ * (seen by the IRQ0 glue) the driver is woken; when the owner dies the glue
+ * stops the controller. */
+void devsvc_usb_set_present(int present);
+int devsvc_usb_present(void);
+void devsvc_usb_note_td(int accepted);
+void devsvc_usb_note_report(void);
+void devsvc_usb_note_stop(void);
+/* IRQ0 glue: the watched TD finished (1) or a new one was armed (0). */
+void devsvc_usb_set_done(int done);
+int devsvc_usb_done(void);
 void devsvc_status(os_device_status_t* out);
 
 #endif

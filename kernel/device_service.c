@@ -27,6 +27,10 @@ static struct {
     uint32_t ring3_frames, ring0_frames, stalls;
 } g_vga;
 
+static struct {
+    uint32_t present, tds, rejected, reports, stops, done;
+} g_usb;
+
 static uint32_t g_last_owner_check;
 
 void devsvc_reset(void) {
@@ -36,6 +40,7 @@ void devsvc_reset(void) {
     p = (uint8_t*)&g_ps2; for (i = 0; i < sizeof(g_ps2); i++) p[i] = 0;
     p = (uint8_t*)&g_ser; for (i = 0; i < sizeof(g_ser); i++) p[i] = 0;
     p = (uint8_t*)&g_vga; for (i = 0; i < sizeof(g_vga); i++) p[i] = 0;
+    p = (uint8_t*)&g_usb; for (i = 0; i < sizeof(g_usb); i++) p[i] = 0;
     g_last_owner_check = 0;
 }
 
@@ -55,6 +60,7 @@ void devsvc_owner_gone(int dev) {
     g_dev[dev].owner = 0;
     if (dev == DEV_SERIAL) g_ser.inflight = 0;
     if (dev == DEV_VGA) g_vga.pending = 0;
+    if (dev == DEV_USB) g_usb.done = 0;
 }
 
 int devsvc_handed_off(int dev) { return (dev >= 0 && dev < DEV_COUNT) ? (int)g_dev[dev].handed_off : 0; }
@@ -137,6 +143,7 @@ int devsvc_wants_cpu(int dev, uint32_t now) {
     if (dev == DEV_PS2) return g_ps2.pending ? 1 : 0;
     /* frames coalesce: hand over the CPU once one waited 2 ticks */
     if (dev == DEV_VGA) return g_vga.pending && now - g_vga.pending_since >= 2U;
+    if (dev == DEV_USB) return g_usb.done ? 1 : 0;
     if (g_ser.head == g_ser.tail || g_ser.inflight) return 0;
     return devsvc_serial_queued() >= DEVSVC_SERIAL_BATCH || now - g_ser.last_take >= 2U;
 }
@@ -172,7 +179,8 @@ uint32_t devsvc_watchdog(uint32_t now) {
     }
     if (now - g_last_owner_check >= 10U) {
         g_last_owner_check = now;
-        if (g_dev[DEV_PS2].owner > 0 || g_dev[DEV_SERIAL].owner > 0 || g_dev[DEV_VGA].owner > 0)
+        if (g_dev[DEV_PS2].owner > 0 || g_dev[DEV_SERIAL].owner > 0 || g_dev[DEV_VGA].owner > 0 ||
+            g_dev[DEV_USB].owner > 0)
             act |= DEVSVC_W_CHECK_OWNERS;
     }
     return act;
@@ -200,6 +208,14 @@ int devsvc_vga_take(uint32_t now) {
 
 void devsvc_vga_note_ring0(void) { g_vga.ring0_frames++; }
 
+void devsvc_usb_set_present(int present) { g_usb.present = present ? 1U : 0U; }
+int devsvc_usb_present(void) { return (int)g_usb.present; }
+void devsvc_usb_note_td(int accepted) { if (accepted) g_usb.tds++; else g_usb.rejected++; }
+void devsvc_usb_note_report(void) { g_usb.reports++; }
+void devsvc_usb_note_stop(void) { g_usb.stops++; }
+void devsvc_usb_set_done(int done) { g_usb.done = (done && g_dev[DEV_USB].owner > 0) ? 1U : 0U; }
+int devsvc_usb_done(void) { return (int)g_usb.done; }
+
 void devsvc_status(os_device_status_t* out) {
     if (!out) return;
     out->mouse_packets = 0; out->mouse_dx = 0; out->mouse_dy = 0; out->mouse_buttons = 0; out->kbd_mods = 0;
@@ -224,4 +240,12 @@ void devsvc_status(os_device_status_t* out) {
     out->vga_ring0_frames = g_vga.ring0_frames;
     out->vga_stalls = g_vga.stalls;
     out->vga_respawns = g_dev[DEV_VGA].respawns;
+    out->usb_owner = g_dev[DEV_USB].owner;
+    out->usb_handed_off = g_dev[DEV_USB].handed_off;
+    out->usb_present = g_usb.present;
+    out->usb_tds = g_usb.tds;
+    out->usb_rejected = g_usb.rejected;
+    out->usb_reports = g_usb.reports;
+    out->usb_stops = g_usb.stops;
+    out->usb_respawns = g_dev[DEV_USB].respawns;
 }
