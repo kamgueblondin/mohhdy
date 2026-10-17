@@ -384,6 +384,71 @@ def send_command_until(client, command, marker, proc, mode="gets", wait_prompt=T
     raise RuntimeError("timeout waiting for command echo: %s" % command)
 
 
+def read_ppm(path):
+    with open(path, "rb") as handle:
+        data = handle.read()
+    fields = []
+    pos = 0
+    while len(fields) < 4:
+        while data[pos:pos + 1].isspace():
+            pos += 1
+        if data[pos:pos + 1] == b"#":
+            pos = data.index(b"\n", pos) + 1
+            continue
+        end = pos
+        while not data[end:end + 1].isspace():
+            end += 1
+        fields.append(data[pos:end])
+        pos = end
+    pos += 1
+    if fields[0] != b"P6":
+        raise RuntimeError("expected P6 screendump, got %r" % fields[0])
+    return int(fields[1]), int(fields[2]), data[pos:]
+
+
+def check_web_pixels(monitor):
+    """Lot 6 (US-031): find the #hero box (pure red, 208x48 in the layout)
+    and the yellow centered paragraph and the blue border on the dump."""
+    dump = os.path.join(LOG_DIR, "qemu-osui-gui-web.ppm")
+    try:
+        os.remove(dump)
+    except OSError:
+        pass
+    monitor.sendall(("screendump %s\n" % dump).encode("ascii"))
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if os.path.isfile(dump) and os.path.getsize(dump) > 10000:
+            break
+        time.sleep(0.2)
+    time.sleep(0.3)
+    width, height, rgb = read_ppm(dump)
+    xs, ys = [], []
+    yellow = blue = 0
+    for y in range(height):
+        row = rgb[y * width * 3:(y + 1) * width * 3]
+        for x in range(width):
+            px = row[x * 3:x * 3 + 3]
+            if px == b"\xff\x00\x00":
+                xs.append(x)
+                ys.append(y)
+            elif px == b"\xff\xff\x00":
+                yellow += 1
+            elif px == b"\x00\x00\xff":
+                blue += 1
+    if not xs:
+        raise RuntimeError("web pane: no #hero pixels on the framebuffer")
+    box_w = max(xs) - min(xs) + 1
+    box_h = max(ys) - min(ys) + 1
+    say("web pane: hero box %dx%d at %d,%d, yellow %d px, blue %d px" % (box_w, box_h, min(xs), min(ys), yellow, blue))
+    if (box_w, box_h) != (208, 48):
+        raise RuntimeError("web pane: hero box %dx%d, expected 208x48" % (box_w, box_h))
+    # the white text inside the red box leaves holes, so count is below 208*48
+    if len(xs) < 208 * 48 - 72 * 8 or len(xs) >= 208 * 48:
+        raise RuntimeError("web pane: hero pixel count %d" % len(xs))
+    if yellow < 600 or blue < 3 * 300:
+        raise RuntimeError("web pane: yellow %d blue %d" % (yellow, blue))
+
+
 def terminate(proc):
     if proc is None or proc.poll() is not None:
         return
@@ -440,6 +505,34 @@ def main():
 
             say("typing gui-status ...")
             send_command_until(monitor, "gui-status", "canonical=gui", proc)
+            # Lot 6 (US-031, US-043, US-045): guest web engine from the
+            # text console: layout, inspector, diagnostics console, timing.
+            say("typing web-render /web/demo.html ...")
+            start = send_command_until(monitor, "web-render /web/demo.html", "web-render ok", proc)
+            out = normalized_log(log_text()[start:])
+            for needle in ("osui web render file=/web/demo.html",
+                           "web title Mohhdy web engine demo",
+                           "web item rect 8 8 208x48 #00ff0000",
+                           "web item text 12 13 72x8 #00ffffff \"Mohhdy OS\"",
+                           "web item border",
+                           "\"centered on yellow\""):
+                if needle not in out:
+                    raise RuntimeError("web-render missing %r: %s" % (needle, out[-1500:]))
+            if "never shown" in out or "ignored" in out:
+                raise RuntimeError("hidden or script content painted: %s" % out[-1500:])
+            start = send_command_until(monitor, "web-inspect /web/demo.html hero", "inspect div#hero", proc)
+            out = normalized_log(log_text()[start:])
+            if "inspect div#hero display block box 8 8 208x48 color #ffffff bg #ff0000" not in out:
+                raise RuntimeError("web-inspect hero: %s" % out[-800:])
+            start = send_command_until(monitor, "web-console /web/demo.html", "web-console ok", proc)
+            out = normalized_log(log_text()[start:])
+            if "script ignored (no JavaScript)" not in out or "scripts_skipped 1" not in out:
+                raise RuntimeError("web-console: %s" % out[-800:])
+            start = send_command_until(monitor, "web-perf /web/demo.html 5", "web-perf runs 5", proc)
+            wait_for(proc, " budget ", CMD_TIMEOUT, start)
+            out = normalized_log(log_text()[start:])
+            if not re.search(r"web-perf runs 5 parse_ticks \d+ style_ticks \d+ layout_ticks \d+ ms_per_render \d+ nodes \d+", out):
+                raise RuntimeError("web-perf: %s" % out[-800:])
             say("typing gui ...")
             send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             wait_for(proc, "chrome=qemu_fb", CMD_TIMEOUT)
@@ -615,6 +708,18 @@ def main():
             if " ide=" in snap or "pane=" not in snap:
                 raise RuntimeError("pm-ide still active after ESC q: %s" % snap)
             say("pm-ide fullscreen: completion, saved, checked, ran with output pane, quit")
+            # Lot 6 (US-031): the page painted by the guest web engine in the
+            # OS-UI web pane, checked on the QEMU framebuffer pixels.
+            say("typing web /web/demo.html in gui ...")
+            send_command_until(
+                monitor, "web /web/demo.html", "osui web render file=/web/demo.html", proc,
+                mode="getc", wait_prompt=False
+            )
+            time.sleep(1.0)
+            check_web_pixels(monitor)
+            step = len(log_text())
+            send_key(monitor, "esc")
+            wait_for(proc, "osui web close file=/web/demo.html", CMD_TIMEOUT, step)
             say("typing console ...")
             send_command_until(
                 monitor, "console", "chrome=text", proc, mode="getc", wait_prompt=True

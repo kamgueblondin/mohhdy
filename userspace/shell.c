@@ -26,6 +26,7 @@ int shell_collab_line(const char* line);
 #include "csig.h"
 #include "collab.h"
 #include "../kernel/sha256.h"
+#include "webeng.h"
 int shell_collab_sign(const uint8_t* m, int len, uint8_t sig[40], uint8_t pk[128]);
 /* US-060: FILE.sig = "pmsig1 pk=<hex> sig=<hex>", Schnorr over
  * SHA-256("pmcert1" || source) with the node's collab key */
@@ -2936,6 +2937,86 @@ static int grpc_wire_handler(const char* path, const char* payload, char* reply,
     reply[k] = 0;
     return 12;
 }
+/* Lot 6 (US-031, US-043, US-045): guest web engine from the text console.
+ *   web-render FILE        parse + style + layout, summary and display list
+ *   web-dom FILE           DOM tree with computed display (inspector)
+ *   web-inspect FILE ID    computed style and box of the element #ID
+ *   web-console FILE       parse/CSS diagnostics (no JavaScript console)
+ *   web-perf FILE [N]      ticks per phase over N renders (100 Hz PIT) */
+extern we_doc_t* osui_gui_web_doc(void);
+static void web_out(void* c, const char* s) { (void)c; print_string(s); }
+static void cmd_web(shell_context_t* ctx, const char* command, char args[][128], int arg_count) {
+    char status[200];
+    we_doc_t* d = osui_gui_web_doc();
+    uint32_t i;
+    if (arg_count < 1 || (strcmp(command, "web-inspect") == 0 && arg_count < 2)) {
+        print_string("usage: "); print_string(command);
+        print_string(strcmp(command, "web-inspect") == 0 ? " FICHIER ID\n" : " FICHIER\n");
+        return;
+    }
+    if (strcmp(command, "web-perf") == 0) {
+        static char src[OSUI_WEB_SRC_MAX];
+        int n = pm_host_read(0, args[0], src, OSUI_WEB_SRC_MAX - 1), runs = 20, r;
+        unsigned int t0, tp = 0, ts = 0, tl = 0, t;
+        if (arg_count >= 2) { const char* q = args[1]; runs = 0; while (*q >= '0' && *q <= '9') runs = runs * 10 + (*q++ - '0'); if (runs < 1) runs = 1; if (runs > 500) runs = 500; }
+        if (n < 0) { print_string("web-perf error not found "); print_string(args[0]); print_string("\n"); return; }
+        for (r = 0; r < runs; r++) {
+            t0 = sys_ticks();
+            if (we_parse(d, src, n) != 0) { print_string("web-perf error parse\n"); return; }
+            t = sys_ticks(); tp += t - t0; t0 = t;
+            (void)we_style(d);
+            t = sys_ticks(); ts += t - t0; t0 = t;
+            (void)we_layout(d, OSUI_WEB_VIEWPORT);
+            t = sys_ticks(); tl += t - t0;
+        }
+        print_string("web-perf runs "); print_int(runs);
+        print_string(" parse_ticks "); print_int((int)tp);
+        print_string(" style_ticks "); print_int((int)ts);
+        print_string(" layout_ticks "); print_int((int)tl);
+        print_string(" ms_per_render "); print_int((int)(((tp + ts + tl) * 10U) / (unsigned)runs));
+        print_string(" nodes "); print_int((int)d->perf.nodes);
+        print_string(" rules "); print_int((int)d->perf.rules);
+        print_string(" decls "); print_int((int)d->perf.decls_applied);
+        print_string(" boxes "); print_int((int)d->perf.boxes);
+        print_string(" items "); print_int((int)d->perf.items);
+        print_string(((tp + ts + tl) * 10U) / (unsigned)runs <= 100U ? " budget ok\n" : " budget over\n");
+        ctx->last_rc = 0;
+        return;
+    }
+    if (osui_gui_web_load(args[0], status, (int)sizeof(status)) != 0) {
+        print_string(status); print_string("\n");
+        return;
+    }
+    if (strcmp(command, "web-render") == 0) {
+        print_string(status); print_string("\n");
+        if (d->title[0]) { print_string("web title "); print_string(d->title); print_string("\n"); }
+        for (i = 0; i < d->nitems; i++) {
+            const os_fb_web_item_t* it = &d->items[i];
+            print_string(it->kind == OS_FB_WEB_RECT ? "web item rect " : it->kind == OS_FB_WEB_BORDER ? "web item border " : "web item text ");
+            print_int(it->x); print_string(" "); print_int(it->y); print_string(" ");
+            print_int(it->w); print_string("x"); print_int(it->h);
+            print_string(" #"); pm_print_hex(it->color & 0xFFFFFFU);
+            if (it->kind == OS_FB_WEB_TEXT) { print_string(it->bold ? " bold \"" : " \""); print_string(it->text); print_string("\""); }
+            print_string("\n");
+        }
+        print_string("web-render ok\n");
+    } else if (strcmp(command, "web-dom") == 0) {
+        we_dump_dom(d, web_out, 0);
+        print_string("web-dom ok nodes "); print_int((int)d->nnodes); print_string("\n");
+    } else if (strcmp(command, "web-inspect") == 0) {
+        int idx = we_find_id(d, args[1]);
+        if (idx < 0) { print_string("web-inspect error no element #"); print_string(args[1]); print_string("\n"); return; }
+        we_inspect(d, idx, web_out, 0);
+    } else {
+        for (i = 0; i < d->ndiag; i++) { print_string("web-console "); print_string(d->diag[i]); print_string("\n"); }
+        print_string("web-console ok diag "); print_int((int)d->ndiag);
+        print_string(" dropped "); print_int((int)d->diag_dropped);
+        print_string(" unknown_props "); print_int((int)d->perf.unknown_props);
+        print_string(" scripts_skipped "); print_int((int)d->perf.scripts_skipped); print_string("\n");
+    }
+    ctx->last_rc = 0;
+}
+
 static void cmd_grpc_wire(shell_context_t* ctx, char args[][128], int arg_count) {
     static unsigned char req[512], resp[512];
     char path[64], msg[160];
@@ -3487,7 +3568,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -6714,6 +6795,11 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "grpc-wire") == 0) {
         cmd_grpc_wire(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "web-render") == 0 || strcmp(command, "web-dom") == 0 ||
+               strcmp(command, "web-inspect") == 0 || strcmp(command, "web-console") == 0 ||
+               strcmp(command, "web-perf") == 0) {
+        cmd_web(ctx, command, args, arg_count);
         return 1;
     } else if (strncmp(command, "pm-", 3) == 0 &&
                (strcmp(command, "pm-check") == 0 || strcmp(command, "pm-run") == 0 ||

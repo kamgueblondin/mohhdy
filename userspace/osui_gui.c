@@ -6,6 +6,7 @@
 #include "osui_gui.h"
 #include "osui_runtime.h"
 #include "osui_ide.h"
+#include "webeng.h"
 #include "os_syscalls.h"
 
 #define COLS OS_VGA_COLS
@@ -32,6 +33,12 @@ static char g_ide_buf[OSUI_IDE_TEXT_MAX + 1];
 static char g_term[GUI_TERM_MAX][GUI_TERM_LEN];
 static int g_term_i;
 static int g_term_n;
+/* Lot 6 (US-031): page rendered by the guest web engine in the web pane. */
+static we_doc_t g_web;
+static int g_web_active;
+static int g_web_scroll;
+static char g_web_file[40];
+static char g_web_src[OSUI_WEB_SRC_MAX];
 
 static int slen(const char *s) {
     int n = 0;
@@ -60,6 +67,60 @@ static int scmp(const char *a, const char *b) {
         i++;
     }
     return a[i] - b[i];
+}
+
+static void web_num(char *d, int max, const char *label, int v) {
+    char t[12];
+    int k = 0, n = slen(d);
+    unsigned u = (unsigned)(v < 0 ? -v : v);
+    scpy(d + n, max - n, label);
+    n = slen(d);
+    if (v < 0 && n < max - 1) d[n++] = '-';
+    do { t[k++] = (char)('0' + u % 10U); u /= 10U; } while (u && k < 11);
+    while (k && n < max - 1) d[n++] = t[--k];
+    d[n] = 0;
+}
+
+we_doc_t *osui_gui_web_doc(void) { return &g_web; }
+int osui_gui_web_active(void) { return g_web_active; }
+
+int osui_gui_web_load(const char *file, char *status, int max) {
+    int n = -1, rc;
+    if (status && max > 0) status[0] = 0;
+    if (g_ide_load) n = g_ide_load(file, g_web_src, OSUI_WEB_SRC_MAX - 1);
+    if (n < 0) { if (status) { scpy(status, max, "osui web error=not_found file="); scpy(status + slen(status), max - slen(status), file); } return -1; }
+    g_web_src[n] = 0;
+    rc = we_render(&g_web, g_web_src, n, OSUI_WEB_VIEWPORT);
+    if (status) {
+        scpy(status, max, rc == 0 ? "osui web render file=" : "osui web error=render file=");
+        scpy(status + slen(status), max - slen(status), file);
+        web_num(status, max, " nodes ", (int)g_web.perf.nodes);
+        web_num(status, max, " rules ", (int)g_web.perf.rules);
+        web_num(status, max, " boxes ", (int)g_web.perf.boxes);
+        web_num(status, max, " lines ", (int)g_web.perf.lines);
+        web_num(status, max, " items ", (int)g_web.perf.items);
+        web_num(status, max, " dropped ", (int)g_web.perf.items_dropped);
+        web_num(status, max, " page ", (int)g_web.perf.page_w);
+        web_num(status, max, "x", (int)g_web.perf.page_h);
+        web_num(status, max, " diag ", (int)g_web.ndiag);
+    }
+    return rc;
+}
+
+static void web_open_line(const char *line, char *out, int out_max) {
+    const char *f = line + 4;
+    char status[200];
+    while (*f == ' ') f++;
+    if (!*f || slen(f) >= (int)sizeof(g_web_file)) {
+        if (out) scpy(out, out_max, "osui web error=usage web FILE\n");
+        return;
+    }
+    if (osui_gui_web_load(f, status, (int)sizeof(status)) == 0) {
+        scpy(g_web_file, (int)sizeof(g_web_file), f);
+        g_web_active = 1;
+        g_web_scroll = 0;
+    }
+    if (out) { scpy(out, out_max, status); scpy(out + slen(out), out_max - slen(out), "\n"); }
 }
 
 void osui_gui_set_ide_ops(osui_ide_load_t load, osui_ide_save_t save, osui_ide_exec_t exec) {
@@ -459,7 +520,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     if (!scene) return;
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
-    scene->version = 3; /* 3: term_attr (pm-ide syntax classes) */
+    scene->version = 4; /* 3: term_attr (pm-ide syntax classes), 4: web display list */
     scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
     scene->pane = OS_FB_PANE_NONE;
     if (pane) {
@@ -511,6 +572,23 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         for (i = 0; i < n; i++) osui_gui_term_at(i, scene->term[i], OS_FB_TERM_LEN);
     }
     scene->nterm = (uint8_t)n;
+    scene->nweb = 0;
+    if (g_web_active) {
+        uint32_t k;
+        scene->pane = OS_FB_PANE_WEB;
+        scene->nweb = (uint16_t)g_web.nitems;
+        scene->web_page_w = (uint16_t)g_web.perf.page_w;
+        scene->web_page_h = (uint16_t)g_web.perf.page_h;
+        scene->web_scroll = (uint16_t)g_web_scroll;
+        scpy(scene->web_title, OS_FB_TERM_LEN, "web ");
+        scpy(scene->web_title + slen(scene->web_title), OS_FB_TERM_LEN - slen(scene->web_title), g_web_file);
+        if (g_web.title[0]) {
+            scpy(scene->web_title + slen(scene->web_title), OS_FB_TERM_LEN - slen(scene->web_title), " - ");
+            scpy(scene->web_title + slen(scene->web_title), OS_FB_TERM_LEN - slen(scene->web_title), g_web.title);
+        }
+        for (k = 0; k < g_web.nitems && k < OS_FB_WEB_ITEMS; k++) scene->web[k] = g_web.items[k];
+        scene->input[0] = 0;
+    }
     if (g_ide.active) {
         /* US-050: the editor takes the whole desktop (OS_FB_PANE_IDE). */
         scene->pane = OS_FB_PANE_IDE;
@@ -560,6 +638,18 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         osui_stage_tick(out, out_max);
         return 0;
     }
+    if (g_web_active) {
+        /* Lot 6: the web pane takes the desktop; arrows scroll, ESC closes. */
+        if (key == OS_VGA_KEY_ESC) {
+            g_web_active = 0;
+            if (out) { scpy(out, out_max, "osui web close file="); scpy(out + slen(out), out_max - slen(out), g_web_file); scpy(out + slen(out), out_max - slen(out), "\n"); }
+        } else if (key == OS_VGA_KEY_DOWN) {
+            if (g_web_scroll + 20 < (int)g_web.perf.page_h) g_web_scroll += 20;
+        } else if (key == OS_VGA_KEY_UP) {
+            g_web_scroll = g_web_scroll >= 20 ? g_web_scroll - 20 : 0;
+        }
+        return 0;
+    }
     if (g_ide.active) {
         /* Full screen: every key goes to the editor, ESC is its command
          * prefix and does not leave the desktop. */
@@ -604,6 +694,12 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             g_input[0] = 0;
             if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=qemu_fb\n");
             return 1;
+        }
+        if (g_input[0] == 'w' && g_input[1] == 'e' && g_input[2] == 'b' && (g_input[3] == ' ' || g_input[3] == 0)) {
+            web_open_line(g_input, out, out_max);
+            g_ilen = 0;
+            g_input[0] = 0;
+            return 0;
         }
         if (g_input[0] == 'p' && g_input[1] == 'm' && g_input[2] == '-' && g_input[3] == 'i' &&
             g_input[4] == 'd' && g_input[5] == 'e' && (g_input[6] == ' ' || g_input[6] == 0)) {
@@ -672,6 +768,7 @@ void osui_gui_run(void) {
     g_idle = 0;
     g_input[0] = 0;
     g_ide.active = 0;
+    g_web_active = 0;
     osui_gui_term_reset();
     osui_gui_ack_enter();
     serial_puts("osui gui live chrome=qemu_fb display_surface=vbe_lfb us031_complete=false\n");

@@ -543,7 +543,7 @@ userspace-all:
 
 pack-initrd: userspace-all
 	@mkdir -p build
-	@paths="userspace promptmessage/examples"; \
+	@paths="userspace promptmessage/examples webpages"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
 	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && \
 	    [ -z "$$(find $$paths -type f -newer build/.initrd-stamp -print -quit 2>/dev/null)" ]; then \
@@ -560,6 +560,7 @@ pack-initrd-now:
 	@echo "Un autre fichier de demonstration." > $(INITRD_DIR)/hello.txt
 	@echo "Configuration du systeme MOHHDY v7" > $(INITRD_DIR)/config.cfg
 	@mkdir -p $(INITRD_DIR)/pm && cp -f promptmessage/examples/*.pm $(INITRD_DIR)/pm/
+	@mkdir -p $(INITRD_DIR)/web && cp -f webpages/*.html $(INITRD_DIR)/web/
 	@echo "#!/bin/sh" > $(INITRD_DIR)/startup.sh
 	@echo "echo 'Script de demarrage MOHHDY v7'" >> $(INITRD_DIR)/startup.sh
 	@echo "Donnees de demonstration pour l'intelligence artificielle locale" > $(INITRD_DIR)/ai_data.txt
