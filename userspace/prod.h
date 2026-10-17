@@ -97,6 +97,31 @@ typedef struct {
     uint32_t health_score;     /* 100 - failure_risk */
 } prod_maint_t;
 
+/* US-115 (Lot 9): learned failure predictor. A logistic regression in
+ * Q12 fixed point (no floating point, no division), trained by stochastic
+ * gradient descent on windows of the guest's own metrics ring. A sample
+ * is a failure when the application metric (custom) reaches fail_at or
+ * free memory falls to fail_mem_pct percent of the total; a window is
+ * labelled positive when a failure follows within `horizon` samples.
+ * Features of the window ending at sample i (PROD_MM_WIN samples):
+ * custom level, custom trend, memory used share, busy share, bias. */
+#define PROD_MM_FEAT 5
+#define PROD_MM_WIN 4
+typedef struct {
+    int32_t w[PROD_MM_FEAT];         /* Q12 weights */
+    uint32_t fail_at, fail_mem_pct, horizon;
+    uint32_t trained, windows, positives, correct, epochs;
+} prod_maint_model_t;
+/* Q12 logistic of a Q12 argument (table over [-8, 8], linear interpolation) */
+int32_t prod_sigmoid_q12(int32_t z);
+/* features of the window ending at ring index `end` (0 = oldest); -1 when too short */
+int prod_maint_features(const prod_metrics_t* m, const prod_maint_model_t* mm, int end, int32_t x[PROD_MM_FEAT]);
+/* trains from scratch; returns the number of windows, -1 when < 8 or no positive or no negative */
+int prod_maint_train(prod_maint_model_t* mm, const prod_metrics_t* m, uint32_t fail_at, uint32_t fail_mem_pct,
+                     uint32_t horizon, uint32_t epochs);
+/* failure probability 0..100 for the newest window, -1 when untrained or too few samples */
+int prod_maint_model_risk(const prod_maint_model_t* mm, const prod_metrics_t* m);
+
 /* US-119 (Lot 7): counters observed in this guest; one console session. */
 typedef struct {
     uint32_t total_tasks_executed;   /* shell command words counted */
@@ -154,6 +179,33 @@ void prod_sec_scan_init(prod_sec_scan_t* s);
 void prod_sec_scan_file(prod_sec_scan_t* s, int audited, const prod_elf_audit_t* a, int in_baseline, int same);
 void prod_sec_scan_finish(prod_sec_scan_t* s, int baseline_entries);
 int prod_sec_scan_report(const prod_sec_scan_t* s, char* out, int cap);
+
+/* US-112 (Lot 9): local signature database. One record per line:
+ *   ID SEVERITY hex HEXBYTES     byte pattern searched in the file (hex so
+ *                                the database never matches itself)
+ *   ID SEVERITY fnv HASH8 SIZE   known-bad file (FNV-1a of the first
+ *                                PROD_SEC_HASH_MAX bytes and exact size)
+ * SEVERITY: low medium high critical. '#' lines are comments. Advisory ids
+ * are local (MSA-...), not CVE numbers: there is no online CVE feed. */
+#define PROD_SECDB_MAX 32
+#define PROD_SECDB_PAT 32
+enum { PROD_SEV_LOW = 1, PROD_SEV_MEDIUM, PROD_SEV_HIGH, PROD_SEV_CRITICAL };
+enum { PROD_SIG_HEX = 1, PROD_SIG_FNV };
+typedef struct {
+    char id[20];
+    uint8_t severity, kind;
+    uint8_t pat[PROD_SECDB_PAT]; int plen;
+    uint32_t hash, size;
+} prod_secdb_rec_t;
+typedef struct { prod_secdb_rec_t r[PROD_SECDB_MAX]; int n; int bad_lines; } prod_secdb_t;
+extern const char prod_secdb_builtin[];
+/* records parsed (malformed lines counted in bad_lines), -1 when the table overflows */
+int prod_secdb_parse(const char* text, prod_secdb_t* db);
+/* number of records matching this file; their indices in hits[0..max) */
+int prod_secdb_match(const prod_secdb_t* db, const uint8_t* b, int len, uint32_t size, uint32_t hash,
+                     int* hits, int max);
+const char* prod_sev_name(int sev);
+uint32_t prod_sev_weight(int sev);
 
 #define PROD_FEEDBACK 16
 typedef struct { uint8_t rating; char text[48]; } prod_fb_t;

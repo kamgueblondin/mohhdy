@@ -173,6 +173,20 @@ def main():
                 "sec-scan files 2 elf 0 wx_segments 0 exec_stack 0 bad_entry 0 changed 1 added 0 missing 0 risk_score 25 status findings"],
                 attempts=2)
             run(mon, proc, "write /app/health ok", "[0m : ")
+            # US-112 (Lot 9): local signature database; the four test-rogue
+            # programs of /bin are flagged, nothing else.
+            out = run(mon, proc, "prod-sec-db /bin", "prod-sec-db ok files ", attempts=2, timeout=90)
+            for needle in ("prod-sec-db database records 5 bad_lines 0 source builtin",
+                           "sec-db hit /bin/devrogue MSA-2026-0001 high pattern",
+                           "sec-db hit /bin/pcirogue MSA-2026-0002 high pattern",
+                           "sec-db hit /bin/atarogue MSA-2026-0003 medium pattern",
+                           "sec-db hit /bin/airogue MSA-2026-0004 medium pattern"):
+                if needle not in out:
+                    raise RuntimeError("prod-sec-db /bin: missing %r in %s" % (needle, out[-1200:]))
+            m = re.search(r"prod-sec-db ok files (\d+) flagged 4 hits 4 worst high risk 90", out)
+            if not m or int(m.group(1)) < 20:
+                raise RuntimeError("prod-sec-db /bin summary: %s" % out[-600:])
+            run(mon, proc, "prod-sec-db /app", "prod-sec-db ok files 2 flagged 0 hits 0 worst none risk 0", attempts=2)
             # US-108 (Lot 7): real local CI/CD of a PromptMessage program.
             run(mon, proc, "prod-cicd /pm/hello.pm /pm/tests.pm /hello.pmc",
                 ["cicd stage 1/5 lint ok statements ", "cicd stage 3/5 test ok expects 3 failed 0",
@@ -211,6 +225,25 @@ def main():
             m = re.search(r"prod-maint-predict firing_alerts 0 mem_exhaust_ticks (none|\d+) risk (\d+) health (\d+) \(heuristic\) ok", out)
             if not m or int(m.group(2)) + int(m.group(3)) != 100:
                 raise RuntimeError("prod-maint-predict: %s" % out[-400:])
+            # US-115 (Lot 9): learned predictor (Q12 logistic regression)
+            # trained on a recorded history of three degradations that end
+            # in a failure (custom >= 100); the history is injected (simule
+            # workload), the training and the prediction run in the guest.
+            for _ in range(3):
+                run(mon, proc, "prod-inject 10 15 10 15 10 15 30 45 60 75 90 110", "prod-inject ok samples 12 custom 110")
+            out = run(mon, proc, "prod-maint-train 100 3", "prod-maint-train ", timeout=60)
+            m = re.search(r"prod-maint-train ok windows (\d+) positives (\d+) epochs 60 train_accuracy (\d+) weights", out)
+            if not m or int(m.group(1)) < 20 or int(m.group(2)) < 6 or int(m.group(3)) < 75:
+                raise RuntimeError("prod-maint-train: %s" % out[-400:])
+            run(mon, proc, "prod-inject 10 12 10 12 10 12", "prod-inject ok samples 6 custom 12")
+            out = run(mon, proc, "prod-maint-predict", "prod-maint-predict model ", attempts=2)
+            if not re.search(r"prod-maint-predict model failure_probability (\d+) verdict healthy horizon 3 \(learned\) ok", out):
+                raise RuntimeError("prod-maint-predict healthy: %s" % out[-400:])
+            run(mon, proc, "prod-inject 30 45 60 75", "prod-inject ok samples 4 custom 75")
+            out = run(mon, proc, "prod-maint-predict", "prod-maint-predict model ", attempts=2)
+            if not re.search(r"prod-maint-predict model failure_probability (\d+) verdict maintenance-needed horizon 3 "
+                             r"\(learned\) ok", out):
+                raise RuntimeError("prod-maint-predict degrading: %s" % out[-400:])
             # US-119 (Lot 7): counters observed in this guest.
             out = run(mon, proc, "prod-biz-metrics", "prod-biz-metrics commands_per_min ", attempts=2)
             m = re.search(r"prod-biz-metrics commands_per_min (\d+) commands (\d+) distinct (\d+) sessions 1 uptime_s (\d+) ok", out)

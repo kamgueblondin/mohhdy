@@ -168,6 +168,60 @@ static int cmd_sec_scan(const char* rest, int make_baseline) {
     return sc.risk_score ? 2 : 0;
 }
 
+/* US-112 (Lot 9): prod-sec-db DIR [DBFILE] scans every file of DIR
+ * against the signature database (built-in, or DBFILE in the same text
+ * format, see prod.h). Exit 2 when a record matches. */
+static prod_secdb_t g_db;
+static prod_maint_model_t g_mm;
+static char g_db_text[4096];
+static int cmd_sec_db(const char* rest) {
+    char dir[64], dbf[64], path[160];
+    int n, i, k, files = 0, hits = 0, flagged = 0, worst = 0, got, nh, hit[8];
+    uint32_t risk = 0;
+    const char* src = prod_secdb_builtin;
+    rest = word(rest, dir, 64); rest = word(rest, dbf, 64);
+    if (!dir[0]) { out("prod-sec-db error usage: prod-sec-db DIR [DBFILE]\n"); return 1; }
+    if (dbf[0]) {
+        got = sys_readfile(dbf, g_db_text, (int)sizeof(g_db_text) - 1);
+        if (got < 0) { out("prod-sec-db error database not found\n"); return 1; }
+        g_db_text[got] = 0;
+        src = g_db_text;
+    }
+    if (prod_secdb_parse(src, &g_db) < 0) { out("prod-sec-db error database too large\n"); return 1; }
+    line("prod-sec-db database records ", (uint32_t)g_db.n, "");
+    line(" bad_lines ", (uint32_t)g_db.bad_lines, "");
+    out(dbf[0] ? " source file\n" : " source builtin\n");
+    n = sys_listdir(dir, g_sec_ents, 64);
+    if (n < 0) { out("prod-sec-db error no such directory\n"); return 1; }
+    for (i = 0; i < n; i++) {
+        if (g_sec_ents[i].flags == OS_DIRENT_DIR) continue;
+        join(path, dir, g_sec_ents[i].name, 160);
+        got = sys_readfile(path, (char*)g_sec_file, PROD_SEC_HASH_MAX);
+        if (got < 0) { out("prod-sec-db error unreadable "); out(path); out("\n"); return 1; }
+        files++;
+        nh = prod_secdb_match(&g_db, g_sec_file, got, g_sec_ents[i].size, prod_fnv1a(g_sec_file, got), hit, 8);
+        if (!nh) continue;
+        flagged++;
+        hits += nh;
+        for (k = 0; k < nh && k < 8; k++) {
+            const prod_secdb_rec_t* r = &g_db.r[hit[k]];
+            g_out[0] = 0; s_cat(g_out, "sec-db hit ", 4096); s_cat(g_out, path, 4096);
+            s_cat(g_out, " ", 4096); s_cat(g_out, r->id, 4096);
+            s_cat(g_out, " ", 4096); s_cat(g_out, prod_sev_name(r->severity), 4096);
+            s_cat(g_out, r->kind == PROD_SIG_HEX ? " pattern\n" : " hash\n", 4096);
+            out(g_out);
+            risk += prod_sev_weight(r->severity);
+            if (r->severity > worst) worst = r->severity;
+        }
+    }
+    line("prod-sec-db ok files ", (uint32_t)files, "");
+    line(" flagged ", (uint32_t)flagged, "");
+    line(" hits ", (uint32_t)hits, "");
+    out(" worst "); out(worst ? prod_sev_name(worst) : "none");
+    line(" risk ", risk > 100U ? 100U : risk, "\n");
+    return hits ? 2 : 0;
+}
+
 /* US-108 (Lot 7): prod-cicd SOURCE.pm TESTS.pm DEPLOY_PATH runs the real
  * local pipeline (cicd.c): lint, build, test, deploy, verify. */
 /* relative PromptMessage paths are taken from the root */
@@ -216,7 +270,7 @@ static const char* k_cmds[] = {
     "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
     "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "prod-integrity", "prod-bench", "prod-diag",
     "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "prod-perf-tune", "prod-maint-predict", "prod-support-bundle", "prod-biz-metrics", "prod-perf-monitor",
-    "prod-cicd", "prod-pipeline", "prod-autoscale-workload", "prod-sec-scan", "prod-sec-baseline", 0
+    "prod-cicd", "prod-pipeline", "prod-autoscale-workload", "prod-sec-scan", "prod-sec-baseline", "prod-sec-db", "prod-maint-train", 0
 };
 int shell_prod_is(const char* l) {
     char w[24]; int i;
@@ -430,9 +484,18 @@ int shell_prod_line(const char* l) {
     }
     if (s_eq(cmd, "prod-inject")) { /* set the application metric, then sample */
         prod_sample_t s;
+        uint32_t count = 0;
         rest = word(rest, a, 64);
         if (to_u(a, &x)) { out("prod-inject error value\n"); return 1; }
         g_custom = x; take(&s); push(&s);
+        /* Lot 9: further values, one sample each (a recorded history) */
+        for (;;) {
+            rest = word(rest, a, 64);
+            if (!a[0]) break;
+            if (to_u(a, &x) || ++count > 32U) { out("prod-inject error value\n"); return 1; }
+            g_custom = x; take(&s); push(&s);
+        }
+        if (count) { line("prod-inject ok samples ", count + 1U, ""); line(" custom ", x, "\n"); return 0; }
         line("prod-inject ok custom ", x, "\n"); return 0;
     }
     if (s_eq(cmd, "prod-metrics")) {
@@ -809,6 +872,45 @@ int shell_prod_line(const char* l) {
         s_cat(g_out, " risk ", 4096); cat_u(g_out, pm.failure_risk, 4096);
         s_cat(g_out, " health ", 4096); cat_u(g_out, pm.health_score, 4096);
         s_cat(g_out, " (heuristic) ok\n", 4096);
+        /* Lot 9: learned model, when trained (prod-maint-train) */
+        if (g_mm.trained) {
+            int r = prod_maint_model_risk(&g_mm, &g_m);
+            s_cat(g_out, "prod-maint-predict model ", 4096);
+            if (r < 0) s_cat(g_out, "too-few-samples", 4096);
+            else {
+                s_cat(g_out, "failure_probability ", 4096); cat_u(g_out, (uint32_t)r, 4096);
+                s_cat(g_out, r >= 50 ? " verdict maintenance-needed" : " verdict healthy", 4096);
+            }
+            s_cat(g_out, " horizon ", 4096); cat_u(g_out, g_mm.horizon, 4096);
+            s_cat(g_out, " (learned) ok\n", 4096);
+        }
+        out(g_out); return 0;
+    }
+    if (s_eq(cmd, "prod-maint-train")) {
+        uint32_t fail_at = 0, horizon = 3, mem_pct = 0;
+        int n, j;
+        rest = word(rest, a, 64); rest = word(rest, b, 64);
+        if (to_u(a, &fail_at) || !fail_at || (b[0] && to_u(b, &horizon))) {
+            out("prod-maint-train error usage: prod-maint-train FAIL_AT [HORIZON] [MEM_FREE_PCT]\n"); return 1;
+        }
+        rest = word(rest, a, 64);
+        if (a[0] && (to_u(a, &mem_pct) || mem_pct > 50U)) { out("prod-maint-train error MEM_FREE_PCT 0..50\n"); return 1; }
+        n = prod_maint_train(&g_mm, &g_m, fail_at, mem_pct, horizon, 60U);
+        if (n < 0) {
+            out("prod-maint-train error need 8 windows with failures and healthy periods (prod-inject)\n");
+            return 1;
+        }
+        g_out[0] = 0; s_cat(g_out, "prod-maint-train ok windows ", 4096); cat_u(g_out, g_mm.windows, 4096);
+        s_cat(g_out, " positives ", 4096); cat_u(g_out, g_mm.positives, 4096);
+        s_cat(g_out, " epochs ", 4096); cat_u(g_out, g_mm.epochs, 4096);
+        s_cat(g_out, " train_accuracy ", 4096); cat_u(g_out, g_mm.correct * 100U / g_mm.windows, 4096);
+        s_cat(g_out, " weights", 4096);
+        for (j = 0; j < PROD_MM_FEAT; j++) {
+            s_cat(g_out, " ", 4096);
+            if (g_mm.w[j] < 0) { s_cat(g_out, "-", 4096); cat_u(g_out, (uint32_t)-g_mm.w[j], 4096); }
+            else cat_u(g_out, (uint32_t)g_mm.w[j], 4096);
+        }
+        s_cat(g_out, " (q12 logistic regression)\n", 4096);
         out(g_out); return 0;
     }
     if (s_eq(cmd, "prod-support-bundle")) return cmd_support_bundle(rest);
@@ -854,6 +956,7 @@ int shell_prod_line(const char* l) {
     }
     if (s_eq(cmd, "prod-sec-scan")) return cmd_sec_scan(rest, 0);
     if (s_eq(cmd, "prod-sec-baseline")) return cmd_sec_scan(rest, 1);
+    if (s_eq(cmd, "prod-sec-db")) return cmd_sec_db(rest);
     if (s_eq(cmd, "prod-biz-metrics")) {
         prod_biz_metrics_t bm;
         prod_biz_metrics_get(&g_use, sys_ticks(), &bm);
