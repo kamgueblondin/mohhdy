@@ -552,9 +552,130 @@ void test_p2p_consolidation_and_fallback(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p stats ok"));
 }
 
+/* US-063: chain alpha - beta - gamma - delta after discovery; alpha
+ * reaches delta through two relays from the distance vector in HELLO. */
+void test_multi_relay_chain(void) {
+    char rep[1024];
+    setup(4, 0);
+    run(4, 400);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[0], "delta")->keyed);
+    g_cut[0][2] = g_cut[2][0] = 1;
+    g_cut[0][3] = g_cut[3][0] = 1;
+    g_cut[1][3] = g_cut[3][1] = 1;
+    run(4, 1500);
+    TEST_ASSERT_FALSE(p2p_find(&g_n[0], "delta")->up);
+    TEST_ASSERT_FALSE(p2p_find(&g_n[0], "gamma")->up);
+    TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "delta", "two relays"));
+    run(4, 40);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[3], "p2p msg from alpha: two relays (relayed)"));
+    TEST_ASSERT_EQUAL(1, (int)g_n[1].relayed_multi);
+    TEST_ASSERT_TRUE(g_n[2].relayed >= 1U);
+    TEST_ASSERT_EQUAL(0, (int)g_n[2].relayed_multi);
+    /* and back: delta reaches alpha the same way */
+    TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[3], &g_h[3], "alpha", "back"));
+    run(4, 40);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p msg from delta: back (relayed)"));
+    /* beyond P2P_MAX_HOPS nothing is advertised: a 4-hop chain is not routed */
+    p2p_report(&g_n[1], &g_h[1], "cache", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "relayed_multi 2"));
+}
+
+/* US-068/073: delay-based and loss-based window control. */
+void test_qos_adaptive_controller(void) {
+    char rep[512];
+    uint32_t w;
+    int i;
+    setup(2, 0);
+    run(2, 1000);
+    TEST_ASSERT_EQUAL(P2P_QOS_WINDOW_MAX, g_n[0].qos.window_size);
+    TEST_ASSERT_TRUE(g_n[0].qos.rtt_min_ms > 0U);
+    /* queueing delay: sample far above the minimum cuts a quarter */
+    p2p_qos_note_rtt(&g_n[0], g_n[0].qos.rtt_min_ms * 2U + 200U);
+    TEST_ASSERT_EQUAL(P2P_QOS_WINDOW_MAX - P2P_QOS_WINDOW_MAX / 4U, g_n[0].qos.window_size);
+    TEST_ASSERT_EQUAL(1, (int)g_n[0].qos.delay_backoffs);
+    /* unanswered PINGs: cut the link for two ping rounds (below down time) */
+    g_cut[1][0] = 1;
+    run(2, 700);
+    g_cut[1][0] = 0;
+    TEST_ASSERT_TRUE(g_n[0].qos.ping_losses >= 1U);
+    w = g_n[0].qos.window_size;
+    TEST_ASSERT_TRUE(w < P2P_QOS_WINDOW_MAX / 2U);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[0], "beta")->up);
+    /* recovery: clean round trips grow the window again */
+    run(2, 3000);
+    TEST_ASSERT_TRUE(g_n[0].qos.window_size > w);
+    for (i = 0; i < 20; i++) p2p_qos_note_rtt(&g_n[0], g_n[0].qos.rtt_min_ms);
+    TEST_ASSERT_EQUAL(P2P_QOS_WINDOW_MAX, g_n[0].qos.window_size);
+    TEST_ASSERT_TRUE(g_n[0].qos.rate_est_bps > 0U);
+    p2p_report(&g_n[0], &g_h[0], "qos", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p qos window 16 srtt_ms "));
+    TEST_ASSERT_NOT_NULL(strstr(rep, " delay_backoffs 1 "));
+}
+
+/* US-070: versioned invalidation, fences against stale fills, acks and
+ * re-send to a peer that missed the first INV. */
+void test_cache_versioned_acked_invalidation(void) {
+    char rep[512];
+    setup(3, 0);
+    run(3, 400);
+    TEST_ASSERT_EQUAL(0, p2p_cache_put_v(&g_n[1], "cfg", "old", 4, 5000, g_ticks));
+    TEST_ASSERT_EQUAL(0, p2p_cache_put_v(&g_n[2], "cfg", "old", 4, 5000, g_ticks));
+    /* gamma misses the first round */
+    g_cut[0][2] = 1;
+    TEST_ASSERT_EQUAL(2, p2p_cache_invalidate_v(&g_n[0], &g_h[0], "cfg", 5));
+    run(3, 50);
+    TEST_ASSERT_NULL(p2p_cache_get(&g_n[1], "cfg", g_ticks));
+    TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_n[2], "cfg", g_ticks));
+    TEST_ASSERT_EQUAL(1, (int)g_n[0].cache.inv_active);
+    g_cut[0][2] = 0;
+    run(3, 1200);
+    TEST_ASSERT_NULL(p2p_cache_get(&g_n[2], "cfg", g_ticks));
+    TEST_ASSERT_EQUAL(0, (int)g_n[0].cache.inv_active);
+    TEST_ASSERT_TRUE(g_n[0].cache.inv_resent >= 1U);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p cache inv acked cfg v5 acks 2"));
+    /* a late fill at or below the fence is refused, a newer one is kept */
+    TEST_ASSERT_EQUAL(-2, p2p_cache_put_v(&g_n[1], "cfg", "old", 4, 5000, g_ticks));
+    TEST_ASSERT_EQUAL(-2, p2p_cache_put_v(&g_n[2], "cfg", "old", 5, 5000, g_ticks));
+    TEST_ASSERT_EQUAL(0, p2p_cache_put_v(&g_n[2], "cfg", "new", 6, 5000, g_ticks));
+    TEST_ASSERT_EQUAL_STRING("new", p2p_cache_get(&g_n[2], "cfg", g_ticks)->value);
+    p2p_report(&g_n[2], &g_h[2], "cache", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "stale_refused 1"));
+    /* a peer that never answers: the sender gives up and says so */
+    g_cut[0][1] = 1;
+    TEST_ASSERT_EQUAL(2, p2p_cache_invalidate_v(&g_n[0], &g_h[0], "cfg", 7));
+    run(3, 8000);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p cache inv incomplete cfg acks 1"));
+}
+
+/* US-075: learned per-type baseline, a burst far above it is flagged. */
+void test_traffic_baseline_anomaly(void) {
+    char rep[2048];
+    int i;
+    setup(2, 0);
+    run(2, 8000);
+    TEST_ASSERT_EQUAL(0, (int)g_n[1].anomalies);
+    p2p_report(&g_n[1], &g_h[1], "analyze", rep, sizeof(rep));
+    TEST_ASSERT_NULL(strstr(rep, "rate-anomaly"));
+    for (i = 0; i < 14; i++) {
+        TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "beta", "burst"));
+        run(2, 10);
+    }
+    run(2, 1100);
+    TEST_ASSERT_TRUE(g_n[1].anomalies >= 1U);
+    TEST_ASSERT_EQUAL(P2P_I_MSG, (int)g_n[1].last_anomaly_type);
+    p2p_report(&g_n[1], &g_h[1], "analyze", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze finding node rate-anomaly "));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze anomaly type msg rate 14"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "verdict suspicious"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
+    RUN_TEST(test_multi_relay_chain);
+    RUN_TEST(test_qos_adaptive_controller);
+    RUN_TEST(test_cache_versioned_acked_invalidation);
+    RUN_TEST(test_traffic_baseline_anomaly);
     RUN_TEST(test_wrong_network_key_is_kept_out);
     RUN_TEST(test_encrypted_message_tamper_and_replay);
     RUN_TEST(test_replication_lww_get_and_sync);

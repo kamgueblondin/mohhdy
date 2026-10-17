@@ -22,6 +22,10 @@
 #define P2P_DATAGRAM_MAX 600
 #define P2P_HZ 100U
 #define P2P_HELLO_TICKS (2U * P2P_HZ)
+/* Distance vector in HELLO: a destination is advertised up to this many
+ * hops away. The frame TTL (header byte 5) starts at the same value. */
+#define P2P_MAX_HOPS 3U
+#define P2P_ANALYZE_WARMUP 5U
 #define P2P_PING_TICKS (3U * P2P_HZ)
 #define P2P_DOWN_TICKS (10U * P2P_HZ)
 #define P2P_PROPOSE_TICKS (15U * P2P_HZ)
@@ -35,7 +39,7 @@ enum {
     P2P_I_GRPC_REQ, P2P_I_GRPC_RESP, P2P_I_STUN_REQ, P2P_I_STUN_RESP, P2P_I_NAT_PUNCH,
     P2P_I_RAFT_APPEND, P2P_I_RAFT_APPEND_RESP,
     P2P_I_RAFT_PREVOTE_REQ, P2P_I_RAFT_PREVOTE_RESP,
-    P2P_I_RAFT_SNAPSHOT, P2P_I_RAFT_SNAPSHOT_RESP, P2P_I_COUNT
+    P2P_I_RAFT_SNAPSHOT, P2P_I_RAFT_SNAPSHOT_RESP, P2P_I_CACHE_INV_ACK, P2P_I_COUNT
 };
 
 typedef struct {
@@ -58,10 +62,12 @@ typedef struct {
     uint8_t iv[4];
     uint32_t tx_counter, rx_counter, rx_window;
     uint32_t last_seen, ping_sent_at, rtt_ticks;
+    uint8_t ping_wait;     /* a PING is outstanding (no PONG yet) */
     uint32_t sync_at;      /* last SYNC_REQ sent by p2p_sync */
     uint8_t sync_retries;  /* re-sends left until SYNC_ITEMS arrives */
     uint32_t via;            /* 0: direct, else id of the relay node */
     uint32_t neighbors[P2P_PEERS];
+    uint8_t nb_hops[P2P_PEERS];  /* hops from that neighbor to neighbors[i] (1..P2P_MAX_HOPS) */
     uint32_t sent, received, auth_fail, replay, throttled, down_events;
     uint32_t bucket_tick, bucket_used;
     uint32_t raft_next;   /* next log index to send (1-based, 0 = unset) */
@@ -147,18 +153,38 @@ typedef struct {
     char value[P2P_VAL_MAX];
     uint32_t expire_tick;
     uint32_t hits;
+    uint32_t version;       /* version of the value cached (0: unversioned) */
 } p2p_cache_entry_t;
 
+/* Invalidation fence: a fill at or below this version is refused. */
+#define P2P_CACHE_FENCES 8
+/* Invalidation re-sent to peers that have not acked, every second, at
+ * most this many times. */
+#define P2P_CACHE_INV_RETRIES 5
 typedef struct {
     p2p_cache_entry_t entries[P2P_CACHE_MAX];
     uint32_t total_hits;
     uint32_t total_misses;
     uint32_t invalidations;
+    struct { char key[P2P_KEY_MAX]; uint32_t version; } fence[P2P_CACHE_FENCES];
+    uint32_t fence_next;
+    uint32_t stale_refused;  /* fills refused by a fence */
+    /* Outstanding invalidation (one at a time). */
+    char inv_key[P2P_KEY_MAX];
+    uint32_t inv_version;
+    uint32_t inv_waiting[P2P_PEERS];  /* peer ids that have not acked */
+    uint32_t inv_tick;
+    uint8_t inv_retries, inv_active;
+    uint32_t inv_acked, inv_resent, inv_completed;
 } p2p_cache_t;
 
 typedef struct {
     uint32_t window_size;     /* dynamic congestion window (1..16) */
-    uint32_t rtt_avg_ms;      /* smoothed RTT in ms */
+    uint32_t rtt_avg_ms;      /* smoothed RTT in ms (EWMA 1/8 of PONG samples) */
+    uint32_t rtt_min_ms;      /* lowest RTT sample seen (0: none yet) */
+    uint32_t delay_backoffs;  /* window cut by 1/4 on a queueing delay sample */
+    uint32_t ping_losses;     /* PINGs never answered before the next round */
+    uint32_t rate_est_bps;    /* window * datagram / srtt, bytes per second */
     uint32_t loss_count;      /* total detected losses / retransmissions */
     uint32_t priority_high_tx;/* high-priority control frames sent */
     uint32_t priority_low_tx; /* low-priority data frames sent */
@@ -195,6 +221,12 @@ typedef struct {
     /* traffic analysis (US-075) */
     uint32_t tx_type[P2P_I_COUNT], rx_type[P2P_I_COUNT];
     uint32_t tx_bytes, rx_bytes, relayed, bad_hello, foreign, dup;
+    uint32_t relayed_multi; /* forwarded to a further relay, not to the destination */
+    /* Learned per-type receive baseline (US-075): EWMA of frames per
+     * second, x16 fixed point, after P2P_ANALYZE_WARMUP windows. */
+    uint32_t base_rate16[P2P_I_COUNT];
+    uint32_t last_rx[P2P_I_COUNT];
+    uint32_t analyze_tick, analyze_windows, anomalies, last_anomaly_type, last_anomaly_rate;
     char last_msg[P2P_TEXT_MAX];
     /* Typed RPC over the sealed channel (not HTTP/2 gRPC). */
 #define P2P_RPC_SLOTS 4
@@ -234,6 +266,9 @@ int p2p_raft_vote_import(p2p_node_t* n, const uint8_t* in, int len);
 const p2p_item_t* p2p_cache_get(p2p_node_t* n, const char* key, uint32_t current_tick);
 int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t ttl_ticks, uint32_t current_tick);
 /* Drop a local cache line and tell every up keyed peer. Returns how many were told. */
+void p2p_qos_note_rtt(p2p_node_t* n, uint32_t sample_ms);
+int p2p_cache_invalidate_v(p2p_node_t* n, const p2p_host_t* h, const char* key, uint32_t version);
+int p2p_cache_put_v(p2p_node_t* n, const char* key, const char* value, uint32_t version, uint32_t ttl_ticks, uint32_t current_tick);
 int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key);
 /* AIMD on the data window. Control frames do not pass through it. */
 void p2p_qos_note_loss(p2p_node_t* n);
