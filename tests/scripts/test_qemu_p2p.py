@@ -219,8 +219,12 @@ def main():
             raise RuntimeError("alpha qos shaping counters: %s" % log(a, start_q)[-400:])
         say("scenario 1b ok: burst of 6 shaped (queued %s), all delivered, meas_tx_bps %s" % (burst.group(2), shaped.group(1)))
         # Lot 6 (US-075): a flood from gamma is attributed to gamma by
-        # beta's per-peer baseline.
-        cmd(c, "p2p-burst beta 40 flood", "p2p-burst sent ")
+        # beta's per-peer baseline. Gamma plays a misbehaving sender that
+        # ignores its own QoS controller (a well-behaved burst is shaped
+        # by the adaptive window, as scenario 1b shows).
+        start_f = cmd(c, "p2p-flood beta 40", "p2p-flood sent ")
+        if "p2p-flood sent 40 unshaped" not in log(c, start_f):
+            raise RuntimeError("gamma flood not sent: %s" % log(c, start_f)[-400:])
         for _round in range(3):
             cmd(b, "p2p-poll 3", "p2p-poll ok")
         start_an = cmd(b, "p2p-analyze", "p2p analyze ok findings ")

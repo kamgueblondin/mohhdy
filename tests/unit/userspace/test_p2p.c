@@ -702,7 +702,11 @@ void test_anomaly_peer_attribution_and_solicited(void) {
     run(3, 8000);
     TEST_ASSERT_TRUE(g_n[1].qos.meas_rx_bps > 0U);
     TEST_ASSERT_TRUE(g_n[1].qos.meas_tx_bps > 0U);
-    for (i = 0; i < 14; i++) { (void)p2p_send_text(&g_n[2], &g_h[2], "beta", "flood"); run(3, 10); }
+    /* gamma ignores its own controller: even a window of 1 does not slow it */
+    g_n[2].rate_limit = 1U;
+    for (i = 0; i < 14; i++) TEST_ASSERT_EQUAL(0, p2p_send_unshaped(&g_n[2], &g_h[2], "beta", "flood"));
+    TEST_ASSERT_EQUAL(14U, g_n[2].unshaped_tx);
+    g_n[2].rate_limit = 0U;
     run(3, 1100);
     TEST_ASSERT_EQUAL(g_n[2].id, g_n[1].last_anomaly_peer);
     TEST_ASSERT_TRUE(p2p_find(&g_n[1], "gamma")->anomalies >= 1U);

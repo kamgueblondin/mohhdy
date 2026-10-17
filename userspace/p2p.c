@@ -1632,6 +1632,20 @@ int p2p_send_text(p2p_node_t* n, const p2p_host_t* h, const char* peer, const ch
     return seal_send(n, h, p, P2P_I_MSG, b, pos);
 }
 
+/* Lot 6 (US-075 proof): a misbehaving sender that ignores its own QoS
+ * controller and rate limit (no admit, no shaping queue). Used to show the
+ * receiver attributes a flood; a well-behaved node never calls it. */
+int p2p_send_unshaped(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* text) {
+    uint8_t b[P2P_DATAGRAM_MAX];
+    p2p_peer_t* p = p2p_find(n, peer);
+    int pos;
+    if (!n->up || !p) return -1;
+    pos = put_str(b, 0, 400, text);
+    if (pos < 0) return -1;
+    n->unshaped_tx++;
+    return seal_send(n, h, p, P2P_I_MSG, b, pos);
+}
+
 static uint32_t next_version(const p2p_node_t* n, const char* key) {
     const p2p_item_t* it = p2p_get_local(n, key);
     return it ? it->version + 1U : 1U;

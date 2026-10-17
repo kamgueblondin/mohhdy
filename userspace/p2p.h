@@ -249,6 +249,7 @@ typedef struct {
     uint32_t last_anomaly_peer;   /* Lot 6: id of the peer above its own baseline */
     uint32_t solicited_until;     /* Lot 6: a reply burst we asked for (sync, snapshot) is expected until then */
     uint32_t solicited_skipped;   /* anomaly windows not counted because solicited */
+    uint32_t unshaped_tx;         /* messages sent by p2p_send_unshaped (flood proof) */
     /* Lot 6 (US-068/073): data messages waiting for budget */
     struct { uint8_t used; uint32_t peer; uint8_t inner; uint16_t len; uint8_t body[P2P_SHAPE_BODY]; } shape_q[P2P_SHAPE_Q];
     /* Lot 6 (US-070): cache lines written through the Raft log */
@@ -275,6 +276,8 @@ void p2p_down(p2p_node_t* n);
 void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget);
 p2p_peer_t* p2p_find(p2p_node_t* n, const char* name);
 int p2p_send_text(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* text);
+/* Lot 6: bypasses admit/shaping (flood proof only, see p2p.c) */
+int p2p_send_unshaped(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* text);
 int p2p_put(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 const p2p_item_t* p2p_get_local(const p2p_node_t* n, const char* key);
 int p2p_get_remote(p2p_node_t* n, const p2p_host_t* h, const char* key);

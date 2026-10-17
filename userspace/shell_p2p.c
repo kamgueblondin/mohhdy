@@ -340,6 +340,19 @@ int shell_p2p_line(const char* line) {
         print_string(" refused "); print_int(refused); print_string("\n");
         return refused == count ? 1 : 0;
     }
+    if (s_eq(cmd, "p2p-flood")) {
+        /* Lot 6 (US-075 proof): a sender ignoring its own QoS controller */
+        int count, k, sent = 0;
+        unsigned t0 = ticks();
+        rest = word(rest, a, (int)sizeof(a));
+        rest = word(rest, b, (int)sizeof(b));
+        count = to_int(b);
+        if (!a[0] || count < 1 || count > 64) { print_string("p2p-flood error usage: p2p-flood PEER N\n"); return 1; }
+        for (k = 0; k < count; k++) if (p2p_send_unshaped(&g_node, &g_host, a, "flood") == 0) sent++;
+        print_string("p2p-flood sent "); print_int(sent); print_string(" unshaped ms ");
+        print_int((int)((ticks() - t0) * (1000U / P2P_HZ))); print_string("\n");
+        return sent ? 0 : 1;
+    }
     if (s_eq(cmd, "p2p-put") || s_eq(cmd, "p2p-propose")) {
         rest = word(rest, a, (int)sizeof(a));
         rest = word(rest, b, (int)sizeof(b));
