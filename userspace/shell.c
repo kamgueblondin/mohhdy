@@ -3137,6 +3137,15 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         return;
     }
     if (pm_load_source(command, args[0], &len) != 0) return;
+    if (strcmp(command, "pm-assist") == 0) {
+        /* US-058 (partial): rule based assistant, no language model. */
+        static char abuf[1024];
+        int hints = 0;
+        st = pm_assist(g_pm_src, len, &g_pm_host, abuf, (int)sizeof(abuf), &hints);
+        print_string(abuf);
+        ctx->last_rc = st == PM_OK ? 0 : 1;
+        return;
+    }
     if (strcmp(command, "pm-version") == 0) {
         char path[RAMFS_PATH_MAX]; int v, k;
         for (v = 1; v <= 9; v++) {
@@ -3155,6 +3164,21 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
         return;
     }
     if (pm_compile_report(command, len, &g_pm_tmp) != 0) return;
+    if (strcmp(command, "pm-cross") == 0) {
+        /* US-055 (partial): PMC1 bytecode to a portable C99 program. The
+         * text goes to the console between markers (the file store caps a
+         * file at 1 KB); the host build of it is checked by unit tests. */
+        static char cbuf[16384];
+        int instr = 0, n = pm_cross_c(&g_pm_tmp, cbuf, (int)sizeof(cbuf), &instr);
+        if (n < 0) { print_string("pm-cross error program too large for the C target\n"); return; }
+        print_string("pm-cross begin\n");
+        print_string(cbuf);
+        print_string("pm-cross end\n");
+        print_string("pm-cross ok target=c99 bytes="); print_int(n);
+        print_string(" instructions="); print_int(instr); print_string("\n");
+        ctx->last_rc = 0;
+        return;
+    }
     if (strcmp(command, "pm-check") == 0) {
         print_string("pm-check ok "); print_string(args[0]);
         print_string(" statements "); print_int(g_pm_tmp.statements);
@@ -3321,7 +3345,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -6550,7 +6574,8 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
                 strcmp(command, "pm-versions") == 0 || strcmp(command, "pm-edit") == 0 || strcmp(command, "pm-ide") == 0 ||
                 strcmp(command, "pm-catalog") == 0 || strcmp(command, "pm-catalog-search") == 0 || strcmp(command, "pm-catalog-fetch") == 0 || strcmp(command, "pm-install") == 0 ||
                 strcmp(command, "pm-certify") == 0 || strcmp(command, "pm-verify") == 0 ||
-                strcmp(command, "pm-ca-init") == 0 || strcmp(command, "pm-ca-sign") == 0 || strcmp(command, "pm-ca-verify") == 0)) {
+                strcmp(command, "pm-ca-init") == 0 || strcmp(command, "pm-ca-sign") == 0 || strcmp(command, "pm-ca-verify") == 0 ||
+                strcmp(command, "pm-cross") == 0 || strcmp(command, "pm-assist") == 0)) {
         cmd_pm(ctx, command, args, arg_count);
         return 1;
     } else if (strcmp(command, "stat") == 0) {

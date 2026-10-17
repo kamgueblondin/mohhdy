@@ -227,6 +227,110 @@ void test_limits(void) {
     TEST_ASSERT_EQUAL_STRING("bad or too many variables", g_prog.err);
 }
 
+/* Lot 5 US-055: the C99 target, compiled and run by the host C compiler,
+ * prints exactly what the guest VM prints (main program and a trigger). */
+static char g_csrc[65536];
+/* POSIX helpers (the test build uses -std=c99 and the guest stddef.h). */
+FILE* popen(const char* command, const char* mode);
+int pclose(FILE* stream);
+char* mkdtemp(char* tmpl);
+int system(const char* command);
+static int run_cmd_capture(const char* cmd, char* out, int cap) {
+    FILE* f = popen(cmd, "r");
+    int n = 0, c;
+    if (!f) return -1;
+    while ((c = fgetc(f)) != EOF && n < cap - 1) out[n++] = (char)c;
+    out[n] = 0;
+    return pclose(f);
+}
+void test_cross_compile_c99_matches_vm(void) {
+    char dir[] = "/tmp/pmcrossXXXXXX";
+    char cmd[512], got[4096];
+    FILE* f;
+    int n, instr = 0;
+    const char* src =
+        "set name to \"MOHHDY\"\n"
+        "set n to 2 + 1\n"
+        "repeat $n times\n"
+        "  append \"line \" + $name to file \"log.txt\"\n"
+        "end\n"
+        "if $n == 3 and $name contains \"HH\" then\n"
+        "  print \"three ?\?= (ok) 'q'\"\n"
+        "else\n"
+        "  print \"other\"\n"
+        "end\n"
+        "if not file \"missing.txt\" exists then print \"absent\"\n"
+        "show file \"log.txt\"\n"
+        "if system.memory < 50 then print \"mem low\" + system.memory\n"
+        "expect $n == 3\n"
+        "when user says \"bonjour\" then print \"salut \" + $name\n";
+    setUp();
+    g_mem = 7;
+    n = run_src(src);
+    if (n != PM_OK) printf("cross src: rc %d line %d %s / %s\n", n, g_prog.err_line, g_prog.err, g_vm.err);
+    TEST_ASSERT_EQUAL(PM_OK, n);
+    TEST_ASSERT_NOT_NULL(mkdtemp(dir));
+    n = pm_cross_c(&g_prog, g_csrc, (int)sizeof(g_csrc), &instr);
+    TEST_ASSERT_GREATER_THAN(1000, n);
+    TEST_ASSERT_GREATER_THAN(20, instr);
+    TEST_ASSERT_EQUAL(PM_ERR_LIMIT, pm_cross_c(&g_prog, g_csrc, 200, &instr));
+    n = pm_cross_c(&g_prog, g_csrc, (int)sizeof(g_csrc), &instr);
+    snprintf(cmd, sizeof(cmd), "%s/app.c", dir);
+    f = fopen(cmd, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fwrite(g_csrc, 1, (size_t)n, f);
+    fclose(f);
+    snprintf(cmd, sizeof(cmd), "cd %s && cc -std=c99 -w -o app app.c 2>&1", dir);
+    TEST_ASSERT_EQUAL(0, run_cmd_capture(cmd, got, (int)sizeof(got)));
+    snprintf(cmd, sizeof(cmd), "cd %s && MOHHDY_MEM=7 ./app", dir);
+    TEST_ASSERT_EQUAL(0, run_cmd_capture(cmd, got, (int)sizeof(got)));
+    if (strcmp(g_out, got) != 0) printf("\n--vm--\n%s--c--\n%s--\n", g_out, got);
+    TEST_ASSERT_EQUAL_STRING(g_out, got);
+    /* trigger path: `./app PHRASE` is pm-run then pm-say PHRASE, both
+     * from a fresh file store */
+    setUp();
+    g_mem = 7;
+    TEST_ASSERT_EQUAL(PM_OK, run_src(src));
+    TEST_ASSERT_EQUAL(PM_OK, pm_say(&g_prog, &g_vm, &g_host, "BONJOUR"));
+    snprintf(cmd, sizeof(cmd), "cd %s && rm -f log.txt && MOHHDY_MEM=7 ./app BONJOUR", dir);
+    TEST_ASSERT_EQUAL(0, run_cmd_capture(cmd, got, (int)sizeof(got)));
+    if (strcmp(g_out, got) != 0) printf("\n--vm--\n%s--c--\n%s--\n", g_out, got);
+    TEST_ASSERT_EQUAL_STRING(g_out, got);
+    /* the step budget and the path rule hold on the target too */
+    TEST_ASSERT_EQUAL(PM_OK, pm_compile("repeat 100000 times print 1\n", 27, &g_prog, &g_host));
+    n = pm_cross_c(&g_prog, g_csrc, (int)sizeof(g_csrc), &instr);
+    snprintf(cmd, sizeof(cmd), "%s/loop.c", dir);
+    f = fopen(cmd, "w"); fwrite(g_csrc, 1, (size_t)n, f); fclose(f);
+    snprintf(cmd, sizeof(cmd), "cd %s && cc -std=c99 -w -o loop loop.c && ./loop >/dev/null 2>err.txt; echo rc=$?; cat err.txt", dir);
+    run_cmd_capture(cmd, got, (int)sizeof(got));
+    TEST_ASSERT_NOT_NULL(strstr(got, "rc=3"));
+    TEST_ASSERT_NOT_NULL(strstr(got, "step budget exhausted"));
+    snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);
+    TEST_ASSERT_EQUAL(0, system(cmd));
+}
+
+/* Lot 5 US-058: rule based assistant. */
+void test_assist_hints_and_lint(void) {
+    char out[1024];
+    int hints = 0;
+    const char* typo = "print \"a\"\nprnt \"b\"\n";
+    const char* noto = "set x 3\n";
+    const char* lint = "set unused to 1\nset n to 2\nprint $n\nwhen user says \"vide\" then set n to 1\n";
+    setUp();
+    TEST_ASSERT_EQUAL(PM_ERR_SYNTAX, pm_assist(typo, (int)strlen(typo), &g_host, out, sizeof(out), &hints));
+    TEST_ASSERT_NOT_NULL(strstr(out, "pm-assist error line 2"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "did you mean 'print' instead of 'prnt'"));
+    TEST_ASSERT_EQUAL(1, hints);
+    TEST_ASSERT_EQUAL(PM_ERR_SYNTAX, pm_assist(noto, (int)strlen(noto), &g_host, out, sizeof(out), &hints));
+    TEST_ASSERT_NOT_NULL(strstr(out, "write 'set NAME to VALUE'"));
+    TEST_ASSERT_EQUAL(PM_OK, pm_assist(lint, (int)strlen(lint), &g_host, out, sizeof(out), &hints));
+    TEST_ASSERT_NOT_NULL(strstr(out, "variable unused is set but never read"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "trigger \"vide\" has no visible effect"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "pm-assist ok statements"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "hints 2 engine=rules"));
+    TEST_ASSERT_EQUAL(2, hints);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_spec_examples_run);
@@ -239,6 +343,8 @@ int main(void) {
     RUN_TEST(test_libraries_doc_and_debugger);
     RUN_TEST(test_pm_checksum_and_compilation_helpers);
     RUN_TEST(test_limits);
+    RUN_TEST(test_cross_compile_c99_matches_vm);
+    RUN_TEST(test_assist_hints_and_lint);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

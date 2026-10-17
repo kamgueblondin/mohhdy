@@ -9,7 +9,9 @@ image, rejects a tampered image, breaks in the debugger, versions a source,
 runs an inline statement and authors a program with the line editor
 (pm-edit and pm-ide). Also filters the local catalog, copies one sample,
 and checks a local Schnorr record (pm-ca-init, pm-ca-sign, pm-ca-verify,
-including a tampered source). No network marketplace, no public CA, no model.
+including a tampered source). Translates hello.pm to C99 (pm-cross), builds
+and runs it on the host, and runs the rule based assistant (pm-assist).
+No network marketplace, no public CA, no model.
 """
 import os
 import re
@@ -59,6 +61,35 @@ def run(client, proc, line, marker, timeout=30):
 def expect(chunk, needle):
     if needle not in chunk:
         raise RuntimeError("missing %r in: %s" % (needle, chunk[-1500:]))
+
+
+def check_cross(raw):
+    """Builds the C printed by pm-cross with the host cc and runs it."""
+    import tempfile
+    begin = raw.find("pm-cross begin\n")
+    end = raw.find("pm-cross end", begin)
+    if begin < 0 or end < 0:
+        raise RuntimeError("pm-cross markers missing: %s" % raw[-800:])
+    src = raw[begin + len("pm-cross begin\n"):end].replace("\r\n", "\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "app.c"), "w") as handle:
+            handle.write(src)
+        subprocess.run(["cc", "-std=c99", "-w", "-o", "app", "app.c"], cwd=tmp, check=True,
+                       timeout=60)
+        env = dict(os.environ, MOHHDY_MEM="10")
+        run1 = subprocess.run(["./app"], cwd=tmp, env=env, capture_output=True, text=True,
+                              timeout=30)
+        os.remove(os.path.join(tmp, "journal.txt"))
+        run2 = subprocess.run(["./app", "bonjour"], cwd=tmp, env=env, capture_output=True,
+                              text=True, timeout=30)
+        with open(os.path.join(tmp, "journal.txt")) as handle:
+            journal = handle.read()
+    if run1.returncode != 0 or run1.stdout != "pm> bonjour monde\npm> memoire ok\n":
+        raise RuntimeError("pm-cross binary: rc %d out %r" % (run1.returncode, run1.stdout))
+    if run2.stdout != run1.stdout + "pm> salut monde\n":
+        raise RuntimeError("pm-cross trigger: %r" % run2.stdout)
+    if journal.count("ligne") != 2:
+        raise RuntimeError("pm-cross journal.txt: %r" % journal)
 
 
 def main():
@@ -140,6 +171,18 @@ def main():
             expect(out, "pm-edit saved mine.pm")
             out = run(client, proc, "pm-run mine.pm", "pm-run ok")
             expect(out, "pm> n=42")
+            # US-055 partial: C99 target. The guest prints the C program;
+            # the host compiler builds it and the binary prints what the
+            # guest VM printed (pm-run hello.pm earlier, then a trigger).
+            start = len(h.log_text())
+            out = run(client, proc, "pm-cross /pm/hello.pm", "pm-cross ok target=c99", timeout=60)
+            raw = h.log_text()[start:]
+            check_cross(raw)
+            # US-058 partial: rule based assistant (no model).
+            out = run(client, proc, "pm-assist /pm/bad.pm", "pm-assist error")
+            expect(out, "write 'set NAME to VALUE'")
+            out = run(client, proc, "pm-assist /pm/hello.pm", "pm-assist ok")
+            expect(out, "engine=rules")
             # Local catalog, install, certification record (US-059/060 local).
             out = run(client, proc, "pm-catalog", "pm-catalog ok 4")
             expect(out, "pm-catalog hello.pm - PromptMessage demo")
