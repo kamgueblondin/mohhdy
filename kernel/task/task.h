@@ -174,6 +174,9 @@ int task_root_shell_pid(void);
 /* Put a freshly created task first in the round-robin order (right after
  * the kernel task) so it runs before the shell reaches its input loop. */
 void task_queue_move_first_user(task_t* task);
+/* Lot 5: schedule a ready Ring 3 driver, then resume the caller if its
+ * quantum is not spent (see schedule). */
+void task_yield_to_driver(cpu_state_t* cpu);
 /* Scheduler restriction/hook used by the ATA sector RPC (NULL = none). */
 extern task_t* task_sched_only;
 /* Set while that task waits for a key in SYS_GETS: only boot services and

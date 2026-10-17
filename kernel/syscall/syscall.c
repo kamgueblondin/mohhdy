@@ -2595,7 +2595,7 @@ void syscall_handler(cpu_state_t* cpu) {
      * the frame already: yield like SYS_YIELD. */
     if (current_task && current_task == syscall_entry_task &&
         current_task->state == TASK_RUNNING && device_driver_wants_cpu(current_task)) {
-        schedule(cpu);
+        task_yield_to_driver(cpu);
     }
 }
 
