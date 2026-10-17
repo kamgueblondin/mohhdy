@@ -1188,6 +1188,26 @@ int ne2k_socket_segment_gate(ne2k_device_t* device, const ne2k_io_t* io, const n
     return 1;
 }
 
+int ne2k_socket_rx_poll_tcp_gated(ne2k_device_t* device, const ne2k_io_t* io, const net_arp_cache_t* cache,
+                                  uint8_t* rx_frame, uint16_t rx_capacity, uint16_t* frame_length,
+                                  uint8_t* tx_frame, uint16_t tx_capacity, const uint8_t local_ip[4],
+                                  const uint8_t remote_ip[4], int socket_id, net_tcp_view_t* view,
+                                  uint16_t* ignored) {
+    uint8_t round; int status;
+    if (!frame_length || !view) return -1;
+    /* Les doublons/hors-ordre ne consomment pas le sondage : on draine
+     * jusqu'a NE2K_SOCKET_GATE_MAX_SKIP trames ignorees dans le meme appel. */
+    for (round = 0U; round <= NE2K_SOCKET_GATE_MAX_SKIP; round++) {
+        status = ne2k_rx_poll_tcp(device, io, rx_frame, rx_capacity, frame_length, view);
+        if (status != 0) return status;
+        status = ne2k_socket_segment_gate(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip,
+                                          socket_id, view);
+        if (status <= 0) return status < 0 ? -5 : 0;
+        if (ignored && *ignored < 0xffffU) (*ignored)++;
+    }
+    return 1;
+}
+
 int ne2k_socket_tls_idle(ne2k_device_t* device, const ne2k_io_t* io, const net_arp_cache_t* cache,
                          uint8_t* tx_frame, uint16_t tx_capacity, const uint8_t local_ip[4],
                          const uint8_t remote_ip[4], int socket_id, ne2k_tls_client_t* client) {
@@ -1243,7 +1263,10 @@ int ne2k_socket_tls_poll(ne2k_device_t* device,const ne2k_io_t* io,const net_arp
         if (status < 0) goto rollback_socket;
         if (status == 0) goto after_handshake_message;
     }
-    status = ne2k_rx_poll_tcp(device, io, rx_frame, rx_capacity, &frame_length, &view);
+    status = ne2k_socket_rx_poll_tcp_gated(device, io, cache, rx_frame, rx_capacity, &frame_length,
+                                           tx_frame, tx_capacity, local_ip, remote_ip, socket_id, &view,
+                                           &client->ignored_segments);
+    if (status < 0) goto rollback_socket;
     if (status != 0) {
         /* Apres ServerHelloDone, emettre le vol sur un sondage sans ACK :
          * QEMU perd souvent la trame si elle part dans le meme tour que l'ACK. */
@@ -1255,13 +1278,6 @@ int ne2k_socket_tls_poll(ne2k_device_t* device,const ne2k_io_t* io,const net_arp
             (void)ne2k_socket_tls_idle(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip,
                                        socket_id, client);
         return status;
-    }
-    status = ne2k_socket_segment_gate(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip,
-                                      socket_id, &view);
-    if (status < 0) goto rollback_socket;
-    if (status == 1) {
-        if (client->ignored_segments < 0xffffU) client->ignored_segments++;
-        return 1;
     }
     client->idle_polls = 0U;
     if (client->handshake.state == NET_TLS_HANDSHAKE_FINISHED_SENT ||
@@ -1396,11 +1412,9 @@ int ne2k_socket_llm_poll_response(ne2k_device_t* device,const ne2k_io_t* io,cons
     if (!device || !io || !cache || !rx_frame || !tx_frame || !local_ip || !remote_ip || !session ||
         !plaintext || !accumulator || !response || !consumed) return -1;
     *consumed = 0U;
-    status = ne2k_rx_poll_tcp(device, io, rx_frame, rx_capacity, &frame_length, &view);
-    if (status != 0) return status;
-    status = ne2k_socket_segment_gate(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip,
-                                      socket_id, &view);
-    if (status != 0) return status < 0 ? -3 : 1;
+    status = ne2k_socket_rx_poll_tcp_gated(device, io, cache, rx_frame, rx_capacity, &frame_length,
+                                           tx_frame, tx_capacity, local_ip, remote_ip, socket_id, &view, 0);
+    if (status != 0) return status < 0 ? -3 : status;
     if (net_socket_connection_snapshot(socket_id, &previous_connection) != 0) return -2;
     previous_session = *session; previous_accumulator = *accumulator; previous_response = *response;
     status = net_llm_socket_open_response(socket_id, session, &view, plaintext, plaintext_capacity,
@@ -1426,11 +1440,9 @@ int ne2k_socket_llm_poll_sse(ne2k_device_t* device,const ne2k_io_t* io,const net
     if (!device || !io || !cache || !rx_frame || !tx_frame || !local_ip || !remote_ip || !session ||
         !plaintext || !response || !text || !text_length || !consumed) return -1;
     *text_length = 0U; *consumed = 0U;
-    status = ne2k_rx_poll_tcp(device, io, rx_frame, rx_capacity, &frame_length, &view);
-    if (status != 0) return status;
-    status = ne2k_socket_segment_gate(device, io, cache, tx_frame, tx_capacity, local_ip, remote_ip,
-                                      socket_id, &view);
-    if (status != 0) return status < 0 ? -3 : 1;
+    status = ne2k_socket_rx_poll_tcp_gated(device, io, cache, rx_frame, rx_capacity, &frame_length,
+                                           tx_frame, tx_capacity, local_ip, remote_ip, socket_id, &view, 0);
+    if (status != 0) return status < 0 ? -3 : status;
     if (net_socket_connection_snapshot(socket_id, &previous_connection) != 0) return -2;
     previous_session = *session; previous_response = *response;
     status = net_llm_socket_open_sse(socket_id, session, &view, plaintext, plaintext_capacity,

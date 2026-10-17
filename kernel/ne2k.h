@@ -536,6 +536,14 @@ int ne2k_llm_connection_poll_sse(ne2k_device_t* device,const ne2k_io_t* io,const
 int ne2k_socket_segment_gate(ne2k_device_t* device, const ne2k_io_t* io, const net_arp_cache_t* cache,
                              uint8_t* tx_frame, uint16_t tx_capacity, const uint8_t local_ip[4],
                              const uint8_t remote_ip[4], int socket_id, net_tcp_view_t* view);
+#define NE2K_SOCKET_GATE_MAX_SKIP 8U
+/* ne2k_rx_poll_tcp + filtre : saute les segments ignores (au plus
+ * NE2K_SOCKET_GATE_MAX_SKIP par appel) ; 1 si aucune trame utile. */
+int ne2k_socket_rx_poll_tcp_gated(ne2k_device_t* device, const ne2k_io_t* io, const net_arp_cache_t* cache,
+                                  uint8_t* rx_frame, uint16_t rx_capacity, uint16_t* frame_length,
+                                  uint8_t* tx_frame, uint16_t tx_capacity, const uint8_t local_ip[4],
+                                  const uint8_t remote_ip[4], int socket_id, net_tcp_view_t* view,
+                                  uint16_t* ignored);
 /* Sondage sans trame : retransmet le dernier envoi non acquitte avec backoff. */
 int ne2k_socket_tls_idle(ne2k_device_t* device, const ne2k_io_t* io, const net_arp_cache_t* cache,
                          uint8_t* tx_frame, uint16_t tx_capacity, const uint8_t local_ip[4],

@@ -120,6 +120,11 @@ jobs:
       - name: QEMU strict network build, no Ring 0 fallback
         run: make qemu-net-no-ring0
 
+      # Guest TCP/TLS loss recovery: dropped ClientHello and Certificate,
+      # duplicated ServerKeyExchange (about 2 min).
+      - name: QEMU TCP/TLS loss recovery (frame drop)
+        run: make qemu-net-loss-recovery
+
       - name: QEMU strict network build, loopback-only worker (no NE2000)
         run: make qemu-net-loopback-worker
 
