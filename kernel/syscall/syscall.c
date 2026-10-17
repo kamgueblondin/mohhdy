@@ -339,7 +339,10 @@ int kernel_journal_sector_io(uint32_t lba, uint32_t count, void* buf, int write)
         if (syscall_ata_fat_io(ATA_DRIVE_MASTER, lba, count, buf, write, &rc)) return rc;
         return -1;
     }
+    /* No IDE disk: nothing to read, and no port access (US-001). */
+    if (!ata_present()) return -1;
     if (kernel_fat_pio_fallback_enabled() || !ata_ring3_store_pending()) {
+        if (!write) ata_job_note_journal_kernel_read(count);
         return write ? ata_write_sectors(lba, count, buf) : ata_read_sectors(lba, count, buf);
     }
     return -1;

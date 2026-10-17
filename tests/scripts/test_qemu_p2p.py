@@ -275,6 +275,14 @@ def main():
         cmd(a, "p2p-block gamma", "p2p-block ok gamma")
         cmd(c, "p2p-block alpha", "p2p-block ok alpha")
         wait_log(a, "p2p peer gamma down", 90)
+        # US-068/073: the unanswered PING to gamma halved the window; beta
+        # PONGs grow it back by one per round trip, so it is still below 16.
+        start_q = cmd(a, "p2p-qos", "p2p qos window ")
+        qos = re.search(r"p2p qos window (\d+) srtt_ms (\d+) min_rtt_ms (\d+) losses (\d+) ping_losses (\d+)",
+                        log(a, start_q))
+        if not qos or int(qos.group(1)) >= 16 or int(qos.group(5)) < 1 or int(qos.group(3)) < 1:
+            raise RuntimeError("alpha qos did not adapt: %s" % log(a, start_q)[-400:])
+        say("scenario 3: adaptive window %s after ping loss, srtt %s ms" % (qos.group(1), qos.group(2)))
         cmd(a, "p2p-send gamma via-relay-msg", "p2p-send ok to gamma")
         wait_log(c, "p2p msg from alpha: via-relay-msg (relayed)", 60)
         start_b = cmd(b, "p2p-stats", "p2p stats ok tx_bytes ")
@@ -302,6 +310,19 @@ def main():
         if "p2p analyze finding node relayed " not in log(b, start_b):
             raise RuntimeError("beta analysis missed the relay: %s" % log(b, start_b)[-600:])
         say("scenario 3 ok: failure detected, relayed delivery (%.0fs)" % (time.monotonic() - t0))
+
+        # Scenario 4 (US-070): versioned invalidation acked by both peers;
+        # gamma is blocked from alpha, so its INV and ACK go through beta.
+        cmd(b, "p2p-cache putv cfg old 4", "p2p-cache putv ok cfg")
+        cmd(c, "p2p-cache putv cfg old 4", "p2p-cache putv ok cfg")
+        cmd(a, "p2p-cache inv cfg 5", "p2p-cache inv sent peers 2")
+        wait_log(b, "p2p cache invalidated cfg", 60)
+        wait_log(c, "p2p cache invalidated cfg", 60)
+        wait_log(a, "p2p cache inv acked cfg v5 acks 2", 60)
+        cmd(b, "p2p-cache putv cfg old 5", "p2p-cache stale refused cfg")
+        cmd(c, "p2p-cache get cfg", "p2p-cache miss cfg")
+        cmd(b, "p2p-cache", "stale_refused 1")
+        say("scenario 4 ok: acked versioned cache invalidation (%.0fs)" % (time.monotonic() - t0))
         say("PASS frames=%d hello=%d sealed=%d plaintext=0 in %.0fs"
             % (hub.p2p_frames, hub.p2p_hello, hub.p2p_sealed, time.monotonic() - t0))
         return 0

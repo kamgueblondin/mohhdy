@@ -49,7 +49,7 @@ LOG_BOOT2 = os.path.join(LOG_DIR, "ata-driver-boot2.log")
 ERR = os.path.join(LOG_DIR, "ata-driver.err")
 MON = os.path.join(LOG_DIR, "ata-driver-monitor.sock")
 DISK = os.path.join(LOG_DIR, "ata-driver.img")
-KERNEL = os.path.join(ROOT, "build", "mohhdy.bin")
+KERNEL = os.environ.get("MOHHDY_ATA_KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
 INITRD = os.path.join(ROOT, "my_initrd.tar")
 KEY_HOLD_MS = int(os.environ.get("KEY_HOLD_MS", "10"))
 GP_FAULT = "[FAULT] user task killed: int=0x0000000d"
@@ -169,6 +169,8 @@ READY_SPEC = ("atadriver ring3 pio ready", ("flushes", "loads", "kpio"))
 LOAD_SPEC = ("atadriver snapshot load ok", ("gen", "flushes", "loads", "kpio"))
 FATIO_SPEC = ("atadriver fat io", ("rd", "wr", "kfat"))
 STATUS_KEYS = ("driver", "boot", "fatrd", "fatwr", "fatkpio", "fatkpiolive",
+               # US-001: boot journals read by Ring 0 PIO / installed by Ring 3.
+               "jkread", "jinst",
                "aborts", "flushes", "kpio", "resets",
                # Tranche 4 suite: FAT/overlay code served by the driver itself.
                "store", "fsops", "fskernel", "fsaborts", "fsredo", "fsunavail",
@@ -361,6 +363,14 @@ def boot1():
             raise RuntimeError("boot FAT mount was not deferred to Ring 3")
         if st["fatkpio"] != 0:
             raise RuntimeError("boot FAT mount used Ring 0 PIO: %r" % st)
+        # US-001: the mount and event journals came from the Ring 3 driver,
+        #         the kernel read none of their sectors itself.
+        if st["jkread"] != 0 or st["jinst"] != 2:
+            raise RuntimeError("boot journals not read by the Ring 3 driver: %r" % st)
+        for line in ("[ATA] mount journal installed by Ring 3 atadriver",
+                     "[ATA] event journal installed by Ring 3 atadriver"):
+            if line not in log_text():
+                raise RuntimeError("missing %r" % line)
         if (store[0] != STORE_FAT16_OVERLAY or store[1] != 1 or store[3] != 1 or
                 store[4] <= 16 or st["store"] != STORE_FAT16_OVERLAY or
                 st["handovers"] != 1 or st["fskernel"] != 0):

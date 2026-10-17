@@ -10,9 +10,31 @@
 
 ## État courant vérifié
 
+## Etat courant du 17 octobre 2026 (lot 3)
+
+Living baseline. Branched from `7cfcf0b` (merge of pull request #151), branch `cursor/lot3-geant`, pull request #152. The lot 2 section below keeps its own counter (770/770).
+
+```text
+make test-all : 783/783 passed, 0 failed, 0 skipped
+```
+
+Detail: 54/54 kernel, 10/10 userspace, 1/1 performance, 1/1 robustness. New cases: 2 CSS, 4 P2P, 5 `test_osui_ide`, 1 `test_gui_pm_ide_fullscreen`. `tests/scripts/run_all_tests.sh` now counts a unit test that does not compile as a failure (it was counted as skipped, so a broken test left `make test-all` green). Guest command register: 368 names (`p2p-qos` added).
+
+Coverage: `make coverage COVERAGE_MIN=78` runs in CI (job `coverage`, timeout 15 min) and fails below the floor. Measured this lot: 79.82% lines executed (25224/31603) across 145 source files. Host unit-test translation units only, not the guest image.
+
+- US-001 stays open, narrower. The mount journal (LBA 4222-4223) and the event journal (LBA 4224) are now read by the Ring 3 `atadriver` and handed over with `OS_ATA_FS_INSTALL` kinds 4 and 5 (once per boot; the kernel does not flush a journal before it is handed over). `ata-status` prints `jkread` (journal sectors read by Ring 0 PIO) and `jinst`. Without an IDE disk the kernel does no journal port access. The boot overlay snapshot was already installed by Ring 3. The legacy image now links `boot_storage_strict.o`: the boot FAT mount, the overlay and the journals come from Ring 3 on both images, and `kernel/boot_storage_legacy.c` is gone. The legacy image keeps the Ring 0 NIC path (`ne2k_probe`, `net_tls_record_`) on purpose: it is the comparison kernel for `NET_RING0_FALLBACK`, not a shipped image. Still Ring 0 on both images: PIC, PIT, PS/2, VGA, serial, PCI, `usb_tablet`. Proof: `make strict-image-check` (rejects `kernel_ring0_boot_fat_mount` in both images), `make qemu-ata-driver` (`jkread 0 jinst 2`), the same contract with `MOHHDY_ATA_KERNEL=build/mohhdy-netlegacy.bin` (by hand, passed), `make qemu-foundation-steps` (both journals `(restored)` by Ring 3 after reboot, `alias/` and the unacked event survive).
+- US-063 partial, closer. HELLO carries a distance vector (peer id plus hop count, at most 3 hops, also the frame TTL); frames are relayed hop by hop. Proof: `test_multi_relay_chain` (4 nodes in a line, alpha to delta through beta and gamma). QEMU still runs 3 guests, so QEMU proves one relay only. A destination must have been discovered and keyed once.
+- US-068 and US-073 partial, closer. Adaptive controller: EWMA smoothed RTT, minimum RTT, window cut by a quarter when RTT is above twice the minimum, halved on loss (one loss per outage), plus one per success. `p2p-qos` prints it. Proof: `test_qos_adaptive_controller` and QEMU scenario 3 (`window < 16`, `ping_losses >= 1` after the gamma cut). Not a bandwidth estimator.
+- US-069 unchanged (partial): hub wire cut, reroute, resync.
+- US-070 partial, closer. Versioned entries, fences against stale writes (`p2p-cache stale refused`), invalidation acked per peer, re-sent every second up to 5 times, `incomplete` when acks never arrive. Proof: `test_cache_versioned_acked_invalidation` and QEMU scenario 4 (gamma's INV and ACK relayed through beta). Not a consensus-backed cache.
+- US-075 partial, closer. Learned per-type receive baseline (EWMA, 5 windows of warm-up, anomaly above 4x baseline plus 8 frames/s). This is an EWMA baseline, not machine learning. A rate anomaly ranks as `degraded`, not `suspicious`: QEMU showed a solicited raft snapshot burst tripping it. Proof: `test_traffic_baseline_anomaly`, QEMU scenario 3 `p2p-analyze`.
+- US-050 partial, closer. `pm-ide FILE` typed on the OS-UI desktop (`gui`) opens a full-screen editor (`userspace/osui_ide.c`, pane `OS_FB_PANE_IDE` drawn by `kernel/gfx_desktop.c`): 96 lines x 72 columns, arrows, Enter, Backspace, 12 visible rows with scrolling, ESC then `w` save, `c` check, `r` run, `q` quit (refused if unsaved), `Q` discard. Save, check and run use the shell store and the PromptMessage VM. Proof: `test_osui_ide`, `test_gui_pm_ide_fullscreen`, `make qemu-osui-gui` (types a program, saves, checks, runs, quits, then `pm-check` reads the file). Limits: no syntax colouring, no completion, no debugger, the program output is not shown in the editor (only the verdict line), the cursor is shown as `_` only on a space or past the end (Ln/Col in the title). `pm-ide` typed in the text console is still the line editor.
+- US-059 and US-060 unchanged (partial).
+- OS-UI CSS (Phase 3): `browser-html-render` now parses CSS rules (type, `.class`, `#id`, `*`, compounds, descendant combinator up to 3 compounds, comma groups, inline style, `!important`), matches them on the DOM, applies the cascade by specificity then source order, inherits color, font-weight and text-transform, and honours `display:none`, over a user-agent sheet. `browser-css-demo` prints `author_rules=7 total_rules=19 errors=0 hidden=1`. Proof: `test_css_cascade_engine`, `test_css_parser_rules_and_errors`, `make qemu-osui-runtime`. Still a text renderer: no layout engine, no box model drawing.
+
 ## Etat courant du 15 octobre 2026 (lot 2)
 
-Living baseline. Branched from `708917b` (merge of pull request #149). The lot 1 section below keeps its own counter (768/768). US-001 stays open. US-064 is closed for the guest Raft log described here. It is not Paxos.
+Previous baseline for lot 2, branched from `708917b` (merge of pull request #149). Superseded by the lot 3 section above. The lot 1 section below keeps its own counter (768/768). US-001 stays open. US-064 is closed for the guest Raft log described here. It is not Paxos.
 
 ```text
 make test-all : 770/770 passed, 0 failed, 0 skipped

@@ -376,6 +376,7 @@ static int v32_write(uint32_t lba, const void* buf) { return drv_write(1, lba, b
 /* Strict kernel: Ring 0 did not mount FAT. Read the boot sector and the
  * overlay window here, then hand the bytes to the kernel. The short wait
  * does not yield, so this finishes before any other Ring 3 task opens the disk. */
+static uint8_t journal_buf[1024];
 static void fs_install_boot(void) {
     os_ata_status_t ks;
     uint32_t i;
@@ -389,7 +390,23 @@ static void fs_install_boot(void) {
     for (i = 0; i < OV_DISK_SECTORS_DRV; i++) {
         if (pio_transfer_boot(0, i, 1U, ov_disk + i * 512U) != 0) { ov_disk_known = 0; break; }
     }
+    /* US-001: the boot journals too (mount 4222-4223, events 4224). A
+     * read error (short disk) hands over zeros: the kernel keeps its
+     * defaults and stops waiting for that journal. */
+    for (i = 0; i < 2U; i++) {
+        if (pio_transfer_boot(0, OS_ATA_MOUNT_JOURNAL_LBA + i, 1U, journal_buf + i * 512U) != 0) {
+            for (i = 0; i < sizeof(journal_buf); i++) journal_buf[i] = 0;
+            break;
+        }
+    }
     release();
+    (void)sc4(SYS_ATA_FS, OS_ATA_FS_INSTALL, OS_ATA_FS_INSTALL_MOUNT_JOURNAL,
+              (uint32_t)journal_buf, (uint32_t)sizeof(journal_buf));
+    claim();
+    if (pio_transfer_boot(0, OS_ATA_EVENT_JOURNAL_LBA, 1U, journal_buf) != 0)
+        for (i = 0; i < 512U; i++) journal_buf[i] = 0;
+    release();
+    (void)sc4(SYS_ATA_FS, OS_ATA_FS_INSTALL, OS_ATA_FS_INSTALL_EVENT_JOURNAL, (uint32_t)journal_buf, 512U);
     if (ov_disk_known)
         (void)sc4(SYS_ATA_FS, OS_ATA_FS_INSTALL, OS_ATA_FS_INSTALL_OVERLAY,
                   (uint32_t)ov_disk, (uint32_t)sizeof(ov_disk));
@@ -546,6 +563,12 @@ void main(void) {
         for (;;) yield();
     }
     claim();
+    /* Select the master before sampling the status: the kernel no longer
+     * reads the boot journals first (US-001), so this can be the first
+     * access after reset and the register is only valid once a drive is
+     * selected. */
+    outb(ATA_DRIVE, 0xA0);
+    delay();
     status = inb(ATA_CMD);
     if (status != 0xFF && status != 0x00 && identify_master() != 0) {
         release();

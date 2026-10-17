@@ -11,8 +11,10 @@ static const char* const k_names[P2P_I_COUNT] = {
     "ping", "pong", "msg", "put", "sync-req", "sync-items", "get-req", "get-resp", "propose", "vote", "commit", "app",
     "raft-req", "raft-resp", "raft-hb", "cache-inv",
     "grpc-req", "grpc-resp", "stun-req", "stun-resp", "nat-punch", "raft-append", "raft-append-resp",
-    "raft-prevote-req", "raft-prevote-resp", "raft-snapshot", "raft-snapshot-resp"
+    "raft-prevote-req", "raft-prevote-resp", "raft-snapshot", "raft-snapshot-resp", "cache-inv-ack"
 };
+static void cache_fence(p2p_node_t* n, const char* key, uint32_t version);
+static int cache_inv_send(p2p_node_t* n, const p2p_host_t* h, int only_waiting);
 const char* p2p_type_name(int t) { return (t > 0 && t < P2P_I_COUNT) ? k_names[t] : "?"; }
 
 /* ---------------------------------------------------------------- helpers */
@@ -99,7 +101,7 @@ static int kv_apply(p2p_node_t* n, const char* key, const char* value, uint32_t 
 
 /* --------------------------------------------------------------- framing */
 static void header(p2p_node_t* n, uint8_t* b, int type, uint32_t dst, uint32_t via) {
-    b[0] = 'M'; b[1] = 'P'; b[2] = '2'; b[3] = 1; b[4] = (uint8_t)type; b[5] = 3; b[6] = 0; b[7] = 0;
+    b[0] = 'M'; b[1] = 'P'; b[2] = '2'; b[3] = 1; b[4] = (uint8_t)type; b[5] = (uint8_t)P2P_MAX_HOPS; b[6] = 0; b[7] = 0;
     put32(b + 8, n->id); put32(b + 12, dst); put32(b + 16, ++n->msg_id); put32(b + 20, via);
 }
 static void remember(p2p_node_t* n, uint32_t src, uint32_t id) {
@@ -120,6 +122,27 @@ static int emit(p2p_node_t* n, const p2p_host_t* h, const uint8_t* ip, const uin
     return 0;
 }
 
+/* Hops from us to peer p: 1 when the direct link is up, else one more
+ * than the best up neighbor that advertises p, 0 when unreachable or
+ * farther than P2P_MAX_HOPS. */
+static uint32_t reach_hops(const p2p_node_t* n, const p2p_peer_t* p) {
+    int i, j;
+    uint32_t best = 0;
+    if (!p->used || p->blocked) return 0;
+    if (p->up) return 1;
+    for (i = 0; i < P2P_PEERS; i++) {
+        const p2p_peer_t* r = &n->peers[i];
+        if (!r->used || !r->up || r->blocked || r == p) continue;
+        for (j = 0; j < P2P_PEERS; j++) {
+            if (r->neighbors[j] == p->id && r->nb_hops[j] && r->nb_hops[j] < P2P_MAX_HOPS) {
+                uint32_t hc = (uint32_t)r->nb_hops[j] + 1U;
+                if (!best || hc < best) best = hc;
+            }
+        }
+    }
+    return best;
+}
+
 static void send_hello(p2p_node_t* n, const p2p_host_t* h) {
     uint8_t b[P2P_DATAGRAM_MAX], mac[32];
     int pos = HDR, i, cnt = 0;
@@ -128,8 +151,18 @@ static void send_hello(p2p_node_t* n, const p2p_host_t* h) {
     mcopy(b + pos, n->ip, 4); pos += 4;
     mcopy(b + pos, n->pub, 32); pos += 32;
     b[pos++] = 0;
-    for (i = 0; i < P2P_PEERS; i++)
-        if (n->peers[i].used && n->peers[i].up) { put32(b + pos, n->peers[i].id); pos += 4; cnt++; }
+    {
+        /* Distance vector (US-063): every known peer we can reach, with
+         * its hop count from us. Ids first, then one hop byte per id. */
+        uint8_t hops[P2P_PEERS];
+        for (i = 0; i < P2P_PEERS; i++) {
+            uint32_t hc = reach_hops(n, &n->peers[i]);
+            if (!hc) continue;
+            put32(b + pos, n->peers[i].id); pos += 4;
+            hops[cnt++] = (uint8_t)hc;
+        }
+        for (i = 0; i < cnt; i++) b[pos++] = hops[i];
+    }
     b[HDR + P2P_NAME_MAX + 36] = (uint8_t)cnt;
     hmac_sha256(n->netkey, 32, b, (uint32_t)pos, mac);
     mcopy(b + pos, mac, 16); pos += 16;
@@ -179,8 +212,9 @@ int p2p_route_find(const p2p_node_t* n, uint32_t dest_id, uint32_t* next_hop, ui
             if (c < min_cost) { min_cost = c; best_hop = 0; }
         } else {
             for (j = 0; j < P2P_PEERS; j++) {
-                if (p->neighbors[j] == dest_id) {
-                    uint32_t c = link_cost(p) + 15U; /* 15 penalty for 2nd hop */
+                if (p->neighbors[j] == dest_id && p->nb_hops[j] && p->nb_hops[j] <= P2P_MAX_HOPS - 1U) {
+                    /* 15 per extra hop: one relay costs 15, two cost 30. */
+                    uint32_t c = link_cost(p) + 15U * (uint32_t)p->nb_hops[j];
                     if (c < min_cost) { min_cost = c; best_hop = p->id; }
                 }
             }
@@ -253,15 +287,40 @@ static int admit(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
     return 1;
 }
 
+static void qos_rate(p2p_node_t* n) {
+    uint32_t srtt = n->qos.rtt_avg_ms < 10U ? 10U : n->qos.rtt_avg_ms;
+    n->qos.rate_est_bps = n->qos.window_size * (uint32_t)P2P_DATAGRAM_MAX * 1000U / srtt;
+}
+
 void p2p_qos_note_loss(p2p_node_t* n) {
     if (!n) return;
     n->qos.loss_count++;
     if (n->qos.window_size > 1U) n->qos.window_size /= 2U;
+    qos_rate(n);
 }
 
 void p2p_qos_note_ack(p2p_node_t* n) {
     if (!n) return;
     if (n->qos.window_size < P2P_QOS_WINDOW_MAX) n->qos.window_size++;
+}
+
+/* Adaptive controller (US-068/073), fed by PONG round trips:
+ * smoothed RTT (EWMA 1/8) and minimum RTT; a sample above twice the
+ * minimum plus 20 ms means a queue is building, the window shrinks by a
+ * quarter; otherwise it grows by one per round trip (additive increase).
+ * Losses (unanswered PING, rejected append) halve it. */
+void p2p_qos_note_rtt(p2p_node_t* n, uint32_t sample_ms) {
+    if (!n) return;
+    if (!n->qos.rtt_min_ms || sample_ms < n->qos.rtt_min_ms) n->qos.rtt_min_ms = sample_ms ? sample_ms : 1U;
+    n->qos.rtt_avg_ms = n->qos.rtt_avg_ms ? (n->qos.rtt_avg_ms * 7U + sample_ms) / 8U : sample_ms;
+    if (sample_ms > 2U * n->qos.rtt_min_ms + 20U) {
+        uint32_t w = n->qos.window_size - n->qos.window_size / 4U;
+        n->qos.window_size = w ? w : 1U;
+        n->qos.delay_backoffs++;
+    } else {
+        p2p_qos_note_ack(n);
+    }
+    qos_rate(n);
 }
 
 /* ------------------------------------------------------------ handlers */
@@ -628,7 +687,11 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         if (len >= 4) (void)seal_send(n, h, p, P2P_I_PONG, m, 4);
         break;
     case P2P_I_PONG:
-        if (len >= 4) p->rtt_ticks = now(h) - get32(m);
+        if (len >= 4) {
+            p->rtt_ticks = now(h) - get32(m);
+            p->ping_wait = 0;
+            p2p_qos_note_rtt(n, p->rtt_ticks * (1000U / P2P_HZ));
+        }
         break;
     case P2P_I_MSG:
         if (get_str(m, 0, len, n->last_msg, P2P_TEXT_MAX) < 0) break;
@@ -984,10 +1047,33 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         }
         break;
     }
+    case P2P_I_CACHE_INV_ACK: {
+        char key[P2P_KEY_MAX];
+        int kp = get_str(m, 0, len, key, P2P_KEY_MAX), left = 0;
+        if (kp < 0 || kp + 4 > len || !n->cache.inv_active) break;
+        if (!s_eq(key, n->cache.inv_key) || get32(m + kp) != n->cache.inv_version) break;
+        for (i = 0; i < P2P_PEERS; i++) {
+            if (n->cache.inv_waiting[i] == p->id) { n->cache.inv_waiting[i] = 0; n->cache.inv_acked++; }
+            if (n->cache.inv_waiting[i]) left++;
+        }
+        if (!left) {
+            n->cache.inv_active = 0;
+            n->cache.inv_completed++;
+            s_cat(line, "p2p cache inv acked ", 200); s_cat(line, key, 200);
+            s_cat(line, " v", 200); cat_u(line, n->cache.inv_version, 200);
+            s_cat(line, " acks ", 200); cat_u(line, n->cache.inv_acked, 200);
+            say(h, line);
+        }
+        break;
+    }
     case P2P_I_CACHE_INV: {
         char key[P2P_KEY_MAX];
-        int c_idx;
-        if (get_str(m, 0, len, key, P2P_KEY_MAX) >= 0) {
+        int c_idx, kp;
+        uint32_t ver = 0;
+        kp = get_str(m, 0, len, key, P2P_KEY_MAX);
+        if (kp >= 0) {
+            if (kp + 4 <= len) ver = get32(m + kp);
+            cache_fence(n, key, ver);
             for (c_idx = 0; c_idx < P2P_CACHE_MAX; c_idx++) {
                 if (n->cache.entries[c_idx].used && s_eq(n->cache.entries[c_idx].key, key)) {
                     n->cache.entries[c_idx].used = 0;
@@ -996,6 +1082,9 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
                     say(h, line);
                 }
             }
+            /* Ack even when nothing was cached: the sender counts peers. */
+            pos = put_str(b, 0, P2P_DATAGRAM_MAX, key);
+            if (pos >= 0) { put32(b + pos, ver); (void)seal_send(n, h, p, P2P_I_CACHE_INV_ACK, b, pos + 4); }
         }
         break;
     }
@@ -1087,9 +1176,9 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
     char line[96];
     if (len < body + 16) { n->bad_hello++; return; }
     cnt = b[body - 1];
-    if (cnt > P2P_PEERS || len != body + cnt * 4 + 16) { n->bad_hello++; return; }
-    hmac_sha256(n->netkey, 32, b, (uint32_t)(body + cnt * 4), tag);
-    if (!meq(tag, b + body + cnt * 4, 16)) { n->bad_hello++; return; }
+    if (cnt > P2P_PEERS || len != body + cnt * 5 + 16) { n->bad_hello++; return; }
+    hmac_sha256(n->netkey, 32, b, (uint32_t)(body + cnt * 5), tag);
+    if (!meq(tag, b + body + cnt * 5, 16)) { n->bad_hello++; return; }
     p = by_id(n, src);
     if (!p) {
         for (i = 0; i < P2P_PEERS && n->peers[i].used; i++) {}
@@ -1107,7 +1196,12 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
         mcopy(p->pub, b + HDR + P2P_NAME_MAX + 4, 32);
         derive(n, p);
     }
-    for (i = 0; i < P2P_PEERS; i++) p->neighbors[i] = i < cnt ? get32(b + body + i * 4) : 0;
+    for (i = 0; i < P2P_PEERS; i++) {
+        p->neighbors[i] = i < cnt ? get32(b + body + i * 4) : 0;
+        p->nb_hops[i] = i < cnt ? b[body + cnt * 4 + i] : 0;
+        /* A route back through ourselves is useless (split horizon). */
+        if (p->neighbors[i] == n->id) p->nb_hops[i] = 0;
+    }
     p->last_seen = now(h);
     p->via = 0;
     if (!p->up) {
@@ -1136,10 +1230,17 @@ static void on_datagram(p2p_node_t* n, const p2p_host_t* h, uint8_t* b, int len,
     if (dst != n->id) {
         /* Relay (US-063): forward verbatim when we are the chosen next hop. */
         p2p_peer_t* d = by_id(n, dst);
-        if (via == n->id && b[5] > 0 && d && d->up && !d->blocked) {
-            b[5]--; put32(b + 20, 0);
-            n->relayed++;
-            (void)emit(n, h, d->ip, b, len);
+        uint32_t nh = 0, cost = 0;
+        if (via == n->id && b[5] > 0 && d && p2p_route_find(n, dst, &nh, &cost) == 0) {
+            p2p_peer_t* r = nh ? by_id(n, nh) : d;
+            /* Hop by hop: direct when the link is up, else the next relay
+             * from our own distance vector, never back to the sender. */
+            if (r && r->up && !r->blocked && r->id != src && !meq(r->mac, mac, 6)) {
+                b[5]--; put32(b + 20, nh);
+                n->relayed++;
+                if (nh) n->relayed_multi++;
+                (void)emit(n, h, r->ip, b, len);
+            }
         }
         return;
     }
@@ -1284,13 +1385,48 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
             say(h, line);
         }
     }
+    /* Unacked cache invalidation: re-send to the peers still waiting. */
+    if (n->cache.inv_active && t - n->cache.inv_tick >= P2P_HZ) {
+        n->cache.inv_tick = t;
+        if (n->cache.inv_retries) {
+            n->cache.inv_retries--;
+            n->cache.inv_resent += (uint32_t)(cache_inv_send(n, h, 1) > 0 ? 1 : 0);
+        } else {
+            char line[96];
+            n->cache.inv_active = 0;
+            line[0] = 0; s_cat(line, "p2p cache inv incomplete ", 96); s_cat(line, n->cache.inv_key, 96);
+            s_cat(line, " acks ", 96); cat_u(line, n->cache.inv_acked, 96);
+            say(h, line);
+        }
+    }
+    /* Learned receive baseline (US-075), one window per second: after the
+     * warm-up, a type whose rate is above 4x its baseline plus 8 frames/s
+     * is an anomaly; the baseline then keeps learning (EWMA 1/8). */
+    if (t - n->analyze_tick >= P2P_HZ) {
+        uint32_t k;
+        n->analyze_tick = t;
+        for (k = P2P_I_PING; k < P2P_I_COUNT; k++) {
+            uint32_t rate = n->rx_type[k] - n->last_rx[k];
+            n->last_rx[k] = n->rx_type[k];
+            if (n->analyze_windows >= P2P_ANALYZE_WARMUP && rate * 16U > 4U * n->base_rate16[k] + 8U * 16U) {
+                n->anomalies++;
+                n->last_anomaly_type = k;
+                n->last_anomaly_rate = rate;
+            }
+            n->base_rate16[k] = n->analyze_windows ? (n->base_rate16[k] * 7U + rate * 16U) / 8U : rate * 16U;
+        }
+        n->analyze_windows++;
+    }
     if (t - n->last_ping >= P2P_PING_TICKS) {
         n->last_ping = t;
         for (i = 0; i < P2P_PEERS; i++) {
             p2p_peer_t* p = &n->peers[i];
             if (!p->used || !p->up || !p->keyed) continue;
+            /* One loss event per outage: the first unanswered PING halves
+             * the window, later ones on the same silent peer do not. */
+            if (p->ping_wait == 1U) { n->qos.ping_losses++; p2p_qos_note_loss(n); p->ping_wait = 2U; }
             put32(b, t); p->ping_sent_at = t;
-            (void)seal_send(n, h, p, P2P_I_PING, b, 4);
+            if (seal_send(n, h, p, P2P_I_PING, b, 4) == 0 && !p->ping_wait) p->ping_wait = 1U;
         }
     }
     for (i = 0; i < P2P_PEERS; i++) {
@@ -1639,9 +1775,49 @@ const p2p_item_t* p2p_cache_get(p2p_node_t* n, const char* key, uint32_t current
     return 0;
 }
 
-int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key) {
+static void cache_fence(p2p_node_t* n, const char* key, uint32_t version) {
+    uint32_t i;
+    for (i = 0; i < P2P_CACHE_FENCES; i++) {
+        if (n->cache.fence[i].key[0] && s_eq(n->cache.fence[i].key, key)) {
+            if (version > n->cache.fence[i].version) n->cache.fence[i].version = version;
+            return;
+        }
+    }
+    i = n->cache.fence_next++ % P2P_CACHE_FENCES;
+    s_copy(n->cache.fence[i].key, key, P2P_KEY_MAX);
+    n->cache.fence[i].version = version;
+}
+
+static uint32_t cache_fence_of(const p2p_node_t* n, const char* key) {
+    int i;
+    for (i = 0; i < P2P_CACHE_FENCES; i++)
+        if (n->cache.fence[i].key[0] && s_eq(n->cache.fence[i].key, key)) return n->cache.fence[i].version;
+    return 0;
+}
+
+static int cache_inv_send(p2p_node_t* n, const p2p_host_t* h, int only_waiting) {
     uint8_t b[64];
-    int i, pos, sent = 0;
+    int i, j, pos, sent = 0;
+    pos = put_str(b, 0, 60, n->cache.inv_key);
+    if (pos < 0) return -1;
+    put32(b + pos, n->cache.inv_version); pos += 4;
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        int waiting = 0;
+        if (!p->used || !p->keyed) continue;
+        for (j = 0; j < P2P_PEERS; j++) if (n->cache.inv_waiting[j] == p->id) waiting = 1;
+        if (only_waiting && !waiting) continue;
+        if (seal_send(n, h, p, P2P_I_CACHE_INV, b, pos) == 0) sent++;
+    }
+    return sent;
+}
+
+/* Coherent invalidation (US-070): local drop plus a fence at the new
+ * version, then INV(key, version) to every keyed peer, re-sent each second
+ * to peers that have not acked (P2P_CACHE_INV_RETRIES). Returns the number
+ * of peers the first round reached. */
+int p2p_cache_invalidate_v(p2p_node_t* n, const p2p_host_t* h, const char* key, uint32_t version) {
+    int i, k = 0;
     if (!n || !key || !key[0]) return -1;
     for (i = 0; i < P2P_CACHE_MAX; i++) {
         if (n->cache.entries[i].used && s_eq(n->cache.entries[i].key, key)) {
@@ -1649,15 +1825,39 @@ int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key) {
             n->cache.invalidations++;
         }
     }
+    cache_fence(n, key, version);
     if (!n->up || !h) return 0;
-    pos = put_str(b, 0, 64, key);
-    if (pos < 0) return -1;
+    s_copy(n->cache.inv_key, key, P2P_KEY_MAX);
+    n->cache.inv_version = version;
+    n->cache.inv_acked = 0;
     for (i = 0; i < P2P_PEERS; i++) {
-        p2p_peer_t* p = &n->peers[i];
-        if (!p->used || !p->keyed || !p->up) continue;
-        if (seal_send(n, h, p, P2P_I_CACHE_INV, b, pos) == 0) sent++;
+        n->cache.inv_waiting[i] = 0;
+        if (n->peers[i].used && n->peers[i].keyed) n->cache.inv_waiting[k++] = n->peers[i].id;
     }
-    return sent;
+    n->cache.inv_active = k ? 1 : 0;
+    n->cache.inv_retries = P2P_CACHE_INV_RETRIES;
+    n->cache.inv_tick = now(h);
+    return cache_inv_send(n, h, 0);
+}
+
+int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key) {
+    const p2p_item_t* it;
+    if (!n || !key) return -1;
+    it = p2p_get_local(n, key);
+    return p2p_cache_invalidate_v(n, h, key, it ? it->version : cache_fence_of(n, key) + 1U);
+}
+
+/* Fill with a known version: refused when a fence covers it (a stale
+ * value arriving after an invalidation). */
+int p2p_cache_put_v(p2p_node_t* n, const char* key, const char* value, uint32_t version,
+                    uint32_t ttl_ticks, uint32_t current_tick) {
+    int i;
+    if (!n || !key) return -1;
+    if (version && version <= cache_fence_of(n, key)) { n->cache.stale_refused++; return -2; }
+    if (p2p_cache_put(n, key, value, ttl_ticks, current_tick) != 0) return -1;
+    for (i = 0; i < P2P_CACHE_MAX; i++)
+        if (n->cache.entries[i].used && s_eq(n->cache.entries[i].key, key)) n->cache.entries[i].version = version;
+    return 0;
 }
 
 int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t ttl_ticks, uint32_t current_tick) {
@@ -1678,6 +1878,7 @@ int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t tt
     s_copy(n->cache.entries[slot].value, value, P2P_VAL_MAX);
     n->cache.entries[slot].expire_tick = current_tick + ttl_ticks;
     n->cache.entries[slot].hits = 0;
+    n->cache.entries[slot].version = 0;
     return 0;
 }
 
@@ -1752,7 +1953,18 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         NFIND(n->foreign > 0, degraded, "foreign", n->foreign, "non P2P frames on the segment")
         NFIND(rx_all >= 10U && n->dup * 10U > rx_all, degraded, "duplicates", n->dup, "more than 10 percent of received")
         NFIND(n->relayed > 0, degraded, "relayed", n->relayed, "a direct link is down, relay in use")
-        NFIND(n->qos.loss_count > 0, degraded, "congestion", n->qos.loss_count, "raft append loss halved the data window")
+        NFIND(n->qos.loss_count > 0, degraded, "congestion", n->qos.loss_count, "loss halved the data window")
+        NFIND(n->qos.delay_backoffs > 0, degraded, "queue-delay", n->qos.delay_backoffs, "rtt above twice the minimum, window cut by a quarter")
+        /* Statistical, not evidence: a solicited burst (raft snapshot after
+         * a cut) trips it too, seen in QEMU. Only crypto failures make the
+         * verdict suspicious. */
+        NFIND(n->anomalies > 0, degraded, "rate-anomaly", n->anomalies, "rx rate above 4x the learned baseline")
+        if (n->anomalies > 0) {
+            s_cat(out, "p2p analyze anomaly type ", cap); s_cat(out, p2p_type_name((int)n->last_anomaly_type), cap);
+            s_cat(out, " rate ", cap); cat_u(out, n->last_anomaly_rate, cap);
+            s_cat(out, " baseline_x16 ", cap); cat_u(out, n->base_rate16[n->last_anomaly_type], cap);
+            s_cat(out, "\n", cap);
+        }
 #undef NFIND
         s_cat(out, "p2p analyze ok findings ", cap); cat_u(out, (uint32_t)shown, cap);
         s_cat(out, suspicious ? " verdict suspicious\n" : degraded ? " verdict degraded\n" : " verdict healthy\n", cap);
@@ -1769,6 +1981,30 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " dup ", cap); cat_u(out, n->dup, cap);
         s_cat(out, " bad_hello ", cap); cat_u(out, n->bad_hello, cap);
         s_cat(out, " foreign ", cap); cat_u(out, n->foreign, cap);
+        s_cat(out, "\n", cap);
+    }
+    if (s_eq(what, "qos")) {
+        out[0] = 0;
+        s_cat(out, "p2p qos window ", cap); cat_u(out, n->qos.window_size, cap);
+        s_cat(out, " srtt_ms ", cap); cat_u(out, n->qos.rtt_avg_ms, cap);
+        s_cat(out, " min_rtt_ms ", cap); cat_u(out, n->qos.rtt_min_ms, cap);
+        s_cat(out, " losses ", cap); cat_u(out, n->qos.loss_count, cap);
+        s_cat(out, " ping_losses ", cap); cat_u(out, n->qos.ping_losses, cap);
+        s_cat(out, " delay_backoffs ", cap); cat_u(out, n->qos.delay_backoffs, cap);
+        s_cat(out, " rate_bps ", cap); cat_u(out, n->qos.rate_est_bps, cap);
+        s_cat(out, " high_tx ", cap); cat_u(out, n->qos.priority_high_tx, cap);
+        s_cat(out, " low_tx ", cap); cat_u(out, n->qos.priority_low_tx, cap);
+        s_cat(out, "\n", cap);
+    } else if (s_eq(what, "cache")) {
+        out[0] = 0;
+        s_cat(out, "p2p cache hits ", cap); cat_u(out, n->cache.total_hits, cap);
+        s_cat(out, " misses ", cap); cat_u(out, n->cache.total_misses, cap);
+        s_cat(out, " invalidations ", cap); cat_u(out, n->cache.invalidations, cap);
+        s_cat(out, " stale_refused ", cap); cat_u(out, n->cache.stale_refused, cap);
+        s_cat(out, " inv_completed ", cap); cat_u(out, n->cache.inv_completed, cap);
+        s_cat(out, " inv_pending ", cap); cat_u(out, n->cache.inv_active, cap);
+        s_cat(out, " inv_resent ", cap); cat_u(out, n->cache.inv_resent, cap);
+        s_cat(out, " relayed_multi ", cap); cat_u(out, n->relayed_multi, cap);
         s_cat(out, "\n", cap);
     }
     if (s_eq(what, "raft")) {

@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 367
+#define MOHHDY_SHELL_COMMAND_COUNT 368
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -209,6 +209,7 @@ static const char * const mohhdy_shell_commands[] = {
     "p2p-propose",
     "p2p-punch",
     "p2p-put",
+    "p2p-qos",
     "p2p-raft",
     "p2p-raft-compact",
     "p2p-raft-put",

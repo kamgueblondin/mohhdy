@@ -94,6 +94,12 @@ def main():
     print("Scope: translation units those tests compile. Not the guest image.")
     if failed:
         print("Unreadable .gcda: %d" % failed)
+    floor = os.environ.get("COVERAGE_MIN", "")
+    if floor:
+        if percent < float(floor):
+            print("Coverage FAIL: %.2f%% is below the floor COVERAGE_MIN=%s%%." % (percent, floor))
+            return 1
+        print("Coverage floor OK: %.2f%% >= %s%%." % (percent, floor))
     return 0
 
 

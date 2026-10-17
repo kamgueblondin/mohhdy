@@ -37,6 +37,9 @@ Elle confirme visuellement :
 ## 3. Descriptif des Prochaines Tranches d'Implémentation (Priorités 1 à 3)
 
 ### Etape 1 : Tranche 4, ce qui reste Ring 0
+- Lot 3 part de `7cfcf0b` (merge #151), PR #152. `make test-all` : 783/783. `make coverage COVERAGE_MIN=78` tourne en CI (79.82% mesure).
+- US-001 reste ouvert, plus etroit : journaux de montage et d'evenements lus par `bin/atadriver` Ring 3 (`jkread 0`), image legacy sans montage FAT Ring 0 (elle garde seulement le NIC Ring 0, noyau de comparaison). Restent Ring 0 : PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`.
+- Phase 5 (partiels, plus avances) : US-063 multi-relais (unitaire 4 noeuds), US-068/073 controleur adaptatif (QEMU), US-070 cache versionne a invalidation acquittee (QEMU), US-075 base EWMA (pas de ML). Phase 4 : US-050 IDE plein ecran dans le bureau OS-UI (partiel). Phase 3 : vrai moteur de regles CSS (cascade, specificite, heritage).
 - Lot 2 part de `708917b` (merge #149). `make test-all` : 770/770. Le compteur du lot 1 (768/768) reste dans `docs/ETAT_REEL.md`.
 - US-001 reste ouvert. IDENTIFY Ring 0 et le PIO FAT de repli ne sont lies dans aucune image. L'image legacy garde le NIC et `kernel_ring0_boot_fat_mount`. Le respawn de `bin/atadriver` (budget 4) rend le budget quand le pid publie le store, et ne rearme le canal que s'il est BSY ou DRQ. Le journal de regime permanent passe par le pilote quand l'appelant peut attendre. Restent Ring 0 : lecture du journal au boot, chargement overlay au boot, PIC, PIT, PS/2, VGA, serie, PCI, `usb_tablet`, montage FAT de boot legacy. Preuve : `make strict-image-check`, `make qemu-ata-driver` (269 s).
 - US-064 est ferme pour le journal Raft du guest (pas Paxos). InstallSnapshot, lease de leader 10 s, pre-vote, fenetre 16, compaction. Le scenario QEMU 2 coupe le fil du hub (`cut_pair`, pas `p2p-block`). Le scenario 2b installe le snapshot puis commit l'index 3. Preuve : `make qemu-p2p` (183 s).

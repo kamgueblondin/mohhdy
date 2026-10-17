@@ -144,6 +144,9 @@ void ata_job_io_cancel(void) {
     g_stats.fat_rpc_aborts++;
 }
 
+void ata_job_note_journal_kernel_read(uint32_t sectors) { g_stats.journal_kernel_pio_reads += sectors; }
+void ata_job_note_journal_install(void) { g_stats.journal_installs++; }
+
 void ata_job_note_fat_kernel_pio(uint32_t sectors, int driver_live) {
     g_stats.fat_kernel_pio_sectors += sectors;
     if (driver_live) g_stats.fat_kernel_pio_live += sectors;

@@ -290,6 +290,16 @@ def main():
     try:
         proc, client, err = boot()
         say("[foundation] second boot")
+        # US-001: on the strict image both journals come back through the
+        # Ring 3 atadriver; the kernel reads none of their sectors.
+        st = run_command(proc, client, "ata-status", "ata-status ok ")
+        for line in ("[ATA] mount journal installed by Ring 3 atadriver (restored)",
+                     "[ATA] event journal installed by Ring 3 atadriver (restored)"):
+            if line not in log_text():
+                raise RuntimeError("missing %r" % line)
+        if " jkread 0 " not in normalized(st) or " jinst 2 " not in normalized(st):
+            raise RuntimeError("boot journals read by Ring 0: %s" % st[-400:])
+        say("[foundation] journals restored by the Ring 3 atadriver, jkread 0")
         run_command(proc, client, "service-watch keep", "service-watch ok")
         chunk = run_command(proc, client, "service-event-pull", "service-event-pull ok keep")
         if " keep " not in normalized(chunk):

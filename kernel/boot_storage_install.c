@@ -7,6 +7,8 @@
 #include "fs/fat32.h"
 #include "../fs/overlay.h"
 #include "mem/string.h"
+#include "ata_job.h"
+#include "service_registry.h"
 
 void print_string(const char* str);
 void print_string_serial(const char* str);
@@ -46,6 +48,16 @@ int kernel_boot_storage_install(uint32_t kind, const uint8_t* data, uint32_t len
         kernel_fat32_bind_io();
         kernel_storage_refresh_fences();
         print_string_serial("[ATA] FAT32 boot sector installed by Ring 3 atadriver\n");
+        return 0;
+    }
+    if (kind == OS_ATA_FS_INSTALL_MOUNT_JOURNAL || kind == OS_ATA_FS_INSTALL_EVENT_JOURNAL) {
+        int which = kind == OS_ATA_FS_INSTALL_MOUNT_JOURNAL ? 0 : 1;
+        int rc = service_registry_boot_journal_install(which, data, len);
+        if (rc < 0) return -1;
+        ata_job_note_journal_install();
+        print_string_serial(which == 0 ? "[ATA] mount journal installed by Ring 3 atadriver"
+                                       : "[ATA] event journal installed by Ring 3 atadriver");
+        print_string_serial(rc == 0 ? " (restored)\n" : " (empty, defaults kept)\n");
         return 0;
     }
     if (kind == OS_ATA_FS_INSTALL_OVERLAY) {

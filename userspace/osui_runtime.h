@@ -15,6 +15,10 @@ void osui_runtime_init(void);
 int osui_is_command(const char *cmd);
 int osui_is_linux_trap(const char *cmd);
 int osui_dispatch_line(const char *line, char *out, int out_max);
+/* CSS stylesheet parser of the text renderer (rules added, rule count, errors). */
+int osui_css_parse(const char *css);
+int osui_css_rule_count(void);
+int osui_css_error_count(void);
 
 int osui_guest_command_count(void);
 

@@ -411,6 +411,7 @@ typedef struct {
 #define OS_FB_PANE_P2P 7
 #define OS_FB_PANE_COLLAB 8
 #define OS_FB_PANE_PROD 9
+#define OS_FB_PANE_IDE 10 /* US-050: full-screen pm-ide, term[] = editor frame */
 #define OS_FB_STAGE_REFLECTING 0
 #define OS_FB_STAGE_ACTING 1
 #define OS_FB_STAGE_PRESENTING 2
@@ -1168,6 +1169,10 @@ typedef struct {
 #define OS_ATA_FS_INSTALL_FAT16   1U
 #define OS_ATA_FS_INSTALL_FAT32   2U
 #define OS_ATA_FS_INSTALL_OVERLAY 3U
+#define OS_ATA_FS_INSTALL_MOUNT_JOURNAL 4U /* LBA 4222-4223, 1024 bytes */
+#define OS_ATA_FS_INSTALL_EVENT_JOURNAL 5U /* LBA 4224, 512 bytes */
+#define OS_ATA_MOUNT_JOURNAL_LBA 4222U
+#define OS_ATA_EVENT_JOURNAL_LBA 4224U
 
 /* Store flags: what the driver serves from its own code. */
 #define OS_ATA_FS_STORE_FAT16   1U
@@ -1515,6 +1520,8 @@ typedef struct {
     uint32_t boot_mount_deferred; /* 1: strict boot left FAT mount to the Ring 3 driver */
     uint32_t slave_present;       /* 1: status probe saw the slave (not IDENTIFY) */
     uint32_t supervised_respawns; /* strict image: bin/atadriver spawned again after death */
+    uint32_t journal_kernel_pio_reads; /* journal sectors read by Ring 0 PIO (strict boot: expected 0) */
+    uint32_t journal_installs;         /* boot journals handed over by the Ring 3 driver */
 } os_ata_status_t;
 #define OS_TASK_SUPERVISION_EVENT_SIZE 24U
 

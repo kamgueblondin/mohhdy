@@ -561,6 +561,32 @@ static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh
     if (body) draw_text(fb, w, h, x + 18, y + 96, body, RGB(201, 232, 223));
 }
 
+/* US-050: full-screen pm-ide. term[0] title, term[1..n-2] text rows with
+ * a line-number gutter ('>' marks the cursor line), term[n-1] status.
+ * The frame text comes from the Ring 3 editor (userspace/osui_ide.c). */
+static void draw_ide(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
+    int n = sc ? (int)sc->nterm : 0, i, ty, maxc, row_h = 20;
+    if (n > OS_FB_TERM_MAX) n = OS_FB_TERM_MAX;
+    round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 14, 18), 250);
+    stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
+    fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
+    traffic(fb, w, h, x + 8, y + 8);
+    maxc = (rw - 40) / 8;
+    if (maxc < 8) maxc = 8;
+    if (n > 0) draw_text_n(fb, w, h, x + 56, y + 12, sc->term[0], maxc - 6, RGB(232, 238, 244));
+    ty = y + 48;
+    for (i = 1; i < n - 1; i++) {
+        if (ty + row_h > y + rh - 40) break;
+        if (sc->term[i][3] == '>') fill_rect(fb, w, h, x + 10, ty - 4, rw - 20, row_h, RGB(24, 40, 48));
+        draw_text_n(fb, w, h, x + 18, ty, sc->term[i], maxc, RGB(201, 232, 223));
+        ty += row_h;
+    }
+    if (n > 1) {
+        fill_rect(fb, w, h, x + 10, y + rh - 32, rw - 20, 24, RGB(42, 36, 16));
+        draw_text_n(fb, w, h, x + 18, y + rh - 26, sc->term[n - 1], maxc, RGB(243, 230, 176));
+    }
+}
+
 static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
     int ty, term_h, i, maxc, prompt_y, n;
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 16, 20), 240);
@@ -905,6 +931,10 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     draw_stage_body(fb, w, h, scene_x + 12, scene_y + 48, scene_w - 24, scene_h - 60, sc);
 
     pane = sc->pane;
+    if (pane == OS_FB_PANE_IDE) {
+        draw_ide(fb, w, h, 8, bar_h + 8, w - 16, h - bar_h - 16, sc);
+        return;
+    }
     ptitle = pane_title(pane);
     if (ptitle) {
         int wx = 36, wy = bar_h + 28;
