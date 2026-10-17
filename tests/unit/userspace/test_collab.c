@@ -331,7 +331,7 @@ void test_marketplace_contracts_disputes_privacy_compliance(void) {
     TEST_ASSERT_EQUAL(0, collab_anonymize_id(k_id[0], 99, &blinded));
     TEST_ASSERT_NOT_EQUAL(k_id[0], blinded);
 
-    /* US-104: computed checks; signed ledger and no leak: 4/4 */
+    /* US-104: computed checks; signed ledger and no leak: 6/6 */
     TEST_ASSERT_EQUAL(0, collab_compliance_check(&g_c[0], &comp));
     TEST_ASSERT_EQUAL(1, comp.signing_on);
     TEST_ASSERT_EQUAL(1, comp.all_signed);
@@ -339,18 +339,49 @@ void test_marketplace_contracts_disputes_privacy_compliance(void) {
     TEST_ASSERT_EQUAL(100, (int)comp.compliance_score);
     TEST_ASSERT_GREATER_THAN(0, collab_compliance_report(&g_c[0], rep, sizeof(rep)));
     TEST_ASSERT_NOT_NULL(strstr(rep, "compliance signing on all_signed yes forged_applied 0 private_local yes"));
-    TEST_ASSERT_NOT_NULL(strstr(rep, "score 100 passed 4/4 (self-check, not a certification)"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "score 100 passed 6/6 (self-check, not a certification)"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "compliance verified 4/4 keys_bound yes erasure effective unerased 0"));
+    TEST_ASSERT_EQUAL(1, comp.no_forgery_accepted);
+    TEST_ASSERT_EQUAL(4, comp.verified);
+    /* Lot 9: a signature altered at rest is found by re-verification */
+    g_c[0].sig[1][5] ^= 0x40;
+    TEST_ASSERT_EQUAL(0, collab_compliance_check(&g_c[0], &comp));
+    TEST_ASSERT_EQUAL(0, comp.no_forgery_accepted);
+    TEST_ASSERT_EQUAL(1, comp.bad_signatures);
+    TEST_ASSERT_EQUAL(83, (int)comp.compliance_score);
+    g_c[0].sig[1][5] ^= 0x40;
+    /* Lot 9: erasure is checked on the stored texts */
+    TEST_ASSERT_EQUAL(0, collab_profile_set(&g_c[1], "city", "lyon", 1));
+    TEST_ASSERT_GREATER_THAN(0, collab_emit(&g_c[1], &g_h[1], CE_PROFILE, 0, 0, 0, 0, "city=lyon")); deliver();
+    TEST_ASSERT_GREATER_THAN(0, collab_forget(&g_c[1], &g_h[1])); deliver();
+    TEST_ASSERT_EQUAL(0, collab_compliance_check(&g_c[0], &comp));
+    TEST_ASSERT_EQUAL(1, comp.erasure_effective);
+    TEST_ASSERT_EQUAL(100, (int)comp.compliance_score);
+    {
+        int i;
+        for (i = 0; i < g_c[0].n; i++)
+            if (g_c[0].e[i].type == CE_PROFILE && g_c[0].e[i].origin == k_id[1]) strcpy(g_c[0].e[i].text, "city=lyon");
+    }
+    TEST_ASSERT_EQUAL(0, collab_compliance_check(&g_c[0], &comp));
+    TEST_ASSERT_EQUAL(0, comp.erasure_effective);
+    TEST_ASSERT_GREATER_THAN(0, comp.unerased);
+    {
+        int i;
+        for (i = 0; i < g_c[0].n; i++)
+            if (g_c[0].e[i].type == CE_PROFILE && g_c[0].e[i].origin == k_id[1]) strcpy(g_c[0].e[i].text, "[redacted]");
+    }
     /* a private value that leaked into a shared entry is detected */
     TEST_ASSERT_EQUAL(0, collab_profile_set(&g_c[0], "phone", "5550101", 0));
     collab_emit(&g_c[0], &g_h[0], CE_TICKET, 0, 0, 0, 0, "call me 5550101"); deliver();
     TEST_ASSERT_EQUAL(0, collab_compliance_check(&g_c[0], &comp));
     TEST_ASSERT_EQUAL(0, comp.private_kept_local);
-    TEST_ASSERT_EQUAL(75, (int)comp.compliance_score);
+    TEST_ASSERT_EQUAL(83, (int)comp.compliance_score);
     /* an unsigned node fails the signing checks */
     setup();
     TEST_ASSERT_EQUAL(0, collab_compliance_check(&g_c[0], &comp));
     TEST_ASSERT_EQUAL(0, comp.signing_on);
-    TEST_ASSERT_EQUAL(50, (int)comp.compliance_score);
+    TEST_ASSERT_EQUAL(0, comp.keys_bound);
+    TEST_ASSERT_EQUAL(33, (int)comp.compliance_score);
 }
 
 /* US-099: escrow contract; US-101: dispute decided by rulings. */

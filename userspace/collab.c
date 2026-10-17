@@ -1168,24 +1168,47 @@ int collab_anonymize_id(uint32_t raw_id, uint32_t salt, uint32_t* blinded_id) {
 }
 
 /* --------------------------------------------------- US-104 Compliance Audit */
+/* Lot 9 (US-104): every check is recomputed from the stored ledger.
+ * Signatures are verified again with the key bound to each origin (not
+ * assumed from the receive path); erasure is checked on the stored texts. */
 int collab_compliance_check(const collab_t* c, collab_compliance_t* comp) {
-    int i, k, signed_n = 0, leak = 0;
+    int i, j, k, signed_n = 0, leak = 0, bad = 0, ok = 0, unbound = 0, unerased = 0;
+    uint8_t in[SIGN_LEN];
     if (!c || !comp) return -1;
     mzero(comp, (int)sizeof(*comp));
     comp->signing_on = c->signing ? 1 : 0;
     for (i = 0; i < c->n; i++) {
-        if (c->has_sig[i]) signed_n++;
-        if (is_redacted(&c->e[i]) || c->e[i].type == CE_REDACT) comp->redactions++;
+        const collab_entry_t* e = &c->e[i];
+        const uint8_t* pk = e->origin == c->self && c->signing ? c->pk : collab_key_of(c, e->origin);
+        if (c->has_sig[i]) {
+            signed_n++;
+            sign_input(e, c->th[i], in);
+            if (pk && csig_verify(pk, in, SIGN_LEN, c->sig[i])) ok++; else bad++;
+        }
+        if (!pk) unbound++;
+        if (is_redacted(e) || e->type == CE_REDACT) comp->redactions++;
+        /* right to erasure: nothing of the origin's earlier profile texts left */
+        if (e->type == CE_REDACT)
+            for (j = 0; j < c->n; j++)
+                if (c->e[j].type == CE_PROFILE && c->e[j].origin == e->origin && c->e[j].lamport < e->lamport &&
+                    !is_redacted(&c->e[j]))
+                    unerased++;
         /* a private profile value must never travel in an entry */
         for (k = 0; k < COLLAB_FIELDS; k++)
             if (c->profile[k].key[0] && !c->profile[k].shared && c->profile[k].value[0] &&
-                str_str(c->e[i].text, c->profile[k].value)) leak = 1;
+                str_str(e->text, c->profile[k].value)) leak = 1;
     }
     comp->all_signed = c->n > 0 && signed_n == c->n;
-    comp->no_forgery_accepted = 1;     /* forged entries never enter e[] (rejected on receipt) */
+    comp->verified = ok;
+    comp->bad_signatures = bad;
+    comp->no_forgery_accepted = c->n > 0 && ok == c->n && bad == 0;
     comp->private_kept_local = !leak;
-    comp->checks = 4;
-    comp->passed = comp->signing_on + comp->all_signed + comp->no_forgery_accepted + comp->private_kept_local;
+    comp->erasure_effective = unerased == 0;
+    comp->unerased = unerased;
+    comp->keys_bound = c->n > 0 && unbound == 0;
+    comp->checks = 6;
+    comp->passed = comp->signing_on + comp->all_signed + comp->no_forgery_accepted + comp->private_kept_local +
+                   comp->erasure_effective + comp->keys_bound;
     comp->compliance_score = (uint32_t)(comp->passed * 100 / comp->checks);
     collab_key_fpr(c->pk, comp->cert_hash);
     return 0;
@@ -1197,10 +1220,16 @@ int collab_compliance_report(const collab_t* c, char* out, int cap) {
     out[0] = 0;
     s_cat(out, "compliance signing ", cap); s_cat(out, comp.signing_on ? "on" : "off", cap);
     s_cat(out, " all_signed ", cap); s_cat(out, comp.all_signed ? "yes" : "no", cap);
-    s_cat(out, " forged_applied ", cap); s_cat(out, comp.no_forgery_accepted ? "0" : "?", cap);
+    s_cat(out, " forged_applied ", cap); cat_u(out, (uint32_t)comp.bad_signatures, cap);
     s_cat(out, " private_local ", cap); s_cat(out, comp.private_kept_local ? "yes" : "no", cap);
     s_cat(out, " redactions ", cap); cat_u(out, (uint32_t)comp.redactions, cap);
     s_cat(out, " forged_rejected ", cap); cat_u(out, c->forged, cap); s_cat(out, "\n", cap);
+    s_cat(out, "compliance verified ", cap); cat_u(out, (uint32_t)comp.verified, cap);
+    s_cat(out, "/", cap); cat_u(out, (uint32_t)c->n, cap);
+    s_cat(out, " keys_bound ", cap); s_cat(out, comp.keys_bound ? "yes" : "no", cap);
+    s_cat(out, " erasure ", cap); s_cat(out, comp.erasure_effective ? "effective" : "incomplete", cap);
+    s_cat(out, " unerased ", cap); cat_u(out, (uint32_t)comp.unerased, cap); s_cat(out, "\n", cap);
+    s_cat(out, "compliance map integrity=gdpr-5.1.f erasure=gdpr-17 by-design=gdpr-25 access=gdpr-15 (collab-export)\n", cap);
     s_cat(out, "compliance key ", cap); s_cat(out, comp.cert_hash, cap);
     s_cat(out, " score ", cap); cat_u(out, comp.compliance_score, cap);
     s_cat(out, " passed ", cap); cat_u(out, (uint32_t)comp.passed, cap); s_cat(out, "/", cap); cat_u(out, (uint32_t)comp.checks, cap);

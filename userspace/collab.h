@@ -213,18 +213,23 @@ int collab_zk_prove(uint64_t secret, const char* msg, collab_zk_proof_t* out);
 /* 0 when the proof shows knowledge of log_g(y) for this message */
 int collab_zk_verify(uint64_t y, const char* msg, const collab_zk_proof_t* pr);
 
-/* US-104 compliance self-check (Lot 7: computed, not asserted). Each check
- * is a fact of the local node and ledger: entries signed by their origin,
- * no forged entry accepted, redaction available (export and forget
- * commands exist and the ledger keeps text hashes), private profile fields
- * kept local (never in a shared entry). Score = passed * 100 / checks. It
- * is a self-assessment, not a GDPR certification. */
+/* US-104 compliance self-check (Lot 7 computed, Lot 9 recomputed from the
+ * stored ledger). Six checks: signing on; every stored entry signed; every
+ * signature verifies again with the key bound to its origin (none forged
+ * or altered at rest); private profile fields never in a shared entry;
+ * erasure effective (after a redaction, no earlier profile text of that
+ * origin is left); a key bound for every origin. Score = passed * 100 /
+ * checks. Mapped to GDPR articles in the report; it is a self-assessment,
+ * not a GDPR certification. */
 typedef struct {
     int signing_on;
     int all_signed;            /* every stored entry has a signature */
-    int no_forgery_accepted;   /* forged entries rejected, none applied */
+    int no_forgery_accepted;   /* every stored signature verifies again */
     int private_kept_local;    /* no private profile field appears in a shared entry */
+    int erasure_effective;     /* redactions really removed the earlier texts */
+    int keys_bound;            /* every origin has a bound public key */
     int redactions;            /* redaction entries in the ledger */
+    int verified, bad_signatures, unerased;
     int checks, passed;
     uint32_t compliance_score;
     char cert_hash[17];        /* own public key fingerprint */
