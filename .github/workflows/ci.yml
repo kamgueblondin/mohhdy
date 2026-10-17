@@ -261,6 +261,41 @@ jobs:
           path: |
             test_logs/coverage_report.txt
 
+  p2p-mesh:
+    name: QEMU P2P four guests (multi-hop, crash, rejoin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      # US-063 two relays, US-069 relay crash + reboot + rejoin (about 2 min).
+      - name: QEMU P2P four guests (two-relay path, crash, rejoin)
+        run: make qemu-p2p-mesh
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2p-mesh-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   p2p:
     name: QEMU P2P and collab three guests
     runs-on: ubuntu-latest
