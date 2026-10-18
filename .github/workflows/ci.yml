@@ -54,9 +54,6 @@ jobs:
       - name: Strict image without Ring 0 net stack + no secrets (sizes)
         run: make strict-image-check secrets-check
 
-      - name: Run unit tests (make test-all)
-        run: make test-all
-
       # Guard: the two integration shards cover exactly the seven contracts.
       - name: Integration shard coverage (dry run)
         run: |
@@ -153,8 +150,10 @@ jobs:
       - name: QEMU aiworker Ring 3 GGUF session (hors integration-qemu)
         run: make qemu-ai-gguf
 
-      - name: QEMU phase 6 platform groundwork (HAL, screen, power, devices, migration, deploy)
-        run: make qemu-platform
+      # Lot 9 headroom: moved from integration-qemu-rest.
+      # Tranche 5 slices 1-2: net-driver gate and net IPC relay (no disk).
+      - name: QEMU Tranche 5 net-driver gate + IPC relay
+        run: make qemu-net-worker
 
       - name: Upload logs
         if: always()
@@ -189,6 +188,11 @@ jobs:
 
       - name: Build OS image
         run: make all
+
+      # Lot 9 headroom: moved from build-and-test (unit tests, registry,
+      # facade check; the coverage job also runs the unit tests).
+      - name: Run unit tests (make test-all)
+        run: make test-all
 
       - name: Phase 8 production contract (one guest)
         run: make qemu-production
@@ -245,6 +249,13 @@ jobs:
       # Measured 79.56% on 2026-10-17. The floor fails the job on a drop.
       - name: make coverage (host unit tests, gcov line floor)
         run: make coverage COVERAGE_MIN=78
+
+      # Lot 9 headroom: phase 6 platform contract moved here from ai-gguf.
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU phase 6 platform groundwork (HAL, screen, power, devices, migration, deploy)
+        run: make qemu-platform
 
       - name: Upload coverage report
         if: always()
@@ -340,7 +351,7 @@ jobs:
             test_logs/
 
   p2p:
-    name: QEMU P2P and collab three guests
+    name: QEMU P2P three guests
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -364,6 +375,38 @@ jobs:
       - name: QEMU P2P three guests (discovery, encrypted links, replication, consensus, relay)
         run: make qemu-p2p
 
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2p-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
+  # Lot 9 headroom: the collab ledger left the p2p job (12:32 in lot 8).
+  collab:
+    name: QEMU collaborative ledger three guests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
       - name: Phase 7 collaborative ledger (three guests)
         run: make qemu-collab
 
@@ -371,7 +414,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p2p-logs
+          name: collab-logs
           if-no-files-found: ignore
           path: |
             test_logs/
@@ -403,10 +446,6 @@ jobs:
 
       - name: QEMU NE2000 TLS multipair (moved from build-and-test)
         run: make qemu-ne2k-tls-multipair
-
-      # Tranche 5 slices 1-2: net-driver gate and net IPC relay (no disk).
-      - name: QEMU Tranche 5 net-driver gate + IPC relay
-        run: make qemu-net-worker
 
       - name: Upload integration logs
         if: always()

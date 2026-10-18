@@ -6,6 +6,8 @@
 #include "dosemu.h"
 #include "mobile_ui.h"
 #include "devsync.h"
+#include "p2p.h"
+#include "osui_gui.h"
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
@@ -19,6 +21,10 @@ int sys_getpid(void);
 int sys_ps(os_proc_t* out, int max_n);
 int sys_task_metrics(int pid, os_task_metrics_t* out);
 unsigned int sys_ticks(void);
+p2p_node_t* shell_p2p_node(void);
+const p2p_host_t* shell_p2p_host(void);
+void shell_p2p_poll(void);
+void shell_p2p_app(void* ctx, uint32_t from, const uint8_t* d, int len);
 
 static int g_profile = PLAT_PWR_BALANCED;
 static int g_auto;
@@ -75,7 +81,7 @@ static const char* k_cmds[] = {
     "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
     "migrate-import", "migrate-verify", "deploy-make", "deploy-apply", "deploy-verify", "admin-all",
     "sensor-read", "continuity-export", "continuity-import", "legacy-emul",
-    "mobile-ui", "devsync-set", "devsync-del", "devsync-sync", "devsync-show", 0
+    "mobile-ui", "devsync-set", "devsync-del", "devsync-sync", "devsync-show", "devsync-pull", 0
 };
 int shell_platform_is(const char* line) {
     char w[24];
@@ -394,6 +400,17 @@ static void power_line(void) {
 static mui_layout_t g_mui;
 static mui_state_t g_mui_state;
 static int g_mui_on;
+static char* g_mcap;            /* Lot 9: capture for the VBE desktop hook */
+static int g_mcap_max;
+
+static void mprint(const char* t) {
+    int n, k = 0;
+    if (!g_mcap) { print_string(t); return; }
+    n = 0;
+    while (g_mcap[n]) n++;
+    while (t[k] && n < g_mcap_max - 1) g_mcap[n++] = t[k++];
+    g_mcap[n] = 0;
+}
 
 static void mui_line(const char* what, int act) {
     g_out[0] = 0;
@@ -406,7 +423,7 @@ static void mui_line(const char* what, int act) {
     s_cat(g_out, g_mui_state.shade ? " shade 1" : " shade 0", 4096);
     s_cat(g_out, " frame ", 4096); cat_hex(g_out, mui_frame_hash(&g_mui, &g_mui_state), 4096);
     s_cat(g_out, "\n", 4096);
-    print_string(g_out);
+    mprint(g_out);
 }
 
 /* mobile-ui WxH | mobile-ui tap X Y | mobile-ui swipe X0 Y0 X1 Y1 |
@@ -426,7 +443,7 @@ static int cmd_mobile(const char* rest) {
         while (w[i] && j < 7) hs[j++] = w[i++];
         hs[j] = 0;
         W = to_int(ws, &ok1); H = to_int(hs, &ok2);
-        if (!ok1 || !ok2 || mui_layout(W, H, &g_mui) != 0) { print_string("mobile-ui error screen too small or bad size\n"); return 1; }
+        if (!ok1 || !ok2 || mui_layout(W, H, &g_mui) != 0) { mprint("mobile-ui error screen too small or bad size\n"); return 1; }
         mui_init(&g_mui_state);
         g_mui_on = 1;
         g_out[0] = 0;
@@ -440,14 +457,14 @@ static int cmd_mobile(const char* rest) {
         s_cat(g_out, " nav ", 4096); cat_u(g_out, (uint32_t)g_mui.nav_h, 4096);
         s_cat(g_out, " frame ", 4096); cat_hex(g_out, mui_frame_hash(&g_mui, &g_mui_state), 4096);
         s_cat(g_out, " input simule (no touch hardware)\n", 4096);
-        print_string(g_out);
+        mprint(g_out);
         return 0;
     }
-    if (!g_mui_on) { print_string("mobile-ui error usage: mobile-ui WxH first\n"); return 1; }
+    if (!g_mui_on) { mprint("mobile-ui error usage: mobile-ui WxH first\n"); return 1; }
     if (s_eq(w, "tap")) {
         rest = word(rest, a, 16); rest = word(rest, b, 16);
         int x = to_int(a, &ok1), y = to_int(b, &ok2);
-        if (!ok1 || !ok2) { print_string("mobile-ui error usage: mobile-ui tap X Y\n"); return 1; }
+        if (!ok1 || !ok2) { mprint("mobile-ui error usage: mobile-ui tap X Y\n"); return 1; }
         mui_line("tap", mui_tap(&g_mui_state, &g_mui, x, y));
         return 0;
     }
@@ -455,7 +472,7 @@ static int cmd_mobile(const char* rest) {
         int i, id = -1;
         rest = word(rest, a, 16);
         for (i = 0; i < MUI_APPS; i++) if (s_eq(a, mui_app_name(i))) id = i;
-        if (id < 0) { print_string("mobile-ui error unknown app\n"); return 1; }
+        if (id < 0) { mprint("mobile-ui error unknown app\n"); return 1; }
         mui_line("tap", mui_tap(&g_mui_state, &g_mui, g_mui.t[id].x + g_mui.t[id].w / 2, g_mui.t[id].y + g_mui.t[id].h / 2));
         return 0;
     }
@@ -464,7 +481,7 @@ static int cmd_mobile(const char* rest) {
         int x0, y0, x1, y1;
         rest = word(rest, a, 16); rest = word(rest, b, 16); rest = word(rest, c, 16); rest = word(rest, d, 16);
         x0 = to_int(a, &ok1); y0 = to_int(b, &ok2); x1 = to_int(c, &ok3); y1 = to_int(d, &ok4);
-        if (!ok1 || !ok2 || !ok3 || !ok4) { print_string("mobile-ui error usage: mobile-ui swipe X0 Y0 X1 Y1\n"); return 1; }
+        if (!ok1 || !ok2 || !ok3 || !ok4) { mprint("mobile-ui error usage: mobile-ui swipe X0 Y0 X1 Y1\n"); return 1; }
         p[0].x = x0; p[0].y = y0; p[0].t_ms = 0U; p[0].down = 1;
         p[1].x = (x0 + x1) / 2; p[1].y = (y0 + y1) / 2; p[1].t_ms = 80U; p[1].down = 1;
         p[2].x = x1; p[2].y = y1; p[2].t_ms = 160U; p[2].down = 1;
@@ -472,8 +489,40 @@ static int cmd_mobile(const char* rest) {
         mui_line("swipe", mui_gesture(&g_mui_state, &g_mui, p, 4));
         return 0;
     }
-    print_string("mobile-ui error usage: mobile-ui WxH | tap X Y | app NAME | swipe X0 Y0 X1 Y1\n");
+    mprint("mobile-ui error usage: mobile-ui WxH | tap X Y | app NAME | swipe X0 Y0 X1 Y1\n");
     return 1;
+}
+
+/* Lot 9 (US-077): "mobile-ui ARGS" typed on the OS-UI VBE desktop. Same
+ * state as the shell command; the frame is sent to the web pane as a
+ * display list (mui_display_list) and painted by the kernel on the LFB. */
+static os_fb_web_item_t g_mui_dl[OS_FB_WEB_ITEMS];
+
+int shell_mobile_gui(const char* args, char* out, int out_max) {
+    char title[48];
+    int rc, n, k, nt = 0;
+    if (!out || out_max <= 0) return -1;
+    out[0] = 0;
+    g_mcap = out; g_mcap_max = out_max;
+    rc = cmd_mobile(args && *args ? args : "320x448");
+    g_mcap = 0;
+    if (!g_mui_on) return rc;
+    n = mui_display_list(&g_mui, &g_mui_state, g_mui_dl, OS_FB_WEB_ITEMS);
+    if (n < 0) return 1;
+    for (k = 0; k < n; k++) if (g_mui_dl[k].kind == OS_FB_WEB_TEXT) nt++;
+    title[0] = 0;
+    s_cat(title, plat_form_name(g_mui.form), 48); s_cat(title, " ", 48);
+    s_cat(title, g_mui_state.screen == MUI_SCREEN_HOME ? "home" : g_mui_state.screen == MUI_SCREEN_APP ? mui_app_name(g_mui_state.app) : "recents", 48);
+    if (g_mui_state.shade) s_cat(title, " shade", 48);
+    osui_gui_show_items(title, g_mui_dl, n, g_mui.w, g_mui.h);
+    g_out[0] = 0;
+    s_cat(g_out, "mobile-ui vbe pane web items ", 4096); cat_u(g_out, (uint32_t)n, 4096);
+    s_cat(g_out, " text ", 4096); cat_u(g_out, (uint32_t)nt, 4096);
+    s_cat(g_out, " page ", 4096); cat_u(g_out, (uint32_t)g_mui.w, 4096); s_cat(g_out, "x", 4096); cat_u(g_out, (uint32_t)g_mui.h, 4096);
+    s_cat(g_out, " title ", 4096); s_cat(g_out, title, 4096);
+    s_cat(g_out, "\n", 4096);
+    g_mcap = out; mprint(g_out); g_mcap = 0;
+    return rc;
 }
 
 /* ------------------------------------------------ Lot 8: US-083 devsync */
@@ -504,6 +553,94 @@ static void ds_show(const char* name, ds_replica_t* r) {
     }
     s_cat(g_out, "\n", 4096);
     print_string(g_out);
+}
+
+/* Lot 9 (US-083): devsync between two guests over the phase 5 P2P link
+ * (sealed P2P_I_APP payloads, X25519 + AES-128-GCM per pair).
+ *   'D' 'Q' RDEV vv[8] (32 bytes LE)  pull request: delta of RDEV for vv
+ *   'D' 'R' RDEV text                 reply: ds_export text (sum checked)
+ * Replies are answered from the idle P2P pump, so the peer shell can sit
+ * at its prompt. One datagram per delta (at most 396 bytes of text). */
+#define DS_NET_TEXT 396
+static volatile int g_dsn_wait;          /* 1 waiting, 2 got reply */
+static uint32_t g_dsn_from;
+static char g_dsn_text[DS_NET_TEXT + 1];
+static uint32_t g_dsn_served, g_dsn_bytes_out;
+static void ds_put32(uint8_t* p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
+static uint32_t ds_get32(const uint8_t* p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
+void shell_devsync_app(uint32_t from, const uint8_t* d, int len) {
+    static uint8_t reply[400];
+    char nm[2];
+    ds_replica_t* r;
+    int i, n;
+    if (len < 3 || d[0] != 'D') return;
+    nm[0] = (char)d[2]; nm[1] = 0;
+    r = ds_dev(nm);
+    if (!r) return;
+    if (d[1] == 'Q' && len == 3 + 4 * DS_DEVICES) {
+        uint32_t vv[DS_DEVICES];
+        for (i = 0; i < DS_DEVICES; i++) vv[i] = ds_get32(d + 3 + 4 * i);
+        n = ds_export(r, vv, g_big, DS_NET_TEXT + 1);
+        if (n <= 0 || n > DS_NET_TEXT) return;          /* too large for one datagram */
+        reply[0] = 'D'; reply[1] = 'R'; reply[2] = d[2];
+        for (i = 0; i < n; i++) reply[3 + i] = (uint8_t)g_big[i];
+        if (p2p_send_app(shell_p2p_node(), shell_p2p_host(), from, reply, 3 + n) > 0) { g_dsn_served++; g_dsn_bytes_out += (uint32_t)n; }
+        return;
+    }
+    if (d[1] == 'R' && g_dsn_wait == 1 && len - 3 <= DS_NET_TEXT) {
+        for (i = 0; i < len - 3; i++) g_dsn_text[i] = (char)d[3 + i];
+        g_dsn_text[len - 3] = 0;
+        g_dsn_from = from;
+        g_dsn_wait = 2;
+    }
+}
+
+/* devsync-pull DEV PEER RDEV [SECONDS] */
+static int cmd_devsync_pull(const char* rest) {
+    char dv[8], peer[32], rd[8], sc[8];
+    uint8_t q[3 + 4 * DS_DEVICES];
+    ds_replica_t *r, *rr;
+    p2p_node_t* node = shell_p2p_node();
+    p2p_peer_t* p;
+    unsigned t0, secs = 10;
+    int i, rc;
+    rest = word(rest, dv, 8); rest = word(rest, peer, 32); rest = word(rest, rd, 8); rest = word(rest, sc, 8);
+    if (dv[0] >= 'a' && dv[0] <= 'z') dv[0] = (char)(dv[0] - 32);
+    if (rd[0] >= 'a' && rd[0] <= 'z') rd[0] = (char)(rd[0] - 32);
+    if (sc[0]) { secs = 0; for (i = 0; sc[i] >= '0' && sc[i] <= '9'; i++) secs = secs * 10U + (unsigned)(sc[i] - '0'); }
+    r = ds_dev(dv); rr = ds_dev(rd);
+    if (!r || !rr || !peer[0] || !secs || secs > 120) {
+        print_string("devsync-pull error usage: devsync-pull DEV PEER REMOTE_DEV [SECONDS]\n"); return 1;
+    }
+    if (!node->up) { print_string("devsync-pull error p2p down (p2p-up first)\n"); return 1; }
+    p = p2p_find(node, peer);
+    if (!p || !p->keyed) { print_string("devsync-pull error peer unknown or not keyed\n"); return 1; }
+    node->app = shell_p2p_app; node->app_ctx = 0;
+    q[0] = 'D'; q[1] = 'Q'; q[2] = (uint8_t)rd[0];
+    for (i = 0; i < DS_DEVICES; i++) ds_put32(q + 3 + 4 * i, r->vv[i]);
+    g_dsn_wait = 1;
+    if (p2p_send_app(node, shell_p2p_host(), p->id, q, (int)sizeof(q)) <= 0) {
+        g_dsn_wait = 0; print_string("devsync-pull error send\n"); return 1;
+    }
+    t0 = sys_ticks();
+    while (g_dsn_wait == 1 && sys_ticks() - t0 < secs * 100U) { shell_p2p_poll(); (void)sys0(SYS_YIELD); }
+    if (g_dsn_wait != 2) {
+        g_dsn_wait = 0;
+        print_string("devsync-pull error timeout (no reply or delta over one datagram)\n"); return 2;
+    }
+    g_dsn_wait = 0;
+    rc = ds_import(r, g_dsn_text);
+    g_out[0] = 0; s_cat(g_out, "devsync-pull ", 4096); s_cat(g_out, dv, 4096); s_cat(g_out, " from ", 4096);
+    s_cat(g_out, p2p_peer_name(node, g_dsn_from), 4096); s_cat(g_out, ":", 4096); s_cat(g_out, rd, 4096);
+    if (rc < 0) {
+        s_cat(g_out, rc == -2 ? " error sum\n" : " error format\n", 4096); print_string(g_out); return 1;
+    }
+    s_cat(g_out, " ok delta_bytes ", 4096); cat_u(g_out, (uint32_t)s_len(g_dsn_text), 4096);
+    s_cat(g_out, " applied ", 4096); cat_u(g_out, (uint32_t)rc, 4096);
+    s_cat(g_out, " ms ", 4096); cat_u(g_out, (sys_ticks() - t0) * 10U, 4096);
+    s_cat(g_out, " transport=p2p-sealed\n", 4096);
+    print_string(g_out);
+    return 0;
 }
 
 /* devsync-set DEV KEY VAL, devsync-del DEV KEY, devsync-sync SRC DST,
@@ -676,6 +813,7 @@ int shell_platform_line(const char* line) {
     }
     if (s_eq(cmd, "gesture")) return cmd_gesture(rest);
     if (s_eq(cmd, "mobile-ui")) return cmd_mobile(rest);
+    if (s_eq(cmd, "devsync-pull")) return cmd_devsync_pull(rest);
     if (s_eq(cmd, "devsync-set") || s_eq(cmd, "devsync-del") || s_eq(cmd, "devsync-sync") || s_eq(cmd, "devsync-show"))
         return cmd_devsync(cmd, rest);
     if (s_eq(cmd, "gesture-multi")) {

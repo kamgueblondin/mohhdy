@@ -297,6 +297,107 @@ int prod_maint_predict(const prod_metrics_t* m, const prod_alerts_t* a, prod_mai
     return 0;
 }
 
+/* ------------------------------------------- US-115 learned predictor */
+static const int32_t k_sig[33] = {
+    1, 2, 4, 6, 10, 17, 27, 45, 74, 120, 194, 311, 488, 747, 1102, 1546, 2048,
+    2550, 2994, 3349, 3608, 3785, 3902, 3976, 4022, 4051, 4069, 4079, 4086, 4090, 4092, 4094, 4095
+};
+int32_t prod_sigmoid_q12(int32_t z) {
+    int32_t u, i, f;
+    if (z <= -32768) return k_sig[0];
+    if (z >= 32768) return k_sig[32];
+    u = z + 32768;                 /* 0 .. 65536, step 0.5 = 2048 */
+    i = u >> 11; f = u & 2047;
+    if (i >= 32) return k_sig[32];
+    return k_sig[i] + (((k_sig[i + 1] - k_sig[i]) * f) >> 11);
+}
+static int32_t mm_clamp(int32_t v, int32_t lo, int32_t hi) { return v < lo ? lo : v > hi ? hi : v; }
+/* v * 4096 / d for small values, without a division instruction issue:
+ * plain 32-bit unsigned division (no libgcc needed). */
+static int32_t mm_scale(uint32_t v, uint32_t d) {
+    if (!d) return 0;
+    if (v > 1000000U) v = 1000000U;
+    return (int32_t)((v * 4096U) / d);
+}
+static int mm_failure(const prod_maint_model_t* mm, const prod_sample_t* s) {
+    uint32_t tot = s->v[PM_MEM_USED] + s->v[PM_MEM_FREE];
+    if (s->v[PM_CUSTOM] >= mm->fail_at) return 1;
+    if (mm->fail_mem_pct && tot && s->v[PM_MEM_FREE] * 100U <= tot * mm->fail_mem_pct) return 1;
+    return 0;
+}
+int prod_maint_features(const prod_metrics_t* m, const prod_maint_model_t* mm, int end, int32_t x[PROD_MM_FEAT]) {
+    const prod_sample_t *a, *b;
+    uint32_t tot;
+    int32_t d;
+    if (!m || !mm || end < PROD_MM_WIN - 1 || end >= m->n || !mm->fail_at) return -1;
+    a = at(m, end - (PROD_MM_WIN - 1)); b = at(m, end);
+    x[0] = mm_clamp(mm_scale(b->v[PM_CUSTOM], mm->fail_at), 0, 8192);
+    d = b->v[PM_CUSTOM] >= a->v[PM_CUSTOM] ? mm_scale(b->v[PM_CUSTOM] - a->v[PM_CUSTOM], mm->fail_at)
+                                           : -mm_scale(a->v[PM_CUSTOM] - b->v[PM_CUSTOM], mm->fail_at);
+    x[1] = mm_clamp(d, -8192, 8192);
+    tot = b->v[PM_MEM_USED] + b->v[PM_MEM_FREE];
+    x[2] = tot ? mm_clamp(mm_scale(b->v[PM_MEM_USED] > 1000000U ? 1000000U : b->v[PM_MEM_USED],
+                                   tot > 1000000U ? 1000000U : tot), 0, 4096) : 0;
+    x[3] = mm_clamp(mm_scale(b->v[PM_BUSY], 100U), 0, 4096);
+    x[4] = 4096;
+    return 0;
+}
+static int32_t mm_prob(const int32_t* w, const int32_t* x) {
+    int64_t z = 0;
+    int j;
+    for (j = 0; j < PROD_MM_FEAT; j++) z += (int64_t)w[j] * (int64_t)x[j];
+    z >>= 12;
+    if (z > 1000000) z = 1000000;
+    if (z < -1000000) z = -1000000;
+    return prod_sigmoid_q12((int32_t)z);
+}
+static int mm_label(const prod_metrics_t* m, const prod_maint_model_t* mm, int end) {
+    int k;
+    for (k = end + 1; k <= end + (int)mm->horizon && k < m->n; k++) if (mm_failure(mm, at(m, k))) return 1;
+    return 0;
+}
+int prod_maint_train(prod_maint_model_t* mm, const prod_metrics_t* m, uint32_t fail_at, uint32_t fail_mem_pct,
+                     uint32_t horizon, uint32_t epochs) {
+    int32_t x[PROD_MM_FEAT];
+    int i, j, last;
+    uint32_t e, pos = 0, neg = 0, nw = 0;
+    if (!mm || !m || !fail_at || !horizon || horizon > 16U || !epochs || epochs > 200U) return -1;
+    mzero(mm, (int)sizeof(*mm));
+    mm->fail_at = fail_at; mm->fail_mem_pct = fail_mem_pct; mm->horizon = horizon;
+    /* a window is usable when its horizon is fully observed and the
+     * window itself is not already failing */
+    last = m->n - 1 - (int)horizon;
+    for (i = PROD_MM_WIN - 1; i <= last; i++) {
+        if (mm_failure(mm, at(m, i))) continue;
+        nw++;
+        if (mm_label(m, mm, i)) pos++; else neg++;
+    }
+    if (nw < 8U || !pos || !neg) return -1;
+    for (e = 0; e < epochs; e++) {
+        for (i = PROD_MM_WIN - 1; i <= last; i++) {
+            int32_t p, err;
+            if (mm_failure(mm, at(m, i))) continue;
+            (void)prod_maint_features(m, mm, i, x);
+            p = mm_prob(mm->w, x);
+            err = (mm_label(m, mm, i) ? 4096 : 0) - p;
+            for (j = 0; j < PROD_MM_FEAT; j++)
+                mm->w[j] = mm_clamp(mm->w[j] + (int32_t)(((int64_t)err * x[j]) >> 13), -262144, 262144);
+        }
+    }
+    for (i = PROD_MM_WIN - 1; i <= last; i++) {
+        if (mm_failure(mm, at(m, i))) continue;
+        (void)prod_maint_features(m, mm, i, x);
+        if ((mm_prob(mm->w, x) >= 2048) == (mm_label(m, mm, i) != 0)) mm->correct++;
+    }
+    mm->windows = nw; mm->positives = pos; mm->epochs = epochs; mm->trained = 1;
+    return (int)nw;
+}
+int prod_maint_model_risk(const prod_maint_model_t* mm, const prod_metrics_t* m) {
+    int32_t x[PROD_MM_FEAT];
+    if (!mm || !mm->trained || !m || prod_maint_features(m, mm, m->n - 1, x) != 0) return -1;
+    return (int)(((uint32_t)mm_prob(mm->w, x) * 100U + 2048U) >> 12);
+}
+
 int prod_biz_metrics_get(const prod_usage_t* u, uint32_t uptime_ticks, prod_biz_metrics_t* bm) {
     if (!bm) return -1;
     mzero(bm, (int)sizeof(*bm));
@@ -478,6 +579,123 @@ int prod_sec_scan_report(const prod_sec_scan_t* s, char* out, int cap) {
 }
 
 /* ---------------------------------- US-114 Smart Alert Threshold Learning */
+/* ------------------------------------------- US-112 signature database */
+/* Built-in database (Lot 9): the four test-rogue programs of the image,
+ * identified by a byte pattern of their own code, and a sample known-bad
+ * hash. Patterns are hex so this text never matches the shell itself. */
+const char prod_secdb_builtin[] =
+    "# MOHHDY local signature database v1 (MSA = MOHHDY security advisory)\n"
+    "MSA-2026-0001 high hex 646576726f67756520756e7365616c\n"      /* sealed-key unseal attempt */
+    "MSA-2026-0002 high hex 706369726f67756520636c61696d\n"        /* PCI port claim by a non-driver */
+    "MSA-2026-0003 medium hex 617461726f677565207265676973746572\n" /* ATA service name squatting */
+    "MSA-2026-0004 medium hex 6169726f677565207265676973746572\n"  /* AI engine service squatting */
+    "MSA-2026-0005 critical fnv deadbeef 4096\n";                    /* sample known-bad file */
+const char* prod_sev_name(int sev) {
+    return sev == PROD_SEV_LOW ? "low" : sev == PROD_SEV_MEDIUM ? "medium" : sev == PROD_SEV_HIGH ? "high"
+         : sev == PROD_SEV_CRITICAL ? "critical" : "?";
+}
+uint32_t prod_sev_weight(int sev) {
+    return sev == PROD_SEV_LOW ? 5U : sev == PROD_SEV_MEDIUM ? 15U : sev == PROD_SEV_HIGH ? 30U
+         : sev == PROD_SEV_CRITICAL ? 60U : 0U;
+}
+static int db_hex(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+/* next blank-separated word; NULL when it does not fit in `cap` */
+static const char* db_word(const char* p, const char* end, char* w, int cap) {
+    int n = 0;
+    if (!p) return 0;
+    while (p < end && *p == ' ') p++;
+    while (p < end && *p != ' ') { if (n >= cap - 1) return 0; w[n++] = *p++; }
+    w[n] = 0;
+    return p;
+}
+static int db_line(const char* p, const char* end, prod_secdb_rec_t* r) {
+    char id[24], sev[12], kind[8], a[72], b[16];
+    int i, n;
+    uint32_t v;
+    mzero(r, (int)sizeof(*r));
+    p = db_word(p, end, id, (int)sizeof(id));
+    p = db_word(p, end, sev, (int)sizeof(sev));
+    p = db_word(p, end, kind, (int)sizeof(kind));
+    p = db_word(p, end, a, (int)sizeof(a));
+    p = db_word(p, end, b, (int)sizeof(b));
+    if (!p) return -1;
+    while (p < end && *p == ' ') p++;
+    if (p != end || !id[0] || s_len(id) >= (int)sizeof(r->id)) return -1;
+    if (s_eq(sev, "low")) r->severity = PROD_SEV_LOW;
+    else if (s_eq(sev, "medium")) r->severity = PROD_SEV_MEDIUM;
+    else if (s_eq(sev, "high")) r->severity = PROD_SEV_HIGH;
+    else if (s_eq(sev, "critical")) r->severity = PROD_SEV_CRITICAL;
+    else return -1;
+    s_copy(r->id, id, (int)sizeof(r->id));
+    if (s_eq(kind, "hex")) {
+        n = s_len(a);
+        if (b[0] || n < 8 || (n & 1) || n / 2 > PROD_SECDB_PAT) return -1;   /* 4 bytes at least */
+        for (i = 0; i < n; i += 2) {
+            int hi = db_hex(a[i]), lo = db_hex(a[i + 1]);
+            if (hi < 0 || lo < 0) return -1;
+            r->pat[i / 2] = (uint8_t)(hi * 16 + lo);
+        }
+        r->plen = n / 2;
+        r->kind = PROD_SIG_HEX;
+        return 0;
+    }
+    if (s_eq(kind, "fnv")) {
+        if (s_len(a) != 8 || !b[0]) return -1;
+        for (i = 0, v = 0; i < 8; i++) { int d = db_hex(a[i]); if (d < 0) return -1; v = (v << 4) | (uint32_t)d; }
+        r->hash = v;
+        for (i = 0, v = 0; b[i]; i++) { if (b[i] < '0' || b[i] > '9' || v > 100000000U) return -1; v = v * 10U + (uint32_t)(b[i] - '0'); }
+        r->size = v;
+        r->kind = PROD_SIG_FNV;
+        return 0;
+    }
+    return -1;
+}
+int prod_secdb_parse(const char* text, prod_secdb_t* db) {
+    const char* p = text;
+    if (!text || !db) return -1;
+    mzero(db, (int)sizeof(*db));
+    while (*p) {
+        const char* e = p;
+        const char* q;
+        while (*e && *e != '\n') e++;
+        q = p;
+        while (q < e && (*q == ' ' || *q == '\r')) q++;
+        if (q < e && *q != '#') {
+            const char* t = e;
+            while (t > q && (t[-1] == '\r' || t[-1] == ' ')) t--;
+            if (db->n >= PROD_SECDB_MAX) return -1;
+            if (db_line(q, t, &db->r[db->n]) == 0) db->n++;
+            else db->bad_lines++;
+        }
+        p = *e ? e + 1 : e;
+    }
+    return db->n;
+}
+int prod_secdb_match(const prod_secdb_t* db, const uint8_t* b, int len, uint32_t size, uint32_t hash,
+                     int* hits, int max) {
+    int i, j, k, n = 0;
+    if (!db || (!b && len)) return 0;
+    for (i = 0; i < db->n; i++) {
+        const prod_secdb_rec_t* r = &db->r[i];
+        int hit = 0;
+        if (r->kind == PROD_SIG_FNV) hit = r->hash == hash && r->size == size;
+        else if (r->kind == PROD_SIG_HEX) {
+            for (j = 0; j + r->plen <= len && !hit; j++) {
+                if (b[j] != r->pat[0]) continue;
+                for (k = 1; k < r->plen && b[j + k] == r->pat[k]; k++) {}
+                if (k == r->plen) hit = 1;
+            }
+        }
+        if (hit) { if (hits && n < max) hits[n] = i; n++; }
+    }
+    return n;
+}
+
 int prod_alert_learn_update(prod_alert_learn_t* al, const prod_metrics_t* m, int metric_id) {
     prod_stat_t st;
     uint32_t var_sum = 0;

@@ -10,6 +10,26 @@
 
 ## État courant vérifié
 
+## Etat courant du 17 octobre 2026 (lot 9)
+
+Living baseline. Branched from `0b6114c` (merge of pull request #157), branch `cursor/lot9-geant`, pull request #158. The lot 8 section below keeps its own counter (894/894). Plan and full inventory: [lot9_plan.md](lot9_plan.md).
+
+```text
+make test-all : 901/901 passed, 0 failed, 0 skipped
+```
+
+- CI headroom: jobs rebalanced (qemu-platform in coverage, qemu-net-worker in ai-gguf, test-all in production, new job `collab` for `make qemu-collab`); every job finishes in about 10 min or less on the 15 min budget.
+- US-067 closed: gRPC (HTTP/2 frames, HPACK subset, protobuf) carried in the application records of the guest TLS 1.2 session between two guests (`grpc-tls-serve`, `grpc-tls-call`, AES-128-GCM); the hub sees no gRPC preface, path or payload in clear. Proof: `make qemu-net-peer-tls-worker`. HPACK stays a subset.
+- US-099 closed: contract language MCL in the ledger (`collab-contract-deploy`, `collab-signoff`), compiled and evaluated deterministically on every replica (pay, refund, split, conditions on sign-offs, payee, arbiter, elapsed Lamport time). Proof: `test_collab`, `make qemu-collab`. No real money (US-097 stays simule).
+- US-104 closed as a verified self-check: six computed checks, signatures re-verified with the bound keys, erasure verified, GDPR article map. It is not a certification.
+- US-112 closed: offline signature database (built in or file), hex patterns and FNV hashes, severities (`prod-sec-db`). No online CVE feed.
+- US-115 closed: Q12 logistic regression trained in the guest on labelled windows (`prod-maint-train`, `prod-maint-predict` learned verdict).
+- US-083 closed: `devsync-pull` between two guests over the sealed P2P channel (version vector request, delta reply, last-writer-wins, equal digests, no plaintext on the wire). Proof: `make qemu-p2p` scenario 1b.
+- US-077 closed: `mobile-ui` typed on the OS-UI VBE desktop paints the phone frame through the web pane display list (`mui_display_list`), checked pixel by pixel against the pixel model in `test_mobile_ui` and on the framebuffer in `make qemu-osui-gui`. Touch input stays simule (no touch hardware).
+- US-103 closed: Schnorr NIZK in a 2048-bit group with a 256-bit subgroup (`csig_zk_*`, `collab-zk-strong`), parameters from `scripts/gen_zk_group.py` (fixed labels, re-checked in the guest), known answer test against an independent Python run. Not constant time. The 62-bit toy command `collab-zk-prove` is kept.
+- Root causes fixed: the shell prompt is written in one call (a kernel line from another task split the `ESC[0m : ` needle in the four-guest job), the collab job creates its log directory.
+- Still partial or open: see the inventory in [lot9_plan.md](lot9_plan.md) (phase 2 open, US-038/US-039, US-050, US-055, US-058, US-059/US-060, US-063, US-068/US-073, US-069, US-070, US-074, US-075, US-076, US-080, US-081, US-120 partial, US-078 and US-097 simule).
+
 ## Etat courant du 17 octobre 2026 (lot 8)
 
 Living baseline. Branched from `1de7236` (merge of pull request #156), branch `cursor/lot8-geant`, pull request #157. The lot 7 section below keeps its own counter (867/867).

@@ -6,15 +6,15 @@
 static const char* const k_types[CE_COUNT] = {
     "?", "join", "transfer", "offer", "reserve", "task", "claim", "done", "accept", "reject",
     "rate", "propose", "vote", "profile", "redact", "ticket", "answer",
-    "escrow", "settle", "dispute", "ruling", "auction", "bid", "close"
+    "escrow", "settle", "dispute", "ruling", "auction", "bid", "close", "contract", "signoff"
 };
 static const char* const k_reasons[] = {
     "ok", "not-joined", "insufficient-points", "unknown-ref", "capacity-full", "bad-state",
     "not-allowed", "wrong-result", "duplicate", "no-rating-right", "bad-amount", "table-full",
-    "bid-too-low"
+    "bid-too-low", "bad-contract"
 };
 const char* collab_type_name(int t) { return (t > 0 && t < CE_COUNT) ? k_types[t] : "?"; }
-const char* collab_reason(int r) { return (r >= 0 && r <= 12) ? k_reasons[r] : "?"; }
+const char* collab_reason(int r) { return (r >= 0 && r <= 13) ? k_reasons[r] : "?"; }
 
 static int s_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
@@ -358,12 +358,17 @@ static rating_t g_rate[32]; static int g_nrate;
 static uint32_t g_tickets, g_answered;
 typedef struct { uint32_t origin, seq; int answered; } ticket_t;
 static ticket_t g_tick[16]; static int g_ntick;
-/* Lot 7: escrow (1 open 2 released 3 refunded 4 disputed), auction (1 open 2 sold 3 unsold) */
+/* Lot 7: escrow (1 open 2 released 3 refunded 4 disputed 5 split), auction (1 open 2 sold 3 unsold) */
 typedef struct {
     uint32_t payer, seq, payee, arbiter, amount;
     int state;
     uint32_t for_payer, for_payee, voters[COLLAB_NODES];
     int nv;
+    /* Lot 9 (US-099): program, sign-offs, clause that fired */
+    int has_prog, fired;
+    uint32_t lamport0, paid_payee;
+    collab_mcl_t prog;
+    collab_mcl_facts_t facts;
 } escrow_t;
 typedef struct { uint32_t seller, seq, reserve, best, bidder; int state; uint32_t bids; } auction_t;
 static escrow_t g_esc[16]; static int g_nesc;
@@ -550,6 +555,7 @@ static int apply(collab_state_t* s, const collab_entry_t* e) {
         if (!g_tick[i].answered) g_answered++;
         g_tick[i].answered = 1;
         return 0;
+    case CE_CONTRACT:
     case CE_ESCROW:
         p = acct(s, e->peer, 0);
         if (!p || !p->joined || p == o) return 6;
@@ -557,8 +563,20 @@ static int apply(collab_state_t* s, const collab_entry_t* e) {
         if (e->amount == 0 || e->amount > 1000000U) return 10;
         if (o->balance < (int32_t)e->amount) return 2;
         if (g_nesc >= 16) return 11;
-        o->balance -= (int32_t)e->amount;                 /* locked in the contract */
         mzero(&g_esc[g_nesc], (int)sizeof(g_esc[0]));
+        if (e->type == CE_CONTRACT) {
+            int q, r2;
+            if (collab_mcl_compile(e->text, &g_esc[g_nesc].prog) != 0) return 13;
+            for (q = 0; q < g_esc[g_nesc].prog.n; q++)
+                for (r2 = 0; r2 < g_esc[g_nesc].prog.cl[q].nc; r2++)
+                    if (g_esc[g_nesc].prog.cl[q].cond[r2].kind == MCL_ARB && !e->aux) return 13;
+            g_esc[g_nesc].facts.payee = e->peer;
+            g_esc[g_nesc].facts.arbiter = e->aux;
+            g_esc[g_nesc].has_prog = 1;
+            g_esc[g_nesc].fired = -1;
+            g_esc[g_nesc].lamport0 = e->lamport;
+        }
+        o->balance -= (int32_t)e->amount;                 /* locked in the contract */
         g_esc[g_nesc].payer = e->origin; g_esc[g_nesc].seq = e->seq; g_esc[g_nesc].payee = e->peer;
         g_esc[g_nesc].arbiter = e->aux; g_esc[g_nesc].amount = e->amount; g_esc[g_nesc].state = 1;
         g_nesc++;
@@ -614,6 +632,17 @@ static int apply(collab_state_t* s, const collab_entry_t* e) {
         }
         return 0;
     }
+    case CE_SIGNOFF: {
+        escrow_t* x = escrow_of(e->peer, e->ref);
+        int v;
+        if (!x || !x->has_prog) return 3;
+        if (x->state != 1) return 5;
+        if (e->origin == x->payer) return 6;
+        for (v = 0; v < x->facts.ns; v++) if (x->facts.signers[v] == e->origin) return 8;
+        if (x->facts.ns >= COLLAB_NODES) return 11;
+        x->facts.signers[x->facts.ns++] = e->origin;
+        return 0;
+    }
     case CE_AUCTION:
         if (!e->text[0] || e->amount == 0 || e->amount > 1000000U) return 10;
         if (g_nauc >= 8) return 11;
@@ -646,6 +675,28 @@ static int apply(collab_state_t* s, const collab_entry_t* e) {
     }
 }
 
+/* Lot 9 (US-099): runs every open contract program at ledger clock
+ * `lamport` (the entry just folded); the first true clause settles. */
+static void contracts_tick(collab_state_t* s, uint32_t lamport) {
+    int i, k;
+    for (i = 0; i < g_nesc; i++) {
+        escrow_t* x = &g_esc[i];
+        collab_account_t *pe, *pa;
+        if (!x->has_prog || x->state != 1) continue;
+        x->facts.elapsed = lamport >= x->lamport0 ? lamport - x->lamport0 : 0U;
+        k = collab_mcl_eval(&x->prog, &x->facts);
+        if (k < 0) continue;
+        pe = acct(s, x->payee, 0); pa = acct(s, x->payer, 0);
+        if (!pe || !pa) continue;
+        x->fired = k;
+        if (x->prog.cl[k].action == MCL_PAY) { x->paid_payee = x->amount; x->state = 2; }
+        else if (x->prog.cl[k].action == MCL_REFUND) { x->paid_payee = 0; x->state = 3; }
+        else { x->paid_payee = x->amount * x->prog.cl[k].pct / 100U; x->state = 5; }
+        pe->balance += (int32_t)x->paid_payee;
+        pa->balance += (int32_t)(x->amount - x->paid_payee);
+    }
+}
+
 void collab_fold(collab_t* c, collab_state_t* s) {
     sha256_ctx_t h;
     uint8_t w[COLLAB_WIRE + 1];
@@ -664,6 +715,7 @@ void collab_fold(collab_t* c, collab_state_t* s) {
         int k = g_order[i], r = apply(s, &c->e[k]);
         c->status[k] = (uint8_t)r;
         if (r) s->rejected++; else s->applied++;
+        contracts_tick(s, c->e[k].lamport);
         collab_encode(&c->e[k], w); w[COLLAB_WIRE] = (uint8_t)r;
         sha256_update(&h, w, COLLAB_WIRE + 1);
     }
@@ -721,7 +773,7 @@ int collab_report(collab_t* c, const collab_host_t* h, const char* what, uint32_
         }
         s_cat(out, "collab tasks ok ", cap); cat_u(out, (uint32_t)g_ntask, cap); s_cat(out, "\n", cap);
     } else if (s_eq(what, "escrows")) {
-        static const char* const es[] = {"?", "open", "released", "refunded", "disputed"};
+        static const char* const es[] = {"?", "open", "released", "refunded", "disputed", "split"};
         for (i = 0; i < g_nesc; i++) {
             int k = find(c, g_esc[i].payer, g_esc[i].seq);
             s_cat(out, "collab escrow ", cap); s_cat(out, nm(h, g_esc[i].payer), cap); s_cat(out, "#", cap); cat_u(out, g_esc[i].seq, cap);
@@ -729,7 +781,14 @@ int collab_report(collab_t* c, const collab_host_t* h, const char* what, uint32_
             s_cat(out, "' payee ", cap); s_cat(out, nm(h, g_esc[i].payee), cap);
             s_cat(out, " arbiter ", cap); s_cat(out, g_esc[i].arbiter ? nm(h, g_esc[i].arbiter) : "none", cap);
             s_cat(out, " amount ", cap); cat_u(out, g_esc[i].amount, cap);
-            s_cat(out, " state ", cap); s_cat(out, es[g_esc[i].state >= 1 && g_esc[i].state <= 4 ? g_esc[i].state : 0], cap);
+            s_cat(out, " state ", cap); s_cat(out, es[g_esc[i].state >= 1 && g_esc[i].state <= 5 ? g_esc[i].state : 0], cap);
+            if (g_esc[i].has_prog) {
+                s_cat(out, " program clauses ", cap); cat_u(out, (uint32_t)g_esc[i].prog.n, cap);
+                s_cat(out, " signoffs ", cap); cat_u(out, (uint32_t)g_esc[i].facts.ns, cap);
+                s_cat(out, " fired ", cap);
+                if (g_esc[i].fired >= 0) cat_u(out, (uint32_t)g_esc[i].fired + 1U, cap); else s_cat(out, "none", cap);
+                s_cat(out, " to_payee ", cap); cat_u(out, g_esc[i].paid_payee, cap);
+            }
             s_cat(out, " rulings payer ", cap); cat_u(out, g_esc[i].for_payer, cap);
             s_cat(out, " payee ", cap); cat_u(out, g_esc[i].for_payee, cap); s_cat(out, "\n", cap);
         }
@@ -891,6 +950,102 @@ int collab_dispute_open(collab_t* c, const collab_host_t* h, uint32_t payer, uin
 int collab_dispute_vote(collab_t* c, const collab_host_t* h, uint32_t payer, uint32_t escrow_seq, int for_payer) {
     return collab_emit(c, h, CE_RULING, payer, escrow_seq, for_payer ? 1U : 0U, 0, for_payer ? "for payer" : "for payee");
 }
+
+/* ------------------------------------------- US-099 contract language */
+static const char* mcl_ws(const char* p) { while (*p == ' ') p++; return p; }
+static int mcl_kw(const char** pp, const char* kw) {
+    const char* p = mcl_ws(*pp);
+    int i = 0;
+    while (kw[i] && p[i] == kw[i]) i++;
+    if (kw[i]) return 0;
+    if ((p[i] >= 'a' && p[i] <= 'z')) return 0;
+    *pp = p + i;
+    return 1;
+}
+static int mcl_num(const char** pp, uint32_t* v) {
+    const char* p = mcl_ws(*pp);
+    uint32_t r = 0;
+    int any = 0;
+    while (*p >= '0' && *p <= '9') { r = r * 10U + (uint32_t)(*p - '0'); p++; any = 1; if (r > 1000000U) return 0; }
+    if (!any) return 0;
+    *v = r; *pp = p;
+    return 1;
+}
+int collab_mcl_compile(const char* src, collab_mcl_t* out) {
+    const char* p = src;
+    if (!src || !out) return -1;
+    mzero(out, (int)sizeof(*out));
+    for (;;) {
+        collab_mcl_clause_t* cl;
+        if (out->n >= COLLAB_MCL_CLAUSES) return -(int)(p - src + 1);
+        cl = &out->cl[out->n];
+        if (mcl_kw(&p, "pay")) cl->action = MCL_PAY;
+        else if (mcl_kw(&p, "refund")) cl->action = MCL_REFUND;
+        else if (mcl_kw(&p, "split")) {
+            cl->action = MCL_SPLIT;
+            if (!mcl_num(&p, &cl->pct) || cl->pct < 1U || cl->pct > 99U) return -(int)(p - src + 1);
+        } else return -(int)(mcl_ws(p) - src + 1);
+        if (!mcl_kw(&p, "if")) return -(int)(mcl_ws(p) - src + 1);
+        for (;;) {
+            collab_mcl_cond_t* cd;
+            if (cl->nc >= COLLAB_MCL_CONDS) return -(int)(p - src + 1);
+            cd = &cl->cond[cl->nc];
+            if (mcl_kw(&p, "sigs")) cd->kind = MCL_SIGS;
+            else if (mcl_kw(&p, "payee")) cd->kind = MCL_PAYEE;
+            else if (mcl_kw(&p, "arb")) cd->kind = MCL_ARB;
+            else if (mcl_kw(&p, "after")) cd->kind = MCL_AFTER;
+            else return -(int)(mcl_ws(p) - src + 1);
+            if (cd->kind == MCL_SIGS || cd->kind == MCL_AFTER) {
+                if (!mcl_num(&p, &cd->arg)) return -(int)(mcl_ws(p) - src + 1);
+                if (cd->kind == MCL_SIGS && (cd->arg == 0U || cd->arg > COLLAB_NODES)) return -(int)(p - src);
+            }
+            cl->nc++;
+            p = mcl_ws(p);
+            if (*p == '&') { p++; continue; }
+            {   /* juxtaposed conditions are also a conjunction */
+                const char* q = p;
+                if (mcl_kw(&q, "sigs") || mcl_kw(&q, "payee") || mcl_kw(&q, "arb") || mcl_kw(&q, "after")) continue;
+            }
+            break;
+        }
+        out->n++;
+        p = mcl_ws(p);
+        if (*p == ';') { p++; continue; }
+        if (mcl_kw(&p, "else")) continue;
+        if (*p) return -(int)(p - src + 1);
+        return 0;
+    }
+}
+int collab_mcl_eval(const collab_mcl_t* prog, const collab_mcl_facts_t* f) {
+    int i, j, k;
+    if (!prog || !f) return -1;
+    for (i = 0; i < prog->n; i++) {
+        const collab_mcl_clause_t* cl = &prog->cl[i];
+        int ok = cl->nc > 0;
+        for (j = 0; j < cl->nc && ok; j++) {
+            const collab_mcl_cond_t* cd = &cl->cond[j];
+            if (cd->kind == MCL_PAYEE || cd->kind == MCL_ARB) {
+                uint32_t who = cd->kind == MCL_PAYEE ? f->payee : f->arbiter;
+                int found = 0;
+                for (k = 0; k < f->ns; k++) if (who && f->signers[k] == who) found = 1;
+                ok = found;
+            } else if (cd->kind == MCL_SIGS) ok = (uint32_t)f->ns >= cd->arg;
+            else if (cd->kind == MCL_AFTER) ok = f->elapsed >= cd->arg;
+            else ok = 0;
+        }
+        if (ok) return i;
+    }
+    return -1;
+}
+int collab_contract_deploy(collab_t* c, const collab_host_t* h, uint32_t payee, uint32_t arbiter, uint32_t amount,
+                           const char* program) {
+    collab_mcl_t tmp;
+    if (!program || s_len(program) >= COLLAB_TEXT || collab_mcl_compile(program, &tmp) != 0) return -1;
+    return collab_emit(c, h, CE_CONTRACT, payee, 0, amount, arbiter, program);
+}
+int collab_contract_signoff(collab_t* c, const collab_host_t* h, uint32_t payer, uint32_t contract_seq) {
+    return collab_emit(c, h, CE_SIGNOFF, payer, contract_seq, 0, 0, "signoff");
+}
 int collab_auction_open(collab_t* c, const collab_host_t* h, const char* item, uint32_t reserve) {
     char t[COLLAB_TEXT];
     s_copy(t, item ? item : "", COLLAB_TEXT);
@@ -1013,24 +1168,47 @@ int collab_anonymize_id(uint32_t raw_id, uint32_t salt, uint32_t* blinded_id) {
 }
 
 /* --------------------------------------------------- US-104 Compliance Audit */
+/* Lot 9 (US-104): every check is recomputed from the stored ledger.
+ * Signatures are verified again with the key bound to each origin (not
+ * assumed from the receive path); erasure is checked on the stored texts. */
 int collab_compliance_check(const collab_t* c, collab_compliance_t* comp) {
-    int i, k, signed_n = 0, leak = 0;
+    int i, j, k, signed_n = 0, leak = 0, bad = 0, ok = 0, unbound = 0, unerased = 0;
+    uint8_t in[SIGN_LEN];
     if (!c || !comp) return -1;
     mzero(comp, (int)sizeof(*comp));
     comp->signing_on = c->signing ? 1 : 0;
     for (i = 0; i < c->n; i++) {
-        if (c->has_sig[i]) signed_n++;
-        if (is_redacted(&c->e[i]) || c->e[i].type == CE_REDACT) comp->redactions++;
+        const collab_entry_t* e = &c->e[i];
+        const uint8_t* pk = e->origin == c->self && c->signing ? c->pk : collab_key_of(c, e->origin);
+        if (c->has_sig[i]) {
+            signed_n++;
+            sign_input(e, c->th[i], in);
+            if (pk && csig_verify(pk, in, SIGN_LEN, c->sig[i])) ok++; else bad++;
+        }
+        if (!pk) unbound++;
+        if (is_redacted(e) || e->type == CE_REDACT) comp->redactions++;
+        /* right to erasure: nothing of the origin's earlier profile texts left */
+        if (e->type == CE_REDACT)
+            for (j = 0; j < c->n; j++)
+                if (c->e[j].type == CE_PROFILE && c->e[j].origin == e->origin && c->e[j].lamport < e->lamport &&
+                    !is_redacted(&c->e[j]))
+                    unerased++;
         /* a private profile value must never travel in an entry */
         for (k = 0; k < COLLAB_FIELDS; k++)
             if (c->profile[k].key[0] && !c->profile[k].shared && c->profile[k].value[0] &&
-                str_str(c->e[i].text, c->profile[k].value)) leak = 1;
+                str_str(e->text, c->profile[k].value)) leak = 1;
     }
     comp->all_signed = c->n > 0 && signed_n == c->n;
-    comp->no_forgery_accepted = 1;     /* forged entries never enter e[] (rejected on receipt) */
+    comp->verified = ok;
+    comp->bad_signatures = bad;
+    comp->no_forgery_accepted = c->n > 0 && ok == c->n && bad == 0;
     comp->private_kept_local = !leak;
-    comp->checks = 4;
-    comp->passed = comp->signing_on + comp->all_signed + comp->no_forgery_accepted + comp->private_kept_local;
+    comp->erasure_effective = unerased == 0;
+    comp->unerased = unerased;
+    comp->keys_bound = c->n > 0 && unbound == 0;
+    comp->checks = 6;
+    comp->passed = comp->signing_on + comp->all_signed + comp->no_forgery_accepted + comp->private_kept_local +
+                   comp->erasure_effective + comp->keys_bound;
     comp->compliance_score = (uint32_t)(comp->passed * 100 / comp->checks);
     collab_key_fpr(c->pk, comp->cert_hash);
     return 0;
@@ -1042,10 +1220,16 @@ int collab_compliance_report(const collab_t* c, char* out, int cap) {
     out[0] = 0;
     s_cat(out, "compliance signing ", cap); s_cat(out, comp.signing_on ? "on" : "off", cap);
     s_cat(out, " all_signed ", cap); s_cat(out, comp.all_signed ? "yes" : "no", cap);
-    s_cat(out, " forged_applied ", cap); s_cat(out, comp.no_forgery_accepted ? "0" : "?", cap);
+    s_cat(out, " forged_applied ", cap); cat_u(out, (uint32_t)comp.bad_signatures, cap);
     s_cat(out, " private_local ", cap); s_cat(out, comp.private_kept_local ? "yes" : "no", cap);
     s_cat(out, " redactions ", cap); cat_u(out, (uint32_t)comp.redactions, cap);
     s_cat(out, " forged_rejected ", cap); cat_u(out, c->forged, cap); s_cat(out, "\n", cap);
+    s_cat(out, "compliance verified ", cap); cat_u(out, (uint32_t)comp.verified, cap);
+    s_cat(out, "/", cap); cat_u(out, (uint32_t)c->n, cap);
+    s_cat(out, " keys_bound ", cap); s_cat(out, comp.keys_bound ? "yes" : "no", cap);
+    s_cat(out, " erasure ", cap); s_cat(out, comp.erasure_effective ? "effective" : "incomplete", cap);
+    s_cat(out, " unerased ", cap); cat_u(out, (uint32_t)comp.unerased, cap); s_cat(out, "\n", cap);
+    s_cat(out, "compliance map integrity=gdpr-5.1.f erasure=gdpr-17 by-design=gdpr-25 access=gdpr-15 (collab-export)\n", cap);
     s_cat(out, "compliance key ", cap); s_cat(out, comp.cert_hash, cap);
     s_cat(out, " score ", cap); cat_u(out, comp.compliance_score, cap);
     s_cat(out, " passed ", cap); cat_u(out, (uint32_t)comp.passed, cap); s_cat(out, "/", cap); cat_u(out, (uint32_t)comp.checks, cap);

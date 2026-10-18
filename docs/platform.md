@@ -48,3 +48,13 @@ code, toolchain or image exists in this tree, and the HAL says so
 * `tests/integration/test_qemu_platform.py` (`make qemu-platform`): every
   command above in one i386 guest, including the refusal paths (ARM port,
   bad size, unknown device, changed deploy source, tampered archive).
+
+## Lot 9
+
+- US-077 on screen: `mobile-ui ARGS` typed on the OS-UI VBE desktop (`gui`)
+  shows the phone frame in the web pane. `mui_display_list` turns the mobile
+  state into RECT and TEXT items; `test_mobile_ui` rasterizes them and compares
+  every pixel with `mui_pixel`; `make qemu-osui-gui` checks the framebuffer
+  (wallpaper 320x368 around 8 icons of 64x64, then the green app bar 320x48
+  after `mobile-ui app chat`). Touch input stays simule (typed commands).
+- US-083 between guests: see docs/p2p.md (`devsync-pull`).

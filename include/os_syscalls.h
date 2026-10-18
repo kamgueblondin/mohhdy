@@ -366,6 +366,16 @@
  * data = src_ip[4] src_mac[6] payload, length = 10 + payload, or 0. */
 #define OS_PEER_P2P_SEND 10U
 #define OS_PEER_P2P_RECV 11U
+/* Lot 9 (US-067): raw application data on an established guest-guest
+ * TLS 1.2 session, so a guest protocol (gRPC over HTTP/2) runs inside TLS.
+ * slot 0 = server session (SYS_PEER_LISTEN/ACCEPT, SYS_PEER_TLS_POLL up to
+ * Finished), slot 1 = client session (ai-acquire + ai-tls-poll,
+ * TLS_COMPLETE). TLS_SEND: one application_data record of `length` bytes
+ * (at most OS_PEER_TLS_APP_MAX). TLS_RECV: polls up to `attempts` frames;
+ * 0 = one opened record in data[0..length), 1 = nothing yet. */
+#define OS_PEER_TLS_APP_SEND 12U
+#define OS_PEER_TLS_APP_RECV 13U
+#define OS_PEER_TLS_APP_MAX 512U
 #define OS_PEER_WEB_SLOTS 4U
 #define OS_PEER_SLOT_FREE 0U
 #define OS_PEER_SLOT_LISTEN 1U
