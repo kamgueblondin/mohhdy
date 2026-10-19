@@ -267,4 +267,5 @@ typedef struct {
     char next[256];              /* stories not done, in file order */
 } prod_roadmap_t;
 int prod_roadmap_parse(const char* text, int len, prod_roadmap_t* rm);
+int prod_roadmap_eval(const prod_roadmap_t* rm, uint32_t* total_done, uint32_t* total_entries, uint32_t* pct);
 #endif

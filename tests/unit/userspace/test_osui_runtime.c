@@ -1137,6 +1137,29 @@ void test_css_parser_rules_and_errors(void) {
     TEST_ASSERT_EQUAL(1, osui_css_parse("p{color:red"));
 }
 
+static void test_all_browser_and_osui_commands_dispatch(void) {
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("browser-tab-new http://example.local/page1"));
+    TEST_ASSERT_EQUAL(0, run_line("browser-tab-list"));
+    TEST_ASSERT(strstr(g_out, "count=1") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-storage-set pref theme_dark"));
+    TEST_ASSERT_EQUAL(0, run_line("browser-storage-get pref"));
+    TEST_ASSERT(strstr(g_out, "value=theme_dark") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("tab-storage pref"));
+    TEST_ASSERT(strstr(g_out, "value=theme_dark") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("mcp-list"));
+    TEST_ASSERT_EQUAL(0, run_line("mcp-status"));
+    TEST_ASSERT_EQUAL(0, run_line("osui-model status"));
+    TEST_ASSERT_EQUAL(0, run_line("osui-provider status"));
+    TEST_ASSERT_EQUAL(0, run_line("osui-telemetry status"));
+    TEST_ASSERT_EQUAL(0, run_line("osui-audit"));
+    TEST_ASSERT_EQUAL(0, run_line("media-status"));
+    TEST_ASSERT_EQUAL(0, run_line("origin-status"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bridge_flags);
@@ -1172,6 +1195,7 @@ int main(void) {
     RUN_TEST(test_multi_origin_security_and_p2p_socket_isolation);
     RUN_TEST(test_telemetry_pwa_and_media);
     RUN_TEST(test_html_css_rendering);
+    RUN_TEST(test_all_browser_and_osui_commands_dispatch);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

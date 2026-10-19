@@ -120,5 +120,6 @@ int pm_assist(const char* src, int len, const pm_host_t* host, char* out, int ca
 int pm_crl_has(const char* crl, int len, const unsigned char* digest);
 /* Returns the new length (unchanged if already listed) or PM_ERR_LIMIT. */
 int pm_crl_add(char* crl, int len, int cap, const unsigned char* digest);
+int pm_ca_rotate_status(int rotation_count, char* out, int cap);
 
 #endif

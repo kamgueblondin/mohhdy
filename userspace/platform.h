@@ -54,6 +54,7 @@ typedef struct {
     int charging;
 } plat_sensors_t;
 int plat_sensor_read(plat_sensors_t* s);
+int plat_sensor_tick(plat_sensors_t* s, uint32_t ticks);
 int plat_sensor_report(const plat_sensors_t* s, char* out, int cap);
 
 /* ---- energy (US-081) ---- */

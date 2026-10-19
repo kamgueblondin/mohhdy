@@ -893,6 +893,15 @@ static const char* str_str(const char* haystack, const char* needle) {
     return 0;
 }
 
+int collab_pay_convert(uint32_t points, const char* target_currency, uint32_t fee_bps, uint32_t* converted_amount, uint32_t* fee_amount) {
+    uint32_t raw = 0U;
+    int rc = collab_point_convert(points, target_currency, &raw);
+    if (rc != 0 || !converted_amount || !fee_amount) return -1;
+    *fee_amount = (raw * fee_bps) / 10000U;
+    *converted_amount = raw > *fee_amount ? raw - *fee_amount : 0U;
+    return 0;
+}
+
 int collab_market_search(collab_t* c, const collab_host_t* h, const char* query, char* out, int cap) {
     static collab_state_t st;
     int i, count = 0;

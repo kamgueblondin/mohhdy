@@ -510,9 +510,21 @@ void test_maint_learned_model(void) {
     TEST_ASSERT_EQUAL(-1, prod_maint_model_risk(&mm, &m));
 }
 
+static void test_roadmap_eval(void) {
+    prod_roadmap_t rm;
+    uint32_t done = 0, total = 0, pct = 0;
+    const char *text = "US-001 1 done ok\nUS-002 1 open todo\n";
+    TEST_ASSERT_EQUAL(2, prod_roadmap_parse(text, (int)strlen(text), &rm));
+    TEST_ASSERT_EQUAL(0, prod_roadmap_eval(&rm, &done, &total, &pct));
+    TEST_ASSERT_EQUAL(1, done);
+    TEST_ASSERT_EQUAL(2, total);
+    TEST_ASSERT_EQUAL(50, pct);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
+    RUN_TEST(test_roadmap_eval);
     RUN_TEST(test_metrics_ring_stats_and_prediction);
     RUN_TEST(test_alerts_for_n_dedupe_and_hysteresis);
     RUN_TEST(test_log_analysis);

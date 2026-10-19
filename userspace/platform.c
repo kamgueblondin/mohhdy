@@ -116,6 +116,17 @@ int plat_sensor_read(plat_sensors_t* s) {
     s->charging = 1;
     return 0;
 }
+int plat_sensor_tick(plat_sensors_t* s, uint32_t ticks) {
+    if (!s) return -1;
+    if (!s->charging && s->battery_pct > 0) {
+        uint32_t drop = ticks / 1000U;
+        if (drop > 0) {
+            s->battery_pct = (int)s->battery_pct - (int)drop;
+            if (s->battery_pct < 0) s->battery_pct = 0;
+        }
+    }
+    return 0;
+}
 int plat_sensor_report(const plat_sensors_t* s, char* out, int cap) {
     if (!s || !out) return -1;
     out[0] = 0;

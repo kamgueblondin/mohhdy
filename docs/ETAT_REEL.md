@@ -10,6 +10,21 @@
 
 ## État courant vérifié
 
+## Etat courant du 19 octobre 2026 (lot 10)
+
+Living baseline. Branched from `600fcfa` (merge of pull request #158), branch `cursor/lot10-geant`, pull request #159. Plan: [lot10_plan.md](lot10_plan.md).
+
+```text
+make test-all : 902/902 passed, 0 failed, 0 skipped
+```
+
+- US-039: Full CSP directive enforcement in `userspace/webrt.c` (`webrt_csp_enforce`). Evaluates script, style, image and fetch resource permissions against origin.
+- US-059/060: CA Key Rotation and Revocation status helper in `userspace/promptmessage.c` (`pm_ca_rotate_status`).
+- US-078/081: Dynamic sensor discharge simulation on tick cycles in `userspace/platform.c` (`plat_sensor_tick`).
+- US-097: Dynamic points conversion with fee percentage computation in `userspace/collab.c` (`collab_pay_convert`).
+- US-120: Dynamic roadmap evaluation with FNV checksum calculation in `userspace/prod.c` (`prod_roadmap_eval`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest.
+
 ## Etat courant du 17 octobre 2026 (lot 9)
 
 Living baseline. Branched from `0b6114c` (merge of pull request #157), branch `cursor/lot9-geant`, pull request #158. The lot 8 section below keeps its own counter (894/894). Plan and full inventory: [lot9_plan.md](lot9_plan.md).

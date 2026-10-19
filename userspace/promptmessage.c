@@ -1218,3 +1218,29 @@ int pm_crl_add(char* crl, int len, int cap, const unsigned char* digest) {
     crl[len + need - 1] = '\n';
     return len + need;
 }
+
+int pm_ca_rotate_status(int rotation_count, char* out, int cap) {
+    int p = 0;
+    if (!out || cap <= 0) return -1;
+    out[0] = 0;
+    {
+        const char *head = "pm-ca-rotate status=ok rotations=";
+        int i = 0;
+        while (head[i] && p < cap - 1) out[p++] = head[i++];
+    }
+    {
+        char num[16];
+        int k = 0, v = rotation_count < 0 ? 0 : rotation_count;
+        if (v == 0) { num[k++] = '0'; }
+        else {
+            char rev[16]; int r = 0;
+            while (v && r < 15) { rev[r++] = (char)('0' + (v % 10)); v /= 10; }
+            while (r) num[k++] = rev[--r];
+        }
+        num[k] = 0;
+        for (int i = 0; num[i] && p < cap - 1; i++) out[p++] = num[i];
+    }
+    if (p < cap - 1) out[p++] = '\n';
+    out[p] = 0;
+    return p;
+}
