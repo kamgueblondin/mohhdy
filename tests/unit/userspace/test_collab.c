@@ -711,6 +711,12 @@ void test_contract_language_in_the_ledger(void) {
     same_digest();
 }
 
+static void test_collab_pay_convert_fee(void) {
+    uint32_t conv = 0, fee = 0;
+    TEST_ASSERT_EQUAL(0, collab_pay_convert(100, "USD", 500, &conv, &fee));
+    TEST_ASSERT_EQUAL(10, conv + fee);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_zk_schnorr_proof);
@@ -732,6 +738,7 @@ int main(void) {
     RUN_TEST(test_payment_conversion_escrow_and_ticket_routing);
     RUN_TEST(test_collab_consolidation_and_fallback);
     RUN_TEST(test_crypto_schnorr_pbkdf2_aes_gcm_pipeline);
+    RUN_TEST(test_collab_pay_convert_fee);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

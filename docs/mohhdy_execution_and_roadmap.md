@@ -9,7 +9,7 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 
 ### Suite de Tests
 - `make test-all` rejoue la suite de non-regression sur l'arbre courant :
-  - **770 tests executes / 770 tests reussis** (0 echec, 0 ignore). Journal `test_logs/test_results_20261015_112957.log`. Le compteur 766/766 du 14 octobre reste historique.
+  - **902 tests executes / 902 tests reussis** (0 echec, 0 ignore).
   - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. Couverture hote mesuree par `make coverage` : 79.55% de lignes (24434/30716). Pas l'image guest. Pas dans `make test-all`.
 - Les compteurs plus anciens de ce fichier (563/563 et autres) decrivent la livraison de leur paragraphe, pas l'arbre courant.
 - `make strict-image-check`, `make secrets-check` et `make tree-clean-check` sont les gardes d'image et d'arbre.

@@ -178,10 +178,18 @@ static void test_a11y_audit(void) {
     TEST_ASSERT_EQUAL(0, webrt_a11y_audit("<html lang=\"fr\"><h1>a</h1><h2>b</h2><img src=x alt=\"x\"></html>", &r));
 }
 
+static void test_csp_enforce(void) {
+    webrt_csp_t p;
+    webrt_csp_parse(&p, "default-src 'self'; script-src https://cdn.mohhdy.local");
+    TEST_ASSERT_EQUAL(1, webrt_csp_enforce(&p, "https://app.mohhdy.local", "script", "https://cdn.mohhdy.local/app.js"));
+    TEST_ASSERT_EQUAL(0, webrt_csp_enforce(&p, "https://app.mohhdy.local", "script", "https://evil.org/app.js"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
     RUN_TEST(test_csp_parse_and_sources);
+    RUN_TEST(test_csp_enforce);
     RUN_TEST(test_sanitizer);
     RUN_TEST(test_sanitize_page);
     RUN_TEST(test_media_queries);

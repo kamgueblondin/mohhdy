@@ -935,3 +935,17 @@ int prod_roadmap_parse(const char* t, int len, prod_roadmap_t* rm) {
     }
     return (int)rm->entries;
 }
+
+int prod_roadmap_eval(const prod_roadmap_t* rm, uint32_t* total_done, uint32_t* total_entries, uint32_t* pct) {
+    uint32_t d = 0U, e = 0U;
+    int p;
+    if (!rm || !total_done || !total_entries || !pct) return -1;
+    for (p = 0; p < PROD_RM_PHASES; p++) {
+        d += rm->done[p];
+        e += rm->done[p] + rm->partial[p] + rm->simule[p] + rm->open[p];
+    }
+    *total_done = d;
+    *total_entries = e > 0U ? e : rm->entries;
+    *pct = *total_entries > 0U ? (d * 100U) / *total_entries : 0U;
+    return 0;
+}

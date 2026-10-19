@@ -251,6 +251,15 @@ void test_platform_consolidation_and_fallback(void) {
     TEST_ASSERT_EQUAL(-1, plat_continuity_import("INVALID_MAGIC\nfoo", &c));
 }
 
+static void test_sensor_tick_discharge(void) {
+    plat_sensors_t s;
+    plat_sensor_read(&s);
+    s.charging = 0;
+    s.battery_pct = 80;
+    plat_sensor_tick(&s, 5000);
+    TEST_ASSERT_EQUAL(75, s.battery_pct);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_hal_and_ports);
@@ -265,6 +274,7 @@ int main(void) {
     RUN_TEST(test_sensors_multi_touch_continuity_and_emul);
     RUN_TEST(test_resize_hotplug_and_admin_nodes);
     RUN_TEST(test_platform_consolidation_and_fallback);
+    RUN_TEST(test_sensor_tick_discharge);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

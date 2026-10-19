@@ -240,6 +240,7 @@ int collab_compliance_report(const collab_t* c, char* out, int cap);
 /* US-097: no payment. collab_point_convert multiplies by fixed rates
  * (simule, no exchange, no money). */
 int collab_point_convert(uint32_t points, const char* target_currency, uint32_t* converted_amount);
+int collab_pay_convert(uint32_t points, const char* target_currency, uint32_t fee_bps, uint32_t* converted_amount, uint32_t* fee_amount);
 
 /* US-105 P2P ticket routing */
 int collab_ticket_route(collab_t* c, const collab_host_t* h, uint32_t ticket_seq, uint32_t helper_id);

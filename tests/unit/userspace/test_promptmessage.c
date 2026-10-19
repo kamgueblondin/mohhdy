@@ -355,6 +355,14 @@ void test_crl_add_and_lookup(void) {
     TEST_ASSERT_EQUAL(0, pm_crl_has(crl, 40, a));
 }
 
+static void test_ca_rotate_status(void) {
+    char buf[128];
+    int len = pm_ca_rotate_status(2, buf, sizeof(buf));
+    TEST_ASSERT(len > 0);
+    TEST_ASSERT(strstr(buf, "status=ok") != NULL);
+    TEST_ASSERT(strstr(buf, "rotations=2") != NULL);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_spec_examples_run);
@@ -370,6 +378,7 @@ int main(void) {
     RUN_TEST(test_cross_compile_c99_matches_vm);
     RUN_TEST(test_assist_hints_and_lint);
     RUN_TEST(test_crl_add_and_lookup);
+    RUN_TEST(test_ca_rotate_status);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
