@@ -1003,6 +1003,11 @@ static void test_telemetry_pwa_and_media(void) {
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "browser-telemetry reset ok") != NULL);
 
+    /* PWA Manifest - Error case */
+    rc = run_line("pwa-manifest");
+    TEST_ASSERT(rc != 0);
+    TEST_ASSERT(strstr(g_out, "error=invalid_manifest") != NULL);
+
     /* PWA Manifest */
     rc = run_line("pwa-manifest TestApp app://test/start app://test/ standalone");
     TEST_ASSERT_EQUAL(0, rc);
@@ -1014,15 +1019,27 @@ static void test_telemetry_pwa_and_media(void) {
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "TestApp") != NULL);
 
+    /* PWA Run before Install -> should fail */
+    rc = run_line("pwa-run TestApp");
+    TEST_ASSERT(rc != 0);
+    TEST_ASSERT(strstr(g_out, "error=not_installed") != NULL);
+
     /* PWA Install */
     rc = run_line("pwa-install TestApp");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "status=installed") != NULL);
 
-    /* PWA Run */
+    /* PWA Run after Install */
     rc = run_line("pwa-run TestApp");
     TEST_ASSERT_EQUAL(0, rc);
     TEST_ASSERT(strstr(g_out, "pwa_name=TestApp") != NULL);
+
+    /* Verify audit log captured events */
+    rc = run_line("osui-audit");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "pwa_manifest") != NULL);
+    TEST_ASSERT(strstr(g_out, "pwa_install") != NULL);
+    TEST_ASSERT(strstr(g_out, "pwa_run") != NULL);
 
     /* Media Stream Play */
     rc = run_line("media-play audio track1");

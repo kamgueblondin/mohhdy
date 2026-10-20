@@ -208,9 +208,12 @@ static void test_vbe_p2p_collab_prod_panes(void) {
 static void test_gui_media_rendering(void) {
     setup();
     run_line("media-play audio stream1");
+    osui_stage_tick(g_out, (int)sizeof(g_out));
     osui_gui_render(g_cells);
     osui_gui_ascii_row(g_cells, 9, g_row, (int)sizeof(g_row));
     TEST_ASSERT(strstr(g_row, "MEDIA PLAY stream1") != NULL);
+    TEST_ASSERT(strstr(g_row, "type=audio") != NULL);
+    TEST_ASSERT(strstr(g_row, "ticks=1") != NULL);
 
     osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
     TEST_ASSERT(strstr(g_snap, "media=playing:stream1") != NULL);

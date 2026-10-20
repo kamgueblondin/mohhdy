@@ -10,6 +10,19 @@
 
 ## État courant vérifié
 
+## Etat courant du 20 octobre 2026 (lot 13)
+
+Living baseline. Plan: [lot13_plan.md](lot13_plan.md).
+
+```text
+make test-all : 912+ passed, 0 failed, 0 skipped
+```
+
+- US-034: Evolved PWA engine with isolated origin execution (`pwa://<app_id>`), strict manifest validation, required install verification before execution, and MCP connector access control (`mcp-auth`, `mcp-credentials`, `mcp-invoke`).
+- US-048: Enhanced freestanding media stream handling (`browser-media`, `media-play`, `media-pause`, `media-stop`, `media-stream`) with autonomous state management, tick telemetry (`telemetry_media_ticks`), and status header display on the QEMU VBE desktop.
+- US-081: Extended structured security audit logging (`osui-audit`, `audit_log_add`) tracking origin denials (`origin_denied`), MCP capability & auth violations (`mcp_capability_denied`, `mcp_auth_required`), and PWA lifecycle events (`pwa_manifest`, `pwa_install`, `pwa_run`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest.
+
 ## Etat courant du 19 octobre 2026 (lot 11)
 
 Living baseline. Plan: [lot11_plan.md](lot11_plan.md).

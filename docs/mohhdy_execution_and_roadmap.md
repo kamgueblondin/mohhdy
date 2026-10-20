@@ -9,7 +9,7 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 
 ### Suite de Tests
 - `make test-all` rejoue la suite de non-regression sur l'arbre courant :
-  - **907 tests executes / 907 tests reussis** (0 echec, 0 ignore).
+  - **912 tests executes / 912 tests reussis** (0 echec, 0 ignore).
   - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. Couverture hote mesuree par `make coverage` : 79.55% de lignes (24434/30716). Pas l'image guest. Pas dans `make test-all`.
 - Les compteurs plus anciens de ce fichier (563/563 et autres) decrivent la livraison de leur paragraphe, pas l'arbre courant.
 - `make strict-image-check`, `make secrets-check` et `make tree-clean-check` sont les gardes d'image et d'arbre.
@@ -45,6 +45,11 @@ Elle confirme visuellement :
 - **Moteur de session & Conteneurisation Onglets (US-031 / US-038)** : Evolution du conteneur d'onglets du Navigateur-OS avec persistance de session isolee par site/origine (`extract_origin_from_url`, `origin_ok`). Stockage local par onglet (`browser-storage-set`, `browser-storage-get`) chiffre sur disque (`browser-fs-save`, `browser-fs-load`).
 - **Vues d'inspection VFS & FS-as-Web (US-045)** : Integration directe de l'inspection VFS et vue du systeme de fichiers sandboxe dans les panneaux natifs OS-UI (`/browser` et `/fs`, `osui_gui_browser_inspect`, `osui_gui_vfs_inspect`).
 - **Evaluation Latence GGUF KVM (Garde 3)** : Validation du protocole de benchmark de latence KVM avec reutilisation du cache KV multi-tours (`gpt2_gguf_infer_preload_kv_cache`, `benchmark_qemu_gguf_kvm_latency.py`).
+
+### Lot 13 (20 octobre 2026) : Moteur PWA, Media Stream Freestanding & Audit de Securite
+- **Moteur PWA et Origines Isolees (US-034)** : Execution sous origines isolees `pwa://<app_id>`, verification obligatoire de manifest (`pwa-manifest`, `pwa-install`), verifications d'installation avant execution (`pwa-run`), et controle d'accès aux connecteurs MCP (`mcp-auth`, `mcp-credentials`, `mcp-invoke`).
+- **Media Stream Freestanding (US-048)** : Gestion autonome des etats de flux media (`browser-media`, `media-play`, `media-pause`, `media-stop`, `media-stream`), telemetrie (`telemetry_media_ticks`) et affichage VBE desktop QEMU.
+- **Journal d'Audit de Securite Structure (US-081)** : Traçabilite et journalisation de securite (`osui-audit`, `audit_log_add`) pour les refus d'origine (`origin_denied`), violations de capacite/authentification MCP (`mcp_capability_denied`, `mcp_auth_required`), et evenements du cycle de vie PWA (`pwa_manifest`, `pwa_install`, `pwa_run`).
 
 ### Etape 1 : Tranche 4, ce qui reste Ring 0
 - Lot 6 part de `ca04007` (merge #154), PR #155. `make test-all` : 848/848. US-001 : souris PS/2 prouvee en QEMU, Shift garde a la mort du pilote. Phase 3 : moteur web minimal en C guest (US-031), `web-perf` (US-043), `web-dom`/`web-inspect`/`web-console` (US-045), pipeline composants/`@media`/`var()`/a11y. Phase 4 : cle CA scellee par le noyau (cle de scellement par boot, simule). Phase 5 : gRPC sur TCP entre deux invites (`make qemu-grpc-guests`), lissage QoS, cache via Raft, anomalie attribuee par pair.

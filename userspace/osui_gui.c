@@ -726,15 +726,30 @@ void osui_gui_render(uint16_t *cells) {
         " guest_html_stage=false  python_facade=false  display_host=false",
         ATTR_DIM);
     if (osui_get_media_active()) {
-        char media_buf[80];
-        scpy(media_buf, 80, " [MEDIA ");
+        char media_buf[96];
+        scpy(media_buf, 96, " [MEDIA ");
         if (osui_get_media_paused()) {
-            scpy(media_buf + slen(media_buf), 80 - slen(media_buf), "PAUSED ");
+            scpy(media_buf + slen(media_buf), 96 - slen(media_buf), "PAUSED ");
         } else {
-            scpy(media_buf + slen(media_buf), 80 - slen(media_buf), "PLAY ");
+            scpy(media_buf + slen(media_buf), 96 - slen(media_buf), "PLAY ");
         }
-        scpy(media_buf + slen(media_buf), 80 - slen(media_buf), osui_get_media_title());
-        scpy(media_buf + slen(media_buf), 80 - slen(media_buf), "]");
+        scpy(media_buf + slen(media_buf), 96 - slen(media_buf), osui_get_media_title());
+        scpy(media_buf + slen(media_buf), 96 - slen(media_buf), " type=");
+        scpy(media_buf + slen(media_buf), 96 - slen(media_buf), osui_get_media_type());
+        scpy(media_buf + slen(media_buf), 96 - slen(media_buf), " ticks=");
+        /* simple num to string formatting for media ticks */
+        unsigned t = osui_get_media_ticks();
+        char num_buf[16];
+        int np = 0;
+        if (t == 0) { num_buf[np++] = '0'; }
+        else {
+            char rev[16]; int rp = 0;
+            while (t > 0) { rev[rp++] = (char)('0' + (t % 10)); t /= 10; }
+            while (rp > 0) num_buf[np++] = rev[--rp];
+        }
+        num_buf[np] = 0;
+        scpy(media_buf + slen(media_buf), 96 - slen(media_buf), num_buf);
+        scpy(media_buf + slen(media_buf), 96 - slen(media_buf), "]");
         put_text(cells, 0, 9, media_buf, ATTR_TITLE);
     }
 }
