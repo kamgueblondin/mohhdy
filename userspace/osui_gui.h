@@ -39,6 +39,8 @@ typedef int (*osui_mobile_op_t)(const char *args, char *out, int out_max);
 void osui_gui_set_mobile_op(osui_mobile_op_t fn);
 int osui_gui_show_items(const char *title, const os_fb_web_item_t *items, int n, int page_w, int page_h);
 int osui_gui_mobile_active(void);
+void osui_gui_browser_inspect(void);
+void osui_gui_vfs_inspect(const char *path);
 void osui_gui_term_reset(void);
 int osui_gui_term_count(void);
 void osui_gui_term_at(int i, char *dst, int max);

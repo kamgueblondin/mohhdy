@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Quantifie la latence GGUF locale MOHHDY sous QEMU KVM (Multiboot guest).
+"""Quantifie la latence GGUF locale MOHHDY sous QEMU KVM (Multiboot guest - Lot 12 Garde 3).
 
 Meme contrat de mesure que le benchmark TCG : horloge monotone hote avant
 chaque commande Ring 3 ``ai bonjour`` / ``ai-continue``, exclusion du boot et

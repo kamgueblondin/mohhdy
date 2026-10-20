@@ -450,8 +450,32 @@ static void test_gui_web_pipeline_sanitized(void) {
     osui_gui_set_ide_ops(0, 0, 0);
 }
 
+static void test_lot12_vfs_and_browser_inspection_views(void) {
+    char term[80];
+    setup();
+    osui_gui_term_reset();
+    osui_gui_browser_inspect();
+    TEST_ASSERT(osui_gui_term_count() >= 3);
+    osui_gui_term_at(0, term, (int)sizeof(term));
+    TEST_ASSERT(strstr(term, "Browser-OS Native Panel") != NULL);
+
+    osui_gui_term_reset();
+    osui_gui_vfs_inspect("/overlay/");
+    TEST_ASSERT(osui_gui_term_count() >= 3);
+    osui_gui_term_at(0, term, (int)sizeof(term));
+    TEST_ASSERT(strstr(term, "VFS Sandbox Inspection") != NULL);
+    TEST_ASSERT(strstr(term, "/overlay/") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("/browser"));
+    TEST_ASSERT_EQUAL_STRING("browser", osui_get_pane());
+
+    TEST_ASSERT_EQUAL(0, run_line("/fs"));
+    TEST_ASSERT_EQUAL_STRING("fs", osui_get_pane());
+}
+
 int main(void) {
     unity_init();
+    RUN_TEST(test_lot12_vfs_and_browser_inspection_views);
     RUN_TEST(test_gui_command_canonical);
     RUN_TEST(test_vga_pointer_not_ascii_desktop);
     RUN_TEST(test_scene_center_and_float);

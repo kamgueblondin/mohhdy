@@ -849,6 +849,30 @@ static void test_web_serve(void) {
     osui_test_web_open_rc = 0;
 }
 
+static void test_lot12_session_engine_and_tab_persistence(void) {
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("browser-tab-new http://site.com/dashboard"));
+    TEST_ASSERT(strstr(g_out, "tab_id=") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-origin-status"));
+    TEST_ASSERT(strstr(g_out, "active_origin=http://site.com") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-storage-set session_token tok_abc123"));
+    TEST_ASSERT(strstr(g_out, "key=session_token") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-storage-get session_token"));
+    TEST_ASSERT(strstr(g_out, "value=tok_abc123") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-fs-save /session_lot12.json"));
+    TEST_ASSERT(strstr(g_out, "encrypted=true") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-fs-load /session_lot12.json"));
+    TEST_ASSERT(strstr(g_out, "browser-fs-load ok") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-storage-get session_token"));
+    TEST_ASSERT(strstr(g_out, "value=tok_abc123") != NULL);
+}
+
 static void test_browser_tab_extensions_and_fs_web_persistence(void) {
     setup();
     TEST_ASSERT_EQUAL(0, run_line("browser-tab-new about:blank"));
@@ -1189,6 +1213,7 @@ int main(void) {
     RUN_TEST(test_osui_model);
     RUN_TEST(test_osui_provider);
     RUN_TEST(test_browser_navigation_dom_tree_and_audit);
+    RUN_TEST(test_lot12_session_engine_and_tab_persistence);
     RUN_TEST(test_browser_tab_extensions_and_fs_web_persistence);
     RUN_TEST(test_agentic_workflows_p2p_collab_prod);
     RUN_TEST(test_browser_pm_run_and_navigation);
