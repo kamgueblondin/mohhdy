@@ -2,6 +2,11 @@
 
 > **Etat reel et pilotage (20 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **912** tests reussis.
 
+## Lot 13: Moteur PWA, Media Stream Freestanding & Audit de Securite ✅ (20 octobre 2026)
+- [x] US-034 : Moteur PWA avance avec execution sous origines isolees `pwa://<app_id>`, verification de manifest (`pwa-manifest`), verifications d'installation (`pwa-install`, `pwa-run`), et controle d'accès aux connecteurs MCP (`mcp-auth`, `mcp-credentials`).
+- [x] US-048 : Flux media autonome (`browser-media`, `media-play`, `media-pause`, `media-stop`, `media-stream`) avec telemetrie de ticks (`telemetry_media_ticks`) et affichage statut dans l'entete VBE desktop.
+- [x] US-081 : Traçabilite et journalisation de securite structuree (`osui-audit`, `audit_log_add`) traquant les refus d'origine (`origin_denied`), violations MCP (`mcp_capability_denied`, `mcp_auth_required`), et evenements PWA.
+
 ## Lot 12: Moteur de session, conteneurisation Navigateur-OS & Latence GGUF KVM ✅ (20 octobre 2026)
 - [x] US-031 / US-038 : Evolution du conteneur d'onglets du Navigateur-OS avec persistance de session isolee par site/origine (`extract_origin_from_url`, `origin_ok`). Stockage local par onglet (`browser-storage-set`, `browser-storage-get`) chiffre sur disque (`browser-fs-save`, `browser-fs-load`).
 - [x] US-045 : Integration directe de l'inspection VFS et de la vue du systeme de fichiers sandboxe dans les panneaux natifs OS-UI (`/browser` et `/fs`, `osui_gui_browser_inspect`, `osui_gui_vfs_inspect`).

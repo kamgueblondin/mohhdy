@@ -1126,7 +1126,13 @@ void osui_extract_origin_from_url(const char *url, char *dst, int max) {
     } else if (s_ncmp(url, "file://", 7) == 0) {
         s_cpy(dst, max, "file://local");
     } else if (s_ncmp(url, "pwa://", 6) == 0) {
-        s_cpy(dst, max, url);
+        int i = 6;
+        while (url[i] && url[i] != '/' && url[i] != '?' && url[i] != '#' && (i < max - 1)) {
+            i++;
+        }
+        int k;
+        for (k = 0; k < i && k < max - 1; k++) dst[k] = url[k];
+        dst[k] = 0;
     } else if (s_ncmp(url, "http://", 7) == 0 || s_ncmp(url, "https://", 8) == 0) {
         int scheme_len = s_ncmp(url, "https://", 8) == 0 ? 8 : 7;
         int i = scheme_len;
@@ -1409,8 +1415,13 @@ static int cmd_browser_telemetry(char args[OSUI_MAX_ARGS][96], int narg, char *o
 
 static int cmd_pwa_manifest(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0, i;
-    const char *name = (narg > 0 && args[0][0]) ? args[0] : "MohhdyApp";
-    const char *url = (narg > 1 && args[1][0]) ? args[1] : "app://local";
+    if (narg < 2 || !args[0][0] || !args[1][0]) {
+        out_add(out, max, &p, "osui pwa-manifest error=invalid_manifest\n");
+        audit_log_add("pwa_manifest", "invalid_manifest");
+        return OSUI_ERR;
+    }
+    const char *name = args[0];
+    const char *url = args[1];
     const char *scope = (narg > 2 && args[2][0]) ? args[2] : url;
     const char *display = (narg > 3 && args[3][0]) ? args[3] : "standalone";
     osui_pwa_t *app = 0;
@@ -1435,6 +1446,7 @@ static int cmd_pwa_manifest(char args[OSUI_MAX_ARGS][96], int narg, char *out, i
     }
     if (!app) {
         out_add(out, max, &p, "osui pwa-manifest error=capacity_reached\n");
+        audit_log_add("pwa_manifest", "capacity_reached");
         return OSUI_ERR;
     }
     s_cpy(app->name, 32, name);
@@ -1442,6 +1454,7 @@ static int cmd_pwa_manifest(char args[OSUI_MAX_ARGS][96], int narg, char *out, i
     s_cpy(app->scope, 32, scope);
     s_cpy(app->theme_color, 16, "#007acc");
     s_cpy(app->display, 16, display);
+    audit_log_add("pwa_manifest", app->id);
 
     out_add(out, max, &p, "osui pwa-manifest ok id=");
     out_add(out, max, &p, app->id);
@@ -1476,6 +1489,7 @@ static int cmd_pwa_install(char args[OSUI_MAX_ARGS][96], int narg, char *out, in
         return OSUI_ERR;
     }
     app->installed = 1;
+    audit_log_add("pwa_install", app->id);
     out_add(out, max, &p, "osui pwa-install ok id=");
     out_add(out, max, &p, app->id);
     out_add(out, max, &p, " name=");
@@ -1525,9 +1539,18 @@ static int cmd_pwa_run(char args[OSUI_MAX_ARGS][96], int narg, char *out, int ma
         out_add(out, max, &p, "osui pwa-run error=not_found target=");
         out_add(out, max, &p, target);
         out_add(out, max, &p, "\n");
+        audit_log_add("pwa_run", "not_found");
+        return OSUI_ERR;
+    }
+    if (!app->installed) {
+        out_add(out, max, &p, "osui pwa-run error=not_installed target=");
+        out_add(out, max, &p, target);
+        out_add(out, max, &p, "\n");
+        audit_log_add("pwa_run", "not_installed");
         return OSUI_ERR;
     }
     G.telemetry_pwa_runs++;
+    audit_log_add("pwa_run", app->id);
     s_cpy(pwa_url, sizeof(pwa_url), "pwa://");
     s_cat(pwa_url, sizeof(pwa_url), app->id);
     s_cat(pwa_url, sizeof(pwa_url), "/main");
@@ -4265,6 +4288,7 @@ static int cmd_mcp_invoice(char args[OSUI_MAX_ARGS][96], int narg, char *out, in
     rid = new_rid();
     if (!has_cap(s, "mcp.invoice.create")) {
         journal(s->id, "mcp.invoice.create", "capability_denied", rid);
+        audit_log_add("mcp_capability_denied", "mcp.invoice.create");
         out_add(out, max, &p, "osui mcp-invoice error=capability_denied capability=mcp.invoice.create");
         emit_rid(out, max, &p, rid);
         out_add(out, max, &p, "\n");
@@ -4369,6 +4393,7 @@ static int cmd_mcp_invoke(char args[OSUI_MAX_ARGS][96], int narg, char *out, int
     if (s_cmp(tool, "mcp.payment.process") == 0 || s_cmp(tool, "mcp.document.sign") == 0) {
         if (!mcp_has_auth(tool)) {
             journal(s->id, tool, "auth_required", rid);
+            audit_log_add("mcp_auth_required", tool);
             out_add(out, max, &p, "osui mcp-invoke error=authentication_required tool=");
             out_add(out, max, &p, tool);
             out_add(out, max, &p, " status=401");
