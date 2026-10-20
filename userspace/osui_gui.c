@@ -367,6 +367,7 @@ void osui_gui_browser_inspect(void) {
     osui_gui_term_push("Browser-OS Native Panel : FS-as-web, containerized tabs, isolated storage");
     osui_gui_term_push("Tab container: active_origin=self allowed=self,http://127.0.0.1,p2p://node");
     osui_gui_term_push("DOM Tree Sandbox & JS Eval: ready (dom_simulator)");
+    osui_gui_term_push("Performance Metrics: web-perf & browser-telemetry perf active");
 }
 
 void osui_gui_vfs_inspect(const char *path) {
@@ -380,6 +381,7 @@ void osui_gui_vfs_inspect(const char *path) {
     osui_gui_term_push(line);
     osui_gui_term_push("Mount points: /initrd (ro), /overlay (rw), /fat16 (rw), /fat32 (ro)");
     osui_gui_term_push("Sandbox files: /etc/pm_ca.pub, /web_app.json, /demo/hello.txt");
+    osui_gui_term_push("Nodes: html, head, body, div#app, button#menu-toggle, form#invoice-form");
 }
 
 static void seed_shell_term(void) {
