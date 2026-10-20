@@ -91,7 +91,7 @@ static void setup(void) {
 }
 static int is_zero(const num_t* n) { int i; for (i = 0; i < n->b.length; i++) if (n->b.limbs[i]) return 0; return 1; }
 static void hash_mod_q(const uint8_t* a, int alen, const uint8_t* m, int mlen, num_t* out) {
-    sha256_ctx_t h; uint8_t d[32]; num_t t;
+    static sha256_ctx_t h; static uint8_t d[32]; static num_t t;
     sha256_init(&h); sha256_update(&h, a, (uint32_t)alen); sha256_update(&h, m, (uint32_t)mlen); sha256_final(&h, d);
     load(&t, d, 32); num(out); bigint_mod_reduce(&out->b, &t.b, &Q.b);
 }
@@ -105,7 +105,7 @@ static mont_t g_m1024, g_m2048;
 static int geq(const mont_t* m, const uint32_t* a) { int i; for (i = m->nl - 1; i >= 0; i--) { if (a[i] != m->pl[i]) return a[i] > m->pl[i]; } return 1; }
 static void subp(const mont_t* m, uint32_t* a) { uint64_t br = 0; int i; for (i = 0; i < m->nl; i++) { uint64_t d = (uint64_t)a[i] - m->pl[i] - br; a[i] = (uint32_t)d; br = (d >> 63) & 1U; } }
 static void mont_mul(const mont_t* M, uint32_t* out, const uint32_t* a, const uint32_t* b) {
-    uint32_t t[ML + 2];
+    static uint32_t t[ML + 2];
     int i, j, nl = M->nl;
     for (i = 0; i < nl + 2; i++) t[i] = 0;
     for (i = 0; i < nl; i++) {
@@ -123,12 +123,13 @@ static void mont_mul(const mont_t* M, uint32_t* out, const uint32_t* a, const ui
 }
 static void to_limbs(const mont_t* M, const num_t* n, uint32_t* l) { int i; for (i = 0; i < M->nl; i++) l[i] = i < n->b.length ? n->b.limbs[i] : 0; }
 static void from_limbs(const mont_t* M, num_t* n, const uint32_t* l) {
-    uint8_t be[4 * ML]; int i, nl = M->nl;
+    static uint8_t be[4 * ML]; int i, nl = M->nl;
     for (i = 0; i < nl; i++) { uint32_t v = l[nl - 1 - i]; be[4 * i] = (uint8_t)(v >> 24); be[4 * i + 1] = (uint8_t)(v >> 16); be[4 * i + 2] = (uint8_t)(v >> 8); be[4 * i + 3] = (uint8_t)v; }
     load(n, be, 4 * nl);
 }
 static void mont_setup(mont_t* M, const num_t* P_, int nl) {
-    uint32_t inv = 1, x[ML];
+    static uint32_t x[ML];
+    uint32_t inv = 1;
     int i, bits = 32 * nl;
     if (M->ready) return;
     M->nl = nl;
@@ -148,9 +149,9 @@ static void mont_setup(mont_t* M, const num_t* P_, int nl) {
     M->ready = 1;
 }
 static int modexp_m(const mont_t* M, const num_t* Pm, num_t* out, const num_t* base, const num_t* e) {
-    uint32_t b[ML], acc[ML], one[ML];
+    static uint32_t b[ML], acc[ML], one[ML];
+    static num_t red;
     int i, bits;
-    num_t red;
     num(&red);
     if (bigint_mod_reduce(&red.b, &base->b, &Pm->b) != 0) return -1;
     to_limbs(M, &red, b);
@@ -173,7 +174,7 @@ static int modexp(num_t* out, const num_t* base, const num_t* e) {
 }
 
 int csig_keypair(const uint8_t seed[32], uint8_t sk[CSIG_SK], uint8_t pk[CSIG_PK]) {
-    num_t x, y;
+    static num_t x, y;
     setup();
     hash_mod_q((const uint8_t*)"mohhdy-collab-key", 17, seed, 32, &x);
     if (is_zero(&x)) return -1;
@@ -183,7 +184,7 @@ int csig_keypair(const uint8_t seed[32], uint8_t sk[CSIG_SK], uint8_t pk[CSIG_PK
 }
 
 int csig_sign(const uint8_t sk[CSIG_SK], const uint8_t* msg, int len, uint8_t sig[CSIG_SIG]) {
-    num_t x, k, r, e, xe, s, tmp;
+    static num_t x, k, r, e, xe, s, tmp;
     uint8_t rb[128];
     setup();
     load(&x, sk, CSIG_SK);
@@ -203,7 +204,7 @@ int csig_sign(const uint8_t sk[CSIG_SK], const uint8_t* msg, int len, uint8_t si
 }
 
 int csig_pk_valid(const uint8_t pk[CSIG_PK]) {
-    num_t y, t, one;
+    static num_t y, t, one;
     uint8_t ob = 1;
     setup();
     load(&y, pk, CSIG_PK); load(&one, &ob, 1);
@@ -213,7 +214,7 @@ int csig_pk_valid(const uint8_t pk[CSIG_PK]) {
 }
 
 int csig_verify(const uint8_t pk[CSIG_PK], const uint8_t* msg, int len, const uint8_t sig[CSIG_SIG]) {
-    num_t y, e, s, a, b, r, tmp, e2;
+    static num_t y, e, s, a, b, r, tmp, e2;
     uint8_t rb[128];
     setup();
     load(&y, pk, CSIG_PK); load(&e, sig, 20); load(&s, sig + 20, 20);
@@ -248,11 +249,11 @@ static int zexp(num_t* out, const num_t* base, const num_t* e) { zsetup(); retur
 /* 512-bit hash of the parts, reduced mod q (bias below 2^-256) */
 static void zhash(const char* tag, const uint8_t* a, int alen, const uint8_t* b, int blen,
                   const uint8_t* c, int clen, const uint8_t* m, int mlen, num_t* out) {
-    uint8_t d[64];
-    num_t t;
+    static uint8_t d[64];
+    static num_t t;
+    static sha256_ctx_t h;
     int half;
     for (half = 0; half < 2; half++) {
-        sha256_ctx_t h;
         uint8_t ctr = (uint8_t)half;
         int tl = 0;
         while (tag[tl]) tl++;
@@ -271,7 +272,7 @@ static void zhash(const char* tag, const uint8_t* a, int alen, const uint8_t* b,
 }
 /* a*b mod p through Montgomery: (a*b/R) * R^2 / R */
 static void zmulmod(num_t* out, const num_t* a, const num_t* b) {
-    uint32_t x[ML], y[ML];
+    static uint32_t x[ML], y[ML];
     to_limbs(&g_m2048, a, x); to_limbs(&g_m2048, b, y);
     mont_mul(&g_m2048, x, x, y);
     mont_mul(&g_m2048, x, x, g_m2048.r2);
@@ -279,7 +280,7 @@ static void zmulmod(num_t* out, const num_t* a, const num_t* b) {
 }
 
 int csig_zk_group_check(void) {
-    num_t pm1, one, r, two, t;
+    static num_t pm1, one, r, two, t;
     uint8_t ob = 1, tb = 2;
     zsetup();
     load(&one, &ob, 1); load(&two, &tb, 1);
@@ -293,7 +294,7 @@ int csig_zk_group_check(void) {
 }
 
 int csig_zk_keypair(const uint8_t seed[32], uint8_t sk[CSIG_ZK_SK], uint8_t pk[CSIG_ZK_PK]) {
-    num_t x, y;
+    static num_t x, y;
     zsetup();
     zhash("zk2-key", seed, 32, 0, 0, 0, 0, 0, 0, &x);
     if (is_zero(&x)) return -1;
@@ -303,7 +304,7 @@ int csig_zk_keypair(const uint8_t seed[32], uint8_t sk[CSIG_ZK_SK], uint8_t pk[C
 }
 
 int csig_zk_prove(const uint8_t sk[CSIG_ZK_SK], const uint8_t* msg, int len, uint8_t proof[CSIG_ZK_PROOF]) {
-    num_t x, y, k, t, c, cx, s, tmp;
+    static num_t x, y, k, t, c, cx, s, tmp;
     uint8_t yb[256], tb[256], gb[256];
     zsetup();
     load(&x, sk, CSIG_ZK_SK);
@@ -322,7 +323,7 @@ int csig_zk_prove(const uint8_t sk[CSIG_ZK_SK], const uint8_t* msg, int len, uin
 }
 
 int csig_zk_verify(const uint8_t pk[CSIG_ZK_PK], const uint8_t* msg, int len, const uint8_t proof[CSIG_ZK_PROOF]) {
-    num_t y, t, s, c, one, a, b, r, chk;
+    static num_t y, t, s, c, one, a, b, r, chk;
     uint8_t ob = 1, gb[256];
     zsetup();
     load(&y, pk, CSIG_ZK_PK); load(&t, proof, 256); load(&s, proof + 256, 32); load(&one, &ob, 1);

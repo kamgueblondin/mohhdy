@@ -2660,7 +2660,7 @@ static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out,
 
     rc = pm_compile(g_osui_pm_src, len, &g_osui_pm_prog, &g_osui_pm_host);
     if (rc != PM_OK && s_ncmp(g_osui_pm_src, "print ", 6) == 0 && !s_find(g_osui_pm_src, "\"")) {
-        char auto_src[PM_SRC_MAX];
+        static char auto_src[PM_SRC_MAX];
         int ap = 0;
         out_add(auto_src, sizeof(auto_src), &ap, "print \"");
         out_add(auto_src, sizeof(auto_src), &ap, g_osui_pm_src + 6);

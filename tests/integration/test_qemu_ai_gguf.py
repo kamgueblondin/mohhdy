@@ -200,7 +200,7 @@ def contract(monitor, proc):
     # adopts the kernel mirror and finishes the session in Ring 3.
     resumed_before = s["sess_resumed"]
     _, start = base.spawn(monitor, proc, "ggufpause")
-    base.child_regex(monitor, proc, r"ggufpause waiting worker %s" % wpid, start)
+    base.child_regex(monitor, proc, r"ggufpause waiting worker %s" % wpid, start, rounds=30)
     base.kill(monitor, proc, wpid)
     wpid, wstart = base.spawn(monitor, proc, "aiworker")
     worker_gguf_ready(monitor, proc, wstart)
