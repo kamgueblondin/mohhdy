@@ -1,6 +1,11 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (19 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **907+** tests reussis.
+> **Etat reel et pilotage (20 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **912** tests reussis.
+
+## Lot 12: Moteur de session, conteneurisation Navigateur-OS & Latence GGUF KVM ✅ (20 octobre 2026)
+- [x] US-031 / US-038 : Evolution du conteneur d'onglets du Navigateur-OS avec persistance de session isolee par site/origine (`extract_origin_from_url`, `origin_ok`). Stockage local par onglet (`browser-storage-set`, `browser-storage-get`) chiffre sur disque (`browser-fs-save`, `browser-fs-load`).
+- [x] US-045 : Integration directe de l'inspection VFS et de la vue du systeme de fichiers sandboxe dans les panneaux natifs OS-UI (`/browser` et `/fs`, `osui_gui_browser_inspect`, `osui_gui_vfs_inspect`).
+- [x] Garde 3 : Validation du protocole de benchmark de latence KVM avec reutilisation du cache KV multi-tours (`gpt2_gguf_infer_preload_kv_cache`, `benchmark_qemu_gguf_kvm_latency.py`).
 
 ## Lot 11: Extensions Moteur Web, P2P Mesh Avancé & Production ✅ (19 octobre 2026)
 - [x] US-039 / US-031 : Validation dynamique des origines CSP pour images, styles et scripts lors du rendu de la liste d'affichage (`webrt_csp_validate_display_list_resource`), journalisée dans `osui-audit`.

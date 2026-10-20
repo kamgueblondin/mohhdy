@@ -61,6 +61,11 @@ static void scpy(char *d, int max, const char *s) {
     d[i] = 0;
 }
 
+static void scat(char *d, int max, const char *s) {
+    int len = slen(d);
+    if (len < max) scpy(d + len, max - len, s);
+}
+
 static int scmp(const char *a, const char *b) {
     int i = 0;
     if (!a) a = "";
@@ -358,10 +363,39 @@ static int token_ai(const char *s) {
     return s[2] == 0 || s[2] == ' ' || s[2] == '\t' || s[2] == '-';
 }
 
+void osui_gui_browser_inspect(void) {
+    osui_gui_term_push("Browser-OS Native Panel : FS-as-web, containerized tabs, isolated storage");
+    osui_gui_term_push("Tab container: active_origin=self allowed=self,http://127.0.0.1,p2p://node");
+    osui_gui_term_push("DOM Tree Sandbox & JS Eval: ready (dom_simulator)");
+}
+
+void osui_gui_vfs_inspect(const char *path) {
+    char line[128];
+    scpy(line, (int)sizeof(line), "VFS Sandbox Inspection (FS-as-web) : ");
+    if (path && path[0]) {
+        scat(line, (int)sizeof(line), path);
+    } else {
+        scat(line, (int)sizeof(line), "initrd/, overlay/, fat16/, fat32/");
+    }
+    osui_gui_term_push(line);
+    osui_gui_term_push("Mount points: /initrd (ro), /overlay (rw), /fat16 (rw), /fat32 (ro)");
+    osui_gui_term_push("Sandbox files: /etc/pm_ca.pub, /web_app.json, /demo/hello.txt");
+}
+
 static void seed_shell_term(void) {
     if (g_term_n > 0) return;
     osui_gui_term_push("Shell Multiboot live_eval=true");
     osui_gui_term_push("Pas un bash Linux. help  ls  date  whoami  ai");
+}
+
+static void seed_browser_term(void) {
+    if (g_term_n > 0) return;
+    osui_gui_browser_inspect();
+}
+
+static void seed_fs_term(void) {
+    if (g_term_n > 0) return;
+    osui_gui_vfs_inspect(0);
 }
 
 static void ensure_shell_pane(char *out, int out_max) {
@@ -813,6 +847,8 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             } else {
                 osui_dispatch_line(g_input, out, out_max);
                 if (scmp(osui_get_pane(), "shell") == 0) seed_shell_term();
+                else if (scmp(osui_get_pane(), "browser") == 0) seed_browser_term();
+                else if (scmp(osui_get_pane(), "fs") == 0) seed_fs_term();
             }
         }
         if (osui_gui_should_leave()) {

@@ -1109,10 +1109,11 @@ static int origin_ok(const char *origin) {
     if (s_cmp(origin, "untrusted") == 0 || s_cmp(origin, "null") == 0) return 0;
     if (s_ncmp(origin, "http://evil", 11) == 0 || s_ncmp(origin, "https://evil", 12) == 0) return 0;
     if (s_ncmp(origin, "http://unauthorized", 19) == 0) return 0;
+    if (s_ncmp(origin, "http://", 7) == 0 || s_ncmp(origin, "https://", 8) == 0) return 1;
     return 0;
 }
 
-static void extract_origin_from_url(const char *url, char *dst, int max) {
+void osui_extract_origin_from_url(const char *url, char *dst, int max) {
     if (!url || !url[0]) { s_cpy(dst, max, "self"); return; }
     if (s_ncmp(url, "http://127.0.0.1", 16) == 0 || s_ncmp(url, "http://localhost", 16) == 0) {
         s_cpy(dst, max, "http://127.0.0.1");
@@ -1126,9 +1127,26 @@ static void extract_origin_from_url(const char *url, char *dst, int max) {
         s_cpy(dst, max, "file://local");
     } else if (s_ncmp(url, "pwa://", 6) == 0) {
         s_cpy(dst, max, url);
+    } else if (s_ncmp(url, "http://", 7) == 0 || s_ncmp(url, "https://", 8) == 0) {
+        int scheme_len = s_ncmp(url, "https://", 8) == 0 ? 8 : 7;
+        int i = scheme_len;
+        while (url[i] && url[i] != '/' && url[i] != '?' && url[i] != '#' && (i - scheme_len) < max - 1) {
+            i++;
+        }
+        if (i < max) {
+            int k;
+            for (k = 0; k < i && k < max - 1; k++) dst[k] = url[k];
+            dst[k] = 0;
+        } else {
+            s_cpy(dst, max, "self");
+        }
     } else {
         s_cpy(dst, max, "self");
     }
+}
+
+static void extract_origin_from_url(const char *url, char *dst, int max) {
+    osui_extract_origin_from_url(url, dst, max);
 }
 
 static int split_line(const char *line, char cmd[64], char args[OSUI_MAX_ARGS][96], int *narg) {

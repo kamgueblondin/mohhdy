@@ -817,6 +817,12 @@ Le lot 110 ajoute `gpt2_gguf_runtime_prepare`, qui matérialise une table caller
 Le lot 111 ajoute `gpt2_gguf_runtime_get_layer`, qui fournit une vue bornée par valeur d'une couche déjà préparée sans rescanner le blob GGUF. Les runtimes non prêts, pointeurs nuls et indices hors limites sont rejetés sans allocation. `make test-all` reste à **265 tests réussis, 0 échec et 0 test ignoré**.
 Le lot 112 étend `benchmark_gpt2_kv_latency.py` pour mesurer séparément `COLD_LATENCY_SECONDS` et `WARM_LATENCY_SECONDS`, avec `KV_REUSE=1` après deux prompts successifs. La mesure reste explicite sur les limites de QEMU TCG et ne modifie pas le contrat du moteur local. La syntaxe Python et `git diff --check` sont validés.
 
+
+Le lot 11 ajoute la validation dynamique CSP des origines de ressources (`webrt_csp_validate_display_list_resource`) dans `userspace/webrt.c` et `userspace/osui_runtime.c` pour le Web Runtime (US-039 / US-031), l'estimation RTT EWMA et l'invalidation automatique du cache P2P lors de la déconnexion d'un pair dans `userspace/p2p.c` (US-063 / US-070), et l'intégration du profil d'énergie dans la boucle d'ordonnancement OS-UI (`plat_power_schedule_tick` et `osui_stage_tick`) dans `userspace/platform.c` et `userspace/osui_runtime.c` (US-081). `make test-all` valide l'ensemble de la suite.
+
+
+Le lot 12 fait évoluer le conteneur d'onglets du Navigateur-OS avec la persistance de session isolée par site/origine (`extract_origin_from_url`, `origin_ok`) et la persistance chiffrée sur disque du stockage local par onglet (`browser-storage-set`, `browser-storage-get`, `browser-fs-save`, `browser-fs-load`) dans `userspace/osui_runtime.c` (US-031 / US-038). Il intègre l'inspection VFS et la vue du système de fichiers sandboxé directement dans les panneaux natifs OS-UI `/browser` et `/fs` (`osui_gui_browser_inspect`, `osui_gui_vfs_inspect`) dans `userspace/osui_gui.c` et `userspace/osui_gui.h` (US-045). Enfin, il valide le protocole de benchmark de latence KVM avec la réutilisation du cache KV multi-tours (`gpt2_gguf_infer_preload_kv_cache`, `gpt2_gguf_cache_matches`, `gpt2_gguf_infer_kv_cache_count`) dans `kernel/llm/gpt2_gguf_infer.c` et `tests/scripts/benchmark_qemu_gguf_kvm_latency.py` (Garde 3). `make test-all` est vert (912 tests réussis), `make gguf-kvm-benchmark-check`, `make strict-image-check`, `make secrets-check`, et `make tree-clean-check` sont validés.
+
 ## Regles de realisation du projet
 
 Les regles suivantes s'appliquent a toute la suite du projet :

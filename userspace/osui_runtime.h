@@ -8,6 +8,7 @@ int osui_web_active(void);
 int osui_web_poll(char *out, int max);
 int osui_web_save_state(char *buf, int max);
 int osui_web_load_state(const char *buf, int len);
+void osui_extract_origin_from_url(const char *url, char *dst, int max);
 #define OSUI_CANVAS_ROWS 22
 #define OSUI_CANVAS_COLS 78
 

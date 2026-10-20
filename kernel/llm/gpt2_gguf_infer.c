@@ -7,6 +7,7 @@
 
 #define GPT2_GGUF_INFER_HIDDEN (4U * GPT2_GGUF_INFER_MAX_CHANNELS)
 #define GPT2_GGUF_INFER_DENSE_BYTES (GPT2_GGUF_INFER_HIDDEN * (uint32_t)sizeof(float))
+/* Lot 12: Multi-turn KV cache reuse and KVM latency benchmark support. */
 /* ffn_down lit une ligne de largeur 4C : dimensionner pour le pire cas Q6_K. */
 #define GPT2_GGUF_INFER_ROW_BYTES \
     ((GPT2_GGUF_INFER_HIDDEN / GPT2_QK_K) * GPT2_Q6_K_BLOCK_BYTES)
