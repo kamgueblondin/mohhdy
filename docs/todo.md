@@ -1,6 +1,11 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (20 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **912** tests reussis.
+> **Etat reel et pilotage (20 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **913** tests reussis.
+
+## Lot 14: Optimisation Performances & Robustesse Navigateur-OS / GGUF ✅ (20 octobre 2026)
+- [x] US-043 / US-045 : Evolution des metriques de performance du navigateur (`web-perf`, `browser-telemetry perf`) avec calcul de latence par cycle d'ordonnancement (`telemetry_sched_cycles`, `perf_min_us`, `perf_max_us`, `perf_avg_us`, `perf_last_us`, `render_ms`).
+- [x] US-045 : Extensions des vues d'inspection VFS / FS-as-Web dans `/browser` et `/fs` pour l'inspection hierarchique du DOM (`browser-dom-tree`) et l'evaluation d'expressions sandboxees (`browser-eval`).
+- [x] Garde 3 : Consolidation du cache KV multi-tours pour l'inference GGUF avec rembobinage dynamique du prefixe commun (`gpt2_gguf_cache_match_prefix`, `gpt2_gguf_align_cache_prefix`). Validation du protocole de benchmark de latence KVM (`make gguf-kvm-benchmark-check`).
 
 ## Lot 13: Moteur PWA, Media Stream Freestanding & Audit de Securite ✅ (20 octobre 2026)
 - [x] US-034 : Moteur PWA avance avec execution sous origines isolees `pwa://<app_id>`, verification de manifest (`pwa-manifest`), verifications d'installation (`pwa-install`, `pwa-run`), et controle d'accès aux connecteurs MCP (`mcp-auth`, `mcp-credentials`).

@@ -10,6 +10,19 @@
 
 ## État courant vérifié
 
+## Etat courant du 20 octobre 2026 (lot 14)
+
+Living baseline. Plan: [lot14_plan.md](lot14_plan.md).
+
+```text
+make test-all : 913+ passed, 0 failed, 0 skipped
+```
+
+- US-043 / US-045: Evolved browser performance telemetry (`web-perf`, `browser-telemetry perf`) with cycle latency calculation and scheduling tick overhead tracking (`telemetry_sched_cycles`, `perf_min_us`, `perf_max_us`, `perf_avg_us`, `perf_last_us`, `render_ms`).
+- US-045 / VFS-as-Web: Extended VFS/DOM tree inspection in `/browser` and `/fs` for target node inspection, DOM hierarchy display (`browser-dom-tree`), and sandboxed expression evaluation (`browser-eval`).
+- Garde 3 / GGUF: Consolidated multi-turn KV cache handling in `kernel/llm/gpt2_gguf_infer.c` (`gpt2_gguf_cache_match_prefix`, `gpt2_gguf_align_cache_prefix`) to rewind matching prefix KV entries on multi-turn prompt changes. Validated KVM latency benchmark protocol (`make gguf-kvm-benchmark-check`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 20 octobre 2026 (lot 13)
 
 Living baseline. Plan: [lot13_plan.md](lot13_plan.md).

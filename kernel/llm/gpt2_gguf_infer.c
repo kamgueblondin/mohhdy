@@ -279,13 +279,28 @@ int gpt2_gguf_infer_init_fat32(const fat32_volume_t* volume, const char* filenam
     return 0;
 }
 
-static int gpt2_gguf_cache_matches(const uint32_t* tokens, uint32_t count) {
-    uint32_t i;
-    if (gguf_cache.count > count) return 0;
-    for (i = 0U; i < gguf_cache.count; i++) {
-        if (gguf_cache_tokens[i] != tokens[i]) return 0;
+static uint32_t gpt2_gguf_cache_match_prefix(const uint32_t* tokens, uint32_t count) {
+    uint32_t i = 0U;
+    uint32_t limit = gguf_cache.count < count ? gguf_cache.count : count;
+    while (i < limit && gguf_cache_tokens[i] == tokens[i]) {
+        i++;
     }
-    return 1;
+    return i;
+}
+
+static void gpt2_gguf_align_cache_prefix(const uint32_t* tokens, uint32_t count) {
+    uint32_t matched = gpt2_gguf_cache_match_prefix(tokens, count);
+    if (matched < gguf_cache.count) {
+        gguf_cache.count = matched;
+        if (matched == 0U) {
+            gguf_last_top_k_ready = 0U;
+        }
+    }
+}
+
+static int gpt2_gguf_cache_matches(const uint32_t* tokens, uint32_t count) {
+    uint32_t matched = gpt2_gguf_cache_match_prefix(tokens, count);
+    return (matched == gguf_cache.count && gguf_cache.count <= count) ? 1 : 0;
 }
 
 uint32_t gpt2_gguf_infer_kv_cache_count(void) {
@@ -312,8 +327,7 @@ int gpt2_gguf_infer_preload_kv_cache(const uint32_t* tokens, uint32_t token_coun
         }
     }
     if (!gpt2_gguf_cache_matches(tokens, token_count)) {
-        gpt2_gguf_kv_cache_reset(&gguf_cache);
-        gguf_last_top_k_ready = 0U;
+        gpt2_gguf_align_cache_prefix(tokens, token_count);
     }
     while (gguf_cache.count < token_count) {
         uint32_t position = gguf_cache.count;
@@ -359,8 +373,12 @@ int gpt2_gguf_generate_next_sampled(const uint32_t* tokens, uint32_t token_count
     }
     if (!gpt2_gguf_cache_matches(tokens, token_count) ||
         (gguf_cache.count == token_count && generated != 0U)) {
-        gpt2_gguf_kv_cache_reset(&gguf_cache);
-        gguf_last_top_k_ready = 0U;
+        if (gguf_cache.count == token_count && generated != 0U) {
+            gpt2_gguf_kv_cache_reset(&gguf_cache);
+            gguf_last_top_k_ready = 0U;
+        } else {
+            gpt2_gguf_align_cache_prefix(tokens, token_count);
+        }
     }
     while (gguf_cache.count < token_count) {
         uint32_t position = gguf_cache.count;

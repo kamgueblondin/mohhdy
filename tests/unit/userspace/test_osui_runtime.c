@@ -1178,6 +1178,28 @@ void test_css_parser_rules_and_errors(void) {
     TEST_ASSERT_EQUAL(1, osui_css_parse("p{color:red"));
 }
 
+static void test_lot14_web_perf_and_vfs_inspection(void) {
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("web-perf /web/demo.html"));
+    TEST_ASSERT(strstr(g_out, "web-perf ok") != NULL);
+    TEST_ASSERT(strstr(g_out, "render_ms=") != NULL);
+    TEST_ASSERT(strstr(g_out, "latency_us=") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-telemetry perf"));
+    TEST_ASSERT(strstr(g_out, "min_us=") != NULL);
+    TEST_ASSERT(strstr(g_out, "sched_cycles=") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-dom-tree /fs"));
+    TEST_ASSERT(strstr(g_out, "target=/fs") != NULL);
+    TEST_ASSERT(strstr(g_out, "vfs_mounts=/initrd,/overlay,/fat16,/fat32") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-eval document.querySelector('#app')"));
+    TEST_ASSERT(strstr(g_out, "result=DOMElement<#app>") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("browser-eval vfs.stat('/overlay/file')"));
+    TEST_ASSERT(strstr(g_out, "result=VFSNode</overlay/>") != NULL);
+}
+
 static void test_all_browser_and_osui_commands_dispatch(void) {
     setup();
     TEST_ASSERT_EQUAL(0, run_line("browser-tab-new http://example.local/page1"));
@@ -1237,6 +1259,7 @@ int main(void) {
     RUN_TEST(test_multi_origin_security_and_p2p_socket_isolation);
     RUN_TEST(test_telemetry_pwa_and_media);
     RUN_TEST(test_html_css_rendering);
+    RUN_TEST(test_lot14_web_perf_and_vfs_inspection);
     RUN_TEST(test_all_browser_and_osui_commands_dispatch);
     unity_print_results();
     unity_cleanup();
