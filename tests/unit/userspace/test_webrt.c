@@ -185,11 +185,43 @@ static void test_csp_enforce(void) {
     TEST_ASSERT_EQUAL(0, webrt_csp_enforce(&p, "https://app.mohhdy.local", "script", "https://evil.org/app.js"));
 }
 
+static char g_test_audit_action[32];
+static char g_test_audit_detail[64];
+static void test_audit_cb(const char* action, const char* detail) {
+    strncpy(g_test_audit_action, action ? action : "", sizeof(g_test_audit_action));
+    strncpy(g_test_audit_detail, detail ? detail : "", sizeof(g_test_audit_detail));
+}
+
+static void test_csp_validate_display_list(void) {
+    webrt_csp_t p;
+    webrt_set_audit_callback(test_audit_cb);
+    g_test_audit_action[0] = 0;
+    g_test_audit_detail[0] = 0;
+    webrt_csp_parse(&p, "default-src 'self'; img-src https://img.mohhdy.local; style-src 'self' 'unsafe-inline'; script-src https://cdn.mohhdy.local");
+
+    /* Allowed resources */
+    TEST_ASSERT_EQUAL(1, webrt_csp_validate_display_list_resource(&p, "https://app.mohhdy.local", "img", "https://img.mohhdy.local/pic.png"));
+    TEST_ASSERT_EQUAL(1, webrt_csp_validate_display_list_resource(&p, "https://app.mohhdy.local", "style", "inline"));
+    TEST_ASSERT_EQUAL(1, webrt_csp_validate_display_list_resource(&p, "https://app.mohhdy.local", "script", "https://cdn.mohhdy.local/app.js"));
+
+    /* Blocked image resource -> triggers audit callback */
+    TEST_ASSERT_EQUAL(0, webrt_csp_validate_display_list_resource(&p, "https://app.mohhdy.local", "img", "https://evil.org/badge.png"));
+    TEST_ASSERT_EQUAL_STRING("csp_blocked", g_test_audit_action);
+    TEST_ASSERT_EQUAL_STRING("img:https://evil.org/badge.png", g_test_audit_detail);
+
+    /* Blocked script resource -> triggers audit callback */
+    g_test_audit_action[0] = 0;
+    TEST_ASSERT_EQUAL(0, webrt_csp_validate_display_list_resource(&p, "https://app.mohhdy.local", "script", "https://unauthorized.org/ad.js"));
+    TEST_ASSERT_EQUAL_STRING("csp_blocked", g_test_audit_action);
+    TEST_ASSERT_EQUAL_STRING("script:https://unauthorized.org/ad.js", g_test_audit_detail);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
     RUN_TEST(test_csp_parse_and_sources);
     RUN_TEST(test_csp_enforce);
+    RUN_TEST(test_csp_validate_display_list);
     RUN_TEST(test_sanitizer);
     RUN_TEST(test_sanitize_page);
     RUN_TEST(test_media_queries);

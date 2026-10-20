@@ -10,6 +10,19 @@
 
 ## État courant vérifié
 
+## Etat courant du 19 octobre 2026 (lot 11)
+
+Living baseline. Plan: [lot11_plan.md](lot11_plan.md).
+
+```text
+make test-all : 907+ passed, 0 failed, 0 skipped
+```
+
+- US-039 / US-031: Extended CSP verification in `userspace/webrt.c` and `userspace/webrt.h` with dynamic origin validation for image, style, and script display list resources (`webrt_csp_validate_display_list_resource`). Unauthorized load attempts logged to the audit log (`osui-audit`).
+- US-063 / US-070: Reinforced degraded link detection in P2P routing table using smoothed EWMA RTT sliding window (`rtt_ewma_ms` in `link_cost`). Automatic stale cache entry invalidation (`p2p_cache_on_peer_down`) triggered on peer disconnections.
+- US-081: Integrated power profile manager (`plat_power_schedule_tick`) into OS-UI runtime scheduling tick (`osui_stage_tick` in `userspace/osui_runtime.c`) to dynamically adapt background activity levels (`background_ms`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest.
+
 ## Etat courant du 19 octobre 2026 (lot 10)
 
 Living baseline. Branched from `600fcfa` (merge of pull request #158), branch `cursor/lot10-geant`, pull request #159. Plan: [lot10_plan.md](lot10_plan.md).

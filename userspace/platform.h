@@ -73,6 +73,7 @@ const char* plat_power_name(int profile);
 /* auto: pick a profile from the busy percentage of the last sample. */
 int plat_power_auto(uint32_t busy_percent, int on_battery);
 int plat_power_status_report(uint32_t busy_percent, int battery_pct, char* out, int cap);
+int plat_power_schedule_tick(int profile, uint32_t stage_ticks, uint32_t* background_ms);
 
 /* ---- device registry (US-085) ---- */
 #define PLAT_DEVICES 12

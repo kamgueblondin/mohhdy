@@ -196,7 +196,7 @@ static void derive(p2p_node_t* n, p2p_peer_t* p) {
 
 /* Route: direct if the peer is up, else through an up neighbor that lists it. */
 static uint32_t link_cost(const p2p_peer_t* p) {
-    uint32_t rtt_ms = p->rtt_ticks * (1000U / P2P_HZ);
+    uint32_t rtt_ms = p->rtt_ewma_ms ? p->rtt_ewma_ms : (p->rtt_ticks * (1000U / P2P_HZ));
     uint32_t load = p->bucket_used > 5 ? 20U : 5U;
     return 10U + rtt_ms + load;
 }
@@ -745,9 +745,12 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         break;
     case P2P_I_PONG:
         if (len >= 4) {
-            p->rtt_ticks = now(h) - get32(m);
+            uint32_t sample_ticks = now(h) - get32(m);
+            uint32_t sample_ms = sample_ticks * (1000U / P2P_HZ);
+            p->rtt_ticks = sample_ticks;
             p->ping_wait = 0;
-            p2p_qos_note_rtt(n, p->rtt_ticks * (1000U / P2P_HZ));
+            p->rtt_ewma_ms = p->rtt_ewma_ms ? (p->rtt_ewma_ms * 7U + sample_ms) / 8U : sample_ms;
+            p2p_qos_note_rtt(n, sample_ms);
         }
         break;
     case P2P_I_MSG:
@@ -1483,6 +1486,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
         if (t - p->last_seen >= P2P_DOWN_TICKS) {
             char line[64];
             p->up = 0; p->down_events++;
+            p2p_cache_on_peer_down(n, p->id);
             line[0] = 0; s_cat(line, "p2p peer ", 64); s_cat(line, p->name, 64); s_cat(line, " down", 64);
             say(h, line);
         }
@@ -2005,6 +2009,21 @@ int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key) {
     if (!n || !key) return -1;
     it = p2p_get_local(n, key);
     return p2p_cache_invalidate_v(n, h, key, it ? it->version : cache_fence_of(n, key) + 1U);
+}
+
+void p2p_cache_on_peer_down(p2p_node_t* n, uint32_t peer_id) {
+    int i;
+    if (!n) return;
+    (void)peer_id;
+    for (i = 0; i < P2P_CACHE_MAX; i++) {
+        if (n->cache.entries[i].used) {
+            /* Invalidate stale or non-Raft entries upon peer disconnect */
+            if (n->cache.entries[i].expire_tick != P2P_CACHE_RAFT_TTL) {
+                n->cache.entries[i].used = 0;
+                n->cache.invalidations++;
+            }
+        }
+    }
 }
 
 /* Fill with a known version: refused when a fence covers it (a stale

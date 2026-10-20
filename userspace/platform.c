@@ -193,6 +193,18 @@ int plat_power_status_report(uint32_t busy, int battery_pct, char* out, int cap)
     s_cat(out, battery_pct < 100 ? " state discharging\n" : " state full\n", cap);
     return s_len(out);
 }
+int plat_power_schedule_tick(int profile, uint32_t stage_ticks, uint32_t* background_ms) {
+    plat_power_policy_t p;
+    if (plat_power_policy(profile, &p) != 0) return -1;
+    uint32_t bg = p.background_ms;
+    if (profile == PLAT_PWR_SAVER) {
+        bg += (stage_ticks % 50U);
+    } else if (profile == PLAT_PWR_BALANCED) {
+        bg += (stage_ticks % 10U);
+    }
+    if (background_ms) *background_ms = bg;
+    return 0;
+}
 
 /* -------------------------------------------------------------- devices */
 int plat_dev_add(plat_devices_t* r, const char* name, const char* cls, int present, const char* detail) {
