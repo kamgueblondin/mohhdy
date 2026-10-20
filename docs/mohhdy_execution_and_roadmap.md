@@ -9,7 +9,7 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 
 ### Suite de Tests
 - `make test-all` rejoue la suite de non-regression sur l'arbre courant :
-  - **902 tests executes / 902 tests reussis** (0 echec, 0 ignore).
+  - **907 tests executes / 907 tests reussis** (0 echec, 0 ignore).
   - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. Couverture hote mesuree par `make coverage` : 79.55% de lignes (24434/30716). Pas l'image guest. Pas dans `make test-all`.
 - Les compteurs plus anciens de ce fichier (563/563 et autres) decrivent la livraison de leur paragraphe, pas l'arbre courant.
 - `make strict-image-check`, `make secrets-check` et `make tree-clean-check` sont les gardes d'image et d'arbre.
@@ -35,6 +35,11 @@ Elle confirme visuellement :
 ---
 
 ## 3. Descriptif des Prochaines Tranches d'Implémentation (Priorités 1 à 3)
+
+### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production
+- **Moteur Web & Securite (US-039 / US-031)** : Validation dynamique CSP des origines de ressources (images, styles, scripts) lors de la construction de la liste d'affichage (`webrt_csp_validate_display_list_resource`). Journalisation des acces bloques dans `osui-audit`.
+- **Reseau P2P & Resilience Mesh (US-063 / US-070)** : Fenetre glissante EWMA pour le RTT par pair (`rtt_ewma_ms`), renforçant la selection dans la table de routage (`link_cost`). Invalidation/purge automatique des entrees de cache P2P perimees (`p2p_cache_on_peer_down`) lors des deconnexions de pairs.
+- **Telemetrie et Energie HAL (US-081)** : Integration du gestionnaire de profils de puissance (`plat_power_schedule_tick`) au tick d'ordonnancement de l'OS-UI runtime pour ajuster dynamiquement le niveau d'activite de fond (`background_ms`).
 
 ### Etape 1 : Tranche 4, ce qui reste Ring 0
 - Lot 6 part de `ca04007` (merge #154), PR #155. `make test-all` : 848/848. US-001 : souris PS/2 prouvee en QEMU, Shift garde a la mort du pilote. Phase 3 : moteur web minimal en C guest (US-031), `web-perf` (US-043), `web-dom`/`web-inspect`/`web-console` (US-045), pipeline composants/`@media`/`var()`/a11y. Phase 4 : cle CA scellee par le noyau (cle de scellement par boot, simule). Phase 5 : gRPC sur TCP entre deux invites (`make qemu-grpc-guests`), lissage QoS, cache via Raft, anomalie attribuee par pair.

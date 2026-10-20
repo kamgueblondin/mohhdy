@@ -49,10 +49,13 @@ typedef struct {
     int count;
     int errors;
 } webrt_csp_t;
+typedef void (*webrt_audit_fn)(const char* action, const char* detail);
+void webrt_set_audit_callback(webrt_audit_fn fn);
 int webrt_csp_parse(webrt_csp_t* p, const char* header);
 /* url "inline" asks about an inline script/style ('unsafe-inline'). */
 int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* page_origin, const char* url);
 int webrt_csp_enforce(const webrt_csp_t* p, const char* page_origin, const char* resource_type, const char* resource_url);
+int webrt_csp_validate_display_list_resource(const webrt_csp_t* p, const char* page_origin, const char* resource_type, const char* resource_url);
 /* Origin "scheme://host[:port]" of an absolute URL into out (0 if relative). */
 int webrt_url_origin(const char* url, char* out, int max);
 /* Drops <script>, <iframe>, <object>, <embed>, <style> elements, on*

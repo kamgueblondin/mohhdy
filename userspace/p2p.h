@@ -62,6 +62,7 @@ typedef struct {
     uint8_t iv[4];
     uint32_t tx_counter, rx_counter, rx_window;
     uint32_t last_seen, ping_sent_at, rtt_ticks;
+    uint32_t rtt_ewma_ms;  /* EWMA sliding window smoothed RTT in ms */
     uint8_t ping_wait;     /* 0 none, 1 PING outstanding, 2 outstanding and loss counted */
     uint32_t sync_at;      /* last SYNC_REQ sent by p2p_sync */
     uint8_t sync_retries;  /* re-sends left until SYNC_ITEMS arrives */
@@ -299,6 +300,7 @@ void p2p_qos_note_rtt(p2p_node_t* n, uint32_t sample_ms);
 int p2p_cache_invalidate_v(p2p_node_t* n, const p2p_host_t* h, const char* key, uint32_t version);
 int p2p_cache_put_v(p2p_node_t* n, const char* key, const char* value, uint32_t version, uint32_t ttl_ticks, uint32_t current_tick);
 int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key);
+void p2p_cache_on_peer_down(p2p_node_t* n, uint32_t peer_id);
 /* Lot 6 (US-070): cache write through the Raft log (leader only). Every
  * node applies it at commit: line value, version = log index, fence below.
  * Returns the log index or -1. */

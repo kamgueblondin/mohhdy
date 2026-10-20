@@ -284,6 +284,12 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+static webrt_audit_fn g_webrt_audit_cb = 0;
+
+void webrt_set_audit_callback(webrt_audit_fn fn) {
+    g_webrt_audit_cb = fn;
+}
+
 int webrt_csp_enforce(const webrt_csp_t* p, const char* page_origin, const char* resource_type, const char* resource_url) {
     char dir[32];
     int i = 0;
@@ -304,6 +310,28 @@ int webrt_csp_enforce(const webrt_csp_t* p, const char* page_origin, const char*
         dir[i++] = '-'; dir[i++] = 's'; dir[i++] = 'r'; dir[i++] = 'c'; dir[i] = 0;
     }
     return webrt_csp_allows(p, dir, page_origin, resource_url);
+}
+
+int webrt_csp_validate_display_list_resource(const webrt_csp_t* p, const char* page_origin, const char* resource_type, const char* resource_url) {
+    int ok;
+    if (!resource_type || !resource_url) return 1;
+    ok = webrt_csp_enforce(p, page_origin, resource_type, resource_url);
+    if (!ok) {
+        if (g_webrt_audit_cb) {
+            char detail[128];
+            int pos = 0;
+            w_copy(detail, sizeof(detail), resource_type, -1);
+            pos = w_len(detail);
+            if (pos < (int)sizeof(detail) - 2) {
+                detail[pos++] = ':';
+                detail[pos] = 0;
+            }
+            w_copy(detail + pos, (int)sizeof(detail) - pos, resource_url, -1);
+            g_webrt_audit_cb("csp_blocked", detail);
+        }
+        return 0;
+    }
+    return 1;
 }
 
 static int is_name_char(char c) {

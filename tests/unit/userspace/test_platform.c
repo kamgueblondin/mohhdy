@@ -75,6 +75,18 @@ void test_power(void) {
     TEST_ASSERT_EQUAL(PLAT_PWR_BALANCED, plat_power_auto(95, 1));
 }
 
+void test_power_schedule_tick(void) {
+    uint32_t bg_ms = 0;
+    TEST_ASSERT_EQUAL(0, plat_power_schedule_tick(PLAT_PWR_PERFORMANCE, 10, &bg_ms));
+    TEST_ASSERT_EQUAL(10, (int)bg_ms);
+
+    TEST_ASSERT_EQUAL(0, plat_power_schedule_tick(PLAT_PWR_BALANCED, 5, &bg_ms));
+    TEST_ASSERT_EQUAL(55, (int)bg_ms);
+
+    TEST_ASSERT_EQUAL(0, plat_power_schedule_tick(PLAT_PWR_SAVER, 12, &bg_ms));
+    TEST_ASSERT_EQUAL(262, (int)bg_ms);
+}
+
 void test_devices(void) {
     plat_devices_t r;
     memset(&r, 0, sizeof(r));
@@ -266,6 +278,7 @@ int main(void) {
     RUN_TEST(test_layout_forms);
     RUN_TEST(test_gestures);
     RUN_TEST(test_power);
+    RUN_TEST(test_power_schedule_tick);
     RUN_TEST(test_devices);
     RUN_TEST(test_elf_compat);
     RUN_TEST(test_notifications);

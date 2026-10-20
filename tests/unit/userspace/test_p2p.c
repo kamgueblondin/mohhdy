@@ -573,6 +573,24 @@ void test_p2p_consolidation_and_fallback(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p stats ok"));
 }
 
+void test_rtt_ewma_and_auto_cache_invalidation_on_disconnect(void) {
+    setup(2, 0);
+    run(2, 300);
+    p2p_peer_t* b = p2p_find(&g_n[0], "beta");
+    TEST_ASSERT_NOT_NULL(b);
+
+    /* Populate cache */
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_n[0], "item1", "val1", 500, g_ticks));
+    TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_n[0], "item1", g_ticks));
+
+    /* Disconnect beta and verify automatic cache invalidation */
+    g_cut[1][0] = 1;
+    run(2, 1200); /* Wait past P2P_DOWN_TICKS */
+    TEST_ASSERT_FALSE(b->up);
+    TEST_ASSERT_NULL(p2p_cache_get(&g_n[0], "item1", g_ticks));
+    TEST_ASSERT_GREATER_THAN(0, (int)g_n[0].cache.invalidations);
+}
+
 /* US-063: chain alpha - beta - gamma - delta after discovery; alpha
  * reaches delta through two relays from the distance vector in HELLO. */
 void test_multi_relay_chain(void) {
@@ -886,6 +904,7 @@ int main(void) {
     RUN_TEST(test_stun_behind_simulated_nat);
     RUN_TEST(test_route_prefers_direct_over_cheaper_relay);
     RUN_TEST(test_p2p_consolidation_and_fallback);
+    RUN_TEST(test_rtt_ewma_and_auto_cache_invalidation_on_disconnect);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

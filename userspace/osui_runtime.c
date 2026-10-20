@@ -9,6 +9,7 @@
 #include "os_syscalls.h"
 #include "promptmessage.h"
 #include "csig.h"
+#include "platform.h"
 #include "../kernel/sha256.h"
 
 static int pm_hexval(char c) {
@@ -2659,7 +2660,7 @@ static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out,
 
     rc = pm_compile(g_osui_pm_src, len, &g_osui_pm_prog, &g_osui_pm_host);
     if (rc != PM_OK && s_ncmp(g_osui_pm_src, "print ", 6) == 0 && !s_find(g_osui_pm_src, "\"")) {
-        char auto_src[PM_SRC_MAX];
+        static char auto_src[PM_SRC_MAX];
         int ap = 0;
         out_add(auto_src, sizeof(auto_src), &ap, "print \"");
         out_add(auto_src, sizeof(auto_src), &ap, g_osui_pm_src + 6);
@@ -3438,7 +3439,7 @@ static int cmd_web_csp(char args[OSUI_MAX_ARGS][96], int narg, char *out, int ma
     const char *page = "https://app.mohhdy.local";
     webrt_csp_parse(&pol, k_web_csp);
     if (narg >= 2) {
-        int ok = webrt_csp_allows(&pol, args[0], page, args[1]);
+        int ok = webrt_csp_validate_display_list_resource(&pol, page, args[0], args[1]);
         out_add(out, max, &p, "web-csp directive=");
         out_add(out, max, &p, args[0]);
         out_add(out, max, &p, " url=");
@@ -3447,7 +3448,7 @@ static int cmd_web_csp(char args[OSUI_MAX_ARGS][96], int narg, char *out, int ma
         return OSUI_OK;
     }
     for (i = 0; i < 8; i++) {
-        int ok = webrt_csp_allows(&pol, checks[i][0], page, checks[i][1]);
+        int ok = webrt_csp_validate_display_list_resource(&pol, page, checks[i][0], checks[i][1]);
         if (ok) allowed++; else blocked++;
         out_add(out, max, &p, "  ");
         out_add(out, max, &p, checks[i][0]);
@@ -5348,6 +5349,7 @@ static int cmd_prompt(char args[OSUI_MAX_ARGS][96], int narg, const char *raw, c
 void osui_runtime_init(void) {
     int i;
     for (i = 0; i < (int)sizeof(G); i++) ((char *)&G)[i] = 0;
+    webrt_set_audit_callback(audit_log_add);
     G.next_sid = 0;
     G.next_rid = 0;
     G.next_iid = 0;
@@ -5499,11 +5501,13 @@ void osui_gui_ack_leave(void) { G.gui_leave = 0; }
 void osui_gui_closed(void) { G.gui_live = 0; G.gui_leave = 0; }
 
 int osui_stage_tick(char *out, int out_max) {
+    uint32_t bg_ms = 0;
     if (out && out_max > 0) out[0] = 0;
     if (G.media.active && !G.media.paused) {
         G.media.ticks++;
         G.telemetry_media_ticks++;
     }
+    plat_power_schedule_tick(PLAT_PWR_BALANCED, (uint32_t)G.stage_tick, &bg_ms);
     if (!G.stage_autonomous) return 0;
     G.stage_tick++;
     canvas_sim(G.stage_tick);
