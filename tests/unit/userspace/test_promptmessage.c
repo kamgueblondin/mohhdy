@@ -335,6 +335,7 @@ void test_assist_hints_and_lint(void) {
 void test_crl_add_and_lookup(void) {
     char crl[96];
     unsigned char a[32], b[32];
+    memset(crl, 0, sizeof(crl));
     int n, i;
     for (i = 0; i < 32; i++) { a[i] = (unsigned char)i; b[i] = (unsigned char)(255 - i); }
     TEST_ASSERT_EQUAL(0, pm_crl_has(crl, 0, a));
@@ -363,6 +364,18 @@ static void test_ca_rotate_status(void) {
     TEST_ASSERT(strstr(buf, "rotations=2") != NULL);
 }
 
+static void test_lot21_pm_ca_and_crl_orchestration(void) {
+    char crl[128];
+    unsigned char digest[32];
+    int n, i;
+    memset(crl, 0, sizeof(crl));
+    for (i = 0; i < 32; i++) digest[i] = (unsigned char)(i * 3 + 1);
+    TEST_ASSERT_EQUAL(0, pm_crl_has(crl, 0, digest));
+    n = pm_crl_add(crl, 0, (int)sizeof(crl), digest);
+    TEST_ASSERT_GREATER_THAN(0, n);
+    TEST_ASSERT_EQUAL(1, pm_crl_has(crl, n, digest));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_spec_examples_run);
@@ -379,6 +392,7 @@ int main(void) {
     RUN_TEST(test_assist_hints_and_lint);
     RUN_TEST(test_crl_add_and_lookup);
     RUN_TEST(test_ca_rotate_status);
+    RUN_TEST(test_lot21_pm_ca_and_crl_orchestration);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -2731,9 +2731,12 @@ static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out,
     int p = 0;
     const char *path = narg > 0 ? args[0] : "demo/app.pm";
     int len, rc;
+    uint8_t d[32];
 
     g_osui_pm_out_buf[0] = 0;
     g_osui_pm_out_pos = 0;
+
+    audit_log_add("pm_load", path);
 
     len = osui_pm_read(0, path, g_osui_pm_src, sizeof(g_osui_pm_src));
     if (len < 0) {
@@ -2747,7 +2750,64 @@ static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out,
         }
     }
 
-    /* Hardening: Schnorr (.sig) formal signature verification for certified programs */
+    pm_sig_digest(g_osui_pm_src, len, d);
+
+    /* 1. CRL Revocation check */
+    {
+        char crl_buf[512];
+        int crl_len = osui_pm_read(0, "/etc/pm_ca.crl", crl_buf, sizeof(crl_buf) - 1);
+        if (crl_len > 0) {
+            crl_buf[crl_len] = 0;
+            if (pm_crl_has(crl_buf, crl_len, d)) {
+                audit_log_add("pm_crl_revoked", path);
+                audit_log_add("pm_ca_revoked_denied", path);
+                out_add(out, max, &p, "osui browser-pm-run error=revoked path=");
+                out_add(out, max, &p, path);
+                out_add(out, max, &p, "\n");
+                return OSUI_ERR;
+            }
+            audit_log_add("pm_crl_checked", path);
+        }
+    }
+
+    /* 2. Local CA Trust Chain verification */
+    {
+        char ca_pub_buf[288];
+        int ca_pub_len = osui_pm_read(0, "/etc/pm_ca.pub", ca_pub_buf, sizeof(ca_pub_buf) - 1);
+        if (ca_pub_len >= 10 + 2 * CSIG_PK && s_ncmp(ca_pub_buf, "pmca1 pub=", 10) == 0) {
+            uint8_t ca_pk[CSIG_PK], ca_sig[CSIG_SIG];
+            char ca_sig_path[128], ca_sig_buf[200];
+            int j, bad_ca = 0, ca_sig_len;
+
+            ca_pub_buf[ca_pub_len] = 0;
+            for (j = 0; !bad_ca && j < CSIG_PK; j++) {
+                int a = pm_hexval(ca_pub_buf[10 + 2 * j]), b = pm_hexval(ca_pub_buf[11 + 2 * j]);
+                if (a < 0 || b < 0) bad_ca = 1; else ca_pk[j] = (uint8_t)(a * 16 + b);
+            }
+
+            s_cpy(ca_sig_path, sizeof(ca_sig_path), path);
+            s_cat(ca_sig_path, (int)sizeof(ca_sig_path), ".ca");
+            ca_sig_len = osui_pm_read(0, ca_sig_path, ca_sig_buf, sizeof(ca_sig_buf) - 1);
+
+            if (ca_sig_len >= 13 + 2 * CSIG_SIG && s_ncmp(ca_sig_buf, "pmca1sig sig=", 13) == 0) {
+                ca_sig_buf[ca_sig_len] = 0;
+                for (j = 0; !bad_ca && j < CSIG_SIG; j++) {
+                    int a = pm_hexval(ca_sig_buf[13 + 2 * j]), b = pm_hexval(ca_sig_buf[14 + 2 * j]);
+                    if (a < 0 || b < 0) bad_ca = 1; else ca_sig[j] = (uint8_t)(a * 16 + b);
+                }
+                if (bad_ca || !csig_pk_valid(ca_pk) || !csig_verify(ca_pk, d, 32, ca_sig)) {
+                    audit_log_add("pm_ca_untrusted_denied", path);
+                    out_add(out, max, &p, "osui browser-pm-run error=ca_untrusted path=");
+                    out_add(out, max, &p, path);
+                    out_add(out, max, &p, "\n");
+                    return OSUI_ERR;
+                }
+                audit_log_add("pm_ca_verified", path);
+            }
+        }
+    }
+
+    /* 3. Schnorr (.sig) formal signature verification for certified programs */
     {
         char sig_path[128];
         char sig_buf[400];
@@ -2756,7 +2816,7 @@ static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out,
         s_cat(sig_path, (int)sizeof(sig_path), ".sig");
         sig_len = osui_pm_read(0, sig_path, sig_buf, sizeof(sig_buf) - 1);
         if (sig_len >= 10 + 2 * CSIG_PK + 5 + 2 * CSIG_SIG && s_ncmp(sig_buf, "pmsig1 pk=", 10) == 0) {
-            uint8_t pk[CSIG_PK], sig[CSIG_SIG], d[32];
+            uint8_t pk[CSIG_PK], sig[CSIG_SIG];
             int j, bad = 0;
             sig_buf[sig_len] = 0;
             for (j = 0; !bad && j < CSIG_PK; j++) {
@@ -2768,7 +2828,6 @@ static int cmd_browser_pm_run(char args[OSUI_MAX_ARGS][96], int narg, char *out,
                 int a = pm_hexval(sig_buf[o + 2 * j]), b = pm_hexval(sig_buf[o + 1 + 2 * j]);
                 if (a < 0 || b < 0) bad = 1; else sig[j] = (uint8_t)(a * 16 + b);
             }
-            pm_sig_digest(g_osui_pm_src, len, d);
             if (bad || !csig_pk_valid(pk) || !csig_verify(pk, d, 32, sig)) {
                 audit_log_add("pm_run_signature_denied", path);
                 out_add(out, max, &p, "osui browser-pm-run error=signature_denied path=");
@@ -4254,6 +4313,7 @@ static int cmd_browser_fs_load(char args[OSUI_MAX_ARGS][96], int narg, char *out
 
 static int cmd_browser_fs_sync(char *out, int max) {
     char dummy_args[OSUI_MAX_ARGS][96];
+    audit_log_add("vfs_fs_sync", "/web_app.json");
     s_cpy(dummy_args[0], 96, "/web_app.json");
     return cmd_browser_fs_save(dummy_args, 1, out, max);
 }
@@ -4567,6 +4627,7 @@ static osui_fs_t *fs_find(const char *path) {
 static int cmd_fs_list(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     const char *path = narg > 0 ? args[0] : "";
     int i, p = 0, n = 0;
+    audit_log_add("vfs_inspect", path[0] ? path : "/fs");
     if (path[0] && fs_traversal(path)) {
         unsigned rid = new_rid();
         out_add(out, max, &p, "osui fs-list error=traversal_denied");

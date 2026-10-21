@@ -959,6 +959,21 @@ static void test_lot20_p2p_cache_and_raft_anti_entropy(void) {
     TEST_ASSERT_TRUE(g_n[0].qos.loss_count > 0U);
 }
 
+static void test_lot21_mesh_routing_and_grpc_fallback(void) {
+    setup(3, 0);
+    run(3, 50);
+    uint32_t nh = 0, cost = 0;
+    p2p_peer_t* bp;
+    /* Self route lookup must be rejected (-1) to avoid 2-node loops */
+    TEST_ASSERT_EQUAL(-1, p2p_route_find(&g_n[0], g_n[0].id, &nh, &cost));
+    /* STUN probe auto-fallback to NAT punch when server is down */
+    bp = p2p_find(&g_n[0], "beta");
+    TEST_ASSERT_NOT_NULL(bp);
+    if (bp) bp->blocked = 1;
+    (void)p2p_stun_probe(&g_n[0], &g_h[0], "beta");
+    TEST_ASSERT_GREATER_THAN(0U, g_n[0].nat.nat_punches);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -991,6 +1006,7 @@ int main(void) {
     RUN_TEST(test_rtt_ewma_and_auto_cache_invalidation_on_disconnect);
     RUN_TEST(test_lot19_adaptive_cost_and_mesh_routing);
     RUN_TEST(test_lot20_p2p_cache_and_raft_anti_entropy);
+    RUN_TEST(test_lot21_mesh_routing_and_grpc_fallback);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

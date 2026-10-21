@@ -1752,6 +1752,17 @@ int p2p_grpc_call_deadline(p2p_node_t* n, const p2p_host_t* h, const char* peer,
     uint32_t id, deadline;
     int pos, type;
     if (!n || !n->up || !p || !service || !method) return -1;
+    if (!p->up || p->blocked) {
+        /* Auto-healing: multi-hop relay fallback if direct link is down */
+        uint32_t nh = 0, cost = 0;
+        if (p2p_route_find(n, p->id, &nh, &cost) == 0 && nh > 0) {
+            p2p_peer_t* r = by_id(n, nh);
+            if (r && r->up && !r->blocked) p = r;
+            else return -1;
+        } else {
+            return -1;
+        }
+    }
     id = fixed_id ? fixed_id : ++n->rpc_seq;
     deadline = timeout_ticks ? now(h) + timeout_ticks : now(h);
     type = grpc_type_of(service, method);
@@ -1774,6 +1785,10 @@ int p2p_stun_probe(p2p_node_t* n, const p2p_host_t* h, const char* stun_server_p
     uint8_t b[STUN_HEADER];
     p2p_peer_t* p = p2p_find(n, stun_server_peer);
     if (!n || !n->up || !p) return -1;
+    if (!p->up || p->blocked) {
+        /* Auto-healing: fall back to NAT punch if STUN server is down */
+        return p2p_nat_punch(n, h, stun_server_peer);
+    }
     {
         int slot, rl;
         uint32_t t = now(h);
@@ -1788,7 +1803,7 @@ int p2p_stun_probe(p2p_node_t* n, const p2p_host_t* h, const char* stun_server_p
         n->nat.srv[slot].pending = 1;
         n->nat.srv[slot].valid = 0;
         rl = stun_build_binding_request(b, (int)sizeof(b), n->nat.srv[slot].txid);
-        if (rl <= 0) return -1;
+        if (rl <= 0) return p2p_nat_punch(n, h, stun_server_peer);
         return seal_send(n, h, p, P2P_I_STUN_REQ, b, rl);
     }
 }

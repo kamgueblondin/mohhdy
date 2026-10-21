@@ -594,6 +594,24 @@ static void test_lot20_secdb_and_elf_wx_audit(void) {
     TEST_ASSERT_EQUAL(-1, prod_elf_audit((const uint8_t*)"not_elf", 7, &a));
 }
 
+static void test_lot21_support_bundle_checksum_verification(void) {
+    prod_metrics_t m;
+    prod_alerts_t a;
+    prod_usage_t u;
+    prod_feedback_t f;
+    char out[2048];
+    int len;
+
+    memset(&m, 0, sizeof(m));
+    memset(&a, 0, sizeof(a));
+    memset(&u, 0, sizeof(u));
+    memset(&f, 0, sizeof(f));
+
+    len = prod_support_bundle_text(&m, &a, &u, &f, 100, out, (int)sizeof(out));
+    TEST_ASSERT_GREATER_THAN(0, len);
+    TEST_ASSERT_NOT_NULL(strstr(out, "checksum verified=true fnv "));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -615,6 +633,7 @@ int main(void) {
     RUN_TEST(test_lot17_autoscale_stress_and_bundle_health);
     RUN_TEST(test_lot19_support_bundle_fnv_and_risk_model);
     RUN_TEST(test_lot20_secdb_and_elf_wx_audit);
+    RUN_TEST(test_lot21_support_bundle_checksum_verification);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
