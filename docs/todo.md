@@ -1,6 +1,16 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (21 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **914** tests reussis.
+> **Etat reel et pilotage (21 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **918** tests reussis.
+
+## Lot 19: Optimisation Moteur Multi-Onglets OS-UI, Résilience Routage P2P Mesh & Diagnostic Production ✅ (21 octobre 2026)
+- [x] US-038 / US-045 : Perfectionnement de la gestion dynamique du cycle de vie des onglets (`browser-tab-rename`, `browser-tab-pin`, `browser-tab-duplicate`, `browser-tab-next`, `browser-tab-prev`), isolation du stockage local par site et traçabilité étendue dans `osui-audit` pour navigation, inspection DOM/VFS et persistance chiffrée (`ENC_V1:`).
+- [x] US-068 / US-073 : Optimisation du calcul du coût de lien EWMA (`p2p_calc_link_cost`) intégrant RTT, pertes et anomalies, détection des chemins de routage (`p2p_route_find`), réinvalidation automatique du cache P2P et anti-entropie Raft.
+- [x] US-115 / US-116 : Affinement de la prédiction du risque de maintenance logistique Q12 (`prod_maint_model_risk`), vérification d'intégrité FNV-1a des bundles de support (`prod-support-bundle`) et évaluation dynamique de la feuille de route (`prod-roadmap`).
+
+## Lot 18: Consolidation Web Runtime, Robustesse Consensus P2P & Métriques de Production / Sécurité ✅ (21 octobre 2026)
+- [x] US-041 : Extension de la table `WEBRT_VARS` à 32 variables CSS et évaluation dynamique cascade/fallback (`var()`).
+- [x] US-075 / US-070 : Détection fine des anomalies de trafic par pair, régulation adaptative AIMD et invalidation automatique du cache P2P.
+- [x] US-112 / US-120 : Base de signatures de sécurité `prod-secdb` (`MSA-2026-0006`), contrôle FNV-1a de la feuille de route `prod-roadmap` et mise à jour de `prod-support-bundle`.
 
 ## Lot 17: Consolidation Web Runtime, Robustesse Inférence GGUF KVM & Synchronisation P2P/Production ✅ (21 octobre 2026)
 - [x] US-040 / US-081 : Évaluation DOM/CSS étendue pour media queries `aspect-ratio` et traçabilité des opérations VFS sandboxées (`vfs_read`, `vfs_scope_denied`, `vfs_traversal_denied`, `vfs_fs_save`, `vfs_fs_load`, `fetch_allowed`) dans `osui-audit`.

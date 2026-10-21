@@ -633,6 +633,31 @@ void test_rtt_ewma_and_auto_cache_invalidation_on_disconnect(void) {
     TEST_ASSERT_GREATER_THAN(0, (int)g_n[0].cache.invalidations);
 }
 
+void test_lot19_adaptive_cost_and_mesh_routing(void) {
+    setup(3, 0);
+    run(3, 300);
+    p2p_peer_t* b = p2p_find(&g_n[0], "beta");
+    TEST_ASSERT_NOT_NULL(b);
+
+    uint32_t c_base = p2p_calc_link_cost(b);
+    b->rtt_ewma_ms = 80;
+    b->loss_percent = 10;
+    b->anomalies = 1;
+    uint32_t c_high = p2p_calc_link_cost(b);
+    TEST_ASSERT_GREATER_THAN((int)c_base, (int)c_high);
+
+    uint32_t nh = 0, cost = 0;
+    TEST_ASSERT_EQUAL(0, p2p_route_find(&g_n[0], b->id, &nh, &cost));
+    TEST_ASSERT_GREATER_THAN(0, (int)cost);
+
+    char rep[512];
+    p2p_report(&g_n[0], &g_h[0], "cache", rep, sizeof(rep));
+    TEST_ASSERT(strstr(rep, "p2p cache hits") != NULL);
+
+    p2p_report(&g_n[0], &g_h[0], "raft", rep, sizeof(rep));
+    TEST_ASSERT(strstr(rep, "p2p raft role") != NULL);
+}
+
 /* US-063: chain alpha - beta - gamma - delta after discovery; alpha
  * reaches delta through two relays from the distance vector in HELLO. */
 void test_multi_relay_chain(void) {
@@ -948,6 +973,7 @@ int main(void) {
     RUN_TEST(test_p2p_consolidation_and_fallback);
     RUN_TEST(test_lot17_raft_resilience_and_compact_zeroing);
     RUN_TEST(test_rtt_ewma_and_auto_cache_invalidation_on_disconnect);
+    RUN_TEST(test_lot19_adaptive_cost_and_mesh_routing);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

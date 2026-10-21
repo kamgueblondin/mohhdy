@@ -202,6 +202,7 @@ uint32_t p2p_calc_link_cost(const p2p_peer_t* p) {
     cost = 10U + rtt_ms + (p->bucket_used > 5 ? 20U : 5U);
     if (p->loss_percent > 0) cost += (uint32_t)p->loss_percent * 10U;
     if (p->anomalies > 0) cost += p->anomalies * 50U;
+    if (p->down_events > 0) cost += (uint32_t)p->down_events * 25U;
     return cost;
 }
 

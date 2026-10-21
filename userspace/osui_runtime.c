@@ -2539,6 +2539,7 @@ static int cmd_browser_tab_rename(char args[OSUI_MAX_ARGS][96], int narg, char *
         out_add(out, max, &p, "osui browser-tab-rename error=no_active_tab\n");
         return OSUI_ERR;
     }
+    audit_log_add("tab_rename", tab->title);
     out_add(out, max, &p, "osui browser-tab-rename ok tab_id=");
     out_add(out, max, &p, tab->id);
     out_add(out, max, &p, " title=");
@@ -2571,6 +2572,7 @@ static int cmd_browser_tab_pin(char args[OSUI_MAX_ARGS][96], int narg, char *out
         return OSUI_ERR;
     }
     tab->pinned = pin_val;
+    audit_log_add("tab_pin", tab->pinned ? "pinned" : "unpinned");
     out_add(out, max, &p, "osui browser-tab-pin ok tab_id=");
     out_add(out, max, &p, tab->id);
     out_add(out, max, &p, " pinned=");
@@ -2614,6 +2616,7 @@ static int cmd_browser_tab_duplicate(char args[OSUI_MAX_ARGS][96], int narg, cha
     make_id(dst->id, 't', G.next_tid);
     G.n_tabs++;
     G.current_tab = slot;
+    audit_log_add("tab_duplicate", dst->id);
     out_add(out, max, &p, "osui browser-tab-duplicate ok source_id=");
     out_add(out, max, &p, src->id);
     out_add(out, max, &p, " tab_id=");
@@ -2637,6 +2640,7 @@ static int cmd_browser_tab_next(char *out, int max) {
     }
     if (next_slot >= 0) {
         G.current_tab = next_slot;
+        audit_log_add("tab_next", G.tabs[G.current_tab].id);
         out_add(out, max, &p, "osui browser-tab-next ok tab_id=");
         out_add(out, max, &p, G.tabs[G.current_tab].id);
         out_add(out, max, &p, " url=");
@@ -2661,6 +2665,7 @@ static int cmd_browser_tab_prev(char *out, int max) {
     }
     if (prev_slot >= 0) {
         G.current_tab = prev_slot;
+        audit_log_add("tab_prev", G.tabs[G.current_tab].id);
         out_add(out, max, &p, "osui browser-tab-prev ok tab_id=");
         out_add(out, max, &p, G.tabs[G.current_tab].id);
         out_add(out, max, &p, " url=");
@@ -2832,6 +2837,7 @@ static int cmd_browser_navigate(char args[OSUI_MAX_ARGS][96], int narg, char *ou
     tab = &G.tabs[G.current_tab];
     s_cpy(tab->url, 64, args[0]);
     extract_origin_from_url(args[0], tab->origin, sizeof(tab->origin));
+    audit_log_add("navigate", tab->url);
     if (s_has_ci(args[0], ".pm") || s_ncmp(args[0], "pm://", 5) == 0) {
         s_cpy(tab->kind, 16, "pm");
         s_cpy(tab->title, 32, "PromptProgram");
@@ -2876,6 +2882,7 @@ static int cmd_browser_back(char *out, int max) {
     }
     tab->history_pos--;
     s_cpy(tab->url, 64, tab->history[tab->history_pos]);
+    audit_log_add("nav_back", tab->url);
     out_add(out, max, &p, "osui browser-back ok tab_id=");
     out_add(out, max, &p, tab->id);
     out_add(out, max, &p, " url=");
@@ -2898,6 +2905,7 @@ static int cmd_browser_forward(char *out, int max) {
     }
     tab->history_pos++;
     s_cpy(tab->url, 64, tab->history[tab->history_pos]);
+    audit_log_add("nav_forward", tab->url);
     out_add(out, max, &p, "osui browser-forward ok tab_id=");
     out_add(out, max, &p, tab->id);
     out_add(out, max, &p, " url=");
@@ -3697,6 +3705,7 @@ static int cmd_web_a11y(char *out, int max) {
 static int cmd_browser_dom_tree(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0, i;
     const char *target_path = (narg > 0 && args[0][0]) ? args[0] : "/browser";
+    audit_log_add("dom_tree", target_path);
     osui_tab_t *tab = (G.current_tab >= 0 && G.current_tab < OSUI_MAX_TABS && G.tabs[G.current_tab].used) ? &G.tabs[G.current_tab] : 0;
     out_add(out, max, &p, "osui browser-dom-tree ok tab_id=");
     out_add(out, max, &p, tab ? tab->id : "none");
@@ -5334,7 +5343,7 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "osui-audit") == 0) return cmd_osui_audit(out, max);
     if (s_cmp(cmd, "osui-model") == 0) return cmd_osui_model(args, narg, out, max);
     if (s_cmp(cmd, "osui-provider") == 0) return cmd_osui_provider(args, narg, out, max);
-    if (s_cmp(cmd, "os-browser") == 0) return open_then("browser", cmd_browser_status, out, max);
+    if (s_cmp(cmd, "os-browser") == 0) { audit_log_add("os_inspect", "browser"); return open_then("browser", cmd_browser_status, out, max); }
     if (s_cmp(cmd, "os-shell") == 0) {
         char dummy[64];
         char a[OSUI_MAX_ARGS][96];
@@ -5349,6 +5358,7 @@ static int dispatch_cmd(const char *cmd, char args[OSUI_MAX_ARGS][96], int narg,
     if (s_cmp(cmd, "os-fs") == 0) {
         char dummy[64];
         char a[OSUI_MAX_ARGS][96];
+        audit_log_add("os_inspect", "fs");
         s_cpy(a[0], 96, "fs");
         cmd_open(a, 1, dummy, 64);
         return cmd_fs_list(args, narg, out, max);

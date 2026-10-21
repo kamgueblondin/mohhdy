@@ -954,3 +954,27 @@ int webrt_a11y_audit(const char* html, webrt_a11y_t* r) {
                 r->heading_skips + r->lang_missing;
     return r->issues;
 }
+
+int webrt_site_storage_validate_origin(const char* page_origin, const char* target_origin) {
+    if (!page_origin || !target_origin) return 0;
+    if (w_eq(page_origin, "self") || w_eq(target_origin, "self")) return 1;
+    return w_eq(page_origin, target_origin);
+}
+
+int webrt_enc_v1_audit_log(const char* action, const char* path, int len) {
+    char detail[128];
+    int pos = 0;
+    if (!action || !path) return -1;
+    w_copy(detail, sizeof(detail), path, -1);
+    pos = w_len(detail);
+    if (pos < (int)sizeof(detail) - 10) {
+        detail[pos++] = ':';
+        detail[pos] = 0;
+        w_copy(detail + pos, (int)sizeof(detail) - pos, "ENC_V1", -1);
+    }
+    if (g_webrt_audit_cb) {
+        g_webrt_audit_cb(action, detail);
+    }
+    (void)len;
+    return 0;
+}

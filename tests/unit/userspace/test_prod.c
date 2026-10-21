@@ -558,6 +558,27 @@ static void test_roadmap_eval(void) {
     TEST_ASSERT_EQUAL(50, pct);
 }
 
+static void test_lot19_support_bundle_fnv_and_risk_model(void) {
+    prod_metrics_t m;
+    prod_alerts_t a;
+    prod_usage_t u;
+    prod_feedback_t fb;
+    char bundle[1024];
+
+    prod_metrics_init(&m);
+    prod_alerts_init(&a);
+    memset(&u, 0, sizeof(u));
+    memset(&fb, 0, sizeof(fb));
+
+    int len = prod_support_bundle_text(&m, &a, &u, &fb, 1000, bundle, sizeof(bundle));
+    TEST_ASSERT_GREATER_THAN(0, len);
+
+    uint32_t fnv1 = prod_fnv1a((const uint8_t*)bundle, len);
+    uint32_t fnv2 = prod_fnv1a((const uint8_t*)bundle, len);
+    TEST_ASSERT_EQUAL(fnv1, fnv2);
+    TEST_ASSERT_NOT_EQUAL(0, fnv1);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -577,6 +598,7 @@ int main(void) {
     RUN_TEST(test_smart_alerts_and_perf_monitor);
     RUN_TEST(test_prod_consolidation_and_fallback);
     RUN_TEST(test_lot17_autoscale_stress_and_bundle_health);
+    RUN_TEST(test_lot19_support_bundle_fnv_and_risk_model);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
