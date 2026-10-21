@@ -4309,6 +4309,7 @@ static int cmd_mcp_auth(char args[OSUI_MAX_ARGS][96], int narg, char *out, int m
         out_add(out, max, &p, "osui mcp-auth error=usage <tool> <bearer_token>\n");
         return OSUI_ERR;
     }
+    audit_log_add("mcp_auth", args[0]);
     for (i = 0; i < G.n_mcp_creds; i++) {
         if (s_cmp(G.mcp_creds[i].tool, args[0]) == 0) {
             s_cpy(G.mcp_creds[i].bearer, 64, args[1]);
@@ -4334,6 +4335,7 @@ static int cmd_mcp_auth(char args[OSUI_MAX_ARGS][96], int narg, char *out, int m
 
 static int cmd_mcp_credentials(char *out, int max) {
     int p = 0, i;
+    audit_log_add("mcp_credentials", "read");
     out_add(out, max, &p, "osui mcp-credentials count=");
     out_u(out, max, &p, (unsigned)G.n_mcp_creds);
     out_add(out, max, &p, "\n");
@@ -4465,6 +4467,7 @@ static int cmd_mcp_invoice(char args[OSUI_MAX_ARGS][96], int narg, char *out, in
     s_cpy(inv->customer, 48, args[0]);
     s_cpy(inv->amount, 24, args[1]);
     journal(s->id, "mcp.invoice.create", "ok", rid);
+    audit_log_add("mcp_invoice", inv->id);
     out_add(out, max, &p, "osui mcp-invoice ok invoice_id=");
     out_add(out, max, &p, inv->id);
     out_add(out, max, &p, " session_id=");
@@ -4529,6 +4532,7 @@ static int cmd_mcp_invoke(char args[OSUI_MAX_ARGS][96], int narg, char *out, int
             return OSUI_ERR;
         }
         journal(s->id, tool, "ok", rid);
+        audit_log_add("mcp_invoke_ok", tool);
         out_add(out, max, &p, "osui mcp-invoke ok tool=");
         out_add(out, max, &p, tool);
         out_add(out, max, &p, " session_id=");

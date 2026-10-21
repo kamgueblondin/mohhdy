@@ -943,6 +943,22 @@ void test_route_prefers_direct_over_cheaper_relay(void) {
     TEST_ASSERT_EQUAL((int)alpha->id, (int)nh);
 }
 
+static void test_lot20_p2p_cache_and_raft_anti_entropy(void) {
+    setup(3, 0);
+    run(3, 400);
+
+    /* Test cache invalidation and peer disconnect cleanup */
+    TEST_ASSERT_EQUAL(0, p2p_cache_put_v(&g_n[0], "lot20_key", "val1", 1, 1000, g_ticks));
+    p2p_cache_on_peer_down(&g_n[0], g_n[1].id);
+    TEST_ASSERT_EQUAL(0, g_n[0].cache.inv_active);
+
+    /* Test AIMD QoS note loss */
+    uint32_t orig_win = g_n[0].qos.window_size;
+    p2p_qos_note_loss(&g_n[0]);
+    TEST_ASSERT_TRUE(g_n[0].qos.window_size <= orig_win);
+    TEST_ASSERT_TRUE(g_n[0].qos.loss_count > 0U);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -974,6 +990,7 @@ int main(void) {
     RUN_TEST(test_lot17_raft_resilience_and_compact_zeroing);
     RUN_TEST(test_rtt_ewma_and_auto_cache_invalidation_on_disconnect);
     RUN_TEST(test_lot19_adaptive_cost_and_mesh_routing);
+    RUN_TEST(test_lot20_p2p_cache_and_raft_anti_entropy);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

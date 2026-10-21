@@ -216,6 +216,25 @@ static void test_csp_validate_display_list(void) {
     TEST_ASSERT_EQUAL_STRING("script:https://unauthorized.org/ad.js", g_test_audit_detail);
 }
 
+static void test_lot20_responsive_aspect_ratio_and_nested_vars(void) {
+    webrt_viewport_t vp = {1920, 1080, 0};
+    int defined = 0, unresolved = 0;
+
+    /* Aspect ratio media queries */
+    TEST_ASSERT_TRUE(webrt_mq_match("(aspect-ratio: 16/9)", &vp));
+    TEST_ASSERT_TRUE(webrt_mq_match("( min-aspect-ratio: 4/3 )", &vp));
+    TEST_ASSERT_TRUE(webrt_mq_match("(max-aspect-ratio: 21/9)", &vp));
+    TEST_ASSERT_FALSE(webrt_mq_match("(max-aspect-ratio: 4/3)", &vp));
+
+    /* Nested CSS variables and 32 WEBRT_VARS limit support */
+    webrt_css_resolve_vars(":root{--primary:#0080ff;--accent:var(--primary);--bg:var(--accent);}"
+                           "body{color:var(--bg);fill:var(--primary);}",
+                           out, sizeof(out), &defined, &unresolved);
+    TEST_ASSERT_EQUAL(3, defined);
+    TEST_ASSERT_EQUAL(0, unresolved);
+    TEST_ASSERT_EQUAL_STRING(":root{}body{color:#0080ff;fill:#0080ff;}", out);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -229,6 +248,7 @@ int main(void) {
     RUN_TEST(test_custom_properties);
     RUN_TEST(test_components);
     RUN_TEST(test_a11y_audit);
+    RUN_TEST(test_lot20_responsive_aspect_ratio_and_nested_vars);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

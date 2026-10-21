@@ -2031,9 +2031,8 @@ int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key) {
 }
 
 void p2p_cache_on_peer_down(p2p_node_t* n, uint32_t peer_id) {
-    int i;
+    int i, remaining = 0;
     if (!n) return;
-    (void)peer_id;
     for (i = 0; i < P2P_CACHE_MAX; i++) {
         if (n->cache.entries[i].used) {
             /* Invalidate stale or non-Raft entries upon peer disconnect */
@@ -2047,7 +2046,9 @@ void p2p_cache_on_peer_down(p2p_node_t* n, uint32_t peer_id) {
         if (n->cache.inv_waiting[i] == peer_id) {
             n->cache.inv_waiting[i] = 0;
         }
+        if (n->cache.inv_waiting[i] != 0) remaining++;
     }
+    if (!remaining) n->cache.inv_active = 0;
 }
 
 /* Fill with a known version: refused when a fence covers it (a stale
