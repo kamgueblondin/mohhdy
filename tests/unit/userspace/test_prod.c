@@ -454,7 +454,7 @@ void test_secdb_parse_and_match(void) {
     static prod_secdb_t db;
     static uint8_t file[256];
     int hits[8], n;
-    TEST_ASSERT_EQUAL(5, prod_secdb_parse(prod_secdb_builtin, &db));
+    TEST_ASSERT_EQUAL(6, prod_secdb_parse(prod_secdb_builtin, &db));
     TEST_ASSERT_EQUAL(0, db.bad_lines);
     TEST_ASSERT_EQUAL_STRING("MSA-2026-0001", db.r[0].id);
     TEST_ASSERT_EQUAL(PROD_SEV_HIGH, db.r[0].severity);

@@ -598,7 +598,8 @@ const char prod_secdb_builtin[] =
     "MSA-2026-0002 high hex 706369726f67756520636c61696d\n"        /* PCI port claim by a non-driver */
     "MSA-2026-0003 medium hex 617461726f677565207265676973746572\n" /* ATA service name squatting */
     "MSA-2026-0004 medium hex 6169726f677565207265676973746572\n"  /* AI engine service squatting */
-    "MSA-2026-0005 critical fnv deadbeef 4096\n";                    /* sample known-bad file */
+    "MSA-2026-0005 critical fnv deadbeef 4096\n"                    /* sample known-bad file */
+    "MSA-2026-0006 high hex 7379735f7261775f696f5f636c61696d\n";    /* unauthorized raw IO claim */
 const char* prod_sev_name(int sev) {
     return sev == PROD_SEV_LOW ? "low" : sev == PROD_SEV_MEDIUM ? "medium" : sev == PROD_SEV_HIGH ? "high"
          : sev == PROD_SEV_CRITICAL ? "critical" : "?";
