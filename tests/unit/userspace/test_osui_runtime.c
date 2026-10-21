@@ -1200,6 +1200,20 @@ static void test_lot14_web_perf_and_vfs_inspection(void) {
     TEST_ASSERT(strstr(g_out, "result=VFSNode</overlay/>") != NULL);
 }
 
+static void test_lot15_csp_audit_and_p2p_resilience(void) {
+    setup();
+    /* CSP validation for allowed vs blocked resources */
+    TEST_ASSERT_EQUAL(0, run_line("web-csp script-src /js/app.js"));
+    TEST_ASSERT(strstr(g_out, "verdict=allow") != NULL);
+
+    TEST_ASSERT_EQUAL(0, run_line("web-csp script-src https://evil.example/x.js"));
+    TEST_ASSERT(strstr(g_out, "verdict=block") != NULL);
+
+    /* Audit log should record the CSP block */
+    TEST_ASSERT_EQUAL(0, run_line("osui-audit"));
+    TEST_ASSERT(strstr(g_out, "[AUDIT] csp_blocked : script-src:https://evil.example/x.js") != NULL);
+}
+
 static void test_all_browser_and_osui_commands_dispatch(void) {
     setup();
     TEST_ASSERT_EQUAL(0, run_line("browser-tab-new http://example.local/page1"));
@@ -1260,6 +1274,7 @@ int main(void) {
     RUN_TEST(test_telemetry_pwa_and_media);
     RUN_TEST(test_html_css_rendering);
     RUN_TEST(test_lot14_web_perf_and_vfs_inspection);
+    RUN_TEST(test_lot15_csp_audit_and_p2p_resilience);
     RUN_TEST(test_all_browser_and_osui_commands_dispatch);
     unity_print_results();
     unity_cleanup();

@@ -579,6 +579,12 @@ void test_rtt_ewma_and_auto_cache_invalidation_on_disconnect(void) {
     p2p_peer_t* b = p2p_find(&g_n[0], "beta");
     TEST_ASSERT_NOT_NULL(b);
 
+    /* Test link cost calculation with EWMA RTT & Loss */
+    b->rtt_ewma_ms = 40;
+    b->loss_percent = 5;
+    b->bucket_used = 2;
+    TEST_ASSERT_GREATER_THAN(10, (int)p2p_calc_link_cost(b));
+
     /* Populate cache */
     TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_n[0], "item1", "val1", 500, g_ticks));
     TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_n[0], "item1", g_ticks));

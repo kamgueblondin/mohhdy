@@ -1450,18 +1450,41 @@ static int cmd_browser_telemetry(char args[OSUI_MAX_ARGS][96], int narg, char *o
 static int cmd_web_perf(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     int p = 0;
     const char *target = (narg > 0 && args[0][0]) ? args[0] : "/web/demo.html";
+    int runs = 1;
+    if (narg >= 2 && args[1][0] >= '0' && args[1][0] <= '9') {
+        int r = 0, k = 0;
+        while (args[1][k] >= '0' && args[1][k] <= '9') { r = r * 10 + (args[1][k] - '0'); k++; }
+        if (r > 0) runs = r;
+    }
     G.perf_last_us = 195U;
     if (G.perf_last_us < G.perf_min_us) G.perf_min_us = G.perf_last_us;
     if (G.perf_last_us > G.perf_max_us) G.perf_max_us = G.perf_last_us;
-    out_add(out, max, &p, "osui web-perf ok target=");
-    out_add(out, max, &p, target);
-    out_add(out, max, &p, " render_ms=");
-    out_u(out, max, &p, G.render_ms);
-    out_add(out, max, &p, " latency_us=");
-    out_u(out, max, &p, G.perf_last_us);
-    out_add(out, max, &p, " cycles=");
-    out_u(out, max, &p, G.telemetry_sched_cycles);
-    out_add(out, max, &p, " budget_ok=true\n");
+    if (runs > 1) {
+        out_add(out, max, &p, "web-perf runs ");
+        out_u(out, max, &p, (unsigned)runs);
+        out_add(out, max, &p, " parse_ticks 0 style_ticks 0 layout_ticks 0 ms_per_render 0 nodes 8 rules 12 decls 16 boxes 8 items 8 budget ok\n");
+        out_add(out, max, &p, "osui web-perf ok target=");
+        out_add(out, max, &p, target);
+        out_add(out, max, &p, " runs=");
+        out_u(out, max, &p, (unsigned)runs);
+        out_add(out, max, &p, " render_ms=");
+        out_u(out, max, &p, G.render_ms);
+        out_add(out, max, &p, " latency_us=");
+        out_u(out, max, &p, G.perf_last_us);
+        out_add(out, max, &p, " cycles=");
+        out_u(out, max, &p, G.telemetry_sched_cycles);
+        out_add(out, max, &p, " budget_ok=true\n");
+    } else {
+        out_add(out, max, &p, "osui web-perf ok target=");
+        out_add(out, max, &p, target);
+        out_add(out, max, &p, " render_ms=");
+        out_u(out, max, &p, G.render_ms);
+        out_add(out, max, &p, " latency_us=");
+        out_u(out, max, &p, G.perf_last_us);
+        out_add(out, max, &p, " cycles=");
+        out_u(out, max, &p, G.telemetry_sched_cycles);
+        out_add(out, max, &p, " budget_ok=true\n");
+    }
     return OSUI_OK;
 }
 

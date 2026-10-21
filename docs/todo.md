@@ -2,6 +2,11 @@
 
 > **Etat reel et pilotage (20 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **913** tests reussis.
 
+## Lot 15: Consolidation Sécurité Web Runtime, Résilience P2P Mesh & Métriques de Production ✅ (20 octobre 2026)
+- [x] US-039 / US-031 : Isolation CSP et contrôle dynamique des ressources d'affichage (`webrt_csp_enforce`, `webrt_csp_validate_display_list_resource`) pour scripts, styles, images, médias et connecteurs réseau avec journalisation d'audit (`osui-audit`).
+- [x] US-063 / US-070 : Calcul de coût de lien P2P dynamique (`p2p_calc_link_cost`) utilisant le RTT EWMA glissant (`rtt_ewma_ms`), la perte de paquets et la charge. Purge et invalidation automatique des entrées du cache P2P distribué et de la file d'invalidation lors des déconnexions de pairs (`p2p_cache_on_peer_down`).
+- [x] US-120 / Garde 1 : Évaluation dynamique de la feuille de route (`prod_roadmap_eval`, `prod_roadmap_parse`) avec vérification d'intégrité FNV-1a (`checksum_fnv`), exposant la progression et la somme FNV via `prod-roadmap` et la télémétrie.
+
 ## Lot 14: Optimisation Performances & Robustesse Navigateur-OS / GGUF ✅ (20 octobre 2026)
 - [x] US-043 / US-045 : Evolution des metriques de performance du navigateur (`web-perf`, `browser-telemetry perf`) avec calcul de latence par cycle d'ordonnancement (`telemetry_sched_cycles`, `perf_min_us`, `perf_max_us`, `perf_avg_us`, `perf_last_us`, `render_ms`).
 - [x] US-045 : Extensions des vues d'inspection VFS / FS-as-Web dans `/browser` et `/fs` pour l'inspection hierarchique du DOM (`browser-dom-tree`) et l'evaluation d'expressions sandboxees (`browser-eval`).

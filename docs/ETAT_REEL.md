@@ -10,6 +10,19 @@
 
 ## État courant vérifié
 
+## Etat courant du 20 octobre 2026 (lot 15)
+
+Living baseline. Plan: [lot15_plan.md](lot15_plan.md).
+
+```text
+make test-all : 913+ passed, 0 failed, 0 skipped
+```
+
+- US-039 / US-031: Evolved Web Runtime CSP enforcement (`webrt_csp_enforce`, `webrt_csp_validate_display_list_resource`) across scripts, styles, images, media streams, and fetch/connect directives, logging all CSP violations into the `osui-audit` security audit trail.
+- US-063 / US-070: Consolidated P2P link cost calculations (`p2p_calc_link_cost`) using sliding window EWMA RTT (`rtt_ewma_ms`), packet loss percentage, and bucket load. Improved mesh network resilience with automatic cache invalidation and waiting queue cleanup on peer disconnection (`p2p_cache_on_peer_down`).
+- US-120 / Garde 1: Updated roadmap evaluation (`prod_roadmap_eval`, `prod_roadmap_parse`) with FNV-1a checksum integrity verification (`checksum_fnv`), exposing phase progress and checksum telemetry in `prod-roadmap` and OS-UI telemetry outputs.
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 20 octobre 2026 (lot 14)
 
 Living baseline. Plan: [lot14_plan.md](lot14_plan.md).
