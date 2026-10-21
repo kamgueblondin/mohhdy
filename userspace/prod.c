@@ -430,6 +430,9 @@ int prod_autoscale_workload_eval(prod_scaler_t* s, prod_autoscale_workload_t* wl
     old_workers = s->cur;
     effective_load = wl->queue_depth > 0 ? wl->queue_depth : (wl->cpu_load_pct / 10U);
     if (effective_load == 0 && wl->cpu_load_pct > 80U) effective_load = 10U;
+    if (wl->queue_depth > 50U || wl->cpu_load_pct > 90U) {
+        effective_load *= 2U;
+    }
     new_workers = prod_scaler_step(s, effective_load, now_tick);
     if (new_workers != old_workers) wl->scale_events++;
     wl->active_workers = (uint32_t)new_workers;
@@ -900,6 +903,14 @@ int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, co
         s_cat(out, "usage ", cap); s_cat(out, u->u[i].name, cap); s_cat(out, " ", cap); cat_u(out, u->u[i].count, cap); s_cat(out, "\n", cap);
     }
     s_cat(out, "feedback total ", cap); cat_u(out, f ? f->total : 0, cap); s_cat(out, "\n", cap);
+    {
+        prod_perf_monitor_t pm;
+        char pm_buf[256];
+        if (prod_perf_monitor_eval(m, a, &pm, pm_buf, (int)sizeof(pm_buf)) >= 0) {
+            s_cat(out, "health_score ", cap); cat_u(out, pm.overall_health_score, cap);
+            s_cat(out, " status ", cap); s_cat(out, pm.system_status_ok ? "ok_healthy\n" : "warning_degraded\n", cap);
+        }
+    }
     {
         extern int sys_readfile(const char* path, char* buf, int max);
         static char rmbuf[2048];

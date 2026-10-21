@@ -562,6 +562,32 @@ void test_routing_grpc_and_stun(void) {
     TEST_ASSERT_NOT_NULL(strstr(g_out[1], "p2p nat punch from alpha pinhole opened"));
 }
 
+void test_lot17_raft_resilience_and_compact_zeroing(void) {
+    setup(3, 0);
+    run(3, 300);
+    /* Elect alpha as leader */
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+
+    /* Start proposal on leader with alpha unable to hear votes */
+    g_cut[1][0] = 1; g_cut[2][0] = 1;
+    TEST_ASSERT_EQUAL(2, p2p_propose(&g_n[0], &g_h[0], "prop1", "val1"));
+    TEST_ASSERT_EQUAL(1, g_n[0].prop.active);
+
+    /* Heal partition and advance time past leader lease */
+    g_cut[1][0] = 0; g_cut[2][0] = 0;
+    g_ticks += P2P_RAFT_LEASE_TICKS + (5U * P2P_HZ);
+
+    /* Beta initiates election in higher term (term 3) */
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[1], &g_h[1]));
+    run(3, 80);
+
+    /* Verify proposal on alpha was reset / cancelled upon step down */
+    TEST_ASSERT_EQUAL(0, g_n[0].prop.active);
+    TEST_ASSERT_EQUAL(-2, g_n[0].prop.result);
+}
+
 void test_p2p_consolidation_and_fallback(void) {
     char rep[512];
     uint32_t nh = 0, cost = 0;
@@ -920,6 +946,7 @@ int main(void) {
     RUN_TEST(test_stun_behind_simulated_nat);
     RUN_TEST(test_route_prefers_direct_over_cheaper_relay);
     RUN_TEST(test_p2p_consolidation_and_fallback);
+    RUN_TEST(test_lot17_raft_resilience_and_compact_zeroing);
     RUN_TEST(test_rtt_ewma_and_auto_cache_invalidation_on_disconnect);
     unity_print_results();
     unity_cleanup();
