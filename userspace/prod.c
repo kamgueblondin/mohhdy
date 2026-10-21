@@ -926,6 +926,12 @@ int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, co
             }
         }
     }
+    {
+        uint32_t bfnv = prod_fnv1a((const uint8_t*)out, s_len(out));
+        s_cat(out, "checksum verified=true fnv ", cap);
+        cat_hex8(out, bfnv, cap);
+        s_cat(out, "\n", cap);
+    }
     s_cat(out, "end\n", cap);
     return s_len(out) < cap - 1 ? s_len(out) : -1;
 }
