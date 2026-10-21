@@ -10,6 +10,19 @@
 
 ## État courant vérifié
 
+## Etat courant du 21 octobre 2026 (lot 22)
+
+Living baseline. Plan: [lot22_plan.md](lot22_plan.md).
+
+```text
+make test-all : 929 passed, 0 failed, 0 skipped
+```
+
+- US-041 / US-060: Consolidated sandboxed PromptMessage execution (`cmd_browser_pm_run`), CA certificate validation, Schnorr signatures (`csig_verify`), and extended security audit trail (`osui-audit`, `audit_log_add`) for CA key rotation (`pm_ca_rotate_status`) and user session lifecycle (`session_new`, `session_use`, `session_end`, `session_ttl`, `session_restore`, `session_cleanup`).
+- US-075 / US-082: Consolidated P2P state synchronization (`p2p_sync`), Raft election/compaction (`p2p_raft_elect`, `p2p_raft_compact`, `raft_step_down`), Last-Writer-Wins (LWW) collaborative transaction resolution, and AES-128-GCM signing key sealing (`g_collab_locked`, `shell_persist_line`).
+- US-112 / US-116: Refined predictive maintenance risk calculation (`prod_maint_model_risk`), workload auto-scaling (`prod_autoscale_workload_eval`), performance monitoring (`prod_perf_monitor_eval`), dynamic roadmap evaluation (`prod_roadmap_eval`, `checksum_fnv`), and diagnostic support bundle generation (`prod_support_bundle_text`, `prod-support-bundle`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 21 octobre 2026 (lot 17)
 
 Living baseline. Plan: [lot17_plan.md](lot17_plan.md).

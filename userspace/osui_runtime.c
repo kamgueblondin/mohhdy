@@ -1719,6 +1719,7 @@ static int cmd_session_new(char args[OSUI_MAX_ARGS][96], int narg, char *out, in
         out_add(out, max, &p, "osui session-new error=too_many_sessions\n");
         return OSUI_ERR;
     }
+    audit_log_add("session_new", s->id);
     out_add(out, max, &p, "osui session-new ok session_id=");
     out_add(out, max, &p, s->id);
     out_add(out, max, &p, " site_id=");
@@ -1742,6 +1743,7 @@ static int cmd_session_use(char args[OSUI_MAX_ARGS][96], int narg, char *out, in
     for (i = 0; i < OSUI_MAX_SESSIONS; i++) {
         if (&G.sessions[i] == s) G.current = i;
     }
+    audit_log_add("session_use", s->id);
     out_add(out, max, &p, "osui session-use ok session_id=");
     out_add(out, max, &p, s->id);
     out_add(out, max, &p, "\n");
@@ -1781,6 +1783,7 @@ static int cmd_session_end(char *out, int max) {
     s->n_msgs = 0;
     s_cpy(s->ai_state, 16, "ended");
     journal(s->id, "session.end", "ok", 0U);
+    audit_log_add("session_end", s->id);
     out_add(out, max, &p, "osui session-end ok session_id=");
     out_add(out, max, &p, s->id);
     out_add(out, max, &p, " status=closed ai_status=ended history=cleared\n");
@@ -1830,6 +1833,7 @@ static int cmd_session_ttl(char args[OSUI_MAX_ARGS][96], int narg, char *out, in
         return OSUI_ERR;
     }
     if (narg >= 1) G.session_ttl = v;
+    audit_log_add("session_ttl", narg >= 1 ? args[0] : "get");
     out_add(out, max, &p, "osui session-ttl ok ttl=");
     out_u(out, max, &p, G.session_ttl);
     out_add(out, max, &p, "\n");
@@ -1856,6 +1860,7 @@ static int cmd_session_restore(char args[OSUI_MAX_ARGS][96], int narg, char *out
     for (i = 0; i < OSUI_MAX_SESSIONS; i++)
         if (&G.sessions[i] == s) G.current = i;
     journal(s->id, "session.restore", "ok", 0U);
+    audit_log_add("session_restore", s->id);
     out_add(out, max, &p, "osui session-restore ok session_id=");
     out_add(out, max, &p, s->id);
     out_add(out, max, &p, " status=open history=");
@@ -1878,6 +1883,7 @@ static int cmd_session_cleanup(char *out, int max) {
         if (G.n_sessions > 0) G.n_sessions--;
         freed++;
     }
+    audit_log_add("session_cleanup", "freed");
     if (G.current < 0 || G.current >= OSUI_MAX_SESSIONS || !G.sessions[G.current].used) {
         G.current = -1;
         for (i = 0; i < OSUI_MAX_SESSIONS; i++)

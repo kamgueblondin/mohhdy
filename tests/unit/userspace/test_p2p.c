@@ -974,6 +974,19 @@ static void test_lot21_mesh_routing_and_grpc_fallback(void) {
     TEST_ASSERT_GREATER_THAN(0U, g_n[0].nat.nat_punches);
 }
 
+static void test_lot22_raft_partition_resilience(void) {
+    setup(3, 0);
+    run(3, 300);
+    /* Elect alpha as leader */
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+
+    /* Compact Raft log on leader and verify log count reset */
+    TEST_ASSERT_EQUAL(0, p2p_raft_compact(&g_n[0]));
+    TEST_ASSERT_EQUAL(0U, g_n[0].raft.log_count);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1007,6 +1020,7 @@ int main(void) {
     RUN_TEST(test_lot19_adaptive_cost_and_mesh_routing);
     RUN_TEST(test_lot20_p2p_cache_and_raft_anti_entropy);
     RUN_TEST(test_lot21_mesh_routing_and_grpc_fallback);
+    RUN_TEST(test_lot22_raft_partition_resilience);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

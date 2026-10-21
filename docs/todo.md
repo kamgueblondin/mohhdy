@@ -1,6 +1,11 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (21 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **918** tests reussis.
+> **Etat reel et pilotage (21 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **929** tests reussis.
+
+## Lot 22: Consolidation Ecosysteme OS-UI / PromptMessage, Resilience Economique Collaborative & Surveillance Production Continue ✅ (21 octobre 2026)
+- [x] US-041 / US-060 : Execution sandboxee PromptMessage (`cmd_browser_pm_run`), verification certificats CA (`/etc/pm_ca.pub`), signatures Schnorr (`csig_verify`), et tracabilite dans `osui-audit` pour rotation cles CA (`pm_ca_rotate_status`) et cycle de vie des sessions utilisateur.
+- [x] US-075 / US-082 : Synchronisation d'etat P2P (`p2p_sync`), consensus Raft (`p2p_raft_elect`, `p2p_raft_compact`), resolution LWW du registre collaboratif et scellement AES-128-GCM des cles de signature.
+- [x] US-112 / US-116 : Prediction de risque de maintenance (`prod_maint_model_risk`), autoscaling de charge (`prod_autoscale_workload_eval`), evaluation dynamique de la feuille de route (`prod_roadmap_eval`, `checksum_fnv`) et paquets de diagnostic (`prod-support-bundle`, `prod_support_bundle_text`) avec empreinte FNV-1a.
 
 ## Lot 19: Optimisation Moteur Multi-Onglets OS-UI, Résilience Routage P2P Mesh & Diagnostic Production ✅ (21 octobre 2026)
 - [x] US-038 / US-045 : Perfectionnement de la gestion dynamique du cycle de vie des onglets (`browser-tab-rename`, `browser-tab-pin`, `browser-tab-duplicate`, `browser-tab-next`, `browser-tab-prev`), isolation du stockage local par site et traçabilité étendue dans `osui-audit` pour navigation, inspection DOM/VFS et persistance chiffrée (`ENC_V1:`).
