@@ -10,6 +10,19 @@
 
 ## État courant vérifié
 
+## Etat courant du 21 octobre 2026 (lot 17)
+
+Living baseline. Plan: [lot17_plan.md](lot17_plan.md).
+
+```text
+make test-all : 914+ passed, 0 failed, 0 skipped
+```
+
+- US-040 / US-081: Evolved Web Runtime DOM/CSS media query evaluation (`aspect-ratio`, `min-aspect-ratio`, `max-aspect-ratio`) in `userspace/webrt.c` and consolidated VFS sandbox security audit logging (`vfs_read`, `vfs_scope_denied`, `vfs_traversal_denied`, `vfs_fs_save`, `vfs_fs_load`, `fetch_allowed`) in `userspace/osui_runtime.c`.
+- US-070 / US-076: Reinforced P2P Raft consensus resilience by purging active proposals (`n->prop.active = 0`, `n->prop.result = -2`) on term step-down / network partition, and cleaning up uncommitted log slots and cache fences during snapshot installation (`raft_install_snapshot`) and compaction (`p2p_raft_compact`).
+- US-110 / US-121: Extended production autoscaling workload evaluation (`prod_autoscale_workload_eval`) for high CPU and queue depth stress scenarios, and integrated system health score & status into diagnostic support bundles (`prod_support_bundle_text`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 20 octobre 2026 (lot 15)
 
 Living baseline. Plan: [lot15_plan.md](lot15_plan.md).

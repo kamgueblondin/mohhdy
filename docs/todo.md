@@ -2,6 +2,11 @@
 
 > **Etat reel et pilotage (21 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **914** tests reussis.
 
+## Lot 17: Consolidation Web Runtime, Robustesse Inférence GGUF KVM & Synchronisation P2P/Production ✅ (21 octobre 2026)
+- [x] US-040 / US-081 : Évaluation DOM/CSS étendue pour media queries `aspect-ratio` et traçabilité des opérations VFS sandboxées (`vfs_read`, `vfs_scope_denied`, `vfs_traversal_denied`, `vfs_fs_save`, `vfs_fs_load`, `fetch_allowed`) dans `osui-audit`.
+- [x] US-070 / US-076 : Résilience Raft P2P renforcée par purge des propositions obsolètes lors des changements de terme/leader et réinitialisation propre du cache/snapshot (`p2p_raft_compact`, `raft_install_snapshot`).
+- [x] US-110 / US-121 : Évaluation d'autoscaling sous scénarios de stress de charge (`prod_autoscale_workload_eval`) et intégration du score de santé global système (`health_score`) dans le rapport de diagnostic `prod_support_bundle_text`.
+
 ## Lot 16: Extension Sécurité Audit, Consolidation QoS P2P Mesh & Robustesse Démarrage/VFS ✅ (21 octobre 2026)
 - [x] US-039 / US-081 : Audit avancé dans `osui-audit` pour violations CSP, refus d'origine (`origin_denied`), et accès non autorisés MCP. Persistance sur l'overlay VFS lors de `browser-fs-save` et `browser-fs-load`.
 - [x] US-068 / US-075 : Intégration des anomalies de trafic par pair (`p->anomalies`) dans `p2p_calc_link_cost` (+50U par anomalie) et régulation AIMD réactive `p2p_qos_note_loss`.

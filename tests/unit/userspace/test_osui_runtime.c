@@ -1227,6 +1227,30 @@ static void test_lot15_csp_audit_and_p2p_resilience(void) {
     TEST_ASSERT(strstr(g_out, "[AUDIT] origin : origin_denied") != NULL);
 }
 
+static void test_lot17_vfs_sandbox_audit_logging(void) {
+    int rc;
+    setup();
+    /* Scope denied */
+    rc = run_line("fs-read demo/hello.txt");
+    TEST_ASSERT_EQUAL(1, rc);
+
+    /* Traversal denied */
+    rc = run_line("fs-read ../secret");
+    TEST_ASSERT_EQUAL(1, rc);
+
+    /* Grant scope & read */
+    run_line("grant fs.read:demo/");
+    rc = run_line("fs-read demo/hello.txt");
+    TEST_ASSERT_EQUAL(0, rc);
+
+    /* Verify audit log captures operations */
+    rc = run_line("osui-audit");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "[AUDIT] vfs_scope_denied") != NULL);
+    TEST_ASSERT(strstr(g_out, "[AUDIT] vfs_traversal_denied") != NULL);
+    TEST_ASSERT(strstr(g_out, "[AUDIT] vfs_read") != NULL);
+}
+
 static void test_all_browser_and_osui_commands_dispatch(void) {
     setup();
     TEST_ASSERT_EQUAL(0, run_line("browser-tab-new http://example.local/page1"));
@@ -1288,6 +1312,7 @@ int main(void) {
     RUN_TEST(test_html_css_rendering);
     RUN_TEST(test_lot14_web_perf_and_vfs_inspection);
     RUN_TEST(test_lot15_csp_audit_and_p2p_resilience);
+    RUN_TEST(test_lot17_vfs_sandbox_audit_logging);
     RUN_TEST(test_all_browser_and_osui_commands_dispatch);
     unity_print_results();
     unity_cleanup();

@@ -528,6 +528,27 @@ static int mq_term(const char* t, int n, const webrt_viewport_t* v) {
         if (kl == 9 && w_ieqn(f, "max-width", 9)) return v->width <= mq_length(f + vs, vl);
         if (kl == 10 && w_ieqn(f, "min-height", 10)) return v->height >= mq_length(f + vs, vl);
         if (kl == 10 && w_ieqn(f, "max-height", 10)) return v->height <= mq_length(f + vs, vl);
+        if ((kl == 12 && w_ieqn(f, "aspect-ratio", 12)) ||
+            (kl == 16 && w_ieqn(f, "min-aspect-ratio", 16)) ||
+            (kl == 16 && w_ieqn(f, "max-aspect-ratio", 16))) {
+            int num = 1, den = 1, slash = -1, k;
+            for (k = 0; k < vl; k++) {
+                if (f[vs + k] == '/') { slash = k; break; }
+            }
+            if (slash >= 0) {
+                num = w_atoi(f + vs, slash);
+                den = w_atoi(f + vs + slash + 1, vl - slash - 1);
+            } else {
+                num = w_atoi(f + vs, vl);
+            }
+            if (den <= 0) den = 1;
+            if (num <= 0) num = 1;
+            if (kl == 12) return (v->width * den) == (v->height * num);
+            if (kl == 16 && f[0] == 'm' && f[1] == 'i' && f[2] == 'n')
+                return (v->width * den) >= (v->height * num);
+            if (kl == 16 && f[0] == 'm' && f[1] == 'a' && f[2] == 'x')
+                return (v->width * den) <= (v->height * num);
+        }
         if (kl == 11 && w_ieqn(f, "orientation", 11)) {
             int portrait = v->height >= v->width;
             if (vl == 8 && w_ieqn(f + vs, "portrait", 8)) return portrait;

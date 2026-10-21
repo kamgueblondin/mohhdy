@@ -3909,6 +3909,7 @@ static int cmd_browser_fetch(char args[OSUI_MAX_ARGS][96], int narg, char *out, 
         return OSUI_ERR;
     }
     journal(cur() ? cur()->id : "", "fetch", "ok", rid);
+    audit_log_add("fetch_allowed", url);
     out_add(out, max, &p, "osui browser-fetch ok url=");
     out_add(out, max, &p, url);
     out_add(out, max, &p, " origin=");
@@ -4174,6 +4175,7 @@ static int cmd_browser_fs_save(char args[OSUI_MAX_ARGS][96], int narg, char *out
     const char *path = (narg > 0 && args[0][0]) ? args[0] : "/web_app.json";
     static char buf[1024];
     static char enc_buf[1024];
+    audit_log_add("vfs_fs_save", path);
     len = osui_web_save_state(buf, sizeof(buf));
     s_cpy(enc_buf, sizeof(enc_buf), "ENC_V1:");
     for (i = 0; i < len && (7 + i) < (int)sizeof(enc_buf) - 1; i++) {
@@ -4201,6 +4203,7 @@ static int cmd_browser_fs_load(char args[OSUI_MAX_ARGS][96], int narg, char *out
     const char *path = (narg > 0 && args[0][0]) ? args[0] : "/web_app.json";
     static char buf[1024];
     static char dec_buf[1024];
+    audit_log_add("vfs_fs_load", path);
     n = sys_readfile(path, buf, sizeof(buf) - 1);
     if (n <= 0) {
         out_add(out, max, &p, "osui browser-fs-load error=read_failed path=");
@@ -4575,6 +4578,7 @@ static int cmd_fs_read(char args[OSUI_MAX_ARGS][96], int narg, char *out, int ma
     }
     rid = new_rid();
     if (fs_traversal(args[0])) {
+        audit_log_add("vfs_traversal_denied", args[0]);
         out_add(out, max, &p, "osui fs-read error=traversal_denied");
         emit_rid(out, max, &p, rid);
         out_add(out, max, &p, "\n");
@@ -4583,6 +4587,7 @@ static int cmd_fs_read(char args[OSUI_MAX_ARGS][96], int narg, char *out, int ma
     if (!fs_read_allowed(cur(), args[0])) {
         osui_session_t *s = cur();
         journal(s ? s->id : "", "fs.read", "scope_denied", rid);
+        audit_log_add("vfs_scope_denied", args[0]);
         out_add(out, max, &p, "osui fs-read error=capability_denied capability=fs.read:<scope>");
         emit_rid(out, max, &p, rid);
         out_add(out, max, &p, "\n");
@@ -4591,6 +4596,7 @@ static int cmd_fs_read(char args[OSUI_MAX_ARGS][96], int narg, char *out, int ma
     {
         osui_session_t *s = cur();
         journal(s ? s->id : "", "fs.read", "ok", rid);
+        audit_log_add("vfs_read", args[0]);
     }
     f = fs_find(args[0]);
     if (!f || f->is_dir) {

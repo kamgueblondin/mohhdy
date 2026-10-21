@@ -488,6 +488,10 @@ static void raft_step_down(p2p_node_t* n, uint32_t term) {
     n->raft.role = P2P_RAFT_FOLLOWER;
     n->raft.voted_for = 0;
     n->raft.leader_id = 0;
+    if (n->prop.active) {
+        n->prop.active = 0;
+        n->prop.result = -2;
+    }
 }
 static void raft_apply(p2p_node_t* n, const p2p_host_t* h) {
     char line[160];
@@ -603,6 +607,7 @@ static void raft_install_snapshot(p2p_node_t* n, const p2p_host_t* h, uint32_t i
     for (i = 0; i < n->raft.snap_in_n && i < P2P_KV; i++) {
         p2p_item_t* it = &n->raft.snap_in[i];
         (void)kv_apply(n, it->key, it->value, it->version, it->origin);
+        cache_fence(n, it->key, it->version);
     }
     line[0] = 0;
     s_cat(line, "p2p raft snapshot installed index ", 80);
@@ -931,8 +936,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         if (len < 8) break;
         hb_term = get32(m); ldr_id = get32(m + 4);
         if (hb_term >= n->raft.term) {
-            if (hb_term > n->raft.term) n->raft.term_changes++;
-            n->raft.term = hb_term;
+            if (hb_term > n->raft.term) raft_step_down(n, hb_term);
             n->raft.role = P2P_RAFT_FOLLOWER;
             n->raft.leader_id = ldr_id;
             n->raft.voted_for = 0;
@@ -1903,6 +1907,7 @@ int p2p_raft_compact(p2p_node_t* n) {
         kept[i] = *src;
     }
     for (i = 0; i < keep; i++) n->raft.log[i] = kept[i];
+    for (i = keep; i < P2P_RAFT_LOG; i++) mzero(&n->raft.log[i], (int)sizeof(n->raft.log[i]));
     n->raft.snapshot_index = base;
     n->raft.snapshot_term = term;
     /* Kv image at this index. Later appends change n->kv and must not

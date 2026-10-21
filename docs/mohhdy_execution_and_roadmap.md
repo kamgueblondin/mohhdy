@@ -56,6 +56,11 @@ Elle confirme visuellement :
 - **Inspection VFS & FS-as-Web (US-045)** : Inspection hierarchique du DOM (`browser-dom-tree`) et evaluation d'expressions sandboxees VFS (`browser-eval`) directement accessibles dans `/browser` et `/fs`.
 - **Evaluation de Latence & Benchmarks GGUF (Garde 3)** : Cache KV multi-tours consolide avec rembobinage dynamique du prefixe commun (`gpt2_gguf_cache_match_prefix`, `gpt2_gguf_align_cache_prefix`) dans `kernel/llm/gpt2_gguf_infer.c`. Validation du protocole KVM (`make gguf-kvm-benchmark-check`).
 
+### Lot 17 (21 octobre 2026) : Consolidation Web Runtime, Robustesse Inférence GGUF KVM & Synchronisation P2P/Production
+- **Moteur Web & Sandbox VFS Extended (US-040 / US-081)** : Évaluation avancée des media queries (`aspect-ratio`) et traçabilité renforcée des opérations VFS sandboxées (`vfs_read`, `vfs_scope_denied`, `vfs_traversal_denied`, `vfs_fs_save`, `vfs_fs_load`, `fetch_allowed`) dans `osui-audit`.
+- **Réseau P2P & Résilience Consensus Mesh (US-070 / US-076)** : Purge systématique des propositions obsolètes lors du changement de terme/leader et synchronisation propre des snapshots/cache (`raft_install_snapshot`, `p2p_raft_compact`).
+- **Métriques Production & Autoscaling (US-110 / US-121)** : Gestion des pics de charge sous scénarios de stress dans `prod_autoscale_workload_eval` et intégration de l'état de santé système global (`health_score`) dans `prod_support_bundle_text`.
+
 ### Lot 15 (20 octobre 2026) : Securite Web Runtime, Resilience P2P Mesh & Metriques de Production
 - **Securite Web Runtime & Inspection CSP (US-039 / US-031)** : Isolation CSP et verification stricte des ressources d'affichage (`webrt_csp_enforce`, `webrt_csp_validate_display_list_resource`) sur feuilles de style, scripts, images, medias et connexions réseau, avec journalisation des rejections dans le journal d'audit (`osui-audit`).
 - **Maillage P2P & Resilience Mesh (US-063 / US-070)** : Coût de lien dynamique (`p2p_calc_link_cost`) mis a jour selon le RTT EWMA (`rtt_ewma_ms`), le taux de perte de paquets et la charge. Purge et invalidation automatique des entrees de cache perimees (`p2p_cache_on_peer_down`) lors des deconnexions de pairs.

@@ -380,6 +380,42 @@ void test_smart_alerts_and_perf_monitor(void) {
     TEST_ASSERT_NOT_NULL(strstr(out_buf, "status ok_healthy"));
 }
 
+void test_lot17_autoscale_stress_and_bundle_health(void) {
+    prod_scaler_t sc;
+    prod_autoscale_workload_t wl;
+    prod_metrics_t m;
+    prod_alerts_t a;
+    prod_usage_t u;
+    prod_feedback_t fb;
+    char out_buf[512], bundle[2048];
+    int blen;
+
+    prod_scaler_init(&sc, 1, 4, 4000U, 1000U, 2U);
+    memset(&wl, 0, sizeof(wl));
+
+    /* Normal workload evaluation */
+    wl.queue_depth = 20;
+    wl.cpu_load_pct = 50;
+    prod_autoscale_workload_eval(&sc, &wl, 100, out_buf, sizeof(out_buf));
+    uint32_t normal_workers = wl.active_workers;
+
+    /* High queue depth stress condition (>50) */
+    wl.queue_depth = 60;
+    prod_autoscale_workload_eval(&sc, &wl, 100, out_buf, sizeof(out_buf));
+    TEST_ASSERT_TRUE(wl.active_workers >= normal_workers);
+
+    /* Test support bundle includes overall health score */
+    prod_metrics_init(&m);
+    prod_alerts_init(&a);
+    memset(&u, 0, sizeof(u));
+    memset(&fb, 0, sizeof(fb));
+
+    blen = prod_support_bundle_text(&m, &a, &u, &fb, 100, bundle, sizeof(bundle));
+    TEST_ASSERT_GREATER_THAN(0, blen);
+    TEST_ASSERT_NOT_NULL(strstr(bundle, "health_score 100"));
+    TEST_ASSERT_NOT_NULL(strstr(bundle, "status ok_healthy"));
+}
+
 void test_prod_consolidation_and_fallback(void) {
     prod_metrics_t m;
     prod_alerts_t a;
@@ -540,6 +576,7 @@ int main(void) {
     RUN_TEST(test_maint_learned_model);
     RUN_TEST(test_smart_alerts_and_perf_monitor);
     RUN_TEST(test_prod_consolidation_and_fallback);
+    RUN_TEST(test_lot17_autoscale_stress_and_bundle_health);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
