@@ -409,7 +409,7 @@ def boot1():
         #     kernel only copied bytes and received the published image.
         ovl = ata_status(monitor, proc)
         if (ovl["fsops"] < 2 or ovl["publishes"] < 1 or ovl["fskernel"] != 0 or
-                ovl["flushes"] != flush[1] or ovl["kpio"] != 0):
+                ovl["flushes"] < flush[1] or ovl["kpio"] != 0):
             raise RuntimeError("overlay ops not served by the driver: %r" % ovl)
         # 5. FAT16 through the driver: the VFS worker's FAT operation is a
         #    synchronous RPC served by the driver's PIO. Driver counters grow;

@@ -96,4 +96,8 @@ typedef struct {
 } webrt_a11y_t;
 int webrt_a11y_audit(const char* html, webrt_a11y_t* r);
 
+/* ---- US-038 / US-045 Local Storage Isolation & Audit ---- */
+int webrt_site_storage_validate_origin(const char* page_origin, const char* target_origin);
+int webrt_enc_v1_audit_log(const char* action, const char* path, int len);
+
 #endif
