@@ -1275,6 +1275,20 @@ static void test_lot19_tab_lifecycle_and_audit_tracing(void) {
     TEST_ASSERT(strstr(g_out, "[AUDIT] os_inspect") != NULL);
 }
 
+static void test_lot22_session_lifecycle_and_pm_audit_tracing(void) {
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("session-new lot22site"));
+    TEST_ASSERT_EQUAL(0, run_line("session-ttl 120"));
+    TEST_ASSERT_EQUAL(0, run_line("session-end"));
+    TEST_ASSERT_EQUAL(0, run_line("session-cleanup"));
+
+    TEST_ASSERT_EQUAL(0, run_line("osui-audit"));
+    TEST_ASSERT(strstr(g_out, "[AUDIT] session_new") != NULL);
+    TEST_ASSERT(strstr(g_out, "[AUDIT] session_ttl") != NULL);
+    TEST_ASSERT(strstr(g_out, "[AUDIT] session_end") != NULL);
+    TEST_ASSERT(strstr(g_out, "[AUDIT] session_cleanup") != NULL);
+}
+
 static void test_all_browser_and_osui_commands_dispatch(void) {
     setup();
     TEST_ASSERT_EQUAL(0, run_line("browser-tab-new http://example.local/page1"));
@@ -1338,6 +1352,7 @@ int main(void) {
     RUN_TEST(test_lot15_csp_audit_and_p2p_resilience);
     RUN_TEST(test_lot17_vfs_sandbox_audit_logging);
     RUN_TEST(test_lot19_tab_lifecycle_and_audit_tracing);
+    RUN_TEST(test_lot22_session_lifecycle_and_pm_audit_tracing);
     RUN_TEST(test_all_browser_and_osui_commands_dispatch);
     unity_print_results();
     unity_cleanup();

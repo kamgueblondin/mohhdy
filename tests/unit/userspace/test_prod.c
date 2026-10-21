@@ -612,6 +612,41 @@ static void test_lot21_support_bundle_checksum_verification(void) {
     TEST_ASSERT_NOT_NULL(strstr(out, "checksum verified=true fnv "));
 }
 
+static void test_lot22_predictive_maintenance_and_autoscale_eval(void) {
+    prod_metrics_t m;
+    prod_maint_model_t mm;
+    prod_scaler_t s;
+    prod_autoscale_workload_t wl;
+    prod_sample_t sm;
+    char out[128];
+    int risk, i;
+
+    memset(&m, 0, sizeof(m));
+    memset(&sm, 0, sizeof(sm));
+    for (i = 0; i < 12; i++) {
+        sm.tick = (uint32_t)(100 + i * 10);
+        sm.v[PM_MEM_USED] = 50;
+        sm.v[PM_BUSY] = 30;
+        prod_metrics_push(&m, &sm);
+    }
+
+    memset(&mm, 0, sizeof(mm));
+    mm.trained = 1;
+    mm.fail_at = 1000;
+    mm.w[0] = 100;
+
+    risk = prod_maint_model_risk(&mm, &m);
+    TEST_ASSERT_GREATER_THAN(-1, risk);
+
+    prod_scaler_init(&s, 1, 10, 800, 200, 5);
+    memset(&wl, 0, sizeof(wl));
+    wl.queue_depth = 60;
+    wl.cpu_load_pct = 95;
+
+    TEST_ASSERT_EQUAL(0, prod_autoscale_workload_eval(&s, &wl, 100, out, sizeof(out)));
+    TEST_ASSERT_NOT_NULL(strstr(out, "autoscale workload workers"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -634,6 +669,7 @@ int main(void) {
     RUN_TEST(test_lot19_support_bundle_fnv_and_risk_model);
     RUN_TEST(test_lot20_secdb_and_elf_wx_audit);
     RUN_TEST(test_lot21_support_bundle_checksum_verification);
+    RUN_TEST(test_lot22_predictive_maintenance_and_autoscale_eval);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
