@@ -102,3 +102,8 @@ Elle confirme visuellement :
 - **Déploiement du harnais de mesure** : Exécuter le harnais `tests/scripts/benchmark_qemu_gguf_kvm_latency.py` sous KVM (`make gguf-kvm-benchmark`).
 - **Évaluation des métriques de latence** : Établir le rapport (min, médiane, max, dispersion) isolant le temps du premier jeton et la réutilisation du cache KV multi-tours.
 - **Validation** : Exécution de `make gguf-kvm-benchmark-check`.
+
+### Lot 16 : Extension Sécurité Audit, Consolidation QoS P2P Mesh & Robustesse Démarrage/VFS (US-045 / US-068 / US-081)
+- **Moteur Web & Sécurité Audit** : Tracé complet dans `osui-audit` pour violations CSP, refus d'origine (`origin_denied`), et tentatives/refus de connecteurs MCP avec persistance overlay VFS.
+- **Maillage P2P & Contrôle QoS** : Pénalisation des anomalies de trafic par pair dans `p2p_calc_link_cost` et réajustement AIMD.
+- **Diagnostic Production** : Calcul FNV-1a de la feuille de route (`checksum_fnv`) dans `prod_support_bundle_text` et sécurisation des bornes de `prod_maint_model_risk`.

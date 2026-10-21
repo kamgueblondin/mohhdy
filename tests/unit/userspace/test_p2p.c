@@ -531,6 +531,16 @@ void test_routing_grpc_and_stun(void) {
     TEST_ASSERT_EQUAL(0, (int)nh);
     TEST_ASSERT_GREATER_THAN(0, (int)cost);
 
+    /* Test Lot 16 link cost penalty on peer anomalies */
+    {
+        p2p_peer_t *p0 = &g_n[0].peers[0];
+        uint32_t c_normal = p2p_calc_link_cost(p0);
+        p0->anomalies = 2;
+        uint32_t c_anomaly = p2p_calc_link_cost(p0);
+        TEST_ASSERT_EQUAL(c_normal + 100U, c_anomaly);
+        p0->anomalies = 0;
+    }
+
     p2p_report(&g_n[0], &g_h[0], "route", rep, sizeof(rep));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p route dest beta via direct cost "));
 

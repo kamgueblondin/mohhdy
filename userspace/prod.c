@@ -394,8 +394,14 @@ int prod_maint_train(prod_maint_model_t* mm, const prod_metrics_t* m, uint32_t f
 }
 int prod_maint_model_risk(const prod_maint_model_t* mm, const prod_metrics_t* m) {
     int32_t x[PROD_MM_FEAT];
-    if (!mm || !mm->trained || !m || prod_maint_features(m, mm, m->n - 1, x) != 0) return -1;
-    return (int)(((uint32_t)mm_prob(mm->w, x) * 100U + 2048U) >> 12);
+    int32_t p;
+    uint32_t risk;
+    if (!mm || !mm->trained || !m || m->n < PROD_MM_WIN || prod_maint_features(m, mm, m->n - 1, x) != 0) return -1;
+    p = mm_prob(mm->w, x);
+    if (p < 0) p = 0;
+    if (p > 4096) p = 4096;
+    risk = ((uint32_t)p * 100U + 2048U) >> 12;
+    return risk > 100U ? 100 : (int)risk;
 }
 
 int prod_biz_metrics_get(const prod_usage_t* u, uint32_t uptime_ticks, prod_biz_metrics_t* bm) {
@@ -893,7 +899,22 @@ int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, co
     for (i = 0; u && i < u->n && i < 8; i++) {
         s_cat(out, "usage ", cap); s_cat(out, u->u[i].name, cap); s_cat(out, " ", cap); cat_u(out, u->u[i].count, cap); s_cat(out, "\n", cap);
     }
-    s_cat(out, "feedback total ", cap); cat_u(out, f ? f->total : 0, cap); s_cat(out, "\nend\n", cap);
+    s_cat(out, "feedback total ", cap); cat_u(out, f ? f->total : 0, cap); s_cat(out, "\n", cap);
+    {
+        extern int sys_readfile(const char* path, char* buf, int max);
+        static char rmbuf[2048];
+        prod_roadmap_t rm;
+        int rlen = sys_readfile("/roadmap.txt", rmbuf, (int)sizeof(rmbuf) - 1);
+        if (rlen > 0) {
+            rmbuf[rlen] = 0;
+            if (prod_roadmap_parse(rmbuf, rlen, &rm) == 0) {
+                s_cat(out, "roadmap fnv ", cap);
+                cat_hex8(out, rm.checksum_fnv, cap);
+                s_cat(out, "\n", cap);
+            }
+        }
+    }
+    s_cat(out, "end\n", cap);
     return s_len(out) < cap - 1 ? s_len(out) : -1;
 }
 

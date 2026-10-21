@@ -1,6 +1,11 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (20 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **913** tests reussis.
+> **Etat reel et pilotage (21 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **914** tests reussis.
+
+## Lot 16: Extension Sécurité Audit, Consolidation QoS P2P Mesh & Robustesse Démarrage/VFS ✅ (21 octobre 2026)
+- [x] US-039 / US-081 : Audit avancé dans `osui-audit` pour violations CSP, refus d'origine (`origin_denied`), et accès non autorisés MCP. Persistance sur l'overlay VFS lors de `browser-fs-save` et `browser-fs-load`.
+- [x] US-068 / US-075 : Intégration des anomalies de trafic par pair (`p->anomalies`) dans `p2p_calc_link_cost` (+50U par anomalie) et régulation AIMD réactive `p2p_qos_note_loss`.
+- [x] US-116 / US-120 : Inclusion de l'empreinte FNV-1a de la feuille de route (`checksum_fnv`) dans le rapport `prod_support_bundle_text` et consolidation de `prod_maint_model_risk`.
 
 ## Lot 15: Consolidation Sécurité Web Runtime, Résilience P2P Mesh & Métriques de Production ✅ (20 octobre 2026)
 - [x] US-039 / US-031 : Isolation CSP et contrôle dynamique des ressources d'affichage (`webrt_csp_enforce`, `webrt_csp_validate_display_list_resource`) pour scripts, styles, images, médias et connecteurs réseau avec journalisation d'audit (`osui-audit`).
