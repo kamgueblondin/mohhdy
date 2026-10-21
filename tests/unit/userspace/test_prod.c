@@ -579,6 +579,21 @@ static void test_lot19_support_bundle_fnv_and_risk_model(void) {
     TEST_ASSERT_NOT_EQUAL(0, fnv1);
 }
 
+static void test_lot20_secdb_and_elf_wx_audit(void) {
+    prod_secdb_t db;
+    int hits[8];
+    uint8_t rogue[] = "devrogue unseal";
+
+    TEST_ASSERT_TRUE(prod_secdb_parse(prod_secdb_builtin, &db) > 0);
+    TEST_ASSERT_EQUAL(6, db.n);
+
+    int nh = prod_secdb_match(&db, rogue, (int)sizeof(rogue) - 1, (uint32_t)sizeof(rogue) - 1, prod_fnv1a(rogue, (int)sizeof(rogue) - 1), hits, 8);
+    TEST_ASSERT_TRUE(nh > 0);
+
+    prod_elf_audit_t a;
+    TEST_ASSERT_EQUAL(-1, prod_elf_audit((const uint8_t*)"not_elf", 7, &a));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -599,6 +614,7 @@ int main(void) {
     RUN_TEST(test_prod_consolidation_and_fallback);
     RUN_TEST(test_lot17_autoscale_stress_and_bundle_health);
     RUN_TEST(test_lot19_support_bundle_fnv_and_risk_model);
+    RUN_TEST(test_lot20_secdb_and_elf_wx_audit);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

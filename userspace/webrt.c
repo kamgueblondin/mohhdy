@@ -516,6 +516,8 @@ static int mq_term(const char* t, int n, const webrt_viewport_t* v) {
     if (n >= 2 && t[0] == '(' && t[n - 1] == ')') {
         const char* f = t + 1;
         int fl = n - 2, c = 0, vs, vl, kl;
+        while (fl > 0 && w_space(f[0])) { f++; fl--; }
+        while (fl > 0 && w_space(f[fl - 1])) fl--;
         while (c < fl && f[c] != ':') c++;
         if (c >= fl) return 0;                 /* boolean features: unsupported */
         kl = c;
@@ -543,10 +545,11 @@ static int mq_term(const char* t, int n, const webrt_viewport_t* v) {
             }
             if (den <= 0) den = 1;
             if (num <= 0) num = 1;
+            if (v->height <= 0 || v->width <= 0) return 0;
             if (kl == 12) return (v->width * den) == (v->height * num);
-            if (kl == 16 && f[0] == 'm' && f[1] == 'i' && f[2] == 'n')
+            if (kl == 16 && w_ieqn(f, "min-aspect-ratio", 16))
                 return (v->width * den) >= (v->height * num);
-            if (kl == 16 && f[0] == 'm' && f[1] == 'a' && f[2] == 'x')
+            if (kl == 16 && w_ieqn(f, "max-aspect-ratio", 16))
                 return (v->width * den) <= (v->height * num);
         }
         if (kl == 11 && w_ieqn(f, "orientation", 11)) {
@@ -673,7 +676,11 @@ static int subst_vars(const char* s, int n, const w_var_t* vars, int count, w_ou
             {
                 int vi = var_lookup(vars, count, s + ns, ne - ns);
                 if (vi >= 0) {
-                    o_puts(w, vars[vi].value);
+                    if (level < 3 && w_find_ci(vars[vi].value, w_len(vars[vi].value), "var(") >= 0) {
+                        unresolved += subst_vars(vars[vi].value, w_len(vars[vi].value), vars, count, w, level + 1);
+                    } else {
+                        o_puts(w, vars[vi].value);
+                    }
                 } else if (fb >= 0 && level < 3) {
                     int fs = fb, fe = close;
                     while (fs < fe && w_space(s[fs])) fs++;
