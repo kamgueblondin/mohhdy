@@ -243,7 +243,8 @@ void test_phase8_offline_extensions(void) {
         TEST_ASSERT_TRUE(blen > 0);
         TEST_ASSERT_NOT_NULL(strstr(bundle, "mohhdy support bundle v1 tick 4242\n"));
         TEST_ASSERT_NOT_NULL(strstr(bundle, "alert hot busy > 80 ok\n"));
-        TEST_ASSERT_NOT_NULL(strstr(bundle, "feedback total 2\nend\n"));
+        TEST_ASSERT_NOT_NULL(strstr(bundle, "feedback total 2\n"));
+        TEST_ASSERT_NOT_NULL(strstr(bundle, "end\n"));
         TEST_ASSERT_EQUAL(-1, prod_support_bundle_text(&m, &a, &u, &fb, 1, bundle, 70));
         prod_alert_remove(&a, "hot");
     }

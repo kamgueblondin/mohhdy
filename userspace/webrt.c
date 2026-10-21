@@ -293,47 +293,46 @@ void webrt_set_audit_callback(webrt_audit_fn fn) {
 int webrt_csp_enforce(const webrt_csp_t* p, const char* page_origin, const char* resource_type, const char* resource_url) {
     char dir[32];
     int i = 0;
+    int allowed = 1;
     if (!p || !resource_type || !resource_url) return 1;
     if (w_eq(resource_type, "script") || w_eq(resource_type, "script-src")) {
-        return webrt_csp_allows(p, "script-src", page_origin, resource_url);
+        allowed = webrt_csp_allows(p, "script-src", page_origin, resource_url);
     } else if (w_eq(resource_type, "style") || w_eq(resource_type, "style-src")) {
-        return webrt_csp_allows(p, "style-src", page_origin, resource_url);
+        allowed = webrt_csp_allows(p, "style-src", page_origin, resource_url);
     } else if (w_eq(resource_type, "img") || w_eq(resource_type, "image") || w_eq(resource_type, "img-src")) {
-        return webrt_csp_allows(p, "img-src", page_origin, resource_url);
+        allowed = webrt_csp_allows(p, "img-src", page_origin, resource_url);
     } else if (w_eq(resource_type, "media") || w_eq(resource_type, "audio") || w_eq(resource_type, "video") || w_eq(resource_type, "media-src")) {
-        return webrt_csp_allows(p, "media-src", page_origin, resource_url);
+        allowed = webrt_csp_allows(p, "media-src", page_origin, resource_url);
     } else if (w_eq(resource_type, "connect") || w_eq(resource_type, "fetch") || w_eq(resource_type, "connect-src")) {
-        return webrt_csp_allows(p, "connect-src", page_origin, resource_url);
+        allowed = webrt_csp_allows(p, "connect-src", page_origin, resource_url);
+    } else {
+        dir[0] = 0;
+        while (resource_type[i] && i < 20) { dir[i] = resource_type[i]; i++; }
+        dir[i] = 0;
+        if (i < 20 && !w_eq(dir + (i > 4 ? i - 4 : 0), "-src")) {
+            dir[i++] = '-'; dir[i++] = 's'; dir[i++] = 'r'; dir[i++] = 'c'; dir[i] = 0;
+        }
+        allowed = webrt_csp_allows(p, dir, page_origin, resource_url);
     }
-    dir[0] = 0;
-    while (resource_type[i] && i < 20) { dir[i] = resource_type[i]; i++; }
-    dir[i] = 0;
-    if (i < 20 && !w_eq(dir + (i > 4 ? i - 4 : 0), "-src")) {
-        dir[i++] = '-'; dir[i++] = 's'; dir[i++] = 'r'; dir[i++] = 'c'; dir[i] = 0;
+
+    if (!allowed && g_webrt_audit_cb) {
+        char detail[128];
+        int pos = 0;
+        w_copy(detail, sizeof(detail), resource_type, -1);
+        pos = w_len(detail);
+        if (pos < (int)sizeof(detail) - 2) {
+            detail[pos++] = ':';
+            detail[pos] = 0;
+        }
+        w_copy(detail + pos, (int)sizeof(detail) - pos, resource_url, -1);
+        g_webrt_audit_cb("csp_blocked", detail);
     }
-    return webrt_csp_allows(p, dir, page_origin, resource_url);
+    return allowed;
 }
 
 int webrt_csp_validate_display_list_resource(const webrt_csp_t* p, const char* page_origin, const char* resource_type, const char* resource_url) {
-    int ok;
     if (!resource_type || !resource_url) return 1;
-    ok = webrt_csp_enforce(p, page_origin, resource_type, resource_url);
-    if (!ok) {
-        if (g_webrt_audit_cb) {
-            char detail[128];
-            int pos = 0;
-            w_copy(detail, sizeof(detail), resource_type, -1);
-            pos = w_len(detail);
-            if (pos < (int)sizeof(detail) - 2) {
-                detail[pos++] = ':';
-                detail[pos] = 0;
-            }
-            w_copy(detail + pos, (int)sizeof(detail) - pos, resource_url, -1);
-            g_webrt_audit_cb("csp_blocked", detail);
-        }
-        return 0;
-    }
-    return 1;
+    return webrt_csp_enforce(p, page_origin, resource_type, resource_url);
 }
 
 static int is_name_char(char c) {

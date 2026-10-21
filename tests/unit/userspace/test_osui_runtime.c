@@ -1212,6 +1212,19 @@ static void test_lot15_csp_audit_and_p2p_resilience(void) {
     /* Audit log should record the CSP block */
     TEST_ASSERT_EQUAL(0, run_line("osui-audit"));
     TEST_ASSERT(strstr(g_out, "[AUDIT] csp_blocked : script-src:https://evil.example/x.js") != NULL);
+
+    /* Test Lot 16 Audit additions: origin check audit & MCP undeclared audit */
+    run_line("session-new demo");
+    run_line("origin-check null");
+    run_line("osui-audit");
+    TEST_ASSERT(strstr(g_out, "[AUDIT] origin : origin_denied") != NULL);
+
+    /* Test audit persistence across browser-fs-save / browser-fs-load */
+    run_line("browser-tab-new https://mohhdy.local/test");
+    run_line("browser-fs-save /test_audit.json");
+    run_line("browser-fs-load /test_audit.json");
+    run_line("osui-audit");
+    TEST_ASSERT(strstr(g_out, "[AUDIT] origin : origin_denied") != NULL);
 }
 
 static void test_all_browser_and_osui_commands_dispatch(void) {

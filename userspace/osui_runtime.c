@@ -2300,6 +2300,7 @@ static int cmd_origin_check(char args[OSUI_MAX_ARGS][96], int narg, char *out, i
     int p = 0;
     if (!origin_ok(origin)) {
         journal(s ? s->id : "", "origin", "origin_denied", rid);
+        audit_log_add("origin", "origin_denied");
         out_add(out, max, &p, "osui origin_denied origin=");
         out_add(out, max, &p, origin);
         emit_rid(out, max, &p, rid);
@@ -4055,7 +4056,7 @@ static void copy_word_val(const char *src, char *dst, int max) {
 
 int osui_web_save_state(char *buf, int max) {
     int p = 0, i, k;
-    if (!buf || max <= 0 || G.n_tabs <= 0) return 0;
+    if (!buf || max <= 0) return 0;
     buf[0] = 0;
     out_add(buf, max, &p, "WEB_STATE_V1 tabs=");
     out_u(buf, max, &p, (unsigned)G.n_tabs);
@@ -4089,6 +4090,14 @@ int osui_web_save_state(char *buf, int max) {
             out_add(buf, max, &p, "\n");
         }
     }
+    for (i = 0; i < G.n_audit; i++) {
+        if (!G.audit_log[i].used) continue;
+        out_add(buf, max, &p, "AUDIT action=");
+        out_add(buf, max, &p, G.audit_log[i].action);
+        out_add(buf, max, &p, " detail=");
+        out_add(buf, max, &p, G.audit_log[i].detail);
+        out_add(buf, max, &p, "\n");
+    }
     return p;
 }
 
@@ -4100,6 +4109,8 @@ int osui_web_load_state(const char *buf, int len) {
     G.n_tabs = 0;
     G.current_tab = -1;
     for (i = 0; i < OSUI_MAX_TABS; i++) G.tabs[i].used = 0;
+    G.n_audit = 0;
+    for (i = 0; i < OSUI_MAX_AUDIT; i++) G.audit_log[i].used = 0;
 
     while (buf[p]) {
         char line[256];
@@ -4147,6 +4158,12 @@ int osui_web_load_state(const char *buf, int len) {
                 s_cpy(cur_t->storage[cur_t->n_storage].value, 64, val);
                 cur_t->n_storage++;
             }
+        } else if (s_ncmp(line, "AUDIT ", 6) == 0) {
+            char act[32] = {0}, det[64] = {0};
+            const char *s;
+            if ((s = s_find(line, "action=")) != 0) copy_word_val(s + 7, act, sizeof(act));
+            if ((s = s_find(line, "detail=")) != 0) copy_word_val(s + 7, det, sizeof(det));
+            if (act[0]) audit_log_add(act, det);
         }
     }
     return G.n_tabs;

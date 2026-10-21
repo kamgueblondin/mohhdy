@@ -201,6 +201,7 @@ uint32_t p2p_calc_link_cost(const p2p_peer_t* p) {
     rtt_ms = p->rtt_ewma_ms ? p->rtt_ewma_ms : (p->rtt_ticks * (1000U / P2P_HZ));
     cost = 10U + rtt_ms + (p->bucket_used > 5 ? 20U : 5U);
     if (p->loss_percent > 0) cost += (uint32_t)p->loss_percent * 10U;
+    if (p->anomalies > 0) cost += p->anomalies * 50U;
     return cost;
 }
 
@@ -1539,7 +1540,11 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
             p->rx_win_last = p->received;
             if (n->analyze_windows >= P2P_ANALYZE_WARMUP && rate * 16U > 4U * p->rx_base16 + 8U * 16U) {
                 if ((int32_t)(n->solicited_until - t) > 0) n->solicited_skipped++;
-                else { p->anomalies++; n->last_anomaly_peer = p->id; }
+                else {
+                    p->anomalies++;
+                    n->last_anomaly_peer = p->id;
+                    p2p_qos_note_loss(n);
+                }
             }
             p->rx_base16 = n->analyze_windows ? (p->rx_base16 * 7U + rate * 16U) / 8U : rate * 16U;
         }
