@@ -3954,6 +3954,7 @@ static int cmd_browser_storage_set(char args[OSUI_MAX_ARGS][96], int narg, char 
     for (i = 0; i < tab->n_storage; i++) {
         if (s_cmp(tab->storage[i].key, args[0]) == 0) {
             s_cpy(tab->storage[i].value, 64, args[1]);
+            audit_log_add("storage_set_ok", args[0]);
             out_add(out, max, &p, "osui browser-storage-set ok tab_id=");
             out_add(out, max, &p, tab->id);
             out_add(out, max, &p, " key=");
@@ -3963,6 +3964,7 @@ static int cmd_browser_storage_set(char args[OSUI_MAX_ARGS][96], int narg, char 
         }
     }
     if (tab->n_storage >= OSUI_MAX_TAB_STORAGE) {
+        audit_log_add("storage_set", "storage_full");
         out_add(out, max, &p, "osui browser-storage-set error=tab_storage_full\n");
         return OSUI_ERR;
     }
@@ -3970,6 +3972,7 @@ static int cmd_browser_storage_set(char args[OSUI_MAX_ARGS][96], int narg, char 
     s_cpy(tab->storage[tab->n_storage].key, 24, args[0]);
     s_cpy(tab->storage[tab->n_storage].value, 64, args[1]);
     tab->n_storage++;
+    audit_log_add("storage_set_ok", args[0]);
     out_add(out, max, &p, "osui browser-storage-set ok tab_id=");
     out_add(out, max, &p, tab->id);
     out_add(out, max, &p, " key=");
@@ -4013,6 +4016,7 @@ static int cmd_browser_storage_get(char args[OSUI_MAX_ARGS][96], int narg, char 
     }
     for (i = 0; i < tab->n_storage; i++) {
         if (s_cmp(tab->storage[i].key, args[0]) == 0) {
+            audit_log_add("storage_get_ok", args[0]);
             out_add(out, max, &p, "osui browser-storage-get ok tab_id=");
             out_add(out, max, &p, tab->id);
             out_add(out, max, &p, " key=");
@@ -4023,6 +4027,7 @@ static int cmd_browser_storage_get(char args[OSUI_MAX_ARGS][96], int narg, char 
             return OSUI_OK;
         }
     }
+    audit_log_add("storage_get", "key_not_found");
     out_add(out, max, &p, "osui browser-storage-get error=not_found\n");
     return OSUI_ERR;
 }

@@ -643,7 +643,7 @@ int webrt_css_flatten_media(const char* css, const webrt_viewport_t* v, char* ou
 }
 
 /* ---------- US-041 custom properties ---------- */
-#define WEBRT_VARS 16
+#define WEBRT_VARS 32
 typedef struct { char name[32]; char value[64]; } w_var_t;
 
 static int var_lookup(const w_var_t* vars, int count, const char* name, int nl) {

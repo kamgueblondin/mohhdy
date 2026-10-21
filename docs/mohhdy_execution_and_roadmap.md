@@ -112,3 +112,9 @@ Elle confirme visuellement :
 - **Moteur Web & Sécurité Audit** : Tracé complet dans `osui-audit` pour violations CSP, refus d'origine (`origin_denied`), et tentatives/refus de connecteurs MCP avec persistance overlay VFS.
 - **Maillage P2P & Contrôle QoS** : Pénalisation des anomalies de trafic par pair dans `p2p_calc_link_cost` et réajustement AIMD.
 - **Diagnostic Production** : Calcul FNV-1a de la feuille de route (`checksum_fnv`) dans `prod_support_bundle_text` et sécurisation des bornes de `prod_maint_model_risk`.
+
+### Lot 18 : Consolidation Web Runtime, Robustesse Consensus P2P & Métriques de Production / Sécurité (US-041 / US-075 / US-112)
+- **Moteur Web Runtime & Styles CSS** : Extension de la table `WEBRT_VARS` a 32 variables et evaluation dynamique cascade/fallback (`var()`) dans `userspace/webrt.c` et `userspace/osui_runtime.c`.
+- **Sandbox VFS & Stockage Local** : Tracabilite et journalisation de la sandbox VFS et du stockage local par onglet dans `osui-audit`.
+- **Maillage P2P & AIMD** : Detection fine des anomalies de trafic par pair, regulation AIMD sous charge/latence et invalidation automatique du cache P2P sous partitions reseau dans `userspace/p2p.c`.
+- **Securite Production & Roadmap** : Ajout d'empreintes dans `prod-secdb` (`MSA-2026-0006`), validation FNV-1a de `prod-roadmap` et mise a jour de `prod-support-bundle` dans `userspace/prod.c`.
