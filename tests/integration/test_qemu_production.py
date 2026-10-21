@@ -176,7 +176,7 @@ def main():
             # US-112 (Lot 9): local signature database; the four test-rogue
             # programs of /bin are flagged, nothing else.
             out = run(mon, proc, "prod-sec-db /bin", "prod-sec-db ok files ", attempts=2, timeout=90)
-            for needle in ("prod-sec-db database records 5 bad_lines 0 source builtin",
+            for needle in ("prod-sec-db database records 6 bad_lines 0 source builtin",
                            "sec-db hit /bin/devrogue MSA-2026-0001 high pattern",
                            "sec-db hit /bin/pcirogue MSA-2026-0002 high pattern",
                            "sec-db hit /bin/atarogue MSA-2026-0003 medium pattern",
