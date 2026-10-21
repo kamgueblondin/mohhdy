@@ -73,6 +73,8 @@ typedef struct {
     uint32_t bucket_tick, bucket_used;
     uint32_t rx_win_last, rx_base16; /* Lot 6 (US-075): per-peer frames/s baseline */
     uint32_t anomalies;              /* windows above 4x that baseline + 8 */
+    uint8_t loss_percent;            /* US-063: estimated packet loss percentage (0..100) */
+    uint32_t link_cost;              /* US-063: dynamic link cost metric derived from RTT & loss */
     uint32_t raft_next;   /* next log index to send (1-based, 0 = unset) */
     uint32_t raft_match;  /* highest index known replicated */
     uint32_t raft_commit_sent; /* leader_commit last sent to this peer */
@@ -301,6 +303,7 @@ int p2p_cache_invalidate_v(p2p_node_t* n, const p2p_host_t* h, const char* key, 
 int p2p_cache_put_v(p2p_node_t* n, const char* key, const char* value, uint32_t version, uint32_t ttl_ticks, uint32_t current_tick);
 int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key);
 void p2p_cache_on_peer_down(p2p_node_t* n, uint32_t peer_id);
+uint32_t p2p_calc_link_cost(const p2p_peer_t* p);
 /* Lot 6 (US-070): cache write through the Raft log (leader only). Every
  * node applies it at commit: line value, version = log index, fence below.
  * Returns the log index or -1. */

@@ -264,6 +264,7 @@ int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, co
 typedef struct {
     uint32_t done[PROD_RM_PHASES], partial[PROD_RM_PHASES], simule[PROD_RM_PHASES], open[PROD_RM_PHASES];
     uint32_t entries, bad;
+    uint32_t checksum_fnv;       /* FNV-1a checksum over roadmap content */
     char next[256];              /* stories not done, in file order */
 } prod_roadmap_t;
 int prod_roadmap_parse(const char* text, int len, prod_roadmap_t* rm);

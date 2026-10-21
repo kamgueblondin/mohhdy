@@ -909,6 +909,7 @@ int prod_roadmap_parse(const char* t, int len, prod_roadmap_t* rm) {
     int pos = 0;
     if (!t || !rm || len < 0) return -1;
     mzero(rm, (int)sizeof(*rm));
+    rm->checksum_fnv = prod_fnv1a((const uint8_t*)t, len);
     while (pos < len) {
         char us[12], ph[4], st[12];
         int start = pos, phase;

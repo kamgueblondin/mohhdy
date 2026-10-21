@@ -836,7 +836,8 @@ int shell_prod_line(const char* l) {
         g_out[0] = 0;
         s_cat(g_out, "prod-roadmap next ", 4096); s_cat(g_out, rm.next, 4096); s_cat(g_out, "\n", 4096);
         s_cat(g_out, "prod-roadmap ok source /roadmap.txt entries ", 4096); cat_u(g_out, rm.entries, 4096);
-        s_cat(g_out, " bad ", 4096); cat_u(g_out, rm.bad, 4096); s_cat(g_out, "\n", 4096);
+        s_cat(g_out, " bad ", 4096); cat_u(g_out, rm.bad, 4096);
+        s_cat(g_out, " fnv ", 4096); cat_hex(g_out, rm.checksum_fnv, 4096); s_cat(g_out, "\n", 4096);
         out(g_out);
         return 0;
     }

@@ -194,11 +194,18 @@ static void derive(p2p_node_t* n, p2p_peer_t* p) {
     mzero(shared, 32); mzero(d, 32);
 }
 
-/* Route: direct if the peer is up, else through an up neighbor that lists it. */
+uint32_t p2p_calc_link_cost(const p2p_peer_t* p) {
+    uint32_t rtt_ms;
+    uint32_t cost;
+    if (!p) return 0;
+    rtt_ms = p->rtt_ewma_ms ? p->rtt_ewma_ms : (p->rtt_ticks * (1000U / P2P_HZ));
+    cost = 10U + rtt_ms + (p->bucket_used > 5 ? 20U : 5U);
+    if (p->loss_percent > 0) cost += (uint32_t)p->loss_percent * 10U;
+    return cost;
+}
+
 static uint32_t link_cost(const p2p_peer_t* p) {
-    uint32_t rtt_ms = p->rtt_ewma_ms ? p->rtt_ewma_ms : (p->rtt_ticks * (1000U / P2P_HZ));
-    uint32_t load = p->bucket_used > 5 ? 20U : 5U;
-    return 10U + rtt_ms + load;
+    return p2p_calc_link_cost(p);
 }
 
 /* Fewest hops first, link cost (RTT, load) between routes of the same
@@ -750,6 +757,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
             p->rtt_ticks = sample_ticks;
             p->ping_wait = 0;
             p->rtt_ewma_ms = p->rtt_ewma_ms ? (p->rtt_ewma_ms * 7U + sample_ms) / 8U : sample_ms;
+            p->link_cost = p2p_calc_link_cost(p);
             p2p_qos_note_rtt(n, sample_ms);
         }
         break;
@@ -2022,6 +2030,11 @@ void p2p_cache_on_peer_down(p2p_node_t* n, uint32_t peer_id) {
                 n->cache.entries[i].used = 0;
                 n->cache.invalidations++;
             }
+        }
+    }
+    for (i = 0; i < P2P_PEERS; i++) {
+        if (n->cache.inv_waiting[i] == peer_id) {
+            n->cache.inv_waiting[i] = 0;
         }
     }
 }
