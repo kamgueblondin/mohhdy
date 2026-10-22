@@ -1,6 +1,11 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (21 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **932** tests reussis.
+> **Etat reel et pilotage (22 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **935** tests reussis.
+
+## Lot 24: Consolidation Sandbox Web Runtime, Resilience Reseau Mesh P2P/Raft & Supervision Haute Disponibilite Production ✅ (22 octobre 2026)
+- [x] US-039 / US-041 : Evaluation dynamique CSP (`webrt_csp_enforce`, `webrt_csp_validate_display_list_resource`), isolation d'origines (`webrt_site_storage_validate_origin`) et tracabilite dans `osui-audit` des refus CSP (`csp_blocked`), acces d'origines non autorisees (`origin_denied`), et credentials MCP (`mcp_auth`, `mcp_credentials`, `mcp_invoke`).
+- [x] US-070 / US-076 : Anti-entropie Raft lors des reconnexions et instantanes (`p2p_raft_compact`, `raft_install_snapshot`), calcul du cout de lien EWMA (`p2p_calc_link_cost`), controle reactif AIMD (`p2p_qos_note_loss`) et invalidation automatique cache P2P (`p2p_cache_on_peer_down`).
+- [x] US-110 / US-120 : Autoscaling dynamique sous charge extreme (`prod_autoscale_workload_eval`), moniteur de performance global (`prod_perf_monitor_eval`), controle d'integrite FNV-1a de la feuille de route (`prod_roadmap_eval`), et score de sante global dans bundles de diagnostic (`prod-support-bundle`, `prod_support_bundle_text`).
 
 ## Lot 23: Perfectionnement Securite Web Runtime, Resilience Multi-Noeuds P2P/Raft & Supervision Avancee Production ✅ (21 octobre 2026)
 - [x] US-039 / US-041 : Filtrage dynamique CSP (`webrt_csp_enforce`, `webrt_csp_validate_display_list_resource`), isolation des origines et tracabilite dans `osui-audit` des refus CSP, acces d'origines non autorisees et autorisations MCP.

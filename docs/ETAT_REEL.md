@@ -10,6 +10,19 @@
 
 ## État courant vérifié
 
+## Etat courant du 22 octobre 2026 (lot 24)
+
+Living baseline. Plan: [lot24_plan.md](lot24_plan.md).
+
+```text
+make test-all : 935 passed, 0 failed, 0 skipped
+```
+
+- US-039 / US-041: Dynamic CSP evaluation (`webrt_csp_enforce`, `webrt_csp_validate_display_list_resource`) and origin isolation (`webrt_site_storage_validate_origin`) consolidated for all resource types. Security audit logging (`osui-audit`) for CSP blocked resources (`csp_blocked`), unauthorized origin access (`origin_denied`), and MCP credentials management (`mcp_auth`, `mcp_credentials`, `mcp_invoke`).
+- US-070 / US-076: Raft log anti-entropy synchronization refined post-partition reconnects and snapshot compaction (`p2p_raft_compact`, `raft_install_snapshot`). EWMA link cost calculation (`p2p_calc_link_cost`), reactive AIMD rate control (`p2p_qos_note_loss`), and automatic P2P cache invalidation on peer disconnect (`p2p_cache_on_peer_down`).
+- US-110 / US-120: Dynamic workload autoscaling under extreme stress scenarios (`prod_autoscale_workload_eval`), global performance monitor (`prod_perf_monitor_eval`), FNV-1a roadmap evaluation (`/roadmap.txt`, `prod_roadmap_eval`), and health score inclusion in support bundles (`prod-support-bundle`, `prod_support_bundle_text`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 21 octobre 2026 (lot 22)
 
 Living baseline. Plan: [lot22_plan.md](lot22_plan.md).
