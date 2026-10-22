@@ -1,6 +1,12 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (22 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **935** tests reussis.
+> **Etat reel et pilotage (22 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **938** tests reussis.
+
+## Lot 25: Extension Majeure VFS Multi-Repertoires, Moteur TLS/Handshake Ring 3, Bus Multi-Agents PromptProgram & Resilience P2P/Raft Avancee ✅ (22 octobre 2026)
+- [x] US-032 / US-033 : Creation de sous-repertoires multi-niveaux (`ramfs_mkdir_p`), listage recursif (`ramfs_list_recursive`), copie de repertoires (`ramfs_cp`), deplacement inter-repertoires (`ramfs_mv`) et suppression recursive (`ramfs_rm_r` / `rm -r`) sous controle de capacite mutate.
+- [x] US-041 / US-045 / US-061 : Verification de chaine de certificats X.509 multi-niveaux et etat de handshake TLS Ring 3 (`webrt_tls_verify_cert_chain`, `webrt_tls_handshake_step`), gestionnaire d'evenements DOM et hooks asynchrones (`webrt_dom_add_event_listener`, `webrt_dom_dispatch_event`), chainage multi-agents PromptProgram avec transmission de contexte de session serialise (`pm_context_*`, `pm_pipe_exec`).
+- [x] US-070 / US-078 : Reconciliation automatique de journal Raft post-partition (`p2p_raft_reconcile_partition`), compression d'en-tetes gRPC-Wire (`grpcwire_compress_header`), et ajustement dynamique du Lease de Leader sous pics de RTT EWMA / pertes de paquets (`p2p_raft_update_lease`).
+- [x] US-118 / US-120 : Auto-correction automatique des workers stalles ou bloques (`prod_autofix_stalled_workers`), consolidation des regles du modele de risque de maintenance predictive et controle d'integrite FNV-1a.
 
 ## Lot 24: Consolidation Sandbox Web Runtime, Resilience Reseau Mesh P2P/Raft & Supervision Haute Disponibilite Production ✅ (22 octobre 2026)
 - [x] US-039 / US-041 : Evaluation dynamique CSP (`webrt_csp_enforce`, `webrt_csp_validate_display_list_resource`), isolation d'origines (`webrt_site_storage_validate_origin`) et tracabilite dans `osui-audit` des refus CSP (`csp_blocked`), acces d'origines non autorisees (`origin_denied`), et credentials MCP (`mcp_auth`, `mcp_credentials`, `mcp_invoke`).

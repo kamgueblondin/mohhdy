@@ -148,6 +148,7 @@ typedef struct {
 } prod_autoscale_workload_t;
 /* Lot 23 (US-110 / US-120): Dynamic workload autoscaling evaluation */
 int prod_autoscale_workload_eval(prod_scaler_t* s, prod_autoscale_workload_t* wl, uint32_t now_tick, char* out, int cap);
+int prod_autofix_stalled_workers(prod_autoscale_workload_t* wl, char* out, int cap);
 
 /* US-112 security scanner (Lot 7, real checks; no CVE database):
  * ELF32 program headers of each file (W+X PT_LOAD segments, executable

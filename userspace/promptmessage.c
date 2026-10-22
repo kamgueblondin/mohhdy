@@ -1244,3 +1244,149 @@ int pm_ca_rotate_status(int rotation_count, char* out, int cap) {
     out[p] = 0;
     return p;
 }
+
+/* ---- US-061 Multi-Agent Bus & Session Context ---- */
+static int pm_streq(const char* a, const char* b) {
+    if (!a) a = "";
+    if (!b) b = "";
+    int i = 0;
+    while (a[i] && b[i]) {
+        if (a[i] != b[i]) return 0;
+        i++;
+    }
+    return a[i] == b[i];
+}
+
+static void pm_strcpy(char* d, int cap, const char* s) {
+    int i = 0;
+    if (!d || cap <= 0) return;
+    if (!s) s = "";
+    while (s[i] && i < cap - 1) {
+        d[i] = s[i];
+        i++;
+    }
+    d[i] = 0;
+}
+
+void pm_context_init(pm_context_t* ctx, const char* agent_id, uint32_t session_id) {
+    if (!ctx) return;
+    pm_strcpy(ctx->agent_id, sizeof(ctx->agent_id), agent_id ? agent_id : "agent0");
+    ctx->session_id = session_id;
+    ctx->var_count = 0;
+    for (int i = 0; i < PM_VARS; i++) {
+        ctx->keys[i][0] = 0;
+        ctx->vals[i][0] = 0;
+    }
+}
+
+int pm_context_set_var(pm_context_t* ctx, const char* key, const char* val) {
+    if (!ctx || !key) return -1;
+    for (int i = 0; i < ctx->var_count; i++) {
+        if (pm_streq(ctx->keys[i], key)) {
+            pm_strcpy(ctx->vals[i], sizeof(ctx->vals[i]), val);
+            return 0;
+        }
+    }
+    if (ctx->var_count >= PM_VARS) return -1;
+    pm_strcpy(ctx->keys[ctx->var_count], sizeof(ctx->keys[ctx->var_count]), key);
+    pm_strcpy(ctx->vals[ctx->var_count], sizeof(ctx->vals[ctx->var_count]), val);
+    ctx->var_count++;
+    return 0;
+}
+
+const char* pm_context_get_var(const pm_context_t* ctx, const char* key) {
+    if (!ctx || !key) return 0;
+    for (int i = 0; i < ctx->var_count; i++) {
+        if (pm_streq(ctx->keys[i], key)) {
+            return ctx->vals[i];
+        }
+    }
+    return 0;
+}
+
+int pm_context_serialize(const pm_context_t* ctx, char* out, int cap) {
+    int p = 0;
+    if (!ctx || !out || cap < 16) return -1;
+    pm_strcpy(out, cap, ctx->agent_id);
+    p = 0; while (out[p]) p++;
+    if (p < cap - 1) out[p++] = ':';
+    {
+        char num[16];
+        int k = 0; uint32_t v = ctx->session_id;
+        if (v == 0) num[k++] = '0';
+        else {
+            char rev[16]; int r = 0;
+            while (v && r < 15) { rev[r++] = (char)('0' + (v % 10)); v /= 10; }
+            while (r) num[k++] = rev[--r];
+        }
+        num[k] = 0;
+        for (int i = 0; num[i] && p < cap - 1; i++) out[p++] = num[i];
+    }
+    if (p < cap - 1) out[p++] = ':';
+    for (int i = 0; i < ctx->var_count && p < cap - 2; i++) {
+        const char* k = ctx->keys[i];
+        const char* v = ctx->vals[i];
+        while (*k && p < cap - 2) out[p++] = *k++;
+        out[p++] = '=';
+        while (*v && p < cap - 2) out[p++] = *v++;
+        out[p++] = ';';
+    }
+    out[p] = 0;
+    return p;
+}
+
+int pm_context_deserialize(pm_context_t* ctx, const char* in, int len) {
+    if (!ctx || !in || len <= 0) return -1;
+    pm_context_init(ctx, "deserialized", 0);
+    int pos = 0;
+    int i = 0;
+    while (pos < len && in[pos] != ':' && i < PM_AGENT_NAME_MAX - 1) {
+        ctx->agent_id[i++] = in[pos++];
+    }
+    ctx->agent_id[i] = 0;
+    if (pos < len && in[pos] == ':') pos++;
+    uint32_t sid = 0;
+    while (pos < len && in[pos] >= '0' && in[pos] <= '9') {
+        sid = sid * 10 + (uint32_t)(in[pos++] - '0');
+    }
+    ctx->session_id = sid;
+    if (pos < len && in[pos] == ':') pos++;
+    while (pos < len && ctx->var_count < PM_VARS) {
+        char key[PM_NAME_MAX];
+        char val[PM_VAL_MAX];
+        int kp = 0, vp = 0;
+        while (pos < len && in[pos] != '=' && in[pos] != ';' && kp < PM_NAME_MAX - 1) {
+            key[kp++] = in[pos++];
+        }
+        key[kp] = 0;
+        if (pos < len && in[pos] == '=') pos++;
+        while (pos < len && in[pos] != ';' && vp < PM_VAL_MAX - 1) {
+            val[vp++] = in[pos++];
+        }
+        val[vp] = 0;
+        if (pos < len && in[pos] == ';') pos++;
+        if (kp > 0) {
+            pm_context_set_var(ctx, key, val);
+        }
+    }
+    return 0;
+}
+
+int pm_pipe_exec(const pm_program_t* prog1, const pm_program_t* prog2,
+                 pm_vm_t* vm1, pm_vm_t* vm2,
+                 pm_context_t* ctx, const pm_host_t* host) {
+    if (!prog1 || !prog2 || !vm1 || !vm2 || !ctx) return PM_ERR_RUNTIME;
+    pm_vm_reset(vm1);
+    pm_vm_reset(vm2);
+    int st1 = pm_run(prog1, vm1, host);
+    if (st1 != PM_OK) return st1;
+
+    for (int i = 0; i < prog1->nvars; i++) {
+        if (vm1->vars[i].is_str) {
+            pm_context_set_var(ctx, prog1->vars[i], vm1->vars[i].str);
+        }
+    }
+
+    int st2 = pm_run(prog2, vm2, host);
+    return st2;
+}

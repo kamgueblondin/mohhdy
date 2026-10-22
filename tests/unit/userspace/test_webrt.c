@@ -279,6 +279,38 @@ static void test_lot24_webrt_csp_and_origin_audit(void) {
     TEST_ASSERT_EQUAL(0, webrt_site_storage_validate_origin("https://app.mohhdy.local", "https://untrusted.com"));
 }
 
+static void test_lot25_webrt_tls_and_dom_events(void) {
+    webrt_tls_session_t tls;
+    webrt_dom_event_mgr_t dom;
+    uint8_t dummy_cert[32];
+    uint8_t tls_buf[64];
+    char script_buf[128];
+    for (int i = 0; i < 32; i++) dummy_cert[i] = (uint8_t)i;
+
+    /* Ring 3 TLS handshake and certificate verification */
+    webrt_tls_init(&tls, "secure.mohhdy.local");
+    TEST_ASSERT_EQUAL(WEBRT_TLS_STATE_IDLE, tls.state);
+    TEST_ASSERT_EQUAL(0, webrt_tls_verify_cert_chain(&tls, dummy_cert, 32, 2));
+    TEST_ASSERT_EQUAL(1, tls.cert_valid);
+
+    TEST_ASSERT_EQUAL(32, webrt_tls_handshake_step(&tls, 0, 0, tls_buf, sizeof(tls_buf)));
+    TEST_ASSERT_EQUAL(WEBRT_TLS_STATE_CLIENT_HELLO, tls.state);
+    TEST_ASSERT_EQUAL(0, webrt_tls_handshake_step(&tls, 0, 0, 0, 0));
+    TEST_ASSERT_EQUAL(WEBRT_TLS_STATE_SERVER_HELLO, tls.state);
+    TEST_ASSERT_EQUAL(0, webrt_tls_handshake_step(&tls, 0, 0, 0, 0));
+    TEST_ASSERT_EQUAL(WEBRT_TLS_STATE_CERT_VERIFY, tls.state);
+    TEST_ASSERT_EQUAL(0, webrt_tls_handshake_step(&tls, 0, 0, 0, 0));
+    TEST_ASSERT_EQUAL(WEBRT_TLS_STATE_KEY_EXCHANGE, tls.state);
+
+    /* DOM Event Manager & Callbacks */
+    webrt_dom_event_init(&dom);
+    TEST_ASSERT_EQUAL(0, webrt_dom_add_event_listener(&dom, "btn1", "click", "console.log('clicked')"));
+    TEST_ASSERT_EQUAL(1, dom.count);
+    TEST_ASSERT_EQUAL(22, webrt_dom_dispatch_event(&dom, "btn1", "click", script_buf, sizeof(script_buf)));
+    TEST_ASSERT_EQUAL_STRING("console.log('clicked')", script_buf);
+    TEST_ASSERT_EQUAL(0, webrt_dom_dispatch_event(&dom, "btn1", "submit", script_buf, sizeof(script_buf)));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -295,6 +327,7 @@ int main(void) {
     RUN_TEST(test_lot20_responsive_aspect_ratio_and_nested_vars);
     RUN_TEST(test_lot23_webrt_csp_and_origin_audit);
     RUN_TEST(test_lot24_webrt_csp_and_origin_audit);
+    RUN_TEST(test_lot25_webrt_tls_and_dom_events);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

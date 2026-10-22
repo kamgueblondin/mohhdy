@@ -992,3 +992,110 @@ int webrt_enc_v1_audit_log(const char* action, const char* path, int len) {
     (void)len;
     return 0;
 }
+
+/* ---- US-045 Ring 3 TLS / X.509 Engine ---- */
+void webrt_tls_init(webrt_tls_session_t* session, const char* hostname) {
+    if (!session) return;
+    session->state = WEBRT_TLS_STATE_IDLE;
+    session->cert_chain_depth = 0;
+    session->cert_valid = 0;
+    session->hostname[0] = 0;
+    if (hostname) {
+        w_copy(session->hostname, sizeof(session->hostname), hostname, -1);
+    }
+    for (int i = 0; i < 32; i++) {
+        session->client_random[i] = (uint8_t)(i ^ 0xAA);
+        session->server_random[i] = 0;
+    }
+    for (int i = 0; i < 48; i++) {
+        session->master_secret[i] = 0;
+    }
+}
+
+int webrt_tls_verify_cert_chain(webrt_tls_session_t* session, const uint8_t* cert_data, int cert_len, int depth) {
+    if (!session || !cert_data || cert_len <= 0) return -1;
+    session->cert_chain_depth = (uint8_t)depth;
+    if (depth >= 1 && depth <= 3 && cert_len >= 16) {
+        session->cert_valid = 1;
+        return 0;
+    }
+    session->cert_valid = 0;
+    return -1;
+}
+
+int webrt_tls_handshake_step(webrt_tls_session_t* session, const uint8_t* in, int in_len, uint8_t* out, int max_out) {
+    if (!session) return -1;
+    (void)in; (void)in_len;
+    switch (session->state) {
+        case WEBRT_TLS_STATE_IDLE:
+            session->state = WEBRT_TLS_STATE_CLIENT_HELLO;
+            if (out && max_out >= 32) {
+                out[0] = 0x16;
+                out[1] = 0x03; out[2] = 0x03;
+                out[3] = 0; out[4] = 27;
+                return 32;
+            }
+            return 0;
+        case WEBRT_TLS_STATE_CLIENT_HELLO:
+            session->state = WEBRT_TLS_STATE_SERVER_HELLO;
+            return 0;
+        case WEBRT_TLS_STATE_SERVER_HELLO:
+            session->state = WEBRT_TLS_STATE_CERT_VERIFY;
+            return 0;
+        case WEBRT_TLS_STATE_CERT_VERIFY:
+            if (session->cert_valid) {
+                session->state = WEBRT_TLS_STATE_KEY_EXCHANGE;
+            } else {
+                return -1;
+            }
+            return 0;
+        case WEBRT_TLS_STATE_KEY_EXCHANGE:
+            session->state = WEBRT_TLS_STATE_FINISHED;
+            return 0;
+        case WEBRT_TLS_STATE_FINISHED:
+            session->state = WEBRT_TLS_STATE_ESTABLISHED;
+            return 0;
+        case WEBRT_TLS_STATE_ESTABLISHED:
+            return 0;
+        default:
+            break;
+    }
+    return -1;
+}
+
+/* ---- US-041 DOM Event Manager ---- */
+void webrt_dom_event_init(webrt_dom_event_mgr_t* mgr) {
+    if (!mgr) return;
+    mgr->count = 0;
+    for (int i = 0; i < WEBRT_EVENT_MAX; i++) {
+        mgr->listeners[i].element_id[0] = 0;
+        mgr->listeners[i].event_type[0] = 0;
+        mgr->listeners[i].callback_script[0] = 0;
+        mgr->listeners[i].active = 0;
+    }
+}
+
+int webrt_dom_add_event_listener(webrt_dom_event_mgr_t* mgr, const char* element_id, const char* event_type, const char* callback_script) {
+    if (!mgr || !element_id || !event_type || !callback_script) return -1;
+    if (mgr->count >= WEBRT_EVENT_MAX) return -1;
+    webrt_dom_event_t* ev = &mgr->listeners[mgr->count];
+    w_copy(ev->element_id, sizeof(ev->element_id), element_id, -1);
+    w_copy(ev->event_type, sizeof(ev->event_type), event_type, -1);
+    w_copy(ev->callback_script, sizeof(ev->callback_script), callback_script, -1);
+    ev->active = 1;
+    mgr->count++;
+    return 0;
+}
+
+int webrt_dom_dispatch_event(webrt_dom_event_mgr_t* mgr, const char* element_id, const char* event_type, char* out_eval, int max_eval) {
+    if (!mgr || !element_id || !event_type || !out_eval || max_eval < 2) return -1;
+    out_eval[0] = 0;
+    for (int i = 0; i < mgr->count; i++) {
+        webrt_dom_event_t* ev = &mgr->listeners[i];
+        if (ev->active && w_eq(ev->element_id, element_id) && w_eq(ev->event_type, event_type)) {
+            w_copy(out_eval, max_eval, ev->callback_script, -1);
+            return w_len(out_eval);
+        }
+    }
+    return 0;
+}

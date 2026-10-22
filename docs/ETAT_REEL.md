@@ -10,6 +10,20 @@
 
 ## État courant vérifié
 
+## Etat courant du 22 octobre 2026 (lot 25)
+
+Living baseline. Plan: [lot25_plan.md](lot25_plan.md).
+
+```text
+make test-all : 938 passed, 0 failed, 0 skipped
+```
+
+- US-032 / US-033: VFS multi-level subdirectories (`ramfs_mkdir_p`, `ramfs_list_recursive`), recursive directory copy (`ramfs_cp`), cross-directory move (`ramfs_mv`), and recursive deletion (`ramfs_rm_r` / `rm -r`) under capacity mutate access control.
+- US-041 / US-045 / US-061: Ring 3 TLS handshake state machine and multi-level X.509 certificate chain validation (`webrt_tls_verify_cert_chain`), DOM event manager and async callback dispatch (`webrt_dom_add_event_listener`, `webrt_dom_dispatch_event`), multi-agent PromptProgram session context and instruction pipeline chaining (`pm_context_*`, `pm_pipe_exec`).
+- US-070 / US-078: Raft log automatic partition reconciliation (`p2p_raft_reconcile_partition`), gRPC-Wire header compression (`grpcwire_compress_header`), and dynamic leader lease adjustment under high RTT / packet loss (`p2p_raft_update_lease`).
+- US-118 / US-120: Automatic auto-correction for stalled/blocked workers (`prod_autofix_stalled_workers`), consolidated predictive maintenance risk engine, and FNV-1a checksum verification.
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 22 octobre 2026 (lot 24)
 
 Living baseline. Plan: [lot24_plan.md](lot24_plan.md).

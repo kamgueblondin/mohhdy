@@ -1,5 +1,6 @@
 #ifndef MOHHDY_GRPCWIRE_H
 #define MOHHDY_GRPCWIRE_H
+#include <stdint.h>
 /* Lot 5 (US-067, partial): gRPC wire encoding in guest C, no libc.
  * Protocol Buffers wire format (varint, length-delimited), gRPC
  * Length-Prefixed-Message, HTTP/2 frame headers (RFC 9113 4.1) and an HPACK
@@ -41,6 +42,7 @@ int gw_h2_frame_get(const unsigned char* in, int len, int* type, int* flags, uns
 
 /* HPACK subset */
 int gw_hpack_put(unsigned char* out, int cap, const char* name, const char* value);
+int grpcwire_compress_header(const char* name, const char* val, uint8_t* out, int max_out);
 typedef struct { char name[32]; char value[64]; } gw_header_t;
 int gw_hpack_decode(const unsigned char* in, int len, gw_header_t* hdrs, int max);   /* count */
 

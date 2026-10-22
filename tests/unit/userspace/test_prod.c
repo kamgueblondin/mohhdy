@@ -738,6 +738,27 @@ static void test_lot24_prod_extreme_autoscale_and_bundle_health(void) {
     TEST_ASSERT_NOT_NULL(strstr(out, "checksum verified=true fnv "));
 }
 
+static void test_lot25_prod_diagnostics_and_autofix(void) {
+    prod_autoscale_workload_t wl;
+    char buf[128];
+    memset(&wl, 0, sizeof(wl));
+    wl.active_workers = 0;
+    wl.queue_depth = 10;
+    wl.cpu_load_pct = 50;
+
+    int fixes = prod_autofix_stalled_workers(&wl, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL(1, fixes);
+    TEST_ASSERT_EQUAL(1U, wl.active_workers);
+    TEST_ASSERT_NOT_NULL(strstr(buf, "autofix active_workers 1 fixes 1"));
+
+    /* High stress workload autofix */
+    wl.cpu_load_pct = 98;
+    wl.queue_depth = 60;
+    fixes = prod_autofix_stalled_workers(&wl, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL(1, fixes);
+    TEST_ASSERT_EQUAL(3U, wl.active_workers);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -763,6 +784,7 @@ int main(void) {
     RUN_TEST(test_lot22_predictive_maintenance_and_autoscale_eval);
     RUN_TEST(test_lot23_prod_extreme_autoscale_and_bundle_health);
     RUN_TEST(test_lot24_prod_extreme_autoscale_and_bundle_health);
+    RUN_TEST(test_lot25_prod_diagnostics_and_autofix);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

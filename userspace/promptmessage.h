@@ -11,6 +11,7 @@
  */
 #ifndef MOHHDY_PROMPTMESSAGE_H
 #define MOHHDY_PROMPTMESSAGE_H
+#include <stdint.h>
 
 #define PM_SRC_MAX 4096
 #define PM_CODE_MAX 4096
@@ -121,5 +122,28 @@ int pm_crl_has(const char* crl, int len, const unsigned char* digest);
 /* Returns the new length (unchanged if already listed) or PM_ERR_LIMIT. */
 int pm_crl_add(char* crl, int len, int cap, const unsigned char* digest);
 int pm_ca_rotate_status(int rotation_count, char* out, int cap);
+
+/* ---- US-061 Multi-Agent Bus & Session Context ---- */
+#define PM_AGENT_NAME_MAX 24
+#define PM_CTX_SER_MAX 512
+
+typedef struct {
+    char agent_id[PM_AGENT_NAME_MAX];
+    uint32_t session_id;
+    int var_count;
+    char keys[PM_VARS][PM_NAME_MAX];
+    char vals[PM_VARS][PM_VAL_MAX];
+} pm_context_t;
+
+void pm_context_init(pm_context_t* ctx, const char* agent_id, uint32_t session_id);
+int pm_context_set_var(pm_context_t* ctx, const char* key, const char* val);
+const char* pm_context_get_var(const pm_context_t* ctx, const char* key);
+int pm_context_serialize(const pm_context_t* ctx, char* out, int cap);
+int pm_context_deserialize(pm_context_t* ctx, const char* in, int len);
+
+/* Chain execution of prog1 piping context into prog2 */
+int pm_pipe_exec(const pm_program_t* prog1, const pm_program_t* prog2,
+                 pm_vm_t* vm1, pm_vm_t* vm2,
+                 pm_context_t* ctx, const pm_host_t* host);
 
 #endif

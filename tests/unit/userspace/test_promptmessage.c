@@ -376,6 +376,26 @@ static void test_lot21_pm_ca_and_crl_orchestration(void) {
     TEST_ASSERT_EQUAL(1, pm_crl_has(crl, n, digest));
 }
 
+static void test_lot25_pm_multi_agent_bus(void) {
+    pm_context_t ctx;
+    char ser_buf[256];
+    pm_context_init(&ctx, "agent_a", 1001);
+    TEST_ASSERT_EQUAL_STRING("agent_a", ctx.agent_id);
+    TEST_ASSERT_EQUAL(1001, ctx.session_id);
+
+    TEST_ASSERT_EQUAL(0, pm_context_set_var(&ctx, "msg", "hello"));
+    TEST_ASSERT_EQUAL_STRING("hello", pm_context_get_var(&ctx, "msg"));
+
+    int len = pm_context_serialize(&ctx, ser_buf, sizeof(ser_buf));
+    TEST_ASSERT(len > 0);
+
+    pm_context_t ctx2;
+    TEST_ASSERT_EQUAL(0, pm_context_deserialize(&ctx2, ser_buf, len));
+    TEST_ASSERT_EQUAL_STRING("agent_a", ctx2.agent_id);
+    TEST_ASSERT_EQUAL(1001, ctx2.session_id);
+    TEST_ASSERT_EQUAL_STRING("hello", pm_context_get_var(&ctx2, "msg"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_spec_examples_run);
@@ -393,6 +413,7 @@ int main(void) {
     RUN_TEST(test_crl_add_and_lookup);
     RUN_TEST(test_ca_rotate_status);
     RUN_TEST(test_lot21_pm_ca_and_crl_orchestration);
+    RUN_TEST(test_lot25_pm_multi_agent_bus);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

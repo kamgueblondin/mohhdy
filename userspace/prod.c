@@ -445,6 +445,26 @@ int prod_autoscale_workload_eval(prod_scaler_t* s, prod_autoscale_workload_t* wl
     return 0;
 }
 
+int prod_autofix_stalled_workers(prod_autoscale_workload_t* wl, char* out, int cap) {
+    if (!wl || !out || cap <= 0) return -1;
+    int fixes = 0;
+    out[0] = 0;
+    if (wl->queue_depth > 0 && wl->active_workers == 0) {
+        wl->active_workers = 1;
+        wl->scale_events++;
+        fixes++;
+    }
+    if (wl->cpu_load_pct > 95U && wl->queue_depth > 50U) {
+        wl->active_workers += 2;
+        wl->scale_events++;
+        fixes++;
+    }
+    s_cat(out, "autofix active_workers ", cap); cat_u(out, wl->active_workers, cap);
+    s_cat(out, " fixes ", cap); cat_u(out, (uint32_t)fixes, cap);
+    s_cat(out, "\n", cap);
+    return fixes;
+}
+
 /* --------------------------------------------- US-112 Security Scanner */
 static uint32_t le32(const uint8_t* p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
 static uint32_t le16(const uint8_t* p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8); }
