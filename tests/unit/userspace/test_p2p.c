@@ -1014,6 +1014,33 @@ static void test_lot23_p2p_raft_anti_entropy_and_link_cost(void) {
     TEST_ASSERT_EQUAL(0, g_n[0].cache.inv_active);
 }
 
+static void test_lot24_p2p_raft_anti_entropy_and_link_cost(void) {
+    p2p_peer_t peer;
+    memset(&peer, 0, sizeof(peer));
+    peer.rtt_ewma_ms = 40;
+    peer.bucket_used = 2;
+    peer.loss_percent = 2;
+    peer.anomalies = 0;
+    peer.down_events = 1;
+
+    /* Base cost 10 + 40 RTT + 5 bucket + 20 loss + 0 anomalies + 25 down events = 100 */
+    uint32_t cost = p2p_calc_link_cost(&peer);
+    TEST_ASSERT_EQUAL(100U, cost);
+
+    setup(3, 0);
+    run(3, 200);
+
+    /* AIMD rate adaptation */
+    g_n[0].qos.window_size = 32;
+    p2p_qos_note_loss(&g_n[0]);
+    TEST_ASSERT_EQUAL(16U, g_n[0].qos.window_size);
+
+    /* Disconnect cache invalidation */
+    TEST_ASSERT_EQUAL(0, p2p_cache_put_v(&g_n[0], "p2p_k24", "v24", 1, 600, g_ticks));
+    p2p_cache_on_peer_down(&g_n[0], g_n[1].id);
+    TEST_ASSERT_EQUAL(0, g_n[0].cache.inv_active);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1049,6 +1076,7 @@ int main(void) {
     RUN_TEST(test_lot21_mesh_routing_and_grpc_fallback);
     RUN_TEST(test_lot22_raft_partition_resilience);
     RUN_TEST(test_lot23_p2p_raft_anti_entropy_and_link_cost);
+    RUN_TEST(test_lot24_p2p_raft_anti_entropy_and_link_cost);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

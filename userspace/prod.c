@@ -422,7 +422,7 @@ static void cat_u(char* d, uint32_t v, int cap) {
     r[i] = 0; s_cat(d, r, cap);
 }
 
-/* --------------------------------------------- US-110 / Lot 23 Autoscaling Workload */
+/* --------------------------------------------- US-110 / Lot 24 Autoscaling Workload */
 int prod_autoscale_workload_eval(prod_scaler_t* s, prod_autoscale_workload_t* wl, uint32_t now_tick, char* out, int cap) {
     int old_workers, new_workers;
     uint32_t effective_load;

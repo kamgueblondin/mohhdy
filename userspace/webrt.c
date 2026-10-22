@@ -290,7 +290,7 @@ void webrt_set_audit_callback(webrt_audit_fn fn) {
     g_webrt_audit_cb = fn;
 }
 
-/* Lot 23 (US-039 / US-041): Dynamic CSP enforcement and resource display list validation */
+/* Lot 24 (US-039 / US-041): Consolidated dynamic CSP enforcement and resource display list validation */
 int webrt_csp_enforce(const webrt_csp_t* p, const char* page_origin, const char* resource_type, const char* resource_url) {
     char dir[32];
     int i = 0;
@@ -306,6 +306,12 @@ int webrt_csp_enforce(const webrt_csp_t* p, const char* page_origin, const char*
         allowed = webrt_csp_allows(p, "media-src", page_origin, resource_url);
     } else if (w_eq(resource_type, "connect") || w_eq(resource_type, "fetch") || w_eq(resource_type, "connect-src")) {
         allowed = webrt_csp_allows(p, "connect-src", page_origin, resource_url);
+    } else if (w_eq(resource_type, "font") || w_eq(resource_type, "font-src")) {
+        allowed = webrt_csp_allows(p, "font-src", page_origin, resource_url);
+    } else if (w_eq(resource_type, "object") || w_eq(resource_type, "object-src")) {
+        allowed = webrt_csp_allows(p, "object-src", page_origin, resource_url);
+    } else if (w_eq(resource_type, "frame") || w_eq(resource_type, "frame-src")) {
+        allowed = webrt_csp_allows(p, "frame-src", page_origin, resource_url);
     } else {
         dir[0] = 0;
         while (resource_type[i] && i < 20) { dir[i] = resource_type[i]; i++; }

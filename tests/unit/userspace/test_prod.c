@@ -692,6 +692,52 @@ static void test_lot23_prod_extreme_autoscale_and_bundle_health(void) {
     TEST_ASSERT_NOT_NULL(strstr(out, "checksum verified=true fnv "));
 }
 
+static void test_lot24_prod_extreme_autoscale_and_bundle_health(void) {
+    prod_scaler_t s;
+    prod_autoscale_workload_t wl;
+    prod_perf_monitor_t pm;
+    prod_metrics_t m;
+    prod_alerts_t a;
+    prod_usage_t u;
+    prod_feedback_t f;
+    prod_roadmap_t rm;
+    uint32_t done = 0, entries = 0, pct = 0;
+    char out[2048];
+    int len;
+
+    /* Extreme workload evaluation */
+    prod_scaler_init(&s, 2, 20, 1000, 300, 10);
+    memset(&wl, 0, sizeof(wl));
+    wl.queue_depth = 90;
+    wl.cpu_load_pct = 95;
+    TEST_ASSERT_EQUAL(0, prod_autoscale_workload_eval(&s, &wl, 1000, out, sizeof(out)));
+    TEST_ASSERT_GREATER_THAN(2U, wl.active_workers);
+    TEST_ASSERT_NOT_NULL(strstr(out, "queue 90"));
+
+    /* Performance monitor evaluation */
+    memset(&m, 0, sizeof(m));
+    memset(&a, 0, sizeof(a));
+    TEST_ASSERT_TRUE(prod_perf_monitor_eval(&m, &a, &pm, out, sizeof(out)) >= 0);
+    TEST_ASSERT_EQUAL(100U, pm.overall_health_score);
+    TEST_ASSERT_EQUAL(1, pm.system_status_ok);
+
+    /* Roadmap FNV-1a parsing & evaluation */
+    const char *rm_text = "US-039 1 done ok\nUS-070 2 done ok\nUS-110 3 done ok\nUS-120 4 done ok\n";
+    TEST_ASSERT_EQUAL(4, prod_roadmap_parse(rm_text, (int)strlen(rm_text), &rm));
+    TEST_ASSERT_EQUAL(0, prod_roadmap_eval(&rm, &done, &entries, &pct));
+    TEST_ASSERT_EQUAL(4U, done);
+    TEST_ASSERT_EQUAL(4U, entries);
+    TEST_ASSERT_EQUAL(100U, pct);
+
+    /* Support bundle text verification */
+    memset(&u, 0, sizeof(u));
+    memset(&f, 0, sizeof(f));
+    len = prod_support_bundle_text(&m, &a, &u, &f, 500, out, sizeof(out));
+    TEST_ASSERT_GREATER_THAN(0, len);
+    TEST_ASSERT_NOT_NULL(strstr(out, "health_score 100"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "checksum verified=true fnv "));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -716,6 +762,7 @@ int main(void) {
     RUN_TEST(test_lot21_support_bundle_checksum_verification);
     RUN_TEST(test_lot22_predictive_maintenance_and_autoscale_eval);
     RUN_TEST(test_lot23_prod_extreme_autoscale_and_bundle_health);
+    RUN_TEST(test_lot24_prod_extreme_autoscale_and_bundle_health);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

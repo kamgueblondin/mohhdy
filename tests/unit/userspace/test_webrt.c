@@ -262,6 +262,23 @@ static void test_lot23_webrt_csp_and_origin_audit(void) {
     TEST_ASSERT_EQUAL_STRING("/etc/web_storage.dat:ENC_V1", g_test_audit_detail);
 }
 
+static void test_lot24_webrt_csp_and_origin_audit(void) {
+    webrt_csp_t p;
+    webrt_set_audit_callback(test_audit_cb);
+    g_test_audit_action[0] = 0;
+    g_test_audit_detail[0] = 0;
+
+    webrt_csp_parse(&p, "default-src 'self'; connect-src https://api.mohhdy.local; script-src https://js.mohhdy.local");
+
+    TEST_ASSERT_EQUAL(1, webrt_csp_enforce(&p, "https://app.mohhdy.local", "connect", "https://api.mohhdy.local/v1"));
+    TEST_ASSERT_EQUAL(0, webrt_csp_enforce(&p, "https://app.mohhdy.local", "connect", "https://unauthorized-api.org"));
+    TEST_ASSERT_EQUAL_STRING("csp_blocked", g_test_audit_action);
+    TEST_ASSERT_EQUAL_STRING("connect:https://unauthorized-api.org", g_test_audit_detail);
+
+    TEST_ASSERT_EQUAL(1, webrt_site_storage_validate_origin("https://app.mohhdy.local", "self"));
+    TEST_ASSERT_EQUAL(0, webrt_site_storage_validate_origin("https://app.mohhdy.local", "https://untrusted.com"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -277,6 +294,7 @@ int main(void) {
     RUN_TEST(test_a11y_audit);
     RUN_TEST(test_lot20_responsive_aspect_ratio_and_nested_vars);
     RUN_TEST(test_lot23_webrt_csp_and_origin_audit);
+    RUN_TEST(test_lot24_webrt_csp_and_origin_audit);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
