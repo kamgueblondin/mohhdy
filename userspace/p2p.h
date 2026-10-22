@@ -268,6 +268,8 @@ typedef struct {
     /* Application payloads (Phase 7 collab) carried in sealed P2P_I_APP. */
     void (*app)(void* app_ctx, uint32_t from_id, const uint8_t* data, int length);
     void* app_ctx;
+    /* Lot 26: Multi-Region P2P routing */
+    uint32_t region_id;
 } p2p_node_t;
 
 int p2p_up_step(p2p_node_t* n, int step, const char* name, const uint8_t ip[4], const char* netkey,
@@ -287,6 +289,9 @@ int p2p_get_remote(p2p_node_t* n, const p2p_host_t* h, const char* key);
 int p2p_sync(p2p_node_t* n, const p2p_host_t* h, const char* peer);
 int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 int p2p_block(p2p_node_t* n, const char* peer, int blocked);
+int p2p_region_set(p2p_node_t* n, uint32_t region_id);
+int raft_stream_snapshot_chunk(p2p_node_t* n, const p2p_host_t* h, const char* peer, uint32_t chunk_idx, uint32_t total_chunks, const uint8_t* chunk_data, int chunk_len);
+int p2p_qos_bbr_step(p2p_node_t* n, uint32_t current_rtt_ms, uint32_t bytes_delivered, uint32_t delta_ms);
 int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h);
 /* Lot 23 (US-070 / US-076): Raft compaction and anti-entropy snapshot management */
 int p2p_raft_compact(p2p_node_t* n);

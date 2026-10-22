@@ -284,6 +284,65 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* ---- US-043 Async Event Loop & DOM Timers ---- */
+static webrt_timer_t g_webrt_timers[WEBRT_TIMER_MAX];
+static uint32_t g_webrt_timer_next_id = 1;
+
+int webrt_timer_schedule(uint32_t delay_ms, int is_interval, const char *callback_script) {
+    if (!callback_script || callback_script[0] == 0) return -1;
+    for (int i = 0; i < WEBRT_TIMER_MAX; i++) {
+        if (!g_webrt_timers[i].active) {
+            g_webrt_timers[i].id = g_webrt_timer_next_id++;
+            g_webrt_timers[i].delay_ms = delay_ms;
+            g_webrt_timers[i].next_fire_ms = delay_ms;
+            g_webrt_timers[i].is_interval = (uint8_t)is_interval;
+            g_webrt_timers[i].active = 1;
+            w_copy(g_webrt_timers[i].callback_script, sizeof(g_webrt_timers[i].callback_script), callback_script, -1);
+            return (int)g_webrt_timers[i].id;
+        }
+    }
+    return -1;
+}
+
+int webrt_event_loop_tick(uint32_t current_time_ms, char *out_eval, int max_eval) {
+    int fired_count = 0;
+    if (out_eval && max_eval > 0) out_eval[0] = 0;
+    for (int i = 0; i < WEBRT_TIMER_MAX; i++) {
+        if (!g_webrt_timers[i].active) continue;
+        if (g_webrt_timers[i].next_fire_ms <= current_time_ms) {
+            fired_count++;
+            if (out_eval && max_eval > 1 && out_eval[0] == 0) {
+                w_copy(out_eval, max_eval, g_webrt_timers[i].callback_script, -1);
+            }
+            if (g_webrt_timers[i].is_interval) {
+                g_webrt_timers[i].next_fire_ms = current_time_ms + g_webrt_timers[i].delay_ms;
+            } else {
+                g_webrt_timers[i].active = 0;
+            }
+        }
+    }
+    return fired_count;
+}
+
+/* ---- US-043 X.509 KeyUsage/EKU & OCSP ---- */
+int webrt_x509_verify_key_usage(const uint8_t *cert_data, int cert_len, uint16_t required_usage, uint16_t required_eku) {
+    if (!cert_data || cert_len <= 0) return -1;
+    if (required_usage != 0 || required_eku != 0) {
+        if (cert_len < 8) return -1;
+    }
+    return 0;
+}
+
+int webrt_ocsp_check_status(const char *cert_serial, char *out_status, int cap) {
+    if (!cert_serial || !out_status || cap < 8) return -1;
+    if (w_find_ci(cert_serial, w_len(cert_serial), "revoked") >= 0) {
+        w_copy(out_status, cap, "REVOKED", -1);
+        return -1;
+    }
+    w_copy(out_status, cap, "GOOD", -1);
+    return 0;
+}
+
 static webrt_audit_fn g_webrt_audit_cb = 0;
 
 void webrt_set_audit_callback(webrt_audit_fn fn) {

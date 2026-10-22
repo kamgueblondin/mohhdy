@@ -1041,6 +1041,27 @@ static void test_lot24_p2p_raft_anti_entropy_and_link_cost(void) {
     TEST_ASSERT_EQUAL(0, g_n[0].cache.inv_active);
 }
 
+static void test_lot26_p2p_region_snapshot_and_bbr(void) {
+    uint8_t chunk[64];
+    memset(chunk, 0xAB, sizeof(chunk));
+
+    setup(3, 0);
+    run(3, 200);
+
+    /* Multi-Region P2P routing */
+    TEST_ASSERT_EQUAL(0, p2p_region_set(&g_n[0], 10));
+    TEST_ASSERT_EQUAL(10U, g_n[0].region_id);
+
+    /* Raft Snapshot Chunk Streaming */
+    TEST_ASSERT_EQUAL(64, raft_stream_snapshot_chunk(&g_n[0], &g_h[0], "beta", 0, 2, chunk, 64));
+
+    /* BBR-like adaptive QoS step */
+    TEST_ASSERT_EQUAL(0, p2p_qos_bbr_step(&g_n[0], 20, 10000, 50));
+    TEST_ASSERT_EQUAL(20U, g_n[0].qos.rtt_min_ms);
+    TEST_ASSERT_GREATER_THAN(0U, g_n[0].qos.rate_est_bps);
+    TEST_ASSERT_GREATER_THAN(0U, g_n[0].qos.window_size);
+}
+
 static void test_lot25_p2p_partition_healing_and_lease(void) {
     setup(3, 0);
     run(3, 200);
@@ -1097,6 +1118,7 @@ int main(void) {
     RUN_TEST(test_lot23_p2p_raft_anti_entropy_and_link_cost);
     RUN_TEST(test_lot24_p2p_raft_anti_entropy_and_link_cost);
     RUN_TEST(test_lot25_p2p_partition_healing_and_lease);
+    RUN_TEST(test_lot26_p2p_region_snapshot_and_bbr);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

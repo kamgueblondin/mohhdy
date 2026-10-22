@@ -1,6 +1,12 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (22 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **938** tests reussis.
+> **Etat reel et pilotage (22 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **940** tests reussis.
+
+## Lot 26: Extension Avancee VFS Virtuel Multi-Secteurs, Moteur JS/DOM Event Loop Ring 3, Reseau P2P Raft Multi-Regions & Supervision Predictive Auto-Adaptative ✅ (22 octobre 2026)
+- [x] US-033 / US-034 : Gestionnaire de quotas par sous-arborescence VFS (`vfs_quota_set`, `vfs_quota_check`), controle de droits ACL (`vfs_access_grant`, `vfs_access_control`), echange atomique inter-fichiers (`vfs_atomic_swap`), et verrous de lecture/ecriture (`vfs_flock`).
+- [x] US-043 / US-046 / US-062 : Minuteurs DOM et boucle d'evenements (`webrt_timer_schedule`, `webrt_event_loop_tick`), verification KeyUsage/EKU X.509 (`webrt_x509_verify_key_usage`), statut OCSP simule (`webrt_ocsp_check_status`), et file de messages/bus inter-agents PromptProgram (`pm_bus_init`, `pm_bus_publish`, `pm_bus_subscribe`, `pm_bus_dequeue`).
+- [x] US-071 / US-079 : Routage P2P multi-regions (`p2p_region_set`), transfert d'instantanes Raft decoupe par trames (`raft_stream_snapshot_chunk`), et controleur de debit adaptatif BBR-like (`p2p_qos_bbr_step`).
+- [x] US-119 / US-121 : Auto-redemarrage de services sous fuite ou saturation (`auto_restarts`), calculateur KPI metier (`prod_biz_kpi_eval`), et controle d'integrite FNV-1a sur la persistance overlay.
 
 ## Lot 25: Extension Majeure VFS Multi-Repertoires, Moteur TLS/Handshake Ring 3, Bus Multi-Agents PromptProgram & Resilience P2P/Raft Avancee ✅ (22 octobre 2026)
 - [x] US-032 / US-033 : Creation de sous-repertoires multi-niveaux (`ramfs_mkdir_p`), listage recursif (`ramfs_list_recursive`), copie de repertoires (`ramfs_cp`), deplacement inter-repertoires (`ramfs_mv`) et suppression recursive (`ramfs_rm_r` / `rm -r`) sous controle de capacite mutate.

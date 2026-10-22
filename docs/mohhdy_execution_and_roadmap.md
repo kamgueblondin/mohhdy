@@ -9,7 +9,7 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 
 ### Suite de Tests
 - `make test-all` rejoue la suite de non-regression sur l'arbre courant :
-  - **938 tests executes / 938 tests reussis** (0 echec, 0 ignore).
+  - **940 tests executes / 940 tests reussis** (0 echec, 0 ignore).
   - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. Couverture hote mesuree par `make coverage` : 79.55% de lignes (24434/30716). Pas l'image guest. Pas dans `make test-all`.
 - Les compteurs plus anciens de ce fichier (563/563 et autres) decrivent la livraison de leur paragraphe, pas l'arbre courant.
 - `make strict-image-check`, `make secrets-check` et `make tree-clean-check` sont les gardes d'image et d'arbre.
@@ -55,6 +55,12 @@ Elle confirme visuellement :
 - **Moteur Web & Performance Telemetrie (US-043 / US-045)** : Calcul de latence par cycle d'ordonnancement (`telemetry_sched_cycles`, `perf_min_us`, `perf_max_us`, `perf_avg_us`, `perf_last_us`, `render_ms`) pour `web-perf` et `browser-telemetry perf`.
 - **Inspection VFS & FS-as-Web (US-045)** : Inspection hierarchique du DOM (`browser-dom-tree`) et evaluation d'expressions sandboxees VFS (`browser-eval`) directement accessibles dans `/browser` et `/fs`.
 - **Evaluation de Latence & Benchmarks GGUF (Garde 3)** : Cache KV multi-tours consolide avec rembobinage dynamique du prefixe commun (`gpt2_gguf_cache_match_prefix`, `gpt2_gguf_align_cache_prefix`) dans `kernel/llm/gpt2_gguf_infer.c`. Validation du protocole KVM (`make gguf-kvm-benchmark-check`).
+
+### Lot 26 (22 octobre 2026) : Extension Avancee VFS Virtuel, Event Loop JS / Bus Multi-Agents, Reseau P2P Multi-Regions & Diagnostic Auto-Healing
+- **VFS Quotas, Droits, Swap Atomique & Verrouillage (US-033 / US-034)** : Gestionnaire de quotas par sous-arborescence VFS (`vfs_quota_set`, `vfs_quota_check`), droits ACL (`vfs_access_grant`, `vfs_access_control`), permutation atomique de fichiers (`vfs_atomic_swap`) et verrous de lecture/ecriture (`vfs_flock`).
+- **Web Runtime, JS Event Loop & Bus Multi-Agents Async (US-043 / US-046 / US-062)** : Minuteurs DOM et boucle d'evenements (`webrt_timer_schedule`, `webrt_event_loop_tick`), controle KeyUsage/EKU X.509 (`webrt_x509_verify_key_usage`), statut OCSP simule (`webrt_ocsp_check_status`), et file de messages/bus inter-agents PromptProgram (`pm_bus_init`, `pm_bus_publish`, `pm_bus_subscribe`, `pm_bus_dequeue`).
+- **Reseau P2P Mesh Multi-Regions, Raft Streaming & Dynamic QoS (US-071 / US-079)** : Routage multi-regions (`p2p_region_set`), transfert d'instantanes Raft decoupe par trames (`raft_stream_snapshot_chunk`), et controle de debit adaptatif BBR-like (`p2p_qos_bbr_step`).
+- **Diagnostic Production, KPI Metier & Auto-Healing (US-119 / US-121)** : Auto-redemarrage de services sous fuite ou saturation (`auto_restarts`), calculateur KPI metier (`prod_biz_kpi_eval`), et controle d'integrite FNV-1a sur la persistance overlay.
 
 ### Lot 17 (21 octobre 2026) : Consolidation Web Runtime, Robustesse Inférence GGUF KVM & Synchronisation P2P/Production
 - **Moteur Web & Sandbox VFS Extended (US-040 / US-081)** : Évaluation avancée des media queries (`aspect-ratio`) et traçabilité renforcée des opérations VFS sandboxées (`vfs_read`, `vfs_scope_denied`, `vfs_traversal_denied`, `vfs_fs_save`, `vfs_fs_load`, `fetch_allowed`) dans `osui-audit`.

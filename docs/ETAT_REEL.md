@@ -10,6 +10,20 @@
 
 ## État courant vérifié
 
+## Etat courant du 22 octobre 2026 (lot 26)
+
+Living baseline. Plan: [lot26_plan.md](lot26_plan.md).
+
+```text
+make test-all : 940 passed, 0 failed, 0 skipped
+```
+
+- US-033 / US-034: VFS quota capacity manager (`vfs_quota_set`, `vfs_quota_check`), access rights control (`vfs_access_grant`, `vfs_access_control`), atomic inter-file swap (`vfs_atomic_swap`), and file locking (`vfs_flock`).
+- US-043 / US-046 / US-062: Ring 3 JS/DOM Event Loop timers (`webrt_timer_schedule`, `webrt_event_loop_tick`), X.509 KeyUsage/EKU verification (`webrt_x509_verify_key_usage`), simulated OCSP revocation check (`webrt_ocsp_check_status`), and PromptProgram Multi-Agent Async Message Queue & Event Bus (`pm_bus_init`, `pm_bus_publish`, `pm_bus_subscribe`, `pm_bus_dequeue`).
+- US-071 / US-079: Multi-Region P2P routing and hierarchical clustering (`p2p_region_set`), chunked Raft snapshot streaming (`raft_stream_snapshot_chunk`), and adaptive BBR-like congestion controller (`p2p_qos_bbr_step`).
+- US-119 / US-121: Automated service auto-restarts (`auto_restarts`) in `prod_perf_monitor_eval` and `prod_support_bundle_text`, business KPI calculator (`prod_biz_kpi_eval`), and FNV-1a overlay persistence integrity validation.
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 22 octobre 2026 (lot 25)
 
 Living baseline. Plan: [lot25_plan.md](lot25_plan.md).

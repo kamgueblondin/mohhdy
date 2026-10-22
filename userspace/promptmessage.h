@@ -146,4 +146,14 @@ int pm_pipe_exec(const pm_program_t* prog1, const pm_program_t* prog2,
                  pm_vm_t* vm1, pm_vm_t* vm2,
                  pm_context_t* ctx, const pm_host_t* host);
 
+/* ---- US-062 Multi-Agent Async Message Queue & Bus ---- */
+#define PM_BUS_CHANNELS 8
+#define PM_BUS_SUBS_PER_CHAN 4
+#define PM_BUS_MSG_QUEUE 16
+
+void pm_bus_init(void);
+int pm_bus_subscribe(const char *channel, const char *agent_id);
+int pm_bus_publish(const char *channel, const char *sender, const char *message);
+int pm_bus_dequeue(const char *agent_id, char *out_channel, char *out_sender, char *out_message, int cap);
+
 #endif

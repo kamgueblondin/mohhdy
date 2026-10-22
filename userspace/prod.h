@@ -128,6 +128,8 @@ typedef struct {
     uint32_t distinct_commands;
     uint32_t uptime_seconds;
     uint32_t business_kpi_score;     /* commands per minute of uptime */
+    uint32_t avg_exec_time_ms;
+    uint32_t global_efficiency_score;
 } prod_biz_metrics_t;
 
 /* requested_mode < 0 lets the busy average choose. */
@@ -222,6 +224,7 @@ void prod_usage_hit(prod_usage_t* u, const char* name);
 void prod_usage_sort(prod_usage_t* u);
 
 int prod_biz_metrics_get(const prod_usage_t* u, uint32_t uptime_ticks, prod_biz_metrics_t* bm);
+int prod_biz_kpi_eval(const prod_usage_t* u, uint32_t uptime_ticks, uint32_t total_cmd_time_ms, prod_biz_metrics_t* bm);
 
 /* US-114 Dynamic Threshold Learning */
 typedef struct {
@@ -242,6 +245,7 @@ typedef struct {
     uint32_t avg_busy_pct;
     uint32_t free_mem_kib;
     int system_status_ok;
+    uint32_t auto_restarts;
 } prod_perf_monitor_t;
 
 /* Lot 23 (US-110 / US-120): Performance monitor evaluation */

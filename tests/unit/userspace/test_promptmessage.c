@@ -376,6 +376,22 @@ static void test_lot21_pm_ca_and_crl_orchestration(void) {
     TEST_ASSERT_EQUAL(1, pm_crl_has(crl, n, digest));
 }
 
+static void test_lot26_pm_bus_pub_sub_queue(void) {
+    char out_chan[32], out_sender[24], out_msg[128];
+
+    pm_bus_init();
+    TEST_ASSERT_EQUAL(0, pm_bus_subscribe("events", "agent_worker"));
+    TEST_ASSERT_EQUAL(0, pm_bus_publish("events", "agent_leader", "task_assigned"));
+
+    TEST_ASSERT_EQUAL(1, pm_bus_dequeue("agent_worker", out_chan, out_sender, out_msg, sizeof(out_msg)));
+    TEST_ASSERT_EQUAL_STRING("events", out_chan);
+    TEST_ASSERT_EQUAL_STRING("agent_leader", out_sender);
+    TEST_ASSERT_EQUAL_STRING("task_assigned", out_msg);
+
+    /* Queue empty now */
+    TEST_ASSERT_EQUAL(0, pm_bus_dequeue("agent_worker", out_chan, out_sender, out_msg, sizeof(out_msg)));
+}
+
 static void test_lot25_pm_multi_agent_bus(void) {
     pm_context_t ctx;
     char ser_buf[256];
@@ -414,6 +430,7 @@ int main(void) {
     RUN_TEST(test_ca_rotate_status);
     RUN_TEST(test_lot21_pm_ca_and_crl_orchestration);
     RUN_TEST(test_lot25_pm_multi_agent_bus);
+    RUN_TEST(test_lot26_pm_bus_pub_sub_queue);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

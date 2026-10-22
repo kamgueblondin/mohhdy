@@ -279,6 +279,37 @@ static void test_lot24_webrt_csp_and_origin_audit(void) {
     TEST_ASSERT_EQUAL(0, webrt_site_storage_validate_origin("https://app.mohhdy.local", "https://untrusted.com"));
 }
 
+static void test_lot26_webrt_timers_keyusage_ocsp(void) {
+    char eval_buf[128];
+    uint8_t dummy_cert[16] = {0x30, 0x0E, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00};
+    char status_buf[32];
+
+    /* DOM Timers & Event Loop Tick */
+    int t1 = webrt_timer_schedule(50, 0, "alert('timeout')");
+    int t2 = webrt_timer_schedule(100, 1, "console.log('interval')");
+    TEST_ASSERT_TRUE(t1 > 0);
+    TEST_ASSERT_TRUE(t2 > 0);
+
+    /* At time 10ms, no timer fired */
+    TEST_ASSERT_EQUAL(0, webrt_event_loop_tick(10, eval_buf, sizeof(eval_buf)));
+
+    /* At time 60ms, timeout t1 fired */
+    TEST_ASSERT_EQUAL(1, webrt_event_loop_tick(60, eval_buf, sizeof(eval_buf)));
+    TEST_ASSERT_EQUAL_STRING("alert('timeout')", eval_buf);
+
+    /* At time 110ms, interval t2 fired */
+    TEST_ASSERT_EQUAL(1, webrt_event_loop_tick(110, eval_buf, sizeof(eval_buf)));
+    TEST_ASSERT_EQUAL_STRING("console.log('interval')", eval_buf);
+
+    /* X.509 KeyUsage & OCSP status */
+    TEST_ASSERT_EQUAL(0, webrt_x509_verify_key_usage(dummy_cert, 16, WEBRT_KU_DIGITAL_SIGNATURE, WEBRT_EKU_SERVER_AUTH));
+    TEST_ASSERT_EQUAL(0, webrt_ocsp_check_status("SN-123456", status_buf, sizeof(status_buf)));
+    TEST_ASSERT_EQUAL_STRING("GOOD", status_buf);
+
+    TEST_ASSERT_EQUAL(-1, webrt_ocsp_check_status("SN-REVOKED-999", status_buf, sizeof(status_buf)));
+    TEST_ASSERT_EQUAL_STRING("REVOKED", status_buf);
+}
+
 static void test_lot25_webrt_tls_and_dom_events(void) {
     webrt_tls_session_t tls;
     webrt_dom_event_mgr_t dom;
@@ -328,6 +359,7 @@ int main(void) {
     RUN_TEST(test_lot23_webrt_csp_and_origin_audit);
     RUN_TEST(test_lot24_webrt_csp_and_origin_audit);
     RUN_TEST(test_lot25_webrt_tls_and_dom_events);
+    RUN_TEST(test_lot26_webrt_timers_keyusage_ocsp);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

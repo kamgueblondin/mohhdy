@@ -127,6 +127,41 @@ static void test_ramfs_mv_directory(void) {
     TEST_ASSERT(ramfs_is_file("/proj2/a.txt"));
 }
 
+static void test_lot26_vfs_quotas_acls_swap_flock(void) {
+    ramfs_init();
+
+    /* Quotas */
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_quota_set("/sandbox", 100, 5));
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_mkdir("/sandbox"));
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_write("/sandbox/file1.txt", "1234567890", 10));
+    TEST_ASSERT_EQUAL(RAMFS_ERR_NOSPACE, vfs_quota_check("/sandbox", 150, 1));
+
+    /* Access Control (ACLs) */
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_access_grant("/sandbox/file1.txt", "app_origin", VFS_RIGHT_READ));
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_access_control("/sandbox/file1.txt", "app_origin", VFS_RIGHT_READ));
+    TEST_ASSERT_EQUAL(RAMFS_ERR_INVAL, vfs_access_control("/sandbox/file1.txt", "app_origin", VFS_RIGHT_WRITE));
+
+    /* Atomic Swap */
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_write("/file_a.txt", "AAA", 3));
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_write("/file_b.txt", "BBB", 3));
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_atomic_swap("/file_a.txt", "/file_b.txt"));
+    int sa = 0, sb = 0;
+    const char *da = ramfs_read("/file_a.txt", &sa);
+    const char *db = ramfs_read("/file_b.txt", &sb);
+    TEST_ASSERT_EQUAL_STRING("BBB", da);
+    TEST_ASSERT_EQUAL_STRING("AAA", db);
+
+    /* File Locking (flock) */
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_flock("/file_a.txt", VFS_LOCK_SH));
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_flock("/file_a.txt", VFS_LOCK_SH));
+    TEST_ASSERT_EQUAL(RAMFS_ERR_INVAL, vfs_flock("/file_a.txt", VFS_LOCK_EX));
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_flock("/file_a.txt", VFS_LOCK_UN));
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_flock("/file_a.txt", VFS_LOCK_UN));
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_flock("/file_a.txt", VFS_LOCK_EX));
+    TEST_ASSERT_EQUAL(RAMFS_ERR_INVAL, vfs_flock("/file_a.txt", VFS_LOCK_SH));
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_flock("/file_a.txt", VFS_LOCK_UN));
+}
+
 static void test_lot25_vfs_mkdir_p_rm_r(void) {
     ramfs_dirent_t rents[RAMFS_MAX_LIST];
     int count;
@@ -166,6 +201,7 @@ int main(void) {
     RUN_TEST(test_ramfs_parent_must_exist);
     RUN_TEST(test_ramfs_mv_directory);
     RUN_TEST(test_lot25_vfs_mkdir_p_rm_r);
+    RUN_TEST(test_lot26_vfs_quotas_acls_swap_flock);
     RUN_TEST(test_procsim_table_and_kill);
 
     unity_print_results();
