@@ -942,12 +942,14 @@ int shell_prod_line(const char* l) {
         return 1;
     }
     if (s_eq(cmd, "prod-perf-monitor")) {
+        /* Lot 23 (US-110 / US-120): Global performance monitor evaluation */
         prod_perf_monitor_t pm;
         prod_perf_monitor_eval(&g_m, &g_a, &pm, g_out, (int)sizeof(g_out));
         out(g_out);
         return 0;
     }
     if (s_eq(cmd, "prod-autoscale-workload")) {
+        /* Lot 23 (US-110 / US-120): Dynamic workload autoscaling evaluation under load */
         prod_autoscale_workload_t wl = {1, 5, 45, 0};
         word(rest, a, 64);
         if (a[0]) (void)to_u(a, &wl.queue_depth);

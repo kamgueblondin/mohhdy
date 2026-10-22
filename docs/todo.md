@@ -1,6 +1,11 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (21 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **929** tests reussis.
+> **Etat reel et pilotage (21 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **932** tests reussis.
+
+## Lot 23: Perfectionnement Securite Web Runtime, Resilience Multi-Noeuds P2P/Raft & Supervision Avancee Production ✅ (21 octobre 2026)
+- [x] US-039 / US-041 : Filtrage dynamique CSP (`webrt_csp_enforce`, `webrt_csp_validate_display_list_resource`), isolation des origines et tracabilite dans `osui-audit` des refus CSP, acces d'origines non autorisees et autorisations MCP.
+- [x] US-070 / US-076 : Anti-entropie Raft lors des reconnexions et instantanes (`p2p_raft_compact`, `raft_install_snapshot`), calcul du cout de lien EWMA (`p2p_calc_link_cost`), controle AIMD (`p2p_qos_note_loss`) et invalidation automatique cache P2P (`p2p_cache_on_peer_down`).
+- [x] US-110 / US-120 : Autoscaling dynamique de charge extreme (`prod_autoscale_workload_eval`), moniteur de performance global (`prod_perf_monitor_eval`), verification FNV-1a de la feuille de route (`prod_roadmap_eval`), et score de sante global dans bundles de diagnostic (`prod-support-bundle`, `prod_support_bundle_text`).
 
 ## Lot 22: Consolidation Ecosysteme OS-UI / PromptMessage, Resilience Economique Collaborative & Surveillance Production Continue ✅ (21 octobre 2026)
 - [x] US-041 / US-060 : Execution sandboxee PromptMessage (`cmd_browser_pm_run`), verification certificats CA (`/etc/pm_ca.pub`), signatures Schnorr (`csig_verify`), et tracabilite dans `osui-audit` pour rotation cles CA (`pm_ca_rotate_status`) et cycle de vie des sessions utilisateur.

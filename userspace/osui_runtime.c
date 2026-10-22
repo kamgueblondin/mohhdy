@@ -3617,6 +3617,7 @@ static const char k_web_csp[] =
     "default-src 'self'; script-src 'self' https://cdn.mohhdy.local; img-src * data:; "
     "style-src 'self' 'unsafe-inline'";
 
+/* Lot 23 (US-039 / US-041): Web CSP dynamic resource validation and display list enforcement */
 static int cmd_web_csp(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) {
     static const char *const checks[8][2] = {
         {"script-src", "/js/app.js"}, {"script-src", "https://cdn.mohhdy.local/lib.js"},

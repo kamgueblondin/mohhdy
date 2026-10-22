@@ -235,6 +235,33 @@ static void test_lot20_responsive_aspect_ratio_and_nested_vars(void) {
     TEST_ASSERT_EQUAL_STRING(":root{}body{color:#0080ff;fill:#0080ff;}", out);
 }
 
+static void test_lot23_webrt_csp_and_origin_audit(void) {
+    webrt_csp_t p;
+    webrt_set_audit_callback(test_audit_cb);
+    g_test_audit_action[0] = 0;
+    g_test_audit_detail[0] = 0;
+
+    webrt_csp_parse(&p, "default-src 'self'; script-src https://cdn.mohhdy.local; img-src https://img.mohhdy.local; media-src https://media.mohhdy.local");
+
+    /* Allowed resources */
+    TEST_ASSERT_EQUAL(1, webrt_csp_enforce(&p, "https://app.mohhdy.local", "script", "https://cdn.mohhdy.local/app.js"));
+    TEST_ASSERT_EQUAL(1, webrt_csp_validate_display_list_resource(&p, "https://app.mohhdy.local", "media", "https://media.mohhdy.local/stream.mp4"));
+
+    /* Blocked resources & audit callback verification */
+    TEST_ASSERT_EQUAL(0, webrt_csp_enforce(&p, "https://app.mohhdy.local", "media", "https://unauthorized.org/video.mp4"));
+    TEST_ASSERT_EQUAL_STRING("csp_blocked", g_test_audit_action);
+    TEST_ASSERT_EQUAL_STRING("media:https://unauthorized.org/video.mp4", g_test_audit_detail);
+
+    /* Origin validation and encrypted audit tracing */
+    TEST_ASSERT_EQUAL(1, webrt_site_storage_validate_origin("https://app.mohhdy.local", "https://app.mohhdy.local"));
+    TEST_ASSERT_EQUAL(0, webrt_site_storage_validate_origin("https://app.mohhdy.local", "https://evil.org"));
+
+    g_test_audit_action[0] = 0;
+    TEST_ASSERT_EQUAL(0, webrt_enc_v1_audit_log("storage_set", "/etc/web_storage.dat", 20));
+    TEST_ASSERT_EQUAL_STRING("storage_set", g_test_audit_action);
+    TEST_ASSERT_EQUAL_STRING("/etc/web_storage.dat:ENC_V1", g_test_audit_detail);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -249,6 +276,7 @@ int main(void) {
     RUN_TEST(test_components);
     RUN_TEST(test_a11y_audit);
     RUN_TEST(test_lot20_responsive_aspect_ratio_and_nested_vars);
+    RUN_TEST(test_lot23_webrt_csp_and_origin_audit);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
