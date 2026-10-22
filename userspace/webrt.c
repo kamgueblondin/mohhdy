@@ -284,6 +284,193 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* ---- Lot 28: Web Runtime Vector Engine & CSS Box Model / 2D Rasterizer Implementation ---- */
+int webrt_compute_box_model(int width, int height,
+                            int m_top, int m_right, int m_bottom, int m_left,
+                            int b_top, int b_right, int b_bottom, int b_left,
+                            int p_top, int p_right, int p_bottom, int p_left,
+                            webrt_box_model_t *out) {
+    if (!out) return -1;
+    out->content_width = width < 0 ? 0 : width;
+    out->content_height = height < 0 ? 0 : height;
+
+    out->margin_top = m_top < 0 ? 0 : m_top;
+    out->margin_right = m_right < 0 ? 0 : m_right;
+    out->margin_bottom = m_bottom < 0 ? 0 : m_bottom;
+    out->margin_left = m_left < 0 ? 0 : m_left;
+
+    out->border_top = b_top < 0 ? 0 : b_top;
+    out->border_right = b_right < 0 ? 0 : b_right;
+    out->border_bottom = b_bottom < 0 ? 0 : b_bottom;
+    out->border_left = b_left < 0 ? 0 : b_left;
+
+    out->padding_top = p_top < 0 ? 0 : p_top;
+    out->padding_right = p_right < 0 ? 0 : p_right;
+    out->padding_bottom = p_bottom < 0 ? 0 : p_bottom;
+    out->padding_left = p_left < 0 ? 0 : p_left;
+
+    out->total_width = out->margin_left + out->border_left + out->padding_left +
+                       out->content_width +
+                       out->padding_right + out->border_right + out->margin_right;
+
+    out->total_height = out->margin_top + out->border_top + out->padding_top +
+                        out->content_height +
+                        out->padding_bottom + out->border_bottom + out->margin_bottom;
+
+    return 0;
+}
+
+int webrt_text_wrap(const char *in_text, int max_width_px, int char_width_px,
+                    char *out_lines, int max_lines, int line_cap) {
+    if (!in_text || !out_lines || max_lines <= 0 || line_cap <= 0 || char_width_px <= 0) return -1;
+
+    int max_chars_per_line = max_width_px / char_width_px;
+    if (max_chars_per_line <= 0) max_chars_per_line = 1;
+
+    int in_len = w_len(in_text);
+    int read_pos = 0;
+    int line_count = 0;
+    out_lines[0] = 0;
+
+    while (read_pos < in_len && line_count < max_lines) {
+        int chunk = in_len - read_pos;
+        if (chunk > max_chars_per_line) chunk = max_chars_per_line;
+
+        char line_buf[128];
+        if (chunk >= (int)sizeof(line_buf)) chunk = (int)sizeof(line_buf) - 1;
+
+        for (int k = 0; k < chunk; k++) {
+            line_buf[k] = in_text[read_pos + k];
+        }
+        line_buf[chunk] = 0;
+
+        int line_offset = line_count * line_cap;
+        w_copy(&out_lines[line_offset], line_cap, line_buf, -1);
+
+        read_pos += chunk;
+        line_count++;
+    }
+
+    return line_count;
+}
+
+int webrt_text_align_offset(int align_mode, int content_width_px, int text_width_px) {
+    if (content_width_px <= text_width_px) return 0;
+    if (align_mode == WEBRT_TEXT_ALIGN_CENTER) {
+        return (content_width_px - text_width_px) / 2;
+    } else if (align_mode == WEBRT_TEXT_ALIGN_RIGHT) {
+        return content_width_px - text_width_px;
+    } else if (align_mode == WEBRT_TEXT_ALIGN_JUSTIFY) {
+        return (content_width_px - text_width_px) / 4;
+    }
+    return 0; /* LEFT */
+}
+
+void webrt_form_component_init(webrt_form_component_t *comp, int id, int type, const char *name) {
+    if (!comp) return;
+    comp->id = id;
+    comp->type = type;
+    comp->focused = 0;
+    comp->value[0] = 0;
+    comp->onchange_callback[0] = 0;
+    comp->onclick_callback[0] = 0;
+    if (name) w_copy(comp->name, sizeof(comp->name), name, -1);
+    else comp->name[0] = 0;
+}
+
+int webrt_form_component_set_focus(webrt_form_component_t *comp, int focused) {
+    if (!comp) return -1;
+    comp->focused = focused ? 1 : 0;
+    return 0;
+}
+
+int webrt_form_component_input_text(webrt_form_component_t *comp, const char *text, char *out_eval, int max_eval) {
+    if (!comp || !text) return -1;
+    w_copy(comp->value, sizeof(comp->value), text, -1);
+    if (comp->onchange_callback[0] && out_eval && max_eval > 1) {
+        w_copy(out_eval, max_eval, comp->onchange_callback, -1);
+        return w_len(out_eval);
+    }
+    if (out_eval && max_eval > 0) out_eval[0] = 0;
+    return 0;
+}
+
+int webrt_form_component_click(webrt_form_component_t *comp, char *out_eval, int max_eval) {
+    if (!comp) return -1;
+    if (comp->onclick_callback[0] && out_eval && max_eval > 1) {
+        w_copy(out_eval, max_eval, comp->onclick_callback, -1);
+        return w_len(out_eval);
+    }
+    if (out_eval && max_eval > 0) out_eval[0] = 0;
+    return 0;
+}
+
+void webrt_vec_init(webrt_vec_display_list_t *dl) {
+    if (!dl) return;
+    dl->count = 0;
+}
+
+int webrt_vec_add_line(webrt_vec_display_list_t *dl, int x1, int y1, int x2, int y2, uint32_t color) {
+    if (!dl || dl->count >= WEBRT_VEC_CMD_MAX) return -1;
+    webrt_vec_cmd_t *cmd = &dl->cmds[dl->count++];
+    cmd->type = WEBRT_VEC_LINE;
+    cmd->x1 = x1;
+    cmd->y1 = y1;
+    cmd->x2 = x2;
+    cmd->y2 = y2;
+    cmd->radius = 0;
+    cmd->color_start = color;
+    cmd->color_end = color;
+    return 0;
+}
+
+int webrt_vec_add_round_rect(webrt_vec_display_list_t *dl, int x, int y, int w, int h, int radius, uint32_t color) {
+    if (!dl || dl->count >= WEBRT_VEC_CMD_MAX) return -1;
+    webrt_vec_cmd_t *cmd = &dl->cmds[dl->count++];
+    cmd->type = WEBRT_VEC_ROUND_RECT;
+    cmd->x1 = x;
+    cmd->y1 = y;
+    cmd->x2 = x + w;
+    cmd->y2 = y + h;
+    cmd->radius = radius;
+    cmd->color_start = color;
+    cmd->color_end = color;
+    return 0;
+}
+
+int webrt_vec_add_gradient(webrt_vec_display_list_t *dl, int x, int y, int w, int h, uint32_t color_start, uint32_t color_end) {
+    if (!dl || dl->count >= WEBRT_VEC_CMD_MAX) return -1;
+    webrt_vec_cmd_t *cmd = &dl->cmds[dl->count++];
+    cmd->type = WEBRT_VEC_GRADIENT;
+    cmd->x1 = x;
+    cmd->y1 = y;
+    cmd->x2 = x + w;
+    cmd->y2 = y + h;
+    cmd->radius = 0;
+    cmd->color_start = color_start;
+    cmd->color_end = color_end;
+    return 0;
+}
+
+int webrt_render_vector_dom(const webrt_box_model_t *box, uint32_t bg_color, uint32_t border_color, webrt_vec_display_list_t *out_dl) {
+    if (!box || !out_dl) return -1;
+    webrt_vec_init(out_dl);
+
+    /* Background gradient / fill */
+    int content_x = box->margin_left + box->border_left + box->padding_left;
+    int content_y = box->margin_top + box->border_top + box->padding_top;
+    webrt_vec_add_gradient(out_dl, content_x, content_y, box->content_width, box->content_height, bg_color, bg_color ^ 0x00111111U);
+
+    /* Outer border rounded rectangle */
+    int border_x = box->margin_left;
+    int border_y = box->margin_top;
+    int border_w = box->border_left + box->padding_left + box->content_width + box->padding_right + box->border_right;
+    int border_h = box->border_top + box->padding_top + box->content_height + box->padding_bottom + box->border_bottom;
+    webrt_vec_add_round_rect(out_dl, border_x, border_y, border_w, border_h, 4, border_color);
+
+    return out_dl->count;
+}
+
 /* ---- US-047 DOM MutationObserver & CSS Flexbox Light ---- */
 void webrt_dom_observer_init(webrt_dom_observer_mgr_t *mgr) {
     if (!mgr) return;

@@ -188,6 +188,24 @@ static void test_lot25_vfs_mkdir_p_rm_r(void) {
     TEST_ASSERT(ramfs_exists("/web2/assets/css/style.css"));
 }
 
+static void test_lot28_page_cache_and_io_queue(void) {
+    vfs_page_cache_init();
+    uint8_t buf[512];
+    for (int i = 0; i < 512; i++) buf[i] = (uint8_t)i;
+
+    TEST_ASSERT_EQUAL(0, vfs_page_cache_write(10, buf, 1));
+    uint8_t read_buf[512];
+    TEST_ASSERT_EQUAL(0, vfs_page_cache_read(10, read_buf));
+    TEST_ASSERT_EQUAL(buf[0], read_buf[0]);
+
+    TEST_ASSERT_EQUAL(1, vfs_cache_flush());
+    TEST_ASSERT_EQUAL(0, vfs_cache_flush());
+
+    TEST_ASSERT_EQUAL(0, vfs_io_enqueue(20, VFS_IO_PRIO_READ_AHEAD, 0, buf, 512));
+    TEST_ASSERT_EQUAL(0, vfs_io_enqueue(15, VFS_IO_PRIO_URGENT_FLUSH, 1, buf, 512));
+    TEST_ASSERT_EQUAL(2, vfs_io_process_coalesced());
+}
+
 int main(void) {
     unity_init();
 
@@ -203,6 +221,7 @@ int main(void) {
     RUN_TEST(test_lot25_vfs_mkdir_p_rm_r);
     RUN_TEST(test_lot26_vfs_quotas_acls_swap_flock);
     RUN_TEST(test_procsim_table_and_kill);
+    RUN_TEST(test_lot28_page_cache_and_io_queue);
 
     unity_print_results();
     unity_cleanup();

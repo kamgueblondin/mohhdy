@@ -211,4 +211,72 @@ typedef struct {
 
 int webrt_flex_compute_layout(webrt_flex_container_t *container);
 
+/* ---- Lot 28: Web Runtime Vector Engine & CSS Box Model / 2D Rasterizer (US-031 / US-040 / US-042) ---- */
+typedef struct {
+    int margin_top, margin_right, margin_bottom, margin_left;
+    int border_top, border_right, border_bottom, border_left;
+    int padding_top, padding_right, padding_bottom, padding_left;
+    int content_width, content_height;
+    int total_width, total_height;
+} webrt_box_model_t;
+
+int webrt_compute_box_model(int width, int height,
+                            int m_top, int m_right, int m_bottom, int m_left,
+                            int b_top, int b_right, int b_bottom, int b_left,
+                            int p_top, int p_right, int p_bottom, int p_left,
+                            webrt_box_model_t *out);
+
+int webrt_text_wrap(const char *in_text, int max_width_px, int char_width_px,
+                    char *out_lines, int max_lines, int line_cap);
+
+#define WEBRT_TEXT_ALIGN_LEFT    0
+#define WEBRT_TEXT_ALIGN_CENTER  1
+#define WEBRT_TEXT_ALIGN_RIGHT   2
+#define WEBRT_TEXT_ALIGN_JUSTIFY 3
+
+int webrt_text_align_offset(int align_mode, int content_width_px, int text_width_px);
+
+#define WEBRT_FORM_INPUT    1
+#define WEBRT_FORM_BUTTON   2
+#define WEBRT_FORM_TEXTAREA 3
+
+typedef struct {
+    int id;
+    int type;
+    int focused;
+    char name[32];
+    char value[128];
+    char onchange_callback[64];
+    char onclick_callback[64];
+} webrt_form_component_t;
+
+void webrt_form_component_init(webrt_form_component_t *comp, int id, int type, const char *name);
+int webrt_form_component_set_focus(webrt_form_component_t *comp, int focused);
+int webrt_form_component_input_text(webrt_form_component_t *comp, const char *text, char *out_eval, int max_eval);
+int webrt_form_component_click(webrt_form_component_t *comp, char *out_eval, int max_eval);
+
+#define WEBRT_VEC_LINE       1
+#define WEBRT_VEC_ROUND_RECT 2
+#define WEBRT_VEC_GRADIENT   3
+
+typedef struct {
+    int type;
+    int x1, y1, x2, y2;
+    int radius;
+    uint32_t color_start;
+    uint32_t color_end;
+} webrt_vec_cmd_t;
+
+#define WEBRT_VEC_CMD_MAX 16
+typedef struct {
+    webrt_vec_cmd_t cmds[WEBRT_VEC_CMD_MAX];
+    int count;
+} webrt_vec_display_list_t;
+
+void webrt_vec_init(webrt_vec_display_list_t *dl);
+int webrt_vec_add_line(webrt_vec_display_list_t *dl, int x1, int y1, int x2, int y2, uint32_t color);
+int webrt_vec_add_round_rect(webrt_vec_display_list_t *dl, int x, int y, int w, int h, int radius, uint32_t color);
+int webrt_vec_add_gradient(webrt_vec_display_list_t *dl, int x, int y, int w, int h, uint32_t color_start, uint32_t color_end);
+int webrt_render_vector_dom(const webrt_box_model_t *box, uint32_t bg_color, uint32_t border_color, webrt_vec_display_list_t *out_dl);
+
 #endif
