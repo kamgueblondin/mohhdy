@@ -246,6 +246,11 @@ int gw_hpack_put(unsigned char* out, int cap, const char* name, const char* valu
     return hp_str_put(out, cap, pos, value);
 }
 
+int grpcwire_compress_header(const char* name, const char* val, uint8_t* out, int max_out) {
+    if (!name || !val || !out || max_out < 4) return -1;
+    return gw_hpack_put(out, max_out, name, val);
+}
+
 static int hp_str_get(const unsigned char* in, int len, int pos, char* out, int cap) {
     unsigned int l;
     int i;

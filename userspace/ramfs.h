@@ -1,5 +1,5 @@
-/* ramfs.h - VFS RAM pédagogique pour le shell MOHHDY
- * Pas un vrai système de fichiers : table en mémoire processus.
+/* ramfs.h - VFS RAM pedagogique pour le shell MOHHDY
+ * Pas un vrai systeme de fichiers : table en memoire processus.
  */
 
 #ifndef MOHHDY_RAMFS_H
@@ -34,8 +34,10 @@ int ramfs_is_dir(const char *path);
 int ramfs_is_file(const char *path);
 
 int ramfs_mkdir(const char *path);
+int ramfs_mkdir_p(const char *path);
 int ramfs_rmdir(const char *path);
 int ramfs_rm(const char *path);
+int ramfs_rm_r(const char *path);
 int ramfs_cp(const char *src, const char *dst);
 int ramfs_mv(const char *src, const char *dst);
 
@@ -43,6 +45,7 @@ const char *ramfs_read(const char *path, int *size);
 int ramfs_write(const char *path, const char *data, int len);
 
 int ramfs_list(const char *path, ramfs_dirent_t *out, int max_n);
+int ramfs_list_recursive(const char *path, ramfs_dirent_t *out, int max_n);
 int ramfs_node_count(void);
 
 const char *ramfs_strerror(int err);

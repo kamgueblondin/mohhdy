@@ -101,4 +101,45 @@ int webrt_a11y_audit(const char* html, webrt_a11y_t* r);
 int webrt_site_storage_validate_origin(const char* page_origin, const char* target_origin);
 int webrt_enc_v1_audit_log(const char* action, const char* path, int len);
 
+/* ---- US-045 Ring 3 TLS / X.509 Engine ---- */
+#define WEBRT_TLS_STATE_IDLE          0
+#define WEBRT_TLS_STATE_CLIENT_HELLO   1
+#define WEBRT_TLS_STATE_SERVER_HELLO   2
+#define WEBRT_TLS_STATE_CERT_VERIFY    3
+#define WEBRT_TLS_STATE_KEY_EXCHANGE   4
+#define WEBRT_TLS_STATE_FINISHED       5
+#define WEBRT_TLS_STATE_ESTABLISHED    6
+
+typedef struct {
+    uint8_t state;
+    uint8_t cert_chain_depth;
+    uint8_t cert_valid;
+    char hostname[64];
+    uint8_t client_random[32];
+    uint8_t server_random[32];
+    uint8_t master_secret[48];
+} webrt_tls_session_t;
+
+void webrt_tls_init(webrt_tls_session_t* session, const char* hostname);
+int webrt_tls_verify_cert_chain(webrt_tls_session_t* session, const uint8_t* cert_data, int cert_len, int depth);
+int webrt_tls_handshake_step(webrt_tls_session_t* session, const uint8_t* in, int in_len, uint8_t* out, int max_out);
+
+/* ---- US-041 DOM Event Manager & Callbacks ---- */
+#define WEBRT_EVENT_MAX 16
+typedef struct {
+    char element_id[32];
+    char event_type[20]; /* e.g. "click", "submit", "change" */
+    char callback_script[128];
+    uint8_t active;
+} webrt_dom_event_t;
+
+typedef struct {
+    webrt_dom_event_t listeners[WEBRT_EVENT_MAX];
+    int count;
+} webrt_dom_event_mgr_t;
+
+void webrt_dom_event_init(webrt_dom_event_mgr_t* mgr);
+int webrt_dom_add_event_listener(webrt_dom_event_mgr_t* mgr, const char* element_id, const char* event_type, const char* callback_script);
+int webrt_dom_dispatch_event(webrt_dom_event_mgr_t* mgr, const char* element_id, const char* event_type, char* out_eval, int max_eval);
+
 #endif

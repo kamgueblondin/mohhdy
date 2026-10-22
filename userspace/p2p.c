@@ -1907,6 +1907,37 @@ int p2p_raft_append(p2p_node_t* n, const p2p_host_t* h, const char* key, const c
 }
 
 /* Lot 24 (US-070 / US-076): Consolidated Raft log compaction & snapshot anti-entropy */
+int p2p_raft_reconcile_partition(p2p_node_t* n, const p2p_host_t* h, uint32_t peer_id, uint32_t remote_term, uint32_t remote_commit_index) {
+    if (!n) return -1;
+    (void)h;
+    if (remote_term > n->raft.term) {
+        raft_step_down(n, remote_term);
+    }
+    p2p_peer_t* p = 0;
+    for (int i = 0; i < P2P_PEERS; i++) {
+        if (n->peers[i].used && n->peers[i].id == peer_id) {
+            p = &n->peers[i];
+            break;
+        }
+    }
+    if (n->raft.role == P2P_RAFT_LEADER && p) {
+        if (remote_commit_index < n->raft.commit_index) {
+            p->raft_next = remote_commit_index + 1U;
+            return 1; /* Reconciliation sync needed */
+        }
+    }
+    return 0;
+}
+
+int p2p_raft_update_lease(p2p_node_t* n, uint32_t rtt_ms, uint32_t loss_pct, uint32_t current_tick) {
+    if (!n) return -1;
+    uint32_t extra = 0U;
+    if (rtt_ms > 100U) extra += (rtt_ms / 10U) * (P2P_HZ / 100U);
+    if (loss_pct > 20U) extra += (loss_pct * P2P_HZ) / 100U;
+    n->raft.lease_until = current_tick + P2P_RAFT_LEASE_TICKS + extra;
+    return 0;
+}
+
 int p2p_raft_compact(p2p_node_t* n) {
     uint32_t base, keep, i, term;
     p2p_raft_entry_t* e;

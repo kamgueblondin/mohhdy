@@ -127,6 +127,32 @@ static void test_ramfs_mv_directory(void) {
     TEST_ASSERT(ramfs_is_file("/proj2/a.txt"));
 }
 
+static void test_lot25_vfs_mkdir_p_rm_r(void) {
+    ramfs_dirent_t rents[RAMFS_MAX_LIST];
+    int count;
+    ramfs_init();
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_mkdir_p("/web/assets/css"));
+    TEST_ASSERT(ramfs_is_dir("/web"));
+    TEST_ASSERT(ramfs_is_dir("/web/assets"));
+    TEST_ASSERT(ramfs_is_dir("/web/assets/css"));
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_write("/web/assets/css/style.css", "body { color: red; }", 20));
+    TEST_ASSERT(ramfs_is_file("/web/assets/css/style.css"));
+
+    count = ramfs_list_recursive("/web", rents, RAMFS_MAX_LIST);
+    TEST_ASSERT(count >= 3);
+
+    /* Directory copy */
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_cp("/web", "/web2"));
+    TEST_ASSERT(ramfs_is_dir("/web2"));
+    TEST_ASSERT(ramfs_is_file("/web2/assets/css/style.css"));
+
+    /* Recursive delete */
+    TEST_ASSERT_EQUAL(RAMFS_OK, ramfs_rm_r("/web"));
+    TEST_ASSERT(!ramfs_exists("/web"));
+    TEST_ASSERT(!ramfs_exists("/web/assets/css/style.css"));
+    TEST_ASSERT(ramfs_exists("/web2/assets/css/style.css"));
+}
+
 int main(void) {
     unity_init();
 
@@ -139,6 +165,7 @@ int main(void) {
     RUN_TEST(test_ramfs_grep_content);
     RUN_TEST(test_ramfs_parent_must_exist);
     RUN_TEST(test_ramfs_mv_directory);
+    RUN_TEST(test_lot25_vfs_mkdir_p_rm_r);
     RUN_TEST(test_procsim_table_and_kill);
 
     unity_print_results();

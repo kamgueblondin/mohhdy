@@ -290,6 +290,9 @@ int p2p_block(p2p_node_t* n, const char* peer, int blocked);
 int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h);
 /* Lot 23 (US-070 / US-076): Raft compaction and anti-entropy snapshot management */
 int p2p_raft_compact(p2p_node_t* n);
+/* Lot 25 (US-070 / US-078): Partition healing and dynamic leader lease adjustment */
+int p2p_raft_reconcile_partition(p2p_node_t* n, const p2p_host_t* h, uint32_t peer_id, uint32_t remote_term, uint32_t remote_commit_index);
+int p2p_raft_update_lease(p2p_node_t* n, uint32_t rtt_ms, uint32_t loss_pct, uint32_t current_tick);
 /* Append one log entry. Returns the 1-based index, or -1 if not leader. */
 int p2p_raft_append(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 /* 12-byte term/vote trailer ('R','F', version 1). Returns 12 or -1. */

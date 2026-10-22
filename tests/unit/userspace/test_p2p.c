@@ -1041,6 +1041,25 @@ static void test_lot24_p2p_raft_anti_entropy_and_link_cost(void) {
     TEST_ASSERT_EQUAL(0, g_n[0].cache.inv_active);
 }
 
+static void test_lot25_p2p_partition_healing_and_lease(void) {
+    setup(3, 0);
+    run(3, 200);
+
+    /* Elect alpha as leader */
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    g_n[0].raft.commit_index = 5;
+
+    /* Partition reconciliation test */
+    TEST_ASSERT_EQUAL(1, p2p_raft_reconcile_partition(&g_n[0], &g_h[0], g_n[1].id, 2, 2));
+
+    /* Dynamic lease adjustment under high RTT and packet loss */
+    uint32_t init_lease = g_n[0].raft.lease_until;
+    p2p_raft_update_lease(&g_n[0], 150, 25, g_ticks);
+    TEST_ASSERT_GREATER_THAN((int)init_lease, (int)g_n[0].raft.lease_until);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1077,6 +1096,7 @@ int main(void) {
     RUN_TEST(test_lot22_raft_partition_resilience);
     RUN_TEST(test_lot23_p2p_raft_anti_entropy_and_link_cost);
     RUN_TEST(test_lot24_p2p_raft_anti_entropy_and_link_cost);
+    RUN_TEST(test_lot25_p2p_partition_healing_and_lease);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

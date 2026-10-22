@@ -1,4 +1,4 @@
-/* ramfs.c - VFS RAM (table de nœuds en mémoire). Sans libc. */
+/* ramfs.c - VFS RAM (table de noeuds en memoire). Sans libc. */
 
 #include "ramfs.h"
 
@@ -279,6 +279,46 @@ int ramfs_mkdir(const char *path) {
     return add_dir(path);
 }
 
+int ramfs_mkdir_p(const char *path) {
+    char cur[RAMFS_PATH_MAX];
+    int i = 0;
+    if (!path || path[0] == 0) return RAMFS_ERR_INVAL;
+    if (path[0] == '/') {
+        cur[0] = '/';
+        cur[1] = 0;
+        i = 1;
+    } else {
+        cur[0] = 0;
+    }
+    while (path[i]) {
+        while (path[i] == '/') i++;
+        if (!path[i]) break;
+        int len = rf_strlen(cur);
+        if (len > 1 && cur[len - 1] != '/') {
+            cur[len++] = '/';
+            cur[len] = 0;
+        } else if (len == 0) {
+            cur[0] = '/';
+            cur[1] = 0;
+            len = 1;
+        }
+        while (path[i] && path[i] != '/') {
+            if (len < RAMFS_PATH_MAX - 1) {
+                cur[len++] = path[i];
+            }
+            i++;
+        }
+        cur[len] = 0;
+        if (!find_node(cur)) {
+            int rc = add_dir(cur);
+            if (rc != RAMFS_OK && rc != RAMFS_ERR_EXISTS) return rc;
+        } else if (!ramfs_is_dir(cur)) {
+            return RAMFS_ERR_NOTDIR;
+        }
+    }
+    return RAMFS_OK;
+}
+
 int ramfs_rmdir(const char *path) {
     ramfs_node_t *n;
     if (!path || rf_strcmp(path, "/") == 0) return RAMFS_ERR_INVAL;
@@ -288,6 +328,32 @@ int ramfs_rmdir(const char *path) {
     if (has_children(path)) return RAMFS_ERR_NOTEMPTY;
     n->used = 0;
     g_count--;
+    return RAMFS_OK;
+}
+
+int ramfs_rm_r(const char *path) {
+    ramfs_node_t *n;
+    int plen;
+    if (!path || rf_strcmp(path, "/") == 0) return RAMFS_ERR_INVAL;
+    n = find_node(path);
+    if (!n) return RAMFS_ERR_NOTFOUND;
+    if (!n->is_dir) {
+        n->used = 0;
+        g_count--;
+        return RAMFS_OK;
+    }
+    plen = rf_strlen(path);
+    for (int i = 0; i < RAMFS_MAX_NODES; i++) {
+        if (!g_nodes[i].used) continue;
+        if (rf_strcmp(g_nodes[i].path, path) == 0) {
+            g_nodes[i].used = 0;
+            g_count--;
+        } else if (rf_strncmp(g_nodes[i].path, path, plen) == 0 &&
+                   g_nodes[i].path[plen] == '/') {
+            g_nodes[i].used = 0;
+            g_count--;
+        }
+    }
     return RAMFS_OK;
 }
 
@@ -347,7 +413,6 @@ int ramfs_cp(const char *src, const char *dst) {
     if (!src || !dst) return RAMFS_ERR_INVAL;
     s = find_node(src);
     if (!s) return RAMFS_ERR_NOTFOUND;
-    if (s->is_dir) return RAMFS_ERR_ISDIR;
     rf_strcpy(dest, dst);
     dnode = find_node(dst);
     if (dnode && dnode->is_dir) {
@@ -365,6 +430,33 @@ int ramfs_cp(const char *src, const char *dst) {
         }
         dnode = find_node(dest);
     }
+
+    if (s->is_dir) {
+        int slen = rf_strlen(src);
+        ramfs_mkdir_p(dest);
+        for (int i = 0; i < RAMFS_MAX_NODES; i++) {
+            if (!g_nodes[i].used) continue;
+            if (rf_strncmp(g_nodes[i].path, src, slen) == 0 &&
+                g_nodes[i].path[slen] == '/') {
+                char target[RAMFS_PATH_MAX];
+                int dlen = rf_strlen(dest);
+                rf_strcpy(target, dest);
+                int k = 0;
+                while (g_nodes[i].path[slen + k] && dlen + k < RAMFS_PATH_MAX - 1) {
+                    target[dlen + k] = g_nodes[i].path[slen + k];
+                    k++;
+                }
+                target[dlen + k] = 0;
+                if (g_nodes[i].is_dir) {
+                    ramfs_mkdir_p(target);
+                } else {
+                    ramfs_write(target, g_nodes[i].content, g_nodes[i].size);
+                }
+            }
+        }
+        return RAMFS_OK;
+    }
+
     if (dnode && dnode->is_dir) return RAMFS_ERR_ISDIR;
     return ramfs_write(dest, s->content, s->size);
 }
@@ -438,6 +530,41 @@ int ramfs_list(const char *path, ramfs_dirent_t *out, int max_n) {
             int j = 0;
             while (bn[j] && j < RAMFS_NAME_MAX - 1) {
                 out[count].name[j] = bn[j];
+                j++;
+            }
+            out[count].name[j] = 0;
+            out[count].is_dir = g_nodes[i].is_dir;
+            out[count].size = g_nodes[i].size;
+            count++;
+        }
+    }
+    return count;
+}
+
+int ramfs_list_recursive(const char *path, ramfs_dirent_t *out, int max_n) {
+    ramfs_node_t *n;
+    int count = 0;
+    int plen;
+    if (!path || !out || max_n <= 0) return RAMFS_ERR_INVAL;
+    n = find_node(path);
+    if (!n) return RAMFS_ERR_NOTFOUND;
+    if (!n->is_dir) return RAMFS_ERR_NOTDIR;
+    plen = rf_strlen(path);
+    for (int i = 0; i < RAMFS_MAX_NODES && count < max_n; i++) {
+        if (!g_nodes[i].used) continue;
+        if (rf_strcmp(g_nodes[i].path, path) == 0) continue;
+        int is_under = 0;
+        if (rf_strcmp(path, "/") == 0) {
+            is_under = 1;
+        } else if (rf_strncmp(g_nodes[i].path, path, plen) == 0 &&
+                   g_nodes[i].path[plen] == '/') {
+            is_under = 1;
+        }
+        if (is_under) {
+            const char *rel = (rf_strcmp(path, "/") == 0) ? g_nodes[i].path + 1 : g_nodes[i].path + plen + 1;
+            int j = 0;
+            while (rel[j] && j < RAMFS_NAME_MAX - 1) {
+                out[count].name[j] = rel[j];
                 j++;
             }
             out[count].name[j] = 0;
