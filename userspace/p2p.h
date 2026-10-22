@@ -288,7 +288,7 @@ int p2p_sync(p2p_node_t* n, const p2p_host_t* h, const char* peer);
 int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 int p2p_block(p2p_node_t* n, const char* peer, int blocked);
 int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h);
-/* Drop the applied prefix through last_applied. Returns the new snapshot index. */
+/* Lot 23 (US-070 / US-076): Raft compaction and anti-entropy snapshot management */
 int p2p_raft_compact(p2p_node_t* n);
 /* Append one log entry. Returns the 1-based index, or -1 if not leader. */
 int p2p_raft_append(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
@@ -302,7 +302,9 @@ void p2p_qos_note_rtt(p2p_node_t* n, uint32_t sample_ms);
 int p2p_cache_invalidate_v(p2p_node_t* n, const p2p_host_t* h, const char* key, uint32_t version);
 int p2p_cache_put_v(p2p_node_t* n, const char* key, const char* value, uint32_t version, uint32_t ttl_ticks, uint32_t current_tick);
 int p2p_cache_invalidate(p2p_node_t* n, const p2p_host_t* h, const char* key);
+/* Lot 23 (US-070 / US-076): Automatic cache invalidation upon peer disconnects */
 void p2p_cache_on_peer_down(p2p_node_t* n, uint32_t peer_id);
+/* Lot 23 (US-070 / US-076): EWMA link cost calculation */
 uint32_t p2p_calc_link_cost(const p2p_peer_t* p);
 /* Lot 6 (US-070): cache write through the Raft log (leader only). Every
  * node applies it at commit: line value, version = log index, fence below.

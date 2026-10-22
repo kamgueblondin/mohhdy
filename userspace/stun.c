@@ -1,4 +1,4 @@
-/* userspace/stun.c - STUN (RFC 5389) Binding codec, see stun.h. */
+/* userspace/stun.c - STUN (RFC 5389) Binding codec (Lot 23, US-070/US-076). */
 #include "stun.h"
 
 static void put16(uint8_t* b, uint16_t v) { b[0] = (uint8_t)(v >> 8); b[1] = (uint8_t)v; }

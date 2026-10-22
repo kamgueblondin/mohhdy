@@ -290,6 +290,7 @@ void webrt_set_audit_callback(webrt_audit_fn fn) {
     g_webrt_audit_cb = fn;
 }
 
+/* Lot 23 (US-039 / US-041): Dynamic CSP enforcement and resource display list validation */
 int webrt_csp_enforce(const webrt_csp_t* p, const char* page_origin, const char* resource_type, const char* resource_url) {
     char dir[32];
     int i = 0;

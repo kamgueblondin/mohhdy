@@ -194,6 +194,7 @@ static void derive(p2p_node_t* n, p2p_peer_t* p) {
     mzero(shared, 32); mzero(d, 32);
 }
 
+/* Lot 23 (US-070 / US-076): EWMA link cost calculation */
 uint32_t p2p_calc_link_cost(const p2p_peer_t* p) {
     uint32_t rtt_ms;
     uint32_t cost;

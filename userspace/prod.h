@@ -146,6 +146,7 @@ typedef struct {
     uint32_t cpu_load_pct;
     uint32_t scale_events;
 } prod_autoscale_workload_t;
+/* Lot 23 (US-110 / US-120): Dynamic workload autoscaling evaluation */
 int prod_autoscale_workload_eval(prod_scaler_t* s, prod_autoscale_workload_t* wl, uint32_t now_tick, char* out, int cap);
 
 /* US-112 security scanner (Lot 7, real checks; no CVE database):
@@ -242,6 +243,7 @@ typedef struct {
     int system_status_ok;
 } prod_perf_monitor_t;
 
+/* Lot 23 (US-110 / US-120): Performance monitor evaluation */
 int prod_perf_monitor_eval(const prod_metrics_t* m, const prod_alerts_t* a, prod_perf_monitor_t* pm, char* out, int cap);
 
 /* Persistence (consolidation lot): compact serialization of the in-RAM
