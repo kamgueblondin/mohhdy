@@ -9,7 +9,7 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 
 ### Suite de Tests
 - `make test-all` rejoue la suite de non-regression sur l'arbre courant :
-  - **940 tests executes / 940 tests reussis** (0 echec, 0 ignore).
+  - **945 tests executes / 945 tests reussis** (0 echec, 0 ignore).
   - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. Couverture hote mesuree par `make coverage` : 79.55% de lignes (24434/30716). Pas l'image guest. Pas dans `make test-all`.
 - Les compteurs plus anciens de ce fichier (563/563 et autres) decrivent la livraison de leur paragraphe, pas l'arbre courant.
 - `make strict-image-check`, `make secrets-check` et `make tree-clean-check` sont les gardes d'image et d'arbre.
@@ -55,6 +55,12 @@ Elle confirme visuellement :
 - **Moteur Web & Performance Telemetrie (US-043 / US-045)** : Calcul de latence par cycle d'ordonnancement (`telemetry_sched_cycles`, `perf_min_us`, `perf_max_us`, `perf_avg_us`, `perf_last_us`, `render_ms`) pour `web-perf` et `browser-telemetry perf`.
 - **Inspection VFS & FS-as-Web (US-045)** : Inspection hierarchique du DOM (`browser-dom-tree`) et evaluation d'expressions sandboxees VFS (`browser-eval`) directement accessibles dans `/browser` et `/fs`.
 - **Evaluation de Latence & Benchmarks GGUF (Garde 3)** : Cache KV multi-tours consolide avec rembobinage dynamique du prefixe commun (`gpt2_gguf_cache_match_prefix`, `gpt2_gguf_align_cache_prefix`) dans `kernel/llm/gpt2_gguf_infer.c`. Validation du protocole KVM (`make gguf-kvm-benchmark-check`).
+
+### Lot 27 (22 octobre 2026) : Consolidation Industrielle VFS Virtuel, Moteur Web/Flexbox/MutationObserver, Reseau P2P Multi-Cluster & AI SLA Monitor / Fault Engine
+- **Systeme de Fichiers Virtuel (VFS) Journalise & Transactions (US-035)** : Journalisation circulaire des mutations (`vfs_journal_begin`, `vfs_journal_commit`, `vfs_journal_rollback`) et instantanes transactionnels (`vfs_snapshot_create`, `vfs_snapshot_restore`).
+- **Moteur Web Runtime, Layout CSS Flexbox & MutationObserver DOM (US-047 / US-063)** : DOM MutationObserver (`webrt_dom_observe_mutation`, `webrt_dom_notify_mutation`), moteur de layout CSS Flexbox Light Ring 3 (`webrt_flex_compute_layout`) et streaming d'agents IA (`pm_stream_init`, `pm_stream_append`, `pm_stream_read`).
+- **Reseau P2P Mesh Multi-Cluster & Fast Recovery (US-080)** : Routage inter-cluster (`p2p_cluster_route_forward`) et re-election/rattrapage rapide Raft post-partition (`p2p_raft_fast_recovery`).
+- **Telemesure de Production, AI SLA Monitor & Modele de Prediction de Pannes (US-122)** : AI SLA Monitor (`prod_ai_sla_init`, `prod_ai_sla_record`, `prod_ai_sla_eval`) et moteur de prediction de pannes materielles/services (`prod_fault_predict_init`, `prod_fault_predict_record`, `prod_fault_predict_eval`).
 
 ### Lot 26 (22 octobre 2026) : Extension Avancee VFS Virtuel, Event Loop JS / Bus Multi-Agents, Reseau P2P Multi-Regions & Diagnostic Auto-Healing
 - **VFS Quotas, Droits, Swap Atomique & Verrouillage (US-033 / US-034)** : Gestionnaire de quotas par sous-arborescence VFS (`vfs_quota_set`, `vfs_quota_check`), droits ACL (`vfs_access_grant`, `vfs_access_control`), permutation atomique de fichiers (`vfs_atomic_swap`) et verrous de lecture/ecriture (`vfs_flock`).

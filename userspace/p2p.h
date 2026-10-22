@@ -290,6 +290,8 @@ int p2p_sync(p2p_node_t* n, const p2p_host_t* h, const char* peer);
 int p2p_propose(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 int p2p_block(p2p_node_t* n, const char* peer, int blocked);
 int p2p_region_set(p2p_node_t* n, uint32_t region_id);
+int p2p_cluster_route_forward(p2p_node_t* n, const p2p_host_t* h, uint32_t target_cluster_id, const uint8_t* data, int length);
+int p2p_raft_fast_recovery(p2p_node_t* n, const p2p_host_t* h, uint32_t highest_known_term);
 int raft_stream_snapshot_chunk(p2p_node_t* n, const p2p_host_t* h, const char* peer, uint32_t chunk_idx, uint32_t total_chunks, const uint8_t* chunk_data, int chunk_len);
 int p2p_qos_bbr_step(p2p_node_t* n, uint32_t current_rtt_ms, uint32_t bytes_delivered, uint32_t delta_ms);
 int p2p_raft_elect(p2p_node_t* n, const p2p_host_t* h);

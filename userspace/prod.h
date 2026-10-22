@@ -276,4 +276,30 @@ typedef struct {
 } prod_roadmap_t;
 int prod_roadmap_parse(const char* text, int len, prod_roadmap_t* rm);
 int prod_roadmap_eval(const prod_roadmap_t* rm, uint32_t* total_done, uint32_t* total_entries, uint32_t* pct);
+
+/* US-122: AI SLA Monitor & Predictive Fault Engine */
+typedef struct {
+    uint32_t total_requests;
+    uint32_t successful_requests;
+    uint32_t avg_token_latency_ms;
+    uint32_t max_token_latency_ms;
+    uint32_t sla_breaches;
+    uint32_t target_latency_ms;
+} prod_ai_sla_t;
+
+void prod_ai_sla_init(prod_ai_sla_t *sla, uint32_t target_latency_ms);
+void prod_ai_sla_record(prod_ai_sla_t *sla, uint32_t token_latency_ms, int success);
+int prod_ai_sla_eval(const prod_ai_sla_t *sla, uint32_t *success_rate_pct, uint32_t *sla_compliance_pct);
+
+typedef struct {
+    uint32_t io_errors;
+    uint32_t memory_corruptions;
+    uint32_t packet_losses;
+    uint32_t risk_score; /* 0..100 */
+} prod_fault_predict_t;
+
+void prod_fault_predict_init(prod_fault_predict_t *fp);
+void prod_fault_predict_record(prod_fault_predict_t *fp, uint32_t io_err, uint32_t mem_err, uint32_t pkt_loss);
+int prod_fault_predict_eval(const prod_fault_predict_t *fp, char *out_verdict, int cap);
+
 #endif

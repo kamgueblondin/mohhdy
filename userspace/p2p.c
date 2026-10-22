@@ -2351,6 +2351,33 @@ int p2p_region_set(p2p_node_t* n, uint32_t region_id) {
     return 0;
 }
 
+int p2p_cluster_route_forward(p2p_node_t* n, const p2p_host_t* h, uint32_t target_cluster_id, const uint8_t* data, int length) {
+    int i, forwarded = 0;
+    if (!n || !h || !data || length <= 0) return -1;
+    (void)target_cluster_id;
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        if (p->used && p->up && !p->blocked) {
+            if (p2p_send_app(n, h, p->id, data, length) > 0) {
+                forwarded++;
+            }
+        }
+    }
+    return forwarded;
+}
+
+int p2p_raft_fast_recovery(p2p_node_t* n, const p2p_host_t* h, uint32_t highest_known_term) {
+    if (!n || !n->raft.active) return -1;
+    if (highest_known_term > n->raft.term) {
+        raft_step_down(n, highest_known_term);
+        if (h && h->out) {
+            h->out(h->ctx, "p2p raft fast recovery triggered, term updated to highest known");
+        }
+        return 1;
+    }
+    return 0;
+}
+
 int raft_stream_snapshot_chunk(p2p_node_t* n, const p2p_host_t* h, const char* peer, uint32_t chunk_idx, uint32_t total_chunks, const uint8_t* chunk_data, int chunk_len) {
     uint8_t b[P2P_DATAGRAM_MAX];
     p2p_peer_t* p;

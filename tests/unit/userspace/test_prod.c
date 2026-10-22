@@ -738,6 +738,32 @@ static void test_lot24_prod_extreme_autoscale_and_bundle_health(void) {
     TEST_ASSERT_NOT_NULL(strstr(out, "checksum verified=true fnv "));
 }
 
+static void test_lot27_prod_ai_sla_and_fault_predict(void) {
+    prod_ai_sla_t sla;
+    uint32_t s_rate = 0, compliance = 0;
+    prod_ai_sla_init(&sla, 50);
+
+    prod_ai_sla_record(&sla, 30, 1);
+    prod_ai_sla_record(&sla, 80, 1); /* Breach: 80 > 50 */
+    prod_ai_sla_record(&sla, 40, 1);
+
+    TEST_ASSERT_EQUAL(0, prod_ai_sla_eval(&sla, &s_rate, &compliance));
+    TEST_ASSERT_EQUAL(100, s_rate);
+    TEST_ASSERT_EQUAL(66, compliance); /* 2/3 compliant */
+
+    prod_fault_predict_t fp;
+    char verdict[32];
+    prod_fault_predict_init(&fp);
+
+    prod_fault_predict_record(&fp, 1, 0, 2); /* 15 + 10 = 25 -> MODERATE_RISK */
+    TEST_ASSERT_EQUAL(25, prod_fault_predict_eval(&fp, verdict, sizeof(verdict)));
+    TEST_ASSERT_EQUAL_STRING("MODERATE_RISK", verdict);
+
+    prod_fault_predict_record(&fp, 2, 1, 0); /* + 30 + 40 = 95 -> CRITICAL_RISK */
+    TEST_ASSERT_EQUAL(95, prod_fault_predict_eval(&fp, verdict, sizeof(verdict)));
+    TEST_ASSERT_EQUAL_STRING("CRITICAL_RISK", verdict);
+}
+
 static void test_lot26_prod_auto_restarts_and_biz_kpi(void) {
     prod_metrics_t m;
     prod_alerts_t a;
@@ -820,6 +846,7 @@ int main(void) {
     RUN_TEST(test_lot24_prod_extreme_autoscale_and_bundle_health);
     RUN_TEST(test_lot25_prod_diagnostics_and_autofix);
     RUN_TEST(test_lot26_prod_auto_restarts_and_biz_kpi);
+    RUN_TEST(test_lot27_prod_ai_sla_and_fault_predict);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

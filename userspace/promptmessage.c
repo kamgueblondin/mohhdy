@@ -44,6 +44,48 @@ static int s_has(const char* hay, const char* needle) {
     }
     return 0;
 }
+
+/* ---- Agent Pipeline Streaming ---- */
+void pm_stream_init(pm_stream_t *st, const char *agent_id) {
+    if (!st) return;
+    st->write_pos = 0;
+    st->read_pos = 0;
+    st->closed = 0;
+    st->buffer[0] = 0;
+    st->agent_id[0] = 0;
+    if (agent_id) s_copy(st->agent_id, agent_id, sizeof(st->agent_id));
+}
+
+int pm_stream_append(pm_stream_t *st, const char *chunk, int len) {
+    if (!st || !chunk || st->closed) return -1;
+    if (len < 0) len = s_len(chunk);
+    int space = PM_STREAM_BUF_MAX - 1 - st->write_pos;
+    if (space <= 0) return 0;
+    int to_copy = (len < space) ? len : space;
+    for (int i = 0; i < to_copy; i++) {
+        st->buffer[st->write_pos++] = chunk[i];
+    }
+    st->buffer[st->write_pos] = 0;
+    return to_copy;
+}
+
+int pm_stream_read(pm_stream_t *st, char *out, int cap) {
+    if (!st || !out || cap < 2) return -1;
+    out[0] = 0;
+    int avail = st->write_pos - st->read_pos;
+    if (avail <= 0) return 0;
+    int to_read = (avail < cap - 1) ? avail : cap - 1;
+    for (int i = 0; i < to_read; i++) {
+        out[i] = st->buffer[st->read_pos++];
+    }
+    out[to_read] = 0;
+    if (st->read_pos == st->write_pos) {
+        st->read_pos = 0;
+        st->write_pos = 0;
+        st->buffer[0] = 0;
+    }
+    return to_read;
+}
 static void s_cat(char* d, const char* s, int cap) {
     int n = s_len(d), i = 0;
     while (s[i] && n < cap - 1) d[n++] = s[i++];

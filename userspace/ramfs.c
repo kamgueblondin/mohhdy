@@ -13,6 +13,34 @@ typedef struct {
 #define VFS_MAX_QUOTAS 8
 #define VFS_MAX_ACLS   16
 #define VFS_MAX_LOCKS  16
+#define VFS_JOURNAL_LOG_MAX 16
+#define VFS_SNAPSHOT_MAX 4
+
+typedef enum {
+    VFS_OP_WRITE = 1,
+    VFS_OP_RM = 2,
+    VFS_OP_MV = 3,
+    VFS_OP_MKDIR = 4
+} vfs_op_type_t;
+
+typedef struct {
+    int used;
+    int tx_id;
+    vfs_op_type_t op;
+    char path[RAMFS_PATH_MAX];
+    char old_path[RAMFS_PATH_MAX];
+    char old_content[RAMFS_CONTENT_MAX];
+    int old_size;
+    int existed;
+    int was_dir;
+} vfs_journal_entry_t;
+
+typedef struct {
+    int used;
+    uint32_t id;
+    ramfs_node_t nodes[RAMFS_MAX_NODES];
+    int count;
+} vfs_snapshot_t;
 
 typedef struct {
     int used;
@@ -41,6 +69,14 @@ static int g_count;
 static vfs_quota_entry_t g_quotas[VFS_MAX_QUOTAS];
 static vfs_acl_entry_t g_acls[VFS_MAX_ACLS];
 static vfs_lock_entry_t g_locks[VFS_MAX_LOCKS];
+
+static vfs_journal_entry_t g_journal[VFS_JOURNAL_LOG_MAX];
+static int g_journal_head = 0;
+static int g_active_tx = 0;
+static int g_tx_counter = 1;
+
+static vfs_snapshot_t g_snapshots[VFS_SNAPSHOT_MAX];
+static uint32_t g_snapshot_counter = 1;
 
 static int rf_strlen(const char *s) {
     int n = 0;
@@ -282,6 +318,14 @@ void ramfs_init(void) {
     for (i = 0; i < VFS_MAX_LOCKS; i++) {
         g_locks[i].used = 0;
     }
+    for (i = 0; i < VFS_JOURNAL_LOG_MAX; i++) {
+        g_journal[i].used = 0;
+    }
+    for (i = 0; i < VFS_SNAPSHOT_MAX; i++) {
+        g_snapshots[i].used = 0;
+    }
+    g_active_tx = 0;
+    g_journal_head = 0;
 
     add_dir("/");
     add_dir("/bin");
@@ -311,10 +355,39 @@ int ramfs_is_file(const char *path) {
     return n && !n->is_dir;
 }
 
+static void vfs_journal_record(vfs_op_type_t op, const char *path, const char *old_path) {
+    if (!g_active_tx) return;
+    int idx = g_journal_head;
+    vfs_journal_entry_t *e = &g_journal[idx];
+    g_journal_head = (g_journal_head + 1) % VFS_JOURNAL_LOG_MAX;
+
+    e->used = 1;
+    e->tx_id = g_active_tx;
+    e->op = op;
+    rf_strcpy(e->path, path ? path : "");
+    rf_strcpy(e->old_path, old_path ? old_path : "");
+    e->old_content[0] = 0;
+    e->old_size = 0;
+    e->existed = 0;
+    e->was_dir = 0;
+
+    ramfs_node_t *n = find_node(path);
+    if (n) {
+        e->existed = 1;
+        e->was_dir = n->is_dir;
+        if (!n->is_dir) {
+            rf_memcpy(e->old_content, n->content, n->size);
+            e->old_content[n->size] = 0;
+            e->old_size = n->size;
+        }
+    }
+}
+
 int ramfs_mkdir(const char *path) {
     if (!path || path[0] == 0 || rf_strcmp(path, "/") == 0) return RAMFS_ERR_INVAL;
     if (find_node(path)) return RAMFS_ERR_EXISTS;
     if (!parent_is_dir(path)) return RAMFS_ERR_NOTDIR;
+    vfs_journal_record(VFS_OP_MKDIR, path, 0);
     return add_dir(path);
 }
 
@@ -402,6 +475,7 @@ int ramfs_rm(const char *path) {
     n = find_node(path);
     if (!n) return RAMFS_ERR_NOTFOUND;
     if (n->is_dir) return RAMFS_ERR_ISDIR;
+    vfs_journal_record(VFS_OP_RM, path, 0);
     n->used = 0;
     g_count--;
     return RAMFS_OK;
@@ -418,6 +492,7 @@ int ramfs_write(const char *path, const char *data, int len) {
         uint32_t add_b = (uint32_t)(len > n->size ? len - n->size : 0);
         int qrc = vfs_quota_check(path, add_b, 0);
         if (qrc != RAMFS_OK) return qrc;
+        vfs_journal_record(VFS_OP_WRITE, path, 0);
         if (data) rf_memcpy(n->content, data, len);
         n->content[len] = 0;
         n->size = len;
@@ -426,6 +501,7 @@ int ramfs_write(const char *path, const char *data, int len) {
     if (!parent_is_dir(path)) return RAMFS_ERR_NOTDIR;
     int qrc = vfs_quota_check(path, (uint32_t)len, 1);
     if (qrc != RAMFS_OK) return qrc;
+    vfs_journal_record(VFS_OP_WRITE, path, 0);
     n = alloc_node();
     if (!n) return RAMFS_ERR_NOSPACE;
     rf_strcpy(n->path, path);
@@ -533,6 +609,7 @@ int ramfs_mv(const char *src, const char *dst) {
     if (d) return RAMFS_ERR_EXISTS;
     if (!parent_is_dir(dest)) return RAMFS_ERR_NOTDIR;
     slen = rf_strlen(src);
+    vfs_journal_record(VFS_OP_MV, dest, src);
     if (s->is_dir) {
         for (int i = 0; i < RAMFS_MAX_NODES; i++) {
             if (!g_nodes[i].used) continue;
@@ -740,6 +817,111 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
     rf_memcpy(nb->content, tmp_content, tmp_size + 1);
     nb->size = tmp_size;
 
+    return RAMFS_OK;
+}
+
+int vfs_journal_begin(void) {
+    if (g_active_tx) return g_active_tx;
+    g_active_tx = g_tx_counter++;
+    return g_active_tx;
+}
+
+int vfs_journal_commit(int tx_id) {
+    if (tx_id <= 0 || tx_id != g_active_tx) return RAMFS_ERR_INVAL;
+    for (int i = 0; i < VFS_JOURNAL_LOG_MAX; i++) {
+        if (g_journal[i].used && g_journal[i].tx_id == tx_id) {
+            g_journal[i].used = 0;
+        }
+    }
+    g_active_tx = 0;
+    return RAMFS_OK;
+}
+
+int vfs_journal_rollback(int tx_id) {
+    if (tx_id <= 0 || tx_id != g_active_tx) return RAMFS_ERR_INVAL;
+    for (int i = VFS_JOURNAL_LOG_MAX - 1; i >= 0; i--) {
+        if (!g_journal[i].used || g_journal[i].tx_id != tx_id) continue;
+        vfs_journal_entry_t *e = &g_journal[i];
+        ramfs_node_t *n = find_node(e->path);
+
+        if (e->op == VFS_OP_WRITE || e->op == VFS_OP_MKDIR) {
+            if (!e->existed) {
+                if (n) { n->used = 0; g_count--; }
+            } else {
+                if (n && !e->was_dir) {
+                    rf_memcpy(n->content, e->old_content, e->old_size);
+                    n->content[e->old_size] = 0;
+                    n->size = e->old_size;
+                }
+            }
+        } else if (e->op == VFS_OP_RM) {
+            if (e->existed) {
+                if (!n) {
+                    n = alloc_node();
+                    if (n) {
+                        rf_strcpy(n->path, e->path);
+                        n->is_dir = e->was_dir;
+                        if (!e->was_dir) {
+                            rf_memcpy(n->content, e->old_content, e->old_size);
+                            n->content[e->old_size] = 0;
+                            n->size = e->old_size;
+                        }
+                    }
+                } else {
+                    n->used = 1;
+                    n->is_dir = e->was_dir;
+                    if (!e->was_dir) {
+                        rf_memcpy(n->content, e->old_content, e->old_size);
+                        n->content[e->old_size] = 0;
+                        n->size = e->old_size;
+                    }
+                }
+            }
+        } else if (e->op == VFS_OP_MV) {
+            ramfs_node_t *curr = find_node(e->path);
+            if (curr) {
+                rf_strcpy(curr->path, e->old_path);
+            }
+        }
+        e->used = 0;
+    }
+    g_active_tx = 0;
+    return RAMFS_OK;
+}
+
+int vfs_snapshot_create(uint32_t *snapshot_id) {
+    if (!snapshot_id) return RAMFS_ERR_INVAL;
+    int slot = -1;
+    for (int i = 0; i < VFS_SNAPSHOT_MAX; i++) {
+        if (!g_snapshots[i].used) { slot = i; break; }
+    }
+    if (slot < 0) {
+        slot = 0;
+    }
+    vfs_snapshot_t *s = &g_snapshots[slot];
+    s->used = 1;
+    s->id = g_snapshot_counter++;
+    s->count = g_count;
+    for (int i = 0; i < RAMFS_MAX_NODES; i++) {
+        s->nodes[i] = g_nodes[i];
+    }
+    *snapshot_id = s->id;
+    return RAMFS_OK;
+}
+
+int vfs_snapshot_restore(uint32_t snapshot_id) {
+    vfs_snapshot_t *s = 0;
+    for (int i = 0; i < VFS_SNAPSHOT_MAX; i++) {
+        if (g_snapshots[i].used && g_snapshots[i].id == snapshot_id) {
+            s = &g_snapshots[i];
+            break;
+        }
+    }
+    if (!s) return RAMFS_ERR_NOTFOUND;
+    g_count = s->count;
+    for (int i = 0; i < RAMFS_MAX_NODES; i++) {
+        g_nodes[i] = s->nodes[i];
+    }
     return RAMFS_OK;
 }
 
