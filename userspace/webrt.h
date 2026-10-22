@@ -211,4 +211,48 @@ typedef struct {
 
 int webrt_flex_compute_layout(webrt_flex_container_t *container);
 
+/* ---- Lot 29: Shadow DOM, Event Propagation Path & Microtasks/Macrotasks (US-032 / US-043) ---- */
+#define WEBRT_SHADOW_MODE_OPEN   0
+#define WEBRT_SHADOW_MODE_CLOSED 1
+#define WEBRT_SHADOW_MAX_ROOTS   16
+#define WEBRT_SHADOW_MAX_NODES   16
+
+typedef struct {
+    char id[32];
+    char tag[32];
+    char inner_html[128];
+} webrt_shadow_node_t;
+
+typedef struct {
+    char host_id[32];
+    uint8_t mode; /* 0: OPEN, 1: CLOSED */
+    uint8_t active;
+    webrt_shadow_node_t nodes[WEBRT_SHADOW_MAX_NODES];
+    int node_count;
+} webrt_shadow_root_t;
+
+#define WEBRT_EVENT_PHASE_NONE      0
+#define WEBRT_EVENT_PHASE_CAPTURING 1
+#define WEBRT_EVENT_PHASE_AT_TARGET  2
+#define WEBRT_EVENT_PHASE_BUBBLING   3
+
+#define WEBRT_TASKS_MAX 16
+
+typedef struct {
+    void (*fn)(void *arg);
+    void *arg;
+    char desc[64];
+    uint8_t active;
+} webrt_task_t;
+
+void webrt_shadow_init(void);
+int webrt_shadow_root_attach(const char *host_element_id, uint8_t mode, webrt_shadow_root_t **out_root);
+int webrt_shadow_root_add_node(const char *host_element_id, const char *node_id, const char *tag, const char *inner_html);
+int webrt_shadow_root_get(const char *host_element_id, uint8_t requester_mode, webrt_shadow_root_t **out_root);
+
+int webrt_dom_dispatch_event_path(webrt_dom_event_mgr_t *mgr, const char *target_id, const char *event_type, uint8_t bubbles, char *event_path_out, int path_cap);
+
+int webrt_queue_microtask(void (*fn)(void *), void *arg, const char *desc);
+int webrt_queue_macrotask(void (*fn)(void *), void *arg, const char *desc);
+
 #endif

@@ -188,6 +188,42 @@ static void test_lot25_vfs_mkdir_p_rm_r(void) {
     TEST_ASSERT(ramfs_exists("/web2/assets/css/style.css"));
 }
 
+static void test_lot29_vfs_journaling_locks_integrity(void) {
+    ramfs_init();
+
+    vfs_mutation_log_t log;
+    vfs_mutation_log_init(&log);
+
+    vfs_mutation_log_append(&log, 101, VFS_MUTATION_OP_MKDIR, "/var/data", 0, 0, 0, VFS_MUTATION_STATUS_COMMITTED);
+    vfs_mutation_log_append(&log, 101, VFS_MUTATION_OP_WRITE, "/var/data/test.txt", 0, "hello_lot29", 11, VFS_MUTATION_STATUS_COMMITTED);
+    vfs_mutation_log_append(&log, 102, VFS_MUTATION_OP_WRITE, "/var/data/uncommitted.txt", 0, "draft", 5, VFS_MUTATION_STATUS_UNCOMMITTED);
+
+    int applied = vfs_mutation_roll_forward(&log);
+    TEST_ASSERT_EQUAL(2, applied);
+    TEST_ASSERT(ramfs_exists("/var/data/test.txt"));
+    TEST_ASSERT(!ramfs_exists("/var/data/uncommitted.txt"));
+
+    int sz = 0;
+    const char *content = ramfs_read("/var/data/test.txt", &sz);
+    TEST_ASSERT_NOT_NULL(content);
+    TEST_ASSERT_EQUAL(11, sz);
+
+    TEST_ASSERT_EQUAL(0, vfs_dir_lock_tree("/var", VFS_LOCK_SH, 1));
+    TEST_ASSERT_EQUAL(0, vfs_dir_lock_tree("/var/data", VFS_LOCK_SH, 2));
+    TEST_ASSERT_EQUAL(-1, vfs_dir_lock_tree("/var", VFS_LOCK_EX, 3));
+    TEST_ASSERT_EQUAL(0, vfs_dir_unlock_tree("/var", 1));
+    TEST_ASSERT_EQUAL(0, vfs_dir_unlock_tree("/var/data", 2));
+
+    TEST_ASSERT_EQUAL(0, vfs_dir_lock_tree("/var", VFS_LOCK_EX, 1));
+    TEST_ASSERT_EQUAL(-1, vfs_dir_lock_tree("/var/data", VFS_LOCK_SH, 2));
+    TEST_ASSERT_EQUAL(0, vfs_dir_unlock_tree("/var", 1));
+
+    int cycle = -1, dangling = -1;
+    TEST_ASSERT_EQUAL(0, vfs_integrity_check(&cycle, &dangling));
+    TEST_ASSERT_EQUAL(0, cycle);
+    TEST_ASSERT_EQUAL(0, dangling);
+}
+
 int main(void) {
     unity_init();
 
@@ -202,6 +238,7 @@ int main(void) {
     RUN_TEST(test_ramfs_mv_directory);
     RUN_TEST(test_lot25_vfs_mkdir_p_rm_r);
     RUN_TEST(test_lot26_vfs_quotas_acls_swap_flock);
+    RUN_TEST(test_lot29_vfs_journaling_locks_integrity);
     RUN_TEST(test_procsim_table_and_kill);
 
     unity_print_results();

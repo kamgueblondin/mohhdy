@@ -2417,3 +2417,153 @@ int p2p_qos_bbr_step(p2p_node_t* n, uint32_t current_rtt_ms, uint32_t bytes_deli
     n->qos.window_size = target_win;
     return 0;
 }
+
+/* Lot 29: Dynamic Re-keying, Zero-Trust Verification & Raft 2PC (US-064 / US-075) */
+static p2p_2pc_tx_t g_2pc_txs[P2P_2PC_MAX_TX];
+
+int p2p_rekey_init_peer(p2p_peer_t *p, const uint8_t *initial_key, uint32_t rekey_interval_ticks, uint32_t rekey_pkt_limit) {
+    if (!p) return -1;
+    if (initial_key) {
+        mcopy(p->key, initial_key, 16);
+    }
+    p->key_gen = 1;
+    p->pkts_sent_with_key = 0;
+    p->key_created_tick = 0;
+    p->rekey_interval_ticks = rekey_interval_ticks ? rekey_interval_ticks : 100;
+    p->rekey_pkt_limit = rekey_pkt_limit ? rekey_pkt_limit : 50;
+    return 0;
+}
+
+int p2p_rekey_check_and_rotate(p2p_node_t *n, uint32_t peer_id, uint32_t current_tick) {
+    if (!n) return -1;
+    p2p_peer_t *p = by_id(n, peer_id);
+    if (!p || p->zero_trust_revoked) return -1;
+
+    if (p->rekey_interval_ticks == 0) p->rekey_interval_ticks = 100;
+    if (p->rekey_pkt_limit == 0) p->rekey_pkt_limit = 50;
+
+    int trigger_pkt = (p->rekey_pkt_limit > 0 && p->pkts_sent_with_key >= p->rekey_pkt_limit);
+    int trigger_time = (p->rekey_interval_ticks > 0 && (current_tick >= p->key_created_tick) && ((current_tick - p->key_created_tick) >= p->rekey_interval_ticks));
+
+    if (trigger_pkt || trigger_time) {
+        p->key_gen++;
+        for (int i = 0; i < 16; i++) {
+            p->key[i] = (uint8_t)(p->key[i] ^ (uint8_t)(p->key_gen * 17U + i * 3U));
+        }
+        p->pkts_sent_with_key = 0;
+        p->key_created_tick = current_tick;
+        return 1;
+    }
+    return 0;
+}
+
+int p2p_peer_revoke(p2p_node_t *n, uint32_t peer_id, const char *reason) {
+    if (!n) return -1;
+    p2p_peer_t *p = by_id(n, peer_id);
+    if (!p) return -1;
+
+    p->zero_trust_revoked = 1;
+    p->revoke_reason[0] = 0;
+    if (reason) {
+        int i = 0;
+        while (reason[i] && i < (int)sizeof(p->revoke_reason) - 1) {
+            p->revoke_reason[i] = reason[i];
+            i++;
+        }
+        p->revoke_reason[i] = 0;
+    }
+    for (int i = 0; i < 16; i++) p->key[i] = 0;
+    p->anomalies++;
+    return 0;
+}
+
+int p2p_zero_trust_verify_pkt(p2p_node_t *n, uint32_t peer_id, uint64_t seq_num, uint32_t pkt_len, uint32_t current_tick) {
+    if (!n) return -1;
+    p2p_peer_t *p = by_id(n, peer_id);
+    if (!p || p->zero_trust_revoked) return -1;
+
+    if (p->last_seen_seq > 0 && seq_num <= p->last_seen_seq) {
+        p2p_peer_revoke(n, peer_id, "replay_attack_detected");
+        return -2;
+    }
+
+    if (pkt_len > 4096) {
+        p2p_peer_revoke(n, peer_id, "packet_size_anomaly");
+        return -3;
+    }
+
+    p->last_seen_seq = seq_num;
+    p->pkts_sent_with_key++;
+    p2p_rekey_check_and_rotate(n, peer_id, current_tick);
+    return 0;
+}
+
+int p2p_raft_2pc_prepare(p2p_node_t *n, uint32_t tx_id, const char *mutation_cmd, uint32_t participant_mask) {
+    if (!n || tx_id == 0) return -1;
+
+    p2p_2pc_tx_t *slot = 0;
+    for (int i = 0; i < P2P_2PC_MAX_TX; i++) {
+        if (g_2pc_txs[i].active && g_2pc_txs[i].tx_id == tx_id) {
+            slot = &g_2pc_txs[i];
+            break;
+        }
+    }
+    if (!slot) {
+        for (int i = 0; i < P2P_2PC_MAX_TX; i++) {
+            if (!g_2pc_txs[i].active) {
+                slot = &g_2pc_txs[i];
+                break;
+            }
+        }
+    }
+    if (!slot) return -1;
+
+    slot->active = 1;
+    slot->tx_id = tx_id;
+    slot->state = P2P_2PC_STATE_PREPARED;
+    slot->participant_mask = participant_mask;
+    slot->mutation_cmd[0] = 0;
+    if (mutation_cmd) {
+        int i = 0;
+        while (mutation_cmd[i] && i < (int)sizeof(slot->mutation_cmd) - 1) {
+            slot->mutation_cmd[i] = mutation_cmd[i];
+            i++;
+        }
+        slot->mutation_cmd[i] = 0;
+    }
+    return 0;
+}
+
+int p2p_raft_2pc_commit(p2p_node_t *n, uint32_t tx_id) {
+    if (!n || tx_id == 0) return -1;
+    for (int i = 0; i < P2P_2PC_MAX_TX; i++) {
+        if (g_2pc_txs[i].active && g_2pc_txs[i].tx_id == tx_id) {
+            if (g_2pc_txs[i].state != P2P_2PC_STATE_PREPARED) return -1;
+            g_2pc_txs[i].state = P2P_2PC_STATE_COMMITTED;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int p2p_raft_2pc_abort(p2p_node_t *n, uint32_t tx_id) {
+    if (!n || tx_id == 0) return -1;
+    for (int i = 0; i < P2P_2PC_MAX_TX; i++) {
+        if (g_2pc_txs[i].active && g_2pc_txs[i].tx_id == tx_id) {
+            g_2pc_txs[i].state = P2P_2PC_STATE_ABORTED;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int p2p_raft_2pc_status(p2p_node_t *n, uint32_t tx_id, int *out_state) {
+    if (!n || tx_id == 0 || !out_state) return -1;
+    for (int i = 0; i < P2P_2PC_MAX_TX; i++) {
+        if (g_2pc_txs[i].active && g_2pc_txs[i].tx_id == tx_id) {
+            *out_state = g_2pc_txs[i].state;
+            return 0;
+        }
+    }
+    return -1;
+}

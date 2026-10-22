@@ -302,4 +302,43 @@ void prod_fault_predict_init(prod_fault_predict_t *fp);
 void prod_fault_predict_record(prod_fault_predict_t *fp, uint32_t io_err, uint32_t mem_err, uint32_t pkt_loss);
 int prod_fault_predict_eval(const prod_fault_predict_t *fp, char *out_verdict, int cap);
 
+/* US-108 / US-118: Autonomous CI/CD Pipeline, Perf Regression & Adaptive Alerting */
+typedef struct {
+    uint32_t total_runs;
+    uint32_t successful_runs;
+    uint32_t failed_runs;
+    uint32_t last_fnv_checksum;
+    uint8_t last_elf_valid;
+    uint8_t last_test_matrix_passed;
+} prod_cicd_pipeline_t;
+
+typedef struct {
+    uint32_t hist_latency_us[8];
+    uint32_t hist_cpu_pct[8];
+    uint32_t hist_mem_kb[8];
+    uint32_t count;
+} prod_perf_history_t;
+
+typedef struct {
+    uint32_t cpu_samples[3];
+    uint32_t mem_samples[3];
+    uint32_t count;
+    uint32_t cpu_accel_threshold;
+    uint32_t mem_accel_threshold;
+} prod_adaptive_alert_t;
+
+void prod_cicd_pipeline_init(prod_cicd_pipeline_t *pipe);
+int prod_cicd_validate_elf(const uint8_t *elf_data, uint32_t size, char *out_diag, int cap);
+int prod_cicd_verify_checksum(const uint8_t *data, uint32_t size, uint32_t expected_fnv1a);
+int prod_cicd_eval_test_matrix(prod_cicd_pipeline_t *pipe, int pass_count, int total_count, char *out_report, int cap);
+int prod_cicd_run_pipeline(prod_cicd_pipeline_t *pipe, const uint8_t *elf_data, uint32_t elf_size, uint32_t expected_fnv, int pass_tests, int total_tests, char *out_summary, int cap);
+
+void prod_perf_history_init(prod_perf_history_t *hist);
+void prod_perf_history_add(prod_perf_history_t *hist, uint32_t latency_us, uint32_t cpu_pct, uint32_t mem_kb);
+int prod_perf_regression_eval(const prod_perf_history_t *hist, uint32_t current_latency_us, uint32_t current_cpu_pct, uint32_t current_mem_kb, char *out_summary, int cap);
+
+void prod_adaptive_alert_init(prod_adaptive_alert_t *alert, uint32_t cpu_accel_threshold, uint32_t mem_accel_threshold);
+void prod_adaptive_alert_record(prod_adaptive_alert_t *alert, uint32_t cpu_usage, uint32_t mem_usage);
+int prod_adaptive_alert_eval(const prod_adaptive_alert_t *alert, int *out_alert_flag, char *out_msg, int cap);
+
 #endif

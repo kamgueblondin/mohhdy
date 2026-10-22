@@ -80,6 +80,15 @@ typedef struct {
     uint32_t raft_commit_sent; /* leader_commit last sent to this peer */
     uint32_t raft_snap_gen; /* snapshot_index this peer is receiving */
     uint8_t raft_snap_off;  /* next kv item index to send */
+    /* Lot 29: US-064 Dynamic Re-keying & US-075 Zero-Trust */
+    uint32_t key_gen;
+    uint32_t pkts_sent_with_key;
+    uint32_t key_created_tick;
+    uint32_t rekey_interval_ticks;
+    uint32_t rekey_pkt_limit;
+    uint64_t last_seen_seq;
+    uint8_t zero_trust_revoked;
+    char revoke_reason[64];
 } p2p_peer_t;
 
 typedef struct {
@@ -338,4 +347,33 @@ const char* p2p_type_name(int type);
 int p2p_send_app(p2p_node_t* n, const p2p_host_t* h, uint32_t peer_id, const uint8_t* data, int length);
 const char* p2p_peer_name(const p2p_node_t* n, uint32_t id);
 uint32_t p2p_member_count(const p2p_node_t* n);
+
+/* Lot 29: Dynamic Re-keying, Zero-Trust Verification & Raft 2PC (US-064 / US-075) */
+#define P2P_2PC_STATE_NONE      0
+#define P2P_2PC_STATE_PREPARED  1
+#define P2P_2PC_STATE_COMMITTED 2
+#define P2P_2PC_STATE_ABORTED   3
+#define P2P_2PC_MAX_TX          8
+
+typedef struct {
+    uint32_t tx_id;
+    uint8_t state;
+    char mutation_cmd[128];
+    uint32_t participant_mask;
+    uint32_t votes_mask;
+    uint32_t created_tick;
+    uint8_t active;
+} p2p_2pc_tx_t;
+
+int p2p_rekey_init_peer(p2p_peer_t *p, const uint8_t *initial_key, uint32_t rekey_interval_ticks, uint32_t rekey_pkt_limit);
+int p2p_rekey_check_and_rotate(p2p_node_t *n, uint32_t peer_id, uint32_t current_tick);
+
+int p2p_peer_revoke(p2p_node_t *n, uint32_t peer_id, const char *reason);
+int p2p_zero_trust_verify_pkt(p2p_node_t *n, uint32_t peer_id, uint64_t seq_num, uint32_t pkt_len, uint32_t current_tick);
+
+int p2p_raft_2pc_prepare(p2p_node_t *n, uint32_t tx_id, const char *mutation_cmd, uint32_t participant_mask);
+int p2p_raft_2pc_commit(p2p_node_t *n, uint32_t tx_id);
+int p2p_raft_2pc_abort(p2p_node_t *n, uint32_t tx_id);
+int p2p_raft_2pc_status(p2p_node_t *n, uint32_t tx_id, int *out_state);
+
 #endif

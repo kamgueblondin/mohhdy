@@ -284,6 +284,124 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* ---- Lot 29: Shadow DOM Tree & Lifecycle Manager (US-032 / US-043) ---- */
+static webrt_shadow_root_t g_shadow_roots[WEBRT_SHADOW_MAX_ROOTS];
+
+void webrt_shadow_init(void) {
+    for (int i = 0; i < WEBRT_SHADOW_MAX_ROOTS; i++) {
+        g_shadow_roots[i].host_id[0] = 0;
+        g_shadow_roots[i].mode = WEBRT_SHADOW_MODE_OPEN;
+        g_shadow_roots[i].active = 0;
+        g_shadow_roots[i].node_count = 0;
+    }
+}
+
+int webrt_shadow_root_attach(const char *host_element_id, uint8_t mode, webrt_shadow_root_t **out_root) {
+    if (!host_element_id || host_element_id[0] == 0) return -1;
+
+    for (int i = 0; i < WEBRT_SHADOW_MAX_ROOTS; i++) {
+        if (g_shadow_roots[i].active && w_eq(g_shadow_roots[i].host_id, host_element_id)) {
+            return -1;
+        }
+    }
+
+    for (int i = 0; i < WEBRT_SHADOW_MAX_ROOTS; i++) {
+        if (!g_shadow_roots[i].active) {
+            g_shadow_roots[i].active = 1;
+            w_copy(g_shadow_roots[i].host_id, sizeof(g_shadow_roots[i].host_id), host_element_id, -1);
+            g_shadow_roots[i].mode = mode;
+            g_shadow_roots[i].node_count = 0;
+            if (out_root) *out_root = &g_shadow_roots[i];
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int webrt_shadow_root_add_node(const char *host_element_id, const char *node_id, const char *tag, const char *inner_html) {
+    if (!host_element_id || !node_id) return -1;
+    for (int i = 0; i < WEBRT_SHADOW_MAX_ROOTS; i++) {
+        if (g_shadow_roots[i].active && w_eq(g_shadow_roots[i].host_id, host_element_id)) {
+            if (g_shadow_roots[i].node_count >= WEBRT_SHADOW_MAX_NODES) return -1;
+            webrt_shadow_node_t *node = &g_shadow_roots[i].nodes[g_shadow_roots[i].node_count];
+            w_copy(node->id, sizeof(node->id), node_id, -1);
+            w_copy(node->tag, sizeof(node->tag), tag ? tag : "div", -1);
+            w_copy(node->inner_html, sizeof(node->inner_html), inner_html ? inner_html : "", -1);
+            g_shadow_roots[i].node_count++;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int webrt_shadow_root_get(const char *host_element_id, uint8_t requester_mode, webrt_shadow_root_t **out_root) {
+    if (!host_element_id || !out_root) return -1;
+    *out_root = 0;
+    for (int i = 0; i < WEBRT_SHADOW_MAX_ROOTS; i++) {
+        if (g_shadow_roots[i].active && w_eq(g_shadow_roots[i].host_id, host_element_id)) {
+            if (g_shadow_roots[i].mode == WEBRT_SHADOW_MODE_CLOSED && requester_mode == 0) {
+                return -1;
+            }
+            *out_root = &g_shadow_roots[i];
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int webrt_dom_dispatch_event_path(webrt_dom_event_mgr_t *mgr, const char *target_id, const char *event_type, uint8_t bubbles, char *event_path_out, int path_cap) {
+    if (!mgr || !target_id || !event_type || !event_path_out || path_cap < 8) return -1;
+    event_path_out[0] = 0;
+
+    const char *ancestors[3];
+    int ancestor_count = 0;
+    ancestors[ancestor_count++] = "document";
+    if (!w_eq(target_id, "body") && !w_eq(target_id, "document")) {
+        ancestors[ancestor_count++] = "body";
+    }
+    ancestors[ancestor_count++] = target_id;
+
+    int pos = 0;
+
+    for (int i = 0; i < ancestor_count - 1; i++) {
+        if (pos > 0 && pos < path_cap - 1) {
+            event_path_out[pos++] = '>';
+            event_path_out[pos] = 0;
+        }
+        w_copy(event_path_out + pos, path_cap - pos, "CAP:", -1);
+        pos = w_len(event_path_out);
+        w_copy(event_path_out + pos, path_cap - pos, ancestors[i], -1);
+        pos = w_len(event_path_out);
+    }
+
+    if (pos > 0 && pos < path_cap - 1) {
+        event_path_out[pos++] = '>';
+        event_path_out[pos] = 0;
+    }
+    w_copy(event_path_out + pos, path_cap - pos, "TARGET:", -1);
+    pos = w_len(event_path_out);
+    w_copy(event_path_out + pos, path_cap - pos, target_id, -1);
+    pos = w_len(event_path_out);
+
+    if (bubbles) {
+        for (int i = ancestor_count - 2; i >= 0; i--) {
+            if (pos > 0 && pos < path_cap - 1) {
+                event_path_out[pos++] = '>';
+                event_path_out[pos] = 0;
+            }
+            w_copy(event_path_out + pos, path_cap - pos, "BUBBLE:", -1);
+            pos = w_len(event_path_out);
+            w_copy(event_path_out + pos, path_cap - pos, ancestors[i], -1);
+            pos = w_len(event_path_out);
+        }
+    }
+
+    char temp_eval[128];
+    webrt_dom_dispatch_event(mgr, target_id, event_type, temp_eval, sizeof(temp_eval));
+
+    return 0;
+}
+
 /* ---- US-047 DOM MutationObserver & CSS Flexbox Light ---- */
 void webrt_dom_observer_init(webrt_dom_observer_mgr_t *mgr) {
     if (!mgr) return;
@@ -413,9 +531,72 @@ int webrt_timer_schedule(uint32_t delay_ms, int is_interval, const char *callbac
     return -1;
 }
 
+static webrt_task_t g_microtasks[WEBRT_TASKS_MAX];
+static int g_microtasks_head = 0;
+static int g_microtasks_tail = 0;
+
+static webrt_task_t g_macrotasks[WEBRT_TASKS_MAX];
+static int g_macrotasks_head = 0;
+static int g_macrotasks_tail = 0;
+
+int webrt_queue_microtask(void (*fn)(void *), void *arg, const char *desc) {
+    if (!fn && (!desc || desc[0] == 0)) return -1;
+    int next = (g_microtasks_tail + 1) % WEBRT_TASKS_MAX;
+    if (next == g_microtasks_head) return -1;
+    webrt_task_t *t = &g_microtasks[g_microtasks_tail];
+    t->fn = fn;
+    t->arg = arg;
+    t->desc[0] = 0;
+    if (desc) w_copy(t->desc, sizeof(t->desc), desc, -1);
+    t->active = 1;
+    g_microtasks_tail = next;
+    return 0;
+}
+
+int webrt_queue_macrotask(void (*fn)(void *), void *arg, const char *desc) {
+    if (!fn && (!desc || desc[0] == 0)) return -1;
+    int next = (g_macrotasks_tail + 1) % WEBRT_TASKS_MAX;
+    if (next == g_macrotasks_head) return -1;
+    webrt_task_t *t = &g_macrotasks[g_macrotasks_tail];
+    t->fn = fn;
+    t->arg = arg;
+    t->desc[0] = 0;
+    if (desc) w_copy(t->desc, sizeof(t->desc), desc, -1);
+    t->active = 1;
+    g_macrotasks_tail = next;
+    return 0;
+}
+
 int webrt_event_loop_tick(uint32_t current_time_ms, char *out_eval, int max_eval) {
     int fired_count = 0;
     if (out_eval && max_eval > 0) out_eval[0] = 0;
+
+    while (g_microtasks_head != g_microtasks_tail) {
+        webrt_task_t *t = &g_microtasks[g_microtasks_head];
+        if (t->active) {
+            fired_count++;
+            if (t->fn) t->fn(t->arg);
+            if (out_eval && max_eval > 1 && out_eval[0] == 0 && t->desc[0] != 0) {
+                w_copy(out_eval, max_eval, t->desc, -1);
+            }
+            t->active = 0;
+        }
+        g_microtasks_head = (g_microtasks_head + 1) % WEBRT_TASKS_MAX;
+    }
+
+    if (g_macrotasks_head != g_macrotasks_tail) {
+        webrt_task_t *t = &g_macrotasks[g_macrotasks_head];
+        if (t->active) {
+            fired_count++;
+            if (t->fn) t->fn(t->arg);
+            if (out_eval && max_eval > 1 && out_eval[0] == 0 && t->desc[0] != 0) {
+                w_copy(out_eval, max_eval, t->desc, -1);
+            }
+            t->active = 0;
+        }
+        g_macrotasks_head = (g_macrotasks_head + 1) % WEBRT_TASKS_MAX;
+    }
+
     for (int i = 0; i < WEBRT_TIMER_MAX; i++) {
         if (!g_webrt_timers[i].active) continue;
         if (g_webrt_timers[i].next_fire_ms <= current_time_ms) {
