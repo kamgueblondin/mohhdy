@@ -142,4 +142,32 @@ void webrt_dom_event_init(webrt_dom_event_mgr_t* mgr);
 int webrt_dom_add_event_listener(webrt_dom_event_mgr_t* mgr, const char* element_id, const char* event_type, const char* callback_script);
 int webrt_dom_dispatch_event(webrt_dom_event_mgr_t* mgr, const char* element_id, const char* event_type, char* out_eval, int max_eval);
 
+/* ---- US-043 Async Event Loop & DOM Timers ---- */
+#define WEBRT_TIMER_MAX 16
+
+typedef struct {
+    uint32_t id;
+    uint32_t delay_ms;
+    uint32_t next_fire_ms;
+    uint8_t is_interval;
+    uint8_t active;
+    char callback_script[128];
+} webrt_timer_t;
+
+int webrt_timer_schedule(uint32_t delay_ms, int is_interval, const char *callback_script);
+int webrt_event_loop_tick(uint32_t current_time_ms, char *out_eval, int max_eval);
+
+/* ---- US-043 X.509 KeyUsage/EKU & OCSP ---- */
+#define WEBRT_KU_DIGITAL_SIGNATURE (1 << 0)
+#define WEBRT_KU_NON_REPUDIATION   (1 << 1)
+#define WEBRT_KU_KEY_ENCIPHERMENT  (1 << 2)
+#define WEBRT_KU_DATA_ENCIPHERMENT (1 << 3)
+
+#define WEBRT_EKU_SERVER_AUTH      (1 << 0)
+#define WEBRT_EKU_CLIENT_AUTH      (1 << 1)
+#define WEBRT_EKU_CODE_SIGNING     (1 << 2)
+
+int webrt_x509_verify_key_usage(const uint8_t *cert_data, int cert_len, uint16_t required_usage, uint16_t required_eku);
+int webrt_ocsp_check_status(const char *cert_serial, char *out_status, int cap);
+
 #endif

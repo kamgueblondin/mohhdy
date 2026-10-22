@@ -10,8 +10,37 @@ typedef struct {
     int size;
 } ramfs_node_t;
 
+#define VFS_MAX_QUOTAS 8
+#define VFS_MAX_ACLS   16
+#define VFS_MAX_LOCKS  16
+
+typedef struct {
+    int used;
+    char path[RAMFS_PATH_MAX];
+    uint32_t max_bytes;
+    uint32_t max_nodes;
+} vfs_quota_entry_t;
+
+typedef struct {
+    int used;
+    char path[RAMFS_PATH_MAX];
+    char origin[64];
+    uint8_t rights;
+} vfs_acl_entry_t;
+
+typedef struct {
+    int used;
+    char path[RAMFS_PATH_MAX];
+    int lock_type;
+    int count;
+} vfs_lock_entry_t;
+
 static ramfs_node_t g_nodes[RAMFS_MAX_NODES];
 static int g_count;
+
+static vfs_quota_entry_t g_quotas[VFS_MAX_QUOTAS];
+static vfs_acl_entry_t g_acls[VFS_MAX_ACLS];
+static vfs_lock_entry_t g_locks[VFS_MAX_LOCKS];
 
 static int rf_strlen(const char *s) {
     int n = 0;
@@ -244,6 +273,16 @@ void ramfs_init(void) {
     }
     g_count = 0;
 
+    for (i = 0; i < VFS_MAX_QUOTAS; i++) {
+        g_quotas[i].used = 0;
+    }
+    for (i = 0; i < VFS_MAX_ACLS; i++) {
+        g_acls[i].used = 0;
+    }
+    for (i = 0; i < VFS_MAX_LOCKS; i++) {
+        g_locks[i].used = 0;
+    }
+
     add_dir("/");
     add_dir("/bin");
     add_dir("/docs");
@@ -376,12 +415,17 @@ int ramfs_write(const char *path, const char *data, int len) {
     n = find_node(path);
     if (n) {
         if (n->is_dir) return RAMFS_ERR_ISDIR;
+        uint32_t add_b = (uint32_t)(len > n->size ? len - n->size : 0);
+        int qrc = vfs_quota_check(path, add_b, 0);
+        if (qrc != RAMFS_OK) return qrc;
         if (data) rf_memcpy(n->content, data, len);
         n->content[len] = 0;
         n->size = len;
         return RAMFS_OK;
     }
     if (!parent_is_dir(path)) return RAMFS_ERR_NOTDIR;
+    int qrc = vfs_quota_check(path, (uint32_t)len, 1);
+    if (qrc != RAMFS_OK) return qrc;
     n = alloc_node();
     if (!n) return RAMFS_ERR_NOSPACE;
     rf_strcpy(n->path, path);
@@ -578,6 +622,178 @@ int ramfs_list_recursive(const char *path, ramfs_dirent_t *out, int max_n) {
 
 int ramfs_node_count(void) {
     return g_count;
+}
+
+int vfs_quota_set(const char *path, uint32_t max_bytes, uint32_t max_nodes) {
+    if (!path || path[0] == 0) return RAMFS_ERR_INVAL;
+    for (int i = 0; i < VFS_MAX_QUOTAS; i++) {
+        if (g_quotas[i].used && rf_strcmp(g_quotas[i].path, path) == 0) {
+            g_quotas[i].max_bytes = max_bytes;
+            g_quotas[i].max_nodes = max_nodes;
+            return RAMFS_OK;
+        }
+    }
+    for (int i = 0; i < VFS_MAX_QUOTAS; i++) {
+        if (!g_quotas[i].used) {
+            g_quotas[i].used = 1;
+            rf_strcpy(g_quotas[i].path, path);
+            g_quotas[i].max_bytes = max_bytes;
+            g_quotas[i].max_nodes = max_nodes;
+            return RAMFS_OK;
+        }
+    }
+    return RAMFS_ERR_NOSPACE;
+}
+
+int vfs_quota_check(const char *path, uint32_t bytes_to_add, uint32_t nodes_to_add) {
+    if (!path) return RAMFS_OK;
+    for (int i = 0; i < VFS_MAX_QUOTAS; i++) {
+        if (!g_quotas[i].used) continue;
+        int qlen = rf_strlen(g_quotas[i].path);
+        int is_under = 0;
+        if (rf_strcmp(g_quotas[i].path, "/") == 0) {
+            is_under = 1;
+        } else if (rf_strcmp(path, g_quotas[i].path) == 0 ||
+                   (rf_strncmp(path, g_quotas[i].path, qlen) == 0 && path[qlen] == '/')) {
+            is_under = 1;
+        }
+        if (is_under) {
+            uint32_t cur_bytes = 0;
+            uint32_t cur_nodes = 0;
+            for (int k = 0; k < RAMFS_MAX_NODES; k++) {
+                if (!g_nodes[k].used) continue;
+                int k_under = 0;
+                if (rf_strcmp(g_quotas[i].path, "/") == 0) {
+                    k_under = 1;
+                } else if (rf_strcmp(g_nodes[k].path, g_quotas[i].path) == 0 ||
+                           (rf_strncmp(g_nodes[k].path, g_quotas[i].path, qlen) == 0 && g_nodes[k].path[qlen] == '/')) {
+                    k_under = 1;
+                }
+                if (k_under) {
+                    cur_nodes++;
+                    cur_bytes += (uint32_t)g_nodes[k].size;
+                }
+            }
+            if (cur_bytes + bytes_to_add > g_quotas[i].max_bytes ||
+                cur_nodes + nodes_to_add > g_quotas[i].max_nodes) {
+                return RAMFS_ERR_NOSPACE;
+            }
+        }
+    }
+    return RAMFS_OK;
+}
+
+int vfs_access_grant(const char *path, const char *origin, uint8_t rights) {
+    if (!path || !origin) return RAMFS_ERR_INVAL;
+    for (int i = 0; i < VFS_MAX_ACLS; i++) {
+        if (g_acls[i].used && rf_strcmp(g_acls[i].path, path) == 0 &&
+            rf_strcmp(g_acls[i].origin, origin) == 0) {
+            g_acls[i].rights = rights;
+            return RAMFS_OK;
+        }
+    }
+    for (int i = 0; i < VFS_MAX_ACLS; i++) {
+        if (!g_acls[i].used) {
+            g_acls[i].used = 1;
+            rf_strcpy(g_acls[i].path, path);
+            rf_strcpy(g_acls[i].origin, origin);
+            g_acls[i].rights = rights;
+            return RAMFS_OK;
+        }
+    }
+    return RAMFS_ERR_NOSPACE;
+}
+
+int vfs_access_control(const char *path, const char *origin, uint8_t required_rights) {
+    if (!path || !origin) return RAMFS_OK;
+    int has_acl_for_path = 0;
+    for (int i = 0; i < VFS_MAX_ACLS; i++) {
+        if (!g_acls[i].used) continue;
+        if (rf_strcmp(g_acls[i].path, path) == 0 || rf_strcmp(g_acls[i].path, "*") == 0) {
+            has_acl_for_path = 1;
+            if (rf_strcmp(g_acls[i].origin, origin) == 0 || rf_strcmp(g_acls[i].origin, "*") == 0) {
+                if ((g_acls[i].rights & required_rights) == required_rights) {
+                    return RAMFS_OK;
+                }
+            }
+        }
+    }
+    if (!has_acl_for_path) return RAMFS_OK;
+    return RAMFS_ERR_INVAL;
+}
+
+int vfs_atomic_swap(const char *path_a, const char *path_b) {
+    ramfs_node_t *na, *nb;
+    if (!path_a || !path_b) return RAMFS_ERR_INVAL;
+    na = find_node(path_a);
+    nb = find_node(path_b);
+    if (!na || !nb) return RAMFS_ERR_NOTFOUND;
+    if (na->is_dir || nb->is_dir) return RAMFS_ERR_ISDIR;
+
+    char tmp_content[RAMFS_CONTENT_MAX];
+    int tmp_size = na->size;
+    rf_memcpy(tmp_content, na->content, na->size + 1);
+
+    rf_memcpy(na->content, nb->content, nb->size + 1);
+    na->size = nb->size;
+
+    rf_memcpy(nb->content, tmp_content, tmp_size + 1);
+    nb->size = tmp_size;
+
+    return RAMFS_OK;
+}
+
+int vfs_flock(const char *path, int lock_type) {
+    if (!path) return RAMFS_ERR_INVAL;
+    if (lock_type == VFS_LOCK_UN) {
+        for (int i = 0; i < VFS_MAX_LOCKS; i++) {
+            if (g_locks[i].used && rf_strcmp(g_locks[i].path, path) == 0) {
+                if (g_locks[i].lock_type == VFS_LOCK_SH) {
+                    g_locks[i].count--;
+                    if (g_locks[i].count <= 0) g_locks[i].used = 0;
+                } else {
+                    g_locks[i].used = 0;
+                }
+                return RAMFS_OK;
+            }
+        }
+        return RAMFS_OK;
+    } else if (lock_type == VFS_LOCK_SH) {
+        for (int i = 0; i < VFS_MAX_LOCKS; i++) {
+            if (g_locks[i].used && rf_strcmp(g_locks[i].path, path) == 0) {
+                if (g_locks[i].lock_type == VFS_LOCK_EX) return RAMFS_ERR_INVAL;
+                g_locks[i].count++;
+                return RAMFS_OK;
+            }
+        }
+        for (int i = 0; i < VFS_MAX_LOCKS; i++) {
+            if (!g_locks[i].used) {
+                g_locks[i].used = 1;
+                rf_strcpy(g_locks[i].path, path);
+                g_locks[i].lock_type = VFS_LOCK_SH;
+                g_locks[i].count = 1;
+                return RAMFS_OK;
+            }
+        }
+        return RAMFS_ERR_NOSPACE;
+    } else if (lock_type == VFS_LOCK_EX) {
+        for (int i = 0; i < VFS_MAX_LOCKS; i++) {
+            if (g_locks[i].used && rf_strcmp(g_locks[i].path, path) == 0) {
+                return RAMFS_ERR_INVAL;
+            }
+        }
+        for (int i = 0; i < VFS_MAX_LOCKS; i++) {
+            if (!g_locks[i].used) {
+                g_locks[i].used = 1;
+                rf_strcpy(g_locks[i].path, path);
+                g_locks[i].lock_type = VFS_LOCK_EX;
+                g_locks[i].count = 1;
+                return RAMFS_OK;
+            }
+        }
+        return RAMFS_ERR_NOSPACE;
+    }
+    return RAMFS_ERR_INVAL;
 }
 
 const char *ramfs_strerror(int err) {

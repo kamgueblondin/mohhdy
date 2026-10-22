@@ -5,6 +5,8 @@
 #ifndef MOHHDY_RAMFS_H
 #define MOHHDY_RAMFS_H
 
+#include <stdint.h>
+
 #define RAMFS_MAX_NODES     64
 #define RAMFS_PATH_MAX      128
 #define RAMFS_NAME_MAX      64
@@ -19,6 +21,14 @@
 #define RAMFS_ERR_NOTEMPTY  -5
 #define RAMFS_ERR_NOSPACE   -6
 #define RAMFS_ERR_INVAL     -7
+
+#define VFS_LOCK_UN 0
+#define VFS_LOCK_SH 1
+#define VFS_LOCK_EX 2
+
+#define VFS_RIGHT_READ  1
+#define VFS_RIGHT_WRITE 2
+#define VFS_RIGHT_EXEC  4
 
 typedef struct {
     char name[RAMFS_NAME_MAX];
@@ -47,6 +57,13 @@ int ramfs_write(const char *path, const char *data, int len);
 int ramfs_list(const char *path, ramfs_dirent_t *out, int max_n);
 int ramfs_list_recursive(const char *path, ramfs_dirent_t *out, int max_n);
 int ramfs_node_count(void);
+
+int vfs_quota_set(const char *path, uint32_t max_bytes, uint32_t max_nodes);
+int vfs_quota_check(const char *path, uint32_t bytes_to_add, uint32_t nodes_to_add);
+int vfs_access_grant(const char *path, const char *origin, uint8_t rights);
+int vfs_access_control(const char *path, const char *origin, uint8_t required_rights);
+int vfs_atomic_swap(const char *path_a, const char *path_b);
+int vfs_flock(const char *path, int lock_type);
 
 const char *ramfs_strerror(int err);
 

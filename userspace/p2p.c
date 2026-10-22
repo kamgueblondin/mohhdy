@@ -2343,3 +2343,50 @@ const char* p2p_peer_name(const p2p_node_t* n, uint32_t id) {
     return "?";
 }
 uint32_t p2p_member_count(const p2p_node_t* n) { return up_count(n) + 1U; }
+
+/* Lot 26: Multi-Region routing, Raft Snapshot Streaming & Dynamic QoS BBR */
+int p2p_region_set(p2p_node_t* n, uint32_t region_id) {
+    if (!n) return -1;
+    n->region_id = region_id;
+    return 0;
+}
+
+int raft_stream_snapshot_chunk(p2p_node_t* n, const p2p_host_t* h, const char* peer, uint32_t chunk_idx, uint32_t total_chunks, const uint8_t* chunk_data, int chunk_len) {
+    uint8_t b[P2P_DATAGRAM_MAX];
+    p2p_peer_t* p;
+    int pos;
+    if (!n || !n->up || !peer || !chunk_data || chunk_len <= 0) return -1;
+    p = p2p_find(n, peer);
+    if (!p || !p->keyed || !p->up) return -1;
+
+    put32(b, n->raft.term);
+    put32(b + 4, n->id);
+    put32(b + 8, chunk_idx);
+    put32(b + 12, total_chunks);
+    if (chunk_len > 400) chunk_len = 400;
+    mcopy(b + 16, chunk_data, chunk_len);
+    pos = 16 + chunk_len;
+
+    n->raft.snap_in_n = (uint8_t)(chunk_idx + 1);
+    return seal_send(n, h, p, P2P_I_RAFT_SNAPSHOT, b, pos) == 0 ? chunk_len : -1;
+}
+
+int p2p_qos_bbr_step(p2p_node_t* n, uint32_t current_rtt_ms, uint32_t bytes_delivered, uint32_t delta_ms) {
+    if (!n) return -1;
+    if (current_rtt_ms > 0) {
+        if (!n->qos.rtt_min_ms || current_rtt_ms < n->qos.rtt_min_ms) {
+            n->qos.rtt_min_ms = current_rtt_ms;
+        }
+        n->qos.rtt_avg_ms = n->qos.rtt_avg_ms ? (n->qos.rtt_avg_ms * 7U + current_rtt_ms) / 8U : current_rtt_ms;
+    }
+    if (delta_ms > 0) {
+        n->qos.rate_est_bps = (bytes_delivered * 1000U) / delta_ms;
+        n->qos.meas_tx_bps = n->qos.rate_est_bps;
+    }
+    /* Calculate dynamic congestion window (bounded 1..16) */
+    uint32_t target_win = n->qos.rtt_min_ms ? (n->qos.rate_est_bps * n->qos.rtt_min_ms) / (8U * P2P_DATAGRAM_MAX * 1000U) : 4U;
+    if (target_win < 1U) target_win = 1U;
+    if (target_win > P2P_QOS_WINDOW_MAX) target_win = P2P_QOS_WINDOW_MAX;
+    n->qos.window_size = target_win;
+    return 0;
+}

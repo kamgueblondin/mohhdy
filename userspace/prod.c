@@ -410,7 +410,28 @@ int prod_biz_metrics_get(const prod_usage_t* u, uint32_t uptime_ticks, prod_biz_
     bm->uptime_seconds = uptime_ticks / 100U;
     bm->total_tasks_executed = u ? u->total : 0;
     bm->distinct_commands = u ? (uint32_t)u->n : 0;
-    bm->business_kpi_score = uptime_ticks >= 100U ? bm->total_tasks_executed * 60U / bm->uptime_seconds : 0;
+    bm->business_kpi_score = uptime_ticks >= 100U && bm->uptime_seconds > 0 ? bm->total_tasks_executed * 60U / bm->uptime_seconds : 0;
+    return 0;
+}
+
+int prod_biz_kpi_eval(const prod_usage_t* u, uint32_t uptime_ticks, uint32_t total_cmd_time_ms, prod_biz_metrics_t* bm) {
+    if (!bm) return -1;
+    prod_biz_metrics_get(u, uptime_ticks, bm);
+    if (bm->total_tasks_executed > 0) {
+        bm->avg_exec_time_ms = total_cmd_time_ms / bm->total_tasks_executed;
+    } else {
+        bm->avg_exec_time_ms = 0;
+    }
+    uint32_t eff = 100U;
+    if (bm->avg_exec_time_ms > 1000U) {
+        eff = (eff > 30U) ? eff - 30U : 0U;
+    } else if (bm->avg_exec_time_ms > 200U) {
+        eff = (eff > 15U) ? eff - 15U : 0U;
+    }
+    if (bm->business_kpi_score < 5U) {
+        eff = (eff > 10U) ? eff - 10U : 0U;
+    }
+    bm->global_efficiency_score = eff;
     return 0;
 }
 
@@ -769,12 +790,17 @@ int prod_perf_monitor_eval(const prod_metrics_t* m, const prod_alerts_t* a, prod
     pm->overall_health_score = (active * 20U < 100U) ? (100U - active * 20U) : 0U;
     pm->system_status_ok = (pm->overall_health_score >= 60U) ? 1 : 0;
 
+    if (active > 2 || pm->avg_busy_pct > 85U) {
+        pm->auto_restarts++;
+    }
+
     out[0] = 0;
     s_cat(out, "perf-monitor health ", cap); cat_u(out, pm->overall_health_score, cap);
     s_cat(out, " active_alerts ", cap); cat_u(out, pm->active_alerts, cap);
     s_cat(out, " samples ", cap); cat_u(out, pm->sample_count, cap);
     s_cat(out, " avg_busy_pct ", cap); cat_u(out, pm->avg_busy_pct, cap);
     s_cat(out, " free_mem_kib ", cap); cat_u(out, pm->free_mem_kib, cap);
+    s_cat(out, " auto_restarts ", cap); cat_u(out, pm->auto_restarts, cap);
     s_cat(out, pm->system_status_ok ? " status ok_healthy\n" : " status warning_degraded\n", cap);
     return s_len(out);
 }
@@ -929,6 +955,7 @@ int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, co
         char pm_buf[256];
         if (prod_perf_monitor_eval(m, a, &pm, pm_buf, (int)sizeof(pm_buf)) >= 0) {
             s_cat(out, "health_score ", cap); cat_u(out, pm.overall_health_score, cap);
+            s_cat(out, " auto_restarts ", cap); cat_u(out, pm.auto_restarts, cap);
             s_cat(out, " status ", cap); s_cat(out, pm.system_status_ok ? "ok_healthy\n" : "warning_degraded\n", cap);
         }
     }

@@ -1390,3 +1390,96 @@ int pm_pipe_exec(const pm_program_t* prog1, const pm_program_t* prog2,
     int st2 = pm_run(prog2, vm2, host);
     return st2;
 }
+
+/* ---- US-062 Multi-Agent Async Message Queue & Bus ---- */
+typedef struct {
+    char channel[32];
+    char agent_id[24];
+} pm_bus_sub_t;
+
+typedef struct {
+    char channel[32];
+    char sender[24];
+    char message[128];
+    int active;
+} pm_bus_msg_slot_t;
+
+static pm_bus_sub_t g_pm_bus_subs[PM_BUS_CHANNELS * PM_BUS_SUBS_PER_CHAN];
+static int g_pm_bus_sub_count = 0;
+
+static pm_bus_msg_slot_t g_pm_bus_msg_queue[PM_BUS_MSG_QUEUE];
+static int g_pm_bus_msg_head = 0;
+static int g_pm_bus_msg_tail = 0;
+
+void pm_bus_init(void) {
+    g_pm_bus_sub_count = 0;
+    for (int i = 0; i < PM_BUS_CHANNELS * PM_BUS_SUBS_PER_CHAN; i++) {
+        g_pm_bus_subs[i].channel[0] = 0;
+        g_pm_bus_subs[i].agent_id[0] = 0;
+    }
+    g_pm_bus_msg_head = 0;
+    g_pm_bus_msg_tail = 0;
+    for (int i = 0; i < PM_BUS_MSG_QUEUE; i++) {
+        g_pm_bus_msg_queue[i].active = 0;
+    }
+}
+
+int pm_bus_subscribe(const char *channel, const char *agent_id) {
+    if (!channel || !agent_id) return -1;
+    for (int i = 0; i < g_pm_bus_sub_count; i++) {
+        if (pm_streq(g_pm_bus_subs[i].channel, channel) &&
+            pm_streq(g_pm_bus_subs[i].agent_id, agent_id)) {
+            return 0;
+        }
+    }
+    if (g_pm_bus_sub_count >= PM_BUS_CHANNELS * PM_BUS_SUBS_PER_CHAN) return -1;
+    pm_strcpy(g_pm_bus_subs[g_pm_bus_sub_count].channel, sizeof(g_pm_bus_subs[0].channel), channel);
+    pm_strcpy(g_pm_bus_subs[g_pm_bus_sub_count].agent_id, sizeof(g_pm_bus_subs[0].agent_id), agent_id);
+    g_pm_bus_sub_count++;
+    return 0;
+}
+
+int pm_bus_publish(const char *channel, const char *sender, const char *message) {
+    if (!channel || !sender || !message) return -1;
+    int next_tail = (g_pm_bus_msg_tail + 1) % PM_BUS_MSG_QUEUE;
+    if (next_tail == g_pm_bus_msg_head && g_pm_bus_msg_queue[g_pm_bus_msg_head].active) {
+        return -1;
+    }
+    pm_bus_msg_slot_t *slot = &g_pm_bus_msg_queue[g_pm_bus_msg_tail];
+    pm_strcpy(slot->channel, sizeof(slot->channel), channel);
+    pm_strcpy(slot->sender, sizeof(slot->sender), sender);
+    pm_strcpy(slot->message, sizeof(slot->message), message);
+    slot->active = 1;
+    g_pm_bus_msg_tail = next_tail;
+    return 0;
+}
+
+int pm_bus_dequeue(const char *agent_id, char *out_channel, char *out_sender, char *out_message, int cap) {
+    if (!agent_id) return 0;
+    int cur = g_pm_bus_msg_head;
+    while (cur != g_pm_bus_msg_tail || g_pm_bus_msg_queue[cur].active) {
+        if (g_pm_bus_msg_queue[cur].active) {
+            int matched = 0;
+            for (int s = 0; s < g_pm_bus_sub_count; s++) {
+                if (pm_streq(g_pm_bus_subs[s].agent_id, agent_id) &&
+                    (pm_streq(g_pm_bus_subs[s].channel, g_pm_bus_msg_queue[cur].channel) || pm_streq(g_pm_bus_subs[s].channel, "*"))) {
+                    matched = 1;
+                    break;
+                }
+            }
+            if (matched) {
+                if (out_channel) pm_strcpy(out_channel, 32, g_pm_bus_msg_queue[cur].channel);
+                if (out_sender) pm_strcpy(out_sender, 24, g_pm_bus_msg_queue[cur].sender);
+                if (out_message) pm_strcpy(out_message, cap, g_pm_bus_msg_queue[cur].message);
+                g_pm_bus_msg_queue[cur].active = 0;
+                if (cur == g_pm_bus_msg_head) {
+                    g_pm_bus_msg_head = (g_pm_bus_msg_head + 1) % PM_BUS_MSG_QUEUE;
+                }
+                return 1;
+            }
+        }
+        cur = (cur + 1) % PM_BUS_MSG_QUEUE;
+        if (cur == g_pm_bus_msg_tail) break;
+    }
+    return 0;
+}

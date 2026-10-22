@@ -738,6 +738,40 @@ static void test_lot24_prod_extreme_autoscale_and_bundle_health(void) {
     TEST_ASSERT_NOT_NULL(strstr(out, "checksum verified=true fnv "));
 }
 
+static void test_lot26_prod_auto_restarts_and_biz_kpi(void) {
+    prod_metrics_t m;
+    prod_alerts_t a;
+    prod_perf_monitor_t pm;
+    prod_usage_t u;
+    prod_biz_metrics_t bm;
+    char buf[256];
+
+    prod_metrics_init(&m);
+    prod_alerts_init(&a);
+    memset(&u, 0, sizeof(u));
+
+    /* Add 3 firing alerts to trigger auto_restarts */
+    prod_alert_add(&a, "a1", PM_BUSY, 1, 10, 1);
+    prod_alert_add(&a, "a2", PM_BUSY, 1, 10, 1);
+    prod_alert_add(&a, "a3", PM_BUSY, 1, 10, 1);
+    prod_sample_t smp = S(10, 200, 90);
+    prod_alerts_eval(&a, &smp);
+
+    TEST_ASSERT_GREATER_THAN(0, prod_perf_monitor_eval(&m, &a, &pm, buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL(1U, pm.auto_restarts);
+    TEST_ASSERT_NOT_NULL(strstr(buf, "auto_restarts 1"));
+
+    /* Business KPI Calculator */
+    prod_usage_hit(&u, "ls");
+    prod_usage_hit(&u, "ps");
+    prod_usage_hit(&u, "cat");
+    TEST_ASSERT_EQUAL(0, prod_biz_kpi_eval(&u, 12000, 1500, &bm));
+    TEST_ASSERT_EQUAL(3U, bm.total_tasks_executed);
+    TEST_ASSERT_EQUAL(3U, bm.distinct_commands);
+    TEST_ASSERT_EQUAL(500U, bm.avg_exec_time_ms);
+    TEST_ASSERT_GREATER_THAN(0U, bm.global_efficiency_score);
+}
+
 static void test_lot25_prod_diagnostics_and_autofix(void) {
     prod_autoscale_workload_t wl;
     char buf[128];
@@ -785,6 +819,7 @@ int main(void) {
     RUN_TEST(test_lot23_prod_extreme_autoscale_and_bundle_health);
     RUN_TEST(test_lot24_prod_extreme_autoscale_and_bundle_health);
     RUN_TEST(test_lot25_prod_diagnostics_and_autofix);
+    RUN_TEST(test_lot26_prod_auto_restarts_and_biz_kpi);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
