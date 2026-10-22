@@ -156,4 +156,18 @@ int pm_bus_subscribe(const char *channel, const char *agent_id);
 int pm_bus_publish(const char *channel, const char *sender, const char *message);
 int pm_bus_dequeue(const char *agent_id, char *out_channel, char *out_sender, char *out_message, int cap);
 
+/* ---- Agent Pipeline Streaming ---- */
+#define PM_STREAM_BUF_MAX 256
+typedef struct {
+    char agent_id[PM_AGENT_NAME_MAX];
+    char buffer[PM_STREAM_BUF_MAX];
+    int write_pos;
+    int read_pos;
+    uint8_t closed;
+} pm_stream_t;
+
+void pm_stream_init(pm_stream_t *st, const char *agent_id);
+int pm_stream_append(pm_stream_t *st, const char *chunk, int len);
+int pm_stream_read(pm_stream_t *st, char *out, int cap);
+
 #endif

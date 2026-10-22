@@ -1036,3 +1036,74 @@ int prod_roadmap_eval(const prod_roadmap_t* rm, uint32_t* total_done, uint32_t* 
     *pct = *total_entries > 0U ? (d * 100U) / *total_entries : 0U;
     return 0;
 }
+
+/* US-122: AI SLA Monitor & Predictive Fault Engine */
+void prod_ai_sla_init(prod_ai_sla_t *sla, uint32_t target_latency_ms) {
+    if (!sla) return;
+    sla->total_requests = 0;
+    sla->successful_requests = 0;
+    sla->avg_token_latency_ms = 0;
+    sla->max_token_latency_ms = 0;
+    sla->sla_breaches = 0;
+    sla->target_latency_ms = target_latency_ms ? target_latency_ms : 100;
+}
+
+void prod_ai_sla_record(prod_ai_sla_t *sla, uint32_t token_latency_ms, int success) {
+    if (!sla) return;
+    sla->total_requests++;
+    if (success) sla->successful_requests++;
+    if (token_latency_ms > sla->max_token_latency_ms) {
+        sla->max_token_latency_ms = token_latency_ms;
+    }
+    if (token_latency_ms > sla->target_latency_ms) {
+        sla->sla_breaches++;
+    }
+    sla->avg_token_latency_ms = (sla->avg_token_latency_ms * (sla->total_requests - 1) + token_latency_ms) / sla->total_requests;
+}
+
+int prod_ai_sla_eval(const prod_ai_sla_t *sla, uint32_t *success_rate_pct, uint32_t *sla_compliance_pct) {
+    if (!sla || sla->total_requests == 0) {
+        if (success_rate_pct) *success_rate_pct = 100;
+        if (sla_compliance_pct) *sla_compliance_pct = 100;
+        return 0;
+    }
+    uint32_t s_rate = (sla->successful_requests * 100U) / sla->total_requests;
+    uint32_t compliance = ((sla->total_requests - sla->sla_breaches) * 100U) / sla->total_requests;
+    if (success_rate_pct) *success_rate_pct = s_rate;
+    if (sla_compliance_pct) *sla_compliance_pct = compliance;
+    return 0;
+}
+
+void prod_fault_predict_init(prod_fault_predict_t *fp) {
+    if (!fp) return;
+    fp->io_errors = 0;
+    fp->memory_corruptions = 0;
+    fp->packet_losses = 0;
+    fp->risk_score = 0;
+}
+
+void prod_fault_predict_record(prod_fault_predict_t *fp, uint32_t io_err, uint32_t mem_err, uint32_t pkt_loss) {
+    if (!fp) return;
+    fp->io_errors += io_err;
+    fp->memory_corruptions += mem_err;
+    fp->packet_losses += pkt_loss;
+
+    uint32_t score = fp->io_errors * 15U + fp->memory_corruptions * 40U + fp->packet_losses * 5U;
+    if (score > 100U) score = 100U;
+    fp->risk_score = score;
+}
+
+int prod_fault_predict_eval(const prod_fault_predict_t *fp, char *out_verdict, int cap) {
+    if (!fp || !out_verdict || cap < 16) return -1;
+    out_verdict[0] = 0;
+    if (fp->risk_score >= 75U) {
+        s_copy(out_verdict, "CRITICAL_RISK", cap);
+    } else if (fp->risk_score >= 40U) {
+        s_copy(out_verdict, "ELEVATED_RISK", cap);
+    } else if (fp->risk_score >= 15U) {
+        s_copy(out_verdict, "MODERATE_RISK", cap);
+    } else {
+        s_copy(out_verdict, "HEALTHY", cap);
+    }
+    return (int)fp->risk_score;
+}

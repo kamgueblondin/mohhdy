@@ -65,6 +65,13 @@ int vfs_access_control(const char *path, const char *origin, uint8_t required_ri
 int vfs_atomic_swap(const char *path_a, const char *path_b);
 int vfs_flock(const char *path, int lock_type);
 
+int vfs_journal_begin(void);
+int vfs_journal_commit(int tx_id);
+int vfs_journal_rollback(int tx_id);
+
+int vfs_snapshot_create(uint32_t *snapshot_id);
+int vfs_snapshot_restore(uint32_t snapshot_id);
+
 const char *ramfs_strerror(int err);
 
 #endif

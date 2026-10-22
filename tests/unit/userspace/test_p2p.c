@@ -1041,6 +1041,25 @@ static void test_lot24_p2p_raft_anti_entropy_and_link_cost(void) {
     TEST_ASSERT_EQUAL(0, g_n[0].cache.inv_active);
 }
 
+static void test_lot27_p2p_cluster_routing_and_fast_recovery(void) {
+    setup(3, 0);
+    run(3, 200);
+
+    /* Cluster forwarding test */
+    uint8_t dummy_app[16] = "cluster_msg";
+    TEST_ASSERT(p2p_cluster_route_forward(&g_n[0], &g_h[0], 2, dummy_app, 11) >= 0);
+
+    /* Raft Fast Recovery test */
+    g_n[0].raft.active = 1;
+    g_n[0].raft.role = P2P_RAFT_LEADER;
+    g_n[0].raft.term = 5;
+
+    TEST_ASSERT_EQUAL(1, p2p_raft_fast_recovery(&g_n[0], &g_h[0], 10));
+    TEST_ASSERT_EQUAL(10U, g_n[0].raft.term);
+    TEST_ASSERT_EQUAL(P2P_RAFT_FOLLOWER, g_n[0].raft.role);
+    TEST_ASSERT_EQUAL(0, p2p_raft_fast_recovery(&g_n[0], &g_h[0], 10));
+}
+
 static void test_lot26_p2p_region_snapshot_and_bbr(void) {
     uint8_t chunk[64];
     memset(chunk, 0xAB, sizeof(chunk));
@@ -1119,6 +1138,7 @@ int main(void) {
     RUN_TEST(test_lot24_p2p_raft_anti_entropy_and_link_cost);
     RUN_TEST(test_lot25_p2p_partition_healing_and_lease);
     RUN_TEST(test_lot26_p2p_region_snapshot_and_bbr);
+    RUN_TEST(test_lot27_p2p_cluster_routing_and_fast_recovery);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

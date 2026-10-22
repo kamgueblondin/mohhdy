@@ -170,4 +170,45 @@ int webrt_event_loop_tick(uint32_t current_time_ms, char *out_eval, int max_eval
 int webrt_x509_verify_key_usage(const uint8_t *cert_data, int cert_len, uint16_t required_usage, uint16_t required_eku);
 int webrt_ocsp_check_status(const char *cert_serial, char *out_status, int cap);
 
+/* ---- US-047 DOM MutationObserver & CSS Flexbox Light ---- */
+#define WEBRT_OBSERVER_MAX 8
+typedef struct {
+    char target_id[32];
+    char callback_script[128];
+    uint8_t observe_child_list;
+    uint8_t observe_attributes;
+    uint8_t active;
+} webrt_dom_observer_t;
+
+typedef struct {
+    webrt_dom_observer_t observers[WEBRT_OBSERVER_MAX];
+    int count;
+} webrt_dom_observer_mgr_t;
+
+void webrt_dom_observer_init(webrt_dom_observer_mgr_t *mgr);
+int webrt_dom_observe_mutation(webrt_dom_observer_mgr_t *mgr, const char *target_id, const char *callback_script, uint8_t child_list, uint8_t attributes);
+int webrt_dom_notify_mutation(webrt_dom_observer_mgr_t *mgr, const char *target_id, const char *mutation_type, char *out_eval, int max_eval);
+
+typedef struct {
+    int x, y, width, height;
+} webrt_rect_t;
+
+#define WEBRT_FLEX_ITEM_MAX 8
+typedef struct {
+    int min_width, min_height;
+    int computed_x, computed_y;
+    int computed_w, computed_h;
+} webrt_flex_item_t;
+
+typedef struct {
+    int direction;      /* 0: row, 1: column */
+    int justify_content;/* 0: flex-start, 1: center, 2: flex-end, 3: space-between */
+    int align_items;    /* 0: flex-start, 1: center, 2: flex-end */
+    int width, height;
+    webrt_flex_item_t items[WEBRT_FLEX_ITEM_MAX];
+    int item_count;
+} webrt_flex_container_t;
+
+int webrt_flex_compute_layout(webrt_flex_container_t *container);
+
 #endif

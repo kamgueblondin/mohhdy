@@ -1,6 +1,12 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (22 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **940** tests reussis.
+> **Etat reel et pilotage (22 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **945** tests reussis.
+
+## Lot 27: Consolidation Industrielle VFS (Journalisation & Transactions), Moteur Web/Flexbox/MutationObserver, Reseau P2P Multi-Cluster & AI SLA Monitor / Fault Engine ✅ (22 octobre 2026)
+- [x] US-035 : Journalisation circulaire des mutations VFS (`vfs_journal_begin`, `vfs_journal_commit`, `vfs_journal_rollback`) et instantanes transactionnels VFS (`vfs_snapshot_create`, `vfs_snapshot_restore`).
+- [x] US-047 / US-063 : DOM MutationObserver Ring 3 (`webrt_dom_observe_mutation`, `webrt_dom_notify_mutation`), moteur de layout CSS Flexbox Light Ring 3 (`webrt_flex_compute_layout`), et streaming de reponse d'agents IA dans PromptProgram (`pm_stream_init`, `pm_stream_append`, `pm_stream_read`).
+- [x] US-080 : Routage P2P inter-cluster (`p2p_cluster_route_forward`) et rattrapage rapide Raft post-partition (`p2p_raft_fast_recovery`).
+- [x] US-122 : AI SLA Monitor (`prod_ai_sla_init`, `prod_ai_sla_record`, `prod_ai_sla_eval`) et moteur de prediction de pannes materielles/services (`prod_fault_predict_init`, `prod_fault_predict_record`, `prod_fault_predict_eval`).
 
 ## Lot 26: Extension Avancee VFS Virtuel Multi-Secteurs, Moteur JS/DOM Event Loop Ring 3, Reseau P2P Raft Multi-Regions & Supervision Predictive Auto-Adaptative ✅ (22 octobre 2026)
 - [x] US-033 / US-034 : Gestionnaire de quotas par sous-arborescence VFS (`vfs_quota_set`, `vfs_quota_check`), controle de droits ACL (`vfs_access_grant`, `vfs_access_control`), echange atomique inter-fichiers (`vfs_atomic_swap`), et verrous de lecture/ecriture (`vfs_flock`).

@@ -10,6 +10,20 @@
 
 ## État courant vérifié
 
+## Etat courant du 22 octobre 2026 (lot 27)
+
+Living baseline. Plan: [lot27_plan.md](lot27_plan.md).
+
+```text
+make test-all : 945 passed, 0 failed, 0 skipped
+```
+
+- US-035: VFS journaled mutations (`vfs_journal_begin`, `vfs_journal_commit`, `vfs_journal_rollback`) and transactional snapshots (`vfs_snapshot_create`, `vfs_snapshot_restore`) in Ring 3.
+- US-047 / US-063: DOM MutationObserver (`webrt_dom_observe_mutation`, `webrt_dom_notify_mutation`) and CSS Flexbox Light layout engine (`webrt_flex_compute_layout`) in Ring 3. Agent pipeline streaming (`pm_stream_init`, `pm_stream_append`, `pm_stream_read`) in PromptProgram.
+- US-080: Multi-Cluster P2P Mesh inter-cluster routing (`p2p_cluster_route_forward`) and Raft dynamic fast recovery (`p2p_raft_fast_recovery`).
+- US-122: Production AI SLA Monitor (`prod_ai_sla_init`, `prod_ai_sla_record`, `prod_ai_sla_eval`) and predictive hardware/service fault engine (`prod_fault_predict_init`, `prod_fault_predict_record`, `prod_fault_predict_eval`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 22 octobre 2026 (lot 26)
 
 Living baseline. Plan: [lot26_plan.md](lot26_plan.md).

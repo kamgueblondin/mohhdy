@@ -284,6 +284,115 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* ---- US-047 DOM MutationObserver & CSS Flexbox Light ---- */
+void webrt_dom_observer_init(webrt_dom_observer_mgr_t *mgr) {
+    if (!mgr) return;
+    mgr->count = 0;
+    for (int i = 0; i < WEBRT_OBSERVER_MAX; i++) {
+        mgr->observers[i].target_id[0] = 0;
+        mgr->observers[i].callback_script[0] = 0;
+        mgr->observers[i].observe_child_list = 0;
+        mgr->observers[i].observe_attributes = 0;
+        mgr->observers[i].active = 0;
+    }
+}
+
+int webrt_dom_observe_mutation(webrt_dom_observer_mgr_t *mgr, const char *target_id, const char *callback_script, uint8_t child_list, uint8_t attributes) {
+    if (!mgr || !target_id || !callback_script) return -1;
+    if (mgr->count >= WEBRT_OBSERVER_MAX) return -1;
+    webrt_dom_observer_t *obs = &mgr->observers[mgr->count];
+    w_copy(obs->target_id, sizeof(obs->target_id), target_id, -1);
+    w_copy(obs->callback_script, sizeof(obs->callback_script), callback_script, -1);
+    obs->observe_child_list = child_list;
+    obs->observe_attributes = attributes;
+    obs->active = 1;
+    mgr->count++;
+    return 0;
+}
+
+int webrt_dom_notify_mutation(webrt_dom_observer_mgr_t *mgr, const char *target_id, const char *mutation_type, char *out_eval, int max_eval) {
+    if (!mgr || !target_id || !mutation_type || !out_eval || max_eval < 2) return -1;
+    out_eval[0] = 0;
+    int matches = 0;
+    for (int i = 0; i < mgr->count; i++) {
+        webrt_dom_observer_t *obs = &mgr->observers[i];
+        if (!obs->active) continue;
+        if (w_eq(obs->target_id, target_id) || w_eq(obs->target_id, "*")) {
+            int notify = 0;
+            if (w_eq(mutation_type, "childList") && obs->observe_child_list) notify = 1;
+            if (w_eq(mutation_type, "attributes") && obs->observe_attributes) notify = 1;
+            if (notify) {
+                matches++;
+                if (out_eval[0] == 0) {
+                    w_copy(out_eval, max_eval, obs->callback_script, -1);
+                }
+            }
+        }
+    }
+    return matches;
+}
+
+int webrt_flex_compute_layout(webrt_flex_container_t *container) {
+    if (!container || container->item_count <= 0) return -1;
+    int count = container->item_count;
+    if (count > WEBRT_FLEX_ITEM_MAX) count = WEBRT_FLEX_ITEM_MAX;
+
+    int is_row = (container->direction == 0);
+    int main_size = is_row ? container->width : container->height;
+    int cross_size = is_row ? container->height : container->width;
+
+    int total_main_min = 0;
+    for (int i = 0; i < count; i++) {
+        total_main_min += is_row ? container->items[i].min_width : container->items[i].min_height;
+    }
+
+    int free_space = main_size - total_main_min;
+    if (free_space < 0) free_space = 0;
+
+    int cur_main = 0;
+    int gap = 0;
+
+    if (container->justify_content == 1) { /* center */
+        cur_main = free_space / 2;
+    } else if (container->justify_content == 2) { /* flex-end */
+        cur_main = free_space;
+    } else if (container->justify_content == 3 && count > 1) { /* space-between */
+        gap = free_space / (count - 1);
+    }
+
+    for (int i = 0; i < count; i++) {
+        webrt_flex_item_t *item = &container->items[i];
+        int item_main = is_row ? item->min_width : item->min_height;
+        int item_cross = is_row ? item->min_height : item->min_width;
+
+        if (is_row) {
+            item->computed_x = cur_main;
+            item->computed_w = item_main;
+            item->computed_h = item_cross;
+            if (container->align_items == 1) { /* center */
+                item->computed_y = (cross_size - item_cross) / 2;
+            } else if (container->align_items == 2) { /* flex-end */
+                item->computed_y = cross_size - item_cross;
+            } else {
+                item->computed_y = 0;
+            }
+        } else {
+            item->computed_y = cur_main;
+            item->computed_h = item_main;
+            item->computed_w = item_cross;
+            if (container->align_items == 1) { /* center */
+                item->computed_x = (cross_size - item_cross) / 2;
+            } else if (container->align_items == 2) { /* flex-end */
+                item->computed_x = cross_size - item_cross;
+            } else {
+                item->computed_x = 0;
+            }
+        }
+        cur_main += item_main + gap;
+    }
+    return 0;
+}
+
 /* ---- US-043 Async Event Loop & DOM Timers ---- */
 static webrt_timer_t g_webrt_timers[WEBRT_TIMER_MAX];
 static uint32_t g_webrt_timer_next_id = 1;
