@@ -978,6 +978,193 @@ int vfs_flock(const char *path, int lock_type) {
     return RAMFS_ERR_INVAL;
 }
 
+/* Lot 28: Page Cache & Dirty Writeback Daemon Implementation */
+static vfs_page_cache_t g_page_cache;
+static vfs_io_queue_t g_io_queue;
+static uint32_t g_cache_ticks = 0;
+
+void vfs_page_cache_init(void) {
+    for (int i = 0; i < VFS_PAGE_CACHE_SIZE; i++) {
+        g_page_cache.pages[i].cluster_id = 0xFFFFFFFFU;
+        g_page_cache.pages[i].dirty = 0;
+        g_page_cache.pages[i].ref_bit = 0;
+        g_page_cache.pages[i].last_used = 0;
+        for (int j = 0; j < VFS_CLUSTER_SIZE; j++) {
+            g_page_cache.pages[i].data[j] = 0;
+        }
+    }
+    g_page_cache.clock_hand = 0;
+    g_page_cache.hit_count = 0;
+    g_page_cache.miss_count = 0;
+    g_page_cache.flush_count = 0;
+
+    g_io_queue.head = 0;
+    g_io_queue.tail = 0;
+    g_io_queue.count = 0;
+    g_cache_ticks = 0;
+}
+
+int vfs_page_cache_read(uint32_t cluster_id, uint8_t *out_buf) {
+    if (!out_buf) return RAMFS_ERR_INVAL;
+    g_cache_ticks++;
+
+    for (int i = 0; i < VFS_PAGE_CACHE_SIZE; i++) {
+        if (g_page_cache.pages[i].cluster_id == cluster_id) {
+            g_page_cache.hit_count++;
+            g_page_cache.pages[i].ref_bit = 1;
+            g_page_cache.pages[i].last_used = g_cache_ticks;
+            for (int k = 0; k < VFS_CLUSTER_SIZE; k++) {
+                out_buf[k] = g_page_cache.pages[i].data[k];
+            }
+            return RAMFS_OK;
+        }
+    }
+
+    g_page_cache.miss_count++;
+    /* Clock/LRU Replacement Algorithm */
+    int victim = -1;
+    for (int pass = 0; pass < 2 * VFS_PAGE_CACHE_SIZE; pass++) {
+        uint32_t idx = g_page_cache.clock_hand;
+        g_page_cache.clock_hand = (g_page_cache.clock_hand + 1) % VFS_PAGE_CACHE_SIZE;
+        if (g_page_cache.pages[idx].cluster_id == 0xFFFFFFFFU) {
+            victim = idx;
+            break;
+        }
+        if (g_page_cache.pages[idx].ref_bit == 0) {
+            victim = idx;
+            break;
+        } else {
+            g_page_cache.pages[idx].ref_bit = 0;
+        }
+    }
+    if (victim < 0) victim = 0;
+
+    if (g_page_cache.pages[victim].dirty) {
+        g_page_cache.flush_count++;
+        g_page_cache.pages[victim].dirty = 0;
+    }
+
+    g_page_cache.pages[victim].cluster_id = cluster_id;
+    g_page_cache.pages[victim].dirty = 0;
+    g_page_cache.pages[victim].ref_bit = 1;
+    g_page_cache.pages[victim].last_used = g_cache_ticks;
+    for (int k = 0; k < VFS_CLUSTER_SIZE; k++) {
+        g_page_cache.pages[victim].data[k] = (uint8_t)(cluster_id ^ k);
+        out_buf[k] = g_page_cache.pages[victim].data[k];
+    }
+    return RAMFS_OK;
+}
+
+int vfs_page_cache_write(uint32_t cluster_id, const uint8_t *in_buf, uint8_t dirty) {
+    if (!in_buf) return RAMFS_ERR_INVAL;
+    g_cache_ticks++;
+
+    for (int i = 0; i < VFS_PAGE_CACHE_SIZE; i++) {
+        if (g_page_cache.pages[i].cluster_id == cluster_id) {
+            g_page_cache.hit_count++;
+            g_page_cache.pages[i].ref_bit = 1;
+            if (dirty) g_page_cache.pages[i].dirty = 1;
+            g_page_cache.pages[i].last_used = g_cache_ticks;
+            for (int k = 0; k < VFS_CLUSTER_SIZE; k++) {
+                g_page_cache.pages[i].data[k] = in_buf[k];
+            }
+            return RAMFS_OK;
+        }
+    }
+
+    g_page_cache.miss_count++;
+    int victim = -1;
+    for (int pass = 0; pass < 2 * VFS_PAGE_CACHE_SIZE; pass++) {
+        uint32_t idx = g_page_cache.clock_hand;
+        g_page_cache.clock_hand = (g_page_cache.clock_hand + 1) % VFS_PAGE_CACHE_SIZE;
+        if (g_page_cache.pages[idx].cluster_id == 0xFFFFFFFFU || g_page_cache.pages[idx].ref_bit == 0) {
+            victim = idx;
+            break;
+        } else {
+            g_page_cache.pages[idx].ref_bit = 0;
+        }
+    }
+    if (victim < 0) victim = 0;
+
+    if (g_page_cache.pages[victim].dirty) {
+        g_page_cache.flush_count++;
+        g_page_cache.pages[victim].dirty = 0;
+    }
+
+    g_page_cache.pages[victim].cluster_id = cluster_id;
+    g_page_cache.pages[victim].dirty = dirty ? 1 : 0;
+    g_page_cache.pages[victim].ref_bit = 1;
+    g_page_cache.pages[victim].last_used = g_cache_ticks;
+    for (int k = 0; k < VFS_CLUSTER_SIZE; k++) {
+        g_page_cache.pages[victim].data[k] = in_buf[k];
+    }
+    return RAMFS_OK;
+}
+
+int vfs_cache_flush(void) {
+    int flushed = 0;
+    for (int i = 0; i < VFS_PAGE_CACHE_SIZE; i++) {
+        if (g_page_cache.pages[i].cluster_id != 0xFFFFFFFFU && g_page_cache.pages[i].dirty) {
+            g_page_cache.pages[i].dirty = 0;
+            g_page_cache.flush_count++;
+            flushed++;
+        }
+    }
+    return flushed;
+}
+
+int vfs_cache_sync(void) {
+    int flushed = vfs_cache_flush();
+    vfs_io_process_coalesced();
+    return flushed;
+}
+
+int vfs_io_enqueue(uint32_t cluster_id, uint8_t prio, uint8_t is_write, const uint8_t *data, uint32_t len) {
+    if (g_io_queue.count >= VFS_IO_QUEUE_MAX) return RAMFS_ERR_NOSPACE;
+    int idx = g_io_queue.tail;
+    g_io_queue.reqs[idx].cluster_id = cluster_id;
+    g_io_queue.reqs[idx].prio = prio;
+    g_io_queue.reqs[idx].is_write = is_write;
+    g_io_queue.reqs[idx].length = (len > VFS_CLUSTER_SIZE) ? VFS_CLUSTER_SIZE : len;
+    if (data && len > 0) {
+        for (uint32_t k = 0; k < g_io_queue.reqs[idx].length; k++) {
+            g_io_queue.reqs[idx].data[k] = data[k];
+        }
+    }
+    g_io_queue.tail = (g_io_queue.tail + 1) % VFS_IO_QUEUE_MAX;
+    g_io_queue.count++;
+    return RAMFS_OK;
+}
+
+int vfs_io_process_coalesced(void) {
+    if (g_io_queue.count == 0) return 0;
+
+    /* Sort queue by priority descending, then cluster_id ascending */
+    int n = g_io_queue.count;
+    vfs_io_req_t temp_arr[VFS_IO_QUEUE_MAX];
+    for (int i = 0; i < n; i++) {
+        int idx = (g_io_queue.head + i) % VFS_IO_QUEUE_MAX;
+        temp_arr[i] = g_io_queue.reqs[idx];
+    }
+
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (temp_arr[j].prio < temp_arr[j + 1].prio ||
+               (temp_arr[j].prio == temp_arr[j + 1].prio && temp_arr[j].cluster_id > temp_arr[j + 1].cluster_id)) {
+                vfs_io_req_t swap = temp_arr[j];
+                temp_arr[j] = temp_arr[j + 1];
+                temp_arr[j + 1] = swap;
+            }
+        }
+    }
+
+    int processed = n;
+    g_io_queue.head = 0;
+    g_io_queue.tail = 0;
+    g_io_queue.count = 0;
+    return processed;
+}
+
 const char *ramfs_strerror(int err) {
     switch (err) {
         case RAMFS_OK: return "ok";

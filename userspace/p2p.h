@@ -338,4 +338,42 @@ const char* p2p_type_name(int type);
 int p2p_send_app(p2p_node_t* n, const p2p_host_t* h, uint32_t peer_id, const uint8_t* data, int length);
 const char* p2p_peer_name(const p2p_node_t* n, uint32_t id);
 uint32_t p2p_member_count(const p2p_node_t* n);
+
+/* ---- Lot 28: P2P WAN Multi-Hop Mesh, Epidemic Gossip & NAT Hole Punching (US-061 / US-063 / US-074) ---- */
+#define P2P_GOSSIP_ITEMS_MAX 16
+typedef struct {
+    char key[P2P_KEY_MAX];
+    char value[P2P_VAL_MAX];
+    uint32_t version;
+    uint32_t origin;
+    uint32_t ttl_hops;
+} p2p_gossip_item_t;
+
+typedef struct {
+    p2p_gossip_item_t items[P2P_GOSSIP_ITEMS_MAX];
+    int count;
+    uint32_t rounds_executed;
+} p2p_gossip_table_t;
+
+#define P2P_NAT_SESSIONS_MAX 8
+typedef struct {
+    uint32_t peer_id;
+    uint8_t ip[4];
+    uint16_t port;
+    uint32_t last_keepalive_tick;
+    uint8_t session_active;
+    uint8_t hole_punched;
+} p2p_nat_session_t;
+
+typedef struct {
+    p2p_nat_session_t sessions[P2P_NAT_SESSIONS_MAX];
+    int count;
+    uint32_t total_keepalives_sent;
+} p2p_nat_keepalive_table_t;
+
+int p2p_gossip_broadcast(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value, uint32_t version);
+int p2p_gossip_tick(p2p_node_t* n, const p2p_host_t* h, p2p_gossip_table_t* table);
+int p2p_nat_keepalive_step(p2p_node_t* n, const p2p_host_t* h, p2p_nat_keepalive_table_t* table, uint32_t now_tick);
+int p2p_multipath_route_select(const p2p_node_t* n, uint32_t dest_id, uint32_t* path1_next, uint32_t* path2_next);
+
 #endif
