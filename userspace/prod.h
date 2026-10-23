@@ -622,4 +622,53 @@ void prod_ai_remed_engine_init(prod_ai_auto_remed_engine_t *eng);
 int prod_ai_remed_register_plan(prod_ai_auto_remed_engine_t *eng, uint32_t plan_id, const char *name, uint32_t trigger_threshold, const char *action_command);
 int prod_ai_remed_eval_and_execute(prod_ai_auto_remed_engine_t *eng, uint32_t current_risk_score, char *out_log, int max_sz);
 
+/* Lot 39: Production Daemon Predictive Multi-Region Incident Isolation & Autonomous Self-Driving Infrastructure Optimization Engine (US-122 / US-131) */
+#define PROD_MULTI_REGION_MAX 8
+#define PROD_SELF_DRIVING_PROCS_MAX 16
+
+typedef struct {
+    uint32_t region_id;
+    char region_name[16];
+    uint32_t latency_ms;
+    uint32_t packet_loss_ppm;
+    uint32_t error_rate_ppm;
+    uint32_t cpu_util_pct;
+    uint8_t isolated;
+    uint32_t anomaly_score;
+} prod_region_telemetry_t;
+
+typedef struct {
+    prod_region_telemetry_t regions[PROD_MULTI_REGION_MAX];
+    int region_count;
+    uint32_t total_isolations;
+    uint32_t isolation_threshold;
+} prod_multi_region_isolator_t;
+
+typedef struct {
+    uint32_t proc_id;
+    uint32_t target_core;
+    uint32_t priority_weight;
+    uint32_t cache_quota_kb;
+    uint32_t load_pct;
+} prod_proc_spec_t;
+
+typedef struct {
+    prod_proc_spec_t procs[PROD_SELF_DRIVING_PROCS_MAX];
+    int proc_count;
+    uint32_t total_cores;
+    uint32_t total_cache_kb;
+    uint32_t rebalances_performed;
+    uint8_t self_driving_active;
+} prod_self_driving_engine_t;
+
+void prod_multi_region_isolator_init(prod_multi_region_isolator_t *iso, uint32_t threshold);
+int prod_multi_region_register(prod_multi_region_isolator_t *iso, uint32_t region_id, const char *name);
+int prod_multi_region_record_telemetry(prod_multi_region_isolator_t *iso, uint32_t region_id, uint32_t latency_ms, uint32_t loss_ppm, uint32_t err_ppm, uint32_t cpu_pct);
+int prod_multi_region_cluster_and_isolate(prod_multi_region_isolator_t *iso, char *out_log, int max_sz, int *out_isolated_count);
+
+void prod_self_driving_init(prod_self_driving_engine_t *eng, uint32_t total_cores, uint32_t total_cache_kb);
+int prod_self_driving_register_proc(prod_self_driving_engine_t *eng, uint32_t proc_id, uint32_t load_pct);
+int prod_self_driving_optimize(prod_self_driving_engine_t *eng, char *out_log, int max_sz);
+int prod_self_driving_get_proc_assignment(const prod_self_driving_engine_t *eng, uint32_t proc_id, uint32_t *out_core, uint32_t *out_cache_quota_kb);
+
 #endif

@@ -1,4 +1,4 @@
-/* test_ramfs.c - Tests du VFS RAM et de la table de processus simulée */
+/* test_ramfs.c - Tests du VFS RAM et de la table de processus simulee */
 
 #include "../../framework/unity.h"
 #include "../../framework/test_kernel.h"
@@ -530,6 +530,58 @@ static void test_lot38_nvme_sg_and_erasure_dist(void) {
     TEST_ASSERT_EQUAL(1, rec_chunks);
 }
 
+static void test_lot39_nvme_dif_dix_and_mvcc_gc(void) {
+    uint8_t data[16] = "Hello NVMe DIF!";
+    vfs_nvme_dif_pi_t pi;
+    int res = vfs_nvme_dif_generate(data, 15, 100, 0x1234, &pi);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_NOT_EQUAL(0, pi.guard_tag);
+    TEST_ASSERT_EQUAL(0x1234, pi.app_tag);
+    TEST_ASSERT_EQUAL(100, pi.ref_tag);
+
+    /* Verify pass */
+    res = vfs_nvme_dif_verify(data, 15, 100, 0x1234, &pi);
+    TEST_ASSERT_EQUAL(0, res);
+
+    /* Verify CRC corruption fail */
+    data[0] = 'X';
+    res = vfs_nvme_dif_verify(data, 15, 100, 0x1234, &pi);
+    TEST_ASSERT_EQUAL(-1, res);
+    data[0] = 'H';
+
+    /* DIX formatting and stripping */
+    uint8_t formatted_block[64];
+    uint32_t total_len = 0;
+    res = vfs_nvme_dix_format_block(data, 15, 200, 0x5678, formatted_block, &total_len);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(15 + VFS_NVME_DIF_PI_SIZE, total_len);
+
+    uint8_t stripped_data[64];
+    uint32_t stripped_len = 0;
+    res = vfs_nvme_dix_strip_and_verify(formatted_block, total_len, 200, 0x5678, stripped_data, &stripped_len);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(15, stripped_len);
+    TEST_ASSERT_EQUAL_MEMORY(data, stripped_data, 15);
+
+    /* MVCC GC Engine */
+    vfs_mvcc_gc_engine_t gc;
+    vfs_mvcc_gc_init(&gc, 10);
+    res = vfs_mvcc_gc_mark_obsolete(&gc, 5, 101, 1, 1000);
+    TEST_ASSERT_EQUAL(0, res);
+    res = vfs_mvcc_gc_mark_obsolete(&gc, 12, 102, 2, 1005);
+    TEST_ASSERT_EQUAL(0, res);
+
+    int reclaimed = 0;
+    res = vfs_mvcc_gc_collect_async(&gc, 10, &reclaimed);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, reclaimed);
+
+    uint32_t rec_inodes = 0, rec_blocks = 0;
+    vfs_mvcc_gc_stat(&gc, &rec_inodes, &rec_blocks);
+    TEST_ASSERT_EQUAL(1, rec_inodes);
+    TEST_ASSERT_EQUAL(1, rec_blocks);
+}
+
 int main(void) {
     unity_init();
 
@@ -555,6 +607,7 @@ int main(void) {
     RUN_TEST(test_lot37_nvme_qp_offload);
     RUN_TEST(test_lot37_erasure_coding);
     RUN_TEST(test_lot38_nvme_sg_and_erasure_dist);
+    RUN_TEST(test_lot39_nvme_dif_dix_and_mvcc_gc);
 
     unity_print_results();
     unity_cleanup();

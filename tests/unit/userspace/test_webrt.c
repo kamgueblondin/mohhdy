@@ -695,6 +695,66 @@ static void test_lot38_sab_futex_and_wasm_simd_conv(void) {
     TEST_ASSERT_EQUAL(14 * 14 * 9, conv.conv_ops_count);
 }
 
+static void test_lot39_wasm_simd256_and_webgpu_compute(void) {
+    /* WASM SIMD 256-bit Vector Operations */
+    int32_t raw_a[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    int32_t raw_b[8] = {2, 2, 2, 2, 2, 2, 2, 2};
+    webrt_v256_t va, vb, vc, vout;
+    webrt_simd256_load(&va, raw_a);
+    webrt_simd256_load(&vb, raw_b);
+
+    int64_t dot = 0;
+    int res = webrt_wasm_simd256_dot(&va, &vb, &dot);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(72, dot); /* (1+2+3+4+5+6+7+8)*2 = 36*2 = 72 */
+
+    /* FMA */
+    int32_t raw_c[8] = {10, 10, 10, 10, 10, 10, 10, 10};
+    webrt_simd256_load(&vc, raw_c);
+    res = webrt_wasm_simd256_fma(&va, &vb, &vc, &vout);
+    TEST_ASSERT_EQUAL(0, res);
+
+    /* ReLU and GELU */
+    int32_t raw_mix[8] = {-131072, -65536, 0, 65536, 131072, 196608, -196608, -262144};
+    webrt_v256_t vmix, vrelu, vgelu;
+    webrt_simd256_load(&vmix, raw_mix);
+
+    res = webrt_wasm_simd256_relu(&vmix, &vrelu);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(0, vrelu.val[0]);
+    TEST_ASSERT_EQUAL(65536, vrelu.val[3]);
+
+    res = webrt_wasm_simd256_gelu(&vmix, &vgelu);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(0, vgelu.val[6]); /* x <= -3 */
+    TEST_ASSERT_EQUAL(196608, vgelu.val[5]); /* x >= +3 */
+
+    /* WebGPU Compute Pipeline */
+    webrt_webgpu_compute_pass_t pass;
+    webrt_webgpu_compute_pass_init(&pass, 42);
+    TEST_ASSERT_EQUAL(1, pass.state);
+
+    webrt_webgpu_bind_group_t bg;
+    bg.group_id = 0;
+    bg.entries[0].binding_id = 1;
+    bg.entries[0].buffer = raw_a;
+    bg.entries[0].size = sizeof(raw_a);
+    bg.entry_count = 1;
+
+    res = webrt_webgpu_bind_group_set(&pass, 0, &bg);
+    TEST_ASSERT_EQUAL(0, res);
+
+    res = webrt_webgpu_dispatch_workgroups(&pass, 4, 4, 1);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(2, pass.state);
+
+    int completed = 0;
+    res = webrt_webgpu_compute_pass_finish(&pass, &completed);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(16, completed);
+    TEST_ASSERT_EQUAL(3, pass.state);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -723,6 +783,7 @@ int main(void) {
     RUN_TEST(test_lot37_service_worker_bg_sync);
     RUN_TEST(test_lot37_wasm_simd_tensor);
     RUN_TEST(test_lot38_sab_futex_and_wasm_simd_conv);
+    RUN_TEST(test_lot39_wasm_simd256_and_webgpu_compute);
 
     unity_print_results();
     unity_cleanup();

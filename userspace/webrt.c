@@ -284,6 +284,109 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* Lot 39: Web Runtime WebAssembly SIMD 256-bit Vector Acceleration Engine & WebGPU Compute Pipeline State Machine (US-059 / US-061) */
+
+void webrt_simd256_load(webrt_v256_t *v, const int32_t data[8]) {
+    if (!v || !data) return;
+    for (int i = 0; i < 8; i++) {
+        v->val[i] = data[i];
+    }
+}
+
+int webrt_wasm_simd256_dot(const webrt_v256_t *a, const webrt_v256_t *b, int64_t *out_dot) {
+    if (!a || !b || !out_dot) return -1;
+    int64_t sum = 0;
+    for (int i = 0; i < 8; i++) {
+        sum += (int64_t)a->val[i] * (int64_t)b->val[i];
+    }
+    *out_dot = sum;
+    return 0;
+}
+
+int webrt_wasm_simd256_fma(const webrt_v256_t *a, const webrt_v256_t *b, const webrt_v256_t *c, webrt_v256_t *out) {
+    if (!a || !b || !c || !out) return -1;
+    for (int i = 0; i < 8; i++) {
+        out->val[i] = (int32_t)(((int64_t)a->val[i] * (int64_t)b->val[i]) >> 16) + c->val[i];
+    }
+    return 0;
+}
+
+int webrt_wasm_simd256_relu(const webrt_v256_t *in, webrt_v256_t *out) {
+    if (!in || !out) return -1;
+    for (int i = 0; i < 8; i++) {
+        out->val[i] = (in->val[i] > 0) ? in->val[i] : 0;
+    }
+    return 0;
+}
+
+static int32_t gelu_fp1616(int32_t x) {
+    if (x <= -196608) return 0;
+    if (x >= 196608) return x;
+    if (x > 0) {
+        int32_t x_sq = (int32_t)(((int64_t)x * x) >> 16);
+        int32_t x_cb = (int32_t)(((int64_t)x_sq * x) >> 16);
+        int32_t val = x - ((x_sq >> 3) - (x_cb >> 5));
+        return (val > 0) ? val : 0;
+    } else {
+        int32_t abs_x = -x;
+        int32_t x_sq = (int32_t)(((int64_t)abs_x * abs_x) >> 16);
+        int32_t x_cb = (int32_t)(((int64_t)x_sq * abs_x) >> 16);
+        int32_t val = -((x_sq >> 3) - (x_cb >> 5));
+        return (val < 0) ? val : 0;
+    }
+}
+
+int webrt_wasm_simd256_gelu(const webrt_v256_t *in, webrt_v256_t *out) {
+    if (!in || !out) return -1;
+    for (int i = 0; i < 8; i++) {
+        out->val[i] = gelu_fp1616(in->val[i]);
+    }
+    return 0;
+}
+
+void webrt_webgpu_compute_pass_init(webrt_webgpu_compute_pass_t *pass, uint32_t pipeline_id) {
+    if (!pass) return;
+    pass->pipeline_id = pipeline_id;
+    pass->state = 1; /* encoding */
+    pass->bind_group_count = 0;
+    pass->dispatch_x = 0;
+    pass->dispatch_y = 0;
+    pass->dispatch_z = 0;
+    pass->dispatches_completed = 0;
+    for (int i = 0; i < WEBRT_WEBGPU_BIND_GROUPS_MAX; i++) {
+        pass->bind_groups[i].group_id = 0;
+        pass->bind_groups[i].entry_count = 0;
+    }
+}
+
+int webrt_webgpu_bind_group_set(webrt_webgpu_compute_pass_t *pass, uint32_t group_id, const webrt_webgpu_bind_group_t *bg) {
+    if (!pass || !bg || pass->state != 1 || group_id >= WEBRT_WEBGPU_BIND_GROUPS_MAX) return -1;
+    pass->bind_groups[group_id] = *bg;
+    if ((int)(group_id + 1) > pass->bind_group_count) {
+        pass->bind_group_count = (int)(group_id + 1);
+    }
+    return 0;
+}
+
+int webrt_webgpu_dispatch_workgroups(webrt_webgpu_compute_pass_t *pass, uint32_t x, uint32_t y, uint32_t z) {
+    if (!pass || pass->state != 1 || x == 0 || y == 0 || z == 0) return -1;
+    pass->dispatch_x = x;
+    pass->dispatch_y = y;
+    pass->dispatch_z = z;
+    pass->dispatches_completed += (x * y * z);
+    pass->state = 2; /* dispatched */
+    return 0;
+}
+
+int webrt_webgpu_compute_pass_finish(webrt_webgpu_compute_pass_t *pass, int *out_completed_dispatches) {
+    if (!pass || pass->state != 2) return -1;
+    pass->state = 3; /* completed */
+    if (out_completed_dispatches) {
+        *out_completed_dispatches = (int)pass->dispatches_completed;
+    }
+    return 0;
+}
+
 /* Lot 38: Web Runtime Web Workers Shared Array Buffer Atomics Synchronization Engine & WebAssembly SIMD 128-bit Tensor Convolutions (US-058 / US-060) */
 
 void webrt_sab_futex_init(webrt_sab_futex_t *futex, int32_t initial_val) {

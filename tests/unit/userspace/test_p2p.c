@@ -1241,6 +1241,70 @@ static void test_lot37_p2p_wan_raft_election_and_batch_zk(void) {
     TEST_ASSERT_EQUAL(1, batch.verified_count);
 }
 
+static void test_lot39_wan_async_repl_and_zk_plonk(void) {
+    /* Cross-WAN Async Consensus Replication */
+    p2p_wan_async_repl_t repl;
+    p2p_wan_async_repl_init(&repl, 100);
+    TEST_ASSERT_EQUAL(100, repl.window_start);
+    TEST_ASSERT_EQUAL(100, repl.window_end);
+
+    uint8_t entry1[16] = "LogEntryData100";
+    uint8_t entry2[16] = "LogEntryData101";
+
+    int res = p2p_wan_async_repl_push(&repl, 1, entry1, 15);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(101, repl.window_end);
+
+    res = p2p_wan_async_repl_push(&repl, 1, entry2, 15);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(102, repl.window_end);
+
+    /* Delta Compression & Decompression */
+    uint8_t delta[64];
+    uint32_t delta_len = 0;
+    res = p2p_wan_async_repl_compress_delta(entry1, 15, entry2, 15, delta, &delta_len);
+    TEST_ASSERT_EQUAL(0, res);
+
+    uint8_t decompressed[64];
+    uint32_t decomp_len = 0;
+    res = p2p_wan_async_repl_decompress_delta(entry1, 15, delta, delta_len, decompressed, &decomp_len);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(15, decomp_len);
+    TEST_ASSERT_EQUAL_MEMORY(entry2, decompressed, 15);
+
+    /* ACK sliding window */
+    res = p2p_wan_async_repl_ack(&repl, 100);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(101, repl.window_start);
+
+    /* ZK-PLONK Verifier */
+    p2p_zk_plonk_verifier_t verifier;
+    p2p_zk_plonk_verifier_init(&verifier);
+
+    /* Construct gate: 1 * w0 + 2 * w1 - 1 * w2 + 0 * (w0*w1) + 0 = 0 -> (1*3 + 2*4 - 1*11 = 0) */
+    p2p_zk_plonk_circuit_entry_t gate;
+    gate.wire_a = 0;
+    gate.wire_b = 1;
+    gate.wire_c = 2;
+    gate.gate.q_l = 1;
+    gate.gate.q_r = 2;
+    gate.gate.q_o = -1;
+    gate.gate.q_m = 0;
+    gate.gate.q_c = 0;
+
+    uint32_t wires[P2P_ZK_PLONK_WIRES_MAX] = {3, 4, 11, 0, 0, 0, 0, 0};
+
+    p2p_zk_plonk_proof_t proof;
+    res = p2p_zk_plonk_proof_create(&gate, 1, wires, &proof);
+    TEST_ASSERT_EQUAL(0, res);
+
+    int valid = 0;
+    res = p2p_zk_plonk_verify(&verifier, &proof, &valid);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, valid);
+    TEST_ASSERT_EQUAL(1, verifier.verified_proofs);
+}
+
 static void test_lot38_p2p_multi_raft_wan_and_zk_range(void) {
     p2p_multi_raft_wan_shard_mgr_t mgr;
     p2p_multi_raft_wan_shard_init(&mgr);
@@ -1454,6 +1518,7 @@ int main(void) {
     RUN_TEST(test_lot35_p2p_cross_wan_raft_bulletproof_ip);
     RUN_TEST(test_lot37_p2p_wan_raft_election_and_batch_zk);
     RUN_TEST(test_lot38_p2p_multi_raft_wan_and_zk_range);
+    RUN_TEST(test_lot39_wan_async_repl_and_zk_plonk);
 
     unity_print_results();
     unity_cleanup();

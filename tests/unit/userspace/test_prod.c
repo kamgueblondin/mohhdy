@@ -865,6 +865,59 @@ static void test_lot37_prod_adaptive_lb_and_self_healing(void) {
     TEST_ASSERT_EQUAL(1, sh.remediations_count);
 }
 
+static void test_lot39_multi_region_isolator_and_self_driving(void) {
+    /* Multi-Region Telemetry Incident Isolation */
+    prod_multi_region_isolator_t iso;
+    prod_multi_region_isolator_init(&iso, 150);
+    TEST_ASSERT_EQUAL(150, iso.isolation_threshold);
+
+    int res = prod_multi_region_register(&iso, 1, "us-east-1");
+    TEST_ASSERT_EQUAL(0, res);
+    res = prod_multi_region_register(&iso, 2, "eu-west-1");
+    TEST_ASSERT_EQUAL(0, res);
+
+    /* Record normal telemetry for us-east-1 */
+    res = prod_multi_region_record_telemetry(&iso, 1, 50, 100, 200, 25);
+    TEST_ASSERT_EQUAL(0, res);
+
+    /* Record critical telemetry anomaly for eu-west-1 */
+    res = prod_multi_region_record_telemetry(&iso, 2, 800, 50000, 100000, 95);
+    TEST_ASSERT_EQUAL(0, res);
+
+    char logbuf[256];
+    int isolated_cnt = 0;
+    res = prod_multi_region_cluster_and_isolate(&iso, logbuf, sizeof(logbuf), &isolated_cnt);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, isolated_cnt);
+    TEST_ASSERT_NOT_NULL(strstr(logbuf, "eu-west-1"));
+
+    /* Self-Driving Infrastructure Optimization */
+    prod_self_driving_engine_t eng;
+    prod_self_driving_init(&eng, 4, 1024); /* 4 cores, 1024 KB cache */
+    TEST_ASSERT_EQUAL(4, eng.total_cores);
+    TEST_ASSERT_EQUAL(1024, eng.total_cache_kb);
+
+    res = prod_self_driving_register_proc(&eng, 101, 80); /* 80% load */
+    TEST_ASSERT_EQUAL(0, res);
+    res = prod_self_driving_register_proc(&eng, 102, 20); /* 20% load */
+    TEST_ASSERT_EQUAL(0, res);
+
+    res = prod_self_driving_optimize(&eng, logbuf, sizeof(logbuf));
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, eng.rebalances_performed);
+
+    uint32_t core = 0, cache_kb = 0;
+    res = prod_self_driving_get_proc_assignment(&eng, 101, &core, &cache_kb);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(0, core);
+    TEST_ASSERT_EQUAL((1024 * 80) / 100, cache_kb); /* 819 KB */
+
+    res = prod_self_driving_get_proc_assignment(&eng, 102, &core, &cache_kb);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, core);
+    TEST_ASSERT_EQUAL((1024 * 20) / 100, cache_kb); /* 204 KB */
+}
+
 static void test_lot38_prod_predictive_fail_and_ai_remed(void) {
     prod_infra_fail_pred_t pred;
     prod_infra_fail_pred_init(&pred);
@@ -1162,6 +1215,7 @@ int main(void) {
     RUN_TEST(test_lot35_prod_fault_mitigation_and_ai_remediation);
     RUN_TEST(test_lot37_prod_adaptive_lb_and_self_healing);
     RUN_TEST(test_lot38_prod_predictive_fail_and_ai_remed);
+    RUN_TEST(test_lot39_multi_region_isolator_and_self_driving);
 
     unity_print_results();
     unity_cleanup();

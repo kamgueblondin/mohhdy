@@ -825,6 +825,127 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
     return RAMFS_OK;
 }
 
+/* Lot 39: VFS PCIe NVMe End-to-End Data Protection DIF/DIX & Distributed MVCC Garbage Collection Engine (US-011 / US-044) */
+
+uint16_t vfs_nvme_dif_crc16(const uint8_t *data, uint32_t len) {
+    uint16_t crc = 0xFFFF;
+    if (!data) return 0;
+    for (uint32_t i = 0; i < len; i++) {
+        crc ^= ((uint16_t)data[i] << 8);
+        for (int j = 0; j < 8; j++) {
+            if (crc & 0x8000) {
+                crc = (uint16_t)((crc << 1) ^ 0x1021);
+            } else {
+                crc = (uint16_t)(crc << 1);
+            }
+        }
+    }
+    return crc;
+}
+
+int vfs_nvme_dif_generate(const uint8_t *data, uint32_t len, uint32_t lba, uint16_t app_tag, vfs_nvme_dif_pi_t *out_pi) {
+    if (!data || !out_pi || len == 0) return -1;
+    out_pi->guard_tag = vfs_nvme_dif_crc16(data, len);
+    out_pi->app_tag = app_tag;
+    out_pi->ref_tag = lba;
+    return 0;
+}
+
+int vfs_nvme_dif_verify(const uint8_t *data, uint32_t len, uint32_t lba, uint16_t app_tag, const vfs_nvme_dif_pi_t *pi) {
+    if (!data || !pi || len == 0) return -1;
+    uint16_t expected_crc = vfs_nvme_dif_crc16(data, len);
+    if (pi->guard_tag != expected_crc) return -1;
+    if (app_tag != 0xFFFF && pi->app_tag != app_tag) return -2;
+    if (lba != 0xFFFFFFFF && pi->ref_tag != lba) return -3;
+    return 0;
+}
+
+int vfs_nvme_dix_format_block(const uint8_t *data, uint32_t data_len, uint32_t lba, uint16_t app_tag, uint8_t *out_block_with_pi, uint32_t *out_total_len) {
+    if (!data || !out_block_with_pi || !out_total_len || data_len == 0) return -1;
+    for (uint32_t i = 0; i < data_len; i++) {
+        out_block_with_pi[i] = data[i];
+    }
+    vfs_nvme_dif_pi_t pi;
+    vfs_nvme_dif_generate(data, data_len, lba, app_tag, &pi);
+    uint8_t *pi_ptr = out_block_with_pi + data_len;
+    pi_ptr[0] = (uint8_t)(pi.guard_tag >> 8);
+    pi_ptr[1] = (uint8_t)(pi.guard_tag & 0xFF);
+    pi_ptr[2] = (uint8_t)(pi.app_tag >> 8);
+    pi_ptr[3] = (uint8_t)(pi.app_tag & 0xFF);
+    pi_ptr[4] = (uint8_t)((pi.ref_tag >> 24) & 0xFF);
+    pi_ptr[5] = (uint8_t)((pi.ref_tag >> 16) & 0xFF);
+    pi_ptr[6] = (uint8_t)((pi.ref_tag >> 8) & 0xFF);
+    pi_ptr[7] = (uint8_t)(pi.ref_tag & 0xFF);
+    *out_total_len = data_len + VFS_NVME_DIF_PI_SIZE;
+    return 0;
+}
+
+int vfs_nvme_dix_strip_and_verify(const uint8_t *block_with_pi, uint32_t total_len, uint32_t lba, uint16_t app_tag, uint8_t *out_data, uint32_t *out_data_len) {
+    if (!block_with_pi || !out_data || !out_data_len || total_len <= VFS_NVME_DIF_PI_SIZE) return -1;
+    uint32_t data_len = total_len - VFS_NVME_DIF_PI_SIZE;
+    const uint8_t *pi_ptr = block_with_pi + data_len;
+    vfs_nvme_dif_pi_t pi;
+    pi.guard_tag = (uint16_t)(((uint16_t)pi_ptr[0] << 8) | pi_ptr[1]);
+    pi.app_tag = (uint16_t)(((uint16_t)pi_ptr[2] << 8) | pi_ptr[3]);
+    pi.ref_tag = ((uint32_t)pi_ptr[4] << 24) | ((uint32_t)pi_ptr[5] << 16) | ((uint32_t)pi_ptr[6] << 8) | pi_ptr[7];
+    int vres = vfs_nvme_dif_verify(block_with_pi, data_len, lba, app_tag, &pi);
+    if (vres != 0) return vres;
+    for (uint32_t i = 0; i < data_len; i++) {
+        out_data[i] = block_with_pi[i];
+    }
+    *out_data_len = data_len;
+    return 0;
+}
+
+void vfs_mvcc_gc_init(vfs_mvcc_gc_engine_t *gc, uint32_t min_active_version) {
+    if (!gc) return;
+    for (int i = 0; i < VFS_MVCC_GC_MAX_OBSOLETE; i++) {
+        gc->obsolete_entries[i].version_id = 0;
+        gc->obsolete_entries[i].inode_id = 0;
+        gc->obsolete_entries[i].block_id = 0;
+        gc->obsolete_entries[i].timestamp = 0;
+        gc->obsolete_entries[i].is_obsolete = 0;
+    }
+    gc->count = 0;
+    gc->reclaimed_inodes = 0;
+    gc->reclaimed_blocks = 0;
+    gc->min_active_version = min_active_version;
+}
+
+int vfs_mvcc_gc_mark_obsolete(vfs_mvcc_gc_engine_t *gc, uint32_t version_id, uint32_t inode_id, uint32_t block_id, uint32_t timestamp) {
+    if (!gc) return -1;
+    if (gc->count >= VFS_MVCC_GC_MAX_OBSOLETE) return -1;
+    int idx = gc->count++;
+    gc->obsolete_entries[idx].version_id = version_id;
+    gc->obsolete_entries[idx].inode_id = inode_id;
+    gc->obsolete_entries[idx].block_id = block_id;
+    gc->obsolete_entries[idx].timestamp = timestamp;
+    gc->obsolete_entries[idx].is_obsolete = 1;
+    return 0;
+}
+
+int vfs_mvcc_gc_collect_async(vfs_mvcc_gc_engine_t *gc, uint32_t watermark_version, int *out_reclaimed_count) {
+    if (!gc) return -1;
+    int reclaimed = 0;
+    for (int i = 0; i < gc->count; i++) {
+        if (gc->obsolete_entries[i].is_obsolete && gc->obsolete_entries[i].version_id < watermark_version) {
+            if (gc->obsolete_entries[i].inode_id != 0) gc->reclaimed_inodes++;
+            if (gc->obsolete_entries[i].block_id != 0) gc->reclaimed_blocks++;
+            gc->obsolete_entries[i].is_obsolete = 0;
+            reclaimed++;
+        }
+    }
+    if (out_reclaimed_count) *out_reclaimed_count = reclaimed;
+    return 0;
+}
+
+int vfs_mvcc_gc_stat(const vfs_mvcc_gc_engine_t *gc, uint32_t *out_reclaimed_inodes, uint32_t *out_reclaimed_blocks) {
+    if (!gc) return -1;
+    if (out_reclaimed_inodes) *out_reclaimed_inodes = gc->reclaimed_inodes;
+    if (out_reclaimed_blocks) *out_reclaimed_blocks = gc->reclaimed_blocks;
+    return 0;
+}
+
 /* Lot 38: VFS PCIe NVMe Direct Memory Access (DMA) Scatter-Gather Engine & Distributed Erasure Coding Cross-Node Synchronization Engine (US-010 / US-043) */
 
 void vfs_nvme_sg_init(vfs_nvme_sg_list_t *sg, uint32_t list_id) {
