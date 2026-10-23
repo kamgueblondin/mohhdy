@@ -609,4 +609,50 @@ void p2p_zk_bulletproof_batch_init(p2p_zk_bulletproof_batch_t *batch);
 int p2p_zk_bulletproof_batch_add(p2p_zk_bulletproof_batch_t *batch, const p2p_zk_bulletproof_ip_t *proof, uint32_t expected_inner_product);
 int p2p_zk_bulletproof_batch_verify(p2p_zk_bulletproof_batch_t *batch, int *out_all_valid);
 
+/* Lot 38: P2P Cross-WAN Multi-Raft Consensus Group Sharding & Zero-Knowledge Bulletproof Range Proof Verification Engine (US-073 / US-085) */
+#define P2P_MULTI_RAFT_WAN_SHARDS_MAX 8
+#define P2P_ZK_RANGE_BATCH_MAX 16
+
+typedef struct {
+    uint32_t shard_id;
+    uint32_t wan_region_id;
+    uint32_t leader_id;
+    uint32_t term;
+    uint32_t lease_ticks;
+    uint32_t lease_expire_tick;
+    uint8_t healthy;
+} p2p_multi_raft_wan_shard_t;
+
+typedef struct {
+    p2p_multi_raft_wan_shard_t shards[P2P_MULTI_RAFT_WAN_SHARDS_MAX];
+    int shard_count;
+    uint32_t total_failovers;
+    uint32_t rebalance_count;
+} p2p_multi_raft_wan_shard_mgr_t;
+
+typedef struct {
+    uint64_t min_value;
+    uint64_t max_value;
+    uint64_t committed_value;
+    uint32_t commitment_hash;
+    uint8_t proof_bytes[P2P_BULLETPROOF_INNER_PRODUCT_SIZE];
+    uint32_t proof_len;
+} p2p_zk_bulletproof_range_proof_t;
+
+typedef struct {
+    p2p_zk_bulletproof_range_proof_t proofs[P2P_ZK_RANGE_BATCH_MAX];
+    int count;
+    uint32_t verified_count;
+} p2p_zk_range_batch_t;
+
+void p2p_multi_raft_wan_shard_init(p2p_multi_raft_wan_shard_mgr_t *mgr);
+int p2p_multi_raft_wan_shard_add(p2p_multi_raft_wan_shard_mgr_t *mgr, uint32_t shard_id, uint32_t wan_region_id, uint32_t leader_id);
+int p2p_multi_raft_wan_shard_failover(p2p_multi_raft_wan_shard_mgr_t *mgr, uint32_t shard_id, uint32_t new_leader_id, uint32_t current_tick);
+int p2p_multi_raft_wan_shard_rebalance_leases(p2p_multi_raft_wan_shard_mgr_t *mgr, uint32_t current_tick, int *out_rebalanced);
+
+void p2p_zk_range_batch_init(p2p_zk_range_batch_t *batch);
+int p2p_zk_range_proof_create(uint64_t value, uint64_t min_val, uint64_t max_val, p2p_zk_bulletproof_range_proof_t *out_proof);
+int p2p_zk_range_batch_add(p2p_zk_range_batch_t *batch, const p2p_zk_bulletproof_range_proof_t *proof);
+int p2p_zk_range_batch_verify(p2p_zk_range_batch_t *batch, int *out_all_valid);
+
 #endif

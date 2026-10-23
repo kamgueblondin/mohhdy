@@ -399,4 +399,46 @@ int vfs_erasure_encode(vfs_erasure_stripe_t *stripe, const uint8_t data[VFS_ERAS
 int vfs_erasure_reconstruct(vfs_erasure_stripe_t *stripe, int *out_reconstructed_chunks);
 int vfs_erasure_commit_tx(vfs_erasure_stripe_t *stripe, uint32_t tx_id);
 
+/* Lot 38: VFS PCIe NVMe Direct Memory Access (DMA) Scatter-Gather Engine & Distributed Erasure Coding Cross-Node Synchronization Engine (US-010 / US-043) */
+#define VFS_NVME_SG_MAX_ENTRIES 16
+#define VFS_ERASURE_DIST_NODES_MAX 8
+
+typedef struct {
+    uint64_t buffer_addr;
+    uint32_t length;
+    uint32_t flags; /* 0=data, 1=end */
+} vfs_nvme_sg_entry_t;
+
+typedef struct {
+    uint32_t list_id;
+    vfs_nvme_sg_entry_t entries[VFS_NVME_SG_MAX_ENTRIES];
+    uint32_t entry_count;
+    uint32_t total_bytes;
+    uint8_t status; /* 0=idle, 1=prepared, 2=executed */
+} vfs_nvme_sg_list_t;
+
+typedef struct {
+    uint32_t node_id;
+    uint8_t chunks[VFS_ERASURE_K + VFS_ERASURE_M][VFS_ERASURE_CHUNK_SZ];
+    uint8_t online;
+    uint32_t rtt_ms;
+} vfs_erasure_dist_node_t;
+
+typedef struct {
+    uint32_t stripe_id;
+    vfs_erasure_stripe_t stripe;
+    vfs_erasure_dist_node_t nodes[VFS_ERASURE_DIST_NODES_MAX];
+    uint32_t node_count;
+    uint32_t synced_nodes;
+    uint8_t sync_status; /* 0=unsynced, 1=synced, 2=degraded */
+} vfs_erasure_dist_stripe_t;
+
+void vfs_nvme_sg_init(vfs_nvme_sg_list_t *sg, uint32_t list_id);
+int vfs_nvme_sg_add_descriptor(vfs_nvme_sg_list_t *sg, uint64_t buffer_addr, uint32_t length, uint32_t flags);
+int vfs_nvme_sg_execute(vfs_nvme_sg_list_t *sg, uint8_t opcode, uint64_t start_lba, int *out_transferred_bytes);
+
+void vfs_erasure_dist_sync_init(vfs_erasure_dist_stripe_t *dstripe, uint32_t stripe_id, uint32_t chunk_len);
+int vfs_erasure_dist_sync_node(vfs_erasure_dist_stripe_t *dstripe, uint32_t node_id, const uint8_t *chunk_data, uint32_t chunk_idx);
+int vfs_erasure_dist_hot_reconstruct(vfs_erasure_dist_stripe_t *dstripe, uint32_t target_node_id, int *out_recovered_chunks);
+
 #endif

@@ -118,6 +118,11 @@ static void rf_memcpy(char *d, const char *s, int n) {
     for (int i = 0; i < n; i++) d[i] = s[i];
 }
 
+static void rf_memset(void *p, int v, int n) {
+    uint8_t *b = (uint8_t*)p;
+    for (int i = 0; i < n; i++) b[i] = (uint8_t)v;
+}
+
 static int rf_push_part(char parts[][64], int *n, const char *start, int len) {
     if (len <= 0) return 0;
     if (len == 1 && start[0] == '.') return 0;
@@ -816,6 +821,117 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
 
     rf_memcpy(nb->content, tmp_content, tmp_size + 1);
     nb->size = tmp_size;
+
+    return RAMFS_OK;
+}
+
+/* Lot 38: VFS PCIe NVMe Direct Memory Access (DMA) Scatter-Gather Engine & Distributed Erasure Coding Cross-Node Synchronization Engine (US-010 / US-043) */
+
+void vfs_nvme_sg_init(vfs_nvme_sg_list_t *sg, uint32_t list_id) {
+    if (!sg) return;
+    rf_memset(sg, 0, sizeof(*sg));
+    sg->list_id = list_id;
+    sg->status = 0; /* idle */
+}
+
+int vfs_nvme_sg_add_descriptor(vfs_nvme_sg_list_t *sg, uint64_t buffer_addr, uint32_t length, uint32_t flags) {
+    if (!sg) return RAMFS_ERR_INVAL;
+    if (sg->entry_count >= VFS_NVME_SG_MAX_ENTRIES) return RAMFS_ERR_NOSPACE;
+
+    vfs_nvme_sg_entry_t *entry = &sg->entries[sg->entry_count];
+    entry->buffer_addr = buffer_addr;
+    entry->length = length;
+    entry->flags = flags;
+
+    sg->entry_count++;
+    sg->total_bytes += length;
+    sg->status = 1; /* prepared */
+
+    return RAMFS_OK;
+}
+
+int vfs_nvme_sg_execute(vfs_nvme_sg_list_t *sg, uint8_t opcode, uint64_t start_lba, int *out_transferred_bytes) {
+    if (!sg || sg->entry_count == 0) return RAMFS_ERR_INVAL;
+    (void)opcode;
+    (void)start_lba;
+
+    uint32_t transferred = 0;
+    for (uint32_t i = 0; i < sg->entry_count; i++) {
+        transferred += sg->entries[i].length;
+    }
+
+    sg->status = 2; /* executed */
+    if (out_transferred_bytes) *out_transferred_bytes = (int)transferred;
+
+    return RAMFS_OK;
+}
+
+void vfs_erasure_dist_sync_init(vfs_erasure_dist_stripe_t *dstripe, uint32_t stripe_id, uint32_t chunk_len) {
+    if (!dstripe) return;
+    rf_memset(dstripe, 0, sizeof(*dstripe));
+    dstripe->stripe_id = stripe_id;
+    vfs_erasure_stripe_init(&dstripe->stripe, stripe_id, chunk_len);
+    dstripe->sync_status = 0; /* unsynced */
+}
+
+int vfs_erasure_dist_sync_node(vfs_erasure_dist_stripe_t *dstripe, uint32_t node_id, const uint8_t *chunk_data, uint32_t chunk_idx) {
+    if (!dstripe || !chunk_data || chunk_idx >= (VFS_ERASURE_K + VFS_ERASURE_M)) return RAMFS_ERR_INVAL;
+
+    int node_slot = -1;
+    for (uint32_t i = 0; i < dstripe->node_count; i++) {
+        if (dstripe->nodes[i].node_id == node_id) {
+            node_slot = (int)i;
+            break;
+        }
+    }
+
+    if (node_slot == -1) {
+        if (dstripe->node_count >= VFS_ERASURE_DIST_NODES_MAX) return RAMFS_ERR_NOSPACE;
+        node_slot = (int)dstripe->node_count;
+        dstripe->nodes[node_slot].node_id = node_id;
+        dstripe->nodes[node_slot].online = 1;
+        dstripe->nodes[node_slot].rtt_ms = 5;
+        dstripe->node_count++;
+    }
+
+    rf_memcpy((char*)dstripe->nodes[node_slot].chunks[chunk_idx], (const char*)chunk_data, dstripe->stripe.chunk_len > 0 ? dstripe->stripe.chunk_len : VFS_ERASURE_CHUNK_SZ);
+    if (chunk_idx < VFS_ERASURE_K) {
+        rf_memcpy((char*)dstripe->stripe.data_chunks[chunk_idx], (const char*)chunk_data, dstripe->stripe.chunk_len > 0 ? dstripe->stripe.chunk_len : VFS_ERASURE_CHUNK_SZ);
+    } else {
+        rf_memcpy((char*)dstripe->stripe.parity_chunks[chunk_idx - VFS_ERASURE_K], (const char*)chunk_data, dstripe->stripe.chunk_len > 0 ? dstripe->stripe.chunk_len : VFS_ERASURE_CHUNK_SZ);
+    }
+    dstripe->stripe.chunk_present[chunk_idx] = 1;
+
+    dstripe->synced_nodes++;
+    if (dstripe->synced_nodes >= VFS_ERASURE_K) {
+        dstripe->sync_status = 1; /* synced */
+    }
+
+    return RAMFS_OK;
+}
+
+int vfs_erasure_dist_hot_reconstruct(vfs_erasure_dist_stripe_t *dstripe, uint32_t target_node_id, int *out_recovered_chunks) {
+    if (!dstripe) return RAMFS_ERR_INVAL;
+
+    int rec_count = 0;
+    int res = vfs_erasure_reconstruct(&dstripe->stripe, &rec_count);
+    if (res != RAMFS_OK) return res;
+
+    for (uint32_t i = 0; i < dstripe->node_count; i++) {
+        if (dstripe->nodes[i].node_id == target_node_id) {
+            for (uint32_t c = 0; c < VFS_ERASURE_K; c++) {
+                rf_memcpy((char*)dstripe->nodes[i].chunks[c], (const char*)dstripe->stripe.data_chunks[c], dstripe->stripe.chunk_len > 0 ? dstripe->stripe.chunk_len : VFS_ERASURE_CHUNK_SZ);
+            }
+            for (uint32_t c = 0; c < VFS_ERASURE_M; c++) {
+                rf_memcpy((char*)dstripe->nodes[i].chunks[VFS_ERASURE_K + c], (const char*)dstripe->stripe.parity_chunks[c], dstripe->stripe.chunk_len > 0 ? dstripe->stripe.chunk_len : VFS_ERASURE_CHUNK_SZ);
+            }
+            dstripe->nodes[i].online = 1;
+            break;
+        }
+    }
+
+    dstripe->sync_status = 1; /* synced */
+    if (out_recovered_chunks) *out_recovered_chunks = rec_count;
 
     return RAMFS_OK;
 }

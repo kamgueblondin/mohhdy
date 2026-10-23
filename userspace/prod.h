@@ -578,4 +578,48 @@ void prod_ai_self_heal_record_telemetry(prod_ai_self_heal_t *sh, uint32_t cpu_lo
 int prod_ai_self_heal_eval(prod_ai_self_heal_t *sh, uint32_t *out_risk_score, uint8_t *out_trigger_remediation);
 int prod_ai_self_heal_execute(prod_ai_self_heal_t *sh, const char *remediation_action, char *out_log, int max_sz);
 
+/* Lot 38: Production Daemon Predictive Infrastructure Failure Mitigation & Autonomous AI-Driven Auto-Remediation Engine (US-121 / US-130) */
+#define PROD_INFRA_TELEMETRY_SERIES_MAX 16
+#define PROD_AI_REMED_PLANS_MAX 8
+
+typedef struct {
+    uint32_t timestamps[PROD_INFRA_TELEMETRY_SERIES_MAX];
+    uint32_t temp_celsius[PROD_INFRA_TELEMETRY_SERIES_MAX];
+    uint32_t packet_loss_ppm[PROD_INFRA_TELEMETRY_SERIES_MAX];
+    uint32_t io_error_count[PROD_INFRA_TELEMETRY_SERIES_MAX];
+    int count;
+} prod_infra_telemetry_series_t;
+
+typedef struct {
+    prod_infra_telemetry_series_t series;
+    uint32_t failure_risk_score;
+    uint8_t failure_predicted;
+    uint32_t eval_count;
+} prod_infra_fail_pred_t;
+
+typedef struct {
+    uint32_t plan_id;
+    char name[32];
+    uint32_t trigger_risk_threshold;
+    char action_command[64];
+    uint8_t enabled;
+    uint32_t execution_count;
+} prod_ai_remed_plan_t;
+
+typedef struct {
+    prod_ai_remed_plan_t plans[PROD_AI_REMED_PLANS_MAX];
+    int plan_count;
+    uint32_t total_auto_remediations;
+    uint32_t last_executed_plan_id;
+    uint8_t active;
+} prod_ai_auto_remed_engine_t;
+
+void prod_infra_fail_pred_init(prod_infra_fail_pred_t *pred);
+void prod_infra_fail_pred_record(prod_infra_fail_pred_t *pred, uint32_t timestamp, uint32_t temp_celsius, uint32_t packet_loss_ppm, uint32_t io_error_count);
+int prod_infra_fail_pred_eval(prod_infra_fail_pred_t *pred, uint32_t *out_risk_score, uint8_t *out_fail_predicted);
+
+void prod_ai_remed_engine_init(prod_ai_auto_remed_engine_t *eng);
+int prod_ai_remed_register_plan(prod_ai_auto_remed_engine_t *eng, uint32_t plan_id, const char *name, uint32_t trigger_threshold, const char *action_command);
+int prod_ai_remed_eval_and_execute(prod_ai_auto_remed_engine_t *eng, uint32_t current_risk_score, char *out_log, int max_sz);
+
 #endif

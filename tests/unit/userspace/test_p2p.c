@@ -1241,6 +1241,42 @@ static void test_lot37_p2p_wan_raft_election_and_batch_zk(void) {
     TEST_ASSERT_EQUAL(1, batch.verified_count);
 }
 
+static void test_lot38_p2p_multi_raft_wan_and_zk_range(void) {
+    p2p_multi_raft_wan_shard_mgr_t mgr;
+    p2p_multi_raft_wan_shard_init(&mgr);
+    TEST_ASSERT_EQUAL(0, mgr.shard_count);
+
+    int res = p2p_multi_raft_wan_shard_add(&mgr, 1, 10, 100);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, mgr.shard_count);
+
+    res = p2p_multi_raft_wan_shard_failover(&mgr, 1, 101, 200);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(101, mgr.shards[0].leader_id);
+    TEST_ASSERT_EQUAL(1, mgr.total_failovers);
+
+    int rebalanced = 0;
+    res = p2p_multi_raft_wan_shard_rebalance_leases(&mgr, 300, &rebalanced);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, rebalanced);
+
+    p2p_zk_range_batch_t rbatch;
+    p2p_zk_range_batch_init(&rbatch);
+
+    p2p_zk_bulletproof_range_proof_t rproof;
+    res = p2p_zk_range_proof_create(50, 0, 100, &rproof);
+    TEST_ASSERT_EQUAL(0, res);
+
+    res = p2p_zk_range_batch_add(&rbatch, &rproof);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, rbatch.count);
+
+    int all_valid = 0;
+    res = p2p_zk_range_batch_verify(&rbatch, &all_valid);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, all_valid);
+}
+
 static void test_lot31_p2p_topology_bft_bloom(void) {
     p2p_node_t node;
     memset(&node, 0, sizeof(node));
@@ -1417,6 +1453,7 @@ int main(void) {
     RUN_TEST(test_lot33_p2p_geo_consensus_bulletproof);
     RUN_TEST(test_lot35_p2p_cross_wan_raft_bulletproof_ip);
     RUN_TEST(test_lot37_p2p_wan_raft_election_and_batch_zk);
+    RUN_TEST(test_lot38_p2p_multi_raft_wan_and_zk_range);
 
     unity_print_results();
     unity_cleanup();
