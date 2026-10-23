@@ -322,4 +322,61 @@ int webrt_vec_add_round_rect(webrt_vec_display_list_t *dl, int x, int y, int w, 
 int webrt_vec_add_gradient(webrt_vec_display_list_t *dl, int x, int y, int w, int h, uint32_t color_start, uint32_t color_end);
 int webrt_render_vector_dom(const webrt_box_model_t *box, uint32_t bg_color, uint32_t border_color, webrt_vec_display_list_t *out_dl);
 
+/* Lot 30: Web Runtime Vector Canvas 2D & WebAssembly VM (US-048 / US-050) */
+#define WEBRT_CANVAS2D_MAX_COMMANDS 64
+#define WEBRT_WASM_STACK_MAX 128
+#define WEBRT_WASM_GLOBALS_MAX 16
+
+#define WEBRT_CANVAS_PATH_LINE    1
+#define WEBRT_CANVAS_PATH_BEZIER  2
+#define WEBRT_CANVAS_PATH_RECT    3
+#define WEBRT_CANVAS_PATH_POLY    4
+
+typedef struct {
+    int32_t a, b, c, d, e, f; /* 16.16 fixed-point matrix: [a c e; b d f] */
+} webrt_matrix2d_t;
+
+typedef struct {
+    int type;
+    int32_t x1, y1, x2, y2, x3, y3, x4, y4;
+    uint32_t fill_color;
+    uint32_t stroke_color;
+    int point_count;
+} webrt_canvas_cmd_t;
+
+typedef struct {
+    int width;
+    int height;
+    webrt_matrix2d_t matrix;
+    webrt_canvas_cmd_t commands[WEBRT_CANVAS2D_MAX_COMMANDS];
+    int command_count;
+} webrt_canvas2d_t;
+
+typedef struct {
+    int32_t stack[WEBRT_WASM_STACK_MAX];
+    int sp;
+    int32_t globals[WEBRT_WASM_GLOBALS_MAX];
+    int global_count;
+    uint32_t pc;
+    uint8_t halted;
+} webrt_wasm_vm_t;
+
+typedef struct {
+    uint32_t frame_id;
+    uint32_t callback_id;
+    uint8_t pending;
+} webrt_anim_frame_t;
+
+void webrt_canvas2d_init(webrt_canvas2d_t *canvas, int width, int height);
+void webrt_canvas2d_transform(webrt_canvas2d_t *canvas, int32_t a, int32_t b, int32_t c, int32_t d, int32_t e, int32_t f);
+int webrt_canvas2d_draw_path(webrt_canvas2d_t *canvas, int type, int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint32_t fill_color);
+
+void webrt_wasm_vm_init(webrt_wasm_vm_t *vm);
+int webrt_wasm_stack_push(webrt_wasm_vm_t *vm, int32_t val);
+int webrt_wasm_stack_pop(webrt_wasm_vm_t *vm, int32_t *out_val);
+int webrt_wasm_exec_module(webrt_wasm_vm_t *vm, const uint8_t *bytecode, uint32_t code_len);
+
+int webrt_request_animation_frame(uint32_t callback_id);
+int webrt_render_frame_tick(uint32_t current_tick, uint32_t *out_executed_callback);
+
 #endif

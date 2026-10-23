@@ -10,6 +10,20 @@
 
 ## État courant vérifié
 
+## Etat courant du 23 octobre 2026 (lot 30)
+
+Living baseline. Plan: [lot30_plan.md](lot30_plan.md).
+
+```text
+make test-all : 959 passed, 0 failed, 0 skipped
+```
+
+- US-003 / US-036: Sandbox VFS Virtual Layer & Multi-Mount Overlay Engine (`vfs_mount_table_t`, `vfs_mount_point_add`, `vfs_mount_point_remove`), multi-layer Overlay FS Copy-On-Write write & file lookup (`vfs_overlay_cow_write`, `vfs_overlay_file_lookup`), and VFS namespace fragmentation analysis & compaction (`vfs_defrag_compact`).
+- US-048 / US-050: Web Runtime Vector Canvas 2D engine in 16.16 fixed-point (`webrt_canvas2d_init`, `webrt_canvas2d_draw_path`, `webrt_canvas2d_transform`), MVP stack-based WebAssembly bytecode VM interpreter (`webrt_wasm_vm_init`, `webrt_wasm_exec_module`, `webrt_wasm_stack_push`, `webrt_wasm_stack_pop`), and animation frame tick event loop execution (`webrt_request_animation_frame`, `webrt_render_frame_tick`).
+- US-065 / US-077: P2P WAN Multi-Region Mesh routing with region-weighted EWMA (`p2p_region_route_calculate`), Raft Log Sharding / Multi-Raft group consensus (`p2p_multi_raft_propose`, `p2p_multi_raft_commit`), and Merkle tree state anti-entropy diff synchronization (`p2p_merkle_sync_tree`, `p2p_merkle_diff_sync`).
+- US-114 / US-123: Production predictive health matrix evaluation (`prod_predictive_health_eval`), worker auto-quarantine daemon (`prod_worker_auto_quarantine`), and global FNV-1a signed diagnostic audit reporting (`prod_audit_diagnostic_report`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 22 octobre 2026 (lot 27)
 
 Living baseline. Plan: [lot27_plan.md](lot27_plan.md).

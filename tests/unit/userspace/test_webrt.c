@@ -408,6 +408,34 @@ static void test_lot28_webrt_vector_and_box_model(void) {
     TEST_ASSERT(webrt_render_vector_dom(&box, 0x00FFFFFFU, 0x00000000U, &dl) > 0);
 }
 
+static void test_lot30_webrt_canvas2d_wasm_anim(void) {
+    /* 1. Canvas 2D matrix transformation & draw path */
+    webrt_canvas2d_t canvas;
+    webrt_canvas2d_init(&canvas, 800, 600);
+    webrt_canvas2d_transform(&canvas, 1 << 16, 0, 0, 1 << 16, 10, 20);
+    TEST_ASSERT_EQUAL(0, webrt_canvas2d_draw_path(&canvas, WEBRT_CANVAS_PATH_LINE, 0, 0, 100, 100, 0xFF0000));
+    TEST_ASSERT_EQUAL(1, canvas.command_count);
+    TEST_ASSERT_EQUAL(10, canvas.commands[0].x1);
+    TEST_ASSERT_EQUAL(20, canvas.commands[0].y1);
+
+    /* 2. WebAssembly MVP bytecode VM execution */
+    webrt_wasm_vm_t vm;
+    webrt_wasm_vm_init(&vm);
+    /* WASM Bytecode: i32.const 5, i32.const 10, i32.add, halt */
+    uint8_t bc[] = { 0x41, 0x05, 0x41, 0x0A, 0x6A, 0x0F };
+    TEST_ASSERT_EQUAL(0, webrt_wasm_exec_module(&vm, bc, sizeof(bc)));
+    int32_t res = 0;
+    TEST_ASSERT_EQUAL(0, webrt_wasm_stack_pop(&vm, &res));
+    TEST_ASSERT_EQUAL(15, res);
+
+    /* 3. Animation frame tick */
+    int frame_id = webrt_request_animation_frame(42);
+    TEST_ASSERT_TRUE(frame_id > 0);
+    uint32_t cb = 0;
+    TEST_ASSERT_EQUAL(1, webrt_render_frame_tick(1, &cb));
+    TEST_ASSERT_EQUAL(42, cb);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -428,6 +456,7 @@ int main(void) {
     RUN_TEST(test_lot26_webrt_timers_keyusage_ocsp);
     RUN_TEST(test_lot29_webrt_shadow_dom_event_loop);
     RUN_TEST(test_lot28_webrt_vector_and_box_model);
+    RUN_TEST(test_lot30_webrt_canvas2d_wasm_anim);
 
     unity_print_results();
     unity_cleanup();
