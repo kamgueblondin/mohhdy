@@ -1143,6 +1143,34 @@ static void test_lot29_p2p_rekey_zero_trust_2pc(void) {
     TEST_ASSERT_EQUAL(P2P_2PC_STATE_ABORTED, status);
 }
 
+static void test_lot28_p2p_gossip_nat_and_multipath(void) {
+    p2p_node_t node;
+    p2p_host_t host = {0};
+    uint8_t ip[4] = {192, 168, 1, 10};
+    p2p_up(&node, "node1", ip, "netkey123", (const uint8_t*)"seed1234seed1234seed1234seed1234", &host);
+
+    p2p_gossip_table_t gtable = {0};
+    gtable.count = 1;
+    for (int i = 0; i < P2P_KEY_MAX - 1 && "k1"[i]; i++) gtable.items[0].key[i] = "k1"[i];
+    for (int i = 0; i < P2P_VAL_MAX - 1 && "v1"[i]; i++) gtable.items[0].value[i] = "v1"[i];
+    gtable.items[0].version = 1;
+    gtable.items[0].ttl_hops = 3;
+
+    p2p_gossip_tick(&node, &host, &gtable);
+    TEST_ASSERT_EQUAL(1, gtable.rounds_executed);
+
+    p2p_nat_keepalive_table_t ntable = {0};
+    ntable.count = 1;
+    ntable.sessions[0].peer_id = 2;
+    ntable.sessions[0].session_active = 1;
+    ntable.sessions[0].last_keepalive_tick = 0;
+
+    p2p_nat_keepalive_step(&node, &host, &ntable, 1000);
+
+    uint32_t p1 = 0, p2 = 0;
+    p2p_multipath_route_select(&node, 2, &p1, &p2);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1183,6 +1211,8 @@ int main(void) {
     RUN_TEST(test_lot26_p2p_region_snapshot_and_bbr);
     RUN_TEST(test_lot27_p2p_cluster_routing_and_fast_recovery);
     RUN_TEST(test_lot29_p2p_rekey_zero_trust_2pc);
+    RUN_TEST(test_lot28_p2p_gossip_nat_and_multipath);
+
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

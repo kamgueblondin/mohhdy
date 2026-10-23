@@ -389,6 +389,25 @@ static void test_lot29_webrt_shadow_dom_event_loop(void) {
     TEST_ASSERT_EQUAL(11, state_counter);
 }
 
+static void test_lot28_webrt_vector_and_box_model(void) {
+    webrt_box_model_t box;
+    TEST_ASSERT_EQUAL(0, webrt_compute_box_model(100, 50, 10, 10, 10, 10, 2, 2, 2, 2, 5, 5, 5, 5, &box));
+    TEST_ASSERT_EQUAL(134, box.total_width);
+    TEST_ASSERT_EQUAL(84, box.total_height);
+
+    char lines[256];
+    int count = webrt_text_wrap("Hello Mohhdy OS Vector Engine", 80, 8, lines, 4, 64);
+    TEST_ASSERT(count > 0);
+
+    webrt_form_component_t comp;
+    webrt_form_component_init(&comp, 1, WEBRT_FORM_INPUT, "username");
+    webrt_form_component_set_focus(&comp, 1);
+    TEST_ASSERT_EQUAL(1, comp.focused);
+
+    webrt_vec_display_list_t dl;
+    TEST_ASSERT(webrt_render_vector_dom(&box, 0x00FFFFFFU, 0x00000000U, &dl) > 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -408,6 +427,8 @@ int main(void) {
     RUN_TEST(test_lot25_webrt_tls_and_dom_events);
     RUN_TEST(test_lot26_webrt_timers_keyusage_ocsp);
     RUN_TEST(test_lot29_webrt_shadow_dom_event_loop);
+    RUN_TEST(test_lot28_webrt_vector_and_box_model);
+
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

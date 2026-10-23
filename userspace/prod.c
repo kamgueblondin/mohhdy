@@ -1301,3 +1301,122 @@ int prod_adaptive_alert_eval(const prod_adaptive_alert_t *alert, int *out_alert_
     if (out_msg && cap > 0) s_copy(out_msg, "Resource acceleration stable", cap);
     return 0;
 }
+
+/* ---- Lot 28: Real-Time Telemetry Profiler, Autonomous Healing & Latency Percentiles Implementation ---- */
+void prod_task_profiler_init(prod_task_profiler_t *profiler) {
+    if (!profiler) return;
+    profiler->count = 0;
+}
+
+int prod_profile_task_tick(prod_task_profiler_t *profiler, uint32_t task_id, const char *name, uint32_t cpu_delta, uint32_t mem_bytes) {
+    if (!profiler) return -1;
+    for (int i = 0; i < profiler->count; i++) {
+        if (profiler->tasks[i].task_id == task_id) {
+            profiler->tasks[i].cpu_ticks += cpu_delta;
+            if (cpu_delta > 1000U) {
+                profiler->tasks[i].infinite_loop_detected = 1;
+            }
+            if (mem_bytes > profiler->tasks[i].mem_bytes + 64 * 1024) {
+                profiler->tasks[i].leak_suspected = 1;
+            }
+            profiler->tasks[i].mem_bytes = mem_bytes;
+            if (mem_bytes > profiler->tasks[i].mem_peak) {
+                profiler->tasks[i].mem_peak = mem_bytes;
+            }
+            return 0;
+        }
+    }
+
+    if (profiler->count >= PROD_PROFILER_TASKS_MAX) return -1;
+    prod_task_profile_entry_t *t = &profiler->tasks[profiler->count++];
+    t->task_id = task_id;
+    if (name) s_copy(t->task_name, name, sizeof(t->task_name));
+    else t->task_name[0] = 0;
+    t->cpu_ticks = cpu_delta;
+    t->mem_bytes = mem_bytes;
+    t->mem_peak = mem_bytes;
+    t->leak_suspected = 0;
+    t->infinite_loop_detected = (cpu_delta > 1000U) ? 1 : 0;
+    return 0;
+}
+
+void prod_autonomous_healing_init(prod_autonomous_healing_runtime_t *runtime) {
+    if (!runtime) return;
+    runtime->count = 0;
+    runtime->auto_restarts_total = 0;
+    runtime->failovers_total = 0;
+}
+
+int prod_auto_heal_tick(prod_autonomous_healing_runtime_t *runtime, uint32_t service_id, const char *name, uint8_t is_stalled) {
+    if (!runtime) return -1;
+    for (int i = 0; i < runtime->count; i++) {
+        if (runtime->services[i].service_id == service_id) {
+            if (is_stalled) {
+                runtime->services[i].status = 2; /* stalled */
+                runtime->services[i].restarts_count++;
+                runtime->auto_restarts_total++;
+                return 1; /* Restart triggered */
+            } else {
+                runtime->services[i].status = 0; /* healthy */
+                return 0;
+            }
+        }
+    }
+
+    if (runtime->count >= PROD_HEAL_SERVICES_MAX) return -1;
+    prod_service_heal_entry_t *s = &runtime->services[runtime->count++];
+    s->service_id = service_id;
+    if (name) s_copy(s->service_name, name, sizeof(s->service_name));
+    else s->service_name[0] = 0;
+    s->status = is_stalled ? 2 : 0;
+    s->restarts_count = is_stalled ? 1 : 0;
+    s->degraded_transitions = 0;
+    if (is_stalled) runtime->auto_restarts_total++;
+    return is_stalled ? 1 : 0;
+}
+
+void prod_latency_percentiles_init(prod_latency_percentiles_t *lat) {
+    if (!lat) return;
+    lat->count = 0;
+    lat->p50_ms = 0;
+    lat->p95_ms = 0;
+    lat->p99_ms = 0;
+}
+
+void prod_latency_percentiles_record(prod_latency_percentiles_t *lat, uint32_t latency_ms) {
+    if (!lat) return;
+    if (lat->count < PROD_LATENCY_SAMPLES_MAX) {
+        lat->samples_ms[lat->count++] = latency_ms;
+    } else {
+        lat->samples_ms[PROD_LATENCY_SAMPLES_MAX - 1] = latency_ms;
+    }
+}
+
+int prod_telemetry_calc_percentiles(prod_latency_percentiles_t *lat) {
+    if (!lat || lat->count == 0) return -1;
+    /* Bubble sort samples */
+    int n = lat->count;
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (lat->samples_ms[j] > lat->samples_ms[j + 1]) {
+                uint32_t tmp = lat->samples_ms[j];
+                lat->samples_ms[j] = lat->samples_ms[j + 1];
+                lat->samples_ms[j + 1] = tmp;
+            }
+        }
+    }
+
+    int idx_p50 = (n * 50) / 100;
+    int idx_p95 = (n * 95) / 100;
+    int idx_p99 = (n * 99) / 100;
+
+    if (idx_p50 >= n) idx_p50 = n - 1;
+    if (idx_p95 >= n) idx_p95 = n - 1;
+    if (idx_p99 >= n) idx_p99 = n - 1;
+
+    lat->p50_ms = lat->samples_ms[idx_p50];
+    lat->p95_ms = lat->samples_ms[idx_p95];
+    lat->p99_ms = lat->samples_ms[idx_p99];
+
+    return 0;
+}

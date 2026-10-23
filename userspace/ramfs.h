@@ -110,6 +110,54 @@ int vfs_dir_lock_tree(const char *dir_path, uint8_t lock_mode, uint32_t owner_id
 int vfs_dir_unlock_tree(const char *dir_path, uint32_t owner_id);
 
 int vfs_integrity_check(int *out_cycle_detected, int *out_dangling_count);
+/* Lot 28: Page Cache & Dirty Writeback Daemon (US-001 / US-033) */
+#define VFS_PAGE_CACHE_SIZE 128
+#define VFS_CLUSTER_SIZE    512
+#define VFS_CACHE_MAX_BYTES (32 * 1024 * 1024)
+
+#define VFS_IO_PRIO_READ_AHEAD   1
+#define VFS_IO_PRIO_NORMAL_WRITE 2
+#define VFS_IO_PRIO_URGENT_FLUSH 3
+
+typedef struct {
+    uint32_t cluster_id;
+    uint8_t dirty;
+    uint8_t ref_bit;
+    uint32_t last_used;
+    uint8_t data[VFS_CLUSTER_SIZE];
+} vfs_page_entry_t;
+
+typedef struct {
+    vfs_page_entry_t pages[VFS_PAGE_CACHE_SIZE];
+    uint32_t clock_hand;
+    uint32_t hit_count;
+    uint32_t miss_count;
+    uint32_t flush_count;
+} vfs_page_cache_t;
+
+typedef struct {
+    uint32_t cluster_id;
+    uint8_t prio;
+    uint8_t is_write;
+    uint32_t length;
+    uint8_t data[VFS_CLUSTER_SIZE];
+} vfs_io_req_t;
+
+#define VFS_IO_QUEUE_MAX 32
+typedef struct {
+    vfs_io_req_t reqs[VFS_IO_QUEUE_MAX];
+    int head;
+    int tail;
+    int count;
+} vfs_io_queue_t;
+
+void vfs_page_cache_init(void);
+int vfs_page_cache_read(uint32_t cluster_id, uint8_t *out_buf);
+int vfs_page_cache_write(uint32_t cluster_id, const uint8_t *in_buf, uint8_t dirty);
+int vfs_cache_flush(void);
+int vfs_cache_sync(void);
+int vfs_io_enqueue(uint32_t cluster_id, uint8_t prio, uint8_t is_write, const uint8_t *data, uint32_t len);
+int vfs_io_process_coalesced(void);
 
 const char *ramfs_strerror(int err);
 

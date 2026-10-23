@@ -868,6 +868,28 @@ static void test_lot29_prod_cicd_regression_adaptive_alert(void) {
     TEST_ASSERT_NOT_NULL(strstr(alert_msg, "ADAPTIVE ALERT"));
 }
 
+static void test_lot28_prod_profiler_healing_and_latency(void) {
+    prod_task_profiler_t profiler;
+    prod_task_profiler_init(&profiler);
+    TEST_ASSERT_EQUAL(0, prod_profile_task_tick(&profiler, 1, "worker1", 50, 1024));
+    TEST_ASSERT_EQUAL(1, profiler.count);
+
+    prod_autonomous_healing_runtime_t healing;
+    prod_autonomous_healing_init(&healing);
+    TEST_ASSERT_EQUAL(0, prod_auto_heal_tick(&healing, 1, "service1", 0));
+    TEST_ASSERT_EQUAL(1, prod_auto_heal_tick(&healing, 1, "service1", 1));
+
+    prod_latency_percentiles_t lat;
+    prod_latency_percentiles_init(&lat);
+    for (uint32_t i = 1; i <= 100; i++) {
+        prod_latency_percentiles_record(&lat, i * 10);
+    }
+    TEST_ASSERT_EQUAL(0, prod_telemetry_calc_percentiles(&lat));
+    TEST_ASSERT(lat.p50_ms > 0);
+    TEST_ASSERT(lat.p95_ms >= lat.p50_ms);
+    TEST_ASSERT(lat.p99_ms >= lat.p95_ms);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -897,6 +919,8 @@ int main(void) {
     RUN_TEST(test_lot26_prod_auto_restarts_and_biz_kpi);
     RUN_TEST(test_lot27_prod_ai_sla_and_fault_predict);
     RUN_TEST(test_lot29_prod_cicd_regression_adaptive_alert);
+    RUN_TEST(test_lot28_prod_profiler_healing_and_latency);
+
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

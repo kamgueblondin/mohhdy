@@ -2567,3 +2567,98 @@ int p2p_raft_2pc_status(p2p_node_t *n, uint32_t tx_id, int *out_state) {
     }
     return -1;
 }
+
+/* ---- Lot 28: P2P WAN Multi-Hop Mesh, Epidemic Gossip & NAT Hole Punching Implementation ---- */
+int p2p_gossip_broadcast(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value, uint32_t version) {
+    if (!n || !key || !value) return -1;
+    int sent_count = 0;
+    for (int i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        if (p->used && p->up && p->keyed && !p->blocked) {
+            uint8_t payload[128];
+            int pos = 0;
+            put32(payload + pos, version); pos += 4;
+            s_copy((char*)payload + pos, key, P2P_KEY_MAX); pos += P2P_KEY_MAX;
+            s_copy((char*)payload + pos, value, P2P_VAL_MAX); pos += P2P_VAL_MAX;
+            if (seal_send(n, h, p, P2P_I_PUT, payload, pos) == 0) {
+                sent_count++;
+            }
+        }
+    }
+    return sent_count;
+}
+
+int p2p_gossip_tick(p2p_node_t* n, const p2p_host_t* h, p2p_gossip_table_t* table) {
+    if (!n || !table) return -1;
+    table->rounds_executed++;
+    int synced = 0;
+    for (int i = 0; i < table->count; i++) {
+        p2p_gossip_item_t* item = &table->items[i];
+        if (item->ttl_hops > 0) {
+            int sent = p2p_gossip_broadcast(n, h, item->key, item->value, item->version);
+            if (sent > 0) {
+                item->ttl_hops--;
+                synced += sent;
+            }
+        }
+    }
+    return synced;
+}
+
+int p2p_nat_keepalive_step(p2p_node_t* n, const p2p_host_t* h, p2p_nat_keepalive_table_t* table, uint32_t now_tick) {
+    if (!n || !table) return -1;
+    int keepalives = 0;
+    for (int i = 0; i < table->count; i++) {
+        p2p_nat_session_t* s = &table->sessions[i];
+        if (s->session_active && (now_tick - s->last_keepalive_tick >= (5U * P2P_HZ))) {
+            p2p_peer_t* p = by_id(n, s->peer_id);
+            if (p && p->used && p->keyed) {
+                uint8_t payload[8];
+                put32(payload, n->id);
+                put32(payload + 4, now_tick);
+                if (seal_send(n, h, p, P2P_I_PING, payload, 8) == 0) {
+                    s->last_keepalive_tick = now_tick;
+                    table->total_keepalives_sent++;
+                    keepalives++;
+                }
+            }
+        }
+    }
+    return keepalives;
+}
+
+int p2p_multipath_route_select(const p2p_node_t* n, uint32_t dest_id, uint32_t* path1_next, uint32_t* path2_next) {
+    if (!n || !path1_next || !path2_next) return -1;
+    *path1_next = 0;
+    *path2_next = 0;
+
+    uint32_t best1_cost = 0xFFFFFFFFU;
+    uint32_t best2_cost = 0xFFFFFFFFU;
+
+    for (int i = 0; i < P2P_PEERS; i++) {
+        const p2p_peer_t* p = &n->peers[i];
+        if (p->used && p->up && !p->blocked) {
+            uint32_t cost = p2p_calc_link_cost(p);
+            if (p->id == dest_id || p->via == dest_id) {
+                if (cost < best1_cost) {
+                    best2_cost = best1_cost;
+                    *path2_next = *path1_next;
+                    best1_cost = cost;
+                    *path1_next = p->id;
+                } else if (cost < best2_cost && p->id != *path1_next) {
+                    best2_cost = cost;
+                    *path2_next = p->id;
+                }
+            }
+        }
+    }
+
+    if (*path1_next == 0) {
+        uint32_t cost = 0;
+        if (p2p_route_find(n, dest_id, path1_next, &cost) == 0) {
+            best1_cost = cost;
+        }
+    }
+
+    return (*path1_next != 0) ? 0 : -1;
+}

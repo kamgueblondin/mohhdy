@@ -340,5 +340,54 @@ int prod_perf_regression_eval(const prod_perf_history_t *hist, uint32_t current_
 void prod_adaptive_alert_init(prod_adaptive_alert_t *alert, uint32_t cpu_accel_threshold, uint32_t mem_accel_threshold);
 void prod_adaptive_alert_record(prod_adaptive_alert_t *alert, uint32_t cpu_usage, uint32_t mem_usage);
 int prod_adaptive_alert_eval(const prod_adaptive_alert_t *alert, int *out_alert_flag, char *out_msg, int cap);
+/* ---- Lot 28: Real-Time Telemetry Profiler, Autonomous Healing & Latency Percentiles (US-107 / US-110 / US-115) ---- */
+typedef struct {
+    uint32_t task_id;
+    char task_name[32];
+    uint32_t cpu_ticks;
+    uint32_t mem_bytes;
+    uint32_t mem_peak;
+    uint8_t leak_suspected;
+    uint8_t infinite_loop_detected;
+} prod_task_profile_entry_t;
+
+#define PROD_PROFILER_TASKS_MAX 16
+typedef struct {
+    prod_task_profile_entry_t tasks[PROD_PROFILER_TASKS_MAX];
+    int count;
+} prod_task_profiler_t;
+
+typedef struct {
+    uint32_t service_id;
+    char service_name[32];
+    uint8_t status; /* 0: healthy, 1: degraded, 2: stalled */
+    uint32_t restarts_count;
+    uint32_t degraded_transitions;
+} prod_service_heal_entry_t;
+
+#define PROD_HEAL_SERVICES_MAX 8
+typedef struct {
+    prod_service_heal_entry_t services[PROD_HEAL_SERVICES_MAX];
+    int count;
+    uint32_t auto_restarts_total;
+    uint32_t failovers_total;
+} prod_autonomous_healing_runtime_t;
+
+#define PROD_LATENCY_SAMPLES_MAX 128
+typedef struct {
+    uint32_t samples_ms[PROD_LATENCY_SAMPLES_MAX];
+    int count;
+    uint32_t p50_ms;
+    uint32_t p95_ms;
+    uint32_t p99_ms;
+} prod_latency_percentiles_t;
+
+void prod_task_profiler_init(prod_task_profiler_t *profiler);
+int prod_profile_task_tick(prod_task_profiler_t *profiler, uint32_t task_id, const char *name, uint32_t cpu_delta, uint32_t mem_bytes);
+void prod_autonomous_healing_init(prod_autonomous_healing_runtime_t *runtime);
+int prod_auto_heal_tick(prod_autonomous_healing_runtime_t *runtime, uint32_t service_id, const char *name, uint8_t is_stalled);
+void prod_latency_percentiles_init(prod_latency_percentiles_t *lat);
+void prod_latency_percentiles_record(prod_latency_percentiles_t *lat, uint32_t latency_ms);
+int prod_telemetry_calc_percentiles(prod_latency_percentiles_t *lat);
 
 #endif
