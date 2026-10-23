@@ -595,4 +595,46 @@ int webrt_sab_futex_wake(webrt_sab_futex_t *futex, int count, int *out_woken);
 int webrt_wasm_simd_mat8_mul(const webrt_mat8x8_t *a, const webrt_mat8x8_t *b, webrt_mat8x8_t *out);
 int webrt_wasm_simd_tensor_conv2d(webrt_tensor_conv_t *conv);
 
+/* Lot 39: Web Runtime WebAssembly SIMD 256-bit Vector Acceleration Engine & WebGPU Compute Pipeline State Machine (US-059 / US-061) */
+#define WEBRT_WEBGPU_BINDINGS_MAX 8
+#define WEBRT_WEBGPU_BIND_GROUPS_MAX 4
+
+typedef struct {
+    int32_t val[8]; /* 256-bit SIMD vector containing 8 x int32_t or 16.16 fixed point elements */
+} webrt_v256_t;
+
+typedef struct {
+    uint32_t binding_id;
+    const void *buffer;
+    uint32_t size;
+} webrt_webgpu_bind_entry_t;
+
+typedef struct {
+    uint32_t group_id;
+    webrt_webgpu_bind_entry_t entries[WEBRT_WEBGPU_BINDINGS_MAX];
+    int entry_count;
+} webrt_webgpu_bind_group_t;
+
+typedef struct {
+    uint32_t pipeline_id;
+    uint32_t state; /* 0=uninitialized, 1=encoding, 2=dispatched, 3=completed */
+    webrt_webgpu_bind_group_t bind_groups[WEBRT_WEBGPU_BIND_GROUPS_MAX];
+    int bind_group_count;
+    uint32_t dispatch_x;
+    uint32_t dispatch_y;
+    uint32_t dispatch_z;
+    uint32_t dispatches_completed;
+} webrt_webgpu_compute_pass_t;
+
+void webrt_simd256_load(webrt_v256_t *v, const int32_t data[8]);
+int webrt_wasm_simd256_dot(const webrt_v256_t *a, const webrt_v256_t *b, int64_t *out_dot);
+int webrt_wasm_simd256_fma(const webrt_v256_t *a, const webrt_v256_t *b, const webrt_v256_t *c, webrt_v256_t *out);
+int webrt_wasm_simd256_relu(const webrt_v256_t *in, webrt_v256_t *out);
+int webrt_wasm_simd256_gelu(const webrt_v256_t *in, webrt_v256_t *out);
+
+void webrt_webgpu_compute_pass_init(webrt_webgpu_compute_pass_t *pass, uint32_t pipeline_id);
+int webrt_webgpu_bind_group_set(webrt_webgpu_compute_pass_t *pass, uint32_t group_id, const webrt_webgpu_bind_group_t *bg);
+int webrt_webgpu_dispatch_workgroups(webrt_webgpu_compute_pass_t *pass, uint32_t x, uint32_t y, uint32_t z);
+int webrt_webgpu_compute_pass_finish(webrt_webgpu_compute_pass_t *pass, int *out_completed_dispatches);
+
 #endif

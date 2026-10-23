@@ -1616,6 +1616,141 @@ int prod_audit_diagnostic_report(const prod_quarantine_mgr_t *q_mgr, const prod_
     return (int)s_len(out_report);
 }
 
+/* Lot 39: Production Daemon Predictive Multi-Region Incident Isolation & Autonomous Self-Driving Infrastructure Optimization Engine (US-122 / US-131) */
+
+void prod_multi_region_isolator_init(prod_multi_region_isolator_t *iso, uint32_t threshold) {
+    if (!iso) return;
+    iso->region_count = 0;
+    iso->total_isolations = 0;
+    iso->isolation_threshold = threshold;
+    for (int i = 0; i < PROD_MULTI_REGION_MAX; i++) {
+        iso->regions[i].region_id = 0;
+        iso->regions[i].region_name[0] = '\0';
+        iso->regions[i].latency_ms = 0;
+        iso->regions[i].packet_loss_ppm = 0;
+        iso->regions[i].error_rate_ppm = 0;
+        iso->regions[i].cpu_util_pct = 0;
+        iso->regions[i].isolated = 0;
+        iso->regions[i].anomaly_score = 0;
+    }
+}
+
+int prod_multi_region_register(prod_multi_region_isolator_t *iso, uint32_t region_id, const char *name) {
+    if (!iso || !name || iso->region_count >= PROD_MULTI_REGION_MAX) return -1;
+    for (int i = 0; i < iso->region_count; i++) {
+        if (iso->regions[i].region_id == region_id) return 0; /* Already registered */
+    }
+    int idx = iso->region_count++;
+    iso->regions[idx].region_id = region_id;
+    s_copy(iso->regions[idx].region_name, name, sizeof(iso->regions[idx].region_name));
+    iso->regions[idx].isolated = 0;
+    iso->regions[idx].anomaly_score = 0;
+    return 0;
+}
+
+int prod_multi_region_record_telemetry(prod_multi_region_isolator_t *iso, uint32_t region_id, uint32_t latency_ms, uint32_t loss_ppm, uint32_t err_ppm, uint32_t cpu_pct) {
+    if (!iso) return -1;
+    for (int i = 0; i < iso->region_count; i++) {
+        if (iso->regions[i].region_id == region_id) {
+            iso->regions[i].latency_ms = latency_ms;
+            iso->regions[i].packet_loss_ppm = loss_ppm;
+            iso->regions[i].error_rate_ppm = err_ppm;
+            iso->regions[i].cpu_util_pct = cpu_pct;
+            uint32_t score = (latency_ms / 10) + (loss_ppm / 1000) + (err_ppm / 1000) + cpu_pct;
+            iso->regions[i].anomaly_score = score;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int prod_multi_region_cluster_and_isolate(prod_multi_region_isolator_t *iso, char *out_log, int max_sz, int *out_isolated_count) {
+    if (!iso) return -1;
+    int isolated_cnt = 0;
+    if (out_log && max_sz > 0) out_log[0] = '\0';
+
+    for (int i = 0; i < iso->region_count; i++) {
+        prod_region_telemetry_t *r = &iso->regions[i];
+        if (r->anomaly_score >= iso->isolation_threshold && !r->isolated) {
+            r->isolated = 1;
+            iso->total_isolations++;
+            isolated_cnt++;
+            if (out_log && max_sz > 0) {
+                s_cat(out_log, "[MULTI-REGION] Isolated region: ", max_sz);
+                s_cat(out_log, r->region_name, max_sz);
+                s_cat(out_log, "\n", max_sz);
+            }
+        }
+    }
+    if (out_isolated_count) *out_isolated_count = isolated_cnt;
+    return 0;
+}
+
+void prod_self_driving_init(prod_self_driving_engine_t *eng, uint32_t total_cores, uint32_t total_cache_kb) {
+    if (!eng) return;
+    eng->proc_count = 0;
+    eng->total_cores = (total_cores > 0) ? total_cores : 1;
+    eng->total_cache_kb = total_cache_kb;
+    eng->rebalances_performed = 0;
+    eng->self_driving_active = 1;
+    for (int i = 0; i < PROD_SELF_DRIVING_PROCS_MAX; i++) {
+        eng->procs[i].proc_id = 0;
+        eng->procs[i].target_core = 0;
+        eng->procs[i].priority_weight = 0;
+        eng->procs[i].cache_quota_kb = 0;
+        eng->procs[i].load_pct = 0;
+    }
+}
+
+int prod_self_driving_register_proc(prod_self_driving_engine_t *eng, uint32_t proc_id, uint32_t load_pct) {
+    if (!eng || eng->proc_count >= PROD_SELF_DRIVING_PROCS_MAX) return -1;
+    for (int i = 0; i < eng->proc_count; i++) {
+        if (eng->procs[i].proc_id == proc_id) {
+            eng->procs[i].load_pct = load_pct;
+            return 0;
+        }
+    }
+    int idx = eng->proc_count++;
+    eng->procs[idx].proc_id = proc_id;
+    eng->procs[idx].target_core = (uint32_t)(idx % eng->total_cores);
+    eng->procs[idx].priority_weight = load_pct;
+    eng->procs[idx].cache_quota_kb = eng->total_cache_kb / (uint32_t)eng->proc_count;
+    eng->procs[idx].load_pct = load_pct;
+    return 0;
+}
+
+int prod_self_driving_optimize(prod_self_driving_engine_t *eng, char *out_log, int max_sz) {
+    if (!eng || eng->proc_count == 0) return -1;
+    uint32_t total_load = 0;
+    for (int i = 0; i < eng->proc_count; i++) {
+        total_load += eng->procs[i].load_pct;
+    }
+    if (total_load == 0) total_load = 1;
+
+    for (int i = 0; i < eng->proc_count; i++) {
+        eng->procs[i].target_core = (uint32_t)(i % eng->total_cores);
+        eng->procs[i].priority_weight = eng->procs[i].load_pct;
+        eng->procs[i].cache_quota_kb = (eng->total_cache_kb * eng->procs[i].load_pct) / total_load;
+    }
+    eng->rebalances_performed++;
+    if (out_log && max_sz > 0) {
+        s_copy(out_log, "[SELF-DRIVING] Optimization complete - Procs balanced across cores and cache quotas recalculated.\n", max_sz);
+    }
+    return 0;
+}
+
+int prod_self_driving_get_proc_assignment(const prod_self_driving_engine_t *eng, uint32_t proc_id, uint32_t *out_core, uint32_t *out_cache_quota_kb) {
+    if (!eng) return -1;
+    for (int i = 0; i < eng->proc_count; i++) {
+        if (eng->procs[i].proc_id == proc_id) {
+            if (out_core) *out_core = eng->procs[i].target_core;
+            if (out_cache_quota_kb) *out_cache_quota_kb = eng->procs[i].cache_quota_kb;
+            return 0;
+        }
+    }
+    return -1;
+}
+
 /* Lot 38: Production Daemon Predictive Infrastructure Failure Mitigation & Autonomous AI-Driven Auto-Remediation Engine (US-121 / US-130) */
 
 void prod_infra_fail_pred_init(prod_infra_fail_pred_t *pred) {

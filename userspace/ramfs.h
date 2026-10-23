@@ -441,4 +441,41 @@ void vfs_erasure_dist_sync_init(vfs_erasure_dist_stripe_t *dstripe, uint32_t str
 int vfs_erasure_dist_sync_node(vfs_erasure_dist_stripe_t *dstripe, uint32_t node_id, const uint8_t *chunk_data, uint32_t chunk_idx);
 int vfs_erasure_dist_hot_reconstruct(vfs_erasure_dist_stripe_t *dstripe, uint32_t target_node_id, int *out_recovered_chunks);
 
+/* Lot 39: VFS PCIe NVMe End-to-End Data Protection DIF/DIX & Distributed MVCC Garbage Collection Engine (US-011 / US-044) */
+#define VFS_NVME_DIF_PI_SIZE 8
+#define VFS_MVCC_GC_MAX_OBSOLETE 32
+
+typedef struct {
+    uint16_t guard_tag; /* CRC16 check */
+    uint16_t app_tag;   /* Application tag */
+    uint32_t ref_tag;   /* Lower 32-bit LBA reference tag */
+} vfs_nvme_dif_pi_t;
+
+typedef struct {
+    uint32_t version_id;
+    uint32_t inode_id;
+    uint32_t block_id;
+    uint32_t timestamp;
+    uint8_t is_obsolete;
+} vfs_mvcc_gc_entry_t;
+
+typedef struct {
+    vfs_mvcc_gc_entry_t obsolete_entries[VFS_MVCC_GC_MAX_OBSOLETE];
+    int count;
+    uint32_t reclaimed_inodes;
+    uint32_t reclaimed_blocks;
+    uint32_t min_active_version;
+} vfs_mvcc_gc_engine_t;
+
+uint16_t vfs_nvme_dif_crc16(const uint8_t *data, uint32_t len);
+int vfs_nvme_dif_generate(const uint8_t *data, uint32_t len, uint32_t lba, uint16_t app_tag, vfs_nvme_dif_pi_t *out_pi);
+int vfs_nvme_dif_verify(const uint8_t *data, uint32_t len, uint32_t lba, uint16_t app_tag, const vfs_nvme_dif_pi_t *pi);
+int vfs_nvme_dix_format_block(const uint8_t *data, uint32_t data_len, uint32_t lba, uint16_t app_tag, uint8_t *out_block_with_pi, uint32_t *out_total_len);
+int vfs_nvme_dix_strip_and_verify(const uint8_t *block_with_pi, uint32_t total_len, uint32_t lba, uint16_t app_tag, uint8_t *out_data, uint32_t *out_data_len);
+
+void vfs_mvcc_gc_init(vfs_mvcc_gc_engine_t *gc, uint32_t min_active_version);
+int vfs_mvcc_gc_mark_obsolete(vfs_mvcc_gc_engine_t *gc, uint32_t version_id, uint32_t inode_id, uint32_t block_id, uint32_t timestamp);
+int vfs_mvcc_gc_collect_async(vfs_mvcc_gc_engine_t *gc, uint32_t watermark_version, int *out_reclaimed_count);
+int vfs_mvcc_gc_stat(const vfs_mvcc_gc_engine_t *gc, uint32_t *out_reclaimed_inodes, uint32_t *out_reclaimed_blocks);
+
 #endif

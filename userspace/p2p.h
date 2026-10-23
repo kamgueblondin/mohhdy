@@ -655,4 +655,65 @@ int p2p_zk_range_proof_create(uint64_t value, uint64_t min_val, uint64_t max_val
 int p2p_zk_range_batch_add(p2p_zk_range_batch_t *batch, const p2p_zk_bulletproof_range_proof_t *proof);
 int p2p_zk_range_batch_verify(p2p_zk_range_batch_t *batch, int *out_all_valid);
 
+/* Lot 39: P2P Mesh Network Cross-WAN Asynchronous Consensus Replication & Zero-Knowledge PLONK Verification Engine (US-074 / US-086) */
+#define P2P_WAN_SLIDING_WINDOW_SZ 16
+#define P2P_RAFT_LOG_DELTA_MAX 128
+#define P2P_ZK_PLONK_WIRES_MAX 8
+#define P2P_ZK_PLONK_CIRCUIT_GATES_MAX 16
+
+typedef struct {
+    uint32_t index;
+    uint32_t term;
+    uint8_t data[64];
+    uint32_t len;
+    uint8_t acked;
+} p2p_wan_raft_log_entry_t;
+
+typedef struct {
+    p2p_wan_raft_log_entry_t window[P2P_WAN_SLIDING_WINDOW_SZ];
+    uint32_t window_start;
+    uint32_t window_end;
+    uint32_t ack_watermark;
+    uint32_t compressed_bytes;
+    uint32_t uncompressed_bytes;
+} p2p_wan_async_repl_t;
+
+typedef struct {
+    int32_t q_l;
+    int32_t q_r;
+    int32_t q_o;
+    int32_t q_m;
+    int32_t q_c;
+} p2p_zk_plonk_gate_t;
+
+typedef struct {
+    uint32_t wire_a;
+    uint32_t wire_b;
+    uint32_t wire_c;
+    p2p_zk_plonk_gate_t gate;
+} p2p_zk_plonk_circuit_entry_t;
+
+typedef struct {
+    p2p_zk_plonk_circuit_entry_t gates[P2P_ZK_PLONK_CIRCUIT_GATES_MAX];
+    int gate_count;
+    uint32_t wire_values[P2P_ZK_PLONK_WIRES_MAX];
+    uint8_t proof_bytes[128];
+    uint32_t proof_len;
+} p2p_zk_plonk_proof_t;
+
+typedef struct {
+    uint32_t verified_proofs;
+    uint32_t failed_proofs;
+} p2p_zk_plonk_verifier_t;
+
+void p2p_wan_async_repl_init(p2p_wan_async_repl_t *repl, uint32_t start_index);
+int p2p_wan_async_repl_push(p2p_wan_async_repl_t *repl, uint32_t term, const uint8_t *data, uint32_t len);
+int p2p_wan_async_repl_ack(p2p_wan_async_repl_t *repl, uint32_t ack_index);
+int p2p_wan_async_repl_compress_delta(const uint8_t *prev, uint32_t prev_len, const uint8_t *curr, uint32_t curr_len, uint8_t *out_delta, uint32_t *out_delta_len);
+int p2p_wan_async_repl_decompress_delta(const uint8_t *prev, uint32_t prev_len, const uint8_t *delta, uint32_t delta_len, uint8_t *out_curr, uint32_t *out_curr_len);
+
+void p2p_zk_plonk_verifier_init(p2p_zk_plonk_verifier_t *v);
+int p2p_zk_plonk_proof_create(const p2p_zk_plonk_circuit_entry_t *gates, int gate_cnt, const uint32_t *wires, p2p_zk_plonk_proof_t *out_proof);
+int p2p_zk_plonk_verify(p2p_zk_plonk_verifier_t *v, const p2p_zk_plonk_proof_t *proof, int *out_valid);
+
 #endif
