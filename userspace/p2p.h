@@ -716,4 +716,72 @@ void p2p_zk_plonk_verifier_init(p2p_zk_plonk_verifier_t *v);
 int p2p_zk_plonk_proof_create(const p2p_zk_plonk_circuit_entry_t *gates, int gate_cnt, const uint32_t *wires, p2p_zk_plonk_proof_t *out_proof);
 int p2p_zk_plonk_verify(p2p_zk_plonk_verifier_t *v, const p2p_zk_plonk_proof_t *proof, int *out_valid);
 
+/* Lot 40: P2P Mesh Network Cross-WAN Geo-Distributed Raft Consensus Sharding & Zero-Knowledge STARK Verification Engine (US-075 / US-087) */
+#define P2P_WAN_GEO_SHARDS_MAX 4
+#define P2P_PATRICIA_TRIE_MAX_NODES 32
+#define P2P_ZK_STARK_FRI_LAYERS_MAX 4
+
+typedef struct {
+    uint32_t node_id;
+    char prefix[16];
+    uint32_t hash;
+    uint8_t is_leaf;
+} p2p_patricia_node_t;
+
+typedef struct {
+    p2p_patricia_node_t nodes[P2P_PATRICIA_TRIE_MAX_NODES];
+    int node_count;
+    uint32_t root_hash;
+} p2p_patricia_trie_t;
+
+typedef struct {
+    uint32_t shard_id;
+    uint32_t region_mask;
+    uint32_t leader_id;
+    uint32_t term;
+    uint32_t lease_expire_tick;
+    p2p_patricia_trie_t state_trie;
+    uint8_t active;
+} p2p_wan_geo_shard_entry_t;
+
+typedef struct {
+    p2p_wan_geo_shard_entry_t shards[P2P_WAN_GEO_SHARDS_MAX];
+    int shard_count;
+    uint32_t rebalance_events;
+    uint32_t compressed_bytes;
+} p2p_wan_geo_sharding_mgr_t;
+
+typedef struct {
+    uint32_t layer_idx;
+    uint32_t evaluation_domain_size;
+    uint32_t merkle_root;
+    uint32_t folding_factor;
+} p2p_zk_stark_fri_layer_t;
+
+typedef struct {
+    uint32_t trace_length;
+    uint32_t fri_layers_count;
+    p2p_zk_stark_fri_layer_t fri_layers[P2P_ZK_STARK_FRI_LAYERS_MAX];
+    uint32_t query_evaluations[8];
+    uint8_t proof_bytes[256];
+    uint32_t proof_len;
+} p2p_zk_stark_proof_t;
+
+typedef struct {
+    uint32_t verified_starks;
+    uint32_t failed_starks;
+} p2p_zk_stark_verifier_t;
+
+void p2p_wan_geo_sharding_init(p2p_wan_geo_sharding_mgr_t *mgr);
+int p2p_wan_geo_sharding_add_shard(p2p_wan_geo_sharding_mgr_t *mgr, uint32_t shard_id, uint32_t region_mask, uint32_t leader_id);
+int p2p_wan_geo_sharding_rebalance_leases(p2p_wan_geo_sharding_mgr_t *mgr, uint32_t current_tick, int *out_rebalanced_count);
+
+void p2p_patricia_trie_init(p2p_patricia_trie_t *trie);
+int p2p_patricia_trie_insert(p2p_patricia_trie_t *trie, const char *prefix, const uint8_t *data, uint32_t len);
+int p2p_patricia_trie_compress(p2p_patricia_trie_t *trie, uint32_t *out_compressed_hash);
+
+void p2p_zk_stark_verifier_init(p2p_zk_stark_verifier_t *v);
+int p2p_zk_stark_proof_create(uint32_t trace_len, int fri_layers_cnt, p2p_zk_stark_proof_t *out_proof);
+int p2p_zk_stark_verify_fri(p2p_zk_stark_verifier_t *v, const p2p_zk_stark_proof_t *proof, int *out_valid);
+
 #endif

@@ -755,6 +755,49 @@ static void test_lot39_wasm_simd256_and_webgpu_compute(void) {
     TEST_ASSERT_EQUAL(3, pass.state);
 }
 
+static void test_lot40_simd512_and_webgpu_parallel_encoder(void) {
+    int32_t data_a[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    int32_t data_b[16] = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2};
+    webrt_v512_t va, vb, vc, vout;
+    webrt_simd512_load(&va, data_a);
+    webrt_simd512_load(&vb, data_b);
+
+    int64_t dot = 0;
+    int res = webrt_wasm_simd512_dot(&va, &vb, &dot);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(272, (int)dot);
+
+    webrt_simd512_load(&vc, data_a);
+    res = webrt_wasm_simd512_fma(&va, &vb, &vc, &vout);
+    TEST_ASSERT_EQUAL(0, res);
+
+    webrt_v512_t vsilu;
+    res = webrt_wasm_simd512_silu(&va, &vsilu);
+    TEST_ASSERT_EQUAL(0, res);
+
+    webrt_v512_t vsoft;
+    res = webrt_wasm_simd512_softmax(&va, &vsoft);
+    TEST_ASSERT_EQUAL(0, res);
+
+    webrt_webgpu_parallel_encoder_t enc;
+    webrt_webgpu_parallel_encoder_init(&enc, 101);
+    uint32_t buf1 = 0, buf2 = 0;
+    res = webrt_webgpu_parallel_create_command_buffer(&enc, &buf1);
+    TEST_ASSERT_EQUAL(0, res);
+    res = webrt_webgpu_parallel_create_command_buffer(&enc, &buf2);
+    TEST_ASSERT_EQUAL(0, res);
+
+    res = webrt_webgpu_command_buffer_encode_dispatch(&enc, buf1, 1, 4, 1, 1);
+    TEST_ASSERT_EQUAL(0, res);
+    res = webrt_webgpu_command_buffer_encode_dispatch(&enc, buf2, 2, 8, 2, 1);
+    TEST_ASSERT_EQUAL(0, res);
+
+    int total_cmds = 0;
+    res = webrt_webgpu_parallel_encoder_finish(&enc, &total_cmds);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(2, total_cmds);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -784,6 +827,7 @@ int main(void) {
     RUN_TEST(test_lot37_wasm_simd_tensor);
     RUN_TEST(test_lot38_sab_futex_and_wasm_simd_conv);
     RUN_TEST(test_lot39_wasm_simd256_and_webgpu_compute);
+    RUN_TEST(test_lot40_simd512_and_webgpu_parallel_encoder);
 
     unity_print_results();
     unity_cleanup();

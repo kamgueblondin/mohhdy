@@ -918,6 +918,41 @@ static void test_lot39_multi_region_isolator_and_self_driving(void) {
     TEST_ASSERT_EQUAL((1024 * 20) / 100, cache_kb); /* 204 KB */
 }
 
+static void test_lot40_multi_cluster_heal_and_self_driving_resource(void) {
+    prod_multi_cluster_auto_heal_t mgr;
+    prod_multi_cluster_auto_heal_init(&mgr, 1000);
+
+    int res = prod_multi_cluster_register(&mgr, 1, "us-east-cluster");
+    TEST_ASSERT_EQUAL(0, res);
+
+    res = prod_multi_cluster_record_telemetry(&mgr, 1, 3000, 15, 80);
+    TEST_ASSERT_EQUAL(0, res);
+
+    char logbuf[256];
+    res = prod_multi_cluster_eval_and_heal(&mgr, 100, logbuf, sizeof(logbuf));
+    TEST_ASSERT_GREATER_THAN(0, res);
+    TEST_ASSERT_EQUAL(1, mgr.auto_heal_count);
+
+    prod_self_driving_resource_engine_t reng;
+    prod_self_driving_resource_engine_init(&reng, 4, 1000, 4096);
+
+    res = prod_self_driving_resource_register(&reng, 10, "web_service");
+    TEST_ASSERT_EQUAL(0, res);
+
+    res = prod_self_driving_resource_update_load(&reng, 10, 80);
+    TEST_ASSERT_EQUAL(0, res);
+
+    res = prod_self_driving_resource_rebalance(&reng, logbuf, sizeof(logbuf));
+    TEST_ASSERT_GREATER_THAN(0, res);
+    TEST_ASSERT_EQUAL(1, reng.real_time_adjustments);
+
+    uint32_t mask = 0, bw = 0, cache = 0;
+    res = prod_self_driving_resource_get_quota(&reng, 10, &mask, &bw, &cache);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1000, bw);
+    TEST_ASSERT_EQUAL(4096, cache);
+}
+
 static void test_lot38_prod_predictive_fail_and_ai_remed(void) {
     prod_infra_fail_pred_t pred;
     prod_infra_fail_pred_init(&pred);
@@ -1216,6 +1251,7 @@ int main(void) {
     RUN_TEST(test_lot37_prod_adaptive_lb_and_self_healing);
     RUN_TEST(test_lot38_prod_predictive_fail_and_ai_remed);
     RUN_TEST(test_lot39_multi_region_isolator_and_self_driving);
+    RUN_TEST(test_lot40_multi_cluster_heal_and_self_driving_resource);
 
     unity_print_results();
     unity_cleanup();
