@@ -1278,6 +1278,33 @@ static void test_lot32_p2p_topology_zk_bbr(void) {
     TEST_ASSERT_EQUAL(12, items);
 }
 
+static void test_lot33_p2p_geo_consensus_bulletproof(void) {
+    /* 1. Cross-WAN Geo-Sharded Consensus */
+    p2p_geo_shard_t shard;
+    p2p_geo_shard_init(&shard, 101, 0x0F);
+    TEST_ASSERT_EQUAL(1, shard.active);
+
+    uint32_t cid1 = 0, cid2 = 0;
+    TEST_ASSERT_EQUAL(0, p2p_geo_consensus_propose(&shard, 1, "geo_data_region1", &cid1));
+    TEST_ASSERT_EQUAL(0, p2p_geo_consensus_propose(&shard, 2, "geo_data_region2", &cid2));
+    TEST_ASSERT_EQUAL(1, cid1);
+    TEST_ASSERT_EQUAL(2, cid2);
+    TEST_ASSERT_EQUAL(2, shard.count);
+
+    int synced = 0;
+    TEST_ASSERT_EQUAL(0, p2p_geo_cross_region_sync(&shard, 2, &synced));
+    TEST_ASSERT_EQUAL(2, synced);
+
+    /* 2. Zero-Knowledge Bulletproof Validation */
+    p2p_zk_bulletproof_t proof;
+    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_create_commitment(500, 12345, &proof));
+    TEST_ASSERT_EQUAL(64, proof.proof_len);
+
+    int valid = 0;
+    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_verify(&proof, 100, 1000, &valid));
+    TEST_ASSERT_EQUAL(1, valid);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1322,6 +1349,7 @@ int main(void) {
     RUN_TEST(test_lot30_p2p_region_route_multi_raft_merkle);
     RUN_TEST(test_lot31_p2p_topology_bft_bloom);
     RUN_TEST(test_lot32_p2p_topology_zk_bbr);
+    RUN_TEST(test_lot33_p2p_geo_consensus_bulletproof);
 
     unity_print_results();
     unity_cleanup();

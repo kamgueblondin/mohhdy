@@ -467,4 +467,36 @@ int webrt_wasm_simd_exec(const uint8_t *bytecode, uint32_t code_len, webrt_wasm_
 int webrt_shared_memory_lock(webrt_arraybuffer_t *ab, uint32_t timeout_ticks);
 int webrt_shared_memory_unlock(webrt_arraybuffer_t *ab);
 
+/* Lot 33: Web Runtime WebGPU Fixed-Point Compute Shader & WebAssembly Threads Atomic Futex Engine (US-053 / US-055) */
+#define WEBRT_WEBGPU_WORKGROUP_MAX 64
+#define WEBRT_WASM_THREADS_MAX 8
+
+#define WEBRT_WASM_ATOMIC_ADD 1
+#define WEBRT_WASM_ATOMIC_SUB 2
+#define WEBRT_WASM_ATOMIC_AND 3
+#define WEBRT_WASM_ATOMIC_OR  4
+#define WEBRT_WASM_ATOMIC_XOR 5
+#define WEBRT_WASM_ATOMIC_XCHG 6
+
+typedef struct {
+    uint32_t workgroup_size_x;
+    uint32_t workgroup_size_y;
+    uint32_t dispatch_count;
+    uint8_t active;
+} webrt_webgpu_pipeline_t;
+
+typedef struct {
+    uint32_t num_threads;
+    uint32_t active_threads;
+    uint8_t shared_memory_enabled;
+} webrt_wasm_threads_ctx_t;
+
+void webrt_webgpu_compute_init(webrt_webgpu_pipeline_t *pipeline, uint32_t workgroup_size_x, uint32_t workgroup_size_y);
+int webrt_webgpu_dispatch_compute(webrt_webgpu_pipeline_t *pipeline, const int32_t *input_data, int32_t *output_data, uint32_t count);
+
+void webrt_wasm_threads_init(webrt_wasm_threads_ctx_t *ctx, uint32_t num_threads);
+int webrt_wasm_atomic_op(webrt_arraybuffer_t *ab, uint32_t byte_offset, uint32_t op_type, int32_t operand, int32_t *out_old);
+int webrt_futex_wait(webrt_arraybuffer_t *ab, uint32_t byte_offset, int32_t expected_val, uint32_t timeout_ms);
+int webrt_futex_wake(webrt_arraybuffer_t *ab, uint32_t byte_offset, uint32_t wake_count);
+
 #endif

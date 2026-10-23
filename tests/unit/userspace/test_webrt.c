@@ -528,6 +528,43 @@ static void test_lot32_webrt_gpu_simd_shared_memory(void) {
     TEST_ASSERT_EQUAL(0, webrt_shared_memory_lock(&ab, 10));
 }
 
+static void test_lot33_webrt_webgpu_compute_wasm_futex(void) {
+    /* 1. WebGPU Compute Shader */
+    webrt_webgpu_pipeline_t pipeline;
+    webrt_webgpu_compute_init(&pipeline, 2, 5);
+    TEST_ASSERT_EQUAL(1, pipeline.active);
+
+    int32_t in_data[4] = { 10, 20, 30, 40 };
+    int32_t out_data[4] = { 0 };
+
+    TEST_ASSERT_EQUAL(0, webrt_webgpu_dispatch_compute(&pipeline, in_data, out_data, 4));
+    TEST_ASSERT_EQUAL(1, pipeline.dispatch_count);
+    TEST_ASSERT_EQUAL(25, out_data[0]); /* 10 * 2 + 5 */
+    TEST_ASSERT_EQUAL(45, out_data[1]); /* 20 * 2 + 5 */
+
+    /* 2. WASM Threads & Futex Engine */
+    webrt_wasm_threads_ctx_t threads_ctx;
+    webrt_wasm_threads_init(&threads_ctx, 4);
+    TEST_ASSERT_EQUAL(4, threads_ctx.num_threads);
+    TEST_ASSERT_EQUAL(1, threads_ctx.shared_memory_enabled);
+
+    webrt_arraybuffer_t ab;
+    ab.byte_length = 128;
+    memset(ab.data, 0, sizeof(ab.data));
+
+    int32_t *ptr = (int32_t *)(ab.data + 16);
+    *ptr = 100;
+
+    int32_t old_val = 0;
+    TEST_ASSERT_EQUAL(0, webrt_wasm_atomic_op(&ab, 16, WEBRT_WASM_ATOMIC_ADD, 50, &old_val));
+    TEST_ASSERT_EQUAL(100, old_val);
+    TEST_ASSERT_EQUAL(150, *ptr);
+
+    TEST_ASSERT_EQUAL(1, webrt_futex_wait(&ab, 16, 999, 100)); /* Mismatch */
+    TEST_ASSERT_EQUAL(0, webrt_futex_wait(&ab, 16, 150, 100)); /* Match */
+    TEST_ASSERT_EQUAL(2, webrt_futex_wake(&ab, 16, 2));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -551,6 +588,7 @@ int main(void) {
     RUN_TEST(test_lot30_webrt_canvas2d_wasm_anim);
     RUN_TEST(test_lot31_webrt_webgl3d_as_jit_atomics);
     RUN_TEST(test_lot32_webrt_gpu_simd_shared_memory);
+    RUN_TEST(test_lot33_webrt_webgpu_compute_wasm_futex);
 
     unity_print_results();
     unity_cleanup();

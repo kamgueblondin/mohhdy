@@ -10,6 +10,20 @@
 
 ## État courant vérifié
 
+## Etat courant du 23 octobre 2026 (lot 33)
+
+Living baseline. Plan: [lot33_plan.md](lot33_plan.md).
+
+```text
+make test-all : 971 passed, 0 failed, 0 skipped
+```
+
+- US-006 / US-039: Storage VFS CRDT Replicated Conflict-Free Resolution (`vfs_crdt_merge`, `vfs_crdt_resolve_conflict`) and 2PL/MVCC Distributed Transaction Isolation Engine (`vfs_dist_tx_begin`, `vfs_dist_tx_isolation_check`, `vfs_dist_tx_commit_iso`, `vfs_dist_tx_rollback_iso`).
+- US-053 / US-055: Web Runtime WebGPU 16.16 fixed-point Compute Shader dispatch (`webrt_webgpu_compute_init`, `webrt_webgpu_dispatch_compute`) and WebAssembly Threads Atomic Futex Engine (`webrt_wasm_threads_init`, `webrt_wasm_atomic_op`, `webrt_futex_wait`, `webrt_futex_wake`).
+- US-068 / US-080: P2P Mesh Cross-WAN Geo-Sharded Multi-Region Consensus (`p2p_geo_shard_init`, `p2p_geo_consensus_propose`, `p2p_geo_cross_region_sync`) and Zero-Knowledge Bulletproof Range Proof Validation (`p2p_zk_bulletproof_create_commitment`, `p2p_zk_bulletproof_verify`).
+- US-117 / US-126: Production Daemon Autonomous SLA Self-Healing Engine (`prod_sla_self_heal_init`, `prod_sla_self_heal_eval`) and Predictive Anomaly Risk Mitigation Engine (`prod_anomaly_predict_init`, `prod_anomaly_predict_record`, `prod_anomaly_predict_eval`, `prod_anomaly_mitigate_action`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 23 octobre 2026 (lot 31)
 
 Living baseline. Plan: [lot31_plan.md](lot31_plan.md).
