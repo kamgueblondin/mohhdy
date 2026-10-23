@@ -865,6 +865,35 @@ static void test_lot37_prod_adaptive_lb_and_self_healing(void) {
     TEST_ASSERT_EQUAL(1, sh.remediations_count);
 }
 
+static void test_lot38_prod_predictive_fail_and_ai_remed(void) {
+    prod_infra_fail_pred_t pred;
+    prod_infra_fail_pred_init(&pred);
+
+    for (int i = 0; i < 5; i++) {
+        prod_infra_fail_pred_record(&pred, 1000 + i * 10, 80, 2000, 3);
+    }
+
+    uint32_t risk = 0;
+    uint8_t fail_pred = 0;
+    int res = prod_infra_fail_pred_eval(&pred, &risk, &fail_pred);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, fail_pred);
+
+    prod_ai_auto_remed_engine_t eng;
+    prod_ai_remed_engine_init(&eng);
+    TEST_ASSERT_EQUAL(1, eng.active);
+
+    res = prod_ai_remed_register_plan(&eng, 101, "failover-node", 40, "prod_failover --node 1");
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, eng.plan_count);
+
+    char log_buf[256];
+    res = prod_ai_remed_eval_and_execute(&eng, risk, log_buf, sizeof(log_buf));
+    TEST_ASSERT_EQUAL(1, res);
+    TEST_ASSERT_EQUAL(1, eng.total_auto_remediations);
+    TEST_ASSERT_EQUAL(101, eng.last_executed_plan_id);
+}
+
 static void test_lot29_prod_cicd_regression_adaptive_alert(void) {
     prod_cicd_pipeline_t pipe;
     prod_cicd_pipeline_init(&pipe);
@@ -1132,6 +1161,7 @@ int main(void) {
     RUN_TEST(test_lot33_prod_sla_self_heal_and_anomaly);
     RUN_TEST(test_lot35_prod_fault_mitigation_and_ai_remediation);
     RUN_TEST(test_lot37_prod_adaptive_lb_and_self_healing);
+    RUN_TEST(test_lot38_prod_predictive_fail_and_ai_remed);
 
     unity_print_results();
     unity_cleanup();

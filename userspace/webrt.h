@@ -565,4 +565,34 @@ int webrt_bg_sync_process(webrt_bg_sync_queue_t *q, int *out_processed);
 int webrt_wasm_simd_mat4_mul(const webrt_mat4x4_t *a, const webrt_mat4x4_t *b, webrt_mat4x4_t *out);
 int webrt_wasm_simd_tensor3d_contract(const webrt_tensor3d_t *t1, const webrt_tensor3d_t *t2, int32_t *out_scalar);
 
+/* Lot 38: Web Runtime Web Workers Shared Array Buffer Atomics Synchronization Engine & WebAssembly SIMD 128-bit Tensor Convolutions (US-058 / US-060) */
+#define WEBRT_SAB_FUTEX_WAITERS_MAX 8
+
+typedef struct {
+    int32_t value; /* atomic counter/state */
+    uint32_t lock_val;
+    uint32_t waiters[WEBRT_SAB_FUTEX_WAITERS_MAX];
+    int waiter_count;
+    uint32_t lock_acquisitions;
+    uint32_t contention_events;
+} webrt_sab_futex_t;
+
+typedef struct {
+    int32_t m[8][8]; /* 16.16 fixed point 8x8 matrix */
+} webrt_mat8x8_t;
+
+typedef struct {
+    int32_t input[16][16];  /* 16x16 input image/tensor */
+    int32_t kernel[3][3];   /* 3x3 convolution kernel */
+    int32_t output[14][14]; /* 14x14 output tensor */
+    uint32_t conv_ops_count;
+} webrt_tensor_conv_t;
+
+void webrt_sab_futex_init(webrt_sab_futex_t *futex, int32_t initial_val);
+int webrt_sab_futex_wait(webrt_sab_futex_t *futex, int32_t expected_val, uint32_t worker_id);
+int webrt_sab_futex_wake(webrt_sab_futex_t *futex, int count, int *out_woken);
+
+int webrt_wasm_simd_mat8_mul(const webrt_mat8x8_t *a, const webrt_mat8x8_t *b, webrt_mat8x8_t *out);
+int webrt_wasm_simd_tensor_conv2d(webrt_tensor_conv_t *conv);
+
 #endif

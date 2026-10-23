@@ -284,6 +284,88 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* Lot 38: Web Runtime Web Workers Shared Array Buffer Atomics Synchronization Engine & WebAssembly SIMD 128-bit Tensor Convolutions (US-058 / US-060) */
+
+void webrt_sab_futex_init(webrt_sab_futex_t *futex, int32_t initial_val) {
+    if (!futex) return;
+    for (int i = 0; i < (int)(sizeof(webrt_sab_futex_t)/sizeof(uint8_t)); i++) {
+        ((uint8_t*)futex)[i] = 0;
+    }
+    futex->value = initial_val;
+    futex->lock_val = 0;
+    futex->waiter_count = 0;
+    futex->lock_acquisitions = 0;
+    futex->contention_events = 0;
+}
+
+int webrt_sab_futex_wait(webrt_sab_futex_t *futex, int32_t expected_val, uint32_t worker_id) {
+    if (!futex) return -1;
+    if (futex->value != expected_val) {
+        return -2; /* value mismatch, do not sleep */
+    }
+
+    if (futex->waiter_count < WEBRT_SAB_FUTEX_WAITERS_MAX) {
+        futex->waiters[futex->waiter_count++] = worker_id;
+        futex->contention_events++;
+    }
+    return 0;
+}
+
+int webrt_sab_futex_wake(webrt_sab_futex_t *futex, int count, int *out_woken) {
+    if (!futex || count <= 0) return -1;
+
+    int woken = 0;
+    while (futex->waiter_count > 0 && woken < count) {
+        futex->waiter_count--;
+        woken++;
+    }
+
+    futex->lock_acquisitions += woken;
+    if (out_woken) *out_woken = woken;
+    return 0;
+}
+
+int webrt_wasm_simd_mat8_mul(const webrt_mat8x8_t *a, const webrt_mat8x8_t *b, webrt_mat8x8_t *out) {
+    if (!a || !b || !out) return -1;
+
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            int64_t sum = 0;
+            for (int k = 0; k < 8; k++) {
+                int64_t val_a = (int64_t)a->m[r][k];
+                int64_t val_b = (int64_t)b->m[k][c];
+                sum += (val_a * val_b) >> 16;
+            }
+            out->m[r][c] = (int32_t)sum;
+        }
+    }
+
+    return 0;
+}
+
+int webrt_wasm_simd_tensor_conv2d(webrt_tensor_conv_t *conv) {
+    if (!conv) return -1;
+
+    conv->conv_ops_count = 0;
+
+    for (int r = 0; r < 14; r++) {
+        for (int c = 0; c < 14; c++) {
+            int64_t sum = 0;
+            for (int kr = 0; kr < 3; kr++) {
+                for (int kc = 0; kc < 3; kc++) {
+                    int64_t in_val = (int64_t)conv->input[r + kr][c + kc];
+                    int64_t k_val = (int64_t)conv->kernel[kr][kc];
+                    sum += (in_val * k_val) >> 16;
+                    conv->conv_ops_count++;
+                }
+            }
+            conv->output[r][c] = (int32_t)sum;
+        }
+    }
+
+    return 0;
+}
+
 /* Lot 33: Web Runtime WebGPU Fixed-Point Compute Shader & WebAssembly Threads Atomic Futex Engine (US-053 / US-055) */
 
 void webrt_webgpu_compute_init(webrt_webgpu_pipeline_t *pipeline, uint32_t workgroup_size_x, uint32_t workgroup_size_y) {

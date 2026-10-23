@@ -651,6 +651,50 @@ static void test_lot37_wasm_simd_tensor(void) {
     TEST_ASSERT_EQUAL(48 * (1 << 16), scalar);
 }
 
+static void test_lot38_sab_futex_and_wasm_simd_conv(void) {
+    webrt_sab_futex_t futex;
+    webrt_sab_futex_init(&futex, 1);
+    TEST_ASSERT_EQUAL(1, futex.value);
+
+    int res = webrt_sab_futex_wait(&futex, 1, 101);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, futex.waiter_count);
+
+    int woken = 0;
+    res = webrt_sab_futex_wake(&futex, 1, &woken);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, woken);
+    TEST_ASSERT_EQUAL(0, futex.waiter_count);
+
+    webrt_mat8x8_t m1, m2, m_out;
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            m1.m[r][c] = (r == c) ? (1 << 16) : 0;
+            m2.m[r][c] = (r + c + 1) * (1 << 16);
+        }
+    }
+    res = webrt_wasm_simd_mat8_mul(&m1, &m2, &m_out);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1 * (1 << 16), m_out.m[0][0]);
+    TEST_ASSERT_EQUAL(2 * (1 << 16), m_out.m[0][1]);
+
+    webrt_tensor_conv_t conv;
+    for (int r = 0; r < 16; r++) {
+        for (int c = 0; c < 16; c++) {
+            conv.input[r][c] = (1 << 16);
+        }
+    }
+    for (int kr = 0; kr < 3; kr++) {
+        for (int kc = 0; kc < 3; kc++) {
+            conv.kernel[kr][kc] = (1 << 16);
+        }
+    }
+    res = webrt_wasm_simd_tensor_conv2d(&conv);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(9 * (1 << 16), conv.output[0][0]);
+    TEST_ASSERT_EQUAL(14 * 14 * 9, conv.conv_ops_count);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -678,6 +722,7 @@ int main(void) {
     RUN_TEST(test_lot35_webrt_sw_offscreen_cache_simd_vec);
     RUN_TEST(test_lot37_service_worker_bg_sync);
     RUN_TEST(test_lot37_wasm_simd_tensor);
+    RUN_TEST(test_lot38_sab_futex_and_wasm_simd_conv);
 
     unity_print_results();
     unity_cleanup();

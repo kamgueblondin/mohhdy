@@ -1616,6 +1616,119 @@ int prod_audit_diagnostic_report(const prod_quarantine_mgr_t *q_mgr, const prod_
     return (int)s_len(out_report);
 }
 
+/* Lot 38: Production Daemon Predictive Infrastructure Failure Mitigation & Autonomous AI-Driven Auto-Remediation Engine (US-121 / US-130) */
+
+void prod_infra_fail_pred_init(prod_infra_fail_pred_t *pred) {
+    if (!pred) return;
+    for (int i = 0; i < (int)(sizeof(prod_infra_fail_pred_t)/sizeof(uint8_t)); i++) {
+        ((uint8_t*)pred)[i] = 0;
+    }
+}
+
+void prod_infra_fail_pred_record(prod_infra_fail_pred_t *pred, uint32_t timestamp, uint32_t temp_celsius, uint32_t packet_loss_ppm, uint32_t io_error_count) {
+    if (!pred) return;
+
+    if (pred->series.count >= PROD_INFRA_TELEMETRY_SERIES_MAX) {
+        for (int i = 0; i < PROD_INFRA_TELEMETRY_SERIES_MAX - 1; i++) {
+            pred->series.timestamps[i] = pred->series.timestamps[i + 1];
+            pred->series.temp_celsius[i] = pred->series.temp_celsius[i + 1];
+            pred->series.packet_loss_ppm[i] = pred->series.packet_loss_ppm[i + 1];
+            pred->series.io_error_count[i] = pred->series.io_error_count[i + 1];
+        }
+        pred->series.count = PROD_INFRA_TELEMETRY_SERIES_MAX - 1;
+    }
+
+    int idx = pred->series.count;
+    pred->series.timestamps[idx] = timestamp;
+    pred->series.temp_celsius[idx] = temp_celsius;
+    pred->series.packet_loss_ppm[idx] = packet_loss_ppm;
+    pred->series.io_error_count[idx] = io_error_count;
+    pred->series.count++;
+}
+
+int prod_infra_fail_pred_eval(prod_infra_fail_pred_t *pred, uint32_t *out_risk_score, uint8_t *out_fail_predicted) {
+    if (!pred) return -1;
+
+    pred->eval_count++;
+    if (pred->series.count == 0) {
+        if (out_risk_score) *out_risk_score = 0;
+        if (out_fail_predicted) *out_fail_predicted = 0;
+        return 0;
+    }
+
+    uint32_t avg_temp = 0, avg_loss = 0, total_io_err = 0;
+    for (int i = 0; i < pred->series.count; i++) {
+        avg_temp += pred->series.temp_celsius[i];
+        avg_loss += pred->series.packet_loss_ppm[i];
+        total_io_err += pred->series.io_error_count[i];
+    }
+    avg_temp /= (uint32_t)pred->series.count;
+    avg_loss /= (uint32_t)pred->series.count;
+
+    uint32_t score = 0;
+    if (avg_temp > 70) score += (avg_temp - 70) * 2;
+    if (avg_loss > 1000) score += (avg_loss - 1000) / 100;
+    score += total_io_err * 15;
+
+    if (score > 100) score = 100;
+    pred->failure_risk_score = score;
+    pred->failure_predicted = (score >= 50) ? 1 : 0;
+
+    if (out_risk_score) *out_risk_score = pred->failure_risk_score;
+    if (out_fail_predicted) *out_fail_predicted = pred->failure_predicted;
+
+    return 0;
+}
+
+void prod_ai_remed_engine_init(prod_ai_auto_remed_engine_t *eng) {
+    if (!eng) return;
+    for (int i = 0; i < (int)(sizeof(prod_ai_auto_remed_engine_t)/sizeof(uint8_t)); i++) {
+        ((uint8_t*)eng)[i] = 0;
+    }
+    eng->active = 1;
+}
+
+int prod_ai_remed_register_plan(prod_ai_auto_remed_engine_t *eng, uint32_t plan_id, const char *name, uint32_t trigger_threshold, const char *action_command) {
+    if (!eng || !name || !action_command) return -1;
+    if (eng->plan_count >= PROD_AI_REMED_PLANS_MAX) return -1;
+
+    prod_ai_remed_plan_t *p = &eng->plans[eng->plan_count++];
+    p->plan_id = plan_id;
+    s_copy(p->name, name, sizeof(p->name));
+    p->trigger_risk_threshold = trigger_threshold;
+    s_copy(p->action_command, action_command, sizeof(p->action_command));
+    p->enabled = 1;
+
+    return 0;
+}
+
+int prod_ai_remed_eval_and_execute(prod_ai_auto_remed_engine_t *eng, uint32_t current_risk_score, char *out_log, int max_sz) {
+    if (!eng) return -1;
+
+    int executed_count = 0;
+    if (out_log && max_sz > 0) out_log[0] = '\0';
+
+    for (int i = 0; i < eng->plan_count; i++) {
+        prod_ai_remed_plan_t *p = &eng->plans[i];
+        if (p->enabled && current_risk_score >= p->trigger_risk_threshold) {
+            p->execution_count++;
+            eng->total_auto_remediations++;
+            eng->last_executed_plan_id = p->plan_id;
+            executed_count++;
+
+            if (out_log && max_sz > 0) {
+                s_cat(out_log, "[AI-REMED-EXEC] Plan: ", max_sz);
+                s_cat(out_log, p->name, max_sz);
+                s_cat(out_log, " Cmd: ", max_sz);
+                s_cat(out_log, p->action_command, max_sz);
+                s_cat(out_log, "\n", max_sz);
+            }
+        }
+    }
+
+    return executed_count;
+}
+
 /* Lot 37: Production Daemon Autonomous Real-Time Adaptive Load-Balancing & AI Self-Healing Anomaly Mitigation Engine (US-120 / US-129) */
 void prod_adaptive_lb_init(prod_adaptive_lb_t *lb) {
     if (!lb) return;

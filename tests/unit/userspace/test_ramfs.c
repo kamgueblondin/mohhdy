@@ -490,6 +490,46 @@ static void test_lot37_erasure_coding(void) {
     TEST_ASSERT_EQUAL(1, stripe.status);
 }
 
+static void test_lot38_nvme_sg_and_erasure_dist(void) {
+    vfs_nvme_sg_list_t sg;
+    vfs_nvme_sg_init(&sg, 42);
+    TEST_ASSERT_EQUAL(42, sg.list_id);
+    TEST_ASSERT_EQUAL(0, sg.entry_count);
+
+    int res = vfs_nvme_sg_add_descriptor(&sg, 0x1000, 512, 0);
+    TEST_ASSERT_EQUAL(0, res);
+    res = vfs_nvme_sg_add_descriptor(&sg, 0x2000, 1024, 1);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(2, sg.entry_count);
+    TEST_ASSERT_EQUAL(1536, sg.total_bytes);
+
+    int transferred = 0;
+    res = vfs_nvme_sg_execute(&sg, 2, 0, &transferred);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1536, transferred);
+    TEST_ASSERT_EQUAL(2, sg.status);
+
+    vfs_erasure_dist_stripe_t dstripe;
+    vfs_erasure_dist_sync_init(&dstripe, 101, 256);
+    TEST_ASSERT_EQUAL(101, dstripe.stripe_id);
+
+    uint8_t chunk_buf[VFS_ERASURE_CHUNK_SZ];
+    for (int i = 0; i < VFS_ERASURE_CHUNK_SZ; i++) chunk_buf[i] = (uint8_t)i;
+
+    for (uint32_t c = 0; c < VFS_ERASURE_K + VFS_ERASURE_M; c++) {
+        res = vfs_erasure_dist_sync_node(&dstripe, 10 + c, chunk_buf, c);
+        TEST_ASSERT_EQUAL(0, res);
+    }
+    TEST_ASSERT_EQUAL(1, dstripe.sync_status);
+
+    /* Hot reconstruction test */
+    int rec_chunks = 0;
+    dstripe.stripe.chunk_present[0] = 0;
+    res = vfs_erasure_dist_hot_reconstruct(&dstripe, 10, &rec_chunks);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, rec_chunks);
+}
+
 int main(void) {
     unity_init();
 
@@ -514,6 +554,7 @@ int main(void) {
     RUN_TEST(test_lot35_nvme_direct_io_and_multi_stream_journal);
     RUN_TEST(test_lot37_nvme_qp_offload);
     RUN_TEST(test_lot37_erasure_coding);
+    RUN_TEST(test_lot38_nvme_sg_and_erasure_dist);
 
     unity_print_results();
     unity_cleanup();
