@@ -9,7 +9,7 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 
 ### Suite de Tests
 - `make test-all` rejoue la suite de non-regression sur l'arbre courant :
-  - **959 tests executes / 959 tests reussis** (0 echec, 0 ignore).
+  - **963 tests executes / 963 tests reussis** (0 echec, 0 ignore).
   - 54 modules kernel, 9 modules userspace, 1 performance, 1 robustness. Couverture hote mesuree par `make coverage` : 79.55% de lignes (24434/30716). Pas l'image guest. Pas dans `make test-all`.
 - Les compteurs plus anciens de ce fichier (563/563 et autres) decrivent la livraison de leur paragraphe, pas l'arbre courant.
 - `make strict-image-check`, `make secrets-check` et `make tree-clean-check` sont les gardes d'image et d'arbre.
@@ -55,6 +55,12 @@ Elle confirme visuellement :
 - **Moteur Web & Performance Telemetrie (US-043 / US-045)** : Calcul de latence par cycle d'ordonnancement (`telemetry_sched_cycles`, `perf_min_us`, `perf_max_us`, `perf_avg_us`, `perf_last_us`, `render_ms`) pour `web-perf` et `browser-telemetry perf`.
 - **Inspection VFS & FS-as-Web (US-045)** : Inspection hierarchique du DOM (`browser-dom-tree`) et evaluation d'expressions sandboxees VFS (`browser-eval`) directement accessibles dans `/browser` et `/fs`.
 - **Evaluation de Latence & Benchmarks GGUF (Garde 3)** : Cache KV multi-tours consolide avec rembobinage dynamique du prefixe commun (`gpt2_gguf_cache_match_prefix`, `gpt2_gguf_align_cache_prefix`) dans `kernel/llm/gpt2_gguf_infer.c`. Validation du protocole KVM (`make gguf-kvm-benchmark-check`).
+
+### Lot 31 (23 octobre 2026) : Extension Industrielle Avancee & Haute Disponibilite Systeme
+- **Subsysteme VFS Distributed Replicated State & Write-Ahead Log Engine (US-004 / US-037)** : Moteur de replication distribuee d'etat VFS base sur des journaux WAL a deux phases (`vfs_wal_log_append`, `vfs_wal_checkpoint_apply`), verrouillage distribue multi-noeuds avec bail dynamique et detection de verrous orphelins (`vfs_distributed_lock_acquire`, `vfs_distributed_lock_release`), et analyse d'integrite de la table d'inodes distribuee avec reconciliation automatique post-partition VFS (`vfs_distributed_reconcile`).
+- **Moteur Web Runtime WebGL 3D Vector Pipeline & AssemblyScript JIT VM (US-049 / US-051)** : Moteur de rendu 3D WebGL Ring 3 sans flottants (virgule fixe 16.16) avec projection perspective 3D, z-buffering entier, et calculs d'illumination de Phong (`webrt_webgl3d_init`, `webrt_webgl3d_render_mesh`, `webrt_webgl3d_set_matrix`), interprete / executeur d'instructions AssemblyScript JIT bytecode en C Freestanding (`webrt_assemblyscript_exec`, `webrt_assemblyscript_register_host_fn`), et partage de memoire Shared ArrayBuffer avec Atomics wait/notify (`webrt_arraybuffer_share`, `webrt_atomics_wait_notify`).
+- **Reseau P2P WAN Mesh Multi-Topology & Dynamic Byzantine Fault Tolerance (BFT) (US-066 / US-078)** : Routage WAN Multi-Topologies (Ring, Star, Mesh) avec selection dynamique basee sur la metrique EWMA d'accord Byzantine (`p2p_topology_select_route`), consensus Byzantine Fault Tolerance (PBFT / Ring-BFT) supportant jusqu'a f noeuds malveillants (`p2p_bft_preprepare`, `p2p_bft_prepare`, `p2p_bft_commit`), et mecanisme d'anti-entropie accelere par filtres de Bloom distribues (`p2p_bloom_sync_init`, `p2p_bloom_sync_diff`).
+- **Moteur de Production Chaos Engineering & Incident Auto-Remediation (US-115 / US-124)** : Injecteur de pannes controlees Ring 3 (Chaos Engineering Daemon) pour simuler latence reseau, pertes de paquets et saturation memoire (`prod_chaos_inject_fault`, `prod_chaos_clear_faults`), moteur d'auto-remediation d'incidents executant des playbooks d'urgence automatises (`prod_remediation_run_playbook`), et generateur de rapport post-mortem FNV-1a avec audit d'execution (`prod_audit_postmortem_report`).
 
 ### Lot 29 (22 octobre 2026) : Extension et Consolidation Industrielle VFS, Web Runtime Shadow DOM / Event Loop, P2P Zero-Trust & Pipeline CI/CD Ring 3
 - **Subsysteme VFS & Journalisation Transactionnelle (US-002 / US-034)** : Table circulaire de journaux de mutations VFS (`vfs_mutation_log_t`) avec roll-forward post-crash, isolation transactionnelle multi-fichiers avec verrouillage hierarchique de repertoires (`vfs_dir_lock_tree`), et verification d'integrite de table de noeuds avec detection de cycles (`vfs_integrity_check`).

@@ -280,6 +280,45 @@ static void test_lot30_vfs_mount_overlay_defrag(void) {
     TEST_ASSERT_EQUAL(RAMFS_OK, vfs_defrag_compact(&moved, &freed));
 }
 
+static void test_lot31_vfs_wal_locks_reconcile(void) {
+    /* 1. WAL Log Append & Checkpoint Apply */
+    vfs_wal_log_t wal;
+    vfs_wal_init(&wal);
+
+    int lsn1 = vfs_wal_log_append(&wal, 1, VFS_MUTATION_OP_MKDIR, "/dist_dir", NULL, 0);
+    TEST_ASSERT_GREATER_THAN(0, lsn1);
+
+    int lsn2 = vfs_wal_log_append(&wal, 1, VFS_MUTATION_OP_WRITE, "/dist_dir/data.txt", "dist_data", 9);
+    TEST_ASSERT_GREATER_THAN(lsn1, lsn2);
+
+    int applied = vfs_wal_checkpoint_apply(&wal, lsn2);
+    TEST_ASSERT_EQUAL(2, applied);
+    TEST_ASSERT_EQUAL(1, ramfs_exists("/dist_dir/data.txt"));
+
+    /* 2. Distributed Lock Acquire & Release */
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_distributed_lock_acquire("/dist_dir/data.txt", 1, 100, 10));
+    TEST_ASSERT_EQUAL(-1, vfs_distributed_lock_acquire("/dist_dir/data.txt", 2, 100, 20)); /* Held by 1 */
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_distributed_lock_acquire("/dist_dir/data.txt", 2, 100, 120)); /* Expired takeover */
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_distributed_lock_release("/dist_dir/data.txt", 2));
+
+    /* 3. Distributed Reconcile */
+    vfs_remote_inode_t rem_inodes[2];
+    strcpy(rem_inodes[0].path, "/remote_dir");
+    rem_inodes[0].is_dir = 1;
+    rem_inodes[0].hash = 0;
+    rem_inodes[0].size = 0;
+
+    strcpy(rem_inodes[1].path, "/remote_dir/file.txt");
+    rem_inodes[1].is_dir = 0;
+    rem_inodes[1].hash = 12345;
+    rem_inodes[1].size = 10;
+
+    int synced = 0, conflicts = 0;
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_distributed_reconcile(rem_inodes, 2, 1, &synced, &conflicts));
+    TEST_ASSERT_EQUAL(2, synced);
+    TEST_ASSERT_EQUAL(0, conflicts);
+}
+
 int main(void) {
     unity_init();
 
@@ -298,6 +337,7 @@ int main(void) {
     RUN_TEST(test_procsim_table_and_kill);
     RUN_TEST(test_lot28_page_cache_and_io_queue);
     RUN_TEST(test_lot30_vfs_mount_overlay_defrag);
+    RUN_TEST(test_lot31_vfs_wal_locks_reconcile);
 
     unity_print_results();
     unity_cleanup();

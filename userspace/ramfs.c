@@ -820,6 +820,175 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
     return RAMFS_OK;
 }
 
+/* Lot 31: VFS Distributed Replicated State & Write-Ahead Log Engine (US-004 / US-037) */
+
+static vfs_dist_lock_t g_dist_locks[VFS_DIST_LOCKS_MAX];
+
+void vfs_wal_init(vfs_wal_log_t *wal) {
+    if (!wal) return;
+    wal->count = 0;
+    wal->last_applied_lsn = 0;
+    wal->next_lsn = 1;
+    for (int i = 0; i < VFS_WAL_MAX_ENTRIES; i++) {
+        wal->entries[i].lsn = 0;
+        wal->entries[i].node_id = 0;
+        wal->entries[i].op_type = 0;
+        wal->entries[i].applied = 0;
+        wal->entries[i].path[0] = '\0';
+        wal->entries[i].data[0] = '\0';
+        wal->entries[i].data_len = 0;
+    }
+}
+
+int vfs_wal_log_append(vfs_wal_log_t *wal, uint32_t node_id, uint8_t op_type, const char *path, const char *data, uint32_t len) {
+    if (!wal || !path) return RAMFS_ERR_INVAL;
+    if (wal->count >= VFS_WAL_MAX_ENTRIES) return RAMFS_ERR_NOSPACE;
+
+    uint32_t idx = wal->count;
+    vfs_wal_entry_t *e = &wal->entries[idx];
+    e->lsn = wal->next_lsn++;
+    e->node_id = node_id;
+    e->op_type = op_type;
+    e->applied = 0;
+    rf_strcpy(e->path, path);
+    e->data[0] = '\0';
+    e->data_len = 0;
+
+    if (data && len > 0) {
+        uint32_t copy_len = (len < RAMFS_CONTENT_MAX - 1) ? len : (RAMFS_CONTENT_MAX - 1);
+        for (uint32_t i = 0; i < copy_len; i++) e->data[i] = data[i];
+        e->data[copy_len] = '\0';
+        e->data_len = copy_len;
+    }
+
+    wal->count++;
+    return (int)e->lsn;
+}
+
+int vfs_wal_checkpoint_apply(vfs_wal_log_t *wal, uint32_t target_lsn) {
+    if (!wal) return RAMFS_ERR_INVAL;
+    int applied_count = 0;
+
+    for (uint32_t i = 0; i < wal->count; i++) {
+        vfs_wal_entry_t *e = &wal->entries[i];
+        if (e->lsn <= target_lsn && !e->applied) {
+            if (e->op_type == VFS_MUTATION_OP_WRITE) {
+                ramfs_write(e->path, e->data, (int)e->data_len);
+            } else if (e->op_type == VFS_MUTATION_OP_MKDIR) {
+                ramfs_mkdir_p(e->path);
+            } else if (e->op_type == VFS_MUTATION_OP_RM) {
+                ramfs_rm_r(e->path);
+            }
+            e->applied = 1;
+            wal->last_applied_lsn = e->lsn;
+            applied_count++;
+        }
+    }
+    return applied_count;
+}
+
+int vfs_distributed_lock_acquire(const char *path, uint32_t node_id, uint32_t lease_ticks, uint32_t current_tick) {
+    if (!path || path[0] == '\0') return RAMFS_ERR_INVAL;
+
+    for (int i = 0; i < VFS_DIST_LOCKS_MAX; i++) {
+        if (g_dist_locks[i].active && rf_strcmp(g_dist_locks[i].path, path) == 0) {
+            /* Check if lease expired */
+            if (current_tick >= g_dist_locks[i].lease_expire_tick) {
+                /* Orphaned or expired lock: takeover */
+                g_dist_locks[i].holder_node_id = node_id;
+                g_dist_locks[i].lease_expire_tick = current_tick + lease_ticks;
+                return RAMFS_OK;
+            }
+            if (g_dist_locks[i].holder_node_id == node_id) {
+                /* Renew lease */
+                g_dist_locks[i].lease_expire_tick = current_tick + lease_ticks;
+                return RAMFS_OK;
+            }
+            /* Held by another active node */
+            return -1;
+        }
+    }
+
+    /* Allocate free slot */
+    for (int i = 0; i < VFS_DIST_LOCKS_MAX; i++) {
+        if (!g_dist_locks[i].active) {
+            g_dist_locks[i].active = 1;
+            rf_strcpy(g_dist_locks[i].path, path);
+            g_dist_locks[i].holder_node_id = node_id;
+            g_dist_locks[i].lease_expire_tick = current_tick + lease_ticks;
+            return RAMFS_OK;
+        }
+    }
+
+    return RAMFS_ERR_NOSPACE;
+}
+
+int vfs_distributed_lock_release(const char *path, uint32_t node_id) {
+    if (!path) return RAMFS_ERR_INVAL;
+
+    for (int i = 0; i < VFS_DIST_LOCKS_MAX; i++) {
+        if (g_dist_locks[i].active && rf_strcmp(g_dist_locks[i].path, path) == 0) {
+            if (g_dist_locks[i].holder_node_id == node_id) {
+                g_dist_locks[i].active = 0;
+                g_dist_locks[i].path[0] = '\0';
+                return RAMFS_OK;
+            }
+            return RAMFS_ERR_INVAL;
+        }
+    }
+    return RAMFS_ERR_NOTFOUND;
+}
+
+static uint32_t simple_fnv1a(const char *data, int len) {
+    uint32_t hash = 2166136261U;
+    for (int i = 0; i < len; i++) {
+        hash ^= (uint8_t)data[i];
+        hash *= 16777619U;
+    }
+    return hash;
+}
+
+int vfs_distributed_reconcile(const vfs_remote_inode_t *remote_inodes, int remote_count, uint32_t remote_term, int *out_synced_count, int *out_conflict_count) {
+    if (!remote_inodes || remote_count < 0) return RAMFS_ERR_INVAL;
+
+    (void)remote_term;
+    int synced = 0;
+    int conflicts = 0;
+
+    for (int i = 0; i < remote_count; i++) {
+        const vfs_remote_inode_t *r = &remote_inodes[i];
+        ramfs_node_t *local = find_node(r->path);
+
+        if (!local) {
+            /* Missing locally: sync directory or empty file */
+            if (r->is_dir) {
+                ramfs_mkdir_p(r->path);
+            } else {
+                ramfs_write(r->path, "", 0);
+            }
+            synced++;
+        } else {
+            if (r->is_dir != local->is_dir) {
+                conflicts++;
+            } else if (!r->is_dir) {
+                uint32_t l_hash = simple_fnv1a(local->content, local->size);
+                if (r->hash != l_hash || r->size != (uint32_t)local->size) {
+                    conflicts++;
+                } else {
+                    synced++;
+                }
+            } else {
+                synced++;
+            }
+        }
+    }
+
+    if (out_synced_count) *out_synced_count = synced;
+    if (out_conflict_count) *out_conflict_count = conflicts;
+
+    return RAMFS_OK;
+}
+
 int vfs_journal_begin(void) {
     if (g_active_tx) return g_active_tx;
     g_active_tx = g_tx_counter++;

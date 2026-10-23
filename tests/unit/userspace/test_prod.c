@@ -915,6 +915,32 @@ static void test_lot30_prod_auto_healing_predictive_diag(void) {
     TEST_ASSERT_NOT_NULL(strstr(report, "Checksum FNV-1a"));
 }
 
+static void test_lot31_prod_chaos_remediation_postmortem(void) {
+    /* 1. Chaos Engineering Injector */
+    TEST_ASSERT_EQUAL(0, prod_chaos_inject_fault(PROD_CHAOS_FAULT_LATENCY, 100));
+    TEST_ASSERT_EQUAL(0, prod_chaos_clear_faults());
+
+    /* 2. Remediation Playbook Engine */
+    prod_remediation_playbook_t pb;
+    memset(&pb, 0, sizeof(pb));
+    strcpy(pb.playbook_name, "AUTO_RECOVER_LATENCY");
+    pb.step_count = 2;
+    strcpy(pb.steps[0].action_name, "DRAIN_TRAFFIC");
+    strcpy(pb.steps[1].action_name, "RESTART_PODS");
+
+    char log[512];
+    TEST_ASSERT_EQUAL(2, prod_remediation_run_playbook(&pb, "LATENCY_SPIKE_DETECTED", log, sizeof(log)));
+    TEST_ASSERT_EQUAL(1, pb.executed_all);
+    TEST_ASSERT_NOT_NULL(strstr(log, "REMEDIATION PLAYBOOK"));
+
+    /* 3. Post-Mortem Audit Report */
+    char report[512];
+    int rlen = prod_audit_postmortem_report(&pb, 1001, report, sizeof(report));
+    TEST_ASSERT_TRUE(rlen > 0);
+    TEST_ASSERT_NOT_NULL(strstr(report, "POSTMORTEM INCIDENT REPORT"));
+    TEST_ASSERT_NOT_NULL(strstr(report, "checksum verified=true fnv"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -946,6 +972,7 @@ int main(void) {
     RUN_TEST(test_lot29_prod_cicd_regression_adaptive_alert);
     RUN_TEST(test_lot28_prod_profiler_healing_and_latency);
     RUN_TEST(test_lot30_prod_auto_healing_predictive_diag);
+    RUN_TEST(test_lot31_prod_chaos_remediation_postmortem);
 
     unity_print_results();
     unity_cleanup();

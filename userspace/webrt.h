@@ -379,4 +379,57 @@ int webrt_wasm_exec_module(webrt_wasm_vm_t *vm, const uint8_t *bytecode, uint32_
 int webrt_request_animation_frame(uint32_t callback_id);
 int webrt_render_frame_tick(uint32_t current_tick, uint32_t *out_executed_callback);
 
+/* Lot 31: Web Runtime WebGL 3D Vector Pipeline & AssemblyScript JIT VM (US-049 / US-051) */
+#define WEBRT_WEBGL3D_MAX_VERTICES 128
+#define WEBRT_WEBGL3D_MAX_FACES    64
+#define WEBRT_AS_HOST_FN_MAX       16
+#define WEBRT_ARRAYBUFFER_MAX      1024
+
+typedef struct {
+    int32_t x, y, z; /* 16.16 fixed point */
+} webrt_vec3_t;
+
+typedef struct {
+    int32_t m[4][4]; /* 16.16 fixed point matrix */
+} webrt_mat4_t;
+
+typedef struct {
+    uint16_t v1, v2, v3;
+    uint32_t color;
+} webrt_face_t;
+
+typedef struct {
+    webrt_vec3_t vertices[WEBRT_WEBGL3D_MAX_VERTICES];
+    int vertex_count;
+    webrt_face_t faces[WEBRT_WEBGL3D_MAX_FACES];
+    int face_count;
+    webrt_mat4_t modelview;
+    webrt_mat4_t projection;
+    webrt_vec3_t light_dir;
+} webrt_webgl3d_ctx_t;
+
+typedef int32_t (*webrt_as_host_fn_t)(int32_t arg1, int32_t arg2);
+
+typedef struct {
+    uint8_t id;
+    webrt_as_host_fn_t fn;
+} webrt_as_host_reg_t;
+
+typedef struct {
+    uint8_t data[WEBRT_ARRAYBUFFER_MAX];
+    uint32_t byte_length;
+    uint32_t shared_ref_count;
+    int32_t lock_state;
+} webrt_arraybuffer_t;
+
+void webrt_webgl3d_init(webrt_webgl3d_ctx_t *ctx);
+void webrt_webgl3d_set_matrix(webrt_webgl3d_ctx_t *ctx, int is_projection, const webrt_mat4_t *mat);
+int webrt_webgl3d_render_mesh(webrt_webgl3d_ctx_t *ctx, uint32_t *out_framebuffer, int width, int height);
+
+int webrt_assemblyscript_register_host_fn(uint8_t fn_id, webrt_as_host_fn_t fn);
+int webrt_assemblyscript_exec(const uint8_t *bytecode, uint32_t code_len, int32_t *out_result);
+
+int webrt_arraybuffer_share(webrt_arraybuffer_t *ab, uint32_t length);
+int webrt_atomics_wait_notify(webrt_arraybuffer_t *ab, uint32_t byte_offset, int32_t expected, int32_t new_val);
+
 #endif

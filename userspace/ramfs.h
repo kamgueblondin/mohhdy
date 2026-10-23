@@ -194,4 +194,49 @@ int vfs_overlay_file_lookup(const vfs_overlay_config_t *cfg, const char *relativ
 
 int vfs_defrag_compact(int *out_nodes_moved, int *out_freed_slots);
 
+/* Lot 31: VFS Distributed Replicated State & Write-Ahead Log Engine (US-004 / US-037) */
+#define VFS_WAL_MAX_ENTRIES 32
+#define VFS_DIST_LOCKS_MAX  16
+
+typedef struct {
+    uint32_t lsn;
+    uint32_t node_id;
+    uint8_t op_type;
+    uint8_t applied;
+    char path[RAMFS_PATH_MAX];
+    char data[RAMFS_CONTENT_MAX];
+    uint32_t data_len;
+} vfs_wal_entry_t;
+
+typedef struct {
+    vfs_wal_entry_t entries[VFS_WAL_MAX_ENTRIES];
+    uint32_t count;
+    uint32_t last_applied_lsn;
+    uint32_t next_lsn;
+} vfs_wal_log_t;
+
+typedef struct {
+    char path[RAMFS_PATH_MAX];
+    uint32_t holder_node_id;
+    uint32_t lease_expire_tick;
+    uint8_t active;
+} vfs_dist_lock_t;
+
+typedef struct {
+    char path[RAMFS_PATH_MAX];
+    uint32_t version;
+    uint32_t hash;
+    uint32_t size;
+    uint8_t is_dir;
+} vfs_remote_inode_t;
+
+void vfs_wal_init(vfs_wal_log_t *wal);
+int vfs_wal_log_append(vfs_wal_log_t *wal, uint32_t node_id, uint8_t op_type, const char *path, const char *data, uint32_t len);
+int vfs_wal_checkpoint_apply(vfs_wal_log_t *wal, uint32_t target_lsn);
+
+int vfs_distributed_lock_acquire(const char *path, uint32_t node_id, uint32_t lease_ticks, uint32_t current_tick);
+int vfs_distributed_lock_release(const char *path, uint32_t node_id);
+
+int vfs_distributed_reconcile(const vfs_remote_inode_t *remote_inodes, int remote_count, uint32_t remote_term, int *out_synced_count, int *out_conflict_count);
+
 #endif

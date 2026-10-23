@@ -454,4 +454,41 @@ int p2p_merkle_insert(p2p_merkle_tree_t *tree, uint32_t node_id, const char *key
 uint32_t p2p_merkle_sync_tree(p2p_merkle_tree_t *tree);
 int p2p_merkle_diff_sync(const p2p_merkle_tree_t *local_tree, const p2p_merkle_tree_t *remote_tree, uint32_t *out_diff_ids, int max_diffs);
 
+/* Lot 31: P2P WAN Mesh Multi-Topology & Dynamic Byzantine Fault Tolerance (BFT) (US-066 / US-078) */
+#define P2P_TOPOLOGY_RING 1
+#define P2P_TOPOLOGY_STAR 2
+#define P2P_TOPOLOGY_MESH 3
+
+#define P2P_BFT_STAGE_IDLE       0
+#define P2P_BFT_STAGE_PREPREPARE 1
+#define P2P_BFT_STAGE_PREPARE    2
+#define P2P_BFT_STAGE_COMMIT     3
+
+typedef struct {
+    uint32_t view_id;
+    uint32_t sequence_num;
+    uint8_t stage;
+    uint32_t preprepare_votes;
+    uint32_t prepare_votes;
+    uint32_t commit_votes;
+    uint32_t f_max_faulty;
+    char proposal_hash[32];
+    uint8_t committed;
+} p2p_bft_state_t;
+
+#define P2P_BLOOM_FILTER_SIZE_BITS 256
+typedef struct {
+    uint8_t filter[P2P_BLOOM_FILTER_SIZE_BITS / 8];
+    uint32_t items_added;
+} p2p_bloom_filter_t;
+
+int p2p_topology_select_route(const p2p_node_t *n, uint32_t topology_type, uint32_t dest_id, uint32_t *out_next_hop);
+
+int p2p_bft_preprepare(p2p_bft_state_t *bft, uint32_t view_id, uint32_t seq, const char *proposal_data, uint32_t f_max);
+int p2p_bft_prepare(p2p_bft_state_t *bft, uint32_t voter_id, uint32_t view_id, uint32_t seq);
+int p2p_bft_commit(p2p_bft_state_t *bft, uint32_t voter_id, uint32_t view_id, uint32_t seq);
+
+void p2p_bloom_sync_init(p2p_bloom_filter_t *filter);
+int p2p_bloom_sync_diff(const p2p_bloom_filter_t *local_bf, const p2p_bloom_filter_t *remote_bf, int *out_mismatch_count);
+
 #endif
