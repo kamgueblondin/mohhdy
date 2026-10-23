@@ -534,4 +534,51 @@ int vfs_dist_metadata_node_failover(vfs_dist_metadata_rebalancer_t *reb, uint32_
 int vfs_dist_metadata_rebalance(vfs_dist_metadata_rebalancer_t *reb, int *out_migrated_inodes);
 int vfs_dist_metadata_resolve_vector_conflict(const vfs_vector_clock_t *clock_a, const vfs_vector_clock_t *clock_b, vfs_vector_clock_t *out_merged_clock, int *out_conflict);
 
+/* Lot 41: VFS PCIe NVMe Host Memory Buffer (HMB) & Dynamic Zone Allocation Engine (US-013 / US-046) */
+#define RAMFS_NVME_HMB_PAGES_MAX 8
+#define RAMFS_NVME_HMB_BUFFER_SIZE 2048
+#define VFS_MULTI_REGION_ZONES_MAX 8
+
+typedef struct {
+    uint32_t page_idx;
+    uint32_t phys_addr;
+    uint8_t registered;
+} vfs_nvme_hmb_page_t;
+
+typedef struct {
+    vfs_nvme_hmb_page_t pages[RAMFS_NVME_HMB_PAGES_MAX];
+    int registered_page_count;
+    uint32_t page_size;
+    uint8_t buffer[RAMFS_NVME_HMB_BUFFER_SIZE];
+    uint32_t head;
+    uint32_t tail;
+    uint32_t total_writes;
+    uint32_t total_reads;
+} vfs_nvme_hmb_engine_t;
+
+typedef struct {
+    uint32_t zone_id;
+    uint32_t region_id;
+    uint32_t capacity;
+    uint32_t used_bytes;
+    uint8_t active;
+} vfs_multi_region_zone_t;
+
+typedef struct {
+    vfs_multi_region_zone_t zones[VFS_MULTI_REGION_ZONES_MAX];
+    int zone_count;
+    uint32_t failover_count;
+    uint32_t rebalanced_stripes;
+} vfs_multi_region_rebalancer_t;
+
+void vfs_nvme_hmb_init(vfs_nvme_hmb_engine_t *hmb, uint32_t total_pages, uint32_t page_size_bytes);
+int vfs_nvme_hmb_register_page(vfs_nvme_hmb_engine_t *hmb, uint32_t page_idx, uint32_t phys_addr);
+int vfs_nvme_hmb_ring_write(vfs_nvme_hmb_engine_t *hmb, const uint8_t *data, uint32_t len, uint32_t *out_written);
+int vfs_nvme_hmb_ring_read(vfs_nvme_hmb_engine_t *hmb, uint8_t *out_data, uint32_t max_len, uint32_t *out_read);
+
+void vfs_multi_region_rebalancer_init(vfs_multi_region_rebalancer_t *reb);
+int vfs_multi_region_add_zone(vfs_multi_region_rebalancer_t *reb, uint32_t zone_id, uint32_t region_id, uint32_t capacity);
+int vfs_multi_region_failover(vfs_multi_region_rebalancer_t *reb, uint32_t failed_region_id, uint32_t target_region_id);
+int vfs_multi_region_rebalance(vfs_multi_region_rebalancer_t *reb, int *out_rebalanced_stripes);
+
 #endif

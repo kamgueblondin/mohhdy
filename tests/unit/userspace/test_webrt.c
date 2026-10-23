@@ -798,6 +798,40 @@ static void test_lot40_simd512_and_webgpu_parallel_encoder(void) {
     TEST_ASSERT_EQUAL(2, total_cmds);
 }
 
+static void test_lot41_wasm_simd_mha_and_webgpu_multi_queue(void) {
+    webrt_mha_kernel_t kernel;
+    webrt_mha_init(&kernel, 4, 16);
+    TEST_ASSERT_EQUAL(4, kernel.num_heads);
+    TEST_ASSERT_EQUAL(16, kernel.head_dim);
+
+    int32_t in_vec[64];
+    int32_t q_vec[64], k_vec[64], v_vec[64], out_vec[64];
+    for (int i = 0; i < 64; i++) in_vec[i] = i;
+
+    TEST_ASSERT_EQUAL(0, webrt_mha_qkv_proj(&kernel, in_vec, q_vec, k_vec, v_vec, 1));
+    TEST_ASSERT_EQUAL(0, q_vec[0]);
+    TEST_ASSERT_EQUAL(1, k_vec[0]);
+    TEST_ASSERT_EQUAL(2, v_vec[0]);
+
+    int32_t logits[4] = {10, 20, 30, 40};
+    int32_t probs[4] = {0};
+    TEST_ASSERT_EQUAL(0, webrt_mha_softmax_fast_q16(logits, probs, 4));
+
+    TEST_ASSERT_EQUAL(0, webrt_mha_compute_attention(&kernel, q_vec, k_vec, v_vec, out_vec, 1));
+    TEST_ASSERT_EQUAL(1, kernel.total_attentions_computed);
+
+    webrt_webgpu_multi_queue_t mq;
+    webrt_webgpu_multi_queue_init(&mq);
+    TEST_ASSERT_EQUAL(0, webrt_webgpu_multi_queue_submit(&mq, 0, 101, 50));
+    TEST_ASSERT_EQUAL(0, webrt_webgpu_multi_queue_submit(&mq, 1, 202, 100));
+    TEST_ASSERT_EQUAL(2, mq.total_submissions);
+
+    int executed = 0;
+    TEST_ASSERT_EQUAL(0, webrt_webgpu_multi_queue_process(&mq, &executed));
+    TEST_ASSERT_EQUAL(2, executed);
+    TEST_ASSERT_EQUAL(2, mq.total_processed);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -828,6 +862,7 @@ int main(void) {
     RUN_TEST(test_lot38_sab_futex_and_wasm_simd_conv);
     RUN_TEST(test_lot39_wasm_simd256_and_webgpu_compute);
     RUN_TEST(test_lot40_simd512_and_webgpu_parallel_encoder);
+    RUN_TEST(test_lot41_wasm_simd_mha_and_webgpu_multi_queue);
 
     unity_print_results();
     unity_cleanup();

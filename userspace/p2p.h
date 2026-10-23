@@ -784,4 +784,47 @@ void p2p_zk_stark_verifier_init(p2p_zk_stark_verifier_t *v);
 int p2p_zk_stark_proof_create(uint32_t trace_len, int fri_layers_cnt, p2p_zk_stark_proof_t *out_proof);
 int p2p_zk_stark_verify_fri(p2p_zk_stark_verifier_t *v, const p2p_zk_stark_proof_t *proof, int *out_valid);
 
+/* Lot 41: P2P Mesh Network Cross-WAN Geo-Replicated Consensus Mesh & Zero-Knowledge Proof Aggregator Engine (US-076 / US-088) */
+#define P2P_CROSS_WAN_NODES_MAX 8
+#define P2P_ZK_AGGREGATOR_PROOFS_MAX 16
+#define P2P_ZK_PROOF_TYPE_STARK 1
+#define P2P_ZK_PROOF_TYPE_PLONK 2
+
+typedef struct {
+    uint32_t node_id;
+    uint32_t region_id;
+    uint32_t state_hash;
+    uint8_t active;
+} p2p_cross_wan_node_t;
+
+typedef struct {
+    p2p_cross_wan_node_t nodes[P2P_CROSS_WAN_NODES_MAX];
+    int node_count;
+    uint32_t merkle_root;
+    uint32_t total_rebalances;
+} p2p_cross_wan_mesh_t;
+
+typedef struct {
+    uint32_t proof_type;
+    uint8_t proof_data[128];
+    uint32_t proof_len;
+    uint8_t valid;
+} p2p_zk_aggregated_proof_t;
+
+typedef struct {
+    p2p_zk_aggregated_proof_t proofs[P2P_ZK_AGGREGATOR_PROOFS_MAX];
+    int proof_count;
+    uint32_t batch_verifications;
+    uint32_t total_valid_proofs;
+} p2p_zk_aggregator_t;
+
+void p2p_cross_wan_mesh_init(p2p_cross_wan_mesh_t *mesh);
+int p2p_cross_wan_mesh_add_node(p2p_cross_wan_mesh_t *mesh, uint32_t node_id, uint32_t region_id);
+int p2p_cross_wan_mesh_rebalance(p2p_cross_wan_mesh_t *mesh, int *out_topology_changes);
+int p2p_cross_wan_mesh_merkle_aggregate(p2p_cross_wan_mesh_t *mesh, uint32_t *out_root_hash);
+
+void p2p_zk_aggregator_init(p2p_zk_aggregator_t *agg);
+int p2p_zk_aggregator_add_proof(p2p_zk_aggregator_t *agg, uint32_t proof_type, const uint8_t *proof_data, uint32_t proof_len);
+int p2p_zk_aggregator_verify_batch(p2p_zk_aggregator_t *agg, int *out_valid_count);
+
 #endif

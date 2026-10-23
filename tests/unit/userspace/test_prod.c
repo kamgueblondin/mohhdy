@@ -1213,6 +1213,35 @@ static void test_lot35_prod_fault_mitigation_and_ai_remediation(void) {
     TEST_ASSERT_NOT_NULL(strstr(log_buf, "REALTIME PREDICTIVE AI REMEDIATION"));
 }
 
+static void test_lot41_prod_chaos_resilience_and_core_scheduler(void) {
+    prod_chaos_resilience_t res;
+    prod_chaos_resilience_init(&res, 500);
+    TEST_ASSERT_EQUAL(0, prod_chaos_resilience_inject(&res, 10, 1));
+    TEST_ASSERT_EQUAL(1, res.total_injections);
+    TEST_ASSERT_EQUAL(1, res.regions[0].isolated);
+
+    char log_buf[128] = {0};
+    int healed_cnt = 0;
+    TEST_ASSERT_EQUAL(0, prod_chaos_resilience_isolate_and_heal(&res, log_buf, sizeof(log_buf), &healed_cnt));
+    TEST_ASSERT_EQUAL(1, healed_cnt);
+    TEST_ASSERT_EQUAL(1, res.regions[0].healed);
+
+    prod_core_scheduler_t sched;
+    prod_core_scheduler_init(&sched, 4);
+    TEST_ASSERT_EQUAL(4, sched.num_cores);
+
+    TEST_ASSERT_EQUAL(0, prod_core_scheduler_bind_thread(&sched, 101, 0));
+    TEST_ASSERT_EQUAL(1, sched.thread_count);
+
+    TEST_ASSERT_EQUAL(0, prod_core_scheduler_migrate_thread(&sched, 101, 2));
+    TEST_ASSERT_EQUAL(2, sched.threads[0].current_core);
+    TEST_ASSERT_EQUAL(1, sched.total_migrations);
+
+    uint32_t freq_pct = 0;
+    TEST_ASSERT_EQUAL(0, prod_core_scheduler_scale_power_thermal(&sched, 80, &freq_pct));
+    TEST_ASSERT_EQUAL(75, freq_pct);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -1252,6 +1281,7 @@ int main(void) {
     RUN_TEST(test_lot38_prod_predictive_fail_and_ai_remed);
     RUN_TEST(test_lot39_multi_region_isolator_and_self_driving);
     RUN_TEST(test_lot40_multi_cluster_heal_and_self_driving_resource);
+    RUN_TEST(test_lot41_prod_chaos_resilience_and_core_scheduler);
 
     unity_print_results();
     unity_cleanup();

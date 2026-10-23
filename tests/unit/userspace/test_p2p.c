@@ -1504,6 +1504,36 @@ static void test_lot35_p2p_cross_wan_raft_bulletproof_ip(void) {
     TEST_ASSERT_EQUAL(0, valid);
 }
 
+static void test_lot41_p2p_cross_wan_mesh_and_zk_aggregator(void) {
+    p2p_cross_wan_mesh_t mesh;
+    p2p_cross_wan_mesh_init(&mesh);
+    TEST_ASSERT_EQUAL(0, p2p_cross_wan_mesh_add_node(&mesh, 1001, 1));
+    TEST_ASSERT_EQUAL(0, p2p_cross_wan_mesh_add_node(&mesh, 1002, 2));
+    TEST_ASSERT_EQUAL(2, mesh.node_count);
+
+    int changes = 0;
+    TEST_ASSERT_EQUAL(0, p2p_cross_wan_mesh_rebalance(&mesh, &changes));
+    TEST_ASSERT_EQUAL(2, changes);
+    TEST_ASSERT_EQUAL(1, mesh.total_rebalances);
+
+    uint32_t root_hash = 0;
+    TEST_ASSERT_EQUAL(0, p2p_cross_wan_mesh_merkle_aggregate(&mesh, &root_hash));
+    TEST_ASSERT_NOT_EQUAL(0, root_hash);
+
+    p2p_zk_aggregator_t agg;
+    p2p_zk_aggregator_init(&agg);
+    uint8_t proof1[16] = {1, 2, 3, 4};
+    uint8_t proof2[16] = {5, 6, 7, 8};
+    TEST_ASSERT_EQUAL(0, p2p_zk_aggregator_add_proof(&agg, P2P_ZK_PROOF_TYPE_STARK, proof1, 4));
+    TEST_ASSERT_EQUAL(0, p2p_zk_aggregator_add_proof(&agg, P2P_ZK_PROOF_TYPE_PLONK, proof2, 4));
+    TEST_ASSERT_EQUAL(2, agg.proof_count);
+
+    int valid_cnt = 0;
+    TEST_ASSERT_EQUAL(0, p2p_zk_aggregator_verify_batch(&agg, &valid_cnt));
+    TEST_ASSERT_EQUAL(2, valid_cnt);
+    TEST_ASSERT_EQUAL(2, agg.total_valid_proofs);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1554,6 +1584,7 @@ int main(void) {
     RUN_TEST(test_lot38_p2p_multi_raft_wan_and_zk_range);
     RUN_TEST(test_lot39_wan_async_repl_and_zk_plonk);
     RUN_TEST(test_lot40_geo_sharding_and_zk_stark);
+    RUN_TEST(test_lot41_p2p_cross_wan_mesh_and_zk_aggregator);
 
     unity_print_results();
     unity_cleanup();

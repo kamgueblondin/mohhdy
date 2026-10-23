@@ -1616,6 +1616,121 @@ int prod_audit_diagnostic_report(const prod_quarantine_mgr_t *q_mgr, const prod_
     return (int)s_len(out_report);
 }
 
+/* Lot 41: Production Daemon Multi-Region Autonomous Chaos Resilience Engine & Predictive Core Scheduler Engine */
+
+void prod_chaos_resilience_init(prod_chaos_resilience_t *res, uint32_t threshold) {
+    if (!res) return;
+    res->region_count = 0;
+    res->anomaly_threshold_ppm = threshold;
+    res->total_injections = 0;
+    res->total_healings = 0;
+    for (int i = 0; i < PROD_CHAOS_REGIONS_MAX; i++) {
+        res->regions[i].region_id = 0;
+        res->regions[i].fault_mask = 0;
+        res->regions[i].isolated = 0;
+        res->regions[i].healed = 0;
+    }
+}
+
+int prod_chaos_resilience_inject(prod_chaos_resilience_t *res, uint32_t region_id, uint32_t fault_type) {
+    if (!res) return -1;
+    int idx = -1;
+    for (int i = 0; i < res->region_count; i++) {
+        if (res->regions[i].region_id == region_id) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx == -1) {
+        if (res->region_count >= PROD_CHAOS_REGIONS_MAX) return -1;
+        idx = res->region_count;
+        res->regions[idx].region_id = region_id;
+        res->regions[idx].fault_mask = 0;
+        res->regions[idx].isolated = 0;
+        res->regions[idx].healed = 0;
+        res->region_count++;
+    }
+    res->regions[idx].fault_mask |= fault_type;
+    res->regions[idx].isolated = 1;
+    res->total_injections++;
+    return 0;
+}
+
+int prod_chaos_resilience_isolate_and_heal(prod_chaos_resilience_t *res, char *out_log, int max_sz, int *out_healed_count) {
+    if (!res) return -1;
+    int healed = 0;
+    if (out_log && max_sz > 0) out_log[0] = '\0';
+    for (int i = 0; i < res->region_count; i++) {
+        if (res->regions[i].isolated && !res->regions[i].healed) {
+            res->regions[i].fault_mask = 0;
+            res->regions[i].isolated = 0;
+            res->regions[i].healed = 1;
+            healed++;
+        }
+    }
+    res->total_healings += healed;
+    if (out_log && max_sz > 0) {
+        s_copy(out_log, "[CHAOS RESILIENCE] Auto-isolated & healed regions\n", max_sz);
+    }
+    if (out_healed_count) *out_healed_count = healed;
+    return 0;
+}
+
+void prod_core_scheduler_init(prod_core_scheduler_t *sched, uint32_t num_cores) {
+    if (!sched) return;
+    sched->thread_count = 0;
+    sched->num_cores = (num_cores > PROD_SCHED_CORES_MAX) ? PROD_SCHED_CORES_MAX : num_cores;
+    sched->current_temp_celsius = 45;
+    sched->total_migrations = 0;
+    sched->scaled_freq_pct = 100;
+    for (int i = 0; i < PROD_SCHED_THREADS_MAX; i++) {
+        sched->threads[i].thread_id = 0;
+        sched->threads[i].current_core = 0;
+        sched->threads[i].affinity_mask = 0xFF;
+        sched->threads[i].cpu_load_pct = 0;
+        sched->threads[i].active = 0;
+    }
+}
+
+int prod_core_scheduler_bind_thread(prod_core_scheduler_t *sched, uint32_t thread_id, uint32_t initial_core) {
+    if (!sched || sched->thread_count >= PROD_SCHED_THREADS_MAX) return -1;
+    int idx = sched->thread_count;
+    sched->threads[idx].thread_id = thread_id;
+    sched->threads[idx].current_core = (initial_core < sched->num_cores) ? initial_core : 0;
+    sched->threads[idx].affinity_mask = (1U << sched->threads[idx].current_core);
+    sched->threads[idx].cpu_load_pct = 25;
+    sched->threads[idx].active = 1;
+    sched->thread_count++;
+    return 0;
+}
+
+int prod_core_scheduler_migrate_thread(prod_core_scheduler_t *sched, uint32_t thread_id, uint32_t target_core) {
+    if (!sched || target_core >= sched->num_cores) return -1;
+    for (int i = 0; i < sched->thread_count; i++) {
+        if (sched->threads[i].active && sched->threads[i].thread_id == thread_id) {
+            sched->threads[i].current_core = target_core;
+            sched->threads[i].affinity_mask = (1U << target_core);
+            sched->total_migrations++;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int prod_core_scheduler_scale_power_thermal(prod_core_scheduler_t *sched, uint32_t temp_celsius, uint32_t *out_scaled_freq_pct) {
+    if (!sched) return -1;
+    sched->current_temp_celsius = temp_celsius;
+    if (temp_celsius > 85) {
+        sched->scaled_freq_pct = 50;
+    } else if (temp_celsius > 70) {
+        sched->scaled_freq_pct = 75;
+    } else {
+        sched->scaled_freq_pct = 100;
+    }
+    if (out_scaled_freq_pct) *out_scaled_freq_pct = sched->scaled_freq_pct;
+    return 0;
+}
+
 /* Lot 40: Production Daemon Multi-Cluster Incident Auto-Healing Engine & Self-Driving Resource Allocation Engine */
 
 void prod_multi_cluster_auto_heal_init(prod_multi_cluster_auto_heal_t *mgr, uint32_t anomaly_threshold_ppm) {

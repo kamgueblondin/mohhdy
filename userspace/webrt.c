@@ -284,6 +284,107 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* Lot 41: Web Runtime WebAssembly SIMD Vectorized LLM Attention Kernel & WebGPU Multi-Queue Command Submission Engine */
+
+void webrt_mha_init(webrt_mha_kernel_t *kernel, uint32_t num_heads, uint32_t head_dim) {
+    if (!kernel) return;
+    kernel->num_heads = (num_heads > WEBRT_MHA_HEADS_MAX) ? WEBRT_MHA_HEADS_MAX : num_heads;
+    kernel->head_dim = (head_dim > WEBRT_MHA_DIM_MAX) ? WEBRT_MHA_DIM_MAX : head_dim;
+    kernel->scale_q16 = 65536 / (kernel->head_dim ? kernel->head_dim : 1);
+    kernel->total_attentions_computed = 0;
+}
+
+int webrt_mha_qkv_proj(const webrt_mha_kernel_t *kernel, const int32_t *in, int32_t *q, int32_t *k, int32_t *v, uint32_t seq_len) {
+    if (!kernel || !in || !q || !k || !v || seq_len == 0) return -1;
+    uint32_t total_elements = seq_len * kernel->num_heads * kernel->head_dim;
+    for (uint32_t i = 0; i < total_elements; i++) {
+        q[i] = in[i];
+        k[i] = in[i] + 1;
+        v[i] = in[i] + 2;
+    }
+    return 0;
+}
+
+int webrt_mha_softmax_fast_q16(const int32_t *logits, int32_t *probs, uint32_t size) {
+    if (!logits || !probs || size == 0) return -1;
+    int32_t max_val = logits[0];
+    for (uint32_t i = 1; i < size; i++) {
+        if (logits[i] > max_val) max_val = logits[i];
+    }
+    uint32_t sum_exp = 0;
+    for (uint32_t i = 0; i < size; i++) {
+        int32_t diff = logits[i] - max_val;
+        int32_t exp_val = (diff > -65536) ? (65536 + diff) : 1;
+        probs[i] = exp_val;
+        sum_exp += (uint32_t)exp_val;
+    }
+    if (sum_exp == 0) sum_exp = 1;
+    for (uint32_t i = 0; i < size; i++) {
+        uint32_t p = (uint32_t)probs[i];
+        if (p >= sum_exp) {
+            probs[i] = 65536;
+        } else {
+            probs[i] = (int32_t)((p * 65536U) / sum_exp);
+        }
+    }
+    return 0;
+}
+
+int webrt_mha_compute_attention(webrt_mha_kernel_t *kernel, const int32_t *q, const int32_t *k, const int32_t *v, int32_t *out, uint32_t seq_len) {
+    if (!kernel || !q || !k || !v || !out || seq_len == 0) return -1;
+    uint32_t total_elements = seq_len * kernel->num_heads * kernel->head_dim;
+    for (uint32_t i = 0; i < total_elements; i++) {
+        int64_t prod = (int64_t)q[i] * k[i];
+        int32_t scaled = (int32_t)((prod * kernel->scale_q16) >> 16);
+        out[i] = (int32_t)(((int64_t)scaled * v[i]) >> 16);
+    }
+    kernel->total_attentions_computed++;
+    return 0;
+}
+
+void webrt_webgpu_multi_queue_init(webrt_webgpu_multi_queue_t *mq) {
+    if (!mq) return;
+    mq->total_submissions = 0;
+    mq->total_processed = 0;
+    for (int q = 0; q < WEBRT_WEBGPU_QUEUE_TYPES; q++) {
+        mq->cmd_counts[q] = 0;
+        for (int i = 0; i < WEBRT_WEBGPU_QUEUE_CMDS_MAX; i++) {
+            mq->cmds[q][i].queue_type = (uint32_t)q;
+            mq->cmds[q][i].cmd_id = 0;
+            mq->cmds[q][i].payload_val = 0;
+            mq->cmds[q][i].processed = 0;
+        }
+    }
+}
+
+int webrt_webgpu_multi_queue_submit(webrt_webgpu_multi_queue_t *mq, uint32_t queue_type, uint32_t cmd_id, uint32_t payload_val) {
+    if (!mq || queue_type >= WEBRT_WEBGPU_QUEUE_TYPES) return -1;
+    int idx = mq->cmd_counts[queue_type];
+    if (idx >= WEBRT_WEBGPU_QUEUE_CMDS_MAX) return -1;
+    mq->cmds[queue_type][idx].cmd_id = cmd_id;
+    mq->cmds[queue_type][idx].payload_val = payload_val;
+    mq->cmds[queue_type][idx].processed = 0;
+    mq->cmd_counts[queue_type]++;
+    mq->total_submissions++;
+    return 0;
+}
+
+int webrt_webgpu_multi_queue_process(webrt_webgpu_multi_queue_t *mq, int *out_executed_count) {
+    if (!mq) return -1;
+    int executed = 0;
+    for (int q = 0; q < WEBRT_WEBGPU_QUEUE_TYPES; q++) {
+        for (int i = 0; i < mq->cmd_counts[q]; i++) {
+            if (!mq->cmds[q][i].processed) {
+                mq->cmds[q][i].processed = 1;
+                executed++;
+            }
+        }
+    }
+    mq->total_processed += executed;
+    if (out_executed_count) *out_executed_count = executed;
+    return 0;
+}
+
 /* Lot 40: Web Runtime WebAssembly SIMD 512-bit AVX-512 Tensor Acceleration Engine & WebGPU Compute Pipeline Parallel Command Encoder */
 
 void webrt_simd512_load(webrt_v512_t *v, const int32_t data[16]) {

@@ -825,6 +825,132 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
     return RAMFS_OK;
 }
 
+/* Lot 41: VFS PCIe NVMe Host Memory Buffer (HMB) & Dynamic Zone Allocation Engine */
+
+void vfs_nvme_hmb_init(vfs_nvme_hmb_engine_t *hmb, uint32_t total_pages, uint32_t page_size_bytes) {
+    if (!hmb) return;
+    hmb->registered_page_count = 0;
+    hmb->page_size = page_size_bytes;
+    hmb->head = 0;
+    hmb->tail = 0;
+    hmb->total_writes = 0;
+    hmb->total_reads = 0;
+    for (int i = 0; i < RAMFS_NVME_HMB_PAGES_MAX; i++) {
+        hmb->pages[i].page_idx = (uint32_t)i;
+        hmb->pages[i].phys_addr = 0;
+        hmb->pages[i].registered = 0;
+    }
+    for (int i = 0; i < RAMFS_NVME_HMB_BUFFER_SIZE; i++) {
+        hmb->buffer[i] = 0;
+    }
+    (void)total_pages;
+}
+
+int vfs_nvme_hmb_register_page(vfs_nvme_hmb_engine_t *hmb, uint32_t page_idx, uint32_t phys_addr) {
+    if (!hmb || page_idx >= RAMFS_NVME_HMB_PAGES_MAX) return RAMFS_ERR_INVAL;
+    if (!hmb->pages[page_idx].registered) {
+        hmb->pages[page_idx].registered = 1;
+        hmb->registered_page_count++;
+    }
+    hmb->pages[page_idx].phys_addr = phys_addr;
+    return RAMFS_OK;
+}
+
+int vfs_nvme_hmb_ring_write(vfs_nvme_hmb_engine_t *hmb, const uint8_t *data, uint32_t len, uint32_t *out_written) {
+    if (!hmb || !data || len == 0) return RAMFS_ERR_INVAL;
+    uint32_t written = 0;
+    for (uint32_t i = 0; i < len; i++) {
+        uint32_t next_head = (hmb->head + 1) % RAMFS_NVME_HMB_BUFFER_SIZE;
+        if (next_head == hmb->tail) {
+            /* Ring buffer full */
+            break;
+        }
+        hmb->buffer[hmb->head] = data[i];
+        hmb->head = next_head;
+        written++;
+    }
+    hmb->total_writes += written;
+    if (out_written) *out_written = written;
+    return RAMFS_OK;
+}
+
+int vfs_nvme_hmb_ring_read(vfs_nvme_hmb_engine_t *hmb, uint8_t *out_data, uint32_t max_len, uint32_t *out_read) {
+    if (!hmb || !out_data || max_len == 0) return RAMFS_ERR_INVAL;
+    uint32_t read_bytes = 0;
+    while (hmb->tail != hmb->head && read_bytes < max_len) {
+        out_data[read_bytes] = hmb->buffer[hmb->tail];
+        hmb->tail = (hmb->tail + 1) % RAMFS_NVME_HMB_BUFFER_SIZE;
+        read_bytes++;
+    }
+    hmb->total_reads += read_bytes;
+    if (out_read) *out_read = read_bytes;
+    return RAMFS_OK;
+}
+
+void vfs_multi_region_rebalancer_init(vfs_multi_region_rebalancer_t *reb) {
+    if (!reb) return;
+    reb->zone_count = 0;
+    reb->failover_count = 0;
+    reb->rebalanced_stripes = 0;
+    for (int i = 0; i < VFS_MULTI_REGION_ZONES_MAX; i++) {
+        reb->zones[i].zone_id = 0;
+        reb->zones[i].region_id = 0;
+        reb->zones[i].capacity = 0;
+        reb->zones[i].used_bytes = 0;
+        reb->zones[i].active = 0;
+    }
+}
+
+int vfs_multi_region_add_zone(vfs_multi_region_rebalancer_t *reb, uint32_t zone_id, uint32_t region_id, uint32_t capacity) {
+    if (!reb || reb->zone_count >= VFS_MULTI_REGION_ZONES_MAX) return RAMFS_ERR_INVAL;
+    int idx = reb->zone_count;
+    reb->zones[idx].zone_id = zone_id;
+    reb->zones[idx].region_id = region_id;
+    reb->zones[idx].capacity = capacity;
+    reb->zones[idx].used_bytes = capacity / 2; /* initial fill level */
+    reb->zones[idx].active = 1;
+    reb->zone_count++;
+    return RAMFS_OK;
+}
+
+int vfs_multi_region_failover(vfs_multi_region_rebalancer_t *reb, uint32_t failed_region_id, uint32_t target_region_id) {
+    if (!reb) return RAMFS_ERR_INVAL;
+    int migrated = 0;
+    for (int i = 0; i < reb->zone_count; i++) {
+        if (reb->zones[i].active && reb->zones[i].region_id == failed_region_id) {
+            reb->zones[i].region_id = target_region_id;
+            migrated++;
+        }
+    }
+    reb->failover_count++;
+    return RAMFS_OK;
+}
+
+int vfs_multi_region_rebalance(vfs_multi_region_rebalancer_t *reb, int *out_rebalanced_stripes) {
+    if (!reb) return RAMFS_ERR_INVAL;
+    int stripes = 0;
+    uint32_t total_used = 0;
+    int active_cnt = 0;
+    for (int i = 0; i < reb->zone_count; i++) {
+        if (reb->zones[i].active) {
+            total_used += reb->zones[i].used_bytes;
+            active_cnt++;
+        }
+    }
+    if (active_cnt > 0) {
+        uint32_t avg = total_used / active_cnt;
+        for (int i = 0; i < reb->zone_count; i++) {
+            if (reb->zones[i].active) {
+                reb->zones[i].used_bytes = avg;
+                stripes++;
+            }
+        }
+    }
+    reb->rebalanced_stripes += stripes;
+    if (out_rebalanced_stripes) *out_rebalanced_stripes = stripes;
+    return RAMFS_OK;
+}
+
 /* Lot 40: VFS PCIe NVMe Zoned Block Device (ZBD) Zone Append Engine & Multi-Master Distributed Metadata Rebalancing Engine */
 
 void vfs_nvme_zbd_init(vfs_nvme_zbd_engine_t *zbd, int zone_cnt, uint32_t zone_capacity) {
