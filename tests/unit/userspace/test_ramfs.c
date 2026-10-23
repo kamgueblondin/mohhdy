@@ -242,6 +242,44 @@ static void test_lot28_page_cache_and_io_queue(void) {
     TEST_ASSERT_EQUAL(2, vfs_io_process_coalesced());
 }
 
+static void test_lot30_vfs_mount_overlay_defrag(void) {
+    ramfs_init();
+
+    /* 1. Mount table test */
+    vfs_mount_table_t mtable;
+    vfs_mount_table_init(&mtable);
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_mount_point_add(&mtable, "/mnt/data", "/data", 0));
+    TEST_ASSERT_EQUAL(RAMFS_ERR_EXISTS, vfs_mount_point_add(&mtable, "/mnt/data", "/data2", 0));
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_mount_point_remove(&mtable, "/mnt/data"));
+    TEST_ASSERT_EQUAL(0, mtable.count);
+
+    /* 2. Overlay FS COW write and file lookup */
+    ramfs_mkdir_p("/lower1");
+    ramfs_mkdir_p("/upper");
+    ramfs_write("/lower1/file.txt", "lower_data", 10);
+
+    vfs_overlay_config_t ov_cfg;
+    ov_cfg.active = 1;
+    ov_cfg.lower_count = 1;
+    strcpy(ov_cfg.lower_layers[0], "/lower1");
+    strcpy(ov_cfg.upper_layer, "/upper");
+    strcpy(ov_cfg.work_dir, "/work");
+
+    char found_path[RAMFS_PATH_MAX];
+    uint8_t is_wh = 0;
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_overlay_file_lookup(&ov_cfg, "/file.txt", found_path, sizeof(found_path), &is_wh));
+    TEST_ASSERT_EQUAL_STRING("/lower1/file.txt", found_path);
+
+    /* COW Write */
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_overlay_cow_write(&ov_cfg, "/file.txt", "upper_data", 10));
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_overlay_file_lookup(&ov_cfg, "/file.txt", found_path, sizeof(found_path), &is_wh));
+    TEST_ASSERT_EQUAL_STRING("/upper/file.txt", found_path);
+
+    /* 3. Defrag compact */
+    int moved = 0, freed = 0;
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_defrag_compact(&moved, &freed));
+}
+
 int main(void) {
     unity_init();
 
@@ -259,6 +297,7 @@ int main(void) {
     RUN_TEST(test_lot29_vfs_journaling_locks_integrity);
     RUN_TEST(test_procsim_table_and_kill);
     RUN_TEST(test_lot28_page_cache_and_io_queue);
+    RUN_TEST(test_lot30_vfs_mount_overlay_defrag);
 
     unity_print_results();
     unity_cleanup();

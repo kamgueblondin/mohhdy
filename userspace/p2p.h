@@ -412,4 +412,46 @@ int p2p_gossip_tick(p2p_node_t* n, const p2p_host_t* h, p2p_gossip_table_t* tabl
 int p2p_nat_keepalive_step(p2p_node_t* n, const p2p_host_t* h, p2p_nat_keepalive_table_t* table, uint32_t now_tick);
 int p2p_multipath_route_select(const p2p_node_t* n, uint32_t dest_id, uint32_t* path1_next, uint32_t* path2_next);
 
+/* Lot 30: P2P WAN Multi-Region Mesh & Distributed Consensus Partitioning (US-065 / US-077) */
+#define P2P_MULTI_RAFT_GROUPS_MAX 4
+#define P2P_MERKLE_NODES_MAX 32
+
+typedef struct {
+    uint32_t group_id;
+    uint32_t term;
+    uint32_t leader_id;
+    uint32_t commit_index;
+    uint32_t last_log_index;
+    uint8_t active;
+} p2p_multi_raft_group_t;
+
+typedef struct {
+    p2p_multi_raft_group_t groups[P2P_MULTI_RAFT_GROUPS_MAX];
+    int group_count;
+} p2p_multi_raft_mgr_t;
+
+typedef struct {
+    uint32_t node_id;
+    uint32_t hash;
+    char key[P2P_KEY_MAX];
+    char value[P2P_VAL_MAX];
+} p2p_merkle_entry_t;
+
+typedef struct {
+    p2p_merkle_entry_t entries[P2P_MERKLE_NODES_MAX];
+    int count;
+    uint32_t root_hash;
+} p2p_merkle_tree_t;
+
+int p2p_region_route_calculate(const p2p_node_t *n, uint32_t src_region, uint32_t dst_region, uint32_t dest_id, uint32_t *out_next_hop, uint32_t *out_cost);
+
+void p2p_multi_raft_init(p2p_multi_raft_mgr_t *mgr);
+int p2p_multi_raft_propose(p2p_multi_raft_mgr_t *mgr, uint32_t group_id, const char *cmd);
+int p2p_multi_raft_commit(p2p_multi_raft_mgr_t *mgr, uint32_t group_id, uint32_t index);
+
+void p2p_merkle_init(p2p_merkle_tree_t *tree);
+int p2p_merkle_insert(p2p_merkle_tree_t *tree, uint32_t node_id, const char *key, const char *value);
+uint32_t p2p_merkle_sync_tree(p2p_merkle_tree_t *tree);
+int p2p_merkle_diff_sync(const p2p_merkle_tree_t *local_tree, const p2p_merkle_tree_t *remote_tree, uint32_t *out_diff_ids, int max_diffs);
+
 #endif

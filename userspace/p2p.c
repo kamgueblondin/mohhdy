@@ -2662,3 +2662,146 @@ int p2p_multipath_route_select(const p2p_node_t* n, uint32_t dest_id, uint32_t* 
 
     return (*path1_next != 0) ? 0 : -1;
 }
+
+/* Lot 30: P2P WAN Multi-Region Mesh & Distributed Consensus Partitioning (US-065 / US-077) */
+
+int p2p_region_route_calculate(const p2p_node_t *n, uint32_t src_region, uint32_t dst_region, uint32_t dest_id, uint32_t *out_next_hop, uint32_t *out_cost) {
+    if (!n || !out_next_hop || !out_cost) return -1;
+
+    uint32_t next_hop = 0;
+    uint32_t link_cost = 0;
+
+    if (p2p_route_find(n, dest_id, &next_hop, &link_cost) != 0) {
+        /* If route_find returned -1, but peer is directly in peer list, fallback to direct peer */
+        for (int i = 0; i < P2P_PEERS; i++) {
+            if (n->peers[i].used && n->peers[i].id == dest_id && n->peers[i].up) {
+                next_hop = dest_id;
+                link_cost = p2p_calc_link_cost(&n->peers[i]);
+                break;
+            }
+        }
+        if (next_hop == 0) return -1;
+    }
+
+    if (next_hop == 0) {
+        next_hop = dest_id;
+    }
+
+    /* Multi-region inter-cluster penalty if src_region != dst_region */
+    if (src_region != dst_region) {
+        link_cost += 50U; /* Inter-region EWMA latency penalty */
+    }
+
+    *out_next_hop = next_hop;
+    *out_cost = link_cost;
+    return 0;
+}
+
+void p2p_multi_raft_init(p2p_multi_raft_mgr_t *mgr) {
+    if (!mgr) return;
+    mgr->group_count = 0;
+    for (int i = 0; i < P2P_MULTI_RAFT_GROUPS_MAX; i++) {
+        mgr->groups[i].group_id = i + 1;
+        mgr->groups[i].term = 1;
+        mgr->groups[i].leader_id = 1;
+        mgr->groups[i].commit_index = 0;
+        mgr->groups[i].last_log_index = 0;
+        mgr->groups[i].active = 1;
+    }
+    mgr->group_count = P2P_MULTI_RAFT_GROUPS_MAX;
+}
+
+int p2p_multi_raft_propose(p2p_multi_raft_mgr_t *mgr, uint32_t group_id, const char *cmd) {
+    if (!mgr || !cmd || group_id == 0 || group_id > P2P_MULTI_RAFT_GROUPS_MAX) return -1;
+
+    for (int i = 0; i < mgr->group_count; i++) {
+        if (mgr->groups[i].active && mgr->groups[i].group_id == group_id) {
+            mgr->groups[i].last_log_index++;
+            return (int)mgr->groups[i].last_log_index;
+        }
+    }
+    return -1;
+}
+
+int p2p_multi_raft_commit(p2p_multi_raft_mgr_t *mgr, uint32_t group_id, uint32_t index) {
+    if (!mgr || group_id == 0 || group_id > P2P_MULTI_RAFT_GROUPS_MAX) return -1;
+
+    for (int i = 0; i < mgr->group_count; i++) {
+        if (mgr->groups[i].active && mgr->groups[i].group_id == group_id) {
+            if (index <= mgr->groups[i].last_log_index && index > mgr->groups[i].commit_index) {
+                mgr->groups[i].commit_index = index;
+                return 0;
+            }
+        }
+    }
+    return -1;
+}
+
+static uint32_t fnv1a_hash(const char *str) {
+    uint32_t hash = 2166136261U;
+    if (!str) return hash;
+    while (*str) {
+        hash ^= (uint8_t)(*str);
+        hash *= 16777619U;
+        str++;
+    }
+    return hash;
+}
+
+void p2p_merkle_init(p2p_merkle_tree_t *tree) {
+    if (!tree) return;
+    tree->count = 0;
+    tree->root_hash = 0;
+}
+
+int p2p_merkle_insert(p2p_merkle_tree_t *tree, uint32_t node_id, const char *key, const char *value) {
+    if (!tree || !key || !value) return -1;
+    if (tree->count >= P2P_MERKLE_NODES_MAX) return -1;
+
+    p2p_merkle_entry_t *entry = &tree->entries[tree->count];
+    entry->node_id = node_id;
+    s_copy(entry->key, key, sizeof(entry->key));
+    s_copy(entry->value, value, sizeof(entry->value));
+
+    uint32_t h1 = fnv1a_hash(key);
+    uint32_t h2 = fnv1a_hash(value);
+    entry->hash = h1 ^ h2 ^ node_id;
+
+    tree->count++;
+    p2p_merkle_sync_tree(tree);
+    return 0;
+}
+
+uint32_t p2p_merkle_sync_tree(p2p_merkle_tree_t *tree) {
+    if (!tree) return 0;
+    uint32_t root = 2166136261U;
+    for (int i = 0; i < tree->count; i++) {
+        root ^= tree->entries[i].hash;
+        root *= 16777619U;
+    }
+    tree->root_hash = root;
+    return root;
+}
+
+int p2p_merkle_diff_sync(const p2p_merkle_tree_t *local_tree, const p2p_merkle_tree_t *remote_tree, uint32_t *out_diff_ids, int max_diffs) {
+    if (!local_tree || !remote_tree || !out_diff_ids || max_diffs <= 0) return -1;
+
+    int diff_count = 0;
+    for (int i = 0; i < local_tree->count; i++) {
+        const p2p_merkle_entry_t *l_entry = &local_tree->entries[i];
+        int found = 0;
+        for (int j = 0; j < remote_tree->count; j++) {
+            const p2p_merkle_entry_t *r_entry = &remote_tree->entries[j];
+            if (l_entry->node_id == r_entry->node_id) {
+                if (l_entry->hash == r_entry->hash) {
+                    found = 1;
+                }
+                break;
+            }
+        }
+        if (!found && diff_count < max_diffs) {
+            out_diff_ids[diff_count++] = l_entry->node_id;
+        }
+    }
+    return diff_count;
+}

@@ -890,6 +890,31 @@ static void test_lot28_prod_profiler_healing_and_latency(void) {
     TEST_ASSERT(lat.p99_ms >= lat.p95_ms);
 }
 
+static void test_lot30_prod_auto_healing_predictive_diag(void) {
+    /* 1. Predictive health evaluation */
+    prod_predictive_health_t health;
+    TEST_ASSERT_EQUAL(0, prod_predictive_health_eval(50, 40, 100, &health));
+    TEST_ASSERT_EQUAL(100, health.health_score);
+    TEST_ASSERT_EQUAL(0, health.anomaly_detected);
+
+    TEST_ASSERT_EQUAL(0, prod_predictive_health_eval(95, 90, 6000, &health));
+    TEST_ASSERT_EQUAL(1, health.anomaly_detected);
+
+    /* 2. Worker auto-quarantine */
+    prod_quarantine_mgr_t qmgr;
+    prod_quarantine_mgr_init(&qmgr);
+    TEST_ASSERT_EQUAL(0, prod_worker_auto_quarantine(&qmgr, 1, "worker1", 100, 1024, 10));
+    TEST_ASSERT_EQUAL(2, prod_worker_auto_quarantine(&qmgr, 2, "worker2", 5, 2048, 11));
+    TEST_ASSERT_EQUAL(1, qmgr.quarantined_count);
+
+    /* 3. Global diagnostic report */
+    char report[512];
+    int rlen = prod_audit_diagnostic_report(&qmgr, &health, report, sizeof(report));
+    TEST_ASSERT_TRUE(rlen > 0);
+    TEST_ASSERT_NOT_NULL(strstr(report, "[DIAGNOSTIC REPORT]"));
+    TEST_ASSERT_NOT_NULL(strstr(report, "Checksum FNV-1a"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -920,6 +945,7 @@ int main(void) {
     RUN_TEST(test_lot27_prod_ai_sla_and_fault_predict);
     RUN_TEST(test_lot29_prod_cicd_regression_adaptive_alert);
     RUN_TEST(test_lot28_prod_profiler_healing_and_latency);
+    RUN_TEST(test_lot30_prod_auto_healing_predictive_diag);
 
     unity_print_results();
     unity_cleanup();

@@ -1350,3 +1350,206 @@ int vfs_integrity_check(int *out_cycle_detected, int *out_dangling_count) {
 
     return (cycle != 0 || dangling != 0) ? -1 : 0;
 }
+
+/* Lot 30: VFS Virtual Layer & Multi-Mount Overlay Engine (US-003 / US-036) */
+
+void vfs_mount_table_init(vfs_mount_table_t *table) {
+    if (!table) return;
+    for (int i = 0; i < VFS_MOUNT_MAX; i++) {
+        table->mounts[i].active = 0;
+        table->mounts[i].mount_point[0] = '\0';
+        table->mounts[i].target_path[0] = '\0';
+        table->mounts[i].flags = 0;
+    }
+    table->count = 0;
+}
+
+int vfs_mount_point_add(vfs_mount_table_t *table, const char *mount_point, const char *target_path, uint32_t flags) {
+    if (!table || !mount_point || !target_path || mount_point[0] == '\0') return RAMFS_ERR_INVAL;
+
+    for (int i = 0; i < VFS_MOUNT_MAX; i++) {
+        if (table->mounts[i].active && rf_strcmp(table->mounts[i].mount_point, mount_point) == 0) {
+            return RAMFS_ERR_EXISTS;
+        }
+    }
+
+    for (int i = 0; i < VFS_MOUNT_MAX; i++) {
+        if (!table->mounts[i].active) {
+            table->mounts[i].active = 1;
+            rf_strcpy(table->mounts[i].mount_point, mount_point);
+            rf_strcpy(table->mounts[i].target_path, target_path);
+            table->mounts[i].flags = flags;
+            table->count++;
+            return RAMFS_OK;
+        }
+    }
+    return RAMFS_ERR_NOSPACE;
+}
+
+int vfs_mount_point_remove(vfs_mount_table_t *table, const char *mount_point) {
+    if (!table || !mount_point) return RAMFS_ERR_INVAL;
+
+    for (int i = 0; i < VFS_MOUNT_MAX; i++) {
+        if (table->mounts[i].active && rf_strcmp(table->mounts[i].mount_point, mount_point) == 0) {
+            table->mounts[i].active = 0;
+            table->mounts[i].mount_point[0] = '\0';
+            table->mounts[i].target_path[0] = '\0';
+            table->count--;
+            return RAMFS_OK;
+        }
+    }
+    return RAMFS_ERR_NOTFOUND;
+}
+
+static void combine_path(const char *dir, const char *rel, char *out, int max_sz) {
+    if (!dir || !rel || !out || max_sz <= 0) return;
+    int dlen = rf_strlen(dir);
+    if (dlen > 0 && dir[dlen - 1] == '/') {
+        if (rel[0] == '/') {
+            rf_strcpy(out, dir);
+            int cur_len = rf_strlen(out);
+            int idx = 0;
+            while (rel[idx + 1] && cur_len + idx < max_sz - 1) {
+                out[cur_len + idx] = rel[idx + 1];
+                idx++;
+            }
+            out[cur_len + idx] = '\0';
+        } else {
+            rf_strcpy(out, dir);
+            int cur_len = rf_strlen(out);
+            int idx = 0;
+            while (rel[idx] && cur_len + idx < max_sz - 1) {
+                out[cur_len + idx] = rel[idx];
+                idx++;
+            }
+            out[cur_len + idx] = '\0';
+        }
+    } else {
+        if (rel[0] == '/') {
+            rf_strcpy(out, dir);
+            int cur_len = rf_strlen(out);
+            int idx = 0;
+            while (rel[idx] && cur_len + idx < max_sz - 1) {
+                out[cur_len + idx] = rel[idx];
+                idx++;
+            }
+            out[cur_len + idx] = '\0';
+        } else {
+            rf_strcpy(out, dir);
+            int cur_len = rf_strlen(out);
+            if (cur_len < max_sz - 1) {
+                out[cur_len] = '/';
+                out[cur_len + 1] = '\0';
+                cur_len++;
+            }
+            int idx = 0;
+            while (rel[idx] && cur_len + idx < max_sz - 1) {
+                out[cur_len + idx] = rel[idx];
+                idx++;
+            }
+            out[cur_len + idx] = '\0';
+        }
+    }
+}
+
+int vfs_overlay_file_lookup(const vfs_overlay_config_t *cfg, const char *relative_path, char *out_found_path, int out_sz, uint8_t *out_is_whiteout) {
+    if (!cfg || !relative_path || !cfg->active) return RAMFS_ERR_INVAL;
+
+    if (out_is_whiteout) *out_is_whiteout = 0;
+
+    char test_path[RAMFS_PATH_MAX];
+    char whiteout_path[RAMFS_PATH_MAX];
+
+    /* Check upper layer first */
+    if (cfg->upper_layer[0] != '\0') {
+        combine_path(cfg->upper_layer, relative_path, test_path, sizeof(test_path));
+
+        /* Check for whiteout file .wh.<file> */
+        (void)out_sz;
+        char parent[RAMFS_PATH_MAX];
+        rf_parent(test_path, parent);
+        const char *name = rf_basename(test_path);
+        char wh_name[RAMFS_NAME_MAX];
+        rf_strcpy(wh_name, ".wh.");
+        int cur = rf_strlen(wh_name);
+        int idx = 0;
+        while (name[idx] && cur + idx < RAMFS_NAME_MAX - 1) {
+            wh_name[cur + idx] = name[idx];
+            idx++;
+        }
+        wh_name[cur + idx] = '\0';
+        combine_path(parent, wh_name, whiteout_path, sizeof(whiteout_path));
+
+        ramfs_node_t *wh_node = find_node(whiteout_path);
+        if (wh_node) {
+            if (out_is_whiteout) *out_is_whiteout = 1;
+            return RAMFS_ERR_NOTFOUND;
+        }
+
+        ramfs_node_t *u_node = find_node(test_path);
+        if (u_node) {
+            if (out_found_path) rf_strcpy(out_found_path, test_path);
+            return RAMFS_OK;
+        }
+    }
+
+    /* Check lower layers in order */
+    for (int i = 0; i < cfg->lower_count && i < VFS_OVERLAY_LAYERS_MAX; i++) {
+        if (cfg->lower_layers[i][0] == '\0') continue;
+        combine_path(cfg->lower_layers[i], relative_path, test_path, sizeof(test_path));
+        ramfs_node_t *l_node = find_node(test_path);
+        if (l_node) {
+            if (out_found_path) rf_strcpy(out_found_path, test_path);
+            return RAMFS_OK;
+        }
+    }
+
+    return RAMFS_ERR_NOTFOUND;
+}
+
+int vfs_overlay_cow_write(const vfs_overlay_config_t *cfg, const char *relative_path, const char *data, uint32_t len) {
+    if (!cfg || !relative_path || !cfg->active || cfg->upper_layer[0] == '\0') return RAMFS_ERR_INVAL;
+
+    char target_upper[RAMFS_PATH_MAX];
+    combine_path(cfg->upper_layer, relative_path, target_upper, sizeof(target_upper));
+
+    /* Create target directories in upper layer if needed */
+    char parent[RAMFS_PATH_MAX];
+    rf_parent(target_upper, parent);
+    if (rf_strcmp(parent, "/") != 0 && !find_node(parent)) {
+        ramfs_mkdir_p(parent);
+    }
+
+    /* Perform write on upper layer */
+    int res = ramfs_write(target_upper, data, (int)len);
+    return res;
+}
+
+int vfs_defrag_compact(int *out_nodes_moved, int *out_freed_slots) {
+    int moved = 0;
+    int freed = 0;
+
+    int free_slot = -1;
+    for (int i = 0; i < RAMFS_MAX_NODES; i++) {
+        if (!g_nodes[i].used) {
+            freed++;
+            if (free_slot == -1) {
+                free_slot = i;
+            }
+        } else if (free_slot != -1) {
+            /* Move node i to free_slot */
+            g_nodes[free_slot] = g_nodes[i];
+            g_nodes[i].used = 0;
+            moved++;
+            /* Find next free slot */
+            while (free_slot < RAMFS_MAX_NODES && g_nodes[free_slot].used) {
+                free_slot++;
+            }
+        }
+    }
+
+    if (out_nodes_moved) *out_nodes_moved = moved;
+    if (out_freed_slots) *out_freed_slots = freed;
+
+    return RAMFS_OK;
+}

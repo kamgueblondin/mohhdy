@@ -390,4 +390,37 @@ void prod_latency_percentiles_init(prod_latency_percentiles_t *lat);
 void prod_latency_percentiles_record(prod_latency_percentiles_t *lat, uint32_t latency_ms);
 int prod_telemetry_calc_percentiles(prod_latency_percentiles_t *lat);
 
+/* Lot 30: Production Auto-Healing & Multi-Metric Predictive Diagnostics (US-114 / US-123) */
+#define PROD_WORKERS_MAX 16
+
+typedef struct {
+    uint32_t worker_id;
+    char name[32];
+    uint32_t throughput_ops;
+    uint32_t mem_bytes;
+    uint8_t status; /* 0: Active, 1: Degraded, 2: Quarantined */
+    uint32_t quarantine_tick;
+} prod_worker_entry_t;
+
+typedef struct {
+    prod_worker_entry_t workers[PROD_WORKERS_MAX];
+    int count;
+    uint32_t quarantined_count;
+} prod_quarantine_mgr_t;
+
+typedef struct {
+    uint32_t health_score; /* 0 - 100 */
+    uint32_t cpu_load_pct;
+    uint32_t mem_load_pct;
+    uint32_t error_rate_ppm;
+    uint8_t anomaly_detected;
+} prod_predictive_health_t;
+
+int prod_predictive_health_eval(uint32_t cpu_pct, uint32_t mem_pct, uint32_t error_rate_ppm, prod_predictive_health_t *out_health);
+
+void prod_quarantine_mgr_init(prod_quarantine_mgr_t *mgr);
+int prod_worker_auto_quarantine(prod_quarantine_mgr_t *mgr, uint32_t worker_id, const char *name, uint32_t throughput_ops, uint32_t mem_bytes, uint32_t current_tick);
+
+int prod_audit_diagnostic_report(const prod_quarantine_mgr_t *q_mgr, const prod_predictive_health_t *health, char *out_report, int max_sz);
+
 #endif

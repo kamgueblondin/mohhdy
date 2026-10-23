@@ -284,6 +284,175 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* Lot 30: Web Runtime Vector Canvas 2D & WebAssembly VM (US-048 / US-050) */
+
+void webrt_canvas2d_init(webrt_canvas2d_t *canvas, int width, int height) {
+    if (!canvas) return;
+    canvas->width = width;
+    canvas->height = height;
+    canvas->command_count = 0;
+    /* Identity matrix in 16.16 fixed point: a=1, b=0, c=0, d=1, e=0, f=0 */
+    canvas->matrix.a = 1 << 16;
+    canvas->matrix.b = 0;
+    canvas->matrix.c = 0;
+    canvas->matrix.d = 1 << 16;
+    canvas->matrix.e = 0;
+    canvas->matrix.f = 0;
+}
+
+void webrt_canvas2d_transform(webrt_canvas2d_t *canvas, int32_t a, int32_t b, int32_t c, int32_t d, int32_t e, int32_t f) {
+    if (!canvas) return;
+    canvas->matrix.a = a;
+    canvas->matrix.b = b;
+    canvas->matrix.c = c;
+    canvas->matrix.d = d;
+    canvas->matrix.e = e;
+    canvas->matrix.f = f;
+}
+
+int webrt_canvas2d_draw_path(webrt_canvas2d_t *canvas, int type, int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint32_t fill_color) {
+    if (!canvas) return -1;
+    if (canvas->command_count >= WEBRT_CANVAS2D_MAX_COMMANDS) return -1;
+
+    /* Apply 2D fixed-point transformation matrix [a c e; b d f] */
+    int32_t tx1 = (int32_t)(((int64_t)canvas->matrix.a * x1 + (int64_t)canvas->matrix.c * y1) >> 16) + canvas->matrix.e;
+    int32_t ty1 = (int32_t)(((int64_t)canvas->matrix.b * x1 + (int64_t)canvas->matrix.d * y1) >> 16) + canvas->matrix.f;
+    int32_t tx2 = (int32_t)(((int64_t)canvas->matrix.a * x2 + (int64_t)canvas->matrix.c * y2) >> 16) + canvas->matrix.e;
+    int32_t ty2 = (int32_t)(((int64_t)canvas->matrix.b * x2 + (int64_t)canvas->matrix.d * y2) >> 16) + canvas->matrix.f;
+
+    webrt_canvas_cmd_t *cmd = &canvas->commands[canvas->command_count];
+    cmd->type = type;
+    cmd->x1 = tx1;
+    cmd->y1 = ty1;
+    cmd->x2 = tx2;
+    cmd->y2 = ty2;
+    cmd->fill_color = fill_color;
+
+    canvas->command_count++;
+    return 0;
+}
+
+void webrt_wasm_vm_init(webrt_wasm_vm_t *vm) {
+    if (!vm) return;
+    vm->sp = 0;
+    vm->global_count = 0;
+    vm->pc = 0;
+    vm->halted = 0;
+    for (int i = 0; i < WEBRT_WASM_GLOBALS_MAX; i++) {
+        vm->globals[i] = 0;
+    }
+}
+
+int webrt_wasm_stack_push(webrt_wasm_vm_t *vm, int32_t val) {
+    if (!vm) return -1;
+    if (vm->sp >= WEBRT_WASM_STACK_MAX) return -1;
+    vm->stack[vm->sp++] = val;
+    return 0;
+}
+
+int webrt_wasm_stack_pop(webrt_wasm_vm_t *vm, int32_t *out_val) {
+    if (!vm) return -1;
+    if (vm->sp <= 0) return -1;
+    vm->sp--;
+    if (out_val) *out_val = vm->stack[vm->sp];
+    return 0;
+}
+
+int webrt_wasm_exec_module(webrt_wasm_vm_t *vm, const uint8_t *bytecode, uint32_t code_len) {
+    if (!vm || !bytecode || code_len == 0) return -1;
+
+    vm->pc = 0;
+    vm->halted = 0;
+
+    while (vm->pc < code_len && !vm->halted) {
+        uint8_t opcode = bytecode[vm->pc++];
+        switch (opcode) {
+            case 0x01: { /* NOP */
+                break;
+            }
+            case 0x0F: { /* RETURN / HALT */
+                vm->halted = 1;
+                break;
+            }
+            case 0x41: { /* i32.const <val: 4 bytes or 1 byte signed> */
+                if (vm->pc < code_len) {
+                    int32_t val = (int8_t)bytecode[vm->pc++];
+                    if (webrt_wasm_stack_push(vm, val) != 0) return -1;
+                }
+                break;
+            }
+            case 0x6A: { /* i32.add */
+                int32_t b, a;
+                if (webrt_wasm_stack_pop(vm, &b) != 0 || webrt_wasm_stack_pop(vm, &a) != 0) return -1;
+                if (webrt_wasm_stack_push(vm, a + b) != 0) return -1;
+                break;
+            }
+            case 0x6B: { /* i32.sub */
+                int32_t b, a;
+                if (webrt_wasm_stack_pop(vm, &b) != 0 || webrt_wasm_stack_pop(vm, &a) != 0) return -1;
+                if (webrt_wasm_stack_push(vm, a - b) != 0) return -1;
+                break;
+            }
+            case 0x6C: { /* i32.mul */
+                int32_t b, a;
+                if (webrt_wasm_stack_pop(vm, &b) != 0 || webrt_wasm_stack_pop(vm, &a) != 0) return -1;
+                if (webrt_wasm_stack_push(vm, a * b) != 0) return -1;
+                break;
+            }
+            case 0x23: { /* global.get <index> */
+                if (vm->pc < code_len) {
+                    uint8_t idx = bytecode[vm->pc++];
+                    if (idx < WEBRT_WASM_GLOBALS_MAX) {
+                        if (webrt_wasm_stack_push(vm, vm->globals[idx]) != 0) return -1;
+                    }
+                }
+                break;
+            }
+            case 0x24: { /* global.set <index> */
+                if (vm->pc < code_len) {
+                    uint8_t idx = bytecode[vm->pc++];
+                    int32_t val;
+                    if (webrt_wasm_stack_pop(vm, &val) != 0) return -1;
+                    if (idx < WEBRT_WASM_GLOBALS_MAX) {
+                        vm->globals[idx] = val;
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    return 0;
+}
+
+static webrt_anim_frame_t g_anim_frames[16];
+static int g_anim_frame_count = 0;
+static uint32_t g_frame_counter = 0;
+
+int webrt_request_animation_frame(uint32_t callback_id) {
+    if (g_anim_frame_count >= 16) return -1;
+    g_anim_frames[g_anim_frame_count].frame_id = ++g_frame_counter;
+    g_anim_frames[g_anim_frame_count].callback_id = callback_id;
+    g_anim_frames[g_anim_frame_count].pending = 1;
+    g_anim_frame_count++;
+    return (int)g_anim_frames[g_anim_frame_count - 1].frame_id;
+}
+
+int webrt_render_frame_tick(uint32_t current_tick, uint32_t *out_executed_callback) {
+    (void)current_tick;
+    if (out_executed_callback) *out_executed_callback = 0;
+
+    for (int i = 0; i < g_anim_frame_count; i++) {
+        if (g_anim_frames[i].pending) {
+            g_anim_frames[i].pending = 0;
+            if (out_executed_callback) *out_executed_callback = g_anim_frames[i].callback_id;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* ---- Lot 29: Shadow DOM Tree & Lifecycle Manager (US-032 / US-043) ---- */
 static webrt_shadow_root_t g_shadow_roots[WEBRT_SHADOW_MAX_ROOTS];
 

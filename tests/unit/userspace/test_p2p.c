@@ -1171,6 +1171,41 @@ static void test_lot28_p2p_gossip_nat_and_multipath(void) {
     p2p_multipath_route_select(&node, 2, &p1, &p2);
 }
 
+static void test_lot30_p2p_region_route_multi_raft_merkle(void) {
+    p2p_node_t node;
+    memset(&node, 0, sizeof(node));
+    node.id = 1;
+    node.peers[0].used = 1;
+    node.peers[0].id = 2;
+    node.peers[0].up = 1;
+    node.peers[0].rtt_ewma_ms = 10;
+
+    /* 1. Multi-region route calculate */
+    uint32_t next_hop = 0, cost = 0;
+    TEST_ASSERT_EQUAL(0, p2p_region_route_calculate(&node, 1, 2, 2, &next_hop, &cost));
+    TEST_ASSERT_EQUAL(2, next_hop);
+    TEST_ASSERT_TRUE(cost >= 50);
+
+    /* 2. Multi-Raft manager */
+    p2p_multi_raft_mgr_t raft_mgr;
+    p2p_multi_raft_init(&raft_mgr);
+    TEST_ASSERT_EQUAL(1, p2p_multi_raft_propose(&raft_mgr, 1, "SET k1 v1"));
+    TEST_ASSERT_EQUAL(0, p2p_multi_raft_commit(&raft_mgr, 1, 1));
+
+    /* 3. Merkle tree anti-entropy diff sync */
+    p2p_merkle_tree_t t1, t2;
+    p2p_merkle_init(&t1);
+    p2p_merkle_init(&t2);
+    p2p_merkle_insert(&t1, 100, "key1", "val1");
+    p2p_merkle_insert(&t1, 101, "key2", "val2");
+    p2p_merkle_insert(&t2, 100, "key1", "val1");
+
+    uint32_t diff_ids[4];
+    int diff_cnt = p2p_merkle_diff_sync(&t1, &t2, diff_ids, 4);
+    TEST_ASSERT_EQUAL(1, diff_cnt);
+    TEST_ASSERT_EQUAL(101, diff_ids[0]);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1212,6 +1247,7 @@ int main(void) {
     RUN_TEST(test_lot27_p2p_cluster_routing_and_fast_recovery);
     RUN_TEST(test_lot29_p2p_rekey_zero_trust_2pc);
     RUN_TEST(test_lot28_p2p_gossip_nat_and_multipath);
+    RUN_TEST(test_lot30_p2p_region_route_multi_raft_merkle);
 
     unity_print_results();
     unity_cleanup();

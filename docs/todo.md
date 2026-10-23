@@ -1,6 +1,12 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (22 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **951** tests reussis.
+> **Etat reel et pilotage (23 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **959** tests reussis.
+
+## Lot 30: Consolidation Industrielle et Extension Systeme Avancee VFS Overlay, Web Runtime Canvas 2D & WASM, P2P Multi-Regions & Supervision Auto-Healing ✅ (23 octobre 2026)
+- [x] US-003 / US-036 : Sandbox VFS Virtual Layer & Multi-Mount Overlay Engine (`vfs_mount_table_t`, `vfs_mount_point_add`, `vfs_mount_point_remove`), Overlay FS Copy-On-Write write & lookup (`vfs_overlay_cow_write`, `vfs_overlay_file_lookup`), et analyse de fragmentation avec compactage (`vfs_defrag_compact`).
+- [x] US-048 / US-050 : Web Runtime Canvas 2D Ring 3 sans flottants en virgule fixe 16.16 (`webrt_canvas2d_draw_path`, `webrt_canvas2d_transform`), interprete WebAssembly MVP stack-based (`webrt_wasm_exec_module`), et animation frame tick (`webrt_request_animation_frame`, `webrt_render_frame_tick`).
+- [x] US-065 / US-077 : Routage P2P WAN Multi-Regions avec EWMA pondere (`p2p_region_route_calculate`), log sharding Multi-Raft (`p2p_multi_raft_propose`, `p2p_multi_raft_commit`), et synchro Merkle tree anti-entropie (`p2p_merkle_diff_sync`).
+- [x] US-114 / US-123 : Moteur de supervision predictive auto-adaptative (`prod_predictive_health_eval`), daemon d'auto-healing et de quarantaine des travailleurs defectueux (`prod_worker_auto_quarantine`), et rapport d'audit FNV-1a (`prod_audit_diagnostic_report`).
 
 ## Lot 29: Extension et Consolidation Industrielle VFS, Web Runtime Shadow DOM / Event Loop, P2P Zero-Trust & Pipeline CI/CD Ring 3 ✅ (22 octobre 2026)
 - [x] US-002 / US-034 : Table circulaire de journaux de mutations VFS (`vfs_mutation_log_t`) avec roll-forward post-crash, isolation transactionnelle multi-fichiers avec verrouillage hierarchique de repertoires (`vfs_dir_lock_tree`), et verification d'integrite de table de noeuds VFS avec detection de cycles (`vfs_integrity_check`).

@@ -161,4 +161,37 @@ int vfs_io_process_coalesced(void);
 
 const char *ramfs_strerror(int err);
 
+/* Lot 30: VFS Virtual Layer & Multi-Mount Overlay Engine (US-003 / US-036) */
+#define VFS_MOUNT_MAX 8
+#define VFS_OVERLAY_LAYERS_MAX 4
+
+typedef struct {
+    char mount_point[RAMFS_PATH_MAX];
+    char target_path[RAMFS_PATH_MAX];
+    uint32_t flags;
+    uint8_t active;
+} vfs_mount_point_t;
+
+typedef struct {
+    vfs_mount_point_t mounts[VFS_MOUNT_MAX];
+    int count;
+} vfs_mount_table_t;
+
+typedef struct {
+    char lower_layers[VFS_OVERLAY_LAYERS_MAX][RAMFS_PATH_MAX];
+    int lower_count;
+    char upper_layer[RAMFS_PATH_MAX];
+    char work_dir[RAMFS_PATH_MAX];
+    uint8_t active;
+} vfs_overlay_config_t;
+
+void vfs_mount_table_init(vfs_mount_table_t *table);
+int vfs_mount_point_add(vfs_mount_table_t *table, const char *mount_point, const char *target_path, uint32_t flags);
+int vfs_mount_point_remove(vfs_mount_table_t *table, const char *mount_point);
+
+int vfs_overlay_cow_write(const vfs_overlay_config_t *cfg, const char *relative_path, const char *data, uint32_t len);
+int vfs_overlay_file_lookup(const vfs_overlay_config_t *cfg, const char *relative_path, char *out_found_path, int out_sz, uint8_t *out_is_whiteout);
+
+int vfs_defrag_compact(int *out_nodes_moved, int *out_freed_slots);
+
 #endif
