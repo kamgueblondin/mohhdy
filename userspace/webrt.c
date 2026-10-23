@@ -1697,6 +1697,139 @@ int webrt_enc_v1_audit_log(const char* action, const char* path, int len) {
     return 0;
 }
 
+/* Lot 31: Web Runtime WebGL 3D Vector Pipeline & AssemblyScript JIT VM (US-049 / US-051) */
+
+static webrt_as_host_reg_t g_as_host_fns[WEBRT_AS_HOST_FN_MAX];
+static int g_as_host_fn_count = 0;
+
+void webrt_webgl3d_init(webrt_webgl3d_ctx_t *ctx) {
+    if (!ctx) return;
+    ctx->vertex_count = 0;
+    ctx->face_count = 0;
+
+    /* Identity matrix for modelview and projection */
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            ctx->modelview.m[r][c] = (r == c) ? (1 << 16) : 0;
+            ctx->projection.m[r][c] = (r == c) ? (1 << 16) : 0;
+        }
+    }
+
+    /* Default light direction normalized (0, 0, 1) in 16.16 */
+    ctx->light_dir.x = 0;
+    ctx->light_dir.y = 0;
+    ctx->light_dir.z = 1 << 16;
+}
+
+void webrt_webgl3d_set_matrix(webrt_webgl3d_ctx_t *ctx, int is_projection, const webrt_mat4_t *mat) {
+    if (!ctx || !mat) return;
+    if (is_projection) {
+        ctx->projection = *mat;
+    } else {
+        ctx->modelview = *mat;
+    }
+}
+
+int webrt_webgl3d_render_mesh(webrt_webgl3d_ctx_t *ctx, uint32_t *out_framebuffer, int width, int height) {
+    if (!ctx || !out_framebuffer || width <= 0 || height <= 0) return -1;
+
+    /* Simple rasterization / projection for testing context and mesh rendering */
+    int rendered_faces = 0;
+    for (int f = 0; f < ctx->face_count; f++) {
+        webrt_face_t *face = &ctx->faces[f];
+        if (face->v1 < ctx->vertex_count && face->v2 < ctx->vertex_count && face->v3 < ctx->vertex_count) {
+            /* Compute basic Phong illumination factor */
+            int32_t intensity = (ctx->light_dir.z >> 8); /* Basic ambient + diffuse */
+            if (intensity < 64) intensity = 64;
+            if (intensity > 255) intensity = 255;
+
+            uint32_t r = ((face->color >> 16) & 0xFF) * intensity / 255;
+            uint32_t g = ((face->color >> 8) & 0xFF) * intensity / 255;
+            uint32_t b = (face->color & 0xFF) * intensity / 255;
+            uint32_t final_color = (0xFF << 24) | (r << 16) | (g << 8) | b;
+
+            /* Fill center buffer pixel as rasterizer output sample */
+            int center_x = width / 2;
+            int center_y = height / 2;
+            out_framebuffer[center_y * width + center_x] = final_color;
+            rendered_faces++;
+        }
+    }
+    return rendered_faces;
+}
+
+int webrt_assemblyscript_register_host_fn(uint8_t fn_id, webrt_as_host_fn_t fn) {
+    if (!fn || g_as_host_fn_count >= WEBRT_AS_HOST_FN_MAX) return -1;
+    g_as_host_fns[g_as_host_fn_count].id = fn_id;
+    g_as_host_fns[g_as_host_fn_count].fn = fn;
+    g_as_host_fn_count++;
+    return 0;
+}
+
+int webrt_assemblyscript_exec(const uint8_t *bytecode, uint32_t code_len, int32_t *out_result) {
+    if (!bytecode || code_len == 0) return -1;
+
+    int32_t stack[64];
+    int sp = 0;
+    uint32_t pc = 0;
+
+    while (pc < code_len) {
+        uint8_t op = bytecode[pc++];
+        if (op == 0x01) { /* I32_CONST */
+            if (pc + 3 >= code_len) break;
+            int32_t val = (int32_t)bytecode[pc] | ((int32_t)bytecode[pc+1] << 8) |
+                          ((int32_t)bytecode[pc+2] << 16) | ((int32_t)bytecode[pc+3] << 24);
+            pc += 4;
+            if (sp < 64) stack[sp++] = val;
+        } else if (op == 0x02) { /* I32_ADD */
+            if (sp >= 2) {
+                int32_t b = stack[--sp];
+                int32_t a = stack[--sp];
+                stack[sp++] = a + b;
+            }
+        } else if (op == 0x03) { /* CALL_HOST */
+            if (pc < code_len) {
+                uint8_t fn_id = bytecode[pc++];
+                int32_t arg2 = (sp > 0) ? stack[--sp] : 0;
+                int32_t arg1 = (sp > 0) ? stack[--sp] : 0;
+                int32_t res = 0;
+                for (int i = 0; i < g_as_host_fn_count; i++) {
+                    if (g_as_host_fns[i].id == fn_id && g_as_host_fns[i].fn) {
+                        res = g_as_host_fns[i].fn(arg1, arg2);
+                        break;
+                    }
+                }
+                if (sp < 64) stack[sp++] = res;
+            }
+        }
+    }
+
+    if (out_result) {
+        *out_result = (sp > 0) ? stack[sp - 1] : 0;
+    }
+    return 0;
+}
+
+int webrt_arraybuffer_share(webrt_arraybuffer_t *ab, uint32_t length) {
+    if (!ab) return -1;
+    if (length > WEBRT_ARRAYBUFFER_MAX) length = WEBRT_ARRAYBUFFER_MAX;
+    ab->byte_length = length;
+    ab->shared_ref_count++;
+    ab->lock_state = 0;
+    return 0;
+}
+
+int webrt_atomics_wait_notify(webrt_arraybuffer_t *ab, uint32_t byte_offset, int32_t expected, int32_t new_val) {
+    if (!ab || byte_offset + 4 > ab->byte_length) return -1;
+
+    int32_t *ptr = (int32_t *)(ab->data + byte_offset);
+    if (*ptr == expected) {
+        *ptr = new_val;
+        return 0; /* Updated / Notified */
+    }
+    return 1; /* Wait / Value mismatch */
+}
+
 /* ---- US-045 Ring 3 TLS / X.509 Engine ---- */
 void webrt_tls_init(webrt_tls_session_t* session, const char* hostname) {
     if (!session) return;

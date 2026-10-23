@@ -1206,6 +1206,48 @@ static void test_lot30_p2p_region_route_multi_raft_merkle(void) {
     TEST_ASSERT_EQUAL(101, diff_ids[0]);
 }
 
+static void test_lot31_p2p_topology_bft_bloom(void) {
+    p2p_node_t node;
+    memset(&node, 0, sizeof(node));
+    node.id = 10;
+    node.peers[0].used = 1;
+    node.peers[0].id = 20;
+    node.peers[0].up = 1;
+
+    /* 1. Multi-Topology Routing */
+    uint32_t next_hop = 0;
+    TEST_ASSERT_EQUAL(0, p2p_topology_select_route(&node, P2P_TOPOLOGY_RING, 30, &next_hop));
+    TEST_ASSERT_EQUAL(20, next_hop);
+
+    /* 2. BFT Consensus (f = 1, quorum = 2f + 1 = 3) */
+    p2p_bft_state_t bft;
+    memset(&bft, 0, sizeof(bft));
+    TEST_ASSERT_EQUAL(0, p2p_bft_preprepare(&bft, 1, 100, "block_payload_data", 1));
+    TEST_ASSERT_EQUAL(P2P_BFT_STAGE_PREPREPARE, bft.stage);
+
+    TEST_ASSERT_EQUAL(0, p2p_bft_prepare(&bft, 1, 1, 100));
+    TEST_ASSERT_EQUAL(0, p2p_bft_prepare(&bft, 2, 1, 100));
+    TEST_ASSERT_EQUAL(0, p2p_bft_prepare(&bft, 3, 1, 100));
+    TEST_ASSERT_EQUAL(P2P_BFT_STAGE_PREPARE, bft.stage);
+
+    TEST_ASSERT_EQUAL(0, p2p_bft_commit(&bft, 1, 1, 100));
+    TEST_ASSERT_EQUAL(0, p2p_bft_commit(&bft, 2, 1, 100));
+    TEST_ASSERT_EQUAL(0, p2p_bft_commit(&bft, 3, 1, 100));
+    TEST_ASSERT_EQUAL(P2P_BFT_STAGE_COMMIT, bft.stage);
+    TEST_ASSERT_EQUAL(1, bft.committed);
+
+    /* 3. Bloom Filter Sync Diff */
+    p2p_bloom_filter_t bf1, bf2;
+    p2p_bloom_sync_init(&bf1);
+    p2p_bloom_sync_init(&bf2);
+    bf1.filter[0] = 0b00000001;
+    bf2.filter[0] = 0b00000011;
+
+    int mismatches = 0;
+    TEST_ASSERT_EQUAL(0, p2p_bloom_sync_diff(&bf1, &bf2, &mismatches));
+    TEST_ASSERT_EQUAL(1, mismatches);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1248,6 +1290,7 @@ int main(void) {
     RUN_TEST(test_lot29_p2p_rekey_zero_trust_2pc);
     RUN_TEST(test_lot28_p2p_gossip_nat_and_multipath);
     RUN_TEST(test_lot30_p2p_region_route_multi_raft_merkle);
+    RUN_TEST(test_lot31_p2p_topology_bft_bloom);
 
     unity_print_results();
     unity_cleanup();

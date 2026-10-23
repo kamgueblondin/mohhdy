@@ -423,4 +423,37 @@ int prod_worker_auto_quarantine(prod_quarantine_mgr_t *mgr, uint32_t worker_id, 
 
 int prod_audit_diagnostic_report(const prod_quarantine_mgr_t *q_mgr, const prod_predictive_health_t *health, char *out_report, int max_sz);
 
+/* Lot 31: Production Chaos Engineering & Incident Auto-Remediation (US-115 / US-124) */
+#define PROD_CHAOS_FAULT_LATENCY  1
+#define PROD_CHAOS_FAULT_PKTLOSS  2
+#define PROD_CHAOS_FAULT_MEMSAT   3
+
+#define PROD_PLAYBOOK_STEPS_MAX   8
+
+typedef struct {
+    uint8_t fault_type;
+    uint32_t severity;
+    uint8_t active;
+} prod_chaos_fault_t;
+
+typedef struct {
+    char action_name[32];
+    uint8_t executed;
+    uint8_t success;
+} prod_playbook_step_t;
+
+typedef struct {
+    char playbook_name[32];
+    prod_playbook_step_t steps[PROD_PLAYBOOK_STEPS_MAX];
+    int step_count;
+    uint8_t executed_all;
+} prod_remediation_playbook_t;
+
+int prod_chaos_inject_fault(uint8_t fault_type, uint32_t severity);
+int prod_chaos_clear_faults(void);
+
+int prod_remediation_run_playbook(prod_remediation_playbook_t *pb, const char *incident_trigger, char *out_log, int max_sz);
+
+int prod_audit_postmortem_report(const prod_remediation_playbook_t *pb, uint32_t incident_id, char *out_report, int max_sz);
+
 #endif

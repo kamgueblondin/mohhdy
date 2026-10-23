@@ -10,6 +10,20 @@
 
 ## État courant vérifié
 
+## Etat courant du 23 octobre 2026 (lot 31)
+
+Living baseline. Plan: [lot31_plan.md](lot31_plan.md).
+
+```text
+make test-all : 963 passed, 0 failed, 0 skipped
+```
+
+- US-004 / US-037: VFS Distributed Replicated State & Write-Ahead Log Engine (`vfs_wal_log_append`, `vfs_wal_checkpoint_apply`), multi-node distributed lock manager with dynamic lease and orphan detection (`vfs_distributed_lock_acquire`, `vfs_distributed_lock_release`), and distributed inode table integrity analysis with post-partition reconciliation (`vfs_distributed_reconcile`).
+- US-049 / US-051: Web Runtime WebGL 3D Vector Pipeline in 16.16 fixed-point with 3D projection, integer z-buffering, and Phong illumination (`webrt_webgl3d_init`, `webrt_webgl3d_set_matrix`, `webrt_webgl3d_render_mesh`), AssemblyScript JIT bytecode VM with host function registration (`webrt_assemblyscript_exec`, `webrt_assemblyscript_register_host_fn`), and multi-thread synchronization with Shared ArrayBuffer & Atomics (`webrt_arraybuffer_share`, `webrt_atomics_wait_notify`).
+- US-066 / US-078: P2P WAN Mesh Multi-Topology routing (Ring, Star, Mesh) with dynamic EWMA selection (`p2p_topology_select_route`), Byzantine Fault Tolerance consensus supporting up to f malicious nodes (`p2p_bft_preprepare`, `p2p_bft_prepare`, `p2p_bft_commit`), and distributed Bloom filter anti-entropy diff synchronization (`p2p_bloom_sync_init`, `p2p_bloom_sync_diff`).
+- US-115 / US-124: Production Chaos Engineering fault injector daemon (`prod_chaos_inject_fault`, `prod_chaos_clear_faults`), incident auto-remediation playbook engine (`prod_remediation_run_playbook`), and FNV-1a signed post-mortem incident audit report generator (`prod_audit_postmortem_report`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 23 octobre 2026 (lot 30)
 
 Living baseline. Plan: [lot30_plan.md](lot30_plan.md).

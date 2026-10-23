@@ -2805,3 +2805,131 @@ int p2p_merkle_diff_sync(const p2p_merkle_tree_t *local_tree, const p2p_merkle_t
     }
     return diff_count;
 }
+
+/* Lot 31: P2P WAN Mesh Multi-Topology & Dynamic Byzantine Fault Tolerance (BFT) (US-066 / US-078) */
+
+int p2p_topology_select_route(const p2p_node_t *n, uint32_t topology_type, uint32_t dest_id, uint32_t *out_next_hop) {
+    if (!n || !out_next_hop) return -1;
+
+    uint32_t best_next = 0;
+    uint32_t min_cost = 0xFFFFFFFFU;
+
+    if (topology_type == P2P_TOPOLOGY_RING) {
+        /* Next node in numerical ID ring sequence */
+        for (int i = 0; i < P2P_PEERS; i++) {
+            if (n->peers[i].used && n->peers[i].up && !n->peers[i].zero_trust_revoked) {
+                if (n->peers[i].id > n->id) {
+                    if (n->peers[i].id < min_cost) {
+                        min_cost = n->peers[i].id;
+                        best_next = n->peers[i].id;
+                    }
+                }
+            }
+        }
+        if (best_next == 0) {
+            /* Wrap around ring */
+            for (int i = 0; i < P2P_PEERS; i++) {
+                if (n->peers[i].used && n->peers[i].up && !n->peers[i].zero_trust_revoked) {
+                    if (n->peers[i].id < min_cost) {
+                        min_cost = n->peers[i].id;
+                        best_next = n->peers[i].id;
+                    }
+                }
+            }
+        }
+    } else if (topology_type == P2P_TOPOLOGY_STAR) {
+        /* Route through designated hub / lowest node ID */
+        uint32_t hub_id = n->id;
+        for (int i = 0; i < P2P_PEERS; i++) {
+            if (n->peers[i].used && n->peers[i].up && !n->peers[i].zero_trust_revoked) {
+                if (n->peers[i].id < hub_id) {
+                    hub_id = n->peers[i].id;
+                }
+            }
+        }
+        best_next = (hub_id == n->id) ? dest_id : hub_id;
+    } else {
+        /* Mesh: EWMA / link cost best route */
+        return p2p_route_find(n, dest_id, out_next_hop, &min_cost);
+    }
+
+    *out_next_hop = best_next;
+    return (best_next != 0) ? 0 : -1;
+}
+
+int p2p_bft_preprepare(p2p_bft_state_t *bft, uint32_t view_id, uint32_t seq, const char *proposal_data, uint32_t f_max) {
+    if (!bft || !proposal_data) return -1;
+
+    bft->view_id = view_id;
+    bft->sequence_num = seq;
+    bft->stage = P2P_BFT_STAGE_PREPREPARE;
+    bft->preprepare_votes = 1;
+    bft->prepare_votes = 0;
+    bft->commit_votes = 0;
+    bft->f_max_faulty = f_max;
+    bft->committed = 0;
+
+    /* Compute proposal hash */
+    uint32_t h = 2166136261U;
+    for (int i = 0; proposal_data[i]; i++) {
+        h ^= (uint8_t)proposal_data[i];
+        h *= 16777619U;
+    }
+    for (int i = 0; i < 8; i++) {
+        bft->proposal_hash[i] = "0123456789abcdef"[(h >> (i * 4)) & 0xF];
+    }
+    bft->proposal_hash[8] = '\0';
+
+    return 0;
+}
+
+int p2p_bft_prepare(p2p_bft_state_t *bft, uint32_t voter_id, uint32_t view_id, uint32_t seq) {
+    if (!bft || bft->stage != P2P_BFT_STAGE_PREPREPARE) return -1;
+    (void)voter_id;
+    if (bft->view_id != view_id || bft->sequence_num != seq) return -1;
+
+    bft->prepare_votes++;
+    /* Check quorum: 2f + 1 prepare votes */
+    if (bft->prepare_votes >= (2 * bft->f_max_faulty + 1)) {
+        bft->stage = P2P_BFT_STAGE_PREPARE;
+    }
+    return 0;
+}
+
+int p2p_bft_commit(p2p_bft_state_t *bft, uint32_t voter_id, uint32_t view_id, uint32_t seq) {
+    if (!bft || bft->stage < P2P_BFT_STAGE_PREPARE) return -1;
+    (void)voter_id;
+    if (bft->view_id != view_id || bft->sequence_num != seq) return -1;
+
+    bft->commit_votes++;
+    /* Check quorum: 2f + 1 commit votes */
+    if (bft->commit_votes >= (2 * bft->f_max_faulty + 1)) {
+        bft->stage = P2P_BFT_STAGE_COMMIT;
+        bft->committed = 1;
+    }
+    return 0;
+}
+
+void p2p_bloom_sync_init(p2p_bloom_filter_t *filter) {
+    if (!filter) return;
+    for (int i = 0; i < P2P_BLOOM_FILTER_SIZE_BITS / 8; i++) {
+        filter->filter[i] = 0;
+    }
+    filter->items_added = 0;
+}
+
+int p2p_bloom_sync_diff(const p2p_bloom_filter_t *local_bf, const p2p_bloom_filter_t *remote_bf, int *out_mismatch_count) {
+    if (!local_bf || !remote_bf) return -1;
+
+    int mismatches = 0;
+    for (int i = 0; i < P2P_BLOOM_FILTER_SIZE_BITS / 8; i++) {
+        uint8_t diff = local_bf->filter[i] ^ remote_bf->filter[i];
+        while (diff > 0) {
+            if (diff & 1) mismatches++;
+            diff >>= 1;
+        }
+    }
+
+    if (out_mismatch_count) *out_mismatch_count = mismatches;
+    return 0;
+}

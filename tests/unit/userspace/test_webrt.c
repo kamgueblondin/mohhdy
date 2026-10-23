@@ -436,6 +436,47 @@ static void test_lot30_webrt_canvas2d_wasm_anim(void) {
     TEST_ASSERT_EQUAL(42, cb);
 }
 
+static int32_t sample_host_fn(int32_t a, int32_t b) {
+    return a * b;
+}
+
+static void test_lot31_webrt_webgl3d_as_jit_atomics(void) {
+    /* 1. WebGL 3D Rasterizer */
+    webrt_webgl3d_ctx_t gl_ctx;
+    webrt_webgl3d_init(&gl_ctx);
+    gl_ctx.vertex_count = 3;
+    gl_ctx.face_count = 1;
+    gl_ctx.faces[0].v1 = 0;
+    gl_ctx.faces[0].v2 = 1;
+    gl_ctx.faces[0].v3 = 2;
+    gl_ctx.faces[0].color = 0x00FF00; /* Green */
+
+    uint32_t fb[16 * 16];
+    memset(fb, 0, sizeof(fb));
+    TEST_ASSERT_EQUAL(1, webrt_webgl3d_render_mesh(&gl_ctx, fb, 16, 16));
+
+    /* 2. AssemblyScript JIT VM */
+    TEST_ASSERT_EQUAL(0, webrt_assemblyscript_register_host_fn(0x10, sample_host_fn));
+    /* Bytecode: i32.const 6, i32.const 7, call_host 0x10 */
+    uint8_t as_bc[] = { 0x01, 0x06, 0x00, 0x00, 0x00, 0x01, 0x07, 0x00, 0x00, 0x00, 0x03, 0x10 };
+    int32_t as_res = 0;
+    TEST_ASSERT_EQUAL(0, webrt_assemblyscript_exec(as_bc, sizeof(as_bc), &as_res));
+    TEST_ASSERT_EQUAL(42, as_res);
+
+    /* 3. Shared ArrayBuffer & Atomics */
+    webrt_arraybuffer_t ab;
+    memset(&ab, 0, sizeof(ab));
+    TEST_ASSERT_EQUAL(0, webrt_arraybuffer_share(&ab, 256));
+    TEST_ASSERT_EQUAL(1, ab.shared_ref_count);
+
+    int32_t *atom_ptr = (int32_t *)(ab.data + 0);
+    *atom_ptr = 100;
+
+    TEST_ASSERT_EQUAL(0, webrt_atomics_wait_notify(&ab, 0, 100, 200));
+    TEST_ASSERT_EQUAL(200, *atom_ptr);
+    TEST_ASSERT_EQUAL(1, webrt_atomics_wait_notify(&ab, 0, 100, 300)); /* Mismatch */
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -457,6 +498,7 @@ int main(void) {
     RUN_TEST(test_lot29_webrt_shadow_dom_event_loop);
     RUN_TEST(test_lot28_webrt_vector_and_box_model);
     RUN_TEST(test_lot30_webrt_canvas2d_wasm_anim);
+    RUN_TEST(test_lot31_webrt_webgl3d_as_jit_atomics);
 
     unity_print_results();
     unity_cleanup();

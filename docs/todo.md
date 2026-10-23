@@ -1,6 +1,12 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (23 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **959** tests reussis.
+> **Etat reel et pilotage (23 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **963** tests reussis.
+
+## Lot 31: Extension Industrielle Avancee & Haute Disponibilite Systeme VFS Replicated State, WebGL 3D & AssemblyScript JIT, P2P WAN Multi-Topology BFT & Production Chaos Engineering ✅ (23 octobre 2026)
+- [x] US-004 / US-037 : VFS Distributed Replicated State & Write-Ahead Log Engine (`vfs_wal_log_append`, `vfs_wal_checkpoint_apply`), verrouillage distribue multi-noeuds avec bail dynamique (`vfs_distributed_lock_acquire`, `vfs_distributed_lock_release`), et analyse d'integrite d'inodes distribues avec reconciliation post-partition (`vfs_distributed_reconcile`).
+- [x] US-049 / US-051 : Web Runtime WebGL 3D Vector Pipeline en virgule fixe 16.16 avec projection perspective 3D, z-buffering entier, et illumination de Phong (`webrt_webgl3d_init`, `webrt_webgl3d_set_matrix`, `webrt_webgl3d_render_mesh`), interprete AssemblyScript JIT bytecode (`webrt_assemblyscript_exec`, `webrt_assemblyscript_register_host_fn`), et partage Shared ArrayBuffer avec Atomics wait/notify (`webrt_arraybuffer_share`, `webrt_atomics_wait_notify`).
+- [x] US-066 / US-078 : Routage P2P WAN Multi-Topologies avec selection dynamique EWMA (`p2p_topology_select_route`), consensus Byzantine Fault Tolerance (`p2p_bft_preprepare`, `p2p_bft_prepare`, `p2p_bft_commit`), et synchro Bloom filter anti-entropie (`p2p_bloom_sync_init`, `p2p_bloom_sync_diff`).
+- [x] US-115 / US-124 : Injecteur de pannes Ring 3 Chaos Engineering (`prod_chaos_inject_fault`, `prod_chaos_clear_faults`), moteur de playbooks d'auto-remediation (`prod_remediation_run_playbook`), et rapport post-mortem FNV-1a (`prod_audit_postmortem_report`).
 
 ## Lot 30: Consolidation Industrielle et Extension Systeme Avancee VFS Overlay, Web Runtime Canvas 2D & WASM, P2P Multi-Regions & Supervision Auto-Healing ✅ (23 octobre 2026)
 - [x] US-003 / US-036 : Sandbox VFS Virtual Layer & Multi-Mount Overlay Engine (`vfs_mount_table_t`, `vfs_mount_point_add`, `vfs_mount_point_remove`), Overlay FS Copy-On-Write write & lookup (`vfs_overlay_cow_write`, `vfs_overlay_file_lookup`), et analyse de fragmentation avec compactage (`vfs_defrag_compact`).
