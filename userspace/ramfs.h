@@ -362,4 +362,41 @@ void vfs_nvme_multi_stream_journal_init(vfs_nvme_journal_t *j);
 int vfs_nvme_multi_stream_journal_append(vfs_nvme_journal_t *j, uint16_t stream_id, uint64_t lba, const char *data, uint32_t len);
 int vfs_nvme_multi_stream_journal_flush(vfs_nvme_journal_t *j, uint16_t stream_id, int *out_flushed);
 
+/* Lot 37: VFS PCIe NVMe Dynamic Queue Pair Offloading & Transactional Erasure Coding Engine (US-009 / US-042) */
+#define VFS_NVME_QP_MAX_ENTRIES 16
+#define VFS_ERASURE_K 4
+#define VFS_ERASURE_M 2
+#define VFS_ERASURE_CHUNK_SZ 256
+
+typedef struct {
+    uint32_t qp_id;
+    uint16_t sq_head;
+    uint16_t sq_tail;
+    uint16_t cq_head;
+    uint16_t cq_tail;
+    uint32_t submitted_count;
+    uint32_t completed_count;
+    vfs_nvme_cmd_t sq[VFS_NVME_QP_MAX_ENTRIES];
+    vfs_nvme_cmd_t cq[VFS_NVME_QP_MAX_ENTRIES];
+    uint8_t active;
+} vfs_nvme_qp_t;
+
+typedef struct {
+    uint32_t stripe_id;
+    uint8_t data_chunks[VFS_ERASURE_K][VFS_ERASURE_CHUNK_SZ];
+    uint8_t parity_chunks[VFS_ERASURE_M][VFS_ERASURE_CHUNK_SZ];
+    uint32_t chunk_len;
+    uint8_t chunk_present[VFS_ERASURE_K + VFS_ERASURE_M]; /* 1 if intact, 0 if lost */
+    uint8_t status; /* 0=uncommitted, 1=committed, 2=reconstructed */
+} vfs_erasure_stripe_t;
+
+void vfs_nvme_qp_init(vfs_nvme_qp_t *qp, uint32_t qp_id);
+int vfs_nvme_qp_offload_submit(vfs_nvme_qp_t *qp, uint8_t opcode, uint32_t nsid, uint64_t lba, uint32_t blocks, uint16_t stream_id);
+int vfs_nvme_qp_poll_completion(vfs_nvme_qp_t *qp, int *out_completed);
+
+void vfs_erasure_stripe_init(vfs_erasure_stripe_t *stripe, uint32_t stripe_id, uint32_t chunk_len);
+int vfs_erasure_encode(vfs_erasure_stripe_t *stripe, const uint8_t data[VFS_ERASURE_K][VFS_ERASURE_CHUNK_SZ]);
+int vfs_erasure_reconstruct(vfs_erasure_stripe_t *stripe, int *out_reconstructed_chunks);
+int vfs_erasure_commit_tx(vfs_erasure_stripe_t *stripe, uint32_t tx_id);
+
 #endif

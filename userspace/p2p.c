@@ -2883,6 +2883,88 @@ int p2p_bft_preprepare(p2p_bft_state_t *bft, uint32_t view_id, uint32_t seq, con
     return 0;
 }
 
+/* Lot 37: P2P Mesh Network Cross-WAN Resilient Raft Group Leader Election & Zero-Knowledge Bulletproof Batch Verification Engine (US-072 / US-084) */
+void p2p_wan_raft_elec_init(p2p_wan_raft_elec_t *elec, uint32_t group_id, uint32_t total_voters, uint32_t lease_ticks) {
+    if (!elec) return;
+    for (uint32_t i = 0; i < sizeof(p2p_wan_raft_elec_t); i++) {
+        ((uint8_t *)elec)[i] = 0;
+    }
+    elec->group_id = group_id;
+    elec->total_voters = total_voters;
+    elec->lease_ticks = lease_ticks;
+    elec->state = 0; /* Follower */
+}
+
+int p2p_wan_raft_leader_elect(p2p_wan_raft_elec_t *elec, uint32_t candidate_id, uint32_t current_term, uint32_t votes_received, uint32_t current_tick) {
+    if (!elec) return -1;
+
+    uint32_t quorum = (elec->total_voters / 2) + 1;
+    if (quorum < P2P_WAN_RAFT_QUORUM_MIN) quorum = P2P_WAN_RAFT_QUORUM_MIN;
+
+    elec->term = current_term;
+    elec->votes_granted = votes_received;
+
+    if (votes_received >= quorum) {
+        elec->leader_id = candidate_id;
+        elec->state = 2; /* Leader */
+        elec->leader_lease_expire_tick = current_tick + elec->lease_ticks;
+        return 0;
+    } else {
+        elec->state = 1; /* Candidate */
+        return -1; /* Quorum not met */
+    }
+}
+
+int p2p_wan_raft_check_leader_lease(const p2p_wan_raft_elec_t *elec, uint32_t current_tick, int *out_lease_valid) {
+    if (!elec || !out_lease_valid) return -1;
+
+    if (elec->state == 2 && current_tick <= elec->leader_lease_expire_tick) {
+        *out_lease_valid = 1;
+    } else {
+        *out_lease_valid = 0;
+    }
+
+    return 0;
+}
+
+void p2p_zk_bulletproof_batch_init(p2p_zk_bulletproof_batch_t *batch) {
+    if (!batch) return;
+    for (uint32_t i = 0; i < sizeof(p2p_zk_bulletproof_batch_t); i++) {
+        ((uint8_t *)batch)[i] = 0;
+    }
+}
+
+int p2p_zk_bulletproof_batch_add(p2p_zk_bulletproof_batch_t *batch, const p2p_zk_bulletproof_ip_t *proof, uint32_t expected_inner_product) {
+    if (!batch || !proof) return -1;
+    if (batch->count >= P2P_ZK_BULLETPROOF_BATCH_MAX) return -1;
+
+    batch->proofs[batch->count] = *proof;
+    batch->expected_inner_products[batch->count] = expected_inner_product;
+    batch->count++;
+
+    return 0;
+}
+
+int p2p_zk_bulletproof_batch_verify(p2p_zk_bulletproof_batch_t *batch, int *out_all_valid) {
+    if (!batch || !out_all_valid) return -1;
+
+    int valid_count = 0;
+    for (int i = 0; i < batch->count; i++) {
+        int v = 0;
+        p2p_zk_bulletproof_inner_product_verify(&batch->proofs[i], batch->expected_inner_products[i], &v);
+        if (v) valid_count++;
+    }
+
+    batch->verified_count = valid_count;
+    if (valid_count == batch->count && batch->count > 0) {
+        *out_all_valid = 1;
+    } else {
+        *out_all_valid = 0;
+    }
+
+    return 0;
+}
+
 /* Lot 33: P2P Cross-WAN Geo-Sharded Multi-Region Consensus & Zero-Knowledge Bulletproof Validation (US-068 / US-080) */
 
 void p2p_geo_shard_init(p2p_geo_shard_t *shard, uint32_t shard_id, uint32_t region_mask) {

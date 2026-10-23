@@ -579,4 +579,34 @@ int p2p_cross_wan_raft_sync_groups(p2p_cross_wan_raft_shard_mgr_t *mgr, uint32_t
 int p2p_zk_bulletproof_inner_product_create(const uint32_t *vec_a, const uint32_t *vec_b, uint32_t count, p2p_zk_bulletproof_ip_t *out_proof);
 int p2p_zk_bulletproof_inner_product_verify(const p2p_zk_bulletproof_ip_t *proof, uint32_t expected_inner_product, int *out_valid);
 
+/* Lot 37: P2P Mesh Network Cross-WAN Resilient Raft Group Leader Election & Zero-Knowledge Bulletproof Batch Verification Engine (US-072 / US-084) */
+#define P2P_WAN_RAFT_QUORUM_MIN 2
+#define P2P_ZK_BULLETPROOF_BATCH_MAX 16
+
+typedef struct {
+    uint32_t group_id;
+    uint32_t term;
+    uint32_t leader_id;
+    uint32_t votes_granted;
+    uint32_t total_voters;
+    uint32_t lease_ticks;
+    uint32_t leader_lease_expire_tick;
+    uint8_t state; /* 0=follower, 1=candidate, 2=leader */
+} p2p_wan_raft_elec_t;
+
+typedef struct {
+    p2p_zk_bulletproof_ip_t proofs[P2P_ZK_BULLETPROOF_BATCH_MAX];
+    uint32_t expected_inner_products[P2P_ZK_BULLETPROOF_BATCH_MAX];
+    int count;
+    uint32_t verified_count;
+} p2p_zk_bulletproof_batch_t;
+
+void p2p_wan_raft_elec_init(p2p_wan_raft_elec_t *elec, uint32_t group_id, uint32_t total_voters, uint32_t lease_ticks);
+int p2p_wan_raft_leader_elect(p2p_wan_raft_elec_t *elec, uint32_t candidate_id, uint32_t current_term, uint32_t votes_received, uint32_t current_tick);
+int p2p_wan_raft_check_leader_lease(const p2p_wan_raft_elec_t *elec, uint32_t current_tick, int *out_lease_valid);
+
+void p2p_zk_bulletproof_batch_init(p2p_zk_bulletproof_batch_t *batch);
+int p2p_zk_bulletproof_batch_add(p2p_zk_bulletproof_batch_t *batch, const p2p_zk_bulletproof_ip_t *proof, uint32_t expected_inner_product);
+int p2p_zk_bulletproof_batch_verify(p2p_zk_bulletproof_batch_t *batch, int *out_all_valid);
+
 #endif

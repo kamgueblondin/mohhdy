@@ -476,6 +476,90 @@ int webrt_wasm_simd_vec_dot_i32(const int32_t *a, const int32_t *b, uint32_t cou
     return 0;
 }
 
+/* Lot 37: Web Runtime Service Workers Background Sync Engine & WebAssembly SIMD Matrix 2D/3D Tensor Acceleration (US-057 / US-059) */
+void webrt_bg_sync_init(webrt_bg_sync_queue_t *q) {
+    if (!q) return;
+    for (uint32_t i = 0; i < sizeof(webrt_bg_sync_queue_t); i++) {
+        ((uint8_t *)q)[i] = 0;
+    }
+}
+
+int webrt_bg_sync_register(webrt_bg_sync_queue_t *q, const char *tag, const char *payload, uint32_t len, uint32_t *out_task_id) {
+    if (!q || !tag || (len > 0 && !payload)) return -1;
+    if (q->count >= WEBRT_BG_SYNC_QUEUE_MAX) return -1;
+
+    webrt_bg_sync_task_t *t = &q->tasks[q->count];
+    t->task_id = (uint32_t)(q->count + 1);
+    w_copy(t->tag, sizeof(t->tag), tag, -1);
+
+    if (payload && len > 0) {
+        uint32_t cpy = len >= sizeof(t->payload) ? sizeof(t->payload) - 1 : len;
+        for (uint32_t i = 0; i < cpy; i++) {
+            t->payload[i] = payload[i];
+        }
+        t->payload[cpy] = 0;
+        t->payload_len = cpy;
+    } else {
+        t->payload[0] = 0;
+        t->payload_len = 0;
+    }
+
+    t->retries = 0;
+    t->status = 0; /* Pending */
+    q->count++;
+
+    if (out_task_id) *out_task_id = t->task_id;
+    return 0;
+}
+
+int webrt_bg_sync_process(webrt_bg_sync_queue_t *q, int *out_processed) {
+    if (!q) return -1;
+
+    int processed = 0;
+    for (int i = 0; i < q->count; i++) {
+        webrt_bg_sync_task_t *t = &q->tasks[i];
+        if (t->status == 0) { /* Pending */
+            t->status = 1; /* Synced */
+            q->synced_count++;
+            processed++;
+        }
+    }
+
+    if (out_processed) *out_processed = processed;
+    return 0;
+}
+
+int webrt_wasm_simd_mat4_mul(const webrt_mat4x4_t *a, const webrt_mat4x4_t *b, webrt_mat4x4_t *out) {
+    if (!a || !b || !out) return -1;
+
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            int64_t sum = 0;
+            for (int k = 0; k < 4; k++) {
+                sum += ((int64_t)a->m[i][k] * b->m[k][j]) >> 16;
+            }
+            out->m[i][j] = (int32_t)sum;
+        }
+    }
+    return 0;
+}
+
+int webrt_wasm_simd_tensor3d_contract(const webrt_tensor3d_t *t1, const webrt_tensor3d_t *t2, int32_t *out_scalar) {
+    if (!t1 || !t2 || !out_scalar) return -1;
+
+    int64_t sum = 0;
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            for (int k = 0; k < 2; k++) {
+                sum += ((int64_t)t1->data[i][j][k] * t2->data[i][j][k]) >> 16;
+            }
+        }
+    }
+
+    *out_scalar = (int32_t)sum;
+    return 0;
+}
+
 /* Lot 32: Web Runtime GPU Fixed-Point Rasterizer & WebAssembly SIMD Pipeline (US-052 / US-054) */
 int webrt_gpu_rasterize_polygon(const webrt_gpu_polygon_t *poly, uint32_t *framebuffer, int width, int height) {
     if (!poly || !framebuffer || width <= 0 || height <= 0 || poly->count < 3) return -1;

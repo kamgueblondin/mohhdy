@@ -531,4 +531,38 @@ int webrt_offscreen_cache_match(webrt_sw_cache_mgr_t *mgr, const char *key, char
 int webrt_wasm_simd_vec_add_f32(const float *a, const float *b, float *out, uint32_t count);
 int webrt_wasm_simd_vec_dot_i32(const int32_t *a, const int32_t *b, uint32_t count, int32_t *out_dot);
 
+/* Lot 37: Web Runtime Service Workers Background Sync Engine & WebAssembly SIMD Matrix 2D/3D Tensor Acceleration (US-057 / US-059) */
+#define WEBRT_BG_SYNC_QUEUE_MAX 16
+
+typedef struct {
+    uint32_t task_id;
+    char tag[32];
+    char payload[128];
+    uint32_t payload_len;
+    uint8_t retries;
+    uint8_t status; /* 0=pending, 1=synced, 2=failed */
+} webrt_bg_sync_task_t;
+
+typedef struct {
+    webrt_bg_sync_task_t tasks[WEBRT_BG_SYNC_QUEUE_MAX];
+    int count;
+    uint32_t synced_count;
+    uint32_t failed_count;
+} webrt_bg_sync_queue_t;
+
+typedef struct {
+    int32_t m[4][4]; /* 16.16 fixed point */
+} webrt_mat4x4_t;
+
+typedef struct {
+    int32_t data[2][2][2]; /* 16.16 fixed point 2x2x2 tensor */
+} webrt_tensor3d_t;
+
+void webrt_bg_sync_init(webrt_bg_sync_queue_t *q);
+int webrt_bg_sync_register(webrt_bg_sync_queue_t *q, const char *tag, const char *payload, uint32_t len, uint32_t *out_task_id);
+int webrt_bg_sync_process(webrt_bg_sync_queue_t *q, int *out_processed);
+
+int webrt_wasm_simd_mat4_mul(const webrt_mat4x4_t *a, const webrt_mat4x4_t *b, webrt_mat4x4_t *out);
+int webrt_wasm_simd_tensor3d_contract(const webrt_tensor3d_t *t1, const webrt_tensor3d_t *t2, int32_t *out_scalar);
+
 #endif

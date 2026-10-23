@@ -819,6 +819,52 @@ static void test_lot25_prod_diagnostics_and_autofix(void) {
     TEST_ASSERT_EQUAL(3U, wl.active_workers);
 }
 
+static void test_lot37_prod_adaptive_lb_and_self_healing(void) {
+    prod_adaptive_lb_t lb;
+    prod_adaptive_lb_init(&lb);
+
+    int res = prod_adaptive_lb_register_node(&lb, 1, "node-a", 5);
+    TEST_ASSERT_EQUAL(0, res);
+    res = prod_adaptive_lb_register_node(&lb, 2, "node-b", 5);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(2, lb.count);
+
+    /* Update node 1 with lower load */
+    prod_adaptive_lb_update_node(&lb, 1, 20, 10, 1);
+    /* Update node 2 with higher load */
+    prod_adaptive_lb_update_node(&lb, 2, 80, 50, 1);
+
+    uint32_t selected = 0;
+    res = prod_adaptive_lb_select_node(&lb, &selected);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, selected); /* node-a selected */
+
+    char log_buf[256];
+    res = prod_adaptive_lb_rebalance(&lb, log_buf, sizeof(log_buf));
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, lb.total_rebalances);
+
+    prod_ai_self_heal_t sh;
+    prod_ai_self_heal_init(&sh);
+    TEST_ASSERT_EQUAL(1, sh.active);
+
+    /* Record high load telemetry */
+    for (int i = 0; i < 5; i++) {
+        prod_ai_self_heal_record_telemetry(&sh, 90, 85, 5000);
+    }
+
+    uint32_t risk_score = 0;
+    uint8_t trigger_remediation = 0;
+    res = prod_ai_self_heal_eval(&sh, &risk_score, &trigger_remediation);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, trigger_remediation);
+    TEST_ASSERT(risk_score >= 70);
+
+    res = prod_ai_self_heal_execute(&sh, "isolate_faulty_node", log_buf, sizeof(log_buf));
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, sh.remediations_count);
+}
+
 static void test_lot29_prod_cicd_regression_adaptive_alert(void) {
     prod_cicd_pipeline_t pipe;
     prod_cicd_pipeline_init(&pipe);
@@ -1085,6 +1131,7 @@ int main(void) {
     RUN_TEST(test_lot32_prod_chaos_sla_postmortem);
     RUN_TEST(test_lot33_prod_sla_self_heal_and_anomaly);
     RUN_TEST(test_lot35_prod_fault_mitigation_and_ai_remediation);
+    RUN_TEST(test_lot37_prod_adaptive_lb_and_self_healing);
 
     unity_print_results();
     unity_cleanup();
