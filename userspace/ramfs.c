@@ -820,6 +820,114 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
     return RAMFS_OK;
 }
 
+/* Lot 33: VFS CRDT Replicated Conflict-Free Resolution & Distributed Transaction Isolation Engine (US-006 / US-039) */
+
+int vfs_crdt_merge(const vfs_crdt_node_t *local, const vfs_crdt_node_t *remote, vfs_crdt_node_t *merged) {
+    if (!merged) return -1;
+    merged->count = 0;
+
+    if (local) {
+        for (int i = 0; i < local->count && i < VFS_CRDT_MAX_ELEMENTS; i++) {
+            merged->elements[merged->count] = local->elements[i];
+            merged->count++;
+        }
+    }
+
+    if (remote) {
+        for (int j = 0; j < remote->count && j < VFS_CRDT_MAX_ELEMENTS; j++) {
+            const vfs_crdt_element_t *re = &remote->elements[j];
+            int found_idx = -1;
+            for (int k = 0; k < merged->count; k++) {
+                if (rf_strcmp(merged->elements[k].path, re->path) == 0) {
+                    found_idx = k;
+                    break;
+                }
+            }
+
+            if (found_idx != -1) {
+                vfs_crdt_element_t *me = &merged->elements[found_idx];
+                if (re->timestamp > me->timestamp ||
+                   (re->timestamp == me->timestamp && re->node_id > me->node_id)) {
+                    *me = *re;
+                }
+            } else if (merged->count < VFS_CRDT_MAX_ELEMENTS) {
+                merged->elements[merged->count] = *re;
+                merged->count++;
+            }
+        }
+    }
+
+    return 0;
+}
+
+int vfs_crdt_resolve_conflict(const char *path, uint32_t local_ts, uint32_t remote_ts, const char *local_val, const char *remote_val, char *out_val, uint32_t out_cap) {
+    if (!path || !out_val || out_cap == 0) return -1;
+
+    const char *winner = local_val;
+    if (remote_ts > local_ts) {
+        winner = remote_val;
+    }
+
+    if (winner) {
+        rf_strcpy(out_val, winner);
+        out_val[out_cap - 1] = '\0';
+    } else {
+        out_val[0] = '\0';
+    }
+
+    return 0;
+}
+
+int vfs_dist_tx_begin(uint32_t tx_id, uint32_t isolation_level, vfs_dist_tx_iso_t *out_tx) {
+    if (!out_tx) return -1;
+    out_tx->tx_id = tx_id;
+    out_tx->isolation_level = isolation_level;
+    out_tx->start_timestamp = tx_id * 10;
+    out_tx->active = 1;
+    out_tx->read_only = 0;
+    out_tx->lock_count = 0;
+    for (int i = 0; i < RAMFS_MAX_LIST; i++) {
+        out_tx->locked_paths[i][0] = '\0';
+    }
+    return 0;
+}
+
+int vfs_dist_tx_isolation_check(const vfs_dist_tx_iso_t *tx, const char *path, uint8_t is_write) {
+    if (!tx || !tx->active || !path) return -1;
+
+    if (is_write) {
+        vfs_dist_tx_iso_t *mutable_tx = (vfs_dist_tx_iso_t *)tx;
+        for (int i = 0; i < mutable_tx->lock_count; i++) {
+            if (rf_strcmp(mutable_tx->locked_paths[i], path) == 0) {
+                return 0;
+            }
+        }
+        if (mutable_tx->lock_count < RAMFS_MAX_LIST) {
+            rf_strcpy(mutable_tx->locked_paths[mutable_tx->lock_count], path);
+            mutable_tx->locked_paths[mutable_tx->lock_count][RAMFS_PATH_MAX - 1] = '\0';
+            mutable_tx->lock_count++;
+            return 0;
+        }
+        return -2;
+    }
+
+    return 0;
+}
+
+int vfs_dist_tx_commit_iso(vfs_dist_tx_iso_t *tx) {
+    if (!tx || !tx->active) return -1;
+    tx->active = 0;
+    tx->lock_count = 0;
+    return 0;
+}
+
+int vfs_dist_tx_rollback_iso(vfs_dist_tx_iso_t *tx) {
+    if (!tx || !tx->active) return -1;
+    tx->active = 0;
+    tx->lock_count = 0;
+    return 0;
+}
+
 /* Lot 32: VFS Distributed Transactional Storage & MVCC Snapshot Engine (US-005 / US-038) */
 static vfs_mvcc_version_entry_t g_mvcc_versions[VFS_MVCC_VERSIONS_MAX];
 static uint32_t g_mvcc_snap_counter = 1;

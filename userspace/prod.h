@@ -483,4 +483,32 @@ int prod_chaos_playbook_run(const prod_chaos_scenario_t *scenarios, int scenario
 int prod_sla_continuous_eval(const prod_sla_metrics_t *metrics, uint32_t *out_sla_pct_fp, uint32_t *out_penalty_points);
 int prod_audit_postmortem_detailed_report(const prod_chaos_scenario_t *scenarios, int scenario_count, const prod_sla_metrics_t *sla, uint32_t incident_id, char *out_report, int max_sz);
 
+/* Lot 33: Production Daemon Autonomous SLA Self-Healing & Predictive Anomaly Risk Mitigation Engine (US-117 / US-126) */
+#define PROD_ANOMALY_SAMPLES_MAX 16
+
+typedef struct {
+    uint32_t target_sla_pct_fp;
+    uint32_t auto_repairs_count;
+    uint32_t last_remediation_tick;
+    uint8_t self_healing_active;
+} prod_sla_self_heal_t;
+
+typedef struct {
+    uint32_t cpu_samples[PROD_ANOMALY_SAMPLES_MAX];
+    uint32_t mem_samples[PROD_ANOMALY_SAMPLES_MAX];
+    uint32_t err_samples[PROD_ANOMALY_SAMPLES_MAX];
+    int count;
+    uint32_t risk_score; /* 0..100 */
+    uint8_t anomaly_flag;
+    uint32_t mitigations_executed;
+} prod_anomaly_engine_t;
+
+void prod_sla_self_heal_init(prod_sla_self_heal_t *sh, uint32_t target_sla_pct_fp);
+int prod_sla_self_heal_eval(prod_sla_self_heal_t *sh, const prod_sla_metrics_t *metrics, char *out_log, int max_sz);
+
+void prod_anomaly_predict_init(prod_anomaly_engine_t *engine);
+void prod_anomaly_predict_record(prod_anomaly_engine_t *engine, uint32_t cpu_load, uint32_t mem_load, uint32_t err_count);
+int prod_anomaly_predict_eval(prod_anomaly_engine_t *engine, uint32_t *out_risk_score, uint8_t *out_anomaly_flag);
+int prod_anomaly_mitigate_action(prod_anomaly_engine_t *engine, const char *mitigation_type, char *out_log, int max_sz);
+
 #endif

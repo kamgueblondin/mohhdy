@@ -984,6 +984,42 @@ static void test_lot32_prod_chaos_sla_postmortem(void) {
     TEST_ASSERT_NOT_NULL(strstr(report, "Postmortem Detailed Audit Signed - FNV-1a verified"));
 }
 
+static void test_lot33_prod_sla_self_heal_and_anomaly(void) {
+    /* 1. Autonomous SLA Self-Healing Engine */
+    prod_sla_self_heal_t sh;
+    prod_sla_self_heal_init(&sh, 99 << 16);
+    TEST_ASSERT_EQUAL(1, sh.self_healing_active);
+
+    prod_sla_metrics_t metrics;
+    metrics.uptime_ticks = 900;
+    metrics.downtime_ticks = 100; /* SLA drop below target */
+    metrics.total_requests = 1000;
+    metrics.failed_requests = 50;
+    metrics.p99_latency_ms = 200;
+
+    char log[256];
+    TEST_ASSERT_EQUAL(1, prod_sla_self_heal_eval(&sh, &metrics, log, sizeof(log)));
+    TEST_ASSERT_EQUAL(1, sh.auto_repairs_count);
+    TEST_ASSERT_NOT_NULL(strstr(log, "Auto-healing repair triggered"));
+
+    /* 2. Predictive Anomaly Risk Mitigation Engine */
+    prod_anomaly_engine_t engine;
+    prod_anomaly_predict_init(&engine);
+
+    for (int i = 0; i < 5; i++) {
+        prod_anomaly_predict_record(&engine, 80 + i * 2, 85 + i * 2, 5 + i);
+    }
+
+    uint32_t risk = 0;
+    uint8_t flag = 0;
+    TEST_ASSERT_EQUAL(0, prod_anomaly_predict_eval(&engine, &risk, &flag));
+    TEST_ASSERT_GREATER_THAN(50, risk);
+
+    TEST_ASSERT_EQUAL(0, prod_anomaly_mitigate_action(&engine, "DRAIN_AND_SCALE", log, sizeof(log)));
+    TEST_ASSERT_EQUAL(1, engine.mitigations_executed);
+    TEST_ASSERT_NOT_NULL(strstr(log, "PREDICTIVE ANOMALY MITIGATION"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -1017,6 +1053,7 @@ int main(void) {
     RUN_TEST(test_lot30_prod_auto_healing_predictive_diag);
     RUN_TEST(test_lot31_prod_chaos_remediation_postmortem);
     RUN_TEST(test_lot32_prod_chaos_sla_postmortem);
+    RUN_TEST(test_lot33_prod_sla_self_heal_and_anomaly);
 
     unity_print_results();
     unity_cleanup();

@@ -368,6 +368,51 @@ static void test_lot32_vfs_mvcc_commit_compaction(void) {
     TEST_ASSERT_EQUAL(VFS_WAL_MAX_ENTRIES, reclaimed);
 }
 
+static void test_lot33_vfs_crdt_and_tx_isolation(void) {
+    /* 1. CRDT LWW-Element-Set Merge */
+    vfs_crdt_node_t local, remote, merged;
+    local.count = 2;
+    strcpy(local.elements[0].path, "/crdt/file1.txt");
+    local.elements[0].timestamp = 100;
+    local.elements[0].node_id = 1;
+    strcpy(local.elements[0].value, "val_local1");
+
+    strcpy(local.elements[1].path, "/crdt/file2.txt");
+    local.elements[1].timestamp = 100;
+    local.elements[1].node_id = 1;
+    strcpy(local.elements[1].value, "val_local2");
+
+    remote.count = 2;
+    strcpy(remote.elements[0].path, "/crdt/file1.txt");
+    remote.elements[0].timestamp = 120; /* Remote newer */
+    remote.elements[0].node_id = 2;
+    strcpy(remote.elements[0].value, "val_remote1");
+
+    strcpy(remote.elements[1].path, "/crdt/file3.txt");
+    remote.elements[1].timestamp = 110;
+    remote.elements[1].node_id = 2;
+    strcpy(remote.elements[1].value, "val_remote3");
+
+    TEST_ASSERT_EQUAL(0, vfs_crdt_merge(&local, &remote, &merged));
+    TEST_ASSERT_EQUAL(3, merged.count);
+    TEST_ASSERT_EQUAL_STRING("val_remote1", merged.elements[0].value);
+
+    char resolved[64];
+    TEST_ASSERT_EQUAL(0, vfs_crdt_resolve_conflict("/crdt/file1.txt", 100, 120, "local", "remote", resolved, sizeof(resolved)));
+    TEST_ASSERT_EQUAL_STRING("remote", resolved);
+
+    /* 2. Distributed Tx Isolation Engine */
+    vfs_dist_tx_iso_t tx;
+    TEST_ASSERT_EQUAL(0, vfs_dist_tx_begin(201, VFS_DIST_TX_ISO_SERIALIZABLE, &tx));
+    TEST_ASSERT_EQUAL(1, tx.active);
+
+    TEST_ASSERT_EQUAL(0, vfs_dist_tx_isolation_check(&tx, "/crdt/file1.txt", 1));
+    TEST_ASSERT_EQUAL(1, tx.lock_count);
+
+    TEST_ASSERT_EQUAL(0, vfs_dist_tx_commit_iso(&tx));
+    TEST_ASSERT_EQUAL(0, tx.active);
+}
+
 int main(void) {
     unity_init();
 
@@ -388,6 +433,7 @@ int main(void) {
     RUN_TEST(test_lot30_vfs_mount_overlay_defrag);
     RUN_TEST(test_lot31_vfs_wal_locks_reconcile);
     RUN_TEST(test_lot32_vfs_mvcc_commit_compaction);
+    RUN_TEST(test_lot33_vfs_crdt_and_tx_isolation);
 
     unity_print_results();
     unity_cleanup();

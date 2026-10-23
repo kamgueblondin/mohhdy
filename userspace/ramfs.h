@@ -280,4 +280,40 @@ int vfs_mvcc_read_version(const char *path, uint32_t snapshot_version, char *out
 int vfs_distributed_commit_validate(const vfs_dist_tx_context_t *tx_ctx, int min_quorum, int *out_committed);
 int vfs_compaction_journal_compact(vfs_wal_log_t *wal, int *out_reclaimed_slots, int *out_compacted_inodes);
 
+/* Lot 33: VFS CRDT Replicated Conflict-Free Resolution & Distributed Transaction Isolation Engine (US-006 / US-039) */
+#define VFS_CRDT_MAX_ELEMENTS 16
+#define VFS_DIST_TX_ISO_READ_COMMITTED 1
+#define VFS_DIST_TX_ISO_REPEATABLE_READ 2
+#define VFS_DIST_TX_ISO_SERIALIZABLE 3
+
+typedef struct {
+    char path[RAMFS_PATH_MAX];
+    uint32_t timestamp;
+    uint32_t node_id;
+    char value[RAMFS_CONTENT_MAX];
+    uint8_t is_deleted;
+} vfs_crdt_element_t;
+
+typedef struct {
+    vfs_crdt_element_t elements[VFS_CRDT_MAX_ELEMENTS];
+    int count;
+} vfs_crdt_node_t;
+
+typedef struct {
+    uint32_t tx_id;
+    uint32_t isolation_level;
+    uint32_t start_timestamp;
+    uint8_t active;
+    uint8_t read_only;
+    char locked_paths[RAMFS_MAX_LIST][RAMFS_PATH_MAX];
+    int lock_count;
+} vfs_dist_tx_iso_t;
+
+int vfs_crdt_merge(const vfs_crdt_node_t *local, const vfs_crdt_node_t *remote, vfs_crdt_node_t *merged);
+int vfs_crdt_resolve_conflict(const char *path, uint32_t local_ts, uint32_t remote_ts, const char *local_val, const char *remote_val, char *out_val, uint32_t out_cap);
+int vfs_dist_tx_begin(uint32_t tx_id, uint32_t isolation_level, vfs_dist_tx_iso_t *out_tx);
+int vfs_dist_tx_isolation_check(const vfs_dist_tx_iso_t *tx, const char *path, uint8_t is_write);
+int vfs_dist_tx_commit_iso(vfs_dist_tx_iso_t *tx);
+int vfs_dist_tx_rollback_iso(vfs_dist_tx_iso_t *tx);
+
 #endif

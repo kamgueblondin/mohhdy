@@ -512,4 +512,38 @@ int p2p_topology_reconfigure(p2p_node_t *n, const p2p_topo_peer_info_t *peers, i
 int p2p_zk_consensus_verify(const p2p_zk_proof_t *proof, const char *expected_statement, int *out_valid);
 int p2p_bbr_anti_entropy_sync(p2p_node_t *n, uint32_t target_peer_id, uint32_t bw_est_kbps, int *out_items_synced);
 
+/* Lot 33: P2P Cross-WAN Geo-Sharded Multi-Region Consensus & Zero-Knowledge Bulletproof Validation (US-068 / US-080) */
+#define P2P_GEO_SHARD_ENTRIES_MAX 16
+#define P2P_BULLETPROOF_BYTES_MAX 64
+
+typedef struct {
+    uint32_t entry_id;
+    uint32_t region_origin;
+    char payload[P2P_VAL_MAX];
+    uint8_t synced;
+} p2p_geo_entry_t;
+
+typedef struct {
+    uint32_t shard_id;
+    uint32_t region_mask;
+    p2p_geo_entry_t entries[P2P_GEO_SHARD_ENTRIES_MAX];
+    int count;
+    uint32_t next_consensus_id;
+    uint8_t active;
+} p2p_geo_shard_t;
+
+typedef struct {
+    uint32_t value_commitment;
+    uint32_t blinding_factor;
+    uint8_t proof_bytes[P2P_BULLETPROOF_BYTES_MAX];
+    uint32_t proof_len;
+} p2p_zk_bulletproof_t;
+
+void p2p_geo_shard_init(p2p_geo_shard_t *shard, uint32_t shard_id, uint32_t region_mask);
+int p2p_geo_consensus_propose(p2p_geo_shard_t *shard, uint32_t proposer_id, const char *data, uint32_t *out_consensus_id);
+int p2p_geo_cross_region_sync(p2p_geo_shard_t *shard, uint32_t target_region_id, int *out_synced_entries);
+
+int p2p_zk_bulletproof_create_commitment(uint32_t value, uint32_t blinding_factor, p2p_zk_bulletproof_t *out_proof);
+int p2p_zk_bulletproof_verify(const p2p_zk_bulletproof_t *proof, uint32_t min_val, uint32_t max_val, int *out_valid);
+
 #endif
