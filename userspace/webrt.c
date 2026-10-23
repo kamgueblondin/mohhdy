@@ -365,6 +365,117 @@ int webrt_futex_wake(webrt_arraybuffer_t *ab, uint32_t byte_offset, uint32_t wak
     return wake_count > 0 ? (int)wake_count : 1;
 }
 
+/* Lot 35: Web Runtime Service Workers PWA Offscreen Cache Engine & WebAssembly SIMD Vector Acceleration (US-056 / US-058) */
+
+void webrt_sw_cache_mgr_init(webrt_sw_cache_mgr_t *mgr) {
+    if (!mgr) return;
+    mgr->worker_count = 0;
+    mgr->cache_count = 0;
+    for (int i = 0; i < WEBRT_SW_MAX_WORKERS; i++) {
+        mgr->workers[i].scope[0] = '\0';
+        mgr->workers[i].script_url[0] = '\0';
+        mgr->workers[i].active = 0;
+    }
+    for (int i = 0; i < WEBRT_OFFSCREEN_CACHE_MAX; i++) {
+        mgr->cache_entries[i].key[0] = '\0';
+        mgr->cache_entries[i].response_body[0] = '\0';
+        mgr->cache_entries[i].body_len = 0;
+        mgr->cache_entries[i].active = 0;
+    }
+}
+
+int webrt_service_worker_register(webrt_sw_cache_mgr_t *mgr, const char *scope, const char *script_url) {
+    if (!mgr || !scope || !script_url || scope[0] == '\0' || script_url[0] == '\0') return -1;
+
+    /* Check if scope already registered */
+    for (int i = 0; i < WEBRT_SW_MAX_WORKERS; i++) {
+        if (mgr->workers[i].active && w_eq(mgr->workers[i].scope, scope)) {
+            w_copy(mgr->workers[i].script_url, sizeof(mgr->workers[i].script_url), script_url, -1);
+            return 0;
+        }
+    }
+
+    /* Find free slot */
+    for (int i = 0; i < WEBRT_SW_MAX_WORKERS; i++) {
+        if (!mgr->workers[i].active) {
+            mgr->workers[i].active = 1;
+            w_copy(mgr->workers[i].scope, sizeof(mgr->workers[i].scope), scope, -1);
+            w_copy(mgr->workers[i].script_url, sizeof(mgr->workers[i].script_url), script_url, -1);
+            mgr->worker_count++;
+            return 0;
+        }
+    }
+
+    return -2; /* Capacity reached */
+}
+
+int webrt_offscreen_cache_put(webrt_sw_cache_mgr_t *mgr, const char *key, const char *response_body, uint32_t body_len) {
+    if (!mgr || !key || !response_body || key[0] == '\0') return -1;
+
+    /* Check if key exists */
+    for (int i = 0; i < WEBRT_OFFSCREEN_CACHE_MAX; i++) {
+        if (mgr->cache_entries[i].active && w_eq(mgr->cache_entries[i].key, key)) {
+            uint32_t copy_len = (body_len < sizeof(mgr->cache_entries[i].response_body) - 1) ? body_len : (sizeof(mgr->cache_entries[i].response_body) - 1);
+            for (uint32_t k = 0; k < copy_len; k++) mgr->cache_entries[i].response_body[k] = response_body[k];
+            mgr->cache_entries[i].response_body[copy_len] = '\0';
+            mgr->cache_entries[i].body_len = copy_len;
+            return 0;
+        }
+    }
+
+    /* Find free slot */
+    for (int i = 0; i < WEBRT_OFFSCREEN_CACHE_MAX; i++) {
+        if (!mgr->cache_entries[i].active) {
+            mgr->cache_entries[i].active = 1;
+            w_copy(mgr->cache_entries[i].key, sizeof(mgr->cache_entries[i].key), key, -1);
+
+            uint32_t copy_len = (body_len < sizeof(mgr->cache_entries[i].response_body) - 1) ? body_len : (sizeof(mgr->cache_entries[i].response_body) - 1);
+            for (uint32_t k = 0; k < copy_len; k++) mgr->cache_entries[i].response_body[k] = response_body[k];
+            mgr->cache_entries[i].response_body[copy_len] = '\0';
+            mgr->cache_entries[i].body_len = copy_len;
+
+            mgr->cache_count++;
+            return 0;
+        }
+    }
+
+    return -2;
+}
+
+int webrt_offscreen_cache_match(webrt_sw_cache_mgr_t *mgr, const char *key, char *out_body, uint32_t max_len, uint32_t *out_len) {
+    if (!mgr || !key || !out_body || max_len == 0) return -1;
+
+    for (int i = 0; i < WEBRT_OFFSCREEN_CACHE_MAX; i++) {
+        if (mgr->cache_entries[i].active && w_eq(mgr->cache_entries[i].key, key)) {
+            uint32_t copy_len = (mgr->cache_entries[i].body_len < max_len - 1) ? mgr->cache_entries[i].body_len : (max_len - 1);
+            for (uint32_t k = 0; k < copy_len; k++) out_body[k] = mgr->cache_entries[i].response_body[k];
+            out_body[copy_len] = '\0';
+            if (out_len) *out_len = copy_len;
+            return 0;
+        }
+    }
+
+    return -1; /* Cache miss */
+}
+
+int webrt_wasm_simd_vec_add_f32(const float *a, const float *b, float *out, uint32_t count) {
+    if (!a || !b || !out || count == 0) return -1;
+    for (uint32_t i = 0; i < count; i++) {
+        out[i] = a[i] + b[i];
+    }
+    return 0;
+}
+
+int webrt_wasm_simd_vec_dot_i32(const int32_t *a, const int32_t *b, uint32_t count, int32_t *out_dot) {
+    if (!a || !b || !out_dot || count == 0) return -1;
+    int32_t dot = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        dot += a[i] * b[i];
+    }
+    *out_dot = dot;
+    return 0;
+}
+
 /* Lot 32: Web Runtime GPU Fixed-Point Rasterizer & WebAssembly SIMD Pipeline (US-052 / US-054) */
 int webrt_gpu_rasterize_polygon(const webrt_gpu_polygon_t *poly, uint32_t *framebuffer, int width, int height) {
     if (!poly || !framebuffer || width <= 0 || height <= 0 || poly->count < 3) return -1;

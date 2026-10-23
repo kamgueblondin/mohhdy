@@ -413,6 +413,33 @@ static void test_lot33_vfs_crdt_and_tx_isolation(void) {
     TEST_ASSERT_EQUAL(0, tx.active);
 }
 
+static void test_lot35_nvme_direct_io_and_multi_stream_journal(void) {
+    /* 1. NVMe Direct-I/O Queue Submission */
+    vfs_nvme_queue_t q;
+    vfs_nvme_direct_io_init(&q);
+    TEST_ASSERT_EQUAL(0, vfs_nvme_direct_io_submit(&q, VFS_NVME_OP_WRITE, 1, 1024, 8, 1));
+    TEST_ASSERT_EQUAL(1, q.count);
+    TEST_ASSERT_EQUAL(1, q.completed_count);
+    TEST_ASSERT_EQUAL(VFS_NVME_OP_WRITE, q.cq[0].opcode);
+    TEST_ASSERT_EQUAL(1, q.cq[0].status);
+
+    /* 2. NVMe Multi-Stream Journaling */
+    vfs_nvme_journal_t j;
+    vfs_nvme_multi_stream_journal_init(&j);
+    TEST_ASSERT_EQUAL(1, vfs_nvme_multi_stream_journal_append(&j, 1, 2048, "stream1_data", 12));
+    TEST_ASSERT_EQUAL(2, vfs_nvme_multi_stream_journal_append(&j, 2, 4096, "stream2_data", 12));
+    TEST_ASSERT_EQUAL(2, j.count);
+
+    int flushed = 0;
+    TEST_ASSERT_EQUAL(0, vfs_nvme_multi_stream_journal_flush(&j, 1, &flushed));
+    TEST_ASSERT_EQUAL(1, flushed);
+    TEST_ASSERT_EQUAL(1, j.flushed_count);
+
+    TEST_ASSERT_EQUAL(0, vfs_nvme_multi_stream_journal_flush(&j, 0, &flushed));
+    TEST_ASSERT_EQUAL(1, flushed);
+    TEST_ASSERT_EQUAL(2, j.flushed_count);
+}
+
 int main(void) {
     unity_init();
 
@@ -434,6 +461,7 @@ int main(void) {
     RUN_TEST(test_lot31_vfs_wal_locks_reconcile);
     RUN_TEST(test_lot32_vfs_mvcc_commit_compaction);
     RUN_TEST(test_lot33_vfs_crdt_and_tx_isolation);
+    RUN_TEST(test_lot35_nvme_direct_io_and_multi_stream_journal);
 
     unity_print_results();
     unity_cleanup();

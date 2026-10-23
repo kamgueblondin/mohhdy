@@ -1020,6 +1020,36 @@ static void test_lot33_prod_sla_self_heal_and_anomaly(void) {
     TEST_ASSERT_NOT_NULL(strstr(log, "PREDICTIVE ANOMALY MITIGATION"));
 }
 
+static void test_lot35_prod_fault_mitigation_and_ai_remediation(void) {
+    /* 1. Autonomous Fault Mitigation Engine */
+    prod_fault_mitigation_t fm;
+    prod_autonomous_fault_mitigation_init(&fm);
+    TEST_ASSERT_EQUAL(1, fm.active);
+
+    char log_buf[256];
+    TEST_ASSERT_GREATER_THAN(0, prod_autonomous_fault_mitigation_eval(&fm, 1, 2, log_buf, sizeof(log_buf)));
+    TEST_ASSERT_EQUAL(1, fm.hw_fault_count);
+    TEST_ASSERT_EQUAL(2, fm.service_degraded_count);
+    TEST_ASSERT_EQUAL(1, fm.auto_mitigations_count);
+    TEST_ASSERT_NOT_NULL(strstr(log_buf, "AUTONOMOUS FAULT MITIGATION"));
+
+    /* 2. Real-Time Predictive AI Anomaly Remediation Engine */
+    prod_ai_remediation_t rem;
+    prod_ai_anomaly_remediation_init(&rem);
+    TEST_ASSERT_EQUAL(1, rem.remediation_active);
+
+    prod_ai_anomaly_remediation_record(&rem, 300, 2 * 1024 * 1024, 2000);
+    uint32_t risk_score = 0;
+    uint8_t trigger = 0;
+    TEST_ASSERT_EQUAL(0, prod_ai_anomaly_remediation_eval(&rem, &risk_score, &trigger));
+    TEST_ASSERT_EQUAL(100, risk_score);
+    TEST_ASSERT_EQUAL(1, trigger);
+
+    TEST_ASSERT_GREATER_THAN(0, prod_ai_anomaly_remediation_execute(&rem, "SCALE_AI_WORKERS", log_buf, sizeof(log_buf)));
+    TEST_ASSERT_EQUAL(1, rem.remediations_executed);
+    TEST_ASSERT_NOT_NULL(strstr(log_buf, "REALTIME PREDICTIVE AI REMEDIATION"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -1054,6 +1084,7 @@ int main(void) {
     RUN_TEST(test_lot31_prod_chaos_remediation_postmortem);
     RUN_TEST(test_lot32_prod_chaos_sla_postmortem);
     RUN_TEST(test_lot33_prod_sla_self_heal_and_anomaly);
+    RUN_TEST(test_lot35_prod_fault_mitigation_and_ai_remediation);
 
     unity_print_results();
     unity_cleanup();

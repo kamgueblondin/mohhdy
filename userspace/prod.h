@@ -511,4 +511,28 @@ void prod_anomaly_predict_record(prod_anomaly_engine_t *engine, uint32_t cpu_loa
 int prod_anomaly_predict_eval(prod_anomaly_engine_t *engine, uint32_t *out_risk_score, uint8_t *out_anomaly_flag);
 int prod_anomaly_mitigate_action(prod_anomaly_engine_t *engine, const char *mitigation_type, char *out_log, int max_sz);
 
+/* Lot 35: Production Daemon Autonomous Fault Mitigation & Real-Time Predictive AI Anomaly Remediation Engine (US-119 / US-128) */
+typedef struct {
+    uint32_t hw_fault_count;
+    uint32_t service_degraded_count;
+    uint32_t auto_mitigations_count;
+    uint8_t active;
+} prod_fault_mitigation_t;
+
+typedef struct {
+    uint32_t ai_inferences_total;
+    uint32_t anomaly_predictions_total;
+    uint32_t remediations_executed;
+    uint32_t current_risk_score;
+    uint8_t remediation_active;
+} prod_ai_remediation_t;
+
+void prod_autonomous_fault_mitigation_init(prod_fault_mitigation_t *fm);
+int prod_autonomous_fault_mitigation_eval(prod_fault_mitigation_t *fm, uint32_t hw_faults, uint32_t svc_degraded, char *out_log, int max_sz);
+
+void prod_ai_anomaly_remediation_init(prod_ai_remediation_t *rem);
+void prod_ai_anomaly_remediation_record(prod_ai_remediation_t *rem, uint32_t inference_latency_ms, uint32_t memory_leak_bytes, uint32_t error_rate_ppm);
+int prod_ai_anomaly_remediation_eval(prod_ai_remediation_t *rem, uint32_t *out_risk_score, uint8_t *out_trigger_remediation);
+int prod_ai_anomaly_remediation_execute(prod_ai_remediation_t *rem, const char *action_type, char *out_log, int max_sz);
+
 #endif

@@ -499,4 +499,36 @@ int webrt_wasm_atomic_op(webrt_arraybuffer_t *ab, uint32_t byte_offset, uint32_t
 int webrt_futex_wait(webrt_arraybuffer_t *ab, uint32_t byte_offset, int32_t expected_val, uint32_t timeout_ms);
 int webrt_futex_wake(webrt_arraybuffer_t *ab, uint32_t byte_offset, uint32_t wake_count);
 
+/* Lot 35: Web Runtime Service Workers PWA Offscreen Cache Engine & WebAssembly SIMD Vector Acceleration (US-056 / US-058) */
+#define WEBRT_SW_MAX_WORKERS       8
+#define WEBRT_OFFSCREEN_CACHE_MAX 16
+
+typedef struct {
+    char scope[64];
+    char script_url[96];
+    uint8_t active;
+} webrt_service_worker_t;
+
+typedef struct {
+    char key[64];
+    char response_body[256];
+    uint32_t body_len;
+    uint8_t active;
+} webrt_offscreen_cache_entry_t;
+
+typedef struct {
+    webrt_service_worker_t workers[WEBRT_SW_MAX_WORKERS];
+    int worker_count;
+    webrt_offscreen_cache_entry_t cache_entries[WEBRT_OFFSCREEN_CACHE_MAX];
+    int cache_count;
+} webrt_sw_cache_mgr_t;
+
+void webrt_sw_cache_mgr_init(webrt_sw_cache_mgr_t *mgr);
+int webrt_service_worker_register(webrt_sw_cache_mgr_t *mgr, const char *scope, const char *script_url);
+int webrt_offscreen_cache_put(webrt_sw_cache_mgr_t *mgr, const char *key, const char *response_body, uint32_t body_len);
+int webrt_offscreen_cache_match(webrt_sw_cache_mgr_t *mgr, const char *key, char *out_body, uint32_t max_len, uint32_t *out_len);
+
+int webrt_wasm_simd_vec_add_f32(const float *a, const float *b, float *out, uint32_t count);
+int webrt_wasm_simd_vec_dot_i32(const int32_t *a, const int32_t *b, uint32_t count, int32_t *out_dot);
+
 #endif

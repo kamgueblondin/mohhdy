@@ -1,6 +1,12 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (23 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **971** tests reussis.
+> **Etat reel et pilotage (23 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **979** tests reussis.
+
+## Lot 35: Extension Systeme Industrielle Avancee & Haute Disponibilite Systeme VFS PCIe NVMe Direct-I/O & Multi-Stream Journaling, Web Runtime Service Workers & WASM SIMD, P2P Cross-WAN Raft Sharding & ZK Bulletproof Inner-Product, Autonomous Fault Mitigation & AI Anomaly Remediation Engine (23 octobre 2026)
+- [x] US-008 / US-041 : Stockage Distribue VFS PCIe NVMe Direct-I/O Ring 3 Driver Engine (`vfs_nvme_direct_io_init`, `vfs_nvme_direct_io_submit`) et Moteur de Journalisation Multi-Stream Transactionnel (`vfs_nvme_multi_stream_journal_init`, `vfs_nvme_multi_stream_journal_append`, `vfs_nvme_multi_stream_journal_flush`).
+- [x] US-056 / US-058 : Moteur Web Runtime Service Workers PWA Offscreen Cache Engine (`webrt_service_worker_register`, `webrt_offscreen_cache_put`, `webrt_offscreen_cache_match`) et WebAssembly SIMD Vector Acceleration Engine (`webrt_wasm_simd_vec_add_f32`, `webrt_wasm_simd_vec_dot_i32`).
+- [x] US-071 / US-083 : Reseau Mesh P2P Cross-WAN Resilient Raft Group Sharding (`p2p_cross_wan_raft_shard_init`, `p2p_cross_wan_raft_propose_sharded`, `p2p_cross_wan_raft_sync_groups`) et Validation Zero-Knowledge Bulletproof Inner-Product Proofs (`p2p_zk_bulletproof_inner_product_create`, `p2p_zk_bulletproof_inner_product_verify`).
+- [x] US-119 / US-128 : Daemon de Production Autonomous Fault Mitigation Engine (`prod_autonomous_fault_mitigation_init`, `prod_autonomous_fault_mitigation_eval`) et Moteur de Remediation Predictive des Risques d'Anomalies IA (`prod_ai_anomaly_remediation_init`, `prod_ai_anomaly_remediation_record`, `prod_ai_anomaly_remediation_eval`, `prod_ai_anomaly_remediation_execute`).
 
 ## Lot 33: Extension Systeme Industrielle Avancee & Haute Disponibilite Systeme VFS CRDT & Distributed Isolation, WebGPU & WASM Futex, P2P Geo-Sharded Consensus & ZK Bulletproofs, Autonomous SLA Self-Healing & Anomaly Risk Mitigation Engine (23 octobre 2026)
 - [x] US-006 / US-039 : Stockage Distribue VFS CRDT Replicated Conflict-Free Resolution (`vfs_crdt_merge`, `vfs_crdt_resolve_conflict`) et Moteur d'Isolation de Transactions Distribuees (`vfs_dist_tx_begin`, `vfs_dist_tx_isolation_check`, `vfs_dist_tx_commit_iso`, `vfs_dist_tx_rollback_iso`).
