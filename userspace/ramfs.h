@@ -316,4 +316,50 @@ int vfs_dist_tx_isolation_check(const vfs_dist_tx_iso_t *tx, const char *path, u
 int vfs_dist_tx_commit_iso(vfs_dist_tx_iso_t *tx);
 int vfs_dist_tx_rollback_iso(vfs_dist_tx_iso_t *tx);
 
+/* Lot 35: VFS PCIe NVMe Direct-I/O & Multi-Stream Transactional Journaling Engine (US-008 / US-041) */
+#define VFS_NVME_QUEUE_MAX_ENTRIES 16
+#define VFS_NVME_STREAMS_MAX        4
+#define VFS_NVME_OP_READ            1
+#define VFS_NVME_OP_WRITE           2
+#define VFS_NVME_OP_FLUSH           3
+
+typedef struct {
+    uint8_t opcode;
+    uint32_t nsid;
+    uint64_t lba;
+    uint32_t blocks;
+    uint16_t stream_id;
+    uint8_t status;
+} vfs_nvme_cmd_t;
+
+typedef struct {
+    vfs_nvme_cmd_t sq[VFS_NVME_QUEUE_MAX_ENTRIES];
+    vfs_nvme_cmd_t cq[VFS_NVME_QUEUE_MAX_ENTRIES];
+    uint32_t head;
+    uint32_t tail;
+    uint32_t count;
+    uint32_t completed_count;
+} vfs_nvme_queue_t;
+
+typedef struct {
+    uint16_t stream_id;
+    uint64_t lba;
+    uint32_t len;
+    uint8_t status; /* 0=pending, 1=flushed */
+    char data[RAMFS_CONTENT_MAX];
+} vfs_nvme_stream_entry_t;
+
+typedef struct {
+    vfs_nvme_stream_entry_t entries[VFS_NVME_QUEUE_MAX_ENTRIES];
+    uint32_t count;
+    uint32_t flushed_count;
+} vfs_nvme_journal_t;
+
+void vfs_nvme_direct_io_init(vfs_nvme_queue_t *q);
+int vfs_nvme_direct_io_submit(vfs_nvme_queue_t *q, uint8_t opcode, uint32_t nsid, uint64_t lba, uint32_t blocks, uint16_t stream_id);
+
+void vfs_nvme_multi_stream_journal_init(vfs_nvme_journal_t *j);
+int vfs_nvme_multi_stream_journal_append(vfs_nvme_journal_t *j, uint16_t stream_id, uint64_t lba, const char *data, uint32_t len);
+int vfs_nvme_multi_stream_journal_flush(vfs_nvme_journal_t *j, uint16_t stream_id, int *out_flushed);
+
 #endif

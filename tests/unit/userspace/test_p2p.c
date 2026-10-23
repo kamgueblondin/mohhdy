@@ -1305,6 +1305,36 @@ static void test_lot33_p2p_geo_consensus_bulletproof(void) {
     TEST_ASSERT_EQUAL(1, valid);
 }
 
+static void test_lot35_p2p_cross_wan_raft_bulletproof_ip(void) {
+    /* 1. Cross-WAN Resilient Raft Group Sharding */
+    p2p_cross_wan_raft_shard_mgr_t mgr;
+    p2p_cross_wan_raft_shard_init(&mgr);
+    TEST_ASSERT_EQUAL(4, mgr.group_count);
+
+    TEST_ASSERT_EQUAL(0, p2p_cross_wan_raft_propose_sharded(&mgr, 1, "SET user_id=1001"));
+    TEST_ASSERT_EQUAL(1, mgr.total_sharded_proposals);
+
+    int synced_groups = 0;
+    TEST_ASSERT_EQUAL(0, p2p_cross_wan_raft_sync_groups(&mgr, 0x01, &synced_groups));
+    TEST_ASSERT_EQUAL(1, synced_groups);
+
+    /* 2. Zero-Knowledge Bulletproof Inner-Product Proofs */
+    uint32_t vec_a[4] = { 1, 2, 3, 4 };
+    uint32_t vec_b[4] = { 10, 20, 30, 40 };
+    p2p_zk_bulletproof_ip_t proof;
+
+    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_inner_product_create(vec_a, vec_b, 4, &proof));
+    TEST_ASSERT_EQUAL(300, proof.inner_product_value); /* 10 + 40 + 90 + 160 = 300 */
+    TEST_ASSERT_EQUAL(64, proof.proof_len);
+
+    int valid = 0;
+    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_inner_product_verify(&proof, 300, &valid));
+    TEST_ASSERT_EQUAL(1, valid);
+
+    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_inner_product_verify(&proof, 999, &valid));
+    TEST_ASSERT_EQUAL(0, valid);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1350,6 +1380,7 @@ int main(void) {
     RUN_TEST(test_lot31_p2p_topology_bft_bloom);
     RUN_TEST(test_lot32_p2p_topology_zk_bbr);
     RUN_TEST(test_lot33_p2p_geo_consensus_bulletproof);
+    RUN_TEST(test_lot35_p2p_cross_wan_raft_bulletproof_ip);
 
     unity_print_results();
     unity_cleanup();

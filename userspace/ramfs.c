@@ -820,6 +820,110 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
     return RAMFS_OK;
 }
 
+/* Lot 35: VFS PCIe NVMe Direct-I/O & Multi-Stream Transactional Journaling Engine (US-008 / US-041) */
+
+void vfs_nvme_direct_io_init(vfs_nvme_queue_t *q) {
+    if (!q) return;
+    q->head = 0;
+    q->tail = 0;
+    q->count = 0;
+    q->completed_count = 0;
+    for (int i = 0; i < VFS_NVME_QUEUE_MAX_ENTRIES; i++) {
+        q->sq[i].opcode = 0;
+        q->sq[i].nsid = 0;
+        q->sq[i].lba = 0;
+        q->sq[i].blocks = 0;
+        q->sq[i].stream_id = 0;
+        q->sq[i].status = 0;
+
+        q->cq[i].opcode = 0;
+        q->cq[i].nsid = 0;
+        q->cq[i].lba = 0;
+        q->cq[i].blocks = 0;
+        q->cq[i].stream_id = 0;
+        q->cq[i].status = 0;
+    }
+}
+
+int vfs_nvme_direct_io_submit(vfs_nvme_queue_t *q, uint8_t opcode, uint32_t nsid, uint64_t lba, uint32_t blocks, uint16_t stream_id) {
+    if (!q) return RAMFS_ERR_INVAL;
+    if (q->count >= VFS_NVME_QUEUE_MAX_ENTRIES) return RAMFS_ERR_NOSPACE;
+
+    uint32_t idx = q->tail;
+    vfs_nvme_cmd_t *cmd = &q->sq[idx];
+    cmd->opcode = opcode;
+    cmd->nsid = nsid;
+    cmd->lba = lba;
+    cmd->blocks = blocks;
+    cmd->stream_id = stream_id;
+    cmd->status = 0; /* Submitted / Pending */
+
+    q->tail = (q->tail + 1) % VFS_NVME_QUEUE_MAX_ENTRIES;
+    q->count++;
+
+    /* Direct-I/O immediate processing simulation into Completion Queue (CQ) */
+    vfs_nvme_cmd_t *cq_cmd = &q->cq[q->completed_count % VFS_NVME_QUEUE_MAX_ENTRIES];
+    *cq_cmd = *cmd;
+    cq_cmd->status = 1; /* Success */
+    q->completed_count++;
+
+    return 0;
+}
+
+void vfs_nvme_multi_stream_journal_init(vfs_nvme_journal_t *j) {
+    if (!j) return;
+    j->count = 0;
+    j->flushed_count = 0;
+    for (int i = 0; i < VFS_NVME_QUEUE_MAX_ENTRIES; i++) {
+        j->entries[i].stream_id = 0;
+        j->entries[i].lba = 0;
+        j->entries[i].len = 0;
+        j->entries[i].status = 0;
+        j->entries[i].data[0] = '\0';
+    }
+}
+
+int vfs_nvme_multi_stream_journal_append(vfs_nvme_journal_t *j, uint16_t stream_id, uint64_t lba, const char *data, uint32_t len) {
+    if (!j) return RAMFS_ERR_INVAL;
+    if (j->count >= VFS_NVME_QUEUE_MAX_ENTRIES) return RAMFS_ERR_NOSPACE;
+
+    uint32_t idx = j->count;
+    vfs_nvme_stream_entry_t *e = &j->entries[idx];
+    e->stream_id = stream_id;
+    e->lba = lba;
+    e->status = 0; /* Pending flush */
+    e->data[0] = '\0';
+
+    if (data && len > 0) {
+        uint32_t copy_len = (len < RAMFS_CONTENT_MAX - 1) ? len : (RAMFS_CONTENT_MAX - 1);
+        for (uint32_t k = 0; k < copy_len; k++) e->data[k] = data[k];
+        e->data[copy_len] = '\0';
+        e->len = copy_len;
+    } else {
+        e->len = 0;
+    }
+
+    j->count++;
+    return (int)(idx + 1);
+}
+
+int vfs_nvme_multi_stream_journal_flush(vfs_nvme_journal_t *j, uint16_t stream_id, int *out_flushed) {
+    if (!j) return RAMFS_ERR_INVAL;
+
+    int flushed = 0;
+    for (uint32_t i = 0; i < j->count; i++) {
+        vfs_nvme_stream_entry_t *e = &j->entries[i];
+        if (e->status == 0 && (stream_id == 0 || e->stream_id == stream_id)) {
+            e->status = 1; /* Flushed */
+            j->flushed_count++;
+            flushed++;
+        }
+    }
+
+    if (out_flushed) *out_flushed = flushed;
+    return 0;
+}
+
 /* Lot 33: VFS CRDT Replicated Conflict-Free Resolution & Distributed Transaction Isolation Engine (US-006 / US-039) */
 
 int vfs_crdt_merge(const vfs_crdt_node_t *local, const vfs_crdt_node_t *remote, vfs_crdt_node_t *merged) {

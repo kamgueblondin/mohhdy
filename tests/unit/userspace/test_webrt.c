@@ -565,6 +565,42 @@ static void test_lot33_webrt_webgpu_compute_wasm_futex(void) {
     TEST_ASSERT_EQUAL(2, webrt_futex_wake(&ab, 16, 2));
 }
 
+static void test_lot35_webrt_sw_offscreen_cache_simd_vec(void) {
+    /* 1. Service Workers PWA Offscreen Cache Engine */
+    webrt_sw_cache_mgr_t mgr;
+    webrt_sw_cache_mgr_init(&mgr);
+
+    TEST_ASSERT_EQUAL(0, webrt_service_worker_register(&mgr, "https://app.mohhdy.local/", "/sw.js"));
+    TEST_ASSERT_EQUAL(1, mgr.worker_count);
+
+    TEST_ASSERT_EQUAL(0, webrt_offscreen_cache_put(&mgr, "/api/data.json", "{\"status\":\"ok\"}", 15));
+    TEST_ASSERT_EQUAL(1, mgr.cache_count);
+
+    char body_buf[64];
+    uint32_t body_len = 0;
+    TEST_ASSERT_EQUAL(0, webrt_offscreen_cache_match(&mgr, "/api/data.json", body_buf, sizeof(body_buf), &body_len));
+    TEST_ASSERT_EQUAL(15, body_len);
+    TEST_ASSERT_EQUAL_STRING("{\"status\":\"ok\"}", body_buf);
+
+    /* 2. WebAssembly SIMD Vector Acceleration Engine */
+    float va[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    float vb[4] = { 10.0f, 20.0f, 30.0f, 40.0f };
+    float vout[4] = { 0 };
+
+    TEST_ASSERT_EQUAL(0, webrt_wasm_simd_vec_add_f32(va, vb, vout, 4));
+    TEST_ASSERT_TRUE(vout[0] >= 10.9f && vout[0] <= 11.1f);
+    TEST_ASSERT_TRUE(vout[1] >= 21.9f && vout[1] <= 22.1f);
+    TEST_ASSERT_TRUE(vout[2] >= 32.9f && vout[2] <= 33.1f);
+    TEST_ASSERT_TRUE(vout[3] >= 43.9f && vout[3] <= 44.1f);
+
+    int32_t ia[4] = { 1, 2, 3, 4 };
+    int32_t ib[4] = { 10, 20, 30, 40 };
+    int32_t dot_out = 0;
+
+    TEST_ASSERT_EQUAL(0, webrt_wasm_simd_vec_dot_i32(ia, ib, 4, &dot_out));
+    TEST_ASSERT_EQUAL(300, dot_out); /* 10 + 40 + 90 + 160 = 300 */
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -589,6 +625,7 @@ int main(void) {
     RUN_TEST(test_lot31_webrt_webgl3d_as_jit_atomics);
     RUN_TEST(test_lot32_webrt_gpu_simd_shared_memory);
     RUN_TEST(test_lot33_webrt_webgpu_compute_wasm_futex);
+    RUN_TEST(test_lot35_webrt_sw_offscreen_cache_simd_vec);
 
     unity_print_results();
     unity_cleanup();

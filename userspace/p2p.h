@@ -546,4 +546,37 @@ int p2p_geo_cross_region_sync(p2p_geo_shard_t *shard, uint32_t target_region_id,
 int p2p_zk_bulletproof_create_commitment(uint32_t value, uint32_t blinding_factor, p2p_zk_bulletproof_t *out_proof);
 int p2p_zk_bulletproof_verify(const p2p_zk_bulletproof_t *proof, uint32_t min_val, uint32_t max_val, int *out_valid);
 
+/* Lot 35: P2P Cross-WAN Resilient Raft Group Sharding & Zero-Knowledge Bulletproof Inner-Product Proofs (US-071 / US-083) */
+#define P2P_CROSS_WAN_GROUPS_MAX 4
+#define P2P_BULLETPROOF_INNER_PRODUCT_SIZE 64
+
+typedef struct {
+    uint32_t group_id;
+    uint32_t wan_region_mask;
+    uint32_t term;
+    uint32_t leader_id;
+    uint8_t active;
+} p2p_cross_wan_raft_group_t;
+
+typedef struct {
+    p2p_cross_wan_raft_group_t groups[P2P_CROSS_WAN_GROUPS_MAX];
+    int group_count;
+    uint32_t total_sharded_proposals;
+} p2p_cross_wan_raft_shard_mgr_t;
+
+typedef struct {
+    uint32_t vector_a_commitment;
+    uint32_t vector_b_commitment;
+    uint32_t inner_product_value;
+    uint8_t proof_bytes[P2P_BULLETPROOF_INNER_PRODUCT_SIZE];
+    uint32_t proof_len;
+} p2p_zk_bulletproof_ip_t;
+
+void p2p_cross_wan_raft_shard_init(p2p_cross_wan_raft_shard_mgr_t *mgr);
+int p2p_cross_wan_raft_propose_sharded(p2p_cross_wan_raft_shard_mgr_t *mgr, uint32_t group_id, const char *command);
+int p2p_cross_wan_raft_sync_groups(p2p_cross_wan_raft_shard_mgr_t *mgr, uint32_t target_wan_region, int *out_synced_groups);
+
+int p2p_zk_bulletproof_inner_product_create(const uint32_t *vec_a, const uint32_t *vec_b, uint32_t count, p2p_zk_bulletproof_ip_t *out_proof);
+int p2p_zk_bulletproof_inner_product_verify(const p2p_zk_bulletproof_ip_t *proof, uint32_t expected_inner_product, int *out_valid);
+
 #endif

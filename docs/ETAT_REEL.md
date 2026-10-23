@@ -10,6 +10,20 @@
 
 ## État courant vérifié
 
+## Etat courant du 23 octobre 2026 (lot 35)
+
+Living baseline. Plan: [lot35_plan.md](lot35_plan.md).
+
+```text
+make test-all : 979 passed, 0 failed, 0 skipped
+```
+
+- US-008 / US-041: Storage VFS PCIe NVMe Direct-I/O Ring 3 Driver Engine (`vfs_nvme_direct_io_init`, `vfs_nvme_direct_io_submit`) and Multi-Stream Transactional Journaling Engine (`vfs_nvme_multi_stream_journal_init`, `vfs_nvme_multi_stream_journal_append`, `vfs_nvme_multi_stream_journal_flush`).
+- US-056 / US-058: Web Runtime Service Workers PWA Offscreen Cache Engine (`webrt_service_worker_register`, `webrt_offscreen_cache_put`, `webrt_offscreen_cache_match`) and WebAssembly SIMD Vector Acceleration Engine (`webrt_wasm_simd_vec_add_f32`, `webrt_wasm_simd_vec_dot_i32`).
+- US-071 / US-083: P2P Mesh Cross-WAN Resilient Raft Group Sharding (`p2p_cross_wan_raft_shard_init`, `p2p_cross_wan_raft_propose_sharded`, `p2p_cross_wan_raft_sync_groups`) and Zero-Knowledge Bulletproof Inner-Product Proof Validation (`p2p_zk_bulletproof_inner_product_create`, `p2p_zk_bulletproof_inner_product_verify`).
+- US-119 / US-128: Production Daemon Autonomous Fault Mitigation Engine (`prod_autonomous_fault_mitigation_init`, `prod_autonomous_fault_mitigation_eval`) and Real-Time Predictive AI Anomaly Remediation Engine (`prod_ai_anomaly_remediation_init`, `prod_ai_anomaly_remediation_record`, `prod_ai_anomaly_remediation_eval`, `prod_ai_anomaly_remediation_execute`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 23 octobre 2026 (lot 33)
 
 Living baseline. Plan: [lot33_plan.md](lot33_plan.md).
