@@ -535,4 +535,47 @@ void prod_ai_anomaly_remediation_record(prod_ai_remediation_t *rem, uint32_t inf
 int prod_ai_anomaly_remediation_eval(prod_ai_remediation_t *rem, uint32_t *out_risk_score, uint8_t *out_trigger_remediation);
 int prod_ai_anomaly_remediation_execute(prod_ai_remediation_t *rem, const char *action_type, char *out_log, int max_sz);
 
+/* Lot 37: Production Daemon Autonomous Real-Time Adaptive Load-Balancing & AI Self-Healing Anomaly Mitigation Engine (US-120 / US-129) */
+#define PROD_ADAPTIVE_LB_NODES_MAX 8
+#define PROD_AI_SELF_HEAL_SAMPLES_MAX 16
+
+typedef struct {
+    uint32_t node_id;
+    char name[32];
+    uint32_t load_pct;
+    uint32_t rtt_ms;
+    uint32_t weight;
+    uint32_t active_requests;
+    uint8_t healthy;
+} prod_adaptive_lb_node_t;
+
+typedef struct {
+    prod_adaptive_lb_node_t nodes[PROD_ADAPTIVE_LB_NODES_MAX];
+    int count;
+    uint32_t total_rebalances;
+    uint32_t selected_node_id;
+} prod_adaptive_lb_t;
+
+typedef struct {
+    uint32_t telemetry_cpu_samples[PROD_AI_SELF_HEAL_SAMPLES_MAX];
+    uint32_t telemetry_mem_samples[PROD_AI_SELF_HEAL_SAMPLES_MAX];
+    uint32_t telemetry_err_samples[PROD_AI_SELF_HEAL_SAMPLES_MAX];
+    int sample_count;
+    uint32_t anomaly_risk_score;
+    uint8_t self_heal_triggered;
+    uint32_t remediations_count;
+    uint8_t active;
+} prod_ai_self_heal_t;
+
+void prod_adaptive_lb_init(prod_adaptive_lb_t *lb);
+int prod_adaptive_lb_register_node(prod_adaptive_lb_t *lb, uint32_t node_id, const char *name, uint32_t weight);
+int prod_adaptive_lb_update_node(prod_adaptive_lb_t *lb, uint32_t node_id, uint32_t load_pct, uint32_t rtt_ms, uint8_t healthy);
+int prod_adaptive_lb_select_node(prod_adaptive_lb_t *lb, uint32_t *out_node_id);
+int prod_adaptive_lb_rebalance(prod_adaptive_lb_t *lb, char *out_log, int max_sz);
+
+void prod_ai_self_heal_init(prod_ai_self_heal_t *sh);
+void prod_ai_self_heal_record_telemetry(prod_ai_self_heal_t *sh, uint32_t cpu_load, uint32_t mem_load, uint32_t err_rate_ppm);
+int prod_ai_self_heal_eval(prod_ai_self_heal_t *sh, uint32_t *out_risk_score, uint8_t *out_trigger_remediation);
+int prod_ai_self_heal_execute(prod_ai_self_heal_t *sh, const char *remediation_action, char *out_log, int max_sz);
+
 #endif

@@ -601,6 +601,56 @@ static void test_lot35_webrt_sw_offscreen_cache_simd_vec(void) {
     TEST_ASSERT_EQUAL(300, dot_out); /* 10 + 40 + 90 + 160 = 300 */
 }
 
+static void test_lot37_service_worker_bg_sync(void) {
+    webrt_bg_sync_queue_t q;
+    webrt_bg_sync_init(&q);
+
+    uint32_t task_id = 0;
+    int res = webrt_bg_sync_register(&q, "sync-form", "data=123", 8, &task_id);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, task_id);
+    TEST_ASSERT_EQUAL(1, q.count);
+    TEST_ASSERT_EQUAL(0, q.tasks[0].status);
+
+    int processed = 0;
+    res = webrt_bg_sync_process(&q, &processed);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, processed);
+    TEST_ASSERT_EQUAL(1, q.synced_count);
+    TEST_ASSERT_EQUAL(1, q.tasks[0].status);
+}
+
+static void test_lot37_wasm_simd_tensor(void) {
+    webrt_mat4x4_t a, b, out_mat;
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            a.m[i][j] = (i == j) ? (1 << 16) : 0; /* Identity 16.16 */
+            b.m[i][j] = (i + j + 1) * (1 << 16);  /* Scaled values */
+        }
+    }
+
+    int res = webrt_wasm_simd_mat4_mul(&a, &b, &out_mat);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1 * (1 << 16), out_mat.m[0][0]);
+    TEST_ASSERT_EQUAL(2 * (1 << 16), out_mat.m[0][1]);
+
+    webrt_tensor3d_t t1, t2;
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            for (int k = 0; k < 2; k++) {
+                t1.data[i][j][k] = 2 * (1 << 16);
+                t2.data[i][j][k] = 3 * (1 << 16);
+            }
+        }
+    }
+
+    int32_t scalar = 0;
+    res = webrt_wasm_simd_tensor3d_contract(&t1, &t2, &scalar);
+    TEST_ASSERT_EQUAL(0, res);
+    /* 8 elements * (2 * 3) = 48 (in 16.16 fp) */
+    TEST_ASSERT_EQUAL(48 * (1 << 16), scalar);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -626,6 +676,8 @@ int main(void) {
     RUN_TEST(test_lot32_webrt_gpu_simd_shared_memory);
     RUN_TEST(test_lot33_webrt_webgpu_compute_wasm_futex);
     RUN_TEST(test_lot35_webrt_sw_offscreen_cache_simd_vec);
+    RUN_TEST(test_lot37_service_worker_bg_sync);
+    RUN_TEST(test_lot37_wasm_simd_tensor);
 
     unity_print_results();
     unity_cleanup();

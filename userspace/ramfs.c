@@ -820,6 +820,249 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
     return RAMFS_OK;
 }
 
+/* Lot 37: VFS PCIe NVMe Dynamic Queue Pair Offloading & Transactional Erasure Coding Engine (US-009 / US-042) */
+void vfs_nvme_qp_init(vfs_nvme_qp_t *qp, uint32_t qp_id) {
+    if (!qp) return;
+    for (uint32_t i = 0; i < sizeof(vfs_nvme_qp_t); i++) {
+        ((uint8_t *)qp)[i] = 0;
+    }
+    qp->qp_id = qp_id;
+    qp->active = 1;
+}
+
+int vfs_nvme_qp_offload_submit(vfs_nvme_qp_t *qp, uint8_t opcode, uint32_t nsid, uint64_t lba, uint32_t blocks, uint16_t stream_id) {
+    if (!qp || !qp->active) return RAMFS_ERR_INVAL;
+    if (qp->submitted_count - qp->completed_count >= VFS_NVME_QP_MAX_ENTRIES) return RAMFS_ERR_NOSPACE;
+
+    vfs_nvme_cmd_t *cmd = &qp->sq[qp->sq_tail];
+    cmd->opcode = opcode;
+    cmd->nsid = nsid;
+    cmd->lba = lba;
+    cmd->blocks = blocks;
+    cmd->stream_id = stream_id;
+    cmd->status = 0;
+
+    qp->sq_tail = (qp->sq_tail + 1) % VFS_NVME_QP_MAX_ENTRIES;
+    qp->submitted_count++;
+    return RAMFS_OK;
+}
+
+int vfs_nvme_qp_poll_completion(vfs_nvme_qp_t *qp, int *out_completed) {
+    if (!qp || !qp->active) return RAMFS_ERR_INVAL;
+
+    int completed = 0;
+    while (qp->sq_head != qp->sq_tail) {
+        vfs_nvme_cmd_t cmd = qp->sq[qp->sq_head];
+        qp->sq_head = (qp->sq_head + 1) % VFS_NVME_QP_MAX_ENTRIES;
+
+        cmd.status = 0; /* Success */
+        qp->cq[qp->cq_tail] = cmd;
+        qp->cq_tail = (qp->cq_tail + 1) % VFS_NVME_QP_MAX_ENTRIES;
+
+        qp->completed_count++;
+        completed++;
+    }
+
+    if (out_completed) *out_completed = completed;
+    return RAMFS_OK;
+}
+
+static uint8_t gf_mul2(uint8_t x) {
+    return (x & 0x80) ? (uint8_t)((x << 1) ^ 0x1b) : (uint8_t)(x << 1);
+}
+
+static uint8_t gf_mul(uint8_t x, uint8_t c) {
+    if (c == 1) return x;
+    if (c == 2) return gf_mul2(x);
+    if (c == 4) return gf_mul2(gf_mul2(x));
+    if (c == 8) return gf_mul2(gf_mul2(gf_mul2(x)));
+    uint8_t res = 0;
+    for (int i = 0; i < 8; i++) {
+        if ((c >> i) & 1) {
+            uint8_t val = x;
+            for (int j = 0; j < i; j++) val = gf_mul2(val);
+            res ^= val;
+        }
+    }
+    return res;
+}
+
+static uint8_t gf_div(uint8_t a, uint8_t b) {
+    if (b == 0) return 0;
+    if (a == 0) return 0;
+    for (uint32_t x = 1; x < 256; x++) {
+        if (gf_mul((uint8_t)b, (uint8_t)x) == 1) {
+            return gf_mul(a, (uint8_t)x);
+        }
+    }
+    return 0;
+}
+
+void vfs_erasure_stripe_init(vfs_erasure_stripe_t *stripe, uint32_t stripe_id, uint32_t chunk_len) {
+    if (!stripe) return;
+    for (uint32_t i = 0; i < sizeof(vfs_erasure_stripe_t); i++) {
+        ((uint8_t *)stripe)[i] = 0;
+    }
+    stripe->stripe_id = stripe_id;
+    stripe->chunk_len = (chunk_len > VFS_ERASURE_CHUNK_SZ) ? VFS_ERASURE_CHUNK_SZ : chunk_len;
+    for (int i = 0; i < VFS_ERASURE_K + VFS_ERASURE_M; i++) {
+        stripe->chunk_present[i] = 1;
+    }
+    stripe->status = 0;
+}
+
+int vfs_erasure_encode(vfs_erasure_stripe_t *stripe, const uint8_t data[VFS_ERASURE_K][VFS_ERASURE_CHUNK_SZ]) {
+    if (!stripe || !data) return RAMFS_ERR_INVAL;
+
+    static const uint8_t coeffs[VFS_ERASURE_K] = {1, 2, 4, 8};
+
+    for (int k = 0; k < VFS_ERASURE_K; k++) {
+        for (uint32_t b = 0; b < stripe->chunk_len; b++) {
+            stripe->data_chunks[k][b] = data[k][b];
+        }
+        stripe->chunk_present[k] = 1;
+    }
+
+    for (uint32_t b = 0; b < stripe->chunk_len; b++) {
+        uint8_t p0 = 0;
+        uint8_t p1 = 0;
+        for (int k = 0; k < VFS_ERASURE_K; k++) {
+            p0 ^= stripe->data_chunks[k][b];
+            p1 ^= gf_mul(stripe->data_chunks[k][b], coeffs[k]);
+        }
+        stripe->parity_chunks[0][b] = p0;
+        stripe->parity_chunks[1][b] = p1;
+    }
+
+    stripe->chunk_present[VFS_ERASURE_K] = 1;
+    stripe->chunk_present[VFS_ERASURE_K + 1] = 1;
+    stripe->status = 0;
+    return RAMFS_OK;
+}
+
+int vfs_erasure_reconstruct(vfs_erasure_stripe_t *stripe, int *out_reconstructed_chunks) {
+    if (!stripe) return RAMFS_ERR_INVAL;
+
+    static const uint8_t coeffs[VFS_ERASURE_K] = {1, 2, 4, 8};
+
+    int missing_count = 0;
+    int missing_idx[VFS_ERASURE_K + VFS_ERASURE_M];
+    for (int i = 0; i < VFS_ERASURE_K + VFS_ERASURE_M; i++) {
+        if (!stripe->chunk_present[i]) {
+            missing_idx[missing_count++] = i;
+        }
+    }
+
+    if (missing_count == 0) {
+        if (out_reconstructed_chunks) *out_reconstructed_chunks = 0;
+        return RAMFS_OK;
+    }
+
+    if (missing_count > VFS_ERASURE_M) {
+        return RAMFS_ERR_INVAL; /* Cannot reconstruct */
+    }
+
+    if (missing_count == 1) {
+        int idx = missing_idx[0];
+        if (idx == VFS_ERASURE_K) { /* P0 lost */
+            for (uint32_t b = 0; b < stripe->chunk_len; b++) {
+                uint8_t p0 = 0;
+                for (int k = 0; k < VFS_ERASURE_K; k++) p0 ^= stripe->data_chunks[k][b];
+                stripe->parity_chunks[0][b] = p0;
+            }
+        } else if (idx == VFS_ERASURE_K + 1) { /* P1 lost */
+            for (uint32_t b = 0; b < stripe->chunk_len; b++) {
+                uint8_t p1 = 0;
+                for (int k = 0; k < VFS_ERASURE_K; k++) p1 ^= gf_mul(stripe->data_chunks[k][b], coeffs[k]);
+                stripe->parity_chunks[1][b] = p1;
+            }
+        } else { /* Di lost */
+            for (uint32_t b = 0; b < stripe->chunk_len; b++) {
+                uint8_t d_i = stripe->parity_chunks[0][b];
+                for (int k = 0; k < VFS_ERASURE_K; k++) {
+                    if (k != idx) d_i ^= stripe->data_chunks[k][b];
+                }
+                stripe->data_chunks[idx][b] = d_i;
+            }
+        }
+        stripe->chunk_present[idx] = 1;
+    } else if (missing_count == 2) {
+        int idx1 = missing_idx[0];
+        int idx2 = missing_idx[1];
+
+        if (idx1 == VFS_ERASURE_K && idx2 == VFS_ERASURE_K + 1) { /* P0 & P1 lost */
+            for (uint32_t b = 0; b < stripe->chunk_len; b++) {
+                uint8_t p0 = 0, p1 = 0;
+                for (int k = 0; k < VFS_ERASURE_K; k++) {
+                    p0 ^= stripe->data_chunks[k][b];
+                    p1 ^= gf_mul(stripe->data_chunks[k][b], coeffs[k]);
+                }
+                stripe->parity_chunks[0][b] = p0;
+                stripe->parity_chunks[1][b] = p1;
+            }
+        } else if (idx1 < VFS_ERASURE_K && idx2 == VFS_ERASURE_K) { /* Di & P0 lost */
+            for (uint32_t b = 0; b < stripe->chunk_len; b++) {
+                uint8_t sum_p1 = stripe->parity_chunks[1][b];
+                for (int k = 0; k < VFS_ERASURE_K; k++) {
+                    if (k != idx1) sum_p1 ^= gf_mul(stripe->data_chunks[k][b], coeffs[k]);
+                }
+                stripe->data_chunks[idx1][b] = gf_div(sum_p1, coeffs[idx1]);
+
+                uint8_t p0 = 0;
+                for (int k = 0; k < VFS_ERASURE_K; k++) p0 ^= stripe->data_chunks[k][b];
+                stripe->parity_chunks[0][b] = p0;
+            }
+        } else if (idx1 < VFS_ERASURE_K && idx2 == VFS_ERASURE_K + 1) { /* Di & P1 lost */
+            for (uint32_t b = 0; b < stripe->chunk_len; b++) {
+                uint8_t d_i = stripe->parity_chunks[0][b];
+                for (int k = 0; k < VFS_ERASURE_K; k++) {
+                    if (k != idx1) d_i ^= stripe->data_chunks[k][b];
+                }
+                stripe->data_chunks[idx1][b] = d_i;
+
+                uint8_t p1 = 0;
+                for (int k = 0; k < VFS_ERASURE_K; k++) p1 ^= gf_mul(stripe->data_chunks[k][b], coeffs[k]);
+                stripe->parity_chunks[1][b] = p1;
+            }
+        } else if (idx1 < VFS_ERASURE_K && idx2 < VFS_ERASURE_K) { /* Di & Dj lost */
+            uint8_t c1 = coeffs[idx1];
+            uint8_t c2 = coeffs[idx2];
+            uint8_t det = c1 ^ c2;
+
+            for (uint32_t b = 0; b < stripe->chunk_len; b++) {
+                uint8_t s0 = stripe->parity_chunks[0][b];
+                uint8_t s1 = stripe->parity_chunks[1][b];
+                for (int k = 0; k < VFS_ERASURE_K; k++) {
+                    if (k != idx1 && k != idx2) {
+                        s0 ^= stripe->data_chunks[k][b];
+                        s1 ^= gf_mul(stripe->data_chunks[k][b], coeffs[k]);
+                    }
+                }
+                /* c1 * s0 ^ s1 = det * d_j */
+                uint8_t rhs = gf_mul(c1, s0) ^ s1;
+                uint8_t d_j = gf_div(rhs, det);
+                uint8_t d_i = s0 ^ d_j;
+
+                stripe->data_chunks[idx1][b] = d_i;
+                stripe->data_chunks[idx2][b] = d_j;
+            }
+        }
+        stripe->chunk_present[idx1] = 1;
+        stripe->chunk_present[idx2] = 1;
+    }
+
+    stripe->status = 2; /* Reconstructed */
+    if (out_reconstructed_chunks) *out_reconstructed_chunks = missing_count;
+    return RAMFS_OK;
+}
+
+int vfs_erasure_commit_tx(vfs_erasure_stripe_t *stripe, uint32_t tx_id) {
+    if (!stripe) return RAMFS_ERR_INVAL;
+    (void)tx_id;
+    stripe->status = 1; /* Committed */
+    return RAMFS_OK;
+}
+
 /* Lot 35: VFS PCIe NVMe Direct-I/O & Multi-Stream Transactional Journaling Engine (US-008 / US-041) */
 
 void vfs_nvme_direct_io_init(vfs_nvme_queue_t *q) {

@@ -440,6 +440,56 @@ static void test_lot35_nvme_direct_io_and_multi_stream_journal(void) {
     TEST_ASSERT_EQUAL(2, j.flushed_count);
 }
 
+static void test_lot37_nvme_qp_offload(void) {
+    vfs_nvme_qp_t qp;
+    vfs_nvme_qp_init(&qp, 101);
+    TEST_ASSERT_EQUAL(1, qp.active);
+    TEST_ASSERT_EQUAL(101, qp.qp_id);
+
+    int res = vfs_nvme_qp_offload_submit(&qp, VFS_NVME_OP_WRITE, 1, 4096, 8, 1);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+    TEST_ASSERT_EQUAL(1, qp.submitted_count);
+
+    int completed = 0;
+    res = vfs_nvme_qp_poll_completion(&qp, &completed);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+    TEST_ASSERT_EQUAL(1, completed);
+    TEST_ASSERT_EQUAL(1, qp.completed_count);
+}
+
+static void test_lot37_erasure_coding(void) {
+    vfs_erasure_stripe_t stripe;
+    vfs_erasure_stripe_init(&stripe, 1, 128);
+
+    uint8_t data[VFS_ERASURE_K][VFS_ERASURE_CHUNK_SZ];
+    for (int k = 0; k < VFS_ERASURE_K; k++) {
+        for (int b = 0; b < 128; b++) {
+            data[k][b] = (uint8_t)(k + b);
+        }
+    }
+
+    int res = vfs_erasure_encode(&stripe, data);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+
+    /* Simulate loss of data chunk 1 and parity chunk 0 */
+    stripe.chunk_present[1] = 0;
+    stripe.chunk_present[VFS_ERASURE_K] = 0;
+
+    int reconstructed = 0;
+    res = vfs_erasure_reconstruct(&stripe, &reconstructed);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+    TEST_ASSERT_EQUAL(2, reconstructed);
+    TEST_ASSERT_EQUAL(1, stripe.chunk_present[1]);
+    TEST_ASSERT_EQUAL(1, stripe.chunk_present[VFS_ERASURE_K]);
+
+    /* Verify chunk 1 data was recovered */
+    TEST_ASSERT_EQUAL((uint8_t)(1 + 10), stripe.data_chunks[1][10]);
+
+    res = vfs_erasure_commit_tx(&stripe, 1001);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+    TEST_ASSERT_EQUAL(1, stripe.status);
+}
+
 int main(void) {
     unity_init();
 
@@ -462,6 +512,8 @@ int main(void) {
     RUN_TEST(test_lot32_vfs_mvcc_commit_compaction);
     RUN_TEST(test_lot33_vfs_crdt_and_tx_isolation);
     RUN_TEST(test_lot35_nvme_direct_io_and_multi_stream_journal);
+    RUN_TEST(test_lot37_nvme_qp_offload);
+    RUN_TEST(test_lot37_erasure_coding);
 
     unity_print_results();
     unity_cleanup();

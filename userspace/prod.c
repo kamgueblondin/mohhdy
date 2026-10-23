@@ -1616,6 +1616,162 @@ int prod_audit_diagnostic_report(const prod_quarantine_mgr_t *q_mgr, const prod_
     return (int)s_len(out_report);
 }
 
+/* Lot 37: Production Daemon Autonomous Real-Time Adaptive Load-Balancing & AI Self-Healing Anomaly Mitigation Engine (US-120 / US-129) */
+void prod_adaptive_lb_init(prod_adaptive_lb_t *lb) {
+    if (!lb) return;
+    for (uint32_t i = 0; i < sizeof(prod_adaptive_lb_t); i++) {
+        ((uint8_t *)lb)[i] = 0;
+    }
+}
+
+int prod_adaptive_lb_register_node(prod_adaptive_lb_t *lb, uint32_t node_id, const char *name, uint32_t weight) {
+    if (!lb || !name || lb->count >= PROD_ADAPTIVE_LB_NODES_MAX) return -1;
+
+    prod_adaptive_lb_node_t *node = &lb->nodes[lb->count];
+    node->node_id = node_id;
+    s_copy(node->name, name, sizeof(node->name));
+    node->weight = weight > 0 ? weight : 1;
+    node->load_pct = 0;
+    node->rtt_ms = 1;
+    node->active_requests = 0;
+    node->healthy = 1;
+
+    lb->count++;
+    return 0;
+}
+
+int prod_adaptive_lb_update_node(prod_adaptive_lb_t *lb, uint32_t node_id, uint32_t load_pct, uint32_t rtt_ms, uint8_t healthy) {
+    if (!lb) return -1;
+
+    for (int i = 0; i < lb->count; i++) {
+        if (lb->nodes[i].node_id == node_id) {
+            lb->nodes[i].load_pct = load_pct;
+            lb->nodes[i].rtt_ms = rtt_ms > 0 ? rtt_ms : 1;
+            lb->nodes[i].healthy = healthy;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int prod_adaptive_lb_select_node(prod_adaptive_lb_t *lb, uint32_t *out_node_id) {
+    if (!lb || !out_node_id || lb->count == 0) return -1;
+
+    int best_idx = -1;
+    uint32_t lowest_score = 0xFFFFFFFF;
+
+    for (int i = 0; i < lb->count; i++) {
+        if (!lb->nodes[i].healthy) continue;
+        /* Dynamic cost score = (load_pct * 10 + rtt_ms) / weight */
+        uint32_t score = (lb->nodes[i].load_pct * 10 + lb->nodes[i].rtt_ms) / (lb->nodes[i].weight > 0 ? lb->nodes[i].weight : 1);
+        if (score < lowest_score) {
+            lowest_score = score;
+            best_idx = i;
+        }
+    }
+
+    if (best_idx < 0) return -1;
+
+    lb->nodes[best_idx].active_requests++;
+    lb->selected_node_id = lb->nodes[best_idx].node_id;
+    *out_node_id = lb->nodes[best_idx].node_id;
+    return 0;
+}
+
+int prod_adaptive_lb_rebalance(prod_adaptive_lb_t *lb, char *out_log, int max_sz) {
+    if (!lb || !out_log || max_sz <= 0) return -1;
+
+    lb->total_rebalances++;
+    for (int i = 0; i < lb->count; i++) {
+        if (lb->nodes[i].load_pct > 80 && lb->nodes[i].weight > 1) {
+            lb->nodes[i].weight--; /* Decrease weight for overloaded node */
+        } else if (lb->nodes[i].load_pct < 30 && lb->nodes[i].weight < 10) {
+            lb->nodes[i].weight++; /* Increase weight for underloaded node */
+        }
+    }
+
+    out_log[0] = '\0';
+    s_copy(out_log, "[ADAPTIVE LB] Weights rebalanced successfully\n", max_sz);
+    return 0;
+}
+
+void prod_ai_self_heal_init(prod_ai_self_heal_t *sh) {
+    if (!sh) return;
+    for (uint32_t i = 0; i < sizeof(prod_ai_self_heal_t); i++) {
+        ((uint8_t *)sh)[i] = 0;
+    }
+    sh->active = 1;
+}
+
+void prod_ai_self_heal_record_telemetry(prod_ai_self_heal_t *sh, uint32_t cpu_load, uint32_t mem_load, uint32_t err_rate_ppm) {
+    if (!sh || !sh->active) return;
+
+    if (sh->sample_count < PROD_AI_SELF_HEAL_SAMPLES_MAX) {
+        sh->telemetry_cpu_samples[sh->sample_count] = cpu_load;
+        sh->telemetry_mem_samples[sh->sample_count] = mem_load;
+        sh->telemetry_err_samples[sh->sample_count] = err_rate_ppm;
+        sh->sample_count++;
+    } else {
+        for (int i = 1; i < PROD_AI_SELF_HEAL_SAMPLES_MAX; i++) {
+            sh->telemetry_cpu_samples[i - 1] = sh->telemetry_cpu_samples[i];
+            sh->telemetry_mem_samples[i - 1] = sh->telemetry_mem_samples[i];
+            sh->telemetry_err_samples[i - 1] = sh->telemetry_err_samples[i];
+        }
+        sh->telemetry_cpu_samples[PROD_AI_SELF_HEAL_SAMPLES_MAX - 1] = cpu_load;
+        sh->telemetry_mem_samples[PROD_AI_SELF_HEAL_SAMPLES_MAX - 1] = mem_load;
+        sh->telemetry_err_samples[PROD_AI_SELF_HEAL_SAMPLES_MAX - 1] = err_rate_ppm;
+    }
+}
+
+int prod_ai_self_heal_eval(prod_ai_self_heal_t *sh, uint32_t *out_risk_score, uint8_t *out_trigger_remediation) {
+    if (!sh || !sh->active || !out_risk_score || !out_trigger_remediation) return -1;
+
+    if (sh->sample_count == 0) {
+        *out_risk_score = 0;
+        *out_trigger_remediation = 0;
+        return 0;
+    }
+
+    uint32_t cpu_avg = 0, mem_avg = 0, err_avg = 0;
+    for (int i = 0; i < sh->sample_count; i++) {
+        cpu_avg += sh->telemetry_cpu_samples[i];
+        mem_avg += sh->telemetry_mem_samples[i];
+        err_avg += sh->telemetry_err_samples[i];
+    }
+    cpu_avg /= sh->sample_count;
+    mem_avg /= sh->sample_count;
+    err_avg /= sh->sample_count;
+
+    uint32_t risk = (cpu_avg / 2) + (mem_avg / 2) + (err_avg / 100);
+    if (risk > 100) risk = 100;
+
+    sh->anomaly_risk_score = risk;
+    if (risk >= 70) {
+        sh->self_heal_triggered = 1;
+        *out_trigger_remediation = 1;
+    } else {
+        sh->self_heal_triggered = 0;
+        *out_trigger_remediation = 0;
+    }
+
+    *out_risk_score = risk;
+    return 0;
+}
+
+int prod_ai_self_heal_execute(prod_ai_self_heal_t *sh, const char *remediation_action, char *out_log, int max_sz) {
+    if (!sh || !remediation_action || !out_log || max_sz <= 0) return -1;
+
+    sh->remediations_count++;
+    sh->self_heal_triggered = 0;
+
+    out_log[0] = '\0';
+    s_copy(out_log, "[AI SELF HEALING] Action executed: ", max_sz);
+    s_cat(out_log, remediation_action, max_sz);
+    s_cat(out_log, "\n", max_sz);
+
+    return 0;
+}
+
 /* Lot 35: Production Daemon Autonomous Fault Mitigation & Real-Time Predictive AI Anomaly Remediation Engine (US-119 / US-128) */
 
 void prod_autonomous_fault_mitigation_init(prod_fault_mitigation_t *fm) {

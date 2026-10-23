@@ -1206,6 +1206,41 @@ static void test_lot30_p2p_region_route_multi_raft_merkle(void) {
     TEST_ASSERT_EQUAL(101, diff_ids[0]);
 }
 
+static void test_lot37_p2p_wan_raft_election_and_batch_zk(void) {
+    p2p_wan_raft_elec_t elec;
+    p2p_wan_raft_elec_init(&elec, 1, 5, 100);
+    TEST_ASSERT_EQUAL(0, elec.state);
+
+    /* 3 votes out of 5 total voters -> quorum = 3 -> Leader */
+    int res = p2p_wan_raft_leader_elect(&elec, 10, 1, 3, 500);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(2, elec.state);
+    TEST_ASSERT_EQUAL(10, elec.leader_id);
+
+    int lease_valid = 0;
+    res = p2p_wan_raft_check_leader_lease(&elec, 550, &lease_valid);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, lease_valid);
+
+    p2p_zk_bulletproof_batch_t batch;
+    p2p_zk_bulletproof_batch_init(&batch);
+
+    uint32_t vec_a[4] = {1, 2, 3, 4};
+    uint32_t vec_b[4] = {5, 6, 7, 8};
+    p2p_zk_bulletproof_ip_t proof;
+    p2p_zk_bulletproof_inner_product_create(vec_a, vec_b, 4, &proof);
+
+    res = p2p_zk_bulletproof_batch_add(&batch, &proof, 70);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, batch.count);
+
+    int all_valid = 0;
+    res = p2p_zk_bulletproof_batch_verify(&batch, &all_valid);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, all_valid);
+    TEST_ASSERT_EQUAL(1, batch.verified_count);
+}
+
 static void test_lot31_p2p_topology_bft_bloom(void) {
     p2p_node_t node;
     memset(&node, 0, sizeof(node));
@@ -1381,6 +1416,7 @@ int main(void) {
     RUN_TEST(test_lot32_p2p_topology_zk_bbr);
     RUN_TEST(test_lot33_p2p_geo_consensus_bulletproof);
     RUN_TEST(test_lot35_p2p_cross_wan_raft_bulletproof_ip);
+    RUN_TEST(test_lot37_p2p_wan_raft_election_and_batch_zk);
 
     unity_print_results();
     unity_cleanup();
