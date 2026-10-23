@@ -582,6 +582,53 @@ static void test_lot39_nvme_dif_dix_and_mvcc_gc(void) {
     TEST_ASSERT_EQUAL(1, rec_blocks);
 }
 
+static void test_lot40_zbd_and_metadata_rebalancer(void) {
+    vfs_nvme_zbd_engine_t zbd;
+    vfs_nvme_zbd_init(&zbd, 4, 128);
+    TEST_ASSERT_EQUAL(4, zbd.zone_count);
+
+    uint32_t zone_id = 0;
+    int res = vfs_nvme_zbd_zone_alloc(&zbd, &zone_id);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+    TEST_ASSERT_EQUAL(0, zone_id);
+
+    uint32_t wp = 0;
+    uint8_t dummy_data[64] = {0};
+    res = vfs_nvme_zbd_zone_append(&zbd, zone_id, dummy_data, 64, &wp);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+    TEST_ASSERT_EQUAL(0, wp);
+    TEST_ASSERT_EQUAL(64, zbd.zones[zone_id].wp);
+
+    res = vfs_nvme_zbd_zone_reset(&zbd, zone_id);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+    TEST_ASSERT_EQUAL(0, zbd.zones[zone_id].wp);
+    TEST_ASSERT_EQUAL(VFS_ZBD_ZONE_EMPTY, zbd.zones[zone_id].state);
+
+    vfs_dist_metadata_rebalancer_t reb;
+    vfs_dist_metadata_init(&reb);
+    vfs_dist_metadata_register_node(&reb, 101, 100);
+    vfs_dist_metadata_register_node(&reb, 102, 20);
+
+    int migrated = 0;
+    res = vfs_dist_metadata_rebalance(&reb, &migrated);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+    TEST_ASSERT_EQUAL(40, migrated);
+
+    res = vfs_dist_metadata_node_failover(&reb, 102, 101);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+    TEST_ASSERT_EQUAL(120, reb.nodes[0].inode_count);
+
+    vfs_vector_clock_t ca = {{2, 1, 0, 0}};
+    vfs_vector_clock_t cb = {{1, 3, 0, 0}};
+    vfs_vector_clock_t cm;
+    int conflict = 0;
+    res = vfs_dist_metadata_resolve_vector_conflict(&ca, &cb, &cm, &conflict);
+    TEST_ASSERT_EQUAL(RAMFS_OK, res);
+    TEST_ASSERT_EQUAL(2, cm.clock[0]);
+    TEST_ASSERT_EQUAL(3, cm.clock[1]);
+    TEST_ASSERT_EQUAL(1, conflict);
+}
+
 int main(void) {
     unity_init();
 
@@ -608,6 +655,7 @@ int main(void) {
     RUN_TEST(test_lot37_erasure_coding);
     RUN_TEST(test_lot38_nvme_sg_and_erasure_dist);
     RUN_TEST(test_lot39_nvme_dif_dix_and_mvcc_gc);
+    RUN_TEST(test_lot40_zbd_and_metadata_rebalancer);
 
     unity_print_results();
     unity_cleanup();

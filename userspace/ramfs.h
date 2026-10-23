@@ -478,4 +478,60 @@ int vfs_mvcc_gc_mark_obsolete(vfs_mvcc_gc_engine_t *gc, uint32_t version_id, uin
 int vfs_mvcc_gc_collect_async(vfs_mvcc_gc_engine_t *gc, uint32_t watermark_version, int *out_reclaimed_count);
 int vfs_mvcc_gc_stat(const vfs_mvcc_gc_engine_t *gc, uint32_t *out_reclaimed_inodes, uint32_t *out_reclaimed_blocks);
 
+/* Lot 40: VFS PCIe NVMe Zoned Block Device (ZBD) Zone Append Engine & Multi-Master Distributed Metadata Rebalancing Engine (US-012 / US-045) */
+#define RAMFS_NVME_ZBD_ZONES_MAX 8
+#define VFS_ZBD_ZONE_EMPTY 0
+#define VFS_ZBD_ZONE_IMPLICIT_OPEN 1
+#define VFS_ZBD_ZONE_CLOSED 2
+#define VFS_ZBD_ZONE_FULL 3
+
+#define VFS_DIST_NODES_MAX 8
+#define VFS_VECTOR_CLOCK_NODES 4
+
+typedef struct {
+    uint32_t zone_id;
+    uint32_t wp;
+    uint32_t capacity;
+    uint8_t state;
+    uint32_t write_count;
+} vfs_nvme_zbd_zone_t;
+
+typedef struct {
+    vfs_nvme_zbd_zone_t zones[RAMFS_NVME_ZBD_ZONES_MAX];
+    int zone_count;
+    uint32_t total_appends;
+    uint32_t total_resets;
+} vfs_nvme_zbd_engine_t;
+
+typedef struct {
+    uint32_t clock[VFS_VECTOR_CLOCK_NODES];
+} vfs_vector_clock_t;
+
+typedef struct {
+    uint32_t node_id;
+    uint8_t active;
+    uint32_t load_weight;
+    uint32_t inode_count;
+    vfs_vector_clock_t vclock;
+} vfs_metadata_node_t;
+
+typedef struct {
+    vfs_metadata_node_t nodes[VFS_DIST_NODES_MAX];
+    int node_count;
+    uint32_t total_rebalances;
+    uint32_t total_failovers;
+    uint32_t total_conflicts_resolved;
+} vfs_dist_metadata_rebalancer_t;
+
+void vfs_nvme_zbd_init(vfs_nvme_zbd_engine_t *zbd, int zone_cnt, uint32_t zone_capacity);
+int vfs_nvme_zbd_zone_alloc(vfs_nvme_zbd_engine_t *zbd, uint32_t *out_zone_id);
+int vfs_nvme_zbd_zone_reset(vfs_nvme_zbd_engine_t *zbd, uint32_t zone_id);
+int vfs_nvme_zbd_zone_append(vfs_nvme_zbd_engine_t *zbd, uint32_t zone_id, const uint8_t *data, uint32_t len, uint32_t *out_wp);
+
+void vfs_dist_metadata_init(vfs_dist_metadata_rebalancer_t *reb);
+int vfs_dist_metadata_register_node(vfs_dist_metadata_rebalancer_t *reb, uint32_t node_id, uint32_t initial_inodes);
+int vfs_dist_metadata_node_failover(vfs_dist_metadata_rebalancer_t *reb, uint32_t failed_node_id, uint32_t target_node_id);
+int vfs_dist_metadata_rebalance(vfs_dist_metadata_rebalancer_t *reb, int *out_migrated_inodes);
+int vfs_dist_metadata_resolve_vector_conflict(const vfs_vector_clock_t *clock_a, const vfs_vector_clock_t *clock_b, vfs_vector_clock_t *out_merged_clock, int *out_conflict);
+
 #endif

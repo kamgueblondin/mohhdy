@@ -284,6 +284,147 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* Lot 40: Web Runtime WebAssembly SIMD 512-bit AVX-512 Tensor Acceleration Engine & WebGPU Compute Pipeline Parallel Command Encoder */
+
+void webrt_simd512_load(webrt_v512_t *v, const int32_t data[16]) {
+    if (!v) return;
+    for (int i = 0; i < 16; i++) {
+        v->val[i] = data ? data[i] : 0;
+    }
+}
+
+int webrt_wasm_simd512_dot(const webrt_v512_t *a, const webrt_v512_t *b, int64_t *out_dot) {
+    if (!a || !b || !out_dot) return -1;
+    int64_t sum = 0;
+    for (int i = 0; i < 16; i++) {
+        sum += (int64_t)a->val[i] * (int64_t)b->val[i];
+    }
+    *out_dot = sum;
+    return 0;
+}
+
+int webrt_wasm_simd512_fma(const webrt_v512_t *a, const webrt_v512_t *b, const webrt_v512_t *c, webrt_v512_t *out) {
+    if (!a || !b || !c || !out) return -1;
+    for (int i = 0; i < 16; i++) {
+        int64_t prod = ((int64_t)a->val[i] * (int64_t)b->val[i]) >> 16;
+        out->val[i] = (int32_t)(prod + c->val[i]);
+    }
+    return 0;
+}
+
+int webrt_wasm_simd512_silu(const webrt_v512_t *in, webrt_v512_t *out) {
+    if (!in || !out) return -1;
+    for (int i = 0; i < 16; i++) {
+        int32_t x = in->val[i];
+        if (x <= -262144) {
+            out->val[i] = 0;
+        } else if (x >= 262144) {
+            out->val[i] = x;
+        } else {
+            int32_t sig = 32768 + (x / 4);
+            if (sig < 0) sig = 0;
+            if (sig > 65536) sig = 65536;
+            int64_t prod = ((int64_t)x * sig) >> 16;
+            out->val[i] = (int32_t)prod;
+        }
+    }
+    return 0;
+}
+
+int webrt_wasm_simd512_softmax(const webrt_v512_t *in, webrt_v512_t *out) {
+    if (!in || !out) return -1;
+    int32_t max_val = in->val[0];
+    for (int i = 1; i < 16; i++) {
+        if (in->val[i] > max_val) max_val = in->val[i];
+    }
+
+    int32_t exp_vals[16];
+    uint32_t sum_exp = 0;
+
+    for (int i = 0; i < 16; i++) {
+        int32_t diff = in->val[i] - max_val;
+        int32_t exp_v = 0;
+        if (diff >= 0) {
+            exp_v = 65536;
+        } else if (diff <= -262144) {
+            exp_v = 100;
+        } else {
+            int64_t d2 = ((int64_t)diff * diff) >> 17;
+            exp_v = (int32_t)(65536 + diff + d2);
+            if (exp_v < 100) exp_v = 100;
+        }
+        exp_vals[i] = exp_v;
+        sum_exp += (uint32_t)exp_v;
+    }
+
+    if (sum_exp == 0) sum_exp = 1;
+
+    for (int i = 0; i < 16; i++) {
+        uint32_t v = (uint32_t)exp_vals[i];
+        uint32_t res_fp = ((v / sum_exp) << 16) + (((v % sum_exp) << 16) / sum_exp);
+        out->val[i] = (int32_t)res_fp;
+    }
+    return 0;
+}
+
+void webrt_webgpu_parallel_encoder_init(webrt_webgpu_parallel_encoder_t *enc, uint32_t encoder_id) {
+    if (!enc) return;
+    enc->encoder_id = encoder_id;
+    enc->buffer_count = 0;
+    enc->total_commands_encoded = 0;
+    enc->active = 1;
+    for (int i = 0; i < WEBRT_WEBGPU_COMMAND_BUFFERS_MAX; i++) {
+        enc->buffers[i].buffer_id = 0;
+        enc->buffers[i].cmd_count = 0;
+        enc->buffers[i].closed = 0;
+    }
+}
+
+int webrt_webgpu_parallel_create_command_buffer(webrt_webgpu_parallel_encoder_t *enc, uint32_t *out_buf_id) {
+    if (!enc || !enc->active || enc->buffer_count >= WEBRT_WEBGPU_COMMAND_BUFFERS_MAX) return -1;
+    int idx = enc->buffer_count++;
+    uint32_t buf_id = (uint32_t)(idx + 1);
+    enc->buffers[idx].buffer_id = buf_id;
+    enc->buffers[idx].cmd_count = 0;
+    enc->buffers[idx].closed = 0;
+    if (out_buf_id) *out_buf_id = buf_id;
+    return 0;
+}
+
+int webrt_webgpu_command_buffer_encode_dispatch(webrt_webgpu_parallel_encoder_t *enc, uint32_t buf_id, uint32_t pipeline_id, uint32_t x, uint32_t y, uint32_t z) {
+    if (!enc || !enc->active) return -1;
+    webrt_webgpu_command_buffer_t *target_buf = 0;
+    for (int i = 0; i < enc->buffer_count; i++) {
+        if (enc->buffers[i].buffer_id == buf_id && !enc->buffers[i].closed) {
+            target_buf = &enc->buffers[i];
+            break;
+        }
+    }
+    if (!target_buf || target_buf->cmd_count >= WEBRT_WEBGPU_CMDS_PER_BUFFER) return -1;
+
+    int cmd_idx = target_buf->cmd_count++;
+    target_buf->cmds[cmd_idx].opcode = 1;
+    target_buf->cmds[cmd_idx].pipeline_id = pipeline_id;
+    target_buf->cmds[cmd_idx].dispatch_x = x;
+    target_buf->cmds[cmd_idx].dispatch_y = y;
+    target_buf->cmds[cmd_idx].dispatch_z = z;
+
+    enc->total_commands_encoded++;
+    return 0;
+}
+
+int webrt_webgpu_parallel_encoder_finish(webrt_webgpu_parallel_encoder_t *enc, int *out_total_cmds) {
+    if (!enc || !enc->active) return -1;
+    int total = 0;
+    for (int i = 0; i < enc->buffer_count; i++) {
+        enc->buffers[i].closed = 1;
+        total += enc->buffers[i].cmd_count;
+    }
+    enc->active = 0;
+    if (out_total_cmds) *out_total_cmds = total;
+    return 0;
+}
+
 /* Lot 39: Web Runtime WebAssembly SIMD 256-bit Vector Acceleration Engine & WebGPU Compute Pipeline State Machine (US-059 / US-061) */
 
 void webrt_simd256_load(webrt_v256_t *v, const int32_t data[8]) {

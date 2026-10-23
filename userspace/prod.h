@@ -671,4 +671,56 @@ int prod_self_driving_register_proc(prod_self_driving_engine_t *eng, uint32_t pr
 int prod_self_driving_optimize(prod_self_driving_engine_t *eng, char *out_log, int max_sz);
 int prod_self_driving_get_proc_assignment(const prod_self_driving_engine_t *eng, uint32_t proc_id, uint32_t *out_core, uint32_t *out_cache_quota_kb);
 
+/* Lot 40: Production Daemon Multi-Cluster Incident Auto-Healing Engine & Self-Driving Resource Allocation Engine (US-123 / US-132) */
+#define PROD_CLUSTERS_MAX 8
+#define PROD_SELF_DRIVING_RESOURCES_MAX 8
+
+typedef struct {
+    uint32_t cluster_id;
+    char cluster_name[16];
+    uint32_t error_rate_ppm;
+    uint32_t latency_p99_ms;
+    uint32_t cpu_load_pct;
+    uint8_t status; /* 0=healthy, 1=degraded, 2=isolated, 3=auto_healed */
+    uint32_t isolation_tick;
+} prod_cluster_telemetry_t;
+
+typedef struct {
+    prod_cluster_telemetry_t clusters[PROD_CLUSTERS_MAX];
+    int cluster_count;
+    uint32_t auto_heal_count;
+    uint32_t isolation_count;
+    uint32_t anomaly_threshold_ppm;
+} prod_multi_cluster_auto_heal_t;
+
+typedef struct {
+    uint32_t service_id;
+    char service_name[16];
+    uint32_t core_mask;
+    uint32_t mem_bandwidth_mbps;
+    uint32_t cache_quota_kb;
+    uint32_t current_load_pct;
+} prod_resource_allocation_entry_t;
+
+typedef struct {
+    prod_resource_allocation_entry_t entries[PROD_SELF_DRIVING_RESOURCES_MAX];
+    int entry_count;
+    uint32_t total_cores;
+    uint32_t total_mem_bandwidth_mbps;
+    uint32_t total_cache_kb;
+    uint32_t real_time_adjustments;
+    uint8_t active;
+} prod_self_driving_resource_engine_t;
+
+void prod_multi_cluster_auto_heal_init(prod_multi_cluster_auto_heal_t *mgr, uint32_t anomaly_threshold_ppm);
+int prod_multi_cluster_register(prod_multi_cluster_auto_heal_t *mgr, uint32_t cluster_id, const char *name);
+int prod_multi_cluster_record_telemetry(prod_multi_cluster_auto_heal_t *mgr, uint32_t cluster_id, uint32_t err_ppm, uint32_t lat_ms, uint32_t cpu_pct);
+int prod_multi_cluster_eval_and_heal(prod_multi_cluster_auto_heal_t *mgr, uint32_t current_tick, char *out_log, int max_sz);
+
+void prod_self_driving_resource_engine_init(prod_self_driving_resource_engine_t *eng, uint32_t total_cores, uint32_t total_bw, uint32_t total_cache);
+int prod_self_driving_resource_register(prod_self_driving_resource_engine_t *eng, uint32_t service_id, const char *name);
+int prod_self_driving_resource_update_load(prod_self_driving_resource_engine_t *eng, uint32_t service_id, uint32_t load_pct);
+int prod_self_driving_resource_rebalance(prod_self_driving_resource_engine_t *eng, char *out_log, int max_sz);
+int prod_self_driving_resource_get_quota(const prod_self_driving_resource_engine_t *eng, uint32_t service_id, uint32_t *out_core_mask, uint32_t *out_bw_mbps, uint32_t *out_cache_kb);
+
 #endif

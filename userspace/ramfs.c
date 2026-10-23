@@ -825,6 +825,162 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
     return RAMFS_OK;
 }
 
+/* Lot 40: VFS PCIe NVMe Zoned Block Device (ZBD) Zone Append Engine & Multi-Master Distributed Metadata Rebalancing Engine */
+
+void vfs_nvme_zbd_init(vfs_nvme_zbd_engine_t *zbd, int zone_cnt, uint32_t zone_capacity) {
+    if (!zbd) return;
+    zbd->zone_count = (zone_cnt > RAMFS_NVME_ZBD_ZONES_MAX) ? RAMFS_NVME_ZBD_ZONES_MAX : zone_cnt;
+    zbd->total_appends = 0;
+    zbd->total_resets = 0;
+    for (int i = 0; i < RAMFS_NVME_ZBD_ZONES_MAX; i++) {
+        zbd->zones[i].zone_id = (uint32_t)i;
+        zbd->zones[i].wp = 0;
+        zbd->zones[i].capacity = zone_capacity;
+        zbd->zones[i].state = VFS_ZBD_ZONE_EMPTY;
+        zbd->zones[i].write_count = 0;
+    }
+}
+
+int vfs_nvme_zbd_zone_alloc(vfs_nvme_zbd_engine_t *zbd, uint32_t *out_zone_id) {
+    if (!zbd) return RAMFS_ERR_INVAL;
+    for (int i = 0; i < zbd->zone_count; i++) {
+        if (zbd->zones[i].state == VFS_ZBD_ZONE_EMPTY || zbd->zones[i].state == VFS_ZBD_ZONE_CLOSED) {
+            zbd->zones[i].state = VFS_ZBD_ZONE_IMPLICIT_OPEN;
+            if (out_zone_id) *out_zone_id = zbd->zones[i].zone_id;
+            return RAMFS_OK;
+        }
+    }
+    return RAMFS_ERR_NOSPACE;
+}
+
+int vfs_nvme_zbd_zone_reset(vfs_nvme_zbd_engine_t *zbd, uint32_t zone_id) {
+    if (!zbd || (int)zone_id >= zbd->zone_count) return RAMFS_ERR_INVAL;
+    zbd->zones[zone_id].wp = 0;
+    zbd->zones[zone_id].state = VFS_ZBD_ZONE_EMPTY;
+    zbd->total_resets++;
+    return RAMFS_OK;
+}
+
+int vfs_nvme_zbd_zone_append(vfs_nvme_zbd_engine_t *zbd, uint32_t zone_id, const uint8_t *data, uint32_t len, uint32_t *out_wp) {
+    (void)data;
+    if (!zbd || (int)zone_id >= zbd->zone_count || len == 0) return RAMFS_ERR_INVAL;
+    vfs_nvme_zbd_zone_t *z = &zbd->zones[zone_id];
+    if (z->state == VFS_ZBD_ZONE_FULL || z->wp >= z->capacity) return RAMFS_ERR_NOSPACE;
+
+    if (out_wp) *out_wp = z->wp;
+    z->wp += len;
+    z->write_count++;
+    zbd->total_appends++;
+
+    if (z->wp >= z->capacity) {
+        z->wp = z->capacity;
+        z->state = VFS_ZBD_ZONE_FULL;
+    } else {
+        z->state = VFS_ZBD_ZONE_IMPLICIT_OPEN;
+    }
+    return RAMFS_OK;
+}
+
+void vfs_dist_metadata_init(vfs_dist_metadata_rebalancer_t *reb) {
+    if (!reb) return;
+    reb->node_count = 0;
+    reb->total_rebalances = 0;
+    reb->total_failovers = 0;
+    reb->total_conflicts_resolved = 0;
+    for (int i = 0; i < VFS_DIST_NODES_MAX; i++) {
+        reb->nodes[i].node_id = 0;
+        reb->nodes[i].active = 0;
+        reb->nodes[i].load_weight = 0;
+        reb->nodes[i].inode_count = 0;
+        for (int c = 0; c < VFS_VECTOR_CLOCK_NODES; c++) {
+            reb->nodes[i].vclock.clock[c] = 0;
+        }
+    }
+}
+
+int vfs_dist_metadata_register_node(vfs_dist_metadata_rebalancer_t *reb, uint32_t node_id, uint32_t initial_inodes) {
+    if (!reb || reb->node_count >= VFS_DIST_NODES_MAX) return RAMFS_ERR_NOSPACE;
+    int idx = reb->node_count++;
+    reb->nodes[idx].node_id = node_id;
+    reb->nodes[idx].active = 1;
+    reb->nodes[idx].inode_count = initial_inodes;
+    reb->nodes[idx].load_weight = initial_inodes * 10;
+    reb->nodes[idx].vclock.clock[idx % VFS_VECTOR_CLOCK_NODES] = 1;
+    return RAMFS_OK;
+}
+
+int vfs_dist_metadata_node_failover(vfs_dist_metadata_rebalancer_t *reb, uint32_t failed_node_id, uint32_t target_node_id) {
+    if (!reb) return RAMFS_ERR_INVAL;
+    int failed_idx = -1;
+    int target_idx = -1;
+    for (int i = 0; i < reb->node_count; i++) {
+        if (reb->nodes[i].node_id == failed_node_id) failed_idx = i;
+        if (reb->nodes[i].node_id == target_node_id) target_idx = i;
+    }
+    if (failed_idx < 0 || target_idx < 0 || !reb->nodes[target_idx].active) return RAMFS_ERR_NOTFOUND;
+
+    reb->nodes[target_idx].inode_count += reb->nodes[failed_idx].inode_count;
+    reb->nodes[target_idx].load_weight += reb->nodes[failed_idx].load_weight;
+    reb->nodes[failed_idx].inode_count = 0;
+    reb->nodes[failed_idx].load_weight = 0;
+    reb->nodes[failed_idx].active = 0;
+    reb->total_failovers++;
+    return RAMFS_OK;
+}
+
+int vfs_dist_metadata_rebalance(vfs_dist_metadata_rebalancer_t *reb, int *out_migrated_inodes) {
+    if (!reb || reb->node_count == 0) return RAMFS_ERR_INVAL;
+    int max_idx = -1;
+    int min_idx = -1;
+    uint32_t max_inodes = 0;
+    uint32_t min_inodes = 0xFFFFFFFF;
+
+    for (int i = 0; i < reb->node_count; i++) {
+        if (reb->nodes[i].active) {
+            if (reb->nodes[i].inode_count >= max_inodes) {
+                max_inodes = reb->nodes[i].inode_count;
+                max_idx = i;
+            }
+            if (reb->nodes[i].inode_count <= min_inodes) {
+                min_inodes = reb->nodes[i].inode_count;
+                min_idx = i;
+            }
+        }
+    }
+
+    if (max_idx < 0 || min_idx < 0 || max_idx == min_idx || max_inodes <= min_inodes + 1) {
+        if (out_migrated_inodes) *out_migrated_inodes = 0;
+        return RAMFS_OK;
+    }
+
+    uint32_t diff = max_inodes - min_inodes;
+    uint32_t migrate = diff / 2;
+    reb->nodes[max_idx].inode_count -= migrate;
+    reb->nodes[min_idx].inode_count += migrate;
+    reb->nodes[max_idx].load_weight = reb->nodes[max_idx].inode_count * 10;
+    reb->nodes[min_idx].load_weight = reb->nodes[min_idx].inode_count * 10;
+
+    reb->total_rebalances++;
+    if (out_migrated_inodes) *out_migrated_inodes = (int)migrate;
+    return RAMFS_OK;
+}
+
+int vfs_dist_metadata_resolve_vector_conflict(const vfs_vector_clock_t *clock_a, const vfs_vector_clock_t *clock_b, vfs_vector_clock_t *out_merged_clock, int *out_conflict) {
+    if (!clock_a || !clock_b || !out_merged_clock) return RAMFS_ERR_INVAL;
+    int a_greater = 0;
+    int b_greater = 0;
+
+    for (int i = 0; i < VFS_VECTOR_CLOCK_NODES; i++) {
+        if (clock_a->clock[i] > clock_b->clock[i]) a_greater = 1;
+        if (clock_b->clock[i] > clock_a->clock[i]) b_greater = 1;
+        out_merged_clock->clock[i] = (clock_a->clock[i] > clock_b->clock[i]) ? clock_a->clock[i] : clock_b->clock[i];
+    }
+
+    int conflict = (a_greater && b_greater) ? 1 : 0;
+    if (out_conflict) *out_conflict = conflict;
+    return RAMFS_OK;
+}
+
 /* Lot 39: VFS PCIe NVMe End-to-End Data Protection DIF/DIX & Distributed MVCC Garbage Collection Engine (US-011 / US-044) */
 
 uint16_t vfs_nvme_dif_crc16(const uint8_t *data, uint32_t len) {

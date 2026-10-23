@@ -637,4 +637,46 @@ int webrt_webgpu_bind_group_set(webrt_webgpu_compute_pass_t *pass, uint32_t grou
 int webrt_webgpu_dispatch_workgroups(webrt_webgpu_compute_pass_t *pass, uint32_t x, uint32_t y, uint32_t z);
 int webrt_webgpu_compute_pass_finish(webrt_webgpu_compute_pass_t *pass, int *out_completed_dispatches);
 
+/* Lot 40: Web Runtime WebAssembly SIMD 512-bit AVX-512 Tensor Acceleration Engine & WebGPU Compute Pipeline Parallel Command Encoder (US-062 / US-087) */
+#define WEBRT_WEBGPU_COMMAND_BUFFERS_MAX 4
+#define WEBRT_WEBGPU_CMDS_PER_BUFFER 16
+
+typedef struct {
+    int32_t val[16]; /* 512-bit SIMD vector containing 16 x int32_t or 16.16 fixed point elements */
+} webrt_v512_t;
+
+typedef struct {
+    uint32_t opcode; /* 1=dispatch */
+    uint32_t pipeline_id;
+    uint32_t dispatch_x;
+    uint32_t dispatch_y;
+    uint32_t dispatch_z;
+} webrt_webgpu_cmd_t;
+
+typedef struct {
+    uint32_t buffer_id;
+    webrt_webgpu_cmd_t cmds[WEBRT_WEBGPU_CMDS_PER_BUFFER];
+    int cmd_count;
+    uint8_t closed;
+} webrt_webgpu_command_buffer_t;
+
+typedef struct {
+    uint32_t encoder_id;
+    webrt_webgpu_command_buffer_t buffers[WEBRT_WEBGPU_COMMAND_BUFFERS_MAX];
+    int buffer_count;
+    uint32_t total_commands_encoded;
+    uint8_t active;
+} webrt_webgpu_parallel_encoder_t;
+
+void webrt_simd512_load(webrt_v512_t *v, const int32_t data[16]);
+int webrt_wasm_simd512_dot(const webrt_v512_t *a, const webrt_v512_t *b, int64_t *out_dot);
+int webrt_wasm_simd512_fma(const webrt_v512_t *a, const webrt_v512_t *b, const webrt_v512_t *c, webrt_v512_t *out);
+int webrt_wasm_simd512_silu(const webrt_v512_t *in, webrt_v512_t *out);
+int webrt_wasm_simd512_softmax(const webrt_v512_t *in, webrt_v512_t *out);
+
+void webrt_webgpu_parallel_encoder_init(webrt_webgpu_parallel_encoder_t *enc, uint32_t encoder_id);
+int webrt_webgpu_parallel_create_command_buffer(webrt_webgpu_parallel_encoder_t *enc, uint32_t *out_buf_id);
+int webrt_webgpu_command_buffer_encode_dispatch(webrt_webgpu_parallel_encoder_t *enc, uint32_t buf_id, uint32_t pipeline_id, uint32_t x, uint32_t y, uint32_t z);
+int webrt_webgpu_parallel_encoder_finish(webrt_webgpu_parallel_encoder_t *enc, int *out_total_cmds);
+
 #endif

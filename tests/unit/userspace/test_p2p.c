@@ -1305,6 +1305,40 @@ static void test_lot39_wan_async_repl_and_zk_plonk(void) {
     TEST_ASSERT_EQUAL(1, verifier.verified_proofs);
 }
 
+static void test_lot40_geo_sharding_and_zk_stark(void) {
+    p2p_wan_geo_sharding_mgr_t mgr;
+    p2p_wan_geo_sharding_init(&mgr);
+
+    int res = p2p_wan_geo_sharding_add_shard(&mgr, 1, 0x01, 101);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, mgr.shard_count);
+
+    p2p_patricia_trie_insert(&mgr.shards[0].state_trie, "usr/", (const uint8_t*)"data1", 5);
+    uint32_t chash = 0;
+    p2p_patricia_trie_compress(&mgr.shards[0].state_trie, &chash);
+    TEST_ASSERT_NOT_EQUAL(0, chash);
+
+    int rebalanced = 0;
+    res = p2p_wan_geo_sharding_rebalance_leases(&mgr, 150, &rebalanced);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, rebalanced);
+
+    p2p_zk_stark_verifier_t v;
+    p2p_zk_stark_verifier_init(&v);
+
+    p2p_zk_stark_proof_t proof;
+    res = p2p_zk_stark_proof_create(1024, 3, &proof);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1024, proof.trace_length);
+    TEST_ASSERT_EQUAL(3, proof.fri_layers_count);
+
+    int valid = 0;
+    res = p2p_zk_stark_verify_fri(&v, &proof, &valid);
+    TEST_ASSERT_EQUAL(0, res);
+    TEST_ASSERT_EQUAL(1, valid);
+    TEST_ASSERT_EQUAL(1, v.verified_starks);
+}
+
 static void test_lot38_p2p_multi_raft_wan_and_zk_range(void) {
     p2p_multi_raft_wan_shard_mgr_t mgr;
     p2p_multi_raft_wan_shard_init(&mgr);
@@ -1519,6 +1553,7 @@ int main(void) {
     RUN_TEST(test_lot37_p2p_wan_raft_election_and_batch_zk);
     RUN_TEST(test_lot38_p2p_multi_raft_wan_and_zk_range);
     RUN_TEST(test_lot39_wan_async_repl_and_zk_plonk);
+    RUN_TEST(test_lot40_geo_sharding_and_zk_stark);
 
     unity_print_results();
     unity_cleanup();
