@@ -1108,6 +1108,200 @@ int prod_fault_predict_eval(const prod_fault_predict_t *fp, char *out_verdict, i
     return (int)fp->risk_score;
 }
 
+/* US-108 / US-118: Autonomous CI/CD Pipeline, Perf Regression & Adaptive Alerting */
+void prod_cicd_pipeline_init(prod_cicd_pipeline_t *pipe) {
+    if (!pipe) return;
+    pipe->total_runs = 0;
+    pipe->successful_runs = 0;
+    pipe->failed_runs = 0;
+    pipe->last_fnv_checksum = 0;
+    pipe->last_elf_valid = 0;
+    pipe->last_test_matrix_passed = 0;
+}
+
+int prod_cicd_validate_elf(const uint8_t *elf_data, uint32_t size, char *out_diag, int cap) {
+    if (!elf_data || size < 52) {
+        if (out_diag && cap > 0) s_copy(out_diag, "ELF invalid: size too small", cap);
+        return -1;
+    }
+    if (elf_data[0] != 0x7f || elf_data[1] != 'E' || elf_data[2] != 'L' || elf_data[3] != 'F') {
+        if (out_diag && cap > 0) s_copy(out_diag, "ELF invalid: bad magic", cap);
+        return -1;
+    }
+    if (elf_data[4] != 1) {
+        if (out_diag && cap > 0) s_copy(out_diag, "ELF invalid: non 32-bit class", cap);
+        return -1;
+    }
+    uint16_t machine = (uint16_t)elf_data[18] | ((uint16_t)elf_data[19] << 8);
+    if (machine != 3 && machine != 0x28) {
+        if (out_diag && cap > 0) s_copy(out_diag, "ELF invalid: unsupported machine", cap);
+        return -1;
+    }
+    if (out_diag && cap > 0) s_copy(out_diag, "ELF32 i386 executable valid", cap);
+    return 0;
+}
+
+int prod_cicd_verify_checksum(const uint8_t *data, uint32_t size, uint32_t expected_fnv1a) {
+    if (!data || size == 0) return -1;
+    uint32_t h = 2166136261U;
+    for (uint32_t i = 0; i < size; i++) {
+        h ^= (uint32_t)data[i];
+        h *= 16777619U;
+    }
+    if (expected_fnv1a == 0 || h == expected_fnv1a) return 0;
+    return -1;
+}
+
+int prod_cicd_eval_test_matrix(prod_cicd_pipeline_t *pipe, int pass_count, int total_count, char *out_report, int cap) {
+    if (total_count <= 0 || pass_count < 0 || pass_count > total_count) {
+        if (out_report && cap > 0) s_copy(out_report, "Test Matrix invalid counts", cap);
+        if (pipe) pipe->last_test_matrix_passed = 0;
+        return -1;
+    }
+    if (out_report && cap > 0) {
+        if (pass_count == total_count) {
+            s_copy(out_report, "Test Matrix: ALL PASSED (100%)", cap);
+        } else {
+            s_copy(out_report, "Test Matrix: PARTIAL PASS", cap);
+        }
+    }
+    int ok = (pass_count == total_count) ? 0 : -1;
+    if (pipe) pipe->last_test_matrix_passed = (ok == 0) ? 1 : 0;
+    return ok;
+}
+
+int prod_cicd_run_pipeline(prod_cicd_pipeline_t *pipe, const uint8_t *elf_data, uint32_t elf_size, uint32_t expected_fnv, int pass_tests, int total_tests, char *out_summary, int cap) {
+    if (!pipe) return -1;
+    pipe->total_runs++;
+
+    char diag[64];
+    int elf_res = prod_cicd_validate_elf(elf_data, elf_size, diag, sizeof(diag));
+    pipe->last_elf_valid = (elf_res == 0) ? 1 : 0;
+
+    int chk_res = prod_cicd_verify_checksum(elf_data, elf_size, expected_fnv);
+
+    char report[64];
+    int matrix_res = prod_cicd_eval_test_matrix(pipe, pass_tests, total_tests, report, sizeof(report));
+
+    if (elf_res == 0 && chk_res == 0 && matrix_res == 0) {
+        pipe->successful_runs++;
+        if (out_summary && cap > 0) s_copy(out_summary, "CI/CD Pipeline PASSED: ELF valid, Checksum OK, Matrix 100%", cap);
+        return 0;
+    } else {
+        pipe->failed_runs++;
+        if (out_summary && cap > 0) s_copy(out_summary, "CI/CD Pipeline FAILED: Validation or Test Matrix failed", cap);
+        return -1;
+    }
+}
+
+void prod_perf_history_init(prod_perf_history_t *hist) {
+    if (!hist) return;
+    hist->count = 0;
+    for (int i = 0; i < 8; i++) {
+        hist->hist_latency_us[i] = 0;
+        hist->hist_cpu_pct[i] = 0;
+        hist->hist_mem_kb[i] = 0;
+    }
+}
+
+void prod_perf_history_add(prod_perf_history_t *hist, uint32_t latency_us, uint32_t cpu_pct, uint32_t mem_kb) {
+    if (!hist) return;
+    if (hist->count < 8) {
+        hist->hist_latency_us[hist->count] = latency_us;
+        hist->hist_cpu_pct[hist->count] = cpu_pct;
+        hist->hist_mem_kb[hist->count] = mem_kb;
+        hist->count++;
+    } else {
+        for (int i = 0; i < 7; i++) {
+            hist->hist_latency_us[i] = hist->hist_latency_us[i + 1];
+            hist->hist_cpu_pct[i] = hist->hist_cpu_pct[i + 1];
+            hist->hist_mem_kb[i] = hist->hist_mem_kb[i + 1];
+        }
+        hist->hist_latency_us[7] = latency_us;
+        hist->hist_cpu_pct[7] = cpu_pct;
+        hist->hist_mem_kb[7] = mem_kb;
+    }
+}
+
+int prod_perf_regression_eval(const prod_perf_history_t *hist, uint32_t current_latency_us, uint32_t current_cpu_pct, uint32_t current_mem_kb, char *out_summary, int cap) {
+    if (!hist || hist->count == 0) {
+        if (out_summary && cap > 0) s_copy(out_summary, "No historical baseline", cap);
+        return 0;
+    }
+
+    uint32_t sum_lat = 0, sum_cpu = 0, sum_mem = 0;
+    for (uint32_t i = 0; i < hist->count; i++) {
+        sum_lat += hist->hist_latency_us[i];
+        sum_cpu += hist->hist_cpu_pct[i];
+        sum_mem += hist->hist_mem_kb[i];
+    }
+    uint32_t avg_lat = sum_lat / hist->count;
+    uint32_t avg_cpu = sum_cpu / hist->count;
+    uint32_t avg_mem = sum_mem / hist->count;
+
+    uint32_t lat_thresh = avg_lat + (avg_lat / 5U);
+    uint32_t cpu_thresh = avg_cpu + (avg_cpu / 5U);
+    uint32_t mem_thresh = avg_mem + (avg_mem / 5U);
+
+    if (current_latency_us > lat_thresh || current_cpu_pct > cpu_thresh || current_mem_kb > mem_thresh) {
+        if (out_summary && cap > 0) s_copy(out_summary, "PERF REGRESSION DETECTED: execution metrics exceeded baseline +20%", cap);
+        return 1;
+    }
+
+    if (out_summary && cap > 0) s_copy(out_summary, "PERF OK: execution metrics within historical baseline", cap);
+    return 0;
+}
+
+void prod_adaptive_alert_init(prod_adaptive_alert_t *alert, uint32_t cpu_accel_threshold, uint32_t mem_accel_threshold) {
+    if (!alert) return;
+    alert->count = 0;
+    alert->cpu_accel_threshold = cpu_accel_threshold ? cpu_accel_threshold : 10;
+    alert->mem_accel_threshold = mem_accel_threshold ? mem_accel_threshold : 100;
+    for (int i = 0; i < 3; i++) {
+        alert->cpu_samples[i] = 0;
+        alert->mem_samples[i] = 0;
+    }
+}
+
+void prod_adaptive_alert_record(prod_adaptive_alert_t *alert, uint32_t cpu_usage, uint32_t mem_usage) {
+    if (!alert) return;
+    if (alert->count < 3) {
+        alert->cpu_samples[alert->count] = cpu_usage;
+        alert->mem_samples[alert->count] = mem_usage;
+        alert->count++;
+    } else {
+        alert->cpu_samples[0] = alert->cpu_samples[1];
+        alert->cpu_samples[1] = alert->cpu_samples[2];
+        alert->cpu_samples[2] = cpu_usage;
+
+        alert->mem_samples[0] = alert->mem_samples[1];
+        alert->mem_samples[1] = alert->mem_samples[2];
+        alert->mem_samples[2] = mem_usage;
+    }
+}
+
+int prod_adaptive_alert_eval(const prod_adaptive_alert_t *alert, int *out_alert_flag, char *out_msg, int cap) {
+    if (!alert || !out_alert_flag) return -1;
+    *out_alert_flag = 0;
+
+    if (alert->count < 3) {
+        if (out_msg && cap > 0) s_copy(out_msg, "Insufficient samples for 2nd derivative", cap);
+        return 0;
+    }
+
+    int32_t accel_cpu = (int32_t)alert->cpu_samples[2] - 2 * (int32_t)alert->cpu_samples[1] + (int32_t)alert->cpu_samples[0];
+    int32_t accel_mem = (int32_t)alert->mem_samples[2] - 2 * (int32_t)alert->mem_samples[1] + (int32_t)alert->mem_samples[0];
+
+    if (accel_cpu > (int32_t)alert->cpu_accel_threshold || accel_mem > (int32_t)alert->mem_accel_threshold) {
+        *out_alert_flag = 1;
+        if (out_msg && cap > 0) s_copy(out_msg, "ADAPTIVE ALERT: acceleration threshold exceeded (2nd derivative spike)", cap);
+        return 1;
+    }
+
+    if (out_msg && cap > 0) s_copy(out_msg, "Resource acceleration stable", cap);
+    return 0;
+}
+
 /* ---- Lot 28: Real-Time Telemetry Profiler, Autonomous Healing & Latency Percentiles Implementation ---- */
 void prod_task_profiler_init(prod_task_profiler_t *profiler) {
     if (!profiler) return;

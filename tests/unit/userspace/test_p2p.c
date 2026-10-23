@@ -1100,6 +1100,49 @@ static void test_lot25_p2p_partition_healing_and_lease(void) {
     TEST_ASSERT_GREATER_THAN((int)init_lease, (int)g_n[0].raft.lease_until);
 }
 
+static void test_lot29_p2p_rekey_zero_trust_2pc(void) {
+    setup(2, 0);
+    p2p_node_t *node = &g_n[0];
+    p2p_peer_t *peer = &node->peers[0];
+    peer->used = 1;
+    peer->id = 2;
+    uint8_t init_key[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    p2p_rekey_init_peer(peer, init_key, 10, 5);
+
+    TEST_ASSERT_EQUAL(0, p2p_zero_trust_verify_pkt(node, 2, 100, 128, 1005));
+    TEST_ASSERT(peer->last_seen_seq == 100);
+
+    TEST_ASSERT_EQUAL(-2, p2p_zero_trust_verify_pkt(node, 2, 100, 128, 1006));
+    TEST_ASSERT_EQUAL(1, peer->zero_trust_revoked);
+    TEST_ASSERT_EQUAL_STRING("replay_attack_detected", peer->revoke_reason);
+
+    TEST_ASSERT_EQUAL(-1, p2p_zero_trust_verify_pkt(node, 2, 101, 128, 1007));
+
+    p2p_peer_t *peer2 = &node->peers[1];
+    peer2->used = 1;
+    peer2->id = 3;
+    p2p_rekey_init_peer(peer2, init_key, 100, 3);
+
+    TEST_ASSERT_EQUAL(0, p2p_zero_trust_verify_pkt(node, 3, 10, 64, 1008));
+    TEST_ASSERT_EQUAL(0, p2p_zero_trust_verify_pkt(node, 3, 11, 64, 1009));
+    TEST_ASSERT_EQUAL(0, p2p_zero_trust_verify_pkt(node, 3, 12, 64, 1010));
+    TEST_ASSERT_EQUAL(2, peer2->key_gen);
+
+    TEST_ASSERT_EQUAL(0, p2p_raft_2pc_prepare(node, 501, "SET db:config=production", 0x07));
+    int status = -1;
+    TEST_ASSERT_EQUAL(0, p2p_raft_2pc_status(node, 501, &status));
+    TEST_ASSERT_EQUAL(P2P_2PC_STATE_PREPARED, status);
+
+    TEST_ASSERT_EQUAL(0, p2p_raft_2pc_commit(node, 501));
+    TEST_ASSERT_EQUAL(0, p2p_raft_2pc_status(node, 501, &status));
+    TEST_ASSERT_EQUAL(P2P_2PC_STATE_COMMITTED, status);
+
+    TEST_ASSERT_EQUAL(0, p2p_raft_2pc_prepare(node, 502, "DELETE /var/log", 0x07));
+    TEST_ASSERT_EQUAL(0, p2p_raft_2pc_abort(node, 502));
+    TEST_ASSERT_EQUAL(0, p2p_raft_2pc_status(node, 502, &status));
+    TEST_ASSERT_EQUAL(P2P_2PC_STATE_ABORTED, status);
+}
+
 static void test_lot28_p2p_gossip_nat_and_multipath(void) {
     p2p_node_t node;
     p2p_host_t host = {0};
@@ -1167,6 +1210,7 @@ int main(void) {
     RUN_TEST(test_lot25_p2p_partition_healing_and_lease);
     RUN_TEST(test_lot26_p2p_region_snapshot_and_bbr);
     RUN_TEST(test_lot27_p2p_cluster_routing_and_fast_recovery);
+    RUN_TEST(test_lot29_p2p_rekey_zero_trust_2pc);
     RUN_TEST(test_lot28_p2p_gossip_nat_and_multipath);
 
     unity_print_results();

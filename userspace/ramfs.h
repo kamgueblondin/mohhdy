@@ -72,6 +72,44 @@ int vfs_journal_rollback(int tx_id);
 int vfs_snapshot_create(uint32_t *snapshot_id);
 int vfs_snapshot_restore(uint32_t snapshot_id);
 
+/* Lot 29: Transactional File Journaling, Tree Locking & Integrity Check (US-002 / US-034) */
+#define VFS_MUTATION_MAX 32
+
+#define VFS_MUTATION_OP_WRITE  1
+#define VFS_MUTATION_OP_MKDIR  2
+#define VFS_MUTATION_OP_RM     3
+#define VFS_MUTATION_OP_RENAME 4
+
+#define VFS_MUTATION_STATUS_UNCOMMITTED 0
+#define VFS_MUTATION_STATUS_COMMITTED   1
+#define VFS_MUTATION_STATUS_APPLIED     2
+
+typedef struct {
+    uint32_t seq_id;
+    uint32_t tx_id;
+    uint8_t op_type;
+    uint8_t status;
+    char path[RAMFS_PATH_MAX];
+    char target_path[RAMFS_PATH_MAX];
+    char data[RAMFS_CONTENT_MAX];
+    uint32_t data_len;
+} vfs_mutation_entry_t;
+
+typedef struct {
+    vfs_mutation_entry_t entries[VFS_MUTATION_MAX];
+    uint32_t head;
+    uint32_t count;
+    uint32_t next_seq;
+} vfs_mutation_log_t;
+
+void vfs_mutation_log_init(vfs_mutation_log_t *log);
+int vfs_mutation_log_append(vfs_mutation_log_t *log, uint32_t tx_id, uint8_t op_type, const char *path, const char *target_path, const char *data, uint32_t len, uint8_t status);
+int vfs_mutation_roll_forward(vfs_mutation_log_t *log);
+
+int vfs_dir_lock_tree(const char *dir_path, uint8_t lock_mode, uint32_t owner_id);
+int vfs_dir_unlock_tree(const char *dir_path, uint32_t owner_id);
+
+int vfs_integrity_check(int *out_cycle_detected, int *out_dangling_count);
 /* Lot 28: Page Cache & Dirty Writeback Daemon (US-001 / US-033) */
 #define VFS_PAGE_CACHE_SIZE 128
 #define VFS_CLUSTER_SIZE    512

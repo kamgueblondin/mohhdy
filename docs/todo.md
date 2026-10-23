@@ -1,6 +1,12 @@
 # TODO - Correction MOHHDY Shell Utilisateur
 
-> **Etat reel et pilotage (22 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **945** tests reussis.
+> **Etat reel et pilotage (22 octobre 2026).** Le perimetre courant, les limites et les etapes livrees sont dans [ETAT_REEL.md](ETAT_REEL.md). Rejeu local : **951** tests reussis.
+
+## Lot 29: Extension et Consolidation Industrielle VFS, Web Runtime Shadow DOM / Event Loop, P2P Zero-Trust & Pipeline CI/CD Ring 3 ✅ (22 octobre 2026)
+- [x] US-002 / US-034 : Table circulaire de journaux de mutations VFS (`vfs_mutation_log_t`) avec roll-forward post-crash, isolation transactionnelle multi-fichiers avec verrouillage hierarchique de repertoires (`vfs_dir_lock_tree`), et verification d'integrite de table de noeuds VFS avec detection de cycles (`vfs_integrity_check`).
+- [x] US-032 / US-043 : Isolation Shadow Roots (`open`/`closed`) pour Custom Elements (`webrt_shadow_root_attach`, `webrt_shadow_root_get`, `webrt_shadow_root_add_node`), propagation d'evenements DOM avec phases capture, target et bubbling (`webrt_dom_dispatch_event_path`), et boucle d'evenements asynchrone avec microtasks (Promises) / macrotasks (Timers/Events) dans `webrt_event_loop_tick`.
+- [x] US-064 / US-075 : Rotation dynamique automatique des clefs AES-128-GCM (`p2p_rekey_check_and_rotate`), verification Zero-Trust avec revocation instantanee sur rejeu/anomalie (`p2p_zero_trust_verify_pkt`, `p2p_peer_revoke`), et consensus Two-Phase Commit over Raft (`p2p_raft_2pc_prepare`, `p2p_raft_2pc_commit`, `p2p_raft_2pc_abort`).
+- [x] US-108 / US-118 : Pipeline CI/CD autonome Ring 3 (`prod_cicd_run_pipeline`), detecteur automatique de regressions de performance comparant aux metriques historiques (`prod_perf_regression_eval`), et systeme d'alerte adapte base sur la derivee seconde des consommations CPU/memoire (`prod_adaptive_alert_eval`).
 
 ## Lot 27: Consolidation Industrielle VFS (Journalisation & Transactions), Moteur Web/Flexbox/MutationObserver, Reseau P2P Multi-Cluster & AI SLA Monitor / Fault Engine ✅ (22 octobre 2026)
 - [x] US-035 : Journalisation circulaire des mutations VFS (`vfs_journal_begin`, `vfs_journal_commit`, `vfs_journal_rollback`) et instantanes transactionnels VFS (`vfs_snapshot_create`, `vfs_snapshot_restore`).

@@ -1178,3 +1178,175 @@ const char *ramfs_strerror(int err) {
         default: return "erreur";
     }
 }
+
+/* Lot 29: Transactional File Journaling, Tree Locking & Integrity Check (US-002 / US-034) */
+static vfs_mutation_log_t g_mutation_log;
+
+typedef struct {
+    int used;
+    char dir_path[RAMFS_PATH_MAX];
+    uint8_t lock_mode;
+    uint32_t owner_id;
+} vfs_tree_lock_entry_t;
+
+static vfs_tree_lock_entry_t g_tree_locks[16];
+
+void vfs_mutation_log_init(vfs_mutation_log_t *log) {
+    if (!log) log = &g_mutation_log;
+    log->head = 0;
+    log->count = 0;
+    log->next_seq = 1;
+    for (int i = 0; i < VFS_MUTATION_MAX; i++) {
+        log->entries[i].seq_id = 0;
+        log->entries[i].tx_id = 0;
+        log->entries[i].op_type = 0;
+        log->entries[i].status = VFS_MUTATION_STATUS_UNCOMMITTED;
+        log->entries[i].path[0] = 0;
+        log->entries[i].target_path[0] = 0;
+        log->entries[i].data[0] = 0;
+        log->entries[i].data_len = 0;
+    }
+}
+
+int vfs_mutation_log_append(vfs_mutation_log_t *log, uint32_t tx_id, uint8_t op_type, const char *path, const char *target_path, const char *data, uint32_t len, uint8_t status) {
+    if (!log) log = &g_mutation_log;
+    uint32_t idx = log->head;
+    vfs_mutation_entry_t *e = &log->entries[idx];
+    e->seq_id = log->next_seq++;
+    e->tx_id = tx_id;
+    e->op_type = op_type;
+    e->status = status;
+    e->path[0] = 0;
+    if (path) rf_strcpy(e->path, path);
+    e->target_path[0] = 0;
+    if (target_path) rf_strcpy(e->target_path, target_path);
+    e->data[0] = 0;
+    e->data_len = 0;
+    if (data && len > 0) {
+        uint32_t copy_len = (len < RAMFS_CONTENT_MAX - 1) ? len : (RAMFS_CONTENT_MAX - 1);
+        for (uint32_t i = 0; i < copy_len; i++) e->data[i] = data[i];
+        e->data[copy_len] = 0;
+        e->data_len = copy_len;
+    }
+    log->head = (log->head + 1) % VFS_MUTATION_MAX;
+    if (log->count < VFS_MUTATION_MAX) log->count++;
+    return (int)e->seq_id;
+}
+
+int vfs_mutation_roll_forward(vfs_mutation_log_t *log) {
+    if (!log) log = &g_mutation_log;
+    int applied_count = 0;
+    for (uint32_t i = 0; i < VFS_MUTATION_MAX; i++) {
+        vfs_mutation_entry_t *e = &log->entries[i];
+        if (e->seq_id > 0 && e->status == VFS_MUTATION_STATUS_COMMITTED) {
+            if (e->op_type == VFS_MUTATION_OP_WRITE) {
+                ramfs_write(e->path, e->data, (int)e->data_len);
+            } else if (e->op_type == VFS_MUTATION_OP_MKDIR) {
+                ramfs_mkdir_p(e->path);
+            } else if (e->op_type == VFS_MUTATION_OP_RM) {
+                ramfs_rm_r(e->path);
+            } else if (e->op_type == VFS_MUTATION_OP_RENAME) {
+                ramfs_mv(e->path, e->target_path);
+            }
+            e->status = VFS_MUTATION_STATUS_APPLIED;
+            applied_count++;
+        }
+    }
+    return applied_count;
+}
+
+static int is_path_prefix(const char *prefix, const char *path) {
+    if (!prefix || !path) return 0;
+    int plen = rf_strlen(prefix);
+    if (plen == 0) return 0;
+    if (rf_strcmp(prefix, "/") == 0) return 1;
+    if (rf_strncmp(path, prefix, plen) == 0) {
+        if (path[plen] == '\0' || path[plen] == '/') return 1;
+    }
+    return 0;
+}
+
+int vfs_dir_lock_tree(const char *dir_path, uint8_t lock_mode, uint32_t owner_id) {
+    if (!dir_path || dir_path[0] == 0 || lock_mode == 0) return RAMFS_ERR_INVAL;
+
+    for (int i = 0; i < 16; i++) {
+        if (g_tree_locks[i].used) {
+            if (is_path_prefix(g_tree_locks[i].dir_path, dir_path) || is_path_prefix(dir_path, g_tree_locks[i].dir_path)) {
+                if (g_tree_locks[i].owner_id != owner_id) {
+                    if (lock_mode == VFS_LOCK_EX || g_tree_locks[i].lock_mode == VFS_LOCK_EX) {
+                        return -1;
+                    }
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < 16; i++) {
+        if (!g_tree_locks[i].used) {
+            g_tree_locks[i].used = 1;
+            rf_strcpy(g_tree_locks[i].dir_path, dir_path);
+            g_tree_locks[i].lock_mode = lock_mode;
+            g_tree_locks[i].owner_id = owner_id;
+            return 0;
+        }
+    }
+    return RAMFS_ERR_NOSPACE;
+}
+
+int vfs_dir_unlock_tree(const char *dir_path, uint32_t owner_id) {
+    if (!dir_path) return RAMFS_ERR_INVAL;
+    for (int i = 0; i < 16; i++) {
+        if (g_tree_locks[i].used && g_tree_locks[i].owner_id == owner_id && rf_strcmp(g_tree_locks[i].dir_path, dir_path) == 0) {
+            g_tree_locks[i].used = 0;
+            return 0;
+        }
+    }
+    return RAMFS_ERR_NOTFOUND;
+}
+
+int vfs_integrity_check(int *out_cycle_detected, int *out_dangling_count) {
+    int cycle = 0;
+    int dangling = 0;
+
+    if (out_cycle_detected) *out_cycle_detected = 0;
+    if (out_dangling_count) *out_dangling_count = 0;
+
+    for (int i = 0; i < RAMFS_MAX_NODES; i++) {
+        if (!g_nodes[i].used) continue;
+        if (rf_strcmp(g_nodes[i].path, "/") == 0) continue;
+
+        char current_path[RAMFS_PATH_MAX];
+        char parent_path[RAMFS_PATH_MAX];
+        rf_strcpy(current_path, g_nodes[i].path);
+
+        int depth = 0;
+        while (rf_strcmp(current_path, "/") != 0 && depth < RAMFS_MAX_NODES) {
+            rf_parent(current_path, parent_path);
+            if (rf_strcmp(parent_path, "/") == 0) {
+                break;
+            }
+            ramfs_node_t *pnode = find_node(parent_path);
+            if (!pnode) {
+                dangling++;
+                break;
+            } else if (!pnode->is_dir) {
+                dangling++;
+                break;
+            }
+            if (rf_strcmp(parent_path, g_nodes[i].path) == 0) {
+                cycle = 1;
+                break;
+            }
+            rf_strcpy(current_path, parent_path);
+            depth++;
+        }
+        if (depth >= RAMFS_MAX_NODES) {
+            cycle = 1;
+        }
+    }
+
+    if (out_cycle_detected) *out_cycle_detected = cycle;
+    if (out_dangling_count) *out_dangling_count = dangling;
+
+    return (cycle != 0 || dangling != 0) ? -1 : 0;
+}

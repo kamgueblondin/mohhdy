@@ -342,6 +342,53 @@ static void test_lot25_webrt_tls_and_dom_events(void) {
     TEST_ASSERT_EQUAL(0, webrt_dom_dispatch_event(&dom, "btn1", "submit", script_buf, sizeof(script_buf)));
 }
 
+static void test_microtask_cb(void *arg) {
+    int *val = (int*)arg;
+    if (val) *val += 10;
+}
+
+static void test_macrotask_cb(void *arg) {
+    int *val = (int*)arg;
+    if (val) *val += 1;
+}
+
+static void test_lot29_webrt_shadow_dom_event_loop(void) {
+    webrt_shadow_init();
+    webrt_shadow_root_t *root_open = 0;
+    webrt_shadow_root_t *root_closed = 0;
+
+    TEST_ASSERT_EQUAL(0, webrt_shadow_root_attach("x-card", WEBRT_SHADOW_MODE_OPEN, &root_open));
+    TEST_ASSERT_NOT_NULL(root_open);
+    TEST_ASSERT_EQUAL(0, webrt_shadow_root_add_node("x-card", "title", "h1", "Card Header"));
+
+    TEST_ASSERT_EQUAL(0, webrt_shadow_root_attach("x-private", WEBRT_SHADOW_MODE_CLOSED, &root_closed));
+    TEST_ASSERT_NOT_NULL(root_closed);
+
+    webrt_shadow_root_t *get_root = 0;
+    TEST_ASSERT_EQUAL(0, webrt_shadow_root_get("x-card", 0, &get_root));
+    TEST_ASSERT_NOT_NULL(get_root);
+
+    TEST_ASSERT_EQUAL(-1, webrt_shadow_root_get("x-private", 0, &get_root));
+    TEST_ASSERT_EQUAL(0, webrt_shadow_root_get("x-private", 1, &get_root));
+
+    webrt_dom_event_mgr_t mgr;
+    webrt_dom_event_init(&mgr);
+    webrt_dom_add_event_listener(&mgr, "btn-submit", "click", "submitForm()");
+
+    char path_buf[256];
+    TEST_ASSERT_EQUAL(0, webrt_dom_dispatch_event_path(&mgr, "btn-submit", "click", 1, path_buf, sizeof(path_buf)));
+    TEST_ASSERT_EQUAL_STRING("CAP:document>CAP:body>TARGET:btn-submit>BUBBLE:body>BUBBLE:document", path_buf);
+
+    int state_counter = 0;
+    TEST_ASSERT_EQUAL(0, webrt_queue_macrotask(test_macrotask_cb, &state_counter, "macrotask_1"));
+    TEST_ASSERT_EQUAL(0, webrt_queue_microtask(test_microtask_cb, &state_counter, "microtask_1"));
+
+    char eval_out[128];
+    int count = webrt_event_loop_tick(100, eval_out, sizeof(eval_out));
+    TEST_ASSERT(count >= 2);
+    TEST_ASSERT_EQUAL(11, state_counter);
+}
+
 static void test_lot28_webrt_vector_and_box_model(void) {
     webrt_box_model_t box;
     TEST_ASSERT_EQUAL(0, webrt_compute_box_model(100, 50, 10, 10, 10, 10, 2, 2, 2, 2, 5, 5, 5, 5, &box));
@@ -379,6 +426,7 @@ int main(void) {
     RUN_TEST(test_lot24_webrt_csp_and_origin_audit);
     RUN_TEST(test_lot25_webrt_tls_and_dom_events);
     RUN_TEST(test_lot26_webrt_timers_keyusage_ocsp);
+    RUN_TEST(test_lot29_webrt_shadow_dom_event_loop);
     RUN_TEST(test_lot28_webrt_vector_and_box_model);
 
     unity_print_results();

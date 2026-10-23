@@ -819,6 +819,55 @@ static void test_lot25_prod_diagnostics_and_autofix(void) {
     TEST_ASSERT_EQUAL(3U, wl.active_workers);
 }
 
+static void test_lot29_prod_cicd_regression_adaptive_alert(void) {
+    prod_cicd_pipeline_t pipe;
+    prod_cicd_pipeline_init(&pipe);
+
+    uint8_t synthetic_elf[64];
+    for (int i = 0; i < 64; i++) synthetic_elf[i] = 0;
+    synthetic_elf[0] = 0x7f; synthetic_elf[1] = 'E'; synthetic_elf[2] = 'L'; synthetic_elf[3] = 'F';
+    synthetic_elf[4] = 1;
+    synthetic_elf[18] = 3; synthetic_elf[19] = 0;
+
+    char diag[64];
+    TEST_ASSERT_EQUAL(0, prod_cicd_validate_elf(synthetic_elf, sizeof(synthetic_elf), diag, sizeof(diag)));
+    TEST_ASSERT_NOT_NULL(strstr(diag, "valid"));
+
+    uint32_t expected_fnv = 2166136261U;
+    for (uint32_t i = 0; i < sizeof(synthetic_elf); i++) {
+        expected_fnv ^= (uint32_t)synthetic_elf[i];
+        expected_fnv *= 16777619U;
+    }
+    TEST_ASSERT_EQUAL(0, prod_cicd_verify_checksum(synthetic_elf, sizeof(synthetic_elf), expected_fnv));
+
+    char summary[128];
+    TEST_ASSERT_EQUAL(0, prod_cicd_run_pipeline(&pipe, synthetic_elf, sizeof(synthetic_elf), expected_fnv, 10, 10, summary, sizeof(summary)));
+    TEST_ASSERT_EQUAL(1, pipe.successful_runs);
+
+    prod_perf_history_t hist;
+    prod_perf_history_init(&hist);
+    for (int i = 0; i < 5; i++) {
+        prod_perf_history_add(&hist, 1000, 25, 4096);
+    }
+    TEST_ASSERT_EQUAL(0, prod_perf_regression_eval(&hist, 1050, 26, 4100, summary, sizeof(summary)));
+
+    TEST_ASSERT_EQUAL(1, prod_perf_regression_eval(&hist, 1350, 26, 4100, summary, sizeof(summary)));
+    TEST_ASSERT_NOT_NULL(strstr(summary, "REGRESSION DETECTED"));
+
+    prod_adaptive_alert_t alert;
+    prod_adaptive_alert_init(&alert, 10, 100);
+
+    prod_adaptive_alert_record(&alert, 20, 1000);
+    prod_adaptive_alert_record(&alert, 30, 1100);
+    prod_adaptive_alert_record(&alert, 55, 1300);
+
+    int alert_flag = 0;
+    char alert_msg[128];
+    TEST_ASSERT_EQUAL(1, prod_adaptive_alert_eval(&alert, &alert_flag, alert_msg, sizeof(alert_msg)));
+    TEST_ASSERT_EQUAL(1, alert_flag);
+    TEST_ASSERT_NOT_NULL(strstr(alert_msg, "ADAPTIVE ALERT"));
+}
+
 static void test_lot28_prod_profiler_healing_and_latency(void) {
     prod_task_profiler_t profiler;
     prod_task_profiler_init(&profiler);
@@ -869,6 +918,7 @@ int main(void) {
     RUN_TEST(test_lot25_prod_diagnostics_and_autofix);
     RUN_TEST(test_lot26_prod_auto_restarts_and_biz_kpi);
     RUN_TEST(test_lot27_prod_ai_sla_and_fault_predict);
+    RUN_TEST(test_lot29_prod_cicd_regression_adaptive_alert);
     RUN_TEST(test_lot28_prod_profiler_healing_and_latency);
 
     unity_print_results();
