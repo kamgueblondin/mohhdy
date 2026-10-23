@@ -284,6 +284,175 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* Lot 32: Web Runtime GPU Fixed-Point Rasterizer & WebAssembly SIMD Pipeline (US-052 / US-054) */
+int webrt_gpu_rasterize_polygon(const webrt_gpu_polygon_t *poly, uint32_t *framebuffer, int width, int height) {
+    if (!poly || !framebuffer || width <= 0 || height <= 0 || poly->count < 3) return -1;
+
+    /* Compute bounding box in screen integer coordinates (points are 16.16 fixed-point) */
+    int min_x = width - 1, max_x = 0;
+    int min_y = height - 1, max_y = 0;
+
+    for (int i = 0; i < poly->count; i++) {
+        int sx = poly->pts[i].x >> 16;
+        int sy = poly->pts[i].y >> 16;
+        if (sx < min_x) min_x = sx;
+        if (sx > max_x) max_x = sx;
+        if (sy < min_y) min_y = sy;
+        if (sy > max_y) max_y = sy;
+    }
+
+    /* Clamp bounding box to screen dimensions */
+    if (min_x < 0) min_x = 0;
+    if (max_x >= width) max_x = width - 1;
+    if (min_y < 0) min_y = 0;
+    if (max_y >= height) max_y = height - 1;
+
+    int pixels_drawn = 0;
+
+    /* Scanline bounding box triangle / polygon fill using edge functions */
+    for (int py = min_y; py <= max_y; py++) {
+        for (int px = min_x; px <= max_x; px++) {
+            /* Point in polygon check using cross products (supports CW and CCW) */
+            int pos = 0, neg = 0;
+            int px_fp = (px << 16) + (1 << 15); /* pixel center 16.16 */
+            int py_fp = (py << 16) + (1 << 15);
+
+            for (int i = 0; i < poly->count; i++) {
+                int next = (i + 1) % poly->count;
+                int32_t x1 = poly->pts[i].x;
+                int32_t y1 = poly->pts[i].y;
+                int32_t x2 = poly->pts[next].x;
+                int32_t y2 = poly->pts[next].y;
+
+                /* Edge function: (px - x1)*(y2 - y1) - (py - y1)*(x2 - x1) */
+                int64_t cross = ((int64_t)(px_fp - x1) * (y2 - y1)) - ((int64_t)(py_fp - y1) * (x2 - x1));
+                if (cross > 0) pos++;
+                if (cross < 0) neg++;
+
+                if (pos > 0 && neg > 0) break;
+            }
+
+            if (!(pos > 0 && neg > 0)) {
+                framebuffer[py * width + px] = poly->color;
+                pixels_drawn++;
+            }
+        }
+    }
+
+    return pixels_drawn;
+}
+
+int webrt_gpu_clip_frustum(const webrt_gpu_polygon_t *in_poly, webrt_gpu_polygon_t *out_poly) {
+    if (!in_poly || !out_poly) return -1;
+
+    /* Clip against 16.16 fixed point frustum bounds [-1000..1000] in x, y, z */
+    out_poly->count = 0;
+    out_poly->color = in_poly->color;
+
+    for (int i = 0; i < in_poly->count; i++) {
+        int32_t x = in_poly->pts[i].x;
+        int32_t y = in_poly->pts[i].y;
+        int32_t z = in_poly->pts[i].z;
+
+        /* Check bounds in 16.16 fixed-point (-1000 * 65536 to 1000 * 65536) */
+        int32_t min_bound = -1000 * 65536;
+        int32_t max_bound = 1000 * 65536;
+
+        if (x >= min_bound && x <= max_bound &&
+            y >= min_bound && y <= max_bound &&
+            z >= min_bound && z <= max_bound) {
+            if (out_poly->count < WEBRT_GPU_MAX_POLY_PTS) {
+                out_poly->pts[out_poly->count] = in_poly->pts[i];
+                out_poly->count++;
+            }
+        }
+    }
+
+    return out_poly->count;
+}
+
+int webrt_wasm_simd_exec(const uint8_t *bytecode, uint32_t code_len, webrt_wasm_v128_t *out_val) {
+    if (!bytecode || code_len == 0 || !out_val) return -1;
+
+    webrt_wasm_simd_ctx_t ctx;
+    ctx.top = 0;
+
+    uint32_t ip = 0;
+    while (ip < code_len) {
+        uint8_t op = bytecode[ip++];
+        if (op == 0xFD) { /* WASM SIMD prefix opcode */
+            if (ip >= code_len) break;
+            uint8_t simd_op = bytecode[ip++];
+
+            if (simd_op == 0x0C) { /* v128.const */
+                if (ip + 16 > code_len) return -2;
+                if (ctx.top < WEBRT_WASM_SIMD_STACK_MAX) {
+                    for (int i = 0; i < 16; i++) {
+                        ctx.stack[ctx.top].u8[i] = bytecode[ip++];
+                    }
+                    ctx.top++;
+                }
+            } else if (simd_op == 0x6E) { /* i32x4.add */
+                if (ctx.top >= 2) {
+                    webrt_wasm_v128_t b = ctx.stack[--ctx.top];
+                    webrt_wasm_v128_t a = ctx.stack[--ctx.top];
+                    webrt_wasm_v128_t res;
+                    for (int i = 0; i < 4; i++) {
+                        res.i32[i] = a.i32[i] + b.i32[i];
+                    }
+                    ctx.stack[ctx.top++] = res;
+                }
+            } else if (simd_op == 0x6F) { /* i32x4.sub */
+                if (ctx.top >= 2) {
+                    webrt_wasm_v128_t b = ctx.stack[--ctx.top];
+                    webrt_wasm_v128_t a = ctx.stack[--ctx.top];
+                    webrt_wasm_v128_t res;
+                    for (int i = 0; i < 4; i++) {
+                        res.i32[i] = a.i32[i] - b.i32[i];
+                    }
+                    ctx.stack[ctx.top++] = res;
+                }
+            } else if (simd_op == 0x70) { /* i32x4.mul */
+                if (ctx.top >= 2) {
+                    webrt_wasm_v128_t b = ctx.stack[--ctx.top];
+                    webrt_wasm_v128_t a = ctx.stack[--ctx.top];
+                    webrt_wasm_v128_t res;
+                    for (int i = 0; i < 4; i++) {
+                        res.i32[i] = a.i32[i] * b.i32[i];
+                    }
+                    ctx.stack[ctx.top++] = res;
+                }
+            }
+        }
+    }
+
+    if (ctx.top > 0) {
+        *out_val = ctx.stack[ctx.top - 1];
+        return 0;
+    }
+
+    return -3;
+}
+
+int webrt_shared_memory_lock(webrt_arraybuffer_t *ab, uint32_t timeout_ticks) {
+    if (!ab) return -1;
+    (void)timeout_ticks;
+
+    if (ab->lock_state == 0) {
+        ab->lock_state = 1;
+        return 0;
+    }
+
+    return -1; /* Locked */
+}
+
+int webrt_shared_memory_unlock(webrt_arraybuffer_t *ab) {
+    if (!ab) return -1;
+
+    ab->lock_state = 0;
+    return 0;
+}
+
 /* Lot 30: Web Runtime Vector Canvas 2D & WebAssembly VM (US-048 / US-050) */
 
 void webrt_canvas2d_init(webrt_canvas2d_t *canvas, int width, int height) {

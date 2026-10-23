@@ -941,6 +941,49 @@ static void test_lot31_prod_chaos_remediation_postmortem(void) {
     TEST_ASSERT_NOT_NULL(strstr(report, "checksum verified=true fnv"));
 }
 
+static void test_lot32_prod_chaos_sla_postmortem(void) {
+    /* Test Chaos Playbook Execution */
+    prod_chaos_scenario_t scenarios[2];
+    scenarios[0].scenario_id = 1;
+    snprintf(scenarios[0].scenario_name, sizeof(scenarios[0].scenario_name), "Latency Spike");
+    scenarios[0].fault_type = PROD_CHAOS_SCENARIO_LATENCY_SPIKE;
+    scenarios[0].duration_ticks = 10;
+    scenarios[0].severity = 50;
+    scenarios[0].status = 0;
+
+    scenarios[1].scenario_id = 2;
+    snprintf(scenarios[1].scenario_name, sizeof(scenarios[1].scenario_name), "Packet Drop");
+    scenarios[1].fault_type = PROD_CHAOS_SCENARIO_PACKET_DROP;
+    scenarios[1].duration_ticks = 10;
+    scenarios[1].severity = 10;
+    scenarios[1].status = 0;
+
+    char log_buf[512];
+    int run_count = prod_chaos_playbook_run(scenarios, 2, log_buf, sizeof(log_buf));
+    TEST_ASSERT_EQUAL(2, run_count);
+    TEST_ASSERT_NOT_NULL(strstr(log_buf, "All fault injections cleared successfully"));
+
+    /* Test SLA Continuous Evaluation */
+    prod_sla_metrics_t sla;
+    sla.uptime_ticks = 990;
+    sla.downtime_ticks = 10;
+    sla.total_requests = 1000;
+    sla.failed_requests = 5;
+    sla.p99_latency_ms = 120;
+    sla.target_sla_pct = 0x0063E666;
+
+    uint32_t sla_fp = 0, penalty = 0;
+    TEST_ASSERT_EQUAL(0, prod_sla_continuous_eval(&sla, &sla_fp, &penalty));
+    TEST_ASSERT_TRUE(sla_fp > 0);
+    TEST_ASSERT_TRUE(penalty > 0);
+
+    /* Test Postmortem Detailed Report */
+    char report[512];
+    int report_len = prod_audit_postmortem_detailed_report(scenarios, 2, &sla, 555, report, sizeof(report));
+    TEST_ASSERT_TRUE(report_len > 0);
+    TEST_ASSERT_NOT_NULL(strstr(report, "Postmortem Detailed Audit Signed - FNV-1a verified"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -973,6 +1016,7 @@ int main(void) {
     RUN_TEST(test_lot28_prod_profiler_healing_and_latency);
     RUN_TEST(test_lot30_prod_auto_healing_predictive_diag);
     RUN_TEST(test_lot31_prod_chaos_remediation_postmortem);
+    RUN_TEST(test_lot32_prod_chaos_sla_postmortem);
 
     unity_print_results();
     unity_cleanup();

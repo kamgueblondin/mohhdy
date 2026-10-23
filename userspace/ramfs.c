@@ -820,6 +820,151 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
     return RAMFS_OK;
 }
 
+/* Lot 32: VFS Distributed Transactional Storage & MVCC Snapshot Engine (US-005 / US-038) */
+static vfs_mvcc_version_entry_t g_mvcc_versions[VFS_MVCC_VERSIONS_MAX];
+static uint32_t g_mvcc_snap_counter = 1;
+
+int vfs_mvcc_snapshot_create(uint32_t snapshot_version, vfs_mvcc_snapshot_t *out_snap) {
+    if (!out_snap) return -1;
+
+    out_snap->snapshot_id = g_mvcc_snap_counter++;
+    out_snap->snapshot_version = snapshot_version;
+    out_snap->timestamp = snapshot_version * 100;
+    out_snap->active = 1;
+
+    /* Archive current state of active VFS nodes into MVCC version store if not present */
+    for (int i = 0; i < RAMFS_MAX_NODES; i++) {
+        if (!g_nodes[i].used || g_nodes[i].is_dir) continue;
+
+        /* Check if version already exists for this path and version */
+        int exists = 0;
+        for (int v = 0; v < VFS_MVCC_VERSIONS_MAX; v++) {
+            if (g_mvcc_versions[v].active &&
+                g_mvcc_versions[v].version_id == snapshot_version &&
+                rf_strcmp(g_mvcc_versions[v].path, g_nodes[i].path) == 0) {
+                exists = 1;
+                break;
+            }
+        }
+
+        if (!exists) {
+            /* Find free slot in g_mvcc_versions */
+            int slot = -1;
+            for (int v = 0; v < VFS_MVCC_VERSIONS_MAX; v++) {
+                if (!g_mvcc_versions[v].active) {
+                    slot = v;
+                    break;
+                }
+            }
+            if (slot == -1) {
+                /* Evict oldest or first slot */
+                slot = 0;
+            }
+
+            g_mvcc_versions[slot].version_id = snapshot_version;
+            rf_strcpy(g_mvcc_versions[slot].path, g_nodes[i].path);
+            g_mvcc_versions[slot].path[RAMFS_PATH_MAX - 1] = '\0';
+            rf_strcpy(g_mvcc_versions[slot].content, g_nodes[i].content);
+            g_mvcc_versions[slot].content[RAMFS_CONTENT_MAX - 1] = '\0';
+            g_mvcc_versions[slot].size = (uint32_t)g_nodes[i].size;
+            g_mvcc_versions[slot].timestamp = snapshot_version * 100;
+            g_mvcc_versions[slot].active = 1;
+        }
+    }
+
+    return 0;
+}
+
+int vfs_mvcc_read_version(const char *path, uint32_t snapshot_version, char *out_buf, uint32_t buf_cap, uint32_t *out_size) {
+    if (!path || !out_buf || buf_cap == 0) return -1;
+
+    /* First search in MVCC version table for exact version_id <= snapshot_version */
+    int best_slot = -1;
+    uint32_t best_ver = 0;
+
+    for (int v = 0; v < VFS_MVCC_VERSIONS_MAX; v++) {
+        if (g_mvcc_versions[v].active &&
+            rf_strcmp(g_mvcc_versions[v].path, path) == 0 &&
+            g_mvcc_versions[v].version_id <= snapshot_version) {
+            if (best_slot == -1 || g_mvcc_versions[v].version_id > best_ver) {
+                best_ver = g_mvcc_versions[v].version_id;
+                best_slot = v;
+            }
+        }
+    }
+
+    if (best_slot != -1) {
+        uint32_t sz = g_mvcc_versions[best_slot].size;
+        if (sz >= buf_cap) sz = buf_cap - 1;
+        for (uint32_t i = 0; i < sz; i++) {
+            out_buf[i] = g_mvcc_versions[best_slot].content[i];
+        }
+        out_buf[sz] = '\0';
+        if (out_size) *out_size = sz;
+        return 0;
+    }
+
+    /* Fallback to live VFS node */
+    ramfs_node_t *n = find_node(path);
+    if (!n || n->is_dir) return -2;
+
+    uint32_t sz = (uint32_t)n->size;
+    if (sz >= buf_cap) sz = buf_cap - 1;
+    for (uint32_t i = 0; i < sz; i++) {
+        out_buf[i] = n->content[i];
+    }
+    out_buf[sz] = '\0';
+    if (out_size) *out_size = sz;
+    return 0;
+}
+
+int vfs_distributed_commit_validate(const vfs_dist_tx_context_t *tx_ctx, int min_quorum, int *out_committed) {
+    if (!tx_ctx) return -1;
+
+    int positive_votes = 0;
+    for (int i = 0; i < tx_ctx->node_count && i < VFS_COMMIT_NODES_MAX; i++) {
+        if (tx_ctx->node_votes[i].vote_prepared) {
+            positive_votes++;
+        }
+    }
+
+    if (positive_votes >= min_quorum && tx_ctx->phase == 0) {
+        if (out_committed) *out_committed = 1;
+        return 0;
+    } else if (tx_ctx->phase == 1) {
+        if (out_committed) *out_committed = 1;
+        return 0;
+    } else {
+        if (out_committed) *out_committed = 0;
+        return -1;
+    }
+}
+
+int vfs_compaction_journal_compact(vfs_wal_log_t *wal, int *out_reclaimed_slots, int *out_compacted_inodes) {
+    if (!wal) return -1;
+
+    int reclaimed = 0;
+    int compacted = 0;
+
+    /* Apply all unapplied log entries up to current count */
+    for (uint32_t i = 0; i < wal->count; i++) {
+        if (!wal->entries[i].applied) {
+            wal->entries[i].applied = 1;
+            compacted++;
+        }
+    }
+
+    /* Reclaim applied log slots */
+    wal->count = 0;
+    wal->last_applied_lsn = wal->next_lsn;
+    reclaimed = VFS_WAL_MAX_ENTRIES;
+
+    if (out_reclaimed_slots) *out_reclaimed_slots = reclaimed;
+    if (out_compacted_inodes) *out_compacted_inodes = compacted;
+
+    return 0;
+}
+
 /* Lot 31: VFS Distributed Replicated State & Write-Ahead Log Engine (US-004 / US-037) */
 
 static vfs_dist_lock_t g_dist_locks[VFS_DIST_LOCKS_MAX];

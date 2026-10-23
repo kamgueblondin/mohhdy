@@ -456,4 +456,31 @@ int prod_remediation_run_playbook(prod_remediation_playbook_t *pb, const char *i
 
 int prod_audit_postmortem_report(const prod_remediation_playbook_t *pb, uint32_t incident_id, char *out_report, int max_sz);
 
+/* Lot 32: Production Chaos Engineering Playbook Execution & Continuous SLA Monitoring (US-116 / US-125) */
+#define PROD_CHAOS_SCENARIO_LATENCY_SPIKE 1
+#define PROD_CHAOS_SCENARIO_PACKET_DROP   2
+#define PROD_CHAOS_SCENARIO_SERVICE_DOWN  3
+
+typedef struct {
+    uint32_t scenario_id;
+    char scenario_name[32];
+    uint8_t fault_type;
+    uint32_t duration_ticks;
+    uint32_t severity;
+    uint8_t status; /* 0=pending, 1=running, 2=completed, 3=failed */
+} prod_chaos_scenario_t;
+
+typedef struct {
+    uint32_t uptime_ticks;
+    uint32_t downtime_ticks;
+    uint32_t total_requests;
+    uint32_t failed_requests;
+    uint32_t p99_latency_ms;
+    uint32_t target_sla_pct; /* 16.16 fixed point, e.g. 99.9% = 0x0063E666 */
+} prod_sla_metrics_t;
+
+int prod_chaos_playbook_run(const prod_chaos_scenario_t *scenarios, int scenario_count, char *out_log, int max_sz);
+int prod_sla_continuous_eval(const prod_sla_metrics_t *metrics, uint32_t *out_sla_pct_fp, uint32_t *out_penalty_points);
+int prod_audit_postmortem_detailed_report(const prod_chaos_scenario_t *scenarios, int scenario_count, const prod_sla_metrics_t *sla, uint32_t incident_id, char *out_report, int max_sz);
+
 #endif

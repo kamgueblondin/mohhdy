@@ -491,4 +491,25 @@ int p2p_bft_commit(p2p_bft_state_t *bft, uint32_t voter_id, uint32_t view_id, ui
 void p2p_bloom_sync_init(p2p_bloom_filter_t *filter);
 int p2p_bloom_sync_diff(const p2p_bloom_filter_t *local_bf, const p2p_bloom_filter_t *remote_bf, int *out_mismatch_count);
 
+/* Lot 32: P2P WAN Mesh Dynamic Topology Reconfiguration & Zero-Knowledge Consensus (US-067 / US-079) */
+#define P2P_ZK_PROOF_SIZE 64
+
+typedef struct {
+    uint32_t peer_id;
+    uint32_t rtt_ms;
+    uint32_t ewma_rtt;
+    uint32_t flap_count;
+    uint8_t active;
+} p2p_topo_peer_info_t;
+
+typedef struct {
+    char statement[32];
+    uint8_t proof_bytes[P2P_ZK_PROOF_SIZE];
+    uint32_t proof_len;
+} p2p_zk_proof_t;
+
+int p2p_topology_reconfigure(p2p_node_t *n, const p2p_topo_peer_info_t *peers, int peer_count, uint32_t *out_active_topology);
+int p2p_zk_consensus_verify(const p2p_zk_proof_t *proof, const char *expected_statement, int *out_valid);
+int p2p_bbr_anti_entropy_sync(p2p_node_t *n, uint32_t target_peer_id, uint32_t bw_est_kbps, int *out_items_synced);
+
 #endif

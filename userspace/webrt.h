@@ -432,4 +432,39 @@ int webrt_assemblyscript_exec(const uint8_t *bytecode, uint32_t code_len, int32_
 int webrt_arraybuffer_share(webrt_arraybuffer_t *ab, uint32_t length);
 int webrt_atomics_wait_notify(webrt_arraybuffer_t *ab, uint32_t byte_offset, int32_t expected, int32_t new_val);
 
+/* Lot 32: Web Runtime GPU Fixed-Point Rasterizer & WebAssembly SIMD Pipeline (US-052 / US-054) */
+#define WEBRT_GPU_MAX_POLY_PTS 16
+#define WEBRT_WASM_SIMD_STACK_MAX 16
+
+typedef struct {
+    int32_t x; /* 16.16 fixed point */
+    int32_t y; /* 16.16 fixed point */
+    int32_t z; /* 16.16 fixed point */
+} webrt_gpu_point3d_t;
+
+typedef struct {
+    webrt_gpu_point3d_t pts[WEBRT_GPU_MAX_POLY_PTS];
+    int count;
+    uint32_t color;
+} webrt_gpu_polygon_t;
+
+typedef union {
+    int32_t i32[4];
+    uint32_t u32[4];
+    uint8_t u8[16];
+} webrt_wasm_v128_t;
+
+typedef struct {
+    webrt_wasm_v128_t stack[WEBRT_WASM_SIMD_STACK_MAX];
+    int top;
+} webrt_wasm_simd_ctx_t;
+
+int webrt_gpu_rasterize_polygon(const webrt_gpu_polygon_t *poly, uint32_t *framebuffer, int width, int height);
+int webrt_gpu_clip_frustum(const webrt_gpu_polygon_t *in_poly, webrt_gpu_polygon_t *out_poly);
+
+int webrt_wasm_simd_exec(const uint8_t *bytecode, uint32_t code_len, webrt_wasm_v128_t *out_val);
+
+int webrt_shared_memory_lock(webrt_arraybuffer_t *ab, uint32_t timeout_ticks);
+int webrt_shared_memory_unlock(webrt_arraybuffer_t *ab);
+
 #endif
