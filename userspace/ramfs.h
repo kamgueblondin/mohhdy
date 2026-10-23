@@ -239,4 +239,45 @@ int vfs_distributed_lock_release(const char *path, uint32_t node_id);
 
 int vfs_distributed_reconcile(const vfs_remote_inode_t *remote_inodes, int remote_count, uint32_t remote_term, int *out_synced_count, int *out_conflict_count);
 
+/* Lot 32: VFS Distributed Transactional Storage & MVCC Snapshot Engine (US-005 / US-038) */
+#define VFS_MVCC_VERSIONS_MAX 16
+#define VFS_MVCC_SNAPSHOTS_MAX 8
+#define VFS_COMMIT_NODES_MAX 8
+
+typedef struct {
+    uint32_t version_id;
+    char path[RAMFS_PATH_MAX];
+    char content[RAMFS_CONTENT_MAX];
+    uint32_t size;
+    uint32_t timestamp;
+    uint8_t active;
+} vfs_mvcc_version_entry_t;
+
+typedef struct {
+    uint32_t snapshot_id;
+    uint32_t snapshot_version;
+    uint32_t timestamp;
+    uint8_t active;
+} vfs_mvcc_snapshot_t;
+
+typedef struct {
+    uint32_t node_id;
+    uint8_t vote_prepared;
+    uint32_t term;
+} vfs_commit_node_vote_t;
+
+typedef struct {
+    uint32_t tx_id;
+    char path[RAMFS_PATH_MAX];
+    uint32_t target_version;
+    vfs_commit_node_vote_t node_votes[VFS_COMMIT_NODES_MAX];
+    int node_count;
+    uint8_t phase; /* 0=PREPARE, 1=COMMIT, 2=ABORT */
+} vfs_dist_tx_context_t;
+
+int vfs_mvcc_snapshot_create(uint32_t snapshot_version, vfs_mvcc_snapshot_t *out_snap);
+int vfs_mvcc_read_version(const char *path, uint32_t snapshot_version, char *out_buf, uint32_t buf_cap, uint32_t *out_size);
+int vfs_distributed_commit_validate(const vfs_dist_tx_context_t *tx_ctx, int min_quorum, int *out_committed);
+int vfs_compaction_journal_compact(vfs_wal_log_t *wal, int *out_reclaimed_slots, int *out_compacted_inodes);
+
 #endif

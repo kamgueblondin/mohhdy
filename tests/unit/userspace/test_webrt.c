@@ -477,6 +477,57 @@ static void test_lot31_webrt_webgl3d_as_jit_atomics(void) {
     TEST_ASSERT_EQUAL(1, webrt_atomics_wait_notify(&ab, 0, 100, 300)); /* Mismatch */
 }
 
+static void test_lot32_webrt_gpu_simd_shared_memory(void) {
+    /* Test GPU Rasterize Polygon */
+    webrt_gpu_polygon_t poly;
+    poly.count = 3;
+    poly.color = 0xFF00FF00; /* Green */
+    poly.pts[0].x = 10 << 16; poly.pts[0].y = 10 << 16; poly.pts[0].z = 0;
+    poly.pts[1].x = 50 << 16; poly.pts[1].y = 10 << 16; poly.pts[1].z = 0;
+    poly.pts[2].x = 10 << 16; poly.pts[2].y = 50 << 16; poly.pts[2].z = 0;
+
+    uint32_t fb[100 * 100];
+    for (int i = 0; i < 100 * 100; i++) fb[i] = 0;
+
+    int drawn = webrt_gpu_rasterize_polygon(&poly, fb, 100, 100);
+    TEST_ASSERT_TRUE(drawn > 0);
+
+    /* Test GPU Frustum Clip */
+    webrt_gpu_polygon_t clipped;
+    int c_count = webrt_gpu_clip_frustum(&poly, &clipped);
+    TEST_ASSERT_EQUAL(3, c_count);
+
+    /* Test WASM SIMD execution */
+    /* v128.const [1, 2, 3, 4] -> FD 0C ... */
+    /* v128.const [10, 20, 30, 40] -> FD 0C ... */
+    /* i32x4.add -> FD 6E */
+    uint8_t simd_code[38];
+    simd_code[0] = 0xFD; simd_code[1] = 0x0C;
+    int32_t v1[4] = {1, 2, 3, 4};
+    for (int i = 0; i < 16; i++) simd_code[2 + i] = ((uint8_t*)v1)[i];
+
+    simd_code[18] = 0xFD; simd_code[19] = 0x0C;
+    int32_t v2[4] = {10, 20, 30, 40};
+    for (int i = 0; i < 16; i++) simd_code[20 + i] = ((uint8_t*)v2)[i];
+
+    simd_code[36] = 0xFD; simd_code[37] = 0x6E;
+
+    webrt_wasm_v128_t res;
+    TEST_ASSERT_EQUAL(0, webrt_wasm_simd_exec(simd_code, sizeof(simd_code), &res));
+    TEST_ASSERT_EQUAL(11, res.i32[0]);
+    TEST_ASSERT_EQUAL(22, res.i32[1]);
+    TEST_ASSERT_EQUAL(33, res.i32[2]);
+    TEST_ASSERT_EQUAL(44, res.i32[3]);
+
+    /* Test Shared Memory Futex Lock / Unlock */
+    webrt_arraybuffer_t ab;
+    ab.lock_state = 0;
+    TEST_ASSERT_EQUAL(0, webrt_shared_memory_lock(&ab, 10));
+    TEST_ASSERT_EQUAL(-1, webrt_shared_memory_lock(&ab, 10)); /* Already locked */
+    TEST_ASSERT_EQUAL(0, webrt_shared_memory_unlock(&ab));
+    TEST_ASSERT_EQUAL(0, webrt_shared_memory_lock(&ab, 10));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -499,6 +550,7 @@ int main(void) {
     RUN_TEST(test_lot28_webrt_vector_and_box_model);
     RUN_TEST(test_lot30_webrt_canvas2d_wasm_anim);
     RUN_TEST(test_lot31_webrt_webgl3d_as_jit_atomics);
+    RUN_TEST(test_lot32_webrt_gpu_simd_shared_memory);
 
     unity_print_results();
     unity_cleanup();

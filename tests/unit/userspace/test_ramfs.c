@@ -2,7 +2,7 @@
 
 #include "../../framework/unity.h"
 #include "../../framework/test_kernel.h"
-#include "ramfs.h"
+#include "../../../userspace/ramfs.h"
 #include "procsim.h"
 #include <string.h>
 
@@ -319,6 +319,55 @@ static void test_lot31_vfs_wal_locks_reconcile(void) {
     TEST_ASSERT_EQUAL(0, conflicts);
 }
 
+static void test_lot32_vfs_mvcc_commit_compaction(void) {
+    ramfs_init();
+    ramfs_mkdir_p("/mvcc");
+    ramfs_write("/mvcc/data.txt", "v1_content", 10);
+
+    vfs_mvcc_snapshot_t snap;
+    TEST_ASSERT_EQUAL(0, vfs_mvcc_snapshot_create(1, &snap));
+    TEST_ASSERT_EQUAL(1, snap.snapshot_version);
+
+    /* Modify live file */
+    ramfs_write("/mvcc/data.txt", "v2_content_new", 14);
+
+    vfs_mvcc_snapshot_t snap2;
+    TEST_ASSERT_EQUAL(0, vfs_mvcc_snapshot_create(2, &snap2));
+
+    /* Read via MVCC snapshot version 1 */
+    char buf[64];
+    uint32_t sz = 0;
+    TEST_ASSERT_EQUAL(0, vfs_mvcc_read_version("/mvcc/data.txt", 1, buf, sizeof(buf), &sz));
+    TEST_ASSERT_EQUAL_STRING("v1_content", buf);
+
+    /* Read via MVCC snapshot version 2 */
+    TEST_ASSERT_EQUAL(0, vfs_mvcc_read_version("/mvcc/data.txt", 2, buf, sizeof(buf), &sz));
+    TEST_ASSERT_EQUAL_STRING("v2_content_new", buf);
+
+    /* Distributed commit validation */
+    vfs_dist_tx_context_t tx_ctx;
+    tx_ctx.tx_id = 101;
+    tx_ctx.node_count = 3;
+    tx_ctx.phase = 0;
+    tx_ctx.node_votes[0].vote_prepared = 1;
+    tx_ctx.node_votes[1].vote_prepared = 1;
+    tx_ctx.node_votes[2].vote_prepared = 0;
+
+    int committed = 0;
+    TEST_ASSERT_EQUAL(0, vfs_distributed_commit_validate(&tx_ctx, 2, &committed));
+    TEST_ASSERT_EQUAL(1, committed);
+
+    /* Journal compaction */
+    vfs_wal_log_t wal;
+    vfs_wal_init(&wal);
+    vfs_wal_log_append(&wal, 1, 1, "/mvcc/data.txt", "v1_content", 10);
+
+    int reclaimed = 0, compacted = 0;
+    TEST_ASSERT_EQUAL(0, vfs_compaction_journal_compact(&wal, &reclaimed, &compacted));
+    TEST_ASSERT_EQUAL(1, compacted);
+    TEST_ASSERT_EQUAL(VFS_WAL_MAX_ENTRIES, reclaimed);
+}
+
 int main(void) {
     unity_init();
 
@@ -338,6 +387,7 @@ int main(void) {
     RUN_TEST(test_lot28_page_cache_and_io_queue);
     RUN_TEST(test_lot30_vfs_mount_overlay_defrag);
     RUN_TEST(test_lot31_vfs_wal_locks_reconcile);
+    RUN_TEST(test_lot32_vfs_mvcc_commit_compaction);
 
     unity_print_results();
     unity_cleanup();

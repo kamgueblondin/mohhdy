@@ -1248,6 +1248,36 @@ static void test_lot31_p2p_topology_bft_bloom(void) {
     TEST_ASSERT_EQUAL(1, mismatches);
 }
 
+static void test_lot32_p2p_topology_zk_bbr(void) {
+    p2p_node_t n;
+    n.id = 1;
+
+    /* Test Topology Reconfiguration with high flap count -> STAR topology */
+    p2p_topo_peer_info_t peers[2];
+    peers[0].peer_id = 2; peers[0].rtt_ms = 50; peers[0].ewma_rtt = 50; peers[0].flap_count = 6; peers[0].active = 1;
+    peers[1].peer_id = 3; peers[1].rtt_ms = 60; peers[1].ewma_rtt = 60; peers[1].flap_count = 0; peers[1].active = 1;
+
+    uint32_t active_topo = 0;
+    TEST_ASSERT_EQUAL(0, p2p_topology_reconfigure(&n, peers, 2, &active_topo));
+    TEST_ASSERT_EQUAL(P2P_TOPOLOGY_STAR, active_topo);
+
+    /* Test ZK Consensus verification */
+    p2p_zk_proof_t proof;
+    for (int i = 0; i < 32; i++) proof.statement[i] = 0;
+    proof.statement[0] = 'a'; proof.statement[1] = 'g'; proof.statement[2] = 'r'; proof.statement[3] = 'e'; proof.statement[4] = 'e';
+    proof.proof_len = 8;
+    for (int i = 0; i < 8; i++) proof.proof_bytes[i] = (uint8_t)(i + 1);
+
+    int valid = 0;
+    TEST_ASSERT_EQUAL(0, p2p_zk_consensus_verify(&proof, "agree", &valid));
+    TEST_ASSERT_EQUAL(1, valid);
+
+    /* Test BBR Anti-entropy sync */
+    int items = 0;
+    TEST_ASSERT_EQUAL(0, p2p_bbr_anti_entropy_sync(&n, 2, 1200, &items));
+    TEST_ASSERT_EQUAL(12, items);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1291,6 +1321,7 @@ int main(void) {
     RUN_TEST(test_lot28_p2p_gossip_nat_and_multipath);
     RUN_TEST(test_lot30_p2p_region_route_multi_raft_merkle);
     RUN_TEST(test_lot31_p2p_topology_bft_bloom);
+    RUN_TEST(test_lot32_p2p_topology_zk_bbr);
 
     unity_print_results();
     unity_cleanup();
