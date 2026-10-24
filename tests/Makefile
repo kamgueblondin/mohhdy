@@ -460,6 +460,10 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_fsops: $(UNIT_DIR)/userspace/test_fsops.
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/fsops.c $(FRAMEWORK_SOURCES)
 
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_files: $(UNIT_DIR)/userspace/test_osui_files.c $(UNIT_DIR)/userspace/mockfs.h ../userspace/osui_files.c ../userspace/osui_files.h ../userspace/osui_app.c ../userspace/fsops.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c $(FRAMEWORK_SOURCES)
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_panes: $(UNIT_DIR)/userspace/test_osui_panes.c ../userspace/osui_panes.c ../userspace/osui_panes.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_panes.c $(FRAMEWORK_SOURCES)
