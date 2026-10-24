@@ -7,6 +7,7 @@
 #include "osui_gui.h"
 #include "os_syscalls.h"
 #include "osui_ide.h"
+#include "mockfs.h"
 #include <string.h>
 
 static uint16_t g_cells[OS_VGA_ROWS * OS_VGA_COLS];
@@ -190,7 +191,7 @@ static void test_gui_scene_llm_and_newest_messages(void) {
     char line[32];
     setup();
     osui_gui_fill_scene(&g_scene);
-    TEST_ASSERT_EQUAL(6, g_scene.version);
+    TEST_ASSERT_EQUAL(7, g_scene.version);
     TEST_ASSERT_EQUAL_STRING("stub_echo", g_scene.llm);
     for (i = 0; i < 5; i++) {
         snprintf(line, sizeof(line), "chat note%d", i);
@@ -353,8 +354,8 @@ static void test_gui_pm_ide_fullscreen(void) {
     TEST_ASSERT_EQUAL(0, strncmp(g_scene.term[0], "pm-ide t.pm Ln 1 Col 1 /1", 25));
     TEST_ASSERT_EQUAL_STRING("  1> say 1", g_scene.term[1]); /* cursor on s: Ln/Col in the title */
     /* scene v3 carries the syntax classes: gutter, keyword, number (v4
-     * keeps them and adds the web display list, Lot 6; v5 adds llm; v6 pane_live) */
-    TEST_ASSERT_EQUAL(6, g_scene.version);
+     * keeps them and adds the web display list, Lot 6; v5 adds llm; v6 pane_live; v7 app windows) */
+    TEST_ASSERT_EQUAL(7, g_scene.version);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_GUTTER, g_scene.term_attr[1][0]);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_KEYWORD, g_scene.term_attr[1][5]);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_NUMBER, g_scene.term_attr[1][9]);
@@ -436,7 +437,7 @@ static void test_gui_web_pane_pipeline(void) {
     TEST_ASSERT_EQUAL(1, osui_gui_web_active());
     osui_gui_fill_scene(&g_scene);
     TEST_ASSERT_EQUAL(OS_FB_PANE_WEB, g_scene.pane);
-    TEST_ASSERT_EQUAL(6, g_scene.version);
+    TEST_ASSERT_EQUAL(7, g_scene.version);
     TEST_ASSERT_TRUE(g_scene.nweb > 0);
     TEST_ASSERT_NOT_NULL(strstr(g_scene.web_title, "web t.html"));
     for (i = 0; i < g_scene.nweb; i++) {
@@ -612,6 +613,90 @@ static void test_gui_live_panes(void) {
     osui_gui_set_pane_source(0);
 }
 
+static void evt(const char *line) {
+    char b[128];
+    int i;
+    snprintf(b, sizeof(b), "%c%s\n", OS_FB_EVT, line);
+    g_out[0] = 0;
+    for (i = 0; b[i]; i++) osui_gui_feed_key((unsigned char)b[i], g_out + strlen(g_out), (int)(sizeof(g_out) - strlen(g_out)));
+}
+
+/* Scene v7: file explorer and text editor windows over the shared file
+ * library; kernel events (OS_FB_EVT) drive them, keys follow the focus. */
+static void test_gui_apps_explorer_editor(void) {
+    setup();
+    mfs_reset();
+    osui_gui_set_fs_io(&mfs_io);
+    feed_str("/files /home");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui files open dir=/home"));
+    TEST_ASSERT_EQUAL(0, osui_gui_focus());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_APP_FILES, g_scene.app[0].kind);
+    TEST_ASSERT_EQUAL(0, g_scene.app_focus);
+    TEST_ASSERT_NOT_NULL(strstr(g_scene.app[0].rows[2], "notes.txt"));
+    TEST_ASSERT_NOT_NULL(strstr(g_scene.app[0].tool, "[Infos]"));
+    /* keys go to the explorer: new folder */
+    feed_str("d"); feed_str("docs");
+    g_out[0] = 0;
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui files mkdir ok /home/docs"));
+    TEST_ASSERT(mfs_find("/home/docs") >= 0);
+    TEST_ASSERT_EQUAL_STRING("", osui_gui_input());     /* not typed on the desktop */
+    /* double click on notes.txt (row 3: docs is first) opens the editor */
+    evt("app 0 dclick 3 4");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui edit open file=/home/notes.txt"));
+    TEST_ASSERT_EQUAL(1, osui_gui_focus());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_APP_EDIT, g_scene.app[1].kind);
+    TEST_ASSERT_EQUAL_STRING("   1 ligne 1", g_scene.app[1].rows[0]);
+    /* edit and save: same bytes as cat would show */
+    osui_gui_feed_key(0x13, g_out, (int)sizeof(g_out));
+    feed_str(" ok");
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(1, g_scene.app[1].dirty);
+    osui_gui_feed_key(27, g_out, (int)sizeof(g_out));
+    g_out[0] = 0;
+    osui_gui_feed_key('w', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui edit saved file=/home/notes.txt"));
+    TEST_ASSERT_EQUAL(19, mfs[mfs_find("/home/notes.txt")].len);
+    TEST_ASSERT(memcmp(mfs[mfs_find("/home/notes.txt")].data, "ligne 1 ok\nligne 2\n", 19) == 0);
+    /* toolbar click: "[Cherch]" opens the find prompt */
+    evt("app 1 tool 70");
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_NOT_NULL(strstr(g_scene.app[1].status, "Chercher:"));
+    osui_gui_feed_key(27, g_out, (int)sizeof(g_out));
+    /* focus back to the desktop: keys go to the input line */
+    evt("focus d");
+    feed_str("ab");
+    TEST_ASSERT_EQUAL_STRING("ab", osui_gui_input());
+    osui_gui_feed_key('\b', g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('\b', g_out, (int)sizeof(g_out));
+    /* close with unsaved changes asks once */
+    evt("focus 1");
+    feed_str("z");
+    evt("app 1 close");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui edit close refused unsaved"));
+    evt("app 1 close");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui edit close file=/home/notes.txt"));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(0, g_scene.app[1].kind);
+    /* read-only initrd: error in the editor status, file unchanged */
+    feed_str("x");   /* focus went back to the explorer */
+    evt("focus d");
+    feed_str("/edit /ro/readme.txt");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    feed_str("Z");
+    osui_gui_feed_key(27, g_out, (int)sizeof(g_out));
+    g_out[0] = 0;
+    osui_gui_feed_key('w', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui edit save error=protege (initrd)"));
+    TEST_ASSERT_EQUAL(14, mfs[mfs_find("/ro/readme.txt")].len);
+    evt("app 1 close"); evt("app 1 close");
+    evt("app 0 close");
+    TEST_ASSERT_EQUAL(-1, osui_gui_focus());
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_lot12_vfs_and_browser_inspection_views);
@@ -634,6 +719,7 @@ int main(void) {
     RUN_TEST(test_gui_web_pipeline_sanitized);
     RUN_TEST(test_gui_mobile_pane);
     RUN_TEST(test_gui_live_panes);
+    RUN_TEST(test_gui_apps_explorer_editor);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

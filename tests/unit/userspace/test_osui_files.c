@@ -121,7 +121,7 @@ static void test_read_only_and_info(void) {
 
 static void test_toolbar_hit(void) {
     TEST_ASSERT_EQUAL(0, osui_app_tool_hit(osui_files_toolbar, 1));
-    TEST_ASSERT_EQUAL(-1, osui_app_tool_hit(osui_files_toolbar, 8));
+    TEST_ASSERT_EQUAL(-1, osui_app_tool_hit(osui_files_toolbar, 6));
     TEST_ASSERT_EQUAL(1, osui_app_tool_hit(osui_files_toolbar, 10));
     TEST_ASSERT_EQUAL(OSUI_FT_INFO, osui_app_tool_hit(osui_files_toolbar, (int)(strstr(osui_files_toolbar, "Infos") - osui_files_toolbar)));
 }

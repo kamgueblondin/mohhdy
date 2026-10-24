@@ -7326,6 +7326,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         shell_term_leave_if(input_buffer);
         if (osui_gui_should_enter()) {
             osui_gui_set_pane_source(&k_pane_src);
+        osui_gui_set_fs_io(&shell_fs_io);
             osui_gui_run();
             shell_after_gui(ctx);
         }
@@ -7367,6 +7368,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         shell_term_leave_if(input_buffer);
         if (osui_gui_should_enter()) {
             osui_gui_set_pane_source(&k_pane_src);
+        osui_gui_set_fs_io(&shell_fs_io);
             osui_gui_run();
             shell_after_gui(ctx);
         }

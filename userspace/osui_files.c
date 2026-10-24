@@ -12,7 +12,7 @@
 #define K_ESC 27
 
 const char osui_files_toolbar[] =
-    "[Parent] [Ouvrir] [+Fichier] [+Dossier] [Renommer] [Suppr.] [Copier] [Deplacer] [Infos]";
+    "[Haut] [Ouvrir] [+Fich] [+Doss] [Renom] [Suppr] [Copier] [Depl] [Infos]";
 
 static int s_len(const char *s) { int n = 0; while (s && s[n]) n++; return n; }
 static void s_cpy(char *d, int max, const char *s) {

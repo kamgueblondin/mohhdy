@@ -479,7 +479,7 @@ void osui_ide_out_append(osui_ide_t *ide, const char *text) {
 /* ==== plain text mode: the desktop text editor ======================== */
 
 const char osui_ide_toolbar[] =
-    "[Ouvrir] [Enreg.] [Enreg. sous] [Couper] [Copier] [Coller] [Annuler] [Retablir] [Chercher] [Marque]";
+    "[Ouvrir] [Enreg] [Sous] [Couper] [Copier] [Coller] [Annul] [Retab] [Cherch]";
 
 static char g_clip[OSUI_IDE_TEXT_MAX];
 static int g_clip_len;
