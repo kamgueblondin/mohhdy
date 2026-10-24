@@ -97,6 +97,10 @@ static int fill_admin(const osui_pane_src_t *src, char lines[][OSUI_PANES_LINE],
             up++;
             put_s(&b, "actif pid "); put_u(&b, (unsigned)st.owner_pid);
             put_s(&b, " file "); put_u(&b, st.queued_messages);
+        } else if (i == 0) {
+            /* the vfs server is transient: the FAT commands start it for
+             * one request; files go through the kernel VFS otherwise */
+            put_s(&b, "a la demande (non resident, fichiers via le noyau)");
         } else put_s(&b, "absent");
     }
     b = line(lines, 0);
@@ -105,8 +109,64 @@ static int fill_admin(const osui_pane_src_t *src, char lines[][OSUI_PANES_LINE],
     return n;
 }
 
+const char *osui_panes_command(int pane) {
+    switch (pane) {
+    case OS_FB_PANE_P2P: return "p2p-stats";
+    case OS_FB_PANE_COLLAB: return "collab-balances";
+    case OS_FB_PANE_PROD: return "prod-metrics";
+    case OS_FB_PANE_SUPPORT: return "prod-diag";
+    default: return 0;
+    }
+}
+
+/* "$ cmd" then the captured output, one window line per output line
+ * (long lines wrap). */
+static int fill_cmd(const osui_pane_src_t *src, const char *cmd, char lines[][OSUI_PANES_LINE], int max) {
+    static char outb[2048];
+    int n = 0, k, i, col = 0;
+    buf_t b = line(lines, n++);
+    put_s(&b, "$ "); put_s(&b, cmd); put_s(&b, "  (sortie du shell)");
+    k = src->run ? src->run(cmd, outb, (int)sizeof(outb)) : -1;
+    if (k < 0) { if (n < max) { b = line(lines, n++); put_s(&b, "  indisponible"); } return n; }
+    if (k == 0) { if (n < max) { b = line(lines, n++); put_s(&b, "  (aucune sortie)"); } return n; }
+    if (n >= max) return n;
+    b = line(lines, n++);
+    for (i = 0; i < k && outb[i]; i++) {
+        char c = outb[i];
+        if (c == '\r') continue;
+        if (c == '\n' || col >= OSUI_PANES_LINE - 1) {
+            if (n >= max) return n;
+            b = line(lines, n++);
+            col = 0;
+            if (c == '\n') continue;
+        }
+        if (c == '\t') c = ' ';
+        if (c < 32 || c > 126) continue;
+        if (b.n < b.max - 1) { b.s[b.n++] = c; b.s[b.n] = 0; col++; }
+    }
+    if (n > 1 && lines[n - 1][0] == 0) n--;
+    return n;
+}
+
+/* Browser-OS: the local pages the web-render engine can show. */
+static int fill_browser(const osui_pane_src_t *src, char lines[][OSUI_PANES_LINE], int max) {
+    static os_dirent_t ents[32];
+    int n = 0, i, k = src->listdir ? src->listdir("/web", ents, 32) : -1;
+    buf_t b = line(lines, n++);
+    put_s(&b, "Pages locales /web : tapez web-render /web/<page>");
+    if (k < 0) { if (n < max) { b = line(lines, n++); put_s(&b, "  /web indisponible"); } return n; }
+    for (i = 0; i < k && n < max; i++) {
+        if (ents[i].flags == OS_DIRENT_DIR) continue;
+        b = line(lines, n++);
+        put_s(&b, "  /web/"); put_s(&b, ents[i].name); put_s(&b, "  "); put_u(&b, ents[i].size); put_s(&b, " o");
+    }
+    return n;
+}
+
 int osui_panes_fill(int pane, const osui_pane_src_t *src, char lines[][OSUI_PANES_LINE], int max) {
     if (!src || !lines || max <= 0) return 0;
+    if (osui_panes_command(pane)) return fill_cmd(src, osui_panes_command(pane), lines, max);
+    if (pane == OS_FB_PANE_BROWSER) return fill_browser(src, lines, max);
     if (pane == OS_FB_PANE_STATUS) return fill_status(src, lines, max);
     if (pane == OS_FB_PANE_FS) return fill_fs(src, lines, max);
     if (pane == OS_FB_PANE_ADMIN) return fill_admin(src, lines, max);

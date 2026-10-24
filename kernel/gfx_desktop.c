@@ -1699,12 +1699,12 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         int ww = lay.pane_win.box.w;
         int wh = lay.pane_win.box.h;
         const char *body = "Cerveau = osui_runtime.c. Pas Chromium.";
-        if (pane == OS_FB_PANE_BROWSER) body = "Browser-OS : FS-as-web, onglets, storage par onglet, DOM tree, JS eval";
+        if (pane == OS_FB_PANE_BROWSER) body = "Browser-OS : pages locales /web, tapez web-render /web/<page>";
         else if (pane == OS_FB_PANE_FS) body = "Inspection VFS Sandboxee (FS-as-web) : initrd/, overlay/, fat16/, fat32/";
         else if (pane == OS_FB_PANE_STATUS) body = "chrome=qemu_fb display_surface=vbe_lfb";
-        else if (pane == OS_FB_PANE_P2P) body = "Noeud P2P actif : decouverte, routes, consensus Raft, encrypted LWW";
-        else if (pane == OS_FB_PANE_COLLAB) body = "Economie Collab : points, sequestres, marketplace, gouvernance, Schnorr";
-        else if (pane == OS_FB_PANE_PROD) body = "Production : metriques, alertes, autoscale, pipeline CI/CD, maintenance";
+        else if (pane == OS_FB_PANE_P2P) body = "P2P : sortie de p2p-stats (aucune sortie recue)";
+        else if (pane == OS_FB_PANE_COLLAB) body = "Collab : sortie de collab-balances (aucune sortie recue)";
+        else if (pane == OS_FB_PANE_PROD) body = "Production : sortie de prod-metrics (aucune sortie recue)";
 
         if (pane == OS_FB_PANE_SHELL)
             draw_shell(fb, w, h, wx, wy, ww, wh, sc);

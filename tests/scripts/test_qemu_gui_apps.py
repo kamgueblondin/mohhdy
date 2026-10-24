@@ -10,6 +10,7 @@ through the USB tablet:
     a double click enter it again (mouse path through the kernel events);
   * Enter on the file opens it in the editor, the typed text is saved
     with ESC w;
+  * /p2p shows the captured output of the real p2p-stats command;
   * the terminal (cat) shows the same bytes: one file layer (fsops) for
     the shell commands and the desktop apps.
 """
@@ -150,6 +151,18 @@ def main():
             _, _, rgb = g.screendump_rgb(monitor, "qemu-gui-apps-editor.ppm")
             step(monitor, proc, "close editor", "osui edit close file=/ux3/b.txt", [("k", "esc"), ("k", "q")])
             step(monitor, proc, "close explorer", "osui files close", [("k", "esc")])
+            time.sleep(0.8)
+            # P2P window: the captured output of the real p2p-stats command
+            g.send_command_until(monitor, "/p2p", "osui gui line=/p2p", proc, mode="getc", wait_prompt=False)
+            time.sleep(2.0)
+            _, _, rgb = g.screendump_rgb(monitor, "qemu-gui-apps-p2p.ppm")
+            px, py, pw = 36, BAR_H + 28, 1024 - 420
+            teal = tw_count(rgb, px + 18, py + 94, px + pw - 20, py + 108, (122, 212, 196))
+            body = tw_count(rgb, px + 18, py + 110, px + pw - 20, py + 140, (201, 232, 223))
+            if teal < 40 or body < 20:
+                raise RuntimeError("P2P window: no command output drawn (teal %d, body %d)" % (teal, body))
+            g.say("P2P window shows the p2p-stats output (teal %d px, body %d px)" % (teal, body))
+            g.send_command_until(monitor, "/center", "osui gui line=/center", proc, mode="getc", wait_prompt=False)
             time.sleep(0.8)
             # the terminal reads the same bytes
             tw.open_terminal(monitor, proc)

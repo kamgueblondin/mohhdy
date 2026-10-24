@@ -849,9 +849,11 @@ void osui_gui_set_pane_source(const osui_pane_src_t *src) { g_pane_src = src; g_
 
 static int pane_live_fill(int pane) {
     unsigned now;
-    if (!g_pane_src || (pane != OS_FB_PANE_STATUS && pane != OS_FB_PANE_FS && pane != OS_FB_PANE_ADMIN)) return 0;
+    if (!g_pane_src || (pane != OS_FB_PANE_STATUS && pane != OS_FB_PANE_FS && pane != OS_FB_PANE_ADMIN &&
+                        pane != OS_FB_PANE_BROWSER && !osui_panes_command(pane))) return 0;
     now = g_pane_src->ticks ? g_pane_src->ticks() : 0;
-    if (pane != g_pane_for || now - g_pane_at >= 100U) {
+    /* command panes run their command when they open (not every second) */
+    if (pane != g_pane_for || (!osui_panes_command(pane) && now - g_pane_at >= 100U)) {
         g_pane_n = osui_panes_fill(pane, g_pane_src, g_pane_lines, OS_FB_TERM_MAX);
         g_pane_for = pane;
         g_pane_at = now;

@@ -578,7 +578,7 @@ static int pl_svc(const char *n, os_service_status_t *st) {
     return -1;
 }
 static void test_gui_live_panes(void) {
-    static const osui_pane_src_t src = { pl_list, 0, 0, pl_ticks, pl_svc };
+    static const osui_pane_src_t src = { pl_list, 0, 0, pl_ticks, pl_svc, 0 };
     setup();
     osui_gui_set_pane_source(&src);
     pl_t = 100 * 61;
@@ -606,7 +606,13 @@ static void test_gui_live_panes(void) {
     osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
     osui_gui_fill_scene(&g_scene);
     TEST_ASSERT_EQUAL_STRING("  vfs: actif pid 4 file 0", g_scene.term[1]);
+    /* UX3: Browser-OS lists the local pages of web-render */
     feed_str("/browser");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(1, g_scene.pane_live);
+    TEST_ASSERT_EQUAL_STRING("Pages locales /web : tapez web-render /web/<page>", g_scene.term[0]);
+    feed_str("/center");
     osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
     osui_gui_fill_scene(&g_scene);
     TEST_ASSERT_EQUAL(0, g_scene.pane_live);

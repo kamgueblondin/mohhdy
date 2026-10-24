@@ -139,7 +139,16 @@ void handle_line(shell_context_t* ctx, char* input_buffer);
 // ==============================================================================
 
 // Wrappers pour les appels système
+/* While a desktop window runs a command (osui_panes.c), its output is
+ * captured here instead of reaching the console. */
+static char *g_cap_buf;
+static int g_cap_n, g_cap_max;
+
 void putc(char c) {
+    if (g_cap_buf) {
+        if (g_cap_n < g_cap_max - 1) g_cap_buf[g_cap_n++] = c;
+        return;
+    }
     asm volatile("int $0x80" : : "a"(1), "b"(c));
 }
 
@@ -623,8 +632,23 @@ int sys_service_status(const char* name, os_service_status_t* status) {
 
 /* Live Statut / Fichiers / Admin windows: the same syscalls as uptime,
  * mem, ps, ls and service-status (userspace/osui_panes.c). */
+/* P2P / Collab / Prod / Support windows: the real shell command, its
+ * printed output captured (same handlers as typed in the terminal). */
+static int shell_pane_run(const char *cmd, char *out, int max) {
+    int rc;
+    if (!cmd || !out || max <= 1 || g_cap_buf) return -1;
+    g_cap_buf = out; g_cap_n = 0; g_cap_max = max;
+    if (cmd[0] == 'p' && cmd[1] == '2' && cmd[2] == 'p') (void)shell_p2p_line(cmd);
+    else if (cmd[0] == 'c') (void)shell_collab_line(cmd);
+    else (void)shell_prod_line(cmd);
+    out[g_cap_n] = 0;
+    rc = g_cap_n;
+    g_cap_buf = 0;
+    return rc;
+}
+
 static const osui_pane_src_t k_pane_src = {
-    sys_listdir, sys_ps, sys_meminfo, sys_ticks, sys_service_status
+    sys_listdir, sys_ps, sys_meminfo, sys_ticks, sys_service_status, shell_pane_run
 };
 
 int sys_service_grant(const char* name, int target_pid) {
