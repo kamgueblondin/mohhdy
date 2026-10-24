@@ -1581,6 +1581,12 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         g_last_scene = *sc;
         g_last_scene_valid = 1;
     }
+    {
+        /* a pane that opens (or changes) comes to the front */
+        static uint8_t pane_prev;
+        if (sc->pane != pane_prev && sc->pane != OS_FB_PANE_NONE) z_raise(GFX_WIN_PANE);
+        pane_prev = sc->pane;
+    }
     if (sc->version >= 7) {
         /* userspace owns the focus: an app that opens, or takes the focus,
          * comes to the front */
