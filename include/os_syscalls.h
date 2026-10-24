@@ -474,9 +474,15 @@ typedef struct {
 } os_fb_web_item_t;
 
 /* version >= 7: one desktop app window. kind 0 = closed. */
-#define OS_FB_APPS 2
-#define OS_FB_APP_FILES 1       /* slot 0 */
-#define OS_FB_APP_EDIT 2        /* slot 1 */
+#define OS_FB_APPS 6            /* UX4: generic window slots, any app */
+#define OS_FB_APP_FILES 1
+#define OS_FB_APP_EDIT 2
+#define OS_FB_APP_TASKS 3
+#define OS_FB_APP_VIEW 4
+#define OS_FB_APP_SETTINGS 5
+#define OS_FB_APP_P2P 6
+#define OS_FB_APP_PMRUN 7
+#define OS_FB_APP_CHAT 8
 #define OS_FB_APP_ROWS 22
 #define OS_FB_APP_COLS 78
 typedef struct {
@@ -1943,6 +1949,12 @@ typedef struct {
  * YYYYMMDDHHMMSSZ + NUL from a stable CMOS snapshot (two equal reads, each
  * started with UIP clear). Returns 0, OS_RTC_BAD_ARGUMENT or OS_RTC_UNSTABLE. */
 #define SYS_RTC_UTC 160
+/* UX4 shared desktop clipboard: ebx OS_CLIP_GET / OS_CLIP_SET, ecx buffer,
+ * edx length (set) or capacity (get); returns the byte count or < 0. */
+#define SYS_CLIPBOARD 161
+#define OS_CLIP_GET 0
+#define OS_CLIP_SET 1
+#define OS_CLIP_MAX 4096
 #define OS_RTC_BAD_ARGUMENT (-192)
 #define OS_RTC_UNSTABLE (-193)
 typedef struct {

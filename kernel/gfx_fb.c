@@ -1,6 +1,7 @@
 /* gfx_fb.c - Bochs/QEMU VBE linear framebuffer. Surface produit = fenetre QEMU.
  * La resolution suit la fenetre hote (COM2 WxH) ; sinon 1024x768 + zoom-to-fit.
  */
+#include "clipboard.h"
 #include "gfx_fb.h"
 #include "gfx_term.h"
 
@@ -691,7 +692,7 @@ static void term_sink(const uint16_t *cells, int cols, int rows, int cx, int cy,
  * keys (newlines become spaces: a paste never runs a command). */
 static uint16_t g_sel_cells[GFX_TERM_MAX_COLS * GFX_TERM_MAX_ROWS];
 static int g_sel_drag, g_sel_on, g_sel_a, g_sel_b;
-static char g_clip[512];
+static char g_clip[OS_CLIP_MAX + 1];   /* paste buffer, filled from clipboard.c */
 static int g_clip_n;
 
 static void sel_show(void) {
@@ -708,8 +709,9 @@ static void sel_show(void) {
 static void term_select(int x, int y, int left, int was, int right_press) {
     int col, row, in = gfx_term_cell_at(&g_term_l, x, y, &col, &row);
     int idx = row * g_term_l.cols + col;
-    if (right_press && g_clip_n > 0) {
+    if (right_press && clipboard_len() > 0) {
         int i;
+        g_clip_n = clipboard_get(g_clip, (int)sizeof(g_clip));
         for (i = 0; i < g_clip_n; i++) kbd_put_char(g_clip[i] == '\n' ? ' ' : g_clip[i]);
         print_string_serial("gfx term paste ");
         serial_uint((unsigned)g_clip_n);
@@ -736,6 +738,7 @@ static void term_select(int x, int y, int left, int was, int right_press) {
             int cols = 0, rows = 0;
             vga_console_frame_copy_n(g_term_cells, GFX_TERM_MAX_COLS * GFX_TERM_MAX_ROWS, &cols, &rows);
             g_clip_n = gfx_term_sel_text(g_term_cells, cols, rows, g_sel_a, g_sel_b, g_clip, (int)sizeof(g_clip));
+            (void)clipboard_set(g_clip, g_clip_n);
             print_string_serial("gfx term copy ");
             serial_uint((unsigned)g_clip_n);
             write_serial('\n');

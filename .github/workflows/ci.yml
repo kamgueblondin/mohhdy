@@ -341,6 +341,10 @@ jobs:
       - name: QEMU gRPC over guest TCP between two guests (Lot 6 US-067, about 1 min)
         run: make qemu-grpc-guests
 
+      # UX4: own job slot with spare time (collab job is near 10 min)
+      - name: QEMU desktop tool apps (task manager, settings, P2P, PM run, viewer, chat; about 3 min)
+        run: make qemu-gui-tools
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,0 +1,70 @@
+/* osui_tools.h - the "tool" apps of the desktop that reuse terminal
+ * features: task manager, image/text viewer, settings, P2P, PromptMessage
+ * run output and the GPT-2 chat. Each one is a window of the generic app
+ * slots (osui_gui.c) drawn through osui_app_view_t.
+ *
+ * No feature is reimplemented here: the content comes from the real shell
+ * commands (ps, mem, kill, service-status, date, p2p-*, pm-run, ai-model)
+ * run through the injected src->run (the shell captures what the command
+ * prints, see shell_app_run), from file bytes (src->read) and from the
+ * GPT-2 step syscalls (src->ai_step). Freestanding, host testable. */
+#ifndef OSUI_TOOLS_H
+#define OSUI_TOOLS_H
+#include "osui_app.h"
+
+#define OSUI_TOOL_LINES 128
+#define OSUI_TOOL_OUT 4096          /* captured command output per call */
+#define OSUI_TOOL_INPUT 72
+
+typedef struct {
+    /* runs one shell command (allow-listed, see osui_tool_cmd_allowed) and
+     * captures its output; returns the byte count or < 0 */
+    int (*run)(const char *cmd, char *out, int max);
+    /* reads a whole file; returns the byte count or < 0 */
+    int (*read)(const char *path, char *buf, int max);
+    /* one GPT-2 generation step: first=1 starts from prompt; returns the
+     * piece length, 0 at the end, < 0 error (OS_AI_CANCELLED on Esc) */
+    int (*ai_step)(const char *prompt, int first, char *piece, int max);
+    const char *(*ai_model)(void);
+    /* framebuffer size, 0 when unknown */
+    int (*screen)(int *w, int *h);
+} osui_tool_src_t;
+
+enum { OSUI_TOOL_NONE = 0, OSUI_TOOL_CLOSE = 1, OSUI_TOOL_EDIT = 2, OSUI_TOOL_CHANGED = 3 };
+
+typedef struct {
+    int kind, active;
+    char arg[64];                              /* viewer / pm-run file */
+    char lines[OSUI_TOOL_LINES][OSUI_APP_COLS];
+    unsigned char cls[OSUI_TOOL_LINES];        /* OSUI_APP_A_* of each line */
+    int n, top, sel;
+    int mode;                                  /* tasks: 0 processes, 1 services */
+    int armed_pid;                             /* tasks: kill confirmation */
+    char input[OSUI_TOOL_INPUT];
+    int ilen;
+    char status[OSUI_APP_COLS];
+    char log[96];                              /* serial log of the last action */
+    /* chat */
+    int gen;                                   /* 1 generating */
+    int steps, cur_len;
+    char prompt[OSUI_TOOL_INPUT];
+    int image;                                 /* viewer: 1 PGM/PPM preview */
+} osui_tool_t;
+
+const char *osui_tool_toolbar(int kind);
+const char *osui_tool_name(int kind);
+int osui_tool_cmd_allowed(const char *cmd);
+void osui_tool_open(osui_tool_t *t, int kind, const char *arg, const osui_tool_src_t *src);
+void osui_tool_refresh(osui_tool_t *t, const osui_tool_src_t *src);
+int osui_tool_tool(osui_tool_t *t, int b, const osui_tool_src_t *src);
+int osui_tool_click(osui_tool_t *t, int row, int col, int dbl, const osui_tool_src_t *src);
+int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src);
+/* chat: one generation step when generating; 1 when the view changed */
+int osui_tool_idle(osui_tool_t *t, const osui_tool_src_t *src);
+void osui_tool_render(const osui_tool_t *t, osui_app_view_t *v);
+/* first decimal number of a ps line (the PID), -1 none */
+int osui_tool_line_pid(const char *line);
+/* PGM/PPM (P2, P3, P5, P6) to an ASCII preview of cols x rows; returns
+ * the row count, < 0 when the bytes are not such an image */
+int osui_tool_image_ascii(const char *buf, int n, char out[][OSUI_APP_COLS], int cols, int rows);
+#endif

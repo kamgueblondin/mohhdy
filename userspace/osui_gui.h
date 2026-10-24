@@ -74,5 +74,17 @@ int osui_gui_files_open(const char *dir, char *out, int out_max);
 int osui_gui_edit_open(const char *file, char *out, int out_max);
 /* Kernel compositor event (line after OS_FB_EVT): focus, app clicks. */
 void osui_gui_event(const char *line, char *out, int out_max);
-int osui_gui_focus(void);           /* 0 files, 1 editor, -1 desktop */
+int osui_gui_focus(void);           /* focused app slot, -1 desktop */
+/* UX4 tool apps (osui_tools.c): "/tasks", "/view F", "/settings",
+ * "/peers", "/pmrun F", "/chat". run: allow-listed shell command with
+ * captured output; ai_step: one GPT-2 step; screen: framebuffer size. */
+void osui_gui_set_tool_ops(int (*run)(const char *, char *, int),
+                           int (*ai_step)(const char *, int, char *, int),
+                           const char *(*ai_model)(void), int (*screen)(int *, int *));
+int osui_gui_tool_open(int kind, const char *arg, char *out, int out_max);
+/* idle tick of the desktop loop: chat streaming; 1 when the view changed */
+int osui_gui_idle(char *out, int out_max);
+/* UX4 browser: resolve a link of page base to a local page path; < 0
+ * for a scheme (javascript:, http:), a query or a fragment */
+int osui_gui_web_resolve(const char *base, const char *href, char *dst, int max);
 #endif

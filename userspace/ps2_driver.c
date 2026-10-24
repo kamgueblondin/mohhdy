@@ -52,6 +52,13 @@ void main(void) {
         uint32_t n = 0U, reads = 0U;
         int seq = dev_op(OS_DEV_OP_PS2_WAIT, 50U, 0U, 0U);
         if (seq < 0) continue;
+        /* UX4: the kernel holds the live Shift/Caps state. When this task
+         * stalls (GPT-2 load or generation), Ring 0 drains the controller
+         * and may see a Shift make or break this decoder never gets: start
+         * every batch from the kernel state, or Shift stays inverted and
+         * typed text comes out as "?CentEr". */
+        rc = dev_op(OS_DEV_OP_PS2_MODS, 0U, 0U, 0U);
+        if (rc >= 0) ps2_decoder_seed(&dec, (uint32_t)rc);
         while (reads < 64U) {
             uint8_t status = inb(0x64);
             uint8_t byte;

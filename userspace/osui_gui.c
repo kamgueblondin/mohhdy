@@ -55,6 +55,30 @@ static int g_evt_on, g_evt_len;
 static char g_evt[96];
 static char g_app_buf[FSOPS_FILE_MAX + 1];
 static osui_app_view_t g_view;
+/* UX4: generic window slots. g_slot[i] is the app kind shown in window i
+ * (0: free); any app takes the first free slot, one window per app. */
+static int g_slot[OS_FB_APPS];
+
+static int slot_of(int kind) {
+    int i;
+    for (i = 0; i < OS_FB_APPS; i++) if (g_slot[i] == kind) return i;
+    return -1;
+}
+static int slot_take(int kind) {
+    int i = slot_of(kind);
+    if (i >= 0) return i;
+    for (i = 0; i < OS_FB_APPS; i++) if (!g_slot[i]) { g_slot[i] = kind; return i; }
+    return -1;
+}
+static void slot_drop(int kind) {
+    int i = slot_of(kind);
+    if (i < 0) return;
+    g_slot[i] = 0;
+    if (g_focus == i || g_focus < 0 || !g_slot[g_focus]) {
+        g_focus = -1;
+        for (i = 0; i < OS_FB_APPS; i++) if (g_slot[i]) { g_focus = i; break; }
+    }
+}
 
 static int slen(const char *s) {
     int n = 0;
@@ -185,6 +209,75 @@ int osui_gui_web_load(const char *file, char *status, int max) {
     return rc;
 }
 
+static void app_out(char *out, int out_max, const char *a, const char *b);
+static int evt_int(const char **p);
+
+/* UX4: browser history (local pages) and link navigation */
+#define WEB_HIST 8
+static char g_web_hist[WEB_HIST][40];
+static int g_web_hn, g_web_hi = -1;
+
+static int web_go(const char *file, int push, char *out, int out_max) {
+    char status[320];
+    int k;
+    if (osui_gui_web_load(file, status, (int)sizeof(status)) != 0) {
+        if (out) { scat(out, out_max, status); scat(out, out_max, "\n"); }
+        return -1;
+    }
+    scpy(g_web_file, (int)sizeof(g_web_file), file);
+    g_web_active = 1;
+    g_web_mobile = 0;
+    g_web_scroll = 0;
+    if (push) {
+        if (g_web_hi + 1 >= WEB_HIST) {
+            for (k = 0; k + 1 < WEB_HIST; k++) scpy(g_web_hist[k], 40, g_web_hist[k + 1]);
+            g_web_hi--;
+        }
+        g_web_hi++;
+        scpy(g_web_hist[g_web_hi], 40, file);
+        g_web_hn = g_web_hi + 1;           /* a new page drops the forward list */
+    }
+    if (out) { scat(out, out_max, status); scat(out, out_max, "\n"); }
+    return 0;
+}
+
+/* href relative to the current page; only local pages: a scheme
+ * (javascript:, http:, file:) or a fragment is refused */
+int osui_gui_web_resolve(const char *base, const char *href, char *dst, int max) {
+    char dir[FSOPS_PATH_MAX];
+    int i;
+    if (!href || !href[0] || href[0] == '#') return -1;
+    for (i = 0; href[i]; i++) if (href[i] == ':' || href[i] == '?' || href[i] == '#') return -1;
+    fsops_parent(base && base[0] ? base : "/web/index.html", dir, (int)sizeof(dir));
+    fsops_resolve(dir, href, dst, max);
+    return slen(dst) < 40 ? 0 : -1;
+}
+
+static void web_event(const char *p, char *out, int out_max) {
+    if (!g_web_active) return;
+    if (sncmp(p, "back", 4) == 0 || sncmp(p, "fwd", 3) == 0) {
+        int to = g_web_hi + (p[0] == 'b' ? -1 : 1);
+        if (to < 0 || to >= g_web_hn) { app_out(out, out_max, p[0] == 'b' ? "osui web back none" : "osui web fwd none", 0); return; }
+        if (web_go(g_web_hist[to], 0, out, out_max) == 0) g_web_hi = to;
+        app_out(out, out_max, p[0] == 'b' ? "osui web back file=" : "osui web fwd file=", g_web_file);
+        return;
+    }
+    if (sncmp(p, "click", 5) == 0) {
+        char href[64], dst[FSOPS_PATH_MAX];
+        int x, y;
+        p += 5;
+        x = evt_int(&p);
+        y = evt_int(&p);
+        if (we_link_at(&g_web, x, y, href, (int)sizeof(href)) <= 0) return;
+        if (osui_gui_web_resolve(g_web_file, href, dst, (int)sizeof(dst)) != 0) {
+            app_out(out, out_max, "osui web link refused href=", href);
+            return;
+        }
+        app_out(out, out_max, "osui web link href=", href);
+        (void)web_go(dst, 1, out, out_max);
+    }
+}
+
 static void web_open_line(const char *line, char *out, int out_max) {
     const char *f = line + 4;
     char status[320];
@@ -193,13 +286,10 @@ static void web_open_line(const char *line, char *out, int out_max) {
         if (out) scpy(out, out_max, "osui web error=usage web FILE\n");
         return;
     }
-    if (osui_gui_web_load(f, status, (int)sizeof(status)) == 0) {
-        scpy(g_web_file, (int)sizeof(g_web_file), f);
-        g_web_active = 1;
-        g_web_mobile = 0;
-        g_web_scroll = 0;
-    }
-    if (out) { scpy(out, out_max, status); scpy(out + slen(out), out_max - slen(out), "\n"); }
+    (void)status;
+    if (out && out_max > 0) out[0] = 0;
+    if (!g_web_active) { g_web_hi = -1; g_web_hn = 0; }   /* a fresh browser session */
+    (void)web_go(f, 1, out, out_max);
 }
 
 void osui_gui_set_mobile_op(osui_mobile_op_t fn) { g_mobile_op = fn; }
@@ -323,9 +413,10 @@ static void app_out(char *out, int out_max, const char *a, const char *b) {
 
 int osui_gui_files_open(const char *dir, char *out, int out_max) {
     if (!g_fs_io) { app_out(out, out_max, "osui files error=no_fs", 0); return -1; }
+    if (slot_of(OS_FB_APP_FILES) < 0 && slot_take(OS_FB_APP_FILES) < 0) { app_out(out, out_max, "osui app error=no_slot", 0); return -1; }
     if (!g_files.active) osui_files_open(&g_files, g_fs_io, dir && dir[0] ? dir : "/");
     else if (dir && dir[0]) (void)osui_files_cd(&g_files, dir);
-    g_focus = 0;
+    g_focus = slot_of(OS_FB_APP_FILES);
     app_out(out, out_max, "osui files open dir=", g_files.cwd);
     return 0;
 }
@@ -336,10 +427,11 @@ int osui_gui_edit_open(const char *file, char *out, int out_max) {
     if (!g_fs_io) { app_out(out, out_max, "osui edit error=no_fs", 0); return -1; }
     if (g_edit.active && g_edit.modified) {
         osui_ide_set_status(&g_edit, "non enregistre: enregistrez avant d'ouvrir un autre fichier");
-        g_focus = 1;
+        g_focus = slot_of(OS_FB_APP_EDIT);
         app_out(out, out_max, "osui edit busy unsaved=", g_edit.file);
         return -1;
     }
+    if (slot_of(OS_FB_APP_EDIT) < 0 && slot_take(OS_FB_APP_EDIT) < 0) { app_out(out, out_max, "osui app error=no_slot", 0); return -1; }
     fsops_resolve(g_files.active ? g_files.cwd : "/", file && file[0] ? file : "sans_titre.txt", path, (int)sizeof(path));
     if (slen(path) >= (int)sizeof(g_edit.file)) { app_out(out, out_max, "osui edit error=name_too_long", 0); return -1; }
     {
@@ -349,6 +441,7 @@ int osui_gui_edit_open(const char *file, char *out, int out_max) {
             if (n < 0) {
                 app_out(out, out_max, "osui edit error=", fsops_strerror(n));
                 if (g_files.active) scpy(g_files.status, (int)sizeof(g_files.status), fsops_strerror(n));
+                if (!g_edit.active) slot_drop(OS_FB_APP_EDIT);
                 return -1;
             }
             osui_ide_open_plain(&g_edit, path, g_app_buf, n);
@@ -359,8 +452,15 @@ int osui_gui_edit_open(const char *file, char *out, int out_max) {
             app_out(out, out_max, "osui edit open new file=", path);
         }
     }
-    g_focus = 1;
+    g_focus = slot_of(OS_FB_APP_EDIT);
     return 0;
+}
+
+int osui_gui_tool_open(int kind, const char *arg, char *out, int out_max);
+
+static int is_image(const char *p) {
+    int n = slen(p);
+    return n > 4 && p[n - 4] == '.' && p[n - 3] == 'p' && (p[n - 2] == 'g' || p[n - 2] == 'p' || p[n - 2] == 'n') && p[n - 1] == 'm';
 }
 
 static void edit_action(int act, char *out, int out_max) {
@@ -368,13 +468,21 @@ static void edit_action(int act, char *out, int out_max) {
     if (act == OSUI_IDE_QUIT) {
         app_out(out, out_max, "osui edit close file=", g_edit.file);
         g_edit.active = 0;
-        g_focus = g_files.active ? 0 : -1;
+        slot_drop(OS_FB_APP_EDIT);
         return;
     }
     if (act == OSUI_IDE_OPEN) {
         char p[FSOPS_PATH_MAX];
         scpy(p, (int)sizeof(p), g_edit.prompt_out);
         (void)osui_gui_edit_open(p, out, out_max);
+        return;
+    }
+    if (act == OSUI_IDE_RUN) {
+        /* ESC r: run the saved .pm file in the PromptMessage window */
+        char p[FSOPS_PATH_MAX];
+        if (g_edit.modified) { osui_ide_set_status(&g_edit, "enregistrez d'abord (ESC w), puis ESC r"); return; }
+        scpy(p, (int)sizeof(p), g_edit.file);
+        (void)osui_gui_tool_open(OS_FB_APP_PMRUN, p, out, out_max);
         return;
     }
     if (act != OSUI_IDE_SAVE && act != OSUI_IDE_SAVE_AS) return;
@@ -403,10 +511,15 @@ static void edit_action(int act, char *out, int out_max) {
 
 static void files_result(int r, const char *log_before, char *out, int out_max) {
     if (g_files.log[0] && scmp(g_files.log, log_before) != 0) app_out(out, out_max, g_files.log, 0);
-    if (r == OSUI_FILES_OPEN) (void)osui_gui_edit_open(g_files.open_path, out, out_max);
+    if (r == OSUI_FILES_OPEN) {
+        /* open with: PNM images in the viewer, everything else in the editor */
+        if (is_image(g_files.open_path)) (void)osui_gui_tool_open(OS_FB_APP_VIEW, g_files.open_path, out, out_max);
+        else (void)osui_gui_edit_open(g_files.open_path, out, out_max);
+    }
     else if (r == OSUI_FILES_CLOSE) {
         app_out(out, out_max, "osui files close", 0);
-        g_focus = g_edit.active ? 1 : -1;
+        g_files.active = 0;
+        slot_drop(OS_FB_APP_FILES);
     }
 }
 
@@ -418,45 +531,79 @@ static int evt_int(const char **p) {
     return neg ? -v : v;
 }
 
+static void files_event(const char *p, char *out, int out_max) {
+    static char before[160];
+    int r = OSUI_FILES_NONE;
+    scpy(before, (int)sizeof(before), g_files.log);
+    if (sncmp(p, "close", 5) == 0) r = OSUI_FILES_CLOSE;
+    else if (sncmp(p, "tool", 4) == 0) { p += 4; r = osui_files_tool(&g_files, osui_app_tool_hit(osui_files_toolbar, evt_int(&p))); }
+    else if (sncmp(p, "dclick", 6) == 0) { int rr, cc; p += 6; rr = evt_int(&p); cc = evt_int(&p); r = osui_files_click(&g_files, rr, cc, 1); }
+    else if (sncmp(p, "click", 5) == 0) { int rr, cc; p += 5; rr = evt_int(&p); cc = evt_int(&p); r = osui_files_click(&g_files, rr, cc, 0); }
+    files_result(r, before, out, out_max);
+}
+
+static void edit_event(const char *p, char *out, int out_max) {
+    int act = OSUI_IDE_NONE;
+    if (sncmp(p, "close", 5) == 0) {
+        act = g_edit.modified && !g_edit.quit_armed ? OSUI_IDE_NONE : OSUI_IDE_QUIT;
+        if (act == OSUI_IDE_NONE) {
+            g_edit.quit_armed = 1;
+            osui_ide_set_status(&g_edit, "non enregistre: Fermer encore abandonne, ESC w enregistre");
+            app_out(out, out_max, "osui edit close refused unsaved=", g_edit.file);
+        }
+    } else if (sncmp(p, "tool", 4) == 0) { p += 4; act = osui_ide_tool(&g_edit, osui_app_tool_hit(osui_ide_toolbar, evt_int(&p))); }
+    else if (sncmp(p, "drag", 4) == 0) { int a, b, c, d; p += 4; a = evt_int(&p); b = evt_int(&p); c = evt_int(&p); d = evt_int(&p); osui_ide_drag(&g_edit, a, b, c, d); }
+    else if (sncmp(p, "click", 5) == 0 || sncmp(p, "dclick", 6) == 0) { int rr, cc; p += (*p == 'd') ? 6 : 5; rr = evt_int(&p); cc = evt_int(&p); osui_ide_click(&g_edit, rr, cc); }
+    edit_action(act, out, out_max);
+}
+
+static void files_key(int key, char *out, int out_max) {
+    static char before[160];
+    if (key == 'v' && g_files.mode == OSUI_FILES_BROWSE) {
+        /* "open with" the viewer (text or image) */
+        char p[FSOPS_PATH_MAX];
+        if (osui_files_selected(&g_files, p, (int)sizeof(p))) (void)osui_gui_tool_open(OS_FB_APP_VIEW, p, out, out_max);
+        return;
+    }
+    if (key == 'y' && g_files.mode == OSUI_FILES_BROWSE) {
+        /* copy the selected path to the shared clipboard (paste it in the
+         * terminal with the right button, in the editor with ESC v) */
+        char p[FSOPS_PATH_MAX];
+        if (osui_files_selected(&g_files, p, (int)sizeof(p))) {
+            osui_ide_set_clipboard(p, slen(p));
+            scpy(g_files.status, (int)sizeof(g_files.status), "chemin copie dans le presse-papiers");
+            app_out(out, out_max, "osui files clip ", p);
+        }
+        return;
+    }
+    scpy(before, (int)sizeof(before), g_files.log);
+    files_result(osui_files_key(&g_files, key), before, out, out_max);
+}
+
+static void edit_key(int key, char *out, int out_max) { edit_action(osui_ide_key(&g_edit, key), out, out_max); }
+
+#include "osui_gui_apps.inc"
+
 void osui_gui_event(const char *line, char *out, int out_max) {
     const char *p = line;
-    static char before[160];
     if (sncmp(p, "focus ", 6) == 0) {
         p += 6;
         if (*p == 'd') g_focus = -1;
-        else if (*p == '0' && g_files.active) g_focus = 0;
-        else if (*p == '1' && g_edit.active) g_focus = 1;
+        else {
+            int k = evt_int(&p);
+            if (k >= 0 && k < OS_FB_APPS && g_slot[k]) g_focus = k;
+        }
         return;
     }
+    if (sncmp(p, "web ", 4) == 0) { web_event(p + 4, out, out_max); return; }
     if (sncmp(p, "app ", 4) != 0) return;
     p += 4;
     {
-        int slot = evt_int(&p);
+        int slot = evt_int(&p), kind;
         while (*p == ' ') p++;
-        scpy(before, (int)sizeof(before), g_files.log);
-        if (slot == 0 && g_files.active) {
-            int r = OSUI_FILES_NONE;
-            g_focus = 0;
-            if (sncmp(p, "close", 5) == 0) { g_files.active = 0; r = OSUI_FILES_CLOSE; }
-            else if (sncmp(p, "tool", 4) == 0) { p += 4; r = osui_files_tool(&g_files, osui_app_tool_hit(osui_files_toolbar, evt_int(&p))); }
-            else if (sncmp(p, "dclick", 6) == 0) { int rr, cc; p += 6; rr = evt_int(&p); cc = evt_int(&p); r = osui_files_click(&g_files, rr, cc, 1); }
-            else if (sncmp(p, "click", 5) == 0) { int rr, cc; p += 5; rr = evt_int(&p); cc = evt_int(&p); r = osui_files_click(&g_files, rr, cc, 0); }
-            files_result(r, before, out, out_max);
-        } else if (slot == 1 && g_edit.active) {
-            int act = OSUI_IDE_NONE;
-            g_focus = 1;
-            if (sncmp(p, "close", 5) == 0) {
-                act = g_edit.modified && !g_edit.quit_armed ? OSUI_IDE_NONE : OSUI_IDE_QUIT;
-                if (act == OSUI_IDE_NONE) {
-                    g_edit.quit_armed = 1;
-                    osui_ide_set_status(&g_edit, "non enregistre: Fermer encore abandonne, ESC w enregistre");
-                    app_out(out, out_max, "osui edit close refused unsaved=", g_edit.file);
-                }
-            } else if (sncmp(p, "tool", 4) == 0) { p += 4; act = osui_ide_tool(&g_edit, osui_app_tool_hit(osui_ide_toolbar, evt_int(&p))); }
-            else if (sncmp(p, "drag", 4) == 0) { int a, b, c, d; p += 4; a = evt_int(&p); b = evt_int(&p); c = evt_int(&p); d = evt_int(&p); osui_ide_drag(&g_edit, a, b, c, d); }
-            else if (sncmp(p, "click", 5) == 0 || sncmp(p, "dclick", 6) == 0) { int rr, cc; p += (*p == 'd') ? 6 : 5; rr = evt_int(&p); cc = evt_int(&p); osui_ide_click(&g_edit, rr, cc); }
-            edit_action(act, out, out_max);
-        }
+        if (slot < 0 || slot >= OS_FB_APPS || !(kind = g_slot[slot])) return;
+        g_focus = slot;
+        app_event(kind, p, out, out_max);
     }
 }
 
@@ -952,8 +1099,8 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         if (!g_web_mobile) scene->input[0] = 0;
     }
     scene->app_focus = (uint8_t)(g_focus < 0 ? 0xFF : g_focus);
-    if (g_files.active) { osui_files_render(&g_files, &g_view); app_to_scene(&g_view, &scene->app[0], OS_FB_APP_FILES); }
-    if (g_edit.active) { osui_ide_render_app(&g_edit, &g_view); app_to_scene(&g_view, &scene->app[1], OS_FB_APP_EDIT); }
+    for (i = 0; i < OS_FB_APPS; i++)
+        if (g_slot[i] && app_render(g_slot[i], &g_view)) app_to_scene(&g_view, &scene->app[i], g_slot[i]);
     if (g_ide.active) {
         /* US-050: the editor takes the whole desktop (OS_FB_PANE_IDE). */
         scene->pane = OS_FB_PANE_IDE;
@@ -1027,14 +1174,8 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         } else if (g_evt_len < (int)sizeof(g_evt) - 1) g_evt[g_evt_len++] = (char)key;
         return 0;
     }
-    if (g_focus == 0 && g_files.active && !g_ide.active && !g_web_active) {
-        static char before[160];
-        scpy(before, (int)sizeof(before), g_files.log);
-        files_result(osui_files_key(&g_files, key), before, out, out_max);
-        return 0;
-    }
-    if (g_focus == 1 && g_edit.active && !g_ide.active && !g_web_active) {
-        edit_action(osui_ide_key(&g_edit, key), out, out_max);
+    if (g_focus >= 0 && g_focus < OS_FB_APPS && g_slot[g_focus] && !g_ide.active && !g_web_active) {
+        app_key(g_slot[g_focus], key, out, out_max);
         return 0;
     }
     if (g_web_active && !(g_web_mobile && key != OS_VGA_KEY_ESC && key != OS_VGA_KEY_UP && key != OS_VGA_KEY_DOWN)) {
@@ -1116,6 +1257,18 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         }
         if (g_input[0] == 'w' && g_input[1] == 'e' && g_input[2] == 'b' && (g_input[3] == ' ' || g_input[3] == 0)) {
             web_open_line(g_input, out, out_max);
+            g_ilen = 0;
+            g_input[0] = 0;
+            return 0;
+        }
+        if (scmp(g_input, "/browse") == 0) {
+            /* UX4: the local site home, links clickable, < > history */
+            web_open_line("web /web/index.html", out, out_max);
+            g_ilen = 0;
+            g_input[0] = 0;
+            return 0;
+        }
+        if (tool_slash(g_input, out, out_max)) {
             g_ilen = 0;
             g_input[0] = 0;
             return 0;
@@ -1234,6 +1387,12 @@ void osui_gui_run(void) {
         sys_vga_blit_scene(&scene);
         if (key != 0 || (g_idle++ % 8) == 0) emit_snap();
         if (stop) break;
+        if (key == 0 && osui_gui_idle(out, OSUI_OUT_MAX)) {
+            if (out[0]) serial_puts(out);
+            osui_gui_fill_scene(&scene);
+            sys_vga_blit_scene(&scene);
+            continue;
+        }
         if (key == 0) yield_gui();
     }
     osui_gui_closed();

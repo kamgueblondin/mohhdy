@@ -150,6 +150,28 @@ static void test_click_places_caret(void) {
     TEST_ASSERT_EQUAL(0, E.col);
 }
 
+/* UX4: the shared desktop clipboard (kernel): copy pushes, paste pulls
+ * what the terminal or the explorer copied in between. */
+static char g_shared[4097];
+static int g_shared_n, g_puts;
+static int fake_put(const char *t, int n) { memcpy(g_shared, t, (size_t)n); g_shared[n] = 0; g_shared_n = n; g_puts++; return n; }
+static int fake_take(char *o, int max) { int n = g_shared_n < max - 1 ? g_shared_n : max - 1; memcpy(o, g_shared, (size_t)n); o[n] = 0; return n; }
+static void test_shared_clipboard_hooks(void) {
+    osui_ide_set_clip_ops(fake_put, fake_take);
+    osui_ide_open_plain(&E, "/t", "un deux\n", 8);
+    cmd('m');
+    osui_ide_key(&E, 29); osui_ide_key(&E, 29);
+    cmd('c');
+    TEST_ASSERT_EQUAL(1, g_puts);
+    TEST_ASSERT_EQUAL_STRING("un", g_shared);
+    /* the terminal selection replaced it: paste brings the new text */
+    strcpy(g_shared, "/home/notes.txt"); g_shared_n = 15;
+    osui_ide_click(&E, 0, 5 + 7);                  /* caret at the end, no selection */
+    cmd('v');
+    TEST_ASSERT_EQUAL_STRING("un deux/home/notes.txt\n", text());
+    osui_ide_set_clip_ops(0, 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_open_edit_save_text);
@@ -159,6 +181,7 @@ int main(void) {
     RUN_TEST(test_close_prompt_on_unsaved);
     RUN_TEST(test_truncated_file_not_saved_over);
     RUN_TEST(test_click_places_caret);
+    RUN_TEST(test_shared_clipboard_hooks);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
