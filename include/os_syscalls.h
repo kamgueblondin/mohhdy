@@ -403,6 +403,9 @@ typedef struct {
 #define OS_VGA_COLS 80
 #define OS_VGA_ROWS 25
 #define OS_VGA_KEY_ESC 27
+/* Injected by the VBE terminal window close/minimize button: the console
+ * line input turns it into the line "gui" (back to the desktop). */
+#define OS_TERM_KEY_CLOSE 0x11
 #define OS_VGA_KEY_LEFT 28
 #define OS_VGA_KEY_RIGHT 29
 #define OS_VGA_KEY_UP 30

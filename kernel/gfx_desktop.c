@@ -112,6 +112,7 @@ void gfx_desktop_set_mouse(int x, int y, uint8_t buttons) {
     if (vga_desktop_active() && !left_prev && left_now) {
         gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
     }
+    if (gfx_fb_term_active()) gfx_fb_term_mouse(g_mouse_x, g_mouse_y, buttons, g_prev_buttons);
     g_prev_buttons = buttons;
 
     gfx_fb_update_cursor();
@@ -141,6 +142,7 @@ void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons) {
     if (vga_desktop_active() && !left_prev && left_now) {
         gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
     }
+    if (gfx_fb_term_active()) gfx_fb_term_mouse(g_mouse_x, g_mouse_y, buttons, g_prev_buttons);
     g_prev_buttons = buttons;
 
     gfx_fb_update_cursor();
@@ -775,7 +777,7 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
         draw_text(fb, w, h, x + rw - 8 * ln - 12, y + 14, lab, RGB(243, 230, 176));
     }
     fill_rect_a(fb, w, h, x + 14, y + 46, rw - 28, 44, RGB(42, 36, 16), 230);
-    draw_text(fb, w, h, x + 20, y + 50, "Surface de commande du SE Multiboot.", RGB(243, 230, 176));
+    draw_text_n(fb, w, h, x + 20, y + 50, "Surface de commande du SE Multiboot.", (rw - 40) / 8, RGB(243, 230, 176));
     llm_text(lab, (int)sizeof(lab), "llm=", sc, "  pas un moteur de production.");
     draw_text_n(fb, w, h, x + 20, y + 62, lab, (rw - 40) / 8, RGB(243, 230, 176));
     log_y = y + 98;
@@ -784,9 +786,9 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     if (n > OS_FB_MSG_MAX) n = OS_FB_MSG_MAX;
     if (n <= 0) {
         llm_text(lab, (int)sizeof(lab), "os . llm=", sc, "");
-        draw_text(fb, w, h, x + 20, log_y + 8, lab, RGB(154, 168, 181));
-        draw_text(fb, w, h, x + 20, log_y + 22, "Mohhdy OS - SE Multiboot dirige par prompts.", RGB(201, 232, 223));
-        draw_text(fb, w, h, x + 20, log_y + 34, "us031_complete=false  phase3_complete=false", RGB(201, 232, 223));
+        draw_text_n(fb, w, h, x + 20, log_y + 8, lab, (rw - 40) / 8, RGB(154, 168, 181));
+        draw_text_n(fb, w, h, x + 20, log_y + 22, "Mohhdy OS - SE Multiboot dirige par prompts.", (rw - 40) / 8, RGB(201, 232, 223));
+        draw_text_n(fb, w, h, x + 20, log_y + 34, "us031_complete=false  phase3_complete=false", (rw - 40) / 8, RGB(201, 232, 223));
     } else {
         for (i = 0; i < n; i++) {
             msg = sc->messages[i];
@@ -796,7 +798,7 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     }
     fill_rect(fb, w, h, x + 14, y + rh - 70, rw - 28, 28, RGB(16, 25, 32));
     if (sc && sc->input[0]) draw_text_n(fb, w, h, x + 20, y + rh - 62, input_tail(sc->input, (rw - 48) / 8), (rw - 48) / 8, RGB(232, 238, 244));
-    else draw_text(fb, w, h, x + 20, y + rh - 62, "Prompt ou /help, /browser, /shell ...", RGB(154, 168, 181));
+    else draw_text_n(fb, w, h, x + 20, y + rh - 62, "Prompt ou /help, /browser, /shell ...", (rw - 40) / 8, RGB(154, 168, 181));
     round_rect(fb, w, h, x + 14, y + rh - 34, 88, 22, 8, RGB(61, 154, 138));
     draw_text(fb, w, h, x + 26, y + rh - 28, "Envoyer", RGB(15, 20, 25));
     draw_text(fb, w, h, x + 110, y + rh - 28, sc && sc->session[0] ? sc->session : "s0001", RGB(154, 168, 181));
@@ -884,6 +886,12 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
 
     pane = sc->pane;
     if (pane != OS_FB_PANE_NONE) {
+        /* A pane window covers the Scene IA: it is not drawn and its
+         * pills are not clickable (they used to show through the pane). */
+        out->scene_ia.box.w = out->scene_ia.box.h = 0;
+        for (i = 0; i < 3; i++) out->scene_ia.pills[i].w = out->scene_ia.pills[i].h = 0;
+    }
+    if (pane != OS_FB_PANE_NONE) {
         int wx = 36, wy = bar_h + 28;
         int ww = clampi(w - (w >= 780 ? 420 : 48), 240, w - 48);
         int wh = clampi(h - 220, 160, h - bar_h - 80);
@@ -918,11 +926,19 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
             chat_x = (int)sc->chat_x * w / 80;
             chat_y = (int)sc->chat_y * h / 25;
         }
+        /* Keep the desktop icon column (w - 96) and the dock free: the
+         * floating chat used to cover Statut/Fichiers and the dock. */
+        if (w >= 780 && h >= 520) {
+            int room = (w - 104) - pane_right;
+            if (room < chat_w && room >= 220) chat_w = room;
+            max_x = w - 104 - chat_w;
+        }
         if (max_x < 8) max_x = 8;
         if (pane_right > max_x) pane_right = max_x;
         if (chat_x < pane_right) chat_x = pane_right;
         chat_x = clampi(chat_x, pane_right, max_x);
-        chat_y = clampi(chat_y, bar_h + 8, h - chat_h - 8);
+        if (chat_h > h - 56 - bar_h - 16) chat_h = h - 56 - bar_h - 16;
+        chat_y = clampi(chat_y, bar_h + 8, h - 56 - chat_h);
     } else {
         chat_x = (w - chat_w) / 2;
         chat_y = bar_h + (h / 14);
@@ -985,6 +1001,7 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     int dock_w, dock_x, dock_y, i;
     uint8_t pane;
     const char *ptitle;
+    gfx_desktop_layout_t lay;
     const char *menus[7] = { "Chat", "Browser-OS", "Shell", "Admin", "Support", "Statut", "FS" };
     struct {
         uint32_t c0, c1;
@@ -1078,13 +1095,13 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         }
     }
 
-    scene_w = clampi(w / 2, 200, w - 40);
-    if (scene_w > 640) scene_w = 640;
-    scene_h = clampi(h / 5, 90, 150);
-    scene_x = (w - scene_w) / 2 - (w >= 780 ? 20 : 0);
-    if (scene_x < 8) scene_x = 8;
-    scene_y = h - scene_h - 64;
-    if (scene_y < bar_h + 40) scene_y = bar_h + 40;
+    /* one layout for drawing and for the click hit test */
+    gfx_desktop_get_layout(sc, w, h, &lay);
+    scene_x = lay.scene_ia.box.x;
+    scene_y = lay.scene_ia.box.y;
+    scene_w = lay.scene_ia.box.w;
+    scene_h = lay.scene_ia.box.h;
+    if (scene_w > 0) {
     round_rect_a(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(11, 16, 20), 150);
     stroke_round(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(61, 154, 138), 1);
     draw_text(fb, w, h, scene_x + 16, scene_y + 12, "Scene IA", RGB(232, 238, 244));
@@ -1097,6 +1114,7 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         draw_text(fb, w, h, scene_x + 16, scene_y + 28, lab, RGB(154, 168, 181));
     }
     draw_stage_body(fb, w, h, scene_x + 12, scene_y + 48, scene_w - 24, scene_h - 60, sc);
+    }
 
     pane = sc->pane;
     if (pane == OS_FB_PANE_IDE) {
@@ -1109,9 +1127,9 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     }
     ptitle = pane_title(pane);
     if (ptitle) {
-        int wx = 36, wy = bar_h + 28;
-        int ww = clampi(w - (w >= 780 ? 420 : 48), 240, w - 48);
-        int wh = clampi(h - 220, 160, h - bar_h - 80);
+        int wx = lay.pane_win.box.x, wy = lay.pane_win.box.y;
+        int ww = lay.pane_win.box.w;
+        int wh = lay.pane_win.box.h;
         const char *body = "Cerveau = osui_runtime.c. Pas Chromium.";
         if (pane == OS_FB_PANE_BROWSER) body = "Browser-OS : FS-as-web, onglets, storage par onglet, DOM tree, JS eval";
         else if (pane == OS_FB_PANE_FS) body = "Inspection VFS Sandboxee (FS-as-web) : initrd/, overlay/, fat16/, fat32/";
@@ -1126,31 +1144,10 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
             draw_window(fb, w, h, wx, wy, ww, wh, ptitle, body, sc);
     }
 
-    chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(w / 3, 220, 360) : clampi(w / 2, 240, 640);
-    if (chat_w > w - 24) chat_w = w - 24;
-    chat_h = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(h / 2, 180, 400) : clampi((h * 5) / 12, 160, 360);
-    if (chat_h > h - bar_h - 56) chat_h = h - bar_h - 56;
-    if (chat_h < 120) chat_h = 120;
-    if (sc->chat_mode == OS_FB_CHAT_FLOAT) {
-        int pane_w = ptitle ? clampi(w - (w >= 780 ? 420 : 48), 240, w - 48) : 0;
-        int pane_right = ptitle ? (36 + pane_w + 12) : 8;
-        int max_x = w - chat_w - 8;
-        chat_x = w - chat_w - 16;
-        chat_y = h - chat_h - 70;
-        if (sc->chat_x || sc->chat_y) {
-            chat_x = (int)sc->chat_x * w / 80;
-            chat_y = (int)sc->chat_y * h / 25;
-        }
-        if (max_x < 8) max_x = 8;
-        if (pane_right > max_x) pane_right = max_x;
-        if (chat_x < pane_right) chat_x = pane_right;
-        chat_x = clampi(chat_x, pane_right, max_x);
-        chat_y = clampi(chat_y, bar_h + 8, h - chat_h - 8);
-    } else {
-        chat_x = (w - chat_w) / 2;
-        chat_y = bar_h + (h / 14);
-        if (chat_y + chat_h > h - 52) chat_y = bar_h + 8;
-    }
+    chat_x = lay.chat_win.box.x;
+    chat_y = lay.chat_win.box.y;
+    chat_w = lay.chat_win.box.w;
+    chat_h = lay.chat_win.box.h;
     draw_chat(fb, w, h, chat_x, chat_y, chat_w, chat_h, sc);
 
     dock_w = 7 * 44 + 16;

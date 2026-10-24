@@ -10,6 +10,8 @@ void gfx_fb_leave(void);
 /* Show the text console in a VBE window (desktop must be live). */
 int gfx_fb_term_enter(void);
 int gfx_fb_term_active(void);
+/* Mouse over the terminal window: title bar buttons and drag. */
+void gfx_fb_term_mouse(int x, int y, uint8_t buttons, uint8_t prev);
 int gfx_fb_active(void);
 int gfx_fb_width(void);
 int gfx_fb_height(void);
