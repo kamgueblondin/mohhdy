@@ -12,6 +12,8 @@ USB tablet:
   * /pmrun runs a PromptMessage file written in the shell (pm-run);
   * /view shows a text file; five windows are open at once and the
     screen shows them (pixels of each window frame);
+  * /browse renders /web/index.html in the web pane; its back button is
+    a kernel event handled by Ring 3 (link clicks: unit tests);
   * /chat opens the chat window (the GPT-2 reply itself is checked by the
     run-gpt2 screenshots: this job has no GGUF model on its disk).
 """
@@ -125,12 +127,20 @@ def main():
             desktop_focus(qmp)
             out = slash(monitor, proc, "/chat", "osui tool open app=Chat IA")
             g.say("chat window open")
-            time.sleep(1.0)
-            _, _, rgb = g.screendump_rgb(monitor, "qemu-gui-tools.ppm")
-            n = count(rgb, 0, FRAME)
-            if n < 3000:
-                raise RuntimeError("app window bodies not on screen (%d px)" % n)
-            g.say("five tool windows on screen at once (window body %d px)" % n)
+            n_tools = count(g.screendump_rgb(monitor, "qemu-gui-tools.ppm")[2], 0, FRAME)
+            if n_tools < 3000:
+                raise RuntimeError("app window bodies not on screen (%d px)" % n_tools)
+            g.say("five tool windows on screen at once (window body %d px)" % n_tools)
+            desktop_focus(qmp)
+            # browser: local site home through the guest web engine, then the
+            # title bar back button reaches Ring 3 as a "web back" event
+            slash(monitor, proc, "/browse", "osui web render file=/web/index.html")
+            g.say("/browse renders /web/index.html")
+            start = len(g.log_text())
+            bar_h = max(28, min(40, 768 // 22))
+            g.click_tablet(qmp, 1024 - 16 - 2 * 34 + 10, bar_h + 20, 1024, 768)
+            g.wait_for(proc, "osui web back none", g.CMD_TIMEOUT, start)
+            g.say("browser back button -> osui web back none (first page)")
         g.say("QEMU GUI tool apps (task manager, settings, P2P, PM run, viewer, chat) contract passed.")
         return 0
     finally:
