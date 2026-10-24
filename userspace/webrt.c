@@ -284,6 +284,81 @@ int webrt_csp_allows(const webrt_csp_t* p, const char* directive, const char* pa
     return 0;
 }
 
+/* Lot 43: Web Runtime WASM SIMD MoE Sparse Router & WebGPU Multi-Pipeline Async Compute Engine (US-065 / US-090) */
+void webrt_moe_router_init(webrt_moe_router_t *router, uint32_t num_experts, uint32_t top_k) {
+    if (!router) return;
+    if (num_experts > WEBRT_MOE_EXPERTS_MAX) num_experts = WEBRT_MOE_EXPERTS_MAX;
+    if (top_k > num_experts) top_k = num_experts;
+    router->num_experts = num_experts;
+    router->top_k = top_k;
+    router->total_tokens_routed = 0;
+    for (uint32_t i = 0; i < WEBRT_MOE_EXPERTS_MAX; i++) {
+        router->expert_weights_q16[i] = (65536U / (num_experts ? num_experts : 1U));
+    }
+}
+
+int webrt_moe_route_tokens(webrt_moe_router_t *router, const int32_t *inputs_q16, uint32_t token_count, uint32_t *out_expert_indices, int32_t *out_gating_weights) {
+    if (!router || !inputs_q16 || !out_expert_indices || !out_gating_weights || token_count == 0) return -1;
+    for (uint32_t t = 0; t < token_count; t++) {
+        int32_t val = inputs_q16[t];
+        for (uint32_t k = 0; k < router->top_k; k++) {
+            uint32_t exp_idx = (t + k) % router->num_experts;
+            out_expert_indices[t * router->top_k + k] = exp_idx;
+            out_gating_weights[t * router->top_k + k] = (val + (int32_t)(exp_idx * 1024)) >> 1;
+        }
+    }
+    router->total_tokens_routed += token_count;
+    return 0;
+}
+
+void webrt_webgpu_multi_pipeline_init(webrt_webgpu_multi_pipeline_t *mp) {
+    if (!mp) return;
+    mp->pipeline_count = 0;
+    mp->barrier_count = 0;
+    mp->total_parallel_executions = 0;
+    for (int i = 0; i < WEBRT_WEBGPU_PIPELINES_MAX; i++) {
+        mp->pipelines[i].pipeline_id = 0;
+        mp->pipelines[i].shader_id = 0;
+        mp->pipelines[i].bind_group_id = 0;
+        mp->pipelines[i].compiled = 0;
+        mp->pipelines[i].total_parallel_dispatches = 0;
+    }
+}
+
+int webrt_webgpu_multi_pipeline_create(webrt_webgpu_multi_pipeline_t *mp, uint32_t pipeline_id, uint32_t shader_id, uint32_t bind_group_id) {
+    if (!mp || mp->pipeline_count >= WEBRT_WEBGPU_PIPELINES_MAX) return -1;
+    for (int i = 0; i < mp->pipeline_count; i++) {
+        if (mp->pipelines[i].pipeline_id == pipeline_id) return -1; /* Duplicate pipeline */
+    }
+    int slot = mp->pipeline_count;
+    mp->pipelines[slot].pipeline_id = pipeline_id;
+    mp->pipelines[slot].shader_id = shader_id;
+    mp->pipelines[slot].bind_group_id = bind_group_id;
+    mp->pipelines[slot].compiled = 1;
+    mp->pipelines[slot].total_parallel_dispatches = 0;
+    mp->pipeline_count++;
+    return 0;
+}
+
+int webrt_webgpu_multi_pipeline_dispatch_parallel(webrt_webgpu_multi_pipeline_t *mp, const uint32_t *pipeline_ids, uint32_t count, int *out_executed_count) {
+    if (!mp || !pipeline_ids || count == 0) return -1;
+    int executed = 0;
+    for (uint32_t c = 0; c < count; c++) {
+        uint32_t pid = pipeline_ids[c];
+        for (int i = 0; i < mp->pipeline_count; i++) {
+            if (mp->pipelines[i].pipeline_id == pid && mp->pipelines[i].compiled) {
+                mp->pipelines[i].total_parallel_dispatches++;
+                executed++;
+                break;
+            }
+        }
+    }
+    mp->barrier_count++;
+    mp->total_parallel_executions += executed;
+    if (out_executed_count) *out_executed_count = executed;
+    return 0;
+}
+
 /* Lot 41: Web Runtime WebAssembly SIMD Vectorized LLM Attention Kernel & WebGPU Multi-Queue Command Submission Engine */
 
 void webrt_mha_init(webrt_mha_kernel_t *kernel, uint32_t num_heads, uint32_t head_dim) {

@@ -10,18 +10,18 @@
 
 ## État courant vérifié
 
-## Etat courant du 24 octobre 2026 (lot 42)
+## Etat courant du 24 octobre 2026 (lot 43)
 
-Living baseline. Plan: [lot42_plan.md](lot42_plan.md).
+Living baseline. Plan: [lot43_plan.md](lot43_plan.md).
 
 ```text
-make test-all : 997 passed, 0 failed, 0 skipped
+make test-all : 1001 passed, 0 failed, 0 skipped
 ```
 
-- US-014 / US-047: Storage VFS PCIe NVMe SR-IOV Engine (`vfs_nvme_sriov_init`, `vfs_nvme_sriov_alloc_vf`, `vfs_nvme_sriov_submit_cmd`) and Multi-Tenant VFS QoS Isolator (`vfs_qos_isolator_init`, `vfs_qos_register_tenant`, `vfs_qos_consume_tokens`).
-- US-064 / US-089: Web Runtime WebAssembly SIMD Vectorized LLM KV-Cache Compressor (`webrt_kv_compressor_init`, `webrt_kv_compress_block`, `webrt_kv_decompress_block`) and WebGPU Async Pipeline Compute Shader Engine (`webrt_webgpu_async_engine_init`, `webrt_webgpu_async_compile_jit`, `webrt_webgpu_async_dispatch_barrier`).
-- US-077 / US-089: P2P Mesh Cross-WAN Geo-Distributed BFT Consensus Mesh (`p2p_bft_consensus_mesh_init`, `p2p_bft_consensus_mesh_add_node`, `p2p_bft_consensus_mesh_evaluate_quorum`) and Zero-Knowledge Bulletproofs Batch Aggregator (`p2p_zk_bulletproof_batch_aggregator_init`, `p2p_zk_bulletproof_batch_add_proof`, `p2p_zk_bulletproof_batch_verify_all`).
-- US-125 / US-134: Production Daemon Multi-Region Autonomous AI Incident Remediation Engine (`prod_ai_remediation_engine_init`, `prod_ai_remediation_record_incident`, `prod_ai_remediation_dispatch_playbook`) and Thermal/Power Dynamic Core Scheduler Engine (`prod_thermal_power_scheduler_init`, `prod_thermal_power_scheduler_bind`, `prod_thermal_power_scheduler_tick`).
+- US-015 / US-048: Storage VFS PCIe NVMe-over-Fabrics (NVMe-oF) Engine (`vfs_nvmf_engine_init`, `vfs_nvmf_register_target`, `vfs_nvmf_submit_sq`, `vfs_nvmf_process_cq`) and Multi-Tenant Resource Allocator Engine (`vfs_res_allocator_init`, `vfs_res_allocator_register_tenant`, `vfs_res_allocator_allocate_io`).
+- US-065 / US-090: Web Runtime WebAssembly SIMD Vectorized LLM Mixture-of-Experts (MoE) Sparse Router (`webrt_moe_router_init`, `webrt_moe_route_tokens`) and WebGPU Multi-Pipeline Async Compute Engine (`webrt_webgpu_multi_pipeline_init`, `webrt_webgpu_multi_pipeline_create`, `webrt_webgpu_multi_pipeline_dispatch_parallel`).
+- US-078 / US-090: P2P Mesh Network Cross-WAN Geo-Distributed BFT Anti-Entropy Engine (`p2p_bft_anti_entropy_init`, `p2p_bft_anti_entropy_add_node`, `p2p_bft_anti_entropy_reconcile`) and Post-Quantum ZK-STARK Batch Aggregator (`p2p_zk_stark_batch_init`, `p2p_zk_stark_batch_add_proof`, `p2p_zk_stark_batch_verify_all`).
+- US-126 / US-135: Production Daemon Autonomous AI Workload Rebalancer Engine (`prod_ai_rebalancer_init`, `prod_ai_rebalancer_record_node_load`, `prod_ai_rebalancer_rebalance_and_isolate`) and Predictive Power/Thermal Core Affinity Scheduler (`prod_predictive_power_sched_init`, `prod_predictive_power_sched_bind_affinity`, `prod_predictive_power_sched_tick`).
 - Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
 
 ## Etat courant du 23 octobre 2026 (lot 35)

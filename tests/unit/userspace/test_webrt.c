@@ -859,6 +859,33 @@ static void test_lot42_wasm_simd_kv_compressor_and_webgpu_async(void) {
     TEST_ASSERT_EQUAL(1, async_eng.memory_barriers_passed);
 }
 
+static void test_lot43_wasm_simd_moe_router_and_webgpu_multi_pipeline(void) {
+    webrt_moe_router_t router;
+    webrt_moe_router_init(&router, 4, 2);
+    TEST_ASSERT_EQUAL(4, router.num_experts);
+    TEST_ASSERT_EQUAL(2, router.top_k);
+
+    int32_t inputs_q16[4] = {1000 << 16, 2000 << 16, 3000 << 16, 4000 << 16};
+    uint32_t exp_indices[8];
+    int32_t weights[8];
+    TEST_ASSERT_EQUAL(0, webrt_moe_route_tokens(&router, inputs_q16, 4, exp_indices, weights));
+    TEST_ASSERT_EQUAL(4, router.total_tokens_routed);
+
+    webrt_webgpu_multi_pipeline_t mp;
+    webrt_webgpu_multi_pipeline_init(&mp);
+    TEST_ASSERT_EQUAL(0, mp.pipeline_count);
+
+    TEST_ASSERT_EQUAL(0, webrt_webgpu_multi_pipeline_create(&mp, 1, 10, 100));
+    TEST_ASSERT_EQUAL(0, webrt_webgpu_multi_pipeline_create(&mp, 2, 11, 101));
+    TEST_ASSERT_EQUAL(2, mp.pipeline_count);
+
+    uint32_t pids[2] = {1, 2};
+    int exec = 0;
+    TEST_ASSERT_EQUAL(0, webrt_webgpu_multi_pipeline_dispatch_parallel(&mp, pids, 2, &exec));
+    TEST_ASSERT_EQUAL(2, exec);
+    TEST_ASSERT_EQUAL(1, mp.barrier_count);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -891,6 +918,7 @@ int main(void) {
     RUN_TEST(test_lot40_simd512_and_webgpu_parallel_encoder);
     RUN_TEST(test_lot41_wasm_simd_mha_and_webgpu_multi_queue);
     RUN_TEST(test_lot42_wasm_simd_kv_compressor_and_webgpu_async);
+    RUN_TEST(test_lot43_wasm_simd_moe_router_and_webgpu_multi_pipeline);
 
     unity_print_results();
     unity_cleanup();

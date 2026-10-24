@@ -680,6 +680,38 @@ static void test_lot42_nvme_sriov_and_qos_isolation(void) {
     TEST_ASSERT_EQUAL(1, allowed);
 }
 
+static void test_lot43_nvmf_and_resource_allocator(void) {
+    vfs_nvmf_engine_t nvmf;
+    vfs_nvmf_engine_init(&nvmf);
+    TEST_ASSERT_EQUAL(0, nvmf.target_count);
+
+    TEST_ASSERT_EQUAL(0, vfs_nvmf_register_target(&nvmf, 101, 0)); /* RDMA */
+    TEST_ASSERT_EQUAL(1, nvmf.target_count);
+    TEST_ASSERT_EQUAL(-1, vfs_nvmf_register_target(&nvmf, 101, 0)); /* Duplicate */
+
+    TEST_ASSERT_EQUAL(0, vfs_nvmf_submit_sq(&nvmf, 101, 1));
+    TEST_ASSERT_EQUAL(0, vfs_nvmf_submit_sq(&nvmf, 101, 2));
+    TEST_ASSERT_EQUAL(2, nvmf.total_fabric_ops);
+
+    int completed = 0;
+    TEST_ASSERT_EQUAL(0, vfs_nvmf_process_cq(&nvmf, 101, &completed));
+    TEST_ASSERT_EQUAL(2, completed);
+
+    vfs_res_allocator_t alloc;
+    vfs_res_allocator_init(&alloc);
+    TEST_ASSERT_EQUAL(0, alloc.tenant_count);
+
+    TEST_ASSERT_EQUAL(0, vfs_res_allocator_register_tenant(&alloc, 1, 1000, 10000, 100));
+    TEST_ASSERT_EQUAL(1, alloc.tenant_count);
+
+    int granted = 0;
+    TEST_ASSERT_EQUAL(0, vfs_res_allocator_allocate_io(&alloc, 1, 500, 5000, &granted));
+    TEST_ASSERT_EQUAL(1, granted);
+
+    TEST_ASSERT_EQUAL(0, vfs_res_allocator_allocate_io(&alloc, 1, 600, 6000, &granted));
+    TEST_ASSERT_EQUAL(0, granted); /* Exceeds quota */
+}
+
 int main(void) {
     unity_init();
 
@@ -709,6 +741,7 @@ int main(void) {
     RUN_TEST(test_lot40_zbd_and_metadata_rebalancer);
     RUN_TEST(test_lot41_nvme_hmb_and_multi_region_rebalance);
     RUN_TEST(test_lot42_nvme_sriov_and_qos_isolation);
+    RUN_TEST(test_lot43_nvmf_and_resource_allocator);
 
     unity_print_results();
     unity_cleanup();

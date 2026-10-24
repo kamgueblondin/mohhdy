@@ -1242,6 +1242,32 @@ static void test_lot41_prod_chaos_resilience_and_core_scheduler(void) {
     TEST_ASSERT_EQUAL(75, freq_pct);
 }
 
+static void test_lot43_prod_ai_rebalancer_and_predictive_power_sched(void) {
+    prod_ai_rebalancer_t reb;
+    prod_ai_rebalancer_init(&reb);
+    TEST_ASSERT_EQUAL(0, reb.node_count);
+
+    TEST_ASSERT_EQUAL(0, prod_ai_rebalancer_record_node_load(&reb, 1, 100, 90, 50));
+    TEST_ASSERT_EQUAL(0, prod_ai_rebalancer_record_node_load(&reb, 2, 100, 98, 90));
+    TEST_ASSERT_EQUAL(2, reb.node_count);
+
+    int migrated = 0, isolated = 0;
+    TEST_ASSERT_EQUAL(0, prod_ai_rebalancer_rebalance_and_isolate(&reb, &migrated, &isolated));
+    TEST_ASSERT_EQUAL(1, migrated);
+    TEST_ASSERT_EQUAL(1, isolated);
+
+    prod_predictive_power_sched_t sched;
+    prod_predictive_power_sched_init(&sched, 4);
+    TEST_ASSERT_EQUAL(4, sched.num_cores);
+
+    TEST_ASSERT_EQUAL(0, prod_predictive_power_sched_bind_affinity(&sched, 1, 0, 0x03));
+    TEST_ASSERT_EQUAL(1, sched.thread_count);
+
+    uint32_t freq = 0;
+    TEST_ASSERT_EQUAL(0, prod_predictive_power_sched_tick(&sched, 90, &freq));
+    TEST_ASSERT_EQUAL(50, freq);
+}
+
 static void test_lot42_prod_ai_remediation_and_thermal_scheduler(void) {
     prod_ai_remediation_engine_t ai_engine;
     prod_ai_remediation_engine_init(&ai_engine);
@@ -1308,6 +1334,7 @@ int main(void) {
     RUN_TEST(test_lot40_multi_cluster_heal_and_self_driving_resource);
     RUN_TEST(test_lot41_prod_chaos_resilience_and_core_scheduler);
     RUN_TEST(test_lot42_prod_ai_remediation_and_thermal_scheduler);
+    RUN_TEST(test_lot43_prod_ai_rebalancer_and_predictive_power_sched);
 
     unity_print_results();
     unity_cleanup();
