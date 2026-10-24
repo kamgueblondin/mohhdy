@@ -7381,7 +7381,11 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
     }
 
     if (input_buffer[0] == '/') {
-        char osui_out[OSUI_OUT_MAX];
+        /* static: the desktop Shell pane runs handle_line at the bottom of
+         * the GUI loop stack (osui_gui_run -> eval -> handle_line), where a
+         * 2 KiB local faulted the shell. Not reentrant: the outer use is
+         * printed before osui_gui_run starts. */
+        static char osui_out[OSUI_OUT_MAX];
         ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
         print_string(osui_out);
         if (osui_gui_should_enter()) {
@@ -7428,7 +7432,11 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
     }
 
     if (osui_is_command(command)) {
-        char osui_out[OSUI_OUT_MAX];
+        /* static: the desktop Shell pane runs handle_line at the bottom of
+         * the GUI loop stack (osui_gui_run -> eval -> handle_line), where a
+         * 2 KiB local faulted the shell. Not reentrant: the outer use is
+         * printed before osui_gui_run starts. */
+        static char osui_out[OSUI_OUT_MAX];
         ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
         print_string(osui_out);
         if (osui_gui_should_enter()) {

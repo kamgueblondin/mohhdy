@@ -135,8 +135,19 @@ static void test_frame_routed_to_ring3_driver(void) {
     vga_test_route_ring3 = 0;
 }
 
+/* Leaving the VBE desktop reuses the text RAM: the epoch tells the Ring 3
+ * driver to repaint every cell instead of trusting its diff cache. */
+static void test_vram_lost_bumps_epoch(void) {
+    uint32_t e0 = vga_console_vram_epoch();
+    vga_console_vram_lost();
+    TEST_ASSERT_EQUAL(e0 + 1U, vga_console_vram_epoch());
+    vga_console_vram_lost();
+    TEST_ASSERT_EQUAL(e0 + 2U, vga_console_vram_epoch());
+}
+
 int main(void) {
     unity_init();
+    RUN_TEST(test_vram_lost_bumps_epoch);
     RUN_TEST(test_init_blanks_screen);
     RUN_TEST(test_put_xy_writes_cell);
     RUN_TEST(test_scroll_saves_history);

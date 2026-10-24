@@ -264,6 +264,53 @@ static void test_gui_live_shell_eval(void) {
     osui_gui_set_program_eval(0);
 }
 
+static char g_eval_seen[128];
+static int g_eval_calls;
+static int recording_shell_eval(const char *line, char *captured, int cap_max) {
+    int i = 0;
+    while (line[i] && i < (int)sizeof(g_eval_seen) - 1) { g_eval_seen[i] = line[i]; i++; }
+    g_eval_seen[i] = 0;
+    g_eval_calls++;
+    if (captured && cap_max > 0) { strncpy(captured, "shell.c ran it\n", (size_t)cap_max - 1); captured[cap_max - 1] = 0; }
+    return 0;
+}
+
+/* The Shell pane is the console shell: every line, OS-UI commands and
+ * "/..." lines included, goes to the one shell.c command table. Only the
+ * GUI host controls stay in the desktop loop. */
+static void test_gui_shell_pane_uses_console_shell(void) {
+    static const char *const lines[] = {
+        "help", "ls", "p2p-status", "ai hello", "net-status", "gui-status",
+        "session-list", "/chat", "fs-list /", "pm-check ide.pm", "bonjour", 0
+    };
+    int i;
+    for (i = 0; lines[i]; i++)
+        TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_SHELL, osui_gui_route_line(lines[i], "shell"));
+    TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("console", "shell"));
+    TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("gui-exit", "shell"));
+    TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("web /web/demo.html", "shell"));
+    TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("pm-ide x.pm", "shell"));
+    /* other panes keep the OS-UI line, ai and ! still reach the shell */
+    TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_OSUI, osui_gui_route_line("session-list", "none"));
+    TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_SHELL, osui_gui_route_line("ai hello", "none"));
+    TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_SHELL, osui_gui_route_line("!ls", "none"));
+
+    setup();
+    osui_gui_term_reset();
+    osui_gui_set_program_eval(recording_shell_eval);
+    TEST_ASSERT_EQUAL(0, run_line("/shell"));
+    g_eval_calls = 0;
+    osui_gui_set_input("session-list");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, g_eval_calls);
+    TEST_ASSERT_EQUAL_STRING("session-list", g_eval_seen);
+    osui_gui_set_input("p2p-status");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(2, g_eval_calls);
+    TEST_ASSERT_EQUAL_STRING("p2p-status", g_eval_seen);
+    osui_gui_set_program_eval(0);
+}
+
 static void test_vbe_p2p_collab_prod_panes(void) {
     setup();
     TEST_ASSERT_EQUAL(0, run_line("/p2p"));
@@ -567,6 +614,7 @@ int main(void) {
     RUN_TEST(test_gui_scene_llm_and_newest_messages);
     RUN_TEST(test_gui_unknown_command_hint);
     RUN_TEST(test_gui_live_shell_eval);
+    RUN_TEST(test_gui_shell_pane_uses_console_shell);
     RUN_TEST(test_vbe_p2p_collab_prod_panes);
     RUN_TEST(test_gui_media_rendering);
     RUN_TEST(test_gui_pm_ide_fullscreen);

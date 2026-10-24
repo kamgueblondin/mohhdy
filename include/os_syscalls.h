@@ -1878,6 +1878,9 @@ typedef struct {
     uint32_t cursor_y;
     uint32_t cursor_visible;
     uint32_t seq;
+    /* Bumped when the text memory was overwritten behind the driver (the
+     * VBE desktop reuses the same video RAM): repaint every cell. */
+    uint32_t vram_epoch;
 } os_vga_driver_frame_t;
 /* Lot 6 (US-059/060): kernel key sealing. The sealing key lives in kernel
  * memory only (derived per boot from TSC/PIT jitter, no TPM: simule).

@@ -23,6 +23,7 @@ static int dev_op(uint32_t op, uint32_t a, uint32_t b, uint32_t c) {
 }
 
 static os_vga_driver_frame_t g_frame;
+static uint32_t g_epoch;
 static uint16_t g_shown[OS_VGA_CELLS];
 
 static void cursor(const os_vga_driver_frame_t* f) {
@@ -64,6 +65,11 @@ void main(void) {
     for (i = 0; i < OS_VGA_CELLS; i++) g_shown[i] = vram[i];
     for (;;) {
         if (dev_op(OS_DEV_OP_VGA_TAKE, (uint32_t)&g_frame, 0U, 50U) != 1) continue;
+        if (g_frame.vram_epoch != g_epoch) {
+            /* video RAM was reused by the VBE desktop: forget the cache */
+            g_epoch = g_frame.vram_epoch;
+            for (i = 0; i < OS_VGA_CELLS; i++) g_shown[i] = (uint16_t)~g_frame.cells[i];
+        }
         for (i = 0; i < OS_VGA_CELLS; i++) {
             if (g_shown[i] != g_frame.cells[i]) {
                 vram[i] = g_frame.cells[i];

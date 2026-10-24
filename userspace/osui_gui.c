@@ -406,7 +406,32 @@ void osui_gui_vfs_inspect(const char *path) {
 static void seed_shell_term(void) {
     if (g_term_n > 0) return;
     osui_gui_term_push("Shell Multiboot live_eval=true");
-    osui_gui_term_push("Pas un bash Linux. help  ls  date  whoami  ai");
+    osui_gui_term_push("Meme shell que la console (shell.c). help, ai, p2p-...");
+    osui_gui_term_push("Echap vide la ligne, console revient au texte");
+}
+
+static int is_word(const char *s, const char *w) {
+    int n = slen(w);
+    return sncmp(s, w, n) == 0 && (s[n] == 0 || s[n] == ' ' || s[n] == '\t');
+}
+
+/* One decision point for a line typed on the desktop.
+ * HOST: needs the GUI loop itself (leave, web pane, editor). mobile-ui is
+ *       caught before when the mobile shell is linked.
+ * SHELL: runs through the console shell (userspace/shell.c handle_line),
+ *        so the Shell pane is the same shell as the text console: same
+ *        command table, same output. shell.c itself hands OS-UI commands
+ *        and "/..." lines to osui_dispatch_line, exactly as in the console.
+ * OSUI: chat and other panes keep the OS-UI command line. */
+int osui_gui_route_line(const char *line, const char *pane) {
+    if (!line) return OSUI_GUI_ROUTE_OSUI;
+    while (*line == ' ' || *line == '\t') line++;
+    if (scmp(line, "console") == 0 || scmp(line, "gui-exit") == 0 || scmp(line, "/console") == 0
+        || is_word(line, "web") || is_word(line, "pm-ide"))
+        return OSUI_GUI_ROUTE_HOST;
+    if (line[0] == '!' || token_ai(line)) return OSUI_GUI_ROUTE_SHELL;
+    if (pane && scmp(pane, "shell") == 0) return OSUI_GUI_ROUTE_SHELL;
+    return OSUI_GUI_ROUTE_OSUI;
 }
 
 static void seed_browser_term(void) {
@@ -426,7 +451,7 @@ static void ensure_shell_pane(char *out, int out_max) {
 }
 
 static int run_program_line(const char *line, char *out, int out_max) {
-    char cap[1024];
+    static char cap[1024]; /* off the GUI stack: the shell runs below it */
     char shown[88];
     const char *src = line ? line : "";
     int n = 0;
@@ -881,15 +906,10 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             int program = 0;
             const char *eval_line = g_input;
             first_token(g_input, tok, (int)sizeof(tok));
+            program = osui_gui_route_line(g_input, osui_get_pane()) == OSUI_GUI_ROUTE_SHELL;
             if (g_input[0] == '!') {
                 eval_line = g_input + 1;
                 while (*eval_line == ' ' || *eval_line == '\t') eval_line++;
-                program = 1;
-            } else if (token_ai(g_input)) {
-                program = 1;
-            } else if (scmp(osui_get_pane(), "shell") == 0
-                       && g_input[0] != '/' && !osui_is_command(tok)) {
-                program = 1;
             }
             if (program) {
                 run_program_line(eval_line, out, out_max);
@@ -905,10 +925,12 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
                     scat(note, (int)sizeof(note), " - ai <question> ou /help");
                     osui_note(note);
                 }
-                if (scmp(osui_get_pane(), "shell") == 0) seed_shell_term();
-                else if (scmp(osui_get_pane(), "browser") == 0) seed_browser_term();
-                else if (scmp(osui_get_pane(), "fs") == 0) seed_fs_term();
             }
+            /* A pane switch may come from either path ("/fs" typed in the
+             * shell terminal runs through shell.c, which dispatches it). */
+            if (scmp(osui_get_pane(), "shell") == 0) seed_shell_term();
+            else if (scmp(osui_get_pane(), "browser") == 0) seed_browser_term();
+            else if (scmp(osui_get_pane(), "fs") == 0) seed_fs_term();
         }
         if (osui_gui_should_leave()) {
             osui_gui_ack_leave();
@@ -932,14 +954,14 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
 }
 
 static void emit_snap(void) {
-    char snap[OSUI_SNAP_MAX];
+    static char snap[OSUI_SNAP_MAX];
     osui_gui_write_snap(snap, OSUI_SNAP_MAX);
     serial_puts(snap);
 }
 
 void osui_gui_run(void) {
     static os_fb_scene_t scene;
-    char out[OSUI_OUT_MAX];
+    static char out[OSUI_OUT_MAX];
     int key;
     int stop;
 

@@ -10,6 +10,10 @@
 typedef int (*osui_program_eval_t)(const char *line, char *captured, int cap_max);
 
 void osui_gui_set_program_eval(osui_program_eval_t fn);
+#define OSUI_GUI_ROUTE_HOST 0
+#define OSUI_GUI_ROUTE_SHELL 1
+#define OSUI_GUI_ROUTE_OSUI 2
+int osui_gui_route_line(const char *line, const char *pane);
 
 /* US-050: the full-screen pm-ide surface. The shell owns the file system
  * and the PromptMessage VM; the desktop owns the editor. load returns the
