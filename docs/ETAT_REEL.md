@@ -10,6 +10,15 @@
 
 ## État courant vérifié
 
+## Etat courant du 24 octobre 2026 (terminal du bureau = la console)
+
+- Le Shell du bureau n'est plus un volet avec son propre editeur de ligne: c'est la console elle-meme. `/shell`, l'icone Shell, le menu Shell, ou une ligne `ai ...` ou `!commande` tapee sur le bureau terminent la boucle du bureau; le shell (`userspace/shell.c`) revient a son invite normale et le noyau dessine la meme grille de cellules 80x25 de `kernel/vga_console.c` dans une fenetre VBE (`kernel/gfx_term.c`, avec la police VGA sauvegardee du plan 2). Une ligne tapee sur le bureau est executee a cette invite.
+- Un seul coeur: memes cellules, couleurs, curseur, defilement, historique d'ecran (PgUp/PgDn), meme saisie de ligne (`SYS_GETS`), memes commandes, meme `ai` (Echap annule la generation comme en mode texte). Le pilote Ring 3 vgadriver n'est pas utilise pendant que la fenetre est affichee: la trame va au second backend.
+- Supprime: l'evaluation de ligne du volet Shell (`run_program_line`, `seed_shell_term`, `osui_gui_set_program_eval`), la capture de sortie de shell.c (`putc` capture, `shell_gui_eval`, branches `g_gui_eval`).
+- Sortir: `gui` revient au bureau, `console` (ou `gui-exit`) revient au mode texte. Echap va a l'application de la console, il ne quitte pas la fenetre.
+- `term-dump` ecrit la grille visible sur la ligne serie (`TERM-DUMP BEGIN backend=text|vbe`). Test QEMU `make qemu-gui-shell`: la meme suite (clear, p2p-status, session-status, help qui defile) donne la meme grille de 25 lignes en mode texte et dans la fenetre, PgUp fait defiler la fenetre, `console` revient en 720x400. Tests unitaires: meme grille sur les deux backends a partir du meme flux, rendu des glyphes et couleurs, decoupage par cellules modifiees.
+- Limites: la grille reste 80x25. La fenetre est centree; un cadre deux fois plus grand est utilise si l'ecran VBE fait au moins 1288x848. La taille VBE ne suit pas la fenetre QEMU tant que le terminal est affiche (elle est relue au retour au bureau). Pas de pointeur souris dans la fenetre. La console n'a ni rappel d'historique par fleche haute ni completion par Tab (fleche haute fait defiler d'une ligne), donc le terminal du bureau non plus: c'est la meme console. Le volet Shell decrit ci-dessous (meme jour, PR #194) est remplace par cette fenetre.
+
 ## Etat courant du 24 octobre 2026 (bureau: Echap et shell unique)
 
 - Echap sur le bureau VBE ne laisse plus des bandes magenta et vertes. Cause: la sortie du bureau ne remettait que le registre misc et le sequenceur; le CRTC, le controleur graphique et le controleur d'attributs restaient en 1024x768 graphique, donc les cellules texte de 0xB8000 etaient lues comme des pixels. Le LFB ecrase aussi la police (plan 2) et les cellules texte, alors que le pilote Ring 3 vgadriver ne repeignait que les cellules qu'il croyait changees. Correction: jeu complet de registres VGA mode 3, police sauvegardee avant le premier passage en VBE puis restauree, et compteur `vram_epoch` dans la trame du vgadriver pour tout repeindre. Test QEMU: `make qemu-gui-esc` (deux allers-retours gui puis Echap, capture 720x400 sans pixels satures).
