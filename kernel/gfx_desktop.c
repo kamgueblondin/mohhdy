@@ -1412,7 +1412,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         /* active item: an app window on top of the stack, else the pane,
          * else the chat */
         int k, top = -1;
-        for (k = GFX_WIN_COUNT - 1; k >= 0 && top < 0; k--) {
+        for (k = GFX_WIN_COUNT - 1; k >= 0 && top == -1; k--) {
             int win = g_z[k];
             if (GFX_IS_APP_WIN(win) && out->app_win[win - GFX_WIN_APP0].visible) top = app_dock(sc->app[win - GFX_WIN_APP0].kind) >= 0 ? app_dock(sc->app[win - GFX_WIN_APP0].kind) : -3;
             else if (win == GFX_WIN_PANE && out->pane_win.active) top = -2;

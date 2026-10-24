@@ -759,6 +759,42 @@ static void test_app_windows_events_and_z_order(void) {
     vga_desktop_set(0);
 }
 
+
+/* UX4: generic slots - six windows of any kind, cascaded, raised on click,
+ * events carry the slot index. */
+static void test_generic_app_slots_z_order(void) {
+    gfx_desktop_layout_t l;
+    char got[64];
+    int i;
+    static const int kinds[OS_FB_APPS] = {OS_FB_APP_FILES, OS_FB_APP_TASKS, OS_FB_APP_VIEW,
+                                          OS_FB_APP_SETTINGS, OS_FB_APP_P2P, OS_FB_APP_PMRUN};
+    vga_desktop_set(1);
+    gfx_desktop_wm_reset();
+    app_scene();
+    for (i = 0; i < OS_FB_APPS; i++) {
+        g_scene.app[i].kind = (uint8_t)kinds[i];
+        g_scene.app[i].nrows = 2;
+        strcpy(g_scene.app[i].title, "App");
+        strcpy(g_scene.app[i].rows[0], "row");
+        g_scene.app_focus = (uint8_t)i;
+        redraw(&l);
+        TEST_ASSERT(l.app_win[i].visible);
+        TEST_ASSERT_EQUAL(GFX_WIN_APP0 + i, l.z[GFX_WIN_COUNT - 1]);
+        if (i > 0) TEST_ASSERT(l.app_win[i].box.x > l.app_win[i - 1].box.x || l.app_win[i].box.y > l.app_win[i - 1].box.y);
+    }
+    /* an app kind without a dock entry clears the menu highlight */
+    TEST_ASSERT_EQUAL(-1, l.menu_active);
+    /* click a visible part of slot 2: focus event with its index */
+    drain_kbd();
+    click_at(l.app_win[2].box.x + 10, l.app_win[2].box.y + 30);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\x16" "focus 2\n", got);
+    redraw(&l);
+    TEST_ASSERT_EQUAL(GFX_WIN_APP0 + 2, l.z[GFX_WIN_COUNT - 1]);
+    for (i = 0; i < OS_FB_APPS; i++) g_scene.app[i].kind = 0;
+    vga_desktop_set(0);
+}
+
 static void test_llm_friendly_names(void) {
     TEST_ASSERT_EQUAL_STRING("GPT-2 local", gfx_desktop_llm_name("gpt2_local"));
     TEST_ASSERT_EQUAL_STRING("GPT-2 GGUF local", gfx_desktop_llm_name("gpt2_gguf_local"));
@@ -788,6 +824,7 @@ int main(void) {
     RUN_TEST(test_web_pane_display_list);
     RUN_TEST(test_window_manager_panes_and_chat);
     RUN_TEST(test_app_windows_events_and_z_order);
+    RUN_TEST(test_generic_app_slots_z_order);
     RUN_TEST(test_llm_friendly_names);
     unity_print_results();
     unity_cleanup();
