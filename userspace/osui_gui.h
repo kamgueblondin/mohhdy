@@ -61,4 +61,6 @@ void osui_gui_set_input(const char *text);
 const char *osui_gui_input(void);
 void osui_gui_run(void);
 
+#include "osui_panes.h"
+void osui_gui_set_pane_source(const osui_pane_src_t *src);
 #endif

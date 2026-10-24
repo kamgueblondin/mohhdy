@@ -406,6 +406,10 @@ typedef struct {
 /* Injected by the VBE terminal window close/minimize button: the console
  * line input turns it into the line "gui" (back to the desktop). */
 #define OS_TERM_KEY_CLOSE 0x11
+#define OS_TERM_KEY_HOME 0x12
+#define OS_TERM_KEY_END 0x13
+#define OS_TERM_KEY_DEL 0x14
+#define OS_TERM_KEY_MIN 0x15 /* terminal minimize: back to the desktop, keep the typed line */
 #define OS_VGA_KEY_LEFT 28
 #define OS_VGA_KEY_RIGHT 29
 #define OS_VGA_KEY_UP 30
@@ -499,6 +503,9 @@ typedef struct {
     /* version >= 5: llm label of the last chat turn (stub_echo,
      * gpt2_local, gpt2_gguf_local, gpt2_cancelled ...). */
     char llm[OS_FB_LLM_LEN];
+    /* version >= 6: term[] holds the live content of the Statut / Fichiers
+     * / Admin window (userspace/osui_panes.c), not the shell log. */
+    uint8_t pane_live;
 } os_fb_scene_t;
 
 typedef struct {

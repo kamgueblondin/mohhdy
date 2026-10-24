@@ -73,10 +73,12 @@ static void vga_font_save(void);
 static int g_term;
 static int g_term_full;
 static gfx_term_layout_t g_term_l;
-static uint16_t g_term_shown[GFX_TERM_COLS * GFX_TERM_ROWS];
-static int g_term_max;            /* maximize button state */
-static int g_term_dx, g_term_dy;  /* window moved from the centre */
-static int g_term_drag, g_term_grab_x, g_term_grab_y;
+static uint16_t g_term_shown[GFX_TERM_MAX_COLS * GFX_TERM_MAX_ROWS];
+static uint16_t g_term_cells[GFX_TERM_MAX_COLS * GFX_TERM_MAX_ROWS];
+static int g_term_geom_dirty;      /* window grid != console grid: resize at a safe point */
+void print_sync_cursor(void);
+static gfx_wm_win_t g_term_wm;     /* close/min/max/drag state (gfx_wm.c) */
+static int g_term_minimized;       /* left by its minimize button */
 /* Last desktop scene: the terminal window is composed over it. */
 static os_fb_scene_t local; /* Lot 6: too large for the kernel stack */
 static int g_scene_valid;
@@ -469,24 +471,53 @@ void gfx_fb_update_cursor(void) {
     unlock_interrupts(irq_flags);
 }
 
+static int present_local(void);
+static volatile int g_presenting, g_present_again;
+
+/* A mouse IRQ may ask for a redraw while a present runs: draw again at
+ * the end instead of drawing into g_back twice at the same time. */
+static int present_guarded(void) {
+    int rc;
+    if (g_presenting) { g_present_again = 1; return 0; }
+    g_presenting = 1;
+    do {
+        g_present_again = 0;
+        rc = present_local();
+    } while (g_present_again && rc == 0);
+    g_presenting = 0;
+    return rc;
+}
+
 int gfx_fb_present(const os_fb_scene_t *scene) {
+    if (!scene || scene->magic != OS_FB_MAGIC) return -1;
+    if (g_term) {
+        /* back from the terminal window to the desktop loop: the console
+         * gets the text mode grid again (80x25, reflowed) */
+        g_term = 0;
+        vga_console_set_gfx_sink(0);
+        vga_desktop_set(1);
+        if (vga_console_resize(VGA_COLS, VGA_ROWS)) print_sync_cursor();
+        g_saved_cursor_valid = 0;
+    }
+    memcpy(&local, scene, sizeof(local));
+    g_scene_valid = 1;
+    return present_guarded();
+}
+
+/* Window manager changes (minimize, drag ...) redraw the last scene
+ * without waiting for the Ring 3 desktop loop. */
+void gfx_fb_redraw_desktop(void) {
+    if (!g_on || g_term || !g_scene_valid) return;
+    (void)present_guarded();
+}
+
+static int present_local(void) {
     uint32_t *dst;
     uint32_t n, i;
     int nw, nh;
     int mx = 0, my = 0;
     uint8_t btn = 0;
     int cx, cy;
-
-    if (!scene || scene->magic != OS_FB_MAGIC) return -1;
-    if (g_term) {
-        /* back from the terminal window to the desktop loop */
-        g_term = 0;
-        vga_console_set_gfx_sink(0);
-        vga_desktop_set(1);
-        g_saved_cursor_valid = 0;
-    }
-    memcpy(&local, scene, sizeof(local));
-    g_scene_valid = 1;
     if (com2_poll_size(&nw, &nh)) {
         if (!g_on || nw != g_w || nh != g_h) {
             if (vbe_set_mode(nw, nh) == 0) {
@@ -593,8 +624,20 @@ static uint32_t *term_surface(int *pitch) {
     return g_back ? g_back : (uint32_t *)g_lfb;
 }
 
+/* Layout of the window; the grid drawn is the console grid until
+ * gfx_fb_term_poll resized the console to the window (not from the mouse
+ * path: the console may be in the middle of an update). */
 static void term_layout_now(gfx_term_layout_t *l) {
-    gfx_term_layout_at(g_w, g_h, g_term_max, g_term_dx, g_term_dy, l);
+    gfx_term_layout_at(g_w, g_h, g_term_wm.maximized, g_term_wm.dx, g_term_wm.dy, l);
+    if (g_term && (l->cols != vga_console_cols() || l->rows != vga_console_rows())) {
+        g_term_geom_dirty = 1;
+        l->cols = vga_console_cols();
+        l->rows = vga_console_rows();
+    }
+}
+
+static void term_cells_now(void) {
+    vga_console_frame_copy_n(g_term_cells, GFX_TERM_MAX_COLS * GFX_TERM_MAX_ROWS, 0, 0);
 }
 
 /* Window frame and every cell, composed in g_back then shown. With
@@ -615,17 +658,19 @@ static void term_compose(const uint16_t *cells, int desktop) {
 
 /* The console in a VBE window: vga_console.c composes the frame as in
  * text mode and hands it here instead of to the VGA text page. */
-static void term_sink(const uint16_t *cells, int cx, int cy, int visible) {
+static void term_sink(const uint16_t *cells, int cols, int rows, int cx, int cy, int visible) {
     gfx_term_layout_t l;
     int pitch, lo, hi;
     uint32_t *dst;
     uint32_t flags;
+    (void)cols; (void)rows; /* = vga_console_cols/rows, used by term_layout_now */
     (void)cx; (void)cy; (void)visible; /* the cursor cell is already inverted */
     if (!g_term || !g_on || !g_lfb) return;
     flags = lock_interrupts();
     cursor_hide();
     term_layout_now(&l);
-    if (g_term_full || l.w != g_term_l.w || l.h != g_term_l.h || l.x != g_term_l.x || l.y != g_term_l.y) {
+    if (g_term_full || l.w != g_term_l.w || l.h != g_term_l.h || l.x != g_term_l.x || l.y != g_term_l.y
+        || l.cols != g_term_l.cols || l.rows != g_term_l.rows) {
         term_compose(cells, !g_term_full);
         g_term_full = 0;
     } else {
@@ -633,45 +678,79 @@ static void term_sink(const uint16_t *cells, int cx, int cy, int visible) {
         (void)gfx_term_render_rows(dst, g_w, g_h, pitch, &l, g_font_plane2, cells, g_term_shown, 0, &lo, &hi);
         if (lo >= 0)
             blit_rect(l.gx, l.gy + lo * GFX_TERM_CELL_H * l.scale,
-                      GFX_TERM_COLS * GFX_TERM_CELL_W * l.scale, (hi - lo + 1) * GFX_TERM_CELL_H * l.scale);
+                      l.cols * GFX_TERM_CELL_W * l.scale, (hi - lo + 1) * GFX_TERM_CELL_H * l.scale);
     }
     unlock_interrupts(flags);
     gfx_fb_update_cursor();
 }
 
-/* Mouse on the terminal window (IRQ context): buttons and title drag. */
+/* Mouse on the terminal window (IRQ context): the shared window manager
+ * (gfx_wm.c) decides; this only applies the result to the console. */
 void gfx_fb_term_mouse(int x, int y, uint8_t buttons, uint8_t prev) {
-    int left = buttons & 1, was = prev & 1;
+    int left = buttons & 1, was = prev & 1, act;
+    gfx_term_layout_t c;
+    gfx_wm_rect_t placed, base;
     if (!g_term) return;
-    if (left && !was) {
-        int hit = gfx_term_hit(&g_term_l, x, y);
-        if (hit == GFX_TERM_HIT_CLOSE || hit == GFX_TERM_HIT_MIN) {
-            print_string_serial(hit == GFX_TERM_HIT_CLOSE ? "gfx term button close\n" : "gfx term button minimize\n");
-            kbd_put_char((char)OS_TERM_KEY_CLOSE);
-        } else if (hit == GFX_TERM_HIT_MAX) {
-            uint16_t cells[GFX_TERM_COLS * GFX_TERM_ROWS];
-            g_term_max = !g_term_max;
-            print_string_serial(g_term_max ? "gfx term button maximize on\n" : "gfx term button maximize off\n");
-            vga_console_frame_copy(cells, 0, 0, 0);
-            cursor_hide();
-            term_compose(cells, 1);
-        } else if (hit == GFX_TERM_HIT_TITLE && !g_term_max) {
-            g_term_drag = 1;
-            g_term_grab_x = x - g_term_l.x;
-            g_term_grab_y = y - g_term_l.y;
-        }
-    } else if (!left && was && g_term_drag) {
-        gfx_term_layout_t c;
-        uint16_t cells[GFX_TERM_COLS * GFX_TERM_ROWS];
-        g_term_drag = 0;
-        gfx_term_layout_at(g_w, g_h, 0, 0, 0, &c);
-        g_term_dx = (x - g_term_grab_x) - c.x;
-        g_term_dy = (y - g_term_grab_y) - c.y;
-        print_string_serial("gfx term moved\n");
-        vga_console_frame_copy(cells, 0, 0, 0);
+    gfx_term_layout_at(g_w, g_h, 0, 0, 0, &c);
+    base.x = c.x; base.y = c.y; base.w = c.w; base.h = c.h;
+    placed.x = g_term_l.x; placed.y = g_term_l.y; placed.w = g_term_l.w; placed.h = g_term_l.h;
+    act = gfx_wm_mouse(&g_term_wm, placed, base, GFX_TERM_TITLE_H * g_term_l.scale, g_term_l.scale,
+                       x, y, left && !was, !left && was);
+    if (act == GFX_WM_ACT_CLOSE || act == GFX_WM_ACT_MINIMIZE) {
+        /* the console cannot be destroyed: both go back to the desktop.
+         * Minimize keeps the half typed line and marks the dock icon. */
+        g_term_minimized = act == GFX_WM_ACT_MINIMIZE;
+        g_term_wm.closed = g_term_wm.minimized = 0;
+        print_string_serial(act == GFX_WM_ACT_CLOSE ? "gfx term button close\n" : "gfx term button minimize\n");
+        kbd_put_char((char)(act == GFX_WM_ACT_CLOSE ? OS_TERM_KEY_CLOSE : OS_TERM_KEY_MIN));
+    } else if (act == GFX_WM_ACT_MAXIMIZE || act == GFX_WM_ACT_MOVED) {
+        if (act == GFX_WM_ACT_MAXIMIZE)
+            print_string_serial(g_term_wm.maximized ? "gfx term button maximize on\n" : "gfx term button maximize off\n");
+        else
+            print_string_serial("gfx term moved\n");
+        term_cells_now();
         cursor_hide();
-        term_compose(cells, 1);
+        term_compose(g_term_cells, 1);
     }
+}
+
+int gfx_fb_term_minimized(void) { return g_term_minimized; }
+
+/* Safe point (SYS_GETS idle loop): follow a new screen size sent on COM2
+ * (QEMU window resize, scripts/qemu_gui_fit.py) and give the console the
+ * grid of the window (maximize, resize). The shell output reflows to the
+ * new width (vga_console_resize). */
+void gfx_fb_term_poll(void) {
+    gfx_term_layout_t l;
+    int nw, nh;
+    if (!g_term || !g_on || !g_lfb) return;
+    if (com2_poll_size(&nw, &nh) && (nw != g_w || nh != g_h)) {
+        uint32_t flags = lock_interrupts();
+        cursor_hide();
+        if (vbe_set_mode(nw, nh) == 0) log_fb_size("gfx term fb resize ", g_w, g_h);
+        g_saved_cursor_valid = 0;
+        g_term_geom_dirty = 1;
+        unlock_interrupts(flags);
+    }
+    if (!g_term_geom_dirty) return;
+    g_term_geom_dirty = 0;
+    gfx_term_layout_at(g_w, g_h, g_term_wm.maximized, g_term_wm.dx, g_term_wm.dy, &l);
+    if (l.cols != vga_console_cols() || l.rows != vga_console_rows()) {
+        g_term_full = 1;
+        (void)vga_console_resize(l.cols, l.rows);
+        print_sync_cursor();
+        print_string_serial("gfx term grid ");
+        serial_uint((unsigned)vga_console_cols()); write_serial('x'); serial_uint((unsigned)vga_console_rows());
+        print_string_serial(" reflow\n");
+    }
+    {
+        uint32_t flags = lock_interrupts();
+        term_cells_now();
+        cursor_hide();
+        term_compose(g_term_cells, 1);
+        unlock_interrupts(flags);
+    }
+    gfx_fb_update_cursor();
 }
 
 int gfx_fb_term_enter(void) {
@@ -679,11 +758,14 @@ int gfx_fb_term_enter(void) {
     if (!g_on || !g_lfb || !g_font_saved) return -1;
     g_term = 1;
     g_term_full = 1;
-    g_term_drag = 0;
+    g_term_wm.drag = 0;
+    g_term_minimized = 0;
     term_layout_now(&l);
     print_string_serial("gfx term on fb ");
     serial_uint((unsigned)g_w); write_serial('x'); serial_uint((unsigned)g_h);
-    print_string_serial(" grid 80x25 scale ");
+    print_string_serial(" grid ");
+    serial_uint((unsigned)l.cols); write_serial('x'); serial_uint((unsigned)l.rows);
+    print_string_serial(" scale ");
     serial_uint((unsigned)l.scale);
     print_string_serial(" window ");
     serial_uint((unsigned)l.x); write_serial(','); serial_uint((unsigned)l.y); write_serial(' ');
@@ -713,7 +795,11 @@ void gfx_fb_leave(void) {
     g_fit_n = 0;
     g_saved_cursor_valid = 0;
     vga_console_vram_lost();
-    if (was_term) vga_console_redraw(); /* keep what the terminal showed */
+    if (was_term) {
+        /* keep what the terminal showed, reflowed to 80x25 text mode */
+        if (vga_console_resize(VGA_COLS, VGA_ROWS)) print_sync_cursor();
+        vga_console_redraw();
+    }
     else vga_desktop_set(0);
 }
 
@@ -731,6 +817,9 @@ void gfx_fb_leave(void) {}
 int gfx_fb_term_enter(void) { return -1; }
 int gfx_fb_term_active(void) { return 0; }
 void gfx_fb_term_mouse(int x, int y, uint8_t buttons, uint8_t prev) { (void)x; (void)y; (void)buttons; (void)prev; }
+int gfx_fb_term_minimized(void) { return 0; }
+void gfx_fb_term_poll(void) {}
+void gfx_fb_redraw_desktop(void) {}
 int gfx_fb_active(void) { return 0; }
 int gfx_fb_width(void) { return GFX_FB_WIDTH; }
 int gfx_fb_height(void) { return GFX_FB_HEIGHT; }

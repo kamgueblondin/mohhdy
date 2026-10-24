@@ -375,6 +375,9 @@ jobs:
       - name: QEMU P2P three guests (discovery, encrypted links, replication, consensus, relay)
         run: make qemu-p2p
 
+      - name: QEMU console line editor, text mode + terminal window (about 1.5 min)
+        run: make qemu-line-edit
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -409,6 +412,12 @@ jobs:
 
       - name: Phase 7 collaborative ledger (three guests)
         run: make qemu-collab
+
+      - name: QEMU GUI window manager (panes, chat, dock, terminal minimize, about 1 min)
+        run: make qemu-gui-windows
+
+      - name: QEMU terminal grid follows maximize and screen resize (reflow, about 1 min)
+        run: make qemu-gui-term-resize
 
       - name: Upload logs
         if: always()

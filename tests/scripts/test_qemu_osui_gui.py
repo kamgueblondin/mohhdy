@@ -175,7 +175,10 @@ def desktop_hit_centers(width, height, chat_mode="center", pane=None):
     if pane:
         wx = 36
         wy = bar_h + 28
-        traffic = (wx + 8 + 21, wy + 8 + 8)
+        ww = clampi(width - (420 if width >= 780 else 48), 240, width - 48)
+        # close button of the shared window manager (kernel/gfx_wm.c):
+        # rightmost of the title bar, 14 px, title bar 30 px under a 2 px border
+        traffic = (wx + ww - 2 - 18 + 7, wy + 2 + (30 - 14) // 2 + 7)
     if chat_mode == "float":
         chat_w = clampi(width // 3, 220, 360)
         chat_h = clampi(height // 2, 180, 400)

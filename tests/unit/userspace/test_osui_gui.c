@@ -190,7 +190,7 @@ static void test_gui_scene_llm_and_newest_messages(void) {
     char line[32];
     setup();
     osui_gui_fill_scene(&g_scene);
-    TEST_ASSERT_EQUAL(5, g_scene.version);
+    TEST_ASSERT_EQUAL(6, g_scene.version);
     TEST_ASSERT_EQUAL_STRING("stub_echo", g_scene.llm);
     for (i = 0; i < 5; i++) {
         snprintf(line, sizeof(line), "chat note%d", i);
@@ -353,8 +353,8 @@ static void test_gui_pm_ide_fullscreen(void) {
     TEST_ASSERT_EQUAL(0, strncmp(g_scene.term[0], "pm-ide t.pm Ln 1 Col 1 /1", 25));
     TEST_ASSERT_EQUAL_STRING("  1> say 1", g_scene.term[1]); /* cursor on s: Ln/Col in the title */
     /* scene v3 carries the syntax classes: gutter, keyword, number (v4
-     * keeps them and adds the web display list, Lot 6; v5 adds llm) */
-    TEST_ASSERT_EQUAL(5, g_scene.version);
+     * keeps them and adds the web display list, Lot 6; v5 adds llm; v6 pane_live) */
+    TEST_ASSERT_EQUAL(6, g_scene.version);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_GUTTER, g_scene.term_attr[1][0]);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_KEYWORD, g_scene.term_attr[1][5]);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_NUMBER, g_scene.term_attr[1][9]);
@@ -436,7 +436,7 @@ static void test_gui_web_pane_pipeline(void) {
     TEST_ASSERT_EQUAL(1, osui_gui_web_active());
     osui_gui_fill_scene(&g_scene);
     TEST_ASSERT_EQUAL(OS_FB_PANE_WEB, g_scene.pane);
-    TEST_ASSERT_EQUAL(5, g_scene.version);
+    TEST_ASSERT_EQUAL(6, g_scene.version);
     TEST_ASSERT_TRUE(g_scene.nweb > 0);
     TEST_ASSERT_NOT_NULL(strstr(g_scene.web_title, "web t.html"));
     for (i = 0; i < g_scene.nweb; i++) {
@@ -563,6 +563,55 @@ static void test_lot12_vfs_and_browser_inspection_views(void) {
     TEST_ASSERT_EQUAL_STRING("fs", osui_get_pane());
 }
 
+/* Statut / Fichiers / Admin windows carry live lines from the guest
+ * syscalls (osui_panes.c); other panes keep the shell log in term[]. */
+static unsigned pl_t;
+static unsigned pl_ticks(void) { return pl_t; }
+static int pl_list(const char *p, os_dirent_t *o, int m) {
+    (void)p; (void)m;
+    strcpy(o[0].name, "etc"); o[0].flags = OS_DIRENT_DIR; o[0].size = 0;
+    return 1;
+}
+static int pl_svc(const char *n, os_service_status_t *st) {
+    if (strcmp(n, "vfs") == 0) { st->owner_pid = 4; st->queued_messages = 0; return 0; }
+    return -1;
+}
+static void test_gui_live_panes(void) {
+    static const osui_pane_src_t src = { pl_list, 0, 0, pl_ticks, pl_svc };
+    setup();
+    osui_gui_set_pane_source(&src);
+    pl_t = 100 * 61;
+    feed_str("/status");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_STATUS, g_scene.pane);
+    TEST_ASSERT_EQUAL(1, g_scene.pane_live);
+    TEST_ASSERT_EQUAL_STRING("uptime 0:01:01  (PIT ticks 6100)", g_scene.term[0]);
+    TEST_ASSERT_EQUAL_STRING("memoire: indisponible", g_scene.term[1]);
+    /* refreshed about once a second, not on every frame */
+    pl_t += 50;
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL_STRING("uptime 0:01:01  (PIT ticks 6100)", g_scene.term[0]);
+    pl_t += 60;
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL_STRING("uptime 0:01:02  (PIT ticks 6210)", g_scene.term[0]);
+    feed_str("/fs");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_PANE_FS, g_scene.pane);
+    TEST_ASSERT_EQUAL_STRING("ls /  (1 entrees, sys_listdir)", g_scene.term[0]);
+    TEST_ASSERT_EQUAL_STRING("  d  etc/", g_scene.term[1]);
+    feed_str("/admin");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL_STRING("  vfs: actif pid 4 file 0", g_scene.term[1]);
+    feed_str("/browser");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(0, g_scene.pane_live);
+    osui_gui_set_pane_source(0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_lot12_vfs_and_browser_inspection_views);
@@ -584,6 +633,7 @@ int main(void) {
     RUN_TEST(test_gui_web_pane_pipeline);
     RUN_TEST(test_gui_web_pipeline_sanitized);
     RUN_TEST(test_gui_mobile_pane);
+    RUN_TEST(test_gui_live_panes);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

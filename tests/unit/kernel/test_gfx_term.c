@@ -76,11 +76,31 @@ static void test_title_buttons_hit(void) {
     TEST_ASSERT_EQUAL(GFX_TERM_HIT_CLOSE, gfx_term_hit(&l, bx + 3, by + 3));
 }
 
+/* The grid follows the window: 80x25 in a window, the screen when
+ * maximized, smaller on a screen too small for 80x25. */
+static void test_grid_follows_window(void) {
+    gfx_term_layout_t l;
+    gfx_term_layout_at(1024, 768, 0, 0, 0, &l);
+    TEST_ASSERT_EQUAL(80, l.cols); TEST_ASSERT_EQUAL(25, l.rows);
+    TEST_ASSERT_EQUAL(80 * 8 + 4, l.w);
+    gfx_term_layout_at(1024, 768, 1, 0, 0, &l);
+    TEST_ASSERT_EQUAL(127, l.cols); TEST_ASSERT_EQUAL(46, l.rows);
+    TEST_ASSERT(l.gx + l.cols * 8 <= 1024 && l.gy + l.rows * 16 <= 768);
+    gfx_term_layout_at(1920, 1080, 1, 0, 0, &l);
+    TEST_ASSERT_EQUAL(2, l.scale);
+    TEST_ASSERT_EQUAL((1920 - 4) / 16, l.cols);
+    TEST_ASSERT_EQUAL((1080 - 4 - 40) / 32, l.rows);
+    gfx_term_layout_at(640, 400, 0, 0, 0, &l);
+    TEST_ASSERT_EQUAL(79, l.cols); TEST_ASSERT_EQUAL(23, l.rows);
+    TEST_ASSERT(l.w <= 640 && l.h <= 400);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_layout_centered_and_scaled);
     RUN_TEST(test_cell_pixels_follow_font_and_attr);
     RUN_TEST(test_title_buttons_hit);
+    RUN_TEST(test_grid_follows_window);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -9,8 +9,10 @@
 #define GFX_TERM_H
 #include <stdint.h>
 
-#define GFX_TERM_COLS 80
+#define GFX_TERM_COLS 80      /* default grid (text mode size) */
 #define GFX_TERM_ROWS 25
+#define GFX_TERM_MAX_COLS 240 /* = VGA_MAX_COLS */
+#define GFX_TERM_MAX_ROWS 80  /* = VGA_MAX_ROWS */
 #define GFX_TERM_CELL_W 8
 #define GFX_TERM_CELL_H 16
 #define GFX_TERM_TITLE_H 20
@@ -22,23 +24,26 @@ typedef struct {
     int x, y;       /* window top left, title bar included */
     int w, h;       /* window size, title bar included */
     int gx, gy;     /* top left of the cell grid */
+    int cols, rows; /* grid size: 80x25 in a window, the screen when maximized */
 } gfx_term_layout_t;
 
-/* Centered window; scale grows with the framebuffer (maximized look on a
- * large window). The grid itself stays 80x25. */
+/* Centered window; scale grows with the framebuffer. The window grid is
+ * 80x25 (smaller if the screen is too small); maximized, the grid takes
+ * the whole screen at the same scale. */
 void gfx_term_layout(int fb_w, int fb_h, gfx_term_layout_t *out);
 /* Same, moved by (dx, dy) from the centre (clamped on screen), or covering
  * the screen when maximized. */
 void gfx_term_layout_at(int fb_w, int fb_h, int maximized, int dx, int dy, gfx_term_layout_t *out);
 
 /* Title bar buttons, right to left: close, maximize, minimize. */
-#define GFX_TERM_BTN 14
-#define GFX_TERM_HIT_NONE 0
-#define GFX_TERM_HIT_GRID 1
-#define GFX_TERM_HIT_TITLE 2
-#define GFX_TERM_HIT_MIN 3
-#define GFX_TERM_HIT_MAX 4
-#define GFX_TERM_HIT_CLOSE 5
+#include "gfx_wm.h"
+#define GFX_TERM_BTN GFX_WM_BTN
+#define GFX_TERM_HIT_NONE GFX_WM_HIT_NONE
+#define GFX_TERM_HIT_GRID GFX_WM_HIT_BODY
+#define GFX_TERM_HIT_TITLE GFX_WM_HIT_TITLE
+#define GFX_TERM_HIT_MIN GFX_WM_HIT_MIN
+#define GFX_TERM_HIT_MAX GFX_WM_HIT_MAX
+#define GFX_TERM_HIT_CLOSE GFX_WM_HIT_CLOSE
 int gfx_term_hit(const gfx_term_layout_t *l, int x, int y);
 /* Top left of button GFX_TERM_HIT_MIN/MAX/CLOSE. */
 void gfx_term_button_pos(const gfx_term_layout_t *l, int which, int *x, int *y);

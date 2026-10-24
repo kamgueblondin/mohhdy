@@ -11,6 +11,9 @@ void gfx_fb_leave(void);
 int gfx_fb_term_enter(void);
 int gfx_fb_term_active(void);
 /* Mouse over the terminal window: title bar buttons and drag. */
+int gfx_fb_term_minimized(void);
+void gfx_fb_term_poll(void);
+void gfx_fb_redraw_desktop(void);
 void gfx_fb_term_mouse(int x, int y, uint8_t buttons, uint8_t prev);
 int gfx_fb_active(void);
 int gfx_fb_width(void);

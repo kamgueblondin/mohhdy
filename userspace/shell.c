@@ -620,6 +620,12 @@ int sys_service_status(const char* name, os_service_status_t* status) {
     return result;
 }
 
+/* Live Statut / Fichiers / Admin windows: the same syscalls as uptime,
+ * mem, ps, ls and service-status (userspace/osui_panes.c). */
+static const osui_pane_src_t k_pane_src = {
+    sys_listdir, sys_ps, sys_meminfo, sys_ticks, sys_service_status
+};
+
 int sys_service_grant(const char* name, int target_pid) {
     int result;
     asm volatile("int $0x80" : "=a"(result) : "a"(SYS_SERVICE_GRANT), "b"(name), "c"(target_pid));
@@ -1160,9 +1166,10 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  tail <file>        - Fin du fichier (tail ok N fichier)\n");
     
     print_colored("\nAFFICHAGE :\n", COLOR_YELLOW);
-    print_string("  Page Up / Haut     - Remonter dans l'historique d'ecran\n");
-    print_string("  Page Down / Bas    - Redescendre vers la saisie\n");
-    print_string("  Curseur bloc       - Marque la position de saisie\n");
+    print_string("  Page Up / Page Down - Defiler l'historique d'ecran\n");
+    print_string("  Haut / Bas         - Rappeler les lignes deja tapees\n");
+    print_string("  Tab                - Completer la commande (2 fois: liste)\n");
+    print_string("  Gauche Droite Debut Fin Suppr - Editer la ligne\n");
     
     print_colored("\nCONTRÔLE :\n", COLOR_YELLOW);
     print_string("  exit [code]        - Quitter le shell\n");
@@ -7384,6 +7391,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         print_string(osui_out);
         shell_term_leave_if(input_buffer);
         if (osui_gui_should_enter()) {
+            osui_gui_set_pane_source(&k_pane_src);
             osui_gui_run();
             shell_after_gui(ctx);
         }
@@ -7424,6 +7432,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         print_string(osui_out);
         shell_term_leave_if(input_buffer);
         if (osui_gui_should_enter()) {
+            osui_gui_set_pane_source(&k_pane_src);
             osui_gui_run();
             shell_after_gui(ctx);
         }
