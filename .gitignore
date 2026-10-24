@@ -76,3 +76,6 @@ userspace/netwire
 /initrd_content/pm/
 /initrd_content/dos/
 userspace/usbdriver
+
+# Stale object files at the repository root (the build writes to build/).
+/*.o

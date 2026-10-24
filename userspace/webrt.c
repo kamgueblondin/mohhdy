@@ -362,56 +362,115 @@ int webrt_webgpu_multi_pipeline_dispatch_parallel(webrt_webgpu_multi_pipeline_t 
 /* Lot 41: Web Runtime WebAssembly SIMD Vectorized LLM Attention Kernel & WebGPU Multi-Queue Command Submission Engine */
 
 void webrt_mha_init(webrt_mha_kernel_t *kernel, uint32_t num_heads, uint32_t head_dim) {
+    uint32_t lo = 0, hi = 65536U, d;
     if (!kernel) return;
     kernel->num_heads = (num_heads > WEBRT_MHA_HEADS_MAX) ? WEBRT_MHA_HEADS_MAX : num_heads;
     kernel->head_dim = (head_dim > WEBRT_MHA_DIM_MAX) ? WEBRT_MHA_DIM_MAX : head_dim;
-    kernel->scale_q16 = 65536 / (kernel->head_dim ? kernel->head_dim : 1);
+    /* scale = 1/sqrt(head_dim) in 16.16 (the old code used 1/head_dim):
+     * the largest s with s*s*head_dim <= 2^32, found without division. */
+    d = kernel->head_dim ? kernel->head_dim : 1U;
+    while (lo < hi) {
+        uint32_t mid = lo + (hi - lo + 1U) / 2U;
+        if ((uint64_t)mid * mid * d <= 4294967296ULL) lo = mid; else hi = mid - 1U;
+    }
+    kernel->scale_q16 = (int32_t)lo;
     kernel->total_attentions_computed = 0;
 }
 
 int webrt_mha_qkv_proj(const webrt_mha_kernel_t *kernel, const int32_t *in, int32_t *q, int32_t *k, int32_t *v, uint32_t seq_len) {
+    /* Identity projection: the kernel carries no learned W_q/W_k/W_v, so
+     * Q = K = V = input (self-attention over the raw vectors). The old code
+     * added +1 and +2 offsets, which is not a projection. */
     if (!kernel || !in || !q || !k || !v || seq_len == 0) return -1;
     uint32_t total_elements = seq_len * kernel->num_heads * kernel->head_dim;
     for (uint32_t i = 0; i < total_elements; i++) {
         q[i] = in[i];
-        k[i] = in[i] + 1;
-        v[i] = in[i] + 2;
+        k[i] = in[i];
+        v[i] = in[i];
     }
     return 0;
 }
 
+/* exp(x) in 16.16 for x <= 0: 2^(x*log2(e)) split into an integer shift and
+ * a 4th order polynomial for 2^f, f in [0,1) (max relative error ~0.2%). */
+static uint32_t webrt_exp_neg_q16(int32_t x) {
+    int64_t t;
+    int32_t n, f;
+    uint64_t p;
+    if (x > 0) x = 0;
+    if (x < -(20 * 65536)) return 0U;
+    t = ((int64_t)x * 94548) >> 16;           /* x * log2(e), 16.16 */
+    n = (int32_t)(t >> 16);                   /* floor, <= 0 */
+    f = (int32_t)(t - ((int64_t)n << 16));    /* [0, 65536) */
+    p = 630U;
+    p = 3638U + ((p * (uint32_t)f) >> 16);
+    p = 15743U + ((p * (uint32_t)f) >> 16);
+    p = 45426U + ((p * (uint32_t)f) >> 16);
+    p = 65536U + ((p * (uint32_t)f) >> 16);
+    if (-n >= 32) return 0U;
+    return (uint32_t)(p >> (uint32_t)(-n));
+}
+
 int webrt_mha_softmax_fast_q16(const int32_t *logits, int32_t *probs, uint32_t size) {
-    if (!logits || !probs || size == 0) return -1;
+    /* Real softmax in 16.16 (the old code used exp(x) ~ 1 + x). The sum
+     * stays below 2^31, so size is bounded to 32768 entries. */
+    if (!logits || !probs || size == 0 || size > 32768U) return -1;
     int32_t max_val = logits[0];
     for (uint32_t i = 1; i < size; i++) {
         if (logits[i] > max_val) max_val = logits[i];
     }
     uint32_t sum_exp = 0;
     for (uint32_t i = 0; i < size; i++) {
-        int32_t diff = logits[i] - max_val;
-        int32_t exp_val = (diff > -65536) ? (65536 + diff) : 1;
-        probs[i] = exp_val;
-        sum_exp += (uint32_t)exp_val;
+        int64_t diff = (int64_t)logits[i] - max_val;
+        uint32_t e = diff < -(20 * 65536) ? 0U : webrt_exp_neg_q16((int32_t)diff);
+        if (e > 65536U) e = 65536U;
+        probs[i] = (int32_t)e;
+        sum_exp += e;
     }
-    if (sum_exp == 0) sum_exp = 1;
+    if (sum_exp == 0) sum_exp = 1; /* the max element always gives 65536 */
     for (uint32_t i = 0; i < size; i++) {
-        uint32_t p = (uint32_t)probs[i];
-        if (p >= sum_exp) {
-            probs[i] = 65536;
-        } else {
-            probs[i] = (int32_t)((p * 65536U) / sum_exp);
-        }
+        /* (e / sum) in 16.16 using 32-bit division only: Q15 then << 1. */
+        uint32_t e = (uint32_t)probs[i];
+        probs[i] = (int32_t)((((e << 15) + sum_exp / 2U) / sum_exp) << 1);
     }
     return 0;
 }
 
 int webrt_mha_compute_attention(webrt_mha_kernel_t *kernel, const int32_t *q, const int32_t *k, const int32_t *v, int32_t *out, uint32_t seq_len) {
+    /* Scaled dot-product multi-head attention, 16.16 fixed point, no mask.
+     * Layout: [seq_len][num_heads][head_dim]. For each head h and query i:
+     *   s_j = (q_i . k_j) * scale, p = softmax(s), out_i = sum_j p_j v_j. */
+    int32_t scores[WEBRT_MHA_SEQ_MAX];
+    int32_t probs[WEBRT_MHA_SEQ_MAX];
+    uint32_t h, i, j, d, H, D, stride;
     if (!kernel || !q || !k || !v || !out || seq_len == 0) return -1;
-    uint32_t total_elements = seq_len * kernel->num_heads * kernel->head_dim;
-    for (uint32_t i = 0; i < total_elements; i++) {
-        int64_t prod = (int64_t)q[i] * k[i];
-        int32_t scaled = (int32_t)((prod * kernel->scale_q16) >> 16);
-        out[i] = (int32_t)(((int64_t)scaled * v[i]) >> 16);
+    if (seq_len > WEBRT_MHA_SEQ_MAX || kernel->num_heads == 0 || kernel->head_dim == 0) return -1;
+    H = kernel->num_heads;
+    D = kernel->head_dim;
+    stride = H * D;
+    for (h = 0; h < H; h++) {
+        for (i = 0; i < seq_len; i++) {
+            const int32_t *qi = q + i * stride + h * D;
+            for (j = 0; j < seq_len; j++) {
+                const int32_t *kj = k + j * stride + h * D;
+                int64_t dot = 0;
+                int64_t s;
+                for (d = 0; d < D; d++) dot += ((int64_t)qi[d] * kj[d]) >> 16;
+                if (dot > (1LL << 46)) dot = 1LL << 46;
+                if (dot < -(1LL << 46)) dot = -(1LL << 46);
+                s = (dot * kernel->scale_q16) >> 16;
+                if (s > 0x7FFFFFFFLL) s = 0x7FFFFFFFLL;
+                if (s < -0x7FFFFFFFLL) s = -0x7FFFFFFFLL;
+                scores[j] = (int32_t)s;
+            }
+            if (webrt_mha_softmax_fast_q16(scores, probs, seq_len) != 0) return -1;
+            for (d = 0; d < D; d++) {
+                int64_t acc = 0;
+                for (j = 0; j < seq_len; j++)
+                    acc += (int64_t)probs[j] * v[j * stride + h * D + d];
+                out[i * stride + h * D + d] = (int32_t)(acc >> 16);
+            }
+        }
     }
     kernel->total_attentions_computed++;
     return 0;

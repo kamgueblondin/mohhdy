@@ -204,6 +204,9 @@ def main():
             boot_tasks += 1 if "[SERIAL] boot serialdriver spawned" in log_text() else 0
             boot_tasks += 1 if "[VGA] boot vgadriver spawned" in log_text() else 0
             boot_tasks += 1 if "[USB] boot usbdriver spawned" in log_text() else 0
+            # Ring 3 AI worker: spawned at boot when the initrd carries the
+            # GPT-2 model (make pack-initrd with models/ present).
+            boot_tasks += 1 if "[AI] boot aiworker spawned" in log_text() else 0
             send_command_until(monitor, "task-capacity", "task-capacity ok %d 16 %d" %
                                (boot_tasks + 1, 16 - boot_tasks - 1), proc)
 

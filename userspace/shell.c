@@ -29,6 +29,7 @@ int shell_collab_line(const char* line);
 #include "../kernel/sha256.h"
 #include "webeng.h"
 #include "webrt.h"
+#include "shell_util.h"
 int shell_collab_sign(const uint8_t* m, int len, uint8_t sig[40], uint8_t pk[128]);
 /* US-060: FILE.sig = "pmsig1 pk=<hex> sig=<hex>", Schnorr over
  * SHA-256("pmcert1" || source) with the node's collab key */
@@ -61,6 +62,9 @@ static void pm_sig_path(const char* f, char* out) {
 // ==============================================================================
 
 #define MAX_COMMAND_LENGTH 512
+/* 32 words (args[MAX_ARGS][128] is 4 KiB on the stack of handle_line;
+ * 64 overflowed the shell stack under the VBE GUI). Extra words are now
+ * reported (g_parse_truncated) instead of being dropped silently. */
 #define MAX_ARGS 32
 #define MAX_HISTORY 50
 #define MAX_PATH_LENGTH 256
@@ -1013,52 +1017,18 @@ void set_env_var(shell_context_t* ctx, const char* name, const char* value) {
 // PARSEUR DE COMMANDES AVANCÉ
 // ==============================================================================
 
+/* What the last parse_command call lost (SHELL_PARSE_* bits, 0 if none). */
+static int g_parse_truncated = 0;
+/* Whole-answer GGUF latency: the kernel only records the last 109/110
+ * step, so the shell times the full ai / ai-continue answer itself. */
+static unsigned int g_gguf_answer_ticks = 0;
+static unsigned int g_gguf_answer_steps = 0;
+
+
 int parse_command(const char* input, char* command, char args[MAX_ARGS][128], int* arg_count) {
-    *arg_count = 0;
-    int cmd_len = 0;
-    int in_word = 0;
-    int in_quotes = 0;
-    int arg_idx = 0;
-    int char_idx = 0;
-    
-    // Extraire la commande
-    int i = 0;
-    while (input[i] == ' ' || input[i] == '\t') i++; // Skip whitespace
-    
-    while (input[i] != '\0' && input[i] != ' ' && input[i] != '\t') {
-        command[cmd_len++] = input[i++];
-    }
-    command[cmd_len] = '\0';
-    
-    // Extraire les arguments
-    while (input[i] != '\0' && *arg_count < MAX_ARGS) {
-        if (input[i] == ' ' || input[i] == '\t') {
-            if (in_word && !in_quotes) {
-                args[arg_idx][char_idx] = '\0';
-                (*arg_count)++;
-                arg_idx++;
-                char_idx = 0;
-                in_word = 0;
-            }
-        } else if (input[i] == '"') {
-            in_quotes = !in_quotes;
-            in_word = 1;
-        } else {
-            if (!in_word) {
-                in_word = 1;
-                char_idx = 0;
-            }
-            args[arg_idx][char_idx++] = input[i];
-        }
-        i++;
-    }
-    
-    if (in_word) {
-        args[arg_idx][char_idx] = '\0';
-        (*arg_count)++;
-    }
-    
-    return strlen(command) > 0 ? 1 : 0;
+    /* Bounded parser (shell_util.c): the old loop could write past a
+     * 128-byte argument and dropped words beyond MAX_ARGS without notice. */
+    return shell_parse_line(input, command, 128, args, MAX_ARGS, arg_count, &g_parse_truncated);
 }
 
 // ==============================================================================
@@ -1232,7 +1202,7 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  reboot             - Redémarrer le système\n");
     print_string("  shutdown           - Arrêter le système\n");
     
-    print_colored("\nCOMMANDES OS-UI (Ring 3, llm=stub_echo) :\n", COLOR_YELLOW);
+    print_colored("\nCOMMANDES OS-UI (Ring 3; chat simple = stub_echo, chat ai = GPT-2 local) :\n", COLOR_YELLOW);
     print_string("  /help /browser /shell /admin /support /status /fs /center\n");
     print_string("  gui | graphics | desktop  - Entrer le bureau graphique QEMU (VBE)\n");
     print_string("  gui-status          - Instantane etat + canvas (nographic OK)\n");
@@ -5876,6 +5846,7 @@ static void cmd_ai_model(shell_context_t* ctx, char args[][128], int arg_count) 
             return;
         }
         strcpy(ctx->ai_model, args[1]);
+        osui_set_ai_model(args[1]);
         if (strstr(args[1], "gpt2") != 0 && strstr(args[1], ".gguf") != 0) {
             print_success("Profil GPT-2 GGUF selectionne; modele FAT16 requis au boot");
         } else if (strstr(args[1], "gpt2") != 0) {
@@ -6307,9 +6278,10 @@ static const char* ai_runtime_abort_name(uint32_t abort_reason) {
 }
 
 static void ai_runtime_json_call(const char* key, uint32_t path, int32_t result,
-                                 uint32_t ticks, uint32_t error, uint32_t abort_reason) {
-    uint32_t lat_ms = ticks * 10U;
-    uint32_t tok_lat_ms = lat_ms / 24U;
+                                 uint32_t ticks, uint32_t tokens, int show_tokens,
+                                 uint32_t error, uint32_t abort_reason) {
+    uint32_t lat_ms = 0, tok_lat_ms = 0;
+    shell_ai_latency(ticks, 100U, tokens, &lat_ms, &tok_lat_ms);
     print_string(",\"");
     print_string(key);
     print_string("\":{\"path\":\"");
@@ -6320,11 +6292,32 @@ static void ai_runtime_json_call(const char* key, uint32_t path, int32_t result,
     print_int((int)lat_ms);
     print_string(",\"token_latency_ms\":");
     print_int((int)tok_lat_ms);
+    if (show_tokens) {
+        print_string(",\"tokens\":");
+        print_int((int)tokens);
+    }
     print_string(",\"error\":\"");
     print_string(ai_runtime_error_name(error));
     print_string("\",\"abort\":\"");
     print_string(ai_runtime_abort_name(abort_reason));
     print_string("\"}");
+}
+
+/* New tokens of the last FP32 generation, or 24 (the per-call maximum)
+ * when the kernel snapshot does not carry the counts. */
+static uint32_t ai_runtime_fp32_tokens(const os_ai_engine_status_t* st) {
+    if (st->last_token_count > st->last_prompt_tokens)
+        return st->last_token_count - st->last_prompt_tokens;
+    return 24U;
+}
+
+/* 1 ready, 0 absent, -1 unknown (no live worker to ask). */
+static int ai_runtime_model_ready(const shell_context_t* ctx, int ai_rc,
+                                  const os_ai_engine_status_t* st) {
+    if (ai_rc != 0) return -1;
+    if (strstr(ai_model_name(ctx), ".gguf") != 0) return st->gguf_worker_pid > 0 ? 1 : 0;
+    if (st->worker_pid <= 0) return -1;
+    return st->checkpoint_mapped > 0 ? 1 : 0;
 }
 
 static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count) {
@@ -6344,7 +6337,12 @@ static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count
         print_string(ai_model_name(ctx));
         print_string("\",\"execution\":\"qemu-guest\",\"context_tokens\":64,\"max_new_tokens\":24,\"factuality\":\"not-guaranteed\",\"network\":\"");
         print_string(network);
-        print_string("\",\"network_detail\":{\"nic\":");
+        print_string("\",\"model_ready\":");
+        {
+            int ready = ai_runtime_model_ready(ctx, ai_rc, &ai_st);
+            print_string(ready > 0 ? "true" : ready == 0 ? "false" : "\"unknown\"");
+        }
+        print_string(",\"network_detail\":{\"nic\":");
         print_string((session_status & 1U) ? "true" : "false");
         print_string(",\"dhcp_lease\":");
         print_string((session_status & 2U) ? "true" : "false");
@@ -6358,10 +6356,15 @@ static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count
             print_string(ai_st.worker_pid > 0 ? "live" : "absent");
             print_string("\"");
             ai_runtime_json_call("last", ai_st.last_path, ai_st.last_result,
-                                 ai_st.last_latency_ticks, ai_st.last_error, ai_st.last_abort);
+                                 ai_st.last_latency_ticks, ai_runtime_fp32_tokens(&ai_st), 0,
+                                 ai_st.last_error, ai_st.last_abort);
+            /* The kernel keeps the last 109/110 step only; the shell timed
+             * the whole answer (all steps) when one was produced. */
             ai_runtime_json_call("gguf_last", ai_st.gguf_last_path, ai_st.gguf_last_result,
-                                 ai_st.gguf_last_latency_ticks, ai_st.gguf_last_error,
-                                 ai_st.gguf_last_abort);
+                                 g_gguf_answer_steps ? g_gguf_answer_ticks : ai_st.gguf_last_latency_ticks,
+                                 g_gguf_answer_steps ? g_gguf_answer_steps
+                                                     : (ai_st.gguf_last_latency_ticks ? 1U : 0U), 1,
+                                 ai_st.gguf_last_error, ai_st.gguf_last_abort);
             print_string(",\"liveness\":{\"heartbeats\":");
             print_int((int)ai_st.heartbeats);
             print_string(",\"stalls\":");
@@ -6387,6 +6390,17 @@ static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count
     print_string(ai_provider_name(ctx));
     print_string("\nModele declare     : ");
     print_string(ai_model_name(ctx));
+    {
+        int ready = ai_runtime_model_ready(ctx, ai_rc, &ai_st);
+        if (ready == 0) {
+            print_string(" (absent de ce guest");
+            if (strstr(ai_model_name(ctx), ".gguf") == 0 && ai_st.gguf_worker_pid > 0)
+                print_string("; GGUF pret: ai-model use gpt2.gguf");
+            print_string(")");
+        } else if (ready > 0) {
+            print_string(" (pret)");
+        }
+    }
     print_string("\nLocal              : GPT-2 FP32 initrd ou GPT-2 GGUF FAT16, generation top-k\n");
     print_string("Limite locale      : 64 jetons de contexte, cache KV actif; GGUF lit les poids par fenetres\n");
     print_string("Contrat de sortie  : completion locale, pas une reponse factuelle garantie\n");
@@ -6415,6 +6429,17 @@ static void cmd_ai_runtime(shell_context_t* ctx, char args[][128], int arg_count
         print_string(", abandon ");
         print_string(ai_runtime_abort_name(ai_st.last_abort));
         print_string("\n");
+        if (g_gguf_answer_steps) {
+            uint32_t ms = 0, per = 0;
+            shell_ai_latency(g_gguf_answer_ticks, 100U, g_gguf_answer_steps, &ms, &per);
+            print_string("Derniere reponse GGUF: ");
+            print_int((int)ms);
+            print_string(" ms pour ");
+            print_int((int)g_gguf_answer_steps);
+            print_string(" jetons (");
+            print_int((int)per);
+            print_string(" ms/jeton)\n");
+        }
     }
     print_string("Etat reseau        : ");
     print_string(network);
@@ -6515,6 +6540,7 @@ static int ai_gguf_sentence(const char* query, int first, char* dst, int cap) {
     int used = 0;
     int steps = 0;
     int n;
+    unsigned int t0 = sys_ticks();
     if (!dst || cap < 2) return -1;
     dst[0] = '\0';
     n = first ? sys_gpt2_gguf_generate(query, piece, (int)sizeof(piece))
@@ -6528,6 +6554,8 @@ static int ai_gguf_sentence(const char* query, int first, char* dst, int cap) {
         n = sys_gpt2_gguf_continue(piece, (int)sizeof(piece));
         if (n < 0) break;
     }
+    g_gguf_answer_ticks = sys_ticks() - t0;
+    g_gguf_answer_steps = (unsigned int)steps;
     return used;
 }
 
@@ -6545,6 +6573,27 @@ void call_ai_assistant(shell_context_t* ctx, const char* query) {
         int generated_len = use_gguf
             ? ai_gguf_sentence(query, 1, generated, (int)sizeof(generated))
             : sys_gpt2_generate(query, generated, sizeof(generated));
+        if (generated_len == OS_AI_CANCELLED) {
+            print_colored("[IA] generation annulee (Echap); aucune reponse de repli.\n", COLOR_YELLOW);
+            return;
+        }
+        if (generated_len < 0 && !use_gguf) {
+            /* FP32 checkpoint absent from this guest: use the GGUF model
+             * from FAT16 when it is there, as the OS-UI chat does. */
+            static os_ai_engine_status_t st; /* 676 bytes: keep off the stack */
+            if (ai_runtime_status(&st) == 0 && st.last_error == OS_AI_ERROR_MODEL_MISSING) {
+                int g = ai_gguf_sentence(query, 1, generated, (int)sizeof(generated));
+                if (g == OS_AI_CANCELLED) {
+                    print_colored("[IA] generation annulee (Echap); aucune reponse de repli.\n", COLOR_YELLOW);
+                    return;
+                }
+                if (g >= 0) {
+                    print_colored("[IA] checkpoint FP32 absent, repli sur gpt2.gguf\n", COLOR_YELLOW);
+                    use_gguf = 1;
+                    generated_len = g;
+                }
+            }
+        }
         if (generated_len >= 0) {
             print_colored(use_gguf ? "[GPT-2 GGUF local] " : "[GPT-2 local] ", COLOR_GREEN);
             if (generated_len == 0) print_string("(fin de sequence)");
@@ -6584,11 +6633,24 @@ void cmd_ai(shell_context_t* ctx, char args[][128], int arg_count) {
         return;
     }
     
-    // Reconstituer la question complète
+    // Reconstituer la question complete (bornee a full_query)
     char full_query[MAX_COMMAND_LENGTH] = "";
+    int fq = 0;
     for (int i = 0; i < arg_count; i++) {
-        strcat(full_query, args[i]);
-        if (i < arg_count - 1) strcat(full_query, " ");
+        for (int j = 0; args[i][j] && fq < MAX_COMMAND_LENGTH - 1; j++) full_query[fq++] = args[i][j];
+        if (i < arg_count - 1 && fq < MAX_COMMAND_LENGTH - 1) full_query[fq++] = ' ';
+    }
+    full_query[fq] = '\0';
+    if (g_parse_truncated) {
+        print_colored("[IA] attention: question tronquee (", COLOR_YELLOW);
+        if (g_parse_truncated & SHELL_PARSE_WORDS_DROPPED) {
+            print_string("plus de ");
+            print_int(MAX_ARGS);
+            print_string(" mots");
+        } else {
+            print_string("mot de plus de 127 caracteres");
+        }
+        print_colored("); seule la partie ci-dessous est envoyee au modele.\n", COLOR_YELLOW);
     }
     // Echo immediate for visibility
     print_colored("[IA] ", COLOR_MAGENTA);
@@ -6994,6 +7056,7 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "vfs-grant") == 0) {
         cmd_vfs_grant(ctx, args, arg_count);
+        return 1;
     } else if (strcmp(command, "vfs-backend-grant") == 0) {
         cmd_vfs_backend_grant(ctx, args, arg_count);
         return 1;
@@ -7026,11 +7089,13 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "vfs-mkdir") == 0) {
         cmd_vfs_mkdir(ctx, args, arg_count);
+        return 1;
     } else if (strcmp(command, "vfs-rmdir") == 0) {
         cmd_vfs_rmdir(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "vfs-list") == 0) {
         cmd_vfs_list(ctx, args, arg_count);
+        return 1;
     } else if (strcmp(command, "vfs-list-page") == 0) {
         cmd_vfs_list_page(ctx, args, arg_count);
         return 1;
@@ -7075,10 +7140,13 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "devices") == 0) {
         cmd_devices(ctx, args, arg_count);
+        return 1;
     } else if (strcmp(command, "lspci") == 0) {
         cmd_lspci(ctx, args, arg_count);
+        return 1;
     } else if (strcmp(command, "pci-rescan") == 0) {
         cmd_pci_rescan(ctx, args, arg_count);
+        return 1;
     } else if (strcmp(command, "net-relay-status") == 0) {
         cmd_net_relay_status(ctx, args, arg_count);
         return 1;
@@ -7150,6 +7218,7 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "ai-peer-accept") == 0) {
         cmd_ai_peer_accept(ctx, args, arg_count);
+        return 1;
     } else if (strcmp(command, "ai-peer-tls-poll") == 0) {
         cmd_ai_peer_tls_poll(ctx, args, arg_count);
         return 1;

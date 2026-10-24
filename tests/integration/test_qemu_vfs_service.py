@@ -79,6 +79,54 @@ def rejoin_spawn_preempted_puts(output):
 
 
 
+def rejoin_spawn_inside_line(output):
+    """Rejoin a child line cut by the shell `spawn ok pid N name` reply.
+
+    The child runs as soon as it is spawned, and IRQ0 can switch back to
+    the shell in the middle of one SYS_PUTC string. The shell reply then
+    lands inside the child line, and the rest of that line only comes on
+    the child's next turn, after the shell read its next command (CI flake,
+    qemu-ai-gguf): `... aborted 0 rogu` + `spawn ok pid 10 ggufclient` +
+    prompt and SYS_GETS echo of `yield` + `e 0 pending ... end`.
+    Only a spawn line that starts inside a line is handled, and only when
+    every line between it and the rest is shell input echo (prompt,
+    SYS_GETS, KBD_). The rest is glued back to its prefix; the spawn line
+    and the echo lines follow, so no character is dropped.
+    """
+    spawn = re.compile(r"(?<=[A-Za-z0-9_ ])(spawn ok pid \d+ [A-Za-z0-9_]+\r?\n)")
+    echo = re.compile(r"^(?:(?:\x1b\[[0-9;]*m)*/?(?:\x1b\[[0-9;]*m)* : )?(?:SYS_GETS|KBD_)")
+    pieces = []
+    last = 0
+    for match in spawn.finditer(output):
+        if match.start() < last:
+            continue
+        pos = match.end()
+        gap_end = None
+        for _ in range(64):
+            nl = output.find("\n", pos)
+            line = output[pos:nl if nl >= 0 else len(output)]
+            if not echo.match(line):
+                gap_end = pos
+                break
+            if nl < 0:
+                break
+            pos = nl + 1
+        if gap_end is None or gap_end >= len(output):
+            continue
+        nl = output.find("\n", gap_end)
+        rest_end = len(output) if nl < 0 else nl + 1
+        rest = output[gap_end:rest_end]
+        if not rest.endswith("\n"):
+            rest += "\n"
+        pieces.append(output[last:match.start()])
+        pieces.append(rest)
+        pieces.append(match.group(1))
+        pieces.append(output[match.end():gap_end])
+        last = rest_end
+    pieces.append(output[last:])
+    return "".join(pieces)
+
+
 def rejoin_task_resume_ok(output):
     """Recolle `task-resume ok` + bruit + pid apres preemption IRQ0.
 
@@ -115,6 +163,8 @@ def normalized_log(output):
     output = re.sub(r"\[SCHED\] switching to task \d+\s*", "", output)
     # Prefixe puts() + spawn ok + suffixe de la meme ligne (flake CI vfs-service).
     output = rejoin_spawn_preempted_puts(output)
+    # Reponse spawn ok inseree au milieu d'une ligne du fils (flake CI ai-gguf).
+    output = rejoin_spawn_inside_line(output)
     # task-resume ok <pid> coupe apres ok (SCHED + trace worker).
     output = rejoin_task_resume_ok(output)
     return re.sub(r"[ \t]{2,}", " ", output)

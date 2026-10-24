@@ -541,20 +541,30 @@ build/userspace_switch.o: boot/userspace_switch.s
 # The tar is stamped: make qemu-production, qemu-persistence and qemu-osui-web
 # each depend on pack-initrd, and a phony recipe was repacking the same
 # initrd on every one of those targets inside a single CI job.
-.PHONY: userspace-all pack-initrd pack-initrd-now
+.PHONY: userspace-all pack-initrd pack-initrd-now check-initrd-stamp
 userspace-all:
 	$(MAKE) -C userspace all
+
+# The model profile (MODEL_DIR and which model files it holds, with size
+# and mtime) is part of the stamp: switching MODEL_DIR to a directory with
+# older files must repack, the mtime test alone kept the previous models.
+INITRD_MODELS_KEY = MODEL_DIR=$(MODEL_DIR) $(foreach f,$(MODEL_DIR)/gpt2_tokenizer.bin $(GPT2_MODEL) $(GPT2_GGUF_MODEL),$(f):$(shell stat -c '%s:%Y' $(f) 2>/dev/null || echo absent))
 
 pack-initrd: userspace-all
 	@mkdir -p build
 	@paths="userspace promptmessage/examples webpages dosapps"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
 	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && \
+	    [ "$$(cat build/.initrd-models 2>/dev/null)" = "$(INITRD_MODELS_KEY)" ] && \
 	    [ -z "$$(find $$paths -type f -newer build/.initrd-stamp -print -quit 2>/dev/null)" ]; then \
 		echo "[mkinitrd] initrd unchanged"; \
 	else \
 		$(MAKE) --no-print-directory pack-initrd-now; \
 	fi
+
+# Repacks with another MODEL_DIR and back, then checks the stamp logic.
+check-initrd-stamp:
+	@sh tests/scripts/check_initrd_model_stamp.sh
 
 # Règle pour empaqueter l'initrd automatiquement
 pack-initrd-now:
@@ -640,6 +650,7 @@ pack-initrd-now:
 	@tar -C $(INITRD_DIR) -cf $(INITRD_IMAGE) .
 	@mkdir -p build
 	@touch build/.initrd-stamp
+	@echo "$(INITRD_MODELS_KEY)" > build/.initrd-models
 	@echo "[mkinitrd] Packed executables into $(INITRD_IMAGE)"
 
 # ===== ISO (GRUB) Build =====
@@ -810,6 +821,7 @@ test-all:
 	@$(MAKE) -C tests test
 	@python3 scripts/extract_guest_commands.py --check
 	@python3 tests/scripts/test_python_facade_removed.py
+	@python3 tests/scripts/check_shell_dispatch_returns.py
 
 # Host unit tests rebuilt with --coverage, then one gcov line percentage.
 # Not part of test-all. CI job "coverage" runs it with COVERAGE_MIN, a floor

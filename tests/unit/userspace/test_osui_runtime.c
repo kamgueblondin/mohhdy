@@ -556,6 +556,60 @@ extern int osui_test_ai_rc;
 extern unsigned osui_test_ai_error;
 extern unsigned osui_test_ai_abort;
 
+extern int osui_test_gguf_rc;
+extern int osui_test_gguf_calls;
+
+/* chat ai with the FP32 checkpoint missing falls back to the GGUF model
+ * (the old code stopped at ai_model_missing); status lines report the live
+ * GPT-2 backend instead of a fixed llm=stub_echo. */
+static void test_chat_ai_gguf_fallback_and_honest_labels(void) {
+    int rc;
+    setup();
+    TEST_ASSERT_EQUAL(0, run_line("os-status"));
+    TEST_ASSERT(strstr(g_out, "llm=stub_echo ai_llm=none ai_model=gpt2_124M.bin") != NULL);
+    /* FP32 missing, no GGUF either: explicit no_model, GGUF was tried. */
+    osui_test_ai_rc = -1; osui_test_ai_error = 1U; osui_test_gguf_rc = -1;
+    osui_test_gguf_calls = 0;
+    rc = run_line("chat ai bonjour");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "llm=gpt2_missing ai_status=no_model") != NULL);
+    TEST_ASSERT_EQUAL(1, osui_test_gguf_calls);
+    /* FP32 missing, GGUF present: the answer comes from GGUF. */
+    osui_test_gguf_rc = 0;
+    rc = run_line("chat ai bonjour");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "osui chat ok llm=gpt2_gguf_local ai_status=ready") != NULL);
+    TEST_ASSERT(strstr(g_out, "response=gguf local reply.") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("os-status"));
+    TEST_ASSERT(strstr(g_out, "ai_llm=gpt2_gguf_local") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("admin-status"));
+    TEST_ASSERT(strstr(g_out, "ai_llm=gpt2_gguf_local") != NULL);
+    /* A failure that is not "model missing" does not hide behind GGUF. */
+    osui_test_ai_error = 2U; osui_test_gguf_calls = 0;
+    rc = run_line("chat ai bonjour");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "error=ai_generation_failed") != NULL);
+    TEST_ASSERT_EQUAL(0, osui_test_gguf_calls);
+    /* Shell ai-model use gpt2.gguf: chat ai goes to GGUF directly. */
+    osui_set_ai_model("gpt2.gguf");
+    rc = run_line("chat ai bonjour");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "llm=gpt2_gguf_local") != NULL);
+    TEST_ASSERT_EQUAL(0, run_line("os-status"));
+    TEST_ASSERT(strstr(g_out, "ai_model=gpt2.gguf") != NULL);
+    /* FP32 present: unchanged gpt2_local path. */
+    osui_set_ai_model("gpt2_124M.bin");
+    osui_test_ai_rc = 0; osui_test_ai_error = 0U; osui_test_gguf_calls = 0;
+    rc = run_line("chat ai bonjour");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "osui chat ok llm=gpt2_local ai_status=ready") != NULL);
+    TEST_ASSERT_EQUAL(0, osui_test_gguf_calls);
+    TEST_ASSERT_EQUAL(0, run_line("os-status"));
+    TEST_ASSERT(strstr(g_out, "ai_llm=gpt2_local") != NULL);
+    osui_test_gguf_rc = -1;
+}
+
+
 /* Roadmap step 3: scoped VFS reads, allowlisted agent commands. */
 static void test_scopes_and_agent_run(void) {
     int rc;
@@ -1354,6 +1408,7 @@ int main(void) {
     RUN_TEST(test_lot19_tab_lifecycle_and_audit_tracing);
     RUN_TEST(test_lot22_session_lifecycle_and_pm_audit_tracing);
     RUN_TEST(test_all_browser_and_osui_commands_dispatch);
+    RUN_TEST(test_chat_ai_gguf_fallback_and_honest_labels);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

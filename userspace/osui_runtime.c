@@ -302,7 +302,7 @@ static unsigned osui_ai_last_error(void) { return osui_test_ai_error; }
 static unsigned osui_ai_last_abort(void) { return osui_test_ai_abort; }
 int osui_test_ai_worker = 0;
 static int osui_ai_worker_pid(void) { return osui_test_ai_worker; }
-static int osui_gpt2_generate(const char *prompt, char *out, int max) {
+static int osui_gpt2_fp32(const char *prompt, char *out, int max) {
     const char *fixture = "test local response";
     int i = 0;
     (void)prompt;
@@ -313,6 +313,32 @@ static int osui_gpt2_generate(const char *prompt, char *out, int max) {
     }
     while (fixture[i] && i < max - 1) {
         out[i] = fixture[i];
+        i++;
+    }
+    out[i] = 0;
+    return i;
+}
+/* Host fixture of the GGUF steps (109/110): osui_test_gguf_rc < 0 means
+ * no GGUF model (the call fails with that code); otherwise the steps
+ * return the pieces below, then 0 (end of sequence). */
+int osui_test_gguf_rc = -1;
+int osui_test_gguf_calls = 0;
+static int g_test_gguf_step;
+static int osui_gguf_step(int first, const char *prompt, char *out, int max) {
+    static const char *const pieces[] = { "gguf", " local", " reply.", 0 };
+    const char *piece;
+    int i = 0;
+    (void)prompt;
+    osui_test_gguf_calls++;
+    if (!out || max < 2) return -1;
+    out[0] = 0;
+    if (osui_test_gguf_rc < 0) return osui_test_gguf_rc;
+    if (first) g_test_gguf_step = 0;
+    piece = pieces[g_test_gguf_step];
+    if (!piece) return 0;
+    g_test_gguf_step++;
+    while (piece[i] && i < max - 1) {
+        out[i] = piece[i];
         i++;
     }
     out[i] = 0;
@@ -529,11 +555,25 @@ static int osui_ai_worker_pid(void) {
                  : "memory");
     return result == 0 ? (int)st.worker_pid : 0;
 }
-static int osui_gpt2_generate(const char *prompt, char *out, int max) {
+static int osui_gpt2_fp32(const char *prompt, char *out, int max) {
     int result;
     asm volatile("int $0x80" : "=a"(result)
                  : "a"(SYS_GPT2_GENERATE), "b"(prompt), "c"(out), "d"(max)
                  : "memory");
+    return result;
+}
+/* One GGUF step: 109 starts a generation from prompt, 110 continues it. */
+static int osui_gguf_step(int first, const char *prompt, char *out, int max) {
+    int result;
+    if (first) {
+        asm volatile("int $0x80" : "=a"(result)
+                     : "a"(SYS_GPT2_GGUF_GENERATE), "b"(prompt), "c"(out), "d"(max)
+                     : "memory");
+    } else {
+        asm volatile("int $0x80" : "=a"(result)
+                     : "a"(SYS_GPT2_GGUF_CONTINUE), "c"(out), "d"(max)
+                     : "memory");
+    }
     return result;
 }
 #endif
@@ -547,6 +587,75 @@ static int s_len(const char *s) {
 
 static const char *stage_llm_name(void) {
     return G.stage_llm[0] ? G.stage_llm : "stub_echo";
+}
+
+/* Backend of the last successful local generation: 1 FP32, 2 GGUF. */
+static int g_osui_backend = 0;
+#define OSUI_GGUF_STEPS 24
+
+static int osui_has_gguf_suffix(const char *name) {
+    int n = s_len(name);
+    const char *x = ".gguf";
+    int i;
+    if (n < 5) return 0;
+    for (i = 0; i < 5; i++)
+        if (name[n - 5 + i] != x[i]) return 0;
+    return 1;
+}
+
+/* GGUF sentence: the first step, then continue until the end of sequence,
+ * a sentence end, the step budget or the buffer limit. */
+static int osui_gguf_sentence(const char *prompt, char *out, int max) {
+    char piece[128];
+    int used = 0, steps = 0, n, i;
+    if (!out || max < 2) return -1;
+    out[0] = 0;
+    n = osui_gguf_step(1, prompt, piece, (int)sizeof(piece));
+    if (n < 0) return n;
+    while (n > 0 && steps < OSUI_GGUF_STEPS) {
+        for (i = 0; i < n && piece[i] && used < max - 1; i++) out[used++] = piece[i];
+        out[used] = 0;
+        steps++;
+        if (used >= 24 && (out[used - 1] == '.' || out[used - 1] == '!' || out[used - 1] == '?'))
+            break;
+        if (used >= max - 1) break;
+        n = osui_gguf_step(0, prompt, piece, (int)sizeof(piece));
+        if (n < 0) break;
+    }
+    return used;
+}
+
+/* Local GPT-2 for chat ai: the GGUF profile goes to the GGUF steps; the
+ * FP32 profile falls back to GGUF when the FP32 checkpoint is missing,
+ * so a guest that only has gpt2.gguf still answers. */
+static int osui_gpt2_generate(const char *prompt, char *out, int max) {
+    int rc;
+    if (osui_has_gguf_suffix(G.ai_model)) {
+        rc = osui_gguf_sentence(prompt, out, max);
+        if (rc >= 0) g_osui_backend = 2;
+        return rc;
+    }
+    rc = osui_gpt2_fp32(prompt, out, max);
+    if (rc >= 0) {
+        g_osui_backend = 1;
+        return rc;
+    }
+    if (rc != OS_AI_CANCELLED && osui_ai_last_error() == OS_AI_ERROR_MODEL_MISSING) {
+        int g = osui_gguf_sentence(prompt, out, max);
+        if (g >= 0) {
+            g_osui_backend = 2;
+            return g;
+        }
+        if (g == OS_AI_CANCELLED) return g;
+    }
+    return rc;
+}
+
+/* Local GPT-2 backend that produced the last chat ai answer ("none"
+ * before any). llm= keeps naming the last chat turn (stub_echo for the
+ * echo workflow); ai_llm= says whether GPT-2 is actually live. */
+static const char *osui_ai_llm_name(void) {
+    return g_osui_backend == 2 ? "gpt2_gguf_local" : g_osui_backend == 1 ? "gpt2_local" : "none";
 }
 
 static int s_cmp(const char *a, const char *b) {
@@ -1202,8 +1311,12 @@ static void rest_from(char args[OSUI_MAX_ARGS][96], int narg, int start, char *d
 
 static int cmd_os_help(char *out, int max) {
     int p = 0;
+    out_add(out, max, &p, "osui help llm=");
+    out_add(out, max, &p, stage_llm_name());
+    out_add(out, max, &p, " ai_llm=");
+    out_add(out, max, &p, osui_ai_llm_name());
+    out_add(out, max, &p, " live_guest=true python_facade=false\n");
     out_add(out, max, &p,
-        "osui help llm=stub_echo live_guest=true python_facade=false\n"
         "prompt=MOHHDY>  Pas un bash Linux. Scene guest = etat C, bureau VBE QEMU.\n"
         "slash: /help /browser /shell /admin /support /status /fs /center /close /plan /draw\n"
         "gui (aliases graphics, desktop) : entre le bureau graphique QEMU. console : retour texte.\n"
@@ -1349,8 +1462,14 @@ static int cmd_osui_model(char args[OSUI_MAX_ARGS][96], int narg, char *out, int
 static int cmd_os_status(char *out, int max) {
     osui_session_t *s = cur();
     int p = 0;
+    out_add(out, max, &p, "osui os-status service=mohhdy-os llm=");
+    out_add(out, max, &p, stage_llm_name());
+    out_add(out, max, &p, " ai_llm=");
+    out_add(out, max, &p, osui_ai_llm_name());
+    out_add(out, max, &p, " ai_model=");
+    out_add(out, max, &p, G.ai_model[0] ? G.ai_model : "gpt2_124M.bin");
+    out_add(out, max, &p, " harness=dom_simulator\n");
     out_add(out, max, &p,
-        "osui os-status service=mohhdy-os llm=stub_echo harness=dom_simulator\n"
         "live_guest=true chrome=qemu_fb display_surface=vbe_lfb python_facade=false guest_html_stage=false\n"
         "gui_cmd=gui aliases=graphics,desktop leave=console\n"
         "phase3_complete=false us031_complete=false billing=false kb_loaded=");
@@ -2142,10 +2261,14 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
                             ab == OS_AI_ABORT_TIMEOUT ? "timeout" : 0;
             s_cpy(G.stage_ai_note, 48, w ? "etat_ia=reponse (repli Ring 0, worker IA perdu)"
                                          : "etat_ia=reponse prete");
+            const char *llm = g_osui_backend == 2 ? "gpt2_gguf_local" : "gpt2_local";
+            s_cpy(G.stage_llm, 20, llm);
             s_cpy(s->ai_state, 16, "ready");
             add_msg(s, reply);
             stage_render(text);
-            out_add(out, max, &p, "osui chat ok llm=gpt2_local ai_status=ready");
+            out_add(out, max, &p, "osui chat ok llm=");
+            out_add(out, max, &p, llm);
+            out_add(out, max, &p, " ai_status=ready");
             if (w) {
                 out_add(out, max, &p, " worker=");
                 out_add(out, max, &p, w);
@@ -2278,7 +2401,11 @@ static int cmd_takeover(char *out, int max) {
 static int cmd_admin_status(char *out, int max) {
     osui_session_t *s = cur();
     int p = 0, i;
-    out_add(out, max, &p, "osui admin-status llm=stub_echo\n");
+    out_add(out, max, &p, "osui admin-status llm=");
+    out_add(out, max, &p, stage_llm_name());
+    out_add(out, max, &p, " ai_llm=");
+    out_add(out, max, &p, osui_ai_llm_name());
+    out_add(out, max, &p, "\n");
     if (s) {
         out_add(out, max, &p, "session_id=");
         out_add(out, max, &p, s->id);
@@ -4787,7 +4914,11 @@ static int cmd_gui(char *out, int max) {
         "osui gui ok chrome=qemu_fb display_surface=vbe_lfb canonical=gui aliases=graphics,desktop\n"
         "leave=console chat_mode=");
     out_add(out, max, &p, G.chat_mode);
-    out_add(out, max, &p, " llm=stub_echo us031_complete=false guest_html_stage=false python_facade=false\n");
+    out_add(out, max, &p, " llm=");
+    out_add(out, max, &p, stage_llm_name());
+    out_add(out, max, &p, " ai_llm=");
+    out_add(out, max, &p, osui_ai_llm_name());
+    out_add(out, max, &p, " us031_complete=false guest_html_stage=false python_facade=false\n");
     return OSUI_OK;
 }
 
@@ -5593,8 +5724,14 @@ static int cmd_prompt(char args[OSUI_MAX_ARGS][96], int narg, const char *raw, c
     return cmd_chat(args, narg, out, max);
 }
 
+/* Shell ai-model use keeps the OS-UI chat on the same local profile. */
+void osui_set_ai_model(const char *name) {
+    if (name && name[0]) s_cpy(G.ai_model, 32, name);
+}
+
 void osui_runtime_init(void) {
     int i;
+    g_osui_backend = 0;
     for (i = 0; i < (int)sizeof(G); i++) ((char *)&G)[i] = 0;
     webrt_set_audit_callback(audit_log_add);
     G.next_sid = 0;

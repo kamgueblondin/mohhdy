@@ -388,6 +388,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webrt: $(UNIT_DIR)/userspace/test_webrt.
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/webrt.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_shell_util: $(UNIT_DIR)/userspace/test_shell_util.c ../userspace/shell_util.c ../userspace/shell_util.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/shell_util.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_stun: $(UNIT_DIR)/userspace/test_stun.c ../userspace/stun.c ../userspace/stun.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/stun.c $(FRAMEWORK_SOURCES)
