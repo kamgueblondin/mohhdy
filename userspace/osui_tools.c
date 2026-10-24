@@ -104,8 +104,22 @@ static void add_line(osui_tool_t *t, const char *s, int len, int cls) {
         t->n = OSUI_TOOL_LINES - 1;
     }
     if (len < 0) len = t_len(s);
-    if (len > OSUI_APP_COLS - 1) len = OSUI_APP_COLS - 1;
-    for (k = 0; k < len; k++) t->lines[t->n][k] = (s[k] == '\t' || (unsigned char)s[k] < 32) ? ' ' : s[k];
+    {
+        /* the grid font is ASCII: Latin-1 letters of UTF-8 text (French
+         * shell messages) lose their accent instead of showing "??" */
+        int o = 0;
+        for (k = 0; k < len && o < OSUI_APP_COLS - 1; k++) {
+            unsigned char c = (unsigned char)s[k];
+            if (c == 0xC3 && k + 1 < len) {
+                unsigned char b = (unsigned char)s[++k] | 0x20;   /* lower case */
+                c = (b >= 0xA0 && b <= 0xA5) ? 'a' : b == 0xA7 ? 'c' : (b >= 0xA8 && b <= 0xAB) ? 'e'
+                  : (b >= 0xAC && b <= 0xAF) ? 'i' : (b >= 0xB2 && b <= 0xB6) ? 'o' : (b >= 0xB9 && b <= 0xBC) ? 'u' : '?';
+            } else if (c >= 0x80) { while (k + 1 < len && ((unsigned char)s[k + 1] & 0xC0) == 0x80) k++; c = '?'; }
+            else if (c == '\t' || c < 32) c = ' ';
+            t->lines[t->n][o++] = (char)c;
+        }
+        len = o;
+    }
     t->lines[t->n][len] = 0;
     t->cls[t->n] = (unsigned char)cls;
     t->n++;
