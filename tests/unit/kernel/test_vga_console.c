@@ -145,8 +145,59 @@ static void test_vram_lost_bumps_epoch(void) {
     TEST_ASSERT_EQUAL(e0 + 2U, vga_console_vram_epoch());
 }
 
+static uint16_t g_sink_cells[VGA_ROWS * VGA_COLS];
+static int g_sink_calls;
+static void test_sink(const uint16_t *cells, int cx, int cy, int vis) {
+    int i;
+    (void)cx; (void)cy; (void)vis;
+    for (i = 0; i < VGA_ROWS * VGA_COLS; i++) g_sink_cells[i] = cells[i];
+    g_sink_calls++;
+}
+
+static void feed(const char *s, int *x, int *y) {
+    for (; *s; s++) {
+        if (*s == '\n' || *x >= VGA_COLS) { *x = 0; (*y)++; if (*s == '\n') continue; }
+        if (*y >= VGA_ROWS) { vga_console_scroll(); *y = VGA_ROWS - 1; }
+        vga_console_put_xy(*s, *x, *y, (char)((*x % 7) + 1));
+        (*x)++;
+        vga_console_set_cursor(*x, *y);
+    }
+}
+
+/* One console core, two backends: the same byte stream gives the same
+ * cell grid on the VGA text page (Ring 0 paint) and in the VBE terminal
+ * sink, scrolling and scrollback included. */
+static void test_text_and_vbe_backends_same_grid(void) {
+    static uint16_t text_grid[VGA_ROWS * VGA_COLS];
+    const char *stream = "MOHHDY> help\nligne 1\nligne 2 tres longue ................................................................ fin\n";
+    int x = 0, y = 0, i, k;
+    vga_test_route_ring3 = 0;
+    vga_console_set_gfx_sink(0);
+    vga_console_init(0x07);
+    for (k = 0; k < 12; k++) feed(stream, &x, &y);
+    for (i = 0; i < VGA_ROWS * VGA_COLS; i++) text_grid[i] = vga_test_fb[i];
+
+    vga_console_set_gfx_sink(test_sink);
+    TEST_ASSERT_EQUAL(1, vga_console_gfx_sink_active());
+    vga_console_init(0x07);
+    x = 0; y = 0;
+    g_sink_calls = 0;
+    for (k = 0; k < 12; k++) feed(stream, &x, &y);
+    TEST_ASSERT(g_sink_calls > 0);
+    for (i = 0; i < VGA_ROWS * VGA_COLS; i++) TEST_ASSERT_EQUAL(text_grid[i], g_sink_cells[i]);
+    /* scrollback works the same through the sink */
+    TEST_ASSERT(vga_console_view_up(VGA_ROWS - 1) > 0);
+    TEST_ASSERT(g_sink_cells[0] != text_grid[0] || g_sink_cells[VGA_COLS] != text_grid[VGA_COLS]);
+    vga_console_view_live();
+    vga_console_view_down(VGA_ROWS);
+    for (i = 0; i < VGA_ROWS * VGA_COLS; i++) TEST_ASSERT_EQUAL(text_grid[i], g_sink_cells[i]);
+    vga_console_set_gfx_sink(0);
+    TEST_ASSERT_EQUAL(0, vga_console_gfx_sink_active());
+}
+
 int main(void) {
     unity_init();
+    RUN_TEST(test_text_and_vbe_backends_same_grid);
     RUN_TEST(test_vram_lost_bumps_epoch);
     RUN_TEST(test_init_blanks_screen);
     RUN_TEST(test_put_xy_writes_cell);

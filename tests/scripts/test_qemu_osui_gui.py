@@ -699,6 +699,9 @@ def main():
             if last_error is not None:
                 raise last_error
             # Dock index 2 is "/shell" (C, B, sh, A, S, i, F). Hit-test via UHCI tablet.
+            # The Shell is the console itself: the desktop loop ends and the
+            # kernel draws the console in a VBE window (one shell.c prompt).
+            step = len(log_text())
             click_dock_and_wait(
                 qmp,
                 proc,
@@ -706,33 +709,31 @@ def main():
                 height,
                 2,
                 "osui gui line=/shell",
-                extra_marker="live_eval=true",
+                extra_marker="chrome=vbe_term",
             )
+            wait_for(proc, "gfx term on fb ", CMD_TIMEOUT, step)
+            wait_for(proc, "[0m : ", CMD_TIMEOUT, step)
             if "usbdriver first report applied" not in log_text():
                 raise RuntimeError("tablet clicks did not go through the Ring 3 usbdriver")
+            say("typing whoami in the console terminal window ...")
+            send_command_until(monitor, "whoami", "whoami ok", proc)
+            say("typing ai hello in the console terminal window ...")
+            send_command_until(monitor, "ai hello", "[IA]", proc, wait_prompt=not MODEL_PACKED)
+            if MODEL_PACKED:
+                # The real GPT-2 takes 30-40 s under TCG: ESC goes to the
+                # console app, as in text mode, and cancels it.
+                step = len(log_text())
+                send_key(monitor, "esc")
+                wait_for(proc, "generation annulee (Echap)", CMD_TIMEOUT, step)
+                wait_for(proc, "[0m : ", CMD_TIMEOUT, step)
+                say("ESC cancelled ai in the console terminal window")
+            say("typing gui to go back to the desktop ...")
+            send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
+            wait_for(proc, "OSUI-SNAP", CMD_TIMEOUT)
             say("typing /browser in gui ...")
             send_command_until(
                 monitor, "/browser", "chat_mode=float", proc, mode="getc", wait_prompt=False
             )
-            say("typing /shell in gui ...")
-            send_command_until(
-                monitor, "/shell", "live_eval=true", proc, mode="getc", wait_prompt=False
-            )
-            say("typing whoami in gui shell ...")
-            send_command_until(
-                monitor, "whoami", "whoami ok", proc, mode="getc", wait_prompt=False
-            )
-            say("typing ai hello in gui shell ...")
-            send_command_until(
-                monitor, "ai hello", "[IA]", proc, mode="getc", wait_prompt=False
-            )
-            if MODEL_PACKED:
-                # The real GPT-2 takes 30-40 s under TCG: ESC must cancel it
-                # and give the desktop input back (UI test contract).
-                step = len(log_text())
-                send_key(monitor, "esc")
-                wait_for(proc, "generation annulee (Echap)", CMD_TIMEOUT, step)
-                say("ESC cancelled ai in the gui shell pane")
             say("typing /p2p in gui ...")
             send_command_until(
                 monitor, "/p2p", "pane=p2p", proc, mode="getc", wait_prompt=False

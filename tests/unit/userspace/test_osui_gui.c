@@ -24,7 +24,7 @@ static void setup(void) {
     osui_runtime_init();
     osui_gui_set_input("");
     osui_gui_term_reset();
-    osui_gui_set_program_eval(0);
+    (void)osui_gui_take_pending(0, 0);
 }
 
 static void test_gui_command_canonical(void) {
@@ -220,69 +220,32 @@ static void test_gui_unknown_command_hint(void) {
     TEST_ASSERT(strstr(msg, "ai <question>") != NULL);
 }
 
-static int fake_shell_eval(const char *line, char *captured, int cap_max) {
-    const char *msg = "whoami ok root\n";
-    int i = 0;
-    (void)line;
-    if (!captured || cap_max <= 0) return 1;
-    while (msg[i] && i < cap_max - 1) {
-        captured[i] = msg[i];
-        i++;
-    }
-    captured[i] = 0;
-    return 0;
-}
-
-static void test_gui_live_shell_eval(void) {
-    char term[80];
-    int n, rc;
+/* The Shell is the console: "/shell" ends the desktop loop and asks for
+ * the console terminal window; the desktop keeps no line editor, history
+ * or command table of its own for it. */
+static void test_gui_shell_opens_console_terminal(void) {
+    char pending[96];
+    int rc;
     setup();
-    osui_gui_term_reset();
-    osui_gui_set_program_eval(fake_shell_eval);
-    TEST_ASSERT_EQUAL(0, run_line("/shell"));
-    osui_gui_set_input("whoami");
-    memset(g_out, 0, sizeof(g_out));
+    osui_gui_set_input("/shell");
     rc = osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
-    TEST_ASSERT_EQUAL(0, rc);
-    TEST_ASSERT_EQUAL_STRING("shell", osui_get_pane());
-    TEST_ASSERT(osui_gui_term_count() >= 3);
-    n = osui_gui_term_count();
-    osui_gui_term_at(n - 1, term, (int)sizeof(term));
-    TEST_ASSERT(strstr(term, "whoami ok") != NULL);
-    osui_gui_fill_scene(&g_scene);
-    TEST_ASSERT_EQUAL(OS_FB_PANE_SHELL, g_scene.pane);
-    TEST_ASSERT(g_scene.nterm >= 3);
-    osui_gui_write_snap(g_snap, (int)sizeof(g_snap));
-    TEST_ASSERT(strstr(g_snap, "nterm=") != NULL);
-    TEST_ASSERT(strstr(g_snap, "term=") != NULL);
-    TEST_ASSERT(strstr(g_snap, "whoami ok") != NULL);
-
-    osui_gui_set_input("!date");
-    memset(g_out, 0, sizeof(g_out));
-    rc = osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
-    TEST_ASSERT_EQUAL(0, rc);
-    osui_gui_set_program_eval(0);
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT_EQUAL(1, osui_gui_term_requested());
+    TEST_ASSERT(strstr(g_out, "osui gui term chrome=vbe_term same_console=true") != NULL);
+    TEST_ASSERT_EQUAL(0, osui_gui_take_pending(pending, (int)sizeof(pending)));
+    TEST_ASSERT_EQUAL_STRING("", pending);
+    TEST_ASSERT_EQUAL(0, osui_gui_term_requested());
+    TEST_ASSERT(strcmp(osui_get_pane(), "shell") != 0); /* no empty shell pane left */
 }
 
-static char g_eval_seen[128];
-static int g_eval_calls;
-static int recording_shell_eval(const char *line, char *captured, int cap_max) {
-    int i = 0;
-    while (line[i] && i < (int)sizeof(g_eval_seen) - 1) { g_eval_seen[i] = line[i]; i++; }
-    g_eval_seen[i] = 0;
-    g_eval_calls++;
-    if (captured && cap_max > 0) { strncpy(captured, "shell.c ran it\n", (size_t)cap_max - 1); captured[cap_max - 1] = 0; }
-    return 0;
-}
-
-/* The Shell pane is the console shell: every line, OS-UI commands and
- * "/..." lines included, goes to the one shell.c command table. Only the
- * GUI host controls stay in the desktop loop. */
+/* A shell line typed on the desktop is not run by the desktop: it is
+ * handed to the console prompt (pending), which runs it with shell.c. */
 static void test_gui_shell_pane_uses_console_shell(void) {
     static const char *const lines[] = {
         "help", "ls", "p2p-status", "ai hello", "net-status", "gui-status",
         "session-list", "/chat", "fs-list /", "pm-check ide.pm", "bonjour", 0
     };
+    char pending[96];
     int i;
     for (i = 0; lines[i]; i++)
         TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_SHELL, osui_gui_route_line(lines[i], "shell"));
@@ -290,25 +253,25 @@ static void test_gui_shell_pane_uses_console_shell(void) {
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("gui-exit", "shell"));
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("web /web/demo.html", "shell"));
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("pm-ide x.pm", "shell"));
-    /* other panes keep the OS-UI line, ai and ! still reach the shell */
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_OSUI, osui_gui_route_line("session-list", "none"));
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_SHELL, osui_gui_route_line("ai hello", "none"));
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_SHELL, osui_gui_route_line("!ls", "none"));
 
     setup();
-    osui_gui_term_reset();
-    osui_gui_set_program_eval(recording_shell_eval);
-    TEST_ASSERT_EQUAL(0, run_line("/shell"));
-    g_eval_calls = 0;
-    osui_gui_set_input("session-list");
-    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
-    TEST_ASSERT_EQUAL(1, g_eval_calls);
-    TEST_ASSERT_EQUAL_STRING("session-list", g_eval_seen);
-    osui_gui_set_input("p2p-status");
-    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
-    TEST_ASSERT_EQUAL(2, g_eval_calls);
-    TEST_ASSERT_EQUAL_STRING("p2p-status", g_eval_seen);
-    osui_gui_set_program_eval(0);
+    osui_gui_set_input("ai hello");
+    TEST_ASSERT_EQUAL(1, osui_gui_feed_key('\n', g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(1, osui_gui_take_pending(pending, (int)sizeof(pending)));
+    TEST_ASSERT_EQUAL_STRING("ai hello", pending);
+    setup();
+    osui_gui_set_input("!p2p-status");
+    TEST_ASSERT_EQUAL(1, osui_gui_feed_key('\n', g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(1, osui_gui_take_pending(pending, (int)sizeof(pending)));
+    TEST_ASSERT_EQUAL_STRING("p2p-status", pending);
+    /* other desktop lines stay on the desktop */
+    setup();
+    osui_gui_set_input("/browser");
+    TEST_ASSERT_EQUAL(0, osui_gui_feed_key('\n', g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(0, osui_gui_term_requested());
 }
 
 static void test_vbe_p2p_collab_prod_panes(void) {
@@ -613,7 +576,7 @@ int main(void) {
     RUN_TEST(test_gui_term_strips_ansi);
     RUN_TEST(test_gui_scene_llm_and_newest_messages);
     RUN_TEST(test_gui_unknown_command_hint);
-    RUN_TEST(test_gui_live_shell_eval);
+    RUN_TEST(test_gui_shell_opens_console_terminal);
     RUN_TEST(test_gui_shell_pane_uses_console_shell);
     RUN_TEST(test_vbe_p2p_collab_prod_panes);
     RUN_TEST(test_gui_media_rendering);

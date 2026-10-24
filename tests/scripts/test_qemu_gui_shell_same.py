@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""The desktop Shell pane is the console shell (one shell.c, no copy).
+"""The desktop terminal window is the console itself (one core, one shell).
 
-Types the same commands in the text console and then in the VBE desktop
-Shell pane (/shell), and checks both produce the same output lines on the
-serial line while the desktop stays on the Shell pane.
-Commands: a console-only shell.c command (p2p-status) and an OS-UI
-command (session-status) that used to bypass shell.c in the pane.
+Runs the same commands (clear, a console-only command, an OS-UI command,
+the long help that scrolls) in text mode and then in the VBE terminal
+window opened with /shell, dumps the visible 80x25 grid over serial with
+term-dump each time and requires the two grids to be identical. Also
+checks PgUp scrolls back in the window and console returns to text mode.
 """
 from __future__ import print_function
 
@@ -24,37 +24,36 @@ os.environ.setdefault("OSUI_GUI_QMP_SOCK", "/tmp/mohhdy-gui-shell-qmp.sock")
 os.environ.setdefault("OVERLAY_DISK", os.path.join(LOGS, "qemu-gui-shell-same-overlay.img"))
 import test_qemu_osui_gui as g  # noqa: E402
 
+# clear first so both grids start empty; help is long and scrolls.
 COMMANDS = [
+    ("clear", None),
     ("p2p-status", "p2p"),
     ("session-status", "session"),
+    ("help", "term-dump"),
 ]
-NOISE = ("SYS_GET", "OSUI-SNAP", "osui gui line=", "[0m : ", "SYS_PUT", "[SCHED", "[IRQ")
 
 
-def output_lines(text):
-    lines = []
-    for raw in g.normalized_log(text).splitlines():
-        line = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", raw).strip()
-        if not line or any(n in raw for n in NOISE) or line.endswith(":"):
-            continue
-        lines.append(line)
-    return lines
+def dump_grid(monitor, proc):
+    start = g.send_command_until(monitor, "term-dump", "TERM-DUMP END", proc)
+    text = g.normalized_log(g.log_text()[start:])
+    head = re.search(r"TERM-DUMP BEGIN backend=(\w+)", text)
+    body = text[text.find("TERM-DUMP BEGIN"):text.find("TERM-DUMP END")]
+    rows = [line[5:] for line in body.splitlines() if line.startswith("TERM|")]
+    if len(rows) != 25:
+        raise RuntimeError("grid dump has %d rows: %r" % (len(rows), body[-800:]))
+    return head.group(1) if head else "?", rows
 
 
-def wait_quiet(proc, settle=2.0, timeout=30.0):
-    deadline = time.monotonic() + timeout
-    last = len(g.log_text())
-    quiet_since = time.monotonic()
-    while time.monotonic() < deadline:
-        time.sleep(0.2)
-        n = len(g.log_text())
-        if n != last:
-            last = n
-            quiet_since = time.monotonic()
-        elif time.monotonic() - quiet_since > settle:
-            return
-    if proc.poll() is not None:
-        raise RuntimeError("QEMU stopped")
+def run_sequence(monitor, proc):
+    for cmd, marker in COMMANDS:
+        if marker:
+            g.send_command_until(monitor, cmd, marker, proc)
+        else:
+            start = len(g.log_text())
+            g.send_command_once(monitor, cmd, proc, "gets")
+            g.wait_for(proc, "[0m : ", g.CMD_TIMEOUT, start)
+            time.sleep(0.5)
+    return dump_grid(monitor, proc)
 
 
 def main():
@@ -79,36 +78,44 @@ def main():
             g.wait_for(proc, "[0m : ", g.BOOT_TIMEOUT)
             monitor = g.monitor_connect()
             time.sleep(0.6)
-            console = {}
-            for cmd, marker in COMMANDS:
-                start = g.send_command_until(monitor, cmd, marker, proc)
-                wait_quiet(proc)
-                text = g.log_text()[start:]
-                text = text[text.find("ligne lue: " + cmd):]
-                console[cmd] = output_lines(text)[1:]
-                g.say("console %s: %d lines" % (cmd, len(console[cmd])))
-                if not console[cmd]:
-                    raise RuntimeError("console %s printed nothing" % cmd)
+            back_a, grid_a = run_sequence(monitor, proc)
+            if back_a != "text":
+                raise RuntimeError("console dump backend %s" % back_a)
+            g.say("console grid: %d non empty rows" % len([r for r in grid_a if r]))
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
-            g.send_command_until(monitor, "/shell", "pane=shell", proc, mode="getc", wait_prompt=False)
-            for cmd, marker in COMMANDS:
-                start = g.send_command_until(monitor, cmd, marker, proc, mode="getc", wait_prompt=False)
-                wait_quiet(proc)
-                text = g.log_text()[start:]
-                text = text[text.find("osui gui line=" + cmd):]
-                gui = output_lines(text)
-                missing = [l for l in console[cmd] if l not in gui]
-                if missing:
-                    raise RuntimeError("GUI %s differs from console; missing %r\nGUI: %r"
-                                       % (cmd, missing[:5], gui[:20]))
-                snaps = re.findall(r"OSUI-SNAP [^\r\n]*", g.normalized_log(text))
-                if not snaps or "pane=shell" not in snaps[-1]:
-                    raise RuntimeError("GUI left the shell pane: %r" % snaps[-1:])
-                g.say("GUI %s: same %d lines as the console" % (cmd, len(console[cmd])))
-            g.send_key(monitor, "esc")
-            g.wait_for(proc, "chrome=text prompt=MOHHDY>", g.CMD_TIMEOUT)
-        g.say("QEMU GUI shell = console shell contract passed.")
+            start = len(g.log_text())
+            g.send_command_until(monitor, "/shell", "chrome=vbe_term", proc, mode="getc", wait_prompt=False)
+            g.wait_for(proc, "gfx term on fb ", g.CMD_TIMEOUT, start)
+            g.wait_for(proc, "[0m : ", g.CMD_TIMEOUT, start)
+            back_b, grid_b = run_sequence(monitor, proc)
+            if back_b != "vbe":
+                raise RuntimeError("terminal dump backend %s" % back_b)
+            diff = [(i, a, b) for i, (a, b) in enumerate(zip(grid_a, grid_b)) if a != b]
+            if diff:
+                raise RuntimeError("terminal grid differs from the console: %r" % diff[:4])
+            g.say("terminal window grid == console grid (25 rows)")
+            w, h, rgb = g.screendump_rgb(monitor, "qemu-gui-term.ppm")
+            if w < 1000:
+                raise RuntimeError("terminal not on the VBE screen: %dx%d" % (w, h))
+            # PgUp scrolls the same console back inside the window.
+            g.send_key(monitor, "pgup")
+            time.sleep(1.5)
+            _, _, rgb_up = g.screendump_rgb(monitor, "qemu-gui-term-pgup.ppm")
+            if rgb_up == rgb:
+                raise RuntimeError("PgUp did not scroll the terminal window")
+            g.send_key(monitor, "pgdn")
+            time.sleep(0.5)
+            g.say("PgUp scrolls back in the terminal window")
+            g.send_command_until(monitor, "console", "chrome=text", proc)
+            time.sleep(1.0)
+            w, h, _ = g.screendump_rgb(monitor, "qemu-gui-term-text.ppm")
+            if w > 800:
+                raise RuntimeError("console did not return to text mode: %dx%d" % (w, h))
+            back_c, _ = dump_grid(monitor, proc)
+            if back_c != "text":
+                raise RuntimeError("after console the backend is %s" % back_c)
+        g.say("QEMU GUI terminal = console contract passed.")
         return 0
     finally:
         if monitor is not None:
@@ -120,5 +127,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as error:
-        print("QEMU GUI shell failed: %s" % error, file=sys.stderr)
+        print("QEMU GUI terminal failed: %s" % error, file=sys.stderr)
         raise SystemExit(1)

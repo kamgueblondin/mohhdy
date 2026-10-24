@@ -207,6 +207,9 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_fat16.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/fs/fat16.c $BASE_DIR/kernel/fs/fat32.c $BASE_DIR/kernel/llm/gpt2_gguf.c $BASE_DIR/kernel/llm/gpt2_gguf_loader.c $BASE_DIR/kernel/llm/gpt2_quant.c $BASE_DIR/kernel/llm/gpt2_sample.c"
     fi
+    if [ "$(basename "$test_file")" = "test_gfx_term.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/gfx_term.c"
+    fi
     if [ "$(basename "$test_file")" = "test_vga_console.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/vga_console.c"
     fi

@@ -19,6 +19,13 @@ int vga_console_view_offset(void);
 int vga_console_hist_count(void);
 uint16_t vga_console_visible_cell(int x, int y);
 int vga_desktop_active(void);
+/* Second backend of the same console (VBE terminal window). While a sink
+ * is set the frame goes to it instead of the VGA text page. */
+typedef void (*vga_gfx_sink_t)(const uint16_t *cells, int cx, int cy, int visible);
+void vga_console_set_gfx_sink(vga_gfx_sink_t fn);
+int vga_console_gfx_sink_active(void);
+/* Repaint the current console without clearing it. */
+void vga_console_redraw(void);
 void vga_desktop_set(int on);
 void vga_desktop_blit(const uint16_t *cells);
 /* Lot 7 (US-001): the rendered frame, for the Ring 3 driver and Ring 0. */

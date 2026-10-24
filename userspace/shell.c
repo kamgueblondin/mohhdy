@@ -130,9 +130,6 @@ typedef struct {
 } shell_context_t;
 
 static shell_context_t *g_live_ctx;
-static int g_gui_eval;
-static char g_cap[1536];
-static int g_cap_n;
 
 void handle_line(shell_context_t* ctx, char* input_buffer);
 
@@ -142,42 +139,10 @@ void handle_line(shell_context_t* ctx, char* input_buffer);
 
 // Wrappers pour les appels système
 void putc(char c) {
-    if (g_gui_eval && g_cap_n < (int)sizeof(g_cap) - 1) {
-        /* ESC is kept so the GUI pane can drop whole color codes
-         * (osui_gui_term_push) instead of showing "[35m". */
-        if (c == '\n' || c == 27 || (c >= 32 && c <= 126)) {
-            g_cap[g_cap_n++] = c;
-            g_cap[g_cap_n] = 0;
-        }
-    }
     asm volatile("int $0x80" : : "a"(1), "b"(c));
 }
 
-static int shell_gui_eval(const char *line, char *captured, int cap_max) {
-    char buf[MAX_COMMAND_LENGTH];
-    int i = 0;
-    if (!g_live_ctx) return 1;
-    if (!line) line = "";
-    while (line[i] && i < MAX_COMMAND_LENGTH - 1) {
-        buf[i] = line[i];
-        i++;
-    }
-    buf[i] = 0;
-    g_cap_n = 0;
-    g_cap[0] = 0;
-    g_gui_eval = 1;
-    handle_line(g_live_ctx, buf);
-    g_gui_eval = 0;
-    if (captured && cap_max > 0) {
-        i = 0;
-        while (g_cap[i] && i < cap_max - 1) {
-            captured[i] = g_cap[i];
-            i++;
-        }
-        captured[i] = 0;
-    }
-    return 0;
-}
+static int shell_vga_cmd(unsigned int what);
 
 void exit_program(int code) { 
     asm volatile("int $0x80" : : "a"(0), "b"(code)); 
@@ -1150,6 +1115,7 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     
     print_colored("\nCOMMANDES SHELL :\n", COLOR_YELLOW);
     print_string("  history            - Historique des commandes\n");
+    print_string("  term-dump          - Grille console visible sur la ligne serie\n");
     print_string("  alias <name>=<cmd> - Créer un alias\n");
     print_string("  unalias <name>     - Supprimer un alias\n");
     print_string("  env                - Variables d'environnement\n");
@@ -6621,11 +6587,6 @@ void call_ai_assistant(shell_context_t* ctx, const char* query) {
         print_int(generated_len);
         print_colored("); repli de compatibilite.\n", COLOR_YELLOW);
     }
-    if (g_gui_eval) {
-        print_string("[IA] pas de poids GPT-2 dans ce guest. Pas d'exec depuis le bureau VBE.\n");
-        print_string("llm=stub_echo pour le chat. us031_complete=false\n");
-        return;
-    }
     // Lancer le binaire local de compatibilite en tache bloquante pour garantir l'affichage
     char* argv[3];
     argv[0] = "ai_assistant";
@@ -6928,6 +6889,10 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "history") == 0) {
         cmd_history(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "term-dump") == 0) {
+        /* the visible console grid goes to the serial line (both backends) */
+        shell_vga_cmd(2U);
         return 1;
     } else if (strcmp(command, "env") == 0) {
         cmd_env(ctx, args, arg_count);
@@ -7347,6 +7312,37 @@ void display_prompt(shell_context_t* ctx) {
     print_string(line);
 }
 
+/* SYS_VGA_BLIT small commands (kernel/syscall/syscall.c). */
+static int shell_vga_cmd(unsigned int what) {
+    int rc;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_VGA_BLIT), "b"(what));
+    return rc;
+}
+
+/* The desktop ended to show this same console in a VBE window: run the
+ * line typed on the desktop here, at the real prompt. */
+static void shell_after_gui(shell_context_t *ctx) {
+    static char pending[MAX_COMMAND_LENGTH];
+    if (!osui_gui_term_requested()) return;
+    print_string("Terminal du bureau: c'est la console MOHHDY. gui revient au bureau, console au mode texte.\n");
+    if (osui_gui_take_pending(pending, (int)sizeof(pending)) && pending[0]) {
+        print_string("MOHHDY> ");
+        print_string(pending);
+        print_string("\n");
+        handle_line(ctx, pending);
+    }
+}
+
+/* console / gui-exit typed in the terminal window go back to text mode. */
+static void shell_term_leave_if(const char *cmd) {
+    if (!cmd) return;
+    if (strcmp(cmd, "console") != 0 && strcmp(cmd, "gui-exit") != 0 && strcmp(cmd, "/console") != 0) return;
+    if (shell_vga_cmd(3U) != 1) return;
+    osui_gui_ack_leave();
+    shell_vga_cmd(0U);
+    print_string("osui gui exit chrome=text prompt=MOHHDY>\n");
+}
+
 void handle_line(shell_context_t* ctx, char* input_buffer) {
     char command[128];
     char args[MAX_ARGS][128];
@@ -7381,15 +7377,15 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
     }
 
     if (input_buffer[0] == '/') {
-        /* static: the desktop Shell pane runs handle_line at the bottom of
-         * the GUI loop stack (osui_gui_run -> eval -> handle_line), where a
-         * 2 KiB local faulted the shell. Not reentrant: the outer use is
+        /* static: keeps 2 KiB off the shell stack. Not reentrant: it is
          * printed before osui_gui_run starts. */
         static char osui_out[OSUI_OUT_MAX];
         ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
         print_string(osui_out);
+        shell_term_leave_if(input_buffer);
         if (osui_gui_should_enter()) {
-            if (!g_gui_eval) osui_gui_run();
+            osui_gui_run();
+            shell_after_gui(ctx);
         }
         return;
     }
@@ -7414,17 +7410,6 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         return;
     }
 
-    if (g_gui_eval) {
-        if (strcmp(command, "exit") == 0 || strcmp(command, "quit") == 0
-            || strcmp(command, "logout") == 0
-            || strcmp(command, "reboot") == 0
-            || strcmp(command, "shutdown") == 0) {
-            print_string("console pour quitter le bureau. exit/reboot interdit ici.\n");
-            ctx->last_rc = 1;
-            return;
-        }
-    }
-
     if (osui_is_linux_trap(command)) {
         print_string("Pas un bash Linux. Shell Multiboot (userspace/shell.c). Tapez help.\n");
         ctx->last_rc = 1;
@@ -7432,15 +7417,15 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
     }
 
     if (osui_is_command(command)) {
-        /* static: the desktop Shell pane runs handle_line at the bottom of
-         * the GUI loop stack (osui_gui_run -> eval -> handle_line), where a
-         * 2 KiB local faulted the shell. Not reentrant: the outer use is
+        /* static: keeps 2 KiB off the shell stack. Not reentrant: it is
          * printed before osui_gui_run starts. */
         static char osui_out[OSUI_OUT_MAX];
         ctx->last_rc = osui_dispatch_line(input_buffer, osui_out, (int)sizeof(osui_out));
         print_string(osui_out);
+        shell_term_leave_if(input_buffer);
         if (osui_gui_should_enter()) {
-            if (!g_gui_eval) osui_gui_run();
+            osui_gui_run();
+            shell_after_gui(ctx);
         }
         return;
     }
@@ -7565,7 +7550,6 @@ void main() {
     // Initialiser le contexte du shell
     init_shell_context(&shell_ctx);
     g_live_ctx = &shell_ctx;
-    osui_gui_set_program_eval(shell_gui_eval);
     osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
     osui_gui_set_mobile_op(shell_mobile_gui);
     

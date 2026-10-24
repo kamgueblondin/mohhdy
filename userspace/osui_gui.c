@@ -25,7 +25,9 @@ static char g_input[96];
 static int g_ilen;
 static int g_leave;
 static int g_idle;
-static osui_program_eval_t g_eval;
+/* Set when the desktop hands over to the console terminal window. */
+static int g_term_req;
+static char g_pending[96];
 static osui_ide_t g_ide;
 static osui_ide_load_t g_ide_load;
 static osui_ide_save_t g_ide_save;
@@ -293,8 +295,32 @@ static void ide_action(int act, char *out, int out_max) {
     ide_out(out, out_max, "osui pm-ide check ", msg);
 }
 
-void osui_gui_set_program_eval(osui_program_eval_t fn) {
-    g_eval = fn;
+int osui_gui_term_requested(void) { return g_term_req; }
+
+int osui_gui_take_pending(char *dst, int max) {
+    int had = g_pending[0] != 0;
+    if (dst && max > 0) scpy(dst, max, g_pending);
+    g_pending[0] = 0;
+    g_term_req = 0;
+    return had;
+}
+
+/* Hand the screen to the console: the desktop loop ends, the shell goes
+ * back to its own prompt (same line editor, same commands) and the kernel
+ * draws the console in a VBE window. The typed line, if any, is run there. */
+static int request_terminal(const char *line, char *out, int out_max) {
+    g_term_req = 1;
+    scpy(g_pending, (int)sizeof(g_pending), line ? line : "");
+    if (scmp(osui_get_pane(), "shell") == 0) osui_dispatch_line("/close", 0, 0);
+    g_leave = 1;
+    g_ilen = 0;
+    g_input[0] = 0;
+    if (out) {
+        scpy(out, out_max, "osui gui term chrome=vbe_term same_console=true line=");
+        scat(out, out_max, g_pending);
+        scat(out, out_max, "\n");
+    }
+    return 1;
 }
 
 void osui_gui_term_reset(void) {
@@ -403,13 +429,6 @@ void osui_gui_vfs_inspect(const char *path) {
     osui_gui_term_push("Nodes: html, head, body, div#app, button#menu-toggle, form#invoice-form");
 }
 
-static void seed_shell_term(void) {
-    if (g_term_n > 0) return;
-    osui_gui_term_push("Shell Multiboot live_eval=true");
-    osui_gui_term_push("Meme shell que la console (shell.c). help, ai, p2p-...");
-    osui_gui_term_push("Echap vide la ligne, console revient au texte");
-}
-
 static int is_word(const char *s, const char *w) {
     int n = slen(w);
     return sncmp(s, w, n) == 0 && (s[n] == 0 || s[n] == ' ' || s[n] == '\t');
@@ -418,10 +437,9 @@ static int is_word(const char *s, const char *w) {
 /* One decision point for a line typed on the desktop.
  * HOST: needs the GUI loop itself (leave, web pane, editor). mobile-ui is
  *       caught before when the mobile shell is linked.
- * SHELL: runs through the console shell (userspace/shell.c handle_line),
- *        so the Shell pane is the same shell as the text console: same
- *        command table, same output. shell.c itself hands OS-UI commands
- *        and "/..." lines to osui_dispatch_line, exactly as in the console.
+ * SHELL: the desktop gives the screen to the console terminal window and
+ *        the line runs at the real shell prompt (userspace/shell.c): one
+ *        line editor, one command table, one output path.
  * OSUI: chat and other panes keep the OS-UI command line. */
 int osui_gui_route_line(const char *line, const char *pane) {
     if (!line) return OSUI_GUI_ROUTE_OSUI;
@@ -442,36 +460,6 @@ static void seed_browser_term(void) {
 static void seed_fs_term(void) {
     if (g_term_n > 0) return;
     osui_gui_vfs_inspect(0);
-}
-
-static void ensure_shell_pane(char *out, int out_max) {
-    if (scmp(osui_get_pane(), "shell") != 0)
-        osui_dispatch_line("/shell", out, out_max);
-    seed_shell_term();
-}
-
-static int run_program_line(const char *line, char *out, int out_max) {
-    static char cap[1024]; /* off the GUI stack: the shell runs below it */
-    char shown[88];
-    const char *src = line ? line : "";
-    int n = 0;
-    cap[0] = 0;
-    ensure_shell_pane(out, out_max);
-    scpy(shown, 10, "MOHHDY> ");
-    n = slen(shown);
-    while (*src && n < 86) shown[n++] = *src++;
-    shown[n] = 0;
-    osui_gui_term_push(shown);
-    if (g_eval) {
-        g_eval(line ? line : "", cap, (int)sizeof(cap));
-        if (cap[0]) osui_gui_term_push(cap);
-        if (out && out_max > 0) scpy(out, out_max, cap[0] ? cap : shown);
-    } else {
-        osui_gui_term_push("(eval shell absent de ce binaire)");
-        if (out) scpy(out, out_max, "osui gui shell eval=missing\n");
-        return 1;
-    }
-    return 0;
 }
 
 static void put_cell(uint16_t *cells, int x, int y, char ch, unsigned char attr) {
@@ -502,6 +490,12 @@ static void sys_vga_blit_scene(const os_fb_scene_t *scene) {
     (void)rc;
 }
 
+static int sys_vga_term(void) {
+    int rc;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_VGA_BLIT), "b"(1));
+    return rc;
+}
+
 static void sys_vga_leave(void) {
     int rc;
     asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_VGA_BLIT), "b"(0));
@@ -529,6 +523,7 @@ static void yield_gui(void) {
 #else
 static void sys_vga_blit_scene(const os_fb_scene_t *scene) { (void)scene; }
 static void sys_vga_leave(void) {}
+static int sys_vga_term(void) { return 0; }
 static int sys_getc_gui(void) { return 0; }
 static void serial_puts(const char *s) { (void)s; }
 static void yield_gui(void) {}
@@ -911,25 +906,20 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
                 eval_line = g_input + 1;
                 while (*eval_line == ' ' || *eval_line == '\t') eval_line++;
             }
-            if (program) {
-                run_program_line(eval_line, out, out_max);
-            } else {
-                if (osui_dispatch_line(g_input, out, out_max) != 0 && out
-                    && scmp(osui_get_pane(), "shell") != 0
-                    && sncmp(out, "osui error=commande inconnue", 28) == 0) {
-                    /* The error used to reach the serial line only: say it
-                     * in the chat window too. */
-                    static char note[OS_FB_MSG_LEN]; /* off the GUI stack */
-                    scpy(note, (int)sizeof(note), "commande inconnue: ");
-                    scat(note, (int)sizeof(note), tok);
-                    scat(note, (int)sizeof(note), " - ai <question> ou /help");
-                    osui_note(note);
-                }
+            if (program) return request_terminal(eval_line, out, out_max);
+            if (osui_dispatch_line(g_input, out, out_max) != 0 && out
+                && sncmp(out, "osui error=commande inconnue", 28) == 0) {
+                /* The error used to reach the serial line only: say it
+                 * in the chat window too. */
+                static char note[OS_FB_MSG_LEN]; /* off the GUI stack */
+                scpy(note, (int)sizeof(note), "commande inconnue: ");
+                scat(note, (int)sizeof(note), tok);
+                scat(note, (int)sizeof(note), " - ai <question> ou /help");
+                osui_note(note);
             }
-            /* A pane switch may come from either path ("/fs" typed in the
-             * shell terminal runs through shell.c, which dispatches it). */
-            if (scmp(osui_get_pane(), "shell") == 0) seed_shell_term();
-            else if (scmp(osui_get_pane(), "browser") == 0) seed_browser_term();
+            /* "/shell", the Shell icon or menu: the Shell is the console. */
+            if (scmp(osui_get_pane(), "shell") == 0) return request_terminal("", out, out_max);
+            if (scmp(osui_get_pane(), "browser") == 0) seed_browser_term();
             else if (scmp(osui_get_pane(), "fs") == 0) seed_fs_term();
         }
         if (osui_gui_should_leave()) {
@@ -972,6 +962,8 @@ void osui_gui_run(void) {
     g_ide.active = 0;
     g_web_active = 0;
     g_web_mobile = 0;
+    g_term_req = 0;
+    g_pending[0] = 0;
     osui_gui_term_reset();
     osui_gui_ack_enter();
     serial_puts("osui gui live chrome=qemu_fb display_surface=vbe_lfb us031_complete=false\n");
@@ -995,7 +987,13 @@ void osui_gui_run(void) {
         if (stop) break;
         if (key == 0) yield_gui();
     }
-    sys_vga_leave();
     osui_gui_closed();
+    if (g_term_req && sys_vga_term() == 0) {
+        serial_puts("osui gui exit chrome=vbe_term prompt=MOHHDY>\n");
+        return;
+    }
+    g_term_req = 0;
+    g_pending[0] = 0;
+    sys_vga_leave();
     serial_puts("osui gui exit chrome=text prompt=MOHHDY>\n");
 }

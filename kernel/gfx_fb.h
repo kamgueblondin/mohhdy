@@ -7,6 +7,9 @@
 
 int gfx_fb_present(const os_fb_scene_t *scene);
 void gfx_fb_leave(void);
+/* Show the text console in a VBE window (desktop must be live). */
+int gfx_fb_term_enter(void);
+int gfx_fb_term_active(void);
 int gfx_fb_active(void);
 int gfx_fb_width(void);
 int gfx_fb_height(void);
