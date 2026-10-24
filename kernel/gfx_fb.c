@@ -686,6 +686,63 @@ static void term_sink(const uint16_t *cells, int cols, int rows, int cx, int cy,
 
 /* Mouse on the terminal window (IRQ context): the shared window manager
  * (gfx_wm.c) decides; this only applies the result to the console. */
+/* Mouse selection in the terminal: drag selects (inverted cells), the
+ * release copies to the clipboard, the right button pastes it as typed
+ * keys (newlines become spaces: a paste never runs a command). */
+static uint16_t g_sel_cells[GFX_TERM_MAX_COLS * GFX_TERM_MAX_ROWS];
+static int g_sel_drag, g_sel_on, g_sel_a, g_sel_b;
+static char g_clip[512];
+static int g_clip_n;
+
+static void sel_show(void) {
+    int n = g_term_l.cols * g_term_l.rows;
+    uint32_t flags = lock_interrupts();
+    term_cells_now();
+    for (int i = 0; i < n && i < GFX_TERM_MAX_COLS * GFX_TERM_MAX_ROWS; i++) g_sel_cells[i] = g_term_cells[i];
+    if (g_sel_on) gfx_term_sel_apply(g_sel_cells, n, g_sel_a, g_sel_b);
+    cursor_hide();
+    term_compose(g_sel_cells, 0);
+    unlock_interrupts(flags);
+}
+
+static void term_select(int x, int y, int left, int was, int right_press) {
+    int col, row, in = gfx_term_cell_at(&g_term_l, x, y, &col, &row);
+    int idx = row * g_term_l.cols + col;
+    if (right_press && g_clip_n > 0) {
+        int i;
+        for (i = 0; i < g_clip_n; i++) kbd_put_char(g_clip[i] == '\n' ? ' ' : g_clip[i]);
+        print_string_serial("gfx term paste ");
+        serial_uint((unsigned)g_clip_n);
+        write_serial('\n');
+        return;
+    }
+    if (left && !was) {
+        int had = g_sel_on;
+        g_sel_drag = in;
+        g_sel_on = 0;
+        if (in) g_sel_a = g_sel_b = idx;
+        if (had) sel_show();
+        return;
+    }
+    if (left && g_sel_drag && in && idx != g_sel_b) {
+        g_sel_b = idx;
+        g_sel_on = g_sel_a != g_sel_b;
+        sel_show();
+        return;
+    }
+    if (!left && was && g_sel_drag) {
+        g_sel_drag = 0;
+        if (g_sel_on) {
+            int cols = 0, rows = 0;
+            vga_console_frame_copy_n(g_term_cells, GFX_TERM_MAX_COLS * GFX_TERM_MAX_ROWS, &cols, &rows);
+            g_clip_n = gfx_term_sel_text(g_term_cells, cols, rows, g_sel_a, g_sel_b, g_clip, (int)sizeof(g_clip));
+            print_string_serial("gfx term copy ");
+            serial_uint((unsigned)g_clip_n);
+            write_serial('\n');
+        }
+    }
+}
+
 void gfx_fb_term_mouse(int x, int y, uint8_t buttons, uint8_t prev) {
     int left = buttons & 1, was = prev & 1, act;
     gfx_term_layout_t c;
@@ -711,6 +768,9 @@ void gfx_fb_term_mouse(int x, int y, uint8_t buttons, uint8_t prev) {
         term_cells_now();
         cursor_hide();
         term_compose(g_term_cells, 1);
+    } else if (!g_term_wm.drag && (act == GFX_WM_ACT_BODY || act == GFX_WM_ACT_NONE || g_sel_drag ||
+                                   ((buttons & 2) && !(prev & 2)))) {
+        term_select(x, y, left, was, (buttons & 2) && !(prev & 2));
     }
 }
 

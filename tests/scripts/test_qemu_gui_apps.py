@@ -11,12 +11,14 @@ through the USB tablet:
   * Enter on the file opens it in the editor, the typed text is saved
     with ESC w;
   * /p2p shows the captured output of the real p2p-stats command;
-  * the terminal (cat) shows the same bytes: one file layer (fsops) for
+  * the terminal (cat) shows the same bytes; a mouse drag in the
+    terminal copies text and the right button pastes it: one file layer (fsops) for
     the shell commands and the desktop apps.
 """
 from __future__ import print_function
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -165,9 +167,29 @@ def main():
             g.send_command_until(monitor, "/center", "osui gui line=/center", proc, mode="getc", wait_prompt=False)
             time.sleep(0.8)
             # the terminal reads the same bytes
-            tw.open_terminal(monitor, proc)
+            win = tw.open_terminal(monitor, proc)
             g.send_command_until(monitor, "cat /ux3/b.txt", "hello ux3", proc)
             g.say("cat in the terminal shows the text saved by the desktop editor")
+            # mouse selection: drag over the top rows copies, right click pastes
+            scale, wx, wy, ww, _wh = win
+            gx, gy = wx + 2, wy + 2 + 20 * scale
+            start = len(g.log_text())
+            tw.move(qmp, gx + 2, gy + 2)
+            tw.button(qmp, True)
+            tw.move(qmp, gx + 40 * 8 * scale, gy + 3 * 16 * scale + 4)
+            tw.button(qmp, False)
+            g.wait_for(proc, "gfx term copy ", g.CMD_TIMEOUT, start)
+            copied = int(re.findall(r"gfx term copy (\d+)", g.log_text()[start:])[-1])
+            if copied <= 0:
+                raise RuntimeError("terminal selection copied nothing")
+            start = len(g.log_text())
+            g.qmp_cmd(qmp, {"execute": "input-send-event", "arguments": {"events": [
+                {"type": "btn", "data": {"down": True, "button": "right"}}]}})
+            time.sleep(0.4)
+            g.qmp_cmd(qmp, {"execute": "input-send-event", "arguments": {"events": [
+                {"type": "btn", "data": {"down": False, "button": "right"}}]}})
+            g.wait_for(proc, "gfx term paste %d" % copied, g.CMD_TIMEOUT, start)
+            g.say("terminal mouse selection copied %d bytes, right click pasted them" % copied)
         g.say("QEMU GUI apps (explorer + editor) contract passed.")
         return 0
     finally:

@@ -146,3 +146,51 @@ int gfx_term_render_rows(uint32_t *fb, int fb_w, int fb_h, int pitch,
     if (row_max) *row_max = hi;
     return n;
 }
+
+int gfx_term_cell_at(const gfx_term_layout_t *l, int x, int y, int *col, int *row) {
+    int cw, ch, c, r;
+    if (!l || l->scale <= 0) return 0;
+    cw = GFX_TERM_CELL_W * l->scale;
+    ch = GFX_TERM_CELL_H * l->scale;
+    if (x < l->gx || y < l->gy) return 0;
+    c = (x - l->gx) / cw;
+    r = (y - l->gy) / ch;
+    if (c >= l->cols || r >= l->rows) return 0;
+    if (col) *col = c;
+    if (row) *row = r;
+    return 1;
+}
+
+int gfx_term_sel_text(const uint16_t *cells, int cols, int rows, int a, int b, char *out, int max) {
+    int n = 0, i, r, t;
+    if (!out || max <= 0) return 0;
+    out[0] = 0;
+    if (!cells || cols <= 0 || rows <= 0) return 0;
+    if (a > b) { t = a; a = b; b = t; }
+    if (a < 0) a = 0;
+    if (b >= cols * rows) b = cols * rows - 1;
+    for (r = a / cols; r <= b / cols; r++) {
+        int from = r == a / cols ? a % cols : 0;
+        int to = r == b / cols ? b % cols : cols - 1;
+        int end = to;
+        while (end >= from && ((char)(cells[r * cols + end] & 0xFF) == ' ' || (cells[r * cols + end] & 0xFF) == 0)) end--;
+        if (r != a / cols && n < max - 1) out[n++] = '\n';
+        for (i = from; i <= end && n < max - 1; i++) {
+            char c = (char)(cells[r * cols + i] & 0xFF);
+            out[n++] = (c >= 32 && c <= 126) ? c : ' ';
+        }
+    }
+    out[n] = 0;
+    return n;
+}
+
+void gfx_term_sel_apply(uint16_t *cells, int n, int a, int b) {
+    int i, t;
+    if (!cells) return;
+    if (a > b) { t = a; a = b; b = t; }
+    for (i = a < 0 ? 0 : a; i <= b && i < n; i++) {
+        uint16_t v = cells[i], at = (uint16_t)(v >> 8);
+        at = (uint16_t)(((at & 0x0F) << 4) | ((at >> 4) & 0x0F));
+        cells[i] = (uint16_t)((v & 0xFF) | (at << 8));
+    }
+}
