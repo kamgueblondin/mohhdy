@@ -73,7 +73,13 @@ void vga_console_paint_ring0(void) {
 }
 #endif
 
+static vga_gfx_sink_t gfx_sink;
+
 static void present(void) {
+    if (gfx_sink) {                    /* the VBE terminal window paints it */
+        gfx_sink(frame, frame_cx, frame_cy, frame_cvis);
+        return;
+    }
     if (vga_route_frame()) return;     /* the Ring 3 driver paints it */
     vga_console_paint_ring0();
 }
@@ -307,6 +313,22 @@ uint16_t vga_console_visible_cell(int x, int y) {
 
 int vga_desktop_active(void) {
     return desktop_on;
+}
+
+void vga_console_set_gfx_sink(vga_gfx_sink_t fn) {
+    gfx_sink = fn;
+    if (fn) {
+        desktop_on = 0;
+        view_off = 0;
+        compose_visible();
+    }
+}
+
+int vga_console_gfx_sink_active(void) { return gfx_sink != 0; }
+
+void vga_console_redraw(void) {
+    desktop_on = 0;
+    compose_visible();
 }
 
 void vga_desktop_set(int on) {

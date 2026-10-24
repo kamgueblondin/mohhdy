@@ -7,9 +7,11 @@
 
 #define OSUI_SNAP_MAX 3072
 
-typedef int (*osui_program_eval_t)(const char *line, char *captured, int cap_max);
 
-void osui_gui_set_program_eval(osui_program_eval_t fn);
+/* The desktop loop ended to show the console terminal window. The pending
+ * line (may be empty) runs at the shell prompt. take clears both. */
+int osui_gui_term_requested(void);
+int osui_gui_take_pending(char *dst, int max);
 #define OSUI_GUI_ROUTE_HOST 0
 #define OSUI_GUI_ROUTE_SHELL 1
 #define OSUI_GUI_ROUTE_OSUI 2

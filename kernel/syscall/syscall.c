@@ -2744,6 +2744,41 @@ void syscall_handler(cpu_state_t* cpu) {
                     cpu->eax = 0;
                     break;
                 }
+                /* Small values are commands, never a scene pointer:
+                 * 1 show the console in the VBE terminal window,
+                 * 2 dump the visible console grid on the serial line,
+                 * 3 is the terminal window live. */
+                if (cpu->ebx == 1U) {
+                    cpu->eax = (uint32_t)gfx_fb_term_enter();
+                    break;
+                }
+                if (cpu->ebx == 2U) {
+                    int x, y;
+                    print_string_serial("TERM-DUMP BEGIN backend=");
+                    print_string_serial(gfx_fb_term_active() ? "vbe" : "text");
+                    print_string_serial("\n");
+                    for (y = 0; y < VGA_ROWS; y++) {
+                        char row[VGA_COLS + 1];
+                        int end = 0;
+                        for (x = 0; x < VGA_COLS; x++) {
+                            char ch = (char)(vga_console_visible_cell(x, y) & 0xFF);
+                            if (ch < 32 || ch > 126) ch = ' ';
+                            row[x] = ch;
+                            if (ch != ' ') end = x + 1;
+                        }
+                        row[end] = 0;
+                        print_string_serial("TERM|");
+                        print_string_serial(row);
+                        print_string_serial("\n");
+                    }
+                    print_string_serial("TERM-DUMP END\n");
+                    cpu->eax = 0;
+                    break;
+                }
+                if (cpu->ebx == 3U) {
+                    cpu->eax = (uint32_t)gfx_fb_term_active();
+                    break;
+                }
                 {
                     const os_fb_scene_t *scene = (const os_fb_scene_t *)cpu->ebx;
                     if (scene->magic == OS_FB_MAGIC) {

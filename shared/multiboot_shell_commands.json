@@ -399,6 +399,7 @@
     "task-resume",
     "task-summary",
     "task-suspend",
+    "term-dump",
     "test",
     "top",
     "touch",
@@ -877,6 +878,7 @@
     "gui-move"
   ],
   "dispatch_only": [
+    "term-dump",
     "vfs-backend-grant",
     "vfs-backend-grant-read",
     "vfs-backend-grant-mutate",

@@ -2,6 +2,7 @@
  * La resolution suit la fenetre hote (COM2 WxH) ; sinon 1024x768 + zoom-to-fit.
  */
 #include "gfx_fb.h"
+#include "gfx_term.h"
 
 #ifndef KERNEL_TEST
 #include "gfx_desktop.h"
@@ -68,6 +69,10 @@ static int g_saved_cursor_y = -1;
 static uint8_t g_saved_cursor_btn = 0;
 static int g_saved_cursor_valid = 0;
 static void vga_font_save(void);
+static int g_term;
+static int g_term_full;
+static gfx_term_layout_t g_term_l;
+static uint16_t g_term_shown[GFX_TERM_COLS * GFX_TERM_ROWS];
 #endif
 
 int gfx_fb_parse_fit_line(const char *s, int *w, int *h) {
@@ -467,6 +472,13 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
     int cx, cy;
 
     if (!scene || scene->magic != OS_FB_MAGIC) return -1;
+    if (g_term) {
+        /* back from the terminal window to the desktop loop */
+        g_term = 0;
+        vga_console_set_gfx_sink(0);
+        vga_desktop_set(1);
+        g_saved_cursor_valid = 0;
+    }
     memcpy(&local, scene, sizeof(local));
     if (com2_poll_size(&nw, &nh)) {
         if (!g_on || nw != g_w || nh != g_h) {
@@ -540,7 +552,49 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
     return 0;
 }
 
+/* The console in a VBE window: vga_console.c composes the frame as in
+ * text mode and hands it here instead of to the VGA text page. */
+static void term_sink(const uint16_t *cells, int cx, int cy, int visible) {
+    gfx_term_layout_t l;
+    int pitch;
+    (void)cx; (void)cy; (void)visible; /* the cursor cell is already inverted */
+    if (!g_term || !g_on || !g_lfb) return;
+    pitch = (g_pitch > 0) ? g_pitch : g_w;
+    gfx_term_layout(g_w, g_h, &l);
+    if (g_term_full || l.w != g_term_l.w || l.h != g_term_l.h) {
+        g_term_l = l;
+        gfx_term_draw_frame((uint32_t *)g_lfb, g_w, g_h, pitch, &l, g_font_plane2,
+                            "Terminal MOHHDY = console (gui: bureau, console: texte)");
+        (void)gfx_term_render((uint32_t *)g_lfb, g_w, g_h, pitch, &l, g_font_plane2, cells, g_term_shown, 1);
+        g_term_full = 0;
+        return;
+    }
+    (void)gfx_term_render((uint32_t *)g_lfb, g_w, g_h, pitch, &l, g_font_plane2, cells, g_term_shown, 0);
+}
+
+int gfx_fb_term_enter(void) {
+    gfx_term_layout_t l;
+    if (!g_on || !g_lfb || !g_font_saved) return -1;
+    g_term = 1;
+    g_term_full = 1;
+    gfx_term_layout(g_w, g_h, &l);
+    print_string_serial("gfx term on fb ");
+    serial_uint((unsigned)g_w); write_serial('x'); serial_uint((unsigned)g_h);
+    print_string_serial(" grid 80x25 scale ");
+    serial_uint((unsigned)l.scale);
+    print_string_serial(" backend=vbe same_console=vga_console\n");
+    vga_console_set_gfx_sink(term_sink);
+    return 0;
+}
+
+int gfx_fb_term_active(void) { return g_term; }
+
 void gfx_fb_leave(void) {
+    int was_term = g_term;
+    if (g_term) {
+        g_term = 0;
+        vga_console_set_gfx_sink(0);
+    }
     if (!g_on) {
         vga_desktop_set(0);
         return;
@@ -553,7 +607,8 @@ void gfx_fb_leave(void) {
     g_fit_n = 0;
     g_saved_cursor_valid = 0;
     vga_console_vram_lost();
-    vga_desktop_set(0);
+    if (was_term) vga_console_redraw(); /* keep what the terminal showed */
+    else vga_desktop_set(0);
 }
 
 int gfx_fb_active(void) { return g_on; }
@@ -567,6 +622,8 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
     return 0;
 }
 void gfx_fb_leave(void) {}
+int gfx_fb_term_enter(void) { return -1; }
+int gfx_fb_term_active(void) { return 0; }
 int gfx_fb_active(void) { return 0; }
 int gfx_fb_width(void) { return GFX_FB_WIDTH; }
 int gfx_fb_height(void) { return GFX_FB_HEIGHT; }
