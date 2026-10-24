@@ -1166,9 +1166,10 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  tail <file>        - Fin du fichier (tail ok N fichier)\n");
     
     print_colored("\nAFFICHAGE :\n", COLOR_YELLOW);
-    print_string("  Page Up / Haut     - Remonter dans l'historique d'ecran\n");
-    print_string("  Page Down / Bas    - Redescendre vers la saisie\n");
-    print_string("  Curseur bloc       - Marque la position de saisie\n");
+    print_string("  Page Up / Page Down - Defiler l'historique d'ecran\n");
+    print_string("  Haut / Bas         - Rappeler les lignes deja tapees\n");
+    print_string("  Tab                - Completer la commande (2 fois: liste)\n");
+    print_string("  Gauche Droite Debut Fin Suppr - Editer la ligne\n");
     
     print_colored("\nCONTRÔLE :\n", COLOR_YELLOW);
     print_string("  exit [code]        - Quitter le shell\n");
