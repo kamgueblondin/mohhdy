@@ -38,6 +38,10 @@ typedef struct {
         gfx_rect_t box;
         gfx_rect_t icons[7];
     } dock;
+    struct {
+        int count; /* desktop icons drawn on the right (0 to 6) */
+        gfx_rect_t icons[6];
+    } desk;
 } gfx_desktop_layout_t;
 
 /* Lot 6 (US-031): page origin and size of the web pane. */

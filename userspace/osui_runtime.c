@@ -302,8 +302,9 @@ static unsigned osui_ai_last_error(void) { return osui_test_ai_error; }
 static unsigned osui_ai_last_abort(void) { return osui_test_ai_abort; }
 int osui_test_ai_worker = 0;
 static int osui_ai_worker_pid(void) { return osui_test_ai_worker; }
+const char *osui_test_ai_text = 0; /* reply override (default below) */
 static int osui_gpt2_fp32(const char *prompt, char *out, int max) {
-    const char *fixture = "test local response";
+    const char *fixture = osui_test_ai_text ? osui_test_ai_text : "test local response";
     int i = 0;
     (void)prompt;
     if (!out || max < 2) return -1;
@@ -323,6 +324,7 @@ static int osui_gpt2_fp32(const char *prompt, char *out, int max) {
  * return the pieces below, then 0 (end of sequence). */
 int osui_test_gguf_rc = -1;
 int osui_test_gguf_calls = 0;
+int osui_test_gguf_cancel_at = 0; /* > 0: that continue step returns ESC */
 static int g_test_gguf_step;
 static int osui_gguf_step(int first, const char *prompt, char *out, int max) {
     static const char *const pieces[] = { "gguf", " local", " reply.", 0 };
@@ -334,6 +336,8 @@ static int osui_gguf_step(int first, const char *prompt, char *out, int max) {
     out[0] = 0;
     if (osui_test_gguf_rc < 0) return osui_test_gguf_rc;
     if (first) g_test_gguf_step = 0;
+    if (!first && osui_test_gguf_cancel_at > 0 && g_test_gguf_step >= osui_test_gguf_cancel_at)
+        return OS_AI_CANCELLED;
     piece = pieces[g_test_gguf_step];
     if (!piece) return 0;
     g_test_gguf_step++;
@@ -604,7 +608,8 @@ static int osui_has_gguf_suffix(const char *name) {
 }
 
 /* GGUF sentence: the first step, then continue until the end of sequence,
- * a sentence end, the step budget or the buffer limit. */
+ * a sentence end, the step budget or the buffer limit. ESC during a
+ * continue step cancels the whole answer (it is not a short reply). */
 static int osui_gguf_sentence(const char *prompt, char *out, int max) {
     char piece[128];
     int used = 0, steps = 0, n, i;
@@ -620,9 +625,27 @@ static int osui_gguf_sentence(const char *prompt, char *out, int max) {
             break;
         if (used >= max - 1) break;
         n = osui_gguf_step(0, prompt, piece, (int)sizeof(piece));
+        if (n == OS_AI_CANCELLED) return n;
         if (n < 0) break;
     }
     return used;
+}
+
+/* A chat reply is one line: GPT-2 often starts with a newline and may
+ * emit more; the GUI shows them as '?' and response= must stay on one
+ * line. Leading blanks go, other control characters become spaces. */
+static void osui_reply_one_line(char *s) {
+    int r = 0, w = 0;
+    if (!s) return;
+    while (s[r] == ' ' || s[r] == '\n' || s[r] == '\r' || s[r] == '\t') r++;
+    for (; s[r]; r++) {
+        char c = s[r];
+        if ((unsigned char)c < 32 || c == 127) c = ' ';
+        if (c == ' ' && w > 0 && s[w - 1] == ' ') continue;
+        s[w++] = c;
+    }
+    while (w > 0 && s[w - 1] == ' ') w--;
+    s[w] = 0;
 }
 
 /* Local GPT-2 for chat ai: the GGUF profile goes to the GGUF steps; the
@@ -2206,6 +2229,7 @@ static int cmd_chat(char args[OSUI_MAX_ARGS][96], int narg, char *out, int max) 
             }
         }
         rc = osui_gpt2_generate(prompt, reply, sizeof(reply));
+        if (rc >= 0) osui_reply_one_line(reply);
         if (rc < 0) {
             /* Distinct states (and scene labels): cancelled by ESC, no
              * model installed, or a real generation failure. */
@@ -5859,6 +5883,12 @@ int osui_move_chat(int dx, int dy) {
     if (G.chat_x > 52) G.chat_x = 52;
     if (G.chat_y > 14) G.chat_y = 14;
     return 1;
+}
+
+/* GUI hint shown as a chat message of the current session. */
+void osui_note(const char *text) {
+    osui_session_t *s = cur();
+    if (s && text && text[0]) add_msg(s, text);
 }
 
 int osui_msg_count(void) {

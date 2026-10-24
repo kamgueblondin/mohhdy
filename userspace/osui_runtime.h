@@ -37,6 +37,7 @@ const char *osui_get_session_id(void);
 int osui_get_chat_x(void);
 int osui_get_chat_y(void);
 int osui_move_chat(int dx, int dy);
+void osui_note(const char *text);
 int osui_msg_count(void);
 void osui_msg_at(int i, char *dst, int max);
 void osui_canvas_row(int r, char *dst, int max);

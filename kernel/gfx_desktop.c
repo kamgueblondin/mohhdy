@@ -65,6 +65,17 @@ static void gfx_desktop_handle_click(int x, int y) {
         }
     }
 
+    /* 4b. Desktop icons on the right (Browser-OS ... Fichiers), unless
+     * the floating chat window is drawn over them. */
+    if (!in_rect(x, y, &layout.chat_win.box)) {
+        for (i = 0; i < layout.desk.count; i++) {
+            if (in_rect(x, y, &layout.desk.icons[i])) {
+                kbd_put_string(cmds[i + 1]);
+                return;
+            }
+        }
+    }
+
     /* 5. Scene IA Mode Pills */
     if (in_rect(x, y, &layout.scene_ia.pills[0])) {
         kbd_put_string("/stage-prompt reflexion\n");
@@ -550,14 +561,49 @@ static const char *pane_title(uint8_t pane) {
     }
 }
 
-static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const char *title, const char *body) {
+/* llm label of the last chat turn: the scene carries it from version 5;
+ * older scenes keep the historic stub_echo label. */
+static const char *scene_llm(const os_fb_scene_t *sc) {
+    if (sc && sc->magic == OS_FB_MAGIC && sc->version >= 5 && sc->llm[0]) return sc->llm;
+    return "stub_echo";
+}
+
+static void llm_text(char *d, int max, const char *pre, const os_fb_scene_t *sc, const char *post) {
+    const char *parts[3];
+    int n = 0, k, i;
+    const char *name = scene_llm(sc);
+    char clean[OS_FB_LLM_LEN];
+    for (i = 0; i < OS_FB_LLM_LEN - 1 && name[i]; i++)
+        clean[i] = (name[i] >= 32 && name[i] <= 126) ? name[i] : '?';
+    clean[i] = 0;
+    parts[0] = pre ? pre : "";
+    parts[1] = clean;
+    parts[2] = post ? post : "";
+    if (!d || max <= 0) return;
+    for (k = 0; k < 3; k++)
+        for (i = 0; parts[k][i] && n < max - 1; i++) d[n++] = parts[k][i];
+    d[n] = 0;
+}
+
+/* Long input: show its end (where the user types), not its start. */
+static const char *input_tail(const char *s, int maxc) {
+    int n = 0;
+    if (!s) return "";
+    while (s[n]) n++;
+    if (maxc > 0 && n > maxc) return s + (n - maxc);
+    return s;
+}
+
+static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const char *title, const char *body, const os_fb_scene_t *sc) {
+    char lab[64];
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(18, 28, 36), 230);
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
     traffic(fb, w, h, x + 8, y + 8);
     draw_text(fb, w, h, x + 56, y + 12, title ? title : "", RGB(232, 238, 244));
     fill_rect_a(fb, w, h, x + 12, y + 44, rw - 24, 40, RGB(42, 36, 16), 220);
-    draw_text(fb, w, h, x + 18, y + 48, "llm=stub_echo  us031_complete=false", RGB(243, 230, 176));
+    llm_text(lab, (int)sizeof(lab), "llm=", sc, "  us031_complete=false");
+    draw_text(fb, w, h, x + 18, y + 48, lab, RGB(243, 230, 176));
     if (body) draw_text(fb, w, h, x + 18, y + 96, body, RGB(201, 232, 223));
 }
 
@@ -705,7 +751,7 @@ static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh,
     }
     draw_text(fb, w, h, x + 18, prompt_y, "MOHHDY> ", RGB(201, 232, 223));
     if (sc && sc->input[0]) {
-        draw_text_n(fb, w, h, x + 18 + 8 * 8, prompt_y, sc->input, maxc - 8, RGB(232, 238, 244));
+        draw_text_n(fb, w, h, x + 18 + 8 * 8, prompt_y, input_tail(sc->input, maxc - 8), maxc - 8, RGB(232, 238, 244));
     } else {
         fill_rect(fb, w, h, x + 18 + 8 * 8, prompt_y, 8, 10, RGB(61, 154, 138));
     }
@@ -714,37 +760,47 @@ static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh,
 static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
     int log_y, i, n;
     const char *msg;
+    char lab[64];
+    int stub = scene_llm(sc)[0] == 's' && scene_llm(sc)[1] == 't';
     round_rect_a(fb, w, h, x, y, rw, rh, 14, RGB(12, 18, 24), 210);
     stroke_round(fb, w, h, x, y, rw, rh, 14, RGB(61, 154, 138), 2);
     fill_rect(fb, w, h, x + 1, y + 1, rw - 2, 36, RGB(28, 44, 56));
     traffic(fb, w, h, x + 10, y + 10);
     draw_text(fb, w, h, x + 58, y + 14, "Mohhdy", RGB(232, 238, 244));
-    draw_text(fb, w, h, x + rw - 8 * 14 - 12, y + 14, "llm=stub_echo", RGB(243, 230, 176));
+    llm_text(lab, (int)sizeof(lab), "llm=", sc, "");
+    {
+        int ln = 0;
+        while (lab[ln]) ln++;
+        if (ln < 14) ln = 14;
+        draw_text(fb, w, h, x + rw - 8 * ln - 12, y + 14, lab, RGB(243, 230, 176));
+    }
     fill_rect_a(fb, w, h, x + 14, y + 46, rw - 28, 44, RGB(42, 36, 16), 230);
     draw_text(fb, w, h, x + 20, y + 50, "Surface de commande du SE Multiboot.", RGB(243, 230, 176));
-    draw_text(fb, w, h, x + 20, y + 62, "llm=stub_echo  pas un moteur de production.", RGB(243, 230, 176));
+    llm_text(lab, (int)sizeof(lab), "llm=", sc, "  pas un moteur de production.");
+    draw_text_n(fb, w, h, x + 20, y + 62, lab, (rw - 40) / 8, RGB(243, 230, 176));
     log_y = y + 98;
     fill_rect(fb, w, h, x + 14, log_y, rw - 28, rh - 180, RGB(11, 16, 20));
     n = sc ? (int)sc->nmsg : 0;
     if (n > OS_FB_MSG_MAX) n = OS_FB_MSG_MAX;
     if (n <= 0) {
-        draw_text(fb, w, h, x + 20, log_y + 8, "os . llm=stub_echo", RGB(154, 168, 181));
+        llm_text(lab, (int)sizeof(lab), "os . llm=", sc, "");
+        draw_text(fb, w, h, x + 20, log_y + 8, lab, RGB(154, 168, 181));
         draw_text(fb, w, h, x + 20, log_y + 22, "Mohhdy OS - SE Multiboot dirige par prompts.", RGB(201, 232, 223));
         draw_text(fb, w, h, x + 20, log_y + 34, "us031_complete=false  phase3_complete=false", RGB(201, 232, 223));
     } else {
         for (i = 0; i < n; i++) {
             msg = sc->messages[i];
-            draw_text(fb, w, h, x + 20, log_y + 8 + i * 22, "session locale, stub", RGB(154, 168, 181));
+            draw_text(fb, w, h, x + 20, log_y + 8 + i * 22, stub ? "session locale, stub" : "session locale", RGB(154, 168, 181));
             draw_text_n(fb, w, h, x + 20, log_y + 18 + i * 22, msg, (rw - 48) / 8, RGB(232, 238, 244));
         }
     }
     fill_rect(fb, w, h, x + 14, y + rh - 70, rw - 28, 28, RGB(16, 25, 32));
-    if (sc && sc->input[0]) draw_text_n(fb, w, h, x + 20, y + rh - 62, sc->input, (rw - 48) / 8, RGB(232, 238, 244));
+    if (sc && sc->input[0]) draw_text_n(fb, w, h, x + 20, y + rh - 62, input_tail(sc->input, (rw - 48) / 8), (rw - 48) / 8, RGB(232, 238, 244));
     else draw_text(fb, w, h, x + 20, y + rh - 62, "Prompt ou /help, /browser, /shell ...", RGB(154, 168, 181));
     round_rect(fb, w, h, x + 14, y + rh - 34, 88, 22, 8, RGB(61, 154, 138));
     draw_text(fb, w, h, x + 26, y + rh - 28, "Envoyer", RGB(15, 20, 25));
     draw_text(fb, w, h, x + 110, y + rh - 28, sc && sc->session[0] ? sc->session : "s0001", RGB(154, 168, 181));
-    draw_text(fb, w, h, x + 170, y + rh - 28, "stub", RGB(154, 168, 181));
+    draw_text(fb, w, h, x + 170, y + rh - 28, stub ? "stub" : scene_llm(sc), RGB(154, 168, 181));
 }
 
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *out) {
@@ -905,6 +961,21 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         out->dock.icons[i].w = 36;
         out->dock.icons[i].h = 32;
     }
+
+    /* Same rule as the icon tiles drawn in gfx_desktop_draw_no_cursor:
+     * a 42 px tile at w - 86 and its label below. */
+    out->desk.count = 0;
+    if (w >= 780 && h >= 520 && pane != OS_FB_PANE_IDE && pane != OS_FB_PANE_WEB) {
+        int dgap = (h >= 700) ? 72 : 56;
+        for (i = 0; i < 6; i++) {
+            if (bar_h + 16 + i * dgap + 58 > h - 52) break;
+            out->desk.icons[i].x = w - 96;
+            out->desk.icons[i].y = bar_h + 16 + i * dgap;
+            out->desk.icons[i].w = 62;
+            out->desk.icons[i].h = 58;
+            out->desk.count = i + 1;
+        }
+    }
 }
 
 void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
@@ -974,9 +1045,11 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
             draw_text(fb, w, h, mx, ty, menus[i], RGB(232, 238, 244));
             mx += lens[i] * 8 + gap;
         }
-        if (w >= 920)
-            draw_text(fb, w, h, w - 8 * 36 - 12, ty, "llm=stub_echo us031=false", RGB(243, 230, 176));
-        else if (w >= 720)
+        if (w >= 920) {
+            char lab[64];
+            llm_text(lab, (int)sizeof(lab), "llm=", sc, " us031=false");
+            draw_text(fb, w, h, w - 8 * 36 - 12, ty, lab, RGB(243, 230, 176));
+        } else if (w >= 720)
             draw_text(fb, w, h, w - 8 * 16 - 8, ty, "us031=false", RGB(243, 230, 176));
     }
 
@@ -987,9 +1060,14 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     stroke_round(fb, w, h, 12, bar_h + 8, 96, 18, 9, RGB(61, 154, 138), 1);
     draw_text(fb, w, h, 22, bar_h + 13, mode_s, RGB(122, 212, 196));
     if (w >= 700) {
-        draw_text(fb, w, h, 118, bar_h + 13, "llm=stub_echo", RGB(243, 230, 176));
+        char lab[64];
+        int ln = 0;
+        llm_text(lab, (int)sizeof(lab), "llm=", sc, "");
+        draw_text(fb, w, h, 118, bar_h + 13, lab, RGB(243, 230, 176));
+        while (lab[ln]) ln++;
+        if (ln < 13) ln = 13;
         if (w >= 980)
-            draw_text(fb, w, h, 118 + 15 * 8, bar_h + 13, "bootstrap graphique : pas VGA ASCII", RGB(154, 168, 181));
+            draw_text(fb, w, h, 118 + (ln + 2) * 8, bar_h + 13, "bootstrap graphique : pas VGA ASCII", RGB(154, 168, 181));
     }
 
     if (w >= 780 && h >= 520) {
@@ -1010,10 +1088,14 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     round_rect_a(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(11, 16, 20), 150);
     stroke_round(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(61, 154, 138), 1);
     draw_text(fb, w, h, scene_x + 16, scene_y + 12, "Scene IA", RGB(232, 238, 244));
-    caption = "llm=stub_echo . en attente d'un prompt";
-    if (sc->stage_mode == OS_FB_STAGE_ACTING) caption = "llm=stub_echo . action stub";
-    if (sc->stage_mode == OS_FB_STAGE_PRESENTING) caption = "llm=stub_echo . resultats";
-    draw_text(fb, w, h, scene_x + 16, scene_y + 28, caption, RGB(154, 168, 181));
+    caption = " . en attente d'un prompt";
+    if (sc->stage_mode == OS_FB_STAGE_ACTING) caption = " . action stub";
+    if (sc->stage_mode == OS_FB_STAGE_PRESENTING) caption = " . resultats";
+    {
+        char lab[80];
+        llm_text(lab, (int)sizeof(lab), "llm=", sc, caption);
+        draw_text(fb, w, h, scene_x + 16, scene_y + 28, lab, RGB(154, 168, 181));
+    }
     draw_stage_body(fb, w, h, scene_x + 12, scene_y + 48, scene_w - 24, scene_h - 60, sc);
 
     pane = sc->pane;
@@ -1041,7 +1123,7 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         if (pane == OS_FB_PANE_SHELL)
             draw_shell(fb, w, h, wx, wy, ww, wh, sc);
         else
-            draw_window(fb, w, h, wx, wy, ww, wh, ptitle, body);
+            draw_window(fb, w, h, wx, wy, ww, wh, ptitle, body, sc);
     }
 
     chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(w / 3, 220, 360) : clampi(w / 2, 240, 640);

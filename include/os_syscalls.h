@@ -439,6 +439,7 @@ typedef struct {
 #define OS_FB_INPUT_LEN 96
 #define OS_FB_TERM_MAX 14
 #define OS_FB_TERM_LEN 64
+#define OS_FB_LLM_LEN 20
 
 typedef struct {
     uint16_t cells[OS_VGA_ROWS * OS_VGA_COLS];
@@ -492,6 +493,9 @@ typedef struct {
     uint16_t web_scroll;
     char web_title[OS_FB_TERM_LEN];
     os_fb_web_item_t web[OS_FB_WEB_ITEMS];
+    /* version >= 5: llm label of the last chat turn (stub_echo,
+     * gpt2_local, gpt2_gguf_local, gpt2_cancelled ...). */
+    char llm[OS_FB_LLM_LEN];
 } os_fb_scene_t;
 
 typedef struct {

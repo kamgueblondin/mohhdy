@@ -610,6 +610,38 @@ static void test_chat_ai_gguf_fallback_and_honest_labels(void) {
 }
 
 
+extern const char *osui_test_ai_text;
+extern int osui_test_gguf_cancel_at;
+
+/* UI test: a chat reply is one line (GPT-2 often starts with a newline),
+ * and ESC during a GGUF continue step cancels the answer instead of
+ * passing a partial text as a normal reply. */
+static void test_chat_ai_reply_one_line_and_gguf_cancel(void) {
+    int rc;
+    setup();
+    osui_test_ai_rc = 0; osui_test_ai_error = 0U;
+    osui_test_ai_text = "\n\n  Hello there.\nSecond\tline  ";
+    rc = run_line("chat ai bonjour");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "response=Hello there. Second line\n") != NULL);
+    osui_test_ai_text = 0;
+    osui_set_ai_model("gpt2.gguf");
+    osui_test_gguf_rc = 0;
+    osui_test_gguf_cancel_at = 1;
+    rc = run_line("chat ai bonjour");
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "error=ai_cancelled llm=gpt2_cancelled ai_status=cancelled") != NULL);
+    TEST_ASSERT(strstr(g_out, "response=") == NULL);
+    /* the next request works and is complete */
+    osui_test_gguf_cancel_at = 0;
+    osui_test_ai_error = 0U;
+    rc = run_line("chat ai bonjour");
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT(strstr(g_out, "response=gguf local reply.") != NULL);
+    osui_set_ai_model("gpt2_124M.bin");
+    osui_test_gguf_rc = -1;
+}
+
 /* Roadmap step 3: scoped VFS reads, allowlisted agent commands. */
 static void test_scopes_and_agent_run(void) {
     int rc;
@@ -1409,6 +1441,7 @@ int main(void) {
     RUN_TEST(test_lot22_session_lifecycle_and_pm_audit_tracing);
     RUN_TEST(test_all_browser_and_osui_commands_dispatch);
     RUN_TEST(test_chat_ai_gguf_fallback_and_honest_labels);
+    RUN_TEST(test_chat_ai_reply_one_line_and_gguf_cancel);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
