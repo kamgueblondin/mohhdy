@@ -808,17 +808,54 @@ static void test_lot41_wasm_simd_mha_and_webgpu_multi_queue(void) {
     int32_t q_vec[64], k_vec[64], v_vec[64], out_vec[64];
     for (int i = 0; i < 64; i++) in_vec[i] = i;
 
+    /* scale = 1/sqrt(16) = 0.25 in 16.16 */
+    TEST_ASSERT_EQUAL(16384, kernel.scale_q16);
+
+    /* Identity projection (no learned weights): Q = K = V = input. */
     TEST_ASSERT_EQUAL(0, webrt_mha_qkv_proj(&kernel, in_vec, q_vec, k_vec, v_vec, 1));
     TEST_ASSERT_EQUAL(0, q_vec[0]);
-    TEST_ASSERT_EQUAL(1, k_vec[0]);
-    TEST_ASSERT_EQUAL(2, v_vec[0]);
+    TEST_ASSERT_EQUAL(0, k_vec[0]);
+    TEST_ASSERT_EQUAL(63, v_vec[63]);
 
-    int32_t logits[4] = {10, 20, 30, 40};
+    /* Softmax: equal logits split evenly; logits 0 and -ln(2) give 2/3, 1/3. */
+    int32_t logits[4] = {10, 10, 10, 10};
     int32_t probs[4] = {0};
     TEST_ASSERT_EQUAL(0, webrt_mha_softmax_fast_q16(logits, probs, 4));
+    for (int i = 0; i < 4; i++) TEST_ASSERT(probs[i] >= 16380 && probs[i] <= 16388);
+    int32_t l2[2] = {0, -45426}; /* -ln(2) in 16.16 */
+    int32_t p2[2] = {0, 0};
+    TEST_ASSERT_EQUAL(0, webrt_mha_softmax_fast_q16(l2, p2, 2));
+    TEST_ASSERT(p2[0] > 43600 && p2[0] < 43800);   /* 2/3 = 43690 */
+    TEST_ASSERT(p2[1] > 21750 && p2[1] < 21950);   /* 1/3 = 21845 */
+    int32_t l3[3] = {0, -2 * 65536, -100 * 65536};
+    int32_t p3[3] = {0, 0, 0};
+    TEST_ASSERT_EQUAL(0, webrt_mha_softmax_fast_q16(l3, p3, 3));
+    TEST_ASSERT(p3[0] > 57600 && p3[0] < 57900);   /* 1/(1+e^-2) = 0.8808 */
+    TEST_ASSERT_EQUAL(0, p3[2]);
 
     TEST_ASSERT_EQUAL(0, webrt_mha_compute_attention(&kernel, q_vec, k_vec, v_vec, out_vec, 1));
     TEST_ASSERT_EQUAL(1, kernel.total_attentions_computed);
+    /* One position: the only weight is 1, so out = v. */
+    for (int i = 0; i < 64; i++) TEST_ASSERT(out_vec[i] >= v_vec[i] - 1 && out_vec[i] <= v_vec[i]);
+
+    /* Two positions, one head of dim 4. A query aligned with key 1 must
+     * attend mostly to v1; a zero query must average v0 and v1. */
+    webrt_mha_kernel_t k1;
+    webrt_mha_init(&k1, 1, 4);
+    TEST_ASSERT_EQUAL(32768, k1.scale_q16); /* 1/sqrt(4) */
+    int32_t Q[8] = {0, 0, 0, 0,  0, 8 << 16, 0, 0};
+    int32_t K[8] = {8 << 16, 0, 0, 0,  0, 8 << 16, 0, 0};
+    int32_t V[8] = {100 << 16, 0, 0, 0,  0, 200 << 16, 0, 0};
+    int32_t O[8];
+    TEST_ASSERT_EQUAL(0, webrt_mha_compute_attention(&k1, Q, K, V, O, 2));
+    /* Query 0 is zero: equal weights, out = (v0 + v1) / 2. */
+    TEST_ASSERT(O[0] > (49 << 16) && O[0] < (51 << 16));
+    TEST_ASSERT(O[1] > (99 << 16) && O[1] < (101 << 16));
+    /* Query 1 . key 1 = 64, scaled 32: weight on v1 is ~1. */
+    TEST_ASSERT(O[5] > (199 << 16));
+    TEST_ASSERT(O[4] < (1 << 16));
+    /* Bounds are enforced. */
+    TEST_ASSERT_EQUAL(-1, webrt_mha_compute_attention(&k1, Q, K, V, O, WEBRT_MHA_SEQ_MAX + 1));
 
     webrt_webgpu_multi_queue_t mq;
     webrt_webgpu_multi_queue_init(&mq);

@@ -1235,10 +1235,12 @@ static void test_lot37_p2p_wan_raft_election_and_batch_zk(void) {
     TEST_ASSERT_EQUAL(1, batch.count);
 
     int all_valid = 0;
+    /* No inner-product verifier: the batch fails closed. */
+    all_valid = 1;
     res = p2p_zk_bulletproof_batch_verify(&batch, &all_valid);
-    TEST_ASSERT_EQUAL(0, res);
-    TEST_ASSERT_EQUAL(1, all_valid);
-    TEST_ASSERT_EQUAL(1, batch.verified_count);
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, res);
+    TEST_ASSERT_EQUAL(0, all_valid);
+    TEST_ASSERT_EQUAL(0, batch.verified_count);
 }
 
 static void test_lot39_wan_async_repl_and_zk_plonk(void) {
@@ -1333,10 +1335,13 @@ static void test_lot40_geo_sharding_and_zk_stark(void) {
     TEST_ASSERT_EQUAL(3, proof.fri_layers_count);
 
     int valid = 0;
+    /* No FRI verifier: fail closed, never accepted. */
+    valid = 1;
     res = p2p_zk_stark_verify_fri(&v, &proof, &valid);
-    TEST_ASSERT_EQUAL(0, res);
-    TEST_ASSERT_EQUAL(1, valid);
-    TEST_ASSERT_EQUAL(1, v.verified_starks);
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, res);
+    TEST_ASSERT_EQUAL(0, valid);
+    TEST_ASSERT_EQUAL(0, v.verified_starks);
+    TEST_ASSERT_EQUAL(1, v.failed_starks);
 }
 
 static void test_lot38_p2p_multi_raft_wan_and_zk_range(void) {
@@ -1370,9 +1375,12 @@ static void test_lot38_p2p_multi_raft_wan_and_zk_range(void) {
     TEST_ASSERT_EQUAL(1, rbatch.count);
 
     int all_valid = 0;
+    /* No range-proof verifier: fail closed. */
+    all_valid = 1;
     res = p2p_zk_range_batch_verify(&rbatch, &all_valid);
-    TEST_ASSERT_EQUAL(0, res);
-    TEST_ASSERT_EQUAL(1, all_valid);
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, res);
+    TEST_ASSERT_EQUAL(0, all_valid);
+    TEST_ASSERT_EQUAL(0, rbatch.verified_count);
 }
 
 static void test_lot31_p2p_topology_bft_bloom(void) {
@@ -1438,8 +1446,10 @@ static void test_lot32_p2p_topology_zk_bbr(void) {
     for (int i = 0; i < 8; i++) proof.proof_bytes[i] = (uint8_t)(i + 1);
 
     int valid = 0;
-    TEST_ASSERT_EQUAL(0, p2p_zk_consensus_verify(&proof, "agree", &valid));
-    TEST_ASSERT_EQUAL(1, valid);
+    /* Unkeyed hash is not a proof: fail closed. */
+    valid = 1;
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, p2p_zk_consensus_verify(&proof, "agree", &valid));
+    TEST_ASSERT_EQUAL(0, valid);
 
     /* Test BBR Anti-entropy sync */
     int items = 0;
@@ -1470,8 +1480,14 @@ static void test_lot33_p2p_geo_consensus_bulletproof(void) {
     TEST_ASSERT_EQUAL(64, proof.proof_len);
 
     int valid = 0;
-    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_verify(&proof, 100, 1000, &valid));
-    TEST_ASSERT_EQUAL(1, valid);
+    /* No range-proof verifier: fail closed, even for a forged first byte. */
+    valid = 1;
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, p2p_zk_bulletproof_verify(&proof, 100, 1000, &valid));
+    TEST_ASSERT_EQUAL(0, valid);
+    proof.proof_bytes[0] = 0xFF;
+    valid = 1;
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, p2p_zk_bulletproof_verify(&proof, 0, 1, &valid));
+    TEST_ASSERT_EQUAL(0, valid);
 }
 
 static void test_lot43_p2p_bft_anti_entropy_and_zk_stark_batch(void) {
@@ -1496,8 +1512,10 @@ static void test_lot43_p2p_bft_anti_entropy_and_zk_stark_batch(void) {
     TEST_ASSERT_EQUAL(1, agg.proof_count);
 
     int valid_count = 0;
-    TEST_ASSERT_EQUAL(0, p2p_zk_stark_batch_verify_all(&agg, &valid_count));
-    TEST_ASSERT_EQUAL(1, valid_count);
+    valid_count = 1;
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, p2p_zk_stark_batch_verify_all(&agg, &valid_count));
+    TEST_ASSERT_EQUAL(0, valid_count);
+    TEST_ASSERT_EQUAL(0, agg.proofs[0].verified);
 }
 
 static void test_lot35_p2p_cross_wan_raft_bulletproof_ip(void) {
@@ -1523,10 +1541,13 @@ static void test_lot35_p2p_cross_wan_raft_bulletproof_ip(void) {
     TEST_ASSERT_EQUAL(64, proof.proof_len);
 
     int valid = 0;
-    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_inner_product_verify(&proof, 300, &valid));
-    TEST_ASSERT_EQUAL(1, valid);
-
-    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_inner_product_verify(&proof, 999, &valid));
+    /* A forger can set inner_product_value: fail closed for any claim. */
+    valid = 1;
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, p2p_zk_bulletproof_inner_product_verify(&proof, 300, &valid));
+    TEST_ASSERT_EQUAL(0, valid);
+    proof.inner_product_value = 999;
+    valid = 1;
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, p2p_zk_bulletproof_inner_product_verify(&proof, 999, &valid));
     TEST_ASSERT_EQUAL(0, valid);
 }
 
@@ -1555,9 +1576,11 @@ static void test_lot41_p2p_cross_wan_mesh_and_zk_aggregator(void) {
     TEST_ASSERT_EQUAL(2, agg.proof_count);
 
     int valid_cnt = 0;
-    TEST_ASSERT_EQUAL(0, p2p_zk_aggregator_verify_batch(&agg, &valid_cnt));
-    TEST_ASSERT_EQUAL(2, valid_cnt);
-    TEST_ASSERT_EQUAL(2, agg.total_valid_proofs);
+    valid_cnt = 2;
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, p2p_zk_aggregator_verify_batch(&agg, &valid_cnt));
+    TEST_ASSERT_EQUAL(0, valid_cnt);
+    TEST_ASSERT_EQUAL(0, agg.total_valid_proofs);
+    TEST_ASSERT_EQUAL(0, agg.proofs[0].valid);
 }
 
 static void test_lot42_p2p_bft_mesh_and_zk_bulletproofs_batch(void) {
@@ -1581,9 +1604,10 @@ static void test_lot42_p2p_bft_mesh_and_zk_bulletproofs_batch(void) {
     TEST_ASSERT_EQUAL(1, bullet_agg.proof_count);
 
     int valid_cnt = 0;
-    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_batch_verify_all(&bullet_agg, &valid_cnt));
-    TEST_ASSERT_EQUAL(1, valid_cnt);
-    TEST_ASSERT_EQUAL(1, bullet_agg.total_valid_bulletproofs);
+    valid_cnt = 1;
+    TEST_ASSERT_EQUAL(P2P_ZK_ERR_NO_VERIFIER, p2p_zk_bulletproof_batch_verify_all(&bullet_agg, &valid_cnt));
+    TEST_ASSERT_EQUAL(0, valid_cnt);
+    TEST_ASSERT_EQUAL(0, bullet_agg.total_valid_bulletproofs);
 }
 
 int main(void) {

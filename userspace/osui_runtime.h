@@ -13,6 +13,8 @@ void osui_extract_origin_from_url(const char *url, char *dst, int max);
 #define OSUI_CANVAS_COLS 78
 
 void osui_runtime_init(void);
+/* Local model profile of chat ai (gpt2_124M.bin or gpt2.gguf). */
+void osui_set_ai_model(const char *name);
 int osui_is_command(const char *cmd);
 int osui_is_linux_trap(const char *cmd);
 int osui_dispatch_line(const char *line, char *out, int out_max);

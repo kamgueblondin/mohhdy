@@ -514,6 +514,14 @@ int p2p_bbr_anti_entropy_sync(p2p_node_t *n, uint32_t target_peer_id, uint32_t b
 
 /* Lot 33: P2P Cross-WAN Geo-Sharded Multi-Region Consensus & Zero-Knowledge Bulletproof Validation (US-068 / US-080) */
 #define P2P_GEO_SHARD_ENTRIES_MAX 16
+/* Zero-knowledge verifiers: this freestanding build has no STARK, FRI,
+ * Bulletproofs, inner-product or range-proof verifier. The p2p_zk_*_verify*
+ * entry points therefore fail closed: they never report a proof as valid,
+ * set every validity output to 0 and return P2P_ZK_ERR_NO_VERIFIER.
+ * p2p_zk_plonk_verify is the exception: it checks the gate equations against
+ * the cleartext wire values in the proof (a circuit satisfiability check,
+ * not a zero-knowledge proof). */
+#define P2P_ZK_ERR_NO_VERIFIER (-38)
 #define P2P_BULLETPROOF_BYTES_MAX 64
 
 typedef struct {

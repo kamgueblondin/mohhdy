@@ -2964,20 +2964,13 @@ int p2p_zk_stark_batch_add_proof(p2p_zk_stark_batch_aggregator_t *agg, uint32_t 
 }
 
 int p2p_zk_stark_batch_verify_all(p2p_zk_stark_batch_aggregator_t *agg, int *out_valid_count) {
+    /* Fail closed: no FRI/STARK verifier is implemented in this freestanding
+     * build. Checking fri_queries_count is not a proof check, so every proof
+     * is reported invalid and the call returns P2P_ZK_ERR_NO_VERIFIER. */
     if (!agg) return -1;
-    int valid = 0;
-    for (int i = 0; i < agg->proof_count; i++) {
-        if (agg->proofs[i].fri_queries_count >= 8) {
-            agg->proofs[i].verified = 1;
-            valid++;
-        } else {
-            agg->proofs[i].verified = 0;
-        }
-    }
-    agg->total_batch_verifications++;
-    agg->total_valid_stark_proofs += valid;
-    if (out_valid_count) *out_valid_count = valid;
-    return 0;
+    for (int i = 0; i < agg->proof_count; i++) agg->proofs[i].verified = 0;
+    if (out_valid_count) *out_valid_count = 0;
+    return P2P_ZK_ERR_NO_VERIFIER;
 }
 
 /* Lot 41: P2P Mesh Network Cross-WAN Geo-Replicated Consensus Mesh & Zero-Knowledge Proof Aggregator Engine */
@@ -3061,18 +3054,12 @@ int p2p_zk_aggregator_add_proof(p2p_zk_aggregator_t *agg, uint32_t proof_type, c
 }
 
 int p2p_zk_aggregator_verify_batch(p2p_zk_aggregator_t *agg, int *out_valid_count) {
+    /* Fail closed: a non-empty proof is not a valid proof. No STARK/PLONK
+     * batch verifier exists here, so nothing is accepted. */
     if (!agg) return -1;
-    int valid_cnt = 0;
-    for (int i = 0; i < agg->proof_count; i++) {
-        if (agg->proofs[i].proof_len > 0) {
-            agg->proofs[i].valid = 1;
-            valid_cnt++;
-        }
-    }
-    agg->batch_verifications++;
-    agg->total_valid_proofs += valid_cnt;
-    if (out_valid_count) *out_valid_count = valid_cnt;
-    return 0;
+    for (int i = 0; i < agg->proof_count; i++) agg->proofs[i].valid = 0;
+    if (out_valid_count) *out_valid_count = 0;
+    return P2P_ZK_ERR_NO_VERIFIER;
 }
 
 /* Lot 42: P2P Mesh Network Cross-WAN Geo-Distributed Fault-Tolerant Consensus Mesh & Zero-Knowledge Bulletproofs Batch Aggregator Engine (US-077 / US-089) */
@@ -3183,19 +3170,13 @@ int p2p_zk_bulletproof_batch_add_proof(p2p_zk_bulletproof_batch_aggregator_t *ag
 }
 
 int p2p_zk_bulletproof_batch_verify_all(p2p_zk_bulletproof_batch_aggregator_t *agg, int *out_valid_count) {
+    /* Fail closed: non-zero ids and commitments prove nothing. No
+     * Bulletproofs verifier exists here, so nothing is accepted. */
     int i;
-    int valid_cnt = 0;
     if (!agg) return -1;
-    for (i = 0; i < agg->proof_count; i++) {
-        if (agg->proofs[i].proof_id > 0 && agg->proofs[i].commitment_val > 0) {
-            agg->proofs[i].valid = 1;
-            valid_cnt++;
-        }
-    }
-    agg->batch_verifications_count++;
-    agg->total_valid_bulletproofs += valid_cnt;
-    if (out_valid_count) *out_valid_count = valid_cnt;
-    return 0;
+    for (i = 0; i < agg->proof_count; i++) agg->proofs[i].valid = 0;
+    if (out_valid_count) *out_valid_count = 0;
+    return P2P_ZK_ERR_NO_VERIFIER;
 }
 
 /* Lot 40: P2P Mesh Network Cross-WAN Geo-Distributed Raft Consensus Sharding & Zero-Knowledge STARK Verification Engine */
@@ -3326,15 +3307,11 @@ int p2p_zk_stark_proof_create(uint32_t trace_len, int fri_layers_cnt, p2p_zk_sta
 }
 
 int p2p_zk_stark_verify_fri(p2p_zk_stark_verifier_t *v, const p2p_zk_stark_proof_t *proof, int *out_valid) {
+    /* Fail closed: non-zero lengths are not a FRI check. */
     if (!v || !proof || !out_valid) return -1;
-    if (proof->proof_len > 0 && proof->fri_layers_count > 0 && proof->trace_length > 0) {
-        *out_valid = 1;
-        v->verified_starks++;
-    } else {
-        *out_valid = 0;
-        v->failed_starks++;
-    }
-    return 0;
+    *out_valid = 0;
+    v->failed_starks++;
+    return P2P_ZK_ERR_NO_VERIFIER;
 }
 
 /* Lot 39: P2P Mesh Network Cross-WAN Asynchronous Consensus Replication & Zero-Knowledge PLONK Verification Engine (US-074 / US-086) */
@@ -3449,6 +3426,8 @@ int p2p_zk_plonk_proof_create(const p2p_zk_plonk_circuit_entry_t *gates, int gat
     return 0;
 }
 
+/* Circuit satisfiability check over the cleartext wire values carried in
+ * the proof. This is not zero-knowledge: the witness is revealed. */
 int p2p_zk_plonk_verify(p2p_zk_plonk_verifier_t *v, const p2p_zk_plonk_proof_t *proof, int *out_valid) {
     if (!v || !proof || !out_valid || proof->gate_count <= 0) return -1;
     int valid = 1;
@@ -3568,25 +3547,13 @@ int p2p_zk_range_batch_add(p2p_zk_range_batch_t *batch, const p2p_zk_bulletproof
 }
 
 int p2p_zk_range_batch_verify(p2p_zk_range_batch_t *batch, int *out_all_valid) {
+    /* Fail closed: the old check compared the cleartext committed_value to
+     * the range, which a prover controls and which is not zero-knowledge.
+     * No range-proof verifier exists here, so nothing is accepted. */
     if (!batch || !out_all_valid) return -1;
-
-    int all_valid = 1;
-    for (int i = 0; i < batch->count; i++) {
-        p2p_zk_bulletproof_range_proof_t *p = &batch->proofs[i];
-        if (p->committed_value < p->min_value || p->committed_value > p->max_value || p->proof_len != P2P_BULLETPROOF_INNER_PRODUCT_SIZE) {
-            all_valid = 0;
-            break;
-        }
-    }
-
-    if (all_valid) {
-        batch->verified_count = batch->count;
-        *out_all_valid = 1;
-    } else {
-        *out_all_valid = 0;
-    }
-
-    return 0;
+    batch->verified_count = 0;
+    *out_all_valid = 0;
+    return P2P_ZK_ERR_NO_VERIFIER;
 }
 
 /* Lot 37: P2P Mesh Network Cross-WAN Resilient Raft Group Leader Election & Zero-Knowledge Bulletproof Batch Verification Engine (US-072 / US-084) */
@@ -3652,23 +3619,11 @@ int p2p_zk_bulletproof_batch_add(p2p_zk_bulletproof_batch_t *batch, const p2p_zk
 }
 
 int p2p_zk_bulletproof_batch_verify(p2p_zk_bulletproof_batch_t *batch, int *out_all_valid) {
+    /* Fail closed, like p2p_zk_bulletproof_inner_product_verify. */
     if (!batch || !out_all_valid) return -1;
-
-    int valid_count = 0;
-    for (int i = 0; i < batch->count; i++) {
-        int v = 0;
-        p2p_zk_bulletproof_inner_product_verify(&batch->proofs[i], batch->expected_inner_products[i], &v);
-        if (v) valid_count++;
-    }
-
-    batch->verified_count = valid_count;
-    if (valid_count == batch->count && batch->count > 0) {
-        *out_all_valid = 1;
-    } else {
-        *out_all_valid = 0;
-    }
-
-    return 0;
+    batch->verified_count = 0;
+    *out_all_valid = 0;
+    return P2P_ZK_ERR_NO_VERIFIER;
 }
 
 /* Lot 33: P2P Cross-WAN Geo-Sharded Multi-Region Consensus & Zero-Knowledge Bulletproof Validation (US-068 / US-080) */
@@ -3736,18 +3691,13 @@ int p2p_zk_bulletproof_create_commitment(uint32_t value, uint32_t blinding_facto
 }
 
 int p2p_zk_bulletproof_verify(const p2p_zk_bulletproof_t *proof, uint32_t min_val, uint32_t max_val, int *out_valid) {
+    /* Fail closed: the old check accepted any proof whose first byte was
+     * non-zero and ignored the range. No range-proof verifier exists here. */
     if (!proof || !out_valid) return -1;
-
     (void)min_val;
     (void)max_val;
-
-    if (proof->proof_len > 0 && proof->proof_bytes[0] != 0) {
-        *out_valid = 1;
-    } else {
-        *out_valid = 0;
-    }
-
-    return 0;
+    *out_valid = 0;
+    return P2P_ZK_ERR_NO_VERIFIER;
 }
 
 int p2p_bft_prepare(p2p_bft_state_t *bft, uint32_t voter_id, uint32_t view_id, uint32_t seq) {
@@ -3836,42 +3786,11 @@ int p2p_topology_reconfigure(p2p_node_t *n, const p2p_topo_peer_info_t *peers, i
 }
 
 int p2p_zk_consensus_verify(const p2p_zk_proof_t *proof, const char *expected_statement, int *out_valid) {
+    /* Fail closed: an unkeyed FNV-1a hash over public bytes is not a proof
+     * (the old code accepted any non-zero hash). No verifier exists here. */
     if (!proof || !expected_statement) return -1;
-
-    /* Verify statement match and proof byte signature integrity using FNV-1a */
-    int stmt_match = 1;
-    for (int i = 0; i < 32; i++) {
-        if (expected_statement[i] == '\0' && proof->statement[i] == '\0') break;
-        if (proof->statement[i] != expected_statement[i]) {
-            stmt_match = 0;
-            break;
-        }
-    }
-
-    if (!stmt_match || proof->proof_len == 0) {
-        if (out_valid) *out_valid = 0;
-        return 0;
-    }
-
-    /* Compute FNV-1a checksum over statement and proof bytes */
-    uint32_t hash = 2166136261U;
-    for (int i = 0; proof->statement[i] != '\0' && i < 32; i++) {
-        hash ^= (uint8_t)proof->statement[i];
-        hash *= 16777619U;
-    }
-    for (uint32_t i = 0; i < proof->proof_len && i < P2P_ZK_PROOF_SIZE; i++) {
-        hash ^= proof->proof_bytes[i];
-        hash *= 16777619U;
-    }
-
-    /* Proof is valid if proof bytes pass non-zero check and hash non-zero */
-    if (hash != 0) {
-        if (out_valid) *out_valid = 1;
-        return 0;
-    } else {
-        if (out_valid) *out_valid = 0;
-        return 0;
-    }
+    if (out_valid) *out_valid = 0;
+    return P2P_ZK_ERR_NO_VERIFIER;
 }
 
 /* Lot 35: P2P Cross-WAN Resilient Raft Group Sharding & Zero-Knowledge Bulletproof Inner-Product Proofs (US-071 / US-083) */
@@ -3943,16 +3862,13 @@ int p2p_zk_bulletproof_inner_product_create(const uint32_t *vec_a, const uint32_
 }
 
 int p2p_zk_bulletproof_inner_product_verify(const p2p_zk_bulletproof_ip_t *proof, uint32_t expected_inner_product, int *out_valid) {
+    /* Fail closed: the old check compared the prover-supplied
+     * inner_product_value field with the expected value, which any forger
+     * can set. No inner-product argument verifier exists here. */
     if (!proof || proof->proof_len == 0 || !out_valid) return -1;
-
-    if (proof->inner_product_value == expected_inner_product &&
-        proof->proof_len == P2P_BULLETPROOF_INNER_PRODUCT_SIZE) {
-        *out_valid = 1;
-    } else {
-        *out_valid = 0;
-    }
-
-    return 0;
+    (void)expected_inner_product;
+    *out_valid = 0;
+    return P2P_ZK_ERR_NO_VERIFIER;
 }
 
 int p2p_bbr_anti_entropy_sync(p2p_node_t *n, uint32_t target_peer_id, uint32_t bw_est_kbps, int *out_items_synced) {
