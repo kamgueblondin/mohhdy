@@ -10,6 +10,7 @@
 #include "webrt.h"
 #include "os_syscalls.h"
 #include "osui_panes.h"
+#include "osui_files.h"
 
 #define COLS OS_VGA_COLS
 #define ROWS OS_VGA_ROWS
@@ -45,6 +46,15 @@ static char g_web_file[40];
 static int g_web_mobile;
 static osui_mobile_op_t g_mobile_op;
 static char g_web_src[OSUI_WEB_SRC_MAX];
+/* desktop apps (scene version 7) */
+static const fsops_io_t *g_fs_io;
+static osui_files_t g_files;
+static osui_ide_t g_edit;
+static int g_focus = -1;
+static int g_evt_on, g_evt_len;
+static char g_evt[96];
+static char g_app_buf[FSOPS_FILE_MAX + 1];
+static osui_app_view_t g_view;
 
 static int slen(const char *s) {
     int n = 0;
@@ -294,6 +304,177 @@ static void ide_action(int act, char *out, int out_max) {
         return;
     }
     ide_out(out, out_max, "osui pm-ide check ", msg);
+}
+
+
+/* ---- desktop apps: file explorer and text editor --------------------- */
+
+void osui_gui_set_fs_io(const fsops_io_t *io) { g_fs_io = io; }
+int osui_gui_focus(void) { return g_focus; }
+
+static void app_out(char *out, int out_max, const char *a, const char *b) {
+    int n;
+    if (!out || out_max <= 0) return;
+    n = slen(out);
+    scpy(out + n, out_max - n, a);
+    if (b) scat(out, out_max, b);
+    scat(out, out_max, "\n");
+}
+
+int osui_gui_files_open(const char *dir, char *out, int out_max) {
+    if (!g_fs_io) { app_out(out, out_max, "osui files error=no_fs", 0); return -1; }
+    if (!g_files.active) osui_files_open(&g_files, g_fs_io, dir && dir[0] ? dir : "/");
+    else if (dir && dir[0]) (void)osui_files_cd(&g_files, dir);
+    g_focus = 0;
+    app_out(out, out_max, "osui files open dir=", g_files.cwd);
+    return 0;
+}
+
+int osui_gui_edit_open(const char *file, char *out, int out_max) {
+    int n = 0;
+    char path[FSOPS_PATH_MAX];
+    if (!g_fs_io) { app_out(out, out_max, "osui edit error=no_fs", 0); return -1; }
+    if (g_edit.active && g_edit.modified) {
+        osui_ide_set_status(&g_edit, "non enregistre: enregistrez avant d'ouvrir un autre fichier");
+        g_focus = 1;
+        app_out(out, out_max, "osui edit busy unsaved=", g_edit.file);
+        return -1;
+    }
+    fsops_resolve(g_files.active ? g_files.cwd : "/", file && file[0] ? file : "sans_titre.txt", path, (int)sizeof(path));
+    if (slen(path) >= (int)sizeof(g_edit.file)) { app_out(out, out_max, "osui edit error=name_too_long", 0); return -1; }
+    {
+        os_dirent_t st;
+        if (g_fs_io->stat && g_fs_io->stat(path, &st) == 0) {
+            n = fsops_read(g_fs_io, path, g_app_buf, FSOPS_FILE_MAX);
+            if (n < 0) {
+                app_out(out, out_max, "osui edit error=", fsops_strerror(n));
+                if (g_files.active) scpy(g_files.status, (int)sizeof(g_files.status), fsops_strerror(n));
+                return -1;
+            }
+            osui_ide_open_plain(&g_edit, path, g_app_buf, n);
+            app_out(out, out_max, "osui edit open file=", path);
+        } else {
+            osui_ide_open_plain(&g_edit, path, "", 0);
+            osui_ide_set_status(&g_edit, "nouveau fichier (cree a l'enregistrement)");
+            app_out(out, out_max, "osui edit open new file=", path);
+        }
+    }
+    g_focus = 1;
+    return 0;
+}
+
+static void edit_action(int act, char *out, int out_max) {
+    int len, rc;
+    if (act == OSUI_IDE_QUIT) {
+        app_out(out, out_max, "osui edit close file=", g_edit.file);
+        g_edit.active = 0;
+        g_focus = g_files.active ? 0 : -1;
+        return;
+    }
+    if (act == OSUI_IDE_OPEN) {
+        char p[FSOPS_PATH_MAX];
+        scpy(p, (int)sizeof(p), g_edit.prompt_out);
+        (void)osui_gui_edit_open(p, out, out_max);
+        return;
+    }
+    if (act != OSUI_IDE_SAVE && act != OSUI_IDE_SAVE_AS) return;
+    len = osui_ide_save_text(&g_edit, g_app_buf, (int)sizeof(g_app_buf));
+    if (len < 0) { osui_ide_set_status(&g_edit, "texte trop grand"); return; }
+    if (act == OSUI_IDE_SAVE_AS) {
+        char p[FSOPS_PATH_MAX];
+        fsops_resolve(g_files.active ? g_files.cwd : "/", g_edit.file, p, (int)sizeof(p));
+        scpy(g_edit.file, (int)sizeof(g_edit.file), p);
+    }
+    rc = fsops_write(g_fs_io, g_edit.file, g_app_buf, len);
+    if (rc != 0) {
+        char msg[OSUI_IDE_ROW_LEN];
+        scpy(msg, (int)sizeof(msg), "erreur: ");
+        scat(msg, (int)sizeof(msg), fsops_strerror(rc));
+        osui_ide_set_status(&g_edit, msg);
+        app_out(out, out_max, "osui edit save error=", fsops_strerror(rc));
+        return;
+    }
+    g_edit.modified = 0;
+    g_edit.quit_armed = 0;
+    osui_ide_set_status(&g_edit, "enregistre");
+    app_out(out, out_max, "osui edit saved file=", g_edit.file);
+    if (g_files.active) (void)osui_files_refresh(&g_files);
+}
+
+static void files_result(int r, const char *log_before, char *out, int out_max) {
+    if (g_files.log[0] && scmp(g_files.log, log_before) != 0) app_out(out, out_max, g_files.log, 0);
+    if (r == OSUI_FILES_OPEN) (void)osui_gui_edit_open(g_files.open_path, out, out_max);
+    else if (r == OSUI_FILES_CLOSE) {
+        app_out(out, out_max, "osui files close", 0);
+        g_focus = g_edit.active ? 1 : -1;
+    }
+}
+
+static int evt_int(const char **p) {
+    int v = 0, neg = 0;
+    while (**p == ' ') (*p)++;
+    if (**p == '-') { neg = 1; (*p)++; }
+    while (**p >= '0' && **p <= '9') { v = v * 10 + (**p - '0'); (*p)++; }
+    return neg ? -v : v;
+}
+
+void osui_gui_event(const char *line, char *out, int out_max) {
+    const char *p = line;
+    static char before[160];
+    if (sncmp(p, "focus ", 6) == 0) {
+        p += 6;
+        if (*p == 'd') g_focus = -1;
+        else if (*p == '0' && g_files.active) g_focus = 0;
+        else if (*p == '1' && g_edit.active) g_focus = 1;
+        return;
+    }
+    if (sncmp(p, "app ", 4) != 0) return;
+    p += 4;
+    {
+        int slot = evt_int(&p);
+        while (*p == ' ') p++;
+        scpy(before, (int)sizeof(before), g_files.log);
+        if (slot == 0 && g_files.active) {
+            int r = OSUI_FILES_NONE;
+            g_focus = 0;
+            if (sncmp(p, "close", 5) == 0) { g_files.active = 0; r = OSUI_FILES_CLOSE; }
+            else if (sncmp(p, "tool", 4) == 0) { p += 4; r = osui_files_tool(&g_files, osui_app_tool_hit(osui_files_toolbar, evt_int(&p))); }
+            else if (sncmp(p, "dclick", 6) == 0) { int rr, cc; p += 6; rr = evt_int(&p); cc = evt_int(&p); r = osui_files_click(&g_files, rr, cc, 1); }
+            else if (sncmp(p, "click", 5) == 0) { int rr, cc; p += 5; rr = evt_int(&p); cc = evt_int(&p); r = osui_files_click(&g_files, rr, cc, 0); }
+            files_result(r, before, out, out_max);
+        } else if (slot == 1 && g_edit.active) {
+            int act = OSUI_IDE_NONE;
+            g_focus = 1;
+            if (sncmp(p, "close", 5) == 0) {
+                act = g_edit.modified && !g_edit.quit_armed ? OSUI_IDE_NONE : OSUI_IDE_QUIT;
+                if (act == OSUI_IDE_NONE) {
+                    g_edit.quit_armed = 1;
+                    osui_ide_set_status(&g_edit, "non enregistre: Fermer encore abandonne, ESC w enregistre");
+                    app_out(out, out_max, "osui edit close refused unsaved=", g_edit.file);
+                }
+            } else if (sncmp(p, "tool", 4) == 0) { p += 4; act = osui_ide_tool(&g_edit, osui_app_tool_hit(osui_ide_toolbar, evt_int(&p))); }
+            else if (sncmp(p, "drag", 4) == 0) { int a, b, c, d; p += 4; a = evt_int(&p); b = evt_int(&p); c = evt_int(&p); d = evt_int(&p); osui_ide_drag(&g_edit, a, b, c, d); }
+            else if (sncmp(p, "click", 5) == 0 || sncmp(p, "dclick", 6) == 0) { int rr, cc; p += (*p == 'd') ? 6 : 5; rr = evt_int(&p); cc = evt_int(&p); osui_ide_click(&g_edit, rr, cc); }
+            edit_action(act, out, out_max);
+        }
+    }
+}
+
+static void app_to_scene(const osui_app_view_t *v, os_fb_app_t *a, int kind) {
+    int r;
+    a->kind = (uint8_t)kind;
+    a->nrows = (uint8_t)v->nrows;
+    a->cur_row = (int8_t)v->cur_row;
+    a->cur_col = (int8_t)v->cur_col;
+    a->dirty = (uint8_t)v->dirty;
+    scpy(a->title, (int)sizeof(a->title), v->title);
+    scpy(a->tool, OS_FB_APP_COLS, v->tool);
+    scpy(a->status, OS_FB_APP_COLS, v->status);
+    for (r = 0; r < OS_FB_APP_ROWS && r < OSUI_APP_ROWS; r++) {
+        int k;
+        scpy(a->rows[r], OS_FB_APP_COLS, v->rows[r]);
+        for (k = 0; k < OS_FB_APP_COLS; k++) a->attr[r][k] = v->attr[r][k];
+    }
 }
 
 int osui_gui_term_requested(void) { return g_term_req; }
@@ -668,9 +849,11 @@ void osui_gui_set_pane_source(const osui_pane_src_t *src) { g_pane_src = src; g_
 
 static int pane_live_fill(int pane) {
     unsigned now;
-    if (!g_pane_src || (pane != OS_FB_PANE_STATUS && pane != OS_FB_PANE_FS && pane != OS_FB_PANE_ADMIN)) return 0;
+    if (!g_pane_src || (pane != OS_FB_PANE_STATUS && pane != OS_FB_PANE_FS && pane != OS_FB_PANE_ADMIN &&
+                        pane != OS_FB_PANE_BROWSER && !osui_panes_command(pane))) return 0;
     now = g_pane_src->ticks ? g_pane_src->ticks() : 0;
-    if (pane != g_pane_for || now - g_pane_at >= 100U) {
+    /* command panes run their command when they open (not every second) */
+    if (pane != g_pane_for || (!osui_panes_command(pane) && now - g_pane_at >= 100U)) {
         g_pane_n = osui_panes_fill(pane, g_pane_src, g_pane_lines, OS_FB_TERM_MAX);
         g_pane_for = pane;
         g_pane_at = now;
@@ -689,7 +872,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     if (!scene) return;
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
-    scene->version = 6; /* 3: term_attr (pm-ide syntax classes), 4: web display list, 5: llm, 6: pane_live */
+    scene->version = 7; /* 3: term_attr (pm-ide syntax classes), 4: web display list, 5: llm, 6: pane_live, 7: app windows */
     scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
     scene->pane = OS_FB_PANE_NONE;
     if (pane) {
@@ -768,6 +951,9 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         for (k = 0; k < g_web.nitems && k < OS_FB_WEB_ITEMS; k++) scene->web[k] = g_web.items[k];
         if (!g_web_mobile) scene->input[0] = 0;
     }
+    scene->app_focus = (uint8_t)(g_focus < 0 ? 0xFF : g_focus);
+    if (g_files.active) { osui_files_render(&g_files, &g_view); app_to_scene(&g_view, &scene->app[0], OS_FB_APP_FILES); }
+    if (g_edit.active) { osui_ide_render_app(&g_edit, &g_view); app_to_scene(&g_view, &scene->app[1], OS_FB_APP_EDIT); }
     if (g_ide.active) {
         /* US-050: the editor takes the whole desktop (OS_FB_PANE_IDE). */
         scene->pane = OS_FB_PANE_IDE;
@@ -830,6 +1016,25 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
     if (out && out_max > 0) out[0] = 0;
     if (key == 0) {
         osui_stage_tick(out, out_max);
+        return 0;
+    }
+    if (key == OS_FB_EVT) { g_evt_on = 1; g_evt_len = 0; return 0; }
+    if (g_evt_on) {
+        if (key == '\n' || key == '\r') {
+            g_evt[g_evt_len] = 0;
+            g_evt_on = 0;
+            osui_gui_event(g_evt, out, out_max);
+        } else if (g_evt_len < (int)sizeof(g_evt) - 1) g_evt[g_evt_len++] = (char)key;
+        return 0;
+    }
+    if (g_focus == 0 && g_files.active && !g_ide.active && !g_web_active) {
+        static char before[160];
+        scpy(before, (int)sizeof(before), g_files.log);
+        files_result(osui_files_key(&g_files, key), before, out, out_max);
+        return 0;
+    }
+    if (g_focus == 1 && g_edit.active && !g_ide.active && !g_web_active) {
+        edit_action(osui_ide_key(&g_edit, key), out, out_max);
         return 0;
     }
     if (g_web_active && !(g_web_mobile && key != OS_VGA_KEY_ESC && key != OS_VGA_KEY_UP && key != OS_VGA_KEY_DOWN)) {
@@ -915,6 +1120,22 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             g_input[0] = 0;
             return 0;
         }
+        if (sncmp(g_input, "/files", 6) == 0 && (g_input[6] == ' ' || g_input[6] == 0)) {
+            const char *a = g_input + 6;
+            while (*a == ' ') a++;
+            (void)osui_gui_files_open(a, out, out_max);
+            g_ilen = 0;
+            g_input[0] = 0;
+            return 0;
+        }
+        if (sncmp(g_input, "/edit", 5) == 0 && (g_input[5] == ' ' || g_input[5] == 0)) {
+            const char *a = g_input + 5;
+            while (*a == ' ') a++;
+            (void)osui_gui_edit_open(a, out, out_max);
+            g_ilen = 0;
+            g_input[0] = 0;
+            return 0;
+        }
         if (g_input[0] == 'p' && g_input[1] == 'm' && g_input[2] == '-' && g_input[3] == 'i' &&
             g_input[4] == 'd' && g_input[5] == 'e' && (g_input[6] == ' ' || g_input[6] == 0)) {
             (void)ide_open_line(g_input, out, out_max);
@@ -990,6 +1211,8 @@ void osui_gui_run(void) {
     g_web_mobile = 0;
     g_term_req = 0;
     g_pending[0] = 0;
+    g_focus = -1;
+    g_evt_on = 0;
     osui_gui_term_reset();
     osui_gui_ack_enter();
     serial_puts("osui gui live chrome=qemu_fb display_surface=vbe_lfb us031_complete=false\n");
@@ -1000,7 +1223,7 @@ void osui_gui_run(void) {
     while (!g_leave) {
         key = sys_getc_gui();
         out[0] = 0;
-        if (key == '\n' || key == '\r') {
+        if ((key == '\n' || key == '\r') && !g_evt_on && g_focus < 0) {
             serial_puts("osui gui line=");
             serial_puts(g_input);
             serial_puts("\n");

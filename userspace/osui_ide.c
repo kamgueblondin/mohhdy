@@ -33,8 +33,8 @@ int osui_ide_text_rows(const osui_ide_t *ide) {
 }
 
 static void ide_follow(osui_ide_t *ide) {
-    int width = OSUI_IDE_ROW_LEN - 1 - 5; /* gutter "NNN> " */
-    int rows = osui_ide_text_rows(ide);
+    int width = ide->plain ? OSUI_APP_COLS - 1 - 5 : OSUI_IDE_ROW_LEN - 1 - 5; /* gutter "NNN> " */
+    int rows = ide->plain ? OSUI_APP_ROWS : osui_ide_text_rows(ide);
     if (ide->row < ide->top) ide->top = ide->row;
     if (ide->row >= ide->top + rows) ide->top = ide->row - rows + 1;
     if (ide->col < ide->left) ide->left = ide->col;
@@ -135,9 +135,12 @@ static void ide_backspace(osui_ide_t *ide) {
     }
 }
 
+static int plain_key(osui_ide_t *ide, int key);
+
 int osui_ide_key(osui_ide_t *ide, int key) {
     int n;
     if (!ide || !ide->active) return OSUI_IDE_NONE;
+    if (ide->plain) return plain_key(ide, key);
     if (ide->cmd_mode) {
         ide->cmd_mode = 0;
         if (key == 'w') return OSUI_IDE_SAVE;
@@ -471,4 +474,419 @@ void osui_ide_out_append(osui_ide_t *ide, const char *text) {
     }
     ide->out_visible = 1;
     ide_follow(ide);
+}
+
+/* ==== plain text mode: the desktop text editor ======================== */
+
+const char osui_ide_toolbar[] =
+    "[Ouvrir] [Enreg] [Sous] [Couper] [Copier] [Coller] [Annul] [Retab] [Cherch]";
+
+static char g_clip[OSUI_IDE_TEXT_MAX];
+static int g_clip_len;
+
+const char *osui_ide_clipboard(void) { return g_clip; }
+
+void osui_ide_set_clipboard(const char *text, int len) {
+    int i;
+    if (len < 0) len = 0;
+    if (len > OSUI_IDE_TEXT_MAX - 1) len = OSUI_IDE_TEXT_MAX - 1;
+    for (i = 0; i < len; i++) g_clip[i] = text[i];
+    g_clip[len] = 0;
+    g_clip_len = len;
+}
+
+static void reload_text(osui_ide_t *ide, const char *text, int row, int col) {
+    int r = 0, c = 0, i, k;
+    for (r = 0; r < OSUI_IDE_LINES; r++) for (k = 0; k <= OSUI_IDE_COLS; k++) ide->lines[r][k] = 0;
+    r = 0;
+    for (i = 0; text[i]; i++) {
+        if (text[i] == '\n') { if (r + 1 >= OSUI_IDE_LINES) break; r++; c = 0; continue; }
+        if (c < OSUI_IDE_COLS) ide->lines[r][c++] = text[i];
+    }
+    ide->nlines = r + 1;
+    if (ide->nlines > 1 && i > 0 && text[i - 1] == '\n' && ide->lines[r][0] == 0) ide->nlines = r;
+    ide->row = row < ide->nlines ? row : ide->nlines - 1;
+    ide->col = col;
+    if (ide->col > ide_len(ide->lines[ide->row])) ide->col = ide_len(ide->lines[ide->row]);
+    ide->mark_on = 0;
+    ide_follow(ide);
+}
+
+static void snap_push(char stack[][OSUI_IDE_TEXT_MAX], int rc[][2], int *n, const osui_ide_t *ide) {
+    int i, k;
+    if (*n == OSUI_IDE_UNDO) {
+        for (i = 0; i + 1 < OSUI_IDE_UNDO; i++) {
+            for (k = 0; k < OSUI_IDE_TEXT_MAX; k++) stack[i][k] = stack[i + 1][k];
+            rc[i][0] = rc[i + 1][0]; rc[i][1] = rc[i + 1][1];
+        }
+        (*n)--;
+    }
+    if (osui_ide_text(ide, stack[*n], OSUI_IDE_TEXT_MAX) < 0) stack[*n][0] = 0;
+    rc[*n][0] = ide->row; rc[*n][1] = ide->col;
+    (*n)++;
+}
+
+/* Before an edit: one undo step per edit, typed characters grouped. */
+static void undo_point(osui_ide_t *ide, int kind) {
+    if (kind == 1 && ide->last_edit == 1) return;
+    snap_push(ide->undo, ide->undo_rc, &ide->undo_n, ide);
+    ide->redo_n = 0;
+    ide->last_edit = kind;
+}
+
+static void do_undo(osui_ide_t *ide, int redo) {
+    char (*from)[OSUI_IDE_TEXT_MAX] = redo ? ide->redo : ide->undo;
+    int (*frc)[2] = redo ? ide->redo_rc : ide->undo_rc;
+    int *fn = redo ? &ide->redo_n : &ide->undo_n;
+    if (*fn == 0) { osui_ide_set_status(ide, redo ? "rien a retablir" : "rien a annuler"); return; }
+    if (redo) snap_push(ide->undo, ide->undo_rc, &ide->undo_n, ide);
+    else snap_push(ide->redo, ide->redo_rc, &ide->redo_n, ide);
+    (*fn)--;
+    reload_text(ide, from[*fn], frc[*fn][0], frc[*fn][1]);
+    ide->modified = 1;
+    ide->last_edit = 0;
+    osui_ide_set_status(ide, redo ? "retabli" : "annule");
+}
+
+static int pos_less(int r0, int c0, int r1, int c1) { return r0 < r1 || (r0 == r1 && c0 < c1); }
+
+static int sel_range(const osui_ide_t *ide, int *r0, int *c0, int *r1, int *c1) {
+    if (!ide->mark_on) return 0;
+    if (ide->mark_row == ide->row && ide->mark_col == ide->col) return 0;
+    if (pos_less(ide->mark_row, ide->mark_col, ide->row, ide->col)) {
+        *r0 = ide->mark_row; *c0 = ide->mark_col; *r1 = ide->row; *c1 = ide->col;
+    } else {
+        *r0 = ide->row; *c0 = ide->col; *r1 = ide->mark_row; *c1 = ide->mark_col;
+    }
+    return 1;
+}
+
+int osui_ide_selection(const osui_ide_t *ide, char *out, int max) {
+    int r0, c0, r1, c1, r, n = 0;
+    if (!ide || !out || max <= 0 || !sel_range(ide, &r0, &c0, &r1, &c1)) { if (out && max > 0) out[0] = 0; return 0; }
+    for (r = r0; r <= r1; r++) {
+        int a = r == r0 ? c0 : 0, b = r == r1 ? c1 : ide_len(ide->lines[r]), k;
+        for (k = a; k < b && n < max - 1; k++) out[n++] = ide->lines[r][k];
+        if (r < r1 && n < max - 1) out[n++] = '\n';
+    }
+    out[n] = 0;
+    return n;
+}
+
+static int delete_range(osui_ide_t *ide, int r0, int c0, int r1, int c1) {
+    char *a = ide->lines[r0];
+    const char *b = ide->lines[r1] + c1;
+    int bl = ide_len(b), i, k;
+    if (c0 + bl > OSUI_IDE_COLS) { osui_ide_set_status(ide, "ligne trop longue"); return -1; }
+    for (k = 0; k <= bl; k++) a[c0 + k] = b[k];
+    for (k = c0 + bl + 1; k <= OSUI_IDE_COLS; k++) a[k] = 0;
+    if (r1 > r0) {
+        int gone = r1 - r0;
+        for (i = r0 + 1; i + gone < ide->nlines; i++) ide_cpy(ide->lines[i], OSUI_IDE_COLS + 1, ide->lines[i + gone]);
+        for (i = ide->nlines - gone; i < ide->nlines; i++) for (k = 0; k <= OSUI_IDE_COLS; k++) ide->lines[i][k] = 0;
+        ide->nlines -= gone;
+    }
+    ide->row = r0; ide->col = c0;
+    ide->mark_on = 0;
+    ide->modified = 1;
+    return 0;
+}
+
+static int delete_selection(osui_ide_t *ide) {
+    int r0, c0, r1, c1;
+    if (!sel_range(ide, &r0, &c0, &r1, &c1)) return 0;
+    return delete_range(ide, r0, c0, r1, c1) == 0 ? 1 : -1;
+}
+
+static void insert_text(osui_ide_t *ide, const char *t) {
+    for (; t && *t; t++) {
+        if (*t == '\n') ide_newline(ide);
+        else if ((unsigned char)*t >= 32 && (unsigned char)*t <= 126) ide_insert(ide, *t);
+    }
+}
+
+static int find_next(osui_ide_t *ide) {
+    int fl = ide_len(ide->find), r, start_c, pass;
+    if (fl == 0) { osui_ide_set_status(ide, "rien a chercher"); return 0; }
+    for (pass = 0; pass < 2; pass++) {
+        for (r = pass ? 0 : ide->row; r < ide->nlines; r++) {
+            const char *l = ide->lines[r];
+            int n = ide_len(l), c;
+            start_c = (!pass && r == ide->row) ? ide->col : 0;
+            for (c = start_c; c + fl <= n; c++) {
+                int k = 0;
+                while (k < fl && l[c + k] == ide->find[k]) k++;
+                if (k == fl) {
+                    char msg[OSUI_IDE_ROW_LEN];
+                    ide->mark_on = 1; ide->mark_row = r; ide->mark_col = c;
+                    ide->row = r; ide->col = c + fl;
+                    ide_follow(ide);
+                    ide_cpy(msg, (int)sizeof(msg), "trouve ligne ");
+                    ide_cat_u(msg, (int)sizeof(msg), (unsigned)(r + 1));
+                    osui_ide_set_status(ide, msg);
+                    return 1;
+                }
+            }
+        }
+    }
+    osui_ide_set_status(ide, "introuvable");
+    return 0;
+}
+
+static void do_copy(osui_ide_t *ide, int cut) {
+    static char tmp[OSUI_IDE_TEXT_MAX];
+    int n = osui_ide_selection(ide, tmp, (int)sizeof(tmp));
+    if (n <= 0) { osui_ide_set_status(ide, "pas de selection (ESC m pose la marque)"); return; }
+    osui_ide_set_clipboard(tmp, n);
+    if (cut) { undo_point(ide, 2); (void)delete_selection(ide); osui_ide_set_status(ide, "coupe"); }
+    else osui_ide_set_status(ide, "copie");
+    ide_follow(ide);
+}
+
+static void do_paste(osui_ide_t *ide) {
+    if (!g_clip_len) { osui_ide_set_status(ide, "presse-papiers vide"); return; }
+    undo_point(ide, 3);
+    if (delete_selection(ide) < 0) return;
+    insert_text(ide, g_clip);
+    ide->mark_on = 0;
+    ide_follow(ide);
+    osui_ide_set_status(ide, "colle");
+}
+
+static void start_prompt(osui_ide_t *ide, int which, const char *initial) {
+    ide->prompt = which;
+    ide_cpy(ide->prompt_buf, (int)sizeof(ide->prompt_buf), initial ? initial : "");
+}
+
+static int quit_request(osui_ide_t *ide) {
+    if (ide->modified && !ide->quit_armed) {
+        ide->quit_armed = 1;
+        osui_ide_set_status(ide, "non enregistre: ESC w enregistre, ESC Q (ou Fermer encore) abandonne");
+        return OSUI_IDE_NONE;
+    }
+    return OSUI_IDE_QUIT;
+}
+
+int osui_ide_tool(osui_ide_t *ide, int b) {
+    if (!ide || !ide->active || !ide->plain) return OSUI_IDE_NONE;
+    ide->prompt = OSUI_IDE_P_NONE;
+    switch (b) {
+    case OSUI_IDE_T_OPEN: start_prompt(ide, OSUI_IDE_P_OPEN, ""); return OSUI_IDE_NONE;
+    case OSUI_IDE_T_SAVE:
+        if (ide->truncated) { osui_ide_set_status(ide, "fichier tronque a l'ouverture: Enreg. sous un autre nom"); return OSUI_IDE_NONE; }
+        return OSUI_IDE_SAVE;
+    case OSUI_IDE_T_SAVE_AS: start_prompt(ide, OSUI_IDE_P_SAVE_AS, ide->file); return OSUI_IDE_NONE;
+    case OSUI_IDE_T_CUT: do_copy(ide, 1); return OSUI_IDE_NONE;
+    case OSUI_IDE_T_COPY: do_copy(ide, 0); return OSUI_IDE_NONE;
+    case OSUI_IDE_T_PASTE: do_paste(ide); return OSUI_IDE_NONE;
+    case OSUI_IDE_T_UNDO: do_undo(ide, 0); return OSUI_IDE_NONE;
+    case OSUI_IDE_T_REDO: do_undo(ide, 1); return OSUI_IDE_NONE;
+    case OSUI_IDE_T_FIND: start_prompt(ide, OSUI_IDE_P_FIND, ide->find); return OSUI_IDE_NONE;
+    case OSUI_IDE_T_MARK:
+        ide->mark_on = !ide->mark_on;
+        ide->mark_row = ide->row; ide->mark_col = ide->col;
+        osui_ide_set_status(ide, ide->mark_on ? "marque posee: deplacez le curseur pour selectionner" : "marque retiree");
+        return OSUI_IDE_NONE;
+    default: return OSUI_IDE_NONE;
+    }
+}
+
+static int prompt_key(osui_ide_t *ide, int key) {
+    int n = ide_len(ide->prompt_buf), which = ide->prompt;
+    if (key == OSUI_IDE_KEY_ESC) { ide->prompt = OSUI_IDE_P_NONE; osui_ide_set_status(ide, "annule"); return OSUI_IDE_NONE; }
+    if (key == '\b' || key == 127) { if (n > 0) ide->prompt_buf[n - 1] = 0; return OSUI_IDE_NONE; }
+    if (key >= 32 && key <= 126) {
+        if (n < (int)sizeof(ide->prompt_buf) - 1) { ide->prompt_buf[n] = (char)key; ide->prompt_buf[n + 1] = 0; }
+        return OSUI_IDE_NONE;
+    }
+    if (key != '\n' && key != '\r') return OSUI_IDE_NONE;
+    ide->prompt = OSUI_IDE_P_NONE;
+    if (!ide->prompt_buf[0]) { osui_ide_set_status(ide, "annule"); return OSUI_IDE_NONE; }
+    if (which == OSUI_IDE_P_FIND) { ide_cpy(ide->find, (int)sizeof(ide->find), ide->prompt_buf); (void)find_next(ide); return OSUI_IDE_NONE; }
+    ide_cpy(ide->prompt_out, (int)sizeof(ide->prompt_out), ide->prompt_buf);
+    if (which == OSUI_IDE_P_SAVE_AS) { ide_cpy(ide->file, (int)sizeof(ide->file), ide->prompt_buf); ide->truncated = 0; return OSUI_IDE_SAVE_AS; }
+    if (which == OSUI_IDE_P_OPEN) {
+        if (ide->modified) { osui_ide_set_status(ide, "non enregistre: enregistrez avant d'ouvrir un autre fichier"); return OSUI_IDE_NONE; }
+        return OSUI_IDE_OPEN;
+    }
+    return OSUI_IDE_NONE;
+}
+
+static int plain_key(osui_ide_t *ide, int key) {
+    int n, moved = 0;
+    if (ide->prompt) return prompt_key(ide, key);
+    if (ide->cmd_mode) {
+        ide->cmd_mode = 0;
+        switch (key) {
+        case 'w': return osui_ide_tool(ide, OSUI_IDE_T_SAVE);
+        case 'a': return osui_ide_tool(ide, OSUI_IDE_T_SAVE_AS);
+        case 'o': return osui_ide_tool(ide, OSUI_IDE_T_OPEN);
+        case 'x': return osui_ide_tool(ide, OSUI_IDE_T_CUT);
+        case 'c': return osui_ide_tool(ide, OSUI_IDE_T_COPY);
+        case 'v': return osui_ide_tool(ide, OSUI_IDE_T_PASTE);
+        case 'u': return osui_ide_tool(ide, OSUI_IDE_T_UNDO);
+        case 'y': return osui_ide_tool(ide, OSUI_IDE_T_REDO);
+        case 'f': return osui_ide_tool(ide, OSUI_IDE_T_FIND);
+        case 'n': (void)find_next(ide); return OSUI_IDE_NONE;
+        case 'm': return osui_ide_tool(ide, OSUI_IDE_T_MARK);
+        case 'q': return quit_request(ide);
+        case 'Q': return OSUI_IDE_QUIT;
+        default: osui_ide_set_status(ide, "commande annulee"); return OSUI_IDE_NONE;
+        }
+    }
+    if (key == OSUI_IDE_KEY_ESC) {
+        ide->cmd_mode = 1;
+        osui_ide_set_status(ide, "ESC: w enreg. a sous o ouvrir x c v couper/copier/coller u y annuler/retablir f n chercher m marque q");
+        return OSUI_IDE_NONE;
+    }
+    ide->quit_armed = 0;
+    n = ide_len(ide->lines[ide->row]);
+    switch (key) {
+    case OSUI_IDE_KEY_LEFT:
+        if (ide->col > 0) ide->col--;
+        else if (ide->row > 0) { ide->row--; ide->col = ide_len(ide->lines[ide->row]); }
+        moved = 1; break;
+    case OSUI_IDE_KEY_RIGHT:
+        if (ide->col < n) ide->col++;
+        else if (ide->row + 1 < ide->nlines) { ide->row++; ide->col = 0; }
+        moved = 1; break;
+    case OSUI_IDE_KEY_UP: if (ide->row > 0) ide->row--; moved = 1; break;
+    case OSUI_IDE_KEY_DOWN: if (ide->row + 1 < ide->nlines) ide->row++; moved = 1; break;
+    case OSUI_IDE_KEY_HOME: ide->col = 0; moved = 1; break;
+    case OSUI_IDE_KEY_END: ide->col = n; moved = 1; break;
+    case '\n': case '\r':
+        undo_point(ide, 2);
+        if (delete_selection(ide) < 0) break;
+        ide_newline(ide);
+        break;
+    case '\b': case 127:
+        undo_point(ide, 2);
+        { int d = delete_selection(ide); if (d == 0) ide_backspace(ide); }
+        break;
+    case OSUI_IDE_KEY_DEL:
+        undo_point(ide, 2);
+        {
+            int d = delete_selection(ide);
+            if (d == 0) {
+                if (ide->col < n) { ide->col++; ide_backspace(ide); }
+                else if (ide->row + 1 < ide->nlines) { ide->row++; ide->col = 0; ide_backspace(ide); }
+            }
+        }
+        break;
+    case '\t':
+        undo_point(ide, 1);
+        if (delete_selection(ide) < 0) break;
+        ide_insert(ide, ' '); ide_insert(ide, ' '); ide_insert(ide, ' '); ide_insert(ide, ' ');
+        break;
+    default:
+        if (key < 32 || key > 126) return OSUI_IDE_NONE;
+        undo_point(ide, 1);
+        if (delete_selection(ide) < 0) break;
+        ide_insert(ide, (char)key);
+        break;
+    }
+    if (moved) ide->last_edit = 0;
+    n = ide_len(ide->lines[ide->row]);
+    if (ide->col > n) ide->col = n;
+    ide_follow(ide);
+    return OSUI_IDE_NONE;
+}
+
+void osui_ide_open_plain(osui_ide_t *ide, const char *file, const char *text, int len) {
+    osui_ide_open(ide, file, text, len);
+    ide->plain = 1;
+    osui_ide_set_status(ide, ide->truncated ? "fichier tronque (96 lignes x 72 colonnes): Enreg. sous un autre nom"
+                                            : "ESC puis w enregistre, q ferme; barre d'outils cliquable");
+}
+
+#define APP_GUTTER 5   /* "NNNN " */
+#define APP_TEXT_ROWS (OSUI_APP_ROWS)
+
+static void plain_follow_app(osui_ide_t *ide) {
+    int width = OSUI_APP_COLS - 1 - APP_GUTTER;
+    if (ide->row < ide->top) ide->top = ide->row;
+    if (ide->row >= ide->top + APP_TEXT_ROWS) ide->top = ide->row - APP_TEXT_ROWS + 1;
+    if (ide->col < ide->left) ide->left = ide->col;
+    if (ide->col >= ide->left + width) ide->left = ide->col - width + 1;
+}
+
+void osui_ide_click(osui_ide_t *ide, int row, int col) {
+    int line, c, n;
+    if (!ide || !ide->active) return;
+    line = ide->top + row;
+    if (line >= ide->nlines) line = ide->nlines - 1;
+    if (line < 0) line = 0;
+    c = ide->left + col - APP_GUTTER;
+    if (c < 0) c = 0;
+    n = ide_len(ide->lines[line]);
+    if (c > n) c = n;
+    ide->row = line; ide->col = c;
+    ide->mark_on = 0;
+    ide->last_edit = 0;
+}
+
+void osui_ide_drag(osui_ide_t *ide, int r0, int c0, int r1, int c1) {
+    int mr, mc;
+    if (!ide || !ide->active) return;
+    osui_ide_click(ide, r0, c0);
+    mr = ide->row; mc = ide->col;
+    osui_ide_click(ide, r1, c1);
+    if (mr != ide->row || mc != ide->col) { ide->mark_on = 1; ide->mark_row = mr; ide->mark_col = mc; }
+}
+
+int osui_ide_save_text(const osui_ide_t *ide, char *out, int max) {
+    int n = osui_ide_text(ide, out, max);
+    if (n == 1 && ide->nlines == 1 && ide->lines[0][0] == 0) { out[0] = 0; return 0; }
+    return n;
+}
+
+void osui_ide_render_app(const osui_ide_t *ide0, osui_app_view_t *v) {
+    osui_ide_t *ide = (osui_ide_t *)ide0;   /* scroll follows the window size */
+    int r, r0 = 0, c0 = 0, r1 = 0, c1 = 0, has;
+    {
+        int i; char *p = (char *)v;
+        for (i = 0; i < (int)sizeof(*v); i++) p[i] = 0;
+        v->cur_row = v->cur_col = -1;
+    }
+    if (!ide || !ide->active) return;
+    plain_follow_app(ide);
+    ide_cpy(v->title, (int)sizeof(v->title), "Editeur - ");
+    ide_cat(v->title, (int)sizeof(v->title), ide->file);
+    if (ide->modified) ide_cat(v->title, (int)sizeof(v->title), " *");
+    v->dirty = ide->modified;
+    ide_cpy(v->tool, OSUI_APP_COLS, osui_ide_toolbar);
+    has = sel_range(ide, &r0, &c0, &r1, &c1);
+    for (r = 0; r < APP_TEXT_ROWS; r++) {
+        int line = ide->top + r, k = 0, c;
+        char num[8];
+        char *d = v->rows[r];
+        if (line >= ide->nlines) { ide_cpy(d, OSUI_APP_COLS, "   ~"); for (k = 0; k < 4; k++) v->attr[r][k] = OSUI_APP_A_DIM; continue; }
+        num[0] = 0;
+        ide_cat_u(num, (int)sizeof(num), (unsigned)(line + 1));
+        for (c = ide_len(num); c < 4; c++) d[k++] = ' ';
+        for (c = 0; num[c]; c++) d[k++] = num[c];
+        d[k++] = ' ';
+        for (c = 0; c < APP_GUTTER; c++) v->attr[r][c] = OSUI_APP_A_DIM;
+        for (c = ide->left; ide->lines[line][c] && k < OSUI_APP_COLS - 1; c++, k++) {
+            d[k] = ide->lines[line][c];
+            v->attr[r][k] = (has && !pos_less(line, c, r0, c0) && pos_less(line, c, r1, c1)) ? OSUI_APP_A_SEL : OSUI_APP_A_TEXT;
+        }
+        d[k] = 0;
+    }
+    v->nrows = APP_TEXT_ROWS;
+    v->cur_row = ide->row - ide->top;
+    v->cur_col = APP_GUTTER + ide->col - ide->left;
+    if (ide->prompt) {
+        const char *q = ide->prompt == OSUI_IDE_P_FIND ? "Chercher: " : ide->prompt == OSUI_IDE_P_SAVE_AS ? "Enregistrer sous: " : "Ouvrir: ";
+        ide_cpy(v->status, OSUI_APP_COLS, q);
+        ide_cat(v->status, OSUI_APP_COLS, ide->prompt_buf);
+        ide_cat(v->status, OSUI_APP_COLS, "_  (Entree valide, Echap annule)");
+    } else {
+        ide_cpy(v->status, OSUI_APP_COLS, "Ln ");
+        ide_cat_u(v->status, OSUI_APP_COLS, (unsigned)(ide->row + 1));
+        ide_cat(v->status, OSUI_APP_COLS, " Col ");
+        ide_cat_u(v->status, OSUI_APP_COLS, (unsigned)(ide->col + 1));
+        ide_cat(v->status, OSUI_APP_COLS, ide->cmd_mode ? "  CMD  " : "  ");
+        ide_cat(v->status, OSUI_APP_COLS, ide->status);
+    }
 }

@@ -473,6 +473,31 @@ typedef struct {
     char text[OS_FB_WEB_TEXT_LEN];
 } os_fb_web_item_t;
 
+/* version >= 7: one desktop app window. kind 0 = closed. */
+#define OS_FB_APPS 2
+#define OS_FB_APP_FILES 1       /* slot 0 */
+#define OS_FB_APP_EDIT 2        /* slot 1 */
+#define OS_FB_APP_ROWS 22
+#define OS_FB_APP_COLS 78
+typedef struct {
+    uint8_t kind;
+    uint8_t nrows;
+    int8_t cur_row;             /* caret cell, -1 none */
+    int8_t cur_col;
+    uint8_t dirty;
+    uint8_t pad[3];
+    char title[64];
+    char tool[OS_FB_APP_COLS];  /* "[Label] [Label] ..." */
+    char status[OS_FB_APP_COLS];
+    char rows[OS_FB_APP_ROWS][OS_FB_APP_COLS];
+    uint8_t attr[OS_FB_APP_ROWS][OS_FB_APP_COLS];
+} os_fb_app_t;
+/* Desktop event from the kernel compositor to the Ring 3 desktop loop:
+ * the byte OS_FB_EVT, then a text line ending in '\n' in the keyboard
+ * stream: "focus K|d", "app K click R C", "app K dclick R C",
+ * "app K drag R0 C0 R1 C1", "app K tool C", "app K close". */
+#define OS_FB_EVT 0x16
+
 typedef struct {
     uint32_t magic;
     uint16_t version;
@@ -506,6 +531,12 @@ typedef struct {
     /* version >= 6: term[] holds the live content of the Statut / Fichiers
      * / Admin window (userspace/osui_panes.c), not the shell log. */
     uint8_t pane_live;
+    /* version >= 7: app windows (file explorer, text editor). The Ring 3
+     * app model fills the grid (userspace/osui_app.h); the kernel draws it
+     * and sends clicks back as app events (OS_FB_EVT, see below). */
+    uint8_t app_focus;          /* slot with keyboard focus, 0xFF none */
+    uint8_t app_pad[3];
+    os_fb_app_t app[OS_FB_APPS];
 } os_fb_scene_t;
 
 typedef struct {

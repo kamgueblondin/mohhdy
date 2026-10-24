@@ -419,6 +419,9 @@ jobs:
       - name: QEMU terminal grid follows maximize and screen resize (reflow, about 1 min)
         run: make qemu-gui-term-resize
 
+      - name: QEMU desktop explorer + editor, saved file read by cat in the terminal (about 1 min)
+        run: make qemu-gui-apps
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

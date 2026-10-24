@@ -95,12 +95,42 @@ static void test_grid_follows_window(void) {
     TEST_ASSERT(l.w <= 640 && l.h <= 400);
 }
 
+/* UX3: mouse selection helpers (cell under the pointer, copied text,
+ * inverted cells). */
+static void test_selection_text_and_highlight(void) {
+    uint16_t cells[4 * 3];
+    char out[64];
+    const char *rows[3] = { "ab  ", "cdef", "g   " };
+    gfx_term_layout_t l;
+    int i, c, r;
+    for (i = 0; i < 12; i++) cells[i] = (uint16_t)((uint8_t)rows[i / 4][i % 4] | (0x07 << 8));
+    TEST_ASSERT_EQUAL(2, gfx_term_sel_text(cells, 4, 3, 0, 3, out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("ab", out);                    /* trailing blanks dropped */
+    gfx_term_sel_text(cells, 4, 3, 9, 1, out, (int)sizeof(out));   /* either order */
+    TEST_ASSERT_EQUAL_STRING("b\ncdef\ng", out);
+    TEST_ASSERT_EQUAL(3, gfx_term_sel_text(cells, 4, 3, 0, 11, out, 4));   /* bounded */
+    TEST_ASSERT_EQUAL_STRING("ab\n", out);
+    gfx_term_sel_apply(cells, 12, 5, 6);
+    TEST_ASSERT_EQUAL(0x70, cells[5] >> 8);
+    TEST_ASSERT_EQUAL(0x70, cells[6] >> 8);
+    TEST_ASSERT_EQUAL(0x07, cells[7] >> 8);
+    TEST_ASSERT_EQUAL('d', cells[5] & 0xFF);
+    gfx_term_layout(1024, 768, &l);
+    TEST_ASSERT(gfx_term_cell_at(&l, l.gx, l.gy, &c, &r));
+    TEST_ASSERT_EQUAL(0, c); TEST_ASSERT_EQUAL(0, r);
+    TEST_ASSERT(gfx_term_cell_at(&l, l.gx + 3 * GFX_TERM_CELL_W * l.scale + 1, l.gy + 2 * GFX_TERM_CELL_H * l.scale, &c, &r));
+    TEST_ASSERT_EQUAL(3, c); TEST_ASSERT_EQUAL(2, r);
+    TEST_ASSERT(!gfx_term_cell_at(&l, l.gx - 1, l.gy, &c, &r));
+    TEST_ASSERT(!gfx_term_cell_at(&l, l.gx, l.gy + l.rows * GFX_TERM_CELL_H * l.scale, &c, &r));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_layout_centered_and_scaled);
     RUN_TEST(test_cell_pixels_follow_font_and_attr);
     RUN_TEST(test_title_buttons_hit);
     RUN_TEST(test_grid_follows_window);
+    RUN_TEST(test_selection_text_and_highlight);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

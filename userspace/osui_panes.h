@@ -12,10 +12,18 @@ typedef struct {
     int (*meminfo)(os_meminfo_t *info);
     unsigned int (*ticks)(void);
     int (*service_status)(const char *name, os_service_status_t *st);
+    /* Runs one shell command and captures what it prints (P2P, Collab,
+     * Prod, Support windows); returns the byte count or < 0. */
+    int (*run)(const char *cmd, char *out, int max);
 } osui_pane_src_t;
 
 #define OSUI_PANES_LINE 64
-/* Fill up to max lines for pane (OS_FB_PANE_STATUS / FS / ADMIN).
+/* Shell command whose real output fills the pane, 0 when the pane has
+ * none (P2P p2p-stats, Collab collab-balances, Prod prod-metrics,
+ * Support prod-diag). */
+const char *osui_panes_command(int pane);
+/* Fill up to max lines for pane (STATUS / FS / ADMIN / BROWSER and the
+ * command panes above).
  * Returns the line count, 0 for other panes or without a source. */
 int osui_panes_fill(int pane, const osui_pane_src_t *src, char lines[][OSUI_PANES_LINE], int max);
 /* Services the Admin window asks the registry about. */

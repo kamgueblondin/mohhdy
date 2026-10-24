@@ -69,4 +69,13 @@ int gfx_term_render_rows(uint32_t *fb, int fb_w, int fb_h, int pitch,
                          const gfx_term_layout_t *l, const uint8_t *font,
                          const uint16_t *cells, uint16_t *shown, int full,
                          int *row_min, int *row_max);
+/* Mouse text selection (UX3). Cell under (x, y) of the grid, 0 outside. */
+int gfx_term_cell_at(const gfx_term_layout_t *l, int x, int y, int *col, int *row);
+/* Text of the cells between linear indexes a and b (either order, both
+ * included), one line per grid row, trailing blanks dropped; returns the
+ * length (out is always terminated). */
+int gfx_term_sel_text(const uint16_t *cells, int cols, int rows, int a, int b, char *out, int max);
+/* Inverts the colours of the selected cells (fg and bg nibbles swapped). */
+void gfx_term_sel_apply(uint16_t *cells, int n, int a, int b);
+
 #endif

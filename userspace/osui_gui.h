@@ -63,4 +63,16 @@ void osui_gui_run(void);
 
 #include "osui_panes.h"
 void osui_gui_set_pane_source(const osui_pane_src_t *src);
+
+/* Desktop apps (scene version 7): file explorer (slot 0) and text editor
+ * (slot 1) over the shared file library, the same one as the shell
+ * commands. "/files [DIR]" and "/edit [FILE]" typed on the desktop open
+ * them; the dock icons do the same. */
+#include "fsops.h"
+void osui_gui_set_fs_io(const fsops_io_t *io);
+int osui_gui_files_open(const char *dir, char *out, int out_max);
+int osui_gui_edit_open(const char *file, char *out, int out_max);
+/* Kernel compositor event (line after OS_FB_EVT): focus, app clicks. */
+void osui_gui_event(const char *line, char *out, int out_max);
+int osui_gui_focus(void);           /* 0 files, 1 editor, -1 desktop */
 #endif

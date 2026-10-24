@@ -40,8 +40,22 @@ enum {
     OSUI_IDE_SAVE = 1,
     OSUI_IDE_CHECK = 2,
     OSUI_IDE_RUN = 3,
-    OSUI_IDE_QUIT = 4
+    OSUI_IDE_QUIT = 4,
+    OSUI_IDE_SAVE_AS = 5,   /* plain mode: ide->file holds the new name */
+    OSUI_IDE_OPEN = 6       /* plain mode: ide->prompt_out holds the path */
 };
+
+/* Text editor of the desktop (plain mode of the same core): extra keys. */
+#define OSUI_IDE_KEY_HOME 0x12
+#define OSUI_IDE_KEY_END 0x13
+#define OSUI_IDE_KEY_DEL 0x14
+#define OSUI_IDE_UNDO 8
+/* prompts of the plain mode */
+enum { OSUI_IDE_P_NONE = 0, OSUI_IDE_P_FIND, OSUI_IDE_P_SAVE_AS, OSUI_IDE_P_OPEN };
+/* toolbar of the text editor window, in osui_ide_tool order */
+enum { OSUI_IDE_T_OPEN = 0, OSUI_IDE_T_SAVE, OSUI_IDE_T_SAVE_AS, OSUI_IDE_T_CUT, OSUI_IDE_T_COPY,
+       OSUI_IDE_T_PASTE, OSUI_IDE_T_UNDO, OSUI_IDE_T_REDO, OSUI_IDE_T_FIND, OSUI_IDE_T_MARK };
+extern const char osui_ide_toolbar[];
 
 typedef struct {
     int active;
@@ -60,6 +74,19 @@ typedef struct {
     int out_total;    /* lines received since the last clear */
     int out_visible;  /* output pane shown (ESC o toggles) */
     int completions;  /* Tab completions applied */
+    /* plain text mode (desktop text editor), see osui_ide_open_plain */
+    int plain;
+    int mark_on, mark_row, mark_col;  /* selection: mark .. cursor */
+    int prompt;                       /* OSUI_IDE_P_* */
+    char prompt_buf[48];
+    char prompt_out[48];
+    char find[48];
+    int quit_armed;                   /* q on a modified buffer asked once */
+    int last_edit;                    /* undo grouping of typed characters */
+    int undo_n, redo_n;
+    int undo_rc[OSUI_IDE_UNDO][2], redo_rc[OSUI_IDE_UNDO][2];
+    char undo[OSUI_IDE_UNDO][OSUI_IDE_TEXT_MAX];
+    char redo[OSUI_IDE_UNDO][OSUI_IDE_TEXT_MAX];
 } osui_ide_t;
 
 void osui_ide_open(osui_ide_t *ide, const char *file, const char *text, int len);
@@ -78,5 +105,23 @@ int osui_ide_complete(osui_ide_t *ide);
 void osui_ide_out_clear(osui_ide_t *ide);
 void osui_ide_out_append(osui_ide_t *ide, const char *text);
 int osui_ide_text_rows(const osui_ide_t *ide);
+
+/* ---- plain text mode: the desktop text editor ----------------------- */
+#include "osui_app.h"
+void osui_ide_open_plain(osui_ide_t *ide, const char *file, const char *text, int len);
+/* Toolbar button (OSUI_IDE_T_*): same actions as the ESC commands. */
+int osui_ide_tool(osui_ide_t *ide, int button);
+/* Mouse in the text grid of the window (row/col of the content grid).
+ * click places the caret; drag selects from (r0,c0) to (r1,c1). */
+void osui_ide_click(osui_ide_t *ide, int row, int col);
+void osui_ide_drag(osui_ide_t *ide, int r0, int c0, int r1, int c1);
+/* Selected text (0 when none) and the shared clipboard. */
+int osui_ide_selection(const osui_ide_t *ide, char *out, int max);
+const char *osui_ide_clipboard(void);
+void osui_ide_set_clipboard(const char *text, int len);
+/* Content grid of the window: line numbers, text, selection, caret. */
+void osui_ide_render_app(const osui_ide_t *ide, osui_app_view_t *v);
+/* Text to write: like osui_ide_text, an untouched empty buffer is 0 bytes. */
+int osui_ide_save_text(const osui_ide_t *ide, char *out, int max);
 
 #endif

@@ -57,10 +57,15 @@ if [ -z "$ACCEL" ]; then
     fi
 fi
 
+FIT_SOCK="${MOHHDY_FIT_SOCK:-/tmp/mohhdy-gpt2-fit.sock}"
 case "$DISPLAY_MODE" in
-    gtk) DISP=(-vga std -usb -device usb-tablet
+    # COM2 on a unix socket: scripts/qemu_gui_fit.py --watch sends the
+    # window size, the desktop and the terminal follow a window resize.
+    gtk) rm -f "$FIT_SOCK"
+         DISP=(-vga std -usb -device usb-tablet
                -display gtk,zoom-to-fit=on,show-menubar=off,grab-on-hover=off,show-cursor=on
-               -serial file:test_logs/run-gpt2-serial.log) ;;
+               -serial file:test_logs/run-gpt2-serial.log
+               -serial "unix:$FIT_SOCK,server,nowait") ;;
     curses) DISP=(-display curses -serial file:test_logs/run-gpt2-serial.log) ;;
     none) DISP=(-display none -vga none -serial stdio) ;;
     *) echo "[run-gpt2] GPT2_DISPLAY must be gtk, curses or none" >&2; exit 2 ;;
@@ -68,8 +73,21 @@ esac
 mkdir -p test_logs
 echo "[run-gpt2] accel=$ACCEL profile=$PROFILE display=$DISPLAY_MODE"
 echo "[run-gpt2] In the guest: ai-model use gpt2.gguf, then ai <english text>, then ai-continue"
-exec qemu-system-i386 -name "Mohhdy OS GPT-2" -cpu pentium3 \
-    -machine "type=pc,accel=$ACCEL" \
-    -kernel build/mohhdy.bin -initrd my_initrd.tar -m 1024M \
-    "${DISP[@]}" -no-reboot -no-shutdown \
-    -drive file=build/gpt2_gguf_fat16.img,format=raw,if=ide,cache=writethrough
+QEMU=(qemu-system-i386 -name "Mohhdy OS GPT-2" -cpu pentium3
+    -machine "type=pc,accel=$ACCEL"
+    -kernel build/mohhdy.bin -initrd my_initrd.tar -m 1024M
+    "${DISP[@]}" -no-reboot -no-shutdown
+    -drive file=build/gpt2_gguf_fat16.img,format=raw,if=ide,cache=writethrough)
+if [ "$DISPLAY_MODE" != gtk ]; then
+    exec "${QEMU[@]}"
+fi
+if ! command -v xdotool >/dev/null || ! command -v xwininfo >/dev/null; then
+    echo "[run-gpt2] xdotool/xwininfo missing: the window zooms but the desktop keeps its size"
+    exec "${QEMU[@]}"
+fi
+"${QEMU[@]}" &
+QPID=$!
+MOHHDY_FIT_SOCK="$FIT_SOCK" MOHHDY_FIT_NAME="Mohhdy OS GPT-2" python3 scripts/qemu_gui_fit.py --watch &
+WPID=$!
+trap 'kill $WPID 2>/dev/null || true; rm -f "$FIT_SOCK"' EXIT
+wait $QPID
