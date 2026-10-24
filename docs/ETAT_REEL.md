@@ -10,6 +10,13 @@
 
 ## État courant vérifié
 
+## Etat courant du 24 octobre 2026 (bureau: Echap et shell unique)
+
+- Echap sur le bureau VBE ne laisse plus des bandes magenta et vertes. Cause: la sortie du bureau ne remettait que le registre misc et le sequenceur; le CRTC, le controleur graphique et le controleur d'attributs restaient en 1024x768 graphique, donc les cellules texte de 0xB8000 etaient lues comme des pixels. Le LFB ecrase aussi la police (plan 2) et les cellules texte, alors que le pilote Ring 3 vgadriver ne repeignait que les cellules qu'il croyait changees. Correction: jeu complet de registres VGA mode 3, police sauvegardee avant le premier passage en VBE puis restauree, et compteur `vram_epoch` dans la trame du vgadriver pour tout repeindre. Test QEMU: `make qemu-gui-esc` (deux allers-retours gui puis Echap, capture 720x400 sans pixels satures).
+- Le volet Shell du bureau (`/shell` ou l'icone Shell) est le shell de la console: chaque ligne passe par `handle_line` de `userspace/shell.c`, y compris les commandes OS-UI et les lignes `/...`, que shell.c transmet lui-meme a `osui_dispatch_line` comme dans la console. Seuls `console`, `gui-exit`, `web`, `pm-ide` et `mobile-ui` restent geres par la boucle du bureau. Point unique de decision: `osui_gui_route_line`. Les autres volets (chat) gardent la ligne OS-UI, `ai ...` et `!commande` y passent aussi par shell.c. Test unitaire `test_gui_shell_pane_uses_console_shell`, test QEMU `make qemu-gui-shell` (meme sortie pour `p2p-status` et `session-status` en console et dans le volet Shell).
+- Correctif en route: ce chemin faisait une faute de page (pile utilisateur epuisee sous la boucle du bureau). Les tampons de 1 a 3 Kio de la boucle du bureau et de `handle_line` sont maintenant statiques.
+- Limites: le volet Shell affiche 14 lignes de 64 caracteres; une sortie plus longue est tronquee a l'ecran (elle reste complete sur la ligne serie). Les commandes qui lisent le clavier en continu ne sont pas prouvees dans le volet.
+
 ## Etat courant du 24 octobre 2026 (lot 43)
 
 Living baseline. Plan: [lot43_plan.md](lot43_plan.md).
