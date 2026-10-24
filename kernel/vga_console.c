@@ -78,6 +78,15 @@ static void present(void) {
     vga_console_paint_ring0();
 }
 
+static uint32_t vram_epoch;
+
+uint32_t vga_console_vram_epoch(void) { return vram_epoch; }
+
+/* The text cells in video RAM no longer match what was painted (the VBE
+ * linear framebuffer shares that RAM). The Ring 3 driver repaints every
+ * cell when the epoch changes; the Ring 0 path always repaints them. */
+void vga_console_vram_lost(void) { vram_epoch++; }
+
 void vga_console_frame_copy(uint16_t* cells, uint32_t* cx, uint32_t* cy, uint32_t* visible) {
     int i;
     if (cells) for (i = 0; i < VGA_ROWS * VGA_COLS; i++) cells[i] = frame[i];

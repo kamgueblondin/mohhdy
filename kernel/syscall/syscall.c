@@ -1201,6 +1201,7 @@ static int sys_device_service(uint32_t op, uint32_t a, uint32_t b, uint32_t c) {
         if (got) {
             vga_console_frame_copy(fr.cells, &fr.cursor_x, &fr.cursor_y, &fr.cursor_visible);
             fr.seq++;
+            fr.vram_epoch = vga_console_vram_epoch();
         }
         if (flags & 0x200U) __asm__ volatile("sti" ::: "memory");
         if (got) *(os_vga_driver_frame_t*)a = fr;

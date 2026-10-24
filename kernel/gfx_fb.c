@@ -67,6 +67,7 @@ static int g_saved_cursor_x = -1;
 static int g_saved_cursor_y = -1;
 static uint8_t g_saved_cursor_btn = 0;
 static int g_saved_cursor_valid = 0;
+static void vga_font_save(void);
 #endif
 
 int gfx_fb_parse_fit_line(const char *s, int *w, int *h) {
@@ -272,6 +273,7 @@ static int vbe_set_mode(int width, int height) {
         if (id < VBE_DISPI_ID4) return -1;
     }
 
+    if (!g_on) vga_font_save();
     dispi_write(VBE_DISPI_INDEX_ENABLE, VBE_DISPI_DISABLED);
     dispi_write(VBE_DISPI_INDEX_XRES, (unsigned short)width);
     dispi_write(VBE_DISPI_INDEX_YRES, (unsigned short)height);
@@ -310,14 +312,83 @@ static int vbe_set_mode(int width, int height) {
     return 0;
 }
 
+/* Standard VGA mode 3 (80x25 text, 9x16 cells) register set.
+ * Enabling the Bochs DISPI LFB rewrites the CRTC, graphics controller and
+ * attribute controller for 1024x768 graphics; clearing DISPI_ENABLE does
+ * not undo that. Only resetting misc and the sequencer left the card in
+ * graphics mode, so the text cells at 0xB8000 were scanned as pixels: the
+ * full screen magenta/green stripes seen after ESC. The LFB also overwrites
+ * plane 2, where the text font lives, so the font is saved before the
+ * first switch and written back here. */
+static const uint8_t k_mode3_crtc[25] = {
+    0x5F, 0x4F, 0x50, 0x82, 0x55, 0x81, 0xBF, 0x1F, 0x00, 0x4F, 0x0D, 0x0E,
+    0x00, 0x00, 0x00, 0x50, 0x9C, 0x0E, 0x8F, 0x28, 0x1F, 0x96, 0xB9, 0xA3, 0xFF
+};
+static const uint8_t k_mode3_gc[9] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x0E, 0x00, 0xFF };
+static const uint8_t k_mode3_ac[21] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x14, 0x07, 0x38, 0x39, 0x3A, 0x3B,
+    0x3C, 0x3D, 0x3E, 0x3F, 0x0C, 0x00, 0x0F, 0x08, 0x00
+};
+#define VGA_FONT_BYTES (256u * 32u)
+static uint8_t g_font_plane2[VGA_FONT_BYTES];
+static int g_font_saved;
+
+static void vga_seq(uint8_t i, uint8_t v) { outb(0x3C4, i); outb(0x3C5, v); }
+static void vga_gc(uint8_t i, uint8_t v) { outb(0x3CE, i); outb(0x3CF, v); }
+
+/* Plane 2 at 0xA0000, flat addressing. */
+static void vga_plane2_open(uint8_t write_mask) {
+    vga_seq(0x00, 0x01);
+    vga_seq(0x02, write_mask);
+    vga_seq(0x04, 0x06);
+    vga_seq(0x00, 0x03);
+    vga_gc(0x04, 0x02);
+    vga_gc(0x05, 0x00);
+    vga_gc(0x06, 0x04);
+}
+
+static void vga_plane2_close(void) {
+    vga_seq(0x00, 0x01);
+    vga_seq(0x02, 0x03);
+    vga_seq(0x04, 0x02);
+    vga_seq(0x00, 0x03);
+    vga_gc(0x04, 0x00);
+    vga_gc(0x05, 0x10);
+    vga_gc(0x06, 0x0E);
+}
+
+static void vga_font_save(void) {
+    volatile uint8_t *mem = (volatile uint8_t *)0xA0000u;
+    uint32_t i;
+    if (g_font_saved) return;
+    vga_plane2_open(0x04);
+    for (i = 0; i < VGA_FONT_BYTES; i++) g_font_plane2[i] = mem[i];
+    vga_plane2_close();
+    g_font_saved = 1;
+}
+
 static void vga_text_restore(void) {
+    unsigned i;
     dispi_write(VBE_DISPI_INDEX_ENABLE, VBE_DISPI_DISABLED);
     outb(0x3C2, 0x67);
-    outb(0x3C4, 0x00); outb(0x3C5, 0x03);
-    outb(0x3C4, 0x01); outb(0x3C5, 0x00);
-    outb(0x3C4, 0x02); outb(0x3C5, 0x03);
-    outb(0x3C4, 0x03); outb(0x3C5, 0x00);
-    outb(0x3C4, 0x04); outb(0x3C5, 0x02);
+    vga_seq(0x00, 0x01);
+    vga_seq(0x01, 0x00);
+    vga_seq(0x02, 0x03);
+    vga_seq(0x03, 0x00);
+    vga_seq(0x04, 0x02);
+    vga_seq(0x00, 0x03);
+    outb(0x3D4, 0x11); outb(0x3D5, (uint8_t)(inb(0x3D5) & 0x7F));
+    for (i = 0; i < sizeof(k_mode3_crtc); i++) { outb(0x3D4, (uint8_t)i); outb(0x3D5, k_mode3_crtc[i]); }
+    for (i = 0; i < sizeof(k_mode3_gc); i++) vga_gc((uint8_t)i, k_mode3_gc[i]);
+    (void)inb(0x3DA);
+    for (i = 0; i < sizeof(k_mode3_ac); i++) { outb(0x3C0, (uint8_t)i); outb(0x3C0, k_mode3_ac[i]); }
+    outb(0x3C0, 0x20);
+    if (g_font_saved) {
+        volatile uint8_t *mem = (volatile uint8_t *)0xA0000u;
+        vga_plane2_open(0x04);
+        for (i = 0; i < VGA_FONT_BYTES; i++) mem[i] = g_font_plane2[i];
+        vga_plane2_close();
+    }
 }
 
 void gfx_fb_update_cursor(void) {
@@ -481,6 +552,7 @@ void gfx_fb_leave(void) {
     g_logged = 0;
     g_fit_n = 0;
     g_saved_cursor_valid = 0;
+    vga_console_vram_lost();
     vga_desktop_set(0);
 }
 
