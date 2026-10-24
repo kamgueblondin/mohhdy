@@ -1191,15 +1191,19 @@ help:
 .PHONY: all kernel-only run run-gui run-qemu-gtk test-build info-initrd info-user user-program userspace-all clean distclean help pack-initrd test-setup test-quick test-kernel test-userspace test-all coverage test-performance test-valgrind test-clean pre-commit-tests ci-tests qemu-smoke qemu-ne2k-acquire qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-close qemu-ne2k-tls-next qemu-ne2k-tls-multipair gpt2-recovery gpt2-benchmark gpt2-tests qemu-gguf-smoke gguf-benchmark gguf-benchmark-check gguf-kvm-benchmark gguf-kvm-benchmark-check ci deps disk gui-captures gui-record
 
 
-# One command local GPT-2 chat: release assets, image, GGUF disk, QEMU GTK.
 .PHONY: qemu-gui-windows
 qemu-gui-windows: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_windows.py
+
+.PHONY: qemu-gui-term-resize
+qemu-gui-term-resize: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_term_resize.py
 
 .PHONY: qemu-line-edit
 qemu-line-edit: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_line_edit.py
 
+# One command local GPT-2 chat: release assets, image, GGUF disk, QEMU GTK.
 .PHONY: run-gpt2
 run-gpt2:
 	@scripts/run_gpt2.sh

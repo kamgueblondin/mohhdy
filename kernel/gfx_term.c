@@ -16,30 +16,44 @@ void gfx_term_layout(int fb_w, int fb_h, gfx_term_layout_t *out) {
 void gfx_term_layout_at(int fb_w, int fb_h, int maximized, int dx, int dy, gfx_term_layout_t *out) {
     int gw = GFX_TERM_COLS * GFX_TERM_CELL_W;
     int gh = GFX_TERM_ROWS * GFX_TERM_CELL_H;
-    int s = 1;
+    int s = 1, cw, ch;
     if (!out) return;
     out->maximized = maximized ? 1 : 0;
     while ((s + 1) * gw + 8 <= fb_w && (s + 1) * (gh + GFX_TERM_TITLE_H) + 8 <= fb_h) s++;
     out->scale = s;
-    out->w = s * gw + 4;
-    out->h = s * (gh + GFX_TERM_TITLE_H) + 4;
+    cw = GFX_TERM_CELL_W * s;
+    ch = GFX_TERM_CELL_H * s;
+    if (maximized) {
+        out->cols = (fb_w - 4) / cw;
+        out->rows = (fb_h - 4 - GFX_TERM_TITLE_H * s) / ch;
+    } else {
+        out->cols = GFX_TERM_COLS;
+        out->rows = GFX_TERM_ROWS;
+        if (out->cols * cw + 4 > fb_w) out->cols = (fb_w - 4) / cw;
+        if (out->rows * ch + GFX_TERM_TITLE_H * s + 4 > fb_h) out->rows = (fb_h - 4 - GFX_TERM_TITLE_H * s) / ch;
+    }
+    if (out->cols > GFX_TERM_MAX_COLS) out->cols = GFX_TERM_MAX_COLS;
+    if (out->rows > GFX_TERM_MAX_ROWS) out->rows = GFX_TERM_MAX_ROWS;
+    if (out->cols < 8) out->cols = 8;
+    if (out->rows < 2) out->rows = 2;
+    if (maximized) {
+        out->x = 0; out->y = 0; out->w = fb_w; out->h = fb_h;
+        out->gx = 2 + ((fb_w - 4) - out->cols * cw) / 2;
+        out->gy = 2 + GFX_TERM_TITLE_H * s;
+        return;
+    }
+    out->w = out->cols * cw + 4;
+    out->h = out->rows * ch + GFX_TERM_TITLE_H * s + 4;
     if (out->w > fb_w) out->w = fb_w;
     if (out->h > fb_h) out->h = fb_h;
-    out->x = (fb_w - out->w) / 2 + (maximized ? 0 : dx);
-    out->y = (fb_h - out->h) / 2 + (maximized ? 0 : dy);
+    out->x = (fb_w - out->w) / 2 + dx;
+    out->y = (fb_h - out->h) / 2 + dy;
     if (out->x > fb_w - out->w) out->x = fb_w - out->w;
     if (out->y > fb_h - out->h) out->y = fb_h - out->h;
     if (out->x < 0) out->x = 0;
     if (out->y < 0) out->y = 0;
     out->gx = out->x + 2;
     out->gy = out->y + 2 + s * GFX_TERM_TITLE_H;
-    if (maximized) {
-        /* the window takes the screen, the grid stays centred inside */
-        int inner_w = out->w, inner_h = out->h;
-        out->x = 0; out->y = 0; out->w = fb_w; out->h = fb_h;
-        out->gx = (fb_w - inner_w) / 2 + 2;
-        out->gy = s * GFX_TERM_TITLE_H + 2 + (fb_h - inner_h) / 2;
-    }
 }
 
 static gfx_wm_rect_t wm_rect(const gfx_term_layout_t *l) {
@@ -98,8 +112,10 @@ void gfx_term_draw_frame(uint32_t *fb, int fb_w, int fb_h, int pitch,
 void gfx_term_draw_cell(uint32_t *fb, int fb_w, int fb_h, int pitch,
                         const gfx_term_layout_t *l, const uint8_t *font, int i, uint16_t cell) {
     unsigned attr = (unsigned)(cell >> 8);
-    int col = i % GFX_TERM_COLS, row = i / GFX_TERM_COLS;
-    if (!fb || !l || i < 0 || i >= GFX_TERM_COLS * GFX_TERM_ROWS) return;
+    int col, row;
+    if (!fb || !l || l->cols <= 0 || i < 0 || i >= l->cols * l->rows) return;
+    col = i % l->cols;
+    row = i / l->cols;
     glyph(fb, fb_w, fb_h, pitch,
           l->gx + col * GFX_TERM_CELL_W * l->scale, l->gy + row * GFX_TERM_CELL_H * l->scale,
           l->scale, font, (unsigned char)(cell & 0xFF), k_pal[attr & 15u], k_pal[(attr >> 4) & 7u]);
@@ -117,12 +133,12 @@ int gfx_term_render_rows(uint32_t *fb, int fb_w, int fb_h, int pitch,
                          int *row_min, int *row_max) {
     int i, n = 0, lo = -1, hi = -1;
     if (cells) {
-        for (i = 0; i < GFX_TERM_COLS * GFX_TERM_ROWS; i++) {
+        for (i = 0; i < l->cols * l->rows; i++) {
             if (!full && shown && shown[i] == cells[i]) continue;
             gfx_term_draw_cell(fb, fb_w, fb_h, pitch, l, font, i, cells[i]);
             if (shown) shown[i] = cells[i];
-            if (lo < 0) lo = i / GFX_TERM_COLS;
-            hi = i / GFX_TERM_COLS;
+            if (lo < 0) lo = i / l->cols;
+            hi = i / l->cols;
             n++;
         }
     }

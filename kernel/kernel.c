@@ -566,10 +566,13 @@ int ansi_parse_param() {
 // Remplace l'ancienne fonction print_char par celle-ci
 /* Non destructive cursor move one cell left (line editor), wrapping to
  * the end of the previous row like print_char wraps forward. */
+/* After vga_console_resize (terminal window size change). */
+void print_sync_cursor(void) { vga_console_get_cursor(&vga_x, &vga_y); }
+
 void print_cursor_left(void) {
     if (vga_desktop_active()) return;
     if (vga_x > 0) vga_x--;
-    else if (vga_y > 0) { vga_y--; vga_x = 79; }
+    else if (vga_y > 0) { vga_y--; vga_x = vga_console_cols() - 1; }
     vga_console_set_cursor(vga_x, vga_y);
 }
 
@@ -617,8 +620,8 @@ void print_char(char c, int x, int y, char color) {
                 print_char_vga(c, vga_x, vga_y, current_color);
                 vga_x++;
             }
-            if (vga_x >= 80) { vga_x = 0; vga_y++; }
-            if (vga_y >= 25) { scroll_screen(); vga_y = 24; }
+            if (vga_x >= vga_console_cols()) { vga_console_mark_wrap(vga_y); vga_x = 0; vga_y++; }
+            if (vga_y >= vga_console_rows()) { scroll_screen(); vga_y = vga_console_rows() - 1; }
             vga_console_set_cursor(vga_x, vga_y);
         } else {
             print_char_vga(c, x, y, color);

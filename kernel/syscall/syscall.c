@@ -2758,11 +2758,23 @@ void syscall_handler(cpu_state_t* cpu) {
                     int x, y;
                     print_string_serial("TERM-DUMP BEGIN backend=");
                     print_string_serial(gfx_fb_term_active() ? "vbe" : "text");
+                    print_string_serial(" grid=");
+                    {
+                        char nb[12]; int v = vga_console_cols(), k2 = 0, j2;
+                        char tmp[12];
+                        do { tmp[k2++] = (char)('0' + v % 10); v /= 10; } while (v);
+                        for (j2 = 0; j2 < k2; j2++) nb[j2] = tmp[k2 - 1 - j2];
+                        nb[k2++] = 'x';
+                        v = vga_console_rows();
+                        { int s0 = k2; char t2[6]; int m = 0; do { t2[m++] = (char)('0' + v % 10); v /= 10; } while (v); while (m) nb[k2++] = t2[--m]; (void)s0; }
+                        nb[k2] = 0;
+                        print_string_serial(nb);
+                    }
                     print_string_serial("\n");
-                    for (y = 0; y < VGA_ROWS; y++) {
-                        char row[VGA_COLS + 1];
+                    for (y = 0; y < vga_console_rows(); y++) {
+                        char row[VGA_MAX_COLS + 1];
                         int end = 0;
-                        for (x = 0; x < VGA_COLS; x++) {
+                        for (x = 0; x < vga_console_cols(); x++) {
                             char ch = (char)(vga_console_visible_cell(x, y) & 0xFF);
                             if (ch < 32 || ch > 126) ch = ' ';
                             row[x] = ch;
@@ -4464,6 +4476,7 @@ static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu) 
         if (!keyboard_poll_char(&c)) {
             task_t* self = current_task;
             device_supervise_throttled();
+            gfx_fb_term_poll();   /* terminal window resize / maximize: reflow */
             /* Save the kernel continuation. schedule(cpu) would store the
              * user int 0x80 frame and re-enter SYS_GETS from scratch. */
             if (self && self->syscall_frame && !self->kctx_valid) {

@@ -9,8 +9,10 @@
 #define GFX_TERM_H
 #include <stdint.h>
 
-#define GFX_TERM_COLS 80
+#define GFX_TERM_COLS 80      /* default grid (text mode size) */
 #define GFX_TERM_ROWS 25
+#define GFX_TERM_MAX_COLS 240 /* = VGA_MAX_COLS */
+#define GFX_TERM_MAX_ROWS 80  /* = VGA_MAX_ROWS */
 #define GFX_TERM_CELL_W 8
 #define GFX_TERM_CELL_H 16
 #define GFX_TERM_TITLE_H 20
@@ -22,10 +24,12 @@ typedef struct {
     int x, y;       /* window top left, title bar included */
     int w, h;       /* window size, title bar included */
     int gx, gy;     /* top left of the cell grid */
+    int cols, rows; /* grid size: 80x25 in a window, the screen when maximized */
 } gfx_term_layout_t;
 
-/* Centered window; scale grows with the framebuffer (maximized look on a
- * large window). The grid itself stays 80x25. */
+/* Centered window; scale grows with the framebuffer. The window grid is
+ * 80x25 (smaller if the screen is too small); maximized, the grid takes
+ * the whole screen at the same scale. */
 void gfx_term_layout(int fb_w, int fb_h, gfx_term_layout_t *out);
 /* Same, moved by (dx, dy) from the centre (clamped on screen), or covering
  * the screen when maximized. */
