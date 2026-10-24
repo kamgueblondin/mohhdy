@@ -145,6 +145,14 @@ static void test_pane_layout_has_no_overlaps(void) {
     blank_scene();
     gfx_desktop_get_layout(&g_scene, 1024, 768, &l);
     TEST_ASSERT(l.scene_ia.box.w > 0);   /* no pane: Scene IA is there */
+    /* UX3: floating chat without a pane: it used to cover the Scene IA card */
+    for (k = 0; k < 3; k++) {
+        blank_scene();
+        g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+        gfx_desktop_get_layout(&g_scene, sizes[k][0], sizes[k][1], &l);
+        TEST_ASSERT(l.chat_win.box.h >= 120);
+        TEST_ASSERT(!overlap(&l.chat_win.box, &l.scene_ia.box));
+    }
 }
 
 static void test_layout_scales_with_framebuffer(void) {

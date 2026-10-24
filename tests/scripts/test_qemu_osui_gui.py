@@ -158,10 +158,10 @@ def clampi(v, lo, hi):
 def desktop_hit_centers(width, height, chat_mode="center", pane=None):
     """Mirror gfx_desktop_get_layout centers used by gfx_desktop_handle_click."""
     bar_h = clampi(height // 22, 28, 40)
-    menus = ["Chat", "Browser-OS", "Shell", "Admin", "Support", "Statut", "FS"]
+    menus = ["Chat", "Browser-OS", "Shell", "Admin", "Support", "Statut", "Fichiers", "Editeur"]
     mx = 122
     ty = (bar_h - 8) // 2
-    gap = 14
+    gap = 8 if width < 720 else 14
     flag_w = (8 * 36 + 12) if width >= 920 else ((8 * 16 + 12) if width >= 720 else 8)
     menu = []
     for label in menus:
@@ -200,7 +200,7 @@ def desktop_hit_centers(width, height, chat_mode="center", pane=None):
         if chat_y + chat_h > height - 52:
             chat_y = bar_h + 8
     send_btn = (chat_x + 14 + 44, chat_y + chat_h - 34 + 11)
-    dock_w = 7 * 44 + 16
+    dock_w = 8 * 44 + 16
     if dock_w > width - 16:
         dock_w = width - 16
     dock_x = (width - dock_w) // 2
@@ -208,7 +208,7 @@ def desktop_hit_centers(width, height, chat_mode="center", pane=None):
     if dock_y < bar_h + 8:
         dock_y = height - 36
     docks = []
-    for i in range(7):
+    for i in range(8):
         docks.append((dock_x + 8 + i * 44 + 18, dock_y + 4 + 16))
     return {
         "menu": menu,

@@ -254,7 +254,7 @@ static void app_click(const gfx_desktop_layout_t *l, int slot, int act, int x, i
     }
     if (app_cell(l, slot, x, y, &r, &c)) {
         uint32_t now = desk_ticks();
-        int dbl = g_last_click_slot == slot && g_last_click_row == r && now - g_last_click_tick <= 40U;
+        int dbl = g_last_click_slot == slot && g_last_click_row == r && now - g_last_click_tick <= 50U; /* 0.5 s at 100 Hz */
         evt_app(slot, dbl ? "dclick" : "click", 2, r, c, 0, 0);
         g_last_click_slot = dbl ? -1 : slot;
         g_last_click_row = r;
@@ -1305,6 +1305,17 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         chat_y = bar_h + (h / 14);
         if (chat_y + chat_h > h - 52) chat_y = bar_h + 8;
     }
+    if (sc->chat_mode == OS_FB_CHAT_FLOAT && out->scene_ia.box.w > 0 &&
+        chat_x < out->scene_ia.box.x + out->scene_ia.box.w && chat_x + chat_w > out->scene_ia.box.x &&
+        chat_y < out->scene_ia.box.y + out->scene_ia.box.h && chat_y + chat_h > out->scene_ia.box.y) {
+        /* the chat window and the Scene IA card used to overlap: the chat
+         * ends above the card (moved up first when it would get too short) */
+        int room = out->scene_ia.box.y - 12 - chat_y;
+        if (room < 160) { chat_y = bar_h + 8; room = out->scene_ia.box.y - 12 - chat_y; }
+        if (room >= 120) chat_h = room;
+        else out->scene_ia.box.w = out->scene_ia.box.h = 0;   /* no room: card hidden */
+        if (out->scene_ia.box.w == 0) for (i = 0; i < 3; i++) out->scene_ia.pills[i].w = out->scene_ia.pills[i].h = 0;
+    }
     {
         gfx_wm_rect_t base, placed, area;
         area.x = 0; area.y = bar_h + 4; area.w = w; area.h = h - bar_h - 4 - 52;
@@ -1318,17 +1329,6 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         out->chat_win.maximized = g_wm_chat.maximized && placed.w > 0;
     }
 
-    if (out->chat_win.visible && !out->chat_win.maximized && out->scene_ia.box.w > 0 &&
-        chat_x < out->scene_ia.box.x + out->scene_ia.box.w && chat_x + chat_w > out->scene_ia.box.x &&
-        chat_y < out->scene_ia.box.y + out->scene_ia.box.h && chat_y + chat_h > out->scene_ia.box.y) {
-        /* the chat window and the Scene IA card used to overlap: the chat
-         * ends above the card (moved up first when it would get too short) */
-        int room = out->scene_ia.box.y - 12 - chat_y;
-        if (room < 160) { chat_y = bar_h + 8; room = out->scene_ia.box.y - 12 - chat_y; }
-        if (room >= 120) chat_h = room;
-        else out->scene_ia.box.w = out->scene_ia.box.h = 0;   /* no room: card hidden */
-        if (out->scene_ia.box.w == 0) for (i = 0; i < 3; i++) out->scene_ia.pills[i].w = out->scene_ia.pills[i].h = 0;
-    }
     out->chat_win.box.x = chat_x;
     out->chat_win.box.y = chat_y;
     out->chat_win.box.w = chat_w;
