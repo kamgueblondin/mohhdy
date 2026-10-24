@@ -679,4 +679,41 @@ int webrt_webgpu_parallel_create_command_buffer(webrt_webgpu_parallel_encoder_t 
 int webrt_webgpu_command_buffer_encode_dispatch(webrt_webgpu_parallel_encoder_t *enc, uint32_t buf_id, uint32_t pipeline_id, uint32_t x, uint32_t y, uint32_t z);
 int webrt_webgpu_parallel_encoder_finish(webrt_webgpu_parallel_encoder_t *enc, int *out_total_cmds);
 
+/* Lot 41: Web Runtime WebAssembly SIMD Vectorized LLM Attention Kernel & WebGPU Multi-Queue Command Submission Engine (US-063 / US-088) */
+#define WEBRT_MHA_HEADS_MAX 8
+#define WEBRT_MHA_DIM_MAX 64
+#define WEBRT_MHA_SEQ_MAX 128
+#define WEBRT_WEBGPU_QUEUE_TYPES 3 /* 0=Graphics, 1=Compute, 2=Transfer */
+#define WEBRT_WEBGPU_QUEUE_CMDS_MAX 16
+
+typedef struct {
+    uint32_t num_heads;
+    uint32_t head_dim;
+    int32_t scale_q16; /* 16.16 fixed-point scale factor = 1/sqrt(head_dim) */
+    uint32_t total_attentions_computed;
+} webrt_mha_kernel_t;
+
+typedef struct {
+    uint32_t queue_type;
+    uint32_t cmd_id;
+    uint32_t payload_val;
+    uint8_t processed;
+} webrt_webgpu_queue_cmd_t;
+
+typedef struct {
+    webrt_webgpu_queue_cmd_t cmds[WEBRT_WEBGPU_QUEUE_TYPES][WEBRT_WEBGPU_QUEUE_CMDS_MAX];
+    int cmd_counts[WEBRT_WEBGPU_QUEUE_TYPES];
+    uint32_t total_submissions;
+    uint32_t total_processed;
+} webrt_webgpu_multi_queue_t;
+
+void webrt_mha_init(webrt_mha_kernel_t *kernel, uint32_t num_heads, uint32_t head_dim);
+int webrt_mha_qkv_proj(const webrt_mha_kernel_t *kernel, const int32_t *in, int32_t *q, int32_t *k, int32_t *v, uint32_t seq_len);
+int webrt_mha_softmax_fast_q16(const int32_t *logits, int32_t *probs, uint32_t size);
+int webrt_mha_compute_attention(webrt_mha_kernel_t *kernel, const int32_t *q, const int32_t *k, const int32_t *v, int32_t *out, uint32_t seq_len);
+
+void webrt_webgpu_multi_queue_init(webrt_webgpu_multi_queue_t *mq);
+int webrt_webgpu_multi_queue_submit(webrt_webgpu_multi_queue_t *mq, uint32_t queue_type, uint32_t cmd_id, uint32_t payload_val);
+int webrt_webgpu_multi_queue_process(webrt_webgpu_multi_queue_t *mq, int *out_executed_count);
+
 #endif

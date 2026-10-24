@@ -629,6 +629,39 @@ static void test_lot40_zbd_and_metadata_rebalancer(void) {
     TEST_ASSERT_EQUAL(1, conflict);
 }
 
+static void test_lot41_nvme_hmb_and_multi_region_rebalance(void) {
+    vfs_nvme_hmb_engine_t hmb;
+    vfs_nvme_hmb_init(&hmb, 8, 4096);
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_nvme_hmb_register_page(&hmb, 0, 0x100000));
+    TEST_ASSERT_EQUAL(1, hmb.registered_page_count);
+
+    uint8_t write_data[16] = "LOT41_NVME_HMB";
+    uint32_t written = 0;
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_nvme_hmb_ring_write(&hmb, write_data, 14, &written));
+    TEST_ASSERT_EQUAL(14, written);
+
+    uint8_t read_data[16] = {0};
+    uint32_t read_bytes = 0;
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_nvme_hmb_ring_read(&hmb, read_data, 16, &read_bytes));
+    TEST_ASSERT_EQUAL(14, read_bytes);
+    read_data[14] = '\0';
+    TEST_ASSERT_EQUAL_STRING("LOT41_NVME_HMB", (const char*)read_data);
+
+    vfs_multi_region_rebalancer_t reb;
+    vfs_multi_region_rebalancer_init(&reb);
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_multi_region_add_zone(&reb, 1, 100, 1000));
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_multi_region_add_zone(&reb, 2, 100, 2000));
+    TEST_ASSERT_EQUAL(2, reb.zone_count);
+
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_multi_region_failover(&reb, 100, 200));
+    TEST_ASSERT_EQUAL(1, reb.failover_count);
+    TEST_ASSERT_EQUAL(200, reb.zones[0].region_id);
+
+    int rebalanced_stripes = 0;
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_multi_region_rebalance(&reb, &rebalanced_stripes));
+    TEST_ASSERT_EQUAL(2, rebalanced_stripes);
+}
+
 int main(void) {
     unity_init();
 
@@ -656,6 +689,7 @@ int main(void) {
     RUN_TEST(test_lot38_nvme_sg_and_erasure_dist);
     RUN_TEST(test_lot39_nvme_dif_dix_and_mvcc_gc);
     RUN_TEST(test_lot40_zbd_and_metadata_rebalancer);
+    RUN_TEST(test_lot41_nvme_hmb_and_multi_region_rebalance);
 
     unity_print_results();
     unity_cleanup();

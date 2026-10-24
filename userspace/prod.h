@@ -723,4 +723,50 @@ int prod_self_driving_resource_update_load(prod_self_driving_resource_engine_t *
 int prod_self_driving_resource_rebalance(prod_self_driving_resource_engine_t *eng, char *out_log, int max_sz);
 int prod_self_driving_resource_get_quota(const prod_self_driving_resource_engine_t *eng, uint32_t service_id, uint32_t *out_core_mask, uint32_t *out_bw_mbps, uint32_t *out_cache_kb);
 
+/* Lot 41: Production Daemon Multi-Region Autonomous Chaos Resilience Engine & Predictive Core Scheduler Engine (US-124 / US-133) */
+#define PROD_CHAOS_REGIONS_MAX 8
+#define PROD_SCHED_THREADS_MAX 16
+#define PROD_SCHED_CORES_MAX 8
+
+typedef struct {
+    uint32_t region_id;
+    uint32_t fault_mask; /* 1=network_delay, 2=packet_loss, 4=cpu_spike */
+    uint8_t isolated;
+    uint8_t healed;
+} prod_region_chaos_entry_t;
+
+typedef struct {
+    prod_region_chaos_entry_t regions[PROD_CHAOS_REGIONS_MAX];
+    int region_count;
+    uint32_t anomaly_threshold_ppm;
+    uint32_t total_injections;
+    uint32_t total_healings;
+} prod_chaos_resilience_t;
+
+typedef struct {
+    uint32_t thread_id;
+    uint32_t current_core;
+    uint32_t affinity_mask;
+    uint32_t cpu_load_pct;
+    uint8_t active;
+} prod_thread_sched_entry_t;
+
+typedef struct {
+    prod_thread_sched_entry_t threads[PROD_SCHED_THREADS_MAX];
+    int thread_count;
+    uint32_t num_cores;
+    uint32_t current_temp_celsius;
+    uint32_t total_migrations;
+    uint32_t scaled_freq_pct;
+} prod_core_scheduler_t;
+
+void prod_chaos_resilience_init(prod_chaos_resilience_t *res, uint32_t threshold);
+int prod_chaos_resilience_inject(prod_chaos_resilience_t *res, uint32_t region_id, uint32_t fault_type);
+int prod_chaos_resilience_isolate_and_heal(prod_chaos_resilience_t *res, char *out_log, int max_sz, int *out_healed_count);
+
+void prod_core_scheduler_init(prod_core_scheduler_t *sched, uint32_t num_cores);
+int prod_core_scheduler_bind_thread(prod_core_scheduler_t *sched, uint32_t thread_id, uint32_t initial_core);
+int prod_core_scheduler_migrate_thread(prod_core_scheduler_t *sched, uint32_t thread_id, uint32_t target_core);
+int prod_core_scheduler_scale_power_thermal(prod_core_scheduler_t *sched, uint32_t temp_celsius, uint32_t *out_scaled_freq_pct);
+
 #endif
