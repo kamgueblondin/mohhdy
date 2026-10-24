@@ -180,6 +180,9 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/osui_panes.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
+    if [ "$(basename "$test_file")" = "test_osui_editor.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/osui_ide.c"
+    fi
     if [ "$(basename "$test_file")" = "test_osui_ide.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_ide.c"
         cflags="$cflags -I$BASE_DIR/userspace"
