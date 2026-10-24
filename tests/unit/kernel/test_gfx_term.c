@@ -46,10 +46,41 @@ static void test_cell_pixels_follow_font_and_attr(void) {
     TEST_ASSERT_EQUAL(1, gfx_term_render(fb, FW, FH, FW, &l, font, cells, shown, 0));
 }
 
+/* Title bar buttons and drag zone, normal and maximized. */
+static void test_title_buttons_hit(void) {
+    gfx_term_layout_t l;
+    int bx, by, w;
+    gfx_term_layout_at(FW, FH, 0, 0, 0, &l);
+    for (w = GFX_TERM_HIT_MIN; w <= GFX_TERM_HIT_CLOSE; w++) {
+        gfx_term_button_pos(&l, w, &bx, &by);
+        TEST_ASSERT_EQUAL(w, gfx_term_hit(&l, bx + 7, by + 7));
+    }
+    TEST_ASSERT_EQUAL(GFX_TERM_HIT_TITLE, gfx_term_hit(&l, l.x + 40, l.y + 8));
+    TEST_ASSERT_EQUAL(GFX_TERM_HIT_GRID, gfx_term_hit(&l, l.gx + 10, l.gy + 10));
+    TEST_ASSERT_EQUAL(GFX_TERM_HIT_NONE, gfx_term_hit(&l, 2, 2));
+    gfx_term_layout_at(FW, FH, 0, -150, -100, &l);
+    {
+        gfx_term_layout_t c;
+        gfx_term_layout(FW, FH, &c);
+        TEST_ASSERT_EQUAL(c.x - 150, l.x);
+        TEST_ASSERT_EQUAL(c.y - 100, l.y);
+    }
+    gfx_term_layout_at(FW, FH, 0, -5000, 5000, &l);   /* clamped on screen */
+    TEST_ASSERT_EQUAL(0, l.x);
+    TEST_ASSERT_EQUAL(FH - l.h, l.y);
+    gfx_term_layout_at(FW, FH, 1, 0, 0, &l);
+    TEST_ASSERT_EQUAL(0, l.x);
+    TEST_ASSERT_EQUAL(FW, l.w);
+    gfx_term_button_pos(&l, GFX_TERM_HIT_CLOSE, &bx, &by);
+    TEST_ASSERT(bx > FW - 40);
+    TEST_ASSERT_EQUAL(GFX_TERM_HIT_CLOSE, gfx_term_hit(&l, bx + 3, by + 3));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_layout_centered_and_scaled);
     RUN_TEST(test_cell_pixels_follow_font_and_attr);
+    RUN_TEST(test_title_buttons_hit);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

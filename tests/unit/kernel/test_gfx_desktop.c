@@ -115,6 +115,37 @@ static void test_circle_kind_paints_ring(void) {
     TEST_ASSERT(count_near(430, 560, 620, 700, 100, 180, 170, 80) > 10);
 }
 
+static int overlap(const gfx_rect_t *a, const gfx_rect_t *b) {
+    return a->w > 0 && b->w > 0 && a->x < b->x + b->w && b->x < a->x + a->w
+        && a->y < b->y + b->h && b->y < a->y + a->h;
+}
+
+/* Usability audit: with a pane open the Scene IA is hidden (it showed
+ * through the pane and its pills stayed clickable under it), and the
+ * floating chat keeps clear of the pane, the right icon column and the
+ * dock, for every pane and at several screen sizes. */
+static void test_pane_layout_has_no_overlaps(void) {
+    static const int sizes[3][2] = { { 1024, 768 }, { 1280, 720 }, { 800, 600 } };
+    gfx_desktop_layout_t l;
+    int k, pane, i;
+    for (k = 0; k < 3; k++) {
+        for (pane = OS_FB_PANE_BROWSER; pane <= OS_FB_PANE_PROD; pane++) {
+            blank_scene();
+            g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+            g_scene.pane = (uint8_t)pane;
+            gfx_desktop_get_layout(&g_scene, sizes[k][0], sizes[k][1], &l);
+            TEST_ASSERT_EQUAL(0, l.scene_ia.box.w);
+            for (i = 0; i < 3; i++) TEST_ASSERT_EQUAL(0, l.scene_ia.pills[i].w);
+            TEST_ASSERT(!overlap(&l.chat_win.box, &l.pane_win.box));
+            TEST_ASSERT(!overlap(&l.chat_win.box, &l.dock.box));
+            for (i = 0; i < l.desk.count; i++) TEST_ASSERT(!overlap(&l.chat_win.box, &l.desk.icons[i]));
+        }
+    }
+    blank_scene();
+    gfx_desktop_get_layout(&g_scene, 1024, 768, &l);
+    TEST_ASSERT(l.scene_ia.box.w > 0);   /* no pane: Scene IA is there */
+}
+
 static void test_layout_scales_with_framebuffer(void) {
     static uint32_t small[800 * 600];
     static uint32_t tiny[640 * 400];
@@ -306,7 +337,7 @@ static void test_desktop_icons_click(void) {
     TEST_ASSERT(count_near(layout.desk.icons[4].x, layout.desk.icons[4].y,
                            layout.desk.icons[4].x + layout.desk.icons[4].w,
                            layout.desk.icons[4].y + 42, 100, 120, 136, 60) > 100);
-    /* floating chat over the icons: a click there is not an icon click */
+    /* floating chat beside the icons: icons stay clickable */
     blank_scene();
     g_scene.chat_mode = OS_FB_CHAT_FLOAT;
     gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
@@ -324,10 +355,13 @@ static void test_desktop_icons_click(void) {
                 break;
             }
         }
-        TEST_ASSERT(hit >= 0);
-        click_at(rect_center_x(&layout.desk.icons[hit]), rect_center_y(&layout.desk.icons[hit]));
+        /* the floating chat no longer covers any desktop icon (audit fix):
+         * every icon stays clickable while the chat floats */
+        TEST_ASSERT_EQUAL(-1, hit);
+        click_at(rect_center_x(&layout.desk.icons[4]), rect_center_y(&layout.desk.icons[4]));
         read_kbd(got, (int)sizeof(got));
-        TEST_ASSERT_EQUAL_STRING("", got);
+        TEST_ASSERT_EQUAL_STRING("/status\n", got);
+        drain_kbd();
     }
     /* full screen web pane: no desktop icons */
     blank_scene();
@@ -467,6 +501,7 @@ int main(void) {
     RUN_TEST(test_shell_pane_shows_prompt);
     RUN_TEST(test_circle_kind_paints_ring);
     RUN_TEST(test_layout_scales_with_framebuffer);
+    RUN_TEST(test_pane_layout_has_no_overlaps);
     RUN_TEST(test_parse_fit_line);
     RUN_TEST(test_mouse_cursor_rendering);
     RUN_TEST(test_fb_present_repeated);

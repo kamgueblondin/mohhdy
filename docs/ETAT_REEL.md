@@ -1069,3 +1069,28 @@ Les regles suivantes s'appliquent a toute la suite du projet :
 - Les limitations temporaires d'une implementation ne changent pas le perimetre. Elles doivent etre corrigees dans les increments suivants.
 
 La feuille de route doit donc conduire progressivement du noyau actuel vers l'IA complete, l'OS-UI, PromptMessage, le Web Runtime, le reseau P2P, le multi-plateforme, les fonctions collaboratives et la production, sans retirer de phase.
+
+## GUI terminal window and usability audit (PR #196)
+
+Root causes and fixes:
+- Hover erased the terminal: the terminal was painted only in the LFB while
+  the soft cursor restored pixels from g_back (desktop composition). The
+  terminal is now composed into g_back, then dirty rows are blitted.
+  Test: tests/scripts/test_qemu_gui_term_window.py (hover pixels).
+- No window chrome: the terminal window now has close, minimize, maximize
+  buttons (mouse) and a draggable title bar. Close/minimize return to the
+  desktop; the shell state is kept (same vga_console). Keyboard: `gui`
+  returns to the desktop, `console` to text mode; Shell icon or /shell
+  reopens the window. Close during a running command applies at the next
+  prompt. Tests: QEMU term window test + test_gfx_term unit hit test.
+- Close key was dropped by keyboard_poll_char (0x11 filtered): fixed.
+- Audit: Scene IA showed through open panes; floating chat covered the
+  Statut/Fichiers icons and the dock; chat text overflowed. Root cause:
+  drawing and hit testing duplicated the layout. Drawing now uses
+  gfx_desktop_get_layout. Test: test_pane_layout_has_no_overlaps,
+  test_desktop_icons_click.
+
+Remaining (not fixed): chat window has no close button; pane traffic
+lights all close the pane (no min/max); pane content is sparse; menu bar
+has no active state; terminal grid fixed at 80x25 (no VBE resize while
+shown); no history recall or Tab completion in the console.
