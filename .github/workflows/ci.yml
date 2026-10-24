@@ -375,6 +375,9 @@ jobs:
       - name: QEMU P2P three guests (discovery, encrypted links, replication, consensus, relay)
         run: make qemu-p2p
 
+      - name: QEMU console line editor, text mode + terminal window (about 1.5 min)
+        run: make qemu-line-edit
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

@@ -564,6 +564,15 @@ int ansi_parse_param() {
 
 
 // Remplace l'ancienne fonction print_char par celle-ci
+/* Non destructive cursor move one cell left (line editor), wrapping to
+ * the end of the previous row like print_char wraps forward. */
+void print_cursor_left(void) {
+    if (vga_desktop_active()) return;
+    if (vga_x > 0) vga_x--;
+    else if (vga_y > 0) { vga_y--; vga_x = 79; }
+    vga_console_set_cursor(vga_x, vga_y);
+}
+
 void print_char(char c, int x, int y, char color) {
     if (ansi_state == NORMAL) {
 #if CONFIG_UTF8_VGA

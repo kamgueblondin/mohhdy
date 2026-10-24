@@ -131,6 +131,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_fat16: $(UNIT_DIR)/kernel/test_fat16.c ../k
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/fs/fat16.c ../kernel/fs/fat32.c ../kernel/llm/gpt2_gguf.c ../kernel/llm/gpt2_gguf_loader.c ../kernel/llm/gpt2_quant.c ../kernel/llm/gpt2_sample.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_line_edit: $(UNIT_DIR)/kernel/test_line_edit.c ../kernel/line_edit.c ../kernel/line_edit.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/line_edit.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled kernel test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_gfx_term: $(UNIT_DIR)/kernel/test_gfx_term.c ../kernel/gfx_term.c ../kernel/gfx_term.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/gfx_term.c $(FRAMEWORK_SOURCES)

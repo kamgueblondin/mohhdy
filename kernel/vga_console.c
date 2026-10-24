@@ -213,6 +213,11 @@ void vga_console_put_xy(char c, int x, int y, char color) {
     compose_visible();
 }
 
+uint16_t vga_console_cell(int x, int y) {
+    if (x < 0 || y < 0 || x >= VGA_COLS || y >= VGA_ROWS) return 0;
+    return live[y][x];
+}
+
 void vga_console_scroll(void) {
     int row;
     int col;

@@ -208,14 +208,15 @@ static int kbd_handle_extended(uint8_t scancode) {
         vga_console_view_down(VGA_ROWS - 1);
         return 1;
     }
-    if (key == 0x48) {
-        vga_console_view_up(1);
-        return 1;
-    }
-    if (key == 0x50) {
-        vga_console_view_down(1);
-        return 1;
-    }
+    /* Line editor keys (kernel/line_edit.c). PgUp/PgDn keep scrollback;
+     * Up/Down are history recall like a usual shell. */
+    if (key == 0x48) { kbd_put_char((char)OS_VGA_KEY_UP); return 1; }
+    if (key == 0x50) { kbd_put_char((char)OS_VGA_KEY_DOWN); return 1; }
+    if (key == 0x4B) { kbd_put_char((char)OS_VGA_KEY_LEFT); return 1; }
+    if (key == 0x4D) { kbd_put_char((char)OS_VGA_KEY_RIGHT); return 1; }
+    if (key == 0x47) { kbd_put_char((char)OS_TERM_KEY_HOME); return 1; }
+    if (key == 0x4F) { kbd_put_char((char)OS_TERM_KEY_END); return 1; }
+    if (key == 0x53) { kbd_put_char((char)OS_TERM_KEY_DEL); return 1; }
     return 1;
 }
 
@@ -699,7 +700,8 @@ int keyboard_poll_char(char* out) {
             || c == (char)OS_VGA_KEY_ESC
             || c == (char)OS_VGA_KEY_LEFT || c == (char)OS_VGA_KEY_RIGHT
             || c == (char)OS_VGA_KEY_UP || c == (char)OS_VGA_KEY_DOWN
-            || c == (char)OS_TERM_KEY_CLOSE) {
+            || c == (char)OS_TERM_KEY_CLOSE || c == (char)OS_TERM_KEY_HOME
+            || c == (char)OS_TERM_KEY_END || c == (char)OS_TERM_KEY_DEL) {
             *out = c;
             return 1;
         }

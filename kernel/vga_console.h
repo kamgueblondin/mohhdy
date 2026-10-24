@@ -10,6 +10,7 @@
 void vga_console_init(char color);
 void vga_console_put_xy(char c, int x, int y, char color);
 void vga_console_scroll(void);
+uint16_t vga_console_cell(int x, int y);
 void vga_console_clear(char color);
 void vga_console_set_cursor(int x, int y);
 int vga_console_view_up(int lines);

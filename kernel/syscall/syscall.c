@@ -34,6 +34,8 @@
 #include "../fs/fat32.h"
 #include "../net_socket.h"
 #include "../vga_console.h"
+#include "../line_edit.h"
+#include "../../userspace/mohhdy_osui_bridge.h"
 #include "../input/usb_tablet.h"
 #include "../gfx_fb.h"
 #include "../pci_service.h"
@@ -4415,15 +4417,43 @@ int sys_spawn(const char* path, char* argv[]) {
 
 
 // Implémentation de SYS_GETS - Lire une ligne complète depuis le clavier
+/* One line editor (kernel/line_edit.c) for the VGA text console and the
+ * VBE terminal window: history, Tab completion from the shell command
+ * registry, Left/Right/Home/End/Delete. */
+extern int vga_x;
+void print_cursor_left(void);
+static void le_put(char c) { print_char(c, -1, -1, 0x0F); }
+static char le_prompt[80];
+static int le_prompt_len;
+static void le_reprompt(void) {
+    int i;
+    for (i = 0; i < le_prompt_len; i++) print_char(le_prompt[i], -1, -1, 0x0F);
+}
+static const line_edit_io_t le_io = { le_put, print_cursor_left, le_reprompt };
+static line_edit_t le_state;
+
 static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu) {
-    volatile uint32_t i = 0;
+    line_edit_t *le = &le_state;
+    uint32_t k;
     (void)cpu;
     if (!buffer || size == 0) return;
 
     print_string_serial("SYS_GETS: Debut de la lecture (version corrigee)...\n");
     asm volatile("sti");
+    {
+        int x, y = 0;
+        extern int vga_y;
+        y = vga_y;
+        le_prompt_len = 0;
+        for (x = 0; x < vga_x && x < 80; x++) {
+            char ch = (char)(vga_console_cell(x, y) & 0xFF);
+            le_prompt[le_prompt_len++] = ch ? ch : ' ';
+        }
+    }
+    line_edit_begin(le, (int)(size > LE_MAX ? LE_MAX : size), mohhdy_shell_commands,
+                    MOHHDY_SHELL_COMMAND_COUNT, &le_io);
 
-    while (i < size - 1) {
+    for (;;) {
         char c = 0;
         if (!keyboard_poll_char(&c)) {
             task_t* self = current_task;
@@ -4442,45 +4472,32 @@ static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu) 
             continue;
         }
         if (c == (char)OS_TERM_KEY_CLOSE) {
-            /* close/minimize button of the VBE terminal window: drop the
-             * typed text and answer the line "gui" (back to the desktop) */
-            const char *g = "gui";
-            while (i > 0) {
-                i--;
-                print_char('\b', -1, -1, 0x0F);
-                print_char(' ', -1, -1, 0x0F);
-                print_char('\b', -1, -1, 0x0F);
-            }
-            if (!gfx_fb_term_active()) continue;
-            while (*g && i < size - 1) { buffer[i++] = *g; print_char(*g, -1, -1, 0x0F); g++; }
+            /* close/minimize button of the VBE terminal window: replace the
+             * typed text by the line "gui" (back to the desktop) */
+            if (!gfx_fb_term_active()) { line_edit_set(le, ""); continue; }
+            line_edit_set(le, "gui");
             c = '\n';
         }
-        if (c == '\r' || c == '\n') {
+        if ((unsigned char)c >= 32 && (unsigned char)c <= 126) {
+            print_string_serial("SYS_GETS: caractère ajouté: '");
+            write_serial(c);
+            print_string_serial("'\n");
+        } else if (c != '\n' && c != '\r') {
+            print_string_serial("SYS_GETS: edit key ");
+            write_serial("0123456789abcdef"[((unsigned char)c >> 4) & 15]);
+            write_serial("0123456789abcdef"[(unsigned char)c & 15]);
+            print_string_serial("\n");
+        }
+        if (line_edit_key(le, c)) {
             print_char('\n', -1, -1, 0x0F);
-            buffer[i] = '\0';
+            for (k = 0; k + 1 < size && le->buf[k]; k++) buffer[k] = le->buf[k];
+            buffer[k] = '\0';
             print_string_serial("SYS_GETS: ligne lue: ");
             print_string_serial(buffer);
             print_string_serial("\n");
             return;
         }
-        if (c == '\b' && i > 0) {
-            i--;
-            print_char('\b', -1, -1, 0x0F);
-            print_char(' ', -1, -1, 0x0F);
-            print_char('\b', -1, -1, 0x0F);
-        } else if ((unsigned char)c >= 32 && (unsigned char)c <= 126) {
-            buffer[i++] = c;
-            print_char(c, -1, -1, 0x0F);
-            print_string_serial("SYS_GETS: caractère ajouté: '");
-            write_serial(c);
-            print_string_serial("'\n");
-        }
     }
-
-    buffer[i] = '\0';
-    print_string_serial("SYS_GETS: buffer plein, ligne lue: ");
-    print_string_serial(buffer);
-    print_string_serial("\n");
 }
 
 void sys_gets(char* buffer, uint32_t size) {
