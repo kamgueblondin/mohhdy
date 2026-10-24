@@ -474,9 +474,14 @@ typedef struct {
 } os_fb_web_item_t;
 
 /* version >= 7: one desktop app window. kind 0 = closed. */
-#define OS_FB_APPS 2
-#define OS_FB_APP_FILES 1       /* slot 0 */
-#define OS_FB_APP_EDIT 2        /* slot 1 */
+#define OS_FB_APPS 6            /* UX4: generic window slots, any app */
+#define OS_FB_APP_FILES 1
+#define OS_FB_APP_EDIT 2
+#define OS_FB_APP_TASKS 3
+#define OS_FB_APP_VIEW 4
+#define OS_FB_APP_SETTINGS 5
+#define OS_FB_APP_P2P 6
+#define OS_FB_APP_PMRUN 7
 #define OS_FB_APP_ROWS 22
 #define OS_FB_APP_COLS 78
 typedef struct {

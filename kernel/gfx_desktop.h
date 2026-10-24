@@ -20,9 +20,10 @@ typedef struct {
 /* windows of the z-order (gfx_desktop_layout_t.z) */
 #define GFX_WIN_PANE 0
 #define GFX_WIN_CHAT 1
-#define GFX_WIN_APP0 2           /* file explorer */
-#define GFX_WIN_APP1 3           /* text editor */
-#define GFX_WIN_COUNT 4
+#define GFX_WIN_APP0 2           /* first app window slot (UX4: any app) */
+#define GFX_WIN_APP1 3
+#define GFX_WIN_COUNT (2 + OS_FB_APPS)
+#define GFX_IS_APP_WIN(w) ((w) >= GFX_WIN_APP0 && (w) < GFX_WIN_COUNT)
 #define GFX_DESKTOP_APP_TITLE_H 30
 #define GFX_APP_ROW_H 14
 #define GFX_APP_TOOL_Y 36        /* toolbar text row, from the window top */

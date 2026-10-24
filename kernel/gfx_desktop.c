@@ -31,7 +31,8 @@ static gfx_wm_win_t g_wm_app[OS_FB_APPS];
 static uint8_t g_app_kind_prev[OS_FB_APPS];
 static uint8_t g_app_focus_prev = 0xFF;
 /* z-order, last on top, and the window with the keyboard (-1 desktop) */
-static int g_z[GFX_WIN_COUNT] = { GFX_WIN_PANE, GFX_WIN_CHAT, GFX_WIN_APP0, GFX_WIN_APP1 };
+static int g_z[GFX_WIN_COUNT] = { GFX_WIN_PANE, GFX_WIN_CHAT, 2, 3, 4, 5, 6, 7 };
+typedef char gfx_z_init_matches[(GFX_WIN_COUNT == 8) ? 1 : -1];
 static int g_focus = -1;
 static int g_hover_dock = -1;
 /* press in an app grid: click now, drag on release */
@@ -83,10 +84,10 @@ static void evt_end(void) { kbd_put_char('\n'); }
 static void evt_focus(int win) {
     int was = g_focus;
     g_focus = win;
-    if (win == GFX_WIN_APP0 || win == GFX_WIN_APP1) {
+    if (GFX_IS_APP_WIN(win)) {
         if (was == win) return;
         evt_begin(); kbd_put_string("focus "); put_uint((unsigned)(win - GFX_WIN_APP0)); evt_end();
-    } else if (was == GFX_WIN_APP0 || was == GFX_WIN_APP1) {
+    } else if (GFX_IS_APP_WIN(was)) {
         evt_begin(); kbd_put_string("focus d"); evt_end();
     }
 }
@@ -106,7 +107,7 @@ static void evt_app(int slot, const char *what, int n, int a, int b, int c, int 
 
 /* A desktop command line (typed form): the desktop gets the keyboard. */
 static void desk_cmd(const char *line) {
-    if (g_focus == GFX_WIN_APP0 || g_focus == GFX_WIN_APP1) evt_focus(-1);
+    if (GFX_IS_APP_WIN(g_focus)) evt_focus(-1);
     kbd_put_string(line);
 }
 
@@ -158,11 +159,26 @@ static const char *const k_open_cmds[GFX_DESKTOP_DOCK] = {
     "/center\n", "/browser\n", "/shell\n", "/admin\n", "/support\n", "/status\n", "/files\n", "/edit\n"
 };
 
+/* window slot showing app kind, -1 when not open */
+static int app_slot(const os_fb_scene_t *sc, int kind) {
+    int s;
+    if (!sc || sc->version < 7) return -1;
+    for (s = 0; s < OS_FB_APPS; s++) if (sc->app[s].kind == kind) return s;
+    return -1;
+}
+
+/* dock / menu entry of an app kind (Fichiers 6, Editeur 7), -1 none */
+static int app_dock(int kind) {
+    if (kind == OS_FB_APP_FILES) return 6;
+    if (kind == OS_FB_APP_EDIT) return 7;
+    return -1;
+}
+
 static void open_target(int i) {
     const os_fb_scene_t *sc = g_last_scene_valid ? &g_last_scene : 0;
-    if (i >= 6 && i <= 7 && sc && sc->version >= 7 && sc->app[i - 6].kind) {
+    int slot = i == 6 ? app_slot(sc, OS_FB_APP_FILES) : i == 7 ? app_slot(sc, OS_FB_APP_EDIT) : -1;
+    if (slot >= 0) {
         /* open app: restore if minimized, bring to front, keyboard */
-        int slot = i - 6;
         if (!gfx_wm_visible(&g_wm_app[slot])) { gfx_wm_restore(&g_wm_app[slot]); wm_log("gfx wm app restore\n"); }
         z_raise(GFX_WIN_APP0 + slot);
         evt_focus(GFX_WIN_APP0 + slot);
@@ -1360,9 +1376,11 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         if (base.w > w - 16) base.w = w - 16;
         base.h = GFX_APP_GRID_Y + OS_FB_APP_ROWS * GFX_APP_ROW_H + 30;
         if (base.h > area.h) base.h = area.h;
-        base.x = i == 0 ? 24 : w - base.w - 110;
+        /* cascade: each slot a little lower and to the right */
+        base.x = 24 + i * 120;
+        if (base.x + base.w > w - 8) base.x = w - 8 - base.w;
         if (base.x < 8) base.x = 8;
-        base.y = bar_h + (i == 0 ? 20 : 56);
+        base.y = bar_h + 20 + i * 36;
         out->app_win[i].base = from_wm(base);
         out->app_win[i].visible = 0;
         out->app_win[i].minimized = open && g_wm_app[i].minimized;
@@ -1396,11 +1414,12 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         int k, top = -1;
         for (k = GFX_WIN_COUNT - 1; k >= 0 && top < 0; k--) {
             int win = g_z[k];
-            if (win >= GFX_WIN_APP0 && out->app_win[win - GFX_WIN_APP0].visible) top = 6 + win - GFX_WIN_APP0;
+            if (GFX_IS_APP_WIN(win) && out->app_win[win - GFX_WIN_APP0].visible) top = app_dock(sc->app[win - GFX_WIN_APP0].kind) >= 0 ? app_dock(sc->app[win - GFX_WIN_APP0].kind) : -3;
             else if (win == GFX_WIN_PANE && out->pane_win.active) top = -2;
             else if (win == GFX_WIN_CHAT && out->chat_win.visible) top = -2;
         }
         if (top >= 0) out->menu_active = top;
+        else if (top == -3) out->menu_active = -1;   /* app without a menu entry */
         else if (out->pane_win.active && pane_index(pane) > 0) out->menu_active = pane_index(pane);
         else if (out->chat_win.visible) out->menu_active = 0;
     }
@@ -1408,7 +1427,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     if (pane_index(pane) > 0) out->dock_state[pane_index(pane)] = out->pane_win.active ? 1 : 2;
     if (gfx_fb_term_minimized()) out->dock_state[2] = 2;
     for (i = 0; i < OS_FB_APPS; i++)
-        if (sc->version >= 7 && sc->app[i].kind && (i || !out->dock_state[6])) out->dock_state[6 + i] = out->app_win[i].visible ? 1 : 2;
+        if (sc->version >= 7 && app_dock(sc->app[i].kind) >= 0) out->dock_state[app_dock(sc->app[i].kind)] = out->app_win[i].visible ? 1 : 2;
 
     dock_w = GFX_DESKTOP_DOCK * 44 + 16;
     if (dock_w > w - 16) dock_w = w - 16;
