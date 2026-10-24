@@ -143,6 +143,83 @@ static void test_gui_feed_slash_and_esc(void) {
     TEST_ASSERT(strstr(g_out, "gui exit") != NULL);
 }
 
+/* UI test: ESC with a half typed line clears it and keeps the desktop;
+ * the next ESC (empty line) leaves the desktop as before. */
+static void test_gui_esc_clears_input_first(void) {
+    int rc;
+    setup();
+    osui_gui_set_input("hello wor");
+    memset(g_out, 0, sizeof(g_out));
+    rc = osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT_EQUAL_STRING("", osui_gui_input());
+    TEST_ASSERT(strstr(g_out, "osui gui input cleared") != NULL);
+    TEST_ASSERT(strstr(g_out, "gui exit") == NULL);
+    /* typing works again after the clear */
+    osui_gui_feed_key('a', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("a", osui_gui_input());
+    osui_gui_feed_key('\b', g_out, (int)sizeof(g_out));
+    memset(g_out, 0, sizeof(g_out));
+    rc = osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, rc);
+    TEST_ASSERT(strstr(g_out, "gui exit") != NULL);
+}
+
+/* UI test: the shell pane shows text, not raw color codes, and a line
+ * that only held a color reset is not an empty row. */
+static void test_gui_term_strips_ansi(void) {
+    char term[80];
+    setup();
+    osui_gui_term_reset();
+    osui_gui_term_push("\x1b[35m[IA] \x1b[0mquestion: hi\n\x1b[0m\nnext");
+    TEST_ASSERT_EQUAL(2, osui_gui_term_count());
+    osui_gui_term_at(0, term, (int)sizeof(term));
+    TEST_ASSERT_EQUAL_STRING("[IA] question: hi", term);
+    osui_gui_term_at(1, term, (int)sizeof(term));
+    TEST_ASSERT_EQUAL_STRING("next", term);
+    /* plain empty lines are kept */
+    osui_gui_term_reset();
+    osui_gui_term_push("a\n\nb");
+    TEST_ASSERT_EQUAL(3, osui_gui_term_count());
+}
+
+/* UI test: the scene names the llm of the last chat turn (version 5)
+ * and the chat window gets the newest messages. */
+static void test_gui_scene_llm_and_newest_messages(void) {
+    int i;
+    char line[32];
+    setup();
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(5, g_scene.version);
+    TEST_ASSERT_EQUAL_STRING("stub_echo", g_scene.llm);
+    for (i = 0; i < 5; i++) {
+        snprintf(line, sizeof(line), "chat note%d", i);
+        TEST_ASSERT_EQUAL(0, run_line(line));
+    }
+    TEST_ASSERT_EQUAL(10, osui_msg_count());
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_MSG_MAX, g_scene.nmsg);
+    TEST_ASSERT_EQUAL_STRING("note4", g_scene.messages[OS_FB_MSG_MAX - 2]);
+    TEST_ASSERT_EQUAL_STRING("note2", g_scene.messages[0]);
+}
+
+/* UI test: an unknown word typed in the chat box gets a visible hint in
+ * the chat window, not only on the serial line. */
+static void test_gui_unknown_command_hint(void) {
+    char msg[OS_FB_MSG_LEN];
+    int n;
+    setup();
+    osui_gui_set_input("bonjour");
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, osui_gui_feed_key('\n', g_out, (int)sizeof(g_out)));
+    TEST_ASSERT(strstr(g_out, "commande inconnue") != NULL);
+    n = osui_msg_count();
+    TEST_ASSERT(n >= 1);
+    osui_msg_at(n - 1, msg, (int)sizeof(msg));
+    TEST_ASSERT(strstr(msg, "commande inconnue: bonjour") != NULL);
+    TEST_ASSERT(strstr(msg, "ai <question>") != NULL);
+}
+
 static int fake_shell_eval(const char *line, char *captured, int cap_max) {
     const char *msg = "whoami ok root\n";
     int i = 0;
@@ -266,8 +343,8 @@ static void test_gui_pm_ide_fullscreen(void) {
     TEST_ASSERT_EQUAL(0, strncmp(g_scene.term[0], "pm-ide t.pm Ln 1 Col 1 /1", 25));
     TEST_ASSERT_EQUAL_STRING("  1> say 1", g_scene.term[1]); /* cursor on s: Ln/Col in the title */
     /* scene v3 carries the syntax classes: gutter, keyword, number (v4
-     * keeps them and adds the web display list, Lot 6) */
-    TEST_ASSERT_EQUAL(4, g_scene.version);
+     * keeps them and adds the web display list, Lot 6; v5 adds llm) */
+    TEST_ASSERT_EQUAL(5, g_scene.version);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_GUTTER, g_scene.term_attr[1][0]);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_KEYWORD, g_scene.term_attr[1][5]);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_NUMBER, g_scene.term_attr[1][9]);
@@ -349,7 +426,7 @@ static void test_gui_web_pane_pipeline(void) {
     TEST_ASSERT_EQUAL(1, osui_gui_web_active());
     osui_gui_fill_scene(&g_scene);
     TEST_ASSERT_EQUAL(OS_FB_PANE_WEB, g_scene.pane);
-    TEST_ASSERT_EQUAL(4, g_scene.version);
+    TEST_ASSERT_EQUAL(5, g_scene.version);
     TEST_ASSERT_TRUE(g_scene.nweb > 0);
     TEST_ASSERT_NOT_NULL(strstr(g_scene.web_title, "web t.html"));
     for (i = 0; i < g_scene.nweb; i++) {
@@ -485,6 +562,10 @@ int main(void) {
     RUN_TEST(test_snap_center_and_float);
     RUN_TEST(test_snap_stage_kind);
     RUN_TEST(test_gui_feed_slash_and_esc);
+    RUN_TEST(test_gui_esc_clears_input_first);
+    RUN_TEST(test_gui_term_strips_ansi);
+    RUN_TEST(test_gui_scene_llm_and_newest_messages);
+    RUN_TEST(test_gui_unknown_command_hint);
     RUN_TEST(test_gui_live_shell_eval);
     RUN_TEST(test_vbe_p2p_collab_prod_panes);
     RUN_TEST(test_gui_media_rendering);
