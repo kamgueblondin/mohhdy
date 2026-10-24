@@ -910,12 +910,12 @@ static void draw_wm_buttons(uint32_t *fb, int w, int h, int x, int y, int rw, in
 
 static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const char *title, const char *body, const os_fb_scene_t *sc) {
     char lab[64];
-    round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(18, 28, 36), 230);
+    round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(18, 28, 36), 255);  /* opaque: no bleed from windows behind */
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_PANE_TITLE_H);
     draw_text_n(fb, w, h, x + 14, y + 12, title ? title : "", (rw - 80) / 8, RGB(232, 238, 244));
-    fill_rect_a(fb, w, h, x + 12, y + 44, rw - 24, 40, RGB(42, 36, 16), 220);
+    fill_rect(fb, w, h, x + 12, y + 44, rw - 24, 40, RGB(42, 36, 16));
     llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
     draw_text(fb, w, h, x + 18, y + 48, lab, RGB(243, 230, 176));
     if (sc && sc->version >= 6 && sc->pane_live && sc->nterm > 0) {
@@ -958,7 +958,7 @@ static void draw_ide_colored(uint32_t *fb, int w, int h, int x, int y, const cha
 static void draw_ide(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
     int n = sc ? (int)sc->nterm : 0, i, ty, maxc, row_h = 20;
     if (n > OS_FB_TERM_MAX) n = OS_FB_TERM_MAX;
-    round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 14, 18), 250);
+    round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 14, 18), 255);
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
     traffic(fb, w, h, x + 8, y + 8);
@@ -1041,7 +1041,7 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
 
 static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
     int ty, term_h, i, maxc, prompt_y, n;
-    round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 16, 20), 240);
+    round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 16, 20), 255);
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_PANE_TITLE_H);
@@ -1082,7 +1082,7 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     const char *msg;
     char lab[64];
     int stub = scene_llm(sc)[0] == 's' && scene_llm(sc)[1] == 't';
-    round_rect_a(fb, w, h, x, y, rw, rh, 14, RGB(12, 18, 24), 210);
+    round_rect_a(fb, w, h, x, y, rw, rh, 14, RGB(12, 18, 24), 255);
     stroke_round(fb, w, h, x, y, rw, rh, 14, RGB(61, 154, 138), 2);
     fill_rect(fb, w, h, x + 1, y + 1, rw - 2, 36, RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_CHAT_TITLE_H);
@@ -1460,7 +1460,7 @@ static void draw_app(uint32_t *fb, int w, int h, const gfx_rect_t *box, const os
     int x = box->x, y = box->y, rw = box->w, rh = box->h, r, c, maxc;
     char title[80];
     int n = 0, i;
-    round_rect_a(fb, w, h, x, y, rw, rh, 12, RGB(14, 20, 27), 238);
+    round_rect_a(fb, w, h, x, y, rw, rh, 12, RGB(14, 20, 27), 255);
     stroke_round(fb, w, h, x, y, rw, rh, 12, focused ? RGB(122, 212, 196) : RGB(52, 70, 84), focused ? 2 : 1);
     fill_rect(fb, w, h, x + 2, y + 2, rw - 4, GFX_DESKTOP_APP_TITLE_H - 4, focused ? RGB(28, 52, 62) : RGB(24, 34, 44));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_APP_TITLE_H);

@@ -702,6 +702,8 @@ static void test_app_windows_events_and_z_order(void) {
     TEST_ASSERT(l.app_win[1].visible);
     TEST_ASSERT_EQUAL(GFX_WIN_APP1, l.z[GFX_WIN_COUNT - 1]);
     TEST_ASSERT_EQUAL(GFX_WIN_APP1, l.focus);
+    /* UX4: windows are opaque, nothing behind bleeds through the frame */
+    TEST_ASSERT_EQUAL(0x0E141Bu, g_fb[(l.app_win[1].box.y + GFX_APP_GRID_Y + 40) * W + l.app_win[1].box.x + 4] & 0xFFFFFFu);
     TEST_ASSERT_EQUAL(7, l.menu_active);
     drain_kbd();
     /* a point of app 0 not covered by app 1 */
