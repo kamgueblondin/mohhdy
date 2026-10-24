@@ -620,6 +620,12 @@ int sys_service_status(const char* name, os_service_status_t* status) {
     return result;
 }
 
+/* Live Statut / Fichiers / Admin windows: the same syscalls as uptime,
+ * mem, ps, ls and service-status (userspace/osui_panes.c). */
+static const osui_pane_src_t k_pane_src = {
+    sys_listdir, sys_ps, sys_meminfo, sys_ticks, sys_service_status
+};
+
 int sys_service_grant(const char* name, int target_pid) {
     int result;
     asm volatile("int $0x80" : "=a"(result) : "a"(SYS_SERVICE_GRANT), "b"(name), "c"(target_pid));
@@ -7384,6 +7390,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         print_string(osui_out);
         shell_term_leave_if(input_buffer);
         if (osui_gui_should_enter()) {
+            osui_gui_set_pane_source(&k_pane_src);
             osui_gui_run();
             shell_after_gui(ctx);
         }
@@ -7424,6 +7431,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         print_string(osui_out);
         shell_term_leave_if(input_buffer);
         if (osui_gui_should_enter()) {
+            osui_gui_set_pane_source(&k_pane_src);
             osui_gui_run();
             shell_after_gui(ctx);
         }

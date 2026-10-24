@@ -25,15 +25,23 @@ typedef struct {
         gfx_rect_t pills[3];
     } scene_ia;
     struct {
-        int active;
+        int active;          /* a pane window is drawn (open, not minimized) */
+        int minimized, maximized;
         gfx_rect_t box;
-        gfx_rect_t traffic;
+        gfx_rect_t base;     /* default place, before drag / maximize */
+        gfx_rect_t traffic;  /* close button (kept name: old traffic light) */
+        gfx_rect_t btn[3];   /* minimize, maximize, close */
     } pane_win;
     struct {
-        gfx_rect_t box;
+        int visible, minimized, maximized;
+        gfx_rect_t box;      /* w = h = 0 when closed or minimized */
+        gfx_rect_t base;
         gfx_rect_t input;
         gfx_rect_t send_btn;
+        gfx_rect_t btn[3];   /* minimize, maximize, close */
     } chat_win;
+    int menu_active;         /* index in menu_items of the active window, -1 none */
+    int dock_state[7];       /* 0 nothing, 1 open, 2 minimized */
     struct {
         gfx_rect_t box;
         gfx_rect_t icons[7];
@@ -55,5 +63,9 @@ uint32_t gfx_desktop_pixel(const uint32_t *fb, int w, int h, int x, int y);
 void gfx_desktop_set_mouse(int x, int y, uint8_t buttons);
 void gfx_desktop_get_mouse(int *x, int *y, uint8_t *buttons);
 void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons);
+/* Window manager state of the pane and chat windows (gfx_wm.c). */
+void gfx_desktop_wm_reset(void);
+#define GFX_DESKTOP_PANE_TITLE_H 30
+#define GFX_DESKTOP_CHAT_TITLE_H 34
 
 #endif

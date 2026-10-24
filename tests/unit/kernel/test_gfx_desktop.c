@@ -3,6 +3,7 @@
 #include "../../framework/unity.h"
 #include "../../../kernel/gfx_desktop.h"
 #include "../../../kernel/gfx_fb.h"
+#include "../../../kernel/gfx_wm.h"
 #include "../../../kernel/vga_console.h"
 #include "../../../kernel/keyboard.h"
 #include <string.h>
@@ -493,6 +494,133 @@ static void test_web_pane_display_list(void) {
     TEST_ASSERT_EQUAL(0, count_near(ox + 10, oy + 10, ox + 40, oy + 30, 255, 0, 0, 0));
 }
 
+/* Window manager on the OS-UI windows (kernel/gfx_wm.c): every pane and
+ * the chat have minimize / maximize / close, a title drag, the dock and
+ * the menu restore a minimized window, the menu marks the active one. */
+static void drag(int x0, int y0, int x1, int y1) {
+    gfx_desktop_set_mouse(x0, y0, 0);
+    gfx_desktop_set_mouse(x0, y0, 1);
+    gfx_desktop_set_mouse(x1, y1, 1);
+    gfx_desktop_set_mouse(x1, y1, 0);
+}
+
+static void redraw(gfx_desktop_layout_t *l) {
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    gfx_desktop_get_layout(&g_scene, W, H, l);
+}
+
+static void test_window_manager_panes_and_chat(void) {
+    static const uint8_t panes[6] = { OS_FB_PANE_BROWSER, OS_FB_PANE_ADMIN, OS_FB_PANE_SUPPORT,
+                                      OS_FB_PANE_STATUS, OS_FB_PANE_FS, OS_FB_PANE_SHELL };
+    gfx_desktop_layout_t l, m;
+    char got[64];
+    int k;
+    vga_desktop_set(1);
+    for (k = 0; k < 6; k++) {
+        int idx;
+        gfx_desktop_wm_reset();
+        blank_scene();
+        g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+        g_scene.pane = panes[k];
+        redraw(&l);
+        TEST_ASSERT(l.pane_win.active);
+        idx = l.menu_active;
+        TEST_ASSERT(idx >= 1 && idx <= 6);
+        TEST_ASSERT_EQUAL(1, l.dock_state[idx]);
+        /* the three buttons are drawn in their colours */
+        TEST_ASSERT_EQUAL(GFX_WM_RGB_CLOSE, g_fb[(l.pane_win.btn[2].y + 2) * W + l.pane_win.btn[2].x + 7]);
+        TEST_ASSERT_EQUAL(GFX_WM_RGB_MIN, g_fb[(l.pane_win.btn[0].y + 2) * W + l.pane_win.btn[0].x + 7]);
+        /* maximize: the pane takes the work area, again: back */
+        drain_kbd();
+        click_at(rect_center_x(&l.pane_win.btn[1]), rect_center_y(&l.pane_win.btn[1]));
+        redraw(&m);
+        TEST_ASSERT(m.pane_win.maximized);
+        TEST_ASSERT_EQUAL(0, m.pane_win.box.x);
+        TEST_ASSERT_EQUAL(W, m.pane_win.box.w);
+        click_at(rect_center_x(&m.pane_win.btn[1]), rect_center_y(&m.pane_win.btn[1]));
+        redraw(&m);
+        TEST_ASSERT(!m.pane_win.maximized);
+        TEST_ASSERT_EQUAL(l.pane_win.box.x, m.pane_win.box.x);
+        /* drag the title bar */
+        drag(l.pane_win.box.x + 60, l.pane_win.box.y + 10, l.pane_win.box.x + 100, l.pane_win.box.y + 50);
+        redraw(&m);
+        TEST_ASSERT_EQUAL(l.pane_win.box.x + 40, m.pane_win.box.x);
+        TEST_ASSERT_EQUAL(l.pane_win.box.y + 40, m.pane_win.box.y);
+        /* minimize: hidden, amber dock mark, no command sent */
+        click_at(rect_center_x(&m.pane_win.btn[0]), rect_center_y(&m.pane_win.btn[0]));
+        redraw(&m);
+        TEST_ASSERT(!m.pane_win.active);
+        TEST_ASSERT(m.pane_win.minimized);
+        TEST_ASSERT_EQUAL(2, m.dock_state[idx]);
+        read_kbd(got, (int)sizeof(got));
+        TEST_ASSERT_EQUAL_STRING("", got);
+        /* the dock icon restores it in place, still without a command */
+        click_at(rect_center_x(&m.dock.icons[idx]), rect_center_y(&m.dock.icons[idx]));
+        redraw(&m);
+        TEST_ASSERT(m.pane_win.active);
+        TEST_ASSERT_EQUAL(l.pane_win.box.x + 40, m.pane_win.box.x);
+        read_kbd(got, (int)sizeof(got));
+        TEST_ASSERT_EQUAL_STRING("", got);
+        /* minimize again, the menu item restores too */
+        click_at(rect_center_x(&m.pane_win.btn[0]), rect_center_y(&m.pane_win.btn[0]));
+        redraw(&m);
+        TEST_ASSERT(!m.pane_win.active);
+        click_at(rect_center_x(&m.menu_items[idx]), rect_center_y(&m.menu_items[idx]));
+        redraw(&m);
+        TEST_ASSERT(m.pane_win.active);
+        /* close sends the command that closes the pane */
+        click_at(rect_center_x(&m.pane_win.btn[2]), rect_center_y(&m.pane_win.btn[2]));
+        read_kbd(got, (int)sizeof(got));
+        TEST_ASSERT_EQUAL_STRING("/center\n", got);
+    }
+    /* chat: close hides it, the Chat menu reopens it without a command */
+    gfx_desktop_wm_reset();
+    blank_scene();
+    redraw(&l);
+    TEST_ASSERT(l.chat_win.visible);
+    TEST_ASSERT_EQUAL(0, l.menu_active);
+    TEST_ASSERT_EQUAL(GFX_WM_RGB_CLOSE, g_fb[(l.chat_win.btn[2].y + 2) * W + l.chat_win.btn[2].x + 7]);
+    drain_kbd();
+    click_at(rect_center_x(&l.chat_win.btn[2]), rect_center_y(&l.chat_win.btn[2]));
+    redraw(&m);
+    TEST_ASSERT(!m.chat_win.visible);
+    TEST_ASSERT_EQUAL(0, m.dock_state[0]);
+    TEST_ASSERT_EQUAL(-1, m.menu_active);
+    TEST_ASSERT_EQUAL(0, m.chat_win.send_btn.w);   /* hidden chat takes no click */
+    click_at(rect_center_x(&l.chat_win.send_btn), rect_center_y(&l.chat_win.send_btn));
+    click_at(rect_center_x(&m.menu_items[0]), rect_center_y(&m.menu_items[0]));
+    redraw(&m);
+    TEST_ASSERT(m.chat_win.visible);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("", got);
+    /* chat minimize: amber dock mark, the dock Chat icon restores */
+    click_at(rect_center_x(&m.chat_win.btn[0]), rect_center_y(&m.chat_win.btn[0]));
+    redraw(&m);
+    TEST_ASSERT(!m.chat_win.visible);
+    TEST_ASSERT_EQUAL(2, m.dock_state[0]);
+    click_at(rect_center_x(&m.dock.icons[0]), rect_center_y(&m.dock.icons[0]));
+    redraw(&m);
+    TEST_ASSERT(m.chat_win.visible);
+    /* chat maximize and drag */
+    click_at(rect_center_x(&m.chat_win.btn[1]), rect_center_y(&m.chat_win.btn[1]));
+    redraw(&m);
+    TEST_ASSERT(m.chat_win.maximized);
+    TEST_ASSERT_EQUAL(W, m.chat_win.box.w);
+    click_at(rect_center_x(&m.chat_win.btn[1]), rect_center_y(&m.chat_win.btn[1]));
+    redraw(&m);
+    drag(m.chat_win.box.x + 40, m.chat_win.box.y + 12, m.chat_win.box.x + 10, m.chat_win.box.y + 62);
+    redraw(&l);
+    TEST_ASSERT_EQUAL(m.chat_win.box.x - 30, l.chat_win.box.x);
+    TEST_ASSERT_EQUAL(m.chat_win.box.y + 50, l.chat_win.box.y);
+    /* the send button follows the moved chat */
+    drain_kbd();
+    click_at(rect_center_x(&l.chat_win.send_btn), rect_center_y(&l.chat_win.send_btn));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\n", got);
+    gfx_desktop_wm_reset();
+    vga_desktop_set(0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -512,6 +640,7 @@ int main(void) {
     RUN_TEST(test_p2p_collab_prod_panes_drawing);
     RUN_TEST(test_vbe_layout_automation_under_load);
     RUN_TEST(test_web_pane_display_list);
+    RUN_TEST(test_window_manager_panes_and_chat);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

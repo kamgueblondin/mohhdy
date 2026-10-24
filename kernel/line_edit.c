@@ -40,6 +40,7 @@ void line_edit_begin(line_edit_t *le, int size, const char *const *words, int nw
     le->hist_pos = -1;
     le->saved[0] = 0;
     le->last_tab = 0;
+    le->no_hist = 0;
     le->words = words;
     le->nwords = nwords;
     le->io = io;
@@ -151,7 +152,7 @@ int line_edit_key(line_edit_t *le, char c) {
         int i;
         for (i = le->cur; i < le->len; i++) le->io->put(le->buf[i]);
         le->buf[le->len] = 0;
-        hist_add(le->buf);
+        if (!le->no_hist) hist_add(le->buf);
         return 1;
     }
     switch (uc) {

@@ -4431,6 +4431,7 @@ static void le_reprompt(void) {
 }
 static const line_edit_io_t le_io = { le_put, print_cursor_left, le_reprompt };
 static line_edit_t le_state;
+static char le_pending[LE_MAX];   /* line kept by the minimize button */
 
 static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu) {
     line_edit_t *le = &le_state;
@@ -4452,6 +4453,11 @@ static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu) 
     }
     line_edit_begin(le, (int)(size > LE_MAX ? LE_MAX : size), mohhdy_shell_commands,
                     MOHHDY_SHELL_COMMAND_COUNT, &le_io);
+    if (le_pending[0] && gfx_fb_term_active()) {
+        print_string_serial("SYS_GETS: restored minimized line\n");
+        line_edit_set(le, le_pending);
+        le_pending[0] = 0;
+    }
 
     for (;;) {
         char c = 0;
@@ -4471,12 +4477,20 @@ static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu) 
             }
             continue;
         }
-        if (c == (char)OS_TERM_KEY_CLOSE) {
-            /* close/minimize button of the VBE terminal window: replace the
-             * typed text by the line "gui" (back to the desktop) */
+        if (c == (char)OS_TERM_KEY_CLOSE || c == (char)OS_TERM_KEY_MIN) {
+            /* close / minimize button of the VBE terminal window: answer the
+             * line "gui" (back to the desktop). Minimize keeps the typed
+             * text for the next prompt; close drops it. */
+            if (c == (char)OS_TERM_KEY_MIN) {
+                for (k = 0; k + 1 < sizeof(le_pending) && le->buf[k]; k++) le_pending[k] = le->buf[k];
+                le_pending[k] = 0;
+            } else {
+                le_pending[0] = 0;
+            }
             if (!gfx_fb_term_active()) { line_edit_set(le, ""); continue; }
             line_edit_set(le, "gui");
             c = '\n';
+            le->no_hist = 1;   /* "gui" from a button is not a typed command */
         }
         if ((unsigned char)c >= 32 && (unsigned char)c <= 126) {
             print_string_serial("SYS_GETS: caractère ajouté: '");

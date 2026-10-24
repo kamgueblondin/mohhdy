@@ -9,6 +9,7 @@
 #include "webeng.h"
 #include "webrt.h"
 #include "os_syscalls.h"
+#include "osui_panes.h"
 
 #define COLS OS_VGA_COLS
 #define ROWS OS_VGA_ROWS
@@ -657,6 +658,26 @@ void osui_gui_write_snap(char *dst, int max) {
     snap_add(dst, max, &p, "OSUI-END\n");
 }
 
+/* Live window content (osui_panes.c), refreshed about once a second. */
+static const osui_pane_src_t *g_pane_src;
+static char g_pane_lines[OS_FB_TERM_MAX][OSUI_PANES_LINE];
+static int g_pane_n, g_pane_for = -1;
+static unsigned g_pane_at;
+
+void osui_gui_set_pane_source(const osui_pane_src_t *src) { g_pane_src = src; g_pane_for = -1; }
+
+static int pane_live_fill(int pane) {
+    unsigned now;
+    if (!g_pane_src || (pane != OS_FB_PANE_STATUS && pane != OS_FB_PANE_FS && pane != OS_FB_PANE_ADMIN)) return 0;
+    now = g_pane_src->ticks ? g_pane_src->ticks() : 0;
+    if (pane != g_pane_for || now - g_pane_at >= 100U) {
+        g_pane_n = osui_panes_fill(pane, g_pane_src, g_pane_lines, OS_FB_TERM_MAX);
+        g_pane_for = pane;
+        g_pane_at = now;
+    }
+    return 1;
+}
+
 void osui_gui_fill_scene(os_fb_scene_t *scene) {
     int i, n;
     const char *mode = osui_get_chat_mode();
@@ -668,7 +689,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     if (!scene) return;
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
-    scene->version = 5; /* 3: term_attr (pm-ide syntax classes), 4: web display list, 5: llm */
+    scene->version = 6; /* 3: term_attr (pm-ide syntax classes), 4: web display list, 5: llm, 6: pane_live */
     scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
     scene->pane = OS_FB_PANE_NONE;
     if (pane) {
@@ -725,6 +746,11 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         for (i = 0; i < n; i++) osui_gui_term_at(i, scene->term[i], OS_FB_TERM_LEN);
     }
     scene->nterm = (uint8_t)n;
+    if (pane_live_fill(scene->pane)) {
+        for (i = 0; i < g_pane_n && i < OS_FB_TERM_MAX; i++) scpy(scene->term[i], OS_FB_TERM_LEN, g_pane_lines[i]);
+        scene->nterm = (uint8_t)i;
+        scene->pane_live = 1;
+    }
     scene->nweb = 0;
     if (g_web_active) {
         uint32_t k;

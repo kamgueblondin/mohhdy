@@ -701,7 +701,8 @@ int keyboard_poll_char(char* out) {
             || c == (char)OS_VGA_KEY_LEFT || c == (char)OS_VGA_KEY_RIGHT
             || c == (char)OS_VGA_KEY_UP || c == (char)OS_VGA_KEY_DOWN
             || c == (char)OS_TERM_KEY_CLOSE || c == (char)OS_TERM_KEY_HOME
-            || c == (char)OS_TERM_KEY_END || c == (char)OS_TERM_KEY_DEL) {
+            || c == (char)OS_TERM_KEY_END || c == (char)OS_TERM_KEY_DEL
+            || c == (char)OS_TERM_KEY_MIN) {
             *out = c;
             return 1;
         }

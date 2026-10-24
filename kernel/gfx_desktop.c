@@ -5,6 +5,14 @@
 #include "input/usb_tablet.h"
 #include "keyboard.h"
 #include "vga_console.h"
+#include "gfx_wm.h"
+
+#ifdef KERNEL_TEST
+static void wm_log(const char *s) { (void)s; }
+#else
+extern void print_string_serial(const char* str);
+static void wm_log(const char *s) { print_string_serial(s); }
+#endif
 
 #define RGB(r, g, b) ((uint32_t)(r) << 16 | (uint32_t)(g) << 8 | (uint32_t)(b))
 
@@ -14,10 +22,96 @@ static uint8_t g_mouse_buttons = 0;
 static uint8_t g_prev_buttons = 0;
 static os_fb_scene_t g_last_scene;
 static int g_last_scene_valid = 0;
+/* Window manager state (kernel/gfx_wm.c): one per desktop window. */
+static gfx_wm_win_t g_wm_pane, g_wm_chat;
+static int g_wm_pane_id = -1;
+
+void gfx_desktop_wm_reset(void) {
+    gfx_wm_reset(&g_wm_pane);
+    gfx_wm_reset(&g_wm_chat);
+    g_wm_pane_id = -1;
+}
+
+static gfx_wm_rect_t to_wm(const gfx_rect_t *r) {
+    gfx_wm_rect_t o;
+    o.x = r->x; o.y = r->y; o.w = r->w; o.h = r->h;
+    return o;
+}
+
+static gfx_rect_t from_wm(gfx_wm_rect_t r) {
+    gfx_rect_t o;
+    o.x = r.x; o.y = r.y; o.w = r.w; o.h = r.h;
+    return o;
+}
+
+/* minimize, maximize, close button rectangles of a placed window */
+static void wm_buttons(const gfx_rect_t *box, int title_h, gfx_rect_t out[3]) {
+    int b;
+    for (b = 0; b < 3; b++) {
+        int x = 0, y = 0;
+        if (box->w > 0) gfx_wm_button_pos(to_wm(box), title_h, 1, GFX_WM_HIT_MIN + b, &x, &y);
+        out[b].x = x; out[b].y = y;
+        out[b].w = box->w > 0 ? GFX_WM_BTN : 0;
+        out[b].h = box->w > 0 ? GFX_WM_BTN : 0;
+    }
+}
+
+/* menu / dock index of a pane: Chat, Browser-OS, Shell, Admin, Support,
+ * Statut, FS. */
+static int pane_index(int pane) {
+    switch (pane) {
+    case OS_FB_PANE_NONE: return 0;
+    case OS_FB_PANE_BROWSER: return 1;
+    case OS_FB_PANE_SHELL: return 2;
+    case OS_FB_PANE_ADMIN: return 3;
+    case OS_FB_PANE_SUPPORT: return 4;
+    case OS_FB_PANE_STATUS: return 5;
+    case OS_FB_PANE_FS: return 6;
+    default: return -1;
+    }
+}
 
 static int in_rect(int px, int py, const gfx_rect_t *r) {
     if (!r || r->w <= 0 || r->h <= 0) return 0;
     return px >= r->x && px < r->x + r->w && py >= r->y && py < r->y + r->h;
+}
+
+static const char *const k_open_cmds[7] = {
+    "/center\n", "/browser\n", "/shell\n", "/admin\n", "/support\n", "/status\n", "/fs\n"
+};
+
+static void open_target(int i) {
+    const os_fb_scene_t *sc = g_last_scene_valid ? &g_last_scene : 0;
+    if (i == 0 && !gfx_wm_visible(&g_wm_chat)) {
+        gfx_wm_restore(&g_wm_chat);
+        wm_log("gfx wm chat restore\n");
+        gfx_fb_redraw_desktop();
+        return;
+    }
+    if (i > 0 && sc && pane_index(sc->pane) == i && !gfx_wm_visible(&g_wm_pane)) {
+        gfx_wm_restore(&g_wm_pane);
+        wm_log("gfx wm pane restore\n");
+        gfx_fb_redraw_desktop();
+        return;
+    }
+    kbd_put_string(k_open_cmds[i]);
+}
+
+/* Title drag released (the press was handled by the click). */
+static void wm_release(int x, int y) {
+    gfx_desktop_layout_t layout;
+    int w = gfx_fb_width(), h = gfx_fb_height();
+    if (!g_wm_chat.drag && !g_wm_pane.drag) return;
+    gfx_desktop_get_layout(g_last_scene_valid ? &g_last_scene : 0, w, h, &layout);
+    if (g_wm_chat.drag &&
+        gfx_wm_mouse(&g_wm_chat, to_wm(&layout.chat_win.box), to_wm(&layout.chat_win.base),
+                     GFX_DESKTOP_CHAT_TITLE_H, 1, x, y, 0, 1) == GFX_WM_ACT_MOVED)
+        wm_log("gfx wm chat moved\n");
+    if (g_wm_pane.drag &&
+        gfx_wm_mouse(&g_wm_pane, to_wm(&layout.pane_win.box), to_wm(&layout.pane_win.base),
+                     GFX_DESKTOP_PANE_TITLE_H, 1, x, y, 0, 1) == GFX_WM_ACT_MOVED)
+        wm_log("gfx wm pane moved\n");
+    gfx_fb_redraw_desktop();
 }
 
 static void gfx_desktop_handle_click(int x, int y) {
@@ -25,54 +119,65 @@ static void gfx_desktop_handle_click(int x, int y) {
     int w = gfx_fb_width();
     int h = gfx_fb_height();
     int i;
-    const char *cmds[7] = {
-        "/center\n",
-        "/browser\n",
-        "/shell\n",
-        "/admin\n",
-        "/support\n",
-        "/status\n",
-        "/fs\n"
-    };
 
     gfx_desktop_get_layout(g_last_scene_valid ? &g_last_scene : 0, w, h, &layout);
 
-    /* 1. Chat "Envoyer" button */
-    if (in_rect(x, y, &layout.chat_win.send_btn)) {
-        kbd_put_string("\n");
-        return;
+    /* 0. Window chrome, topmost first: chat window, then the pane window
+     * (gfx_wm.c decides close / minimize / maximize / drag). */
+    if (layout.chat_win.visible) {
+        int act = gfx_wm_mouse(&g_wm_chat, to_wm(&layout.chat_win.box), to_wm(&layout.chat_win.base),
+                               GFX_DESKTOP_CHAT_TITLE_H, 1, x, y, 1, 0);
+        if (act == GFX_WM_ACT_CLOSE || act == GFX_WM_ACT_MINIMIZE || act == GFX_WM_ACT_MAXIMIZE) {
+            wm_log(act == GFX_WM_ACT_CLOSE ? "gfx wm chat close\n"
+                                : act == GFX_WM_ACT_MINIMIZE ? "gfx wm chat minimize\n"
+                                : g_wm_chat.maximized ? "gfx wm chat maximize on\n" : "gfx wm chat maximize off\n");
+            gfx_fb_redraw_desktop();
+            return;
+        }
+        if (act == GFX_WM_ACT_DRAG) return;
+        if (act == GFX_WM_ACT_BODY) {
+            if (in_rect(x, y, &layout.chat_win.send_btn)) kbd_put_string("\n");
+            return;
+        }
+    }
+    if (layout.pane_win.active) {
+        int act = gfx_wm_mouse(&g_wm_pane, to_wm(&layout.pane_win.box), to_wm(&layout.pane_win.base),
+                               GFX_DESKTOP_PANE_TITLE_H, 1, x, y, 1, 0);
+        if (act == GFX_WM_ACT_CLOSE) {
+            wm_log("gfx wm pane close\n");
+            gfx_wm_reset(&g_wm_pane);
+            kbd_put_string("/center\n");
+            return;
+        }
+        if (act == GFX_WM_ACT_MINIMIZE || act == GFX_WM_ACT_MAXIMIZE) {
+            wm_log(act == GFX_WM_ACT_MINIMIZE ? "gfx wm pane minimize\n"
+                                : g_wm_pane.maximized ? "gfx wm pane maximize on\n" : "gfx wm pane maximize off\n");
+            gfx_fb_redraw_desktop();
+            return;
+        }
+        if (act == GFX_WM_ACT_DRAG || act == GFX_WM_ACT_BODY) return;
     }
 
-    /* 2. Window pane close button (traffic light) */
-    if (layout.pane_win.active && in_rect(x, y, &layout.pane_win.traffic)) {
+    if (g_last_scene_valid && (g_last_scene.pane == OS_FB_PANE_IDE || g_last_scene.pane == OS_FB_PANE_WEB)
+        && in_rect(x, y, &layout.pane_win.traffic)) {
         kbd_put_string("/center\n");
         return;
     }
 
-    /* 3. Dock icons */
+    /* 3. Dock icons, 4. top menu bar: a minimized or closed window comes
+     * back without a command; otherwise the command opens it. */
     for (i = 0; i < 7; i++) {
-        if (in_rect(x, y, &layout.dock.icons[i])) {
-            kbd_put_string(cmds[i]);
+        if (in_rect(x, y, &layout.dock.icons[i]) || (i < layout.menu_count && in_rect(x, y, &layout.menu_items[i]))) {
+            open_target(i);
             return;
         }
     }
 
-    /* 4. Top menu bar items */
-    for (i = 0; i < layout.menu_count; i++) {
-        if (in_rect(x, y, &layout.menu_items[i])) {
-            kbd_put_string(cmds[i]);
+    /* 4b. Desktop icons on the right (Browser-OS ... Fichiers) */
+    for (i = 0; i < layout.desk.count; i++) {
+        if (in_rect(x, y, &layout.desk.icons[i])) {
+            open_target(i + 1);
             return;
-        }
-    }
-
-    /* 4b. Desktop icons on the right (Browser-OS ... Fichiers), unless
-     * the floating chat window is drawn over them. */
-    if (!in_rect(x, y, &layout.chat_win.box)) {
-        for (i = 0; i < layout.desk.count; i++) {
-            if (in_rect(x, y, &layout.desk.icons[i])) {
-                kbd_put_string(cmds[i + 1]);
-                return;
-            }
         }
     }
 
@@ -112,6 +217,7 @@ void gfx_desktop_set_mouse(int x, int y, uint8_t buttons) {
     if (vga_desktop_active() && !left_prev && left_now) {
         gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
     }
+    if (vga_desktop_active() && left_prev && !left_now) wm_release(g_mouse_x, g_mouse_y);
     if (gfx_fb_term_active()) gfx_fb_term_mouse(g_mouse_x, g_mouse_y, buttons, g_prev_buttons);
     g_prev_buttons = buttons;
 
@@ -142,6 +248,7 @@ void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons) {
     if (vga_desktop_active() && !left_prev && left_now) {
         gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
     }
+    if (vga_desktop_active() && left_prev && !left_now) wm_release(g_mouse_x, g_mouse_y);
     if (gfx_fb_term_active()) gfx_fb_term_mouse(g_mouse_x, g_mouse_y, buttons, g_prev_buttons);
     g_prev_buttons = buttons;
 
@@ -596,17 +703,29 @@ static const char *input_tail(const char *s, int maxc) {
     return s;
 }
 
+static void draw_wm_buttons(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, int title_h) {
+    gfx_wm_rect_t r;
+    r.x = x; r.y = y; r.w = rw; r.h = rh;
+    gfx_wm_draw_buttons(fb, w, h, w, r, title_h, 1);
+}
+
 static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const char *title, const char *body, const os_fb_scene_t *sc) {
     char lab[64];
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(18, 28, 36), 230);
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
-    traffic(fb, w, h, x + 8, y + 8);
-    draw_text(fb, w, h, x + 56, y + 12, title ? title : "", RGB(232, 238, 244));
+    draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_PANE_TITLE_H);
+    draw_text_n(fb, w, h, x + 14, y + 12, title ? title : "", (rw - 80) / 8, RGB(232, 238, 244));
     fill_rect_a(fb, w, h, x + 12, y + 44, rw - 24, 40, RGB(42, 36, 16), 220);
     llm_text(lab, (int)sizeof(lab), "llm=", sc, "  us031_complete=false");
     draw_text(fb, w, h, x + 18, y + 48, lab, RGB(243, 230, 176));
-    if (body) draw_text(fb, w, h, x + 18, y + 96, body, RGB(201, 232, 223));
+    if (sc && sc->version >= 6 && sc->pane_live && sc->nterm > 0) {
+        /* live window content from guest syscalls (userspace/osui_panes.c) */
+        int i, ty = y + 96, n = sc->nterm > OS_FB_TERM_MAX ? OS_FB_TERM_MAX : sc->nterm;
+        for (i = 0; i < n && ty + 12 <= y + rh - 8; i++, ty += 14)
+            draw_text_n(fb, w, h, x + 18, ty, sc->term[i], (rw - 36) / 8,
+                        i == 0 ? RGB(122, 212, 196) : RGB(201, 232, 223));
+    } else if (body) draw_text_n(fb, w, h, x + 18, y + 96, body, (rw - 36) / 8, RGB(201, 232, 223));
 }
 
 /* US-050: full-screen pm-ide. term[0] title, term[1..n-2] text rows with
@@ -726,9 +845,9 @@ static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh,
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 16, 20), 240);
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
-    traffic(fb, w, h, x + 8, y + 8);
-    draw_text(fb, w, h, x + 56, y + 12, "Shell Multiboot", RGB(232, 238, 244));
-    draw_text(fb, w, h, x + rw - 8 * 18 - 10, y + 12, "prompt=MOHHDY>", RGB(122, 212, 196));
+    draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_PANE_TITLE_H);
+    draw_text(fb, w, h, x + 14, y + 12, "Shell Multiboot", RGB(232, 238, 244));
+    if (rw > 8 * 34 + 80) draw_text(fb, w, h, x + rw - 8 * 18 - 70, y + 12, "prompt=MOHHDY>", RGB(122, 212, 196));
     term_h = rh - 44;
     if (term_h < 80) term_h = 80;
     fill_rect(fb, w, h, x + 10, y + 36, rw - 20, term_h, RGB(8, 12, 16));
@@ -767,14 +886,15 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     round_rect_a(fb, w, h, x, y, rw, rh, 14, RGB(12, 18, 24), 210);
     stroke_round(fb, w, h, x, y, rw, rh, 14, RGB(61, 154, 138), 2);
     fill_rect(fb, w, h, x + 1, y + 1, rw - 2, 36, RGB(28, 44, 56));
-    traffic(fb, w, h, x + 10, y + 10);
-    draw_text(fb, w, h, x + 58, y + 14, "Mohhdy", RGB(232, 238, 244));
+    draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_CHAT_TITLE_H);
+    draw_text(fb, w, h, x + 16, y + 14, "Mohhdy", RGB(232, 238, 244));
     llm_text(lab, (int)sizeof(lab), "llm=", sc, "");
     {
         int ln = 0;
         while (lab[ln]) ln++;
         if (ln < 14) ln = 14;
-        draw_text(fb, w, h, x + rw - 8 * ln - 12, y + 14, lab, RGB(243, 230, 176));
+        if (x + 16 + 8 * 8 < x + rw - 8 * ln - 66)
+            draw_text(fb, w, h, x + rw - 8 * ln - 66, y + 14, lab, RGB(243, 230, 176));
     }
     fill_rect_a(fb, w, h, x + 14, y + 46, rw - 28, 44, RGB(42, 36, 16), 230);
     draw_text_n(fb, w, h, x + 20, y + 50, "Surface de commande du SE Multiboot.", (rw - 40) / 8, RGB(243, 230, 176));
@@ -885,29 +1005,45 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     out->scene_ia.pills[2].h = 40;
 
     pane = sc->pane;
-    if (pane != OS_FB_PANE_NONE) {
-        /* A pane window covers the Scene IA: it is not drawn and its
-         * pills are not clickable (they used to show through the pane). */
-        out->scene_ia.box.w = out->scene_ia.box.h = 0;
-        for (i = 0; i < 3; i++) out->scene_ia.pills[i].w = out->scene_ia.pills[i].h = 0;
-    }
-    if (pane != OS_FB_PANE_NONE) {
-        int wx = 36, wy = bar_h + 28;
-        int ww = clampi(w - (w >= 780 ? 420 : 48), 240, w - 48);
-        int wh = clampi(h - 220, 160, h - bar_h - 80);
-
-        out->pane_win.active = 1;
-        out->pane_win.box.x = wx;
-        out->pane_win.box.y = wy;
-        out->pane_win.box.w = ww;
-        out->pane_win.box.h = wh;
-
-        out->pane_win.traffic.x = wx + 8;
-        out->pane_win.traffic.y = wy + 8;
-        out->pane_win.traffic.w = 42;
-        out->pane_win.traffic.h = 16;
-    } else {
+    {
+        gfx_wm_rect_t area;
+        area.x = 0; area.y = bar_h + 4; area.w = w; area.h = h - bar_h - 4 - 52;
+        if (area.h < 120) area.h = h - bar_h - 4;
+        if (pane != g_wm_pane_id) {
+            /* another pane: default place and state */
+            gfx_wm_reset(&g_wm_pane);
+            g_wm_pane_id = pane;
+        }
         out->pane_win.active = 0;
+        out->pane_win.minimized = 0;
+        out->pane_win.maximized = 0;
+        out->pane_win.box.x = out->pane_win.box.y = out->pane_win.box.w = out->pane_win.box.h = 0;
+        out->pane_win.base = out->pane_win.box;
+        if (pane != OS_FB_PANE_NONE && pane != OS_FB_PANE_IDE && pane != OS_FB_PANE_WEB) {
+            gfx_wm_rect_t base, placed;
+            base.x = 36; base.y = bar_h + 28;
+            base.w = clampi(w - (w >= 780 ? 420 : 48), 240, w - 48);
+            base.h = clampi(h - 220, 160, h - bar_h - 80);
+            out->pane_win.base = from_wm(base);
+            gfx_wm_place(&g_wm_pane, base, area, &placed);
+            out->pane_win.box = from_wm(placed);
+            out->pane_win.active = placed.w > 0;
+            out->pane_win.minimized = !gfx_wm_visible(&g_wm_pane);
+            out->pane_win.maximized = g_wm_pane.maximized && out->pane_win.active;
+        }
+        wm_buttons(&out->pane_win.box, GFX_DESKTOP_PANE_TITLE_H, out->pane_win.btn);
+        out->pane_win.traffic = out->pane_win.btn[2];
+        if (pane == OS_FB_PANE_IDE || pane == OS_FB_PANE_WEB) {
+            /* full screen panes keep their traffic light close (and ESC) */
+            out->pane_win.traffic.x = 36 + 8; out->pane_win.traffic.y = bar_h + 28 + 8;
+            out->pane_win.traffic.w = 42; out->pane_win.traffic.h = 16;
+        }
+        if (out->pane_win.active || pane == OS_FB_PANE_IDE || pane == OS_FB_PANE_WEB) {
+            /* A pane window covers the Scene IA: it is not drawn and its
+             * pills are not clickable (they used to show through the pane). */
+            out->scene_ia.box.w = out->scene_ia.box.h = 0;
+            for (i = 0; i < 3; i++) out->scene_ia.pills[i].w = out->scene_ia.pills[i].h = 0;
+        }
     }
 
     chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(w / 3, 220, 360) : clampi(w / 2, 240, 640);
@@ -917,9 +1053,10 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     if (chat_h < 120) chat_h = 120;
 
     if (sc->chat_mode == OS_FB_CHAT_FLOAT) {
-        int pane_w = (pane != OS_FB_PANE_NONE) ? clampi(w - (w >= 780 ? 420 : 48), 240, w - 48) : 0;
-        int pane_right = (pane != OS_FB_PANE_NONE) ? (36 + pane_w + 12) : 8;
+        int pane_open = out->pane_win.active && !out->pane_win.maximized;
+        int pane_right = pane_open ? (out->pane_win.box.x + out->pane_win.box.w + 12) : 8;
         int max_x = w - chat_w - 8;
+        if (pane_open && out->pane_win.box.x > w / 2) pane_right = 8;  /* pane dragged right */
         chat_x = w - chat_w - 16;
         chat_y = h - chat_h - 70;
         if (sc->chat_x || sc->chat_y) {
@@ -944,6 +1081,18 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         chat_y = bar_h + (h / 14);
         if (chat_y + chat_h > h - 52) chat_y = bar_h + 8;
     }
+    {
+        gfx_wm_rect_t base, placed, area;
+        area.x = 0; area.y = bar_h + 4; area.w = w; area.h = h - bar_h - 4 - 52;
+        if (area.h < 120) area.h = h - bar_h - 4;
+        base.x = chat_x; base.y = chat_y; base.w = chat_w; base.h = chat_h;
+        out->chat_win.base = from_wm(base);
+        gfx_wm_place(&g_wm_chat, base, area, &placed);
+        chat_x = placed.x; chat_y = placed.y; chat_w = placed.w; chat_h = placed.h;
+        out->chat_win.visible = placed.w > 0;
+        out->chat_win.minimized = g_wm_chat.minimized;
+        out->chat_win.maximized = g_wm_chat.maximized && placed.w > 0;
+    }
 
     out->chat_win.box.x = chat_x;
     out->chat_win.box.y = chat_y;
@@ -959,6 +1108,20 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     out->chat_win.send_btn.y = chat_y + chat_h - 34;
     out->chat_win.send_btn.w = 88;
     out->chat_win.send_btn.h = 22;
+    if (!out->chat_win.visible) {
+        out->chat_win.input.w = out->chat_win.input.h = 0;
+        out->chat_win.send_btn.w = out->chat_win.send_btn.h = 0;
+    }
+    wm_buttons(&out->chat_win.box, GFX_DESKTOP_CHAT_TITLE_H, out->chat_win.btn);
+
+    /* active window in the menu bar and open / minimized marks in the dock */
+    out->menu_active = -1;
+    for (i = 0; i < 7; i++) out->dock_state[i] = 0;
+    if (out->pane_win.active && pane_index(pane) > 0) out->menu_active = pane_index(pane);
+    else if (out->chat_win.visible) out->menu_active = 0;
+    out->dock_state[0] = out->chat_win.visible ? 1 : (g_wm_chat.minimized ? 2 : 0);
+    if (pane_index(pane) > 0) out->dock_state[pane_index(pane)] = out->pane_win.active ? 1 : 2;
+    if (gfx_fb_term_minimized()) out->dock_state[2] = 2;
 
     dock_w = 7 * 44 + 16;
     if (dock_w > w - 16) dock_w = w - 16;
@@ -1040,6 +1203,8 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         g_last_scene_valid = 1;
     }
 
+    /* one layout for drawing and for the click hit test */
+    gfx_desktop_get_layout(sc, w, h, &lay);
     landscape(fb, w, h);
     bar_h = clampi(h / 22, 28, 40);
     fill_rect_a(fb, w, h, 0, 0, w, bar_h, RGB(12, 28, 40), 235);
@@ -1059,7 +1224,12 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         }
         for (i = 0; i < 7; i++) {
             if (mx + lens[i] * 8 > w - flag_w - 8) break;
-            draw_text(fb, w, h, mx, ty, menus[i], RGB(232, 238, 244));
+            if (i == lay.menu_active) {
+                /* active window: highlighted menu item */
+                round_rect(fb, w, h, mx - 6, ty - 5, lens[i] * 8 + 12, 18, 8, RGB(61, 154, 138));
+                draw_text(fb, w, h, mx, ty, menus[i], RGB(15, 20, 25));
+            } else
+                draw_text(fb, w, h, mx, ty, menus[i], RGB(232, 238, 244));
             mx += lens[i] * 8 + gap;
         }
         if (w >= 920) {
@@ -1095,8 +1265,6 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         }
     }
 
-    /* one layout for drawing and for the click hit test */
-    gfx_desktop_get_layout(sc, w, h, &lay);
     scene_x = lay.scene_ia.box.x;
     scene_y = lay.scene_ia.box.y;
     scene_w = lay.scene_ia.box.w;
@@ -1126,7 +1294,7 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         return;
     }
     ptitle = pane_title(pane);
-    if (ptitle) {
+    if (ptitle && lay.pane_win.active) {
         int wx = lay.pane_win.box.x, wy = lay.pane_win.box.y;
         int ww = lay.pane_win.box.w;
         int wh = lay.pane_win.box.h;
@@ -1148,7 +1316,7 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     chat_y = lay.chat_win.box.y;
     chat_w = lay.chat_win.box.w;
     chat_h = lay.chat_win.box.h;
-    draw_chat(fb, w, h, chat_x, chat_y, chat_w, chat_h, sc);
+    if (lay.chat_win.visible) draw_chat(fb, w, h, chat_x, chat_y, chat_w, chat_h, sc);
 
     dock_w = 7 * 44 + 16;
     if (dock_w > w - 16) dock_w = w - 16;
@@ -1162,6 +1330,11 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
             int n = 0;
             while (dock[i][n]) n++;
             draw_text(fb, w, h, dock_x + 8 + i * 44 + (36 - n * 8) / 2, dock_y + 14, dock[i], RGB(15, 20, 25));
+        }
+        if (lay.dock_state[i]) {
+            /* open (light) or minimized (amber) window mark under the icon */
+            uint32_t c = lay.dock_state[i] == 2 ? RGB(230, 180, 60) : RGB(232, 238, 244);
+            fill_rect(fb, w, h, dock_x + 8 + i * 44 + 14, dock_y + 36, 8, 3, c);
         }
     }
 

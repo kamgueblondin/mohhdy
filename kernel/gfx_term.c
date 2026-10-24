@@ -1,5 +1,6 @@
 /* gfx_term.c - VBE backend of the text console cell grid (see gfx_term.h). */
 #include "gfx_term.h"
+#include "gfx_wm.h"
 
 static const uint32_t k_pal[16] = {
     0x000000, 0x0000AA, 0x00AA00, 0x00AAAA, 0xAA0000, 0xAA00AA, 0xAA5500, 0xAAAAAA,
@@ -41,25 +42,21 @@ void gfx_term_layout_at(int fb_w, int fb_h, int maximized, int dx, int dy, gfx_t
     }
 }
 
+static gfx_wm_rect_t wm_rect(const gfx_term_layout_t *l) {
+    gfx_wm_rect_t r;
+    r.x = l->x; r.y = l->y; r.w = l->w; r.h = l->h;
+    return r;
+}
+
+/* Title bar buttons: one implementation in gfx_wm.c for every window. */
 void gfx_term_button_pos(const gfx_term_layout_t *l, int which, int *x, int *y) {
-    int s = l ? l->scale : 1;
-    int k = which == GFX_TERM_HIT_CLOSE ? 1 : (which == GFX_TERM_HIT_MAX ? 2 : 3);
-    int bx = l ? l->x + l->w - 2 - k * (GFX_TERM_BTN + 4) * s : 0;
-    int by = l ? l->y + 2 + (GFX_TERM_TITLE_H * s - GFX_TERM_BTN * s) / 2 : 0;
-    if (x) *x = bx;
-    if (y) *y = by;
+    if (!l) { if (x) *x = 0; if (y) *y = 0; return; }
+    gfx_wm_button_pos(wm_rect(l), GFX_TERM_TITLE_H * l->scale, l->scale, which, x, y);
 }
 
 int gfx_term_hit(const gfx_term_layout_t *l, int x, int y) {
-    int w;
-    if (!l || x < l->x || y < l->y || x >= l->x + l->w || y >= l->y + l->h) return GFX_TERM_HIT_NONE;
-    for (w = GFX_TERM_HIT_MIN; w <= GFX_TERM_HIT_CLOSE; w++) {
-        int bx, by;
-        gfx_term_button_pos(l, w, &bx, &by);
-        if (x >= bx && y >= by && x < bx + GFX_TERM_BTN * l->scale && y < by + GFX_TERM_BTN * l->scale) return w;
-    }
-    if (y < l->y + 2 + l->scale * GFX_TERM_TITLE_H) return GFX_TERM_HIT_TITLE;
-    return GFX_TERM_HIT_GRID;
+    if (!l) return GFX_TERM_HIT_NONE;
+    return gfx_wm_hit(wm_rect(l), GFX_TERM_TITLE_H * l->scale, l->scale, x, y);
 }
 
 static void put(uint32_t *fb, int w, int h, int pitch, int x, int y, uint32_t c) {
@@ -91,20 +88,7 @@ void gfx_term_draw_frame(uint32_t *fb, int fb_w, int fb_h, int pitch,
             int edge = (x < l->x + 2 || x >= l->x + l->w - 2 || y < l->y + 2 || y >= l->y + l->h - 2);
             put(fb, fb_w, fb_h, pitch, x, y, edge ? border : (y < l->gy ? bar : 0));
         }
-    {
-        /* title bar buttons: minimize, maximize, close (red) */
-        static const uint32_t col[3] = { 0x2E7D5B, 0x2E7D5B, 0xC0392B };
-        static const char mark[3] = { '_', 'o', 'x' };
-        int w, s = l->scale;
-        for (w = GFX_TERM_HIT_MIN; w <= GFX_TERM_HIT_CLOSE; w++) {
-            int bx, by, k = w - GFX_TERM_HIT_MIN;
-            gfx_term_button_pos(l, w, &bx, &by);
-            for (y = by; y < by + GFX_TERM_BTN * s; y++)
-                for (x = bx; x < bx + GFX_TERM_BTN * s; x++)
-                    put(fb, fb_w, fb_h, pitch, x, y, col[k]);
-            glyph(fb, fb_w, fb_h, pitch, bx + 3 * s, by - s, s, font, (unsigned char)mark[k], 0xFFFFFF, col[k]);
-        }
-    }
+    gfx_wm_draw_buttons(fb, fb_w, fb_h, pitch, wm_rect(l), GFX_TERM_TITLE_H * l->scale, l->scale);
     if (!title) return;
     for (i = 0; title[i] && (i + 1) * GFX_TERM_CELL_W * l->scale < l->w - 4 - 3 * (GFX_TERM_BTN + 4) * l->scale; i++)
         glyph(fb, fb_w, fb_h, pitch, l->gx + i * GFX_TERM_CELL_W * l->scale,

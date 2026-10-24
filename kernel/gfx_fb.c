@@ -74,9 +74,8 @@ static int g_term;
 static int g_term_full;
 static gfx_term_layout_t g_term_l;
 static uint16_t g_term_shown[GFX_TERM_COLS * GFX_TERM_ROWS];
-static int g_term_max;            /* maximize button state */
-static int g_term_dx, g_term_dy;  /* window moved from the centre */
-static int g_term_drag, g_term_grab_x, g_term_grab_y;
+static gfx_wm_win_t g_term_wm;     /* close/min/max/drag state (gfx_wm.c) */
+static int g_term_minimized;       /* left by its minimize button */
 /* Last desktop scene: the terminal window is composed over it. */
 static os_fb_scene_t local; /* Lot 6: too large for the kernel stack */
 static int g_scene_valid;
@@ -469,14 +468,24 @@ void gfx_fb_update_cursor(void) {
     unlock_interrupts(irq_flags);
 }
 
-int gfx_fb_present(const os_fb_scene_t *scene) {
-    uint32_t *dst;
-    uint32_t n, i;
-    int nw, nh;
-    int mx = 0, my = 0;
-    uint8_t btn = 0;
-    int cx, cy;
+static int present_local(void);
+static volatile int g_presenting, g_present_again;
 
+/* A mouse IRQ may ask for a redraw while a present runs: draw again at
+ * the end instead of drawing into g_back twice at the same time. */
+static int present_guarded(void) {
+    int rc;
+    if (g_presenting) { g_present_again = 1; return 0; }
+    g_presenting = 1;
+    do {
+        g_present_again = 0;
+        rc = present_local();
+    } while (g_present_again && rc == 0);
+    g_presenting = 0;
+    return rc;
+}
+
+int gfx_fb_present(const os_fb_scene_t *scene) {
     if (!scene || scene->magic != OS_FB_MAGIC) return -1;
     if (g_term) {
         /* back from the terminal window to the desktop loop */
@@ -487,6 +496,23 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
     }
     memcpy(&local, scene, sizeof(local));
     g_scene_valid = 1;
+    return present_guarded();
+}
+
+/* Window manager changes (minimize, drag ...) redraw the last scene
+ * without waiting for the Ring 3 desktop loop. */
+void gfx_fb_redraw_desktop(void) {
+    if (!g_on || g_term || !g_scene_valid) return;
+    (void)present_guarded();
+}
+
+static int present_local(void) {
+    uint32_t *dst;
+    uint32_t n, i;
+    int nw, nh;
+    int mx = 0, my = 0;
+    uint8_t btn = 0;
+    int cx, cy;
     if (com2_poll_size(&nw, &nh)) {
         if (!g_on || nw != g_w || nh != g_h) {
             if (vbe_set_mode(nw, nh) == 0) {
@@ -594,7 +620,7 @@ static uint32_t *term_surface(int *pitch) {
 }
 
 static void term_layout_now(gfx_term_layout_t *l) {
-    gfx_term_layout_at(g_w, g_h, g_term_max, g_term_dx, g_term_dy, l);
+    gfx_term_layout_at(g_w, g_h, g_term_wm.maximized, g_term_wm.dx, g_term_wm.dy, l);
 }
 
 /* Window frame and every cell, composed in g_back then shown. With
@@ -639,47 +665,46 @@ static void term_sink(const uint16_t *cells, int cx, int cy, int visible) {
     gfx_fb_update_cursor();
 }
 
-/* Mouse on the terminal window (IRQ context): buttons and title drag. */
+/* Mouse on the terminal window (IRQ context): the shared window manager
+ * (gfx_wm.c) decides; this only applies the result to the console. */
 void gfx_fb_term_mouse(int x, int y, uint8_t buttons, uint8_t prev) {
-    int left = buttons & 1, was = prev & 1;
+    int left = buttons & 1, was = prev & 1, act;
+    gfx_term_layout_t c;
+    gfx_wm_rect_t placed, base;
     if (!g_term) return;
-    if (left && !was) {
-        int hit = gfx_term_hit(&g_term_l, x, y);
-        if (hit == GFX_TERM_HIT_CLOSE || hit == GFX_TERM_HIT_MIN) {
-            print_string_serial(hit == GFX_TERM_HIT_CLOSE ? "gfx term button close\n" : "gfx term button minimize\n");
-            kbd_put_char((char)OS_TERM_KEY_CLOSE);
-        } else if (hit == GFX_TERM_HIT_MAX) {
-            uint16_t cells[GFX_TERM_COLS * GFX_TERM_ROWS];
-            g_term_max = !g_term_max;
-            print_string_serial(g_term_max ? "gfx term button maximize on\n" : "gfx term button maximize off\n");
-            vga_console_frame_copy(cells, 0, 0, 0);
-            cursor_hide();
-            term_compose(cells, 1);
-        } else if (hit == GFX_TERM_HIT_TITLE && !g_term_max) {
-            g_term_drag = 1;
-            g_term_grab_x = x - g_term_l.x;
-            g_term_grab_y = y - g_term_l.y;
-        }
-    } else if (!left && was && g_term_drag) {
-        gfx_term_layout_t c;
+    gfx_term_layout_at(g_w, g_h, 0, 0, 0, &c);
+    base.x = c.x; base.y = c.y; base.w = c.w; base.h = c.h;
+    placed.x = g_term_l.x; placed.y = g_term_l.y; placed.w = g_term_l.w; placed.h = g_term_l.h;
+    act = gfx_wm_mouse(&g_term_wm, placed, base, GFX_TERM_TITLE_H * g_term_l.scale, g_term_l.scale,
+                       x, y, left && !was, !left && was);
+    if (act == GFX_WM_ACT_CLOSE || act == GFX_WM_ACT_MINIMIZE) {
+        /* the console cannot be destroyed: both go back to the desktop.
+         * Minimize keeps the half typed line and marks the dock icon. */
+        g_term_minimized = act == GFX_WM_ACT_MINIMIZE;
+        g_term_wm.closed = g_term_wm.minimized = 0;
+        print_string_serial(act == GFX_WM_ACT_CLOSE ? "gfx term button close\n" : "gfx term button minimize\n");
+        kbd_put_char((char)(act == GFX_WM_ACT_CLOSE ? OS_TERM_KEY_CLOSE : OS_TERM_KEY_MIN));
+    } else if (act == GFX_WM_ACT_MAXIMIZE || act == GFX_WM_ACT_MOVED) {
         uint16_t cells[GFX_TERM_COLS * GFX_TERM_ROWS];
-        g_term_drag = 0;
-        gfx_term_layout_at(g_w, g_h, 0, 0, 0, &c);
-        g_term_dx = (x - g_term_grab_x) - c.x;
-        g_term_dy = (y - g_term_grab_y) - c.y;
-        print_string_serial("gfx term moved\n");
+        if (act == GFX_WM_ACT_MAXIMIZE)
+            print_string_serial(g_term_wm.maximized ? "gfx term button maximize on\n" : "gfx term button maximize off\n");
+        else
+            print_string_serial("gfx term moved\n");
         vga_console_frame_copy(cells, 0, 0, 0);
         cursor_hide();
         term_compose(cells, 1);
     }
 }
 
+int gfx_fb_term_minimized(void) { return g_term_minimized; }
+
 int gfx_fb_term_enter(void) {
     gfx_term_layout_t l;
     if (!g_on || !g_lfb || !g_font_saved) return -1;
     g_term = 1;
     g_term_full = 1;
-    g_term_drag = 0;
+    g_term_wm.drag = 0;
+    g_term_minimized = 0;
     term_layout_now(&l);
     print_string_serial("gfx term on fb ");
     serial_uint((unsigned)g_w); write_serial('x'); serial_uint((unsigned)g_h);
@@ -731,6 +756,8 @@ void gfx_fb_leave(void) {}
 int gfx_fb_term_enter(void) { return -1; }
 int gfx_fb_term_active(void) { return 0; }
 void gfx_fb_term_mouse(int x, int y, uint8_t buttons, uint8_t prev) { (void)x; (void)y; (void)buttons; (void)prev; }
+int gfx_fb_term_minimized(void) { return 0; }
+void gfx_fb_redraw_desktop(void) {}
 int gfx_fb_active(void) { return 0; }
 int gfx_fb_width(void) { return GFX_FB_WIDTH; }
 int gfx_fb_height(void) { return GFX_FB_HEIGHT; }

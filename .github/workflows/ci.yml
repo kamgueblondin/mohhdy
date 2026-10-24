@@ -413,6 +413,9 @@ jobs:
       - name: Phase 7 collaborative ledger (three guests)
         run: make qemu-collab
 
+      - name: QEMU GUI window manager (panes, chat, dock, terminal minimize, about 1 min)
+        run: make qemu-gui-windows
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

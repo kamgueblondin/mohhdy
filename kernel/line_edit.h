@@ -27,6 +27,7 @@ typedef struct {
     int hist_pos;              /* -1: editing the live line */
     char saved[LE_MAX];        /* live line while browsing history */
     int last_tab;
+    int no_hist;               /* do not record this line */
     const char *const *words;
     int nwords;
     const line_edit_io_t *io;
