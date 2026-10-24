@@ -20,6 +20,8 @@ INITRD = os.environ.get("MOHHDY_INITRD", os.path.join(ROOT, "my_initrd.tar"))
 DISK = os.environ.get("DISK_IMAGE", os.path.join(ROOT, "build", "overlay.img"))
 RAM = os.environ.get("GPT2_RAM", "1024M")
 SOCK = os.environ.get("MOHHDY_FIT_SOCK", "/tmp/mohhdy-qemu-fit.sock")
+# xdotool --name regex of the QEMU GTK window (run_gpt2.sh: "Mohhdy OS GPT-2")
+WIN_NAME = os.environ.get("MOHHDY_FIT_NAME", "QEMU|Mohhdy OS")
 MIN_W, MIN_H = 640, 400
 MAX_W, MAX_H = 1920, 1200
 
@@ -39,7 +41,7 @@ def clamp_size(width, height):
 def qemu_window_size():
     try:
         out = subprocess.check_output(
-            ["xdotool", "search", "--name", "QEMU"],
+            ["xdotool", "search", "--name", WIN_NAME],
             stderr=subprocess.DEVNULL,
         ).decode("ascii", "replace").strip()
     except (OSError, subprocess.CalledProcessError):
@@ -121,7 +123,27 @@ def fit_loop(stop):
             pass
 
 
+def watch_only():
+    """--watch: QEMU is started elsewhere (scripts/run_gpt2.sh) with
+    -serial unix:SOCK,server,nowait as COM2; follow its window until the
+    socket goes away for good."""
+    stop = threading.Event()
+    watcher = threading.Thread(target=fit_loop, args=(stop,))
+    watcher.daemon = True
+    watcher.start()
+    misses = 0
+    try:
+        while misses < 40:
+            time.sleep(0.5)
+            misses = 0 if os.path.exists(SOCK) else misses + 1
+    finally:
+        stop.set()
+    return 0
+
+
 def main():
+    if "--watch" in sys.argv[1:]:
+        return watch_only()
     os.environ.setdefault("DISPLAY", ":1")
     try:
         os.remove(SOCK)
