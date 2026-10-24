@@ -21,6 +21,7 @@ void shell_prod_count(const char* line);
 int shell_collab_line(const char* line);
 #include "shell_platform.h"
 #include "osui_gui.h"
+#include "osui_tools.h"
 #include "osui_ide.h"
 #include "fsops.h"
 #include "promptmessage.h"
@@ -7308,6 +7309,43 @@ static void shell_term_leave_if(const char *cmd) {
     print_string("osui gui exit chrome=text prompt=MOHHDY>\n");
 }
 
+/* UX4 desktop tool apps (osui_tools.c): the same command handlers as the
+ * terminal, output captured. Only allow-listed, non-interactive commands
+ * (osui_tool_cmd_allowed). */
+static int shell_app_run(const char *cmd, char *out, int max) {
+    static char line[160];
+    int i;
+    if (!cmd || !out || max <= 1 || g_cap_buf || !g_live_ctx || !osui_tool_cmd_allowed(cmd)) return -1;
+    for (i = 0; cmd[i] && i < (int)sizeof(line) - 1; i++) line[i] = cmd[i];
+    line[i] = 0;
+    g_cap_buf = out; g_cap_n = 0; g_cap_max = max;
+    handle_line(g_live_ctx, line);
+    out[g_cap_n] = 0;
+    i = g_cap_n;
+    g_cap_buf = 0;
+    return i;
+}
+
+/* One GPT-2 step for the chat window: GGUF streams piece by piece
+ * (generate, then continue); the FP32 checkpoint answers in one call. */
+static int shell_ai_step(const char *prompt, int first, char *piece, int max) {
+    const char *m = g_live_ctx ? ai_model_name(g_live_ctx) : "";
+    if (!strstr(m, "gpt2")) return -1;
+    if (strstr(m, ".gguf")) return first ? sys_gpt2_gguf_generate(prompt, piece, max) : sys_gpt2_gguf_continue(piece, max);
+    if (!first) return 0;
+    return sys_gpt2_generate(prompt, piece, max);
+}
+
+static const char *shell_ai_model(void) { return g_live_ctx ? ai_model_name(g_live_ctx) : ""; }
+
+static int shell_screen(int *w, int *h) {
+    int v = shell_vga_cmd(4U);
+    if (v <= 0) return -1;
+    *w = (v >> 16) & 0xFFFF;
+    *h = v & 0xFFFF;
+    return 0;
+}
+
 void handle_line(shell_context_t* ctx, char* input_buffer) {
     char command[128];
     char args[MAX_ARGS][128];
@@ -7350,6 +7388,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         shell_term_leave_if(input_buffer);
         if (osui_gui_should_enter()) {
             osui_gui_set_pane_source(&k_pane_src);
+            osui_gui_set_tool_ops(shell_app_run, shell_ai_step, shell_ai_model, shell_screen);
         osui_gui_set_fs_io(&shell_fs_io);
             osui_gui_run();
             shell_after_gui(ctx);
@@ -7392,6 +7431,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         shell_term_leave_if(input_buffer);
         if (osui_gui_should_enter()) {
             osui_gui_set_pane_source(&k_pane_src);
+            osui_gui_set_tool_ops(shell_app_run, shell_ai_step, shell_ai_model, shell_screen);
         osui_gui_set_fs_io(&shell_fs_io);
             osui_gui_run();
             shell_after_gui(ctx);

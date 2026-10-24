@@ -390,6 +390,13 @@ int osui_gui_edit_open(const char *file, char *out, int out_max) {
     return 0;
 }
 
+int osui_gui_tool_open(int kind, const char *arg, char *out, int out_max);
+
+static int is_image(const char *p) {
+    int n = slen(p);
+    return n > 4 && p[n - 4] == '.' && p[n - 3] == 'p' && (p[n - 2] == 'g' || p[n - 2] == 'p' || p[n - 2] == 'n') && p[n - 1] == 'm';
+}
+
 static void edit_action(int act, char *out, int out_max) {
     int len, rc;
     if (act == OSUI_IDE_QUIT) {
@@ -402,6 +409,14 @@ static void edit_action(int act, char *out, int out_max) {
         char p[FSOPS_PATH_MAX];
         scpy(p, (int)sizeof(p), g_edit.prompt_out);
         (void)osui_gui_edit_open(p, out, out_max);
+        return;
+    }
+    if (act == OSUI_IDE_RUN) {
+        /* ESC r: run the saved .pm file in the PromptMessage window */
+        char p[FSOPS_PATH_MAX];
+        if (g_edit.modified) { osui_ide_set_status(&g_edit, "enregistrez d'abord (ESC w), puis ESC r"); return; }
+        scpy(p, (int)sizeof(p), g_edit.file);
+        (void)osui_gui_tool_open(OS_FB_APP_PMRUN, p, out, out_max);
         return;
     }
     if (act != OSUI_IDE_SAVE && act != OSUI_IDE_SAVE_AS) return;
@@ -430,7 +445,11 @@ static void edit_action(int act, char *out, int out_max) {
 
 static void files_result(int r, const char *log_before, char *out, int out_max) {
     if (g_files.log[0] && scmp(g_files.log, log_before) != 0) app_out(out, out_max, g_files.log, 0);
-    if (r == OSUI_FILES_OPEN) (void)osui_gui_edit_open(g_files.open_path, out, out_max);
+    if (r == OSUI_FILES_OPEN) {
+        /* open with: PNM images in the viewer, everything else in the editor */
+        if (is_image(g_files.open_path)) (void)osui_gui_tool_open(OS_FB_APP_VIEW, g_files.open_path, out, out_max);
+        else (void)osui_gui_edit_open(g_files.open_path, out, out_max);
+    }
     else if (r == OSUI_FILES_CLOSE) {
         app_out(out, out_max, "osui files close", 0);
         g_files.active = 0;
@@ -474,6 +493,12 @@ static void edit_event(const char *p, char *out, int out_max) {
 
 static void files_key(int key, char *out, int out_max) {
     static char before[160];
+    if (key == 'v' && g_files.mode == OSUI_FILES_BROWSE) {
+        /* "open with" the viewer (text or image) */
+        char p[FSOPS_PATH_MAX];
+        if (osui_files_selected(&g_files, p, (int)sizeof(p))) (void)osui_gui_tool_open(OS_FB_APP_VIEW, p, out, out_max);
+        return;
+    }
     scpy(before, (int)sizeof(before), g_files.log);
     files_result(osui_files_key(&g_files, key), before, out, out_max);
 }
@@ -1158,6 +1183,11 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             g_input[0] = 0;
             return 0;
         }
+        if (tool_slash(g_input, out, out_max)) {
+            g_ilen = 0;
+            g_input[0] = 0;
+            return 0;
+        }
         if (sncmp(g_input, "/files", 6) == 0 && (g_input[6] == ' ' || g_input[6] == 0)) {
             const char *a = g_input + 6;
             while (*a == ' ') a++;
@@ -1272,6 +1302,12 @@ void osui_gui_run(void) {
         sys_vga_blit_scene(&scene);
         if (key != 0 || (g_idle++ % 8) == 0) emit_snap();
         if (stop) break;
+        if (key == 0 && osui_gui_idle(out, OSUI_OUT_MAX)) {
+            if (out[0]) serial_puts(out);
+            osui_gui_fill_scene(&scene);
+            sys_vga_blit_scene(&scene);
+            continue;
+        }
         if (key == 0) yield_gui();
     }
     osui_gui_closed();

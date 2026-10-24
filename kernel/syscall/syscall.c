@@ -2793,6 +2793,11 @@ void syscall_handler(cpu_state_t* cpu) {
                     cpu->eax = (uint32_t)gfx_fb_term_active();
                     break;
                 }
+                /* 4: framebuffer size (w << 16 | h), 0 without VBE */
+                if (cpu->ebx == 4U) {
+                    cpu->eax = gfx_fb_width() > 0 ? ((uint32_t)gfx_fb_width() << 16) | (uint32_t)gfx_fb_height() : 0U;
+                    break;
+                }
                 {
                     const os_fb_scene_t *scene = (const os_fb_scene_t *)cpu->ebx;
                     if (scene->magic == OS_FB_MAGIC) {

@@ -703,6 +703,108 @@ static void test_gui_apps_explorer_editor(void) {
     TEST_ASSERT_EQUAL(-1, osui_gui_focus());
 }
 
+/* UX4: tool apps in generic slots: several windows at once, open-with
+ * from the explorer, ESC r from the editor, chat streaming on idle ticks. */
+static char g_tcmds[512];
+static int tg_run(const char *cmd, char *out, int max) {
+    strcat(g_tcmds, cmd); strcat(g_tcmds, "|");
+    snprintf(out, (size_t)max, "%s ok\n", cmd);
+    return (int)strlen(out);
+}
+static int tg_steps;
+static int tg_ai(const char *prompt, int first, char *piece, int max) {
+    (void)prompt; (void)max;
+    if (first) tg_steps = 0;
+    if (tg_steps++ >= 2) return 0;
+    strcpy(piece, tg_steps == 1 ? "Bonjour" : " le monde, ceci est une reponse.");
+    return (int)strlen(piece);
+}
+static const char *tg_model(void) { return "gpt2.gguf"; }
+static void test_gui_tool_apps_slots(void) {
+    int i, guard = 0;
+    setup();
+    mfs_reset();
+    g_tcmds[0] = 0;
+    osui_gui_set_fs_io(&mfs_io);
+    osui_gui_set_tool_ops(tg_run, tg_ai, tg_model, 0);
+    feed_str("/files /home");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    evt("focus d");
+    feed_str("/tasks");
+    g_out[0] = 0;
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui tool open app=Gestionnaire des taches"));
+    TEST_ASSERT(strstr(g_tcmds, "ps|mem|") != 0);
+    TEST_ASSERT_EQUAL(1, osui_gui_focus());
+    evt("focus d");
+    feed_str("/settings");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    evt("focus d");
+    feed_str("/peers");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    evt("focus d");
+    feed_str("/chat");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_APP_FILES, g_scene.app[0].kind);
+    TEST_ASSERT_EQUAL(OS_FB_APP_TASKS, g_scene.app[1].kind);
+    TEST_ASSERT_EQUAL(OS_FB_APP_SETTINGS, g_scene.app[2].kind);
+    TEST_ASSERT_EQUAL(OS_FB_APP_P2P, g_scene.app[3].kind);
+    TEST_ASSERT_EQUAL(OS_FB_APP_CHAT, g_scene.app[4].kind);
+    TEST_ASSERT_EQUAL(4, g_scene.app_focus);
+    TEST_ASSERT_NOT_NULL(strstr(g_scene.app[1].tool, "[Tuer]"));
+    /* chat: typed into the focused window, streamed on idle ticks */
+    feed_str("Salut");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    g_out[0] = 0;
+    TEST_ASSERT_EQUAL(1, osui_gui_idle(g_out, (int)sizeof(g_out)));
+    osui_gui_fill_scene(&g_scene);
+    {
+        int found = 0;
+        for (i = 0; i < OS_FB_APP_ROWS; i++) if (strstr(g_scene.app[4].rows[i], "IA: Bonjour")) found = 1;
+        TEST_ASSERT(found);
+    }
+    while (guard++ < 5 && !strstr(g_out, "osui chat reply=")) osui_gui_idle(g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui chat reply=IA: Bonjour le monde"));
+    /* a sixth app fits, a seventh is refused */
+    evt("focus d");
+    feed_str("/view /home/notes.txt");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_APP_VIEW, g_scene.app[5].kind);
+    TEST_ASSERT_NOT_NULL(strstr(g_scene.app[5].rows[0], "ligne 1"));
+    evt("focus d");
+    feed_str("/pmrun /home/a.pm");
+    g_out[0] = 0;
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui app error=no_slot"));
+    /* close the viewer and the chat by their window events */
+    evt("app 5 close");
+    evt("app 4 close");
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(0, g_scene.app[5].kind);
+    TEST_ASSERT_EQUAL(0, g_scene.app[4].kind);
+    /* explorer "open with": v opens the selected file in the viewer */
+    evt("focus 0");
+    osui_gui_feed_key(31, g_out, (int)sizeof(g_out));   /* down to notes.txt */
+    g_out[0] = 0;
+    osui_gui_feed_key('v', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui tool open app=Visionneuse"));
+    /* editor ESC r runs the saved file in the PromptMessage window */
+    evt("app 4 close");
+    evt("focus d");
+    feed_str("/edit /home/notes.txt");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    osui_gui_feed_key(27, g_out, (int)sizeof(g_out));
+    g_tcmds[0] = 0;
+    g_out[0] = 0;
+    osui_gui_feed_key('r', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui tool open app=PromptMessage"));
+    TEST_ASSERT(strstr(g_tcmds, "pm-run /home/notes.txt|") != 0);
+    for (i = 0; i < OS_FB_APPS; i++) { char e[24]; snprintf(e, sizeof(e), "app %d close", i); evt(e); evt(e); }
+    osui_gui_set_tool_ops(0, 0, 0, 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_lot12_vfs_and_browser_inspection_views);
@@ -726,6 +828,7 @@ int main(void) {
     RUN_TEST(test_gui_mobile_pane);
     RUN_TEST(test_gui_live_panes);
     RUN_TEST(test_gui_apps_explorer_editor);
+    RUN_TEST(test_gui_tool_apps_slots);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -482,6 +482,7 @@ typedef struct {
 #define OS_FB_APP_SETTINGS 5
 #define OS_FB_APP_P2P 6
 #define OS_FB_APP_PMRUN 7
+#define OS_FB_APP_CHAT 8
 #define OS_FB_APP_ROWS 22
 #define OS_FB_APP_COLS 78
 typedef struct {

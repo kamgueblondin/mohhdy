@@ -731,6 +731,7 @@ static int plain_key(osui_ide_t *ide, int key) {
         case 'm': return osui_ide_tool(ide, OSUI_IDE_T_MARK);
         case 'q': return quit_request(ide);
         case 'Q': return OSUI_IDE_QUIT;
+        case 'r': return OSUI_IDE_RUN;    /* desktop: run the .pm file (PromptMessage window) */
         default: osui_ide_set_status(ide, "commande annulee"); return OSUI_IDE_NONE;
         }
     }
