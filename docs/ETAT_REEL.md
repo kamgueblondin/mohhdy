@@ -1102,3 +1102,41 @@ Remaining (not fixed): chat window has no close button; pane traffic
 lights all close the pane (no min/max); pane content is sparse; menu bar
 has no active state; terminal grid fixed at 80x25 (no VBE resize while
 shown); no history recall or Tab completion in the console.
+
+## Desktop apps: file explorer and text editor (PR #198, UX3)
+
+What exists, tested by unit tests and `make qemu-gui-apps` (CI, collab job):
+
+- One file library, `userspace/fsops.c`: the shell commands mkdir, rmdir,
+  rm, cp, mv, touch and the desktop apps call the same functions (the old
+  256-byte cp limit is gone). Read-only initrd paths report
+  "protege (initrd)"; errors are shown in the app status line.
+- File explorer (`/files`, Fichiers dock icon / menu / desktop icon):
+  breadcrumbs, browse, open, new file, new folder, rename, delete with
+  confirmation, copy, move, info, keyboard navigation, toolbar clicks,
+  double click opens. The old FS pane stays on `/fs`.
+- Text editor (`/edit FILE`, or Enter / double click in the explorer):
+  plain-text mode of the pm-ide core (`userspace/osui_ide.c`): open, save,
+  save as, selection, cut/copy/paste, undo/redo, find, line numbers, dirty
+  marker, asks once before closing unsaved text. The QEMU test saves a
+  file in the editor and reads the same bytes with `cat` in the terminal.
+- Windows: one info pane, the chat, the explorer and the editor, with a
+  kernel z-order, click-to-front and keyboard focus. Not arbitrary windows.
+- Dock: 8 drawn pictograms with a name tooltip on hover.
+- Status strip and chat: user-facing engine name ("GPT-2 local", "echo
+  (sans modele)"); chat messages wrap; the floating chat no longer covers
+  the Scene IA card.
+- P2P / Collab / Prod / Support windows show the captured output of a real
+  shell command run when the window opens (p2p-stats, collab-balances,
+  prod-metrics, prod-diag). Browser-OS lists the local /web pages; showing
+  one still goes through `web-render /web/<page>`.
+- Admin: the vfs server is shown as "a la demande" (it is transient,
+  started by the FAT commands), not as absent.
+- Terminal: mouse drag selects and copies, right click pastes (newlines
+  become spaces, so a paste never runs a command).
+- `make run-gpt2` (GTK): a COM2 socket and `scripts/qemu_gui_fit.py --watch`
+  make the desktop follow a window resize (needs xdotool and xwininfo).
+
+Limits: the editor holds 96 lines of 72 columns, the app grid is a fixed
+22 rows, two app slots, clipboard of 512 bytes, the Browser pane does not
+embed the page itself.
