@@ -76,7 +76,7 @@ void initrd_init(uint32_t location, uint32_t size) {
     
     print_string_serial("Parsing initrd TAR archive...\n");
     
-    while (current_pos < location + size && file_index < 64) {
+    while (current_pos < location + size && file_index < INITRD_FILE_MAX) {
         tar_header_t* header = (tar_header_t*)current_pos;
         
         // Vérifie si on a atteint la fin (deux blocs de zéros)

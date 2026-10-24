@@ -9,6 +9,7 @@ import sys
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 src = open(os.path.join(ROOT, "fs", "initrd.c")).read()
 cap = int(re.search(r"#define INITRD_FILE_MAX (\d+)U", src).group(1))
+assert re.search(r"file_index < INITRD_FILE_MAX", src), "parser loop must use INITRD_FILE_MAX"
 n = 0
 for base, dirs, files in os.walk(os.path.join(ROOT, "initrd_content")):
     n += len(dirs) + len(files)
