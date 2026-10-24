@@ -750,4 +750,37 @@ void webrt_webgpu_async_engine_init(webrt_webgpu_async_engine_t *engine);
 int webrt_webgpu_async_compile_jit(webrt_webgpu_async_engine_t *engine, uint32_t shader_id, uint32_t wg_x, uint32_t wg_y, uint32_t wg_z);
 int webrt_webgpu_async_dispatch_barrier(webrt_webgpu_async_engine_t *engine, uint32_t shader_id, uint32_t grid_x, uint32_t grid_y, uint32_t grid_z);
 
+/* Lot 43: Web Runtime WASM SIMD MoE Sparse Router & WebGPU Multi-Pipeline Async Compute Engine (US-065 / US-090) */
+#define WEBRT_MOE_EXPERTS_MAX 8
+#define WEBRT_WEBGPU_PIPELINES_MAX 8
+
+typedef struct {
+    uint32_t num_experts;
+    uint32_t top_k;
+    uint32_t expert_weights_q16[WEBRT_MOE_EXPERTS_MAX];
+    uint32_t total_tokens_routed;
+} webrt_moe_router_t;
+
+typedef struct {
+    uint32_t pipeline_id;
+    uint32_t shader_id;
+    uint32_t bind_group_id;
+    uint8_t compiled;
+    uint32_t total_parallel_dispatches;
+} webrt_webgpu_multi_pipe_t;
+
+typedef struct {
+    webrt_webgpu_multi_pipe_t pipelines[WEBRT_WEBGPU_PIPELINES_MAX];
+    int pipeline_count;
+    uint32_t barrier_count;
+    uint32_t total_parallel_executions;
+} webrt_webgpu_multi_pipeline_t;
+
+void webrt_moe_router_init(webrt_moe_router_t *router, uint32_t num_experts, uint32_t top_k);
+int webrt_moe_route_tokens(webrt_moe_router_t *router, const int32_t *inputs_q16, uint32_t token_count, uint32_t *out_expert_indices, int32_t *out_gating_weights);
+
+void webrt_webgpu_multi_pipeline_init(webrt_webgpu_multi_pipeline_t *mp);
+int webrt_webgpu_multi_pipeline_create(webrt_webgpu_multi_pipeline_t *mp, uint32_t pipeline_id, uint32_t shader_id, uint32_t bind_group_id);
+int webrt_webgpu_multi_pipeline_dispatch_parallel(webrt_webgpu_multi_pipeline_t *mp, const uint32_t *pipeline_ids, uint32_t count, int *out_executed_count);
+
 #endif

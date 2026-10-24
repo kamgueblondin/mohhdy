@@ -628,4 +628,52 @@ void vfs_qos_isolator_init(vfs_qos_isolator_t *qos);
 int vfs_qos_register_tenant(vfs_qos_isolator_t *qos, uint32_t tenant_id, uint32_t iops_limit, uint32_t bw_limit_kbps, uint32_t latency_us);
 int vfs_qos_consume_tokens(vfs_qos_isolator_t *qos, uint32_t tenant_id, uint32_t iops_req, uint32_t bw_req_kb, int *out_allowed);
 
+/* Lot 43: VFS PCIe NVMe-over-Fabrics (NVMe-oF) & Multi-Tenant Resource Allocator Engine (US-015 / US-048) */
+#define VFS_NVMF_MAX_TARGETS 8
+#define VFS_RES_ALLOC_MAX_TENANTS 8
+
+typedef struct {
+    uint32_t target_id;
+    uint32_t transport_type; /* 0=RDMA, 1=TCP */
+    uint32_t sq_head;
+    uint32_t sq_tail;
+    uint32_t cq_head;
+    uint32_t cq_tail;
+    uint32_t cmds_submitted;
+    uint32_t cmds_completed;
+    uint8_t active;
+} vfs_nvmf_target_t;
+
+typedef struct {
+    vfs_nvmf_target_t targets[VFS_NVMF_MAX_TARGETS];
+    int target_count;
+    uint32_t total_fabric_ops;
+} vfs_nvmf_engine_t;
+
+typedef struct {
+    uint32_t tenant_id;
+    uint32_t io_quota_max;
+    uint32_t io_quota_used;
+    uint32_t bw_max_kbps;
+    uint32_t bw_current_kbps;
+    uint32_t latency_guarantee_us;
+    uint32_t total_allocated_io;
+    uint8_t active;
+} vfs_res_tenant_t;
+
+typedef struct {
+    vfs_res_tenant_t tenants[VFS_RES_ALLOC_MAX_TENANTS];
+    int tenant_count;
+    uint32_t total_allocations;
+} vfs_res_allocator_t;
+
+void vfs_nvmf_engine_init(vfs_nvmf_engine_t *engine);
+int vfs_nvmf_register_target(vfs_nvmf_engine_t *engine, uint32_t target_id, uint32_t transport_type);
+int vfs_nvmf_submit_sq(vfs_nvmf_engine_t *engine, uint32_t target_id, uint32_t cmd_id);
+int vfs_nvmf_process_cq(vfs_nvmf_engine_t *engine, uint32_t target_id, int *out_completed_count);
+
+void vfs_res_allocator_init(vfs_res_allocator_t *alloc);
+int vfs_res_allocator_register_tenant(vfs_res_allocator_t *alloc, uint32_t tenant_id, uint32_t io_quota, uint32_t bw_kbps, uint32_t latency_us);
+int vfs_res_allocator_allocate_io(vfs_res_allocator_t *alloc, uint32_t tenant_id, uint32_t requested_io, uint32_t requested_bw, int *out_granted);
+
 #endif

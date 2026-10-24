@@ -816,4 +816,51 @@ void prod_thermal_power_scheduler_init(prod_thermal_power_scheduler_t *sched, ui
 int prod_thermal_power_scheduler_bind(prod_thermal_power_scheduler_t *sched, uint32_t thread_id, uint32_t core_id, uint32_t affinity_mask);
 int prod_thermal_power_scheduler_tick(prod_thermal_power_scheduler_t *sched, uint32_t current_temp_celsius, uint32_t *out_scaled_freq_pct);
 
+/* Lot 43: Production Daemon Autonomous AI Workload Rebalancer Engine & Predictive Power/Thermal Core Affinity Scheduler (US-126 / US-135) */
+#define PROD_AI_NODES_MAX 8
+#define PROD_POWER_THREADS_MAX 16
+
+typedef struct {
+    uint32_t node_id;
+    uint32_t region_id;
+    uint32_t cpu_load_pct;
+    uint32_t mem_load_pct;
+    uint8_t overloaded;
+    uint8_t isolated;
+    uint8_t active;
+} prod_ai_node_load_t;
+
+typedef struct {
+    prod_ai_node_load_t nodes[PROD_AI_NODES_MAX];
+    int node_count;
+    uint32_t rebalance_events;
+    uint32_t total_migrations;
+} prod_ai_rebalancer_t;
+
+typedef struct {
+    uint32_t thread_id;
+    uint32_t current_core;
+    uint32_t affinity_mask;
+    uint32_t power_budget_mw;
+    uint8_t active;
+} prod_power_thread_t;
+
+typedef struct {
+    prod_power_thread_t threads[PROD_POWER_THREADS_MAX];
+    int thread_count;
+    uint32_t num_cores;
+    uint32_t target_freq_pct;
+    uint32_t temperature_celsius;
+    uint8_t throttling_active;
+    uint32_t total_affinity_rebinds;
+} prod_predictive_power_sched_t;
+
+void prod_ai_rebalancer_init(prod_ai_rebalancer_t *reb);
+int prod_ai_rebalancer_record_node_load(prod_ai_rebalancer_t *reb, uint32_t node_id, uint32_t region_id, uint32_t cpu_pct, uint32_t mem_pct);
+int prod_ai_rebalancer_rebalance_and_isolate(prod_ai_rebalancer_t *reb, int *out_migrated_count, int *out_isolated_count);
+
+void prod_predictive_power_sched_init(prod_predictive_power_sched_t *sched, uint32_t num_cores);
+int prod_predictive_power_sched_bind_affinity(prod_predictive_power_sched_t *sched, uint32_t thread_id, uint32_t initial_core, uint32_t mask);
+int prod_predictive_power_sched_tick(prod_predictive_power_sched_t *sched, uint32_t temp_celsius, uint32_t *out_target_freq_pct);
+
 #endif

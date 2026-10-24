@@ -1616,6 +1616,126 @@ int prod_audit_diagnostic_report(const prod_quarantine_mgr_t *q_mgr, const prod_
     return (int)s_len(out_report);
 }
 
+/* Lot 43: Production Daemon Autonomous AI Workload Rebalancer Engine & Predictive Power/Thermal Core Affinity Scheduler (US-126 / US-135) */
+void prod_ai_rebalancer_init(prod_ai_rebalancer_t *reb) {
+    if (!reb) return;
+    reb->node_count = 0;
+    reb->rebalance_events = 0;
+    reb->total_migrations = 0;
+    for (int i = 0; i < PROD_AI_NODES_MAX; i++) {
+        reb->nodes[i].node_id = 0;
+        reb->nodes[i].region_id = 0;
+        reb->nodes[i].cpu_load_pct = 0;
+        reb->nodes[i].mem_load_pct = 0;
+        reb->nodes[i].overloaded = 0;
+        reb->nodes[i].isolated = 0;
+        reb->nodes[i].active = 0;
+    }
+}
+
+int prod_ai_rebalancer_record_node_load(prod_ai_rebalancer_t *reb, uint32_t node_id, uint32_t region_id, uint32_t cpu_pct, uint32_t mem_pct) {
+    if (!reb) return -1;
+    for (int i = 0; i < reb->node_count; i++) {
+        if (reb->nodes[i].active && reb->nodes[i].node_id == node_id) {
+            reb->nodes[i].cpu_load_pct = cpu_pct;
+            reb->nodes[i].mem_load_pct = mem_pct;
+            reb->nodes[i].overloaded = (cpu_pct > 85 || mem_pct > 85) ? 1 : 0;
+            return 0;
+        }
+    }
+    if (reb->node_count >= PROD_AI_NODES_MAX) return -1;
+    int slot = reb->node_count;
+    reb->nodes[slot].node_id = node_id;
+    reb->nodes[slot].region_id = region_id;
+    reb->nodes[slot].cpu_load_pct = cpu_pct;
+    reb->nodes[slot].mem_load_pct = mem_pct;
+    reb->nodes[slot].overloaded = (cpu_pct > 85 || mem_pct > 85) ? 1 : 0;
+    reb->nodes[slot].isolated = 0;
+    reb->nodes[slot].active = 1;
+    reb->node_count++;
+    return 0;
+}
+
+int prod_ai_rebalancer_rebalance_and_isolate(prod_ai_rebalancer_t *reb, int *out_migrated_count, int *out_isolated_count) {
+    if (!reb) return -1;
+    int migrated = 0;
+    int isolated = 0;
+    for (int i = 0; i < reb->node_count; i++) {
+        if (reb->nodes[i].active && reb->nodes[i].overloaded) {
+            if (reb->nodes[i].cpu_load_pct > 95) {
+                reb->nodes[i].isolated = 1;
+                isolated++;
+            } else {
+                reb->nodes[i].cpu_load_pct -= 20;
+                if (reb->nodes[i].cpu_load_pct <= 85) {
+                    reb->nodes[i].overloaded = 0;
+                }
+                migrated++;
+            }
+        }
+    }
+    reb->rebalance_events++;
+    reb->total_migrations += migrated;
+    if (out_migrated_count) *out_migrated_count = migrated;
+    if (out_isolated_count) *out_isolated_count = isolated;
+    return 0;
+}
+
+void prod_predictive_power_sched_init(prod_predictive_power_sched_t *sched, uint32_t num_cores) {
+    if (!sched) return;
+    sched->thread_count = 0;
+    sched->num_cores = num_cores ? num_cores : 1;
+    sched->target_freq_pct = 100;
+    sched->temperature_celsius = 45;
+    sched->throttling_active = 0;
+    sched->total_affinity_rebinds = 0;
+    for (int i = 0; i < PROD_POWER_THREADS_MAX; i++) {
+        sched->threads[i].thread_id = 0;
+        sched->threads[i].current_core = 0;
+        sched->threads[i].affinity_mask = 0;
+        sched->threads[i].power_budget_mw = 0;
+        sched->threads[i].active = 0;
+    }
+}
+
+int prod_predictive_power_sched_bind_affinity(prod_predictive_power_sched_t *sched, uint32_t thread_id, uint32_t initial_core, uint32_t mask) {
+    if (!sched) return -1;
+    for (int i = 0; i < sched->thread_count; i++) {
+        if (sched->threads[i].active && sched->threads[i].thread_id == thread_id) {
+            sched->threads[i].current_core = initial_core % sched->num_cores;
+            sched->threads[i].affinity_mask = mask;
+            sched->total_affinity_rebinds++;
+            return 0;
+        }
+    }
+    if (sched->thread_count >= PROD_POWER_THREADS_MAX) return -1;
+    int slot = sched->thread_count;
+    sched->threads[slot].thread_id = thread_id;
+    sched->threads[slot].current_core = initial_core % sched->num_cores;
+    sched->threads[slot].affinity_mask = mask;
+    sched->threads[slot].power_budget_mw = 5000;
+    sched->threads[slot].active = 1;
+    sched->thread_count++;
+    return 0;
+}
+
+int prod_predictive_power_sched_tick(prod_predictive_power_sched_t *sched, uint32_t temp_celsius, uint32_t *out_target_freq_pct) {
+    if (!sched) return -1;
+    sched->temperature_celsius = temp_celsius;
+    if (temp_celsius > 85) {
+        sched->target_freq_pct = 50;
+        sched->throttling_active = 1;
+    } else if (temp_celsius > 70) {
+        sched->target_freq_pct = 75;
+        sched->throttling_active = 1;
+    } else {
+        sched->target_freq_pct = 100;
+        sched->throttling_active = 0;
+    }
+    if (out_target_freq_pct) *out_target_freq_pct = sched->target_freq_pct;
+    return 0;
+}
+
 /* Lot 41: Production Daemon Multi-Region Autonomous Chaos Resilience Engine & Predictive Core Scheduler Engine */
 
 void prod_chaos_resilience_init(prod_chaos_resilience_t *res, uint32_t threshold) {

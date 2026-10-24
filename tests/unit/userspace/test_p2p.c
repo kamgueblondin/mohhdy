@@ -1474,6 +1474,32 @@ static void test_lot33_p2p_geo_consensus_bulletproof(void) {
     TEST_ASSERT_EQUAL(1, valid);
 }
 
+static void test_lot43_p2p_bft_anti_entropy_and_zk_stark_batch(void) {
+    p2p_bft_anti_entropy_engine_t ae;
+    p2p_bft_anti_entropy_init(&ae);
+    TEST_ASSERT_EQUAL(0, ae.node_count);
+
+    TEST_ASSERT_EQUAL(0, p2p_bft_anti_entropy_add_node(&ae, 1, 10, 1, 15));
+    TEST_ASSERT_EQUAL(0, p2p_bft_anti_entropy_add_node(&ae, 2, 10, 2, 20));
+    TEST_ASSERT_EQUAL(2, ae.node_count);
+
+    int reconciled = 0;
+    TEST_ASSERT_EQUAL(0, p2p_bft_anti_entropy_reconcile(&ae, &reconciled));
+    TEST_ASSERT_EQUAL(1, reconciled);
+
+    p2p_zk_stark_batch_aggregator_t agg;
+    p2p_zk_stark_batch_init(&agg);
+    TEST_ASSERT_EQUAL(0, agg.proof_count);
+
+    uint8_t proof_data[64] = {1, 2, 3, 4};
+    TEST_ASSERT_EQUAL(0, p2p_zk_stark_batch_add_proof(&agg, 1, 16, proof_data, 4));
+    TEST_ASSERT_EQUAL(1, agg.proof_count);
+
+    int valid_count = 0;
+    TEST_ASSERT_EQUAL(0, p2p_zk_stark_batch_verify_all(&agg, &valid_count));
+    TEST_ASSERT_EQUAL(1, valid_count);
+}
+
 static void test_lot35_p2p_cross_wan_raft_bulletproof_ip(void) {
     /* 1. Cross-WAN Resilient Raft Group Sharding */
     p2p_cross_wan_raft_shard_mgr_t mgr;
@@ -1612,6 +1638,7 @@ int main(void) {
     RUN_TEST(test_lot40_geo_sharding_and_zk_stark);
     RUN_TEST(test_lot41_p2p_cross_wan_mesh_and_zk_aggregator);
     RUN_TEST(test_lot42_p2p_bft_mesh_and_zk_bulletproofs_batch);
+    RUN_TEST(test_lot43_p2p_bft_anti_entropy_and_zk_stark_batch);
 
     unity_print_results();
     unity_cleanup();

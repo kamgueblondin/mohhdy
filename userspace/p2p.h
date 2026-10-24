@@ -870,4 +870,46 @@ void p2p_zk_bulletproof_batch_aggregator_init(p2p_zk_bulletproof_batch_aggregato
 int p2p_zk_bulletproof_batch_add_proof(p2p_zk_bulletproof_batch_aggregator_t *agg, uint32_t proof_id, const uint8_t *proof_bytes, uint32_t commit_val);
 int p2p_zk_bulletproof_batch_verify_all(p2p_zk_bulletproof_batch_aggregator_t *agg, int *out_valid_count);
 
+/* Lot 43: P2P Mesh Network Cross-WAN Geo-Distributed Post-Quantum ZK-STARK Batch Aggregator & BFT Anti-Entropy Engine (US-078 / US-090) */
+#define P2P_BFT_AE_NODES_MAX 8
+#define P2P_ZK_STARK_BATCH_PROOFS_MAX 8
+
+typedef struct {
+    uint32_t node_id;
+    uint32_t wan_region_id;
+    uint32_t state_version;
+    uint32_t ewma_latency_ms;
+    uint8_t byzantine_fault;
+    uint8_t active;
+} p2p_bft_ae_node_t;
+
+typedef struct {
+    p2p_bft_ae_node_t nodes[P2P_BFT_AE_NODES_MAX];
+    int node_count;
+    uint32_t consensus_state_version;
+    uint32_t total_reconciliations;
+} p2p_bft_anti_entropy_engine_t;
+
+typedef struct {
+    uint32_t proof_id;
+    uint32_t fri_queries_count;
+    uint8_t proof_data[64];
+    uint8_t verified;
+} p2p_zk_stark_batch_entry_t;
+
+typedef struct {
+    p2p_zk_stark_batch_entry_t proofs[P2P_ZK_STARK_BATCH_PROOFS_MAX];
+    int proof_count;
+    uint32_t total_batch_verifications;
+    uint32_t total_valid_stark_proofs;
+} p2p_zk_stark_batch_aggregator_t;
+
+void p2p_bft_anti_entropy_init(p2p_bft_anti_entropy_engine_t *engine);
+int p2p_bft_anti_entropy_add_node(p2p_bft_anti_entropy_engine_t *engine, uint32_t node_id, uint32_t wan_region_id, uint32_t version, uint32_t latency_ms);
+int p2p_bft_anti_entropy_reconcile(p2p_bft_anti_entropy_engine_t *engine, int *out_reconciled_nodes);
+
+void p2p_zk_stark_batch_init(p2p_zk_stark_batch_aggregator_t *agg);
+int p2p_zk_stark_batch_add_proof(p2p_zk_stark_batch_aggregator_t *agg, uint32_t proof_id, uint32_t fri_queries, const uint8_t *data, uint32_t data_len);
+int p2p_zk_stark_batch_verify_all(p2p_zk_stark_batch_aggregator_t *agg, int *out_valid_count);
+
 #endif

@@ -825,6 +825,133 @@ int vfs_atomic_swap(const char *path_a, const char *path_b) {
     return RAMFS_OK;
 }
 
+/* Lot 43: VFS PCIe NVMe-over-Fabrics (NVMe-oF) & Multi-Tenant Resource Allocator Engine (US-015 / US-048) */
+void vfs_nvmf_engine_init(vfs_nvmf_engine_t *engine) {
+    if (!engine) return;
+    engine->target_count = 0;
+    engine->total_fabric_ops = 0;
+    for (int i = 0; i < VFS_NVMF_MAX_TARGETS; i++) {
+        engine->targets[i].target_id = 0;
+        engine->targets[i].transport_type = 0;
+        engine->targets[i].sq_head = 0;
+        engine->targets[i].sq_tail = 0;
+        engine->targets[i].cq_head = 0;
+        engine->targets[i].cq_tail = 0;
+        engine->targets[i].cmds_submitted = 0;
+        engine->targets[i].cmds_completed = 0;
+        engine->targets[i].active = 0;
+    }
+}
+
+int vfs_nvmf_register_target(vfs_nvmf_engine_t *engine, uint32_t target_id, uint32_t transport_type) {
+    if (!engine || engine->target_count >= VFS_NVMF_MAX_TARGETS) return -1;
+    for (int i = 0; i < engine->target_count; i++) {
+        if (engine->targets[i].active && engine->targets[i].target_id == target_id) {
+            return -1; /* Duplicate target ID */
+        }
+    }
+    int slot = engine->target_count;
+    engine->targets[slot].target_id = target_id;
+    engine->targets[slot].transport_type = transport_type;
+    engine->targets[slot].sq_head = 0;
+    engine->targets[slot].sq_tail = 0;
+    engine->targets[slot].cq_head = 0;
+    engine->targets[slot].cq_tail = 0;
+    engine->targets[slot].cmds_submitted = 0;
+    engine->targets[slot].cmds_completed = 0;
+    engine->targets[slot].active = 1;
+    engine->target_count++;
+    return 0;
+}
+
+int vfs_nvmf_submit_sq(vfs_nvmf_engine_t *engine, uint32_t target_id, uint32_t cmd_id) {
+    if (!engine) return -1;
+    (void)cmd_id;
+    for (int i = 0; i < engine->target_count; i++) {
+        if (engine->targets[i].active && engine->targets[i].target_id == target_id) {
+            engine->targets[i].sq_tail++;
+            engine->targets[i].cmds_submitted++;
+            engine->total_fabric_ops++;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int vfs_nvmf_process_cq(vfs_nvmf_engine_t *engine, uint32_t target_id, int *out_completed_count) {
+    if (!engine) return -1;
+    for (int i = 0; i < engine->target_count; i++) {
+        if (engine->targets[i].active && engine->targets[i].target_id == target_id) {
+            uint32_t pending = engine->targets[i].cmds_submitted - engine->targets[i].cmds_completed;
+            engine->targets[i].cmds_completed += pending;
+            engine->targets[i].cq_tail += pending;
+            engine->targets[i].sq_head += pending;
+            engine->targets[i].cq_head += pending;
+            if (out_completed_count) *out_completed_count = (int)pending;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+void vfs_res_allocator_init(vfs_res_allocator_t *alloc) {
+    if (!alloc) return;
+    alloc->tenant_count = 0;
+    alloc->total_allocations = 0;
+    for (int i = 0; i < VFS_RES_ALLOC_MAX_TENANTS; i++) {
+        alloc->tenants[i].tenant_id = 0;
+        alloc->tenants[i].io_quota_max = 0;
+        alloc->tenants[i].io_quota_used = 0;
+        alloc->tenants[i].bw_max_kbps = 0;
+        alloc->tenants[i].bw_current_kbps = 0;
+        alloc->tenants[i].latency_guarantee_us = 0;
+        alloc->tenants[i].total_allocated_io = 0;
+        alloc->tenants[i].active = 0;
+    }
+}
+
+int vfs_res_allocator_register_tenant(vfs_res_allocator_t *alloc, uint32_t tenant_id, uint32_t io_quota, uint32_t bw_kbps, uint32_t latency_us) {
+    if (!alloc || alloc->tenant_count >= VFS_RES_ALLOC_MAX_TENANTS) return -1;
+    for (int i = 0; i < alloc->tenant_count; i++) {
+        if (alloc->tenants[i].active && alloc->tenants[i].tenant_id == tenant_id) {
+            return -1; /* Duplicate tenant */
+        }
+    }
+    int slot = alloc->tenant_count;
+    alloc->tenants[slot].tenant_id = tenant_id;
+    alloc->tenants[slot].io_quota_max = io_quota;
+    alloc->tenants[slot].io_quota_used = 0;
+    alloc->tenants[slot].bw_max_kbps = bw_kbps;
+    alloc->tenants[slot].bw_current_kbps = 0;
+    alloc->tenants[slot].latency_guarantee_us = latency_us;
+    alloc->tenants[slot].total_allocated_io = 0;
+    alloc->tenants[slot].active = 1;
+    alloc->tenant_count++;
+    return 0;
+}
+
+int vfs_res_allocator_allocate_io(vfs_res_allocator_t *alloc, uint32_t tenant_id, uint32_t requested_io, uint32_t requested_bw, int *out_granted) {
+    if (!alloc || !out_granted) return -1;
+    *out_granted = 0;
+    for (int i = 0; i < alloc->tenant_count; i++) {
+        if (alloc->tenants[i].active && alloc->tenants[i].tenant_id == tenant_id) {
+            vfs_res_tenant_t *t = &alloc->tenants[i];
+            if (t->io_quota_used + requested_io <= t->io_quota_max &&
+                t->bw_current_kbps + requested_bw <= t->bw_max_kbps) {
+                t->io_quota_used += requested_io;
+                t->bw_current_kbps += requested_bw;
+                t->total_allocated_io += requested_io;
+                alloc->total_allocations++;
+                *out_granted = 1;
+            } else {
+                *out_granted = 0;
+            }
+            return 0;
+        }
+    }
+    return -1;
+}
+
 /* Lot 41: VFS PCIe NVMe Host Memory Buffer (HMB) & Dynamic Zone Allocation Engine */
 
 void vfs_nvme_hmb_init(vfs_nvme_hmb_engine_t *hmb, uint32_t total_pages, uint32_t page_size_bytes) {
