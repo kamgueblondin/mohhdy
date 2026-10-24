@@ -4441,6 +4441,20 @@ static void sys_gets_cooperative(char* buffer, uint32_t size, cpu_state_t* cpu) 
             }
             continue;
         }
+        if (c == (char)OS_TERM_KEY_CLOSE) {
+            /* close/minimize button of the VBE terminal window: drop the
+             * typed text and answer the line "gui" (back to the desktop) */
+            const char *g = "gui";
+            while (i > 0) {
+                i--;
+                print_char('\b', -1, -1, 0x0F);
+                print_char(' ', -1, -1, 0x0F);
+                print_char('\b', -1, -1, 0x0F);
+            }
+            if (!gfx_fb_term_active()) continue;
+            while (*g && i < size - 1) { buffer[i++] = *g; print_char(*g, -1, -1, 0x0F); g++; }
+            c = '\n';
+        }
         if (c == '\r' || c == '\n') {
             print_char('\n', -1, -1, 0x0F);
             buffer[i] = '\0';

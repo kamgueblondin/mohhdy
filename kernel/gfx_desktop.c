@@ -112,6 +112,7 @@ void gfx_desktop_set_mouse(int x, int y, uint8_t buttons) {
     if (vga_desktop_active() && !left_prev && left_now) {
         gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
     }
+    if (gfx_fb_term_active()) gfx_fb_term_mouse(g_mouse_x, g_mouse_y, buttons, g_prev_buttons);
     g_prev_buttons = buttons;
 
     gfx_fb_update_cursor();
@@ -141,6 +142,7 @@ void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons) {
     if (vga_desktop_active() && !left_prev && left_now) {
         gfx_desktop_handle_click(g_mouse_x, g_mouse_y);
     }
+    if (gfx_fb_term_active()) gfx_fb_term_mouse(g_mouse_x, g_mouse_y, buttons, g_prev_buttons);
     g_prev_buttons = buttons;
 
     gfx_fb_update_cursor();

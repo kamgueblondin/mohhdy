@@ -983,7 +983,7 @@ qemu-ai-gguf-only: $(OS_IMAGE) pack-initrd
 qemu-service-grant: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_service_grant.py
 
-.PHONY: qemu-gui-esc qemu-gui-shell qemu-osui-web qemu-osui-peer qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit osui-registry-check secrets-check strict-image-check tree-clean-check
+.PHONY: qemu-gui-esc qemu-gui-shell qemu-gui-term-window qemu-osui-web qemu-osui-peer qemu-osui-runtime qemu-osui-gui qemu-osui-gui-fit osui-registry-check secrets-check strict-image-check tree-clean-check
 # Roadmap step 4 guardrail: no provider secret built into any image.
 secrets-check: $(OS_IMAGE) pack-initrd kernel-netlegacy
 	@python3 scripts/check_no_secrets.py
@@ -1025,6 +1025,10 @@ qemu-osui-gui: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_osui_gui.py
 	@python3 tests/scripts/test_qemu_gui_esc_text.py
 	@python3 tests/scripts/test_qemu_gui_shell_same.py
+	@python3 tests/scripts/test_qemu_gui_term_window.py
+
+qemu-gui-term-window: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_term_window.py
 
 qemu-gui-shell: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_shell_same.py

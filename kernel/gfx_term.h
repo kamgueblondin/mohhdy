@@ -17,6 +17,7 @@
 #define GFX_TERM_FONT_BYTES (256 * 32)
 
 typedef struct {
+    int maximized;  /* window covers the whole screen */
     int scale;      /* integer zoom of the cell grid (1 or more) */
     int x, y;       /* window top left, title bar included */
     int w, h;       /* window size, title bar included */
@@ -26,6 +27,21 @@ typedef struct {
 /* Centered window; scale grows with the framebuffer (maximized look on a
  * large window). The grid itself stays 80x25. */
 void gfx_term_layout(int fb_w, int fb_h, gfx_term_layout_t *out);
+/* Same, moved by (dx, dy) from the centre (clamped on screen), or covering
+ * the screen when maximized. */
+void gfx_term_layout_at(int fb_w, int fb_h, int maximized, int dx, int dy, gfx_term_layout_t *out);
+
+/* Title bar buttons, right to left: close, maximize, minimize. */
+#define GFX_TERM_BTN 14
+#define GFX_TERM_HIT_NONE 0
+#define GFX_TERM_HIT_GRID 1
+#define GFX_TERM_HIT_TITLE 2
+#define GFX_TERM_HIT_MIN 3
+#define GFX_TERM_HIT_MAX 4
+#define GFX_TERM_HIT_CLOSE 5
+int gfx_term_hit(const gfx_term_layout_t *l, int x, int y);
+/* Top left of button GFX_TERM_HIT_MIN/MAX/CLOSE. */
+void gfx_term_button_pos(const gfx_term_layout_t *l, int which, int *x, int *y);
 
 /* VGA 16 colour palette as 0x00RRGGBB. */
 uint32_t gfx_term_rgb(unsigned idx);
@@ -43,4 +59,9 @@ void gfx_term_draw_cell(uint32_t *fb, int fb_w, int fb_h, int pitch,
 int gfx_term_render(uint32_t *fb, int fb_w, int fb_h, int pitch,
                     const gfx_term_layout_t *l, const uint8_t *font,
                     const uint16_t *cells, uint16_t *shown, int full);
+/* Same, and reports the first and last grid row painted (-1 if none). */
+int gfx_term_render_rows(uint32_t *fb, int fb_w, int fb_h, int pitch,
+                         const gfx_term_layout_t *l, const uint8_t *font,
+                         const uint16_t *cells, uint16_t *shown, int full,
+                         int *row_min, int *row_max);
 #endif

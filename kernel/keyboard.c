@@ -698,7 +698,8 @@ int keyboard_poll_char(char* out) {
         if ((c >= 32 && c <= 126) || c == '\n' || c == '\r' || c == '\t' || c == '\b'
             || c == (char)OS_VGA_KEY_ESC
             || c == (char)OS_VGA_KEY_LEFT || c == (char)OS_VGA_KEY_RIGHT
-            || c == (char)OS_VGA_KEY_UP || c == (char)OS_VGA_KEY_DOWN) {
+            || c == (char)OS_VGA_KEY_UP || c == (char)OS_VGA_KEY_DOWN
+            || c == (char)OS_TERM_KEY_CLOSE) {
             *out = c;
             return 1;
         }

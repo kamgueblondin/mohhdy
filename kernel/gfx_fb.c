@@ -7,6 +7,7 @@
 #ifndef KERNEL_TEST
 #include "gfx_desktop.h"
 #include "vga_console.h"
+#include "keyboard.h"
 #include "mem/vmm.h"
 #include "task/task.h"
 #include "mem/heap.h"
@@ -73,6 +74,12 @@ static int g_term;
 static int g_term_full;
 static gfx_term_layout_t g_term_l;
 static uint16_t g_term_shown[GFX_TERM_COLS * GFX_TERM_ROWS];
+static int g_term_max;            /* maximize button state */
+static int g_term_dx, g_term_dy;  /* window moved from the centre */
+static int g_term_drag, g_term_grab_x, g_term_grab_y;
+/* Last desktop scene: the terminal window is composed over it. */
+static os_fb_scene_t local; /* Lot 6: too large for the kernel stack */
+static int g_scene_valid;
 #endif
 
 int gfx_fb_parse_fit_line(const char *s, int *w, int *h) {
@@ -465,7 +472,6 @@ void gfx_fb_update_cursor(void) {
 int gfx_fb_present(const os_fb_scene_t *scene) {
     uint32_t *dst;
     uint32_t n, i;
-    static os_fb_scene_t local; /* Lot 6: too large for the kernel stack */
     int nw, nh;
     int mx = 0, my = 0;
     uint8_t btn = 0;
@@ -480,6 +486,7 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
         g_saved_cursor_valid = 0;
     }
     memcpy(&local, scene, sizeof(local));
+    g_scene_valid = 1;
     if (com2_poll_size(&nw, &nh)) {
         if (!g_on || nw != g_w || nh != g_h) {
             if (vbe_set_mode(nw, nh) == 0) {
@@ -552,24 +559,119 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
     return 0;
 }
 
+/* Soft cursor: take it off both surfaces before they are redrawn under it
+ * (the old code restored desktop pixels saved in g_back over the terminal,
+ * which only lived in the LFB: hovering erased the terminal). */
+static void cursor_hide(void) {
+    int cx, cy, pitch = (g_pitch > 0) ? g_pitch : g_w;
+    if (!g_saved_cursor_valid || !g_lfb) return;
+    for (cy = 0; cy < 18; cy++)
+        for (cx = 0; cx < 12; cx++) {
+            int px = g_saved_cursor_x + cx, py = g_saved_cursor_y + cy;
+            if (px >= 0 && px < g_w && py >= 0 && py < g_h) {
+                uint32_t c = g_cursor_saved_bg[cy * 12 + cx];
+                if (g_back) g_back[py * g_w + px] = c;
+                g_lfb[py * pitch + px] = c;
+            }
+        }
+    g_saved_cursor_valid = 0;
+}
+
+static void blit_rect(int x, int y, int w, int h) {
+    int r, c, pitch = (g_pitch > 0) ? g_pitch : g_w;
+    if (!g_back || !g_lfb) return;
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > g_w) w = g_w - x;
+    if (y + h > g_h) h = g_h - y;
+    for (r = y; r < y + h; r++)
+        for (c = x; c < x + w; c++) g_lfb[r * pitch + c] = g_back[r * g_w + c];
+}
+
+static uint32_t *term_surface(int *pitch) {
+    *pitch = g_back ? g_w : ((g_pitch > 0) ? g_pitch : g_w);
+    return g_back ? g_back : (uint32_t *)g_lfb;
+}
+
+static void term_layout_now(gfx_term_layout_t *l) {
+    gfx_term_layout_at(g_w, g_h, g_term_max, g_term_dx, g_term_dy, l);
+}
+
+/* Window frame and every cell, composed in g_back then shown. With
+ * desktop set the desktop is redrawn first (window moved or resized). */
+static void term_compose(const uint16_t *cells, int desktop) {
+    gfx_term_layout_t l;
+    int pitch;
+    uint32_t *dst = term_surface(&pitch);
+    term_layout_now(&l);
+    if (desktop && g_scene_valid && g_back) gfx_desktop_draw_no_cursor(&local, g_back, g_w, g_h);
+    g_term_l = l;
+    gfx_term_draw_frame(dst, g_w, g_h, pitch, &l, g_font_plane2,
+                        "Terminal MOHHDY = console");
+    (void)gfx_term_render(dst, g_w, g_h, pitch, &l, g_font_plane2, cells, g_term_shown, 1);
+    if (desktop) blit_rect(0, 0, g_w, g_h);
+    else blit_rect(l.x, l.y, l.w, l.h);
+}
+
 /* The console in a VBE window: vga_console.c composes the frame as in
  * text mode and hands it here instead of to the VGA text page. */
 static void term_sink(const uint16_t *cells, int cx, int cy, int visible) {
     gfx_term_layout_t l;
-    int pitch;
+    int pitch, lo, hi;
+    uint32_t *dst;
+    uint32_t flags;
     (void)cx; (void)cy; (void)visible; /* the cursor cell is already inverted */
     if (!g_term || !g_on || !g_lfb) return;
-    pitch = (g_pitch > 0) ? g_pitch : g_w;
-    gfx_term_layout(g_w, g_h, &l);
-    if (g_term_full || l.w != g_term_l.w || l.h != g_term_l.h) {
-        g_term_l = l;
-        gfx_term_draw_frame((uint32_t *)g_lfb, g_w, g_h, pitch, &l, g_font_plane2,
-                            "Terminal MOHHDY = console (gui: bureau, console: texte)");
-        (void)gfx_term_render((uint32_t *)g_lfb, g_w, g_h, pitch, &l, g_font_plane2, cells, g_term_shown, 1);
+    flags = lock_interrupts();
+    cursor_hide();
+    term_layout_now(&l);
+    if (g_term_full || l.w != g_term_l.w || l.h != g_term_l.h || l.x != g_term_l.x || l.y != g_term_l.y) {
+        term_compose(cells, !g_term_full);
         g_term_full = 0;
-        return;
+    } else {
+        dst = term_surface(&pitch);
+        (void)gfx_term_render_rows(dst, g_w, g_h, pitch, &l, g_font_plane2, cells, g_term_shown, 0, &lo, &hi);
+        if (lo >= 0)
+            blit_rect(l.gx, l.gy + lo * GFX_TERM_CELL_H * l.scale,
+                      GFX_TERM_COLS * GFX_TERM_CELL_W * l.scale, (hi - lo + 1) * GFX_TERM_CELL_H * l.scale);
     }
-    (void)gfx_term_render((uint32_t *)g_lfb, g_w, g_h, pitch, &l, g_font_plane2, cells, g_term_shown, 0);
+    unlock_interrupts(flags);
+    gfx_fb_update_cursor();
+}
+
+/* Mouse on the terminal window (IRQ context): buttons and title drag. */
+void gfx_fb_term_mouse(int x, int y, uint8_t buttons, uint8_t prev) {
+    int left = buttons & 1, was = prev & 1;
+    if (!g_term) return;
+    if (left && !was) {
+        int hit = gfx_term_hit(&g_term_l, x, y);
+        if (hit == GFX_TERM_HIT_CLOSE || hit == GFX_TERM_HIT_MIN) {
+            print_string_serial(hit == GFX_TERM_HIT_CLOSE ? "gfx term button close\n" : "gfx term button minimize\n");
+            kbd_put_char((char)OS_TERM_KEY_CLOSE);
+        } else if (hit == GFX_TERM_HIT_MAX) {
+            uint16_t cells[GFX_TERM_COLS * GFX_TERM_ROWS];
+            g_term_max = !g_term_max;
+            print_string_serial(g_term_max ? "gfx term button maximize on\n" : "gfx term button maximize off\n");
+            vga_console_frame_copy(cells, 0, 0, 0);
+            cursor_hide();
+            term_compose(cells, 1);
+        } else if (hit == GFX_TERM_HIT_TITLE && !g_term_max) {
+            g_term_drag = 1;
+            g_term_grab_x = x - g_term_l.x;
+            g_term_grab_y = y - g_term_l.y;
+        }
+    } else if (!left && was && g_term_drag) {
+        gfx_term_layout_t c;
+        uint16_t cells[GFX_TERM_COLS * GFX_TERM_ROWS];
+        g_term_drag = 0;
+        gfx_term_layout_at(g_w, g_h, 0, 0, 0, &c);
+        g_term_dx = (x - g_term_grab_x) - c.x;
+        g_term_dy = (y - g_term_grab_y) - c.y;
+        print_string_serial("gfx term moved\n");
+        vga_console_frame_copy(cells, 0, 0, 0);
+        cursor_hide();
+        term_compose(cells, 1);
+    }
 }
 
 int gfx_fb_term_enter(void) {
@@ -577,11 +679,15 @@ int gfx_fb_term_enter(void) {
     if (!g_on || !g_lfb || !g_font_saved) return -1;
     g_term = 1;
     g_term_full = 1;
-    gfx_term_layout(g_w, g_h, &l);
+    g_term_drag = 0;
+    term_layout_now(&l);
     print_string_serial("gfx term on fb ");
     serial_uint((unsigned)g_w); write_serial('x'); serial_uint((unsigned)g_h);
     print_string_serial(" grid 80x25 scale ");
     serial_uint((unsigned)l.scale);
+    print_string_serial(" window ");
+    serial_uint((unsigned)l.x); write_serial(','); serial_uint((unsigned)l.y); write_serial(' ');
+    serial_uint((unsigned)l.w); write_serial('x'); serial_uint((unsigned)l.h);
     print_string_serial(" backend=vbe same_console=vga_console\n");
     vga_console_set_gfx_sink(term_sink);
     return 0;
@@ -624,6 +730,7 @@ int gfx_fb_present(const os_fb_scene_t *scene) {
 void gfx_fb_leave(void) {}
 int gfx_fb_term_enter(void) { return -1; }
 int gfx_fb_term_active(void) { return 0; }
+void gfx_fb_term_mouse(int x, int y, uint8_t buttons, uint8_t prev) { (void)x; (void)y; (void)buttons; (void)prev; }
 int gfx_fb_active(void) { return 0; }
 int gfx_fb_width(void) { return GFX_FB_WIDTH; }
 int gfx_fb_height(void) { return GFX_FB_HEIGHT; }
