@@ -1087,7 +1087,7 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     fill_rect(fb, w, h, x + 1, y + 1, rw - 2, 36, RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_CHAT_TITLE_H);
     draw_text(fb, w, h, x + 16, y + 14, "Mohhdy", RGB(232, 238, 244));
-    llm_text(lab, (int)sizeof(lab), "llm=", sc, "");
+    llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
     {
         int ln = 0;
         while (lab[ln]) ln++;
