@@ -805,6 +805,65 @@ static void test_gui_tool_apps_slots(void) {
     osui_gui_set_tool_ops(0, 0, 0, 0);
 }
 
+/* UX4: browser links (guest web engine hit test) and back / forward */
+static int web_pages_load(const char *file, char *buf, int max) {
+    const char *r = 0;
+    if (!strcmp(file, "/web/index.html")) r = "<h1>Accueil</h1><p><a href=\"page2.html\">Page deux</a></p><p><a href=\"javascript:x()\">Script</a></p><p><a href=\"http://example.com/\">Distant</a></p>";
+    else if (!strcmp(file, "/web/page2.html")) r = "<h1>Deux</h1><p><a href=\"/web/index.html\">Accueil</a></p>";
+    if (!r || (int)strlen(r) > max) return -1;
+    memcpy(buf, r, strlen(r));
+    return (int)strlen(r);
+}
+static int web_item(const char *text, int *x, int *y) {
+    int i;
+    osui_gui_fill_scene(&g_scene);
+    for (i = 0; i < (int)g_scene.nweb; i++)
+        if (g_scene.web[i].kind == OS_FB_WEB_TEXT && strstr(g_scene.web[i].text, text)) { *x = g_scene.web[i].x + 3; *y = g_scene.web[i].y + 3; return 1; }
+    return 0;
+}
+static void test_gui_web_links_history(void) {
+    char e[48], d[64];
+    int x, y;
+    setup();
+    osui_gui_set_ide_ops(web_pages_load, fake_save, fake_exec);
+    feed_str("web /web/index.html");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web render file=/web/index.html"));
+    TEST_ASSERT(web_item("Page deux", &x, &y));
+    snprintf(e, sizeof(e), "web click %d %d", x, y);
+    evt(e);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web link href=page2.html"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web render file=/web/page2.html"));
+    TEST_ASSERT(web_item("Deux", &x, &y));
+    /* a click outside any link does nothing */
+    evt("web click 900 5");
+    TEST_ASSERT_EQUAL_STRING("", g_out);
+    evt("web back");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web back file=/web/index.html"));
+    evt("web back");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web back none"));
+    evt("web fwd");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web fwd file=/web/page2.html"));
+    evt("web back");
+    /* a javascript: link is dropped by the sanitizer: no navigation */
+    TEST_ASSERT(web_item("Script", &x, &y));
+    snprintf(e, sizeof(e), "web click %d %d", x, y);
+    evt(e);
+    TEST_ASSERT(strstr(g_out, "osui web render") == 0);
+    /* remote schemes are refused: local pages only */
+    TEST_ASSERT(web_item("Distant", &x, &y));
+    snprintf(e, sizeof(e), "web click %d %d", x, y);
+    evt(e);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web link refused href=http://example.com/"));
+    TEST_ASSERT(osui_gui_web_resolve("/web/a/b.html", "../c.html", d, (int)sizeof(d)) == 0);
+    TEST_ASSERT_EQUAL_STRING("/web/c.html", d);
+    TEST_ASSERT(osui_gui_web_resolve("/web/a.html", "http://x/y", d, (int)sizeof(d)) < 0);
+    TEST_ASSERT(osui_gui_web_resolve("/web/a.html", "#top", d, (int)sizeof(d)) < 0);
+    osui_gui_set_ide_ops(0, 0, 0);
+    feed_str("/center");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_lot12_vfs_and_browser_inspection_views);
@@ -829,6 +888,7 @@ int main(void) {
     RUN_TEST(test_gui_live_panes);
     RUN_TEST(test_gui_apps_explorer_editor);
     RUN_TEST(test_gui_tool_apps_slots);
+    RUN_TEST(test_gui_web_links_history);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

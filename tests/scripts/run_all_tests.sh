@@ -240,7 +240,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/kernel/vga_console.c"
     fi
     if [ "$(basename "$test_file")" = "test_gfx_desktop.c" ]; then
-        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/gfx_wm.c $BASE_DIR/kernel/gfx_term.c $BASE_DIR/kernel/pci_service.c $BASE_DIR/kernel/input/usb_tablet.c"
+        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/clipboard.c $BASE_DIR/kernel/gfx_wm.c $BASE_DIR/kernel/gfx_term.c $BASE_DIR/kernel/pci_service.c $BASE_DIR/kernel/input/usb_tablet.c"
     fi
     if [ "$(basename "$test_file")" = "test_ipc.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/ipc.c"

@@ -7336,6 +7336,20 @@ static int shell_ai_step(const char *prompt, int first, char *piece, int max) {
     return sys_gpt2_generate(prompt, piece, max);
 }
 
+static int shell_clip_put(const char *text, int len) {
+    int rc;
+    if (len > OS_CLIP_MAX) len = OS_CLIP_MAX;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_CLIPBOARD), "b"(OS_CLIP_SET), "c"(text), "d"(len) : "memory");
+    return rc;
+}
+
+static int shell_clip_take(char *out, int max) {
+    int rc;
+    if (max > OS_CLIP_MAX + 1) max = OS_CLIP_MAX + 1;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_CLIPBOARD), "b"(OS_CLIP_GET), "c"(out), "d"(max) : "memory");
+    return rc < 0 ? 0 : rc;
+}
+
 static const char *shell_ai_model(void) { return g_live_ctx ? ai_model_name(g_live_ctx) : ""; }
 
 static int shell_screen(int *w, int *h) {
@@ -7389,6 +7403,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         if (osui_gui_should_enter()) {
             osui_gui_set_pane_source(&k_pane_src);
             osui_gui_set_tool_ops(shell_app_run, shell_ai_step, shell_ai_model, shell_screen);
+            osui_ide_set_clip_ops(shell_clip_put, shell_clip_take);
         osui_gui_set_fs_io(&shell_fs_io);
             osui_gui_run();
             shell_after_gui(ctx);
@@ -7432,6 +7447,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         if (osui_gui_should_enter()) {
             osui_gui_set_pane_source(&k_pane_src);
             osui_gui_set_tool_ops(shell_app_run, shell_ai_step, shell_ai_model, shell_screen);
+            osui_ide_set_clip_ops(shell_clip_put, shell_clip_take);
         osui_gui_set_fs_io(&shell_fs_io);
             osui_gui_run();
             shell_after_gui(ctx);
@@ -7554,7 +7570,9 @@ void shell_main_loop(shell_context_t* ctx) {
 // ==============================================================================
 
 void main() {
-    shell_context_t shell_ctx;
+    /* static: 46 KiB that used to sit on the 64 KiB user stack; the GUI
+     * tool windows run shell commands from deep inside "gui" (UX4). */
+    static shell_context_t shell_ctx;
     
     // Initialiser le contexte du shell
     init_shell_context(&shell_ctx);

@@ -47,7 +47,11 @@ int osui_gui_tool_open(int kind, const char *arg, char *out, int out_max) {
     g_focus = slot_of(kind);
     app_out(out, out_max, "osui tool open app=", osui_tool_name(kind));
     if (path[0]) { scat(out, out_max, "osui tool file="); scat(out, out_max, path); scat(out, out_max, "\n"); }
-    if (t->n > 0) { scat(out, out_max, "osui tool first="); scat(out, out_max, t->lines[0]); scat(out, out_max, "\n"); }
+    {
+        /* the first lines of real content, for the serial log and the tests */
+        int i;
+        for (i = 0; i < t->n && i < 6; i++) { scat(out, out_max, "osui tool line="); scat(out, out_max, t->lines[i]); scat(out, out_max, "\n"); }
+    }
     return 0;
 }
 

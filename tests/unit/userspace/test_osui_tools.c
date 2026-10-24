@@ -17,7 +17,7 @@ static int fake_run(const char *cmd, char *out, int max) {
     const char *r = "";
     if (!osui_tool_cmd_allowed(cmd)) return -1;
     strcat(g_cmds, cmd); strcat(g_cmds, "|");
-    if (!strcmp(cmd, "ps")) r = "PID  NAME   STATE\n 1  kernel  run\n 7  shell   run\n 12  ps2driver wait\n";
+    if (!strcmp(cmd, "ps")) r = "\x1b[33mPID  NAME   STATE\x1b[0m\n 1  kernel  run\n 7  shell   run\n 12  ps2driver wait\n";
     else if (!strcmp(cmd, "mem")) r = "mem total 64 MiB free 40 MiB\n";
     else if (!strncmp(cmd, "kill ", 5)) { g_killed = my_atoi(cmd + 5); r = g_killed == 1 ? "kill: processus protege (kernel)\n" : "Processus termine\n"; }
     else if (!strncmp(cmd, "service-status ", 15)) r = "service ok\n";
@@ -83,7 +83,9 @@ static void test_task_manager_kill_with_confirmation(void) {
     osui_tool_open(&t, OS_FB_APP_TASKS, "", &k_src);
     TEST_ASSERT(strstr(g_cmds, "ps|mem|") != 0);
     TEST_ASSERT(has_line("ps2driver"));
+    TEST_ASSERT_EQUAL_STRING("PID  NAME   STATE", t.lines[0]);   /* ANSI colours dropped */
     TEST_ASSERT(has_line("free 40 MiB"));
+    TEST_ASSERT_EQUAL(1, t.sel);              /* first process row selected */
     /* select the shell row (row 2), Tuer once arms, twice kills */
     TEST_ASSERT_EQUAL(OSUI_TOOL_CHANGED, osui_tool_click(&t, 2, 0, 0, &k_src));
     osui_tool_tool(&t, 1, &k_src);

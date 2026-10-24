@@ -344,6 +344,27 @@ static void gfx_desktop_handle_click(int x, int y) {
         desk_cmd("/center\n");
         return;
     }
+    if (g_last_scene_valid && g_last_scene.pane == OS_FB_PANE_WEB && g_last_scene.version >= 4) {
+        /* UX4: browser navigation: back / forward buttons, and a click in
+         * the page goes to Ring 3 in page coordinates (link hit test in
+         * the guest web engine, userspace/webeng.c we_link_at) */
+        gfx_rect_t nav;
+        int ox, oy, pw, ph;
+        for (k = 0; k < 2; k++) {
+            gfx_desktop_web_nav(w, h, k, &nav);
+            if (in_rect(x, y, &nav)) {
+                evt_begin(); kbd_put_string(k == 0 ? "web back" : "web fwd"); evt_end();
+                return;
+            }
+        }
+        gfx_desktop_web_origin(w, h, &ox, &oy, &pw, &ph);
+        if (x >= ox && y >= oy && x < ox + pw && y < oy + ph) {
+            evt_begin(); kbd_put_string("web click ");
+            put_uint((unsigned)(x - ox)); kbd_put_char(' ');
+            put_uint((unsigned)(y - oy + (int)g_last_scene.web_scroll)); evt_end();
+            return;
+        }
+    }
 
     /* 3. Dock icons, 4. top menu bar: a minimized or closed window comes
      * back without a command; otherwise the command opens it. */
@@ -1018,14 +1039,29 @@ void gfx_desktop_web_origin(int w, int h, int *ox, int *oy, int *pw, int *ph) {
     if (ph) *ph = h - (bar_h + 48) - 16;
 }
 
+/* UX4: back (0) / forward (1) buttons of the web pane title bar */
+void gfx_desktop_web_nav(int w, int h, int which, gfx_rect_t *r) {
+    int bar_h = clampi(h / 22, 28, 40);
+    r->w = 28;
+    r->h = 20;
+    r->x = w - 16 - (2 - which) * 34;
+    r->y = bar_h + 14;
+}
+
 static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
     int ox, oy, pw, ph, i, n, cx1, cy1;
     int bar_h = clampi(h / 22, 28, 40);
+    gfx_rect_t nav;
     gfx_desktop_web_origin(w, h, &ox, &oy, &pw, &ph);
     round_rect_a(fb, w, h, 8, bar_h + 8, w - 16, h - bar_h - 16, 10, RGB(10, 14, 18), 250);
     fill_rect(fb, w, h, 8, bar_h + 8, w - 16, 32, RGB(28, 44, 56));
     traffic(fb, w, h, 16, bar_h + 16);
-    draw_text_n(fb, w, h, 64, bar_h + 20, sc->web_title, (w - 96) / 8, RGB(232, 238, 244));
+    draw_text_n(fb, w, h, 64, bar_h + 20, sc->web_title, (w - 96 - 80) / 8, RGB(232, 238, 244));
+    for (i = 0; i < 2; i++) {
+        gfx_desktop_web_nav(w, h, i, &nav);
+        fill_rect(fb, w, h, nav.x, nav.y, nav.w, nav.h, RGB(44, 66, 82));
+        draw_text(fb, w, h, nav.x + 10, nav.y + 6, i == 0 ? "<" : ">", RGB(232, 238, 244));
+    }
     fill_rect(fb, w, h, ox, oy, pw, ph, RGB(255, 255, 255));
     cx1 = ox + pw;
     cy1 = oy + ph;

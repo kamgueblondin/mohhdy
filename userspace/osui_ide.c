@@ -483,8 +483,23 @@ const char osui_ide_toolbar[] =
 
 static char g_clip[OSUI_IDE_TEXT_MAX];
 static int g_clip_len;
+/* UX4: the shared desktop clipboard (kernel SYS_CLIPBOARD), when set */
+static int (*g_clip_put)(const char *text, int len);
+static int (*g_clip_take)(char *out, int max);
 
-const char *osui_ide_clipboard(void) { return g_clip; }
+void osui_ide_set_clip_ops(int (*put)(const char *, int), int (*take)(char *, int)) {
+    g_clip_put = put;
+    g_clip_take = take;
+}
+
+const char *osui_ide_clipboard(void) {
+    if (g_clip_take) {
+        int n = g_clip_take(g_clip, (int)sizeof(g_clip));
+        g_clip_len = n > 0 ? n : 0;
+        g_clip[g_clip_len] = 0;
+    }
+    return g_clip;
+}
 
 void osui_ide_set_clipboard(const char *text, int len) {
     int i;
@@ -493,6 +508,7 @@ void osui_ide_set_clipboard(const char *text, int len) {
     for (i = 0; i < len; i++) g_clip[i] = text[i];
     g_clip[len] = 0;
     g_clip_len = len;
+    if (g_clip_put) (void)g_clip_put(g_clip, len);
 }
 
 static void reload_text(osui_ide_t *ide, const char *text, int row, int col) {
@@ -644,6 +660,7 @@ static void do_copy(osui_ide_t *ide, int cut) {
 }
 
 static void do_paste(osui_ide_t *ide) {
+    (void)osui_ide_clipboard();   /* the terminal or the explorer may have copied since */
     if (!g_clip_len) { osui_ide_set_status(ide, "presse-papiers vide"); return; }
     undo_point(ide, 3);
     if (delete_selection(ide) < 0) return;

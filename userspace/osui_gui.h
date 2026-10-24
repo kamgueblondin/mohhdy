@@ -84,4 +84,7 @@ void osui_gui_set_tool_ops(int (*run)(const char *, char *, int),
 int osui_gui_tool_open(int kind, const char *arg, char *out, int out_max);
 /* idle tick of the desktop loop: chat streaming; 1 when the view changed */
 int osui_gui_idle(char *out, int out_max);
+/* UX4 browser: resolve a link of page base to a local page path; < 0
+ * for a scheme (javascript:, http:), a query or a fragment */
+int osui_gui_web_resolve(const char *base, const char *href, char *dst, int max);
 #endif

@@ -111,6 +111,22 @@ static void add_line(osui_tool_t *t, const char *s, int len, int cls) {
     t->n++;
 }
 
+/* drop ANSI colour sequences (ESC [ ... letter) the shell prints */
+static int strip_ansi(char *s, int n) {
+    int i = 0, o = 0;
+    while (i < n) {
+        if (s[i] == 27 && i + 1 < n && s[i + 1] == '[') {
+            i += 2;
+            while (i < n && !((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z'))) i++;
+            if (i < n) i++;
+            continue;
+        }
+        s[o++] = s[i++];
+    }
+    s[o] = 0;
+    return o;
+}
+
 /* split text into lines, wrapping at the grid width */
 static void add_text(osui_tool_t *t, const char *s, int n, int cls) {
     int i = 0, start = 0, w = OSUI_APP_COLS - 2;
@@ -145,6 +161,7 @@ static int run_into(osui_tool_t *t, const osui_tool_src_t *src, const char *cmd,
     if (!src || !src->run) { add_line(t, "commande indisponible (pas de shell)", -1, OSUI_APP_A_ERR); return -1; }
     n = src->run(cmd, g_out, (int)sizeof(g_out));
     if (n < 0) { add_line(t, "commande refusee: ", -1, OSUI_APP_A_ERR); t_cat(t->lines[t->n - 1], OSUI_APP_COLS, cmd); return n; }
+    n = strip_ansi(g_out, n);
     add_text(t, g_out, n, cls);
     return n;
 }
@@ -156,6 +173,7 @@ static void set_status(osui_tool_t *t, const char *a, const char *b) {
 
 static void first_line(char *d, int max, const char *s) {
     int i = 0;
+    (void)strip_ansi((char *)s, t_len(s));
     while (s[i] && s[i] != '\n' && i < max - 1) { d[i] = s[i]; i++; }
     d[i] = 0;
 }
@@ -169,6 +187,8 @@ static void tasks_fill(osui_tool_t *t, const osui_tool_src_t *src) {
         (void)run_into(t, src, "ps", OSUI_APP_A_TEXT);
         add_line(t, "", 0, OSUI_APP_A_TEXT);
         (void)run_into(t, src, "mem", OSUI_APP_A_DIM);
+        /* select the first process row */
+        for (i = 0; i < t->n; i++) if (osui_tool_line_pid(t->lines[i]) >= 0) { t->sel = i; break; }
         set_status(t, "selectionnez un processus puis Tuer (le noyau refuse les PID proteges)", 0);
     } else {
         char cmd[48];

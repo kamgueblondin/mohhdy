@@ -1949,6 +1949,12 @@ typedef struct {
  * YYYYMMDDHHMMSSZ + NUL from a stable CMOS snapshot (two equal reads, each
  * started with UIP clear). Returns 0, OS_RTC_BAD_ARGUMENT or OS_RTC_UNSTABLE. */
 #define SYS_RTC_UTC 160
+/* UX4 shared desktop clipboard: ebx OS_CLIP_GET / OS_CLIP_SET, ecx buffer,
+ * edx length (set) or capacity (get); returns the byte count or < 0. */
+#define SYS_CLIPBOARD 161
+#define OS_CLIP_GET 0
+#define OS_CLIP_SET 1
+#define OS_CLIP_MAX 4096
 #define OS_RTC_BAD_ARGUMENT (-192)
 #define OS_RTC_UNSTABLE (-193)
 typedef struct {

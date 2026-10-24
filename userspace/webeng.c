@@ -207,6 +207,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                     else if (w_eq(an, "class")) w_cpy(n->cls, 32, av, vk);
                     else if (w_eq(an, "style")) { if (pool_put(d, av, vk, &n->style_off) == 0) n->style_len = (uint16_t)vk; }
                     else if (w_eq(an, "alt")) { if (pool_put(d, av, vk, &n->alt_off) == 0) n->alt_len = (uint16_t)vk; }
+                    else if (w_eq(an, "href")) { if (pool_put(d, av, vk, &n->href_off) == 0) n->href_len = (uint16_t)vk; }
                 }
                 i = j + 1; text_start = i;
                 if (w_eq(name, "img")) {
@@ -612,6 +613,17 @@ static void flush_line(we_inline_t* f, int force) {
         if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, OS_FB_WEB_RECT, xs, f->y, len * WE_CHAR_W, WE_LINE_H, n->bg);
         it = emit(d, OS_FB_WEB_TEXT, xs, f->y + 1, len * WE_CHAR_W, 8, d->nodes[node].color);
         if (it) { it->bold = d->nodes[node].bold; w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len); }
+        {   /* UX4: text nodes get the bounding box of their runs, so a
+             * click on a link's words finds the <a> (we_link_at) */
+            we_node_t* tn = &d->nodes[node];
+            int x1 = xs + len * WE_CHAR_W, y1 = f->y + WE_LINE_H;
+            if (tn->w <= 0) { tn->x = (int16_t)xs; tn->y = (int16_t)f->y; tn->w = (int16_t)(x1 - xs); tn->h = WE_LINE_H; }
+            else {
+                int ax = tn->x < xs ? tn->x : xs, ay = tn->y < f->y ? tn->y : f->y;
+                int bx = tn->x + tn->w > x1 ? tn->x + tn->w : x1, by = tn->y + tn->h > y1 ? tn->y + tn->h : y1;
+                tn->x = (int16_t)ax; tn->y = (int16_t)ay; tn->w = (int16_t)(bx - ax); tn->h = (int16_t)(by - ay);
+            }
+        }
         x = xs + len * WE_CHAR_W;
         i = j;
     }
@@ -812,4 +824,32 @@ void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx) {
     out_num(out, ctx, " bold ", n->bold);
     out(ctx, n->align == WE_ALIGN_CENTER ? " align center" : n->align == WE_ALIGN_RIGHT ? " align right" : " align left");
     out(ctx, "\n");
+}
+
+/* UX4: hit test for the desktop browser links. Text nodes have no box of
+ * their own here: the deepest element whose border box holds the point
+ * wins, then its ancestors are searched for an <a href>. */
+int we_link_at(const we_doc_t* d, int x, int y, char* href, int max) {
+    int i, best = -1, best_area = 0x7FFFFFFF;
+    if (!d || !href || max <= 0) return 0;
+    href[0] = 0;
+    for (i = 0; i < (int)d->nnodes; i++) {
+        const we_node_t* n = &d->nodes[i];
+        int area;
+        if ((!n->is_text && n->display == WE_DISP_NONE) || n->w <= 0 || n->h <= 0) continue;
+        if (x < n->x || y < n->y || x >= n->x + n->w || y >= n->y + n->h) continue;
+        area = (int)n->w * (int)n->h;
+        if (area <= best_area) { best_area = area; best = i; }
+    }
+    while (best >= 0) {
+        const we_node_t* n = &d->nodes[best];
+        if (n->href_len && w_eq(n->tag, "a")) {
+            int k, len = n->href_len < max - 1 ? n->href_len : max - 1;
+            for (k = 0; k < len; k++) href[k] = d->pool[n->href_off + k];
+            href[len] = 0;
+            return len;
+        }
+        best = n->parent;
+    }
+    return 0;
 }
