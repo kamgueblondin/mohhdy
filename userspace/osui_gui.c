@@ -77,6 +77,15 @@ static int scmp(const char *a, const char *b) {
     return a[i] - b[i];
 }
 
+static int sncmp(const char *a, const char *b, int n) {
+    int i;
+    for (i = 0; i < n; i++) {
+        if (a[i] != b[i]) return (unsigned char)a[i] - (unsigned char)b[i];
+        if (!a[i]) return 0;
+    }
+    return 0;
+}
+
 static void web_num(char *d, int max, const char *label, int v) {
     char t[12];
     int k = 0, n = slen(d);
@@ -309,11 +318,20 @@ void osui_gui_term_at(int i, char *dst, int max) {
 void osui_gui_term_push(const char *text) {
     char line[GUI_TERM_LEN];
     int n = 0;
+    int ansi = 0; /* the line had a color code (ESC [ ... letter) */
     if (!text) return;
     while (*text) {
+        if (*text == 27 && text[1] == '[') {
+            /* Shell color codes are not text: drop the whole sequence. */
+            text += 2;
+            while (*text && !(*text >= 0x40 && *text <= 0x7E)) text++;
+            if (*text) text++;
+            ansi = 1;
+            continue;
+        }
         if (*text == '\n' || n == GUI_TERM_LEN - 1) {
             line[n] = 0;
-            if (n > 0 || *text == '\n') {
+            if (n > 0 || (*text == '\n' && !ansi)) {
                 int slot;
                 if (g_term_n < GUI_TERM_MAX) {
                     slot = (g_term_i + g_term_n) % GUI_TERM_MAX;
@@ -326,6 +344,7 @@ void osui_gui_term_push(const char *text) {
             }
             n = 0;
             if (*text == '\n') {
+                ansi = 0;
                 text++;
                 continue;
             }
@@ -629,7 +648,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     if (!scene) return;
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
-    scene->version = 4; /* 3: term_attr (pm-ide syntax classes), 4: web display list */
+    scene->version = 5; /* 3: term_attr (pm-ide syntax classes), 4: web display list, 5: llm */
     scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
     scene->pane = OS_FB_PANE_NONE;
     if (pane) {
@@ -667,10 +686,15 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     sid = osui_get_session_id();
     scpy(scene->session, 12, sid ? sid : "s0001");
     scpy(scene->input, OS_FB_INPUT_LEN, g_input);
+    scpy(scene->llm, OS_FB_LLM_LEN, osui_get_stage_llm());
     n = osui_msg_count();
-    if (n > OS_FB_MSG_MAX) n = OS_FB_MSG_MAX;
-    scene->nmsg = (uint16_t)n;
-    for (i = 0; i < n; i++) osui_msg_at(i, scene->messages[i], OS_FB_MSG_LEN);
+    {
+        /* The chat window shows the newest messages, not the oldest. */
+        int first = n > OS_FB_MSG_MAX ? n - OS_FB_MSG_MAX : 0;
+        n -= first;
+        scene->nmsg = (uint16_t)n;
+        for (i = 0; i < n; i++) osui_msg_at(first + i, scene->messages[i], OS_FB_MSG_LEN);
+    }
     n = osui_gui_term_count();
     if (n > OS_FB_TERM_MAX) {
         int skip = n - OS_FB_TERM_MAX;
@@ -784,6 +808,14 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         return 0;
     }
     if (key == OS_VGA_KEY_ESC) {
+        /* ESC first clears a half typed line; ESC on an empty line
+         * leaves the desktop. */
+        if (g_ilen > 0) {
+            g_ilen = 0;
+            g_input[0] = 0;
+            if (out) scpy(out, out_max, "osui gui input cleared\n");
+            return 0;
+        }
         g_leave = 1;
         if (out) scpy(out, out_max, "osui gui exit chat_mode=center chrome=qemu_fb\n");
         return 1;
@@ -862,7 +894,17 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             if (program) {
                 run_program_line(eval_line, out, out_max);
             } else {
-                osui_dispatch_line(g_input, out, out_max);
+                if (osui_dispatch_line(g_input, out, out_max) != 0 && out
+                    && scmp(osui_get_pane(), "shell") != 0
+                    && sncmp(out, "osui error=commande inconnue", 28) == 0) {
+                    /* The error used to reach the serial line only: say it
+                     * in the chat window too. */
+                    static char note[OS_FB_MSG_LEN]; /* off the GUI stack */
+                    scpy(note, (int)sizeof(note), "commande inconnue: ");
+                    scat(note, (int)sizeof(note), tok);
+                    scat(note, (int)sizeof(note), " - ai <question> ou /help");
+                    osui_note(note);
+                }
                 if (scmp(osui_get_pane(), "shell") == 0) seed_shell_term();
                 else if (scmp(osui_get_pane(), "browser") == 0) seed_browser_term();
                 else if (scmp(osui_get_pane(), "fs") == 0) seed_fs_term();

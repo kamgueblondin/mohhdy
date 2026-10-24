@@ -143,7 +143,9 @@ void handle_line(shell_context_t* ctx, char* input_buffer);
 // Wrappers pour les appels système
 void putc(char c) {
     if (g_gui_eval && g_cap_n < (int)sizeof(g_cap) - 1) {
-        if (c == '\n' || (c >= 32 && c <= 126)) {
+        /* ESC is kept so the GUI pane can drop whole color codes
+         * (osui_gui_term_push) instead of showing "[35m". */
+        if (c == '\n' || c == 27 || (c >= 32 && c <= 126)) {
             g_cap[g_cap_n++] = c;
             g_cap[g_cap_n] = 0;
         }
@@ -6535,12 +6537,20 @@ static int ai_gguf_append(char* dst, int used, int cap, const char* piece, int p
     return used;
 }
 
+/* Set by ai_gguf_sentence when ESC stopped it after some text: the text
+ * is a partial answer, not a finished sentence. */
+static int g_gguf_cut = 0;
+
 static int ai_gguf_sentence(const char* query, int first, char* dst, int cap) {
-    char piece[128];
+    /* static: in the VBE desktop this runs at the bottom of a deep stack
+     * (osui_gui_run -> shell eval -> handle_line -> ai), where 640 more
+     * bytes faulted the shell (page fault in ai_gguf_sentence). */
+    static char piece[128];
     int used = 0;
     int steps = 0;
     int n;
     unsigned int t0 = sys_ticks();
+    g_gguf_cut = 0;
     if (!dst || cap < 2) return -1;
     dst[0] = '\0';
     n = first ? sys_gpt2_gguf_generate(query, piece, (int)sizeof(piece))
@@ -6552,6 +6562,10 @@ static int ai_gguf_sentence(const char* query, int first, char* dst, int cap) {
         if (used >= AI_GGUF_SENTENCE_MIN && ai_gguf_has_sentence_end(dst, used)) break;
         if (used + 1 >= cap) break;
         n = sys_gpt2_gguf_continue(piece, (int)sizeof(piece));
+        if (n == OS_AI_CANCELLED) {
+            g_gguf_cut = 1;
+            if (used == 0) return n;
+        }
         if (n < 0) break;
     }
     g_gguf_answer_ticks = sys_ticks() - t0;
@@ -6568,7 +6582,7 @@ void call_ai_assistant(shell_context_t* ctx, const char* query) {
     print_string(ai_model_name(ctx));
     print_string("\n");
     if (strstr(ai_model_name(ctx), "gpt2") != 0) {
-        char generated[512];
+        static char generated[512]; /* off the stack, see ai_gguf_sentence */
         int use_gguf = strstr(ai_model_name(ctx), ".gguf") != 0;
         int generated_len = use_gguf
             ? ai_gguf_sentence(query, 1, generated, (int)sizeof(generated))
@@ -6599,6 +6613,8 @@ void call_ai_assistant(shell_context_t* ctx, const char* query) {
             if (generated_len == 0) print_string("(fin de sequence)");
             else print_string(generated);
             print_string("\n");
+            if (use_gguf && g_gguf_cut)
+                print_colored("[IA] generation interrompue (Echap); reponse partielle, ai-continue pour la suite.\n", COLOR_YELLOW);
             return;
         }
         print_colored(use_gguf ? "[GPT-2 GGUF local] indisponible (code " : "[GPT-2 local] indisponible (code ", COLOR_YELLOW);
@@ -6674,6 +6690,19 @@ void cmd_ai_continue(shell_context_t* ctx, char args[][128], int arg_count) {
         return;
     }
     generated_len = ai_gguf_sentence(0, 0, generated, (int)sizeof(generated));
+    if (generated_len == OS_AI_CANCELLED) {
+        /* ESC: the session is kept, ai-continue can resume it. */
+        print_colored("[IA] generation annulee (Echap); ai-continue pour reprendre.\n", COLOR_YELLOW);
+        return;
+    }
+    if (generated_len == OS_AI_GGUF_NO_WORKER) {
+        /* Right after ESC the worker still drains the dropped step for a
+         * few seconds; the session itself is kept. */
+        print_colored("[GPT-2 GGUF local] session indisponible (worker IA occupe ou absent, reessayez dans quelques secondes) code ", COLOR_YELLOW);
+        print_int(generated_len);
+        print_string("\n");
+        return;
+    }
     if (generated_len < 0) {
         print_colored("[GPT-2 GGUF local] session indisponible (lancez d'abord ai <question>) code ", COLOR_YELLOW);
         print_int(generated_len);
@@ -6684,6 +6713,8 @@ void cmd_ai_continue(shell_context_t* ctx, char args[][128], int arg_count) {
     if (generated_len == 0) print_string("(fin de sequence)");
     else print_string(generated);
     print_string("\n");
+    if (g_gguf_cut)
+        print_colored("[IA] generation interrompue (Echap); reponse partielle, ai-continue pour la suite.\n", COLOR_YELLOW);
 }
 
 void cmd_ai_mode(shell_context_t* ctx, char args[][128], int arg_count) {

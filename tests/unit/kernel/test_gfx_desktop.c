@@ -284,6 +284,93 @@ static void test_hit_regions_dock_menu_stage_close(void) {
     vga_desktop_set(0);
 }
 
+/* UI test: the desktop icons on the right open their pane on click,
+ * except where the floating chat window covers them. */
+static void test_desktop_icons_click(void) {
+    gfx_desktop_layout_t layout;
+    char got[48];
+    blank_scene();
+    vga_desktop_set(1);
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    gfx_desktop_get_layout(&g_scene, W, H, &layout);
+    TEST_ASSERT_EQUAL(6, layout.desk.count);
+    drain_kbd();
+    click_at(rect_center_x(&layout.desk.icons[4]), rect_center_y(&layout.desk.icons[4]));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("/status\n", got);
+    drain_kbd();
+    click_at(rect_center_x(&layout.desk.icons[5]), rect_center_y(&layout.desk.icons[5]));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("/fs\n", got);
+    /* the icon tile really is drawn inside the hit box (Statut grey) */
+    TEST_ASSERT(count_near(layout.desk.icons[4].x, layout.desk.icons[4].y,
+                           layout.desk.icons[4].x + layout.desk.icons[4].w,
+                           layout.desk.icons[4].y + 42, 100, 120, 136, 60) > 100);
+    /* floating chat over the icons: a click there is not an icon click */
+    blank_scene();
+    g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    gfx_desktop_get_layout(&g_scene, W, H, &layout);
+    drain_kbd();
+    {
+        int k, hit = -1;
+        for (k = 0; k < layout.desk.count; k++) {
+            int cx = rect_center_x(&layout.desk.icons[k]), cy = rect_center_y(&layout.desk.icons[k]);
+            if (cx >= layout.chat_win.box.x && cx < layout.chat_win.box.x + layout.chat_win.box.w &&
+                cy >= layout.chat_win.box.y && cy < layout.chat_win.box.y + layout.chat_win.box.h &&
+                !(cx >= layout.chat_win.send_btn.x && cx < layout.chat_win.send_btn.x + layout.chat_win.send_btn.w &&
+                  cy >= layout.chat_win.send_btn.y && cy < layout.chat_win.send_btn.y + layout.chat_win.send_btn.h)) {
+                hit = k;
+                break;
+            }
+        }
+        TEST_ASSERT(hit >= 0);
+        click_at(rect_center_x(&layout.desk.icons[hit]), rect_center_y(&layout.desk.icons[hit]));
+        read_kbd(got, (int)sizeof(got));
+        TEST_ASSERT_EQUAL_STRING("", got);
+    }
+    /* full screen web pane: no desktop icons */
+    blank_scene();
+    g_scene.version = 4;
+    g_scene.pane = OS_FB_PANE_WEB;
+    gfx_desktop_get_layout(&g_scene, W, H, &layout);
+    TEST_ASSERT_EQUAL(0, layout.desk.count);
+    vga_desktop_set(0);
+}
+
+/* UI test: from scene version 5 the labels name the real llm; older
+ * scenes keep the stub_echo pixels. */
+static void test_llm_label_from_scene(void) {
+    static uint32_t a[W * H];
+    int x, y, diff = 0, diff_old = 0;
+    blank_scene();
+    g_scene.version = 4;
+    gfx_desktop_draw(&g_scene, a, W, H);
+    blank_scene();
+    g_scene.version = 4;
+    memcpy(g_scene.llm, "gpt2_local", 11);
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    for (y = 0; y < 80; y++)
+        for (x = 0; x < W; x++)
+            if (gfx_desktop_pixel(a, W, H, x, y) != gfx_desktop_pixel(g_fb, W, H, x, y)) diff_old++;
+    TEST_ASSERT_EQUAL(0, diff_old);
+    g_scene.version = 5;
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    /* top bar label and stage badge line (y < 80) changed */
+    for (y = 0; y < 80; y++)
+        for (x = 0; x < W; x++)
+            if (gfx_desktop_pixel(a, W, H, x, y) != gfx_desktop_pixel(g_fb, W, H, x, y)) diff++;
+    TEST_ASSERT(diff > 50);
+    /* version 5 with stub_echo draws like the old scene */
+    memcpy(g_scene.llm, "stub_echo", 10);
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    diff = 0;
+    for (y = 0; y < H; y++)
+        for (x = 0; x < W; x++)
+            if (gfx_desktop_pixel(a, W, H, x, y) != gfx_desktop_pixel(g_fb, W, H, x, y)) diff++;
+    TEST_ASSERT_EQUAL(0, diff);
+}
+
 static void test_p2p_collab_prod_panes_drawing(void) {
     blank_scene();
     g_scene.chat_mode = OS_FB_CHAT_FLOAT;
@@ -385,6 +472,8 @@ int main(void) {
     RUN_TEST(test_fb_present_repeated);
     RUN_TEST(test_desktop_layout_and_hit_test);
     RUN_TEST(test_hit_regions_dock_menu_stage_close);
+    RUN_TEST(test_desktop_icons_click);
+    RUN_TEST(test_llm_label_from_scene);
     RUN_TEST(test_p2p_collab_prod_panes_drawing);
     RUN_TEST(test_vbe_layout_automation_under_load);
     RUN_TEST(test_web_pane_display_list);

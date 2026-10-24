@@ -726,6 +726,13 @@ def main():
             send_command_until(
                 monitor, "ai hello", "[IA]", proc, mode="getc", wait_prompt=False
             )
+            if MODEL_PACKED:
+                # The real GPT-2 takes 30-40 s under TCG: ESC must cancel it
+                # and give the desktop input back (UI test contract).
+                step = len(log_text())
+                send_key(monitor, "esc")
+                wait_for(proc, "generation annulee (Echap)", CMD_TIMEOUT, step)
+                say("ESC cancelled ai in the gui shell pane")
             say("typing /p2p in gui ...")
             send_command_until(
                 monitor, "/p2p", "pane=p2p", proc, mode="getc", wait_prompt=False
@@ -742,6 +749,16 @@ def main():
             send_command_until(
                 monitor, "/center", "chat_mode=center", proc, mode="getc", wait_prompt=False
             )
+            # ESC on a half typed line clears it and keeps the desktop.
+            step = len(log_text())
+            for key in ("x", "y", "z"):
+                send_key(monitor, key)
+                time.sleep(0.2)
+            send_key(monitor, "esc")
+            wait_for(proc, "osui gui input cleared", CMD_TIMEOUT, step)
+            if "osui gui exit" in log_text()[step:]:
+                raise RuntimeError("ESC with typed input left the desktop")
+            say("ESC cleared the typed line, desktop kept")
             say("typing media-play audio stream1 in gui ...")
             send_command_until(
                 monitor, "media-play audio stream1", "status=playing", proc, mode="getc", wait_prompt=False
