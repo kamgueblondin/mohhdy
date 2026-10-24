@@ -170,6 +170,9 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c"
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
+    if [ "$(basename "$test_file")" = "test_fsops.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/fsops.c"
+    fi
     if [ "$(basename "$test_file")" = "test_osui_panes.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_panes.c"
         cflags="$cflags -I$BASE_DIR/userspace"

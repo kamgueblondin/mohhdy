@@ -22,6 +22,7 @@ int shell_collab_line(const char* line);
 #include "shell_platform.h"
 #include "osui_gui.h"
 #include "osui_ide.h"
+#include "fsops.h"
 #include "promptmessage.h"
 #include "grpcwire.h"
 #include "csig.h"
@@ -743,7 +744,22 @@ static int wait_vfs_read_reply(int expected_sender, uint32_t request_id, os_ipc_
                                 VFS_READ_REPLY_WAIT_TURNS);
 }
 
+void print_string(const char* str);
 static void print_fs_err(const char* cmd, int rc);
+/* The kernel VFS through the shared file library (userspace/fsops.c): the
+ * desktop file explorer and text editor use the same functions. The
+ * ramfs fallbacks below only cover paths the kernel VFS does not know. */
+const fsops_io_t shell_fs_io = {
+    sys_stat, sys_listdir, sys_readfile, sys_writefile, sys_mkdir, sys_unlink, sys_rename, sys_copy
+};
+
+static void print_fs_ok(const char* cmd, const char* name) {
+    print_string(cmd);
+    print_string(" ok ");
+    print_string(name);
+    print_string("\n");
+}
+
 
 // ==============================================================================
 // FONCTIONS UTILITAIRES MODERNES
@@ -2535,31 +2551,22 @@ static void cmd_append(shell_context_t* ctx, char args[][128], int arg_count) {
 
 static void cmd_touch(shell_context_t* ctx, char args[][128], int arg_count) {
     char path[RAMFS_PATH_MAX];
-    os_dirent_t st;
     int rc;
     if (arg_count == 0) {
         print_error("touch: fichier manquant");
         return;
     }
     resolve_arg(ctx, args[0], path);
-    if (sys_stat(path, &st) == 0) {
-        if (st.flags == OS_DIRENT_DIR) {
-            print_error("touch: est un repertoire");
-            return;
-        }
-        print_string("touch ok ");
-        print_string(args[0]);
-        print_string("\n");
+    rc = fsops_touch(&shell_fs_io, path);
+    if (rc == FSOPS_ERR_ISDIR) {
+        print_error("touch: est un repertoire");
         return;
     }
-    rc = sys_writefile(path, "", 0);
     if (rc < 0) {
         print_fs_err("touch", rc);
         return;
     }
-    print_string("touch ok ");
-    print_string(args[0]);
-    print_string("\n");
+    print_fs_ok("touch", args[0]);
 }
 
 static void cmd_stat(shell_context_t* ctx, char args[][128], int arg_count) {
@@ -3596,13 +3603,8 @@ static void cmd_which(shell_context_t* ctx, const char* cmd) {
 static void print_fs_err(const char* cmd, int rc) {
     print_string(cmd);
     print_string(": ");
-    if (rc == -2) print_string("existe deja\n");
-    else if (rc == -3) print_string("parent invalide\n");
-    else if (rc == -4) print_string("est un repertoire\n");
-    else if (rc == -5) print_string("repertoire non vide\n");
-    else if (rc == -6) print_string("plus de place\n");
-    else if (rc == -8) print_string("protege (initrd)\n");
-    else print_string("echec\n");
+    print_string(fsops_strerror(rc));
+    print_string("\n");
 }
 
 static void cmd_mkdir(shell_context_t* ctx, char args[][128], int arg_count) {
@@ -3613,14 +3615,12 @@ static void cmd_mkdir(shell_context_t* ctx, char args[][128], int arg_count) {
         return;
     }
     resolve_arg(ctx, args[0], path);
-    rc = sys_mkdir(path);
+    rc = fsops_mkdir(&shell_fs_io, path);
     if (rc != 0) {
         print_fs_err("mkdir", rc);
         return;
     }
-    print_string("mkdir ok ");
-    print_string(args[0]);
-    print_string("\n");
+    print_fs_ok("mkdir", args[0]);
 }
 
 static void cmd_rmdir(shell_context_t* ctx, char args[][128], int arg_count) {
@@ -3633,18 +3633,12 @@ static void cmd_rmdir(shell_context_t* ctx, char args[][128], int arg_count) {
     }
     resolve_arg(ctx, args[0], path);
     if (sys_stat(path, &st) == 0) {
-        if (st.flags != OS_DIRENT_DIR) {
-            print_error("rmdir: n'est pas un repertoire");
-            return;
-        }
-        rc = sys_unlink(path);
+        rc = fsops_rmdir(&shell_fs_io, path);
         if (rc != 0) {
             print_fs_err("rmdir", rc);
             return;
         }
-        print_string("rmdir ok ");
-        print_string(args[0]);
-        print_string("\n");
+        print_fs_ok("rmdir", args[0]);
         return;
     }
     rc = ramfs_rmdir(path);
@@ -3661,68 +3655,23 @@ static void cmd_rm(shell_context_t* ctx, char args[][128], int arg_count) {
     }
     resolve_arg(ctx, args[0], path);
     if (sys_stat(path, &st) == 0) {
-        if (st.flags == OS_DIRENT_DIR) {
-            print_error("rm: est un repertoire");
-            return;
-        }
-        rc = sys_unlink(path);
+        rc = fsops_rm(&shell_fs_io, path);
         if (rc != 0) {
             print_fs_err("rm", rc);
             return;
         }
-        print_string("rm ok ");
-        print_string(args[0]);
-        print_string("\n");
+        print_fs_ok("rm", args[0]);
         return;
     }
     rc = ramfs_rm(path);
     if (rc != RAMFS_OK) print_ramfs_err("rm", rc);
 }
 
-static const char* fs_basename(const char* path) {
-    const char* b = path ? path : "";
-    int i = 0;
-    while (path && path[i]) {
-        if (path[i] == '/') b = path + i + 1;
-        i++;
-    }
-    return (b && b[0]) ? b : "/";
-}
-
-static void fs_join(char* out, int max, const char* dir, const char* name) {
-    int i = 0;
-    int j = 0;
-    if (!dir) dir = "/";
-    if (!name) name = "";
-    while (dir[i] && i < max - 2) {
-        out[i] = dir[i];
-        i++;
-    }
-    if (i > 0 && out[i - 1] != '/') out[i++] = '/';
-    while (name[j] && i < max - 1) out[i++] = name[j++];
-    out[i] = '\0';
-}
-
-static int kernel_copy_file_to(const char* src, const char* dest) {
-    os_dirent_t st;
-    char buf[256];
-    int n;
-    int w;
-    if (sys_stat(src, &st) != 0) return -1;
-    if (st.flags == OS_DIRENT_DIR) return -4;
-    n = sys_readfile(src, buf, (int)sizeof(buf));
-    if (n < 0) return n;
-    if (sys_stat(dest, &st) == 0 && st.flags == OS_DIRENT_DIR) return -4;
-    w = sys_writefile(dest, buf, n);
-    if (w < 0) return w;
-    return 0;
-}
-
 static void cmd_cp(shell_context_t* ctx, char args[][128], int arg_count) {
     char src[RAMFS_PATH_MAX];
     char dst[RAMFS_PATH_MAX];
+    char fin[RAMFS_PATH_MAX];
     os_dirent_t st;
-    int src_dir;
     int rc;
     if (arg_count < 2) {
         print_error("cp: usage cp <src> <dest>");
@@ -3731,21 +3680,12 @@ static void cmd_cp(shell_context_t* ctx, char args[][128], int arg_count) {
     resolve_arg(ctx, args[0], src);
     resolve_arg(ctx, args[1], dst);
     if (sys_stat(src, &st) == 0) {
-        src_dir = (st.flags == OS_DIRENT_DIR);
-        if (sys_stat(dst, &st) == 0 && st.flags == OS_DIRENT_DIR) {
-            char joined[RAMFS_PATH_MAX];
-            fs_join(joined, RAMFS_PATH_MAX, dst, fs_basename(src));
-            strcpy(dst, joined);
-        }
-        if (src_dir) rc = sys_copy(src, dst);
-        else rc = kernel_copy_file_to(src, dst);
+        rc = fsops_cp(&shell_fs_io, src, dst, fin, RAMFS_PATH_MAX);
         if (rc != 0) {
             print_fs_err("cp", rc);
             return;
         }
-        print_string("cp ok ");
-        print_string(fs_basename(dst));
-        print_string("\n");
+        print_fs_ok("cp", fsops_basename(fin));
         return;
     }
     rc = ramfs_cp(src, dst);
@@ -3755,6 +3695,7 @@ static void cmd_cp(shell_context_t* ctx, char args[][128], int arg_count) {
 static void cmd_mv(shell_context_t* ctx, char args[][128], int arg_count) {
     char src[RAMFS_PATH_MAX];
     char dst[RAMFS_PATH_MAX];
+    char fin[RAMFS_PATH_MAX];
     os_dirent_t st;
     int rc;
     if (arg_count < 2) {
@@ -3764,19 +3705,12 @@ static void cmd_mv(shell_context_t* ctx, char args[][128], int arg_count) {
     resolve_arg(ctx, args[0], src);
     resolve_arg(ctx, args[1], dst);
     if (sys_stat(src, &st) == 0) {
-        if (sys_stat(dst, &st) == 0 && st.flags == OS_DIRENT_DIR) {
-            char joined[RAMFS_PATH_MAX];
-            fs_join(joined, RAMFS_PATH_MAX, dst, fs_basename(src));
-            strcpy(dst, joined);
-        }
-        rc = sys_rename(src, dst);
+        rc = fsops_mv(&shell_fs_io, src, dst, fin, RAMFS_PATH_MAX);
         if (rc != 0) {
             print_fs_err("mv", rc);
             return;
         }
-        print_string("mv ok ");
-        print_string(fs_basename(dst));
-        print_string("\n");
+        print_fs_ok("mv", fsops_basename(fin));
         return;
     }
     rc = ramfs_mv(src, dst);
