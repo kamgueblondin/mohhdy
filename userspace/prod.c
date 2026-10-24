@@ -1731,6 +1731,129 @@ int prod_core_scheduler_scale_power_thermal(prod_core_scheduler_t *sched, uint32
     return 0;
 }
 
+/* Lot 42: Production Daemon Multi-Region Autonomous AI Incident Remediation Engine & Thermal/Power Dynamic Core Scheduler Engine (US-125 / US-134) */
+void prod_ai_remediation_engine_init(prod_ai_remediation_engine_t *engine) {
+    int i;
+    if (!engine) return;
+    for (i = 0; i < PROD_AI_INCIDENTS_MAX; i++) {
+        engine->incidents[i].incident_id = 0;
+        engine->incidents[i].region_id = 0;
+        engine->incidents[i].severity = 0;
+        engine->incidents[i].playbook_dispatched = 0;
+        engine->incidents[i].region_isolated = 0;
+        engine->incidents[i].active = 0;
+    }
+    engine->incident_count = 0;
+    engine->total_playbooks_run = 0;
+    engine->total_isolations = 0;
+}
+
+int prod_ai_remediation_record_incident(prod_ai_remediation_engine_t *engine, uint32_t incident_id, uint32_t region_id, uint32_t severity) {
+    int i;
+    if (!engine) return -1;
+    for (i = 0; i < PROD_AI_INCIDENTS_MAX; i++) {
+        if (engine->incidents[i].active && engine->incidents[i].incident_id == incident_id) {
+            return -2;
+        }
+    }
+    if (engine->incident_count >= PROD_AI_INCIDENTS_MAX) return -3;
+    for (i = 0; i < PROD_AI_INCIDENTS_MAX; i++) {
+        if (!engine->incidents[i].active) {
+            engine->incidents[i].incident_id = incident_id;
+            engine->incidents[i].region_id = region_id;
+            engine->incidents[i].severity = severity;
+            engine->incidents[i].playbook_dispatched = 0;
+            engine->incidents[i].region_isolated = 0;
+            engine->incidents[i].active = 1;
+            engine->incident_count++;
+            return 0;
+        }
+    }
+    return -4;
+}
+
+int prod_ai_remediation_dispatch_playbook(prod_ai_remediation_engine_t *engine, uint32_t incident_id, int *out_isolated) {
+    int i;
+    if (!engine || !out_isolated) return -1;
+    *out_isolated = 0;
+    for (i = 0; i < PROD_AI_INCIDENTS_MAX; i++) {
+        if (engine->incidents[i].active && engine->incidents[i].incident_id == incident_id) {
+            engine->incidents[i].playbook_dispatched = 1;
+            engine->total_playbooks_run++;
+            if (engine->incidents[i].severity >= 3) { /* High or critical */
+                engine->incidents[i].region_isolated = 1;
+                engine->total_isolations++;
+                *out_isolated = 1;
+            }
+            return 0;
+        }
+    }
+    return -2; /* Incident not found */
+}
+
+void prod_thermal_power_scheduler_init(prod_thermal_power_scheduler_t *sched, uint32_t num_cores) {
+    int i;
+    if (!sched) return;
+    sched->num_cores = (num_cores > PROD_DYNAMIC_CORES_MAX) ? PROD_DYNAMIC_CORES_MAX : num_cores;
+    for (i = 0; i < PROD_DYNAMIC_THREADS_MAX; i++) {
+        sched->threads[i].thread_id = 0;
+        sched->threads[i].assigned_core = 0;
+        sched->threads[i].target_affinity_mask = 0;
+        sched->threads[i].cpu_cycles = 0;
+        sched->threads[i].active = 0;
+    }
+    sched->thread_count = 0;
+    sched->current_freq_pct = 100;
+    sched->current_temp_celsius = 45;
+    sched->thermal_throttling_active = 0;
+    sched->total_freq_scales = 0;
+}
+
+int prod_thermal_power_scheduler_bind(prod_thermal_power_scheduler_t *sched, uint32_t thread_id, uint32_t core_id, uint32_t affinity_mask) {
+    int i;
+    if (!sched) return -1;
+    if (core_id >= sched->num_cores) return -2;
+    for (i = 0; i < PROD_DYNAMIC_THREADS_MAX; i++) {
+        if (sched->threads[i].active && sched->threads[i].thread_id == thread_id) {
+            sched->threads[i].assigned_core = core_id;
+            sched->threads[i].target_affinity_mask = affinity_mask;
+            return 0;
+        }
+    }
+    if (sched->thread_count >= PROD_DYNAMIC_THREADS_MAX) return -3;
+    for (i = 0; i < PROD_DYNAMIC_THREADS_MAX; i++) {
+        if (!sched->threads[i].active) {
+            sched->threads[i].thread_id = thread_id;
+            sched->threads[i].assigned_core = core_id;
+            sched->threads[i].target_affinity_mask = affinity_mask;
+            sched->threads[i].cpu_cycles = 0;
+            sched->threads[i].active = 1;
+            sched->thread_count++;
+            return 0;
+        }
+    }
+    return -4;
+}
+
+int prod_thermal_power_scheduler_tick(prod_thermal_power_scheduler_t *sched, uint32_t current_temp_celsius, uint32_t *out_scaled_freq_pct) {
+    if (!sched || !out_scaled_freq_pct) return -1;
+    sched->current_temp_celsius = current_temp_celsius;
+    if (current_temp_celsius > 85) {
+        sched->current_freq_pct = 50;
+        sched->thermal_throttling_active = 1;
+        sched->total_freq_scales++;
+    } else if (current_temp_celsius > 75) {
+        sched->current_freq_pct = 75;
+        sched->thermal_throttling_active = 1;
+        sched->total_freq_scales++;
+    } else {
+        sched->current_freq_pct = 100;
+        sched->thermal_throttling_active = 0;
+    }
+    *out_scaled_freq_pct = sched->current_freq_pct;
+    return 0;
+}
+
 /* Lot 40: Production Daemon Multi-Cluster Incident Auto-Healing Engine & Self-Driving Resource Allocation Engine */
 
 void prod_multi_cluster_auto_heal_init(prod_multi_cluster_auto_heal_t *mgr, uint32_t anomaly_threshold_ppm) {

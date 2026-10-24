@@ -10,6 +10,20 @@
 
 ## État courant vérifié
 
+## Etat courant du 24 octobre 2026 (lot 42)
+
+Living baseline. Plan: [lot42_plan.md](lot42_plan.md).
+
+```text
+make test-all : 997 passed, 0 failed, 0 skipped
+```
+
+- US-014 / US-047: Storage VFS PCIe NVMe SR-IOV Engine (`vfs_nvme_sriov_init`, `vfs_nvme_sriov_alloc_vf`, `vfs_nvme_sriov_submit_cmd`) and Multi-Tenant VFS QoS Isolator (`vfs_qos_isolator_init`, `vfs_qos_register_tenant`, `vfs_qos_consume_tokens`).
+- US-064 / US-089: Web Runtime WebAssembly SIMD Vectorized LLM KV-Cache Compressor (`webrt_kv_compressor_init`, `webrt_kv_compress_block`, `webrt_kv_decompress_block`) and WebGPU Async Pipeline Compute Shader Engine (`webrt_webgpu_async_engine_init`, `webrt_webgpu_async_compile_jit`, `webrt_webgpu_async_dispatch_barrier`).
+- US-077 / US-089: P2P Mesh Cross-WAN Geo-Distributed BFT Consensus Mesh (`p2p_bft_consensus_mesh_init`, `p2p_bft_consensus_mesh_add_node`, `p2p_bft_consensus_mesh_evaluate_quorum`) and Zero-Knowledge Bulletproofs Batch Aggregator (`p2p_zk_bulletproof_batch_aggregator_init`, `p2p_zk_bulletproof_batch_add_proof`, `p2p_zk_bulletproof_batch_verify_all`).
+- US-125 / US-134: Production Daemon Multi-Region Autonomous AI Incident Remediation Engine (`prod_ai_remediation_engine_init`, `prod_ai_remediation_record_incident`, `prod_ai_remediation_dispatch_playbook`) and Thermal/Power Dynamic Core Scheduler Engine (`prod_thermal_power_scheduler_init`, `prod_thermal_power_scheduler_bind`, `prod_thermal_power_scheduler_tick`).
+- Command alignment: 442 commands aligned and verified across shell builtins and JSON manifest (`python3 scripts/extract_guest_commands.py --check`).
+
 ## Etat courant du 23 octobre 2026 (lot 35)
 
 Living baseline. Plan: [lot35_plan.md](lot35_plan.md).

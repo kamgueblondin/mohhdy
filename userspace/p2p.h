@@ -827,4 +827,47 @@ void p2p_zk_aggregator_init(p2p_zk_aggregator_t *agg);
 int p2p_zk_aggregator_add_proof(p2p_zk_aggregator_t *agg, uint32_t proof_type, const uint8_t *proof_data, uint32_t proof_len);
 int p2p_zk_aggregator_verify_batch(p2p_zk_aggregator_t *agg, int *out_valid_count);
 
+/* Lot 42: P2P Mesh Network Cross-WAN Geo-Distributed Fault-Tolerant Consensus Mesh & Zero-Knowledge Bulletproofs Batch Aggregator Engine (US-077 / US-089) */
+#define P2P_BFT_MESH_NODES_MAX 8
+#define P2P_ZK_BULLETPROOF_BATCH_ENTRY_MAX 8
+
+typedef struct {
+    uint32_t node_id;
+    uint32_t region_id;
+    uint32_t rtt_ewma_ms;
+    uint8_t faulty;
+    uint8_t slow;
+    uint8_t active;
+} p2p_bft_node_t;
+
+typedef struct {
+    p2p_bft_node_t nodes[P2P_BFT_MESH_NODES_MAX];
+    int node_count;
+    uint32_t ewma_quorum_ms;
+    uint32_t total_consensus_rounds;
+    uint32_t faulty_nodes_detected;
+} p2p_bft_consensus_mesh_t;
+
+typedef struct {
+    uint32_t proof_id;
+    uint8_t proof_bytes[64];
+    uint32_t commitment_val;
+    uint8_t valid;
+} p2p_zk_bulletproof_entry_t;
+
+typedef struct {
+    p2p_zk_bulletproof_entry_t proofs[P2P_ZK_BULLETPROOF_BATCH_ENTRY_MAX];
+    int proof_count;
+    uint32_t batch_verifications_count;
+    uint32_t total_valid_bulletproofs;
+} p2p_zk_bulletproof_batch_aggregator_t;
+
+void p2p_bft_consensus_mesh_init(p2p_bft_consensus_mesh_t *mesh);
+int p2p_bft_consensus_mesh_add_node(p2p_bft_consensus_mesh_t *mesh, uint32_t node_id, uint32_t region_id, uint32_t rtt_ms);
+int p2p_bft_consensus_mesh_evaluate_quorum(p2p_bft_consensus_mesh_t *mesh, int *out_quorum_achieved, uint32_t *out_active_nodes);
+
+void p2p_zk_bulletproof_batch_aggregator_init(p2p_zk_bulletproof_batch_aggregator_t *agg);
+int p2p_zk_bulletproof_batch_add_proof(p2p_zk_bulletproof_batch_aggregator_t *agg, uint32_t proof_id, const uint8_t *proof_bytes, uint32_t commit_val);
+int p2p_zk_bulletproof_batch_verify_all(p2p_zk_bulletproof_batch_aggregator_t *agg, int *out_valid_count);
+
 #endif

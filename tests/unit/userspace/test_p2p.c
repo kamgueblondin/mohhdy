@@ -1534,6 +1534,32 @@ static void test_lot41_p2p_cross_wan_mesh_and_zk_aggregator(void) {
     TEST_ASSERT_EQUAL(2, agg.total_valid_proofs);
 }
 
+static void test_lot42_p2p_bft_mesh_and_zk_bulletproofs_batch(void) {
+    p2p_bft_consensus_mesh_t mesh;
+    p2p_bft_consensus_mesh_init(&mesh);
+    TEST_ASSERT_EQUAL(0, p2p_bft_consensus_mesh_add_node(&mesh, 1, 10, 50));
+    TEST_ASSERT_EQUAL(0, p2p_bft_consensus_mesh_add_node(&mesh, 2, 10, 60));
+    TEST_ASSERT_EQUAL(0, p2p_bft_consensus_mesh_add_node(&mesh, 3, 10, 1200)); /* Faulty */
+    TEST_ASSERT_EQUAL(3, mesh.node_count);
+    TEST_ASSERT_EQUAL(1, mesh.faulty_nodes_detected);
+
+    int quorum_ok = 0;
+    uint32_t active_nodes = 0;
+    TEST_ASSERT_EQUAL(0, p2p_bft_consensus_mesh_evaluate_quorum(&mesh, &quorum_ok, &active_nodes));
+    TEST_ASSERT_EQUAL(3, active_nodes);
+
+    p2p_zk_bulletproof_batch_aggregator_t bullet_agg;
+    p2p_zk_bulletproof_batch_aggregator_init(&bullet_agg);
+    uint8_t proof_bytes[64] = {0xAB};
+    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_batch_add_proof(&bullet_agg, 501, proof_bytes, 100));
+    TEST_ASSERT_EQUAL(1, bullet_agg.proof_count);
+
+    int valid_cnt = 0;
+    TEST_ASSERT_EQUAL(0, p2p_zk_bulletproof_batch_verify_all(&bullet_agg, &valid_cnt));
+    TEST_ASSERT_EQUAL(1, valid_cnt);
+    TEST_ASSERT_EQUAL(1, bullet_agg.total_valid_bulletproofs);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
@@ -1585,6 +1611,7 @@ int main(void) {
     RUN_TEST(test_lot39_wan_async_repl_and_zk_plonk);
     RUN_TEST(test_lot40_geo_sharding_and_zk_stark);
     RUN_TEST(test_lot41_p2p_cross_wan_mesh_and_zk_aggregator);
+    RUN_TEST(test_lot42_p2p_bft_mesh_and_zk_bulletproofs_batch);
 
     unity_print_results();
     unity_cleanup();

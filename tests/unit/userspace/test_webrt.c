@@ -832,6 +832,33 @@ static void test_lot41_wasm_simd_mha_and_webgpu_multi_queue(void) {
     TEST_ASSERT_EQUAL(2, mq.total_processed);
 }
 
+static void test_lot42_wasm_simd_kv_compressor_and_webgpu_async(void) {
+    webrt_kv_compressor_t comp;
+    webrt_kv_compressor_init(&comp, 0); /* Q4_K */
+    int32_t in_q16[WEBRT_KV_BLOCK_SIZE];
+    for (int i = 0; i < WEBRT_KV_BLOCK_SIZE; i++) {
+        in_q16[i] = (i % 16) << 16;
+    }
+    uint8_t compressed[32];
+    uint32_t comp_sz = 0;
+    TEST_ASSERT_EQUAL(0, webrt_kv_compress_block(&comp, in_q16, compressed, &comp_sz));
+    TEST_ASSERT_EQUAL(32, comp_sz);
+    TEST_ASSERT_EQUAL(1, comp.total_blocks_compressed);
+
+    int32_t out_q16[WEBRT_KV_BLOCK_SIZE];
+    TEST_ASSERT_EQUAL(0, webrt_kv_decompress_block(&comp, compressed, out_q16, comp_sz));
+    TEST_ASSERT_EQUAL(1, comp.total_blocks_decompressed);
+
+    webrt_webgpu_async_engine_t async_eng;
+    webrt_webgpu_async_engine_init(&async_eng);
+    TEST_ASSERT_EQUAL(0, webrt_webgpu_async_compile_jit(&async_eng, 1001, 8, 8, 1));
+    TEST_ASSERT_EQUAL(1, async_eng.shader_count);
+
+    TEST_ASSERT_EQUAL(0, webrt_webgpu_async_dispatch_barrier(&async_eng, 1001, 16, 16, 1));
+    TEST_ASSERT_EQUAL(1, async_eng.total_async_dispatches);
+    TEST_ASSERT_EQUAL(1, async_eng.memory_barriers_passed);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cache_freshness_revalidation_and_lru);
@@ -863,6 +890,7 @@ int main(void) {
     RUN_TEST(test_lot39_wasm_simd256_and_webgpu_compute);
     RUN_TEST(test_lot40_simd512_and_webgpu_parallel_encoder);
     RUN_TEST(test_lot41_wasm_simd_mha_and_webgpu_multi_queue);
+    RUN_TEST(test_lot42_wasm_simd_kv_compressor_and_webgpu_async);
 
     unity_print_results();
     unity_cleanup();

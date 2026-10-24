@@ -769,4 +769,51 @@ int prod_core_scheduler_bind_thread(prod_core_scheduler_t *sched, uint32_t threa
 int prod_core_scheduler_migrate_thread(prod_core_scheduler_t *sched, uint32_t thread_id, uint32_t target_core);
 int prod_core_scheduler_scale_power_thermal(prod_core_scheduler_t *sched, uint32_t temp_celsius, uint32_t *out_scaled_freq_pct);
 
+/* Lot 42: Production Daemon Multi-Region Autonomous AI Incident Remediation Engine & Thermal/Power Dynamic Core Scheduler Engine (US-125 / US-134) */
+#define PROD_AI_INCIDENTS_MAX 8
+#define PROD_DYNAMIC_CORES_MAX 8
+#define PROD_DYNAMIC_THREADS_MAX 16
+
+typedef struct {
+    uint32_t incident_id;
+    uint32_t region_id;
+    uint32_t severity; /* 1=low, 2=med, 3=high, 4=critical */
+    uint8_t playbook_dispatched;
+    uint8_t region_isolated;
+    uint8_t active;
+} prod_ai_incident_t;
+
+typedef struct {
+    prod_ai_incident_t incidents[PROD_AI_INCIDENTS_MAX];
+    int incident_count;
+    uint32_t total_playbooks_run;
+    uint32_t total_isolations;
+} prod_ai_remediation_engine_t;
+
+typedef struct {
+    uint32_t thread_id;
+    uint32_t assigned_core;
+    uint32_t target_affinity_mask;
+    uint32_t cpu_cycles;
+    uint8_t active;
+} prod_dynamic_thread_t;
+
+typedef struct {
+    prod_dynamic_thread_t threads[PROD_DYNAMIC_THREADS_MAX];
+    int thread_count;
+    uint32_t num_cores;
+    uint32_t current_freq_pct;
+    uint32_t current_temp_celsius;
+    uint8_t thermal_throttling_active;
+    uint32_t total_freq_scales;
+} prod_thermal_power_scheduler_t;
+
+void prod_ai_remediation_engine_init(prod_ai_remediation_engine_t *engine);
+int prod_ai_remediation_record_incident(prod_ai_remediation_engine_t *engine, uint32_t incident_id, uint32_t region_id, uint32_t severity);
+int prod_ai_remediation_dispatch_playbook(prod_ai_remediation_engine_t *engine, uint32_t incident_id, int *out_isolated);
+
+void prod_thermal_power_scheduler_init(prod_thermal_power_scheduler_t *sched, uint32_t num_cores);
+int prod_thermal_power_scheduler_bind(prod_thermal_power_scheduler_t *sched, uint32_t thread_id, uint32_t core_id, uint32_t affinity_mask);
+int prod_thermal_power_scheduler_tick(prod_thermal_power_scheduler_t *sched, uint32_t current_temp_celsius, uint32_t *out_scaled_freq_pct);
+
 #endif
