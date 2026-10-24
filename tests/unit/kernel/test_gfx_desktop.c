@@ -251,7 +251,7 @@ static void test_desktop_layout_and_hit_test(void) {
 
     /* Verify layout fields calculated properly */
     TEST_ASSERT(layout.bar_h >= 28 && layout.bar_h <= 40);
-    TEST_ASSERT_EQUAL(7, layout.menu_count);
+    TEST_ASSERT_EQUAL(GFX_DESKTOP_MENUS, layout.menu_count);
     TEST_ASSERT(layout.dock.box.w > 200);
     TEST_ASSERT(layout.chat_win.send_btn.w > 50);
     TEST_ASSERT(layout.scene_ia.pills[0].w > 20);
@@ -333,7 +333,8 @@ static void test_desktop_icons_click(void) {
     drain_kbd();
     click_at(rect_center_x(&layout.desk.icons[5]), rect_center_y(&layout.desk.icons[5]));
     read_kbd(got, (int)sizeof(got));
-    TEST_ASSERT_EQUAL_STRING("/fs\n", got);
+    /* the Fichiers icon opens the explorer app; the FS pane stays on /fs */
+    TEST_ASSERT_EQUAL_STRING("/files\n", got);
     /* the icon tile really is drawn inside the hit box (Statut grey) */
     TEST_ASSERT(count_near(layout.desk.icons[4].x, layout.desk.icons[4].y,
                            layout.desk.icons[4].x + layout.desk.icons[4].w,
@@ -445,7 +446,7 @@ static void test_vbe_layout_automation_under_load(void) {
 
         /* Invariant checks on calculated layout */
         TEST_ASSERT(layout.bar_h >= 24 && layout.bar_h <= 60);
-        TEST_ASSERT_EQUAL(7, layout.menu_count);
+        TEST_ASSERT_EQUAL(GFX_DESKTOP_MENUS, layout.menu_count);
         TEST_ASSERT(layout.dock.box.w > 0 && layout.dock.box.h > 0);
         TEST_ASSERT(layout.chat_win.box.w > 0 && layout.chat_win.box.h > 0);
         TEST_ASSERT(layout.chat_win.send_btn.w > 0);
@@ -621,6 +622,141 @@ static void test_window_manager_panes_and_chat(void) {
     vga_desktop_set(0);
 }
 
+/* UX3: explorer / editor app windows from the scene (v7): z-order, focus,
+ * toolbar / grid / close events on the OS_FB_EVT channel, dock tooltip. */
+static void app_scene(void) {
+    int i;
+    blank_scene();
+    g_scene.version = 7;
+    g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+    g_scene.app_focus = 0xFF;
+    g_scene.app[0].kind = OS_FB_APP_FILES;
+    g_scene.app[0].nrows = 4;
+    strcpy(g_scene.app[0].title, "Fichiers - /home");
+    strcpy(g_scene.app[0].tool, "[Haut] [Ouvrir]");
+    for (i = 0; i < 4; i++) strcpy(g_scene.app[0].rows[i], "entry");
+    strcpy(g_scene.app[0].status, "4 elements");
+}
+
+static void test_app_windows_events_and_z_order(void) {
+    gfx_desktop_layout_t l, m;
+    char got[96];
+    int i, gx, gy;
+    vga_desktop_set(1);
+    gfx_desktop_wm_reset();
+    app_scene();
+    redraw(&l);
+    /* a newly opened app comes to the front, above the chat */
+    TEST_ASSERT(l.app_win[0].visible);
+    TEST_ASSERT(!l.app_win[1].visible);
+    TEST_ASSERT_EQUAL(GFX_WIN_APP0, l.z[GFX_WIN_COUNT - 1]);
+    TEST_ASSERT_EQUAL(1, l.dock_state[6]);
+    TEST_ASSERT_EQUAL(6, l.menu_active);
+    /* the window is painted (title band) */
+    TEST_ASSERT(count_near(l.app_win[0].box.x + 4, l.app_win[0].box.y + 4,
+                           l.app_win[0].box.x + 200, l.app_win[0].box.y + 20, 24, 34, 44, 6) > 500);
+
+    /* toolbar click: focus event then "app 0 tool C" */
+    drain_kbd();
+    click_at(l.app_win[0].tool.x + 8 * 9 + 2, l.app_win[0].tool.y + 6);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\x16" "focus 0\n" "\x16" "app 0 tool 9\n", got);
+
+    /* the scene reports the focus; a grid click is "click R C", a second
+     * one on the same row is a double click */
+    g_scene.app_focus = 0;
+    redraw(&l);
+    gx = l.app_win[0].grid.x + 3 * 8 + 2;
+    gy = l.app_win[0].grid.y + 2 * GFX_APP_ROW_H + 3;
+    drain_kbd();
+    click_at(gx, gy);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\x16" "app 0 click 2 3\n", got);
+    click_at(gx, gy);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\x16" "app 0 dclick 2 3\n", got);
+    /* drag inside the grid: a selection */
+    drain_kbd();
+    gfx_desktop_set_mouse(gx, gy, 0);
+    gfx_desktop_set_mouse(gx, gy, 1);
+    gfx_desktop_set_mouse(gx + 16, gy + GFX_APP_ROW_H, 1);
+    gfx_desktop_set_mouse(gx + 16, gy + GFX_APP_ROW_H, 0);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT(strstr(got, "app 0 drag 2 3 3 5\n") != 0);
+
+    /* a second app opens above the first; clicking the first raises it */
+    g_scene.app[1].kind = OS_FB_APP_EDIT;
+    g_scene.app[1].nrows = 1;
+    strcpy(g_scene.app[1].title, "Editeur - /home/a.txt");
+    g_scene.app[1].dirty = 1;
+    g_scene.app_focus = 1;
+    redraw(&l);
+    TEST_ASSERT(l.app_win[1].visible);
+    TEST_ASSERT_EQUAL(GFX_WIN_APP1, l.z[GFX_WIN_COUNT - 1]);
+    TEST_ASSERT_EQUAL(GFX_WIN_APP1, l.focus);
+    TEST_ASSERT_EQUAL(7, l.menu_active);
+    drain_kbd();
+    /* a point of app 0 not covered by app 1 */
+    click_at(l.app_win[0].box.x + 10, l.app_win[0].box.y + l.app_win[0].box.h - 8);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\x16" "focus 0\n", got);
+    gfx_desktop_get_layout(&g_scene, W, H, &m);
+    TEST_ASSERT_EQUAL(GFX_WIN_APP0, m.z[GFX_WIN_COUNT - 1]);
+
+    /* close button: "app 0 close" */
+    drain_kbd();
+    click_at(rect_center_x(&m.app_win[0].btn[2]), rect_center_y(&m.app_win[0].btn[2]));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\x16" "app 0 close\n", got);
+    /* minimize is local: hidden, amber dock mark, no event */
+    g_scene.app_focus = 1;
+    redraw(&l);
+    drain_kbd();
+    click_at(rect_center_x(&l.app_win[1].btn[0]), rect_center_y(&l.app_win[1].btn[0]));
+    redraw(&m);
+    TEST_ASSERT(!m.app_win[1].visible);
+    TEST_ASSERT_EQUAL(2, m.dock_state[7]);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT(strstr(got, "close") == 0);
+    /* the Editeur dock icon restores it without a command */
+    drain_kbd();
+    click_at(rect_center_x(&m.dock.icons[7]), rect_center_y(&m.dock.icons[7]));
+    redraw(&l);
+    TEST_ASSERT(l.app_win[1].visible);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT(strstr(got, "/edit") == 0);
+
+    /* desktop commands from the dock while an app has the focus: the
+     * desktop takes the keyboard back first */
+    g_scene.app_focus = 0;
+    g_scene.app[1].kind = 0;
+    redraw(&l);
+    drain_kbd();
+    click_at(rect_center_x(&l.dock.icons[5]), rect_center_y(&l.dock.icons[5]));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\x16" "focus d\n/status\n", got);
+
+    /* dock hover: tooltip with the name, pictograms (no letters) */
+    for (i = 0; i < GFX_DESKTOP_DOCK; i++) TEST_ASSERT(gfx_desktop_dock_names[i][0] != 0);
+    gfx_desktop_set_mouse(rect_center_x(&l.dock.icons[6]), rect_center_y(&l.dock.icons[6]), 0);
+    redraw(&l);
+    TEST_ASSERT_EQUAL(6, l.hover_dock);
+    TEST_ASSERT(count_near(l.dock.icons[6].x - 30, l.dock.icons[6].y - 32,
+                           l.dock.icons[6].x + 66, l.dock.icons[6].y - 8, 232, 238, 244, 4) > 200);
+    gfx_desktop_set_mouse(10, H / 2, 0);
+    redraw(&l);
+    TEST_ASSERT_EQUAL(-1, l.hover_dock);
+    vga_desktop_set(0);
+}
+
+static void test_llm_friendly_names(void) {
+    TEST_ASSERT_EQUAL_STRING("GPT-2 local", gfx_desktop_llm_name("gpt2_local"));
+    TEST_ASSERT_EQUAL_STRING("GPT-2 GGUF local", gfx_desktop_llm_name("gpt2_gguf_local"));
+    TEST_ASSERT_EQUAL_STRING("echo (sans modele)", gfx_desktop_llm_name("stub_echo"));
+    TEST_ASSERT_EQUAL_STRING("echo (sans modele)", gfx_desktop_llm_name(""));
+    TEST_ASSERT_EQUAL_STRING("other", gfx_desktop_llm_name("other"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -641,6 +777,8 @@ int main(void) {
     RUN_TEST(test_vbe_layout_automation_under_load);
     RUN_TEST(test_web_pane_display_list);
     RUN_TEST(test_window_manager_panes_and_chat);
+    RUN_TEST(test_app_windows_events_and_z_order);
+    RUN_TEST(test_llm_friendly_names);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

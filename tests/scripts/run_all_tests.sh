@@ -172,9 +172,11 @@ run_test() {
     fi
     if [ "$(basename "$test_file")" = "test_osui_files.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c"
+        cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_fsops.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/fsops.c"
+        cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_osui_panes.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_panes.c"
@@ -182,6 +184,7 @@ run_test() {
     fi
     if [ "$(basename "$test_file")" = "test_osui_editor.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_ide.c"
+        cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_osui_ide.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_ide.c"

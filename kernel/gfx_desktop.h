@@ -15,9 +15,22 @@ typedef struct {
     int x, y, w, h;
 } gfx_rect_t;
 
+#define GFX_DESKTOP_MENUS 8      /* Chat ... Statut, Fichiers, Editeur */
+#define GFX_DESKTOP_DOCK 8
+/* windows of the z-order (gfx_desktop_layout_t.z) */
+#define GFX_WIN_PANE 0
+#define GFX_WIN_CHAT 1
+#define GFX_WIN_APP0 2           /* file explorer */
+#define GFX_WIN_APP1 3           /* text editor */
+#define GFX_WIN_COUNT 4
+#define GFX_DESKTOP_APP_TITLE_H 30
+#define GFX_APP_ROW_H 14
+#define GFX_APP_TOOL_Y 36        /* toolbar text row, from the window top */
+#define GFX_APP_GRID_Y 58        /* first grid row, from the window top */
+
 typedef struct {
     int bar_h;
-    gfx_rect_t menu_items[7];
+    gfx_rect_t menu_items[GFX_DESKTOP_MENUS];
     int menu_count;
     gfx_rect_t stage_badge;
     struct {
@@ -40,11 +53,22 @@ typedef struct {
         gfx_rect_t send_btn;
         gfx_rect_t btn[3];   /* minimize, maximize, close */
     } chat_win;
+    struct {
+        int visible, minimized, maximized;
+        gfx_rect_t box;      /* w = h = 0 when closed or minimized */
+        gfx_rect_t base;
+        gfx_rect_t btn[3];   /* minimize, maximize, close */
+        gfx_rect_t tool;     /* toolbar band */
+        gfx_rect_t grid;     /* content grid */
+    } app_win[OS_FB_APPS];
+    int z[GFX_WIN_COUNT];    /* drawing order, last on top */
+    int focus;               /* GFX_WIN_* with the keyboard, -1 desktop */
     int menu_active;         /* index in menu_items of the active window, -1 none */
-    int dock_state[7];       /* 0 nothing, 1 open, 2 minimized */
+    int dock_state[GFX_DESKTOP_DOCK];   /* 0 nothing, 1 open, 2 minimized */
+    int hover_dock;          /* dock icon under the pointer (tooltip), -1 */
     struct {
         gfx_rect_t box;
-        gfx_rect_t icons[7];
+        gfx_rect_t icons[GFX_DESKTOP_DOCK];
     } dock;
     struct {
         int count; /* desktop icons drawn on the right (0 to 6) */
@@ -65,6 +89,9 @@ void gfx_desktop_get_mouse(int *x, int *y, uint8_t *buttons);
 void gfx_desktop_move_mouse(int dx, int dy, uint8_t buttons);
 /* Window manager state of the pane and chat windows (gfx_wm.c). */
 void gfx_desktop_wm_reset(void);
+/* Dock labels (tooltips) and the user-facing name of an llm label. */
+extern const char *const gfx_desktop_dock_names[GFX_DESKTOP_DOCK];
+const char *gfx_desktop_llm_name(const char *llm);
 #define GFX_DESKTOP_PANE_TITLE_H 30
 #define GFX_DESKTOP_CHAT_TITLE_H 34
 
