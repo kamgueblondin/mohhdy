@@ -951,6 +951,145 @@ int vfs_multi_region_rebalance(vfs_multi_region_rebalancer_t *reb, int *out_reba
     return RAMFS_OK;
 }
 
+/* Lot 42: Storage VFS PCIe NVMe Single-Root I/O Virtualization (SR-IOV) & Multi-Tenant QoS Isolation Engine (US-014 / US-047) */
+void vfs_nvme_sriov_init(vfs_nvme_sriov_engine_t *engine) {
+    int i;
+    if (!engine) return;
+    for (i = 0; i < VFS_NVME_SRIOV_MAX_VFS; i++) {
+        engine->vfs[i].vf_id = 0;
+        engine->vfs[i].pf_id = 0;
+        engine->vfs[i].bar_base_addr = 0;
+        engine->vfs[i].bar_size = 0;
+        engine->vfs[i].cmd_queue_head = 0;
+        engine->vfs[i].cmd_queue_tail = 0;
+        engine->vfs[i].cmds_processed = 0;
+        engine->vfs[i].active = 0;
+    }
+    engine->vf_count = 0;
+    engine->total_vf_cmds = 0;
+}
+
+int vfs_nvme_sriov_alloc_vf(vfs_nvme_sriov_engine_t *engine, uint32_t vf_id, uint32_t pf_id, uint32_t bar_base, uint32_t bar_size) {
+    int i;
+    if (!engine) return RAMFS_ERR_INVAL;
+    for (i = 0; i < VFS_NVME_SRIOV_MAX_VFS; i++) {
+        if (engine->vfs[i].active && engine->vfs[i].vf_id == vf_id) {
+            return RAMFS_ERR_EXISTS;
+        }
+    }
+    if (engine->vf_count >= VFS_NVME_SRIOV_MAX_VFS) return RAMFS_ERR_NOSPACE;
+    for (i = 0; i < VFS_NVME_SRIOV_MAX_VFS; i++) {
+        if (!engine->vfs[i].active) {
+            engine->vfs[i].vf_id = vf_id;
+            engine->vfs[i].pf_id = pf_id;
+            engine->vfs[i].bar_base_addr = bar_base;
+            engine->vfs[i].bar_size = bar_size;
+            engine->vfs[i].cmd_queue_head = 0;
+            engine->vfs[i].cmd_queue_tail = 0;
+            engine->vfs[i].cmds_processed = 0;
+            engine->vfs[i].active = 1;
+            engine->vf_count++;
+            return RAMFS_OK;
+        }
+    }
+    return RAMFS_ERR_NOSPACE;
+}
+
+int vfs_nvme_sriov_submit_cmd(vfs_nvme_sriov_engine_t *engine, uint32_t vf_id, uint32_t cmd_id) {
+    int i;
+    (void)cmd_id;
+    if (!engine) return RAMFS_ERR_INVAL;
+    for (i = 0; i < VFS_NVME_SRIOV_MAX_VFS; i++) {
+        if (engine->vfs[i].active && engine->vfs[i].vf_id == vf_id) {
+            engine->vfs[i].cmd_queue_tail = (engine->vfs[i].cmd_queue_tail + 1) % 256;
+            engine->vfs[i].cmd_queue_head = (engine->vfs[i].cmd_queue_head + 1) % 256;
+            engine->vfs[i].cmds_processed++;
+            engine->total_vf_cmds++;
+            return RAMFS_OK;
+        }
+    }
+    return RAMFS_ERR_NOTFOUND;
+}
+
+void vfs_qos_isolator_init(vfs_qos_isolator_t *qos) {
+    int i;
+    if (!qos) return;
+    for (i = 0; i < VFS_QOS_MAX_TENANTS; i++) {
+        qos->tenants[i].tenant_id = 0;
+        qos->tenants[i].iops_limit = 0;
+        qos->tenants[i].bw_limit_kbps = 0;
+        qos->tenants[i].tokens_iops = 0;
+        qos->tenants[i].tokens_bw = 0;
+        qos->tenants[i].latency_guarantee_us = 0;
+        qos->tenants[i].total_iops_consumed = 0;
+        qos->tenants[i].total_bw_consumed = 0;
+        qos->tenants[i].active = 0;
+    }
+    qos->tenant_count = 0;
+    qos->total_refills = 0;
+}
+
+int vfs_qos_register_tenant(vfs_qos_isolator_t *qos, uint32_t tenant_id, uint32_t iops_limit, uint32_t bw_limit_kbps, uint32_t latency_us) {
+    int i;
+    if (!qos) return RAMFS_ERR_INVAL;
+    for (i = 0; i < VFS_QOS_MAX_TENANTS; i++) {
+        if (qos->tenants[i].active && qos->tenants[i].tenant_id == tenant_id) {
+            return RAMFS_ERR_EXISTS;
+        }
+    }
+    if (qos->tenant_count >= VFS_QOS_MAX_TENANTS) return RAMFS_ERR_NOSPACE;
+    for (i = 0; i < VFS_QOS_MAX_TENANTS; i++) {
+        if (!qos->tenants[i].active) {
+            qos->tenants[i].tenant_id = tenant_id;
+            qos->tenants[i].iops_limit = iops_limit;
+            qos->tenants[i].bw_limit_kbps = bw_limit_kbps;
+            qos->tenants[i].tokens_iops = iops_limit;
+            qos->tenants[i].tokens_bw = bw_limit_kbps;
+            qos->tenants[i].latency_guarantee_us = latency_us;
+            qos->tenants[i].total_iops_consumed = 0;
+            qos->tenants[i].total_bw_consumed = 0;
+            qos->tenants[i].active = 1;
+            qos->tenant_count++;
+            return RAMFS_OK;
+        }
+    }
+    return RAMFS_ERR_NOSPACE;
+}
+
+int vfs_qos_consume_tokens(vfs_qos_isolator_t *qos, uint32_t tenant_id, uint32_t iops_req, uint32_t bw_req_kb, int *out_allowed) {
+    int i;
+    if (!qos || !out_allowed) return RAMFS_ERR_INVAL;
+    *out_allowed = 0;
+    for (i = 0; i < VFS_QOS_MAX_TENANTS; i++) {
+        if (qos->tenants[i].active && qos->tenants[i].tenant_id == tenant_id) {
+            if (qos->tenants[i].tokens_iops >= iops_req && qos->tenants[i].tokens_bw >= bw_req_kb) {
+                qos->tenants[i].tokens_iops -= iops_req;
+                qos->tenants[i].tokens_bw -= bw_req_kb;
+                qos->tenants[i].total_iops_consumed += iops_req;
+                qos->tenants[i].total_bw_consumed += bw_req_kb;
+                *out_allowed = 1;
+                return RAMFS_OK;
+            } else {
+                /* Refill if empty for simulation */
+                qos->tenants[i].tokens_iops = qos->tenants[i].iops_limit;
+                qos->tenants[i].tokens_bw = qos->tenants[i].bw_limit_kbps;
+                qos->total_refills++;
+                if (qos->tenants[i].tokens_iops >= iops_req && qos->tenants[i].tokens_bw >= bw_req_kb) {
+                    qos->tenants[i].tokens_iops -= iops_req;
+                    qos->tenants[i].tokens_bw -= bw_req_kb;
+                    qos->tenants[i].total_iops_consumed += iops_req;
+                    qos->tenants[i].total_bw_consumed += bw_req_kb;
+                    *out_allowed = 1;
+                    return RAMFS_OK;
+                }
+                *out_allowed = 0;
+                return RAMFS_OK;
+            }
+        }
+    }
+    return RAMFS_ERR_NOTFOUND;
+}
+
 /* Lot 40: VFS PCIe NVMe Zoned Block Device (ZBD) Zone Append Engine & Multi-Master Distributed Metadata Rebalancing Engine */
 
 void vfs_nvme_zbd_init(vfs_nvme_zbd_engine_t *zbd, int zone_cnt, uint32_t zone_capacity) {

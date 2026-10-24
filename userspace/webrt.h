@@ -716,4 +716,38 @@ void webrt_webgpu_multi_queue_init(webrt_webgpu_multi_queue_t *mq);
 int webrt_webgpu_multi_queue_submit(webrt_webgpu_multi_queue_t *mq, uint32_t queue_type, uint32_t cmd_id, uint32_t payload_val);
 int webrt_webgpu_multi_queue_process(webrt_webgpu_multi_queue_t *mq, int *out_executed_count);
 
+/* Lot 42: Web Runtime WebAssembly SIMD Vectorized LLM KV-Cache Compressor & WebGPU Async Pipeline Compute Shader Engine (US-064 / US-089) */
+#define WEBRT_KV_BLOCK_SIZE 64
+#define WEBRT_WEBGPU_ASYNC_SHADERS_MAX 8
+
+typedef struct {
+    uint32_t quant_type; /* 0=Q4_K, 1=Q8_0 */
+    uint32_t total_blocks_compressed;
+    uint32_t total_blocks_decompressed;
+} webrt_kv_compressor_t;
+
+typedef struct {
+    uint32_t shader_id;
+    uint32_t workgroup_size_x;
+    uint32_t workgroup_size_y;
+    uint32_t workgroup_size_z;
+    uint8_t compiled_jit;
+    uint32_t total_dispatches;
+} webrt_webgpu_async_shader_t;
+
+typedef struct {
+    webrt_webgpu_async_shader_t shaders[WEBRT_WEBGPU_ASYNC_SHADERS_MAX];
+    int shader_count;
+    uint32_t memory_barriers_passed;
+    uint32_t total_async_dispatches;
+} webrt_webgpu_async_engine_t;
+
+void webrt_kv_compressor_init(webrt_kv_compressor_t *comp, uint32_t quant_type);
+int webrt_kv_compress_block(webrt_kv_compressor_t *comp, const int32_t *in_q16, uint8_t *out_compressed, uint32_t *out_sz);
+int webrt_kv_decompress_block(webrt_kv_compressor_t *comp, const uint8_t *compressed, int32_t *out_q16, uint32_t in_sz);
+
+void webrt_webgpu_async_engine_init(webrt_webgpu_async_engine_t *engine);
+int webrt_webgpu_async_compile_jit(webrt_webgpu_async_engine_t *engine, uint32_t shader_id, uint32_t wg_x, uint32_t wg_y, uint32_t wg_z);
+int webrt_webgpu_async_dispatch_barrier(webrt_webgpu_async_engine_t *engine, uint32_t shader_id, uint32_t grid_x, uint32_t grid_y, uint32_t grid_z);
+
 #endif

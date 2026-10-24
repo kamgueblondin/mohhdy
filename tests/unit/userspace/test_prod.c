@@ -1242,6 +1242,31 @@ static void test_lot41_prod_chaos_resilience_and_core_scheduler(void) {
     TEST_ASSERT_EQUAL(75, freq_pct);
 }
 
+static void test_lot42_prod_ai_remediation_and_thermal_scheduler(void) {
+    prod_ai_remediation_engine_t ai_engine;
+    prod_ai_remediation_engine_init(&ai_engine);
+    TEST_ASSERT_EQUAL(0, prod_ai_remediation_record_incident(&ai_engine, 901, 10, 3)); /* High severity */
+    TEST_ASSERT_EQUAL(1, ai_engine.incident_count);
+
+    int isolated = 0;
+    TEST_ASSERT_EQUAL(0, prod_ai_remediation_dispatch_playbook(&ai_engine, 901, &isolated));
+    TEST_ASSERT_EQUAL(1, isolated);
+    TEST_ASSERT_EQUAL(1, ai_engine.total_playbooks_run);
+    TEST_ASSERT_EQUAL(1, ai_engine.total_isolations);
+
+    prod_thermal_power_scheduler_t dyn_sched;
+    prod_thermal_power_scheduler_init(&dyn_sched, 4);
+    TEST_ASSERT_EQUAL(4, dyn_sched.num_cores);
+
+    TEST_ASSERT_EQUAL(0, prod_thermal_power_scheduler_bind(&dyn_sched, 201, 1, 0x03));
+    TEST_ASSERT_EQUAL(1, dyn_sched.thread_count);
+
+    uint32_t scaled_freq = 0;
+    TEST_ASSERT_EQUAL(0, prod_thermal_power_scheduler_tick(&dyn_sched, 88, &scaled_freq));
+    TEST_ASSERT_EQUAL(50, scaled_freq);
+    TEST_ASSERT_EQUAL(1, dyn_sched.thermal_throttling_active);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
@@ -1282,6 +1307,7 @@ int main(void) {
     RUN_TEST(test_lot39_multi_region_isolator_and_self_driving);
     RUN_TEST(test_lot40_multi_cluster_heal_and_self_driving_resource);
     RUN_TEST(test_lot41_prod_chaos_resilience_and_core_scheduler);
+    RUN_TEST(test_lot42_prod_ai_remediation_and_thermal_scheduler);
 
     unity_print_results();
     unity_cleanup();

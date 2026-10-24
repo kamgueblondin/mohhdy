@@ -581,4 +581,51 @@ int vfs_multi_region_add_zone(vfs_multi_region_rebalancer_t *reb, uint32_t zone_
 int vfs_multi_region_failover(vfs_multi_region_rebalancer_t *reb, uint32_t failed_region_id, uint32_t target_region_id);
 int vfs_multi_region_rebalance(vfs_multi_region_rebalancer_t *reb, int *out_rebalanced_stripes);
 
+/* Lot 42: Storage VFS PCIe NVMe Single-Root I/O Virtualization (SR-IOV) & Multi-Tenant QoS Isolation Engine (US-014 / US-047) */
+#define VFS_NVME_SRIOV_MAX_VFS 8
+#define VFS_QOS_MAX_TENANTS 8
+
+typedef struct {
+    uint32_t vf_id;
+    uint32_t pf_id;
+    uint32_t bar_base_addr;
+    uint32_t bar_size;
+    uint32_t cmd_queue_head;
+    uint32_t cmd_queue_tail;
+    uint32_t cmds_processed;
+    uint8_t active;
+} vfs_nvme_sriov_vf_t;
+
+typedef struct {
+    vfs_nvme_sriov_vf_t vfs[VFS_NVME_SRIOV_MAX_VFS];
+    int vf_count;
+    uint32_t total_vf_cmds;
+} vfs_nvme_sriov_engine_t;
+
+typedef struct {
+    uint32_t tenant_id;
+    uint32_t iops_limit;
+    uint32_t bw_limit_kbps;
+    uint32_t tokens_iops;
+    uint32_t tokens_bw;
+    uint32_t latency_guarantee_us;
+    uint32_t total_iops_consumed;
+    uint32_t total_bw_consumed;
+    uint8_t active;
+} vfs_qos_tenant_t;
+
+typedef struct {
+    vfs_qos_tenant_t tenants[VFS_QOS_MAX_TENANTS];
+    int tenant_count;
+    uint32_t total_refills;
+} vfs_qos_isolator_t;
+
+void vfs_nvme_sriov_init(vfs_nvme_sriov_engine_t *engine);
+int vfs_nvme_sriov_alloc_vf(vfs_nvme_sriov_engine_t *engine, uint32_t vf_id, uint32_t pf_id, uint32_t bar_base, uint32_t bar_size);
+int vfs_nvme_sriov_submit_cmd(vfs_nvme_sriov_engine_t *engine, uint32_t vf_id, uint32_t cmd_id);
+
+void vfs_qos_isolator_init(vfs_qos_isolator_t *qos);
+int vfs_qos_register_tenant(vfs_qos_isolator_t *qos, uint32_t tenant_id, uint32_t iops_limit, uint32_t bw_limit_kbps, uint32_t latency_us);
+int vfs_qos_consume_tokens(vfs_qos_isolator_t *qos, uint32_t tenant_id, uint32_t iops_req, uint32_t bw_req_kb, int *out_allowed);
+
 #endif

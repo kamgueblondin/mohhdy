@@ -662,6 +662,24 @@ static void test_lot41_nvme_hmb_and_multi_region_rebalance(void) {
     TEST_ASSERT_EQUAL(2, rebalanced_stripes);
 }
 
+static void test_lot42_nvme_sriov_and_qos_isolation(void) {
+    vfs_nvme_sriov_engine_t sriov;
+    vfs_nvme_sriov_init(&sriov);
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_nvme_sriov_alloc_vf(&sriov, 1, 0, 0xF0000000, 0x10000));
+    TEST_ASSERT_EQUAL(1, sriov.vf_count);
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_nvme_sriov_submit_cmd(&sriov, 1, 101));
+    TEST_ASSERT_EQUAL(1, sriov.total_vf_cmds);
+
+    vfs_qos_isolator_t qos;
+    vfs_qos_isolator_init(&qos);
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_qos_register_tenant(&qos, 10, 1000, 5000, 200));
+    TEST_ASSERT_EQUAL(1, qos.tenant_count);
+
+    int allowed = 0;
+    TEST_ASSERT_EQUAL(RAMFS_OK, vfs_qos_consume_tokens(&qos, 10, 100, 500, &allowed));
+    TEST_ASSERT_EQUAL(1, allowed);
+}
+
 int main(void) {
     unity_init();
 
@@ -690,6 +708,7 @@ int main(void) {
     RUN_TEST(test_lot39_nvme_dif_dix_and_mvcc_gc);
     RUN_TEST(test_lot40_zbd_and_metadata_rebalancer);
     RUN_TEST(test_lot41_nvme_hmb_and_multi_region_rebalance);
+    RUN_TEST(test_lot42_nvme_sriov_and_qos_isolation);
 
     unity_print_results();
     unity_cleanup();
