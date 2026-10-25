@@ -31,6 +31,7 @@ typedef struct {
     char status[OSUI_APP_COLS];
     char open_path[FSOPS_PATH_MAX];   /* file to open (OSUI_FILES_OPEN) */
     char log[160];                     /* last operation, for the serial line */
+    int vrows, vcols;                  /* Lot 45: window grid, 0 default */
 } osui_files_t;
 
 extern const char osui_files_toolbar[];
@@ -45,4 +46,6 @@ int osui_files_tool(osui_files_t *f, int button);
 void osui_files_render(const osui_files_t *f, osui_app_view_t *v);
 /* Path of the selected entry; 0 when the list is empty. */
 int osui_files_selected(const osui_files_t *f, char *out, int max);
+/* Lot 45 (US-G15): the window grid changed; more rows list more entries */
+void osui_files_set_view(osui_files_t *f, int rows, int cols);
 #endif

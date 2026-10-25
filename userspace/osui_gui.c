@@ -648,6 +648,17 @@ void osui_gui_event(const char *line, char *out, int out_max) {
             if (kind == OS_FB_APP_EDIT) {
                 osui_ide_set_view(&g_edit, rr, cc);
                 app_out(out, out_max, "osui edit view resized", 0);
+            } else if (kind == OS_FB_APP_FILES) {
+                osui_files_set_view(&g_files, rr, cc);
+                app_out(out, out_max, "osui files view resized", 0);
+            } else if (tool_of(kind)) {
+                /* Lot 45 (US-G15): every tool window follows its grid */
+                char m[64];
+                osui_tool_set_view(tool_of(kind), rr, cc, &g_tool_src);
+                scpy(m, (int)sizeof(m), osui_tool_name(kind));
+                scat(m, (int)sizeof(m), " rows=");
+                { char nb[12]; int v = rr, k = 0, j; char tmp[12]; if (!v) tmp[k++] = '0'; while (v) { tmp[k++] = (char)('0' + v % 10); v /= 10; } for (j = 0; j < k; j++) nb[j] = tmp[k - 1 - j]; nb[k] = 0; scat(m, (int)sizeof(m), nb); }
+                app_out(out, out_max, "osui tool view resized app=", m);
             }
             return;
         }

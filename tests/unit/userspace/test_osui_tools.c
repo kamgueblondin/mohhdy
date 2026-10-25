@@ -40,6 +40,9 @@ static int fake_read(const char *path, char *buf, int max) {
     const char *r;
     if (!strcmp(path, "/home/img.pgm")) r = "P2\n# c\n4 2\n255\n0 0 255 255\n0 0 255 255\n";
     else if (!strcmp(path, "/home/a.txt")) r = "ligne un\nligne deux\nligne trois\n";
+    else if (!strcmp(path, "/home/long.txt"))
+        r = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"
+            "0123456789012345678901234567890123456789012345678901234567890123456789\nfin\n";
     else return -2;
     strncpy(buf, r, (size_t)max); return (int)strlen(r);
 }
@@ -115,6 +118,33 @@ static void test_task_manager_kill_with_confirmation(void) {
     TEST_ASSERT(strstr(v.title, "Gestionnaire") != 0);
     TEST_ASSERT(strstr(v.tool, "[Tuer]") != 0);
     TEST_ASSERT_EQUAL(OSUI_TOOL_CLOSE, osui_tool_tool(&t, 3, &k_src));
+}
+
+/* Lot 45 (US-G15): a tool window follows its grid (maximize / restore):
+ * more rows shown, text rewrapped at the new width, input line at the
+ * bottom of the bigger grid; back to the default grid on restore. */
+static void test_window_grid_follows_size(void) {
+    memset(&t, 0, sizeof(t));
+    osui_tool_open(&t, OS_FB_APP_VIEW, "/home/long.txt", &k_src);
+    TEST_ASSERT_EQUAL(76, (int)strlen(t.lines[0]));          /* default 78-col grid */
+    osui_tool_set_view(&t, 40, 120, &k_src);
+    TEST_ASSERT_EQUAL(119, (int)strlen(t.lines[0]));         /* rewrapped at 120 cols */
+    osui_tool_render(&t, &v);
+    TEST_ASSERT_EQUAL(119, (int)strlen(v.rows[0]));
+    osui_tool_set_view(&t, 0, 0, &k_src);
+    TEST_ASSERT_EQUAL(76, (int)strlen(t.lines[0]));
+    memset(&t, 0, sizeof(t));
+    osui_tool_open(&t, OS_FB_APP_NET, "", &k_src);
+    osui_tool_render(&t, &v);
+    TEST_ASSERT_EQUAL(OSUI_APP_ROWS, v.nrows);
+    osui_tool_set_view(&t, 40, 120, &k_src);
+    osui_tool_render(&t, &v);
+    TEST_ASSERT_EQUAL(40, v.nrows);                          /* input row is the last of 40 */
+    TEST_ASSERT_EQUAL(39, v.cur_row);
+    TEST_ASSERT(strncmp(v.rows[39], "arg> ", 5) == 0);
+    osui_tool_open(&t, OS_FB_APP_NET, "", &k_src);           /* reopened: default grid */
+    osui_tool_render(&t, &v);
+    TEST_ASSERT_EQUAL(OSUI_APP_ROWS, v.nrows);
 }
 
 static void test_viewer_text_and_image(void) {
@@ -243,6 +273,7 @@ int main(void) {
     RUN_TEST(test_allowlist);
     RUN_TEST(test_task_manager_kill_with_confirmation);
     RUN_TEST(test_viewer_text_and_image);
+    RUN_TEST(test_window_grid_follows_size);
     RUN_TEST(test_settings_real_values);
     RUN_TEST(test_p2p_window);
     RUN_TEST(test_pm_run_window);

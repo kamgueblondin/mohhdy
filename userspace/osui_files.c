@@ -47,11 +47,29 @@ static void log_op(osui_files_t *f, const char *op, int rc, const char *path) {
     s_cat(f->log, (int)sizeof(f->log), path);
 }
 
+
+/* Lot 45: grid rows of the window (default OSUI_APP_ROWS until resized) */
+static int files_rows(const osui_files_t *f) {
+    int r = f->vrows > 0 ? f->vrows : OSUI_APP_ROWS;
+    if (r > OSUI_APP_MAX_ROWS) r = OSUI_APP_MAX_ROWS;
+    if (r < 4) r = 4;
+    return r;
+}
+static int files_view(const osui_files_t *f) { return files_rows(f) - 2; }   /* breadcrumb + header */
+
+void osui_files_set_view(osui_files_t *f, int rows, int cols) {
+    if (!f) return;
+    f->vrows = rows < 0 ? 0 : rows;
+    f->vcols = cols < 0 ? 0 : cols;
+    if (f->sel >= f->top + files_view(f)) f->top = f->sel - files_view(f) + 1;
+    if (f->top > 0 && f->top + files_view(f) > f->n) f->top = f->n > files_view(f) ? f->n - files_view(f) : 0;
+}
+
 static void follow(osui_files_t *f) {
     if (f->sel < 0) f->sel = 0;
     if (f->sel >= f->n) f->sel = f->n > 0 ? f->n - 1 : 0;
     if (f->sel < f->top) f->top = f->sel;
-    if (f->sel >= f->top + OSUI_FILES_VIEW) f->top = f->sel - OSUI_FILES_VIEW + 1;
+    if (f->sel >= f->top + files_view(f)) f->top = f->sel - files_view(f) + 1;
     if (f->top < 0) f->top = 0;
 }
 
@@ -314,7 +332,7 @@ void osui_files_render(const osui_files_t *f, osui_app_view_t *v) {
         put_row(v, 0, line, OSUI_APP_A_LINK);
     }
     put_row(v, 1, "  Nom                                         Taille   Type", OSUI_APP_A_DIM);
-    for (r = 2, i = f->top; r < OSUI_APP_ROWS && i < f->n; r++, i++) {
+    for (r = 2, i = f->top; r < files_rows(f) && i < f->n; r++, i++) {
         const os_dirent_t *e = &f->ent[i];
         int dir = e->flags == OS_DIRENT_DIR, k;
         char num[16];
