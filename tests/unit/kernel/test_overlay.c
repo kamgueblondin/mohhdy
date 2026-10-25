@@ -154,33 +154,105 @@ static void test_snapshot_rejects_small_buffer(void) {
     TEST_ASSERT_EQUAL(99, sz);
 }
 
-static void test_64k_file_write_read_and_bounds(void) {
-    static char big[65536];
-    static char back[65536];
+/* Lot 44 (US-G16): a 30 KiB file is byte exact through write, read,
+ * read_at, snapshot and restore; beyond the bound is refused and a refused
+ * write leaves the old file untouched. */
+static void test_large_file_write_read_and_bounds(void) {
+    static char big[OV_FILE_MAX_BYTES + 1U];
+    static char back[OV_FILE_MAX_BYTES + 1U];
     uint32_t i, sz = 0;
     int n;
 
     setUp();
-    for (i = 0; i < 65536; i++) big[i] = (char)(i % 251);
+    for (i = 0; i <= OV_FILE_MAX_BYTES; i++) big[i] = (char)(i % 251U);
+    TEST_ASSERT_EQUAL((int)OV_FILE_MAX_BYTES, overlay_write("big.bin", big, OV_FILE_MAX_BYTES));
+    n = overlay_read("big.bin", back, sizeof(back));
+    TEST_ASSERT_EQUAL((int)OV_FILE_MAX_BYTES, n);
+    TEST_ASSERT_EQUAL_MEMORY(big, back, OV_FILE_MAX_BYTES);
+    /* chunked reads used by the kernel relay */
+    TEST_ASSERT_EQUAL(4096, overlay_read_at("big.bin", back, 4096, 10000U));
+    TEST_ASSERT_EQUAL_MEMORY(big + 10000, back, 4096);
+    TEST_ASSERT_EQUAL(20, overlay_read_at("big.bin", back, 4096, OV_FILE_MAX_BYTES - 20U));
+    TEST_ASSERT_EQUAL(0, overlay_read_at("big.bin", back, 4096, OV_FILE_MAX_BYTES));
 
-    /* Write exact 64 KiB */
-    int wr = overlay_write("64k.bin", big, 65536);
-    (void)wr;
-    n = overlay_read("64k.bin", back, sizeof(back));
-    TEST_ASSERT_EQUAL(65536, n);
-    TEST_ASSERT_EQUAL_MEMORY(big, back, 65536);
+    TEST_ASSERT_EQUAL(0, overlay_snapshot(g_snap, sizeof(g_snap), &sz));
+    TEST_ASSERT_EQUAL(OV_SNAP_SIZE, sz);
+    overlay_init();
+    TEST_ASSERT_EQUAL(0, overlay_restore(g_snap, sz));
+    for (i = 0; i < sizeof(back); i++) back[i] = 0;
+    TEST_ASSERT_EQUAL((int)OV_FILE_MAX_BYTES, overlay_read("big.bin", back, sizeof(back)));
+    TEST_ASSERT_EQUAL_MEMORY(big, back, OV_FILE_MAX_BYTES);
 
-    /* Snapshot & restore 64 KiB file */
+    TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, overlay_write("too_big.bin", big, OV_FILE_MAX_BYTES + 1U));
+    TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, overlay_append("big.bin", "extra", 5));
+    TEST_ASSERT_EQUAL((int)OV_FILE_MAX_BYTES, overlay_read("big.bin", back, sizeof(back)));
+    TEST_ASSERT_EQUAL_MEMORY(big, back, OV_FILE_MAX_BYTES);
+    /* a second large file does not fit the 32 KiB disk area: refused, no change */
+    TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, overlay_write("second.bin", big, 4096));
+    TEST_ASSERT_TRUE(overlay_read("second.bin", back, sizeof(back)) < 0);
+    TEST_ASSERT_TRUE(overlay_snapshot_bytes() <= OV_SNAP_SIZE);
+}
+
+static void test_large_file_rewrite_copy_append(void) {
+    static char big[12000];
+    static char back[16000];
+    uint32_t i, sz = 0;
+
+    setUp();
+    for (i = 0; i < sizeof(big); i++) big[i] = (char)('A' + i % 23U);
+    TEST_ASSERT_EQUAL(12000, overlay_write("a.txt", big, 12000));
+    TEST_ASSERT_EQUAL(OV_OK, overlay_copy("a.txt", "b.txt"));
+    TEST_ASSERT_EQUAL(12000, overlay_read("b.txt", back, sizeof(back)));
+    TEST_ASSERT_EQUAL_MEMORY(big, back, 12000);
+    /* shrink then grow by append, still byte exact */
+    TEST_ASSERT_EQUAL(5, overlay_write("a.txt", "hello", 5));
+    TEST_ASSERT_EQUAL(1000, overlay_append("a.txt", big, 1000));
+    TEST_ASSERT_EQUAL(1005, overlay_read("a.txt", back, sizeof(back)));
+    TEST_ASSERT_EQUAL_MEMORY("hello", back, 5);
+    TEST_ASSERT_EQUAL_MEMORY(big, back + 5, 1000);
+    TEST_ASSERT_EQUAL(OV_OK, overlay_rename("b.txt", "c.txt"));
     TEST_ASSERT_EQUAL(0, overlay_snapshot(g_snap, sizeof(g_snap), &sz));
     overlay_init();
     TEST_ASSERT_EQUAL(0, overlay_restore(g_snap, sz));
-    n = overlay_read("64k.bin", back, sizeof(back));
-    TEST_ASSERT_EQUAL(65536, n);
-    TEST_ASSERT_EQUAL_MEMORY(big, back, 65536);
+    TEST_ASSERT_EQUAL(12000, overlay_read("c.txt", back, sizeof(back)));
+    TEST_ASSERT_EQUAL_MEMORY(big, back, 12000);
+    TEST_ASSERT_EQUAL(OV_OK, overlay_unlink("c.txt"));
+    TEST_ASSERT_EQUAL(OV_OK, overlay_unlink("a.txt"));
+    TEST_ASSERT_EQUAL(16U, overlay_snapshot_bytes());
+}
 
-    /* Attempting to write past 64 KiB is refused */
-    TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, overlay_write("too_big.bin", big, 65537));
-    TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, overlay_append("64k.bin", "extra", 5));
+/* Disks written before Lot 44 hold a fixed v2 image (64 slots): it still
+ * loads, and the next snapshot is v3. */
+static void test_restore_v2_disk_image(void) {
+    static uint8_t v2[OV_SNAP_V2_SIZE];
+    char out[16];
+    uint32_t off = 16U + 5U * OV_SNAP_V2_NODE, sz = 0;
+    memset(v2, 0, sizeof(v2));
+    setUp();
+    put_u32(v2 + 0, OV_SNAP_MAGIC);
+    put_u32(v2 + 4, OV_SNAP_V2_VERSION);
+    put_u32(v2 + 8, OV_SNAP_V2_NODES);
+    put_u32(v2 + 12, 1U);
+    v2[off] = 1U;
+    put_u32(v2 + off + 4U, 4U);
+    memcpy(v2 + off + 8U, "v2.txt", 7U);
+    memcpy(v2 + off + 8U + OV_SNAP_V2_PATH, "v2ok", 4U);
+    TEST_ASSERT_EQUAL(0, overlay_restore(v2, sizeof(v2)));
+    TEST_ASSERT_EQUAL(4, overlay_read("v2.txt", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_MEMORY("v2ok", out, 4);
+    TEST_ASSERT_EQUAL(0, overlay_snapshot(g_snap, sizeof(g_snap), &sz));
+    TEST_ASSERT_EQUAL(3, (int)g_snap[4]);
+}
+
+static void test_restore_v3_rejects_broken_chain(void) {
+    uint32_t sz = 0;
+    char buf[8];
+    setUp();
+    TEST_ASSERT_EQUAL(1000, overlay_write("c.bin", (const char*)g_snap, 1000));
+    TEST_ASSERT_EQUAL(0, overlay_snapshot(g_snap, sizeof(g_snap), &sz));
+    put_u32(g_snap + 12, 2U);  /* drop the last block record */
+    TEST_ASSERT_TRUE(overlay_restore(g_snap, sz) < 0);
+    TEST_ASSERT_EQUAL(8, overlay_read("c.bin", buf, sizeof(buf)));
 }
 
 int main(void) {
@@ -193,7 +265,10 @@ int main(void) {
     RUN_TEST(test_restore_v1_snapshot_compatibility);
     RUN_TEST(test_snapshot_v2_accepts_extended_file);
     RUN_TEST(test_snapshot_rejects_small_buffer);
-    RUN_TEST(test_64k_file_write_read_and_bounds);
+    RUN_TEST(test_large_file_write_read_and_bounds);
+    RUN_TEST(test_large_file_rewrite_copy_append);
+    RUN_TEST(test_restore_v3_rejects_broken_chain);
+    RUN_TEST(test_restore_v2_disk_image);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

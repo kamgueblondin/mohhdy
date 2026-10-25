@@ -56,6 +56,16 @@ pour toutes les apps (US-G15), ecriture de gros fichiers persistants
 (US-G16), panneaux vfs/task/session/mcp/media/grpc (US-G17), formulaires
 du registre collab, redemarrage de pilote depuis /services.
 
+Lot 44 (PR #201 de Jules, revue et corrigee) : fichiers overlay jusqu'a
+30 Kio (blocs chaines, image v3 dense dans la zone AIOV de 32 Kio, relais
+atadriver par morceaux de 4 Kio), panneaux /vfs /sessions /mcp /media
+/grpc /pwa /devsync /sysadmin /api, `driver-restart`, formulaires du
+registre collab, `grep -r` pagine. US-G16 et US-G17 passent a partiel ;
+US-G15 reste a faire. Non fait : lignes de plus de 72 colonnes, fichiers
+de 64 Kio, BMP/PNG, presse-papiers de plus de 4 Kio, capture des
+programmes lances, Raft avec partition, acceleration HTTPS, ports TCP.
+Etat par point : `docs/lot44_plan.md`.
+
 ### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production
 - **Moteur Web & Securite (US-039 / US-031)** : Validation dynamique CSP des origines de ressources (images, styles, scripts) lors de la construction de la liste d'affichage (`webrt_csp_validate_display_list_resource`). Journalisation des acces bloques dans `osui-audit`.
 - **Reseau P2P & Resilience Mesh (US-063 / US-070)** : Fenetre glissante EWMA pour le RTT par pair (`rtt_ewma_ms`), renforçant la selection dans la table de routage (`link_cost`). Invalidation/purge automatique des entrees de cache P2P perimees (`p2p_cache_on_peer_down`) lors des deconnexions de pairs.

@@ -292,7 +292,6 @@ static int serve_job(void) {
 /* ========================================================================
  * Tranche 4 suite: the FS store served by this task's own code.
  * ======================================================================== */
-#define OV_SNAP_SIZE_DRV OV_SNAP_SIZE
 #define OV_DISK_SECTORS_DRV 64U
 static fat16_volume_t v16;
 static fat32_volume_t v32;
@@ -302,7 +301,7 @@ static uint32_t store_flags;   /* flags the kernel accepted */
 static int store_ready;
 static uint8_t fs_req[OS_ATA_FSOP_BUFFER_SIZE];
 static uint8_t fs_reply[OS_ATA_FSOP_BUFFER_SIZE];
-static uint8_t ov_img[OV_SNAP_SIZE_DRV];            /* snapshot to write / handover */
+static uint8_t ov_img[OV_DISK_SECTORS_DRV * 512U];  /* snapshot to write / handover */
 static uint8_t ov_disk[OV_DISK_SECTORS_DRV * 512U]; /* what LBA 0-63 hold */
 static int ov_disk_known;
 /* Per-op state. */

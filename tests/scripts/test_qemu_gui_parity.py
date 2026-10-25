@@ -42,7 +42,16 @@ PANELS = [
     ("/security", "Securite et CA", "whoami", ""),
     ("/devtools", "Outils web", "browser-status", "browser-status"),
     ("/notes", "Notes et archives", "ls /", "Initrd / VFS"),
-    ("/devsync", "DevSync cluster", "devsync-show", "devsync"),
+    # Lot 44 (US-G17) panels
+    # /vfs: the vfs server is not started at boot, the shell's own refusal
+    # is the real output (start it with "spawn bin/vfsserver" in /cmd)
+    ("/vfs", "Virtuel VFS", "vfs-stats", "service vfs indisponible"),
+    ("/sessions", "Sessions utilisateur", "session-status", "osui session-status session_id="),
+    ("/mcp", "Paiements MCP", "mcp-status", "osui mcp-status active="),
+    ("/media", "Media et streaming", "browser-media", "osui browser-media status="),
+    ("/pwa", "Applications PWA", "pwa-list", "osui pwa-list count="),
+    ("/sysadmin", "Administration", "os-admin", "osui admin-status"),
+    ("/api", "Tokens API", "api", "osui api status="),
 ]
 
 
@@ -90,6 +99,17 @@ def viewer_images(monitor, proc):
     start = len(g.log_text())
     key(monitor, "esc")
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
+
+
+def devsync(monitor, proc):
+    slash(monitor, proc, "/devsync", "osui tool open app=DevSync cluster")
+    start = len(g.log_text())
+    type_text(monitor, "A")
+    key(monitor, "ret")
+    run_marker(proc, start, "devsync-show A")
+    g.wait_for(proc, "osui panel out=", g.CMD_TIMEOUT, start)
+    say("/devsync: devsync-show A runs through the shell")
+    close_panel(monitor, proc, "DevSync cluster")
 
 
 def grpc(monitor, proc):
@@ -196,6 +216,13 @@ def generic(monitor, proc):
     run_marker(proc, start, "reboot", "refused")
     g.wait_for(proc, "reservee au terminal", g.CMD_TIMEOUT, start)
     say("/cmd: registry command runs, terminal-only reboot refused with its reason")
+    # Lot 44: restart of a Ring 3 driver from a window
+    start = len(g.log_text())
+    type_text(monitor, "driver-restart pcidriver")
+    key(monitor, "ret")
+    run_marker(proc, start, "driver-restart pcidriver")
+    g.wait_for(proc, "osui panel out=driver-restart ok pci-driver old ", g.CMD_TIMEOUT, start)
+    say("/cmd: driver-restart pcidriver stopped the Ring 3 PCI driver (kernel rights)")
     start = len(g.log_text())
     key(monitor, "esc")
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
@@ -226,6 +253,7 @@ def main():
             help_window(monitor, proc)
             families(monitor, proc)
             grpc(monitor, proc)
+            devsync(monitor, proc)
             viewer_images(monitor, proc)
             search(monitor, proc)
             confirm_mutation(monitor, proc)

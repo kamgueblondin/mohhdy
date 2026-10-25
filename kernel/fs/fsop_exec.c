@@ -326,7 +326,7 @@ int32_t fsop_execute(const os_ata_fsop_request_t* req, const char* path, const c
         case OS_ATA_FSOP_OVL_READ:
             cap = req->arg0 < out_cap ? req->arg0 : out_cap;
             if (cap == 0U) return -1;
-            rc = overlay_read(path, (char*)out, cap);
+            rc = overlay_read_at(path, (char*)out, cap, req->arg1);  /* arg1 = offset */
             if (rc > 0) *out_len = (uint32_t)rc;
             return rc;
         case OS_ATA_FSOP_OVL_WRITE:

@@ -127,7 +127,7 @@ static void test_viewer_text_and_image(void) {
     osui_tool_open(&t, OS_FB_APP_VIEW, "/home/img.pgm", &k_src);
     TEST_ASSERT_EQUAL(1, t.image);
     /* UX5: real pixels (the compositor draws them), a caption row */
-    TEST_ASSERT_EQUAL_STRING("image 4x2 affichee en pixels 4x2", t.lines[0]);
+    TEST_ASSERT_EQUAL_STRING("image 4x2 affichee en pixels 4x2 fmt=pnm zoom=fit", t.lines[0]);
     TEST_ASSERT_EQUAL(4, t.img_w);
     TEST_ASSERT_EQUAL(2, t.img_h);
     {
