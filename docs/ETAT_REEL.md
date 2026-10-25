@@ -1140,3 +1140,60 @@ What exists, tested by unit tests and `make qemu-gui-apps` (CI, collab job):
 Limits: the editor holds 96 lines of 72 columns, the app grid is a fixed
 22 rows, two app slots, clipboard of 512 bytes, the Browser pane does not
 embed the page itself.
+
+## Desktop: terminal features as windows (PR #199, UX4)
+
+What exists, tested by unit tests and `make qemu-gui-tools` (CI, p2p-mesh
+job) plus `make qemu-gui-apps`:
+
+- Generic app windows: 6 slots, any app kind in any slot, one window per
+  app kind, cascaded placement, click-to-front z-order, focus events carry
+  the slot index. A seventh app is refused ("no_slot"). Windows are opaque
+  (nothing behind bleeds through).
+- Tool apps (`userspace/osui_tools.c`) reuse the terminal: their content is
+  the captured output of the real shell commands (`shell_app_run`, an allow
+  list of non-interactive commands: ps, mem, kill, service-status, date,
+  uptime, whoami, p2p-*, pm-run, pm-check, ai-model, hal-info,
+  screen-adapt; no `;|&<>$` and no interactive command).
+  - Task manager (`/tasks`): ps + mem, select a row, Tuer asks for a
+    confirmation then runs `kill PID`; the rights check is the kernel's
+    (protected PIDs and the shell itself are refused, the window shows the
+    answer). Services view: service-status of the registry services, read
+    only. Restarting a driver from the window is not implemented.
+  - Viewer (`/view FILE`, explorer key `v`, Enter / double click on a
+    .pgm/.ppm/.pnm): text up to 8 KiB with scrolling; PGM/PPM (P2, P3,
+    P5, P6) as an ASCII luminance preview (10 levels), not pixels. Other
+    image formats (PNG, JPEG, BMP) are not decoded.
+  - Settings (`/settings`): RTC date (`date`), uptime, VBE framebuffer size
+    (new `SYS_VGA_BLIT` command 4), user. Read only: there is one theme and
+    one keyboard layout (US QWERTY), the window says so.
+  - P2P (`/peers`): p2p-peers / p2p-stats, Up (NAME IP from the input line),
+    Down, Envoyer (PEER TEXT); the window does not start a node by itself.
+  - PromptMessage (`/pmrun FILE`, editor `ESC r` on a saved file): output
+    of `pm-run`, Relancer, Verifier (`pm-check`), Editer.
+  - GPT-2 chat (`/chat`): the desktop loop runs one GPT-2 step per idle tick
+    (GGUF: generate then continue), so pieces appear as they come; Annuler
+    (or Esc) stops between steps, Suite continues, Modele switches between
+    gpt2.gguf and gpt2_124M.bin through `ai-model use`. The FP32 checkpoint
+    answers in one step (no streaming). A step itself is not interruptible
+    from the window (the kernel Esc cancel still works).
+- Shared clipboard: one 4 KiB kernel buffer (`kernel/clipboard.c`,
+  `SYS_CLIPBOARD`) used by the VBE terminal selection / right-click paste,
+  the editor (copy pushes, paste pulls) and the explorer (`y` copies the
+  selected path). Terminal paste still turns newlines into spaces.
+- Browser: `/browse` (or `web FILE`) renders a local page with the guest
+  web engine; a click on a link is hit-tested in Ring 3 on the engine's
+  layout boxes (`we_link_at`) and loads the target page; `<` `>` buttons in
+  the title bar walk an 8-entry history. Only local paths: schemes
+  (http:, javascript:), queries and fragments are refused; the sanitizer
+  already drops javascript: links. The Browser-OS info pane still lists
+  /web.
+- Keyboard: the Ring 3 PS/2 driver re-reads Shift/Caps from the kernel at
+  each wake; before, a stall (GPT-2 load) let the kernel's Ring 0 drain
+  change Shift without the driver knowing, which garbled the case.
+- The shell context (46 KiB) moved off the 64 KiB user stack: a GUI window
+  running `pm-run` from inside `gui` overflowed it.
+
+Limits: the editor still holds 96 lines of 72 columns with the fixed
+22x78 app grid (no dynamic size); tool windows cannot be resized beyond
+the grid; one window per app kind.

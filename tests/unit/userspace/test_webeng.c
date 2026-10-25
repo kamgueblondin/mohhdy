@@ -175,6 +175,22 @@ static void test_limits(void) {
     TEST_ASSERT_EQUAL(-1, we_layout(&g_doc, 10));
 }
 
+/* UX4: href kept by the parser, link hit test on laid-out text */
+static void test_link_at(void) {
+    static const char html[] = "<p>avant <a href=\"b.html\">le lien</a></p><div style=\"height:40px\">vide</div>";
+    char href[32];
+    uint32_t i;
+    int x = -1, y = -1;
+    TEST_ASSERT_EQUAL(0, we_render(&g_doc, html, (int)sizeof(html) - 1, 400));
+    for (i = 0; i < g_doc.nitems; i++)
+        if (g_doc.items[i].kind == OS_FB_WEB_TEXT && strstr(g_doc.items[i].text, "le lien")) { x = g_doc.items[i].x + 4; y = g_doc.items[i].y + 2; }
+    TEST_ASSERT(x >= 0);
+    TEST_ASSERT_EQUAL(6, we_link_at(&g_doc, x, y, href, (int)sizeof(href)));
+    TEST_ASSERT_EQUAL_STRING("b.html", href);
+    TEST_ASSERT_EQUAL(0, we_link_at(&g_doc, 2, y, href, (int)sizeof(href)));     /* "avant" */
+    TEST_ASSERT_EQUAL(0, we_link_at(&g_doc, 2, y + 20, href, (int)sizeof(href)));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_parse_tree_and_title);
@@ -184,6 +200,7 @@ int main(void) {
     RUN_TEST(test_percent_width_and_img_alt);
     RUN_TEST(test_inspector_and_diagnostics);
     RUN_TEST(test_limits);
+    RUN_TEST(test_link_at);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

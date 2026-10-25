@@ -119,6 +119,9 @@ void osui_ide_drag(osui_ide_t *ide, int r0, int c0, int r1, int c1);
 int osui_ide_selection(const osui_ide_t *ide, char *out, int max);
 const char *osui_ide_clipboard(void);
 void osui_ide_set_clipboard(const char *text, int len);
+/* UX4: route the clipboard through the shared desktop clipboard (the
+ * kernel one the VBE terminal selection also uses); 0, 0 = local only. */
+void osui_ide_set_clip_ops(int (*put)(const char *, int), int (*take)(char *, int));
 /* Content grid of the window: line numbers, text, selection, caret. */
 void osui_ide_render_app(const osui_ide_t *ide, osui_app_view_t *v);
 /* Text to write: like osui_ide_text, an untouched empty buffer is 0 bytes. */

@@ -7,8 +7,8 @@ extern void print_string_vga(const char* str, char color);
 
 // Variables globales
 initrd_t* current_initrd = 0;
-#define INITRD_FILE_MAX 64U
-static initrd_file_t files_array[INITRD_FILE_MAX]; // Support jusqu'à 64 fichiers
+#define INITRD_FILE_MAX 128U  /* UX4: 64 was full (web pages pushed bin/airogue out) */
+static initrd_file_t files_array[INITRD_FILE_MAX]; /* up to INITRD_FILE_MAX files */
 static os_dirent_t initrd_page_entries[INITRD_FILE_MAX];
 
 // Fonctions utilitaires pour les chaînes de caractères
@@ -76,7 +76,7 @@ void initrd_init(uint32_t location, uint32_t size) {
     
     print_string_serial("Parsing initrd TAR archive...\n");
     
-    while (current_pos < location + size && file_index < 64) {
+    while (current_pos < location + size && file_index < INITRD_FILE_MAX) {
         tar_header_t* header = (tar_header_t*)current_pos;
         
         // Vérifie si on a atteint la fin (deux blocs de zéros)

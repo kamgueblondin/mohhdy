@@ -126,6 +126,32 @@ static void test_capacity_is_respected(void) {
     TEST_ASSERT_EQUAL(0, ps2_decode_byte(0, 0x1E, 0, ev, &n, 8));
 }
 
+/* UX4: the driver stalls, Ring 0 drains the Shift break (kernel mods = 0)
+ * while this decoder still holds Shift. Re-seeding at each wake (as
+ * ps2_driver.c now does) gives "/c", not the "?C" seen under GPT-2 load. */
+static void test_reseed_after_ring0_drain(void) {
+    char c[8];
+    ps2_decoder_init(&d); n = 0;
+    (void)ps2_decode_byte(&d, 0x2A, 0, ev, &n, 8);              /* shift press, driver */
+    /* stall: 0xAA consumed by Ring 0, kernel mods now 0 */
+    n = 0;
+    ps2_decoder_seed(&d, 0U);                                   /* next wake */
+    (void)ps2_decode_byte(&d, 0x35, 0, ev, &n, 8);              /* / */
+    (void)ps2_decode_byte(&d, 0x2E, 0, ev, &n, 8);              /* c */
+    TEST_ASSERT_EQUAL(2U, chars(c, 8));
+    TEST_ASSERT_EQUAL('/', c[0]);
+    TEST_ASSERT_EQUAL('c', c[1]);
+    /* the other way: Ring 0 saw the make, the driver gets the break */
+    ps2_decoder_init(&d); n = 0;
+    ps2_decoder_seed(&d, OS_INPUT_MOD_SHIFT);
+    (void)ps2_decode_byte(&d, 0x2E, 0, ev, &n, 8);              /* C */
+    (void)ps2_decode_byte(&d, 0xAA, 0, ev, &n, 8);              /* break reaches the driver */
+    (void)ps2_decode_byte(&d, 0x2E, 0, ev, &n, 8);              /* c */
+    TEST_ASSERT_EQUAL(2U, chars(c, 8));
+    TEST_ASSERT_EQUAL('C', c[0]);
+    TEST_ASSERT_EQUAL('c', c[1]);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_letters_digits_and_breaks);
@@ -134,6 +160,7 @@ int main(void) {
     RUN_TEST(test_escape_extended_and_controller_bytes);
     RUN_TEST(test_mouse_packets_and_resync);
     RUN_TEST(test_capacity_is_respected);
+    RUN_TEST(test_reseed_after_ring0_drain);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

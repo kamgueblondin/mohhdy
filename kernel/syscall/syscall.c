@@ -1,3 +1,4 @@
+#include "../clipboard.h"
 #include "syscall.h"
 #include "kernel.h"
 #include "../interrupts.h"
@@ -2669,6 +2670,20 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_DEVICE_SERVICE:
             cpu->eax = (uint32_t)sys_device_service(cpu->ebx, cpu->ecx, cpu->edx, cpu->esi);
             break;
+        case SYS_CLIPBOARD:
+            {
+                /* UX4: one clipboard for the terminal, editor, explorer */
+                uint32_t op = cpu->ebx, buf = cpu->ecx, len = cpu->edx;
+                if (!current_task || current_task->type != TASK_TYPE_USER || len > OS_CLIP_MAX + 1U
+                    || (len && !syscall_user_range((const void*)buf, len, op == OS_CLIP_GET))) {
+                    cpu->eax = (uint32_t)-1;
+                } else if (op == OS_CLIP_SET) {
+                    cpu->eax = (uint32_t)clipboard_set((const char*)buf, (int)len);
+                } else if (op == OS_CLIP_GET) {
+                    cpu->eax = (uint32_t)clipboard_get((char*)buf, (int)len);
+                } else cpu->eax = (uint32_t)-1;
+            }
+            break;
         case SYS_RTC_UTC:
             cpu->eax = (uint32_t)sys_rtc_utc((char*)cpu->ecx);
             break;
@@ -2791,6 +2806,11 @@ void syscall_handler(cpu_state_t* cpu) {
                 }
                 if (cpu->ebx == 3U) {
                     cpu->eax = (uint32_t)gfx_fb_term_active();
+                    break;
+                }
+                /* 4: framebuffer size (w << 16 | h), 0 without VBE */
+                if (cpu->ebx == 4U) {
+                    cpu->eax = gfx_fb_width() > 0 ? ((uint32_t)gfx_fb_width() << 16) | (uint32_t)gfx_fb_height() : 0U;
                     break;
                 }
                 {

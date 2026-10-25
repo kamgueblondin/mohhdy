@@ -42,6 +42,7 @@ typedef struct {
     uint16_t text_off, text_len;   /* text node content in pool */
     uint16_t style_off, style_len; /* inline style attribute in pool */
     uint16_t alt_off, alt_len;     /* img alt */
+    uint16_t href_off, href_len;   /* a href (UX4: desktop browser links) */
     /* computed style */
     uint8_t display, bold, align, has_bg;
     uint32_t color, bg, border_color;
@@ -96,4 +97,8 @@ int we_find_id(const we_doc_t* d, const char* id);
 typedef void (*we_out_fn)(void* ctx, const char* s);
 void we_dump_dom(const we_doc_t* d, we_out_fn out, void* ctx);
 void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx);
+/* UX4: link under page point (x, y): copies the href of the nearest <a>
+ * ancestor of the deepest laid-out node there; returns its length, 0 when
+ * no link is there. */
+int we_link_at(const we_doc_t* d, int x, int y, char* href, int max);
 #endif
