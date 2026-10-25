@@ -54,6 +54,7 @@ typedef struct task {
     task_type_t type;          // Type de tâche (kernel/user)
     uint32_t priority;          // Politique CPU locale : 1 (bas) à 3 (haut)
     vmm_directory_t* vmm_dir;  // Répertoire de pages de la tâche
+    uint32_t heap_size;        /* UX5 SYS_HEAP_GROW bytes mapped at OS_USER_HEAP_BASE */
     uint32_t kernel_stack_p;   // Pointeur vers le sommet de la pile noyau
     char name[32];
     int parent_pid;            // Créateur direct, -1 pour la tâche racine

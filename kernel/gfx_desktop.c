@@ -44,11 +44,63 @@ const char *const gfx_desktop_dock_names[GFX_DESKTOP_DOCK] = {
     "Chat", "Navigateur", "Terminal", "Admin", "Support", "Statut", "Fichiers", "Editeur"
 };
 
+static int g_app_fit[OS_FB_APPS][3];   /* UX5: kind, rows, cols last sent */
+static os_fb_image_t g_img;            /* UX5: viewer pixels (kernel copy) */
+static int g_img_valid;
+
+int gfx_desktop_set_image(const os_fb_image_t *img) {
+    uint32_t i, n;
+    if (!img || img->magic != OS_FB_IMG_MAGIC || img->slot >= OS_FB_APPS || img->w == 0 || img->h == 0 ||
+        img->w > OS_FB_IMG_MAX_W || img->h > OS_FB_IMG_MAX_H) {
+        g_img_valid = 0;
+        return img ? -1 : 0;
+    }
+    g_img.magic = img->magic; g_img.slot = img->slot; g_img.w = img->w; g_img.h = img->h;
+    n = (uint32_t)img->w * img->h * 3U;
+    for (i = 0; i < n; i++) g_img.rgb[i] = img->rgb[i];
+    g_img_valid = 1;
+    return 0;
+}
+
+/* Image area: the grid below its first (caption) row, the image scaled by
+ * an integer factor (or down, nearest) to fit, centered. */
+void gfx_desktop_image_rect(const gfx_rect_t *box, gfx_rect_t *out) {
+    int gx, gy, gw, gh, w, h, k;
+    out->x = out->y = out->w = out->h = 0;
+    if (!g_img_valid || !box || box->w <= 0) return;
+    gx = box->x + 12; gy = box->y + GFX_APP_GRID_Y + GFX_APP_ROW_H + 4;
+    gw = box->w - 24; gh = box->h - GFX_APP_GRID_Y - GFX_APP_ROW_H - 4 - 30;
+    if (gw <= 0 || gh <= 0) return;
+    w = g_img.w; h = g_img.h;
+    k = 1;
+    while (w * (k + 1) <= gw && h * (k + 1) <= gh && k < 8) k++;
+    w *= k; h *= k;
+    if (w > gw) { h = (h * gw) / w; w = gw; }
+    if (h > gh) { w = (w * gh) / h; h = gh; }
+    out->x = gx + (gw - w) / 2; out->y = gy; out->w = w; out->h = h;
+}
+
+static void draw_app_image(uint32_t *fb, int w, int h, const gfx_rect_t *box) {
+    gfx_rect_t r;
+    int x, y;
+    gfx_desktop_image_rect(box, &r);
+    for (y = 0; y < r.h; y++) {
+        int sy = (y * g_img.h) / r.h, py = r.y + y;
+        if (py < 0 || py >= h) continue;
+        for (x = 0; x < r.w; x++) {
+            int sx = (x * g_img.w) / r.w, px = r.x + x;
+            const uint8_t *p = g_img.rgb + (sy * g_img.w + sx) * 3;
+            if (px < 0 || px >= w) continue;
+            fb[py * w + px] = RGB(p[0], p[1], p[2]);
+        }
+    }
+}
+
 void gfx_desktop_wm_reset(void) {
     int i;
     gfx_wm_reset(&g_wm_pane);
     gfx_wm_reset(&g_wm_chat);
-    for (i = 0; i < OS_FB_APPS; i++) { gfx_wm_reset(&g_wm_app[i]); g_app_kind_prev[i] = 0; }
+    for (i = 0; i < OS_FB_APPS; i++) { gfx_wm_reset(&g_wm_app[i]); g_app_kind_prev[i] = 0; g_app_fit[i][0] = 0; }
     g_wm_pane_id = -1;
     g_focus = -1;
     g_app_focus_prev = 0xFF;
@@ -210,8 +262,8 @@ static int app_cell(const gfx_desktop_layout_t *l, int slot, int x, int y, int *
     if (!in_rect(x, y, g)) return 0;
     *row = (y - g->y) / GFX_APP_ROW_H;
     *col = (x - g->x) / 8;
-    if (*row >= OS_FB_APP_ROWS) *row = OS_FB_APP_ROWS - 1;
-    if (*col >= OS_FB_APP_COLS - 1) *col = OS_FB_APP_COLS - 2;
+    if (*row >= OS_FB_APP_MAX_ROWS) *row = OS_FB_APP_MAX_ROWS - 1;
+    if (*col >= OS_FB_APP_MAX_COLS - 1) *col = OS_FB_APP_MAX_COLS - 2;
     return 1;
 }
 
@@ -1201,6 +1253,35 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     draw_text_n(fb, w, h, x + 170, y + rh - 28, gfx_desktop_llm_name(scene_llm(sc)), (rw - 190) / 8, RGB(154, 168, 181));
 }
 
+/* UX5: rows and columns of the content grid that fit an app window box
+ * (the default window gives OS_FB_APP_ROWS x OS_FB_APP_COLS - 1). */
+void gfx_desktop_app_grid_fit(const gfx_rect_t *box, int *rows, int *cols) {
+    int r = 0, c = 0;
+    if (box && box->w > 0 && box->h > 0) {
+        r = (box->h - GFX_APP_GRID_Y - 30) / GFX_APP_ROW_H;
+        c = (box->w - 24) / 8;
+    }
+    if (r < 0) r = 0;
+    if (c < 0) c = 0;
+    if (r > OS_FB_APP_MAX_ROWS) r = OS_FB_APP_MAX_ROWS;
+    if (c > OS_FB_APP_MAX_COLS - 1) c = OS_FB_APP_MAX_COLS - 1;
+    if (rows) *rows = r;
+    if (cols) *cols = c;
+}
+
+/* UX5: tell the app its grid when the window size changes. */
+static void app_size_event(int slot, int kind, const gfx_rect_t *box) {
+    int r, c;
+    gfx_desktop_app_grid_fit(box, &r, &c);
+    if (r <= 0 || c <= 0) return;
+    if (g_app_fit[slot][0] != kind) {   /* new app: it starts on the default grid */
+        g_app_fit[slot][0] = kind; g_app_fit[slot][1] = OS_FB_APP_ROWS; g_app_fit[slot][2] = OS_FB_APP_COLS - 1;
+    }
+    if (g_app_fit[slot][0] == kind && g_app_fit[slot][1] == r && g_app_fit[slot][2] == c) return;
+    g_app_fit[slot][0] = kind; g_app_fit[slot][1] = r; g_app_fit[slot][2] = c;
+    evt_app(slot, "size", 2, r, c, 0, 0);
+}
+
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *out) {
     static os_fb_scene_t def; /* Lot 6: the scene carries the web display list, keep it off the 16 KB kernel stack */
     const os_fb_scene_t *sc = scene;
@@ -1436,7 +1517,11 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         out->app_win[i].grid.x = out->app_win[i].box.x + 12;
         out->app_win[i].grid.y = out->app_win[i].box.y + GFX_APP_GRID_Y;
         out->app_win[i].grid.w = out->app_win[i].tool.w;
-        out->app_win[i].grid.h = out->app_win[i].visible ? OS_FB_APP_ROWS * GFX_APP_ROW_H : 0;
+        {
+            int fr = 0, fc = 0;
+            gfx_desktop_app_grid_fit(&out->app_win[i].box, &fr, &fc);
+            out->app_win[i].grid.h = out->app_win[i].visible ? fr * GFX_APP_ROW_H : 0;
+        }
     }
     for (i = 0; i < GFX_WIN_COUNT; i++) out->z[i] = g_z[i];
     out->focus = g_focus;
@@ -1512,7 +1597,7 @@ static uint32_t app_attr_rgb(uint8_t a) {
 }
 
 static void draw_app(uint32_t *fb, int w, int h, const gfx_rect_t *box, const os_fb_app_t *a, int focused) {
-    int x = box->x, y = box->y, rw = box->w, rh = box->h, r, c, maxc;
+    int x = box->x, y = box->y, rw = box->w, rh = box->h, r, c, maxc, maxr;
     char title[80];
     int n = 0, i;
     round_rect_a(fb, w, h, x, y, rw, rh, 12, RGB(14, 20, 27), 255);
@@ -1523,12 +1608,11 @@ static void draw_app(uint32_t *fb, int w, int h, const gfx_rect_t *box, const os
     if (a->dirty && n < 76) { title[n++] = ' '; title[n++] = '*'; }
     title[n] = 0;
     draw_text_n(fb, w, h, x + 14, y + 11, title, (rw - 110) / 8, RGB(232, 238, 244));
-    maxc = (rw - 24) / 8;
-    if (maxc > OS_FB_APP_COLS - 1) maxc = OS_FB_APP_COLS - 1;
+    gfx_desktop_app_grid_fit(box, &maxr, &maxc);
     fill_rect(fb, w, h, x + 8, y + GFX_APP_TOOL_Y - 5, rw - 16, 18, RGB(22, 32, 42));
     draw_text_n(fb, w, h, x + 12, y + GFX_APP_TOOL_Y, a->tool, maxc, RGB(122, 212, 196));
-    fill_rect(fb, w, h, x + 8, y + GFX_APP_GRID_Y - 2, rw - 16, OS_FB_APP_ROWS * GFX_APP_ROW_H + 4, RGB(9, 13, 18));
-    for (r = 0; r < OS_FB_APP_ROWS && r < (int)a->nrows; r++) {
+    fill_rect(fb, w, h, x + 8, y + GFX_APP_GRID_Y - 2, rw - 16, maxr * GFX_APP_ROW_H + 4, RGB(9, 13, 18));
+    for (r = 0; r < maxr && r < (int)a->nrows; r++) {
         int gy = y + GFX_APP_GRID_Y + r * GFX_APP_ROW_H;
         if (gy + GFX_APP_ROW_H > y + rh - 26) break;
         for (c = 0; c < maxc && a->rows[r][c]; c++) {
@@ -1541,7 +1625,7 @@ static void draw_app(uint32_t *fb, int w, int h, const gfx_rect_t *box, const os
                 draw_char(fb, w, h, gx, gy + 3, a->rows[r][c], app_attr_rgb(at));
         }
     }
-    if (focused && a->kind == OS_FB_APP_EDIT && a->cur_row < OS_FB_APP_ROWS && a->cur_col < maxc) {
+    if (focused && a->kind == OS_FB_APP_EDIT && a->cur_row >= 0 && a->cur_row < maxr && a->cur_col < maxc) {
         int gy = y + GFX_APP_GRID_Y + a->cur_row * GFX_APP_ROW_H;
         fill_rect(fb, w, h, x + 12 + a->cur_col * 8, gy + 1, 2, GFX_APP_ROW_H - 2, RGB(250, 210, 90));
     }
@@ -1782,8 +1866,12 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
 
             } else {
                 int slot = win - GFX_WIN_APP0;
-                if (lay.app_win[slot].visible)
+                if (lay.app_win[slot].visible) {
                     draw_app(fb, w, h, &lay.app_win[slot].box, &sc->app[slot], lay.focus == win);
+                    app_size_event(slot, sc->app[slot].kind, &lay.app_win[slot].box);
+                    if (g_img_valid && g_img.slot == slot && sc->app[slot].kind == OS_FB_APP_VIEW)
+                        draw_app_image(fb, w, h, &lay.app_win[slot].box);
+                }
             }
         }
     }

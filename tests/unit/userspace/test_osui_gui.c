@@ -5,9 +5,11 @@
 #include "../../framework/test_kernel.h"
 #include "osui_runtime.h"
 #include "osui_gui.h"
+#include "osui_tools.h"
 #include "os_syscalls.h"
 #include "osui_ide.h"
 #include "mockfs.h"
+#include "umalloc.h"
 #include <string.h>
 
 static uint16_t g_cells[OS_VGA_ROWS * OS_VGA_COLS];
@@ -805,6 +807,128 @@ static void test_gui_tool_apps_slots(void) {
     osui_gui_set_tool_ops(0, 0, 0, 0);
 }
 
+/* UX5 GUI parity: a family panel opens from its slash command, runs the
+ * selected entry through the shell run hook, a panel argument prefills
+ * the input line and the generic /cmd window asks the registry. */
+static int tg_known(const char *name) { return !strcmp(name, "ata-status") || !strcmp(name, "uptime") || !strcmp(name, "net-status"); }
+static int tg_run_checked(const char *cmd, char *out, int max) {
+    if (osui_tool_cmd_check(cmd, tg_known) != OSUI_CMD_OK) return -1;
+    return tg_run(cmd, out, max);
+}
+static void test_gui_parity_panels(void) {
+    setup();
+    mfs_reset();
+    g_tcmds[0] = 0;
+    osui_gui_set_fs_io(&mfs_io);
+    osui_gui_set_tool_ops(tg_run_checked, tg_ai, tg_model, 0);
+    osui_gui_set_tool_known(tg_known);
+    feed_str("/disk");
+    g_out[0] = 0;
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui tool open app=Stockage"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui tool line=Pilote ATA"));
+    TEST_ASSERT_EQUAL(0, (int)strlen(g_tcmds));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_APP_STORE, g_scene.app[0].kind);
+    TEST_ASSERT_NOT_NULL(strstr(g_scene.app[0].tool, "[Executer]"));
+    g_out[0] = 0;
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("ata-status|", g_tcmds);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui panel run cmd=ata-status ok"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui panel out=ata-status ok"));
+    /* generic window: the argument prefills the input line */
+    evt("focus d");
+    feed_str("/cmd uptime");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(OS_FB_APP_CMD, g_scene.app[1].kind);
+    TEST_ASSERT_NOT_NULL(strstr(g_scene.app[1].rows[OS_FB_APP_ROWS - 1], "cmd> uptime"));
+    g_out[0] = 0;
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui panel run cmd=uptime ok"));
+    feed_str("reboot");
+    g_out[0] = 0;
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui panel run cmd=reboot refused"));
+    TEST_ASSERT(strstr(g_tcmds, "reboot") == 0);
+    evt("app 1 close"); evt("app 1 close");
+    evt("app 0 close"); evt("app 0 close");
+    osui_gui_set_tool_known(0);
+    osui_gui_set_tool_ops(0, 0, 0, 0);
+}
+
+/* UX5: viewer image sent in pixels to the compositor (once per image,
+ * cleared on close), files over 8 KB through the heap; the editor grid
+ * follows "app K size R C". */
+const os_fb_image_t *osui_gui_test_image(int *calls);
+static unsigned char g_gui_arena[1 << 20] __attribute__((aligned(16)));
+static int gui_grow(unsigned want) { return want <= sizeof(g_gui_arena) ? (int)((want + 4095U) & ~4095U) : -1; }
+static void test_gui_viewer_pixels_and_editor_size(void) {
+    static char pgm[9000];
+    int n, i, calls0, calls1, slot;
+    const os_fb_image_t *img;
+    setup();
+    mfs_reset();
+    umalloc_init(g_gui_arena, gui_grow);
+    osui_gui_set_heap(urealloc);
+    osui_gui_set_fs_io(&mfs_io);
+    osui_gui_set_tool_ops(tg_run, tg_ai, tg_model, 0);
+    n = sprintf(pgm, "P5 100 84 255\n");
+    for (i = 0; i < 100 * 84; i++) pgm[n + i] = (char)(i % 100 < 50 ? 10 : 240);
+    TEST_ASSERT(n + 8400 > FSOPS_FILE_MAX);
+    mfs_add("/home/big.pgm", 0, pgm, n + 8400);
+    evt("focus d");
+    feed_str("/view /home/big.pgm");
+    g_out[0] = 0;
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui tool line=image 100x84 affichee en pixels 100x84"));
+    (void)osui_gui_test_image(&calls0);
+    osui_gui_fill_scene(&g_scene);
+    img = osui_gui_test_image(&calls1);
+    TEST_ASSERT_EQUAL(calls0 + 1, calls1);
+    TEST_ASSERT_NOT_NULL(img);
+    slot = -1;
+    for (i = 0; i < OS_FB_APPS; i++) if (g_scene.app[i].kind == OS_FB_APP_VIEW) slot = i;
+    TEST_ASSERT_EQUAL(slot, img->slot);
+    TEST_ASSERT_EQUAL(OS_FB_IMG_MAGIC, (int)img->magic);
+    TEST_ASSERT_EQUAL(100, img->w);
+    TEST_ASSERT_EQUAL(84, img->h);
+    TEST_ASSERT_EQUAL(10, img->rgb[0]);
+    TEST_ASSERT_EQUAL(240, img->rgb[99 * 3]);
+    osui_gui_fill_scene(&g_scene);                 /* unchanged: not sent again */
+    (void)osui_gui_test_image(&calls0);
+    TEST_ASSERT_EQUAL(calls1, calls0);
+    {
+        char e[24];
+        snprintf(e, sizeof(e), "app %d close", slot);
+        evt(e);
+    }
+    osui_gui_fill_scene(&g_scene);
+    img = osui_gui_test_image(&calls1);
+    TEST_ASSERT_NULL(img);                         /* closed: cleared */
+    TEST_ASSERT_EQUAL(calls0 + 1, calls1);
+    /* editor: default 22 rows, then the window grid from the kernel */
+    evt("focus d");
+    feed_str("/edit /home/notes.txt");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    osui_gui_fill_scene(&g_scene);
+    slot = -1;
+    for (i = 0; i < OS_FB_APPS; i++) if (g_scene.app[i].kind == OS_FB_APP_EDIT) slot = i;
+    TEST_ASSERT(slot >= 0);
+    TEST_ASSERT_EQUAL(OSUI_APP_ROWS, g_scene.app[slot].nrows);
+    {
+        char e[40];
+        snprintf(e, sizeof(e), "app %d size 40 120", slot);
+        evt(e);
+        TEST_ASSERT_NOT_NULL(strstr(g_out, "osui edit view resized"));
+    }
+    osui_gui_fill_scene(&g_scene);
+    TEST_ASSERT_EQUAL(40, g_scene.app[slot].nrows);
+    for (i = 0; i < OS_FB_APPS; i++) { char e[24]; snprintf(e, sizeof(e), "app %d close", i); evt(e); evt(e); }
+    osui_gui_set_tool_ops(0, 0, 0, 0);
+    osui_gui_set_heap(0);
+}
+
 /* UX4: browser links (guest web engine hit test) and back / forward */
 static int web_pages_load(const char *file, char *buf, int max) {
     const char *r = 0;
@@ -888,6 +1012,8 @@ int main(void) {
     RUN_TEST(test_gui_live_panes);
     RUN_TEST(test_gui_apps_explorer_editor);
     RUN_TEST(test_gui_tool_apps_slots);
+    RUN_TEST(test_gui_viewer_pixels_and_editor_size);
+    RUN_TEST(test_gui_parity_panels);
     RUN_TEST(test_gui_web_links_history);
     unity_print_results();
     unity_cleanup();

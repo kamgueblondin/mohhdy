@@ -399,6 +399,38 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 
 Une étape ne passe à l'état livré qu'après implémentation, test ciblé, test de régression (`make test-all`) et mise à jour de `docs/ETAT_REEL.md`. Les compteurs historiques de ce document sont conservés pour la traçabilité ; le compteur vivant de la baseline courante est **766/766**.
 
+### Piste GUI parity (UX5, 25 octobre 2026)
+
+Les fonctionnalites du terminal arrivent dans le bureau graphique sans
+dupliquer le code : chaque fenetre execute les vraies commandes du shell
+(meme tache, memes droits noyau). Detail par famille : `docs/GUI_PARITY.md`.
+Statuts comptes par `prod-roadmap` (phase 9 de `/roadmap.txt`). Ces US
+completent le backlog ; elles n'en retirent aucune.
+
+| US | Besoin | Statut |
+|---|---|---|
+| US-G01 | Tool windows run any shell registry command (kernel rights, terminal-only commands refused) | done |
+| US-G02 | Editor: lines on the user heap, grid follows the window | partial (72-column lines, large saves refused by the overlay store) |
+| US-G03 | Viewer draws PGM/PPM as pixels | partial (no PNG/JPEG/BMP) |
+| US-G04 | Network panel /net | partial (status, p2p-up; no interface configuration) |
+| US-G05 | Storage panel /disk | partial (ata, mounts, persist, ls, stat, mkdir) |
+| US-G06 | Services and drivers panel /services | partial (read only, no restart) |
+| US-G07 | Logs panel /logs | partial |
+| US-G08 | Collab ledger panel /ledger | partial (read, p2p-up; no offer/vote/escrow forms) |
+| US-G09 | Production / CI panel /ci (the /prod name is the existing production pane) | partial |
+| US-G10 | Security / CA panel /security | partial (local Schnorr CA) |
+| US-G11 | Web devtools panel /devtools | partial |
+| US-G12 | File search /search and `grep -r` | done (first 8 KiB per file, 64 hits) |
+| US-G13 | Notes and archives panel /notes | partial |
+| US-G14 | Generic command window /cmd | done |
+| US-G15 | Window-sized grid for every app | todo |
+| US-G16 | Large persistent saves (overlay node 384 bytes) | todo |
+| US-G17 | Panels for vfs, task, session, mcp, media, grpc | todo |
+
+Preuves : `test_osui_parity`, `test_osui_gui`, `test_fsops`,
+`test_osui_editor`, `test_gfx_desktop`, `make qemu-gui-ux5`,
+`make qemu-gui-parity` (CI, job gui-parity).
+
 ## Regles obligatoires du backlog
 
 Ces regles completent toutes les phases et toutes les User Stories du document :

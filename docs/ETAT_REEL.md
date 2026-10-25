@@ -1197,3 +1197,51 @@ job) plus `make qemu-gui-apps`:
 Limits: the editor still holds 96 lines of 72 columns with the fixed
 22x78 app grid (no dynamic size); tool windows cannot be resized beyond
 the grid; one window per app kind.
+
+## Desktop: GUI parity with the terminal (PR #200, UX5)
+
+What exists, tested by unit tests and `make qemu-gui-ux5` plus
+`make qemu-gui-parity` (CI job gui-parity, under 15 minutes):
+
+- User heap: `SYS_HEAP_GROW` (162) maps pages at 0x60000000 (64 MiB max,
+  grow only, per task `heap_size`); `userspace/umalloc.c` is a first-fit
+  malloc/free/realloc over it. The shell uses it for the editor.
+- Editor: lines live on the heap (no 96-line cap; a 400-line 28 KB file
+  opens in full), the grid follows the window: the kernel sends
+  `app K size R C` after a resize or maximize (up to 48x128 cells). Limits:
+  a line is still 72 columns (horizontal scroll); undo is disabled above
+  8 KiB ("annuler indisponible"); saving goes through the writable overlay
+  store whose node holds 384 bytes, so a large Save As is refused with the
+  store error (QEMU test checks it), never cut silently. Only the editor
+  follows the window size; the other apps keep the 22x77 grid.
+- Viewer: PGM/PPM (P2, P3, P5, P6) are decoded in Ring 3, scaled down to
+  fit 320x240 and drawn as real pixels by the compositor (`SYS_VGA_BLIT`
+  command 5, integer upscale up to x8); closing clears the image. PNG,
+  JPEG and BMP are not decoded.
+- Rights model of the tool windows: the fixed allowlist is replaced by the
+  shell registry: any registry command may run from a window, except shell
+  metacharacters and terminal-only commands (interactive, session, desktop
+  nesting). The command runs in the shell task, so the kernel checks the
+  rights exactly as for a typed command. See `docs/GUI_PARITY.md`.
+- Panels per command family (`userspace/osui_parity.c`): /net, /disk,
+  /services, /logs, /ledger, /ci, /security, /search, /devtools, /notes
+  and the generic /cmd. 58 entries, each a real shell command line;
+  state-changing entries need a second Enter. `scripts/check_gui_parity.py`
+  (in test-all) fails if a panel names a command missing from the registry.
+- `grep -r MOTIF [REP]` in the terminal (shared `fsops_grep`, also used by
+  /search): recursive, depth 6, 32 entries per directory, first 8 KiB of
+  each file, 64 hits max; the summary line counts the cut files.
+
+GUI parity track (status per family, details in `docs/GUI_PARITY.md`,
+counted by `prod-roadmap` as phase 9 of `/roadmap.txt`):
+
+| Family | Status |
+|---|---|
+| files, search, generic command window, tools rights model | done |
+| editor, viewer, processes, services/drivers, network, p2p, storage, logs, collab ledger, production/CI, security/CA, web devtools, notes/archives, PromptMessage, AI, system settings | partial |
+| sessions, mcp, media, pwa, devsync, os-*, admin-*, api-* (only through /cmd); window-sized grid for every app; large persistent saves | todo |
+
+Next steps: grid resize for all apps (US-G15); a large-file write path in
+the overlay store (US-G16, today 384-byte nodes and an 8 KiB ATA relay);
+panels for vfs, task, session, mcp, media and grpc (US-G17); forms for the
+collab ledger (offers, votes, escrow) and driver restart in /services.

@@ -17,8 +17,8 @@
 #define OSUI_TOOL_INPUT 72
 
 typedef struct {
-    /* runs one shell command (allow-listed, see osui_tool_cmd_allowed) and
-     * captures its output; returns the byte count or < 0 */
+    /* runs one shell command (checked by osui_tool_cmd_check against the
+     * shell registry) and captures its output; returns the bytes or < 0 */
     int (*run)(const char *cmd, char *out, int max);
     /* reads a whole file; returns the byte count or < 0 */
     int (*read)(const char *path, char *buf, int max);
@@ -28,6 +28,11 @@ typedef struct {
     const char *(*ai_model)(void);
     /* framebuffer size, 0 when unknown */
     int (*screen)(int *w, int *h);
+    /* UX5: whole file of any size (heap); returns the bytes, 0 = use read */
+    const char *(*load)(const char *path, int *n);
+    /* UX5: 1 when NAME is a command of the shell registry (builtin or the
+     * generated mohhdy_shell_commands list); 0 = old fixed allowlist */
+    int (*known)(const char *name);
 } osui_tool_src_t;
 
 enum { OSUI_TOOL_NONE = 0, OSUI_TOOL_CLOSE = 1, OSUI_TOOL_EDIT = 2, OSUI_TOOL_CHANGED = 3 };
@@ -43,17 +48,36 @@ typedef struct {
     char input[OSUI_TOOL_INPUT];
     int ilen;
     char status[OSUI_APP_COLS];
-    char log[96];                              /* serial log of the last action */
+    char log[200];                             /* serial log of the last action */
     /* chat */
     int gen;                                   /* 1 generating */
     int steps, cur_len;
     char prompt[OSUI_TOOL_INPUT];
-    int image;                                 /* viewer: 1 PGM/PPM preview */
+    int image;                                 /* viewer: 1 PGM/PPM image */
+    int img_w, img_h, img_src_w, img_src_h;    /* shown / file size */
+    unsigned img_gen;                          /* bumps on each new image */
+    char last[OSUI_TOOL_INPUT + 40];           /* parity: last command run */
+    int psel;                                  /* parity: menu line kept across runs */
 } osui_tool_t;
 
 const char *osui_tool_toolbar(int kind);
 const char *osui_tool_name(int kind);
 int osui_tool_cmd_allowed(const char *cmd);
+/* UX5 rights model of the GUI tools: 0 when cmd may run from a window,
+ * else the reason. A command may run when it is in the shell registry
+ * (known), has no shell metacharacter and is not terminal-only
+ * (interactive, desktop, session or nesting commands). Rights are then
+ * the kernel's: the command runs in the shell task, as when typed. With
+ * known == 0 the old fixed allowlist applies. */
+#define OSUI_CMD_OK 0
+#define OSUI_CMD_EMPTY 1
+#define OSUI_CMD_META 2
+#define OSUI_CMD_UNKNOWN 3
+#define OSUI_CMD_TERMINAL 4
+int osui_tool_cmd_check(const char *cmd, int (*known)(const char *name));
+const char *osui_tool_cmd_reason(int code);
+/* 1 when kind is a UX5 parity panel (osui_parity.h) */
+int osui_tool_is_panel(int kind);
 void osui_tool_open(osui_tool_t *t, int kind, const char *arg, const osui_tool_src_t *src);
 void osui_tool_refresh(osui_tool_t *t, const osui_tool_src_t *src);
 int osui_tool_tool(osui_tool_t *t, int b, const osui_tool_src_t *src);
@@ -67,4 +91,10 @@ int osui_tool_line_pid(const char *line);
 /* PGM/PPM (P2, P3, P5, P6) to an ASCII preview of cols x rows; returns
  * the row count, < 0 when the bytes are not such an image */
 int osui_tool_image_ascii(const char *buf, int n, char out[][OSUI_APP_COLS], int cols, int rows);
+/* UX5: PGM/PPM to RGB pixels, nearest-neighbour downscale to fit max_w x
+ * max_h (aspect kept). Returns 0 and the size, < 0 when not an image. */
+int osui_tool_image_decode(const char *buf, int n, unsigned char *rgb, int max_w, int max_h,
+                           int *w, int *h, int *src_w, int *src_h);
+/* UX5: the pixels of the viewer (valid while t->image). */
+const unsigned char *osui_tool_image_rgb(void);
 #endif

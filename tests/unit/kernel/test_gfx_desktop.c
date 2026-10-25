@@ -1,3 +1,4 @@
+#include <stdio.h>
 /* test_gfx_desktop.c - Pixels du bureau VBE (glassmorphic, pas ASCII 80x25). */
 
 #include "../../framework/unity.h"
@@ -841,6 +842,101 @@ static void test_web_nav_events(void) {
     vga_desktop_set(0);
 }
 
+
+/* UX5: the app grid follows the window: default 22 x 77, a maximized
+ * window sends "app K size R C" with the larger grid, restore sends back. */
+static void test_app_grid_fits_window(void) {
+    gfx_desktop_layout_t l, m;
+    char got[96];
+    int r = 0, c = 0, mr = 0, mc = 0;
+    vga_desktop_set(1);
+    gfx_desktop_wm_reset();
+    blank_scene();
+    g_scene.version = 7;
+    g_scene.app[1].kind = OS_FB_APP_EDIT;
+    g_scene.app[1].nrows = 1;
+    drain_kbd();
+    redraw(&l);
+    TEST_ASSERT(l.app_win[1].visible);
+    gfx_desktop_app_grid_fit(&l.app_win[1].box, &r, &c);
+    TEST_ASSERT_EQUAL(OS_FB_APP_ROWS, r);
+    TEST_ASSERT_EQUAL(OS_FB_APP_COLS - 1, c);
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("", got);               /* default grid: no event */
+    click_at(rect_center_x(&l.app_win[1].btn[1]), rect_center_y(&l.app_win[1].btn[1]));
+    drain_kbd();
+    redraw(&m);
+    TEST_ASSERT(m.app_win[1].maximized);
+    gfx_desktop_app_grid_fit(&m.app_win[1].box, &mr, &mc);
+    TEST_ASSERT(mr > r);
+    TEST_ASSERT(mc > c);
+    TEST_ASSERT(mr <= OS_FB_APP_MAX_ROWS && mc <= OS_FB_APP_MAX_COLS - 1);
+    TEST_ASSERT_EQUAL(mr * GFX_APP_ROW_H, m.app_win[1].grid.h);
+    {
+        char want[64], back[64];
+        snprintf(want, sizeof(want), "\x16" "app 1 size %d %d\n", mr, mc);
+        snprintf(back, sizeof(back), "\x16" "app 1 size %d %d\n", OS_FB_APP_ROWS, OS_FB_APP_COLS - 1);
+        /* the maximize click redraws: the event is already in the stream */
+        gfx_desktop_wm_reset();
+        redraw(&l);
+        drain_kbd();
+        click_at(rect_center_x(&l.app_win[1].btn[1]), rect_center_y(&l.app_win[1].btn[1]));
+        gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+        read_kbd(got, (int)sizeof(got));
+        TEST_ASSERT_NOT_NULL(strstr(got, want));
+        gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);   /* same size: no new event */
+        read_kbd(got, (int)sizeof(got));
+        TEST_ASSERT_EQUAL_STRING("", got);
+        gfx_desktop_get_layout(&g_scene, W, H, &m);
+        click_at(rect_center_x(&m.app_win[1].btn[1]), rect_center_y(&m.app_win[1].btn[1]));
+        gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+        read_kbd(got, (int)sizeof(got));
+        TEST_ASSERT_NOT_NULL(strstr(got, back));
+    }
+    g_scene.app[1].kind = 0;
+    vga_desktop_set(0);
+}
+
+/* UX5: the viewer image is drawn in pixels inside its window, scaled up,
+ * only for the viewer slot; a bad image is refused and clears. */
+static void test_viewer_image_pixels(void) {
+    static os_fb_image_t img;
+    gfx_desktop_layout_t l;
+    gfx_rect_t r;
+    int x, y;
+    vga_desktop_set(1);
+    gfx_desktop_wm_reset();
+    blank_scene();
+    g_scene.version = 7;
+    g_scene.app[0].kind = OS_FB_APP_VIEW;
+    g_scene.app[0].nrows = 1;
+    memset(&img, 0, sizeof(img));
+    img.magic = OS_FB_IMG_MAGIC; img.slot = 0; img.w = 2; img.h = 1;
+    img.rgb[0] = 255; img.rgb[1] = 0; img.rgb[2] = 0;       /* red | blue */
+    img.rgb[3] = 0; img.rgb[4] = 0; img.rgb[5] = 255;
+    TEST_ASSERT_EQUAL(0, gfx_desktop_set_image(&img));
+    redraw(&l);
+    gfx_desktop_image_rect(&l.app_win[0].box, &r);
+    TEST_ASSERT(r.w >= 16 && r.h >= 8);                     /* scaled up */
+    TEST_ASSERT(r.x >= l.app_win[0].box.x && r.x + r.w <= l.app_win[0].box.x + l.app_win[0].box.w);
+    x = r.x + r.w / 4; y = r.y + r.h / 2;
+    TEST_ASSERT_EQUAL(0xFF0000, (int)(g_fb[y * W + x] & 0xFFFFFFu));
+    x = r.x + (3 * r.w) / 4;
+    TEST_ASSERT_EQUAL(0x0000FF, (int)(g_fb[y * W + x] & 0xFFFFFFu));
+    /* another app kind in that slot: no image drawn */
+    g_scene.app[0].kind = OS_FB_APP_TASKS;
+    redraw(&l);
+    TEST_ASSERT(g_fb[y * W + x] != 0x0000FFu);
+    /* bad image refused, image cleared */
+    img.w = OS_FB_IMG_MAX_W + 1;
+    TEST_ASSERT_EQUAL(-1, gfx_desktop_set_image(&img));
+    gfx_desktop_image_rect(&l.app_win[0].box, &r);
+    TEST_ASSERT_EQUAL(0, r.w);
+    TEST_ASSERT_EQUAL(0, gfx_desktop_set_image(0));
+    g_scene.app[0].kind = 0;
+    vga_desktop_set(0);
+}
+
 static void test_llm_friendly_names(void) {
     TEST_ASSERT_EQUAL_STRING("GPT-2 local", gfx_desktop_llm_name("gpt2_local"));
     TEST_ASSERT_EQUAL_STRING("GPT-2 GGUF local", gfx_desktop_llm_name("gpt2_gguf_local"));
@@ -873,6 +969,8 @@ int main(void) {
     RUN_TEST(test_generic_app_slots_z_order);
     RUN_TEST(test_shared_clipboard);
     RUN_TEST(test_web_nav_events);
+    RUN_TEST(test_app_grid_fits_window);
+    RUN_TEST(test_viewer_image_pixels);
     RUN_TEST(test_llm_friendly_names);
     unity_print_results();
     unity_cleanup();

@@ -24,6 +24,7 @@ int osui_css_rule_count(void);
 int osui_css_error_count(void);
 
 int osui_guest_command_count(void);
+int osui_guest_command_known(const char *name);
 
 const char *osui_get_chat_mode(void);
 const char *osui_get_pane(void);

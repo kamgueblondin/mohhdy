@@ -55,6 +55,18 @@ int fsops_rmdir(const fsops_io_t *io, const char *path);   /* empty dirs */
 int fsops_cp(const fsops_io_t *io, const char *src, const char *dst, char *final_dst, int max);
 int fsops_mv(const fsops_io_t *io, const char *src, const char *dst, char *final_dst, int max);
 
+/* UX5 recursive search (shell "grep -r", GUI /search panel): every line
+ * of the files under dir (depth <= FSOPS_GREP_DEPTH, FSOPS_GREP_DIR
+ * entries per directory) that contains pat goes to hit(). Only the first
+ * FSOPS_FILE_MAX bytes of a file are searched. Stops after max_hits.
+ * Returns the hit count (< 0 when dir cannot be listed); *files and
+ * *truncated (may be null) count the searched and the cut files. */
+#define FSOPS_GREP_DEPTH 6
+#define FSOPS_GREP_DIR 32
+typedef void (*fsops_grep_hit_fn)(void *ctx, const char *path, int line, const char *text, int len);
+int fsops_grep(const fsops_io_t *io, const char *dir, const char *pat, int max_hits,
+               fsops_grep_hit_fn hit, void *ctx, int *files, int *truncated);
+
 /* "existe deja", "protege (initrd)" ... */
 const char *fsops_strerror(int rc);
 #endif

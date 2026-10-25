@@ -5,8 +5,11 @@
 #ifndef OSUI_APP_H
 #define OSUI_APP_H
 
-#define OSUI_APP_ROWS 22
+#define OSUI_APP_ROWS 22      /* default window grid */
 #define OSUI_APP_COLS 78      /* characters per row, NUL included */
+/* UX5: a maximized window shows up to this grid (OS_FB_APP_MAX_*). */
+#define OSUI_APP_MAX_ROWS 48
+#define OSUI_APP_MAX_COLS 128
 
 /* character classes of a grid row */
 #define OSUI_APP_A_TEXT 0
@@ -20,9 +23,9 @@
 typedef struct {
     char title[64];
     char tool[OSUI_APP_COLS];            /* "[Label] [Label] ..." */
-    char rows[OSUI_APP_ROWS][OSUI_APP_COLS];
-    unsigned char attr[OSUI_APP_ROWS][OSUI_APP_COLS];
-    char status[OSUI_APP_COLS];
+    char rows[OSUI_APP_MAX_ROWS][OSUI_APP_MAX_COLS];
+    unsigned char attr[OSUI_APP_MAX_ROWS][OSUI_APP_MAX_COLS];
+    char status[OSUI_APP_MAX_COLS];
     int nrows;
     int cur_row, cur_col;                /* caret in grid cells, -1 none */
     int dirty;                           /* title marker */

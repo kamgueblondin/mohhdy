@@ -25,6 +25,8 @@ typedef int (*osui_ide_load_t)(const char *file, char *buf, int max);
 typedef int (*osui_ide_save_t)(const char *file, const char *buf, int len);
 typedef int (*osui_ide_exec_t)(int action, const char *file, const char *src, int len, char *msg, int max);
 void osui_gui_set_ide_ops(osui_ide_load_t load, osui_ide_save_t save, osui_ide_exec_t exec);
+/* UX5: user heap (realloc-like) for big files and the editor line store. */
+void osui_gui_set_heap(void *(*realloc_fn)(void *, unsigned));
 int osui_gui_ide_active(void);
 void osui_gui_ide_frame_row(int r, char *dst, int max);
 /* Program output of an OSUI_IDE_RUN, called by exec while the VM runs:
@@ -78,6 +80,7 @@ int osui_gui_focus(void);           /* focused app slot, -1 desktop */
 /* UX4 tool apps (osui_tools.c): "/tasks", "/view F", "/settings",
  * "/peers", "/pmrun F", "/chat". run: allow-listed shell command with
  * captured output; ai_step: one GPT-2 step; screen: framebuffer size. */
+void osui_gui_set_tool_known(int (*known)(const char *));
 void osui_gui_set_tool_ops(int (*run)(const char *, char *, int),
                            int (*ai_step)(const char *, int, char *, int),
                            const char *(*ai_model)(void), int (*screen)(int *, int *));

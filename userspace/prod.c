@@ -961,7 +961,7 @@ int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, co
     }
     {
         extern int sys_readfile(const char* path, char* buf, int max);
-        static char rmbuf[2048];
+        static char rmbuf[4096];
         prod_roadmap_t rm;
         int rlen = sys_readfile("/roadmap.txt", rmbuf, (int)sizeof(rmbuf) - 1);
         if (rlen > 0) {
@@ -1007,7 +1007,8 @@ int prod_roadmap_parse(const char* t, int len, prod_roadmap_t* rm) {
         rm_word(t, len, &pos, us, 12); rm_word(t, len, &pos, ph, 4); rm_word(t, len, &pos, st, 12);
         while (pos < len && t[pos] != '\n') pos++;
         pos++;
-        phase = (ph[0] >= '1' && ph[0] <= '8' && !ph[1]) ? ph[0] - '0' : -1;
+        /* phases 1..8 of the master plan, 9 = GUI parity track (UX5) */
+        phase = (ph[0] >= '1' && ph[0] <= '9' && !ph[1]) ? ph[0] - '0' : -1;
         if (us[0] != 'U' || us[1] != 'S' || us[2] != '-' || phase < 0 || start == pos) { rm->bad++; continue; }
         if (s_eq(st, "done")) rm->done[phase]++;
         else if (s_eq(st, "partial")) rm->partial[phase]++;

@@ -483,8 +483,26 @@ typedef struct {
 #define OS_FB_APP_P2P 6
 #define OS_FB_APP_PMRUN 7
 #define OS_FB_APP_CHAT 8
-#define OS_FB_APP_ROWS 22
+/* UX5 GUI parity panels (userspace/osui_parity.c): one per terminal
+ * command family, plus the generic command window. */
+#define OS_FB_APP_NET 9
+#define OS_FB_APP_STORE 10
+#define OS_FB_APP_SERVICES 11
+#define OS_FB_APP_LOGS 12
+#define OS_FB_APP_LEDGER 13
+#define OS_FB_APP_PROD 14
+#define OS_FB_APP_SECURITY 15
+#define OS_FB_APP_SEARCH 16
+#define OS_FB_APP_DEVTOOLS 17
+#define OS_FB_APP_NOTES 18
+#define OS_FB_APP_CMD 19
+#define OS_FB_APP_KIND_MAX 19
+#define OS_FB_APP_ROWS 22       /* default window grid */
 #define OS_FB_APP_COLS 78
+/* UX5: grid buffers; a maximized window shows as many rows / columns as
+ * fit, and the compositor sends "app K size R C" when that changes. */
+#define OS_FB_APP_MAX_ROWS 48
+#define OS_FB_APP_MAX_COLS 128
 typedef struct {
     uint8_t kind;
     uint8_t nrows;
@@ -495,14 +513,28 @@ typedef struct {
     char title[64];
     char tool[OS_FB_APP_COLS];  /* "[Label] [Label] ..." */
     char status[OS_FB_APP_COLS];
-    char rows[OS_FB_APP_ROWS][OS_FB_APP_COLS];
-    uint8_t attr[OS_FB_APP_ROWS][OS_FB_APP_COLS];
+    char rows[OS_FB_APP_MAX_ROWS][OS_FB_APP_MAX_COLS];
+    uint8_t attr[OS_FB_APP_MAX_ROWS][OS_FB_APP_MAX_COLS];
 } os_fb_app_t;
 /* Desktop event from the kernel compositor to the Ring 3 desktop loop:
  * the byte OS_FB_EVT, then a text line ending in '\n' in the keyboard
  * stream: "focus K|d", "app K click R C", "app K dclick R C",
- * "app K drag R0 C0 R1 C1", "app K tool C", "app K close". */
+ * "app K drag R0 C0 R1 C1", "app K tool C", "app K close",
+ * "app K size R C" (UX5 grid that fits the window). */
 #define OS_FB_EVT 0x16
+/* UX5 image of the viewer window, drawn as real pixels by the compositor.
+ * SYS_VGA_BLIT EBX = 5, ECX = os_fb_image_t* (0 clears). Sent only when
+ * the image changes; the kernel keeps a copy. */
+#define OS_FB_IMG_MAGIC 0x31474D49U   /* 'IMG1' */
+#define OS_FB_IMG_MAX_W 320
+#define OS_FB_IMG_MAX_H 240
+typedef struct {
+    uint32_t magic;
+    uint8_t slot;               /* app window slot that shows it */
+    uint8_t pad[3];
+    uint16_t w, h;              /* <= OS_FB_IMG_MAX_W x OS_FB_IMG_MAX_H */
+    uint8_t rgb[OS_FB_IMG_MAX_W * OS_FB_IMG_MAX_H * 3];
+} os_fb_image_t;
 
 typedef struct {
     uint32_t magic;
@@ -1955,6 +1987,15 @@ typedef struct {
 #define OS_CLIP_GET 0
 #define OS_CLIP_SET 1
 #define OS_CLIP_MAX 4096
+/* UX5 per-process heap: ebx = wanted heap size in bytes (grow only, 0 =
+ * query). Returns the size now mapped (>= wanted) at OS_USER_HEAP_BASE, or
+ * < 0 (OS_HEAP_NO_MEMORY when frames run out, OS_HEAP_TOO_BIG past MAX).
+ * Pages are zeroed and freed with the process. */
+#define SYS_HEAP_GROW 162
+#define OS_USER_HEAP_BASE 0x60000000U
+#define OS_USER_HEAP_MAX 0x04000000U /* 64 MiB */
+#define OS_HEAP_NO_MEMORY (-1)
+#define OS_HEAP_TOO_BIG (-2)
 #define OS_RTC_BAD_ARGUMENT (-192)
 #define OS_RTC_UNSTABLE (-193)
 typedef struct {

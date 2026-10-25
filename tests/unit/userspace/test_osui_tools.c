@@ -5,6 +5,7 @@
 #include "osui_tools.h"
 #include "os_syscalls.h"
 #include <string.h>
+#include <stdio.h>
 
 
 static int my_atoi(const char *s) { int v = 0; while (*s >= '0' && *s <= '9') v = v * 10 + (*s++ - '0'); return v; }
@@ -54,7 +55,7 @@ static int fake_ai(const char *prompt, int first, char *piece, int max) {
 static const char *fake_model(void) { return g_model; }
 static int fake_screen(int *w, int *h) { *w = 1024; *h = 600; return 0; }
 
-static const osui_tool_src_t k_src = { fake_run, fake_read, fake_ai, fake_model, fake_screen };
+static const osui_tool_src_t k_src = { fake_run, fake_read, fake_ai, fake_model, fake_screen, 0, 0 };
 static osui_tool_t t;
 static osui_app_view_t v;
 
@@ -125,7 +126,16 @@ static void test_viewer_text_and_image(void) {
     TEST_ASSERT_EQUAL(OSUI_TOOL_EDIT, osui_tool_tool(&t, 2, &k_src));
     osui_tool_open(&t, OS_FB_APP_VIEW, "/home/img.pgm", &k_src);
     TEST_ASSERT_EQUAL(1, t.image);
-    TEST_ASSERT_EQUAL_STRING("  @@", t.lines[0]);
+    /* UX5: real pixels (the compositor draws them), a caption row */
+    TEST_ASSERT_EQUAL_STRING("image 4x2 affichee en pixels 4x2", t.lines[0]);
+    TEST_ASSERT_EQUAL(4, t.img_w);
+    TEST_ASSERT_EQUAL(2, t.img_h);
+    {
+        const unsigned char *px = osui_tool_image_rgb();
+        TEST_ASSERT_EQUAL(0, px[0]);                 /* (0,0) black */
+        TEST_ASSERT_EQUAL(255, px[2 * 3]);           /* (2,0) white */
+        TEST_ASSERT_EQUAL(255, px[(4 + 3) * 3 + 1]); /* (3,1) white */
+    }
     TEST_ASSERT_EQUAL(OSUI_TOOL_NONE, osui_tool_tool(&t, 2, &k_src));
     osui_tool_open(&t, OS_FB_APP_VIEW, "/missing", &k_src);
     TEST_ASSERT(has_line("lecture impossible"));
@@ -135,6 +145,26 @@ static void test_viewer_text_and_image(void) {
         TEST_ASSERT_EQUAL(1, osui_tool_image_ascii(p5, (int)sizeof(p5) - 1, out, 10, 4));
         TEST_ASSERT_EQUAL_STRING(" @", out[0]);
         TEST_ASSERT(osui_tool_image_ascii("hello", 5, out, 10, 4) < 0);
+    }
+    {
+        /* decode: P6 colors, P3 maxval scaling, downscale keeps the aspect */
+        static unsigned char rgb[OS_FB_IMG_MAX_W * OS_FB_IMG_MAX_H * 3];
+        static const char p6[] = "P6 2 1 255\n\xff\x00\x00\x00\x00\xff";
+        static char big[64 + 640 * 10];
+        int w = 0, h = 0, sw = 0, sh = 0, n, i;
+        TEST_ASSERT_EQUAL(0, osui_tool_image_decode(p6, (int)sizeof(p6) - 1, rgb, 320, 240, &w, &h, &sw, &sh));
+        TEST_ASSERT_EQUAL(2, w); TEST_ASSERT_EQUAL(1, h);
+        TEST_ASSERT_EQUAL(255, rgb[0]); TEST_ASSERT_EQUAL(0, rgb[1]); TEST_ASSERT_EQUAL(255, rgb[5]);
+        TEST_ASSERT_EQUAL(0, osui_tool_image_decode("P3 1 1 15\n15 0 7\n", 16, rgb, 320, 240, &w, &h, 0, 0));
+        TEST_ASSERT_EQUAL(255, rgb[0]); TEST_ASSERT_EQUAL(119, rgb[2]);
+        n = sprintf(big, "P5 640 10 255\n");
+        for (i = 0; i < 640 * 10; i++) big[n + i] = (char)(i % 640 < 320 ? 0 : 200);
+        TEST_ASSERT_EQUAL(0, osui_tool_image_decode(big, n + 6400, rgb, 320, 240, &w, &h, &sw, &sh));
+        TEST_ASSERT_EQUAL(320, w); TEST_ASSERT_EQUAL(5, h);
+        TEST_ASSERT_EQUAL(640, sw); TEST_ASSERT_EQUAL(10, sh);
+        TEST_ASSERT_EQUAL(0, rgb[0]); TEST_ASSERT_EQUAL(200, rgb[319 * 3]);
+        TEST_ASSERT(osui_tool_image_decode(big, n + 100, rgb, 320, 240, &w, &h, 0, 0) < 0);   /* truncated */
+        TEST_ASSERT(osui_tool_image_decode("hello", 5, rgb, 320, 240, &w, &h, 0, 0) < 0);
     }
 }
 

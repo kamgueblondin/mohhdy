@@ -21,6 +21,7 @@ void shell_prod_count(const char* line);
 int shell_collab_line(const char* line);
 #include "shell_platform.h"
 #include "osui_gui.h"
+#include "umalloc.h"
 #include "osui_tools.h"
 #include "osui_ide.h"
 #include "fsops.h"
@@ -5511,10 +5512,37 @@ static int load_file_lines(shell_context_t* ctx, const char* filearg,
     return n;
 }
 
+/* UX5: "grep -r MOTIF [REP]" - recursive search over the VFS through
+ * fsops_grep (shared with the GUI /search panel). */
+static void grep_r_hit(void *ctx, const char *path, int line, const char *text, int len) {
+    char b[100];
+    int i;
+    (void)ctx;
+    print_string(path); print_string(":"); print_int(line); print_string(": ");
+    for (i = 0; i < len && i < (int)sizeof(b) - 1; i++) b[i] = (text[i] == '\r' || text[i] == '\t') ? ' ' : text[i];
+    b[i] = 0;
+    print_string(b); print_string("\n");
+}
+
+static void cmd_grep_r(shell_context_t* ctx, char args[][128], int arg_count) {
+    char dir[RAMFS_PATH_MAX];
+    int files = 0, cut = 0, n;
+    if (arg_count < 2) { print_error("grep: usage grep -r <motif> [repertoire]"); return; }
+    resolve_arg(ctx, arg_count >= 3 ? args[2] : ".", dir);
+    n = fsops_grep(&shell_fs_io, dir, args[1], 64, grep_r_hit, 0, &files, &cut);
+    if (n < 0) { print_error("grep: repertoire introuvable"); return; }
+    if (n == 0) print_string("(aucune correspondance)\n");
+    print_string("grep -r hits "); print_int(n);
+    print_string(" files "); print_int(files);
+    print_string(" truncated "); print_int(cut);
+    print_string(n >= 64 ? " (limite 64)\n" : "\n");
+}
+
 static void cmd_grep(shell_context_t* ctx, char args[][128], int arg_count) {
     char lines[32][128];
     int n;
     int hits = 0;
+    if (arg_count >= 1 && strcmp(args[0], "-r") == 0) { cmd_grep_r(ctx, args, arg_count); return; }
     if (arg_count < 2) {
         print_error("grep: usage grep <motif> <fichier>");
         return;
@@ -7309,13 +7337,21 @@ static void shell_term_leave_if(const char *cmd) {
     print_string("osui gui exit chrome=text prompt=MOHHDY>\n");
 }
 
+/* UX5 rights model of the desktop tools: a command of the shell registry
+ * (the builtins of this file or the generated list) may run from a
+ * window. osui_tool_cmd_check still refuses metacharacters and the
+ * terminal-only commands; the kernel then checks the rights exactly as
+ * for a typed command, since the window runs in this same task. */
+static int shell_cmd_known(const char *name) {
+    return is_builtin(name) || osui_guest_command_known(name);
+}
+
 /* UX4 desktop tool apps (osui_tools.c): the same command handlers as the
- * terminal, output captured. Only allow-listed, non-interactive commands
- * (osui_tool_cmd_allowed). */
+ * terminal, output captured (osui_tool_cmd_check, see above). */
 static int shell_app_run(const char *cmd, char *out, int max) {
     static char line[160];
     int i;
-    if (!cmd || !out || max <= 1 || g_cap_buf || !g_live_ctx || !osui_tool_cmd_allowed(cmd)) return -1;
+    if (!cmd || !out || max <= 1 || g_cap_buf || !g_live_ctx || osui_tool_cmd_check(cmd, shell_cmd_known) != OSUI_CMD_OK) return -1;
     for (i = 0; cmd[i] && i < (int)sizeof(line) - 1; i++) line[i] = cmd[i];
     line[i] = 0;
     g_cap_buf = out; g_cap_n = 0; g_cap_max = max;
@@ -7334,6 +7370,13 @@ static int shell_ai_step(const char *prompt, int first, char *piece, int max) {
     if (strstr(m, ".gguf")) return first ? sys_gpt2_gguf_generate(prompt, piece, max) : sys_gpt2_gguf_continue(piece, max);
     if (!first) return 0;
     return sys_gpt2_generate(prompt, piece, max);
+}
+
+/* UX5: SYS_HEAP_GROW behind umalloc (userspace/umalloc.c). */
+static int shell_heap_grow(unsigned want) {
+    int rc;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_HEAP_GROW), "b"(want) : "memory");
+    return rc;
 }
 
 static int shell_clip_put(const char *text, int len) {
@@ -7403,6 +7446,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         if (osui_gui_should_enter()) {
             osui_gui_set_pane_source(&k_pane_src);
             osui_gui_set_tool_ops(shell_app_run, shell_ai_step, shell_ai_model, shell_screen);
+            osui_gui_set_tool_known(shell_cmd_known);
             osui_ide_set_clip_ops(shell_clip_put, shell_clip_take);
         osui_gui_set_fs_io(&shell_fs_io);
             osui_gui_run();
@@ -7447,6 +7491,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         if (osui_gui_should_enter()) {
             osui_gui_set_pane_source(&k_pane_src);
             osui_gui_set_tool_ops(shell_app_run, shell_ai_step, shell_ai_model, shell_screen);
+            osui_gui_set_tool_known(shell_cmd_known);
             osui_ide_set_clip_ops(shell_clip_put, shell_clip_take);
         osui_gui_set_fs_io(&shell_fs_io);
             osui_gui_run();
@@ -7578,6 +7623,8 @@ void main() {
     init_shell_context(&shell_ctx);
     g_live_ctx = &shell_ctx;
     osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
+    umalloc_init((void *)OS_USER_HEAP_BASE, shell_heap_grow);
+    osui_gui_set_heap(urealloc);
     osui_gui_set_mobile_op(shell_mobile_gui);
     
     // Affichage de bienvenue moderne

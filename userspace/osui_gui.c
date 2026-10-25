@@ -11,6 +11,7 @@
 #include "os_syscalls.h"
 #include "osui_panes.h"
 #include "osui_files.h"
+#include "osui_parity.h"
 
 #define COLS OS_VGA_COLS
 #define ROWS OS_VGA_ROWS
@@ -54,6 +55,22 @@ static int g_focus = -1;
 static int g_evt_on, g_evt_len;
 static char g_evt[96];
 static char g_app_buf[FSOPS_FILE_MAX + 1];
+/* UX5: the user heap (umalloc in the guest) for files over FSOPS_FILE_MAX */
+static void *(*g_urealloc)(void *, unsigned);
+static char *g_big;
+void osui_gui_set_heap(void *(*realloc_fn)(void *, unsigned)) {
+    g_urealloc = realloc_fn;
+    osui_ide_set_heap(realloc_fn);
+}
+/* Buffer of n + 1 bytes: the static one, else the heap; 0 = no memory. */
+static char *big_buf(int n) {
+    char *m;
+    if (n <= FSOPS_FILE_MAX) return g_app_buf;
+    if (!g_urealloc) return 0;
+    m = (char *)g_urealloc(g_big, (unsigned)n + 1U);
+    if (m) g_big = m;
+    return m;
+}
 static osui_app_view_t g_view;
 /* UX4: generic window slots. g_slot[i] is the app kind shown in window i
  * (0: free); any app takes the first free slot, one window per app. */
@@ -437,15 +454,28 @@ int osui_gui_edit_open(const char *file, char *out, int out_max) {
     {
         os_dirent_t st;
         if (g_fs_io->stat && g_fs_io->stat(path, &st) == 0) {
-            n = fsops_read(g_fs_io, path, g_app_buf, FSOPS_FILE_MAX);
+            char *buf = big_buf((int)st.size);
+            n = buf ? fsops_read(g_fs_io, path, buf, (int)st.size > FSOPS_FILE_MAX ? (int)st.size : FSOPS_FILE_MAX)
+                    : FSOPS_ERR_TOOBIG;
             if (n < 0) {
                 app_out(out, out_max, "osui edit error=", fsops_strerror(n));
                 if (g_files.active) scpy(g_files.status, (int)sizeof(g_files.status), fsops_strerror(n));
                 if (!g_edit.active) slot_drop(OS_FB_APP_EDIT);
                 return -1;
             }
-            osui_ide_open_plain(&g_edit, path, g_app_buf, n);
+            osui_ide_open_plain(&g_edit, path, buf, n);
             app_out(out, out_max, "osui edit open file=", path);
+            {
+                char num[48];
+                int v = g_edit.nlines, k = 0, j;
+                char rev[12];
+                do { rev[k++] = (char)('0' + v % 10); v /= 10; } while (v && k < 11);
+                scpy(num, (int)sizeof(num), "osui edit lines=");
+                j = slen(num);
+                while (k && j < (int)sizeof(num) - 1) num[j++] = rev[--k];
+                num[j] = 0;
+                app_out(out, out_max, num, g_edit.truncated ? " truncated" : " complete");
+            }
         } else {
             osui_ide_open_plain(&g_edit, path, "", 0);
             osui_ide_set_status(&g_edit, "nouveau fichier (cree a l'enregistrement)");
@@ -465,6 +495,7 @@ static int is_image(const char *p) {
 
 static void edit_action(int act, char *out, int out_max) {
     int len, rc;
+    char *sbuf;
     if (act == OSUI_IDE_QUIT) {
         app_out(out, out_max, "osui edit close file=", g_edit.file);
         g_edit.active = 0;
@@ -486,14 +517,18 @@ static void edit_action(int act, char *out, int out_max) {
         return;
     }
     if (act != OSUI_IDE_SAVE && act != OSUI_IDE_SAVE_AS) return;
-    len = osui_ide_save_text(&g_edit, g_app_buf, (int)sizeof(g_app_buf));
-    if (len < 0) { osui_ide_set_status(&g_edit, "texte trop grand"); return; }
+    {
+        int need = osui_ide_text_size(&g_edit);
+        sbuf = big_buf(need);
+        len = sbuf ? osui_ide_save_text(&g_edit, sbuf, need > FSOPS_FILE_MAX ? need + 1 : (int)sizeof(g_app_buf)) : -1;
+    }
+    if (len < 0) { osui_ide_set_status(&g_edit, "texte trop grand (memoire)"); return; }
     if (act == OSUI_IDE_SAVE_AS) {
         char p[FSOPS_PATH_MAX];
         fsops_resolve(g_files.active ? g_files.cwd : "/", g_edit.file, p, (int)sizeof(p));
         scpy(g_edit.file, (int)sizeof(g_edit.file), p);
     }
-    rc = fsops_write(g_fs_io, g_edit.file, g_app_buf, len);
+    rc = fsops_write(g_fs_io, g_edit.file, sbuf, len);
     if (rc != 0) {
         char msg[OSUI_IDE_ROW_LEN];
         scpy(msg, (int)sizeof(msg), "erreur: ");
@@ -582,6 +617,7 @@ static void files_key(int key, char *out, int out_max) {
 
 static void edit_key(int key, char *out, int out_max) { edit_action(osui_ide_key(&g_edit, key), out, out_max); }
 
+static void sys_vga_image(const os_fb_image_t *img);
 #include "osui_gui_apps.inc"
 
 void osui_gui_event(const char *line, char *out, int out_max) {
@@ -602,6 +638,16 @@ void osui_gui_event(const char *line, char *out, int out_max) {
         int slot = evt_int(&p), kind;
         while (*p == ' ') p++;
         if (slot < 0 || slot >= OS_FB_APPS || !(kind = g_slot[slot])) return;
+        if (sncmp(p, "size", 4) == 0) {
+            /* UX5: the window grid changed (maximize / restore) */
+            int rr, cc;
+            p += 4; rr = evt_int(&p); cc = evt_int(&p);
+            if (kind == OS_FB_APP_EDIT) {
+                osui_ide_set_view(&g_edit, rr, cc);
+                app_out(out, out_max, "osui edit view resized", 0);
+            }
+            return;
+        }
         g_focus = slot;
         app_event(kind, p, out, out_max);
     }
@@ -617,10 +663,10 @@ static void app_to_scene(const osui_app_view_t *v, os_fb_app_t *a, int kind) {
     scpy(a->title, (int)sizeof(a->title), v->title);
     scpy(a->tool, OS_FB_APP_COLS, v->tool);
     scpy(a->status, OS_FB_APP_COLS, v->status);
-    for (r = 0; r < OS_FB_APP_ROWS && r < OSUI_APP_ROWS; r++) {
+    for (r = 0; r < OS_FB_APP_MAX_ROWS && r < OSUI_APP_MAX_ROWS; r++) {
         int k;
-        scpy(a->rows[r], OS_FB_APP_COLS, v->rows[r]);
-        for (k = 0; k < OS_FB_APP_COLS; k++) a->attr[r][k] = v->attr[r][k];
+        scpy(a->rows[r], OS_FB_APP_MAX_COLS, v->rows[r]);
+        for (k = 0; k < OS_FB_APP_MAX_COLS && k < OSUI_APP_MAX_COLS; k++) a->attr[r][k] = v->attr[r][k];
     }
 }
 
@@ -825,6 +871,13 @@ static int sys_vga_term(void) {
     return rc;
 }
 
+/* UX5: viewer image (SYS_VGA_BLIT 5); 0 clears */
+static void sys_vga_image(const os_fb_image_t *img) {
+    int rc;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_VGA_BLIT), "b"(5), "c"(img) : "memory");
+    (void)rc;
+}
+
 static void sys_vga_leave(void) {
     int rc;
     asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_VGA_BLIT), "b"(0));
@@ -851,6 +904,11 @@ static void yield_gui(void) {
 }
 #else
 static void sys_vga_blit_scene(const os_fb_scene_t *scene) { (void)scene; }
+/* host tests: the last image sent (osui_gui_test_image) */
+static const os_fb_image_t *g_test_img;
+static int g_test_img_calls;
+static void sys_vga_image(const os_fb_image_t *img) { g_test_img = img; g_test_img_calls++; }
+const os_fb_image_t *osui_gui_test_image(int *calls) { if (calls) *calls = g_test_img_calls; return g_test_img; }
 static void sys_vga_leave(void) {}
 static int sys_vga_term(void) { return 0; }
 static int sys_getc_gui(void) { return 0; }
@@ -1017,6 +1075,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     const char *sid;
     int k;
     if (!scene) return;
+    image_sync();   /* UX5: viewer pixels, only when they change */
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
     scene->version = 7; /* 3: term_attr (pm-ide syntax classes), 4: web display list, 5: llm, 6: pane_live, 7: app windows */

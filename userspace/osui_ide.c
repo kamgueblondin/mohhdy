@@ -32,9 +32,50 @@ int osui_ide_text_rows(const osui_ide_t *ide) {
     return OSUI_IDE_VIEW;
 }
 
+static void *(*g_heap)(void *, unsigned);
+void osui_ide_set_heap(void *(*realloc_fn)(void *, unsigned)) { g_heap = realloc_fn; }
+
+/* Line store that holds n lines: the built-in one, else the heap (UX5). */
+static int ide_reserve(osui_ide_t *ide, int n) {
+    int cap, i, k;
+    char (*m)[OSUI_IDE_COLS + 1];
+    if (!ide->lines) { ide->lines = ide->lines0; ide->cap = OSUI_IDE_LINES; }
+    if (n <= ide->cap) return 0;
+    if (!g_heap) return -1;
+    cap = ide->cap * 2;
+    while (cap < n) cap *= 2;
+    if (ide->lines == ide->lines0) {
+        m = (char (*)[OSUI_IDE_COLS + 1])g_heap(0, (unsigned)cap * (OSUI_IDE_COLS + 1));
+        if (!m) return -1;
+        for (i = 0; i < ide->cap; i++) for (k = 0; k <= OSUI_IDE_COLS; k++) m[i][k] = ide->lines0[i][k];
+    } else {
+        m = (char (*)[OSUI_IDE_COLS + 1])g_heap(ide->lines, (unsigned)cap * (OSUI_IDE_COLS + 1));
+        if (!m) return -1;
+    }
+    for (i = ide->cap; i < cap; i++) for (k = 0; k <= OSUI_IDE_COLS; k++) m[i][k] = 0;
+    ide->lines = m;
+    ide->cap = cap;
+    return 0;
+}
+
+static int plain_rows(const osui_ide_t *ide) {
+    int r = ide->view_rows > 0 ? ide->view_rows : OSUI_APP_ROWS;
+    return r > OSUI_APP_MAX_ROWS ? OSUI_APP_MAX_ROWS : r;
+}
+static int plain_cols(const osui_ide_t *ide) {
+    int c = ide->view_cols > 0 ? ide->view_cols : OSUI_APP_COLS - 1;
+    return c > OSUI_APP_MAX_COLS - 1 ? OSUI_APP_MAX_COLS - 1 : c;
+}
+
+void osui_ide_set_view(osui_ide_t *ide, int rows, int cols) {
+    if (!ide) return;
+    ide->view_rows = rows < 3 ? 3 : rows;
+    ide->view_cols = cols < 12 ? 12 : cols;
+}
+
 static void ide_follow(osui_ide_t *ide) {
-    int width = ide->plain ? OSUI_APP_COLS - 1 - 5 : OSUI_IDE_ROW_LEN - 1 - 5; /* gutter "NNN> " */
-    int rows = ide->plain ? OSUI_APP_ROWS : osui_ide_text_rows(ide);
+    int width = ide->plain ? plain_cols(ide) - 5 : OSUI_IDE_ROW_LEN - 1 - 5; /* gutter "NNN> " */
+    int rows = ide->plain ? plain_rows(ide) : osui_ide_text_rows(ide);
     if (ide->row < ide->top) ide->top = ide->row;
     if (ide->row >= ide->top + rows) ide->top = ide->row - rows + 1;
     if (ide->col < ide->left) ide->left = ide->col;
@@ -48,14 +89,21 @@ void osui_ide_set_status(osui_ide_t *ide, const char *msg) {
 void osui_ide_open(osui_ide_t *ide, const char *file, const char *text, int len) {
     int i, r = 0, c = 0;
     char *p = (char *)ide;
+    char (*keep)[OSUI_IDE_COLS + 1] = ide->lines;
+    int keep_cap = ide->cap, vr = ide->view_rows, vc = ide->view_cols, k;
     for (i = 0; i < (int)sizeof(*ide); i++) p[i] = 0;
+    ide->view_rows = vr; ide->view_cols = vc;
+    if (keep && keep != ide->lines0 && keep_cap > OSUI_IDE_LINES && g_heap) {
+        ide->lines = keep; ide->cap = keep_cap;   /* reuse the heap store */
+        for (i = 0; i < keep_cap; i++) for (k = 0; k <= OSUI_IDE_COLS; k++) keep[i][k] = 0;
+    } else { ide->lines = ide->lines0; ide->cap = OSUI_IDE_LINES; }
     ide->active = 1;
     ide_cpy(ide->file, (int)sizeof(ide->file), file);
     for (i = 0; text && i < len; i++) {
         char ch = text[i];
         if (ch == '\r') continue;
         if (ch == '\n') {
-            if (r + 1 >= OSUI_IDE_LINES) { ide->truncated = 1; break; }
+            if (ide_reserve(ide, r + 2) != 0) { ide->truncated = 1; break; }
             r++; c = 0;
             continue;
         }
@@ -99,7 +147,7 @@ static void ide_insert(osui_ide_t *ide, char ch) {
 static void ide_newline(osui_ide_t *ide) {
     int i, k;
     char *l;
-    if (ide->nlines >= OSUI_IDE_LINES) { osui_ide_set_status(ide, "buffer full"); return; }
+    if (ide_reserve(ide, ide->nlines + 1) != 0) { osui_ide_set_status(ide, "buffer full"); return; }
     for (i = ide->nlines; i > ide->row + 1; i--) ide_cpy(ide->lines[i], OSUI_IDE_COLS + 1, ide->lines[i - 1]);
     l = ide->lines[ide->row];
     ide_cpy(ide->lines[ide->row + 1], OSUI_IDE_COLS + 1, l + ide->col);
@@ -513,10 +561,10 @@ void osui_ide_set_clipboard(const char *text, int len) {
 
 static void reload_text(osui_ide_t *ide, const char *text, int row, int col) {
     int r = 0, c = 0, i, k;
-    for (r = 0; r < OSUI_IDE_LINES; r++) for (k = 0; k <= OSUI_IDE_COLS; k++) ide->lines[r][k] = 0;
+    for (r = 0; r < ide->cap; r++) for (k = 0; k <= OSUI_IDE_COLS; k++) ide->lines[r][k] = 0;
     r = 0;
     for (i = 0; text[i]; i++) {
-        if (text[i] == '\n') { if (r + 1 >= OSUI_IDE_LINES) break; r++; c = 0; continue; }
+        if (text[i] == '\n') { if (ide_reserve(ide, r + 2) != 0) break; r++; c = 0; continue; }
         if (c < OSUI_IDE_COLS) ide->lines[r][c++] = text[i];
     }
     ide->nlines = r + 1;
@@ -528,16 +576,16 @@ static void reload_text(osui_ide_t *ide, const char *text, int row, int col) {
     ide_follow(ide);
 }
 
-static void snap_push(char stack[][OSUI_IDE_TEXT_MAX], int rc[][2], int *n, const osui_ide_t *ide) {
+static void snap_push(char stack[][OSUI_IDE_SNAP_MAX], int rc[][2], int *n, const osui_ide_t *ide) {
     int i, k;
     if (*n == OSUI_IDE_UNDO) {
         for (i = 0; i + 1 < OSUI_IDE_UNDO; i++) {
-            for (k = 0; k < OSUI_IDE_TEXT_MAX; k++) stack[i][k] = stack[i + 1][k];
+            for (k = 0; k < OSUI_IDE_SNAP_MAX; k++) stack[i][k] = stack[i + 1][k];
             rc[i][0] = rc[i + 1][0]; rc[i][1] = rc[i + 1][1];
         }
         (*n)--;
     }
-    if (osui_ide_text(ide, stack[*n], OSUI_IDE_TEXT_MAX) < 0) stack[*n][0] = 0;
+    if (osui_ide_text(ide, stack[*n], OSUI_IDE_SNAP_MAX) < 0) stack[*n][0] = 0;
     rc[*n][0] = ide->row; rc[*n][1] = ide->col;
     (*n)++;
 }
@@ -545,15 +593,22 @@ static void snap_push(char stack[][OSUI_IDE_TEXT_MAX], int rc[][2], int *n, cons
 /* Before an edit: one undo step per edit, typed characters grouped. */
 static void undo_point(osui_ide_t *ide, int kind) {
     if (kind == 1 && ide->last_edit == 1) return;
+    if (osui_ide_text_size(ide) > OSUI_IDE_SNAP_MAX) {
+        /* UX5: a snapshot would be cut; no undo rather than a wrong one */
+        ide->undo_off = 1; ide->undo_n = ide->redo_n = 0; ide->last_edit = kind;
+        return;
+    }
+    ide->undo_off = 0;
     snap_push(ide->undo, ide->undo_rc, &ide->undo_n, ide);
     ide->redo_n = 0;
     ide->last_edit = kind;
 }
 
 static void do_undo(osui_ide_t *ide, int redo) {
-    char (*from)[OSUI_IDE_TEXT_MAX] = redo ? ide->redo : ide->undo;
+    char (*from)[OSUI_IDE_SNAP_MAX] = redo ? ide->redo : ide->undo;
     int (*frc)[2] = redo ? ide->redo_rc : ide->undo_rc;
     int *fn = redo ? &ide->redo_n : &ide->undo_n;
+    if (*fn == 0 && ide->undo_off) { osui_ide_set_status(ide, "annuler indisponible: fichier > 8 Kio"); return; }
     if (*fn == 0) { osui_ide_set_status(ide, redo ? "rien a retablir" : "rien a annuler"); return; }
     if (redo) snap_push(ide->undo, ide->undo_rc, &ide->undo_n, ide);
     else snap_push(ide->redo, ide->redo_rc, &ide->redo_n, ide);
@@ -813,15 +868,15 @@ static int plain_key(osui_ide_t *ide, int key) {
 void osui_ide_open_plain(osui_ide_t *ide, const char *file, const char *text, int len) {
     osui_ide_open(ide, file, text, len);
     ide->plain = 1;
-    osui_ide_set_status(ide, ide->truncated ? "fichier tronque (96 lignes x 72 colonnes): Enreg. sous un autre nom"
+    osui_ide_set_status(ide, ide->truncated ? "fichier tronque (lignes > 72 colonnes ou memoire pleine)"
                                             : "ESC puis w enregistre, q ferme; barre d'outils cliquable");
 }
 
 #define APP_GUTTER 5   /* "NNNN " */
-#define APP_TEXT_ROWS (OSUI_APP_ROWS)
+#define APP_TEXT_ROWS (plain_rows(ide))
 
 static void plain_follow_app(osui_ide_t *ide) {
-    int width = OSUI_APP_COLS - 1 - APP_GUTTER;
+    int width = plain_cols(ide) - APP_GUTTER;
     if (ide->row < ide->top) ide->top = ide->row;
     if (ide->row >= ide->top + APP_TEXT_ROWS) ide->top = ide->row - APP_TEXT_ROWS + 1;
     if (ide->col < ide->left) ide->left = ide->col;
@@ -852,6 +907,13 @@ void osui_ide_drag(osui_ide_t *ide, int r0, int c0, int r1, int c1) {
     if (mr != ide->row || mc != ide->col) { ide->mark_on = 1; ide->mark_row = mr; ide->mark_col = mc; }
 }
 
+int osui_ide_text_size(const osui_ide_t *ide) {
+    int r, n = 1;
+    if (!ide || !ide->lines) return 1;
+    for (r = 0; r < ide->nlines; r++) n += ide_len(ide->lines[r]) + 1;
+    return n;
+}
+
 int osui_ide_save_text(const osui_ide_t *ide, char *out, int max) {
     int n = osui_ide_text(ide, out, max);
     if (n == 1 && ide->nlines == 1 && ide->lines[0][0] == 0) { out[0] = 0; return 0; }
@@ -878,14 +940,14 @@ void osui_ide_render_app(const osui_ide_t *ide0, osui_app_view_t *v) {
         int line = ide->top + r, k = 0, c;
         char num[8];
         char *d = v->rows[r];
-        if (line >= ide->nlines) { ide_cpy(d, OSUI_APP_COLS, "   ~"); for (k = 0; k < 4; k++) v->attr[r][k] = OSUI_APP_A_DIM; continue; }
+        if (line >= ide->nlines) { ide_cpy(d, OSUI_APP_MAX_COLS, "   ~"); for (k = 0; k < 4; k++) v->attr[r][k] = OSUI_APP_A_DIM; continue; }
         num[0] = 0;
         ide_cat_u(num, (int)sizeof(num), (unsigned)(line + 1));
         for (c = ide_len(num); c < 4; c++) d[k++] = ' ';
         for (c = 0; num[c]; c++) d[k++] = num[c];
         d[k++] = ' ';
         for (c = 0; c < APP_GUTTER; c++) v->attr[r][c] = OSUI_APP_A_DIM;
-        for (c = ide->left; ide->lines[line][c] && k < OSUI_APP_COLS - 1; c++, k++) {
+        for (c = ide->left; c <= OSUI_IDE_COLS && ide->lines[line][c] && k < plain_cols(ide); c++, k++) {
             d[k] = ide->lines[line][c];
             v->attr[r][k] = (has && !pos_less(line, c, r0, c0) && pos_less(line, c, r1, c1)) ? OSUI_APP_A_SEL : OSUI_APP_A_TEXT;
         }

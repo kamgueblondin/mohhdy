@@ -440,11 +440,13 @@ void test_prod_consolidation_and_fallback(void) {
 /* Lot 8 US-120: roadmap counted from a status file. */
 void test_roadmap_parse(void) {
     static prod_roadmap_t rm;
-    const char* t = "# comment\nUS-076 6 partial arm\nUS-079 6 done g\nUS-097 7 simule pay\n\nbogus line\nUS-120 8 open x\nUS-121 9 done y\nUS-001 1 maybe z\n";
-    TEST_ASSERT_EQUAL(4, prod_roadmap_parse(t, (int)strlen(t), &rm));
+    /* phase 9 is the GUI parity track (UX5); 0 and two digits stay bad */
+    const char* t = "# comment\nUS-076 6 partial arm\nUS-079 6 done g\nUS-097 7 simule pay\n\nbogus line\nUS-120 8 open x\nUS-121 0 done y\nUS-001 1 maybe z\nUS-G01 9 done gui\nUS-G02 9 partial gui\nUS-122 10 done w\n";
+    TEST_ASSERT_EQUAL(6, prod_roadmap_parse(t, (int)strlen(t), &rm));
     TEST_ASSERT_TRUE(rm.partial[6] == 1U && rm.done[6] == 1U && rm.simule[7] == 1U && rm.open[8] == 1U);
-    TEST_ASSERT_TRUE(rm.bad == 3U);
-    TEST_ASSERT_EQUAL(0, strcmp(rm.next, "US-076 US-097 US-120"));
+    TEST_ASSERT_TRUE(rm.done[9] == 1U && rm.partial[9] == 1U);
+    TEST_ASSERT_TRUE(rm.bad == 4U);
+    TEST_ASSERT_EQUAL(0, strcmp(rm.next, "US-076 US-097 US-120 US-G02"));
     TEST_ASSERT_EQUAL(-1, prod_roadmap_parse(0, 0, &rm));
 }
 

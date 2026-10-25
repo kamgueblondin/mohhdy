@@ -81,6 +81,11 @@ typedef struct {
 /* UX4: web pane back (0) / forward (1) buttons */
 void gfx_desktop_web_nav(int w, int h, int which, gfx_rect_t *r);
 void gfx_desktop_web_origin(int w, int h, int *ox, int *oy, int *pw, int *ph);
+/* UX5: viewer image (copied; 0 or a bad image clears). Returns 0 / -1. */
+int gfx_desktop_set_image(const os_fb_image_t *img);
+/* Rectangle the image of slot occupies in box (0 size when none). */
+void gfx_desktop_image_rect(const gfx_rect_t *box, gfx_rect_t *out);
+void gfx_desktop_app_grid_fit(const gfx_rect_t *box, int *rows, int *cols);
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *layout);
 void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h);
 void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w, int h);

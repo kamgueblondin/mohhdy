@@ -37,7 +37,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/kctx.o build/userspace_switch.o \
           build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/ata_fsop.o build/fsop_exec.o build/net_relay.o build/ai_relay.o build/net_nic_owner.o build/net_wire.o build/net_p2p.o build/gdt.o build/idt.o build/vmm.o build/vmm_share.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_gguf_session.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/gpt2_generate.o build/interrupts.o \
-          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/clipboard.o build/gfx_term.o build/line_edit.o build/gfx_wm.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/pci_service.o build/device_service.o build/usb_dma.o build/key_seal.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
+          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/clipboard.o build/user_heap.o build/gfx_term.o build/line_edit.o build/gfx_wm.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/pci_service.o build/device_service.o build/usb_dma.o build/key_seal.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
 
 # L'ABI partagée influence notamment la taille de task_t et des messages IPC.
 # Une évolution de structure doit donc reconstruire toute l'image, pas seulement ipc.o.
@@ -177,6 +177,9 @@ build/line_edit.o: kernel/line_edit.c kernel/line_edit.h
 
 build/gfx_term.o: kernel/gfx_term.c kernel/gfx_term.h
 	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/user_heap.o: kernel/user_heap.c kernel/user_heap.h include/os_syscalls.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/clipboard.o: kernel/clipboard.c kernel/clipboard.h include/os_syscalls.h
@@ -834,6 +837,7 @@ test-all:
 	@echo "=== Suite complète de tests de non-régression ==="
 	@$(MAKE) -C tests test
 	@python3 scripts/extract_guest_commands.py --check
+	@python3 scripts/check_gui_parity.py
 	@python3 tests/scripts/test_python_facade_removed.py
 	@python3 tests/scripts/check_shell_dispatch_returns.py
 	@python3 tests/scripts/check_initrd_capacity.py
@@ -1049,6 +1053,14 @@ qemu-gui-tools: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_tools.py
 
 .PHONY: qemu-gui-tools
+qemu-gui-ux5: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_ux5.py
+
+.PHONY: qemu-gui-ux5
+qemu-gui-parity: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_parity.py
+
+.PHONY: qemu-gui-parity
 qemu-gui-shell: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_shell_same.py
 
@@ -1174,6 +1186,8 @@ help:
 	@echo "  qemu-osui-runtime - Contrat QEMU OS-UI Ring 3 (chat, origin, MCP, FS, scene VGA ; hors integration-qemu)"
 	@echo "  qemu-osui-gui   - Fumee QEMU : gui, screendump VBE, tablet click dock, console (hors integration-qemu)"
 	@echo "  qemu-gui-apps   - Fumee QEMU : explorateur + editeur du bureau, cat dans le terminal"
+	@echo "  qemu-gui-ux5    - Fumee QEMU UX5 : parite GUI (editeur dynamique, visionneuse pixels, outils)"
+	@echo "  qemu-gui-parity - Fumee QEMU UX5 : panneaux GUI des familles de commandes terminal"
 	@echo "  qemu-gui-tools  - Fumee QEMU : gestionnaire des taches, parametres, P2P, PM, visionneuse, chat"
 	@echo "  qemu-osui-gui-fit - GTK : VBE suit la fenetre (DISPLAY, hors integration-qemu)"
 	@echo "  osui-registry-check - Verifie JSON/header vs userspace/shell.c"
