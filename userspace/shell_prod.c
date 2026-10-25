@@ -825,7 +825,7 @@ int shell_prod_line(const char* l) {
             uint32_t tot = rm.done[ph] + rm.partial[ph] + rm.simule[ph] + rm.open[ph];
             if (!tot) continue;
             g_out[0] = 0;
-            s_cat(g_out, "prod-roadmap phase ", 4096); cat_u(g_out, (uint32_t)ph, 4096);
+            s_cat(g_out, ph == 9 ? "prod-roadmap phase 9 (gui-parity)" : "prod-roadmap phase ", 4096); if (ph != 9) cat_u(g_out, (uint32_t)ph, 4096);
             s_cat(g_out, " done ", 4096); cat_u(g_out, rm.done[ph], 4096);
             s_cat(g_out, " partial ", 4096); cat_u(g_out, rm.partial[ph], 4096);
             s_cat(g_out, " simule ", 4096); cat_u(g_out, rm.simule[ph], 4096);

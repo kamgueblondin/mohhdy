@@ -36,6 +36,26 @@ Elle confirme visuellement :
 
 ## 3. Descriptif des Prochaines Tranches d'Implémentation (Priorités 1 à 3)
 
+### Piste GUI parity (UX5, 25 octobre 2026) : le terminal dans le bureau
+
+Fait (PR #200) : tas utilisateur (`SYS_HEAP_GROW`, umalloc), editeur sans
+plafond de 96 lignes et a la taille de la fenetre, visionneuse PGM/PPM en
+pixels, modele de droits des fenetres outils = registre du shell (plus de
+liste fixe), panneaux par famille de commandes (/net, /disk, /services,
+/logs, /ledger, /prod, /security, /search, /devtools, /notes, /cmd) et
+`grep -r`. Etat par famille : `docs/GUI_PARITY.md` ; statuts US-G01 a
+US-G17 dans le fichier US maitre et dans `/roadmap.txt` (phase 9).
+
+Fait : fichiers, recherche, fenetre de commande, droits. Partiel : editeur
+(lignes de 72 colonnes, sauvegardes de plus de 384 octets refusees par le
+magasin overlay), visionneuse (pas de PNG/JPEG), processus, services,
+reseau, p2p, stockage, journaux, registre collab, production, securite,
+outils web, notes, PromptMessage, IA, parametres. A faire : sessions, mcp,
+media, pwa, devsync (seulement via /cmd), grille a la taille de la fenetre
+pour toutes les apps (US-G15), ecriture de gros fichiers persistants
+(US-G16), panneaux vfs/task/session/mcp/media/grpc (US-G17), formulaires
+du registre collab, redemarrage de pilote depuis /services.
+
 ### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production
 - **Moteur Web & Securite (US-039 / US-031)** : Validation dynamique CSP des origines de ressources (images, styles, scripts) lors de la construction de la liste d'affichage (`webrt_csp_validate_display_list_resource`). Journalisation des acces bloques dans `osui-audit`.
 - **Reseau P2P & Resilience Mesh (US-063 / US-070)** : Fenetre glissante EWMA pour le RTT par pair (`rtt_ewma_ms`), renforçant la selection dans la table de routage (`link_cost`). Invalidation/purge automatique des entrees de cache P2P perimees (`p2p_cache_on_peer_down`) lors des deconnexions de pairs.
