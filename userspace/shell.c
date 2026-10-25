@@ -7756,6 +7756,7 @@ void main() {
     osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
     umalloc_init((void *)OS_USER_HEAP_BASE, shell_heap_grow);
     osui_gui_set_heap(urealloc);
+    fsops_set_heap(urealloc);
     osui_gui_set_mobile_op(shell_mobile_gui);
     
     // Affichage de bienvenue moderne

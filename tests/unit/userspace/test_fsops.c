@@ -137,6 +137,23 @@ static void test_grep_recursive(void) {
     TEST_ASSERT(fsops_grep(&mfs_io, "/nope", "x", 5, 0, 0, 0, 0) < 0);
 }
 
+/* Lot 45: with a heap attached, a file over FSOPS_FILE_MAX is searched
+ * whole (the hit at its very end is found, nothing is cut). */
+static char g_theap[2 * FSOPS_FILE_MAX];
+static void *t_realloc(void *p, unsigned n) { (void)p; return n <= sizeof(g_theap) ? g_theap : 0; }
+static void test_grep_big_file_with_heap(void) {
+    static char big[FSOPS_FILE_MAX + 100];
+    int calls = 0, files = 0, cut = -1;
+    mfs_reset();
+    memset(big, 'z', sizeof(big)); memcpy(big + sizeof(big) - 4, "TODO", 4);
+    mfs_add("/home/big.txt", 0, big, (int)sizeof(big));
+    fsops_set_heap(t_realloc);
+    g_hits[0] = 0;
+    TEST_ASSERT_EQUAL(1, fsops_grep(&mfs_io, "/home", "TODO", 10, on_hit, &calls, &files, &cut));
+    TEST_ASSERT_EQUAL(0, cut);
+    fsops_set_heap(0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_paths);
@@ -146,6 +163,7 @@ int main(void) {
     RUN_TEST(test_read_only_initrd_errors);
     RUN_TEST(test_short_write_is_an_error);
     RUN_TEST(test_grep_recursive);
+    RUN_TEST(test_grep_big_file_with_heap);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

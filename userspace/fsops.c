@@ -235,19 +235,36 @@ static int line_has(const char *l, int n, const char *p, int pl) {
     return 0;
 }
 
+/* Lot 45: files over FSOPS_FILE_MAX are searched whole, up to
+ * FSOPS_GREP_FILE_MAX, through a heap buffer when a heap is attached
+ * (fsops_set_heap); without a heap only the first FSOPS_FILE_MAX bytes. */
+static void *(*g_grep_realloc)(void *p, unsigned n);
+static char *g_grep_big;
+static int g_grep_big_n;
+void fsops_set_heap(void *(*realloc_fn)(void *p, unsigned n)) { g_grep_realloc = realloc_fn; }
+
 static void grep_file(grep_state_t *g, const char *path, int size) {
-    int n = g->io->readfile ? g->io->readfile(path, g_grep_buf, (int)sizeof(g_grep_buf)) : -1;
-    int i = 0, line = 1;
+    char *buf = g_grep_buf;
+    int cap = (int)sizeof(g_grep_buf), n, i = 0, line = 1;
+    if (size > cap && g_grep_realloc) {
+        int want = size > FSOPS_GREP_FILE_MAX ? FSOPS_GREP_FILE_MAX : size;
+        if (want > g_grep_big_n) {
+            char *m = (char *)g_grep_realloc(g_grep_big, (unsigned)want + 1U);
+            if (m) { g_grep_big = m; g_grep_big_n = want; }
+        }
+        if (g_grep_big && g_grep_big_n >= want) { buf = g_grep_big; cap = want; }
+    }
+    n = g->io->readfile ? g->io->readfile(path, buf, cap) : -1;
     if (n < 0) return;
     g->files++;
-    if (size > (int)sizeof(g_grep_buf) || n >= (int)sizeof(g_grep_buf)) g->cut++;
+    if (size > cap || (n >= cap && size != n)) g->cut++;
     while (i < n) {
         int s = i;
-        while (i < n && g_grep_buf[i] != '\n') i++;
-        if (line_has(g_grep_buf + s, i - s, g->pat, g->plen)) {
+        while (i < n && buf[i] != '\n') i++;
+        if (line_has(buf + s, i - s, g->pat, g->plen)) {
             if (g->total >= g->start && g->hits < g->max) {
                 g->hits++;
-                if (g->hit) g->hit(g->ctx, path, line, g_grep_buf + s, i - s);
+                if (g->hit) g->hit(g->ctx, path, line, buf + s, i - s);
             }
             g->total++;
         }
