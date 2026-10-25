@@ -221,6 +221,29 @@ static void test_large_file_rewrite_copy_append(void) {
     TEST_ASSERT_EQUAL(16U, overlay_snapshot_bytes());
 }
 
+/* Disks written before Lot 44 hold a fixed v2 image (64 slots): it still
+ * loads, and the next snapshot is v3. */
+static void test_restore_v2_disk_image(void) {
+    static uint8_t v2[OV_SNAP_V2_SIZE];
+    char out[16];
+    uint32_t off = 16U + 5U * OV_SNAP_V2_NODE, sz = 0;
+    memset(v2, 0, sizeof(v2));
+    setUp();
+    put_u32(v2 + 0, OV_SNAP_MAGIC);
+    put_u32(v2 + 4, OV_SNAP_V2_VERSION);
+    put_u32(v2 + 8, OV_SNAP_V2_NODES);
+    put_u32(v2 + 12, 1U);
+    v2[off] = 1U;
+    put_u32(v2 + off + 4U, 4U);
+    memcpy(v2 + off + 8U, "v2.txt", 7U);
+    memcpy(v2 + off + 8U + OV_SNAP_V2_PATH, "v2ok", 4U);
+    TEST_ASSERT_EQUAL(0, overlay_restore(v2, sizeof(v2)));
+    TEST_ASSERT_EQUAL(4, overlay_read("v2.txt", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_MEMORY("v2ok", out, 4);
+    TEST_ASSERT_EQUAL(0, overlay_snapshot(g_snap, sizeof(g_snap), &sz));
+    TEST_ASSERT_EQUAL(3, (int)g_snap[4]);
+}
+
 static void test_restore_v3_rejects_broken_chain(void) {
     uint32_t sz = 0;
     char buf[8];
@@ -245,6 +268,7 @@ int main(void) {
     RUN_TEST(test_large_file_write_read_and_bounds);
     RUN_TEST(test_large_file_rewrite_copy_append);
     RUN_TEST(test_restore_v3_rejects_broken_chain);
+    RUN_TEST(test_restore_v2_disk_image);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
