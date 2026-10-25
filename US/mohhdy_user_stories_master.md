@@ -417,7 +417,7 @@ completent le backlog ; elles n'en retirent aucune.
 | US-G06 | Services and drivers panel /services | partial (read only, no restart) |
 | US-G07 | Logs panel /logs | partial |
 | US-G08 | Collab ledger panel /ledger | partial (read, p2p-up; no offer/vote/escrow forms) |
-| US-G09 | Production / CI panel /prod | partial |
+| US-G09 | Production / CI panel /ci (the /prod name is the existing production pane) | partial |
 | US-G10 | Security / CA panel /security | partial (local Schnorr CA) |
 | US-G11 | Web devtools panel /devtools | partial |
 | US-G12 | File search /search and `grep -r` | done (first 8 KiB per file, 64 hits) |

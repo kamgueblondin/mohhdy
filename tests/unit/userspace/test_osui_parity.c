@@ -102,6 +102,10 @@ static void test_table_matches_registry(void) {
     }
     TEST_ASSERT(total >= 50);
     TEST_ASSERT_EQUAL(0, osui_par_kind_of("/nope"));
+    /* existing desktop pane commands keep their meaning */
+    TEST_ASSERT_EQUAL(0, osui_par_kind_of("/prod"));
+    TEST_ASSERT_EQUAL(0, osui_par_kind_of("/collab"));
+    TEST_ASSERT_EQUAL(0, osui_par_kind_of("/status"));
     TEST_ASSERT(!osui_tool_is_panel(OS_FB_APP_TASKS));
 }
 

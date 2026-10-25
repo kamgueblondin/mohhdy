@@ -92,7 +92,7 @@ const osui_par_family_t osui_par_families[] = {
     { OS_FB_APP_SERVICES, "/services", "Services et pilotes", "services", k_services, N(k_services) },
     { OS_FB_APP_LOGS, "/logs", "Journaux", "logs", k_logs, N(k_logs) },
     { OS_FB_APP_LEDGER, "/ledger", "Registre collab", "collab", k_ledger, N(k_ledger) },
-    { OS_FB_APP_PROD, "/prod", "Production", "prod", k_prod, N(k_prod) },
+    { OS_FB_APP_PROD, "/ci", "Production", "prod", k_prod, N(k_prod) },
     { OS_FB_APP_SECURITY, "/security", "Securite et CA", "security", k_security, N(k_security) },
     { OS_FB_APP_SEARCH, "/search", "Recherche", "search", k_search, N(k_search) },
     { OS_FB_APP_DEVTOOLS, "/devtools", "Outils web", "web", k_devtools, N(k_devtools) },

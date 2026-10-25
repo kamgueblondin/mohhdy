@@ -42,7 +42,7 @@ Fait (PR #200) : tas utilisateur (`SYS_HEAP_GROW`, umalloc), editeur sans
 plafond de 96 lignes et a la taille de la fenetre, visionneuse PGM/PPM en
 pixels, modele de droits des fenetres outils = registre du shell (plus de
 liste fixe), panneaux par famille de commandes (/net, /disk, /services,
-/logs, /ledger, /prod, /security, /search, /devtools, /notes, /cmd) et
+/logs, /ledger, /ci, /security, /search, /devtools, /notes, /cmd) et
 `grep -r`. Etat par famille : `docs/GUI_PARITY.md` ; statuts US-G01 a
 US-G17 dans le fichier US maitre et dans `/roadmap.txt` (phase 9).
 

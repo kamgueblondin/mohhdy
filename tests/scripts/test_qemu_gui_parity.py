@@ -38,7 +38,7 @@ PANELS = [
     ("/services", "Services et pilotes", "devices", "devices ok"),
     ("/logs", "Journaux", "task-events", "task-events ok"),
     ("/ledger", "Registre collab", "collab-balances", "collab-balances"),
-    ("/prod", "Production", "prod-diag", "prod-diag uptime_ticks"),
+    ("/ci", "Production", "prod-diag", "prod-diag uptime_ticks"),
     ("/security", "Securite et CA", "whoami", ""),
     ("/devtools", "Outils web", "browser-status", "browser-status"),
     ("/notes", "Notes et archives", "ls /", "Initrd / VFS"),

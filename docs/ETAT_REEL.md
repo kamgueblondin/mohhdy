@@ -1224,7 +1224,7 @@ What exists, tested by unit tests and `make qemu-gui-ux5` plus
   nesting). The command runs in the shell task, so the kernel checks the
   rights exactly as for a typed command. See `docs/GUI_PARITY.md`.
 - Panels per command family (`userspace/osui_parity.c`): /net, /disk,
-  /services, /logs, /ledger, /prod, /security, /search, /devtools, /notes
+  /services, /logs, /ledger, /ci, /security, /search, /devtools, /notes
   and the generic /cmd. 58 entries, each a real shell command line;
   state-changing entries need a second Enter. `scripts/check_gui_parity.py`
   (in test-all) fails if a panel names a command missing from the registry.

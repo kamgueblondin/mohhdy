@@ -45,7 +45,7 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | /services Services et pilotes | services | `devices`, `lspci`, `dev-list`, `jobs`, `task-summary`, `service-status` (ARG), `service-find` (ARG) |
 | /logs Journaux | logs | `task-events`, `notify-list`, `osui-audit`, `history`, `prod-usage`, `prod-log-analyze` (ARG), `prod-log-append` (ARG+MUT) |
 | /ledger Registre collab | collab | `collab-balances`, `collab-tasks`, `collab-audit`, `p2p-up` (ARG+MUT) |
-| /prod Production | prod | `prod-diag`, `prod-alerts`, `prod-backups`, `prod-scale-status`, `prod-metrics`, `prod-sample` (MUT), `deploy-verify`, `prod-integrity` (ARG) |
+| /ci Production | prod | `prod-diag`, `prod-alerts`, `prod-backups`, `prod-scale-status`, `prod-metrics`, `prod-sample` (MUT), `deploy-verify`, `prod-integrity` (ARG) |
 | /security Securite et CA | security | `whoami`, `id-key`, `origin-check`, `pm-ca-verify` (ARG), `pm-ca-init` (MUT), `pm-ca-sign` (ARG+MUT) |
 | /search Recherche | search | `grep -r` (ARG), `grep` (ARG), `ls` (ARG) |
 | /devtools Outils web | web | `browser-status`, `browser-tabs`, `web-perf`, `web-cache`, `web-dom` (ARG), `web-console` (ARG) |
@@ -65,7 +65,7 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | storage: ata-*, fat16-*, mount-*, persist-* (6), vfs-* (26) | /disk | partial: ata, mounts, persist, ls, stat, mkdir; vfs-* backend probes only through /cmd |
 | logs: task-events, notify-*, osui-audit, history, prod-log-*, prod-usage | /logs | partial |
 | collab ledger: collab-* (37) | /ledger | partial: balances, tasks, audit (needs p2p-up, offered in the panel); offers, auctions, votes, escrow forms only through /cmd |
-| production / CI: prod-* (28), deploy-* (3), cicd | /prod | partial: diag, alerts, backups, scale, metrics, sample, integrity |
+| production / CI: prod-* (28), deploy-* (3), cicd | /ci | partial: diag, alerts, backups, scale, metrics, sample, integrity |
 | security / CA: whoami, id-key, cap-token, pm-ca-*, origin-* | /security | partial: local Schnorr CA only (no public authority) |
 | web devtools: web-* (13), browser-* (34) | /devtools, Browser window (UX4) | partial: status, tabs, perf, cache, DOM, console |
 | search: grep (with UX5 grep -r) | /search | done: recursive, first 8 KiB of each file, 64 hits |
