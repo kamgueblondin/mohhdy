@@ -505,7 +505,8 @@ typedef struct {
 #define OS_FB_APP_DEVSYNC 26
 #define OS_FB_APP_ADMIN 27
 #define OS_FB_APP_API 28
-#define OS_FB_APP_KIND_MAX 28
+#define OS_FB_APP_HELP 29      /* Lot 45: /help, desktop slash programs */
+#define OS_FB_APP_KIND_MAX 29
 #define OS_FB_APP_ROWS 22       /* default window grid */
 #define OS_FB_APP_COLS 78
 /* UX5: grid buffers; a maximized window shows as many rows / columns as

@@ -83,7 +83,7 @@ static void test_rights_model(void) {
 static void test_table_matches_registry(void) {
     int i, k, total = 0;
     char name[40];
-    TEST_ASSERT_EQUAL(20, osui_par_family_count);
+    TEST_ASSERT_EQUAL(21, osui_par_family_count);
     for (i = 0; i < osui_par_family_count; i++) {
         const osui_par_family_t *f = &osui_par_families[i];
         TEST_ASSERT(f->kind >= OS_FB_APP_NET && f->kind <= OS_FB_APP_KIND_MAX);

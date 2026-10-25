@@ -195,17 +195,15 @@ static int app_render(int kind, osui_app_view_t *v) {
 /* "/tasks", "/view F", "/settings", "/peers", "/pmrun F", "/chat", and the
  * UX5 parity panels of osui_parity.c ("/net", "/disk", ... "/cmd [CMD]") */
 static int tool_slash(const char *line, char *out, int out_max) {
-    static const struct { const char *cmd; int kind; } k[] = {
-        { "/tasks", OS_FB_APP_TASKS }, { "/view", OS_FB_APP_VIEW }, { "/settings", OS_FB_APP_SETTINGS },
-        { "/peers", OS_FB_APP_P2P }, { "/pmrun", OS_FB_APP_PMRUN }, { "/chat", OS_FB_APP_CHAT },
-    };
     int i;
-    for (i = 0; i < (int)(sizeof(k) / sizeof(k[0])); i++) {
-        int n = slen(k[i].cmd);
-        if (sncmp(line, k[i].cmd, n) == 0 && (line[n] == ' ' || line[n] == 0)) {
+    for (i = 0; i < osui_par_builtin_count; i++) {
+        const char *sl = osui_par_builtins[i].slash;
+        int n = slen(sl);
+        if (!osui_par_builtins[i].kind) continue;
+        if (sncmp(line, sl, n) == 0 && (line[n] == ' ' || line[n] == 0)) {
             const char *a = line + n;
             while (*a == ' ') a++;
-            (void)osui_gui_tool_open(k[i].kind, a, out, out_max);
+            (void)osui_gui_tool_open(osui_par_builtins[i].kind, a, out, out_max);
             return 1;
         }
     }
@@ -215,7 +213,12 @@ static int tool_slash(const char *line, char *out, int out_max) {
         if (sncmp(line, sl, n) == 0 && (line[n] == ' ' || line[n] == 0)) {
             const char *a = line + n;
             while (*a == ' ') a++;
-            (void)osui_gui_tool_open(osui_par_families[i].kind, a, out, out_max);
+            if (osui_gui_tool_open(osui_par_families[i].kind, a, out, out_max) == 0
+                && osui_par_families[i].kind == OS_FB_APP_HELP) {
+                /* Lot 45: /help shows the list at once (first entry) */
+                int k = slen(out);
+                app_key(OS_FB_APP_HELP, '\n', out + k, out_max - k);
+            }
             return 1;
         }
     }

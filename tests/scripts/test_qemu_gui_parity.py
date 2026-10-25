@@ -42,7 +42,34 @@ PANELS = [
     ("/security", "Securite et CA", "whoami", ""),
     ("/devtools", "Outils web", "browser-status", "browser-status"),
     ("/notes", "Notes et archives", "ls /", "Initrd / VFS"),
+    ("/devsync", "DevSync cluster", "devsync-show", "devsync"),
 ]
+
+
+def help_window(monitor, proc):
+    """Lot 45: /help in the chat opens the Aide window and shows the slash
+    programs at once (gui-help, from the same table as the dispatch)."""
+    start = slash(monitor, proc, "/help", "osui tool open app=Aide")
+    run_marker(proc, start, "gui-help")
+    g.wait_for(proc, "osui panel out=gui-help ok", g.CMD_TIMEOUT, start)
+    say("/help: Aide window lists the desktop slash programs")
+    start = len(g.log_text())
+    key(monitor, "esc")
+    key(monitor, "down")
+    key(monitor, "ret")
+    run_marker(proc, start, "help")
+    say("/help: second entry runs the terminal help (shell registry)")
+    close_panel(monitor, proc, "Aide")
+
+
+def grpc(monitor, proc):
+    slash(monitor, proc, "/grpc", "osui tool open app=Wire gRPC")
+    start = len(g.log_text())
+    type_text(monitor, "Echo Say hi")
+    key(monitor, "ret")
+    run_marker(proc, start, "grpc-wire Echo Say hi")
+    say("/grpc: grpc-wire runs through the shell")
+    close_panel(monitor, proc, "Wire gRPC")
 
 
 def say(msg):
@@ -166,7 +193,9 @@ def main():
             time.sleep(0.6)
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
+            help_window(monitor, proc)
             families(monitor, proc)
+            grpc(monitor, proc)
             search(monitor, proc)
             confirm_mutation(monitor, proc)
             generic(monitor, proc)

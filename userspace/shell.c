@@ -1,6 +1,7 @@
 // shell.c - Shell Interactif Avancé pour MOHHDY v6.0
 // Shell utilisateur complet avec IA intégrée et fonctionnalités modernes
 
+#include "osui_parity.h"
 #include <stdint.h>
 int shell_prod_is(const char* line);
 int shell_persist_is(const char* line);
@@ -3573,7 +3574,7 @@ static int is_builtin(const char* cmd) {
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
-        "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap",
+        "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "gui-help",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
         "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "right-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "rtc-check", "whoami",
         "alias", "unalias", "export", "which", "rc",
@@ -7221,6 +7222,12 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "net-wire-status") == 0) {
         cmd_net_wire_status(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "gui-help") == 0) {
+        /* Lot 45: the desktop slash programs, from the dispatch table */
+        print_string("gui-help ok programmes slash du bureau:\n");
+        (void)osui_par_slash_list(print_string);
+        ctx->last_rc = 0;
         return 1;
     } else if (strcmp(command, "uptime") == 0) {
         cmd_uptime(ctx, args, arg_count);

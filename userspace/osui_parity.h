@@ -28,6 +28,21 @@ typedef struct {
     int count;
 } osui_par_family_t;
 
+/* Lot 45: the slash programs of the desktop chat that are not a parity
+ * family (tool windows, files, editor, panes). kind is the OS_FB_APP_* of
+ * a tool window opened by tool_slash, 0 for the other handlers. One table
+ * for the dispatch and for the "gui-help" listing (no duplicated list). */
+typedef struct {
+    const char *slash;
+    int kind;
+    const char *what;
+} osui_par_builtin_t;
+extern const osui_par_builtin_t osui_par_builtins[];
+extern const int osui_par_builtin_count;
+/* writes the slash program list (builtins then families) through put;
+ * returns the number of entries listed */
+int osui_par_slash_list(void (*put)(const char *s));
+
 extern const osui_par_family_t osui_par_families[];
 extern const int osui_par_family_count;
 

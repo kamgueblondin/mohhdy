@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 444
+#define MOHHDY_SHELL_COMMAND_COUNT 445
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -185,6 +185,7 @@ static const char * const mohhdy_shell_commands[] = {
     "guest-status",
     "gui",
     "gui-exit",
+    "gui-help",
     "gui-move",
     "gui-status",
     "hal-info",

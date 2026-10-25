@@ -149,7 +149,29 @@ static const osui_par_entry_t k_api[] = {
     { "Revoquer un token API", "api-revoke", A | M, "TOKEN_ID" },
 };
 
+static const osui_par_entry_t k_help[] = {
+    { "Programmes slash du bureau", "gui-help", 0, 0 },
+    { "Commandes du terminal (help)", "help", 0, 0 },
+};
+
+const osui_par_builtin_t osui_par_builtins[] = {
+    { "/tasks", OS_FB_APP_TASKS, "Gestionnaire des taches" },
+    { "/view", OS_FB_APP_VIEW, "Visionneuse FICHIER (pgm ppm bmp png)" },
+    { "/settings", OS_FB_APP_SETTINGS, "Parametres" },
+    { "/peers", OS_FB_APP_P2P, "Pairs P2P" },
+    { "/pmrun", OS_FB_APP_PMRUN, "Lancer FICHIER.pm" },
+    { "/chat", OS_FB_APP_CHAT, "Chat IA (ai-model)" },
+    { "/files", 0, "Fichiers [CHEMIN]" },
+    { "/edit", 0, "Editeur FICHIER" },
+    { "/browse", 0, "Site local /web (aussi: web FICHIER)" },
+    { "/shell", 0, "Terminal (aussi: !cmd depuis le chat)" },
+    { "/console", 0, "Retour au mode texte" },
+    { "/browser /fs /admin /support /status /center", 0, "Volets du bureau" },
+};
+const int osui_par_builtin_count = N(osui_par_builtins);
+
 const osui_par_family_t osui_par_families[] = {
+    { OS_FB_APP_HELP, "/help", "Aide", "help", k_help, N(k_help) },
     { OS_FB_APP_NET, "/net", "Reseau", "network", k_net, N(k_net) },
     { OS_FB_APP_STORE, "/disk", "Stockage", "storage", k_store, N(k_store) },
     { OS_FB_APP_SERVICES, "/services", "Services et pilotes", "services", k_services, N(k_services) },
@@ -208,4 +230,17 @@ int osui_par_build(const osui_par_entry_t *e, const char *input, char *out, int 
     }
     out[o] = 0;
     return 0;
+}
+
+int osui_par_slash_list(void (*put)(const char *s)) {
+    int i, n = 0;
+    if (!put) return 0;
+    for (i = 0; i < osui_par_builtin_count; i++, n++) {
+        put(osui_par_builtins[i].slash); put("  "); put(osui_par_builtins[i].what); put("\n");
+    }
+    for (i = 0; i < osui_par_family_count; i++, n++) {
+        put(osui_par_families[i].slash); put("  "); put(osui_par_families[i].title); put("\n");
+    }
+    put("ai TEXTE  question au modele; tout autre mot: commande du chat\n");
+    return n;
 }
