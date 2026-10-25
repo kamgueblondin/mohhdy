@@ -26,6 +26,8 @@ typedef struct {
     char options[OSUI_FORM_MAX_OPTIONS][32];
     int num_options;
     int sel_option;
+    int optional;   /* may stay empty (then left out of the command) */
+    int rest;       /* last word: spaces allowed */
 } osui_form_field_t;
 
 typedef struct osui_form_s osui_form_t;
@@ -39,6 +41,11 @@ struct osui_form_s {
     char cmd_out[OSUI_APP_COLS * 4];
     int (*submit_fn)(osui_form_t *f, void *src, char *out, int max);
     void *ctx;
+    char verb[40];          /* shell command the fields complete */
+    int verb_from_select;   /* field 0 (a list) names the command */
+    char last_cmd[160];     /* command line really run on submit */
+    int confirm;            /* 1: submit needs a second Enter (mutation) */
+    int armed;
 };
 
 /* Core form functions */
@@ -54,5 +61,9 @@ void osui_form_render(const osui_form_t *f, osui_app_view_t *v);
 void osui_form_collab_offer_init(osui_form_t *f);
 void osui_form_collab_vote_init(osui_form_t *f);
 void osui_form_collab_escrow_init(osui_form_t *f);
+void osui_form_collab_settle_init(osui_form_t *f);
+/* verb + non empty fields; -1 on a missing required field or a space in a
+ * one-word field (it would shift the shell arguments). */
+int osui_form_build_cmd(const osui_form_t *f, char *cmd, int max);
 
 #endif

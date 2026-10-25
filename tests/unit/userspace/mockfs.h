@@ -6,7 +6,7 @@
 #include "fsops.h"
 
 #define MFS_N 64
-typedef struct { int used, dir; char path[128]; char data[65536]; int len; } mfs_ent_t;
+typedef struct { int used, dir; char path[128]; char data[40000]; int len; } mfs_ent_t;
 static mfs_ent_t mfs[MFS_N];
 
 static int mfs_find(const char *p) {

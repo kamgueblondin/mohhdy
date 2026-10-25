@@ -148,6 +148,7 @@ static void add_line(osui_tool_t *t, const char *s, int len, int cls) {
     if (t->n >= OSUI_TOOL_LINES) {
         for (k = 0; k + 1 < OSUI_TOOL_LINES; k++) { t_cpy(t->lines[k], OSUI_APP_COLS, t->lines[k + 1]); t->cls[k] = t->cls[k + 1]; }
         t->n = OSUI_TOOL_LINES - 1;
+        t->dropped++;
     }
     if (len < 0) len = t_len(s);
     {
@@ -443,14 +444,7 @@ static void view_fill(osui_tool_t *t, const osui_tool_src_t *src) {
                 int k;
                 for (k = 0; k < n; k++) g_file[k] = big[k];
             }
-    } else {
-        int read_max = (int)sizeof(g_file) - 1;
-        if (src && src->stat) {
-            os_dirent_t st;
-            if (src->stat(t->arg, &st) == 0 && (int)st.size > read_max) read_max = (int)st.size;
-        }
-        n = (src && src->read) ? src->read(t->arg, g_file, read_max) : -1;
-    }
+        } else n = (src && src->read) ? src->read(t->arg, g_file, (int)sizeof(g_file) - 1) : -1;
     }
     if (n < 0) { add_line(t, "lecture impossible: ", -1, OSUI_APP_A_ERR); t_cat(t->lines[0], OSUI_APP_COLS, t->arg); set_status(t, "erreur", 0); return; }
     g_file[n] = 0;
@@ -653,8 +647,17 @@ static void panel_exec(osui_tool_t *t, const osui_tool_src_t *src, const char *c
     t->sel = -1;
     add_line(t, "$ ", -1, OSUI_APP_A_DIM);
     t_cat(t->lines[0], OSUI_APP_COLS, cmd);
+    t->dropped = 0;
     n = run_into(t, src, cmd, OSUI_APP_A_TEXT);
     if (n > 0) first_line(first_out, sizeof(first_out), g_out);
+    if (t->dropped > 0) {
+        /* honest bound: the window keeps the last OSUI_TOOL_LINES lines */
+        char note[OSUI_APP_COLS];
+        t_cpy(note, (int)sizeof(note), "[sortie tronquee: ");
+        t_cat_u(note, (int)sizeof(note), (unsigned)t->dropped);
+        t_cat(note, (int)sizeof(note), " lignes du debut retirees, fenetre limitee a 128 lignes]");
+        add_line(t, note, -1, OSUI_APP_A_DIM);
+    }
     if (!first_out[0]) {
         int k = 1;
         while (k < t->n && !t->lines[k][0]) k++;
@@ -700,6 +703,11 @@ static void panel_run(osui_tool_t *t, const osui_tool_src_t *src) {
         if (t_ncmp(e->cmd, "collab-escrow-create", 20) == 0) {
             t->has_form = 1;
             osui_form_collab_escrow_init(&t->form);
+            return;
+        }
+        if (t_ncmp(e->cmd, "collab-escrow-release", 21) == 0) {
+            t->has_form = 1;
+            osui_form_collab_settle_init(&t->form);
             return;
         }
     }
@@ -815,6 +823,7 @@ int osui_tool_click(osui_tool_t *t, int row, int col, int dbl, const osui_tool_s
     int idx;
     (void)col;
     if (!t || !t->active || row < 0) return OSUI_TOOL_NONE;
+    if (t->has_form) return osui_form_click(&t->form, row, col, (void *)src) ? OSUI_TOOL_CHANGED : OSUI_TOOL_NONE;
     idx = t->top + row;
     if (t->kind == OS_FB_APP_TASKS && idx < t->n) {
         if (t->sel != idx) t->armed_pid = -1;

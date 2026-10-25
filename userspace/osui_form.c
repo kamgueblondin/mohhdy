@@ -38,6 +38,11 @@ void osui_form_init(osui_form_t *f, const char *title) {
     f->cmd_out[0] = 0;
     f->submit_fn = 0;
     f->ctx = 0;
+    f->verb[0] = 0;
+    f->verb_from_select = 0;
+    f->last_cmd[0] = 0;
+    f->confirm = 0;
+    f->armed = 0;
     for (i = 0; i < OSUI_FORM_MAX_FIELDS; i++) {
         f->fields[i].type = OSUI_FORM_FIELD_TEXT;
         f->fields[i].label[0] = 0;
@@ -45,6 +50,8 @@ void osui_form_init(osui_form_t *f, const char *title) {
         f->fields[i].val_len = 0;
         f->fields[i].num_options = 0;
         f->fields[i].sel_option = 0;
+        f->fields[i].optional = 0;
+        f->fields[i].rest = 0;
     }
 }
 
@@ -93,13 +100,22 @@ static int osui_form_validate_and_submit(osui_form_t *f, void *src) {
     int i;
     /* Check required fields */
     for (i = 0; i < f->num_fields; i++) {
-        if (f->fields[i].type == OSUI_FORM_FIELD_TEXT && f->fields[i].val_len == 0) {
+        if (f->fields[i].type == OSUI_FORM_FIELD_TEXT && f->fields[i].val_len == 0 && !f->fields[i].optional) {
             f_cpy(f->status, sizeof(f->status), "Erreur: le champ '");
             f_cat(f->status, sizeof(f->status), f->fields[i].label);
             f_cat(f->status, sizeof(f->status), "' est requis.");
             return -1;
         }
     }
+    if (f->confirm && !f->armed) {
+        /* same rule as the parity panels: a mutation needs a second Enter */
+        char cmd[160];
+        f->armed = 1;
+        f_cpy(f->status, sizeof(f->status), "Entree encore pour confirmer: ");
+        if (osui_form_build_cmd(f, cmd, (int)sizeof(cmd)) == 0) f_cat(f->status, sizeof(f->status), cmd);
+        return 0;
+    }
+    f->armed = 0;
     if (f->submit_fn) {
         return f->submit_fn(f, src, f->cmd_out, sizeof(f->cmd_out));
     }
@@ -110,6 +126,7 @@ static int osui_form_validate_and_submit(osui_form_t *f, void *src) {
 int osui_form_key(osui_form_t *f, int key, void *src) {
     osui_form_field_t *fld;
     if (!f || f->num_fields == 0) return 0;
+    if (key != '\n' && key != '\r') f->armed = 0;
 
     if (key == K_TAB || key == K_DOWN) {
         f->active_field = (f->active_field + 1) % f->num_fields;
@@ -212,109 +229,127 @@ void osui_form_render(const osui_form_t *f, osui_app_view_t *v) {
         }
     }
 
-    if (f->cmd_out[0]) {
-        /* Render output below fields if any */
-        int out_line = r + 1;
-        if (out_line < OSUI_APP_ROWS - 1) {
-            f_cpy(v->rows[out_line], sizeof(v->rows[out_line]), "--- Resultat ---");
-            for (int k = 0; k < OSUI_APP_COLS; k++) v->attr[out_line][k] = OSUI_APP_A_DIM;
+    if (f->last_cmd[0] && r + 1 < OSUI_APP_ROWS) {
+        /* the command really run, then its output (the shell's own text) */
+        int k = 0, o;
+        f_cpy(v->rows[r], sizeof(v->rows[r]), "$ ");
+        f_cat(v->rows[r], sizeof(v->rows[r]), f->last_cmd);
+        for (o = 0; o < OSUI_APP_COLS; o++) v->attr[r][o] = OSUI_APP_A_DIM;
+        r++;
+        while (f->cmd_out[k] && r < OSUI_APP_ROWS) {
+            o = 0;
+            while (f->cmd_out[k] && f->cmd_out[k] != '\n' && o < OSUI_APP_COLS - 1) v->rows[r][o++] = f->cmd_out[k++];
+            v->rows[r][o] = 0;
+            while (f->cmd_out[k] && f->cmd_out[k] != '\n') k++;
+            if (f->cmd_out[k] == '\n') k++;
+            r++;
         }
     }
 
     v->nrows = r;
 }
 
-/* Prebuilt collab ledger forms */
+/* Prebuilt collab ledger forms. They build exactly the shell grammar of
+ * userspace/shell_collab.c (docs/collab.md) and run it through src->run,
+ * the same registry path as a typed command: no second implementation. */
 
-static int collab_offer_submit(osui_form_t *f, void *src_ptr, char *out, int max) {
+int osui_form_build_cmd(const osui_form_t *f, char *cmd, int max) {
+    int i;
+    if (!f || !cmd || max <= 0) return -1;
+    cmd[0] = 0;
+    if (f->num_fields < 1) return -1;
+    if (f->fields[0].type == OSUI_FORM_FIELD_SELECT && f->verb_from_select) {
+        f_cpy(cmd, max, f->fields[0].value);
+        i = 1;
+    } else {
+        f_cpy(cmd, max, f->verb);
+        i = 0;
+    }
+    for (; i < f->num_fields; i++) {
+        const osui_form_field_t *fld = &f->fields[i];
+        int k;
+        if (fld->type == OSUI_FORM_FIELD_SUBMIT) continue;
+        if (!fld->value[0]) { if (fld->optional) continue; return -1; }
+        for (k = 0; fld->value[k]; k++) if (fld->value[k] == ' ' && !fld->rest) return -1;
+        f_cat(cmd, max, " ");
+        f_cat(cmd, max, fld->value);
+    }
+    return f_len(cmd) < max - 1 ? 0 : -1;
+}
+
+static int form_run_submit(osui_form_t *f, void *src_ptr, char *out, int max) {
     const osui_tool_src_t *src = (const osui_tool_src_t *)src_ptr;
     char cmd[256];
-    cmd[0] = 0;
-    f_cat(cmd, sizeof(cmd), "collab-offer ");
-    f_cat(cmd, sizeof(cmd), f->fields[0].value); /* task */
-    f_cat(cmd, sizeof(cmd), " ");
-    f_cat(cmd, sizeof(cmd), f->fields[1].value); /* amount */
-    f_cat(cmd, sizeof(cmd), " ");
-    f_cat(cmd, sizeof(cmd), f->fields[2].value); /* desc */
-
-    if (src && src->run) {
-        int rc = src->run(cmd, out, max);
-        if (rc >= 0) f_cpy(f->status, sizeof(f->status), "Offre creee avec succes.");
-        else f_cpy(f->status, sizeof(f->status), "Echec de la creation de l'offre.");
-        return rc;
+    int rc, k;
+    if (osui_form_build_cmd(f, cmd, (int)sizeof(cmd)) < 0) {
+        f_cpy(f->status, sizeof(f->status), "Erreur: champ vide ou espace interdit");
+        return -1;
     }
-    f_cpy(f->status, sizeof(f->status), cmd);
-    return 0;
+    f_cpy(f->last_cmd, sizeof(f->last_cmd), cmd);
+    if (!src || !src->run) { f_cpy(f->status, sizeof(f->status), "shell indisponible"); return -1; }
+    rc = src->run(cmd, out, max);
+    if (rc < 0) { f_cpy(f->status, sizeof(f->status), "refusee: "); f_cat(f->status, sizeof(f->status), cmd); return rc; }
+    /* first output line in the status: the shell's own ok / error text */
+    for (k = 0; out[k] == '\n' || out[k] == ' '; k++) {}
+    {
+        char line[OSUI_APP_COLS];
+        int o = 0;
+        while (out[k] && out[k] != '\n' && o < (int)sizeof(line) - 1) line[o++] = out[k++];
+        line[o] = 0;
+        f_cpy(f->status, sizeof(f->status), line[0] ? line : "(aucune sortie)");
+    }
+    return rc;
+}
+
+static void form_text(osui_form_t *f, const char *label, const char *def, int optional, int rest) {
+    int i = osui_form_add_text(f, label, def);
+    if (i >= 0) { f->fields[i].optional = optional; f->fields[i].rest = rest; }
 }
 
 void osui_form_collab_offer_init(osui_form_t *f) {
-    osui_form_init(f, "Formulaire: Creer une offre (Collab)");
-    osui_form_add_text(f, "Tache ID:", "t1");
-    osui_form_add_text(f, "Montant:", "100");
-    osui_form_add_text(f, "Description:", "Developpement feature");
-    osui_form_add_submit(f, "[ Soumettre l'Offre ]");
-    f->submit_fn = collab_offer_submit;
-}
-
-static int collab_vote_submit(osui_form_t *f, void *src_ptr, char *out, int max) {
-    const osui_tool_src_t *src = (const osui_tool_src_t *)src_ptr;
-    char cmd[256];
-    cmd[0] = 0;
-    f_cat(cmd, sizeof(cmd), "collab-vote ");
-    f_cat(cmd, sizeof(cmd), f->fields[0].value); /* proposal */
-    f_cat(cmd, sizeof(cmd), " ");
-    f_cat(cmd, sizeof(cmd), f->fields[1].value); /* choice */
-    f_cat(cmd, sizeof(cmd), " ");
-    f_cat(cmd, sizeof(cmd), f->fields[2].value); /* reason */
-
-    if (src && src->run) {
-        int rc = src->run(cmd, out, max);
-        if (rc >= 0) f_cpy(f->status, sizeof(f->status), "Vote enregistre avec succes.");
-        else f_cpy(f->status, sizeof(f->status), "Echec du vote.");
-        return rc;
-    }
-    f_cpy(f->status, sizeof(f->status), cmd);
-    return 0;
+    osui_form_init(f, "Formulaire: offre de capacite (collab-offer)");
+    f_cpy(f->verb, sizeof(f->verb), "collab-offer");
+    form_text(f, "Nom:", "gpu", 0, 0);
+    form_text(f, "Prix:", "10", 0, 0);
+    form_text(f, "Capacite:", "1", 0, 0);
+    osui_form_add_submit(f, "[ Publier l'offre ]");
+    f->confirm = 1;
+    f->submit_fn = form_run_submit;
 }
 
 void osui_form_collab_vote_init(osui_form_t *f) {
-    static const char *const vote_opts[] = { "approuver", "rejeter" };
-    osui_form_init(f, "Formulaire: Voter une proposition (Collab)");
-    osui_form_add_text(f, "Proposition ID:", "p1");
+    static const char *const vote_opts[] = { "yes", "no" };
+    osui_form_init(f, "Formulaire: vote (collab-vote)");
+    f_cpy(f->verb, sizeof(f->verb), "collab-vote");
+    form_text(f, "Proposant (pair):", "", 0, 0);
+    form_text(f, "Sequence:", "", 0, 0);
     osui_form_add_select(f, "Choix:", vote_opts, 2, 0);
-    osui_form_add_text(f, "Raison:", "validation qualite");
-    osui_form_add_submit(f, "[ Soumettre le Vote ]");
-    f->submit_fn = collab_vote_submit;
-}
-
-static int collab_escrow_submit(osui_form_t *f, void *src_ptr, char *out, int max) {
-    const osui_tool_src_t *src = (const osui_tool_src_t *)src_ptr;
-    char cmd[256];
-    cmd[0] = 0;
-    if (f->fields[2].sel_option == 0) f_cat(cmd, sizeof(cmd), "collab-escrow-create ");
-    else if (f->fields[2].sel_option == 1) f_cat(cmd, sizeof(cmd), "collab-escrow-release ");
-    else f_cat(cmd, sizeof(cmd), "collab-dispute-open ");
-
-    f_cat(cmd, sizeof(cmd), f->fields[0].value); /* task */
-    f_cat(cmd, sizeof(cmd), " ");
-    f_cat(cmd, sizeof(cmd), f->fields[1].value); /* amount */
-
-    if (src && src->run) {
-        int rc = src->run(cmd, out, max);
-        if (rc >= 0) f_cpy(f->status, sizeof(f->status), "Operation escrow executee.");
-        else f_cpy(f->status, sizeof(f->status), "Echec de l'operation escrow.");
-        return rc;
-    }
-    f_cpy(f->status, sizeof(f->status), cmd);
-    return 0;
+    osui_form_add_submit(f, "[ Voter ]");
+    f->confirm = 1;
+    f->submit_fn = form_run_submit;
 }
 
 void osui_form_collab_escrow_init(osui_form_t *f) {
-    static const char *const escrow_opts[] = { "deposer", "liberer", "litige" };
-    osui_form_init(f, "Formulaire: Depot/Escrow (Collab)");
-    osui_form_add_text(f, "Tache ID:", "e1");
-    osui_form_add_text(f, "Montant:", "500");
-    osui_form_add_select(f, "Action:", escrow_opts, 3, 0);
-    osui_form_add_submit(f, "[ Executer Escrow ]");
-    f->submit_fn = collab_escrow_submit;
+    osui_form_init(f, "Formulaire: escrow (collab-escrow-create)");
+    f_cpy(f->verb, sizeof(f->verb), "collab-escrow-create");
+    form_text(f, "Beneficiaire (pair):", "", 0, 0);
+    form_text(f, "Arbitre (pair|none):", "none", 0, 0);
+    form_text(f, "Montant:", "", 0, 0);
+    form_text(f, "Nom (option):", "", 1, 0);
+    osui_form_add_submit(f, "[ Creer l'escrow ]");
+    f->confirm = 1;
+    f->submit_fn = form_run_submit;
+}
+
+void osui_form_collab_settle_init(osui_form_t *f) {
+    static const char *const verbs[] = { "collab-escrow-release", "collab-escrow-refund", "collab-dispute-open" };
+    osui_form_init(f, "Formulaire: solder un escrow");
+    f->verb_from_select = 1;
+    osui_form_add_select(f, "Action:", verbs, 3, 0);
+    form_text(f, "Payeur (pair):", "", 0, 0);
+    form_text(f, "Sequence:", "", 0, 0);
+    form_text(f, "Preuve (litige):", "", 1, 1);
+    osui_form_add_submit(f, "[ Executer ]");
+    f->confirm = 1;
+    f->submit_fn = form_run_submit;
 }

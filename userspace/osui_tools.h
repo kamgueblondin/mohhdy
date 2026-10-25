@@ -16,7 +16,7 @@
 #include "osui_form.h"
 
 #define OSUI_TOOL_LINES 128
-#define OSUI_TOOL_OUT 65536         /* captured command output per call (PR 4: 64 KiB buffer) */
+#define OSUI_TOOL_OUT 65536         /* captured command output per call (64 KiB, a note marks a cut) */
 #define OSUI_TOOL_INPUT 72
 
 typedef struct {
@@ -65,6 +65,7 @@ typedef struct {
     /* PR 4: Form support */
     osui_form_t form;
     int has_form;
+    int dropped;                               /* lines scrolled out by the last run */
 } osui_tool_t;
 
 const char *osui_tool_toolbar(int kind);
