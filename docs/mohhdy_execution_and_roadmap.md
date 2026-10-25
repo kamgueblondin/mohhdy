@@ -66,6 +66,22 @@ de 64 Kio, BMP/PNG, presse-papiers de plus de 4 Kio, capture des
 programmes lances, Raft avec partition, acceleration HTTPS, ports TCP.
 Etat par point : `docs/lot44_plan.md`.
 
+Lot 45 (branche `cursor/lot45`) : les corrections de la revue du lot 44
+sont remises (le dernier commit de Jules dans #201, 0f82add, les avait
+annulees, dont l'image overlay de 241 Ko qui pouvait ecraser FAT16) ;
+`/help` du chat ouvre la fenetre Aide (programmes slash tires de la table
+de dispatch, aide du terminal) ; toutes les fenetres outils et
+l'explorateur suivent la grille de leur fenetre (US-G15) ; lignes de
+l'editeur jusqu'a 256 colonnes avec defilement horizontal ; decodeurs
+partages BMP 24/32 et PNG (profondeur 8, sans entrelacement, inflate
+borne) pour la visionneuse (zoom, ajuster, deplacer) et `img-info` ;
+presse-papiers de 64 Kio ; `grep -r` et /search lisent les fichiers
+entiers jusqu'a 1 Mio via le tas du shell ; preuves QEMU du formulaire
+d'offre du registre, de /grpc, /devsync et du respawn supervise de
+pcidriver. Non fait : JPEG, sortie des programmes lances, US-001, Raft
+avec partition, ports TCP, fichiers overlay de plus de 30 Kio. Etat par
+point : `docs/lot45_plan.md`.
+
 ### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production
 - **Moteur Web & Securite (US-039 / US-031)** : Validation dynamique CSP des origines de ressources (images, styles, scripts) lors de la construction de la liste d'affichage (`webrt_csp_validate_display_list_resource`). Journalisation des acces bloques dans `osui-audit`.
 - **Reseau P2P & Resilience Mesh (US-063 / US-070)** : Fenetre glissante EWMA pour le RTT par pair (`rtt_ewma_ms`), renforçant la selection dans la table de routage (`link_cost`). Invalidation/purge automatique des entrees de cache P2P perimees (`p2p_cache_on_peer_down`) lors des deconnexions de pairs.

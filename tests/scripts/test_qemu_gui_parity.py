@@ -247,12 +247,19 @@ def generic(monitor, proc):
     key(monitor, "ret")
     run_marker(proc, start, "driver-restart pcidriver")
     g.wait_for(proc, "osui panel out=driver-restart ok pci-driver old ", g.CMD_TIMEOUT, start)
-    out = g.normalized_log(g.log_text()[start:])
     import re
-    m = re.search(r"driver-restart ok pci-driver old (\d+) new (\d+)", out)
-    if not m or m.group(1) == m.group(2):
-        raise RuntimeError("driver-restart: no supervised respawn with a new pid (%r)" % out[-300:])
-    say("/cmd: driver-restart pcidriver: old pid %s, respawned as pid %s (kernel supervisor)" % m.groups())
+    old = re.search(r"driver-restart ok pci-driver old (\d+)", g.normalized_log(g.log_text()[start:])).group(1)
+    # the kernel supervisor respawns pcidriver at the next use of the PCI
+    # service: lspci from the same window, then the new pid is asserted
+    start = len(g.log_text())
+    type_text(monitor, "lspci")
+    key(monitor, "ret")
+    run_marker(proc, start, "lspci")
+    g.wait_for(proc, "[PCI] supervised respawn bin/pcidriver pid ", g.CMD_TIMEOUT, start)
+    m = re.search(r"\[PCI\] supervised respawn bin/pcidriver pid (\d+)", g.log_text()[start:])
+    if not m or m.group(1) == old:
+        raise RuntimeError("driver-restart: no supervised respawn with a new pid")
+    say("/cmd: driver-restart pcidriver: old pid %s, respawned as pid %s by the kernel supervisor" % (old, m.group(1)))
     start = len(g.log_text())
     key(monitor, "esc")
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)

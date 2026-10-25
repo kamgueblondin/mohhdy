@@ -410,22 +410,23 @@ completent le backlog ; elles n'en retirent aucune.
 | US | Besoin | Statut |
 |---|---|---|
 | US-G01 | Tool windows run any shell registry command (kernel rights, terminal-only commands refused) | done |
-| US-G02 | Editor: lines on the user heap, grid follows the window | partial (72-column lines; saves up to 30 KiB since Lot 44) |
-| US-G03 | Viewer draws PGM/PPM as pixels | partial (no PNG/JPEG/BMP) |
+| US-G02 | Editor: lines on the user heap, grid follows the window | partial (lines up to 256 columns with horizontal scroll since Lot 45; saves up to 30 KiB) |
+| US-G03 | Viewer draws images as pixels | partial (Lot 45: PNM, BMP 24/32, PNG depth 8 non-interlaced, zoom/fit/pan, shared imgdec with `img-info`; no JPEG) |
 | US-G04 | Network panel /net | partial (status, p2p-up; no interface configuration) |
 | US-G05 | Storage panel /disk | partial (ata, mounts, persist, ls, stat, mkdir) |
-| US-G06 | Services and drivers panel /services | partial (driver-restart of the fixed Ring 3 drivers, kernel supervisor respawn; qemu-gui-parity proves the stop of pci-driver from /cmd, the respawn itself is lazy and not asserted) |
+| US-G06 | Services and drivers panel /services | partial (driver-restart of the fixed Ring 3 drivers, kernel supervisor respawn; qemu-gui-parity proves the stop of pci-driver from /cmd, Lot 45 asserts the supervised respawn of pcidriver with a new pid; atadriver / networker respawn not asserted) |
 | US-G07 | Logs panel /logs | partial |
-| US-G08 | Collab ledger panel /ledger | partial (forms for offer, vote, escrow create, release/refund/dispute: shell grammar, second Enter, unit tested; no QEMU proof yet) |
+| US-G08 | Collab ledger panel /ledger | done (forms for offer, vote, escrow create, release/refund/dispute: shell grammar, second Enter, unit tested; QEMU proof of the offer form since Lot 45) |
 | US-G09 | Production / CI panel /ci (the /prod name is the existing production pane) | partial |
 | US-G10 | Security / CA panel /security | partial (local Schnorr CA) |
 | US-G11 | Web devtools panel /devtools | partial |
-| US-G12 | File search /search and `grep -r` | done (first 32 KiB per file, pages of 64 hits: `grep -r MOTIF [REP] [PAGE]`) |
+| US-G12 | File search /search and `grep -r` | done (whole files up to 1 MiB through the shell heap since Lot 45, pages of 64 hits: `grep -r MOTIF [REP] [PAGE]`) |
 | US-G13 | Notes and archives panel /notes | partial |
 | US-G14 | Generic command window /cmd | done |
-| US-G15 | Window-sized grid for every app | todo (Lot 44 PR did not implement it) |
+| US-G15 | Window-sized grid for every app | done (Lot 45: tool windows and file explorer follow the grid, text rewraps; test_osui_tools, qemu-gui-ux5) |
 | US-G16 | Large persistent saves (overlay node 384 bytes) | partial (Lot 44: chained blocks, files up to 30 KiB inside the 32 KiB AIOV disk area, chunked atadriver relay, QEMU byte count proof; 64 KiB needs a new disk layout, FAT16 starts at LBA 64) |
-| US-G17 | Panels for vfs, task, session, mcp, media, grpc | partial (Lot 44: /vfs /sessions /mcp /media /grpc /pwa /devsync /sysadmin /api on the registry, checked against it in test-all; qemu-gui-parity runs the first entry of /vfs /sessions /mcp /media /pwa /sysadmin /api; /grpc and /devsync entries need arguments and have no QEMU run; media is simule) |
+| US-G17 | Panels for vfs, task, session, mcp, media, grpc | done (Lot 44: /vfs /sessions /mcp /media /grpc /pwa /devsync /sysadmin /api on the registry, checked against it in test-all; qemu-gui-parity runs the first entry of /vfs /sessions /mcp /media /pwa /sysadmin /api; /grpc and /devsync run with an argument in QEMU since Lot 45; media is simule) |
+| US-G18 | `/help` in the desktop chat | done (Lot 45: Aide window, slash programs from the dispatch table, terminal help; qemu-gui-parity) |
 
 Preuves : `test_osui_parity`, `test_osui_gui`, `test_fsops`,
 `test_osui_editor`, `test_gfx_desktop`, `make qemu-gui-ux5`,
