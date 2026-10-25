@@ -474,9 +474,17 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_panes: $(UNIT_DIR)/userspace/test_o
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_panes.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_editor: $(UNIT_DIR)/userspace/test_osui_editor.c ../userspace/osui_ide.c ../userspace/osui_ide.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_editor: $(UNIT_DIR)/userspace/test_osui_editor.c ../userspace/osui_ide.c ../userspace/osui_ide.h ../userspace/umalloc.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_ide.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_ide.c ../userspace/umalloc.c $(FRAMEWORK_SOURCES)
+
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_umalloc: $(UNIT_DIR)/userspace/test_umalloc.c ../userspace/umalloc.c ../userspace/umalloc.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/umalloc.c $(FRAMEWORK_SOURCES)
+
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_user_heap: $(UNIT_DIR)/kernel/test_user_heap.c ../kernel/user_heap.c ../kernel/user_heap.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -I.. -o $@ $< ../kernel/user_heap.c $(FRAMEWORK_SOURCES)
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_ide: $(UNIT_DIR)/userspace/test_osui_ide.c ../userspace/osui_ide.c ../userspace/osui_ide.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)

@@ -6,8 +6,12 @@
  * desktop draws. Save, check and run are actions returned to the caller
  * (osui_gui.c), which owns the file system and the PromptMessage VM. */
 
-#define OSUI_IDE_LINES 96
+#define OSUI_IDE_LINES 96     /* built-in line store (no heap attached) */
 #define OSUI_IDE_COLS 72      /* characters per line, without the NUL */
+/* UX5: with osui_ide_set_heap the line store grows on the user heap, so a
+ * file is bounded by memory; undo keeps snapshots up to OSUI_IDE_SNAP_MAX
+ * bytes and is switched off (status says so) for larger buffers. */
+#define OSUI_IDE_SNAP_MAX 8192
 #define OSUI_IDE_VIEW 12      /* text rows on screen (frame = 14 rows) */
 #define OSUI_IDE_FRAME 14     /* title + OSUI_IDE_VIEW + status */
 #define OSUI_IDE_ROW_LEN 64   /* frame row buffer, NUL included */
@@ -60,7 +64,11 @@ extern const char osui_ide_toolbar[];
 typedef struct {
     int active;
     char file[48];
-    char lines[OSUI_IDE_LINES][OSUI_IDE_COLS + 1];
+    char (*lines)[OSUI_IDE_COLS + 1];   /* lines0 or a heap block */
+    int cap;                            /* lines the store holds */
+    char lines0[OSUI_IDE_LINES][OSUI_IDE_COLS + 1];
+    int view_rows, view_cols;           /* window grid (0 = default) */
+    int undo_off;                       /* buffer larger than a snapshot */
     int nlines;
     int row, col;   /* cursor, 0-based */
     int top;        /* first visible line */
@@ -85,8 +93,8 @@ typedef struct {
     int last_edit;                    /* undo grouping of typed characters */
     int undo_n, redo_n;
     int undo_rc[OSUI_IDE_UNDO][2], redo_rc[OSUI_IDE_UNDO][2];
-    char undo[OSUI_IDE_UNDO][OSUI_IDE_TEXT_MAX];
-    char redo[OSUI_IDE_UNDO][OSUI_IDE_TEXT_MAX];
+    char undo[OSUI_IDE_UNDO][OSUI_IDE_SNAP_MAX];
+    char redo[OSUI_IDE_UNDO][OSUI_IDE_SNAP_MAX];
 } osui_ide_t;
 
 void osui_ide_open(osui_ide_t *ide, const char *file, const char *text, int len);
@@ -126,5 +134,12 @@ void osui_ide_set_clip_ops(int (*put)(const char *, int), int (*take)(char *, in
 void osui_ide_render_app(const osui_ide_t *ide, osui_app_view_t *v);
 /* Text to write: like osui_ide_text, an untouched empty buffer is 0 bytes. */
 int osui_ide_save_text(const osui_ide_t *ide, char *out, int max);
+
+/* UX5: heap for the line store (realloc-like, 0 = built-in store only). */
+void osui_ide_set_heap(void *(*realloc_fn)(void *, unsigned));
+/* UX5: text grid of the editor window (rows, cols incl. the gutter). */
+void osui_ide_set_view(osui_ide_t *ide, int rows, int cols);
+/* Bytes osui_ide_text needs (text + NUL). */
+int osui_ide_text_size(const osui_ide_t *ide);
 
 #endif

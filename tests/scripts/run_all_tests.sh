@@ -187,7 +187,7 @@ run_test() {
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_osui_editor.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_ide.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/umalloc.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_osui_ide.c" ]; then
@@ -238,6 +238,13 @@ run_test() {
     fi
     if [ "$(basename "$test_file")" = "test_vga_console.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/vga_console.c"
+    fi
+    if [ "$(basename "$test_file")" = "test_umalloc.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/umalloc.c"
+        cflags="$cflags -I$BASE_DIR/userspace"
+    fi
+    if [ "$(basename "$test_file")" = "test_user_heap.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/user_heap.c"
     fi
     if [ "$(basename "$test_file")" = "test_gfx_desktop.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/clipboard.c $BASE_DIR/kernel/gfx_wm.c $BASE_DIR/kernel/gfx_term.c $BASE_DIR/kernel/pci_service.c $BASE_DIR/kernel/input/usb_tablet.c"

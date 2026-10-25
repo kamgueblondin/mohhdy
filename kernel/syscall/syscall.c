@@ -1,4 +1,6 @@
 #include "../clipboard.h"
+#include "../user_heap.h"
+static int syscall_heap_map_page(void* ctx, uint32_t va);
 #include "syscall.h"
 #include "kernel.h"
 #include "../interrupts.h"
@@ -2684,6 +2686,14 @@ void syscall_handler(cpu_state_t* cpu) {
                 } else cpu->eax = (uint32_t)-1;
             }
             break;
+        case SYS_HEAP_GROW:
+            if (!current_task || current_task->type != TASK_TYPE_USER || !current_task->vmm_dir) {
+                cpu->eax = (uint32_t)OS_HEAP_NO_MEMORY;
+            } else {
+                cpu->eax = (uint32_t)user_heap_grow(&current_task->heap_size, cpu->ebx,
+                                                    syscall_heap_map_page, current_task->vmm_dir);
+            }
+            break;
         case SYS_RTC_UTC:
             cpu->eax = (uint32_t)sys_rtc_utc((char*)cpu->ecx);
             break;
@@ -4119,6 +4129,20 @@ static int gguf_session_relay(uint32_t op, const char* prompt, char* out, uint32
 static int32_t g_ai_gguf_pid;
 static uint32_t g_ai_gguf_size;
 static uint32_t g_ai_gguf_loaded;
+
+/* UX5 SYS_HEAP_GROW: one zeroed frame, mapped RW user in the caller;
+ * it is returned to the PMM with the process (vmm_destroy_user_directory). */
+static int syscall_heap_map_page(void* ctx, uint32_t va) {
+    void* frame = pmm_alloc_page();
+    if (!frame) return -1;
+    memset(frame, 0, PAGE_SIZE); /* identity-mapped frame */
+    if (vmm_map_page_in_directory((vmm_directory_t*)ctx, frame, (void*)va,
+                                  PAGE_PRESENT | PAGE_WRITE | PAGE_USER) != 0) {
+        pmm_free_page(frame);
+        return -1;
+    }
+    return 0;
+}
 
 static int ai_engine_gguf_open(int32_t pid, os_ai_engine_map_t* out) {
     uint32_t size = gpt2_gguf_infer_resident_size();

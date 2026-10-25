@@ -21,6 +21,7 @@ void shell_prod_count(const char* line);
 int shell_collab_line(const char* line);
 #include "shell_platform.h"
 #include "osui_gui.h"
+#include "umalloc.h"
 #include "osui_tools.h"
 #include "osui_ide.h"
 #include "fsops.h"
@@ -7336,6 +7337,13 @@ static int shell_ai_step(const char *prompt, int first, char *piece, int max) {
     return sys_gpt2_generate(prompt, piece, max);
 }
 
+/* UX5: SYS_HEAP_GROW behind umalloc (userspace/umalloc.c). */
+static int shell_heap_grow(unsigned want) {
+    int rc;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_HEAP_GROW), "b"(want) : "memory");
+    return rc;
+}
+
 static int shell_clip_put(const char *text, int len) {
     int rc;
     if (len > OS_CLIP_MAX) len = OS_CLIP_MAX;
@@ -7578,6 +7586,8 @@ void main() {
     init_shell_context(&shell_ctx);
     g_live_ctx = &shell_ctx;
     osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
+    umalloc_init((void *)OS_USER_HEAP_BASE, shell_heap_grow);
+    osui_gui_set_heap(urealloc);
     osui_gui_set_mobile_op(shell_mobile_gui);
     
     // Affichage de bienvenue moderne
