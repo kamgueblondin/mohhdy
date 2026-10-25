@@ -1,6 +1,7 @@
 /* osui_tools.c - see osui_tools.h. Freestanding: no libc. */
 #include "osui_tools.h"
 #include "osui_panes.h"
+#include "osui_parity.h"
 #include "os_syscalls.h"
 
 #define K_UP 30
@@ -39,6 +40,7 @@ static const char k_tb_view[] = "[Haut] [Bas] [Editer] [Fermer]";
 static const char k_tb_settings[] = "[Actualiser] [Fermer]";
 static const char k_tb_p2p[] = "[Pairs] [Stats] [Up] [Down] [Envoyer] [Fermer]";
 static const char k_tb_pmrun[] = "[Relancer] [Verifier] [Editer] [Fermer]";
+static const char k_tb_panel[] = "[Executer] [Menu] [Actualiser] [Fermer]";
 static const char k_tb_chat[] = "[Envoyer] [Suite] [Annuler] [Modele] [Effacer] [Fermer]";
 
 const char *osui_tool_toolbar(int kind) {
@@ -49,7 +51,7 @@ const char *osui_tool_toolbar(int kind) {
     case OS_FB_APP_P2P: return k_tb_p2p;
     case OS_FB_APP_PMRUN: return k_tb_pmrun;
     case OS_FB_APP_CHAT: return k_tb_chat;
-    default: return "";
+    default: return osui_par_family(kind) ? k_tb_panel : "";
     }
 }
 
@@ -61,7 +63,7 @@ const char *osui_tool_name(int kind) {
     case OS_FB_APP_P2P: return "P2P";
     case OS_FB_APP_PMRUN: return "PromptMessage";
     case OS_FB_APP_CHAT: return "Chat IA";
-    default: return "App";
+    default: { const osui_par_family_t *f = osui_par_family(kind); return f ? f->title : "App"; }
     }
 }
 
@@ -81,6 +83,50 @@ int osui_tool_cmd_allowed(const char *cmd) {
     for (i = 0; prefix[i]; i++) if (t_ncmp(cmd, prefix[i], t_len(prefix[i])) == 0) return 1;
     return 0;
 }
+
+/* Terminal-only commands: they read the keyboard in a loop, own the
+ * screen, end the session or would nest a desktop or an AI runtime. A
+ * window must stay responsive, so they stay in the terminal. */
+static const char *const k_term_only[] = {
+    "gui", "gui-exit", "console", "exit", "quit", "logout", "clear", "cls", "top", "edit", "nano", "vi",
+    "pm-ide", "reboot", "shutdown", "halt", "poweroff", "login", "su", "passwd", "sh", "shell", "run",
+    "exec", "watch", "sleep", "read", "osui-start", "osui-run", "osui-session", "osui", "ai-chat",
+    "ai-repl", "chat", "screen-mode", "kbd-test", "mouse-test", "serial-console", "p2p-chat", 0
+};
+
+int osui_tool_cmd_check(const char *cmd, int (*known)(const char *name)) {
+    char name[40];
+    int i = 0, n = 0;
+    if (!cmd) return OSUI_CMD_EMPTY;
+    while (cmd[i] == ' ') i++;
+    if (!cmd[i]) return OSUI_CMD_EMPTY;
+    for (n = i; cmd[n]; n++) if (cmd[n] == ';' || cmd[n] == '|' || cmd[n] == '&' || cmd[n] == '>' || cmd[n] == '<' || cmd[n] == '`' || cmd[n] == '$' || cmd[n] == '\n') return OSUI_CMD_META;
+    if (!known) return osui_tool_cmd_allowed(cmd + i) ? OSUI_CMD_OK : OSUI_CMD_UNKNOWN;
+    n = 0;
+    while (cmd[i] && cmd[i] != ' ' && n < (int)sizeof(name) - 1) name[n++] = cmd[i++];
+    name[n] = 0;
+    if (cmd[i] && cmd[i] != ' ') return OSUI_CMD_UNKNOWN;
+    for (n = 0; k_term_only[n]; n++) {
+        int l = t_len(k_term_only[n]);
+        if (t_ncmp(name, k_term_only[n], l + 1) == 0) return OSUI_CMD_TERMINAL;
+    }
+    /* the osui runtime (AI sessions) can open its own desktop */
+    if (t_ncmp(name, "osui-", 5) == 0 && t_ncmp(name, "osui-audit", 11) != 0) return OSUI_CMD_TERMINAL;
+    return known(name) ? OSUI_CMD_OK : OSUI_CMD_UNKNOWN;
+}
+
+const char *osui_tool_cmd_reason(int code) {
+    switch (code) {
+    case OSUI_CMD_OK: return "ok";
+    case OSUI_CMD_EMPTY: return "commande vide";
+    case OSUI_CMD_META: return "caracteres shell interdits (; | & > < ` $)";
+    case OSUI_CMD_UNKNOWN: return "commande inconnue du registre shell";
+    case OSUI_CMD_TERMINAL: return "commande reservee au terminal (interactive)";
+    default: return "refusee";
+    }
+}
+
+int osui_tool_is_panel(int kind) { return osui_par_family(kind) != 0; }
 
 int osui_tool_line_pid(const char *line) {
     int i = 0, v = 0, got = 0;
@@ -157,7 +203,7 @@ static void add_text(osui_tool_t *t, const char *s, int n, int cls) {
 }
 
 static int view_rows(const osui_tool_t *t) {
-    return (t->kind == OS_FB_APP_P2P || t->kind == OS_FB_APP_CHAT) ? OSUI_APP_ROWS - 2 : OSUI_APP_ROWS - 1;
+    return (t->kind == OS_FB_APP_P2P || t->kind == OS_FB_APP_CHAT || osui_par_family(t->kind)) ? OSUI_APP_ROWS - 2 : OSUI_APP_ROWS - 1;
 }
 
 static void follow_end(osui_tool_t *t) { int v = view_rows(t); t->top = t->n > v ? t->n - v : 0; }
@@ -174,7 +220,12 @@ static int run_into(osui_tool_t *t, const osui_tool_src_t *src, const char *cmd,
     int n;
     if (!src || !src->run) { add_line(t, "commande indisponible (pas de shell)", -1, OSUI_APP_A_ERR); return -1; }
     n = src->run(cmd, g_out, (int)sizeof(g_out));
-    if (n < 0) { add_line(t, "commande refusee: ", -1, OSUI_APP_A_ERR); t_cat(t->lines[t->n - 1], OSUI_APP_COLS, cmd); return n; }
+    if (n < 0) {
+        int why = osui_tool_cmd_check(cmd, src->known);
+        add_line(t, "commande refusee: ", -1, OSUI_APP_A_ERR); t_cat(t->lines[t->n - 1], OSUI_APP_COLS, cmd);
+        if (why != OSUI_CMD_OK) { t_cat(t->lines[t->n - 1], OSUI_APP_COLS, " ("); t_cat(t->lines[t->n - 1], OSUI_APP_COLS, osui_tool_cmd_reason(why)); t_cat(t->lines[t->n - 1], OSUI_APP_COLS, ")"); }
+        return n;
+    }
     n = strip_ansi(g_out, n);
     add_text(t, g_out, n, cls);
     return n;
@@ -546,6 +597,92 @@ static void chat_model(osui_tool_t *t, const osui_tool_src_t *src) {
     follow_end(t);
 }
 
+/* ---- UX5 parity panels (osui_parity.h) -------------------------------- */
+/* mode 0: menu of the family's entries (sel), mode 1: output of the last
+ * command. The input line holds the argument of ARG entries (or the whole
+ * command in the generic /cmd window). MUT entries arm on the first
+ * Enter and run on the second (armed_pid holds the armed entry). */
+
+static void panel_menu(osui_tool_t *t) {
+    const osui_par_family_t *f = osui_par_family(t->kind);
+    int i;
+    clear_lines(t);
+    t->mode = 0;
+    t->armed_pid = -1;
+    if (!f) return;
+    if (!f->count) {
+        add_line(t, "Tapez une commande du terminal puis Entree (ex: uptime, ls /samples).", -1, OSUI_APP_A_DIM);
+        add_line(t, "Droits: ceux du shell (meme tache); refusees: commandes interactives", -1, OSUI_APP_A_DIM);
+        add_line(t, "du terminal (gui, top, edit, exit...) et caracteres ; | & > < ` $.", -1, OSUI_APP_A_DIM);
+        t->sel = -1;
+        set_status(t, "commande libre du registre shell", 0);
+        return;
+    }
+    for (i = 0; i < f->count; i++) {
+        char *l;
+        add_line(t, f->entries[i].label, -1, OSUI_APP_A_TEXT);
+        l = t->lines[t->n - 1];
+        t_cat(l, OSUI_APP_COLS, "  [");
+        t_cat(l, OSUI_APP_COLS, f->entries[i].cmd);
+        if (f->entries[i].flags & OSUI_PAR_ARG) { t_cat(l, OSUI_APP_COLS, " "); t_cat(l, OSUI_APP_COLS, f->entries[i].hint); }
+        t_cat(l, OSUI_APP_COLS, "]");
+        if (f->entries[i].flags & OSUI_PAR_MUT) t_cat(l, OSUI_APP_COLS, " *");
+    }
+    t->sel = (t->psel >= 0 && t->psel < t->n) ? t->psel : 0;
+    follow_sel(t);
+    set_status(t, "Entree: executer (* = modifie l'etat, confirmer)  saisie: argument", 0);
+}
+
+static void panel_exec(osui_tool_t *t, const osui_tool_src_t *src, const char *cmd) {
+    int n;
+    t_cpy(t->last, (int)sizeof(t->last), cmd);
+    if (t->mode == 0) t->psel = t->sel;
+    clear_lines(t);
+    t->mode = 1;
+    t->sel = -1;
+    add_line(t, "$ ", -1, OSUI_APP_A_DIM);
+    t_cat(t->lines[0], OSUI_APP_COLS, cmd);
+    n = run_into(t, src, cmd, OSUI_APP_A_TEXT);
+    t->top = 0;
+    t_cpy(t->log, (int)sizeof(t->log), "osui panel run cmd=");
+    t_cat(t->log, (int)sizeof(t->log), cmd);
+    t_cat(t->log, (int)sizeof(t->log), n < 0 ? " refused" : " ok");
+    if (t->n > 1) {
+        /* first output line, for the serial log and the QEMU tests */
+        t_cat(t->log, (int)sizeof(t->log), "\nosui panel out=");
+        t_cat(t->log, (int)sizeof(t->log), t->lines[1]);
+    }
+    set_status(t, n < 0 ? "refusee: " : "sortie reelle de ", cmd);
+    t_cat(t->status, (int)sizeof(t->status), "  (Echap/Menu: retour)");
+}
+
+static void panel_run(osui_tool_t *t, const osui_tool_src_t *src) {
+    const osui_par_family_t *f = osui_par_family(t->kind);
+    const osui_par_entry_t *e;
+    char cmd[OSUI_TOOL_INPUT + 40];
+    if (!f) return;
+    if (!f->count) {
+        if (!t->ilen) { set_status(t, "tapez d'abord une commande", 0); return; }
+        panel_exec(t, src, t->input);
+        t->ilen = 0; t->input[0] = 0;
+        return;
+    }
+    if (t->mode == 1) { panel_menu(t); return; }
+    if (t->sel < 0 || t->sel >= f->count) return;
+    e = &f->entries[t->sel];
+    if (osui_par_build(e, t->input, cmd, (int)sizeof(cmd)) < 0) { set_status(t, "saisissez d'abord: ", e->hint); return; }
+    if ((e->flags & OSUI_PAR_MUT) && t->armed_pid != t->sel) {
+        t->armed_pid = t->sel;
+        set_status(t, "modifie l'etat: Entree encore pour executer ", cmd);
+        t_cpy(t->log, (int)sizeof(t->log), "osui panel armed cmd=");
+        t_cat(t->log, (int)sizeof(t->log), cmd);
+        return;
+    }
+    t->armed_pid = -1;
+    panel_exec(t, src, cmd);
+    if (e->flags & OSUI_PAR_ARG) { t->ilen = 0; t->input[0] = 0; }
+}
+
 /* ---- common entry points --------------------------------------------- */
 
 void osui_tool_refresh(osui_tool_t *t, const osui_tool_src_t *src) {
@@ -556,7 +693,12 @@ void osui_tool_refresh(osui_tool_t *t, const osui_tool_src_t *src) {
     case OS_FB_APP_P2P: clear_lines(t); p2p_fill(t, src, "p2p-peers"); p2p_fill(t, src, "p2p-stats"); t->top = 0;
         set_status(t, "Up: NOM IP, Envoyer: PAIR TEXTE (saisie en bas)", 0); break;
     case OS_FB_APP_PMRUN: pm_fill(t, src, "pm-run "); break;
-    default: break;
+    default:
+        if (osui_par_family(t->kind)) {
+            if (t->mode == 1 && t->last[0]) { char c[sizeof(t->last)]; t_cpy(c, (int)sizeof(c), t->last); panel_exec(t, src, c); }
+            else panel_menu(t);
+        }
+        break;
     }
 }
 
@@ -564,13 +706,13 @@ void osui_tool_open(osui_tool_t *t, int kind, const char *arg, const osui_tool_s
     int keep = t->active && t->kind == kind && kind == OS_FB_APP_CHAT;
     if (!keep) {
         t->n = 0; t->top = 0; t->ilen = 0; t->input[0] = 0; t->gen = 0; t->prompt[0] = 0;
-        t->status[0] = 0; t->mode = 0; t->image = 0;
+        t->status[0] = 0; t->mode = 0; t->image = 0; t->last[0] = 0; t->psel = 0;
     }
     t->kind = kind;
     t->active = 1;
     t->armed_pid = -1;
     t->log[0] = 0;
-    t->sel = (kind == OS_FB_APP_TASKS) ? 0 : -1;
+    t->sel = (kind == OS_FB_APP_TASKS || osui_par_family(kind)) ? 0 : -1;
     t_cpy(t->arg, (int)sizeof(t->arg), arg ? arg : "");
     if (kind == OS_FB_APP_CHAT) {
         if (!keep) {
@@ -625,7 +767,13 @@ int osui_tool_tool(osui_tool_t *t, int b, const osui_tool_src_t *src) {
         else if (b == 4) { if (!t->gen) { t->n = 0; t->top = 0; t->prompt[0] = 0; set_status(t, "conversation effacee", 0); } }
         else if (b == 5) { t->gen = 0; return OSUI_TOOL_CLOSE; }
         return OSUI_TOOL_CHANGED;
-    default: return OSUI_TOOL_NONE;
+    default:
+        if (!osui_par_family(t->kind)) return OSUI_TOOL_NONE;
+        if (b == 0) panel_run(t, src);
+        else if (b == 1) panel_menu(t);
+        else if (b == 2) osui_tool_refresh(t, src);
+        else if (b == 3) return OSUI_TOOL_CLOSE;
+        return OSUI_TOOL_CHANGED;
     }
 }
 
@@ -640,6 +788,12 @@ int osui_tool_click(osui_tool_t *t, int row, int col, int dbl, const osui_tool_s
         if (dbl) tasks_kill(t, src);
         return OSUI_TOOL_CHANGED;
     }
+    if (osui_par_family(t->kind) && t->mode == 0 && t->sel >= 0 && idx < t->n) {
+        if (t->sel != idx) t->armed_pid = -1;
+        t->sel = idx;
+        if (dbl) panel_run(t, src);
+        return OSUI_TOOL_CHANGED;
+    }
     return OSUI_TOOL_NONE;
 }
 
@@ -647,7 +801,20 @@ int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src) {
     int v;
     if (!t || !t->active) return OSUI_TOOL_NONE;
     v = view_rows(t);
-    if (t->kind == OS_FB_APP_P2P || t->kind == OS_FB_APP_CHAT) {
+    if (osui_par_family(t->kind)) {
+        if (key == K_ESC) {
+            if (t->mode == 1 && osui_par_family(t->kind)->count) { panel_menu(t); return OSUI_TOOL_CHANGED; }
+            return OSUI_TOOL_CLOSE;
+        }
+        if (key == '\n' || key == '\r') { panel_run(t, src); return OSUI_TOOL_CHANGED; }
+        if (key == '\b' || key == 127) { if (t->ilen > 0) t->input[--t->ilen] = 0; return OSUI_TOOL_CHANGED; }
+        if (key >= 32 && key <= 126) {
+            if (t->ilen < OSUI_TOOL_INPUT - 1) { t->input[t->ilen++] = (char)key; t->input[t->ilen] = 0; }
+            t->armed_pid = -1;
+            return OSUI_TOOL_CHANGED;
+        }
+        if (t->sel >= 0 && (key == K_UP || key == K_DOWN)) t->armed_pid = -1;
+    } else if (t->kind == OS_FB_APP_P2P || t->kind == OS_FB_APP_CHAT) {
         if (key == K_ESC) {
             if (t->kind == OS_FB_APP_CHAT && t->gen) { chat_stop(t, "annule"); return OSUI_TOOL_CHANGED; }
             return OSUI_TOOL_CLOSE;
@@ -698,9 +865,10 @@ void osui_tool_render(const osui_tool_t *t, osui_app_view_t *v) {
         for (k = 0; k < OSUI_APP_COLS; k++) v->attr[r][k] = (unsigned char)(i == t->sel ? OSUI_APP_A_SEL : t->cls[i]);
     }
     v->nrows = r;
-    if (t->kind == OS_FB_APP_P2P || t->kind == OS_FB_APP_CHAT) {
+    if (t->kind == OS_FB_APP_P2P || t->kind == OS_FB_APP_CHAT || osui_par_family(t->kind)) {
         int last = OSUI_APP_ROWS - 1;
-        t_cpy(v->rows[last], OSUI_APP_COLS, t->kind == OS_FB_APP_CHAT ? "> " : "p2p> ");
+        const osui_par_family_t *f = osui_par_family(t->kind);
+        t_cpy(v->rows[last], OSUI_APP_COLS, t->kind == OS_FB_APP_CHAT ? "> " : f ? (f->count ? "arg> " : "cmd> ") : "p2p> ");
         t_cat(v->rows[last], OSUI_APP_COLS, t->input);
         for (k = 0; k < OSUI_APP_COLS; k++) v->attr[last][k] = OSUI_APP_A_MATCH;
         v->nrows = OSUI_APP_ROWS;

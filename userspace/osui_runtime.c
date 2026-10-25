@@ -5852,6 +5852,19 @@ int osui_dispatch_line(const char *line, char *out, int out_max) {
     return rc;
 }
 
+/* UX5: 1 when name is in the generated shell registry (the GUI tools
+ * rights model, osui_tool_cmd_check). */
+int osui_guest_command_known(const char *name) {
+    int i, k;
+    if (!name || !name[0]) return 0;
+    for (i = 0; i < MOHHDY_SHELL_COMMAND_COUNT; i++) {
+        const char *c = mohhdy_shell_commands[i];
+        for (k = 0; c[k] && c[k] == name[k]; k++) {}
+        if (!c[k] && !name[k]) return 1;
+    }
+    return 0;
+}
+
 int osui_guest_command_count(void) {
     (void)mohhdy_shell_commands;
     (void)MOHHDY_OSUI_GUEST_HTML_STAGE;

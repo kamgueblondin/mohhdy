@@ -80,6 +80,7 @@ int osui_gui_focus(void);           /* focused app slot, -1 desktop */
 /* UX4 tool apps (osui_tools.c): "/tasks", "/view F", "/settings",
  * "/peers", "/pmrun F", "/chat". run: allow-listed shell command with
  * captured output; ai_step: one GPT-2 step; screen: framebuffer size. */
+void osui_gui_set_tool_known(int (*known)(const char *));
 void osui_gui_set_tool_ops(int (*run)(const char *, char *, int),
                            int (*ai_step)(const char *, int, char *, int),
                            const char *(*ai_model)(void), int (*screen)(int *, int *));

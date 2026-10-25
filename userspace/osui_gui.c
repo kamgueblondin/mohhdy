@@ -11,6 +11,7 @@
 #include "os_syscalls.h"
 #include "osui_panes.h"
 #include "osui_files.h"
+#include "osui_parity.h"
 
 #define COLS OS_VGA_COLS
 #define ROWS OS_VGA_ROWS

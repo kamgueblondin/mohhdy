@@ -483,6 +483,20 @@ typedef struct {
 #define OS_FB_APP_P2P 6
 #define OS_FB_APP_PMRUN 7
 #define OS_FB_APP_CHAT 8
+/* UX5 GUI parity panels (userspace/osui_parity.c): one per terminal
+ * command family, plus the generic command window. */
+#define OS_FB_APP_NET 9
+#define OS_FB_APP_STORE 10
+#define OS_FB_APP_SERVICES 11
+#define OS_FB_APP_LOGS 12
+#define OS_FB_APP_LEDGER 13
+#define OS_FB_APP_PROD 14
+#define OS_FB_APP_SECURITY 15
+#define OS_FB_APP_SEARCH 16
+#define OS_FB_APP_DEVTOOLS 17
+#define OS_FB_APP_NOTES 18
+#define OS_FB_APP_CMD 19
+#define OS_FB_APP_KIND_MAX 19
 #define OS_FB_APP_ROWS 22       /* default window grid */
 #define OS_FB_APP_COLS 78
 /* UX5: grid buffers; a maximized window shows as many rows / columns as

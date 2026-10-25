@@ -55,7 +55,7 @@ static int fake_ai(const char *prompt, int first, char *piece, int max) {
 static const char *fake_model(void) { return g_model; }
 static int fake_screen(int *w, int *h) { *w = 1024; *h = 600; return 0; }
 
-static const osui_tool_src_t k_src = { fake_run, fake_read, fake_ai, fake_model, fake_screen };
+static const osui_tool_src_t k_src = { fake_run, fake_read, fake_ai, fake_model, fake_screen, 0, 0 };
 static osui_tool_t t;
 static osui_app_view_t v;
 
