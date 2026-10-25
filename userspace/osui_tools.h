@@ -28,6 +28,8 @@ typedef struct {
     const char *(*ai_model)(void);
     /* framebuffer size, 0 when unknown */
     int (*screen)(int *w, int *h);
+    /* UX5: whole file of any size (heap); returns the bytes, 0 = use read */
+    const char *(*load)(const char *path, int *n);
 } osui_tool_src_t;
 
 enum { OSUI_TOOL_NONE = 0, OSUI_TOOL_CLOSE = 1, OSUI_TOOL_EDIT = 2, OSUI_TOOL_CHANGED = 3 };
@@ -48,7 +50,9 @@ typedef struct {
     int gen;                                   /* 1 generating */
     int steps, cur_len;
     char prompt[OSUI_TOOL_INPUT];
-    int image;                                 /* viewer: 1 PGM/PPM preview */
+    int image;                                 /* viewer: 1 PGM/PPM image */
+    int img_w, img_h, img_src_w, img_src_h;    /* shown / file size */
+    unsigned img_gen;                          /* bumps on each new image */
 } osui_tool_t;
 
 const char *osui_tool_toolbar(int kind);
@@ -67,4 +71,10 @@ int osui_tool_line_pid(const char *line);
 /* PGM/PPM (P2, P3, P5, P6) to an ASCII preview of cols x rows; returns
  * the row count, < 0 when the bytes are not such an image */
 int osui_tool_image_ascii(const char *buf, int n, char out[][OSUI_APP_COLS], int cols, int rows);
+/* UX5: PGM/PPM to RGB pixels, nearest-neighbour downscale to fit max_w x
+ * max_h (aspect kept). Returns 0 and the size, < 0 when not an image. */
+int osui_tool_image_decode(const char *buf, int n, unsigned char *rgb, int max_w, int max_h,
+                           int *w, int *h, int *src_w, int *src_h);
+/* UX5: the pixels of the viewer (valid while t->image). */
+const unsigned char *osui_tool_image_rgb(void);
 #endif

@@ -897,6 +897,46 @@ static void test_app_grid_fits_window(void) {
     vga_desktop_set(0);
 }
 
+/* UX5: the viewer image is drawn in pixels inside its window, scaled up,
+ * only for the viewer slot; a bad image is refused and clears. */
+static void test_viewer_image_pixels(void) {
+    static os_fb_image_t img;
+    gfx_desktop_layout_t l;
+    gfx_rect_t r;
+    int x, y;
+    vga_desktop_set(1);
+    gfx_desktop_wm_reset();
+    blank_scene();
+    g_scene.version = 7;
+    g_scene.app[0].kind = OS_FB_APP_VIEW;
+    g_scene.app[0].nrows = 1;
+    memset(&img, 0, sizeof(img));
+    img.magic = OS_FB_IMG_MAGIC; img.slot = 0; img.w = 2; img.h = 1;
+    img.rgb[0] = 255; img.rgb[1] = 0; img.rgb[2] = 0;       /* red | blue */
+    img.rgb[3] = 0; img.rgb[4] = 0; img.rgb[5] = 255;
+    TEST_ASSERT_EQUAL(0, gfx_desktop_set_image(&img));
+    redraw(&l);
+    gfx_desktop_image_rect(&l.app_win[0].box, &r);
+    TEST_ASSERT(r.w >= 16 && r.h >= 8);                     /* scaled up */
+    TEST_ASSERT(r.x >= l.app_win[0].box.x && r.x + r.w <= l.app_win[0].box.x + l.app_win[0].box.w);
+    x = r.x + r.w / 4; y = r.y + r.h / 2;
+    TEST_ASSERT_EQUAL(0xFF0000, (int)(g_fb[y * W + x] & 0xFFFFFFu));
+    x = r.x + (3 * r.w) / 4;
+    TEST_ASSERT_EQUAL(0x0000FF, (int)(g_fb[y * W + x] & 0xFFFFFFu));
+    /* another app kind in that slot: no image drawn */
+    g_scene.app[0].kind = OS_FB_APP_TASKS;
+    redraw(&l);
+    TEST_ASSERT(g_fb[y * W + x] != 0x0000FFu);
+    /* bad image refused, image cleared */
+    img.w = OS_FB_IMG_MAX_W + 1;
+    TEST_ASSERT_EQUAL(-1, gfx_desktop_set_image(&img));
+    gfx_desktop_image_rect(&l.app_win[0].box, &r);
+    TEST_ASSERT_EQUAL(0, r.w);
+    TEST_ASSERT_EQUAL(0, gfx_desktop_set_image(0));
+    g_scene.app[0].kind = 0;
+    vga_desktop_set(0);
+}
+
 static void test_llm_friendly_names(void) {
     TEST_ASSERT_EQUAL_STRING("GPT-2 local", gfx_desktop_llm_name("gpt2_local"));
     TEST_ASSERT_EQUAL_STRING("GPT-2 GGUF local", gfx_desktop_llm_name("gpt2_gguf_local"));
@@ -930,6 +970,7 @@ int main(void) {
     RUN_TEST(test_shared_clipboard);
     RUN_TEST(test_web_nav_events);
     RUN_TEST(test_app_grid_fits_window);
+    RUN_TEST(test_viewer_image_pixels);
     RUN_TEST(test_llm_friendly_names);
     unity_print_results();
     unity_cleanup();

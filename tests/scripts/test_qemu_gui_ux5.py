@@ -8,6 +8,9 @@ monitor, clicks through the USB tablet).
     editor follows the window; Save As of the 28 KB buffer reaches the
     writable overlay store, which refuses it (384-byte nodes): the error
     is shown, nothing is cut silently.
+  * Viewer: /view /samples/mire.ppm (160x120 P6, 57 KB) is drawn as real
+    pixels in the window (screen holds its red, green, blue quarters);
+    closing the viewer clears the image.
 """
 from __future__ import print_function
 
@@ -101,7 +104,42 @@ def editor_steps(monitor, qmp, proc):
     key(monitor, "ret")
     g.wait_for(proc, "osui edit save error=", g.CMD_TIMEOUT, start)
     say("Save As of 28 KB: store error reported (overlay node limit), no silent cut")
+    # the maximized editor covers the desktop edge: close it (ESC Q)
+    start = len(g.log_text())
+    key(monitor, "esc")
+    key(monitor, "shift-q")
+    g.wait_for(proc, "osui edit close file=", g.CMD_TIMEOUT, start)
     desktop_focus(qmp)
+
+
+def count_near(rgb, color, tol=10):
+    n = 0
+    for i in range(0, len(rgb), 3 * 5):
+        if all(abs(rgb[i + k] - color[k]) <= tol for k in range(3)):
+            n += 1
+    return n
+
+
+def viewer_steps(monitor, qmp, proc):
+    # test card 160x120 P6 (57 KB, read through the heap): four colored
+    # quarters drawn as real pixels by the compositor, scaled in the window
+    before = g.screendump_rgb(monitor, "qemu-gui-ux5-before-view.ppm")[2]
+    start = slash(monitor, proc, "/view /samples/mire.ppm", "osui tool open app=Visionneuse")
+    g.wait_for(proc, "osui tool line=image 160x120 affichee en pixels 160x120", g.CMD_TIMEOUT, start)
+    time.sleep(1.0)
+    rgb = g.screendump_rgb(monitor, "qemu-gui-ux5-view.ppm")[2]
+    for name, c in (("red", (230, 30, 30)), ("green", (30, 200, 60)), ("blue", (40, 80, 230))):
+        n0, n1 = count_near(before, c), count_near(rgb, c)
+        if n1 - n0 < 600:
+            raise RuntimeError("viewer %s quarter not on screen in pixels (%d -> %d)" % (name, n0, n1))
+    say("viewer draws the PPM test card as real pixels (red/green/blue quarters on screen)")
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)
+    time.sleep(0.8)
+    rgb = g.screendump_rgb(monitor, "qemu-gui-ux5-view-closed.ppm")[2]
+    if count_near(rgb, (40, 80, 230)) - count_near(before, (40, 80, 230)) > 200:
+        raise RuntimeError("image still drawn after the viewer closed")
+    say("viewer closed: image cleared")
 
 
 def main():
@@ -131,6 +169,7 @@ def main():
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             editor_steps(monitor, qmp, proc)
+            viewer_steps(monitor, qmp, proc)
         say("QEMU UX5 GUI parity contract passed.")
         return 0
     finally:

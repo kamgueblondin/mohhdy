@@ -17,6 +17,46 @@ static int tool_read(const char *path, char *buf, int max) {
     return fsops_read(g_fs_io, path, buf, max);
 }
 
+/* UX5: whole file through the heap (viewer images over 8 KB). */
+static const char *tool_load(const char *path, int *n) {
+    os_dirent_t st;
+    char *buf;
+    if (!g_fs_io || !g_fs_io->stat || g_fs_io->stat(path, &st) != 0 || st.flags == OS_DIRENT_DIR) return 0;
+    if ((int)st.size <= FSOPS_FILE_MAX) return 0;          /* small: the read path */
+    buf = big_buf((int)st.size);
+    if (!buf) return 0;
+    *n = fsops_read(g_fs_io, path, buf, (int)st.size);
+    if (*n < 0) return 0;
+    buf[*n] = 0;
+    return buf;
+}
+
+/* UX5: send the viewer image to the compositor when it changes. */
+static os_fb_image_t g_img_msg;
+static unsigned g_img_sent_gen;
+static int g_img_sent_slot = -1;
+static void image_sync(void) {
+    osui_tool_t *t = tool_of(OS_FB_APP_VIEW);
+    int slot = slot_of(OS_FB_APP_VIEW);
+    if (t && t->active && t->image && slot >= 0) {
+        int k, n;
+        const unsigned char *px = osui_tool_image_rgb();
+        if (g_img_sent_slot == slot && g_img_sent_gen == t->img_gen) return;
+        g_img_msg.magic = OS_FB_IMG_MAGIC;
+        g_img_msg.slot = (uint8_t)slot;
+        g_img_msg.w = (uint16_t)t->img_w;
+        g_img_msg.h = (uint16_t)t->img_h;
+        n = t->img_w * t->img_h * 3;
+        for (k = 0; k < n; k++) g_img_msg.rgb[k] = px[k];
+        sys_vga_image(&g_img_msg);
+        g_img_sent_slot = slot;
+        g_img_sent_gen = t->img_gen;
+    } else if (g_img_sent_slot >= 0) {
+        sys_vga_image(0);
+        g_img_sent_slot = -1;
+    }
+}
+
 void osui_gui_set_tool_ops(int (*run)(const char *, char *, int),
                            int (*ai_step)(const char *, int, char *, int),
                            const char *(*ai_model)(void), int (*screen)(int *, int *)) {
@@ -25,6 +65,7 @@ void osui_gui_set_tool_ops(int (*run)(const char *, char *, int),
     g_tool_src.ai_step = ai_step;
     g_tool_src.ai_model = ai_model;
     g_tool_src.screen = screen;
+    g_tool_src.load = tool_load;
 }
 
 static void tool_log(osui_tool_t *t, char *out, int out_max) {

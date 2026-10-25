@@ -508,6 +508,19 @@ typedef struct {
  * "app K drag R0 C0 R1 C1", "app K tool C", "app K close",
  * "app K size R C" (UX5 grid that fits the window). */
 #define OS_FB_EVT 0x16
+/* UX5 image of the viewer window, drawn as real pixels by the compositor.
+ * SYS_VGA_BLIT EBX = 5, ECX = os_fb_image_t* (0 clears). Sent only when
+ * the image changes; the kernel keeps a copy. */
+#define OS_FB_IMG_MAGIC 0x31474D49U   /* 'IMG1' */
+#define OS_FB_IMG_MAX_W 320
+#define OS_FB_IMG_MAX_H 240
+typedef struct {
+    uint32_t magic;
+    uint8_t slot;               /* app window slot that shows it */
+    uint8_t pad[3];
+    uint16_t w, h;              /* <= OS_FB_IMG_MAX_W x OS_FB_IMG_MAX_H */
+    uint8_t rgb[OS_FB_IMG_MAX_W * OS_FB_IMG_MAX_H * 3];
+} os_fb_image_t;
 
 typedef struct {
     uint32_t magic;

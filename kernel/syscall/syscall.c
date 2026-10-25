@@ -41,6 +41,7 @@ static int syscall_heap_map_page(void* ctx, uint32_t va);
 #include "../../userspace/mohhdy_osui_bridge.h"
 #include "../input/usb_tablet.h"
 #include "../gfx_fb.h"
+#include "../gfx_desktop.h"
 #include "../pci_service.h"
 #include "../device_service.h"
 #include "../key_seal.h"
@@ -2816,6 +2817,17 @@ void syscall_handler(cpu_state_t* cpu) {
                 }
                 if (cpu->ebx == 3U) {
                     cpu->eax = (uint32_t)gfx_fb_term_active();
+                    break;
+                }
+                /* 5 (UX5): viewer image, ECX = os_fb_image_t* or 0 */
+                if (cpu->ebx == 5U) {
+                    if (!cpu->ecx) { cpu->eax = (uint32_t)gfx_desktop_set_image(0); break; }
+                    if (!syscall_user_range((const void*)cpu->ecx, (uint32_t)sizeof(os_fb_image_t), 0)) {
+                        cpu->eax = (uint32_t)-1;
+                        break;
+                    }
+                    cpu->eax = (uint32_t)gfx_desktop_set_image((const os_fb_image_t*)cpu->ecx);
+                    if (cpu->eax == 0U) gfx_fb_redraw_desktop();
                     break;
                 }
                 /* 4: framebuffer size (w << 16 | h), 0 without VBE */

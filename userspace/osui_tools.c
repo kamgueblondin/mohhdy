@@ -302,26 +302,104 @@ int osui_tool_image_ascii(const char *buf, int n, char out[][OSUI_APP_COLS], int
     return rows;
 }
 
+static unsigned char g_img_rgb[OS_FB_IMG_MAX_W * OS_FB_IMG_MAX_H * 3];
+const unsigned char *osui_tool_image_rgb(void) { return g_img_rgb; }
+
+int osui_tool_image_decode(const char *buf, int n, unsigned char *rgb, int max_w, int max_h,
+                           int *w_out, int *h_out, int *sw_out, int *sh_out) {
+    int i = 2, w, h, maxv, ascii, color, tw, th, sy, ty = 0, data;
+    if (!buf || !rgb || n < 3 || buf[0] != 'P' || max_w <= 0 || max_h <= 0) return -1;
+    if (buf[1] == '2') { ascii = 1; color = 0; }
+    else if (buf[1] == '5') { ascii = 0; color = 0; }
+    else if (buf[1] == '3') { ascii = 1; color = 1; }
+    else if (buf[1] == '6') { ascii = 0; color = 1; }
+    else return -1;
+    if (read_num(buf, n, &i, &w) || read_num(buf, n, &i, &h) || read_num(buf, n, &i, &maxv)) return -1;
+    if (w <= 0 || h <= 0 || maxv <= 0 || maxv > 255 || w > 4096 || h > 4096) return -1;
+    /* fit, aspect kept, never upscaled (the compositor scales up) */
+    tw = w; th = h;
+    if (tw > max_w) { th = (th * max_w) / tw; tw = max_w; }
+    if (th > max_h) { tw = (tw * max_h) / th; th = max_h; }
+    if (tw < 1) tw = 1;
+    if (th < 1) th = 1;
+    if (!ascii) i++;
+    data = i;
+    for (sy = 0; sy < h && ty < th; sy++) {
+        int take_row = (ty * h) / th == sy, sx, tx = 0;
+        for (sx = 0; sx < w; sx++) {
+            int v[3], k, nc = color ? 3 : 1;
+            for (k = 0; k < nc; k++) {
+                if (ascii) { if (read_num(buf, n, &data, &v[k])) return -1; }
+                else { if (data >= n) return -1; v[k] = (unsigned char)buf[data++]; }
+                if (v[k] > maxv) v[k] = maxv;
+                v[k] = (v[k] * 255) / maxv;
+            }
+            if (!color) v[1] = v[2] = v[0];
+            if (take_row && tx < tw && (tx * w) / tw == sx) {
+                unsigned char *d = rgb + (ty * tw + tx) * 3;
+                d[0] = (unsigned char)v[0]; d[1] = (unsigned char)v[1]; d[2] = (unsigned char)v[2];
+                tx++;
+            }
+        }
+        if (take_row) ty++;
+    }
+    if (ty < th) return -1;
+    if (w_out) *w_out = tw;
+    if (h_out) *h_out = th;
+    if (sw_out) *sw_out = w;
+    if (sh_out) *sh_out = h;
+    return 0;
+}
+
 static char g_file[8192];
+
+/* UX5: the image is drawn in pixels by the compositor; the grid keeps a
+ * caption line for the serial log and the tests. */
+static void view_image_lines(osui_tool_t *t) {
+    char cap[OSUI_APP_COLS];
+    t->image = 1;
+    t->img_gen++;
+    t_cpy(cap, (int)sizeof(cap), "image ");
+    t_cat_u(cap, (int)sizeof(cap), (unsigned)t->img_src_w);
+    t_cat(cap, (int)sizeof(cap), "x");
+    t_cat_u(cap, (int)sizeof(cap), (unsigned)t->img_src_h);
+    t_cat(cap, (int)sizeof(cap), " affichee en pixels ");
+    t_cat_u(cap, (int)sizeof(cap), (unsigned)t->img_w);
+    t_cat(cap, (int)sizeof(cap), "x");
+    t_cat_u(cap, (int)sizeof(cap), (unsigned)t->img_h);
+    add_line(t, cap, -1, OSUI_APP_A_DIM);
+    set_status(t, "image PNM en pixels (mise a l'echelle dans la fenetre)", 0);
+}
 
 static void view_fill(osui_tool_t *t, const osui_tool_src_t *src) {
     int n;
     static char img[OSUI_APP_ROWS][OSUI_APP_COLS];
     clear_lines(t);
     t->image = 0;
-    n = (src && src->read) ? src->read(t->arg, g_file, (int)sizeof(g_file) - 1) : -1;
+    {
+        const char *big = (src && src->load) ? src->load(t->arg, &n) : 0;
+        if (big && n >= 0) {
+            /* UX5: any size through the heap; the text view shows the head */
+            if (osui_tool_image_decode(big, n, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H,
+                                       &t->img_w, &t->img_h, &t->img_src_w, &t->img_src_h) == 0) {
+                view_image_lines(t);
+                return;
+            }
+            if (n > (int)sizeof(g_file) - 1) n = (int)sizeof(g_file) - 1;
+            {
+                int k;
+                for (k = 0; k < n; k++) g_file[k] = big[k];
+            }
+        } else n = (src && src->read) ? src->read(t->arg, g_file, (int)sizeof(g_file) - 1) : -1;
+    }
     if (n < 0) { add_line(t, "lecture impossible: ", -1, OSUI_APP_A_ERR); t_cat(t->lines[0], OSUI_APP_COLS, t->arg); set_status(t, "erreur", 0); return; }
     g_file[n] = 0;
-    {
-        int rows = osui_tool_image_ascii(g_file, n, img, OSUI_APP_COLS - 2, OSUI_APP_ROWS - 1);
-        if (rows > 0) {
-            int r;
-            t->image = 1;
-            for (r = 0; r < rows; r++) add_line(t, img[r], -1, OSUI_APP_A_TEXT);
-            set_status(t, "image PNM en apercu ASCII (luminance, 10 niveaux)", 0);
-            return;
-        }
+    if (osui_tool_image_decode(g_file, n, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H,
+                               &t->img_w, &t->img_h, &t->img_src_w, &t->img_src_h) == 0) {
+        view_image_lines(t);
+        return;
     }
+    (void)img;
     add_text(t, g_file, n, OSUI_APP_A_TEXT);
     {
         char s[OSUI_APP_COLS];

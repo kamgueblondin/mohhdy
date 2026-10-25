@@ -45,6 +45,56 @@ const char *const gfx_desktop_dock_names[GFX_DESKTOP_DOCK] = {
 };
 
 static int g_app_fit[OS_FB_APPS][3];   /* UX5: kind, rows, cols last sent */
+static os_fb_image_t g_img;            /* UX5: viewer pixels (kernel copy) */
+static int g_img_valid;
+
+int gfx_desktop_set_image(const os_fb_image_t *img) {
+    uint32_t i, n;
+    if (!img || img->magic != OS_FB_IMG_MAGIC || img->slot >= OS_FB_APPS || img->w == 0 || img->h == 0 ||
+        img->w > OS_FB_IMG_MAX_W || img->h > OS_FB_IMG_MAX_H) {
+        g_img_valid = 0;
+        return img ? -1 : 0;
+    }
+    g_img.magic = img->magic; g_img.slot = img->slot; g_img.w = img->w; g_img.h = img->h;
+    n = (uint32_t)img->w * img->h * 3U;
+    for (i = 0; i < n; i++) g_img.rgb[i] = img->rgb[i];
+    g_img_valid = 1;
+    return 0;
+}
+
+/* Image area: the grid below its first (caption) row, the image scaled by
+ * an integer factor (or down, nearest) to fit, centered. */
+void gfx_desktop_image_rect(const gfx_rect_t *box, gfx_rect_t *out) {
+    int gx, gy, gw, gh, w, h, k;
+    out->x = out->y = out->w = out->h = 0;
+    if (!g_img_valid || !box || box->w <= 0) return;
+    gx = box->x + 12; gy = box->y + GFX_APP_GRID_Y + GFX_APP_ROW_H + 4;
+    gw = box->w - 24; gh = box->h - GFX_APP_GRID_Y - GFX_APP_ROW_H - 4 - 30;
+    if (gw <= 0 || gh <= 0) return;
+    w = g_img.w; h = g_img.h;
+    k = 1;
+    while (w * (k + 1) <= gw && h * (k + 1) <= gh && k < 8) k++;
+    w *= k; h *= k;
+    if (w > gw) { h = (h * gw) / w; w = gw; }
+    if (h > gh) { w = (w * gh) / h; h = gh; }
+    out->x = gx + (gw - w) / 2; out->y = gy; out->w = w; out->h = h;
+}
+
+static void draw_app_image(uint32_t *fb, int w, int h, const gfx_rect_t *box) {
+    gfx_rect_t r;
+    int x, y;
+    gfx_desktop_image_rect(box, &r);
+    for (y = 0; y < r.h; y++) {
+        int sy = (y * g_img.h) / r.h, py = r.y + y;
+        if (py < 0 || py >= h) continue;
+        for (x = 0; x < r.w; x++) {
+            int sx = (x * g_img.w) / r.w, px = r.x + x;
+            const uint8_t *p = g_img.rgb + (sy * g_img.w + sx) * 3;
+            if (px < 0 || px >= w) continue;
+            fb[py * w + px] = RGB(p[0], p[1], p[2]);
+        }
+    }
+}
 
 void gfx_desktop_wm_reset(void) {
     int i;
@@ -1819,6 +1869,8 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
                 if (lay.app_win[slot].visible) {
                     draw_app(fb, w, h, &lay.app_win[slot].box, &sc->app[slot], lay.focus == win);
                     app_size_event(slot, sc->app[slot].kind, &lay.app_win[slot].box);
+                    if (g_img_valid && g_img.slot == slot && sc->app[slot].kind == OS_FB_APP_VIEW)
+                        draw_app_image(fb, w, h, &lay.app_win[slot].box);
                 }
             }
         }

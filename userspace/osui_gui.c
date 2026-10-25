@@ -616,6 +616,7 @@ static void files_key(int key, char *out, int out_max) {
 
 static void edit_key(int key, char *out, int out_max) { edit_action(osui_ide_key(&g_edit, key), out, out_max); }
 
+static void sys_vga_image(const os_fb_image_t *img);
 #include "osui_gui_apps.inc"
 
 void osui_gui_event(const char *line, char *out, int out_max) {
@@ -869,6 +870,13 @@ static int sys_vga_term(void) {
     return rc;
 }
 
+/* UX5: viewer image (SYS_VGA_BLIT 5); 0 clears */
+static void sys_vga_image(const os_fb_image_t *img) {
+    int rc;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_VGA_BLIT), "b"(5), "c"(img) : "memory");
+    (void)rc;
+}
+
 static void sys_vga_leave(void) {
     int rc;
     asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_VGA_BLIT), "b"(0));
@@ -895,6 +903,11 @@ static void yield_gui(void) {
 }
 #else
 static void sys_vga_blit_scene(const os_fb_scene_t *scene) { (void)scene; }
+/* host tests: the last image sent (osui_gui_test_image) */
+static const os_fb_image_t *g_test_img;
+static int g_test_img_calls;
+static void sys_vga_image(const os_fb_image_t *img) { g_test_img = img; g_test_img_calls++; }
+const os_fb_image_t *osui_gui_test_image(int *calls) { if (calls) *calls = g_test_img_calls; return g_test_img; }
 static void sys_vga_leave(void) {}
 static int sys_vga_term(void) { return 0; }
 static int sys_getc_gui(void) { return 0; }
@@ -1061,6 +1074,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     const char *sid;
     int k;
     if (!scene) return;
+    image_sync();   /* UX5: viewer pixels, only when they change */
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
     scene->version = 7; /* 3: term_attr (pm-ide syntax classes), 4: web display list, 5: llm, 6: pane_live, 7: app windows */
