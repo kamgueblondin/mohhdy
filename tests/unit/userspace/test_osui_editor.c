@@ -132,11 +132,12 @@ static void test_close_prompt_on_unsaved(void) {
 }
 
 static void test_truncated_file_not_saved_over(void) {
-    static char big[200];
+    /* a line longer than the store (OSUI_IDE_COLS) is cut: never saved over */
+    static char big[OSUI_IDE_COLS + 51];
     int i;
-    for (i = 0; i < 199; i++) big[i] = 'x';
-    big[199] = '\n';
-    osui_ide_open_plain(&E, "/big", big, 200);
+    for (i = 0; i < OSUI_IDE_COLS + 50; i++) big[i] = 'x';
+    big[OSUI_IDE_COLS + 50] = '\n';
+    osui_ide_open_plain(&E, "/big", big, OSUI_IDE_COLS + 51);
     TEST_ASSERT_EQUAL(1, E.truncated);
     TEST_ASSERT_EQUAL(OSUI_IDE_NONE, cmd('w'));
     TEST_ASSERT(strstr(E.status, "tronque") != 0);
@@ -233,10 +234,23 @@ static void test_dynamic_store_and_window_grid(void) {
     TEST_ASSERT_EQUAL(1, E.top);                       /* now scrolls */
     /* long line uses the wide grid: 72 chars all shown at 120 columns */
     osui_ide_open_plain(&E, "/home/w.txt", "", 0);
-    for (i = 0; i < OSUI_IDE_COLS; i++) osui_ide_key(&E, 'a' + i % 26);
+    for (i = 0; i < 72; i++) osui_ide_key(&E, 'a' + i % 26);
     osui_ide_render_app(&E, &V);
     TEST_ASSERT_EQUAL(0, E.left);
-    TEST_ASSERT_EQUAL(5 + OSUI_IDE_COLS, (int)strlen(V.rows[0]));
+    TEST_ASSERT_EQUAL(5 + 72, (int)strlen(V.rows[0]));
+    /* Lot 45: lines beyond the old 72-column store (up to OSUI_IDE_COLS):
+     * 200 chars kept, the wide grid scrolls horizontally to the caret */
+    TEST_ASSERT(OSUI_IDE_COLS >= 200);
+    for (; i < 200; i++) osui_ide_key(&E, 'a' + i % 26);
+    TEST_ASSERT_EQUAL(200, (int)strlen(E.lines[0]));
+    osui_ide_render_app(&E, &V);
+    TEST_ASSERT(E.left > 0);
+    TEST_ASSERT(V.cur_col >= 0 && V.cur_col < 120);
+    osui_ide_key(&E, 0x12);                            /* Home */
+    osui_ide_render_app(&E, &V);
+    TEST_ASSERT_EQUAL(0, E.left);
+    osui_ide_open_plain(&E, "/home/w.txt", "", 0);
+    for (i = 0; i < 72; i++) osui_ide_key(&E, 'a' + i % 26);
     osui_ide_set_view(&E, 22, 40);
     osui_ide_render_app(&E, &V);
     TEST_ASSERT(E.left > 0);                           /* narrow: scrolls left */

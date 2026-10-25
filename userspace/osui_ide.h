@@ -7,7 +7,7 @@
  * (osui_gui.c), which owns the file system and the PromptMessage VM. */
 
 #define OSUI_IDE_LINES 96     /* built-in line store (no heap attached) */
-#define OSUI_IDE_COLS 72      /* characters per line, without the NUL */
+#define OSUI_IDE_COLS 256     /* characters per line, without the NUL (Lot 45: was 72) */
 /* UX5: with osui_ide_set_heap the line store grows on the user heap, so a
  * file is bounded by memory; undo keeps snapshots up to OSUI_IDE_SNAP_MAX
  * bytes and is switched off (status says so) for larger buffers. */
