@@ -101,6 +101,31 @@ def viewer_images(monitor, proc):
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
 
 
+def ledger_form(monitor, proc):
+    """Lot 45: the collab-offer form of /ledger builds the shell grammar,
+    arms on the first Enter of submit and runs on the second."""
+    slash(monitor, proc, "/ledger", "osui tool open app=Registre collab")
+    for _ in range(4):
+        key(monitor, "down")
+    key(monitor, "ret")              # opens the form
+    for _ in range(3):
+        key(monitor, "ret")          # Nom -> Prix -> Capacite -> submit
+    start = len(g.log_text())
+    key(monitor, "ret")
+    g.wait_for(proc, "osui form armed Entree encore pour confirmer: collab-offer gpu 10 1", g.CMD_TIMEOUT, start)
+    if "osui form run" in g.log_text()[start:]:
+        raise RuntimeError("ledger form ran without confirmation")
+    start = len(g.log_text())
+    key(monitor, "ret")
+    g.wait_for(proc, "osui form run cmd=collab-offer gpu 10 1", g.CMD_TIMEOUT, start)
+    g.wait_for(proc, "osui form status=", g.CMD_TIMEOUT, start)
+    say("/ledger form: collab-offer armed, then run through the shell")
+    start = len(g.log_text())
+    key(monitor, "esc")              # form -> menu
+    key(monitor, "esc")              # menu -> close
+    g.wait_for(proc, "osui tool close app=Registre collab", g.CMD_TIMEOUT, start)
+
+
 def devsync(monitor, proc):
     slash(monitor, proc, "/devsync", "osui tool open app=DevSync cluster")
     start = len(g.log_text())
@@ -222,7 +247,12 @@ def generic(monitor, proc):
     key(monitor, "ret")
     run_marker(proc, start, "driver-restart pcidriver")
     g.wait_for(proc, "osui panel out=driver-restart ok pci-driver old ", g.CMD_TIMEOUT, start)
-    say("/cmd: driver-restart pcidriver stopped the Ring 3 PCI driver (kernel rights)")
+    out = g.normalized_log(g.log_text()[start:])
+    import re
+    m = re.search(r"driver-restart ok pci-driver old (\d+) new (\d+)", out)
+    if not m or m.group(1) == m.group(2):
+        raise RuntimeError("driver-restart: no supervised respawn with a new pid (%r)" % out[-300:])
+    say("/cmd: driver-restart pcidriver: old pid %s, respawned as pid %s (kernel supervisor)" % m.groups())
     start = len(g.log_text())
     key(monitor, "esc")
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
@@ -254,6 +284,7 @@ def main():
             families(monitor, proc)
             grpc(monitor, proc)
             devsync(monitor, proc)
+            ledger_form(monitor, proc)
             viewer_images(monitor, proc)
             search(monitor, proc)
             confirm_mutation(monitor, proc)

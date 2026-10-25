@@ -885,10 +885,21 @@ int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src) {
             panel_menu(t);
             return OSUI_TOOL_CHANGED;
         }
-        if (osui_form_key(&t->form, key, (void*)src)) {
+        {
+            int was_armed = t->form.armed;
+            if (!osui_form_key(&t->form, key, (void*)src)) return OSUI_TOOL_NONE;
+            /* Lot 45: serial trace of the form (armed, then the real run) */
+            if (t->form.armed && !was_armed) {
+                t_cpy(t->log, (int)sizeof(t->log), "osui form armed ");
+                t_cat(t->log, (int)sizeof(t->log), t->form.status);
+            } else if ((key == '\n' || key == '\r') && was_armed && !t->form.armed && t->form.last_cmd[0]) {
+                t_cpy(t->log, (int)sizeof(t->log), "osui form run cmd=");
+                t_cat(t->log, (int)sizeof(t->log), t->form.last_cmd);
+                t_cat(t->log, (int)sizeof(t->log), "\nosui form status=");
+                t_cat(t->log, (int)sizeof(t->log), t->form.status);
+            }
             return OSUI_TOOL_CHANGED;
         }
-        return OSUI_TOOL_NONE;
     }
     v = view_rows(t);
     if (osui_par_family(t->kind)) {
