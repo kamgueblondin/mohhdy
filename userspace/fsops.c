@@ -112,6 +112,9 @@ int fsops_write(const fsops_io_t *io, const char *path, const char *buf, int n) 
     if (!io || !io->writefile) return FSOPS_ERR_FAIL;
     if (io->stat && io->stat(path, &st) == 0 && st.flags == OS_DIRENT_DIR) return FSOPS_ERR_ISDIR;
     rc = io->writefile(path, buf, n);
+    /* UX5: the overlay store keeps a prefix of a too large file and returns
+     * its length: report it, the caller must not think the file is saved */
+    if (rc > 0 && rc < n) return FSOPS_ERR_TOOBIG;
     return rc < 0 ? rc : 0;
 }
 

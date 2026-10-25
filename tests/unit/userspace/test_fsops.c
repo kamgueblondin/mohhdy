@@ -88,6 +88,19 @@ static void test_read_only_initrd_errors(void) {
     TEST_ASSERT_EQUAL_STRING("existe deja", fsops_strerror(-2));
 }
 
+/* UX5: a store that keeps only a prefix (overlay node, 384 bytes) must not
+ * look like a successful save. */
+static int short_write(const char *p, const char *b, int n) { (void)p; (void)b; return n > 384 ? 384 : n; }
+static void test_short_write_is_an_error(void) {
+    fsops_io_t io = mfs_io;
+    static char big[1000];
+    mfs_reset();
+    io.writefile = short_write;
+    TEST_ASSERT_EQUAL(0, fsops_write(&io, "/home/s.txt", big, 384));
+    TEST_ASSERT_EQUAL(FSOPS_ERR_TOOBIG, fsops_write(&io, "/home/s.txt", big, 1000));
+    TEST_ASSERT_EQUAL_STRING("fichier trop grand", fsops_strerror(FSOPS_ERR_TOOBIG));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_paths);
@@ -95,6 +108,7 @@ int main(void) {
     RUN_TEST(test_create_rename_delete);
     RUN_TEST(test_copy_into_dir_and_large_file);
     RUN_TEST(test_read_only_initrd_errors);
+    RUN_TEST(test_short_write_is_an_error);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

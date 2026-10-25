@@ -464,6 +464,17 @@ int osui_gui_edit_open(const char *file, char *out, int out_max) {
             }
             osui_ide_open_plain(&g_edit, path, buf, n);
             app_out(out, out_max, "osui edit open file=", path);
+            {
+                char num[48];
+                int v = g_edit.nlines, k = 0, j;
+                char rev[12];
+                do { rev[k++] = (char)('0' + v % 10); v /= 10; } while (v && k < 11);
+                scpy(num, (int)sizeof(num), "osui edit lines=");
+                j = slen(num);
+                while (k && j < (int)sizeof(num) - 1) num[j++] = rev[--k];
+                num[j] = 0;
+                app_out(out, out_max, num, g_edit.truncated ? " truncated" : " complete");
+            }
         } else {
             osui_ide_open_plain(&g_edit, path, "", 0);
             osui_ide_set_status(&g_edit, "nouveau fichier (cree a l'enregistrement)");
