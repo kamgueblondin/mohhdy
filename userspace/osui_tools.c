@@ -9,6 +9,9 @@
 #define K_HOME 0x12
 #define K_END 0x13
 #define K_ESC 27
+#define K_LEFT 28
+#define K_RIGHT 29
+#include "imgdec.h"
 #define CHAT_MAX_STEPS 48
 #define CHAT_SENTENCE_MIN 40
 
@@ -36,7 +39,7 @@ static void t_cat_u(char *d, int max, unsigned v) {
 }
 
 static const char k_tb_tasks[] = "[Actualiser] [Tuer] [Processus/Services] [Fermer]";
-static const char k_tb_view[] = "[Haut] [Bas] [Editer] [Fermer]";
+static const char k_tb_view[] = "[Haut] [Bas] [Editer] [Fermer]  + - zoom, f ajuster, fleches";
 static const char k_tb_settings[] = "[Actualiser] [Fermer]";
 static const char k_tb_p2p[] = "[Pairs] [Stats] [Up] [Down] [Envoyer] [Fermer]";
 static const char k_tb_pmrun[] = "[Relancer] [Verifier] [Editer] [Fermer]";
@@ -406,6 +409,32 @@ int osui_tool_image_decode(const char *buf, int n, unsigned char *rgb, int max_w
 
 static char g_file[8192];
 
+/* Lot 45: BMP / PNG / binary PNM through the shared imgdec module, with
+ * zoom and pan; the old PNM decoder stays for ASCII P2 / P3. Bounded:
+ * the PNG scanlines fit in g_img_scratch (1 MiB, e.g. 512x512 RGBA). */
+#define IMG_SCRATCH (1024U * 1024U + 4096U)
+static unsigned char g_img_scratch[IMG_SCRATCH];
+static int view_decode(osui_tool_t *t, const char *buf, int n) {
+    static imgdec_t img;
+    int rc = imgdec_open((const unsigned char *)buf, n, g_img_scratch, IMG_SCRATCH, &img);
+    if (rc == IMGDEC_OK) {
+        if (imgdec_render(&img, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H, t->zoom, t->pan_x, t->pan_y,
+                          &t->img_w, &t->img_h) != IMGDEC_OK) return -1;
+        t->img_src_w = img.w; t->img_src_h = img.h; t->img_fmt = img.fmt;
+        return 0;
+    }
+    if (img.fmt == IMGDEC_BMP || img.fmt == IMGDEC_PNG) {
+        /* a real image we cannot show: say why instead of dumping bytes */
+        add_line(t, "image non affichable: ", -1, OSUI_APP_A_ERR);
+        t_cat(t->lines[t->n - 1], OSUI_APP_COLS, imgdec_strerror(rc));
+        set_status(t, imgdec_fmt_name(img.fmt), " refusee");
+        return 1;
+    }
+    t->img_fmt = 0;
+    return osui_tool_image_decode(buf, n, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H,
+                                  &t->img_w, &t->img_h, &t->img_src_w, &t->img_src_h);
+}
+
 /* UX5: the image is drawn in pixels by the compositor; the grid keeps a
  * caption line for the serial log and the tests. */
 static void view_image_lines(osui_tool_t *t) {
@@ -420,8 +449,14 @@ static void view_image_lines(osui_tool_t *t) {
     t_cat_u(cap, (int)sizeof(cap), (unsigned)t->img_w);
     t_cat(cap, (int)sizeof(cap), "x");
     t_cat_u(cap, (int)sizeof(cap), (unsigned)t->img_h);
+    t_cat(cap, (int)sizeof(cap), " fmt=");
+    t_cat(cap, (int)sizeof(cap), t->img_fmt ? imgdec_fmt_name(t->img_fmt) : "pnm");
+    t_cat(cap, (int)sizeof(cap), " zoom=");
+    if (t->zoom) { t_cat_u(cap, (int)sizeof(cap), (unsigned)t->zoom); t_cat(cap, (int)sizeof(cap), "%"); }
+    else t_cat(cap, (int)sizeof(cap), "fit");
     add_line(t, cap, -1, OSUI_APP_A_DIM);
-    set_status(t, "image PNM en pixels (mise a l'echelle dans la fenetre)", 0);
+    set_status(t, t->img_fmt ? "image en pixels: + - zoom, f ajuster, fleches deplacer"
+                             : "image PNM en pixels (mise a l'echelle dans la fenetre)", 0);
 }
 
 static void view_fill(osui_tool_t *t, const osui_tool_src_t *src) {
@@ -433,10 +468,10 @@ static void view_fill(osui_tool_t *t, const osui_tool_src_t *src) {
         const char *big = (src && src->load) ? src->load(t->arg, &n) : 0;
         if (big && n >= 0) {
             /* UX5: any size through the heap; the text view shows the head */
-            if (osui_tool_image_decode(big, n, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H,
-                                       &t->img_w, &t->img_h, &t->img_src_w, &t->img_src_h) == 0) {
-                view_image_lines(t);
-                return;
+            {
+                int d = view_decode(t, big, n);
+                if (d == 0) { view_image_lines(t); return; }
+                if (d == 1) return;
             }
             if (n > (int)sizeof(g_file) - 1) n = (int)sizeof(g_file) - 1;
             {
@@ -454,10 +489,10 @@ static void view_fill(osui_tool_t *t, const osui_tool_src_t *src) {
     }
     if (n < 0) { add_line(t, "lecture impossible: ", -1, OSUI_APP_A_ERR); t_cat(t->lines[0], OSUI_APP_COLS, t->arg); set_status(t, "erreur", 0); return; }
     g_file[n] = 0;
-    if (osui_tool_image_decode(g_file, n, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H,
-                               &t->img_w, &t->img_h, &t->img_src_w, &t->img_src_h) == 0) {
-        view_image_lines(t);
-        return;
+    {
+        int d = view_decode(t, g_file, n);
+        if (d == 0) { view_image_lines(t); return; }
+        if (d == 1) return;
     }
     (void)img;
     add_text(t, g_file, n, OSUI_APP_A_TEXT);
@@ -740,6 +775,7 @@ void osui_tool_open(osui_tool_t *t, int kind, const char *arg, const osui_tool_s
     if (!keep) {
         t->n = 0; t->top = 0; t->ilen = 0; t->input[0] = 0; t->gen = 0; t->prompt[0] = 0;
         t->status[0] = 0; t->mode = 0; t->image = 0; t->last[0] = 0; t->psel = 0;
+        t->zoom = 0; t->pan_x = 0; t->pan_y = 0; t->img_fmt = 0;
         t->has_form = 0;
     }
     t->kind = kind;
@@ -874,6 +910,28 @@ int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src) {
             if (t->ilen < OSUI_TOOL_INPUT - 1) { t->input[t->ilen++] = (char)key; t->input[t->ilen] = 0; }
             return OSUI_TOOL_CHANGED;
         }
+    } else if (t->kind == OS_FB_APP_VIEW && t->image && t->img_fmt
+               && (key == '+' || key == '=' || key == '-' || key == 'f' || key == '0'
+                   || key == K_LEFT || key == K_RIGHT || key == K_UP || key == K_DOWN)) {
+        /* Lot 45: zoom (25..800 %), fit, pan by a quarter of the view */
+        int cur = t->zoom ? t->zoom : (t->img_src_w ? (t->img_w * 100) / t->img_src_w : 100);
+        int sx = t->img_w * 25 / (cur ? cur : 100), sy = t->img_h * 25 / (cur ? cur : 100);
+        if (sx < 1) sx = 1;
+        if (sy < 1) sy = 1;
+        if (key == '+' || key == '=') t->zoom = cur * 2 > 800 ? 800 : cur * 2;
+        else if (key == '-') t->zoom = cur / 2 < 25 ? 25 : cur / 2;
+        else if (key == 'f') { t->zoom = 0; t->pan_x = t->pan_y = 0; }
+        else if (key == '0') t->zoom = 100;
+        else if (key == K_LEFT) t->pan_x = t->pan_x > sx ? t->pan_x - sx : 0;
+        else if (key == K_RIGHT) t->pan_x += sx;
+        else if (key == K_UP) t->pan_y = t->pan_y > sy ? t->pan_y - sy : 0;
+        else t->pan_y += sy;
+        if (t->pan_x > t->img_src_w) t->pan_x = t->img_src_w;
+        if (t->pan_y > t->img_src_h) t->pan_y = t->img_src_h;
+        view_fill(t, src);
+        t_cpy(t->log, (int)sizeof(t->log), "osui view ");
+        t_cat(t->log, (int)sizeof(t->log), t->n ? t->lines[0] : "");
+        return OSUI_TOOL_CHANGED;
     } else if (key == K_ESC) return OSUI_TOOL_CLOSE;
     else if (key == 'u' || key == 'r') { osui_tool_refresh(t, src); return OSUI_TOOL_CHANGED; }
     else if (key == 'e' && (t->kind == OS_FB_APP_VIEW || t->kind == OS_FB_APP_PMRUN)) return osui_tool_tool(t, 2, src);

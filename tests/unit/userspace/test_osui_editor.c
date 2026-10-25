@@ -158,6 +158,19 @@ static char g_shared[4097];
 static int g_shared_n, g_puts;
 static int fake_put(const char *t, int n) { memcpy(g_shared, t, (size_t)n); g_shared[n] = 0; g_shared_n = n; g_puts++; return n; }
 static int fake_take(char *o, int max) { int n = g_shared_n < max - 1 ? g_shared_n : max - 1; memcpy(o, g_shared, (size_t)n); o[n] = 0; return n; }
+/* Lot 45: the editor clipboard holds up to OSUI_IDE_CLIP_MAX (64 KiB),
+ * multi-line, and clamps beyond it. */
+static void test_clipboard_beyond_4k(void) {
+    static char big[OSUI_IDE_CLIP_MAX + 50];
+    int i;
+    osui_ide_set_clip_ops(0, 0);
+    for (i = 0; i < (int)sizeof(big); i++) big[i] = (i % 70 == 69) ? '\n' : 'q';
+    osui_ide_set_clipboard(big, 10000);
+    TEST_ASSERT_EQUAL(10000, (int)strlen(osui_ide_clipboard()));
+    osui_ide_set_clipboard(big, (int)sizeof(big));
+    TEST_ASSERT_EQUAL(OSUI_IDE_CLIP_MAX, (int)strlen(osui_ide_clipboard()));
+}
+
 static void test_shared_clipboard_hooks(void) {
     osui_ide_set_clip_ops(fake_put, fake_take);
     osui_ide_open_plain(&E, "/t", "un deux\n", 8);
@@ -250,6 +263,7 @@ int main(void) {
     RUN_TEST(test_truncated_file_not_saved_over);
     RUN_TEST(test_click_places_caret);
     RUN_TEST(test_shared_clipboard_hooks);
+    RUN_TEST(test_clipboard_beyond_4k);
     RUN_TEST(test_dynamic_store_and_window_grid);
     unity_print_results();
     unity_cleanup();

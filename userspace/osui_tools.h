@@ -60,6 +60,9 @@ typedef struct {
     int image;                                 /* viewer: 1 PGM/PPM image */
     int img_w, img_h, img_src_w, img_src_h;    /* shown / file size */
     unsigned img_gen;                          /* bumps on each new image */
+    int img_fmt;                               /* Lot 45: IMGDEC_* (0: ASCII PNM path) */
+    int zoom;                                  /* Lot 45: 0 fit, else percent */
+    int pan_x, pan_y;                          /* Lot 45: source pixels at zoom */
     char last[OSUI_TOOL_INPUT + 40];           /* parity: last command run */
     int psel;                                  /* parity: menu line kept across runs */
     /* PR 4: Form support */

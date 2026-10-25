@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 445
+#define MOHHDY_SHELL_COMMAND_COUNT 446
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -194,6 +194,7 @@ static const char * const mohhdy_shell_commands[] = {
     "help",
     "history",
     "id-key",
+    "img-info",
     "info",
     "ipc-recv",
     "ipc-send",

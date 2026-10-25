@@ -2,6 +2,7 @@
 // Shell utilisateur complet avec IA intégrée et fonctionnalités modernes
 
 #include "osui_parity.h"
+#include "imgdec.h"
 #include <stdint.h>
 int shell_prod_is(const char* line);
 int shell_persist_is(const char* line);
@@ -3574,7 +3575,7 @@ static int is_builtin(const char* cmd) {
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
-        "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "gui-help",
+        "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "gui-help", "img-info",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
         "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "right-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "rtc-check", "whoami",
         "alias", "unalias", "export", "which", "rc",
@@ -5645,6 +5646,42 @@ static void cmd_grep(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("\n");
 }
 
+/* Lot 45: image header + full decode check through the shared imgdec
+ * module (same code as the desktop viewer). Heap buffers, bounded. */
+#define IMG_INFO_FILE_MAX (2 * 1024 * 1024)
+#define IMG_INFO_SCRATCH (1024U * 1024U + 4096U)
+static void cmd_img_info(shell_context_t* ctx, char args[][128], int arg_count) {
+    char path[RAMFS_PATH_MAX];
+    os_dirent_t st;
+    unsigned char *buf, *scratch;
+    imgdec_t img;
+    int n, rc;
+    if (arg_count < 1) { print_error("img-info: usage img-info <fichier>"); ctx->last_rc = 1; return; }
+    resolve_arg(ctx, args[0], path);
+    if (sys_stat(path, &st) != 0 || st.flags == OS_DIRENT_DIR) { print_error("img-info: fichier introuvable"); ctx->last_rc = 1; return; }
+    if ((int)st.size > IMG_INFO_FILE_MAX) { print_error("img-info: fichier trop grand (2 Mio max)"); ctx->last_rc = 1; return; }
+    buf = (unsigned char *)umalloc(st.size + 1U);
+    scratch = (unsigned char *)umalloc(IMG_INFO_SCRATCH);
+    if (!buf || !scratch) { if (buf) ufree(buf); if (scratch) ufree(scratch); print_error("img-info: memoire"); ctx->last_rc = 1; return; }
+    n = fsops_read(&shell_fs_io, path, (char *)buf, (int)st.size);
+    rc = n < 0 ? IMGDEC_E_TRUNC : imgdec_open(buf, n, scratch, IMG_INFO_SCRATCH, &img);
+    print_string("img-info ");
+    print_string(rc == IMGDEC_OK ? "ok" : "error");
+    print_string(" fmt="); print_string(imgdec_fmt_name(img.fmt));
+    print_string(" w="); print_int(img.w);
+    print_string(" h="); print_int(img.h);
+    print_string(" bpp="); print_int(img.bpp);
+    if (rc == IMGDEC_OK) {
+        unsigned char px[3];
+        imgdec_pixel(&img, 0, 0, px);
+        print_string(" px0="); print_int(px[0]); print_string(","); print_int(px[1]); print_string(","); print_int(px[2]);
+    } else { print_string(" reason="); print_string(imgdec_strerror(rc)); }
+    print_string("\n");
+    ufree(scratch);
+    ufree(buf);
+    ctx->last_rc = rc == IMGDEC_OK ? 0 : 1;
+}
+
 static void cmd_wc(shell_context_t* ctx, char args[][128], int arg_count) {
     char path[RAMFS_PATH_MAX];
     char kbuf[1024];
@@ -7222,6 +7259,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "net-wire-status") == 0) {
         cmd_net_wire_status(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "img-info") == 0) {
+        cmd_img_info(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "gui-help") == 0) {
         /* Lot 45: the desktop slash programs, from the dispatch table */

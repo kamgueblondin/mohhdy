@@ -15,6 +15,8 @@
 #define OSUI_IDE_VIEW 12      /* text rows on screen (frame = 14 rows) */
 #define OSUI_IDE_FRAME 14     /* title + OSUI_IDE_VIEW + status */
 #define OSUI_IDE_ROW_LEN 64   /* frame row buffer, NUL included */
+/* Lot 45: copy / paste buffer, the kernel clipboard bound (OS_CLIP_MAX) */
+#define OSUI_IDE_CLIP_MAX 65536
 #define OSUI_IDE_TEXT_MAX (OSUI_IDE_LINES * (OSUI_IDE_COLS + 1))
 
 #define OSUI_IDE_KEY_ESC 27

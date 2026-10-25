@@ -58,7 +58,7 @@ ai_gguf_pause.o: ai_gguf_client.c
 	$(CC) $(CFLAGS) -DGGUF_PAUSE -c -o $@ $<
 ai_client.o ai_stat.o ai_rogue.o ai_gguf_client.o ai_gguf_pause.o: ai_common.h $(USER_HEADERS)
 
-shell: shell.o shell_util.o fsops.o ramfs.o procsim.o osui_runtime.o webrt.o grpcwire.o osui_gui.o osui_panes.o osui_files.o osui_app.o osui_tools.o osui_form.o osui_parity.o umalloc.o webeng.o osui_ide.o promptmessage.o shell_p2p.o shell_grpc.o shell_collab.o collab.o p2p.o stun.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o shell_prod.o prod.o cicd.o shell_persist.o csig.o shell_platform.o platform.o mobile_ui.o devsync.o dosemu.o start.o
+shell: shell.o shell_util.o fsops.o ramfs.o procsim.o osui_runtime.o webrt.o grpcwire.o osui_gui.o osui_panes.o osui_files.o osui_app.o osui_tools.o osui_form.o osui_parity.o imgdec.o umalloc.o webeng.o osui_ide.o promptmessage.o shell_p2p.o shell_grpc.o shell_collab.o collab.o p2p.o stun.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o shell_prod.o prod.o cicd.o shell_persist.o csig.o shell_platform.o platform.o mobile_ui.o devsync.o dosemu.o start.o
 	@echo "Linking shell..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 

@@ -490,7 +490,10 @@ int osui_gui_tool_open(int kind, const char *arg, char *out, int out_max);
 
 static int is_image(const char *p) {
     int n = slen(p);
-    return n > 4 && p[n - 4] == '.' && p[n - 3] == 'p' && (p[n - 2] == 'g' || p[n - 2] == 'p' || p[n - 2] == 'n') && p[n - 1] == 'm';
+    if (n > 4 && p[n - 4] == '.' && p[n - 3] == 'p' && (p[n - 2] == 'g' || p[n - 2] == 'p' || p[n - 2] == 'n') && p[n - 1] == 'm') return 1;
+    /* Lot 45: imgdec decodes BMP and PNG too */
+    return n > 4 && p[n - 4] == '.' && ((p[n - 3] == 'b' && p[n - 2] == 'm' && p[n - 1] == 'p')
+                                       || (p[n - 3] == 'p' && p[n - 2] == 'n' && p[n - 1] == 'g'));
 }
 
 static void edit_action(int act, char *out, int out_max) {

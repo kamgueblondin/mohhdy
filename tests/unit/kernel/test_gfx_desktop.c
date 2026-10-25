@@ -810,6 +810,16 @@ static void test_shared_clipboard(void) {
     TEST_ASSERT_EQUAL(OS_CLIP_MAX, clipboard_set(big, (int)sizeof(big)));
     TEST_ASSERT_EQUAL(OS_CLIP_MAX, clipboard_len());
     TEST_ASSERT_EQUAL(15, clipboard_get(out, (int)sizeof(out)));   /* bounded by the caller */
+    {
+        /* Lot 45: multi-line text well beyond the old 4 KiB bound */
+        static char ml[20000], back[20001];
+        int i;
+        TEST_ASSERT(OS_CLIP_MAX >= 65536);
+        for (i = 0; i < (int)sizeof(ml); i++) ml[i] = (i % 61 == 60) ? '\n' : (char)('a' + i % 26);
+        TEST_ASSERT_EQUAL(20000, clipboard_set(ml, 20000));
+        TEST_ASSERT_EQUAL(20000, clipboard_get(back, (int)sizeof(back)));
+        TEST_ASSERT_EQUAL(0, memcmp(ml, back, 20000));
+    }
 }
 
 /* UX4: web pane navigation buttons and page clicks go to Ring 3 */

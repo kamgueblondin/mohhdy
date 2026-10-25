@@ -165,9 +165,8 @@ static void test_64k_file_write_read_and_bounds(void) {
 
     /* Write exact 64 KiB */
     int wr = overlay_write("64k.bin", big, 65536);
-    printf("DEBUG: overlay_write = %d\n", wr);
+    (void)wr;
     n = overlay_read("64k.bin", back, sizeof(back));
-    printf("DEBUG: overlay_read = %d\n", n);
     TEST_ASSERT_EQUAL(65536, n);
     TEST_ASSERT_EQUAL_MEMORY(big, back, 65536);
 

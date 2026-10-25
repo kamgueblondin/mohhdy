@@ -62,6 +62,36 @@ def help_window(monitor, proc):
     close_panel(monitor, proc, "Aide")
 
 
+def viewer_images(monitor, proc):
+    """Lot 45: imgdec in the viewer (PNG, BMP) with zoom, and img-info in
+    the shell through /cmd (same decoder)."""
+    slash(monitor, proc, "/view /samples/mire.png", "fmt=png zoom=fit")
+    g.wait_for(proc, "osui tool line=image 48x32 affichee en pixels 48x32 fmt=png", g.CMD_TIMEOUT)
+    start = len(g.log_text())
+    key(monitor, "shift-equal")
+    g.wait_for(proc, "fmt=png zoom=200%", g.CMD_TIMEOUT, start)
+    say("/view mire.png: PNG decoded in pixels, + zooms to 200%")
+    g.screendump_rgb(monitor, "qemu-gui-lot45-viewer.ppm")
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)
+    slash(monitor, proc, "/view /samples/mire24.bmp", "fmt=bmp zoom=fit")
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)
+    say("/view mire24.bmp: BMP 24 bits decoded")
+    slash(monitor, proc, "/cmd", "osui tool open app=Commande")
+    start = len(g.log_text())
+    type_text(monitor, "img-info /samples/mire32.bmp")
+    key(monitor, "ret")
+    run_marker(proc, start, "img-info /samples/mire32.bmp")
+    g.wait_for(proc, "osui panel out=img-info ok fmt=bmp w=48 h=32 bpp=32", g.CMD_TIMEOUT, start)
+    say("img-info (shell) decodes the same BMP 32 bits")
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
+
+
 def grpc(monitor, proc):
     slash(monitor, proc, "/grpc", "osui tool open app=Wire gRPC")
     start = len(g.log_text())
@@ -196,6 +226,7 @@ def main():
             help_window(monitor, proc)
             families(monitor, proc)
             grpc(monitor, proc)
+            viewer_images(monitor, proc)
             search(monitor, proc)
             confirm_mutation(monitor, proc)
             generic(monitor, proc)
