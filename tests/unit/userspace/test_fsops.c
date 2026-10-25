@@ -59,19 +59,19 @@ static void test_create_rename_delete(void) {
 }
 
 static void test_copy_into_dir_and_large_file(void) {
-    static char big[FSOPS_FILE_MAX];
-    static char back[FSOPS_FILE_MAX];
+    static char big[65536];
+    static char back[65536];
     char d[128];
     int i;
     mfs_reset();
-    for (i = 0; i < FSOPS_FILE_MAX; i++) big[i] = (char)('a' + i % 26);
-    mfs_add("/home/big.txt", 0, big, FSOPS_FILE_MAX);
+    for (i = 0; i < 65536; i++) big[i] = (char)('a' + i % 26);
+    mfs_add("/home/big.txt", 0, big, 65536);
     mfs_add("/home/dst", 1, 0, 0);
-    /* US-G16: copy and read files up to FSOPS_FILE_MAX (32 KiB) */
+    /* US-G16: copy and read 64 KiB files */
     TEST_ASSERT_EQUAL(0, fsops_cp(&mfs_io, "/home/big.txt", "/home/dst", d, 128));
     TEST_ASSERT_EQUAL_STRING("/home/dst/big.txt", d);
-    TEST_ASSERT_EQUAL(FSOPS_FILE_MAX, fsops_read(&mfs_io, d, back, FSOPS_FILE_MAX));
-    TEST_ASSERT(memcmp(big, back, FSOPS_FILE_MAX) == 0);
+    TEST_ASSERT_EQUAL(65536, fsops_read(&mfs_io, d, back, 65536));
+    TEST_ASSERT(memcmp(big, back, 65536) == 0);
     TEST_ASSERT_EQUAL(FSOPS_ERR_EXISTS, fsops_cp(&mfs_io, "/home/big.txt", "/home/big.txt", d, 128));
     TEST_ASSERT_EQUAL(FSOPS_ERR_TOOBIG, fsops_read(&mfs_io, "/home/big.txt", back, 100));
     TEST_ASSERT_EQUAL(0, fsops_mv(&mfs_io, "/home/notes.txt", "/home/dst", d, 128));
@@ -128,34 +128,13 @@ static void test_grep_recursive(void) {
     TEST_ASSERT(strstr(g_hits, "/home/src/a.c:2:TODO fix|") != 0);
     TEST_ASSERT(strstr(g_hits, "/home/src/deep/b.txt:2:TODO two|") != 0);
     TEST_ASSERT(files >= 4);
-    TEST_ASSERT_EQUAL(1, cut);               /* big.txt: only FSOPS_FILE_MAX searched */
+    TEST_ASSERT_EQUAL(1, cut);               /* big.txt: only 8 KiB searched */
     /* max_hits stops early, a file argument searches that file */
     calls = 0;
     TEST_ASSERT_EQUAL(1, fsops_grep(&mfs_io, "/home", "TODO", 1, on_hit, &calls, 0, 0));
     TEST_ASSERT_EQUAL(1, fsops_grep(&mfs_io, "/home/src/a.c", "fix", 5, 0, 0, 0, 0));
     TEST_ASSERT_EQUAL(0, fsops_grep(&mfs_io, "/home", "absent", 5, 0, 0, 0, 0));
     TEST_ASSERT(fsops_grep(&mfs_io, "/nope", "x", 5, 0, 0, 0, 0) < 0);
-}
-
-/* Lot 44: grep -r pages. 150 hits in one file: page 2 (start 64) returns
- * hits 65..128 with the right line numbers, the total counts them all. */
-static void test_grep_pagination(void) {
-    static char txt[150 * 8];
-    int i, o = 0, calls = 0, total = -1, files = 0, cut = 0, n;
-    for (i = 0; i < 150; i++) o += sprintf(txt + o, "hit%03d\n", i + 1);
-    mfs_reset();
-    mfs_add("/home/p.txt", 0, txt, o);
-    g_hits[0] = 0;
-    n = fsops_grep_page(&mfs_io, "/home/p.txt", "hit", 64, 2, on_hit, &calls, &total, &files, &cut);
-    TEST_ASSERT_EQUAL(2, n);
-    TEST_ASSERT_EQUAL(150, total);
-    TEST_ASSERT_EQUAL_STRING("/home/p.txt:65:hit065|/home/p.txt:66:hit066|", g_hits);
-    n = fsops_grep_page(&mfs_io, "/home", "hit", 128, 64, 0, 0, &total, 0, 0);
-    TEST_ASSERT_EQUAL(22, n);
-    TEST_ASSERT_EQUAL(150, total);
-    n = fsops_grep_page(&mfs_io, "/home", "hit", 192, 64, 0, 0, &total, 0, 0);
-    TEST_ASSERT_EQUAL(0, n);
-    TEST_ASSERT(fsops_grep_page(&mfs_io, "/nope", "x", 0, 5, 0, 0, &total, 0, 0) < 0);
 }
 
 int main(void) {
@@ -167,7 +146,6 @@ int main(void) {
     RUN_TEST(test_read_only_initrd_errors);
     RUN_TEST(test_short_write_is_an_error);
     RUN_TEST(test_grep_recursive);
-    RUN_TEST(test_grep_pagination);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

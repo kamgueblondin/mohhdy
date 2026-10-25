@@ -9,7 +9,7 @@
 #include "os_syscalls.h"
 
 #define FSOPS_PATH_MAX 128
-#define FSOPS_FILE_MAX 32768     /* largest file read/copied/edited at once (>= OV_FILE_MAX_BYTES) */
+#define FSOPS_FILE_MAX 65536     /* largest file read/copied/edited at once */
 
 #define FSOPS_ERR_FAIL     (-1)  /* not found / generic failure */
 #define FSOPS_ERR_EXISTS   (-2)

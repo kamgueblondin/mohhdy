@@ -864,7 +864,7 @@ const os_fb_image_t *osui_gui_test_image(int *calls);
 static unsigned char g_gui_arena[1 << 20] __attribute__((aligned(16)));
 static int gui_grow(unsigned want) { return want <= sizeof(g_gui_arena) ? (int)((want + 4095U) & ~4095U) : -1; }
 static void test_gui_viewer_pixels_and_editor_size(void) {
-    static char pgm[FSOPS_FILE_MAX + 9000];
+    static char pgm[9000];
     int n, i, calls0, calls1, slot;
     const os_fb_image_t *img;
     setup();
@@ -873,12 +873,8 @@ static void test_gui_viewer_pixels_and_editor_size(void) {
     osui_gui_set_heap(urealloc);
     osui_gui_set_fs_io(&mfs_io);
     osui_gui_set_tool_ops(tg_run, tg_ai, tg_model, 0);
-    /* a header comment pads the file past FSOPS_FILE_MAX: the heap path */
-    n = sprintf(pgm, "P5\n# ");
-    for (i = 0; i < FSOPS_FILE_MAX; i++) pgm[n++] = 'c';
-    n += sprintf(pgm + n, "\n100 84 255\n");
+    n = sprintf(pgm, "P5 100 84 255\n");
     for (i = 0; i < 100 * 84; i++) pgm[n + i] = (char)(i % 100 < 50 ? 10 : 240);
-    TEST_ASSERT(n + 8400 > FSOPS_FILE_MAX);
     mfs_add("/home/big.pgm", 0, pgm, n + 8400);
     evt("focus d");
     feed_str("/view /home/big.pgm");

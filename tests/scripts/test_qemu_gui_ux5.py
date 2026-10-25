@@ -92,10 +92,9 @@ def editor_steps(monitor, qmp, proc):
     if not near(pixel(rgb, 900, 300), FRAME) and not near(pixel(rgb, 900, 300), (9, 13, 18)):
         raise RuntimeError("maximized editor does not cover x=900: %r" % (pixel(rgb, 900, 300),))
     say("maximize: kernel sent app size, editor grid follows the window")
-    # Save As /long2.txt: the 28 KB buffer is built on the heap. Since Lot 44
-    # the overlay stores it in chained blocks (bound 30 KiB) through the
-    # chunked atadriver relay; fsops_write fails on any short write, so
-    # "saved" means all 27993 bytes were written.
+    # Save As /long2.txt: the 28 KB buffer is built on the heap, the
+    # writable overlay store refuses it (its node holds 384 bytes): the
+    # editor reports the store error, the buffer stays modified-safe.
     start = len(g.log_text())
     key(monitor, "esc")
     key(monitor, "a")
@@ -103,10 +102,8 @@ def editor_steps(monitor, qmp, proc):
         key(monitor, "backspace", 0.08)
     type_text(monitor, "/long2.txt")
     key(monitor, "ret")
-    g.wait_for(proc, "osui edit saved file=/long2.txt", g.CMD_TIMEOUT, start)
-    if "osui edit save error=" in g.log_text()[start:]:
-        raise RuntimeError("Save As of 28 KB reported a store error")
-    say("Save As of 28 KB: saved whole (overlay chained blocks, chunked relay)")
+    g.wait_for(proc, "osui edit save error=", g.CMD_TIMEOUT, start)
+    say("Save As of 28 KB: store error reported (overlay node limit), no silent cut")
     # the maximized editor covers the desktop edge: close it (ESC Q)
     start = len(g.log_text())
     key(monitor, "esc")

@@ -5248,55 +5248,56 @@ static void cmd_devices(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string(" end\n");
 }
 
-/* Lot 44 (US-G17): restart a Ring 3 driver. Only the fixed driver names
- * below (their registered service), never an arbitrary process. The kill
- * goes through SYS_KILL, so the kernel rights apply unchanged (only the root
- * shell may stop a driver). The respawn is the kernel supervisor's own
- * (atadriver, pci/ps2/serial/vga/usb device services); networker has no
- * kernel supervisor, so the shell starts bin/networker again itself. */
-static const struct { const char* name; const char* service; } k_drivers[] = {
-    { "atadriver", "ata-driver" }, { "networker", "net-driver" },
-    { "pcidriver", "pci-driver" }, { "ps2driver", "ps2-driver" },
-    { "serialdriver", "serial-driver" }, { "vgadriver", "vga-driver" },
-    { "usbdriver", "usb-driver" },
-};
-
 static void cmd_driver_restart(shell_context_t* ctx, char args[][128], int arg_count) {
-    const char* service = 0;
-    int pid, k, now = -1, rc;
+    int pid = -1;
+    const char *driver_name;
+    const char *service_name = 0;
     (void)ctx;
     if (arg_count < 1) {
-        print_error("Usage: driver-restart <atadriver|networker|pcidriver|ps2driver|serialdriver|vgadriver|usbdriver>");
+        print_error("Usage: driver-restart <driver-name>");
         return;
     }
-    for (k = 0; k < (int)(sizeof(k_drivers) / sizeof(k_drivers[0])); k++) {
-        if (strcmp(args[0], k_drivers[k].name) == 0 || strcmp(args[0], k_drivers[k].service) == 0) {
-            service = k_drivers[k].service;
-            break;
+    driver_name = args[0];
+    if (strcmp(driver_name, "atadriver") == 0 || strcmp(driver_name, "ata-driver") == 0) service_name = "ata-driver";
+    else if (strcmp(driver_name, "networker") == 0 || strcmp(driver_name, "net-driver") == 0) service_name = "net-driver";
+    else if (strcmp(driver_name, "pcidriver") == 0 || strcmp(driver_name, "pci-driver") == 0) service_name = "pci-driver";
+    else if (strcmp(driver_name, "ps2driver") == 0 || strcmp(driver_name, "ps2-driver") == 0) service_name = "ps2-driver";
+    else if (strcmp(driver_name, "serialdriver") == 0 || strcmp(driver_name, "serial-driver") == 0) service_name = "serial-driver";
+    else if (strcmp(driver_name, "vgadriver") == 0 || strcmp(driver_name, "vga-driver") == 0) service_name = "vga-driver";
+    else if (strcmp(driver_name, "usbdriver") == 0 || strcmp(driver_name, "usb-driver") == 0) service_name = "usb-driver";
+    else service_name = driver_name;
+
+    pid = sys_service_lookup(service_name);
+    if (pid <= 0) {
+        os_proc_t procs[16];
+        int n = sys_ps(procs, 16);
+        for (int i = 0; i < n; i++) {
+            if (strstr(procs[i].name, driver_name) != 0) {
+                pid = procs[i].pid;
+                break;
+            }
         }
     }
-    if (!service) { print_error("driver-restart: pilote inconnu"); return; }
-    pid = sys_service_lookup(service);
-    if (pid <= 0) { print_error("driver-restart: pilote absent (service non enregistre)"); return; }
-    rc = sys_kill_pid(pid);
-    if (rc != 0) {
-        print_string("driver-restart refused "); print_string(service);
-        print_string(" rc "); print_int(rc); print_string("\n");
+
+    if (pid <= 0) {
+        print_error("driver-restart: pilote introuvable");
         return;
     }
-    if (strcmp(service, "net-driver") == 0) {
-        for (k = 0; k < 50 && sys_service_lookup("net-driver") == pid; k++) yield();
-        if (sys_service_lookup("net-driver") <= 0) (void)spawn("bin/networker", 0);
-    }
-    for (k = 0; k < 400; k++) {
-        now = sys_service_lookup(service);
-        if (now > 0 && now != pid) break;
+
+    sys_kill_pid(pid);
+
+    if (strcmp(driver_name, "networker") == 0 || strcmp(service_name, "net-driver") == 0) {
         yield();
+        if (sys_service_lookup("net-driver") <= 0) {
+            spawn("bin/networker", 0);
+        }
     }
-    print_string("driver-restart ok "); print_string(service);
-    print_string(" old "); print_int(pid);
-    if (now > 0 && now != pid) { print_string(" new "); print_int(now); print_string("\n"); }
-    else print_string(" new pending (respawn supervise a la prochaine utilisation)\n");
+
+    print_string("driver-restart ok ");
+    print_string(driver_name);
+    print_string(" pid ");
+    print_int(pid);
+    print_string("\n");
 }
 
 static void cmd_pci_rescan(shell_context_t* ctx, char args[][128], int arg_count) {

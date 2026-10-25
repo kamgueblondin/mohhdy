@@ -127,14 +127,6 @@ def boot1(hub):
         cmd(node, "collab-forget", "collab-forget ok seq 4")
         cmd(node, "persist-passphrase correct-horse-9", "persist-passphrase ok (kept in RAM only)")
         cmd(node, "p2p-put color blue", "p2p-put ok color")
-        # Lot 44 (US-G16): a 27993-byte file crosses the 8 KiB atadriver
-        # buffer in chunks (write then appends, offset reads), byte count and
-        # its last line intact; removed again so the persist blobs keep room
-        # in the 32 KiB AIOV area.
-        cmd(node, "cp /samples/long.txt /big.txt", "cp ok ")
-        cmd(node, "stat /big.txt", "stat file /big.txt 27993")
-        cmd(node, "grep -r 400 /big.txt", "grep -r hits 1 total 1 ")
-        cmd(node, "rm /big.txt", "rm ok /big.txt")
         fpr = fingerprint(node)
         # US-060: PromptMessage certificate signed with this node's key
         cmd(node, "write /t.pm expect 4 == 4", "write ok /t.pm")

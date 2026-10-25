@@ -1241,18 +1241,7 @@ counted by `prod-roadmap` as phase 9 of `/roadmap.txt`):
 | editor, viewer, processes, services/drivers, network, p2p, storage, logs, collab ledger, production/CI, security/CA, web devtools, notes/archives, PromptMessage, AI, system settings | partial |
 | sessions, mcp, media, pwa, devsync, os-*, admin-*, api-* (only through /cmd); window-sized grid for every app; large persistent saves | todo |
 
-Lot 44 (PR #201, reviewed, details and per item status in
-`docs/lot44_plan.md`): overlay files up to 30 KiB (chained 384-byte blocks,
-dense v3 image inside the 64-sector AIOV area, refused cleanly beyond it,
-kernel relay in 4 KiB chunks through the 8 KiB atadriver buffer); panels
-/vfs /sessions /mcp /media /grpc /pwa /devsync /sysadmin /api (registry
-commands, media simule); `driver-restart`; ledger forms in the shell
-grammar; `grep -r MOTIF [REP] [PAGE]` with 32 KiB per file. Not done in
-Lot 44: US-G15, editor lines over 72 columns, 64 KiB files, BMP/PNG,
-clipboard over 4 KiB, capture of spawned programs, Raft partition tests,
-HTTPS speedup, TCP ports.
-
-Next steps: grid resize for all apps (US-G15); 64 KiB files (needs a new
-disk layout, the overlay area is 32 KiB);
+Next steps: grid resize for all apps (US-G15); a large-file write path in
+the overlay store (US-G16, today 384-byte nodes and an 8 KiB ATA relay);
 panels for vfs, task, session, mcp, media and grpc (US-G17); forms for the
 collab ledger (offers, votes, escrow) and driver restart in /services.

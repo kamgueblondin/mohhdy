@@ -47,10 +47,9 @@ static const osui_par_entry_t k_ledger[] = {
     { "Taches collaboratives", "collab-tasks", 0, 0 },
     { "Journal d'audit", "collab-audit", 0, 0 },
     { "Monter le P2P (requis)", "p2p-up", A | M, "NOM IP [CLE]" },
-    { "Formulaire: publier une offre", "collab-offer", A | M, "NOM PRIX CAPACITE" },
-    { "Formulaire: voter", "collab-vote", A | M, "PROPOSANT SEQ yes|no" },
-    { "Formulaire: creer un escrow", "collab-escrow-create", A | M, "BENEFICIAIRE ARBITRE|none MONTANT [NOM]" },
-    { "Formulaire: solder / litige", "collab-escrow-release", A | M, "PAYEUR SEQ" },
+    { "Formulaire: Creer une offre", "collab-offer", A | M, "TACHE MONTANT DESC" },
+    { "Formulaire: Voter proposition", "collab-vote", A | M, "PROP CHOIX RAISON" },
+    { "Formulaire: Depot/Escrow", "collab-escrow-create", A | M, "TACHE MONTANT" },
 };
 static const osui_par_entry_t k_prod[] = {
     { "Diagnostic de production", "prod-diag", 0, 0 },
@@ -101,41 +100,41 @@ static const osui_par_entry_t k_vfs[] = {
 static const osui_par_entry_t k_sessions[] = {
     { "Statut de la session", "session-status", 0, 0 },
     { "Lister les sessions", "session-list", 0, 0 },
-    { "Nouvelle session", "session-new", A | M, "[SITE]" },
-    { "Utiliser une session", "session-use", A | M, "ID" },
-    { "Restaurer une session", "session-restore", A | M, "ID" },
-    { "Nettoyer les sessions expirees", "session-cleanup", M, 0 },
+    { "Nouvelle session", "session-new", A | M, "USER ROLE" },
+    { "Utiliser une session", "session-use", A | M, "TOKEN" },
+    { "Restaurer la session", "session-restore", A | M, "TOKEN" },
+    { "Nettoyer les sessions expiress", "session-cleanup", M, 0 },
     { "Fermer la session", "session-end", M, 0 },
 };
 static const osui_par_entry_t k_mcp[] = {
     { "Statut MCP", "mcp-status", 0, 0 },
     { "Lister les services MCP", "mcp-list", 0, 0 },
     { "Identifiants MCP", "mcp-credentials", 0, 0 },
-    { "Invoquer un outil MCP", "mcp-invoke", A | M, "OUTIL" },
-    { "Facturer un client MCP", "mcp-invoice", A | M, "CLIENT MONTANT" },
+    { "Invoquer un service MCP", "mcp-invoke", A | M, "SERVICE METHODE [ARG]" },
+    { "Facturer un appel MCP", "mcp-invoice", A | M, "CLIENT MONTANT" },
     { "Annuler une facture MCP", "mcp-invoice-void", A | M, "FACTURE_ID" },
 };
 static const osui_par_entry_t k_media[] = {
-    { "Etat du lecteur media (simule)", "browser-media", 0, 0 },
-    { "Lire un media (simule)", "media-play", A | M, "[TYPE] [TITRE]" },
+    { "Statut media", "media-status", 0, 0 },
+    { "Lire un flux media", "media-play", A | M, "FLUX_ID" },
     { "Mettre en pause le flux", "media-pause", M, 0 },
     { "Arreter la lecture media", "media-stop", M, 0 },
-    { "Diffuser un flux (simule)", "media-stream", A | M, "[URL] [TYPE]" },
+    { "Diffuser un flux media", "media-stream", A | M, "SOURCE" },
 };
 static const osui_par_entry_t k_grpc[] = {
-    { "Appel gRPC wire", "grpc-wire", A, "SERVICE METHOD [PAYLOAD]" },
+    { "Appel gRPC wire", "grpc-wire", A, "SERVICE METHODE [PAYLOAD]" },
 };
 static const osui_par_entry_t k_pwa[] = {
     { "Lister les PWA installees", "pwa-list", 0, 0 },
-    { "Declarer un manifeste PWA", "pwa-manifest", A | M, "NOM URL [SCOPE]" },
-    { "Installer une PWA", "pwa-install", A | M, "NOM" },
-    { "Lancer une PWA", "pwa-run", A | M, "NOM" },
+    { "Manifeste d'une PWA", "pwa-manifest", A, "PWA_ID" },
+    { "Installer une PWA", "pwa-install", A | M, "PWA_ID MANIFEST" },
+    { "Lancer une PWA", "pwa-run", A | M, "PWA_ID" },
 };
 static const osui_par_entry_t k_devsync[] = {
-    { "Afficher un appareil devsync", "devsync-show", A, "A|B|C" },
-    { "Synchroniser deux appareils", "devsync-sync", A | M, "SRC DST (A|B|C)" },
-    { "Ecrire une cle devsync", "devsync-set", A | M, "A|B|C CLE VALEUR" },
-    { "Supprimer une cle devsync", "devsync-del", A | M, "A|B|C CLE" },
+    { "Afficher la synchro devsync", "devsync-show", 0, 0 },
+    { "Synchroniser le cluster devsync", "devsync-sync", M, 0 },
+    { "Configurer un noeud devsync", "devsync-set", A | M, "NOEUD CLE VALEUR" },
+    { "Supprimer un noeud devsync", "devsync-del", A | M, "NOEUD CLE" },
 };
 static const osui_par_entry_t k_admin[] = {
     { "Administration OS", "os-admin", 0, 0 },
@@ -146,8 +145,8 @@ static const osui_par_entry_t k_admin[] = {
 };
 static const osui_par_entry_t k_api[] = {
     { "Apercu des API", "api", 0, 0 },
-    { "Creer un token API", "api-token", M, 0 },
-    { "Revoquer le token API", "api-revoke", M, 0 },
+    { "Creer un token API", "api-token", A | M, "CLIENT SCOPE" },
+    { "Revoquer un token API", "api-revoke", A | M, "TOKEN_ID" },
 };
 
 const osui_par_family_t osui_par_families[] = {
