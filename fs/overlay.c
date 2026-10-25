@@ -9,6 +9,8 @@
 typedef struct {
     int used;
     int is_dir;
+    int is_continuation;
+    int next_node;
     char path[OV_PATH_MAX];
     char data[OV_DATA_MAX];
     uint32_t size;
@@ -16,6 +18,20 @@ typedef struct {
 
 static ov_node_t g_ov[OV_MAX_NODES];
 static os_dirent_t overlay_page_entries[OV_MAX_NODES];
+
+static void ov_free_chain(ov_node_t *head) {
+    ov_node_t *curr = head;
+    while (curr) {
+        int next_idx = curr->next_node;
+        curr->used = 0;
+        curr->is_dir = 0;
+        curr->is_continuation = 0;
+        curr->next_node = -1;
+        curr->size = 0;
+        curr->path[0] = '\0';
+        curr = (next_idx >= 0 && next_idx < OV_MAX_NODES) ? &g_ov[next_idx] : 0;
+    }
+}
 
 static int ov_len(const char* s) {
     int n = 0;
@@ -84,7 +100,7 @@ static ov_node_t* ov_find(const char* path) {
     ov_normalize(path, want, OV_PATH_MAX);
     if (!want[0]) return 0;
     for (i = 0; i < OV_MAX_NODES; i++) {
-        if (g_ov[i].used && ov_eq(g_ov[i].path, want)) {
+        if (g_ov[i].used && !g_ov[i].is_continuation && ov_eq(g_ov[i].path, want)) {
             return &g_ov[i];
         }
     }
@@ -154,6 +170,8 @@ void overlay_init(void) {
         g_ov[i].path[0] = '\0';
         g_ov[i].size = 0;
         g_ov[i].is_dir = 0;
+        g_ov[i].is_continuation = 0;
+        g_ov[i].next_node = -1;
     }
 }
 
@@ -216,75 +234,142 @@ int overlay_mkdir(const char* path) {
 
 int overlay_write(const char* path, const char* data, uint32_t n) {
     ov_node_t* node;
+    ov_node_t* curr;
     char want[OV_PATH_MAX];
-    uint32_t i;
+    uint32_t i, chunk, rem, offset;
     ov_normalize(path, want, OV_PATH_MAX);
     if (!want[0] || (n > 0 && !data)) return OV_ERR_INVAL;
+    if (n > OV_FILE_MAX_BYTES) return OV_ERR_NOSPACE;
     node = ov_find(want);
     if (node && node->is_dir) return OV_ERR_ISDIR;
     if (initrd_is_dir(want)) return OV_ERR_ISDIR;
-    if (!node) {
-        if (!ov_parent_is_dir(want)) return OV_ERR_NOTDIR;
-        node = ov_alloc();
-        if (!node) return OV_ERR_NOSPACE;
-        node->used = 1;
-        node->is_dir = 0;
-        ov_copy(node->path, want, OV_PATH_MAX);
+    if (node) {
+        ov_free_chain(node);
+        node = 0;
     }
-    if (n > OV_DATA_MAX) n = OV_DATA_MAX;
-    for (i = 0; i < n; i++) node->data[i] = data[i];
+    if (!ov_parent_is_dir(want)) return OV_ERR_NOTDIR;
+    node = ov_alloc();
+    if (!node) return OV_ERR_NOSPACE;
+    node->used = 1;
+    node->is_dir = 0;
+    node->is_continuation = 0;
+    node->next_node = -1;
     node->size = n;
+    ov_copy(node->path, want, OV_PATH_MAX);
+
+    chunk = n > OV_DATA_MAX ? OV_DATA_MAX : n;
+    for (i = 0; i < chunk; i++) node->data[i] = data[i];
+    rem = n - chunk;
+    offset = chunk;
+    curr = node;
+
+    while (rem > 0) {
+        ov_node_t* next = ov_alloc();
+        if (!next) {
+            ov_free_chain(node);
+            return OV_ERR_NOSPACE;
+        }
+        next->used = 1;
+        next->is_dir = 0;
+        next->is_continuation = 1;
+        next->next_node = -1;
+        next->path[0] = '\0';
+        chunk = rem > OV_DATA_MAX ? OV_DATA_MAX : rem;
+        next->size = chunk;
+        for (i = 0; i < chunk; i++) next->data[i] = data[offset + i];
+        curr->next_node = (int)(next - g_ov);
+        curr = next;
+        rem -= chunk;
+        offset += chunk;
+    }
+
     overlay_save_disk();
     return (int)n;
 }
 
 int overlay_append(const char* path, const char* data, uint32_t n) {
-    ov_node_t* node;
+    ov_node_t* head;
+    ov_node_t* curr;
     char want[OV_PATH_MAX];
-    uint32_t i;
+    uint32_t i, rem, offset, avail, chunk, new_size;
     ov_normalize(path, want, OV_PATH_MAX);
     if (!want[0] || (n > 0 && !data)) return OV_ERR_INVAL;
     if (initrd_is_dir(want)) return OV_ERR_ISDIR;
-    node = ov_find(want);
-    if (node && node->is_dir) return OV_ERR_ISDIR;
-    if (!node) {
+    head = ov_find(want);
+    if (head && head->is_dir) return OV_ERR_ISDIR;
+    if (head) {
+        new_size = head->size + n;
+        if (new_size > OV_FILE_MAX_BYTES) return OV_ERR_NOSPACE;
+        curr = head;
+        while (curr->next_node >= 0 && curr->next_node < OV_MAX_NODES) {
+            curr = &g_ov[curr->next_node];
+        }
+        rem = n;
+        offset = 0;
+        avail = OV_DATA_MAX > curr->size ? OV_DATA_MAX - curr->size : 0;
+        if (avail > 0) {
+            chunk = rem > avail ? avail : rem;
+            for (i = 0; i < chunk; i++) curr->data[curr->size + i] = data[offset + i];
+            curr->size += chunk;
+            rem -= chunk;
+            offset += chunk;
+        }
+        while (rem > 0) {
+            ov_node_t* next = ov_alloc();
+            if (!next) return OV_ERR_NOSPACE;
+            next->used = 1;
+            next->is_dir = 0;
+            next->is_continuation = 1;
+            next->next_node = -1;
+            next->path[0] = '\0';
+            chunk = rem > OV_DATA_MAX ? OV_DATA_MAX : rem;
+            next->size = chunk;
+            for (i = 0; i < chunk; i++) next->data[i] = data[offset + i];
+            curr->next_node = (int)(next - g_ov);
+            curr = next;
+            rem -= chunk;
+            offset += chunk;
+        }
+        head->size = new_size;
+        overlay_save_disk();
+        return (int)n;
+    } else {
         uint32_t have = 0;
-        char tmp[OV_DATA_MAX];
+        static char tmp[OV_FILE_MAX_BYTES];
         if (initrd_is_file(want)) {
-            int r = initrd_read_into(want, tmp, OV_DATA_MAX);
+            int r = initrd_read_into(want, tmp, OV_FILE_MAX_BYTES);
             if (r < 0) return r;
             have = (uint32_t)r;
+            if (have + n > OV_FILE_MAX_BYTES) return OV_ERR_NOSPACE;
+            int write_rc = overlay_write(want, tmp, have);
+            if (write_rc < 0) return write_rc;
+            return overlay_append(want, data, n);
         } else if (!ov_parent_is_dir(want)) {
             return OV_ERR_NOTDIR;
         }
-        if (have + n > OV_DATA_MAX) return OV_ERR_NOSPACE;
-        node = ov_alloc();
-        if (!node) return OV_ERR_NOSPACE;
-        node->used = 1;
-        node->is_dir = 0;
-        node->size = have;
-        ov_copy(node->path, want, OV_PATH_MAX);
-        for (i = 0; i < have; i++) node->data[i] = tmp[i];
+        return overlay_write(want, data, n);
     }
-    if (node->size + n > OV_DATA_MAX) return OV_ERR_NOSPACE;
-    for (i = 0; i < n; i++) node->data[node->size + i] = data[i];
-    node->size += n;
-    overlay_save_disk();
-    return (int)n;
 }
 
 int overlay_read(const char* path, char* buf, uint32_t max) {
-    ov_node_t* n;
-    uint32_t i;
-    uint32_t copy;
-    n = ov_find(path);
-    if (!n) return OV_ERR_NOTFOUND;
-    if (n->is_dir) return OV_ERR_ISDIR;
+    ov_node_t* curr;
+    uint32_t copy_len, rem, offset, chunk, i, node_data_bytes;
+    curr = ov_find(path);
+    if (!curr) return OV_ERR_NOTFOUND;
+    if (curr->is_dir) return OV_ERR_ISDIR;
     if (!buf || max == 0) return OV_ERR_INVAL;
-    copy = n->size;
-    if (copy > max) copy = max;
-    for (i = 0; i < copy; i++) buf[i] = n->data[i];
-    return (int)copy;
+    copy_len = curr->size > max ? max : curr->size;
+    rem = copy_len;
+    offset = 0;
+    while (curr && rem > 0) {
+        node_data_bytes = curr->is_continuation ? curr->size : (curr->size > OV_DATA_MAX ? OV_DATA_MAX : curr->size);
+        chunk = node_data_bytes > rem ? rem : node_data_bytes;
+        for (i = 0; i < chunk; i++) buf[offset + i] = curr->data[i];
+        offset += chunk;
+        rem -= chunk;
+        curr = (curr->next_node >= 0 && curr->next_node < OV_MAX_NODES) ? &g_ov[curr->next_node] : 0;
+    }
+    return (int)copy_len;
 }
 
 int overlay_unlink(const char* path) {
@@ -298,9 +383,7 @@ int overlay_unlink(const char* path) {
         return OV_ERR_NOTFOUND;
     }
     if (n->is_dir && ov_has_children(want)) return OV_ERR_NOTEMPTY;
-    n->used = 0;
-    n->path[0] = '\0';
-    n->size = 0;
+    ov_free_chain(n);
     overlay_save_disk();
     return OV_OK;
 }
@@ -499,7 +582,7 @@ int overlay_listdir_page(const char* path, os_dirent_t* out, uint32_t start, int
     return emitted;
 }
 
-#define OV_DISK_SECTORS 64
+#define OV_DISK_SECTORS 512
 #define OV_DISK_BYTES   (OV_DISK_SECTORS * 512)
 
 static uint8_t g_ov_disk_buf[OV_DISK_BYTES];
@@ -523,11 +606,14 @@ int overlay_snapshot(uint8_t* buf, uint32_t max, uint32_t* out_size) {
     int i;
     int used = 0;
 
-    if (!buf || max < OV_SNAP_SIZE) return -1;
+    if (!buf || max < 16U + OV_SNAP_NODE) return -1;
 
     for (i = 0; i < OV_MAX_NODES; i++) {
         if (g_ov[i].used) used++;
     }
+
+    uint32_t min_needed = 16U + (uint32_t)used * OV_SNAP_NODE;
+    if (max < min_needed) return -1;
 
     ov_put_u32(buf + 0, OV_SNAP_MAGIC);
     ov_put_u32(buf + 4, OV_SNAP_VERSION);
@@ -535,12 +621,12 @@ int overlay_snapshot(uint8_t* buf, uint32_t max, uint32_t* out_size) {
     ov_put_u32(buf + 12, (uint32_t)used);
 
     off = 16;
-    for (i = 0; i < OV_MAX_NODES; i++) {
+    for (i = 0; i < OV_MAX_NODES && off + OV_SNAP_NODE <= max; i++) {
         uint32_t b;
         buf[off + 0] = g_ov[i].used ? 1 : 0;
-        buf[off + 1] = g_ov[i].is_dir ? 1 : 0;
-        buf[off + 2] = 0;
-        buf[off + 3] = 0;
+        buf[off + 1] = g_ov[i].is_dir ? 1 : (g_ov[i].is_continuation ? 2 : 0);
+        buf[off + 2] = (uint8_t)(g_ov[i].next_node & 0xFF);
+        buf[off + 3] = (uint8_t)((g_ov[i].next_node >> 8) & 0xFF);
         ov_put_u32(buf + off + 4, g_ov[i].used ? g_ov[i].size : 0);
         for (b = 0; b < OV_PATH_MAX; b++) {
             buf[off + 8 + b] = (uint8_t)g_ov[i].path[b];
@@ -551,7 +637,7 @@ int overlay_snapshot(uint8_t* buf, uint32_t max, uint32_t* out_size) {
         off += OV_SNAP_NODE;
     }
 
-    if (out_size) *out_size = OV_SNAP_SIZE;
+    if (out_size) *out_size = off;
     return 0;
 }
 
@@ -565,6 +651,7 @@ int overlay_restore(const uint8_t* buf, uint32_t n) {
     uint32_t stored_data;
     uint32_t stored_node;
     uint32_t stored_size;
+    uint32_t avail_nodes;
     int i;
 
     if (!buf || n < 16U || ov_get_u32(buf + 0) != OV_SNAP_MAGIC) return -1;
@@ -575,6 +662,12 @@ int overlay_restore(const uint8_t* buf, uint32_t n) {
         stored_data = OV_SNAP_DATA;
         stored_node = OV_SNAP_NODE;
         stored_size = OV_SNAP_SIZE;
+    } else if (version == OV_SNAP_V2_VERSION) {
+        stored_nodes = OV_SNAP_V2_NODES;
+        stored_path = OV_SNAP_V2_PATH;
+        stored_data = OV_SNAP_V2_DATA;
+        stored_node = OV_SNAP_V2_NODE;
+        stored_size = OV_SNAP_V2_SIZE;
     } else if (version == OV_SNAP_V1_VERSION) {
         stored_nodes = OV_SNAP_V1_NODES;
         stored_path = OV_SNAP_V1_PATH;
@@ -584,20 +677,26 @@ int overlay_restore(const uint8_t* buf, uint32_t n) {
     } else {
         return -1;
     }
-    if (n < stored_size || ov_get_u32(buf + 8) != stored_nodes) return -1;
+
+    if (ov_get_u32(buf + 8) != stored_nodes) return -1;
 
     used_count = ov_get_u32(buf + 12);
     if (used_count > stored_nodes) return -1;
 
+    avail_nodes = (n - 16U) / stored_node;
+    if (avail_nodes > stored_nodes) avail_nodes = stored_nodes;
+    if (used_count > avail_nodes && n < stored_size) return -1;
+
     seen = 0;
     off = 16U;
-    for (i = 0; i < (int)stored_nodes; i++) {
+    for (i = 0; i < (int)avail_nodes; i++) {
         uint8_t used = buf[off];
-        uint8_t is_dir = buf[off + 1U];
+        uint8_t node_type = buf[off + 1U];
         uint32_t size = ov_get_u32(buf + off + 4U);
-        if (used > 1U || is_dir > 1U) return -1;
+        if (used > 1U || node_type > 2U) return -1;
         if (used) {
-            if (size > stored_data) return -1;
+            if (node_type == 0 && size > OV_FILE_MAX_BYTES) return -1;
+            if (node_type != 0 && size > stored_data) return -1;
             seen++;
         }
         off += stored_node;
@@ -606,17 +705,22 @@ int overlay_restore(const uint8_t* buf, uint32_t n) {
 
     overlay_init();
     off = 16U;
-    for (i = 0; i < (int)stored_nodes && i < OV_MAX_NODES; i++) {
-        uint32_t b;
+    for (i = 0; i < (int)avail_nodes && i < OV_MAX_NODES; i++) {
+        uint32_t b, data_bytes;
         if (buf[off]) {
+            uint8_t node_type = buf[off + 1U];
+            int16_t next = (int16_t)((uint16_t)buf[off + 2U] | ((uint16_t)buf[off + 3U] << 8));
             g_ov[i].used = 1;
-            g_ov[i].is_dir = buf[off + 1U] ? 1 : 0;
+            g_ov[i].is_dir = (node_type == 1) ? 1 : 0;
+            g_ov[i].is_continuation = (node_type == 2) ? 1 : 0;
+            g_ov[i].next_node = (next == 0 || next == -1) ? -1 : next;
             g_ov[i].size = ov_get_u32(buf + off + 4U);
             for (b = 0U; b + 1U < OV_PATH_MAX && b < stored_path; b++) {
                 g_ov[i].path[b] = (char)buf[off + 8U + b];
             }
             g_ov[i].path[OV_PATH_MAX - 1U] = '\0';
-            for (b = 0U; b < g_ov[i].size && b < stored_data; b++) {
+            data_bytes = g_ov[i].is_continuation ? g_ov[i].size : (g_ov[i].size > stored_data ? stored_data : g_ov[i].size);
+            for (b = 0U; b < data_bytes && b < stored_data; b++) {
                 g_ov[i].data[b] = (char)buf[off + 8U + stored_path + b];
             }
         }

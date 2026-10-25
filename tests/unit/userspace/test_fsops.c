@@ -59,19 +59,19 @@ static void test_create_rename_delete(void) {
 }
 
 static void test_copy_into_dir_and_large_file(void) {
-    static char big[6000];
-    static char back[8192];
+    static char big[65536];
+    static char back[65536];
     char d[128];
     int i;
     mfs_reset();
-    for (i = 0; i < 6000; i++) big[i] = (char)('a' + i % 26);
-    mfs_add("/home/big.txt", 0, big, 6000);
+    for (i = 0; i < 65536; i++) big[i] = (char)('a' + i % 26);
+    mfs_add("/home/big.txt", 0, big, 65536);
     mfs_add("/home/dst", 1, 0, 0);
-    /* the old shell cp truncated files to 256 bytes */
+    /* US-G16: copy and read 64 KiB files */
     TEST_ASSERT_EQUAL(0, fsops_cp(&mfs_io, "/home/big.txt", "/home/dst", d, 128));
     TEST_ASSERT_EQUAL_STRING("/home/dst/big.txt", d);
-    TEST_ASSERT_EQUAL(6000, fsops_read(&mfs_io, d, back, 8192));
-    TEST_ASSERT(memcmp(big, back, 6000) == 0);
+    TEST_ASSERT_EQUAL(65536, fsops_read(&mfs_io, d, back, 65536));
+    TEST_ASSERT(memcmp(big, back, 65536) == 0);
     TEST_ASSERT_EQUAL(FSOPS_ERR_EXISTS, fsops_cp(&mfs_io, "/home/big.txt", "/home/big.txt", d, 128));
     TEST_ASSERT_EQUAL(FSOPS_ERR_TOOBIG, fsops_read(&mfs_io, "/home/big.txt", back, 100));
     TEST_ASSERT_EQUAL(0, fsops_mv(&mfs_io, "/home/notes.txt", "/home/dst", d, 128));

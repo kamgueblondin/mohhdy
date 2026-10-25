@@ -496,7 +496,16 @@ typedef struct {
 #define OS_FB_APP_DEVTOOLS 17
 #define OS_FB_APP_NOTES 18
 #define OS_FB_APP_CMD 19
-#define OS_FB_APP_KIND_MAX 19
+#define OS_FB_APP_VFS 20
+#define OS_FB_APP_SESSIONS 21
+#define OS_FB_APP_MCP 22
+#define OS_FB_APP_MEDIA 23
+#define OS_FB_APP_GRPC 24
+#define OS_FB_APP_PWA 25
+#define OS_FB_APP_DEVSYNC 26
+#define OS_FB_APP_ADMIN 27
+#define OS_FB_APP_API 28
+#define OS_FB_APP_KIND_MAX 28
 #define OS_FB_APP_ROWS 22       /* default window grid */
 #define OS_FB_APP_COLS 78
 /* UX5: grid buffers; a maximized window shows as many rows / columns as
@@ -1238,12 +1247,11 @@ static inline int os_task_parse_event(const os_ipc_message_t* message,
 #define OS_IPC_ATA_REPLY  0x41544103U
 #define OS_ATA_IPC_WINDOW 64U
 #define OS_ATA_IPC_CLIENT_SERVICE "ata-client"
-/* LBA 0-63 of the master disk hold the kernel overlay snapshot (Ring 0). */
-#define OS_ATA_KERNEL_RESERVED_LBAS 64U
 
 /* Tranche 4 slice 2: kernel <-> atadriver multi-sector job protocol. The
  * kernel copies up to 8 sectors per chunk between its overlay snapshot buffer
  * and the driver buffer (no shared page); the driver runs the PIO at CPL 3. */
+#define OS_ATA_KERNEL_RESERVED_LBAS 64U
 #define OS_ATA_OVERLAY_SECTORS 64U
 #define OS_ATA_JOB_MAX_SECTORS 8U
 #define OS_ATA_JOB_NONE  0U

@@ -154,6 +154,36 @@ static void test_snapshot_rejects_small_buffer(void) {
     TEST_ASSERT_EQUAL(99, sz);
 }
 
+static void test_64k_file_write_read_and_bounds(void) {
+    static char big[65536];
+    static char back[65536];
+    uint32_t i, sz = 0;
+    int n;
+
+    setUp();
+    for (i = 0; i < 65536; i++) big[i] = (char)(i % 251);
+
+    /* Write exact 64 KiB */
+    int wr = overlay_write("64k.bin", big, 65536);
+    printf("DEBUG: overlay_write = %d\n", wr);
+    n = overlay_read("64k.bin", back, sizeof(back));
+    printf("DEBUG: overlay_read = %d\n", n);
+    TEST_ASSERT_EQUAL(65536, n);
+    TEST_ASSERT_EQUAL_MEMORY(big, back, 65536);
+
+    /* Snapshot & restore 64 KiB file */
+    TEST_ASSERT_EQUAL(0, overlay_snapshot(g_snap, sizeof(g_snap), &sz));
+    overlay_init();
+    TEST_ASSERT_EQUAL(0, overlay_restore(g_snap, sz));
+    n = overlay_read("64k.bin", back, sizeof(back));
+    TEST_ASSERT_EQUAL(65536, n);
+    TEST_ASSERT_EQUAL_MEMORY(big, back, 65536);
+
+    /* Attempting to write past 64 KiB is refused */
+    TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, overlay_write("too_big.bin", big, 65537));
+    TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, overlay_append("64k.bin", "extra", 5));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_snapshot_empty_roundtrip);
@@ -164,6 +194,7 @@ int main(void) {
     RUN_TEST(test_restore_v1_snapshot_compatibility);
     RUN_TEST(test_snapshot_v2_accepts_extended_file);
     RUN_TEST(test_snapshot_rejects_small_buffer);
+    RUN_TEST(test_64k_file_write_read_and_bounds);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

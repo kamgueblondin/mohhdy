@@ -15,12 +15,21 @@
 #define OV_ERR_PROTECTED -8
 
 #define OV_SNAP_MAGIC   0x564F4941u /* 'AIOV' little-endian */
-#define OV_SNAP_VERSION 2
-#define OV_SNAP_NODES   64
+#define OV_SNAP_VERSION 3
+#define OV_SNAP_NODES   512
 #define OV_SNAP_PATH    80
 #define OV_SNAP_DATA    384
 #define OV_SNAP_NODE    (1 + 1 + 2 + 4 + OV_SNAP_PATH + OV_SNAP_DATA)
 #define OV_SNAP_SIZE    (16 + OV_SNAP_NODES * OV_SNAP_NODE)
+
+#define OV_SNAP_V2_VERSION 2
+#define OV_SNAP_V2_NODES   64
+#define OV_SNAP_V2_PATH    80
+#define OV_SNAP_V2_DATA    384
+#define OV_SNAP_V2_NODE    (1 + 1 + 2 + 4 + OV_SNAP_V2_PATH + OV_SNAP_V2_DATA)
+#define OV_SNAP_V2_SIZE    (16 + OV_SNAP_V2_NODES * OV_SNAP_V2_NODE)
+
+#define OV_FILE_MAX_BYTES 65536U
 
 /* Lecture de compatibilite pour les images overlay creees avant AOS-023. */
 #define OV_SNAP_V1_VERSION 1

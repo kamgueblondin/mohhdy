@@ -42,7 +42,7 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 |---|---|---|
 | /net Reseau | network | `net-status`, `net-wire-status`, `net-relay-status`, `p2p-health`, `p2p-peers`, `p2p-up` (ARG+MUT) |
 | /disk Stockage | storage | `ata-status`, `mount-journal`, `persist-status`, `ls` (ARG), `stat` (ARG), `mkdir` (ARG+MUT) |
-| /services Services et pilotes | services | `devices`, `lspci`, `dev-list`, `jobs`, `task-summary`, `service-status` (ARG), `service-find` (ARG) |
+| /services Services et pilotes | services | `devices`, `lspci`, `dev-list`, `jobs`, `task-summary`, `driver-restart` (ARG+MUT), `service-status` (ARG), `service-find` (ARG) |
 | /logs Journaux | logs | `task-events`, `notify-list`, `osui-audit`, `history`, `prod-usage`, `prod-log-analyze` (ARG), `prod-log-append` (ARG+MUT) |
 | /ledger Registre collab | collab | `collab-balances`, `collab-tasks`, `collab-audit`, `p2p-up` (ARG+MUT) |
 | /ci Production | prod | `prod-diag`, `prod-alerts`, `prod-backups`, `prod-scale-status`, `prod-metrics`, `prod-sample` (MUT), `deploy-verify`, `prod-integrity` (ARG) |
@@ -50,6 +50,15 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | /search Recherche | search | `grep -r` (ARG), `grep` (ARG), `ls` (ARG) |
 | /devtools Outils web | web | `browser-status`, `browser-tabs`, `web-perf`, `web-cache`, `web-dom` (ARG), `web-console` (ARG) |
 | /notes Notes et archives | notes | `ls /`, `cat` (ARG), `append` (ARG+MUT), `migrate-export` (ARG+MUT), `migrate-verify` (ARG) |
+| /vfs Virtuel VFS | vfs | `vfs-stats`, `vfs-list` (ARG), `vfs-stat` (ARG), `vfs-read` (ARG), `vfs-mount-add` (ARG+MUT), `vfs-mount-remove` (ARG+MUT) |
+| /sessions Sessions | sessions | `session-status`, `session-list`, `session-new` (ARG+MUT), `session-use` (ARG+MUT), `session-restore` (ARG+MUT), `session-cleanup` (MUT), `session-end` (MUT) |
+| /mcp MCP | mcp | `mcp-status`, `mcp-list`, `mcp-credentials`, `mcp-invoke` (ARG+MUT), `mcp-invoice` (ARG+MUT), `mcp-invoice-void` (ARG+MUT) |
+| /media Media | media | `media-status`, `media-play` (ARG+MUT), `media-pause` (MUT), `media-stop` (MUT), `media-stream` (ARG+MUT) |
+| /grpc gRPC Wire | grpc | `grpc-wire` (ARG) |
+| /pwa PWA | pwa | `pwa-list`, `pwa-manifest` (ARG), `pwa-install` (ARG+MUT), `pwa-run` (ARG+MUT) |
+| /devsync DevSync | devsync | `devsync-show`, `devsync-sync` (MUT), `devsync-set` (ARG+MUT), `devsync-del` (ARG+MUT) |
+| /admin Administration | admin | `os-admin`, `os-status`, `admin-status`, `admin-all`, `os-support` |
+| /api API Tokens | api | `api`, `api-token` (ARG+MUT), `api-revoke` (ARG+MUT) |
 | /cmd Commande | any | any registry command typed in the input line |
 
 ## Inventory per family
@@ -57,24 +66,24 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | Family (commands) | GUI surface | Status |
 |---|---|---|
 | files: ls, cat, cp, mv, rm, mkdir, touch, stat (about 20) | Files explorer (UX3), editor, /disk, /notes | done |
-| editor: edit, pm-ide, pm-edit | Editor window (heap, window-sized grid since UX5) | partial: 72-column lines, saves over 384 bytes refused by the overlay store |
+| editor: edit, pm-ide, pm-edit | Editor window (heap, window-sized grid since UX5) | partial: 256-column lines, saves over 384 bytes supported (up to 64 KiB) |
 | processes: ps, kill, mem, jobs, task-* (27), child-* (7) | Task manager (/tasks), /services (jobs, task-summary) | partial: task-events-*, task-priority, task-suspend only through /cmd |
-| services and drivers: service-* (6), devices, lspci, dev-list, pci-rescan | /services, task manager services view | partial: read only, no driver restart from a window |
-| network: net-* (3), fetch-sim, grpc-* (6) | /net | partial: status and p2p-up; no interface configuration UI, grpc only through /cmd |
+| services and drivers: service-* (6), devices, lspci, dev-list, pci-rescan, driver-restart | /services, task manager services view | done: status view and supervised driver restart (driver-restart) |
+| network: net-* (3), fetch-sim, grpc-* (6) | /net, /grpc | done: status, wire, relay, p2p-up, grpc-wire |
 | p2p: p2p-* (27) | /peers (UX4), /net | partial: peers, stats, up, down, send; kv/raft/qos only through /cmd |
-| storage: ata-*, fat16-*, mount-*, persist-* (6), vfs-* (26) | /disk | partial: ata, mounts, persist, ls, stat, mkdir; vfs-* backend probes only through /cmd |
+| storage: ata-*, fat16-*, mount-*, persist-* (6), vfs-* (26) | /disk, /vfs | done: ata, mounts, persist, ls, stat, mkdir, vfs-* |
 | logs: task-events, notify-*, osui-audit, history, prod-log-*, prod-usage | /logs | partial |
-| collab ledger: collab-* (37) | /ledger | partial: balances, tasks, audit (needs p2p-up, offered in the panel); offers, auctions, votes, escrow forms only through /cmd |
+| collab ledger: collab-* (37) | /ledger | partial: balances, tasks, audit, p2p-up; forms in PR4 |
 | production / CI: prod-* (28), deploy-* (3), cicd | /ci | partial: diag, alerts, backups, scale, metrics, sample, integrity |
 | security / CA: whoami, id-key, cap-token, pm-ca-*, origin-* | /security | partial: local Schnorr CA only (no public authority) |
 | web devtools: web-* (13), browser-* (34) | /devtools, Browser window (UX4) | partial: status, tabs, perf, cache, DOM, console |
-| search: grep (with UX5 grep -r) | /search | done: recursive, first 8 KiB of each file, 64 hits |
+| search: grep (with UX5 grep -r) | /search | done: recursive, pagination and Morceau reads |
 | notes / archives: append, cat, migrate-* (3) | /notes | partial: no rich text, archive of a directory |
 | PromptMessage: pm-* (27) | /pmrun, editor ESC r | partial: run, check, edit; catalog/CA through /security or /cmd |
 | AI: ai-* (22), aistats, chat | /chat (GPT-2 streaming) | partial |
 | system: date, uptime, hal-*, rtc-check, screen-adapt, power-* | /settings | partial: read only |
-| sessions, mcp, media, pwa, devsync, os-*, admin-*, api-* | /cmd only | todo |
-| terminal-only: gui, console, exit, top, clear, reboot, shutdown, login | none by design | n/a |
+| sessions, mcp, media, pwa, devsync, os-*, admin-*, api-* | /sessions, /mcp, /media, /pwa, /devsync, /admin, /api | done: parity panels available for all command families |
+| terminal-only: gui, console, exit, top, clear, reboot, shutdown, login | terminal-only by design (doc justified) | done |
 
 ## Tests
 

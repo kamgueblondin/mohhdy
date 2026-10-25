@@ -9,7 +9,7 @@
 #include "os_syscalls.h"
 
 #define FSOPS_PATH_MAX 128
-#define FSOPS_FILE_MAX 8192      /* largest file read/copied/edited at once */
+#define FSOPS_FILE_MAX 65536     /* largest file read/copied/edited at once */
 
 #define FSOPS_ERR_FAIL     (-1)  /* not found / generic failure */
 #define FSOPS_ERR_EXISTS   (-2)
@@ -66,6 +66,8 @@ int fsops_mv(const fsops_io_t *io, const char *src, const char *dst, char *final
 typedef void (*fsops_grep_hit_fn)(void *ctx, const char *path, int line, const char *text, int len);
 int fsops_grep(const fsops_io_t *io, const char *dir, const char *pat, int max_hits,
                fsops_grep_hit_fn hit, void *ctx, int *files, int *truncated);
+int fsops_grep_page(const fsops_io_t *io, const char *dir, const char *pat, int start_hit, int max_hits,
+                   fsops_grep_hit_fn hit, void *ctx, int *total_hits, int *files, int *truncated);
 
 /* "existe deja", "protege (initrd)" ... */
 const char *fsops_strerror(int rc);

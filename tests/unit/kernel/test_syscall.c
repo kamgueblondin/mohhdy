@@ -1717,8 +1717,8 @@ void test_sys_overlay_append(void) {
     char buf[64];
     os_dirent_t st;
     cpu_state_t cpu = {0};
-    char big[OV_SNAP_DATA];
-    int i;
+    static char big[OV_FILE_MAX_BYTES];
+    uint32_t i;
 
     overlay_init();
 
@@ -1788,13 +1788,13 @@ void test_sys_overlay_append(void) {
     buf[19] = '\0';
     TEST_ASSERT_EQUAL_STRING("hello from initrd\nZ", buf);
 
-    for (i = 0; i < (int)OV_SNAP_DATA; i++) big[i] = 'a';
+    for (i = 0; i < OV_FILE_MAX_BYTES; i++) big[i] = 'a';
     cpu.eax = SYS_WRITEFILE;
     cpu.ebx = (uint32_t)"full.txt";
     cpu.ecx = (uint32_t)big;
-    cpu.edx = OV_SNAP_DATA;
+    cpu.edx = OV_FILE_MAX_BYTES;
     syscall_handler(&cpu);
-    TEST_ASSERT_EQUAL((int)OV_SNAP_DATA, (int)cpu.eax);
+    TEST_ASSERT_EQUAL((int)OV_FILE_MAX_BYTES, (int)cpu.eax);
 
     cpu.eax = SYS_APPEND;
     cpu.ebx = (uint32_t)"full.txt";

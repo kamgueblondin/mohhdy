@@ -875,7 +875,6 @@ static void test_gui_viewer_pixels_and_editor_size(void) {
     osui_gui_set_tool_ops(tg_run, tg_ai, tg_model, 0);
     n = sprintf(pgm, "P5 100 84 255\n");
     for (i = 0; i < 100 * 84; i++) pgm[n + i] = (char)(i % 100 < 50 ? 10 : 240);
-    TEST_ASSERT(n + 8400 > FSOPS_FILE_MAX);
     mfs_add("/home/big.pgm", 0, pgm, n + 8400);
     evt("focus d");
     feed_str("/view /home/big.pgm");

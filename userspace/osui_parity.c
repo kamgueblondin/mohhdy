@@ -29,6 +29,7 @@ static const osui_par_entry_t k_services[] = {
     { "Peripheriques (inventaire)", "dev-list", 0, 0 },
     { "Taches en arriere-plan", "jobs", 0, 0 },
     { "Resume des taches", "task-summary", 0, 0 },
+    { "Redemarrer un pilote", "driver-restart", A | M, "NOM (ex: atadriver, networker)" },
     { "Etat d'un service", "service-status", A, "NOM (ex: vfs)" },
     { "Trouver un service", "service-find", A, "NOM" },
 };
@@ -46,6 +47,9 @@ static const osui_par_entry_t k_ledger[] = {
     { "Taches collaboratives", "collab-tasks", 0, 0 },
     { "Journal d'audit", "collab-audit", 0, 0 },
     { "Monter le P2P (requis)", "p2p-up", A | M, "NOM IP [CLE]" },
+    { "Formulaire: Creer une offre", "collab-offer", A | M, "TACHE MONTANT DESC" },
+    { "Formulaire: Voter proposition", "collab-vote", A | M, "PROP CHOIX RAISON" },
+    { "Formulaire: Depot/Escrow", "collab-escrow-create", A | M, "TACHE MONTANT" },
 };
 static const osui_par_entry_t k_prod[] = {
     { "Diagnostic de production", "prod-diag", 0, 0 },
@@ -66,7 +70,7 @@ static const osui_par_entry_t k_security[] = {
     { "Signer un fichier", "pm-ca-sign", A | M, "FICHIER" },
 };
 static const osui_par_entry_t k_search[] = {
-    { "Chercher dans un repertoire (recursif)", "grep -r", A, "MOTIF [REPERTOIRE]" },
+    { "Chercher dans un repertoire (recursif)", "grep -r", A, "MOTIF [REPERTOIRE] [PAGE]" },
     { "Chercher dans un fichier", "grep", A, "MOTIF FICHIER" },
     { "Lister un repertoire", "ls", A, "CHEMIN" },
 };
@@ -85,6 +89,65 @@ static const osui_par_entry_t k_notes[] = {
     { "Archiver un repertoire", "migrate-export", A | M, "DIR ARCHIVE" },
     { "Verifier une archive", "migrate-verify", A, "ARCHIVE [DIR]" },
 };
+static const osui_par_entry_t k_vfs[] = {
+    { "Statistiques VFS", "vfs-stats", 0, 0 },
+    { "Lister un repertoire VFS", "vfs-list", A, "REPERTOIRE/ (ex: /samples/)" },
+    { "Metadonnees VFS", "vfs-stat", A, "CHEMIN" },
+    { "Lire via VFS", "vfs-read", A, "CHEMIN" },
+    { "Ajouter un montage VFS", "vfs-mount-add", A | M, "PREFIXE/ SOURCE" },
+    { "Retirer un montage VFS", "vfs-mount-remove", A | M, "PREFIXE/" },
+};
+static const osui_par_entry_t k_sessions[] = {
+    { "Statut de la session", "session-status", 0, 0 },
+    { "Lister les sessions", "session-list", 0, 0 },
+    { "Nouvelle session", "session-new", A | M, "USER ROLE" },
+    { "Utiliser une session", "session-use", A | M, "TOKEN" },
+    { "Restaurer la session", "session-restore", A | M, "TOKEN" },
+    { "Nettoyer les sessions expiress", "session-cleanup", M, 0 },
+    { "Fermer la session", "session-end", M, 0 },
+};
+static const osui_par_entry_t k_mcp[] = {
+    { "Statut MCP", "mcp-status", 0, 0 },
+    { "Lister les services MCP", "mcp-list", 0, 0 },
+    { "Identifiants MCP", "mcp-credentials", 0, 0 },
+    { "Invoquer un service MCP", "mcp-invoke", A | M, "SERVICE METHODE [ARG]" },
+    { "Facturer un appel MCP", "mcp-invoice", A | M, "CLIENT MONTANT" },
+    { "Annuler une facture MCP", "mcp-invoice-void", A | M, "FACTURE_ID" },
+};
+static const osui_par_entry_t k_media[] = {
+    { "Statut media", "media-status", 0, 0 },
+    { "Lire un flux media", "media-play", A | M, "FLUX_ID" },
+    { "Mettre en pause le flux", "media-pause", M, 0 },
+    { "Arreter la lecture media", "media-stop", M, 0 },
+    { "Diffuser un flux media", "media-stream", A | M, "SOURCE" },
+};
+static const osui_par_entry_t k_grpc[] = {
+    { "Appel gRPC wire", "grpc-wire", A, "SERVICE METHODE [PAYLOAD]" },
+};
+static const osui_par_entry_t k_pwa[] = {
+    { "Lister les PWA installees", "pwa-list", 0, 0 },
+    { "Manifeste d'une PWA", "pwa-manifest", A, "PWA_ID" },
+    { "Installer une PWA", "pwa-install", A | M, "PWA_ID MANIFEST" },
+    { "Lancer une PWA", "pwa-run", A | M, "PWA_ID" },
+};
+static const osui_par_entry_t k_devsync[] = {
+    { "Afficher la synchro devsync", "devsync-show", 0, 0 },
+    { "Synchroniser le cluster devsync", "devsync-sync", M, 0 },
+    { "Configurer un noeud devsync", "devsync-set", A | M, "NOEUD CLE VALEUR" },
+    { "Supprimer un noeud devsync", "devsync-del", A | M, "NOEUD CLE" },
+};
+static const osui_par_entry_t k_admin[] = {
+    { "Administration OS", "os-admin", 0, 0 },
+    { "Statut OS", "os-status", 0, 0 },
+    { "Statut administrateur", "admin-status", 0, 0 },
+    { "Tous les parametres admin", "admin-all", 0, 0 },
+    { "Support OS", "os-support", 0, 0 },
+};
+static const osui_par_entry_t k_api[] = {
+    { "Apercu des API", "api", 0, 0 },
+    { "Creer un token API", "api-token", A | M, "CLIENT SCOPE" },
+    { "Revoquer un token API", "api-revoke", A | M, "TOKEN_ID" },
+};
 
 const osui_par_family_t osui_par_families[] = {
     { OS_FB_APP_NET, "/net", "Reseau", "network", k_net, N(k_net) },
@@ -97,6 +160,15 @@ const osui_par_family_t osui_par_families[] = {
     { OS_FB_APP_SEARCH, "/search", "Recherche", "search", k_search, N(k_search) },
     { OS_FB_APP_DEVTOOLS, "/devtools", "Outils web", "web", k_devtools, N(k_devtools) },
     { OS_FB_APP_NOTES, "/notes", "Notes et archives", "notes", k_notes, N(k_notes) },
+    { OS_FB_APP_VFS, "/vfs", "Virtuel VFS", "vfs", k_vfs, N(k_vfs) },
+    { OS_FB_APP_SESSIONS, "/sessions", "Sessions utilisateur", "sessions", k_sessions, N(k_sessions) },
+    { OS_FB_APP_MCP, "/mcp", "Paiements MCP", "mcp", k_mcp, N(k_mcp) },
+    { OS_FB_APP_MEDIA, "/media", "Media et streaming", "media", k_media, N(k_media) },
+    { OS_FB_APP_GRPC, "/grpc", "Wire gRPC", "grpc", k_grpc, N(k_grpc) },
+    { OS_FB_APP_PWA, "/pwa", "Applications PWA", "pwa", k_pwa, N(k_pwa) },
+    { OS_FB_APP_DEVSYNC, "/devsync", "DevSync cluster", "devsync", k_devsync, N(k_devsync) },
+    { OS_FB_APP_ADMIN, "/sysadmin", "Administration", "admin", k_admin, N(k_admin) },
+    { OS_FB_APP_API, "/api", "Tokens API", "api", k_api, N(k_api) },
     { OS_FB_APP_CMD, "/cmd", "Commande", "any", 0, 0 },
 };
 const int osui_par_family_count = N(osui_par_families);
