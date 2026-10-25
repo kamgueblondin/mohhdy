@@ -23,8 +23,8 @@
 #define ATA_FSOP_DONE      3
 #define ATA_FSOP_ABORTED   4
 
-/* 30224 bytes = OV_SNAP_SIZE (fs/overlay.h), checked in ata_fsop.c. */
-#define ATA_FSOP_MIRROR_BYTES (16U + 64U * (1U + 1U + 2U + 4U + 80U + 384U))
+/* 241680 bytes = OV_SNAP_SIZE (fs/overlay.h), checked in ata_fsop.c. */
+#define ATA_FSOP_MIRROR_BYTES (16U + 512U * (1U + 1U + 2U + 4U + 80U + 384U))
 
 void ata_fsop_init(void);
 

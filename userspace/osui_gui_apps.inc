@@ -57,11 +57,17 @@ static void image_sync(void) {
     }
 }
 
+static int tool_stat(const char *path, os_dirent_t *out) {
+    if (!g_fs_io || !g_fs_io->stat) return -1;
+    return g_fs_io->stat(path, out);
+}
+
 void osui_gui_set_tool_ops(int (*run)(const char *, char *, int),
                            int (*ai_step)(const char *, int, char *, int),
                            const char *(*ai_model)(void), int (*screen)(int *, int *)) {
     g_tool_src.run = run;
     g_tool_src.read = tool_read;
+    g_tool_src.stat = tool_stat;
     g_tool_src.ai_step = ai_step;
     g_tool_src.ai_model = ai_model;
     g_tool_src.screen = screen;

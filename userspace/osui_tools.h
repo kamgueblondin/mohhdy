@@ -10,10 +10,13 @@
  * GPT-2 step syscalls (src->ai_step). Freestanding, host testable. */
 #ifndef OSUI_TOOLS_H
 #define OSUI_TOOLS_H
+#include "os_syscalls.h"
 #include "osui_app.h"
 
+#include "osui_form.h"
+
 #define OSUI_TOOL_LINES 128
-#define OSUI_TOOL_OUT 4096          /* captured command output per call */
+#define OSUI_TOOL_OUT 65536         /* captured command output per call (PR 4: 64 KiB buffer) */
 #define OSUI_TOOL_INPUT 72
 
 typedef struct {
@@ -33,6 +36,7 @@ typedef struct {
     /* UX5: 1 when NAME is a command of the shell registry (builtin or the
      * generated mohhdy_shell_commands list); 0 = old fixed allowlist */
     int (*known)(const char *name);
+    int (*stat)(const char *path, os_dirent_t *out);
 } osui_tool_src_t;
 
 enum { OSUI_TOOL_NONE = 0, OSUI_TOOL_CLOSE = 1, OSUI_TOOL_EDIT = 2, OSUI_TOOL_CHANGED = 3 };
@@ -58,6 +62,9 @@ typedef struct {
     unsigned img_gen;                          /* bumps on each new image */
     char last[OSUI_TOOL_INPUT + 40];           /* parity: last command run */
     int psel;                                  /* parity: menu line kept across runs */
+    /* PR 4: Form support */
+    osui_form_t form;
+    int has_form;
 } osui_tool_t;
 
 const char *osui_tool_toolbar(int kind);

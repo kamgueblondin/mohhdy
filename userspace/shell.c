@@ -10,6 +10,8 @@ void shell_persist_shutdown(void);
 int shell_prod_line(const char* line);
 void shell_prod_count(const char* line);
 #include <stddef.h>
+int strlen(const char* str);
+void strcpy(char* dest, const char* src);
 #include "ramfs.h"
 #include "procsim.h"
 #include "os_syscalls.h"
@@ -644,7 +646,12 @@ static int shell_pane_run(const char *cmd, char *out, int max) {
     else if (cmd[0] == 'c') (void)shell_collab_line(cmd);
     else (void)shell_prod_line(cmd);
     out[g_cap_n] = 0;
-    rc = g_cap_n;
+    if (g_cap_n >= max - 1) {
+        const char *trunc_msg = "\n[SORTIE TRONQUEE - Limite 64 Kio atteinte]\n";
+        int tlen = strlen(trunc_msg);
+        if (max > tlen + 1) strcpy(out + max - 1 - tlen, trunc_msg);
+    }
+    rc = strlen(out);
     g_cap_buf = 0;
     return rc;
 }
@@ -5241,6 +5248,58 @@ static void cmd_devices(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string(" end\n");
 }
 
+static void cmd_driver_restart(shell_context_t* ctx, char args[][128], int arg_count) {
+    int pid = -1;
+    const char *driver_name;
+    const char *service_name = 0;
+    (void)ctx;
+    if (arg_count < 1) {
+        print_error("Usage: driver-restart <driver-name>");
+        return;
+    }
+    driver_name = args[0];
+    if (strcmp(driver_name, "atadriver") == 0 || strcmp(driver_name, "ata-driver") == 0) service_name = "ata-driver";
+    else if (strcmp(driver_name, "networker") == 0 || strcmp(driver_name, "net-driver") == 0) service_name = "net-driver";
+    else if (strcmp(driver_name, "pcidriver") == 0 || strcmp(driver_name, "pci-driver") == 0) service_name = "pci-driver";
+    else if (strcmp(driver_name, "ps2driver") == 0 || strcmp(driver_name, "ps2-driver") == 0) service_name = "ps2-driver";
+    else if (strcmp(driver_name, "serialdriver") == 0 || strcmp(driver_name, "serial-driver") == 0) service_name = "serial-driver";
+    else if (strcmp(driver_name, "vgadriver") == 0 || strcmp(driver_name, "vga-driver") == 0) service_name = "vga-driver";
+    else if (strcmp(driver_name, "usbdriver") == 0 || strcmp(driver_name, "usb-driver") == 0) service_name = "usb-driver";
+    else service_name = driver_name;
+
+    pid = sys_service_lookup(service_name);
+    if (pid <= 0) {
+        os_proc_t procs[16];
+        int n = sys_ps(procs, 16);
+        for (int i = 0; i < n; i++) {
+            if (strstr(procs[i].name, driver_name) != 0) {
+                pid = procs[i].pid;
+                break;
+            }
+        }
+    }
+
+    if (pid <= 0) {
+        print_error("driver-restart: pilote introuvable");
+        return;
+    }
+
+    sys_kill_pid(pid);
+
+    if (strcmp(driver_name, "networker") == 0 || strcmp(service_name, "net-driver") == 0) {
+        yield();
+        if (sys_service_lookup("net-driver") <= 0) {
+            spawn("bin/networker", 0);
+        }
+    }
+
+    print_string("driver-restart ok ");
+    print_string(driver_name);
+    print_string(" pid ");
+    print_int(pid);
+    print_string("\n");
+}
+
 static void cmd_pci_rescan(shell_context_t* ctx, char args[][128], int arg_count) {
     os_ipc_payload_t payload;
     int target, rc;
@@ -5526,16 +5585,33 @@ static void grep_r_hit(void *ctx, const char *path, int line, const char *text, 
 
 static void cmd_grep_r(shell_context_t* ctx, char args[][128], int arg_count) {
     char dir[RAMFS_PATH_MAX];
-    int files = 0, cut = 0, n;
-    if (arg_count < 2) { print_error("grep: usage grep -r <motif> [repertoire]"); return; }
-    resolve_arg(ctx, arg_count >= 3 ? args[2] : ".", dir);
-    n = fsops_grep(&shell_fs_io, dir, args[1], 64, grep_r_hit, 0, &files, &cut);
+    int files = 0, cut = 0, n, total = 0;
+    int page = 1, start_hit = 0;
+    const char *target_dir = ".";
+    if (arg_count < 2) { print_error("grep: usage grep -r <motif> [repertoire] [page]"); return; }
+    if (arg_count >= 3) {
+        if (args[2][0] >= '0' && args[2][0] <= '9') {
+            page = parse_int(args[2]);
+        } else {
+            target_dir = args[2];
+            if (arg_count >= 4 && args[3][0] >= '0' && args[3][0] <= '9') {
+                page = parse_int(args[3]);
+            }
+        }
+    }
+    if (page < 1) page = 1;
+    start_hit = (page - 1) * 64;
+    resolve_arg(ctx, target_dir, dir);
+    n = fsops_grep_page(&shell_fs_io, dir, args[1], start_hit, 64, grep_r_hit, 0, &total, &files, &cut);
     if (n < 0) { print_error("grep: repertoire introuvable"); return; }
-    if (n == 0) print_string("(aucune correspondance)\n");
+    if (n == 0 && total == 0) print_string("(aucune correspondance)\n");
+    else if (n == 0) print_string("(aucune correspondance sur cette page)\n");
     print_string("grep -r hits "); print_int(n);
+    print_string(" total "); print_int(total);
+    print_string(" page "); print_int(page);
     print_string(" files "); print_int(files);
     print_string(" truncated "); print_int(cut);
-    print_string(n >= 64 ? " (limite 64)\n" : "\n");
+    print_string("\n");
 }
 
 static void cmd_grep(shell_context_t* ctx, char args[][128], int arg_count) {
@@ -7131,6 +7207,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
     } else if (strcmp(command, "devices") == 0) {
         cmd_devices(ctx, args, arg_count);
         return 1;
+    } else if (strcmp(command, "driver-restart") == 0) {
+        cmd_driver_restart(ctx, args, arg_count);
+        return 1;
     } else if (strcmp(command, "lspci") == 0) {
         cmd_lspci(ctx, args, arg_count);
         return 1;
@@ -7357,7 +7436,12 @@ static int shell_app_run(const char *cmd, char *out, int max) {
     g_cap_buf = out; g_cap_n = 0; g_cap_max = max;
     handle_line(g_live_ctx, line);
     out[g_cap_n] = 0;
-    i = g_cap_n;
+    if (g_cap_n >= max - 1) {
+        const char *trunc_msg = "\n[SORTIE TRONQUEE - Limite 64 Kio atteinte]\n";
+        int tlen = strlen(trunc_msg);
+        if (max > tlen + 1) strcpy(out + max - 1 - tlen, trunc_msg);
+    }
+    i = strlen(out);
     g_cap_buf = 0;
     return i;
 }

@@ -217,7 +217,7 @@ const char *fsops_strerror(int rc) {
 typedef struct {
     const fsops_io_t *io;
     const char *pat;
-    int plen, max, hits, files, cut;
+    int plen, start, max, hits, total, files, cut;
     fsops_grep_hit_fn hit;
     void *ctx;
 } grep_state_t;
@@ -241,12 +241,15 @@ static void grep_file(grep_state_t *g, const char *path, int size) {
     if (n < 0) return;
     g->files++;
     if (size > (int)sizeof(g_grep_buf) || n >= (int)sizeof(g_grep_buf)) g->cut++;
-    while (i < n && g->hits < g->max) {
+    while (i < n) {
         int s = i;
         while (i < n && g_grep_buf[i] != '\n') i++;
         if (line_has(g_grep_buf + s, i - s, g->pat, g->plen)) {
-            g->hits++;
-            if (g->hit) g->hit(g->ctx, path, line, g_grep_buf + s, i - s);
+            if (g->total >= g->start && g->hits < g->max) {
+                g->hits++;
+                if (g->hit) g->hit(g->ctx, path, line, g_grep_buf + s, i - s);
+            }
+            g->total++;
         }
         i++; line++;
     }
@@ -257,7 +260,7 @@ static int grep_dir(grep_state_t *g, const char *dir, int depth) {
     char p[FSOPS_PATH_MAX];
     int n = fsops_list(g->io, dir, e, FSOPS_GREP_DIR), i;
     if (n < 0) return n;
-    for (i = 0; i < n && g->hits < g->max; i++) {
+    for (i = 0; i < n; i++) {
         fsops_join(p, (int)sizeof(p), dir, e[i].name);
         if (e[i].flags == OS_DIRENT_DIR) { if (depth < FSOPS_GREP_DEPTH) (void)grep_dir(g, p, depth + 1); }
         else grep_file(g, p, (int)e[i].size);
@@ -265,18 +268,27 @@ static int grep_dir(grep_state_t *g, const char *dir, int depth) {
     return 0;
 }
 
-int fsops_grep(const fsops_io_t *io, const char *dir, const char *pat, int max_hits,
-               fsops_grep_hit_fn hit, void *ctx, int *files, int *truncated) {
+int fsops_grep_page(const fsops_io_t *io, const char *dir, const char *pat, int start_hit, int max_hits,
+                   fsops_grep_hit_fn hit, void *ctx, int *total_hits, int *files, int *truncated) {
     grep_state_t g;
     os_dirent_t st;
     int rc;
     if (!io || !dir || !pat) return FSOPS_ERR_FAIL;
-    g.io = io; g.pat = pat; g.plen = 0; g.max = max_hits > 0 ? max_hits : 1;
-    g.hits = 0; g.files = 0; g.cut = 0; g.hit = hit; g.ctx = ctx;
+    g.io = io; g.pat = pat; g.plen = 0;
+    g.start = start_hit > 0 ? start_hit : 0;
+    g.max = max_hits > 0 ? max_hits : 1;
+    g.hits = 0; g.total = 0; g.files = 0; g.cut = 0; g.hit = hit; g.ctx = ctx;
     while (pat[g.plen]) g.plen++;
     if (io->stat && io->stat(dir, &st) == 0 && st.flags != OS_DIRENT_DIR) { grep_file(&g, dir, (int)st.size); rc = 0; }
     else rc = grep_dir(&g, dir, 0);
+    if (total_hits) *total_hits = g.total;
     if (files) *files = g.files;
     if (truncated) *truncated = g.cut;
     return rc < 0 ? rc : g.hits;
+}
+
+int fsops_grep(const fsops_io_t *io, const char *dir, const char *pat, int max_hits,
+               fsops_grep_hit_fn hit, void *ctx, int *files, int *truncated) {
+    int total = 0;
+    return fsops_grep_page(io, dir, pat, 0, max_hits, hit, ctx, &total, files, truncated);
 }
