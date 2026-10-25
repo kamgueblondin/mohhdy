@@ -837,6 +837,7 @@ test-all:
 	@echo "=== Suite complète de tests de non-régression ==="
 	@$(MAKE) -C tests test
 	@python3 scripts/extract_guest_commands.py --check
+	@python3 scripts/check_gui_parity.py
 	@python3 tests/scripts/test_python_facade_removed.py
 	@python3 tests/scripts/check_shell_dispatch_returns.py
 	@python3 tests/scripts/check_initrd_capacity.py
@@ -1056,6 +1057,10 @@ qemu-gui-ux5: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_ux5.py
 
 .PHONY: qemu-gui-ux5
+qemu-gui-parity: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_parity.py
+
+.PHONY: qemu-gui-parity
 qemu-gui-shell: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_shell_same.py
 
@@ -1182,6 +1187,7 @@ help:
 	@echo "  qemu-osui-gui   - Fumee QEMU : gui, screendump VBE, tablet click dock, console (hors integration-qemu)"
 	@echo "  qemu-gui-apps   - Fumee QEMU : explorateur + editeur du bureau, cat dans le terminal"
 	@echo "  qemu-gui-ux5    - Fumee QEMU UX5 : parite GUI (editeur dynamique, visionneuse pixels, outils)"
+	@echo "  qemu-gui-parity - Fumee QEMU UX5 : panneaux GUI des familles de commandes terminal"
 	@echo "  qemu-gui-tools  - Fumee QEMU : gestionnaire des taches, parametres, P2P, PM, visionneuse, chat"
 	@echo "  qemu-osui-gui-fit - GTK : VBE suit la fenetre (DISPLAY, hors integration-qemu)"
 	@echo "  osui-registry-check - Verifie JSON/header vs userspace/shell.c"

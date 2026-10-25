@@ -79,9 +79,9 @@ static const osui_par_entry_t k_devtools[] = {
     { "Console d'un fichier", "web-console", A, "FICHIER" },
 };
 static const osui_par_entry_t k_notes[] = {
-    { "Lister les notes (/home/user)", "ls /home/user", 0, 0 },
-    { "Lire une note", "cat", A, "FICHIER (ex: /home/user/n.txt)" },
-    { "Ajouter une ligne a une note", "append", A | M, "FICHIER TEXTE (ex: /home/user/n.txt)" },
+    { "Lister la racine (notes de l'overlay)", "ls /", 0, 0 },
+    { "Lire une note", "cat", A, "FICHIER (ex: /notes.txt)" },
+    { "Ajouter une ligne a une note", "append", A | M, "FICHIER TEXTE (ex: /notes.txt)" },
     { "Archiver un repertoire", "migrate-export", A | M, "DIR ARCHIVE" },
     { "Verifier une archive", "migrate-verify", A, "ARCHIVE [DIR]" },
 };

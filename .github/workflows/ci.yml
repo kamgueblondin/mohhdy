@@ -380,6 +380,10 @@ jobs:
       - name: QEMU UX5 GUI parity
         run: make qemu-gui-ux5
 
+      # UX5: one desktop panel per terminal command family (about 1.5 min)
+      - name: QEMU UX5 GUI parity panels (network, storage, services, logs, ledger, prod, security, search, devtools, notes, /cmd)
+        run: make qemu-gui-parity
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

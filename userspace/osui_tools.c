@@ -647,10 +647,14 @@ static void panel_exec(osui_tool_t *t, const osui_tool_src_t *src, const char *c
     t_cpy(t->log, (int)sizeof(t->log), "osui panel run cmd=");
     t_cat(t->log, (int)sizeof(t->log), cmd);
     t_cat(t->log, (int)sizeof(t->log), n < 0 ? " refused" : " ok");
-    if (t->n > 1) {
-        /* first output line, for the serial log and the QEMU tests */
-        t_cat(t->log, (int)sizeof(t->log), "\nosui panel out=");
-        t_cat(t->log, (int)sizeof(t->log), t->lines[1]);
+    {
+        /* first non blank output line, for the serial log and the tests */
+        int k = 1;
+        while (k < t->n && !t->lines[k][0]) k++;
+        if (k < t->n) {
+            t_cat(t->log, (int)sizeof(t->log), "\nosui panel out=");
+            t_cat(t->log, (int)sizeof(t->log), t->lines[k]);
+        }
     }
     set_status(t, n < 0 ? "refusee: " : "sortie reelle de ", cmd);
     t_cat(t->status, (int)sizeof(t->status), "  (Echap/Menu: retour)");
