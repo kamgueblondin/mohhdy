@@ -57,7 +57,7 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | /grpc gRPC Wire | grpc | `grpc-wire` (ARG) |
 | /pwa PWA | pwa | `pwa-list`, `pwa-manifest` (ARG), `pwa-install` (ARG+MUT), `pwa-run` (ARG+MUT) |
 | /devsync DevSync | devsync | `devsync-show`, `devsync-sync` (MUT), `devsync-set` (ARG+MUT), `devsync-del` (ARG+MUT) |
-| /admin Administration | admin | `os-admin`, `os-status`, `admin-status`, `admin-all`, `os-support` |
+| /sysadmin Administration | admin | `os-admin`, `os-status`, `admin-status`, `admin-all`, `os-support` |
 | /api API Tokens | api | `api`, `api-token` (ARG+MUT), `api-revoke` (ARG+MUT) |
 | /cmd Commande | any | any registry command typed in the input line |
 
@@ -66,24 +66,24 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | Family (commands) | GUI surface | Status |
 |---|---|---|
 | files: ls, cat, cp, mv, rm, mkdir, touch, stat (about 20) | Files explorer (UX3), editor, /disk, /notes | done |
-| editor: edit, pm-ide, pm-edit | Editor window (heap, window-sized grid since UX5) | partial: 256-column lines, saves over 384 bytes supported (up to 64 KiB) |
+| editor: edit, pm-ide, pm-edit | Editor window (heap, window-sized grid since UX5) | partial: still 72-column lines (not changed in Lot 44); saves up to 30 KiB (overlay chained blocks) |
 | processes: ps, kill, mem, jobs, task-* (27), child-* (7) | Task manager (/tasks), /services (jobs, task-summary) | partial: task-events-*, task-priority, task-suspend only through /cmd |
-| services and drivers: service-* (6), devices, lspci, dev-list, pci-rescan, driver-restart | /services, task manager services view | done: status view and supervised driver restart (driver-restart) |
-| network: net-* (3), fetch-sim, grpc-* (6) | /net, /grpc | done: status, wire, relay, p2p-up, grpc-wire |
+| services and drivers: service-* (6), devices, lspci, dev-list, pci-rescan, driver-restart | /services, task manager services view | partial: status view and `driver-restart` (fixed Ring 3 driver names, respawn by the kernel supervisor; networker restarted by the shell); no QEMU proof yet |
+| network: net-* (3), fetch-sim, grpc-* (6) | /net, /grpc | partial: status, wire, relay, p2p-up, grpc-wire; no interface configuration UI |
 | p2p: p2p-* (27) | /peers (UX4), /net | partial: peers, stats, up, down, send; kv/raft/qos only through /cmd |
-| storage: ata-*, fat16-*, mount-*, persist-* (6), vfs-* (26) | /disk, /vfs | done: ata, mounts, persist, ls, stat, mkdir, vfs-* |
+| storage: ata-*, fat16-*, mount-*, persist-* (6), vfs-* (26) | /disk, /vfs | partial: ata, mounts, persist, ls, stat, mkdir, vfs-stats/list/stat/read/mount-add/mount-remove; other vfs-* probes through /cmd |
 | logs: task-events, notify-*, osui-audit, history, prod-log-*, prod-usage | /logs | partial |
-| collab ledger: collab-* (37) | /ledger | partial: balances, tasks, audit, p2p-up; forms in PR4 |
+| collab ledger: collab-* (37) | /ledger | partial: balances, tasks, audit, p2p-up; forms (offer, vote, escrow create, release/refund/dispute) build the shell grammar and need a second Enter; no QEMU proof yet |
 | production / CI: prod-* (28), deploy-* (3), cicd | /ci | partial: diag, alerts, backups, scale, metrics, sample, integrity |
 | security / CA: whoami, id-key, cap-token, pm-ca-*, origin-* | /security | partial: local Schnorr CA only (no public authority) |
 | web devtools: web-* (13), browser-* (34) | /devtools, Browser window (UX4) | partial: status, tabs, perf, cache, DOM, console |
-| search: grep (with UX5 grep -r) | /search | done: recursive, pagination and Morceau reads |
+| search: grep (with UX5 grep -r) | /search | done: recursive, first 32 KiB of each file (cut files counted), pages of 64 hits (`grep -r MOTIF [REP] [PAGE]`) |
 | notes / archives: append, cat, migrate-* (3) | /notes | partial: no rich text, archive of a directory |
 | PromptMessage: pm-* (27) | /pmrun, editor ESC r | partial: run, check, edit; catalog/CA through /security or /cmd |
 | AI: ai-* (22), aistats, chat | /chat (GPT-2 streaming) | partial |
 | system: date, uptime, hal-*, rtc-check, screen-adapt, power-* | /settings | partial: read only |
-| sessions, mcp, media, pwa, devsync, os-*, admin-*, api-* | /sessions, /mcp, /media, /pwa, /devsync, /admin, /api | done: parity panels available for all command families |
-| terminal-only: gui, console, exit, top, clear, reboot, shutdown, login | terminal-only by design (doc justified) | done |
+| sessions, mcp, media, pwa, devsync, os-*, admin-*, api-* | /sessions, /mcp, /media, /pwa, /devsync, /sysadmin, /api | partial: panels on the registry (table checked in test-all), argument hints match the commands; media is simule; no QEMU test per panel |
+| terminal-only: gui, console, exit, top, clear, reboot, shutdown, login | none by design | n/a |
 
 ## Tests
 
