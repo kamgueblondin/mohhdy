@@ -13,8 +13,8 @@ after the fix-forward commits on the same branch.
 | PR1 editor lines over 72 columns | missing | lines still 72 columns | - |
 | PR2 US-G16 large files | partial | overlay v3: chained 384-byte blocks, files up to 30 KiB, dense image in the 64-sector AIOV area, transactional write/append/copy, kernel relay in 4 KiB chunks through the 8 KiB atadriver buffer | test_overlay (30 KiB byte exact, read_at, snapshot/restore, refusal keeps old file, broken image refused), test_fsops, QEMU persistence (27993-byte file through the driver) |
 | PR2 64 KiB Save As | missing | 64 KiB does not fit the 32 KiB AIOV area; needs a new disk layout (FAT16 base LBA 64) | - |
-| PR3 US-G17 panels | partial | /vfs /sessions /mcp /media /grpc /pwa /devsync /sysadmin /api on the shell registry, double Enter for mutations (existing rule) | test_osui_parity (table vs registry); no QEMU per panel |
-| PR3 /services driver restart | partial | `driver-restart` for the fixed Ring 3 drivers, kernel rights on SYS_KILL, kernel supervisor respawn | none in QEMU yet |
+| PR3 US-G17 panels | partial | /vfs /sessions /mcp /media /grpc /pwa /devsync /sysadmin /api on the shell registry, double Enter for mutations (existing rule) | test_osui_parity (table vs registry); qemu-gui-parity runs the first entry of /vfs /sessions /mcp /media /pwa /sysadmin /api |
+| PR3 /services driver restart | partial | `driver-restart` for the fixed Ring 3 drivers, kernel rights on SYS_KILL, kernel supervisor respawn | qemu-gui-parity: stop of pci-driver from /cmd (lazy respawn not asserted) |
 | PR4 generic form + ledger forms | partial | osui_form: text, list, submit, required fields; collab-offer, collab-vote, collab-escrow-create, release/refund/dispute built in the shell grammar, second Enter, output shown | test_osui_form |
 | PR4 capture of commands that spawn a program | missing | output of a separate program is still not captured | - |
 | PR4 bounded output buffer | partial | 64 KiB capture buffer with a truncation note; the window keeps the last 128 lines and says how many were dropped | unit (existing panel tests) |

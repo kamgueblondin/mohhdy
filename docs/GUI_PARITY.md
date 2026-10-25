@@ -50,10 +50,10 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | /search Recherche | search | `grep -r` (ARG), `grep` (ARG), `ls` (ARG) |
 | /devtools Outils web | web | `browser-status`, `browser-tabs`, `web-perf`, `web-cache`, `web-dom` (ARG), `web-console` (ARG) |
 | /notes Notes et archives | notes | `ls /`, `cat` (ARG), `append` (ARG+MUT), `migrate-export` (ARG+MUT), `migrate-verify` (ARG) |
-| /vfs Virtuel VFS | vfs | `vfs-stats`, `vfs-list` (ARG), `vfs-stat` (ARG), `vfs-read` (ARG), `vfs-mount-add` (ARG+MUT), `vfs-mount-remove` (ARG+MUT) |
+| /vfs Virtuel VFS (needs the vfs server: `spawn bin/vfsserver` in /cmd) | vfs | `vfs-stats`, `vfs-list` (ARG), `vfs-stat` (ARG), `vfs-read` (ARG), `vfs-mount-add` (ARG+MUT), `vfs-mount-remove` (ARG+MUT) |
 | /sessions Sessions | sessions | `session-status`, `session-list`, `session-new` (ARG+MUT), `session-use` (ARG+MUT), `session-restore` (ARG+MUT), `session-cleanup` (MUT), `session-end` (MUT) |
 | /mcp MCP | mcp | `mcp-status`, `mcp-list`, `mcp-credentials`, `mcp-invoke` (ARG+MUT), `mcp-invoice` (ARG+MUT), `mcp-invoice-void` (ARG+MUT) |
-| /media Media | media | `media-status`, `media-play` (ARG+MUT), `media-pause` (MUT), `media-stop` (MUT), `media-stream` (ARG+MUT) |
+| /media Media | media | `browser-media`, `media-play` (ARG+MUT), `media-pause` (MUT), `media-stop` (MUT), `media-stream` (ARG+MUT) |
 | /grpc gRPC Wire | grpc | `grpc-wire` (ARG) |
 | /pwa PWA | pwa | `pwa-list`, `pwa-manifest` (ARG), `pwa-install` (ARG+MUT), `pwa-run` (ARG+MUT) |
 | /devsync DevSync | devsync | `devsync-show`, `devsync-sync` (MUT), `devsync-set` (ARG+MUT), `devsync-del` (ARG+MUT) |
@@ -68,7 +68,7 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | files: ls, cat, cp, mv, rm, mkdir, touch, stat (about 20) | Files explorer (UX3), editor, /disk, /notes | done |
 | editor: edit, pm-ide, pm-edit | Editor window (heap, window-sized grid since UX5) | partial: still 72-column lines (not changed in Lot 44); saves up to 30 KiB (overlay chained blocks) |
 | processes: ps, kill, mem, jobs, task-* (27), child-* (7) | Task manager (/tasks), /services (jobs, task-summary) | partial: task-events-*, task-priority, task-suspend only through /cmd |
-| services and drivers: service-* (6), devices, lspci, dev-list, pci-rescan, driver-restart | /services, task manager services view | partial: status view and `driver-restart` (fixed Ring 3 driver names, respawn by the kernel supervisor; networker restarted by the shell); no QEMU proof yet |
+| services and drivers: service-* (6), devices, lspci, dev-list, pci-rescan, driver-restart | /services, task manager services view | partial: status view and `driver-restart` (fixed Ring 3 driver names, respawn by the kernel supervisor; networker restarted by the shell); qemu-gui-parity proves the stop from /cmd, the lazy respawn is not asserted |
 | network: net-* (3), fetch-sim, grpc-* (6) | /net, /grpc | partial: status, wire, relay, p2p-up, grpc-wire; no interface configuration UI |
 | p2p: p2p-* (27) | /peers (UX4), /net | partial: peers, stats, up, down, send; kv/raft/qos only through /cmd |
 | storage: ata-*, fat16-*, mount-*, persist-* (6), vfs-* (26) | /disk, /vfs | partial: ata, mounts, persist, ls, stat, mkdir, vfs-stats/list/stat/read/mount-add/mount-remove; other vfs-* probes through /cmd |
@@ -82,7 +82,7 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | PromptMessage: pm-* (27) | /pmrun, editor ESC r | partial: run, check, edit; catalog/CA through /security or /cmd |
 | AI: ai-* (22), aistats, chat | /chat (GPT-2 streaming) | partial |
 | system: date, uptime, hal-*, rtc-check, screen-adapt, power-* | /settings | partial: read only |
-| sessions, mcp, media, pwa, devsync, os-*, admin-*, api-* | /sessions, /mcp, /media, /pwa, /devsync, /sysadmin, /api | partial: panels on the registry (table checked in test-all), argument hints match the commands; media is simule; no QEMU test per panel |
+| sessions, mcp, media, pwa, devsync, os-*, admin-*, api-* | /sessions, /mcp, /media, /pwa, /devsync, /sysadmin, /api | partial: panels on the registry (table checked in test-all), argument hints match the commands; qemu-gui-parity runs the first entry of each (not /grpc, /devsync); media is simule |
 | terminal-only: gui, console, exit, top, clear, reboot, shutdown, login | none by design | n/a |
 
 ## Tests

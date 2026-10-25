@@ -116,7 +116,7 @@ static const osui_par_entry_t k_mcp[] = {
     { "Annuler une facture MCP", "mcp-invoice-void", A | M, "FACTURE_ID" },
 };
 static const osui_par_entry_t k_media[] = {
-    { "Statut media", "media-status", 0, 0 },
+    { "Etat du lecteur media (simule)", "browser-media", 0, 0 },
     { "Lire un media (simule)", "media-play", A | M, "[TYPE] [TITRE]" },
     { "Mettre en pause le flux", "media-pause", M, 0 },
     { "Arreter la lecture media", "media-stop", M, 0 },

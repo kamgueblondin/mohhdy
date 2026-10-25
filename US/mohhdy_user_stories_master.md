@@ -414,7 +414,7 @@ completent le backlog ; elles n'en retirent aucune.
 | US-G03 | Viewer draws PGM/PPM as pixels | partial (no PNG/JPEG/BMP) |
 | US-G04 | Network panel /net | partial (status, p2p-up; no interface configuration) |
 | US-G05 | Storage panel /disk | partial (ata, mounts, persist, ls, stat, mkdir) |
-| US-G06 | Services and drivers panel /services | partial (driver-restart of the fixed Ring 3 drivers, kernel supervisor respawn; no QEMU proof yet) |
+| US-G06 | Services and drivers panel /services | partial (driver-restart of the fixed Ring 3 drivers, kernel supervisor respawn; qemu-gui-parity proves the stop of pci-driver from /cmd, the respawn itself is lazy and not asserted) |
 | US-G07 | Logs panel /logs | partial |
 | US-G08 | Collab ledger panel /ledger | partial (forms for offer, vote, escrow create, release/refund/dispute: shell grammar, second Enter, unit tested; no QEMU proof yet) |
 | US-G09 | Production / CI panel /ci (the /prod name is the existing production pane) | partial |
@@ -425,7 +425,7 @@ completent le backlog ; elles n'en retirent aucune.
 | US-G14 | Generic command window /cmd | done |
 | US-G15 | Window-sized grid for every app | todo (Lot 44 PR did not implement it) |
 | US-G16 | Large persistent saves (overlay node 384 bytes) | partial (Lot 44: chained blocks, files up to 30 KiB inside the 32 KiB AIOV disk area, chunked atadriver relay, QEMU byte count proof; 64 KiB needs a new disk layout, FAT16 starts at LBA 64) |
-| US-G17 | Panels for vfs, task, session, mcp, media, grpc | partial (Lot 44: /vfs /sessions /mcp /media /grpc /pwa /devsync /sysadmin /api on the registry, checked against it in test-all; no QEMU test per panel; media is simule) |
+| US-G17 | Panels for vfs, task, session, mcp, media, grpc | partial (Lot 44: /vfs /sessions /mcp /media /grpc /pwa /devsync /sysadmin /api on the registry, checked against it in test-all; qemu-gui-parity runs the first entry of /vfs /sessions /mcp /media /pwa /sysadmin /api; /grpc and /devsync entries need arguments and have no QEMU run; media is simule) |
 
 Preuves : `test_osui_parity`, `test_osui_gui`, `test_fsops`,
 `test_osui_editor`, `test_gfx_desktop`, `make qemu-gui-ux5`,
