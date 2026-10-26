@@ -301,17 +301,32 @@ int osui_files_click(osui_files_t *f, int row, int col, int dbl) {
     return OSUI_FILES_NONE;
 }
 
+/* Lot 46: a row is as wide as the window grid (77 columns by default) */
+static int g_row_cols = OSUI_APP_COLS;
 static void put_row(osui_app_view_t *v, int r, const char *s, unsigned char a) {
     int k;
-    s_cpy(v->rows[r], OSUI_APP_COLS, s);
-    for (k = 0; k < OSUI_APP_COLS; k++) v->attr[r][k] = a;
+    s_cpy(v->rows[r], g_row_cols, s);
+    for (k = 0; k < g_row_cols; k++) v->attr[r][k] = a;
+}
+
+/* Lot 46: grid columns of the window and the width of the name column */
+static int files_cols(const osui_files_t *f) {
+    int c = f->vcols > 0 ? f->vcols : OSUI_APP_COLS - 1;
+    if (c > OSUI_APP_MAX_COLS - 1) c = OSUI_APP_MAX_COLS - 1;
+    if (c < 40) c = 40;
+    return c;
+}
+static int files_namecol(const osui_files_t *f) {
+    int n = 46 + files_cols(f) - (OSUI_APP_COLS - 1);
+    return n < 16 ? 16 : n;
 }
 
 void osui_files_render(const osui_files_t *f, osui_app_view_t *v) {
-    char line[OSUI_APP_COLS + 16];
-    int r, i;
+    char line[OSUI_APP_MAX_COLS + OS_NAME_MAX + 16];
+    int r, i, namecol;
     osui_app_view_clear(v);
     if (!f || !f->active) return;
+    g_row_cols = files_cols(f) + 1;
     s_cpy(v->title, (int)sizeof(v->title), "Fichiers - ");
     s_cat(v->title, (int)sizeof(v->title), f->cwd);
     s_cpy(v->tool, OSUI_APP_COLS, osui_files_toolbar);
@@ -331,7 +346,18 @@ void osui_files_render(const osui_files_t *f, osui_app_view_t *v) {
         }
         put_row(v, 0, line, OSUI_APP_A_LINK);
     }
-    put_row(v, 1, "  Nom                                         Taille   Type", OSUI_APP_A_DIM);
+    /* Lot 46: the name column takes the width the window gives (46 at the
+     * default 77-column grid, as before); a name wider than it is cut with
+     * '~' (a wider window shows it whole) */
+    namecol = files_namecol(f);
+    s_cpy(line, (int)sizeof(line), "  Nom");
+    {
+        int k;
+        for (k = s_len(line); k < namecol; k++) line[k] = ' ';
+        line[namecol] = 0;
+    }
+    s_cat(line, (int)sizeof(line), "Taille   Type");
+    put_row(v, 1, line, OSUI_APP_A_DIM);
     for (r = 2, i = f->top; r < files_rows(f) && i < f->n; r++, i++) {
         const os_dirent_t *e = &f->ent[i];
         int dir = e->flags == OS_DIRENT_DIR, k;
@@ -339,8 +365,9 @@ void osui_files_render(const osui_files_t *f, osui_app_view_t *v) {
         s_cpy(line, (int)sizeof(line), dir ? "+ " : "  ");
         s_cat(line, (int)sizeof(line), e->name);
         if (dir) s_cat(line, (int)sizeof(line), "/");
-        for (k = s_len(line); k < 46; k++) line[k] = ' ';
-        line[46] = 0;
+        if (s_len(line) > namecol - 1) { line[namecol - 2] = '~'; line[namecol - 1] = 0; }
+        for (k = s_len(line); k < namecol; k++) line[k] = ' ';
+        line[namecol] = 0;
         num[0] = 0;
         if (!dir) s_cat_u(num, (int)sizeof(num), e->size);
         for (k = s_len(num); k < 8; k++) s_cat(line, (int)sizeof(line), " ");

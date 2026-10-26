@@ -277,10 +277,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Lot 46: two runs were cancelled at 15 min while apt crawled from
+      # the runner's Azure mirror (~100 KB/s on the 57 MB gcc package).
+      # The .debs are cached; each attempt is bounded and the retry uses
+      # the main Ubuntu archive instead of the Azure mirror.
+      - name: Cache ARM toolchain packages
+        uses: actions/cache@v4
+        with:
+          path: ~/apt-arm
+          key: apt-arm-${{ runner.os }}-noble-v1
+
       - name: Install ARM toolchain and QEMU
+        timeout-minutes: 11
         run: |
-          sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi qemu-system-arm
+          mkdir -p ~/apt-arm/partial
+          pkgs="gcc-arm-none-eabi libnewlib-arm-none-eabi qemu-system-arm"
+          opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120 -o Dir::Cache::archives=$HOME/apt-arm"
+          for i in 1 2; do
+            if timeout 120 sudo apt-get update $opts && \
+               timeout 420 sudo apt-get install -y --no-install-recommends $opts $pkgs; then
+              sudo chown -R "$USER" ~/apt-arm
+              exit 0
+            fi
+            echo "apt attempt $i failed; switching to archive.ubuntu.com"
+            sudo sed -i 's#http://azure.archive.ubuntu.com#http://archive.ubuntu.com#g' \
+              /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+          done
+          exit 1
 
       - name: Build and boot the ARM kernel (make qemu-arm-boot)
         run: make arm-kernel qemu-arm-boot
@@ -389,6 +412,48 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gui-parity-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
+  gui-panels:
+    name: QEMU desktop panels, every entry (Lot 46)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      # Lot 46: 64 entries of /net /disk /services /logs /ci /security
+      # /devtools /notes (about 3 min under TCG)
+      - name: QEMU GUI panels, every entry with arguments and confirmations
+        run: make qemu-gui-panels
+
+      # Lot 46 PR B (US-G16): editor Save As of 64 KiB, v4 overlay image
+      # over LBA 0-63 + 4225-4352, byte exact on disk, cold reboot, FAT16
+      # volume untouched, 64 KiB + 1 refused (two boots, about 5 min)
+      - name: QEMU large save (64 KiB) across a reboot
+        run: make qemu-gui-bigsave
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-panels-logs
           if-no-files-found: ignore
           path: |
             test_logs/

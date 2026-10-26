@@ -456,6 +456,117 @@ void test_raft_snapshot_installs_for_a_lagging_follower(void) {
     TEST_ASSERT_EQUAL(2, (int)g_n[2].raft.snapshot_index);
 }
 
+/* Lot 46: a leader whose follower is cut does not resend the unacked entry
+ * on every p2p_tick (the guest loop ticks many times per timer tick). */
+void test_raft_resend_paced_for_cut_follower(void) {
+    uint32_t before;
+    int k;
+    setup(3, 0);
+    run(3, 300);
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    g_cut[0][2] = 1;
+    g_cut[1][2] = 1;
+    TEST_ASSERT_EQUAL(1, p2p_raft_append(&g_n[0], &g_h[0], "tone", "blue"));
+    before = g_n[0].tx_type[P2P_I_RAFT_APPEND];
+    for (k = 0; k < 500; k++) p2p_tick(&g_n[0], &g_h[0], 32); /* same tick */
+    TEST_ASSERT_TRUE(g_n[0].tx_type[P2P_I_RAFT_APPEND] - before <= 2U);
+    g_ticks += P2P_HZ / 4U;
+    p2p_tick(&g_n[0], &g_h[0], 32);
+    TEST_ASSERT_TRUE(g_n[0].tx_type[P2P_I_RAFT_APPEND] - before >= 1U);
+    /* the healed follower still catches up */
+    g_cut[0][2] = 0;
+    g_cut[1][2] = 0;
+    run(3, 120);
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[2], "tone"));
+}
+
+static p2p_peer_t* peer_of(p2p_node_t* n, uint32_t id) {
+    int i;
+    for (i = 0; i < P2P_PEERS; i++) if (n->peers[i].used && n->peers[i].id == id) return &n->peers[i];
+    return 0;
+}
+static void cut_node(int k, int on) {
+    int i;
+    for (i = 0; i < NODES; i++) if (i != k) { g_cut[k][i] = on; g_cut[i][k] = on; }
+}
+
+/* Lot 46 bug 1: a follower commits up to min(leaderCommit, matched index),
+ * never to its own log end. The isolated old leader alpha holds an
+ * uncommitted index 2; the new leader backs up to index 1 (it may, after a
+ * reject) while its commit is 3: alpha must not apply its own index 2. */
+void test_raft_follower_commit_stops_at_matched_index(void) {
+    p2p_peer_t* pa;
+    int lead = -1, k;
+    setup(3, 0);
+    run(3, 300);
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    TEST_ASSERT_EQUAL(1, p2p_raft_append(&g_n[0], &g_h[0], "tone", "blue"));
+    run(3, 60);
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[0], "tone"));
+    cut_node(0, 1);
+    TEST_ASSERT_EQUAL(2, p2p_raft_append(&g_n[0], &g_h[0], "stale", "alpha"));
+    run(3, P2P_RAFT_ELECTION_TICKS + 2U * P2P_HZ);
+    for (k = 1; k < 3 && lead < 0; k++) {
+        if (g_n[k].raft.role == P2P_RAFT_LEADER) lead = k;
+    }
+    if (lead < 0) { (void)p2p_raft_elect(&g_n[1], &g_h[1]); run(3, 200); }
+    for (k = 1; k < 3 && lead < 0; k++) if (g_n[k].raft.role == P2P_RAFT_LEADER) lead = k;
+    TEST_ASSERT_TRUE(lead > 0);
+    TEST_ASSERT_TRUE(p2p_raft_append(&g_n[lead], &g_h[lead], "split", "one") > 0);
+    TEST_ASSERT_TRUE(p2p_raft_append(&g_n[lead], &g_h[lead], "split2", "two") > 0);
+    run(3, 100);
+    TEST_ASSERT_TRUE(g_n[lead].raft.commit_index >= 3U);
+    TEST_ASSERT_NULL(p2p_get_local(&g_n[0], "stale"));
+    /* heal: the leader starts alpha from index 1 (matched, term 2) */
+    pa = peer_of(&g_n[lead], g_n[0].id);
+    TEST_ASSERT_NOT_NULL(pa);
+    pa->raft_next = 1U;
+    pa->raft_match = 0U;
+    pa->raft_tx_key = 0U;
+    cut_node(0, 0);
+    for (k = 0; k < 40 && g_n[0].raft.role == P2P_RAFT_LEADER; k++) run(3, 10);
+    run(3, 20);
+    TEST_ASSERT_NULL(p2p_get_local(&g_n[0], "stale"));
+    run(3, 300);
+    TEST_ASSERT_NULL(p2p_get_local(&g_n[0], "stale"));
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[0], "split2"));
+}
+
+/* Lot 46 bug 2: two pre-candidates (leader cut, both campaign on the same
+ * tick) grant each other's pre-vote, so a leader is elected. */
+void test_raft_precandidates_grant_each_other(void) {
+    int k, lead = 0;
+    setup(3, 0);
+    run(3, 300);
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    cut_node(0, 1);
+    g_ticks += P2P_RAFT_LEASE_TICKS + P2P_HZ;
+    (void)p2p_raft_elect(&g_n[1], &g_h[1]);
+    (void)p2p_raft_elect(&g_n[2], &g_h[2]);
+    TEST_ASSERT_EQUAL(P2P_RAFT_PRE_CANDIDATE, g_n[1].raft.role);
+    TEST_ASSERT_EQUAL(P2P_RAFT_PRE_CANDIDATE, g_n[2].raft.role);
+    /* Within half an election timeout no timer can expire, so only the
+     * mutual pre-vote grant can move a pre-candidate to a real election
+     * (term 3). The real votes may then split; that is resolved later. */
+    for (k = 0; k < (int)(P2P_RAFT_ELECTION_TICKS / 20U) && !lead; k++) {
+        run(3, 10);
+        lead = g_n[1].raft.term > 2U || g_n[2].raft.term > 2U;
+    }
+    TEST_ASSERT_TRUE(lead);
+    lead = 0;
+    for (k = 0; k < 4 * (int)(P2P_RAFT_ELECTION_TICKS / 10U) && !lead; k++) {
+        run(3, 10);
+        lead = g_n[1].raft.role == P2P_RAFT_LEADER || g_n[2].raft.role == P2P_RAFT_LEADER;
+    }
+    TEST_ASSERT_TRUE(lead);
+}
+
 void test_qos_window_and_cache_invalidate(void) {
     char rep[512];
     int i, ok = 0, throttled = 0;
@@ -1633,6 +1744,9 @@ int main(void) {
     RUN_TEST(test_raft_prevote_does_not_bump_a_healthy_term);
     RUN_TEST(test_raft_compact_past_physical_window);
     RUN_TEST(test_raft_snapshot_installs_for_a_lagging_follower);
+    RUN_TEST(test_raft_resend_paced_for_cut_follower);
+    RUN_TEST(test_raft_follower_commit_stops_at_matched_index);
+    RUN_TEST(test_raft_precandidates_grant_each_other);
     RUN_TEST(test_qos_window_and_cache_invalidate);
     RUN_TEST(test_routing_grpc_and_stun);
     RUN_TEST(test_stun_behind_simulated_nat);

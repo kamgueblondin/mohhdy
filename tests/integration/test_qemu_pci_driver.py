@@ -36,7 +36,11 @@ def lspci(client, proc):
     deadline = time.monotonic() + 10
     while True:
         chunk = normalized_log(ata.log_text()[start:])
-        match = re.search(STATUS_RE, chunk)
+        # The respawned driver's own log lines ([PCI] ... / pcidriver ...)
+        # can land in the middle of the status line on the shared serial
+        # port; drop them before parsing (the fields are still all checked).
+        clean = re.sub(r"\[PCI\][^\n]*\n|pcidriver [^\n]*\n", "", chunk)
+        match = re.search(STATUS_RE, clean)
         if match or time.monotonic() > deadline:
             break
         time.sleep(0.1)

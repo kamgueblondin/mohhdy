@@ -22,7 +22,10 @@ static const char *tool_load(const char *path, int *n) {
     os_dirent_t st;
     char *buf;
     if (!g_fs_io || !g_fs_io->stat || g_fs_io->stat(path, &st) != 0 || st.flags == OS_DIRENT_DIR) return 0;
-    if ((int)st.size <= FSOPS_FILE_MAX) return 0;          /* small: the read path */
+    /* small: the read path. Lot 46: the bound is the tool's own buffer, not
+     * FSOPS_FILE_MAX (files of 8-32 KiB were cut to 8 KiB, and since
+     * FSOPS_FILE_MAX is 64 KiB the 57 KB test card was too) */
+    if ((int)st.size <= OSUI_TOOL_READ_MAX) return 0;
     buf = big_buf((int)st.size);
     if (!buf) return 0;
     *n = fsops_read(g_fs_io, path, buf, (int)st.size);

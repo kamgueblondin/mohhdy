@@ -131,6 +131,34 @@ const char *osui_tool_cmd_reason(int code) {
 
 int osui_tool_is_panel(int kind) { return osui_par_family(kind) != 0; }
 
+int osui_tool_spawn_note(char *out, int max, const os_outcap_stat_t *st) {
+    if (!out || max <= 0) return 0;
+    out[0] = 0;
+    if (!st) return 0;
+    if (st->dropped) {
+        t_cat(out, max, "\n[sortie du programme tronquee: ");
+        t_cat_u(out, max, st->dropped);
+        t_cat(out, max, " octets perdus sur ");
+        t_cat_u(out, max, st->total);
+        t_cat(out, max, " (");
+        t_cat_u(out, max, OS_OUTCAP_MAX / 1024);
+        t_cat(out, max, " Kio max)]\n");
+    }
+    if (st->untracked) {
+        t_cat(out, max, "[");
+        t_cat_u(out, max, st->untracked);
+        t_cat(out, max, " programme(s) non captures: table de ");
+        t_cat_u(out, max, OS_OUTCAP_PIDS);
+        t_cat(out, max, " taches pleine]\n");
+    }
+    if (st->live) {
+        t_cat(out, max, "[");
+        t_cat_u(out, max, st->live);
+        t_cat(out, max, " programme(s) encore actif(s): la suite de leur sortie va a la console]\n");
+    }
+    return t_len(out);
+}
+
 int osui_tool_line_pid(const char *line) {
     int i = 0, v = 0, got = 0;
     while (line[i] && !(line[i] >= '0' && line[i] <= '9')) {
@@ -157,7 +185,8 @@ static int wrap_cols(const osui_tool_t *t) {
 static void add_line(osui_tool_t *t, const char *s, int len, int cls) {
     int k, wc = wrap_cols(t);
     if (t->n >= OSUI_TOOL_LINES) {
-        for (k = 0; k + 1 < OSUI_TOOL_LINES; k++) { t_cpy(t->lines[k], OSUI_TOOL_COLS, t->lines[k + 1]); t->cls[k] = t->cls[k + 1]; }
+        for (k = 0; k + 1 < OSUI_TOOL_LINES; k++) { t_cpy(t->lines[k], OSUI_TOOL_COLS, t->lines[k + 1]); t->cls[k] = t->cls[k + 1]; t->cont[k] = t->cont[k + 1]; }
+        t->cont[0] = 0;   /* its head scrolled out: a line of its own now */
         t->n = OSUI_TOOL_LINES - 1;
         t->dropped++;
     }
@@ -180,6 +209,7 @@ static void add_line(osui_tool_t *t, const char *s, int len, int cls) {
     }
     t->lines[t->n][len] = 0;
     t->cls[t->n] = (unsigned char)cls;
+    t->cont[t->n] = 0;
     t->n++;
 }
 
@@ -201,11 +231,16 @@ static int strip_ansi(char *s, int n) {
 
 /* split text into lines, wrapping at the grid width */
 static void add_text(osui_tool_t *t, const char *s, int n, int cls) {
-    int i = 0, start = 0, w = wrap_cols(t) - 2;
+    int i = 0, start = 0, w = wrap_cols(t) - 2, soft = 0;
     while (i <= n) {
         if (i == n || s[i] == '\n' || i - start >= w) {
-            if (i > start || (i < n && s[i] == '\n')) add_line(t, s + start, i - start, cls);
-            if (i < n && s[i] == '\n') i++;
+            int hard = i < n && s[i] == '\n';
+            if (i > start || hard) {
+                add_line(t, s + start, i - start, cls);
+                t->cont[t->n - 1] = (unsigned char)soft;   /* Lot 46: rewrap at resize */
+            }
+            soft = !hard && i < n;
+            if (hard) i++;
             start = i;
             if (i == n) break;
             continue;
@@ -213,6 +248,7 @@ static void add_text(osui_tool_t *t, const char *s, int n, int cls) {
         i++;
     }
 }
+
 
 static int grid_rows(const osui_tool_t *t) {
     int r = t->vrows > 0 ? t->vrows : OSUI_APP_ROWS;
@@ -233,6 +269,36 @@ static void follow_sel(osui_tool_t *t) {
     if (t->sel >= t->n) t->sel = t->n ? t->n - 1 : 0;
     if (t->sel < t->top) t->top = t->sel;
     if (t->sel >= t->top + v) t->top = t->sel - v + 1;
+}
+
+/* Lot 46: wrap the lines already shown again at the current width: the
+ * soft-wrapped parts of a line are joined, hard line ends are kept. The
+ * view stays at the end when it was there, else on the same text line. */
+static char g_rewrap[OSUI_TOOL_LINES * OSUI_TOOL_COLS];
+static void rewrap_lines(osui_tool_t *t) {
+    static int start[OSUI_TOOL_LINES], len[OSUI_TOOL_LINES];
+    static unsigned char cls[OSUI_TOOL_LINES];
+    int k, nl = 0, o = 0, top_logical = 0, at_end, v = view_rows(t);
+    at_end = t->top + v >= t->n;
+    for (k = 0; k < t->n; k++) {
+        int l = t_len(t->lines[k]);
+        if (!t->cont[k] || nl == 0) {
+            start[nl] = o; len[nl] = 0; cls[nl] = t->cls[k]; nl++;
+        }
+        if (k == t->top) top_logical = nl - 1;
+        if (o + l > (int)sizeof(g_rewrap)) l = (int)sizeof(g_rewrap) - o;
+        { int c; for (c = 0; c < l; c++) g_rewrap[o + c] = t->lines[k][c]; }
+        o += l; len[nl - 1] += l;
+    }
+    t->n = 0;
+    for (k = 0; k < nl; k++) {
+        int before = t->n;
+        add_text(t, g_rewrap + start[k], len[k], cls[k]);
+        if (t->n == before) add_line(t, "", 0, cls[k]);   /* an empty line stays */
+        if (k == top_logical && !at_end) t->top = before;
+    }
+    if (at_end) follow_end(t);
+    else if (t->top + v > t->n) t->top = t->n > v ? t->n - v : 0;
 }
 
 static int run_into(osui_tool_t *t, const osui_tool_src_t *src, const char *cmd, int cls) {
@@ -423,7 +489,7 @@ int osui_tool_image_decode(const char *buf, int n, unsigned char *rgb, int max_w
     return 0;
 }
 
-static char g_file[8192];
+static char g_file[OSUI_TOOL_READ_MAX + 1];
 
 /* Lot 45: BMP / PNG / binary PNM through the shared imgdec module, with
  * zoom and pan; the old PNM decoder stays for ASCII P2 / P3. Bounded:
@@ -721,6 +787,15 @@ static void panel_exec(osui_tool_t *t, const osui_tool_src_t *src, const char *c
         t_cat(t->log, (int)sizeof(t->log), "\nosui panel out=");
         t_cat(t->log, (int)sizeof(t->log), first_out);
     }
+    /* Lot 46: the last two window lines (notes of a cut output, end of
+     * the output of a launched program) on the serial line too */
+    if (n >= 0 && t->n > 2) {
+        int k;
+        for (k = t->n - 2; k < t->n; k++) {
+            t_cat(t->log, (int)sizeof(t->log), "\nosui panel tail=");
+            t_cat(t->log, (int)sizeof(t->log), t->lines[k]);
+        }
+    }
     set_status(t, n < 0 ? "refusee: " : "sortie reelle de ", cmd);
     t_cat(t->status, (int)sizeof(t->status), "  (Echap/Menu: retour)");
 }
@@ -791,6 +866,10 @@ void osui_tool_set_view(osui_tool_t *t, int rows, int cols, const osui_tool_src_
         int sel = t->sel;
         osui_tool_refresh(t, src);
         if (sel >= 0 && sel < t->n) t->sel = sel;
+    } else if (t->sel < 0 && !t->gen && t->kind != OS_FB_APP_CHAT) {
+        /* Lot 46: output already shown (command run, P2P, PM run) is
+         * wrapped again at the new width; the chat keeps its own lines */
+        rewrap_lines(t);
     }
     if (t->sel >= 0) follow_sel(t);
     else if (t->top + view_rows(t) > t->n) t->top = t->n > view_rows(t) ? t->n - view_rows(t) : 0;

@@ -410,27 +410,49 @@ completent le backlog ; elles n'en retirent aucune.
 | US | Besoin | Statut |
 |---|---|---|
 | US-G01 | Tool windows run any shell registry command (kernel rights, terminal-only commands refused) | done |
-| US-G02 | Editor: lines on the user heap, grid follows the window | partial (lines up to 256 columns with horizontal scroll since Lot 45; saves up to 30 KiB) |
+| US-G02 | Editor: lines on the user heap, grid follows the window | done (Lot 46 PR B: Save As of a 64 KiB file, byte exact on the disk and after a cold reboot, 64 KiB + 1 refused with the error shown, `make qemu-gui-bigsave`; lines up to 256 columns since Lot 45. On a disk without room after the FAT16 volume the store stays at 30 KiB per file) |
 | US-G03 | Viewer draws images as pixels | partial (Lot 45: PNM, BMP 24/32, PNG depth 8 non-interlaced, zoom/fit/pan, shared imgdec with `img-info`; no JPEG) |
-| US-G04 | Network panel /net | partial (status, p2p-up; no interface configuration) |
-| US-G05 | Storage panel /disk | partial (ata, mounts, persist, ls, stat, mkdir) |
-| US-G06 | Services and drivers panel /services | partial (driver-restart of the fixed Ring 3 drivers, kernel supervisor respawn; qemu-gui-parity proves the stop of pci-driver from /cmd, Lot 45 asserts the supervised respawn of pcidriver with a new pid; atadriver / networker respawn not asserted) |
-| US-G07 | Logs panel /logs | partial |
+| US-G04 | Network panel /net | partial (Lot 46: every entry runs in `qemu-gui-panels`; the shell has no interface configuration command, so no window can configure the interface; not done in Lot 46: it needs a networker or kernel path to set address, mask and route first) |
+| US-G05 | Storage panel /disk | done (Lot 46: ata, mounts, persist status and save, ls, stat, mkdir, fat16-list; every entry in `qemu-gui-panels`) |
+| US-G06 | Services and drivers panel /services | done (Lot 46: driver-restart of the fixed Ring 3 drivers; supervised respawn of pcidriver (Lot 45) and atadriver with a new pid, networker restarted by the shell with a new pid, each service used after the restart in `qemu-gui-parity`; every entry in `qemu-gui-panels`) |
+| US-G07 | Logs panel /logs | done (Lot 46: every entry in `qemu-gui-panels`, notify-push / notify-ack added) |
 | US-G08 | Collab ledger panel /ledger | done (forms for offer, vote, escrow create, release/refund/dispute: shell grammar, second Enter, unit tested; QEMU proof of the offer form since Lot 45) |
-| US-G09 | Production / CI panel /ci (the /prod name is the existing production pane) | partial |
-| US-G10 | Security / CA panel /security | partial (local Schnorr CA) |
-| US-G11 | Web devtools panel /devtools | partial |
+| US-G09 | Production / CI panel /ci (the /prod name is the existing production pane) | done (Lot 46: every entry in `qemu-gui-panels`; deploy-verify takes its manifest, deploy-make and prod-backup added) |
+| US-G10 | Security / CA panel /security | done (Lot 46: every entry in `qemu-gui-panels`, init, sign, verify, revoke; the CA itself stays a local Schnorr CA, no X.509) |
+| US-G11 | Web devtools panel /devtools | done (Lot 46: every entry in `qemu-gui-panels`, web-inspect and web-a11y added) |
 | US-G12 | File search /search and `grep -r` | done (whole files up to 1 MiB through the shell heap since Lot 45, pages of 64 hits: `grep -r MOTIF [REP] [PAGE]`) |
-| US-G13 | Notes and archives panel /notes | partial |
+| US-G13 | Notes and archives panel /notes | done (Lot 46: every entry in `qemu-gui-panels`, migrate-import added) |
 | US-G14 | Generic command window /cmd | done |
-| US-G15 | Window-sized grid for every app | done (Lot 45: tool windows and file explorer follow the grid, text rewraps; test_osui_tools, qemu-gui-ux5) |
-| US-G16 | Large persistent saves (overlay node 384 bytes) | partial (Lot 44: chained blocks, files up to 30 KiB inside the 32 KiB AIOV disk area, chunked atadriver relay, QEMU byte count proof; 64 KiB needs a new disk layout, FAT16 starts at LBA 64) |
+| US-G15 | Window-sized grid for every app | done (Lot 45: tool windows and file explorer follow the grid, text rewraps; Lot 46: output already shown rewraps at resize, explorer name column widens; test_osui_tools, test_osui_files, qemu-gui-ux5) |
+| US-G16 | Large persistent saves (overlay node 384 bytes) | done (Lot 46 PR B: overlay image v4 over LBA 0-63 and a 128-sector extension placed after the FAT16 volume and the journals (LBA 4225-4352 on the fixture), enabled by atadriver only when IDENTIFY reports enough sectors; 96 KiB store, 64 KiB per file; v1/v2/v3 images still load; `test_overlay`, `test_ata_job`, `make qemu-gui-bigsave` checks that LBA 64-4221 are byte identical) |
 | US-G17 | Panels for vfs, task, session, mcp, media, grpc | done (Lot 44: /vfs /sessions /mcp /media /grpc /pwa /devsync /sysadmin /api on the registry, checked against it in test-all; qemu-gui-parity runs the first entry of /vfs /sessions /mcp /media /pwa /sysadmin /api; /grpc and /devsync run with an argument in QEMU since Lot 45; media is simule) |
 | US-G18 | `/help` in the desktop chat | done (Lot 45: Aide window, slash programs from the dispatch table, terminal help; qemu-gui-parity) |
 
 Preuves : `test_osui_parity`, `test_osui_gui`, `test_fsops`,
 `test_osui_editor`, `test_gfx_desktop`, `make qemu-gui-ux5`,
 `make qemu-gui-parity` (CI, job gui-parity).
+Lot 46 (PR A, `docs/lot46_plan.md`): `test_out_capture`, `make
+qemu-gui-panels` (CI, job gui-panels: every entry of eight panels), output
+of spawned programs and atadriver / networker restart in `make
+qemu-gui-parity`, rewrap at resize in `make qemu-gui-ux5`. Still partial:
+US-G02, US-G03, US-G04, US-G16 (reasons in the table).
+Lot 46 PR B-D (same branch): US-G02 and US-G16 done (`make
+qemu-gui-bigsave`, CI job gui-panels); phase 9 done 16 partial 2 (88%).
+Still partial: US-G03 (no JPEG, no interlaced or 16-bit PNG: not started)
+and US-G04 (no interface configuration command in the shell: not started).
+US-001: ATA IDENTIFY and the FAT PIO fallback were already out of Ring 0
+on both images since Lot 2 (`make strict-image-check`); the supervised
+restart after a crash is re-proved with the v4 layout (`make
+qemu-ata-driver`: kill, mid-job #GP, respawn, reboot). US-064: new QEMU
+scenario 2c in `make qemu-p2p` (the leader itself is partitioned,
+re-election at a higher term, step down after the heal).
+Scenario 2b also cuts gamma alone past the lease: its pre-vote gets no
+majority, its term stays and the leader keeps its term after the heal.
+These runs found three Raft bugs, fixed in `userspace/p2p.c` with unit
+tests that fail without the fix: follower commit = min(leaderCommit,
+matched index); pre-candidates grant each other; leader resends paced
+per peer. TCP ports: `qemu-osui-web` also serves on port 9137. Editor:
+a refused Save As restores the previous name.
 
 ## Regles obligatoires du backlog
 

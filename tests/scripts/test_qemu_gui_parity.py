@@ -11,7 +11,10 @@ as the terminal (shell_app_run, registry rights model):
   * /search runs "grep -r line /samples" (recursive search, fsops_grep);
   * /disk mkdir (state changing) needs a second Enter: armed, then run;
   * /cmd runs a typed registry command (uptime) and refuses a terminal-only
-    one (reboot) with the reason, nothing is executed.
+    one (reboot) with the reason, nothing is executed;
+  * Lot 46: the output of a spawned program is shown in the window, bounded
+    to 16 KiB with a note giving the dropped bytes; driver-restart of
+    atadriver and networker gives new pids and working services.
 """
 from __future__ import print_function
 
@@ -265,6 +268,97 @@ def generic(monitor, proc):
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
 
 
+def spawn_capture(monitor, proc):
+    """Lot 46: the output of a program launched from a window (spawn) is
+    captured by the kernel (SYS_OUT_CAPTURE) and shown in the window, after
+    the shell's own line; past 16 KiB the window says how many bytes were
+    dropped and the end of the output never reaches it."""
+    import re
+    slash(monitor, proc, "/cmd", "osui tool open app=Commande")
+    start = len(g.log_text())
+    type_text(monitor, "spawn ok")
+    key(monitor, "ret")
+    run_marker(proc, start, "spawn ok")
+    g.wait_for(proc, "osui panel out=spawn ok pid ", g.CMD_TIMEOUT, start)
+    g.wait_for(proc, "osui panel tail=exec ok", g.CMD_TIMEOUT, start)
+    g.wait_for(proc, "[OUTCAP] end bytes=8 dropped=0", g.CMD_TIMEOUT, start)
+    say("/cmd spawn ok: the child's 'exec ok' is shown in the window")
+    start = len(g.log_text())
+    type_text(monitor, "spawn outflood")
+    key(monitor, "ret")
+    run_marker(proc, start, "spawn outflood")
+    g.wait_for(proc, "osui panel tail=[sortie du programme tronquee: ", g.CMD_TIMEOUT, start)
+    out = g.normalized_log(g.log_text()[start:])
+    m = re.search(r"\[OUTCAP\] end bytes=(\d+) dropped=(\d+)", out)
+    if not m or int(m.group(2)) <= 0 or int(m.group(1)) - int(m.group(2)) != 16384:
+        raise RuntimeError("outflood: capture not bounded to 16 KiB: %r" % (m.groups() if m else None))
+    note = re.search(r"tronquee: (\d+) octets perdus sur (\d+) \(16 Kio max\)", out)
+    if not note or note.group(1) != m.group(2) or note.group(2) != m.group(1):
+        raise RuntimeError("outflood: window note does not match the kernel count")
+    if "outflood end" in out:
+        raise RuntimeError("outflood: the dropped end of the output reached the window")
+    say("/cmd spawn outflood: %s of %s bytes kept, the window notes %s dropped" %
+        (int(m.group(1)) - int(m.group(2)), m.group(1), m.group(2)))
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
+
+
+def cmd_run(monitor, proc, line):
+    start = len(g.log_text())
+    type_text(monitor, line)
+    key(monitor, "ret")
+    run_marker(proc, start, line)
+    return start
+
+
+def driver_respawn(monitor, proc):
+    """Lot 46: driver-restart of the storage and network drivers from a
+    window. atadriver: the kernel supervisor respawns it at once (new pid),
+    a file written then read back goes through the new driver, ata-status
+    names it. networker: the shell starts it again (new pid), the netrelay
+    proof client (spawned from the same window, output captured) does its
+    TCP loopback through the relay of the new worker."""
+    import re
+    slash(monitor, proc, "/cmd", "osui tool open app=Commande")
+    start = cmd_run(monitor, proc, "driver-restart atadriver")
+    g.wait_for(proc, "osui panel out=driver-restart ok ata-driver old ", g.CMD_TIMEOUT, start)
+    out = g.normalized_log(g.log_text()[start:])
+    m = re.search(r"driver-restart ok ata-driver old (\d+) new (\d+)", out)
+    r = re.search(r"\[ATA\] supervised respawn bin/atadriver pid (\d+)", out)
+    if not m or not r or m.group(1) == m.group(2) or r.group(1) != m.group(2):
+        raise RuntimeError("atadriver: no supervised respawn with a new pid: %r" % (m.groups() if m else None))
+    new_ata = m.group(2)
+    start = cmd_run(monitor, proc, "write l46ata respawnok")
+    g.wait_for(proc, "osui panel out=write ok l46ata", g.CMD_TIMEOUT, start)
+    start = cmd_run(monitor, proc, "cat l46ata")
+    g.wait_for(proc, "osui panel out=respawnok", g.CMD_TIMEOUT, start)
+    start = cmd_run(monitor, proc, "ata-status")
+    g.wait_for(proc, "osui panel out=ata-status ok driver %s " % new_ata, g.CMD_TIMEOUT, start)
+    say("/cmd: driver-restart atadriver: old pid %s, respawned as pid %s; write/cat and ata-status served by it" %
+        (m.group(1), new_ata))
+    start = cmd_run(monitor, proc, "driver-restart networker")
+    g.wait_for(proc, "osui panel out=driver-restart ok net-driver old ", g.CMD_TIMEOUT, start)
+    m = re.search(r"driver-restart ok net-driver old (\d+) new (\d+)", g.normalized_log(g.log_text()[start:]))
+    if not m or m.group(1) == m.group(2):
+        raise RuntimeError("networker: not restarted with a new pid: %r" % (m.groups() if m else None))
+    new_net = m.group(2)
+    restart_start = start
+    start = cmd_run(monitor, proc, "spawn netrelay")
+    # Lot 46 review: the relaunched networker registers net-driver, so it
+    # leaves the capture: the window does not call it a program still running.
+    if "encore actif" in g.normalized_log(g.log_text()[restart_start:start]):
+        raise RuntimeError("networker: the relaunched driver is reported as a program still running")
+    g.wait_for(proc, "netrelay tcp loopback ok ping pong mode relay", g.CMD_TIMEOUT, start)
+    start = cmd_run(monitor, proc, "net-relay-status")
+    g.wait_for(proc, "osui panel out=net-relay ok worker %s " % new_net, g.CMD_TIMEOUT, start)
+    say("/cmd: driver-restart networker: old pid %s, new pid %s; netrelay TCP loopback through its relay" %
+        (m.group(1), new_net))
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
+
+
 def main():
     os.makedirs(g.LOG_DIR, exist_ok=True)
     for path in (g.LOG, g.MON_SOCK, g.QMP_SOCK):
@@ -296,6 +390,8 @@ def main():
             search(monitor, proc)
             confirm_mutation(monitor, proc)
             generic(monitor, proc)
+            spawn_capture(monitor, proc)
+            driver_respawn(monitor, proc)
             g.screendump_rgb(monitor, "qemu-gui-parity-end.ppm")
         say("QEMU UX5 GUI parity panels contract passed.")
         return 0

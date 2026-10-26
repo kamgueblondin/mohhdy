@@ -78,6 +78,8 @@ typedef struct {
     uint32_t raft_next;   /* next log index to send (1-based, 0 = unset) */
     uint32_t raft_match;  /* highest index known replicated */
     uint32_t raft_commit_sent; /* leader_commit last sent to this peer */
+    uint32_t raft_tx_key;      /* Lot 46: what the periodic replicate last sent */
+    uint32_t raft_tx_tick;     /* and when (resend pacing) */
     uint32_t raft_snap_gen; /* snapshot_index this peer is receiving */
     uint8_t raft_snap_off;  /* next kv item index to send */
     /* Lot 29: US-064 Dynamic Re-keying & US-075 Zero-Trust */

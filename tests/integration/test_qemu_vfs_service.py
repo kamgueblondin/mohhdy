@@ -772,6 +772,8 @@ def main():
             # Lot 8 added initrd/roadmap.txt (US-120): 12.
             # UX5 added initrd/samples/ (editor and viewer samples): 13,
             # the third page is full and a fourth holds the last entry.
+            # Lot 46 added initrd/bigfiles/ (64 KiB save samples): 14,
+            # the fourth page holds two entries.
             wait_for("vfs-list-page partiel count 4 next 8", proc, before_page_last)
             before_page_end = len(log_text())
             send_command_until(monitor, "vfs-list-page initrd/ 8", "vfsserver list page request", proc)
@@ -780,7 +782,7 @@ def main():
             before_page_end = len(log_text())
             send_command_until(monitor, "vfs-list-page initrd/ 12", "vfsserver list page request", proc)
             wait_for("vfsserver delegated storage list page", proc, before_page_end)
-            wait_for("vfs-list-page ok count 1 next end", proc, before_page_end)
+            wait_for("vfs-list-page ok count 2 next end", proc, before_page_end)
             before_observe = len(log_text())
             send_command_until(monitor, "vfs-list-observe initrd/ 0 0", "vfsserver list observe request", proc)
             wait_for("vfsserver delegated storage list observe", proc, before_observe)
@@ -933,7 +935,7 @@ def main():
             send_command_until(monitor, "vfs-list-page assets/ 12",
                                "vfsserver delegated alias list page", proc)
             wait_for("vfsvirtual alias list page assets/", proc, before_alias_page_last)
-            wait_for("vfs-list-page ok count 1 next end", proc, before_alias_page_last)
+            wait_for("vfs-list-page ok count 2 next end", proc, before_alias_page_last)
             before_alias_observe = len(log_text())
             send_command_until(monitor, "vfs-list-observe assets/ 0 0",
                                "vfsserver delegated alias list observe", proc)
@@ -948,13 +950,13 @@ def main():
             send_command_until(monitor, "vfs-list-observe assets/ 8 0",
                                "vfsserver delegated alias list observe", proc)
             wait_for("vfsvirtual alias list page assets/", proc, before_alias_observe_last)
-            # UX5 initrd/samples/: 13 root entries, a fourth page ends.
+            # UX5 initrd/samples/: 13 root entries; Lot 46 bigfiles/: 14, the fourth page holds 2.
             wait_for("vfs-list-observe partiel count 4 next 12 generation", proc, before_alias_observe_last)
             before_alias_observe_last = len(log_text())
             send_command_until(monitor, "vfs-list-observe assets/ 12 0",
                                "vfsserver delegated alias list observe", proc)
             wait_for("vfsvirtual alias list page assets/", proc, before_alias_observe_last)
-            wait_for("vfs-list-observe ok count 1 next end generation", proc, before_alias_observe_last)
+            wait_for("vfs-list-observe ok count 2 next end generation", proc, before_alias_observe_last)
             before_alias_read_revoked = len(log_text())
             send_command_until(monitor, "vfs-backend-status %s" % worker_pid,
                                "vfsserver backend status request", proc)

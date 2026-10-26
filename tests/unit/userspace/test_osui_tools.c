@@ -14,6 +14,14 @@ static int g_killed = -1;
 static int g_steps;
 static char g_model[32] = "gpt2.gguf";
 
+/* Lot 46: a 200-character line, an empty line, a short line */
+static char g_long_out[256];
+static void make_long_out(void) {
+    int i;
+    for (i = 0; i < 200; i++) g_long_out[i] = (char)('a' + i % 26);
+    strcpy(g_long_out + 200, "\n\nfin\n");
+}
+
 static int fake_run(const char *cmd, char *out, int max) {
     const char *r = "";
     if (!osui_tool_cmd_allowed(cmd)) return -1;
@@ -29,6 +37,7 @@ static int fake_run(const char *cmd, char *out, int max) {
     else if (!strcmp(cmd, "p2p-stats")) r = "p2p stats tx=3 rx=2\n";
     else if (!strncmp(cmd, "p2p-send ", 9)) r = "p2p-send ok bob\n";
     else if (!strncmp(cmd, "p2p-up ", 7)) r = "p2p-up ok alice\n";
+    else if (!strcmp(cmd, "pm-run /home/long.pm")) r = g_long_out;
     else if (!strncmp(cmd, "pm-run ", 7)) r = "Bonjour depuis PM\npm-run ok\n";
     else if (!strncmp(cmd, "pm-check ", 9)) r = "pm-check ok\n";
     else if (!strncmp(cmd, "ai-model use ", 13)) { strcpy(g_model, cmd + 13); r = "Profil selectionne\n"; }
@@ -145,6 +154,51 @@ static void test_window_grid_follows_size(void) {
     osui_tool_open(&t, OS_FB_APP_NET, "", &k_src);           /* reopened: default grid */
     osui_tool_render(&t, &v);
     TEST_ASSERT_EQUAL(OSUI_APP_ROWS, v.nrows);
+}
+
+/* Lot 46: output already shown is wrapped again when the window grows or
+ * shrinks (soft wraps joined, hard line ends and empty lines kept) */
+static void test_output_rewraps_at_resize(void) {
+    int k;
+    make_long_out();
+    memset(&t, 0, sizeof(t));
+    osui_tool_open(&t, OS_FB_APP_PMRUN, "/home/long.pm", &k_src);
+    /* "$ pm-run ..." then 76 + 76 + 48 characters, "", "fin" */
+    TEST_ASSERT_EQUAL(6, t.n);
+    TEST_ASSERT_EQUAL(76, (int)strlen(t.lines[1]));
+    TEST_ASSERT_EQUAL(1, t.cont[2]);
+    TEST_ASSERT_EQUAL(48, (int)strlen(t.lines[3]));
+    TEST_ASSERT_EQUAL_STRING("", t.lines[4]);
+    TEST_ASSERT_EQUAL_STRING("fin", t.lines[5]);
+    osui_tool_set_view(&t, 40, 120, &k_src);
+    TEST_ASSERT_EQUAL(5, t.n);                              /* 119 + 81 */
+    TEST_ASSERT_EQUAL(119, (int)strlen(t.lines[1]));
+    TEST_ASSERT_EQUAL(81, (int)strlen(t.lines[2]));
+    TEST_ASSERT_EQUAL((char)('a' + 119 % 26), t.lines[2][0]); /* no byte lost at the join */
+    TEST_ASSERT_EQUAL_STRING("", t.lines[3]);
+    TEST_ASSERT_EQUAL_STRING("fin", t.lines[4]);
+    TEST_ASSERT(strncmp(t.lines[0], "$ pm-run /home/long.pm", 22) == 0);
+    osui_tool_set_view(&t, 0, 0, &k_src);                   /* back to the default grid */
+    TEST_ASSERT_EQUAL(6, t.n);
+    for (k = 0; k < 76; k++) TEST_ASSERT_EQUAL((char)('a' + k % 26), t.lines[1][k]);
+    TEST_ASSERT_EQUAL_STRING("fin", t.lines[5]);
+}
+
+/* Lot 46: notes after the output of a launched program (kernel capture) */
+static void test_spawn_note(void) {
+    char note[256];
+    os_outcap_stat_t st;
+    memset(&st, 0, sizeof(st));
+    st.total = 120;
+    TEST_ASSERT_EQUAL(0, osui_tool_spawn_note(note, (int)sizeof(note), &st));
+    TEST_ASSERT_EQUAL_STRING("", note);
+    st.total = 20000; st.dropped = 3616; st.live = 1; st.untracked = 2;
+    TEST_ASSERT(osui_tool_spawn_note(note, (int)sizeof(note), &st) > 0);
+    TEST_ASSERT(strstr(note, "[sortie du programme tronquee: 3616 octets perdus sur 20000 (16 Kio max)]") != 0);
+    TEST_ASSERT(strstr(note, "[2 programme(s) non captures: table de 16 taches pleine]") != 0);
+    TEST_ASSERT(strstr(note, "[1 programme(s) encore actif(s)") != 0);
+    TEST_ASSERT_EQUAL(0, osui_tool_spawn_note(note, (int)sizeof(note), 0));
+    TEST_ASSERT(osui_tool_spawn_note(note, 8, &st) <= 7);       /* bounded */
 }
 
 static void test_viewer_text_and_image(void) {
@@ -274,6 +328,8 @@ int main(void) {
     RUN_TEST(test_task_manager_kill_with_confirmation);
     RUN_TEST(test_viewer_text_and_image);
     RUN_TEST(test_window_grid_follows_size);
+    RUN_TEST(test_spawn_note);
+    RUN_TEST(test_output_rewraps_at_resize);
     RUN_TEST(test_settings_real_values);
     RUN_TEST(test_p2p_window);
     RUN_TEST(test_pm_run_window);

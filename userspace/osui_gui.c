@@ -419,6 +419,17 @@ static void ide_action(int act, char *out, int out_max) {
 void osui_gui_set_fs_io(const fsops_io_t *io) { g_fs_io = io; }
 int osui_gui_focus(void) { return g_focus; }
 
+/* Lot 46: decimal number appended to a log line */
+static void gui_cat_u(char *d, int max, unsigned v) {
+    char tmp[12];
+    int k = 0, n;
+    if (!v) tmp[k++] = '0';
+    while (v) { tmp[k++] = (char)('0' + v % 10U); v /= 10U; }
+    n = slen(d);
+    while (k && n < max - 1) d[n++] = tmp[--k];
+    d[n] = 0;
+}
+
 static void app_out(char *out, int out_max, const char *a, const char *b) {
     int n;
     if (!out || out_max <= 0) return;
@@ -536,6 +547,7 @@ static void edit_action(int act, char *out, int out_max) {
         char msg[OSUI_IDE_ROW_LEN];
         scpy(msg, (int)sizeof(msg), "erreur: ");
         scat(msg, (int)sizeof(msg), fsops_strerror(rc));
+        if (act == OSUI_IDE_SAVE_AS) osui_ide_save_as_failed(&g_edit);
         osui_ide_set_status(&g_edit, msg);
         app_out(out, out_max, "osui edit save error=", fsops_strerror(rc));
         return;
@@ -649,15 +661,27 @@ void osui_gui_event(const char *line, char *out, int out_max) {
                 osui_ide_set_view(&g_edit, rr, cc);
                 app_out(out, out_max, "osui edit view resized", 0);
             } else if (kind == OS_FB_APP_FILES) {
+                /* Lot 46: the explorer columns follow the width */
+                char m[48];
                 osui_files_set_view(&g_files, rr, cc);
-                app_out(out, out_max, "osui files view resized", 0);
+                scpy(m, (int)sizeof(m), " cols=");
+                gui_cat_u(m, (int)sizeof(m), (unsigned)(cc > 0 ? cc : 0));
+                app_out(out, out_max, "osui files view resized", m);
             } else if (tool_of(kind)) {
                 /* Lot 45 (US-G15): every tool window follows its grid */
-                char m[64];
-                osui_tool_set_view(tool_of(kind), rr, cc, &g_tool_src);
+                char m[96];
+                osui_tool_t *tt = tool_of(kind);
+                osui_tool_set_view(tt, rr, cc, &g_tool_src);
                 scpy(m, (int)sizeof(m), osui_tool_name(kind));
                 scat(m, (int)sizeof(m), " rows=");
                 { char nb[12]; int v = rr, k = 0, j; char tmp[12]; if (!v) tmp[k++] = '0'; while (v) { tmp[k++] = (char)('0' + v % 10); v /= 10; } for (j = 0; j < k; j++) nb[j] = tmp[k - 1 - j]; nb[k] = 0; scat(m, (int)sizeof(m), nb); }
+                /* Lot 46: the output already shown is wrapped again */
+                scat(m, (int)sizeof(m), " cols=");
+                gui_cat_u(m, (int)sizeof(m), (unsigned)(cc > 0 ? cc : 0));
+                scat(m, (int)sizeof(m), " lines=");
+                gui_cat_u(m, (int)sizeof(m), (unsigned)tt->n);
+                scat(m, (int)sizeof(m), " w1=");
+                gui_cat_u(m, (int)sizeof(m), (unsigned)(tt->n > 1 ? slen(tt->lines[1]) : 0));
                 app_out(out, out_max, "osui tool view resized app=", m);
             }
             return;

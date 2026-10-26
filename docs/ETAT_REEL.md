@@ -1238,7 +1238,8 @@ counted by `prod-roadmap` as phase 9 of `/roadmap.txt`):
 | Family | Status |
 |---|---|
 | files, search, generic command window, tools rights model | done |
-| editor, viewer, processes, services/drivers, network, p2p, storage, logs, collab ledger, production/CI, security/CA, web devtools, notes/archives, PromptMessage, AI, system settings | partial |
+| services/drivers, storage, logs, collab ledger, production/CI, security/CA (local Schnorr CA), web devtools, notes/archives (Lot 46: every panel entry in `qemu-gui-panels`) | done |
+| editor (saves 30 KiB), viewer (no JPEG), processes, network (no interface configuration command), p2p, PromptMessage, AI, system settings | partial |
 | sessions, mcp, media (simule), pwa, devsync, os-*, admin-*, api-* panels; window-sized grid for every app (Lot 45); chat /help (Lot 45) | done |
 | large persistent saves (30 KiB, 64 KiB needs a new disk layout) | partial |
 
@@ -1266,6 +1267,83 @@ shell heap; QEMU proofs of the ledger offer form, /grpc, /devsync and the
 supervised respawn of pcidriver. Not done in Lot 45: JPEG, output of
 spawned programs, US-001, Raft partition, TCP ports, overlay files over
 30 KiB.
+
+Lot 46 PR A (branch `lot46-a-gui-parity`, per item status in
+`docs/lot46_plan.md`): the output of programs launched from a window
+(spawn, exec) is captured by the kernel (`SYS_OUT_CAPTURE`, 16 KiB and 16
+tasks per run, descendants of the shell only, rights unchanged) and shown
+in the window with a note for the dropped bytes (`test_out_capture`,
+`qemu-gui-parity` with `outflood`, 19825 bytes: 16384 kept); output
+already shown in a tool window rewraps at resize and the explorer name
+column follows the window width (`test_osui_tools`, `test_osui_files`,
+`qemu-gui-ux5`); driver-restart of atadriver (supervised respawn, new pid,
+write/cat and ata-status served) and networker (new pid, netrelay TCP
+loopback through the new relay) in `qemu-gui-parity`; every entry of /net
+/disk /services /logs /ci /security /devtools /notes runs in the new
+`qemu-gui-panels` (64 runs, CI job gui-panels); deploy-verify in /ci takes
+its manifest (it always answered "manifest not found"). Phase 9 of
+`prod-roadmap`: done 14 partial 4 (77%). Still partial: US-G02, US-G03,
+US-G04, US-G16. Not done in PR A, planned in PR B-D: 64 KiB overlay files,
+JPEG and interlaced PNG, US-001, TCP ports, interface configuration, Raft
+partition. A program that prints after the bounded wait of 50 ticks prints
+on the console, not in the window.
+
+Lot 46 PR B-D (same branch, before the merge):
+- Review fixes of PR A: a driver relaunched from a window (networker after
+  driver-restart) registers its service and leaves the capture, so the
+  window no longer says "1 programme encore actif"; the capture is
+  released at once when its owner shell exits, is killed or faults
+  (`out_cap_task_gone` in `task_report_parent_exit`). Proof:
+  `test_out_capture`, `qemu-gui-parity`. `outflood` stays in the initrd
+  next to the other test probes (ok, devrogue, atarogue, pcirogue): the
+  build has one initrd, a test-only image is not done.
+- US-G16 / US-G02 done. Overlay image v4: records over LBA 0-63 and a
+  128-sector extension after the FAT16 volume and after the journals
+  (4222-4224): ext_lba = max(4225, 64 + FAT16 total sectors), enabled by
+  atadriver only when IDENTIFY words 60-61 report ext_lba + 128 sectors;
+  the LBA is in the v4 header and checked >= 4225 and >= the end of the
+  FAT16 volume before any read. Store 96 KiB, files 64 KiB. Without the
+  extension the store writes v3 as before (32 KiB, 30 KiB per file). v1,
+  v2 and v3 images load; a v3 disk is rewritten as v4 on the next save.
+  The kernel job queue, the mirror, the boot install and the Ring 0
+  fallback follow the header. Test disk: 4353 sectors (was 4225).
+  Proof: `test_overlay` (v4 64 KiB roundtrip, LBA map never in 64-4224,
+  half image refused, v3 to v4), `test_ata_job` (two areas, chunks never
+  cross 63/64), `make qemu-gui-bigsave` (CI job gui-panels): editor Save
+  As 65536 bytes, host parse of the disk: byte exact, LBA 64-4221 byte
+  identical to the fresh disk; cold reboot: stat 65536, last line found;
+  Save As of 65537 bytes refused, no file. `make qemu-ata-driver` and
+  `make qemu-persistence` pass with the extension on (disk 8192 sectors).
+- US-001: nothing left to move for this item. ATA IDENTIFY and the FAT
+  PIO fallback are absent from both images since Lot 2
+  (`make strict-image-check`); supervised restart after a crash (kill and
+  mid-job #GP, respawn, reboot) re-run with the v4 layout:
+  `make qemu-ata-driver` PASS. Still Ring 0 by design: PIC, PIT, IRQ
+  stubs, early boot console, panic path, early boot probes.
+- US-064 (later in the branch): `qemu-p2p` 2b adds an isolated pre-vote
+  (gamma cut from both peers campaigns after the lease, its term stays,
+  the leader keeps its term after the heal). These runs found three
+  bugs, fixed in `userspace/p2p.c` with unit tests that fail without the
+  fix: follower commit = min(leaderCommit, matched index) (the old leader
+  applied its own uncommitted entry after the heal); pre-candidates grant
+  each other; leader resends paced per peer (6697 appends in one cut).
+  2c now accepts beta or gamma as the new leader.
+- TCP ports: `qemu-osui-web` serves GET /status on port 9137 (custom port).
+- Editor: a refused Save As restores the previous name.
+- US-G04: not done, the shell has no interface configuration command.
+- US-064: `make qemu-p2p` scenario 2c: the leader is cut from both peers
+  (hub wire cut), its own put is not committed, after the 10 s lease beta
+  is elected at a higher term (3 in this run) and commits, after the heal
+  alpha is follower at that term and applies the majority entry; the
+  isolated entry is applied on no guest. Pre-vote, compaction and
+  InstallSnapshot were already covered by scenario 2b.
+- TCP ports: no code path that ignores the requested port was found.
+  `web-serve` listens on the requested port (8080 and 8443 in
+  `make qemu-osui-web`), `ai-acquire` and `ai-peer-listen` take a port.
+  No new test in this lot.
+- Not done: JPEG and interlaced / 16-bit PNG (US-G03), interface
+  configuration command and its /net entry (US-G04), a test-only initrd.
+  Phase 9 of `prod-roadmap`: done 16 partial 2 (88%).
 
 Next steps: 64 KiB files (needs a new
 disk layout, the overlay area is 32 KiB);

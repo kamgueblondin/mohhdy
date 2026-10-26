@@ -4,7 +4,8 @@
 /* Tranche 4 slice 2: controller ownership and overlay snapshot jobs between
  * the kernel and the Ring 3 atadriver (pure logic). */
 
-static uint8_t fake_disk[ATA_JOB_SNAPSHOT_BYTES];
+/* the AIOV area (LBA 0-63) of a v3 image */
+static uint8_t fake_disk[OS_ATA_OVERLAY_SECTORS * 512U];
 static uint8_t ram_state = 0x11U;
 static int restore_calls;
 
@@ -285,6 +286,72 @@ static void test_debug_crash_flag(void) {
     TEST_ASSERT_EQUAL(0, (int)job.flags);
 }
 
+/* Lot 46 PR B: a v4 image (header: ext_lba 5000) is written in two areas,
+ * sectors 0-63 at LBA 0-63 and 64-191 at LBA 5000-5127, never in between
+ * (the FAT16 volume); a chunk never crosses the boundary; the load reads
+ * the header first, then the extension, and restores the whole image. */
+static uint8_t v4_disk[(5000U + OS_ATA_OVERLAY_EXT_SECTORS) * 512U];
+static uint8_t v4_img[ATA_JOB_SNAPSHOT_BYTES];
+static uint8_t v4_back[ATA_JOB_SNAPSHOT_BYTES];
+static void v4_put(uint8_t* p, uint32_t v) {
+    p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24);
+}
+static int v4_snapshot(uint8_t* buf, uint32_t capacity) {
+    uint32_t i;
+    if (capacity < sizeof(v4_img)) return -1;
+    for (i = 0U; i < sizeof(v4_img); i++) buf[i] = v4_img[i];
+    return 0;
+}
+static int v4_restore(const uint8_t* buf, uint32_t size) {
+    uint32_t i;
+    for (i = 0U; i < size && i < sizeof(v4_back); i++) v4_back[i] = buf[i];
+    restore_calls++;
+    return 0;
+}
+static void test_v4_image_two_areas(void) {
+    static uint8_t buf[OS_ATA_JOB_MAX_SECTORS * 512U];
+    os_ata_job_t job;
+    uint32_t i, lba;
+    int res = -1, ext_chunks = 0;
+    for (i = 0U; i < sizeof(v4_img); i++) v4_img[i] = (uint8_t)(i / 512U + 1U);
+    v4_put(v4_img + 0, 0x564F4941u);
+    v4_put(v4_img + 4, 4U);
+    v4_put(v4_img + 16, 5000U);
+    v4_put(v4_img + 20, OS_ATA_OVERLAY_EXT_SECTORS);
+    for (i = 0U; i < sizeof(v4_disk); i++) v4_disk[i] = 0xEEU;
+    restore_calls = 0;
+    ata_job_init(v4_snapshot, v4_restore);
+    ata_job_request_flush();
+    while (ata_job_fetch(&job, buf, sizeof(buf)) == 1) {
+        TEST_ASSERT_TRUE(job.lba + job.count <= OS_ATA_OVERLAY_SECTORS ||
+                         (job.lba >= 5000U && job.lba + job.count <= 5000U + OS_ATA_OVERLAY_EXT_SECTORS));
+        if (job.lba >= 5000U) ext_chunks++;
+        for (i = 0U; i < job.count * 512U; i++) v4_disk[job.lba * 512U + i] = buf[i];
+        res = ata_job_done(&job, 0, buf, sizeof(buf));
+        if (res != OS_ATA_JOB_CHUNK_OK) break;
+    }
+    TEST_ASSERT_EQUAL(OS_ATA_JOB_FLUSH_DONE, res);
+    TEST_ASSERT_TRUE(ext_chunks > 0);
+    for (lba = 0U; lba < 5000U + OS_ATA_OVERLAY_EXT_SECTORS; lba++) {
+        uint8_t want;
+        if (lba < 64U) want = v4_img[lba * 512U + 100U];
+        else if (lba < 5000U) want = 0xEEU;   /* untouched (FAT16 and journals) */
+        else want = v4_img[(64U + lba - 5000U) * 512U + 100U];
+        TEST_ASSERT_EQUAL((int)want, (int)v4_disk[lba * 512U + 100U]);
+    }
+    for (i = 0U; i < sizeof(v4_back); i++) v4_back[i] = 0U;
+    ata_job_request_load();
+    res = -1;
+    while (ata_job_fetch(&job, buf, sizeof(buf)) == 1) {
+        for (i = 0U; i < job.count * 512U; i++) buf[i] = v4_disk[job.lba * 512U + i];
+        res = ata_job_done(&job, 0, buf, sizeof(buf));
+        if (res != OS_ATA_JOB_CHUNK_OK) break;
+    }
+    TEST_ASSERT_EQUAL(OS_ATA_JOB_LOAD_DONE, res);
+    TEST_ASSERT_EQUAL(1, restore_calls);
+    TEST_ASSERT_EQUAL_MEMORY(v4_img, v4_back, sizeof(v4_img));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_claim_exclusion);
@@ -294,6 +361,7 @@ int main(void) {
     RUN_TEST(test_client_fences);
     RUN_TEST(test_fat_io_job);
     RUN_TEST(test_debug_crash_flag);
+    RUN_TEST(test_v4_image_two_areas);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

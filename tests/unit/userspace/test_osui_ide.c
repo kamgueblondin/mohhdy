@@ -299,6 +299,21 @@ static void test_ide_output_pane(void) {
     TEST_ASSERT_EQUAL_STRING("a b", g_ide.out[0]);
 }
 
+/* Lot 46: a refused Save As puts the previous name back (window title). */
+static void test_ide_save_as_failed_restores_name(void) {
+    int i;
+    osui_ide_open_plain(&g_ide, "a.txt", "x\n", 2);
+    TEST_ASSERT_EQUAL(OSUI_IDE_NONE, osui_ide_tool(&g_ide, OSUI_IDE_T_SAVE_AS));
+    for (i = 0; i < 60; i++) (void)osui_ide_key(&g_ide, '\b');
+    type_str("b.txt");
+    TEST_ASSERT_EQUAL(OSUI_IDE_SAVE_AS, osui_ide_key(&g_ide, '\n'));
+    TEST_ASSERT_EQUAL_STRING("b.txt", g_ide.file);
+    osui_ide_save_as_failed(&g_ide);
+    TEST_ASSERT_EQUAL_STRING("a.txt", g_ide.file);
+    osui_ide_save_as_failed(&g_ide);   /* idempotent */
+    TEST_ASSERT_EQUAL_STRING("a.txt", g_ide.file);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_ide_open_and_text_roundtrip);
@@ -310,6 +325,7 @@ int main(void) {
     RUN_TEST(test_ide_frame_attr);
     RUN_TEST(test_ide_completion);
     RUN_TEST(test_ide_output_pane);
+    RUN_TEST(test_ide_save_as_failed_restores_name);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

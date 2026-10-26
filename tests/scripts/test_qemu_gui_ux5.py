@@ -170,6 +170,61 @@ def tool_resize_steps(monitor, qmp, proc):
     desktop_focus(qmp)
 
 
+def max_button(qmp):
+    bar_h = max(28, min(40, H // 22))
+    bx = 24 + 640 - 2 - 2 * (14 + 4) + 7
+    by = bar_h + 20 + 2 + (30 - 14) // 2 + 7
+    g.click_tablet(qmp, bx, by, W, H)
+
+
+def rewrap_steps(monitor, qmp, proc):
+    """Lot 46: the output already shown in a tool window is wrapped again
+    when the window is maximized; the file explorer columns
+    follow the window width (layout asserted in test_osui_files)."""
+    import re
+    slash(monitor, proc, "/cmd", "osui tool open app=Commande")
+    start = len(g.log_text())
+    type_text(monitor, "ata-status")
+    key(monitor, "ret")
+    g.wait_for(proc, "osui panel run cmd=ata-status ok", g.CMD_TIMEOUT, start)
+    # before the resize the lines are cut at the default width (76 columns)
+    tails = re.findall(r"osui panel tail=(.*)", g.log_text()[start:])
+    if not tails or max(len(x) for x in tails) > 76:
+        raise RuntimeError("ata-status not wrapped at the default width: %r" % tails)
+    spec = r"osui tool view resized app=Commande rows=(\d+) cols=(\d+) lines=(\d+) w1=(\d+)"
+    start = len(g.log_text())
+    max_button(qmp)
+    g.wait_for(proc, "osui tool view resized app=Commande rows=", g.CMD_TIMEOUT, start)
+    big = re.search(spec, g.log_text()[start:])
+    if not big:
+        raise RuntimeError("no resize trace for the Commande window")
+    b = [int(x) for x in big.groups()]
+    # w1: the first output line, now longer than the default grid allows
+    if not (b[1] > 77 and 76 < b[3] < b[1]):
+        raise RuntimeError("ata-status output not rewrapped at the new width: %r" % (b,))
+    time.sleep(1.0)
+    g.screendump_rgb(monitor, "qemu-gui-lot46-cmd-max.ppm")
+    say("maximize: ata-status output rewrapped at %d columns (first line %d chars, %d lines)" % (b[1], b[3], b[2]))
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
+    desktop_focus(qmp)
+    start = slash(monitor, proc, "/files /samples", "osui files open dir=/samples")
+    start = len(g.log_text())
+    max_button(qmp)
+    g.wait_for(proc, "osui files view resized cols=", g.CMD_TIMEOUT, start)
+    m = re.search(r"osui files view resized cols=(\d+)", g.log_text()[start:])
+    if not m or int(m.group(1)) <= 77:
+        raise RuntimeError("maximized explorer did not get more columns: %r" % (m.group(0) if m else None))
+    time.sleep(1.0)
+    g.screendump_rgb(monitor, "qemu-gui-lot46-files-max.ppm")
+    say("maximize: the file explorer gets %s columns (name column widens)" % m.group(1))
+    start = len(g.log_text())
+    key(monitor, "esc")
+    time.sleep(0.6)
+    desktop_focus(qmp)
+
+
 def main():
     os.makedirs(g.LOG_DIR, exist_ok=True)
     for path in (g.LOG, g.MON_SOCK, g.QMP_SOCK):
@@ -199,6 +254,7 @@ def main():
             editor_steps(monitor, qmp, proc)
             viewer_steps(monitor, qmp, proc)
             tool_resize_steps(monitor, qmp, proc)
+            rewrap_steps(monitor, qmp, proc)
         say("QEMU UX5 GUI parity contract passed.")
         return 0
     finally:

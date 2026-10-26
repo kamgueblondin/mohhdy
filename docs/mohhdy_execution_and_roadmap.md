@@ -82,6 +82,41 @@ pcidriver. Non fait : JPEG, sortie des programmes lances, US-001, Raft
 avec partition, ports TCP, fichiers overlay de plus de 30 Kio. Etat par
 point : `docs/lot45_plan.md`.
 
+Lot 46 PR A (branche `lot46-a-gui-parity`) : la sortie des programmes
+lances depuis une fenetre (spawn, exec) est capturee par le noyau
+(`SYS_OUT_CAPTURE`, 16 Kio et 16 taches par execution, seulement les
+descendants du shell, droits du noyau inchanges) et affichee dans la
+fenetre avec une note des octets perdus ; la sortie deja affichee se
+re-replie au redimensionnement et la colonne des noms de l'explorateur
+suit la largeur ; driver-restart de atadriver et networker prouve en QEMU
+(nouveau pid, service utilise ensuite) ; chaque entree de /net /disk
+/services /logs /ci /security /devtools /notes passe dans
+`make qemu-gui-panels`. Phase 9 : 14 faites, 4 partielles (US-G02,
+US-G03, US-G04, US-G16). Plan des 4 PR et etat par point :
+`docs/lot46_plan.md`.
+
+Lot 46 PR B-D (meme branche, avant fusion) : image overlay v4 sur deux
+zones, LBA 0-63 et une extension de 128 secteurs placee apres le volume
+FAT16 et les journaux (LBA 4225-4352 sur le disque de test), activee par
+atadriver seulement si IDENTIFY annonce assez de secteurs ; magasin de
+96 Kio, fichiers de 64 Kio ; les images v1, v2 et v3 se chargent toujours.
+Preuve `make qemu-gui-bigsave` : Enregistrer sous de 64 Kio dans
+l'editeur, octet pour octet sur le disque, LBA 64-4221 identiques au
+disque neuf, apres redemarrage a froid ; 64 Kio + 1 refuse. US-G02 et
+US-G16 faites ; phase 9 : 16 faites, 2 partielles (US-G03 JPEG, US-G04
+configuration d'interface : non commencees). US-001 : IDENTIFY et repli
+FAT PIO deja hors Ring 0 depuis le lot 2, redemarrage supervise reprouve
+(`make qemu-ata-driver`). US-064 : scenario QEMU 2c (le leader lui-meme
+coupe du reseau, reelection, retour en suiveur apres reparation). Ports
+TCP : aucun chemin ignorant le port demande ; `make qemu-osui-web` sert
+aussi GET /status sur le port 9137. Raft : scenario 2b ajoute un pre-vote
+isole (terme inchange, leader conserve apres reparation) ; trois bugs
+corriges dans `userspace/p2p.c` avec tests unitaires qui echouent sans le
+correctif (commit suiveur = min(leaderCommit, index apparie), pre-candidats
+qui s'accordent le pre-vote, renvoi du leader cadence par pair). Editeur :
+un Enregistrer sous refuse remet l'ancien nom. US-G04 non faite : aucune
+commande shell de configuration d'interface n'existe.
+
 ### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production
 - **Moteur Web & Securite (US-039 / US-031)** : Validation dynamique CSP des origines de ressources (images, styles, scripts) lors de la construction de la liste d'affichage (`webrt_csp_validate_display_list_resource`). Journalisation des acces bloques dans `osui-audit`.
 - **Reseau P2P & Resilience Mesh (US-063 / US-070)** : Fenetre glissante EWMA pour le RTT par pair (`rtt_ewma_ms`), renforçant la selection dans la table de routage (`link_cost`). Invalidation/purge automatique des entrees de cache P2P perimees (`p2p_cache_on_peer_down`) lors des deconnexions de pairs.

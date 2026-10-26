@@ -13,7 +13,7 @@
  * TSS IOPB only while it holds the claim. A claim held by a PID that is no
  * longer the live driver is stale and is dropped on the next check. */
 
-#define ATA_JOB_SNAPSHOT_BYTES (OS_ATA_OVERLAY_SECTORS * 512U)
+#define ATA_JOB_SNAPSHOT_BYTES (OS_ATA_OVERLAY_SECTORS_MAX * 512U)
 
 typedef int (*ata_job_snapshot_fn)(uint8_t* buf, uint32_t capacity);
 typedef int (*ata_job_restore_fn)(const uint8_t* buf, uint32_t size);

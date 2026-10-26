@@ -34,6 +34,7 @@ void sys_yield();
 void sys_gets(char* buffer, uint32_t size);
 int sys_exec(const char* path, char* argv[]);
 int sys_spawn(const char* path, char* argv[]);
+int sys_out_capture(uint32_t op, uint32_t buf, uint32_t len);
 
 int sys_listdir(const char* path, os_dirent_t* out, int max_n);
 int sys_readfile(const char* path, char* buf, uint32_t max);

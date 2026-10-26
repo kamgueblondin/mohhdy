@@ -501,6 +501,10 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_user_heap: $(UNIT_DIR)/kernel/test_user_hea
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -I.. -o $@ $< ../kernel/user_heap.c $(FRAMEWORK_SOURCES)
 
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_out_capture: $(UNIT_DIR)/kernel/test_out_capture.c ../kernel/out_capture.c ../kernel/out_capture.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -I.. -o $@ $< ../kernel/out_capture.c $(FRAMEWORK_SOURCES)
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_ide: $(UNIT_DIR)/userspace/test_osui_ide.c ../userspace/osui_ide.c ../userspace/osui_ide.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_ide.c $(FRAMEWORK_SOURCES)

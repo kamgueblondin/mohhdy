@@ -4,7 +4,7 @@
 #include "../../framework/unity.h"
 #include "../../../fs/overlay.h"
 
-static uint8_t g_snap[OV_SNAP_SIZE + 64];
+static uint8_t g_snap[OV_SNAP_SIZE_MAX + 64];
 
 static void put_u32(uint8_t* p, uint32_t value) {
     p[0] = (uint8_t)value;
@@ -15,6 +15,7 @@ static void put_u32(uint8_t* p, uint32_t value) {
 
 void setUp(void) {
     overlay_init();
+    (void)overlay_set_ext(0U);
 }
 
 void tearDown(void) {
@@ -255,6 +256,85 @@ static void test_restore_v3_rejects_broken_chain(void) {
     TEST_ASSERT_EQUAL(8, overlay_read("c.bin", buf, sizeof(buf)));
 }
 
+/* Lot 46 PR B (US-G16): with the extension area (after the FAT16 volume
+ * and the journals) a 64 KiB file is byte exact through write, snapshot
+ * (v4, 96 KiB, two disk areas) and restore; 64 KiB + 1 is refused and
+ * leaves the old file; the store is refused past 96 KiB. */
+static void test_v4_extension_64k_file(void) {
+    static char big[OV_FILE_MAX_EXT_BYTES + 1U];
+    static char back[OV_FILE_MAX_EXT_BYTES + 16U];
+    uint32_t i, sz = 0, s;
+    setUp();
+    TEST_ASSERT_EQUAL(-1, overlay_set_ext(4224U));           /* the event journal: refused */
+    TEST_ASSERT_EQUAL(-1, overlay_set_ext(100U));            /* inside FAT16: refused */
+    TEST_ASSERT_EQUAL(0, overlay_set_ext(OV_EXT_MIN_LBA));
+    TEST_ASSERT_EQUAL(OV_SNAP_SIZE_MAX, overlay_capacity());
+    TEST_ASSERT_EQUAL(OV_FILE_MAX_EXT_BYTES, overlay_file_max());
+    for (i = 0; i <= OV_FILE_MAX_EXT_BYTES; i++) big[i] = (char)((i * 7U + 3U) % 253U);
+    TEST_ASSERT_EQUAL((int)OV_FILE_MAX_EXT_BYTES, overlay_write("big64.bin", big, OV_FILE_MAX_EXT_BYTES));
+    TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, overlay_write("big64.bin", big, OV_FILE_MAX_EXT_BYTES + 1U));
+    TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, overlay_append("big64.bin", "x", 1));
+    TEST_ASSERT_EQUAL((int)OV_FILE_MAX_EXT_BYTES, overlay_read("big64.bin", back, sizeof(back)));
+    TEST_ASSERT_EQUAL_MEMORY(big, back, OV_FILE_MAX_EXT_BYTES);
+    TEST_ASSERT_EQUAL(0, overlay_snapshot(g_snap, sizeof(g_snap), &sz));
+    TEST_ASSERT_EQUAL(OV_SNAP_SIZE_MAX, sz);
+    TEST_ASSERT_EQUAL(4, (int)g_snap[4]);
+    TEST_ASSERT_EQUAL(OV_EXT_MIN_LBA, overlay_image_ext_lba(g_snap));
+    TEST_ASSERT_EQUAL(OV_SNAP_SECTORS_MAX, overlay_image_sectors(g_snap));
+    /* no image sector lands in the FAT16 volume (LBA 64 .. 4221) or on the
+     * journals (4222 .. 4224) */
+    for (s = 0; s < OV_SNAP_SECTORS_MAX; s++) {
+        uint32_t lba = overlay_image_lba(OV_EXT_MIN_LBA, s);
+        TEST_ASSERT_TRUE(lba < 64U || lba >= OV_EXT_MIN_LBA);
+    }
+    TEST_ASSERT_EQUAL(OV_EXT_MIN_LBA + OV_EXT_SECTORS - 1U, overlay_image_lba(OV_EXT_MIN_LBA, OV_SNAP_SECTORS_MAX - 1U));
+    /* the data really crosses into the extension (past 32 KiB) */
+    for (i = OV_SNAP_SIZE, s = 0; i < OV_SNAP_SIZE + 512U; i++) if (g_snap[i]) s++;
+    TEST_ASSERT_TRUE(s > 0U);
+    /* "reboot": a store without the extension learns it from the image */
+    overlay_init();
+    (void)overlay_set_ext(0U);
+    TEST_ASSERT_TRUE(overlay_restore(g_snap, OV_SNAP_SIZE) < 0);   /* half an image: refused */
+    TEST_ASSERT_EQUAL(0, overlay_restore(g_snap, sz));
+    TEST_ASSERT_EQUAL(OV_EXT_MIN_LBA, overlay_ext_lba());
+    memset(back, 0, sizeof(back));
+    TEST_ASSERT_EQUAL((int)OV_FILE_MAX_EXT_BYTES, overlay_read("big64.bin", back, sizeof(back)));
+    TEST_ASSERT_EQUAL_MEMORY(big, back, OV_FILE_MAX_EXT_BYTES);
+    /* store bound: a second 30 KiB file does not fit beside it */
+    TEST_ASSERT_EQUAL(OV_ERR_NOSPACE, overlay_write("second.bin", big, 30720U));
+    TEST_ASSERT_TRUE(overlay_read("second.bin", back, sizeof(back)) < 0);
+    TEST_ASSERT_TRUE(overlay_snapshot_bytes() <= OV_SNAP_SIZE_MAX);
+    /* a v4 header pointing into the FAT16 volume is refused */
+    put_u32(g_snap + 16, 100U);
+    TEST_ASSERT_TRUE(overlay_restore(g_snap, sz) < 0);
+    TEST_ASSERT_EQUAL(0U, overlay_image_ext_lba(g_snap));
+}
+
+/* Lot 46 PR B: a v3 disk (Lot 44/45) still loads in a store that has the
+ * extension, and the next snapshot is v4 with the same files. */
+static void test_v3_image_loads_then_saves_v4(void) {
+    char out[32];
+    uint32_t sz = 0;
+    setUp();
+    TEST_ASSERT_EQUAL(9, overlay_write("v3.txt", "v3 kept !", 9));
+    TEST_ASSERT_EQUAL(0, overlay_snapshot(g_snap, sizeof(g_snap), &sz));
+    TEST_ASSERT_EQUAL(OV_SNAP_SIZE, sz);
+    TEST_ASSERT_EQUAL(3, (int)g_snap[4]);
+    TEST_ASSERT_EQUAL(64U, overlay_image_sectors(g_snap));
+    overlay_init();
+    TEST_ASSERT_EQUAL(0, overlay_set_ext(5000U));
+    TEST_ASSERT_EQUAL(0, overlay_restore(g_snap, sz));
+    TEST_ASSERT_EQUAL(9, overlay_read("v3.txt", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_MEMORY("v3 kept !", out, 9);
+    TEST_ASSERT_EQUAL(0, overlay_snapshot(g_snap, sizeof(g_snap), &sz));
+    TEST_ASSERT_EQUAL(4, (int)g_snap[4]);
+    TEST_ASSERT_EQUAL(5000U, overlay_image_ext_lba(g_snap));
+    overlay_init();
+    (void)overlay_set_ext(0U);
+    TEST_ASSERT_EQUAL(0, overlay_restore(g_snap, sz));
+    TEST_ASSERT_EQUAL(9, overlay_read("v3.txt", out, sizeof(out)));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_snapshot_empty_roundtrip);
@@ -269,6 +349,8 @@ int main(void) {
     RUN_TEST(test_large_file_rewrite_copy_append);
     RUN_TEST(test_restore_v3_rejects_broken_chain);
     RUN_TEST(test_restore_v2_disk_image);
+    RUN_TEST(test_v4_extension_64k_file);
+    RUN_TEST(test_v3_image_loads_then_saves_v4);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -16,6 +16,9 @@
 #include "osui_form.h"
 
 #define OSUI_TOOL_LINES 128
+/* Lot 46: bytes the tool window reads itself (static g_file); a larger
+ * file comes whole through src->load (heap) */
+#define OSUI_TOOL_READ_MAX 8191
 /* Lot 45 (US-G15): line store as wide as a maximized window */
 #define OSUI_TOOL_COLS OSUI_APP_MAX_COLS
 #define OSUI_TOOL_OUT 65536         /* captured command output per call (64 KiB, a note marks a cut) */
@@ -48,13 +51,14 @@ typedef struct {
     char arg[64];                              /* viewer / pm-run file */
     char lines[OSUI_TOOL_LINES][OSUI_TOOL_COLS];
     unsigned char cls[OSUI_TOOL_LINES];        /* OSUI_APP_A_* of each line */
+    unsigned char cont[OSUI_TOOL_LINES];       /* Lot 46: 1 = wrapped part of the line above */
     int n, top, sel;
     int mode;                                  /* tasks: 0 processes, 1 services */
     int armed_pid;                             /* tasks: kill confirmation */
     char input[OSUI_TOOL_INPUT];
     int ilen;
     char status[OSUI_TOOL_COLS];
-    char log[200];                             /* serial log of the last action */
+    char log[400];                             /* serial log of the last action (Lot 46: + tail lines) */
     /* chat */
     int gen;                                   /* 1 generating */
     int steps, cur_len;
@@ -90,6 +94,11 @@ int osui_tool_cmd_allowed(const char *cmd);
 #define OSUI_CMD_TERMINAL 4
 int osui_tool_cmd_check(const char *cmd, int (*known)(const char *name));
 const char *osui_tool_cmd_reason(int code);
+/* Lot 46: the note a window adds after the output of the programs a
+ * command launched (spawn, exec; kernel capture SYS_OUT_CAPTURE): bytes
+ * dropped past OS_OUTCAP_MAX, programs not captured, programs still
+ * running. Returns its length, 0 when there is nothing to say. */
+int osui_tool_spawn_note(char *out, int max, const os_outcap_stat_t *st);
 /* 1 when kind is a UX5 parity panel (osui_parity.h) */
 int osui_tool_is_panel(int kind);
 void osui_tool_open(osui_tool_t *t, int kind, const char *arg, const osui_tool_src_t *src);
@@ -102,7 +111,10 @@ int osui_tool_idle(osui_tool_t *t, const osui_tool_src_t *src);
 void osui_tool_render(const osui_tool_t *t, osui_app_view_t *v);
 /* Lot 45 (US-G15): the window grid changed (maximize / restore / resize).
  * Rows follow at once; new text wraps at the new width; views without side
- * effects (menus, viewer, tasks, settings) are rebuilt at the new size. */
+ * effects (menus, viewer, tasks, settings) are rebuilt at the new size.
+ * Lot 46: the output already shown (command output, P2P, PromptMessage run)
+ * is wrapped again at the new width (soft wraps joined, hard line ends
+ * kept); the store keeps OSUI_TOOL_LINES lines. */
 void osui_tool_set_view(osui_tool_t *t, int rows, int cols, const osui_tool_src_t *src);
 /* first decimal number of a ps line (the PID), -1 none */
 int osui_tool_line_pid(const char *line);
