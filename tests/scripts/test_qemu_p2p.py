@@ -355,6 +355,60 @@ def main():
         cmd(c, "p2p-cache putv cfg2 old %s" % idx, "p2p-cache stale refused cfg2")
         say("scenario 2b: raft prevote, lease, snapshot, hub cut ok (%.0fs)" % (time.monotonic() - t0))
 
+        # Lot 46 PR D (US-064): the leader itself is partitioned (hub wire
+        # cut alpha<->beta and alpha<->gamma). After its lease expires the
+        # majority side (beta, gamma) elects beta with a higher term and
+        # commits a new entry; the isolated old leader cannot commit its own
+        # entry (no quorum). After the heal alpha steps down to follower at
+        # the new term, its uncommitted entry is replaced and it applies the
+        # majority's entry.
+        hub.cut_pair(a["mac"], b["mac"])
+        hub.cut_pair(a["mac"], c["mac"])
+        alpha_at_cut = len(base.log_text(a["log"]))
+        at_cut = dict((n["label"], len(base.log_text(n["log"]))) for n in (a, b, c))
+        start_s = cmd(a, "p2p-raft-put stale alpha", "p2p-raft-put ")
+        stale_isolated = "p2p-raft-put ok index" in log(a, start_s)
+        cmd(a, "p2p-poll 1", "p2p-poll ok")
+        time.sleep(12.0)   # P2P_RAFT_LEASE_TICKS is 10 s
+        elected = False
+        for _try in range(6):
+            cmd(b, "p2p-raft elect", "p2p-raft ")
+            for _round in range(2):
+                cmd(b, "p2p-poll 1", "p2p-poll ok")
+                cmd(c, "p2p-poll 1", "p2p-poll ok")
+            start_r = cmd(b, "p2p-raft", "p2p raft role ")
+            if "p2p raft role leader" in log(b, start_r):
+                elected = True
+                break
+            time.sleep(2.0)
+        if not elected:
+            raise RuntimeError("beta was not elected while alpha was partitioned: %s" % log(b)[-600:])
+        term_b = int(re.search(r"p2p raft role leader term (\d+)", log(b, start_r)).group(1))
+        start_p = cmd(b, "p2p-raft-put split beta", "p2p-raft-put ok index ")
+        for _round in range(2):
+            cmd(b, "p2p-poll 1", "p2p-poll ok")
+            cmd(c, "p2p-poll 1", "p2p-poll ok")
+        wait_log(c, "split=beta", 30)
+        cmd(a, "p2p-poll 1", "p2p-poll ok")
+        if "split=beta" in log(a, alpha_at_cut) or "commit index" in log(a, alpha_at_cut):
+            raise RuntimeError("isolated alpha committed during the partition: %s" % log(a, alpha_at_cut)[-600:])
+        hub.heal_pair(a["mac"], b["mac"])
+        hub.heal_pair(a["mac"], c["mac"])
+        for _round in range(3):
+            cmd(b, "p2p-poll 2", "p2p-poll ok")
+            cmd(a, "p2p-poll 2", "p2p-poll ok")
+            cmd(c, "p2p-poll 2", "p2p-poll ok")
+        wait_log(a, "split=beta", 40)
+        start_a = cmd(a, "p2p-raft", "p2p raft role ")
+        m = re.search(r"p2p raft role (\w+) term (\d+)", log(a, start_a))
+        if not m or m.group(1) != "follower" or int(m.group(2)) != term_b:
+            raise RuntimeError("old leader did not step down to the new term %d: %r" % (term_b, m.groups() if m else None))
+        for node in (a, b, c):
+            if "stale=alpha" in log(node, at_cut[node["label"]]):
+                raise RuntimeError("%s applied the uncommitted entry of the isolated leader" % node["label"])
+        say("scenario 2c: leader partitioned, beta elected term %d, old leader stepped down after heal%s (%.0fs)" %
+            (term_b, "" if stale_isolated else " (its put was refused)", time.monotonic() - t0))
+
         # Scenario 3: link alpha<->gamma fails; detection, then relay via beta.
         cmd(a, "p2p-block gamma", "p2p-block ok gamma")
         cmd(c, "p2p-block alpha", "p2p-block ok alpha")
