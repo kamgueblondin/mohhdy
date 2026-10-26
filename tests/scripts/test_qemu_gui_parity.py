@@ -100,10 +100,10 @@ def viewer_images(monitor, proc):
     g.wait_for(proc, "osui panel out=img-info ok fmt=bmp w=48 h=32 bpp=32", g.CMD_TIMEOUT, start)
     say("img-info (shell) decodes the same BMP 32 bits")
     # Lot 47 (US-G03): JPEG baseline and PNG 16-bit / Adam7 in the same decoder
-    for path, want in (("/samples/mire420.jpg", "img-info ok fmt=jpeg w=48 h=32 bpp=24"),
-                       ("/samples/mire-rgba16-i.png", "img-info ok fmt=png w=48 h=32 bpp=64 depth=16 interlace=1 px0=0,0,0"),
-                       ("/samples/mire-g2-i.png", "img-info ok fmt=png w=48 h=32 bpp=2 depth=2 interlace=1"),
-                       ("/samples/mire-prog.jpg", "img-info error fmt=jpeg w=48 h=32 bpp=24 reason=variante non supportee")):
+    for path, want in (("/images/mire420.jpg", "img-info ok fmt=jpeg w=48 h=32 bpp=24"),
+                       ("/images/mire-rgba16-i.png", "img-info ok fmt=png w=48 h=32 bpp=64 depth=16 interlace=1 px0=0,0,0"),
+                       ("/images/mire-g2-i.png", "img-info ok fmt=png w=48 h=32 bpp=2 depth=2 interlace=1"),
+                       ("/images/mire-prog.jpg", "img-info error fmt=jpeg w=48 h=32 bpp=24 reason=variante non supportee")):
         start = len(g.log_text())
         type_text(monitor, "img-info " + path)
         key(monitor, "ret")
@@ -113,14 +113,14 @@ def viewer_images(monitor, proc):
     start = len(g.log_text())
     key(monitor, "esc")
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
-    slash(monitor, proc, "/view /samples/mire444.jpg", "fmt=jpeg zoom=fit")
+    slash(monitor, proc, "/view /images/mire444.jpg", "fmt=jpeg zoom=fit")
     g.wait_for(proc, "osui tool line=image 48x32 affichee en pixels 48x32 fmt=jpeg", g.CMD_TIMEOUT)
     g.screendump_rgb(monitor, "qemu-gui-lot47-viewer-jpeg.ppm")
     start = len(g.log_text())
     key(monitor, "esc")
     g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)
     say("/view mire444.jpg: JPEG baseline drawn in pixels")
-    slash(monitor, proc, "/view /samples/mire-rgb-i.png", "fmt=png zoom=fit")
+    slash(monitor, proc, "/view /images/mire-rgb-i.png", "fmt=png zoom=fit")
     start = len(g.log_text())
     key(monitor, "esc")
     g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)

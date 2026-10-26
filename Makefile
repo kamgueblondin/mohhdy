@@ -582,15 +582,18 @@ INITRD_MODELS_KEY = MODEL_DIR=$(MODEL_DIR) $(foreach f,$(MODEL_DIR)/gpt2_tokeniz
 pack-initrd: userspace-all
 	@mkdir -p build
 	@# Lot 46: the hand-kept initrd files (roadmap, samples, bigfiles) count too: an
-	@# edited /roadmap.txt left the old initrd in place
-	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples $(INITRD_DIR)/bigfiles"; \
+	@# edited /roadmap.txt left the old initrd in place. Lot 47: the file list is
+	@# compared too (a moved file keeps its old mtime and was never repacked)
+	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples $(INITRD_DIR)/images $(INITRD_DIR)/bigfiles"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
 	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && [ -f $(INITRD_TEST_IMAGE) ] && \
 	    [ "$$(cat build/.initrd-models 2>/dev/null)" = "$(INITRD_MODELS_KEY)" ] && \
-	    [ -z "$$(find $$paths -type f -newer build/.initrd-stamp -print -quit 2>/dev/null)" ]; then \
+	    [ -z "$$(find $$paths -type f -newer build/.initrd-stamp -print -quit 2>/dev/null)" ] && \
+	    [ "$$(find $$paths -type f 2>/dev/null | sort | cksum)" = "$$(cat build/.initrd-list 2>/dev/null)" ]; then \
 		echo "[mkinitrd] initrd unchanged"; \
 	else \
-		$(MAKE) --no-print-directory pack-initrd-now; \
+		$(MAKE) --no-print-directory pack-initrd-now && \
+		find $$paths -type f 2>/dev/null | sort | cksum > build/.initrd-list; \
 	fi
 
 # Repacks with another MODEL_DIR and back, then checks the stamp logic.

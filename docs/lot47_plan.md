@@ -74,7 +74,8 @@ merged nor rebased.
   - PNG files are written by the script itself.
   - JPEG files were made once with Pillow and are committed, because
     libjpeg output can change between versions.
-  - All of them are in `initrd_content/samples/`.
+  - All of them are in `initrd_content/images/` (`/images`), so `/samples`
+    keeps the 8 files the panel tests count.
 - Measured against the true pattern: 4:4:4 at most 4 levels off, 4:2:0
   and restart at most 8, gray at most 1. The unit tests allow 8 / 14 / 4.
 - Robustness: `test_jpeg_refusals_and_bounds` (corrupted entropy data,
