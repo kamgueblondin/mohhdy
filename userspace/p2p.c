@@ -649,10 +649,28 @@ static int raft_send_one(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
     p->raft_commit_sent = n->raft.commit_index;
     return 0;
 }
+/* Lot 46: the periodic replicate runs on every p2p_tick. Without pacing a
+ * leader resent the same unacked entry to an unreachable follower on each
+ * tick (6697 appends during one hub cut), which crowded out the HELLO the
+ * follower needs to rejoin. A peer gets a new entry, a new commit index or
+ * a snapshot at once; the same frame again only after P2P_RAFT_RESEND. */
+#define P2P_RAFT_RESEND (P2P_HZ / 4U)
 static void raft_replicate(p2p_node_t* n, const p2p_host_t* h) {
     int i;
+    uint32_t t, key;
     if (!n->raft.active || n->raft.role != P2P_RAFT_LEADER) return;
-    for (i = 0; i < P2P_PEERS; i++) (void)raft_send_one(n, h, &n->peers[i]);
+    t = now(h);
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        if (!p->used || !p->keyed || !p->up) continue;
+        key = (n->raft.snapshot_index > 0U && p->raft_match < n->raft.snapshot_index) ?
+              (0x80000000U | n->raft.snapshot_index) : p->raft_next;
+        if (key == p->raft_tx_key && p->raft_commit_sent == n->raft.commit_index &&
+            t - p->raft_tx_tick < P2P_RAFT_RESEND) continue;
+        p->raft_tx_key = key;
+        p->raft_tx_tick = t;
+        (void)raft_send_one(n, h, p);
+    }
 }
 static void raft_become_leader(p2p_node_t* n, const p2p_host_t* h) {
     int i;
@@ -663,6 +681,7 @@ static void raft_become_leader(p2p_node_t* n, const p2p_host_t* h) {
     raft_note_lease(n, h);
     for (i = 0; i < P2P_PEERS; i++) {
         n->peers[i].raft_next = n->raft.log_count + 1U;
+        n->peers[i].raft_tx_key = 0;
         n->peers[i].raft_match = 0;
     }
     line[0] = 0;
@@ -874,6 +893,11 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         my_term = raft_last_term(n);
         log_ok = !(last_term < my_term || (last_term == my_term && last_idx < my_idx));
         timer_expired = now(h) - n->raft.election_tick >= P2P_RAFT_ELECTION_TICKS;
+        /* Lot 46: a node already campaigning has lost its leader too; its
+         * own pre-vote reset election_tick, which made two pre-candidates
+         * refuse each other forever (qemu-p2p 2c after an isolated pre-vote). */
+        if (n->raft.role == P2P_RAFT_PRE_CANDIDATE || n->raft.role == P2P_RAFT_CANDIDATE)
+            timer_expired = 1;
         /* A pre-vote does not bump the term and does not consume voted_for.
          * A follower that still has a leader and a fresh heartbeat refuses,
          * so a short partition cannot start a new term. */
@@ -1007,9 +1031,13 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
             }
         }
         if (ok) {
-            if (lcommit > n->raft.commit_index) {
-                n->raft.commit_index = lcommit < n->raft.log_count ? lcommit : n->raft.log_count;
-            }
+            /* Raft: commit = min(leaderCommit, index of the entry just
+             * matched), not the local log end. Lot 46 (qemu-p2p 2c): an
+             * append matching index 4 with leaderCommit 5 applied the
+             * isolated old leader's own uncommitted index 5. */
+            uint32_t upto = eindex < n->raft.log_count ? eindex : n->raft.log_count;
+            if (lcommit < upto) upto = lcommit;
+            if (upto > n->raft.commit_index) n->raft.commit_index = upto;
             raft_apply(n, h);
             put32(b, n->raft.term); b[4] = 1; put32(b + 5, eindex);
         } else {

@@ -456,6 +456,32 @@ void test_raft_snapshot_installs_for_a_lagging_follower(void) {
     TEST_ASSERT_EQUAL(2, (int)g_n[2].raft.snapshot_index);
 }
 
+/* Lot 46: a leader whose follower is cut does not resend the unacked entry
+ * on every p2p_tick (the guest loop ticks many times per timer tick). */
+void test_raft_resend_paced_for_cut_follower(void) {
+    uint32_t before;
+    int k;
+    setup(3, 0);
+    run(3, 300);
+    TEST_ASSERT_EQUAL(2, p2p_raft_elect(&g_n[0], &g_h[0]));
+    run(3, 80);
+    TEST_ASSERT_EQUAL(P2P_RAFT_LEADER, g_n[0].raft.role);
+    g_cut[0][2] = 1;
+    g_cut[1][2] = 1;
+    TEST_ASSERT_EQUAL(1, p2p_raft_append(&g_n[0], &g_h[0], "tone", "blue"));
+    before = g_n[0].tx_type[P2P_I_RAFT_APPEND];
+    for (k = 0; k < 500; k++) p2p_tick(&g_n[0], &g_h[0], 32); /* same tick */
+    TEST_ASSERT_TRUE(g_n[0].tx_type[P2P_I_RAFT_APPEND] - before <= 2U);
+    g_ticks += P2P_HZ / 4U;
+    p2p_tick(&g_n[0], &g_h[0], 32);
+    TEST_ASSERT_TRUE(g_n[0].tx_type[P2P_I_RAFT_APPEND] - before >= 1U);
+    /* the healed follower still catches up */
+    g_cut[0][2] = 0;
+    g_cut[1][2] = 0;
+    run(3, 120);
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[2], "tone"));
+}
+
 void test_qos_window_and_cache_invalidate(void) {
     char rep[512];
     int i, ok = 0, throttled = 0;
@@ -1633,6 +1659,7 @@ int main(void) {
     RUN_TEST(test_raft_prevote_does_not_bump_a_healthy_term);
     RUN_TEST(test_raft_compact_past_physical_window);
     RUN_TEST(test_raft_snapshot_installs_for_a_lagging_follower);
+    RUN_TEST(test_raft_resend_paced_for_cut_follower);
     RUN_TEST(test_qos_window_and_cache_invalidate);
     RUN_TEST(test_routing_grpc_and_stun);
     RUN_TEST(test_stun_behind_simulated_nat);

@@ -330,17 +330,47 @@ def main():
             raise RuntimeError("gamma applied late=yes during the hub cut")
         cmd(a, "p2p-raft-compact", "p2p-raft-compact ok index 2")
         cmd(a, "p2p-raft-put next ok", "p2p-raft-put ok index 3")
+        # Lot 46: pre-vote under a real partition. Gamma, cut from both
+        # peers, waits out the leader lease and campaigns: its pre-vote gets
+        # no majority, so its term does not move, and after the heal the
+        # leader keeps its term (no disruptive election).
+        term_re = r"p2p raft role (\w+) term (\d+) .*? term_changes (\d+)"
+        st_a = cmd(a, "p2p-raft", "p2p raft role leader")
+        a_term = re.search(term_re, log(a, st_a)).group(2)
+        st_c = cmd(c, "p2p-raft", " term_changes ")
+        c_before = re.search(term_re, log(c, st_c)).groups()
+        time.sleep(12)
+        st_e = cmd(c, "p2p-raft elect", "p2p-raft ")
+        if "p2p-raft lease held" in log(c, st_e):
+            time.sleep(6)
+            cmd(c, "p2p-raft elect", "p2p-raft election started")
+        wait_log(c, "p2p raft prevote started", 20, st_e)
+        cmd(c, "p2p-poll 2", "p2p-poll ok")
+        st_c = cmd(c, "p2p-raft", " term_changes ")
+        c_after = re.search(term_re, log(c, st_c)).groups()
+        if c_after[0] == "leader" or c_after[1:] != c_before[1:]:
+            raise RuntimeError("isolated gamma pre-vote moved its term: %r -> %r" % (c_before, c_after))
+        say("scenario 2b: isolated gamma pre-vote, term stays %s (role %s)" % (c_after[1], c_after[0]))
         hub.heal_pair(a["mac"], c["mac"])
         hub.heal_pair(b["mac"], c["mac"])
         # Two rounds: the leader sends the snapshot, the follower answers,
         # then the leader sends index 3. One round leaves that reply queued.
-        for _round in range(2):
+        # The cut now outlasts the lease (pre-vote check above), so the
+        # peers may have marked gamma down: poll until it rejoins (8 max).
+        healed_at = len(base.log_text(c["log"]))
+        for _round in range(8):
             cmd(a, "p2p-poll 2", "p2p-poll ok")
             cmd(b, "p2p-poll 2", "p2p-poll ok")
             cmd(c, "p2p-poll 2", "p2p-poll ok")
+            if _round >= 1 and "p2p raft snapshot installed index 2" in log(c, healed_at):
+                break
         wait_log(c, "p2p raft snapshot installed index 2", 40)
         wait_log(b, "p2p raft commit index 3 next=ok", 30)
         wait_log(c, "p2p raft commit index 3 next=ok", 30)
+        st_a = cmd(a, "p2p-raft", "p2p raft role ")
+        got = re.search(term_re, log(a, st_a)).groups()
+        if got[0] != "leader" or got[1] != a_term:
+            raise RuntimeError("heal after gamma pre-vote disrupted the leader: %r (term was %s)" % (got, a_term))
         # Lot 6 (US-070): cache line written through the Raft log, same
         # value and version on the three guests, older fill refused.
         start_cr = cmd(a, "p2p-cache raft cfg2 green", "p2p-cache raft ok cfg2 index ")
@@ -370,25 +400,31 @@ def main():
         stale_isolated = "p2p-raft-put ok index" in log(a, start_s)
         cmd(a, "p2p-poll 1", "p2p-poll ok")
         time.sleep(12.0)   # P2P_RAFT_LEASE_TICKS is 10 s
-        elected = False
+        # Lot 46: beta or gamma may win (gamma campaigns too once its own
+        # pre-vote timer ran, see 2b); any majority leader is valid Raft.
+        elected = None
         for _try in range(6):
             cmd(b, "p2p-raft elect", "p2p-raft ")
             for _round in range(2):
                 cmd(b, "p2p-poll 1", "p2p-poll ok")
                 cmd(c, "p2p-poll 1", "p2p-poll ok")
-            start_r = cmd(b, "p2p-raft", "p2p raft role ")
-            if "p2p raft role leader" in log(b, start_r):
-                elected = True
+            for node in (b, c):
+                start_r = cmd(node, "p2p-raft", "p2p raft role ")
+                if "p2p raft role leader" in log(node, start_r):
+                    elected = node
+                    break
+            if elected:
                 break
             time.sleep(2.0)
         if not elected:
-            raise RuntimeError("beta was not elected while alpha was partitioned: %s" % log(b)[-600:])
-        term_b = int(re.search(r"p2p raft role leader term (\d+)", log(b, start_r)).group(1))
-        start_p = cmd(b, "p2p-raft-put split beta", "p2p-raft-put ok index ")
+            raise RuntimeError("no leader elected while alpha was partitioned: %s" % log(b)[-600:])
+        other = c if elected is b else b
+        term_b = int(re.search(r"p2p raft role leader term (\d+)", log(elected, start_r)).group(1))
+        start_p = cmd(elected, "p2p-raft-put split beta", "p2p-raft-put ok index ")
         for _round in range(2):
-            cmd(b, "p2p-poll 1", "p2p-poll ok")
-            cmd(c, "p2p-poll 1", "p2p-poll ok")
-        wait_log(c, "split=beta", 30)
+            cmd(elected, "p2p-poll 1", "p2p-poll ok")
+            cmd(other, "p2p-poll 1", "p2p-poll ok")
+        wait_log(other, "split=beta", 30)
         cmd(a, "p2p-poll 1", "p2p-poll ok")
         if "split=beta" in log(a, alpha_at_cut) or "commit index" in log(a, alpha_at_cut):
             raise RuntimeError("isolated alpha committed during the partition: %s" % log(a, alpha_at_cut)[-600:])
@@ -406,7 +442,7 @@ def main():
         for node in (a, b, c):
             if "stale=alpha" in log(node, at_cut[node["label"]]):
                 raise RuntimeError("%s applied the uncommitted entry of the isolated leader" % node["label"])
-        say("scenario 2c: leader partitioned, beta elected term %d, old leader stepped down after heal%s (%.0fs)" %
+        say("scenario 2c: leader partitioned, " + elected["name"] + " elected term %d, old leader stepped down after heal%s (%.0fs)" %
             (term_b, "" if stale_isolated else " (its put was refused)", time.monotonic() - t0))
 
         # Scenario 3: link alpha<->gamma fails; detection, then relay via beta.

@@ -279,6 +279,14 @@ def main():
         type_line(client, proc, "web-serve stop")
         wait_for(proc, "osui web-serve ok served=2 failed=0", 30, start)
         wait_for_prompt(proc, len(text()) - 400)
+        # (4) Lot 46: an arbitrary port is honored, not only 8080/8443.
+        start = send_command(client, proc, "web-serve 9137 1")
+        p1 = peer.request(b"GET /status HTTP/1.0\r\n\r\n", guest_port=9137)
+        if not p1.startswith(b"HTTP/1.0 200 OK"):
+            raise RuntimeError("GET /status on port 9137: %r" % p1[:300])
+        wait_for(proc, "osui web-serve ok served=1 failed=0", 60, start)
+        wait_for_prompt(proc, start)
+        print("custom port: web-serve 9137 served GET /status")
         if peer.error is not None:
             raise RuntimeError("controlled Ethernet peer failed: %s" % peer.error)
         print("QEMU OS-UI web contract: http 3 concurrent + 2, https 2 concurrent, background 2")
