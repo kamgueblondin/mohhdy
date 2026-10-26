@@ -11,6 +11,8 @@ ASFLAGS = --32
 PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver vfsvirtual networker vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim vfshistclaim waitchild ok
 # Lot 46: window capture proof (output larger than OS_OUTCAP_MAX)
 PROGRAMS += outflood
+# Lot 47: test-only probe, a non-root caller of the interface configuration
+PROGRAMS += ifcrogue
 USER_HEADERS = shell_util.h webeng.h dosemu.h cicd.h webrt.h grpcwire.h promptmessage.h ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h osui_panes.h osui_ide.h fsops.h osui_files.h osui_app.h osui_tools.h osui_form.h osui_gui_apps.inc p2p.h shell_p2p.h shell_grpc.h collab.h prod.h csig.h
 # Tranche 4: Ring 3 ATA driver + proofs.
 PROGRAMS += atadriver ataclient atarogue
@@ -227,6 +229,10 @@ waitchild: wait_child.o start.o
 
 ok: ok.o start.o
 	@echo "Linking ok..."
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
+ifcrogue: ifcrogue.o net_ifcfg.o start.o
+	@echo "Linking ifcrogue..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 outflood: outflood.o start.o

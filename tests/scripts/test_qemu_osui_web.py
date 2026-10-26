@@ -291,6 +291,15 @@ def main():
         # served on the new address, then back to DHCP and served again.
         start = send_command(client, proc, "net-if")
         wait_for(proc, "net-if ok mode dhcp ip 10.32.0.15 ", 30, start)
+        # rights: a spawned program (not the root shell) is refused any change, may read
+        start = send_command(client, proc, "spawn ifcrogue")
+        wait_for(proc, "ifcrogue end", 60, start)
+        tail = text()[start:]
+        if tail.count("ifcrogue net-if error denied (root shell only)") != 2 or \
+                "ifcrogue net-if ok mode dhcp ip 10.32.0.15 " not in tail:
+            raise RuntimeError("ifcrogue: non-root interface change not refused: %r" % tail[-600:])
+        start = send_command(client, proc, "net-if")
+        wait_for(proc, "net-if ok mode dhcp ip 10.32.0.15 ", 30, start)
         start = send_command(client, proc, "net-if static 10.32.0.77 255.255.255.0 10.32.0.2")
         wait_for(proc, "net-if ok mode static ip 10.32.0.77 mask 255.255.255.0 gw 10.32.0.2 lease 1", 30, start)
         wait_for_prompt(proc, start)

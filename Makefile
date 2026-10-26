@@ -21,7 +21,7 @@ INITRD_TEST_IMAGE = my_initrd_test.tar
 INITRD_TEST_DIR := build/initrd_test_root
 TEST_ONLY_PROGRAMS = user_program spin ipcwait ipcpoke pcirogue devrogue ataclient atarogue netclaim netrelay netwire \
 	vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim vfshistclaim \
-	waitchild outflood aiclient aistat airogue ggufclient ggufpause
+	waitchild outflood ifcrogue aiclient aistat airogue ggufclient ggufpause
 DISK_IMAGE ?= build/overlay.img
 GGUF_DISK_IMAGE ?= build/gpt2_gguf_fat16.img
 FAT32_SECONDARY_IMAGE ?= build/fat32_secondary.img
@@ -677,6 +677,7 @@ pack-initrd-now:
 	@cp -f userspace/vfshistclaim $(INITRD_TEST_DIR)/bin/vfshistclaim
 	@cp -f userspace/waitchild $(INITRD_TEST_DIR)/bin/waitchild
 	@cp -f userspace/outflood $(INITRD_TEST_DIR)/bin/outflood
+	@cp -f userspace/ifcrogue $(INITRD_TEST_DIR)/bin/ifcrogue
 	@cp -f userspace/aiclient $(INITRD_TEST_DIR)/bin/aiclient
 	@cp -f userspace/aistat $(INITRD_TEST_DIR)/bin/aistat
 	@cp -f userspace/airogue $(INITRD_TEST_DIR)/bin/airogue
@@ -1051,6 +1052,12 @@ strict-image-check: $(OS_IMAGE) kernel-netlegacy pack-initrd
 	@nm $(OS_IMAGE) | grep -q ' kernel_nic_boot_probe$$' || { echo "FAIL: strict image lost kernel_nic_boot_probe"; exit 1; }
 	@echo "OK production initrd without the $(words $(TEST_ONLY_PROGRAMS)) test programs (they ship in $(INITRD_TEST_IMAGE))"
 	@echo "OK strict image without Ring 0 network stack; legacy image keeps only the Ring 0 NIC path; both images: boot FAT mount, overlay and journals by the Ring 3 atadriver, no ATA IDENTIFY or FAT PIO fallback"
+
+# Lot 47 (US-120): /roadmap.txt agrees with the US master phase 9 table and
+# with the prod-roadmap counts the QEMU production test expects.
+roadmap-check:
+	@python3 scripts/check_roadmap.py
+.PHONY: roadmap-check
 
 # Fail if a build or a test rewrote a tracked file, or left an untracked
 # file, outside build/. Ignored products (build/, initrd tarball, logs)
