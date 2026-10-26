@@ -1254,6 +1254,12 @@ static inline int os_task_parse_event(const os_ipc_message_t* message,
  * and the driver buffer (no shared page); the driver runs the PIO at CPL 3. */
 #define OS_ATA_KERNEL_RESERVED_LBAS 64U
 #define OS_ATA_OVERLAY_SECTORS 64U
+/* Lot 46 (US-G16): overlay v4 extension area, right after the event journal
+ * (LBA 4224). The disk image grows from 4225 to 4353 sectors; the FAT16
+ * volume (LBA 64-4221) and the journals (4222-4224) do not move. */
+#define OS_ATA_OVERLAY_EXT_LBA 4225U
+#define OS_ATA_OVERLAY_EXT_SECTORS 128U
+#define OS_ATA_OVERLAY_ALL_SECTORS (OS_ATA_OVERLAY_SECTORS + OS_ATA_OVERLAY_EXT_SECTORS)
 #define OS_ATA_JOB_MAX_SECTORS 8U
 #define OS_ATA_JOB_NONE  0U
 #define OS_ATA_JOB_WRITE 1U

@@ -48,7 +48,7 @@ US-119 8 done business-metrics
 US-120 8 partial roadmap-from-status-file
 # Phase 9 = GUI parity track (UX5): terminal command families in the desktop.
 US-G01 9 done gui-tools-run-registry-commands-kernel-rights
-US-G02 9 partial editor-heap-window-grid-256col-lines-hscroll-saves-30k
+US-G02 9 partial editor-heap-window-grid-256col-lines-hscroll-saves-64k-v4-not-tested
 US-G03 9 partial viewer-pnm-bmp-png-zoom-fit-pan-no-jpeg-no-interlace
 US-G04 9 partial net-panel-every-entry-qemu-no-interface-config-command-in-shell
 US-G05 9 done disk-panel-every-entry-qemu-persist-save-fat16-lot46
@@ -62,6 +62,6 @@ US-G12 9 done search-panel-grep-r-whole-files-1m-heap-pages
 US-G13 9 done notes-panel-every-entry-qemu-export-verify-import-lot46
 US-G14 9 done cmd-window-any-registry-command
 US-G15 9 done tools-files-editor-follow-window-grid
-US-G16 9 partial overlay-files-30k-chunked-relay-not-64k
+US-G16 9 partial overlay-v4-64k-ext-lba-4225-written-not-tested
 US-G17 9 done panels-vfs-session-mcp-media-simule-pwa-api-grpc-devsync-qemu
 US-G18 9 done chat-help-window-slash-programs-from-dispatch-table

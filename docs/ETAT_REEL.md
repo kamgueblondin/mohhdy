@@ -1292,3 +1292,19 @@ Next steps: 64 KiB files (needs a new
 disk layout, the overlay area is 32 KiB);
 panels for vfs, task, session, mcp, media and grpc (US-G17); forms for the
 collab ledger (offers, votes, escrow) and driver restart in /services.
+
+## Lot 46 PR B (branch `lot46-b-large-files`) - code written, NON TESTE
+
+Large files (US-G16, US-G02). Overlay image v4: the same dense records as
+v3, over the AIOV area (LBA 0-63) plus a new extension area of 128 sectors
+at LBA 4225-4352, after the event journal; the FAT16 volume (LBA 64-4221)
+and the journals (4222-4224) do not move, the disk image grows from 4225
+to 4353 sectors. A small overlay is still written as v3; v1, v2, v3 images
+still load. 64 KiB per file, 65537 bytes refused. The Ring 3 atadriver
+reads and writes the extension (capacity 96 KiB), or keeps the 32 KiB
+budget on a disk made before Lot 46. Compiled; unit tests in
+`test_overlay` and the QEMU script `qemu-large-files` (64 KiB Save As,
+refusal, reboot) are written and were NOT run. Limits: the slice 2
+snapshot jobs stay 64 sectors (a kernel-held overlay over 32 KiB is not
+flushed by them), `cp` of files over 32 KiB stays refused (FSOPS_FILE_MAX).
+

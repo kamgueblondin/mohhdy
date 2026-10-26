@@ -410,7 +410,7 @@ completent le backlog ; elles n'en retirent aucune.
 | US | Besoin | Statut |
 |---|---|---|
 | US-G01 | Tool windows run any shell registry command (kernel rights, terminal-only commands refused) | done |
-| US-G02 | Editor: lines on the user heap, grid follows the window | partial (lines up to 256 columns with horizontal scroll since Lot 45; saves up to 30 KiB) |
+| US-G02 | Editor: lines on the user heap, grid follows the window | partial - code written, NON TESTE (lines up to 256 columns with horizontal scroll since Lot 45; Lot 46 PR B lifts the 30 KiB save limit with the overlay v4 image, 64 KiB Save As; `qemu-large-files` written, not run) |
 | US-G03 | Viewer draws images as pixels | partial (Lot 45: PNM, BMP 24/32, PNG depth 8 non-interlaced, zoom/fit/pan, shared imgdec with `img-info`; no JPEG) |
 | US-G04 | Network panel /net | partial (Lot 46: every entry runs in `qemu-gui-panels`; the shell has no interface configuration command, so no window can configure the interface; planned in Lot 46 PR D) |
 | US-G05 | Storage panel /disk | done (Lot 46: ata, mounts, persist status and save, ls, stat, mkdir, fat16-list; every entry in `qemu-gui-panels`) |
@@ -424,7 +424,7 @@ completent le backlog ; elles n'en retirent aucune.
 | US-G13 | Notes and archives panel /notes | done (Lot 46: every entry in `qemu-gui-panels`, migrate-import added) |
 | US-G14 | Generic command window /cmd | done |
 | US-G15 | Window-sized grid for every app | done (Lot 45: tool windows and file explorer follow the grid, text rewraps; Lot 46: output already shown rewraps at resize, explorer name column widens; test_osui_tools, test_osui_files, qemu-gui-ux5) |
-| US-G16 | Large persistent saves (overlay node 384 bytes) | partial (Lot 44: chained blocks, files up to 30 KiB inside the 32 KiB AIOV disk area, chunked atadriver relay, QEMU byte count proof; 64 KiB needs a new disk layout, FAT16 starts at LBA 64) |
+| US-G16 | Large persistent saves (overlay node 384 bytes) | partial - code written, NON TESTE (Lot 44: chained blocks, 30 KiB, QEMU byte count proof. Lot 46 PR B: overlay image v4, AIOV LBA 0-63 + extension LBA 4225-4352, FAT16 LBA 64-4221 untouched; 64 KiB per file, 65537 refused, v1/v2/v3 images still load; unit tests and `qemu-large-files` written, not run; see docs/lot46_plan.md) |
 | US-G17 | Panels for vfs, task, session, mcp, media, grpc | done (Lot 44: /vfs /sessions /mcp /media /grpc /pwa /devsync /sysadmin /api on the registry, checked against it in test-all; qemu-gui-parity runs the first entry of /vfs /sessions /mcp /media /pwa /sysadmin /api; /grpc and /devsync run with an argument in QEMU since Lot 45; media is simule) |
 | US-G18 | `/help` in the desktop chat | done (Lot 45: Aide window, slash programs from the dispatch table, terminal help; qemu-gui-parity) |
 

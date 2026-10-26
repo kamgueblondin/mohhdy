@@ -353,7 +353,7 @@ jobs:
   gui-parity:
     name: QEMU desktop GUI parity (UX4 tools + UX5)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20  # Lot 46: + qemu-large-files (two boots)
 
     steps:
       - name: Checkout repository
@@ -383,6 +383,10 @@ jobs:
       # UX5: one desktop panel per terminal command family (about 1.5 min)
       - name: QEMU UX5 GUI parity panels (network, storage, services, logs, ledger, prod, security, search, devtools, notes, /cmd)
         run: make qemu-gui-parity
+
+      # Lot 46 PR B (US-G16): 64 KiB Save As, refusal past it, reboot
+      - name: QEMU large files (64 KiB save, v4 overlay, reboot)
+        run: make qemu-large-files
 
       - name: Upload logs
         if: always()

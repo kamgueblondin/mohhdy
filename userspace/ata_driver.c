@@ -292,7 +292,8 @@ static int serve_job(void) {
 /* ========================================================================
  * Tranche 4 suite: the FS store served by this task's own code.
  * ======================================================================== */
-#define OV_DISK_SECTORS_DRV 64U
+#define OV_DISK_SECTORS_DRV 64U                         /* primary area LBA 0-63 */
+#define OV_ALL_SECTORS_DRV OS_ATA_OVERLAY_ALL_SECTORS   /* Lot 46: + v4 extension */
 static fat16_volume_t v16;
 static fat32_volume_t v32;
 static uint8_t v16_window[16U * 512U];
@@ -301,18 +302,50 @@ static uint32_t store_flags;   /* flags the kernel accepted */
 static int store_ready;
 static uint8_t fs_req[OS_ATA_FSOP_BUFFER_SIZE];
 static uint8_t fs_reply[OS_ATA_FSOP_BUFFER_SIZE];
-static uint8_t ov_img[OV_DISK_SECTORS_DRV * 512U];  /* snapshot to write / handover */
-static uint8_t ov_disk[OV_DISK_SECTORS_DRV * 512U]; /* what LBA 0-63 hold */
+static uint8_t ov_img[OV_ALL_SECTORS_DRV * 512U];  /* snapshot to write / handover */
+static uint8_t ov_disk[OV_ALL_SECTORS_DRV * 512U]; /* what LBA 0-63 + extension hold */
 static int ov_disk_known;
+/* Lot 46 (US-G16): the extension area (OS_ATA_OVERLAY_EXT_LBA) answered a
+ * read. 0 on a disk image made before Lot 46 (4225 sectors): the overlay
+ * then keeps the 32 KiB v3 budget (overlay_set_capacity). */
+static int ov_ext_ok;
+
+/* Image sector index of a disk LBA of the overlay areas, -1 elsewhere. */
+static int ov_sector_of(uint32_t lba) {
+    if (lba < OV_DISK_SECTORS_DRV) return (int)lba;
+    if (lba >= OS_ATA_OVERLAY_EXT_LBA && lba < OS_ATA_OVERLAY_EXT_LBA + OS_ATA_OVERLAY_EXT_SECTORS)
+        return (int)(OV_DISK_SECTORS_DRV + (lba - OS_ATA_OVERLAY_EXT_LBA));
+    return -1;
+}
+
+/* Reads the extension area into ov_disk (boot short wait or claimed PIO). */
+static int ov_read_ext(int boot) {
+    uint32_t i;
+    for (i = OV_DISK_SECTORS_DRV; i < OV_ALL_SECTORS_DRV; i++) {
+        int rc = boot ? pio_transfer_boot(0, overlay_image_lba(i), 1U, ov_disk + i * 512U)
+                      : pio_read(0, overlay_image_lba(i), ov_disk + i * 512U);
+        if (rc != 0) {
+            for (i = OV_DISK_SECTORS_DRV * 512U; i < sizeof(ov_disk); i++) ov_disk[i] = 0;
+            return -1;
+        }
+    }
+    return 0;
+}
 /* Per-op state. */
 static uint32_t op_gen, op_rd, op_wr;
 static int op_noted, op_crash, ov_dirty;
 
 static void ov_disk_note(uint32_t lba, uint32_t count, const uint8_t* data) {
     uint32_t i;
-    if (!ov_disk_known || lba >= OV_DISK_SECTORS_DRV) return;
-    if (lba + count > OV_DISK_SECTORS_DRV) count = OV_DISK_SECTORS_DRV - lba;
-    for (i = 0; i < count * 512U; i++) ov_disk[lba * 512U + i] = data[i];
+    uint32_t k;
+    if (!ov_disk_known) return;
+    /* Lot 46: sector by sector, so a job that touches the extension area
+     * (Ring 0 fallback image) keeps the incremental base right too. */
+    for (k = 0; k < count; k++) {
+        int s = ov_sector_of(lba + k);
+        if (s < 0) continue;
+        for (i = 0; i < 512U; i++) ov_disk[(uint32_t)s * 512U + i] = data[k * 512U + i];
+    }
 }
 
 /* Overlay hooks: the store only marks itself dirty; serve_fs_op persists
@@ -389,6 +422,14 @@ static void fs_install_boot(void) {
     ov_disk_known = 1;
     for (i = 0; i < OV_DISK_SECTORS_DRV; i++) {
         if (pio_transfer_boot(0, i, 1U, ov_disk + i * 512U) != 0) { ov_disk_known = 0; break; }
+    }
+    /* Lot 46: a v4 image continues in the extension area. If it cannot be
+     * read, nothing is installed (a cut v4 image would be refused anyway,
+     * and an empty install must not hide the primary area). */
+    for (i = OV_DISK_SECTORS_DRV * 512U; i < sizeof(ov_disk); i++) ov_disk[i] = 0;
+    if (ov_disk_known && overlay_image_bytes(ov_disk) > OV_SNAP_SIZE && ov_read_ext(1) != 0) {
+        puts("atadriver overlay v4 extension unreadable\n");
+        ov_disk_known = 0;
     }
     /* US-001: the boot journals too (mount 4222-4223, events 4224). A
      * read error (short disk) hands over zeros: the kernel keeps its
@@ -467,7 +508,12 @@ static void fs_try_ready(void) {
     ov_disk_known = 1;
     for (i = 0; i < OV_DISK_SECTORS_DRV && ov_disk_known; i++)
         if (pio_read(0, i, ov_disk + i * 512U) != 0) ov_disk_known = 0;
+    ov_ext_ok = ov_read_ext(0) == 0;
     release();
+    /* Lot 46 (US-G16): 96 KiB v4 budget only when the extension exists. */
+    overlay_set_capacity(ov_ext_ok ? OV_SNAP_MAX_SIZE : OV_SNAP_SIZE);
+    puts("atadriver overlay capacity="); putu(overlay_capacity());
+    puts(ov_ext_ok ? " v4\n" : " v3\n");
     store_flags = want;
     if (sc2(SYS_ATA_FS, OS_ATA_FS_STATUS, (uint32_t)&st) == 0) store_flags = st.fs_store_flags;
     puts("atadriver store ready flags="); putu(store_flags);
@@ -491,9 +537,12 @@ static void fs_persist(int32_t result) {
     }
     for (i = size; i < sizeof(ov_img); i++) ov_img[i] = 0;
     (void)sc5(SYS_ATA_FS, OS_ATA_FS_PUBLISH, op_gen, (uint32_t)ov_img, size, (uint32_t)result);
-    for (s = 0; s < OV_DISK_SECTORS_DRV && rc == 0; s++) {
+    if (size > OV_SNAP_SIZE && !ov_ext_ok) rc = -1; /* cannot happen: capacity is v3 */
+    /* Primary area first, then the extension (Lot 46, v4 only differs there
+     * when the image is v4 or was v4 before). */
+    for (s = 0; s < (ov_ext_ok ? OV_ALL_SECTORS_DRV : OV_DISK_SECTORS_DRV) && rc == 0; s++) {
         if (ov_disk_known && mem_eq(ov_img + s * 512U, ov_disk + s * 512U, 512U)) continue;
-        rc = pio_write(0, s, ov_img + s * 512U);
+        rc = pio_write(0, overlay_image_lba(s), ov_img + s * 512U);
         if (rc == 0) {
             for (i = 0; i < 512U; i++) ov_disk[s * 512U + i] = ov_img[s * 512U + i];
             wrote++;
@@ -608,6 +657,10 @@ void main(void) {
             /* LBA 0-63 hold the overlay snapshot, written only via kernel jobs. */
             rc = OS_ATA_DRIVER_REQUIRED;
             puts("atadriver overlay region write refused\n");
+        } else if (m.type == OS_IPC_ATA_WRITE && drive == 0 && ov_sector_of(lba) >= 0) {
+            /* Lot 46: the v4 extension area belongs to the overlay as well. */
+            rc = OS_ATA_DRIVER_REQUIRED;
+            puts("atadriver overlay extension write refused\n");
         } else if (m.type == OS_IPC_ATA_WRITE &&
                    ((drive == 0 && lba < st.client_min_lba) || (drive == 1 && st.slave_write_locked))) {
             /* FAT16 volume on the master / FAT32 slave stay kernel-owned. */

@@ -1,16 +1,59 @@
 # Lot 46 - plan of the 4 PRs, status per item
 
 Base: `origin/main` after the merge of PR #202 (Lot 45). One PR per theme,
-each one green on `make test-all` and its QEMU gates before the next.
-Only PR A is done in this branch (`lot46-a-gui-parity`); B, C and D are
-planned, nothing of them is implemented yet.
+stacked: B on A, C on B, D on C (branches `lot46-a-gui-parity`,
+`lot46-b-large-files`, `lot46-c-us001`, `lot46-d-network`). Order of the
+user's work order (Lot 46): B large files, C US-001, D network. An earlier
+version of this file described C as the JPEG viewer and D as the kernel and
+network leftovers: that was wrong, corrected here.
 
 | PR | Theme | Status |
 |---|---|---|
-| A | End of the GUI parity (this branch) | done for items 1-3, item 4: 7 of 11 US-G entries done, 4 stay partial (reasons below) |
-| B | Storage: overlay files over 30 KiB (new disk layout, FAT16 starts at LBA 64), editor saves of 64 KiB (US-G16, US-G02) | planned, not started |
-| C | Viewer: JPEG baseline and interlaced / 16-bit PNG in the shared `imgdec` (US-G03) | planned, not started |
-| D | Kernel and network leftovers of Lot 45: US-001 (ATA IDENTIFY and FAT PIO fallback out of Ring 0), TCP ports honored, interface configuration command (US-G04), Raft partition tests (US-064) | planned, not started |
+| A | End of the GUI parity (`lot46-a-gui-parity`) | done for items 1-3, item 4: 7 of 11 US-G entries done, 4 stay partial (reasons below) |
+| B | Large files (US-G16, US-G02): overlay v4 disk layout over 30 KiB without touching FAT16, 64 KiB Save As persistent after reboot, refusal past it, editor 30 KiB limit gone | partial - code written, compiled, NON TESTE (no unit test, no QEMU run yet, see "PR B") |
+| C | US-001: ATA IDENTIFY and the FAT PIO fallback out of Ring 0 into the Ring 3 atadriver, supervised restart of atadriver without data loss (QEMU crash + recovery tests) | see "PR C" |
+| D | Network: US-064 Raft (real network partition between guests, pre-vote, log compaction, QEMU partition and re-election tests), TCP ports honored end to end (listen and connect on the asked port, QEMU tests) | see "PR D" |
+
+Not in the Lot 46 order (stay partial, unchanged): US-G03 viewer (JPEG,
+interlaced / 16-bit PNG) and US-G04 (no shell command configures the
+interface).
+
+## PR B - large files (US-G16, US-G02)
+
+Status: code written and compiled (`make CC=i686-linux-gnu-gcc
+LD=i686-linux-gnu-ld all`, unit test binaries cross-compiled), NON TESTE:
+no unit test, no QEMU script was run in this PR (credit budget). Nothing
+of this PR is "done" until `make test-all` and `make qemu-large-files`
+pass.
+
+Disk layout (LBA, 512-byte sectors), checked against the FAT16 fixture
+(`tests/scripts/make_fat16_image.py`): AIOV primary area 0-63 (unchanged),
+FAT16 volume 64-4221 (unchanged geometry, `FAT_DISK_END` = 4225 keeps the
+same total sector count in the boot sector), mount journal 4222-4223,
+event journal 4224 (unchanged), new v4 extension area 4225-4352
+(`OS_ATA_OVERLAY_EXT_LBA`, 128 sectors). The disk image grows from 4225 to
+4353 sectors (`DISK_SECTORS`); no FAT sector moves or is written.
+
+| Item | Status | What the code does | Test written (not run) |
+|---|---|---|---|
+| v4 image format | partial - code written, NON TESTE | same dense v3 records; header version 4, node count 288 (RAM slots, was 128); image of 96 KiB (primary 32 KiB + extension 64 KiB); written only when the overlay does not fit v3 (more than 32 KiB or more than 128 records), so a small overlay keeps the exact v3 bytes and the slice 2 jobs (64 sectors) keep working; a v4 image cut to 32 KiB is refused, RAM unchanged | `test_overlay`: `test_v4_64k_file_roundtrip_and_bound`, `test_v4_cut_image_refused`, `test_v3_kept_when_it_fits_and_after_shrink`, `test_image_lba_layout` |
+| Backward compatible load v1/v2/v3 | partial - code written, NON TESTE | v1 and v2 (fixed slots) unchanged; v3 header with 128 nodes accepted as before; v4 with 288 | existing `test_restore_v1_snapshot_compatibility`, `test_restore_v2_disk_image` (still asserts the next snapshot is v3), v3 roundtrips, plus `test_v3_kept_when_it_fits_and_after_shrink` |
+| Disk budget | partial - code written, NON TESTE | `overlay_set_capacity`: 96 KiB when the atadriver reads the extension area, else 32 KiB (disk made before Lot 46): then the Lot 44 bound (30 KiB per file, 128 records) holds exactly, so what is in RAM still always persists | `test_large_file_write_read_and_bounds` (Lot 44 test, every assertion kept, now pinned to the 32 KiB capacity), `test_v3_capacity_bounds_record_count` |
+| 64 KiB per file, refusal past it | partial - code written, NON TESTE | `OV_FILE_MAX_BYTES` 65536; 65537 bytes (write or append) refused with `OV_ERR_NOSPACE`, the old file untouched | `test_v4_64k_file_roundtrip_and_bound`, QEMU `qemu-large-files` |
+| Persistence through the Ring 3 atadriver | partial - code written, NON TESTE | boot install reads the extension when the primary header is v4 (an unreadable extension installs nothing); handover reads it and sets the capacity (`atadriver overlay capacity=98304 v4`); persist writes the changed sectors of the primary area then of the extension; sector IPC writes into the extension are refused like LBA 0-63; Ring 0 fallback `overlay_save_disk` / `overlay_load_disk` write and read both areas; kernel mirror 96 KiB | `qemu-large-files` |
+| Save As 64 KiB byte for byte, after reboot | partial - code written, NON TESTE | editor Save As uses the same path as before (heap buffer, `fsops_write`, chunked relay of 4 KiB) | `tests/scripts/test_qemu_large_files.py` (`make qemu-large-files`, step added to the CI job gui-parity, timeout 15 -> 20 min): boot 1 opens `/samples/big64.txt` (new sample, 1024 lines of 64 bytes = 65536), Save As `/big64.txt`, one more character then Save As `/over64.txt` refused; boot 2 on the same disk: overlay loaded, `stat /big64.txt` 65536, first and last lines found, `/over64.txt` absent |
+| Editor 30 KiB limit (US-G02) | partial - code written, NON TESTE | the editor had no limit of its own: the 30 KiB came from the overlay; it is gone with the same path | same QEMU script |
+
+Limits that stay (honest):
+- The slice 2 snapshot jobs (kernel-held overlay before the store
+  handover) still move 64 sectors: a kernel-held overlay over 32 KiB is not
+  flushed by them (the snapshot does not fit their buffer, the job is
+  refused); it is persisted by the driver after the handover or by the
+  Ring 0 fallback. Not tested.
+- `FSOPS_FILE_MAX` stays 32 KiB: `cp` and the explorer copy of a file over
+  32 KiB answer "trop gros" (unchanged); the editor and Save As use the
+  heap path. Not changed to avoid touching the shared fsops buffers.
+- A disk image made before Lot 46 (4225 sectors) keeps the 32 KiB budget.
 
 ## PR A - items
 

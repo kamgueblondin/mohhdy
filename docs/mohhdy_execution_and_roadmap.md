@@ -93,7 +93,15 @@ suit la largeur ; driver-restart de atadriver et networker prouve en QEMU
 /services /logs /ci /security /devtools /notes passe dans
 `make qemu-gui-panels`. Phase 9 : 14 faites, 4 partielles (US-G02,
 US-G03, US-G04, US-G16). Plan des 4 PR et etat par point :
-`docs/lot46_plan.md` (PR B, C, D prevues, non commencees).
+`docs/lot46_plan.md`.
+
+Lot 46 PR B (branche `lot46-b-large-files`, empilee sur A) : grands
+fichiers (US-G16, US-G02), code ecrit et compile, NON TESTE. Image overlay
+v4 = zone AIOV LBA 0-63 + zone d'extension LBA 4225-4352 apres les
+journaux ; le volume FAT16 (LBA 64-4221) ne bouge pas ; 64 Kio par fichier,
+65537 refuse ; images v1/v2/v3 toujours chargees. Tests unitaires
+(`test_overlay`) et script QEMU `qemu-large-files` ecrits, non executes.
+Ordre Lot 46 : B grands fichiers, C US-001, D reseau.
 
 ### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production
 - **Moteur Web & Securite (US-039 / US-031)** : Validation dynamique CSP des origines de ressources (images, styles, scripts) lors de la construction de la liste d'affichage (`webrt_csp_validate_display_list_resource`). Journalisation des acces bloques dans `osui-audit`.

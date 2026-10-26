@@ -5,12 +5,19 @@ from pathlib import Path
 
 SECTOR = 512
 BASE_LBA = 64
-TOTAL_DISK_SECTORS = 4225
+# End of the FAT16 volume + journals (the disk size until Lot 45). The FAT
+# geometry is computed from it and does not change in Lot 46.
+FAT_DISK_END = 4225
 # LBA 4222-4223 : journal de montages (magic MNTJ).
 # LBA 4224 : journal d'evenements non acquittes (magic EVNT).
 # Les deux sont hors AIOV (0-63) et hors volume FAT.
 JOURNAL_SECTORS = 3
-TOTAL_FAT_SECTORS = TOTAL_DISK_SECTORS - BASE_LBA - JOURNAL_SECTORS
+TOTAL_FAT_SECTORS = FAT_DISK_END - BASE_LBA - JOURNAL_SECTORS
+# Lot 46 (US-G16): LBA 4225-4352, extension area of the v4 overlay image
+# (OS_ATA_OVERLAY_EXT_LBA / OS_ATA_OVERLAY_EXT_SECTORS), zero on a new disk.
+OVERLAY_EXT_LBA = FAT_DISK_END
+OVERLAY_EXT_SECTORS = 128
+TOTAL_DISK_SECTORS = OVERLAY_EXT_LBA + OVERLAY_EXT_SECTORS
 FAT_SECTORS = 16
 ROOT_ENTRIES = 32
 ROOT_SECTORS = (ROOT_ENTRIES * 32 + SECTOR - 1) // SECTOR

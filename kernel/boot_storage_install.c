@@ -62,7 +62,8 @@ int kernel_boot_storage_install(uint32_t kind, const uint8_t* data, uint32_t len
     }
     if (kind == OS_ATA_FS_INSTALL_OVERLAY) {
         int restored;
-        if (len > 64U * 512U) len = 64U * 512U;
+        /* Lot 46: a v4 image comes with its extension area (96 KiB). */
+        if (len > OV_SNAP_MAX_SIZE) len = OV_SNAP_MAX_SIZE;
         /* An empty disk is not a failure: RAM keeps the overlay_init image. */
         restored = overlay_restore(data, len);
         if (restored == 0) {

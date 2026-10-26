@@ -23,8 +23,9 @@
 #define ATA_FSOP_DONE      3
 #define ATA_FSOP_ABORTED   4
 
-/* 32768 bytes = OV_SNAP_SIZE (fs/overlay.h): the 64-sector AIOV area. */
-#define ATA_FSOP_MIRROR_BYTES (64U * 512U)
+/* Lot 46: OV_SNAP_MAX_SIZE (fs/overlay.h), the 64-sector AIOV area plus
+ * the v4 extension area (was 32768 bytes, the v3 image, until Lot 45). */
+#define ATA_FSOP_MIRROR_BYTES (OS_ATA_OVERLAY_ALL_SECTORS * 512U)
 
 void ata_fsop_init(void);
 

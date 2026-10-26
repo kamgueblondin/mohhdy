@@ -19,7 +19,8 @@ DISK_IMAGE ?= build/overlay.img
 GGUF_DISK_IMAGE ?= build/gpt2_gguf_fat16.img
 FAT32_SECONDARY_IMAGE ?= build/fat32_secondary.img
 GPT2_GGUF_DEPLOY_MODEL ?= models/gpt2-Q3_K_M.gguf
-DISK_SECTORS ?= 4225
+# Lot 46: 4225 (AIOV + FAT16 + journals) + 128 sectors of v4 overlay extension
+DISK_SECTORS ?= 4353
 FAT_BASE_LBA ?= 64
 QEMU_DISK_OPTS = -drive file=$(DISK_IMAGE),format=raw,if=ide,cache=writethrough
 MODEL_DIR ?= models
@@ -1071,6 +1072,12 @@ qemu-gui-ux5: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_ux5.py
 
 .PHONY: qemu-gui-ux5
+# Lot 46 PR B (US-G16): 64 KiB Save As in the editor, refusal at 65537,
+# byte count and lines after a reboot on the same disk (v4 overlay image).
+qemu-large-files: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_large_files.py
+
+.PHONY: qemu-large-files
 qemu-gui-parity: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_parity.py
 
@@ -1201,6 +1208,7 @@ help:
 	@echo "  qemu-osui-gui   - Fumee QEMU : gui, screendump VBE, tablet click dock, console (hors integration-qemu)"
 	@echo "  qemu-gui-apps   - Fumee QEMU : explorateur + editeur du bureau, cat dans le terminal"
 	@echo "  qemu-gui-ux5    - Fumee QEMU UX5 : parite GUI (editeur dynamique, visionneuse pixels, outils)"
+	@echo "  qemu-large-files - Lot 46 : Save As 64 Kio, refus a 65537, relu apres reboot (overlay v4)"
 	@echo "  qemu-gui-parity - Fumee QEMU UX5 : panneaux GUI des familles de commandes terminal"
 	@echo "  qemu-gui-tools  - Fumee QEMU : gestionnaire des taches, parametres, P2P, PM, visionneuse, chat"
 	@echo "  qemu-osui-gui-fit - GTK : VBE suit la fenetre (DISPLAY, hors integration-qemu)"
