@@ -42,7 +42,9 @@ merged nor rebased.
 - QEMU (`make qemu-osui-web` step 5):
   - `net-if` shows dhcp 10.32.0.15.
   - The test-only program `ifcrogue`, spawned by the shell, is refused
-    both changes (`denied (root shell only)`) and may read.
+    both changes (`denied (root shell only)`) and may read. Its console
+    is not on the serial log, so the verdict is its exit code, 7, read
+    by `wait-any-result`.
   - `static 10.32.0.77` is applied; `10.32.0.255` (broadcast) is refused.
   - `web-serve` on port 9138 answers HTTP 200 to the host peer on
     10.32.0.77.

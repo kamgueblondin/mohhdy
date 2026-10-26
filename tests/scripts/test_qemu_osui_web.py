@@ -293,11 +293,13 @@ def main():
         wait_for(proc, "net-if ok mode dhcp ip 10.32.0.15 ", 30, start)
         # rights: a spawned program (not the root shell) is refused any change, may read
         start = send_command(client, proc, "spawn ifcrogue")
-        wait_for(proc, "ifcrogue end", 60, start)
-        tail = text()[start:]
-        if tail.count("ifcrogue net-if error denied (root shell only)") != 2 or \
-                "ifcrogue net-if ok mode dhcp ip 10.32.0.15 " not in tail:
-            raise RuntimeError("ifcrogue: non-root interface change not refused: %r" % tail[-600:])
+        wait_for(proc, "spawn ok pid ", 30, start)
+        pid = re.search(r"spawn ok pid (\d+) ifcrogue", text()[start:]).group(1)
+        # its console is not on the serial log: the verdict is its exit code
+        # (1 static refused | 2 dhcp refused | 4 read answered)
+        time.sleep(3)
+        start = send_command(client, proc, "wait-any-result")
+        wait_for(proc, "wait-any-result ok %s 7 " % pid, 30, start)
         start = send_command(client, proc, "net-if")
         wait_for(proc, "net-if ok mode dhcp ip 10.32.0.15 ", 30, start)
         start = send_command(client, proc, "net-if static 10.32.0.77 255.255.255.0 10.32.0.2")
