@@ -16,7 +16,7 @@ import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 KERNEL = os.environ.get("MOHHDY_KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
-INITRD = os.environ.get("MOHHDY_INITRD", os.path.join(ROOT, "my_initrd.tar"))
+INITRD = os.environ.get("MOHHDY_INITRD", os.path.join(ROOT, "my_initrd_test.tar"))
 DISK = os.environ.get("DISK_IMAGE", os.path.join(ROOT, "build", "overlay.img"))
 RAM = os.environ.get("GPT2_RAM", "1024M")
 SOCK = os.environ.get("MOHHDY_FIT_SOCK", "/tmp/mohhdy-qemu-fit.sock")

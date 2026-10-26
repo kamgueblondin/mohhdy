@@ -1349,3 +1349,37 @@ Next steps: 64 KiB files (needs a new
 disk layout, the overlay area is 32 KiB);
 panels for vfs, task, session, mcp, media and grpc (US-G17); forms for the
 collab ledger (offers, votes, escrow) and driver restart in /services.
+
+Lot 47 (`docs/lot47_plan.md`, PR #204):
+- US-G04 done. The shell command `net-if` shows the interface and sets
+  it: `static IP MASK GW` or `dhcp`. It goes through `SYS_PEER_DATA` op
+  14 to the Ring 3 networker, which owns the single lease.
+  - Changes are allowed to the root shell task only, checked by the
+    kernel before the relay.
+  - Bad addresses are refused: broadcast, network, loopback, multicast,
+    a non-contiguous mask, a gateway off the subnet.
+  - The return to DHCP is a DHCP-only exchange; the DHCP renewal is off
+    while the static mode is on.
+  - /net entries 6 and 7 reuse the command; a change is armed by a first
+    Enter.
+  - QEMU, `make qemu-osui-web`: TCP answers 200 on the static address
+    10.32.0.77 and again on 10.32.0.15 after `net-if dhcp`. The
+    test-only program `ifcrogue` (not the root shell) is refused both
+    changes.
+  - Not tested: a TCP connection kept open across an address change.
+- US-G03 done. The shared imgdec decodes JPEG baseline (SOF0/SOF1, gray
+  or YCbCr, sampling 1..2, restart markers) and PNG of every bit depth
+  (1/2/4/8/16) and Adam7. `img-info` and the viewer use it.
+  - Progressive, arithmetic, 12-bit and CMYK JPEG are refused with a
+    reason.
+  - 16-bit samples keep their high byte.
+  - Proof: `test_imgdec` (reference images, lossy tolerance 8 levels at
+    4:4:4) and `make qemu-gui-parity`.
+- Test-only initrd. QEMU tests boot `my_initrd_test.tar`. The production
+  `my_initrd.tar` (run, iso, run-gpt2) no longer carries the 28 proof
+  programs (outflood, rogues, claims, netrelay, ...). `make
+  strict-image-check` fails if one of them is in the production image.
+- US-120 stays partial. `/roadmap.txt` is still hand-kept, but `make
+  roadmap-check` (CI) checks phase 9 against the US master table and the
+  prod-roadmap counts of the QEMU test against the file.
+- Phase 9 of `prod-roadmap`: done 18 partial 0 (100%).

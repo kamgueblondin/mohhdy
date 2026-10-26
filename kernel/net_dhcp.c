@@ -135,3 +135,31 @@ int net_dhcp_lease_next_hop(const net_dhcp_lease_t* lease,const uint8_t destinat
 int net_dhcp_lease_mark_acquired(net_dhcp_lease_t* lease,uint32_t now){if(!lease||!lease->valid||lease->lease_seconds==0U)return -1;lease->acquired_tick=now;return 0;}
 int net_dhcp_lease_is_valid_at(const net_dhcp_lease_t* lease,uint32_t now){uint32_t elapsed;if(!lease||!lease->valid||lease->lease_seconds==0U)return 0;elapsed=now-lease->acquired_tick;return elapsed<lease->lease_seconds?1:0;}
 int net_dhcp_lease_renewal_due(const net_dhcp_lease_t* lease,uint32_t now){uint32_t elapsed,renew_after;if(!lease||!lease->valid||lease->lease_seconds==0U)return 0;elapsed=now-lease->acquired_tick;renew_after=lease->lease_seconds-(lease->lease_seconds/2U);return elapsed>=renew_after?1:0;}
+
+/* Lot 47 (US-G04) */
+static uint32_t ifc_u32(const uint8_t a[4]) {
+    return ((uint32_t)a[0] << 24) | ((uint32_t)a[1] << 16) | ((uint32_t)a[2] << 8) | (uint32_t)a[3];
+}
+
+int net_dhcp_static_apply(net_dhcp_lease_t* lease, const uint8_t ip[4],
+                          const uint8_t mask[4], const uint8_t gateway[4]) {
+    uint32_t a, m, g, inv, i;
+    if (!lease || !ip || !mask || !gateway) return -1;
+    a = ifc_u32(ip); m = ifc_u32(mask); g = ifc_u32(gateway);
+    inv = ~m;
+    if (m == 0U || m == 0xFFFFFFFFU || (inv & (inv + 1U)) != 0U) return -1;
+    if (a == 0U || ip[0] == 127U || ip[0] >= 224U) return -1;
+    if ((a & inv) == 0U || (a & inv) == inv) return -1;
+    if (g == a || (g & m) != (a & m) || (g & inv) == 0U || (g & inv) == inv) return -1;
+    for (i = 0U; i < 4U; i++) {
+        lease->ipv4[i] = ip[i];
+        lease->subnet_mask[i] = mask[i];
+        lease->router_ipv4[i] = gateway[i];
+        lease->server_ipv4[i] = 0U;
+    }
+    lease->valid = 1U;
+    lease->subnet_valid = 1U;
+    lease->router_valid = 1U;
+    lease->lease_seconds = 0xFFFFFFFFU;
+    return 0;
+}

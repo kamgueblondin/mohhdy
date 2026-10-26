@@ -11,6 +11,8 @@ ASFLAGS = --32
 PROGRAMS = shell fake_ai test_program ai_assistant idle spin ipcserver vfsserver vfsvirtual networker vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim vfshistclaim waitchild ok
 # Lot 46: window capture proof (output larger than OS_OUTCAP_MAX)
 PROGRAMS += outflood
+# Lot 47: test-only probe, a non-root caller of the interface configuration
+PROGRAMS += ifcrogue
 USER_HEADERS = shell_util.h webeng.h dosemu.h cicd.h webrt.h grpcwire.h promptmessage.h ../include/os_syscalls.h ../include/os_vfs_service.h ../include/os_ipc_deferred.h mohhdy_osui_bridge.h osui_runtime.h osui_gui.h osui_panes.h osui_ide.h fsops.h osui_files.h osui_app.h osui_tools.h osui_form.h osui_gui_apps.inc p2p.h shell_p2p.h shell_grpc.h collab.h prod.h csig.h
 # Tranche 4: Ring 3 ATA driver + proofs.
 PROGRAMS += atadriver ataclient atarogue
@@ -60,7 +62,7 @@ ai_gguf_pause.o: ai_gguf_client.c
 	$(CC) $(CFLAGS) -DGGUF_PAUSE -c -o $@ $<
 ai_client.o ai_stat.o ai_rogue.o ai_gguf_client.o ai_gguf_pause.o: ai_common.h $(USER_HEADERS)
 
-shell: shell.o shell_util.o fsops.o ramfs.o procsim.o osui_runtime.o webrt.o grpcwire.o osui_gui.o osui_panes.o osui_files.o osui_app.o osui_tools.o osui_form.o osui_parity.o imgdec.o umalloc.o webeng.o osui_ide.o promptmessage.o shell_p2p.o shell_grpc.o shell_collab.o collab.o p2p.o stun.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o shell_prod.o prod.o cicd.o shell_persist.o csig.o shell_platform.o platform.o mobile_ui.o devsync.o dosemu.o start.o
+shell: shell.o shell_util.o fsops.o ramfs.o procsim.o osui_runtime.o webrt.o grpcwire.o osui_gui.o osui_panes.o osui_files.o osui_app.o osui_tools.o osui_form.o osui_parity.o net_ifcfg.o imgdec.o umalloc.o webeng.o osui_ide.o promptmessage.o shell_p2p.o shell_grpc.o shell_collab.o collab.o p2p.o stun.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o shell_prod.o prod.o cicd.o shell_persist.o csig.o shell_platform.o platform.o mobile_ui.o devsync.o dosemu.o start.o
 	@echo "Linking shell..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
@@ -227,6 +229,10 @@ waitchild: wait_child.o start.o
 
 ok: ok.o start.o
 	@echo "Linking ok..."
+	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
+
+ifcrogue: ifcrogue.o net_ifcfg.o start.o
+	@echo "Linking ifcrogue..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
 outflood: outflood.o start.o

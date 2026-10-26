@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-TARGETS = ["build/mohhdy.bin", "build/mohhdy-netlegacy.bin", "my_initrd.tar"]
+TARGETS = ["build/mohhdy.bin", "build/mohhdy-netlegacy.bin", "my_initrd.tar", "my_initrd_test.tar"]
 PATTERNS = [
     (b"openai_key", re.compile(rb"(?<![A-Za-z0-9-])sk-(?:proj-)?[A-Za-z0-9_]{20,}")),
     (b"bearer", re.compile(rb"Bearer [A-Za-z0-9._-]{16,}")),

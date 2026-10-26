@@ -16,7 +16,7 @@ LOG = os.path.join(LOG_DIR, "ipc-foundation.log")
 ERR = os.path.join(LOG_DIR, "ipc-foundation.err")
 MON = os.path.join(LOG_DIR, "ipc-foundation-monitor.sock")
 KERNEL = os.path.join(ROOT, "build", "mohhdy.bin")
-INITRD = os.path.join(ROOT, "my_initrd.tar")
+INITRD = os.path.join(ROOT, "my_initrd_test.tar")
 KEY_HOLD_MS = int(os.environ.get("KEY_HOLD_MS", "10"))
 
 

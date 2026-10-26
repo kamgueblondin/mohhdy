@@ -56,6 +56,13 @@ void net_dhcp_lease_clear(net_dhcp_lease_t* lease);
 int net_dhcp_parse_ack(const uint8_t* packet, uint32_t length,
                        uint32_t expected_xid, net_dhcp_lease_t* lease);
 /* Copie la destination si elle est locale, sinon le routeur DHCP ; ne modifie pas next_hop sur erreur. */
+/* Lot 47 (US-G04): a static configuration as a lease that never renews.
+ * Refuses 0.0.0.0, broadcast, multicast, loopback, a non contiguous mask
+ * (or /0, /32), host or broadcast address of the subnet as address, and a
+ * gateway outside the subnet or equal to the address. 0 or -1; the lease
+ * is untouched on error. */
+int net_dhcp_static_apply(net_dhcp_lease_t* lease, const uint8_t ip[4],
+                          const uint8_t mask[4], const uint8_t gateway[4]);
 int net_dhcp_lease_next_hop(const net_dhcp_lease_t* lease,
                             const uint8_t destination[4], uint8_t next_hop[4]);
 /* Marque l’acquisition et vérifie un bail live sans attendre ni allouer. */

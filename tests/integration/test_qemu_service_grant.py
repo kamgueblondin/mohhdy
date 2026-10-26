@@ -13,7 +13,7 @@ LOG = os.path.join(LOG_DIR, "service-grant.log")
 ERR = os.path.join(LOG_DIR, "service-grant.err")
 MON = os.path.join(LOG_DIR, "service-grant-monitor.sock")
 KERNEL = os.path.join(ROOT, "build", "mohhdy.bin")
-INITRD = os.path.join(ROOT, "my_initrd.tar")
+INITRD = os.path.join(ROOT, "my_initrd_test.tar")
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.24"))
 KEY_RETRIES = int(os.environ.get("KEY_RETRIES", "3"))
 

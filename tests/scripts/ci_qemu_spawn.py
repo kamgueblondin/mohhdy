@@ -11,7 +11,7 @@ import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 KERNEL = os.environ.get("KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
-INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd.tar"))
+INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd_test.tar"))
 LOG_DIR = os.path.join(ROOT, "test_logs")
 LOG = os.environ.get("SPAWN_LOG", os.path.join(LOG_DIR, "ci-qemu-spawn-serial.log"))
 QEMU_ERR = os.environ.get("SPAWN_ERR", os.path.join(LOG_DIR, "ci-qemu-spawn-stderr.log"))

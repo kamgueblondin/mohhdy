@@ -2,27 +2,32 @@
  * Used by the shell (img-info) and the desktop viewer (osui_tools.c).
  *
  * Formats: binary PNM (P5, P6), BMP (uncompressed 24 and 32 bits, bottom-up
- * or top-down) and PNG (bit depth 8, color types 0 2 3 4 6, no interlace)
- * with a bounded inflate (stored, fixed and dynamic Huffman blocks).
- * Memory: PNG needs a caller-owned scratch of IMGDEC_PNG_RAW(w, h, ch)
- * bytes for the unfiltered scanlines; larger images are refused with
- * IMGDEC_E_TOOBIG. Nothing is allocated. */
+ * or top-down), PNG (color types 0 2 3 4 6, every bit depth the spec allows
+ * (1 2 4 8 16), Adam7 interlace; 16-bit samples keep their high byte) with a
+ * bounded inflate, and since Lot 47 JPEG baseline (SOF0/SOF1, gray or YCbCr,
+ * sampling 1..2, restart markers; progressive refused with E_UNSUP).
+ * Memory: PNG and JPEG need a caller-owned scratch of imgdec_scratch_need()
+ * bytes (after probe); larger images are refused with IMGDEC_E_TOOBIG.
+ * Nothing is allocated. */
 #ifndef IMGDEC_H
 #define IMGDEC_H
 
-enum { IMGDEC_NONE = 0, IMGDEC_PNM = 1, IMGDEC_BMP = 2, IMGDEC_PNG = 3 };
+enum { IMGDEC_NONE = 0, IMGDEC_PNM = 1, IMGDEC_BMP = 2, IMGDEC_PNG = 3, IMGDEC_JPEG = 4 };
 enum {
     IMGDEC_OK = 0, IMGDEC_E_FORMAT = -1, IMGDEC_E_TRUNC = -2, IMGDEC_E_UNSUP = -3,
     IMGDEC_E_TOOBIG = -4, IMGDEC_E_INFLATE = -5, IMGDEC_E_CRC = -6
 };
 #define IMGDEC_MAX_DIM 4096
+/* legacy: raw scanlines of an 8-bit non-interlaced PNG */
 #define IMGDEC_PNG_RAW(w, h, ch) ((unsigned)(h) * (1U + (unsigned)(w) * (unsigned)(ch)))
 
 typedef struct {
     int fmt, w, h;
-    int channels;          /* PNG: bytes per pixel of the scanlines */
-    int bpp;               /* BMP bits per pixel, PNG 8 * channels, PNM 8 or 24 */
+    int channels;          /* PNG/JPEG: 8-bit samples per decoded pixel */
+    int bpp;               /* BMP bits per pixel, PNG depth * channels, JPEG 8 * channels, PNM 8 or 24 */
     int color_type;        /* PNG only */
+    int depth;             /* PNG bit depth (1 2 4 8 16) */
+    int interlace;         /* PNG Adam7 */
     /* decoded source */
     const unsigned char *data;     /* BMP / PNM pixel data, PNG raw scanlines */
     int stride;                    /* bytes per row of data */
@@ -33,6 +38,8 @@ typedef struct {
 
 /* format and size only (no pixel decoding, no scratch) */
 int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img);
+/* scratch bytes imgdec_open needs for a probed image (0: none) */
+unsigned imgdec_scratch_need(const imgdec_t *img);
 /* full decode; scratch is used for PNG only */
 int imgdec_open(const unsigned char *buf, int n, unsigned char *scratch, unsigned scratch_max, imgdec_t *img);
 /* one pixel of an opened image */

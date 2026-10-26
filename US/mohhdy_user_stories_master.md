@@ -411,8 +411,8 @@ completent le backlog ; elles n'en retirent aucune.
 |---|---|---|
 | US-G01 | Tool windows run any shell registry command (kernel rights, terminal-only commands refused) | done |
 | US-G02 | Editor: lines on the user heap, grid follows the window | done (Lot 46 PR B: Save As of a 64 KiB file, byte exact on the disk and after a cold reboot, 64 KiB + 1 refused with the error shown, `make qemu-gui-bigsave`; lines up to 256 columns since Lot 45. On a disk without room after the FAT16 volume the store stays at 30 KiB per file) |
-| US-G03 | Viewer draws images as pixels | partial (Lot 45: PNM, BMP 24/32, PNG depth 8 non-interlaced, zoom/fit/pan, shared imgdec with `img-info`; no JPEG) |
-| US-G04 | Network panel /net | partial (Lot 46: every entry runs in `qemu-gui-panels`; the shell has no interface configuration command, so no window can configure the interface; not done in Lot 46: it needs a networker or kernel path to set address, mask and route first) |
+| US-G03 | Viewer draws images as pixels | done (Lot 47: JPEG baseline (SOF0/SOF1, gray or YCbCr, sampling 1..2, restart markers; progressive refused), PNG every bit depth 1/2/4/8/16 and Adam7 interlace, added to the shared imgdec used by `img-info` and the viewer; Lot 45: PNM, BMP 24/32, zoom/fit/pan) |
+| US-G04 | Network panel /net | done (Lot 47: shell command `net-if` (show, `static IP MASK GW`, `dhcp`) through the networker; changes allowed to the root shell only, checked by the kernel; /net entries 6 and 7, change armed by a first Enter; `qemu-osui-web`: TCP served on the static address and again after the return to DHCP, a spawned program refused) |
 | US-G05 | Storage panel /disk | done (Lot 46: ata, mounts, persist status and save, ls, stat, mkdir, fat16-list; every entry in `qemu-gui-panels`) |
 | US-G06 | Services and drivers panel /services | done (Lot 46: driver-restart of the fixed Ring 3 drivers; supervised respawn of pcidriver (Lot 45) and atadriver with a new pid, networker restarted by the shell with a new pid, each service used after the restart in `qemu-gui-parity`; every entry in `qemu-gui-panels`) |
 | US-G07 | Logs panel /logs | done (Lot 46: every entry in `qemu-gui-panels`, notify-push / notify-ack added) |
@@ -440,6 +440,9 @@ Lot 46 PR B-D (same branch): US-G02 and US-G16 done (`make
 qemu-gui-bigsave`, CI job gui-panels); phase 9 done 16 partial 2 (88%).
 Still partial: US-G03 (no JPEG, no interlaced or 16-bit PNG: not started)
 and US-G04 (no interface configuration command in the shell: not started).
+Lot 47 (`docs/lot47_plan.md`): US-G03 and US-G04 done; phase 9 done 18
+partial 0 (100%). `/roadmap.txt` is checked against this table by
+`make roadmap-check` (CI).
 US-001: ATA IDENTIFY and the FAT PIO fallback were already out of Ring 0
 on both images since Lot 2 (`make strict-image-check`); the supervised
 restart after a crash is re-proved with the v4 layout (`make

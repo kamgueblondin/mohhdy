@@ -98,7 +98,7 @@ def main():
             except OSError:
                 pass
         command = [
-            "qemu-system-i386", "-kernel", "build/mohhdy.bin", "-initrd", "my_initrd.tar",
+            "qemu-system-i386", "-kernel", "build/mohhdy.bin", "-initrd", "my_initrd_test.tar",
             "-m", "128M", "-display", "none", "-vga", "none",
             "-serial", "file:" + LOG, "-monitor", "none", "-no-reboot", "-no-shutdown",
         ]

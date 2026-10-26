@@ -47,12 +47,12 @@ jobs:
       - name: Verify build artifacts
         run: |
           test -s build/mohhdy.bin
-          test -s my_initrd.tar
+          test -s my_initrd.tar && test -s my_initrd_test.tar
           ls -lh build/mohhdy.bin my_initrd.tar
           file build/mohhdy.bin
 
       - name: Strict image without Ring 0 net stack + no secrets (sizes)
-        run: make strict-image-check secrets-check
+        run: make strict-image-check secrets-check roadmap-check
 
       # Guard: the two integration shards cover exactly the seven contracts.
       - name: Integration shard coverage (dry run)

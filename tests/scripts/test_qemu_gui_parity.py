@@ -75,7 +75,7 @@ def help_window(monitor, proc):
 
 
 def viewer_images(monitor, proc):
-    """Lot 45: imgdec in the viewer (PNG, BMP) with zoom, and img-info in
+    """Lot 45 (+ Lot 47 JPEG, PNG 16-bit/Adam7): imgdec in the viewer (PNG, BMP) with zoom, and img-info in
     the shell through /cmd (same decoder)."""
     slash(monitor, proc, "/view /samples/mire.png", "fmt=png zoom=fit")
     g.wait_for(proc, "osui tool line=image 48x32 affichee en pixels 48x32 fmt=png", g.CMD_TIMEOUT)
@@ -99,9 +99,32 @@ def viewer_images(monitor, proc):
     run_marker(proc, start, "img-info /samples/mire32.bmp")
     g.wait_for(proc, "osui panel out=img-info ok fmt=bmp w=48 h=32 bpp=32", g.CMD_TIMEOUT, start)
     say("img-info (shell) decodes the same BMP 32 bits")
+    # Lot 47 (US-G03): JPEG baseline and PNG 16-bit / Adam7 in the same decoder
+    for path, want in (("/images/mire420.jpg", "img-info ok fmt=jpeg w=48 h=32 bpp=24"),
+                       ("/images/mire-rgba16-i.png", "img-info ok fmt=png w=48 h=32 bpp=64 depth=16 interlace=1 px0=0,0,0"),
+                       ("/images/mire-g2-i.png", "img-info ok fmt=png w=48 h=32 bpp=2 depth=2 interlace=1"),
+                       ("/images/mire-prog.jpg", "img-info error fmt=jpeg w=48 h=32 bpp=24 reason=variante non supportee")):
+        start = len(g.log_text())
+        type_text(monitor, "img-info " + path)
+        key(monitor, "ret")
+        run_marker(proc, start, "img-info " + path)
+        g.wait_for(proc, "osui panel out=" + want, g.CMD_TIMEOUT, start)
+        say("img-info " + path + ": " + want)
     start = len(g.log_text())
     key(monitor, "esc")
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
+    slash(monitor, proc, "/view /images/mire444.jpg", "fmt=jpeg zoom=fit")
+    g.wait_for(proc, "osui tool line=image 48x32 affichee en pixels 48x32 fmt=jpeg", g.CMD_TIMEOUT)
+    g.screendump_rgb(monitor, "qemu-gui-lot47-viewer-jpeg.ppm")
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)
+    say("/view mire444.jpg: JPEG baseline drawn in pixels")
+    slash(monitor, proc, "/view /images/mire-rgb-i.png", "fmt=png zoom=fit")
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)
+    say("/view mire-rgb-i.png: interlaced PNG drawn")
 
 
 def ledger_form(monitor, proc):

@@ -25,7 +25,7 @@ import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 KERNEL = os.environ.get("KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
-INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd.tar"))
+INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd_test.tar"))
 DISK = os.environ.get("OVERLAY_DISK", os.path.join(ROOT, "build", "gpt2_gguf_fat16.img"))
 LOG_DIR = os.path.join(ROOT, "test_logs")
 RUNS = int(os.environ.get("GGUF_BENCH_RUNS", "3"))

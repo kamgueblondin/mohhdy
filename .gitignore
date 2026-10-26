@@ -28,6 +28,7 @@ userspace/vfshistclaim
 userspace/waitchild
 userspace/ok
 userspace/outflood
+userspace/ifcrogue
 userspace/*.o
 userspace/*.bin
 initrd_content/bin/*
@@ -36,6 +37,7 @@ initrd_content/bin/*
 /build/
 /.apt-cache/
 /my_initrd.tar
+/my_initrd_test.tar
 /test_logs/
 *.iso
 

@@ -145,3 +145,14 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
   (test_lot46_entries).
 - `scripts/check_gui_parity.py` (in `make test-all`): every panel command
   is in the registry.
+
+## Lot 47
+
+- /net configures the interface. Entry 6 shows it (`net-if`); entry 7
+  takes `static IP MASK GW` or `dhcp` and runs on the second Enter. It is
+  the same shell command, with the same kernel rights: root shell only.
+  Proof: `qemu-gui-panels` and `qemu-osui-web`. US-G04 done.
+- The viewer and `img-info` decode JPEG baseline and PNG of every bit
+  depth and with Adam7 interlace, through the same imgdec. Proof:
+  `test_imgdec` and `qemu-gui-parity`. US-G03 done.
+- Every US-G entry is done. Details: `docs/lot47_plan.md`.

@@ -2054,6 +2054,18 @@ void syscall_handler(cpu_state_t* cpu) {
     /* Tranche 5 slice 2: socket syscalls 99-108 of a non-worker task are
      * relayed to the worker over IPC instead of refused. A request already
      * in flight for this task is finished even if the worker just died. */
+    /* Lot 47 (US-G04): an interface change (static address or back to
+     * DHCP) is accepted from the root shell only; reads are open. Checked
+     * here, before the relay, so the networker never sees a refused one. */
+    if (current_task && cpu->eax == SYS_PEER_DATA &&
+        syscall_user_range((const void*)cpu->ebx, sizeof(os_peer_data_request_t), 0)) {
+        const os_peer_data_request_t* ifr = (const os_peer_data_request_t*)cpu->ebx;
+        if (ifr->op == OS_PEER_IFCONFIG &&
+            !net_ifconfig_allowed(ifr->data[0], (int32_t)current_task->id, task_root_shell_pid())) {
+            cpu->eax = (uint32_t)OS_PEER_DENIED;
+            return;
+        }
+    }
     if (current_task && net_relay_supported(cpu->eax) &&
         (net_relay_state_for((int32_t)current_task->id) != NET_RELAY_FREE ||
          !service_registry_net_syscall_allowed((int32_t)current_task->id, cpu->eax))) {

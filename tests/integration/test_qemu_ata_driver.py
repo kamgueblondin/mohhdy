@@ -50,7 +50,7 @@ ERR = os.path.join(LOG_DIR, "ata-driver.err")
 MON = os.path.join(LOG_DIR, "ata-driver-monitor.sock")
 DISK = os.path.join(LOG_DIR, "ata-driver.img")
 KERNEL = os.environ.get("MOHHDY_ATA_KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
-INITRD = os.path.join(ROOT, "my_initrd.tar")
+INITRD = os.path.join(ROOT, "my_initrd_test.tar")
 KEY_HOLD_MS = int(os.environ.get("KEY_HOLD_MS", "10"))
 GP_FAULT = "[FAULT] user task killed: int=0x0000000d"
 

@@ -117,6 +117,21 @@ qui s'accordent le pre-vote, renvoi du leader cadence par pair). Editeur :
 un Enregistrer sous refuse remet l'ancien nom. US-G04 non faite : aucune
 commande shell de configuration d'interface n'existe.
 
+Lot 47 (PR #204, `docs/lot47_plan.md`) :
+- US-G04 faite : commande `net-if` (afficher, `static IP MASQUE
+  PASSERELLE`, `dhcp`) par le networker Ring 3. Les changements sont
+  reserves au shell racine, controle par le noyau. Entrees /net 6 et 7.
+  En QEMU : TCP sur l'adresse statique, puis apres le retour en DHCP ; un
+  programme lance (`ifcrogue`) est refuse.
+- US-G03 faite : JPEG baseline et PNG 1/2/4/8/16 bits et Adam7 dans
+  l'imgdec partage (`img-info`, visionneuse). Le JPEG progressif est
+  refuse avec sa raison.
+- Image initrd de test separee (`my_initrd_test.tar`, 28 programmes de
+  preuve). L'image de production n'en contient aucun, verifie par `make
+  strict-image-check`.
+- `make roadmap-check` en CI (US-120 reste partielle).
+- Phase 9 : 18 faites, 0 partielle.
+
 ### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production
 - **Moteur Web & Securite (US-039 / US-031)** : Validation dynamique CSP des origines de ressources (images, styles, scripts) lors de la construction de la liste d'affichage (`webrt_csp_validate_display_list_resource`). Journalisation des acces bloques dans `osui-audit`.
 - **Reseau P2P & Resilience Mesh (US-063 / US-070)** : Fenetre glissante EWMA pour le RTT par pair (`rtt_ewma_ms`), renforçant la selection dans la table de routage (`link_cost`). Invalidation/purge automatique des entrees de cache P2P perimees (`p2p_cache_on_peer_down`) lors des deconnexions de pairs.

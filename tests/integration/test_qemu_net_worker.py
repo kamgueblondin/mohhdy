@@ -42,7 +42,7 @@ RECLAIM_MARK = [RECLAIM_LEGACY]
 PROM_LEGACY = "net-driver nic ring3 ok base 768 irq 3 mac 52:54:00:12:34:56 prom-match 1"
 PROM_STRICT = "net-driver nic ring3 ok base 768 irq 3 mac 52:54:00:12:34:56 prom-match ring3"
 PROM_MARK = [PROM_LEGACY]
-INITRD = os.path.join(ROOT, "my_initrd.tar")
+INITRD = os.path.join(ROOT, "my_initrd_test.tar")
 KEY_HOLD_MS = int(os.environ.get("KEY_HOLD_MS", "10"))
 
 

@@ -11,7 +11,7 @@ SCENARIO = os.path.join(ROOT, "tests", "scripts", "ci_qemu_core_smoke.py")
 def main():
     if not os.path.isfile(os.path.join(ROOT, "build", "mohhdy.bin")):
         raise RuntimeError("missing kernel artefact; run make all first")
-    if not os.path.isfile(os.path.join(ROOT, "my_initrd.tar")):
+    if not os.path.isfile(os.path.join(ROOT, "my_initrd_test.tar")):
         raise RuntimeError("missing initrd artefact; run make all first")
     result = subprocess.run([sys.executable, SCENARIO], cwd=ROOT)
     if result.returncode != 0:

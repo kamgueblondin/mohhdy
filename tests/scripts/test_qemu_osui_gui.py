@@ -15,7 +15,7 @@ import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 KERNEL = os.environ.get("KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
-INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd.tar"))
+INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd_test.tar"))
 LOG_DIR = os.path.join(ROOT, "test_logs")
 LOG = os.environ.get("OSUI_GUI_LOG", os.path.join(LOG_DIR, "qemu-osui-gui-serial.log"))
 QEMU_ERR = os.environ.get("OSUI_GUI_ERR", os.path.join(LOG_DIR, "qemu-osui-gui-stderr.log"))
@@ -34,7 +34,7 @@ KEY_CHAR_RETRIES = int(os.environ.get("KEY_CHAR_RETRIES", "3"))
 def _model_packed():
     import tarfile
     try:
-        with tarfile.open(os.environ.get("INITRD", os.path.join(ROOT, "my_initrd.tar"))) as tar:
+        with tarfile.open(os.environ.get("INITRD", os.path.join(ROOT, "my_initrd_test.tar"))) as tar:
             return any(n.endswith("models/gpt2_124M.bin") for n in tar.getnames())
     except (OSError, tarfile.TarError):
         return False

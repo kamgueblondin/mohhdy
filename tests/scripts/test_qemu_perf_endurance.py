@@ -58,7 +58,7 @@ def start_node(label, mac, name, ip, hub_port, with_disk=True):
             pass
     command = [
         "qemu-system-i386", "-cpu", "max",
-        "-kernel", os.path.join(ROOT, "build", "mohhdy.bin"), "-initrd", os.path.join(ROOT, "my_initrd.tar"),
+        "-kernel", os.path.join(ROOT, "build", "mohhdy.bin"), "-initrd", os.path.join(ROOT, "my_initrd_test.tar"),
         "-m", "1024M", "-display", "none", "-vga", "none",
         "-serial", "file:" + node["log"],
         "-monitor", "unix:%s,server,nowait" % node["mon"],
