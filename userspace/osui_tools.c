@@ -185,7 +185,8 @@ static int wrap_cols(const osui_tool_t *t) {
 static void add_line(osui_tool_t *t, const char *s, int len, int cls) {
     int k, wc = wrap_cols(t);
     if (t->n >= OSUI_TOOL_LINES) {
-        for (k = 0; k + 1 < OSUI_TOOL_LINES; k++) { t_cpy(t->lines[k], OSUI_TOOL_COLS, t->lines[k + 1]); t->cls[k] = t->cls[k + 1]; }
+        for (k = 0; k + 1 < OSUI_TOOL_LINES; k++) { t_cpy(t->lines[k], OSUI_TOOL_COLS, t->lines[k + 1]); t->cls[k] = t->cls[k + 1]; t->cont[k] = t->cont[k + 1]; }
+        t->cont[0] = 0;   /* its head scrolled out: a line of its own now */
         t->n = OSUI_TOOL_LINES - 1;
         t->dropped++;
     }
@@ -208,6 +209,7 @@ static void add_line(osui_tool_t *t, const char *s, int len, int cls) {
     }
     t->lines[t->n][len] = 0;
     t->cls[t->n] = (unsigned char)cls;
+    t->cont[t->n] = 0;
     t->n++;
 }
 
@@ -229,11 +231,16 @@ static int strip_ansi(char *s, int n) {
 
 /* split text into lines, wrapping at the grid width */
 static void add_text(osui_tool_t *t, const char *s, int n, int cls) {
-    int i = 0, start = 0, w = wrap_cols(t) - 2;
+    int i = 0, start = 0, w = wrap_cols(t) - 2, soft = 0;
     while (i <= n) {
         if (i == n || s[i] == '\n' || i - start >= w) {
-            if (i > start || (i < n && s[i] == '\n')) add_line(t, s + start, i - start, cls);
-            if (i < n && s[i] == '\n') i++;
+            int hard = i < n && s[i] == '\n';
+            if (i > start || hard) {
+                add_line(t, s + start, i - start, cls);
+                t->cont[t->n - 1] = (unsigned char)soft;   /* Lot 46: rewrap at resize */
+            }
+            soft = !hard && i < n;
+            if (hard) i++;
             start = i;
             if (i == n) break;
             continue;
@@ -241,6 +248,7 @@ static void add_text(osui_tool_t *t, const char *s, int n, int cls) {
         i++;
     }
 }
+
 
 static int grid_rows(const osui_tool_t *t) {
     int r = t->vrows > 0 ? t->vrows : OSUI_APP_ROWS;
@@ -261,6 +269,36 @@ static void follow_sel(osui_tool_t *t) {
     if (t->sel >= t->n) t->sel = t->n ? t->n - 1 : 0;
     if (t->sel < t->top) t->top = t->sel;
     if (t->sel >= t->top + v) t->top = t->sel - v + 1;
+}
+
+/* Lot 46: wrap the lines already shown again at the current width: the
+ * soft-wrapped parts of a line are joined, hard line ends are kept. The
+ * view stays at the end when it was there, else on the same text line. */
+static char g_rewrap[OSUI_TOOL_LINES * OSUI_TOOL_COLS];
+static void rewrap_lines(osui_tool_t *t) {
+    static int start[OSUI_TOOL_LINES], len[OSUI_TOOL_LINES];
+    static unsigned char cls[OSUI_TOOL_LINES];
+    int k, nl = 0, o = 0, top_logical = 0, at_end, v = view_rows(t);
+    at_end = t->top + v >= t->n;
+    for (k = 0; k < t->n; k++) {
+        int l = t_len(t->lines[k]);
+        if (!t->cont[k] || nl == 0) {
+            start[nl] = o; len[nl] = 0; cls[nl] = t->cls[k]; nl++;
+        }
+        if (k == t->top) top_logical = nl - 1;
+        if (o + l > (int)sizeof(g_rewrap)) l = (int)sizeof(g_rewrap) - o;
+        { int c; for (c = 0; c < l; c++) g_rewrap[o + c] = t->lines[k][c]; }
+        o += l; len[nl - 1] += l;
+    }
+    t->n = 0;
+    for (k = 0; k < nl; k++) {
+        int before = t->n;
+        add_text(t, g_rewrap + start[k], len[k], cls[k]);
+        if (t->n == before) add_line(t, "", 0, cls[k]);   /* an empty line stays */
+        if (k == top_logical && !at_end) t->top = before;
+    }
+    if (at_end) follow_end(t);
+    else if (t->top + v > t->n) t->top = t->n > v ? t->n - v : 0;
 }
 
 static int run_into(osui_tool_t *t, const osui_tool_src_t *src, const char *cmd, int cls) {
@@ -828,6 +866,10 @@ void osui_tool_set_view(osui_tool_t *t, int rows, int cols, const osui_tool_src_
         int sel = t->sel;
         osui_tool_refresh(t, src);
         if (sel >= 0 && sel < t->n) t->sel = sel;
+    } else if (t->sel < 0 && !t->gen && t->kind != OS_FB_APP_CHAT) {
+        /* Lot 46: output already shown (command run, P2P, PM run) is
+         * wrapped again at the new width; the chat keeps its own lines */
+        rewrap_lines(t);
     }
     if (t->sel >= 0) follow_sel(t);
     else if (t->top + view_rows(t) > t->n) t->top = t->n > view_rows(t) ? t->n - view_rows(t) : 0;

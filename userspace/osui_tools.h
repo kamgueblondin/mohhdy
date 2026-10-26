@@ -48,6 +48,7 @@ typedef struct {
     char arg[64];                              /* viewer / pm-run file */
     char lines[OSUI_TOOL_LINES][OSUI_TOOL_COLS];
     unsigned char cls[OSUI_TOOL_LINES];        /* OSUI_APP_A_* of each line */
+    unsigned char cont[OSUI_TOOL_LINES];       /* Lot 46: 1 = wrapped part of the line above */
     int n, top, sel;
     int mode;                                  /* tasks: 0 processes, 1 services */
     int armed_pid;                             /* tasks: kill confirmation */
@@ -107,7 +108,10 @@ int osui_tool_idle(osui_tool_t *t, const osui_tool_src_t *src);
 void osui_tool_render(const osui_tool_t *t, osui_app_view_t *v);
 /* Lot 45 (US-G15): the window grid changed (maximize / restore / resize).
  * Rows follow at once; new text wraps at the new width; views without side
- * effects (menus, viewer, tasks, settings) are rebuilt at the new size. */
+ * effects (menus, viewer, tasks, settings) are rebuilt at the new size.
+ * Lot 46: the output already shown (command output, P2P, PromptMessage run)
+ * is wrapped again at the new width (soft wraps joined, hard line ends
+ * kept); the store keeps OSUI_TOOL_LINES lines. */
 void osui_tool_set_view(osui_tool_t *t, int rows, int cols, const osui_tool_src_t *src);
 /* first decimal number of a ps line (the PID), -1 none */
 int osui_tool_line_pid(const char *line);

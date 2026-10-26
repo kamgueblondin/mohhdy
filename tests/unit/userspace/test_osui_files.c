@@ -56,6 +56,34 @@ static void test_keyboard_selection_and_open_file(void) {
     TEST_ASSERT_EQUAL(OSUI_FILES_CLOSE, osui_files_key(&F, 27));
 }
 
+/* Lot 46: the name column follows the window width; the default grid
+ * keeps the old layout, a long name is cut with '~' and shown whole once
+ * the window is wide enough */
+static void test_columns_follow_window_width(void) {
+    static const char longname[] = "rapport_annuel_de_production_et_de_maintenance_2026.txt";
+    char path[96];
+    mfs_reset();
+    strcpy(path, "/home/"); strcat(path, longname);
+    mfs_add(path, 0, "abc", 3);
+    osui_files_open(&F, &mfs_io, "/home");
+    osui_files_render(&F, &V);
+    TEST_ASSERT_EQUAL_STRING("  Nom                                         Taille   Type", V.rows[1]);
+    TEST_ASSERT(strstr(V.rows[3], longname) == 0);          /* cut at 46 columns */
+    TEST_ASSERT_EQUAL('~', V.rows[3][44]);
+    TEST_ASSERT_EQUAL(' ', V.rows[3][45]);
+    TEST_ASSERT(strstr(V.rows[3], "fichier") != 0);
+    TEST_ASSERT(strlen(V.rows[3]) <= OSUI_APP_COLS - 1);
+    osui_files_set_view(&F, 30, 120);
+    osui_files_render(&F, &V);
+    TEST_ASSERT_EQUAL(89, (int)(strstr(V.rows[1], "Taille") - V.rows[1]));   /* 46 + 43 */
+    TEST_ASSERT(strstr(V.rows[3], longname) != 0);          /* whole name */
+    TEST_ASSERT_EQUAL('3', V.rows[3][89 + 7]);              /* size column moved too */
+    TEST_ASSERT(strstr(V.rows[2], "notes.txt") != 0);          /* sorted: notes.txt first */
+    osui_files_set_view(&F, 0, 0);                          /* restored: default layout */
+    osui_files_render(&F, &V);
+    TEST_ASSERT_EQUAL_STRING("  Nom                                         Taille   Type", V.rows[1]);
+}
+
 static void test_create_rename_copy_move_delete(void) {
     mfs_reset();
     osui_files_open(&F, &mfs_io, "/home");
@@ -133,6 +161,7 @@ int main(void) {
     RUN_TEST(test_create_rename_copy_move_delete);
     RUN_TEST(test_read_only_and_info);
     RUN_TEST(test_toolbar_hit);
+    RUN_TEST(test_columns_follow_window_width);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
