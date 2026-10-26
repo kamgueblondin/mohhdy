@@ -2560,6 +2560,7 @@ void syscall_handler(cpu_state_t* cpu) {
             break;
         case SYS_SERVICE_REGISTER:
             cpu->eax = (uint32_t)sys_service_register((const char*)cpu->ebx);
+            if ((int)cpu->eax >= 0 && current_task) (void)out_cap_forget((int32_t)current_task->id);
             break;
         case SYS_SERVICE_LOOKUP:
             cpu->eax = (uint32_t)sys_service_lookup((const char*)cpu->ebx);

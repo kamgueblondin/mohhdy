@@ -1,3 +1,4 @@
+#include "../out_capture.h"
 #include "task.h"
 #include "kernel/mem/pmm.h"
 #include "kernel/mem/vmm.h"
@@ -1053,6 +1054,7 @@ void task_report_parent_exit(task_t* child, int exit_code, uint32_t reason) {
     os_ipc_payload_t payload;
     os_task_exit_result_t result;
     uint32_t index;
+    if (child) (void)out_cap_task_gone((int32_t)child->id);   /* Lot 46 review */
     if (!child || child->parent_pid <= 0) return;
     parent = get_task_by_id(child->parent_pid);
     if (!parent || parent->type != TASK_TYPE_USER || parent->state == TASK_TERMINATED) return;

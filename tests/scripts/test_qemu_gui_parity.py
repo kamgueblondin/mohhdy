@@ -343,7 +343,12 @@ def driver_respawn(monitor, proc):
     if not m or m.group(1) == m.group(2):
         raise RuntimeError("networker: not restarted with a new pid: %r" % (m.groups() if m else None))
     new_net = m.group(2)
+    restart_start = start
     start = cmd_run(monitor, proc, "spawn netrelay")
+    # Lot 46 review: the relaunched networker registers net-driver, so it
+    # leaves the capture: the window does not call it a program still running.
+    if "encore actif" in g.normalized_log(g.log_text()[restart_start:start]):
+        raise RuntimeError("networker: the relaunched driver is reported as a program still running")
     g.wait_for(proc, "netrelay tcp loopback ok ping pong mode relay", g.CMD_TIMEOUT, start)
     start = cmd_run(monitor, proc, "net-relay-status")
     g.wait_for(proc, "osui panel out=net-relay ok worker %s " % new_net, g.CMD_TIMEOUT, start)

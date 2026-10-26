@@ -40,4 +40,10 @@ uint32_t out_cap_total(void);     /* bytes captured since begin (kept + dropped)
 /* tracked pid number k (0 .. count-1), for the "still alive" count */
 int out_cap_pid_count(void);
 int32_t out_cap_pid_at(int k);
+/* removes pid from the capture (a daemon that registered a service);
+ * 1 when it was tracked */
+int out_cap_forget(int32_t pid);
+/* pid is gone: releases the capture when it is the owner (1), forgets a
+ * tracked pid (2), else 0 */
+int out_cap_task_gone(int32_t pid);
 #endif

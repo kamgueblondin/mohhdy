@@ -62,11 +62,33 @@ static void test_pid_table_is_bounded(void) {
     TEST_ASSERT_EQUAL(0, out_cap_pid_count());
 }
 
+/* Lot 46 review: a relaunched driver (service registered) leaves the
+ * capture, a dead owner releases it at once. */
+static void test_daemon_leaves_and_dead_owner_releases(void) {
+    out_cap_reset();
+    TEST_ASSERT_EQUAL(0, out_cap_begin(1));
+    TEST_ASSERT_EQUAL(1, out_cap_child(1, 5));
+    TEST_ASSERT_EQUAL(1, out_cap_child(1, 9));
+    TEST_ASSERT_EQUAL(2, out_cap_pid_count());
+    TEST_ASSERT_EQUAL(1, out_cap_forget(9));                /* networker registered net-driver */
+    TEST_ASSERT_EQUAL(1, out_cap_pid_count());
+    TEST_ASSERT_EQUAL(0, out_cap_put(9, 'n'));              /* its output: console */
+    TEST_ASSERT_EQUAL(0, out_cap_forget(9));
+    TEST_ASSERT_EQUAL(1, out_cap_put(5, 'a'));
+    TEST_ASSERT_EQUAL(2, out_cap_task_gone(5));             /* a tracked child ended */
+    TEST_ASSERT_EQUAL(0, out_cap_task_gone(77));
+    TEST_ASSERT_EQUAL(1, out_cap_task_gone(1));             /* the owner shell died */
+    TEST_ASSERT_EQUAL(0, out_cap_owner());
+    TEST_ASSERT_EQUAL(0, out_cap_begin(2));                 /* free for another shell at once */
+    TEST_ASSERT_EQUAL(0, out_cap_end(2));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_only_descendants_of_the_owner_are_captured);
     RUN_TEST(test_bound_counts_dropped_bytes);
     RUN_TEST(test_pid_table_is_bounded);
+    RUN_TEST(test_daemon_leaves_and_dead_owner_releases);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -76,3 +76,26 @@ uint32_t out_cap_untracked(void) { return g_untracked; }
 uint32_t out_cap_total(void) { return g_total; }
 int out_cap_pid_count(void) { return g_owner > 0 ? g_npids : 0; }
 int32_t out_cap_pid_at(int k) { return (k >= 0 && k < g_npids) ? g_pids[k] : 0; }
+
+/* Lot 46 review: a task that registers a service is a daemon (a driver
+ * restarted from a window, networker): it leaves the capture, its output
+ * goes to the console and it does not count as a program still running. */
+int out_cap_forget(int32_t pid) {
+    int k;
+    if (g_owner <= 0 || pid <= 0) return 0;
+    for (k = 0; k < g_npids; k++) {
+        if (g_pids[k] == pid) {
+            g_pids[k] = g_pids[g_npids - 1];
+            g_npids--;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Lot 46 review: the owner is gone (exit, kill, fault): the capture is
+ * released at once, not at the next SYS_OUT_CAPTURE call. */
+int out_cap_task_gone(int32_t pid) {
+    if (g_owner > 0 && pid == g_owner) { out_cap_reset(); return 1; }
+    return out_cap_forget(pid) ? 2 : 0;
+}

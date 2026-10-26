@@ -304,7 +304,7 @@ build/string.o: kernel/mem/string.c kernel/mem/string.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Règles de compilation pour le système de tâches (version complète)
-build/task.o: kernel/task/task.c kernel/task/task.h kernel/ata_job.h
+build/task.o: kernel/task/task.c kernel/task/task.h kernel/ata_job.h kernel/out_capture.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
