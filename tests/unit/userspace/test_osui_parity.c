@@ -121,6 +121,36 @@ static void test_build(void) {
     TEST_ASSERT_EQUAL_STRING("ata-status", out);
 }
 
+/* Lot 46: panel entries added for full parity; deploy-verify takes its
+ * manifest (without it the shell always answered "manifest not found") */
+static const osui_par_entry_t *entry_of(int kind, const char *cmd) {
+    const osui_par_family_t *f = osui_par_family(kind);
+    int i;
+    for (i = 0; f && i < f->count; i++) if (!strcmp(f->entries[i].cmd, cmd)) return &f->entries[i];
+    return 0;
+}
+
+static void test_lot46_entries(void) {
+    char out[96];
+    const osui_par_entry_t *e = entry_of(OS_FB_APP_PROD, "deploy-verify");
+    TEST_ASSERT_NOT_NULL(e);
+    TEST_ASSERT(e->flags & OSUI_PAR_ARG);
+    TEST_ASSERT_EQUAL(-1, osui_par_build(e, "", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(0, osui_par_build(e, "/l46.man", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("deploy-verify /l46.man", out);
+    /* state changes are confirmed (second Enter), reads are not */
+    TEST_ASSERT(entry_of(OS_FB_APP_PROD, "deploy-make")->flags & OSUI_PAR_MUT);
+    TEST_ASSERT(entry_of(OS_FB_APP_PROD, "prod-backup")->flags & OSUI_PAR_MUT);
+    TEST_ASSERT(entry_of(OS_FB_APP_STORE, "persist-save")->flags & OSUI_PAR_MUT);
+    TEST_ASSERT_EQUAL(0, entry_of(OS_FB_APP_STORE, "fat16-list")->flags);
+    TEST_ASSERT(entry_of(OS_FB_APP_LOGS, "notify-push")->flags & OSUI_PAR_MUT);
+    TEST_ASSERT(entry_of(OS_FB_APP_LOGS, "notify-ack")->flags & OSUI_PAR_MUT);
+    TEST_ASSERT(entry_of(OS_FB_APP_SECURITY, "pm-ca-revoke")->flags & OSUI_PAR_MUT);
+    TEST_ASSERT_EQUAL(OSUI_PAR_ARG, entry_of(OS_FB_APP_DEVTOOLS, "web-inspect")->flags);
+    TEST_ASSERT_EQUAL(OSUI_PAR_ARG, entry_of(OS_FB_APP_DEVTOOLS, "web-a11y")->flags);
+    TEST_ASSERT(entry_of(OS_FB_APP_NOTES, "migrate-import")->flags & OSUI_PAR_MUT);
+}
+
 static void type(const char *s) { while (*s) osui_tool_key(&t, *s++, &k_src); }
 
 static void test_panel_menu_run_and_back(void) {
@@ -224,6 +254,7 @@ int main(void) {
     RUN_TEST(test_rights_model);
     RUN_TEST(test_table_matches_registry);
     RUN_TEST(test_build);
+    RUN_TEST(test_lot46_entries);
     RUN_TEST(test_panel_menu_run_and_back);
     RUN_TEST(test_panel_arg_and_confirm);
     RUN_TEST(test_search_and_generic_cmd);

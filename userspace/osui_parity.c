@@ -22,6 +22,9 @@ static const osui_par_entry_t k_store[] = {
     { "Lister un repertoire", "ls", A, "CHEMIN (ex: /samples)" },
     { "Infos d'un fichier", "stat", A, "CHEMIN" },
     { "Creer un repertoire", "mkdir", A | M, "CHEMIN" },
+    /* Lot 46: the rest of the storage commands of the shell */
+    { "Sauver la persistance (noeud chiffre)", "persist-save", M, 0 },
+    { "Lister le volume FAT16", "fat16-list", 0, 0 },
 };
 static const osui_par_entry_t k_services[] = {
     { "Pilotes en ring 3 (ps2, serie, vga, usb)", "devices", 0, 0 },
@@ -41,6 +44,9 @@ static const osui_par_entry_t k_logs[] = {
     { "Usage des commandes", "prod-usage", 0, 0 },
     { "Analyser un journal", "prod-log-analyze", A, "FICHIER" },
     { "Ajouter au journal", "prod-log-append", A | M, "FICHIER TEXTE" },
+    /* Lot 46: notifications, push and acknowledge */
+    { "Pousser une notification", "notify-push", A | M, "PRIORITE(1-3) TEXTE" },
+    { "Acquitter une notification", "notify-ack", A | M, "ID" },
 };
 static const osui_par_entry_t k_ledger[] = {
     { "Soldes du registre", "collab-balances", 0, 0 },
@@ -59,16 +65,22 @@ static const osui_par_entry_t k_prod[] = {
     { "Mise a l'echelle", "prod-scale-status", 0, 0 },
     { "Metriques", "prod-metrics", 0, 0 },
     { "Prendre un echantillon", "prod-sample", M, 0 },
-    { "Verifier le deploiement", "deploy-verify", 0, 0 },
+    /* Lot 46: deploy-verify needs its manifest (it always answered
+     * "manifest not found" without one); the manifest is built here too */
+    { "Verifier le deploiement", "deploy-verify", A, "MANIFESTE (ex: /deploy.man)" },
     { "Integrite d'un repertoire", "prod-integrity", A, "baseline|check DIR" },
+    { "Construire un manifeste", "deploy-make", A | M, "/SOURCE /CIBLE MANIFESTE" },
+    { "Sauvegarder un repertoire", "prod-backup", A | M, "NOM DIR" },
 };
 static const osui_par_entry_t k_security[] = {
     { "Identite (whoami)", "whoami", 0, 0 },
     { "Cles d'identite", "id-key", 0, 0 },
     { "Origine (politique)", "origin-check", 0, 0 },
-    { "Verifier une signature CA", "pm-ca-verify", A, "FICHIER" },
+    { "Verifier une signature CA", "pm-ca-verify", A, "FICHIER.pm (ex: /pm/hello.pm)" },
     { "Initialiser la CA locale", "pm-ca-init", M, 0 },
     { "Signer un fichier", "pm-ca-sign", A | M, "FICHIER" },
+    /* Lot 46: local revocation list */
+    { "Revoquer une signature", "pm-ca-revoke", A | M, "FICHIER.pm" },
 };
 static const osui_par_entry_t k_search[] = {
     { "Chercher dans un repertoire (recursif)", "grep -r", A, "MOTIF [REPERTOIRE] [PAGE]" },
@@ -82,6 +94,9 @@ static const osui_par_entry_t k_devtools[] = {
     { "Cache web", "web-cache", 0, 0 },
     { "Arbre DOM d'un fichier", "web-dom", A, "FICHIER (ex: /web/demo.html)" },
     { "Console d'un fichier", "web-console", A, "FICHIER" },
+    /* Lot 46: inspector and accessibility audit */
+    { "Inspecter un element", "web-inspect", A, "FICHIER ID" },
+    { "Audit d'accessibilite", "web-a11y", A, "FICHIER" },
 };
 static const osui_par_entry_t k_notes[] = {
     { "Lister la racine (notes de l'overlay)", "ls /", 0, 0 },
@@ -89,6 +104,8 @@ static const osui_par_entry_t k_notes[] = {
     { "Ajouter une ligne a une note", "append", A | M, "FICHIER TEXTE (ex: /notes.txt)" },
     { "Archiver un repertoire", "migrate-export", A | M, "DIR ARCHIVE" },
     { "Verifier une archive", "migrate-verify", A, "ARCHIVE [DIR]" },
+    /* Lot 46: restore an archive */
+    { "Restaurer une archive", "migrate-import", A | M, "ARCHIVE DIR" },
 };
 static const osui_par_entry_t k_vfs[] = {
     { "Statistiques VFS", "vfs-stats", 0, 0 },

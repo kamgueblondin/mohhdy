@@ -574,7 +574,9 @@ INITRD_MODELS_KEY = MODEL_DIR=$(MODEL_DIR) $(foreach f,$(MODEL_DIR)/gpt2_tokeniz
 
 pack-initrd: userspace-all
 	@mkdir -p build
-	@paths="userspace promptmessage/examples webpages dosapps"; \
+	@# Lot 46: the hand-kept initrd files (roadmap, samples) count too: an
+	@# edited /roadmap.txt left the old initrd in place
+	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
 	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && \
 	    [ "$$(cat build/.initrd-models 2>/dev/null)" = "$(INITRD_MODELS_KEY)" ] && \
@@ -1052,6 +1054,12 @@ qemu-gui-term-window: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_term_window.py
 
 .PHONY: qemu-gui-apps
+# Lot 46 (PR A): every entry of the /net /disk /services /logs /ci
+# /security /devtools /notes panels runs in QEMU (arguments, confirmations)
+qemu-gui-panels: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_panels.py
+
+.PHONY: qemu-gui-panels
 qemu-gui-apps: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_apps.py
 

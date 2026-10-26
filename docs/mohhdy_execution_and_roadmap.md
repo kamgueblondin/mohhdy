@@ -82,6 +82,19 @@ pcidriver. Non fait : JPEG, sortie des programmes lances, US-001, Raft
 avec partition, ports TCP, fichiers overlay de plus de 30 Kio. Etat par
 point : `docs/lot45_plan.md`.
 
+Lot 46 PR A (branche `lot46-a-gui-parity`) : la sortie des programmes
+lances depuis une fenetre (spawn, exec) est capturee par le noyau
+(`SYS_OUT_CAPTURE`, 16 Kio et 16 taches par execution, seulement les
+descendants du shell, droits du noyau inchanges) et affichee dans la
+fenetre avec une note des octets perdus ; la sortie deja affichee se
+re-replie au redimensionnement et la colonne des noms de l'explorateur
+suit la largeur ; driver-restart de atadriver et networker prouve en QEMU
+(nouveau pid, service utilise ensuite) ; chaque entree de /net /disk
+/services /logs /ci /security /devtools /notes passe dans
+`make qemu-gui-panels`. Phase 9 : 14 faites, 4 partielles (US-G02,
+US-G03, US-G04, US-G16). Plan des 4 PR et etat par point :
+`docs/lot46_plan.md` (PR B, C, D prevues, non commencees).
+
 ### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production
 - **Moteur Web & Securite (US-039 / US-031)** : Validation dynamique CSP des origines de ressources (images, styles, scripts) lors de la construction de la liste d'affichage (`webrt_csp_validate_display_list_resource`). Journalisation des acces bloques dans `osui-audit`.
 - **Reseau P2P & Resilience Mesh (US-063 / US-070)** : Fenetre glissante EWMA pour le RTT par pair (`rtt_ewma_ms`), renforçant la selection dans la table de routage (`link_cost`). Invalidation/purge automatique des entrees de cache P2P perimees (`p2p_cache_on_peer_down`) lors des deconnexions de pairs.

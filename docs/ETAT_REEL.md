@@ -1238,7 +1238,8 @@ counted by `prod-roadmap` as phase 9 of `/roadmap.txt`):
 | Family | Status |
 |---|---|
 | files, search, generic command window, tools rights model | done |
-| editor, viewer, processes, services/drivers, network, p2p, storage, logs, collab ledger, production/CI, security/CA, web devtools, notes/archives, PromptMessage, AI, system settings | partial |
+| services/drivers, storage, logs, collab ledger, production/CI, security/CA (local Schnorr CA), web devtools, notes/archives (Lot 46: every panel entry in `qemu-gui-panels`) | done |
+| editor (saves 30 KiB), viewer (no JPEG), processes, network (no interface configuration command), p2p, PromptMessage, AI, system settings | partial |
 | sessions, mcp, media (simule), pwa, devsync, os-*, admin-*, api-* panels; window-sized grid for every app (Lot 45); chat /help (Lot 45) | done |
 | large persistent saves (30 KiB, 64 KiB needs a new disk layout) | partial |
 
@@ -1266,6 +1267,26 @@ shell heap; QEMU proofs of the ledger offer form, /grpc, /devsync and the
 supervised respawn of pcidriver. Not done in Lot 45: JPEG, output of
 spawned programs, US-001, Raft partition, TCP ports, overlay files over
 30 KiB.
+
+Lot 46 PR A (branch `lot46-a-gui-parity`, per item status in
+`docs/lot46_plan.md`): the output of programs launched from a window
+(spawn, exec) is captured by the kernel (`SYS_OUT_CAPTURE`, 16 KiB and 16
+tasks per run, descendants of the shell only, rights unchanged) and shown
+in the window with a note for the dropped bytes (`test_out_capture`,
+`qemu-gui-parity` with `outflood`, 19825 bytes: 16384 kept); output
+already shown in a tool window rewraps at resize and the explorer name
+column follows the window width (`test_osui_tools`, `test_osui_files`,
+`qemu-gui-ux5`); driver-restart of atadriver (supervised respawn, new pid,
+write/cat and ata-status served) and networker (new pid, netrelay TCP
+loopback through the new relay) in `qemu-gui-parity`; every entry of /net
+/disk /services /logs /ci /security /devtools /notes runs in the new
+`qemu-gui-panels` (64 runs, CI job gui-panels); deploy-verify in /ci takes
+its manifest (it always answered "manifest not found"). Phase 9 of
+`prod-roadmap`: done 14 partial 4 (77%). Still partial: US-G02, US-G03,
+US-G04, US-G16. Not done in PR A, planned in PR B-D: 64 KiB overlay files,
+JPEG and interlaced PNG, US-001, TCP ports, interface configuration, Raft
+partition. A program that prints after the bounded wait of 50 ticks prints
+on the console, not in the window.
 
 Next steps: 64 KiB files (needs a new
 disk layout, the overlay area is 32 KiB);
