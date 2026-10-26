@@ -15,6 +15,13 @@ ASFLAGS = -f elf32
 OS_IMAGE = build/mohhdy.bin
 ISO_IMAGE = build/mohhdy.iso
 INITRD_IMAGE = my_initrd.tar
+# Lot 47: QEMU tests boot a separate image = production + the proof and
+# probe programs below; the production image (run, iso, run-gpt2) has none.
+INITRD_TEST_IMAGE = my_initrd_test.tar
+INITRD_TEST_DIR := build/initrd_test_root
+TEST_ONLY_PROGRAMS = user_program spin ipcwait ipcpoke pcirogue devrogue ataclient atarogue netclaim netrelay netwire \
+	vfsflight vfsaliasflight serviceclaim vfsclaim vfscapclaim vfsreleaseclaim vfsreadclaim vfsmutateclaim vfshistclaim \
+	waitchild outflood aiclient aistat airogue ggufclient ggufpause
 DISK_IMAGE ?= build/overlay.img
 GGUF_DISK_IMAGE ?= build/gpt2_gguf_fat16.img
 FAT32_SECONDARY_IMAGE ?= build/fat32_secondary.img
@@ -578,7 +585,7 @@ pack-initrd: userspace-all
 	@# edited /roadmap.txt left the old initrd in place
 	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples $(INITRD_DIR)/bigfiles"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
-	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && \
+	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && [ -f $(INITRD_TEST_IMAGE) ] && \
 	    [ "$$(cat build/.initrd-models 2>/dev/null)" = "$(INITRD_MODELS_KEY)" ] && \
 	    [ -z "$$(find $$paths -type f -newer build/.initrd-stamp -print -quit 2>/dev/null)" ]; then \
 		echo "[mkinitrd] initrd unchanged"; \
@@ -632,47 +639,53 @@ pack-initrd-now:
 	@cp -f $(USER_SHELL) $(BIN_DEST_DIR)/shell
 	@cp -f userspace/fake_ai $(BIN_DEST_DIR)/fake_ai
 	@cp -f userspace/ai_assistant $(BIN_DEST_DIR)/ai_assistant
-	@cp -f userspace/test_program $(BIN_DEST_DIR)/user_program
 	@cp -f userspace/idle $(BIN_DEST_DIR)/idle
-	@cp -f userspace/spin $(BIN_DEST_DIR)/spin
 	@cp -f userspace/ipcserver $(BIN_DEST_DIR)/ipcserver
-	@cp -f userspace/ipcwait $(BIN_DEST_DIR)/ipcwait
-	@cp -f userspace/ipcpoke $(BIN_DEST_DIR)/ipcpoke
 	@cp -f userspace/vfsserver $(BIN_DEST_DIR)/vfsserver
 	@cp -f userspace/vfsvirtual $(BIN_DEST_DIR)/vfsvirtual
 	@cp -f userspace/networker $(BIN_DEST_DIR)/networker
 	@cp -f userspace/atadriver $(BIN_DEST_DIR)/atadriver
 	@cp -f userspace/pcidriver $(BIN_DEST_DIR)/pcidriver
-	@cp -f userspace/pcirogue $(BIN_DEST_DIR)/pcirogue
 	@cp -f userspace/ps2driver $(BIN_DEST_DIR)/ps2driver
 	@cp -f userspace/serialdriver $(BIN_DEST_DIR)/serialdriver
 	@cp -f userspace/vgadriver $(BIN_DEST_DIR)/vgadriver
 	@cp -f userspace/usbdriver $(BIN_DEST_DIR)/usbdriver
-	@cp -f userspace/devrogue $(BIN_DEST_DIR)/devrogue
-	@cp -f userspace/ataclient $(BIN_DEST_DIR)/ataclient
-	@cp -f userspace/atarogue $(BIN_DEST_DIR)/atarogue
-	@cp -f userspace/netclaim $(BIN_DEST_DIR)/netclaim
-	@cp -f userspace/netrelay $(BIN_DEST_DIR)/netrelay
-	@cp -f userspace/netwire $(BIN_DEST_DIR)/netwire
-	@cp -f userspace/vfsflight $(BIN_DEST_DIR)/vfsflight
-	@cp -f userspace/vfsaliasflight $(BIN_DEST_DIR)/vfsaliasflight
-	@cp -f userspace/serviceclaim $(BIN_DEST_DIR)/serviceclaim
-	@cp -f userspace/vfsclaim $(BIN_DEST_DIR)/vfsclaim
-	@cp -f userspace/vfscapclaim $(BIN_DEST_DIR)/vfscapclaim
-	@cp -f userspace/vfsreleaseclaim $(BIN_DEST_DIR)/vfsreleaseclaim
-	@cp -f userspace/vfsreadclaim $(BIN_DEST_DIR)/vfsreadclaim
-	@cp -f userspace/vfsmutateclaim $(BIN_DEST_DIR)/vfsmutateclaim
-	@cp -f userspace/vfshistclaim $(BIN_DEST_DIR)/vfshistclaim
-	@cp -f userspace/waitchild $(BIN_DEST_DIR)/waitchild
 	@cp -f userspace/ok $(BIN_DEST_DIR)/ok
-	@cp -f userspace/outflood $(BIN_DEST_DIR)/outflood
 	@cp -f userspace/aiworker $(BIN_DEST_DIR)/aiworker
-	@cp -f userspace/aiclient $(BIN_DEST_DIR)/aiclient
-	@cp -f userspace/aistat $(BIN_DEST_DIR)/aistat
-	@cp -f userspace/airogue $(BIN_DEST_DIR)/airogue
-	@cp -f userspace/ggufclient $(BIN_DEST_DIR)/ggufclient
-	@cp -f userspace/ggufpause $(BIN_DEST_DIR)/ggufpause
+	@# Lot 47: proof programs never land in the production tree (old builds left them there)
+	@for p in $(TEST_ONLY_PROGRAMS); do rm -f $(BIN_DEST_DIR)/$$p; done
+	@rm -rf $(INITRD_TEST_DIR) && mkdir -p $(INITRD_TEST_DIR)/bin
+	@cp -f userspace/test_program $(INITRD_TEST_DIR)/bin/user_program
+	@cp -f userspace/spin $(INITRD_TEST_DIR)/bin/spin
+	@cp -f userspace/ipcwait $(INITRD_TEST_DIR)/bin/ipcwait
+	@cp -f userspace/ipcpoke $(INITRD_TEST_DIR)/bin/ipcpoke
+	@cp -f userspace/pcirogue $(INITRD_TEST_DIR)/bin/pcirogue
+	@cp -f userspace/devrogue $(INITRD_TEST_DIR)/bin/devrogue
+	@cp -f userspace/ataclient $(INITRD_TEST_DIR)/bin/ataclient
+	@cp -f userspace/atarogue $(INITRD_TEST_DIR)/bin/atarogue
+	@cp -f userspace/netclaim $(INITRD_TEST_DIR)/bin/netclaim
+	@cp -f userspace/netrelay $(INITRD_TEST_DIR)/bin/netrelay
+	@cp -f userspace/netwire $(INITRD_TEST_DIR)/bin/netwire
+	@cp -f userspace/vfsflight $(INITRD_TEST_DIR)/bin/vfsflight
+	@cp -f userspace/vfsaliasflight $(INITRD_TEST_DIR)/bin/vfsaliasflight
+	@cp -f userspace/serviceclaim $(INITRD_TEST_DIR)/bin/serviceclaim
+	@cp -f userspace/vfsclaim $(INITRD_TEST_DIR)/bin/vfsclaim
+	@cp -f userspace/vfscapclaim $(INITRD_TEST_DIR)/bin/vfscapclaim
+	@cp -f userspace/vfsreleaseclaim $(INITRD_TEST_DIR)/bin/vfsreleaseclaim
+	@cp -f userspace/vfsreadclaim $(INITRD_TEST_DIR)/bin/vfsreadclaim
+	@cp -f userspace/vfsmutateclaim $(INITRD_TEST_DIR)/bin/vfsmutateclaim
+	@cp -f userspace/vfshistclaim $(INITRD_TEST_DIR)/bin/vfshistclaim
+	@cp -f userspace/waitchild $(INITRD_TEST_DIR)/bin/waitchild
+	@cp -f userspace/outflood $(INITRD_TEST_DIR)/bin/outflood
+	@cp -f userspace/aiclient $(INITRD_TEST_DIR)/bin/aiclient
+	@cp -f userspace/aistat $(INITRD_TEST_DIR)/bin/aistat
+	@cp -f userspace/airogue $(INITRD_TEST_DIR)/bin/airogue
+	@cp -f userspace/ggufclient $(INITRD_TEST_DIR)/bin/ggufclient
+	@cp -f userspace/ggufpause $(INITRD_TEST_DIR)/bin/ggufpause
 	@tar -C $(INITRD_DIR) -cf $(INITRD_IMAGE) .
+	@cp -f $(INITRD_IMAGE) $(INITRD_TEST_IMAGE)
+	@tar -C $(INITRD_TEST_DIR) -rf $(INITRD_TEST_IMAGE) $(addprefix ./bin/,$(TEST_ONLY_PROGRAMS))
+	@echo "[mkinitrd] Test image $(INITRD_TEST_IMAGE): production + $(words $(TEST_ONLY_PROGRAMS)) proof programs"
 	@mkdir -p build
 	@touch build/.initrd-stamp
 	@echo "$(INITRD_MODELS_KEY)" > build/.initrd-models
@@ -755,7 +768,7 @@ run-kbd-gui-test: $(OS_IMAGE) pack-initrd
 	@echo "3. Testez le clavier dans la fenêtre QEMU"
 	@echo "4. Fermez QEMU quand terminé, puis vérifiez les logs"
 	@echo "=============================================="
-	qemu-system-i386 -kernel $(OS_IMAGE) -initrd $(INITRD_IMAGE) \
+	qemu-system-i386 -kernel $(OS_IMAGE) -initrd $(INITRD_TEST_IMAGE) \
 		-m 256M -vga std \
 		-machine type=pc,accel=tcg \
 		-device i8042 \
@@ -804,7 +817,7 @@ info-user:
 # Cible pour nettoyer le projet
 clean:
 	rm -rf build
-	rm -f $(INITRD_IMAGE)
+	rm -f $(INITRD_IMAGE) $(INITRD_TEST_IMAGE)
 	rm -rf initrd_content
 	rm -f output.log
 	@$(MAKE) -C userspace clean
@@ -1012,7 +1025,13 @@ secrets-check: $(OS_IMAGE) pack-initrd kernel-netlegacy
 	@python3 scripts/check_no_secrets.py
 
 # Strict default image: the Ring 0 network stack must not be linked in.
-strict-image-check: $(OS_IMAGE) kernel-netlegacy
+strict-image-check: $(OS_IMAGE) kernel-netlegacy pack-initrd
+	@# Lot 47: the production initrd carries no proof / probe program; the test image does
+	@for p in $(TEST_ONLY_PROGRAMS); do \
+		if tar -tf $(INITRD_IMAGE) | grep -qx "./bin/$$p"; then echo "FAIL: test program $$p in the production initrd"; exit 1; fi; \
+		tar -tf $(INITRD_TEST_IMAGE) | grep -qx "./bin/$$p" || { echo "FAIL: test image lost $$p"; exit 1; }; \
+	done
+	@tar -tf $(INITRD_IMAGE) | grep -qx './bin/shell' || { echo "FAIL: production initrd lost the shell"; exit 1; }
 	@size $(OS_IMAGE) $(NETLEGACY_IMAGE)
 	@if nm $(OS_IMAGE) | grep -E ' (net_tls_record_|net_tcp_|x509_|net_dhcp_|ne2k_llm_|net_wire_demux)' >/dev/null; then \
 		echo "FAIL: Ring 0 network stack linked in the strict image"; exit 1; fi
@@ -1030,6 +1049,7 @@ strict-image-check: $(OS_IMAGE) kernel-netlegacy
 		echo "FAIL: legacy image still links Ring 0 ATA IDENTIFY or FAT PIO fallback"; exit 1; fi
 	@nm $(OS_IMAGE) | grep -q ' kernel_boot_storage$$' || { echo "FAIL: strict image lost kernel_boot_storage"; exit 1; }
 	@nm $(OS_IMAGE) | grep -q ' kernel_nic_boot_probe$$' || { echo "FAIL: strict image lost kernel_nic_boot_probe"; exit 1; }
+	@echo "OK production initrd without the $(words $(TEST_ONLY_PROGRAMS)) test programs (they ship in $(INITRD_TEST_IMAGE))"
 	@echo "OK strict image without Ring 0 network stack; legacy image keeps only the Ring 0 NIC path; both images: boot FAT mount, overlay and journals by the Ring 3 atadriver, no ATA IDENTIFY or FAT PIO fallback"
 
 # Fail if a build or a test rewrote a tracked file, or left an untracked

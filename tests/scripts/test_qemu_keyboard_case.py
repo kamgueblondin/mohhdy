@@ -15,7 +15,7 @@ import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 KERNEL = os.environ.get("KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
-INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd.tar"))
+INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd_test.tar"))
 LOG = os.environ.get("LOG", os.path.join(ROOT, "test_logs", "keyboard-case.log"))
 ERR = os.environ.get("QEMU_ERR", os.path.join(ROOT, "test_logs", "keyboard-case.err"))
 MON = os.environ.get("QEMU_MON_SOCK", os.path.join(ROOT, "test_logs", "keyboard-case-monitor.sock"))

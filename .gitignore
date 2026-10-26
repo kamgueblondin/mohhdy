@@ -36,6 +36,7 @@ initrd_content/bin/*
 /build/
 /.apt-cache/
 /my_initrd.tar
+/my_initrd_test.tar
 /test_logs/
 *.iso
 

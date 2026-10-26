@@ -74,7 +74,7 @@ def main():
         with open(ERR, "wb") as err:
             proc = subprocess.Popen([
                 "qemu-system-i386", "-cpu", "pentium3", "-kernel", "build/mohhdy.bin",
-                "-initrd", "my_initrd.tar", "-m", "1024M", "-display", "none", "-vga", "none",
+                "-initrd", "my_initrd_test.tar", "-m", "1024M", "-display", "none", "-vga", "none",
                 "-serial", "file:" + LOG, "-monitor", "unix:%s,server,nowait" % MON,
                 "-no-reboot", "-no-shutdown",
             ], cwd=ROOT, stdout=err, stderr=err)

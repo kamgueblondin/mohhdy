@@ -143,7 +143,7 @@ def main():
             pass
     cmd = [
         "qemu-system-i386", "-kernel", os.path.join(ROOT, "build", "mohhdy.bin"),
-        "-initrd", os.path.join(ROOT, "my_initrd.tar"), "-m", "1024M", "-display", "none",
+        "-initrd", os.path.join(ROOT, "my_initrd_test.tar"), "-m", "1024M", "-display", "none",
         "-vga", "none", "-serial", "file:" + LOG,
         "-monitor", "unix:%s,server,nowait" % MON, "-machine", "type=pc,accel=tcg",
         "-netdev", "user,id=n0", "-device", "ne2k_isa,netdev=n0", "-no-reboot", "-no-shutdown",

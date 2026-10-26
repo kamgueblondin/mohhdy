@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 KERNEL="${KERNEL:-build/mohhdy.bin}"
-INITRD="${INITRD:-my_initrd.tar}"
+INITRD="${INITRD:-my_initrd_test.tar}"
 CORE_TIMEOUT="${CORE_TIMEOUT:-180}"
 EXTRAS_TIMEOUT="${EXTRAS_TIMEOUT:-150}"
 PERSIST_TIMEOUT="${PERSIST_TIMEOUT:-180}"

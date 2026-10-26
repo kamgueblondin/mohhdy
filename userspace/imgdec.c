@@ -201,6 +201,8 @@ static void zero(imgdec_t *img) {
 
 static int sane(int w, int h) { return w > 0 && h > 0 && w <= IMGDEC_MAX_DIM && h <= IMGDEC_MAX_DIM; }
 
+#include "imgdec_jpeg.inc"
+
 /* ---- probe ------------------------------------------------------------ */
 static int probe_png(const unsigned char *b, int n, imgdec_t *img) {
     static const unsigned char sig[8] = { 137, 80, 78, 71, 13, 10, 26, 10 };
@@ -212,17 +214,21 @@ static int probe_png(const unsigned char *b, int n, imgdec_t *img) {
     img->w = (int)be32(b + 16); img->h = (int)be32(b + 20);
     img->color_type = b[25];
     if (!sane(img->w, img->h)) return IMGDEC_E_TOOBIG;
-    if (b[24] != 8 || b[26] != 0 || b[27] != 0 || b[28] != 0) return IMGDEC_E_UNSUP;   /* depth 8, no interlace */
+    /* Lot 47: bit depth 1/2/4/8/16 as the PNG spec allows per color type,
+     * Adam7 interlace; samples are normalized to 8 bits after decoding. */
+    if (b[26] != 0 || b[27] != 0 || b[28] > 1) return IMGDEC_E_UNSUP;
+    img->depth = b[24];
+    img->interlace = b[28];
     switch (img->color_type) {
-    case 0: ch = 1; break;
-    case 2: ch = 3; break;
-    case 3: ch = 1; break;
-    case 4: ch = 2; break;
-    case 6: ch = 4; break;
+    case 0: ch = 1; if (img->depth != 1 && img->depth != 2 && img->depth != 4 && img->depth != 8 && img->depth != 16) return IMGDEC_E_UNSUP; break;
+    case 3: ch = 1; if (img->depth != 1 && img->depth != 2 && img->depth != 4 && img->depth != 8) return IMGDEC_E_UNSUP; break;
+    case 2: ch = 3; if (img->depth != 8 && img->depth != 16) return IMGDEC_E_UNSUP; break;
+    case 4: ch = 2; if (img->depth != 8 && img->depth != 16) return IMGDEC_E_UNSUP; break;
+    case 6: ch = 4; if (img->depth != 8 && img->depth != 16) return IMGDEC_E_UNSUP; break;
     default: return IMGDEC_E_UNSUP;
     }
     img->channels = ch;
-    img->bpp = 8 * ch;
+    img->bpp = img->depth * ch;
     return IMGDEC_OK;
 }
 
@@ -270,6 +276,8 @@ int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img) {
     zero(img);
     rc = probe_png(buf, n, img); if (rc != IMGDEC_E_FORMAT) return rc;
     zero(img);
+    rc = probe_jpeg(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_JPEG) return rc;
+    zero(img);
     rc = probe_bmp(buf, n, img); if (rc != IMGDEC_E_FORMAT) return rc;
     zero(img);
     return probe_pnm(buf, n, img);
@@ -282,11 +290,75 @@ static int paeth(int a, int b, int c) {
     return pb <= pc ? b : c;
 }
 
+/* Adam7 passes: x0, y0, dx, dy */
+static const unsigned char k_adam7[7][4] = {
+    {0, 0, 8, 8}, {4, 0, 8, 8}, {0, 4, 4, 8}, {2, 0, 4, 4}, {0, 2, 2, 4}, {1, 0, 2, 2}, {0, 1, 1, 2}
+};
+static unsigned png_rowbytes(int w, int ch, int depth) {
+    return ((unsigned)w * (unsigned)ch * (unsigned)depth + 7U) / 8U;
+}
+static int png_pass_dim(int full, int o, int d) { return full > o ? (full - o + d - 1) / d : 0; }
+
+/* raw (inflated) bytes for the whole image, all passes */
+static unsigned png_raw_size(const imgdec_t *img) {
+    unsigned t = 0U;
+    int p;
+    if (!img->interlace) return (unsigned)img->h * (1U + png_rowbytes(img->w, img->channels, img->depth));
+    for (p = 0; p < 7; p++) {
+        int pw = png_pass_dim(img->w, k_adam7[p][0], k_adam7[p][2]);
+        int ph = png_pass_dim(img->h, k_adam7[p][1], k_adam7[p][3]);
+        if (pw && ph) t += (unsigned)ph * (1U + png_rowbytes(pw, img->channels, img->depth));
+    }
+    return t;
+}
+
+unsigned imgdec_scratch_need(const imgdec_t *img) {
+    if (!img) return 0U;
+    if (img->fmt == IMGDEC_PNG) return png_raw_size(img) + (unsigned)img->w * (unsigned)img->h * (unsigned)img->channels;
+    if (img->fmt == IMGDEC_JPEG) return jpeg_scratch_need(img);
+    return 0U;
+}
+
+static int png_unfilter(unsigned char *rows, int nrows, int stride, int fbpp) {
+    int y;
+    for (y = 0; y < nrows; y++) {
+        unsigned char *row = rows + (unsigned)y * (unsigned)(1 + stride);
+        const unsigned char *prev = y ? row - (1 + stride) + 1 : 0;
+        int f = row[0], x;
+        unsigned char *p = row + 1;
+        if (f > 4) return IMGDEC_E_FORMAT;
+        for (x = 0; x < stride; x++) {
+            int a = x >= fbpp ? p[x - fbpp] : 0, up = prev ? prev[x] : 0, c = (prev && x >= fbpp) ? prev[x - fbpp] : 0;
+            switch (f) {
+            case 1: p[x] = (unsigned char)(p[x] + a); break;
+            case 2: p[x] = (unsigned char)(p[x] + up); break;
+            case 3: p[x] = (unsigned char)(p[x] + ((a + up) >> 1)); break;
+            case 4: p[x] = (unsigned char)(p[x] + paeth(a, up, c)); break;
+            default: break;
+            }
+        }
+    }
+    return IMGDEC_OK;
+}
+
+/* sample k (channel index inside the pixel row) of a filtered row as 8 bits */
+static unsigned char png_sample(const unsigned char *p, int k, int depth, int palette) {
+    if (depth == 8) return p[k];
+    if (depth == 16) return p[2 * k];          /* high byte */
+    {
+        int per = 8 / depth, shift = 8 - depth * (k % per + 1);
+        unsigned v = ((unsigned)p[k / per] >> shift) & ((1U << depth) - 1U);
+        if (palette) return (unsigned char)v;
+        return (unsigned char)((v * 255U) / ((1U << depth) - 1U));
+    }
+}
+
 static int open_png(const unsigned char *b, int n, unsigned char *scratch, unsigned smax, imgdec_t *img) {
     static rd_t r;
-    unsigned need = IMGDEC_PNG_RAW(img->w, img->h, img->channels);
-    int pos = 8, got_end = 0, y;
-    int bpp = img->channels, stride = img->w * img->channels;
+    unsigned raw = png_raw_size(img), need = imgdec_scratch_need(img);
+    unsigned char *out;
+    int pos = 8, got_end = 0, ch = img->channels, pal = img->color_type == 3;
+    int fbpp = (ch * img->depth) / 8 < 1 ? 1 : (ch * img->depth) / 8;
     if (!scratch || need > smax) return IMGDEC_E_TOOBIG;
     r.nseg = 0; r.cur = 0; r.pos = 0; r.bitbuf = 0; r.bitcnt = 0; r.eof = 0;
     while (pos + 12 <= n) {
@@ -308,33 +380,38 @@ static int open_png(const unsigned char *b, int n, unsigned char *scratch, unsig
         pos += 12 + (int)len;
     }
     if (!got_end || !r.nseg) return IMGDEC_E_TRUNC;
-    if (img->color_type == 3 && !img->npal) return IMGDEC_E_FORMAT;
+    if (pal && !img->npal) return IMGDEC_E_FORMAT;
     if (zlib_header(&r)) return IMGDEC_E_FORMAT;
     {
-        int got = inflate_rd(&r, scratch, need);
+        int got = inflate_rd(&r, scratch, raw);
         if (got < 0) return got;
-        if ((unsigned)got != need) return IMGDEC_E_TRUNC;
+        if ((unsigned)got != raw) return IMGDEC_E_TRUNC;
     }
-    /* unfilter in place: row y at scratch + y * (1 + stride), filter byte first */
-    for (y = 0; y < img->h; y++) {
-        unsigned char *row = scratch + (unsigned)y * (unsigned)(1 + stride);
-        const unsigned char *prev = y ? row - (1 + stride) + 1 : 0;
-        int f = row[0], x;
-        unsigned char *p = row + 1;
-        if (f > 4) return IMGDEC_E_FORMAT;
-        for (x = 0; x < stride; x++) {
-            int a = x >= bpp ? p[x - bpp] : 0, up = prev ? prev[x] : 0, c = (prev && x >= bpp) ? prev[x - bpp] : 0;
-            switch (f) {
-            case 1: p[x] = (unsigned char)(p[x] + a); break;
-            case 2: p[x] = (unsigned char)(p[x] + up); break;
-            case 3: p[x] = (unsigned char)(p[x] + ((a + up) >> 1)); break;
-            case 4: p[x] = (unsigned char)(p[x] + paeth(a, up, c)); break;
-            default: break;
+    out = scratch + raw;                       /* w * h * ch, 8-bit samples */
+    {
+        unsigned off = 0U;
+        int p, passes = img->interlace ? 7 : 1;
+        for (p = 0; p < passes; p++) {
+            int x0 = img->interlace ? k_adam7[p][0] : 0, y0 = img->interlace ? k_adam7[p][1] : 0;
+            int dx = img->interlace ? k_adam7[p][2] : 1, dy = img->interlace ? k_adam7[p][3] : 1;
+            int pw = png_pass_dim(img->w, x0, dx), ph = png_pass_dim(img->h, y0, dy), x, y, k, rc;
+            int stride = (int)png_rowbytes(pw, ch, img->depth);
+            if (!pw || !ph) continue;
+            rc = png_unfilter(scratch + off, ph, stride, fbpp);
+            if (rc) return rc;
+            for (y = 0; y < ph; y++) {
+                const unsigned char *row = scratch + off + (unsigned)y * (unsigned)(1 + stride) + 1;
+                unsigned char *dst = out + ((unsigned)(y0 + y * dy) * (unsigned)img->w) * (unsigned)ch;
+                for (x = 0; x < pw; x++)
+                    for (k = 0; k < ch; k++)
+                        dst[(unsigned)(x0 + x * dx) * (unsigned)ch + (unsigned)k] =
+                            png_sample(row, x * ch + k, img->depth, pal);
             }
+            off += (unsigned)ph * (unsigned)(1 + stride);
         }
     }
-    img->data = scratch + 1;
-    img->stride = 1 + stride;
+    img->data = out;
+    img->stride = img->w * ch;
     return IMGDEC_OK;
 }
 
@@ -342,6 +419,7 @@ int imgdec_open(const unsigned char *buf, int n, unsigned char *scratch, unsigne
     int rc = imgdec_probe(buf, n, img);
     if (rc) return rc;
     if (img->fmt == IMGDEC_PNG) return open_png(buf, n, scratch, scratch_max, img);
+    if (img->fmt == IMGDEC_JPEG) return open_jpeg(buf, n, scratch, scratch_max, img);
     return IMGDEC_OK;
 }
 
@@ -407,7 +485,7 @@ int imgdec_render(const imgdec_t *img, unsigned char *rgb, int max_w, int max_h,
 }
 
 const char *imgdec_fmt_name(int fmt) {
-    switch (fmt) { case IMGDEC_PNM: return "pnm"; case IMGDEC_BMP: return "bmp"; case IMGDEC_PNG: return "png"; default: return "inconnu"; }
+    switch (fmt) { case IMGDEC_PNM: return "pnm"; case IMGDEC_BMP: return "bmp"; case IMGDEC_PNG: return "png"; case IMGDEC_JPEG: return "jpeg"; default: return "inconnu"; }
 }
 
 const char *imgdec_strerror(int rc) {

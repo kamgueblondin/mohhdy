@@ -5738,6 +5738,7 @@ static void cmd_img_info(shell_context_t* ctx, char args[][128], int arg_count) 
     print_string(" w="); print_int(img.w);
     print_string(" h="); print_int(img.h);
     print_string(" bpp="); print_int(img.bpp);
+    if (img.fmt == IMGDEC_PNG) { print_string(" depth="); print_int(img.depth); print_string(" interlace="); print_int(img.interlace); }
     if (rc == IMGDEC_OK) {
         unsigned char px[3];
         imgdec_pixel(&img, 0, 0, px);

@@ -13,7 +13,7 @@ LOG = os.path.join(LOG_DIR, "vfs-service.log")
 ERR = os.path.join(LOG_DIR, "vfs-service.err")
 MON = os.path.join(LOG_DIR, "vfs-service-monitor.sock")
 KERNEL = os.path.join(ROOT, "build", "mohhdy.bin")
-INITRD = os.path.join(ROOT, "my_initrd.tar")
+INITRD = os.path.join(ROOT, "my_initrd_test.tar")
 DISK = os.path.join(LOG_DIR, "vfs-service-overlay.img")
 FAT32_DISK = os.path.join(LOG_DIR, "vfs-service-fat32.img")
 # Chaque caractère reste confirmé par le shell avant la suite de la ligne. Le

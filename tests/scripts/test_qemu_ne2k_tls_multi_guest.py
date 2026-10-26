@@ -20,7 +20,7 @@ from qemu_shared_ethernet_hub import SharedEthernetHub
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 KERNEL = os.environ.get("KERNEL", os.path.join(ROOT, "build", "mohhdy.bin"))
-INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd.tar"))
+INITRD = os.environ.get("INITRD", os.path.join(ROOT, "my_initrd_test.tar"))
 LOG_DIR = os.path.join(ROOT, "test_logs")
 BOOT_TIMEOUT = float(os.environ.get("BOOT_TIMEOUT", "90"))
 KEY_DELAY = float(os.environ.get("KEY_DELAY", "0.05"))

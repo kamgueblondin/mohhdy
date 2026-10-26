@@ -47,7 +47,7 @@ jobs:
       - name: Verify build artifacts
         run: |
           test -s build/mohhdy.bin
-          test -s my_initrd.tar
+          test -s my_initrd.tar && test -s my_initrd_test.tar
           ls -lh build/mohhdy.bin my_initrd.tar
           file build/mohhdy.bin
 

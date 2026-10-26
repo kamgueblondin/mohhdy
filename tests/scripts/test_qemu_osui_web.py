@@ -167,7 +167,7 @@ def main():
     peer.start()
     command = [
         "qemu-system-i386", "-kernel", os.path.join(ROOT, "build", "mohhdy.bin"),
-        "-initrd", os.path.join(ROOT, "my_initrd.tar"), "-cpu", "max", "-m", "1024M",
+        "-initrd", os.path.join(ROOT, "my_initrd_test.tar"), "-cpu", "max", "-m", "1024M",
         "-display", "none", "-vga", "none", "-serial", "file:" + LOG,
         "-monitor", "unix:%s,server,nowait" % MON, "-machine", "type=pc,accel=tcg",
         "-rtc", "base=2026-08-18T00:00:00",

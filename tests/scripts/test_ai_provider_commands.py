@@ -16,7 +16,7 @@ KERNEL = os.path.join(ROOT, "build", "mohhdy.bin")
 # bearer) only exists in the legacy image; the strict default image does not
 # link the Ring 0 network stack and is checked for that honest state.
 LEGACY_KERNEL = os.path.join(ROOT, "build", "mohhdy-netlegacy.bin")
-INITRD = os.path.join(ROOT, "my_initrd.tar")
+INITRD = os.path.join(ROOT, "my_initrd_test.tar")
 
 
 def log_text():

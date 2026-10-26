@@ -491,7 +491,7 @@ int osui_tool_image_decode(const char *buf, int n, unsigned char *rgb, int max_w
 
 static char g_file[OSUI_TOOL_READ_MAX + 1];
 
-/* Lot 45: BMP / PNG / binary PNM through the shared imgdec module, with
+/* Lot 45 (Lot 47: + JPEG baseline, PNG 1-16 bit, Adam7): BMP / PNG / binary PNM through the shared imgdec module, with
  * zoom and pan; the old PNM decoder stays for ASCII P2 / P3. Bounded:
  * the PNG scanlines fit in g_img_scratch (1 MiB, e.g. 512x512 RGBA). */
 #define IMG_SCRATCH (1024U * 1024U + 4096U)
@@ -505,7 +505,7 @@ static int view_decode(osui_tool_t *t, const char *buf, int n) {
         t->img_src_w = img.w; t->img_src_h = img.h; t->img_fmt = img.fmt;
         return 0;
     }
-    if (img.fmt == IMGDEC_BMP || img.fmt == IMGDEC_PNG) {
+    if (img.fmt == IMGDEC_BMP || img.fmt == IMGDEC_PNG || img.fmt == IMGDEC_JPEG) {
         /* a real image we cannot show: say why instead of dumping bytes */
         add_line(t, "image non affichable: ", -1, OSUI_APP_A_ERR);
         t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, imgdec_strerror(rc));

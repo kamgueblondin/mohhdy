@@ -33,7 +33,7 @@ def boot():
             pass
     command = [
         "qemu-system-i386", "-kernel", os.path.join(tw.ROOT, "build", "mohhdy.bin"),
-        "-initrd", os.path.join(tw.ROOT, "my_initrd.tar"), "-cpu", "max", "-m", "1024M",
+        "-initrd", os.path.join(tw.ROOT, "my_initrd_test.tar"), "-cpu", "max", "-m", "1024M",
         "-display", "none", "-vga", "none", "-serial", "file:" + tw.LOG,
         "-monitor", "unix:%s,server,nowait" % tw.MON, "-machine", "type=pc,accel=tcg",
         "-net", "none", "-no-reboot", "-no-shutdown",

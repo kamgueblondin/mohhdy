@@ -76,7 +76,7 @@ def configured_jobs(count):
 
 
 def assert_artifacts():
-    required = ("build/mohhdy.bin", "my_initrd.tar")
+    required = ("build/mohhdy.bin", "my_initrd_test.tar")
     missing = [path for path in required if not os.path.isfile(os.path.join(ROOT, path))]
     if missing:
         raise RuntimeError("missing integration artefacts: %s" % ", ".join(missing))

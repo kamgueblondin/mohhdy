@@ -10,7 +10,7 @@ import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 KERNEL = os.path.join(ROOT, "build", "mohhdy.bin")
-INITRD = os.path.join(ROOT, "my_initrd.tar")
+INITRD = os.path.join(ROOT, "my_initrd_test.tar")
 DISK = os.path.join(ROOT, "test_logs", "gui-capture-overlay.img")
 LOG_DIR = os.path.join(ROOT, "test_logs")
 LOG = os.path.join(LOG_DIR, "gui-record-serial.log")

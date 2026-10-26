@@ -465,7 +465,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_form: $(UNIT_DIR)/userspace/test_os
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_form.c ../userspace/fsops.c ../userspace/osui_app.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_imgdec: $(UNIT_DIR)/userspace/test_imgdec.c $(UNIT_DIR)/userspace/imgdec_samples.h ../userspace/imgdec.c ../userspace/imgdec.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_imgdec: $(UNIT_DIR)/userspace/test_imgdec.c $(UNIT_DIR)/userspace/imgdec_samples.h ../userspace/imgdec.c ../userspace/imgdec_jpeg.inc ../userspace/imgdec.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"

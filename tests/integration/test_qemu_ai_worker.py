@@ -47,7 +47,7 @@ LOG = os.path.join(LOG_DIR, "ai-worker.log")
 ERR = os.path.join(LOG_DIR, "ai-worker.err")
 MON = os.path.join(LOG_DIR, "ai-worker-monitor.sock")
 KERNEL = os.path.join(ROOT, "build", "mohhdy.bin")
-INITRD = os.path.join(ROOT, "my_initrd.tar")
+INITRD = os.path.join(ROOT, "my_initrd_test.tar")
 FIXTURE = os.path.join(ROOT, "build", "ai_fixture")
 KEY_HOLD_MS = int(os.environ.get("KEY_HOLD_MS", "10"))
 
