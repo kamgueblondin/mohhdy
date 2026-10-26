@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 446
+#define MOHHDY_SHELL_COMMAND_COUNT 447
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -226,6 +226,7 @@ static const char * const mohhdy_shell_commands[] = {
     "mount-journal",
     "mount-journal-add",
     "mv",
+    "net-if",
     "net-relay-status",
     "net-status",
     "net-wire-status",

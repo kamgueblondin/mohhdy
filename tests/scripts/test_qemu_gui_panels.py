@@ -37,6 +37,11 @@ PANELS = [
         (5, "alice 10.0.0.2", True, "p2p-up step 1/4"),
         (3, None, False, "p2p health ok"),
         (4, None, False, "p2p peers ok"),
+        # Lot 47 (US-G04): the shell net-if command from the window (root
+        # shell task, so the kernel accepts the change); no NIC here, the
+        # static address is still recorded by the loopback networker.
+        (6, None, False, "net-if "),
+        (7, "static 10.32.0.77 255.255.255.0 10.32.0.2", True, "net-if ok mode static ip 10.32.0.77"),
     ]),
     ("/disk", "Stockage", [
         (0, None, False, "ata-status ok driver"),

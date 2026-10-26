@@ -14,6 +14,9 @@ static const osui_par_entry_t k_net[] = {
     { "Sante P2P", "p2p-health", 0, 0 },
     { "Pairs P2P", "p2p-peers", 0, 0 },
     { "Monter le P2P", "p2p-up", A | M, "NOM IP [CLE]" },
+    /* Lot 47 (US-G04): same `net-if` command as the console */
+    { "Interface (adresse, masque, passerelle)", "net-if", 0, 0 },
+    { "Configurer l'interface", "net-if", A | M, "static IP MASQUE PASSERELLE | dhcp" },
 };
 static const osui_par_entry_t k_store[] = {
     { "Pilote ATA (lectures, ecritures)", "ata-status", 0, 0 },

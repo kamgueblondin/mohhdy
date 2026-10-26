@@ -68,4 +68,10 @@ int net_relay_bulk_result(int32_t caller_pid, uint8_t* out, uint32_t capacity);
 
 void net_relay_fill_status(os_net_relay_status_t* out, int32_t live_worker);
 
+/* Lot 47 (US-G04): an interface read is open, a change (static address
+ * or back to DHCP) only from the root shell. */
+static inline int net_ifconfig_allowed(uint32_t action, int32_t caller_pid, int32_t root_shell_pid) {
+    if (action == 0U) return 1;
+    return root_shell_pid > 0 && caller_pid == root_shell_pid;
+}
 #endif

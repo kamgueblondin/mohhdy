@@ -3,6 +3,7 @@
 
 #include "osui_parity.h"
 #include "imgdec.h"
+#include "net_ifcfg.h"
 #include <stdint.h>
 int shell_prod_is(const char* line);
 int shell_persist_is(const char* line);
@@ -1250,6 +1251,7 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  ai-sse-poll        - Lire un delta SSE LLM extrait par le noyau\n");
     print_string("  ai-next            - Rearmer une session LLM apres sa reponse\n");
     print_string("  ai-close           - Annuler la session LLM et purger ses secrets\n");
+    print_string("  net-if [static IP MASQUE PASSERELLE | dhcp] - Configuration de l'interface\n");
     print_string("  net-status         - Etat reel de la pile reseau bare-metal\n");
     
     print_colored("\nCOMMANDES UTILITAIRES :\n", COLOR_YELLOW);
@@ -3618,7 +3620,7 @@ static void cmd_pm_inline(shell_context_t* ctx, const char* stmt) {
 
 static int is_builtin(const char* cmd) {
     static const char* names[] = {
-        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
+        "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "net-if", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
         "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
@@ -5368,6 +5370,22 @@ static void cmd_pci_rescan(shell_context_t* ctx, char args[][128], int arg_count
 }
 
 /* Tranche 5 slice 3: kernel counters of the worker-only NE2000 wire path. */
+/* Lot 47 (US-G04): interface configuration through the networker. */
+static int net_if_call(os_peer_data_request_t* r) {
+    int rc;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_PEER_DATA), "b"((uint32_t)r) : "memory");
+    return rc;
+}
+static void cmd_net_if(shell_context_t* ctx, char args[][128], int arg_count) {
+    static os_peer_data_request_t r;
+    static char out[160];
+    const char* av[4];
+    int i;
+    for (i = 0; i < 4; i++) av[i] = i < arg_count ? args[i] : "";
+    ctx->last_rc = net_ifcfg_run(arg_count > 4 ? 5 : arg_count, av, net_if_call, &r, out, (int)sizeof(out));
+    print_string(out);
+}
+
 static void cmd_net_wire_status(shell_context_t* ctx, char args[][128], int arg_count) {
     os_net_wire_status_t st;
     int rc;
@@ -7305,6 +7323,9 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "net-relay-status") == 0) {
         cmd_net_relay_status(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "net-if") == 0) {
+        cmd_net_if(ctx, args, arg_count);
         return 1;
     } else if (strcmp(command, "net-wire-status") == 0) {
         cmd_net_wire_status(ctx, args, arg_count);

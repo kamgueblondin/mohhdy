@@ -202,6 +202,10 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/umalloc.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
+    if [ "$(basename "$test_file")" = "test_net_ifcfg.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/net_ifcfg.c $BASE_DIR/kernel/net_dhcp.c"
+        cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include"
+    fi
     if [ "$(basename "$test_file")" = "test_osui_ide.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_ide.c"
         cflags="$cflags -I$BASE_DIR/userspace"

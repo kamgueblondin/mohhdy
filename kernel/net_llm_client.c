@@ -37,6 +37,7 @@ typedef struct {
 #define KERNEL_LLM_DHCP_RETRY_MAX_TICKS 10000U
 #define KERNEL_LLM_DHCP_RETRY_LIMIT 5U
 static kernel_llm_dhcp_maintenance_t boot_llm_dhcp_maintenance;
+static uint8_t g_ifc_static; /* Lot 47 (US-G04): static address set */
 /* Espaces de travail noyau fixes : aucun buffer du chemin DHCP→LLM n’est alloué. */
 net_arp_cache_t boot_llm_arp_cache;
 uint8_t boot_llm_dhcp_tx[KERNEL_LLM_FRAME_CAPACITY];
@@ -134,6 +135,7 @@ void net_llm_client_reset(void) {
     boot_llm_http_streaming = 0U;
     boot_llm_application_recovery.pending = 0U;
     boot_llm_dhcp_maintenance.armed = 0U;
+    g_ifc_static = 0U;
     boot_llm_dhcp_maintenance.retries_used = 0U;
     boot_llm_dhcp_maintenance.retry_limit = KERNEL_LLM_DHCP_RETRY_LIMIT;
     boot_llm_dhcp_maintenance.next_retry_tick = 0U;
@@ -339,6 +341,7 @@ int kernel_llm_dhcp_maintenance(uint32_t now) {
 #ifndef MOHHDY_RING3
     if (!nic_owner_kernel_may_touch()) return 0; /* Tranche 5 suite: card in Ring 3 */
 #endif
+    if (g_ifc_static) return 0; /* Lot 47: static address, no DHCP renew */
     if (boot_llm_lease.valid) {
         /* ne2k_dhcp_poll_ack consomme la tete du ring, DHCP ou pas. Pendant
          * SYN/TLS/HTTP ces trames ne doivent pas disparaitre. */
@@ -1075,11 +1078,60 @@ static int kernel_peer_tls_app(os_peer_data_request_t* r) {
     return 1;
 }
 
+/* Lot 47 (US-G04): static address or DHCP. The rights check (root shell
+ * only for a change) is in the kernel before the relay. */
+static void ifc_report(os_peer_data_request_t* r) {
+    uint32_t i;
+    for (i = 0U; i < 14U; i++) r->data[i] = 0U;
+    r->data[0] = !boot_llm_lease.valid && !g_ifc_static ? (uint8_t)OS_IFCONFIG_MODE_NONE :
+                 g_ifc_static ? (uint8_t)OS_IFCONFIG_MODE_STATIC : (uint8_t)OS_IFCONFIG_MODE_DHCP;
+    for (i = 0U; i < 4U; i++) {
+        r->data[1U + i] = boot_llm_lease.ipv4[i];
+        r->data[5U + i] = boot_llm_lease.subnet_valid ? boot_llm_lease.subnet_mask[i] : 0U;
+        r->data[9U + i] = boot_llm_lease.router_valid ? boot_llm_lease.router_ipv4[i] : 0U;
+    }
+    r->data[13] = boot_llm_lease.valid ? 1U : 0U;
+    r->length = 14U;
+}
+static int kernel_ifconfig(os_peer_data_request_t* r) {
+    int rc = 0;
+    if (r->data[0] == OS_IFCONFIG_STATIC) {
+        net_dhcp_lease_t next = boot_llm_lease;
+        if (net_dhcp_static_apply(&next, r->data + 1, r->data + 5, r->data + 9) != 0) {
+            ifc_report(r);
+            return OS_PEER_BAD_ADDRESS;
+        }
+        boot_llm_lease = next;
+        g_ifc_static = 1U;
+    } else if (r->data[0] == OS_IFCONFIG_DHCP) {
+        if (g_ifc_static) {
+            /* DHCP only (DISCOVER..ACK) into a scratch lease: the static
+             * address stays until a lease is granted. */
+            static uint32_t ifc_xid = 0x4C343700U;
+            net_dhcp_lease_t next;
+            if (!g_llm_present) { ifc_report(r); return OS_PEER_UNAVAILABLE; }
+            net_dhcp_lease_clear(&next);
+            rc = ne2k_dhcp_acquire(g_llm_dev, g_llm_io, boot_llm_dhcp_tx, sizeof(boot_llm_dhcp_tx),
+                                   boot_llm_dhcp_rx, sizeof(boot_llm_dhcp_rx), ++ifc_xid, 64U, &next);
+            if (rc == 0 && next.valid) {
+                boot_llm_lease = next;
+                g_ifc_static = 0U;
+            } else rc = -1;
+        }
+    } else if (r->data[0] != OS_IFCONFIG_GET) {
+        return OS_PEER_BAD_REQUEST;
+    }
+    ifc_report(r);
+    return rc < 0 ? OS_PEER_FAILED : 0;
+}
+int kernel_ifconfig_is_static(void) { return g_ifc_static; }
+
 int kernel_peer_data(os_peer_data_request_t* r) {
     uint8_t state = 0U;
     uint16_t attempts, n = 0U, segment_length = 0U;
     int status;
     if (!r) return OS_PEER_BAD_REQUEST;
+    if (r->op == OS_PEER_IFCONFIG) return kernel_ifconfig(r);
     if (!g_llm_present) return OS_PEER_UNAVAILABLE;
     if (r->op == OS_PEER_P2P_SEND || r->op == OS_PEER_P2P_RECV) return kernel_p2p_op(r);
     if (!boot_llm_lease.valid) return OS_PEER_NO_LEASE;

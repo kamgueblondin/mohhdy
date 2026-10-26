@@ -727,3 +727,9 @@ $(ALL_TEST_BINS): | $(BUILD_DIR) $(LOG_DIR)
 
 # Marquer les cibles qui ne créent pas de fichiers
 .PHONY: $(filter-out $(ALL_TEST_BINS), $(MAKECMDGOALS))
+
+# Lot 47 (US-G04): net-if command, static lease validation, rights predicate
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_net_ifcfg: $(UNIT_DIR)/userspace/test_net_ifcfg.c ../userspace/net_ifcfg.c ../userspace/net_ifcfg.h ../kernel/net_dhcp.c ../kernel/net_dhcp.h ../kernel/net_relay.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/net_ifcfg.c ../kernel/net_dhcp.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"

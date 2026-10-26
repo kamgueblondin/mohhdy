@@ -376,6 +376,18 @@
 #define OS_PEER_TLS_APP_SEND 12U
 #define OS_PEER_TLS_APP_RECV 13U
 #define OS_PEER_TLS_APP_MAX 512U
+/* Lot 47 (US-G04): interface configuration. data[0] = OS_IFCONFIG_GET,
+ * OS_IFCONFIG_STATIC (data[1..4] address, [5..8] mask, [9..12] gateway) or
+ * OS_IFCONFIG_DHCP. The reply always fills data[0] = current mode
+ * (OS_IFCONFIG_MODE_*), [1..4] address, [5..8] mask, [9..12] gateway,
+ * [13] lease valid. A change is accepted from the root shell only. */
+#define OS_PEER_IFCONFIG 14U
+#define OS_IFCONFIG_GET 0U
+#define OS_IFCONFIG_STATIC 1U
+#define OS_IFCONFIG_DHCP 2U
+#define OS_IFCONFIG_MODE_NONE 0U
+#define OS_IFCONFIG_MODE_STATIC 1U
+#define OS_IFCONFIG_MODE_DHCP 2U
 #define OS_PEER_WEB_SLOTS 4U
 #define OS_PEER_SLOT_FREE 0U
 #define OS_PEER_SLOT_LISTEN 1U
@@ -643,6 +655,8 @@ typedef struct {
 #define OS_PEER_FAILED (-134)
 #define OS_PEER_TIMEOUT (-135)
 #define OS_PEER_NOT_LISTENING (-136)
+#define OS_PEER_DENIED (-137)       /* Lot 47: interface change outside the root shell */
+#define OS_PEER_BAD_ADDRESS (-138)  /* Lot 47: address, mask or gateway refused */
 
 
 #define OS_SOCKET_BAD_ARGUMENT (-120)

@@ -287,6 +287,34 @@ def main():
         wait_for(proc, "osui web-serve ok served=1 failed=0", 60, start)
         wait_for_prompt(proc, start)
         print("custom port: web-serve 9137 served GET /status")
+        # (5) Lot 47 (US-G04): static address through net-if, TCP still
+        # served on the new address, then back to DHCP and served again.
+        start = send_command(client, proc, "net-if")
+        wait_for(proc, "net-if ok mode dhcp ip 10.32.0.15 ", 30, start)
+        start = send_command(client, proc, "net-if static 10.32.0.77 255.255.255.0 10.32.0.2")
+        wait_for(proc, "net-if ok mode static ip 10.32.0.77 mask 255.255.255.0 gw 10.32.0.2 lease 1", 30, start)
+        wait_for_prompt(proc, start)
+        start = send_command(client, proc, "net-if static 10.32.0.255 255.255.255.0 10.32.0.2")
+        wait_for(proc, "net-if error bad address", 30, start)
+        wait_for_prompt(proc, start)
+        peer.guest_ip = b"\x0a\x20\x00\x4d"   # 10.32.0.77
+        start = send_command(client, proc, "web-serve 9138 1")
+        s77 = peer.request(b"GET /status HTTP/1.0\r\n\r\n", guest_port=9138)
+        if not s77.startswith(b"HTTP/1.0 200 OK"):
+            raise RuntimeError("GET /status on the static address: %r" % s77[:300])
+        wait_for(proc, "osui web-serve ok served=1 failed=0", 60, start)
+        wait_for_prompt(proc, start)
+        start = send_command(client, proc, "net-if dhcp")
+        wait_for(proc, "net-if ok mode dhcp ip 10.32.0.15 ", 60, start)
+        wait_for_prompt(proc, start)
+        peer.guest_ip = b"\x0a\x20\x00\x0f"
+        start = send_command(client, proc, "web-serve 9139 1")
+        s15 = peer.request(b"GET /status HTTP/1.0\r\n\r\n", guest_port=9139)
+        if not s15.startswith(b"HTTP/1.0 200 OK"):
+            raise RuntimeError("GET /status after net-if dhcp: %r" % s15[:300])
+        wait_for(proc, "osui web-serve ok served=1 failed=0", 60, start)
+        wait_for_prompt(proc, start)
+        print("net-if: static 10.32.0.77 served, bad address refused, back to dhcp 10.32.0.15 served")
         if peer.error is not None:
             raise RuntimeError("controlled Ethernet peer failed: %s" % peer.error)
         print("QEMU OS-UI web contract: http 3 concurrent + 2, https 2 concurrent, background 2")

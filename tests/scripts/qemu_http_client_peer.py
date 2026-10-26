@@ -31,7 +31,7 @@ class Conn:
         self.retransmits = 0
 
     def _send(self, flags, payload=b""):
-        frame = _ethernet(self.peer.mac, 0x0800, _ipv4_tcp(SERVER_IP, GUEST_IP, self.port, self.guest_port,
+        frame = _ethernet(self.peer.mac, 0x0800, _ipv4_tcp(SERVER_IP, self.peer.guest_ip, self.port, self.guest_port,
                                                             self.c_seq, self.g_seq, flags, payload))
         with self.peer.lock:
             self.peer._send_frame(self.peer.conn, frame)
@@ -69,7 +69,7 @@ class Conn:
         if self.last is None:
             return
         seq, data = self.last
-        frame = _ethernet(self.peer.mac, 0x0800, _ipv4_tcp(SERVER_IP, GUEST_IP, self.port, self.guest_port,
+        frame = _ethernet(self.peer.mac, 0x0800, _ipv4_tcp(SERVER_IP, self.peer.guest_ip, self.port, self.guest_port,
                                                             seq, self.g_seq, ACK | PSH, data))
         with self.peer.lock:
             self.peer._send_frame(self.peer.conn, frame)
@@ -193,6 +193,7 @@ class HttpClientPeer(ControlledEthernetPeer):
         self.lock = threading.Lock()
         self.next_port = 40000
         self.conns = {}
+        self.guest_ip = GUEST_IP  # Lot 47: net-if static moves the guest
 
     def _handle_frame(self, connection, frame):
         self.conn = connection
