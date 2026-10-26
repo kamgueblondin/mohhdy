@@ -1320,6 +1320,17 @@ Lot 46 PR B-D (same branch, before the merge):
   mid-job #GP, respawn, reboot) re-run with the v4 layout:
   `make qemu-ata-driver` PASS. Still Ring 0 by design: PIC, PIT, IRQ
   stubs, early boot console, panic path, early boot probes.
+- US-064 (later in the branch): `qemu-p2p` 2b adds an isolated pre-vote
+  (gamma cut from both peers campaigns after the lease, its term stays,
+  the leader keeps its term after the heal). These runs found three
+  bugs, fixed in `userspace/p2p.c` with unit tests that fail without the
+  fix: follower commit = min(leaderCommit, matched index) (the old leader
+  applied its own uncommitted entry after the heal); pre-candidates grant
+  each other; leader resends paced per peer (6697 appends in one cut).
+  2c now accepts beta or gamma as the new leader.
+- TCP ports: `qemu-osui-web` serves GET /status on port 9137 (custom port).
+- Editor: a refused Save As restores the previous name.
+- US-G04: not done, the shell has no interface configuration command.
 - US-064: `make qemu-p2p` scenario 2c: the leader is cut from both peers
   (hub wire cut), its own put is not committed, after the 10 s lease beta
   is elected at a higher term (3 in this run) and commits, after the heal

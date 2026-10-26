@@ -108,8 +108,14 @@ configuration d'interface : non commencees). US-001 : IDENTIFY et repli
 FAT PIO deja hors Ring 0 depuis le lot 2, redemarrage supervise reprouve
 (`make qemu-ata-driver`). US-064 : scenario QEMU 2c (le leader lui-meme
 coupe du reseau, reelection, retour en suiveur apres reparation). Ports
-TCP : aucun chemin ignorant le port demande n'a ete trouve ; ecoute sur
-8080 et 8443 deja prouvee par `make qemu-osui-web`, pas de nouveau test.
+TCP : aucun chemin ignorant le port demande ; `make qemu-osui-web` sert
+aussi GET /status sur le port 9137. Raft : scenario 2b ajoute un pre-vote
+isole (terme inchange, leader conserve apres reparation) ; trois bugs
+corriges dans `userspace/p2p.c` avec tests unitaires qui echouent sans le
+correctif (commit suiveur = min(leaderCommit, index apparie), pre-candidats
+qui s'accordent le pre-vote, renvoi du leader cadence par pair). Editeur :
+un Enregistrer sous refuse remet l'ancien nom. US-G04 non faite : aucune
+commande shell de configuration d'interface n'existe.
 
 ### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production
 - **Moteur Web & Securite (US-039 / US-031)** : Validation dynamique CSP des origines de ressources (images, styles, scripts) lors de la construction de la liste d'affichage (`webrt_csp_validate_display_list_resource`). Journalisation des acces bloques dans `osui-audit`.

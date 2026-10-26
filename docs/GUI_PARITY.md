@@ -79,6 +79,10 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 
 ## Lot 46 (PR A)
 
+- Later in the branch: a refused Save As restores the previous file name
+  (title); /net still has no interface configuration (US-G04 partial: no
+  shell command exists to reuse).
+
 - Output of launched programs in the window (kernel capture, above).
 - The file explorer name column follows the window width; output already
   shown in a tool window is wrapped again when the window is resized.
