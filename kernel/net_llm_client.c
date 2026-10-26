@@ -1101,6 +1101,18 @@ static int kernel_ifconfig(os_peer_data_request_t* r) {
             ifc_report(r);
             return OS_PEER_BAD_ADDRESS;
         }
+        /* Close any active TCP socket or web slots on address change */
+        if (boot_peer_listen_socket >= 0) {
+            (void)net_socket_close(boot_peer_listen_socket);
+            boot_peer_listen_socket = -1;
+        }
+        if (g_web_open) {
+            uint16_t wi;
+            for (wi = 0U; wi < OS_PEER_WEB_SLOTS; wi++) {
+                if (g_web[wi].used) web_slot_free(&g_web[wi]);
+            }
+            g_web_open = 0U;
+        }
         boot_llm_lease = next;
         g_ifc_static = 1U;
     } else if (r->data[0] == OS_IFCONFIG_DHCP) {
@@ -1114,6 +1126,17 @@ static int kernel_ifconfig(os_peer_data_request_t* r) {
             rc = ne2k_dhcp_acquire(g_llm_dev, g_llm_io, boot_llm_dhcp_tx, sizeof(boot_llm_dhcp_tx),
                                    boot_llm_dhcp_rx, sizeof(boot_llm_dhcp_rx), ++ifc_xid, 64U, &next);
             if (rc == 0 && next.valid) {
+                if (boot_peer_listen_socket >= 0) {
+                    (void)net_socket_close(boot_peer_listen_socket);
+                    boot_peer_listen_socket = -1;
+                }
+                if (g_web_open) {
+                    uint16_t wi;
+                    for (wi = 0U; wi < OS_PEER_WEB_SLOTS; wi++) {
+                        if (g_web[wi].used) web_slot_free(&g_web[wi]);
+                    }
+                    g_web_open = 0U;
+                }
                 boot_llm_lease = next;
                 g_ifc_static = 0U;
             } else rc = -1;
