@@ -147,6 +147,23 @@ static void test_window_grid_follows_size(void) {
     TEST_ASSERT_EQUAL(OSUI_APP_ROWS, v.nrows);
 }
 
+/* Lot 46: notes after the output of a launched program (kernel capture) */
+static void test_spawn_note(void) {
+    char note[256];
+    os_outcap_stat_t st;
+    memset(&st, 0, sizeof(st));
+    st.total = 120;
+    TEST_ASSERT_EQUAL(0, osui_tool_spawn_note(note, (int)sizeof(note), &st));
+    TEST_ASSERT_EQUAL_STRING("", note);
+    st.total = 20000; st.dropped = 3616; st.live = 1; st.untracked = 2;
+    TEST_ASSERT(osui_tool_spawn_note(note, (int)sizeof(note), &st) > 0);
+    TEST_ASSERT(strstr(note, "[sortie du programme tronquee: 3616 octets perdus sur 20000 (16 Kio max)]") != 0);
+    TEST_ASSERT(strstr(note, "[2 programme(s) non captures: table de 16 taches pleine]") != 0);
+    TEST_ASSERT(strstr(note, "[1 programme(s) encore actif(s)") != 0);
+    TEST_ASSERT_EQUAL(0, osui_tool_spawn_note(note, (int)sizeof(note), 0));
+    TEST_ASSERT(osui_tool_spawn_note(note, 8, &st) <= 7);       /* bounded */
+}
+
 static void test_viewer_text_and_image(void) {
     memset(&t, 0, sizeof(t));
     osui_tool_open(&t, OS_FB_APP_VIEW, "/home/a.txt", &k_src);
@@ -274,6 +291,7 @@ int main(void) {
     RUN_TEST(test_task_manager_kill_with_confirmation);
     RUN_TEST(test_viewer_text_and_image);
     RUN_TEST(test_window_grid_follows_size);
+    RUN_TEST(test_spawn_note);
     RUN_TEST(test_settings_real_values);
     RUN_TEST(test_p2p_window);
     RUN_TEST(test_pm_run_window);

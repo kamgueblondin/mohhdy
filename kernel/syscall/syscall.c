@@ -45,6 +45,7 @@ static int syscall_heap_map_page(void* ctx, uint32_t va);
 #include "../pci_service.h"
 #include "../device_service.h"
 #include "../key_seal.h"
+#include "../out_capture.h"
 /* Completions locales : BPE, top-k basse temperature, arret EOT ou repetition,
  * et newline ou fin de phrase une fois 80 caracteres ecrits. */
 
@@ -2124,7 +2125,10 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_PUTC:
             {
                 extern void write_serial(char a);
-                print_char((char)cpu->ebx, -1, -1, 0x0F); // VGA
+                /* Lot 46: a program launched from a desktop window prints
+                 * into the bounded capture of that window (serial kept) */
+                if (!current_task || !out_cap_put((int32_t)current_task->id, (char)cpu->ebx))
+                    print_char((char)cpu->ebx, -1, -1, 0x0F); // VGA
                 write_serial((char)cpu->ebx);             // Serial
             }
             break;
@@ -2171,16 +2175,20 @@ void syscall_handler(cpu_state_t* cpu) {
         case SYS_PUTS:
             {
                 char* str = (char*)cpu->ebx;
+                /* Lot 46: same capture as SYS_PUTC (see out_capture.h) */
+                int cap = current_task && out_cap_tracked((int32_t)current_task->id);
                 if (str) {
                     for (int i = 0; i < 1024 && str[i] != '\0'; i++) {
                         char ch = str[i];
                         // Filtrer les non-imprimables (sauf \n, \r, \t)
                         if ((ch >= 32 && ch <= 126) || ch == '\n' || ch == '\r' || ch == '\t') {
-                            print_char(ch, -1, -1, 0x0F);
+                            if (cap) (void)out_cap_put((int32_t)current_task->id, ch);
+                            else print_char(ch, -1, -1, 0x0F);
                         }
                     }
                     // Garantir un flush visuel minimal
-                    print_char('\n', -1, -1, 0x0F);
+                    if (cap) (void)out_cap_put((int32_t)current_task->id, '\n');
+                    else print_char('\n', -1, -1, 0x0F);
                 }
             }
             break;
@@ -2719,6 +2727,9 @@ void syscall_handler(cpu_state_t* cpu) {
                     cpu->eax = (uint32_t)clipboard_get((char*)buf, (int)len);
                 } else cpu->eax = (uint32_t)-1;
             }
+            break;
+        case SYS_OUT_CAPTURE:
+            cpu->eax = (uint32_t)sys_out_capture(cpu->ebx, cpu->ecx, cpu->edx);
             break;
         case SYS_HEAP_GROW:
             if (!current_task || current_task->type != TASK_TYPE_USER || !current_task->vmm_dir) {
@@ -4431,6 +4442,57 @@ void syscall_init() {
     register_interrupt_handler(0x80, (interrupt_handler_t)syscall_handler);
 }
 
+/* Lot 46: SYS_OUT_CAPTURE (kernel/out_capture.h). A capture left open by a
+ * task that is gone is released, so a crashed shell does not keep it. */
+static int outcap_task_alive(int32_t pid) {
+    task_t* t = pid > 0 ? get_task_by_id(pid) : 0;
+    return t && t->type == TASK_TYPE_USER && t->state != TASK_TERMINATED;
+}
+
+int sys_out_capture(uint32_t op, uint32_t buf, uint32_t len) {
+    int32_t self;
+    if (!current_task || current_task->type != TASK_TYPE_USER) return OS_OUTCAP_BAD;
+    self = (int32_t)current_task->id;
+    if (out_cap_owner() > 0 && out_cap_owner() != self && !outcap_task_alive(out_cap_owner()))
+        out_cap_reset();
+    switch (op) {
+    case OS_OUTCAP_BEGIN:
+        return out_cap_begin(self);
+    case OS_OUTCAP_READ:
+        if (len == 0U || len > OS_OUTCAP_MAX + 1U || !syscall_user_range((const void*)buf, len, 1))
+            return OS_OUTCAP_BAD;
+        return out_cap_read(self, (char*)buf, (int)len);
+    case OS_OUTCAP_END: {
+        uint32_t total = out_cap_total(), dropped = out_cap_dropped();
+        int rc = out_cap_end(self);
+        if (rc >= 0 && total > 0U) {
+            print_string_serial("[OUTCAP] end bytes=");
+            ata_serial_u32(total);
+            print_string_serial(" dropped=");
+            ata_serial_u32(dropped);
+            print_string_serial("\n");
+        }
+        return rc;
+    }
+    case OS_OUTCAP_STAT: {
+        os_outcap_stat_t* st = (os_outcap_stat_t*)buf;
+        int k;
+        uint32_t live = 0U;
+        if (out_cap_owner() != self || len < sizeof(*st) || !syscall_user_range((const void*)buf, sizeof(*st), 1))
+            return OS_OUTCAP_BAD;
+        for (k = 0; k < out_cap_pid_count(); k++)
+            if (outcap_task_alive(out_cap_pid_at(k))) live++;
+        st->total = out_cap_total();
+        st->dropped = out_cap_dropped();
+        st->untracked = out_cap_untracked();
+        st->live = live;
+        return 0;
+    }
+    default:
+        return OS_OUTCAP_BAD;
+    }
+}
+
 /* SYS_EXEC : cree l'enfant, le parent passe TASK_WAITING. Le handler
  * appelle schedule() depuis le cadre user. SYS_EXIT reveille le waiter. */
 int sys_exec(const char* path, char* argv[]) {
@@ -4470,6 +4532,7 @@ int sys_exec(const char* path, char* argv[]) {
     }
     new_task->parent_pid = current_task ? current_task->id : -1;
     new_task->waiter_pid = current_task ? current_task->id : 0;
+    (void)out_cap_child((int32_t)current_task->id, (int32_t)new_task->id);
     return 0;
 }
 
@@ -4513,6 +4576,7 @@ int sys_spawn(const char* path, char* argv[]) {
         }
     }
     new_task->parent_pid = current_task ? current_task->id : -1;
+    (void)out_cap_child((int32_t)current_task->id, (int32_t)new_task->id);
     return new_task->id;
 }
 

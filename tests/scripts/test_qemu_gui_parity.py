@@ -11,7 +11,9 @@ as the terminal (shell_app_run, registry rights model):
   * /search runs "grep -r line /samples" (recursive search, fsops_grep);
   * /disk mkdir (state changing) needs a second Enter: armed, then run;
   * /cmd runs a typed registry command (uptime) and refuses a terminal-only
-    one (reboot) with the reason, nothing is executed.
+    one (reboot) with the reason, nothing is executed;
+  * Lot 46: the output of a spawned program is shown in the window, bounded
+    to 16 KiB with a note giving the dropped bytes.
 """
 from __future__ import print_function
 
@@ -265,6 +267,42 @@ def generic(monitor, proc):
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
 
 
+def spawn_capture(monitor, proc):
+    """Lot 46: the output of a program launched from a window (spawn) is
+    captured by the kernel (SYS_OUT_CAPTURE) and shown in the window, after
+    the shell's own line; past 16 KiB the window says how many bytes were
+    dropped and the end of the output never reaches it."""
+    import re
+    slash(monitor, proc, "/cmd", "osui tool open app=Commande")
+    start = len(g.log_text())
+    type_text(monitor, "spawn ok")
+    key(monitor, "ret")
+    run_marker(proc, start, "spawn ok")
+    g.wait_for(proc, "osui panel out=spawn ok pid ", g.CMD_TIMEOUT, start)
+    g.wait_for(proc, "osui panel tail=exec ok", g.CMD_TIMEOUT, start)
+    g.wait_for(proc, "[OUTCAP] end bytes=8 dropped=0", g.CMD_TIMEOUT, start)
+    say("/cmd spawn ok: the child's 'exec ok' is shown in the window")
+    start = len(g.log_text())
+    type_text(monitor, "spawn outflood")
+    key(monitor, "ret")
+    run_marker(proc, start, "spawn outflood")
+    g.wait_for(proc, "osui panel tail=[sortie du programme tronquee: ", g.CMD_TIMEOUT, start)
+    out = g.normalized_log(g.log_text()[start:])
+    m = re.search(r"\[OUTCAP\] end bytes=(\d+) dropped=(\d+)", out)
+    if not m or int(m.group(2)) <= 0 or int(m.group(1)) - int(m.group(2)) != 16384:
+        raise RuntimeError("outflood: capture not bounded to 16 KiB: %r" % (m.groups() if m else None))
+    note = re.search(r"tronquee: (\d+) octets perdus sur (\d+) \(16 Kio max\)", out)
+    if not note or note.group(1) != m.group(2) or note.group(2) != m.group(1):
+        raise RuntimeError("outflood: window note does not match the kernel count")
+    if "outflood end" in out:
+        raise RuntimeError("outflood: the dropped end of the output reached the window")
+    say("/cmd spawn outflood: %s of %s bytes kept, the window notes %s dropped" %
+        (int(m.group(1)) - int(m.group(2)), m.group(1), m.group(2)))
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
+
+
 def main():
     os.makedirs(g.LOG_DIR, exist_ok=True)
     for path in (g.LOG, g.MON_SOCK, g.QMP_SOCK):
@@ -296,6 +334,7 @@ def main():
             search(monitor, proc)
             confirm_mutation(monitor, proc)
             generic(monitor, proc)
+            spawn_capture(monitor, proc)
             g.screendump_rgb(monitor, "qemu-gui-parity-end.ppm")
         say("QEMU UX5 GUI parity panels contract passed.")
         return 0

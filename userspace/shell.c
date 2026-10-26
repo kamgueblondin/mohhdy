@@ -160,6 +160,24 @@ void putc(char c) {
 
 static int shell_vga_cmd(unsigned int what);
 
+/* Lot 46: while a window runs a command, the programs it launches (spawn,
+ * exec) print into the kernel capture (SYS_OUT_CAPTURE, bounded to
+ * OS_OUTCAP_MAX bytes); the shell copies it into the same window buffer,
+ * after its own text, at the point where the child returns. */
+static int g_outcap_on;
+static int sys_out_capture(unsigned int op, void* buf, unsigned int len) {
+    int r;
+    asm volatile("int $0x80" : "=a"(r) : "a"(SYS_OUT_CAPTURE), "b"(op), "c"(buf), "d"(len) : "memory");
+    return r;
+}
+static void shell_cap_drain(void) {
+    static char chunk[1024];
+    int n, i;
+    if (!g_outcap_on || !g_cap_buf) return;
+    while ((n = sys_out_capture(OS_OUTCAP_READ, chunk, sizeof(chunk))) > 0)
+        for (i = 0; i < n; i++) putc(chunk[i]);
+}
+
 void exit_program(int code) { 
     asm volatile("int $0x80" : : "a"(0), "b"(code)); 
 }
@@ -180,6 +198,7 @@ int sys_getchar(void) {
 int exec(const char* path, char* argv[]) {
     int result;
     asm volatile("int $0x80" : "=a"(result) : "a"(6), "b"(path), "c"(argv));
+    shell_cap_drain();   /* Lot 46: the child has exited, its output in order */
     return result;
 }
 
@@ -640,13 +659,35 @@ int sys_service_status(const char* name, os_service_status_t* status) {
  * mem, ps, ls and service-status (userspace/osui_panes.c). */
 /* P2P / Collab / Prod / Support windows: the real shell command, its
  * printed output captured (same handlers as typed in the terminal). */
-static int shell_pane_run(const char *cmd, char *out, int max) {
-    int rc;
-    if (!cmd || !out || max <= 1 || g_cap_buf) return -1;
+/* Lot 46: one capture path for every window run (panes, tool windows):
+ * the shell's own text (g_cap_buf) and the programs it launches (kernel
+ * capture), one bounded buffer, notes for every cut. */
+static void shell_cap_open(char *out, int max) {
     g_cap_buf = out; g_cap_n = 0; g_cap_max = max;
-    if (cmd[0] == 'p' && cmd[1] == '2' && cmd[2] == 'p') (void)shell_p2p_line(cmd);
-    else if (cmd[0] == 'c') (void)shell_collab_line(cmd);
-    else (void)shell_prod_line(cmd);
+    g_outcap_on = sys_out_capture(OS_OUTCAP_BEGIN, 0, 0) == 0;
+}
+
+static int shell_cap_close(char *out, int max) {
+    int rc;
+    if (g_outcap_on) {
+        os_outcap_stat_t st;
+        char note[OSUI_TOOL_COLS * 2];
+        unsigned int t0 = sys_ticks();
+        /* a spawned program runs on its own: wait for it a bounded time
+         * (50 ticks), then what it prints later goes to the console */
+        while (sys_out_capture(OS_OUTCAP_STAT, &st, sizeof(st)) == 0 && st.live > 0 && sys_ticks() - t0 < 50U) {
+            shell_cap_drain();
+            yield();
+        }
+        shell_cap_drain();
+        if (sys_out_capture(OS_OUTCAP_STAT, &st, sizeof(st)) != 0) st.total = st.dropped = st.untracked = st.live = 0;
+        (void)sys_out_capture(OS_OUTCAP_END, 0, 0);
+        g_outcap_on = 0;
+        if (osui_tool_spawn_note(note, (int)sizeof(note), &st) > 0) {
+            int i;
+            for (i = 0; note[i]; i++) putc(note[i]);
+        }
+    }
     out[g_cap_n] = 0;
     if (g_cap_n >= max - 1) {
         const char *trunc_msg = "\n[SORTIE TRONQUEE - Limite 64 Kio atteinte]\n";
@@ -656,6 +697,15 @@ static int shell_pane_run(const char *cmd, char *out, int max) {
     rc = strlen(out);
     g_cap_buf = 0;
     return rc;
+}
+
+static int shell_pane_run(const char *cmd, char *out, int max) {
+    if (!cmd || !out || max <= 1 || g_cap_buf) return -1;
+    shell_cap_open(out, max);
+    if (cmd[0] == 'p' && cmd[1] == '2' && cmd[2] == 'p') (void)shell_p2p_line(cmd);
+    else if (cmd[0] == 'c') (void)shell_collab_line(cmd);
+    else (void)shell_prod_line(cmd);
+    return shell_cap_close(out, max);
 }
 
 static const osui_pane_src_t k_pane_src = {
@@ -7479,17 +7529,9 @@ static int shell_app_run(const char *cmd, char *out, int max) {
     if (!cmd || !out || max <= 1 || g_cap_buf || !g_live_ctx || osui_tool_cmd_check(cmd, shell_cmd_known) != OSUI_CMD_OK) return -1;
     for (i = 0; cmd[i] && i < (int)sizeof(line) - 1; i++) line[i] = cmd[i];
     line[i] = 0;
-    g_cap_buf = out; g_cap_n = 0; g_cap_max = max;
+    shell_cap_open(out, max);
     handle_line(g_live_ctx, line);
-    out[g_cap_n] = 0;
-    if (g_cap_n >= max - 1) {
-        const char *trunc_msg = "\n[SORTIE TRONQUEE - Limite 64 Kio atteinte]\n";
-        int tlen = strlen(trunc_msg);
-        if (max > tlen + 1) strcpy(out + max - 1 - tlen, trunc_msg);
-    }
-    i = strlen(out);
-    g_cap_buf = 0;
-    return i;
+    return shell_cap_close(out, max);
 }
 
 /* One GPT-2 step for the chat window: GGUF streams piece by piece

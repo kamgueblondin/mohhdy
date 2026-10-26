@@ -37,7 +37,7 @@ BIN_DEST_DIR := $(INITRD_DIR)/bin
 OBJECTS = build/boot.o build/idt_loader.o build/isr_stubs.o build/paging.o build/context_switch.o build/kctx.o build/userspace_switch.o \
           build/string.o build/pmm.o build/heap.o build/gdt_asm.o build/io_bitmap.o build/ata_job.o build/ata_fsop.o build/fsop_exec.o build/net_relay.o build/ai_relay.o build/net_nic_owner.o build/net_wire.o build/net_p2p.o build/gdt.o build/idt.o build/vmm.o build/vmm_share.o build/task.o \
           build/syscall.o build/elf.o build/initrd.o build/overlay.o build/ata.o build/rtc.o build/fat16.o build/fat32.o build/gpt2_model.o build/gpt2_gguf.o build/gpt2_gguf_loader.o build/gpt2_quant.o build/gpt2_gguf_infer.o build/gpt2_gguf_session.o build/gpt2_tokenizer.o build/gpt2_sample.o build/gpt2_infer.o build/gpt2_generate.o build/interrupts.o \
-          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/clipboard.o build/user_heap.o build/gfx_term.o build/line_edit.o build/gfx_wm.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/pci_service.o build/device_service.o build/usb_dma.o build/key_seal.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
+          build/keyboard.o build/usb_tablet.o build/timer.o build/ipc.o build/ipc_wait.o build/service_registry.o build/multiboot.o build/kernel.o build/vga_console.o build/gfx_desktop.o build/gfx_fb.o build/clipboard.o build/out_capture.o build/user_heap.o build/gfx_term.o build/line_edit.o build/gfx_wm.o build/kbd_buffer.o build/net_ethernet_arp.o build/net_nic.o build/pci.o build/pci_service.o build/device_service.o build/usb_dma.o build/key_seal.o build/ne2k.o build/ne2k_hw.o build/net_dhcp.o build/net_ipv4_udp.o build/net_dns.o build/net_tcp.o build/net_socket.o build/net_llm_socket.o build/sha256.o build/aes_gcm.o build/x509_der.o build/bigint.o build/ecdsa_p256.o build/x25519.o build/rsa_verify.o build/net_tls_record.o build/net_tls_server.o build/net_http_tls.o build/net_llm_client.o build/net_stack_exec.o
 
 # L'ABI partagée influence notamment la taille de task_t et des messages IPC.
 # Une évolution de structure doit donc reconstruire toute l'image, pas seulement ipc.o.
@@ -186,6 +186,11 @@ build/clipboard.o: kernel/clipboard.c kernel/clipboard.h include/os_syscalls.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Lot 46: bounded capture of the output of programs launched from a window
+build/out_capture.o: kernel/out_capture.c kernel/out_capture.h include/os_syscalls.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 build/gfx_fb.o: kernel/gfx_fb.c kernel/gfx_fb.h kernel/gfx_desktop.h kernel/vga_console.h kernel/gfx_term.h kernel/clipboard.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -304,7 +309,7 @@ build/task.o: kernel/task/task.c kernel/task/task.h kernel/ata_job.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Règles de compilation pour les appels système
-build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h include/os_syscalls.h $(NET_FLAG_STAMP) $(GGUF_FLAG_STAMP)
+build/syscall.o: kernel/syscall/syscall.c kernel/syscall/syscall.h kernel/llm/gpt2_gguf_session.h kernel/ata_job.h kernel/ata_fsop.h kernel/fs/fsop_exec.h kernel/net_relay.h kernel/net_wire.h kernel/out_capture.h include/os_syscalls.h $(NET_FLAG_STAMP) $(GGUF_FLAG_STAMP)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(NET_SYSCALL_FLAGS) $(GGUF_SYSCALL_FLAGS) -c $< -o $@
 
@@ -658,6 +663,7 @@ pack-initrd-now:
 	@cp -f userspace/vfshistclaim $(BIN_DEST_DIR)/vfshistclaim
 	@cp -f userspace/waitchild $(BIN_DEST_DIR)/waitchild
 	@cp -f userspace/ok $(BIN_DEST_DIR)/ok
+	@cp -f userspace/outflood $(BIN_DEST_DIR)/outflood
 	@cp -f userspace/aiworker $(BIN_DEST_DIR)/aiworker
 	@cp -f userspace/aiclient $(BIN_DEST_DIR)/aiclient
 	@cp -f userspace/aistat $(BIN_DEST_DIR)/aistat

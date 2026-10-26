@@ -2005,6 +2005,25 @@ typedef struct {
 #define OS_USER_HEAP_MAX 0x04000000U /* 64 MiB */
 #define OS_HEAP_NO_MEMORY (-1)
 #define OS_HEAP_TOO_BIG (-2)
+/* Lot 46: output of the programs a desktop window launches (spawn, exec),
+ * kernel/out_capture.h. ebx = op, ecx = buffer, edx = its size. Only the
+ * task that opened the capture may read or close it, and only its own
+ * descendants created while it is open are captured. */
+#define SYS_OUT_CAPTURE 163
+#define OS_OUTCAP_BEGIN 0   /* open: 0, OS_OUTCAP_BUSY */
+#define OS_OUTCAP_READ 1    /* copy and remove the kept bytes: count */
+#define OS_OUTCAP_END 2     /* close: bytes dropped past the bound */
+#define OS_OUTCAP_STAT 3    /* ecx = os_outcap_stat_t* */
+#define OS_OUTCAP_MAX 16384 /* bytes kept per capture (16 KiB) */
+#define OS_OUTCAP_PIDS 16   /* tasks tracked per capture */
+#define OS_OUTCAP_BAD (-1)
+#define OS_OUTCAP_BUSY (-2)
+typedef struct {
+    uint32_t total;      /* bytes printed by the captured tasks */
+    uint32_t dropped;    /* of which past OS_OUTCAP_MAX (not kept) */
+    uint32_t untracked;  /* children not captured (pid table full) */
+    uint32_t live;       /* captured tasks still running */
+} os_outcap_stat_t;
 #define OS_RTC_BAD_ARGUMENT (-192)
 #define OS_RTC_UNSTABLE (-193)
 typedef struct {

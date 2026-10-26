@@ -54,7 +54,7 @@ typedef struct {
     char input[OSUI_TOOL_INPUT];
     int ilen;
     char status[OSUI_TOOL_COLS];
-    char log[200];                             /* serial log of the last action */
+    char log[400];                             /* serial log of the last action (Lot 46: + tail lines) */
     /* chat */
     int gen;                                   /* 1 generating */
     int steps, cur_len;
@@ -90,6 +90,11 @@ int osui_tool_cmd_allowed(const char *cmd);
 #define OSUI_CMD_TERMINAL 4
 int osui_tool_cmd_check(const char *cmd, int (*known)(const char *name));
 const char *osui_tool_cmd_reason(int code);
+/* Lot 46: the note a window adds after the output of the programs a
+ * command launched (spawn, exec; kernel capture SYS_OUT_CAPTURE): bytes
+ * dropped past OS_OUTCAP_MAX, programs not captured, programs still
+ * running. Returns its length, 0 when there is nothing to say. */
+int osui_tool_spawn_note(char *out, int max, const os_outcap_stat_t *st);
 /* 1 when kind is a UX5 parity panel (osui_parity.h) */
 int osui_tool_is_panel(int kind);
 void osui_tool_open(osui_tool_t *t, int kind, const char *arg, const osui_tool_src_t *src);

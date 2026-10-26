@@ -131,6 +131,34 @@ const char *osui_tool_cmd_reason(int code) {
 
 int osui_tool_is_panel(int kind) { return osui_par_family(kind) != 0; }
 
+int osui_tool_spawn_note(char *out, int max, const os_outcap_stat_t *st) {
+    if (!out || max <= 0) return 0;
+    out[0] = 0;
+    if (!st) return 0;
+    if (st->dropped) {
+        t_cat(out, max, "\n[sortie du programme tronquee: ");
+        t_cat_u(out, max, st->dropped);
+        t_cat(out, max, " octets perdus sur ");
+        t_cat_u(out, max, st->total);
+        t_cat(out, max, " (");
+        t_cat_u(out, max, OS_OUTCAP_MAX / 1024);
+        t_cat(out, max, " Kio max)]\n");
+    }
+    if (st->untracked) {
+        t_cat(out, max, "[");
+        t_cat_u(out, max, st->untracked);
+        t_cat(out, max, " programme(s) non captures: table de ");
+        t_cat_u(out, max, OS_OUTCAP_PIDS);
+        t_cat(out, max, " taches pleine]\n");
+    }
+    if (st->live) {
+        t_cat(out, max, "[");
+        t_cat_u(out, max, st->live);
+        t_cat(out, max, " programme(s) encore actif(s): la suite de leur sortie va a la console]\n");
+    }
+    return t_len(out);
+}
+
 int osui_tool_line_pid(const char *line) {
     int i = 0, v = 0, got = 0;
     while (line[i] && !(line[i] >= '0' && line[i] <= '9')) {
@@ -720,6 +748,15 @@ static void panel_exec(osui_tool_t *t, const osui_tool_src_t *src, const char *c
     if (first_out[0]) {
         t_cat(t->log, (int)sizeof(t->log), "\nosui panel out=");
         t_cat(t->log, (int)sizeof(t->log), first_out);
+    }
+    /* Lot 46: the last two window lines (notes of a cut output, end of
+     * the output of a launched program) on the serial line too */
+    if (n >= 0 && t->n > 2) {
+        int k;
+        for (k = t->n - 2; k < t->n; k++) {
+            t_cat(t->log, (int)sizeof(t->log), "\nosui panel tail=");
+            t_cat(t->log, (int)sizeof(t->log), t->lines[k]);
+        }
     }
     set_status(t, n < 0 ? "refusee: " : "sortie reelle de ", cmd);
     t_cat(t->status, (int)sizeof(t->status), "  (Echap/Menu: retour)");
