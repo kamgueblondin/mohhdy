@@ -62,7 +62,7 @@ int kernel_boot_storage_install(uint32_t kind, const uint8_t* data, uint32_t len
     }
     if (kind == OS_ATA_FS_INSTALL_OVERLAY) {
         int restored;
-        if (len > 64U * 512U) len = 64U * 512U;
+        if (len > OS_ATA_OVERLAY_SECTORS_MAX * 512U) len = OS_ATA_OVERLAY_SECTORS_MAX * 512U;
         /* An empty disk is not a failure: RAM keeps the overlay_init image. */
         restored = overlay_restore(data, len);
         if (restored == 0) {

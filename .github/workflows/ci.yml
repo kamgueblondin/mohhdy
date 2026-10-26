@@ -420,6 +420,12 @@ jobs:
       - name: QEMU GUI panels, every entry with arguments and confirmations
         run: make qemu-gui-panels
 
+      # Lot 46 PR B (US-G16): editor Save As of 64 KiB, v4 overlay image
+      # over LBA 0-63 + 4225-4352, byte exact on disk, cold reboot, FAT16
+      # volume untouched, 64 KiB + 1 refused (two boots, about 5 min)
+      - name: QEMU large save (64 KiB) across a reboot
+        run: make qemu-gui-bigsave
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

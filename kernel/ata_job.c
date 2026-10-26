@@ -4,6 +4,25 @@ static ata_job_snapshot_fn g_snapshot;
 static ata_job_restore_fn g_restore;
 static int32_t g_claim_pid;
 static uint8_t g_buf[ATA_JOB_SNAPSHOT_BYTES];
+/* Lot 46 PR B: sectors of the image in g_buf (64 = v3, 192 = v4) and the
+ * LBA of its extension area, read from the image header (fs/overlay.h:
+ * magic 'AIOV', version 4, ext_lba at byte 16, 128 at byte 20). */
+static uint32_t g_total = OS_ATA_OVERLAY_SECTORS, g_ext_lba;
+static uint32_t job_u32(const uint8_t* p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+static void job_geometry(void) {
+    g_total = OS_ATA_OVERLAY_SECTORS;
+    g_ext_lba = 0U;
+    if (job_u32(g_buf) == 0x564F4941u && job_u32(g_buf + 4) == 4U &&
+        job_u32(g_buf + 16) >= 4225U && job_u32(g_buf + 20) == OS_ATA_OVERLAY_EXT_SECTORS) {
+        g_ext_lba = job_u32(g_buf + 16);
+        g_total = OS_ATA_OVERLAY_SECTORS_MAX;
+    }
+}
+static uint32_t job_lba(uint32_t cursor) {
+    return cursor < OS_ATA_OVERLAY_SECTORS ? cursor : g_ext_lba + (cursor - OS_ATA_OVERLAY_SECTORS);
+}
 static uint32_t g_flush_dirty;
 static uint32_t g_load_pending;
 static uint32_t g_active_op;
@@ -182,7 +201,9 @@ void ata_job_note_channel_reset(void) { g_stats.channel_resets++; }
 void ata_job_note_respawn(void) { g_stats.supervised_respawns++; }
 
 static uint32_t chunk_count(void) {
-    uint32_t left = OS_ATA_OVERLAY_SECTORS - g_cursor;
+    /* a chunk never crosses from the AIOV area into the extension */
+    uint32_t end = g_cursor < OS_ATA_OVERLAY_SECTORS ? OS_ATA_OVERLAY_SECTORS : g_total;
+    uint32_t left = end - g_cursor;
     return left < OS_ATA_JOB_MAX_SECTORS ? left : OS_ATA_JOB_MAX_SECTORS;
 }
 
@@ -210,12 +231,15 @@ int ata_job_fetch(os_ata_job_t* job, uint8_t* data, uint32_t capacity) {
         if (g_flush_dirty) {
             for (i = 0U; i < sizeof(g_buf); i++) g_buf[i] = 0U;
             if (!g_snapshot || g_snapshot(g_buf, sizeof(g_buf)) != 0) return -1;
+            job_geometry();
             g_flush_dirty = 0U;
             g_active_op = OS_ATA_JOB_WRITE;
         } else if (g_load_pending) {
             g_load_pending = 0U;
             g_load_invalid = 0U;
             g_active_op = OS_ATA_JOB_READ;
+            g_total = OS_ATA_OVERLAY_SECTORS;   /* the header says if more follows */
+            g_ext_lba = 0U;
         } else {
             return 0;
         }
@@ -230,7 +254,7 @@ int ata_job_fetch(os_ata_job_t* job, uint8_t* data, uint32_t capacity) {
     }
     job->op = g_active_op;
     job->drive = 0U;
-    job->lba = g_cursor; /* the overlay snapshot starts at LBA 0 */
+    job->lba = job_lba(g_cursor); /* LBA 0-63, then the v4 extension */
     job->count = count;
     job->generation = g_ov_generation;
     job->flags = 0U;
@@ -264,7 +288,7 @@ int ata_job_done(const os_ata_job_t* job, int32_t status, const uint8_t* data,
     if (g_handed != ATA_HANDED_OVERLAY || g_active_op == OS_ATA_JOB_NONE) return OS_ATA_JOB_STALE;
     count = chunk_count();
     if (job->op != g_active_op || job->generation != g_ov_generation ||
-        job->lba != g_cursor || job->count != count || job->drive != 0U)
+        job->lba != job_lba(g_cursor) || job->count != count || job->drive != 0U)
         return OS_ATA_JOB_STALE;
     op = g_active_op;
     g_handed = ATA_HANDED_NONE;
@@ -280,7 +304,8 @@ int ata_job_done(const os_ata_job_t* job, int32_t status, const uint8_t* data,
         for (i = 0U; i < count * 512U; i++) g_buf[base + i] = data[i];
     }
     g_cursor += count;
-    if (g_cursor < OS_ATA_OVERLAY_SECTORS) return OS_ATA_JOB_CHUNK_OK;
+    if (op == OS_ATA_JOB_READ && g_cursor == OS_ATA_OVERLAY_SECTORS) job_geometry();
+    if (g_cursor < g_total) return OS_ATA_JOB_CHUNK_OK;
     g_active_op = OS_ATA_JOB_NONE;
     g_cursor = 0U;
     if (op == OS_ATA_JOB_WRITE) {

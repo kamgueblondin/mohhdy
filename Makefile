@@ -19,7 +19,7 @@ DISK_IMAGE ?= build/overlay.img
 GGUF_DISK_IMAGE ?= build/gpt2_gguf_fat16.img
 FAT32_SECONDARY_IMAGE ?= build/fat32_secondary.img
 GPT2_GGUF_DEPLOY_MODEL ?= models/gpt2-Q3_K_M.gguf
-DISK_SECTORS ?= 4225
+DISK_SECTORS ?= 4353
 FAT_BASE_LBA ?= 64
 QEMU_DISK_OPTS = -drive file=$(DISK_IMAGE),format=raw,if=ide,cache=writethrough
 MODEL_DIR ?= models
@@ -1075,6 +1075,14 @@ qemu-gui-parity: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_parity.py
 
 .PHONY: qemu-gui-parity
+
+# Lot 46 PR B (US-G16): editor Save As of 64 KiB, v4 overlay image (LBA 0-63
+# + extension 4225-4352), byte exact on disk and after a cold reboot, FAT16
+# volume untouched, 64 KiB + 1 refused.
+qemu-gui-bigsave: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_gui_bigsave.py
+
+.PHONY: qemu-gui-bigsave
 qemu-gui-shell: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_shell_same.py
 

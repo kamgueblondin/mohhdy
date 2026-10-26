@@ -93,8 +93,10 @@ static int wait_drq(void);
 
 /* IDENTIFY (0xEC) belongs to this task. Ring 0 on the strict image never
  * sends it. Drain the 256-word payload; the model string is not parsed. */
+static uint32_t g_disk_sectors;   /* Lot 46 PR B: IDENTIFY words 60-61 (LBA28) */
 static int identify_master(void) {
     uint32_t i;
+    uint16_t w;
     uint8_t st;
     outb(ATA_DRIVE, 0xA0);
     delay();
@@ -108,7 +110,12 @@ static int identify_master(void) {
     st = inb(ATA_CMD);
     if (st == 0x00 || st == 0xFF) return -1;
     if (wait_drq() < 0) return -1;
-    for (i = 0; i < 256U; i++) (void)inw(ATA_DATA);
+    g_disk_sectors = 0U;
+    for (i = 0; i < 256U; i++) {
+        w = inw(ATA_DATA);
+        if (i == 60U) g_disk_sectors |= (uint32_t)w;
+        if (i == 61U) g_disk_sectors |= (uint32_t)w << 16;
+    }
     return 0;
 }
 
@@ -292,7 +299,8 @@ static int serve_job(void) {
 /* ========================================================================
  * Tranche 4 suite: the FS store served by this task's own code.
  * ======================================================================== */
-#define OV_DISK_SECTORS_DRV 64U
+#define OV_DISK_SECTORS_DRV 64U   /* AIOV area, LBA 0-63 */
+/* Lot 46 PR B: a v4 image adds OV_EXT_SECTORS after the FAT16 volume */
 static fat16_volume_t v16;
 static fat32_volume_t v32;
 static uint8_t v16_window[16U * 512U];
@@ -301,8 +309,8 @@ static uint32_t store_flags;   /* flags the kernel accepted */
 static int store_ready;
 static uint8_t fs_req[OS_ATA_FSOP_BUFFER_SIZE];
 static uint8_t fs_reply[OS_ATA_FSOP_BUFFER_SIZE];
-static uint8_t ov_img[OV_DISK_SECTORS_DRV * 512U];  /* snapshot to write / handover */
-static uint8_t ov_disk[OV_DISK_SECTORS_DRV * 512U]; /* what LBA 0-63 hold */
+static uint8_t ov_img[OV_SNAP_SIZE_MAX];  /* snapshot to write / handover */
+static uint8_t ov_disk[OV_SNAP_SIZE_MAX]; /* what the image sectors hold on disk */
 static int ov_disk_known;
 /* Per-op state. */
 static uint32_t op_gen, op_rd, op_wr;
@@ -310,9 +318,18 @@ static int op_noted, op_crash, ov_dirty;
 
 static void ov_disk_note(uint32_t lba, uint32_t count, const uint8_t* data) {
     uint32_t i;
-    if (!ov_disk_known || lba >= OV_DISK_SECTORS_DRV) return;
-    if (lba + count > OV_DISK_SECTORS_DRV) count = OV_DISK_SECTORS_DRV - lba;
-    for (i = 0; i < count * 512U; i++) ov_disk[lba * 512U + i] = data[i];
+    uint32_t ext = overlay_ext_lba(), s;
+    if (!ov_disk_known) return;
+    if (lba < OV_DISK_SECTORS_DRV) {
+        if (lba + count > OV_DISK_SECTORS_DRV) count = OV_DISK_SECTORS_DRV - lba;
+        s = lba;
+    } else if (ext && lba >= ext && lba < ext + OV_EXT_SECTORS) {
+        if (lba + count > ext + OV_EXT_SECTORS) count = ext + OV_EXT_SECTORS - lba;
+        s = OV_DISK_SECTORS_DRV + (lba - ext);
+    } else {
+        return;
+    }
+    for (i = 0; i < count * 512U; i++) ov_disk[s * 512U + i] = data[i];
 }
 
 /* Overlay hooks: the store only marks itself dirty; serve_fs_op persists
@@ -377,18 +394,41 @@ static int v32_write(uint32_t lba, const void* buf) { return drv_write(1, lba, b
  * overlay window here, then hand the bytes to the kernel. The short wait
  * does not yield, so this finishes before any other Ring 3 task opens the disk. */
 static uint8_t journal_buf[1024];
+static uint32_t ov_boot_sectors = OV_DISK_SECTORS_DRV;
 static void fs_install_boot(void) {
     os_ata_status_t ks;
-    uint32_t i;
+    uint32_t i, fat_end;
     if (sc1(SYS_ATA_STATUS, (uint32_t)&ks) != 0 || ks.boot_mount_deferred == 0U) return;
     claim();
-    if (pio_transfer_boot(0, 64U, 1U, sector) == 0)
+    fat_end = 64U;
+    if (pio_transfer_boot(0, 64U, 1U, sector) == 0) {
+        /* end of the FAT16 volume from its BPB (total sectors 16 or 32 bit) */
+        uint32_t t16 = (uint32_t)sector[19] | ((uint32_t)sector[20] << 8);
+        uint32_t t32 = (uint32_t)sector[32] | ((uint32_t)sector[33] << 8) |
+                       ((uint32_t)sector[34] << 16) | ((uint32_t)sector[35] << 24);
+        if (sector[510] == 0x55 && sector[511] == 0xAA) fat_end = 64U + (t16 ? t16 : t32);
         (void)sc4(SYS_ATA_FS, OS_ATA_FS_INSTALL, OS_ATA_FS_INSTALL_FAT16, (uint32_t)sector, 512U);
+    }
     if (ks.slave_present && pio_transfer_boot(1, 0U, 1U, sector) == 0)
         (void)sc4(SYS_ATA_FS, OS_ATA_FS_INSTALL, OS_ATA_FS_INSTALL_FAT32, (uint32_t)sector, 512U);
     ov_disk_known = 1;
     for (i = 0; i < OV_DISK_SECTORS_DRV; i++) {
         if (pio_transfer_boot(0, i, 1U, ov_disk + i * 512U) != 0) { ov_disk_known = 0; break; }
+    }
+    /* Lot 46 PR B: a v4 image continues in its extension area (LBA from
+     * the header, checked >= OV_EXT_MIN_LBA: never the FAT16 volume) */
+    ov_boot_sectors = OV_DISK_SECTORS_DRV;
+    if (ov_disk_known && overlay_image_ext_lba(ov_disk) >= fat_end) {
+        uint32_t ext = overlay_image_ext_lba(ov_disk);
+        for (i = 0; i < OV_EXT_SECTORS; i++) {
+            if (pio_transfer_boot(0, ext + i, 1U, ov_disk + (OV_DISK_SECTORS_DRV + i) * 512U) != 0) {
+                ov_disk_known = 0;
+                break;
+            }
+        }
+        if (ov_disk_known) ov_boot_sectors = OV_SNAP_SECTORS_MAX;
+        puts("atadriver overlay v4 ext lba="); putu(ext);
+        puts(ov_disk_known ? " read ok\n" : " read failed\n");
     }
     /* US-001: the boot journals too (mount 4222-4223, events 4224). A
      * read error (short disk) hands over zeros: the kernel keeps its
@@ -409,7 +449,7 @@ static void fs_install_boot(void) {
     (void)sc4(SYS_ATA_FS, OS_ATA_FS_INSTALL, OS_ATA_FS_INSTALL_EVENT_JOURNAL, (uint32_t)journal_buf, 512U);
     if (ov_disk_known)
         (void)sc4(SYS_ATA_FS, OS_ATA_FS_INSTALL, OS_ATA_FS_INSTALL_OVERLAY,
-                  (uint32_t)ov_disk, (uint32_t)sizeof(ov_disk));
+                  (uint32_t)ov_disk, ov_boot_sectors * 512U);
 }
 
 static void fs_mount(void) {
@@ -435,6 +475,23 @@ static void fs_mount(void) {
     op_rd = 0; /* mount reads are not FS op traffic */
     overlay_init();
     overlay_set_disk_hooks(drv_overlay_redirect, 0);
+    /* Lot 46 PR B (US-G16): the extension area goes after the FAT16 volume
+     * (64 + its total sectors) and after the journals (4222-4224), only on
+     * a mounted FAT16 disk that IDENTIFY says is large enough. Otherwise
+     * the store stays v3 (32 KiB area, 30 KiB files). */
+    if (v16_ok) {
+        uint32_t end = 64U + v16.total_sectors;
+        uint32_t ext = end > OV_EXT_MIN_LBA ? end : OV_EXT_MIN_LBA;
+        if (g_disk_sectors >= ext + OV_EXT_SECTORS && overlay_set_ext(ext) == 0) {
+            puts("atadriver overlay ext lba="); putu(ext);
+            puts(" sectors="); putu(OV_EXT_SECTORS);
+            puts(" fat16 end="); putu(end);
+            puts(" disk="); putu(g_disk_sectors); puts("\n");
+        } else {
+            puts("atadriver overlay ext none disk="); putu(g_disk_sectors);
+            puts(" need="); putu(ext + OV_EXT_SECTORS); puts("\n");
+        }
+    }
 }
 
 static int mem_eq(const uint8_t* a, const uint8_t* b, uint32_t n) {
@@ -467,6 +524,10 @@ static void fs_try_ready(void) {
     ov_disk_known = 1;
     for (i = 0; i < OV_DISK_SECTORS_DRV && ov_disk_known; i++)
         if (pio_read(0, i, ov_disk + i * 512U) != 0) ov_disk_known = 0;
+    if (overlay_ext_lba())
+        for (i = 0; i < OV_EXT_SECTORS && ov_disk_known; i++)
+            if (pio_read(0, overlay_ext_lba() + i, ov_disk + (OV_DISK_SECTORS_DRV + i) * 512U) != 0)
+                ov_disk_known = 0;
     release();
     store_flags = want;
     if (sc2(SYS_ATA_FS, OS_ATA_FS_STATUS, (uint32_t)&st) == 0) store_flags = st.fs_store_flags;
@@ -491,9 +552,10 @@ static void fs_persist(int32_t result) {
     }
     for (i = size; i < sizeof(ov_img); i++) ov_img[i] = 0;
     (void)sc5(SYS_ATA_FS, OS_ATA_FS_PUBLISH, op_gen, (uint32_t)ov_img, size, (uint32_t)result);
-    for (s = 0; s < OV_DISK_SECTORS_DRV && rc == 0; s++) {
+    for (s = 0; s < size / 512U && rc == 0; s++) {
         if (ov_disk_known && mem_eq(ov_img + s * 512U, ov_disk + s * 512U, 512U)) continue;
-        rc = pio_write(0, s, ov_img + s * 512U);
+        /* image sector s: LBA s in the AIOV area, then the v4 extension */
+        rc = pio_write(0, overlay_image_lba(overlay_ext_lba(), s), ov_img + s * 512U);
         if (rc == 0) {
             for (i = 0; i < 512U; i++) ov_disk[s * 512U + i] = ov_img[s * 512U + i];
             wrote++;

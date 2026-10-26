@@ -5,12 +5,15 @@ from pathlib import Path
 
 SECTOR = 512
 BASE_LBA = 64
-TOTAL_DISK_SECTORS = 4225
 # LBA 4222-4223 : journal de montages (magic MNTJ).
 # LBA 4224 : journal d'evenements non acquittes (magic EVNT).
 # Les deux sont hors AIOV (0-63) et hors volume FAT.
 JOURNAL_SECTORS = 3
-TOTAL_FAT_SECTORS = TOTAL_DISK_SECTORS - BASE_LBA - JOURNAL_SECTORS
+TOTAL_FAT_SECTORS = 4225 - BASE_LBA - JOURNAL_SECTORS
+# Lot 46 PR B (US-G16): LBA 4225-4352 = extension of the v4 overlay image
+# (128 sectors, after the FAT16 volume and the journals; fs/overlay.h).
+EXT_SECTORS = 128
+TOTAL_DISK_SECTORS = 4225 + EXT_SECTORS
 FAT_SECTORS = 16
 ROOT_ENTRIES = 32
 ROOT_SECTORS = (ROOT_ENTRIES * 32 + SECTOR - 1) // SECTOR

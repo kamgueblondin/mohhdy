@@ -648,7 +648,7 @@ retry:
  * store when it serves one, the kernel overlay otherwise. */
 #define OVS_DIRENT_MAX (ATA_FS_OUT_MAX / (uint32_t)sizeof(os_dirent_t))
 
-/* Lot 44 (US-G16): files up to OV_FILE_MAX_BYTES cross the 8 KiB driver
+/* Lot 44 (US-G16): files up to OV_FILE_MAX_EXT_BYTES (Lot 46) cross the 8 KiB driver
  * buffer in chunks: reads with an offset (arg1), writes as one WRITE then
  * APPENDs. Each chunk is a normal relay op with the same failure policy. */
 #define OVS_CHUNK 4096U
@@ -661,7 +661,7 @@ static int ovs_read(const char* path, char* buf, uint32_t max) {
         return overlay_read(path, buf, max);
     while (rc > 0) {
         got += (uint32_t)rc;
-        if ((uint32_t)rc < cap || got >= max || got >= OV_FILE_MAX_BYTES) break;
+        if ((uint32_t)rc < cap || got >= max || got >= OV_FILE_MAX_EXT_BYTES) break;
         cap = max - got < OVS_CHUNK ? max - got : OVS_CHUNK;
         if (!ata_fs_relay(OS_ATA_FSOP_OVL_READ, cap, got, path, 0, 0, 0U, buf + got, cap, &rc))
             return -1;  /* the store left the driver mid file: fail closed */
@@ -672,7 +672,7 @@ static int ovs_read(const char* path, char* buf, uint32_t max) {
 static int ovs_write(const char* path, const char* data, uint32_t n) {
     int32_t rc;
     uint32_t first = n < OVS_CHUNK ? n : OVS_CHUNK, off;
-    if (n > OV_FILE_MAX_BYTES) return OV_ERR_NOSPACE;
+    if (n > OV_FILE_MAX_EXT_BYTES) return OV_ERR_NOSPACE;  /* the store checks its layout */
     if (!path || !ata_fs_relay(OS_ATA_FSOP_OVL_WRITE, 0U, 0U, path, 0, data, first, 0, 0U, &rc))
         return overlay_write(path, data, n);
     if (rc < 0) return rc;
@@ -688,7 +688,7 @@ static int ovs_write(const char* path, const char* data, uint32_t n) {
 static int ovs_append(const char* path, const char* data, uint32_t n) {
     int32_t rc;
     uint32_t first = n < OVS_CHUNK ? n : OVS_CHUNK, off;
-    if (n > OV_FILE_MAX_BYTES) return OV_ERR_NOSPACE;
+    if (n > OV_FILE_MAX_EXT_BYTES) return OV_ERR_NOSPACE;  /* the store checks its layout */
     if (!path || !ata_fs_relay(OS_ATA_FSOP_OVL_APPEND, 0U, 0U, path, 0, data, first, 0, 0U, &rc))
         return overlay_append(path, data, n);
     if (rc < 0) return rc;
