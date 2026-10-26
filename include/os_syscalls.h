@@ -505,7 +505,8 @@ typedef struct {
 #define OS_FB_APP_DEVSYNC 26
 #define OS_FB_APP_ADMIN 27
 #define OS_FB_APP_API 28
-#define OS_FB_APP_KIND_MAX 28
+#define OS_FB_APP_HELP 29      /* Lot 45: /help, desktop slash programs */
+#define OS_FB_APP_KIND_MAX 29
 #define OS_FB_APP_ROWS 22       /* default window grid */
 #define OS_FB_APP_COLS 78
 /* UX5: grid buffers; a maximized window shows as many rows / columns as
@@ -1994,7 +1995,7 @@ typedef struct {
 #define SYS_CLIPBOARD 161
 #define OS_CLIP_GET 0
 #define OS_CLIP_SET 1
-#define OS_CLIP_MAX 4096
+#define OS_CLIP_MAX 65536   /* Lot 45: explicit 64 KiB bound (was 4 KiB) */
 /* UX5 per-process heap: ebx = wanted heap size in bytes (grow only, 0 =
  * query). Returns the size now mapped (>= wanted) at OS_USER_HEAP_BASE, or
  * < 0 (OS_HEAP_NO_MEMORY when frames run out, OS_HEAP_TOO_BIG past MAX).

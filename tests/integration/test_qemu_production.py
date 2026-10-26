@@ -204,9 +204,9 @@ def main():
             run(mon, proc, "prod-roadmap", ["prod-roadmap phase 6 done 11 partial 3 simule 1 open 0 progress 73%",
                                             "prod-roadmap phase 7 done 14 partial 0 simule 1 open 0 progress 93%",
                                             "prod-roadmap phase 8 done 14 partial 1 simule 0 open 0 progress 93%",
-                                            "prod-roadmap phase 9 (gui-parity) done 3 partial 11 simule 0 open 3 progress 17%",
+                                            "prod-roadmap phase 9 (gui-parity) done 7 partial 11 simule 0 open 0 progress 38%",
                                             "prod-roadmap next US-076 US-078 US-080",
-                                            "prod-roadmap ok source /roadmap.txt entries 62 bad 0"], attempts=2)
+                                            "prod-roadmap ok source /roadmap.txt entries 63 bad 0"], attempts=2)
             # US-106 (Lot 7): auto-tuning from rates measured now and the
             # recorded busy average; an explicit mode is honoured.
             out = run(mon, proc, "prod-perf-tune", ["prod-perf-tune measured alu_ops_s ", " ok"], attempts=2, timeout=60)

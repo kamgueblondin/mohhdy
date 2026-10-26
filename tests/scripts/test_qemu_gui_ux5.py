@@ -92,9 +92,10 @@ def editor_steps(monitor, qmp, proc):
     if not near(pixel(rgb, 900, 300), FRAME) and not near(pixel(rgb, 900, 300), (9, 13, 18)):
         raise RuntimeError("maximized editor does not cover x=900: %r" % (pixel(rgb, 900, 300),))
     say("maximize: kernel sent app size, editor grid follows the window")
-    # Save As /long2.txt: the 28 KB buffer is built on the heap, the
-    # writable overlay store refuses it (its node holds 384 bytes): the
-    # editor reports the store error, the buffer stays modified-safe.
+    # Save As /long2.txt: the 28 KB buffer is built on the heap. Since Lot 44
+    # the overlay stores it in chained blocks (bound 30 KiB) through the
+    # chunked atadriver relay; fsops_write fails on any short write, so
+    # "saved" means all 27993 bytes were written.
     start = len(g.log_text())
     key(monitor, "esc")
     key(monitor, "a")
@@ -102,8 +103,10 @@ def editor_steps(monitor, qmp, proc):
         key(monitor, "backspace", 0.08)
     type_text(monitor, "/long2.txt")
     key(monitor, "ret")
-    g.wait_for(proc, "osui edit save error=", g.CMD_TIMEOUT, start)
-    say("Save As of 28 KB: store error reported (overlay node limit), no silent cut")
+    g.wait_for(proc, "osui edit saved file=/long2.txt", g.CMD_TIMEOUT, start)
+    if "osui edit save error=" in g.log_text()[start:]:
+        raise RuntimeError("Save As of 28 KB reported a store error")
+    say("Save As of 28 KB: saved whole (overlay chained blocks, chunked relay)")
     # the maximized editor covers the desktop edge: close it (ESC Q)
     start = len(g.log_text())
     key(monitor, "esc")
@@ -142,6 +145,31 @@ def viewer_steps(monitor, qmp, proc):
     say("viewer closed: image cleared")
 
 
+def tool_resize_steps(monitor, qmp, proc):
+    """Lot 45 (US-G15): a tool window (/help) follows its grid: maximize
+    sends "app K size R C", the Aide window shows more rows."""
+    start = slash(monitor, proc, "/help", "osui tool open app=Aide")
+    g.wait_for(proc, "osui panel run cmd=gui-help ok", g.CMD_TIMEOUT, start)
+    bar_h = max(28, min(40, H // 22))
+    bx = 24 + 640 - 2 - 2 * (14 + 4) + 7
+    by = bar_h + 20 + 2 + (30 - 14) // 2 + 7
+    start = len(g.log_text())
+    g.click_tablet(qmp, bx, by, W, H)
+    g.wait_for(proc, "osui tool view resized app=Aide rows=", g.CMD_TIMEOUT, start)
+    import re
+    m = re.search(r"osui tool view resized app=Aide rows=(\d+)", g.log_text()[start:])
+    if not m or int(m.group(1)) <= 22:
+        raise RuntimeError("maximized Aide window did not get more rows: %r" % (m.group(0) if m else None))
+    time.sleep(1.0)
+    g.screendump_rgb(monitor, "qemu-gui-lot45-help-max.ppm")
+    say("maximize: the Aide tool window follows its grid (%s rows)" % m.group(1))
+    start = len(g.log_text())
+    key(monitor, "esc")
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Aide", g.CMD_TIMEOUT, start)
+    desktop_focus(qmp)
+
+
 def main():
     os.makedirs(g.LOG_DIR, exist_ok=True)
     for path in (g.LOG, g.MON_SOCK, g.QMP_SOCK):
@@ -170,6 +198,7 @@ def main():
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             editor_steps(monitor, qmp, proc)
             viewer_steps(monitor, qmp, proc)
+            tool_resize_steps(monitor, qmp, proc)
         say("QEMU UX5 GUI parity contract passed.")
         return 0
     finally:

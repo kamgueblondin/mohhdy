@@ -7,7 +7,7 @@
  * (osui_gui.c), which owns the file system and the PromptMessage VM. */
 
 #define OSUI_IDE_LINES 96     /* built-in line store (no heap attached) */
-#define OSUI_IDE_COLS 72      /* characters per line, without the NUL */
+#define OSUI_IDE_COLS 256     /* characters per line, without the NUL (Lot 45: was 72) */
 /* UX5: with osui_ide_set_heap the line store grows on the user heap, so a
  * file is bounded by memory; undo keeps snapshots up to OSUI_IDE_SNAP_MAX
  * bytes and is switched off (status says so) for larger buffers. */
@@ -15,6 +15,8 @@
 #define OSUI_IDE_VIEW 12      /* text rows on screen (frame = 14 rows) */
 #define OSUI_IDE_FRAME 14     /* title + OSUI_IDE_VIEW + status */
 #define OSUI_IDE_ROW_LEN 64   /* frame row buffer, NUL included */
+/* Lot 45: copy / paste buffer, the kernel clipboard bound (OS_CLIP_MAX) */
+#define OSUI_IDE_CLIP_MAX 65536
 #define OSUI_IDE_TEXT_MAX (OSUI_IDE_LINES * (OSUI_IDE_COLS + 1))
 
 #define OSUI_IDE_KEY_ESC 27

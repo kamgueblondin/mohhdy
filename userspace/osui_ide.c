@@ -529,7 +529,7 @@ void osui_ide_out_append(osui_ide_t *ide, const char *text) {
 const char osui_ide_toolbar[] =
     "[Ouvrir] [Enreg] [Sous] [Couper] [Copier] [Coller] [Annul] [Retab] [Cherch]";
 
-static char g_clip[OSUI_IDE_TEXT_MAX];
+static char g_clip[OSUI_IDE_CLIP_MAX + 1];
 static int g_clip_len;
 /* UX4: the shared desktop clipboard (kernel SYS_CLIPBOARD), when set */
 static int (*g_clip_put)(const char *text, int len);
@@ -552,7 +552,7 @@ const char *osui_ide_clipboard(void) {
 void osui_ide_set_clipboard(const char *text, int len) {
     int i;
     if (len < 0) len = 0;
-    if (len > OSUI_IDE_TEXT_MAX - 1) len = OSUI_IDE_TEXT_MAX - 1;
+    if (len > OSUI_IDE_CLIP_MAX) len = OSUI_IDE_CLIP_MAX;
     for (i = 0; i < len; i++) g_clip[i] = text[i];
     g_clip[len] = 0;
     g_clip_len = len;
@@ -705,7 +705,7 @@ static int find_next(osui_ide_t *ide) {
 }
 
 static void do_copy(osui_ide_t *ide, int cut) {
-    static char tmp[OSUI_IDE_TEXT_MAX];
+    static char tmp[OSUI_IDE_CLIP_MAX + 1];
     int n = osui_ide_selection(ide, tmp, (int)sizeof(tmp));
     if (n <= 0) { osui_ide_set_status(ide, "pas de selection (ESC m pose la marque)"); return; }
     osui_ide_set_clipboard(tmp, n);

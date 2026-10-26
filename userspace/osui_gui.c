@@ -490,7 +490,10 @@ int osui_gui_tool_open(int kind, const char *arg, char *out, int out_max);
 
 static int is_image(const char *p) {
     int n = slen(p);
-    return n > 4 && p[n - 4] == '.' && p[n - 3] == 'p' && (p[n - 2] == 'g' || p[n - 2] == 'p' || p[n - 2] == 'n') && p[n - 1] == 'm';
+    if (n > 4 && p[n - 4] == '.' && p[n - 3] == 'p' && (p[n - 2] == 'g' || p[n - 2] == 'p' || p[n - 2] == 'n') && p[n - 1] == 'm') return 1;
+    /* Lot 45: imgdec decodes BMP and PNG too */
+    return n > 4 && p[n - 4] == '.' && ((p[n - 3] == 'b' && p[n - 2] == 'm' && p[n - 1] == 'p')
+                                       || (p[n - 3] == 'p' && p[n - 2] == 'n' && p[n - 1] == 'g'));
 }
 
 static void edit_action(int act, char *out, int out_max) {
@@ -645,6 +648,17 @@ void osui_gui_event(const char *line, char *out, int out_max) {
             if (kind == OS_FB_APP_EDIT) {
                 osui_ide_set_view(&g_edit, rr, cc);
                 app_out(out, out_max, "osui edit view resized", 0);
+            } else if (kind == OS_FB_APP_FILES) {
+                osui_files_set_view(&g_files, rr, cc);
+                app_out(out, out_max, "osui files view resized", 0);
+            } else if (tool_of(kind)) {
+                /* Lot 45 (US-G15): every tool window follows its grid */
+                char m[64];
+                osui_tool_set_view(tool_of(kind), rr, cc, &g_tool_src);
+                scpy(m, (int)sizeof(m), osui_tool_name(kind));
+                scat(m, (int)sizeof(m), " rows=");
+                { char nb[12]; int v = rr, k = 0, j; char tmp[12]; if (!v) tmp[k++] = '0'; while (v) { tmp[k++] = (char)('0' + v % 10); v /= 10; } for (j = 0; j < k; j++) nb[j] = tmp[k - 1 - j]; nb[k] = 0; scat(m, (int)sizeof(m), nb); }
+                app_out(out, out_max, "osui tool view resized app=", m);
             }
             return;
         }

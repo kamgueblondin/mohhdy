@@ -6,7 +6,7 @@
 #include "fsops.h"
 
 #define MFS_N 64
-typedef struct { int used, dir; char path[128]; char data[65536]; int len; } mfs_ent_t;
+typedef struct { int used, dir; char path[128]; char data[131072]; int len; } mfs_ent_t;
 static mfs_ent_t mfs[MFS_N];
 
 static int mfs_find(const char *p) {
@@ -20,6 +20,7 @@ static int mfs_add(const char *p, int dir, const char *d, int n) {
     int i;
     for (i = 0; i < MFS_N; i++) if (!mfs[i].used) {
         mfs[i].used = 1; mfs[i].dir = dir; strcpy(mfs[i].path, p);
+        if (n > (int)sizeof(mfs[i].data)) n = (int)sizeof(mfs[i].data);   /* never overflow */
         if (d && n > 0) memcpy(mfs[i].data, d, (size_t)n);
         mfs[i].len = n > 0 ? n : 0;
         return 0;

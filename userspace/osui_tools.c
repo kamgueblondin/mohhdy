@@ -9,6 +9,9 @@
 #define K_HOME 0x12
 #define K_END 0x13
 #define K_ESC 27
+#define K_LEFT 28
+#define K_RIGHT 29
+#include "imgdec.h"
 #define CHAT_MAX_STEPS 48
 #define CHAT_SENTENCE_MIN 40
 
@@ -36,7 +39,7 @@ static void t_cat_u(char *d, int max, unsigned v) {
 }
 
 static const char k_tb_tasks[] = "[Actualiser] [Tuer] [Processus/Services] [Fermer]";
-static const char k_tb_view[] = "[Haut] [Bas] [Editer] [Fermer]";
+static const char k_tb_view[] = "[Haut] [Bas] [Editer] [Fermer]  + - zoom, f ajuster, fleches";
 static const char k_tb_settings[] = "[Actualiser] [Fermer]";
 static const char k_tb_p2p[] = "[Pairs] [Stats] [Up] [Down] [Envoyer] [Fermer]";
 static const char k_tb_pmrun[] = "[Relancer] [Verifier] [Editer] [Fermer]";
@@ -143,18 +146,27 @@ int osui_tool_line_pid(const char *line) {
 
 static void clear_lines(osui_tool_t *t) { t->n = 0; t->top = 0; if (t->sel >= 0) t->sel = 0; }
 
+/* Lot 45: text wraps at the window width (default grid until resized) */
+static int wrap_cols(const osui_tool_t *t) {
+    int c = t->vcols > 0 ? t->vcols + 1 : OSUI_APP_COLS;   /* + the NUL */
+    if (c > OSUI_TOOL_COLS) c = OSUI_TOOL_COLS;
+    if (c < 20) c = 20;
+    return c;
+}
+
 static void add_line(osui_tool_t *t, const char *s, int len, int cls) {
-    int k;
+    int k, wc = wrap_cols(t);
     if (t->n >= OSUI_TOOL_LINES) {
-        for (k = 0; k + 1 < OSUI_TOOL_LINES; k++) { t_cpy(t->lines[k], OSUI_APP_COLS, t->lines[k + 1]); t->cls[k] = t->cls[k + 1]; }
+        for (k = 0; k + 1 < OSUI_TOOL_LINES; k++) { t_cpy(t->lines[k], OSUI_TOOL_COLS, t->lines[k + 1]); t->cls[k] = t->cls[k + 1]; }
         t->n = OSUI_TOOL_LINES - 1;
+        t->dropped++;
     }
     if (len < 0) len = t_len(s);
     {
         /* the grid font is ASCII: Latin-1 letters of UTF-8 text (French
          * shell messages) lose their accent instead of showing "??" */
         int o = 0;
-        for (k = 0; k < len && o < OSUI_APP_COLS - 1; k++) {
+        for (k = 0; k < len && o < wc - 1; k++) {
             unsigned char c = (unsigned char)s[k];
             if (c == 0xC3 && k + 1 < len) {
                 unsigned char b = (unsigned char)s[++k] | 0x20;   /* lower case */
@@ -189,7 +201,7 @@ static int strip_ansi(char *s, int n) {
 
 /* split text into lines, wrapping at the grid width */
 static void add_text(osui_tool_t *t, const char *s, int n, int cls) {
-    int i = 0, start = 0, w = OSUI_APP_COLS - 2;
+    int i = 0, start = 0, w = wrap_cols(t) - 2;
     while (i <= n) {
         if (i == n || s[i] == '\n' || i - start >= w) {
             if (i > start || (i < n && s[i] == '\n')) add_line(t, s + start, i - start, cls);
@@ -202,8 +214,15 @@ static void add_text(osui_tool_t *t, const char *s, int n, int cls) {
     }
 }
 
+static int grid_rows(const osui_tool_t *t) {
+    int r = t->vrows > 0 ? t->vrows : OSUI_APP_ROWS;
+    if (r > OSUI_APP_MAX_ROWS) r = OSUI_APP_MAX_ROWS;
+    if (r < 4) r = 4;
+    return r;
+}
+
 static int view_rows(const osui_tool_t *t) {
-    return (t->kind == OS_FB_APP_P2P || t->kind == OS_FB_APP_CHAT || osui_par_family(t->kind)) ? OSUI_APP_ROWS - 2 : OSUI_APP_ROWS - 1;
+    return (t->kind == OS_FB_APP_P2P || t->kind == OS_FB_APP_CHAT || osui_par_family(t->kind)) ? grid_rows(t) - 2 : grid_rows(t) - 1;
 }
 
 static void follow_end(osui_tool_t *t) { int v = view_rows(t); t->top = t->n > v ? t->n - v : 0; }
@@ -222,8 +241,8 @@ static int run_into(osui_tool_t *t, const osui_tool_src_t *src, const char *cmd,
     n = src->run(cmd, g_out, (int)sizeof(g_out));
     if (n < 0) {
         int why = osui_tool_cmd_check(cmd, src->known);
-        add_line(t, "commande refusee: ", -1, OSUI_APP_A_ERR); t_cat(t->lines[t->n - 1], OSUI_APP_COLS, cmd);
-        if (why != OSUI_CMD_OK) { t_cat(t->lines[t->n - 1], OSUI_APP_COLS, " ("); t_cat(t->lines[t->n - 1], OSUI_APP_COLS, osui_tool_cmd_reason(why)); t_cat(t->lines[t->n - 1], OSUI_APP_COLS, ")"); }
+        add_line(t, "commande refusee: ", -1, OSUI_APP_A_ERR); t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, cmd);
+        if (why != OSUI_CMD_OK) { t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, " ("); t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, osui_tool_cmd_reason(why)); t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, ")"); }
         return n;
     }
     n = strip_ansi(g_out, n);
@@ -270,7 +289,7 @@ static void tasks_fill(osui_tool_t *t, const osui_tool_src_t *src) {
 
 static void tasks_kill(osui_tool_t *t, const osui_tool_src_t *src) {
     int pid = (t->sel >= 0 && t->sel < t->n) ? osui_tool_line_pid(t->lines[t->sel]) : -1;
-    char cmd[24], res[OSUI_APP_COLS];
+    char cmd[24], res[OSUI_TOOL_COLS];
     if (t->mode != 0 || pid < 0) { set_status(t, "selectionnez une ligne de processus", 0); return; }
     if (t->armed_pid != pid) {
         t->armed_pid = pid;
@@ -406,10 +425,36 @@ int osui_tool_image_decode(const char *buf, int n, unsigned char *rgb, int max_w
 
 static char g_file[8192];
 
+/* Lot 45: BMP / PNG / binary PNM through the shared imgdec module, with
+ * zoom and pan; the old PNM decoder stays for ASCII P2 / P3. Bounded:
+ * the PNG scanlines fit in g_img_scratch (1 MiB, e.g. 512x512 RGBA). */
+#define IMG_SCRATCH (1024U * 1024U + 4096U)
+static unsigned char g_img_scratch[IMG_SCRATCH];
+static int view_decode(osui_tool_t *t, const char *buf, int n) {
+    static imgdec_t img;
+    int rc = imgdec_open((const unsigned char *)buf, n, g_img_scratch, IMG_SCRATCH, &img);
+    if (rc == IMGDEC_OK) {
+        if (imgdec_render(&img, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H, t->zoom, t->pan_x, t->pan_y,
+                          &t->img_w, &t->img_h) != IMGDEC_OK) return -1;
+        t->img_src_w = img.w; t->img_src_h = img.h; t->img_fmt = img.fmt;
+        return 0;
+    }
+    if (img.fmt == IMGDEC_BMP || img.fmt == IMGDEC_PNG) {
+        /* a real image we cannot show: say why instead of dumping bytes */
+        add_line(t, "image non affichable: ", -1, OSUI_APP_A_ERR);
+        t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, imgdec_strerror(rc));
+        set_status(t, imgdec_fmt_name(img.fmt), " refusee");
+        return 1;
+    }
+    t->img_fmt = 0;
+    return osui_tool_image_decode(buf, n, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H,
+                                  &t->img_w, &t->img_h, &t->img_src_w, &t->img_src_h);
+}
+
 /* UX5: the image is drawn in pixels by the compositor; the grid keeps a
  * caption line for the serial log and the tests. */
 static void view_image_lines(osui_tool_t *t) {
-    char cap[OSUI_APP_COLS];
+    char cap[OSUI_TOOL_COLS];
     t->image = 1;
     t->img_gen++;
     t_cpy(cap, (int)sizeof(cap), "image ");
@@ -420,8 +465,14 @@ static void view_image_lines(osui_tool_t *t) {
     t_cat_u(cap, (int)sizeof(cap), (unsigned)t->img_w);
     t_cat(cap, (int)sizeof(cap), "x");
     t_cat_u(cap, (int)sizeof(cap), (unsigned)t->img_h);
+    t_cat(cap, (int)sizeof(cap), " fmt=");
+    t_cat(cap, (int)sizeof(cap), t->img_fmt ? imgdec_fmt_name(t->img_fmt) : "pnm");
+    t_cat(cap, (int)sizeof(cap), " zoom=");
+    if (t->zoom) { t_cat_u(cap, (int)sizeof(cap), (unsigned)t->zoom); t_cat(cap, (int)sizeof(cap), "%"); }
+    else t_cat(cap, (int)sizeof(cap), "fit");
     add_line(t, cap, -1, OSUI_APP_A_DIM);
-    set_status(t, "image PNM en pixels (mise a l'echelle dans la fenetre)", 0);
+    set_status(t, t->img_fmt ? "image en pixels: + - zoom, f ajuster, fleches deplacer"
+                             : "image PNM en pixels (mise a l'echelle dans la fenetre)", 0);
 }
 
 static void view_fill(osui_tool_t *t, const osui_tool_src_t *src) {
@@ -433,36 +484,29 @@ static void view_fill(osui_tool_t *t, const osui_tool_src_t *src) {
         const char *big = (src && src->load) ? src->load(t->arg, &n) : 0;
         if (big && n >= 0) {
             /* UX5: any size through the heap; the text view shows the head */
-            if (osui_tool_image_decode(big, n, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H,
-                                       &t->img_w, &t->img_h, &t->img_src_w, &t->img_src_h) == 0) {
-                view_image_lines(t);
-                return;
+            {
+                int d = view_decode(t, big, n);
+                if (d == 0) { view_image_lines(t); return; }
+                if (d == 1) return;
             }
             if (n > (int)sizeof(g_file) - 1) n = (int)sizeof(g_file) - 1;
             {
                 int k;
                 for (k = 0; k < n; k++) g_file[k] = big[k];
             }
-    } else {
-        int read_max = (int)sizeof(g_file) - 1;
-        if (src && src->stat) {
-            os_dirent_t st;
-            if (src->stat(t->arg, &st) == 0 && (int)st.size > read_max) read_max = (int)st.size;
-        }
-        n = (src && src->read) ? src->read(t->arg, g_file, read_max) : -1;
+        } else n = (src && src->read) ? src->read(t->arg, g_file, (int)sizeof(g_file) - 1) : -1;
     }
-    }
-    if (n < 0) { add_line(t, "lecture impossible: ", -1, OSUI_APP_A_ERR); t_cat(t->lines[0], OSUI_APP_COLS, t->arg); set_status(t, "erreur", 0); return; }
+    if (n < 0) { add_line(t, "lecture impossible: ", -1, OSUI_APP_A_ERR); t_cat(t->lines[0], OSUI_TOOL_COLS, t->arg); set_status(t, "erreur", 0); return; }
     g_file[n] = 0;
-    if (osui_tool_image_decode(g_file, n, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H,
-                               &t->img_w, &t->img_h, &t->img_src_w, &t->img_src_h) == 0) {
-        view_image_lines(t);
-        return;
+    {
+        int d = view_decode(t, g_file, n);
+        if (d == 0) { view_image_lines(t); return; }
+        if (d == 1) return;
     }
     (void)img;
     add_text(t, g_file, n, OSUI_APP_A_TEXT);
     {
-        char s[OSUI_APP_COLS];
+        char s[OSUI_TOOL_COLS];
         s[0] = 0;
         t_cat_u(s, (int)sizeof(s), (unsigned)n);
         t_cat(s, (int)sizeof(s), " octets, ");
@@ -473,7 +517,7 @@ static void view_fill(osui_tool_t *t, const osui_tool_src_t *src) {
 }
 
 static void settings_fill(osui_tool_t *t, const osui_tool_src_t *src) {
-    char s[OSUI_APP_COLS];
+    char s[OSUI_TOOL_COLS];
     int w = 0, h = 0;
     clear_lines(t);
     add_line(t, "Date et heure (RTC CMOS, UTC):", -1, OSUI_APP_A_DIR);
@@ -500,7 +544,7 @@ static void settings_fill(osui_tool_t *t, const osui_tool_src_t *src) {
 static void p2p_fill(osui_tool_t *t, const osui_tool_src_t *src, const char *cmd) {
     add_line(t, "", 0, OSUI_APP_A_TEXT);
     add_line(t, "$ ", -1, OSUI_APP_A_DIM);
-    t_cat(t->lines[t->n - 1], OSUI_APP_COLS, cmd);
+    t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, cmd);
     (void)run_into(t, src, cmd, OSUI_APP_A_TEXT);
     follow_end(t);
 }
@@ -521,7 +565,7 @@ static void pm_fill(osui_tool_t *t, const osui_tool_src_t *src, const char *verb
     t_cpy(cmd, (int)sizeof(cmd), verb);
     t_cat(cmd, (int)sizeof(cmd), t->arg);
     add_line(t, "$ ", -1, OSUI_APP_A_DIM);
-    t_cat(t->lines[0], OSUI_APP_COLS, cmd);
+    t_cat(t->lines[0], OSUI_TOOL_COLS, cmd);
     (void)run_into(t, src, cmd, OSUI_APP_A_TEXT);
     set_status(t, "sortie reelle de ", cmd);
 }
@@ -533,7 +577,7 @@ static void chat_start(osui_tool_t *t, int first) {
         if (!t->ilen) { set_status(t, "ecrivez une question puis Entree", 0); return; }
         t_cpy(t->prompt, (int)sizeof(t->prompt), t->input);
         add_line(t, "Vous: ", -1, OSUI_APP_A_DIR);
-        t_cat(t->lines[t->n - 1], OSUI_APP_COLS, t->prompt);
+        t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, t->prompt);
         t->ilen = 0; t->input[0] = 0;
     } else if (!t->prompt[0]) { set_status(t, "rien a continuer", 0); return; }
     add_line(t, first ? "IA: " : "IA (suite): ", -1, OSUI_APP_A_LINK);
@@ -549,7 +593,7 @@ static void chat_append(osui_tool_t *t, const char *p, int n) {
     for (i = 0; i < n; i++) {
         char *ln = t->lines[t->n - 1];
         int len = t_len(ln);
-        if (p[i] == '\n' || len >= OSUI_APP_COLS - 2) {
+        if (p[i] == '\n' || len >= OSUI_TOOL_COLS - 2) {
             add_line(t, "    ", -1, OSUI_APP_A_LINK);
             if (p[i] == '\n') continue;
             ln = t->lines[t->n - 1];
@@ -561,7 +605,7 @@ static void chat_append(osui_tool_t *t, const char *p, int n) {
 }
 
 static void chat_stop(osui_tool_t *t, const char *why) {
-    char s[OSUI_APP_COLS];
+    char s[OSUI_TOOL_COLS];
     t->gen = 0;
     t_cpy(s, (int)sizeof(s), why);
     t_cat(s, (int)sizeof(s), " (");
@@ -594,14 +638,14 @@ int osui_tool_idle(osui_tool_t *t, const osui_tool_src_t *src) {
 static void chat_model(osui_tool_t *t, const osui_tool_src_t *src) {
     const char *cur = (src && src->ai_model) ? src->ai_model() : "";
     const char *next = (cur && ends_with(cur, ".gguf")) ? "gpt2_124M.bin" : "gpt2.gguf";
-    char cmd[48], res[OSUI_APP_COLS];
+    char cmd[48], res[OSUI_TOOL_COLS];
     if (t->gen) { set_status(t, "annulez la generation avant de changer de modele", 0); return; }
     t_cpy(cmd, (int)sizeof(cmd), "ai-model use ");
     t_cat(cmd, (int)sizeof(cmd), next);
     if (!src || !src->run || src->run(cmd, g_out, (int)sizeof(g_out)) < 0) { set_status(t, "ai-model indisponible", 0); return; }
     first_line(res, (int)sizeof(res), g_out);
     add_line(t, "Modele: ", -1, OSUI_APP_A_DIM);
-    t_cat(t->lines[t->n - 1], OSUI_APP_COLS, next);
+    t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, next);
     set_status(t, res, 0);
     follow_end(t);
 }
@@ -631,11 +675,11 @@ static void panel_menu(osui_tool_t *t) {
         char *l;
         add_line(t, f->entries[i].label, -1, OSUI_APP_A_TEXT);
         l = t->lines[t->n - 1];
-        t_cat(l, OSUI_APP_COLS, "  [");
-        t_cat(l, OSUI_APP_COLS, f->entries[i].cmd);
-        if (f->entries[i].flags & OSUI_PAR_ARG) { t_cat(l, OSUI_APP_COLS, " "); t_cat(l, OSUI_APP_COLS, f->entries[i].hint); }
-        t_cat(l, OSUI_APP_COLS, "]");
-        if (f->entries[i].flags & OSUI_PAR_MUT) t_cat(l, OSUI_APP_COLS, " *");
+        t_cat(l, OSUI_TOOL_COLS, "  [");
+        t_cat(l, OSUI_TOOL_COLS, f->entries[i].cmd);
+        if (f->entries[i].flags & OSUI_PAR_ARG) { t_cat(l, OSUI_TOOL_COLS, " "); t_cat(l, OSUI_TOOL_COLS, f->entries[i].hint); }
+        t_cat(l, OSUI_TOOL_COLS, "]");
+        if (f->entries[i].flags & OSUI_PAR_MUT) t_cat(l, OSUI_TOOL_COLS, " *");
     }
     t->sel = (t->psel >= 0 && t->psel < t->n) ? t->psel : 0;
     follow_sel(t);
@@ -644,7 +688,7 @@ static void panel_menu(osui_tool_t *t) {
 
 static void panel_exec(osui_tool_t *t, const osui_tool_src_t *src, const char *cmd) {
     int n;
-    char first_out[OSUI_APP_COLS];
+    char first_out[OSUI_TOOL_COLS];
     first_out[0] = 0;
     t_cpy(t->last, (int)sizeof(t->last), cmd);
     if (t->mode == 0) t->psel = t->sel;
@@ -652,9 +696,18 @@ static void panel_exec(osui_tool_t *t, const osui_tool_src_t *src, const char *c
     t->mode = 1;
     t->sel = -1;
     add_line(t, "$ ", -1, OSUI_APP_A_DIM);
-    t_cat(t->lines[0], OSUI_APP_COLS, cmd);
+    t_cat(t->lines[0], OSUI_TOOL_COLS, cmd);
+    t->dropped = 0;
     n = run_into(t, src, cmd, OSUI_APP_A_TEXT);
     if (n > 0) first_line(first_out, sizeof(first_out), g_out);
+    if (t->dropped > 0) {
+        /* honest bound: the window keeps the last OSUI_TOOL_LINES lines */
+        char note[OSUI_TOOL_COLS];
+        t_cpy(note, (int)sizeof(note), "[sortie tronquee: ");
+        t_cat_u(note, (int)sizeof(note), (unsigned)t->dropped);
+        t_cat(note, (int)sizeof(note), " lignes du debut retirees, fenetre limitee a 128 lignes]");
+        add_line(t, note, -1, OSUI_APP_A_DIM);
+    }
     if (!first_out[0]) {
         int k = 1;
         while (k < t->n && !t->lines[k][0]) k++;
@@ -702,6 +755,11 @@ static void panel_run(osui_tool_t *t, const osui_tool_src_t *src) {
             osui_form_collab_escrow_init(&t->form);
             return;
         }
+        if (t_ncmp(e->cmd, "collab-escrow-release", 21) == 0) {
+            t->has_form = 1;
+            osui_form_collab_settle_init(&t->form);
+            return;
+        }
     }
     if (osui_par_build(e, t->input, cmd, (int)sizeof(cmd)) < 0) { set_status(t, "saisissez d'abord: ", e->hint); return; }
     if ((e->flags & OSUI_PAR_MUT) && t->armed_pid != t->sel) {
@@ -717,6 +775,26 @@ static void panel_run(osui_tool_t *t, const osui_tool_src_t *src) {
 }
 
 /* ---- common entry points --------------------------------------------- */
+
+void osui_tool_set_view(osui_tool_t *t, int rows, int cols, const osui_tool_src_t *src) {
+    if (!t) return;
+    if (rows < 0) rows = 0;
+    if (cols < 0) cols = 0;
+    if (rows > OSUI_APP_MAX_ROWS) rows = OSUI_APP_MAX_ROWS;
+    if (cols > OSUI_TOOL_COLS) cols = OSUI_TOOL_COLS;
+    if (t->vrows == rows && t->vcols == cols) return;
+    t->vrows = rows; t->vcols = cols;
+    if (!t->active || t->has_form) return;
+    /* rebuild only what has no side effect; command output keeps its lines */
+    if (t->kind == OS_FB_APP_VIEW || t->kind == OS_FB_APP_TASKS || t->kind == OS_FB_APP_SETTINGS
+        || (osui_par_family(t->kind) && t->mode == 0)) {
+        int sel = t->sel;
+        osui_tool_refresh(t, src);
+        if (sel >= 0 && sel < t->n) t->sel = sel;
+    }
+    if (t->sel >= 0) follow_sel(t);
+    else if (t->top + view_rows(t) > t->n) t->top = t->n > view_rows(t) ? t->n - view_rows(t) : 0;
+}
 
 void osui_tool_refresh(osui_tool_t *t, const osui_tool_src_t *src) {
     switch (t->kind) {
@@ -740,6 +818,8 @@ void osui_tool_open(osui_tool_t *t, int kind, const char *arg, const osui_tool_s
     if (!keep) {
         t->n = 0; t->top = 0; t->ilen = 0; t->input[0] = 0; t->gen = 0; t->prompt[0] = 0;
         t->status[0] = 0; t->mode = 0; t->image = 0; t->last[0] = 0; t->psel = 0;
+        t->zoom = 0; t->pan_x = 0; t->pan_y = 0; t->img_fmt = 0;
+        t->vrows = 0; t->vcols = 0;   /* a new window starts on the default grid */
         t->has_form = 0;
     }
     t->kind = kind;
@@ -752,7 +832,7 @@ void osui_tool_open(osui_tool_t *t, int kind, const char *arg, const osui_tool_s
         if (!keep) {
             add_line(t, "Chat GPT-2 local (moteur du noyau, pas de reseau).", -1, OSUI_APP_A_DIM);
             add_line(t, "Modele: ", -1, OSUI_APP_A_DIM);
-            t_cat(t->lines[t->n - 1], OSUI_APP_COLS, (src && src->ai_model) ? src->ai_model() : "?");
+            t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, (src && src->ai_model) ? src->ai_model() : "?");
             set_status(t, "ecrivez une question puis Entree", 0);
         }
         return;
@@ -815,6 +895,7 @@ int osui_tool_click(osui_tool_t *t, int row, int col, int dbl, const osui_tool_s
     int idx;
     (void)col;
     if (!t || !t->active || row < 0) return OSUI_TOOL_NONE;
+    if (t->has_form) return osui_form_click(&t->form, row, col, (void *)src) ? OSUI_TOOL_CHANGED : OSUI_TOOL_NONE;
     idx = t->top + row;
     if (t->kind == OS_FB_APP_TASKS && idx < t->n) {
         if (t->sel != idx) t->armed_pid = -1;
@@ -840,10 +921,21 @@ int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src) {
             panel_menu(t);
             return OSUI_TOOL_CHANGED;
         }
-        if (osui_form_key(&t->form, key, (void*)src)) {
+        {
+            int was_armed = t->form.armed;
+            if (!osui_form_key(&t->form, key, (void*)src)) return OSUI_TOOL_NONE;
+            /* Lot 45: serial trace of the form (armed, then the real run) */
+            if (t->form.armed && !was_armed) {
+                t_cpy(t->log, (int)sizeof(t->log), "osui form armed ");
+                t_cat(t->log, (int)sizeof(t->log), t->form.status);
+            } else if ((key == '\n' || key == '\r') && was_armed && !t->form.armed && t->form.last_cmd[0]) {
+                t_cpy(t->log, (int)sizeof(t->log), "osui form run cmd=");
+                t_cat(t->log, (int)sizeof(t->log), t->form.last_cmd);
+                t_cat(t->log, (int)sizeof(t->log), "\nosui form status=");
+                t_cat(t->log, (int)sizeof(t->log), t->form.status);
+            }
             return OSUI_TOOL_CHANGED;
         }
-        return OSUI_TOOL_NONE;
     }
     v = view_rows(t);
     if (osui_par_family(t->kind)) {
@@ -874,6 +966,28 @@ int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src) {
             if (t->ilen < OSUI_TOOL_INPUT - 1) { t->input[t->ilen++] = (char)key; t->input[t->ilen] = 0; }
             return OSUI_TOOL_CHANGED;
         }
+    } else if (t->kind == OS_FB_APP_VIEW && t->image && t->img_fmt
+               && (key == '+' || key == '=' || key == '-' || key == 'f' || key == '0'
+                   || key == K_LEFT || key == K_RIGHT || key == K_UP || key == K_DOWN)) {
+        /* Lot 45: zoom (25..800 %), fit, pan by a quarter of the view */
+        int cur = t->zoom ? t->zoom : (t->img_src_w ? (t->img_w * 100) / t->img_src_w : 100);
+        int sx = t->img_w * 25 / (cur ? cur : 100), sy = t->img_h * 25 / (cur ? cur : 100);
+        if (sx < 1) sx = 1;
+        if (sy < 1) sy = 1;
+        if (key == '+' || key == '=') t->zoom = cur * 2 > 800 ? 800 : cur * 2;
+        else if (key == '-') t->zoom = cur / 2 < 25 ? 25 : cur / 2;
+        else if (key == 'f') { t->zoom = 0; t->pan_x = t->pan_y = 0; }
+        else if (key == '0') t->zoom = 100;
+        else if (key == K_LEFT) t->pan_x = t->pan_x > sx ? t->pan_x - sx : 0;
+        else if (key == K_RIGHT) t->pan_x += sx;
+        else if (key == K_UP) t->pan_y = t->pan_y > sy ? t->pan_y - sy : 0;
+        else t->pan_y += sy;
+        if (t->pan_x > t->img_src_w) t->pan_x = t->img_src_w;
+        if (t->pan_y > t->img_src_h) t->pan_y = t->img_src_h;
+        view_fill(t, src);
+        t_cpy(t->log, (int)sizeof(t->log), "osui view ");
+        t_cat(t->log, (int)sizeof(t->log), t->n ? t->lines[0] : "");
+        return OSUI_TOOL_CHANGED;
     } else if (key == K_ESC) return OSUI_TOOL_CLOSE;
     else if (key == 'u' || key == 'r') { osui_tool_refresh(t, src); return OSUI_TOOL_CHANGED; }
     else if (key == 'e' && (t->kind == OS_FB_APP_VIEW || t->kind == OS_FB_APP_PMRUN)) return osui_tool_tool(t, 2, src);
@@ -906,21 +1020,21 @@ void osui_tool_render(const osui_tool_t *t, osui_app_view_t *v) {
     if (t->arg[0]) { t_cat(v->title, (int)sizeof(v->title), " - "); t_cat(v->title, (int)sizeof(v->title), t->arg); }
     else if (t->kind == OS_FB_APP_CHAT && t->gen) t_cat(v->title, (int)sizeof(v->title), " - generation");
     t_cpy(v->tool, OSUI_APP_COLS, osui_tool_toolbar(t->kind));
-    t_cpy(v->status, OSUI_APP_COLS, t->status);
+    t_cpy(v->status, OSUI_TOOL_COLS, t->status);
     v->cur_row = -1; v->cur_col = -1;
     for (r = 0; r < rows && t->top + r < t->n; r++) {
         int i = t->top + r;
-        t_cpy(v->rows[r], OSUI_APP_COLS, t->lines[i]);
-        for (k = 0; k < OSUI_APP_COLS; k++) v->attr[r][k] = (unsigned char)(i == t->sel ? OSUI_APP_A_SEL : t->cls[i]);
+        t_cpy(v->rows[r], OSUI_TOOL_COLS, t->lines[i]);
+        for (k = 0; k < OSUI_TOOL_COLS; k++) v->attr[r][k] = (unsigned char)(i == t->sel ? OSUI_APP_A_SEL : t->cls[i]);
     }
     v->nrows = r;
     if (t->kind == OS_FB_APP_P2P || t->kind == OS_FB_APP_CHAT || osui_par_family(t->kind)) {
-        int last = OSUI_APP_ROWS - 1;
+        int last = grid_rows(t) - 1;
         const osui_par_family_t *f = osui_par_family(t->kind);
-        t_cpy(v->rows[last], OSUI_APP_COLS, t->kind == OS_FB_APP_CHAT ? "> " : f ? (f->count ? "arg> " : "cmd> ") : "p2p> ");
-        t_cat(v->rows[last], OSUI_APP_COLS, t->input);
-        for (k = 0; k < OSUI_APP_COLS; k++) v->attr[last][k] = OSUI_APP_A_MATCH;
-        v->nrows = OSUI_APP_ROWS;
+        t_cpy(v->rows[last], OSUI_TOOL_COLS, t->kind == OS_FB_APP_CHAT ? "> " : f ? (f->count ? "arg> " : "cmd> ") : "p2p> ");
+        t_cat(v->rows[last], OSUI_TOOL_COLS, t->input);
+        for (k = 0; k < OSUI_TOOL_COLS; k++) v->attr[last][k] = OSUI_APP_A_MATCH;
+        v->nrows = last + 1;
         v->cur_row = last;
         v->cur_col = t_len(v->rows[last]);
     }

@@ -42,7 +42,109 @@ PANELS = [
     ("/security", "Securite et CA", "whoami", ""),
     ("/devtools", "Outils web", "browser-status", "browser-status"),
     ("/notes", "Notes et archives", "ls /", "Initrd / VFS"),
+    # Lot 44 (US-G17) panels
+    # /vfs: the vfs server is not started at boot, the shell's own refusal
+    # is the real output (start it with "spawn bin/vfsserver" in /cmd)
+    ("/vfs", "Virtuel VFS", "vfs-stats", "service vfs indisponible"),
+    ("/sessions", "Sessions utilisateur", "session-status", "osui session-status session_id="),
+    ("/mcp", "Paiements MCP", "mcp-status", "osui mcp-status active="),
+    ("/media", "Media et streaming", "browser-media", "osui browser-media status="),
+    ("/pwa", "Applications PWA", "pwa-list", "osui pwa-list count="),
+    ("/sysadmin", "Administration", "os-admin", "osui admin-status"),
+    ("/api", "Tokens API", "api", "osui api status="),
 ]
+
+
+def help_window(monitor, proc):
+    """Lot 45: /help in the chat opens the Aide window and shows the slash
+    programs at once (gui-help, from the same table as the dispatch)."""
+    start = slash(monitor, proc, "/help", "osui tool open app=Aide")
+    run_marker(proc, start, "gui-help")
+    g.wait_for(proc, "osui panel out=gui-help ok", g.CMD_TIMEOUT, start)
+    say("/help: Aide window lists the desktop slash programs")
+    start = len(g.log_text())
+    key(monitor, "esc")
+    key(monitor, "down")
+    key(monitor, "ret")
+    run_marker(proc, start, "help")
+    say("/help: second entry runs the terminal help (shell registry)")
+    close_panel(monitor, proc, "Aide")
+
+
+def viewer_images(monitor, proc):
+    """Lot 45: imgdec in the viewer (PNG, BMP) with zoom, and img-info in
+    the shell through /cmd (same decoder)."""
+    slash(monitor, proc, "/view /samples/mire.png", "fmt=png zoom=fit")
+    g.wait_for(proc, "osui tool line=image 48x32 affichee en pixels 48x32 fmt=png", g.CMD_TIMEOUT)
+    start = len(g.log_text())
+    key(monitor, "shift-equal")
+    g.wait_for(proc, "fmt=png zoom=200%", g.CMD_TIMEOUT, start)
+    say("/view mire.png: PNG decoded in pixels, + zooms to 200%")
+    g.screendump_rgb(monitor, "qemu-gui-lot45-viewer.ppm")
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)
+    slash(monitor, proc, "/view /samples/mire24.bmp", "fmt=bmp zoom=fit")
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)
+    say("/view mire24.bmp: BMP 24 bits decoded")
+    slash(monitor, proc, "/cmd", "osui tool open app=Commande")
+    start = len(g.log_text())
+    type_text(monitor, "img-info /samples/mire32.bmp")
+    key(monitor, "ret")
+    run_marker(proc, start, "img-info /samples/mire32.bmp")
+    g.wait_for(proc, "osui panel out=img-info ok fmt=bmp w=48 h=32 bpp=32", g.CMD_TIMEOUT, start)
+    say("img-info (shell) decodes the same BMP 32 bits")
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
+
+
+def ledger_form(monitor, proc):
+    """Lot 45: the collab-offer form of /ledger builds the shell grammar,
+    arms on the first Enter of submit and runs on the second."""
+    slash(monitor, proc, "/ledger", "osui tool open app=Registre collab")
+    for _ in range(4):
+        key(monitor, "down")
+    key(monitor, "ret")              # opens the form
+    for _ in range(3):
+        key(monitor, "ret")          # Nom -> Prix -> Capacite -> submit
+    start = len(g.log_text())
+    key(monitor, "ret")
+    g.wait_for(proc, "osui form armed Entree encore pour confirmer: collab-offer gpu 10 1", g.CMD_TIMEOUT, start)
+    if "osui form run" in g.log_text()[start:]:
+        raise RuntimeError("ledger form ran without confirmation")
+    start = len(g.log_text())
+    key(monitor, "ret")
+    g.wait_for(proc, "osui form run cmd=collab-offer gpu 10 1", g.CMD_TIMEOUT, start)
+    g.wait_for(proc, "osui form status=", g.CMD_TIMEOUT, start)
+    say("/ledger form: collab-offer armed, then run through the shell")
+    start = len(g.log_text())
+    key(monitor, "esc")              # form -> menu
+    key(monitor, "esc")              # menu -> close
+    g.wait_for(proc, "osui tool close app=Registre collab", g.CMD_TIMEOUT, start)
+
+
+def devsync(monitor, proc):
+    slash(monitor, proc, "/devsync", "osui tool open app=DevSync cluster")
+    start = len(g.log_text())
+    type_text(monitor, "A")
+    key(monitor, "ret")
+    run_marker(proc, start, "devsync-show A")
+    g.wait_for(proc, "osui panel out=", g.CMD_TIMEOUT, start)
+    say("/devsync: devsync-show A runs through the shell")
+    close_panel(monitor, proc, "DevSync cluster")
+
+
+def grpc(monitor, proc):
+    slash(monitor, proc, "/grpc", "osui tool open app=Wire gRPC")
+    start = len(g.log_text())
+    type_text(monitor, "Echo Say hi")
+    key(monitor, "ret")
+    run_marker(proc, start, "grpc-wire Echo Say hi")
+    say("/grpc: grpc-wire runs through the shell")
+    close_panel(monitor, proc, "Wire gRPC")
 
 
 def say(msg):
@@ -139,6 +241,25 @@ def generic(monitor, proc):
     run_marker(proc, start, "reboot", "refused")
     g.wait_for(proc, "reservee au terminal", g.CMD_TIMEOUT, start)
     say("/cmd: registry command runs, terminal-only reboot refused with its reason")
+    # Lot 44: restart of a Ring 3 driver from a window
+    start = len(g.log_text())
+    type_text(monitor, "driver-restart pcidriver")
+    key(monitor, "ret")
+    run_marker(proc, start, "driver-restart pcidriver")
+    g.wait_for(proc, "osui panel out=driver-restart ok pci-driver old ", g.CMD_TIMEOUT, start)
+    import re
+    old = re.search(r"driver-restart ok pci-driver old (\d+)", g.normalized_log(g.log_text()[start:])).group(1)
+    # the kernel supervisor respawns pcidriver at the next use of the PCI
+    # service: lspci from the same window, then the new pid is asserted
+    start = len(g.log_text())
+    type_text(monitor, "lspci")
+    key(monitor, "ret")
+    run_marker(proc, start, "lspci")
+    g.wait_for(proc, "[PCI] supervised respawn bin/pcidriver pid ", g.CMD_TIMEOUT, start)
+    m = re.search(r"\[PCI\] supervised respawn bin/pcidriver pid (\d+)", g.log_text()[start:])
+    if not m or m.group(1) == old:
+        raise RuntimeError("driver-restart: no supervised respawn with a new pid")
+    say("/cmd: driver-restart pcidriver: old pid %s, respawned as pid %s by the kernel supervisor" % (old, m.group(1)))
     start = len(g.log_text())
     key(monitor, "esc")
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
@@ -166,7 +287,12 @@ def main():
             time.sleep(0.6)
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
+            help_window(monitor, proc)
             families(monitor, proc)
+            grpc(monitor, proc)
+            devsync(monitor, proc)
+            ledger_form(monitor, proc)
+            viewer_images(monitor, proc)
             search(monitor, proc)
             confirm_mutation(monitor, proc)
             generic(monitor, proc)

@@ -9,7 +9,7 @@
 #include "os_syscalls.h"
 
 #define FSOPS_PATH_MAX 128
-#define FSOPS_FILE_MAX 65536     /* largest file read/copied/edited at once */
+#define FSOPS_FILE_MAX 32768     /* largest file read/copied/edited at once (>= OV_FILE_MAX_BYTES) */
 
 #define FSOPS_ERR_FAIL     (-1)  /* not found / generic failure */
 #define FSOPS_ERR_EXISTS   (-2)
@@ -58,10 +58,13 @@ int fsops_mv(const fsops_io_t *io, const char *src, const char *dst, char *final
 /* UX5 recursive search (shell "grep -r", GUI /search panel): every line
  * of the files under dir (depth <= FSOPS_GREP_DEPTH, FSOPS_GREP_DIR
  * entries per directory) that contains pat goes to hit(). Only the first
- * FSOPS_FILE_MAX bytes of a file are searched. Stops after max_hits.
+ * FSOPS_FILE_MAX bytes of a file are searched, or up to FSOPS_GREP_FILE_MAX
+ * when a heap is attached with fsops_set_heap (Lot 45). Stops after max_hits.
  * Returns the hit count (< 0 when dir cannot be listed); *files and
  * *truncated (may be null) count the searched and the cut files. */
 #define FSOPS_GREP_DEPTH 6
+#define FSOPS_GREP_FILE_MAX (1024 * 1024)   /* Lot 45: with a heap attached */
+void fsops_set_heap(void *(*realloc_fn)(void *p, unsigned n));
 #define FSOPS_GREP_DIR 32
 typedef void (*fsops_grep_hit_fn)(void *ctx, const char *path, int line, const char *text, int len);
 int fsops_grep(const fsops_io_t *io, const char *dir, const char *pat, int max_hits,

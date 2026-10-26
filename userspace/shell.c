@@ -1,6 +1,8 @@
 // shell.c - Shell Interactif Avancé pour MOHHDY v6.0
 // Shell utilisateur complet avec IA intégrée et fonctionnalités modernes
 
+#include "osui_parity.h"
+#include "imgdec.h"
 #include <stdint.h>
 int shell_prod_is(const char* line);
 int shell_persist_is(const char* line);
@@ -3573,7 +3575,7 @@ static int is_builtin(const char* cmd) {
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
-        "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap",
+        "prod-tutorial", "prod-feedback", "prod-usage", "prod-roadmap", "gui-help", "img-info",
         "cd", "pwd", "cat", "stat", "test", "[", "mkdir", "rmdir", "cp", "mv", "rm",
         "kill", "spawn", "yield", "ipc-send", "ipc-recv", "service-publish", "service-grant", "service-find", "service-status", "service-watch", "service-event-pull", "cap-token", "id-key", "spill-drops", "right-token", "mount-journal", "mount-journal-add", "vfs-backend-probe", "vfs-backend-write-probe", "vfs-backend-remove-probe", "vfs-backend-rename-probe", "vfs-grant", "vfs-read", "vfs-stat", "vfs-stats", "vfs-mount-add", "vfs-mount-remove", "vfs-write", "vfs-remove", "vfs-rename", "vfs-mkdir", "vfs-rmdir", "jobs", "top", "getpid", "uptime", "date", "rtc-check", "whoami",
         "alias", "unalias", "export", "which", "rc",
@@ -5248,56 +5250,55 @@ static void cmd_devices(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string(" end\n");
 }
 
+/* Lot 44 (US-G17): restart a Ring 3 driver. Only the fixed driver names
+ * below (their registered service), never an arbitrary process. The kill
+ * goes through SYS_KILL, so the kernel rights apply unchanged (only the root
+ * shell may stop a driver). The respawn is the kernel supervisor's own
+ * (atadriver, pci/ps2/serial/vga/usb device services); networker has no
+ * kernel supervisor, so the shell starts bin/networker again itself. */
+static const struct { const char* name; const char* service; } k_drivers[] = {
+    { "atadriver", "ata-driver" }, { "networker", "net-driver" },
+    { "pcidriver", "pci-driver" }, { "ps2driver", "ps2-driver" },
+    { "serialdriver", "serial-driver" }, { "vgadriver", "vga-driver" },
+    { "usbdriver", "usb-driver" },
+};
+
 static void cmd_driver_restart(shell_context_t* ctx, char args[][128], int arg_count) {
-    int pid = -1;
-    const char *driver_name;
-    const char *service_name = 0;
+    const char* service = 0;
+    int pid, k, now = -1, rc;
     (void)ctx;
     if (arg_count < 1) {
-        print_error("Usage: driver-restart <driver-name>");
+        print_error("Usage: driver-restart <atadriver|networker|pcidriver|ps2driver|serialdriver|vgadriver|usbdriver>");
         return;
     }
-    driver_name = args[0];
-    if (strcmp(driver_name, "atadriver") == 0 || strcmp(driver_name, "ata-driver") == 0) service_name = "ata-driver";
-    else if (strcmp(driver_name, "networker") == 0 || strcmp(driver_name, "net-driver") == 0) service_name = "net-driver";
-    else if (strcmp(driver_name, "pcidriver") == 0 || strcmp(driver_name, "pci-driver") == 0) service_name = "pci-driver";
-    else if (strcmp(driver_name, "ps2driver") == 0 || strcmp(driver_name, "ps2-driver") == 0) service_name = "ps2-driver";
-    else if (strcmp(driver_name, "serialdriver") == 0 || strcmp(driver_name, "serial-driver") == 0) service_name = "serial-driver";
-    else if (strcmp(driver_name, "vgadriver") == 0 || strcmp(driver_name, "vga-driver") == 0) service_name = "vga-driver";
-    else if (strcmp(driver_name, "usbdriver") == 0 || strcmp(driver_name, "usb-driver") == 0) service_name = "usb-driver";
-    else service_name = driver_name;
-
-    pid = sys_service_lookup(service_name);
-    if (pid <= 0) {
-        os_proc_t procs[16];
-        int n = sys_ps(procs, 16);
-        for (int i = 0; i < n; i++) {
-            if (strstr(procs[i].name, driver_name) != 0) {
-                pid = procs[i].pid;
-                break;
-            }
+    for (k = 0; k < (int)(sizeof(k_drivers) / sizeof(k_drivers[0])); k++) {
+        if (strcmp(args[0], k_drivers[k].name) == 0 || strcmp(args[0], k_drivers[k].service) == 0) {
+            service = k_drivers[k].service;
+            break;
         }
     }
-
-    if (pid <= 0) {
-        print_error("driver-restart: pilote introuvable");
+    if (!service) { print_error("driver-restart: pilote inconnu"); return; }
+    pid = sys_service_lookup(service);
+    if (pid <= 0) { print_error("driver-restart: pilote absent (service non enregistre)"); return; }
+    rc = sys_kill_pid(pid);
+    if (rc != 0) {
+        print_string("driver-restart refused "); print_string(service);
+        print_string(" rc "); print_int(rc); print_string("\n");
         return;
     }
-
-    sys_kill_pid(pid);
-
-    if (strcmp(driver_name, "networker") == 0 || strcmp(service_name, "net-driver") == 0) {
+    if (strcmp(service, "net-driver") == 0) {
+        for (k = 0; k < 50 && sys_service_lookup("net-driver") == pid; k++) yield();
+        if (sys_service_lookup("net-driver") <= 0) (void)spawn("bin/networker", 0);
+    }
+    for (k = 0; k < 400; k++) {
+        now = sys_service_lookup(service);
+        if (now > 0 && now != pid) break;
         yield();
-        if (sys_service_lookup("net-driver") <= 0) {
-            spawn("bin/networker", 0);
-        }
     }
-
-    print_string("driver-restart ok ");
-    print_string(driver_name);
-    print_string(" pid ");
-    print_int(pid);
-    print_string("\n");
+    print_string("driver-restart ok "); print_string(service);
+    print_string(" old "); print_int(pid);
+    if (now > 0 && now != pid) { print_string(" new "); print_int(now); print_string("\n"); }
+    else print_string(" new pending (respawn supervise a la prochaine utilisation)\n");
 }
 
 static void cmd_pci_rescan(shell_context_t* ctx, char args[][128], int arg_count) {
@@ -5642,6 +5643,42 @@ static void cmd_grep(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("grep hits ");
     print_int(hits);
     print_string("\n");
+}
+
+/* Lot 45: image header + full decode check through the shared imgdec
+ * module (same code as the desktop viewer). Heap buffers, bounded. */
+#define IMG_INFO_FILE_MAX (2 * 1024 * 1024)
+#define IMG_INFO_SCRATCH (1024U * 1024U + 4096U)
+static void cmd_img_info(shell_context_t* ctx, char args[][128], int arg_count) {
+    char path[RAMFS_PATH_MAX];
+    os_dirent_t st;
+    unsigned char *buf, *scratch;
+    imgdec_t img;
+    int n, rc;
+    if (arg_count < 1) { print_error("img-info: usage img-info <fichier>"); ctx->last_rc = 1; return; }
+    resolve_arg(ctx, args[0], path);
+    if (sys_stat(path, &st) != 0 || st.flags == OS_DIRENT_DIR) { print_error("img-info: fichier introuvable"); ctx->last_rc = 1; return; }
+    if ((int)st.size > IMG_INFO_FILE_MAX) { print_error("img-info: fichier trop grand (2 Mio max)"); ctx->last_rc = 1; return; }
+    buf = (unsigned char *)umalloc(st.size + 1U);
+    scratch = (unsigned char *)umalloc(IMG_INFO_SCRATCH);
+    if (!buf || !scratch) { if (buf) ufree(buf); if (scratch) ufree(scratch); print_error("img-info: memoire"); ctx->last_rc = 1; return; }
+    n = fsops_read(&shell_fs_io, path, (char *)buf, (int)st.size);
+    rc = n < 0 ? IMGDEC_E_TRUNC : imgdec_open(buf, n, scratch, IMG_INFO_SCRATCH, &img);
+    print_string("img-info ");
+    print_string(rc == IMGDEC_OK ? "ok" : "error");
+    print_string(" fmt="); print_string(imgdec_fmt_name(img.fmt));
+    print_string(" w="); print_int(img.w);
+    print_string(" h="); print_int(img.h);
+    print_string(" bpp="); print_int(img.bpp);
+    if (rc == IMGDEC_OK) {
+        unsigned char px[3];
+        imgdec_pixel(&img, 0, 0, px);
+        print_string(" px0="); print_int(px[0]); print_string(","); print_int(px[1]); print_string(","); print_int(px[2]);
+    } else { print_string(" reason="); print_string(imgdec_strerror(rc)); }
+    print_string("\n");
+    ufree(scratch);
+    ufree(buf);
+    ctx->last_rc = rc == IMGDEC_OK ? 0 : 1;
 }
 
 static void cmd_wc(shell_context_t* ctx, char args[][128], int arg_count) {
@@ -7222,6 +7259,15 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
     } else if (strcmp(command, "net-wire-status") == 0) {
         cmd_net_wire_status(ctx, args, arg_count);
         return 1;
+    } else if (strcmp(command, "img-info") == 0) {
+        cmd_img_info(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "gui-help") == 0) {
+        /* Lot 45: the desktop slash programs, from the dispatch table */
+        print_string("gui-help ok programmes slash du bureau:\n");
+        (void)osui_par_slash_list(print_string);
+        ctx->last_rc = 0;
+        return 1;
     } else if (strcmp(command, "uptime") == 0) {
         cmd_uptime(ctx, args, arg_count);
         return 1;
@@ -7709,6 +7755,7 @@ void main() {
     osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
     umalloc_init((void *)OS_USER_HEAP_BASE, shell_heap_grow);
     osui_gui_set_heap(urealloc);
+    fsops_set_heap(urealloc);
     osui_gui_set_mobile_op(shell_mobile_gui);
     
     // Affichage de bienvenue moderne

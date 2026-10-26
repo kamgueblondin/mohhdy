@@ -16,7 +16,9 @@
 #include "osui_form.h"
 
 #define OSUI_TOOL_LINES 128
-#define OSUI_TOOL_OUT 65536         /* captured command output per call (PR 4: 64 KiB buffer) */
+/* Lot 45 (US-G15): line store as wide as a maximized window */
+#define OSUI_TOOL_COLS OSUI_APP_MAX_COLS
+#define OSUI_TOOL_OUT 65536         /* captured command output per call (64 KiB, a note marks a cut) */
 #define OSUI_TOOL_INPUT 72
 
 typedef struct {
@@ -44,14 +46,14 @@ enum { OSUI_TOOL_NONE = 0, OSUI_TOOL_CLOSE = 1, OSUI_TOOL_EDIT = 2, OSUI_TOOL_CH
 typedef struct {
     int kind, active;
     char arg[64];                              /* viewer / pm-run file */
-    char lines[OSUI_TOOL_LINES][OSUI_APP_COLS];
+    char lines[OSUI_TOOL_LINES][OSUI_TOOL_COLS];
     unsigned char cls[OSUI_TOOL_LINES];        /* OSUI_APP_A_* of each line */
     int n, top, sel;
     int mode;                                  /* tasks: 0 processes, 1 services */
     int armed_pid;                             /* tasks: kill confirmation */
     char input[OSUI_TOOL_INPUT];
     int ilen;
-    char status[OSUI_APP_COLS];
+    char status[OSUI_TOOL_COLS];
     char log[200];                             /* serial log of the last action */
     /* chat */
     int gen;                                   /* 1 generating */
@@ -60,11 +62,16 @@ typedef struct {
     int image;                                 /* viewer: 1 PGM/PPM image */
     int img_w, img_h, img_src_w, img_src_h;    /* shown / file size */
     unsigned img_gen;                          /* bumps on each new image */
+    int img_fmt;                               /* Lot 45: IMGDEC_* (0: ASCII PNM path) */
+    int zoom;                                  /* Lot 45: 0 fit, else percent */
+    int pan_x, pan_y;                          /* Lot 45: source pixels at zoom */
     char last[OSUI_TOOL_INPUT + 40];           /* parity: last command run */
     int psel;                                  /* parity: menu line kept across runs */
     /* PR 4: Form support */
     osui_form_t form;
     int has_form;
+    int vrows, vcols;                          /* Lot 45: window grid, 0 default */
+    int dropped;                               /* lines scrolled out by the last run */
 } osui_tool_t;
 
 const char *osui_tool_toolbar(int kind);
@@ -93,6 +100,10 @@ int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src);
 /* chat: one generation step when generating; 1 when the view changed */
 int osui_tool_idle(osui_tool_t *t, const osui_tool_src_t *src);
 void osui_tool_render(const osui_tool_t *t, osui_app_view_t *v);
+/* Lot 45 (US-G15): the window grid changed (maximize / restore / resize).
+ * Rows follow at once; new text wraps at the new width; views without side
+ * effects (menus, viewer, tasks, settings) are rebuilt at the new size. */
+void osui_tool_set_view(osui_tool_t *t, int rows, int cols, const osui_tool_src_t *src);
 /* first decimal number of a ps line (the PID), -1 none */
 int osui_tool_line_pid(const char *line);
 /* PGM/PPM (P2, P3, P5, P6) to an ASCII preview of cols x rows; returns
