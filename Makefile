@@ -574,9 +574,9 @@ INITRD_MODELS_KEY = MODEL_DIR=$(MODEL_DIR) $(foreach f,$(MODEL_DIR)/gpt2_tokeniz
 
 pack-initrd: userspace-all
 	@mkdir -p build
-	@# Lot 46: the hand-kept initrd files (roadmap, samples) count too: an
+	@# Lot 46: the hand-kept initrd files (roadmap, samples, bigfiles) count too: an
 	@# edited /roadmap.txt left the old initrd in place
-	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples"; \
+	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples $(INITRD_DIR)/bigfiles"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
 	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && \
 	    [ "$$(cat build/.initrd-models 2>/dev/null)" = "$(INITRD_MODELS_KEY)" ] && \

@@ -2,11 +2,11 @@
 """Lot 46 PR B (US-G16, US-G02): editor Save As of a 64 KiB file on the
 real OS, byte exact on the disk and after a cold reboot.
 
-Boot 1 (VBE desktop): /edit /samples/big64.txt (1024 lines, 65536 bytes)
+Boot 1 (VBE desktop): /edit /bigfiles/big64.txt (1024 lines, 65536 bytes)
 opens the file in full (user heap); ESC a Save As /big64s.txt writes it
 through the chunked atadriver relay into the v4 overlay image (LBA 0-63
 plus the extension area at LBA 4225-4352, after the FAT16 volume and the
-journals). /edit /samples/big64p.txt (65537 bytes) then Save As /over.txt
+journals). /edit /bigfiles/big64p.txt (65537 bytes) then Save As /over.txt
 is refused with the store error shown (no file, no cut copy).
 Host check: the disk image is parsed (v4 header, records); /big64s.txt is
 equal to the sample byte for byte and the FAT16 volume (LBA 64-4221) is
@@ -32,7 +32,7 @@ os.environ.setdefault("OVERLAY_DISK", os.path.join(LOGS, "qemu-gui-bigsave-overl
 import test_qemu_osui_gui as g  # noqa: E402
 import test_qemu_gui_ux5 as ux  # noqa: E402
 
-SAMPLE = os.path.join(HERE, "..", "..", "initrd_content", "samples", "big64.txt")
+SAMPLE = os.path.join(HERE, "..", "..", "initrd_content", "bigfiles", "big64.txt")
 SECTOR = 512
 EXT_LBA, EXT_SECTORS = 4225, 128
 FAT_FIRST, FAT_LAST = 64, 4221
@@ -142,12 +142,12 @@ def main():
             raise RuntimeError("atadriver did not enable the extension area after the FAT16 volume")
         say("atadriver: extension area LBA %d-%d (FAT16 volume ends at 4221, journals 4222-4224)" %
             (EXT_LBA, EXT_LBA + EXT_SECTORS - 1))
-        start, tail = save_as(monitor, proc, "/samples/big64.txt", "/big64s.txt", len("/samples/big64.txt"))
+        start, tail = save_as(monitor, proc, "/bigfiles/big64.txt", "/big64s.txt", len("/bigfiles/big64.txt"))
         if "osui edit saved file=/big64s.txt" not in tail:
             raise RuntimeError("Save As of 64 KiB failed: %r" % tail[-400:])
         say("boot 1: Save As /big64s.txt of the 65536-byte file: saved")
         close_editor(monitor, proc, qmp)
-        start, tail = save_as(monitor, proc, "/samples/big64p.txt", "/over.txt", len("/samples/big64p.txt"))
+        start, tail = save_as(monitor, proc, "/bigfiles/big64p.txt", "/over.txt", len("/bigfiles/big64p.txt"))
         if "osui edit save error=" not in tail or "osui edit saved file=/over.txt" in tail:
             raise RuntimeError("Save As of 65537 bytes was not refused: %r" % tail[-400:])
         say("boot 1: Save As /over.txt of 65537 bytes refused, error shown in the editor")
