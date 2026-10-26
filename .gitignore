@@ -28,6 +28,7 @@ userspace/vfshistclaim
 userspace/waitchild
 userspace/ok
 userspace/outflood
+userspace/ifcrogue
 userspace/*.o
 userspace/*.bin
 initrd_content/bin/*
