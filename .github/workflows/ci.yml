@@ -277,10 +277,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Lot 46: two runs were cancelled at 15 min while apt crawled from
+      # the runner's Azure mirror (~100 KB/s on the 57 MB gcc package).
+      # The .debs are cached; each attempt is bounded and the retry uses
+      # the main Ubuntu archive instead of the Azure mirror.
+      - name: Cache ARM toolchain packages
+        uses: actions/cache@v4
+        with:
+          path: ~/apt-arm
+          key: apt-arm-${{ runner.os }}-noble-v1
+
       - name: Install ARM toolchain and QEMU
+        timeout-minutes: 11
         run: |
-          sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi qemu-system-arm
+          mkdir -p ~/apt-arm/partial
+          pkgs="gcc-arm-none-eabi libnewlib-arm-none-eabi qemu-system-arm"
+          opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120 -o Dir::Cache::archives=$HOME/apt-arm"
+          for i in 1 2; do
+            if timeout 120 sudo apt-get update $opts && \
+               timeout 420 sudo apt-get install -y --no-install-recommends $opts $pkgs; then
+              sudo chown -R "$USER" ~/apt-arm
+              exit 0
+            fi
+            echo "apt attempt $i failed; switching to archive.ubuntu.com"
+            sudo sed -i 's#http://azure.archive.ubuntu.com#http://archive.ubuntu.com#g' \
+              /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+          done
+          exit 1
 
       - name: Build and boot the ARM kernel (make qemu-arm-boot)
         run: make arm-kernel qemu-arm-boot
