@@ -776,7 +776,11 @@ static int prompt_key(osui_ide_t *ide, int key) {
     if (!ide->prompt_buf[0]) { osui_ide_set_status(ide, "annule"); return OSUI_IDE_NONE; }
     if (which == OSUI_IDE_P_FIND) { ide_cpy(ide->find, (int)sizeof(ide->find), ide->prompt_buf); (void)find_next(ide); return OSUI_IDE_NONE; }
     ide_cpy(ide->prompt_out, (int)sizeof(ide->prompt_out), ide->prompt_buf);
-    if (which == OSUI_IDE_P_SAVE_AS) { ide_cpy(ide->file, (int)sizeof(ide->file), ide->prompt_buf); ide->truncated = 0; return OSUI_IDE_SAVE_AS; }
+    if (which == OSUI_IDE_P_SAVE_AS) {
+        ide_cpy(ide->prev_file, (int)sizeof(ide->prev_file), ide->file);
+        ide->prev_truncated = ide->truncated;
+        ide_cpy(ide->file, (int)sizeof(ide->file), ide->prompt_buf); ide->truncated = 0; return OSUI_IDE_SAVE_AS;
+    }
     if (which == OSUI_IDE_P_OPEN) {
         if (ide->modified) { osui_ide_set_status(ide, "non enregistre: enregistrez avant d'ouvrir un autre fichier"); return OSUI_IDE_NONE; }
         return OSUI_IDE_OPEN;
@@ -905,6 +909,13 @@ void osui_ide_drag(osui_ide_t *ide, int r0, int c0, int r1, int c1) {
     mr = ide->row; mc = ide->col;
     osui_ide_click(ide, r1, c1);
     if (mr != ide->row || mc != ide->col) { ide->mark_on = 1; ide->mark_row = mr; ide->mark_col = mc; }
+}
+
+void osui_ide_save_as_failed(osui_ide_t *ide) {
+    if (!ide->prev_file[0]) return;
+    ide_cpy(ide->file, (int)sizeof(ide->file), ide->prev_file);
+    ide->truncated = ide->prev_truncated;
+    ide->prev_file[0] = 0;
 }
 
 int osui_ide_text_size(const osui_ide_t *ide) {

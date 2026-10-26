@@ -547,6 +547,7 @@ static void edit_action(int act, char *out, int out_max) {
         char msg[OSUI_IDE_ROW_LEN];
         scpy(msg, (int)sizeof(msg), "erreur: ");
         scat(msg, (int)sizeof(msg), fsops_strerror(rc));
+        if (act == OSUI_IDE_SAVE_AS) osui_ide_save_as_failed(&g_edit);
         osui_ide_set_status(&g_edit, msg);
         app_out(out, out_max, "osui edit save error=", fsops_strerror(rc));
         return;

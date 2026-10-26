@@ -78,6 +78,8 @@ typedef struct {
     int modified;
     int cmd_mode;   /* ESC pressed: next key is a command */
     int truncated;  /* file did not fit when opened */
+    char prev_file[48];  /* Lot 46: name before Save As, restored on failure */
+    int prev_truncated;
     char status[OSUI_IDE_ROW_LEN];
     char out[OSUI_IDE_OUT_LINES][OSUI_IDE_ROW_LEN];
     int out_n;        /* lines kept */
@@ -103,6 +105,8 @@ void osui_ide_open(osui_ide_t *ide, const char *file, const char *text, int len)
 int osui_ide_text(const osui_ide_t *ide, char *out, int max);
 int osui_ide_key(osui_ide_t *ide, int key);
 void osui_ide_set_status(osui_ide_t *ide, const char *msg);
+/* Lot 46: a refused Save As keeps the previous name (title, next ESC w). */
+void osui_ide_save_as_failed(osui_ide_t *ide);
 void osui_ide_frame_row(const osui_ide_t *ide, int r, char *dst, int max);
 /* Syntax class of every character of a source line; returns its length. */
 int osui_ide_highlight(const char *line, unsigned char *cls, int max);
