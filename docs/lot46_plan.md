@@ -2,15 +2,17 @@
 
 Base: `origin/main` after the merge of PR #202 (Lot 45). One PR per theme,
 each one green on `make test-all` and its QEMU gates before the next.
-Only PR A is done in this branch (`lot46-a-gui-parity`); B, C and D are
-planned, nothing of them is implemented yet.
+PR A and, at the owner's request before the merge, the storage part of
+PR B, the US-001 check and the Raft part of PR D are in this branch
+(`lot46-a-gui-parity`). The viewer part (PR C) and the interface
+configuration command are not started.
 
 | PR | Theme | Status |
 |---|---|---|
 | A | End of the GUI parity (this branch) | done for items 1-3, item 4: 7 of 11 US-G entries done, 4 stay partial (reasons below) |
-| B | Storage: overlay files over 30 KiB (new disk layout, FAT16 starts at LBA 64), editor saves of 64 KiB (US-G16, US-G02) | planned, not started |
-| C | Viewer: JPEG baseline and interlaced / 16-bit PNG in the shared `imgdec` (US-G03) | planned, not started |
-| D | Kernel and network leftovers of Lot 45: US-001 (ATA IDENTIFY and FAT PIO fallback out of Ring 0), TCP ports honored, interface configuration command (US-G04), Raft partition tests (US-064) | planned, not started |
+| B | Storage: overlay files over 30 KiB (new disk layout, FAT16 starts at LBA 64), editor saves of 64 KiB (US-G16, US-G02) | done (v4 image, see below) |
+| C | Viewer: JPEG baseline and interlaced / 16-bit PNG in the shared `imgdec` (US-G03) | not started |
+| D | Kernel and network leftovers of Lot 45: US-001 (ATA IDENTIFY and FAT PIO fallback out of Ring 0), TCP ports honored, interface configuration command (US-G04), Raft partition tests (US-064) | US-001: already done since Lot 2, re-proved; Raft: leader partition and re-election in QEMU (done); TCP ports: no ignored port found, no new test; interface configuration: not started |
 
 ## PR A - items
 
@@ -66,3 +68,19 @@ output buffer 64 KiB (unchanged).
 - The /net panel runs on the loopback-only worker in QEMU (no NE2000 in
   the gui VMs); real NIC traffic is covered by the network suites, not by
   the GUI tests.
+
+## Before the merge: review fixes, PR B, US-001, PR D
+
+| Item | Status | Proof |
+|---|---|---|
+| Relaunched networker shown as "1 programme encore actif" | fixed: a task that registers a service leaves the capture (`out_cap_forget` in SYS_SERVICE_REGISTER), its output goes to the console | `test_out_capture` (test_daemon_leaves_and_dead_owner_releases), `qemu-gui-parity` (no "encore actif" after driver-restart networker) |
+| Capture kept until the next call when the owner shell dies | fixed: released in `task_report_parent_exit` (exit, kill, fault) | same unit test |
+| `outflood` in the production initrd | kept, documented: the build has one initrd that already carries the test probes (ok, devrogue, atarogue, pcirogue, ...); a test-only image is not done | - |
+| US-G02, US-G03, US-G04 | G02 done (64 KiB saves); G03 partial: no JPEG, no interlaced or 16-bit PNG, not started; G04 partial: the shell has no command that sets the address or route, not started | `qemu-gui-bigsave` |
+| PR B: US-G16 | done: overlay image v4 (header 32 bytes: magic, 4, 288 slots, records, ext_lba, 128); image sectors 0-63 at LBA 0-63, 64-191 at ext_lba..ext_lba+127; ext_lba = max(4225, 64 + FAT16 total sectors), enabled by atadriver only when IDENTIFY (words 60-61) reports ext_lba + 128 sectors and FAT16 is mounted; at boot the LBA of a v4 header is checked >= 4225 and >= the FAT16 end before it is read. 96 KiB store, 64 KiB per file; without the extension v3 exactly as before (32 KiB, 30 KiB). v1/v2/v3 load; v3 is rewritten as v4 on the next save. Kernel job queue (two areas, a chunk never crosses), mirror (96 KiB), boot install and Ring 0 fallback follow the header. Test disk 4353 sectors | `test_overlay` (test_v4_extension_64k_file, test_v3_image_loads_then_saves_v4; old v1/v2/v3 tests unchanged), `test_ata_job` (test_v4_image_two_areas), `make qemu-gui-bigsave` (new, CI job gui-panels): Save As of 65536 bytes, host parse of the disk byte exact, LBA 64-4221 byte identical to the fresh disk, cold reboot stat 65536, 65537 bytes refused and absent; `qemu-ata-driver` and `qemu-persistence` pass with the extension on |
+| US-001 (PR C of the request) | nothing to move: IDENTIFY and the FAT PIO fallback are not linked in either image since Lot 2; supervised restart re-proved | `make strict-image-check`, `make qemu-ata-driver` (kill, mid-job #GP, respawn, reboot) |
+| US-064 Raft | done: leader partition | `make qemu-p2p` scenario 2c: leader cut from both peers, its entry not committed, beta elected at a higher term after the 10 s lease, commits; after the heal alpha is follower at that term and applies the majority entry, the isolated entry is applied nowhere (pre-vote, compaction and InstallSnapshot: scenario 2b) |
+| TCP ports | no ignored port found: `web-serve` listens on the requested port (8080, 8443 in `qemu-osui-web`), `ai-acquire` and `ai-peer-listen` take a port | no new test |
+| Interface configuration in /net | not started | - |
+
+Phase 9 of `prod-roadmap`: done 16 partial 2 (88%) (`qemu-production`).

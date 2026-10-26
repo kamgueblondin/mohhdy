@@ -16,6 +16,9 @@
 #include "osui_form.h"
 
 #define OSUI_TOOL_LINES 128
+/* Lot 46: bytes the tool window reads itself (static g_file); a larger
+ * file comes whole through src->load (heap) */
+#define OSUI_TOOL_READ_MAX 8191
 /* Lot 45 (US-G15): line store as wide as a maximized window */
 #define OSUI_TOOL_COLS OSUI_APP_MAX_COLS
 #define OSUI_TOOL_OUT 65536         /* captured command output per call (64 KiB, a note marks a cut) */

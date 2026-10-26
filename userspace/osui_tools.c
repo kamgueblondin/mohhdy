@@ -489,7 +489,7 @@ int osui_tool_image_decode(const char *buf, int n, unsigned char *rgb, int max_w
     return 0;
 }
 
-static char g_file[8192];
+static char g_file[OSUI_TOOL_READ_MAX + 1];
 
 /* Lot 45: BMP / PNG / binary PNM through the shared imgdec module, with
  * zoom and pan; the old PNM decoder stays for ASCII P2 / P3. Bounded:

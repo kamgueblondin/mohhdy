@@ -93,7 +93,23 @@ suit la largeur ; driver-restart de atadriver et networker prouve en QEMU
 /services /logs /ci /security /devtools /notes passe dans
 `make qemu-gui-panels`. Phase 9 : 14 faites, 4 partielles (US-G02,
 US-G03, US-G04, US-G16). Plan des 4 PR et etat par point :
-`docs/lot46_plan.md` (PR B, C, D prevues, non commencees).
+`docs/lot46_plan.md`.
+
+Lot 46 PR B-D (meme branche, avant fusion) : image overlay v4 sur deux
+zones, LBA 0-63 et une extension de 128 secteurs placee apres le volume
+FAT16 et les journaux (LBA 4225-4352 sur le disque de test), activee par
+atadriver seulement si IDENTIFY annonce assez de secteurs ; magasin de
+96 Kio, fichiers de 64 Kio ; les images v1, v2 et v3 se chargent toujours.
+Preuve `make qemu-gui-bigsave` : Enregistrer sous de 64 Kio dans
+l'editeur, octet pour octet sur le disque, LBA 64-4221 identiques au
+disque neuf, apres redemarrage a froid ; 64 Kio + 1 refuse. US-G02 et
+US-G16 faites ; phase 9 : 16 faites, 2 partielles (US-G03 JPEG, US-G04
+configuration d'interface : non commencees). US-001 : IDENTIFY et repli
+FAT PIO deja hors Ring 0 depuis le lot 2, redemarrage supervise reprouve
+(`make qemu-ata-driver`). US-064 : scenario QEMU 2c (le leader lui-meme
+coupe du reseau, reelection, retour en suiveur apres reparation). Ports
+TCP : aucun chemin ignorant le port demande n'a ete trouve ; ecoute sur
+8080 et 8443 deja prouvee par `make qemu-osui-web`, pas de nouveau test.
 
 ### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production
 - **Moteur Web & Securite (US-039 / US-031)** : Validation dynamique CSP des origines de ressources (images, styles, scripts) lors de la construction de la liste d'affichage (`webrt_csp_validate_display_list_resource`). Journalisation des acces bloques dans `osui-audit`.

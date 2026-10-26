@@ -88,12 +88,21 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
   /security /devtools /notes (64 runs) through the window menu.
 - Status per item and the 4 entries left partial: `docs/lot46_plan.md`.
 
+## Lot 46 (before the merge: review fixes and PR B)
+
+- A driver relaunched from a window leaves the capture (no "programme
+  encore actif" for networker); the capture is freed when its shell dies.
+- Editor saves up to 64 KiB (overlay image v4, extension area after the
+  FAT16 volume), byte exact after a reboot: `make qemu-gui-bigsave`.
+- Still partial: viewer (no JPEG, no interlaced PNG), /net (no interface
+  configuration command in the shell).
+
 ## Inventory per family
 
 | Family (commands) | GUI surface | Status |
 |---|---|---|
 | files: ls, cat, cp, mv, rm, mkdir, touch, stat (about 20) | Files explorer (UX3), editor, /disk, /notes | done |
-| editor: edit, pm-ide, pm-edit | Editor window (heap, window-sized grid since UX5) | partial: lines up to 256 columns with horizontal scroll (Lot 45); saves up to 30 KiB (overlay chained blocks) |
+| editor: edit, pm-ide, pm-edit | Editor window (heap, window-sized grid since UX5) | done: lines up to 256 columns with horizontal scroll (Lot 45); saves up to 64 KiB on a disk with the v4 extension area (Lot 46, `qemu-gui-bigsave`), 30 KiB otherwise |
 | processes: ps, kill, mem, jobs, task-* (27), child-* (7) | Task manager (/tasks), /services (jobs, task-summary) | partial: task-events-*, task-priority, task-suspend only through /cmd |
 | services and drivers: service-* (6), devices, lspci, dev-list, pci-rescan, driver-restart | /services, task manager services view | done (Lot 46): every /services entry runs in `qemu-gui-panels`; `driver-restart` (fixed Ring 3 driver names): supervised respawn of pcidriver (Lot 45) and atadriver with a new pid, networker restarted by the shell with a new pid, each service used after the restart (`qemu-gui-parity`) |
 | network: net-* (3), fetch-sim, grpc-* (6) | /net, /grpc | partial: every /net entry runs in `qemu-gui-panels` (Lot 46), grpc-wire; the shell has no command that configures the interface (address, route), so no window can either (Lot 46 PR D) |

@@ -1288,6 +1288,52 @@ JPEG and interlaced PNG, US-001, TCP ports, interface configuration, Raft
 partition. A program that prints after the bounded wait of 50 ticks prints
 on the console, not in the window.
 
+Lot 46 PR B-D (same branch, before the merge):
+- Review fixes of PR A: a driver relaunched from a window (networker after
+  driver-restart) registers its service and leaves the capture, so the
+  window no longer says "1 programme encore actif"; the capture is
+  released at once when its owner shell exits, is killed or faults
+  (`out_cap_task_gone` in `task_report_parent_exit`). Proof:
+  `test_out_capture`, `qemu-gui-parity`. `outflood` stays in the initrd
+  next to the other test probes (ok, devrogue, atarogue, pcirogue): the
+  build has one initrd, a test-only image is not done.
+- US-G16 / US-G02 done. Overlay image v4: records over LBA 0-63 and a
+  128-sector extension after the FAT16 volume and after the journals
+  (4222-4224): ext_lba = max(4225, 64 + FAT16 total sectors), enabled by
+  atadriver only when IDENTIFY words 60-61 report ext_lba + 128 sectors;
+  the LBA is in the v4 header and checked >= 4225 and >= the end of the
+  FAT16 volume before any read. Store 96 KiB, files 64 KiB. Without the
+  extension the store writes v3 as before (32 KiB, 30 KiB per file). v1,
+  v2 and v3 images load; a v3 disk is rewritten as v4 on the next save.
+  The kernel job queue, the mirror, the boot install and the Ring 0
+  fallback follow the header. Test disk: 4353 sectors (was 4225).
+  Proof: `test_overlay` (v4 64 KiB roundtrip, LBA map never in 64-4224,
+  half image refused, v3 to v4), `test_ata_job` (two areas, chunks never
+  cross 63/64), `make qemu-gui-bigsave` (CI job gui-panels): editor Save
+  As 65536 bytes, host parse of the disk: byte exact, LBA 64-4221 byte
+  identical to the fresh disk; cold reboot: stat 65536, last line found;
+  Save As of 65537 bytes refused, no file. `make qemu-ata-driver` and
+  `make qemu-persistence` pass with the extension on (disk 8192 sectors).
+- US-001: nothing left to move for this item. ATA IDENTIFY and the FAT
+  PIO fallback are absent from both images since Lot 2
+  (`make strict-image-check`); supervised restart after a crash (kill and
+  mid-job #GP, respawn, reboot) re-run with the v4 layout:
+  `make qemu-ata-driver` PASS. Still Ring 0 by design: PIC, PIT, IRQ
+  stubs, early boot console, panic path, early boot probes.
+- US-064: `make qemu-p2p` scenario 2c: the leader is cut from both peers
+  (hub wire cut), its own put is not committed, after the 10 s lease beta
+  is elected at a higher term (3 in this run) and commits, after the heal
+  alpha is follower at that term and applies the majority entry; the
+  isolated entry is applied on no guest. Pre-vote, compaction and
+  InstallSnapshot were already covered by scenario 2b.
+- TCP ports: no code path that ignores the requested port was found.
+  `web-serve` listens on the requested port (8080 and 8443 in
+  `make qemu-osui-web`), `ai-acquire` and `ai-peer-listen` take a port.
+  No new test in this lot.
+- Not done: JPEG and interlaced / 16-bit PNG (US-G03), interface
+  configuration command and its /net entry (US-G04), a test-only initrd.
+  Phase 9 of `prod-roadmap`: done 16 partial 2 (88%).
+
 Next steps: 64 KiB files (needs a new
 disk layout, the overlay area is 32 KiB);
 panels for vfs, task, session, mcp, media and grpc (US-G17); forms for the
