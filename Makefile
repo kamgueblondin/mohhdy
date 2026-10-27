@@ -928,7 +928,7 @@ gui-captures: $(OS_IMAGE) pack-initrd disk
 gui-record: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/gui_record_demo.py
 
-.PHONY: integration-qemu qemu-p2p-mesh qemu-promptmessage qemu-net-no-ring0 qemu-net-loss-recovery qemu-pci-driver qemu-input-drivers qemu-usb-driver qemu-net-loopback-worker qemu-net-peer-tls-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
+.PHONY: integration-qemu qemu-p2p-mesh qemu-p2p-phase5 qemu-promptmessage qemu-net-no-ring0 qemu-net-loss-recovery qemu-pci-driver qemu-input-drivers qemu-usb-driver qemu-net-loopback-worker qemu-net-peer-tls-worker kernel-netlegacy qemu-integration-plan qemu-irq0-preemption qemu-ai-provider qemu-ne2k-status qemu-ne2k-tls-http qemu-ne2k-tls-sse qemu-ne2k-tls-next qemu-ne2k-tls-multipair qemu-ps2-dual qemu-ne2k-shared-topology qemu-ne2k-tls-multi-guest qemu-ne2k-guest-app-traffic qemu-ne2k-guest-tls-peer qemu-ne2k-guest-tls-chat qemu-ne2k-guest-tls-server qemu-ne2k-guest-tls-metier qemu-foundation-steps qemu-ipc-foundation qemu-ata-driver qemu-net-worker qemu-net-wire qemu-vfs-service qemu-service-grant qemu-ai-worker qemu-ai-gguf
 qemu-irq0-preemption: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/integration/test_qemu_irq0_preemption.py
 
@@ -1314,6 +1314,11 @@ qemu-p2p: $(OS_IMAGE) pack-initrd
 # US-063/US-069: four guests, two-relay path, crash of a relay, reboot and rejoin.
 qemu-p2p-mesh: $(OS_IMAGE) pack-initrd
 	@python3 tests/scripts/test_qemu_p2p_mesh.py
+
+# Lot 48 phase 5: US-070 fence on reconnect, US-068/073 adaptive window
+# under delay/drop, US-075 automatic alerts, US-069 crash/reboot cycles.
+qemu-p2p-phase5: $(OS_IMAGE) pack-initrd
+	@python3 tests/scripts/test_qemu_p2p_phase5.py
 
 qemu-platform: $(OS_IMAGE) pack-initrd
 	@python3 tests/integration/test_qemu_platform.py

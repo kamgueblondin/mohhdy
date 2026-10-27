@@ -865,6 +865,33 @@ void test_cache_versioned_acked_invalidation(void) {
     TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p cache inv incomplete cfg acks 1"));
 }
 
+/* Lot 48 (US-070): a peer cut long enough to be declared down misses the
+ * invalidation (the invalidator stops waiting for it); on reconnect the
+ * fence is pushed to it, so a stale fill at the old version is refused. */
+void test_cache_fence_pushed_on_reconnect(void) {
+    char rep[512];
+    int a, b;
+    setup(3, 0);
+    run(3, 400);
+    TEST_ASSERT_EQUAL(0, p2p_cache_put_v(&g_n[2], "cfg", "old", 4, 50000, g_ticks));
+    for (a = 0; a < 3; a++) for (b = 0; b < 3; b++) if ((a == 2) != (b == 2)) g_cut[a][b] = 1;
+    run(3, P2P_DOWN_TICKS + 300);
+    TEST_ASSERT_EQUAL(0, (int)p2p_find(&g_n[0], "gamma")->up);
+    (void)p2p_cache_invalidate_v(&g_n[0], &g_h[0], "cfg", 5);
+    run(3, 8000);
+    /* without the push gamma would accept a fill at version 5 */
+    for (a = 0; a < 3; a++) for (b = 0; b < 3; b++) g_cut[a][b] = 0;
+    run(3, 1500);
+    TEST_ASSERT_EQUAL(1, (int)p2p_find(&g_n[0], "gamma")->up);
+    TEST_ASSERT_EQUAL(-2, p2p_cache_put_v(&g_n[2], "cfg", "old", 5, 50000, g_ticks));
+    TEST_ASSERT_EQUAL(0, p2p_cache_put_v(&g_n[2], "cfg", "new", 6, 50000, g_ticks));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[2], "p2p cache fence cfg v5 from alpha"));
+    p2p_report(&g_n[0], &g_h[0], "cache", rep, sizeof(rep));
+    TEST_ASSERT_NULL(strstr(rep, "fence_pushed 0 "));
+    p2p_report(&g_n[2], &g_h[2], "cache", rep, sizeof(rep));
+    TEST_ASSERT_NULL(strstr(rep, "fence_raised 0"));
+}
+
 /* US-075: learned per-type baseline, a burst far above it is flagged. */
 void test_traffic_baseline_anomaly(void) {
     char rep[2048];
@@ -921,6 +948,29 @@ void test_anomaly_peer_attribution_and_solicited(void) {
         TEST_ASSERT_EQUAL(before, p2p_find(&g_n[1], "gamma")->anomalies);
         TEST_ASSERT_TRUE(g_n[1].solicited_skipped >= 1U);
     }
+}
+
+/* Lot 48 (US-075): automatic report. Two flooding peers are each named
+ * once per episode without any p2p-analyze command; the quiet one is not;
+ * the episode end is reported when the rate is back under the baseline. */
+void test_anomaly_automatic_alerts(void) {
+    char rep[2048];
+    int i;
+    setup(3, 0);
+    run(3, 8000);
+    for (i = 0; i < 14; i++) {
+        TEST_ASSERT_EQUAL(0, p2p_send_unshaped(&g_n[1], &g_h[1], "alpha", "flood"));
+        TEST_ASSERT_EQUAL(0, p2p_send_unshaped(&g_n[2], &g_h[2], "alpha", "flood"));
+    }
+    run(3, 1100);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p traffic alert peer beta rate "));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p traffic alert peer gamma rate "));
+    TEST_ASSERT_NULL(strstr(g_out[1], "p2p traffic alert"));
+    TEST_ASSERT_NULL(strstr(strstr(g_out[0], "p2p traffic alert peer gamma") + 1, "p2p traffic alert peer gamma"));
+    run(3, 3000);
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p traffic normal peer gamma"));
+    p2p_report(&g_n[0], &g_h[0], "analyze", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze alerts 2\n"));
 }
 
 /* Lot 6 (US-070): a cache write through the Raft log reaches every node
@@ -1728,6 +1778,8 @@ int main(void) {
     RUN_TEST(test_crash_reroute_and_rejoin);
     RUN_TEST(test_qos_adaptive_controller);
     RUN_TEST(test_cache_versioned_acked_invalidation);
+    RUN_TEST(test_cache_fence_pushed_on_reconnect);
+    RUN_TEST(test_anomaly_automatic_alerts);
     RUN_TEST(test_traffic_baseline_anomaly);
     RUN_TEST(test_anomaly_peer_attribution_and_solicited);
     RUN_TEST(test_cache_through_raft);

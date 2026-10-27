@@ -316,6 +316,41 @@ jobs:
           if-no-files-found: ignore
           path: test_logs/arm-boot.log
 
+  p2p-phase5:
+    name: QEMU P2P phase 5 three guests (cache fence, adaptive QoS, traffic alerts, crash cycles)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      # Lot 48: US-070, US-068/073, US-075, US-069 continuous (about 4 min).
+      - name: QEMU P2P phase 5 (three guests, hub delay/drop/cut, three crash cycles)
+        run: make qemu-p2p-phase5
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2p-phase5-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   p2p-mesh:
     name: QEMU P2P four guests + strict network contracts
     runs-on: ubuntu-latest

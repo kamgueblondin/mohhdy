@@ -66,6 +66,9 @@ typedef struct {
     uint8_t ping_wait;     /* 0 none, 1 PING outstanding, 2 outstanding and loss counted */
     uint32_t sync_at;      /* last SYNC_REQ sent by p2p_sync */
     uint8_t sync_retries;  /* re-sends left until SYNC_ITEMS arrives */
+    uint8_t alerting;      /* Lot 48 (US-075): inside an anomaly episode (one alert each) */
+    uint8_t fence_push;    /* Lot 48 (US-070): fence re-sends left after a reconnect */
+    uint32_t fence_at;     /* last fence push to this peer */
     uint32_t via;            /* 0: direct, else id of the relay node */
     uint32_t neighbors[P2P_PEERS];
     uint8_t nb_hops[P2P_PEERS];  /* hops from that neighbor to neighbors[i] (1..P2P_MAX_HOPS) */
@@ -194,6 +197,7 @@ typedef struct {
     uint32_t inv_tick;
     uint8_t inv_retries, inv_active;
     uint32_t inv_acked, inv_resent, inv_completed;
+    uint32_t fence_pushed, fence_raised;   /* Lot 48 (US-070): fences sent on reconnect / raised by an INV */
 } p2p_cache_t;
 
 typedef struct {
@@ -260,6 +264,7 @@ typedef struct {
     uint32_t base_rate16[P2P_I_COUNT];
     uint32_t last_rx[P2P_I_COUNT];
     uint32_t analyze_tick, analyze_windows, anomalies, last_anomaly_type, last_anomaly_rate;
+    uint32_t alerts;   /* Lot 48 (US-075): automatic anomaly reports emitted */
     uint32_t last_anomaly_peer;   /* Lot 6: id of the peer above its own baseline */
     uint32_t solicited_until;     /* Lot 6: a reply burst we asked for (sync, snapshot) is expected until then */
     uint32_t solicited_skipped;   /* anomaly windows not counted because solicited */
