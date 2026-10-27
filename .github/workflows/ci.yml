@@ -484,6 +484,9 @@ jobs:
       - name: QEMU large save (64 KiB) across a reboot
         run: make qemu-gui-bigsave
 
+      - name: QEMU GUI lot 49 (explorer = shell tree, maximize without lag, terminal ls; about 1 min)
+        run: make qemu-gui-lot49
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

@@ -1047,6 +1047,17 @@ void init_shell_context(shell_context_t* ctx) {
     ctx->env_count = 5;
 
     ramfs_init();
+    /* Lot 49: /docs, /home and /home/user (HOME) were shell-private ramfs
+     * directories: `ls` showed them, the desktop explorer (kernel VFS
+     * through fsops) did not. They are made in the kernel VFS when missing,
+     * so the shell and the explorer list the same tree. */
+    {
+        static const char* const dirs[] = {"/docs", "/home", "/home/user"};
+        os_dirent_t st;
+        int i;
+        for (i = 0; i < 3; i++)
+            if (sys_stat(dirs[i], &st) != 0) (void)sys_mkdir(dirs[i]);
+    }
     procsim_init();
     osui_runtime_init();
 }

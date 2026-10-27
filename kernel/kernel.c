@@ -683,7 +683,14 @@ void print_char(char c, int x, int y, char color) {
                         case 31: current_color = 0x04; break; // Red
                         case 32: current_color = 0x02; break; // Green
                         case 33: current_color = 0x06; break; // Yellow
-                        case 34: current_color = 0x01; break; // Blue
+                        /* Lot 49: dark blue (0x01) on black was unreadable
+                         * (ls directory names); blue is drawn light blue. */
+                        case 34: current_color = 0x09; break; // Blue
+                        case 90: case 91: case 92: case 93:
+                        case 94: case 95: case 96: case 97: {
+                            static const char bright[8] = {0x08, 0x0C, 0x0A, 0x0E, 0x09, 0x0D, 0x0B, 0x0F};
+                            current_color = bright[code - 90]; break; // bright colours
+                        }
                         case 35: current_color = 0x05; break; // Magenta
                         case 36: current_color = 0x03; break; // Cyan
                         case 37: current_color = 0x07; break; // White
