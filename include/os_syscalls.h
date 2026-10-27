@@ -380,7 +380,9 @@
  * OS_IFCONFIG_STATIC (data[1..4] address, [5..8] mask, [9..12] gateway) or
  * OS_IFCONFIG_DHCP. The reply always fills data[0] = current mode
  * (OS_IFCONFIG_MODE_*), [1..4] address, [5..8] mask, [9..12] gateway,
- * [13] lease valid. A change is accepted from the root shell only. */
+ * [13] lease valid. A change is accepted from the root shell only.
+ * Lot 48: data[14] = TCP connections on the old address ended with FIN by
+ * this change (listeners kept); reply length 15. */
 #define OS_PEER_IFCONFIG 14U
 #define OS_IFCONFIG_GET 0U
 #define OS_IFCONFIG_STATIC 1U

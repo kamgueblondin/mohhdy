@@ -79,6 +79,9 @@ int net_ifcfg_run(int argc, const char* const* argv, net_ifcfg_call_t call,
     ifc_cat(out, max, &p, " ip "); ifc_ip(out, max, &p, r->data + 1);
     ifc_cat(out, max, &p, " mask "); ifc_ip(out, max, &p, r->data + 5);
     ifc_cat(out, max, &p, " gw "); ifc_ip(out, max, &p, r->data + 9);
-    ifc_cat(out, max, &p, r->data[13] ? " lease 1\n" : " lease 0\n");
+    ifc_cat(out, max, &p, r->data[13] ? " lease 1" : " lease 0");
+    /* Lot 48: TCP connections on the old address, ended with FIN by this change */
+    if (r->length >= 15U && r->data[14]) { ifc_cat(out, max, &p, " closed "); ifc_u8(out, max, &p, r->data[14]); }
+    ifc_cat(out, max, &p, "\n");
     return 0;
 }
