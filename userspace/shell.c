@@ -6371,7 +6371,14 @@ static void cmd_ai_tls_poll(shell_context_t* ctx, char args[][128], int arg_coun
         print_error("Usage: ai-tls-poll");
         return;
     }
-    status = sys_llm_poll_tls();
+    {
+        unsigned int t0 = sys_ticks();
+        status = sys_llm_poll_tls();
+        /* Lot 48 (A2): guest time of this handshake step, 10 ms ticks. */
+        print_string("ai-tls-poll ticks ");
+        print_int((int)(sys_ticks() - t0));
+        print_string("\n");
+    }
     if (status == 0) {
         print_success("ai-tls-poll: progression TLS publiee");
         return;

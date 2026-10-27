@@ -158,12 +158,82 @@ int bigint_mod_multiply(bigint_t* output,const bigint_t* left,const bigint_t* ri
     return 0;
 }
 
+/* Lot 48 (A2): Montgomery exponentiation for an odd modulus (RSA moduli,
+ * the P-256 primes). The generic bigint_mod_multiply runs 32 * n
+ * double-and-add modular additions per product; one Montgomery product
+ * (CIOS, 32x32->64 words) costs about n^2 word products instead, so an
+ * RSA-2048 e=65537 verification drops from ~17 * 2048 modular additions of
+ * 64 limbs to 17 Montgomery products plus one 2048-step conversion.
+ * Same results for every input; the final subtraction is by mask (no
+ * branch on the value). Stack bounded: n <= BIGINT_MONT_MAX_LIMBS. */
+#define BIGINT_MONT_MAX_LIMBS 128U
+static void mont_mul(uint32_t* out, const uint32_t* a, const uint32_t* b, const uint32_t* m, uint16_t n,
+                     uint32_t n0inv) {
+    uint32_t t[BIGINT_MONT_MAX_LIMBS + 2U], r[BIGINT_MONT_MAX_LIMBS], borrow, mask, q;
+    uint16_t i, j; uint64_t x;
+    for (i = 0U; i < (uint16_t)(n + 2U); i++) t[i] = 0U;
+    for (i = 0U; i < n; i++) {
+        x = 0U;
+        for (j = 0U; j < n; j++) { x += (uint64_t)a[j] * b[i] + t[j]; t[j] = (uint32_t)x; x >>= 32; }
+        x += t[n]; t[n] = (uint32_t)x; t[n + 1U] = (uint32_t)(x >> 32);
+        q = t[0] * n0inv;
+        x = (uint64_t)q * m[0] + t[0]; x >>= 32;
+        for (j = 1U; j < n; j++) { x += (uint64_t)q * m[j] + t[j]; t[j - 1U] = (uint32_t)x; x >>= 32; }
+        x += t[n]; t[n - 1U] = (uint32_t)x; t[n] = t[n + 1U] + (uint32_t)(x >> 32);
+    }
+    borrow = 0U;
+    for (i = 0U; i < n; i++) { x = (uint64_t)t[i] - m[i] - borrow; r[i] = (uint32_t)x; borrow = (uint32_t)(x >> 63); }
+    /* t - m is kept when t >= m, i.e. no final borrow beyond t[n]. */
+    mask = 0U - ((t[n] | (borrow ^ 1U)) & 1U);   /* t[n] is 0 or 1 */
+    for (i = 0U; i < n; i++) out[i] = (r[i] & mask) | (t[i] & ~mask);
+}
+static int bigint_modexp_mont(bigint_t* output, const bigint_t* base, const bigint_t* exponent,
+                              const bigint_t* modulus, uint32_t* workspace) {
+    uint16_t n = modulus->length, i, index, bit, started = 0U;
+    uint32_t n0inv = 1U, *result = workspace, *current = workspace + n, *product = workspace + 2U * n;
+    bigint_t cur;
+    for (i = 0U; i < 5U; i++) n0inv *= 2U - modulus->limbs[0] * n0inv;
+    n0inv = 0U - n0inv;
+    /* current = base * R mod m by 32 * n modular doublings. */
+    if (bigint_init(&cur, current, n) != 0 || bigint_mod_reduce(&cur, base, modulus) != 0) return -1;
+    for (i = cur.length; i < n; i++) current[i] = 0U;
+    cur.length = n;
+    for (i = 0U; i < (uint16_t)(32U * n); i++) if (bigint_mod_add_ct(&cur, &cur, &cur, modulus) != 0) return -2;
+    for (index = exponent->length; index > 0U; index--) {
+        uint32_t limb = exponent->limbs[index - 1U];
+        for (bit = 32U; bit > 0U; bit--) {
+            if (started) { mont_mul(product, result, result, modulus->limbs, n, n0inv); for (i = 0U; i < n; i++) result[i] = product[i]; }
+            if ((limb >> (bit - 1U)) & 1U) {
+                if (started) { mont_mul(product, result, current, modulus->limbs, n, n0inv); for (i = 0U; i < n; i++) result[i] = product[i]; }
+                else { for (i = 0U; i < n; i++) result[i] = current[i]; started = 1U; }
+            }
+        }
+    }
+    bigint_zero(output);
+    if (!started) {   /* exponent 0: result 1 (0 when m == 1) */
+        if (!(n == 1U && modulus->limbs[0] == 1U)) { output->limbs[0] = 1U; output->length = 1U; }
+        return 0;
+    }
+    for (i = 0U; i < n; i++) product[i] = 0U;
+    product[0] = 1U;
+    mont_mul(current, result, product, modulus->limbs, n, n0inv);   /* leave Montgomery form */
+    for (i = 0U; i < n; i++) output->limbs[i] = current[i];
+    output->length = n;
+    while (output->length > 0U && output->limbs[output->length - 1U] == 0U) output->length--;
+    return 0;
+}
+static int bigint_mont_ok(const bigint_t* modulus) {
+    return modulus->length >= 1U && modulus->length <= BIGINT_MONT_MAX_LIMBS && (modulus->limbs[0] & 1U) &&
+           modulus->limbs[modulus->length - 1U] != 0U;
+}
+
 int bigint_modexp(bigint_t* output,const bigint_t* base,const bigint_t* exponent,const bigint_t* modulus,uint32_t* workspace,uint16_t workspace_length){
     uint16_t capacity,index,bit; bigint_t result,current,product,temporary;
     if(!output||!base||!exponent||!modulus||!workspace||modulus->length==0U)return -1;
     capacity=modulus->length;
     if(output->capacity<capacity||workspace_length<(uint16_t)(4U*capacity))return -2;
     if(bigint_init(&result,workspace,capacity)!=0||bigint_init(&current,workspace+capacity,capacity)!=0||bigint_init(&product,workspace+(uint16_t)(2U*capacity),capacity)!=0||bigint_init(&temporary,workspace+(uint16_t)(3U*capacity),capacity)!=0)return -3;
+    if(bigint_mont_ok(modulus))return bigint_modexp_mont(output,base,exponent,modulus,workspace)==0?0:-4;
     if(modulus->length==1U&&modulus->limbs[0]==1U)result.length=0U;else{result.limbs[0]=1U;result.length=1U;}
     if(bigint_mod_reduce(&current,base,modulus)!=0)return -4;
     for(index=exponent->length;index>0U;index--){
@@ -195,6 +265,7 @@ int bigint_modexp_u32(bigint_t* output,const bigint_t* base,uint32_t exponent,co
     capacity=modulus->length;
     if(output->capacity<capacity||workspace_length<(uint16_t)(4U*capacity))return -2;
     if(bigint_init(&result,workspace,capacity)!=0||bigint_init(&current,workspace+capacity,capacity)!=0||bigint_init(&product,workspace+(uint16_t)(2U*capacity),capacity)!=0||bigint_init(&temporary,workspace+(uint16_t)(3U*capacity),capacity)!=0)return -3;
+    if(bigint_mont_ok(modulus)){uint32_t e1=exponent;bigint_t ev;ev.limbs=&e1;ev.capacity=1U;ev.length=1U;return bigint_modexp_mont(output,base,&ev,modulus,workspace)==0?0:-4;}
     if(modulus->length==1U&&modulus->limbs[0]==1U)result.length=0U;else{result.limbs[0]=1U;result.length=1U;}
     if(bigint_mod_reduce(&current,base,modulus)!=0)return -4;
     while(exponent){

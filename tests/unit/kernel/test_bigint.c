@@ -141,4 +141,25 @@ void test_bigint_robustness_even_modulus_base_larger_exponents(void) {
 
 void test_bigint_constant_width_modular_primitives(void){uint32_t a_limbs[1],b_limbs[1],m_limbs[1],legacy_limbs[1],ct_limbs[1],temporary_limbs[1];bigint_t a,b,m,legacy,ct,temporary;TEST_ASSERT_EQUAL(0,bigint_init(&a,a_limbs,1));TEST_ASSERT_EQUAL(0,bigint_init(&b,b_limbs,1));TEST_ASSERT_EQUAL(0,bigint_init(&m,m_limbs,1));TEST_ASSERT_EQUAL(0,bigint_init(&legacy,legacy_limbs,1));TEST_ASSERT_EQUAL(0,bigint_init(&ct,ct_limbs,1));TEST_ASSERT_EQUAL(0,bigint_init(&temporary,temporary_limbs,1));a.limbs[0]=5U;a.length=1U;b.limbs[0]=11U;b.length=1U;m.limbs[0]=13U;m.length=1U;TEST_ASSERT_EQUAL(0,bigint_mod_add(&legacy,&a,&b,&m));TEST_ASSERT_EQUAL(0,bigint_mod_add_ct(&ct,&a,&b,&m));TEST_ASSERT_EQUAL(legacy.limbs[0],ct.limbs[0]);TEST_ASSERT_EQUAL(0,bigint_mod_subtract_ct(&ct,&a,&b,&m));TEST_ASSERT_EQUAL(7U,ct.limbs[0]);TEST_ASSERT_EQUAL(0,bigint_mod_multiply(&legacy,&a,&b,&m,&temporary));TEST_ASSERT_EQUAL(0,bigint_mod_multiply_ct(&ct,&a,&b,&m,&temporary));TEST_ASSERT_EQUAL(legacy.limbs[0],ct.limbs[0]);TEST_ASSERT_EQUAL(3U,ct.limbs[0]);}
 
-int main(void){unity_init();RUN_TEST(test_bigint_arithmetic_and_modexp);RUN_TEST(test_bigint_modexp_multilimb);RUN_TEST(test_bigint_modexp_leading_zeros);RUN_TEST(test_bigint_robustness_even_modulus_base_larger_exponents);RUN_TEST(test_bigint_constant_width_modular_primitives);unity_print_results();unity_cleanup();return unity_stats.tests_failed==0?0:1;}
+#include "bigint_mont_vectors.inc"
+/* Lot 48 (A2): bigint_modexp / bigint_modexp_u32 (Montgomery path for odd
+ * moduli) against Python pow() on 32..4096-bit moduli, with bases 0, 1,
+ * m-1, m and above m. */
+void test_bigint_modexp_montgomery_vectors(void){
+    static uint32_t ml[128],el[32],bl[130],ol[128],ws[4U*128U];
+    bigint_t m,e,b,o;uint16_t k,i,len;
+    for(k=0U;k<(uint16_t)(sizeof(mont_vectors)/sizeof(mont_vectors[0]));k++){
+        TEST_ASSERT_EQUAL(0,bigint_init(&m,ml,mont_vectors[k].n));TEST_ASSERT_EQUAL(0,bigint_init(&e,el,32));
+        TEST_ASSERT_EQUAL(0,bigint_init(&b,bl,130));TEST_ASSERT_EQUAL(0,bigint_init(&o,ol,mont_vectors[k].n));
+        for(i=0U;i<mont_vectors[k].n;i++)ml[i]=mont_vectors[k].m[i];m.length=mont_vectors[k].n;
+        for(i=0U;i<mont_vectors[k].ne;i++)el[i]=mont_vectors[k].e[i];e.length=mont_vectors[k].ne;
+        for(i=0U;i<mont_vectors[k].nb;i++)bl[i]=mont_vectors[k].b[i];b.length=mont_vectors[k].nb;
+        while(b.length>0U&&bl[b.length-1U]==0U)b.length--;
+        if(mont_vectors[k].ne==1U&&el[0]==65537U)TEST_ASSERT_EQUAL(0,bigint_modexp_u32(&o,&b,65537U,&m,ws,(uint16_t)(4U*m.length)));
+        else TEST_ASSERT_EQUAL(0,bigint_modexp(&o,&b,&e,&m,ws,(uint16_t)(4U*m.length)));
+        len=mont_vectors[k].n;while(len>0U&&mont_vectors[k].r[len-1U]==0U)len--;
+        TEST_ASSERT_EQUAL(len,o.length);
+        for(i=0U;i<len;i++)TEST_ASSERT_EQUAL(mont_vectors[k].r[i],o.limbs[i]);
+    }
+}
+int main(void){unity_init();RUN_TEST(test_bigint_modexp_montgomery_vectors);RUN_TEST(test_bigint_arithmetic_and_modexp);RUN_TEST(test_bigint_modexp_multilimb);RUN_TEST(test_bigint_modexp_leading_zeros);RUN_TEST(test_bigint_robustness_even_modulus_base_larger_exponents);RUN_TEST(test_bigint_constant_width_modular_primitives);unity_print_results();unity_cleanup();return unity_stats.tests_failed==0?0:1;}

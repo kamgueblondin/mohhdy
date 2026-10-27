@@ -182,7 +182,11 @@ def main():
                                (error, peer.events, peer.error))
         complete = False
         progressions = 0
+        tls_t0 = time.monotonic()
+        poll_times = []
+        guest_ticks = []
         for _ in range(32):
+            poll_t0 = time.monotonic()
             start = send_command(client, proc, "ai-tls-poll")
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
@@ -203,6 +207,9 @@ def main():
             else:
                 raise RuntimeError("tls-poll mute; peer events=%r sizes=%r peer error=%r" %
                                    (peer.events, peer.sent_sizes, peer.error))
+            poll_times.append(time.monotonic() - poll_t0)
+            m = re.search(r"ai-tls-poll ticks (\d+)", text()[start:])
+            guest_ticks.append(int(m.group(1)) if m else -1)
             if progressions >= 7:
                 start = send_command(client, proc, "ai-runtime")
                 wait_for(proc, "Session LLM noyau", 20, start)
@@ -219,6 +226,15 @@ def main():
         if not complete:
             raise RuntimeError("TLS_COMPLETE absent; peer events=%r sizes=%r peer error=%r log=%s" %
                                (peer.events, peer.sent_sizes, peer.error, text()[-2000:]))
+        tls_total = time.monotonic() - tls_t0
+        print("TLS handshake: %.2f s over %d polls: %s" % (tls_total, len(poll_times),
+              " ".join("%.2f" % t for t in poll_times)))
+        print("TLS handshake guest ticks (10 ms): %s" % " ".join(str(t) for t in guest_ticks))
+        # Lot 48 (A2) guard: guest crypto time of the whole handshake. Before
+        # the field/Montgomery arithmetic it was ~198 ticks (1.98 s, X25519
+        # step 160); after, ~11. The bound leaves room for slow CI hosts.
+        if -1 in guest_ticks or sum(guest_ticks) > 60 or max(guest_ticks) > 30:
+            raise RuntimeError("TLS handshake too slow in the guest: ticks %r" % guest_ticks)
         start = send_command(client, proc, "ai-request ollama tiny /api/generate hi")
         try:
             wait_for(proc, "ai-request: POST LLM chiffre emis", 40, start)
