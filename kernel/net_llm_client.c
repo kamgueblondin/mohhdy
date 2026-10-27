@@ -38,6 +38,7 @@ typedef struct {
 #define KERNEL_LLM_DHCP_RETRY_LIMIT 5U
 static kernel_llm_dhcp_maintenance_t boot_llm_dhcp_maintenance;
 static uint32_t g_ifc_closed;   /* Lot 48: connections ended by the last change */
+static uint8_t g_ifc_llm_closed; /* Lot 48: the LLM client session was ended by it */
 static uint8_t g_ifc_static; /* Lot 47 (US-G04): static address set */
 /* Espaces de travail noyau fixes : aucun buffer du chemin DHCP→LLM n’est alloué. */
 net_arp_cache_t boot_llm_arp_cache;
@@ -1084,7 +1085,7 @@ static int kernel_peer_tls_app(os_peer_data_request_t* r) {
  * only for a change) is in the kernel before the relay. */
 static void ifc_report(os_peer_data_request_t* r) {
     uint32_t i;
-    for (i = 0U; i < 15U; i++) r->data[i] = 0U;
+    for (i = 0U; i < 16U; i++) r->data[i] = 0U;
     r->data[0] = !boot_llm_lease.valid && !g_ifc_static ? (uint8_t)OS_IFCONFIG_MODE_NONE :
                  g_ifc_static ? (uint8_t)OS_IFCONFIG_MODE_STATIC : (uint8_t)OS_IFCONFIG_MODE_DHCP;
     for (i = 0U; i < 4U; i++) {
@@ -1094,7 +1095,8 @@ static void ifc_report(os_peer_data_request_t* r) {
     }
     r->data[13] = boot_llm_lease.valid ? 1U : 0U;
     r->data[14] = (uint8_t)(g_ifc_closed > 255U ? 255U : g_ifc_closed);   /* Lot 48 */
-    r->length = 15U;
+    r->data[15] = g_ifc_llm_closed;
+    r->length = 16U;
 }
 /* Lot 48: an address change ends the TCP connections bound to the old
  * address. Each open one gets FIN+ACK sent from the old address (its peer
@@ -1123,6 +1125,13 @@ static void ifc_drop_connections(const uint8_t new_ip[4]) {
         web_slot_free(&g_web[i]);
     }
     if (g_web_open) web_arm();
+    /* the outgoing LLM client connection (ai-acquire): TLS close_notify and
+     * FIN from the old address by the existing close path, lease kept (it
+     * is replaced just after); the next ai-acquire starts from the new one */
+    if (boot_llm_socket_session.state.phase != NE2K_LLM_CONNECTION_IDLE) {
+        (void)kernel_llm_close_internal(1U);
+        g_ifc_llm_closed = 1U;
+    }
     if (boot_peer_listen_socket >= 0 && net_socket_get_state(boot_peer_listen_socket, &state) == 0 &&
         state != NET_TCP_STATE_LISTEN) {
         ifc_fin(boot_peer_listen_socket, boot_peer_remote_ip);
@@ -1133,6 +1142,7 @@ static void ifc_drop_connections(const uint8_t new_ip[4]) {
 static int kernel_ifconfig(os_peer_data_request_t* r) {
     int rc = 0;
     g_ifc_closed = 0U;
+    g_ifc_llm_closed = 0U;
     if (r->data[0] == OS_IFCONFIG_STATIC) {
         net_dhcp_lease_t next = boot_llm_lease;
         if (net_dhcp_static_apply(&next, r->data + 1, r->data + 5, r->data + 9) != 0) {

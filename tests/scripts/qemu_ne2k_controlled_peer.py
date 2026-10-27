@@ -172,6 +172,7 @@ class ControlledEthernetPeer:
         self.guest_next = None
         self.guest_acked = 0
         self.peer_close_after_sse = peer_close_after_sse
+        self.fin_ips = []
         self.events = {"discover": 0, "offer": 0, "request": 0, "ack": 0,
                        "arp": 0, "dns": 0, "syn": 0, "syn_ack": 0, "client_hello": 0,
                        "server_hello": 0, "server_hello_ack": 0}
@@ -401,6 +402,16 @@ class ControlledEthernetPeer:
             return
         if flags & 0x10:
             self.guest_acked = max(self.guest_acked, acknowledgment)
+        if flags & 0x01:
+            # Lot 48: guest FIN and the address it came from (net-if change)
+            self._bump("guest_fin")
+            self.fin_ips.append(bytes(dest_ip))
+        if payload and payload[:1] == b"\x15" and self.tls_step >= 6 and not \
+                (self.full_tls and self.peer_close_after_sse and self.tls_step == 8):
+            # Lot 48: TLS alert record (close_notify on an address change)
+            self._bump("client_alert")
+            if not flags & 0x01:
+                return
         if payload and self._tls_handshake_type(payload) == 1 and self.loss_plan:
             self._bump("client_hello_frames")
         if payload and self._tls_handshake_type(payload) == 1 and "client_hello" in self.loss_plan:

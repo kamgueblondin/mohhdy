@@ -242,6 +242,26 @@ def main():
         missing = [name for name in required if peer.events.get(name, 0) == 0]
         if missing:
             raise RuntimeError("missing controlled TLS/HTTP events: %s" % ", ".join(missing))
+        # Lot 48: the outgoing LLM TLS connection across an address change.
+        # net-if static ends it: TLS close_notify and FIN sent from the old
+        # address 10.32.0.15, reported as llm-closed 1; the session is idle.
+        start = send_command(client, proc, "net-if static 10.32.0.77 255.255.255.0 10.32.0.2")
+        try:
+            wait_for(proc, "net-if ok mode static ip 10.32.0.77 ", 60, start)
+            wait_for(proc, " llm-closed 1", 10, start)
+            wait_for_prompt(proc, start)
+        except RuntimeError as error:
+            raise RuntimeError("%s; peer events=%r" % (error, peer.events))
+        deadline = time.monotonic() + 20
+        while not peer.fin_ips and time.monotonic() < deadline:
+            time.sleep(0.2)
+        if peer.events.get("client_alert", 0) < 1:
+            raise RuntimeError("no TLS close_notify after the address change: %r" % peer.events)
+        if not peer.fin_ips or peer.fin_ips[0] != b"\x0a\x20\x00\x0f":
+            raise RuntimeError("LLM FIN missing or not from the old address: %r" % peer.fin_ips)
+        if peer.error is not None:
+            raise RuntimeError("controlled Ethernet peer failed after net-if: %s" % peer.error)
+        print("net-if: LLM TLS session ended by close_notify + FIN from 10.32.0.15 (llm-closed 1)")
         if EXPECTED_GUEST_MAC:
             try:
                 expected_mac = bytes(int(part, 16) for part in EXPECTED_GUEST_MAC.split(":"))

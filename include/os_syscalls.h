@@ -382,7 +382,8 @@
  * (OS_IFCONFIG_MODE_*), [1..4] address, [5..8] mask, [9..12] gateway,
  * [13] lease valid. A change is accepted from the root shell only.
  * Lot 48: data[14] = TCP connections on the old address ended with FIN by
- * this change (listeners kept); reply length 15. */
+ * this change (listeners kept); data[15] = 1 when the outgoing LLM client
+ * session was ended (close_notify + FIN); reply length 16. */
 #define OS_PEER_IFCONFIG 14U
 #define OS_IFCONFIG_GET 0U
 #define OS_IFCONFIG_STATIC 1U
