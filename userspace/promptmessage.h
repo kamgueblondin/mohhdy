@@ -112,6 +112,8 @@ int pm_disasm(const pm_program_t* prog, char* out, int cap);
 /* Lot 5 US-055: PMC1 bytecode to one portable C99 translation unit.
  * Returns the length written, PM_ERR_LIMIT when cap is too small. */
 int pm_cross_c(const pm_program_t* prog, char* out, int cap, int* instructions);
+/* Second host target (Python 3). Same contract as pm_cross_c. */
+int pm_cross_py(const pm_program_t* prog, char* out, int cap, int* instructions);
 /* Lot 5 US-058: local rule based assistant (no language model). Returns
  * PM_OK (lint) or PM_ERR_SYNTAX (error with hints). */
 int pm_assist(const char* src, int len, const pm_host_t* host, char* out, int cap, int* hints);

@@ -191,6 +191,51 @@ static void test_link_at(void) {
     TEST_ASSERT_EQUAL(0, we_link_at(&g_doc, 2, y + 20, href, (int)sizeof(href)));
 }
 
+/* Lot 49 (US-031, partial): flex row/column and a fixed grid. No JavaScript. */
+static void test_flex_and_grid(void) {
+    static const char flex[] =
+        "<html><body style='margin:0'>"
+        "<div id=row style='display:flex;gap:10px'>"
+        "<div id=a style='width:40px;height:20px'></div>"
+        "<div id=b style='width:40px;height:20px'></div></div>"
+        "<div id=col style='display:flex;flex-direction:column;gap:4px'>"
+        "<div id=c style='height:10px'></div>"
+        "<div id=d style='height:10px'></div></div>"
+        "<div id=g style='display:grid;grid-template-columns:repeat(2, 1fr);gap:8px'>"
+        "<div id=e style='height:10px'></div><div id=f style='height:10px'></div>"
+        "<div id=h style='height:10px'></div></div>"
+        "</body></html>";
+    int row, a, b, col, c, d, g, e, f, h, cell;
+    TEST_ASSERT_EQUAL(0, we_render(&g_doc, flex, (int)sizeof(flex) - 1, 90));
+    row = we_find_id(&g_doc, "row");
+    a = we_find_id(&g_doc, "a");
+    b = we_find_id(&g_doc, "b");
+    TEST_ASSERT_EQUAL(WE_DISP_FLEX, g_doc.nodes[row].display);
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[a].x);
+    TEST_ASSERT_EQUAL(40, g_doc.nodes[a].w);
+    TEST_ASSERT_EQUAL(20, g_doc.nodes[a].h);
+    TEST_ASSERT_EQUAL(50, g_doc.nodes[b].x);          /* (90-10)/2 + gap */
+    TEST_ASSERT_EQUAL(g_doc.nodes[a].y, g_doc.nodes[b].y);
+    col = we_find_id(&g_doc, "col");
+    c = we_find_id(&g_doc, "c");
+    d = we_find_id(&g_doc, "d");
+    TEST_ASSERT_EQUAL(1, g_doc.nodes[col].flex_dir);
+    TEST_ASSERT_EQUAL(g_doc.nodes[c].x, g_doc.nodes[d].x);
+    TEST_ASSERT_EQUAL(g_doc.nodes[c].y + 10 + 4, g_doc.nodes[d].y);
+    g = we_find_id(&g_doc, "g");
+    e = we_find_id(&g_doc, "e");
+    f = we_find_id(&g_doc, "f");
+    h = we_find_id(&g_doc, "h");
+    TEST_ASSERT_EQUAL(WE_DISP_GRID, g_doc.nodes[g].display);
+    TEST_ASSERT_EQUAL(2, g_doc.nodes[g].grid_cols);
+    cell = (90 - 8) / 2;
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[e].x);
+    TEST_ASSERT_EQUAL(cell + 8, g_doc.nodes[f].x);
+    TEST_ASSERT_EQUAL(g_doc.nodes[e].y, g_doc.nodes[f].y);
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[h].x);
+    TEST_ASSERT_EQUAL(g_doc.nodes[e].y + 10 + 8, g_doc.nodes[h].y);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_parse_tree_and_title);
@@ -201,6 +246,7 @@ int main(void) {
     RUN_TEST(test_inspector_and_diagnostics);
     RUN_TEST(test_limits);
     RUN_TEST(test_link_at);
+    RUN_TEST(test_flex_and_grid);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

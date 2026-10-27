@@ -948,7 +948,8 @@ int pm_disasm(const pm_program_t* prog, char* out, int cap) {
  * instruction becomes a labelled statement, jumps become goto, the value
  * stack and the semantics are those of vm_exec (same step budget, same path
  * rule, same "pm> " output). system.memory reads MOHHDY_MEM on the target.
- * One target only (C99 source); no native code generator. */
+ * pm_cross_c emits C99. pm_cross_py emits Python 3 (same stack, budget
+ * and path rule). No native code generator: US-055 stays partial. */
 typedef struct { char* o; int n, cap, over; } pm_xo_t;
 static void xo_s(pm_xo_t* x, const char* s) {
     while (*s) {
@@ -1084,6 +1085,233 @@ int pm_cross_c(const pm_program_t* prog, char* out, int cap, int* instructions) 
     return x.n;
 }
 
+/* Lot 49: second host target. The guest prints the source; the host runs
+ * it with python3. Semantics match vm_exec and the C99 target. */
+static const char k_pm_py_prelude[] =
+    "# PromptMessage -> Python 3 (pm-cross). Run: python3 app.py [phrase]\n"
+    "# system.memory reads MOHHDY_MEM (default 0).\n"
+    "import os, sys\n"
+    "class V:\n"
+    "    def __init__(self):\n"
+    "        self.s = 0\n        self.n = 0\n        self.t = \"\"\n"
+    "S = [V() for _ in range(12)]\n"
+    "sp = 0\nxf = 0\ntrig = 0\nsteps = 0\n"
+    "def die(m):\n"
+    "    sys.stderr.write(\"pm error: %s\\n\" % m)\n"
+    "    raise SystemExit(3)\n"
+    "def txt(v):\n"
+    "    return v.t if v.s else str(v.n)\n"
+    "def tru(v):\n"
+    "    return (v.t != \"\") if v.s else (v.n != 0)\n"
+    "def ieq(a, b):\n"
+    "    return a.lower() == b.lower()\n"
+    "def top():\n"
+    "    global sp\n"
+    "    if sp < 1: die(\"stack underflow\")\n"
+    "    return S[sp - 1]\n"
+    "def push():\n"
+    "    global sp\n"
+    "    if sp >= 12: die(\"stack overflow\")\n"
+    "    sp += 1\n"
+    "    return S[sp - 1]\n"
+    "def pi(n):\n"
+    "    v = push(); v.s = 0; v.n = n; v.t = \"\"\n"
+    "def atoi(e):\n"
+    "    i = 0; n = 0; sign = 1\n"
+    "    if e[:1] == \"-\":\n        sign = -1; i = 1\n"
+    "    while i < len(e) and e[i] >= \"0\" and e[i] <= \"9\":\n"
+    "        n = n * 10 + ord(e[i]) - 48; i += 1\n"
+    "    return 0 if i == (1 if e[:1] == \"-\" else 0) else sign * n\n"
+    "def sysmem():\n"
+    "    e = os.environ.get(\"MOHHDY_MEM\")\n"
+    "    pi(atoi(e) if e else 0)\n"
+    "def add():\n"
+    "    global sp\n"
+    "    if sp < 2: die(\"stack underflow\")\n"
+    "    l = S[sp - 2]; r = S[sp - 1]\n"
+    "    if (not l.s) and (not r.s): l.n = l.n + r.n\n"
+    "    else:\n"
+    "        l.t = (txt(l) + txt(r))[:191]; l.s = 1; l.n = 0\n"
+    "    sp -= 1\n"
+    "def cmp(c):\n"
+    "    global sp\n"
+    "    if sp < 2: die(\"stack underflow\")\n"
+    "    l = S[sp - 2]; r = S[sp - 1]\n"
+    "    if c == 6: x = txt(r) in txt(l)\n"
+    "    elif (not l.s) and (not r.s):\n"
+    "        p = l.n; q = r.n\n"
+    "        x = (p == q) if c == 0 else (p != q) if c == 1 else (p < q) if c == 2 else (p > q) if c == 3 else (p <= q) if c == 4 else (p >= q)\n"
+    "    else:\n"
+    "        a = txt(l); b = txt(r)\n"
+    "        if c == 0: x = a == b\n"
+    "        elif c == 1: x = a != b\n"
+    "        else: die(\"order compare on text\")\n"
+    "    l.s = 0; l.n = 1 if x else 0; l.t = \"\"; sp -= 1\n"
+    "def logic(both):\n"
+    "    global sp\n"
+    "    if sp < 2: die(\"stack underflow\")\n"
+    "    l = S[sp - 2]; r = S[sp - 1]\n"
+    "    x = tru(l); y = tru(r)\n"
+    "    l.s = 0; l.n = 1 if ((x and y) if both else (x or y)) else 0; l.t = \"\"; sp -= 1\n"
+    "def not_():\n"
+    "    v = top(); v.n = 0 if tru(v) else 1; v.s = 0; v.t = \"\"\n"
+    "def fexists():\n"
+    "    v = top(); p = txt(v); v.s = 0; v.t = \"\"\n"
+    "    try:\n"
+    "        f = open(p, \"rb\"); f.close(); v.n = 1\n"
+    "    except OSError:\n"
+    "        v.n = 0\n"
+    "def jz():\n"
+    "    global sp\n"
+    "    v = top(); sp -= 1\n"
+    "    return not tru(v)\n"
+    "def print_():\n"
+    "    global sp\n"
+    "    sys.stdout.write(\"pm> %s\\n\" % txt(top())); sp -= 1\n"
+    "def allowed(p):\n"
+    "    if (not p) or (\"..\" in p): return False\n"
+    "    for pre in (\"/bin/\", \"/models/\", \"bin/\", \"models/\"):\n"
+    "        if p.startswith(pre): return False\n"
+    "    return True\n"
+    "def write_(app):\n"
+    "    global sp\n"
+    "    if sp < 2: die(\"stack underflow\")\n"
+    "    p = txt(S[sp - 2]); c = txt(S[sp - 1]); sp -= 2\n"
+    "    if not allowed(p): die(\"path denied\")\n"
+    "    if len(c) < 191: c = c + \"\\n\"\n"
+    "    try:\n"
+    "        f = open(p, \"ab\" if app else \"wb\")\n"
+    "        data = c.encode(\"latin1\")\n"
+    "        if f.write(data) != len(data): die(\"write failed\")\n"
+    "        f.close()\n"
+    "    except OSError:\n"
+    "        die(\"write failed\")\n"
+    "def show():\n"
+    "    global sp\n"
+    "    p = txt(top()); sp -= 1\n"
+    "    try:\n"
+    "        f = open(p, \"rb\"); raw = f.read(191); f.close()\n"
+    "    except OSError:\n"
+    "        die(\"file not found\")\n"
+    "    n = len(raw); buf = raw + b\"\\x00\"; s = 0; i = 0\n"
+    "    while i <= n:\n"
+    "        if buf[i] == 10 or buf[i] == 0:\n"
+    "            c0 = buf[i]\n"
+    "            if i > s or c0 == 10:\n"
+    "                sys.stdout.write(\"pm> %s\\n\" % buf[s:i].decode(\"latin1\"))\n"
+    "            s = i + 1\n"
+    "        i += 1\n"
+    "def expect(line):\n"
+    "    global sp, xf\n"
+    "    v = top()\n"
+    "    if not tru(v):\n"
+    "        xf += 1\n"
+    "        sys.stdout.write(\"pm-expect failed line %d\\n\" % line)\n"
+    "    sp -= 1\n"
+    "def fin():\n"
+    "    sys.stdout.flush()\n"
+    "    return 2 if xf else 0\n"
+    "def T():\n"
+    "    global steps\n"
+    "    steps += 1\n"
+    "    if steps > 20000: die(\"step budget exhausted\")\n"
+    "def pool_at(a):\n"
+    "    end = P.find(\"\\0\", a)\n"
+    "    if end < 0: end = len(P)\n"
+    "    return P[a:end][:191]\n";
+
+int pm_cross_py(const pm_program_t* prog, char* out, int cap, int* instructions) {
+    pm_xo_t x;
+    int pc = 0, i, count = 0;
+    if (instructions) *instructions = 0;
+    if (!prog || !out || cap < 64 || prog->code_len == 0) return PM_ERR_LIMIT;
+    x.o = out; x.n = 0; x.cap = cap; x.over = 0; out[0] = 0;
+    xo_s(&x, k_pm_py_prelude);
+    xo_s(&x, "P = \"");
+    for (i = 0; i < prog->pool_len; i++) {
+        unsigned char c = (unsigned char)prog->pool[i];
+        char esc[5];
+        if (c == '\\' || c == '"') { esc[0] = '\\'; esc[1] = (char)c; esc[2] = 0; xo_s(&x, esc); }
+        else if (c >= 32 && c < 127) { esc[0] = (char)c; esc[1] = 0; xo_s(&x, esc); }
+        else {
+            esc[0] = '\\'; esc[1] = 'x';
+            esc[2] = "0123456789abcdef"[c >> 4];
+            esc[3] = "0123456789abcdef"[c & 15];
+            esc[4] = 0;
+            xo_s(&x, esc);
+        }
+    }
+    xo_s(&x, "\"\n");
+    xo_s(&x, "def ps(a):\n    v = push(); v.s = 1; v.n = 0; v.t = pool_at(a)\n");
+    xo_s(&x, "def ld(a):\n    global sp\n    push()\n    src = R[a]; dst = S[sp - 1]\n    dst.s = src.s; dst.n = src.n; dst.t = src.t\n");
+    xo_s(&x, "def st(a):\n    global sp\n    src = S[sp - 1]; dst = R[a]\n    dst.s = src.s; dst.n = src.n; dst.t = src.t; sp -= 1\n");
+    xo_s(&x, "R = [V() for _ in range("); xo_i(&x, prog->nvars ? prog->nvars : 1); xo_s(&x, ")]\n");
+    xo_s(&x, "phrase = sys.argv[1] if len(sys.argv) > 1 else None\n");
+    xo_s(&x, "def run():\n    global trig\n    pc = 0\n    while True:\n");
+    xo_s(&x, "        if pc == -1:\n            trig = 1\n");
+    for (i = 0; i < prog->ntrig; i++) {
+        xo_s(&x, "            if phrase is not None and ieq(phrase, pool_at(");
+        xo_i(&x, prog->triggers[i].phrase);
+        xo_s(&x, ")):\n                pc = "); xo_i(&x, prog->triggers[i].addr); xo_s(&x, "\n                continue\n");
+    }
+    xo_s(&x, "            die(\"no trigger\")\n");
+    xo_s(&x, "        if pc == -2:\n            if phrase is not None and not trig:\n                pc = -1\n                continue\n            return fin()\n");
+    while (pc < prog->code_len) {
+        int op = prog->code[pc], at = pc, a = 0, next;
+        if (op >= OP_COUNT) return PM_ERR_IMAGE;
+        pc++;
+        if (op == OP_PUSHI) { if (pc + 4 > prog->code_len) return PM_ERR_IMAGE; a = rd32(prog->code + pc); pc += 4; }
+        else if (op == OP_LINE || op == OP_PUSHS || op == OP_JMP || op == OP_JZ || op == OP_EXPECT) {
+            if (pc + 2 > prog->code_len) return PM_ERR_IMAGE;
+            a = rd16(prog->code + pc); pc += 2;
+        } else if (op == OP_LOAD || op == OP_STORE || op == OP_CMP) {
+            if (pc + 1 > prog->code_len) return PM_ERR_IMAGE;
+            a = prog->code[pc++];
+        }
+        next = pc;
+        if ((op == OP_JMP || op == OP_JZ) && a >= prog->code_len) return PM_ERR_IMAGE;
+        if ((op == OP_LOAD || op == OP_STORE) && a >= prog->nvars) return PM_ERR_IMAGE;
+        if (op == OP_PUSHS && a >= prog->pool_len) return PM_ERR_IMAGE;
+        count++;
+        xo_s(&x, "        if pc == "); xo_i(&x, at); xo_s(&x, ":\n            T()\n");
+        switch (op) {
+        case OP_HALT:
+            xo_s(&x, "            if phrase is not None and not trig:\n                pc = -1\n                continue\n            return fin()\n");
+            break;
+        case OP_RET: xo_s(&x, "            return fin()\n"); break;
+        case OP_LINE: xo_s(&x, "            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_PUSHI: xo_s(&x, "            pi("); xo_i(&x, a); xo_s(&x, ")\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_PUSHS: xo_s(&x, "            ps("); xo_i(&x, a); xo_s(&x, ")\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_LOAD: xo_s(&x, "            ld("); xo_i(&x, a); xo_s(&x, ")\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_STORE: xo_s(&x, "            st("); xo_i(&x, a); xo_s(&x, ")\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_SYSMEM: xo_s(&x, "            sysmem()\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_ADD: xo_s(&x, "            add()\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_CMP: xo_s(&x, "            cmp("); xo_i(&x, a); xo_s(&x, ")\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_AND: xo_s(&x, "            logic(1)\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_OR: xo_s(&x, "            logic(0)\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_NOT: xo_s(&x, "            not_()\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_FEXISTS: xo_s(&x, "            fexists()\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_JMP: xo_s(&x, "            pc = "); xo_i(&x, a); xo_s(&x, "\n            continue\n"); break;
+        case OP_JZ:
+            xo_s(&x, "            if jz():\n                pc = "); xo_i(&x, a);
+            xo_s(&x, "\n                continue\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n");
+            break;
+        case OP_PRINT: xo_s(&x, "            print_()\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_WRITE: xo_s(&x, "            write_(0)\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_APPEND: xo_s(&x, "            write_(1)\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_SHOW: xo_s(&x, "            show()\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        case OP_EXPECT: xo_s(&x, "            expect("); xo_i(&x, a); xo_s(&x, ")\n            pc = "); xo_i(&x, next); xo_s(&x, "\n            continue\n"); break;
+        default: return PM_ERR_IMAGE;
+        }
+        if (x.over) return PM_ERR_LIMIT;
+    }
+    xo_s(&x, "        if pc == -2:\n            pass\n        die(\"bad pc\")\n");
+    xo_s(&x, "raise SystemExit(run())\n");
+    if (x.over) return PM_ERR_LIMIT;
+    if (instructions) *instructions = count;
+    return x.n;
+}
+
 /* ------------------------------------------- US-058 development assistant */
 /* Lot 5: local, rule based (no language model). On a compile error it
  * names the nearest keyword (edit distance <= 2) to the first word of the
@@ -1171,6 +1399,9 @@ int pm_assist(const char* src, int len, const pm_host_t* host, char* out, int ca
         }
         if (pm_word_in(line, "repeat") && !pm_word_in(line, "times")) {
             s_cat(out, "pm-assist hint: write 'repeat N times'\n", cap); count++;
+        }
+        if (s_has(prog.err, "missing end")) {
+            s_cat(out, "pm-assist hint: this block needs an 'end'\n", cap); count++;
         }
         if (count == 0) { s_cat(out, "pm-assist hint: check quotes and the block 'end' lines\n", cap); count++; }
         if (hints) *hints = count;

@@ -4,7 +4,9 @@
 Gaps found by driving the desktop by hand in QEMU, each checked here:
   1. the explorer and the shell list the same tree: /docs, /home (HOME is
      /home/user) were shell-private ramfs directories, absent from the
-     explorer; the explorer now enters /docs;
+     explorer. The desktop copies them into the kernel VFS when `gui`
+     starts (not at shell init: the vfs-service contract needs an empty
+     overlay at boot). The explorer then enters /docs;
   2. maximize repaints at once: the window event arrived as characters and
      each one repainted the whole scene, so a maximized editor showed its
      old grid for about 2 s; 0.5 s after the click the bottom rows of the

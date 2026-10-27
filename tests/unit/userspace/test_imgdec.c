@@ -175,16 +175,27 @@ static void test_jpeg_baseline(void) {
     check_jpeg(img_mire420_jpg, sizeof(img_mire420_jpg), 3, 14, 30);
     check_jpeg(img_mire_gray_jpg, sizeof(img_mire_gray_jpg), 1, 4, 5);
     check_jpeg(img_mire_rst_jpg, sizeof(img_mire_rst_jpg), 3, 14, 30);   /* DRI + RSTn */
+    check_jpeg(img_mire_prog_jpg, sizeof(img_mire_prog_jpg), 3, 14, 30); /* SOF2, same 4:2:0 mire */
     TEST_ASSERT_EQUAL(0, strcmp("jpeg", imgdec_fmt_name(IMGDEC_JPEG)));
 }
 
 static void test_jpeg_refusals_and_bounds(void) {
     imgdec_t img;
     static unsigned char bad[4096];
+    /* arithmetic SOF9: still refused, size reported */
+    static const unsigned char arith[] = {
+        0xFF, 0xD8, 0xFF, 0xC9, 0x00, 0x0B, 8, 0x00, 8, 0x00, 8, 1, 1, 0x11, 0, 0xFF, 0xD9
+    };
+    unsigned need;
     int i;
-    TEST_ASSERT_EQUAL(IMGDEC_E_UNSUP, imgdec_open(img_mire_prog_jpg, sizeof(img_mire_prog_jpg), g_scratch, sizeof(g_scratch), &img));
+    TEST_ASSERT_EQUAL(IMGDEC_E_UNSUP, imgdec_open(arith, sizeof(arith), g_scratch, sizeof(g_scratch), &img));
     TEST_ASSERT_EQUAL(IMGDEC_JPEG, img.fmt);
-    TEST_ASSERT_EQUAL(IMGS_W, img.w);         /* probe still reports the size */
+    TEST_ASSERT_EQUAL(8, img.w);
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_probe(img_mire_prog_jpg, sizeof(img_mire_prog_jpg), &img));
+    TEST_ASSERT_EQUAL(1, img.jpeg_prog);
+    need = imgdec_scratch_need(&img);
+    TEST_ASSERT_TRUE(need > (unsigned)(IMGS_W * IMGS_H * 3));   /* pixels plus coefficient blocks */
+    TEST_ASSERT_EQUAL(IMGDEC_E_TOOBIG, imgdec_open(img_mire_prog_jpg, sizeof(img_mire_prog_jpg), g_scratch, need - 1, &img));
     TEST_ASSERT_EQUAL(IMGDEC_E_TOOBIG, imgdec_open(img_mire444_jpg, sizeof(img_mire444_jpg), g_scratch, IMGS_W * IMGS_H * 3 - 1, &img));
     TEST_ASSERT_TRUE(imgdec_open(img_mire444_jpg, 100, g_scratch, sizeof(g_scratch), &img) < 0);
     /* corrupt entropy data: must stay bounded and never crash */

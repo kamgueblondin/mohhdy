@@ -437,6 +437,20 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (w_ieq_n(v, vl, "none")) n->display = WE_DISP_NONE;
         else if (w_ieq_n(v, vl, "block")) n->display = WE_DISP_BLOCK;
         else if (w_ieq_n(v, vl, "inline")) n->display = WE_DISP_INLINE;
+        else if (w_ieq_n(v, vl, "flex")) n->display = WE_DISP_FLEX;
+        else if (w_ieq_n(v, vl, "grid")) n->display = WE_DISP_GRID;
+    } else if (w_eq(prop, "flex-direction")) {
+        n->flex_dir = (uint8_t)(vl == 6 && w_ieq_n(v, vl, "column"));
+    } else if (w_eq(prop, "gap")) {
+        if (parse_len(v, vl, &px, 0) == 0 && px > 0) n->gap = (int16_t)px;
+    } else if (w_eq(prop, "grid-template-columns")) {
+        int i = 0, num = 0;
+        while (i < vl && w_space(v[i])) i++;
+        if (w_ieq_n(v + i, vl - i, "repeat(")) {
+            i += 7;
+            while (i < vl && v[i] >= '0' && v[i] <= '9') num = num * 10 + (v[i++] - '0');
+            if (num >= 1 && num <= 8) n->grid_cols = (uint8_t)num;
+        }
     } else if (w_eq(prop, "color")) { if (parse_color(v, vl, &col) == 0) n->color = col; }
     else if (w_eq(prop, "background") || w_eq(prop, "background-color")) {
         if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
@@ -674,13 +688,17 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
 }
 
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth);
+static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth);
+static int is_box(uint8_t display) {
+    return display == WE_DISP_BLOCK || display == WE_DISP_FLEX || display == WE_DISP_GRID;
+}
 
 static int layout_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth) {
     int c = d->nodes[idx].first, y = cy;
     while (c >= 0) {
         we_node_t* n = &d->nodes[c];
         if (n->display == WE_DISP_NONE) { c = n->next; continue; }
-        if (n->display == WE_DISP_BLOCK) {
+        if (is_box(n->display)) {
             y += layout_block(d, c, cx, y, cwidth, depth + 1);
             c = n->next;
             continue;
@@ -690,7 +708,7 @@ static int layout_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int
             static we_inline_t f;
             f.d = d; f.x0 = cx; f.width = cwidth; f.y = y; f.align = d->nodes[idx].align;
             f.cur_w = 0; f.nwords = 0; f.lines = 0; f.pending_space = 0;
-            while (c >= 0 && d->nodes[c].display != WE_DISP_BLOCK) {
+            while (c >= 0 && !is_box(d->nodes[c].display)) {
                 if (d->nodes[c].display != WE_DISP_NONE) inline_node(&f, c, depth + 1);
                 c = d->nodes[c].next;
             }
@@ -718,7 +736,10 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     content_x = bx + n->border + n->padding[3];
     content_w = bw - 2 * n->border - n->padding[1] - n->padding[3];
     if (content_w < WE_CHAR_W) content_w = WE_CHAR_W;
-    content_h = layout_children(d, idx, content_x, by + n->border + n->padding[0], content_w, depth);
+    if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID)
+        content_h = layout_flex(d, idx, content_x, by + n->border + n->padding[0], content_w, depth);
+    else
+        content_h = layout_children(d, idx, content_x, by + n->border + n->padding[0], content_w, depth);
     if (n->height >= 0) content_h = n->height;
     bh = content_h + n->padding[0] + n->padding[2] + 2 * n->border;
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw; n->h = (int16_t)bh;
@@ -733,6 +754,64 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     }
     (void)border_slot;
     return n->margin[0] + bh + n->margin[2];
+}
+
+static int flex_item(const we_node_t* n) { return !n->is_text && n->display != WE_DISP_NONE; }
+
+/* Flex items share the content box (row: equal columns, column: stacked).
+ * Grid places them row-major in N equal columns. gap is the same on both axes. */
+static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth) {
+    we_node_t* n = &d->nodes[idx];
+    int c, items = 0, gap, x, y, cols, cell, col, row_y, row_h;
+    if (depth > WE_DEPTH_MAX) return 0;
+    for (c = n->first; c >= 0; c = d->nodes[c].next) if (flex_item(&d->nodes[c])) items++;
+    gap = n->gap > 0 ? n->gap : 0;
+    if (n->display == WE_DISP_GRID) {
+        cols = n->grid_cols > 0 ? n->grid_cols : 1;
+        if (cols > 8) cols = 8;
+        cell = cwidth - (cols > 1 ? gap * (cols - 1) : 0);
+        if (cell < 0) cell = 0;
+        cell = cols ? cell / cols : 0;
+        if (cell < WE_CHAR_W) cell = WE_CHAR_W;
+        col = 0; row_y = cy; row_h = 0; x = cx;
+        for (c = n->first; c >= 0; c = d->nodes[c].next) {
+            int h;
+            if (!flex_item(&d->nodes[c])) continue;
+            if (col == cols) { row_y += row_h + gap; row_h = 0; col = 0; x = cx; }
+            h = layout_block(d, c, x, row_y, cell, depth + 1);
+            if (h > row_h) row_h = h;
+            x += cell + gap;
+            col++;
+        }
+        return row_y + row_h - cy;
+    }
+    if (n->flex_dir == 1) {
+        y = cy;
+        items = 0;
+        for (c = n->first; c >= 0; c = d->nodes[c].next) {
+            if (!flex_item(&d->nodes[c])) continue;
+            if (items) y += gap;
+            y += layout_block(d, c, cx, y, cwidth, depth + 1);
+            items++;
+        }
+        return y - cy;
+    }
+    {
+        int gaps = items > 1 ? gap * (items - 1) : 0;
+        int inner = cwidth - gaps, each;
+        if (inner < 0) inner = 0;
+        each = items ? inner / items : cwidth;
+        if (each < WE_CHAR_W) each = WE_CHAR_W;
+        x = cx; y = 0;
+        for (c = n->first; c >= 0; c = d->nodes[c].next) {
+            int h;
+            if (!flex_item(&d->nodes[c])) continue;
+            h = layout_block(d, c, x, cy, each, depth + 1);
+            if (h > y) y = h;
+            x += each + gap;
+        }
+        return y;
+    }
 }
 
 int we_layout(we_doc_t* d, int viewport_w) {
@@ -800,7 +879,8 @@ void we_dump_dom(const we_doc_t* d, we_out_fn out, void* ctx) {
         out(ctx, n->tag);
         if (n->id[0]) { out(ctx, "#"); out(ctx, n->id); }
         if (n->cls[0]) { out(ctx, " class="); out(ctx, n->cls); }
-        out(ctx, n->display == WE_DISP_NONE ? " none" : n->display == WE_DISP_BLOCK ? " block" : " inline");
+        out(ctx, n->display == WE_DISP_NONE ? " none" : n->display == WE_DISP_BLOCK ? " block"
+            : n->display == WE_DISP_FLEX ? " flex" : n->display == WE_DISP_GRID ? " grid" : " inline");
         out(ctx, "\n");
     }
 }
@@ -811,7 +891,8 @@ void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx) {
     n = &d->nodes[node];
     out(ctx, "inspect "); out(ctx, n->is_text ? "#text" : n->tag);
     if (n->id[0]) { out(ctx, "#"); out(ctx, n->id); }
-    out(ctx, n->display == WE_DISP_NONE ? " display none" : n->display == WE_DISP_BLOCK ? " display block" : " display inline");
+    out(ctx, n->display == WE_DISP_NONE ? " display none" : n->display == WE_DISP_BLOCK ? " display block"
+        : n->display == WE_DISP_FLEX ? " display flex" : n->display == WE_DISP_GRID ? " display grid" : " display inline");
     out_num(out, ctx, " box ", n->x); out_num(out, ctx, " ", n->y);
     out_num(out, ctx, " ", n->w); out_num(out, ctx, "x", n->h);
     out_hex(out, ctx, " color ", n->color);

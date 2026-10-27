@@ -309,6 +309,63 @@ void test_cross_compile_c99_matches_vm(void) {
     TEST_ASSERT_EQUAL(0, system(cmd));
 }
 
+/* Lot 49 US-055: Python 3 target, same output as the VM. */
+void test_cross_compile_py_matches_vm(void) {
+    char dir[] = "/tmp/pmcrosspyXXXXXX";
+    char cmd[512], got[4096];
+    FILE* f;
+    int n, instr = 0;
+    const char* src =
+        "set name to \"MOHHDY\"\n"
+        "set n to 2 + 1\n"
+        "repeat $n times\n"
+        "  append \"line \" + $name to file \"log.txt\"\n"
+        "end\n"
+        "if $n == 3 and $name contains \"HH\" then\n"
+        "  print \"three ?\?= (ok) 'q'\"\n"
+        "else\n"
+        "  print \"other\"\n"
+        "end\n"
+        "if not file \"missing.txt\" exists then print \"absent\"\n"
+        "show file \"log.txt\"\n"
+        "if system.memory < 50 then print \"mem low\" + system.memory\n"
+        "expect $n == 3\n"
+        "when user says \"bonjour\" then print \"salut \" + $name\n";
+    setUp();
+    g_mem = 7;
+    TEST_ASSERT_EQUAL(PM_OK, run_src(src));
+    TEST_ASSERT_NOT_NULL(mkdtemp(dir));
+    n = pm_cross_py(&g_prog, g_csrc, (int)sizeof(g_csrc), &instr);
+    TEST_ASSERT_GREATER_THAN(500, n);
+    snprintf(cmd, sizeof(cmd), "%s/app.py", dir);
+    f = fopen(cmd, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fwrite(g_csrc, 1, (size_t)n, f);
+    fclose(f);
+    snprintf(cmd, sizeof(cmd), "cd %s && MOHHDY_MEM=7 python3 app.py", dir);
+    TEST_ASSERT_EQUAL(0, run_cmd_capture(cmd, got, (int)sizeof(got)));
+    if (strcmp(g_out, got) != 0) printf("\n--vm--\n%s--py--\n%s--\n", g_out, got);
+    TEST_ASSERT_EQUAL_STRING(g_out, got);
+    setUp();
+    g_mem = 7;
+    TEST_ASSERT_EQUAL(PM_OK, run_src(src));
+    TEST_ASSERT_EQUAL(PM_OK, pm_say(&g_prog, &g_vm, &g_host, "BONJOUR"));
+    snprintf(cmd, sizeof(cmd), "cd %s && rm -f log.txt && MOHHDY_MEM=7 python3 app.py BONJOUR", dir);
+    TEST_ASSERT_EQUAL(0, run_cmd_capture(cmd, got, (int)sizeof(got)));
+    if (strcmp(g_out, got) != 0) printf("\n--vm--\n%s--py--\n%s--\n", g_out, got);
+    TEST_ASSERT_EQUAL_STRING(g_out, got);
+    TEST_ASSERT_EQUAL(PM_OK, pm_compile("repeat 100000 times print 1\n", 27, &g_prog, &g_host));
+    n = pm_cross_py(&g_prog, g_csrc, (int)sizeof(g_csrc), &instr);
+    snprintf(cmd, sizeof(cmd), "%s/loop.py", dir);
+    f = fopen(cmd, "w"); fwrite(g_csrc, 1, (size_t)n, f); fclose(f);
+    snprintf(cmd, sizeof(cmd), "cd %s && python3 loop.py >/dev/null 2>err.txt; echo rc=$?; cat err.txt", dir);
+    run_cmd_capture(cmd, got, (int)sizeof(got));
+    TEST_ASSERT_NOT_NULL(strstr(got, "rc=3"));
+    TEST_ASSERT_NOT_NULL(strstr(got, "step budget exhausted"));
+    snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);
+    TEST_ASSERT_EQUAL(0, system(cmd));
+}
+
 /* Lot 5 US-058: rule based assistant. */
 void test_assist_hints_and_lint(void) {
     char out[1024];
@@ -323,6 +380,11 @@ void test_assist_hints_and_lint(void) {
     TEST_ASSERT_EQUAL(1, hints);
     TEST_ASSERT_EQUAL(PM_ERR_SYNTAX, pm_assist(noto, (int)strlen(noto), &g_host, out, sizeof(out), &hints));
     TEST_ASSERT_NOT_NULL(strstr(out, "write 'set NAME to VALUE'"));
+    {
+        const char* noend = "repeat 2 times\nprint 1\n";
+        TEST_ASSERT_EQUAL(PM_ERR_SYNTAX, pm_assist(noend, (int)strlen(noend), &g_host, out, sizeof(out), &hints));
+        TEST_ASSERT_NOT_NULL(strstr(out, "this block needs an 'end'"));
+    }
     TEST_ASSERT_EQUAL(PM_OK, pm_assist(lint, (int)strlen(lint), &g_host, out, sizeof(out), &hints));
     TEST_ASSERT_NOT_NULL(strstr(out, "variable unused is set but never read"));
     TEST_ASSERT_NOT_NULL(strstr(out, "trigger \"vide\" has no visible effect"));
@@ -425,6 +487,7 @@ int main(void) {
     RUN_TEST(test_pm_checksum_and_compilation_helpers);
     RUN_TEST(test_limits);
     RUN_TEST(test_cross_compile_c99_matches_vm);
+    RUN_TEST(test_cross_compile_py_matches_vm);
     RUN_TEST(test_assist_hints_and_lint);
     RUN_TEST(test_crl_add_and_lookup);
     RUN_TEST(test_ca_rotate_status);

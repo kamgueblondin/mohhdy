@@ -10,7 +10,9 @@
  *   layout: block boxes (margin, border, padding, width/height px or %)
  *          stacked vertically, inline text flowed in line boxes of the
  *          8x8 font (8 px per char, 10 px per line), text-align, <br>.
- *          No margin collapsing, no floats, no tables, no fonts.
+ *          display:flex (row or column, one gap) and display:grid
+ *          (repeat(N, 1fr), N is 1..8, one gap). No margin collapsing,
+ *          no floats, no tables, no fonts, no JavaScript.
  *   paint: display list (os_fb_web_item_t) drawn by the OS-UI web pane.
  * US-043: phase counters (we_perf_t). US-045: DOM dump, box inspector,
  * diagnostics console. */
@@ -29,7 +31,7 @@
 #define WE_CHAR_W 8
 #define WE_LINE_H 10
 
-enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2 };
+enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4 };
 enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2 };
 
 typedef struct {
@@ -45,6 +47,9 @@ typedef struct {
     uint16_t href_off, href_len;   /* a href (UX4: desktop browser links) */
     /* computed style */
     uint8_t display, bold, align, has_bg;
+    uint8_t flex_dir;          /* 0 row, 1 column (display:flex) */
+    uint8_t grid_cols;         /* 1..8 when display:grid, else 0 */
+    int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;
     int16_t margin[4], padding[4]; /* top right bottom left */
     int16_t border;
