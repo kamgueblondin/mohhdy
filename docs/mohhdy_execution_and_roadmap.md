@@ -129,7 +129,7 @@ Lot 47 (PR #204, `docs/lot47_plan.md`) :
 - Image initrd de test separee (`my_initrd_test.tar`, 28 programmes de
   preuve). L'image de production n'en contient aucun, verifie par `make
   strict-image-check`.
-- `make roadmap-check` en CI (US-120 reste partielle).
+- `make roadmap-check` en CI : depuis le lot 49 il compare aussi les statuts des phases 6 a 8 a la table du maitre US (US-120 done).
 - Phase 9 : 18 faites, 0 partielle.
 
 ### Lot 11 (19 octobre 2026) : Extensions Moteur Web, P2P mesh avance & Production

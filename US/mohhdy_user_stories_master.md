@@ -163,6 +163,8 @@ Etat Phase 3 (14 octobre 2026; detail in `docs/ETAT_REEL.md`). Pull request #147
 - US-074 : Développement du gestionnaire de NAT traversal
 - US-075 : Création du système d'analyse de trafic intelligent
 
+Etat Phase 5 (27 octobre 2026, lot 48). US-069 ferme : trois cycles crash/redemarrage (beta, gamma, beta) entre trois invites, cle ecrite pendant le crash recue a chaque fois. US-070 ferme : la cloture (fence) d'invalidation est repoussee a un pair qui revient apres une coupure ; il refuse le remplissage perime. US-075 ferme (statistique, pas d'apprentissage) : rapport automatique `p2p traffic alert peer X` par episode, deux emetteurs nommes, aucun sur les noeuds calmes. US-068/US-073 partiels : la fenetre adaptative recule sous un delai du hub (16 -> 10) et sous une perte, puis remonte a 16 ; pas de charge extreme ni de WAN. Preuve : `make qemu-p2p-phase5`.
+
 Etat Phase 5 (17 octobre 2026, lot 9). US-067 ferme : appels gRPC (trames HTTP/2, sous-ensemble HPACK, protobuf) transportes dans les enregistrements applicatifs de la session TLS 1.2 entre deux invites (`grpc-tls-serve`, `grpc-tls-call`, AES-128-GCM), aucun gRPC en clair sur le fil ; preuve `make qemu-net-peer-tls-worker`. HPACK reste un sous-ensemble. US-063, US-068/US-073, US-069, US-070, US-074, US-075 restent partiels (reseau de laboratoire).
 
 Etat Phase 4 et 5 (17 octobre 2026, lot 6; detail dans `docs/ETAT_REEL.md`). US-059/US-060 : la cle privee de la CA n'est plus stockee en clair, elle est scellee par le noyau (`SYS_KEY_SEAL`, AES-128-GCM lie au nom de la tache) ; simule : cle de scellement par boot (pas de TPM), la cle scellee ne survit pas au redemarrage ; CA et catalogue restent locaux, partiels. US-067 : appel gRPC unaire sur une vraie connexion TCP entre deux invites (`grpc-serve`, `grpc-call`, h2c en clair, un appel par connexion, sans controle de flux), `make qemu-grpc-guests` ; partiel au sens gRPC complet. US-068/US-073 : file de lissage au lieu de rejet, debits mesures (QEMU scenario 1b). US-070 : lignes de cache via le journal Raft (QEMU scenario 2b). US-075 : base par pair, anomalie attribuee a sa source, rafales sollicitees ignorees (QEMU scenario 1c) ; statistique, pas d'apprentissage. Ces trois restent partiels (reseau de laboratoire, pas de WAN).
@@ -398,6 +400,59 @@ Cette section traduit la vision historique ci-dessus en ordre d'implémentation 
 ### Règle de progression
 
 Une étape ne passe à l'état livré qu'après implémentation, test ciblé, test de régression (`make test-all`) et mise à jour de `docs/ETAT_REEL.md`. Les compteurs historiques de ce document sont conservés pour la traçabilité ; le compteur vivant de la baseline courante est **766/766**.
+
+
+### Statut phases 6 a 8 (lot 49, US-120)
+
+Source : `initrd_content/roadmap.txt` (lu par `prod-roadmap`). `make roadmap-check` compare chaque ligne ci-dessous a ce fichier ; une divergence fait echouer la CI.
+
+| US | Phase | Note | Statut |
+|---|---|---|---|
+| US-076 | 6 | armv7-core-qemu-virt | partial |
+| US-077 | 6 | mobile-shell-on-vbe-input-simule | done |
+| US-078 | 6 | no-sensor-hardware | simule |
+| US-079 | 6 | gesture-classifiers | done |
+| US-080 | 6 | layout-computed | partial |
+| US-081 | 6 | profiles-no-battery | partial |
+| US-082 | 6 | local-notifications | done |
+| US-083 | 6 | devsync-two-guests-sealed-p2p | done |
+| US-084 | 6 | continuity-record | done |
+| US-085 | 6 | device-registry | done |
+| US-086 | 6 | dos-com-interpreter | done |
+| US-087 | 6 | elf-check | done |
+| US-088 | 6 | migration-archive | done |
+| US-089 | 6 | admin-view | done |
+| US-090 | 6 | local-deploy-rollback | done |
+| US-091 | 7 | points-ledger | done |
+| US-092 | 7 | shared-resources | done |
+| US-093 | 7 | signed-identity | done |
+| US-094 | 7 | auctions | done |
+| US-095 | 7 | reputation | done |
+| US-096 | 7 | distributed-tasks | done |
+| US-097 | 7 | no-real-payment | simule |
+| US-098 | 7 | audit-chain | done |
+| US-099 | 7 | contract-language-mcl | done |
+| US-100 | 7 | governance-votes | done |
+| US-101 | 7 | disputes | done |
+| US-102 | 7 | support-tickets | done |
+| US-103 | 7 | schnorr-nizk-2048-256 | done |
+| US-104 | 7 | verified-self-check-not-certification | done |
+| US-105 | 7 | profile-forget | done |
+| US-106 | 8 | perf-tuning | done |
+| US-107 | 8 | perf-monitor | done |
+| US-108 | 8 | cicd-pipeline | done |
+| US-109 | 8 | backups | done |
+| US-110 | 8 | autoscale-real-tasks | done |
+| US-111 | 8 | logs | done |
+| US-112 | 8 | offline-signature-db | done |
+| US-113 | 8 | alerts | done |
+| US-114 | 8 | learned-thresholds | done |
+| US-115 | 8 | learned-logistic-model | done |
+| US-116 | 8 | support-bundle | done |
+| US-117 | 8 | integrity | done |
+| US-118 | 8 | diagnostics | done |
+| US-119 | 8 | business-metrics | done |
+| US-120 | 8 | roadmap-from-status-file-checked-against-us-master-lot49 | done |
 
 ### Piste GUI parity (UX5, 25 octobre 2026)
 

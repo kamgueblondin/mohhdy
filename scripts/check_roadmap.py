@@ -3,9 +3,8 @@
 longer drift silently. Checks, without booting:
   1. every phase 9 line (US-Gxx) has the status of the US master table
      (US/mohhdy_user_stories_master.md, first word of the Statut column);
-  2. US-076..US-120 are all in roadmap.txt, each in its phase (6, 7 or 8);
-     their statuses are not compared (the US master has no status table
-     for phases 6-8);
+  2. US-076..US-120 are all in roadmap.txt, each in its phase (6, 7 or 8),
+     and each has the status of the US master phase 6-8 table (lot 49);
   3. the prod-roadmap counts and percentages expected by
      tests/integration/test_qemu_production.py are the ones computed from
      /roadmap.txt with the guest rule (done * 100 / total, integer);
@@ -39,10 +38,20 @@ def master_g():
     return out
 
 
+def master_678():
+    out = {}
+    for line in open(os.path.join(ROOT, "US", "mohhdy_user_stories_master.md")):
+        m = re.match(r"\| (US-\d\d\d) \| ([678]) \|[^|]*\| (\w+) \|", line)
+        if m:
+            out[m.group(1)] = (int(m.group(2)), m.group(3))
+    return out
+
+
 def main():
     bad = []
     rows = roadmap()
     g = master_g()
+    t678 = master_678()
     for us, phase, status in rows:
         if status not in STATUSES:
             bad.append("%s: unknown status %s" % (us, status))
@@ -58,6 +67,11 @@ def main():
             expected_phase = 6 if 76 <= num <= 90 else 7 if 91 <= num <= 105 else 8 if 106 <= num <= 120 else 0
             if expected_phase != phase:
                 bad.append("%s: phase %d does not match expected phase %d" % (us, phase, expected_phase))
+            if us not in t678:
+                bad.append("%s: missing from the US master phase 6-8 table" % us)
+            elif t678[us] != (phase, status):
+                bad.append("%s: roadmap.txt says phase %d %s, US master says phase %d %s"
+                           % (us, phase, status, t678[us][0], t678[us][1]))
 
     # Verify presence of all US-076 through US-120 in roadmap.txt
     existing_us = {r[0] for r in rows}
@@ -66,7 +80,7 @@ def main():
         if tag not in existing_us:
             bad.append("%s: missing from roadmap.txt" % tag)
 
-    for us in g:
+    for us in list(g) + list(t678):
         if us not in existing_us:
             bad.append("%s: in the US master table, not in roadmap.txt" % us)
     test = open(os.path.join(ROOT, "tests", "integration", "test_qemu_production.py")).read()
@@ -85,7 +99,7 @@ def main():
     for b in bad:
         print("FAIL roadmap: " + b)
     if not bad:
-        print("OK roadmap.txt (%d entries): phase 9 matches the US master table, US-076..US-120 present in their phase, prod-roadmap test counts match" % len(rows))
+        print("OK roadmap.txt (%d entries): phases 6-9 statuses match the US master tables, US-076..US-120 present in their phase, prod-roadmap test counts match" % len(rows))
     return 1 if bad else 0
 
 

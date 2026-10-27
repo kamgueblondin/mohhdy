@@ -45,7 +45,7 @@ US-116 8 done support-bundle
 US-117 8 done integrity
 US-118 8 done diagnostics
 US-119 8 done business-metrics
-US-120 8 partial roadmap-from-status-file
+US-120 8 done roadmap-from-status-file-checked-against-us-master-lot49
 # Phase 9 = GUI parity track (UX5): terminal command families in the desktop.
 US-G01 9 done gui-tools-run-registry-commands-kernel-rights
 US-G02 9 done editor-heap-window-grid-256col-lines-hscroll-saves-64k-qemu-bigsave-lot46

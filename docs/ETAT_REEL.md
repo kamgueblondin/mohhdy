@@ -1383,3 +1383,13 @@ Lot 47 (`docs/lot47_plan.md`, PR #204):
   roadmap-check` (CI) checks phase 9 against the US master table and the
   prod-roadmap counts of the QEMU test against the file.
 - Phase 9 of `prod-roadmap`: done 18 partial 0 (100%).
+
+## Lot 48 and lot 49 (status)
+
+- Lot 48 (PR #205, merged): net-if address change ends old-address TCP
+  connections with FIN and the LLM TLS session with close_notify + FIN;
+  TLS handshake guest time 1.98 s -> 0.11 s (X25519 field arithmetic,
+  Montgomery modexp, crypto unchanged; QEMU timing guard); phase 5
+  `make qemu-p2p-phase5`: US-069, US-070, US-075 done, US-068/073 partial.
+- Lot 49 (branch cursor/lot49): US-120 done, `roadmap-check` compares the
+  phase 6-8 statuses with the new US master table. See docs/lot49_plan.md.
