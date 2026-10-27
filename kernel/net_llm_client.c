@@ -37,7 +37,6 @@ typedef struct {
 #define KERNEL_LLM_DHCP_RETRY_MAX_TICKS 10000U
 #define KERNEL_LLM_DHCP_RETRY_LIMIT 5U
 static kernel_llm_dhcp_maintenance_t boot_llm_dhcp_maintenance;
-static uint32_t g_ifc_closed;   /* Lot 48: connections ended by the last change */
 static uint8_t g_ifc_static; /* Lot 47 (US-G04): static address set */
 /* Espaces de travail noyau fixes : aucun buffer du chemin DHCP→LLM n’est alloué. */
 net_arp_cache_t boot_llm_arp_cache;
@@ -137,7 +136,6 @@ void net_llm_client_reset(void) {
     boot_llm_application_recovery.pending = 0U;
     boot_llm_dhcp_maintenance.armed = 0U;
     g_ifc_static = 0U;
-    g_ifc_closed = 0U;
     boot_llm_dhcp_maintenance.retries_used = 0U;
     boot_llm_dhcp_maintenance.retry_limit = KERNEL_LLM_DHCP_RETRY_LIMIT;
     boot_llm_dhcp_maintenance.next_retry_tick = 0U;
@@ -1084,7 +1082,7 @@ static int kernel_peer_tls_app(os_peer_data_request_t* r) {
  * only for a change) is in the kernel before the relay. */
 static void ifc_report(os_peer_data_request_t* r) {
     uint32_t i;
-    for (i = 0U; i < 15U; i++) r->data[i] = 0U;
+    for (i = 0U; i < 14U; i++) r->data[i] = 0U;
     r->data[0] = !boot_llm_lease.valid && !g_ifc_static ? (uint8_t)OS_IFCONFIG_MODE_NONE :
                  g_ifc_static ? (uint8_t)OS_IFCONFIG_MODE_STATIC : (uint8_t)OS_IFCONFIG_MODE_DHCP;
     for (i = 0U; i < 4U; i++) {
@@ -1093,53 +1091,28 @@ static void ifc_report(os_peer_data_request_t* r) {
         r->data[9U + i] = boot_llm_lease.router_valid ? boot_llm_lease.router_ipv4[i] : 0U;
     }
     r->data[13] = boot_llm_lease.valid ? 1U : 0U;
-    r->data[14] = (uint8_t)(g_ifc_closed > 255U ? 255U : g_ifc_closed);   /* Lot 48 */
-    r->length = 15U;
-}
-/* Lot 48: an address change ends the TCP connections bound to the old
- * address. Each open one gets FIN+ACK sent from the old address (its peer
- * learns at once instead of timing out), then its slot is freed. Listeners
- * are kept: the web table is re-armed, so a background web-serve goes on
- * serving on the new address. Nothing is done when the address stays. */
-static void ifc_fin(int sock, const uint8_t ip[4]) {
-    uint8_t state = 0U;
-    uint16_t len = 0U;
-    if (sock < 0 || net_socket_get_state(sock, &state) != 0) return;
-    if (state != NET_TCP_STATE_ESTABLISHED && state != NET_TCP_STATE_CLOSE_WAIT) return;
-    if (net_socket_begin_close(sock, boot_peer_segment, sizeof(boot_peer_segment), &len) == 0 && len)
-        (void)ne2k_tcp_segment(g_llm_dev, g_llm_io, &boot_llm_arp_cache, boot_llm_frame, sizeof(boot_llm_frame),
-                               boot_llm_lease.ipv4, ip, boot_peer_segment, len);
-    g_ifc_closed++;
-}
-static void ifc_drop_connections(const uint8_t new_ip[4]) {
-    uint16_t i;
-    uint8_t state = 0U;
-    if (new_ip[0] == boot_llm_lease.ipv4[0] && new_ip[1] == boot_llm_lease.ipv4[1] &&
-        new_ip[2] == boot_llm_lease.ipv4[2] && new_ip[3] == boot_llm_lease.ipv4[3]) return;
-    for (i = 0U; i < OS_PEER_WEB_SLOTS; i++) {
-        if (!g_web[i].used) continue;
-        if (net_socket_get_state(g_web[i].sock, &state) == 0 && state == NET_TCP_STATE_LISTEN) continue;
-        ifc_fin(g_web[i].sock, g_web[i].ip);
-        web_slot_free(&g_web[i]);
-    }
-    if (g_web_open) web_arm();
-    if (boot_peer_listen_socket >= 0 && net_socket_get_state(boot_peer_listen_socket, &state) == 0 &&
-        state != NET_TCP_STATE_LISTEN) {
-        ifc_fin(boot_peer_listen_socket, boot_peer_remote_ip);
-        (void)net_socket_close(boot_peer_listen_socket);
-        boot_peer_listen_socket = -1;
-    }
+    r->length = 14U;
 }
 static int kernel_ifconfig(os_peer_data_request_t* r) {
     int rc = 0;
-    g_ifc_closed = 0U;
     if (r->data[0] == OS_IFCONFIG_STATIC) {
         net_dhcp_lease_t next = boot_llm_lease;
         if (net_dhcp_static_apply(&next, r->data + 1, r->data + 5, r->data + 9) != 0) {
             ifc_report(r);
             return OS_PEER_BAD_ADDRESS;
         }
-        ifc_drop_connections(next.ipv4);
+        /* Close any active TCP socket or web slots on address change */
+        if (boot_peer_listen_socket >= 0) {
+            (void)net_socket_close(boot_peer_listen_socket);
+            boot_peer_listen_socket = -1;
+        }
+        if (g_web_open) {
+            uint16_t wi;
+            for (wi = 0U; wi < OS_PEER_WEB_SLOTS; wi++) {
+                if (g_web[wi].used) web_slot_free(&g_web[wi]);
+            }
+            g_web_open = 0U;
+        }
         boot_llm_lease = next;
         g_ifc_static = 1U;
     } else if (r->data[0] == OS_IFCONFIG_DHCP) {
@@ -1153,7 +1126,17 @@ static int kernel_ifconfig(os_peer_data_request_t* r) {
             rc = ne2k_dhcp_acquire(g_llm_dev, g_llm_io, boot_llm_dhcp_tx, sizeof(boot_llm_dhcp_tx),
                                    boot_llm_dhcp_rx, sizeof(boot_llm_dhcp_rx), ++ifc_xid, 64U, &next);
             if (rc == 0 && next.valid) {
-                ifc_drop_connections(next.ipv4);
+                if (boot_peer_listen_socket >= 0) {
+                    (void)net_socket_close(boot_peer_listen_socket);
+                    boot_peer_listen_socket = -1;
+                }
+                if (g_web_open) {
+                    uint16_t wi;
+                    for (wi = 0U; wi < OS_PEER_WEB_SLOTS; wi++) {
+                        if (g_web[wi].used) web_slot_free(&g_web[wi]);
+                    }
+                    g_web_open = 0U;
+                }
                 boot_llm_lease = next;
                 g_ifc_static = 0U;
             } else rc = -1;

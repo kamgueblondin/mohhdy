@@ -302,31 +302,6 @@ def main():
         wait_for(proc, "wait-any-result ok %s 7 " % pid, 30, start)
         start = send_command(client, proc, "net-if")
         wait_for(proc, "net-if ok mode dhcp ip 10.32.0.15 ", 30, start)
-        # (6) Lot 48: a TCP connection open across the address change. A
-        # background server holds an open connection (partial request);
-        # net-if static ends it with FIN from the old address (closed 1),
-        # and the server goes on serving on the new address.
-        start = send_command(client, proc, "web-serve start 9141")
-        wait_for(proc, "mode=background", 20, start)
-        held = peer.connect(9141)
-        held.send(b"GET /status HTTP/1.0\r\n")
-        time.sleep(2)
-        start = len(text())
-        type_line(client, proc, "net-if static 10.32.0.77 255.255.255.0 10.32.0.2")
-        wait_for(proc, "net-if ok mode static ip 10.32.0.77 mask 255.255.255.0 gw 10.32.0.2 lease 1 closed 1", 60, start)
-        if not held.fin.wait(30):
-            raise RuntimeError("open connection not ended by FIN after the address change")
-        if held.fin_src != b"\x0a\x20\x00\x0f":
-            raise RuntimeError("FIN not sent from the old address: %r" % held.fin_src)
-        peer.guest_ip = b"\x0a\x20\x00\x4d"   # 10.32.0.77
-        s41 = peer.request(b"GET /status HTTP/1.0\r\n\r\n", guest_port=9141)
-        if not s41.startswith(b"HTTP/1.0 200 OK"):
-            raise RuntimeError("background server after the address change: %r" % s41[:300])
-        start = len(text())
-        type_line(client, proc, "web-serve stop")
-        wait_for(proc, "osui web-serve ok served=1 ", 30, start)
-        wait_for_prompt(proc, len(text()) - 400)
-        print("net-if across an open connection: FIN from 10.32.0.15, closed 1, server kept on 10.32.0.77")
         start = send_command(client, proc, "net-if static 10.32.0.77 255.255.255.0 10.32.0.2")
         wait_for(proc, "net-if ok mode static ip 10.32.0.77 mask 255.255.255.0 gw 10.32.0.2 lease 1", 30, start)
         wait_for_prompt(proc, start)

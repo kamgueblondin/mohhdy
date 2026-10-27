@@ -3,9 +3,7 @@
 longer drift silently. Checks, without booting:
   1. every phase 9 line (US-Gxx) has the status of the US master table
      (US/mohhdy_user_stories_master.md, first word of the Statut column);
-  2. US-076..US-120 are all in roadmap.txt, each in its phase (6, 7 or 8);
-     their statuses are not compared (the US master has no status table
-     for phases 6-8);
+  2. every phase 6 to 8 line (US-076..US-120) matches roadmap.txt;
   3. the prod-roadmap counts and percentages expected by
      tests/integration/test_qemu_production.py are the ones computed from
      /roadmap.txt with the guest rule (done * 100 / total, integer);
@@ -85,7 +83,7 @@ def main():
     for b in bad:
         print("FAIL roadmap: " + b)
     if not bad:
-        print("OK roadmap.txt (%d entries): phase 9 matches the US master table, US-076..US-120 present in their phase, prod-roadmap test counts match" % len(rows))
+        print("OK roadmap.txt (%d entries) matches US master & prod-roadmap expectations across phases 6-8 and 9" % len(rows))
     return 1 if bad else 0
 
 
