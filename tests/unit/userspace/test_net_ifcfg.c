@@ -8,7 +8,7 @@
 #include <string.h>
 
 static net_dhcp_lease_t g_lease;
-static int g_static, g_calls;
+static int g_static, g_calls, g_closed, g_llm;
 static uint8_t g_dhcp_ip[4] = {10, 32, 0, 15};
 
 /* a fake networker built on the real net_dhcp_static_apply */
@@ -31,6 +31,7 @@ static int fake_call(os_peer_data_request_t* r) {
         r->data[9 + i] = g_lease.router_ipv4[i];
     }
     r->data[13] = g_lease.valid;
+    r->data[14] = (uint8_t)g_closed; r->data[15] = (uint8_t)g_llm; r->length = 16U;   /* Lot 48 reply layout */
     return 0;
 }
 static int denied_call(os_peer_data_request_t* r) { (void)r; return OS_PEER_DENIED; }
@@ -112,6 +113,21 @@ static void test_rights_predicate(void) {
     TEST_ASSERT_EQUAL(0, net_ifconfig_allowed(7U, 9, 3));
 }
 
+/* Lot 48: connections ended by the change are reported, none means no field */
+static void test_closed_connections_reported(void) {
+    char out[160];
+    g_closed = 2;
+    TEST_ASSERT_EQUAL(0, run("static", "10.32.0.77", "255.255.255.0", "10.32.0.2", 4, out));
+    TEST_ASSERT_EQUAL(0, strcmp(out, "net-if ok mode static ip 10.32.0.77 mask 255.255.255.0 gw 10.32.0.2 lease 1 closed 2\n"));
+    g_closed = 1; g_llm = 1;
+    TEST_ASSERT_EQUAL(0, run("dhcp", "", "", "", 1, out));
+    TEST_ASSERT_TRUE(strstr(out, " lease 1 closed 1 llm-closed 1\n") != 0);
+    g_closed = 0; g_llm = 0;
+    TEST_ASSERT_EQUAL(0, run("", "", "", "", 0, out));
+    TEST_ASSERT_TRUE(strstr(out, " closed") == 0);
+    TEST_ASSERT_TRUE(strstr(out, "lease 1\n") != 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_parse_ip);
@@ -119,6 +135,7 @@ int main(void) {
     RUN_TEST(test_bad_addresses_refused_lease_kept);
     RUN_TEST(test_usage_and_denied);
     RUN_TEST(test_rights_predicate);
+    RUN_TEST(test_closed_connections_reported);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

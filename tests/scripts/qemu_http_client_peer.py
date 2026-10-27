@@ -29,6 +29,7 @@ class Conn:
         self.rx = b""
         self.last = None
         self.retransmits = 0
+        self.fin_src = None   # Lot 48: source address of the guest FIN
 
     def _send(self, flags, payload=b""):
         frame = _ethernet(self.peer.mac, 0x0800, _ipv4_tcp(SERVER_IP, self.peer.guest_ip, self.port, self.guest_port,
@@ -207,6 +208,8 @@ class HttpClientPeer(ControlledEthernetPeer):
                 seq = struct.unpack("!I", frame[t + 4:t + 8])[0]
                 total = struct.unpack("!H", frame[16:18])[0]
                 payload = frame[t + (frame[t + 12] >> 4) * 4:14 + total]
+                if frame[t + 13] & FIN and c.fin_src is None:
+                    c.fin_src = bytes(frame[26:30])
                 c.on_segment(seq, frame[t + 13], payload)
                 return
         if len(frame) >= 14 and self.mac is None and frame[12:14] == b"\x08\x00":

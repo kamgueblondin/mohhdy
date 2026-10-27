@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Lot 47 (US-120): /roadmap.txt stays a hand-kept file, but it can no
+"""Lot 48 (US-120): /roadmap.txt stays a hand-kept file, but it can no
 longer drift silently. Checks, without booting:
   1. every phase 9 line (US-Gxx) has the status of the US master table
      (US/mohhdy_user_stories_master.md, first word of the Statut column);
-  2. the prod-roadmap counts and percentages expected by
+  2. US-076..US-120 are all in roadmap.txt, each in its phase (6, 7 or 8);
+     their statuses are not compared (the US master has no status table
+     for phases 6-8);
+  3. the prod-roadmap counts and percentages expected by
      tests/integration/test_qemu_production.py are the ones computed from
      /roadmap.txt with the guest rule (done * 100 / total, integer);
-  3. the entry count line matches.
+  4. the entry count line matches.
 Exit 1 with the differences."""
 import os
 import re
@@ -48,8 +51,23 @@ def main():
                 bad.append("%s: missing from the US master table" % us)
             elif g[us] != status:
                 bad.append("%s: roadmap.txt says %s, US master says %s" % (us, status, g[us]))
+        elif phase in (6, 7, 8):
+            if not us.startswith("US-"):
+                bad.append("%s: invalid US tag format" % us)
+            num = int(us.split("-")[1])
+            expected_phase = 6 if 76 <= num <= 90 else 7 if 91 <= num <= 105 else 8 if 106 <= num <= 120 else 0
+            if expected_phase != phase:
+                bad.append("%s: phase %d does not match expected phase %d" % (us, phase, expected_phase))
+
+    # Verify presence of all US-076 through US-120 in roadmap.txt
+    existing_us = {r[0] for r in rows}
+    for i in range(76, 121):
+        tag = "US-%03d" % i
+        if tag not in existing_us:
+            bad.append("%s: missing from roadmap.txt" % tag)
+
     for us in g:
-        if us not in [r[0] for r in rows]:
+        if us not in existing_us:
             bad.append("%s: in the US master table, not in roadmap.txt" % us)
     test = open(os.path.join(ROOT, "tests", "integration", "test_qemu_production.py")).read()
     for phase in sorted(set(r[1] for r in rows)):
@@ -67,7 +85,7 @@ def main():
     for b in bad:
         print("FAIL roadmap: " + b)
     if not bad:
-        print("OK roadmap.txt (%d entries) matches the US master phase 9 table and the prod-roadmap test" % len(rows))
+        print("OK roadmap.txt (%d entries): phase 9 matches the US master table, US-076..US-120 present in their phase, prod-roadmap test counts match" % len(rows))
     return 1 if bad else 0
 
 

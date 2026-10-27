@@ -15,6 +15,7 @@ static const char* const k_names[P2P_I_COUNT] = {
     "raft-prevote-req", "raft-prevote-resp", "raft-snapshot", "raft-snapshot-resp", "cache-inv-ack"
 };
 static void cache_fence(p2p_node_t* n, const char* key, uint32_t version);
+static uint32_t cache_fence_of(const p2p_node_t* n, const char* key);
 static int cache_inv_send(p2p_node_t* n, const p2p_host_t* h, int only_waiting);
 const char* p2p_type_name(int t) { return (t > 0 && t < P2P_I_COUNT) ? k_names[t] : "?"; }
 
@@ -284,6 +285,15 @@ static int seal_send(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inne
     n->tx_type[inner]++;
     p->sent++;
     return emit(n, h, ip, b, pos);
+}
+
+/* Lot 48 (US-075): end of an anomaly episode, back under the baseline. */
+static void line_end_alert(p2p_node_t* n, const p2p_host_t* h, const p2p_peer_t* p) {
+    char al[80];
+    (void)n;
+    al[0] = 0;
+    s_cat(al, "p2p traffic normal peer ", 80); s_cat(al, p->name, 80);
+    say(h, al);
 }
 
 /* Per-peer budget for user traffic (US-068/073). Control frames bypass it.
@@ -1177,6 +1187,12 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
         kp = get_str(m, 0, len, key, P2P_KEY_MAX);
         if (kp >= 0) {
             if (kp + 4 <= len) ver = get32(m + kp);
+            if (ver > cache_fence_of(n, key)) {
+                n->cache.fence_raised++;
+                s_cat(line, "p2p cache fence ", 200); s_cat(line, key, 200); s_cat(line, " v", 200);
+                cat_u(line, ver, 200); s_cat(line, " from ", 200); s_cat(line, p->name, 200);
+                say(h, line); line[0] = 0;
+            }
             cache_fence(n, key, ver);
             for (c_idx = 0; c_idx < P2P_CACHE_MAX; c_idx++) {
                 if (n->cache.entries[c_idx].used && s_eq(n->cache.entries[c_idx].key, key)) {
@@ -1341,6 +1357,12 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
     p->via = 0;
     if (!p->up) {
         p->up = 1;
+        /* Lot 48 (US-070): a peer that was cut or rebooted missed the
+         * invalidations sent meanwhile (the invalidator stops waiting for a
+         * down peer). Every known fence is pushed to it on reconnect, a few
+         * times since it may not have our HELLO yet; INV is idempotent. */
+        p->fence_push = 4U;
+        p->fence_at = now(h) - P2P_HZ;
         line[0] = 0;
         s_cat(line, "p2p peer ", 96); s_cat(line, p->name, 96); s_cat(line, " up id ", 96); cat_hex32(line, p->id, 96);
         s_cat(line, p->keyed ? " keyed" : " unkeyed", 96);
@@ -1578,7 +1600,22 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
                     p->anomalies++;
                     n->last_anomaly_peer = p->id;
                     p2p_qos_note_loss(n);
+                    /* Lot 48 (US-075): automatic report, one line when an
+                     * episode starts (no command needed, no log flood). */
+                    if (!p->alerting) {
+                        char al[112];
+                        p->alerting = 1U;
+                        n->alerts++;
+                        al[0] = 0;
+                        s_cat(al, "p2p traffic alert peer ", 112); s_cat(al, p->name, 112);
+                        s_cat(al, " rate ", 112); cat_u(al, rate, 112);
+                        s_cat(al, " base ", 112); cat_u(al, p->rx_base16 / 16U, 112);
+                        say(h, al);
+                    }
                 }
+            } else if (p->alerting) {
+                p->alerting = 0U;
+                line_end_alert(n, h, p);
             }
             p->rx_base16 = n->analyze_windows ? (p->rx_base16 * 7U + rate * 16U) / 8U : rate * 16U;
         }
@@ -1609,6 +1646,20 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
             if (p->ping_wait == 1U) { n->qos.ping_losses++; p2p_qos_note_loss(n); p->ping_wait = 2U; }
             put32(b, t); p->ping_sent_at = t;
             if (seal_send(n, h, p, P2P_I_PING, b, 4) == 0 && !p->ping_wait) p->ping_wait = 1U;
+        }
+    }
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        uint32_t f;
+        if (!p->used || !p->up || !p->keyed || !p->fence_push || t - p->fence_at < P2P_HZ) continue;
+        p->fence_push--; p->fence_at = t;
+        for (f = 0; f < P2P_CACHE_FENCES; f++) {
+            int fl;
+            if (!n->cache.fence[f].key[0] || !n->cache.fence[f].version) continue;
+            fl = put_str(b, 0, 60, n->cache.fence[f].key);
+            if (fl < 0) continue;
+            put32(b + fl, n->cache.fence[f].version);
+            if (seal_send(n, h, p, P2P_I_CACHE_INV, b, fl + 4) == 0) n->cache.fence_pushed++;
         }
     }
     for (i = 0; i < P2P_PEERS; i++) {
@@ -2257,6 +2308,7 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
             s_cat(out, "\n", cap);
         }
 #undef NFIND
+        s_cat(out, "p2p analyze alerts ", cap); cat_u(out, n->alerts, cap); s_cat(out, "\n", cap);
         s_cat(out, "p2p analyze ok findings ", cap); cat_u(out, (uint32_t)shown, cap);
         s_cat(out, suspicious ? " verdict suspicious\n" : degraded ? " verdict degraded\n" : " verdict healthy\n", cap);
     } else {
@@ -2302,6 +2354,8 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " inv_completed ", cap); cat_u(out, n->cache.inv_completed, cap);
         s_cat(out, " inv_pending ", cap); cat_u(out, n->cache.inv_active, cap);
         s_cat(out, " inv_resent ", cap); cat_u(out, n->cache.inv_resent, cap);
+        s_cat(out, " fence_pushed ", cap); cat_u(out, n->cache.fence_pushed, cap);
+        s_cat(out, " fence_raised ", cap); cat_u(out, n->cache.fence_raised, cap);
         s_cat(out, " relayed_multi ", cap); cat_u(out, n->relayed_multi, cap);
         s_cat(out, "\n", cap);
     }
