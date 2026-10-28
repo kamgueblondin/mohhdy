@@ -10,6 +10,16 @@
 
 ## État courant vérifié
 
+## Etat courant du 28 octobre 2026 (lot 51)
+
+Living baseline. Plan: [lot51_plan.md](lot51_plan.md). Base: `origin/main` `839d47a` (pull request #207 merged).
+
+- US-G22, US-G23, US-G24 are `partial`. `/child`, `/release` and `/keys` run existing shell commands. `/p2p`, `/prod`, `/collab` and `/ci` keep their previous slash.
+- `/release` opens on `deploy-verify` with no manifest: the shell prints `manifest not found` and writes nothing. `deploy-apply`, `prod-restore` and `prod-rollback` need a second Enter.
+- `/keys` opens on `collab-keys`. While the node is down the shell prints `error p2p down`. That is not a live ledger.
+- Phase 9: done 18, partial 6, simule 0, open 0, progress 75%, 69 entries. Next: US-076 US-078 US-080 US-081 US-097 US-G19 US-G20 US-G21 US-G22 US-G23 US-G24.
+- US-059, US-060, US-063, US-074 unchanged. No JavaScript VM. No native compiler. No second shell.
+
 ## Etat courant du 28 octobre 2026 (lot 50)
 
 Living baseline. Plan: [lot50_plan.md](lot50_plan.md).

@@ -7,6 +7,9 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 51 (28 octobre 2026)
+- GUI parity, same shell. `/child`, `/release` and `/keys` are menus in `userspace/osui_parity.c`. US-G22, US-G23 and US-G24 are `partial`. Phase 9 is done 18 partial 6, progress 75%, 69 roadmap entries. `/p2p` stays the pane. deploy-verify with no manifest writes nothing. collab-keys while the node is down prints the shell refusal. No second shell. US-059, US-060, US-063 and US-074 are unchanged. Detail: `docs/lot51_plan.md`.
+
 ### Lot 50 (28 octobre 2026)
 - GUI parity, same shell. `/pm`, `/proc` and `/mesh` are menus in `userspace/osui_parity.c`. `/p2p` stays the desktop pane. US-G19, US-G20 and US-G21 are `partial`. Phase 9 is done 18 partial 3, progress 85%, 66 roadmap entries. pm-ide stays in the terminal. The mesh panel does not start a node; QEMU checks the shell refusal `p2p down`. Progressive JPEG (`mire-prog.jpg`) is asserted as a successful decode in `qemu-gui-parity`, and the explorer opens `.jpg` through the shared viewer. No second copy of the shell, no JavaScript VM, no native compiler. US-059, US-060, US-063 and US-074 are unchanged. Detail: `docs/lot50_plan.md`.
 

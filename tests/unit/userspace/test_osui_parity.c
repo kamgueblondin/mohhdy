@@ -83,7 +83,7 @@ static void test_rights_model(void) {
 static void test_table_matches_registry(void) {
     int i, k, total = 0;
     char name[40];
-    TEST_ASSERT_EQUAL(24, osui_par_family_count);
+    TEST_ASSERT_EQUAL(27, osui_par_family_count);
     for (i = 0; i < osui_par_family_count; i++) {
         const osui_par_family_t *f = &osui_par_families[i];
         TEST_ASSERT(f->kind >= OS_FB_APP_NET && f->kind <= OS_FB_APP_KIND_MAX);
@@ -212,6 +212,36 @@ static void test_lot50_entries(void) {
     TEST_ASSERT(!osui_path_is_image(0));
 }
 
+/* Lot 51: /child /release /keys. Existing pane slashes stay free. */
+static void test_lot51_entries(void) {
+    char out[128];
+    const osui_par_entry_t *e;
+    TEST_ASSERT_EQUAL(OS_FB_APP_CHILD, osui_par_kind_of("/child"));
+    TEST_ASSERT_EQUAL(OS_FB_APP_RELEASE, osui_par_kind_of("/release"));
+    TEST_ASSERT_EQUAL(OS_FB_APP_KEYS, osui_par_kind_of("/keys"));
+    TEST_ASSERT_EQUAL(0, osui_par_kind_of("/p2p"));
+    TEST_ASSERT_EQUAL(0, osui_par_kind_of("/collab"));
+    TEST_ASSERT_EQUAL(0, osui_par_kind_of("/prod"));
+    TEST_ASSERT_EQUAL(OS_FB_APP_PROD, osui_par_kind_of("/ci"));
+    TEST_ASSERT_EQUAL(0, entry_of(OS_FB_APP_CHILD, "child-exit-count")->flags);
+    e = entry_of(OS_FB_APP_CHILD, "child-result");
+    TEST_ASSERT_EQUAL(OSUI_PAR_ARG, e->flags);
+    TEST_ASSERT_EQUAL(0, osui_par_build(e, "4", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("child-result 4", out);
+    TEST_ASSERT_EQUAL(OSUI_PAR_MUT, entry_of(OS_FB_APP_CHILD, "child-results-clear")->flags);
+    TEST_ASSERT_EQUAL(0, entry_of(OS_FB_APP_RELEASE, "deploy-verify")->flags);
+    e = entry_of(OS_FB_APP_RELEASE, "deploy-apply");
+    TEST_ASSERT_EQUAL(OSUI_PAR_ARG | OSUI_PAR_MUT, e->flags);
+    TEST_ASSERT_EQUAL(0, osui_par_build(e, "/deploy.man", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("deploy-apply /deploy.man", out);
+    TEST_ASSERT_EQUAL(OSUI_PAR_MUT, entry_of(OS_FB_APP_RELEASE, "prod-rollback")->flags);
+    TEST_ASSERT_EQUAL(OSUI_PAR_ARG | OSUI_PAR_MUT, entry_of(OS_FB_APP_RELEASE, "prod-restore")->flags);
+    TEST_ASSERT_EQUAL(0, entry_of(OS_FB_APP_KEYS, "collab-keys")->flags);
+    e = entry_of(OS_FB_APP_KEYS, "collab-contract-deploy");
+    TEST_ASSERT_EQUAL(OSUI_PAR_ARG | OSUI_PAR_MUT, e->flags);
+    TEST_ASSERT_EQUAL(-1, osui_par_build(e, "", out, (int)sizeof(out)));
+}
+
 static void type(const char *s) { while (*s) osui_tool_key(&t, *s++, &k_src); }
 
 static void test_panel_menu_run_and_back(void) {
@@ -317,6 +347,7 @@ int main(void) {
     RUN_TEST(test_build);
     RUN_TEST(test_lot46_entries);
     RUN_TEST(test_lot50_entries);
+    RUN_TEST(test_lot51_entries);
     RUN_TEST(test_panel_menu_run_and_back);
     RUN_TEST(test_panel_arg_and_confirm);
     RUN_TEST(test_search_and_generic_cmd);

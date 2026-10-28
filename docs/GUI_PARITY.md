@@ -67,6 +67,9 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | /pm Outils PM | promptmessage | `pm-catalog`, `pm-catalog-search` (ARG), `pm-doc` (ARG), `pm-check` (ARG), `pm-disasm` (ARG), `pm-assist` (ARG), `pm-cross` (ARG), `pm-test` (ARG), `pm-versions` (ARG) |
 | /proc Processus | processes | `ps`, `mem`, `task-capacity`, `task-events`, `task-events-notify-status`, `task-priority-child-status`, `task-events-budget-status`, `task-events-watch-status`, `children`, `task-priority` (ARG+MUT), `task-suspend` (ARG+MUT), `task-resume` (ARG+MUT) |
 | /mesh Maillage P2P | p2p | `p2p-stats`, `p2p-analyze`, `p2p-route`, `p2p-qos`, `p2p-raft`, `p2p-stun`, `p2p-cache`, `p2p-kv`, `p2p-cache` (ARG+MUT) |
+| /child Enfants | children | `child-exit-count`, `child-results`, `child-result` (ARG), `child-result-any` (ARG), `child-results-observe` (ARG), `child-results-clear` (MUT), `child-results-forget` (ARG+MUT) |
+| /release Livraison | release | `deploy-verify`, `deploy-apply` (ARG+MUT), `prod-rollback` (MUT), `prod-restore` (ARG+MUT) |
+| /keys Cles collab | keys | `collab-keys`, `collab-contract-deploy` (ARG+MUT) |
 | /cmd Commande | any | any registry command typed in the input line |
 
 ## Lot 45
@@ -110,14 +113,14 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 |---|---|---|
 | files: ls, cat, cp, mv, rm, mkdir, touch, stat (about 20) | Files explorer (UX3), editor, /disk, /notes | done |
 | editor: edit, pm-ide, pm-edit | Editor window (heap, window-sized grid since UX5) | done: lines up to 256 columns with horizontal scroll (Lot 45); saves up to 64 KiB on a disk with the v4 extension area (Lot 46, `qemu-gui-bigsave`), 30 KiB otherwise |
-| processes: ps, kill, mem, jobs, task-* (27), child-* (7) | Task manager (/tasks), /services (jobs, task-summary), /proc (Lot 50) | partial (US-G20): /proc runs ps, mem, task-capacity, task-events, four status readers, children, and task-priority / task-suspend / task-resume with a second Enter. kill and the other task-* / child-* commands stay on /cmd or /tasks |
+| processes: ps, kill, mem, jobs, task-* (27), child-* (7) | Task manager (/tasks), /services (jobs, task-summary), /proc (Lot 50), /child (Lot 51) | partial (US-G20, US-G22): /proc runs ps, mem, task-capacity, task-events, four status readers, children, and task-priority / task-suspend / task-resume with a second Enter. /child runs child-exit-count, child-results and the pid readers; clear and forget need a second Enter. kill and the other task-* commands stay on /cmd or /tasks |
 | services and drivers: service-* (6), devices, lspci, dev-list, pci-rescan, driver-restart | /services, task manager services view | done (Lot 46): every /services entry runs in `qemu-gui-panels`; `driver-restart` (fixed Ring 3 driver names): supervised respawn of pcidriver (Lot 45) and atadriver with a new pid, networker restarted by the shell with a new pid, each service used after the restart (`qemu-gui-parity`) |
 | network: net-* (3), fetch-sim, grpc-* (6) | /net, /grpc | partial: every /net entry runs in `qemu-gui-panels` (Lot 46), grpc-wire; the shell has no command that configures the interface (address, route), so no window can either (Lot 46 PR D) |
 | p2p: p2p-* (27) | /peers (UX4), /net, /mesh (Lot 50) | partial (US-G21): /mesh runs stats, analyze, route, qos, raft, stun, cache and kv. /p2p stays the desktop pane. QEMU proof is the shell line `p2p-stats error p2p down` while the node is down. No live mesh. p2p-up stays on /net |
 | storage: ata-*, fat16-*, mount-*, persist-* (6), vfs-* (26) | /disk, /vfs | done (Lot 46): every /disk entry runs in `qemu-gui-panels` (ata, mounts, persist status and save, ls, stat, mkdir, fat16-list); vfs-stats/list/stat/read/mount-add/mount-remove in /vfs; the vfs-backend-* probes are test tools, through /cmd |
 | logs: task-events, notify-*, osui-audit, history, prod-log-*, prod-usage | /logs | done (Lot 46): every /logs entry runs in `qemu-gui-panels` (append then analyze a log, push then acknowledge a notification) |
-| collab ledger: collab-* (37) | /ledger | done (US-G08 since Lot 45): balances, tasks, audit, p2p-up; forms (offer, vote, escrow create, release/refund/dispute) build the shell grammar and need a second Enter; QEMU proof of the offer form. Contracts and keys (collab-contract-*, collab-keys) through /cmd |
-| production / CI: prod-* (28), deploy-* (3), cicd | /ci | done (Lot 46): every /ci entry runs in `qemu-gui-panels` (diag, alerts, scale, sample then metrics, deploy-make then deploy-verify, integrity baseline then check, backup then backups); restore, rollback, deploy-apply through /cmd |
+| collab ledger: collab-* (37) | /ledger, /keys (Lot 51) | done for /ledger (US-G08 since Lot 45). US-G24 partial: /keys runs collab-keys (QEMU sees `error p2p down` while the node is down) and collab-contract-deploy with a second Enter. Other collab-contract-* stay on /cmd |
+| production / CI: prod-* (28), deploy-* (3), cicd | /ci, /release (Lot 51) | done for /ci (Lot 46): every /ci entry runs in `qemu-gui-panels`. US-G23 partial: /release runs deploy-verify (no manifest: `manifest not found`, nothing written), deploy-apply and prod-restore with an argument and a second Enter, prod-rollback with a second Enter |
 | security / CA: whoami, id-key, cap-token, pm-ca-*, origin-* | /security | done (Lot 46): every /security entry runs in `qemu-gui-panels` (init, sign, verify, revoke, verify refused); the CA is a local Schnorr CA (no X.509, no public authority) |
 | web devtools: web-* (13), browser-* (34) | /devtools, Browser window (UX4) | done (Lot 46): every /devtools entry runs in `qemu-gui-panels` (status, tabs, perf, cache, DOM, console, inspect, a11y); navigation in the Browser window |
 | search: grep (with UX5 grep -r) | /search | done: recursive, whole files up to 1 MiB through the shell heap (Lot 45; cut files counted beyond), pages of 64 hits (`grep -r MOTIF [REP] [PAGE]`) |
@@ -182,3 +185,14 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 - Not done: pm-ide in a window, a live mesh, every task-* command, a
   JavaScript VM, a native compiler. US-059, US-060, US-063, US-074
   unchanged. Detail: `docs/lot50_plan.md`.
+
+## Lot 51
+
+- `/child`, `/release` and `/keys` are menus of shell commands that
+  already exist. US-G22, US-G23 and US-G24 are partial. `/p2p`, `/prod`,
+  `/collab` and `/ci` keep their previous meaning.
+- QEMU runs the first entry of each: `child-exit-count ok`,
+  `deploy-verify error manifest not found` (no write), and
+  `collab-keys error p2p down`.
+- Not done: a live ledger, a real deploy in the window, every
+  collab-contract-* command. Detail: `docs/lot51_plan.md`.

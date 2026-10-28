@@ -525,8 +525,12 @@ typedef struct {
  * OS_FB_APP_P2P (6) or OS_FB_APP_PMRUN (7). */
 #define OS_FB_APP_PM 30        /* /pm PromptMessage tools (pm-ide stays terminal) */
 #define OS_FB_APP_PROC 31      /* /proc process and task commands */
-#define OS_FB_APP_P2PMESH 32   /* /p2p mesh reports (node down is a real answer) */
-#define OS_FB_APP_KIND_MAX 32
+#define OS_FB_APP_P2PMESH 32   /* /mesh reports; /p2p stays the desktop pane */
+/* Lot 51: more terminal commands. These ids do not reuse a pane slash. */
+#define OS_FB_APP_CHILD 33     /* /child child-exit and child-result* */
+#define OS_FB_APP_RELEASE 34   /* /release deploy-verify, apply, rollback, restore */
+#define OS_FB_APP_KEYS 35      /* /keys collab-keys; p2p down is a real answer */
+#define OS_FB_APP_KIND_MAX 35
 #define OS_FB_APP_ROWS 22       /* default window grid */
 #define OS_FB_APP_COLS 78
 /* UX5: grid buffers; a maximized window shows as many rows / columns as

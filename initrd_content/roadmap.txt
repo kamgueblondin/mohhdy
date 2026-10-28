@@ -68,3 +68,6 @@ US-G18 9 done chat-help-window-slash-programs-from-dispatch-table
 US-G19 9 partial pm-panel-catalog-doc-check-assist-cross
 US-G20 9 partial proc-panel-ps-mem-task-events-priority-confirm
 US-G21 9 partial p2p-panel-stats-analyze-route-qos-raft-stun
+US-G22 9 partial child-panel-exit-count-results-confirm
+US-G23 9 partial release-panel-verify-apply-rollback-restore
+US-G24 9 partial keys-panel-collab-keys-contract-deploy
