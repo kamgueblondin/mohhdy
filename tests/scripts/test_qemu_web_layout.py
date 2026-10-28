@@ -83,6 +83,23 @@ def main():
                     if actual != expected:
                         raise RuntimeError("image pixel %d,%d: %r != %r" % (x, y, actual, expected))
             print("web-layout pixels image=48x32 compared=1536 wrap=2 table_rows=2", flush=True)
+            step = len(g.log_text())
+            g.send_key(monitor, "esc")
+            g.wait_for(proc, "osui web close file=/web/lot52.html", g.CMD_TIMEOUT, step)
+            start = g.send_command_until(monitor, "web /web/lot53.html",
+                "osui web render file=/web/lot53.html", proc, mode="getc", wait_prompt=False)
+            time.sleep(0.5)
+            width, height, pixels = g.screendump_rgb(monitor, "qemu-flex-sizing.ppm")
+            for row, spans in ((0, ((0, 50, (255, 0, 0)), (50, 100, (0, 0, 255)))),
+                               (10, ((0, 70, (0, 128, 0)), (70, 100, (255, 255, 0))))):
+                for left, right, color in spans:
+                    for y in range(row, row + 10):
+                        for x in range(left, right):
+                            offset = ((oy + y) * width + ox + x) * 3
+                            if tuple(pixels[offset:offset + 3]) != color:
+                                raise RuntimeError("flex sizing pixel mismatch at %d,%d" % (x, y))
+            print("flex-sizing pixels compared=2000 shrink=50,50 frozen=70,30", flush=True)
+
         print("QEMU web layout contract passed.", flush=True)
         return 0
     finally:

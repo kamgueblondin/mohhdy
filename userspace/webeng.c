@@ -538,6 +538,25 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "flex-grow")) {
         if (bounded_uint(v, vl, 1000, &px) == 0) n->flex_grow = (int16_t)px;
         else diag(d, "flex-grow refused", -1);
+    } else if (w_eq(prop, "flex-shrink")) {
+        if (bounded_uint(v, vl, 1000, &px) == 0) n->flex_shrink = (int16_t)px;
+        else diag(d, "flex-shrink refused", -1);
+    } else if (w_eq(prop, "flex-basis")) {
+        int end = vl, value;
+        if (value_is(v, vl, "auto")) {
+            n->flex_basis = -1; n->basis_pct = 0; n->basis_set = 1;
+        } else {
+            int percent = vl > 0 && v[vl - 1] == '%';
+            if (percent) end--;
+            else if (vl >= 2 && value_is(v + vl - 2, 2, "px")) end -= 2;
+            if (bounded_uint(v, end, 2000, &value) == 0) {
+                n->flex_basis = (int16_t)(percent ? -1 : value);
+                n->basis_pct = (int16_t)(percent ? value : 0);
+                /* Percent zero is a definite zero, not auto. */
+                if (percent && value == 0) n->flex_basis = 0;
+                n->basis_set = 1;
+            } else diag(d, "flex-basis refused", -1);
+        }
     } else if (w_eq(prop, "float")) {
         if (value_is(v, vl, "left")) n->float_side = WE_FLOAT_LEFT;
         else if (value_is(v, vl, "right")) n->float_side = WE_FLOAT_RIGHT;
@@ -675,6 +694,8 @@ int we_style(we_doc_t* d) {
         n->align = p ? p->align : WE_ALIGN_LEFT;
         n->width = -1; n->height = -1; n->width_pct = 0;
         n->flex_grow = -1;
+        n->flex_shrink = n->flex_basis = -1;
+        n->basis_pct = n->basis_set = 0;
         n->min_width = n->max_width = -1;
         n->list_style = p ? p->list_style : WE_LIST_NONE;
         n->border_color = n->color;
@@ -1215,6 +1236,7 @@ static int layout_assigned(we_doc_t *d, int idx, int x, int y, int outer, int de
 typedef struct {
     int node[WE_MAX_NODES];
     int width[WE_MAX_NODES];
+    uint32_t shrink_weight[WE_MAX_NODES];
 } we_track_work_t;
 static we_track_work_t track_work[WE_DEPTH_MAX + 1];
 
@@ -1304,14 +1326,91 @@ static void grow_line(we_doc_t *d, we_track_work_t *work, int first, int end, in
     }
 }
 
+/* Exact product/division without a libgcc 64-bit division dependency.
+ * b <= denominator, so the quotient fits in a and therefore uint32_t. */
+static uint32_t flex_share(uint32_t a, uint32_t b, uint32_t denominator) {
+    uint64_t product = (uint64_t)a * b, remainder = 0;
+    uint32_t result = 0;
+    int bit;
+    if (!denominator) return 0;
+    for (bit = 63; bit >= 0; bit--) {
+        remainder = (remainder << 1) | ((product >> bit) & 1U);
+        if (remainder >= denominator) {
+            remainder -= denominator;
+            if (bit < 32) result |= 1U << bit;
+        }
+    }
+    return result;
+}
+
+static int shrink_floor(const we_node_t *n, int containing) {
+    int minimum = n->min_pct > 0 ? containing * n->min_pct / 100 : n->min_width;
+    if (minimum < 0) minimum = 0;
+    if (minimum > WE_LAYOUT_MAX) minimum = WE_LAYOUT_MAX;
+    minimum += node_border_extra(n) + n->margin[1] + n->margin[3];
+    return minimum > 0 ? minimum : 0;
+}
+
+/* Freeze an item at its minimum, then redistribute the remaining deficit
+ * using the original scaled bases. At most one pass per node plus rounding. */
+static void shrink_line(we_doc_t *d, we_track_work_t *work, int first, int end,
+                        int deficit, int containing) {
+    int pass;
+    for (pass = 0; deficit > 0 && pass <= WE_MAX_NODES; pass++) {
+        uint32_t weight = 0;
+        int k, taken = 0;
+        for (k = first; k < end; k++) {
+            const we_node_t *n = &d->nodes[work->node[k]];
+            if (work->width[k] > shrink_floor(n, containing)) weight += work->shrink_weight[k];
+        }
+        if (!weight) break;
+        for (k = first; k < end; k++) {
+            const we_node_t *n = &d->nodes[work->node[k]];
+            int room = work->width[k] - shrink_floor(n, containing), take;
+            if (room <= 0 || !work->shrink_weight[k]) continue;
+            take = (int)flex_share((uint32_t)deficit, work->shrink_weight[k], weight);
+            if (take > room) take = room;
+            work->width[k] -= take;
+            taken += take;
+        }
+        deficit -= taken;
+        if (!taken) {
+            for (k = first; k < end && deficit; k++) {
+                const we_node_t *n = &d->nodes[work->node[k]];
+                if (work->shrink_weight[k] && work->width[k] > shrink_floor(n, containing)) {
+                    work->width[k]--;
+                    deficit--;
+                }
+            }
+        }
+    }
+    if (deficit) diag(d, "flex minimum prevents fit", -1);
+}
+
+static int flex_base(const we_node_t *n, int containing, int fallback) {
+    int basis;
+    if (n->basis_pct > 0) basis = containing * n->basis_pct / 100;
+    else if (n->flex_basis >= 0) basis = n->flex_basis;
+    else if (n->width_pct > 0) basis = containing * n->width_pct / 100;
+    else basis = n->width >= 0 ? n->width : fallback;
+    if (basis < 0) basis = 0;
+    if (basis > WE_LAYOUT_MAX) basis = WE_LAYOUT_MAX;
+    return basis;
+}
+
 static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth) {
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *work = &track_work[depth];
-    int count, k, gap = n->gap > 0 ? n->gap : 0, y = cy, explicit_grow = 0;
+    int count, k, gap = n->gap > 0 ? n->gap : 0, y = cy, explicit_grow = 0, sizing = 0;
     if (depth > WE_DEPTH_MAX) return 0;
     if (n->display == WE_DISP_GRID) return layout_grid(d, idx, cx, cy, cwidth, depth);
     count = collect_items(d, idx, work);
     if (!count) return 0;
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[work->node[k]];
+        if (child->basis_set || child->flex_shrink >= 0) sizing = 1;
+    }
+    if (n->flex_dir && sizing) diag(d, "column basis/shrink refused", idx);
     if (n->flex_dir) {
         /* The original column path remains the vertical stacking model.
          * Grow distributes definite-height free space on its main axis. */
@@ -1363,7 +1462,7 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
         return y - cy;
     }
     for (k = 0; k < count; k++) if (d->nodes[work->node[k]].flex_grow >= 0) explicit_grow = 1;
-    if (!explicit_grow && !n->flex_wrap) {
+    if (!explicit_grow && !n->flex_wrap && !sizing) {
         int available = cwidth - (count - 1) * gap;
         int each, x = cx, high = 0;
         if (available < 0) available = 0;
@@ -1379,7 +1478,12 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
     }
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[work->node[k]];
-        work->width[k] = preferred_outer(child, cwidth, n->flex_wrap ? WE_CHAR_W : 0);
+        int basis = flex_base(child, cwidth, n->flex_wrap ? WE_CHAR_W : 0);
+        int factor = child->flex_shrink >= 0 ? child->flex_shrink : sizing ? 1 : 0;
+        work->width[k] = constrained_width(child, basis, cwidth) + node_border_extra(child) +
+                         child->margin[1] + child->margin[3];
+        if (work->width[k] < 0) work->width[k] = 0;
+        work->shrink_weight[k] = (uint32_t)basis * (uint32_t)factor;
     }
     k = 0;
     while (k < count) {
@@ -1390,7 +1494,8 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
             used = next;
             k++;
         }
-        grow_line(d, work, first, k, cwidth > used ? cwidth - used : 0, cwidth);
+        if (used > cwidth && sizing) shrink_line(d, work, first, k, used - cwidth, cwidth);
+        else grow_line(d, work, first, k, cwidth > used ? cwidth - used : 0, cwidth);
         for (j = first; j < k; j++) {
             int h = layout_assigned(d, work->node[j], x, y, work->width[j], depth + 1);
             if (h > high) high = h;

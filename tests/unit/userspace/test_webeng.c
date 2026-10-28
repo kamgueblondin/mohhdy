@@ -237,6 +237,7 @@ static void test_flex_and_grid(void) {
 }
 
 #include "webeng_lot52.inc"
+#include "webeng_lot53.inc"
 
 int main(void) {
     unity_init();
@@ -443,6 +444,15 @@ int main(void) {
     RUN_TEST(test_l52_relative_later_child_clamps_to_parent_top);
     RUN_TEST(test_l52_column_grow_auto_basis_is_zero);
     RUN_TEST(test_l52_overlong_word_clears_float_before_overflow);
+    RUN_TEST(test_l53_row_sizing_matrix);
+    RUN_TEST(test_l53_minimum_freeze_and_unavoidable_overflow);
+    RUN_TEST(test_l53_wrap_partitions_before_shrinking);
+    RUN_TEST(test_l53_invalid_values_do_not_replace_prior_declarations);
+    RUN_TEST(test_l53_weight_arithmetic_large_container);
+    RUN_TEST(test_l53_nested_sizing_and_relayout);
+    RUN_TEST(test_l53_column_sizing_is_explicitly_refused);
+    RUN_TEST(test_l53_shrink_rounding_exhausts_deficit);
+    RUN_TEST(test_l53_maximum_node_weight_sum_is_unsigned);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

@@ -68,6 +68,8 @@ typedef struct {
     uint8_t grid_cols;         /* 1..8 when display:grid, else 0 */
     uint8_t flex_wrap, float_side, grid_rows, relative;
     uint8_t list_style;
+    int16_t flex_basis, basis_pct, flex_shrink;
+    uint8_t basis_set;
     int16_t flex_grow;         /* -1: legacy equal flex slots, 0..1000 explicit */
     int16_t row_size[WE_TRACKS_MAX]; /* -1: 1fr, otherwise pixels */
     int16_t min_width, max_width;   /* -1: unset, content-box px */

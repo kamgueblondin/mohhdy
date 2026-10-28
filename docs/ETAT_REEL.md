@@ -10,6 +10,16 @@
 
 ## État courant vérifié
 
+## Etat courant du 28 octobre 2026 (lot 53)
+
+US-031 stays partial and phase3_complete=false. Row flex-basis (px, percent,
+auto) and weighted flex-shrink are in the same webeng.c. Minimum freezes,
+rounding and unavoidable overflow are tested; column basis/shrink is
+explicitly refused. Legacy defaults remain. No kernel/rights change,
+Chromium, WebKit, network loading, JavaScript VM or new font engine.
+US-059, US-060, US-063, US-074 and US-G19..US-G24 unchanged.
+Details and measured gates: [lot53_plan.md](lot53_plan.md).
+
 ## Etat courant du 28 octobre 2026 (lot 52)
 
 US-031 stays **partial**, `phase3_complete=false`. Plan and measured checks:
