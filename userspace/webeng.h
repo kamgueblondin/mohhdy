@@ -10,8 +10,9 @@
  *   layout: block boxes (margin, border, padding, width/height px or %)
  *          stacked vertically, inline text flowed in line boxes of the
  *          8x8 font (8 px per char, 10 px per line), text-align, <br>.
- *          display:flex (row or column, one gap) and display:grid
- *          (repeat(N, 1fr), N is 1..8, one gap). No margin collapsing,
+ *          intrinsic text/box sizes; flex packing and alignment on both
+ *          axes; bounded grid tracks/placement, table colspan and clipping.
+ *          No margin collapsing,
  *          bounded floats, tables, local images; no font loading or JavaScript.
  *   paint: display list (os_fb_web_item_t) drawn by the OS-UI web pane.
  * US-043: phase counters (we_perf_t). US-045: DOM dump, box inspector,
@@ -24,6 +25,7 @@
 #define WE_MAX_NODES 160
 #define WE_MAX_RULES 48
 #define WE_POOL 6144
+#define WE_TEXT_SOURCE_MAX 512
 #define WE_CSS_MAX 2048
 #define WE_MAX_DIAG 8
 #define WE_DIAG_LEN 48
@@ -31,6 +33,11 @@
 #define WE_CHAR_W 8
 #define WE_LINE_H 10
 #define WE_TRACKS_MAX 8
+#define WE_GRID_ROWS_MAX WE_MAX_NODES
+/* Static layout/measure/clip scratch; document storage is caller-owned. */
+#define WE_LAYOUT_WORKSPACE_MAX (512 * 1024)
+#define WE_MEASURE_BUDGET (WE_MAX_NODES * WE_MAX_NODES)
+#define WE_TRACK_AUTO (-32768)
 #define WE_FLOATS_MAX 16
 #define WE_LAYOUT_MAX 16000
 /* One shared, non-reentrant image workspace in webeng.c. No heap.
@@ -48,10 +55,13 @@ enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE };
 
 enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4, WE_DISP_TABLE = 5, WE_DISP_ROW = 6, WE_DISP_CELL = 7 };
 enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2 };
+enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
+       WE_PACK_STRETCH, WE_PACK_BETWEEN, WE_PACK_AROUND, WE_PACK_EVENLY };
+enum { WE_SIZE_AUTO, WE_SIZE_MIN_CONTENT, WE_SIZE_MAX_CONTENT, WE_SIZE_FIT_CONTENT };
 
 typedef struct {
     uint8_t is_text;
-    uint8_t lead_space, trail_space;
+    uint8_t lead_space, trail_space, html_space, pending_html_space;
     char tag[12];
     char id[16];
     char cls[32];
@@ -61,19 +71,29 @@ typedef struct {
     uint16_t alt_off, alt_len;     /* img alt */
     uint16_t href_off, href_len;   /* a href (UX4: desktop browser links) */
     uint16_t src_off, src_len;
-    uint8_t span_refused;
+    uint8_t span_refused, colspan;
     /* computed style */
     uint8_t display, bold, align, has_bg;
     uint8_t flex_dir;          /* 0 row, 1 column (display:flex) */
     uint8_t grid_cols;         /* 1..8 when display:grid, else 0 */
     uint8_t flex_wrap, float_side, grid_rows, relative;
     uint8_t list_style;
+    uint8_t justify_content, align_items, align_self, align_content;
+    uint8_t justify_items, justify_self;
+    uint8_t width_kind, basis_content, border_box;
+    uint8_t nowrap, break_word, visibility, overflow_hidden;
+    uint8_t grid_col_start, grid_row_start, grid_col_span, grid_row_span;
+    int16_t col_size[WE_TRACKS_MAX];
+    int16_t row_gap, col_gap;
+    int16_t height_pct, min_height_pct, max_height_pct;
+    uint8_t height_percent, min_height_percent, max_height_percent;
+    int16_t min_content, max_content;
     int16_t flex_basis, basis_pct, flex_shrink;
     uint8_t basis_set;
     int16_t flex_grow;         /* -1: legacy equal flex slots, 0..1000 explicit */
     int16_t row_size[WE_TRACKS_MAX]; /* -1: 1fr, otherwise pixels */
     int16_t min_width, max_width;   /* -1: unset, content-box px */
-    int16_t min_height, max_height; /* -1: unset, content-box px, no percent */
+    int16_t min_height, max_height; /* -1: unset; percent values use flags */
     int16_t min_pct, max_pct;
     int16_t offset_x, offset_y;
     int16_t gap;               /* px between flex/grid items */
@@ -110,9 +130,11 @@ typedef struct {
     uint32_t pool_used;
     char css[WE_CSS_MAX];
     uint32_t css_len;
+    uint8_t css_parsed;
     we_rule_t rules[WE_MAX_RULES];
     uint32_t nrules;
     os_fb_web_item_t items[OS_FB_WEB_ITEMS];
+    int16_t item_owner[OS_FB_WEB_ITEMS];
     uint32_t nitems;
     char title[48];
     char diag[WE_MAX_DIAG][WE_DIAG_LEN];

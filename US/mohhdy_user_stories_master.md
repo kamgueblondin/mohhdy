@@ -117,6 +117,8 @@ Etat Phase 2 (17 octobre 2026, lot 9; inventaire dans `docs/lot9_plan.md`). US-0
 - US-044 : Création du système d'accessibilité web
 - US-045 : Implémentation du débogueur web intégré
 
+Etat Phase 3 (28 octobre 2026, lot 55). US-031 remains partial, phase3_complete=false. Large guest layout increment: intrinsic sizes, flex packing/alignment, grid weighted/fixed/auto tracks and placements/spans, percentage heights, border-box, table colspan, word wrapping, clipping and visibility/hit tests. Full CSS, Chromium/WebKit, network loading, JavaScript VM and font loading remain absent. US-059/060/063/074 unchanged; US-G19..US-G24 remain partial. Details: docs/lot55_plan.md.
+
 Etat Phase 3 (28 octobre 2026, lot 54). US-031 stays partial, phase3_complete=false. Column basis/shrink, bounded px height limits, freezes and capped grow reuse the existing row solver. Percent bases need definite height. Full intrinsic sizing, full CSS, JavaScript, network and font loading remain absent. Other statuses unchanged; US-G19..US-G24 remain partial. See docs/lot54_plan.md.
 
 Etat Phase 3 (28 octobre 2026, lot 53). US-031 remains partial, phase3_complete=false. Row flex-basis and weighted flex-shrink now resolve negative free space with minimum freezes in the existing guest engine. Column sizing, full intrinsic sizing, JavaScript, network loading and font loading remain absent. Other US statuses unchanged. See docs/lot53_plan.md.
