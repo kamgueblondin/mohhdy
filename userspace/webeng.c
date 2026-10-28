@@ -78,6 +78,7 @@ static int new_node(we_doc_t* d, int parent) {
     n->parent = (int16_t)parent;
     n->first = n->last = n->next = -1;
     n->colspan = 1;
+    n->rowspan = 1;
     if (parent >= 0) {
         we_node_t* p = &d->nodes[parent];
         n->html_space = p->pending_html_space;
@@ -89,15 +90,23 @@ static int new_node(we_doc_t* d, int parent) {
     return idx;
 }
 
-/* decode entities and collapse spaces of html[a..b) into the pool */
+static int ancestor_pre(const we_doc_t *d, int parent) {
+    while (parent >= 0) {
+        if (w_eq(d->nodes[parent].tag, "pre")) return 1;
+        parent = d->nodes[parent].parent;
+    }
+    return 0;
+}
+
+/* Decode entities. Spaces stay in the buffer when the chunk has a glyph or
+ * a pre ancestor needs its newlines. A whitespace-only chunk between
+ * ordinary elements still collapses to one html space, as before. */
 static int add_text(we_doc_t* d, int parent, const char* s, int n) {
     char buf[WE_TEXT_SOURCE_MAX];
-    int i = 0, o = 0, space = 0, lead = 0, idx;
+    int i = 0, o = 0, graphic = 0, newline = 0, idx;
     while (i < n && o < (int)sizeof(buf) - 1) {
         char c = s[i];
-        if (w_space(c)) { if (o == 0) lead = 1; space = 1; i++; continue; }
-        if (space && o > 0) buf[o++] = ' ';
-        space = 0;
+        if (c == '\r') { i++; continue; }
         if (c == '&') {
             if (w_ieq_n(s + i, n - i, "&amp;")) { c = '&'; i += 5; }
             else if (w_ieq_n(s + i, n - i, "&lt;")) { c = '<'; i += 4; }
@@ -105,19 +114,28 @@ static int add_text(we_doc_t* d, int parent, const char* s, int n) {
             else if (w_ieq_n(s + i, n - i, "&quot;")) { c = '"'; i += 6; }
             else if (w_ieq_n(s + i, n - i, "&nbsp;")) { c = ' '; i += 6; }
             else i++;
+            if (c != ' ') graphic = 1;
             buf[o++] = c;
             continue;
         }
+        if (w_space(c)) {
+            buf[o++] = c == '\n' ? '\n' : ' ';
+            if (c == '\n') newline = 1;
+            i++;
+            continue;
+        }
+        graphic = 1;
         buf[o++] = (c >= 32 && c < 127) ? c : '?';
         i++;
     }
     if (i < n) diag(d, "text source exceeds limit", parent);
-    if (o == 0) { d->nodes[parent].pending_html_space = 1; return 0; }
+    if (!graphic && !(ancestor_pre(d, parent) && newline)) {
+        if (o > 0) d->nodes[parent].pending_html_space = 1;
+        return 0;
+    }
     idx = new_node(d, parent);
     if (idx < 0) return -1;
     d->nodes[idx].is_text = 1;
-    d->nodes[idx].lead_space = (uint8_t)lead;
-    d->nodes[idx].trail_space = (uint8_t)space;
     if (pool_put(d, buf, o, &d->nodes[idx].text_off) != 0) return -1;
     d->nodes[idx].text_len = (uint16_t)o;
     d->perf.text_nodes++;
@@ -232,10 +250,11 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                             if (av[digit] < '0' || av[digit] > '9' || span > WE_TRACKS_MAX) { valid = 0; break; }
                             span = span * 10 + av[digit] - '0';
                         }
-                        if (!valid || span < 1 || span > WE_TRACKS_MAX || (w_eq(an, "rowspan") && span != 1)) {
+                        if (!valid || span < 1 || span > WE_TRACKS_MAX) {
                             n->span_refused = 1;
                             diag(d, "table span refused", idx);
                         } else if (w_eq(an, "colspan")) n->colspan = (uint8_t)span;
+                        else n->rowspan = (uint8_t)span;
                     }
                     else if (w_eq(an, "src")) {
                         if (pool_put(d, av, vk, &n->src_off) == 0) n->src_len = (uint16_t)vk;
@@ -577,6 +596,49 @@ static int parse_tracks(const char *v, int len, int16_t *sizes) {
     return count ? count : -1;
 }
 
+static int bounded_signed(const char *v, int len, int max, int *out) {
+    int sign = 1;
+    if (len && v[0] == '+') { v++; len--; }
+    else if (len && v[0] == '-') { sign = -1; v++; len--; }
+    if (bounded_uint(v, len, max, out)) return -1;
+    *out *= sign;
+    return 0;
+}
+
+/* Expand margin into top,right,bottom,left. Returns 1 when a token is auto. */
+static int margin_auto_box(we_node_t *n, const char *v, int vl) {
+    int a[4], l[4], c = tokens(v, vl, a, l), k, px, any = 0;
+    int vals[4], autos[4], top, right, bottom, left;
+    if (c < 1 || c > 4) return 0;
+    for (k = 0; k < c; k++) {
+        if (value_is(v + a[k], l[k], "auto")) { autos[k] = 1; vals[k] = 0; any = 1; }
+        else if (parse_len(v + a[k], l[k], &px, 0) == 0) { autos[k] = 0; vals[k] = px; }
+        else return 0;
+    }
+    if (!any) return 0;
+    top = vals[0];
+    right = c >= 2 ? vals[1] : vals[0];
+    bottom = c >= 3 ? vals[2] : top;
+    left = c == 4 ? vals[3] : right;
+    n->margin[0] = (int16_t)top;
+    n->margin[1] = (int16_t)right;
+    n->margin[2] = (int16_t)bottom;
+    n->margin[3] = (int16_t)left;
+    n->margin_auto = 0;
+    if (c == 1 && autos[0]) n->margin_auto = (uint8_t)(WE_AUTO_TOP | WE_AUTO_RIGHT | WE_AUTO_BOTTOM | WE_AUTO_LEFT);
+    else {
+        int at = autos[0];
+        int ar = c >= 2 ? autos[1] : at;
+        int ab = c >= 3 ? autos[2] : at;
+        int al = c == 4 ? autos[3] : ar;
+        if (at) n->margin_auto |= WE_AUTO_TOP;
+        if (ar) n->margin_auto |= WE_AUTO_RIGHT;
+        if (ab) n->margin_auto |= WE_AUTO_BOTTOM;
+        if (al) n->margin_auto |= WE_AUTO_LEFT;
+    }
+    return 1;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[24];
     int px, pct, k;
@@ -596,14 +658,23 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "table")) n->display = WE_DISP_TABLE;
         else if (value_is(v, vl, "table-row")) n->display = WE_DISP_ROW;
         else if (value_is(v, vl, "table-cell")) n->display = WE_DISP_CELL;
+        else if (value_is(v, vl, "inline-block")) n->display = WE_DISP_INLINE_BLOCK;
         else diag(d, "display refused", -1);
     } else if (w_eq(prop, "flex-direction")) {
-        if (value_is(v, vl, "row") || value_is(v, vl, "column"))
-            n->flex_dir = (uint8_t)value_is(v, vl, "column");
-        else diag(d, "flex-direction refused", -1);
+        if (value_is(v, vl, "row") || value_is(v, vl, "row-reverse")) {
+            n->flex_dir = 0;
+            n->flex_reverse = (uint8_t)value_is(v, vl, "row-reverse");
+        } else if (value_is(v, vl, "column") || value_is(v, vl, "column-reverse")) {
+            n->flex_dir = 1;
+            n->flex_reverse = (uint8_t)value_is(v, vl, "column-reverse");
+        } else diag(d, "flex-direction refused", -1);
+    } else if (w_eq(prop, "order")) {
+        if (bounded_signed(v, vl, WE_ORDER_MAX, &px) == 0) n->item_order = (int8_t)px;
+        else diag(d, "order refused", -1);
     } else if (w_eq(prop, "flex-wrap")) {
-        if (value_is(v, vl, "wrap") || value_is(v, vl, "nowrap"))
-            n->flex_wrap = (uint8_t)value_is(v, vl, "wrap");
+        if (value_is(v, vl, "nowrap")) n->flex_wrap = 0;
+        else if (value_is(v, vl, "wrap")) n->flex_wrap = 1;
+        else if (value_is(v, vl, "wrap-reverse")) n->flex_wrap = 2;
         else diag(d, "flex-wrap refused", -1);
     } else if (w_eq(prop, "flex-grow")) {
         if (bounded_uint(v, vl, 1000, &px) == 0) n->flex_grow = (int16_t)px;
@@ -657,7 +728,11 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "content-box")) n->border_box = 0;
         else diag(d, "box sizing refused", -1);
     } else if (w_eq(prop, "white-space")) {
-        if (value_is(v, vl, "normal") || value_is(v, vl, "nowrap")) n->nowrap = (uint8_t)value_is(v, vl, "nowrap");
+        if (value_is(v, vl, "normal")) { n->nowrap = 0; n->ws_mode = WE_WS_NORMAL; }
+        else if (value_is(v, vl, "nowrap")) { n->nowrap = 1; n->ws_mode = WE_WS_NORMAL; }
+        else if (value_is(v, vl, "pre")) { n->nowrap = 1; n->ws_mode = WE_WS_PRE; }
+        else if (value_is(v, vl, "pre-wrap")) { n->nowrap = 0; n->ws_mode = WE_WS_PRE_WRAP; }
+        else if (value_is(v, vl, "pre-line")) { n->nowrap = 0; n->ws_mode = WE_WS_PRE_LINE; }
         else diag(d, "white space refused", -1);
     } else if (w_eq(prop, "overflow-wrap")) {
         if (value_is(v, vl, "normal") || value_is(v, vl, "break-word")) n->break_word = (uint8_t)value_is(v, vl, "break-word");
@@ -673,15 +748,66 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "right")) n->float_side = WE_FLOAT_RIGHT;
         else if (value_is(v, vl, "none")) n->float_side = WE_FLOAT_NONE;
         else diag(d, "float refused", -1);
+    } else if (w_eq(prop, "clear")) {
+        if (value_is(v, vl, "none")) n->clear_side = WE_CLEAR_NONE;
+        else if (value_is(v, vl, "left")) n->clear_side = WE_CLEAR_LEFT;
+        else if (value_is(v, vl, "right")) n->clear_side = WE_CLEAR_RIGHT;
+        else if (value_is(v, vl, "both")) n->clear_side = WE_CLEAR_BOTH;
+        else diag(d, "clear refused", -1);
+    } else if (w_eq(prop, "z-index")) {
+        if (value_is(v, vl, "auto")) { n->z_set = 0; n->z_index = 0; }
+        else if (bounded_signed(v, vl, WE_Z_MAX, &px) == 0) { n->z_index = (int8_t)px; n->z_set = 1; }
+        else diag(d, "z-index refused", -1);
+    } else if (w_eq(prop, "line-height")) {
+        int end = vl, number = 0, unitless;
+        if (value_is(v, vl, "normal")) n->line_height = 0;
+        else {
+            if (vl >= 2 && value_is(v + vl - 2, 2, "px")) end -= 2;
+            unitless = end == vl;
+            if (bounded_uint(v, end, unitless ? 4 : WE_LINE_H_MAX, &number) == 0 &&
+                number >= (unitless ? 1 : WE_LINE_H))
+                n->line_height = (int16_t)(unitless ? number * WE_LINE_H : number);
+            else diag(d, "line height refused", -1);
+        }
+    } else if (w_eq(prop, "text-indent")) {
+        int pct = 0;
+        if (parse_len(v, vl, &px, &pct) == 0 && pct == 0 && px >= 0 && px <= WE_INDENT_MAX)
+            n->text_indent = (int16_t)px;
+        else diag(d, "text indent refused", -1);
+    } else if (w_eq(prop, "vertical-align")) {
+        if (value_is(v, vl, "top")) n->valign = WE_VALIGN_TOP;
+        else if (value_is(v, vl, "middle")) n->valign = WE_VALIGN_MIDDLE;
+        else if (value_is(v, vl, "bottom")) n->valign = WE_VALIGN_BOTTOM;
+        else diag(d, "vertical align refused", -1);
     } else if (w_eq(prop, "position")) {
-        if (value_is(v, vl, "relative")) n->relative = 1;
-        else if (value_is(v, vl, "static")) n->relative = 0;
+        if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = 0; }
+        else if (value_is(v, vl, "absolute")) { n->absolute = 1; n->relative = 0; }
+        else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = 0; }
         else diag(d, "position refused", -1);
-    } else if (w_eq(prop, "left") || w_eq(prop, "top")) {
+    } else if (w_eq(prop, "left") || w_eq(prop, "top") || w_eq(prop, "right") || w_eq(prop, "bottom")) {
         if (parse_len(v, vl, &px, 0) == 0) {
-            if (w_eq(prop, "left")) n->offset_x = (int16_t)px;
-            else n->offset_y = (int16_t)px;
+            if (w_eq(prop, "left")) { n->offset_x = (int16_t)px; n->inset_flags |= WE_INSET_LEFT; }
+            else if (w_eq(prop, "top")) { n->offset_y = (int16_t)px; n->inset_flags |= WE_INSET_TOP; }
+            else if (w_eq(prop, "right")) { n->offset_r = (int16_t)px; n->inset_flags |= WE_INSET_RIGHT; }
+            else { n->offset_b = (int16_t)px; n->inset_flags |= WE_INSET_BOTTOM; }
         } else diag(d, "position offset refused", -1);
+    } else if (w_eq(prop, "border-collapse")) {
+        if (value_is(v, vl, "collapse")) n->border_collapse = 1;
+        else if (value_is(v, vl, "separate")) n->border_collapse = 0;
+        else diag(d, "border collapse refused", -1);
+    } else if (w_eq(prop, "border-spacing")) {
+        int a[4], lens[4], count = tokens(v, vl, a, lens), t;
+        int hx = 0, hy = 0, ok = count == 1 || count == 2;
+        for (t = 0; t < count && t < 2 && ok; t++) {
+            int end = lens[t], number = 0;
+            const char *tok = v + a[t];
+            if (end >= 2 && value_is(tok + end - 2, 2, "px")) end -= 2;
+            if (bounded_uint(tok, end, WE_SPACING_MAX, &number)) ok = 0;
+            else if (t == 0) hx = hy = number;
+            else hy = number;
+        }
+        if (!ok) diag(d, "border spacing refused", -1);
+        else { n->border_spacing = (int16_t)hx; n->border_spacing_y = (int16_t)hy; }
     } else if (w_eq(prop, "list-style-type")) {
         if (value_is(v, vl, "none")) n->list_style = WE_LIST_NONE;
         else if (value_is(v, vl, "disc")) n->list_style = WE_LIST_DISC;
@@ -724,11 +850,24 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
         else if (w_ieq_n(v, vl, "none") || w_ieq_n(v, vl, "transparent")) n->has_bg = 0;
     }
-    else if (w_eq(prop, "margin")) box4(v, vl, n->margin);
+    else if (w_eq(prop, "margin")) { if (!margin_auto_box(n, v, vl)) box4(v, vl, n->margin); }
     else if (w_eq(prop, "padding")) box4(v, vl, n->padding);
-    else if (w_eq(prop, "margin-top")) { if (parse_len(v, vl, &px, 0) == 0) n->margin[0] = (int16_t)px; }
-    else if (w_eq(prop, "margin-bottom")) { if (parse_len(v, vl, &px, 0) == 0) n->margin[2] = (int16_t)px; }
-    else if (w_eq(prop, "margin-left")) { if (parse_len(v, vl, &px, 0) == 0) n->margin[3] = (int16_t)px; }
+    else if (w_eq(prop, "margin-top")) {
+        if (value_is(v, vl, "auto")) { n->margin[0] = 0; n->margin_auto |= WE_AUTO_TOP; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[0] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_TOP; }
+    }
+    else if (w_eq(prop, "margin-right")) {
+        if (value_is(v, vl, "auto")) { n->margin[1] = 0; n->margin_auto |= WE_AUTO_RIGHT; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[1] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_RIGHT; }
+    }
+    else if (w_eq(prop, "margin-bottom")) {
+        if (value_is(v, vl, "auto")) { n->margin[2] = 0; n->margin_auto |= WE_AUTO_BOTTOM; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[2] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_BOTTOM; }
+    }
+    else if (w_eq(prop, "margin-left")) {
+        if (value_is(v, vl, "auto")) { n->margin[3] = 0; n->margin_auto |= WE_AUTO_LEFT; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[3] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; }
+    }
     else if (w_eq(prop, "padding-left")) { if (parse_len(v, vl, &px, 0) == 0) n->padding[3] = (int16_t)px; }
     else if (w_eq(prop, "width")) {
         if (value_is(v, vl, "min-content") || value_is(v, vl, "max-content") || value_is(v, vl, "fit-content")) {
@@ -822,6 +961,7 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "a")) n->color = 0x0645AD;
     if (w_eq(t, "hr")) { n->height = 2; n->bg = 0x808080; n->has_bg = 1; n->margin[0] = 6; n->margin[2] = 6; }
     if (w_eq(t, "blockquote")) { n->margin[3] = 24; n->margin[1] = 24; }
+    if (w_eq(t, "pre")) { n->display = WE_DISP_BLOCK; n->ws_mode = WE_WS_PRE; n->nowrap = 1; }
 }
 
 int we_style(we_doc_t* d) {
@@ -847,6 +987,16 @@ int we_style(we_doc_t* d) {
         n->justify_content = n->align_items = n->align_self = n->align_content = 0;
         n->justify_items = n->justify_self = 0;
         n->grid_col_start = n->grid_row_start = 0;
+        n->relative = n->absolute = n->flex_reverse = n->margin_auto = n->border_collapse = 0;
+        n->item_order = 0;
+        n->inset_flags = 0;
+        n->offset_x = n->offset_y = n->offset_r = n->offset_b = 0;
+        n->border_spacing = n->border_spacing_y = 0;
+        n->clear_side = n->valign = n->z_set = 0;
+        n->z_index = 0;
+        n->line_height = p ? p->line_height : 0;
+        n->text_indent = p ? p->text_indent : 0;
+        n->ws_mode = p ? p->ws_mode : 0;
         n->nowrap = p ? p->nowrap : 0;
         n->break_word = p ? p->break_word : 0;
         n->visibility = p ? p->visibility : 0;
@@ -1072,6 +1222,7 @@ typedef struct {
     struct { const char* s; int len; int node; int space_before; } w[WE_LINE_WORDS];
     int lines;
     int pending_space, measuring;
+    int line_h, indent, indent_used, atom_h, pending_x;
 } we_inline_t;
 
 static int limit_coord(int n) {
@@ -1085,9 +1236,10 @@ static void flow_region(we_inline_t *f, int need) {
     for (pass = 0; pass <= WE_FLOATS_MAX; pass++) {
         int i, left = f->base_x, right = left + f->base_width;
         int next = WE_LAYOUT_MAX;
+        int band = f->line_h > 0 ? f->line_h : WE_LINE_H;
         for (i = 0; i < f->nfloat; i++) {
             int bottom = f->floats[i].y + f->floats[i].h;
-            if (bottom <= f->y || f->floats[i].y >= f->y + WE_LINE_H) continue;
+            if (bottom <= f->y || f->floats[i].y >= f->y + band) continue;
             if (bottom < next) next = bottom;
             if (f->floats[i].side == WE_FLOAT_LEFT && f->floats[i].x + f->floats[i].w > left)
                 left = f->floats[i].x + f->floats[i].w;
@@ -1096,26 +1248,59 @@ static void flow_region(we_inline_t *f, int need) {
         }
         f->x0 = left;
         f->width = right > left ? right - left : 0;
+        f->indent_used = 0;
+        if (f->lines == 0 && f->indent > 0 && f->width > 0) {
+            int take = f->indent;
+            if (f->width - take < WE_CHAR_W && f->width > WE_CHAR_W) take = f->width - WE_CHAR_W;
+            if (take > f->width) take = f->width;
+            if (take < 0) take = 0;
+            f->x0 += take;
+            f->width -= take;
+            f->indent_used = take;
+        }
         if (f->width >= need || f->nwords || next == WE_LAYOUT_MAX ||
             (need > f->base_width && f->width >= f->base_width)) return;
         f->y = next;
     }
 }
 
-static void flush_line(we_inline_t* f, int force) {
-    int i, x, total = 0;
+static int line_step(const we_inline_t *f) {
+    int step = f->line_h > 0 ? f->line_h : WE_LINE_H;
+    if (f->atom_h > step) step = f->atom_h;
+    return step;
+}
+
+/* advance=0 paints a segment and keeps the line open for an atomic box. */
+static void flush_line_mode(we_inline_t *f, int force, int advance) {
+    int i, x, total = 0, step = line_step(f), box_h;
     we_doc_t* d = f->d;
-    if (f->nwords == 0 && !force) return;
+    box_h = f->line_h > 0 ? f->line_h : WE_LINE_H;
+    if (f->nwords == 0 && !force) {
+        if (advance && f->atom_h > 0) {
+            f->y = limit_coord(f->y + step);
+            f->lines++;
+            if (!f->measuring) d->perf.lines++;
+            f->atom_h = 0;
+            f->pending_x = 0;
+            f->cur_w = 0;
+        }
+        return;
+    }
     if (f->measuring) {
-        f->y = limit_coord(f->y + WE_LINE_H);
-        f->lines++;
-        f->nwords = f->cur_w = 0;
+        if (advance) {
+            f->y = limit_coord(f->y + step);
+            f->lines++;
+            f->nwords = f->cur_w = f->pending_x = 0;
+            f->atom_h = 0;
+        } else f->nwords = 0;
         return;
     }
     for (i = 0; i < f->nwords; i++) total += (f->w[i].len + (i && f->w[i].space_before ? 1 : 0)) * WE_CHAR_W;
-    x = f->x0;
-    if (f->align == WE_ALIGN_CENTER && total < f->width) x += (f->width - total) / 2;
-    else if (f->align == WE_ALIGN_RIGHT && total < f->width) x += f->width - total;
+    x = f->x0 + f->pending_x;
+    if (advance && f->pending_x == 0 && f->atom_h == 0) {
+        if (f->align == WE_ALIGN_CENTER && total < f->width) x += (f->width - total) / 2;
+        else if (f->align == WE_ALIGN_RIGHT && total < f->width) x += f->width - total;
+    }
     i = 0;
     while (i < f->nwords) {
         /* merge words of the same node into one TEXT item */
@@ -1143,7 +1328,7 @@ static void flush_line(we_inline_t* f, int force) {
         }
         buf[len] = 0;
         n = &d->nodes[d->nodes[node].parent >= 0 ? d->nodes[node].parent : node];
-        if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, len * WE_CHAR_W, WE_LINE_H, n->bg);
+        if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, len * WE_CHAR_W, box_h, n->bg);
         it = emit(d, node, OS_FB_WEB_TEXT, xs, f->y + 1, len * WE_CHAR_W, 8, d->nodes[node].color);
         if (it) { it->bold = d->nodes[node].bold; w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len); }
         {   /* UX4: text nodes get the bounding box of their runs, so a
@@ -1160,12 +1345,24 @@ static void flush_line(we_inline_t* f, int force) {
         x = xs + len * WE_CHAR_W;
         i = j;
     }
-    f->y = limit_coord(f->y + WE_LINE_H);
+    if (!advance) {
+        f->pending_x = x - f->x0;
+        if (f->pending_x < 0) f->pending_x = 0;
+        f->cur_w = f->pending_x;
+        f->nwords = 0;
+        return;
+    }
+    f->y = limit_coord(f->y + step);
     f->lines++;
     d->perf.lines++;
     f->nwords = 0;
     f->cur_w = 0;
+    f->pending_x = 0;
+    f->atom_h = 0;
 }
+
+static void flush_line(we_inline_t *f, int force) { flush_line_mode(f, force, 1); }
+static void flush_segment(we_inline_t *f) { flush_line_mode(f, 0, 0); }
 
 static void add_word_piece(we_inline_t* f, const char* s, int len, int node, int space) {
     int ww;
@@ -1212,6 +1409,7 @@ static void add_word(we_inline_t *f, const char *s, int len, int node, int space
 }
 
 static void place_float(we_inline_t *f, int idx, int depth);
+static void place_inline_block(we_inline_t *f, int idx, int depth);
 
 static void inline_node(we_inline_t* f, int idx, int depth) {
     we_doc_t* d = f->d;
@@ -1223,17 +1421,37 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
     if (n->is_text) {
         const char* s = d->pool + n->text_off;
         int i = 0, len = n->text_len;
+        int keep_sp = n->ws_mode == WE_WS_PRE || n->ws_mode == WE_WS_PRE_WRAP;
+        int keep_nl = keep_sp || n->ws_mode == WE_WS_PRE_LINE;
         if (n->lead_space) f->pending_space = 1;
         while (i < len) {
             int a;
-            while (i < len && s[i] == ' ') { i++; f->pending_space = 1; }
+            if (s[i] == '\n') {
+                if (keep_nl) { flush_line(f, 1); f->pending_space = 0; }
+                else f->pending_space = 1;
+                i++;
+                continue;
+            }
+            if (s[i] == ' ' && keep_sp) {
+                a = i;
+                while (i < len && s[i] == ' ') i++;
+                add_word(f, s + a, i - a, idx, 0);
+                continue;
+            }
+            while (i < len && (s[i] == ' ' || s[i] == '\n')) {
+                if (s[i] == '\n' && keep_nl) break;
+                i++;
+                f->pending_space = 1;
+            }
+            if (i < len && s[i] == '\n') continue;
             a = i;
-            while (i < len && s[i] != ' ') i++;
+            while (i < len && s[i] != ' ' && s[i] != '\n') i++;
             if (i > a) { add_word(f, s + a, i - a, idx, f->pending_space); f->pending_space = 0; }
         }
         if (n->trail_space) f->pending_space = 1;
         return;
     }
+    if (n->display == WE_DISP_INLINE_BLOCK) { place_inline_block(f, idx, depth); return; }
     if (w_eq(n->tag, "br")) { flush_line(f, 1); f->pending_space = 0; return; }
     if (w_eq(n->tag, "img")) {
         int h;
@@ -1334,11 +1552,24 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
     const we_node_t *n = &d->nodes[idx];
     int c, i;
     if (n->html_space) { intrinsic_word(flow); flow->pending = 1; }
-    if (depth > WE_DEPTH_MAX || n->display == WE_DISP_NONE) return;
+    if (depth > WE_DEPTH_MAX || n->display == WE_DISP_NONE || n->absolute) return;
     if (n->is_text) {
         if (n->lead_space) { intrinsic_word(flow); flow->pending = 1; }
         for (i = 0; i < n->text_len; i++) {
-            if (d->pool[n->text_off + i] == ' ') {
+            char ch = d->pool[n->text_off + i];
+            int keep_sp = n->ws_mode == WE_WS_PRE || n->ws_mode == WE_WS_PRE_WRAP;
+            int keep_nl = keep_sp || n->ws_mode == WE_WS_PRE_LINE;
+            if (ch == '\n') {
+                if (keep_nl) intrinsic_line(flow);
+                else { intrinsic_word(flow); flow->pending = 1; }
+            } else if (ch == ' ' && n->ws_mode == WE_WS_PRE_WRAP) {
+                intrinsic_word(flow);
+                flow->line = limit_coord(flow->line + WE_CHAR_W);
+                if (WE_CHAR_W > flow->minimum) flow->minimum = WE_CHAR_W;
+            } else if (ch == ' ' && keep_sp) {
+                flow->line = limit_coord(flow->line + WE_CHAR_W);
+                flow->word = limit_coord(flow->word + WE_CHAR_W);
+            } else if (ch == ' ') {
                 intrinsic_word(flow);
                 flow->pending = 1;
             } else {
@@ -1357,6 +1588,17 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
         flow->pending = 0;
         flow->line = limit_coord(flow->line + width);
         if (width > flow->minimum) flow->minimum = width;
+    } else if (n->display == WE_DISP_INLINE_BLOCK) {
+        int extra = node_border_extra(n) + n->margin[1] + n->margin[3];
+        int low = n->min_content, high = n->max_content;
+        if (n->width >= 0) low = high = content_value(n->width, node_border_extra(n), n->border_box);
+        low = constrained_width(n, low, 0) + extra;
+        high = constrained_width(n, high, 0) + extra;
+        intrinsic_word(flow);
+        if (flow->pending && flow->line) flow->line += WE_CHAR_W;
+        flow->pending = 0;
+        flow->line = limit_coord(flow->line + high);
+        if (low > flow->minimum) flow->minimum = low;
     } else if (is_box(n->display)) {
         int extra = node_border_extra(n) + n->margin[1] + n->margin[3];
         int low = n->min_content, high = n->max_content;
@@ -1390,7 +1632,7 @@ static void intrinsic_sizes(we_doc_t *d) {
             for (c = n->first; c >= 0; c = d->nodes[c].next) {
                 const we_node_t *child = &d->nodes[c];
                 int extra, a, b;
-                if (child->display == WE_DISP_NONE || child->is_text) continue;
+                if (child->display == WE_DISP_NONE || child->is_text || child->absolute) continue;
                 extra = node_border_extra(child) + child->margin[1] + child->margin[3];
                 a = child->width >= 0 ? content_value(child->width, node_border_extra(child), child->border_box) : child->min_content;
                 b = child->width >= 0 ? a : child->max_content;
@@ -1407,6 +1649,10 @@ static void intrinsic_sizes(we_doc_t *d) {
             for (c = n->first; c >= 0; c = d->nodes[c].next) intrinsic_inline(d, c, &flow, 0);
         }
         intrinsic_line(&flow);
+        if (n->text_indent > 0 && flow.maximum > 0) {
+            flow.maximum = limit_coord(flow.maximum + n->text_indent);
+            if (flow.minimum > 0) flow.minimum = limit_coord(flow.minimum + n->text_indent);
+        }
         n->min_content = (int16_t)limit_coord(n->nowrap ? flow.maximum : flow.minimum);
         n->max_content = (int16_t)limit_coord(flow.maximum);
     }
@@ -1524,7 +1770,8 @@ static void place_float(we_inline_t *f, int idx, int depth) {
     if (width < WE_CHAR_W) width = WE_CHAR_W;
     if (width > f->base_width) width = f->base_width;
     flow_region(f, width);
-    x = n->float_side == WE_FLOAT_RIGHT ? f->x0 + f->width - width : f->x0;
+    /* text-indent shifts the first inline line, not the float. */
+    x = n->float_side == WE_FLOAT_RIGHT ? f->x0 + f->width - width : f->x0 - f->indent_used;
     if (x < f->base_x) x = f->base_x;
     height = f->measuring ? measure_area_height(d, idx, width, depth) : layout_assigned(d, idx, x, f->y, width, depth);
     slot = f->nfloat++;
@@ -1534,6 +1781,25 @@ static void place_float(we_inline_t *f, int idx, int depth) {
     f->floats[slot].h = height > 0 ? height : 0;
     f->floats[slot].side = n->float_side;
     if (!f->measuring) d->perf.floats++;
+}
+
+static void clear_floats(we_inline_t *f, int side) {
+    int guard;
+    if (side == WE_CLEAR_NONE) return;
+    for (guard = 0; guard <= WE_FLOATS_MAX; guard++) {
+        int i, next = WE_LAYOUT_MAX, hit = 0;
+        for (i = 0; i < f->nfloat; i++) {
+            int bottom = f->floats[i].y + f->floats[i].h;
+            int fs = f->floats[i].side;
+            if (bottom <= f->y) continue;
+            if (side == WE_CLEAR_LEFT && fs != WE_FLOAT_LEFT) continue;
+            if (side == WE_CLEAR_RIGHT && fs != WE_FLOAT_RIGHT) continue;
+            hit = 1;
+            if (bottom < next) next = bottom;
+        }
+        if (!hit || next <= f->y) return;
+        f->y = next;
+    }
 }
 
 static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth, int measuring) {
@@ -1548,17 +1814,23 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->base_width = f->width = cwidth;
     f->y = limit_coord(cy);
     f->align = d->nodes[idx].align;
+    f->line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
+    f->indent = d->nodes[idx].text_indent;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
         we_node_t *n = &d->nodes[c];
         if (n->html_space) f->pending_space = 1;
-        if (n->display == WE_DISP_NONE) continue;
+        if (n->display == WE_DISP_NONE || n->absolute) continue;
         if (n->float_side && !n->is_text) {
+            flush_line(f, 0);
+            clear_floats(f, n->clear_side);
             place_float(f, c, depth + 1);
         } else if (is_box(n->display)) {
             flush_line(f, 0);
+            clear_floats(f, n->clear_side);
             flow_region(f, WE_CHAR_W);
-            f->y = limit_coord(f->y + (measuring ? measure_height(d, c, f->width, depth + 1) :
-                layout_block(d, c, f->x0, f->y, f->width, depth + 1)));
+            /* A block child is not the indented first line. */
+            f->y = limit_coord(f->y + (measuring ? measure_height(d, c, f->width + f->indent_used, depth + 1) :
+                layout_block(d, c, f->x0 - f->indent_used, f->y, f->width + f->indent_used, depth + 1)));
             f->pending_space = 0;
         } else inline_node(f, c, depth + 1);
     }
@@ -1606,6 +1878,9 @@ static void relative_shift(we_doc_t *d, int idx, int first_item, int containing_
         d->items[i].y = (int16_t)limit_coord(d->items[i].y + dy);
     }
 }
+
+static int layout_area(we_doc_t *d, int idx, int x, int y, int width, int height, int containing, int depth);
+static void place_absolutes(we_doc_t *d, int idx, int pad_x, int pad_y, int pad_w, int pad_h, int depth);
 
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     we_node_t* n = &d->nodes[idx];
@@ -1679,6 +1954,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         it = emit(d, idx, OS_FB_WEB_TEXT, bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
         if (it) w_cpy(it->text, OS_FB_WEB_TEXT_LEN, marker, len);
     }
+    place_absolutes(d, idx, bx + n->border, by + n->border, bw - 2 * n->border, bh - 2 * n->border, depth);
     relative_shift(d, idx, first_item, x, cw);
     return n->margin[0] + bh + n->margin[2];
 }
@@ -1704,6 +1980,161 @@ static int layout_assigned(we_doc_t *d, int idx, int x, int y, int outer, int de
     return layout_area(d, idx, x, y, outer, -1, outer, depth);
 }
 
+/* An inline-block is atomic on the current line. Text before it is closed
+ * as a left-packed segment. Text-align does not apply on that line.
+ * The box top matches the line top; there is no baseline alignment. */
+static void place_inline_block(we_inline_t *f, int idx, int depth) {
+    we_doc_t *d = f->d;
+    we_node_t *n = &d->nodes[idx];
+    int extra = node_border_extra(n) + n->margin[1] + n->margin[3];
+    int inner, outer, height;
+    if (n->width >= 0 || n->width_pct > 0 || n->width_kind)
+        inner = specified_width(n, f->base_width, n->max_content);
+    else inner = n->max_content;
+    if (inner < 0) inner = 0;
+    inner = constrained_width(n, inner, f->base_width);
+    outer = inner + extra;
+    if (outer < 1) outer = 1;
+    if (outer > WE_LAYOUT_MAX) outer = WE_LAYOUT_MAX;
+    if (f->nwords && f->cur_w > 0 && f->cur_w + outer > f->width) flush_line(f, 0);
+    if (f->nwords) flush_segment(f);
+    flow_region(f, outer < f->base_width ? outer : WE_CHAR_W);
+    if (f->pending_x > 0 && f->pending_x + outer > f->width) {
+        flush_line(f, 0);
+        flow_region(f, outer < f->base_width ? outer : WE_CHAR_W);
+    }
+    if (outer > f->width - f->pending_x && f->width > f->pending_x) outer = f->width - f->pending_x;
+    if (outer < 1) outer = 1;
+    if (f->measuring) height = measure_area_height(d, idx, outer, depth);
+    else height = layout_assigned(d, idx, f->x0 + f->pending_x, f->y, outer, depth);
+    f->pending_x += outer;
+    f->cur_w = f->pending_x;
+    if (height > f->atom_h) f->atom_h = height;
+}
+
+static int abs_containing(const we_doc_t *d, int idx) {
+    int p = d->nodes[idx].parent;
+    while (p >= 0) {
+        if (d->nodes[p].relative || d->nodes[p].absolute) return p;
+        p = d->nodes[p].parent;
+    }
+    return -1;
+}
+
+/* Shrink-to-fit margin box. A stretch between left and right uses the
+ * padding edge and ignores the intrinsic size. Width auto is capped by
+ * the padding edge; it does not stretch like a normal block. */
+static int absolute_margin_width(const we_node_t *n, int pad_w, int left, int right, int stretch) {
+    int extra = node_border_extra(n);
+    int margins = n->margin[1] + n->margin[3];
+    int content, room;
+    if (stretch) {
+        int w = pad_w - left - right;
+        return w > 0 ? w : 0;
+    }
+    room = pad_w - extra - margins;
+    if (room < 0) room = 0;
+    if (n->width < 0 && n->width_pct <= 0 && n->width_kind == WE_SIZE_AUTO) {
+        content = n->max_content;
+        if (content > room) content = room;
+        if (content < n->min_content) content = n->min_content;
+        if (content > room) content = room;
+    } else content = specified_width(n, pad_w, n->max_content);
+    content = content + extra + margins;
+    return content > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : content;
+}
+
+/* Absolutes are placed after the containing block's in-flow height is
+ * known, and before its relative offset, so the offset moves them too.
+ * No insets use the padding origin. That is not the CSS static position. */
+static int absolute_stack_key(const we_doc_t *d, int owner, int want) {
+    int n = owner;
+    while (n >= 0) {
+        if (d->nodes[n].absolute && abs_containing(d, n) == want)
+            return d->nodes[n].z_set ? d->nodes[n].z_index : 0;
+        n = d->nodes[n].parent;
+    }
+    return 0;
+}
+
+/* Stable order of the absolute slice. In-flow items stay where they were.
+ * A negative key still paints after in-flow content of the same block. */
+static void order_absolute_items(we_doc_t *d, int cb, int start) {
+    int positioned = d->nodes[cb].relative || d->nodes[cb].absolute;
+    int want = positioned ? cb : (d->nodes[cb].parent < 0 ? -1 : -2);
+    int i;
+    if (want < -1 || start < 0) return;
+    for (i = start + 1; i < (int)d->nitems; i++) {
+        os_fb_web_item_t item = d->items[i];
+        int16_t owner = d->item_owner[i];
+        int key = absolute_stack_key(d, owner, want);
+        int j = i;
+        while (j > start && absolute_stack_key(d, d->item_owner[j - 1], want) > key) {
+            d->items[j] = d->items[j - 1];
+            d->item_owner[j] = d->item_owner[j - 1];
+            j--;
+        }
+        d->items[j] = item;
+        d->item_owner[j] = owner;
+    }
+}
+
+static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w, int pad_h, int depth) {
+    int positioned = d->nodes[cb].relative || d->nodes[cb].absolute;
+    int want = positioned ? cb : (d->nodes[cb].parent < 0 ? -1 : -2);
+    int item_start = (int)d->nitems;
+    uint32_t i;
+    if (want < -1 || depth > WE_DEPTH_MAX) return;
+    if (pad_w < 0) pad_w = 0;
+    if (pad_h < 0) pad_h = 0;
+    if (pad_w > WE_LAYOUT_MAX) pad_w = WE_LAYOUT_MAX;
+    if (pad_h > WE_LAYOUT_MAX) pad_h = WE_LAYOUT_MAX;
+    for (i = 0; i < d->nnodes; i++) {
+        we_node_t *n = &d->nodes[i];
+        int flags, left, right, top, bottom, stretch_w, stretch_h, mbw, mbh, x, y;
+        int16_t saved_ch;
+        if ((int)i == cb || !n->absolute || n->display == WE_DISP_NONE) continue;
+        if (abs_containing(d, (int)i) != want) continue;
+        flags = n->inset_flags;
+        left = (flags & WE_INSET_LEFT) ? n->offset_x : 0;
+        right = (flags & WE_INSET_RIGHT) ? n->offset_r : 0;
+        top = (flags & WE_INSET_TOP) ? n->offset_y : 0;
+        bottom = (flags & WE_INSET_BOTTOM) ? n->offset_b : 0;
+        stretch_w = (flags & WE_INSET_LEFT) && (flags & WE_INSET_RIGHT) &&
+            n->width < 0 && n->width_pct <= 0 && n->width_kind == WE_SIZE_AUTO;
+        stretch_h = (flags & WE_INSET_TOP) && (flags & WE_INSET_BOTTOM) &&
+            n->height < 0 && !n->height_percent;
+        mbw = absolute_margin_width(n, pad_w, left, right, stretch_w);
+        saved_ch = containing_height[i];
+        containing_height[i] = (int16_t)pad_h;
+        if (stretch_h) {
+            mbh = pad_h - top - bottom;
+            if (mbh < 0) mbh = 0;
+        } else mbh = -1;
+        if (mbh < 0 && (flags & WE_INSET_BOTTOM) && !(flags & WE_INSET_TOP)) {
+            int content = definite_height(d, (int)i, 0);
+            if (content >= 0) mbh = content + vertical_extra(n) + n->margin[0] + n->margin[2];
+            else {
+                int16_t saved = forced_width[i];
+                forced_width[i] = (int16_t)mbw;
+                mbh = measure_height(d, (int)i, pad_w, depth + 1);
+                forced_width[i] = saved;
+            }
+            if (mbh < 0) mbh = 0;
+            if (mbh > WE_LAYOUT_MAX) mbh = WE_LAYOUT_MAX;
+        }
+        if (flags & WE_INSET_LEFT) x = pad_x + left;
+        else if ((flags & WE_INSET_RIGHT) && mbw >= 0) x = pad_x + pad_w - right - mbw;
+        else x = pad_x;
+        if (flags & WE_INSET_TOP) y = pad_y + top;
+        else if ((flags & WE_INSET_BOTTOM) && mbh >= 0) y = pad_y + pad_h - bottom - mbh;
+        else y = pad_y;
+        layout_area(d, (int)i, limit_coord(x), limit_coord(y), mbw, mbh, pad_w, depth + 1);
+        containing_height[i] = saved_ch;
+    }
+    if ((int)d->nitems > item_start) order_absolute_items(d, cb, item_start);
+}
+
 typedef struct { int first, end, used, cross; } we_flex_line_t;
 typedef struct {
     int node[WE_MAX_NODES];
@@ -1716,9 +2147,18 @@ typedef struct {
 static we_track_work_t track_work[WE_DEPTH_MAX + 1];
 
 static int collect_items(we_doc_t *d, int idx, we_track_work_t *work) {
-    int c, count = 0;
+    int c, count = 0, i;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next)
-        if (flex_item(&d->nodes[c])) work->node[count++] = c;
+        if (flex_item(&d->nodes[c]) && !d->nodes[c].absolute) work->node[count++] = c;
+    /* Stable by source order when item_order ties. */
+    for (i = 1; i < count; i++) {
+        int id = work->node[i], j = i;
+        while (j > 0 && d->nodes[work->node[j - 1]].item_order > d->nodes[id].item_order) {
+            work->node[j] = work->node[j - 1];
+            j--;
+        }
+        work->node[j] = id;
+    }
     return count;
 }
 
@@ -1732,8 +2172,16 @@ typedef struct {
     int height[WE_GRID_ROWS_MAX], row_y[WE_GRID_ROWS_MAX];
 } we_grid_work_t;
 static we_grid_work_t grid_work[WE_DEPTH_MAX + 1];
+/* Column assignment for rowspan. One slot per layout depth. */
+typedef struct {
+    int col[WE_MAX_NODES];
+    uint8_t occ[WE_GRID_ROWS_MAX];
+    int height[WE_GRID_ROWS_MAX];
+    int cols;
+} we_table_slot_t;
+static we_table_slot_t table_slot[WE_DEPTH_MAX + 1];
 typedef char layout_workspace_is_bounded[
-    sizeof(track_work) + sizeof(grid_work) +
+    sizeof(track_work) + sizeof(grid_work) + sizeof(table_slot) +
     sizeof(we_inline_t) * (WE_DEPTH_MAX + 1) +
     sizeof(forced_width) + sizeof(forced_height) + sizeof(resolved_height) +
     sizeof(containing_height) + sizeof(measure_content) + sizeof(measure_cache) + sizeof(int16_t) * OS_FB_WEB_ITEMS +
@@ -1837,12 +2285,6 @@ static void grid_span_minimum(const we_node_t *n, int vertical, int start, int s
         wanted -= take;
         receivers--;
     }
-}
-
-static int grid_span_extent(const int *sizes, int start, int span, int gap) {
-    int k, total = (span - 1) * gap;
-    for (k = start; k < start + span; k++) total += sizes[k];
-    return total;
 }
 
 static uint32_t flex_share(uint32_t a, uint32_t b, uint32_t denominator);
@@ -2209,9 +2651,10 @@ static void flex_modes(const we_doc_t *d, int idx, const we_track_work_t *work,
     const we_node_t *n = &d->nodes[idx];
     int k;
     *sizing = n->flex_dir && (n->min_height >= 0 || n->max_height >= 0 || n->min_height_percent || n->max_height_percent);
-    *modern = n->justify_content || n->align_items || n->align_content || n->row_gap >= 0 || n->col_gap >= 0;
+    *modern = n->justify_content || n->align_items || n->align_content || n->row_gap >= 0 || n->col_gap >= 0 || n->flex_reverse || n->flex_wrap == 2;
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[work->node[k]];
+        if (child->margin_auto) *modern = 1;
         if (child->align_self || child->basis_content || child->border_box || child->height_percent ||
             child->min_height_percent || child->max_height_percent || child->width_kind) *modern = 1;
         if (child->basis_set || child->flex_shrink >= 0 ||
@@ -2262,7 +2705,34 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
         int extra = n->align_content == WE_PACK_STRETCH ? cross_free * (k + 1) / lines - cross_free * k / lines : 0;
         int cross_start = extent + (n->align_content == WE_PACK_STRETCH ? cross_free * k / lines :
             pack_distance(n->align_content, cross_free, k, lines));
-        int used = 0, j, line_cross = line->cross + extra;
+        int j, line_cross = line->cross + extra;
+        int line_autos = 0, auto_share = 0, auto_rem = 0;
+        if (n->flex_wrap == 2) {
+            int limit = cross_available > cross_total ? cross_available : cross_total;
+            int used = cross_start + line_cross;
+            if (limit < used) limit = used;
+            cross_start = limit - used;
+            if (cross_start < 0) cross_start = 0;
+        }
+        uint8_t before_bit = vertical ? WE_AUTO_TOP : WE_AUTO_LEFT;
+        uint8_t after_bit = vertical ? WE_AUTO_BOTTOM : WE_AUTO_RIGHT;
+        /* Reverse lays out from the other main edge. Swap the physical
+         * auto-margin sides first so the later mirror keeps left on the left. */
+        if (n->flex_reverse) {
+            uint8_t swap = before_bit;
+            before_bit = after_bit;
+            after_bit = swap;
+        }
+        for (j = line->first; j < line->end; j++) {
+            uint8_t bits = d->nodes[work->node[j]].margin_auto;
+            if (bits & before_bit) line_autos++;
+            if (bits & after_bit) line_autos++;
+        }
+        if (line_autos && main_free > 0) {
+            auto_share = main_free / line_autos;
+            auto_rem = main_free % line_autos;
+            main_free = 0;
+        }
         for (j = line->first; j < line->end; j++) {
             we_node_t *child = &d->nodes[work->node[j]];
             int align = child->align_self ? child->align_self : n->align_items;
@@ -2274,7 +2744,25 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
                     cross = height_constraint(d, work->node[j], line_cross - flex_extra(child, 1), cross_available) + flex_extra(child, 1);
             }
             off = pack_distance(align, line_cross - cross, 0, 1);
-            main_start = used + pack_distance(n->justify_content, main_free, j - line->first, line->end - line->first);
+            {
+                int cursor = 0, t, rem_left = auto_rem;
+                for (t = line->first; t < j; t++) {
+                    uint8_t bits = d->nodes[work->node[t]].margin_auto;
+                    cursor += work->size[t] + gap;
+                    if (bits & before_bit) { cursor += auto_share; if (rem_left) { cursor++; rem_left--; } }
+                    if (bits & after_bit) { cursor += auto_share; if (rem_left) { cursor++; rem_left--; } }
+                }
+                {
+                    uint8_t bits = child->margin_auto;
+                    int before = 0;
+                    if (bits & before_bit) { before = auto_share; if (rem_left) { before++; rem_left--; } }
+                    main_start = cursor + before + pack_distance(n->justify_content, main_free, j - line->first, line->end - line->first);
+                }
+            }
+            if (n->flex_reverse) {
+                int limit = main >= 0 ? main : line->used;
+                main_start = limit - main_start - work->size[j];
+            }
             x = cx + (vertical ? cross_start + off : main_start);
             y = cy + (vertical ? main_start : cross_start + off);
             width = vertical ? cross : work->size[j];
@@ -2284,7 +2772,6 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
                 return main >= 0 ? main : 0;
             }
             layout_area(d, work->node[j], limit_coord(x), limit_coord(y), width, height, width, depth + 1);
-            used += work->size[j] + gap;
         }
         extent = limit_coord(extent + line->cross + (k + 1 < lines ? cross_gap : 0));
         d->perf.flex_lines++;
@@ -2408,6 +2895,78 @@ static int collect_table_rows(we_doc_t *d, int idx, int *rows, int report) {
     return count;
 }
 
+/* Occupancy is one bit per column. A rowspan cell blocks those columns on
+ * the following rows. A span past the last row is clamped. Returns -1 when
+ * the table must not be painted. */
+static int table_assign(we_doc_t *d, int idx, int *rows, int nr, int depth, int report) {
+    we_table_slot_t *slot = &table_slot[depth];
+    int r, n, cols = 0;
+    w_zero(slot, sizeof(*slot));
+    for (n = 0; n < WE_MAX_NODES; n++) slot->col[n] = -1;
+    for (r = 0; r < nr && r < WE_GRID_ROWS_MAX; r++) {
+        int c, next = 0;
+        for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
+            we_node_t *cell = &d->nodes[c];
+            int span, rs, col, rr, mask;
+            if (cell->display == WE_DISP_NONE || cell->absolute) continue;
+            if (cell->display != WE_DISP_CELL) {
+                if (report) diag(d, "table cell refused", c);
+                continue;
+            }
+            if (cell->span_refused) {
+                if (report) diag(d, "table refused after span", idx);
+                return -1;
+            }
+            span = cell->colspan < 1 ? 1 : cell->colspan;
+            rs = cell->rowspan < 1 ? 1 : cell->rowspan;
+            if (rs > WE_TRACKS_MAX) rs = WE_TRACKS_MAX;
+            if (r + rs > nr) {
+                if (report && cell->rowspan != (uint8_t)(nr - r)) diag(d, "table rowspan clamped", c);
+                rs = nr - r;
+                if (rs < 1) rs = 1;
+            }
+            while (next < WE_TRACKS_MAX && (slot->occ[r] & (uint8_t)(1u << next))) next++;
+            col = next;
+            if (col + span > WE_TRACKS_MAX) {
+                if (report) diag(d, "table columns exceed limit", idx);
+                return -1;
+            }
+            mask = ((1 << span) - 1) << col;
+            for (rr = 0; rr < rs && r + rr < WE_GRID_ROWS_MAX; rr++)
+                slot->occ[r + rr] = (uint8_t)(slot->occ[r + rr] | (uint8_t)mask);
+            slot->col[c] = col;
+            if (col + span > cols) cols = col + span;
+            next = col + span;
+        }
+    }
+    slot->cols = cols;
+    return cols;
+}
+
+static int table_spacing_axis(const we_node_t *n, int vertical) {
+    int spacing;
+    if (n->border_collapse) return 0;
+    spacing = vertical ? n->border_spacing_y : n->border_spacing;
+    if (spacing < 0) return 0;
+    if (spacing > WE_SPACING_MAX) return WE_SPACING_MAX;
+    return spacing;
+}
+
+static int table_spacing_of(const we_node_t *n) {
+    return table_spacing_axis(n, 0);
+}
+
+static int table_spacing_y_of(const we_node_t *n) {
+    return table_spacing_axis(n, 1);
+}
+
+static int table_rowspan_of(const we_node_t *cell, int row, int nr) {
+    int rs = cell->rowspan < 1 ? 1 : cell->rowspan;
+    if (rs > WE_TRACKS_MAX) rs = WE_TRACKS_MAX;
+    if (row + rs > nr) rs = nr - row;
+    return rs < 1 ? 1 : rs;
+}
+
 static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maximum) {
     const we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[0];
@@ -2426,14 +2985,20 @@ static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maxim
         if (cols > WE_TRACKS_MAX) cols = WE_TRACKS_MAX;
         grid_place(d, items, work, count, cols, 0);
     } else {
-        int r;
+        int r, placed;
         rows = collect_table_rows(d, idx, items->node, 0);
+        placed = table_assign(d, idx, items->node, rows, 0, 0);
         count = 0;
-        for (r = 0; r < rows; r++) {
-            int c, column = 0;
-            for (c = d->nodes[items->node[r]].first; c >= 0; c = d->nodes[c].next)
-                if (d->nodes[c].display == WE_DISP_CELL) column += d->nodes[c].colspan;
-            if (column > cols) cols = column;
+        cols = placed < 0 ? 0 : placed;
+        if (placed < 0) {
+            int ncell;
+            for (ncell = 0; ncell < WE_MAX_NODES; ncell++) table_slot[0].col[ncell] = -1;
+            for (r = 0; r < rows; r++) {
+                int c, column = 0;
+                for (c = d->nodes[items->node[r]].first; c >= 0; c = d->nodes[c].next)
+                    if (d->nodes[c].display == WE_DISP_CELL && !d->nodes[c].absolute) column += d->nodes[c].colspan;
+                if (column > cols) cols = column;
+            }
         }
         if (cols > WE_TRACKS_MAX) cols = WE_TRACKS_MAX;
     }
@@ -2449,8 +3014,8 @@ static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maxim
             while (c >= 0) {
                 const we_node_t *child = &d->nodes[c];
                 int span = grid ? child->grid_col_span : child->colspan;
-                int start = grid ? work->col[r] : column;
-                if (child->display != WE_DISP_NONE && (grid || child->display == WE_DISP_CELL)) {
+                int start = grid ? work->col[r] : (table_slot[0].col[c] >= 0 ? table_slot[0].col[c] : column);
+                if (child->display != WE_DISP_NONE && !child->absolute && (grid || child->display == WE_DISP_CELL)) {
                     if ((span == 1) == (pass == 0) && start >= 0 && start + span <= cols) {
                         int extra = node_border_extra(child) + child->margin[1] + child->margin[3];
                         int low = child->width >= 0 ? content_value(child->width, node_border_extra(child), child->border_box) : child->min_content;
@@ -2472,41 +3037,43 @@ static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maxim
         *minimum = limit_coord(*minimum + work->column[k]);
         *maximum = limit_coord(*maximum + work->column_x[k]);
     }
+    if (!grid && cols > 1) {
+        int spacing = table_spacing_of(n);
+        *minimum = limit_coord(*minimum + (cols - 1) * spacing);
+        *maximum = limit_coord(*maximum + (cols - 1) * spacing);
+    }
 }
 
-/* Table tracks are planned once for measurement and paint. Colspan is
- * bounded to eight columns; rowspan remains an explicit refusal. */
+/* Column widths share one planner with paint. Rowspan occupies later rows.
+ * border-spacing is removed from the distributable width; collapse forces 0. */
 static int table_tracks(we_doc_t *d, int idx, int width, int depth, int *widths) {
     int *rows = track_work[depth].node;
-    int nr = 0, c, r, cols = 0, col;
+    int nr = 0, c, r, cols, col, spacing, inner;
     int requested[WE_TRACKS_MAX], sum = 0, auto_cols = 0;
     nr = collect_table_rows(d, idx, rows, 1);
+    cols = table_assign(d, idx, rows, nr, depth, 1);
+    if (cols < 0) return 0;
     for (col = 0; col < WE_TRACKS_MAX; col++) requested[col] = 0;
+    spacing = table_spacing_of(&d->nodes[idx]);
     for (r = 0; r < nr; r++) {
-        int cells = 0;
         for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
             we_node_t *cell = &d->nodes[c];
-            int want;
-            if (cell->display == WE_DISP_NONE) continue;
-            if (cell->display != WE_DISP_CELL) { diag(d, "table cell refused", c); continue; }
-            if (cell->span_refused) { diag(d, "table refused after span", idx); return 0; }
-            if (cells + cell->colspan > WE_TRACKS_MAX) { diag(d, "table columns exceed limit", idx); return 0; }
+            int want, column;
+            if (cell->display != WE_DISP_CELL || cell->absolute || table_slot[depth].col[c] < 0) continue;
+            column = table_slot[depth].col[c];
             want = preferred_outer(cell, width, d->nodes[idx].width_kind == WE_SIZE_MIN_CONTENT ? cell->min_content :
                                     d->nodes[idx].width_kind ? cell->max_content : 0);
             if (cell->colspan == 1 && (d->nodes[idx].width_kind || cell->width >= 0 || cell->width_pct > 0 || cell->min_width >= 0 || cell->min_pct > 0))
-                if (want > requested[cells]) requested[cells] = want;
-            cells += cell->colspan;
+                if (want > requested[column]) requested[column] = want;
         }
-        if (cells > cols) cols = cells;
     }
     for (r = 0; r < nr; r++) {
-        int column = 0;
         for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
             const we_node_t *cell = &d->nodes[c];
-            int span, current = 0, wanted, k, deficit;
-            if (cell->display != WE_DISP_CELL) continue;
-            span = cell->colspan;
-            if (span < 1) span = 1;
+            int span, column, current = 0, wanted, k, deficit;
+            if (cell->display != WE_DISP_CELL || cell->absolute || table_slot[depth].col[c] < 0) continue;
+            span = cell->colspan < 1 ? 1 : cell->colspan;
+            column = table_slot[depth].col[c];
             if (span > 1 && (d->nodes[idx].width_kind || cell->width >= 0 || cell->width_pct || cell->min_width >= 0 || cell->min_pct)) {
                 wanted = preferred_outer(cell, width, d->nodes[idx].width_kind == WE_SIZE_MIN_CONTENT ? cell->min_content :
                                          d->nodes[idx].width_kind ? cell->max_content : 0);
@@ -2518,30 +3085,32 @@ static int table_tracks(we_doc_t *d, int idx, int width, int depth, int *widths)
                     deficit -= take;
                 }
             }
-            column += span;
         }
     }
     if (!cols && !nr) return 0;
     if (!cols) cols = 1;
+    inner = width - (cols > 1 ? spacing * (cols - 1) : 0);
+    if (inner < 0) inner = 0;
     for (col = 0; col < cols; col++) {
         sum += requested[col];
         if (!requested[col]) auto_cols++;
     }
     for (col = 0; col < cols; col++) {
-        if (sum > width) widths[col] = width * requested[col] / sum;
-        else if (!requested[col]) widths[col] = auto_cols ? (width - sum) / auto_cols : 0;
+        if (sum > inner) widths[col] = inner * requested[col] / sum;
+        else if (!requested[col]) widths[col] = auto_cols ? (inner - sum) / auto_cols : 0;
         else widths[col] = requested[col];
     }
     /* A definite table width is exhausted exactly. Extra width goes to
-     * automatic columns, or equally to all columns when all are fixed. */
+     * automatic columns, or equally to all columns when all are fixed.
+     * Spacing stays outside the columns. */
     {
         int assigned = 0, remaining, receivers;
         for (col = 0; col < cols; col++) assigned += widths[col];
-        remaining = width - assigned;
-        receivers = sum > width ? cols : auto_cols ? auto_cols : cols;
+        remaining = inner - assigned;
+        receivers = sum > inner ? cols : auto_cols ? auto_cols : cols;
         for (col = 0; col < cols && remaining > 0; col++) {
             int take;
-            if (sum <= width && auto_cols && requested[col]) continue;
+            if (sum <= inner && auto_cols && requested[col]) continue;
             take = remaining / receivers + (remaining % receivers != 0);
             widths[col] += take;
             remaining -= take;
@@ -2551,58 +3120,134 @@ static int table_tracks(we_doc_t *d, int idx, int width, int depth, int *widths)
     return nr;
 }
 
-static int measure_table(we_doc_t *d, int idx, int width, int depth) {
-    int widths[WE_TRACKS_MAX], nr = table_tracks(d, idx, width, depth, widths);
+static int table_origin(const int *sizes, int index, int spacing) {
+    int k, at = 0;
+    for (k = 0; k < index; k++) at = limit_coord(at + sizes[k] + spacing);
+    return at;
+}
+
+static int table_span_size(const int *sizes, int index, int span, int spacing) {
+    int k, total = 0;
+    if (span < 1) span = 1;
+    for (k = 0; k < span; k++) total = limit_coord(total + sizes[index + k] + (k ? spacing : 0));
+    return total;
+}
+
+/* Row heights match paint. A rowspan taller than the rows it covers grows
+ * the last of those rows. Single-row cells do not stretch their own box. */
+static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths, int nr, int spacing_x, int spacing_y) {
+    we_table_slot_t *slot = &table_slot[depth];
     int *rows = track_work[depth].node;
-    int r, total = 0;
+    int r, c, total = 0;
+    (void)idx;
     for (r = 0; r < nr; r++) {
-        int c, col = 0, high = d->nodes[rows[r]].height > 0 ? d->nodes[rows[r]].height : 0;
+        int high = d->nodes[rows[r]].height > 0 ? d->nodes[rows[r]].height : 0;
         for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
             const we_node_t *cell = &d->nodes[c];
-            int span, size, h;
-            if (cell->display != WE_DISP_CELL) continue;
-            span = cell->colspan;
-            size = grid_span_extent(widths, col, span, 0);
-            h = measure_area_height(d, c, size, depth + 1);
+            int h;
+            if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
+            if (table_rowspan_of(cell, r, nr) != 1) continue;
+            h = measure_area_height(d, c, table_span_size(widths, slot->col[c], cell->colspan, spacing_x), depth + 1);
             if (h > high) high = h;
-            col += span;
         }
-        total = limit_coord(total + high);
+        slot->height[r] = high;
     }
+    for (r = 0; r < nr; r++) {
+        for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
+            const we_node_t *cell = &d->nodes[c];
+            int rs, sum, h;
+            if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
+            rs = table_rowspan_of(cell, r, nr);
+            if (rs < 2) continue;
+            sum = table_span_size(slot->height, r, rs, spacing_y);
+            h = measure_area_height(d, c, table_span_size(widths, slot->col[c], cell->colspan, spacing_x), depth + 1);
+            if (h > sum) slot->height[r + rs - 1] = limit_coord(slot->height[r + rs - 1] + h - sum);
+        }
+    }
+    for (r = 0; r < nr; r++) total = limit_coord(total + slot->height[r] + (r ? spacing_y : 0));
     return total;
+}
+
+static int measure_table(we_doc_t *d, int idx, int width, int depth) {
+    int widths[WE_TRACKS_MAX], nr = table_tracks(d, idx, width, depth, widths);
+    if (!nr) return 0;
+    return table_row_heights(d, idx, depth, widths, nr, table_spacing_of(&d->nodes[idx]), table_spacing_y_of(&d->nodes[idx]));
+}
+
+/* Shift in-flow descendants inside a cell that is taller than its content.
+ * The cell border box stays put. Top alignment does not move anything. */
+static void valign_cell(we_doc_t *d, int idx, int first_item) {
+    we_node_t *cell = &d->nodes[idx];
+    int top, inner, bottom, used, shift, i;
+    if (cell->valign == WE_VALIGN_TOP || first_item < 0) return;
+    top = cell->y + cell->border + cell->padding[0];
+    inner = cell->h - 2 * cell->border - cell->padding[0] - cell->padding[2];
+    if (inner < 0) inner = 0;
+    bottom = top;
+    for (i = idx + 1; i < (int)d->nnodes; i++) {
+        int ancestor = i;
+        if (d->nodes[i].absolute || d->nodes[i].display == WE_DISP_NONE) continue;
+        while (ancestor >= 0 && ancestor != idx) ancestor = d->nodes[ancestor].parent;
+        if (ancestor != idx) continue;
+        if (d->nodes[i].y + d->nodes[i].h > bottom) bottom = d->nodes[i].y + d->nodes[i].h;
+    }
+    used = bottom - top;
+    if (used < 0 || used >= inner) return;
+    shift = cell->valign == WE_VALIGN_MIDDLE ? (inner - used) / 2 : inner - used;
+    if (shift <= 0) return;
+    for (i = idx + 1; i < (int)d->nnodes; i++) {
+        int ancestor = i;
+        while (ancestor >= 0 && ancestor != idx) ancestor = d->nodes[ancestor].parent;
+        if (ancestor == idx) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + shift);
+    }
+    for (i = first_item; i < (int)d->nitems; i++) {
+        int owner = d->item_owner[i], ancestor = owner;
+        if (owner == idx) continue;
+        while (ancestor >= 0 && ancestor != idx) ancestor = d->nodes[ancestor].parent;
+        if (ancestor == idx) d->items[i].y = (int16_t)limit_coord(d->items[i].y + shift);
+    }
 }
 
 static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth) {
     int widths[WE_TRACKS_MAX], nr = table_tracks(d, idx, width, depth, widths);
     int *rows = track_work[depth].node;
-    int r, c, col, cy = y;
+    we_table_slot_t *slot = &table_slot[depth];
+    int spacing = table_spacing_of(&d->nodes[idx]);
+    int spacing_y = table_spacing_y_of(&d->nodes[idx]);
+    int r, c, cy = y;
+    if (!nr) return 0;
+    table_row_heights(d, idx, depth, widths, nr, spacing, spacing_y);
     for (r = 0; r < nr; r++) {
         we_node_t *row = &d->nodes[rows[r]];
-        int cx = x, high = 0, bg_slot = -1;
-        if (row->has_bg) {
-            bg_slot = (int)d->nitems;
-            if (!emit(d, rows[r], OS_FB_WEB_RECT, x, cy, width, 0, row->bg)) bg_slot = -1;
-        }
-        col = 0;
+        int high = slot->height[r], bg_slot = -1;
         row->x = (int16_t)x;
         row->y = (int16_t)cy;
         row->w = (int16_t)width;
-        for (c = row->first; c >= 0; c = d->nodes[c].next) {
-            int h;
-            if (d->nodes[c].display != WE_DISP_CELL) continue;
-            {
-                int span = d->nodes[c].colspan;
-                int cell_width = grid_span_extent(widths, col, span, 0);
-                h = layout_assigned(d, c, cx, cy, cell_width, depth + 1);
-                cx += cell_width;
-                col += span;
-            }
-            if (h > high) high = h;
-        }
-        if (row->height > high) high = row->height;
         row->h = (int16_t)high;
-        if (bg_slot >= 0) d->items[bg_slot].h = (uint16_t)high;
-        cy = limit_coord(cy + high);
+        if (row->has_bg) {
+            bg_slot = (int)d->nitems;
+            if (!emit(d, rows[r], OS_FB_WEB_RECT, x, cy, width, high, row->bg)) bg_slot = -1;
+        }
+        (void)bg_slot;
+        for (c = row->first; c >= 0; c = d->nodes[c].next) {
+            we_node_t *cell = &d->nodes[c];
+            int span, rs, cell_w, cell_h, cx;
+            if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
+            span = cell->colspan < 1 ? 1 : cell->colspan;
+            rs = table_rowspan_of(cell, r, nr);
+            cell_w = table_span_size(widths, slot->col[c], span, spacing);
+            cx = limit_coord(x + table_origin(widths, slot->col[c], spacing));
+            {
+                int first_item = (int)d->nitems;
+                int stretch = rs > 1 || cell->valign != WE_VALIGN_TOP;
+                if (stretch) {
+                    cell_h = rs > 1 ? table_span_size(slot->height, r, rs, spacing_y) : high;
+                    layout_area(d, c, cx, cy, cell_w, cell_h, cell_w, depth + 1);
+                    if (cell->valign != WE_VALIGN_TOP) valign_cell(d, c, first_item);
+                } else layout_assigned(d, c, cx, cy, cell_w, depth + 1);
+            }
+        }
+        cy = limit_coord(cy + high + (r + 1 < nr ? spacing_y : 0));
         d->perf.table_rows++;
     }
     return cy - y;

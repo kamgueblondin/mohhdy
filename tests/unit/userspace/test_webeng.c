@@ -3,6 +3,7 @@
 #include "../../framework/unity.h"
 #include "../../../userspace/webeng.h"
 #include <string.h>
+#include <stdio.h>
 
 static we_doc_t g_doc;
 
@@ -247,6 +248,8 @@ static void test_flex_and_grid(void) {
 #include "webeng_lot55_paint.inc"
 #include "webeng_lot55_text.inc"
 #include "webeng_lot55_composition.inc"
+#include "webeng_lot56.inc"
+#include "webeng_lot56b.inc"
 
 int main(void) {
     unity_init();
@@ -349,7 +352,7 @@ int main(void) {
     RUN_TEST(test_l52_table_tall_cell_sets_next_row);
     RUN_TEST(test_l52_table_row_background_behind_cells);
     RUN_TEST(test_l52_table_span_one_is_supported);
-    RUN_TEST(test_l52_table_rowspan_two_refuses_whole_table);
+    RUN_TEST(test_l52_table_rowspan_two_places_the_next_row);
     RUN_TEST(test_l52_table_nine_columns_refused);
     RUN_TEST(test_l52_table_eight_columns_are_inside);
     RUN_TEST(test_l52_table_missing_cell_leaves_empty_column);
@@ -383,7 +386,7 @@ int main(void) {
     RUN_TEST(test_l52_relative_auto_height_does_not_escape_unknown_bottom);
     RUN_TEST(test_l52_relative_link_hit_moves_with_paint);
     RUN_TEST(test_l52_relative_position_static_overrides_rule);
-    RUN_TEST(test_l52_absolute_position_is_diagnosed);
+    RUN_TEST(test_l52_absolute_position_places_against_padding_edge);
     RUN_TEST(test_l52_list_none_does_not_paint_marker);
     RUN_TEST(test_l52_list_square_marker_inherits_color);
     RUN_TEST(test_l52_hidden_list_item_does_not_advance_number);
@@ -605,7 +608,7 @@ int main(void) {
     RUN_TEST(test_l55_table_span_all_columns_eight);
     RUN_TEST(test_l55_table_span_total_columns_overflow_refused);
     RUN_TEST(test_l55_table_span_invalid_attribute_values);
-    RUN_TEST(test_l55_table_rowspan_still_refused);
+    RUN_TEST(test_l55_table_rowspan_with_colspan_places);
     RUN_TEST(test_l55_table_span_rowspan_one_accepted);
     RUN_TEST(test_l55_table_hidden_span_does_not_advance);
     RUN_TEST(test_l55_table_spans_across_sections);
@@ -705,6 +708,72 @@ int main(void) {
     RUN_TEST(test_l55_scene_grid_area_percentages_relayout_without_stale_cache);
     RUN_TEST(test_l55_scene_percentage_float_measurement_matches_paint);
     RUN_TEST(test_l55_scene_image_output_failure_measures_alt_height);
+    RUN_TEST(test_l56_row_reverse_justify_matrix);
+    RUN_TEST(test_l56_column_reverse_justify_matrix);
+    RUN_TEST(test_l56_reverse_without_justify_uses_main_start);
+    RUN_TEST(test_l56_reverse_gap_stays_between_items);
+    RUN_TEST(test_l56_reverse_does_not_change_cross_axis);
+    RUN_TEST(test_l56_invalid_direction_keeps_reverse);
+    RUN_TEST(test_l56_column_then_row_reverse_clears_column);
+    RUN_TEST(test_l56_order_permutes_flex_items);
+    RUN_TEST(test_l56_order_tie_keeps_source_order);
+    RUN_TEST(test_l56_order_applies_to_grid_auto_placement);
+    RUN_TEST(test_l56_order_out_of_range_keeps_previous);
+    RUN_TEST(test_l56_order_bounds_are_accepted);
+    RUN_TEST(test_l56_reverse_and_order_together);
+    RUN_TEST(test_l56_column_reverse_and_order);
+    RUN_TEST(test_l56_margin_auto_centers_one_item);
+    RUN_TEST(test_l56_margin_shorthand_auto_centers);
+    RUN_TEST(test_l56_margin_left_auto_pushes_to_the_end);
+    RUN_TEST(test_l56_margin_right_auto_stays_at_the_start);
+    RUN_TEST(test_l56_two_margin_autos_share_free_space);
+    RUN_TEST(test_l56_margin_auto_remainder_goes_to_the_first);
+    RUN_TEST(test_l56_margin_auto_with_gap);
+    RUN_TEST(test_l56_margin_auto_disables_justify);
+    RUN_TEST(test_l56_column_margin_auto_centers);
+    RUN_TEST(test_l56_column_margin_remainder);
+    RUN_TEST(test_l56_reverse_margin_left_auto_stays_physical);
+    RUN_TEST(test_l56_reverse_margin_right_auto_pushes_left);
+    RUN_TEST(test_l56_reverse_both_margins_auto_center);
+    RUN_TEST(test_l56_auto_margin_length_is_zero);
+    RUN_TEST(test_l56_fixed_margin_replaces_auto);
+    RUN_TEST(test_l56_absolute_left_top_on_initial_block);
+    RUN_TEST(test_l56_absolute_right_and_bottom);
+    RUN_TEST(test_l56_absolute_stretch_both_edges);
+    RUN_TEST(test_l56_absolute_specified_width_ignores_extra_right);
+    RUN_TEST(test_l56_absolute_nested_relative_containing_block);
+    RUN_TEST(test_l56_absolute_inside_absolute);
+    RUN_TEST(test_l56_absolute_does_not_grow_parent);
+    RUN_TEST(test_l56_absolute_skipped_by_flex_min_content);
+    RUN_TEST(test_l56_relative_offset_moves_absolute_with_parent);
+    RUN_TEST(test_l56_absolute_percentage_width_uses_padding_edge);
+    RUN_TEST(test_l56_absolute_no_insets_use_padding_origin);
+    RUN_TEST(test_l56_static_clears_absolute);
+    RUN_TEST(test_l56_fixed_is_refused_and_keeps_absolute);
+    RUN_TEST(test_l56_invalid_offset_keeps_previous);
+    RUN_TEST(test_l56_pre_keeps_newline_and_spaces);
+    RUN_TEST(test_l56_normal_collapses_newline_to_one_space);
+    RUN_TEST(test_l56_pre_newline_between_spans_is_a_line);
+    RUN_TEST(test_l56_pre_wrap_breaks_the_long_line);
+    RUN_TEST(test_l56_pre_does_not_wrap);
+    RUN_TEST(test_l56_pre_wrap_min_content_is_the_longest_word);
+    RUN_TEST(test_l56_pre_min_content_keeps_the_whole_line);
+    RUN_TEST(test_l56_pre_line_breaks_on_newline_and_collapses_spaces);
+    RUN_TEST(test_l56_normal_resets_pre);
+    RUN_TEST(test_l56_tab_in_pre_is_one_space);
+    RUN_TEST(test_l56_rowspan_two_blocks_the_column);
+    RUN_TEST(test_l56_rowspan_three_covers_each_row);
+    RUN_TEST(test_l56_rowspan_and_colspan_leave_the_corner);
+    RUN_TEST(test_l56_rowspan_taller_than_the_rows_grows_the_last);
+    RUN_TEST(test_l56_rowspan_past_the_table_is_clamped);
+    RUN_TEST(test_l56_rowspan_outside_one_to_eight_refuses_the_table);
+    RUN_TEST(test_l56_border_spacing_separates_cells);
+    RUN_TEST(test_l56_border_collapse_drops_spacing);
+    RUN_TEST(test_l56_border_spacing_px_and_refusal);
+    RUN_TEST(test_l56_border_collapse_invalid_keeps_separate);
+    RUN_TEST(test_l56_spacing_with_rowspan);
+    RUN_TEST(test_l56_guest_page_boxes);
+    lot56b_run();
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

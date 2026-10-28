@@ -10,6 +10,18 @@
 
 ## État courant vérifié
 
+## Etat courant du 28 octobre 2026 (lot 56)
+
+US-031 remains partial, phase3_complete=false. One guest webeng.c increment:
+position absolute against the nearest positioned padding edge; flex
+row-reverse, column-reverse and wrap-reverse; order -8..8; auto margins on
+the flex main axis; table rowspan 1..8 and two-axis border-spacing;
+white-space pre, pre-wrap and pre-line; clear; line-height; text-indent;
+inline-block; table vertical-align; absolute z-index.
+Kernel/rights/syscall ABI unchanged. No Chromium, WebKit, network loading,
+JavaScript VM or new font engine. US-059/060/063/074 unchanged; US-G19..US-G24
+remain partial. Measured limits and gates: [lot56_plan.md](lot56_plan.md).
+
 ## Etat courant du 28 octobre 2026 (lot 55)
 
 US-031 remains partial, phase3_complete=false. One large guest webeng.c

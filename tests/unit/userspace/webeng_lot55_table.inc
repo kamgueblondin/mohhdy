@@ -138,16 +138,26 @@ static void test_l55_table_span_invalid_attribute_values(void) {
     }
 }
 
-static void test_l55_table_rowspan_still_refused(void) {
-    lot52_render("<body style='margin:0'><table id=t><tr>"
-        "<td id=a colspan=2 rowspan=2>A</td><td id=b>B</td></tr></table></body>", 320);
+static void test_l55_table_rowspan_with_colspan_places(void) {
+    lot52_render("<body style='margin:0'><table id=t style='width:90px'><tr>"
+        "<td id=a colspan=2 rowspan=2>A</td><td id=b>B</td></tr>"
+        "<tr><td id=c>C</td></tr></table></body>", 320);
     TEST_ASSERT_EQUAL(2, lot52_node("a")->colspan);
-    TEST_ASSERT_EQUAL(1, lot52_node("a")->span_refused);
-    TEST_ASSERT_EQUAL(0, lot52_node("t")->h);
-    TEST_ASSERT_EQUAL(0, g_doc.perf.table_rows);
-    TEST_ASSERT_NULL(find_text("A"));
-    TEST_ASSERT_TRUE(lot52_has_diag("table span refused"));
-    TEST_ASSERT_TRUE(lot52_has_diag("table refused after span"));
+    TEST_ASSERT_EQUAL(2, lot52_node("a")->rowspan);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->span_refused);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
+    TEST_ASSERT_EQUAL(60, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(20, lot52_node("a")->h);
+    TEST_ASSERT_EQUAL(60, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(30, lot52_node("b")->w);
+    TEST_ASSERT_EQUAL(60, lot52_node("c")->x);
+    TEST_ASSERT_EQUAL(10, lot52_node("c")->y);
+    TEST_ASSERT_EQUAL(30, lot52_node("c")->w);
+    TEST_ASSERT_EQUAL(20, lot52_node("t")->h);
+    TEST_ASSERT_EQUAL(2, g_doc.perf.table_rows);
+    TEST_ASSERT_NOT_NULL(find_text("A"));
+    TEST_ASSERT_NOT_NULL(find_text("C"));
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l55_table_span_rowspan_one_accepted(void) {

@@ -12,6 +12,11 @@
  *          8x8 font (8 px per char, 10 px per line), text-align, <br>.
  *          intrinsic text/box sizes; flex packing and alignment on both
  *          axes; bounded grid tracks/placement, table colspan and clipping.
+ *          Lot 56: position absolute against the nearest positioned box,
+ *          flex order, reverse and wrap-reverse, table rowspan and
+ *          two-axis border-spacing, pre and pre-line whitespace, auto
+ *          margins on the flex main axis, clear, line-height, text-indent,
+ *          inline-block, table vertical-align and absolute z-index.
  *          No margin collapsing,
  *          bounded floats, tables, local images; no font loading or JavaScript.
  *   paint: display list (os_fb_web_item_t) drawn by the OS-UI web pane.
@@ -39,6 +44,16 @@
 #define WE_MEASURE_BUDGET (WE_MAX_NODES * WE_MAX_NODES)
 #define WE_TRACK_AUTO (-32768)
 #define WE_FLOATS_MAX 16
+#define WE_ORDER_MAX 8
+#define WE_SPACING_MAX 64
+enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3 };
+enum { WE_INSET_LEFT = 1, WE_INSET_TOP = 2, WE_INSET_RIGHT = 4, WE_INSET_BOTTOM = 8 };
+enum { WE_AUTO_LEFT = 1, WE_AUTO_RIGHT = 2, WE_AUTO_TOP = 4, WE_AUTO_BOTTOM = 8 };
+enum { WE_CLEAR_NONE = 0, WE_CLEAR_LEFT = 1, WE_CLEAR_RIGHT = 2, WE_CLEAR_BOTH = 3 };
+enum { WE_VALIGN_TOP = 0, WE_VALIGN_MIDDLE = 1, WE_VALIGN_BOTTOM = 2 };
+#define WE_Z_MAX 8
+#define WE_LINE_H_MAX 40
+#define WE_INDENT_MAX 400
 #define WE_LAYOUT_MAX 16000
 /* One shared, non-reentrant image workspace in webeng.c. No heap.
  * Source and decoder scratch each occupy 64 KiB. Decoded dimensions and
@@ -53,7 +68,7 @@
 enum { WE_FLOAT_NONE, WE_FLOAT_LEFT, WE_FLOAT_RIGHT };
 enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE };
 
-enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4, WE_DISP_TABLE = 5, WE_DISP_ROW = 6, WE_DISP_CELL = 7 };
+enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4, WE_DISP_TABLE = 5, WE_DISP_ROW = 6, WE_DISP_CELL = 7, WE_DISP_INLINE_BLOCK = 8 };
 enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2 };
 enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
        WE_PACK_STRETCH, WE_PACK_BETWEEN, WE_PACK_AROUND, WE_PACK_EVENLY };
@@ -96,6 +111,15 @@ typedef struct {
     int16_t min_height, max_height; /* -1: unset; percent values use flags */
     int16_t min_pct, max_pct;
     int16_t offset_x, offset_y;
+    int16_t offset_r, offset_b; /* right / bottom, valid when inset_flags says so */
+    int8_t item_order;         /* -8..8, source order when equal */
+    uint8_t flex_reverse, absolute, rowspan, ws_mode, inset_flags, margin_auto, border_collapse;
+    int16_t border_spacing;    /* horizontal; separate borders; collapse forces 0 */
+    int16_t border_spacing_y;  /* vertical; one value sets both */
+    int16_t line_height;       /* 0 uses WE_LINE_H; glyphs stay at the top */
+    int16_t text_indent;       /* first line only, after float shortening */
+    int8_t z_index;            /* absolute paint order, -8..8 */
+    uint8_t z_set, clear_side, valign;
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;
     int16_t margin[4], padding[4]; /* top right bottom left */
