@@ -620,6 +620,12 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "height")) {
         int r = parse_len(v, vl, &px, 0);
         if (r == 1) n->height = -1; else if (r == 0) n->height = (int16_t)px;
+    } else if (w_eq(prop, "min-height") || w_eq(prop, "max-height")) {
+        int end = vl;
+        if (vl >= 2 && value_is(v + vl - 2, 2, "px")) end -= 2;
+        if (bounded_uint(v, end, 2000, &px)) diag(d, "height limit refused", -1);
+        else if (w_eq(prop, "min-height")) n->min_height = (int16_t)px;
+        else n->max_height = (int16_t)px;
     } else if (w_eq(prop, "border")) {
         int a[4], l[4], c = tokens(v, vl, a, l);
         for (k = 0; k < c; k++) {
@@ -697,6 +703,7 @@ int we_style(we_doc_t* d) {
         n->flex_shrink = n->flex_basis = -1;
         n->basis_pct = n->basis_set = 0;
         n->min_width = n->max_width = -1;
+        n->min_height = n->max_height = -1;
         n->list_style = p ? p->list_style : WE_LIST_NONE;
         n->border_color = n->color;
         if (n->is_text) { n->display = WE_DISP_INLINE; continue; }
@@ -1038,6 +1045,12 @@ static int constrained_width(const we_node_t *n, int width, int containing) {
     return width < 0 ? 0 : width > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : width;
 }
 
+static int constrained_height(const we_node_t *n, int height) {
+    if (n->max_height >= 0 && height > n->max_height) height = n->max_height;
+    if (n->min_height >= 0 && height < n->min_height) height = n->min_height;
+    return height < 0 ? 0 : height > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : height;
+}
+
 static int preferred_outer(const we_node_t *n, int containing, int fallback) {
     int width = n->width_pct > 0 ? containing * n->width_pct / 100 :
                 n->width >= 0 ? n->width : fallback;
@@ -1177,6 +1190,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     else
         content_h = layout_children(d, idx, content_x, by + n->border + n->padding[0], content_w, depth);
     if (n->height >= 0) content_h = n->height;
+    content_h = constrained_height(n, content_h);
     bh = limit_coord(content_h + n->padding[0] + n->padding[2] + 2 * n->border);
     if (bh < 0) bh = 0;
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw; n->h = (int16_t)bh;
@@ -1235,7 +1249,7 @@ static int layout_assigned(we_doc_t *d, int idx, int x, int y, int outer, int de
 
 typedef struct {
     int node[WE_MAX_NODES];
-    int width[WE_MAX_NODES];
+    int size[WE_MAX_NODES];
     uint32_t shrink_weight[WE_MAX_NODES];
 } we_track_work_t;
 static we_track_work_t track_work[WE_DEPTH_MAX + 1];
@@ -1285,40 +1299,45 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
     return y - cy;
 }
 
-static int grow_limit(const we_node_t *n, int containing) {
-    int limit = n->max_pct > 0 ? containing * n->max_pct / 100 : n->max_width;
-    int low = n->min_pct > 0 ? containing * n->min_pct / 100 : n->min_width;
+static int flex_extra(const we_node_t *n, int vertical) {
+    return vertical ? 2 * n->border + n->padding[0] + n->padding[2] + n->margin[0] + n->margin[2] :
+                      node_border_extra(n) + n->margin[1] + n->margin[3];
+}
+
+static int grow_limit(const we_node_t *n, int containing, int vertical) {
+    int limit = vertical ? n->max_height : n->max_pct > 0 ? containing * n->max_pct / 100 : n->max_width;
+    int low = vertical ? n->min_height : n->min_pct > 0 ? containing * n->min_pct / 100 : n->min_width;
     if (limit < 0) return WE_LAYOUT_MAX;
     if (low > limit) limit = low;
-    return limit + node_border_extra(n) + n->margin[1] + n->margin[3];
+    return limit + flex_extra(n, vertical);
 }
 
 /* Iterative water filling: a capped grow item gives its unused share to
  * the other positive growers. Integer remainder goes in source order. */
-static void grow_line(we_doc_t *d, we_track_work_t *work, int first, int end, int free, int containing) {
+static void grow_line(we_doc_t *d, we_track_work_t *work, int first, int end, int free, int containing, int vertical) {
     int pass;
     for (pass = 0; free > 0 && pass <= WE_MAX_NODES; pass++) {
         int k, weight = 0, given = 0;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
-            if (n->flex_grow > 0 && work->width[k] < grow_limit(n, containing)) weight += n->flex_grow;
+            if (n->flex_grow > 0 && work->size[k] < grow_limit(n, containing, vertical)) weight += n->flex_grow;
         }
         if (!weight) break;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
-            int room = grow_limit(n, containing) - work->width[k], take;
+            int room = grow_limit(n, containing, vertical) - work->size[k], take;
             if (n->flex_grow <= 0 || room <= 0) continue;
             take = free * n->flex_grow / weight;
             if (take > room) take = room;
-            work->width[k] += take;
+            work->size[k] += take;
             given += take;
         }
         free -= given;
         if (!given) {
             for (k = first; k < end && free; k++) {
                 const we_node_t *n = &d->nodes[work->node[k]];
-                if (n->flex_grow > 0 && work->width[k] < grow_limit(n, containing)) {
-                    work->width[k]++;
+                if (n->flex_grow > 0 && work->size[k] < grow_limit(n, containing, vertical)) {
+                    work->size[k]++;
                     free--;
                 }
             }
@@ -1343,42 +1362,42 @@ static uint32_t flex_share(uint32_t a, uint32_t b, uint32_t denominator) {
     return result;
 }
 
-static int shrink_floor(const we_node_t *n, int containing) {
-    int minimum = n->min_pct > 0 ? containing * n->min_pct / 100 : n->min_width;
+static int shrink_floor(const we_node_t *n, int containing, int vertical) {
+    int minimum = vertical ? n->min_height : n->min_pct > 0 ? containing * n->min_pct / 100 : n->min_width;
     if (minimum < 0) minimum = 0;
     if (minimum > WE_LAYOUT_MAX) minimum = WE_LAYOUT_MAX;
-    minimum += node_border_extra(n) + n->margin[1] + n->margin[3];
+    minimum += flex_extra(n, vertical);
     return minimum > 0 ? minimum : 0;
 }
 
 /* Freeze an item at its minimum, then redistribute the remaining deficit
  * using the original scaled bases. At most one pass per node plus rounding. */
 static void shrink_line(we_doc_t *d, we_track_work_t *work, int first, int end,
-                        int deficit, int containing) {
+                        int deficit, int containing, int vertical) {
     int pass;
     for (pass = 0; deficit > 0 && pass <= WE_MAX_NODES; pass++) {
         uint32_t weight = 0;
         int k, taken = 0;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
-            if (work->width[k] > shrink_floor(n, containing)) weight += work->shrink_weight[k];
+            if (work->size[k] > shrink_floor(n, containing, vertical)) weight += work->shrink_weight[k];
         }
         if (!weight) break;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
-            int room = work->width[k] - shrink_floor(n, containing), take;
+            int room = work->size[k] - shrink_floor(n, containing, vertical), take;
             if (room <= 0 || !work->shrink_weight[k]) continue;
             take = (int)flex_share((uint32_t)deficit, work->shrink_weight[k], weight);
             if (take > room) take = room;
-            work->width[k] -= take;
+            work->size[k] -= take;
             taken += take;
         }
         deficit -= taken;
         if (!taken) {
             for (k = first; k < end && deficit; k++) {
                 const we_node_t *n = &d->nodes[work->node[k]];
-                if (work->shrink_weight[k] && work->width[k] > shrink_floor(n, containing)) {
-                    work->width[k]--;
+                if (work->shrink_weight[k] && work->size[k] > shrink_floor(n, containing, vertical)) {
+                    work->size[k]--;
                     deficit--;
                 }
             }
@@ -1387,15 +1406,76 @@ static void shrink_line(we_doc_t *d, we_track_work_t *work, int first, int end,
     if (deficit) diag(d, "flex minimum prevents fit", -1);
 }
 
-static int flex_base(const we_node_t *n, int containing, int fallback) {
+static int flex_base(const we_node_t *n, int containing, int fallback, int vertical) {
     int basis;
     if (n->basis_pct > 0) basis = containing * n->basis_pct / 100;
     else if (n->flex_basis >= 0) basis = n->flex_basis;
+    else if (vertical) basis = n->height >= 0 ? n->height : fallback;
     else if (n->width_pct > 0) basis = containing * n->width_pct / 100;
     else basis = n->width >= 0 ? n->width : fallback;
     if (basis < 0) basis = 0;
     if (basis > WE_LAYOUT_MAX) basis = WE_LAYOUT_MAX;
     return basis;
+}
+
+/* Sized columns use the same bounded tracks and grow/shrink solver as rows.
+ * Auto content is not measured: an undeclared auto height starts at zero. */
+static int layout_sized_column(we_doc_t *d, int idx, int cx, int cy, int cw, int depth, int count) {
+    we_node_t *n = &d->nodes[idx];
+    we_track_work_t *work = &track_work[depth];
+    int main = n->height >= 0 ? constrained_height(n, n->height) : -1;
+    int wrap = n->flex_wrap && main >= 0, gap = n->gap > 0 ? n->gap : 0;
+    int k, x = cx, extent = 0;
+    if (n->flex_wrap && main < 0) diag(d, "column wrap requires height", idx);
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[work->node[k]];
+        int basis, factor = child->flex_shrink >= 0 ? child->flex_shrink : 1;
+        if (child->basis_pct > 0 && main < 0) {
+            diag(d, "column percent requires height", work->node[k]);
+            basis = child->height >= 0 ? child->height : 0;
+        } else basis = flex_base(child, main, 0, 1);
+        work->size[k] = constrained_height(child, basis) + flex_extra(child, 1);
+        if (work->size[k] < 0) work->size[k] = 0;
+        work->shrink_weight[k] = (uint32_t)basis * (uint32_t)factor;
+    }
+    k = 0;
+    while (k < count) {
+        int first = k, used = 0, col_width = 0, y = cy, j;
+        while (k < count) {
+            int next = used + (k > first ? gap : 0) + work->size[k];
+            if (wrap && k > first && next > main) break;
+            used = next;
+            k++;
+        }
+        if (main >= 0) {
+            if (used > main) shrink_line(d, work, first, k, used - main, main, 1);
+            else grow_line(d, work, first, k, main - used, main, 1);
+        }
+        for (j = first; j < k; j++) {
+            we_node_t *child = &d->nodes[work->node[j]];
+            int width = wrap ? preferred_outer(child, cw, WE_CHAR_W) : cw;
+            int16_t saved = child->height, low = child->min_height, high = child->max_height;
+            int height = work->size[j] - flex_extra(child, 1), actual;
+            if (wrap && (x - cx + width > cw || width < 0)) {
+                diag(d, "column wrap width exceeded", work->node[j]);
+                return extent;
+            }
+            child->height = (int16_t)(height > 0 ? height : 0);
+            child->min_height = child->max_height = -1;
+            actual = wrap ? layout_assigned(d, work->node[j], x, y, width, depth + 1) :
+                            layout_block(d, work->node[j], x, y, width, depth + 1);
+            child->height = saved;
+            child->min_height = low;
+            child->max_height = high;
+            if (width > col_width) col_width = width;
+            y = limit_coord(y + actual);
+            if (y - cy > extent) extent = y - cy;
+            if (j + 1 < k) y = limit_coord(y + gap);
+        }
+        d->perf.flex_lines++;
+        if (k < count) x = limit_coord(x + col_width + gap);
+    }
+    return extent;
 }
 
 static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth) {
@@ -1406,11 +1486,13 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
     if (n->display == WE_DISP_GRID) return layout_grid(d, idx, cx, cy, cwidth, depth);
     count = collect_items(d, idx, work);
     if (!count) return 0;
+    if (n->flex_dir && (n->min_height >= 0 || n->max_height >= 0)) sizing = 1;
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[work->node[k]];
-        if (child->basis_set || child->flex_shrink >= 0) sizing = 1;
+        if (child->basis_set || child->flex_shrink >= 0 ||
+            (n->flex_dir && (child->min_height >= 0 || child->max_height >= 0))) sizing = 1;
     }
-    if (n->flex_dir && sizing) diag(d, "column basis/shrink refused", idx);
+    if (n->flex_dir && sizing) return layout_sized_column(d, idx, cx, cy, cwidth, depth, count);
     if (n->flex_dir) {
         /* The original column path remains the vertical stacking model.
          * Grow distributes definite-height free space on its main axis. */
@@ -1478,28 +1560,28 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
     }
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[work->node[k]];
-        int basis = flex_base(child, cwidth, n->flex_wrap ? WE_CHAR_W : 0);
+        int basis = flex_base(child, cwidth, n->flex_wrap ? WE_CHAR_W : 0, 0);
         int factor = child->flex_shrink >= 0 ? child->flex_shrink : sizing ? 1 : 0;
-        work->width[k] = constrained_width(child, basis, cwidth) + node_border_extra(child) +
+        work->size[k] = constrained_width(child, basis, cwidth) + node_border_extra(child) +
                          child->margin[1] + child->margin[3];
-        if (work->width[k] < 0) work->width[k] = 0;
+        if (work->size[k] < 0) work->size[k] = 0;
         work->shrink_weight[k] = (uint32_t)basis * (uint32_t)factor;
     }
     k = 0;
     while (k < count) {
         int first = k, used = 0, x = cx, high = 0, j;
         while (k < count) {
-            int next = used + (k > first ? gap : 0) + work->width[k];
+            int next = used + (k > first ? gap : 0) + work->size[k];
             if (n->flex_wrap && k > first && next > cwidth) break;
             used = next;
             k++;
         }
-        if (used > cwidth && sizing) shrink_line(d, work, first, k, used - cwidth, cwidth);
-        else grow_line(d, work, first, k, cwidth > used ? cwidth - used : 0, cwidth);
+        if (used > cwidth && sizing) shrink_line(d, work, first, k, used - cwidth, cwidth, 0);
+        else grow_line(d, work, first, k, cwidth > used ? cwidth - used : 0, cwidth, 0);
         for (j = first; j < k; j++) {
-            int h = layout_assigned(d, work->node[j], x, y, work->width[j], depth + 1);
+            int h = layout_assigned(d, work->node[j], x, y, work->size[j], depth + 1);
             if (h > high) high = h;
-            x += work->width[j] + gap;
+            x += work->size[j] + gap;
         }
         y = limit_coord(y + high);
         if (k < count) y = limit_coord(y + gap);

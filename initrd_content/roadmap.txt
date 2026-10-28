@@ -1,3 +1,4 @@
+# Lot 54: column flex sizing; US-031 partial, all roadmap statuses unchanged.
 # Lot 53: row flex sizing only; US-031 partial, all phase 6-9 statuses unchanged.
 # Mohhdy roadmap status, phases 6 to 8 (US-076 to US-120), lot 9.
 # Lot 52: US-031 guest layout stays partial, phase3_complete=false.

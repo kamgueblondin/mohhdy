@@ -73,6 +73,7 @@ typedef struct {
     int16_t flex_grow;         /* -1: legacy equal flex slots, 0..1000 explicit */
     int16_t row_size[WE_TRACKS_MAX]; /* -1: 1fr, otherwise pixels */
     int16_t min_width, max_width;   /* -1: unset, content-box px */
+    int16_t min_height, max_height; /* -1: unset, content-box px, no percent */
     int16_t min_pct, max_pct;
     int16_t offset_x, offset_y;
     int16_t gap;               /* px between flex/grid items */

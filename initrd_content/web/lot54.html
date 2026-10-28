@@ -1,0 +1,15 @@
+<!doctype html><html><head><title>Lot 54 column sizing</title><style>
+body{margin:0}
+.col{display:flex;flex-direction:column;width:10px;height:100px}
+#a{flex-basis:80px;background:red}
+#b{flex-basis:80px;background:blue}
+#locked{flex-basis:80px;min-height:70px;background:green}
+#tail{flex-basis:80px;background:yellow}
+.wrap{display:flex;flex-direction:column;flex-wrap:wrap;width:24px;height:100px;gap:4px}
+.wrap div{width:10px;flex-basis:60px;flex-grow:1}
+#wa{background:red} #wb{background:blue}
+</style></head><body>
+<div class=col><div id=a></div><div id=b></div></div>
+<div class=col><div id=locked></div><div id=tail></div></div>
+<div class=wrap><div id=wa></div><div id=wb></div></div>
+</body></html>
