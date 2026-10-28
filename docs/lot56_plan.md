@@ -108,7 +108,8 @@ every previous page and adds those boxes.
 
 ## Measured local results
 
-Host webeng cases, run from /workspace on 28 October 2026:
+Measured on 29 October 2026 at 00:03 Mauritius (UTC+4), after the image
+rebuild. Host webeng cases:
 
 ```text
 Tests Run: 589
@@ -117,14 +118,47 @@ Tests Failed: 0
 Tests Ignored: 0
 ```
 
-That is 455 cases on lot 55 plus 134 lot 56 cases. The full make test-all
-count, the QEMU web-layout log and the other gates are recorded in this
-file after those commands finish. They are not invented here.
+That is 455 cases on lot 55 plus 134 lot 56 cases.
 
-git diff origin/main --numstat, with the three untracked files counted as
-additions: 2493 lines added and 150 lines removed. Of the additions, 790 are
-engine/header (726 code, 42 comment, 22 blank) and 1678 are tests, the guest
-page and the test build rule (1537 code, 5 comment, 136 blank). Docs are 25
-lines and are not in the useful count. Useful code is 2263 lines. That is
-below the 4000..6000 band. The shortfall is stated here instead of filled
-with copies.
+```text
+Total Tests: 1730
+Passed: 1730
+Failed: 0
+Skipped: 0
+Execution Time: 66s
+```
+
+QEMU console and framebuffer, from make qemu-web-layout:
+
+```text
+lot56 inspect ra box 80 0 20x10
+lot56 inspect rb box 100 0 20x10
+lot56 inspect host box 0 10 100x40
+lot56 inspect abs box 10 18 30x12
+lot56 inspect c1 box 0 50 36x10
+lot56 inspect c2 box 44 50 36x10
+lot56 inspect note box 0 60 640x20
+lot56 inspect wa box 0 100 20x10
+lot56 inspect fl box 0 110 24x16
+lot56 inspect cleared box 0 126 16x8
+lot56 inspect lines box 0 134 40x40
+lot56 pixels compared=1952 reverse=ordered absolute=inset table=spaced pre=two-lines wrap=reversed clear=below
+QEMU web layout contract passed.
+```
+
+The lot 56 pixel check requires the serial fragment
+`dropped 0 page 640x174 diag 0`. The earlier lot 52, 53, 54 and 55 pages
+still pass in the same run.
+
+make roadmap-check, secrets-check, strict-image-check and tree-clean-check
+pass. python3 scripts/extract_guest_commands.py --check reports 447 names.
+CI job conclusions are not claimed until the pull request checks are read.
+
+git diff origin/main for the implementation commit, with the three new
+files counted as additions: 2493 lines added and 150 removed before this
+plan's measured section. Of those additions, 790 are engine/header (726
+code, 42 comment, 22 blank) and 1678 are tests, the guest page and the test
+build rule (1537 code, 5 comment, 136 blank). Docs outside this measured
+update were 25 lines and are not in the useful count. Useful code is 2263
+lines. That is below the 4000..6000 band. The shortfall is stated here
+instead of filled with copies.
