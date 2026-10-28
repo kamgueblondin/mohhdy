@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Lot 52: the one guest web engine, console geometry and VBE pixels."""
+import os
+import subprocess
+import sys
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+LOGS = os.path.abspath(os.path.join(HERE, "..", "..", "test_logs"))
+os.environ.setdefault("OSUI_GUI_LOG", os.path.join(LOGS, "qemu-web-layout-serial.log"))
+os.environ.setdefault("OSUI_GUI_ERR", os.path.join(LOGS, "qemu-web-layout-stderr.log"))
+os.environ.setdefault("OSUI_GUI_MON_SOCK", os.path.join(LOGS, "qemu-web-layout-mon.sock"))
+os.environ.setdefault("OSUI_GUI_QMP_SOCK", os.path.join(LOGS, "qemu-web-layout-qmp.sock"))
+os.environ.setdefault("OVERLAY_DISK", os.path.join(LOGS, "qemu-web-layout-overlay.img"))
+import test_qemu_osui_gui as g
+
+
+def require(text, fragment):
+    if fragment not in text:
+        raise RuntimeError("missing %r in serial output:\n%s" % (fragment, text[-2500:]))
+
+
+def main():
+    os.makedirs(LOGS, exist_ok=True)
+    for path in (g.LOG, g.QEMU_ERR, g.MON_SOCK):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+    g.prepare_test_disk()
+    proc = None
+    monitor = None
+    try:
+        with open(g.QEMU_ERR, "w") as err:
+            proc = subprocess.Popen([
+                "qemu-system-i386", "-cpu", "pentium3", "-kernel", g.KERNEL,
+                "-initrd", g.INITRD, "-m", "1024M", "-display", "none", "-vga", "std",
+                "-usb", "-device", "usb-tablet", "-serial", "file:" + g.LOG,
+                "-monitor", "unix:%s,server,nowait" % g.MON_SOCK,
+                "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
+            ] + g.qemu_disk_args(), cwd=g.ROOT, stdout=err, stderr=err)
+            g.wait_for(proc, "[0m : ", g.BOOT_TIMEOUT)
+            monitor = g.monitor_connect()
+            start = g.send_command_until(monitor, "web-render /web/lot52.html", "web-render ok", proc)
+            text = g.normalized_log(g.log_text()[start:])
+            require(text, "web title Lot 52 bounded web layout")
+            require(text, "web item rect 0 0 60x12 #00ff0000")
+            require(text, "web item rect 0 16 60x12 #000000ff")
+            require(text, 'web item text 0 29 8x8 #00000000 "A"')
+            require(text, 'web item text 0 39 8x8 #00000000 "C"')
+            require(text, "web item rect 0 48 1x32 #00000000")
+            require(text, "web item rect 1 48 1x32 #00ffffff")
+            if "decode_failed" in text:
+                raise RuntimeError("image fell back to alt")
+            for line in text.splitlines():
+                if line.startswith("osui web render") or line.startswith("web title"):
+                    print(line, flush=True)
+            for ident, box in (("a", "0 0 60x12"), ("b", "0 16 60x12"),
+                               ("cellc", "0 38 50x10"), ("picture", "0 48 48x32"),
+                               ("g3", "0 124 48x10")):
+                start = g.send_command_until(monitor, "web-inspect /web/lot52.html " + ident,
+                                             "inspect ", proc)
+                # Wait for the complete inspector line, not just its prefix.
+                g.wait_for(proc, " align ", g.CMD_TIMEOUT, start)
+                out = g.normalized_log(g.log_text()[start:])
+                require(out, " box " + box)
+                print("web-layout inspect %s box %s" % (ident, box), flush=True)
+            g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
+            g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
+            g.send_command_until(monitor, "web /web/lot52.html", "osui web render file=/web/lot52.html", proc,
+                                 mode="getc", wait_prompt=False)
+            time.sleep(0.5)
+            width, height, pixels = g.screendump_rgb(monitor, "qemu-web-layout.ppm")
+            # Same page origin as the existing guest page test at 1024x768.
+            # The alternating columns are exact, decoded from mire-g1.png.
+            ox, oy = 16, 82
+            for y in range(32):
+                for x in range(48):
+                    expected = (255, 255, 255) if x & 1 else (0, 0, 0)
+                    offset = ((oy + 48 + y) * width + ox + x) * 3
+                    actual = tuple(pixels[offset:offset + 3])
+                    if actual != expected:
+                        raise RuntimeError("image pixel %d,%d: %r != %r" % (x, y, actual, expected))
+            print("web-layout pixels image=48x32 compared=1536 wrap=2 table_rows=2", flush=True)
+        print("QEMU web layout contract passed.", flush=True)
+        return 0
+    finally:
+        if monitor is not None:
+            monitor.close()
+        g.terminate(proc)
+        for path in (g.MON_SOCK,):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+
+
+if __name__ == "__main__":
+    sys.exit(main())

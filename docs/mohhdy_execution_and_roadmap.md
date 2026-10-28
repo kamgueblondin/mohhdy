@@ -7,6 +7,17 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 52 (28 October 2026)
+
+US-031 remains **partial**, `phase3_complete=false`. Guest C layout in the
+existing webeng: flex wrap/grow, bounded grid rows, floats, tables, local
+images through shared imgdec; then min/max widths, bounded relative offsets
+and list markers. One shell and one console/GUI path. Kernel and rights
+unchanged. No Chromium, WebKit, network loading or JavaScript VM. Image
+limits and measured gates: `docs/lot52_plan.md`. Phase 6-9 roadmap statuses
+and the complete non-done id list are unchanged. US-059, US-060, US-063,
+US-074 and US-G19..US-G24 are not advanced by this lot.
+
 ### Lot 51 (28 octobre 2026)
 - GUI parity, same shell. `/child`, `/release` and `/keys` are menus in `userspace/osui_parity.c`. US-G22, US-G23 and US-G24 are `partial`. Phase 9 is done 18 partial 6, progress 75%, 69 roadmap entries. `/p2p` stays the pane. deploy-verify with no manifest writes nothing. collab-keys while the node is down prints the shell refusal. No second shell. US-059, US-060, US-063 and US-074 are unchanged. Detail: `docs/lot51_plan.md`.
 

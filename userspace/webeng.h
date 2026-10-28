@@ -12,7 +12,7 @@
  *          8x8 font (8 px per char, 10 px per line), text-align, <br>.
  *          display:flex (row or column, one gap) and display:grid
  *          (repeat(N, 1fr), N is 1..8, one gap). No margin collapsing,
- *          no floats, no tables, no fonts, no JavaScript.
+ *          bounded floats, tables, local images; no font loading or JavaScript.
  *   paint: display list (os_fb_web_item_t) drawn by the OS-UI web pane.
  * US-043: phase counters (we_perf_t). US-045: DOM dump, box inspector,
  * diagnostics console. */
@@ -30,8 +30,23 @@
 #define WE_DEPTH_MAX 24
 #define WE_CHAR_W 8
 #define WE_LINE_H 10
+#define WE_TRACKS_MAX 8
+#define WE_FLOATS_MAX 16
+#define WE_LAYOUT_MAX 16000
+/* One shared, non-reentrant image workspace in webeng.c. No heap.
+ * Source and decoder scratch each occupy 64 KiB. Decoded dimensions and
+ * output dimensions must fit 64x64. Pixel rectangles share the existing
+ * 96-item display list; an image that cannot fit is refused atomically. */
+#define WE_IMAGE_SOURCE_MAX 65536
+#define WE_IMAGE_SCRATCH_MAX 65536
+#define WE_IMAGE_MAX_W 64
+#define WE_IMAGE_MAX_H 64
+#define WE_IMAGE_WORKSPACE_MAX (WE_IMAGE_SOURCE_MAX + WE_IMAGE_SCRATCH_MAX + 8192)
 
-enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4 };
+enum { WE_FLOAT_NONE, WE_FLOAT_LEFT, WE_FLOAT_RIGHT };
+enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE };
+
+enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4, WE_DISP_TABLE = 5, WE_DISP_ROW = 6, WE_DISP_CELL = 7 };
 enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2 };
 
 typedef struct {
@@ -45,10 +60,19 @@ typedef struct {
     uint16_t style_off, style_len; /* inline style attribute in pool */
     uint16_t alt_off, alt_len;     /* img alt */
     uint16_t href_off, href_len;   /* a href (UX4: desktop browser links) */
+    uint16_t src_off, src_len;
+    uint8_t span_refused;
     /* computed style */
     uint8_t display, bold, align, has_bg;
     uint8_t flex_dir;          /* 0 row, 1 column (display:flex) */
     uint8_t grid_cols;         /* 1..8 when display:grid, else 0 */
+    uint8_t flex_wrap, float_side, grid_rows, relative;
+    uint8_t list_style;
+    int16_t flex_grow;         /* -1: legacy equal flex slots, 0..1000 explicit */
+    int16_t row_size[WE_TRACKS_MAX]; /* -1: 1fr, otherwise pixels */
+    int16_t min_width, max_width;   /* -1: unset, content-box px */
+    int16_t min_pct, max_pct;
+    int16_t offset_x, offset_y;
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;
     int16_t margin[4], padding[4]; /* top right bottom left */
@@ -72,6 +96,8 @@ typedef struct {
     uint32_t rules, decls_applied, unknown_props;
     uint32_t boxes, lines, items, items_dropped;
     uint32_t page_w, page_h;
+    uint32_t flex_lines, grid_lines, floats, table_rows;
+    uint32_t images, image_refused;
 } we_perf_t;
 
 typedef struct {
@@ -91,6 +117,14 @@ typedef struct {
     we_perf_t perf;
     int16_t root;
 } we_doc_t;
+
+/* The reader returns the whole file size, or <0. Returning cap + 1
+ * reports a larger/truncated file. Only absolute local paths are passed;
+ * URLs and parent traversal are refused by the engine before the reader.
+ * The callback and its context outlive a render. Passing 0 disables it.
+ * Rendering is synchronous and non-reentrant, like the shared workspace. */
+typedef int (*we_image_read_fn)(void *ctx, const char *path, unsigned char *dst, int cap);
+void we_set_image_reader(we_image_read_fn read, void *ctx);
 
 /* Each phase returns 0 or a negative error. we_render runs all three. */
 int we_parse(we_doc_t* d, const char* html, int len);

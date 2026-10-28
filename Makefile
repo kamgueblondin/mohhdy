@@ -1448,3 +1448,7 @@ gguf-kvm-benchmark:
 
 gguf-kvm-benchmark-check:
 	@python3 tests/scripts/test_benchmark_qemu_gguf_kvm_latency.py
+
+.PHONY: qemu-web-layout
+qemu-web-layout: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_web_layout.py

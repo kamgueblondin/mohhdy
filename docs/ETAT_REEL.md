@@ -10,6 +10,28 @@
 
 ## État courant vérifié
 
+## Etat courant du 28 octobre 2026 (lot 52)
+
+US-031 stays **partial**, `phase3_complete=false`. Plan and measured checks:
+[lot52_plan.md](lot52_plan.md). Base: `origin/main` `303f23d` (PR #208).
+
+- The same `userspace/webeng.c` lays out flex wrap/grow, grid row tracks,
+  left/right floats, bounded tables and local images through shared imgdec.
+- Also implemented, in the requested order: min/max widths, relative
+  offsets bounded to the containing box, and list markers. No margin
+  collapse. Relative vertical movement requires a definite parent height.
+- Images use one static workspace, bounded in `webeng.h`. Output uses
+  existing rectangle items; excessive source size, dimensions, decode
+  scratch or display complexity produces a diagnostic and the alt.
+- The image reader is the shell FS adapter in console and GUI, with the
+  same kernel rights. No second shell, no kernel/ABI change, no new slash.
+- Final local `make test-all`: 1343 passed, 0 failed, 0 skipped, 150s.
+  `test_webeng`: 202/202, also ASan/UBSan. QEMU parity, web layout (1536
+  image pixels) and production (71s) passed. Useful diff count: 4024; see plan.
+- No Chromium, no WebKit, no network loading and no JavaScript VM.
+  Fixed bitmap font only. US-059, US-060, US-063 and US-074 unchanged.
+  US-G19 through US-G24 remain partial. Roadmap statuses unchanged.
+
 ## Etat courant du 28 octobre 2026 (lot 51)
 
 Living baseline. Plan: [lot51_plan.md](lot51_plan.md). Base: `origin/main` `839d47a` (pull request #207 merged).

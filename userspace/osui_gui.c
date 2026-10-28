@@ -160,6 +160,15 @@ static int g_web_components, g_web_media_kept, g_web_media_dropped, g_web_vars, 
 static char g_web_tmp[OSUI_WEB_SRC_MAX];
 static char g_web_san[OSUI_WEB_SRC_MAX];
 static int g_web_sanitized;
+/* Local resource reads reuse the existing FS adapter and shell rights. */
+static int web_image_read(void *ctx, const char *path, unsigned char *dst, int cap) {
+    os_dirent_t st;
+    (void)ctx;
+    if (!g_fs_io || !g_fs_io->stat || g_fs_io->stat(path, &st) != 0 || st.flags == OS_DIRENT_DIR) return -1;
+    if (st.size > (unsigned)cap) return cap + 1;
+    return fsops_read(g_fs_io, path, (char *)dst, cap);
+}
+
 static int osui_web_pipeline(const char *src, int n) {
     int defined = 0, expanded = 0, kept = 0, dropped = 0, vdef = 0, unres = 0, m, rc, k;
     webrt_viewport_t vp;
@@ -191,6 +200,7 @@ static int osui_web_pipeline(const char *src, int n) {
     }
     rc = we_style(&g_web);
     if (rc != 0) return rc;
+    we_set_image_reader(web_image_read, 0);
     return we_layout(&g_web, OSUI_WEB_VIEWPORT);
 }
 

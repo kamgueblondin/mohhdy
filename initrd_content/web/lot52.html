@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><title>Lot 52 bounded web layout</title>
+<style>
+body { margin:0; color:black; background:white }
+#wrap { display:flex; flex-wrap:wrap; width:100px; gap:4px }
+#a { width:60px; height:12px; background:red }
+#b { width:60px; height:12px; background:blue }
+table { width:100px }
+#picture { display:block }
+#floats { width:100px }
+#float { float:left; width:40px; height:20px; background:green }
+#grid { display:grid; width:100px; grid-template-columns:repeat(2, 1fr); grid-template-rows:20px 30px; gap:4px }
+</style></head><body>
+<div id=wrap><div id=a></div><div id=b></div></div>
+<table id=table><tr><td id=cella>A</td><td>B</td></tr><tr><td id=cellc>C</td><td>D</td></tr></table>
+<img id=picture src=/images/mire-g1.png alt=decode_failed>
+<div id=floats><div id=float></div>word</div>
+<div id=grid><div id=g1>one</div><div>two</div><div id=g3>three</div></div>
+</body></html>

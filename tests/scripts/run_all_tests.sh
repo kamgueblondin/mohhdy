@@ -123,7 +123,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/dosemu.c"
     fi
     if [ "$(basename "$test_file")" = "test_webeng.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/webeng.c"
+        extra_src="$extra_src $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/imgdec.c"
     fi
     if [ "$(basename "$test_file")" = "test_key_seal.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/key_seal.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/sha256.c"
