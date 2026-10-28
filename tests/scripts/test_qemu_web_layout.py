@@ -93,6 +93,15 @@ def main():
                 g.wait_for(proc, " align ", g.CMD_TIMEOUT, start)
                 require(g.normalized_log(g.log_text()[start:]), " box " + box)
                 print("lot56 inspect %s box %s" % (ident, box), flush=True)
+            for ident, box in (("wrapped", "0 14 56x10"), ("floor", "0 24 80x10"),
+                               ("hole", "80 34 40x10"), ("side", "40 64 80x20"),
+                               ("span", "0 84 80x10"), ("auto", "0 124 20x10"),
+                               ("contain", "0 134 24x24"), ("cover", "0 158 24x24")):
+                start = g.send_command_until(monitor, "web-inspect /web/lot57.html " + ident,
+                                             "inspect ", proc)
+                g.wait_for(proc, " align ", g.CMD_TIMEOUT, start)
+                require(g.normalized_log(g.log_text()[start:]), " box " + box)
+                print("lot57 inspect %s box %s" % (ident, box), flush=True)
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             g.send_command_until(monitor, "web /web/lot52.html", "osui web render file=/web/lot52.html", proc,
@@ -214,6 +223,46 @@ def main():
             serial = g.normalized_log(g.log_text()[start:])
             require(serial, "dropped 0 page 640x174 diag 0")
             print("lot56 pixels compared=%d reverse=ordered absolute=inset table=spaced pre=two-lines wrap=reversed clear=below" % compared,
+                  flush=True)
+
+            step = len(g.log_text())
+            g.send_key(monitor, "esc")
+            g.wait_for(proc, "osui web close file=/web/lot56.html", g.CMD_TIMEOUT, step)
+            start = g.send_command_until(monitor, "web /web/lot57.html",
+                "osui web render file=/web/lot57.html", proc, mode="getc", wait_prompt=False)
+            time.sleep(0.5)
+            width, height, pixels = g.screendump_rgb(monitor, "qemu-lot57.ppm")
+            compared = 0
+            for left, top, right, bottom, color in (
+                (0, 0, 56, 10, (255, 0, 0)), (60, 0, 116, 10, (255, 0, 0)),
+                (0, 14, 56, 24, (255, 0, 0)), (0, 24, 80, 34, (255, 0, 0)),
+                (80, 24, 120, 34, (0, 0, 255)), (0, 34, 80, 44, (0, 128, 0)),
+                (0, 44, 80, 54, (0, 0, 128)), (80, 34, 120, 44, (255, 255, 0)),
+                (0, 54, 120, 64, (255, 165, 0)), (0, 64, 40, 84, (255, 0, 0)),
+                (40, 64, 120, 84, (0, 0, 255)), (0, 84, 120, 104, (0, 128, 0)),
+                (0, 124, 20, 134, (0, 0, 255)), (20, 104, 40, 114, (0, 0, 255))):
+                for y in range(top, bottom):
+                    for x in range(left, right):
+                        offset = ((oy + y) * width + ox + x) * 3
+                        if tuple(pixels[offset:offset + 3]) != color:
+                            raise RuntimeError("lot57 layout pixel mismatch at %d,%d" % (x, y))
+                        compared += 1
+            for top, rw, rh, dx, dy in ((134, 24, 16, 0, 4), (158, 36, 24, -6, 0)):
+                for y in range(24):
+                    for x in range(24):
+                        expected = (255, 0, 0)
+                        if dx <= x < dx + rw and dy <= y < dy + rh:
+                            expected = (255, 255, 255) if ((x - dx) * 48 // rw) & 1 else (0, 0, 0)
+                        offset = ((oy + top + y) * width + ox + x) * 3
+                        if tuple(pixels[offset:offset + 3]) != expected:
+                            raise RuntimeError("lot57 image pixel mismatch at %d,%d" % (x, top + y))
+                        compared += 1
+            serial = g.normalized_log(g.log_text()[start:])
+            require(serial, "dropped 0 page 640x182 diag 0")
+            for line in serial.splitlines():
+                if line.startswith("osui web render file=/web/lot57.html"):
+                    print(line, flush=True)
+            print("lot57 pixels compared=%d grid=minmax,dense,areas flex=wrap,cross-auto table=colspan image=contain,cover cascade=important" % compared,
                   flush=True)
 
         print("QEMU web layout contract passed.", flush=True)

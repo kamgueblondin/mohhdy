@@ -43,6 +43,14 @@
 #define WE_LAYOUT_WORKSPACE_MAX (512 * 1024)
 #define WE_MEASURE_BUDGET (WE_MAX_NODES * WE_MAX_NODES)
 #define WE_TRACK_AUTO (-32768)
+#define WE_GRID_AREAS_MAX 8
+#define WE_GRID_NAME_MAX 16
+#define WE_TRACK_LIMIT 2000
+enum { WE_FIT_FILL, WE_FIT_CONTAIN, WE_FIT_COVER, WE_FIT_NONE, WE_FIT_SCALE_DOWN };
+typedef struct {
+    char name[WE_GRID_NAME_MAX];
+    uint8_t row, col, rows, cols;
+} we_grid_area_t;
 #define WE_FLOATS_MAX 16
 #define WE_ORDER_MAX 8
 #define WE_SPACING_MAX 64
@@ -75,7 +83,7 @@ enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
 enum { WE_SIZE_AUTO, WE_SIZE_MIN_CONTENT, WE_SIZE_MAX_CONTENT, WE_SIZE_FIT_CONTENT };
 
 typedef struct {
-    uint8_t is_text;
+    uint8_t is_text, attr_flags, has_text;
     uint8_t lead_space, trail_space, html_space, pending_html_space;
     char tag[12];
     char id[16];
@@ -99,6 +107,14 @@ typedef struct {
     uint8_t nowrap, break_word, visibility, overflow_hidden;
     uint8_t grid_col_start, grid_row_start, grid_col_span, grid_row_span;
     int16_t col_size[WE_TRACKS_MAX];
+    int16_t col_floor[WE_TRACKS_MAX], col_cap[WE_TRACKS_MAX];
+    int16_t row_floor[WE_TRACKS_MAX], row_cap[WE_TRACKS_MAX];
+    int16_t auto_col, auto_row, auto_col_floor, auto_col_cap, auto_row_floor, auto_row_cap;
+    uint8_t grid_dense, grid_column_flow, area_count, area_rows, area_cols;
+    we_grid_area_t areas[WE_GRID_AREAS_MAX];
+    char grid_area[WE_GRID_NAME_MAX];
+    uint8_t object_fit, object_fit_set;
+    int16_t object_x, object_y;
     int16_t row_gap, col_gap;
     int16_t height_pct, min_height_pct, max_height_pct;
     uint8_t height_percent, min_height_percent, max_height_percent;
@@ -130,8 +146,26 @@ typedef struct {
     int16_t x, y, w, h;
 } we_node_t;
 
+#define WE_SELECTOR_PARTS_MAX 4
+#define WE_SELECTOR_CLASSES_MAX 3
+#define WE_SELECTOR_ATTRS_MAX 2
+#define WE_SELECTOR_WORK_MAX 4096
+enum { WE_SEL_DESC, WE_SEL_CHILD, WE_SEL_ADJACENT, WE_SEL_SIBLING };
+enum { WE_PSEUDO_FIRST = 1, WE_PSEUDO_LAST, WE_PSEUDO_ONLY, WE_PSEUDO_EMPTY,
+       WE_PSEUDO_ROOT, WE_PSEUDO_NTH, WE_PSEUDO_NTH_LAST, WE_PSEUDO_TYPE, WE_PSEUDO_TYPE_LAST };
+enum { WE_ATTR_PRESENT, WE_ATTR_EQUAL, WE_ATTR_TOKEN, WE_ATTR_PREFIX, WE_ATTR_SUFFIX, WE_ATTR_CONTAINS };
 typedef struct {
-    char comp[2][3][32];           /* [compound][tag, class, id] */
+    char name[8], value[32];
+    uint8_t op, insensitive;
+} we_selector_attr_t;
+typedef struct {
+    char tag[32], id[32], cls[WE_SELECTOR_CLASSES_MAX][32];
+    we_selector_attr_t attr[WE_SELECTOR_ATTRS_MAX];
+    uint8_t classes, attrs, pseudo, combinator;
+    int16_t nth_a, nth_b;
+} we_selector_part_t;
+typedef struct {
+    we_selector_part_t part[WE_SELECTOR_PARTS_MAX];
     uint8_t ncomp;
     uint16_t spec;
     uint16_t order;

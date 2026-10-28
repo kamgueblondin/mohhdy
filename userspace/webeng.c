@@ -103,6 +103,7 @@ static int ancestor_pre(const we_doc_t *d, int parent) {
  * ordinary elements still collapses to one html space, as before. */
 static int add_text(we_doc_t* d, int parent, const char* s, int n) {
     char buf[WE_TEXT_SOURCE_MAX];
+    if (n > 0) d->nodes[parent].has_text = 1;
     int i = 0, o = 0, graphic = 0, newline = 0, idx;
     while (i < n && o < (int)sizeof(buf) - 1) {
         char c = s[i];
@@ -240,6 +241,11 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                     }
                     av[vk] = 0;
                     if (truncated) { diag(d, "attribute exceeds limit", idx); continue; }
+                    if (w_eq(an, "id")) n->attr_flags |= 1;
+                    else if (w_eq(an, "class")) n->attr_flags |= 2;
+                    else if (w_eq(an, "href")) n->attr_flags |= 4;
+                    else if (w_eq(an, "src")) n->attr_flags |= 8;
+                    else if (w_eq(an, "alt")) n->attr_flags |= 16;
                     if (w_eq(an, "id")) w_cpy(n->id, 16, av, vk);
                     else if (w_eq(an, "class")) w_cpy(n->cls, 32, av, vk);
                     else if (w_eq(an, "style")) { if (pool_put(d, av, vk, &n->style_off) == 0) n->style_len = (uint16_t)vk; }
@@ -302,32 +308,151 @@ int we_parse(we_doc_t* d, const char* html, int len) {
 }
 
 /* ---------- CSS ---------- */
-static int parse_sel(const char* s, int n, we_rule_t* r) {
-    int i = 0, c = 0;
-    w_zero(r->comp, sizeof(r->comp));
-    r->ncomp = 0; r->spec = 0;
-    while (i < n) {
-        while (i < n && w_space(s[i])) i++;
-        if (i >= n) break;
-        if (c >= 2) return -1;
-        if (s[i] == '*') i++;
-        while (i < n && !w_space(s[i])) {
-            int slot = 0, k = 0;
-            char* dst;
-            if (s[i] == '.') { slot = 1; i++; r->spec += 10; }
-            else if (s[i] == '#') { slot = 2; i++; r->spec += 100; }
-            else if (w_namec(s[i])) { slot = 0; r->spec += 1; }
-            else return -1;
-            dst = r->comp[c][slot];
-            if (dst[0]) return -1; /* two classes in one compound: unsupported */
-            while (i < n && w_namec(s[i]) && k < 31) dst[k++] = w_low(s[i++]);
-            dst[k] = 0;
-            if (k == 0) return -1;
-        }
-        c++;
+static int sel_ident(const char *s, int len, int *at, char *out, int cap, int lower) {
+    int start = *at, n = 0;
+    while (*at < len && w_namec(s[*at])) {
+        if (n + 1 >= cap) return -1;
+        out[n++] = lower ? w_low(s[*at]) : s[*at]; (*at)++;
     }
-    r->ncomp = (uint8_t)c;
-    return c > 0 ? 0 : -1;
+    out[n] = 0;
+    return *at == start ? -1 : 0;
+}
+
+static int sel_integer(const char *s, int len, int *out) {
+    int sign = 1, i = 0, number = 0;
+    if (len && (s[0] == '+' || s[0] == '-')) { sign = s[0] == '-' ? -1 : 1; i++; }
+    if (i == len) return -1;
+    for (; i < len; i++) {
+        if (s[i] < '0' || s[i] > '9' || number > WE_MAX_NODES) return -1;
+        number = number * 10 + s[i] - '0';
+        if (number > WE_MAX_NODES) return -1;
+    }
+    *out = number * sign;
+    return 0;
+}
+
+static int sel_nth(const char *s, int len, int16_t *a, int16_t *b) {
+    int at, first = 0, end = len, coefficient = 0, constant = 0, npos = -1;
+    while (first < end && w_space(s[first])) first++;
+    while (end > first && w_space(s[end - 1])) end--;
+    s += first; len = end - first;
+    if (w_ieq_n(s, len, "odd") && len == 3) { *a = 2; *b = 1; return 0; }
+    if (w_ieq_n(s, len, "even") && len == 4) { *a = 2; *b = 0; return 0; }
+    for (at = 0; at < len; at++) if (w_low(s[at]) == 'n') { if (npos >= 0) return -1; npos = at; }
+    if (npos < 0) { if (sel_integer(s, len, &constant)) return -1; }
+    else {
+        if (npos == 0 || (npos == 1 && s[0] == '+')) coefficient = 1;
+        else if (npos == 1 && s[0] == '-') coefficient = -1;
+        else if (sel_integer(s, npos, &coefficient)) return -1;
+        at = npos + 1;
+        while (at < len && w_space(s[at])) at++;
+        if (at < len) {
+            int sign, begin;
+            if (s[at] != '+' && s[at] != '-') return -1;
+            sign = s[at++] == '-' ? -1 : 1;
+            while (at < len && w_space(s[at])) at++;
+            begin = at;
+            while (at < len && s[at] >= '0' && s[at] <= '9') at++;
+            if (at != len || sel_integer(s + begin, at - begin, &constant)) return -1;
+            constant *= sign;
+        }
+    }
+    *a = (int16_t)coefficient; *b = (int16_t)constant;
+    return 0;
+}
+
+static int sel_attribute(const char *s, int len, int *at, we_selector_attr_t *attr) {
+    int i = *at + 1, start, quote = 0, length;
+    while (i < len && w_space(s[i])) i++;
+    if (sel_ident(s, len, &i, attr->name, sizeof(attr->name), 1)) return -1;
+    if (!w_eq(attr->name, "id") && !w_eq(attr->name, "class") && !w_eq(attr->name, "href") &&
+        !w_eq(attr->name, "src") && !w_eq(attr->name, "alt")) return -1;
+    while (i < len && w_space(s[i])) i++;
+    if (i < len && s[i] == ']') { *at = i + 1; attr->op = WE_ATTR_PRESENT; return 0; }
+    if (i >= len) return -1;
+    if (s[i] == '=') { attr->op = WE_ATTR_EQUAL; i++; }
+    else {
+        char op = s[i++];
+        if (i == len || s[i++] != '=') return -1;
+        attr->op = (uint8_t)(op == '~' ? WE_ATTR_TOKEN : op == '^' ? WE_ATTR_PREFIX : op == '$' ? WE_ATTR_SUFFIX : op == '*' ? WE_ATTR_CONTAINS : 255);
+        if (attr->op == 255) return -1;
+    }
+    while (i < len && w_space(s[i])) i++;
+    if (i < len && (s[i] == '\'' || s[i] == '"')) quote = s[i++];
+    start = i;
+    while (i < len && (quote ? s[i] != quote : !w_space(s[i]) && s[i] != ']')) {
+        if (s[i] == '\\') return -1;
+        i++;
+    }
+    length = i - start;
+    if (length >= (int)sizeof(attr->value) || (quote && (i == len || s[i++] != quote))) return -1;
+    w_cpy(attr->value, sizeof(attr->value), s + start, length);
+    while (i < len && w_space(s[i])) i++;
+    if (i < len && w_low(s[i]) == 'i') { attr->insensitive = 1; i++; while (i < len && w_space(s[i])) i++; }
+    if (i == len || s[i++] != ']') return -1;
+    *at = i;
+    return 0;
+}
+
+static int parse_sel(const char* s, int len, we_rule_t* r) {
+    int i = 0, count = 0;
+    w_zero(r->part, sizeof(r->part)); r->ncomp = 0; r->spec = 0;
+    while (i < len && w_space(s[i])) i++;
+    while (i < len) {
+        we_selector_part_t *part;
+        int simple = 0, space = 0;
+        if (count == WE_SELECTOR_PARTS_MAX) return -1;
+        part = &r->part[count];
+        if (s[i] == '*') { i++; simple = 1; }
+        else if (w_namec(s[i])) {
+            if (sel_ident(s, len, &i, part->tag, sizeof(part->tag), 1)) return -1;
+            r->spec++; simple = 1;
+        }
+        while (i < len && !w_space(s[i]) && s[i] != '>' && s[i] != '+' && s[i] != '~') {
+            char marker = s[i++];
+            if (marker == '.') {
+                if (part->classes == WE_SELECTOR_CLASSES_MAX || sel_ident(s, len, &i, part->cls[part->classes], 32, 1)) return -1;
+                part->classes++; r->spec += 64;
+            } else if (marker == '#') {
+                if (part->id[0] || sel_ident(s, len, &i, part->id, sizeof(part->id), 1)) return -1;
+                r->spec += 4096;
+            } else if (marker == '[') {
+                i--;
+                if (part->attrs == WE_SELECTOR_ATTRS_MAX || sel_attribute(s, len, &i, &part->attr[part->attrs])) return -1;
+                part->attrs++; r->spec += 64;
+            } else if (marker == ':') {
+                char pseudo[24];
+                if (part->pseudo || sel_ident(s, len, &i, pseudo, sizeof(pseudo), 1)) return -1;
+                part->pseudo = (uint8_t)(w_eq(pseudo, "first-child") ? WE_PSEUDO_FIRST : w_eq(pseudo, "last-child") ? WE_PSEUDO_LAST :
+                    w_eq(pseudo, "only-child") ? WE_PSEUDO_ONLY : w_eq(pseudo, "empty") ? WE_PSEUDO_EMPTY :
+                    w_eq(pseudo, "root") ? WE_PSEUDO_ROOT : w_eq(pseudo, "nth-child") ? WE_PSEUDO_NTH :
+                    w_eq(pseudo, "nth-last-child") ? WE_PSEUDO_NTH_LAST : w_eq(pseudo, "nth-of-type") ? WE_PSEUDO_TYPE :
+                    w_eq(pseudo, "nth-last-of-type") ? WE_PSEUDO_TYPE_LAST : 0);
+                if (!part->pseudo) return -1;
+                if (part->pseudo >= WE_PSEUDO_NTH) {
+                    int begin;
+                    if (i == len || s[i++] != '(') return -1;
+                    begin = i; while (i < len && s[i] != ')') i++;
+                    if (i == len || sel_nth(s + begin, i - begin, &part->nth_a, &part->nth_b)) return -1;
+                    i++;
+                }
+                r->spec += 64;
+            } else return -1;
+            simple = 1;
+        }
+        if (!simple) return -1;
+        count++;
+        while (i < len && w_space(s[i])) { space = 1; i++; }
+        if (i == len) break;
+        if (count == WE_SELECTOR_PARTS_MAX) return -1;
+        if (s[i] == '>' || s[i] == '+' || s[i] == '~') {
+            r->part[count].combinator = (uint8_t)(s[i] == '>' ? WE_SEL_CHILD : s[i] == '+' ? WE_SEL_ADJACENT : WE_SEL_SIBLING);
+            i++; while (i < len && w_space(s[i])) i++;
+            if (i == len) return -1;
+        } else if (!space) return -1;
+    }
+    r->ncomp = (uint8_t)count;
+    return count ? 0 : -1;
 }
 
 static void parse_css(we_doc_t* d) {
@@ -356,7 +481,19 @@ static void parse_css(we_doc_t* d) {
             int b = a;
             we_rule_t* r;
             uint16_t off;
-            while (b < sel_b && s[b] != ',') b++;
+            { int quote = 0, brackets = 0, parens = 0;
+              while (b < sel_b) {
+                  int ch = s[b];
+                  if (quote) { if (ch == quote) quote = 0; }
+                  else if (ch == '\'' || ch == '"') quote = ch;
+                  else if (ch == '[') brackets++;
+                  else if (ch == ']') brackets--;
+                  else if (ch == '(') parens++;
+                  else if (ch == ')') parens--;
+                  else if (ch == ',' && !brackets && !parens) break;
+                  b++;
+              }
+            }
             if (d->nrules >= WE_MAX_RULES) { diag(d, "too many css rules", a); return; }
             r = &d->rules[d->nrules];
             if (parse_sel(s + a, b - a, r) == 0 && pool_put(d, s + dec_a, dec_b - dec_a, &off) == 0) {
@@ -389,27 +526,101 @@ static int has_class(const char* list, const char* c) {
     return 0;
 }
 
-static int match_comp(const we_node_t* n, char comp[3][32]) {
-    char id[16];
+static int sel_equal(const char *a, const char *b, int len, int insensitive) {
     int i;
-    if (n->is_text) return 0;
-    if (comp[0][0] && !w_eq(n->tag, comp[0])) return 0;
-    if (comp[1][0] && !has_class(n->cls, comp[1])) return 0;
-    if (comp[2][0]) {
-        for (i = 0; n->id[i] && i < 15; i++) id[i] = w_low(n->id[i]);
-        id[i] = 0;
-        if (!w_eq(id, comp[2])) return 0;
-    }
+    for (i = 0; i < len; i++) if ((insensitive ? w_low(a[i]) : a[i]) != (insensitive ? w_low(b[i]) : b[i])) return 0;
     return 1;
 }
 
-static int match_rule(const we_doc_t* d, int idx, we_rule_t* r) {
-    int p;
-    if (!match_comp(&d->nodes[idx], r->comp[r->ncomp - 1])) return 0;
-    if (r->ncomp == 1) return 1;
-    for (p = d->nodes[idx].parent; p > 0; p = d->nodes[p].parent)
-        if (match_comp(&d->nodes[p], r->comp[0])) return 1;
+static int match_attribute(const we_doc_t *d, const we_node_t *n, const we_selector_attr_t *attr) {
+    const char *value;
+    int len, wanted = w_len(attr->value), i;
+    if (w_eq(attr->name, "id")) { value = n->id; len = w_len(value); }
+    else if (w_eq(attr->name, "class")) { value = n->cls; len = w_len(value); }
+    else if (w_eq(attr->name, "href")) { value = d->pool + n->href_off; len = n->href_len; }
+    else if (w_eq(attr->name, "src")) { value = d->pool + n->src_off; len = n->src_len; }
+    else { value = d->pool + n->alt_off; len = n->alt_len; }
+    {
+        int flag = w_eq(attr->name, "id") ? 1 : w_eq(attr->name, "class") ? 2 :
+                   w_eq(attr->name, "href") ? 4 : w_eq(attr->name, "src") ? 8 : 16;
+        if (!(n->attr_flags & flag)) return 0;
+    }
+    if (attr->op == WE_ATTR_PRESENT) return 1;
+    if (attr->op == WE_ATTR_EQUAL) return len == wanted && sel_equal(value, attr->value, len, attr->insensitive);
+    if (!wanted || wanted > len) return 0;
+    if (attr->op == WE_ATTR_PREFIX) return sel_equal(value, attr->value, wanted, attr->insensitive);
+    if (attr->op == WE_ATTR_SUFFIX) return sel_equal(value + len - wanted, attr->value, wanted, attr->insensitive);
+    for (i = 0; i + wanted <= len; i++) {
+        if (attr->op == WE_ATTR_TOKEN && ((i && !w_space(value[i - 1])) || (i + wanted < len && !w_space(value[i + wanted])))) continue;
+        if (sel_equal(value + i, attr->value, wanted, attr->insensitive)) return 1;
+    }
     return 0;
+}
+
+static int match_pseudo(const we_doc_t *d, int idx, const we_selector_part_t *part) {
+    const we_node_t *n = &d->nodes[idx];
+    int c, ordinal = 0, total = 0, typed = part->pseudo == WE_PSEUDO_TYPE || part->pseudo == WE_PSEUDO_TYPE_LAST;
+    if (!part->pseudo) return 1;
+    if (part->pseudo == WE_PSEUDO_ROOT) return n->parent == 0;
+    if (part->pseudo == WE_PSEUDO_EMPTY) {
+        if (n->has_text) return 0;
+        for (c = n->first; c >= 0; c = d->nodes[c].next)
+            if (!d->nodes[c].is_text || d->nodes[c].text_len) return 0;
+        return 1;
+    }
+    if (n->parent < 0) return 0;
+    for (c = d->nodes[n->parent].first; c >= 0; c = d->nodes[c].next) {
+        const we_node_t *child = &d->nodes[c];
+        if (child->is_text || (typed && !w_eq(child->tag, n->tag))) continue;
+        total++;
+        if (c == idx) ordinal = total;
+    }
+    if (part->pseudo == WE_PSEUDO_FIRST) return ordinal == 1;
+    if (part->pseudo == WE_PSEUDO_LAST) return ordinal == total;
+    if (part->pseudo == WE_PSEUDO_ONLY) return total == 1;
+    if (part->pseudo == WE_PSEUDO_NTH_LAST || part->pseudo == WE_PSEUDO_TYPE_LAST) ordinal = total - ordinal + 1;
+    ordinal -= part->nth_b;
+    if (!part->nth_a) return ordinal == 0;
+    return ordinal % part->nth_a == 0 && ordinal / part->nth_a >= 0;
+}
+
+static int match_comp(const we_doc_t *d, int idx, const we_selector_part_t *part) {
+    const we_node_t *n = &d->nodes[idx]; int i;
+    if (n->is_text) return 0;
+    if (part->tag[0] && !w_eq(n->tag, part->tag)) return 0;
+    if (part->id[0] && (w_len(n->id) != w_len(part->id) || !sel_equal(n->id, part->id, w_len(n->id), 1))) return 0;
+    for (i = 0; i < part->classes; i++) if (!has_class(n->cls, part->cls[i])) return 0;
+    for (i = 0; i < part->attrs; i++) if (!match_attribute(d, n, &part->attr[i])) return 0;
+    return match_pseudo(d, idx, part);
+}
+
+static int previous_element(const we_doc_t *d, int idx) {
+    int c, previous = -1, parent = d->nodes[idx].parent;
+    if (parent < 0) return -1;
+    for (c = d->nodes[parent].first; c >= 0 && c != idx; c = d->nodes[c].next)
+        if (!d->nodes[c].is_text) previous = c;
+    return previous;
+}
+
+static int match_chain(const we_doc_t *d, int idx, const we_rule_t *r, int part, int *budget) {
+    int candidate, relation;
+    if (idx <= 0 || (*budget)-- <= 0 || !match_comp(d, idx, &r->part[part])) return 0;
+    if (!part) return 1;
+    relation = r->part[part].combinator;
+    candidate = relation == WE_SEL_ADJACENT || relation == WE_SEL_SIBLING ? previous_element(d, idx) : d->nodes[idx].parent;
+    while (candidate > 0 && *budget > 0) {
+        if (match_chain(d, candidate, r, part - 1, budget)) return 1;
+        if (relation == WE_SEL_CHILD || relation == WE_SEL_ADJACENT) break;
+        candidate = relation == WE_SEL_SIBLING ? previous_element(d, candidate) : d->nodes[candidate].parent;
+    }
+    return 0;
+}
+
+static int match_rule(we_doc_t* d, int idx, const we_rule_t* r) {
+    int budget = WE_SELECTOR_WORK_MAX;
+    int result = r->ncomp ? match_chain(d, idx, r, r->ncomp - 1, &budget) : 0;
+    if (budget <= 0) diag(d, "selector work budget", idx);
+    return result;
 }
 
 static int parse_color(const char* v, int n, uint32_t* out) {
@@ -564,36 +775,172 @@ static int track_token(const char *v, int len, int16_t *size) {
     return 0;
 }
 
-static int parse_tracks(const char *v, int len, int16_t *sizes) {
-    int i = 0, count = 0;
-    if (w_ieq_n(v, len, "repeat(")) {
-        int start = 7, end = start, number;
-        int16_t size;
-        while (end < len && v[end] >= '0' && v[end] <= '9') end++;
-        if (bounded_uint(v + start, end - start, WE_TRACKS_MAX, &number) || number < 1) return -1;
-        while (end < len && w_space(v[end])) end++;
-        if (end >= len || v[end++] != ',') return -1;
-        while (end < len && w_space(v[end])) end++;
-        start = end;
-        while (end < len && v[end] != ')' && !w_space(v[end])) end++;
-        if (track_token(v + start, end - start, &size)) return -1;
-        while (end < len && w_space(v[end])) end++;
-        if (end >= len || v[end++] != ')') return -1;
-        while (end < len && w_space(v[end])) end++;
-        if (end != len) return -1;
-        for (i = 0; i < number; i++) sizes[i] = size;
-        return number;
+static int track_value(const char *v, int len, int16_t *size, int16_t *low, int16_t *cap) {
+    int start, end, number, percent;
+    *low = *cap = -1;
+    if (w_ieq_n(v, len, "minmax(")) {
+        start = 7;
+        while (start < len && w_space(v[start])) start++;
+        end = start;
+        while (end < len && v[end] != ',') end++;
+        if (end == len) return -1;
+        { int last = end; while (last > start && w_space(v[last - 1])) last--;
+          if (parse_dimension(v + start, last - start, &number, &percent) || percent) return -1; }
+        *low = (int16_t)number;
+        start = end + 1;
+        while (start < len && w_space(v[start])) start++;
+        end = len;
+        while (end > start && w_space(v[end - 1])) end--;
+        if (end <= start || v[end - 1] != ')') return -1;
+        end--;
+        while (end > start && w_space(v[end - 1])) end--;
+        if (track_token(v + start, end - start, size)) return -1;
+        if (*size >= 0) {
+            *cap = *size < *low ? *low : *size;
+            *size = WE_TRACK_AUTO;
+        }
+        return 0;
     }
+    if (w_ieq_n(v, len, "fit-content(")) {
+        start = 12; end = len;
+        if (end <= start || v[--end] != ')') return -1;
+        while (start < end && w_space(v[start])) start++;
+        while (end > start && w_space(v[end - 1])) end--;
+        if (parse_dimension(v + start, end - start, &number, &percent) || percent) return -1;
+        *size = WE_TRACK_AUTO; *low = 0; *cap = (int16_t)number;
+        return 0;
+    }
+    return track_token(v, len, size);
+}
+
+/* A list may mix bounded repeat groups and functional track tokens.
+ * Parse into temporary arrays so a bad tail never changes the old list. */
+static int parse_track_list(const char *v, int len, int16_t *sizes, int16_t *floors, int16_t *caps) {
+    int i = 0, count = 0;
     while (i < len) {
-        int first;
+        int first, nesting = 0, end, copies = 1, group_first = count, group_count, c;
         while (i < len && w_space(v[i])) i++;
         if (i == len) break;
         first = i;
-        while (i < len && !w_space(v[i])) i++;
-        if (count >= WE_TRACKS_MAX || track_token(v + first, i - first, &sizes[count])) return -1;
-        count++;
+        if (w_ieq_n(v + i, len - i, "repeat(")) {
+            i += 7; first = i;
+            while (i < len && v[i] >= '0' && v[i] <= '9') i++;
+            if (bounded_uint(v + first, i - first, WE_TRACKS_MAX, &copies) || copies < 1) return -1;
+            while (i < len && w_space(v[i])) i++;
+            if (i == len || v[i++] != ',') return -1;
+            first = i; nesting = 1;
+            while (i < len && nesting) { if (v[i] == '(') nesting++; if (v[i] == ')') nesting--; i++; }
+            if (nesting) return -1;
+            end = i - 1;
+            /* Nested repeat is deliberately refused; functional track values are allowed. */
+            { int j = first;
+              while (j < end) {
+                  int begin, depth = 0;
+                  while (j < end && w_space(v[j])) j++;
+                  if (j == end) break;
+                  begin = j;
+                  while (j < end && (depth || !w_space(v[j]))) {
+                      if (v[j] == '(') depth++;
+                      if (v[j] == ')') depth--;
+                      if (depth < 0) return -1;
+                      j++;
+                  }
+                  if (depth || count >= WE_TRACKS_MAX || track_value(v + begin, j - begin, &sizes[count], &floors[count], &caps[count])) return -1;
+                  count++;
+              }
+            }
+            group_count = count - group_first;
+            if (!group_count || group_count * copies > WE_TRACKS_MAX - group_first) return -1;
+            for (c = 1; c < copies; c++) {
+                int k;
+                for (k = 0; k < group_count; k++, count++) {
+                    sizes[count] = sizes[group_first + k];
+                    floors[count] = floors[group_first + k]; caps[count] = caps[group_first + k];
+                }
+            }
+        } else {
+            while (i < len && (nesting || !w_space(v[i]))) {
+                if (v[i] == '(') nesting++;
+                if (v[i] == ')') nesting--;
+                if (nesting < 0) return -1;
+                i++;
+            }
+            if (nesting || count >= WE_TRACKS_MAX || track_value(v + first, i - first, &sizes[count], &floors[count], &caps[count])) return -1;
+            count++;
+        }
+        if (i < len && !w_space(v[i])) return -1;
     }
     return count ? count : -1;
+}
+
+static int grid_name(const char *v, int len) {
+    int i;
+    if (len < 1 || len >= WE_GRID_NAME_MAX || !((v[0] >= 'a' && v[0] <= 'z') || (v[0] >= 'A' && v[0] <= 'Z') || v[0] == '_')) return 0;
+    for (i = 1; i < len; i++) if (!w_namec(v[i])) return 0;
+    return 1;
+}
+
+static int parse_areas(we_node_t *n, const char *v, int len) {
+    we_grid_area_t areas[WE_GRID_AREAS_MAX];
+    int seen[WE_GRID_AREAS_MAX], count = 0, row = 0, cols = -1, i = 0, k;
+    w_zero(areas, sizeof(areas)); w_zero(seen, sizeof(seen));
+    if (value_is(v, len, "none")) { n->area_count = n->area_rows = n->area_cols = 0; return 0; }
+    while (i < len) {
+        int col = 0, quote;
+        while (i < len && w_space(v[i])) i++;
+        if (i == len) break;
+        if (row >= WE_TRACKS_MAX || (v[i] != '\'' && v[i] != '"')) return -1;
+        quote = v[i++];
+        while (i < len && v[i] != quote) {
+            int start, end, dot = 1, found = -1;
+            while (i < len && w_space(v[i])) i++;
+            if (i == len || v[i] == quote) break;
+            start = i;
+            while (i < len && !w_space(v[i]) && v[i] != quote) i++;
+            end = i;
+            if (col >= WE_TRACKS_MAX) return -1;
+            for (k = start; k < end; k++) if (v[k] != '.') dot = 0;
+            if (!dot) {
+                if (!grid_name(v + start, end - start)) return -1;
+                for (k = 0; k < count; k++) if (w_len(areas[k].name) == end - start && sel_equal(v + start, areas[k].name, end - start, 0)) { found = k; break; }
+                if (found < 0) {
+                    if (count == WE_GRID_AREAS_MAX) return -1;
+                    found = count++;
+                    w_cpy(areas[found].name, WE_GRID_NAME_MAX, v + start, end - start);
+                    areas[found].row = (uint8_t)row; areas[found].col = (uint8_t)col;
+                }
+                if (col < areas[found].col) return -1;
+                areas[found].rows = (uint8_t)(row - areas[found].row + 1);
+                if (col - areas[found].col + 1 > areas[found].cols) areas[found].cols = (uint8_t)(col - areas[found].col + 1);
+                seen[found]++;
+            }
+            col++;
+        }
+        if (i == len || v[i++] != quote || !col || (cols >= 0 && col != cols)) return -1;
+        cols = col; row++;
+        if (i < len && !w_space(v[i])) return -1;
+    }
+    if (!row) return -1;
+    for (k = 0; k < count; k++) if (seen[k] != areas[k].rows * areas[k].cols) return -1;
+    for (k = 0; k < count; k++) n->areas[k] = areas[k];
+    n->area_count = (uint8_t)count; n->area_cols = (uint8_t)cols; n->area_rows = (uint8_t)row;
+    return 0;
+}
+
+static int parse_object_position(we_node_t *n, const char *v, int len) {
+    int starts[4], lengths[4], count = tokens(v, len, starts, lengths), out[2] = {50, 50}, axis;
+    if (count < 1 || count > 2) return -1;
+    for (axis = 0; axis < count; axis++) {
+        const char *p = v + starts[axis]; int l = lengths[axis];
+        if (value_is(p, l, "center")) out[axis] = 50;
+        else if (value_is(p, l, axis ? "top" : "left")) out[axis] = 0;
+        else if (value_is(p, l, axis ? "bottom" : "right")) out[axis] = 100;
+        else if (count == 1 && (value_is(p, l, "top") || value_is(p, l, "bottom"))) { out[1] = value_is(p, l, "top") ? 0 : 100; }
+        else if (l > 1 && p[l - 1] == '%' && !bounded_uint(p, l - 1, 100, &out[axis])) { }
+        else return -1;
+    }
+    n->object_x = (int16_t)out[0]; n->object_y = (int16_t)out[1];
+    return 0;
 }
 
 static int bounded_signed(const char *v, int len, int max, int *out) {
@@ -605,17 +952,16 @@ static int bounded_signed(const char *v, int len, int max, int *out) {
     return 0;
 }
 
-/* Expand margin into top,right,bottom,left. Returns 1 when a token is auto. */
+/* Expand a valid margin into top,right,bottom,left and replace all auto bits. */
 static int margin_auto_box(we_node_t *n, const char *v, int vl) {
-    int a[4], l[4], c = tokens(v, vl, a, l), k, px, any = 0;
+    int a[4], l[4], c = tokens(v, vl, a, l), k, px;
     int vals[4], autos[4], top, right, bottom, left;
     if (c < 1 || c > 4) return 0;
     for (k = 0; k < c; k++) {
-        if (value_is(v + a[k], l[k], "auto")) { autos[k] = 1; vals[k] = 0; any = 1; }
+        if (value_is(v + a[k], l[k], "auto")) { autos[k] = 1; vals[k] = 0; }
         else if (parse_len(v + a[k], l[k], &px, 0) == 0) { autos[k] = 0; vals[k] = px; }
         else return 0;
     }
-    if (!any) return 0;
     top = vals[0];
     right = c >= 2 ? vals[1] : vals[0];
     bottom = c >= 3 ? vals[2] : top;
@@ -645,8 +991,6 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     uint32_t col;
     w_cpy(prop, 24, p, pl);
     for (k = 0; prop[k]; k++) prop[k] = w_low(prop[k]);
-    /* trim !important (cascade order by specificity only) */
-    for (k = 0; k + 9 <= vl; k++) if (w_ieq_n(v + k, vl - k, "!important")) { vl = k; break; }
     while (vl > 0 && w_space(v[vl - 1])) vl--;
     d->perf.decls_applied++;
     if (w_eq(prop, "display")) {
@@ -718,11 +1062,40 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (parse_dimension(v, vl, &number, &percent) || percent) diag(d, "axis gap refused", -1);
         else if (w_eq(prop, "row-gap")) n->row_gap = (int16_t)number;
         else n->col_gap = (int16_t)number;
+    } else if (w_eq(prop, "grid-auto-flow")) {
+        int a[4], lengths[4], c = tokens(v, vl, a, lengths), dense = 0, column = 0, axis = 0, ok = c >= 1 && c <= 2;
+        for (k = 0; k < c && k < 2; k++) {
+            if (value_is(v + a[k], lengths[k], "dense") && !dense) dense = 1;
+            else if (!axis && (value_is(v + a[k], lengths[k], "row") || value_is(v + a[k], lengths[k], "column"))) {
+                column = value_is(v + a[k], lengths[k], "column"); axis = 1;
+            } else ok = 0;
+        }
+        if (!ok) diag(d, "grid flow refused", -1);
+        else { n->grid_dense = (uint8_t)dense; n->grid_column_flow = (uint8_t)column; }
+    } else if (w_eq(prop, "grid-template-areas")) {
+        if (parse_areas(n, v, vl)) diag(d, "grid areas refused", -1);
+    } else if (w_eq(prop, "grid-area")) {
+        if (value_is(v, vl, "auto")) n->grid_area[0] = 0;
+        else if (grid_name(v, vl)) w_cpy(n->grid_area, WE_GRID_NAME_MAX, v, vl);
+        else diag(d, "grid area name refused", -1);
+    } else if (w_eq(prop, "grid-auto-columns") || w_eq(prop, "grid-auto-rows")) {
+        int16_t size, low, cap;
+        if (track_value(v, vl, &size, &low, &cap)) diag(d, "grid auto track refused", -1);
+        else if (w_eq(prop, "grid-auto-columns")) { n->auto_col = size; n->auto_col_floor = low; n->auto_col_cap = cap; }
+        else { n->auto_row = size; n->auto_row_floor = low; n->auto_row_cap = cap; }
+    } else if (w_eq(prop, "object-fit")) {
+        int fit = value_is(v, vl, "fill") ? WE_FIT_FILL : value_is(v, vl, "contain") ? WE_FIT_CONTAIN :
+            value_is(v, vl, "cover") ? WE_FIT_COVER : value_is(v, vl, "none") ? WE_FIT_NONE :
+            value_is(v, vl, "scale-down") ? WE_FIT_SCALE_DOWN : -1;
+        if (fit < 0) diag(d, "object fit refused", -1);
+        else { n->object_fit = (uint8_t)fit; n->object_fit_set = 1; }
+    } else if (w_eq(prop, "object-position")) {
+        if (parse_object_position(n, v, vl)) diag(d, "object position refused", -1);
     } else if (w_eq(prop, "grid-column") || w_eq(prop, "grid-row")) {
         uint8_t start, span;
         if (parse_placement(v, vl, &start, &span)) diag(d, "grid placement refused", -1);
-        else if (w_eq(prop, "grid-column")) { n->grid_col_start = start; n->grid_col_span = span; }
-        else { n->grid_row_start = start; n->grid_row_span = span; }
+        else if (w_eq(prop, "grid-column")) { n->grid_area[0] = 0; n->grid_col_start = start; n->grid_col_span = span; }
+        else { n->grid_area[0] = 0; n->grid_row_start = start; n->grid_row_span = span; }
     } else if (w_eq(prop, "box-sizing")) {
         if (value_is(v, vl, "border-box")) n->border_box = 1;
         else if (value_is(v, vl, "content-box")) n->border_box = 0;
@@ -835,15 +1208,15 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             n->col_gap = count == 2 ? (int16_t)number[1] : -1;
         }
     } else if (w_eq(prop, "grid-template-columns") || w_eq(prop, "grid-template-rows")) {
-        int16_t sizes[WE_TRACKS_MAX];
-        int count = parse_tracks(v, vl, sizes);
+        int16_t sizes[WE_TRACKS_MAX], floors[WE_TRACKS_MAX], caps[WE_TRACKS_MAX];
+        int count = parse_track_list(v, vl, sizes, floors, caps);
         if (count < 0) diag(d, "grid tracks refused", -1);
         else if (w_eq(prop, "grid-template-columns")) {
             n->grid_cols = (uint8_t)count;
-            for (k = 0; k < count; k++) n->col_size[k] = sizes[k];
+            for (k = 0; k < count; k++) { n->col_size[k] = sizes[k]; n->col_floor[k] = floors[k]; n->col_cap[k] = caps[k]; }
         } else {
             n->grid_rows = (uint8_t)count;
-            for (k = 0; k < count; k++) n->row_size[k] = sizes[k];
+            for (k = 0; k < count; k++) { n->row_size[k] = sizes[k]; n->row_floor[k] = floors[k]; n->row_cap[k] = caps[k]; }
         }
     } else if (w_eq(prop, "color")) { if (parse_color(v, vl, &col) == 0) n->color = col; }
     else if (w_eq(prop, "background") || w_eq(prop, "background-color")) {
@@ -918,7 +1291,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     }
 }
 
-static void apply_decls(we_doc_t* d, we_node_t* n, const char* s, int len) {
+static void apply_decls(we_doc_t* d, we_node_t* n, const char* s, int len, int important) {
     int i = 0;
     while (i < len) {
         int pa, pb, va, vb;
@@ -933,7 +1306,16 @@ static void apply_decls(we_doc_t* d, we_node_t* n, const char* s, int len) {
         va = i;
         while (i < len && s[i] != ';') i++;
         vb = i;
-        if (pb > pa && vb > va) apply_decl(d, n, s + pa, pb - pa, s + va, vb - va);
+        {
+            int end = vb, marked = 0;
+            while (end > va && w_space(s[end - 1])) end--;
+            if (end - va >= 9 && w_ieq_n(s + end - 9, 9, "important")) {
+                int bang = end - 9;
+                while (bang > va && w_space(s[bang - 1])) bang--;
+                if (bang > va && s[bang - 1] == '!') { marked = 1; end = bang - 1; }
+            }
+            if (marked == important && pb > pa && end > va) apply_decl(d, n, s + pa, pb - pa, s + va, end - va);
+        }
     }
 }
 
@@ -964,8 +1346,27 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "pre")) { n->display = WE_DISP_BLOCK; n->ws_mode = WE_WS_PRE; n->nowrap = 1; }
 }
 
+static void cascade_rules(we_doc_t *d, int idx, int important) {
+    uint8_t used[WE_MAX_RULES];
+    uint32_t k, r;
+    we_node_t *n = &d->nodes[idx];
+    for (k = 0; k < d->nrules; k++) used[k] = (uint8_t)!match_rule(d, idx, &d->rules[k]);
+    for (k = 0; k < d->nrules; k++) {
+        int best = -1;
+        for (r = 0; r < d->nrules; r++) {
+            if (used[r]) continue;
+            if (best < 0 || d->rules[r].spec < d->rules[best].spec ||
+                (d->rules[r].spec == d->rules[best].spec && d->rules[r].order < d->rules[best].order)) best = (int)r;
+        }
+        if (best < 0) break;
+        used[best] = 1;
+        apply_decls(d, n, d->pool + d->rules[best].decl_off, d->rules[best].decl_len, important);
+    }
+    if (n->style_len) apply_decls(d, n, d->pool + n->style_off, n->style_len, important);
+}
+
 int we_style(we_doc_t* d) {
-    uint32_t i, r;
+    uint32_t i;
     if (!d || d->nnodes == 0) return -1;
     if (!d->css_parsed) { parse_css(d); d->css_parsed = 1; }
     for (i = 0; i < d->nnodes; i++) {
@@ -987,6 +1388,11 @@ int we_style(we_doc_t* d) {
         n->justify_content = n->align_items = n->align_self = n->align_content = 0;
         n->justify_items = n->justify_self = 0;
         n->grid_col_start = n->grid_row_start = 0;
+        n->grid_dense = n->grid_column_flow = n->area_count = n->area_rows = n->area_cols = 0;
+        n->grid_area[0] = 0;
+        n->object_fit = n->object_fit_set = 0; n->object_x = n->object_y = 50;
+        n->auto_col = -1; n->auto_row = WE_TRACK_AUTO;
+        n->auto_col_floor = n->auto_row_floor = n->auto_col_cap = n->auto_row_cap = -1;
         n->relative = n->absolute = n->flex_reverse = n->margin_auto = n->border_collapse = 0;
         n->item_order = 0;
         n->inset_flags = 0;
@@ -1004,30 +1410,15 @@ int we_style(we_doc_t* d) {
         { int track; for (track = 0; track < WE_TRACKS_MAX; track++) {
             n->col_size[track] = -1;
             n->row_size[track] = WE_TRACK_AUTO;
+            n->col_floor[track] = n->row_floor[track] = n->col_cap[track] = n->row_cap[track] = -1;
         } }
         n->list_style = p ? p->list_style : WE_LIST_NONE;
         n->border_color = n->color;
         if (n->is_text) { n->display = WE_DISP_INLINE; continue; }
         if (i == 0) { n->display = WE_DISP_BLOCK; continue; }
         ua_defaults(n);
-        /* cascade: rules sorted by (specificity, order), then inline style */
-        {
-            uint8_t used[WE_MAX_RULES];
-            uint32_t k;
-            for (k = 0; k < d->nrules; k++) used[k] = 0;
-            for (;;) {
-                int best = -1;
-                for (r = 0; r < d->nrules; r++) {
-                    if (used[r] || !match_rule(d, (int)i, &d->rules[r])) continue;
-                    if (best < 0 || d->rules[r].spec < d->rules[best].spec ||
-                        (d->rules[r].spec == d->rules[best].spec && d->rules[r].order < d->rules[best].order)) best = (int)r;
-                }
-                if (best < 0) break;
-                used[best] = 1;
-                apply_decls(d, n, d->pool + d->rules[best].decl_off, d->rules[best].decl_len);
-            }
-        }
-        if (n->style_len) apply_decls(d, n, d->pool + n->style_off, n->style_len);
+        cascade_rules(d, (int)i, 0);
+        cascade_rules(d, (int)i, 1);
         if (n->border && n->border_color == (p ? p->color : 0)) n->border_color = n->color;
         if (p && p->display == WE_DISP_NONE) n->display = WE_DISP_NONE;
     }
@@ -1139,43 +1530,66 @@ static int image_open(we_doc_t *d, int idx) {
     return 0;
 }
 
-static int image_measure_height(we_doc_t *d, int idx) {
+static int image_dimensions(we_doc_t *d, int idx, int available, int assigned_w, int assigned_h, int *w, int *h);
+
+static int image_intrinsic_width(we_doc_t *d, int idx) {
     const we_node_t *n = &d->nodes[idx];
-    if (image_work.failed[idx]) return -1;
-    if ((n->height >= 0 && (n->height < 1 || n->height > WE_IMAGE_MAX_H)) ||
-        (n->width >= 0 && (n->width < 1 || n->width > WE_IMAGE_MAX_W)))
-        return image_fail(d, "image output exceeds limit", idx);
-    if (image_work.natural_h[idx] > 0) return image_work.natural_h[idx];
-    return image_open(d, idx) ? -1 : image_work.natural_h[idx];
+    if (n->width >= 0) return n->width;
+    if (!n->object_fit_set) return n->text_len * WE_CHAR_W;
+    if (!image_work.natural_w[idx] && image_open(d, idx)) return n->text_len * WE_CHAR_W;
+    if (n->object_fit_set && n->height >= 0)
+        return n->height * image_work.natural_w[idx] / image_work.natural_h[idx];
+    return image_work.natural_w[idx];
+}
+
+static int image_measure_height(we_doc_t *d, int idx, int available, int assigned_w) {
+    int w, h;
+    return image_dimensions(d, idx, available, assigned_w, -1, &w, &h) ? -1 : h;
+}
+
+static void image_fit_box(const we_node_t *n, int w, int h, int nw, int nh,
+                          int *rw, int *rh, int *ox, int *oy) {
+    *rw = w; *rh = h;
+    if (n->object_fit == WE_FIT_NONE) { *rw = nw; *rh = nh; }
+    else if (n->object_fit != WE_FIT_FILL) {
+        int by_width = w * nh <= h * nw;
+        if (n->object_fit == WE_FIT_COVER) by_width = !by_width;
+        if (by_width) { *rw = w; *rh = w * nh / nw; }
+        else { *rh = h; *rw = h * nw / nh; }
+        if (*rw < 1) *rw = 1;
+        if (*rh < 1) *rh = 1;
+        if (n->object_fit == WE_FIT_SCALE_DOWN && *rw >= nw && *rh >= nh) { *rw = nw; *rh = nh; }
+    }
+    *ox = (w - *rw) * n->object_x / 100;
+    *oy = (h - *rh) * n->object_y / 100;
+}
+
+static uint32_t image_sample(int x, int y, int rw, int rh) {
+    unsigned char rgb[3];
+    imgdec_pixel(&image_work.decoded, x * image_work.decoded.w / rw,
+                 y * image_work.decoded.h / rh, rgb);
+    return ((uint32_t)rgb[0] << 16) | ((uint32_t)rgb[1] << 8) | rgb[2];
 }
 
 /* Preflight the entire rectangle set. Failure never publishes half an
  * image and never consumes a display-list slot intended for the alt. */
-static int image_paint(we_doc_t *d, int idx, int x, int y, int available) {
+static int image_paint(we_doc_t *d, int idx, int x, int y, int available, int assigned_w, int assigned_h) {
     we_node_t *n = &d->nodes[idx];
-    int w, h, row, col, nr = 0, room = OS_FB_WEB_ITEMS - (int)d->nitems;
-    if (image_open(d, idx)) return -1;
-    w = n->width >= 0 ? n->width : image_work.decoded.w;
-    if (n->width_pct > 0) w = available * n->width_pct / 100;
-    h = n->height >= 0 ? n->height : image_work.decoded.h;
-    if (w < 1 || h < 1 || w > WE_IMAGE_MAX_W || h > WE_IMAGE_MAX_H)
-        return image_fail(d, "image output exceeds limit", idx);
+    int w, h, rw, rh, ox, oy, row, col, nr = 0, room = OS_FB_WEB_ITEMS - (int)d->nitems;
+    int background = n->object_fit_set && n->has_bg && n->display == WE_DISP_INLINE;
+    if (image_dimensions(d, idx, available, assigned_w, assigned_h, &w, &h) || image_open(d, idx)) return -1;
+    if (background) room--;
+    image_fit_box(n, w, h, image_work.decoded.w, image_work.decoded.h, &rw, &rh, &ox, &oy);
     for (row = 0; row < h; row++) {
         col = 0;
         while (col < w) {
             int first = col, r, found = -1;
-            unsigned char rgb[3];
             uint32_t color;
-            imgdec_pixel(&image_work.decoded, col * image_work.decoded.w / w,
-                         row * image_work.decoded.h / h, rgb);
-            color = ((uint32_t)rgb[0] << 16) | ((uint32_t)rgb[1] << 8) | rgb[2];
+            if (col < ox || col >= ox + rw || row < oy || row >= oy + rh) { col++; continue; }
+            color = image_sample(col - ox, row - oy, rw, rh);
             col++;
-            while (col < w) {
-                uint32_t next;
-                imgdec_pixel(&image_work.decoded, col * image_work.decoded.w / w,
-                             row * image_work.decoded.h / h, rgb);
-                next = ((uint32_t)rgb[0] << 16) | ((uint32_t)rgb[1] << 8) | rgb[2];
-                if (next != color) break;
+            while (col < w && col < ox + rw) {
+                if (image_sample(col - ox, row - oy, rw, rh) != color) break;
                 col++;
             }
             for (r = nr - 1; r >= 0; r--) {
@@ -1198,6 +1612,7 @@ static int image_paint(we_doc_t *d, int idx, int x, int y, int available) {
             }
         }
     }
+    if (background) emit(d, idx, OS_FB_WEB_RECT, x, y, w, h, n->bg);
     for (row = 0; row < nr; row++) {
         os_fb_web_item_t *it = &image_work.rect[row];
         emit(d, idx, OS_FB_WEB_RECT, x + it->x, y + it->y, it->w, it->h, it->color);
@@ -1458,9 +1873,9 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
         flush_line(f, 0);
         flow_region(f, WE_CHAR_W);
         if (f->measuring) {
-            h = image_measure_height(d, idx);
+            h = image_measure_height(d, idx, f->width, -1);
             if (h >= 0 && n->height >= 0) h = n->height;
-        } else h = image_paint(d, idx, f->x0, f->y, f->width);
+        } else h = image_paint(d, idx, f->x0, f->y, f->width, -1, -1);
         if (h >= 0) { f->y = limit_coord(f->y + h); return; }
         if (n->text_len) add_word(f, d->pool + n->text_off, n->text_len, idx, f->pending_space);
         f->pending_space = 0;
@@ -1582,7 +1997,7 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
         if (n->trail_space) { intrinsic_word(flow); flow->pending = 1; }
     } else if (w_eq(n->tag, "br")) intrinsic_line(flow);
     else if (w_eq(n->tag, "img")) {
-        int width = n->width >= 0 ? n->width : n->text_len * WE_CHAR_W;
+        int width = image_intrinsic_width(d, idx);
         intrinsic_word(flow);
         if (flow->pending && flow->line) flow->line += WE_CHAR_W;
         flow->pending = 0;
@@ -1624,7 +2039,7 @@ static void intrinsic_sizes(we_doc_t *d) {
         w_zero(&flow, sizeof(flow));
         if (n->display == WE_DISP_NONE) { n->min_content = n->max_content = 0; continue; }
         if (n->is_text) intrinsic_inline(d, i, &flow, 0);
-        else if (w_eq(n->tag, "img")) flow.minimum = flow.maximum = n->width >= 0 ? n->width : n->text_len * WE_CHAR_W;
+        else if (w_eq(n->tag, "img")) flow.minimum = flow.maximum = image_intrinsic_width(d, i);
         else if (n->display == WE_DISP_GRID || n->display == WE_DISP_TABLE)
             intrinsic_track_sizes(d, i, &flow.minimum, &flow.maximum);
         else if (n->display == WE_DISP_FLEX && !n->flex_dir) {
@@ -1698,6 +2113,30 @@ static int height_constraint(const we_doc_t *d, int idx, int value, int parent) 
     return value < 0 ? 0 : value > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : value;
 }
 
+static int image_dimensions(we_doc_t *d, int idx, int available, int assigned_w, int assigned_h, int *w, int *h) {
+    const we_node_t *n = &d->nodes[idx];
+    int nw, nh, parent, fixed;
+    if (image_work.failed[idx]) return -1;
+    if (!image_work.natural_w[idx] && image_open(d, idx)) return -1;
+    nw = image_work.natural_w[idx]; nh = image_work.natural_h[idx];
+    if (nw < 1 || nh < 1) return image_fail(d, "image dimensions invalid", idx);
+    *w = n->width_pct > 0 ? available * n->width_pct / 100 : n->width >= 0 ? n->width : nw;
+    *h = n->height >= 0 ? n->height : nh;
+    if (n->object_fit_set) {
+        parent = containing_height[idx] >= 0 ? containing_height[idx] : definite_height(d, n->parent, 0);
+        fixed = definite_height(d, idx, 0);
+        if (assigned_w >= 0) *w = assigned_w;
+        else *w = specified_width(n, available, fixed >= 0 ? fixed * nw / nh : nw);
+        if (fixed >= 0) *h = fixed;
+        else *h = *w * nh / nw;
+        if (assigned_h >= 0) *h = assigned_h;
+        *h = height_constraint(d, idx, *h, parent);
+    }
+    if (*w < 1 || *h < 1 || *w > WE_IMAGE_MAX_W || *h > WE_IMAGE_MAX_H)
+        return image_fail(d, "image output exceeds limit", idx);
+    return 0;
+}
+
 static int measure_height(we_doc_t *d, int idx, int width, int depth);
 static int measure_area_height(we_doc_t *d, int idx, int outer, int depth);
 static int measure_grid(we_doc_t *d, int idx, int width, int depth);
@@ -1736,7 +2175,7 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
         else width = specified_width(n, width, width - node_border_extra(n) - n->margin[1] - n->margin[3]);
         if (width < WE_CHAR_W) width = WE_CHAR_W;
         if (w_eq(n->tag, "img")) {
-            content = image_measure_height(d, idx);
+            content = image_measure_height(d, idx, width, n->object_fit_set && forced_width[idx] >= 0 ? width : -1);
             if (content < 0) content = WE_LINE_H;
         } else if (n->display == WE_DISP_GRID) content = measure_grid(d, idx, width, depth);
         else if (n->display == WE_DISP_TABLE) content = measure_table(d, idx, width, depth);
@@ -1907,7 +2346,8 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     content_w = bw - 2 * n->border - n->padding[1] - n->padding[3];
     if (content_w < WE_CHAR_W) content_w = WE_CHAR_W;
     if (w_eq(n->tag, "img")) {
-        int image_h = image_paint(d, idx, content_x, by + n->border + n->padding[0], content_w);
+        int image_h = image_paint(d, idx, content_x, by + n->border + n->padding[0], content_w,
+            n->object_fit_set && forced_width[idx] >= 0 ? content_w : -1, n->object_fit_set ? resolved_height[idx] : -1);
         if (image_h >= 0) {
             content_h = image_h;
             bw = n->w + node_border_extra(n);
@@ -2203,28 +2643,39 @@ static void grid_claim(we_grid_work_t *work, int row, int col, int rows, int col
 }
 
 static int grid_place(we_doc_t *d, we_track_work_t *items, we_grid_work_t *work, int count, int cols, int report) {
-    int pass, k, rows = 0, cursor = 0;
-    for (k = 0; k < count; k++) work->row[k] = work->col[k] = -1;
+    const we_node_t *n;
+    if (!count) return 0;
+    n = &d->nodes[d->nodes[items->node[0]].parent];
+    int pass, k, rows = 0, cursor = 0, row_limit = n->grid_rows > n->area_rows ? n->grid_rows : n->area_rows;
+    if (row_limit < 1) row_limit = 1;
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[items->node[k]];
+        int end = child->grid_row_start ? child->grid_row_start + child->grid_row_span - 1 : child->grid_row_span;
+        if (end > row_limit) row_limit = end;
+        work->row[k] = work->col[k] = -1;
+    }
+    if (row_limit > WE_TRACKS_MAX) row_limit = WE_TRACKS_MAX;
     for (pass = 0; pass < 2; pass++) {
         for (k = 0; k < count; k++) {
             const we_node_t *child = &d->nodes[items->node[k]];
             int explicit = child->grid_col_start || child->grid_row_start;
             int rs = child->grid_row_span, cs = child->grid_col_span;
-            int at, first, placed = 0;
+            int at, first, placed = 0, capacity = n->grid_column_flow ? WE_TRACKS_MAX * row_limit : WE_GRID_ROWS_MAX * cols;
             if ((pass == 0) != explicit) continue;
             if (rs < 1) rs = 1;
             if (cs < 1) cs = 1;
-            first = explicit ? 0 : cursor;
-            for (at = first; at < WE_GRID_ROWS_MAX * cols; at++) {
-                int r = at / cols, c = at % cols;
+            first = explicit || n->grid_dense ? 0 : cursor;
+            for (at = first; at < capacity; at++) {
+                int r = n->grid_column_flow ? at % row_limit : at / cols;
+                int c = n->grid_column_flow ? at / row_limit : at % cols;
+                if (n->grid_column_flow && r + rs > row_limit) continue;
                 if (child->grid_row_start && r != child->grid_row_start - 1) continue;
                 if (child->grid_col_start && c != child->grid_col_start - 1) continue;
-                if (!grid_free(work, r, c, rs, cs, cols)) continue;
+                if (!grid_free(work, r, c, rs, cs, n->grid_column_flow ? WE_TRACKS_MAX : cols)) continue;
                 grid_claim(work, r, c, rs, cs);
-                work->row[k] = r;
-                work->col[k] = c;
+                work->row[k] = r; work->col[k] = c;
                 if (r + rs > rows) rows = r + rs;
-                if (!explicit) cursor = at + cs;
+                if (!explicit) cursor = at + (n->grid_column_flow ? rs : cs);
                 placed = 1;
                 break;
             }
@@ -2234,31 +2685,64 @@ static int grid_place(we_doc_t *d, we_track_work_t *items, we_grid_work_t *work,
     return rows;
 }
 
+static int grid_spec(const we_node_t *n, int vertical, int k) {
+    int declared = vertical ? n->grid_rows : n->grid_cols;
+    return k < declared ? (vertical ? n->row_size[k] : n->col_size[k]) : (vertical ? n->auto_row : n->auto_col);
+}
+
+static int grid_floor(const we_node_t *n, int vertical, int k) {
+    int declared = vertical ? n->grid_rows : n->grid_cols;
+    int low = k < declared ? (vertical ? n->row_floor[k] : n->col_floor[k]) : (vertical ? n->auto_row_floor : n->auto_col_floor);
+    return low < 0 ? 0 : low;
+}
+
+static int grid_cap(const we_node_t *n, int vertical, int k) {
+    int declared = vertical ? n->grid_rows : n->grid_cols;
+    return k < declared ? (vertical ? n->row_cap[k] : n->col_cap[k]) : (vertical ? n->auto_row_cap : n->auto_col_cap);
+}
+
+/* Fractions share a common unit. Freeze floors above that unit and solve
+ * again, rather than adding free space on top of unequal minima. */
 static int grid_track_sizes(const we_node_t *n, int vertical, int count, int available,
                              int gap, int *sizes) {
-    int k, fixed = 0, weight = 0, assigned = 0, free;
-    int declared = vertical ? n->grid_rows : n->grid_cols;
+    int k, pass, free = available, weight = 0, assigned = 0;
+    uint8_t frozen[WE_GRID_ROWS_MAX];
+    w_zero(frozen, sizeof(frozen));
+    if (free >= 0) free -= (count > 0 ? count - 1 : 0) * gap;
     for (k = 0; k < count; k++) {
-        int spec = k < declared ? (vertical ? n->row_size[k] : n->col_size[k]) :
-                   vertical ? WE_TRACK_AUTO : -1;
+        int spec = grid_spec(n, vertical, k), low = grid_floor(n, vertical, k), cap = grid_cap(n, vertical, k);
         if (spec >= 0) sizes[k] = spec;
-        else if (spec != WE_TRACK_AUTO && available >= 0) { weight -= spec; sizes[k] = 0; }
-        fixed += sizes[k];
-    }
-    free = available >= 0 ? available - fixed - (count > 0 ? count - 1 : 0) * gap : 0;
-    if (free < 0) free = 0;
-    for (k = 0; k < count; k++) {
-        int spec = k < declared ? (vertical ? n->row_size[k] : n->col_size[k]) : vertical ? WE_TRACK_AUTO : -1;
-        if (spec < 0 && spec != WE_TRACK_AUTO && available >= 0 && weight) {
-            sizes[k] = free * (-spec) / weight;
-            assigned += sizes[k];
+        else if (spec != WE_TRACK_AUTO && available >= 0) sizes[k] = low;
+        else {
+            if (sizes[k] < low) sizes[k] = low;
+            if (cap >= 0 && sizes[k] > cap) sizes[k] = cap;
         }
+        if (spec < 0 && spec != WE_TRACK_AUTO && available >= 0) weight -= spec;
+        else if (free >= 0) free -= sizes[k];
     }
-    if (weight) {
-        int remainder = free - assigned;
+    if (free < 0) free = 0;
+    for (pass = 0; weight > 0 && pass <= count; pass++) {
+        int froze = 0;
+        for (k = 0; k < count; k++) {
+            int spec = grid_spec(n, vertical, k);
+            if (frozen[k] || spec >= 0 || spec == WE_TRACK_AUTO) continue;
+            if (sizes[k] > free * (-spec) / weight) {
+                frozen[k] = 1; free -= sizes[k]; weight += spec; froze = 1;
+                if (free < 0) free = 0;
+            }
+        }
+        if (!froze) break;
+    }
+    if (weight > 0) {
+        int used = 0, remainder;
+        for (k = 0; k < count; k++) {
+            int spec = grid_spec(n, vertical, k);
+            if (!frozen[k] && spec < 0 && spec != WE_TRACK_AUTO) { sizes[k] = free * (-spec) / weight; used += sizes[k]; }
+        }
+        remainder = free - used;
         for (k = 0; k < count && remainder; k++) {
-            int spec = k < declared ? (vertical ? n->row_size[k] : n->col_size[k]) : vertical ? WE_TRACK_AUTO : -1;
-            if (spec < 0 && spec != WE_TRACK_AUTO) { sizes[k]++; remainder--; }
+            int spec = grid_spec(n, vertical, k);
+            if (!frozen[k] && spec < 0 && spec != WE_TRACK_AUTO) { sizes[k]++; remainder--; }
         }
     }
     assigned = count > 0 ? (count - 1) * gap : 0;
@@ -2268,22 +2752,28 @@ static int grid_track_sizes(const we_node_t *n, int vertical, int count, int ava
 
 static void grid_span_minimum(const we_node_t *n, int vertical, int start, int span,
                               int wanted, int gap, int definite, int *sizes) {
-    int k, current = (span - 1) * gap, receivers = 0, declared = vertical ? n->grid_rows : n->grid_cols;
+    int k, pass;
     for (k = start; k < start + span; k++) {
-        int spec = k < declared ? (vertical ? n->row_size[k] : n->col_size[k]) : vertical ? WE_TRACK_AUTO : -1;
-        current += sizes[k];
-        if (spec == WE_TRACK_AUTO || (vertical && definite < 0 && spec < 0)) receivers++;
+        int spec = grid_spec(n, vertical, k), low = grid_floor(n, vertical, k);
+        if (sizes[k] < low) sizes[k] = low;
+        if (spec >= 0) sizes[k] = spec;
     }
-    if (wanted <= current || !receivers) return;
-    wanted -= current;
-    for (k = start; k < start + span; k++) {
-        int spec = k < declared ? (vertical ? n->row_size[k] : n->col_size[k]) : vertical ? WE_TRACK_AUTO : -1;
-        int take;
-        if (spec != WE_TRACK_AUTO && !(vertical && definite < 0 && spec < 0)) continue;
-        take = wanted / receivers + (wanted % receivers != 0);
-        sizes[k] += take;
-        wanted -= take;
-        receivers--;
+    for (pass = 0; pass < span; pass++) {
+        int current = (span - 1) * gap, receivers = 0;
+        for (k = start; k < start + span; k++) {
+            int spec = grid_spec(n, vertical, k), cap = grid_cap(n, vertical, k);
+            current += sizes[k];
+            if ((spec == WE_TRACK_AUTO || (definite < 0 && spec < 0)) && (cap < 0 || sizes[k] < cap)) receivers++;
+        }
+        if (wanted <= current || !receivers) return;
+        current = wanted - current;
+        for (k = start; k < start + span; k++) {
+            int spec = grid_spec(n, vertical, k), cap = grid_cap(n, vertical, k), take;
+            if (!(spec == WE_TRACK_AUTO || (definite < 0 && spec < 0)) || (cap >= 0 && sizes[k] >= cap)) continue;
+            take = current / receivers + (current % receivers != 0);
+            if (cap >= 0 && take > cap - sizes[k]) take = cap - sizes[k];
+            sizes[k] += take; current -= take; receivers--;
+        }
     }
 }
 
@@ -2293,7 +2783,7 @@ static void fit_auto_columns(const we_node_t *n, int cols, int width, int gap,
                              const int *minimum, int *sizes) {
     int k, used = (cols - 1) * gap, room = 0, excess, removed = 0;
     for (k = 0; k < cols; k++) {
-        int spec = k < n->grid_cols ? n->col_size[k] : -1;
+        int spec = grid_spec(n, 0, k);
         used += spec >= 0 ? spec : spec == WE_TRACK_AUTO ? sizes[k] : 0;
         if (spec == WE_TRACK_AUTO && sizes[k] > minimum[k]) room += sizes[k] - minimum[k];
     }
@@ -2301,7 +2791,7 @@ static void fit_auto_columns(const we_node_t *n, int cols, int width, int gap,
     if (excess > room) excess = room;
     if (!room || !excess) return;
     for (k = 0; k < cols; k++) {
-        int spec = k < n->grid_cols ? n->col_size[k] : -1;
+        int spec = grid_spec(n, 0, k);
         if (spec == WE_TRACK_AUTO && sizes[k] > minimum[k]) {
             int take = (int)flex_share((uint32_t)excess, (uint32_t)(sizes[k] - minimum[k]), (uint32_t)room);
             sizes[k] -= take;
@@ -2309,7 +2799,7 @@ static void fit_auto_columns(const we_node_t *n, int cols, int width, int gap,
         }
     }
     for (k = 0; k < cols && removed < excess; k++) {
-        int spec = k < n->grid_cols ? n->col_size[k] : -1;
+        int spec = grid_spec(n, 0, k);
         if (spec == WE_TRACK_AUTO && sizes[k] > minimum[k]) { sizes[k]--; removed++; }
     }
 }
@@ -2328,7 +2818,13 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         if (end > cols) cols = end;
     }
     if (cols > WE_TRACKS_MAX) cols = WE_TRACKS_MAX;
+    if (n->area_cols > cols) cols = n->area_cols;
     rows = grid_place(d, items, work, count, cols, 1);
+    if (n->grid_column_flow) for (k = 0; k < count; k++) {
+        int end = work->col[k] + d->nodes[items->node[k]].grid_col_span;
+        if (work->col[k] >= 0 && end > cols) cols = end;
+    }
+    if (n->area_rows > rows) rows = n->area_rows;
     if (n->grid_rows > rows) rows = n->grid_rows;
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
@@ -2629,7 +3125,8 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
             int align = child->align_self ? child->align_self : n->align_items;
             line->used += work->size[j];
             if (vertical) {
-                int fallback = wrap ? WE_CHAR_W : align == WE_PACK_END || align == WE_PACK_CENTER ? child->max_content : cw - flex_extra(child, 0);
+                int fallback = wrap ? WE_CHAR_W : align == WE_PACK_END || align == WE_PACK_CENTER ||
+                    (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ? child->max_content : cw - flex_extra(child, 0);
                 work->cross[j] = preferred_outer(child, cw, fallback);
             } else work->cross[j] = measure_area_height(d, work->node[j], work->size[j], depth + 1);
             if (work->cross[j] > line->cross) line->cross = work->cross[j];
@@ -2737,13 +3234,19 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
             we_node_t *child = &d->nodes[work->node[j]];
             int align = child->align_self ? child->align_self : n->align_items;
             int cross = work->cross[j], main_start, off, x, y, width, height;
-            if (align == WE_PACK_STRETCH) {
+            int cross_before = child->margin_auto & (vertical ? WE_AUTO_LEFT : WE_AUTO_TOP);
+            int cross_after = child->margin_auto & (vertical ? WE_AUTO_RIGHT : WE_AUTO_BOTTOM);
+            int cross_auto = cross_before || cross_after;
+            if (align == WE_PACK_STRETCH && !cross_auto) {
                 if (vertical && child->width < 0 && !child->width_pct && !child->width_kind)
                     cross = constrained_width(child, line_cross - flex_extra(child, 0), cw) + flex_extra(child, 0);
                 if (!vertical && child->height < 0 && !child->height_percent)
                     cross = height_constraint(d, work->node[j], line_cross - flex_extra(child, 1), cross_available) + flex_extra(child, 1);
             }
-            off = pack_distance(align, line_cross - cross, 0, 1);
+            if (cross_auto) {
+                int free = line_cross > cross ? line_cross - cross : 0;
+                off = cross_before ? (cross_after ? free / 2 : free) : 0;
+            } else off = pack_distance(align, line_cross - cross, 0, 1);
             {
                 int cursor = 0, t, rem_left = auto_rem;
                 for (t = line->first; t < j; t++) {
@@ -2766,7 +3269,7 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
             x = cx + (vertical ? cross_start + off : main_start);
             y = cy + (vertical ? main_start : cross_start + off);
             width = vertical ? cross : work->size[j];
-            height = vertical ? work->size[j] : align == WE_PACK_STRETCH && child->height < 0 && !child->height_percent ? cross : -1;
+            height = vertical ? work->size[j] : !cross_auto && align == WE_PACK_STRETCH && child->height < 0 && !child->height_percent ? cross : -1;
             if (vertical && wrap && (x - cx + width > cw || width < 0)) {
                 diag(d, "column wrap width exceeded", work->node[j]);
                 return main >= 0 ? main : 0;
@@ -2983,7 +3486,12 @@ static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maxim
             if (end > cols) cols = end;
         }
         if (cols > WE_TRACKS_MAX) cols = WE_TRACKS_MAX;
+        if (n->area_cols > cols) cols = n->area_cols;
         grid_place(d, items, work, count, cols, 0);
+        if (n->grid_column_flow) for (k = 0; k < count; k++) {
+            int end = work->col[k] + d->nodes[items->node[k]].grid_col_span;
+            if (work->col[k] >= 0 && end > cols) cols = end;
+        }
     } else {
         int r, placed;
         rows = collect_table_rows(d, idx, items->node, 0);
@@ -3020,10 +3528,13 @@ static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maxim
                         int extra = node_border_extra(child) + child->margin[1] + child->margin[3];
                         int low = child->width >= 0 ? content_value(child->width, node_border_extra(child), child->border_box) : child->min_content;
                         int high = child->width >= 0 ? low : child->max_content;
-                        intrinsic_track_request(n, cols, start, span, constrained_width(child, low, 0) + extra,
-                                                gap, grid, work->column);
-                        intrinsic_track_request(n, cols, start, span, constrained_width(child, high, 0) + extra,
-                                                gap, grid, work->column_x);
+                        if (grid) {
+                            grid_span_minimum(n, 0, start, span, constrained_width(child, low, 0) + extra, gap, -1, work->column);
+                            grid_span_minimum(n, 0, start, span, constrained_width(child, high, 0) + extra, gap, -1, work->column_x);
+                        } else {
+                            intrinsic_track_request(n, cols, start, span, constrained_width(child, low, 0) + extra, gap, 0, work->column);
+                            intrinsic_track_request(n, cols, start, span, constrained_width(child, high, 0) + extra, gap, 0, work->column_x);
+                        }
                     }
                     column += span;
                 }
@@ -3350,6 +3861,28 @@ static void clip_display_list(we_doc_t *d) {
     d->nitems = (uint32_t)count;
 }
 
+static void resolve_grid_areas(we_doc_t *d) {
+    uint32_t i;
+    for (i = 0; i < d->nnodes; i++) {
+        we_node_t *child = &d->nodes[i];
+        const we_node_t *parent;
+        int k;
+        if (!child->grid_area[0] || child->parent < 0) continue;
+        parent = &d->nodes[child->parent];
+        if (parent->display != WE_DISP_GRID) continue;
+        child->grid_col_start = child->grid_row_start = 0;
+        child->grid_col_span = child->grid_row_span = 1;
+        for (k = 0; k < parent->area_count; k++) {
+            const we_grid_area_t *area = &parent->areas[k];
+            if (!w_eq(child->grid_area, area->name)) continue;
+            child->grid_col_start = (uint8_t)(area->col + 1); child->grid_row_start = (uint8_t)(area->row + 1);
+            child->grid_col_span = area->cols; child->grid_row_span = area->rows;
+            break;
+        }
+        if (k == parent->area_count) diag(d, "grid area name unknown", (int)i);
+    }
+}
+
 int we_layout(we_doc_t* d, int viewport_w) {
     int h;
     if (!d || d->nnodes == 0 || viewport_w < 64) return -1;
@@ -3370,6 +3903,7 @@ int we_layout(we_doc_t* d, int viewport_w) {
     w_zero(image_work.natural_h, sizeof(image_work.natural_h));
     w_zero(measure_cache, sizeof(measure_cache));
     measure_budget = WE_MEASURE_BUDGET;
+    resolve_grid_areas(d);
     intrinsic_sizes(d);
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
     clip_display_list(d);

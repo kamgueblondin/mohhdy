@@ -7,6 +7,19 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 57 (29 October 2026)
+
+US-031 stays partial, phase3_complete=false. The same bounded guest webeng
+adds grid minmax/capped intrinsic tracks, mixed repeat groups, dense and
+column placement, named areas and implicit track descriptors; explicit
+object-fit/position and natural image ratio sizing through the one imgdec;
+flex cross-axis auto margins; bounded combinator/attribute/structural CSS
+selectors and !important cascade. Kernel/rights/syscall ABI unchanged.
+No Chromium, WebKit, network loading, JavaScript VM or new font engine.
+US-059/060/063/074 unchanged; US-G19..US-G24 remain partial. Roadmap statuses
+and the exact complete non-done id list are unchanged. Detailed subset,
+limits and measured results: docs/lot57_plan.md.
+
 ### Lot 56 (28 October 2026)
 
 The same guest web engine places absolute boxes, flex reverse, order and
