@@ -23,6 +23,7 @@ Living baseline. Plan: [lot51_plan.md](lot51_plan.md). Base: `origin/main` `839d
 - `make qemu-gui-parity` passed (about 261 s, started 09:12 Mauritius, UTC+4). Serial: `osui panel out=child-exit-count ok 0`, `osui panel out=deploy-verify error manifest not found`, `osui panel out=collab-keys error p2p down (p2p-up first)`. `img-info /images/mire-prog.jpg` still prints `img-info ok fmt=jpeg w=48 h=32 bpp=24`.
 - `make qemu-production` passed in 71 s (same run, finished 09:17 Mauritius, UTC+4). Guest printed `prod-roadmap phase 9 (gui-parity) done 18 partial 6 simule 0 open 0 progress 75%`, `prod-roadmap next US-076 US-078 US-080 US-081 US-097 US-G19 US-G20 US-G21 US-G22 US-G23 US-G24`, and `entries 69 bad 0`.
 - `make qemu-osui-gui` passed (about 290 s, 09:18 to 09:23 Mauritius, UTC+4). `/p2p` still reaches `pane=p2p`, then `/collab` reaches `pane=collab` and `/prod` reaches `pane=prod`. ESC, shell-equals-console and the terminal window passed in the same target.
+- CI run 40637781657 on the docs commit failed one job: `make qemu-ai-worker` missed `aiclient tokens ... end`. The serial log had the line, cut by `yield ok` (`aiclient token` + `yield ok` + `s 0 1 2 ... end`). `normalized_log` now glues that cut the same way it already glues a `spawn ok` cut. No character is dropped. Local re-run passed (10:35 to 10:38 Mauritius, UTC+4): stall 15.0 s, ESC cancel -149, same tokens on worker, kernel and fallback.
 
 ## Etat courant du 28 octobre 2026 (lot 50)
 

@@ -127,6 +127,52 @@ def rejoin_spawn_inside_line(output):
     return "".join(pieces)
 
 
+def rejoin_yield_inside_line(output):
+    """Rejoin a child line cut by the shell reply `yield ok`.
+
+    child_regex types yield when a pattern is not visible yet. IRQ0 can
+    switch to the shell in the middle of one SYS_PUTC string, so the
+    reply lands inside the child line (CI run 40637781657, qemu-ai-worker):
+    `aiclient token` + `yield ok` + prompt and SYS_GETS echo of the next
+    yield + `s 0 1 2 ... end`. Only a yield ok that starts inside a line
+    is handled, and only when every line between it and the rest is shell
+    input echo. The rest is glued back; the yield line and the echo
+    follow, so no character is dropped.
+    """
+    mark = re.compile(r"(?<=[A-Za-z0-9_ ])(yield ok\r?\n)")
+    echo = re.compile(r"^(?:(?:\x1b\[[0-9;]*m)*/?(?:\x1b\[[0-9;]*m)* : )?(?:SYS_GETS|KBD_)")
+    pieces = []
+    last = 0
+    for match in mark.finditer(output):
+        if match.start() < last:
+            continue
+        pos = match.end()
+        gap_end = None
+        for _ in range(64):
+            nl = output.find("\n", pos)
+            line = output[pos:nl if nl >= 0 else len(output)]
+            if not echo.match(line):
+                gap_end = pos
+                break
+            if nl < 0:
+                break
+            pos = nl + 1
+        if gap_end is None or gap_end >= len(output):
+            continue
+        nl = output.find("\n", gap_end)
+        rest_end = len(output) if nl < 0 else nl + 1
+        rest = output[gap_end:rest_end]
+        if not rest.endswith("\n"):
+            rest += "\n"
+        pieces.append(output[last:match.start()])
+        pieces.append(rest)
+        pieces.append(match.group(1))
+        pieces.append(output[match.end():gap_end])
+        last = rest_end
+    pieces.append(output[last:])
+    return "".join(pieces)
+
+
 def rejoin_task_resume_ok(output):
     """Recolle `task-resume ok` + bruit + pid apres preemption IRQ0.
 
@@ -165,6 +211,7 @@ def normalized_log(output):
     output = rejoin_spawn_preempted_puts(output)
     # Reponse spawn ok inseree au milieu d'une ligne du fils (flake CI ai-gguf).
     output = rejoin_spawn_inside_line(output)
+    output = rejoin_yield_inside_line(output)
     # task-resume ok <pid> coupe apres ok (SCHED + trace worker).
     output = rejoin_task_resume_ok(output)
     return re.sub(r"[ \t]{2,}", " ", output)

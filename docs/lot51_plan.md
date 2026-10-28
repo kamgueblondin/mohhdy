@@ -59,6 +59,9 @@ finished at 09:17 Mauritius (UTC+4). Parity serial lines:
 `collab-keys error p2p down (p2p-up first)`. Production printed the
 phase 9 line at 75% and `entries 69 bad 0`. `make qemu-osui-gui`
 passed (09:18 to 09:23 Mauritius, UTC+4): `/p2p` still sets `pane=p2p`.
+CI run 40637781657 then failed `qemu-ai-worker`: `yield ok` cut
+`aiclient tokens` in half. The log rejoin glues that cut. Local
+re-run passed at 10:38 Mauritius (UTC+4).
 
 ## 5. Not done
 
