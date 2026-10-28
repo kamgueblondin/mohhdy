@@ -490,7 +490,7 @@ completent le backlog ; elles n'en retirent aucune.
 | US-G18 | `/help` in the desktop chat | done (Lot 45: Aide window, slash programs from the dispatch table, terminal help; qemu-gui-parity) |
 | US-G19 | PromptMessage tools in a desktop panel | partial (Lot 50: `/pm` runs pm-catalog, pm-catalog-search, pm-doc, pm-check, pm-disasm, pm-assist, pm-cross, pm-test, pm-versions through the shell; pm-ide stays terminal-only; no language model, no native compiler) |
 | US-G20 | Process commands in a desktop panel | partial (Lot 50: `/proc` runs ps, mem, task-capacity, task-events and the status readers; task-priority, task-suspend and task-resume need a second Enter; not every task-* command) |
-| US-G21 | P2P mesh reports in a desktop panel | partial (Lot 50: `/p2p` runs p2p-stats, p2p-analyze, p2p-route, p2p-qos, p2p-raft, p2p-stun, p2p-cache and p2p-kv; QEMU sees the shell refusal while the node is down; no live mesh) |
+| US-G21 | P2P mesh reports in a desktop panel | partial (Lot 50: `/mesh` runs p2p-stats, p2p-analyze, p2p-route, p2p-qos, p2p-raft, p2p-stun, p2p-cache and p2p-kv; `/p2p` stays the desktop pane; QEMU sees the shell refusal while the node is down; no live mesh) |
 
 Preuves : `test_osui_parity`, `test_osui_gui`, `test_fsops`,
 `test_osui_editor`, `test_gfx_desktop`, `make qemu-gui-ux5`,
@@ -512,7 +512,7 @@ status does not change, so the prod-roadmap phase 9 count stays done 18
 partial 0.
 Lot 50 (`docs/lot50_plan.md`): US-G19, US-G20 and US-G21 are partial.
 Phase 9 is done 18 partial 3 (85%). The desktop does not gain a second
-shell: `/pm`, `/proc` and `/p2p` are menus of commands that already
+shell: `/pm`, `/proc` and `/mesh` are menus of commands that already
 exist. US-059, US-060, US-063 and US-074 are not advanced. US-G03 stays
 done; the parity test now expects SOF2 to decode, and the explorer
 treats `.jpg` as an image.

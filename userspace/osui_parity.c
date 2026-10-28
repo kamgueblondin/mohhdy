@@ -254,7 +254,8 @@ const osui_par_family_t osui_par_families[] = {
     { OS_FB_APP_API, "/api", "Tokens API", "api", k_api, N(k_api) },
     { OS_FB_APP_PM, "/pm", "Outils PM", "promptmessage", k_pm, N(k_pm) },
     { OS_FB_APP_PROC, "/proc", "Processus", "processes", k_proc, N(k_proc) },
-    { OS_FB_APP_P2PMESH, "/p2p", "Maillage P2P", "p2p", k_p2pmesh, N(k_p2pmesh) },
+    /* /p2p stays the desktop pane (pane=p2p). This menu is /mesh. */
+    { OS_FB_APP_P2PMESH, "/mesh", "Maillage P2P", "p2p", k_p2pmesh, N(k_p2pmesh) },
     { OS_FB_APP_CMD, "/cmd", "Commande", "any", 0, 0 },
 };
 const int osui_par_family_count = N(osui_par_families);

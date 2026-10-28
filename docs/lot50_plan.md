@@ -48,13 +48,16 @@ Not in this lot, on purpose:
   need a second Enter. QEMU runs `ps` and expects the banner
   `Processus`. kill and the rest of task-* / child-* stay on `/cmd`
   or `/tasks`.
-- US-G21 `partial`. `/p2p` (kind `OS_FB_APP_P2PMESH`, 32, not
+- US-G21 `partial`. `/mesh` (kind `OS_FB_APP_P2PMESH`, 32, not
   `OS_FB_APP_P2P` 6 which is `/peers`) runs p2p-stats, p2p-analyze,
   p2p-route, p2p-qos, p2p-raft, p2p-stun, p2p-cache, p2p-kv. A second
   p2p-cache entry takes `put CLE VALEUR` and confirms. QEMU runs
   p2p-stats while the node is down and expects
   `p2p-stats error p2p down`. That is the shell's own line
   (`userspace/shell_p2p.c`). It is not a live mesh.
+  The slash is `/mesh` because `/p2p` already opens the desktop pane
+  (`pane=p2p`, `qemu-osui-gui` and `qemu-gui-apps`). Taking `/p2p`
+  for the menu made those two jobs fail on CI run 40610642239.
 
 ## 3. Roadmap
 
@@ -62,8 +65,9 @@ Not in this lot, on purpose:
 
 - phase 9 (gui-parity) done 18 partial 3 simule 0 open 0 progress 85%
   (18 * 100 / 21 = 85);
-- next US-076 US-078 US-080 US-G19 US-G20 US-G21 (file order of every
-  status that is not done);
+- next US-076 US-078 US-080 US-081 US-097 US-G19 US-G20 US-G21
+  (file order of every status that is not done; US-081 is partial and
+  US-097 is simule, already in the file before this lot);
 - entries 66 bad 0.
 
 `make roadmap-check` compares those statuses with the US master table.
@@ -79,12 +83,14 @@ log says so.
   `make secrets-check` (no provider secret in 4 images),
   `make strict-image-check`: passed. Guest command registry: 447 names.
   `scripts/check_gui_parity.py`: families=24 entries=148.
-- `make qemu-gui-parity`: passed (about 248 s). First entries of `/pm`,
-  `/proc` and `/p2p`, plus `img-info ok` and `/view` of
-  `/images/mire-prog.jpg`.
-- `make qemu-production` was not run. The expected prod-roadmap lines are
-  in the test and match `make roadmap-check`. That does not prove the
-  guest printed them.
+- `make qemu-gui-parity`: passed (about 248 s) while the mesh menu was
+  still `/p2p`. That slash is now `/mesh`.
+- CI run 40610642239 (`d54e2c0`): gui-parity passed. `qemu-production`
+  printed the longer next line (US-081 and US-097 included). The test
+  expected a string that skipped those two ids, so the job failed.
+  `qemu-osui-gui` and `qemu-gui-apps` failed because `/p2p` no longer
+  opened the pane. Both are fixed in the follow-up commit. The re-run
+  of those three targets is recorded only after it passes.
 
 ## 5. Not done
 

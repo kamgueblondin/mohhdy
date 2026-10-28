@@ -151,15 +151,18 @@ static void test_lot46_entries(void) {
     TEST_ASSERT(entry_of(OS_FB_APP_NOTES, "migrate-import")->flags & OSUI_PAR_MUT);
 }
 
-/* Lot 50: /pm /proc /p2p are menus of existing shell commands.
- * /pm must not be the /pmrun launcher. .jpg opens in the shared viewer. */
+/* Lot 50: /pm /proc /mesh are menus of existing shell commands.
+ * /pm must not be the /pmrun launcher. /p2p stays the desktop pane.
+ * .jpg opens in the shared viewer. */
 static void test_lot50_entries(void) {
     char out[96];
     const osui_par_entry_t *e;
     TEST_ASSERT_EQUAL(OS_FB_APP_PM, osui_par_kind_of("/pm"));
     TEST_ASSERT_EQUAL(0, osui_par_kind_of("/pmrun"));
     TEST_ASSERT_EQUAL(OS_FB_APP_PROC, osui_par_kind_of("/proc"));
-    TEST_ASSERT_EQUAL(OS_FB_APP_P2PMESH, osui_par_kind_of("/p2p"));
+    TEST_ASSERT_EQUAL(OS_FB_APP_P2PMESH, osui_par_kind_of("/mesh"));
+    /* /p2p is the existing desktop pane, not this menu */
+    TEST_ASSERT_EQUAL(0, osui_par_kind_of("/p2p"));
     TEST_ASSERT_EQUAL(0, osui_par_kind_of("/peers"));
     e = entry_of(OS_FB_APP_PM, "pm-catalog");
     TEST_ASSERT_NOT_NULL(e);

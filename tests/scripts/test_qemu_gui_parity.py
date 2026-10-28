@@ -56,10 +56,11 @@ PANELS = [
     ("/sysadmin", "Administration", "os-admin", "osui admin-status"),
     ("/api", "Tokens API", "api", "osui api status="),
     # Lot 50: terminal families that were only reachable through /cmd.
-    # /pm is not /pmrun (that title is "PromptMessage"). /p2p is not /peers.
+    # /pm is not /pmrun (that title is "PromptMessage").
+    # /mesh is not /p2p: /p2p is the desktop pane (pane=p2p).
     ("/pm", "Outils PM", "pm-catalog", "pm-catalog ok"),
     ("/proc", "Processus", "ps", "Processus"),
-    ("/p2p", "Maillage P2P", "p2p-stats", "p2p-stats error p2p down"),
+    ("/mesh", "Maillage P2P", "p2p-stats", "p2p-stats error p2p down"),
 ]
 
 

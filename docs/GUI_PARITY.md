@@ -66,7 +66,7 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | /api API Tokens | api | `api`, `api-token` (ARG+MUT), `api-revoke` (ARG+MUT) |
 | /pm Outils PM | promptmessage | `pm-catalog`, `pm-catalog-search` (ARG), `pm-doc` (ARG), `pm-check` (ARG), `pm-disasm` (ARG), `pm-assist` (ARG), `pm-cross` (ARG), `pm-test` (ARG), `pm-versions` (ARG) |
 | /proc Processus | processes | `ps`, `mem`, `task-capacity`, `task-events`, `task-events-notify-status`, `task-priority-child-status`, `task-events-budget-status`, `task-events-watch-status`, `children`, `task-priority` (ARG+MUT), `task-suspend` (ARG+MUT), `task-resume` (ARG+MUT) |
-| /p2p Maillage P2P | p2p | `p2p-stats`, `p2p-analyze`, `p2p-route`, `p2p-qos`, `p2p-raft`, `p2p-stun`, `p2p-cache`, `p2p-kv`, `p2p-cache` (ARG+MUT) |
+| /mesh Maillage P2P | p2p | `p2p-stats`, `p2p-analyze`, `p2p-route`, `p2p-qos`, `p2p-raft`, `p2p-stun`, `p2p-cache`, `p2p-kv`, `p2p-cache` (ARG+MUT) |
 | /cmd Commande | any | any registry command typed in the input line |
 
 ## Lot 45
@@ -113,7 +113,7 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | processes: ps, kill, mem, jobs, task-* (27), child-* (7) | Task manager (/tasks), /services (jobs, task-summary), /proc (Lot 50) | partial (US-G20): /proc runs ps, mem, task-capacity, task-events, four status readers, children, and task-priority / task-suspend / task-resume with a second Enter. kill and the other task-* / child-* commands stay on /cmd or /tasks |
 | services and drivers: service-* (6), devices, lspci, dev-list, pci-rescan, driver-restart | /services, task manager services view | done (Lot 46): every /services entry runs in `qemu-gui-panels`; `driver-restart` (fixed Ring 3 driver names): supervised respawn of pcidriver (Lot 45) and atadriver with a new pid, networker restarted by the shell with a new pid, each service used after the restart (`qemu-gui-parity`) |
 | network: net-* (3), fetch-sim, grpc-* (6) | /net, /grpc | partial: every /net entry runs in `qemu-gui-panels` (Lot 46), grpc-wire; the shell has no command that configures the interface (address, route), so no window can either (Lot 46 PR D) |
-| p2p: p2p-* (27) | /peers (UX4), /net, /p2p (Lot 50) | partial (US-G21): /p2p runs stats, analyze, route, qos, raft, stun, cache and kv. QEMU proof is the shell line `p2p-stats error p2p down` while the node is down. No live mesh. p2p-up stays on /net |
+| p2p: p2p-* (27) | /peers (UX4), /net, /mesh (Lot 50) | partial (US-G21): /mesh runs stats, analyze, route, qos, raft, stun, cache and kv. /p2p stays the desktop pane. QEMU proof is the shell line `p2p-stats error p2p down` while the node is down. No live mesh. p2p-up stays on /net |
 | storage: ata-*, fat16-*, mount-*, persist-* (6), vfs-* (26) | /disk, /vfs | done (Lot 46): every /disk entry runs in `qemu-gui-panels` (ata, mounts, persist status and save, ls, stat, mkdir, fat16-list); vfs-stats/list/stat/read/mount-add/mount-remove in /vfs; the vfs-backend-* probes are test tools, through /cmd |
 | logs: task-events, notify-*, osui-audit, history, prod-log-*, prod-usage | /logs | done (Lot 46): every /logs entry runs in `qemu-gui-panels` (append then analyze a log, push then acknowledge a notification) |
 | collab ledger: collab-* (37) | /ledger | done (US-G08 since Lot 45): balances, tasks, audit, p2p-up; forms (offer, vote, escrow create, release/refund/dispute) build the shell grammar and need a second Enter; QEMU proof of the offer form. Contracts and keys (collab-contract-*, collab-keys) through /cmd |
@@ -169,9 +169,10 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 
 ## Lot 50
 
-- `/pm`, `/proc` and `/p2p` are menus of shell commands that already
-  exist. US-G19, US-G20 and US-G21 are partial. Proof: `test_osui_parity`
-  and the first entry of each panel in `make qemu-gui-parity`.
+- `/pm`, `/proc` and `/mesh` are menus of shell commands that already
+  exist. US-G19, US-G20 and US-G21 are partial. `/p2p` stays the desktop
+  pane (`pane=p2p`). Proof: `test_osui_parity` and the first entry of
+  each panel in `make qemu-gui-parity`.
 - `qemu-gui-parity` expects `img-info ok fmt=jpeg` on
   `/images/mire-prog.jpg` and draws that file in the viewer. The old
   refusal string was left behind when SOF2 started to decode (CI job
