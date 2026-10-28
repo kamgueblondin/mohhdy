@@ -1,0 +1,11 @@
+<!doctype html><html><head><title>Lot 53 flex sizing</title><style>
+body{margin:0}
+.row{display:flex;width:100px}
+#a{flex-basis:80px;flex-shrink:1;height:10px;background:red}
+#b{flex-basis:80px;flex-shrink:1;height:10px;background:blue}
+#locked{flex-basis:80px;min-width:70px;height:10px;background:green}
+#tail{flex-basis:80px;height:10px;background:yellow}
+</style></head><body>
+<div class=row><div id=a></div><div id=b></div></div>
+<div class=row><div id=locked></div><div id=tail></div></div>
+</body></html>

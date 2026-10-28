@@ -7,6 +7,14 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 53 (28 October 2026)
+
+Bounded row flex-basis/shrink in webeng.c; scaled bases, minimum freezes,
+integer remainder and overflow diagnostic. One console/GUI engine, kernel
+and rights unchanged. US-031 partial, phase3_complete=false. No Chromium,
+WebKit, JavaScript, network or font loading. Other statuses unchanged.
+Details: docs/lot53_plan.md.
+
 ### Lot 52 (28 October 2026)
 
 US-031 remains **partial**, `phase3_complete=false`. Guest C layout in the
