@@ -442,6 +442,9 @@ jobs:
       - name: QEMU UX5 GUI parity panels (network, storage, services, logs, ledger, prod, security, search, devtools, notes, /cmd)
         run: make qemu-gui-parity
 
+      - name: QEMU bounded guest web layout (Lot 52)
+        run: make qemu-web-layout
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

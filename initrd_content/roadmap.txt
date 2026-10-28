@@ -1,4 +1,6 @@
 # Mohhdy roadmap status, phases 6 to 8 (US-076 to US-120), lot 9.
+# Lot 52: US-031 guest layout stays partial, phase3_complete=false.
+# Phase 6-9 statuses and all non-done ids stay unchanged; see docs/lot52_plan.md.
 # Format: US PHASE STATUS NOTE. STATUS is done, partial, simule or open.
 # Read by the guest command prod-roadmap; keep in step with docs/ETAT_REEL.md.
 US-076 6 partial armv7-core-qemu-virt

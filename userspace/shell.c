@@ -7856,6 +7856,7 @@ void main() {
     init_shell_context(&shell_ctx);
     g_live_ctx = &shell_ctx;
     osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
+    osui_gui_set_fs_io(&shell_fs_io);
     umalloc_init((void *)OS_USER_HEAP_BASE, shell_heap_grow);
     osui_gui_set_heap(urealloc);
     fsops_set_heap(urealloc);

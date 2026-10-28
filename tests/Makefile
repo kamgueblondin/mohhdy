@@ -378,9 +378,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ps2_decode: $(UNIT_DIR)/userspace/test_p
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/ps2_decode.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webeng: $(UNIT_DIR)/userspace/test_webeng.c ../userspace/webeng.c ../userspace/webeng.h ../include/os_syscalls.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webeng: $(UNIT_DIR)/userspace/test_webeng.c $(UNIT_DIR)/userspace/webeng_lot52.inc ../userspace/webeng.c ../userspace/webeng.h ../userspace/imgdec.c ../userspace/imgdec.h ../userspace/imgdec_jpeg.inc ../include/os_syscalls.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/webeng.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_grpcwire: $(UNIT_DIR)/userspace/test_grpcwire.c ../userspace/grpcwire.c ../userspace/grpcwire.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
