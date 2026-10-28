@@ -55,6 +55,12 @@ PANELS = [
     ("/pwa", "Applications PWA", "pwa-list", "osui pwa-list count="),
     ("/sysadmin", "Administration", "os-admin", "osui admin-status"),
     ("/api", "Tokens API", "api", "osui api status="),
+    # Lot 50: terminal families that were only reachable through /cmd.
+    # /pm is not /pmrun (that title is "PromptMessage").
+    # /mesh is not /p2p: /p2p is the desktop pane (pane=p2p).
+    ("/pm", "Outils PM", "pm-catalog", "pm-catalog ok"),
+    ("/proc", "Processus", "ps", "Processus"),
+    ("/mesh", "Maillage P2P", "p2p-stats", "p2p-stats error p2p down"),
 ]
 
 
@@ -75,8 +81,8 @@ def help_window(monitor, proc):
 
 
 def viewer_images(monitor, proc):
-    """Lot 45 (+ Lot 47 JPEG, PNG 16-bit/Adam7): imgdec in the viewer (PNG, BMP) with zoom, and img-info in
-    the shell through /cmd (same decoder)."""
+    """Lot 45 (+ Lot 47 JPEG, PNG 16-bit/Adam7, Lot 49/50 SOF2): imgdec in the viewer with zoom, and img-info in
+    the shell through /cmd (same decoder). Arithmetic SOF9 stays refused in test_imgdec (no sample in the initrd)."""
     slash(monitor, proc, "/view /samples/mire.png", "fmt=png zoom=fit")
     g.wait_for(proc, "osui tool line=image 48x32 affichee en pixels 48x32 fmt=png", g.CMD_TIMEOUT)
     start = len(g.log_text())
@@ -103,7 +109,8 @@ def viewer_images(monitor, proc):
     for path, want in (("/images/mire420.jpg", "img-info ok fmt=jpeg w=48 h=32 bpp=24"),
                        ("/images/mire-rgba16-i.png", "img-info ok fmt=png w=48 h=32 bpp=64 depth=16 interlace=1 px0=0,0,0"),
                        ("/images/mire-g2-i.png", "img-info ok fmt=png w=48 h=32 bpp=2 depth=2 interlace=1"),
-                       ("/images/mire-prog.jpg", "img-info error fmt=jpeg w=48 h=32 bpp=24 reason=variante non supportee")):
+                       # Lot 49 decodes Huffman SOF2. The contract is success, same shape as baseline.
+                       ("/images/mire-prog.jpg", "img-info ok fmt=jpeg w=48 h=32 bpp=24")):
         start = len(g.log_text())
         type_text(monitor, "img-info " + path)
         key(monitor, "ret")
@@ -120,6 +127,12 @@ def viewer_images(monitor, proc):
     key(monitor, "esc")
     g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)
     say("/view mire444.jpg: JPEG baseline drawn in pixels")
+    slash(monitor, proc, "/view /images/mire-prog.jpg", "fmt=jpeg zoom=fit")
+    g.wait_for(proc, "osui tool line=image 48x32 affichee en pixels 48x32 fmt=jpeg", g.CMD_TIMEOUT)
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Visionneuse", g.CMD_TIMEOUT, start)
+    say("/view mire-prog.jpg: progressive Huffman JPEG drawn in pixels")
     slash(monitor, proc, "/view /images/mire-rgb-i.png", "fmt=png zoom=fit")
     start = len(g.log_text())
     key(monitor, "esc")

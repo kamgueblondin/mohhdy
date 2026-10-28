@@ -175,9 +175,49 @@ static const osui_par_entry_t k_help[] = {
     { "Commandes du terminal (help)", "help", 0, 0 },
 };
 
+/* Lot 50: terminal families that were only reachable through /cmd.
+ * pm-ide stays terminal-only (keyboard loop). The mesh panel does not
+ * bring the node up; a down node prints the shell's own refusal. */
+static const osui_par_entry_t k_pm[] = {
+    { "Catalogue des programmes", "pm-catalog", 0, 0 },
+    { "Chercher dans le catalogue", "pm-catalog-search", A, "MOTIF" },
+    { "Documentation d'un programme", "pm-doc", A, "FICHIER.pm (ex: /pm/hello.pm)" },
+    { "Verifier un programme", "pm-check", A, "FICHIER.pm" },
+    { "Desassembler", "pm-disasm", A, "FICHIER.pm" },
+    { "Aide a l'ecriture (regles)", "pm-assist", A, "FICHIER.pm" },
+    { "Traduire (C99 ou Python)", "pm-cross", A, "FICHIER [py]" },
+    { "Tester", "pm-test", A, "FICHIER.pm" },
+    { "Versions", "pm-versions", A, "FICHIER.pm" },
+};
+static const osui_par_entry_t k_proc[] = {
+    { "Liste des processus", "ps", 0, 0 },
+    { "Memoire", "mem", 0, 0 },
+    { "Capacite des taches", "task-capacity", 0, 0 },
+    { "Evenements des taches", "task-events", 0, 0 },
+    { "Etat des notifications", "task-events-notify-status", 0, 0 },
+    { "Priorite de supervision", "task-priority-child-status", 0, 0 },
+    { "Budget des evenements", "task-events-budget-status", 0, 0 },
+    { "Surveillance des evenements", "task-events-watch-status", 0, 0 },
+    { "Enfants directs", "children", 0, 0 },
+    { "Changer la priorite", "task-priority", A | M, "PID 1|2|3" },
+    { "Suspendre un enfant", "task-suspend", A | M, "PID" },
+    { "Reprendre un enfant", "task-resume", A | M, "PID" },
+};
+static const osui_par_entry_t k_p2pmesh[] = {
+    { "Statistiques du maillage", "p2p-stats", 0, 0 },
+    { "Analyse", "p2p-analyze", 0, 0 },
+    { "Routes", "p2p-route", 0, 0 },
+    { "Qualite de service", "p2p-qos", 0, 0 },
+    { "Etat Raft", "p2p-raft", 0, 0 },
+    { "Etat STUN", "p2p-stun", 0, 0 },
+    { "Etat du cache", "p2p-cache", 0, 0 },
+    { "Magasin cle-valeur", "p2p-kv", 0, 0 },
+    { "Ecrire dans le cache", "p2p-cache", A | M, "put CLE VALEUR" },
+};
+
 const osui_par_builtin_t osui_par_builtins[] = {
     { "/tasks", OS_FB_APP_TASKS, "Gestionnaire des taches" },
-    { "/view", OS_FB_APP_VIEW, "Visionneuse FICHIER (pgm ppm bmp png)" },
+    { "/view", OS_FB_APP_VIEW, "Visionneuse FICHIER (pgm ppm bmp png jpg)" },
     { "/settings", OS_FB_APP_SETTINGS, "Parametres" },
     { "/peers", OS_FB_APP_P2P, "Pairs P2P" },
     { "/pmrun", OS_FB_APP_PMRUN, "Lancer FICHIER.pm" },
@@ -212,6 +252,10 @@ const osui_par_family_t osui_par_families[] = {
     { OS_FB_APP_DEVSYNC, "/devsync", "DevSync cluster", "devsync", k_devsync, N(k_devsync) },
     { OS_FB_APP_ADMIN, "/sysadmin", "Administration", "admin", k_admin, N(k_admin) },
     { OS_FB_APP_API, "/api", "Tokens API", "api", k_api, N(k_api) },
+    { OS_FB_APP_PM, "/pm", "Outils PM", "promptmessage", k_pm, N(k_pm) },
+    { OS_FB_APP_PROC, "/proc", "Processus", "processes", k_proc, N(k_proc) },
+    /* /p2p stays the desktop pane (pane=p2p). This menu is /mesh. */
+    { OS_FB_APP_P2PMESH, "/mesh", "Maillage P2P", "p2p", k_p2pmesh, N(k_p2pmesh) },
     { OS_FB_APP_CMD, "/cmd", "Commande", "any", 0, 0 },
 };
 const int osui_par_family_count = N(osui_par_families);
@@ -250,6 +294,20 @@ int osui_par_build(const osui_par_entry_t *e, const char *input, char *out, int 
         for (i = 0; input[i] && o < max - 1; i++) out[o++] = input[i];
     }
     out[o] = 0;
+    return 0;
+}
+
+int osui_path_is_image(const char *p) {
+    int n = 0;
+    char a, b, c;
+    if (!p) return 0;
+    while (p[n]) n++;
+    if (n <= 4 || p[n - 4] != '.') return 0;
+    a = p[n - 3]; b = p[n - 2]; c = p[n - 1];
+    if (a == 'p' && (b == 'g' || b == 'p' || b == 'n') && c == 'm') return 1;
+    if (a == 'b' && b == 'm' && c == 'p') return 1;
+    if (a == 'p' && b == 'n' && c == 'g') return 1;
+    if (a == 'j' && b == 'p' && c == 'g') return 1;
     return 0;
 }
 

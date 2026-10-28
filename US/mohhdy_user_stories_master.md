@@ -488,6 +488,9 @@ completent le backlog ; elles n'en retirent aucune.
 | US-G16 | Large persistent saves (overlay node 384 bytes) | done (Lot 46 PR B: overlay image v4 over LBA 0-63 and a 128-sector extension placed after the FAT16 volume and the journals (LBA 4225-4352 on the fixture), enabled by atadriver only when IDENTIFY reports enough sectors; 96 KiB store, 64 KiB per file; v1/v2/v3 images still load; `test_overlay`, `test_ata_job`, `make qemu-gui-bigsave` checks that LBA 64-4221 are byte identical) |
 | US-G17 | Panels for vfs, task, session, mcp, media, grpc | done (Lot 44: /vfs /sessions /mcp /media /grpc /pwa /devsync /sysadmin /api on the registry, checked against it in test-all; qemu-gui-parity runs the first entry of /vfs /sessions /mcp /media /pwa /sysadmin /api; /grpc and /devsync run with an argument in QEMU since Lot 45; media is simule) |
 | US-G18 | `/help` in the desktop chat | done (Lot 45: Aide window, slash programs from the dispatch table, terminal help; qemu-gui-parity) |
+| US-G19 | PromptMessage tools in a desktop panel | partial (Lot 50: `/pm` runs pm-catalog, pm-catalog-search, pm-doc, pm-check, pm-disasm, pm-assist, pm-cross, pm-test, pm-versions through the shell; pm-ide stays terminal-only; no language model, no native compiler) |
+| US-G20 | Process commands in a desktop panel | partial (Lot 50: `/proc` runs ps, mem, task-capacity, task-events and the status readers; task-priority, task-suspend and task-resume need a second Enter; not every task-* command) |
+| US-G21 | P2P mesh reports in a desktop panel | partial (Lot 50: `/mesh` runs p2p-stats, p2p-analyze, p2p-route, p2p-qos, p2p-raft, p2p-stun, p2p-cache and p2p-kv; `/p2p` stays the desktop pane; QEMU sees the shell refusal while the node is down; no live mesh) |
 
 Preuves : `test_osui_parity`, `test_osui_gui`, `test_fsops`,
 `test_osui_editor`, `test_gfx_desktop`, `make qemu-gui-ux5`,
@@ -507,6 +510,12 @@ partial 0 (100%). `/roadmap.txt` is checked against this table by
 Lot 49: US-G03 still done, progressive Huffman JPEG added (SOF2). The
 status does not change, so the prod-roadmap phase 9 count stays done 18
 partial 0.
+Lot 50 (`docs/lot50_plan.md`): US-G19, US-G20 and US-G21 are partial.
+Phase 9 is done 18 partial 3 (85%). The desktop does not gain a second
+shell: `/pm`, `/proc` and `/mesh` are menus of commands that already
+exist. US-059, US-060, US-063 and US-074 are not advanced. US-G03 stays
+done; the parity test now expects SOF2 to decode, and the explorer
+treats `.jpg` as an image.
 US-001: ATA IDENTIFY and the FAT PIO fallback were already out of Ring 0
 on both images since Lot 2 (`make strict-image-check`); the supervised
 restart after a crash is re-proved with the v4 layout (`make

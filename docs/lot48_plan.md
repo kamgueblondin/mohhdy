@@ -207,3 +207,5 @@ Status of this inventory (Lot 48 review): the first version marked as `done` ten
   (`docs/lot49_plan.md`): flex/grid and a Python cross target stay partial,
   SOF2 decodes, the coverage figure is quoted from `make coverage`.
   US-059, US-060, US-063 and US-074 are not advanced there.
+  Lot 50 (`docs/lot50_plan.md`) does not reopen this plan: it only adds
+  desktop menus for commands the shell already has.
