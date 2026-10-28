@@ -144,8 +144,8 @@ Documentation adds 187 lines, plus 2 roadmap comment lines.
 
 ## External review and CI
 
-The branch is intended for a PR against main. No merge or force-push.
-The connected tools do not expose a PR creation operation; gh is not used.
+PR: https://github.com/kamgueblondin/mohhdy/pull/209 (base main). No merge.
+Opened through the Pull Requests REST API with injected auth; no gh or force-push.
 The CI workflow runs on PRs to main/master, pushes to main/master, or a
 manual dispatch; pushing this topic branch alone does not establish a CI
 run. The handoff reports only API-observed run/job status, with its URL
