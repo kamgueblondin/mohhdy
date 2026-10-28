@@ -49,7 +49,18 @@ prints:
   US-G22 US-G23 US-G24;
 - entries 69 bad 0.
 
-## 4. Not done
+## 4. Measured on this branch
+
+`make test-all` journal `test_logs/test_results_20261028_051041.log`
+(28 October 2026, 09:10 Mauritius, UTC+4): 1150 passed, 0 failed,
+0 skipped, 64 s. `make qemu-gui-parity` then `make qemu-production`
+finished at 09:17 Mauritius (UTC+4). Parity serial lines:
+`child-exit-count ok 0`, `deploy-verify error manifest not found`,
+`collab-keys error p2p down (p2p-up first)`. Production printed the
+phase 9 line at 75% and `entries 69 bad 0`. `make qemu-osui-gui`
+passed (09:18 to 09:23 Mauritius, UTC+4): `/p2p` still sets `pane=p2p`.
+
+## 5. Not done
 
 - kill and the rest of task-* from a new window;
 - a deploy that is proved to copy files from the window;

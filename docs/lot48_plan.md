@@ -209,3 +209,5 @@ Status of this inventory (Lot 48 review): the first version marked as `done` ten
   US-059, US-060, US-063 and US-074 are not advanced there.
   Lot 50 (`docs/lot50_plan.md`) does not reopen this plan: it only adds
   desktop menus for commands the shell already has.
+  Lot 51 (`docs/lot51_plan.md`) does not reopen it either: `/child`,
+  `/release` and `/keys` are the same kind of menu.
