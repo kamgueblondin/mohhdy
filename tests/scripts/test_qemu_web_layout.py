@@ -66,6 +66,14 @@ def main():
                 out = g.normalized_log(g.log_text()[start:])
                 require(out, " box " + box)
                 print("web-layout inspect %s box %s" % (ident, box), flush=True)
+            for ident, box in (("a", "0 0 10x50"), ("b", "0 50 10x50"),
+                               ("locked", "0 100 10x70"), ("tail", "0 170 10x30"),
+                               ("wb", "14 200 10x100")):
+                start = g.send_command_until(monitor, "web-inspect /web/lot54.html " + ident,
+                                             "inspect ", proc)
+                g.wait_for(proc, " align ", g.CMD_TIMEOUT, start)
+                require(g.normalized_log(g.log_text()[start:]), " box " + box)
+                print("column-sizing inspect %s box %s" % (ident, box), flush=True)
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             g.send_command_until(monitor, "web /web/lot52.html", "osui web render file=/web/lot52.html", proc,
@@ -99,6 +107,28 @@ def main():
                             if tuple(pixels[offset:offset + 3]) != color:
                                 raise RuntimeError("flex sizing pixel mismatch at %d,%d" % (x, y))
             print("flex-sizing pixels compared=2000 shrink=50,50 frozen=70,30", flush=True)
+            step = len(g.log_text())
+            g.send_key(monitor, "esc")
+            g.wait_for(proc, "osui web close file=/web/lot53.html", g.CMD_TIMEOUT, step)
+            start = g.send_command_until(monitor, "web /web/lot54.html",
+                "osui web render file=/web/lot54.html", proc, mode="getc", wait_prompt=False)
+            time.sleep(0.5)
+            width, height, pixels = g.screendump_rgb(monitor, "qemu-column-sizing.ppm")
+            compared = 0
+            for left, top, right, bottom, color in (
+                (0, 0, 10, 50, (255, 0, 0)), (0, 50, 10, 100, (0, 0, 255)),
+                (0, 100, 10, 170, (0, 128, 0)), (0, 170, 10, 200, (255, 255, 0)),
+                (0, 200, 10, 300, (255, 0, 0)), (14, 200, 24, 300, (0, 0, 255))):
+                for y in range(top, bottom):
+                    for x in range(left, right):
+                        offset = ((oy + y) * width + ox + x) * 3
+                        if tuple(pixels[offset:offset + 3]) != color:
+                            raise RuntimeError("column sizing pixel mismatch at %d,%d" % (x, y))
+                        compared += 1
+            require(g.normalized_log(g.log_text()[start:]), "dropped 0 page 640x300 diag 0")
+            print("column-sizing pixels compared=%d shrink=50,50 frozen=70,30 wrap_x=14" % compared,
+                  flush=True)
+
 
         print("QEMU web layout contract passed.", flush=True)
         return 0

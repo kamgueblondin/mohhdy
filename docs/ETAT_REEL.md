@@ -10,6 +10,16 @@
 
 ## État courant vérifié
 
+## Etat courant du 28 octobre 2026 (lot 54)
+
+US-031 stays partial, phase3_complete=false. Column flex-basis/shrink now
+uses the same bounded row solver, with px min/max-height limits, frozen
+minima, capped grow and wrapping. Percent bases require definite height;
+intrinsic sizing is still absent. Console and GUI share webeng.c.
+No kernel, ABI or rights change; no Chromium, WebKit, network loading,
+JavaScript VM or new font engine. Other story statuses unchanged;
+US-G19..US-G24 remain partial. Details: [lot54_plan.md](lot54_plan.md).
+
 ## Etat courant du 28 octobre 2026 (lot 53)
 
 US-031 stays partial and phase3_complete=false. Row flex-basis (px, percent,

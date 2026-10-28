@@ -238,6 +238,7 @@ static void test_flex_and_grid(void) {
 
 #include "webeng_lot52.inc"
 #include "webeng_lot53.inc"
+#include "webeng_lot54.inc"
 
 int main(void) {
     unity_init();
@@ -450,9 +451,20 @@ int main(void) {
     RUN_TEST(test_l53_invalid_values_do_not_replace_prior_declarations);
     RUN_TEST(test_l53_weight_arithmetic_large_container);
     RUN_TEST(test_l53_nested_sizing_and_relayout);
-    RUN_TEST(test_l53_column_sizing_is_explicitly_refused);
+    RUN_TEST(test_l53_column_sizing_uses_definite_basis);
     RUN_TEST(test_l53_shrink_rounding_exhausts_deficit);
     RUN_TEST(test_l53_maximum_node_weight_sum_is_unsigned);
+    RUN_TEST(test_l54_column_sizing_matrix);
+    RUN_TEST(test_l54_column_minimum_overflow_diagnostic);
+    RUN_TEST(test_l54_column_wrap_basis_and_grow);
+    RUN_TEST(test_l54_column_wrap_percent_cross_size_once);
+    RUN_TEST(test_l54_column_wrap_horizontal_bound);
+    RUN_TEST(test_l54_column_indefinite_height_percent_refused);
+    RUN_TEST(test_l54_block_height_limits_and_invalid_values);
+    RUN_TEST(test_l54_column_parent_maximum_is_main_size);
+    RUN_TEST(test_l54_nested_axes_and_relayout_restore_styles);
+    RUN_TEST(test_l54_column_rounding_and_painted_positions);
+    RUN_TEST(test_l54_column_maximum_unsigned_weights);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

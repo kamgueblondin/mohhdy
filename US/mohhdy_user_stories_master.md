@@ -117,6 +117,8 @@ Etat Phase 2 (17 octobre 2026, lot 9; inventaire dans `docs/lot9_plan.md`). US-0
 - US-044 : Création du système d'accessibilité web
 - US-045 : Implémentation du débogueur web intégré
 
+Etat Phase 3 (28 octobre 2026, lot 54). US-031 stays partial, phase3_complete=false. Column basis/shrink, bounded px height limits, freezes and capped grow reuse the existing row solver. Percent bases need definite height. Full intrinsic sizing, full CSS, JavaScript, network and font loading remain absent. Other statuses unchanged; US-G19..US-G24 remain partial. See docs/lot54_plan.md.
+
 Etat Phase 3 (28 octobre 2026, lot 53). US-031 remains partial, phase3_complete=false. Row flex-basis and weighted flex-shrink now resolve negative free space with minimum freezes in the existing guest engine. Column sizing, full intrinsic sizing, JavaScript, network loading and font loading remain absent. Other US statuses unchanged. See docs/lot53_plan.md.
 
 Etat Phase 3 (28 octobre 2026, lot 52). US-031 stays **partial**. The same guest C engine now has flex-wrap and integer flex-grow, grid-template-rows (pixels or 1fr, 1..8 tracks), left/right floats, tables (1..8 columns, spans other than 1 refused), local images using imgdec with a bounded workspace and alt fallback, min/max widths, bounded relative offsets and list markers. `phase3_complete` remains false. No Chromium, no WebKit, no network loading, no JavaScript VM, no new font engine. See `docs/lot52_plan.md` for test results and precise limits. US-059, US-060, US-063 and US-074 unchanged; US-G19..US-G24 remain partial.

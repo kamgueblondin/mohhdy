@@ -112,13 +112,16 @@ static void test_l53_nested_sizing_and_relayout(void) {
     TEST_ASSERT_EQUAL(80, lot52_node("c")->w);
 }
 
-static void test_l53_column_sizing_is_explicitly_refused(void) {
+static void test_l53_column_sizing_uses_definite_basis(void) {
     const char *html =
         "<body style='margin:0'><div style='display:flex;flex-direction:column'>"
         "<div id=a style='height:10px;flex-basis:80px;flex-shrink:1'></div></div></body>";
     lot52_render(html, 100);
-    TEST_ASSERT_EQUAL(10, lot52_node("a")->h);
-    TEST_ASSERT_TRUE(lot52_has_diag("column basis/shrink refused"));
+    TEST_ASSERT_EQUAL(80, lot52_node("a")->h);
+    TEST_ASSERT_EQUAL(100, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
+    TEST_ASSERT_EQUAL(10, lot52_node("a")->height);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l53_shrink_rounding_exhausts_deficit(void) {
