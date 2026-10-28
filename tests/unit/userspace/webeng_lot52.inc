@@ -3178,3 +3178,23 @@ static void test_l52_column_grow_auto_basis_is_zero(void) {
     TEST_ASSERT_EQUAL(1, g_doc.perf.flex_lines);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
+
+
+static void test_l52_overlong_word_clears_float_before_overflow(void) {
+    const char *html =
+        "<body style='margin:0'><div id=p style='width:80px'>"
+        "<div id=f style='float:left;width:80px;height:20px'></div>abcdefghijkl</div></body>";
+    const os_fb_web_item_t *word;
+    lot52_render(html, 160);
+    word = find_text("abcdefghijkl");
+    TEST_ASSERT_NOT_NULL(word);
+    TEST_ASSERT_EQUAL(80, lot52_node("f")->w);
+    TEST_ASSERT_EQUAL(20, lot52_node("f")->h);
+    TEST_ASSERT_EQUAL(0, word->x);
+    TEST_ASSERT_EQUAL(21, word->y);
+    TEST_ASSERT_EQUAL(96, word->w);
+    TEST_ASSERT_EQUAL(30, lot52_node("p")->h);
+    TEST_ASSERT_EQUAL(1, g_doc.perf.floats);
+    TEST_ASSERT_EQUAL(1, g_doc.perf.lines);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}

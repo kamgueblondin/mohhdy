@@ -39,9 +39,9 @@ US-059, US-060, US-063 and US-074 are unchanged. US-G19..US-G24 stay partial.
   96 rectangles (compile-time workspace ceiling in webeng.h). Source and
   output dimensions are at most 64x64. Horizontal runs merge vertically;
   rectangles share the existing 96-item display list. Insufficient budget
-  refuses the entire image, never a partially painted prefix. Alt remains
-  visible on read/decode/size/budget failure. Replaced images start a fresh
-  line in the current inline implementation. No network resources.
+  refuses the entire image, never a partial prefix. If a list slot remains,
+  failures paint alt. Replaced images start a fresh line in the current
+  inline implementation. No network resources.
 - Extra holes, in the requested order: min/max-width (pixels or percent,
   minimum wins a conflict); position:relative (horizontal clamp, vertical
   clamp for a definite-height parent, otherwise vertical offset is zero;
@@ -76,18 +76,20 @@ ELF i386 tests ran transparently through PRoot/qemu-i386 because the
 instance kernel cannot execute them natively. The guest runs under QEMU
 TCG. No assertions or test outcomes were overridden.
 
-`make test-all`, final run, test_results_20261028_092730.log:
+`make test-all`, final run, test_results_20261028_095642.log:
 
 ```text
-Total Tests: 1343
-Passed: 1343
+Total Tests: 1344
+Passed: 1344
 Failed: 0
 Skipped: 0
-Execution Time: 150s
+Execution Time: 149s
 ```
 
-- test_webeng: 202 passed, 0 failed, 0 ignored (9 legacy cases retained).
-- ASan/UBSan: the same 202 cases passed; no sanitizer error.
+- test_webeng: 203 passed, 0 failed, 0 ignored (9 legacy cases retained).
+- ASan/UBSan: the same 203 cases passed; no sanitizer error.
+- The overlong-word/float regression first failed, then passed after
+  waiting for the full text interval before allowing word overflow.
 - Removal checks outside the checkout: wrap, grow, grid rows, floats,
   tables and image paint each make their corresponding test fail (one
   failed assertion in each selected case). Temporary source copies removed.
@@ -127,20 +129,20 @@ legacy path in the same engine, not copied into another engine.
 |---|---:|---:|---:|---:|
 
 | tests/scripts/test_qemu_web_layout.py | 100 | 5 | 7 | 88 |
-| tests/unit/userspace/test_webeng.c | 195 | 0 | 1 | 194 |
-| tests/unit/userspace/webeng_lot52.inc | 3180 | 1 | 203 | 2976 |
-| userspace/webeng.c | 784 | 15 | 27 | 742 |
+| tests/unit/userspace/test_webeng.c | 196 | 0 | 1 | 195 |
+| tests/unit/userspace/webeng_lot52.inc | 3200 | 1 | 205 | 2994 |
+| userspace/webeng.c | 785 | 15 | 27 | 743 |
 | userspace/webeng.h | 36 | 10 | 2 | 24 |
 
-Useful total: **4024** (engine/header 766, behavioral tests 3258).
-Excluded within these files: 31 comment-only lines and 240 empty lines.
+Useful total: **4044** (engine/header 767, behavioral tests 3277).
+Excluded within these files: 31 comment-only lines and 242 empty lines.
 Copied functions: 0. Documentation, build/CI integration, FS wiring and
 the HTML fixture are counted separately; none inflate the useful total.
 The extra min/max widths, relative positioning and list markers are in
 this total. Work stops inside the requested 4000..6000 band.
 
-The complete PR adds 4532 and removes 105 lines.
-Documentation adds 187 lines, plus 2 roadmap comment lines.
+The complete PR adds 4556 and removes 105 lines.
+Documentation adds 189 lines, plus 2 roadmap comment lines.
 
 ## External review and CI
 

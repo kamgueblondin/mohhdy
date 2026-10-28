@@ -889,7 +889,8 @@ static void flow_region(we_inline_t *f, int need) {
         }
         f->x0 = left;
         f->width = right > left ? right - left : 0;
-        if (f->width >= need || f->nwords || next == WE_LAYOUT_MAX || need > f->base_width) return;
+        if (f->width >= need || f->nwords || next == WE_LAYOUT_MAX ||
+            (need > f->base_width && f->width >= f->base_width)) return;
         f->y = next;
     }
 }

@@ -442,6 +442,7 @@ int main(void) {
     RUN_TEST(test_l52_empty_table_has_no_phantom_row);
     RUN_TEST(test_l52_relative_later_child_clamps_to_parent_top);
     RUN_TEST(test_l52_column_grow_auto_basis_is_zero);
+    RUN_TEST(test_l52_overlong_word_clears_float_before_overflow);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
