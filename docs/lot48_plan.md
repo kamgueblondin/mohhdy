@@ -203,4 +203,7 @@ Status of this inventory (Lot 48 review): the first version marked as `done` ten
 - US-068/073 stay `partial`: adaptation proven under delay and drop on the
   lab hub, not under extreme load or on a WAN.
 - Not done in lot 48: PR B (phases 3-4), PR C status table (done in lot 49),
-  PR D measured coverage and progressive JPEG.
+  PR D measured coverage and progressive JPEG. Lot 49 takes those
+  (`docs/lot49_plan.md`): flex/grid and a Python cross target stay partial,
+  SOF2 decodes, the coverage figure is quoted from `make coverage`.
+  US-059, US-060, US-063 and US-074 are not advanced there.

@@ -7,6 +7,9 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 49 (28 octobre 2026, PR #206)
+- US-120 `done` (status table, `make roadmap-check`). US-031, US-055 and US-058 stay `partial`: flex/grid in `webeng.c` (no JavaScript), `pm-cross FILE py` beside C99 (no native generator), `pm-assist` still rules. US-059, US-060, US-063, US-074 not changed (local catalogue, local CA with a per-boot seal, lab routing, STUN with a simulated NAT). Progressive JPEG (SOF2) in the shared imgdec; US-G03 stays `done`. `/docs` and `/home` enter the kernel VFS when the desktop starts, so a text boot leaves the overlay empty. Detail: `docs/lot49_plan.md`.
+
 ### Suite de Tests
 - `make test-all` rejoue la suite de non-regression sur l'arbre courant :
   - **963 tests executes / 963 tests reussis** (0 echec, 0 ignore).

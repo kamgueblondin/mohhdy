@@ -117,6 +117,8 @@ Etat Phase 2 (17 octobre 2026, lot 9; inventaire dans `docs/lot9_plan.md`). US-0
 - US-044 : Création du système d'accessibilité web
 - US-045 : Implémentation du débogueur web intégré
 
+Etat Phase 3 (28 octobre 2026, lot 49). US-031 reste partiel, plus avance : `display:flex` (ligne en colonnes egales, ou `flex-direction:column` empile) et `display:grid` (`grid-template-columns: repeat(N, 1fr)`, N de 1 a 8, ligne par ligne, `gap`) dans `userspace/webeng.c`. Pas de flex-grow, pas de wrap, pas de `grid-template-rows`. Pas de machine JavaScript. `phase3_complete` reste false. Preuve : `test_flex_and_grid`.
+
 Etat Phase 3 (17 octobre 2026, lot 7). US-039 : l'assainisseur tourne en tete du pipeline du moteur web (`sanitized N`, page hostile prouvee en QEMU) ; CSP analysee mais sans ressource externe a filtrer : reste partiel. US-038 inchange (origine `simule`). `phase3_complete` reste false.
 
 Etat Phase 3 (17 octobre 2026, lot 6; detail dans `docs/ETAT_REEL.md`). US-031 livre comme moteur web minimal en C guest (`userspace/webeng.c` : analyse HTML, cascade CSS, mise en page bloc/ligne, liste d'affichage peinte dans le volet OS-UI `OS_FB_PANE_WEB`), sans JavaScript, sans images, sans flottants ni flex, police fixe 8x10, fichiers locaux seulement. US-043 livre (minimal) : `web-perf`. US-045 livre (minimal) : `web-dom`, `web-inspect`, `web-console`. US-040, US-041, US-042, US-044 appliques dans le pipeline du moteur (composants, `@media` pour 640x480, `var()`, audit a11y dans `web-console`). US-038 (origine `simule`) et US-039 (assainisseur hors pipeline) restent partiels. `phase3_complete` reste false (pas de chargement reseau dans le moteur, pas de script).
@@ -162,6 +164,10 @@ Etat Phase 3 (14 octobre 2026; detail in `docs/ETAT_REEL.md`). Pull request #147
 - US-073 : Intégration du système de QoS adaptatif
 - US-074 : Développement du gestionnaire de NAT traversal
 - US-075 : Création du système d'analyse de trafic intelligent
+
+Etat Phase 4 (28 octobre 2026, lot 49). US-055 reste partiel : `pm-cross FILE` reste le C99, `pm-cross FILE py` emet du Python 3 (meme sortie, budget de 20000 pas, memes chemins refuses). Pas de generateur de code natif. Preuve : `test_cross_compile_py_matches_vm`. US-058 reste partiel : `pm-assist` reste a regles (`engine=rules`) et signale un `end` manquant. Pas de modele. US-059 et US-060 inchanges (catalogue local, CA locale, cle de scellement par boot : simule, pas de TPM).
+
+Etat Phase 5 (28 octobre 2026, lot 49). US-063 et US-074 inchanges. US-063 : vecteur de distances, au plus 3 sauts, reseau de laboratoire. US-074 : codec STUN RFC 5389 reel dans le lien ; le NAT et `p2p-punch` restent simules. Pas de NAT materiel.
 
 Etat Phase 5 (27 octobre 2026, lot 48). US-069 ferme : trois cycles crash/redemarrage (beta, gamma, beta) entre trois invites, cle ecrite pendant le crash recue a chaque fois. US-070 ferme : la cloture (fence) d'invalidation est repoussee a un pair qui revient apres une coupure ; il refuse le remplissage perime. US-075 ferme (statistique, pas d'apprentissage) : rapport automatique `p2p traffic alert peer X` par episode, deux emetteurs nommes, aucun sur les noeuds calmes. US-068/US-073 partiels : la fenetre adaptative recule sous un delai du hub (16 -> 10) et sous une perte, puis remonte a 16 ; pas de charge extreme ni de WAN. Preuve : `make qemu-p2p-phase5`.
 
@@ -466,7 +472,7 @@ completent le backlog ; elles n'en retirent aucune.
 |---|---|---|
 | US-G01 | Tool windows run any shell registry command (kernel rights, terminal-only commands refused) | done |
 | US-G02 | Editor: lines on the user heap, grid follows the window | done (Lot 46 PR B: Save As of a 64 KiB file, byte exact on the disk and after a cold reboot, 64 KiB + 1 refused with the error shown, `make qemu-gui-bigsave`; lines up to 256 columns since Lot 45. On a disk without room after the FAT16 volume the store stays at 30 KiB per file) |
-| US-G03 | Viewer draws images as pixels | done (Lot 47: JPEG baseline (SOF0/SOF1, gray or YCbCr, sampling 1..2, restart markers; progressive refused), PNG every bit depth 1/2/4/8/16 and Adam7 interlace, added to the shared imgdec used by `img-info` and the viewer; Lot 45: PNM, BMP 24/32, zoom/fit/pan) |
+| US-G03 | Viewer draws images as pixels | done (Lot 49: progressive Huffman JPEG SOF2, spectral selection and successive approximation, same gray/YCbCr and sampling limits, caller-owned coefficient scratch; arithmetic SOF9 still refused. Lot 47: JPEG baseline SOF0/SOF1, restart markers, PNG every bit depth 1/2/4/8/16 and Adam7, shared imgdec for `img-info` and the viewer; Lot 45: PNM, BMP 24/32, zoom/fit/pan) |
 | US-G04 | Network panel /net | done (Lot 47: shell command `net-if` (show, `static IP MASK GW`, `dhcp`) through the networker; changes allowed to the root shell only, checked by the kernel; /net entries 6 and 7, change armed by a first Enter; `qemu-osui-web`: TCP served on the static address and again after the return to DHCP, a spawned program refused) |
 | US-G05 | Storage panel /disk | done (Lot 46: ata, mounts, persist status and save, ls, stat, mkdir, fat16-list; every entry in `qemu-gui-panels`) |
 | US-G06 | Services and drivers panel /services | done (Lot 46: driver-restart of the fixed Ring 3 drivers; supervised respawn of pcidriver (Lot 45) and atadriver with a new pid, networker restarted by the shell with a new pid, each service used after the restart in `qemu-gui-parity`; every entry in `qemu-gui-panels`) |
@@ -498,6 +504,9 @@ and US-G04 (no interface configuration command in the shell: not started).
 Lot 47 (`docs/lot47_plan.md`): US-G03 and US-G04 done; phase 9 done 18
 partial 0 (100%). `/roadmap.txt` is checked against this table by
 `make roadmap-check` (CI).
+Lot 49: US-G03 still done, progressive Huffman JPEG added (SOF2). The
+status does not change, so the prod-roadmap phase 9 count stays done 18
+partial 0.
 US-001: ATA IDENTIFY and the FAT PIO fallback were already out of Ring 0
 on both images since Lot 2 (`make strict-image-check`); the supervised
 restart after a crash is re-proved with the v4 layout (`make
