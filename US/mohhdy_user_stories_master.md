@@ -491,6 +491,9 @@ completent le backlog ; elles n'en retirent aucune.
 | US-G19 | PromptMessage tools in a desktop panel | partial (Lot 50: `/pm` runs pm-catalog, pm-catalog-search, pm-doc, pm-check, pm-disasm, pm-assist, pm-cross, pm-test, pm-versions through the shell; pm-ide stays terminal-only; no language model, no native compiler) |
 | US-G20 | Process commands in a desktop panel | partial (Lot 50: `/proc` runs ps, mem, task-capacity, task-events and the status readers; task-priority, task-suspend and task-resume need a second Enter; not every task-* command) |
 | US-G21 | P2P mesh reports in a desktop panel | partial (Lot 50: `/mesh` runs p2p-stats, p2p-analyze, p2p-route, p2p-qos, p2p-raft, p2p-stun, p2p-cache and p2p-kv; `/p2p` stays the desktop pane; QEMU sees the shell refusal while the node is down; no live mesh) |
+| US-G22 | Child result commands in a desktop panel | partial (Lot 51: `/child` runs child-exit-count, child-results, child-result, child-result-any, child-results-observe; child-results-clear and child-results-forget need a second Enter; not every child-* path) |
+| US-G23 | Deploy and rollback in a desktop panel | partial (Lot 51: `/release` runs deploy-verify with no manifest, which prints `manifest not found` and writes nothing; deploy-apply and prod-restore take an argument and a second Enter; prod-rollback needs a second Enter; no live rollout is claimed) |
+| US-G24 | Collab keys in a desktop panel | partial (Lot 51: `/keys` runs collab-keys; QEMU sees `error p2p down` while the node is down; collab-contract-deploy needs an argument and a second Enter; other contract commands stay on `/cmd`) |
 
 Preuves : `test_osui_parity`, `test_osui_gui`, `test_fsops`,
 `test_osui_editor`, `test_gfx_desktop`, `make qemu-gui-ux5`,
@@ -516,6 +519,9 @@ shell: `/pm`, `/proc` and `/mesh` are menus of commands that already
 exist. US-059, US-060, US-063 and US-074 are not advanced. US-G03 stays
 done; the parity test now expects SOF2 to decode, and the explorer
 treats `.jpg` as an image.
+Lot 51 (`docs/lot51_plan.md`): US-G22, US-G23 and US-G24 are partial.
+Phase 9 is done 18 partial 6 (75%, 18*100/24). `/child`, `/release`
+and `/keys` are menus. `/p2p`, `/prod`, `/collab` and `/ci` are unchanged.
 US-001: ATA IDENTIFY and the FAT PIO fallback were already out of Ring 0
 on both images since Lot 2 (`make strict-image-check`); the supervised
 restart after a crash is re-proved with the v4 layout (`make

@@ -109,3 +109,6 @@ log says so.
 - flex-grow, grid areas, a JavaScript VM;
 - measured coverage is not part of `make test-all` (host `make coverage`
   only, floor 78%).
+- Lot 51 (`docs/lot51_plan.md`) takes child results, deploy-verify /
+  deploy-apply / prod-rollback / prod-restore, and collab-keys into
+  new menus. It does not reopen this plan. `/p2p` stays the pane.

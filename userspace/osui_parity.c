@@ -215,6 +215,29 @@ static const osui_par_entry_t k_p2pmesh[] = {
     { "Ecrire dans le cache", "p2p-cache", A | M, "put CLE VALEUR" },
 };
 
+/* Lot 51: commands that were only reachable through /cmd.
+ * /child does not take /p2p. /release does not take /prod or /ci.
+ * /keys does not take /ledger or /collab. */
+static const osui_par_entry_t k_child[] = {
+    { "Nombre de sorties", "child-exit-count", 0, 0 },
+    { "Historique des resultats", "child-results", 0, 0 },
+    { "Dernier resultat d'un pid", "child-result", A, "PID" },
+    { "Resultat retenu d'un pid", "child-result-any", A, "PID" },
+    { "Observer une generation", "child-results-observe", A, "GENERATION" },
+    { "Acquitter l'historique", "child-results-clear", M, 0 },
+    { "Oublier un resultat", "child-results-forget", A | M, "PID" },
+};
+static const osui_par_entry_t k_release[] = {
+    { "Verifier un manifeste", "deploy-verify", 0, 0 },
+    { "Appliquer un manifeste", "deploy-apply", A | M, "MANIFESTE" },
+    { "Revenir au backup pre-deploy", "prod-rollback", M, 0 },
+    { "Restaurer un backup nomme", "prod-restore", A | M, "NOM" },
+};
+static const osui_par_entry_t k_keys[] = {
+    { "Cles connues du registre", "collab-keys", 0, 0 },
+    { "Deployer un contrat", "collab-contract-deploy", A | M, "BENEFICIAIRE ARBITRE|none MONTANT PROGRAMME" },
+};
+
 const osui_par_builtin_t osui_par_builtins[] = {
     { "/tasks", OS_FB_APP_TASKS, "Gestionnaire des taches" },
     { "/view", OS_FB_APP_VIEW, "Visionneuse FICHIER (pgm ppm bmp png jpg)" },
@@ -256,6 +279,9 @@ const osui_par_family_t osui_par_families[] = {
     { OS_FB_APP_PROC, "/proc", "Processus", "processes", k_proc, N(k_proc) },
     /* /p2p stays the desktop pane (pane=p2p). This menu is /mesh. */
     { OS_FB_APP_P2PMESH, "/mesh", "Maillage P2P", "p2p", k_p2pmesh, N(k_p2pmesh) },
+    { OS_FB_APP_CHILD, "/child", "Enfants", "children", k_child, N(k_child) },
+    { OS_FB_APP_RELEASE, "/release", "Livraison", "release", k_release, N(k_release) },
+    { OS_FB_APP_KEYS, "/keys", "Cles collab", "keys", k_keys, N(k_keys) },
     { OS_FB_APP_CMD, "/cmd", "Commande", "any", 0, 0 },
 };
 const int osui_par_family_count = N(osui_par_families);
