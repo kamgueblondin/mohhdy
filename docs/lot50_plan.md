@@ -71,7 +71,22 @@ Not in this lot, on purpose:
 This plan does not claim `make qemu-production` passed unless the run
 log says so.
 
-## 4. Not done
+## 4. Measured on 28 October 2026
+
+- `make test-all`: 1149 passed, 0 failed, 0 skipped, 64 s. Journal
+  `test_logs/test_results_20261028_003631.log` (04:36 Mauritius, UTC+4).
+- `make tree-clean-check`, `make roadmap-check` (66 entries),
+  `make secrets-check` (no provider secret in 4 images),
+  `make strict-image-check`: passed. Guest command registry: 447 names.
+  `scripts/check_gui_parity.py`: families=24 entries=148.
+- `make qemu-gui-parity`: passed (about 248 s). First entries of `/pm`,
+  `/proc` and `/p2p`, plus `img-info ok` and `/view` of
+  `/images/mire-prog.jpg`.
+- `make qemu-production` was not run. The expected prod-roadmap lines are
+  in the test and match `make roadmap-check`. That does not prove the
+  guest printed them.
+
+## 5. Not done
 
 - pm-ide inside a window (it owns the keyboard);
 - every task-* and child-* command;

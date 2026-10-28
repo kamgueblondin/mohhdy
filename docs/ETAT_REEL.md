@@ -19,6 +19,7 @@ Living baseline. Plan: [lot50_plan.md](lot50_plan.md).
 - Phase 9 of `/roadmap.txt`: done 18, partial 3, simule 0, open 0, progress 85%, 66 entries. Next non-done ids: US-076 US-078 US-080 US-G19 US-G20 US-G21.
 - US-059, US-060, US-063, US-074 unchanged. No JavaScript VM. No native code generator. `pm-assist` stays rules.
 - This lot is a menu over the shell, not a second implementation. It is not tens of thousands of new lines: copying `shell.c` into the GUI would break the one-code-path rule.
+- `make test-all` on this commit's tree: 1149 passed, 0 failed, 0 skipped, 64 s. Journal `test_logs/test_results_20261028_003631.log` (28 October 2026, 04:36 Mauritius, UTC+4). `make qemu-gui-parity` passed (about 248 s): `/pm` prints `pm-catalog ok`, `/proc` prints `Processus`, `/p2p` prints `p2p-stats error p2p down`, and `/images/mire-prog.jpg` is `img-info ok fmt=jpeg` then drawn in the viewer. `make qemu-production` was not run; the prod-roadmap strings are checked by `make roadmap-check` against the production test source.
 
 ## Etat courant du 28 octobre 2026 (lot 49)
 
