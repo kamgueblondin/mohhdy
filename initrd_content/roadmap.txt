@@ -45,11 +45,11 @@ US-116 8 done support-bundle
 US-117 8 done integrity
 US-118 8 done diagnostics
 US-119 8 done business-metrics
-US-120 8 partial roadmap-from-status-file
+US-120 8 done roadmap-from-status-file-checked-against-us-master-lot49
 # Phase 9 = GUI parity track (UX5): terminal command families in the desktop.
 US-G01 9 done gui-tools-run-registry-commands-kernel-rights
 US-G02 9 done editor-heap-window-grid-256col-lines-hscroll-saves-64k-qemu-bigsave-lot46
-US-G03 9 done viewer-img-info-jpeg-baseline-png-1-16bit-adam7-shared-imgdec-lot47
+US-G03 9 done viewer-img-info-jpeg-baseline-and-sof2-png-shared-imgdec-lot49
 US-G04 9 done net-if-static-dhcp-root-shell-only-net-panel-confirm-qemu-tcp-lot47
 US-G05 9 done disk-panel-every-entry-qemu-persist-save-fat16-lot46
 US-G06 9 done services-panel-driver-restart-pci-ata-net-respawn-qemu-lot46

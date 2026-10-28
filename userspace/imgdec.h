@@ -4,8 +4,10 @@
  * Formats: binary PNM (P5, P6), BMP (uncompressed 24 and 32 bits, bottom-up
  * or top-down), PNG (color types 0 2 3 4 6, every bit depth the spec allows
  * (1 2 4 8 16), Adam7 interlace; 16-bit samples keep their high byte) with a
- * bounded inflate, and since Lot 47 JPEG baseline (SOF0/SOF1, gray or YCbCr,
- * sampling 1..2, restart markers; progressive refused with E_UNSUP).
+ * bounded inflate, and JPEG: baseline (SOF0/SOF1) and progressive Huffman
+ * (SOF2, spectral selection and successive approximation), gray or YCbCr,
+ * sampling 1..2, restart markers. Arithmetic, lossless, 12-bit and CMYK
+ * JPEG are refused with E_UNSUP.
  * Memory: PNG and JPEG need a caller-owned scratch of imgdec_scratch_need()
  * bytes (after probe); larger images are refused with IMGDEC_E_TOOBIG.
  * Nothing is allocated. */
@@ -28,6 +30,8 @@ typedef struct {
     int color_type;        /* PNG only */
     int depth;             /* PNG bit depth (1 2 4 8 16) */
     int interlace;         /* PNG Adam7 */
+    int jpeg_prog;         /* JPEG SOF2: coefficient buffer follows the pixels */
+    int jpeg_hmax, jpeg_vmax, jpeg_mcu; /* sampling and blocks per MCU */
     /* decoded source */
     const unsigned char *data;     /* BMP / PNM pixel data, PNG raw scanlines */
     int stride;                    /* bytes per row of data */
@@ -40,7 +44,7 @@ typedef struct {
 int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img);
 /* scratch bytes imgdec_open needs for a probed image (0: none) */
 unsigned imgdec_scratch_need(const imgdec_t *img);
-/* full decode; scratch is used for PNG only */
+/* full decode; scratch holds PNG rows, or JPEG pixels plus SOF2 coefficients */
 int imgdec_open(const unsigned char *buf, int n, unsigned char *scratch, unsigned scratch_max, imgdec_t *img);
 /* one pixel of an opened image */
 void imgdec_pixel(const imgdec_t *img, int x, int y, unsigned char rgb[3]);

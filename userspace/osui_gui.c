@@ -1480,6 +1480,11 @@ void osui_gui_run(void) {
         }
         stop = osui_gui_feed_key(key, out, OSUI_OUT_MAX);
         if (out[0]) serial_puts(out);
+        /* Lot 49: the kernel sends a window event (resize, click, drag) as
+         * a line of characters; repainting the whole scene for each of
+         * them made a maximize show the old grid for about 2 s. Paint
+         * once, when the event line is complete. */
+        if (g_evt_on && key != 0 && !stop) continue;
         osui_gui_fill_scene(&scene);
         sys_vga_blit_scene(&scene);
         if (key != 0 || (g_idle++ % 8) == 0) emit_snap();

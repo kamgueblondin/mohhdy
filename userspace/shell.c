@@ -1016,6 +1016,21 @@ static void resolve_arg(shell_context_t* ctx, const char* arg, char* out) {
 // GESTION DE L'HISTORIQUE ET DE L'ENVIRONNEMENT
 // ==============================================================================
 
+/* Lot 49: the desktop explorer lists the kernel VFS (fsops), while `ls`
+ * also lists the shell ramfs. /docs, /home and /home/user (HOME) exist in
+ * the ramfs from boot. They are copied into the kernel VFS only when the
+ * desktop starts, so a text boot leaves the overlay empty. */
+static void shell_share_home_docs(void) {
+    static const char *const dirs[] = {"/docs", "/home", "/home/user"};
+    static const char readme[] = "Documentation MOHHDY (VFS RAM pedagogique).\n";
+    os_dirent_t st;
+    int i;
+    for (i = 0; i < 3; i++)
+        if (sys_stat(dirs[i], &st) != 0) (void)sys_mkdir(dirs[i]);
+    if (sys_stat("/docs/readme.txt", &st) != 0)
+        (void)sys_writefile("/docs/readme.txt", readme, (uint32_t)(sizeof(readme) - 1U));
+}
+
 void init_shell_context(shell_context_t* ctx) {
     strcpy(ctx->current_dir, "/");
     strcpy(ctx->prompt, "MOHHDY>");
@@ -1047,6 +1062,9 @@ void init_shell_context(shell_context_t* ctx) {
     ctx->env_count = 5;
 
     ramfs_init();
+    /* /docs and /home stay in the shell ramfs until the desktop starts.
+     * Creating them here would put them in the kernel overlay, and the
+     * vfs-service contract requires overlay/ to list count 0 at boot. */
     procsim_init();
     osui_runtime_init();
 }
@@ -3420,16 +3438,28 @@ static void cmd_pm(shell_context_t* ctx, const char* command, char args[][128], 
     }
     if (pm_compile_report(command, len, &g_pm_tmp) != 0) return;
     if (strcmp(command, "pm-cross") == 0) {
-        /* US-055 (partial): PMC1 bytecode to a portable C99 program. The
-         * text goes to the console between markers (the file store caps a
-         * file at 1 KB); the host build of it is checked by unit tests. */
+        /* US-055 (partial): PMC1 to C99 (`pm-cross FILE`) or Python 3
+         * (`pm-cross FILE py`). The text goes to the console between
+         * markers (the file store caps a file at 1 KB); the host run of
+         * it is checked by unit tests. No native code generator. */
         static char cbuf[16384];
-        int instr = 0, n = pm_cross_c(&g_pm_tmp, cbuf, (int)sizeof(cbuf), &instr);
-        if (n < 0) { print_string("pm-cross error program too large for the C target\n"); return; }
+        int py = 0, instr = 0, n;
+        if (arg_count > 1) {
+            if (strcmp(args[1], "py") != 0) { print_string("pm-cross error target (c99 or py)\n"); return; }
+            py = 1;
+        }
+        n = py ? pm_cross_py(&g_pm_tmp, cbuf, (int)sizeof(cbuf), &instr)
+               : pm_cross_c(&g_pm_tmp, cbuf, (int)sizeof(cbuf), &instr);
+        if (n < 0) {
+            print_string(py ? "pm-cross error program too large for the Python target\n"
+                            : "pm-cross error program too large for the C target\n");
+            return;
+        }
         print_string("pm-cross begin\n");
         print_string(cbuf);
         print_string("pm-cross end\n");
-        print_string("pm-cross ok target=c99 bytes="); print_int(n);
+        print_string(py ? "pm-cross ok target=py3 bytes=" : "pm-cross ok target=c99 bytes=");
+        print_int(n);
         print_string(" instructions="); print_int(instr); print_string("\n");
         ctx->last_rc = 0;
         return;
@@ -7650,6 +7680,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
             osui_gui_set_tool_known(shell_cmd_known);
             osui_ide_set_clip_ops(shell_clip_put, shell_clip_take);
         osui_gui_set_fs_io(&shell_fs_io);
+            shell_share_home_docs();
             osui_gui_run();
             shell_after_gui(ctx);
         }
@@ -7695,6 +7726,7 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
             osui_gui_set_tool_known(shell_cmd_known);
             osui_ide_set_clip_ops(shell_clip_put, shell_clip_take);
         osui_gui_set_fs_io(&shell_fs_io);
+            shell_share_home_docs();
             osui_gui_run();
             shell_after_gui(ctx);
         }

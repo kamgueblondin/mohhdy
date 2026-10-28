@@ -52,13 +52,13 @@ Status of this inventory (Lot 48 review): the first version marked as `done` ten
 - **US-066 (Chiffrement P2P Zero-Trust)** : `done`. X25519 + AES-128-GCM, re-keying dynamique (`p2p_rekey_check_and_rotate`), verification anti-rejeu.
 - **US-067 (Protocole gRPC optimise)** : `done`. Framing HTTP/2 (HEADERS, DATA, SETTINGS, PING, GOAWAY, RST_STREAM), sous-ensemble HPACK, protobuf, gRPC sur TLS entre invites QEMU (`grpc-tls-serve`, `grpc-tls-call`).
 - **US-068 (Gestionnaire de bande passante & QoS)** : `partial`. File de lissage (shaping queue), fenetres AIMD, controle de debit par pair. Manque : test QEMU dynamique d'adaptation sous charge extreme.
-- **US-069 (Tolerance aux pannes P2P)** : `partial`. Detection de crash, re-attribution de slot, re-jointure et rattrapage du store. Manque : test QEMU automatise multi-invites de crash/rejointe en continu.
-- **US-070 (Cache distribue P2P)** : `partial`. Lignes de cache invalidees via Raft avec cloture et accuse de reception (`P2P_I_CACHE_INV`). Manque : invalidation P2P distribuee automatique sous deconnexion/reconnexion multi-nuds.
+- **US-069 (Tolerance aux pannes P2P)** : `done` (lot 48, reseau de laboratoire; was `partial`). Detection de crash, re-attribution de slot, re-jointure et rattrapage du store. Manque : test QEMU automatise multi-invites de crash/rejointe en continu.
+- **US-070 (Cache distribue P2P)** : `done` (lot 48; was `partial`). Lignes de cache invalidees via Raft avec cloture et accuse de reception (`P2P_I_CACHE_INV`). Manque : invalidation P2P distribuee automatique sous deconnexion/reconnexion multi-nuds.
 - **US-071 (Synchronisation P2P)** : `done`. Anti-entropie Merkle tree, devsync (`devsync-sync`).
 - **US-072 (Moniteur de sante reseau)** : `done`. RTT EWMA, pings de garde, metriques `p2p-health`.
 - **US-073 (QoS adaptative)** : `partial` (US master lot 9). Controleur adaptatif base sur RTT/perte.
 - **US-074 (NAT traversal / STUN)** : `partial` (NAT simulated on the unit bus, punching simulated) Lot 48 review: / `simule`. Codec STUN RFC 5389 (`userspace/stun.c`), classification `direct`/`endpoint_independent`. NAT simule sur le bus unitaire (pas de NAT materiel sur le hub QEMU).
-- **US-075 (Analyse de trafic intelligent)** : `partial`. Ligne de base EWMA par type de message, detection d'anomalie attribuee au pair source. Manque : validation QEMU multi-noeuds avec rapport d'analyse automatique.
+- **US-075 (Analyse de trafic intelligent)** : `done` (lot 48, statistique, pas d'apprentissage; was `partial`). Ligne de base EWMA par type de message, detection d'anomalie attribuee au pair source. Manque : validation QEMU multi-noeuds avec rapport d'analyse automatique.
 
 ### Phase 6 - Multi-Platform (US-076 a US-090)
 - **US-076 (Portage ARM)** : `partial`. Noyau ARMv7-A (`arch/arm`) avec MMU, GIC, timer, SVC syscalls dans QEMU `qemu-system-arm`. Non porte : drivers/shell/OS-UI.
@@ -174,3 +174,36 @@ Status of this inventory (Lot 48 review): the first version marked as `done` ten
   partial.
 - Not done in this PR: PR A items 2 (TLS timing) and 3 (phase 5 QEMU
   tests), PR B, PR C (apart from the presence check), PR D.
+
+## 4. Lot 48 delivered (merged with PR #205, head 7593af4)
+
+- Net-if address change: TCP connections on the old address get FIN from it
+  (`closed N`), a background web-serve is re-armed, the LLM TLS session gets
+  close_notify + FIN (`llm-closed 1`). QEMU: qemu-osui-web step 6,
+  qemu-ne2k-tls-http net-if step. Jules commit c6568c5 had reverted this and
+  deleted its tests; it was merged with our side kept (4b9943b).
+- A2 TLS handshake, measured in the guest with `ai-tls-poll ticks N`
+  (10 ms ticks): before 198 ticks (1.98 s; X25519 step 160, RSA steps 18
+  and 17), after about 11 ticks (0.11 s, no step above 3). Root cause:
+  every modular product was 32 * limbs double-and-add modular additions.
+  Fix: X25519 field arithmetic mod 2^255-19 (8x8 limb product, fold by 38,
+  constant time, same RFC 7748 ladder) and Montgomery modexp for odd moduli
+  (masked final subtraction). Crypto unchanged. The wall time of the test
+  (20 s) is the harness typing keys, not guest work. Guard: the QEMU test
+  fails above 60 ticks total or 30 per step; unit tests: RFC 7748 iterated
+  1 and 1000 rounds, 48 differential cases against the old code, Montgomery
+  vectors 32..4096 bit against Python pow().
+- A3 phase 5 (make qemu-p2p-phase5, CI job, about 4 min, three guests):
+  US-070 fence pushed on reconnect (a cut peer that missed an invalidation
+  refuses the stale fill); US-068/073 adaptive window backs off under a hub
+  delay (16 -> 10, burst shaped without p2p-limit, 12/12 delivered), a 4 s
+  drop counts a ping loss, the window grows back to 16; US-075 automatic
+  `p2p traffic alert peer X` lines for two flooders, none on quiet nodes;
+  US-069 three crash/reboot cycles, each with a key put during the crash.
+- US-068/073 stay `partial`: adaptation proven under delay and drop on the
+  lab hub, not under extreme load or on a WAN.
+- Not done in lot 48: PR B (phases 3-4), PR C status table (done in lot 49),
+  PR D measured coverage and progressive JPEG. Lot 49 takes those
+  (`docs/lot49_plan.md`): flex/grid and a Python cross target stay partial,
+  SOF2 decodes, the coverage figure is quoted from `make coverage`.
+  US-059, US-060, US-063 and US-074 are not advanced there.

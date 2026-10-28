@@ -10,6 +10,20 @@
 
 ## État courant vérifié
 
+## Etat courant du 28 octobre 2026 (lot 49)
+
+Living baseline. Plan: [lot49_plan.md](lot49_plan.md). Pull request #206.
+
+- US-120 `done`. `make roadmap-check` compares every phase 6-9 status with the US master tables.
+- US-031 stays `partial`. Flex (row or column, gap) and grid (`repeat(N, 1fr)`, N at most 8) in `userspace/webeng.c`. No JavaScript VM. `phase3_complete` stays false.
+- US-055 stays `partial`. Second host target: `pm-cross FILE py` (Python 3, same result as the VM). C99 remains. No native code generator.
+- US-058 stays `partial`. `pm-assist` is still rules and names a missing `end`. No language model.
+- US-059, US-060, US-063, US-074 unchanged (`partial`; US-060 seal key per boot and US-074 NAT are `simule`).
+- US-G03 stays `done`. Progressive Huffman JPEG (SOF2, spectral selection, successive approximation) in the shared imgdec. Arithmetic JPEG stays refused. Scratch is caller-owned (pixels, plus int16 coefficients for SOF2).
+- GUI: `/docs`, `/home`, `/home/user` and `/docs/readme.txt` are copied into the kernel VFS when `gui` starts, so the explorer and `ls` list the same tree. They are not created at shell init (that made `vfs-list overlay/` non-empty; the vfs-service job failed on commit 65bb9fb). Maximize paints once per event line. Terminal blue is light blue. `make qemu-gui-lot49` passed (explorer `/docs`, maximize to editor resize 0.00 s). `make integration-qemu-vfs` passed in 542.2 s (`vfs-list ok count 0`).
+- `make test-all` on this commit: 1148 passed, 0 failed, 0 skipped, 67 s. Journal `test_logs/test_results_20261027_235517.log` (28 October 2026, 03:55 Mauritius, UTC+4). Coverage is not measured by that runner.
+- `make coverage COVERAGE_MIN=78` on this commit: 81.91% lines executed (42464/51842) across 211 source files, 813 `.gcda`. Floor OK (81.91% >= 78%). Host unit-test translation units only, not the guest image. The previous CI run (65bb9fb) measured 81.93% (42143/51438).
+
 ## Etat courant du 24 octobre 2026 (UX 2: edition de ligne, fenetres, grille variable)
 
 - Edition de ligne unique (`kernel/line_edit.c`) pour le mode texte et la fenetre terminal: historique (fleches haut/bas, 16 lignes, sans doublon consecutif), Tab complete le premier mot parmi les commandes du shell (prefixe commun, liste au second Tab), gauche/droite, Debut/Fin, Suppr. PgUp/PgDn font toujours defiler l'ecran. Test QEMU `make qemu-line-edit` (les deux modes) et test unitaire.
@@ -1383,3 +1397,13 @@ Lot 47 (`docs/lot47_plan.md`, PR #204):
   roadmap-check` (CI) checks phase 9 against the US master table and the
   prod-roadmap counts of the QEMU test against the file.
 - Phase 9 of `prod-roadmap`: done 18 partial 0 (100%).
+
+## Lot 48 and lot 49 (status)
+
+- Lot 48 (PR #205, merged): net-if address change ends old-address TCP
+  connections with FIN and the LLM TLS session with close_notify + FIN;
+  TLS handshake guest time 1.98 s -> 0.11 s (X25519 field arithmetic,
+  Montgomery modexp, crypto unchanged; QEMU timing guard); phase 5
+  `make qemu-p2p-phase5`: US-069, US-070, US-075 done, US-068/073 partial.
+- Lot 49 (branch cursor/lot49): US-120 done, `roadmap-check` compares the
+  phase 6-8 statuses with the new US master table. See docs/lot49_plan.md.
