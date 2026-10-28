@@ -21,6 +21,7 @@ Living baseline. Plan: [lot50_plan.md](lot50_plan.md).
 - This lot is a menu over the shell, not a second implementation. It is not tens of thousands of new lines: copying `shell.c` into the GUI would break the one-code-path rule.
 - `make test-all` on the first Lot 50 tree: 1149 passed, 0 failed, 0 skipped, 64 s. Journal `test_logs/test_results_20261028_003631.log` (28 October 2026, 04:36 Mauritius, UTC+4). `make qemu-gui-parity` passed (about 248 s) on that tree, which still used the slash `/p2p` for the mesh menu.
 - CI run 40610642239 on `d54e2c0` (04:44 Mauritius, UTC+4): gui-parity passed. Three jobs failed. `qemu-production` printed `prod-roadmap next US-076 US-078 US-080 US-081 US-097 US-G19 US-G20 US-G21` (US-081 partial and US-097 simule were already in the file; the old expected string was only a prefix). `qemu-osui-gui` timed out on `pane=p2p` and `qemu-gui-apps` saw no P2P pane pixels, because `/p2p` had been taken by the new menu. The menu slash is now `/mesh`. `/p2p` is the pane again.
+- Re-run after that fix (journal `test_logs/test_results_20261028_025410.log`, 28 October 2026, 06:54 Mauritius, UTC+4): `make test-all` 1149 passed, 0 failed, 0 skipped, 114 s. `make qemu-gui-parity`, `make qemu-gui-apps`, `make qemu-production` and `make qemu-osui-gui` passed.
 
 ## Etat courant du 28 octobre 2026 (lot 49)
 

@@ -89,8 +89,15 @@ log says so.
   printed the longer next line (US-081 and US-097 included). The test
   expected a string that skipped those two ids, so the job failed.
   `qemu-osui-gui` and `qemu-gui-apps` failed because `/p2p` no longer
-  opened the pane. Both are fixed in the follow-up commit. The re-run
-  of those three targets is recorded only after it passes.
+  opened the pane.
+- Re-run after the `/mesh` fix (journal
+  `test_logs/test_results_20261028_025410.log`, 28 October 2026,
+  06:54 Mauritius, UTC+4): `make test-all` 1149 passed, 0 failed,
+  0 skipped, 114 s. `make qemu-gui-parity` passed (`/mesh` prints
+  `p2p-stats error p2p down`). `make qemu-gui-apps` passed (the `/p2p`
+  pane draws again). `make qemu-production` passed (the full next line).
+  `make qemu-osui-gui` passed (`pane=p2p`, then ESC, shell, and the
+  terminal window).
 
 ## 5. Not done
 
