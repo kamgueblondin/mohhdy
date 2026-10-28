@@ -74,6 +74,14 @@ def main():
                 g.wait_for(proc, " align ", g.CMD_TIMEOUT, start)
                 require(g.normalized_log(g.log_text()[start:]), " box " + box)
                 print("column-sizing inspect %s box %s" % (ident, box), flush=True)
+            for ident, box in (("fb", "100 15 20x10"), ("ga", "24 40 96x10"),
+                               ("span", "0 112 80x10"), ("intrinsic", "0 142 40x20"),
+                               ("image", "0 202 48x16")):
+                start = g.send_command_until(monitor, "web-inspect /web/lot55.html " + ident,
+                                             "inspect ", proc)
+                g.wait_for(proc, " align ", g.CMD_TIMEOUT, start)
+                require(g.normalized_log(g.log_text()[start:]), " box " + box)
+                print("layout-system inspect %s box %s" % (ident, box), flush=True)
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             g.send_command_until(monitor, "web /web/lot52.html", "osui web render file=/web/lot52.html", proc,
@@ -129,6 +137,48 @@ def main():
             print("column-sizing pixels compared=%d shrink=50,50 frozen=70,30 wrap_x=14" % compared,
                   flush=True)
 
+
+            step = len(g.log_text())
+            g.send_key(monitor, "esc")
+            g.wait_for(proc, "osui web close file=/web/lot54.html", g.CMD_TIMEOUT, step)
+            start = g.send_command_until(monitor, "web /web/lot55.html",
+                "osui web render file=/web/lot55.html", proc, mode="getc", wait_prompt=False)
+            time.sleep(0.5)
+            width, height, pixels = g.screendump_rgb(monitor, "qemu-layout-system.ppm")
+            compared = 0
+            for left, top, right, bottom, color in (
+                (0, 15, 20, 25, (255, 0, 0)), (100, 15, 120, 25, (0, 0, 255)),
+                (24, 40, 120, 50, (0, 128, 0)), (0, 52, 20, 72, (255, 255, 0)),
+                (24, 52, 120, 72, (0, 0, 128)), (3, 75, 23, 92, (0, 0, 255)),
+                (0, 112, 80, 122, (0, 128, 0)), (80, 112, 120, 122, (255, 165, 0)),
+                (0, 122, 40, 132, (255, 0, 0)), (40, 122, 80, 132, (0, 0, 255)),
+                (80, 122, 120, 132, (255, 255, 0)), (0, 132, 20, 142, (0, 0, 128)),
+                (20, 218, 40, 228, (0, 0, 255))):
+                for y in range(top, bottom):
+                    for x in range(left, right):
+                        offset = ((oy + y) * width + ox + x) * 3
+                        if tuple(pixels[offset:offset + 3]) != color:
+                            raise RuntimeError("layout system pixel mismatch at %d,%d" % (x, y))
+                        compared += 1
+            for y in range(16):
+                for x in range(48):
+                    expected = (255, 255, 255) if x & 1 else (0, 0, 0)
+                    offset = ((oy + 202 + y) * width + ox + x) * 3
+                    if tuple(pixels[offset:offset + 3]) != expected:
+                        raise RuntimeError("layout system image mismatch at %d,%d" % (x, y))
+                    compared += 1
+            for x, y in ((20, 132), (30, 142), (0, 218), (19, 227)):
+                offset = ((oy + y) * width + ox + x) * 3
+                if tuple(pixels[offset:offset + 3]) != (255, 255, 255):
+                    raise RuntimeError("clipping/visibility leaked pixels at %d,%d" % (x, y))
+                compared += 1
+            serial = g.normalized_log(g.log_text()[start:])
+            require(serial, "dropped 0 page 640x228 diag 0")
+            for line in serial.splitlines():
+                if line.startswith("osui web render file=/web/lot55.html"):
+                    print(line, flush=True)
+            print("layout-system pixels compared=%d flex=packed grid=spanned table=colspan image=decoded clip=bounded" % compared,
+                  flush=True)
 
         print("QEMU web layout contract passed.", flush=True)
         return 0

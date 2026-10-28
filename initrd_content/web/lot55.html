@@ -1,0 +1,31 @@
+<!doctype html><html><head><title>Lot 55 guest layout system</title><style>
+body{margin:0;background:white}
+#flex{display:flex;width:120px;height:40px;justify-content:space-between;align-items:center}
+#fa{width:20px;height:10px;background:red} #fb{width:20px;height:10px;background:blue}
+#grid{display:grid;width:120px;grid-template-columns:20px 1fr 2fr;grid-template-rows:10px 20px;gap:2px 4px}
+#ga{grid-column:2 / span 2;grid-row:1;height:10px;background:green}
+#gb{grid-column:1;grid-row:2;height:20px;background:yellow}
+#gc{grid-column:2 / span 2;grid-row:2;height:20px;background:navy}
+#percent{width:120px;height:40px;padding:2px;border:1px solid red;box-sizing:border-box}
+#half{width:20px;height:50%;padding:1px;box-sizing:border-box;background:blue}
+#table{width:120px} #table td{height:10px}
+#span{background:green} #end{background:orange}
+#ta{background:red} #tb{background:blue} #tc{background:yellow}
+#clip{width:20px;height:10px;overflow:hidden} #clipped{width:40px;height:20px;background:navy}
+#intrinsic{width:min-content} #flow{width:24px;overflow-wrap:break-word}
+#linkclip{width:20px;height:10px;overflow:hidden;white-space:nowrap}
+#image{width:48px;height:16px}
+#visibility{display:flex;height:10px;align-items:start}
+#hidden{width:20px;height:10px;visibility:hidden;background:red}
+#shown{width:20px;height:10px;background:blue}
+</style></head><body>
+<div id=flex><div id=fa></div><div id=fb></div></div>
+<div id=grid><div id=ga></div><div id=gb></div><div id=gc></div></div>
+<div id=percent><div id=half></div></div>
+<table id=table><tr><td id=span colspan=2></td><td id=end></td></tr><tr><td id=ta></td><td id=tb></td><td id=tc></td></tr></table>
+<div id=clip><div id=clipped></div></div>
+<div id=intrinsic>one seven</div><div id=flow>abcdefgh</div>
+<div id=linkclip><a href='/web/lot55.html'>abcdef</a></div>
+<img id=image src='/images/mire-g1.png' alt='fallback'>
+<div id=visibility><div id=hidden></div><div id=shown></div></div>
+</body></html>

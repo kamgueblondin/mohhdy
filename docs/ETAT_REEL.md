@@ -10,6 +10,18 @@
 
 ## État courant vérifié
 
+## Etat courant du 28 octobre 2026 (lot 55)
+
+US-031 remains partial, phase3_complete=false. One large guest webeng.c
+layout increment: bounded intrinsic text/box sizes and content bases;
+flex alignment/packing and axis gaps; fixed/weighted/auto grid tracks,
+placement and spans; percentage heights and box-sizing; table colspan;
+nowrap/break-word, clipping, visibility and matching link hits.
+Measurement reuses the painter's formatter. Kernel/rights/syscall ABI
+unchanged. No Chromium, WebKit, network loading, JavaScript VM or new
+font engine. US-059/060/063/074 unchanged; US-G19..US-G24 remain partial.
+Measured limits, useful line counts and gates: [lot55_plan.md](lot55_plan.md).
+
 ## Etat courant du 28 octobre 2026 (lot 54)
 
 US-031 stays partial, phase3_complete=false. Column flex-basis/shrink now

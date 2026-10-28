@@ -418,7 +418,7 @@ static void test_l52_table_column_widths_shared_across_rows(void) {
 static void test_l52_table_spans_are_refused(void) {
     const char *html =
         "<body style='margin:0'><table id=t><tr>"
-        "<td id=a colspan=2>forbidden</td><td id=b>B</td></tr></table></body>";
+        "<td id=a colspan=9>forbidden</td><td id=b>B</td></tr></table></body>";
     lot52_render(html, 320);
     TEST_ASSERT_TRUE(lot52_has_diag("table span refused"));
     TEST_ASSERT_TRUE(lot52_has_diag("table refused after span"));
@@ -1040,7 +1040,7 @@ static void test_l52_grid_malformed_repeat_does_not_replace_valid(void) {
 
 static void test_l52_grid_rejects_fraction_weight_other_than_one(void) {
     const char *html =
-        "<body style='margin:0'><div id=g style='display:grid;grid-template-rows:10px 2fr'>"
+        "<body style='margin:0'><div id=g style='display:grid;grid-template-rows:10px 9fr'>"
         "<div id=a style='height:10px'></div><div id=b style='height:12px'></div></div></body>";
     lot52_render(html, 120);
     TEST_ASSERT_EQUAL(0, lot52_node("g")->grid_rows);
@@ -1051,13 +1051,13 @@ static void test_l52_grid_rejects_fraction_weight_other_than_one(void) {
 
 static void test_l52_grid_rejects_fixed_column_syntax(void) {
     const char *html =
-        "<body style='margin:0'><div id=g style='display:grid;grid-template-columns:20px 1fr'>"
+        "<body style='margin:0'><div id=g style='display:grid;grid-template-columns:minmax(20px,1fr) 1fr'>"
         "<div id=a style='height:10px'></div><div id=b style='height:10px'></div></div></body>";
     lot52_render(html, 120);
     TEST_ASSERT_EQUAL(0, lot52_node("g")->grid_cols);
     TEST_ASSERT_EQUAL(0, lot52_node("b")->x);
     TEST_ASSERT_EQUAL(10, lot52_node("b")->y);
-    TEST_ASSERT_TRUE(lot52_has_diag("grid columns require 1fr"));
+    TEST_ASSERT_TRUE(lot52_has_diag("grid tracks refused"));
 }
 
 static void test_l52_grid_track_integer_overflow_refused(void) {
