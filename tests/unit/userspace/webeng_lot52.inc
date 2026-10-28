@@ -1424,19 +1424,29 @@ static void test_l52_table_span_one_is_supported(void) {
     TEST_ASSERT_EQUAL(1, g_doc.perf.table_rows);
 }
 
-static void test_l52_table_rowspan_two_refuses_whole_table(void) {
+static void test_l52_table_rowspan_two_places_the_next_row(void) {
     const char *html =
         "<body style='margin:0'><table id=t><tr>"
-        "<td id=a rowspan=2>A</td><td id=b>B</td></tr><tr><td>C</td></tr></table></body>";
+        "<td id=a rowspan=2>A</td><td id=b>B</td></tr><tr><td id=c>C</td></tr></table></body>";
     lot52_render(html, 160);
-    TEST_ASSERT_TRUE(lot52_has_diag("table span refused"));
-    TEST_ASSERT_TRUE(lot52_has_diag("table refused after span"));
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->w);
-    TEST_ASSERT_EQUAL(0, lot52_node("b")->w);
-    TEST_ASSERT_EQUAL(0, lot52_node("t")->h);
-    TEST_ASSERT_EQUAL(0, g_doc.perf.table_rows);
-    TEST_ASSERT_NULL(find_text("A"));
-    TEST_ASSERT_NULL(find_text("C"));
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->span_refused);
+    TEST_ASSERT_EQUAL(2, lot52_node("a")->rowspan);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
+    TEST_ASSERT_EQUAL(80, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(20, lot52_node("a")->h);
+    TEST_ASSERT_EQUAL(80, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(0, lot52_node("b")->y);
+    TEST_ASSERT_EQUAL(80, lot52_node("b")->w);
+    TEST_ASSERT_EQUAL(80, lot52_node("c")->x);
+    TEST_ASSERT_EQUAL(10, lot52_node("c")->y);
+    TEST_ASSERT_EQUAL(80, lot52_node("c")->w);
+    TEST_ASSERT_EQUAL(20, lot52_node("t")->h);
+    TEST_ASSERT_EQUAL(2, g_doc.perf.table_rows);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    TEST_ASSERT_NOT_NULL(find_text("A"));
+    TEST_ASSERT_NOT_NULL(find_text("B"));
+    TEST_ASSERT_NOT_NULL(find_text("C"));
 }
 
 static void test_l52_table_nine_columns_refused(void) {
@@ -1886,14 +1896,18 @@ static void test_l52_relative_position_static_overrides_rule(void) {
     TEST_ASSERT_EQUAL(1, find_text("word")->y);
 }
 
-static void test_l52_absolute_position_is_diagnosed(void) {
+static void test_l52_absolute_position_places_against_padding_edge(void) {
     const char *html =
         "<body style='margin:0'><div id=a style='position:absolute;left:20px;top:10px;width:40px;height:20px'></div></body>";
     lot52_render(html, 160);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->relative);
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
-    TEST_ASSERT_TRUE(lot52_has_diag("position refused"));
+    TEST_ASSERT_EQUAL(1, lot52_node("a")->absolute);
+    TEST_ASSERT_EQUAL(20, lot52_node("a")->x);
+    TEST_ASSERT_EQUAL(10, lot52_node("a")->y);
+    TEST_ASSERT_EQUAL(40, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(20, lot52_node("a")->h);
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[0].h);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l52_list_none_does_not_paint_marker(void) {
