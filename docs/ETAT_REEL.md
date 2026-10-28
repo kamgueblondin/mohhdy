@@ -10,6 +10,16 @@
 
 ## État courant vérifié
 
+## Etat courant du 28 octobre 2026 (lot 50)
+
+Living baseline. Plan: [lot50_plan.md](lot50_plan.md).
+
+- US-G19, US-G20, US-G21 are `partial`. `/pm`, `/proc` and `/p2p` run existing shell commands from a window (same `handle_line`, same kernel rights). pm-ide stays terminal-only. The mesh window does not bring a node up.
+- US-G03 stays `done`. `qemu-gui-parity` expects `img-info ok` on `/images/mire-prog.jpg` and draws it in the viewer. Arithmetic SOF9 stays refused (no sample in the initrd). The explorer opens a `.jpg` in that same viewer. `.jpeg` is not recognized.
+- Phase 9 of `/roadmap.txt`: done 18, partial 3, simule 0, open 0, progress 85%, 66 entries. Next non-done ids: US-076 US-078 US-080 US-G19 US-G20 US-G21.
+- US-059, US-060, US-063, US-074 unchanged. No JavaScript VM. No native code generator. `pm-assist` stays rules.
+- This lot is a menu over the shell, not a second implementation. It is not tens of thousands of new lines: copying `shell.c` into the GUI would break the one-code-path rule.
+
 ## Etat courant du 28 octobre 2026 (lot 49)
 
 Living baseline. Plan: [lot49_plan.md](lot49_plan.md). Pull request #206.

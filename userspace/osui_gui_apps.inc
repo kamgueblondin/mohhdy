@@ -4,7 +4,7 @@
 #include "osui_tools.h"
 
 #define TOOL_FIRST OS_FB_APP_TASKS
-#define TOOL_LAST OS_FB_APP_KIND_MAX   /* UX5: parity panels 9..19 */
+#define TOOL_LAST OS_FB_APP_KIND_MAX   /* UX5 panels, Lot 50 kinds 30..32 */
 static osui_tool_t g_tools[TOOL_LAST - TOOL_FIRST + 1];
 static osui_tool_src_t g_tool_src;
 

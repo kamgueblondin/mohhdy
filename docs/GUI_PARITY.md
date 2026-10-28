@@ -64,6 +64,9 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | /devsync DevSync | devsync | `devsync-show`, `devsync-sync` (MUT), `devsync-set` (ARG+MUT), `devsync-del` (ARG+MUT) |
 | /sysadmin Administration | admin | `os-admin`, `os-status`, `admin-status`, `admin-all`, `os-support` |
 | /api API Tokens | api | `api`, `api-token` (ARG+MUT), `api-revoke` (ARG+MUT) |
+| /pm Outils PM | promptmessage | `pm-catalog`, `pm-catalog-search` (ARG), `pm-doc` (ARG), `pm-check` (ARG), `pm-disasm` (ARG), `pm-assist` (ARG), `pm-cross` (ARG), `pm-test` (ARG), `pm-versions` (ARG) |
+| /proc Processus | processes | `ps`, `mem`, `task-capacity`, `task-events`, `task-events-notify-status`, `task-priority-child-status`, `task-events-budget-status`, `task-events-watch-status`, `children`, `task-priority` (ARG+MUT), `task-suspend` (ARG+MUT), `task-resume` (ARG+MUT) |
+| /p2p Maillage P2P | p2p | `p2p-stats`, `p2p-analyze`, `p2p-route`, `p2p-qos`, `p2p-raft`, `p2p-stun`, `p2p-cache`, `p2p-kv`, `p2p-cache` (ARG+MUT) |
 | /cmd Commande | any | any registry command typed in the input line |
 
 ## Lot 45
@@ -107,10 +110,10 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 |---|---|---|
 | files: ls, cat, cp, mv, rm, mkdir, touch, stat (about 20) | Files explorer (UX3), editor, /disk, /notes | done |
 | editor: edit, pm-ide, pm-edit | Editor window (heap, window-sized grid since UX5) | done: lines up to 256 columns with horizontal scroll (Lot 45); saves up to 64 KiB on a disk with the v4 extension area (Lot 46, `qemu-gui-bigsave`), 30 KiB otherwise |
-| processes: ps, kill, mem, jobs, task-* (27), child-* (7) | Task manager (/tasks), /services (jobs, task-summary) | partial: task-events-*, task-priority, task-suspend only through /cmd |
+| processes: ps, kill, mem, jobs, task-* (27), child-* (7) | Task manager (/tasks), /services (jobs, task-summary), /proc (Lot 50) | partial (US-G20): /proc runs ps, mem, task-capacity, task-events, four status readers, children, and task-priority / task-suspend / task-resume with a second Enter. kill and the other task-* / child-* commands stay on /cmd or /tasks |
 | services and drivers: service-* (6), devices, lspci, dev-list, pci-rescan, driver-restart | /services, task manager services view | done (Lot 46): every /services entry runs in `qemu-gui-panels`; `driver-restart` (fixed Ring 3 driver names): supervised respawn of pcidriver (Lot 45) and atadriver with a new pid, networker restarted by the shell with a new pid, each service used after the restart (`qemu-gui-parity`) |
 | network: net-* (3), fetch-sim, grpc-* (6) | /net, /grpc | partial: every /net entry runs in `qemu-gui-panels` (Lot 46), grpc-wire; the shell has no command that configures the interface (address, route), so no window can either (Lot 46 PR D) |
-| p2p: p2p-* (27) | /peers (UX4), /net | partial: peers, stats, up, down, send; kv/raft/qos only through /cmd |
+| p2p: p2p-* (27) | /peers (UX4), /net, /p2p (Lot 50) | partial (US-G21): /p2p runs stats, analyze, route, qos, raft, stun, cache and kv. QEMU proof is the shell line `p2p-stats error p2p down` while the node is down. No live mesh. p2p-up stays on /net |
 | storage: ata-*, fat16-*, mount-*, persist-* (6), vfs-* (26) | /disk, /vfs | done (Lot 46): every /disk entry runs in `qemu-gui-panels` (ata, mounts, persist status and save, ls, stat, mkdir, fat16-list); vfs-stats/list/stat/read/mount-add/mount-remove in /vfs; the vfs-backend-* probes are test tools, through /cmd |
 | logs: task-events, notify-*, osui-audit, history, prod-log-*, prod-usage | /logs | done (Lot 46): every /logs entry runs in `qemu-gui-panels` (append then analyze a log, push then acknowledge a notification) |
 | collab ledger: collab-* (37) | /ledger | done (US-G08 since Lot 45): balances, tasks, audit, p2p-up; forms (offer, vote, escrow create, release/refund/dispute) build the shell grammar and need a second Enter; QEMU proof of the offer form. Contracts and keys (collab-contract-*, collab-keys) through /cmd |
@@ -119,7 +122,7 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
 | web devtools: web-* (13), browser-* (34) | /devtools, Browser window (UX4) | done (Lot 46): every /devtools entry runs in `qemu-gui-panels` (status, tabs, perf, cache, DOM, console, inspect, a11y); navigation in the Browser window |
 | search: grep (with UX5 grep -r) | /search | done: recursive, whole files up to 1 MiB through the shell heap (Lot 45; cut files counted beyond), pages of 64 hits (`grep -r MOTIF [REP] [PAGE]`) |
 | notes / archives: append, cat, migrate-* (3) | /notes | done (Lot 46): every /notes entry runs in `qemu-gui-panels` (append, cat, export, verify, import); plain text only, no rich text |
-| PromptMessage: pm-* (27) | /pmrun, editor ESC r | partial: run, check, edit; catalog/CA through /security or /cmd |
+| PromptMessage: pm-* (27) | /pmrun, editor ESC r, /pm (Lot 50) | partial (US-G19): /pm runs catalog, search, doc, check, disasm, assist, cross, test, versions. pm-ide stays terminal-only. CA stays on /security. No language model, no native compiler |
 | AI: ai-* (22), aistats, chat | /chat (GPT-2 streaming) | partial |
 | system: date, uptime, hal-*, rtc-check, screen-adapt, power-* | /settings | partial: read only |
 | sessions, mcp, media, pwa, devsync, os-*, admin-*, api-* | /sessions, /mcp, /media, /pwa, /devsync, /sysadmin, /api | partial: panels on the registry (table checked in test-all), argument hints match the commands; qemu-gui-parity runs the first entry of each, /grpc and /devsync with an argument (Lot 45); media is simule |
@@ -145,6 +148,8 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
   (test_lot46_entries).
 - `scripts/check_gui_parity.py` (in `make test-all`): every panel command
   is in the registry.
+- Unit (Lot 50): `test_lot50_entries` (build lines, /pm is not /pmrun,
+  `.jpg` is an image, `.jpeg` is not).
 
 ## Lot 47
 
@@ -156,3 +161,23 @@ closes. Open them from the desktop input: `/net`, `/disk`, ...
   depth and with Adam7 interlace, through the same imgdec. Proof:
   `test_imgdec` and `qemu-gui-parity`. US-G03 done.
 - Every US-G entry is done. Details: `docs/lot47_plan.md`.
+
+## Lot 49
+
+- Huffman SOF2 decodes in the shared imgdec. US-G03 stays done.
+  Arithmetic SOF9 stays refused.
+
+## Lot 50
+
+- `/pm`, `/proc` and `/p2p` are menus of shell commands that already
+  exist. US-G19, US-G20 and US-G21 are partial. Proof: `test_osui_parity`
+  and the first entry of each panel in `make qemu-gui-parity`.
+- `qemu-gui-parity` expects `img-info ok fmt=jpeg` on
+  `/images/mire-prog.jpg` and draws that file in the viewer. The old
+  refusal string was left behind when SOF2 started to decode (CI job
+  gui-parity on the Lot 49 head). The check is not removed.
+- The file explorer opens `.jpg` with `osui_path_is_image` (same viewer).
+  `.jpeg` is not a shipped name and is not recognized.
+- Not done: pm-ide in a window, a live mesh, every task-* command, a
+  JavaScript VM, a native compiler. US-059, US-060, US-063, US-074
+  unchanged. Detail: `docs/lot50_plan.md`.

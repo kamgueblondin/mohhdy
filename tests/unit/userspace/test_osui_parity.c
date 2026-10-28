@@ -83,7 +83,7 @@ static void test_rights_model(void) {
 static void test_table_matches_registry(void) {
     int i, k, total = 0;
     char name[40];
-    TEST_ASSERT_EQUAL(21, osui_par_family_count);
+    TEST_ASSERT_EQUAL(24, osui_par_family_count);
     for (i = 0; i < osui_par_family_count; i++) {
         const osui_par_family_t *f = &osui_par_families[i];
         TEST_ASSERT(f->kind >= OS_FB_APP_NET && f->kind <= OS_FB_APP_KIND_MAX);
@@ -149,6 +149,64 @@ static void test_lot46_entries(void) {
     TEST_ASSERT_EQUAL(OSUI_PAR_ARG, entry_of(OS_FB_APP_DEVTOOLS, "web-inspect")->flags);
     TEST_ASSERT_EQUAL(OSUI_PAR_ARG, entry_of(OS_FB_APP_DEVTOOLS, "web-a11y")->flags);
     TEST_ASSERT(entry_of(OS_FB_APP_NOTES, "migrate-import")->flags & OSUI_PAR_MUT);
+}
+
+/* Lot 50: /pm /proc /p2p are menus of existing shell commands.
+ * /pm must not be the /pmrun launcher. .jpg opens in the shared viewer. */
+static void test_lot50_entries(void) {
+    char out[96];
+    const osui_par_entry_t *e;
+    TEST_ASSERT_EQUAL(OS_FB_APP_PM, osui_par_kind_of("/pm"));
+    TEST_ASSERT_EQUAL(0, osui_par_kind_of("/pmrun"));
+    TEST_ASSERT_EQUAL(OS_FB_APP_PROC, osui_par_kind_of("/proc"));
+    TEST_ASSERT_EQUAL(OS_FB_APP_P2PMESH, osui_par_kind_of("/p2p"));
+    TEST_ASSERT_EQUAL(0, osui_par_kind_of("/peers"));
+    e = entry_of(OS_FB_APP_PM, "pm-catalog");
+    TEST_ASSERT_NOT_NULL(e);
+    TEST_ASSERT_EQUAL(0, e->flags);
+    e = entry_of(OS_FB_APP_PM, "pm-doc");
+    TEST_ASSERT(e->flags & OSUI_PAR_ARG);
+    TEST_ASSERT(e->hint && e->hint[0]);
+    TEST_ASSERT_EQUAL(-1, osui_par_build(e, "", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(0, osui_par_build(e, "/pm/hello.pm", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("pm-doc /pm/hello.pm", out);
+    e = entry_of(OS_FB_APP_PM, "pm-cross");
+    TEST_ASSERT(e->flags & OSUI_PAR_ARG);
+    TEST_ASSERT(strstr(e->hint, "py") != 0);
+    TEST_ASSERT_EQUAL(OSUI_CMD_TERMINAL, osui_tool_cmd_check("pm-ide a.pm", reg_known));
+    e = entry_of(OS_FB_APP_PROC, "task-priority");
+    TEST_ASSERT_EQUAL(OSUI_PAR_ARG | OSUI_PAR_MUT, e->flags);
+    TEST_ASSERT_EQUAL(0, osui_par_build(e, "1 2", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("task-priority 1 2", out);
+    TEST_ASSERT_EQUAL(0, entry_of(OS_FB_APP_PROC, "ps")->flags);
+    TEST_ASSERT_EQUAL(0, entry_of(OS_FB_APP_PROC, "task-priority-child-status")->flags);
+    TEST_ASSERT_EQUAL(0, entry_of(OS_FB_APP_P2PMESH, "p2p-stats")->flags);
+    TEST_ASSERT_EQUAL(0, entry_of(OS_FB_APP_P2PMESH, "p2p-kv")->flags);
+    e = entry_of(OS_FB_APP_P2PMESH, "p2p-cache");
+    TEST_ASSERT_NOT_NULL(e);
+    TEST_ASSERT_EQUAL(0, e->flags);
+    /* the write form is the later entry of the same command */
+    {
+        int i, writes = 0;
+        const osui_par_family_t *f = osui_par_family(OS_FB_APP_P2PMESH);
+        for (i = 0; i < f->count; i++) {
+            if (!strcmp(f->entries[i].cmd, "p2p-cache") && (f->entries[i].flags & OSUI_PAR_MUT)) {
+                writes++;
+                TEST_ASSERT_EQUAL(0, osui_par_build(&f->entries[i], "put k v", out, (int)sizeof(out)));
+                TEST_ASSERT_EQUAL_STRING("p2p-cache put k v", out);
+            }
+        }
+        TEST_ASSERT_EQUAL(1, writes);
+    }
+    TEST_ASSERT(osui_path_is_image("/images/mire-prog.jpg"));
+    TEST_ASSERT(osui_path_is_image("/samples/mire.png"));
+    TEST_ASSERT(osui_path_is_image("/samples/mire24.bmp"));
+    TEST_ASSERT(osui_path_is_image("a.pgm"));
+    TEST_ASSERT(osui_path_is_image("a.ppm"));
+    TEST_ASSERT(osui_path_is_image("a.pnm"));
+    TEST_ASSERT(!osui_path_is_image("/docs/readme.txt"));
+    TEST_ASSERT(!osui_path_is_image("/images/mire.jpeg"));
+    TEST_ASSERT(!osui_path_is_image(0));
 }
 
 static void type(const char *s) { while (*s) osui_tool_key(&t, *s++, &k_src); }
@@ -255,6 +313,7 @@ int main(void) {
     RUN_TEST(test_table_matches_registry);
     RUN_TEST(test_build);
     RUN_TEST(test_lot46_entries);
+    RUN_TEST(test_lot50_entries);
     RUN_TEST(test_panel_menu_run_and_back);
     RUN_TEST(test_panel_arg_and_confirm);
     RUN_TEST(test_search_and_generic_cmd);

@@ -55,4 +55,7 @@ const char *osui_par_cmd_name(const osui_par_entry_t *e, char *out, int max);
 /* builds the line to run: cmd, plus " " input when ARG. Returns 0, or
  * -1 when ARG and the input is empty */
 int osui_par_build(const osui_par_entry_t *e, const char *input, char *out, int max);
+/* 1 when a path ends in a format the shared viewer decodes
+ * (.pgm .ppm .pnm .bmp .png .jpg). .jpeg is not a shipped name. */
+int osui_path_is_image(const char *p);
 #endif

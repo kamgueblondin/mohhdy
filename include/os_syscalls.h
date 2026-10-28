@@ -521,7 +521,12 @@ typedef struct {
 #define OS_FB_APP_ADMIN 27
 #define OS_FB_APP_API 28
 #define OS_FB_APP_HELP 29      /* Lot 45: /help, desktop slash programs */
-#define OS_FB_APP_KIND_MAX 29
+/* Lot 50: more terminal families in the desktop. These ids are not
+ * OS_FB_APP_P2P (6) or OS_FB_APP_PMRUN (7). */
+#define OS_FB_APP_PM 30        /* /pm PromptMessage tools (pm-ide stays terminal) */
+#define OS_FB_APP_PROC 31      /* /proc process and task commands */
+#define OS_FB_APP_P2PMESH 32   /* /p2p mesh reports (node down is a real answer) */
+#define OS_FB_APP_KIND_MAX 32
 #define OS_FB_APP_ROWS 22       /* default window grid */
 #define OS_FB_APP_COLS 78
 /* UX5: grid buffers; a maximized window shows as many rows / columns as

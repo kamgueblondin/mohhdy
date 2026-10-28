@@ -65,3 +65,6 @@ US-G15 9 done tools-files-editor-follow-window-grid
 US-G16 9 done overlay-v4-ext-after-fat16-64k-files-reboot-qemu-bigsave-lot46
 US-G17 9 done panels-vfs-session-mcp-media-simule-pwa-api-grpc-devsync-qemu
 US-G18 9 done chat-help-window-slash-programs-from-dispatch-table
+US-G19 9 partial pm-panel-catalog-doc-check-assist-cross
+US-G20 9 partial proc-panel-ps-mem-task-events-priority-confirm
+US-G21 9 partial p2p-panel-stats-analyze-route-qos-raft-stun
