@@ -10,6 +10,20 @@
 
 ## État courant vérifié
 
+## Etat courant du 29 October 2026 (lot 58)
+
+US-031 stays partial, phase3_complete=false. The same bounded guest engine
+adds typed integer calc/min/max/clamp for dimensions, constraints, flex
+bases, gaps and positioned offsets; aspect-ratio; horizontal block/grid
+auto margins; horizontal LTR logical dimensions and spacing aliases.
+Measure/paint share the grid item width. Local images reuse one imgdec
+workspace and its existing ceilings. The caller-owned document has a
+compile-time 1 MiB cap (i386 actual 554176 bytes); no heap is added.
+Kernel/rights/shared ABI unchanged. No Chromium, WebKit, network loading,
+JavaScript VM or new font engine. US-059/060/063/074 unchanged;
+US-G19..US-G24 remain partial. Roadmap statuses and the exact complete
+non-done list are unchanged. Subset, limits and results: docs/lot58_plan.md.
+
 ## Etat courant du 29 October 2026 (lot 57)
 
 US-031 stays partial, phase3_complete=false. The same bounded guest webeng

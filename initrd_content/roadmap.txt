@@ -1,3 +1,4 @@
+# Lot 58: bounded math/ratio/logical sizing; US-031 partial; all statuses unchanged.
 # Lot 57: grid, image boxes and CSS cascade; US-031 partial; all statuses unchanged.
 # Lot 55: large guest layout increment; US-031 partial; all roadmap statuses unchanged.
 # Lot 54: column flex sizing; US-031 partial, all roadmap statuses unchanged.

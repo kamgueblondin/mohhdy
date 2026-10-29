@@ -709,6 +709,234 @@ static int bounded_uint(const char *v, int len, int max, int *out) {
     return 0;
 }
 
+static int math_refused;
+
+enum { M_NUMBER, M_PX, M_PERCENT, M_ADD, M_SUB, M_MUL, M_DIV, M_MIN, M_MAX, M_CLAMP };
+typedef struct {
+    const char *text;
+    int length, at, depth;
+    we_length_t *out;
+} we_math_parser_t;
+
+static int math_checked(int a, int b, int op, int *value) {
+    int result, aa = a < 0 ? -a : a, bb = b < 0 ? -b : b;
+    if (aa > WE_MATH_VALUE_MAX || bb > WE_MATH_VALUE_MAX) return -1;
+    if (op == M_MUL) {
+        if (bb && aa > WE_MATH_VALUE_MAX / bb) return -1;
+        result = a * b;
+    } else if (op == M_DIV) {
+        if (!b) return -1;
+        result = a / b;
+    } else if (op == M_ADD) result = a + b;
+    else result = a - b;
+    if (result < -WE_MATH_VALUE_MAX || result > WE_MATH_VALUE_MAX) return -1;
+    *value = result;
+    return 0;
+}
+
+static int math_eval(const we_length_t *expr, int basis, int *out) {
+    int values[WE_MATH_NODES_MAX], i;
+    if (!expr->count || expr->count > WE_MATH_NODES_MAX) return -2;
+    if (basis < 0 && expr->percent) return -1;
+    for (i = 0; i < expr->count; i++) {
+        const we_math_node_t *node = &expr->node[i];
+        int a, b;
+        if (node->op <= M_PERCENT) {
+            values[i] = node->op == M_PERCENT ? basis * node->value / 100 : node->value;
+            continue;
+        }
+        if (node->a >= i || node->b >= i) return -2;
+        a = values[node->a]; b = values[node->b];
+        if (node->op == M_MIN) values[i] = a < b ? a : b;
+        else if (node->op == M_MAX) values[i] = a > b ? a : b;
+        else if (node->op == M_CLAMP) {
+            int c;
+            if (node->c >= i) return -2;
+            c = values[node->c];
+            values[i] = b < c ? b : c;
+            if (values[i] < a) values[i] = a;
+        } else if (math_checked(a, b, node->op, &values[i])) return -2;
+    }
+    *out = values[expr->count - 1];
+    return 0;
+}
+
+static int math_used(const we_node_t *n, int slot, int basis, int fallback, int nonnegative) {
+    int result;
+    if (!n->length[slot].count) return fallback;
+    if (math_eval(&n->length[slot], basis, &result)) { math_refused = 1; return fallback; }
+    if (nonnegative && result < 0) return 0;
+    if (result > WE_LAYOUT_MAX) result = WE_LAYOUT_MAX;
+    if (result < -WE_LAYOUT_MAX) result = -WE_LAYOUT_MAX;
+    return result;
+}
+
+static int math_value(const we_node_t *n, int slot, int basis, int fallback) {
+    return math_used(n, slot, basis, fallback, 0);
+}
+
+static int math_nonnegative(const we_node_t *n, int slot, int basis, int fallback) {
+    return math_used(n, slot, basis, fallback, 1);
+}
+
+static void math_space(we_math_parser_t *p) {
+    while (p->at < p->length && w_space(p->text[p->at])) p->at++;
+}
+
+static int math_node(we_math_parser_t *p, int op, int a, int b, int c, int value, int dim) {
+    we_math_node_t *node;
+    int index = p->out->count;
+    if (index >= WE_MATH_NODES_MAX) return -1;
+    node = &p->out->node[index];
+    node->op = (uint8_t)op; node->a = (uint8_t)a; node->b = (uint8_t)b; node->c = (uint8_t)c;
+    node->value = (int16_t)value; node->dimension = (uint8_t)dim;
+    p->out->count++;
+    if (op == M_PERCENT) p->out->percent = 1;
+    return index;
+}
+
+static int math_sum(we_math_parser_t *p);
+
+static int math_atom(we_math_parser_t *p) {
+    int first, number = 0, sign = 1, op = M_NUMBER, result;
+    math_space(p);
+    if (p->at == p->length) return -1;
+    if (p->text[p->at] == '+' || p->text[p->at] == '-') {
+        sign = p->text[p->at++] == '-' ? -1 : 1;
+    }
+    first = p->at;
+    if (first < p->length && p->text[first] >= '0' && p->text[first] <= '9') {
+        while (p->at < p->length && p->text[p->at] >= '0' && p->text[p->at] <= '9') p->at++;
+        if (bounded_uint(p->text + first, p->at - first, WE_MATH_LITERAL_MAX, &number)) return -1;
+        if (p->at < p->length && p->text[p->at] == '%') { op = M_PERCENT; p->at++; }
+        else if (p->at + 2 <= p->length && w_ieq_n(p->text + p->at, 2, "px")) { op = M_PX; p->at += 2; }
+        return math_node(p, op, 0, 0, 0, number * sign, op != M_NUMBER);
+    }
+    if (sign < 0 || first >= p->length || p->depth >= WE_MATH_DEPTH_MAX) return -1;
+    p->depth++;
+    if (p->text[p->at] == '(') {
+        p->at++; result = math_sum(p); math_space(p);
+        if (result < 0 || p->at == p->length || p->text[p->at++] != ')') return -1;
+    } else {
+        int name = p->at, kind, args[4], count = 0;
+        while (p->at < p->length && w_low(p->text[p->at]) >= 'a' && w_low(p->text[p->at]) <= 'z') p->at++;
+        kind = value_is(p->text + name, p->at - name, "calc") ? M_ADD :
+               value_is(p->text + name, p->at - name, "min") ? M_MIN :
+               value_is(p->text + name, p->at - name, "max") ? M_MAX :
+               value_is(p->text + name, p->at - name, "clamp") ? M_CLAMP : -1;
+        if (kind < 0 || p->at == p->length || p->text[p->at++] != '(') return -1;
+        for (;;) {
+            if (count == 4) return -1;
+            args[count] = math_sum(p);
+            if (args[count] < 0) return -1;
+            if (count && p->out->node[args[count]].dimension != p->out->node[args[0]].dimension) return -1;
+            count++; math_space(p);
+            if (p->at == p->length) return -1;
+            if (p->text[p->at] != ',') break;
+            p->at++;
+        }
+        if (p->text[p->at++] != ')' || (kind == M_ADD && count != 1) || (kind == M_CLAMP && count != 3)) return -1;
+        result = args[0];
+        if (kind == M_CLAMP) result = math_node(p, kind, args[0], args[1], args[2], 0, p->out->node[args[0]].dimension);
+        else if (kind != M_ADD) {
+            int i;
+            for (i = 1; i < count; i++) {
+                result = math_node(p, kind, result, args[i], 0, 0, p->out->node[args[0]].dimension);
+                if (result < 0) return -1;
+            }
+        }
+    }
+    p->depth--;
+    return result;
+}
+
+static int math_product(we_math_parser_t *p) {
+    int left = math_atom(p);
+    if (left < 0) return -1;
+    for (;;) {
+        int op, right, ld, rd, saved = p->at;
+        math_space(p);
+        if (p->at == p->length || (p->text[p->at] != '*' && p->text[p->at] != '/')) { p->at = saved; break; }
+        op = p->text[p->at++] == '*' ? M_MUL : M_DIV;
+        right = math_atom(p);
+        if (right < 0) return -1;
+        ld = p->out->node[left].dimension; rd = p->out->node[right].dimension;
+        if ((op == M_MUL && ld && rd) || (op == M_DIV && rd)) return -1;
+        left = math_node(p, op, left, right, 0, 0, ld || rd);
+        if (left < 0) return -1;
+    }
+    return left;
+}
+
+static int math_sum(we_math_parser_t *p) {
+    int left = math_product(p);
+    if (left < 0) return -1;
+    for (;;) {
+        int op, right, saved = p->at;
+        math_space(p);
+        if (p->at == p->length || (p->text[p->at] != '+' && p->text[p->at] != '-')) { p->at = saved; break; }
+        /* Binary +/- require whitespace on each side; unary signs do not. */
+        if (p->at == saved || p->at + 1 == p->length || !w_space(p->text[p->at + 1])) return -1;
+        op = p->text[p->at++] == '+' ? M_ADD : M_SUB;
+        right = math_product(p);
+        if (right < 0 || p->out->node[left].dimension != p->out->node[right].dimension) return -1;
+        left = math_node(p, op, left, right, 0, 0, p->out->node[left].dimension);
+        if (left < 0) return -1;
+    }
+    return left;
+}
+
+static int parse_math(const char *v, int len, we_length_t *out) {
+    we_math_parser_t parser;
+    int root, result;
+    w_zero(out, sizeof(*out)); w_zero(&parser, sizeof(parser));
+    parser.text = v; parser.length = len; parser.out = out;
+    root = math_sum(&parser); math_space(&parser);
+    if (root < 0 || parser.at != len || root != out->count - 1 || !out->node[root].dimension) return -1;
+    /* A zero denominator and constant overflow are rejected before cascade. */
+    if (math_eval(out, 0, &result)) return -1;
+    return 0;
+}
+
+static int math_slot(const char *prop) {
+    static const char *const names[WE_LENGTH_PROPS] = {
+        "width", "height", "min-width", "max-width", "min-height", "max-height", "flex-basis",
+        "left", "top", "right", "bottom", "row-gap", "column-gap"
+    };
+    int i;
+    for (i = 0; i < WE_LENGTH_PROPS; i++) if (w_eq(prop, names[i])) return i;
+    return -1;
+}
+
+static int math_function(const char *v, int len) {
+    return w_ieq_n(v, len, "calc(") || w_ieq_n(v, len, "min(") || w_ieq_n(v, len, "max(") || w_ieq_n(v, len, "clamp(");
+}
+
+static void set_math(we_node_t *n, int slot, const we_length_t *expr) {
+    int fixed = 0;
+    n->length[slot] = *expr;
+    (void)math_eval(expr, 0, &fixed);
+    if (fixed < 0) fixed = 0;
+    if (fixed > WE_LAYOUT_MAX) fixed = WE_LAYOUT_MAX;
+    if (slot == WE_LEN_WIDTH) {
+        n->width_kind = 0; n->width = expr->percent ? -1 : (int16_t)fixed; n->width_pct = expr->percent ? 1 : 0;
+    } else if (slot == WE_LEN_HEIGHT) {
+        n->height = expr->percent ? -1 : (int16_t)fixed; n->height_percent = expr->percent; n->height_pct = 0;
+    } else if (slot == WE_LEN_MIN_W || slot == WE_LEN_MAX_W) {
+        if (slot == WE_LEN_MIN_W) { n->min_width = (int16_t)fixed; n->min_pct = 0; }
+        else { n->max_width = (int16_t)fixed; n->max_pct = 0; }
+    } else if (slot == WE_LEN_MIN_H || slot == WE_LEN_MAX_H) {
+        if (slot == WE_LEN_MIN_H) { n->min_height = (int16_t)fixed; n->min_height_percent = expr->percent; n->min_height_pct = 0; }
+        else { n->max_height = (int16_t)fixed; n->max_height_percent = expr->percent; n->max_height_pct = 0; }
+    } else if (slot == WE_LEN_BASIS) {
+        n->basis_content = 0; n->basis_set = 1; n->flex_basis = expr->percent ? -1 : (int16_t)fixed; n->basis_pct = expr->percent ? 1 : 0;
+    } else if (slot >= WE_LEN_LEFT && slot <= WE_LEN_BOTTOM) {
+        static const uint8_t flags[] = {WE_INSET_LEFT, WE_INSET_TOP, WE_INSET_RIGHT, WE_INSET_BOTTOM};
+        n->inset_flags |= flags[slot - WE_LEN_LEFT];
+    } else if (slot == WE_LEN_ROW_GAP) n->row_gap = (int16_t)fixed;
+    else n->col_gap = (int16_t)fixed;
+}
+
 static int parse_pack(const char *v, int len, int distribution, int stretch) {
     if (value_is(v, len, "start") || value_is(v, len, "flex-start")) return WE_PACK_START;
     if (value_is(v, len, "end") || value_is(v, len, "flex-end")) return WE_PACK_END;
@@ -985,15 +1213,159 @@ static int margin_auto_box(we_node_t *n, const char *v, int vl) {
     return 1;
 }
 
+static const char *logical_property(const char *prop) {
+    static const char *const logical[] = {
+        "inline-size", "block-size", "min-inline-size", "max-inline-size", "min-block-size", "max-block-size",
+        "margin-inline-start", "margin-inline-end", "margin-block-start", "margin-block-end",
+        "padding-inline-start", "padding-inline-end", "padding-block-start", "padding-block-end"
+    };
+    static const char *const physical[] = {
+        "width", "height", "min-width", "max-width", "min-height", "max-height",
+        "margin-left", "margin-right", "margin-top", "margin-bottom",
+        "padding-left", "padding-right", "padding-top", "padding-bottom"
+    };
+    int i;
+    for (i = 0; i < 14; i++) if (w_eq(prop, logical[i])) return physical[i];
+    return prop;
+}
+
+static int functional_tokens(const char *v, int len, int *starts, int *lengths, int cap) {
+    int at = 0, count = 0;
+    while (at < len) {
+        int depth = 0, first;
+        while (at < len && w_space(v[at])) at++;
+        if (at == len) break;
+        if (count == cap) return -1;
+        first = at;
+        while (at < len && (depth || !w_space(v[at]))) {
+            if (v[at] == '(') depth++;
+            if (v[at] == ')') depth--;
+            if (depth < 0 || depth > WE_MATH_DEPTH_MAX) return -1;
+            at++;
+        }
+        if (depth) return -1;
+        starts[count] = first; lengths[count++] = at - first;
+    }
+    return count;
+}
+
+static int gap_declaration(we_node_t *n, const char *v, int len) {
+    int starts[2], lengths[2], values[2], count = functional_tokens(v, len, starts, lengths, 2), i, percent;
+    we_length_t expr[2];
+    if (count < 1) return -1;
+    w_zero(expr, sizeof(expr));
+    for (i = 0; i < count; i++) {
+        if (math_function(v + starts[i], lengths[i])) {
+            if (parse_math(v + starts[i], lengths[i], &expr[i]) || expr[i].percent) return -1;
+            if (math_eval(&expr[i], 0, &values[i])) return -1;
+            if (values[i] < 0) values[i] = 0;
+            if (values[i] > WE_LAYOUT_MAX) values[i] = WE_LAYOUT_MAX;
+        } else if (parse_dimension(v + starts[i], lengths[i], &values[i], &percent) || percent) return -1;
+    }
+    if (count == 1) { values[1] = values[0]; expr[1] = expr[0]; }
+    n->length[WE_LEN_ROW_GAP] = expr[0]; n->length[WE_LEN_COL_GAP] = expr[1];
+    n->gap = (int16_t)values[0];
+    n->row_gap = count == 1 && !expr[0].count ? -1 : (int16_t)values[0];
+    n->col_gap = count == 1 && !expr[1].count ? -1 : (int16_t)values[1];
+    return 0;
+}
+
+static int logical_pair(we_node_t *n, const char *prop, const char *v, int len) {
+    int margin = w_eq(prop, "margin-inline") || w_eq(prop, "margin-block");
+    int block = w_eq(prop, "margin-block") || w_eq(prop, "padding-block");
+    int starts[4], lengths[4], count = tokens(v, len, starts, lengths), k, values[2], auto_bits[2] = {0, 0};
+    int sides[2] = {block ? 0 : 3, block ? 2 : 1};
+    static const uint8_t flags[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
+    if (count < 1 || count > 2) return -1;
+    for (k = 0; k < count; k++) {
+        int end = lengths[k];
+        const char *token = v + starts[k];
+        if (margin && value_is(token, end, "auto")) { values[k] = 0; auto_bits[k] = 1; }
+        else {
+            if (end >= 2 && value_is(token + end - 2, 2, "px")) end -= 2;
+            if (bounded_signed(token, end, 2000, &values[k]) || (!margin && values[k] < 0)) return -1;
+        }
+    }
+    if (count == 1) { values[1] = values[0]; auto_bits[1] = auto_bits[0]; }
+    for (k = 0; k < 2; k++) {
+        if (margin) {
+            n->margin[sides[k]] = (int16_t)values[k];
+            n->margin_auto &= (uint8_t)~flags[sides[k]];
+            if (auto_bits[k]) n->margin_auto |= flags[sides[k]];
+        } else n->padding[sides[k]] = (int16_t)values[k];
+    }
+    return 0;
+}
+
+static int parse_aspect(const char *v, int len, int16_t *numerator, int16_t *denominator) {
+    int at = 0, first, a, b = 1;
+    if (value_is(v, len, "auto")) { *numerator = 0; *denominator = 1; return 0; }
+    while (at < len && w_space(v[at])) at++;
+    first = at;
+    while (at < len && v[at] >= '0' && v[at] <= '9') at++;
+    if (bounded_uint(v + first, at - first, 2000, &a) || !a) return -1;
+    while (at < len && w_space(v[at])) at++;
+    if (at < len) {
+        if (v[at++] != '/') return -1;
+        while (at < len && w_space(v[at])) at++;
+        first = at;
+        while (at < len && v[at] >= '0' && v[at] <= '9') at++;
+        if (bounded_uint(v + first, at - first, 2000, &b) || !b) return -1;
+        while (at < len && w_space(v[at])) at++;
+    }
+    if (at != len) return -1;
+    *numerator = (int16_t)a; *denominator = (int16_t)b;
+    return 0;
+}
+
+static int legacy_length_valid(int slot, const char *v, int len) {
+    int a, b;
+    if (slot < 0) return 0;
+    if (slot == WE_LEN_WIDTH || slot == WE_LEN_MIN_W || slot == WE_LEN_MAX_W) {
+        if (value_is(v, len, "min-content") || value_is(v, len, "max-content") || value_is(v, len, "fit-content") || value_is(v, len, "none")) return 1;
+        return parse_len(v, len, &a, &b) >= 0;
+    }
+    if (slot == WE_LEN_BASIS && (value_is(v, len, "auto") || value_is(v, len, "content"))) return 1;
+    if (slot == WE_LEN_HEIGHT && value_is(v, len, "auto")) return 1;
+    if (slot >= WE_LEN_LEFT && slot <= WE_LEN_BOTTOM) return parse_len(v, len, &a, 0) == 0;
+    return parse_dimension(v, len, &a, &b) == 0 && (slot < WE_LEN_ROW_GAP || !b);
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[24];
     int px, pct, k;
     uint32_t col;
     w_cpy(prop, 24, p, pl);
     for (k = 0; prop[k]; k++) prop[k] = w_low(prop[k]);
+    { const char *mapped = logical_property(prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
     while (vl > 0 && w_space(v[vl - 1])) vl--;
     d->perf.decls_applied++;
-    if (w_eq(prop, "display")) {
+    {
+        int slot = math_slot(prop);
+        if (slot >= 0 && math_function(v, vl)) {
+            we_length_t expr;
+            if (parse_math(v, vl, &expr)) diag(d, "math length refused", -1);
+            else if (slot >= WE_LEN_ROW_GAP && expr.percent) diag(d, "math gap percent refused", -1);
+            else set_math(n, slot, &expr);
+            return;
+        }
+        if (legacy_length_valid(slot, v, vl)) n->length[slot].count = 0;
+    }
+    if (w_eq(prop, "aspect-ratio")) {
+        int16_t a, b;
+        if (parse_aspect(v, vl, &a, &b)) diag(d, "aspect ratio refused", -1);
+        else { n->aspect_num = a; n->aspect_den = b; }
+    } else if (w_eq(prop, "margin-inline") || w_eq(prop, "margin-block") || w_eq(prop, "padding-inline") || w_eq(prop, "padding-block")) {
+        if (logical_pair(n, prop, v, vl)) diag(d, "logical spacing refused", -1);
+    } else if (w_eq(prop, "writing-mode")) {
+        if (!value_is(v, vl, "horizontal-tb")) diag(d, "writing mode refused", -1);
+    } else if (w_eq(prop, "direction")) {
+        if (!value_is(v, vl, "ltr")) diag(d, "direction refused", -1);
+    } else if (w_eq(prop, "padding-top") || w_eq(prop, "padding-right") || w_eq(prop, "padding-bottom")) {
+        if (parse_len(v, vl, &px, 0) == 0 && px >= 0)
+            n->padding[w_eq(prop, "padding-top") ? 0 : w_eq(prop, "padding-right") ? 1 : 2] = (int16_t)px;
+        else diag(d, "padding refused", -1);
+    } else if (w_eq(prop, "display")) {
         if (value_is(v, vl, "none")) n->display = WE_DISP_NONE;
         else if (value_is(v, vl, "block")) n->display = WE_DISP_BLOCK;
         else if (value_is(v, vl, "inline")) n->display = WE_DISP_INLINE;
@@ -1198,15 +1570,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             else { n->max_width = (int16_t)px; n->max_pct = (int16_t)pct; }
         } else diag(d, "width constraint refused", -1);
     } else if (w_eq(prop, "gap")) {
-        int a[4], lengths[4], number[2], percent, count = tokens(v, vl, a, lengths), valid = count >= 1 && count <= 2;
-        for (k = 0; k < count && k < 2; k++)
-            if (parse_dimension(v + a[k], lengths[k], &number[k], &percent) || percent) valid = 0;
-        if (!valid) diag(d, "gap refused", -1);
-        else {
-            n->gap = (int16_t)number[0];
-            n->row_gap = count == 2 ? (int16_t)number[0] : -1;
-            n->col_gap = count == 2 ? (int16_t)number[1] : -1;
-        }
+        if (gap_declaration(n, v, vl)) diag(d, "gap refused", -1);
     } else if (w_eq(prop, "grid-template-columns") || w_eq(prop, "grid-template-rows")) {
         int16_t sizes[WE_TRACKS_MAX], floors[WE_TRACKS_MAX], caps[WE_TRACKS_MAX];
         int count = parse_track_list(v, vl, sizes, floors, caps);
@@ -1241,7 +1605,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (value_is(v, vl, "auto")) { n->margin[3] = 0; n->margin_auto |= WE_AUTO_LEFT; }
         else if (parse_len(v, vl, &px, 0) == 0) { n->margin[3] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; }
     }
-    else if (w_eq(prop, "padding-left")) { if (parse_len(v, vl, &px, 0) == 0) n->padding[3] = (int16_t)px; }
+    else if (w_eq(prop, "padding-left")) {
+        if (parse_len(v, vl, &px, 0) == 0 && px >= 0) n->padding[3] = (int16_t)px;
+        else diag(d, "padding refused", -1);
+    }
     else if (w_eq(prop, "width")) {
         if (value_is(v, vl, "min-content") || value_is(v, vl, "max-content") || value_is(v, vl, "fit-content")) {
             n->width_kind = (uint8_t)(value_is(v, vl, "min-content") ? WE_SIZE_MIN_CONTENT :
@@ -1376,6 +1743,7 @@ int we_style(we_doc_t* d) {
         n->bold = p ? p->bold : 0;
         n->align = p ? p->align : WE_ALIGN_LEFT;
         n->width = -1; n->height = -1; n->width_pct = 0;
+        w_zero(n->length, sizeof(n->length)); n->aspect_num = 0; n->aspect_den = 1;
         n->flex_grow = -1;
         n->flex_shrink = n->flex_basis = -1;
         n->basis_pct = n->basis_set = 0;
@@ -1532,13 +1900,21 @@ static int image_open(we_doc_t *d, int idx) {
 
 static int image_dimensions(we_doc_t *d, int idx, int available, int assigned_w, int assigned_h, int *w, int *h);
 
+static int modern_image(const we_node_t *n) {
+    int slot;
+    if (n->object_fit_set || n->aspect_num) return 1;
+    for (slot = WE_LEN_WIDTH; slot <= WE_LEN_MAX_H; slot++) if (n->length[slot].count) return 1;
+    return 0;
+}
+
 static int image_intrinsic_width(we_doc_t *d, int idx) {
     const we_node_t *n = &d->nodes[idx];
     if (n->width >= 0) return n->width;
-    if (!n->object_fit_set) return n->text_len * WE_CHAR_W;
+    if (!modern_image(n)) return n->text_len * WE_CHAR_W;
     if (!image_work.natural_w[idx] && image_open(d, idx)) return n->text_len * WE_CHAR_W;
-    if (n->object_fit_set && n->height >= 0)
-        return n->height * image_work.natural_w[idx] / image_work.natural_h[idx];
+    if (modern_image(n) && n->height >= 0)
+        return n->height * (n->aspect_num ? n->aspect_num : image_work.natural_w[idx]) /
+               (n->aspect_num ? n->aspect_den : image_work.natural_h[idx]);
     return image_work.natural_w[idx];
 }
 
@@ -1898,6 +2274,8 @@ static int node_border_extra(const we_node_t *n) {
 static int constrained_width(const we_node_t *n, int width, int containing) {
     int low = n->min_pct > 0 ? containing * n->min_pct / 100 : n->min_width;
     int high = n->max_pct > 0 ? containing * n->max_pct / 100 : n->max_width;
+    low = math_nonnegative(n, WE_LEN_MIN_W, containing, n->length[WE_LEN_MIN_W].count ? 0 : low);
+    high = math_nonnegative(n, WE_LEN_MAX_W, containing, n->length[WE_LEN_MAX_W].count ? -1 : high);
     if (n->border_box) {
         if (low >= 0) { low -= node_border_extra(n); if (low < 0) low = 0; }
         if (high >= 0) { high -= node_border_extra(n); if (high < 0) high = 0; }
@@ -1919,6 +2297,7 @@ static we_measure_cache_t measure_cache[WE_MAX_NODES];
 
 static int axis_gap(const we_node_t *n, int vertical) {
     int value = vertical ? n->row_gap : n->col_gap;
+    value = math_nonnegative(n, vertical ? WE_LEN_ROW_GAP : WE_LEN_COL_GAP, 0, value);
     return value >= 0 ? value : n->gap > 0 ? n->gap : 0;
 }
 
@@ -1931,9 +2310,27 @@ static int content_value(int value, int extra, int border_box) {
     return value < 0 ? 0 : value > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : value;
 }
 
+static int ratio_height(const we_node_t *n, int width) {
+    int height;
+    if (!n->aspect_num || n->aspect_den < 1) return 0;
+    if (n->border_box) width += node_border_extra(n);
+    if (width < 0) width = 0;
+    if (width > WE_LAYOUT_MAX) width = WE_LAYOUT_MAX;
+    height = width * n->aspect_den / n->aspect_num;
+    if (n->border_box) height -= vertical_extra(n);
+    return height < 0 ? 0 : height > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : height;
+}
+
+static int horizontal_auto(const we_node_t *n, int containing, int outer) {
+    int free = containing - outer - n->margin[1] - n->margin[3];
+    if (free <= 0 || !(n->margin_auto & WE_AUTO_LEFT)) return 0;
+    return n->margin_auto & WE_AUTO_RIGHT ? free / 2 : free;
+}
+
 static int specified_width(const we_node_t *n, int containing, int fallback) {
     int value;
-    if (n->width_kind == WE_SIZE_MIN_CONTENT) value = n->min_content;
+    if (n->length[WE_LEN_WIDTH].count) value = content_value(math_nonnegative(n, WE_LEN_WIDTH, containing, fallback), node_border_extra(n), n->border_box);
+    else if (n->width_kind == WE_SIZE_MIN_CONTENT) value = n->min_content;
     else if (n->width_kind == WE_SIZE_MAX_CONTENT) value = n->max_content;
     else if (n->width_kind == WE_SIZE_FIT_CONTENT) {
         value = containing - node_border_extra(n) - n->margin[1] - n->margin[3];
@@ -2084,13 +2481,19 @@ static int definite_height(const we_doc_t *d, int idx, int depth) {
     parent = containing_height[idx] >= 0 ? containing_height[idx] :
              n->height_percent || n->min_height_percent || n->max_height_percent ?
              definite_height(d, n->parent, depth + 1) : -1;
-    if (n->height_percent) {
+    if (n->length[WE_LEN_HEIGHT].count) {
+        value = math_nonnegative(n, WE_LEN_HEIGHT, parent, -1);
+        if (value < 0) return -1;
+        value = content_value(value, vertical_extra(n), n->border_box);
+    } else if (n->height_percent) {
         if (parent < 0) return -1;
         value = content_value(parent * n->height_pct / 100, vertical_extra(n), n->border_box);
     } else if (n->height >= 0) value = content_value(n->height, vertical_extra(n), n->border_box);
     else return -1;
     low = n->min_height_percent ? (parent >= 0 ? parent * n->min_height_pct / 100 : -1) : n->min_height;
     high = n->max_height_percent ? (parent >= 0 ? parent * n->max_height_pct / 100 : -1) : n->max_height;
+    low = math_nonnegative(n, WE_LEN_MIN_H, parent, n->length[WE_LEN_MIN_H].count ? 0 : low);
+    high = math_nonnegative(n, WE_LEN_MAX_H, parent, n->length[WE_LEN_MAX_H].count ? -1 : high);
     if (high >= 0 && value > content_value(high, vertical_extra(n), n->border_box))
         value = content_value(high, vertical_extra(n), n->border_box);
     if (low >= 0 && value < content_value(low, vertical_extra(n), n->border_box))
@@ -2102,6 +2505,8 @@ static int height_constraint(const we_doc_t *d, int idx, int value, int parent) 
     const we_node_t *n = &d->nodes[idx];
     int low = n->min_height_percent ? (parent >= 0 ? parent * n->min_height_pct / 100 : -1) : n->min_height;
     int high = n->max_height_percent ? (parent >= 0 ? parent * n->max_height_pct / 100 : -1) : n->max_height;
+    low = math_nonnegative(n, WE_LEN_MIN_H, parent, n->length[WE_LEN_MIN_H].count ? 0 : low);
+    high = math_nonnegative(n, WE_LEN_MAX_H, parent, n->length[WE_LEN_MAX_H].count ? -1 : high);
     if (high >= 0) {
         high = content_value(high, vertical_extra(n), n->border_box);
         if (value > high) value = high;
@@ -2122,13 +2527,14 @@ static int image_dimensions(we_doc_t *d, int idx, int available, int assigned_w,
     if (nw < 1 || nh < 1) return image_fail(d, "image dimensions invalid", idx);
     *w = n->width_pct > 0 ? available * n->width_pct / 100 : n->width >= 0 ? n->width : nw;
     *h = n->height >= 0 ? n->height : nh;
-    if (n->object_fit_set) {
+    if (modern_image(n)) {
         parent = containing_height[idx] >= 0 ? containing_height[idx] : definite_height(d, n->parent, 0);
         fixed = definite_height(d, idx, 0);
         if (assigned_w >= 0) *w = assigned_w;
-        else *w = specified_width(n, available, fixed >= 0 ? fixed * nw / nh : nw);
+        else *w = specified_width(n, available, fixed >= 0 ?
+            fixed * (n->aspect_num ? n->aspect_num : nw) / (n->aspect_num ? n->aspect_den : nh) : nw);
         if (fixed >= 0) *h = fixed;
-        else *h = *w * nh / nw;
+        else *h = n->aspect_num ? ratio_height(n, *w) : *w * nh / nw;
         if (assigned_h >= 0) *h = assigned_h;
         *h = height_constraint(d, idx, *h, parent);
     }
@@ -2146,7 +2552,7 @@ static int flow_children(we_doc_t *d, int idx, int x, int y, int width, int dept
 
 static int measure_height(we_doc_t *d, int idx, int width, int depth) {
     const we_node_t *n = &d->nodes[idx];
-    int fixed, content = 0, parent;
+    int fixed, content = 0, parent, ratio_width = 0;
     if (depth > WE_DEPTH_MAX || n->display == WE_DISP_NONE) return 0;
     {
         const we_measure_cache_t *cache = &measure_cache[idx];
@@ -2173,14 +2579,19 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
     else {
         if (forced_width[idx] >= 0) width = forced_width[idx] - node_border_extra(n) - n->margin[1] - n->margin[3];
         else width = specified_width(n, width, width - node_border_extra(n) - n->margin[1] - n->margin[3]);
+        ratio_width = width;
         if (width < WE_CHAR_W) width = WE_CHAR_W;
         if (w_eq(n->tag, "img")) {
-            content = image_measure_height(d, idx, width, n->object_fit_set && forced_width[idx] >= 0 ? width : -1);
+            content = image_measure_height(d, idx, width, modern_image(n) && forced_width[idx] >= 0 ? width : -1);
             if (content < 0) content = WE_LINE_H;
         } else if (n->display == WE_DISP_GRID) content = measure_grid(d, idx, width, depth);
         else if (n->display == WE_DISP_TABLE) content = measure_table(d, idx, width, depth);
         else if (n->display == WE_DISP_FLEX) content = measure_flex(d, idx, width, depth);
         else content = flow_children(d, idx, 0, 0, width, depth, 1);
+        if (n->aspect_num && !w_eq(n->tag, "img")) {
+            int ratio = ratio_height(n, ratio_width);
+            if (ratio > content) content = ratio;
+        }
     }
     parent = containing_height[idx] >= 0 ? containing_height[idx] : definite_height(d, n->parent, 0);
     content = height_constraint(d, idx, content, parent);
@@ -2295,10 +2706,12 @@ static void relative_shift(we_doc_t *d, int idx, int first_item, int containing_
     int low = containing_x - n->x, high = containing_x + containing_w - n->x - n->w;
     uint32_t i;
     if (!n->relative) return;
+    dx = math_value(n, WE_LEN_LEFT, containing_w, dx);
     if (high < low) dx = 0;
     else { if (dx < low) dx = low; if (dx > high) dx = high; }
     if (parent && definite_height(d, n->parent, 0) >= 0) {
         int top = parent->y + parent->border + parent->padding[0];
+        dy = math_value(n, WE_LEN_TOP, definite_height(d, n->parent, 0), dy);
         low = top - n->y;
         high = top + definite_height(d, n->parent, 0) - n->y - n->h;
         if (high < low) dy = 0;
@@ -2336,6 +2749,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         diag(d, "percent height indefinite", idx);
     if (bw < 0) bw = 0;
     if (bw > WE_LAYOUT_MAX) bw = WE_LAYOUT_MAX;
+    if (forced_width[idx] < 0) bx += horizontal_auto(n, cw, bw);
     bx = limit_coord(bx);
     by = limit_coord(by);
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw;
@@ -2347,7 +2761,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     if (content_w < WE_CHAR_W) content_w = WE_CHAR_W;
     if (w_eq(n->tag, "img")) {
         int image_h = image_paint(d, idx, content_x, by + n->border + n->padding[0], content_w,
-            n->object_fit_set && forced_width[idx] >= 0 ? content_w : -1, n->object_fit_set ? resolved_height[idx] : -1);
+            modern_image(n) && forced_width[idx] >= 0 ? content_w : -1, modern_image(n) ? resolved_height[idx] : -1);
         if (image_h >= 0) {
             content_h = image_h;
             bw = n->w + node_border_extra(n);
@@ -2364,6 +2778,10 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     else
         content_h = layout_children(d, idx, content_x, by + n->border + n->padding[0], content_w, depth);
     if (resolved_height[idx] >= 0) content_h = resolved_height[idx];
+    else if (n->aspect_num && !w_eq(n->tag, "img")) {
+        int ratio = ratio_height(n, bw - node_border_extra(n));
+        if (ratio > content_h) content_h = ratio;
+    }
     if (forced_height[idx] < 0) content_h = height_constraint(d, idx, content_h, containing_height[idx] >= 0 ? containing_height[idx] : definite_height(d, n->parent, 0));
     bh = limit_coord(content_h + n->padding[0] + n->padding[2] + 2 * n->border);
     if (bh < 0) bh = 0;
@@ -2536,10 +2954,10 @@ static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w
         if ((int)i == cb || !n->absolute || n->display == WE_DISP_NONE) continue;
         if (abs_containing(d, (int)i) != want) continue;
         flags = n->inset_flags;
-        left = (flags & WE_INSET_LEFT) ? n->offset_x : 0;
-        right = (flags & WE_INSET_RIGHT) ? n->offset_r : 0;
-        top = (flags & WE_INSET_TOP) ? n->offset_y : 0;
-        bottom = (flags & WE_INSET_BOTTOM) ? n->offset_b : 0;
+        left = (flags & WE_INSET_LEFT) ? math_value(n, WE_LEN_LEFT, pad_w, n->offset_x) : 0;
+        right = (flags & WE_INSET_RIGHT) ? math_value(n, WE_LEN_RIGHT, pad_w, n->offset_r) : 0;
+        top = (flags & WE_INSET_TOP) ? math_value(n, WE_LEN_TOP, pad_h, n->offset_y) : 0;
+        bottom = (flags & WE_INSET_BOTTOM) ? math_value(n, WE_LEN_BOTTOM, pad_h, n->offset_b) : 0;
         stretch_w = (flags & WE_INSET_LEFT) && (flags & WE_INSET_RIGHT) &&
             n->width < 0 && n->width_pct <= 0 && n->width_kind == WE_SIZE_AUTO;
         stretch_h = (flags & WE_INSET_TOP) && (flags & WE_INSET_BOTTOM) &&
@@ -2804,6 +3222,13 @@ static void fit_auto_columns(const we_node_t *n, int cols, int width, int gap,
     }
 }
 
+static int grid_item_width(const we_node_t *n, const we_node_t *child, int width) {
+    int align = child->justify_self ? child->justify_self : n->justify_items;
+    int intrinsic = align == WE_PACK_END || align == WE_PACK_CENTER || align == WE_PACK_START ||
+                    (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT));
+    return preferred_outer(child, width, intrinsic ? child->max_content : width - node_border_extra(child) - child->margin[1] - child->margin[3]);
+}
+
 static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) {
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[depth];
@@ -2848,7 +3273,7 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         if (work->row[k] < 0) continue;
         width = work->column_x[work->col[k] + child->grid_col_span - 1] +
                 work->column[work->col[k] + child->grid_col_span - 1] - work->column_x[work->col[k]];
-        height = measure_area_height(d, items->node[k], width, depth + 1);
+        height = measure_area_height(d, items->node[k], grid_item_width(n, child, width), depth + 1);
         grid_span_minimum(n, 1, work->row[k], child->grid_row_span, height, gy, fixed_height, work->height);
     }
     used_height = grid_track_sizes(n, 1, rows, fixed_height, gy, work->height);
@@ -2895,8 +3320,7 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
         if (r < 0) continue;
         width = work->column_x[c + child->grid_col_span - 1] + work->column[c + child->grid_col_span - 1] - work->column_x[c];
         height = work->row_y[r + child->grid_row_span - 1] + work->height[r + child->grid_row_span - 1] - work->row_y[r];
-        child_width = horizontal == WE_PACK_END || horizontal == WE_PACK_CENTER || horizontal == WE_PACK_START ?
-            preferred_outer(child, width, child->max_content) : preferred_outer(child, width, width - node_border_extra(child) - child->margin[1] - child->margin[3]);
+        child_width = grid_item_width(n, child, width);
         {
             int child_idx = items->node[k];
             int16_t saved = containing_height[child_idx];
@@ -2904,11 +3328,17 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
             child_height = measure_area_height(d, child_idx, child_width, depth + 1);
             containing_height[child_idx] = saved;
         }
-        if (vertical == WE_PACK_STRETCH && child->height < 0 && !child->height_percent)
+        if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) && vertical == WE_PACK_STRETCH && child->height < 0 && !child->height_percent)
             child_height = height_constraint(d, items->node[k], height - vertical_extra(child) - child->margin[0] - child->margin[2], fixed_height) + vertical_extra(child) + child->margin[0] + child->margin[2];
-        if (vertical == WE_PACK_STRETCH && child->height < 0 && !child->height_percent) assigned_h = child_height;
-        x = work->column_x[c] + pack_distance(horizontal, width - child_width, 0, 1);
-        y = work->row_y[r] + pack_distance(vertical, height - child_height, 0, 1);
+        if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) && vertical == WE_PACK_STRETCH && child->height < 0 && !child->height_percent) assigned_h = child_height;
+        x = work->column_x[c] + ((child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ?
+            horizontal_auto(child, width, child_width - child->margin[1] - child->margin[3]) :
+            pack_distance(horizontal, width - child_width, 0, 1));
+        if (child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) {
+            int free = height > child_height ? height - child_height : 0;
+            y = work->row_y[r] + ((child->margin_auto & WE_AUTO_TOP) ?
+                (child->margin_auto & WE_AUTO_BOTTOM ? free / 2 : free) : 0);
+        } else y = work->row_y[r] + pack_distance(vertical, height - child_height, 0, 1);
         {
             int child_idx = items->node[k];
             int16_t saved = containing_height[child_idx];
@@ -2936,6 +3366,10 @@ static int axis_limit(const we_node_t *n, int containing, int vertical, int high
     } else {
         int percent = high ? n->max_pct : n->min_pct;
         value = percent > 0 ? containing * percent / 100 : high ? n->max_width : n->min_width;
+    }
+    {
+        int slot = vertical ? (high ? WE_LEN_MAX_H : WE_LEN_MIN_H) : (high ? WE_LEN_MAX_W : WE_LEN_MIN_W);
+        value = math_nonnegative(n, slot, containing, n->length[slot].count ? (high ? -1 : 0) : value);
     }
     if (value >= 0) value = content_value(value, vertical ? vertical_extra(n) : node_border_extra(n), n->border_box);
     return value;
@@ -3078,7 +3512,13 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
         int basis, intrinsic = child->basis_content ||
             (child->basis_set && child->flex_basis < 0 && !child->basis_pct);
         int factor = child->flex_shrink >= 0 ? child->flex_shrink : sizing || modern ? 1 : 0;
-        if (child->basis_pct > 0 && main < 0) {
+        if (child->length[WE_LEN_BASIS].count) {
+            if (main < 0 && child->length[WE_LEN_BASIS].percent) {
+                diag(d, "column percent requires height", work->node[k]);
+                basis = child->height >= 0 ? child->height : 0;
+            } else basis = content_value(math_nonnegative(child, WE_LEN_BASIS, main, 0),
+                vertical ? vertical_extra(child) : node_border_extra(child), child->border_box);
+        } else if (child->basis_pct > 0 && main < 0) {
             diag(d, "column percent requires height", work->node[k]);
             basis = child->height >= 0 ? child->height : 0;
         } else if (child->basis_pct > 0) basis = content_value(main * child->basis_pct / 100,
@@ -3152,7 +3592,8 @@ static void flex_modes(const we_doc_t *d, int idx, const we_track_work_t *work,
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[work->node[k]];
         if (child->margin_auto) *modern = 1;
-        if (child->align_self || child->basis_content || child->border_box || child->height_percent ||
+        if (child->length[WE_LEN_WIDTH].count || child->length[WE_LEN_MIN_W].count || child->length[WE_LEN_MAX_W].count) *modern = 1;
+        if (child->align_self || child->basis_content || child->border_box || child->aspect_num || child->height_percent ||
             child->min_height_percent || child->max_height_percent || child->width_kind) *modern = 1;
         if (child->basis_set || child->flex_shrink >= 0 ||
             (n->flex_dir && (child->min_height >= 0 || child->max_height >= 0))) *sizing = 1;
@@ -3886,7 +4327,7 @@ static void resolve_grid_areas(we_doc_t *d) {
 int we_layout(we_doc_t* d, int viewport_w) {
     int h;
     if (!d || d->nnodes == 0 || viewport_w < 64) return -1;
-    d->nitems = 0;
+    d->nitems = 0; math_refused = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
@@ -3907,6 +4348,7 @@ int we_layout(we_doc_t* d, int viewport_w) {
     intrinsic_sizes(d);
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
     clip_display_list(d);
+    if (math_refused) diag(d, "math evaluation refused", -1);
     d->perf.items = d->nitems;
     d->perf.page_w = (uint32_t)viewport_w;
     d->perf.page_h = (uint32_t)h;

@@ -1,0 +1,25 @@
+<!doctype html><html><head><title>Lot 58 typed CSS sizing</title><style>
+body{margin:0}
+#math{inline-size:120px}
+#ratio{inline-size:calc(50% - 10px);aspect-ratio:2;margin-inline:auto;background:red}
+#flex{display:flex;flex-wrap:wrap;inline-size:120px;gap:calc(2px + 2px)}
+.chip{inline-size:calc(50% - 2px);block-size:10px;flex-grow:0;background:green}
+#flex>.chip:nth-child(2){background:blue}
+#limits{inline-size:120px;block-size:40px}
+#limited{inline-size:clamp(20px,75%,80px);block-size:max(10px,50%);margin-inline:auto;background:blue}
+#grid{display:grid;inline-size:120px;grid-template-columns:1fr 1fr;grid-template-rows:30px}
+#cell{inline-size:min(100%,40px);aspect-ratio:2;margin:auto;background:green}
+#cellb{inline-size:20px;block-size:10px;margin-inline:auto;background:orange}
+#host{position:relative;inline-size:120px;block-size:40px}
+#absolute{position:absolute;inline-size:calc(50% - 10px);block-size:calc(50% - 10px);left:calc(100% - 60px);top:calc(50% - 5px);background:purple}
+table{inline-size:calc(100px + 20px)}td{block-size:10px;background:green}
+#image{inline-size:calc(20px + 4px);aspect-ratio:1;object-fit:cover;background:red}
+</style></head><body>
+<div id=math><div id=ratio></div></div>
+<div id=flex><div class=chip></div><div class=chip></div><div id=wrapped class=chip></div></div>
+<div id=limits><div id=limited></div></div>
+<div id=grid><div id=cell></div><div id=cellb></div></div>
+<div id=host><div id=absolute></div></div>
+<table><tr><td colspan=2></td><td></td></tr><tr><td></td><td></td><td></td></tr></table>
+<img id=image src='/images/mire-g1.png' alt='decode_failed'>
+</body></html>

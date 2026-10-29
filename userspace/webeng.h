@@ -82,8 +82,27 @@ enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
        WE_PACK_STRETCH, WE_PACK_BETWEEN, WE_PACK_AROUND, WE_PACK_EVENLY };
 enum { WE_SIZE_AUTO, WE_SIZE_MIN_CONTENT, WE_SIZE_MAX_CONTENT, WE_SIZE_FIT_CONTENT };
 
+#define WE_MATH_NODES_MAX 24
+#define WE_MATH_DEPTH_MAX 4
+#define WE_MATH_LITERAL_MAX 2000
+#define WE_MATH_VALUE_MAX 1000000
+#define WE_DOCUMENT_MAX (1024 * 1024)
+enum { WE_LEN_WIDTH, WE_LEN_HEIGHT, WE_LEN_MIN_W, WE_LEN_MAX_W, WE_LEN_MIN_H, WE_LEN_MAX_H,
+       WE_LEN_BASIS, WE_LEN_LEFT, WE_LEN_TOP, WE_LEN_RIGHT, WE_LEN_BOTTOM, WE_LEN_ROW_GAP, WE_LEN_COL_GAP,
+       WE_LENGTH_PROPS };
+typedef struct {
+    int16_t value;
+    uint8_t op, a, b, c, dimension;
+} we_math_node_t;
+typedef struct {
+    we_math_node_t node[WE_MATH_NODES_MAX];
+    uint8_t count, percent;
+} we_length_t;
+
 typedef struct {
     uint8_t is_text, attr_flags, has_text;
+    we_length_t length[WE_LENGTH_PROPS];
+    int16_t aspect_num, aspect_den;
     uint8_t lead_space, trail_space, html_space, pending_html_space;
     char tag[12];
     char id[16];
@@ -200,6 +219,7 @@ typedef struct {
     we_perf_t perf;
     int16_t root;
 } we_doc_t;
+typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 
 /* The reader returns the whole file size, or <0. Returning cap + 1
  * reports a larger/truncated file. Only absolute local paths are passed;
