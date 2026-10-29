@@ -459,7 +459,7 @@ static void test_l56_fixed_is_refused_and_keeps_absolute(void) {
 
 static void test_l56_invalid_offset_keeps_previous(void) {
     lot52_render("<body style='margin:0'><div id=p style='position:relative;width:80px;height:20px'>"
-        "<div id=a style='position:absolute;left:12px;left:auto;width:10px;height:10px'></div></div></body>", 320);
+        "<div id=a style='position:absolute;left:12px;left:anchor(foo);width:10px;height:10px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(12, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(WE_INSET_LEFT, lot52_node("a")->inset_flags & WE_INSET_LEFT);
     TEST_ASSERT_TRUE(lot52_has_diag("position offset refused"));

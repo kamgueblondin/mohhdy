@@ -111,7 +111,7 @@ static void test_l55_text_nowrap_overrides_break_word(void) {
 }
 
 static void test_l55_text_invalid_wrap_preserves_break_word(void) {
-    lot52_render("<body style='margin:0'><div id=a style='width:24px;overflow-wrap:break-word;overflow-wrap:anywhere'>abcdefgh</div></body>", 320);
+    lot52_render("<body style='margin:0'><div id=a style='width:24px;overflow-wrap:break-word;overflow-wrap:anywhere-extra'>abcdefgh</div></body>", 320);
     TEST_ASSERT_EQUAL(30, lot52_node("a")->h);
     TEST_ASSERT_NOT_NULL(find_text("abc"));
     TEST_ASSERT_NOT_NULL(find_text("def"));

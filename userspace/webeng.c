@@ -923,12 +923,15 @@ static void set_math(we_node_t *n, int slot, const we_length_t *expr) {
     } else if (slot == WE_LEN_HEIGHT) {
         n->height = expr->percent ? -1 : (int16_t)fixed; n->height_percent = expr->percent; n->height_pct = 0;
     } else if (slot == WE_LEN_MIN_W || slot == WE_LEN_MAX_W) {
+        if (slot == WE_LEN_MIN_W) n->min_width_kind = WE_SIZE_AUTO;
+        else n->max_width_kind = WE_SIZE_AUTO;
         if (slot == WE_LEN_MIN_W) { n->min_width = (int16_t)fixed; n->min_pct = 0; }
         else { n->max_width = (int16_t)fixed; n->max_pct = 0; }
     } else if (slot == WE_LEN_MIN_H || slot == WE_LEN_MAX_H) {
         if (slot == WE_LEN_MIN_H) { n->min_height = (int16_t)fixed; n->min_height_percent = expr->percent; n->min_height_pct = 0; }
         else { n->max_height = (int16_t)fixed; n->max_height_percent = expr->percent; n->max_height_pct = 0; }
     } else if (slot == WE_LEN_BASIS) {
+        n->basis_kind = WE_SIZE_AUTO;
         n->basis_content = 0; n->basis_set = 1; n->flex_basis = expr->percent ? -1 : (int16_t)fixed; n->basis_pct = expr->percent ? 1 : 0;
     } else if (slot >= WE_LEN_LEFT && slot <= WE_LEN_BOTTOM) {
         static const uint8_t flags[] = {WE_INSET_LEFT, WE_INSET_TOP, WE_INSET_RIGHT, WE_INSET_BOTTOM};
@@ -1217,15 +1220,17 @@ static const char *logical_property(const char *prop) {
     static const char *const logical[] = {
         "inline-size", "block-size", "min-inline-size", "max-inline-size", "min-block-size", "max-block-size",
         "margin-inline-start", "margin-inline-end", "margin-block-start", "margin-block-end",
-        "padding-inline-start", "padding-inline-end", "padding-block-start", "padding-block-end"
+        "padding-inline-start", "padding-inline-end", "padding-block-start", "padding-block-end",
+        "inset-inline-start", "inset-inline-end", "inset-block-start", "inset-block-end"
     };
     static const char *const physical[] = {
         "width", "height", "min-width", "max-width", "min-height", "max-height",
         "margin-left", "margin-right", "margin-top", "margin-bottom",
-        "padding-left", "padding-right", "padding-top", "padding-bottom"
+        "padding-left", "padding-right", "padding-top", "padding-bottom",
+        "left", "right", "top", "bottom"
     };
     int i;
-    for (i = 0; i < 14; i++) if (w_eq(prop, logical[i])) return physical[i];
+    for (i = 0; i < 18; i++) if (w_eq(prop, logical[i])) return physical[i];
     return prop;
 }
 
@@ -1331,6 +1336,109 @@ static int legacy_length_valid(int slot, const char *v, int len) {
     return parse_dimension(v, len, &a, &b) == 0 && (slot < WE_LEN_ROW_GAP || !b);
 }
 
+static int intrinsic_slot(int slot) {
+    return slot == WE_LEN_WIDTH || slot == WE_LEN_MIN_W || slot == WE_LEN_MAX_W || slot == WE_LEN_BASIS;
+}
+
+static int intrinsic_kind(const we_node_t *n, int slot) {
+    return slot == WE_LEN_WIDTH ? n->width_kind : slot == WE_LEN_MIN_W ? n->min_width_kind :
+           slot == WE_LEN_MAX_W ? n->max_width_kind : n->basis_kind;
+}
+
+static void set_intrinsic_kind(we_node_t *n, int slot, int kind) {
+    if (slot == WE_LEN_WIDTH) n->width_kind = (uint8_t)kind;
+    else if (slot == WE_LEN_MIN_W) n->min_width_kind = (uint8_t)kind;
+    else if (slot == WE_LEN_MAX_W) n->max_width_kind = (uint8_t)kind;
+    else n->basis_kind = (uint8_t)kind;
+}
+
+static int intrinsic_declaration(we_node_t *n, int slot, const char *v, int len) {
+    int kind = value_is(v, len, "min-content") ? WE_SIZE_MIN_CONTENT :
+               value_is(v, len, "max-content") ? WE_SIZE_MAX_CONTENT :
+               value_is(v, len, "fit-content") ? WE_SIZE_FIT_CONTENT : WE_SIZE_AUTO;
+    we_length_t expression;
+    w_zero(&expression, sizeof(expression));
+    if (w_ieq_n(v, len, "fit-content(")) {
+        int first = 12, end = len - 1, number, percent;
+        if (end < first || v[end] != ')') return -1;
+        while (first < end && w_space(v[first])) first++;
+        while (end > first && w_space(v[end - 1])) end--;
+        if (math_function(v + first, end - first)) {
+            if (parse_math(v + first, end - first, &expression)) return -1;
+        } else {
+            if (parse_dimension(v + first, end - first, &number, &percent)) return -1;
+            expression.count = 1; expression.percent = (uint8_t)percent;
+            expression.node[0].op = percent ? M_PERCENT : M_PX;
+            expression.node[0].value = (int16_t)number;
+            expression.node[0].dimension = 1;
+        }
+        kind = WE_SIZE_FIT_LIMIT;
+    }
+    if (!kind) return 0;
+    n->length[slot] = expression;
+    set_intrinsic_kind(n, slot, kind);
+    if (slot == WE_LEN_WIDTH) { n->width = -1; n->width_pct = 0; }
+    else if (slot == WE_LEN_MIN_W) { n->min_width = -1; n->min_pct = 0; }
+    else if (slot == WE_LEN_MAX_W) { n->max_width = -1; n->max_pct = 0; }
+    else { n->basis_set = 1; n->basis_content = 0; n->flex_basis = -1; n->basis_pct = 0; }
+    return 1;
+}
+
+static int inset_declaration(we_node_t *n, const char *prop, const char *v, int len) {
+    int starts[4], lengths[4], slots[4], count, k, physical = math_slot(prop);
+    int values[4] = {0, 0, 0, 0}, automatic[4] = {0, 0, 0, 0};
+    we_length_t expression[4];
+    static const uint8_t flags[4] = {WE_INSET_LEFT, WE_INSET_TOP, WE_INSET_RIGHT, WE_INSET_BOTTOM};
+    count = functional_tokens(v, len, starts, lengths, 4);
+    if (count < 1) return -1;
+    if (physical >= WE_LEN_LEFT && physical <= WE_LEN_BOTTOM) {
+        if (count != 1) return -1;
+        slots[0] = physical;
+    } else if (w_eq(prop, "inset")) {
+        slots[0] = WE_LEN_TOP; slots[1] = WE_LEN_RIGHT;
+        slots[2] = WE_LEN_BOTTOM; slots[3] = WE_LEN_LEFT;
+    } else {
+        if (count > 2) return -1;
+        slots[0] = w_eq(prop, "inset-inline") ? WE_LEN_LEFT : WE_LEN_TOP;
+        slots[1] = w_eq(prop, "inset-inline") ? WE_LEN_RIGHT : WE_LEN_BOTTOM;
+    }
+    w_zero(expression, sizeof(expression));
+    for (k = 0; k < count; k++) {
+        const char *token = v + starts[k];
+        int size = lengths[k], end = size, percent;
+        if (value_is(token, size, "auto")) automatic[k] = 1;
+        else if (math_function(token, size)) {
+            if (parse_math(token, size, &expression[k])) return -1;
+        } else {
+            percent = size && token[size - 1] == '%';
+            if (percent) end--;
+            else if (size >= 2 && value_is(token + size - 2, 2, "px")) end -= 2;
+            if (bounded_signed(token, end, 2000, &values[k])) return -1;
+            if (percent) {
+                expression[k].count = expression[k].percent = 1;
+                expression[k].node[0].op = M_PERCENT;
+                expression[k].node[0].value = (int16_t)values[k];
+                expression[k].node[0].dimension = 1;
+            }
+        }
+    }
+    {
+        int total = physical >= WE_LEN_LEFT && physical <= WE_LEN_BOTTOM ? 1 : w_eq(prop, "inset") ? 4 : 2;
+        for (k = 0; k < total; k++) {
+            int from = k < count ? k : k == 2 ? 0 : count > 1 ? 1 : 0;
+            int slot = slots[k], axis = slot - WE_LEN_LEFT;
+            n->length[slot] = expression[from];
+            if (automatic[from]) n->inset_flags &= (uint8_t)~flags[axis];
+            else n->inset_flags |= flags[axis];
+            if (slot == WE_LEN_LEFT) n->offset_x = (int16_t)values[from];
+            else if (slot == WE_LEN_TOP) n->offset_y = (int16_t)values[from];
+            else if (slot == WE_LEN_RIGHT) n->offset_r = (int16_t)values[from];
+            else n->offset_b = (int16_t)values[from];
+        }
+    }
+    return 0;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[24];
     int px, pct, k;
@@ -1340,8 +1448,18 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     { const char *mapped = logical_property(prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
     while (vl > 0 && w_space(v[vl - 1])) vl--;
     d->perf.decls_applied++;
+    if (w_eq(prop, "inset") || w_eq(prop, "inset-inline") || w_eq(prop, "inset-block") ||
+        (math_slot(prop) >= WE_LEN_LEFT && math_slot(prop) <= WE_LEN_BOTTOM)) {
+        if (inset_declaration(n, prop, v, vl))
+            diag(d, math_function(v, vl) && math_slot(prop) >= WE_LEN_LEFT ? "math length refused" : "position offset refused", -1);
+        return;
+    }
     {
         int slot = math_slot(prop);
+        if (intrinsic_slot(slot)) {
+            int result = intrinsic_declaration(n, slot, v, vl);
+            if (result) { if (result < 0) diag(d, "intrinsic size refused", -1); return; }
+        }
         if (slot >= 0 && math_function(v, vl)) {
             we_length_t expr;
             if (parse_math(v, vl, &expr)) diag(d, "math length refused", -1);
@@ -1349,7 +1467,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             else set_math(n, slot, &expr);
             return;
         }
-        if (legacy_length_valid(slot, v, vl)) n->length[slot].count = 0;
+        if (legacy_length_valid(slot, v, vl)) {
+            n->length[slot].count = 0;
+            if (intrinsic_slot(slot)) set_intrinsic_kind(n, slot, WE_SIZE_AUTO);
+        }
     }
     if (w_eq(prop, "aspect-ratio")) {
         int16_t a, b;
@@ -1480,8 +1601,13 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "pre-line")) { n->nowrap = 0; n->ws_mode = WE_WS_PRE_LINE; }
         else diag(d, "white space refused", -1);
     } else if (w_eq(prop, "overflow-wrap")) {
-        if (value_is(v, vl, "normal") || value_is(v, vl, "break-word")) n->break_word = (uint8_t)value_is(v, vl, "break-word");
+        if (value_is(v, vl, "normal")) n->break_word = WE_WRAP_NORMAL;
+        else if (value_is(v, vl, "break-word")) n->break_word = WE_WRAP_BREAK_WORD;
+        else if (value_is(v, vl, "anywhere")) n->break_word = WE_WRAP_ANYWHERE;
         else diag(d, "word wrapping refused", -1);
+    } else if (w_eq(prop, "word-break")) {
+        if (value_is(v, vl, "normal") || value_is(v, vl, "break-all")) n->break_all = (uint8_t)value_is(v, vl, "break-all");
+        else diag(d, "word break refused", -1);
     } else if (w_eq(prop, "overflow")) {
         if (value_is(v, vl, "visible") || value_is(v, vl, "hidden")) n->overflow_hidden = (uint8_t)value_is(v, vl, "hidden");
         else diag(d, "overflow refused", -1);
@@ -1529,13 +1655,6 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "absolute")) { n->absolute = 1; n->relative = 0; }
         else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = 0; }
         else diag(d, "position refused", -1);
-    } else if (w_eq(prop, "left") || w_eq(prop, "top") || w_eq(prop, "right") || w_eq(prop, "bottom")) {
-        if (parse_len(v, vl, &px, 0) == 0) {
-            if (w_eq(prop, "left")) { n->offset_x = (int16_t)px; n->inset_flags |= WE_INSET_LEFT; }
-            else if (w_eq(prop, "top")) { n->offset_y = (int16_t)px; n->inset_flags |= WE_INSET_TOP; }
-            else if (w_eq(prop, "right")) { n->offset_r = (int16_t)px; n->inset_flags |= WE_INSET_RIGHT; }
-            else { n->offset_b = (int16_t)px; n->inset_flags |= WE_INSET_BOTTOM; }
-        } else diag(d, "position offset refused", -1);
     } else if (w_eq(prop, "border-collapse")) {
         if (value_is(v, vl, "collapse")) n->border_collapse = 1;
         else if (value_is(v, vl, "separate")) n->border_collapse = 0;
@@ -1610,12 +1729,6 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else diag(d, "padding refused", -1);
     }
     else if (w_eq(prop, "width")) {
-        if (value_is(v, vl, "min-content") || value_is(v, vl, "max-content") || value_is(v, vl, "fit-content")) {
-            n->width_kind = (uint8_t)(value_is(v, vl, "min-content") ? WE_SIZE_MIN_CONTENT :
-                value_is(v, vl, "max-content") ? WE_SIZE_MAX_CONTENT : WE_SIZE_FIT_CONTENT);
-            n->width = -1; n->width_pct = 0;
-            return;
-        }
         int r = parse_len(v, vl, &px, &pct);
         if (r >= 0) n->width_kind = WE_SIZE_AUTO;
         if (r == 1) { n->width = -1; n->width_pct = 0; }
@@ -1753,6 +1866,7 @@ int we_style(we_doc_t* d) {
         n->height_percent = n->min_height_percent = n->max_height_percent = 0;
         n->height_pct = n->min_height_pct = n->max_height_pct = 0;
         n->width_kind = n->basis_content = n->border_box = n->overflow_hidden = 0;
+        n->min_width_kind = n->max_width_kind = n->basis_kind = 0;
         n->justify_content = n->align_items = n->align_self = n->align_content = 0;
         n->justify_items = n->justify_self = 0;
         n->grid_col_start = n->grid_row_start = 0;
@@ -1773,6 +1887,7 @@ int we_style(we_doc_t* d) {
         n->ws_mode = p ? p->ws_mode : 0;
         n->nowrap = p ? p->nowrap : 0;
         n->break_word = p ? p->break_word : 0;
+        n->break_all = p ? p->break_all : 0;
         n->visibility = p ? p->visibility : 0;
         n->grid_col_span = n->grid_row_span = 1;
         { int track; for (track = 0; track < WE_TRACKS_MAX; track++) {
@@ -1902,7 +2017,7 @@ static int image_dimensions(we_doc_t *d, int idx, int available, int assigned_w,
 
 static int modern_image(const we_node_t *n) {
     int slot;
-    if (n->object_fit_set || n->aspect_num) return 1;
+    if (n->object_fit_set || n->aspect_num || n->width_kind || n->min_width_kind || n->max_width_kind) return 1;
     for (slot = WE_LEN_WIDTH; slot <= WE_LEN_MAX_H; slot++) if (n->length[slot].count) return 1;
     return 0;
 }
@@ -2159,7 +2274,7 @@ static void add_word_piece(we_inline_t* f, const char* s, int len, int node, int
     int ww;
     flow_region(f, len * WE_CHAR_W);
     ww = len * WE_CHAR_W + ((f->nwords && space) ? WE_CHAR_W : 0);
-    if (!f->d->nodes[node].nowrap && f->nwords && f->cur_w + ww > f->width) { flush_line(f, 0); flow_region(f, len * WE_CHAR_W); ww = len * WE_CHAR_W; }
+    if (!f->d->nodes[node].nowrap && (f->nwords || f->pending_x) && f->cur_w + ww > f->width) { flush_line(f, 0); flow_region(f, len * WE_CHAR_W); ww = len * WE_CHAR_W; }
     if (f->nwords >= WE_LINE_WORDS) {
         if (f->d->nodes[node].nowrap) diag(f->d, "inline word capacity", node);
         flush_line(f, 0);
@@ -2173,7 +2288,26 @@ static void add_word_piece(we_inline_t* f, const char* s, int len, int node, int
 
 static void add_word(we_inline_t *f, const char *s, int len, int node, int space) {
     const we_node_t *n = &f->d->nodes[node];
-    if (!n->break_word || n->nowrap || len * WE_CHAR_W <= f->base_width) {
+    if (n->break_all && !n->nowrap) {
+        while (len > 0) {
+            int room, take;
+            flow_region(f, WE_CHAR_W);
+            room = f->width - f->cur_w - (f->nwords && space ? WE_CHAR_W : 0);
+            if (room < WE_CHAR_W && (f->nwords || f->pending_x)) {
+                flush_line(f, 0); space = 0;
+                continue;
+            }
+            take = room / WE_CHAR_W;
+            if (take < 1) take = 1;
+            if (take > len) take = len;
+            add_word_piece(f, s, take, node, space);
+            s += take; len -= take; space = 0;
+            if (len) flush_line(f, 0);
+        }
+        return;
+    }
+    flow_region(f, WE_CHAR_W);
+    if (!n->break_word || n->nowrap || len * WE_CHAR_W <= f->width) {
         add_word_piece(f, s, len, node, space);
         return;
     }
@@ -2271,15 +2405,33 @@ static int node_border_extra(const we_node_t *n) {
     return 2 * n->border + n->padding[1] + n->padding[3];
 }
 
-static int constrained_width(const we_node_t *n, int width, int containing) {
-    int low = n->min_pct > 0 ? containing * n->min_pct / 100 : n->min_width;
-    int high = n->max_pct > 0 ? containing * n->max_pct / 100 : n->max_width;
-    low = math_nonnegative(n, WE_LEN_MIN_W, containing, n->length[WE_LEN_MIN_W].count ? 0 : low);
-    high = math_nonnegative(n, WE_LEN_MAX_W, containing, n->length[WE_LEN_MAX_W].count ? -1 : high);
-    if (n->border_box) {
-        if (low >= 0) { low -= node_border_extra(n); if (low < 0) low = 0; }
-        if (high >= 0) { high -= node_border_extra(n); if (high < 0) high = 0; }
+static int intrinsic_value(const we_node_t *n, int slot, int containing) {
+    int kind = intrinsic_kind(n, slot), value;
+    if (kind == WE_SIZE_MIN_CONTENT) return n->min_content;
+    if (kind == WE_SIZE_MAX_CONTENT) return n->max_content;
+    value = containing - node_border_extra(n) - n->margin[1] - n->margin[3];
+    if (kind == WE_SIZE_FIT_LIMIT) {
+        value = math_nonnegative(n, slot, containing, n->max_content);
+        if (n->border_box) { value -= node_border_extra(n); if (value < 0) value = 0; }
     }
+    if (value > n->max_content) value = n->max_content;
+    if (value < n->min_content) value = n->min_content;
+    return value;
+}
+
+static int width_limit(const we_node_t *n, int containing, int high) {
+    int slot = high ? WE_LEN_MAX_W : WE_LEN_MIN_W;
+    int kind = intrinsic_kind(n, slot);
+    int pct = high ? n->max_pct : n->min_pct;
+    int value = pct > 0 ? containing * pct / 100 : high ? n->max_width : n->min_width;
+    if (kind) return intrinsic_value(n, slot, containing);
+    value = math_nonnegative(n, slot, containing, n->length[slot].count ? (high ? -1 : 0) : value);
+    if (value >= 0 && n->border_box) { value -= node_border_extra(n); if (value < 0) value = 0; }
+    return value;
+}
+
+static int constrained_width(const we_node_t *n, int width, int containing) {
+    int low = width_limit(n, containing, 0), high = width_limit(n, containing, 1);
     if (high >= 0 && width > high) width = high;
     if (low >= 0 && width < low) width = low;
     return width < 0 ? 0 : width > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : width;
@@ -2329,19 +2481,25 @@ static int horizontal_auto(const we_node_t *n, int containing, int outer) {
 
 static int specified_width(const we_node_t *n, int containing, int fallback) {
     int value;
-    if (n->length[WE_LEN_WIDTH].count) value = content_value(math_nonnegative(n, WE_LEN_WIDTH, containing, fallback), node_border_extra(n), n->border_box);
-    else if (n->width_kind == WE_SIZE_MIN_CONTENT) value = n->min_content;
-    else if (n->width_kind == WE_SIZE_MAX_CONTENT) value = n->max_content;
-    else if (n->width_kind == WE_SIZE_FIT_CONTENT) {
-        value = containing - node_border_extra(n) - n->margin[1] - n->margin[3];
-        if (value > n->max_content) value = n->max_content;
-        if (value < n->min_content) value = n->min_content;
-    } else {
+    if (n->width_kind) value = intrinsic_value(n, WE_LEN_WIDTH, containing);
+    else if (n->length[WE_LEN_WIDTH].count) value = content_value(math_nonnegative(n, WE_LEN_WIDTH, containing, fallback), node_border_extra(n), n->border_box);
+    else {
         value = n->width_pct > 0 ? containing * n->width_pct / 100 :
                 n->width >= 0 ? n->width : fallback;
         if (n->width >= 0 || n->width_pct > 0) value = content_value(value, node_border_extra(n), n->border_box);
     }
     return constrained_width(n, value, containing);
+}
+
+static void intrinsic_contribution(const we_node_t *n, int *low, int *high) {
+    *low = n->min_content; *high = n->max_content;
+    if ((n->width_kind == WE_SIZE_MIN_CONTENT || n->width_kind == WE_SIZE_MAX_CONTENT) ||
+        (n->width_kind == WE_SIZE_FIT_LIMIT && !n->length[WE_LEN_WIDTH].percent) ||
+        (!n->width_kind && (n->width >= 0 ||
+         (n->length[WE_LEN_WIDTH].count && !n->length[WE_LEN_WIDTH].percent))))
+        *low = *high = specified_width(n, 0, *high);
+    *low = constrained_width(n, *low, 0);
+    *high = constrained_width(n, *high, 0);
 }
 
 typedef struct {
@@ -2381,6 +2539,7 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
             } else if (ch == ' ' && keep_sp) {
                 flow->line = limit_coord(flow->line + WE_CHAR_W);
                 flow->word = limit_coord(flow->word + WE_CHAR_W);
+                if (!n->nowrap && (n->break_all || n->break_word == WE_WRAP_ANYWHERE)) intrinsic_word(flow);
             } else if (ch == ' ') {
                 intrinsic_word(flow);
                 flow->pending = 1;
@@ -2389,6 +2548,7 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
                 flow->pending = 0;
                 flow->line = limit_coord(flow->line + WE_CHAR_W);
                 flow->word = limit_coord(flow->word + WE_CHAR_W);
+                if (!n->nowrap && (n->break_all || n->break_word == WE_WRAP_ANYWHERE)) intrinsic_word(flow);
             }
         }
         if (n->trail_space) { intrinsic_word(flow); flow->pending = 1; }
@@ -2402,10 +2562,9 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
         if (width > flow->minimum) flow->minimum = width;
     } else if (n->display == WE_DISP_INLINE_BLOCK) {
         int extra = node_border_extra(n) + n->margin[1] + n->margin[3];
-        int low = n->min_content, high = n->max_content;
-        if (n->width >= 0) low = high = content_value(n->width, node_border_extra(n), n->border_box);
-        low = constrained_width(n, low, 0) + extra;
-        high = constrained_width(n, high, 0) + extra;
+        int low, high;
+        intrinsic_contribution(n, &low, &high);
+        low += extra; high += extra;
         intrinsic_word(flow);
         if (flow->pending && flow->line) flow->line += WE_CHAR_W;
         flow->pending = 0;
@@ -2413,11 +2572,10 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
         if (low > flow->minimum) flow->minimum = low;
     } else if (is_box(n->display)) {
         int extra = node_border_extra(n) + n->margin[1] + n->margin[3];
-        int low = n->min_content, high = n->max_content;
+        int low, high;
         intrinsic_line(flow);
-        if (n->width >= 0) low = high = content_value(n->width, node_border_extra(n), n->border_box);
-        low = constrained_width(n, low, 0) + extra;
-        high = constrained_width(n, high, 0) + extra;
+        intrinsic_contribution(n, &low, &high);
+        low += extra; high += extra;
         if (low > flow->minimum) flow->minimum = low;
         if (high > flow->maximum) flow->maximum = high;
     } else {
@@ -2446,10 +2604,8 @@ static void intrinsic_sizes(we_doc_t *d) {
                 int extra, a, b;
                 if (child->display == WE_DISP_NONE || child->is_text || child->absolute) continue;
                 extra = node_border_extra(child) + child->margin[1] + child->margin[3];
-                a = child->width >= 0 ? content_value(child->width, node_border_extra(child), child->border_box) : child->min_content;
-                b = child->width >= 0 ? a : child->max_content;
-                a = constrained_width(child, a, 0) + extra;
-                b = constrained_width(child, b, 0) + extra;
+                intrinsic_contribution(child, &a, &b);
+                a += extra; b += extra;
                 if (n->flex_wrap) { if (a > low) low = a; }
                 else low = limit_coord(low + a + (count ? gap : 0));
                 high = limit_coord(high + b + (count ? gap : 0));
@@ -2706,12 +2862,14 @@ static void relative_shift(we_doc_t *d, int idx, int first_item, int containing_
     int low = containing_x - n->x, high = containing_x + containing_w - n->x - n->w;
     uint32_t i;
     if (!n->relative) return;
-    dx = math_value(n, WE_LEN_LEFT, containing_w, dx);
+    dx = n->inset_flags & WE_INSET_LEFT ? math_value(n, WE_LEN_LEFT, containing_w, dx) :
+         n->inset_flags & WE_INSET_RIGHT ? -math_value(n, WE_LEN_RIGHT, containing_w, n->offset_r) : 0;
     if (high < low) dx = 0;
     else { if (dx < low) dx = low; if (dx > high) dx = high; }
     if (parent && definite_height(d, n->parent, 0) >= 0) {
         int top = parent->y + parent->border + parent->padding[0];
-        dy = math_value(n, WE_LEN_TOP, definite_height(d, n->parent, 0), dy);
+        dy = n->inset_flags & WE_INSET_TOP ? math_value(n, WE_LEN_TOP, definite_height(d, n->parent, 0), dy) :
+             n->inset_flags & WE_INSET_BOTTOM ? -math_value(n, WE_LEN_BOTTOM, definite_height(d, n->parent, 0), n->offset_b) : 0;
         low = top - n->y;
         high = top + definite_height(d, n->parent, 0) - n->y - n->h;
         if (high < low) dy = 0;
@@ -3359,13 +3517,11 @@ static int flex_extra(const we_node_t *n, int vertical) {
 
 static int axis_limit(const we_node_t *n, int containing, int vertical, int high) {
     int value;
+    if (!vertical) return width_limit(n, containing, high);
     if (vertical) {
         int percent = high ? n->max_height_percent : n->min_height_percent;
         value = high ? n->max_height : n->min_height;
         if (percent) value = containing >= 0 ? containing * (high ? n->max_height_pct : n->min_height_pct) / 100 : -1;
-    } else {
-        int percent = high ? n->max_pct : n->min_pct;
-        value = percent > 0 ? containing * percent / 100 : high ? n->max_width : n->min_width;
     }
     {
         int slot = vertical ? (high ? WE_LEN_MAX_H : WE_LEN_MIN_H) : (high ? WE_LEN_MAX_W : WE_LEN_MIN_W);
@@ -3512,7 +3668,12 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
         int basis, intrinsic = child->basis_content ||
             (child->basis_set && child->flex_basis < 0 && !child->basis_pct);
         int factor = child->flex_shrink >= 0 ? child->flex_shrink : sizing || modern ? 1 : 0;
-        if (child->length[WE_LEN_BASIS].count) {
+        if (child->basis_kind && !vertical) basis = intrinsic_value(child, WE_LEN_BASIS, cw);
+        else if (child->basis_kind && vertical) {
+            measure_content[work->node[k]] = 1;
+            basis = measure_area_height(d, work->node[k], cw, depth + 1) - flex_extra(child, 1);
+            measure_content[work->node[k]] = 0;
+        } else if (child->length[WE_LEN_BASIS].count) {
             if (main < 0 && child->length[WE_LEN_BASIS].percent) {
                 diag(d, "column percent requires height", work->node[k]);
                 basis = child->height >= 0 ? child->height : 0;
@@ -3592,7 +3753,8 @@ static void flex_modes(const we_doc_t *d, int idx, const we_track_work_t *work,
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[work->node[k]];
         if (child->margin_auto) *modern = 1;
-        if (child->length[WE_LEN_WIDTH].count || child->length[WE_LEN_MIN_W].count || child->length[WE_LEN_MAX_W].count) *modern = 1;
+        if (child->length[WE_LEN_WIDTH].count || child->length[WE_LEN_MIN_W].count || child->length[WE_LEN_MAX_W].count ||
+            child->min_width_kind || child->max_width_kind || child->basis_kind) *modern = 1;
         if (child->align_self || child->basis_content || child->border_box || child->aspect_num || child->height_percent ||
             child->min_height_percent || child->max_height_percent || child->width_kind) *modern = 1;
         if (child->basis_set || child->flex_shrink >= 0 ||
@@ -3967,8 +4129,8 @@ static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maxim
                 if (child->display != WE_DISP_NONE && !child->absolute && (grid || child->display == WE_DISP_CELL)) {
                     if ((span == 1) == (pass == 0) && start >= 0 && start + span <= cols) {
                         int extra = node_border_extra(child) + child->margin[1] + child->margin[3];
-                        int low = child->width >= 0 ? content_value(child->width, node_border_extra(child), child->border_box) : child->min_content;
-                        int high = child->width >= 0 ? low : child->max_content;
+                        int low, high;
+                        intrinsic_contribution(child, &low, &high);
                         if (grid) {
                             grid_span_minimum(n, 0, start, span, constrained_width(child, low, 0) + extra, gap, -1, work->column);
                             grid_span_minimum(n, 0, start, span, constrained_width(child, high, 0) + extra, gap, -1, work->column_x);

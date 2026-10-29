@@ -442,9 +442,6 @@ jobs:
       - name: QEMU UX5 GUI parity panels (network, storage, services, logs, ledger, prod, security, search, devtools, notes, /cmd)
         run: make qemu-gui-parity
 
-      - name: QEMU bounded guest web layout (Lot 52)
-        run: make qemu-web-layout
-
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -453,6 +450,42 @@ jobs:
           if-no-files-found: ignore
           path: |
             test_logs/
+
+  web-layout:
+    name: QEMU guest web layout (US-031 partial)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: Verify embedded HTML initrd invalidation
+        run: make check-initrd-web-stamp
+
+      - name: QEMU bounded guest web layout (all accumulated pages)
+        run: make qemu-web-layout
+
+      - name: Upload web layout logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-layout-logs
+          if-no-files-found: ignore
+          path: test_logs/
 
   gui-panels:
     name: QEMU desktop panels, every entry (Lot 46)
