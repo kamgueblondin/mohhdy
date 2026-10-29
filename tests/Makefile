@@ -378,7 +378,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ps2_decode: $(UNIT_DIR)/userspace/test_p
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/ps2_decode.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webeng: $(UNIT_DIR)/userspace/test_webeng.c $(UNIT_DIR)/userspace/webeng_lot52.inc $(UNIT_DIR)/userspace/webeng_lot53.inc $(UNIT_DIR)/userspace/webeng_lot54.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot55_*.inc) $(UNIT_DIR)/userspace/webeng_lot56.inc $(UNIT_DIR)/userspace/webeng_lot56b.inc ../userspace/webeng.c ../userspace/webeng.h ../userspace/imgdec.c ../userspace/imgdec.h ../userspace/imgdec_jpeg.inc ../include/os_syscalls.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webeng: $(UNIT_DIR)/userspace/test_webeng.c $(UNIT_DIR)/userspace/webeng_lot52.inc $(UNIT_DIR)/userspace/webeng_lot53.inc $(UNIT_DIR)/userspace/webeng_lot54.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot55_*.inc) $(UNIT_DIR)/userspace/webeng_lot56.inc $(UNIT_DIR)/userspace/webeng_lot56b.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot57_*.inc) ../userspace/webeng.c ../userspace/webeng.h ../userspace/imgdec.c ../userspace/imgdec.h ../userspace/imgdec_jpeg.inc ../include/os_syscalls.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"

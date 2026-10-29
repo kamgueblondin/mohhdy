@@ -1,0 +1,30 @@
+<!doctype html><html><head><title>Lot 57 grid images cascade</title><style>
+body{margin:0}
+#wrap{display:flex;flex-wrap:wrap;width:120px;height:24px;gap:4px}
+.chip{width:56px;height:10px;flex-grow:0;background:red}
+#tracks{display:grid;width:120px;grid-template-columns:minmax(80px,1fr) 1fr}
+#tracks>div{height:10px;background:blue}
+#tracks>div:first-child{background:red}
+#dense{display:grid;width:120px;grid-template-columns:repeat(3,1fr);grid-auto-flow:dense}
+#dense>div{height:10px;background:green}
+.wide{grid-column:span 2}
+#dense>div:nth-child(2){background:navy}
+#dense>div:last-child{background:yellow}
+#areas{display:grid;width:120px;grid-template-columns:40px 80px;grid-template-rows:10px 20px;grid-template-areas:"head head" "body side"}
+#areas>.region{background:orange;height:10px}
+#areas>.region:nth-child(2){grid-area:body;height:20px;background:red}
+#areas>.region:last-child{grid-area:side;height:20px;background:blue!important}
+table{width:120px}td{height:10px;background:green}
+#cross{display:flex;width:120px;height:30px;align-items:stretch}
+#cross>div{width:20px;height:10px;background:blue}
+img{width:24px;height:24px;background:red}
+</style></head><body>
+<div id=wrap><div class=chip></div><div class=chip></div><div id=wrapped class=chip></div></div>
+<div id=tracks><div id=floor></div><div></div></div>
+<div id=dense><div class=wide></div><div class=wide></div><div id=hole></div></div>
+<div id=areas><div class=region style='grid-area:head'></div><div class=region></div><div id=side class=region style='background:yellow'></div></div>
+<table><tr><td id=span colspan=2></td><td></td></tr><tr><td></td><td></td><td></td></tr></table>
+<div id=cross><div id=auto style='margin-top:auto'></div><div style='margin-bottom:auto'></div></div>
+<img id=contain src='/images/mire-g1.png' alt='contain_failed' style='object-fit:contain'>
+<img id=cover src='/images/mire-g1.png' alt='cover_failed' style='object-fit:cover'>
+</body></html>

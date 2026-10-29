@@ -1,3 +1,4 @@
+# Lot 57: grid, image boxes and CSS cascade; US-031 partial; all statuses unchanged.
 # Lot 55: large guest layout increment; US-031 partial; all roadmap statuses unchanged.
 # Lot 54: column flex sizing; US-031 partial, all roadmap statuses unchanged.
 # Lot 53: row flex sizing only; US-031 partial, all phase 6-9 statuses unchanged.

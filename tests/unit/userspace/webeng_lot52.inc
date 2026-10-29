@@ -1051,7 +1051,7 @@ static void test_l52_grid_rejects_fraction_weight_other_than_one(void) {
 
 static void test_l52_grid_rejects_fixed_column_syntax(void) {
     const char *html =
-        "<body style='margin:0'><div id=g style='display:grid;grid-template-columns:minmax(20px,1fr) 1fr'>"
+        "<body style='margin:0'><div id=g style='display:grid;grid-template-columns:minmax(auto,1fr) 1fr'>"
         "<div id=a style='height:10px'></div><div id=b style='height:10px'></div></div></body>";
     lot52_render(html, 120);
     TEST_ASSERT_EQUAL(0, lot52_node("g")->grid_cols);
