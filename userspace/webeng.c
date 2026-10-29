@@ -3850,14 +3850,14 @@ static int baseline_of(we_doc_t *d, int idx, int outer, int depth) {
     uint8_t saved_content = measure_content[idx];
     if (depth > WE_DEPTH_MAX || n->overflow_hidden || w_eq(n->tag, "img") ||
         n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID || n->display == WE_DISP_TABLE)
-        return height > n->margin[2] ? height - n->margin[2] : 0;
+        return limit_coord(height - n->margin[2]);
     baseline_probe = 1; measure_content[idx] = 1;
     (void)measure_area_height(d, idx, outer, depth);
     measure_content[idx] = saved_content; baseline_probe = saved_probe;
     value = flow_baseline[idx];
     if (value >= 0) value += n->margin[0] + n->border + n->padding[0];
     else value = height - n->margin[2];
-    return value < 0 ? 0 : value > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : value;
+    return limit_coord(value);
 }
 
 static void prepare_flex(we_doc_t *d, int idx, int cw,

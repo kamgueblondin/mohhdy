@@ -238,3 +238,31 @@ static void test_l60_composition_image_exports_decoded_bottom_baseline(void) {
     TEST_ASSERT_EQUAL(1, painted);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
+
+static void test_l60_composition_flex_negative_margin_keeps_signed_baseline(void) {
+    lot52_render("<body style='margin:0'><div id=p style='display:flex;width:120px;align-items:baseline'>"
+        "<div id=a style='width:40px;height:30px;margin-top:-20px'>A</div>"
+        "<div id=b style='width:40px'>B</div></div><div id=c style='height:5px'></div></body>", 320);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
+    TEST_ASSERT_EQUAL(0, lot52_node("b")->y);
+    TEST_ASSERT_EQUAL(1, find_text("A")->y);
+    TEST_ASSERT_EQUAL(1, find_text("B")->y);
+    TEST_ASSERT_EQUAL(30, lot52_node("a")->h);
+    TEST_ASSERT_EQUAL(30, lot52_node("p")->h);
+    TEST_ASSERT_EQUAL(30, lot52_node("c")->y);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l60_composition_grid_negative_margin_keeps_signed_baseline(void) {
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:120px;grid-template-columns:60px 60px;align-items:baseline'>"
+        "<div id=a style='width:40px;height:30px;margin-top:-20px'>A</div>"
+        "<div id=b style='width:40px'>B</div></div><div id=c style='height:5px'></div></body>", 320);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
+    TEST_ASSERT_EQUAL(0, lot52_node("b")->y);
+    TEST_ASSERT_EQUAL(1, find_text("A")->y);
+    TEST_ASSERT_EQUAL(1, find_text("B")->y);
+    TEST_ASSERT_EQUAL(30, lot52_node("a")->h);
+    TEST_ASSERT_EQUAL(30, lot52_node("p")->h);
+    TEST_ASSERT_EQUAL(30, lot52_node("c")->y);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}

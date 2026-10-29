@@ -74,7 +74,7 @@ Actual i386 document size and results are recorded below after measurement.
 
 ## Tests and acceptance
 
-242 new cases in the existing test_webeng binary: every bounded named
+244 new cases in the existing test_webeng binary: every bounded named
 start/end pair on both axes, negative indices over 2..8 explicit tracks,
 span/auto derivation, aliases, atomic refusals, first-line ascent/descent
 geometry, nested content, auto-margin precedence, wrap/reverse, caller
@@ -101,18 +101,18 @@ Measured results and line accounting follow actual execution.
 Actual make test-all:
 
 ```text
-Total Tests: 2756
-Passed: 2756
+Total Tests: 2758
+Passed: 2758
 Failed: 0
 Skipped: 0
-Execution Time: 159s
+Execution Time: 156s
 ```
 
-1615/1615 engine cases also pass with native ASan/UBSan. Eleven private
+1617/1617 engine cases also pass with native ASan/UBSan. Twelve private
 mutation builds each exit 1 on the matching new geometry assertion:
 name resolution, negative indices, spans, aliases, request application,
 baseline parsing, flex/grid offsets, ascent/descent height, nested export
-and first-line capture. Existing assertions and invalid fixtures unchanged.
+first-line capture and signed negative-margin baselines. Existing assertions and invalid fixtures unchanged.
 
 The actual i386 document is 657856 bytes (node 3712, expression 194), under
 its unchanged 1 MiB ceiling. Expression storage remains 403520 bytes.
@@ -128,8 +128,8 @@ prod-roadmap next US-076 US-078 US-080 US-081 US-097 US-G19 US-G20 US-G21 US-G22
 ```
 
 Line counts use git diff origin/main --numstat. Engine/header and behavior
-tests add 5434 raw lines: 5188 nonblank/noncomment, 246 blank, 0 comment-only.
-Useful additions are 5188 = 242 engine/header + 4946 behavior tests.
+tests add 5464 raw lines: 5216 nonblank/noncomment, 248 blank, 0 comment-only.
+Useful additions are 5216 = 242 engine/header + 4974 behavior tests.
 No existing function is copied and no filler rounds the total. Docs,
 roadmap comments, HTML fixture and the Makefile dependency are excluded.
 
@@ -148,3 +148,9 @@ osui web render file=/web/lot60.html nodes 28 rules 17 boxes 17 lines 4 items 24
 lot60 pixels compared=6132 baseline=flex,grid names=aliases,span negative=explicit flex=wrap table=colspan image=shared
 QEMU web layout contract passed.
 ```
+
+Review after the initial local runs caught negative top margins: a valid
+negative ascent was being clamped to zero. Baselines now retain their sign
+within -WE_LAYOUT_MAX..WE_LAYOUT_MAX. Two new flex/grid glyph-position
+assertions cover the case; a mutation restoring that clamp is detected.
+The PR records the full GUI/web replay on this corrected engine revision.

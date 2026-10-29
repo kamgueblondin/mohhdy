@@ -1838,6 +1838,8 @@ int main(void) {
     RUN_TEST(test_l60_composition_caller_canaries);
     RUN_TEST(test_l60_composition_combined_guest_fixture);
     RUN_TEST(test_l60_composition_image_exports_decoded_bottom_baseline);
+    RUN_TEST(test_l60_composition_flex_negative_margin_keeps_signed_baseline);
+    RUN_TEST(test_l60_composition_grid_negative_margin_keeps_signed_baseline);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
