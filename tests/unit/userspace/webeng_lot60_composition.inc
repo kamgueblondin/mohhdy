@@ -218,3 +218,23 @@ static void test_l60_composition_combined_guest_fixture(void) {
     TEST_ASSERT_EQUAL(0, g_doc.perf.image_refused);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
+
+static void test_l60_composition_image_exports_decoded_bottom_baseline(void) {
+    int painted;
+    lot58_image("<body style='margin:0'><div id=p style='display:flex;width:120px;align-items:baseline'>"
+        "<img id=a src=/images/mire-g1.png alt=fallback style='object-fit:fill;flex-grow:0'>"
+        "<div id=b style='width:40px;flex-grow:0'>B</div></div></body>");
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
+    TEST_ASSERT_EQUAL(48, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(32, lot52_node("a")->h);
+    TEST_ASSERT_EQUAL(48, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(23, lot52_node("b")->y);
+    TEST_ASSERT_EQUAL(24, find_text("B")->y);
+    TEST_ASSERT_EQUAL(33, lot52_node("p")->h);
+    TEST_ASSERT_EQUAL(1, g_doc.perf.images);
+    TEST_ASSERT_EQUAL(0, g_doc.perf.image_refused);
+    TEST_ASSERT_EQUAL(0xffffffU, lot52_pixel(1, 10, &painted));
+    TEST_ASSERT_EQUAL(1, painted);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}

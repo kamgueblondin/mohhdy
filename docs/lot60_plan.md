@@ -74,7 +74,7 @@ Actual i386 document size and results are recorded below after measurement.
 
 ## Tests and acceptance
 
-241 new cases in the existing test_webeng binary: every bounded named
+242 new cases in the existing test_webeng binary: every bounded named
 start/end pair on both axes, negative indices over 2..8 explicit tracks,
 span/auto derivation, aliases, atomic refusals, first-line ascent/descent
 geometry, nested content, auto-margin precedence, wrap/reverse, caller
@@ -101,14 +101,14 @@ Measured results and line accounting follow actual execution.
 Actual make test-all:
 
 ```text
-Total Tests: 2755
-Passed: 2755
+Total Tests: 2756
+Passed: 2756
 Failed: 0
 Skipped: 0
-Execution Time: 157s
+Execution Time: 159s
 ```
 
-1614/1614 engine cases also pass with native ASan/UBSan. Eleven private
+1615/1615 engine cases also pass with native ASan/UBSan. Eleven private
 mutation builds each exit 1 on the matching new geometry assertion:
 name resolution, negative indices, spans, aliases, request application,
 baseline parsing, flex/grid offsets, ascent/descent height, nested export
@@ -128,10 +128,23 @@ prod-roadmap next US-076 US-078 US-080 US-081 US-097 US-G19 US-G20 US-G21 US-G22
 ```
 
 Line counts use git diff origin/main --numstat. Engine/header and behavior
-tests add 5413 raw lines: 5168 nonblank/noncomment, 245 blank, 0 comment-only.
-Useful additions are 5168 = 242 engine/header + 4926 behavior tests.
+tests add 5434 raw lines: 5188 nonblank/noncomment, 246 blank, 0 comment-only.
+Useful additions are 5188 = 242 engine/header + 4946 behavior tests.
 No existing function is copied and no filler rounds the total. Docs,
 roadmap comments, HTML fixture and the Makefile dependency are excluded.
 
 The PR records the post-commit clean-tree check, final GUI/web QEMU output
 and actual CI run/job conclusions after reading them. US-031 stays partial.
+
+The final make qemu-gui-parity passes, including real post-restart storage
+and network use. Actual final QEMU console/framebuffer output:
+
+```text
+lot60 console flex-baseline box 50 6 50x10
+lot60 console grid-baseline box 40 20 40x20
+lot60 console named-span box 0 40 120x10
+lot60 console negative box 80 50 40x10
+osui web render file=/web/lot60.html nodes 28 rules 17 boxes 17 lines 4 items 24 dropped 0 page 640x91 diag 0 components 0 media_kept 0 media_dropped 0 vars 0 sanitized 0
+lot60 pixels compared=6132 baseline=flex,grid names=aliases,span negative=explicit flex=wrap table=colspan image=shared
+QEMU web layout contract passed.
+```
