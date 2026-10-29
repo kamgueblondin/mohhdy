@@ -146,3 +146,12 @@ initrd-stamp regression script do not count toward the useful-code band.
 
 The PR records the post-commit clean-tree check, web QEMU result and actual
 CI run/job conclusions after reading their results. US-031 stays partial.
+
+The first CI run 40820094442 read 14 successful jobs and one cancelled job.
+GitHub's annotation states the GUI job exceeded its 15-minute budget:
+GUI tools, UX5 and panels had passed; the cumulative web-page contract
+was still painting its last pages. The web contract and initrd-stamp
+regression now run in a separate parallel job, retaining every command,
+pixel assertion and the existing 15-minute budget. GUI assertions and its
+15-minute budget are unchanged. Workflow/setup lines are excluded from
+useful engine/test accounting. The PR records the new head's actual run.
