@@ -68,7 +68,9 @@ and the complete production non-done list do not advance.
   axis. Their actual area is the containing box. Measurement and painting
   share grid_item_width so a fixed or mathematical child width, including
   its ratio-derived height, does not reserve a row measured at another
-  width. Flex still uses the same grow/shrink/freeze solver.
+  width. Mathematical item widths/min/max-widths opt flex into the intrinsic
+  sizing path even without alignment or gap declarations. Ordinary legacy
+  equal-slot defaults remain. Flex uses the same grow/shrink/freeze solver.
 - Logical inline/block size and min/max size aliases, four logical margin
   edges, four logical padding edges, margin/padding-inline and -block
   pairs are supported in horizontal-tb / ltr mode only. Pairs accept one or
@@ -92,7 +94,7 @@ scratch and 64x64 dimensions. No allocation. Evaluation uses only the fixed type
 
 ## Tests and proof
 
-276 new cases in the existing test_webeng binary assert literal geometry,
+279 new cases in the existing test_webeng binary assert literal geometry,
 text positions, image/box behavior, diagnostics, exact node/depth limits,
 caller canaries, per-document ownership and repeated responsive layout.
 Every previous assertion and refusal test is retained unchanged. Initial
@@ -105,8 +107,9 @@ calculated widths, percentage height and grid auto margins, then compares
 the combined page's actual framebuffer pixels: ratio, calc flex-wrap/gaps,
 clamp limits, grid auto margins, absolute insets, table and an initrd image.
 
-Ten private mutation builds fail the new assertions when addition,
+Eleven private mutation builds fail the new assertions when addition,
 percentage resolution, minimum/clamp behavior, calculated flex basis,
+unadorned flex mathematical sizing,
 aspect ratio, logical aliases, block/grid auto margins or math gaps are
 removed. Mutations and their binaries live outside tracked sources.
 
@@ -122,14 +125,14 @@ new font engine. Results and counts below are filled after actual execution.
 Actual make test-all summary, final implementation:
 
 ```text
-Total Tests: 2269
-Passed: 2269
+Total Tests: 2272
+Passed: 2272
 Failed: 0
 Skipped: 0
-Execution Time: 159s
+Execution Time: 157s
 ```
 
-1128/1128 engine cases pass both i386 and native ASan/UBSan. Ten mutation
+1131/1131 engine cases pass both i386 and native ASan/UBSan. Eleven mutation
 variants each exit 1 on the matching new behavior assertion. make all,
 strict-image-check, secrets-check, roadmap-check and the guest-command
 extractor check pass. Registry 447 names, GUI map 27 families/161 entries,
@@ -141,10 +144,10 @@ prod-roadmap next US-076 US-078 US-080 US-081 US-097 US-G19 US-G20 US-G21 US-G22
 ```
 
 Line counts come from git diff origin/main --numstat. Engine/header and
-behavior tests add 5413 raw lines: 5114 nonblank/noncomment lines, 2
-comment-only and 297 blank. Conservatively exclude all 6 lines of the
-extracted grid item-width helper. Useful code: 5108 lines, comprising
-461 engine/header and 4647 tests. No function is duplicated and no filler
+behavior tests add 5444 raw lines: 5142 nonblank/noncomment lines, 2
+comment-only and 300 blank. Conservatively exclude all 6 lines of the
+extracted grid item-width helper. Useful code: 5136 lines, comprising
+462 engine/header and 4674 tests. No function is duplicated and no filler
 rounds the count. Documentation/roadmap, the HTML fixture and the test
 Makefile dependency do not count.
 

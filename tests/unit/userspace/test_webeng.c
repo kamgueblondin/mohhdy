@@ -1335,6 +1335,9 @@ int main(void) {
     RUN_TEST(test_l58_composition_ratio_content_minimum_keeps_all_lines);
     RUN_TEST(test_l58_composition_border_box_cannot_be_smaller_than_edges);
     RUN_TEST(test_l58_composition_combined_guest_fixture);
+    RUN_TEST(test_l58_composition_unadorned_flex_math_width_is_used);
+    RUN_TEST(test_l58_composition_unadorned_flex_math_minimum_is_used);
+    RUN_TEST(test_l58_composition_unadorned_flex_math_maximum_is_used);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

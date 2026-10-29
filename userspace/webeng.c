@@ -3592,6 +3592,7 @@ static void flex_modes(const we_doc_t *d, int idx, const we_track_work_t *work,
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[work->node[k]];
         if (child->margin_auto) *modern = 1;
+        if (child->length[WE_LEN_WIDTH].count || child->length[WE_LEN_MIN_W].count || child->length[WE_LEN_MAX_W].count) *modern = 1;
         if (child->align_self || child->basis_content || child->border_box || child->aspect_num || child->height_percent ||
             child->min_height_percent || child->max_height_percent || child->width_kind) *modern = 1;
         if (child->basis_set || child->flex_shrink >= 0 ||

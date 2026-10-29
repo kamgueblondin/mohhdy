@@ -207,3 +207,30 @@ static void test_l58_composition_combined_guest_fixture(void) {
     TEST_ASSERT_EQUAL(0, g_doc.perf.items_dropped);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
+
+static void test_l58_composition_unadorned_flex_math_width_is_used(void) {
+    lot52_render("<body style='margin:0'><div id=g style='display:flex;width:100px'><div id=a style='width:calc(50% - 10px);height:10px'></div><div id=b style='width:20px;height:10px'></div></div></body>", 320);
+    TEST_ASSERT_EQUAL(40, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(40, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(20, lot52_node("b")->w);
+    TEST_ASSERT_EQUAL(10, lot52_node("g")->h);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l58_composition_unadorned_flex_math_minimum_is_used(void) {
+    lot52_render("<body style='margin:0'><div id=g style='display:flex;width:100px'><div id=a style='width:20px;min-width:calc(30px + 30px);height:10px'></div><div id=b style='width:20px;height:10px'></div></div></body>", 320);
+    TEST_ASSERT_EQUAL(60, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(60, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(20, lot52_node("b")->w);
+    TEST_ASSERT_EQUAL(10, lot52_node("g")->h);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l58_composition_unadorned_flex_math_maximum_is_used(void) {
+    lot52_render("<body style='margin:0'><div id=g style='display:flex;width:100px'><div id=a style='width:60px;max-width:calc(10px + 20px);height:10px'></div><div id=b style='width:20px;height:10px'></div></div></body>", 320);
+    TEST_ASSERT_EQUAL(30, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(30, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(20, lot52_node("b")->w);
+    TEST_ASSERT_EQUAL(10, lot52_node("g")->h);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
