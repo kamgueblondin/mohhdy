@@ -117,6 +117,14 @@ def main():
                 require(serial, "web item rect " + box)
                 print("lot59 console %s box %s" % (label, box), flush=True)
             require(serial, "dropped 0 page 640x146 diag 0")
+            start = g.send_command_until(monitor, "web-render /web/lot60.html", "web-render ok", proc)
+            serial = g.normalized_log(g.log_text()[start:])
+            require(serial, "web title Lot 60 baseline and named grid lines")
+            for label, box in (("flex-baseline", "50 6 50x10"), ("grid-baseline", "40 20 40x20"),
+                               ("named-span", "0 40 120x10"), ("negative", "80 50 40x10")):
+                require(serial, "web item rect " + box)
+                print("lot60 console %s box %s" % (label, box), flush=True)
+            require(serial, "dropped 0 page 640x91 diag 0")
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             g.send_command_until(monitor, "web /web/lot52.html", "osui web render file=/web/lot52.html", proc,
@@ -347,6 +355,40 @@ def main():
                 if line.startswith("osui web render file=/web/lot59.html"):
                     print(line, flush=True)
             print("lot59 pixels compared=%d intrinsic=limits,fit,basis flex=wrap relative=logical table=colspan image=shared" % compared,
+                  flush=True)
+
+            step = len(g.log_text())
+            g.send_key(monitor, "esc")
+            g.wait_for(proc, "osui web close file=/web/lot59.html", g.CMD_TIMEOUT, step)
+            start = g.send_command_until(monitor, "web /web/lot60.html",
+                "osui web render file=/web/lot60.html", proc, mode="getc", wait_prompt=False)
+            time.sleep(0.5)
+            width, height, pixels = g.screendump_rgb(monitor, "qemu-lot60.ppm")
+            compared = 0
+            for left, top, right, bottom, color in (
+                (0, 0, 50, 16, (255, 0, 0)), (50, 6, 100, 16, (0, 0, 255)),
+                (0, 16, 40, 30, (0, 128, 0)), (40, 20, 80, 40, (0, 0, 255)),
+                (0, 40, 120, 50, (255, 165, 0)), (80, 50, 120, 60, (255, 0, 0)),
+                (0, 60, 120, 70, (0, 128, 0))):
+                for y in range(top, bottom):
+                    for x in range(left, right):
+                        offset = ((oy + y) * width + ox + x) * 3
+                        if tuple(pixels[offset:offset + 3]) != color:
+                            raise RuntimeError("lot60 layout pixel mismatch at %d,%d" % (x, y))
+                        compared += 1
+            for y in range(21):
+                for x in range(32):
+                    expected = (255, 255, 255) if (x * 48 // 32) & 1 else (0, 0, 0)
+                    offset = ((oy + 70 + y) * width + ox + x) * 3
+                    if tuple(pixels[offset:offset + 3]) != expected:
+                        raise RuntimeError("lot60 decoded image mismatch at %d,%d" % (x, y))
+                    compared += 1
+            serial = g.normalized_log(g.log_text()[start:])
+            require(serial, "dropped 0 page 640x91 diag 0")
+            for line in serial.splitlines():
+                if line.startswith("osui web render file=/web/lot60.html"):
+                    print(line, flush=True)
+            print("lot60 pixels compared=%d baseline=flex,grid names=aliases,span negative=explicit flex=wrap table=colspan image=shared" % compared,
                   flush=True)
 
         print("QEMU web layout contract passed.", flush=True)

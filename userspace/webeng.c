@@ -1183,6 +1183,155 @@ static int bounded_signed(const char *v, int len, int max, int *out) {
     return 0;
 }
 
+static int line_identifier(const char *v, int len) {
+    return grid_name(v, len) && !value_is(v, len, "auto") && !value_is(v, len, "span") &&
+           !value_is(v, len, "none") && !value_is(v, len, "inherit") && !value_is(v, len, "initial") &&
+           !value_is(v, len, "unset") && !value_is(v, len, "revert");
+}
+
+static int named_track_list(const char *v, int len, int16_t *sizes, int16_t *floors,
+                            int16_t *caps, we_grid_names_t *names) {
+    int at = 0, count = 0;
+    w_zero(names, sizeof(*names));
+    while (at < len) {
+        int first, depth = 0, end, added;
+        while (at < len && w_space(v[at])) at++;
+        if (at == len) break;
+        if (v[at] == '[') {
+            int aliases = 0;
+            at++;
+            while (at < len && v[at] != ']') {
+                while (at < len && w_space(v[at])) at++;
+                if (at == len || v[at] == ']') break;
+                first = at;
+                while (at < len && !w_space(v[at]) && v[at] != ']') at++;
+                if (aliases == WE_GRID_LINE_ALIASES || !line_identifier(v + first, at - first) ||
+                    names->name[count][aliases][0]) return -1;
+                if (aliases && w_len(names->name[count][0]) == at - first &&
+                    sel_equal(v + first, names->name[count][0], at - first, 0)) return -1;
+                w_cpy(names->name[count][aliases++], WE_GRID_NAME_MAX, v + first, at - first);
+            }
+            if (!aliases || at == len || v[at++] != ']') return -1;
+            continue;
+        }
+        if (count == WE_TRACKS_MAX) return -1;
+        first = at;
+        while (at < len && (depth || (!w_space(v[at]) && v[at] != '['))) {
+            if (v[at] == '[' || v[at] == ']') return -1;
+            if (v[at] == '(') depth++;
+            if (v[at] == ')') depth--;
+            if (depth < 0) return -1;
+            at++;
+        }
+        end = at;
+        if (depth || end == first) return -1;
+        {
+            int16_t group[WE_TRACKS_MAX], low[WE_TRACKS_MAX], high[WE_TRACKS_MAX];
+            int k;
+            added = parse_track_list(v + first, end - first, group, low, high);
+            if (added < 1 || count + added > WE_TRACKS_MAX) return -1;
+            for (k = 0; k < added; k++, count++) {
+                sizes[count] = group[k]; floors[count] = low[k]; caps[count] = high[k];
+            }
+        }
+    }
+    return count ? count : -1;
+}
+
+static int grid_edge(const char *v, int len, char out[WE_GRID_NAME_MAX], uint8_t *span) {
+    int number, end = len, first = 0;
+    while (first < end && w_space(v[first])) first++;
+    while (end > first && w_space(v[end - 1])) end--;
+    v += first; len = end - first;
+    if (!len) return -1;
+    out[0] = 0; *span = 0;
+    if (value_is(v, len, "auto")) return 0;
+    if (w_ieq_n(v, len, "span ")) {
+        first = 5;
+        while (first < len && w_space(v[first])) first++;
+        if (bounded_uint(v + first, len - first, WE_TRACKS_MAX, &number) || number < 1) return -1;
+        *span = (uint8_t)number;
+        return 0;
+    }
+    if ((v[0] >= '0' && v[0] <= '9') || v[0] == '-' || v[0] == '+') {
+        if (bounded_signed(v, len, WE_TRACKS_MAX + 1, &number) || !number) return -1;
+    } else if (!line_identifier(v, len)) return -1;
+    w_cpy(out, WE_GRID_NAME_MAX, v, len);
+    return 0;
+}
+
+static int grid_request(we_node_t *n, int axis, const char *v, int len) {
+    we_grid_request_t request;
+    uint8_t start, span;
+    int split = 0, tail;
+    if (!parse_placement(v, len, &start, &span)) {
+        n->grid_request[axis].active = 0;
+        if (axis) { n->grid_row_start = start; n->grid_row_span = span; }
+        else { n->grid_col_start = start; n->grid_col_span = span; }
+        n->grid_area[0] = 0;
+        return 0;
+    }
+    w_zero(&request, sizeof(request));
+    while (split < len && v[split] != '/') split++;
+    if (grid_edge(v, split, request.edge[0], &request.span[0])) return -1;
+    if (split < len) {
+        tail = split + 1;
+        if (grid_edge(v + tail, len - tail, request.edge[1], &request.span[1])) return -1;
+    }
+    if (request.span[0] && (request.span[1] || !request.edge[1][0])) return -1;
+    {
+        int a, b;
+        if (!bounded_signed(request.edge[0], w_len(request.edge[0]), WE_TRACKS_MAX + 1, &a) && a > 0) {
+            if (a > WE_TRACKS_MAX) return -1;
+            if (request.span[1] && a + request.span[1] - 1 > WE_TRACKS_MAX) return -1;
+            if (!bounded_signed(request.edge[1], w_len(request.edge[1]), WE_TRACKS_MAX + 1, &b) && b > 0 && b <= a) return -1;
+        }
+    }
+    request.active = 1;
+    n->grid_request[axis] = request;
+    n->grid_area[0] = 0;
+    return 0;
+}
+
+static int named_line(const we_node_t *parent, int axis, const char *edge) {
+    int line, alias, number, count = axis ? parent->grid_rows : parent->grid_cols;
+    if (!edge[0]) return 0;
+    if ((edge[0] >= '0' && edge[0] <= '9') || edge[0] == '+' || edge[0] == '-') {
+        if (bounded_signed(edge, w_len(edge), WE_TRACKS_MAX + 1, &number)) return -1;
+        if (number < 0) number = count + 2 + number;
+        return number >= 1 && number <= WE_TRACKS_MAX + 1 ? number : -1;
+    }
+    for (line = 0; line <= count; line++) for (alias = 0; alias < WE_GRID_LINE_ALIASES; alias++)
+        if (w_eq(edge, parent->line_names[axis].name[line][alias])) return line + 1;
+    return -1;
+}
+
+static void resolve_grid_requests(we_doc_t *d) {
+    uint32_t i;
+    for (i = 0; i < d->nnodes; i++) {
+        we_node_t *n = &d->nodes[i];
+        int axis;
+        if (n->parent < 0 || d->nodes[n->parent].display != WE_DISP_GRID) continue;
+        for (axis = 0; axis < 2; axis++) {
+            const we_grid_request_t *request = &n->grid_request[axis];
+            int start, end, span;
+            if (!request->active) continue;
+            start = named_line(&d->nodes[n->parent], axis, request->edge[0]);
+            end = named_line(&d->nodes[n->parent], axis, request->edge[1]);
+            if (start >= 0 && end >= 0) {
+                if (!start && end) start = end - (request->span[0] ? request->span[0] : 1);
+                if (!end && start) end = start + (request->span[1] ? request->span[1] : 1);
+            }
+            span = start && end ? end - start : request->span[1] ? request->span[1] : 1;
+            if (start < 0 || end < 0 || start > WE_TRACKS_MAX || end > WE_TRACKS_MAX + 1 || span < 1 || span > WE_TRACKS_MAX) {
+                diag(d, "grid line unresolved", (int)i); start = 0; span = 1;
+            }
+            if (axis) { n->grid_row_start = (uint8_t)start; n->grid_row_span = (uint8_t)span; }
+            else { n->grid_col_start = (uint8_t)start; n->grid_col_span = (uint8_t)span; }
+        }
+    }
+}
+
 /* Expand a valid margin into top,right,bottom,left and replace all auto bits. */
 static int margin_auto_box(we_node_t *n, const char *v, int vl) {
     int a[4], l[4], c = tokens(v, vl, a, l), k, px;
@@ -1542,6 +1691,8 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
                w_eq(prop, "justify-items") || w_eq(prop, "justify-self")) {
         int distribution = w_eq(prop, "justify-content") || w_eq(prop, "align-content");
         int value = parse_pack(v, vl, distribution, !w_eq(prop, "justify-content"));
+        if ((w_eq(prop, "align-items") || w_eq(prop, "align-self")) &&
+            (value_is(v, vl, "baseline") || value_is(v, vl, "first baseline"))) value = WE_PACK_BASELINE;
         if ((w_eq(prop, "align-self") || w_eq(prop, "justify-self")) && value_is(v, vl, "auto")) value = 0;
         if (value < 0) diag(d, "alignment refused", -1);
         else if (w_eq(prop, "justify-content")) n->justify_content = (uint8_t)value;
@@ -1585,10 +1736,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "object-position")) {
         if (parse_object_position(n, v, vl)) diag(d, "object position refused", -1);
     } else if (w_eq(prop, "grid-column") || w_eq(prop, "grid-row")) {
-        uint8_t start, span;
-        if (parse_placement(v, vl, &start, &span)) diag(d, "grid placement refused", -1);
-        else if (w_eq(prop, "grid-column")) { n->grid_area[0] = 0; n->grid_col_start = start; n->grid_col_span = span; }
-        else { n->grid_area[0] = 0; n->grid_row_start = start; n->grid_row_span = span; }
+        if (grid_request(n, w_eq(prop, "grid-row"), v, vl)) diag(d, "grid placement refused", -1);
     } else if (w_eq(prop, "box-sizing")) {
         if (value_is(v, vl, "border-box")) n->border_box = 1;
         else if (value_is(v, vl, "content-box")) n->border_box = 0;
@@ -1692,12 +1840,15 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (gap_declaration(n, v, vl)) diag(d, "gap refused", -1);
     } else if (w_eq(prop, "grid-template-columns") || w_eq(prop, "grid-template-rows")) {
         int16_t sizes[WE_TRACKS_MAX], floors[WE_TRACKS_MAX], caps[WE_TRACKS_MAX];
-        int count = parse_track_list(v, vl, sizes, floors, caps);
+        we_grid_names_t names;
+        int count = named_track_list(v, vl, sizes, floors, caps, &names);
         if (count < 0) diag(d, "grid tracks refused", -1);
         else if (w_eq(prop, "grid-template-columns")) {
+            n->line_names[0] = names;
             n->grid_cols = (uint8_t)count;
             for (k = 0; k < count; k++) { n->col_size[k] = sizes[k]; n->col_floor[k] = floors[k]; n->col_cap[k] = caps[k]; }
         } else {
+            n->line_names[1] = names;
             n->grid_rows = (uint8_t)count;
             for (k = 0; k < count; k++) { n->row_size[k] = sizes[k]; n->row_floor[k] = floors[k]; n->row_cap[k] = caps[k]; }
         }
@@ -1869,6 +2020,8 @@ int we_style(we_doc_t* d) {
         n->min_width_kind = n->max_width_kind = n->basis_kind = 0;
         n->justify_content = n->align_items = n->align_self = n->align_content = 0;
         n->justify_items = n->justify_self = 0;
+        w_zero(n->line_names, sizeof(n->line_names));
+        w_zero(n->grid_request, sizeof(n->grid_request));
         n->grid_col_start = n->grid_row_start = 0;
         n->grid_dense = n->grid_column_flow = n->area_count = n->area_rows = n->area_cols = 0;
         n->grid_area[0] = 0;
@@ -2129,6 +2282,7 @@ typedef struct {
     int lines;
     int pending_space, measuring;
     int line_h, indent, indent_used, atom_h, pending_x;
+    int baseline, origin_y;
 } we_inline_t;
 
 static int limit_coord(int n) {
@@ -2193,6 +2347,7 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         return;
     }
     if (f->measuring) {
+        if (f->baseline < 0) f->baseline = f->y - f->origin_y + WE_TEXT_BASELINE;
         if (advance) {
             f->y = limit_coord(f->y + step);
             f->lines++;
@@ -2439,11 +2594,13 @@ static int constrained_width(const we_node_t *n, int width, int containing) {
 
 static int16_t forced_width[WE_MAX_NODES], forced_height[WE_MAX_NODES];
 static int16_t resolved_height[WE_MAX_NODES], containing_height[WE_MAX_NODES];
+static int16_t flow_baseline[WE_MAX_NODES];
+static int baseline_probe;
 static int measure_budget;
 static uint8_t measure_content[WE_MAX_NODES];
 typedef struct {
-    int width, fixed, parent, result;
-    uint8_t content, valid;
+    int width, fixed, parent, result, baseline;
+    uint8_t content, valid, probe;
 } we_measure_cache_t;
 static we_measure_cache_t measure_cache[WE_MAX_NODES];
 
@@ -2705,6 +2862,7 @@ static int measure_grid(we_doc_t *d, int idx, int width, int depth);
 static int measure_table(we_doc_t *d, int idx, int width, int depth);
 static int measure_flex(we_doc_t *d, int idx, int width, int depth);
 static int flow_children(we_doc_t *d, int idx, int x, int y, int width, int depth, int measuring);
+static int baseline_of(we_doc_t *d, int idx, int outer, int depth);
 
 static int measure_height(we_doc_t *d, int idx, int width, int depth) {
     const we_node_t *n = &d->nodes[idx];
@@ -2716,7 +2874,10 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
         int key_fixed = measure_content[idx] ? -1 : definite_height(d, idx, 0);
         int key_parent = containing_height[idx] >= 0 ? containing_height[idx] : definite_height(d, n->parent, 0);
         if (cache->valid && cache->width == key_width && cache->fixed == key_fixed &&
-            cache->parent == key_parent && cache->content == measure_content[idx]) return cache->result;
+            cache->parent == key_parent && cache->content == measure_content[idx] && cache->probe == baseline_probe) {
+            flow_baseline[idx] = (int16_t)cache->baseline;
+            return cache->result;
+        }
     }
     if (measure_budget-- <= 0) {
         if (measure_budget == -1) diag(d, "measurement budget exceeded", idx);
@@ -2728,8 +2889,10 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
         cache->fixed = measure_content[idx] ? -1 : definite_height(d, idx, 0);
         cache->parent = containing_height[idx] >= 0 ? containing_height[idx] : definite_height(d, n->parent, 0);
         cache->content = measure_content[idx];
+        cache->probe = (uint8_t)baseline_probe;
         cache->valid = 0;
     }
+    flow_baseline[idx] = -1;
     fixed = measure_content[idx] ? -1 : definite_height(d, idx, 0);
     if (fixed >= 0) content = fixed;
     else {
@@ -2752,6 +2915,7 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
     parent = containing_height[idx] >= 0 ? containing_height[idx] : definite_height(d, n->parent, 0);
     content = height_constraint(d, idx, content, parent);
     measure_cache[idx].result = limit_coord(content + vertical_extra(n) + n->margin[0] + n->margin[2]);
+    measure_cache[idx].baseline = flow_baseline[idx];
     measure_cache[idx].valid = 1;
     return measure_cache[idx].result;
 }
@@ -2819,6 +2983,7 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->base_x = f->x0 = cx;
     f->base_width = f->width = cwidth;
     f->y = limit_coord(cy);
+    f->origin_y = f->y; f->baseline = -1;
     f->align = d->nodes[idx].align;
     f->line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
     f->indent = d->nodes[idx].text_indent;
@@ -2835,12 +3000,21 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
             clear_floats(f, n->clear_side);
             flow_region(f, WE_CHAR_W);
             /* A block child is not the indented first line. */
-            f->y = limit_coord(f->y + (measuring ? measure_height(d, c, f->width + f->indent_used, depth + 1) :
-                layout_block(d, c, f->x0 - f->indent_used, f->y, f->width + f->indent_used, depth + 1)));
+            {
+                int height = measuring ? measure_height(d, c, f->width + f->indent_used, depth + 1) :
+                    layout_block(d, c, f->x0 - f->indent_used, f->y, f->width + f->indent_used, depth + 1);
+                if (measuring && baseline_probe && f->baseline < 0) {
+                    int outer = preferred_outer(n, f->width, f->width - node_border_extra(n) - n->margin[1] - n->margin[3]);
+                    int base = baseline_of(d, c, outer, depth + 1);
+                    if (flow_baseline[c] >= 0 || w_eq(n->tag, "img")) f->baseline = f->y - f->origin_y + base;
+                }
+                f->y = limit_coord(f->y + height);
+            }
             f->pending_space = 0;
         } else inline_node(f, c, depth + 1);
     }
     flush_line(f, 0);
+    flow_baseline[idx] = (int16_t)f->baseline;
     bottom = f->y;
     for (i = 0; i < f->nfloat; i++) {
         int end = f->floats[i].y + f->floats[i].h;
@@ -3151,10 +3325,11 @@ static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w
     if ((int)d->nitems > item_start) order_absolute_items(d, cb, item_start);
 }
 
-typedef struct { int first, end, used, cross; } we_flex_line_t;
+typedef struct { int first, end, used, cross, ascent, descent; } we_flex_line_t;
 typedef struct {
     int node[WE_MAX_NODES];
     int cross[WE_MAX_NODES];
+    int baseline[WE_MAX_NODES];
     we_flex_line_t lines[WE_MAX_NODES];
     int main, cross_available, main_gap, cross_gap, line_count, cross_total;
     int size[WE_MAX_NODES];
@@ -3186,6 +3361,7 @@ typedef struct {
     uint8_t occupied[WE_GRID_ROWS_MAX];
     int column[WE_TRACKS_MAX], column_x[WE_TRACKS_MAX], minimum[WE_TRACKS_MAX];
     int height[WE_GRID_ROWS_MAX], row_y[WE_GRID_ROWS_MAX];
+    int ascent[WE_GRID_ROWS_MAX], descent[WE_GRID_ROWS_MAX], baseline[WE_MAX_NODES];
 } we_grid_work_t;
 static we_grid_work_t grid_work[WE_DEPTH_MAX + 1];
 /* Column assignment for rowspan. One slot per layout depth. */
@@ -3200,7 +3376,7 @@ typedef char layout_workspace_is_bounded[
     sizeof(track_work) + sizeof(grid_work) + sizeof(table_slot) +
     sizeof(we_inline_t) * (WE_DEPTH_MAX + 1) +
     sizeof(forced_width) + sizeof(forced_height) + sizeof(resolved_height) +
-    sizeof(containing_height) + sizeof(measure_content) + sizeof(measure_cache) + sizeof(int16_t) * OS_FB_WEB_ITEMS +
+    sizeof(containing_height) + sizeof(flow_baseline) + sizeof(measure_content) + sizeof(measure_cache) + sizeof(int16_t) * OS_FB_WEB_ITEMS +
     sizeof(os_fb_web_item_t) * OS_FB_WEB_ITEMS <= WE_LAYOUT_WORKSPACE_MAX ? 1 : -1];
 
 static int grid_free(const we_grid_work_t *work, int row, int col, int rows, int cols, int count) {
@@ -3432,8 +3608,22 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         width = work->column_x[work->col[k] + child->grid_col_span - 1] +
                 work->column[work->col[k] + child->grid_col_span - 1] - work->column_x[work->col[k]];
         height = measure_area_height(d, items->node[k], grid_item_width(n, child, width), depth + 1);
+        work->baseline[k] = 0;
+        if ((child->align_self ? child->align_self : n->align_items) == WE_PACK_BASELINE &&
+            !(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
+            if (child->grid_row_span != 1) diag(d, "spanning baseline unsupported", items->node[k]);
+            else {
+                int row = work->row[k], below;
+                work->baseline[k] = baseline_of(d, items->node[k], grid_item_width(n, child, width), depth + 1);
+                below = height - work->baseline[k];
+                if (work->baseline[k] > work->ascent[row]) work->ascent[row] = work->baseline[k];
+                if (below > work->descent[row]) work->descent[row] = below;
+            }
+        }
         grid_span_minimum(n, 1, work->row[k], child->grid_row_span, height, gy, fixed_height, work->height);
     }
+    for (k = 0; k < rows; k++)
+        grid_span_minimum(n, 1, k, 1, work->ascent[k] + work->descent[k], gy, fixed_height, work->height);
     used_height = grid_track_sizes(n, 1, rows, fixed_height, gy, work->height);
     position = cy;
     {
@@ -3496,7 +3686,9 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
             int free = height > child_height ? height - child_height : 0;
             y = work->row_y[r] + ((child->margin_auto & WE_AUTO_TOP) ?
                 (child->margin_auto & WE_AUTO_BOTTOM ? free / 2 : free) : 0);
-        } else y = work->row_y[r] + pack_distance(vertical, height - child_height, 0, 1);
+        } else if (vertical == WE_PACK_BASELINE && child->grid_row_span == 1)
+            y = work->row_y[r] + work->ascent[r] - work->baseline[k];
+        else y = work->row_y[r] + pack_distance(vertical, height - child_height, 0, 1);
         {
             int child_idx = items->node[k];
             int16_t saved = containing_height[child_idx];
@@ -3652,6 +3844,22 @@ static int measure_area_height(we_doc_t *d, int idx, int outer, int depth) {
     return height;
 }
 
+static int baseline_of(we_doc_t *d, int idx, int outer, int depth) {
+    const we_node_t *n = &d->nodes[idx];
+    int height = measure_area_height(d, idx, outer, depth), value, saved_probe = baseline_probe;
+    uint8_t saved_content = measure_content[idx];
+    if (depth > WE_DEPTH_MAX || n->overflow_hidden || w_eq(n->tag, "img") ||
+        n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID || n->display == WE_DISP_TABLE)
+        return height > n->margin[2] ? height - n->margin[2] : 0;
+    baseline_probe = 1; measure_content[idx] = 1;
+    (void)measure_area_height(d, idx, outer, depth);
+    measure_content[idx] = saved_content; baseline_probe = saved_probe;
+    value = flow_baseline[idx];
+    if (value >= 0) value += n->margin[0] + n->border + n->padding[0];
+    else value = height - n->margin[2];
+    return value < 0 ? 0 : value > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : value;
+}
+
 static void prepare_flex(we_doc_t *d, int idx, int cw,
                               int depth, int count, int sizing, int modern) {
     we_node_t *n = &d->nodes[idx];
@@ -3721,6 +3929,7 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
         }
         line->used = (k - line->first - 1) * gap;
         line->cross = 0;
+        line->ascent = line->descent = 0;
         for (j = line->first; j < k; j++) {
             const we_node_t *child = &d->nodes[work->node[j]];
             int align = child->align_self ? child->align_self : n->align_items;
@@ -3730,8 +3939,20 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
                     (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ? child->max_content : cw - flex_extra(child, 0);
                 work->cross[j] = preferred_outer(child, cw, fallback);
             } else work->cross[j] = measure_area_height(d, work->node[j], work->size[j], depth + 1);
+            work->baseline[j] = 0;
+            if (align == WE_PACK_BASELINE) {
+                if (vertical) diag(d, "column baseline unsupported", work->node[j]);
+                else if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
+                    int below;
+                    work->baseline[j] = baseline_of(d, work->node[j], work->size[j], depth + 1);
+                    below = work->cross[j] - work->baseline[j];
+                    if (work->baseline[j] > line->ascent) line->ascent = work->baseline[j];
+                    if (below > line->descent) line->descent = below;
+                }
+            }
             if (work->cross[j] > line->cross) line->cross = work->cross[j];
         }
+        if (line->ascent + line->descent > line->cross) line->cross = line->ascent + line->descent;
         if (!wrap && cross_available > line->cross) line->cross = cross_available;
         cross_total = limit_coord(cross_total + line->cross + (lines ? cross_gap : 0));
         lines++;
@@ -3849,7 +4070,8 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
             if (cross_auto) {
                 int free = line_cross > cross ? line_cross - cross : 0;
                 off = cross_before ? (cross_after ? free / 2 : free) : 0;
-            } else off = pack_distance(align, line_cross - cross, 0, 1);
+            } else if (!vertical && align == WE_PACK_BASELINE) off = line->ascent - work->baseline[j];
+            else off = pack_distance(align, line_cross - cross, 0, 1);
             {
                 int cursor = 0, t, rem_left = auto_rem;
                 for (t = line->first; t < j; t++) {
@@ -4489,7 +4711,7 @@ static void resolve_grid_areas(we_doc_t *d) {
 int we_layout(we_doc_t* d, int viewport_w) {
     int h;
     if (!d || d->nnodes == 0 || viewport_w < 64) return -1;
-    d->nitems = 0; math_refused = 0;
+    d->nitems = 0; math_refused = 0; baseline_probe = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
@@ -4499,6 +4721,7 @@ int we_layout(we_doc_t* d, int viewport_w) {
     { uint32_t i; for (i = 0; i < d->nnodes; i++) {
         forced_width[i] = forced_height[i] = resolved_height[i] = containing_height[i] = -1;
         measure_content[i] = 0;
+        flow_baseline[i] = -1;
     } }
     image_work.ready_idx = -1;
     w_zero(image_work.failed, sizeof(image_work.failed));
@@ -4506,6 +4729,7 @@ int we_layout(we_doc_t* d, int viewport_w) {
     w_zero(image_work.natural_h, sizeof(image_work.natural_h));
     w_zero(measure_cache, sizeof(measure_cache));
     measure_budget = WE_MEASURE_BUDGET;
+    resolve_grid_requests(d);
     resolve_grid_areas(d);
     intrinsic_sizes(d);
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
