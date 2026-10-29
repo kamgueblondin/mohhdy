@@ -1,0 +1,20 @@
+<!doctype html><html><head><title>Lot 60 baseline and named grid lines</title><style>
+body{margin:0}section{width:120px}span{visibility:hidden}
+#flex{display:flex;align-items:baseline;flex-wrap:wrap;width:120px}
+#flex div{width:50px;height:10px;flex-grow:0}
+#fa{padding-top:6px;background:red}#fb{background:blue}
+#grid{display:grid;grid-template-columns:[start] 40px [mid alias] 40px [end];align-items:baseline}
+#ga{grid-column:start / mid;padding-top:4px;height:10px;background:green}
+#gb{grid-column:alias / end;height:20px;background:blue}
+#named{display:grid;grid-template-columns:[left] repeat(3,40px) [right];grid-template-rows:[top] 10px [bottom]}
+#span{grid-column:left / right;height:10px;background:orange}
+#negative{display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:10px}
+#last{grid-column:-2 / -1;height:10px;background:red}
+table{width:120px}td{padding:0;border:0;height:10px;background:green}
+img{display:block;width:32px;object-fit:fill}
+</style></head><body><section>
+<div id=flex><div id=fa><span>A</span></div><div id=fb><span>B</span></div></div>
+<div id=grid><div id=ga><span>A</span></div><div id=gb><span>B</span></div></div>
+<div id=named><div id=span></div></div><div id=negative><div id=last></div></div>
+<table><tr><td colspan=2></td></tr></table><img id=image src=/images/mire-g1.png alt=decode_failed>
+</section></body></html>

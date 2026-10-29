@@ -37,6 +37,7 @@
 #define WE_DEPTH_MAX 24
 #define WE_CHAR_W 8
 #define WE_LINE_H 10
+#define WE_TEXT_BASELINE 9
 #define WE_TRACKS_MAX 8
 #define WE_GRID_ROWS_MAX WE_MAX_NODES
 /* Static layout/measure/clip scratch; document storage is caller-owned. */
@@ -45,6 +46,12 @@
 #define WE_TRACK_AUTO (-32768)
 #define WE_GRID_AREAS_MAX 8
 #define WE_GRID_NAME_MAX 16
+#define WE_GRID_LINE_ALIASES 2
+typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME_MAX]; } we_grid_names_t;
+typedef struct {
+    char edge[2][WE_GRID_NAME_MAX];
+    uint8_t span[2], active;
+} we_grid_request_t;
 #define WE_TRACK_LIMIT 2000
 enum { WE_FIT_FILL, WE_FIT_CONTAIN, WE_FIT_COVER, WE_FIT_NONE, WE_FIT_SCALE_DOWN };
 typedef struct {
@@ -79,7 +86,7 @@ enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE };
 enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4, WE_DISP_TABLE = 5, WE_DISP_ROW = 6, WE_DISP_CELL = 7, WE_DISP_INLINE_BLOCK = 8 };
 enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2 };
 enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
-       WE_PACK_STRETCH, WE_PACK_BETWEEN, WE_PACK_AROUND, WE_PACK_EVENLY };
+       WE_PACK_STRETCH, WE_PACK_BETWEEN, WE_PACK_AROUND, WE_PACK_EVENLY, WE_PACK_BASELINE };
 enum { WE_SIZE_AUTO, WE_SIZE_MIN_CONTENT, WE_SIZE_MAX_CONTENT, WE_SIZE_FIT_CONTENT, WE_SIZE_FIT_LIMIT };
 enum { WE_WRAP_NORMAL, WE_WRAP_BREAK_WORD, WE_WRAP_ANYWHERE };
 
@@ -127,6 +134,8 @@ typedef struct {
     uint8_t min_width_kind, max_width_kind, basis_kind, break_all;
     uint8_t nowrap, break_word, visibility, overflow_hidden;
     uint8_t grid_col_start, grid_row_start, grid_col_span, grid_row_span;
+    we_grid_names_t line_names[2];
+    we_grid_request_t grid_request[2];
     int16_t col_size[WE_TRACKS_MAX];
     int16_t col_floor[WE_TRACKS_MAX], col_cap[WE_TRACKS_MAX];
     int16_t row_floor[WE_TRACKS_MAX], row_cap[WE_TRACKS_MAX];
