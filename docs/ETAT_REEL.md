@@ -10,6 +10,18 @@
 
 ## État courant vérifié
 
+## Etat courant du 29 October 2026 (lot 59)
+
+US-031 stays partial, phase3_complete=false. The same bounded guest engine
+adds intrinsic width constraints and fit-content(length-percentage),
+intrinsic flex bases, anywhere/break-all text breaks, bounded relative
+right/bottom and atomic physical/logical insets. One shared measurement,
+layout and imgdec path; i386 caller document 554816 bytes under its 1 MiB
+cap. Kernel/rights/shared ABI unchanged. No Chromium, WebKit, network
+loading, JavaScript VM or new font engine. US-059/060/063/074 unchanged;
+US-G19..US-G24 stay partial. Roadmap statuses and complete non-done list
+unchanged. Subset, remaining gaps and results: docs/lot59_plan.md.
+
 ## Etat courant du 29 October 2026 (lot 58)
 
 US-031 stays partial, phase3_complete=false. The same bounded guest engine

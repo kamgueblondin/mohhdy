@@ -1,0 +1,20 @@
+<!doctype html><html><head><title>Lot 59 intrinsic layout</title><style>
+body{margin:0}section{width:120px}span{visibility:hidden}
+#fit{width:fit-content(40px);height:20px;background:red}
+#flex{display:flex;flex-wrap:wrap;gap:4px;width:120px}
+#flex div{flex-basis:max-content;flex-grow:0;height:10px}
+#a,#c{background:green}#b{background:blue}
+#grid{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:20px;align-items:stretch}
+#cell{max-width:min-content;background:green}#other{background:blue}
+#host{height:40px}#spacer{height:10px}
+#relative{position:relative;width:20px;height:10px;margin-left:30px;inset-inline-end:-10%;inset-block-end:-5px;background:orange}
+#table{width:120px}td{padding:0;border:0;height:10px;background:green}
+#image{display:block;width:fit-content(56px);object-fit:contain}
+</style></head><body><section>
+<div id=fit><span>AB CDEF</span></div>
+<div id=flex><div id=a><span>AB CDEF</span></div><div id=b><span>AB CDEF</span></div><div id=c><span>AB CDEF</span></div></div>
+<div id=grid><div id=cell><span>AB CDEF</span></div><div id=other></div></div>
+<div id=host><div id=spacer></div><div id=relative></div></div>
+<table id=table><tr><td colspan=2></td></tr></table>
+<img id=image src=/images/mire-g1.png alt=decode_failed>
+</section></body></html>

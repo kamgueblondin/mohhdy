@@ -1,3 +1,4 @@
+# Lot 59: intrinsic widths, word breaks, logical insets; US-031 partial; statuses unchanged.
 # Lot 58: bounded math/ratio/logical sizing; US-031 partial; all statuses unchanged.
 # Lot 57: grid, image boxes and CSS cascade; US-031 partial; all statuses unchanged.
 # Lot 55: large guest layout increment; US-031 partial; all roadmap statuses unchanged.

@@ -80,7 +80,8 @@ enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3
 enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2 };
 enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
        WE_PACK_STRETCH, WE_PACK_BETWEEN, WE_PACK_AROUND, WE_PACK_EVENLY };
-enum { WE_SIZE_AUTO, WE_SIZE_MIN_CONTENT, WE_SIZE_MAX_CONTENT, WE_SIZE_FIT_CONTENT };
+enum { WE_SIZE_AUTO, WE_SIZE_MIN_CONTENT, WE_SIZE_MAX_CONTENT, WE_SIZE_FIT_CONTENT, WE_SIZE_FIT_LIMIT };
+enum { WE_WRAP_NORMAL, WE_WRAP_BREAK_WORD, WE_WRAP_ANYWHERE };
 
 #define WE_MATH_NODES_MAX 24
 #define WE_MATH_DEPTH_MAX 4
@@ -123,6 +124,7 @@ typedef struct {
     uint8_t justify_content, align_items, align_self, align_content;
     uint8_t justify_items, justify_self;
     uint8_t width_kind, basis_content, border_box;
+    uint8_t min_width_kind, max_width_kind, basis_kind, break_all;
     uint8_t nowrap, break_word, visibility, overflow_hidden;
     uint8_t grid_col_start, grid_row_start, grid_col_span, grid_row_span;
     int16_t col_size[WE_TRACKS_MAX];

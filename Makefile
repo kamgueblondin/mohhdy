@@ -584,7 +584,7 @@ pack-initrd: userspace-all
 	@# Lot 46: the hand-kept initrd files (roadmap, samples, bigfiles) count too: an
 	@# edited /roadmap.txt left the old initrd in place. Lot 47: the file list is
 	@# compared too (a moved file keeps its old mtime and was never repacked)
-	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples $(INITRD_DIR)/images $(INITRD_DIR)/bigfiles"; \
+	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples $(INITRD_DIR)/images $(INITRD_DIR)/bigfiles $(INITRD_DIR)/web"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
 	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && [ -f $(INITRD_TEST_IMAGE) ] && \
 	    [ "$$(cat build/.initrd-models 2>/dev/null)" = "$(INITRD_MODELS_KEY)" ] && \
@@ -599,6 +599,10 @@ pack-initrd: userspace-all
 # Repacks with another MODEL_DIR and back, then checks the stamp logic.
 check-initrd-stamp:
 	@sh tests/scripts/check_initrd_model_stamp.sh
+
+.PHONY: check-initrd-web-stamp
+check-initrd-web-stamp:
+	@python3 tests/scripts/check_initrd_web_stamp.py
 
 # Règle pour empaqueter l'initrd automatiquement
 pack-initrd-now:
