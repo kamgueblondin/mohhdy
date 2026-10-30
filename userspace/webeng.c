@@ -4989,9 +4989,12 @@ static int table_assign(we_doc_t *d, int idx, int *rows, int nr, int depth, int 
     return cols;
 }
 
+/* Lot 61: border-collapse shares cell borders. Adjacent cells overlap by
+ * the widest cell border of the table (negative spacing), so neighbouring
+ * edges paint once; the later cell's colour wins on the shared edge. */
 static int table_spacing_axis(const we_node_t *n, int vertical) {
     int spacing;
-    if (n->border_collapse) return 0;
+    if (n->border_collapse) return -(int)n->collapse_w;
     spacing = vertical ? n->border_spacing_y : n->border_spacing;
     if (spacing < 0) return 0;
     if (spacing > WE_SPACING_MAX) return WE_SPACING_MAX;
@@ -5535,6 +5538,21 @@ static void clip_display_list(we_doc_t *d) {
     d->nitems = (uint32_t)count;
 }
 
+static void collapse_widths(we_doc_t *d) {
+    uint32_t i;
+    for (i = 0; i < d->nnodes; i++) d->nodes[i].collapse_w = 0;
+    for (i = 0; i < d->nnodes; i++) {
+        const we_node_t *cell = &d->nodes[i];
+        int row = cell->parent, table, b = cell->border > 8 ? 8 : cell->border;
+        if (cell->display != WE_DISP_CELL || row < 0) continue;
+        for (table = row; table >= 0 && d->nodes[table].display != WE_DISP_TABLE; table = d->nodes[table].parent)
+            if (d->nodes[table].display != WE_DISP_ROW && !w_eq(d->nodes[table].tag, "tbody") &&
+                !w_eq(d->nodes[table].tag, "thead") && !w_eq(d->nodes[table].tag, "tfoot")) { table = -1; break; }
+        if (table < 0 || !d->nodes[table].border_collapse) continue;
+        if (b > d->nodes[table].collapse_w) d->nodes[table].collapse_w = (uint8_t)b;
+    }
+}
+
 static void resolve_grid_areas(we_doc_t *d) {
     uint32_t i;
     for (i = 0; i < d->nnodes; i++) {
@@ -5627,6 +5645,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
         grid_expand(&d->nodes[i], 1, -1, 0);
     } }
     subgrid_validate(d);
+    collapse_widths(d);
     resolve_grid_requests(d);
     resolve_grid_areas(d);
     subgrid_bind_all(d);

@@ -182,6 +182,7 @@ typedef struct {
     int8_t z_index;            /* absolute paint order, -8..8 */
     uint8_t z_set, clear_side, valign;
     uint8_t fixed;             /* lot 61: position:fixed (absolute + viewport) */
+    uint8_t collapse_w;        /* lot 61: shared cell border width, layout time */
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;
     int16_t margin[4], padding[4]; /* top right bottom left */
