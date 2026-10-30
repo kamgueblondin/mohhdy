@@ -141,15 +141,16 @@ static void test_l61_stack_successive_layouts_are_stable(void) {
 
 
 /* opacity below 1 forms a z-index 0 stacking context (CSS Color 4 and
- * CSS 2.1 appendix E); the shared item has no alpha, so 0 < opacity < 1
- * paints opaque with one diagnostic and opacity 0 removes the items. */
+ * CSS 2.1 appendix E); opacity 0 removes the items. Lot 62: 0 < opacity < 1
+ * is composited (red at alpha 128 over blue, then over the white canvas). */
 static void test_l61_opacity_forms_a_context_over_later_flow(void) {
     lot52_render("<body style='margin:0'><div id=o style='opacity:0.5;height:10px;background:#ff0000'></div>"
                  "<div id=f style='margin-top:-5px;height:10px;background:#0000ff'></div></body>", 320);
     TEST_ASSERT_EQUAL(50, lot52_node("o")->transparency);
-    TEST_ASSERT_TRUE(l61_index(0x0000FF) < l61_index(0xFF0000));
-    TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(5, 7));
-    TEST_ASSERT_EQUAL(1, l61_diag_count("opacity painted opaque"));
+    TEST_ASSERT_TRUE(l61_index(0x0000FF) < l61_index(0x80007F));
+    TEST_ASSERT_EQUAL(0x80007F, (int)l61_paint(5, 7));
+    TEST_ASSERT_EQUAL(0xFF7F7F, (int)l61_paint(5, 2));
+    TEST_ASSERT_EQUAL(0, l61_diag_count("opacity painted opaque"));
     /* opacity 1 (and above, clamped) is no context: tree order stays. */
     lot52_render("<body style='margin:0'><div id=o style='opacity:1.5;height:10px;background:#ff0000'></div>"
                  "<div id=f style='margin-top:-5px;height:10px;background:#0000ff'></div></body>", 320);
@@ -180,7 +181,7 @@ static void test_l61_opacity_with_z_index_and_static_z(void) {
     lot52_render("<body style='margin:0'><div id=o style='opacity:40%;z-index:-1;height:10px;background:#ff0000'></div>"
                  "<div id=f style='margin-top:-5px;height:10px;background:#0000ff'></div></body>", 320);
     TEST_ASSERT_EQUAL(60, lot52_node("o")->transparency);
-    TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(5, 7));
+    TEST_ASSERT_EQUAL(0x660099, (int)l61_paint(5, 7));          /* red at alpha 102 over blue */
 }
 
 static void test_l61_opacity_values_are_bounded(void) {

@@ -626,13 +626,120 @@ static int match_rule(we_doc_t* d, int idx, const we_rule_t* r) {
     return result;
 }
 
+/* Lot 62: colours carry a transparency byte in bits 24..31 (0 opaque,
+ * 255 fully transparent). Layout and stacking keep it; the compositing
+ * pass resolves it against the backdrop and clears it, since the kernel
+ * painter masks the byte. */
+#define WE_ALPHA_SHIFT 24
+static int value_is(const char *v, int len, const char *s);
+static uint32_t with_alpha(uint32_t rgb, int alpha) {
+    if (alpha < 0) alpha = 0;
+    if (alpha > 255) alpha = 255;
+    return (rgb & 0xFFFFFFu) | ((uint32_t)(255 - alpha) << WE_ALPHA_SHIFT);
+}
+
+/* One colour argument: an integer or decimal number with an optional %
+ * (CSS Color 4 legacy and space syntax). Values are returned in 1/1000
+ * units, the percent flag tells which form was used. */
+static int color_number(const char *v, int n, int *milli, int *percent) {
+    int at = 0, whole = 0, frac = 0, scale = 100, digits = 0, negative = 0;
+    *percent = n > 0 && v[n - 1] == '%';
+    if (*percent) n--;
+    if (n > 3 && w_ieq_n(v + n - 3, 3, "deg")) n -= 3;
+    if (at < n && (v[at] == '-' || v[at] == '+')) { negative = v[at] == '-'; at++; }
+    while (at < n && v[at] >= '0' && v[at] <= '9') { if (whole < 100000) whole = whole * 10 + v[at] - '0'; at++; digits++; }
+    if (at < n && v[at] == '.') {
+        at++;
+        while (at < n && v[at] >= '0' && v[at] <= '9') { frac += (v[at] - '0') * scale; scale /= 10; at++; digits++; }
+    }
+    if (!digits || at != n) return -1;
+    *milli = whole * 1000 + frac;
+    if (negative) *milli = -*milli;
+    return 0;
+}
+
+static int clamp_int(int v, int lo, int hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+}
+
+/* Alpha argument: a number 0..1 or a percentage, clamped, as 0..255. */
+static int color_alpha(int milli, int percent) {
+    int a = percent ? milli / 100 : milli;
+    a = clamp_int(a, 0, 1000);
+    return (a * 255 + 500) / 1000;
+}
+
+/* hsl() to rgb with integer arithmetic: hue in 1/1000 degrees, s and l in
+ * 1/1000 percent (0..100000). */
+static uint32_t hsl_rgb(int hue, int sat, int light) {
+    int c, x, m, h6, r = 0, g = 0, b = 0, part;
+    hue %= 360000;
+    if (hue < 0) hue += 360000;
+    sat = clamp_int(sat, 0, 100000);
+    light = clamp_int(light, 0, 100000);
+    /* chroma in 1/100000 units of full scale */
+    c = (int)((100000LL - (light * 2 > 100000 ? light * 2 - 100000 : 100000 - light * 2)) * sat / 100000);
+    h6 = hue / 60000;
+    part = hue % 120000;
+    x = (int)((long long)c * (60000 - (part > 60000 ? part - 60000 : 60000 - part)) / 60000);
+    m = light - c / 2;
+    if (h6 == 0) { r = c; g = x; } else if (h6 == 1) { r = x; g = c; } else if (h6 == 2) { g = c; b = x; }
+    else if (h6 == 3) { g = x; b = c; } else if (h6 == 4) { r = x; b = c; } else { r = c; b = x; }
+    r = ((r + m) * 255 + 50000) / 100000; g = ((g + m) * 255 + 50000) / 100000; b = ((b + m) * 255 + 50000) / 100000;
+    return ((uint32_t)clamp_int(r, 0, 255) << 16) | ((uint32_t)clamp_int(g, 0, 255) << 8) | (uint32_t)clamp_int(b, 0, 255);
+}
+
+/* rgb()/rgba()/hsl()/hsla(): three channels then an optional alpha,
+ * separated by commas, or by spaces with "/ alpha". */
+static int parse_color_function(const char *v, int n, uint32_t *out) {
+    int hsl, open, at, count = 0, slash = 0, commas = 0, value[4], percent[4], k, alpha = 255;
+    if (n > 5 && (w_ieq_n(v, 5, "rgba(") || w_ieq_n(v, 5, "hsla("))) open = 5;
+    else if (n > 4 && (w_ieq_n(v, 4, "rgb(") || w_ieq_n(v, 4, "hsl("))) open = 4;
+    else return -1;
+    hsl = w_low(v[0]) == 'h';
+    if (v[n - 1] != ')') return -1;
+    at = open;
+    while (at < n - 1) {
+        int start;
+        while (at < n - 1 && w_space(v[at])) at++;
+        if (at >= n - 1) break;
+        if (v[at] == ',' || v[at] == '/') {
+            if (v[at] == ',') commas++; else { if (slash || count != 3) return -1; slash = 1; }
+            if (count == 0) return -1;
+            at++;
+            continue;
+        }
+        if (count == 4) return -1;
+        start = at;
+        while (at < n - 1 && !w_space(v[at]) && v[at] != ',' && v[at] != '/') at++;
+        if (color_number(v + start, at - start, &value[count], &percent[count])) return -1;
+        count++;
+    }
+    if (count < 3 || (commas && slash) || (commas && commas != count - 1) || (!commas && count == 4 && !slash))
+        return -1;
+    if (count == 4) alpha = color_alpha(value[3], percent[3]);
+    if (hsl) {
+        if (percent[0] || !percent[1] || !percent[2]) return -1;
+        *out = with_alpha(hsl_rgb(value[0], value[1], value[2]), alpha);
+        return 0;
+    }
+    *out = 0;
+    for (k = 0; k < 3; k++) {
+        int c = percent[k] ? (value[k] * 255 + 50000) / 100000 : (value[k] + 500) / 1000;
+        if (percent[k] != percent[0]) return -1;
+        *out = (*out << 8) | (uint32_t)clamp_int(c, 0, 255);
+    }
+    *out = with_alpha(*out, alpha);
+    return 0;
+}
+
 static int parse_color(const char* v, int n, uint32_t* out) {
     static const struct { const char* name; uint32_t rgb; } named[] = {
         {"black", 0x000000}, {"white", 0xFFFFFF}, {"red", 0xFF0000}, {"green", 0x008000},
         {"blue", 0x0000FF}, {"yellow", 0xFFFF00}, {"gray", 0x808080}, {"grey", 0x808080},
         {"navy", 0x000080}, {"teal", 0x008080}, {"orange", 0xFFA500}, {"purple", 0x800080},
         {"silver", 0xC0C0C0}, {"maroon", 0x800000}, {"lime", 0x00FF00}, {0, 0}};
-    int i;
+    int i, alpha = 255;
     if (n > 0 && v[0] == '#') {
         uint32_t x = 0;
         int k;
@@ -642,11 +749,15 @@ static int parse_color(const char* v, int n, uint32_t* out) {
             if (h < 0) return -1;
             x = (x << 4) | (uint32_t)h;
         }
-        if (n == 4) x = ((x & 0xF00) << 12) | ((x & 0xF00) << 8) | ((x & 0x0F0) << 8) | ((x & 0x0F0) << 4) | ((x & 0x00F) << 4) | (x & 0x00F);
-        else if (n != 7) return -1;
-        *out = x;
+        if (n == 5) { alpha = (int)(x & 0xF) * 17; x >>= 4; }
+        if (n == 9) { alpha = (int)(x & 0xFF); x >>= 8; }
+        if (n == 4 || n == 5) x = ((x & 0xF00) << 12) | ((x & 0xF00) << 8) | ((x & 0x0F0) << 8) | ((x & 0x0F0) << 4) | ((x & 0x00F) << 4) | (x & 0x00F);
+        else if (n != 7 && n != 9) return -1;
+        *out = with_alpha(x, alpha);
         return 0;
     }
+    if (value_is(v, n, "transparent")) { *out = with_alpha(0, 0); return 0; }
+    if (n > 4 && v[n - 1] == ')') return parse_color_function(v, n, out);
     for (i = 0; named[i].name; i++)
         if (n == w_len(named[i].name) && w_ieq_n(v, n, named[i].name)) { *out = named[i].rgb; return 0; }
     return -1;
@@ -678,7 +789,13 @@ static int tokens(const char* v, int n, int a[4], int l[4]) {
         while (i < n && w_space(v[i])) i++;
         if (i >= n) break;
         a[c] = i;
-        while (i < n && !w_space(v[i])) i++;
+        /* Lot 62: spaces inside a functional value (rgb(1 2 3)) do not split. */
+        { int depth = 0;
+          while (i < n && (depth || !w_space(v[i]))) {
+              if (v[i] == '(') depth++;
+              else if (v[i] == ')' && depth) depth--;
+              i++;
+          } }
         l[c] = i - a[c];
         c++;
     }
@@ -2255,10 +2372,14 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             n->grid_rows = (uint8_t)count;
             for (k = 0; k < count; k++) { n->row_size[k] = sizes[k]; n->row_floor[k] = floors[k]; n->row_cap[k] = caps[k]; }
         }
-    } else if (w_eq(prop, "color")) { if (parse_color(v, vl, &col) == 0) n->color = col; }
+    } else if (w_eq(prop, "color")) {
+        if (parse_color(v, vl, &col) == 0) n->color = col;
+        else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
+    }
     else if (w_eq(prop, "background") || w_eq(prop, "background-color")) {
-        if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
-        else if (w_ieq_n(v, vl, "none") || w_ieq_n(v, vl, "transparent")) n->has_bg = 0;
+        if (w_ieq_n(v, vl, "none") || w_ieq_n(v, vl, "transparent")) n->has_bg = 0;
+        else if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
+        else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
     }
     else if (w_eq(prop, "margin")) { if (!margin_auto_box(n, v, vl)) box4(v, vl, n->margin); }
     else if (w_eq(prop, "padding")) box4(v, vl, n->padding);
@@ -6021,6 +6142,26 @@ static int clip_glyphs(const os_fb_web_item_t *it, int left, int top, int right,
     return used;
 }
 
+/* Side k of a BORDER item as a RECT: top, bottom, then left and right
+ * between them (the kernel painter strokes the same pixels). */
+static void border_side(const os_fb_web_item_t *item, int k, os_fb_web_item_t *edge) {
+    int thickness = item->bold ? item->bold : 1, w = item->w, h = item->h;
+    if (thickness > w) thickness = w;
+    if (thickness > h) thickness = h;
+    *edge = *item;
+    edge->kind = OS_FB_WEB_RECT;
+    edge->bold = 0;
+    if (k < 2) {
+        edge->h = (uint16_t)thickness;
+        if (k) edge->y = (int16_t)(item->y + h - thickness);
+    } else {
+        edge->w = (uint16_t)thickness;
+        edge->y = (int16_t)(item->y + thickness);
+        edge->h = (uint16_t)(h > 2 * thickness ? h - 2 * thickness : 0);
+        if (k == 3) edge->x = (int16_t)(item->x + w - thickness);
+    }
+}
+
 static void clip_display_list(we_doc_t *d) {
     static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
     static int16_t owners[OS_FB_WEB_ITEMS];
@@ -6037,24 +6178,11 @@ static void clip_display_list(we_doc_t *d) {
             if (fragments < 0) fragments = OS_FB_WEB_ITEMS + 1;
             if (!fragments) continue;
         } else if (item.kind == OS_FB_WEB_BORDER) {
-            int thickness = item.bold ? item.bold : 1;
-            int w = item.w, h = item.h;
-            if (thickness > w) thickness = w;
-            if (thickness > h) thickness = h;
+            os_fb_web_item_t sides[4];
             fragments = 0;
             for (k = 0; k < 4; k++) {
-                os_fb_web_item_t edge = item;
-                edge.kind = OS_FB_WEB_RECT;
-                if (k < 2) {
-                    edge.h = (uint16_t)thickness;
-                    if (k) edge.y = (int16_t)(item.y + h - thickness);
-                } else {
-                    edge.w = (uint16_t)thickness;
-                    edge.y = (int16_t)(item.y + thickness);
-                    edge.h = (uint16_t)(h > 2 * thickness ? h - 2 * thickness : 0);
-                    if (k == 3) edge.x = (int16_t)(item.x + w - thickness);
-                }
-                if (clip_rectangle(&edge, left, top, right, bottom)) edges[fragments++] = edge;
+                border_side(&item, k, &sides[k]);
+                if (clip_rectangle(&sides[k], left, top, right, bottom)) edges[fragments++] = sides[k];
             }
         } else {
             if (!clip_rectangle(&item, left, top, right, bottom)) continue;
@@ -6223,12 +6351,9 @@ static void stack_items(we_doc_t *d) {
 }
 
 /* Lot 61: opacity 0 removes the items of its subtree (the boxes keep their
- * layout); 0 < opacity < 1 paints opaque, since the shared item has no
- * alpha, and is diagnosed once. */
+ * layout). Lot 62: 0 < opacity < 1 is composited by composite_items. */
 static void opacity_items(we_doc_t *d) {
-    int i, out = 0, partial = 0;
-    for (i = 0; i < (int)d->nnodes; i++) if (d->nodes[i].transparency && d->nodes[i].transparency < 100) partial = 1;
-    if (partial) diag(d, "opacity painted opaque", -1);
+    int i, out = 0;
     for (i = 0; i < (int)d->nitems; i++) {
         int o = d->item_owner[i], guard, hidden = 0;
         for (guard = 0; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent)
@@ -6236,6 +6361,251 @@ static void opacity_items(we_doc_t *d) {
         if (hidden) continue;
         d->items[out] = d->items[i];
         d->item_owner[out++] = d->item_owner[i];
+    }
+    d->nitems = (uint32_t)out;
+}
+
+/* ---------- Lot 62: alpha compositing ----------
+ * The shared item has no alpha and the kernel painter masks bits 24..31,
+ * so translucent paint is resolved here into opaque fragments. Every
+ * translucent item is split along the edges of what is painted under it
+ * (RECT items, BORDER sides, TEXT boxes) and each piece takes "source over
+ * backdrop". A TEXT item under a translucent RECT is repainted on top,
+ * cut to the piece, with its own blended colour. An opacity group (CSS
+ * Color 4: 0 < opacity < 1) is composited in its own space first, deepest
+ * group first: its items blend over earlier items of the same group only,
+ * then their alpha is multiplied by the group alpha, so the group blends
+ * as one layer. The root backdrop is the white canvas of the web pane.
+ * Fragments share the 96-item display list; on overflow the list is kept
+ * unblended (opaque colours, fully transparent items dropped) with
+ * "alpha display budget". Text over text blends with the paint under the
+ * lower text. */
+#define WE_ALPHA_REGIONS 32
+#define WE_ALPHA_OVERLAYS 8
+#define WE_ALPHA_STACK 48
+#define WE_CANVAS 0xFFFFFFu
+typedef struct { int16_t x, y, w, h; uint32_t dst; int16_t item; } we_region_t;
+static we_region_t alpha_region[WE_ALPHA_REGIONS], alpha_overlay[WE_ALPHA_OVERLAYS];
+static int alpha_regions, alpha_overlays;
+static os_fb_web_item_t alpha_out[OS_FB_WEB_ITEMS], alpha_saved[OS_FB_WEB_ITEMS];
+static int16_t alpha_owner[OS_FB_WEB_ITEMS], alpha_child_of[OS_FB_WEB_ITEMS], alpha_saved_owner[OS_FB_WEB_ITEMS];
+static int alpha_count;
+
+static int color_alpha_of(uint32_t c) {
+    return 255 - (int)(c >> WE_ALPHA_SHIFT);
+}
+
+/* Source over destination with straight colours (Porter-Duff over). */
+static uint32_t alpha_over(uint32_t src, uint32_t dst) {
+    int sa = color_alpha_of(src), da = color_alpha_of(dst), oa, k;
+    uint32_t out = 0;
+    if (sa == 255 || da == 0) return src;
+    if (sa == 0) return dst;
+    oa = sa + (da * (255 - sa) + 127) / 255;
+    for (k = 16; k >= 0; k -= 8) {
+        int sc = (int)((src >> k) & 255u), dc = (int)((dst >> k) & 255u);
+        int num = sc * sa * 255 + dc * da * (255 - sa);
+        out |= (uint32_t)clamp_int((num + oa * 255 / 2) / (oa * 255), 0, 255) << k;
+    }
+    return with_alpha(out, oa);
+}
+
+static int alpha_group(const we_node_t *n) {
+    return n->transparency > 0 && n->transparency < 100;
+}
+
+static int group_alpha(const we_node_t *n) {
+    return ((100 - n->transparency) * 255 + 50) / 100;
+}
+
+/* For the chain of owner (inclusive): the alpha group directly inside g,
+ * -1 when owner belongs to g itself, -2 when owner is outside g (g -1 is
+ * the root and contains everything). */
+static int alpha_child(const we_doc_t *d, int owner, int g) {
+    int last = -1, guard;
+    for (guard = 0; owner >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, owner = d->nodes[owner].parent) {
+        if (owner == g) return last;
+        if (alpha_group(&d->nodes[owner])) last = owner;
+    }
+    return g < 0 ? last : -2;
+}
+
+static int alpha_depth(const we_doc_t *d, int owner) {
+    int depth = 0, guard;
+    for (guard = 0; owner >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, owner = d->nodes[owner].parent)
+        if (alpha_group(&d->nodes[owner])) depth++;
+    return depth;
+}
+
+/* Painted area k of an output item: the box of a RECT or TEXT (k 0, bold
+ * text one pixel wider), a side of a BORDER (k 0..3). */
+static int alpha_shape(const os_fb_web_item_t *it, int k, int *x, int *y, int *w, int *h) {
+    if (it->kind == OS_FB_WEB_BORDER) {
+        os_fb_web_item_t side;
+        border_side(it, k, &side);
+        *x = side.x; *y = side.y; *w = side.w; *h = side.h;
+    } else {
+        if (k) return 0;
+        *x = it->x; *y = it->y; *w = it->w + (it->kind == OS_FB_WEB_TEXT && it->bold ? 1 : 0); *h = it->h;
+    }
+    return *w > 0 && *h > 0;
+}
+
+static int alpha_add(we_region_t *list, int *count, int cap, int x, int y, int w, int h, uint32_t dst, int item) {
+    if (*count >= cap) return -1;
+    list[*count].x = (int16_t)x; list[*count].y = (int16_t)y;
+    list[*count].w = (int16_t)w; list[*count].h = (int16_t)h;
+    list[*count].dst = dst; list[*count].item = (int16_t)item;
+    (*count)++;
+    return 0;
+}
+
+/* Splits (x, y, w, h) into pieces of one backdrop each, looking at the
+ * output items below layer `up` (item * 4 + side) that belong to the
+ * group being composited and not to the source's own child group. */
+static int alpha_query(int g, int child, int text_src, int x, int y, int w, int h) {
+    struct { int16_t x, y, w, h, up; } stack[WE_ALPHA_STACK];
+    int sp = 0;
+    alpha_regions = alpha_overlays = 0;
+    stack[sp].x = (int16_t)x; stack[sp].y = (int16_t)y; stack[sp].w = (int16_t)w; stack[sp].h = (int16_t)h;
+    stack[sp++].up = (int16_t)(alpha_count * 4);
+    while (sp) {
+        int rx, ry, rw, rh, up, layer, found = 0;
+        sp--;
+        rx = stack[sp].x; ry = stack[sp].y; rw = stack[sp].w; rh = stack[sp].h; up = stack[sp].up;
+        for (layer = up - 1; layer >= 0 && !found; layer--) {
+            const os_fb_web_item_t *it = &alpha_out[layer >> 2];
+            int c = alpha_child_of[layer >> 2], sx, sy, sw, sh, ix, iy, ir, ib, piece;
+            if (c == -2 || (child >= 0 && c == child)) continue;
+            if (text_src && it->kind == OS_FB_WEB_TEXT) continue;
+            if (!alpha_shape(it, layer & 3, &sx, &sy, &sw, &sh)) continue;
+            ix = sx > rx ? sx : rx; iy = sy > ry ? sy : ry;
+            ir = sx + sw < rx + rw ? sx + sw : rx + rw; ib = sy + sh < ry + rh ? sy + sh : ry + rh;
+            if (ir <= ix || ib <= iy) continue;
+            found = 1;
+            if (it->kind == OS_FB_WEB_TEXT) {
+                if (alpha_add(alpha_overlay, &alpha_overlays, WE_ALPHA_OVERLAYS, ix, iy, ir - ix, ib - iy, it->color, layer >> 2)) return -1;
+                if (sp >= WE_ALPHA_STACK) return -1;
+                stack[sp].x = (int16_t)ix; stack[sp].y = (int16_t)iy; stack[sp].w = (int16_t)(ir - ix);
+                stack[sp].h = (int16_t)(ib - iy); stack[sp++].up = (int16_t)layer;
+            } else if (alpha_add(alpha_region, &alpha_regions, WE_ALPHA_REGIONS, ix, iy, ir - ix, ib - iy, it->color, -1)) return -1;
+            /* the rest of the piece: bands above, below, left and right */
+            for (piece = 0; piece < 4; piece++) {
+                int px = rx, py = ry, pw = rw, ph = rh;
+                if (piece == 0) ph = iy - ry;
+                else if (piece == 1) { py = ib; ph = ry + rh - ib; }
+                else { py = iy; ph = ib - iy; if (piece == 2) pw = ix - rx; else { px = ir; pw = rx + rw - ir; } }
+                if (pw <= 0 || ph <= 0) continue;
+                if (sp >= WE_ALPHA_STACK) return -1;
+                stack[sp].x = (int16_t)px; stack[sp].y = (int16_t)py; stack[sp].w = (int16_t)pw;
+                stack[sp].h = (int16_t)ph; stack[sp++].up = (int16_t)layer;
+            }
+        }
+        if (!found && alpha_add(alpha_region, &alpha_regions, WE_ALPHA_REGIONS, rx, ry, rw, rh,
+                                g < 0 ? WE_CANVAS : with_alpha(0, 0), -1)) return -1;
+    }
+    return 0;
+}
+
+static int alpha_push(const os_fb_web_item_t *it, int owner, int child) {
+    if (alpha_count >= OS_FB_WEB_ITEMS) return -1;
+    alpha_out[alpha_count] = *it;
+    alpha_owner[alpha_count] = (int16_t)owner;
+    alpha_child_of[alpha_count++] = (int16_t)child;
+    return 0;
+}
+
+/* Text item `text` cut to a piece, every fragment in colour `color`. */
+static int alpha_push_text(const os_fb_web_item_t *text, int x, int y, int w, int h, uint32_t color, int owner, int child) {
+    static os_fb_web_item_t pieces[WE_CLIP_FRAGMENTS];
+    int count = clip_glyphs(text, x, y, x + w, y + h, pieces, WE_CLIP_FRAGMENTS), k;
+    if (count < 0) return -1;
+    for (k = 0; k < count; k++) {
+        pieces[k].color = color;
+        if (alpha_push(&pieces[k], owner, child)) return -1;
+    }
+    return 0;
+}
+
+/* One translucent RECT or TEXT source over the output built so far. */
+static int alpha_source(const os_fb_web_item_t *src, int owner, int g, int child) {
+    int k, text = src->kind == OS_FB_WEB_TEXT, x, y, w, h;
+    if (!alpha_shape(src, 0, &x, &y, &w, &h)) return 0;
+    if (alpha_query(g, child, text, x, y, w, h)) return -1;
+    if (text && alpha_regions == 1 && alpha_region[0].w == w && alpha_region[0].h == h) {
+        os_fb_web_item_t one = *src;
+        one.color = alpha_over(src->color, alpha_region[0].dst);
+        return alpha_push(&one, owner, child);
+    }
+    for (k = 0; k < alpha_regions; k++) {
+        const we_region_t *r = &alpha_region[k];
+        uint32_t color = alpha_over(src->color, r->dst);
+        if (text) { if (alpha_push_text(src, r->x, r->y, r->w, r->h, color, owner, child)) return -1; }
+        else {
+            os_fb_web_item_t piece = *src;
+            piece.x = r->x; piece.y = r->y; piece.w = (uint16_t)r->w; piece.h = (uint16_t)r->h;
+            piece.color = color;
+            if (alpha_push(&piece, owner, child)) return -1;
+        }
+    }
+    for (k = 0; k < alpha_overlays; k++) {
+        const we_region_t *r = &alpha_overlay[k];
+        os_fb_web_item_t under = alpha_out[r->item];
+        if (alpha_push_text(&under, r->x, r->y, r->w, r->h, alpha_over(src->color, r->dst), owner, child)) return -1;
+    }
+    return 0;
+}
+
+/* Composites the items of group g (-1: the whole page over the canvas). */
+static int alpha_pass(we_doc_t *d, int g) {
+    int i, k, ga = g >= 0 ? group_alpha(&d->nodes[g]) : 255;
+    alpha_count = 0;
+    for (i = 0; i < (int)d->nitems; i++) {
+        os_fb_web_item_t it = d->items[i];
+        int owner = d->item_owner[i], child = alpha_child(d, owner, g), a = color_alpha_of(it.color);
+        if (child == -2 || a == 255) { if (alpha_push(&it, owner, child)) return -1; continue; }
+        if (a == 0) continue;
+        if (it.kind == OS_FB_WEB_BORDER) {
+            for (k = 0; k < 4; k++) {
+                os_fb_web_item_t side;
+                border_side(&it, k, &side);
+                if (alpha_source(&side, owner, g, child)) return -1;
+            }
+        } else if (alpha_source(&it, owner, g, child)) return -1;
+    }
+    for (i = 0; i < alpha_count; i++) {
+        d->items[i] = alpha_out[i];
+        d->item_owner[i] = alpha_owner[i];
+        if (g >= 0 && alpha_child_of[i] != -2)
+            d->items[i].color = with_alpha(d->items[i].color, (color_alpha_of(d->items[i].color) * ga + 127) / 255);
+    }
+    d->nitems = (uint32_t)alpha_count;
+    return 0;
+}
+
+static void composite_items(we_doc_t *d) {
+    int i, any = 0, depth, max_depth = 0, failed = 0, saved = (int)d->nitems, out = 0;
+    for (i = 0; i < (int)d->nitems; i++) {
+        int depth_i = alpha_depth(d, d->item_owner[i]);
+        if (depth_i > max_depth) max_depth = depth_i;
+        if (depth_i || color_alpha_of(d->items[i].color) != 255) any = 1;
+    }
+    if (!any) return;
+    for (i = 0; i < (int)d->nitems; i++) { alpha_saved[i] = d->items[i]; alpha_saved_owner[i] = d->item_owner[i]; }
+    for (depth = max_depth; depth >= 1 && !failed; depth--)
+        for (i = 0; i < (int)d->nnodes && !failed; i++)
+            if (alpha_group(&d->nodes[i]) && alpha_depth(d, i) == depth) failed = alpha_pass(d, i) != 0;
+    if (!failed) failed = alpha_pass(d, -1) != 0;
+    if (!failed) {
+        for (i = 0; i < (int)d->nitems; i++) d->items[i].color &= 0xFFFFFFu;
+        return;
+    }
+    diag(d, "alpha display budget", -1);
+    for (i = 0; i < saved; i++) {
+        if (!color_alpha_of(alpha_saved[i].color)) continue;
+        d->items[out] = alpha_saved[i];
+        d->items[out].color &= 0xFFFFFFu;
+        d->item_owner[out++] = alpha_saved_owner[i];
     }
     d->nitems = (uint32_t)out;
 }
@@ -6313,6 +6683,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     opacity_items(d);
     raise_fixed(d);
     clip_display_list(d);
+    composite_items(d);
     if (math_refused) diag(d, "math evaluation refused", -1);
     if (style_solid_3d) diag(d, "border style painted solid", -1);
     d->perf.items = d->nitems;
