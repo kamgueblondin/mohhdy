@@ -51,7 +51,8 @@ static void test_l62_round_clip_escapes(void) {
     l61_rect_at(0, 0, 4, 4, 0xFF0000);                    /* fixed boxes escape the clip */
     lot52_render(L62_BODY "<div style='width:20px;height:20px;overflow:hidden;border-radius:10px;transform:translateX(1px)'>"
                  "<div style='height:20px;background:#ff0000'></div></div></body>", 320);
-    l61_rect_at(1, 0, 20, 20, 0xFF0000);                  /* square under a transform */
+    l61_rect_at(1, 6, 20, 8, 0xFF0000);                   /* lot 63: rounded under a transform too */
+    l61_rect_at(6, 0, 10, 3, 0xFF0000);
 }
 
 static void test_l62_round_double_and_3d_borders(void) {

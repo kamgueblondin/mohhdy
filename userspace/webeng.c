@@ -8347,9 +8347,11 @@ static int clip_frags(os_fb_web_item_t *frag, int count, int left, int top, int 
  * border radii reduced by the borders, CSS Backgrounds 3, 5.3): after the
  * rectangle clip, a fragment that the shape's bands do not wholly contain
  * is cut band by band (TEXT at glyph level, as for rectangles). Nested
- * rounded clips apply innermost first; a fixed box escapes them. Under a
- * transform the clip stays rectangular. Over WE_CLIP_FRAGMENTS the item
- * is dropped with "clipping display budget". */
+ * rounded clips apply innermost first; a fixed box escapes them. Lot 63:
+ * under a transform each rounded clip applies in its box's own space,
+ * before that box's transform maps the pieces. Over WE_CLIP_FRAGMENTS the
+ * item is dropped with "clipping display budget" (or "transform display
+ * budget" under a transform). */
 static int round_bands(const we_node_t *n, int band[][4]) {
     we_radii_t outer, r;
     we_shape_t pad;
@@ -8416,37 +8418,42 @@ static int round_text(const os_fb_web_item_t *it, int band[][4], int count, os_f
     return used;
 }
 
-static int round_clip(const we_doc_t *d, int owner, os_fb_web_item_t *frag, int count, int cap) {
+/* The rounded clip of one box n, in n's own (untransformed) space. */
+static int round_clip_node(const we_node_t *n, os_fb_web_item_t *frag, int count, int cap) {
     static os_fb_web_item_t out[WE_CLIP_FRAGMENTS], one[WE_CLIP_FRAGMENTS];
     static int band[WE_ROUND_BANDS][4];
+    int bands, i, b, k, used = 0;
+    if (!n->overflow_hidden || (bands = round_bands(n, band)) < 0) return count;
+    for (i = 0; i < count; i++) {
+        if (bands_contain(band, bands, &frag[i])) {
+            if (used >= cap) return -1;
+            out[used++] = frag[i];
+            continue;
+        }
+        if (frag[i].kind == OS_FB_WEB_TEXT) {
+            int got = round_text(&frag[i], band, bands, one, WE_CLIP_FRAGMENTS);
+            if (got < 0 || used + got > cap) return -1;
+            for (k = 0; k < got; k++) out[used++] = one[k];
+            continue;
+        }
+        for (b = 0; b < bands; b++) {
+            int got;
+            if (frag[i].y + frag[i].h <= band[b][0] || frag[i].y >= band[b][1]) continue;
+            one[0] = frag[i];
+            got = clip_frags(one, 1, band[b][2], band[b][0], band[b][3], band[b][1], WE_CLIP_FRAGMENTS);
+            if (got < 0 || used + got > cap) return -1;
+            for (k = 0; k < got; k++) out[used++] = one[k];
+        }
+    }
+    for (i = 0; i < used; i++) frag[i] = out[i];
+    return used;
+}
+
+static int round_clip(const we_doc_t *d, int owner, os_fb_web_item_t *frag, int count, int cap) {
     int p = owner >= 0 ? d->nodes[owner].parent : -1, q = owner;
     for (; p >= 0 && count > 0; q = p, p = d->nodes[p].parent) {
-        int bands, i, b, k, used = 0;
         if (q >= 0 && d->nodes[q].fixed) break;
-        if (!d->nodes[p].overflow_hidden || (bands = round_bands(&d->nodes[p], band)) < 0) continue;
-        for (i = 0; i < count; i++) {
-            if (bands_contain(band, bands, &frag[i])) {
-                if (used >= cap) return -1;
-                out[used++] = frag[i];
-                continue;
-            }
-            if (frag[i].kind == OS_FB_WEB_TEXT) {
-                int got = round_text(&frag[i], band, bands, one, WE_CLIP_FRAGMENTS);
-                if (got < 0 || used + got > cap) return -1;
-                for (k = 0; k < got; k++) out[used++] = one[k];
-                continue;
-            }
-            for (b = 0; b < bands; b++) {
-                int got;
-                if (frag[i].y + frag[i].h <= band[b][0] || frag[i].y >= band[b][1]) continue;
-                one[0] = frag[i];
-                got = clip_frags(one, 1, band[b][2], band[b][0], band[b][3], band[b][1], WE_CLIP_FRAGMENTS);
-                if (got < 0 || used + got > cap) return -1;
-                for (k = 0; k < got; k++) out[used++] = one[k];
-            }
-        }
-        for (i = 0; i < used; i++) frag[i] = out[i];
-        count = used;
+        if ((count = round_clip_node(&d->nodes[p], frag, count, cap)) < 0) return -1;
     }
     return count;
 }
@@ -8671,6 +8678,7 @@ static int transform_clip_item(const we_doc_t *d, const os_fb_web_item_t *item, 
             pending = 0;
             if ((count = clip_frags(frag, count, n->x + box_edge(n, 3), n->y + box_edge(n, 0),
                                     n->x + n->w - box_edge(n, 1), n->y + n->h - box_edge(n, 2), cap)) < 0) return -1;
+            if ((count = round_clip_node(n, frag, count, cap)) < 0) return -1;
         }
         if (n->tf_count) {
             node_matrix(n, &step);
