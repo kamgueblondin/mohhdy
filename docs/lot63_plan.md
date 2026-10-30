@@ -1,4 +1,4 @@
-# Lot 63: generated content, text values, radial positions, rotate/skew, rounded dashes and clips (US-031 partial)
+# Lot 63: generated content, text values, tabs, radial positions, rotate/skew, rounded dashes and clips (US-031 partial)
 
 Base: origin/main f808d46 (merge of PR #219, lot 62; contains ab540be).
 Branch: feat/lot63-webeng-layout. No push, no merge, no force-push.
@@ -98,6 +98,22 @@ we_doc_t stays under 1 MiB (see the PR body for the measured size).
   transform maps the pieces (round_clip_node shared with the untransformed
   path).
 
+## G. Tabs, tab-size and break-spaces
+
+- Text keeps U+0009 (also from &#9;). Under pre, pre-wrap and
+  break-spaces a tab advances to the next multiple of tab-size measured
+  from the line start (painted as at most 32 space advances); a tab that
+  does not fit on a wrapping line starts the next line. Collapsing modes
+  read a tab as a space.
+- tab-size: an integer 0..31 (space advances of 8 px) or a px/em length of
+  at most 255 px, inherited, default 8; anything else gives "tab size
+  refused". 0 removes the tabs.
+- white-space: break-spaces and white-space-collapse: break-spaces keep
+  spaces and wrap them like letters: a run fills the line and continues
+  on the next one instead of hanging; text-wrap-mode:nowrap turns it into
+  pre. The intrinsic widths treat each break-spaces space as a break
+  opportunity.
+
 ## QEMU
 
 - /web/lot63.html combines A-F; tests/scripts/test_qemu_web_layout.py
@@ -121,6 +137,11 @@ we_doc_t stays under 1 MiB (see the PR body for the measured size).
   leave the outer corner pixel unpainted and give no square diagnostic;
   the rounded clip under translateX(1px) is now rounded (two bands
   asserted instead of the square).
+- lot55_text, lot56b and lot63_text: break-spaces is now valid; the
+  refused values become break-everything, break-all (white-space) and
+  discard (white-space-collapse).
+- lot56 tabs: a pre tab now advances to the next 64 px stop ("a       b",
+  width 72) instead of being one space.
 
 ## Remaining gaps (first one first)
 
@@ -130,8 +151,7 @@ we_doc_t stays under 1 MiB (see the PR body for the measured size).
 3. Dots and dashes along the corner arcs (arcs are solid), translucent
    radial stops, background images (repeat/position/size).
 4. matrix()/3D transforms, rotated text glyphs, transformed hit testing.
-5. tab-size and break-spaces (tabs become spaces at parse time), soft
-   hyphen breaks and hyphens, vertical writing modes, bidi.
+5. Soft hyphen breaks and hyphens, vertical writing modes, bidi.
 6. Column subgrid baselines, floats inside the negative z layer.
 
 ## Results

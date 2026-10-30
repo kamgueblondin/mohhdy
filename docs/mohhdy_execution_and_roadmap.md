@@ -18,8 +18,8 @@ break keep-all/break-word, radial-gradient explicit sizes and "at
 <position>" centres, rotate by any whole degree (deg/grad/rad/turn) and
 skew painted as at most 8 row bands per rectangle with nested matrices
 composed when no clip separates them, rounded dashed and dotted borders
-(solid arcs, patterned straight parts) and rounded overflow clips under
-transforms. Kernel, rights and shared ABI unchanged. No Chromium, WebKit,
+(solid arcs, patterned straight parts) rounded overflow clips under
+transforms, preserved tabs with tab-size and white-space break-spaces. Kernel, rights and shared ABI unchanged. No Chromium, WebKit,
 network loading, JavaScript VM, new font engine or margin collapsing.
 US-059/060/063/074 unchanged; US-G19..US-G24 remain partial. Margin
 collapsing remains absent. Roadmap statuses and the complete non-done
