@@ -141,4 +141,62 @@ The host test reads the same HTML file.
 
 ## Measured results
 
-Filled in after the final runs below.
+Actual make test-all on the final revision:
+
+```text
+Total Tests: 2871
+Passed: 2871
+Failed: 0
+Skipped: 0
+Execution Time: 76s
+```
+
+test_webeng: 1730 cases, also 1730/1730 under i386 ASan/UBSan
+(-fsanitize=address,undefined, no recover). The i386 document is 678340
+bytes (node 3840), under the unchanged 1 MiB ceiling; the 512 KiB layout
+workspace assertion passes in make all.
+
+Mutation builds (each a private copy of webeng.c linked into test_webeng):
+subgrid placement restore, collapse overlap, probe depth, last-baseline
+offset, inline-block baseline, glyph fragments, scroll state, auto-repeat
+count, subgrid row tracks, stacking pass, stacking z order, stacking
+in-flow level and stacking depth diagnostic each fail at least one lot 61
+assertion. Removing the fixed-box early return in abs_containing is an
+equivalent mutant: a fixed box placed in an ancestor's pass still uses the
+viewport; test_l61_fixed_ignores_positioned_ancestors covers the result.
+
+make all, tree-clean-check, strict-image-check, secrets-check,
+roadmap-check, check-initrd-web-stamp and
+scripts/extract_guest_commands.py --check pass. make qemu-gui-parity
+passes. The production assertion is unchanged and complete:
+
+```text
+prod-roadmap next US-076 US-078 US-080 US-081 US-097 US-G19 US-G20 US-G21 US-G22 US-G23 US-G24
+```
+
+Actual make qemu-web-layout output for this lot (all earlier lots pass in
+the same run):
+
+```text
+lot61 console flex-last-baseline box 0 10 50x10
+lot61 console subgrid-span box 40 24 80x10
+lot61 console inline-block-baseline box 16 34 20x16
+lot61 console glyph-fragment box 9 69 3x2
+lot61 console fixed box 610 470 30x10
+osui web render file=/web/lot61.html nodes 34 rules 17 boxes 19 lines 6 items 29 dropped 0 page 640x95 diag 0 components 0 media_kept 0 media_dropped 0 vars 0 sanitized 0
+lot61 pixels compared=4624 baseline=last,inline-block subgrid=auto-fill fixed=viewport clip=glyph table=collapse flex=wrap image=shared
+QEMU web layout contract passed.
+```
+
+Line counts use git diff origin/main --numstat (30 files, +3016 -179).
+Useful additions: 1042 engine/header code + 1397 behavioural unit test
+code + 54 QEMU script = 2493. Excluded: 95 engine comment lines, 46 engine
+blank lines, 44 test comment lines, 134 test blank lines, 203 doc/roadmap/
+HTML lines. No copied function.
+
+Under the 4000 target. The first gap left is per-edge collapsed border
+resolution (CSS 17.6.2: width, then style, then cell/row/table origin, and
+the table outer border merge); this lot uses one uniform shared width.
+After it: negative z-index below in-flow content (it would change the
+existing absolute rule asserted since lot 56), subgrid own gaps and
+content distribution, and margin collapsing (excluded by this brief).
