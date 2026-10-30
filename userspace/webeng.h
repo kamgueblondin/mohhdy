@@ -194,6 +194,7 @@ typedef struct {
      * mean "use border / border_style". Only collapsed tables read them. */
     int8_t edge_w[4];
     uint8_t edge_style[4], border_style, edge_color_set, collapse_cell;
+    uint8_t cin[4];             /* lot 61: collapsed cell content insets, layout time */
     uint32_t edge_color[4];
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;

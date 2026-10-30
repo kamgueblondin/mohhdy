@@ -34,7 +34,7 @@ static void test_l61_collapse_shares_vertical_and_horizontal_edges(void) {
     l61_box("t", 0, 0, 60, 26);
     l61_box("a", 0, 0, 31, 14);
     l61_box("b", 29, 0, 31, 14);
-    l61_box("c", 0, 12, 31, 12);
+    l61_box("c", 0, 12, 31, 13);   /* insets: 2 above (red), 1 below (own 1px) */
     l61_box("d", 29, 12, 31, 14);
     l61_text_at("A", 2, 3);
     l61_text_at("B", 31, 3);
@@ -56,11 +56,12 @@ static void test_l61_collapse_shared_edge_paints_once(void) {
     TEST_ASSERT_EQUAL(0xFF0000, l61_paint(5, 12));
     TEST_ASSERT_EQUAL(0xFF0000, l61_paint(5, 13));
     TEST_ASSERT_EQUAL(0x0000FF, l61_paint(40, 12));
-    /* c's own 1px bottom and left edges stay 1px. */
-    TEST_ASSERT_EQUAL(0x00FF00, l61_paint(5, 24));
-    TEST_ASSERT_TRUE(l61_paint(5, 25) != 0x00FF00);
-    TEST_ASSERT_EQUAL(0x00FF00, l61_paint(0, 20));
-    TEST_ASSERT_TRUE(l61_paint(1, 20) != 0x00FF00);
+    /* c's own 1px bottom and left edges stay 1px, on the grid line (band
+     * offset B/2 - w/2 = 1). */
+    TEST_ASSERT_EQUAL(0x00FF00, l61_paint(5, 25));
+    TEST_ASSERT_TRUE(l61_paint(5, 24) != 0x00FF00);
+    TEST_ASSERT_EQUAL(0x00FF00, l61_paint(1, 20));
+    TEST_ASSERT_TRUE(l61_paint(0, 20) != 0x00FF00);
 }
 
 static void test_l61_collapse_without_borders_keeps_zero_spacing(void) {
@@ -85,13 +86,17 @@ static void test_l61_collapse_with_spans_and_intrinsic_width(void) {
         "<td id=c rowspan=2 style='border:3px solid #00ff00'>C</td><td id=d>D</td><td id=e>E</td></tr><tr>"
         "<td id=f>F</td><td id=g>G</td></tr></table></div></body>", 320);
     TEST_ASSERT_EQUAL(3, lot52_node("t")->collapse_w);
-    l61_box("t", 0, 0, 32, 30);
+    /* Borderless cells still split the uniform 3px band (B/2 before the
+     * grid line, the odd pixel after it). */
+    l61_box("t", 0, 0, 35, 37);
     l61_box("a", 0, 0, 16, 16);
-    l61_box("b", 13, 0, 19, 12);
-    l61_box("c", 0, 13, 16, 17);
-    l61_box("d", 13, 13, 11, 10);
-    l61_box("e", 21, 13, 11, 10);
-    l61_box("g", 21, 20, 11, 10);
+    l61_box("b", 13, 0, 22, 14);
+    l61_box("c", 0, 13, 16, 24);
+    l61_box("d", 13, 13, 13, 14);
+    l61_box("e", 23, 13, 12, 14);
+    l61_box("g", 23, 24, 12, 13);
+    l61_text_at("D", 16, 16);
+    l61_text_at("E", 24, 16);
 }
 
 static void test_l61_collapse_successive_layouts_are_stable(void) {

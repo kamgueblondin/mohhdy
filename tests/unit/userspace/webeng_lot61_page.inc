@@ -27,27 +27,29 @@ static void test_l61_page_combines_lot_behaviours(void) {
     l61_box("fix", 610, 470, 30, 10);  /* fixed to the 640x480 viewport */
     l61_rect_is(0x800080, 610, 470, 30, 10);
     /* Collapsed table: the wider 4px table border wins the outer edges,
-     * the 2px cell border keeps the interior edge. */
+     * the 2px cell border keeps the interior edge; the 6px content clears
+     * the 4px outer lines (4 + 6 + 4). */
+    l61_box("t2", 0, 95, 120, 14);
     l61_rect_at(0, 95, 120, 4, 0x0000FF);
-    l61_rect_at(0, 101, 120, 4, 0x0000FF);
-    l61_rect_at(0, 95, 4, 10, 0x0000FF);
-    l61_rect_at(116, 95, 4, 10, 0x0000FF);
-    l61_rect_at(59, 95, 2, 10, 0xFF0000);
+    l61_rect_at(0, 105, 120, 4, 0x0000FF);
+    l61_rect_at(0, 95, 4, 14, 0x0000FF);
+    l61_rect_at(116, 95, 4, 14, 0x0000FF);
+    l61_rect_at(59, 95, 2, 14, 0xFF0000);
     TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(60, 96));   /* vertical over horizontal */
     TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(2, 100));
     /* Subgrid column-gap 10px over 40px parent tracks. */
-    l61_box("s2a", 0, 105, 35, 6);
-    l61_box("s2b", 45, 105, 30, 6);
+    l61_box("s2a", 0, 109, 35, 6);
+    l61_box("s2b", 45, 109, 30, 6);
     /* z-index:-1 paints first, below the overlapping in-flow block. */
     TEST_ASSERT_EQUAL(0, l61_index(0x00FF00));
-    TEST_ASSERT_EQUAL(0x00FF00, (int)l61_paint(5, 112));
-    TEST_ASSERT_EQUAL(0x000080, (int)l61_paint(5, 115));
+    TEST_ASSERT_EQUAL(0x00FF00, (int)l61_paint(5, 116));
+    TEST_ASSERT_EQUAL(0x000080, (int)l61_paint(5, 119));
     for (k = 0; k < (int)g_doc.nitems; k++)
         if (g_doc.items[k].kind == OS_FB_WEB_RECT && g_doc.items[k].color == 0 &&
             g_doc.items[k].x >= 8 && g_doc.items[k].x + g_doc.items[k].w <= 12 &&
             g_doc.items[k].y >= 65 && g_doc.items[k].y + g_doc.items[k].h <= 73) fragments++;
     TEST_ASSERT_EQUAL(3, fragments);   /* the second W is cut at x 12 */
-    TEST_ASSERT_EQUAL(120, g_doc.perf.page_h);
+    TEST_ASSERT_EQUAL(124, g_doc.perf.page_h);
     TEST_ASSERT_EQUAL(1, g_doc.perf.images);
     TEST_ASSERT_EQUAL(0, g_doc.perf.items_dropped);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
@@ -59,12 +61,12 @@ static void test_l61_page_scroll_moves_only_fixed(void) {
     we_set_image_reader(lot52_reader, 0);
     TEST_ASSERT_EQUAL(0, we_layout_viewport(&g_doc, 640, 40));
     we_set_image_reader(0, 0);
-    TEST_ASSERT_EQUAL(120, g_doc.perf.page_h);
+    TEST_ASSERT_EQUAL(124, g_doc.perf.page_h);
     l61_box("fix", 610, 30, 30, 10);
-    TEST_ASSERT_EQUAL(80, we_scroll(&g_doc, 1000));   /* clamped to 120 - 40 */
-    l61_box("fix", 610, 110, 30, 10);
+    TEST_ASSERT_EQUAL(84, we_scroll(&g_doc, 1000));   /* clamped to 124 - 40 */
+    l61_box("fix", 610, 114, 30, 10);
     l61_box("sa", 40, 24, 80, 10);
-    l61_rect_is(0x800080, 610, 110, 30, 10);
+    l61_rect_is(0x800080, 610, 114, 30, 10);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 

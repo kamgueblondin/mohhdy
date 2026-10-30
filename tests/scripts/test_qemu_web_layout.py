@@ -131,11 +131,11 @@ def main():
             for label, box in (("flex-last-baseline", "0 10 50x10"), ("subgrid-span", "40 24 80x10"),
                                ("inline-block-baseline", "16 34 20x16"), ("glyph-fragment", "9 69 3x2"),
                                ("fixed", "610 470 30x10"), ("collapse-outer-edge", "0 95 120x4"),
-                               ("collapse-inner-edge", "59 95 2x10"), ("subgrid-own-gap", "45 105 30x6"),
-                               ("negative-z", "0 111 120x6")):
+                               ("collapse-inner-edge", "59 95 2x14"), ("subgrid-own-gap", "45 109 30x6"),
+                               ("negative-z", "0 115 120x6")):
                 require(serial, "web item rect " + box)
                 print("lot61 console %s box %s" % (label, box), flush=True)
-            require(serial, "dropped 0 page 640x120 diag 0")
+            require(serial, "dropped 0 page 640x124 diag 0")
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             g.send_command_until(monitor, "web /web/lot52.html", "osui web render file=/web/lot52.html", proc,
@@ -415,11 +415,11 @@ def main():
                 (0, 24, 40, 34, (255, 165, 0)), (40, 24, 120, 34, (0, 128, 0)),
                 (16, 34, 36, 50, (0, 0, 255)), (0, 54, 120, 56, (255, 0, 0)),
                 (610, 470, 640, 480, (128, 0, 128)), (0, 95, 59, 99, (0, 0, 255)),
-                (61, 95, 120, 99, (0, 0, 255)), (0, 101, 59, 105, (0, 0, 255)),
-                (61, 101, 120, 105, (0, 0, 255)), (0, 99, 4, 101, (0, 0, 255)),
-                (116, 99, 120, 101, (0, 0, 255)), (59, 95, 61, 105, (255, 0, 0)),
-                (0, 105, 35, 111, (0, 128, 0)), (45, 105, 75, 111, (255, 165, 0)),
-                (0, 111, 120, 114, (0, 255, 0)), (0, 114, 120, 120, (0, 0, 128))):
+                (61, 95, 120, 99, (0, 0, 255)), (0, 105, 59, 109, (0, 0, 255)),
+                (61, 105, 120, 109, (0, 0, 255)), (0, 99, 4, 105, (0, 0, 255)),
+                (116, 99, 120, 105, (0, 0, 255)), (59, 95, 61, 109, (255, 0, 0)),
+                (0, 109, 35, 115, (0, 128, 0)), (45, 109, 75, 115, (255, 165, 0)),
+                (0, 115, 120, 118, (0, 255, 0)), (0, 118, 120, 124, (0, 0, 128))):
                 for y in range(top, bottom):
                     for x in range(left, right):
                         offset = ((oy + y) * width + ox + x) * 3
@@ -446,7 +446,7 @@ def main():
                         raise RuntimeError("lot61 decoded image mismatch at %d,%d" % (x, y))
                     compared += 1
             serial = g.normalized_log(g.log_text()[start:])
-            require(serial, "dropped 0 page 640x120 diag 0")
+            require(serial, "dropped 0 page 640x124 diag 0")
             for line in serial.splitlines():
                 if line.startswith("osui web render file=/web/lot61.html"):
                     print(line, flush=True)
