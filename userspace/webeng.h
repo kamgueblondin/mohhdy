@@ -255,6 +255,7 @@ typedef struct {
     uint8_t text_transform, tshadow_count;
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
     int8_t letter_spacing, word_spacing; /* lot 62: px added per glyph / per space, inherited */
+    uint8_t align_last, justify_none;    /* lot 62: text-align-last (0 auto, else 1 + WE_ALIGN_*), text-justify none */
     /* Lot 62: ol start / li value (list_value_set), ol reversed, ol type. */
     int16_t list_value;
     uint8_t list_value_set, list_reversed, list_type_attr;

@@ -95,7 +95,41 @@ static void test_l62_textspace_cascade_and_refusals(void) {
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
+static void test_l62_textspace_align_last_and_text_justify(void) {
+    lot52_render(L62_BODY "<div style='width:100px;text-align:justify;text-align-last:right'>aa bb cc dd ee ff</div>"
+                 "<div style='width:100px;text-align:justify;text-align-last:justify'>gg hh<br>ii jj</div>"
+                 "<div style='width:100px;text-align-last:center'>kk</div></body>", 320);
+    TEST_ASSERT_EQUAL(28, l62_tx("bb"));                  /* the soft line is justified */
+    TEST_ASSERT_EQUAL(60, l62_tx("ee ff"));               /* the last line goes right */
+    TEST_ASSERT_EQUAL(84, l62_tx("hh"));                  /* a forced break and the end justify */
+    TEST_ASSERT_EQUAL(84, l62_tx("jj"));
+    TEST_ASSERT_EQUAL(42, l62_tx("kk"));                  /* one-line block: its last line */
+    lot52_render(L62_BODY "<div style='width:100px;text-align:justify;text-justify:none'>aa bb cc dd ee</div>"
+                 "<div style='width:100px;text-align:end;text-align-last:start'>ff gg hh ii jj kk</div>"
+                 "<div style='width:100px;text-align:center;text-align-last:auto'>ll</div></body>", 320);
+    TEST_ASSERT_NOT_NULL(find_text("aa bb cc dd"));       /* text-justify none: start */
+    TEST_ASSERT_EQUAL(12, l62_tx("ff gg hh ii"));         /* end is right */
+    TEST_ASSERT_EQUAL(0, l62_tx("jj kk"));                /* start is left */
+    TEST_ASSERT_EQUAL(42, l62_tx("ll"));                  /* auto keeps text-align */
+    TEST_ASSERT_EQUAL(0, l61_diag_count("refused"));      /* auto, start and none accepted */
+}
+
+static void test_l62_textspace_align_last_cascade(void) {
+    lot52_render(L62_BODY "<div id=a style='text-align-last:center;text-justify:none'><p id=b>x</p></div>"
+                 "<div id=c style='text-align-last:justify;text-align-last:middle;text-justify:auto;text-justify:distribute'></div>"
+                 "<div id=e style='text-justify:none;text-justify:inter-word'></div></body>", 320);
+    TEST_ASSERT_EQUAL(1 + WE_ALIGN_CENTER, lot52_node("b")->align_last);  /* inherited */
+    TEST_ASSERT_EQUAL(1, lot52_node("b")->justify_none);
+    TEST_ASSERT_EQUAL(1 + WE_ALIGN_JUSTIFY, lot52_node("c")->align_last);
+    TEST_ASSERT_EQUAL(0, lot52_node("c")->justify_none);
+    TEST_ASSERT_EQUAL(0, lot52_node("e")->justify_none);
+    TEST_ASSERT_EQUAL(1, l61_diag_count("text-align-last refused"));
+    TEST_ASSERT_EQUAL(1, l61_diag_count("text-justify refused"));
+}
+
 static void lot62_textspace_run(void) {
+    RUN_TEST(test_l62_textspace_align_last_and_text_justify);
+    RUN_TEST(test_l62_textspace_align_last_cascade);
     RUN_TEST(test_l62_textspace_justify_soft_lines);
     RUN_TEST(test_l62_textspace_justify_exceptions);
     RUN_TEST(test_l62_textspace_letter_spacing);

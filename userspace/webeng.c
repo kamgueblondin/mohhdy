@@ -1937,6 +1937,15 @@ static int radial_shape(const char *a, int l, int *shape) {
     return any;
 }
 
+/* text-align keywords, left-to-right; other values give fallback */
+static int align_keyword(const char *v, int len, int fallback) {
+    if (value_is(v, len, "left") || value_is(v, len, "start")) return WE_ALIGN_LEFT;
+    if (value_is(v, len, "center")) return WE_ALIGN_CENTER;
+    if (value_is(v, len, "right") || value_is(v, len, "end")) return WE_ALIGN_RIGHT;
+    if (value_is(v, len, "justify")) return WE_ALIGN_JUSTIFY;
+    return fallback;
+}
+
 static int parse_gradient(we_node_t *n, const char *v, int len) {
     int start[WE_GRAD_STOPS + 1], length[WE_GRAD_STOPS + 1], count, k, first = 0, dir = WE_GRAD_BOTTOM;
     int pos[WE_GRAD_STOPS], last, radial, shape = 0;
@@ -3091,8 +3100,17 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "font-weight")) {
         n->bold = (uint8_t)(w_ieq_n(v, vl, "bold") || w_ieq_n(v, vl, "700") || w_ieq_n(v, vl, "800") || w_ieq_n(v, vl, "900"));
     } else if (w_eq(prop, "text-align")) {
-        n->align = w_ieq_n(v, vl, "center") ? WE_ALIGN_CENTER : w_ieq_n(v, vl, "right") ? WE_ALIGN_RIGHT :
-                   w_ieq_n(v, vl, "justify") ? WE_ALIGN_JUSTIFY : WE_ALIGN_LEFT;
+        n->align = (uint8_t)align_keyword(v, vl, WE_ALIGN_LEFT);
+    } else if (w_eq(prop, "text-align-last")) {
+        /* Lot 62 round 2: alignment of the last line and of lines before a
+         * forced break (left-to-right: start is left, end is right) */
+        int a = value_is(v, vl, "auto") ? -1 : align_keyword(v, vl, -2);
+        if (a == -2) diag(d, "text-align-last refused", -1);
+        else n->align_last = (uint8_t)(a + 1);
+    } else if (w_eq(prop, "text-justify")) {
+        if (value_is(v, vl, "none")) n->justify_none = 1;
+        else if (value_is(v, vl, "auto") || value_is(v, vl, "inter-word")) n->justify_none = 0;
+        else diag(d, "text-justify refused", -1);
     } else if (w_eq(prop, "letter-spacing") || w_eq(prop, "word-spacing")) {
         /* Lot 62 round 2: px (or em) added after each glyph, or to each
          * word space; letter -4..16, word -8..32 */
@@ -3239,6 +3257,8 @@ int we_style(we_doc_t* d) {
         n->text_transform = p ? p->text_transform : WE_TT_NONE;
         n->letter_spacing = p ? p->letter_spacing : 0;
         n->word_spacing = p ? p->word_spacing : 0;
+        n->align_last = p ? p->align_last : 0;
+        n->justify_none = p ? p->justify_none : 0;
         n->tshadow_count = p ? p->tshadow_count : 0;
         if (p) { int k; for (k = 0; k < WE_SHADOWS_MAX; k++) n->tshadow[k] = p->tshadow[k]; }
         n->z_index = 0;
@@ -3505,6 +3525,7 @@ typedef struct {
     int last, lay_first, lay_last, line_text, line_start, natoms, flow;
     struct { int node, base, height; } atoms[8];
     int wrapped;   /* lot 62: the line being flushed ends at a soft wrap */
+    int align_last, justify_none;
 } we_inline_t;
 #define WE_NO_BASELINE (-32768)
 #define WE_LINE_ATOMS 8
@@ -3742,7 +3763,7 @@ static void paint_run(we_doc_t *d, int node, int xs, int y, const char *buf, int
 
 /* advance=0 paints a segment and keeps the line open for an atomic box. */
 static void flush_line_mode(we_inline_t *f, int force, int advance) {
-    int i, x, total = 0, box_h, wrapped = f->wrapped, extra = 0, gaps = 0, gap = 0;
+    int i, x, total = 0, box_h, wrapped = f->wrapped, extra = 0, gaps = 0, gap = 0, align = f->align;
     we_doc_t* d = f->d;
     f->wrapped = 0;
     box_h = f->line_h > 0 ? f->line_h : WE_LINE_H;
@@ -3760,10 +3781,14 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         if (i && f->w[i].space_before) { total += space_adv(d, f->w[i].node); gaps++; }
     }
     x = f->x0 + f->pending_x;
+    /* the last line and a line before a forced break: text-align-last,
+     * auto meaning text-align with justify falling back to start */
+    if (!wrapped) align = f->align_last ? f->align_last - 1 : align == WE_ALIGN_JUSTIFY ? WE_ALIGN_LEFT : align;
+    if (f->justify_none && align == WE_ALIGN_JUSTIFY) align = WE_ALIGN_LEFT;
     if (advance && f->pending_x == 0 && f->atom_h == 0) {
-        if (f->align == WE_ALIGN_CENTER && total < f->width) x += (f->width - total) / 2;
-        else if (f->align == WE_ALIGN_RIGHT && total < f->width) x += f->width - total;
-        else if (f->align == WE_ALIGN_JUSTIFY && wrapped && gaps && total < f->width) extra = f->width - total;
+        if (align == WE_ALIGN_CENTER && total < f->width) x += (f->width - total) / 2;
+        else if (align == WE_ALIGN_RIGHT && total < f->width) x += f->width - total;
+        else if (align == WE_ALIGN_JUSTIFY && gaps && total < f->width) extra = f->width - total;
     }
     i = 0;
     while (i < f->nwords) {
@@ -4417,6 +4442,8 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->line_start = (int)d->nitems;
     f->flow = idx;
     f->align = d->nodes[idx].align;
+    f->align_last = d->nodes[idx].align_last;
+    f->justify_none = d->nodes[idx].justify_none;
     f->line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
     f->indent = d->nodes[idx].text_indent;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
