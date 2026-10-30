@@ -430,7 +430,7 @@ static int sel_attribute(const char *s, int len, int *at, we_selector_attr_t *at
 
 static int parse_sel(const char* s, int len, we_rule_t* r) {
     int i = 0, count = 0;
-    w_zero(r->part, sizeof(r->part)); r->ncomp = 0; r->spec = 0; r->pseudo_el = 0;
+    w_zero(r->part, sizeof(r->part)); r->ncomp = 0; r->spec = 0;
     while (i < len && w_space(s[i])) i++;
     while (i < len) {
         we_selector_part_t *part;
@@ -465,7 +465,7 @@ static int parse_sel(const char* s, int len, we_rule_t* r) {
                     while (rest < len && w_space(s[rest])) rest++;
                     if (rest < len) return -1;
                     r->pseudo_el = (uint8_t)(w_eq(pseudo, "before") ? WE_PSEUDO_BEFORE : WE_PSEUDO_AFTER);
-                    r->spec++; simple = 1;
+                    simple = 1;
                     continue;
                 }
                 if (element || part->pseudo) return -1;
@@ -2832,12 +2832,11 @@ static void gen_quote(we_doc_t *d, int pseudo, we_gen_t *g, const char *fn, char
 
 /* Validates (pseudo < 0) or evaluates a content list for a pseudo box. */
 static int gen_content(we_doc_t *d, const char *v, int len, int pseudo, we_gen_t *g, char *out, int *olen) {
-    int i = 0, count = 0, cap = WE_CONTENT_TEXT_MAX, elem = pseudo >= 0 ? d->nodes[pseudo].parent : -1;
+    int i = 0, cap = WE_CONTENT_TEXT_MAX, elem = pseudo >= 0 ? d->nodes[pseudo].parent : -1;
     while (1) {
         char name[16], fn[16];
         gen_skip(v, len, &i);
         if (i >= len) break;
-        count++;
         if (v[i] == '"' || v[i] == '\'') { if (css_string(v, len, &i, out, olen, cap)) return -1; continue; }
         if (gen_ident(v, len, &i, fn, sizeof(fn))) return -1;
         if (i < len && v[i] == '(') {
@@ -2891,14 +2890,13 @@ static int gen_content(we_doc_t *d, const char *v, int len, int pseudo, we_gen_t
             }
             continue;
         }
-        if (i < len && !w_space(v[i]) && v[i] != '"' && v[i] != '\'') return -1;
         if (w_eq(fn, "open-quote") || w_eq(fn, "close-quote") || w_eq(fn, "no-open-quote") || w_eq(fn, "no-close-quote")) {
             if (pseudo >= 0) gen_quote(d, pseudo, g, fn, out, olen, cap);
             continue;
         }
         return -1;
     }
-    return count ? 0 : -1;
+    return 0;
 }
 
 /* Returns 1 when the declaration was a generated content property. */
@@ -2920,7 +2918,6 @@ static int content_declaration(we_doc_t *d, we_node_t *n, const char *prop, cons
     slot = w_eq(prop, "counter-reset") ? 0 : w_eq(prop, "counter-increment") ? 1 : w_eq(prop, "counter-set") ? 2 : -1;
     if (slot < 0) return 0;
     if (counter_scan(v, vl, 0, 0, 0) < 0) diag(d, "counter refused", -1);
-    else if (value_is(v, vl, "none")) n->counter_len[slot] = 0;
     else pool_span(d, v, vl, &n->counter_off[slot], &n->counter_len[slot]);
     return 1;
 }
@@ -3474,7 +3471,7 @@ static void cascade_rules(we_doc_t *d, int idx, we_node_t *n, int pseudo, int im
         used[best] = 1;
         apply_decls(d, n, d->pool + d->rules[best].decl_off, d->rules[best].decl_len, important);
     }
-    if (n->style_len && !pseudo) apply_decls(d, n, d->pool + n->style_off, n->style_len, important);
+    if (n->style_len) apply_decls(d, n, d->pool + n->style_off, n->style_len, important);
 }
 
 /* Computes node i: element i matches its own rules (pseudo 0); a generated
@@ -3553,7 +3550,6 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->border_color = n->color;
         n->quotes_kind = p ? p->quotes_kind : WE_QUOTES_AUTO;
         n->quotes_off = p ? p->quotes_off : 0; n->quotes_len = p ? p->quotes_len : 0;
-        n->counter_len[0] = n->counter_len[1] = n->counter_len[2] = 0;
         n->content_kind = WE_CONTENT_NONE;
         if (n->is_text) { n->display = WE_DISP_INLINE; return; }
         if (i == 0) { n->display = WE_DISP_BLOCK; return; }

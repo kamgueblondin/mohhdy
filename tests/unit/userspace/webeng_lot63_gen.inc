@@ -137,7 +137,7 @@ static void test_l63_gen_attr(void) {
 static void test_l63_gen_refusals(void) {
     static const char *const bad[] = { "url(x)", "\"x", "counter(a,bogus)", "counter(a", "attr(id", "attr(id x)", "foo",
         "\"a\"x", "counter(a b)", "counters(a)", "counters(a,b)", "counters(a,\"x)", "open-quote(", "counter(1)",
-        "counter()", "rgb(a)", "counter(a,)", "\"a\nb\"", "\"\"open-quote2" };
+        "counter()", "rgb(a)", "counter(a,)", "\"a\nb\"", "\"\"open-quote2", "counters(a '.')", "open-quote)", "attr(id))" };
     unsigned k;
     for (k = 0; k < sizeof(bad) / sizeof(bad[0]); k++) {
         char html[256];
@@ -150,12 +150,14 @@ static void test_l63_gen_refusals(void) {
 
 static void test_l63_gen_selectors(void) {
     lot52_render(L63_STYLE("p{margin:0}p::before span{content:'a'}p::first-line{color:red}p::before::after{content:'b'}"
-                           "p:first-child::before{content:'1'}p:hover::before{content:'h'}p::before{content:'c'}")
+                           "p:first-child::before{content:'1'}p:hover::before{content:'h'}p::before{content:'c'}p::first-child{color:red}"
+                           "p::before x{content:'b'}p{color:#ff0000}")
                  "<p id=x>x</p><p id=y>y</p></body>", 320);
-    TEST_ASSERT_EQUAL(4, l61_diag_count("css selector unsupported"));
+    TEST_ASSERT_EQUAL(6, l61_diag_count("css selector unsupported"));
+    TEST_ASSERT_EQUAL(0xFF0000, find_text("x")->color);   /* a refused ::before does not leak into the next rule */
     TEST_ASSERT_EQUAL_STRING("1", l63_gen("x", WE_PSEUDO_BEFORE));   /* structural pseudo-class before ::before */
     TEST_ASSERT_EQUAL_STRING("c", l63_gen("y", WE_PSEUDO_BEFORE));
-    TEST_ASSERT_EQUAL(4, (int)g_doc.nrules);
+    TEST_ASSERT_EQUAL(5, (int)g_doc.nrules);
     lot52_render(L63_STYLE("p{margin:0}p::before {content:'+'}::before{content:'-'}") "<p id=p>x</p></body>", 320);
     TEST_ASSERT_EQUAL_STRING("+", l63_gen("p", WE_PSEUDO_BEFORE));   /* trailing space allowed, the type adds specificity */
 }
@@ -226,7 +228,7 @@ static void test_l63_gen_counter_scope(void) {
 }
 
 static void test_l63_gen_counter_refusals_and_budget(void) {
-    static const char *const bad[] = { "none 1", "a b c d e", "a 1.5", "inherit", "a,b", "a -", "a 12345678", "1", "initial", "unset", "a 2x" };
+    static const char *const bad[] = { "none 1", "a+1", "a b c d e", "a 1.5", "inherit", "a,b", "a -", "a 12345678", "1", "initial", "unset", "a 2x" };
     unsigned k;
     for (k = 0; k < sizeof(bad) / sizeof(bad[0]); k++) {
         char html[256];
@@ -299,9 +301,9 @@ static void test_l63_gen_budgets(void) {
 }
 
 static void test_l63_gen_restyle(void) {
-    uint32_t nodes, items;
+    uint32_t nodes, items, pool, k;
     lot52_render(L63_STYLE("p{margin:0}p::before{content:'b'}p::after{content:'a'}") "<p id=p>x</p><p>y</p></body>", 320);
-    nodes = g_doc.nnodes; items = g_doc.nitems;
+    nodes = g_doc.nnodes; items = g_doc.nitems; pool = g_doc.pool_used;
     TEST_ASSERT_EQUAL(0, we_style(&g_doc));               /* a second pass drops and rebuilds the boxes */
     TEST_ASSERT_EQUAL(0, we_layout(&g_doc, 320));
     TEST_ASSERT_EQUAL(nodes, g_doc.nnodes);
@@ -310,6 +312,12 @@ static void test_l63_gen_restyle(void) {
     TEST_ASSERT_EQUAL_STRING("a", l63_gen("p", WE_PSEUDO_AFTER));
     TEST_ASSERT_EQUAL(1, g_doc.nodes[l63_child(we_find_id(&g_doc, "p"), 1)].is_text);
     TEST_ASSERT_EQUAL(-1, l63_child(we_find_id(&g_doc, "p"), 3));   /* before, text, after: no duplicate */
+    TEST_ASSERT_EQUAL(pool, g_doc.pool_used);             /* the generated text is not stored twice */
+    for (k = 0; k < g_doc.nrules; k++) if (g_doc.rules[k].pseudo_el == WE_PSEUDO_AFTER) g_doc.rules[k].pseudo_el = 0;
+    TEST_ASSERT_EQUAL(0, we_style(&g_doc));               /* without the ::after rule the box goes away */
+    TEST_ASSERT_EQUAL(-1, l63_child(we_find_id(&g_doc, "p"), 2));
+    TEST_ASSERT_EQUAL(1, g_doc.nodes[g_doc.nodes[we_find_id(&g_doc, "p")].last].is_text);
+    TEST_ASSERT_EQUAL(nodes - 4, g_doc.nnodes);               /* two boxes and their texts */
 }
 
 static void lot63_gen_run(void) {
