@@ -181,6 +181,7 @@ typedef struct {
     int16_t text_indent;       /* first line only, after float shortening */
     int8_t z_index;            /* absolute paint order, -8..8 */
     uint8_t z_set, clear_side, valign;
+    uint8_t fixed;             /* lot 61: position:fixed (absolute + viewport) */
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;
     int16_t margin[4], padding[4]; /* top right bottom left */
@@ -244,6 +245,8 @@ typedef struct {
     uint32_t ndiag, diag_dropped;
     we_perf_t perf;
     int16_t root;
+    /* Lot 61: explicit viewport and the scroll offset fixed boxes follow. */
+    int16_t viewport_w, viewport_h, scroll_y;
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 
@@ -259,6 +262,12 @@ void we_set_image_reader(we_image_read_fn read, void *ctx);
 int we_parse(we_doc_t* d, const char* html, int len);
 int we_style(we_doc_t* d);
 int we_layout(we_doc_t* d, int viewport_w);
+/* Lot 61: layout against a viewport of viewport_w x viewport_h (fixed boxes,
+ * scroll bound). we_layout uses WE_VIEWPORT_H_DEFAULT. */
+#define WE_VIEWPORT_H_DEFAULT 480
+int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h);
+/* Clamp y to [0, page_h - viewport_h], move fixed boxes, return the offset. */
+int we_scroll(we_doc_t* d, int y);
 int we_render(we_doc_t* d, const char* html, int len, int viewport_w);
 /* US-045 */
 int we_find_id(const we_doc_t* d, const char* id);

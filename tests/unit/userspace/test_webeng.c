@@ -789,7 +789,7 @@ int main(void) {
     RUN_TEST(test_l56_absolute_percentage_width_uses_padding_edge);
     RUN_TEST(test_l56_absolute_no_insets_use_padding_origin);
     RUN_TEST(test_l56_static_clears_absolute);
-    RUN_TEST(test_l56_fixed_is_refused_and_keeps_absolute);
+    RUN_TEST(test_l56_invalid_position_is_refused_and_keeps_absolute);
     RUN_TEST(test_l56_invalid_offset_keeps_previous);
     RUN_TEST(test_l56_pre_keeps_newline_and_spaces);
     RUN_TEST(test_l56_normal_collapses_newline_to_one_space);

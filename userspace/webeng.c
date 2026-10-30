@@ -2023,9 +2023,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "baseline")) n->valign = WE_VALIGN_BASELINE;
         else diag(d, "vertical align refused", -1);
     } else if (w_eq(prop, "position")) {
-        if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = 0; }
-        else if (value_is(v, vl, "absolute")) { n->absolute = 1; n->relative = 0; }
-        else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = 0; }
+        if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = n->fixed = 0; }
+        else if (value_is(v, vl, "absolute")) { n->absolute = 1; n->relative = n->fixed = 0; }
+        else if (value_is(v, vl, "fixed")) { n->absolute = n->fixed = 1; n->relative = 0; }
+        else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = n->fixed = 0; }
         else diag(d, "position refused", -1);
     } else if (w_eq(prop, "border-collapse")) {
         if (value_is(v, vl, "collapse")) n->border_collapse = 1;
@@ -2279,6 +2280,7 @@ int we_style(we_doc_t* d) {
         n->auto_col = -1; n->auto_row = WE_TRACK_AUTO;
         n->auto_col_floor = n->auto_row_floor = n->auto_col_cap = n->auto_row_cap = -1;
         n->relative = n->absolute = n->flex_reverse = n->margin_auto = n->border_collapse = 0;
+        n->fixed = 0;
         n->item_order = 0;
         n->inset_flags = 0;
         n->offset_x = n->offset_y = n->offset_r = n->offset_b = 0;
@@ -2587,6 +2589,12 @@ static int line_step(const we_inline_t *f) {
 }
 
 static int16_t layout_first[WE_MAX_NODES], layout_last[WE_MAX_NODES];
+/* Lot 61: static position of absolutes without insets, page pixels. */
+static int16_t static_x[WE_MAX_NODES], static_y[WE_MAX_NODES];
+static uint8_t static_set[WE_MAX_NODES];
+static void set_static(int idx, int x, int y) {
+    static_x[idx] = (int16_t)x; static_y[idx] = (int16_t)y; static_set[idx] = 1;
+}
 static int baseline_get(we_doc_t *d, int idx, int outer, int depth, int last, int *real);
 static int item_baseline(const we_doc_t *d, int c, int last);
 
@@ -2617,7 +2625,10 @@ static void shift_line(we_inline_t *f, int ascent, int has_text) {
         int dy = ascent - f->atoms[k].base, root = f->atoms[k].node;
         if (f->atoms[k].base < 0 || !dy) continue;
         for (i = root; i < (int)d->nnodes; i++)
-            if (in_subtree(d, i, root)) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + dy);
+            if (in_subtree(d, i, root)) {
+                d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + dy);
+                if (static_set[i]) static_y[i] = (int16_t)limit_coord(static_y[i] + dy);
+            }
         if (layout_first[root] != WE_NO_BASELINE) layout_first[root] = (int16_t)limit_coord(layout_first[root] + dy);
         if (layout_last[root] != WE_NO_BASELINE) layout_last[root] = (int16_t)limit_coord(layout_last[root] + dy);
     }
@@ -2810,6 +2821,12 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
     int c;
     if (n->html_space) f->pending_space = 1;
     if (n->display == WE_DISP_NONE || depth > WE_DEPTH_MAX) return;
+    /* Lot 61: an absolute inside inline content leaves the line; its static
+     * position is the current pen. */
+    if (n->absolute && !n->is_text) {
+        if (!f->measuring) set_static(idx, f->x0 + f->cur_w, f->y);
+        return;
+    }
     if (n->float_side && !n->is_text) { place_float(f, idx, depth); return; }
     if (n->is_text) {
         const char* s = d->pool + n->text_off;
@@ -3308,6 +3325,11 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
         we_node_t *n = &d->nodes[c];
         if (n->html_space) f->pending_space = 1;
+        if (n->absolute && n->display != WE_DISP_NONE && !measuring) {
+            int open = f->nwords || f->pending_x > 0 || f->atom_h > 0;
+            if (is_box(n->display)) set_static(c, f->x0, limit_coord(f->y + (open ? line_step(f) : 0)));
+            else set_static(c, f->x0 + f->cur_w, f->y);
+        }
         if (n->display == WE_DISP_NONE || n->absolute) continue;
         if (n->float_side && !n->is_text) {
             flush_line(f, 0);
@@ -3425,6 +3447,11 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     content_x = limit_coord(bx + n->border + n->padding[3]);
     content_w = bw - 2 * n->border - n->padding[1] - n->padding[3];
     if (content_w < WE_CHAR_W) content_w = WE_CHAR_W;
+    {
+        int c;
+        for (c = n->first; c >= 0; c = d->nodes[c].next)
+            if (d->nodes[c].absolute) set_static(c, content_x, limit_coord(by + n->border + n->padding[0]));
+    }
     if (w_eq(n->tag, "img")) {
         int image_h = image_paint(d, idx, content_x, by + n->border + n->padding[0], content_w,
             modern_image(n) && forced_width[idx] >= 0 ? content_w : -1, modern_image(n) ? resolved_height[idx] : -1);
@@ -3554,6 +3581,7 @@ static void place_inline_block(we_inline_t *f, int idx, int depth) {
 
 static int abs_containing(const we_doc_t *d, int idx) {
     int p = d->nodes[idx].parent;
+    if (d->nodes[idx].fixed) return -1;
     while (p >= 0) {
         if (d->nodes[p].relative || d->nodes[p].absolute) return p;
         p = d->nodes[p].parent;
@@ -3586,7 +3614,9 @@ static int absolute_margin_width(const we_node_t *n, int pad_w, int left, int ri
 
 /* Absolutes are placed after the containing block's in-flow height is
  * known, and before its relative offset, so the offset moves them too.
- * No insets use the padding origin. That is not the CSS static position. */
+ * Lot 61: an axis without insets uses the static position recorded where
+ * the box would have been in flow (content origin for flex/grid/table).
+ * Fixed boxes use the viewport at the current scroll offset. */
 static int absolute_stack_key(const we_doc_t *d, int owner, int want) {
     int n = owner;
     while (n >= 0) {
@@ -3633,8 +3663,10 @@ static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w
         we_node_t *n = &d->nodes[i];
         int flags, left, right, top, bottom, stretch_w, stretch_h, mbw, mbh, x, y;
         int16_t saved_ch;
+        int px = pad_x, py = pad_y, pw = pad_w, ph = pad_h;
         if ((int)i == cb || !n->absolute || n->display == WE_DISP_NONE) continue;
         if (abs_containing(d, (int)i) != want) continue;
+        if (n->fixed) { pad_x = 0; pad_y = d->scroll_y; pad_w = d->viewport_w; pad_h = d->viewport_h; }
         flags = n->inset_flags;
         left = (flags & WE_INSET_LEFT) ? math_value(n, WE_LEN_LEFT, pad_w, n->offset_x) : 0;
         right = (flags & WE_INSET_RIGHT) ? math_value(n, WE_LEN_RIGHT, pad_w, n->offset_r) : 0;
@@ -3665,12 +3697,13 @@ static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w
         }
         if (flags & WE_INSET_LEFT) x = pad_x + left;
         else if ((flags & WE_INSET_RIGHT) && mbw >= 0) x = pad_x + pad_w - right - mbw;
-        else x = pad_x;
+        else x = static_set[i] ? static_x[i] : pad_x;
         if (flags & WE_INSET_TOP) y = pad_y + top;
         else if ((flags & WE_INSET_BOTTOM) && mbh >= 0) y = pad_y + pad_h - bottom - mbh;
-        else y = pad_y;
+        else y = static_set[i] ? static_y[i] : pad_y;
         layout_area(d, (int)i, limit_coord(x), limit_coord(y), mbw, mbh, pad_w, depth + 1);
         containing_height[i] = saved_ch;
+        pad_x = px; pad_y = py; pad_w = pw; pad_h = ph;
     }
     if ((int)d->nitems > item_start) order_absolute_items(d, cb, item_start);
 }
@@ -4432,7 +4465,8 @@ static int measure_area_height(we_doc_t *d, int idx, int outer, int depth) {
 typedef struct {
     int16_t x[WE_MAX_NODES], y[WE_MAX_NODES], w[WE_MAX_NODES], h[WE_MAX_NODES];
     int16_t first[WE_MAX_NODES], last[WE_MAX_NODES], resolved[WE_MAX_NODES], containing[WE_MAX_NODES];
-    uint8_t failed[WE_MAX_NODES];
+    uint8_t failed[WE_MAX_NODES], set[WE_MAX_NODES];
+    int16_t sx[WE_MAX_NODES], sy[WE_MAX_NODES];
 } we_probe_save_t;
 static we_probe_save_t probe_save[WE_PROBE_DEPTH];
 static int probe_level, probe_count;
@@ -4455,6 +4489,7 @@ static int probe_container(we_doc_t *d, int idx, int outer, int depth, int last)
         save->first[i] = layout_first[i]; save->last[i] = layout_last[i];
         save->resolved[i] = resolved_height[i]; save->containing[i] = containing_height[i];
         save->failed[i] = image_work.failed[i];
+        save->set[i] = static_set[i]; save->sx[i] = static_x[i]; save->sy[i] = static_y[i];
     }
     baseline_probe = 0;
     (void)layout_assigned(d, idx, 0, 0, outer, depth);
@@ -4466,6 +4501,7 @@ static int probe_container(we_doc_t *d, int idx, int outer, int depth, int last)
         layout_first[i] = save->first[i]; layout_last[i] = save->last[i];
         resolved_height[i] = save->resolved[i]; containing_height[i] = save->containing[i];
         image_work.failed[i] = save->failed[i];
+        static_set[i] = save->set[i]; static_x[i] = save->sx[i]; static_y[i] = save->sy[i];
     }
     probe_level--;
     d->nitems = nitems; d->ndiag = ndiag; d->diag_dropped = dropped; d->perf = perf;
@@ -5258,7 +5294,10 @@ static void shift_cell(we_doc_t *d, int idx, int first_item, int shift) {
     for (i = idx + 1; i < (int)d->nnodes; i++) {
         int ancestor = i;
         while (ancestor >= 0 && ancestor != idx) ancestor = d->nodes[ancestor].parent;
-        if (ancestor == idx) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + shift);
+        if (ancestor == idx) {
+            d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + shift);
+            if (static_set[i]) static_y[i] = (int16_t)limit_coord(static_y[i] + shift);
+        }
     }
     for (i = first_item; i < (int)d->nitems; i++) {
         int owner = d->item_owner[i], ancestor = owner;
@@ -5326,12 +5365,13 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
 }
 
 static int clip_bounds(const we_doc_t *d, int owner, int *left, int *top, int *right, int *bottom) {
-    int p = owner >= 0 ? d->nodes[owner].parent : -1;
+    int p = owner >= 0 ? d->nodes[owner].parent : -1, q = owner;
     *left = *top = -WE_LAYOUT_MAX;
     *right = *bottom = WE_LAYOUT_MAX;
-    for (; p >= 0; p = d->nodes[p].parent) {
+    for (; p >= 0; q = p, p = d->nodes[p].parent) {
         const we_node_t *n = &d->nodes[p];
         int x, y, r, b;
+        if (q >= 0 && d->nodes[q].fixed) break; /* fixed boxes escape ancestor clips */
         if (!n->overflow_hidden) continue;
         x = n->x + n->border;
         y = n->y + n->border;
@@ -5444,9 +5484,53 @@ static void resolve_grid_areas(we_doc_t *d) {
     }
 }
 
+static int fixed_owner(const we_doc_t *d, int owner) {
+    int guard;
+    for (guard = 0; owner >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, owner = d->nodes[owner].parent)
+        if (d->nodes[owner].fixed) return 1;
+    return 0;
+}
+
+/* Fixed boxes paint after the rest of the page, in their own order. */
+static void raise_fixed(we_doc_t *d) {
+    static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
+    static int16_t owners[OS_FB_WEB_ITEMS];
+    int pass, i, count = 0;
+    for (pass = 0; pass < 2; pass++)
+        for (i = 0; i < (int)d->nitems; i++)
+            if (fixed_owner(d, d->item_owner[i]) == pass) { output[count] = d->items[i]; owners[count++] = d->item_owner[i]; }
+    for (i = 0; i < count; i++) { d->items[i] = output[i]; d->item_owner[i] = owners[i]; }
+}
+
+int we_scroll(we_doc_t* d, int y) {
+    int limit, dy, i;
+    if (!d) return 0;
+    limit = (int)d->perf.page_h - d->viewport_h;
+    if (limit < 0) limit = 0;
+    if (y > limit) y = limit;
+    if (y < 0) y = 0;
+    dy = y - d->scroll_y;
+    if (!dy) return y;
+    for (i = 0; i < (int)d->nitems; i++)
+        if (fixed_owner(d, d->item_owner[i])) d->items[i].y = (int16_t)limit_coord(d->items[i].y + dy);
+    for (i = 0; i < (int)d->nnodes; i++)
+        if (fixed_owner(d, i)) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + dy);
+    d->scroll_y = (int16_t)y;
+    return y;
+}
+
 int we_layout(we_doc_t* d, int viewport_w) {
+    return we_layout_viewport(d, viewport_w, WE_VIEWPORT_H_DEFAULT);
+}
+
+int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     int h;
-    if (!d || d->nnodes == 0 || viewport_w < 64) return -1;
+    if (!d || d->nnodes == 0 || viewport_w < 64 || viewport_h < 1) return -1;
+    if (viewport_h > WE_LAYOUT_MAX) viewport_h = WE_LAYOUT_MAX;
+    d->viewport_w = (int16_t)(viewport_w > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : viewport_w);
+    d->viewport_h = (int16_t)viewport_h;
+    d->scroll_y = 0;
+    w_zero(static_set, sizeof(static_set));
     d->nitems = 0; math_refused = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
@@ -5475,6 +5559,7 @@ int we_layout(we_doc_t* d, int viewport_w) {
     subgrid_bind_all(d);
     intrinsic_sizes(d);
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
+    raise_fixed(d);
     clip_display_list(d);
     if (math_refused) diag(d, "math evaluation refused", -1);
     d->perf.items = d->nitems;

@@ -4,10 +4,12 @@
 #include "webeng_lot61_repeat.inc"
 #include "webeng_lot61_baseline.inc"
 #include "webeng_lot61_subgrid.inc"
+#include "webeng_lot61_viewport.inc"
 
 static void lot61_run(void) {
     lot61_names_run();
     lot61_repeat_run();
     lot61_baseline_run();
     lot61_subgrid_run();
+    lot61_viewport_run();
 }

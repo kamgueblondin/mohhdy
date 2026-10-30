@@ -186,7 +186,7 @@ static int osui_web_pipeline(const char *src, int n) {
     if (rc != 0) return rc;
     if (g_web.css_len > 0) {
         g_web.css[g_web.css_len < WE_CSS_MAX ? g_web.css_len : WE_CSS_MAX - 1] = 0;
-        vp.width = OSUI_WEB_VIEWPORT; vp.height = 480; vp.dark = 0;
+        vp.width = OSUI_WEB_VIEWPORT; vp.height = OSUI_WEB_VIEWPORT_H; vp.dark = 0;
         m = webrt_css_flatten_media(g_web.css, &vp, css1, WE_CSS_MAX, &kept, &dropped);
         if (m >= 0) {
             m = webrt_css_resolve_vars(css1, css2, WE_CSS_MAX, &vdef, &unres);
@@ -201,7 +201,7 @@ static int osui_web_pipeline(const char *src, int n) {
     rc = we_style(&g_web);
     if (rc != 0) return rc;
     we_set_image_reader(web_image_read, 0);
-    return we_layout(&g_web, OSUI_WEB_VIEWPORT);
+    return we_layout_viewport(&g_web, OSUI_WEB_VIEWPORT, OSUI_WEB_VIEWPORT_H);
 }
 
 we_doc_t *osui_gui_web_doc(void) { return &g_web; }
@@ -1289,10 +1289,14 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             g_web_active = 0;
             g_web_mobile = 0;
             if (out) { scpy(out, out_max, "osui web close file="); scpy(out + slen(out), out_max - slen(out), g_web_file); scpy(out + slen(out), out_max - slen(out), "\n"); }
-        } else if (key == OS_VGA_KEY_DOWN) {
+        } else if (key == OS_VGA_KEY_DOWN && g_web_mobile) {
             if (g_web_scroll + 20 < (int)g_web.perf.page_h) g_web_scroll += 20;
-        } else if (key == OS_VGA_KEY_UP) {
+        } else if (key == OS_VGA_KEY_UP && g_web_mobile) {
             g_web_scroll = g_web_scroll >= 20 ? g_web_scroll - 20 : 0;
+        } else if (key == OS_VGA_KEY_DOWN || key == OS_VGA_KEY_UP) {
+            /* Lot 61: the engine bounds the offset to the viewport and keeps
+             * position:fixed boxes in place; the kernel subtracts it. */
+            g_web_scroll = we_scroll(&g_web, g_web_scroll + (key == OS_VGA_KEY_DOWN ? 20 : -20));
         }
         return 0;
     }
