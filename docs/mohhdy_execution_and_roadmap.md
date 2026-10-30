@@ -7,6 +7,32 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 62 (30 October 2026)
+
+US-031 partial, phase3_complete=false. The same bounded guest engine adds
+alpha colours (rgb/rgba/hsl/hsla, #rgba, #rrggbbaa, transparent) with
+engine-side source-over compositing of translucent paint and opacity
+groups (the kernel painter still receives opaque colours), shaded
+groove/ridge/inset/outset borders, paint-time transforms (translate,
+scale, quarter-turn rotate) about transform-origin, outline and
+box-shadow (outer, inset, spread, two-layer blur), text-decoration,
+text-transform, text-shadow, text-overflow ellipsis, percentage margins and
+paddings against the containing block width (0 in intrinsic sizes),
+linear-gradient backgrounds as at most 8 bands, background-clip/origin,
+border-radius as row slices, CSS 2.1 appendix E order of block
+backgrounds, floats, inline content and positioned boxes, and ol
+start/reversed/value/type with alpha and roman markers. A second round
+adds rounded overflow clipping, rounded double/3D borders and shadows,
+letter-spacing, word-spacing, text-align justify and text-align-last,
+radial-gradient rings, and grid-area / padding-box percentage containing
+blocks. Kernel, rights and
+shared ABI unchanged. No Chromium, WebKit, network loading, JavaScript VM,
+new font engine or margin collapsing. US-059/060/063/074 unchanged;
+US-G19..US-G24 remain partial. Margin collapsing remains absent.
+Roadmap statuses and the complete non-done assertion stay unchanged.
+Subset, remaining gaps, line counts and measured results:
+docs/lot62_plan.md.
+
 ### Lot 61 (30 October 2026)
 
 US-031 partial, phase3_complete=false. The same bounded guest engine adds

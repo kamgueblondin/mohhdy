@@ -70,6 +70,20 @@ static int pool_put(we_doc_t* d, const char* s, int n, uint16_t* off) {
 static const char* const k_void[] = { "br", "hr", "img", "input", "meta", "link", "col", 0 };
 static int is_void(const char* t) { int i; for (i = 0; k_void[i]; i++) if (w_eq(t, k_void[i])) return 1; return 0; }
 
+/* Lot 62: an ol start or li value, -9999..9999. */
+static int list_number(const char *v, int len, int *out) {
+    int k = 0, neg = 0, n = 0;
+    if (len > 0 && (v[0] == '-' || v[0] == '+')) { neg = v[0] == '-'; k = 1; }
+    if (k >= len) return -1;
+    for (; k < len; k++) {
+        if (v[k] < '0' || v[k] > '9') return -1;
+        n = n * 10 + v[k] - '0';
+        if (n > 9999) return -1;
+    }
+    *out = neg ? -n : n;
+    return 0;
+}
+
 static int new_node(we_doc_t* d, int parent) {
     we_node_t* n;
     int idx;
@@ -269,6 +283,23 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                         if (pool_put(d, av, vk, &n->src_off) == 0) n->src_len = (uint16_t)vk;
                     }
                     else if (w_eq(an, "href")) { if (pool_put(d, av, vk, &n->href_off) == 0) n->href_len = (uint16_t)vk; }
+                    else if ((w_eq(an, "start") && w_eq(name, "ol")) || (w_eq(an, "value") && w_eq(name, "li"))) {
+                        int number;
+                        if (list_number(av, vk, &number)) diag(d, "list number refused", idx);
+                        else { n->list_value = (int16_t)number; n->list_value_set = 1; }
+                    }
+                    else if (w_eq(an, "reversed") && w_eq(name, "ol")) n->list_reversed = 1;
+                    else if (w_eq(an, "type") && (w_eq(name, "ol") || w_eq(name, "ul"))) {
+                        static const char types[] = "1aAiI";
+                        static const uint8_t styles[] = { WE_LIST_DECIMAL, WE_LIST_LOWER_ALPHA, WE_LIST_UPPER_ALPHA,
+                                                          WE_LIST_LOWER_ROMAN, WE_LIST_UPPER_ROMAN };
+                        int t;
+                        for (t = 0; t < 5; t++) if (vk == 1 && av[0] == types[t]) n->list_type_attr = styles[t];
+                        if (w_eq(av, "disc")) n->list_type_attr = WE_LIST_DISC;
+                        else if (w_eq(av, "circle")) n->list_type_attr = WE_LIST_CIRCLE;
+                        else if (w_eq(av, "square")) n->list_type_attr = WE_LIST_SQUARE;
+                        if (!n->list_type_attr) diag(d, "list type refused", idx);
+                    }
                 }
                 i = j + 1; text_start = i;
                 if (w_eq(name, "img")) {
@@ -626,13 +657,121 @@ static int match_rule(we_doc_t* d, int idx, const we_rule_t* r) {
     return result;
 }
 
+/* Lot 62: colours carry a transparency byte in bits 24..31 (0 opaque,
+ * 255 fully transparent). Layout and stacking keep it; the compositing
+ * pass resolves it against the backdrop and clears it, since the kernel
+ * painter masks the byte. */
+#define WE_ALPHA_SHIFT 24
+static int value_is(const char *v, int len, const char *s);
+static int color_alpha_of(uint32_t c);
+static uint32_t with_alpha(uint32_t rgb, int alpha) {
+    if (alpha < 0) alpha = 0;
+    if (alpha > 255) alpha = 255;
+    return (rgb & 0xFFFFFFu) | ((uint32_t)(255 - alpha) << WE_ALPHA_SHIFT);
+}
+
+/* One colour argument: an integer or decimal number with an optional %
+ * (CSS Color 4 legacy and space syntax). Values are returned in 1/1000
+ * units, the percent flag tells which form was used. */
+static int color_number(const char *v, int n, int *milli, int *percent) {
+    int at = 0, whole = 0, frac = 0, scale = 100, digits = 0, negative = 0;
+    *percent = n > 0 && v[n - 1] == '%';
+    if (*percent) n--;
+    if (n > 3 && w_ieq_n(v + n - 3, 3, "deg")) n -= 3;
+    if (at < n && (v[at] == '-' || v[at] == '+')) { negative = v[at] == '-'; at++; }
+    while (at < n && v[at] >= '0' && v[at] <= '9') { if (whole < 100000) whole = whole * 10 + v[at] - '0'; at++; digits++; }
+    if (at < n && v[at] == '.') {
+        at++;
+        while (at < n && v[at] >= '0' && v[at] <= '9') { frac += (v[at] - '0') * scale; scale /= 10; at++; digits++; }
+    }
+    if (!digits || at != n) return -1;
+    *milli = whole * 1000 + frac;
+    if (negative) *milli = -*milli;
+    return 0;
+}
+
+static int clamp_int(int v, int lo, int hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+}
+
+/* Alpha argument: a number 0..1 or a percentage, clamped, as 0..255. */
+static int color_alpha(int milli, int percent) {
+    int a = percent ? milli / 100 : milli;
+    a = clamp_int(a, 0, 1000);
+    return (a * 255 + 500) / 1000;
+}
+
+/* hsl() to rgb in 32-bit integer arithmetic (no 64-bit division on i386):
+ * hue in 1/1000 degrees, s and l in 1/1000 percent, reduced to 1/10
+ * degree and per-mille. */
+static uint32_t hsl_rgb(int hue, int sat, int light) {
+    int c, x, m, h6, part, r = 0, g = 0, b = 0;
+    hue = (hue / 100) % 3600;
+    if (hue < 0) hue += 3600;
+    sat = clamp_int(sat, 0, 100000) / 100;
+    light = clamp_int(light, 0, 100000) / 100;
+    c = (1000 - (2 * light > 1000 ? 2 * light - 1000 : 1000 - 2 * light)) * sat / 1000;
+    h6 = hue / 600;
+    part = hue % 1200;
+    x = c * (600 - (part > 600 ? part - 600 : 600 - part)) / 600;
+    m = light - c / 2;
+    if (h6 == 0) { r = c; g = x; } else if (h6 == 1) { r = x; g = c; } else if (h6 == 2) { g = c; b = x; }
+    else if (h6 == 3) { g = x; b = c; } else if (h6 == 4) { r = x; b = c; } else { r = c; b = x; }
+    r = ((r + m) * 255 + 500) / 1000; g = ((g + m) * 255 + 500) / 1000; b = ((b + m) * 255 + 500) / 1000;
+    return ((uint32_t)clamp_int(r, 0, 255) << 16) | ((uint32_t)clamp_int(g, 0, 255) << 8) | (uint32_t)clamp_int(b, 0, 255);
+}
+
+/* rgb()/rgba()/hsl()/hsla(): three channels then an optional alpha,
+ * separated by commas, or by spaces with "/ alpha". */
+static int parse_color_function(const char *v, int n, uint32_t *out) {
+    int hsl, open, at, count = 0, slash = 0, commas = 0, value[4], percent[4], k, alpha = 255;
+    if (n > 5 && (w_ieq_n(v, 5, "rgba(") || w_ieq_n(v, 5, "hsla("))) open = 5;
+    else if (n > 4 && (w_ieq_n(v, 4, "rgb(") || w_ieq_n(v, 4, "hsl("))) open = 4;
+    else return -1;
+    hsl = w_low(v[0]) == 'h';
+    if (v[n - 1] != ')') return -1;
+    at = open;
+    while (at < n - 1) {
+        int start;
+        while (at < n - 1 && w_space(v[at])) at++;
+        if (at >= n - 1) break;
+        if (v[at] == ',' || v[at] == '/') {
+            if (v[at] == ',') commas++; else { if (slash || count != 3) return -1; slash = 1; }
+            if (count == 0) return -1;
+            at++;
+            continue;
+        }
+        if (count == 4) return -1;
+        start = at;
+        while (at < n - 1 && !w_space(v[at]) && v[at] != ',' && v[at] != '/') at++;
+        if (color_number(v + start, at - start, &value[count], &percent[count])) return -1;
+        count++;
+    }
+    if (count < 3 || (commas && slash) || (commas && commas != count - 1) || (!commas && count == 4 && !slash))
+        return -1;
+    if (count == 4) alpha = color_alpha(value[3], percent[3]);
+    if (hsl) {
+        if (percent[0] || !percent[1] || !percent[2]) return -1;
+        *out = with_alpha(hsl_rgb(value[0], value[1], value[2]), alpha);
+        return 0;
+    }
+    *out = 0;
+    for (k = 0; k < 3; k++) {
+        int c = percent[k] ? (value[k] * 255 + 50000) / 100000 : (value[k] + 500) / 1000;
+        if (percent[k] != percent[0]) return -1;
+        *out = (*out << 8) | (uint32_t)clamp_int(c, 0, 255);
+    }
+    *out = with_alpha(*out, alpha);
+    return 0;
+}
+
 static int parse_color(const char* v, int n, uint32_t* out) {
     static const struct { const char* name; uint32_t rgb; } named[] = {
         {"black", 0x000000}, {"white", 0xFFFFFF}, {"red", 0xFF0000}, {"green", 0x008000},
         {"blue", 0x0000FF}, {"yellow", 0xFFFF00}, {"gray", 0x808080}, {"grey", 0x808080},
         {"navy", 0x000080}, {"teal", 0x008080}, {"orange", 0xFFA500}, {"purple", 0x800080},
         {"silver", 0xC0C0C0}, {"maroon", 0x800000}, {"lime", 0x00FF00}, {0, 0}};
-    int i;
+    int i, alpha = 255;
     if (n > 0 && v[0] == '#') {
         uint32_t x = 0;
         int k;
@@ -642,11 +781,15 @@ static int parse_color(const char* v, int n, uint32_t* out) {
             if (h < 0) return -1;
             x = (x << 4) | (uint32_t)h;
         }
-        if (n == 4) x = ((x & 0xF00) << 12) | ((x & 0xF00) << 8) | ((x & 0x0F0) << 8) | ((x & 0x0F0) << 4) | ((x & 0x00F) << 4) | (x & 0x00F);
-        else if (n != 7) return -1;
-        *out = x;
+        if (n == 5) { alpha = (int)(x & 0xF) * 17; x >>= 4; }
+        if (n == 9) { alpha = (int)(x & 0xFF); x >>= 8; }
+        if (n == 4 || n == 5) x = ((x & 0xF00) << 12) | ((x & 0xF00) << 8) | ((x & 0x0F0) << 8) | ((x & 0x0F0) << 4) | ((x & 0x00F) << 4) | (x & 0x00F);
+        else if (n != 7 && n != 9) return -1;
+        *out = with_alpha(x, alpha);
         return 0;
     }
+    if (value_is(v, n, "transparent")) { *out = with_alpha(0, 0); return 0; }
+    if (n > 4 && v[n - 1] == ')') return parse_color_function(v, n, out);
     for (i = 0; named[i].name; i++)
         if (n == w_len(named[i].name) && w_ieq_n(v, n, named[i].name)) { *out = named[i].rgb; return 0; }
     return -1;
@@ -678,21 +821,89 @@ static int tokens(const char* v, int n, int a[4], int l[4]) {
         while (i < n && w_space(v[i])) i++;
         if (i >= n) break;
         a[c] = i;
-        while (i < n && !w_space(v[i])) i++;
+        /* Lot 62: spaces inside a functional value (rgb(1 2 3)) do not split. */
+        { int depth = 0;
+          while (i < n && (depth || !w_space(v[i]))) {
+              if (v[i] == '(') depth++;
+              else if (v[i] == ')' && depth) depth--;
+              i++;
+          } }
         l[c] = i - a[c];
         c++;
     }
     return c;
 }
 
-static void box4(const char* v, int n, int16_t out[4]) {
-    int a[4], l[4], px[4], c, k;
+/* Lot 62: "12.5%" or "-10%" (sign only when allowed), percent kept in
+ * tenths so 12.5% resolves exactly; at most 1000%. */
+static int spacing_percent(const char *v, int len, int negative_ok, int *tenths) {
+    int i = 0, whole = 0, frac = 0, digits = 0, neg = 0;
+    if (len > 0 && v[0] == '-') { if (!negative_ok) return -1; neg = 1; i = 1; }
+    while (i < len && v[i] >= '0' && v[i] <= '9') { if (whole <= 1000) whole = whole * 10 + v[i] - '0'; i++; digits++; }
+    if (i < len && v[i] == '.') {
+        i++;
+        if (i < len && v[i] >= '0' && v[i] <= '9') { frac = v[i] - '0'; digits++; }
+        while (i < len && v[i] >= '0' && v[i] <= '9') i++;
+    }
+    if (!digits || i != len - 1 || v[i] != '%' || whole > 1000) return -1;
+    *tenths = (neg ? -1 : 1) * (whole * 10 + frac);
+    return 0;
+}
+
+/* Lot 62: record (or clear when tenths is WE_NO_PCT) the percentage of one
+ * side; box 0 margin, 1 padding. */
+#define WE_NO_PCT 0x7fff
+static void spacing_set(we_node_t *n, int box, int side, int tenths) {
+    int bit = box * 4 + side;
+    if (tenths == WE_NO_PCT) { n->spacing_pct &= (uint8_t)~(1u << bit); return; }
+    n->spacing_pct |= (uint8_t)(1u << bit);
+    n->spacing_value[bit] = (int16_t)tenths;
+    if (box) n->padding[side] = 0; else n->margin[side] = 0;
+}
+
+static void box4(we_node_t *node, int box, const char* v, int n, int16_t out[4]) {
+    int a[4], l[4], px[4], pct[4], c, k;
+    static const int8_t from[4][4] = { {0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3} };
     c = tokens(v, n, a, l);
-    for (k = 0; k < c; k++) if (parse_len(v + a[k], l[k], &px[k], 0) != 0) px[k] = 0;
-    if (c == 1) { out[0] = out[1] = out[2] = out[3] = (int16_t)px[0]; }
-    else if (c == 2) { out[0] = out[2] = (int16_t)px[0]; out[1] = out[3] = (int16_t)px[1]; }
-    else if (c == 3) { out[0] = (int16_t)px[0]; out[1] = out[3] = (int16_t)px[1]; out[2] = (int16_t)px[2]; }
-    else if (c == 4) { for (k = 0; k < 4; k++) out[k] = (int16_t)px[k]; }
+    if (c < 1) return;
+    for (k = 0; k < c; k++) {
+        pct[k] = WE_NO_PCT;
+        if (spacing_percent(v + a[k], l[k], !box, &pct[k]) == 0) px[k] = 0;
+        else { pct[k] = WE_NO_PCT; if (parse_len(v + a[k], l[k], &px[k], 0) != 0) px[k] = 0; }
+    }
+    for (k = 0; k < 4; k++) {
+        out[k] = (int16_t)px[from[c - 1][k]];
+        spacing_set(node, box, k, pct[from[c - 1][k]]);
+    }
+}
+
+/* Lot 62: percentages of the boxes laid out in a containing block of width
+ * cw: in-flow and floated children and, through inline boxes and table
+ * rows, their descendants. Absolute children also use cw (the parent
+ * content box, not their positioned containing block). */
+static void spacing_node(we_node_t *n, int cw) {
+    int bit;
+    if (cw < 0) cw = 0;
+    for (bit = 0; bit < 8; bit++) if (n->spacing_pct & (1u << bit)) {
+        int t = n->spacing_value[bit], v = t < 0 ? -((-t * cw) / 1000) : (t * cw) / 1000;
+        if (v > 2000) v = 2000;
+        if (v < -2000) v = -2000;
+        if (bit < 4) n->margin[bit] = (int16_t)v; else n->padding[bit - 4] = (int16_t)v;
+    }
+}
+
+/* Lot 62 round 2: grid items resolve against their grid area width
+ * (prepare_grid, 0 for track sizing) and absolute boxes against the
+ * padding box of their containing block (place_absolutes). */
+static void spacing_resolve(we_doc_t *d, int parent, int cw, int depth) {
+    int c, grid = d->nodes[parent].display == WE_DISP_GRID;
+    if (depth > WE_DEPTH_MAX) return;
+    for (c = d->nodes[parent].first; c >= 0; c = d->nodes[c].next) {
+        we_node_t *n = &d->nodes[c];
+        if (n->is_text || n->absolute) continue;
+        spacing_node(n, grid ? 0 : cw);
+        if (n->display == WE_DISP_INLINE || n->display == WE_DISP_ROW) spacing_resolve(d, c, cw, depth + 1);
+    }
 }
 
 static int value_is(const char *v, int len, const char *s) {
@@ -1625,34 +1836,212 @@ static void subgrid_tracks(we_node_t *n, int axis, const int *sizes, const int *
 }
 
 /* Expand a valid margin into top,right,bottom,left and replace all auto bits. */
+static int tf_angle(const char *v, int len, int16_t *quarter);
+static int tf_length(const char *v, int len, int16_t *out, int *percent);
+
+/* ---------- Lot 62: border-radius ----------
+ * border-radius: 1 to 4 radii, optionally "/" and 1 to 4 vertical radii;
+ * the longhands take one or two. px (at most 128) or percent (at most
+ * 100). Painted as a staircase of WE_RADIUS_STEPS rows per corner. */
+#define WE_RADIUS_MAX 128
+#define WE_RADIUS_STEPS 3
+#define WE_RADIUS_SLICES (4 * WE_RADIUS_STEPS + 2)
+static int radius_value(const char *v, int len, int *value, int *pct) {
+    int16_t px;
+    int percent;
+    if (tf_length(v, len, &px, &percent) || px < 0) return -1;
+    if (percent ? px > 100 : px > WE_RADIUS_MAX) return -1;
+    *value = px; *pct = percent;
+    return 0;
+}
+
+static int radius_list(const char *v, int len, int *values, int *pcts) {
+    static const int8_t from[4][4] = { {0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3} };
+    int a[4], l[4], c = tokens(v, len, a, l), k, val[4], pc[4];
+    if (c < 1 || c > 4) return -1;
+    for (k = a[c - 1] + l[c - 1]; k < len; k++) if (!w_space(v[k])) return -1;   /* a fifth value */
+    for (k = 0; k < c; k++) if (radius_value(v + a[k], l[k], &val[k], &pc[k])) return -1;
+    for (k = 0; k < 4; k++) { values[k] = val[from[c - 1][k]]; pcts[k] = pc[from[c - 1][k]]; }
+    return 0;
+}
+
+static void radius_store(we_node_t *n, int corner, int x, int xp, int y, int yp) {
+    n->rad_x[corner] = (uint8_t)x; n->rad_y[corner] = (uint8_t)y;
+    n->rad_pct = (uint8_t)(n->rad_pct & ~((1u << corner) | (1u << (corner + 4))));
+    if (xp) n->rad_pct |= (uint8_t)(1u << corner);
+    if (yp) n->rad_pct |= (uint8_t)(1u << (corner + 4));
+}
+
+static int parse_radius(we_node_t *n, const char *v, int len) {
+    int slash = -1, k, x[4], xp[4], y[4], yp[4];
+    for (k = 0; k < len; k++) if (v[k] == '/') { if (slash >= 0) return -1; slash = k; }
+    if (slash < 0) {
+        if (radius_list(v, len, x, xp)) return -1;
+        for (k = 0; k < 4; k++) { y[k] = x[k]; yp[k] = xp[k]; }
+    } else if (radius_list(v, slash, x, xp) || radius_list(v + slash + 1, len - slash - 1, y, yp)) return -1;
+    for (k = 0; k < 4; k++) radius_store(n, k, x[k], xp[k], y[k], yp[k]);
+    return 0;
+}
+
+static int parse_corner(we_node_t *n, int corner, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), x, xp, y, yp;
+    if (c < 1 || c > 2 || radius_value(v + a[0], l[0], &x, &xp)) return -1;
+    if (c == 1) { y = x; yp = xp; }
+    else if (radius_value(v + a[1], l[1], &y, &yp)) return -1;
+    radius_store(n, corner, x, xp, y, yp);
+    return 0;
+}
+
+
+/* Lot 62: split a functional value's arguments at top-level commas. */
+static int comma_args(const char *v, int len, int *start, int *length, int cap) {
+    int i, depth = 0, count = 0, at = 0;
+    for (i = 0; i <= len; i++) {
+        if (i < len && v[i] == '(') depth++;
+        else if (i < len && v[i] == ')') depth--;
+        else if (i == len || (v[i] == ',' && depth == 0)) {
+            int a = at, b = i;
+            while (a < b && w_space(v[a])) a++;
+            while (b > a && w_space(v[b - 1])) b--;
+            if (count >= cap || b == a) return -1;
+            start[count] = a; length[count] = b - a; count++;
+            at = i + 1;
+        }
+    }
+    return depth ? -1 : count;
+}
+
+/* Lot 62: linear-gradient([to side | angle,] color [pct], color [pct]...).
+ * Angles must be a multiple of 90deg (or 0.25turn); corners and length
+ * positions are refused. Positions clamp up to the previous stop; missing
+ * ones spread evenly between their neighbours. */
+/* Lot 62 round 2: the radial-gradient shape argument: circle or ellipse,
+ * an extent keyword, "at center"; 1 when it is one, -1 when refused. */
+static int radial_shape(const char *a, int l, int *shape) {
+    static const char *const ext[4] = { "farthest-corner", "closest-side", "farthest-side", "closest-corner" };
+    int t[4], tl[4], c = tokens(a, l, t, tl), k, j, any = 0;
+    *shape = WE_EXT_FARTHEST_CORNER << 1;
+    for (k = 0; k < c; k++) {
+        const char *w = a + t[k];
+        if (value_is(w, tl[k], "circle")) { *shape |= 1; any = 1; continue; }
+        if (value_is(w, tl[k], "ellipse")) { any = 1; continue; }
+        if (value_is(w, tl[k], "at")) {
+            if (k + 2 != c || !value_is(a + t[k + 1], tl[k + 1], "center")) return -1;
+            return 1;
+        }
+        for (j = 0; j < 4 && !value_is(w, tl[k], ext[j]); j++) {}
+        if (j == 4) return any ? -1 : 0;
+        *shape = (*shape & 1) | (j << 1);
+        any = 1;
+    }
+    return any;
+}
+
+/* text-align keywords, left-to-right; other values give fallback */
+static int align_keyword(const char *v, int len, int fallback) {
+    if (value_is(v, len, "left") || value_is(v, len, "start")) return WE_ALIGN_LEFT;
+    if (value_is(v, len, "center")) return WE_ALIGN_CENTER;
+    if (value_is(v, len, "right") || value_is(v, len, "end")) return WE_ALIGN_RIGHT;
+    if (value_is(v, len, "justify")) return WE_ALIGN_JUSTIFY;
+    return fallback;
+}
+
+static int parse_gradient(we_node_t *n, const char *v, int len) {
+    int start[WE_GRAD_STOPS + 1], length[WE_GRAD_STOPS + 1], count, k, first = 0, dir = WE_GRAD_BOTTOM;
+    int pos[WE_GRAD_STOPS], last, radial, shape = 0;
+    uint32_t color[WE_GRAD_STOPS];
+    if (len < 17 || v[len - 1] != ')') return -1;
+    radial = w_ieq_n(v, 16, "radial-gradient(");
+    if (!radial && !w_ieq_n(v, 16, "linear-gradient(")) return -1;
+    count = comma_args(v + 16, len - 17, start, length, WE_GRAD_STOPS + 1);
+    if (count < 2) return -1;
+    if (radial) {
+        int got = radial_shape(v + 16 + start[0], length[0], &shape);
+        if (got < 0) return -1;
+        first = got;
+        dir = WE_GRAD_RADIAL;
+    } else {
+        const char *a = v + 16 + start[0];
+        int l = length[0];
+        int16_t quarter;
+        if (l > 3 && w_ieq_n(a, 3, "to ")) {
+            int at = 3;
+            while (at < l && w_space(a[at])) at++;
+            if (value_is(a + at, l - at, "bottom")) dir = WE_GRAD_BOTTOM;
+            else if (value_is(a + at, l - at, "right")) dir = WE_GRAD_RIGHT;
+            else if (value_is(a + at, l - at, "top")) dir = WE_GRAD_TOP;
+            else if (value_is(a + at, l - at, "left")) dir = WE_GRAD_LEFT;
+            else return -1;
+            first = 1;
+        } else if (tf_angle(a, l, &quarter) == 0) {
+            static const uint8_t by_quarter[4] = { WE_GRAD_TOP, WE_GRAD_RIGHT, WE_GRAD_BOTTOM, WE_GRAD_LEFT };
+            dir = by_quarter[((quarter % 4) + 4) % 4];
+            first = 1;
+        } else if (l > 0 && ((a[0] >= '0' && a[0] <= '9') || a[0] == '-')) return -1;
+    }
+    if (count - first < 2 || count - first > WE_GRAD_STOPS) return -1;
+    for (k = 0; k < count - first; k++) {
+        const char *a = v + 16 + start[first + k];
+        int l = length[first + k], t[4], tl[4], c = tokens(a, l, t, tl), tenths;
+        pos[k] = -1;
+        if (c < 1 || c > 2 || parse_color(a + t[0], tl[0], &color[k])) return -1;
+        if (radial && (color[k] >> WE_ALPHA_SHIFT)) return -1;   /* rings are painted over each other */
+        if (c == 2) {
+            if (spacing_percent(a + t[1], tl[1], 1, &tenths) || tenths > 1000) return -1;
+            pos[k] = tenths < 0 ? 0 : tenths * 10;
+        }
+    }
+    count -= first;
+    if (pos[0] < 0) pos[0] = 0;
+    if (pos[count - 1] < 0) pos[count - 1] = 10000;
+    last = 0;
+    for (k = 1; k < count; k++) {
+        if (pos[k] < 0) continue;
+        if (pos[k] < pos[last]) pos[k] = pos[last];
+        if (k - last > 1) {
+            int j;
+            for (j = last + 1; j < k; j++) pos[j] = pos[last] + (pos[k] - pos[last]) * (j - last) / (k - last);
+        }
+        last = k;
+    }
+    n->grad_dir = (uint8_t)dir;
+    n->grad_shape = (uint8_t)shape;
+    n->grad_count = (uint8_t)count;
+    for (k = 0; k < count; k++) { n->grad_pos[k] = (uint16_t)pos[k]; n->grad_color[k] = color[k]; }
+    return 0;
+}
+
+/* Lot 62: list-style-type keywords (none included). */
+static int list_keyword(const char *v, int len) {
+    static const char *const names[] = { "none", "disc", "decimal", "square", "circle", "lower-alpha", "upper-alpha",
+                                         "lower-roman", "upper-roman", "decimal-leading-zero", "lower-latin", "upper-latin" };
+    static const uint8_t codes[] = { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE, WE_LIST_CIRCLE,
+                                     WE_LIST_LOWER_ALPHA, WE_LIST_UPPER_ALPHA, WE_LIST_LOWER_ROMAN, WE_LIST_UPPER_ROMAN,
+                                     WE_LIST_LEADING_ZERO, WE_LIST_LOWER_ALPHA, WE_LIST_UPPER_ALPHA };
+    int k;
+    for (k = 0; k < 12; k++) if (value_is(v, len, names[k])) return codes[k];
+    return -1;
+}
+
 static int margin_auto_box(we_node_t *n, const char *v, int vl) {
+    static const int8_t from[4][4] = { {0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3} };
+    static const uint8_t flags[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
     int a[4], l[4], c = tokens(v, vl, a, l), k, px;
-    int vals[4], autos[4], top, right, bottom, left;
+    int vals[4], autos[4], pcts[4];
     if (c < 1 || c > 4) return 0;
     for (k = 0; k < c; k++) {
+        pcts[k] = WE_NO_PCT;
         if (value_is(v + a[k], l[k], "auto")) { autos[k] = 1; vals[k] = 0; }
-        else if (parse_len(v + a[k], l[k], &px, 0) == 0) { autos[k] = 0; vals[k] = px; }
+        else if (spacing_percent(v + a[k], l[k], 1, &pcts[k]) == 0) { autos[k] = 0; vals[k] = 0; }
+        else if (parse_len(v + a[k], l[k], &px, 0) == 0) { autos[k] = 0; vals[k] = px; pcts[k] = WE_NO_PCT; }
         else return 0;
     }
-    top = vals[0];
-    right = c >= 2 ? vals[1] : vals[0];
-    bottom = c >= 3 ? vals[2] : top;
-    left = c == 4 ? vals[3] : right;
-    n->margin[0] = (int16_t)top;
-    n->margin[1] = (int16_t)right;
-    n->margin[2] = (int16_t)bottom;
-    n->margin[3] = (int16_t)left;
     n->margin_auto = 0;
-    if (c == 1 && autos[0]) n->margin_auto = (uint8_t)(WE_AUTO_TOP | WE_AUTO_RIGHT | WE_AUTO_BOTTOM | WE_AUTO_LEFT);
-    else {
-        int at = autos[0];
-        int ar = c >= 2 ? autos[1] : at;
-        int ab = c >= 3 ? autos[2] : at;
-        int al = c == 4 ? autos[3] : ar;
-        if (at) n->margin_auto |= WE_AUTO_TOP;
-        if (ar) n->margin_auto |= WE_AUTO_RIGHT;
-        if (ab) n->margin_auto |= WE_AUTO_BOTTOM;
-        if (al) n->margin_auto |= WE_AUTO_LEFT;
+    for (k = 0; k < 4; k++) {
+        int f = from[c - 1][k];
+        n->margin[k] = (int16_t)vals[f];
+        spacing_set(n, 0, k, pcts[f]);
+        if (autos[f]) n->margin_auto |= flags[k];
     }
     return 1;
 }
@@ -1720,26 +2109,29 @@ static int gap_declaration(we_node_t *n, const char *v, int len) {
 static int logical_pair(we_node_t *n, const char *prop, const char *v, int len) {
     int margin = w_eq(prop, "margin-inline") || w_eq(prop, "margin-block");
     int block = w_eq(prop, "margin-block") || w_eq(prop, "padding-block");
-    int starts[4], lengths[4], count = tokens(v, len, starts, lengths), k, values[2], auto_bits[2] = {0, 0};
+    int starts[4], lengths[4], count = tokens(v, len, starts, lengths), k, values[2], auto_bits[2] = {0, 0}, pcts[2];
     int sides[2] = {block ? 0 : 3, block ? 2 : 1};
     static const uint8_t flags[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
     if (count < 1 || count > 2) return -1;
     for (k = 0; k < count; k++) {
         int end = lengths[k];
         const char *token = v + starts[k];
+        pcts[k] = WE_NO_PCT;
         if (margin && value_is(token, end, "auto")) { values[k] = 0; auto_bits[k] = 1; }
+        else if (spacing_percent(token, end, margin, &pcts[k]) == 0) values[k] = 0;
         else {
             if (end >= 2 && value_is(token + end - 2, 2, "px")) end -= 2;
             if (bounded_signed(token, end, 2000, &values[k]) || (!margin && values[k] < 0)) return -1;
         }
     }
-    if (count == 1) { values[1] = values[0]; auto_bits[1] = auto_bits[0]; }
+    if (count == 1) { values[1] = values[0]; auto_bits[1] = auto_bits[0]; pcts[1] = pcts[0]; }
     for (k = 0; k < 2; k++) {
         if (margin) {
             n->margin[sides[k]] = (int16_t)values[k];
             n->margin_auto &= (uint8_t)~flags[sides[k]];
             if (auto_bits[k]) n->margin_auto |= flags[sides[k]];
         } else n->padding[sides[k]] = (int16_t)values[k];
+        spacing_set(n, !margin, sides[k], pcts[k]);
     }
     return 0;
 }
@@ -1961,11 +2353,308 @@ static void border_edges_reset(we_node_t *n) {
     n->edge_color_set = 0;
 }
 
+/* ---------- Lot 62: transform parsing ----------
+ * transform: none or up to WE_TF_MAX of translate(x[, y]), translateX(),
+ * translateY(), scale(s[, t]), scaleX(), scaleY() and rotate(a) where a
+ * is a multiple of 90deg (deg or turn). Lengths are px (or em, or a bare
+ * 0) and percentages of the border box; scales are numbers or
+ * percentages in -8..8. Anything else is refused atomically. */
+static int tf_args(const char *v, int len, int *start, int *length, int cap) {
+    int at = 0, count = 0;
+    while (at <= len) {
+        int first, end;
+        while (at < len && w_space(v[at])) at++;
+        first = at;
+        while (at < len && v[at] != ',') at++;
+        end = at;
+        while (end > first && w_space(v[end - 1])) end--;
+        if (end == first || count == cap) return -1;
+        start[count] = first; length[count++] = end - first;
+        at++;
+    }
+    return count;
+}
+
+static int tf_length(const char *v, int len, int16_t *out, int *percent) {
+    int px, pct, negative = len > 0 && v[0] == '-', digits = negative, unit;
+    while (digits < len && ((v[digits] >= '0' && v[digits] <= '9') || v[digits] == '.')) digits++;
+    unit = len - digits;
+    if (digits == negative) return -1;
+    if (!(unit == 0 && len - negative == 1 && v[negative] == '0') &&
+        !(unit == 2 && (w_ieq_n(v + digits, 2, "px") || w_ieq_n(v + digits, 2, "em"))) &&
+        !(unit == 1 && v[digits] == '%')) return -1;
+    if (parse_len(v + negative, len - negative, &px, &pct) != 0) return -1;
+    *percent = v[len - 1] == '%';
+    if (*percent) px = pct > 1000 ? 1000 : pct;
+    *out = (int16_t)(negative ? -px : px);
+    return 0;
+}
+
+static int tf_scale(const char *v, int len, int16_t *out) {
+    int milli, percent;
+    if (len > 3 && w_ieq_n(v + len - 3, 3, "deg")) return -1;
+    if (color_number(v, len, &milli, &percent)) return -1;
+    if (percent) milli /= 100;
+    if (milli < -8000 || milli > 8000) return -1;
+    *out = (int16_t)milli;
+    return 0;
+}
+
+static int tf_angle(const char *v, int len, int16_t *quarter) {
+    int milli, percent, turn = len > 4 && w_ieq_n(v + len - 4, 4, "turn");
+    if (turn) len -= 4;
+    else if (!(len > 3 && w_ieq_n(v + len - 3, 3, "deg")) && !(len == 1 && v[0] == '0')) return -1;
+    if (color_number(v, len, &milli, &percent) || percent) return -1;
+    if (turn) { if (milli % 250) return -1; milli = milli / 250 * 90000; }
+    if (milli % 90000) return -1;
+    milli = (milli / 90000) % 4;
+    *quarter = (int16_t)(milli < 0 ? milli + 4 : milli);
+    return 0;
+}
+
+static int tf_function(const char *v, int len, we_transform_t *t) {
+    static const char *const names[] = { "translatex(", "translatey(", "translate(", "scalex(", "scaley(", "scale(", "rotate(", 0 };
+    int k, open = 0, start[2], length[2], count, pct = 0;
+    for (k = 0; names[k]; k++) if (w_ieq_n(v, len, names[k])) { open = w_len(names[k]); break; }
+    if (!names[k] || v[len - 1] != ')') return -1;
+    count = tf_args(v + open, len - open - 1, start, length, 2);
+    if (count < 1 || (count == 2 && k != 2 && k != 5)) return -1;
+    v += open;
+    w_zero(t, sizeof(*t));
+    if (k <= 2) {
+        int vertical = k == 1;
+        t->kind = WE_TF_TRANSLATE;
+        if (tf_length(v + start[0], length[0], vertical ? &t->y : &t->x, &pct)) return -1;
+        if (pct) t->pct |= (uint8_t)(vertical ? 2 : 1);
+        if (count == 2) {
+            if (tf_length(v + start[1], length[1], &t->y, &pct)) return -1;
+            if (pct) t->pct |= 2;
+        }
+    } else if (k <= 5) {
+        t->kind = WE_TF_SCALE;
+        t->x = t->y = 1000;
+        if (tf_scale(v + start[0], length[0], k == 4 ? &t->y : &t->x)) return -1;
+        if (k == 5 && tf_scale(v + start[count - 1], length[count - 1], &t->y)) return -1;
+    } else {
+        t->kind = WE_TF_ROTATE;
+        if (tf_angle(v + start[0], length[0], &t->x)) return -1;
+    }
+    return 0;
+}
+
+static int parse_transform(we_node_t *n, const char *v, int len) {
+    int starts[WE_TF_MAX + 1], lengths[WE_TF_MAX + 1], count, k;
+    we_transform_t list[WE_TF_MAX];
+    if (value_is(v, len, "none")) { n->tf_count = 0; return 0; }
+    count = functional_tokens(v, len, starts, lengths, WE_TF_MAX + 1);
+    if (count < 1 || count > WE_TF_MAX) return -1;
+    for (k = 0; k < count; k++) if (tf_function(v + starts[k], lengths[k], &list[k])) return -1;
+    for (k = 0; k < count; k++) n->tf[k] = list[k];
+    n->tf_count = (uint8_t)count;
+    return 0;
+}
+
+/* transform-origin: one or two of left/center/right/top/bottom, lengths
+ * and percentages; a lone vertical keyword sets y, x stays centred. */
+static int origin_value(const char *v, int len, int *axis, int16_t *value, int *percent) {
+    static const struct { const char *name; int8_t axis, pct; } keys[] = {
+        {"left", 0, 0}, {"right", 0, 100}, {"top", 1, 0}, {"bottom", 1, 100}, {"center", -1, 50}, {0, 0, 0}};
+    int k;
+    for (k = 0; keys[k].name; k++)
+        if (value_is(v, len, keys[k].name)) { *axis = keys[k].axis; *value = keys[k].pct; *percent = 1; return 0; }
+    *axis = -2;
+    return tf_length(v, len, value, percent);
+}
+
+static int parse_transform_origin(we_node_t *n, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), axis[2], pct[2], k, swap = 0;
+    int16_t value[2];
+    if (c < 1 || c > 2) return -1;
+    for (k = 0; k < c; k++) if (origin_value(v + a[k], l[k], &axis[k], &value[k], &pct[k])) return -1;
+    if (c == 1) {
+        axis[1] = -1; value[1] = 50; pct[1] = 1;
+        if (axis[0] == 1) swap = 1;
+    } else {
+        if (axis[0] == 1 || axis[1] == 0) swap = 1;
+        if ((axis[0] >= 0 && axis[0] == axis[1]) || (swap && (axis[0] == 0 || axis[1] == 1 || axis[0] == -2 || axis[1] == -2)))
+            return -1;
+    }
+    if (swap) {
+        int16_t tv = value[0]; int tp = pct[0];
+        value[0] = value[1]; pct[0] = pct[1]; value[1] = tv; pct[1] = tp;
+    }
+    n->tf_origin[0] = value[0]; n->tf_origin[1] = value[1];
+    n->tf_origin_pct = (uint8_t)((pct[0] ? 1 : 0) | (pct[1] ? 2 : 0));
+    return 0;
+}
+
+/* ---------- Lot 62: outline and box-shadow parsing ---------- */
+static int outline_width_value(const char *v, int len, int *out) {
+    int px, pct;
+    if (value_is(v, len, "thin")) { *out = 1; return 0; }
+    if (value_is(v, len, "medium")) { *out = 3; return 0; }
+    if (value_is(v, len, "thick")) { *out = 5; return 0; }
+    if (len < 1 || v[0] < '0' || v[0] > '9' || parse_len(v, len, &px, &pct) != 0 || pct) return -1;
+    if (!(len == 1 && v[0] == '0') && !(len > 2 && (w_ieq_n(v + len - 2, 2, "px") || w_ieq_n(v + len - 2, 2, "em")))) return -1;
+    *out = px > 8 ? 8 : px;
+    return 0;
+}
+
+/* outline-style accepts the border styles except hidden, and auto (solid). */
+static int outline_style_value(const char *v, int len) {
+    int code = value_is(v, len, "auto") ? WE_BS_SOLID : border_style_code(v, len);
+    return code == WE_BS_HIDDEN ? 0 : code;
+}
+
+static int parse_outline(we_node_t *n, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), k, style = 0, width = -1, has_color = 0;
+    uint32_t color = 0;
+    if (c < 1 || c > 3 || tokens_more(v, len, a, l, c)) return -1;
+    for (k = 0; k < c; k++) {
+        int code = outline_style_value(v + a[k], l[k]), w;
+        if (code) { if (style) return -1; style = code; }
+        else if (outline_width_value(v + a[k], l[k], &w) == 0) { if (width >= 0) return -1; width = w; }
+        else if (parse_color(v + a[k], l[k], &color) == 0) { if (has_color) return -1; has_color = 1; }
+        else return -1;
+    }
+    n->outline_style = (uint8_t)(style == WE_BS_NONE ? 0 : style);
+    n->outline_w = (uint8_t)(width < 0 ? 3 : width);
+    n->outline_color_set = (uint8_t)has_color;
+    n->outline_color = color;
+    return 0;
+}
+
+static int shadow_length(const char *v, int len, int low, int high, int *out) {
+    int16_t value;
+    int percent;
+    if (tf_length(v, len, &value, &percent) || percent) return -1;
+    *out = value < low ? low : value > high ? high : value;
+    return 0;
+}
+
+/* box-shadow: none, or up to WE_SHADOWS_MAX comma-separated shadows of
+ * [inset] x y [blur [spread]] [color] in any order of the colour and
+ * inset keyword around the lengths. */
+/* text: a text-shadow entry (no inset, no spread) */
+static int parse_shadow(const char *v, int len, we_shadow_t *sh, int text) {
+    int starts[6], lengths[6], count = functional_tokens(v, len, starts, lengths, 6), k, lens = 0, value[4], closed = 0;
+    w_zero(sh, sizeof(*sh));
+    if (count < 2) return -1;
+    for (k = 0; k < count; k++) {
+        const char *t = v + starts[k];
+        int l = lengths[k];
+        if ((t[0] >= '0' && t[0] <= '9') || t[0] == '-' || t[0] == '.') {
+            /* the lengths are one run: no colour or inset inside it */
+            if (lens == (text ? 3 : 4) || closed) return -1;
+            if (shadow_length(t, l, -64, 64, &value[lens])) return -1;
+            if (lens == 2 && value[2] < 0) return -1;
+            if (lens == 2 && value[2] > 32) value[2] = 32;
+            lens++;
+            continue;
+        }
+        closed = lens > 0;
+        if (!text && value_is(t, l, "inset")) { if (sh->inset) return -1; sh->inset = 1; continue; }
+        if (sh->has_color || parse_color(t, l, &sh->color)) return -1;
+        sh->has_color = 1;
+    }
+    if (lens < 2) return -1;
+    sh->x = (int8_t)value[0]; sh->y = (int8_t)value[1];
+    sh->blur = (uint8_t)(lens > 2 ? value[2] : 0);
+    sh->spread = (int8_t)(lens > 3 ? value[3] : 0);
+    return 0;
+}
+
+static int parse_shadows(we_shadow_t *out, uint8_t *out_count, const char *v, int len, int text) {
+    we_shadow_t list[WE_SHADOWS_MAX];
+    int count = 0, at = 0, depth = 0, start = 0, k;
+    if (value_is(v, len, "none")) { *out_count = 0; return 0; }
+    for (at = 0; at <= len; at++) {
+        if (at < len && v[at] == '(') depth++;
+        if (at < len && v[at] == ')') depth--;
+        if (at < len && (depth || v[at] != ',')) continue;
+        if (count == WE_SHADOWS_MAX || parse_shadow(v + start, at - start, &list[count], text)) return -1;
+        count++;
+        start = at + 1;
+    }
+    for (k = 0; k < count; k++) out[k] = list[k];
+    *out_count = (uint8_t)count;
+    return 0;
+}
+
+static int box_keyword(const char *v, int len) {
+    if (value_is(v, len, "border-box")) return WE_BOX_BORDER;
+    if (value_is(v, len, "padding-box")) return WE_BOX_PADDING;
+    if (value_is(v, len, "content-box")) return WE_BOX_CONTENT;
+    return -1;
+}
+
+/* ---------- Lot 62: text-decoration parsing ----------
+ * Lines: none or any of underline, overline, line-through; style: solid,
+ * double, dotted, dashed, wavy (painted solid, diagnosed); thickness:
+ * auto, from-font or 1..4 px; colour: any colour. The shorthand takes
+ * one of each in any order. */
+static int deco_lines(const char *v, int len, int *lines) {
+    if (value_is(v, len, "underline")) *lines = WE_DECO_UNDER;
+    else if (value_is(v, len, "overline")) *lines = WE_DECO_OVER;
+    else if (value_is(v, len, "line-through")) *lines = WE_DECO_THROUGH;
+    else return -1;
+    return 0;
+}
+
+static int deco_style_value(const char *v, int len) {
+    int code = border_style_code(v, len);
+    if (value_is(v, len, "wavy")) return WE_BS_WAVY;
+    return code == WE_BS_SOLID || code == 4 || code == 5 || code == 6 ? code : 0;
+}
+
+static int deco_thickness(const char *v, int len, int *out) {
+    int16_t value;
+    int percent;
+    if (value_is(v, len, "auto") || value_is(v, len, "from-font")) { *out = 1; return 0; }
+    if (tf_length(v, len, &value, &percent) || percent || value < 0) return -1;
+    *out = value < 1 ? 1 : value > 4 ? 4 : value;
+    return 0;
+}
+
+/* kind 0 shorthand, 1 line, 2 style, 3 colour, 4 thickness */
+static int parse_decoration(we_node_t *n, int kind, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), k, lines = 0, style = 0, thick = 0, has_color = 0, seen_line = 0;
+    uint32_t color = 0;
+    if (c < 1 || tokens_more(v, len, a, l, c)) return -1;
+    if (kind == 3) { if (c != 1 || parse_color(v, len, &color)) return -1; n->deco_color = color; n->deco_color_set = 1; return 0; }
+    if (kind == 4) { if (c != 1 || deco_thickness(v, len, &thick)) return -1; n->deco_thick = (uint8_t)thick; return 0; }
+    if (kind == 2) { if (c != 1 || !(style = deco_style_value(v, len))) return -1; n->deco_style = (uint8_t)style; return 0; }
+    for (k = 0; k < c; k++) {
+        const char *t = v + a[k];
+        int one, s, w;
+        if (value_is(t, l[k], "none")) { if (seen_line) return -1; seen_line = 2; continue; }
+        if (deco_lines(t, l[k], &one) == 0) {
+            if (seen_line == 2 || (lines & one)) return -1;
+            seen_line = 1; lines |= one;
+            continue;
+        }
+        if (kind == 1) return -1;
+        if ((s = deco_style_value(t, l[k])) != 0) { if (style) return -1; style = s; continue; }
+        if (deco_thickness(t, l[k], &w) == 0) { if (thick) return -1; thick = w; continue; }
+        if (parse_color(t, l[k], &color) == 0) { if (has_color) return -1; has_color = 1; continue; }
+        return -1;
+    }
+    if (kind == 1 && !seen_line) return -1;
+    n->deco_line = (uint8_t)lines;
+    if (kind == 0) {
+        n->deco_style = (uint8_t)(style ? style : WE_BS_SOLID);
+        n->deco_thick = (uint8_t)(thick ? thick : 1);
+        n->deco_color_set = (uint8_t)has_color;
+        n->deco_color = color;
+    }
+    return 0;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
-    char prop[24];
+    char prop[40];
     int px, pct, k;
     uint32_t col;
-    w_cpy(prop, 24, p, pl);
+    w_cpy(prop, sizeof(prop), p, pl);
     for (k = 0; prop[k]; k++) prop[k] = w_low(prop[k]);
     { const char *mapped = logical_property(prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
     while (vl > 0 && w_space(v[vl - 1])) vl--;
@@ -2005,8 +2694,9 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "direction")) {
         if (!value_is(v, vl, "ltr")) diag(d, "direction refused", -1);
     } else if (w_eq(prop, "padding-top") || w_eq(prop, "padding-right") || w_eq(prop, "padding-bottom")) {
-        if (parse_len(v, vl, &px, 0) == 0 && px >= 0)
-            n->padding[w_eq(prop, "padding-top") ? 0 : w_eq(prop, "padding-right") ? 1 : 2] = (int16_t)px;
+        int side = w_eq(prop, "padding-top") ? 0 : w_eq(prop, "padding-right") ? 1 : 2;
+        if (spacing_percent(v, vl, 0, &pct) == 0) spacing_set(n, 1, side, pct);
+        else if (parse_len(v, vl, &px, 0) == 0 && px >= 0) { n->padding[side] = (int16_t)px; spacing_set(n, 1, side, WE_NO_PCT); }
         else diag(d, "padding refused", -1);
     } else if (w_eq(prop, "display")) {
         if (value_is(v, vl, "none")) n->display = WE_DISP_NONE;
@@ -2151,6 +2841,58 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "opacity")) {
         if (parse_opacity(v, vl, &px) == 0) n->transparency = (uint8_t)(100 - px);
         else diag(d, "opacity refused", -1);
+    } else if (w_eq(prop, "text-decoration") || w_eq(prop, "text-decoration-line") || w_eq(prop, "text-decoration-style") ||
+               w_eq(prop, "text-decoration-color") || w_eq(prop, "text-decoration-thickness")) {
+        int kind = w_eq(prop, "text-decoration") ? 0 : w_eq(prop, "text-decoration-line") ? 1 :
+                   w_eq(prop, "text-decoration-style") ? 2 : w_eq(prop, "text-decoration-color") ? 3 : 4;
+        if (parse_decoration(n, kind, v, vl)) diag(d, "text-decoration refused", -1);
+    } else if (w_eq(prop, "outline")) {
+        if (parse_outline(n, v, vl)) diag(d, "outline refused", -1);
+    } else if (w_eq(prop, "outline-style")) {
+        int code = outline_style_value(v, vl);
+        if (code) n->outline_style = (uint8_t)(code == WE_BS_NONE ? 0 : code);
+        else diag(d, "outline refused", -1);
+    } else if (w_eq(prop, "outline-width")) {
+        if (outline_width_value(v, vl, &px) == 0) n->outline_w = (uint8_t)px;
+        else diag(d, "outline refused", -1);
+    } else if (w_eq(prop, "outline-color")) {
+        if (parse_color(v, vl, &col) == 0) { n->outline_color = col; n->outline_color_set = 1; }
+        else diag(d, "outline refused", -1);
+    } else if (w_eq(prop, "outline-offset")) {
+        int16_t value;
+        int percent;
+        if (tf_length(v, vl, &value, &percent) == 0 && !percent) n->outline_offset = (int8_t)(value < -32 ? -32 : value > 32 ? 32 : value);
+        else diag(d, "outline refused", -1);
+    } else if (w_eq(prop, "box-shadow")) {
+        if (parse_shadows(n->shadow, &n->shadow_count, v, vl, 0)) diag(d, "box-shadow refused", -1);
+    } else if (w_eq(prop, "text-shadow")) {
+        if (parse_shadows(n->tshadow, &n->tshadow_count, v, vl, 1)) diag(d, "text-shadow refused", -1);
+    } else if (w_eq(prop, "border-radius")) {
+        if (parse_radius(n, v, vl)) diag(d, "border-radius refused", -1);
+    } else if (w_eq(prop, "border-top-left-radius") || w_eq(prop, "border-top-right-radius") ||
+               w_eq(prop, "border-bottom-right-radius") || w_eq(prop, "border-bottom-left-radius")) {
+        int corner = w_eq(prop, "border-top-left-radius") ? 0 : w_eq(prop, "border-top-right-radius") ? 1 :
+                     w_eq(prop, "border-bottom-right-radius") ? 2 : 3;
+        if (parse_corner(n, corner, v, vl)) diag(d, "border-radius refused", -1);
+    } else if (w_eq(prop, "text-overflow")) {
+        if (value_is(v, vl, "clip")) n->text_overflow = 0;
+        else if (value_is(v, vl, "ellipsis")) n->text_overflow = 1;
+        else diag(d, "text-overflow refused", -1);
+    } else if (w_eq(prop, "text-transform")) {
+        if (value_is(v, vl, "none")) n->text_transform = WE_TT_NONE;
+        else if (value_is(v, vl, "uppercase")) n->text_transform = WE_TT_UPPER;
+        else if (value_is(v, vl, "lowercase")) n->text_transform = WE_TT_LOWER;
+        else if (value_is(v, vl, "capitalize")) n->text_transform = WE_TT_CAPITALIZE;
+        else diag(d, "text-transform refused", -1);
+    } else if (w_eq(prop, "background-clip") || w_eq(prop, "background-origin")) {
+        int box = box_keyword(v, vl);
+        if (box < 0) diag(d, "background box refused", -1);
+        else if (w_eq(prop, "background-clip")) n->bg_clip = (uint8_t)box;
+        else n->bg_origin = (uint8_t)box;
+    } else if (w_eq(prop, "transform")) {
+        if (parse_transform(n, v, vl)) diag(d, "transform refused", -1);
+    } else if (w_eq(prop, "transform-origin")) {
+        if (parse_transform_origin(n, v, vl)) diag(d, "transform origin refused", -1);
     } else if (w_eq(prop, "z-index")) {
         if (value_is(v, vl, "auto")) { n->z_set = 0; n->z_index = 0; }
         else if (bounded_signed(v, vl, WE_Z_MAX, &px) == 0) { n->z_index = (int8_t)px; n->z_set = 1; }
@@ -2205,7 +2947,18 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "disc")) n->list_style = WE_LIST_DISC;
         else if (value_is(v, vl, "decimal")) n->list_style = WE_LIST_DECIMAL;
         else if (value_is(v, vl, "square")) n->list_style = WE_LIST_SQUARE;
+        else if (list_keyword(v, vl) >= 0) n->list_style = (uint8_t)list_keyword(v, vl);
         else diag(d, "list marker refused", -1);
+    } else if (w_eq(prop, "list-style")) {
+        int a[4], l[4], c = tokens(v, vl, a, l), k, style = -1, ok = c >= 1;
+        for (k = 0; k < c && ok; k++) {
+            int kw = list_keyword(v + a[k], l[k]);
+            if (value_is(v + a[k], l[k], "outside")) continue;
+            if (kw < 0 || style >= 0) ok = 0;
+            else style = kw;
+        }
+        if (!ok) diag(d, "list marker refused", -1);
+        else n->list_style = (uint8_t)(style < 0 ? WE_LIST_DISC : style);
     } else if (w_eq(prop, "min-width") || w_eq(prop, "max-width")) {
         int is_min = w_eq(prop, "min-width");
         int rc = parse_len(v, vl, &px, &pct);
@@ -2255,31 +3008,50 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             n->grid_rows = (uint8_t)count;
             for (k = 0; k < count; k++) { n->row_size[k] = sizes[k]; n->row_floor[k] = floors[k]; n->row_cap[k] = caps[k]; }
         }
-    } else if (w_eq(prop, "color")) { if (parse_color(v, vl, &col) == 0) n->color = col; }
-    else if (w_eq(prop, "background") || w_eq(prop, "background-color")) {
-        if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
-        else if (w_ieq_n(v, vl, "none") || w_ieq_n(v, vl, "transparent")) n->has_bg = 0;
+    } else if (w_eq(prop, "color")) {
+        if (parse_color(v, vl, &col) == 0) n->color = col;
+        else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
     }
-    else if (w_eq(prop, "margin")) { if (!margin_auto_box(n, v, vl)) box4(v, vl, n->margin); }
-    else if (w_eq(prop, "padding")) box4(v, vl, n->padding);
+    else if ((w_eq(prop, "background") || w_eq(prop, "background-image")) && vl > 16 &&
+             (w_ieq_n(v, 16, "linear-gradient(") || w_ieq_n(v, 16, "radial-gradient("))) {
+        if (parse_gradient(n, v, vl)) diag(d, "gradient refused", -1);
+        else if (w_eq(prop, "background")) n->has_bg = 0;
+    }
+    else if (w_eq(prop, "background-image")) {
+        if (value_is(v, vl, "none")) n->grad_dir = 0;
+        else diag(d, "background image refused", -1);
+    }
+    else if (w_eq(prop, "background") || w_eq(prop, "background-color")) {
+        if (w_eq(prop, "background")) n->grad_dir = 0;
+        if (w_ieq_n(v, vl, "none") || w_ieq_n(v, vl, "transparent")) n->has_bg = 0;
+        else if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
+        else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
+    }
+    else if (w_eq(prop, "margin")) { if (!margin_auto_box(n, v, vl)) box4(n, 0, v, vl, n->margin); }
+    else if (w_eq(prop, "padding")) box4(n, 1, v, vl, n->padding);
     else if (w_eq(prop, "margin-top")) {
-        if (value_is(v, vl, "auto")) { n->margin[0] = 0; n->margin_auto |= WE_AUTO_TOP; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[0] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_TOP; }
+        if (value_is(v, vl, "auto")) { n->margin[0] = 0; n->margin_auto |= WE_AUTO_TOP; spacing_set(n, 0, 0, WE_NO_PCT); }
+        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 0, pct); n->margin_auto &= (uint8_t)~WE_AUTO_TOP; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[0] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_TOP; spacing_set(n, 0, 0, WE_NO_PCT); }
     }
     else if (w_eq(prop, "margin-right")) {
-        if (value_is(v, vl, "auto")) { n->margin[1] = 0; n->margin_auto |= WE_AUTO_RIGHT; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[1] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_RIGHT; }
+        if (value_is(v, vl, "auto")) { n->margin[1] = 0; n->margin_auto |= WE_AUTO_RIGHT; spacing_set(n, 0, 1, WE_NO_PCT); }
+        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 1, pct); n->margin_auto &= (uint8_t)~WE_AUTO_RIGHT; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[1] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_RIGHT; spacing_set(n, 0, 1, WE_NO_PCT); }
     }
     else if (w_eq(prop, "margin-bottom")) {
-        if (value_is(v, vl, "auto")) { n->margin[2] = 0; n->margin_auto |= WE_AUTO_BOTTOM; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[2] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_BOTTOM; }
+        if (value_is(v, vl, "auto")) { n->margin[2] = 0; n->margin_auto |= WE_AUTO_BOTTOM; spacing_set(n, 0, 2, WE_NO_PCT); }
+        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 2, pct); n->margin_auto &= (uint8_t)~WE_AUTO_BOTTOM; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[2] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_BOTTOM; spacing_set(n, 0, 2, WE_NO_PCT); }
     }
     else if (w_eq(prop, "margin-left")) {
-        if (value_is(v, vl, "auto")) { n->margin[3] = 0; n->margin_auto |= WE_AUTO_LEFT; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[3] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; }
+        if (value_is(v, vl, "auto")) { n->margin[3] = 0; n->margin_auto |= WE_AUTO_LEFT; spacing_set(n, 0, 3, WE_NO_PCT); }
+        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 3, pct); n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[3] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; spacing_set(n, 0, 3, WE_NO_PCT); }
     }
     else if (w_eq(prop, "padding-left")) {
-        if (parse_len(v, vl, &px, 0) == 0 && px >= 0) n->padding[3] = (int16_t)px;
+        if (spacing_percent(v, vl, 0, &pct) == 0) spacing_set(n, 1, 3, pct);
+        else if (parse_len(v, vl, &px, 0) == 0 && px >= 0) { n->padding[3] = (int16_t)px; spacing_set(n, 1, 3, WE_NO_PCT); }
         else diag(d, "padding refused", -1);
     }
     else if (w_eq(prop, "width")) {
@@ -2328,7 +3100,24 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "font-weight")) {
         n->bold = (uint8_t)(w_ieq_n(v, vl, "bold") || w_ieq_n(v, vl, "700") || w_ieq_n(v, vl, "800") || w_ieq_n(v, vl, "900"));
     } else if (w_eq(prop, "text-align")) {
-        n->align = w_ieq_n(v, vl, "center") ? WE_ALIGN_CENTER : w_ieq_n(v, vl, "right") ? WE_ALIGN_RIGHT : WE_ALIGN_LEFT;
+        n->align = (uint8_t)align_keyword(v, vl, WE_ALIGN_LEFT);
+    } else if (w_eq(prop, "text-align-last")) {
+        /* Lot 62 round 2: alignment of the last line and of lines before a
+         * forced break (left-to-right: start is left, end is right) */
+        int a = value_is(v, vl, "auto") ? -1 : align_keyword(v, vl, -2);
+        if (a == -2) diag(d, "text-align-last refused", -1);
+        else n->align_last = (uint8_t)(a + 1);
+    } else if (w_eq(prop, "text-justify")) {
+        if (value_is(v, vl, "none")) n->justify_none = 1;
+        else if (value_is(v, vl, "auto") || value_is(v, vl, "inter-word")) n->justify_none = 0;
+        else diag(d, "text-justify refused", -1);
+    } else if (w_eq(prop, "letter-spacing") || w_eq(prop, "word-spacing")) {
+        /* Lot 62 round 2: px (or em) added after each glyph, or to each
+         * word space; letter -4..16, word -8..32 */
+        int letter = w_eq(prop, "letter-spacing"), low = letter ? -4 : -8, high = letter ? 16 : 32;
+        if (value_is(v, vl, "normal")) px = 0;
+        else if (parse_len(v, vl, &px, 0) != 0 || px < low || px > high) { diag(d, letter ? "letter-spacing refused" : "word-spacing refused", -1); px = letter ? n->letter_spacing : n->word_spacing; }
+        if (letter) n->letter_spacing = (int8_t)px; else n->word_spacing = (int8_t)px;
     } else {
         d->perf.decls_applied--;
         d->perf.unknown_props++;
@@ -2378,6 +3167,7 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "td") || w_eq(t, "th")) n->display = WE_DISP_CELL;
     if (w_eq(t, "ul")) n->list_style = WE_LIST_DISC;
     if (w_eq(t, "ol")) n->list_style = WE_LIST_DECIMAL;
+    if ((w_eq(t, "ol") || w_eq(t, "ul")) && n->list_type_attr) n->list_style = n->list_type_attr;
     if (w_eq(t, "body")) { for (i = 0; i < 4; i++) n->margin[i] = 8; }
     if (w_eq(t, "p") || w_eq(t, "ul") || w_eq(t, "ol")) { n->margin[0] = 8; n->margin[2] = 8; }
     if (w_eq(t, "h1") || w_eq(t, "h2") || w_eq(t, "h3") || w_eq(t, "h4")) { n->bold = 1; n->margin[0] = 8; n->margin[2] = 8; }
@@ -2385,6 +3175,8 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "ol")) n->padding[3] = 40;
     if (w_eq(t, "b") || w_eq(t, "strong") || w_eq(t, "th")) n->bold = 1;
     if (w_eq(t, "a")) n->color = 0x0645AD;
+    if (w_eq(t, "u") || w_eq(t, "ins")) n->deco_line = WE_DECO_UNDER;
+    if (w_eq(t, "s") || w_eq(t, "strike") || w_eq(t, "del")) n->deco_line = WE_DECO_THROUGH;
     if (w_eq(t, "hr")) { n->height = 2; n->bg = 0x808080; n->has_bg = 1; n->margin[0] = 6; n->margin[2] = 6; }
     if (w_eq(t, "blockquote")) { n->margin[3] = 24; n->margin[1] = 24; }
     if (w_eq(t, "pre")) { n->display = WE_DISP_BLOCK; n->ws_mode = WE_WS_PRE; n->nowrap = 1; }
@@ -2455,6 +3247,20 @@ int we_style(we_doc_t* d) {
         n->border_spacing = n->border_spacing_y = 0;
         n->clear_side = n->valign = n->z_set = 0;
         n->transparency = 0;
+        n->tf_count = 0; n->tf_origin_pct = 3; n->tf_origin[0] = n->tf_origin[1] = 50;
+        n->outline_style = 0; n->outline_w = 3; n->outline_offset = 0; n->outline_color_set = 0;
+        n->shadow_count = 0;
+        n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
+        n->spacing_pct = 0; n->grad_dir = 0;
+        n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING; n->text_overflow = 0;
+        w_zero(n->rad_x, sizeof(n->rad_x)); w_zero(n->rad_y, sizeof(n->rad_y)); n->rad_pct = 0;
+        n->text_transform = p ? p->text_transform : WE_TT_NONE;
+        n->letter_spacing = p ? p->letter_spacing : 0;
+        n->word_spacing = p ? p->word_spacing : 0;
+        n->align_last = p ? p->align_last : 0;
+        n->justify_none = p ? p->justify_none : 0;
+        n->tshadow_count = p ? p->tshadow_count : 0;
+        if (p) { int k; for (k = 0; k < WE_SHADOWS_MAX; k++) n->tshadow[k] = p->tshadow[k]; }
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
         n->text_indent = p ? p->text_indent : 0;
@@ -2718,6 +3524,8 @@ typedef struct {
      * text seen on the open line and its baseline-aligned atomic boxes. */
     int last, lay_first, lay_last, line_text, line_start, natoms, flow;
     struct { int node, base, height; } atoms[8];
+    int wrapped;   /* lot 62: the line being flushed ends at a soft wrap */
+    int align_last, justify_none;
 } we_inline_t;
 #define WE_NO_BASELINE (-32768)
 #define WE_LINE_ATOMS 8
@@ -2850,10 +3658,114 @@ static int line_aligned(const we_inline_t *f) {
     return 0;
 }
 
+/* Lot 62: text decorations of a text run at (x, y) of width w, y being
+ * the glyph top. Each line kind comes from the nearest ancestor that
+ * declares it (its colour, style and thickness), walking up from the text
+ * and stopping after a float, an absolute box or an inline-block, whose
+ * own decorations still apply (CSS Text Decoration 3, 2.1). Underline
+ * sits under the glyph cell, overline above it, line-through on row 4.
+ * Wavy paints solid with one "wavy decoration painted solid". */
+static int wavy_decoration;
+static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len);
+
+static void paint_decorations(we_doc_t *d, int text, int x, int y, int w) {
+    int done = 0, kind, p = d->nodes[text].parent, guard;
+    for (guard = 0; p >= 0 && guard <= WE_DEPTH_MAX + 1 && done != 7; guard++, p = d->nodes[p].parent) {
+        const we_node_t *n = &d->nodes[p];
+        for (kind = 1; kind <= 4; kind <<= 1) {
+            int t = n->deco_thick ? n->deco_thick : 1, at, style = n->deco_style;
+            uint32_t color = n->deco_color_set ? n->deco_color : n->color;
+            if (!(n->deco_line & kind) || (done & kind)) continue;
+            done |= kind;
+            at = kind == WE_DECO_UNDER ? y + 8 : kind == WE_DECO_OVER ? y - t : y + 4 - t / 2;
+            if (style == WE_BS_WAVY) { wavy_decoration = 1; style = WE_BS_SOLID; }
+            if (style == 4) {   /* double: two lines, the gap equal to the thickness */
+                edge_paint(d, text, WE_BS_SOLID, color, 0, kind == WE_DECO_OVER ? at - 2 * t : at, x, t, w);
+                edge_paint(d, text, WE_BS_SOLID, color, 0, kind == WE_DECO_OVER ? at : at + 2 * t, x, t, w);
+            } else edge_paint(d, text, style, color, 0, at, x, t, w);
+        }
+        if (n->float_side || n->absolute || n->display == WE_DISP_INLINE_BLOCK) break;
+    }
+}
+
+/* Lot 62: text-transform on a run copy (ASCII; glyph widths are fixed).
+ * capitalize upper-cases the first letter of each word; word_start says
+ * whether the run itself starts a word. */
+static void text_transform(char *buf, int len, int mode, int word_start) {
+    int k, start = word_start;
+    for (k = 0; k < len; k++) {
+        char c = buf[k];
+        if (mode == WE_TT_UPPER || (mode == WE_TT_CAPITALIZE && start)) { if (c >= 'a' && c <= 'z') c = (char)(c - 32); }
+        else if (mode == WE_TT_LOWER) { if (c >= 'A' && c <= 'Z') c = (char)(c + 32); }
+        buf[k] = c;
+        start = c == ' ';
+    }
+}
+
+/* Lot 62: text shadows paint under their run, the first one on top; the
+ * colour defaults to the text colour. Blur paints sharp (one diagnostic). */
+static int text_shadow_blur;
+static void text_shadows(we_doc_t *d, int node, int x, int y, const char *buf, int len) {
+    const we_node_t *t = &d->nodes[node];
+    int k;
+    for (k = t->tshadow_count - 1; k >= 0; k--) {
+        const we_shadow_t *sh = &t->tshadow[k];
+        os_fb_web_item_t *it = emit(d, node, OS_FB_WEB_TEXT, limit_coord(x + sh->x), limit_coord(y + sh->y), len * WE_CHAR_W, 8,
+                                    sh->has_color ? sh->color : t->color);
+        if (sh->blur) text_shadow_blur = 1;
+        if (!it) return;
+        it->bold = t->bold;
+        w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len);
+    }
+}
+
+/* Lot 62 round 2: letter-spacing widens every glyph cell of a text node,
+ * word-spacing every word space (which takes the letter spacing too).
+ * The kernel font has a fixed 8 px advance, so a letter-spaced run paints
+ * one TEXT item per glyph; word-spaced or justified spaces end the merged
+ * run. Justification spreads the free width of a soft-wrapped line over
+ * its word spaces, the later spaces taking the rounding; the last line, a
+ * forced break and lines with atomic boxes keep start alignment. Letter
+ * spacing applies after every glyph, the last one included. */
+static int glyph_adv(const we_doc_t *d, int node) {
+    return WE_CHAR_W + d->nodes[node].letter_spacing;
+}
+
+static int space_adv(const we_doc_t *d, int node) {
+    int v = WE_CHAR_W + d->nodes[node].letter_spacing + d->nodes[node].word_spacing;
+    return v > 0 ? v : 0;
+}
+
+static int gap_extra(int extra, int gaps, int g) {
+    return gaps ? extra * (g + 1) / gaps - extra * g / gaps : 0;
+}
+
+static void paint_run(we_doc_t *d, int node, int xs, int y, const char *buf, int len) {
+    int adv = glyph_adv(d, node), k;
+    if (adv == WE_CHAR_W) {
+        os_fb_web_item_t *it;
+        text_shadows(d, node, xs, y, buf, len);
+        it = emit(d, node, OS_FB_WEB_TEXT, xs, y, len * WE_CHAR_W, 8, d->nodes[node].color);
+        if (it) { it->bold = d->nodes[node].bold; w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len); }
+        return;
+    }
+    for (k = 0; k < len; k++) {
+        os_fb_web_item_t *it;
+        if (buf[k] == ' ') continue;
+        text_shadows(d, node, xs + k * adv, y, buf + k, 1);
+        it = emit(d, node, OS_FB_WEB_TEXT, xs + k * adv, y, WE_CHAR_W, 8, d->nodes[node].color);
+        if (!it) return;
+        it->bold = d->nodes[node].bold;
+        it->text[0] = buf[k];
+        it->text[1] = 0;
+    }
+}
+
 /* advance=0 paints a segment and keeps the line open for an atomic box. */
 static void flush_line_mode(we_inline_t *f, int force, int advance) {
-    int i, x, total = 0, box_h;
+    int i, x, total = 0, box_h, wrapped = f->wrapped, extra = 0, gaps = 0, gap = 0, align = f->align;
     we_doc_t* d = f->d;
+    f->wrapped = 0;
     box_h = f->line_h > 0 ? f->line_h : WE_LINE_H;
     if (f->nwords == 0 && !force) {
         if (advance && (f->atom_h > 0 || line_aligned(f))) finish_line(f, f->line_text);
@@ -2864,23 +3776,32 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         else { f->nwords = 0; f->line_text = 1; }
         return;
     }
-    for (i = 0; i < f->nwords; i++) total += (f->w[i].len + (i && f->w[i].space_before ? 1 : 0)) * WE_CHAR_W;
+    for (i = 0; i < f->nwords; i++) {
+        total += f->w[i].len * glyph_adv(d, f->w[i].node);
+        if (i && f->w[i].space_before) { total += space_adv(d, f->w[i].node); gaps++; }
+    }
     x = f->x0 + f->pending_x;
+    /* the last line and a line before a forced break: text-align-last,
+     * auto meaning text-align with justify falling back to start */
+    if (!wrapped) align = f->align_last ? f->align_last - 1 : align == WE_ALIGN_JUSTIFY ? WE_ALIGN_LEFT : align;
+    if (f->justify_none && align == WE_ALIGN_JUSTIFY) align = WE_ALIGN_LEFT;
     if (advance && f->pending_x == 0 && f->atom_h == 0) {
-        if (f->align == WE_ALIGN_CENTER && total < f->width) x += (f->width - total) / 2;
-        else if (f->align == WE_ALIGN_RIGHT && total < f->width) x += f->width - total;
+        if (align == WE_ALIGN_CENTER && total < f->width) x += (f->width - total) / 2;
+        else if (align == WE_ALIGN_RIGHT && total < f->width) x += f->width - total;
+        else if (align == WE_ALIGN_JUSTIFY && gaps && total < f->width) extra = f->width - total;
     }
     i = 0;
     while (i < f->nwords) {
         /* merge words of the same node into one TEXT item */
-        int node = f->w[i].node, j = i, len = 0, xs;
+        int node = f->w[i].node, j = i, len = 0, xs, run_w, before;
         char buf[OS_FB_WEB_TEXT_LEN];
-        os_fb_web_item_t* it;
         const we_node_t* n;
-        if (i && f->w[i].space_before) x += WE_CHAR_W;
+        if (i && f->w[i].space_before) x += space_adv(d, node) + gap_extra(extra, gaps, gap++);
         xs = x;
         while (j < f->nwords && f->w[j].node == node) {
             int k, sp = (j > i && f->w[j].space_before) ? 1 : 0;
+            if (sp && (space_adv(d, node) != WE_CHAR_W || gap_extra(extra, gaps, gap))) break;
+            gap += sp;
             if (len + sp + f->w[j].len > OS_FB_WEB_TEXT_LEN - 1) break;
             if (sp) buf[len++] = ' ';
             for (k = 0; k < f->w[j].len; k++) buf[len++] = f->w[j].s[k];
@@ -2896,14 +3817,17 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
             j = f->w[i].len ? i : i + 1;
         }
         buf[len] = 0;
+        text_transform(buf, len, d->nodes[node].text_transform, i == 0 || f->w[i].space_before);
         n = &d->nodes[d->nodes[node].parent >= 0 ? d->nodes[node].parent : node];
-        if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, len * WE_CHAR_W, box_h, n->bg);
-        it = emit(d, node, OS_FB_WEB_TEXT, xs, f->y + 1, len * WE_CHAR_W, 8, d->nodes[node].color);
-        if (it) { it->bold = d->nodes[node].bold; w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len); }
+        run_w = len * glyph_adv(d, node);
+        if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, run_w, box_h, n->bg);
+        before = (int)d->nitems;
+        paint_run(d, node, xs, f->y + 1, buf, len);
+        if ((int)d->nitems > before) paint_decorations(d, node, xs, f->y + 1, run_w);
         {   /* UX4: text nodes get the bounding box of their runs, so a
              * click on a link's words finds the <a> (we_link_at) */
             we_node_t* tn = &d->nodes[node];
-            int x1 = xs + len * WE_CHAR_W, y1 = f->y + WE_LINE_H;
+            int x1 = xs + run_w, y1 = f->y + WE_LINE_H;
             if (tn->w <= 0) { tn->x = (int16_t)limit_coord(xs); tn->y = (int16_t)limit_coord(f->y); tn->w = (int16_t)(x1 - xs); tn->h = WE_LINE_H; }
             else {
                 int ax = tn->x < xs ? tn->x : xs, ay = tn->y < f->y ? tn->y : f->y;
@@ -2911,7 +3835,7 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
                 tn->x = (int16_t)limit_coord(ax); tn->y = (int16_t)limit_coord(ay); tn->w = (int16_t)(bx - ax); tn->h = (int16_t)(by - ay);
             }
         }
-        x = xs + len * WE_CHAR_W;
+        x = xs + run_w;
         i = j;
     }
     if (!advance) {
@@ -2929,14 +3853,15 @@ static void flush_line(we_inline_t *f, int force) { flush_line_mode(f, force, 1)
 static void flush_segment(we_inline_t *f) { flush_line_mode(f, 0, 0); }
 
 static void add_word_piece(we_inline_t* f, const char* s, int len, int node, int space) {
-    int ww;
-    flow_region(f, len * WE_CHAR_W);
-    ww = len * WE_CHAR_W + ((f->nwords && space) ? WE_CHAR_W : 0);
-    if (!f->d->nodes[node].nowrap && (f->nwords || f->pending_x) && f->cur_w + ww > f->width) { flush_line(f, 0); flow_region(f, len * WE_CHAR_W); ww = len * WE_CHAR_W; }
+    int ww, word = len * glyph_adv(f->d, node);
+    flow_region(f, word);
+    ww = word + ((f->nwords && space) ? space_adv(f->d, node) : 0);
+    if (!f->d->nodes[node].nowrap && (f->nwords || f->pending_x) && f->cur_w + ww > f->width) { f->wrapped = 1; flush_line(f, 0); flow_region(f, word); ww = word; }
     if (f->nwords >= WE_LINE_WORDS) {
         if (f->d->nodes[node].nowrap) diag(f->d, "inline word capacity", node);
+        f->wrapped = 1;
         flush_line(f, 0);
-        ww = len * WE_CHAR_W;
+        ww = word;
     }
     f->w[f->nwords].s = s; f->w[f->nwords].len = len; f->w[f->nwords].node = node;
     f->w[f->nwords].space_before = space;
@@ -2944,50 +3869,56 @@ static void add_word_piece(we_inline_t* f, const char* s, int len, int node, int
     f->cur_w += ww;
 }
 
+static void soft_wrap(we_inline_t *f) {
+    f->wrapped = 1;
+    flush_line(f, 0);
+}
+
 static void add_word(we_inline_t *f, const char *s, int len, int node, int space) {
     const we_node_t *n = &f->d->nodes[node];
+    int adv = glyph_adv(f->d, node), gap = space_adv(f->d, node);
     if (n->break_all && !n->nowrap) {
         while (len > 0) {
             int room, take;
-            flow_region(f, WE_CHAR_W);
-            room = f->width - f->cur_w - (f->nwords && space ? WE_CHAR_W : 0);
-            if (room < WE_CHAR_W && (f->nwords || f->pending_x)) {
-                flush_line(f, 0); space = 0;
+            flow_region(f, adv);
+            room = f->width - f->cur_w - (f->nwords && space ? gap : 0);
+            if (room < adv && (f->nwords || f->pending_x)) {
+                soft_wrap(f); space = 0;
                 continue;
             }
-            take = room / WE_CHAR_W;
+            take = room / adv;
             if (take < 1) take = 1;
             if (take > len) take = len;
             add_word_piece(f, s, take, node, space);
             s += take; len -= take; space = 0;
-            if (len) flush_line(f, 0);
+            if (len) soft_wrap(f);
         }
         return;
     }
-    flow_region(f, WE_CHAR_W);
-    if (!n->break_word || n->nowrap || len * WE_CHAR_W <= f->width) {
+    flow_region(f, adv);
+    if (!n->break_word || n->nowrap || len * adv <= f->width) {
         add_word_piece(f, s, len, node, space);
         return;
     }
-    if (f->nwords) { flush_line(f, 0); space = 0; }
+    if (f->nwords) { soft_wrap(f); space = 0; }
     while (len > 0) {
         int room, take;
-        flow_region(f, WE_CHAR_W);
-        room = f->width - f->cur_w - (f->nwords && space ? WE_CHAR_W : 0);
-        if (room < WE_CHAR_W) {
-            flush_line(f, 0);
-            flow_region(f, WE_CHAR_W);
+        flow_region(f, adv);
+        room = f->width - f->cur_w - (f->nwords && space ? gap : 0);
+        if (room < adv) {
+            soft_wrap(f);
+            flow_region(f, adv);
             room = f->width;
             space = 0;
         }
-        take = room / WE_CHAR_W;
+        take = room / adv;
         if (take < 1) take = 1;
         if (take > len) take = len;
         add_word_piece(f, s, take, node, space);
         s += take;
         len -= take;
         space = 0;
-        if (len) flush_line(f, 0);
+        if (len) soft_wrap(f);
     }
 }
 
@@ -3060,7 +3991,7 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
 
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth);
 static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len);
-static int style_solid_3d;
+static void frame_3d(we_doc_t *d, int idx, int style, uint32_t color, int x, int y, int w, int h, int t);
 static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth);
 static int is_box(uint8_t display) {
     return display == WE_DISP_BLOCK || display == WE_DISP_FLEX || display == WE_DISP_GRID ||
@@ -3223,10 +4154,10 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
                 intrinsic_word(flow);
                 flow->pending = 1;
             } else {
-                if (flow->pending && flow->line) flow->line += WE_CHAR_W;
+                if (flow->pending && flow->line) flow->line += space_adv(d, idx);
                 flow->pending = 0;
-                flow->line = limit_coord(flow->line + WE_CHAR_W);
-                flow->word = limit_coord(flow->word + WE_CHAR_W);
+                flow->line = limit_coord(flow->line + glyph_adv(d, idx));
+                flow->word = limit_coord(flow->word + glyph_adv(d, idx));
                 if (!n->nowrap && (n->break_all || n->break_word == WE_WRAP_ANYWHERE)) intrinsic_word(flow);
             }
         }
@@ -3511,6 +4442,8 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->line_start = (int)d->nitems;
     f->flow = idx;
     f->align = d->nodes[idx].align;
+    f->align_last = d->nodes[idx].align_last;
+    f->justify_none = d->nodes[idx].justify_none;
     f->line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
     f->indent = d->nodes[idx].text_indent;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
@@ -3612,10 +4545,650 @@ static void relative_shift(we_doc_t *d, int idx, int first_item, int containing_
 static int layout_area(we_doc_t *d, int idx, int x, int y, int width, int height, int containing, int depth);
 static void place_absolutes(we_doc_t *d, int idx, int pad_x, int pad_y, int pad_w, int pad_h, int depth);
 
+/* ---------- Lot 62: box-shadow paint ----------
+ * Outer shadows paint under the background, inset shadows over it and
+ * under the content (CSS Backgrounds 3, 7.1), the first shadow on top.
+ * Their items are reserved before the children and filled once the box
+ * size is known; unused reserved items are removed after layout. An outer
+ * shadow is the border box moved by the offsets and grown by the spread,
+ * minus the border box itself; an inset shadow is the padding box minus
+ * the padding box moved and shrunk. A blur radius b is two layers of half
+ * the alpha each, the shape grown and shrunk by b / 2 (composited, so the
+ * core keeps the full alpha). At most 4 items per layer. */
+#define WE_ITEM_RESERVED 1
+#define WE_ITEM_OUTLINE 2
+
+static int shadow_layers(const we_shadow_t *sh) {
+    return sh->blur ? 2 : 1;
+}
+
+/* Lot 62 round 2: a rounded box paints a shadow rounded when an opaque
+ * colour background covers what the shadow must not show: an outer shadow
+ * is then its whole shape under a border-box background, an inset shadow
+ * without blur the padding-box shape with the background repainted inside
+ * the inset shape (cut to the padding box). Other shadows of a rounded box
+ * stay square ("rounded effect painted square"). */
+static int shadow_rounded(const we_node_t *n, const we_shadow_t *sh) {
+    if (!(n->rad_x[0] | n->rad_x[1] | n->rad_x[2] | n->rad_x[3]) || !n->has_bg || (n->bg >> WE_ALPHA_SHIFT)) return 0;
+    if (!sh->inset) return n->bg_clip == WE_BOX_BORDER;
+    return !sh->blur && n->bg_clip != WE_BOX_CONTENT && !n->grad_dir;
+}
+
+static int shadow_slot_count(const we_node_t *n, const we_shadow_t *sh) {
+    if (!shadow_rounded(n, sh)) return 4 * shadow_layers(sh);
+    return WE_RADIUS_SLICES * (sh->inset ? 2 : shadow_layers(sh));
+}
+
+static int shadow_reserve(we_doc_t *d, int idx, int inset, int *count) {
+    const we_node_t *n = &d->nodes[idx];
+    int first = (int)d->nitems, k, j;
+    *count = 0;
+    for (k = 0; k < n->shadow_count; k++) {
+        if (!n->shadow[k].inset != !inset) continue;
+        for (j = 0; j < shadow_slot_count(n, &n->shadow[k]); j++) {
+            os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
+            if (!it) return first;
+            it->kind = 0;
+            it->pad = WE_ITEM_RESERVED;
+            (*count)++;
+        }
+    }
+    return first;
+}
+
+/* Lot 62: colour of the gradient line at p (1/10000), interpolated in
+ * premultiplied alpha between the surrounding stops. */
+static uint32_t gradient_at(const we_node_t *n, int p) {
+    int k = 0, t, a0, a1, total, ch, shift;
+    uint32_t c0, c1, out = 0;
+    if (p <= n->grad_pos[0]) return n->grad_color[0];
+    while (k + 1 < n->grad_count && p > n->grad_pos[k + 1]) k++;
+    if (k + 1 >= n->grad_count) return n->grad_color[n->grad_count - 1];
+    if (n->grad_pos[k + 1] == n->grad_pos[k]) return n->grad_color[k + 1];
+    t = (p - n->grad_pos[k]) * 10000 / (n->grad_pos[k + 1] - n->grad_pos[k]);
+    c0 = n->grad_color[k]; c1 = n->grad_color[k + 1];
+    a0 = 255 - (int)(c0 >> 24); a1 = 255 - (int)(c1 >> 24);
+    total = a0 * (10000 - t) + a1 * t;
+    if (total == 0) return with_alpha(0, 0);
+    for (ch = 0, shift = 0; ch < 3; ch++, shift += 8) {
+        int v0 = (int)((c0 >> shift) & 0xFF), v1 = (int)((c1 >> shift) & 0xFF);
+        int num = v0 * a0 * (10000 - t) + v1 * a1 * t;
+        out |= (uint32_t)((num + total / 2) / total) << shift;
+    }
+    return with_alpha(out, (total + 5000) / 10000);
+}
+
+#define WE_RADIAL_RINGS 3
+#define WE_RADIAL_SLOTS (1 + WE_RADIAL_RINGS * 8)   /* 5 ellipse cuts + 2 clip cuts per ring */
+static int gradient_reserve(we_doc_t *d, int idx, int *count) {
+    int first = (int)d->nitems, k;
+    *count = 0;
+    if (!d->nodes[idx].grad_dir) return first;
+    for (k = 0; k < (d->nodes[idx].grad_dir == WE_GRAD_RADIAL ? WE_RADIAL_SLOTS : WE_GRAD_BANDS); k++) {
+        os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
+        if (!it) break;
+        it->kind = 0;
+        it->pad = WE_ITEM_RESERVED;
+        (*count)++;
+    }
+    return first;
+}
+
+static int gradient_banded;
+
+/* Bands tile the border box exactly; each takes the colour at its middle. */
+/* Lot 62: ordinal of an li: the ol start (default 1, or the item count
+ * when reversed), then +1 (or -1) per displayed li, an li value resetting
+ * it (HTML list owner numbering, direct children only). */
+static int list_ordinal(const we_doc_t *d, int idx) {
+    const we_node_t *n = &d->nodes[idx];
+    const we_node_t *owner = n->parent >= 0 ? &d->nodes[n->parent] : 0;
+    int sibling, number, step = owner && owner->list_reversed ? -1 : 1, count = 0;
+    if (!owner) return n->list_value_set ? n->list_value : 1;
+    for (sibling = owner->first; sibling >= 0; sibling = d->nodes[sibling].next)
+        if (w_eq(d->nodes[sibling].tag, "li") && d->nodes[sibling].display != WE_DISP_NONE) count++;
+    number = owner->list_value_set ? owner->list_value : step < 0 ? count : 1;
+    number -= step;
+    for (sibling = owner->first; sibling >= 0; sibling = d->nodes[sibling].next) {
+        const we_node_t *s = &d->nodes[sibling];
+        if (!w_eq(s->tag, "li") || s->display == WE_DISP_NONE) { if (sibling == idx) break; continue; }
+        number = s->list_value_set ? s->list_value : number + step;
+        if (sibling == idx) break;
+    }
+    return number;
+}
+
+/* Lot 62: marker text; alpha needs 1.., roman 1..3999, else decimal. */
+static int list_marker(int style, int number, char *out) {
+    int len = 0;
+    if ((style == WE_LIST_LOWER_ALPHA || style == WE_LIST_UPPER_ALPHA) && number >= 1) {
+        char rev[8];
+        int k = 0, base = style == WE_LIST_LOWER_ALPHA ? 'a' : 'A';
+        while (number > 0 && k < 7) { number--; rev[k++] = (char)(base + number % 26); number /= 26; }
+        while (k) out[len++] = rev[--k];
+    } else if ((style == WE_LIST_LOWER_ROMAN || style == WE_LIST_UPPER_ROMAN) && number >= 1 && number <= 3999) {
+        static const int values[13] = { 1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1 };
+        static const char *const upper[13] = { "M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I" };
+        int k;
+        for (k = 0; k < 13; k++) while (number >= values[k]) {
+            const char *p = upper[k];
+            while (*p) { out[len++] = style == WE_LIST_LOWER_ROMAN ? (char)(*p + 32) : *p; p++; }
+            number -= values[k];
+        }
+    } else {
+        if (style == WE_LIST_LEADING_ZERO && number > -10 && number < 10) {
+            if (number < 0) { out[len++] = '-'; number = -number; }
+            out[len++] = '0';
+        }
+        w_itoa(number, out + len);
+        len = w_len(out);
+    }
+    out[len] = 0;
+    return len;
+}
+
+/* ---------- Lot 62: rounded shapes as row slices ----------
+ * A shape is a box (w x h) with elliptical corners; it is cut into row
+ * bands at WE_RADIUS_STEPS rows per corner, each band inset on the left
+ * and right by the corner ellipse at the band's middle row. */
+typedef struct { int rx[4], ry[4]; } we_radii_t;
+static int radius_square;
+
+static uint32_t isqrt32(uint32_t v) {
+    uint32_t r = 0, bit = 1u << 30;
+    while (bit > v) bit >>= 2;
+    while (bit) {
+        if (v >= r + bit) { v -= r + bit; r = (r >> 1) + bit; } else r >>= 1;
+        bit >>= 2;
+    }
+    return r;
+}
+
+/* Used radii of a w x h border box: percentages resolved, then all radii
+ * scaled down by the smallest side / (sum of its two radii) below 1. */
+static void radii_scale(we_radii_t *r, int w, int h);
+static void used_radii(const we_node_t *n, int w, int h, we_radii_t *r) {
+    int k;
+    for (k = 0; k < 4; k++) {
+        r->rx[k] = n->rad_pct & (1u << k) ? n->rad_x[k] * w / 100 : n->rad_x[k];
+        r->ry[k] = n->rad_pct & (1u << (k + 4)) ? n->rad_y[k] * h / 100 : n->rad_y[k];
+        if (r->rx[k] > WE_RADIUS_MAX) r->rx[k] = WE_RADIUS_MAX;
+        if (r->ry[k] > WE_RADIUS_MAX) r->ry[k] = WE_RADIUS_MAX;
+        if (!r->rx[k] || !r->ry[k]) r->rx[k] = r->ry[k] = 0;
+    }
+    radii_scale(r, w, h);
+}
+
+static void radii_scale(we_radii_t *r, int w, int h) {
+    static const int8_t side_corners[4][3] = { {0, 1, 0}, {1, 2, 1}, {3, 2, 0}, {0, 3, 1} };
+    int k, num = 1, den = 1;
+    for (k = 0; k < 4; k++) {
+        int a = side_corners[k][0], b = side_corners[k][1], vertical = side_corners[k][2];
+        int sum = vertical ? r->ry[a] + r->ry[b] : r->rx[a] + r->rx[b], len = vertical ? h : w;
+        if (sum > len && len * den < num * sum) { num = len; den = sum; }
+    }
+    if (num < den) for (k = 0; k < 4; k++) {
+        r->rx[k] = r->rx[k] * num / den; r->ry[k] = r->ry[k] * num / den;
+        if (!r->rx[k] || !r->ry[k]) r->rx[k] = r->ry[k] = 0;
+    }
+}
+
+static int radii_any(const we_radii_t *r) {
+    return r->rx[0] || r->rx[1] || r->rx[2] || r->rx[3];
+}
+
+/* inset of one corner at doubled row y2 counted from the corner's edge */
+static int corner_inset(int rx, int ry, int y2) {
+    int r2 = 2 * ry, t2 = r2 - y2;
+    uint32_t q;
+    if (!rx || y2 >= r2) return 0;
+    if (t2 > r2) t2 = r2;
+    q = isqrt32((uint32_t)(rx * rx) * (uint32_t)(r2 * r2 - t2 * t2));
+    return rx - (int)((q + (uint32_t)ry) / (uint32_t)r2);
+}
+
+static void shape_insets(const we_radii_t *r, int h, int y2, int *left, int *right) {
+    int tl = corner_inset(r->rx[0], r->ry[0], y2), tr = corner_inset(r->rx[1], r->ry[1], y2);
+    int bl = corner_inset(r->rx[3], r->ry[3], 2 * h - y2), br = corner_inset(r->rx[2], r->ry[2], 2 * h - y2);
+    *left = tl > bl ? tl : bl;
+    *right = tr > br ? tr : br;
+}
+
+static int add_break(int *list, int count, int cap, int v, int h) {
+    int k;
+    if (v <= 0 || v >= h) return count;
+    for (k = 0; k < count; k++) if (list[k] == v) return count;
+    if (count < cap) list[count++] = v;
+    return count;
+}
+
+static int shape_breaks(const we_radii_t *r, int h, int offset, int *list, int count, int cap) {
+    int c, s;
+    for (c = 0; c < 4; c++) for (s = 1; s <= WE_RADIUS_STEPS; s++) {
+        int at = r->ry[c] * s / WE_RADIUS_STEPS;
+        if (!r->ry[c]) continue;
+        count = add_break(list, count, cap, offset + (c < 2 ? at : h - at), offset + h + 1);
+    }
+    return count;
+}
+
+static void sort_ints(int *list, int count) {
+    int i, j;
+    for (i = 1; i < count; i++) {
+        int v = list[i];
+        for (j = i; j > 0 && list[j - 1] > v; j--) list[j] = list[j - 1];
+        list[j] = v;
+    }
+}
+
+/* Rounded background: slices into the reserved slots (unused stay reserved). */
+static int radius_fill(we_doc_t *d, int slot, int count, const we_radii_t *r, int x, int y, int w, int h, uint32_t color) {
+    int breaks[WE_RADIUS_SLICES + 2], n = 0, k, used = 0, prev_l = -1, prev_r = -1;
+    n = shape_breaks(r, h, 0, breaks + 1, 0, WE_RADIUS_SLICES - 1);
+    breaks[0] = 0;
+    sort_ints(breaks + 1, n);
+    breaks[n + 1] = h;
+    for (k = 0; k <= n; k++) {
+        int a = breaks[k], b = breaks[k + 1], left, right;
+        if (b <= a) continue;
+        shape_insets(r, h, a + b, &left, &right);
+        if (used && left == prev_l && right == prev_r) { d->items[slot + used - 1].h = (uint16_t)(d->items[slot + used - 1].h + b - a); continue; }
+        if (used == count || w - left - right <= 0) { prev_l = -1; continue; }
+        d->items[slot + used].kind = OS_FB_WEB_RECT;
+        d->items[slot + used].color = color;
+        d->items[slot + used].x = (int16_t)(x + left); d->items[slot + used].y = (int16_t)(y + a);
+        d->items[slot + used].w = (uint16_t)(w - left - right); d->items[slot + used].h = (uint16_t)(b - a);
+        used++;
+        prev_l = left; prev_r = right;
+    }
+    return used;
+}
+
+/* Rounded solid border of thickness t: outer shape minus the padding-box
+ * shape (radii reduced by t), up to two rects per band. */
+static int radius_ring(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, int w, int h, int t, uint32_t color, uint32_t far) {
+    we_radii_t in;
+    int breaks[2 * WE_RADIUS_SLICES + 4], n, k, emitted = 0;
+    int pl = -2, pil = -2, pir = -2, pr = -2;
+    uint32_t pc = 0;
+    os_fb_web_item_t *last[2] = {0, 0};
+    if (t <= 0 || w <= 0 || h <= 0) return 0;
+    for (k = 0; k < 4; k++) {
+        in.rx[k] = r->rx[k] > t ? r->rx[k] - t : 0;
+        in.ry[k] = r->ry[k] > t ? r->ry[k] - t : 0;
+        if (!in.rx[k] || !in.ry[k]) in.rx[k] = in.ry[k] = 0;
+    }
+    n = shape_breaks(r, h, 0, breaks + 1, 0, 2 * WE_RADIUS_SLICES);
+    n = shape_breaks(&in, h - 2 * t, t, breaks + 1, n, 2 * WE_RADIUS_SLICES);
+    n = add_break(breaks + 1, n, 2 * WE_RADIUS_SLICES + 2, t, h);
+    n = add_break(breaks + 1, n, 2 * WE_RADIUS_SLICES + 2, h - t, h);
+    breaks[0] = 0;
+    sort_ints(breaks + 1, n);
+    breaks[n + 1] = h;
+    for (k = 0; k <= n; k++) {
+        int a = breaks[k], b = breaks[k + 1], ol, orr, il = -1, ir = -1;
+        uint32_t full;
+        if (b <= a) continue;
+        shape_insets(r, h, a + b, &ol, &orr);
+        if (a >= t && b <= h - t && w > 2 * t) {
+            shape_insets(&in, h - 2 * t, a + b - 2 * t, &il, &ir);
+            il += t; ir += t;
+        }
+        /* lot 62 round 2: a full band takes color above the middle and far
+         * below it, the left piece color and the right piece far */
+        full = a + b < h ? color : far;
+        if (ol == pl && orr == pr && il == pil && ir == pir && last[0] && (il >= 0 || full == pc)) {
+            last[0]->h = (uint16_t)(last[0]->h + b - a);
+            if (last[1]) last[1]->h = (uint16_t)(last[1]->h + b - a);
+            continue;
+        }
+        pl = ol; pr = orr; pil = il; pir = ir; pc = full;
+        last[0] = last[1] = 0;
+        if (il < 0) {
+            if (w - ol - orr > 0) last[0] = emit(d, idx, OS_FB_WEB_RECT, x + ol, y + a, w - ol - orr, b - a, full);
+        } else {
+            if (il > ol) last[0] = emit(d, idx, OS_FB_WEB_RECT, x + ol, y + a, il - ol, b - a, color);
+            if (ir > orr) last[1] = emit(d, idx, OS_FB_WEB_RECT, x + w - ir, y + a, ir - orr, b - a, far);
+            if (!last[0]) { last[0] = last[1]; last[1] = 0; }
+        }
+        emitted += (last[0] != 0) + (last[1] != 0);
+    }
+    return emitted;
+}
+
+static int radius_stepped;
+
+/* radii of an inner box: each reduced by the adjacent insets */
+static void radii_inset(const we_radii_t *r, we_radii_t *out, int top, int right, int bottom, int left) {
+    static const int8_t xs[4] = {3, 1, 1, 3}, ys[4] = {0, 0, 2, 2};
+    int k, inset[4];
+    inset[0] = top; inset[1] = right; inset[2] = bottom; inset[3] = left;
+    for (k = 0; k < 4; k++) {
+        out->rx[k] = r->rx[k] > inset[(int)xs[k]] ? r->rx[k] - inset[(int)xs[k]] : 0;
+        out->ry[k] = r->ry[k] > inset[(int)ys[k]] ? r->ry[k] - inset[(int)ys[k]] : 0;
+        if (!out->rx[k] || !out->ry[k]) out->rx[k] = out->ry[k] = 0;
+    }
+}
+
+/* ---------- Lot 62 round 2: shapes as row bands ----------
+ * A shape is a box with corner radii. Its cuts are its top and bottom
+ * edges and the WE_RADIUS_STEPS rows of each corner; between two cuts a
+ * band takes the corner insets at its middle row. shape_bands() gives the
+ * merged bands of a shape, or of the intersection of two shapes, as
+ * (y0, y1, x0, x1) in page pixels. */
+typedef struct { int x, y, w, h; we_radii_t r; } we_shape_t;
+#define WE_SHAPE_CUTS (2 * (4 * WE_RADIUS_STEPS + 2))
+#define WE_ROUND_BANDS (WE_SHAPE_CUTS + 1)
+
+static void shape_set(we_shape_t *s, int x, int y, int w, int h, const we_radii_t *r) {
+    s->x = x; s->y = y; s->w = w; s->h = h;
+    s->r = *r;
+}
+
+static int cut_add(int *list, int count, int v, int lo, int hi) {
+    int k;
+    if (v <= lo || v >= hi || count >= WE_SHAPE_CUTS) return count;
+    for (k = 0; k < count; k++) if (list[k] == v) return count;
+    list[count] = v;
+    return count + 1;
+}
+
+static int shape_cuts(const we_shape_t *s, int *list, int count, int lo, int hi) {
+    int c, k;
+    count = cut_add(list, count, s->y, lo, hi);
+    count = cut_add(list, count, s->y + s->h, lo, hi);
+    for (c = 0; c < 4; c++) for (k = 1; k <= WE_RADIUS_STEPS && s->r.ry[c]; k++) {
+        int at = s->r.ry[c] * k / WE_RADIUS_STEPS;
+        count = cut_add(list, count, c < 2 ? s->y + at : s->y + s->h - at, lo, hi);
+    }
+    return count;
+}
+
+/* span of a shape over rows [y0, y1), which lie inside or outside it */
+static int shape_span(const we_shape_t *s, int y0, int y1, int *x0, int *x1) {
+    int l, r;
+    if (y0 < s->y || y1 > s->y + s->h || s->w <= 0) return 0;
+    shape_insets(&s->r, s->h, y0 + y1 - 2 * s->y, &l, &r);
+    *x0 = s->x + l;
+    *x1 = s->x + s->w - r;
+    return *x1 > *x0;
+}
+
+static int shape_bands(const we_shape_t *a, const we_shape_t *b, int band[][4], int cap) {
+    int cut[WE_SHAPE_CUTS], n, k, used = 0, lo = a->y, hi = a->y + a->h;
+    if (a->w <= 0 || a->h <= 0) return 0;
+    n = shape_cuts(a, cut, 0, lo, hi);
+    if (b) n = shape_cuts(b, cut, n, lo, hi);
+    sort_ints(cut, n);
+    for (k = 0; k <= n; k++) {
+        int y0 = k ? cut[k - 1] : lo, y1 = k < n ? cut[k] : hi, x0, x1, u0, u1;
+        if (!shape_span(a, y0, y1, &x0, &x1)) continue;
+        if (b) {
+            if (!shape_span(b, y0, y1, &u0, &u1)) continue;
+            if (u0 > x0) x0 = u0;
+            if (u1 < x1) x1 = u1;
+            if (x1 <= x0) continue;
+        }
+        if (used && band[used - 1][1] == y0 && band[used - 1][2] == x0 && band[used - 1][3] == x1) { band[used - 1][1] = y1; continue; }
+        if (used == cap) break;
+        band[used][0] = y0; band[used][1] = y1; band[used][2] = x0; band[used][3] = x1;
+        used++;
+    }
+    return used;
+}
+
+/* bands as RECTs into reserved slots */
+static void bands_into(we_doc_t *d, int slot, int band[][4], int count, uint32_t color) {
+    int k;
+    for (k = 0; k < count; k++) {
+        os_fb_web_item_t *it = &d->items[slot + k];
+        it->kind = OS_FB_WEB_RECT;
+        it->color = color;
+        it->x = (int16_t)limit_coord(band[k][2]); it->y = (int16_t)limit_coord(band[k][0]);
+        it->w = (uint16_t)(band[k][3] - band[k][2]); it->h = (uint16_t)(band[k][1] - band[k][0]);
+    }
+}
+
+/* Radii of a shadow shape: each non-zero radius grows by the spread (or
+ * shrinks, not below 0), then the radii are scaled to the shape. */
+static void radii_spread(const we_radii_t *r, we_radii_t *out, int spread, int w, int h) {
+    int k;
+    for (k = 0; k < 4; k++) {
+        out->rx[k] = r->rx[k] ? r->rx[k] + spread : 0;
+        out->ry[k] = r->ry[k] ? r->ry[k] + spread : 0;
+        if (out->rx[k] <= 0 || out->ry[k] <= 0) out->rx[k] = out->ry[k] = 0;
+    }
+    radii_scale(out, w > 0 ? w : 0, h > 0 ? h : 0);
+}
+
+/* Rounded borders: solid, double (two rings of (t + 1) / 3) and the 3D
+ * styles, whose left and upper parts take one shade and the right and
+ * lower parts the other (groove and ridge as two nested rings). */
+static uint32_t shade_3d(uint32_t color, int light);
+static void radius_border(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, int w, int h, int t, int style, uint32_t color) {
+    uint32_t dark = shade_3d(color, 0), light = shade_3d(color, 1);
+    we_radii_t in;
+    int k = (t + 1) / 3, outer = t / 2;
+    if (style == 4 && t >= 3) {
+        radius_ring(d, idx, r, x, y, w, h, k, color, color);
+        radii_inset(r, &in, t - k, t - k, t - k, t - k);
+        radius_ring(d, idx, &in, x + t - k, y + t - k, w - 2 * (t - k), h - 2 * (t - k), k, color, color);
+    } else if (style == 8 || style == 10) {
+        radius_ring(d, idx, r, x, y, w, h, t, style == 8 ? light : dark, style == 8 ? dark : light);
+    } else if (style == 7 || style == 9) {
+        uint32_t first = style == 9 ? dark : light, second = style == 9 ? light : dark;
+        radius_ring(d, idx, r, x, y, w, h, outer, first, second);
+        radii_inset(r, &in, outer, outer, outer, outer);
+        radius_ring(d, idx, &in, x + outer, y + outer, w - 2 * outer, h - 2 * outer, t - outer, second, first);
+    } else radius_ring(d, idx, r, x, y, w, h, t, color, color);
+}
+
+/* Lot 62: border, padding or content box of a laid out box, (x, y, w, h). */
+static void background_box(const we_node_t *n, int box, int bx, int by, int bw, int bh, int out[4]) {
+    int top = 0, right = 0, bottom = 0, left = 0;
+    if (box >= WE_BOX_PADDING) { top = box_edge(n, 0); right = box_edge(n, 1); bottom = box_edge(n, 2); left = box_edge(n, 3); }
+    if (box == WE_BOX_CONTENT) { top += n->padding[0]; right += n->padding[1]; bottom += n->padding[2]; left += n->padding[3]; }
+    out[0] = bx + left; out[1] = by + top;
+    out[2] = bw - left - right; out[3] = bh - top - bottom;
+    if (out[2] < 0) out[2] = 0;
+    if (out[3] < 0) out[3] = 0;
+}
+
+/* Bands tile the origin box exactly, each taking the colour at its middle,
+ * then are cut to the clip box. The border area outside the origin box
+ * stays unpainted (no image repetition). */
+/* Lot 62 round 2: radial-gradient centred in the origin box. The ending
+ * shape: an ellipse through the box sides (closest/farthest-side) or
+ * through its corners (sqrt 2 larger, the corner extents), a circle to
+ * the nearer or farther side or to the corners. Painted as the last stop
+ * over the clip box, then WE_RADIAL_RINGS nested ellipses from the
+ * outside in, each taking the colour at its band's middle radius and cut
+ * to the clip box (opaque stops only). */
+static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o, const int *c) {
+    const we_node_t *n = &d->nodes[idx];
+    static int band[WE_ROUND_BANDS][4];
+    int extent = n->grad_shape >> 1, rx, ry, ring, used = 1, k;
+    int cx = o[0] + o[2] / 2, cy = o[1] + o[3] / 2;
+    we_shape_t clip, ring_shape;
+    we_radii_t zero, r;
+    if (o[2] <= 0 || o[3] <= 0 || c[2] <= 0 || c[3] <= 0) return;
+    if (n->grad_shape & 1) {
+        int low = o[2] < o[3] ? o[2] : o[3], high = o[2] < o[3] ? o[3] : o[2];
+        rx = extent == WE_EXT_CLOSEST_SIDE ? low / 2 : extent == WE_EXT_FARTHEST_SIDE ? high / 2 :
+             (int)isqrt32((uint32_t)(o[2] * o[2] + o[3] * o[3])) / 2;
+        ry = rx;
+    } else if (extent == WE_EXT_CLOSEST_SIDE || extent == WE_EXT_FARTHEST_SIDE) {
+        rx = o[2] / 2; ry = o[3] / 2;
+    } else {
+        rx = o[2] * 1414 / 2000; ry = o[3] * 1414 / 2000;
+    }
+    if (rx < 1) rx = 1;
+    if (ry < 1) ry = 1;
+    w_zero(&zero, sizeof(zero));
+    shape_set(&clip, c[0], c[1], c[2], c[3], &zero);
+    d->items[slot].kind = OS_FB_WEB_RECT;
+    d->items[slot].color = gradient_at(n, 10000);
+    d->items[slot].x = (int16_t)c[0]; d->items[slot].y = (int16_t)c[1];
+    d->items[slot].w = (uint16_t)c[2]; d->items[slot].h = (uint16_t)c[3];
+    for (ring = WE_RADIAL_RINGS; ring >= 1; ring--) {
+        int ex = rx * ring / WE_RADIAL_RINGS, ey = ry * ring / WE_RADIAL_RINGS, j;
+        if (!ex || !ey) continue;
+        for (j = 0; j < 4; j++) { r.rx[j] = ex; r.ry[j] = ey; }
+        shape_set(&ring_shape, cx - ex, cy - ey, 2 * ex, 2 * ey, &r);
+        k = shape_bands(&ring_shape, &clip, band, count - used);
+        bands_into(d, slot + used, band, k, gradient_at(n, (2 * ring - 1) * 10000 / (2 * WE_RADIAL_RINGS)));
+        used += k;
+    }
+}
+
+static void gradient_fill(we_doc_t *d, int idx, int slot, int count, int bx, int by, int bw, int bh) {
+    const we_node_t *n = &d->nodes[idx];
+    int vertical = n->grad_dir == WE_GRAD_BOTTOM || n->grad_dir == WE_GRAD_TOP;
+    int o[4], c[4], extent, bands, k;
+    if (!n->grad_dir) return;
+    if (n->grad_dir == WE_GRAD_RADIAL) {
+        background_box(n, n->bg_origin, bx, by, bw, bh, o);
+        background_box(n, n->bg_clip, bx, by, bw, bh, c);
+        for (k = 1; k < n->grad_count; k++) if (n->grad_color[k] != n->grad_color[0]) gradient_banded = 1;
+        if (count > 0) radial_fill(d, idx, slot, count, o, c);
+        return;
+    }
+    background_box(n, n->bg_origin, bx, by, bw, bh, o);
+    background_box(n, n->bg_clip, bx, by, bw, bh, c);
+    extent = vertical ? o[3] : o[2];
+    bands = extent < count ? extent : count;
+    if (bands <= 0) return;
+    for (k = 1; k < n->grad_count; k++) if (n->grad_color[k] != n->grad_color[0]) gradient_banded = 1;
+    for (k = 0; k < bands; k++) {
+        os_fb_web_item_t *it = &d->items[slot + k];
+        int a = k * extent / bands, b = (k + 1) * extent / bands;
+        int p = (2 * k + 1) * 10000 / (2 * bands);
+        int x0 = vertical ? o[0] : o[0] + a, y0 = vertical ? o[1] + a : o[1];
+        int x1 = vertical ? o[0] + o[2] : o[0] + b, y1 = vertical ? o[1] + b : o[1] + o[3];
+        if (x0 < c[0]) x0 = c[0];
+        if (y0 < c[1]) y0 = c[1];
+        if (x1 > c[0] + c[2]) x1 = c[0] + c[2];
+        if (y1 > c[1] + c[3]) y1 = c[1] + c[3];
+        if (x1 <= x0 || y1 <= y0) continue;      /* stays reserved, dropped */
+        if (n->grad_dir == WE_GRAD_TOP || n->grad_dir == WE_GRAD_LEFT) p = 10000 - p;
+        it->kind = OS_FB_WEB_RECT;
+        it->color = gradient_at(n, p);
+        it->x = (int16_t)x0; it->y = (int16_t)y0;
+        it->w = (uint16_t)(x1 - x0); it->h = (uint16_t)(y1 - y0);
+    }
+}
+
+/* a minus b, both (x, y, w, h); at most 4 pieces into out (x, y, w, h each). */
+static int rect_minus(const int *a, const int *b, int out[4][4]) {
+    int ix = a[0] > b[0] ? a[0] : b[0], iy = a[1] > b[1] ? a[1] : b[1];
+    int ir = a[0] + a[2] < b[0] + b[2] ? a[0] + a[2] : b[0] + b[2];
+    int ib = a[1] + a[3] < b[1] + b[3] ? a[1] + a[3] : b[1] + b[3];
+    int count = 0, k;
+    int piece[4][4];
+    if (a[2] <= 0 || a[3] <= 0) return 0;
+    if (ir <= ix || ib <= iy) { for (k = 0; k < 4; k++) out[0][k] = a[k]; return 1; }
+    piece[0][0] = a[0]; piece[0][1] = a[1]; piece[0][2] = a[2]; piece[0][3] = iy - a[1];
+    piece[1][0] = a[0]; piece[1][1] = ib; piece[1][2] = a[2]; piece[1][3] = a[1] + a[3] - ib;
+    piece[2][0] = a[0]; piece[2][1] = iy; piece[2][2] = ix - a[0]; piece[2][3] = ib - iy;
+    piece[3][0] = ir; piece[3][1] = iy; piece[3][2] = a[0] + a[2] - ir; piece[3][3] = ib - iy;
+    for (k = 0; k < 4; k++) {
+        if (piece[k][2] <= 0 || piece[k][3] <= 0) continue;
+        out[count][0] = piece[k][0]; out[count][1] = piece[k][1];
+        out[count][2] = piece[k][2]; out[count][3] = piece[k][3];
+        count++;
+    }
+    return count;
+}
+
+/* blur: the wide layer first (outer: grown by b / 2 more, inset: shrunk
+ * by b / 2 more), then the narrow one */
+static int shadow_grow(const we_shadow_t *sh, int layer) {
+    return sh->spread + (shadow_layers(sh) == 2 ? (layer == 0 ? sh->blur / 2 : -(sh->blur / 2)) : 0);
+}
+
+static int shadow_alpha(const we_shadow_t *sh, int layer, int alpha) {
+    return shadow_layers(sh) == 1 ? alpha : layer == 0 ? alpha / 2 : alpha * 255 / (2 * 255 - alpha);
+}
+
+/* A rounded shadow into cap slots; -1 when its bands need more. */
+static int shadow_round(we_doc_t *d, const we_node_t *n, const we_shadow_t *sh, int slot, int cap,
+                        const int *box, const we_radii_t *radii, uint32_t color) {
+    static int band[WE_ROUND_BANDS][4], inner[WE_ROUND_BANDS][4];
+    int count, extra, layer, used = 0, alpha = color_alpha_of(color), s = sh->spread;
+    int px = box[0] + box_edge(n, 3), py = box[1] + box_edge(n, 0);
+    int pw = box[2] - box_edge(n, 1) - box_edge(n, 3), ph = box[3] - box_edge(n, 0) - box_edge(n, 2);
+    we_shape_t shape, pad;
+    we_radii_t r, ri;
+    if (!sh->inset) {
+        for (layer = 0; layer < shadow_layers(sh); layer++) {
+            int grow = shadow_grow(sh, layer), w = box[2] + 2 * grow, h = box[3] + 2 * grow;
+            radii_spread(radii, &r, grow, w, h);
+            shape_set(&shape, box[0] + sh->x - grow, box[1] + sh->y - grow, w, h, &r);
+            count = shape_bands(&shape, 0, band, WE_ROUND_BANDS);
+            if (used + count > cap) return -1;
+            bands_into(d, slot + used, band, count, with_alpha(color, shadow_alpha(sh, layer, alpha)));
+            used += count;
+        }
+        return used;
+    }
+    radii_inset(radii, &r, box_edge(n, 0), box_edge(n, 1), box_edge(n, 2), box_edge(n, 3));
+    shape_set(&pad, px, py, pw, ph, &r);
+    radii_spread(&r, &ri, -s, pw - 2 * s, ph - 2 * s);
+    shape_set(&shape, px + sh->x + s, py + sh->y + s, pw - 2 * s, ph - 2 * s, &ri);
+    count = shape_bands(&pad, 0, band, WE_ROUND_BANDS);
+    extra = shape_bands(&shape, &pad, inner, WE_ROUND_BANDS);
+    if (count + extra > cap) return -1;
+    bands_into(d, slot, band, count, color);
+    bands_into(d, slot + count, inner, extra, n->bg);
+    return count + extra;
+}
+
+static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, int bx, int by, int bw, int bh, const we_radii_t *radii) {
+    const we_node_t *n = &d->nodes[idx];
+    int k, used = 0;
+    int pad[4], border_box[4];
+    pad[0] = bx + box_edge(n, 3); pad[1] = by + box_edge(n, 0);
+    pad[2] = bw - box_edge(n, 1) - box_edge(n, 3); pad[3] = bh - box_edge(n, 0) - box_edge(n, 2);
+    border_box[0] = bx; border_box[1] = by; border_box[2] = bw; border_box[3] = bh;
+    for (k = n->shadow_count - 1; k >= 0; k--) {
+        const we_shadow_t *sh = &n->shadow[k];
+        uint32_t color = sh->has_color ? sh->color : n->color;
+        int alpha = color_alpha_of(color), layer, layers = shadow_layers(sh);
+        if (!sh->inset != !inset) continue;
+        if (radii_any(radii)) {
+            int got = shadow_rounded(n, sh) ? shadow_round(d, n, sh, slot + used, slots - used, border_box, radii, color) : -1;
+            if (got >= 0) { used += got; continue; }
+            radius_square = 1;
+        }
+        for (layer = 0; layer < layers; layer++) {
+            int grow = shadow_grow(sh, layer), a = shadow_alpha(sh, layer, alpha);
+            int shape[4], box[4], pieces[4][4], count, j;
+            if (inset) {
+                shape[0] = pad[0] + sh->x + grow; shape[1] = pad[1] + sh->y + grow;
+                shape[2] = pad[2] - 2 * grow; shape[3] = pad[3] - 2 * grow;
+                count = rect_minus(pad, shape, pieces);
+            } else {
+                shape[0] = bx + sh->x - grow; shape[1] = by + sh->y - grow;
+                shape[2] = bw + 2 * grow; shape[3] = bh + 2 * grow;
+                box[0] = bx; box[1] = by; box[2] = bw; box[3] = bh;
+                count = rect_minus(shape, box, pieces);
+            }
+            for (j = 0; j < count && used < slots; j++, used++) {
+                os_fb_web_item_t *it = &d->items[slot + used];
+                it->kind = OS_FB_WEB_RECT;
+                it->x = (int16_t)limit_coord(pieces[j][0]); it->y = (int16_t)limit_coord(pieces[j][1]);
+                it->w = (uint16_t)pieces[j][2]; it->h = (uint16_t)pieces[j][3];
+                it->color = with_alpha(color, a);
+            }
+        }
+    }
+}
+
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     we_node_t* n = &d->nodes[idx];
     int bx, by, bw, bh, content_x, content_w, content_h, slot, border_slot = -1;
-    int first_item = (int)d->nitems;
+    int first_item = (int)d->nitems, shadow_slot[2], shadow_slots[2], grad_slot, grad_slots, radius_slots;
+    we_radii_t radii;
     if (depth > WE_DEPTH_MAX) return 0;
     d->perf.boxes++;
     layout_first[idx] = layout_last[idx] = WE_NO_BASELINE;
@@ -3632,12 +5205,27 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     bx = limit_coord(bx);
     by = limit_coord(by);
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw;
-    /* reserve the background item now so it paints under the children */
+    /* reserve the background item now so it paints under the children;
+     * lot 62: outer shadows go under it, inset shadows over it */
+    shadow_slot[0] = shadow_reserve(d, idx, 0, &shadow_slots[0]);
     slot = n->has_bg ? (int)d->nitems : -1;
     if (n->has_bg && !emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, n->bg)) slot = -1;
+    /* lot 62: a rounded background takes up to WE_RADIUS_SLICES slots */
+    radius_slots = 0;
+    if (slot >= 0 && (n->rad_x[0] | n->rad_x[1] | n->rad_x[2] | n->rad_x[3])) {
+        for (radius_slots = 1; radius_slots < WE_RADIUS_SLICES; radius_slots++) {
+            os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
+            if (!it) break;
+            it->kind = 0;
+            it->pad = WE_ITEM_RESERVED;
+        }
+    }
+    grad_slot = gradient_reserve(d, idx, &grad_slots);
+    shadow_slot[1] = shadow_reserve(d, idx, 1, &shadow_slots[1]);
     content_x = limit_coord(bx + box_edge(n, 3) + n->padding[3]);
     content_w = bw - box_edge(n, 1) - box_edge(n, 3) - n->padding[1] - n->padding[3];
     if (content_w < WE_CHAR_W) content_w = WE_CHAR_W;
+    spacing_resolve(d, idx, content_w, 0);
     {
         int c;
         for (c = n->first; c >= 0; c = d->nodes[c].next)
@@ -3670,39 +5258,61 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     bh = limit_coord(content_h + vertical_extra(n));
     if (bh < 0) bh = 0;
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw; n->h = (int16_t)bh;
+    used_radii(n, bw, bh, &radii);
+    if (radii_any(&radii)) {
+        radius_stepped = 1;
+        if (n->grad_dir) diag(d, "gradient radius painted square", idx);
+    }
     if (slot >= 0) {
         os_fb_web_item_t* it = &d->items[slot];
-        it->x = (int16_t)bx; it->y = (int16_t)by; it->w = (uint16_t)bw; it->h = (uint16_t)bh;
+        int box[4];
+        background_box(n, n->bg_clip, bx, by, bw, bh, box);
+        if (radius_slots && radii_any(&radii)) {
+            we_radii_t clip;
+            radii_inset(&radii, &clip, box[1] - by, bx + bw - box[0] - box[2], by + bh - box[1] - box[3], box[0] - bx);
+            if (!radius_fill(d, slot, radius_slots, &clip, box[0], box[1], box[2], box[3], n->bg)) { it->kind = 0; it->pad = WE_ITEM_RESERVED; }
+        } else { it->x = (int16_t)box[0]; it->y = (int16_t)box[1]; it->w = (uint16_t)box[2]; it->h = (uint16_t)box[3]; }
     }
-    if (n->border > 0 && !n->collapse_cell && (n->border_style == 5 || n->border_style == 6 || (n->border_style == 4 && n->border >= 3))) {
+    gradient_fill(d, idx, grad_slot, grad_slots, bx, by, bw, bh);
+    shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh, &radii);
+    shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh, &radii);
+    if (n->border > 0 && !n->collapse_cell && radii_any(&radii) &&
+        (n->border_style == 0 || n->border_style == WE_BS_SOLID || n->border_style == 4 || (n->border_style >= 7 && n->border_style <= 10))) {
+        radius_border(d, idx, &radii, bx, by, bw, bh, n->border > 8 ? 8 : n->border, n->border_style, n->border_color);
+        border_slot = 1;
+    } else if (n->border > 0 && !n->collapse_cell && n->border_style >= 7 && n->border_style <= 10) {
+        frame_3d(d, idx, n->border_style, n->border_color, bx, by, bw, bh, n->border > 8 ? 8 : n->border);
+        border_slot = 1;
+    } else if (n->border > 0 && !n->collapse_cell && (n->border_style == 5 || n->border_style == 6 || (n->border_style == 4 && n->border >= 3))) {
         int t = n->border > 8 ? 8 : n->border, inner_h = bh - 2 * t;
         edge_paint(d, idx, n->border_style, n->border_color, 0, by, bx, t, bw);
         edge_paint(d, idx, n->border_style, n->border_color, 0, by + bh - t, bx, t, bw);
         edge_paint(d, idx, n->border_style, n->border_color, 1, bx, by + t, t, inner_h);
         edge_paint(d, idx, n->border_style, n->border_color, 1, bx + bw - t, by + t, t, inner_h);
+        if (radii_any(&radii)) radius_square = 1;
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell) {
         os_fb_web_item_t* it = emit(d, idx, OS_FB_WEB_BORDER, bx, by, bw, bh, n->border_color);
         if (it) it->bold = (uint8_t)(n->border > 8 ? 8 : n->border);
-        if (n->border_style >= 7 && n->border_style <= 10) style_solid_3d = 1;
         border_slot = 1;
     }
     (void)border_slot;
     if (w_eq(n->tag, "img") || (n->overflow_hidden && layout_first[idx] != WE_NO_BASELINE))
         layout_first[idx] = layout_last[idx] = (int16_t)limit_coord(by + bh);
     if (w_eq(n->tag, "li") && n->list_style != WE_LIST_NONE) {
-        char marker[16];
+        char marker[24];
         int number = 1, sibling, len;
         os_fb_web_item_t *it;
-        if (n->parent >= 0) for (sibling = d->nodes[n->parent].first; sibling >= 0 && sibling != idx;
-                                sibling = d->nodes[sibling].next)
-            if (w_eq(d->nodes[sibling].tag, "li") && d->nodes[sibling].display != WE_DISP_NONE) number++;
-        if (n->list_style == WE_LIST_DECIMAL) {
-            w_itoa(number, marker);
-            len = w_len(marker);
+        (void)sibling;
+        number = list_ordinal(d, idx);
+        if (n->list_style == WE_LIST_DISC || n->list_style == WE_LIST_SQUARE || n->list_style == WE_LIST_CIRCLE) {
+            marker[0] = n->list_style == WE_LIST_SQUARE ? '#' : n->list_style == WE_LIST_CIRCLE ? 'o' : '*';
+            marker[1] = 0; len = 1;
+        } else {
+            len = list_marker(n->list_style, number, marker);
             marker[len++] = '.';
             marker[len] = 0;
-        } else { marker[0] = n->list_style == WE_LIST_SQUARE ? '#' : '*'; marker[1] = 0; len = 1; }
+        }
         it = emit(d, idx, OS_FB_WEB_TEXT, bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
         if (it) w_cpy(it->text, OS_FB_WEB_TEXT_LEN, marker, len);
     }
@@ -3783,7 +5393,7 @@ static int abs_containing(const we_doc_t *d, int idx) {
     int p = d->nodes[idx].parent;
     if (d->nodes[idx].fixed) return -1;
     while (p >= 0) {
-        if (d->nodes[p].relative || d->nodes[p].absolute) return p;
+        if (d->nodes[p].relative || d->nodes[p].absolute || d->nodes[p].tf_count) return p;
         p = d->nodes[p].parent;
     }
     return -1;
@@ -3830,7 +5440,7 @@ static int absolute_stack_key(const we_doc_t *d, int owner, int want) {
 /* Stable order of the absolute slice. In-flow items stay where they were.
  * A negative key still paints after in-flow content of the same block. */
 static void order_absolute_items(we_doc_t *d, int cb, int start) {
-    int positioned = d->nodes[cb].relative || d->nodes[cb].absolute;
+    int positioned = d->nodes[cb].relative || d->nodes[cb].absolute || d->nodes[cb].tf_count;
     int want = positioned ? cb : (d->nodes[cb].parent < 0 ? -1 : -2);
     int i;
     if (want < -1 || start < 0) return;
@@ -3850,7 +5460,7 @@ static void order_absolute_items(we_doc_t *d, int cb, int start) {
 }
 
 static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w, int pad_h, int depth) {
-    int positioned = d->nodes[cb].relative || d->nodes[cb].absolute;
+    int positioned = d->nodes[cb].relative || d->nodes[cb].absolute || d->nodes[cb].tf_count;
     int want = positioned ? cb : (d->nodes[cb].parent < 0 ? -1 : -2);
     int item_start = (int)d->nitems;
     uint32_t i;
@@ -3867,6 +5477,7 @@ static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w
         if ((int)i == cb || !n->absolute || n->display == WE_DISP_NONE) continue;
         if (abs_containing(d, (int)i) != want) continue;
         if (n->fixed) { pad_x = 0; pad_y = d->scroll_y; pad_w = d->viewport_w; pad_h = d->viewport_h; }
+        spacing_node(n, pad_w);
         flags = n->inset_flags;
         left = (flags & WE_INSET_LEFT) ? math_value(n, WE_LEN_LEFT, pad_w, n->offset_x) : 0;
         right = (flags & WE_INSET_RIGHT) ? math_value(n, WE_LEN_RIGHT, pad_w, n->offset_r) : 0;
@@ -4395,6 +6006,7 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         if (work->row[k] < 0) continue;
         width = work->column_x[work->col[k] + child->grid_col_span - 1] +
                 work->column[work->col[k] + child->grid_col_span - 1] - work->column_x[work->col[k]];
+        spacing_node(&d->nodes[items->node[k]], width);
         if (subgrid_on(items->node[k], 1)) {
             subgrid_rows(d, idx, items->node[k], work->row[k], grid_item_width(n, child, width, items->node[k]), fixed_height, gy, work, depth);
             work->item_h[k] = -1;
@@ -5638,9 +7250,22 @@ static void edge_rect(we_doc_t *d, int idx, uint32_t color, int vertical, int of
 /* Lot 61 border styles from RECT items only, bounded per line:
  * dashed: dashes of max(2w, 3) px with equal gaps; dotted: w x w dots
  * with w gaps; at most WE_DASH_MAX pieces, the period grows past that.
- * double (w >= 3): two lines of (w + 1) / 3 px around the gap. The 3D
- * styles (ridge, outset, groove, inset) paint solid and are diagnosed. */
+ * double (w >= 3): two lines of (w + 1) / 3 px around the gap. Lot 62:
+ * the 3D styles paint two shaded halves (collapsed lines) or frames. */
 #define WE_DASH_MAX 8
+
+/* Lot 62 3D shades: dark keeps two thirds of each channel, light moves a
+ * third of the way to white; the alpha byte is kept. */
+static uint32_t shade_3d(uint32_t color, int light) {
+    uint32_t out = color & 0xFF000000u;
+    int k;
+    for (k = 0; k < 24; k += 8) {
+        int c = (int)((color >> k) & 255u);
+        c = light ? c + (255 - c) / 3 : c * 2 / 3;
+        out |= (uint32_t)c << k;
+    }
+    return out;
+}
 
 static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len) {
     if (style == 5 || style == 6) {
@@ -5657,8 +7282,40 @@ static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vert
         edge_rect(d, idx, color, vertical, off + w - t, from, t, len);
         return;
     }
-    if (style >= 7 && style <= 10) style_solid_3d = 1;
+    if (style >= 7 && style <= 10) {
+        /* Collapsed model (CSS 2.1 17.6.2): inset draws as ridge, outset
+         * as groove. Groove: the top or left half dark, the other light. */
+        int groove = style == 8 || style == 9, half = w / 2;
+        edge_rect(d, idx, shade_3d(color, !groove), vertical, off, from, half, len);
+        edge_rect(d, idx, shade_3d(color, groove), vertical, off + half, from, w - half, len);
+        return;
+    }
     edge_rect(d, idx, color, vertical, off, from, w, len);
+}
+
+/* Lot 62: separate 3D borders as two nested frames (groove and ridge) or
+ * one (inset and outset). Each frame paints its top and left sides in one
+ * shade and its right and bottom sides in the other; the top-left corner
+ * belongs to the top side, the other corners to the right and bottom
+ * sides (no diagonal joins). */
+static void frame_sides(we_doc_t *d, int idx, uint32_t top_left, uint32_t bottom_right, int x, int y, int w, int h, int t) {
+    if (t <= 0 || w <= 0 || h <= 0) return;
+    if (2 * t > w) t = w / 2 > 0 ? w / 2 : 1;
+    if (2 * t > h) t = h / 2 > 0 ? h / 2 : 1;
+    edge_rect(d, idx, top_left, 0, y, x, t, w - t);
+    edge_rect(d, idx, top_left, 1, x, y + t, t, h - 2 * t);
+    edge_rect(d, idx, bottom_right, 1, x + w - t, y, t, h - t);
+    edge_rect(d, idx, bottom_right, 0, y + h - t, x, t, w);
+}
+
+static void frame_3d(we_doc_t *d, int idx, int style, uint32_t color, int x, int y, int w, int h, int t) {
+    uint32_t dark = shade_3d(color, 0), light = shade_3d(color, 1);
+    int outer = t / 2;
+    if (style == 8) { frame_sides(d, idx, light, dark, x, y, w, h, t); return; }    /* outset */
+    if (style == 10) { frame_sides(d, idx, dark, light, x, y, w, h, t); return; }   /* inset */
+    /* groove: dark then light on the top-left; ridge: the reverse */
+    frame_sides(d, idx, style == 9 ? dark : light, style == 9 ? light : dark, x, y, w, h, outer);
+    frame_sides(d, idx, style == 9 ? light : dark, style == 9 ? dark : light, x + outer, y + outer, w - 2 * outer, h - 2 * outer, t - outer);
 }
 
 /* <col>/<colgroup> origins per column: [0] the col, [1] its colgroup. A
@@ -6021,45 +7678,372 @@ static int clip_glyphs(const os_fb_web_item_t *it, int left, int top, int right,
     return used;
 }
 
+/* Side k of a BORDER item as a RECT: top, bottom, then left and right
+ * between them (the kernel painter strokes the same pixels). */
+static void border_side(const os_fb_web_item_t *item, int k, os_fb_web_item_t *edge) {
+    int thickness = item->bold ? item->bold : 1, w = item->w, h = item->h;
+    if (thickness > w) thickness = w;
+    if (thickness > h) thickness = h;
+    *edge = *item;
+    edge->kind = OS_FB_WEB_RECT;
+    edge->bold = 0;
+    if (k < 2) {
+        edge->h = (uint16_t)thickness;
+        if (k) edge->y = (int16_t)(item->y + h - thickness);
+    } else {
+        edge->w = (uint16_t)thickness;
+        edge->y = (int16_t)(item->y + thickness);
+        edge->h = (uint16_t)(h > 2 * thickness ? h - 2 * thickness : 0);
+        if (k == 3) edge->x = (int16_t)(item->x + w - thickness);
+    }
+}
+
+/* Clips every fragment to (left, top, right, bottom): RECT pieces are cut,
+ * TEXT is cut at glyph level, BORDER splits into its visible sides.
+ * Returns the new count, or -1 when the fragments overflow cap. */
+static int clip_frags(os_fb_web_item_t *frag, int count, int left, int top, int right, int bottom, int cap) {
+    static os_fb_web_item_t out[WE_CLIP_FRAGMENTS], pieces[WE_CLIP_FRAGMENTS];
+    int i, k, used = 0;
+    for (i = 0; i < count; i++) {
+        os_fb_web_item_t item = frag[i];
+        int n = 0;
+        if (item.x >= left && item.y >= top && item.x + item.w <= right && item.y + item.h <= bottom) {
+            pieces[n++] = item;
+        } else if (item.kind == OS_FB_WEB_TEXT) {
+            n = clip_glyphs(&item, left, top, right, bottom, pieces, WE_CLIP_FRAGMENTS);
+            if (n < 0) return -1;
+        } else if (item.kind == OS_FB_WEB_BORDER) {
+            for (k = 0; k < 4; k++) {
+                border_side(&item, k, &pieces[n]);
+                if (clip_rectangle(&pieces[n], left, top, right, bottom)) n++;
+            }
+        } else if (clip_rectangle(&item, left, top, right, bottom)) pieces[n++] = item;
+        if (used + n > cap) return -1;
+        for (k = 0; k < n; k++) out[used++] = pieces[k];
+    }
+    for (i = 0; i < used; i++) frag[i] = out[i];
+    return used;
+}
+
+/* ---------- Lot 62 round 2: rounded overflow clip ----------
+ * overflow:hidden with border-radius clips to the padding-box shape (the
+ * border radii reduced by the borders, CSS Backgrounds 3, 5.3): after the
+ * rectangle clip, a fragment that the shape's bands do not wholly contain
+ * is cut band by band (TEXT at glyph level, as for rectangles). Nested
+ * rounded clips apply innermost first; a fixed box escapes them. Under a
+ * transform the clip stays rectangular. Over WE_CLIP_FRAGMENTS the item
+ * is dropped with "clipping display budget". */
+static int round_bands(const we_node_t *n, int band[][4]) {
+    we_radii_t outer, r;
+    we_shape_t pad;
+    used_radii(n, n->w, n->h, &outer);
+    if (!radii_any(&outer)) return -1;
+    radii_inset(&outer, &r, box_edge(n, 0), box_edge(n, 1), box_edge(n, 2), box_edge(n, 3));
+    if (!radii_any(&r)) return -1;
+    shape_set(&pad, n->x + box_edge(n, 3), n->y + box_edge(n, 0), n->w - box_edge(n, 1) - box_edge(n, 3),
+              n->h - box_edge(n, 0) - box_edge(n, 2), &r);
+    return shape_bands(&pad, 0, band, WE_ROUND_BANDS);
+}
+
+static int bands_contain(int band[][4], int count, const os_fb_web_item_t *it) {
+    int k, covered = it->y;
+    for (k = 0; k < count && covered < it->y + it->h; k++) {
+        if (band[k][1] <= covered) continue;
+        if (band[k][0] > covered || it->x < band[k][2] || it->x + it->w > band[k][3]) return 0;
+        covered = band[k][1];
+    }
+    return covered >= it->y + it->h;
+}
+
+/* TEXT against bands: whole visible glyphs stay text, a partly visible
+ * glyph becomes RECT runs band by band. */
+static int glyph_in_bands(const os_fb_web_item_t *it, int k, int band[][4], int count) {
+    int row, bit, b, x = it->x + k * WE_CHAR_W;
+    for (row = 0; row < 8; row++) {
+        unsigned m = glyph_mask(it->text[k], row, it->bold);
+        int y = it->y + row;
+        if (!m) continue;
+        for (b = 0; b < count && !(y >= band[b][0] && y < band[b][1]); b++) {}
+        if (b == count) return 0;
+        for (bit = 0; bit < 9; bit++)
+            if ((m >> bit) & 1u && (x + bit < band[b][2] || x + bit >= band[b][3])) return 0;
+    }
+    return 1;
+}
+
+static int round_text(const os_fb_web_item_t *it, int band[][4], int count, os_fb_web_item_t *out, int cap) {
+    int len = w_len(it->text), k = 0, used = 0, b, j;
+    while (k < len) {
+        if (it->text[k] != ' ' && glyph_in_bands(it, k, band, count)) {
+            int end = k;
+            while (end < len && glyph_in_bands(it, end, band, count)) end++;
+            while (end > k && it->text[end - 1] == ' ') end--;
+            if (used >= cap) return -1;
+            out[used] = *it;
+            for (j = k; j < end; j++) out[used].text[j - k] = it->text[j];
+            out[used].text[end - k] = 0;
+            out[used].x = (int16_t)(it->x + k * WE_CHAR_W);
+            out[used].w = (uint16_t)((end - k) * WE_CHAR_W);
+            used++;
+            k = end;
+            continue;
+        }
+        if (it->text[k] != ' ')
+            for (b = 0; b < count; b++) {
+                int n = glyph_rects(it, k, band[b][2], band[b][0], band[b][3], band[b][1], out, used, cap);
+                if (n < 0) return -1;
+                used += n;
+            }
+        k++;
+    }
+    return used;
+}
+
+static int round_clip(const we_doc_t *d, int owner, os_fb_web_item_t *frag, int count, int cap) {
+    static os_fb_web_item_t out[WE_CLIP_FRAGMENTS], one[WE_CLIP_FRAGMENTS];
+    static int band[WE_ROUND_BANDS][4];
+    int p = owner >= 0 ? d->nodes[owner].parent : -1, q = owner;
+    for (; p >= 0 && count > 0; q = p, p = d->nodes[p].parent) {
+        int bands, i, b, k, used = 0;
+        if (q >= 0 && d->nodes[q].fixed) break;
+        if (!d->nodes[p].overflow_hidden || (bands = round_bands(&d->nodes[p], band)) < 0) continue;
+        for (i = 0; i < count; i++) {
+            if (bands_contain(band, bands, &frag[i])) {
+                if (used >= cap) return -1;
+                out[used++] = frag[i];
+                continue;
+            }
+            if (frag[i].kind == OS_FB_WEB_TEXT) {
+                int got = round_text(&frag[i], band, bands, one, WE_CLIP_FRAGMENTS);
+                if (got < 0 || used + got > cap) return -1;
+                for (k = 0; k < got; k++) out[used++] = one[k];
+                continue;
+            }
+            for (b = 0; b < bands; b++) {
+                int got;
+                if (frag[i].y + frag[i].h <= band[b][0] || frag[i].y >= band[b][1]) continue;
+                one[0] = frag[i];
+                got = clip_frags(one, 1, band[b][2], band[b][0], band[b][3], band[b][1], WE_CLIP_FRAGMENTS);
+                if (got < 0 || used + got > cap) return -1;
+                for (k = 0; k < got; k++) out[used++] = one[k];
+            }
+        }
+        for (i = 0; i < used; i++) frag[i] = out[i];
+        count = used;
+    }
+    return count;
+}
+
+/* ---------- Lot 62: paint-time transforms ----------
+ * The layout boxes do not move (CSS Transforms 1). At paint time the items
+ * of a transformed box and of its subtree are mapped by its matrix about
+ * transform-origin, innermost box first, each ancestor clip applied in the
+ * space of that ancestor. translate keeps items as they are; scale and
+ * quarter-turn rotation map rectangles to rectangles, so TEXT becomes RECT
+ * runs of its glyph pixels (kernel/gfx_font8.h) and BORDER its four sides.
+ * Coordinates round to whole pixels; an item whose fragments pass
+ * WE_CLIP_FRAGMENTS is dropped with "transform display budget". */
+typedef struct { int a, b, c, d, e, f; } we_matrix_t;   /* a..d in 1/1000, e and f in 1/16 px */
+#define WE_TF_EDGE (WE_LAYOUT_MAX * 16)
+
+static int floor_div(int num, int den) {
+    return num >= 0 ? num / den : -((-num + den - 1) / den);
+}
+
+static int div_round(int num, int den) {
+    return floor_div(2 * num + den, 2 * den);
+}
+
+/* m = m * F with F = (a b; c d), translation (e, f) in whole px. */
+static void matrix_mul(we_matrix_t *m, int a, int b, int c, int dd, int e, int f) {
+    we_matrix_t r;
+    r.a = clamp_int(div_round(m->a * a + m->b * c, 1000), -8000, 8000);
+    r.b = clamp_int(div_round(m->a * b + m->b * dd, 1000), -8000, 8000);
+    r.c = clamp_int(div_round(m->c * a + m->d * c, 1000), -8000, 8000);
+    r.d = clamp_int(div_round(m->c * b + m->d * dd, 1000), -8000, 8000);
+    r.e = clamp_int(m->e + floor_div(2 * (m->a * e + m->b * f), 125), -WE_TF_EDGE, WE_TF_EDGE);
+    r.f = clamp_int(m->f + floor_div(2 * (m->c * e + m->d * f), 125), -WE_TF_EDGE, WE_TF_EDGE);
+    *m = r;
+}
+
+static void node_matrix(const we_node_t *n, we_matrix_t *m) {
+    int ox = n->x + ((n->tf_origin_pct & 1) ? n->w * n->tf_origin[0] / 100 : n->tf_origin[0]);
+    int oy = n->y + ((n->tf_origin_pct & 2) ? n->h * n->tf_origin[1] / 100 : n->tf_origin[1]);
+    int k;
+    m->a = m->d = 1000; m->b = m->c = 0; m->e = ox * 16; m->f = oy * 16;
+    for (k = 0; k < n->tf_count && k < WE_TF_MAX; k++) {
+        const we_transform_t *t = &n->tf[k];
+        if (t->kind == WE_TF_TRANSLATE)
+            matrix_mul(m, 1000, 0, 0, 1000, (t->pct & 1) ? n->w * t->x / 100 : t->x, (t->pct & 2) ? n->h * t->y / 100 : t->y);
+        else if (t->kind == WE_TF_SCALE) matrix_mul(m, t->x, 0, 0, t->y, 0, 0);
+        else if (t->x == 1) matrix_mul(m, 0, -1000, 1000, 0, 0, 0);    /* 90deg clockwise, y down */
+        else if (t->x == 2) matrix_mul(m, -1000, 0, 0, -1000, 0, 0);
+        else if (t->x == 3) matrix_mul(m, 0, 1000, -1000, 0, 0, 0);
+    }
+    matrix_mul(m, 1000, 0, 0, 1000, -ox, -oy);
+}
+
+/* Mapped coordinates round half up: floor(v + 1/2). */
+static int map_x(const we_matrix_t *m, int x, int y) { return floor_div(floor_div(2 * (m->a * x + m->b * y), 125) + m->e + 8, 16); }
+static int map_y(const we_matrix_t *m, int x, int y) { return floor_div(floor_div(2 * (m->c * x + m->d * y), 125) + m->f + 8, 16); }
+
+static int tf_apply(const we_matrix_t *m, os_fb_web_item_t *frag, int count, int cap) {
+    static os_fb_web_item_t rects[WE_CLIP_FRAGMENTS];
+    int i, k, used = 0, out = 0;
+    if (m->a == 1000 && m->d == 1000 && !m->b && !m->c) {
+        int dx = floor_div(m->e + 8, 16), dy = floor_div(m->f + 8, 16);
+        for (i = 0; i < count; i++) {
+            frag[i].x = (int16_t)limit_coord(frag[i].x + dx);
+            frag[i].y = (int16_t)limit_coord(frag[i].y + dy);
+        }
+        return count;
+    }
+    for (i = 0; i < count; i++) {
+        const os_fb_web_item_t *it = &frag[i];
+        if (it->kind == OS_FB_WEB_TEXT) {
+            int len = w_len(it->text);
+            for (k = 0; k < len; k++) {
+                int n;
+                if (it->text[k] == ' ') continue;
+                n = glyph_rects(it, k, -WE_LAYOUT_MAX, -WE_LAYOUT_MAX, WE_LAYOUT_MAX, WE_LAYOUT_MAX, rects, used, cap);
+                if (n < 0) return -1;
+                used += n;
+            }
+        } else if (it->kind == OS_FB_WEB_BORDER) {
+            for (k = 0; k < 4; k++) {
+                if (used >= cap) return -1;
+                border_side(it, k, &rects[used++]);
+            }
+        } else {
+            if (used >= cap) return -1;
+            rects[used++] = *it;
+        }
+    }
+    for (i = 0; i < used; i++) {
+        os_fb_web_item_t r = rects[i];
+        int x0 = map_x(m, r.x, r.y), y0 = map_y(m, r.x, r.y);
+        int x1 = map_x(m, r.x + r.w, r.y + r.h), y1 = map_y(m, r.x + r.w, r.y + r.h), t;
+        if (x1 < x0) { t = x0; x0 = x1; x1 = t; }
+        if (y1 < y0) { t = y0; y0 = y1; y1 = t; }
+        if (x1 <= x0 || y1 <= y0) continue;
+        r.x = (int16_t)limit_coord(x0); r.y = (int16_t)limit_coord(y0);
+        r.w = (uint16_t)(x1 - x0 > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : x1 - x0);
+        r.h = (uint16_t)(y1 - y0 > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : y1 - y0);
+        frag[out++] = r;
+    }
+    return out;
+}
+
+static int transformed_chain(const we_doc_t *d, int owner) {
+    int guard;
+    for (guard = 0; owner >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, owner = d->nodes[owner].parent) {
+        if (d->nodes[owner].tf_count) return 1;
+        if (d->nodes[owner].fixed) return 0;
+    }
+    return 0;
+}
+
+/* Owner transform, then for each ancestor its clip and its transform. */
+static int transform_clip_item(const we_doc_t *d, const os_fb_web_item_t *item, int owner, os_fb_web_item_t *frag, int cap) {
+    int count = 1, p, q, guard;
+    we_matrix_t m;
+    frag[0] = *item;
+    if (owner < 0) return 1;
+    if (d->nodes[owner].tf_count) {
+        node_matrix(&d->nodes[owner], &m);
+        if ((count = tf_apply(&m, frag, count, cap)) < 0) return -1;
+    }
+    for (q = owner, p = d->nodes[owner].parent, guard = 0; p >= 0 && count > 0 && guard <= WE_DEPTH_MAX + 1;
+         q = p, p = d->nodes[p].parent, guard++) {
+        const we_node_t *n = &d->nodes[p];
+        if (d->nodes[q].fixed) break;
+        if (n->overflow_hidden &&
+            (count = clip_frags(frag, count, n->x + box_edge(n, 3), n->y + box_edge(n, 0),
+                                n->x + n->w - box_edge(n, 1), n->y + n->h - box_edge(n, 2), cap)) < 0) return -1;
+        if (n->tf_count) {
+            node_matrix(n, &m);
+            if ((count = tf_apply(&m, frag, count, cap)) < 0) return -1;
+        }
+    }
+    return count;
+}
+
+/* ---------- Lot 62: text-overflow ellipsis ----------
+ * In a block container with overflow hidden and text-overflow ellipsis,
+ * a text run crossing the content box's end edge keeps the characters
+ * that fit with "..." (three ASCII dots, the 8x8 font has no U+2026).
+ * When the runs that fit end before hidden ones, the last visible run
+ * ends with the dots. Runs past the edge are left to the clip. */
+static int ellipsis_block(const we_doc_t *d, int owner, int *edge) {
+    int o = owner, guard;
+    for (guard = 0; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent) {
+        const we_node_t *n = &d->nodes[o];
+        if (n->is_text || n->display == WE_DISP_INLINE) continue;
+        if (!n->text_overflow || !n->overflow_hidden) return -1;
+        *edge = n->x + n->w - box_edge(n, 1) - n->padding[1];
+        return o;
+    }
+    return -1;
+}
+
+static void ellipsis_cut(os_fb_web_item_t *it, int keep_px) {
+    int fit = keep_px / WE_CHAR_W, len = w_len(it->text), keep, k;
+    if (fit > len) fit = len;
+    if (fit < 0) fit = 0;
+    keep = fit - 3 < 0 ? 0 : fit - 3;
+    for (k = keep; k < fit; k++) it->text[k] = '.';
+    it->text[fit] = 0;
+    it->w = (uint16_t)(fit * WE_CHAR_W);
+}
+
+static void ellipsis_items(we_doc_t *d) {
+    int i, j;
+    for (i = 0; i < (int)d->nitems; i++) {
+        os_fb_web_item_t *it = &d->items[i];
+        int edge, block, crossing = 0, hidden = 0, last = -1;
+        if (it->kind != OS_FB_WEB_TEXT || (block = ellipsis_block(d, d->item_owner[i], &edge)) < 0) continue;
+        if (it->x >= edge || it->x + it->w <= edge) {
+            if (it->x + it->w > edge) continue;
+            /* a fitting run: the last one before hidden runs takes the dots */
+            for (j = 0; j < (int)d->nitems; j++) {
+                const os_fb_web_item_t *o = &d->items[j];
+                int e2;
+                if (j == i || o->kind != OS_FB_WEB_TEXT || o->y != it->y) continue;
+                if (ellipsis_block(d, d->item_owner[j], &e2) != block) continue;
+                if (o->x < edge && o->x + o->w > edge) crossing = 1;
+                else if (o->x >= edge) hidden = 1;
+                else if (o->x + o->w > it->x + it->w || (o->x + o->w == it->x + it->w && j > i)) last = j;
+            }
+            if (hidden && !crossing && last < 0) ellipsis_cut(it, it->w);
+            continue;
+        }
+        ellipsis_cut(it, edge - it->x);
+    }
+}
+
 static void clip_display_list(we_doc_t *d) {
     static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
     static int16_t owners[OS_FB_WEB_ITEMS];
     int i, count = 0;
     for (i = 0; i < (int)d->nitems; i++) {
         os_fb_web_item_t item = d->items[i];
-        int left, top, right, bottom, k, fragments = 1;
+        int left, top, right, bottom, k, fragments;
         static os_fb_web_item_t edges[WE_CLIP_FRAGMENTS];
-        if (!clip_bounds(d, d->item_owner[i], &left, &top, &right, &bottom)) continue;
-        if (item.x >= left && item.y >= top && item.x + item.w <= right && item.y + item.h <= bottom) {
-            edges[0] = item;
-        } else if (item.kind == OS_FB_WEB_TEXT) {
-            fragments = clip_glyphs(&item, left, top, right, bottom, edges, WE_CLIP_FRAGMENTS);
-            if (fragments < 0) fragments = OS_FB_WEB_ITEMS + 1;
-            if (!fragments) continue;
-        } else if (item.kind == OS_FB_WEB_BORDER) {
-            int thickness = item.bold ? item.bold : 1;
-            int w = item.w, h = item.h;
-            if (thickness > w) thickness = w;
-            if (thickness > h) thickness = h;
-            fragments = 0;
-            for (k = 0; k < 4; k++) {
-                os_fb_web_item_t edge = item;
-                edge.kind = OS_FB_WEB_RECT;
-                if (k < 2) {
-                    edge.h = (uint16_t)thickness;
-                    if (k) edge.y = (int16_t)(item.y + h - thickness);
-                } else {
-                    edge.w = (uint16_t)thickness;
-                    edge.y = (int16_t)(item.y + thickness);
-                    edge.h = (uint16_t)(h > 2 * thickness ? h - 2 * thickness : 0);
-                    if (k == 3) edge.x = (int16_t)(item.x + w - thickness);
-                }
-                if (clip_rectangle(&edge, left, top, right, bottom)) edges[fragments++] = edge;
+        if (transformed_chain(d, d->item_owner[i])) {
+            fragments = transform_clip_item(d, &item, d->item_owner[i], edges, WE_CLIP_FRAGMENTS);
+            if (fragments < 0) {
+                d->perf.items_dropped++;
+                diag(d, "transform display budget", d->item_owner[i]);
+                continue;
             }
         } else {
-            if (!clip_rectangle(&item, left, top, right, bottom)) continue;
+            if (!clip_bounds(d, d->item_owner[i], &left, &top, &right, &bottom)) continue;
             edges[0] = item;
+            fragments = clip_frags(edges, 1, left, top, right, bottom, WE_CLIP_FRAGMENTS);
+            if (fragments > 0) fragments = round_clip(d, d->item_owner[i], edges, fragments, WE_CLIP_FRAGMENTS);
+            if (fragments < 0) fragments = OS_FB_WEB_ITEMS + 1;
         }
+        if (!fragments) continue;
         if (count + fragments > OS_FB_WEB_ITEMS) {
             if (fragments > OS_FB_WEB_ITEMS) fragments = 1;
             d->perf.items_dropped += (uint32_t)fragments;
@@ -6158,8 +8142,9 @@ static int fixed_owner(const we_doc_t *d, int owner) {
  * the per-containing-block absolute order. Contexts
  * deeper than WE_STACK_DEPTH - 1 are flattened into their parent. */
 #define WE_STACK_DEPTH 8
+#define WE_STACK_KEY (WE_STACK_DEPTH + 1)
 static int stack_context(const we_node_t *n) {
-    return ((n->relative || n->absolute) && n->z_set && !n->fixed) || (n->transparency && !n->fixed);
+    return ((n->relative || n->absolute) && n->z_set && !n->fixed) || ((n->transparency || n->tf_count) && !n->fixed);
 }
 
 /* z of a context: opacity below 1 alone forms a z-index 0 context. */
@@ -6177,7 +8162,27 @@ static int root_background(const we_doc_t *d, int owner) {
     return p > 0 && d->nodes[p].parent == 0 && w_eq(d->nodes[owner].tag, "body");
 }
 
-static int stack_key(const we_doc_t *d, int owner, int8_t *key) {
+/* Lot 62: CSS 2.1 appendix E steps 4 to 8 inside the in-flow level of a
+ * context: 0 block-level backgrounds and borders, 1 floats (each whole,
+ * as an atomic group), 2 inline content (text, inline box backgrounds and
+ * inline-blocks as atomic groups), 3 positioned boxes with z-index auto.
+ * The outermost float, inline-block or positioned box under the context
+ * decides; stop is the context node (-1 at the root). */
+static int paint_class(const we_doc_t *d, int owner, int kind, int stop) {
+    int o, guard, cls = -1;
+    for (guard = 0, o = owner; o >= 0 && o != stop && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent) {
+        const we_node_t *n = &d->nodes[o];
+        int parent_display = n->parent >= 0 ? d->nodes[n->parent].display : WE_DISP_BLOCK;
+        if (n->relative || n->absolute) cls = 3;
+        else if (n->float_side && parent_display != WE_DISP_FLEX && parent_display != WE_DISP_GRID) cls = 1;
+        else if (n->display == WE_DISP_INLINE_BLOCK) cls = 2;
+    }
+    if (cls >= 0) return cls;
+    if (kind == OS_FB_WEB_TEXT || d->nodes[owner].is_text || d->nodes[owner].display == WE_DISP_INLINE) return 2;
+    return 0;
+}
+
+static int stack_key(const we_doc_t *d, int owner, int outline, int kind, int8_t *key) {
     int chain[WE_DEPTH_MAX + 2], count = 0, used, k, o, guard;
     for (guard = 0, o = owner; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent)
         if (stack_context(&d->nodes[o])) chain[count++] = o;
@@ -6186,49 +8191,86 @@ static int stack_key(const we_doc_t *d, int owner, int8_t *key) {
         const we_node_t *c = &d->nodes[chain[count - 1 - k]];
         key[k] = (int8_t)(stack_z(c) < 0 ? 10 + stack_z(c) : 22 + 2 * stack_z(c));
     }
-    for (k = used; k < WE_STACK_DEPTH; k++) key[k] = 0;
+    for (k = used; k < WE_STACK_KEY; k++) key[k] = 0;
     if (used) key[used] = (int8_t)(chain[count - used] == owner ? 0 : 20);
     else key[0] = (int8_t)(root_background(d, owner) ? 0 : 20);
+    if (key[used] == 20) key[used + 1] = (int8_t)paint_class(d, owner, kind, used ? chain[count - used] : -1);
+    /* lot 62: outlines after the z >= 0 children of their context */
+    if (outline) { key[used] = 60; key[used + 1] = 0; }
     return count > used;
 }
 
 static int stack_before(const int8_t *a, const int8_t *b) {
     int k;
-    for (k = 0; k < WE_STACK_DEPTH; k++) if (a[k] != b[k]) return a[k] < b[k];
+    for (k = 0; k < WE_STACK_KEY; k++) if (a[k] != b[k]) return a[k] < b[k];
     return 0;
 }
 
+static int items_overlap(const os_fb_web_item_t *a, const os_fb_web_item_t *b) {
+    return a->x < b->x + b->w && b->x < a->x + a->w && a->y < b->y + b->h && b->y < a->y + a->h;
+}
+
+/* Lot 62: without a stacking context, keep emission order except where two
+ * overlapping items paint out of appendix E order: the smallest original
+ * index whose overlapping predecessors (in key order) are placed goes
+ * next, so pages without conflicts keep their item order. */
+static void paint_order(we_doc_t *d, int8_t keys[][WE_STACK_KEY]) {
+    static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
+    static int16_t owners[OS_FB_WEB_ITEMS];
+    static uint8_t placed[OS_FB_WEB_ITEMS];
+    int n = (int)d->nitems, i, j, out, moved = 0;
+    for (i = 0; i < n && !moved; i++)
+        for (j = 0; j < i; j++)
+            if (stack_before(keys[i], keys[j]) && items_overlap(&d->items[i], &d->items[j])) { moved = 1; break; }
+    if (!moved) return;
+    w_zero(placed, sizeof(placed));
+    for (out = 0; out < n; out++) {
+        for (i = 0; i < n; i++) {
+            if (placed[i]) continue;
+            for (j = 0; j < n; j++) {
+                int before;
+                if (j == i || placed[j] || !items_overlap(&d->items[i], &d->items[j])) continue;
+                before = stack_before(keys[j], keys[i]) || (!stack_before(keys[i], keys[j]) && j < i);
+                if (before) break;
+            }
+            if (j == n) break;
+        }
+        placed[i] = 1;
+        output[out] = d->items[i];
+        owners[out] = d->item_owner[i];
+    }
+    for (i = 0; i < n; i++) { d->items[i] = output[i]; d->item_owner[i] = owners[i]; }
+}
+
 static void stack_items(we_doc_t *d) {
-    static int8_t keys[OS_FB_WEB_ITEMS][WE_STACK_DEPTH];
+    static int8_t keys[OS_FB_WEB_ITEMS][WE_STACK_KEY];
     int i, j, k, any = 0, flat = 0;
     for (i = 0; i < (int)d->nnodes; i++)
         if (stack_context(&d->nodes[i]) && (!d->nodes[i].absolute || stack_z(&d->nodes[i]) < 0)) any = 1;
-    if (!any) return;
-    for (i = 0; i < (int)d->nitems; i++) flat |= stack_key(d, d->item_owner[i], keys[i]);
+    for (i = 0; i < (int)d->nitems; i++)
+        flat |= stack_key(d, d->item_owner[i], d->items[i].pad & WE_ITEM_OUTLINE, d->items[i].kind, keys[i]);
+    if (!any) { paint_order(d, keys); return; }
     if (flat) diag(d, "stacking depth", -1);
     for (i = 1; i < (int)d->nitems; i++) {
         os_fb_web_item_t item = d->items[i];
         int16_t owner = d->item_owner[i];
-        int8_t key[WE_STACK_DEPTH];
-        for (k = 0; k < WE_STACK_DEPTH; k++) key[k] = keys[i][k];
+        int8_t key[WE_STACK_KEY];
+        for (k = 0; k < WE_STACK_KEY; k++) key[k] = keys[i][k];
         for (j = i; j > 0 && stack_before(key, keys[j - 1]); j--) {
             d->items[j] = d->items[j - 1];
             d->item_owner[j] = d->item_owner[j - 1];
-            for (k = 0; k < WE_STACK_DEPTH; k++) keys[j][k] = keys[j - 1][k];
+            for (k = 0; k < WE_STACK_KEY; k++) keys[j][k] = keys[j - 1][k];
         }
         d->items[j] = item;
         d->item_owner[j] = owner;
-        for (k = 0; k < WE_STACK_DEPTH; k++) keys[j][k] = key[k];
+        for (k = 0; k < WE_STACK_KEY; k++) keys[j][k] = key[k];
     }
 }
 
 /* Lot 61: opacity 0 removes the items of its subtree (the boxes keep their
- * layout); 0 < opacity < 1 paints opaque, since the shared item has no
- * alpha, and is diagnosed once. */
+ * layout). Lot 62: 0 < opacity < 1 is composited by composite_items. */
 static void opacity_items(we_doc_t *d) {
-    int i, out = 0, partial = 0;
-    for (i = 0; i < (int)d->nnodes; i++) if (d->nodes[i].transparency && d->nodes[i].transparency < 100) partial = 1;
-    if (partial) diag(d, "opacity painted opaque", -1);
+    int i, out = 0;
     for (i = 0; i < (int)d->nitems; i++) {
         int o = d->item_owner[i], guard, hidden = 0;
         for (guard = 0; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent)
@@ -6238,6 +8280,291 @@ static void opacity_items(we_doc_t *d) {
         d->item_owner[out++] = d->item_owner[i];
     }
     d->nitems = (uint32_t)out;
+}
+
+/* ---------- Lot 62: alpha compositing ----------
+ * The shared item has no alpha and the kernel painter masks bits 24..31,
+ * so translucent paint is resolved here into opaque fragments. Every
+ * translucent item is split along the edges of what is painted under it
+ * (RECT items, BORDER sides, TEXT boxes) and each piece takes "source over
+ * backdrop". A TEXT item under a translucent RECT is repainted on top,
+ * cut to the piece, with its own blended colour. An opacity group (CSS
+ * Color 4: 0 < opacity < 1) is composited in its own space first, deepest
+ * group first: its items blend over earlier items of the same group only,
+ * then their alpha is multiplied by the group alpha, so the group blends
+ * as one layer. The root backdrop is the white canvas of the web pane.
+ * Fragments share the 96-item display list; on overflow the list is kept
+ * unblended (opaque colours, fully transparent items dropped) with
+ * "alpha display budget". Text over text blends with the paint under the
+ * lower text. */
+#define WE_ALPHA_REGIONS 32
+#define WE_ALPHA_OVERLAYS 8
+#define WE_ALPHA_STACK 48
+#define WE_CANVAS 0xFFFFFFu
+typedef struct { int16_t x, y, w, h; uint32_t dst; int16_t item; } we_region_t;
+static we_region_t alpha_region[WE_ALPHA_REGIONS], alpha_overlay[WE_ALPHA_OVERLAYS];
+static int alpha_regions, alpha_overlays;
+static os_fb_web_item_t alpha_out[OS_FB_WEB_ITEMS], alpha_saved[OS_FB_WEB_ITEMS];
+static int16_t alpha_owner[OS_FB_WEB_ITEMS], alpha_child_of[OS_FB_WEB_ITEMS], alpha_saved_owner[OS_FB_WEB_ITEMS];
+static int alpha_count;
+
+static int color_alpha_of(uint32_t c) {
+    return 255 - (int)(c >> WE_ALPHA_SHIFT);
+}
+
+/* Source over destination with straight colours (Porter-Duff over). */
+static uint32_t alpha_over(uint32_t src, uint32_t dst) {
+    int sa = color_alpha_of(src), da = color_alpha_of(dst), oa, k;
+    uint32_t out = 0;
+    if (sa == 255 || da == 0) return src;
+    if (sa == 0) return dst;
+    oa = sa + (da * (255 - sa) + 127) / 255;
+    for (k = 16; k >= 0; k -= 8) {
+        int sc = (int)((src >> k) & 255u), dc = (int)((dst >> k) & 255u);
+        int num = sc * sa * 255 + dc * da * (255 - sa);
+        out |= (uint32_t)clamp_int((num + oa * 255 / 2) / (oa * 255), 0, 255) << k;
+    }
+    return with_alpha(out, oa);
+}
+
+static int alpha_group(const we_node_t *n) {
+    return n->transparency > 0 && n->transparency < 100;
+}
+
+static int group_alpha(const we_node_t *n) {
+    return ((100 - n->transparency) * 255 + 50) / 100;
+}
+
+/* For the chain of owner (inclusive): the alpha group directly inside g,
+ * -1 when owner belongs to g itself, -2 when owner is outside g (g -1 is
+ * the root and contains everything). */
+static int alpha_child(const we_doc_t *d, int owner, int g) {
+    int last = -1, guard;
+    for (guard = 0; owner >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, owner = d->nodes[owner].parent) {
+        if (owner == g) return last;
+        if (alpha_group(&d->nodes[owner])) last = owner;
+    }
+    return g < 0 ? last : -2;
+}
+
+static int alpha_depth(const we_doc_t *d, int owner) {
+    int depth = 0, guard;
+    for (guard = 0; owner >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, owner = d->nodes[owner].parent)
+        if (alpha_group(&d->nodes[owner])) depth++;
+    return depth;
+}
+
+/* Painted area k of an output item: the box of a RECT or TEXT (k 0, bold
+ * text one pixel wider), a side of a BORDER (k 0..3). */
+static int alpha_shape(const os_fb_web_item_t *it, int k, int *x, int *y, int *w, int *h) {
+    if (it->kind == OS_FB_WEB_BORDER) {
+        os_fb_web_item_t side;
+        border_side(it, k, &side);
+        *x = side.x; *y = side.y; *w = side.w; *h = side.h;
+    } else {
+        if (k) return 0;
+        *x = it->x; *y = it->y; *w = it->w + (it->kind == OS_FB_WEB_TEXT && it->bold ? 1 : 0); *h = it->h;
+    }
+    return *w > 0 && *h > 0;
+}
+
+static int alpha_add(we_region_t *list, int *count, int cap, int x, int y, int w, int h, uint32_t dst, int item) {
+    if (*count >= cap) return -1;
+    list[*count].x = (int16_t)x; list[*count].y = (int16_t)y;
+    list[*count].w = (int16_t)w; list[*count].h = (int16_t)h;
+    list[*count].dst = dst; list[*count].item = (int16_t)item;
+    (*count)++;
+    return 0;
+}
+
+/* Splits (x, y, w, h) into pieces of one backdrop each, looking at the
+ * output items below layer `up` (item * 4 + side) that belong to the
+ * group being composited and not to the source's own child group. */
+static int alpha_query(int g, int child, int text_src, int x, int y, int w, int h) {
+    struct { int16_t x, y, w, h, up; } stack[WE_ALPHA_STACK];
+    int sp = 0;
+    alpha_regions = alpha_overlays = 0;
+    stack[sp].x = (int16_t)x; stack[sp].y = (int16_t)y; stack[sp].w = (int16_t)w; stack[sp].h = (int16_t)h;
+    stack[sp++].up = (int16_t)(alpha_count * 4);
+    while (sp) {
+        int rx, ry, rw, rh, up, layer, found = 0;
+        sp--;
+        rx = stack[sp].x; ry = stack[sp].y; rw = stack[sp].w; rh = stack[sp].h; up = stack[sp].up;
+        for (layer = up - 1; layer >= 0 && !found; layer--) {
+            const os_fb_web_item_t *it = &alpha_out[layer >> 2];
+            int c = alpha_child_of[layer >> 2], sx, sy, sw, sh, ix, iy, ir, ib, piece;
+            if (c == -2 || (child >= 0 && c == child)) continue;
+            if (text_src && it->kind == OS_FB_WEB_TEXT) continue;
+            if (!alpha_shape(it, layer & 3, &sx, &sy, &sw, &sh)) continue;
+            ix = sx > rx ? sx : rx; iy = sy > ry ? sy : ry;
+            ir = sx + sw < rx + rw ? sx + sw : rx + rw; ib = sy + sh < ry + rh ? sy + sh : ry + rh;
+            if (ir <= ix || ib <= iy) continue;
+            found = 1;
+            if (it->kind == OS_FB_WEB_TEXT) {
+                if (alpha_add(alpha_overlay, &alpha_overlays, WE_ALPHA_OVERLAYS, ix, iy, ir - ix, ib - iy, it->color, layer >> 2)) return -1;
+                if (sp >= WE_ALPHA_STACK) return -1;
+                stack[sp].x = (int16_t)ix; stack[sp].y = (int16_t)iy; stack[sp].w = (int16_t)(ir - ix);
+                stack[sp].h = (int16_t)(ib - iy); stack[sp++].up = (int16_t)layer;
+            } else if (alpha_add(alpha_region, &alpha_regions, WE_ALPHA_REGIONS, ix, iy, ir - ix, ib - iy, it->color, -1)) return -1;
+            /* the rest of the piece: bands above, below, left and right */
+            for (piece = 0; piece < 4; piece++) {
+                int px = rx, py = ry, pw = rw, ph = rh;
+                if (piece == 0) ph = iy - ry;
+                else if (piece == 1) { py = ib; ph = ry + rh - ib; }
+                else { py = iy; ph = ib - iy; if (piece == 2) pw = ix - rx; else { px = ir; pw = rx + rw - ir; } }
+                if (pw <= 0 || ph <= 0) continue;
+                if (sp >= WE_ALPHA_STACK) return -1;
+                stack[sp].x = (int16_t)px; stack[sp].y = (int16_t)py; stack[sp].w = (int16_t)pw;
+                stack[sp].h = (int16_t)ph; stack[sp++].up = (int16_t)layer;
+            }
+        }
+        if (!found && alpha_add(alpha_region, &alpha_regions, WE_ALPHA_REGIONS, rx, ry, rw, rh,
+                                g < 0 ? WE_CANVAS : with_alpha(0, 0), -1)) return -1;
+    }
+    return 0;
+}
+
+static int alpha_push(const os_fb_web_item_t *it, int owner, int child) {
+    if (alpha_count >= OS_FB_WEB_ITEMS) return -1;
+    alpha_out[alpha_count] = *it;
+    alpha_owner[alpha_count] = (int16_t)owner;
+    alpha_child_of[alpha_count++] = (int16_t)child;
+    return 0;
+}
+
+/* Text item `text` cut to a piece, every fragment in colour `color`. */
+static int alpha_push_text(const os_fb_web_item_t *text, int x, int y, int w, int h, uint32_t color, int owner, int child) {
+    static os_fb_web_item_t pieces[WE_CLIP_FRAGMENTS];
+    int count = clip_glyphs(text, x, y, x + w, y + h, pieces, WE_CLIP_FRAGMENTS), k;
+    if (count < 0) return -1;
+    for (k = 0; k < count; k++) {
+        pieces[k].color = color;
+        if (alpha_push(&pieces[k], owner, child)) return -1;
+    }
+    return 0;
+}
+
+/* One translucent RECT or TEXT source over the output built so far. */
+static int alpha_source(const os_fb_web_item_t *src, int owner, int g, int child) {
+    int k, text = src->kind == OS_FB_WEB_TEXT, x, y, w, h;
+    if (!alpha_shape(src, 0, &x, &y, &w, &h)) return 0;
+    if (alpha_query(g, child, text, x, y, w, h)) return -1;
+    if (text && alpha_regions == 1 && alpha_region[0].w == w && alpha_region[0].h == h) {
+        os_fb_web_item_t one = *src;
+        one.color = alpha_over(src->color, alpha_region[0].dst);
+        return alpha_push(&one, owner, child);
+    }
+    for (k = 0; k < alpha_regions; k++) {
+        const we_region_t *r = &alpha_region[k];
+        uint32_t color = alpha_over(src->color, r->dst);
+        if (text) { if (alpha_push_text(src, r->x, r->y, r->w, r->h, color, owner, child)) return -1; }
+        else {
+            os_fb_web_item_t piece = *src;
+            piece.x = r->x; piece.y = r->y; piece.w = (uint16_t)r->w; piece.h = (uint16_t)r->h;
+            piece.color = color;
+            if (alpha_push(&piece, owner, child)) return -1;
+        }
+    }
+    for (k = 0; k < alpha_overlays; k++) {
+        const we_region_t *r = &alpha_overlay[k];
+        os_fb_web_item_t under = alpha_out[r->item];
+        if (alpha_push_text(&under, r->x, r->y, r->w, r->h, alpha_over(src->color, r->dst), owner, child)) return -1;
+    }
+    return 0;
+}
+
+/* Composites the items of group g (-1: the whole page over the canvas). */
+static int alpha_pass(we_doc_t *d, int g) {
+    int i, k, ga = g >= 0 ? group_alpha(&d->nodes[g]) : 255;
+    alpha_count = 0;
+    for (i = 0; i < (int)d->nitems; i++) {
+        os_fb_web_item_t it = d->items[i];
+        int owner = d->item_owner[i], child = alpha_child(d, owner, g), a = color_alpha_of(it.color);
+        if (child == -2 || a == 255) { if (alpha_push(&it, owner, child)) return -1; continue; }
+        if (a == 0) continue;
+        if (it.kind == OS_FB_WEB_BORDER) {
+            for (k = 0; k < 4; k++) {
+                os_fb_web_item_t side;
+                border_side(&it, k, &side);
+                if (alpha_source(&side, owner, g, child)) return -1;
+            }
+        } else if (alpha_source(&it, owner, g, child)) return -1;
+    }
+    for (i = 0; i < alpha_count; i++) {
+        d->items[i] = alpha_out[i];
+        d->item_owner[i] = alpha_owner[i];
+        if (g >= 0 && alpha_child_of[i] != -2)
+            d->items[i].color = with_alpha(d->items[i].color, (color_alpha_of(d->items[i].color) * ga + 127) / 255);
+    }
+    d->nitems = (uint32_t)alpha_count;
+    return 0;
+}
+
+static void composite_items(we_doc_t *d) {
+    int i, any = 0, depth, max_depth = 0, failed = 0, saved = (int)d->nitems, out = 0;
+    for (i = 0; i < (int)d->nitems; i++) {
+        int depth_i = alpha_depth(d, d->item_owner[i]);
+        if (depth_i > max_depth) max_depth = depth_i;
+        if (depth_i || color_alpha_of(d->items[i].color) != 255) any = 1;
+    }
+    if (!any) return;
+    for (i = 0; i < (int)d->nitems; i++) { alpha_saved[i] = d->items[i]; alpha_saved_owner[i] = d->item_owner[i]; }
+    for (depth = max_depth; depth >= 1 && !failed; depth--)
+        for (i = 0; i < (int)d->nnodes && !failed; i++)
+            if (alpha_group(&d->nodes[i]) && alpha_depth(d, i) == depth) failed = alpha_pass(d, i) != 0;
+    if (!failed) failed = alpha_pass(d, -1) != 0;
+    if (!failed) {
+        for (i = 0; i < (int)d->nitems; i++) d->items[i].color &= 0xFFFFFFu;
+        return;
+    }
+    diag(d, "alpha display budget", -1);
+    for (i = 0; i < saved; i++) {
+        if (!color_alpha_of(alpha_saved[i].color)) continue;
+        d->items[out] = alpha_saved[i];
+        d->items[out].color &= 0xFFFFFFu;
+        d->item_owner[out++] = alpha_saved_owner[i];
+    }
+    d->nitems = (uint32_t)out;
+}
+
+/* Lot 62: outlines (CSS UI 4) after layout: the border box grown by the
+ * offset plus the width, with no layout effect, painted last in their
+ * stacking context (CSS 2.1 appendix E step 10). Inline boxes have no
+ * outline in this subset. */
+static void paint_outlines(we_doc_t *d) {
+    uint32_t i, k;
+    for (i = 0; i < d->nnodes; i++) {
+        const we_node_t *n = &d->nodes[i];
+        int w = n->outline_w, grow = n->outline_offset + n->outline_w, x, y, ow, oh, first = (int)d->nitems, style = n->outline_style;
+        uint32_t color = n->outline_color_set ? n->outline_color : n->color;
+        if (n->is_text || !style || !w || n->display == WE_DISP_NONE || n->display == WE_DISP_INLINE) continue;
+        if (!n->w && !n->h) continue;
+        x = n->x - grow; y = n->y - grow; ow = n->w + 2 * grow; oh = n->h + 2 * grow;
+        if (ow <= 0 || oh <= 0) continue;
+        if (style >= 7 && style <= 10) frame_3d(d, (int)i, style, color, x, y, ow, oh, w);
+        else if (style == 5 || style == 6 || (style == 4 && w >= 3)) {
+            edge_paint(d, (int)i, style, color, 0, y, x, w, ow);
+            edge_paint(d, (int)i, style, color, 0, y + oh - w, x, w, ow);
+            edge_paint(d, (int)i, style, color, 1, x, y + w, w, oh - 2 * w);
+            edge_paint(d, (int)i, style, color, 1, x + ow - w, y + w, w, oh - 2 * w);
+        } else {
+            os_fb_web_item_t *it = emit(d, (int)i, OS_FB_WEB_BORDER, x, y, ow, oh, color);
+            if (it) it->bold = (uint8_t)w;
+        }
+        for (k = (uint32_t)first; k < d->nitems; k++) d->items[k].pad |= WE_ITEM_OUTLINE;
+    }
+}
+
+/* Reserved shadow items that stayed unused are removed. */
+static void drop_reserved(we_doc_t *d) {
+    uint32_t i, out = 0;
+    for (i = 0; i < d->nitems; i++) {
+        if (!d->items[i].kind) continue;
+        d->items[out] = d->items[i];
+        d->items[out].pad = (uint16_t)(d->items[out].pad & ~WE_ITEM_RESERVED);
+        d->item_owner[out++] = d->item_owner[i];
+    }
+    d->nitems = out;
 }
 
 /* Fixed boxes paint after the rest of the page, in their own order. */
@@ -6280,12 +8607,17 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     d->viewport_h = (int16_t)viewport_h;
     d->scroll_y = 0;
     w_zero(static_set, sizeof(static_set));
-    d->nitems = 0; math_refused = 0; style_solid_3d = 0; baseline_probe = 0; probe_level = probe_count = 0;
+    d->nitems = 0; math_refused = 0; wavy_decoration = 0; gradient_banded = 0; text_shadow_blur = 0; radius_stepped = 0; radius_square = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
-    { uint32_t i; for (i = 0; i < d->nnodes; i++)
-        d->nodes[i].x = d->nodes[i].y = d->nodes[i].w = d->nodes[i].h = 0; }
+    { uint32_t i; int bit; for (i = 0; i < d->nnodes; i++) {
+        we_node_t *n = &d->nodes[i];
+        n->x = n->y = n->w = n->h = 0;
+        for (bit = 0; bit < 8; bit++) if (n->spacing_pct & (1u << bit)) {
+            if (bit < 4) n->margin[bit] = 0; else n->padding[bit - 4] = 0;
+        }
+    } }
     if (viewport_w > WE_LAYOUT_MAX) viewport_w = WE_LAYOUT_MAX;
     { uint32_t i; for (i = 0; i < d->nnodes; i++) {
         forced_width[i] = forced_height[i] = resolved_height[i] = containing_height[i] = -1;
@@ -6308,13 +8640,27 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     resolve_grid_areas(d);
     subgrid_bind_all(d);
     intrinsic_sizes(d);
+    { we_node_t *root = &d->nodes[0]; int bit;
+      for (bit = 0; bit < 8; bit++) if (root->spacing_pct & (1u << bit)) {
+          int t = root->spacing_value[bit], v = t < 0 ? -((-t * viewport_w) / 1000) : (t * viewport_w) / 1000;
+          if (bit < 4) root->margin[bit] = (int16_t)v; else root->padding[bit - 4] = (int16_t)v;
+      } }
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
+    drop_reserved(d);
+    ellipsis_items(d);
+    paint_outlines(d);
     stack_items(d);
     opacity_items(d);
     raise_fixed(d);
     clip_display_list(d);
+    composite_items(d);
+    { uint32_t i; for (i = 0; i < d->nitems; i++) d->items[i].pad = 0; }
     if (math_refused) diag(d, "math evaluation refused", -1);
-    if (style_solid_3d) diag(d, "border style painted solid", -1);
+    if (wavy_decoration) diag(d, "wavy decoration painted solid", -1);
+    if (gradient_banded) diag(d, "gradient painted in bands", -1);
+    if (text_shadow_blur) diag(d, "text-shadow blur painted sharp", -1);
+    if (radius_stepped) diag(d, "border-radius painted in steps", -1);
+    if (radius_square) diag(d, "rounded effect painted square", -1);
     d->perf.items = d->nitems;
     d->perf.page_w = (uint32_t)viewport_w;
     d->perf.page_h = (uint32_t)h;
@@ -6402,7 +8748,8 @@ void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx) {
     out_num(out, ctx, " ", n->padding[2]); out_num(out, ctx, " ", n->padding[3]);
     out_num(out, ctx, " border ", n->border);
     out_num(out, ctx, " bold ", n->bold);
-    out(ctx, n->align == WE_ALIGN_CENTER ? " align center" : n->align == WE_ALIGN_RIGHT ? " align right" : " align left");
+    out(ctx, n->align == WE_ALIGN_CENTER ? " align center" : n->align == WE_ALIGN_RIGHT ? " align right" :
+             n->align == WE_ALIGN_JUSTIFY ? " align justify" : " align left");
     out(ctx, "\n");
 }
 

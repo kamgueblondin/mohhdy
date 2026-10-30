@@ -79,6 +79,8 @@ enum { WE_VALIGN_TOP = 0, WE_VALIGN_MIDDLE = 1, WE_VALIGN_BOTTOM = 2, WE_VALIGN_
 #define WE_BS_NONE 1
 #define WE_BS_HIDDEN 2
 #define WE_BS_SOLID 3
+#define WE_BS_WAVY 11
+enum { WE_DECO_UNDER = 1, WE_DECO_OVER = 2, WE_DECO_THROUGH = 4 };
 #define WE_LINE_H_MAX 40
 #define WE_INDENT_MAX 400
 #define WE_LAYOUT_MAX 16000
@@ -93,10 +95,13 @@ enum { WE_VALIGN_TOP = 0, WE_VALIGN_MIDDLE = 1, WE_VALIGN_BOTTOM = 2, WE_VALIGN_
 #define WE_IMAGE_WORKSPACE_MAX (WE_IMAGE_SOURCE_MAX + WE_IMAGE_SCRATCH_MAX + 8192)
 
 enum { WE_FLOAT_NONE, WE_FLOAT_LEFT, WE_FLOAT_RIGHT };
-enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE };
+enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE,
+       /* lot 62 */
+       WE_LIST_CIRCLE, WE_LIST_LOWER_ALPHA, WE_LIST_UPPER_ALPHA, WE_LIST_LOWER_ROMAN, WE_LIST_UPPER_ROMAN,
+       WE_LIST_LEADING_ZERO };
 
 enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4, WE_DISP_TABLE = 5, WE_DISP_ROW = 6, WE_DISP_CELL = 7, WE_DISP_INLINE_BLOCK = 8 };
-enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2 };
+enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2, WE_ALIGN_JUSTIFY = 3 };
 enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
        WE_PACK_STRETCH, WE_PACK_BETWEEN, WE_PACK_AROUND, WE_PACK_EVENLY, WE_PACK_BASELINE,
        WE_PACK_LAST_BASELINE };
@@ -119,6 +124,27 @@ typedef struct {
     we_math_node_t node[WE_MATH_NODES_MAX];
     uint8_t count, percent;
 } we_length_t;
+
+/* Lot 62: paint-time transform functions. translate keeps px or percent
+ * of the border box (pct bit 0 x, bit 1 y), scale keeps 1/1000 factors in
+ * -8..8, rotate keeps quarter turns (0..3) in x. */
+#define WE_TF_MAX 4
+enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE };
+typedef struct { uint8_t kind, pct; int16_t x, y; } we_transform_t;
+
+/* Lot 62: linear gradients, axis-aligned, up to 4 stops, at most
+ * WE_GRAD_BANDS solid bands per box. */
+enum { WE_BOX_BORDER = 0, WE_BOX_PADDING = 1, WE_BOX_CONTENT = 2 };
+enum { WE_TT_NONE = 0, WE_TT_UPPER = 1, WE_TT_LOWER = 2, WE_TT_CAPITALIZE = 3 };
+#define WE_GRAD_STOPS 4
+#define WE_GRAD_BANDS 8
+enum { WE_GRAD_BOTTOM = 1, WE_GRAD_RIGHT = 2, WE_GRAD_TOP = 3, WE_GRAD_LEFT = 4, WE_GRAD_RADIAL = 5 };
+/* lot 62 round 2: radial ending shape, bit 0 circle, bits 1..2 extent */
+enum { WE_EXT_FARTHEST_CORNER = 0, WE_EXT_CLOSEST_SIDE = 1, WE_EXT_FARTHEST_SIDE = 2, WE_EXT_CLOSEST_CORNER = 3 };
+
+/* Lot 62: box-shadow entries (offsets and spread in px, blur 0..32). */
+#define WE_SHADOWS_MAX 2
+typedef struct { int8_t x, y, spread; uint8_t blur, inset, has_color; uint32_t color; } we_shadow_t;
 
 typedef struct {
     uint8_t is_text, attr_flags, has_text;
@@ -196,6 +222,50 @@ typedef struct {
     uint8_t edge_style[4], border_style, edge_color_set, collapse_cell;
     uint8_t transparency;       /* lot 61: 100 - opacity%, non-zero forms a stacking context */
     uint8_t cin[4];             /* lot 61: collapsed cell content insets, layout time */
+    /* Lot 62: transform list and transform-origin (px, or percent when the
+     * tf_origin_pct bit of the axis is set; default 50% 50%). */
+    we_transform_t tf[WE_TF_MAX];
+    uint8_t tf_count, tf_origin_pct;
+    int16_t tf_origin[2];
+    /* Lot 62: outline (style 0 none, width 0..8, offset -32..32, colour
+     * currentColor unless set) and up to WE_SHADOWS_MAX box shadows. */
+    uint8_t outline_style, outline_w, outline_color_set;
+    int8_t outline_offset;
+    uint32_t outline_color;
+    we_shadow_t shadow[WE_SHADOWS_MAX];
+    uint8_t shadow_count;
+    /* Lot 62: text-decoration lines (WE_DECO_*), style (border style code,
+     * 11 wavy), thickness 1..4 and colour (currentColor unless set). */
+    uint8_t deco_line, deco_style, deco_thick, deco_color_set;
+    uint32_t deco_color;
+    /* Lot 62: percentage margins (mask bits 0..3) and paddings (bits 4..7),
+     * top right bottom left, in percent of the containing block width.
+     * margin[] / padding[] hold the value resolved at layout time; they read
+     * 0 before resolution, which is what intrinsic sizes count. */
+    uint8_t spacing_pct;
+    int16_t spacing_value[8];
+    /* Lot 62: linear-gradient background image, painted as bands over the
+     * border box. grad_dir 0 none, else WE_GRAD_*; stop positions in
+     * 1/10000 of the gradient line. */
+    uint8_t grad_dir, grad_count, grad_shape;
+    /* Lot 62: background-clip and the gradient's background-origin
+     * (WE_BOX_BORDER / PADDING / CONTENT; origin defaults to padding). */
+    uint8_t bg_clip, bg_origin;
+    /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
+    uint8_t text_transform, tshadow_count;
+    uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
+    int8_t letter_spacing, word_spacing; /* lot 62: px added per glyph / per space, inherited */
+    uint8_t align_last, justify_none;    /* lot 62: text-align-last (0 auto, else 1 + WE_ALIGN_*), text-justify none */
+    /* Lot 62: ol start / li value (list_value_set), ol reversed, ol type. */
+    int16_t list_value;
+    uint8_t list_value_set, list_reversed, list_type_attr;
+    /* Lot 62: border radii, corners top-left, top-right, bottom-right,
+     * bottom-left; horizontal then vertical, px or percent of the border
+     * box width / height (rad_pct bit c for x, bit 4 + c for y). */
+    uint8_t rad_x[4], rad_y[4], rad_pct;
+    we_shadow_t tshadow[WE_SHADOWS_MAX];
+    uint16_t grad_pos[WE_GRAD_STOPS];
+    uint32_t grad_color[WE_GRAD_STOPS];
     uint32_t edge_color[4];
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;

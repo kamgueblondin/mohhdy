@@ -1,3 +1,4 @@
+# Lot 62: alpha compositing, 3D borders, transforms, outline/shadows, text paint, gradients, radius, paint order, rounded clip, spacing/justify, radial; US-031 partial; statuses unchanged.
 # Lot 61: baselines, subgrid gaps/baselines, viewport, glyph clip, collapsed edges, border styles, z-index/opacity; US-031 partial; statuses unchanged.
 # Lot 60: first baselines, named grid lines; US-031 partial; all statuses unchanged.
 # Lot 59: intrinsic widths, word breaks, logical insets; US-031 partial; statuses unchanged.
