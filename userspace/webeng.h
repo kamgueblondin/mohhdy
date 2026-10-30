@@ -79,6 +79,8 @@ enum { WE_VALIGN_TOP = 0, WE_VALIGN_MIDDLE = 1, WE_VALIGN_BOTTOM = 2, WE_VALIGN_
 #define WE_BS_NONE 1
 #define WE_BS_HIDDEN 2
 #define WE_BS_SOLID 3
+#define WE_BS_WAVY 11
+enum { WE_DECO_UNDER = 1, WE_DECO_OVER = 2, WE_DECO_THROUGH = 4 };
 #define WE_LINE_H_MAX 40
 #define WE_INDENT_MAX 400
 #define WE_LAYOUT_MAX 16000
@@ -219,6 +221,10 @@ typedef struct {
     uint32_t outline_color;
     we_shadow_t shadow[WE_SHADOWS_MAX];
     uint8_t shadow_count;
+    /* Lot 62: text-decoration lines (WE_DECO_*), style (border style code,
+     * 11 wavy), thickness 1..4 and colour (currentColor unless set). */
+    uint8_t deco_line, deco_style, deco_thick, deco_color_set;
+    uint32_t deco_color;
     uint32_t edge_color[4];
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;

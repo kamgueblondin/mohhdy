@@ -2306,11 +2306,73 @@ static int parse_shadows(we_node_t *n, const char *v, int len) {
     return 0;
 }
 
+/* ---------- Lot 62: text-decoration parsing ----------
+ * Lines: none or any of underline, overline, line-through; style: solid,
+ * double, dotted, dashed, wavy (painted solid, diagnosed); thickness:
+ * auto, from-font or 1..4 px; colour: any colour. The shorthand takes
+ * one of each in any order. */
+static int deco_lines(const char *v, int len, int *lines) {
+    if (value_is(v, len, "underline")) *lines = WE_DECO_UNDER;
+    else if (value_is(v, len, "overline")) *lines = WE_DECO_OVER;
+    else if (value_is(v, len, "line-through")) *lines = WE_DECO_THROUGH;
+    else return -1;
+    return 0;
+}
+
+static int deco_style_value(const char *v, int len) {
+    int code = border_style_code(v, len);
+    if (value_is(v, len, "wavy")) return WE_BS_WAVY;
+    return code == WE_BS_SOLID || code == 4 || code == 5 || code == 6 ? code : 0;
+}
+
+static int deco_thickness(const char *v, int len, int *out) {
+    int16_t value;
+    int percent;
+    if (value_is(v, len, "auto") || value_is(v, len, "from-font")) { *out = 1; return 0; }
+    if (tf_length(v, len, &value, &percent) || percent || value < 0) return -1;
+    *out = value < 1 ? 1 : value > 4 ? 4 : value;
+    return 0;
+}
+
+/* kind 0 shorthand, 1 line, 2 style, 3 colour, 4 thickness */
+static int parse_decoration(we_node_t *n, int kind, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), k, lines = 0, style = 0, thick = 0, has_color = 0, seen_line = 0;
+    uint32_t color = 0;
+    if (c < 1 || tokens_more(v, len, a, l, c)) return -1;
+    if (kind == 3) { if (c != 1 || parse_color(v, len, &color)) return -1; n->deco_color = color; n->deco_color_set = 1; return 0; }
+    if (kind == 4) { if (c != 1 || deco_thickness(v, len, &thick)) return -1; n->deco_thick = (uint8_t)thick; return 0; }
+    if (kind == 2) { if (c != 1 || !(style = deco_style_value(v, len))) return -1; n->deco_style = (uint8_t)style; return 0; }
+    for (k = 0; k < c; k++) {
+        const char *t = v + a[k];
+        int one, s, w;
+        if (value_is(t, l[k], "none")) { if (seen_line) return -1; seen_line = 2; continue; }
+        if (deco_lines(t, l[k], &one) == 0) {
+            if (seen_line == 2 || (lines & one)) return -1;
+            seen_line = 1; lines |= one;
+            continue;
+        }
+        if (kind == 1) return -1;
+        if ((s = deco_style_value(t, l[k])) != 0) { if (style) return -1; style = s; continue; }
+        if (deco_thickness(t, l[k], &w) == 0) { if (thick) return -1; thick = w; continue; }
+        if (parse_color(t, l[k], &color) == 0) { if (has_color) return -1; has_color = 1; continue; }
+        return -1;
+    }
+    if (kind == 1 && !seen_line) return -1;
+    n->deco_line = (uint8_t)lines;
+    if (kind == 0) {
+        n->deco_style = (uint8_t)(style ? style : WE_BS_SOLID);
+        n->deco_thick = (uint8_t)(thick ? thick : 1);
+        n->deco_color_set = (uint8_t)has_color;
+        n->deco_color = color;
+    }
+    return 0;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
-    char prop[24];
+    char prop[40];
     int px, pct, k;
     uint32_t col;
-    w_cpy(prop, 24, p, pl);
+    w_cpy(prop, sizeof(prop), p, pl);
     for (k = 0; prop[k]; k++) prop[k] = w_low(prop[k]);
     { const char *mapped = logical_property(prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
     while (vl > 0 && w_space(v[vl - 1])) vl--;
@@ -2496,6 +2558,11 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "opacity")) {
         if (parse_opacity(v, vl, &px) == 0) n->transparency = (uint8_t)(100 - px);
         else diag(d, "opacity refused", -1);
+    } else if (w_eq(prop, "text-decoration") || w_eq(prop, "text-decoration-line") || w_eq(prop, "text-decoration-style") ||
+               w_eq(prop, "text-decoration-color") || w_eq(prop, "text-decoration-thickness")) {
+        int kind = w_eq(prop, "text-decoration") ? 0 : w_eq(prop, "text-decoration-line") ? 1 :
+                   w_eq(prop, "text-decoration-style") ? 2 : w_eq(prop, "text-decoration-color") ? 3 : 4;
+        if (parse_decoration(n, kind, v, vl)) diag(d, "text-decoration refused", -1);
     } else if (w_eq(prop, "outline")) {
         if (parse_outline(n, v, vl)) diag(d, "outline refused", -1);
     } else if (w_eq(prop, "outline-style")) {
@@ -2757,6 +2824,8 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "ol")) n->padding[3] = 40;
     if (w_eq(t, "b") || w_eq(t, "strong") || w_eq(t, "th")) n->bold = 1;
     if (w_eq(t, "a")) n->color = 0x0645AD;
+    if (w_eq(t, "u") || w_eq(t, "ins")) n->deco_line = WE_DECO_UNDER;
+    if (w_eq(t, "s") || w_eq(t, "strike") || w_eq(t, "del")) n->deco_line = WE_DECO_THROUGH;
     if (w_eq(t, "hr")) { n->height = 2; n->bg = 0x808080; n->has_bg = 1; n->margin[0] = 6; n->margin[2] = 6; }
     if (w_eq(t, "blockquote")) { n->margin[3] = 24; n->margin[1] = 24; }
     if (w_eq(t, "pre")) { n->display = WE_DISP_BLOCK; n->ws_mode = WE_WS_PRE; n->nowrap = 1; }
@@ -2830,6 +2899,7 @@ int we_style(we_doc_t* d) {
         n->tf_count = 0; n->tf_origin_pct = 3; n->tf_origin[0] = n->tf_origin[1] = 50;
         n->outline_style = 0; n->outline_w = 3; n->outline_offset = 0; n->outline_color_set = 0;
         n->shadow_count = 0;
+        n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
         n->text_indent = p ? p->text_indent : 0;
@@ -3225,6 +3295,36 @@ static int line_aligned(const we_inline_t *f) {
     return 0;
 }
 
+/* Lot 62: text decorations of a text run at (x, y) of width w, y being
+ * the glyph top. Each line kind comes from the nearest ancestor that
+ * declares it (its colour, style and thickness), walking up from the text
+ * and stopping after a float, an absolute box or an inline-block, whose
+ * own decorations still apply (CSS Text Decoration 3, 2.1). Underline
+ * sits under the glyph cell, overline above it, line-through on row 4.
+ * Wavy paints solid with one "wavy decoration painted solid". */
+static int wavy_decoration;
+static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len);
+
+static void paint_decorations(we_doc_t *d, int text, int x, int y, int w) {
+    int done = 0, kind, p = d->nodes[text].parent, guard;
+    for (guard = 0; p >= 0 && guard <= WE_DEPTH_MAX + 1 && done != 7; guard++, p = d->nodes[p].parent) {
+        const we_node_t *n = &d->nodes[p];
+        for (kind = 1; kind <= 4; kind <<= 1) {
+            int t = n->deco_thick ? n->deco_thick : 1, at, style = n->deco_style;
+            uint32_t color = n->deco_color_set ? n->deco_color : n->color;
+            if (!(n->deco_line & kind) || (done & kind)) continue;
+            done |= kind;
+            at = kind == WE_DECO_UNDER ? y + 8 : kind == WE_DECO_OVER ? y - t : y + 4 - t / 2;
+            if (style == WE_BS_WAVY) { wavy_decoration = 1; style = WE_BS_SOLID; }
+            if (style == 4) {   /* double: two lines, the gap equal to the thickness */
+                edge_paint(d, text, WE_BS_SOLID, color, 0, kind == WE_DECO_OVER ? at - 2 * t : at, x, t, w);
+                edge_paint(d, text, WE_BS_SOLID, color, 0, kind == WE_DECO_OVER ? at : at + 2 * t, x, t, w);
+            } else edge_paint(d, text, style, color, 0, at, x, t, w);
+        }
+        if (n->float_side || n->absolute || n->display == WE_DISP_INLINE_BLOCK) break;
+    }
+}
+
 /* advance=0 paints a segment and keeps the line open for an atomic box. */
 static void flush_line_mode(we_inline_t *f, int force, int advance) {
     int i, x, total = 0, box_h;
@@ -3275,6 +3375,7 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, len * WE_CHAR_W, box_h, n->bg);
         it = emit(d, node, OS_FB_WEB_TEXT, xs, f->y + 1, len * WE_CHAR_W, 8, d->nodes[node].color);
         if (it) { it->bold = d->nodes[node].bold; w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len); }
+        if (it) paint_decorations(d, node, xs, f->y + 1, len * WE_CHAR_W);
         {   /* UX4: text nodes get the bounding box of their runs, so a
              * click on a link's words finds the <a> (we_link_at) */
             we_node_t* tn = &d->nodes[node];
@@ -7249,7 +7350,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     d->viewport_h = (int16_t)viewport_h;
     d->scroll_y = 0;
     w_zero(static_set, sizeof(static_set));
-    d->nitems = 0; math_refused = 0; baseline_probe = 0; probe_level = probe_count = 0;
+    d->nitems = 0; math_refused = 0; wavy_decoration = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
@@ -7287,6 +7388,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     composite_items(d);
     { uint32_t i; for (i = 0; i < d->nitems; i++) d->items[i].pad = 0; }
     if (math_refused) diag(d, "math evaluation refused", -1);
+    if (wavy_decoration) diag(d, "wavy decoration painted solid", -1);
     d->perf.items = d->nitems;
     d->perf.page_w = (uint32_t)viewport_w;
     d->perf.page_h = (uint32_t)h;
