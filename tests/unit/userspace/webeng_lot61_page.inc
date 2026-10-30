@@ -44,12 +44,23 @@ static void test_l61_page_combines_lot_behaviours(void) {
     TEST_ASSERT_EQUAL(0, l61_index(0x00FF00));
     TEST_ASSERT_EQUAL(0x00FF00, (int)l61_paint(5, 116));
     TEST_ASSERT_EQUAL(0x000080, (int)l61_paint(5, 119));
+    /* Dashed and double separate borders as RECT pieces; opacity 0 paints
+     * nothing but keeps its box. */
+    l61_box("dash", 0, 124, 24, 6);
+    l61_rect_at(0, 124, 4, 2, 0xFF00FF);
+    l61_rect_at(8, 124, 4, 2, 0xFF00FF);
+    TEST_ASSERT_TRUE(l61_paint(5, 124) == 0xFFFFFFFFu);
+    l61_rect_at(0, 130, 10, 1, 0x008080);
+    l61_rect_at(0, 132, 10, 1, 0x008080);
+    TEST_ASSERT_TRUE(l61_paint(5, 131) == 0xFFFFFFFFu);
+    l61_box("ghost", 0, 140, 120, 4);
+    TEST_ASSERT_TRUE(l61_paint(5, 142) == 0xFFFFFFFFu);
     for (k = 0; k < (int)g_doc.nitems; k++)
         if (g_doc.items[k].kind == OS_FB_WEB_RECT && g_doc.items[k].color == 0 &&
             g_doc.items[k].x >= 8 && g_doc.items[k].x + g_doc.items[k].w <= 12 &&
             g_doc.items[k].y >= 65 && g_doc.items[k].y + g_doc.items[k].h <= 73) fragments++;
     TEST_ASSERT_EQUAL(3, fragments);   /* the second W is cut at x 12 */
-    TEST_ASSERT_EQUAL(124, g_doc.perf.page_h);
+    TEST_ASSERT_EQUAL(144, g_doc.perf.page_h);
     TEST_ASSERT_EQUAL(1, g_doc.perf.images);
     TEST_ASSERT_EQUAL(0, g_doc.perf.items_dropped);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
@@ -61,12 +72,12 @@ static void test_l61_page_scroll_moves_only_fixed(void) {
     we_set_image_reader(lot52_reader, 0);
     TEST_ASSERT_EQUAL(0, we_layout_viewport(&g_doc, 640, 40));
     we_set_image_reader(0, 0);
-    TEST_ASSERT_EQUAL(124, g_doc.perf.page_h);
+    TEST_ASSERT_EQUAL(144, g_doc.perf.page_h);
     l61_box("fix", 610, 30, 30, 10);
-    TEST_ASSERT_EQUAL(84, we_scroll(&g_doc, 1000));   /* clamped to 124 - 40 */
-    l61_box("fix", 610, 114, 30, 10);
+    TEST_ASSERT_EQUAL(104, we_scroll(&g_doc, 1000));  /* clamped to 144 - 40 */
+    l61_box("fix", 610, 134, 30, 10);
     l61_box("sa", 40, 24, 80, 10);
-    l61_rect_is(0x800080, 610, 114, 30, 10);
+    l61_rect_is(0x800080, 610, 134, 30, 10);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 

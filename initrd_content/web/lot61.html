@@ -15,7 +15,8 @@ img{display:block;width:32px;object-fit:fill}
 #g2{display:grid;grid-template-columns:repeat(3,40px);width:120px}
 #sub2{display:grid;grid-column:1 / -1;grid-template-columns:subgrid;column-gap:10px}
 #s2a{height:6px;background:green}#s2b{height:6px;background:orange}
-#neg{position:relative;z-index:-1;height:6px;background:#00ff00}#over{margin-top:-3px;height:6px;background:#000080}
+#dash{border:2px dashed #ff00ff;width:20px;height:2px}#dbl{border:3px double #008080;width:4px;height:4px}
+#ghost{opacity:0;height:4px;background:#ff0000}#neg{position:relative;z-index:-1;height:6px;background:#00ff00}#over{margin-top:-3px;height:6px;background:#000080}
 </style></head><body><section>
 <div id=flex><div id=fa><span>A</span></div><div id=fb><span>B</span><br><span>C</span></div></div>
 <div id=grid><div id=sub><div id=sa></div><div id=sb></div></div></div>
@@ -26,5 +27,6 @@ img{display:block;width:32px;object-fit:fill}
 <table id=t2><tr><td></td><td></td></tr></table>
 <div id=g2><div id=sub2><div id=s2a></div><div id=s2b></div></div></div>
 <div id=neg></div><div id=over></div>
+<div id=dash></div><div id=dbl></div><div id=ghost></div>
 <div id=fix></div>
 </section></body></html>

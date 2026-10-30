@@ -132,10 +132,11 @@ def main():
                                ("inline-block-baseline", "16 34 20x16"), ("glyph-fragment", "9 69 3x2"),
                                ("fixed", "610 470 30x10"), ("collapse-outer-edge", "0 95 120x4"),
                                ("collapse-inner-edge", "59 95 2x14"), ("subgrid-own-gap", "45 109 30x6"),
-                               ("negative-z", "0 115 120x6")):
+                               ("negative-z", "0 115 120x6"), ("dashed-piece", "8 124 4x2"),
+                               ("double-line", "0 132 10x1")):
                 require(serial, "web item rect " + box)
                 print("lot61 console %s box %s" % (label, box), flush=True)
-            require(serial, "dropped 0 page 640x124 diag 0")
+            require(serial, "dropped 0 page 640x144 diag 0")
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             g.send_command_until(monitor, "web /web/lot52.html", "osui web render file=/web/lot52.html", proc,
@@ -419,7 +420,11 @@ def main():
                 (61, 105, 120, 109, (0, 0, 255)), (0, 99, 4, 105, (0, 0, 255)),
                 (116, 99, 120, 105, (0, 0, 255)), (59, 95, 61, 109, (255, 0, 0)),
                 (0, 109, 35, 115, (0, 128, 0)), (45, 109, 75, 115, (255, 165, 0)),
-                (0, 115, 120, 118, (0, 255, 0)), (0, 118, 120, 124, (0, 0, 128))):
+                (0, 115, 120, 118, (0, 255, 0)), (0, 118, 120, 124, (0, 0, 128)),
+                (0, 124, 4, 126, (255, 0, 255)), (4, 124, 8, 126, (255, 255, 255)),
+                (8, 124, 12, 126, (255, 0, 255)), (0, 130, 10, 131, (0, 128, 128)),
+                (0, 131, 10, 132, (255, 255, 255)), (0, 132, 10, 133, (0, 128, 128)),
+                (0, 140, 120, 144, (255, 255, 255))):
                 for y in range(top, bottom):
                     for x in range(left, right):
                         offset = ((oy + y) * width + ox + x) * 3
@@ -446,11 +451,11 @@ def main():
                         raise RuntimeError("lot61 decoded image mismatch at %d,%d" % (x, y))
                     compared += 1
             serial = g.normalized_log(g.log_text()[start:])
-            require(serial, "dropped 0 page 640x124 diag 0")
+            require(serial, "dropped 0 page 640x144 diag 0")
             for line in serial.splitlines():
                 if line.startswith("osui web render file=/web/lot61.html"):
                     print(line, flush=True)
-            print("lot61 pixels compared=%d baseline=last,inline-block subgrid=auto-fill fixed=viewport clip=glyph table=collapse,outer-edge subgrid-gap=own z=negative flex=wrap image=shared" % compared,
+            print("lot61 pixels compared=%d baseline=last,inline-block subgrid=auto-fill fixed=viewport clip=glyph table=collapse,outer-edge,half-inset border=dashed,double opacity=0 subgrid-gap=own z=negative flex=wrap image=shared" % compared,
                   flush=True)
 
         print("QEMU web layout contract passed.", flush=True)
