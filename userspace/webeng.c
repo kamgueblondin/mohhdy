@@ -1046,7 +1046,16 @@ static int track_value(const char *v, int len, int16_t *size, int16_t *low, int1
 
 /* A list may mix bounded repeat groups and functional track tokens.
  * Parse into temporary arrays so a bad tail never changes the old list. */
-static int parse_track_list(const char *v, int len, int16_t *sizes, int16_t *floors, int16_t *caps) {
+typedef struct { int mode, at; } we_auto_repeat_t;
+
+/* A definite track: fixed, or minmax with a fixed floor and a fr or fixed cap. */
+static int definite_track(int size, int low, int cap) {
+    if (size >= 0) return 1;
+    return low >= 0 && (size != WE_TRACK_AUTO || cap >= 0);
+}
+
+static int parse_track_list(const char *v, int len, int16_t *sizes, int16_t *floors, int16_t *caps,
+                            we_auto_repeat_t *automatic) {
     int i = 0, count = 0;
     while (i < len) {
         int first, nesting = 0, end, copies = 1, group_first = count, group_count, c;
@@ -1054,9 +1063,17 @@ static int parse_track_list(const char *v, int len, int16_t *sizes, int16_t *flo
         if (i == len) break;
         first = i;
         if (w_ieq_n(v + i, len - i, "repeat(")) {
+            int mode = 0;
             i += 7; first = i;
-            while (i < len && v[i] >= '0' && v[i] <= '9') i++;
-            if (bounded_uint(v + first, i - first, WE_TRACKS_MAX, &copies) || copies < 1) return -1;
+            if (w_ieq_n(v + i, len - i, "auto-fill")) mode = WE_AUTO_FILL;
+            else if (w_ieq_n(v + i, len - i, "auto-fit")) mode = WE_AUTO_FIT;
+            if (mode) {
+                if (!automatic || automatic->mode) return -1;
+                i += mode == WE_AUTO_FILL ? 9 : 8;
+            } else {
+                while (i < len && v[i] >= '0' && v[i] <= '9') i++;
+                if (bounded_uint(v + first, i - first, WE_TRACKS_MAX, &copies) || copies < 1) return -1;
+            }
             while (i < len && w_space(v[i])) i++;
             if (i == len || v[i++] != ',') return -1;
             first = i; nesting = 1;
@@ -1082,6 +1099,15 @@ static int parse_track_list(const char *v, int len, int16_t *sizes, int16_t *flo
             }
             group_count = count - group_first;
             if (!group_count || group_count * copies > WE_TRACKS_MAX - group_first) return -1;
+            if (mode) {
+                int at = first;
+                while (at < end && w_space(v[at])) at++;
+                /* fit-content() shares minmax(0, cap) storage but is not a fixed size. */
+                if (w_ieq_n(v + at, end - at, "fit-content(")) return -1;
+                if (group_count != 1 || !definite_track(sizes[group_first], floors[group_first], caps[group_first])) return -1;
+                automatic->mode = mode;
+                automatic->at = group_first;
+            }
             for (c = 1; c < copies; c++) {
                 int k;
                 for (k = 0; k < group_count; k++, count++) {
@@ -1190,9 +1216,10 @@ static int line_identifier(const char *v, int len) {
 }
 
 static int named_track_list(const char *v, int len, int16_t *sizes, int16_t *floors,
-                            int16_t *caps, we_grid_names_t *names) {
-    int at = 0, count = 0;
+                            int16_t *caps, we_grid_names_t *names, we_auto_repeat_t *automatic) {
+    int at = 0, count = 0, k;
     w_zero(names, sizeof(*names));
+    automatic->mode = automatic->at = 0;
     while (at < len) {
         int first, depth = 0, end, added;
         while (at < len && w_space(v[at])) at++;
@@ -1227,14 +1254,20 @@ static int named_track_list(const char *v, int len, int16_t *sizes, int16_t *flo
         if (depth || end == first) return -1;
         {
             int16_t group[WE_TRACKS_MAX], low[WE_TRACKS_MAX], high[WE_TRACKS_MAX];
-            int k;
-            added = parse_track_list(v + first, end - first, group, low, high);
+            we_auto_repeat_t local;
+            local.mode = local.at = 0;
+            added = parse_track_list(v + first, end - first, group, low, high, automatic->mode ? 0 : &local);
             if (added < 1 || count + added > WE_TRACKS_MAX) return -1;
+            if (local.mode) { automatic->mode = local.mode; automatic->at = count + local.at; }
             for (k = 0; k < added; k++, count++) {
                 sizes[count] = group[k]; floors[count] = low[k]; caps[count] = high[k];
             }
         }
     }
+    /* Every other track needs a definite size so the count is defined. */
+    if (automatic->mode)
+        for (k = 0; k < count; k++)
+            if (k != automatic->at && !definite_track(sizes[k], floors[k], caps[k])) return -1;
     return count ? count : -1;
 }
 
@@ -1308,10 +1341,19 @@ static int grid_line_count(const we_node_t *g, int axis) {
 }
 
 /* Explicit names and the implicit <area>-start / <area>-end aliases. */
+/* Explicit names follow the template; lines inside an expanded automatic
+ * repetition carry no names, lines after it shift by the extra copies. */
+static int template_line(const we_node_t *g, int axis, int line) {
+    int at = g->auto_at[axis], copies = g->auto_count[axis];
+    if (!g->auto_mode[axis] || copies <= 1 || line <= at + 1) return line;
+    if (line >= at + 1 + copies) return line - copies + 1;
+    return 0;
+}
+
 static int line_has_name(const we_node_t *g, int axis, int line, const char *name) {
-    int alias, k, len = w_len(name);
-    for (alias = 0; alias < WE_GRID_LINE_ALIASES; alias++)
-        if (w_eq(name, g->line_names[axis].name[line - 1][alias])) return 1;
+    int alias, k, len = w_len(name), t = template_line(g, axis, line);
+    for (alias = 0; t > 0 && alias < WE_GRID_LINE_ALIASES; alias++)
+        if (w_eq(name, g->line_names[axis].name[t - 1][alias])) return 1;
     for (k = 0; k < g->area_count; k++) {
         const we_grid_area_t *area = &g->areas[k];
         int alen = w_len(area->name), first = (axis ? area->row : area->col) + 1;
@@ -1902,9 +1944,19 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "grid-template-columns") || w_eq(prop, "grid-template-rows")) {
         int16_t sizes[WE_TRACKS_MAX], floors[WE_TRACKS_MAX], caps[WE_TRACKS_MAX];
         we_grid_names_t names;
-        int count = named_track_list(v, vl, sizes, floors, caps, &names);
+        we_auto_repeat_t automatic;
+        int count = named_track_list(v, vl, sizes, floors, caps, &names, &automatic), axis = w_eq(prop, "grid-template-rows");
+        if (count >= 0) {
+            n->auto_mode[axis] = (uint8_t)automatic.mode;
+            n->auto_at[axis] = (uint8_t)automatic.at;
+            n->auto_count[axis] = 1;
+            n->tpl_count[axis] = (uint8_t)count;
+            for (k = 0; k < count; k++) {
+                n->tpl_size[axis][k] = sizes[k]; n->tpl_floor[axis][k] = floors[k]; n->tpl_cap[axis][k] = caps[k];
+            }
+        }
         if (count < 0) diag(d, "grid tracks refused", -1);
-        else if (w_eq(prop, "grid-template-columns")) {
+        else if (!axis) {
             n->line_names[0] = names;
             n->grid_cols = (uint8_t)count;
             for (k = 0; k < count; k++) { n->col_size[k] = sizes[k]; n->col_floor[k] = floors[k]; n->col_cap[k] = caps[k]; }
@@ -2082,6 +2134,7 @@ int we_style(we_doc_t* d) {
         n->justify_content = n->align_items = n->align_self = n->align_content = 0;
         n->justify_items = n->justify_self = 0;
         w_zero(n->line_names, sizeof(n->line_names));
+        n->auto_mode[0] = n->auto_mode[1] = n->tpl_count[0] = n->tpl_count[1] = 0;
         w_zero(n->grid_request, sizeof(n->grid_request));
         n->grid_col_start = n->grid_row_start = 0;
         n->grid_dense = n->grid_column_flow = n->area_count = n->area_rows = n->area_cols = 0;
@@ -3423,6 +3476,8 @@ typedef struct {
     int column[WE_TRACKS_MAX], column_x[WE_TRACKS_MAX], minimum[WE_TRACKS_MAX];
     int height[WE_GRID_ROWS_MAX], row_y[WE_GRID_ROWS_MAX];
     int ascent[WE_GRID_ROWS_MAX], descent[WE_GRID_ROWS_MAX], baseline[WE_MAX_NODES];
+    int span[WE_MAX_NODES];
+    uint8_t collapsed[2][WE_TRACKS_MAX];
 } we_grid_work_t;
 static we_grid_work_t grid_work[WE_DEPTH_MAX + 1];
 /* Column assignment for rowspan. One slot per layout depth. */
@@ -3439,6 +3494,48 @@ typedef char layout_workspace_is_bounded[
     sizeof(forced_width) + sizeof(forced_height) + sizeof(resolved_height) +
     sizeof(containing_height) + sizeof(flow_baseline) + sizeof(measure_content) + sizeof(measure_cache) + sizeof(int16_t) * OS_FB_WEB_ITEMS +
     sizeof(os_fb_web_item_t) * OS_FB_WEB_ITEMS <= WE_LAYOUT_WORKSPACE_MAX ? 1 : -1];
+
+static int track_extent(int size, int low, int cap) {
+    if (size >= 0) return size;
+    if (cap >= 0) return cap;
+    return low > 0 ? low : 0;
+}
+
+/* Rebuild the axis from its template with the largest repetition count
+ * that fits the definite size, 1 when indefinite, never above 8 tracks. */
+static void grid_expand(we_node_t *n, int axis, int available, int gap) {
+    int k, j, out = 0, copies = 1, at = n->auto_at[axis], total = n->tpl_count[axis], other = 0, repeat;
+    int16_t *size = axis ? n->row_size : n->col_size;
+    int16_t *low = axis ? n->row_floor : n->col_floor, *cap = axis ? n->row_cap : n->col_cap;
+    if (!n->auto_mode[axis] || total < 1) return;
+    repeat = track_extent(n->tpl_size[axis][at], n->tpl_floor[axis][at], n->tpl_cap[axis][at]);
+    for (k = 0; k < total; k++)
+        if (k != at) other += track_extent(n->tpl_size[axis][k], n->tpl_floor[axis][k], n->tpl_cap[axis][k]);
+    if (available >= 0)
+        while (total + copies <= WE_TRACKS_MAX &&
+               other + (copies + 1) * repeat + (total + copies - 1) * gap <= available) copies++;
+    for (k = 0; k < total; k++)
+        for (j = 0; j < (k == at ? copies : 1); j++, out++) {
+            size[out] = n->tpl_size[axis][k]; low[out] = n->tpl_floor[axis][k]; cap[out] = n->tpl_cap[axis][k];
+        }
+    for (k = out; k < WE_TRACKS_MAX; k++) { size[k] = axis ? WE_TRACK_AUTO : -1; low[k] = cap[k] = -1; }
+    if (axis) n->grid_rows = (uint8_t)out; else n->grid_cols = (uint8_t)out;
+    n->auto_count[axis] = (uint8_t)copies;
+}
+
+/* auto-fit: repeated tracks without an item collapse to 0 with their gaps. */
+static void grid_collapse(we_node_t *n, int axis, const int *starts, const int *spans, int count, uint8_t *collapsed) {
+    int k, i, at = n->auto_at[axis];
+    if (n->auto_mode[axis] != WE_AUTO_FIT) return;
+    for (k = at; k < at + n->auto_count[axis] && k < WE_TRACKS_MAX; k++) {
+        int used = 0;
+        for (i = 0; i < count; i++) if (starts[i] >= 0 && starts[i] <= k && k < starts[i] + spans[i]) used = 1;
+        if (used) continue;
+        collapsed[k] = 1;
+        if (axis) { n->row_size[k] = 0; n->row_floor[k] = n->row_cap[k] = -1; }
+        else { n->col_size[k] = 0; n->col_floor[k] = n->col_cap[k] = -1; }
+    }
+}
 
 static int grid_free(const we_grid_work_t *work, int row, int col, int rows, int cols, int count) {
     int r;
@@ -3517,11 +3614,13 @@ static int grid_cap(const we_node_t *n, int vertical, int k) {
 /* Fractions share a common unit. Freeze floors above that unit and solve
  * again, rather than adding free space on top of unequal minima. */
 static int grid_track_sizes(const we_node_t *n, int vertical, int count, int available,
-                             int gap, int *sizes) {
-    int k, pass, free = available, weight = 0, assigned = 0;
+                             int gap, int *sizes, const uint8_t *collapsed) {
+    int k, pass, free = available, weight = 0, assigned = 0, gaps = -1;
     uint8_t frozen[WE_GRID_ROWS_MAX];
     w_zero(frozen, sizeof(frozen));
-    if (free >= 0) free -= (count > 0 ? count - 1 : 0) * gap;
+    for (k = 0; k < count; k++) if (!collapsed || k >= WE_TRACKS_MAX || !collapsed[k]) gaps++;
+    if (gaps < 0) gaps = 0;
+    if (free >= 0) free -= gaps * gap;
     for (k = 0; k < count; k++) {
         int spec = grid_spec(n, vertical, k), low = grid_floor(n, vertical, k), cap = grid_cap(n, vertical, k);
         if (spec >= 0) sizes[k] = spec;
@@ -3558,7 +3657,7 @@ static int grid_track_sizes(const we_node_t *n, int vertical, int count, int ava
             if (!frozen[k] && spec < 0 && spec != WE_TRACK_AUTO) { sizes[k]++; remainder--; }
         }
     }
-    assigned = count > 0 ? (count - 1) * gap : 0;
+    assigned = gaps * gap;
     for (k = 0; k < count; k++) assigned += sizes[k];
     return assigned;
 }
@@ -3628,9 +3727,17 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[depth];
     we_grid_work_t *work = &grid_work[depth];
-    int count = collect_items(d, idx, items), cols = n->grid_cols ? n->grid_cols : 1;
+    int count, cols, seen;
     int rows, k, used_width, used_height, fixed_height = definite_height(d, idx, 0);
     int gx = axis_gap(n, 0), gy = axis_gap(n, 1), position;
+    if (n->auto_mode[0] || n->auto_mode[1]) {
+        int c;
+        grid_expand(n, 0, cw, gx);
+        grid_expand(n, 1, fixed_height, gy);
+        for (c = n->first; c >= 0; c = d->nodes[c].next) resolve_requests(d, c, 0);
+    }
+    count = collect_items(d, idx, items);
+    cols = n->grid_cols ? n->grid_cols : 1;
     w_zero(work, sizeof(*work));
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
@@ -3646,6 +3753,10 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     }
     if (n->area_rows > rows) rows = n->area_rows;
     if (n->grid_rows > rows) rows = n->grid_rows;
+    for (k = 0; k < count; k++) work->span[k] = d->nodes[items->node[k]].grid_col_span;
+    grid_collapse(n, 0, work->col, work->span, count, work->collapsed[0]);
+    for (k = 0; k < count; k++) work->span[k] = d->nodes[items->node[k]].grid_row_span;
+    grid_collapse(n, 1, work->row, work->span, count, work->collapsed[1]);
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
         if (work->row[k] < 0) continue;
@@ -3655,12 +3766,14 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
                          preferred_outer(child, cw, child->min_content), gx, cw, work->minimum);
     }
     fit_auto_columns(n, cols, cw, gx, work->minimum, work->column);
-    used_width = grid_track_sizes(n, 0, cols, cw, gx, work->column);
+    used_width = grid_track_sizes(n, 0, cols, cw, gx, work->column, work->collapsed[0]);
     if (used_width > cw) diag(d, "grid width overflow", idx);
-    position = cx;
+    position = cx; seen = 0;
     for (k = 0; k < cols; k++) {
+        if (seen && !work->collapsed[0][k]) position += gx;
         work->column_x[k] = limit_coord(position + pack_distance(n->justify_content, cw - used_width, k, cols));
-        position += work->column[k] + gx;
+        position += work->column[k];
+        if (!work->collapsed[0][k]) seen = 1;
     }
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
@@ -3685,8 +3798,8 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     }
     for (k = 0; k < rows; k++)
         grid_span_minimum(n, 1, k, 1, work->ascent[k] + work->descent[k], gy, fixed_height, work->height);
-    used_height = grid_track_sizes(n, 1, rows, fixed_height, gy, work->height);
-    position = cy;
+    used_height = grid_track_sizes(n, 1, rows, fixed_height, gy, work->height, work->collapsed[1]);
+    position = cy; seen = 0;
     {
         int receivers = 0, remaining = fixed_height > used_height ? fixed_height - used_height : 0;
         for (k = 0; k < rows; k++)
@@ -3698,10 +3811,12 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
                 remaining -= extra;
                 receivers--;
             }
+            if (seen && !(k < WE_TRACKS_MAX && work->collapsed[1][k])) position += gy;
             work->row_y[k] = limit_coord(position + (n->align_content == WE_PACK_STRETCH ? 0 :
                 pack_distance(n->align_content, fixed_height - used_height, k, rows)));
             work->height[k] += extra;
-            position += work->height[k] + gy;
+            position += work->height[k];
+            if (!(k < WE_TRACKS_MAX && work->collapsed[1][k])) seen = 1;
         }
     }
     return rows;
@@ -4790,6 +4905,10 @@ int we_layout(we_doc_t* d, int viewport_w) {
     w_zero(image_work.natural_h, sizeof(image_work.natural_h));
     w_zero(measure_cache, sizeof(measure_cache));
     measure_budget = WE_MEASURE_BUDGET;
+    { uint32_t i; for (i = 0; i < d->nnodes; i++) {
+        grid_expand(&d->nodes[i], 0, -1, 0);
+        grid_expand(&d->nodes[i], 1, -1, 0);
+    } }
     resolve_grid_requests(d);
     resolve_grid_areas(d);
     intrinsic_sizes(d);

@@ -58,6 +58,7 @@ typedef struct {
     uint8_t named_span[2], bare[2];
 } we_grid_request_t;
 #define WE_TRACK_LIMIT 2000
+enum { WE_AUTO_REPEAT_NONE, WE_AUTO_FILL, WE_AUTO_FIT };
 enum { WE_FIT_FILL, WE_FIT_CONTAIN, WE_FIT_COVER, WE_FIT_NONE, WE_FIT_SCALE_DOWN };
 typedef struct {
     char name[WE_GRID_NAME_MAX];
@@ -140,6 +141,10 @@ typedef struct {
     uint8_t nowrap, break_word, visibility, overflow_hidden;
     uint8_t grid_col_start, grid_row_start, grid_col_span, grid_row_span;
     we_grid_names_t line_names[2];
+    /* Lot 61: one repeat(auto-fill|auto-fit, track) per axis. The template
+     * keeps one repetition; layout expands it to 1..8 tracks in place. */
+    uint8_t auto_mode[2], auto_at[2], auto_count[2], tpl_count[2];
+    int16_t tpl_size[2][WE_TRACKS_MAX], tpl_floor[2][WE_TRACKS_MAX], tpl_cap[2][WE_TRACKS_MAX];
     we_grid_request_t grid_request[2];
     int16_t col_size[WE_TRACKS_MAX];
     int16_t col_floor[WE_TRACKS_MAX], col_cap[WE_TRACKS_MAX];
