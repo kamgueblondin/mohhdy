@@ -129,6 +129,12 @@ typedef struct {
 enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE };
 typedef struct { uint8_t kind, pct; int16_t x, y; } we_transform_t;
 
+/* Lot 62: linear gradients, axis-aligned, up to 4 stops, at most
+ * WE_GRAD_BANDS solid bands per box. */
+#define WE_GRAD_STOPS 4
+#define WE_GRAD_BANDS 8
+enum { WE_GRAD_BOTTOM = 1, WE_GRAD_RIGHT = 2, WE_GRAD_TOP = 3, WE_GRAD_LEFT = 4 };
+
 /* Lot 62: box-shadow entries (offsets and spread in px, blur 0..32). */
 #define WE_SHADOWS_MAX 2
 typedef struct { int8_t x, y, spread; uint8_t blur, inset, has_color; uint32_t color; } we_shadow_t;
@@ -231,6 +237,12 @@ typedef struct {
      * 0 before resolution, which is what intrinsic sizes count. */
     uint8_t spacing_pct;
     int16_t spacing_value[8];
+    /* Lot 62: linear-gradient background image, painted as bands over the
+     * border box. grad_dir 0 none, else WE_GRAD_*; stop positions in
+     * 1/10000 of the gradient line. */
+    uint8_t grad_dir, grad_count;
+    uint16_t grad_pos[WE_GRAD_STOPS];
+    uint32_t grad_color[WE_GRAD_STOPS];
     uint32_t edge_color[4];
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;

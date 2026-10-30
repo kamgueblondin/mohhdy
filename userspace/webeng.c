@@ -1797,6 +1797,86 @@ static void subgrid_tracks(we_node_t *n, int axis, const int *sizes, const int *
 }
 
 /* Expand a valid margin into top,right,bottom,left and replace all auto bits. */
+static int tf_angle(const char *v, int len, int16_t *quarter);
+
+/* Lot 62: split a functional value's arguments at top-level commas. */
+static int comma_args(const char *v, int len, int *start, int *length, int cap) {
+    int i, depth = 0, count = 0, at = 0;
+    for (i = 0; i <= len; i++) {
+        if (i < len && v[i] == '(') depth++;
+        else if (i < len && v[i] == ')') depth--;
+        else if (i == len || (v[i] == ',' && depth == 0)) {
+            int a = at, b = i;
+            while (a < b && w_space(v[a])) a++;
+            while (b > a && w_space(v[b - 1])) b--;
+            if (count >= cap || b == a) return -1;
+            start[count] = a; length[count] = b - a; count++;
+            at = i + 1;
+        }
+    }
+    return depth ? -1 : count;
+}
+
+/* Lot 62: linear-gradient([to side | angle,] color [pct], color [pct]...).
+ * Angles must be a multiple of 90deg (or 0.25turn); corners and length
+ * positions are refused. Positions clamp up to the previous stop; missing
+ * ones spread evenly between their neighbours. */
+static int parse_gradient(we_node_t *n, const char *v, int len) {
+    int start[WE_GRAD_STOPS + 1], length[WE_GRAD_STOPS + 1], count, k, first = 0, dir = WE_GRAD_BOTTOM;
+    int pos[WE_GRAD_STOPS], last;
+    uint32_t color[WE_GRAD_STOPS];
+    if (len < 17 || !w_ieq_n(v, 16, "linear-gradient(") || v[len - 1] != ')') return -1;
+    count = comma_args(v + 16, len - 17, start, length, WE_GRAD_STOPS + 1);
+    if (count < 2) return -1;
+    {
+        const char *a = v + 16 + start[0];
+        int l = length[0];
+        int16_t quarter;
+        if (l > 3 && w_ieq_n(a, 3, "to ")) {
+            int at = 3;
+            while (at < l && w_space(a[at])) at++;
+            if (value_is(a + at, l - at, "bottom")) dir = WE_GRAD_BOTTOM;
+            else if (value_is(a + at, l - at, "right")) dir = WE_GRAD_RIGHT;
+            else if (value_is(a + at, l - at, "top")) dir = WE_GRAD_TOP;
+            else if (value_is(a + at, l - at, "left")) dir = WE_GRAD_LEFT;
+            else return -1;
+            first = 1;
+        } else if (tf_angle(a, l, &quarter) == 0) {
+            static const uint8_t by_quarter[4] = { WE_GRAD_TOP, WE_GRAD_RIGHT, WE_GRAD_BOTTOM, WE_GRAD_LEFT };
+            dir = by_quarter[((quarter % 4) + 4) % 4];
+            first = 1;
+        } else if (l > 0 && ((a[0] >= '0' && a[0] <= '9') || a[0] == '-')) return -1;
+    }
+    if (count - first < 2 || count - first > WE_GRAD_STOPS) return -1;
+    for (k = 0; k < count - first; k++) {
+        const char *a = v + 16 + start[first + k];
+        int l = length[first + k], t[4], tl[4], c = tokens(a, l, t, tl), tenths;
+        pos[k] = -1;
+        if (c < 1 || c > 2 || parse_color(a + t[0], tl[0], &color[k])) return -1;
+        if (c == 2) {
+            if (spacing_percent(a + t[1], tl[1], 1, &tenths) || tenths > 1000) return -1;
+            pos[k] = tenths < 0 ? 0 : tenths * 10;
+        }
+    }
+    count -= first;
+    if (pos[0] < 0) pos[0] = 0;
+    if (pos[count - 1] < 0) pos[count - 1] = 10000;
+    last = 0;
+    for (k = 1; k < count; k++) {
+        if (pos[k] < 0) continue;
+        if (pos[k] < pos[last]) pos[k] = pos[last];
+        if (k - last > 1) {
+            int j;
+            for (j = last + 1; j < k; j++) pos[j] = pos[last] + (pos[k] - pos[last]) * (j - last) / (k - last);
+        }
+        last = k;
+    }
+    n->grad_dir = (uint8_t)dir;
+    n->grad_count = (uint8_t)count;
+    for (k = 0; k < count; k++) { n->grad_pos[k] = (uint16_t)pos[k]; n->grad_color[k] = color[k]; }
+    return 0;
+}
+
 static int margin_auto_box(we_node_t *n, const char *v, int vl) {
     static const int8_t from[4][4] = { {0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3} };
     static const uint8_t flags[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
@@ -2743,7 +2823,16 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (parse_color(v, vl, &col) == 0) n->color = col;
         else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
     }
+    else if ((w_eq(prop, "background") || w_eq(prop, "background-image")) && vl > 16 && w_ieq_n(v, 16, "linear-gradient(")) {
+        if (parse_gradient(n, v, vl)) diag(d, "gradient refused", -1);
+        else if (w_eq(prop, "background")) n->has_bg = 0;
+    }
+    else if (w_eq(prop, "background-image")) {
+        if (value_is(v, vl, "none")) n->grad_dir = 0;
+        else diag(d, "background image refused", -1);
+    }
     else if (w_eq(prop, "background") || w_eq(prop, "background-color")) {
+        if (w_eq(prop, "background")) n->grad_dir = 0;
         if (w_ieq_n(v, vl, "none") || w_ieq_n(v, vl, "transparent")) n->has_bg = 0;
         else if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
         else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
@@ -2954,7 +3043,7 @@ int we_style(we_doc_t* d) {
         n->outline_style = 0; n->outline_w = 3; n->outline_offset = 0; n->outline_color_set = 0;
         n->shadow_count = 0;
         n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
-        n->spacing_pct = 0;
+        n->spacing_pct = 0; n->grad_dir = 0;
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
         n->text_indent = p ? p->text_indent : 0;
@@ -4177,6 +4266,65 @@ static int shadow_reserve(we_doc_t *d, int idx, int inset, int *count) {
     return first;
 }
 
+/* Lot 62: colour of the gradient line at p (1/10000), interpolated in
+ * premultiplied alpha between the surrounding stops. */
+static uint32_t gradient_at(const we_node_t *n, int p) {
+    int k = 0, t, a0, a1, total, ch, shift;
+    uint32_t c0, c1, out = 0;
+    if (p <= n->grad_pos[0]) return n->grad_color[0];
+    while (k + 1 < n->grad_count && p > n->grad_pos[k + 1]) k++;
+    if (k + 1 >= n->grad_count) return n->grad_color[n->grad_count - 1];
+    if (n->grad_pos[k + 1] == n->grad_pos[k]) return n->grad_color[k + 1];
+    t = (p - n->grad_pos[k]) * 10000 / (n->grad_pos[k + 1] - n->grad_pos[k]);
+    c0 = n->grad_color[k]; c1 = n->grad_color[k + 1];
+    a0 = 255 - (int)(c0 >> 24); a1 = 255 - (int)(c1 >> 24);
+    total = a0 * (10000 - t) + a1 * t;
+    if (total == 0) return with_alpha(0, 0);
+    for (ch = 0, shift = 0; ch < 3; ch++, shift += 8) {
+        int v0 = (int)((c0 >> shift) & 0xFF), v1 = (int)((c1 >> shift) & 0xFF);
+        int num = v0 * a0 * (10000 - t) + v1 * a1 * t;
+        out |= (uint32_t)((num + total / 2) / total) << shift;
+    }
+    return with_alpha(out, (total + 5000) / 10000);
+}
+
+static int gradient_reserve(we_doc_t *d, int idx, int *count) {
+    int first = (int)d->nitems, k;
+    *count = 0;
+    if (!d->nodes[idx].grad_dir) return first;
+    for (k = 0; k < WE_GRAD_BANDS; k++) {
+        os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
+        if (!it) break;
+        it->kind = 0;
+        it->pad = WE_ITEM_RESERVED;
+        (*count)++;
+    }
+    return first;
+}
+
+static int gradient_banded;
+
+/* Bands tile the border box exactly; each takes the colour at its middle. */
+static void gradient_fill(we_doc_t *d, int idx, int slot, int count, int bx, int by, int bw, int bh) {
+    const we_node_t *n = &d->nodes[idx];
+    int vertical = n->grad_dir == WE_GRAD_BOTTOM || n->grad_dir == WE_GRAD_TOP;
+    int extent = vertical ? bh : bw, bands = extent < count ? extent : count, k;
+    if (!n->grad_dir || bands <= 0) return;
+    for (k = 1; k < n->grad_count; k++) if (n->grad_color[k] != n->grad_color[0]) gradient_banded = 1;
+    for (k = 0; k < bands; k++) {
+        os_fb_web_item_t *it = &d->items[slot + k];
+        int a = k * extent / bands, b = (k + 1) * extent / bands;
+        int p = (2 * k + 1) * 10000 / (2 * bands);
+        if (n->grad_dir == WE_GRAD_TOP || n->grad_dir == WE_GRAD_LEFT) p = 10000 - p;
+        it->kind = OS_FB_WEB_RECT;
+        it->color = gradient_at(n, p);
+        it->x = (int16_t)(vertical ? bx : bx + a);
+        it->y = (int16_t)(vertical ? by + a : by);
+        it->w = (uint16_t)(vertical ? bw : b - a);
+        it->h = (uint16_t)(vertical ? b - a : bh);
+    }
+}
+
 /* a minus b, both (x, y, w, h); at most 4 pieces into out (x, y, w, h each). */
 static int rect_minus(const int *a, const int *b, int out[4][4]) {
     int ix = a[0] > b[0] ? a[0] : b[0], iy = a[1] > b[1] ? a[1] : b[1];
@@ -4240,7 +4388,7 @@ static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, in
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     we_node_t* n = &d->nodes[idx];
     int bx, by, bw, bh, content_x, content_w, content_h, slot, border_slot = -1;
-    int first_item = (int)d->nitems, shadow_slot[2], shadow_slots[2];
+    int first_item = (int)d->nitems, shadow_slot[2], shadow_slots[2], grad_slot, grad_slots;
     if (depth > WE_DEPTH_MAX) return 0;
     d->perf.boxes++;
     layout_first[idx] = layout_last[idx] = WE_NO_BASELINE;
@@ -4262,6 +4410,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     shadow_slot[0] = shadow_reserve(d, idx, 0, &shadow_slots[0]);
     slot = n->has_bg ? (int)d->nitems : -1;
     if (n->has_bg && !emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, n->bg)) slot = -1;
+    grad_slot = gradient_reserve(d, idx, &grad_slots);
     shadow_slot[1] = shadow_reserve(d, idx, 1, &shadow_slots[1]);
     content_x = limit_coord(bx + box_edge(n, 3) + n->padding[3]);
     content_w = bw - box_edge(n, 1) - box_edge(n, 3) - n->padding[1] - n->padding[3];
@@ -4303,6 +4452,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         os_fb_web_item_t* it = &d->items[slot];
         it->x = (int16_t)bx; it->y = (int16_t)by; it->w = (uint16_t)bw; it->h = (uint16_t)bh;
     }
+    gradient_fill(d, idx, grad_slot, grad_slots, bx, by, bw, bh);
     shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh);
     shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh);
     if (n->border > 0 && !n->collapse_cell && n->border_style >= 7 && n->border_style <= 10) {
@@ -7406,7 +7556,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     d->viewport_h = (int16_t)viewport_h;
     d->scroll_y = 0;
     w_zero(static_set, sizeof(static_set));
-    d->nitems = 0; math_refused = 0; wavy_decoration = 0; baseline_probe = 0; probe_level = probe_count = 0;
+    d->nitems = 0; math_refused = 0; wavy_decoration = 0; gradient_banded = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
@@ -7455,6 +7605,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     { uint32_t i; for (i = 0; i < d->nitems; i++) d->items[i].pad = 0; }
     if (math_refused) diag(d, "math evaluation refused", -1);
     if (wavy_decoration) diag(d, "wavy decoration painted solid", -1);
+    if (gradient_banded) diag(d, "gradient painted in bands", -1);
     d->perf.items = d->nitems;
     d->perf.page_w = (uint32_t)viewport_w;
     d->perf.page_h = (uint32_t)h;
