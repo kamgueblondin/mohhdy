@@ -164,7 +164,25 @@ static void test_l61_names_lone_area_ident_spans_the_area(void) {
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
+static void test_l61_subgrid_auto_fill_parent_keeps_numeric_placement(void) {
+    int pass;
+    /* The first bind sees one auto-fill track and clamps 2 / span 2; the
+     * expanded parent (3 tracks) must restore the authored placement. */
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;grid-template-columns:repeat(auto-fill,40px);width:120px'>"
+                 "<div id=s style='display:grid;grid-column:1 / -1;grid-template-columns:subgrid'>"
+                 "<div id=a style='grid-column:2 / span 2;height:10px'></div><div id=b style='height:10px'></div></div></div></body>", 320);
+    for (pass = 0; pass < 2; pass++) {
+        TEST_ASSERT_EQUAL(3, lot52_node("s")->grid_cols);
+        l61_box("s", 0, 0, 120, 10);
+        l61_box("a", 40, 0, 80, 10);
+        l61_box("b", 0, 0, 40, 10);
+        TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+        TEST_ASSERT_EQUAL(0, we_layout(&g_doc, 320));
+    }
+}
+
 static void lot61_subgrid_run(void) {
+    RUN_TEST(test_l61_subgrid_auto_fill_parent_keeps_numeric_placement);
     RUN_TEST(test_l61_names_lone_area_ident_spans_the_area);
     RUN_TEST(test_l61_subgrid_columns_inherit_tracks_gap_names);
     RUN_TEST(test_l61_subgrid_successive_layouts_are_stable);

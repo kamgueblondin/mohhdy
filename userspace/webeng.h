@@ -56,6 +56,8 @@ typedef struct {
     uint8_t span[2], active;
     int8_t nth[2];
     uint8_t named_span[2], bare[2];
+    /* Plain numeric placement kept so subgrid clamping can be undone. */
+    uint8_t plain_start, plain_span;
 } we_grid_request_t;
 #define WE_TRACK_LIMIT 2000
 enum { WE_AUTO_REPEAT_NONE, WE_AUTO_FILL, WE_AUTO_FIT };

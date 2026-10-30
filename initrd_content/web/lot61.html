@@ -1,0 +1,22 @@
+<!doctype html><html><head><title>Lot 61 baselines subgrid viewport</title><style>
+body{margin:0}section{width:120px}span{visibility:hidden}
+#flex{display:flex;flex-wrap:wrap;align-items:last baseline;width:120px}
+#fa{width:50px;background:red}#fb{width:50px;padding-bottom:4px;background:blue}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,40px);width:120px}
+#sub{display:grid;grid-column:1 / -1;grid-template-columns:subgrid}
+#sa{grid-column:2 / span 2;height:10px;background:green}#sb{height:10px;background:orange}
+#line{width:120px;height:20px}
+#ib{display:inline-block;vertical-align:baseline;width:20px;padding-top:6px;background:blue}
+table{width:120px;border-collapse:collapse}td{border:2px solid red;height:6px;padding:0}
+#clip{width:12px;height:10px;overflow:hidden;white-space:nowrap}
+#fix{position:fixed;right:0;bottom:0;width:30px;height:10px;background:green}
+img{display:block;width:32px;object-fit:fill}
+</style></head><body><section>
+<div id=flex><div id=fa><span>A</span></div><div id=fb><span>B</span><br><span>C</span></div></div>
+<div id=grid><div id=sub><div id=sa></div><div id=sb></div></div></div>
+<div id=line><span>ab</span><div id=ib><span>X</span></div></div>
+<table><tr><td></td><td></td></tr></table>
+<div id=clip>WW</div>
+<img id=image src=/images/mire-g1.png alt=decode_failed>
+<div id=fix></div>
+</section></body></html>

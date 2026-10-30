@@ -1312,6 +1312,8 @@ static int grid_request(we_node_t *n, int axis, const char *v, int len) {
     int split = 0, a, b;
     if (!parse_placement(v, len, &start, &span)) {
         n->grid_request[axis].active = 0;
+        n->grid_request[axis].plain_start = start;
+        n->grid_request[axis].plain_span = span;
         if (axis) { n->grid_row_start = start; n->grid_row_span = span; }
         else { n->grid_col_start = start; n->grid_col_span = span; }
         n->grid_area[0] = 0;
@@ -1539,7 +1541,11 @@ static void subgrid_items(we_doc_t *d, int s, int report) {
             int span = axis ? d->nodes[s].grid_rows : d->nodes[s].grid_cols;
             uint8_t *first = axis ? &child->grid_row_start : &child->grid_col_start;
             uint8_t *count = axis ? &child->grid_row_span : &child->grid_col_span;
+            const we_grid_request_t *plain = &child->grid_request[axis];
             if (!subgrid_on(s, axis) || span < 1) continue;
+            /* Rebind from the authored value: an earlier, narrower bind
+             * clamped it before auto-repeat expanded the parent. */
+            if (!plain->active && plain->plain_span) { *first = plain->plain_start; *count = plain->plain_span; }
             if (*count > span) *count = (uint8_t)span;
             if (*first && *first + *count - 1 > span) *first = (uint8_t)(span - *count + 1);
         }
