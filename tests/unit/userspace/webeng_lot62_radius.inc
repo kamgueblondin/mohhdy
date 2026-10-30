@@ -42,10 +42,10 @@ static void test_l62_radius_solid_ring(void) {
     L62_HEX(0xFFFFFF, l62_pixel(0, 0));                   /* outside the corner */
     L62_HEX(0xFFFFFF, l62_pixel(4, 2));                   /* inside the inner curve */
     L62_HEX(0x0000FF, l62_pixel(2, 3));
-    /* dashed borders keep the square path */
+    /* lot 63: dashed borders follow the corners too */
     lot52_render(L62_BODY "<div style='width:20px;height:12px;border:2px dashed #0000ff;border-radius:6px'></div></body>", 320);
     TEST_ASSERT_EQUAL(0, l62_items_with(0xFFFFFF));
-    TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(0, 0));
+    TEST_ASSERT_EQUAL(0xFFFFFFFFu, l61_paint(0, 0));        /* nothing painted outside the corner */
 }
 
 static void test_l62_radius_clip_box_and_gradient(void) {

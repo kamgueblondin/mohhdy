@@ -5559,6 +5559,39 @@ static void radius_border(we_doc_t *d, int idx, const we_radii_t *r, int x, int 
     } else radius_ring(d, idx, r, x, y, w, h, t, color, color);
 }
 
+/* Lot 63: rounded dashed and dotted borders. The ring is painted, then
+ * kept only inside the four corner boxes (rx x ry at each rounded corner),
+ * so the arcs are solid; the straight parts between the corners take the
+ * dash or dot pattern of edge_paint(), each side restarting its pattern. */
+static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len);
+static void radius_dashed(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, int w, int h, int t, int style, uint32_t color) {
+    static os_fb_web_item_t ring[OS_FB_WEB_ITEMS];
+    int start = (int)d->nitems, count, i, k;
+    int cx[4], cy[4], from[4];
+    radius_ring(d, idx, r, x, y, w, h, t, color, color);
+    count = (int)d->nitems - start;
+    for (i = 0; i < count; i++) ring[i] = d->items[start + i];
+    d->nitems = (uint32_t)start;
+    cx[0] = cx[3] = x; cx[1] = cx[2] = x + w;
+    cy[0] = cy[1] = y; cy[2] = cy[3] = y + h;
+    for (i = 0; i < count; i++)
+        for (k = 0; k < 4; k++) {
+            int x0 = k == 0 || k == 3 ? cx[k] : cx[k] - r->rx[k], x1 = x0 + r->rx[k];
+            int y0 = k < 2 ? cy[k] : cy[k] - r->ry[k], y1 = y0 + r->ry[k];
+            if (ring[i].x > x0) x0 = ring[i].x;
+            if (ring[i].y > y0) y0 = ring[i].y;
+            if (ring[i].x + ring[i].w < x1) x1 = ring[i].x + ring[i].w;
+            if (ring[i].y + ring[i].h < y1) y1 = ring[i].y + ring[i].h;
+            if (x1 > x0 && y1 > y0) (void)emit(d, idx, OS_FB_WEB_RECT, x0, y0, x1 - x0, y1 - y0, color);
+        }
+    edge_paint(d, idx, style, color, 0, y, x + r->rx[0], t, w - r->rx[0] - r->rx[1]);
+    edge_paint(d, idx, style, color, 0, y + h - t, x + r->rx[3], t, w - r->rx[3] - r->rx[2]);
+    /* a square corner keeps the horizontal side's t x t square */
+    for (k = 0; k < 4; k++) from[k] = r->ry[k] ? r->ry[k] : t;
+    edge_paint(d, idx, style, color, 1, x, y + from[0], t, h - from[0] - from[3]);
+    edge_paint(d, idx, style, color, 1, x + w - t, y + from[1], t, h - from[1] - from[2]);
+}
+
 /* Lot 62: border, padding or content box of a laid out box, (x, y, w, h). */
 static void background_box(const we_node_t *n, int box, int bx, int by, int bw, int bh, int out[4]) {
     int top = 0, right = 0, bottom = 0, left = 0;
@@ -5864,7 +5897,10 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     gradient_fill(d, idx, grad_slot, grad_slots, bx, by, bw, bh);
     shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh, &radii);
     shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh, &radii);
-    if (n->border > 0 && !n->collapse_cell && radii_any(&radii) &&
+    if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 5 || n->border_style == 6)) {
+        radius_dashed(d, idx, &radii, bx, by, bw, bh, n->border > 8 ? 8 : n->border, n->border_style, n->border_color);
+        border_slot = 1;
+    } else if (n->border > 0 && !n->collapse_cell && radii_any(&radii) &&
         (n->border_style == 0 || n->border_style == WE_BS_SOLID || n->border_style == 4 || (n->border_style >= 7 && n->border_style <= 10))) {
         radius_border(d, idx, &radii, bx, by, bw, bh, n->border > 8 ? 8 : n->border, n->border_style, n->border_color);
         border_slot = 1;
@@ -5877,7 +5913,6 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         edge_paint(d, idx, n->border_style, n->border_color, 0, by + bh - t, bx, t, bw);
         edge_paint(d, idx, n->border_style, n->border_color, 1, bx, by + t, t, inner_h);
         edge_paint(d, idx, n->border_style, n->border_color, 1, bx + bw - t, by + t, t, inner_h);
-        if (radii_any(&radii)) radius_square = 1;
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell) {
         os_fb_web_item_t* it = emit(d, idx, OS_FB_WEB_BORDER, bx, by, bw, bh, n->border_color);
