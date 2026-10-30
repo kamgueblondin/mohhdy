@@ -1319,6 +1319,12 @@ static int grid_request(we_node_t *n, int axis, const char *v, int len) {
     while (split < len && v[split] != '/') split++;
     if (grid_edge(v, split, &request, 0)) return -1;
     if (split < len && grid_edge(v + split + 1, len - split - 1, &request, 1)) return -1;
+    /* A lone <custom-ident> also names the end edge (CSS Grid 8.4). */
+    if (split >= len && request.bare[0]) {
+        w_cpy(request.edge[1], sizeof(request.edge[1]), request.edge[0], w_len(request.edge[0]));
+        request.nth[1] = request.nth[0];
+        request.bare[1] = 1;
+    }
     if (request.span[0] && (request.span[1] || !request.edge[1][0])) return -1;
     if (!request.nth[0] && !request.span[0] &&
         !bounded_signed(request.edge[0], w_len(request.edge[0]), WE_TRACKS_MAX + 1, &a) && a > 0) {
@@ -1420,6 +1426,7 @@ static void resolve_requests(we_doc_t *d, int idx, int report) {
             if (!start && end) start = end - (request->span[0] ? request->span[0] : 1);
             if (!end && start) end = start + (request->span[1] ? request->span[1] : 1);
         }
+        if (start > 0 && end == start) end = start + 1;
         span = start > 0 && end > 0 ? end - start : request->span[1] && !request->named_span[1] ? request->span[1] : 1;
         if (start < 0 || end < 0 || start > WE_TRACKS_MAX || end > WE_TRACKS_MAX + 1 || span < 1 || span > WE_TRACKS_MAX) {
             if (report) diag(d, "grid line unresolved", idx);
@@ -1430,9 +1437,120 @@ static void resolve_requests(we_doc_t *d, int idx, int report) {
     }
 }
 
+static uint8_t subgrid_ok[WE_MAX_NODES];
+static int subgrid_on(int s, int axis) { return s >= 0 && ((subgrid_ok[s] >> axis) & 1); }
+
+/* Items of a subgrid resolve against inherited names: report later. */
 static void resolve_grid_requests(we_doc_t *d) {
     uint32_t i;
-    for (i = 0; i < d->nnodes; i++) resolve_requests(d, (int)i, 1);
+    for (i = 0; i < d->nnodes; i++) {
+        int p = d->nodes[i].parent;
+        resolve_requests(d, (int)i, !(p >= 0 && subgrid_ok[p]));
+    }
+}
+
+/* Lot 61 subgrid, bounded: one level, a grid parent, no box offsets on
+ * the subgridded axis, no line-name list. Refusals fall back to none. */
+static void subgrid_validate(we_doc_t *d) {
+    uint32_t i;
+    for (i = 0; i < d->nnodes; i++) {
+        we_node_t *n = &d->nodes[i];
+        int axis, p = n->parent, k;
+        subgrid_ok[i] = 0;
+        for (axis = 0; axis < 2; axis++) {
+            if (!n->subgrid[axis]) continue;
+            w_zero(&n->line_names[axis], sizeof(n->line_names[axis]));
+            for (k = 0; k < WE_TRACKS_MAX; k++) {
+                if (axis) { n->row_size[k] = WE_TRACK_AUTO; n->row_floor[k] = n->row_cap[k] = -1; }
+                else { n->col_size[k] = -1; n->col_floor[k] = n->col_cap[k] = -1; }
+            }
+            if (axis) n->grid_rows = 0; else n->grid_cols = 0;
+        }
+        n->sub_gap[0] = n->sub_gap[1] = 0;
+        if (!n->subgrid[0] && !n->subgrid[1]) continue;
+        if (n->display != WE_DISP_GRID || n->absolute || p < 0 || d->nodes[p].display != WE_DISP_GRID) {
+            diag(d, "subgrid requires grid parent", (int)i);
+            continue;
+        }
+        if (d->nodes[p].subgrid[0] || d->nodes[p].subgrid[1]) {
+            diag(d, "nested subgrid refused", (int)i);
+            continue;
+        }
+        for (axis = 0; axis < 2; axis++) {
+            int a = axis ? 0 : 3, b = axis ? 2 : 1;
+            if (!n->subgrid[axis]) continue;
+            if (n->border || n->padding[a] || n->padding[b] || n->margin[a] || n->margin[b] ||
+                (n->margin_auto & (axis ? (WE_AUTO_TOP | WE_AUTO_BOTTOM) : (WE_AUTO_LEFT | WE_AUTO_RIGHT)))) {
+                diag(d, "subgrid box offsets refused", (int)i);
+                continue;
+            }
+            subgrid_ok[i] |= (uint8_t)(1 << axis);
+        }
+    }
+}
+
+static void name_copy(char *dst, const char *a, const char *b) {
+    int la = w_len(a), lb = w_len(b);
+    if (la + lb >= WE_GRID_NAME_MAX) return;
+    w_cpy(dst, WE_GRID_NAME_MAX, a, la);
+    w_cpy(dst + la, WE_GRID_NAME_MAX - la, b, lb);
+}
+
+/* The subgrid takes span tracks of the parent from `start` (0-based): track
+ * count, auto placeholders, explicit names and area aliases of its lines.
+ * Its items are re-resolved and clamped into the inherited tracks. */
+static void subgrid_bind(we_doc_t *d, int p, int s, int axis, int start, int span) {
+    const we_node_t *g = &d->nodes[p];
+    we_node_t *n = &d->nodes[s];
+    int line, k;
+    if (span < 1) span = 1;
+    if (start + span > WE_TRACKS_MAX) span = WE_TRACKS_MAX - start;
+    if (span < 1) return;
+    w_zero(&n->line_names[axis], sizeof(n->line_names[axis]));
+    for (line = 0; line <= span; line++) {
+        int at = start + line + 1, t = template_line(g, axis, at), alias = 0, a;
+        char *slot;
+        for (a = 0; t > 0 && a < WE_GRID_LINE_ALIASES; a++)
+            if (g->line_names[axis].name[t - 1][a][0] && alias < WE_GRID_LINE_ALIASES) {
+                slot = n->line_names[axis].name[line][alias++];
+                name_copy(slot, g->line_names[axis].name[t - 1][a], "");
+            }
+        for (k = 0; k < g->area_count && alias < WE_GRID_LINE_ALIASES; k++) {
+            const we_grid_area_t *area = &g->areas[k];
+            int first = (axis ? area->row : area->col) + 1, last = first + (axis ? area->rows : area->cols);
+            slot = n->line_names[axis].name[line][alias];
+            if (at == first) { name_copy(slot, area->name, "-start"); if (slot[0]) alias++; }
+            slot = n->line_names[axis].name[line][alias < WE_GRID_LINE_ALIASES ? alias : 0];
+            if (at == last && alias < WE_GRID_LINE_ALIASES) { name_copy(slot, area->name, "-end"); if (slot[0]) alias++; }
+        }
+    }
+    if (axis) n->grid_rows = (uint8_t)span; else n->grid_cols = (uint8_t)span;
+}
+
+static void subgrid_items(we_doc_t *d, int s, int report) {
+    int c, axis;
+    for (c = d->nodes[s].first; c >= 0; c = d->nodes[c].next) {
+        we_node_t *child = &d->nodes[c];
+        if (child->is_text) continue;
+        resolve_requests(d, c, report);
+        for (axis = 0; axis < 2; axis++) {
+            int span = axis ? d->nodes[s].grid_rows : d->nodes[s].grid_cols;
+            uint8_t *first = axis ? &child->grid_row_start : &child->grid_col_start;
+            uint8_t *count = axis ? &child->grid_row_span : &child->grid_col_span;
+            if (!subgrid_on(s, axis) || span < 1) continue;
+            if (*count > span) *count = (uint8_t)span;
+            if (*first && *first + *count - 1 > span) *first = (uint8_t)(span - *count + 1);
+        }
+    }
+}
+
+static void subgrid_tracks(we_node_t *n, int axis, const int *sizes, int start, int gap) {
+    int k, count = axis ? n->grid_rows : n->grid_cols;
+    for (k = 0; k < count; k++) {
+        if (axis) { n->row_size[k] = (int16_t)sizes[start + k]; n->row_floor[k] = n->row_cap[k] = -1; }
+        else { n->col_size[k] = (int16_t)sizes[start + k]; n->col_floor[k] = n->col_cap[k] = -1; }
+    }
+    n->sub_gap[axis] = (int16_t)(gap + 1);
 }
 
 /* Expand a valid margin into top,right,bottom,left and replace all auto bits. */
@@ -1948,7 +2066,20 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         int16_t sizes[WE_TRACKS_MAX], floors[WE_TRACKS_MAX], caps[WE_TRACKS_MAX];
         we_grid_names_t names;
         we_auto_repeat_t automatic;
-        int count = named_track_list(v, vl, sizes, floors, caps, &names, &automatic), axis = w_eq(prop, "grid-template-rows");
+        int count, axis = w_eq(prop, "grid-template-rows");
+        if (value_is(v, vl, "subgrid")) {
+            n->subgrid[axis] = 1;
+            n->auto_mode[axis] = n->tpl_count[axis] = 0;
+            w_zero(&n->line_names[axis], sizeof(n->line_names[axis]));
+            if (axis) n->grid_rows = 0; else n->grid_cols = 0;
+            return;
+        }
+        if (vl > 8 && w_ieq_n(v, 7, "subgrid") && (v[7] == ' ' || v[7] == '[')) {
+            diag(d, "subgrid line names refused", -1);
+            return;
+        }
+        count = named_track_list(v, vl, sizes, floors, caps, &names, &automatic);
+        if (count >= 0) n->subgrid[axis] = 0;
         if (count >= 0) {
             n->auto_mode[axis] = (uint8_t)automatic.mode;
             n->auto_at[axis] = (uint8_t)automatic.at;
@@ -2138,6 +2269,8 @@ int we_style(we_doc_t* d) {
         n->justify_items = n->justify_self = 0;
         w_zero(n->line_names, sizeof(n->line_names));
         n->auto_mode[0] = n->auto_mode[1] = n->tpl_count[0] = n->tpl_count[1] = 0;
+        n->subgrid[0] = n->subgrid[1] = 0;
+        n->sub_gap[0] = n->sub_gap[1] = 0;
         w_zero(n->grid_request, sizeof(n->grid_request));
         n->grid_col_start = n->grid_row_start = 0;
         n->grid_dense = n->grid_column_flow = n->area_count = n->area_rows = n->area_cols = 0;
@@ -2786,6 +2919,7 @@ static we_measure_cache_t measure_cache[WE_MAX_NODES];
 
 static int axis_gap(const we_node_t *n, int vertical) {
     int value = vertical ? n->row_gap : n->col_gap;
+    if (n->sub_gap[vertical] > 0) return n->sub_gap[vertical] - 1;
     value = math_nonnegative(n, vertical ? WE_LEN_ROW_GAP : WE_LEN_COL_GAP, 0, value);
     return value >= 0 ? value : n->gap > 0 ? n->gap : 0;
 }
@@ -3829,6 +3963,91 @@ static int grid_item_width(const we_node_t *n, const we_node_t *child, int width
     return preferred_outer(child, width, intrinsic ? child->max_content : width - node_border_extra(child) - child->margin[1] - child->margin[3]);
 }
 
+static void subgrid_bind_items(we_doc_t *d, int p, const we_track_work_t *items,
+                               const we_grid_work_t *work, int count, int report) {
+    int k;
+    for (k = 0; k < count; k++) {
+        int s = items->node[k];
+        if (!subgrid_ok[s] || work->row[k] < 0) continue;
+        if (subgrid_on(s, 0)) subgrid_bind(d, p, s, 0, work->col[k], d->nodes[s].grid_col_span);
+        if (subgrid_on(s, 1)) subgrid_bind(d, p, s, 1, work->row[k], d->nodes[s].grid_row_span);
+        subgrid_items(d, s, report);
+    }
+}
+
+static int grid_columns_for(const we_doc_t *d, const we_node_t *n, const we_track_work_t *items, int count) {
+    int k, cols = n->grid_cols ? n->grid_cols : 1;
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[items->node[k]];
+        int end = child->grid_col_start ? child->grid_col_start + child->grid_col_span - 1 : child->grid_col_span;
+        if (end > cols) cols = end;
+    }
+    if (cols > WE_TRACKS_MAX) cols = WE_TRACKS_MAX;
+    if (n->area_cols > cols) cols = n->area_cols;
+    return cols;
+}
+
+/* Layout entry: bind every valid subgrid once and report its items. */
+static void subgrid_bind_all(we_doc_t *d) {
+    uint32_t p;
+    for (p = 0; p < d->nnodes; p++) {
+        const we_node_t *n = &d->nodes[p];
+        we_track_work_t *items = &track_work[0];
+        we_grid_work_t *work = &grid_work[0];
+        int c, any = 0, count;
+        if (n->display != WE_DISP_GRID) continue;
+        for (c = n->first; c >= 0; c = d->nodes[c].next) if (subgrid_ok[c]) any = 1;
+        if (!any) continue;
+        count = collect_items(d, (int)p, items);
+        w_zero(work, sizeof(*work));
+        grid_place(d, items, work, count, grid_columns_for(d, n, items, count), 0);
+        subgrid_bind_items(d, (int)p, items, work, count, 1);
+    }
+}
+
+/* Column contributions of a column subgrid's items to the parent tracks. */
+static void subgrid_columns(we_doc_t *d, int p, int s, int start, int cw, int gap, we_grid_work_t *work, int depth) {
+    we_track_work_t *items = &track_work[depth + 1];
+    we_grid_work_t *inner = &grid_work[depth + 1];
+    const we_node_t *g = &d->nodes[p];
+    int count = collect_items(d, s, items), k;
+    if (depth + 1 > WE_DEPTH_MAX) return;
+    w_zero(inner, sizeof(*inner));
+    grid_place(d, items, inner, count, d->nodes[s].grid_cols, 0);
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[items->node[k]];
+        if (inner->row[k] < 0) continue;
+        grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span,
+                          preferred_outer(child, cw, child->max_content), gap, cw, work->column);
+        grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span,
+                          preferred_outer(child, cw, child->min_content), gap, cw, work->minimum);
+    }
+}
+
+static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth);
+
+/* Row contributions of a row subgrid's items, measured at the widths the
+ * subgrid gives them (inherited or its own columns). */
+static void subgrid_rows(we_doc_t *d, int p, int s, int start, int width, int fixed_height, int gap,
+                         we_grid_work_t *work, int depth) {
+    we_track_work_t *items = &track_work[depth + 1];
+    we_grid_work_t *inner = &grid_work[depth + 1];
+    const we_node_t *g = &d->nodes[p], *sub = &d->nodes[s];
+    int count, k;
+    if (depth + 1 > WE_DEPTH_MAX) return;
+    (void)prepare_grid(d, s, 0, 0, width, depth + 1);
+    count = collect_items(d, s, items);
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[items->node[k]];
+        int c = inner->col[k], span, w, h;
+        if (inner->row[k] < 0) continue;
+        span = child->grid_col_span;
+        w = inner->column_x[c + span - 1] + inner->column[c + span - 1] - inner->column_x[c];
+        h = measure_area_height(d, items->node[k], grid_item_width(sub, child, w), depth + 2);
+        grid_span_minimum(g, 1, start + inner->row[k], child->grid_row_span, h, gap, fixed_height, work->height);
+    }
+}
+
 static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) {
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[depth];
@@ -3859,6 +4078,7 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     }
     if (n->area_rows > rows) rows = n->area_rows;
     if (n->grid_rows > rows) rows = n->grid_rows;
+    subgrid_bind_items(d, idx, items, work, count, 0);
     for (k = 0; k < count; k++) work->span[k] = d->nodes[items->node[k]].grid_col_span;
     grid_collapse(n, 0, work->col, work->span, count, work->collapsed[0]);
     for (k = 0; k < count; k++) work->span[k] = d->nodes[items->node[k]].grid_row_span;
@@ -3866,6 +4086,10 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
         if (work->row[k] < 0) continue;
+        if (subgrid_on(items->node[k], 0)) {
+            subgrid_columns(d, idx, items->node[k], work->col[k], cw, gx, work, depth);
+            continue;
+        }
         grid_span_minimum(n, 0, work->col[k], child->grid_col_span,
                          preferred_outer(child, cw, child->max_content), gx, cw, work->column);
         grid_span_minimum(n, 0, work->col[k], child->grid_col_span,
@@ -3881,6 +4105,9 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         position += work->column[k];
         if (!work->collapsed[0][k]) seen = 1;
     }
+    for (k = 0; k < count; k++)
+        if (work->row[k] >= 0 && subgrid_on(items->node[k], 0))
+            subgrid_tracks(&d->nodes[items->node[k]], 0, work->column, work->col[k], gx);
     /* Lot 61: first-baseline groups share the start row and last-baseline
      * groups the end row, spanning items included. A spanning item adds the
      * shift its group imposes to its span contribution. */
@@ -3890,6 +4117,11 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         if (work->row[k] < 0) continue;
         width = work->column_x[work->col[k] + child->grid_col_span - 1] +
                 work->column[work->col[k] + child->grid_col_span - 1] - work->column_x[work->col[k]];
+        if (subgrid_on(items->node[k], 1)) {
+            subgrid_rows(d, idx, items->node[k], work->row[k], grid_item_width(n, child, width), fixed_height, gy, work, depth);
+            work->item_h[k] = -1;
+            continue;
+        }
         height = measure_area_height(d, items->node[k], grid_item_width(n, child, width), depth + 1);
         work->item_h[k] = height;
         work->baseline[k] = 0;
@@ -3913,7 +4145,7 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         const we_node_t *child = &d->nodes[items->node[k]];
         int align = child->align_self ? child->align_self : n->align_items, height = work->item_h[k];
         int end = work->row[k] + child->grid_row_span - 1;
-        if (work->row[k] < 0) continue;
+        if (work->row[k] < 0 || height < 0) continue;
         if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) && child->grid_row_span > 1) {
             if (align == WE_PACK_BASELINE) height += work->ascent[work->row[k]] - work->baseline[k];
             else if (align == WE_PACK_LAST_BASELINE && end < WE_GRID_ROWS_MAX)
@@ -3946,6 +4178,9 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
             if (!(k < WE_TRACKS_MAX && work->collapsed[1][k])) seen = 1;
         }
     }
+    for (k = 0; k < count; k++)
+        if (work->row[k] >= 0 && subgrid_on(items->node[k], 1))
+            subgrid_tracks(&d->nodes[items->node[k]], 1, work->height, work->row[k], gy);
     return rows;
 }
 
@@ -4740,6 +4975,24 @@ static int table_rowspan_of(const we_node_t *cell, int row, int nr) {
     return rs < 1 ? 1 : rs;
 }
 
+/* Intrinsic pass: a column subgrid contributes its items, not itself. */
+static void subgrid_intrinsic(we_doc_t *d, const we_node_t *g, int s, int start, int gap, we_grid_work_t *work) {
+    we_track_work_t *items = &track_work[1];
+    we_grid_work_t *inner = &grid_work[1];
+    int count = collect_items(d, s, items), k, pass;
+    w_zero(inner, sizeof(*inner));
+    grid_place(d, items, inner, count, d->nodes[s].grid_cols, 0);
+    for (pass = 0; pass < 2; pass++)
+        for (k = 0; k < count; k++) {
+            const we_node_t *child = &d->nodes[items->node[k]];
+            int extra = node_border_extra(child) + child->margin[1] + child->margin[3], low, high;
+            if (inner->row[k] < 0 || (child->grid_col_span == 1) != (pass == 0)) continue;
+            intrinsic_contribution(child, &low, &high);
+            grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span, constrained_width(child, low, 0) + extra, gap, -1, work->column);
+            grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span, constrained_width(child, high, 0) + extra, gap, -1, work->column_x);
+        }
+}
+
 static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maximum) {
     const we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[0];
@@ -4793,6 +5046,11 @@ static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maxim
                 const we_node_t *child = &d->nodes[c];
                 int span = grid ? child->grid_col_span : child->colspan;
                 int start = grid ? work->col[r] : (table_slot[0].col[c] >= 0 ? table_slot[0].col[c] : column);
+                if (grid && pass == 0 && start >= 0 && subgrid_on(c, 0)) {
+                    subgrid_intrinsic(d, n, c, start, gap, work);
+                    break;
+                }
+                if (grid && subgrid_on(c, 0)) break;
                 if (child->display != WE_DISP_NONE && !child->absolute && (grid || child->display == WE_DISP_CELL)) {
                     if ((span == 1) == (pass == 0) && start >= 0 && start + span <= cols) {
                         int extra = node_border_extra(child) + child->margin[1] + child->margin[3];
@@ -5211,8 +5469,10 @@ int we_layout(we_doc_t* d, int viewport_w) {
         grid_expand(&d->nodes[i], 0, -1, 0);
         grid_expand(&d->nodes[i], 1, -1, 0);
     } }
+    subgrid_validate(d);
     resolve_grid_requests(d);
     resolve_grid_areas(d);
+    subgrid_bind_all(d);
     intrinsic_sizes(d);
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
     clip_display_list(d);

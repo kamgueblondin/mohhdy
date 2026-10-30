@@ -146,6 +146,10 @@ typedef struct {
      * keeps one repetition; layout expands it to 1..8 tracks in place. */
     uint8_t auto_mode[2], auto_at[2], auto_count[2], tpl_count[2];
     int16_t tpl_size[2][WE_TRACKS_MAX], tpl_floor[2][WE_TRACKS_MAX], tpl_cap[2][WE_TRACKS_MAX];
+    /* Lot 61: grid-template-*: subgrid per axis. Layout copies the parent
+     * tracks, gap (sub_gap - 1, 0 when none) and line names in place. */
+    uint8_t subgrid[2];
+    int16_t sub_gap[2];
     we_grid_request_t grid_request[2];
     int16_t col_size[WE_TRACKS_MAX];
     int16_t col_floor[WE_TRACKS_MAX], col_cap[WE_TRACKS_MAX];
