@@ -18,11 +18,11 @@ baseline export through a bounded probe, vertical-align:baseline for table
 cells and inline-block, grid line occurrences, named spans and area aliases,
 repeat(auto-fill/auto-fit) bounded to 1..8 tracks, a bounded subgrid on both
 axes, an explicit viewport with position:fixed, static positions and bounded
-GUI scroll, partial glyph clipping from kernel/gfx_font8.h and per-edge collapsed table borders (CSS 2.1 width, style, origin, with the table outer border), subgrid own gaps with parent content distribution, column flex and rowspan cell baselines, and bounded z-index stacking contexts with negative z below in-flow content. Kernel,
+GUI scroll, partial glyph clipping from kernel/gfx_font8.h and per-edge collapsed table borders (CSS 2.1 width, style, origin with col/colgroup and the table outer border, half-border content insets), dashed/dotted/double border painting, subgrid own gaps with parent content distribution and shared parent baselines, column flex and rowspan cell baselines, and bounded z-index and opacity stacking contexts with negative z below in-flow content (opacity 0 hides paint; partial opacity paints opaque). Kernel,
 rights and shared ABI unchanged. No
 Chromium, WebKit, network loading, JavaScript VM, new font engine or margin
 collapsing. US-059/060/063/074 unchanged; US-G19..US-G24 remain partial.
-Opacity/transform contexts and margin collapsing remain absent. Roadmap statuses and the complete non-done
+Alpha blending, transform and margin collapsing remain absent. Roadmap statuses and the complete non-done
 assertion stay unchanged. Subset, remaining gaps, line counts and measured
 results: docs/lot61_plan.md.
 

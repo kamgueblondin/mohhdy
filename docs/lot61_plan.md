@@ -68,8 +68,14 @@ listed in "Adapted fixtures" with their new invalid value.
   parent's justify/align-content distribution reaches the subgrid. One
   uniform gutter (the average effective parent gutter plus the own-gap
   difference) is used; rounding can leave 1 px on an interior right edge.
-- Not handled: subgrid items in parent baseline groups, overflow
-  diagnostics for implicit rows.
+- Baselines: baseline-aligned items of a row subgrid join the parent's
+  first/last baseline groups of the rows they sit in (CSS Grid 2, 9.6),
+  own-gap offsets included; the shared ascent and last descent are handed
+  back to the subgrid before it places its items.
+- A subgrid ignores self-alignment on its subgridded axes (always
+  stretched).
+- Not handled: overflow diagnostics for implicit rows; column subgrids do
+  not share baselines (rows are their own).
 
 ## Viewport, fixed, static position, scroll
 
@@ -98,14 +104,30 @@ listed in "Adapted fixtures" with their new invalid value.
 - Per-edge resolution (CSS 2.1 17.6.2.1) for every grid-edge segment:
   hidden suppresses, then the wider width, then style rank (double, solid,
   dashed, dotted, ridge, outset, groove, inset; none loses), then origin
-  (cell above/left, cell below/right, row, row group, table). border-top/
-  right/bottom/left and 1-4 value border-style/width/color are parsed. The
-  table's own border joins the outer segments. Winners paint as rectangles
-  centred in the band, runs merged, vertical after horizontal.
+  (cell above/left, cell below/right, row, row group, column, column
+  group, table). border-top/right/bottom/left and 1-4 value
+  border-style/width/color are parsed. The table's own border joins the
+  outer segments. <col> (void, span) and <colgroup> (col children or span)
+  add column and column-group borders: their outer top/bottom and their
+  left/right lines.
+- Half-border split: the winning line of width w sits at B/2 - w/2 in its
+  band; each cell's content is inset past its half of the widest resolved
+  line on that side. With an odd width the extra pixel goes to the cell
+  after the line (right or below). Runs are merged, vertical lines paint
+  after horizontal ones.
 - Per-edge declarations outside a collapsed table are refused ("border edge
   refused"); border-style none/hidden zeroes a separate border.
-- Limits: all styles paint solid, no <col>/<colgroup> origin, content inset
-  uses the cell's uniform border, corners show the vertical line.
+- Limits: the band width B is uniform per table (a borderless line still
+  splits B between its cells), corners show the vertical line.
+
+## Border styles
+
+- dashed (dashes of max(2w, 3) px, equal gaps), dotted (w x w dots, w gaps)
+  and double (w >= 3: two (w + 1) / 3 px lines) paint as RECT items for
+  separate borders and collapsed lines, at most 8 pieces per line (the
+  period grows past that). Solid separate borders keep the BORDER item.
+- ridge, outset, groove and inset paint solid with one "border style
+  painted solid" diagnostic.
 
 ## Stacking contexts (bounded)
 
@@ -120,12 +142,22 @@ listed in "Adapted fixtures" with their new invalid value.
   under it) paints first. The pass runs when a relative box has a z-index
   or any positioned box has a negative z-index; otherwise absolute-only
   documents keep the per-containing-block order.
+- opacity (number or percentage, clamped to 0..1; "opacity refused"
+  otherwise) below 1 forms a z-index 0 stacking context, also on a static
+  box (whose z-index stays ignored). The shared item has no alpha and the
+  kernel painter is unchanged, so opacity 0 removes the subtree's items
+  (the boxes keep their layout) and 0 < opacity < 1 paints opaque with one
+  "opacity painted opaque" diagnostic.
+- transform: the engine has no transform parsing; it stays an unknown
+  property (not handled in this lot).
 
 ## Not done in this lot
 
-- opacity/transform stacking contexts, floats inside the negative layer.
+- Alpha blending for 0 < opacity < 1 (needs an item alpha or painter
+  change), transform, floats inside the negative layer, per-line collapsed
+  band widths, 3D border styles.
 - Margin collapsing (excluded by the brief), percentage cycles, vertical
-  writing modes, collapsed border styles other than solid when painted.
+  writing modes.
 
 ## Bounded storage
 
@@ -156,7 +188,10 @@ Every assertion is kept; only refusal inputs that became valid changed.
   now a valid negative context; it uses `z-index:-1.5` and also asserts
   "z-index refused". Positive tests in lot61_stack.
 - lot61 internal: uniform collapse "later cell wins" now expects the CSS
-  winner; negative z stacking tests expect appendix E order.
+  winner; negative z stacking tests expect appendix E order; collapsed
+  geometry tests follow the half-border insets and B/2 - w/2 line offset
+  (exact new boxes, text positions added); style tests sample dash/dot
+  pieces and gaps.
 - lot55 vertical partial clip: the 8 px clip only cut an empty glyph row,
   so the text is now kept (new positive test). The fixture uses a 5 px clip;
   `nitems == 0` became `nitems == 9` RECT fragments ending at y <= 5.
@@ -166,8 +201,9 @@ Every assertion is kept; only refusal inputs that became valid changed.
 /web/lot61.html combines last baseline in a wrapping flex row, a subgrid
 over auto-fill tracks, an inline-block on the text baseline, a collapsed
 table, a partially clipped glyph, a fixed box, the shared image, a collapsed
-table whose 4 px outer border wins over 2 px cells, a subgrid with its own
-10 px column-gap and a negative z box under an in-flow block. The
+table whose 4 px outer border wins over 2 px cells (content inset by half
+of each line), a subgrid with its own 10 px column-gap, a negative z box
+under an in-flow block, dashed and double borders and an opacity 0 box. The
 console web-render and GUI paths both check it; all older scenarios stay.
 The host test reads the same HTML file.
 
