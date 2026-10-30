@@ -46,6 +46,10 @@ static void test_l62_gradient_positions(void) {
     l61_rect_at(0, 7, 320, 1, 0x202020);
     l61_rect_at(0, 11, 320, 1, 0xFF0000);
     l61_rect_at(0, 12, 320, 1, 0x0000FF);
+    /* the clamped position also starts the next segment: blue at 50% */
+    lot52_render(L62_BODY "<div style='height:8px;background:linear-gradient(#ff0000 50%, #0000ff 20%, #ffffff)'></div></body>", 320);
+    l61_rect_at(0, 5, 320, 1, 0x6060FF);
+    l61_rect_at(0, 7, 320, 1, 0xDFDFFF);
 }
 
 static void test_l62_gradient_alpha_and_small_boxes(void) {

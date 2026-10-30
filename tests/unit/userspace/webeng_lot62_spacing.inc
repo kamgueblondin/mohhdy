@@ -56,6 +56,10 @@ static void test_l62_spacing_intrinsic_counts_zero(void) {
                  "<div id=f style='padding-left:50%'>ABCD</div></span></div></body>", 320);
     l61_box("ib", 0, 0, 32, 10);                         /* shrink-to-fit ignores the 50% */
     TEST_ASSERT_EQUAL(16, find_text("ABCD")->x);         /* then 50% of 32 */
+    /* a second layout counts 0 again, not the value resolved by the first */
+    TEST_ASSERT_EQUAL(0, we_layout_viewport(&g_doc, 320, 400));
+    l61_box("ib", 0, 0, 32, 10);
+    TEST_ASSERT_EQUAL(16, find_text("ABCD")->x);
 }
 
 static void test_l62_spacing_through_inline_and_flex(void) {
