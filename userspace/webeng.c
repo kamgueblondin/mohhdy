@@ -430,7 +430,7 @@ static int sel_attribute(const char *s, int len, int *at, we_selector_attr_t *at
 
 static int parse_sel(const char* s, int len, we_rule_t* r) {
     int i = 0, count = 0;
-    w_zero(r->part, sizeof(r->part)); r->ncomp = 0; r->spec = 0;
+    w_zero(r->part, sizeof(r->part)); r->ncomp = 0; r->spec = 0; r->pseudo_el = 0;
     while (i < len && w_space(s[i])) i++;
     while (i < len) {
         we_selector_part_t *part;
@@ -456,7 +456,19 @@ static int parse_sel(const char* s, int len, we_rule_t* r) {
                 part->attrs++; r->spec += 64;
             } else if (marker == ':') {
                 char pseudo[24];
-                if (part->pseudo || sel_ident(s, len, &i, pseudo, sizeof(pseudo), 1)) return -1;
+                int element = i < len && s[i] == ':';
+                if (element) i++;
+                if (sel_ident(s, len, &i, pseudo, sizeof(pseudo), 1)) return -1;
+                /* Lot 63: ::before/::after (and the CSS 2 one-colon form) end the selector */
+                if (w_eq(pseudo, "before") || w_eq(pseudo, "after")) {
+                    int rest = i;
+                    while (rest < len && w_space(s[rest])) rest++;
+                    if (rest < len) return -1;
+                    r->pseudo_el = (uint8_t)(w_eq(pseudo, "before") ? WE_PSEUDO_BEFORE : WE_PSEUDO_AFTER);
+                    r->spec++; simple = 1;
+                    continue;
+                }
+                if (element || part->pseudo) return -1;
                 part->pseudo = (uint8_t)(w_eq(pseudo, "first-child") ? WE_PSEUDO_FIRST : w_eq(pseudo, "last-child") ? WE_PSEUDO_LAST :
                     w_eq(pseudo, "only-child") ? WE_PSEUDO_ONLY : w_eq(pseudo, "empty") ? WE_PSEUDO_EMPTY :
                     w_eq(pseudo, "root") ? WE_PSEUDO_ROOT : w_eq(pseudo, "nth-child") ? WE_PSEUDO_NTH :
@@ -489,6 +501,17 @@ static int parse_sel(const char* s, int len, we_rule_t* r) {
     return count ? 0 : -1;
 }
 
+/* Lot 63: the end of a block or value skips quoted strings (content). */
+static int decl_end(const char *s, int n, int i, char stop) {
+    int quote = 0;
+    for (; i < n; i++) {
+        if (quote) { if (s[i] == '\\' && i + 1 < n) i++; else if (s[i] == quote) quote = 0; }
+        else if (s[i] == '"' || s[i] == '\'') quote = s[i];
+        else if (s[i] == stop) break;
+    }
+    return i;
+}
+
 static void parse_css(we_doc_t* d) {
     const char* s = d->css;
     int n = (int)d->css_len, i = 0;
@@ -507,7 +530,7 @@ static void parse_css(we_doc_t* d) {
         sel_b = i;
         if (i >= n) break;
         dec_a = ++i;
-        while (i < n && s[i] != '}') i++;
+        i = decl_end(s, n, i, '}');
         dec_b = i;
         i++;
         a = sel_a;
@@ -2650,6 +2673,258 @@ static int parse_decoration(we_node_t *n, int kind, const char *v, int len) {
     return 0;
 }
 
+/* ---------- Lot 63: generated content values ----------
+ * content, quotes and counter-* keep their declared text in the pool; these
+ * scanners validate it when declared and read it again when the boxes are
+ * generated. Strings take CSS escapes; code points outside printable ASCII
+ * become '?' (the kernel font), \A becomes a newline. */
+static int list_keyword(const char *v, int len);
+static int css_hex(char c) {
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+static void gen_put(char *out, int *olen, int cap, char c) {
+    if (out && *olen < cap) out[*olen] = c;
+    (*olen)++;
+}
+
+static int css_string(const char *v, int len, int *at, char *out, int *olen, int cap) {
+    int i = *at, quote = v[i++];
+    while (i < len && v[i] != quote) {
+        char c = v[i++];
+        if (c == '\n') return -1;
+        if (c == '\\' && i < len) {
+            int code = 0, digits = 0;
+            while (i < len && digits < 6 && css_hex(v[i]) >= 0) { code = code * 16 + css_hex(v[i++]); digits++; }
+            if (digits) {
+                if (i < len && w_space(v[i])) i++;
+                c = code == 0xA ? '\n' : code >= 32 && code < 127 ? (char)code : '?';
+            } else if (v[i] == '\n') { i++; continue; }
+            else c = v[i++];
+        }
+        gen_put(out, olen, cap, c);
+    }
+    if (i >= len) return -1;
+    *at = i + 1;
+    return 0;
+}
+
+static int gen_ident(const char *v, int len, int *at, char *out, int cap) {
+    int i = *at, k = 0;
+    if (i >= len || !(w_namec(v[i]) || v[i] == '-') || (v[i] >= '0' && v[i] <= '9')) return -1;
+    while (i < len && (w_namec(v[i]) || v[i] == '-')) { if (k < cap - 1) out[k++] = w_low(v[i]); i++; }
+    out[k] = 0;
+    *at = i;
+    return k < cap - 1 ? 0 : -1;
+}
+
+static void gen_skip(const char *v, int len, int *at) { while (*at < len && w_space(v[*at])) (*at)++; }
+
+/* counter() / counters() style argument: a list-style-type keyword */
+static int counter_style_arg(const char *v, int len, int *at, int *style) {
+    char name[24];
+    gen_skip(v, len, at);
+    if (gen_ident(v, len, at, name, sizeof(name))) return -1;
+    *style = list_keyword(name, w_len(name));
+    return *style < 0 ? -1 : 0;
+}
+
+typedef struct { char name[16]; int value; int16_t scope; } we_counter_t;
+typedef struct {
+    we_counter_t c[WE_COUNTERS_MAX];
+    int n, quote_depth;
+} we_gen_t;
+
+static int counter_find(const we_gen_t *g, const char *name) {
+    int k;
+    for (k = g->n - 1; k >= 0; k--) if (w_eq(g->c[k].name, name)) return k;
+    return -1;
+}
+
+static int counter_text(int style, int number, char *out);
+static int list_ordinal(const we_doc_t *d, int idx);
+
+/* quotes: none or 1..2 pairs of strings; at most WE_QUOTE_PAIRS */
+#define WE_QUOTE_PAIRS 2
+static int quotes_scan(const char *v, int len, char text[2 * WE_QUOTE_PAIRS][4], int *pairs) {
+    int i = 0, k = 0;
+    while (1) {
+        int l = 0;
+        char buf[8];
+        gen_skip(v, len, &i);
+        if (i >= len) break;
+        if (k == 2 * WE_QUOTE_PAIRS || (v[i] != '"' && v[i] != '\'') || css_string(v, len, &i, buf, &l, 7)) return -1;
+        if (l > 3) return -1;
+        if (text) { w_cpy(text[k], 4, buf, l); }
+        k++;
+    }
+    if (k == 0 || k % 2) return -1;
+    *pairs = k / 2;
+    return 0;
+}
+
+/* counter-reset/-increment/-set: none or ident [integer] pairs (at most 4) */
+#define WE_COUNTER_PAIRS 4
+static int counter_scan(const char *v, int len, char names[WE_COUNTER_PAIRS][16], int *values, int fallback) {
+    int i = 0, k = 0;
+    if (value_is(v, len, "none")) return 0;
+    while (1) {
+        char name[16];
+        int value = fallback;
+        gen_skip(v, len, &i);
+        if (i >= len) break;
+        if (k == WE_COUNTER_PAIRS || gen_ident(v, len, &i, name, sizeof(name)) || w_eq(name, "none") ||
+            w_eq(name, "inherit") || w_eq(name, "initial") || w_eq(name, "unset") || (i < len && !w_space(v[i]))) return -1;
+        gen_skip(v, len, &i);
+        if (i < len && (v[i] == '-' || v[i] == '+' || (v[i] >= '0' && v[i] <= '9'))) {
+            int a = i, neg = v[i] == '-';
+            value = 0;
+            if (v[i] == '-' || v[i] == '+') i++;
+            if (i >= len || v[i] < '0' || v[i] > '9') return -1;
+            while (i < len && v[i] >= '0' && v[i] <= '9') { if (i - a > 6) return -1; value = value * 10 + (v[i++] - '0'); }
+            if (i < len && !w_space(v[i])) return -1;
+            if (neg) value = -value;
+        }
+        if (names) { w_cpy(names[k], 16, name, w_len(name)); values[k] = value; }
+        k++;
+    }
+    return k ? k : -1;
+}
+
+/* Declarations are always read from the pool (rules and style attributes). */
+static void pool_span(const we_doc_t *d, const char *v, int len, uint16_t *off, uint16_t *out_len) {
+    *off = (uint16_t)(v - d->pool);
+    *out_len = (uint16_t)len;
+}
+
+static int counter_value(const we_doc_t *d, const we_gen_t *g, int elem, const char *name) {
+    int k = counter_find(g, name);
+    if (k >= 0) return g->c[k].value;
+    /* the implicit list-item counter of the nearest li */
+    if (w_eq(name, "list-item"))
+        while (elem > 0) { if (w_eq(d->nodes[elem].tag, "li")) return list_ordinal(d, elem); elem = d->nodes[elem].parent; }
+    return 0;
+}
+
+static void gen_text(char *out, int *olen, int cap, const char *s) { while (*s) gen_put(out, olen, cap, *s++); }
+
+static void gen_counter(char *out, int *olen, int cap, int style, int value) {
+    char buf[24];
+    (void)counter_text(style, value, buf);
+    gen_text(out, olen, cap, buf);
+}
+
+/* open-quote/close-quote: the quotes of the pseudo box at the nesting
+ * depth (the last pair past it); close at depth 0 paints nothing. */
+static void gen_quote(we_doc_t *d, int pseudo, we_gen_t *g, const char *fn, char *out, int *olen, int cap) {
+    static char text[2 * WE_QUOTE_PAIRS][4] = { "\"", "\"", "'", "'" };
+    char list[2 * WE_QUOTE_PAIRS][4];
+    const we_node_t *n = &d->nodes[pseudo];
+    int pairs = 2, open = fn[0] == 'o' || fn[3] == 'o', show = fn[0] != 'n', level;
+    if (!open) { if (g->quote_depth == 0) return; g->quote_depth--; }
+    level = g->quote_depth;
+    if (open) g->quote_depth++;
+    if (!show || n->quotes_kind == WE_QUOTES_NONE) return;
+    if (n->quotes_kind == WE_QUOTES_LIST) (void)quotes_scan(d->pool + n->quotes_off, n->quotes_len, list, &pairs);
+    if (level >= pairs) level = pairs - 1;
+    gen_text(out, olen, cap, (n->quotes_kind == WE_QUOTES_LIST ? list : text)[level * 2 + !open]);
+}
+
+/* Validates (pseudo < 0) or evaluates a content list for a pseudo box. */
+static int gen_content(we_doc_t *d, const char *v, int len, int pseudo, we_gen_t *g, char *out, int *olen) {
+    int i = 0, count = 0, cap = WE_CONTENT_TEXT_MAX, elem = pseudo >= 0 ? d->nodes[pseudo].parent : -1;
+    while (1) {
+        char name[16], fn[16];
+        gen_skip(v, len, &i);
+        if (i >= len) break;
+        count++;
+        if (v[i] == '"' || v[i] == '\'') { if (css_string(v, len, &i, out, olen, cap)) return -1; continue; }
+        if (gen_ident(v, len, &i, fn, sizeof(fn))) return -1;
+        if (i < len && v[i] == '(') {
+            int style = WE_LIST_DECIMAL, close, sep_a = 0, sep_l = 0;
+            i++; gen_skip(v, len, &i);
+            if (gen_ident(v, len, &i, name, sizeof(name))) return -1;
+            gen_skip(v, len, &i);
+            if (w_eq(fn, "attr")) {
+                if (i >= len || v[i] != ')') return -1;
+                i++;
+                if (elem > 0) {
+                    const we_node_t *e = &d->nodes[elem];
+                    const char *a = 0;
+                    int l = 0, flag = w_eq(name, "id") ? 1 : w_eq(name, "class") ? 2 : w_eq(name, "href") ? 4 : w_eq(name, "src") ? 8 : w_eq(name, "alt") ? 16 : 0;
+                    if (flag & e->attr_flags) {
+                        if (flag == 1) { a = e->id; l = w_len(a); }
+                        else if (flag == 2) { a = e->cls; l = w_len(a); }
+                        else if (flag == 4) { a = d->pool + e->href_off; l = e->href_len; }
+                        else if (flag == 8) { a = d->pool + e->src_off; l = e->src_len; }
+                        else { a = d->pool + e->alt_off; l = e->alt_len; }
+                    }
+                    while (l-- > 0) gen_put(out, olen, cap, *a++);
+                }
+                continue;
+            }
+            if (!w_eq(fn, "counter") && !w_eq(fn, "counters")) return -1;
+            if (w_eq(fn, "counters")) {
+                int l = 0;
+                if (i >= len || v[i++] != ',') return -1;
+                gen_skip(v, len, &i);
+                sep_a = i;
+                if (i >= len || (v[i] != '"' && v[i] != '\'') || css_string(v, len, &i, 0, &l, 0)) return -1;
+                sep_l = i - sep_a;
+                gen_skip(v, len, &i);
+            }
+            if (i < len && v[i] == ',') { i++; if (counter_style_arg(v, len, &i, &style)) return -1; gen_skip(v, len, &i); }
+            close = i < len && v[i] == ')';
+            if (!close) return -1;
+            i++;
+            if (pseudo < 0) continue;
+            if (w_eq(fn, "counter") || counter_find(g, name) < 0) { gen_counter(out, olen, cap, style, counter_value(d, g, elem, name)); continue; }
+            {   /* counters(): every instance in scope, outermost first */
+                int k, first = 1;
+                for (k = 0; k < g->n; k++) {
+                    int at = sep_a;
+                    if (!w_eq(g->c[k].name, name)) continue;
+                    if (!first) (void)css_string(v, sep_a + sep_l, &at, out, olen, cap);
+                    gen_counter(out, olen, cap, style, g->c[k].value);
+                    first = 0;
+                }
+            }
+            continue;
+        }
+        if (i < len && !w_space(v[i]) && v[i] != '"' && v[i] != '\'') return -1;
+        if (w_eq(fn, "open-quote") || w_eq(fn, "close-quote") || w_eq(fn, "no-open-quote") || w_eq(fn, "no-close-quote")) {
+            if (pseudo >= 0) gen_quote(d, pseudo, g, fn, out, olen, cap);
+            continue;
+        }
+        return -1;
+    }
+    return count ? 0 : -1;
+}
+
+/* Returns 1 when the declaration was a generated content property. */
+static int content_declaration(we_doc_t *d, we_node_t *n, const char *prop, const char *v, int vl) {
+    int pairs, l = 0, slot;
+    if (w_eq(prop, "content")) {
+        if (value_is(v, vl, "none") || value_is(v, vl, "normal")) n->content_kind = WE_CONTENT_NONE;
+        else if (gen_content(d, v, vl, -1, 0, 0, &l)) diag(d, "content refused", -1);
+        else { pool_span(d, v, vl, &n->content_off, &n->content_len); n->content_kind = WE_CONTENT_LIST; }
+        return 1;
+    }
+    if (w_eq(prop, "quotes")) {
+        if (value_is(v, vl, "none")) n->quotes_kind = WE_QUOTES_NONE;
+        else if (value_is(v, vl, "auto")) n->quotes_kind = WE_QUOTES_AUTO;
+        else if (quotes_scan(v, vl, 0, &pairs)) diag(d, "quotes refused", -1);
+        else { pool_span(d, v, vl, &n->quotes_off, &n->quotes_len); n->quotes_kind = WE_QUOTES_LIST; }
+        return 1;
+    }
+    slot = w_eq(prop, "counter-reset") ? 0 : w_eq(prop, "counter-increment") ? 1 : w_eq(prop, "counter-set") ? 2 : -1;
+    if (slot < 0) return 0;
+    if (counter_scan(v, vl, 0, 0, 0) < 0) diag(d, "counter refused", -1);
+    else if (value_is(v, vl, "none")) n->counter_len[slot] = 0;
+    else pool_span(d, v, vl, &n->counter_off[slot], &n->counter_len[slot]);
+    return 1;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[40];
     int px, pct, k;
@@ -2683,6 +2958,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             if (intrinsic_slot(slot)) set_intrinsic_kind(n, slot, WE_SIZE_AUTO);
         }
     }
+    if (content_declaration(d, n, prop, v, vl)) return;
     if (w_eq(prop, "aspect-ratio")) {
         int16_t a, b;
         if (parse_aspect(v, vl, &a, &b)) diag(d, "aspect ratio refused", -1);
@@ -3137,7 +3413,7 @@ static void apply_decls(we_doc_t* d, we_node_t* n, const char* s, int len, int i
         i++;
         while (i < len && w_space(s[i])) i++;
         va = i;
-        while (i < len && s[i] != ';') i++;
+        i = decl_end(s, len, i, ';');
         vb = i;
         {
             int end = vb, marked = 0;
@@ -3182,11 +3458,11 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "pre")) { n->display = WE_DISP_BLOCK; n->ws_mode = WE_WS_PRE; n->nowrap = 1; }
 }
 
-static void cascade_rules(we_doc_t *d, int idx, int important) {
+/* Rules for element idx (pseudo 0) or for its ::before/::after box n. */
+static void cascade_rules(we_doc_t *d, int idx, we_node_t *n, int pseudo, int important) {
     uint8_t used[WE_MAX_RULES];
     uint32_t k, r;
-    we_node_t *n = &d->nodes[idx];
-    for (k = 0; k < d->nrules; k++) used[k] = (uint8_t)!match_rule(d, idx, &d->rules[k]);
+    for (k = 0; k < d->nrules; k++) used[k] = (uint8_t)(d->rules[k].pseudo_el != pseudo || !match_rule(d, idx, &d->rules[k]));
     for (k = 0; k < d->nrules; k++) {
         int best = -1;
         for (r = 0; r < d->nrules; r++) {
@@ -3198,15 +3474,13 @@ static void cascade_rules(we_doc_t *d, int idx, int important) {
         used[best] = 1;
         apply_decls(d, n, d->pool + d->rules[best].decl_off, d->rules[best].decl_len, important);
     }
-    if (n->style_len) apply_decls(d, n, d->pool + n->style_off, n->style_len, important);
+    if (n->style_len && !pseudo) apply_decls(d, n, d->pool + n->style_off, n->style_len, important);
 }
 
-int we_style(we_doc_t* d) {
-    uint32_t i;
-    if (!d || d->nnodes == 0) return -1;
-    if (!d->css_parsed) { parse_css(d); d->css_parsed = 1; }
-    for (i = 0; i < d->nnodes; i++) {
-        we_node_t* n = &d->nodes[i];
+/* Computes node i: element i matches its own rules (pseudo 0); a generated
+ * box matches the ::before/::after rules of its element match. */
+static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) {
+    {
         const we_node_t* p = n->parent >= 0 ? &d->nodes[n->parent] : 0;
         n->color = p ? p->color : 0x000000;
         n->bold = p ? p->bold : 0;
@@ -3277,14 +3551,164 @@ int we_style(we_doc_t* d) {
         } }
         n->list_style = p ? p->list_style : WE_LIST_NONE;
         n->border_color = n->color;
-        if (n->is_text) { n->display = WE_DISP_INLINE; continue; }
-        if (i == 0) { n->display = WE_DISP_BLOCK; continue; }
-        ua_defaults(n);
-        cascade_rules(d, (int)i, 0);
-        cascade_rules(d, (int)i, 1);
+        n->quotes_kind = p ? p->quotes_kind : WE_QUOTES_AUTO;
+        n->quotes_off = p ? p->quotes_off : 0; n->quotes_len = p ? p->quotes_len : 0;
+        n->counter_len[0] = n->counter_len[1] = n->counter_len[2] = 0;
+        n->content_kind = WE_CONTENT_NONE;
+        if (n->is_text) { n->display = WE_DISP_INLINE; return; }
+        if (i == 0) { n->display = WE_DISP_BLOCK; return; }
+        if (pseudo) {
+            /* UA: q::before { content: open-quote } q::after { content: close-quote } */
+            n->display = WE_DISP_INLINE;
+            if (w_eq(d->nodes[match].tag, "q")) n->content_kind = pseudo == WE_PSEUDO_BEFORE ? WE_CONTENT_UA_OPEN : WE_CONTENT_UA_CLOSE;
+        } else ua_defaults(n);
+        cascade_rules(d, match, n, pseudo, 0);
+        cascade_rules(d, match, n, pseudo, 1);
         if (n->border && n->border_color == (p ? p->color : 0)) n->border_color = n->color;
         if (p && p->display == WE_DISP_NONE) n->display = WE_DISP_NONE;
     }
+}
+
+/* ---------- Lot 63: ::before/::after boxes, counters and quotes ----------
+ * After the cascade, each element whose ::before or ::after rules give a
+ * content value gets an inline child box (first or last child). A tree-order
+ * pass then applies counter-reset, counter-increment and counter-set (in
+ * that order, CSS Lists 3), scopes counters to the element, its following
+ * siblings and their descendants, and gives each generated box one text
+ * child with the evaluated content. */
+static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo);
+
+static int gen_allowed(const we_doc_t *d, int el) {
+    static const char *const replaced[] = { "img", "input", "br", "textarea", "select", "iframe", "video", "audio", "canvas", "object", 0 };
+    const we_node_t *e = &d->nodes[el];
+    int k;
+    if (e->is_text || e->pseudo_kind || e->display == WE_DISP_NONE) return 0;
+    for (k = 0; replaced[k]; k++) if (w_eq(e->tag, replaced[k])) return 0;
+    return 1;
+}
+
+static void unlink_last(we_doc_t *d, int parent, int old_last) {
+    we_node_t *p = &d->nodes[parent];
+    p->last = (int16_t)old_last;
+    if (old_last >= 0) d->nodes[old_last].next = -1;
+    else p->first = -1;
+    d->nnodes--;
+}
+
+/* The box is styled in a scratch node first: only a box with content
+ * takes a node (and can hit the node budget). */
+static we_node_t g_gen_scratch;
+
+static int gen_box(we_doc_t *d, int el, int kind) {
+    we_node_t *p = &d->nodes[el], *s = &g_gen_scratch;
+    int old_last = p->last, old_first = p->first, pending = p->pending_html_space, idx;
+    w_zero(s, sizeof(*s));
+    s->parent = (int16_t)el;
+    s->first = s->last = s->next = -1;
+    s->colspan = s->rowspan = 1;
+    s->pseudo_kind = (uint8_t)kind;
+    w_cpy(s->tag, 12, kind == WE_PSEUDO_BEFORE ? "::before" : "::after", kind == WE_PSEUDO_BEFORE ? 8 : 7);
+    style_node(d, s, -1, el, kind);
+    if (s->content_kind == WE_CONTENT_NONE) return -1;
+    if (d->nnodes >= WE_MAX_NODES) { diag(d, "generated content budget", el); return -1; }
+    idx = new_node(d, el);
+    p->pending_html_space = (uint8_t)pending;
+    d->nodes[idx] = *s;
+    if (kind == WE_PSEUDO_BEFORE && old_first >= 0) {
+        d->nodes[old_last].next = -1;
+        p->last = (int16_t)old_last;
+        d->nodes[idx].next = (int16_t)old_first;
+        p->first = (int16_t)idx;
+    }
+    return idx;
+}
+
+static void counter_ops(we_doc_t *d, int idx, we_gen_t *g) {
+    const we_node_t *n = &d->nodes[idx];
+    int op;
+    for (op = 0; op < 3; op++) {
+        char names[WE_COUNTER_PAIRS][16];
+        int values[WE_COUNTER_PAIRS], count, k;
+        if (!n->counter_len[op]) continue;
+        count = counter_scan(d->pool + n->counter_off[op], n->counter_len[op], names, values, op == 1 ? 1 : 0);
+        for (k = 0; k < count; k++) {
+            int at = counter_find(g, names[k]);
+            /* a reset replaces the instance a sibling created, else nests */
+            if (at < 0 || (op == 0 && g->c[at].scope != n->parent)) {
+                if (g->n == WE_COUNTERS_MAX) { diag(d, "counter budget", idx); continue; }
+                at = g->n++;
+                w_cpy(g->c[at].name, 16, names[k], w_len(names[k]));
+                g->c[at].scope = n->parent;
+                g->c[at].value = 0;
+            }
+            if (op == 1) g->c[at].value = clamp_int(g->c[at].value + values[k], -999999, 999999);
+            else g->c[at].value = values[k];
+        }
+    }
+}
+
+static void gen_fill(we_doc_t *d, int idx, we_gen_t *g) {
+    char text[WE_CONTENT_TEXT_MAX];
+    const we_node_t *n = &d->nodes[idx];
+    int len = 0, t;
+    if (n->content_kind == WE_CONTENT_LIST) (void)gen_content(d, d->pool + n->content_off, n->content_len, idx, g, text, &len);
+    else gen_quote(d, idx, g, n->content_kind == WE_CONTENT_UA_OPEN ? "open-quote" : "close-quote", text, &len, WE_CONTENT_TEXT_MAX);
+    if (len > WE_CONTENT_TEXT_MAX) { diag(d, "generated content truncated", idx); len = WE_CONTENT_TEXT_MAX; }
+    if (len == 0) return;
+    if (d->nnodes >= WE_MAX_NODES) { diag(d, "generated content budget", idx); return; }
+    t = new_node(d, idx);
+    d->nodes[t].is_text = 1;
+    if (pool_put(d, text, len, &d->nodes[t].text_off) != 0) { diag(d, "generated content budget", idx); unlink_last(d, idx, -1); return; }
+    d->nodes[t].text_len = (uint16_t)len;
+    style_node(d, &d->nodes[t], t, t, 0);
+}
+
+static void gen_walk(we_doc_t *d, int idx, we_gen_t *g, int depth) {
+    int c;
+    if (d->nodes[idx].is_text || d->nodes[idx].display == WE_DISP_NONE || depth > WE_DEPTH_MAX) return;
+    counter_ops(d, idx, g);
+    if (d->nodes[idx].pseudo_kind) gen_fill(d, idx, g);
+    for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) gen_walk(d, c, g, depth + 1);
+    while (g->n > 0 && g->c[g->n - 1].scope == idx) g->n--;
+}
+
+static void generate_content(we_doc_t *d, int count) {
+    we_gen_t g;
+    int i, kind, any = 0;
+    uint32_t r;
+    for (r = 0; r < d->nrules; r++) any |= d->rules[r].pseudo_el;
+    for (i = 1; i < count; i++) {
+        if (!gen_allowed(d, i)) continue;
+        for (kind = WE_PSEUDO_BEFORE; kind <= WE_PSEUDO_AFTER; kind++)
+            if ((any & kind) || w_eq(d->nodes[i].tag, "q")) (void)gen_box(d, i, kind);
+    }
+    w_zero(&g, sizeof(g));
+    gen_walk(d, 0, &g, 0);
+}
+
+/* Generated boxes are the first and last children past source_nodes. */
+static void drop_generated(we_doc_t *d) {
+    int i, src = d->source_nodes;
+    for (i = 0; i < src; i++) {
+        we_node_t *n = &d->nodes[i];
+        int c, prev = -1;
+        while (n->first >= src) n->first = d->nodes[n->first].next;
+        for (c = n->first; c >= 0; c = d->nodes[c].next) { if (d->nodes[c].next >= src) d->nodes[c].next = -1; prev = c; }
+        n->last = (int16_t)prev;
+    }
+    d->nnodes = (uint32_t)src;
+    d->pool_used = d->source_pool;
+}
+
+int we_style(we_doc_t* d) {
+    uint32_t i, count;
+    if (!d || d->nnodes == 0) return -1;
+    if (!d->css_parsed) { parse_css(d); d->css_parsed = 1; }
+    if (d->source_nodes) drop_generated(d);
+    count = d->source_nodes = (uint16_t)d->nnodes;
+    d->source_pool = (uint16_t)d->pool_used;
+    for (i = 0; i < count; i++) style_node(d, &d->nodes[i], (int)i, (int)i, 0);
+    generate_content(d, (int)count);
     for (i = 0; i < d->nnodes; i++) {
         we_node_t* n = &d->nodes[i];
         int side;
@@ -4687,6 +5111,18 @@ static int list_marker(int style, int number, char *out) {
     return len;
 }
 
+/* Lot 63: counter text in a list style; the bullet styles use the same
+ * ASCII glyphs as the list markers, none gives nothing. */
+static int counter_text(int style, int number, char *out) {
+    if (style == WE_LIST_NONE) { out[0] = 0; return 0; }
+    if (style == WE_LIST_DISC || style == WE_LIST_SQUARE || style == WE_LIST_CIRCLE) {
+        out[0] = style == WE_LIST_SQUARE ? '#' : style == WE_LIST_CIRCLE ? 'o' : '*';
+        out[1] = 0;
+        return 1;
+    }
+    return list_marker(style, number, out);
+}
+
 /* ---------- Lot 62: rounded shapes as row slices ----------
  * A shape is a box (w x h) with elliptical corners; it is cut into row
  * bands at WE_RADIUS_STEPS rows per corner, each band inset on the left
@@ -5305,14 +5741,8 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         os_fb_web_item_t *it;
         (void)sibling;
         number = list_ordinal(d, idx);
-        if (n->list_style == WE_LIST_DISC || n->list_style == WE_LIST_SQUARE || n->list_style == WE_LIST_CIRCLE) {
-            marker[0] = n->list_style == WE_LIST_SQUARE ? '#' : n->list_style == WE_LIST_CIRCLE ? 'o' : '*';
-            marker[1] = 0; len = 1;
-        } else {
-            len = list_marker(n->list_style, number, marker);
-            marker[len++] = '.';
-            marker[len] = 0;
-        }
+        len = counter_text(n->list_style, number, marker);
+        if (n->list_style != WE_LIST_DISC && n->list_style != WE_LIST_SQUARE && n->list_style != WE_LIST_CIRCLE) { marker[len++] = '.'; marker[len] = 0; }
         it = emit(d, idx, OS_FB_WEB_TEXT, bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
         if (it) w_cpy(it->text, OS_FB_WEB_TEXT_LEN, marker, len);
     }

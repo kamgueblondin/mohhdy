@@ -1037,7 +1037,7 @@ static void test_l57_bad_selector_66(void) {
 }
 
 static void test_l57_bad_selector_67(void) {
-    lot52_render("<style>body{margin:0}div{height:10px}div::before{color:red;width:32px}</style><body><div id=a>A</div></body>", 320);
+    lot52_render("<style>body{margin:0}div{height:10px}div::marker{color:red;width:32px}</style><body><div id=a>A</div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->color);
     TEST_ASSERT_EQUAL(320, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(10, lot52_node("a")->h);

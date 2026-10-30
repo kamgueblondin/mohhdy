@@ -256,6 +256,12 @@ typedef struct {
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
     int8_t letter_spacing, word_spacing; /* lot 62: px added per glyph / per space, inherited */
     uint8_t align_last, justify_none;    /* lot 62: text-align-last (0 auto, else 1 + WE_ALIGN_*), text-justify none */
+    /* Lot 63: generated content. pseudo_kind marks a ::before/::after box
+     * (WE_PSEUDO_BEFORE/AFTER); the content, counter and quotes values
+     * keep their source span in the pool, validated when declared. */
+    uint8_t pseudo_kind, content_kind, quotes_kind;
+    uint16_t content_off, content_len, quotes_off, quotes_len;
+    uint16_t counter_off[3], counter_len[3];  /* counter-reset, -increment, -set */
     /* Lot 62: ol start / li value (list_value_set), ol reversed, ol type. */
     int16_t list_value;
     uint8_t list_value_set, list_reversed, list_type_attr;
@@ -284,6 +290,12 @@ typedef struct {
 enum { WE_SEL_DESC, WE_SEL_CHILD, WE_SEL_ADJACENT, WE_SEL_SIBLING };
 enum { WE_PSEUDO_FIRST = 1, WE_PSEUDO_LAST, WE_PSEUDO_ONLY, WE_PSEUDO_EMPTY,
        WE_PSEUDO_ROOT, WE_PSEUDO_NTH, WE_PSEUDO_NTH_LAST, WE_PSEUDO_TYPE, WE_PSEUDO_TYPE_LAST };
+/* Lot 63: generated content */
+enum { WE_PSEUDO_BEFORE = 1, WE_PSEUDO_AFTER = 2 };
+enum { WE_CONTENT_NONE, WE_CONTENT_LIST, WE_CONTENT_UA_OPEN, WE_CONTENT_UA_CLOSE };
+enum { WE_QUOTES_AUTO, WE_QUOTES_NONE, WE_QUOTES_LIST };
+#define WE_COUNTERS_MAX 16
+#define WE_CONTENT_TEXT_MAX 96
 enum { WE_ATTR_PRESENT, WE_ATTR_EQUAL, WE_ATTR_TOKEN, WE_ATTR_PREFIX, WE_ATTR_SUFFIX, WE_ATTR_CONTAINS };
 typedef struct {
     char name[8], value[32];
@@ -301,6 +313,7 @@ typedef struct {
     uint16_t spec;
     uint16_t order;
     uint16_t decl_off, decl_len;
+    uint8_t pseudo_el;  /* lot 63: 0 element, else WE_PSEUDO_BEFORE/AFTER */
 } we_rule_t;
 
 typedef struct {
@@ -332,6 +345,9 @@ typedef struct {
     int16_t root;
     /* Lot 61: explicit viewport and the scroll offset fixed boxes follow. */
     int16_t viewport_w, viewport_h, scroll_y;
+    /* Lot 63: node and pool counts before generated content, so a second
+     * we_style drops the generated boxes first. */
+    uint16_t source_nodes, source_pool;
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 
