@@ -26,7 +26,7 @@ static void test_l61_page_combines_lot_behaviours(void) {
     l61_box("image", 0, 74, 32, 21);
     l61_box("fix", 610, 470, 30, 10);  /* fixed to the 640x480 viewport */
     l61_rect_is(0x800080, 610, 470, 30, 10);
-    for (k = 0; k < g_doc.nitems; k++)
+    for (k = 0; k < (int)g_doc.nitems; k++)
         if (g_doc.items[k].kind == OS_FB_WEB_RECT && g_doc.items[k].color == 0 &&
             g_doc.items[k].x >= 8 && g_doc.items[k].x + g_doc.items[k].w <= 12 &&
             g_doc.items[k].y >= 65 && g_doc.items[k].y + g_doc.items[k].h <= 73) fragments++;
