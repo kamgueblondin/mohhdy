@@ -95,7 +95,10 @@ enum { WE_DECO_UNDER = 1, WE_DECO_OVER = 2, WE_DECO_THROUGH = 4 };
 #define WE_IMAGE_WORKSPACE_MAX (WE_IMAGE_SOURCE_MAX + WE_IMAGE_SCRATCH_MAX + 8192)
 
 enum { WE_FLOAT_NONE, WE_FLOAT_LEFT, WE_FLOAT_RIGHT };
-enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE };
+enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE,
+       /* lot 62 */
+       WE_LIST_CIRCLE, WE_LIST_LOWER_ALPHA, WE_LIST_UPPER_ALPHA, WE_LIST_LOWER_ROMAN, WE_LIST_UPPER_ROMAN,
+       WE_LIST_LEADING_ZERO };
 
 enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4, WE_DISP_TABLE = 5, WE_DISP_ROW = 6, WE_DISP_CELL = 7, WE_DISP_INLINE_BLOCK = 8 };
 enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2 };
@@ -249,6 +252,9 @@ typedef struct {
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
+    /* Lot 62: ol start / li value (list_value_set), ol reversed, ol type. */
+    int16_t list_value;
+    uint8_t list_value_set, list_reversed, list_type_attr;
     /* Lot 62: border radii, corners top-left, top-right, bottom-right,
      * bottom-left; horizontal then vertical, px or percent of the border
      * box width / height (rad_pct bit c for x, bit 4 + c for y). */

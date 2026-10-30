@@ -70,6 +70,20 @@ static int pool_put(we_doc_t* d, const char* s, int n, uint16_t* off) {
 static const char* const k_void[] = { "br", "hr", "img", "input", "meta", "link", "col", 0 };
 static int is_void(const char* t) { int i; for (i = 0; k_void[i]; i++) if (w_eq(t, k_void[i])) return 1; return 0; }
 
+/* Lot 62: an ol start or li value, -9999..9999. */
+static int list_number(const char *v, int len, int *out) {
+    int k = 0, neg = 0, n = 0;
+    if (len > 0 && (v[0] == '-' || v[0] == '+')) { neg = v[0] == '-'; k = 1; }
+    if (k >= len) return -1;
+    for (; k < len; k++) {
+        if (v[k] < '0' || v[k] > '9') return -1;
+        n = n * 10 + v[k] - '0';
+        if (n > 9999) return -1;
+    }
+    *out = neg ? -n : n;
+    return 0;
+}
+
 static int new_node(we_doc_t* d, int parent) {
     we_node_t* n;
     int idx;
@@ -269,6 +283,23 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                         if (pool_put(d, av, vk, &n->src_off) == 0) n->src_len = (uint16_t)vk;
                     }
                     else if (w_eq(an, "href")) { if (pool_put(d, av, vk, &n->href_off) == 0) n->href_len = (uint16_t)vk; }
+                    else if ((w_eq(an, "start") && w_eq(name, "ol")) || (w_eq(an, "value") && w_eq(name, "li"))) {
+                        int number;
+                        if (list_number(av, vk, &number)) diag(d, "list number refused", idx);
+                        else { n->list_value = (int16_t)number; n->list_value_set = 1; }
+                    }
+                    else if (w_eq(an, "reversed") && w_eq(name, "ol")) n->list_reversed = 1;
+                    else if (w_eq(an, "type") && (w_eq(name, "ol") || w_eq(name, "ul"))) {
+                        static const char types[] = "1aAiI";
+                        static const uint8_t styles[] = { WE_LIST_DECIMAL, WE_LIST_LOWER_ALPHA, WE_LIST_UPPER_ALPHA,
+                                                          WE_LIST_LOWER_ROMAN, WE_LIST_UPPER_ROMAN };
+                        int t;
+                        for (t = 0; t < 5; t++) if (vk == 1 && av[0] == types[t]) n->list_type_attr = styles[t];
+                        if (w_eq(av, "disc")) n->list_type_attr = WE_LIST_DISC;
+                        else if (w_eq(av, "circle")) n->list_type_attr = WE_LIST_CIRCLE;
+                        else if (w_eq(av, "square")) n->list_type_attr = WE_LIST_SQUARE;
+                        if (!n->list_type_attr) diag(d, "list type refused", idx);
+                    }
                 }
                 i = j + 1; text_start = i;
                 if (w_eq(name, "img")) {
@@ -1932,6 +1963,18 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
     return 0;
 }
 
+/* Lot 62: list-style-type keywords (none included). */
+static int list_keyword(const char *v, int len) {
+    static const char *const names[] = { "none", "disc", "decimal", "square", "circle", "lower-alpha", "upper-alpha",
+                                         "lower-roman", "upper-roman", "decimal-leading-zero", "lower-latin", "upper-latin" };
+    static const uint8_t codes[] = { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE, WE_LIST_CIRCLE,
+                                     WE_LIST_LOWER_ALPHA, WE_LIST_UPPER_ALPHA, WE_LIST_LOWER_ROMAN, WE_LIST_UPPER_ROMAN,
+                                     WE_LIST_LEADING_ZERO, WE_LIST_LOWER_ALPHA, WE_LIST_UPPER_ALPHA };
+    int k;
+    for (k = 0; k < 12; k++) if (value_is(v, len, names[k])) return codes[k];
+    return -1;
+}
+
 static int margin_auto_box(we_node_t *n, const char *v, int vl) {
     static const int8_t from[4][4] = { {0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3} };
     static const uint8_t flags[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
@@ -2856,7 +2899,18 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "disc")) n->list_style = WE_LIST_DISC;
         else if (value_is(v, vl, "decimal")) n->list_style = WE_LIST_DECIMAL;
         else if (value_is(v, vl, "square")) n->list_style = WE_LIST_SQUARE;
+        else if (list_keyword(v, vl) >= 0) n->list_style = (uint8_t)list_keyword(v, vl);
         else diag(d, "list marker refused", -1);
+    } else if (w_eq(prop, "list-style")) {
+        int a[4], l[4], c = tokens(v, vl, a, l), k, style = -1, ok = c >= 1;
+        for (k = 0; k < c && ok; k++) {
+            int kw = list_keyword(v + a[k], l[k]);
+            if (value_is(v + a[k], l[k], "outside")) continue;
+            if (kw < 0 || style >= 0) ok = 0;
+            else style = kw;
+        }
+        if (!ok) diag(d, "list marker refused", -1);
+        else n->list_style = (uint8_t)(style < 0 ? WE_LIST_DISC : style);
     } else if (w_eq(prop, "min-width") || w_eq(prop, "max-width")) {
         int is_min = w_eq(prop, "min-width");
         int rc = parse_len(v, vl, &px, &pct);
@@ -3047,6 +3101,7 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "td") || w_eq(t, "th")) n->display = WE_DISP_CELL;
     if (w_eq(t, "ul")) n->list_style = WE_LIST_DISC;
     if (w_eq(t, "ol")) n->list_style = WE_LIST_DECIMAL;
+    if ((w_eq(t, "ol") || w_eq(t, "ul")) && n->list_type_attr) n->list_style = n->list_type_attr;
     if (w_eq(t, "body")) { for (i = 0; i < 4; i++) n->margin[i] = 8; }
     if (w_eq(t, "p") || w_eq(t, "ul") || w_eq(t, "ol")) { n->margin[0] = 8; n->margin[2] = 8; }
     if (w_eq(t, "h1") || w_eq(t, "h2") || w_eq(t, "h3") || w_eq(t, "h4")) { n->bold = 1; n->margin[0] = 8; n->margin[2] = 8; }
@@ -4430,6 +4485,56 @@ static int gradient_reserve(we_doc_t *d, int idx, int *count) {
 static int gradient_banded;
 
 /* Bands tile the border box exactly; each takes the colour at its middle. */
+/* Lot 62: ordinal of an li: the ol start (default 1, or the item count
+ * when reversed), then +1 (or -1) per displayed li, an li value resetting
+ * it (HTML list owner numbering, direct children only). */
+static int list_ordinal(const we_doc_t *d, int idx) {
+    const we_node_t *n = &d->nodes[idx];
+    const we_node_t *owner = n->parent >= 0 ? &d->nodes[n->parent] : 0;
+    int sibling, number, step = owner && owner->list_reversed ? -1 : 1, count = 0;
+    if (!owner) return n->list_value_set ? n->list_value : 1;
+    for (sibling = owner->first; sibling >= 0; sibling = d->nodes[sibling].next)
+        if (w_eq(d->nodes[sibling].tag, "li") && d->nodes[sibling].display != WE_DISP_NONE) count++;
+    number = owner->list_value_set ? owner->list_value : step < 0 ? count : 1;
+    number -= step;
+    for (sibling = owner->first; sibling >= 0; sibling = d->nodes[sibling].next) {
+        const we_node_t *s = &d->nodes[sibling];
+        if (!w_eq(s->tag, "li") || s->display == WE_DISP_NONE) { if (sibling == idx) break; continue; }
+        number = s->list_value_set ? s->list_value : number + step;
+        if (sibling == idx) break;
+    }
+    return number;
+}
+
+/* Lot 62: marker text; alpha needs 1.., roman 1..3999, else decimal. */
+static int list_marker(int style, int number, char *out) {
+    int len = 0;
+    if ((style == WE_LIST_LOWER_ALPHA || style == WE_LIST_UPPER_ALPHA) && number >= 1) {
+        char rev[8];
+        int k = 0, base = style == WE_LIST_LOWER_ALPHA ? 'a' : 'A';
+        while (number > 0 && k < 7) { number--; rev[k++] = (char)(base + number % 26); number /= 26; }
+        while (k) out[len++] = rev[--k];
+    } else if ((style == WE_LIST_LOWER_ROMAN || style == WE_LIST_UPPER_ROMAN) && number >= 1 && number <= 3999) {
+        static const int values[13] = { 1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1 };
+        static const char *const upper[13] = { "M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I" };
+        int k;
+        for (k = 0; k < 13; k++) while (number >= values[k]) {
+            const char *p = upper[k];
+            while (*p) { out[len++] = style == WE_LIST_LOWER_ROMAN ? (char)(*p + 32) : *p; p++; }
+            number -= values[k];
+        }
+    } else {
+        if (style == WE_LIST_LEADING_ZERO && number > -10 && number < 10) {
+            if (number < 0) { out[len++] = '-'; number = -number; }
+            out[len++] = '0';
+        }
+        w_itoa(number, out + len);
+        len = w_len(out);
+    }
+    out[len] = 0;
+    return len;
+}
+
 /* ---------- Lot 62: rounded shapes as row slices ----------
  * A shape is a box (w x h) with elliptical corners; it is cut into row
  * bands at WE_RADIUS_STEPS rows per corner, each band inset on the left
@@ -4818,18 +4923,19 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     if (w_eq(n->tag, "img") || (n->overflow_hidden && layout_first[idx] != WE_NO_BASELINE))
         layout_first[idx] = layout_last[idx] = (int16_t)limit_coord(by + bh);
     if (w_eq(n->tag, "li") && n->list_style != WE_LIST_NONE) {
-        char marker[16];
+        char marker[24];
         int number = 1, sibling, len;
         os_fb_web_item_t *it;
-        if (n->parent >= 0) for (sibling = d->nodes[n->parent].first; sibling >= 0 && sibling != idx;
-                                sibling = d->nodes[sibling].next)
-            if (w_eq(d->nodes[sibling].tag, "li") && d->nodes[sibling].display != WE_DISP_NONE) number++;
-        if (n->list_style == WE_LIST_DECIMAL) {
-            w_itoa(number, marker);
-            len = w_len(marker);
+        (void)sibling;
+        number = list_ordinal(d, idx);
+        if (n->list_style == WE_LIST_DISC || n->list_style == WE_LIST_SQUARE || n->list_style == WE_LIST_CIRCLE) {
+            marker[0] = n->list_style == WE_LIST_SQUARE ? '#' : n->list_style == WE_LIST_CIRCLE ? 'o' : '*';
+            marker[1] = 0; len = 1;
+        } else {
+            len = list_marker(n->list_style, number, marker);
             marker[len++] = '.';
             marker[len] = 0;
-        } else { marker[0] = n->list_style == WE_LIST_SQUARE ? '#' : '*'; marker[1] = 0; len = 1; }
+        }
         it = emit(d, idx, OS_FB_WEB_TEXT, bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
         if (it) w_cpy(it->text, OS_FB_WEB_TEXT_LEN, marker, len);
     }
