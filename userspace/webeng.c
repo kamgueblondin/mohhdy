@@ -4437,13 +4437,30 @@ static int shadow_layers(const we_shadow_t *sh) {
     return sh->blur ? 2 : 1;
 }
 
+/* Lot 62 round 2: a rounded box paints a shadow rounded when an opaque
+ * colour background covers what the shadow must not show: an outer shadow
+ * is then its whole shape under a border-box background, an inset shadow
+ * without blur the padding-box shape with the background repainted inside
+ * the inset shape (cut to the padding box). Other shadows of a rounded box
+ * stay square ("rounded effect painted square"). */
+static int shadow_rounded(const we_node_t *n, const we_shadow_t *sh) {
+    if (!(n->rad_x[0] | n->rad_x[1] | n->rad_x[2] | n->rad_x[3]) || !n->has_bg || (n->bg >> WE_ALPHA_SHIFT)) return 0;
+    if (!sh->inset) return n->bg_clip == WE_BOX_BORDER;
+    return !sh->blur && n->bg_clip != WE_BOX_CONTENT && !n->grad_dir;
+}
+
+static int shadow_slot_count(const we_node_t *n, const we_shadow_t *sh) {
+    if (!shadow_rounded(n, sh)) return 4 * shadow_layers(sh);
+    return WE_RADIUS_SLICES * (sh->inset ? 2 : shadow_layers(sh));
+}
+
 static int shadow_reserve(we_doc_t *d, int idx, int inset, int *count) {
     const we_node_t *n = &d->nodes[idx];
     int first = (int)d->nitems, k, j;
     *count = 0;
     for (k = 0; k < n->shadow_count; k++) {
         if (!n->shadow[k].inset != !inset) continue;
-        for (j = 0; j < 4 * shadow_layers(&n->shadow[k]); j++) {
+        for (j = 0; j < shadow_slot_count(n, &n->shadow[k]); j++) {
             os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
             if (!it) return first;
             it->kind = 0;
@@ -4548,6 +4565,7 @@ static int list_marker(int style, int number, char *out) {
  * bands at WE_RADIUS_STEPS rows per corner, each band inset on the left
  * and right by the corner ellipse at the band's middle row. */
 typedef struct { int rx[4], ry[4]; } we_radii_t;
+static int radius_square;
 
 static uint32_t isqrt32(uint32_t v) {
     uint32_t r = 0, bit = 1u << 30;
@@ -4561,9 +4579,9 @@ static uint32_t isqrt32(uint32_t v) {
 
 /* Used radii of a w x h border box: percentages resolved, then all radii
  * scaled down by the smallest side / (sum of its two radii) below 1. */
+static void radii_scale(we_radii_t *r, int w, int h);
 static void used_radii(const we_node_t *n, int w, int h, we_radii_t *r) {
-    static const int8_t side_corners[4][3] = { {0, 1, 0}, {1, 2, 1}, {3, 2, 0}, {0, 3, 1} };
-    int k, num = 1, den = 1;
+    int k;
     for (k = 0; k < 4; k++) {
         r->rx[k] = n->rad_pct & (1u << k) ? n->rad_x[k] * w / 100 : n->rad_x[k];
         r->ry[k] = n->rad_pct & (1u << (k + 4)) ? n->rad_y[k] * h / 100 : n->rad_y[k];
@@ -4571,6 +4589,12 @@ static void used_radii(const we_node_t *n, int w, int h, we_radii_t *r) {
         if (r->ry[k] > WE_RADIUS_MAX) r->ry[k] = WE_RADIUS_MAX;
         if (!r->rx[k] || !r->ry[k]) r->rx[k] = r->ry[k] = 0;
     }
+    radii_scale(r, w, h);
+}
+
+static void radii_scale(we_radii_t *r, int w, int h) {
+    static const int8_t side_corners[4][3] = { {0, 1, 0}, {1, 2, 1}, {3, 2, 0}, {0, 3, 1} };
+    int k, num = 1, den = 1;
     for (k = 0; k < 4; k++) {
         int a = side_corners[k][0], b = side_corners[k][1], vertical = side_corners[k][2];
         int sum = vertical ? r->ry[a] + r->ry[b] : r->rx[a] + r->rx[b], len = vertical ? h : w;
@@ -4655,11 +4679,13 @@ static int radius_fill(we_doc_t *d, int slot, int count, const we_radii_t *r, in
 
 /* Rounded solid border of thickness t: outer shape minus the padding-box
  * shape (radii reduced by t), up to two rects per band. */
-static int radius_ring(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, int w, int h, int t, uint32_t color) {
+static int radius_ring(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, int w, int h, int t, uint32_t color, uint32_t far) {
     we_radii_t in;
     int breaks[2 * WE_RADIUS_SLICES + 4], n, k, emitted = 0;
     int pl = -2, pil = -2, pir = -2, pr = -2;
+    uint32_t pc = 0;
     os_fb_web_item_t *last[2] = {0, 0};
+    if (t <= 0 || w <= 0 || h <= 0) return 0;
     for (k = 0; k < 4; k++) {
         in.rx[k] = r->rx[k] > t ? r->rx[k] - t : 0;
         in.ry[k] = r->ry[k] > t ? r->ry[k] - t : 0;
@@ -4674,24 +4700,28 @@ static int radius_ring(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, 
     breaks[n + 1] = h;
     for (k = 0; k <= n; k++) {
         int a = breaks[k], b = breaks[k + 1], ol, orr, il = -1, ir = -1;
+        uint32_t full;
         if (b <= a) continue;
         shape_insets(r, h, a + b, &ol, &orr);
         if (a >= t && b <= h - t && w > 2 * t) {
             shape_insets(&in, h - 2 * t, a + b - 2 * t, &il, &ir);
             il += t; ir += t;
         }
-        if (ol == pl && orr == pr && il == pil && ir == pir && last[0]) {
+        /* lot 62 round 2: a full band takes color above the middle and far
+         * below it, the left piece color and the right piece far */
+        full = a + b < h ? color : far;
+        if (ol == pl && orr == pr && il == pil && ir == pir && last[0] && (il >= 0 || full == pc)) {
             last[0]->h = (uint16_t)(last[0]->h + b - a);
             if (last[1]) last[1]->h = (uint16_t)(last[1]->h + b - a);
             continue;
         }
-        pl = ol; pr = orr; pil = il; pir = ir;
+        pl = ol; pr = orr; pil = il; pir = ir; pc = full;
         last[0] = last[1] = 0;
         if (il < 0) {
-            if (w - ol - orr > 0) last[0] = emit(d, idx, OS_FB_WEB_RECT, x + ol, y + a, w - ol - orr, b - a, color);
+            if (w - ol - orr > 0) last[0] = emit(d, idx, OS_FB_WEB_RECT, x + ol, y + a, w - ol - orr, b - a, full);
         } else {
             if (il > ol) last[0] = emit(d, idx, OS_FB_WEB_RECT, x + ol, y + a, il - ol, b - a, color);
-            if (ir > orr) last[1] = emit(d, idx, OS_FB_WEB_RECT, x + w - ir, y + a, ir - orr, b - a, color);
+            if (ir > orr) last[1] = emit(d, idx, OS_FB_WEB_RECT, x + w - ir, y + a, ir - orr, b - a, far);
             if (!last[0]) { last[0] = last[1]; last[1] = 0; }
         }
         emitted += (last[0] != 0) + (last[1] != 0);
@@ -4711,6 +4741,119 @@ static void radii_inset(const we_radii_t *r, we_radii_t *out, int top, int right
         out->ry[k] = r->ry[k] > inset[(int)ys[k]] ? r->ry[k] - inset[(int)ys[k]] : 0;
         if (!out->rx[k] || !out->ry[k]) out->rx[k] = out->ry[k] = 0;
     }
+}
+
+/* ---------- Lot 62 round 2: shapes as row bands ----------
+ * A shape is a box with corner radii. Its cuts are its top and bottom
+ * edges and the WE_RADIUS_STEPS rows of each corner; between two cuts a
+ * band takes the corner insets at its middle row. shape_bands() gives the
+ * merged bands of a shape, or of the intersection of two shapes, as
+ * (y0, y1, x0, x1) in page pixels. */
+typedef struct { int x, y, w, h; we_radii_t r; } we_shape_t;
+#define WE_SHAPE_CUTS (2 * (4 * WE_RADIUS_STEPS + 2))
+#define WE_ROUND_BANDS (WE_SHAPE_CUTS + 1)
+
+static void shape_set(we_shape_t *s, int x, int y, int w, int h, const we_radii_t *r) {
+    s->x = x; s->y = y; s->w = w; s->h = h;
+    s->r = *r;
+}
+
+static int cut_add(int *list, int count, int v, int lo, int hi) {
+    int k;
+    if (v <= lo || v >= hi || count >= WE_SHAPE_CUTS) return count;
+    for (k = 0; k < count; k++) if (list[k] == v) return count;
+    list[count] = v;
+    return count + 1;
+}
+
+static int shape_cuts(const we_shape_t *s, int *list, int count, int lo, int hi) {
+    int c, k;
+    count = cut_add(list, count, s->y, lo, hi);
+    count = cut_add(list, count, s->y + s->h, lo, hi);
+    for (c = 0; c < 4; c++) for (k = 1; k <= WE_RADIUS_STEPS && s->r.ry[c]; k++) {
+        int at = s->r.ry[c] * k / WE_RADIUS_STEPS;
+        count = cut_add(list, count, c < 2 ? s->y + at : s->y + s->h - at, lo, hi);
+    }
+    return count;
+}
+
+/* span of a shape over rows [y0, y1), which lie inside or outside it */
+static int shape_span(const we_shape_t *s, int y0, int y1, int *x0, int *x1) {
+    int l, r;
+    if (y0 < s->y || y1 > s->y + s->h || s->w <= 0) return 0;
+    shape_insets(&s->r, s->h, y0 + y1 - 2 * s->y, &l, &r);
+    *x0 = s->x + l;
+    *x1 = s->x + s->w - r;
+    return *x1 > *x0;
+}
+
+static int shape_bands(const we_shape_t *a, const we_shape_t *b, int band[][4], int cap) {
+    int cut[WE_SHAPE_CUTS], n, k, used = 0, lo = a->y, hi = a->y + a->h;
+    if (a->w <= 0 || a->h <= 0) return 0;
+    n = shape_cuts(a, cut, 0, lo, hi);
+    if (b) n = shape_cuts(b, cut, n, lo, hi);
+    sort_ints(cut, n);
+    for (k = 0; k <= n; k++) {
+        int y0 = k ? cut[k - 1] : lo, y1 = k < n ? cut[k] : hi, x0, x1, u0, u1;
+        if (!shape_span(a, y0, y1, &x0, &x1)) continue;
+        if (b) {
+            if (!shape_span(b, y0, y1, &u0, &u1)) continue;
+            if (u0 > x0) x0 = u0;
+            if (u1 < x1) x1 = u1;
+            if (x1 <= x0) continue;
+        }
+        if (used && band[used - 1][1] == y0 && band[used - 1][2] == x0 && band[used - 1][3] == x1) { band[used - 1][1] = y1; continue; }
+        if (used == cap) break;
+        band[used][0] = y0; band[used][1] = y1; band[used][2] = x0; band[used][3] = x1;
+        used++;
+    }
+    return used;
+}
+
+/* bands as RECTs into reserved slots */
+static void bands_into(we_doc_t *d, int slot, int band[][4], int count, uint32_t color) {
+    int k;
+    for (k = 0; k < count; k++) {
+        os_fb_web_item_t *it = &d->items[slot + k];
+        it->kind = OS_FB_WEB_RECT;
+        it->color = color;
+        it->x = (int16_t)limit_coord(band[k][2]); it->y = (int16_t)limit_coord(band[k][0]);
+        it->w = (uint16_t)(band[k][3] - band[k][2]); it->h = (uint16_t)(band[k][1] - band[k][0]);
+    }
+}
+
+/* Radii of a shadow shape: each non-zero radius grows by the spread (or
+ * shrinks, not below 0), then the radii are scaled to the shape. */
+static void radii_spread(const we_radii_t *r, we_radii_t *out, int spread, int w, int h) {
+    int k;
+    for (k = 0; k < 4; k++) {
+        out->rx[k] = r->rx[k] ? r->rx[k] + spread : 0;
+        out->ry[k] = r->ry[k] ? r->ry[k] + spread : 0;
+        if (out->rx[k] <= 0 || out->ry[k] <= 0) out->rx[k] = out->ry[k] = 0;
+    }
+    radii_scale(out, w > 0 ? w : 0, h > 0 ? h : 0);
+}
+
+/* Rounded borders: solid, double (two rings of (t + 1) / 3) and the 3D
+ * styles, whose left and upper parts take one shade and the right and
+ * lower parts the other (groove and ridge as two nested rings). */
+static uint32_t shade_3d(uint32_t color, int light);
+static void radius_border(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, int w, int h, int t, int style, uint32_t color) {
+    uint32_t dark = shade_3d(color, 0), light = shade_3d(color, 1);
+    we_radii_t in;
+    int k = (t + 1) / 3, outer = t / 2;
+    if (style == 4 && t >= 3) {
+        radius_ring(d, idx, r, x, y, w, h, k, color, color);
+        radii_inset(r, &in, t - k, t - k, t - k, t - k);
+        radius_ring(d, idx, &in, x + t - k, y + t - k, w - 2 * (t - k), h - 2 * (t - k), k, color, color);
+    } else if (style == 8 || style == 10) {
+        radius_ring(d, idx, r, x, y, w, h, t, style == 8 ? light : dark, style == 8 ? dark : light);
+    } else if (style == 7 || style == 9) {
+        uint32_t first = style == 9 ? dark : light, second = style == 9 ? light : dark;
+        radius_ring(d, idx, r, x, y, w, h, outer, first, second);
+        radii_inset(r, &in, outer, outer, outer, outer);
+        radius_ring(d, idx, &in, x + outer, y + outer, w - 2 * outer, h - 2 * outer, t - outer, second, first);
+    } else radius_ring(d, idx, r, x, y, w, h, t, color, color);
 }
 
 /* Lot 62: border, padding or content box of a laid out box, (x, y, w, h). */
@@ -4779,22 +4922,68 @@ static int rect_minus(const int *a, const int *b, int out[4][4]) {
     return count;
 }
 
-static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, int bx, int by, int bw, int bh) {
+/* blur: the wide layer first (outer: grown by b / 2 more, inset: shrunk
+ * by b / 2 more), then the narrow one */
+static int shadow_grow(const we_shadow_t *sh, int layer) {
+    return sh->spread + (shadow_layers(sh) == 2 ? (layer == 0 ? sh->blur / 2 : -(sh->blur / 2)) : 0);
+}
+
+static int shadow_alpha(const we_shadow_t *sh, int layer, int alpha) {
+    return shadow_layers(sh) == 1 ? alpha : layer == 0 ? alpha / 2 : alpha * 255 / (2 * 255 - alpha);
+}
+
+/* A rounded shadow into cap slots; -1 when its bands need more. */
+static int shadow_round(we_doc_t *d, const we_node_t *n, const we_shadow_t *sh, int slot, int cap,
+                        const int *box, const we_radii_t *radii, uint32_t color) {
+    static int band[WE_ROUND_BANDS][4], inner[WE_ROUND_BANDS][4];
+    int count, extra, layer, used = 0, alpha = color_alpha_of(color), s = sh->spread;
+    int px = box[0] + box_edge(n, 3), py = box[1] + box_edge(n, 0);
+    int pw = box[2] - box_edge(n, 1) - box_edge(n, 3), ph = box[3] - box_edge(n, 0) - box_edge(n, 2);
+    we_shape_t shape, pad;
+    we_radii_t r, ri;
+    if (!sh->inset) {
+        for (layer = 0; layer < shadow_layers(sh); layer++) {
+            int grow = shadow_grow(sh, layer), w = box[2] + 2 * grow, h = box[3] + 2 * grow;
+            radii_spread(radii, &r, grow, w, h);
+            shape_set(&shape, box[0] + sh->x - grow, box[1] + sh->y - grow, w, h, &r);
+            count = shape_bands(&shape, 0, band, WE_ROUND_BANDS);
+            if (used + count > cap) return -1;
+            bands_into(d, slot + used, band, count, with_alpha(color, shadow_alpha(sh, layer, alpha)));
+            used += count;
+        }
+        return used;
+    }
+    radii_inset(radii, &r, box_edge(n, 0), box_edge(n, 1), box_edge(n, 2), box_edge(n, 3));
+    shape_set(&pad, px, py, pw, ph, &r);
+    radii_spread(&r, &ri, -s, pw - 2 * s, ph - 2 * s);
+    shape_set(&shape, px + sh->x + s, py + sh->y + s, pw - 2 * s, ph - 2 * s, &ri);
+    count = shape_bands(&pad, 0, band, WE_ROUND_BANDS);
+    extra = shape_bands(&shape, &pad, inner, WE_ROUND_BANDS);
+    if (count + extra > cap) return -1;
+    bands_into(d, slot, band, count, color);
+    bands_into(d, slot + count, inner, extra, n->bg);
+    return count + extra;
+}
+
+static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, int bx, int by, int bw, int bh, const we_radii_t *radii) {
     const we_node_t *n = &d->nodes[idx];
     int k, used = 0;
-    int pad[4];
+    int pad[4], border_box[4];
     pad[0] = bx + box_edge(n, 3); pad[1] = by + box_edge(n, 0);
     pad[2] = bw - box_edge(n, 1) - box_edge(n, 3); pad[3] = bh - box_edge(n, 0) - box_edge(n, 2);
+    border_box[0] = bx; border_box[1] = by; border_box[2] = bw; border_box[3] = bh;
     for (k = n->shadow_count - 1; k >= 0; k--) {
         const we_shadow_t *sh = &n->shadow[k];
         uint32_t color = sh->has_color ? sh->color : n->color;
         int alpha = color_alpha_of(color), layer, layers = shadow_layers(sh);
         if (!sh->inset != !inset) continue;
+        if (radii_any(radii)) {
+            int got = shadow_rounded(n, sh) ? shadow_round(d, n, sh, slot + used, slots - used, border_box, radii, color) : -1;
+            if (got >= 0) { used += got; continue; }
+            radius_square = 1;
+        }
         for (layer = 0; layer < layers; layer++) {
-            /* blur: the wide layer first (outer: grown by b / 2 more, inset:
-             * shrunk by b / 2 more), then the narrow one */
-            int grow = sh->spread + (layers == 2 ? (layer == 0 ? sh->blur / 2 : -(sh->blur / 2)) : 0);
-            int a = layers == 1 ? alpha : layer == 0 ? alpha / 2 : alpha * 255 / (2 * 255 - alpha);
+            int grow = shadow_grow(sh, layer), a = shadow_alpha(sh, layer, alpha);
             int shape[4], box[4], pieces[4][4], count, j;
             if (inset) {
                 shape[0] = pad[0] + sh->x + grow; shape[1] = pad[1] + sh->y + grow;
@@ -4907,9 +5096,13 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         } else { it->x = (int16_t)box[0]; it->y = (int16_t)box[1]; it->w = (uint16_t)box[2]; it->h = (uint16_t)box[3]; }
     }
     gradient_fill(d, idx, grad_slot, grad_slots, bx, by, bw, bh);
-    shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh);
-    shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh);
-    if (n->border > 0 && !n->collapse_cell && n->border_style >= 7 && n->border_style <= 10) {
+    shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh, &radii);
+    shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh, &radii);
+    if (n->border > 0 && !n->collapse_cell && radii_any(&radii) &&
+        (n->border_style == 0 || n->border_style == WE_BS_SOLID || n->border_style == 4 || (n->border_style >= 7 && n->border_style <= 10))) {
+        radius_border(d, idx, &radii, bx, by, bw, bh, n->border > 8 ? 8 : n->border, n->border_style, n->border_color);
+        border_slot = 1;
+    } else if (n->border > 0 && !n->collapse_cell && n->border_style >= 7 && n->border_style <= 10) {
         frame_3d(d, idx, n->border_style, n->border_color, bx, by, bw, bh, n->border > 8 ? 8 : n->border);
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell && (n->border_style == 5 || n->border_style == 6 || (n->border_style == 4 && n->border >= 3))) {
@@ -4918,9 +5111,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         edge_paint(d, idx, n->border_style, n->border_color, 0, by + bh - t, bx, t, bw);
         edge_paint(d, idx, n->border_style, n->border_color, 1, bx, by + t, t, inner_h);
         edge_paint(d, idx, n->border_style, n->border_color, 1, bx + bw - t, by + t, t, inner_h);
-        border_slot = 1;
-    } else if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 0 || n->border_style == WE_BS_SOLID)) {
-        radius_ring(d, idx, &radii, bx, by, bw, bh, n->border > 8 ? 8 : n->border, n->border_color);
+        if (radii_any(&radii)) radius_square = 1;
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell) {
         os_fb_web_item_t* it = emit(d, idx, OS_FB_WEB_BORDER, bx, by, bw, bh, n->border_color);
@@ -7356,6 +7547,115 @@ static int clip_frags(os_fb_web_item_t *frag, int count, int left, int top, int 
     return used;
 }
 
+/* ---------- Lot 62 round 2: rounded overflow clip ----------
+ * overflow:hidden with border-radius clips to the padding-box shape (the
+ * border radii reduced by the borders, CSS Backgrounds 3, 5.3): after the
+ * rectangle clip, a fragment that the shape's bands do not wholly contain
+ * is cut band by band (TEXT at glyph level, as for rectangles). Nested
+ * rounded clips apply innermost first; a fixed box escapes them. Under a
+ * transform the clip stays rectangular. Over WE_CLIP_FRAGMENTS the item
+ * is dropped with "clipping display budget". */
+static int round_bands(const we_node_t *n, int band[][4]) {
+    we_radii_t outer, r;
+    we_shape_t pad;
+    used_radii(n, n->w, n->h, &outer);
+    if (!radii_any(&outer)) return -1;
+    radii_inset(&outer, &r, box_edge(n, 0), box_edge(n, 1), box_edge(n, 2), box_edge(n, 3));
+    if (!radii_any(&r)) return -1;
+    shape_set(&pad, n->x + box_edge(n, 3), n->y + box_edge(n, 0), n->w - box_edge(n, 1) - box_edge(n, 3),
+              n->h - box_edge(n, 0) - box_edge(n, 2), &r);
+    return shape_bands(&pad, 0, band, WE_ROUND_BANDS);
+}
+
+static int bands_contain(int band[][4], int count, const os_fb_web_item_t *it) {
+    int k, covered = it->y;
+    for (k = 0; k < count && covered < it->y + it->h; k++) {
+        if (band[k][1] <= covered) continue;
+        if (band[k][0] > covered || it->x < band[k][2] || it->x + it->w > band[k][3]) return 0;
+        covered = band[k][1];
+    }
+    return covered >= it->y + it->h;
+}
+
+/* TEXT against bands: whole visible glyphs stay text, a partly visible
+ * glyph becomes RECT runs band by band. */
+static int glyph_in_bands(const os_fb_web_item_t *it, int k, int band[][4], int count) {
+    int row, bit, b, x = it->x + k * WE_CHAR_W;
+    for (row = 0; row < 8; row++) {
+        unsigned m = glyph_mask(it->text[k], row, it->bold);
+        int y = it->y + row;
+        if (!m) continue;
+        for (b = 0; b < count && !(y >= band[b][0] && y < band[b][1]); b++) {}
+        if (b == count) return 0;
+        for (bit = 0; bit < 9; bit++)
+            if ((m >> bit) & 1u && (x + bit < band[b][2] || x + bit >= band[b][3])) return 0;
+    }
+    return 1;
+}
+
+static int round_text(const os_fb_web_item_t *it, int band[][4], int count, os_fb_web_item_t *out, int cap) {
+    int len = w_len(it->text), k = 0, used = 0, b, j;
+    while (k < len) {
+        if (it->text[k] != ' ' && glyph_in_bands(it, k, band, count)) {
+            int end = k;
+            while (end < len && glyph_in_bands(it, end, band, count)) end++;
+            while (end > k && it->text[end - 1] == ' ') end--;
+            if (used >= cap) return -1;
+            out[used] = *it;
+            for (j = k; j < end; j++) out[used].text[j - k] = it->text[j];
+            out[used].text[end - k] = 0;
+            out[used].x = (int16_t)(it->x + k * WE_CHAR_W);
+            out[used].w = (uint16_t)((end - k) * WE_CHAR_W);
+            used++;
+            k = end;
+            continue;
+        }
+        if (it->text[k] != ' ')
+            for (b = 0; b < count; b++) {
+                int n = glyph_rects(it, k, band[b][2], band[b][0], band[b][3], band[b][1], out, used, cap);
+                if (n < 0) return -1;
+                used += n;
+            }
+        k++;
+    }
+    return used;
+}
+
+static int round_clip(const we_doc_t *d, int owner, os_fb_web_item_t *frag, int count, int cap) {
+    static os_fb_web_item_t out[WE_CLIP_FRAGMENTS], one[WE_CLIP_FRAGMENTS];
+    static int band[WE_ROUND_BANDS][4];
+    int p = owner >= 0 ? d->nodes[owner].parent : -1, q = owner;
+    for (; p >= 0 && count > 0; q = p, p = d->nodes[p].parent) {
+        int bands, i, b, k, used = 0;
+        if (q >= 0 && d->nodes[q].fixed) break;
+        if (!d->nodes[p].overflow_hidden || (bands = round_bands(&d->nodes[p], band)) < 0) continue;
+        for (i = 0; i < count; i++) {
+            if (bands_contain(band, bands, &frag[i])) {
+                if (used >= cap) return -1;
+                out[used++] = frag[i];
+                continue;
+            }
+            if (frag[i].kind == OS_FB_WEB_TEXT) {
+                int got = round_text(&frag[i], band, bands, one, WE_CLIP_FRAGMENTS);
+                if (got < 0 || used + got > cap) return -1;
+                for (k = 0; k < got; k++) out[used++] = one[k];
+                continue;
+            }
+            for (b = 0; b < bands; b++) {
+                int got;
+                if (frag[i].y + frag[i].h <= band[b][0] || frag[i].y >= band[b][1]) continue;
+                one[0] = frag[i];
+                got = clip_frags(one, 1, band[b][2], band[b][0], band[b][3], band[b][1], WE_CLIP_FRAGMENTS);
+                if (got < 0 || used + got > cap) return -1;
+                for (k = 0; k < got; k++) out[used++] = one[k];
+            }
+        }
+        for (i = 0; i < used; i++) frag[i] = out[i];
+        count = used;
+    }
+    return count;
+}
+
 /* ---------- Lot 62: paint-time transforms ----------
  * The layout boxes do not move (CSS Transforms 1). At paint time the items
  * of a transformed box and of its subtree are mapped by its matrix about
@@ -7562,6 +7862,7 @@ static void clip_display_list(we_doc_t *d) {
             if (!clip_bounds(d, d->item_owner[i], &left, &top, &right, &bottom)) continue;
             edges[0] = item;
             fragments = clip_frags(edges, 1, left, top, right, bottom, WE_CLIP_FRAGMENTS);
+            if (fragments > 0) fragments = round_clip(d, d->item_owner[i], edges, fragments, WE_CLIP_FRAGMENTS);
             if (fragments < 0) fragments = OS_FB_WEB_ITEMS + 1;
         }
         if (!fragments) continue;
@@ -8128,7 +8429,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     d->viewport_h = (int16_t)viewport_h;
     d->scroll_y = 0;
     w_zero(static_set, sizeof(static_set));
-    d->nitems = 0; math_refused = 0; wavy_decoration = 0; gradient_banded = 0; text_shadow_blur = 0; radius_stepped = 0; baseline_probe = 0; probe_level = probe_count = 0;
+    d->nitems = 0; math_refused = 0; wavy_decoration = 0; gradient_banded = 0; text_shadow_blur = 0; radius_stepped = 0; radius_square = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
@@ -8181,6 +8482,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     if (gradient_banded) diag(d, "gradient painted in bands", -1);
     if (text_shadow_blur) diag(d, "text-shadow blur painted sharp", -1);
     if (radius_stepped) diag(d, "border-radius painted in steps", -1);
+    if (radius_square) diag(d, "rounded effect painted square", -1);
     d->perf.items = d->nitems;
     d->perf.page_w = (uint32_t)viewport_w;
     d->perf.page_h = (uint32_t)h;
