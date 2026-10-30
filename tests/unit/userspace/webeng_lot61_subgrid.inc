@@ -273,6 +273,75 @@ static void test_l61_subgrid_own_row_gap_feeds_parent_rows(void) {
     l61_box("q", 0, 30, 100, 2);
 }
 
+
+/* Row subgrid items join the parent's baseline groups (CSS Grid 2, 9.6);
+ * the subgrid itself stays stretched on its subgridded axis. */
+static void test_l61_subgrid_items_share_parent_first_baseline(void) {
+    lot52_render("<body style='margin:0'><div id=g style='display:grid;grid-template-columns:40px 40px;align-items:baseline'>"
+                 "<div id=a style='padding-top:6px'>A</div><div id=s style='display:grid;grid-template-rows:subgrid;align-items:baseline'>"
+                 "<div id=b>B</div></div></div></body>", 320);
+    l61_box("s", 40, 0, 40, 16);
+    l61_box("b", 40, 6, 40, 10);
+    l61_text_at("A", 0, 7);
+    l61_text_at("B", 40, 7);
+    /* The deeper baseline inside the subgrid moves the parent item. */
+    lot52_render("<body style='margin:0'><div id=g style='display:grid;grid-template-columns:40px 40px;align-items:baseline'>"
+                 "<div id=a>A</div><div id=s style='display:grid;grid-template-rows:subgrid;align-items:baseline'>"
+                 "<div id=b style='padding-top:9px'>B</div></div></div></body>", 320);
+    l61_box("a", 0, 9, 40, 10);
+    l61_box("g", 0, 0, 320, 19);
+    l61_text_at("A", 0, 10);
+    l61_text_at("B", 40, 10);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l61_subgrid_items_share_last_baseline_with_own_gap(void) {
+    lot52_render("<body style='margin:0'><div id=g style='display:grid;grid-template-columns:40px 40px;grid-template-rows:auto auto;"
+                 "row-gap:0;align-items:last baseline'><div id=a style='grid-row:2;padding-bottom:5px'>A</div>"
+                 "<div id=s style='display:grid;grid-row:1 / 3;grid-template-rows:subgrid;row-gap:6px;align-items:last baseline'>"
+                 "<div id=x style='height:4px'></div><div id=b>B</div></div></div></body>", 320);
+    l61_box("s", 40, 0, 40, 25);
+    l61_box("b", 40, 10, 40, 10);                             /* 3px own-gap half above row 2 */
+    l61_text_at("A", 0, 11);
+    l61_text_at("B", 40, 11);
+}
+
+static void test_l61_subgrid_stays_stretched_on_its_axis(void) {
+    lot52_render("<body style='margin:0'><div id=g style='display:grid;grid-template-columns:40px 40px;align-items:end'>"
+                 "<div id=a style='height:20px'></div><div id=s style='display:grid;grid-template-rows:subgrid'>"
+                 "<div id=b style='height:4px'></div></div></div></body>", 320);
+    l61_box("s", 40, 0, 40, 20);
+    lot52_render("<body style='margin:0'><div id=g style='display:grid;grid-template-columns:40px 40px;justify-items:end'>"
+                 "<div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid'><div id=b style='width:4px'>B</div></div></div></body>", 320);
+    l61_box("s", 0, 0, 80, 10);
+}
+
+
+static void test_l61_subgrid_baseline_offsets_and_descents(void) {
+    /* Row 2 of a subgrid with its own 6px row-gap starts 3px lower; the
+     * shared ascent accounts for it. */
+    lot52_render("<body style='margin:0'><div id=g style='display:grid;grid-template-columns:40px 40px;grid-template-rows:auto auto;"
+                 "align-items:baseline'><div id=a style='grid-row:2;padding-top:2px'>A</div>"
+                 "<div id=s style='display:grid;grid-row:1 / 3;grid-template-rows:subgrid;row-gap:6px;align-items:baseline'>"
+                 "<div id=x style='height:4px'></div><div id=b>B</div></div></div></body>", 320);
+    l61_box("b", 40, 10, 40, 10);
+    l61_text_at("A", 0, 11);
+    l61_text_at("B", 40, 11);
+    /* A subgrid item's last descent moves the parent item. */
+    lot52_render("<body style='margin:0'><div id=g style='display:grid;grid-template-columns:40px 40px;align-items:last baseline'>"
+                 "<div id=a>A</div><div id=s style='display:grid;grid-template-rows:subgrid;align-items:last baseline'>"
+                 "<div id=b style='padding-bottom:8px'>B</div></div></div></body>", 320);
+    l61_box("a", 0, 0, 40, 10);
+    l61_text_at("A", 0, 1);
+    l61_text_at("B", 40, 1);
+    /* Shared ascent plus the subgrid item's descent sizes the row. */
+    lot52_render("<body style='margin:0'><div id=g style='display:grid;grid-template-columns:40px 40px;align-items:baseline'>"
+                 "<div id=a style='padding-top:6px'>A</div><div id=s style='display:grid;grid-template-rows:subgrid;align-items:baseline'>"
+                 "<div id=b style='padding-bottom:8px'>B</div></div></div></body>", 320);
+    l61_box("g", 0, 0, 320, 24);
+    l61_box("b", 40, 6, 40, 18);
+}
+
 static void lot61_subgrid_run(void) {
     RUN_TEST(test_l61_subgrid_uneven_distribution_keeps_left_lines);
     RUN_TEST(test_l61_subgrid_own_row_gap_feeds_parent_rows);
@@ -298,4 +367,8 @@ static void lot61_subgrid_run(void) {
     RUN_TEST(test_l61_subgrid_padding_on_axis_is_refused);
     RUN_TEST(test_l61_subgrid_padding_on_other_axis_is_accepted);
     RUN_TEST(test_l61_subgrid_restyle_to_tracks_drops_inheritance);
+    RUN_TEST(test_l61_subgrid_items_share_parent_first_baseline);
+    RUN_TEST(test_l61_subgrid_items_share_last_baseline_with_own_gap);
+    RUN_TEST(test_l61_subgrid_stays_stretched_on_its_axis);
+    RUN_TEST(test_l61_subgrid_baseline_offsets_and_descents);
 }

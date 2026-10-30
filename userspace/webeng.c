@@ -4189,10 +4189,10 @@ static void fit_auto_columns(const we_node_t *n, int cols, int width, int gap,
     }
 }
 
-static int grid_item_width(const we_node_t *n, const we_node_t *child, int width) {
+static int grid_item_width(const we_node_t *n, const we_node_t *child, int width, int ci) {
     int align = child->justify_self ? child->justify_self : n->justify_items;
-    int intrinsic = align == WE_PACK_END || align == WE_PACK_CENTER || align == WE_PACK_START ||
-                    (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT));
+    int intrinsic = (align == WE_PACK_END || align == WE_PACK_CENTER || align == WE_PACK_START ||
+                    (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT))) && !subgrid_on(ci, 0);
     return preferred_outer(child, width, intrinsic ? child->max_content : width - node_border_extra(child) - child->margin[1] - child->margin[3]);
 }
 
@@ -4261,6 +4261,19 @@ static void subgrid_columns(we_doc_t *d, int p, int s, int start, int cw, int ga
 
 static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth);
 
+/* Lot 61: a row subgrid's baseline-aligned items join the parent's
+ * baseline groups (CSS Grid 2, 9.6). The parent's shared ascent and
+ * last descent per spanned row are handed back to the subgrid, in its own
+ * row coordinates, before it places its items. */
+static int16_t subgrid_ascent[WE_MAX_NODES][WE_TRACKS_MAX], subgrid_ldescent[WE_MAX_NODES][WE_TRACKS_MAX];
+
+/* Offset of subgrid row k's top and bottom from the parent's lines. */
+static int subgrid_row_edge(const we_node_t *sub, int k, int gap, int bottom) {
+    int h1, h2;
+    (void)subgrid_gap_delta(sub, 1, gap, &h1, &h2);
+    return bottom ? (k + 1 < sub->grid_rows ? h1 : 0) : (k > 0 ? h2 : 0);
+}
+
 /* Row contributions of a row subgrid's items, measured at the widths the
  * subgrid gives them (inherited or its own columns). */
 static void subgrid_rows(we_doc_t *d, int p, int s, int start, int width, int fixed_height, int gap,
@@ -4278,9 +4291,38 @@ static void subgrid_rows(we_doc_t *d, int p, int s, int start, int width, int fi
         if (inner->row[k] < 0) continue;
         span = child->grid_col_span;
         w = inner->column_x[c + span - 1] + inner->column[c + span - 1] - inner->column_x[c];
-        h = measure_area_height(d, items->node[k], grid_item_width(sub, child, w), depth + 2);
+        h = measure_area_height(d, items->node[k], grid_item_width(sub, child, w, items->node[k]), depth + 2);
+        {
+            int align = child->align_self ? child->align_self : sub->align_items;
+            int last = align == WE_PACK_LAST_BASELINE, real, base, row, top, bottom;
+            if ((align == WE_PACK_BASELINE || last) && !(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
+                row = last ? inner->row[k] + child->grid_row_span - 1 : inner->row[k];
+                base = baseline_get(d, items->node[k], grid_item_width(sub, child, w, items->node[k]), depth + 2, last, &real);
+                top = subgrid_row_edge(sub, inner->row[k], gap, 0);
+                bottom = subgrid_row_edge(sub, inner->row[k] + child->grid_row_span - 1, gap, 1);
+                if (start + row < WE_GRID_ROWS_MAX) {
+                    if (last) {
+                        if (h - base + bottom > work->ldescent[start + row]) work->ldescent[start + row] = h - base + bottom;
+                        if (child->grid_row_span == 1 && base + top > work->lascent[start + row]) work->lascent[start + row] = base + top;
+                    } else {
+                        if (base + top > work->ascent[start + row]) work->ascent[start + row] = base + top;
+                        if (child->grid_row_span == 1 && h - base + bottom > work->descent[start + row]) work->descent[start + row] = h - base + bottom;
+                    }
+                }
+            }
+        }
         h = w_max(0, h + subgrid_item_extra(sub, 1, inner->row[k], child->grid_row_span, gap));
         grid_span_minimum(g, 1, start + inner->row[k], child->grid_row_span, h, gap, fixed_height, work->height);
+    }
+}
+
+/* After the parent sized its rows: hand the shared groups to subgrid s. */
+static void subgrid_share(we_doc_t *d, int s, int start, int gap, const we_grid_work_t *work) {
+    const we_node_t *sub = &d->nodes[s];
+    int k;
+    for (k = 0; k < sub->grid_rows && k < WE_TRACKS_MAX && start + k < WE_GRID_ROWS_MAX; k++) {
+        subgrid_ascent[s][k] = (int16_t)w_max(0, work->ascent[start + k] - subgrid_row_edge(sub, k, gap, 0));
+        subgrid_ldescent[s][k] = (int16_t)w_max(0, work->ldescent[start + k] - subgrid_row_edge(sub, k, gap, 1));
     }
 }
 
@@ -4354,18 +4396,18 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         width = work->column_x[work->col[k] + child->grid_col_span - 1] +
                 work->column[work->col[k] + child->grid_col_span - 1] - work->column_x[work->col[k]];
         if (subgrid_on(items->node[k], 1)) {
-            subgrid_rows(d, idx, items->node[k], work->row[k], grid_item_width(n, child, width), fixed_height, gy, work, depth);
+            subgrid_rows(d, idx, items->node[k], work->row[k], grid_item_width(n, child, width, items->node[k]), fixed_height, gy, work, depth);
             work->item_h[k] = -1;
             continue;
         }
-        height = measure_area_height(d, items->node[k], grid_item_width(n, child, width), depth + 1);
+        height = measure_area_height(d, items->node[k], grid_item_width(n, child, width, items->node[k]), depth + 1);
         work->item_h[k] = height;
         work->baseline[k] = 0;
         if ((align == WE_PACK_BASELINE || align == WE_PACK_LAST_BASELINE) &&
             !(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
             int real, last = align == WE_PACK_LAST_BASELINE;
             int row = last ? work->row[k] + child->grid_row_span - 1 : work->row[k], below;
-            work->baseline[k] = baseline_get(d, items->node[k], grid_item_width(n, child, width), depth + 1, last, &real);
+            work->baseline[k] = baseline_get(d, items->node[k], grid_item_width(n, child, width, items->node[k]), depth + 1, last, &real);
             below = height - work->baseline[k];
             if (row >= WE_GRID_ROWS_MAX) continue;
             if (last) {
@@ -4415,8 +4457,15 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         }
     }
     for (k = 0; k < count; k++)
-        if (work->row[k] >= 0 && subgrid_on(items->node[k], 1))
+        if (work->row[k] >= 0 && subgrid_on(items->node[k], 1)) {
             subgrid_tracks(&d->nodes[items->node[k]], 1, work->height, work->row_y, work->row[k], gy);
+            subgrid_share(d, items->node[k], work->row[k], gy, work);
+        }
+    if (subgrid_on(idx, 1))
+        for (k = 0; k < rows && k < WE_TRACKS_MAX; k++) {
+            if (subgrid_ascent[idx][k] > work->ascent[k]) work->ascent[k] = subgrid_ascent[idx][k];
+            if (subgrid_ldescent[idx][k] > work->ldescent[k]) work->ldescent[k] = subgrid_ldescent[idx][k];
+        }
     return rows;
 }
 
@@ -4467,9 +4516,12 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
         int vertical = child->align_self ? child->align_self : n->align_items;
         int x, y, assigned_h = -1;
         if (r < 0) continue;
+        /* A subgrid ignores self-alignment on its subgridded axes (columns:
+         * grid_item_width keeps the full track width). */
+        if (subgrid_on(items->node[k], 1)) vertical = WE_PACK_STRETCH;
         width = work->column_x[c + child->grid_col_span - 1] + work->column[c + child->grid_col_span - 1] - work->column_x[c];
         height = work->row_y[r + child->grid_row_span - 1] + work->height[r + child->grid_row_span - 1] - work->row_y[r];
-        child_width = grid_item_width(n, child, width);
+        child_width = grid_item_width(n, child, width, items->node[k]);
         {
             int child_idx = items->node[k];
             int16_t saved = containing_height[child_idx];
