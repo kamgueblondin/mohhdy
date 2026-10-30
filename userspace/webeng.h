@@ -225,6 +225,12 @@ typedef struct {
      * 11 wavy), thickness 1..4 and colour (currentColor unless set). */
     uint8_t deco_line, deco_style, deco_thick, deco_color_set;
     uint32_t deco_color;
+    /* Lot 62: percentage margins (mask bits 0..3) and paddings (bits 4..7),
+     * top right bottom left, in percent of the containing block width.
+     * margin[] / padding[] hold the value resolved at layout time; they read
+     * 0 before resolution, which is what intrinsic sizes count. */
+    uint8_t spacing_pct;
+    int16_t spacing_value[8];
     uint32_t edge_color[4];
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;

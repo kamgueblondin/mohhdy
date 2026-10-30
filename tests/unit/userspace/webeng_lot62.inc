@@ -5,6 +5,7 @@
 #include "webeng_lot62_transform.inc"
 #include "webeng_lot62_decor.inc"
 #include "webeng_lot62_deco.inc"
+#include "webeng_lot62_spacing.inc"
 
 static void lot62_run(void) {
     lot62_alpha_run();
@@ -12,4 +13,5 @@ static void lot62_run(void) {
     lot62_transform_run();
     lot62_decor_run();
     lot62_deco_run();
+    lot62_spacing_run();
 }

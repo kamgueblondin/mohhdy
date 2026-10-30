@@ -803,14 +803,68 @@ static int tokens(const char* v, int n, int a[4], int l[4]) {
     return c;
 }
 
-static void box4(const char* v, int n, int16_t out[4]) {
-    int a[4], l[4], px[4], c, k;
+/* Lot 62: "12.5%" or "-10%" (sign only when allowed), percent kept in
+ * tenths so 12.5% resolves exactly; at most 1000%. */
+static int spacing_percent(const char *v, int len, int negative_ok, int *tenths) {
+    int i = 0, whole = 0, frac = 0, digits = 0, neg = 0;
+    if (len > 0 && v[0] == '-') { if (!negative_ok) return -1; neg = 1; i = 1; }
+    while (i < len && v[i] >= '0' && v[i] <= '9') { if (whole <= 1000) whole = whole * 10 + v[i] - '0'; i++; digits++; }
+    if (i < len && v[i] == '.') {
+        i++;
+        if (i < len && v[i] >= '0' && v[i] <= '9') { frac = v[i] - '0'; digits++; }
+        while (i < len && v[i] >= '0' && v[i] <= '9') i++;
+    }
+    if (!digits || i != len - 1 || v[i] != '%' || whole > 1000) return -1;
+    *tenths = (neg ? -1 : 1) * (whole * 10 + frac);
+    return 0;
+}
+
+/* Lot 62: record (or clear when tenths is WE_NO_PCT) the percentage of one
+ * side; box 0 margin, 1 padding. */
+#define WE_NO_PCT 0x7fff
+static void spacing_set(we_node_t *n, int box, int side, int tenths) {
+    int bit = box * 4 + side;
+    if (tenths == WE_NO_PCT) { n->spacing_pct &= (uint8_t)~(1u << bit); return; }
+    n->spacing_pct |= (uint8_t)(1u << bit);
+    n->spacing_value[bit] = (int16_t)tenths;
+    if (box) n->padding[side] = 0; else n->margin[side] = 0;
+}
+
+static void box4(we_node_t *node, int box, const char* v, int n, int16_t out[4]) {
+    int a[4], l[4], px[4], pct[4], c, k;
+    static const int8_t from[4][4] = { {0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3} };
     c = tokens(v, n, a, l);
-    for (k = 0; k < c; k++) if (parse_len(v + a[k], l[k], &px[k], 0) != 0) px[k] = 0;
-    if (c == 1) { out[0] = out[1] = out[2] = out[3] = (int16_t)px[0]; }
-    else if (c == 2) { out[0] = out[2] = (int16_t)px[0]; out[1] = out[3] = (int16_t)px[1]; }
-    else if (c == 3) { out[0] = (int16_t)px[0]; out[1] = out[3] = (int16_t)px[1]; out[2] = (int16_t)px[2]; }
-    else if (c == 4) { for (k = 0; k < 4; k++) out[k] = (int16_t)px[k]; }
+    if (c < 1) return;
+    for (k = 0; k < c; k++) {
+        pct[k] = WE_NO_PCT;
+        if (spacing_percent(v + a[k], l[k], !box, &pct[k]) == 0) px[k] = 0;
+        else { pct[k] = WE_NO_PCT; if (parse_len(v + a[k], l[k], &px[k], 0) != 0) px[k] = 0; }
+    }
+    for (k = 0; k < 4; k++) {
+        out[k] = (int16_t)px[from[c - 1][k]];
+        spacing_set(node, box, k, pct[from[c - 1][k]]);
+    }
+}
+
+/* Lot 62: percentages of the boxes laid out in a containing block of width
+ * cw: in-flow and floated children and, through inline boxes and table
+ * rows, their descendants. Absolute children also use cw (the parent
+ * content box, not their positioned containing block). */
+static void spacing_resolve(we_doc_t *d, int parent, int cw, int depth) {
+    int c, bit;
+    if (depth > WE_DEPTH_MAX) return;
+    if (cw < 0) cw = 0;
+    for (c = d->nodes[parent].first; c >= 0; c = d->nodes[c].next) {
+        we_node_t *n = &d->nodes[c];
+        if (n->is_text) continue;
+        for (bit = 0; bit < 8; bit++) if (n->spacing_pct & (1u << bit)) {
+            int t = n->spacing_value[bit], v = t < 0 ? -((-t * cw) / 1000) : (t * cw) / 1000;
+            if (v > 2000) v = 2000;
+            if (v < -2000) v = -2000;
+            if (bit < 4) n->margin[bit] = (int16_t)v; else n->padding[bit - 4] = (int16_t)v;
+        }
+        if (n->display == WE_DISP_INLINE || n->display == WE_DISP_ROW) spacing_resolve(d, c, cw, depth + 1);
+    }
 }
 
 static int value_is(const char *v, int len, const char *s) {
@@ -1744,33 +1798,24 @@ static void subgrid_tracks(we_node_t *n, int axis, const int *sizes, const int *
 
 /* Expand a valid margin into top,right,bottom,left and replace all auto bits. */
 static int margin_auto_box(we_node_t *n, const char *v, int vl) {
+    static const int8_t from[4][4] = { {0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3} };
+    static const uint8_t flags[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
     int a[4], l[4], c = tokens(v, vl, a, l), k, px;
-    int vals[4], autos[4], top, right, bottom, left;
+    int vals[4], autos[4], pcts[4];
     if (c < 1 || c > 4) return 0;
     for (k = 0; k < c; k++) {
+        pcts[k] = WE_NO_PCT;
         if (value_is(v + a[k], l[k], "auto")) { autos[k] = 1; vals[k] = 0; }
-        else if (parse_len(v + a[k], l[k], &px, 0) == 0) { autos[k] = 0; vals[k] = px; }
+        else if (spacing_percent(v + a[k], l[k], 1, &pcts[k]) == 0) { autos[k] = 0; vals[k] = 0; }
+        else if (parse_len(v + a[k], l[k], &px, 0) == 0) { autos[k] = 0; vals[k] = px; pcts[k] = WE_NO_PCT; }
         else return 0;
     }
-    top = vals[0];
-    right = c >= 2 ? vals[1] : vals[0];
-    bottom = c >= 3 ? vals[2] : top;
-    left = c == 4 ? vals[3] : right;
-    n->margin[0] = (int16_t)top;
-    n->margin[1] = (int16_t)right;
-    n->margin[2] = (int16_t)bottom;
-    n->margin[3] = (int16_t)left;
     n->margin_auto = 0;
-    if (c == 1 && autos[0]) n->margin_auto = (uint8_t)(WE_AUTO_TOP | WE_AUTO_RIGHT | WE_AUTO_BOTTOM | WE_AUTO_LEFT);
-    else {
-        int at = autos[0];
-        int ar = c >= 2 ? autos[1] : at;
-        int ab = c >= 3 ? autos[2] : at;
-        int al = c == 4 ? autos[3] : ar;
-        if (at) n->margin_auto |= WE_AUTO_TOP;
-        if (ar) n->margin_auto |= WE_AUTO_RIGHT;
-        if (ab) n->margin_auto |= WE_AUTO_BOTTOM;
-        if (al) n->margin_auto |= WE_AUTO_LEFT;
+    for (k = 0; k < 4; k++) {
+        int f = from[c - 1][k];
+        n->margin[k] = (int16_t)vals[f];
+        spacing_set(n, 0, k, pcts[f]);
+        if (autos[f]) n->margin_auto |= flags[k];
     }
     return 1;
 }
@@ -1838,26 +1883,29 @@ static int gap_declaration(we_node_t *n, const char *v, int len) {
 static int logical_pair(we_node_t *n, const char *prop, const char *v, int len) {
     int margin = w_eq(prop, "margin-inline") || w_eq(prop, "margin-block");
     int block = w_eq(prop, "margin-block") || w_eq(prop, "padding-block");
-    int starts[4], lengths[4], count = tokens(v, len, starts, lengths), k, values[2], auto_bits[2] = {0, 0};
+    int starts[4], lengths[4], count = tokens(v, len, starts, lengths), k, values[2], auto_bits[2] = {0, 0}, pcts[2];
     int sides[2] = {block ? 0 : 3, block ? 2 : 1};
     static const uint8_t flags[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
     if (count < 1 || count > 2) return -1;
     for (k = 0; k < count; k++) {
         int end = lengths[k];
         const char *token = v + starts[k];
+        pcts[k] = WE_NO_PCT;
         if (margin && value_is(token, end, "auto")) { values[k] = 0; auto_bits[k] = 1; }
+        else if (spacing_percent(token, end, margin, &pcts[k]) == 0) values[k] = 0;
         else {
             if (end >= 2 && value_is(token + end - 2, 2, "px")) end -= 2;
             if (bounded_signed(token, end, 2000, &values[k]) || (!margin && values[k] < 0)) return -1;
         }
     }
-    if (count == 1) { values[1] = values[0]; auto_bits[1] = auto_bits[0]; }
+    if (count == 1) { values[1] = values[0]; auto_bits[1] = auto_bits[0]; pcts[1] = pcts[0]; }
     for (k = 0; k < 2; k++) {
         if (margin) {
             n->margin[sides[k]] = (int16_t)values[k];
             n->margin_auto &= (uint8_t)~flags[sides[k]];
             if (auto_bits[k]) n->margin_auto |= flags[sides[k]];
         } else n->padding[sides[k]] = (int16_t)values[k];
+        spacing_set(n, !margin, sides[k], pcts[k]);
     }
     return 0;
 }
@@ -2412,8 +2460,9 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "direction")) {
         if (!value_is(v, vl, "ltr")) diag(d, "direction refused", -1);
     } else if (w_eq(prop, "padding-top") || w_eq(prop, "padding-right") || w_eq(prop, "padding-bottom")) {
-        if (parse_len(v, vl, &px, 0) == 0 && px >= 0)
-            n->padding[w_eq(prop, "padding-top") ? 0 : w_eq(prop, "padding-right") ? 1 : 2] = (int16_t)px;
+        int side = w_eq(prop, "padding-top") ? 0 : w_eq(prop, "padding-right") ? 1 : 2;
+        if (spacing_percent(v, vl, 0, &pct) == 0) spacing_set(n, 1, side, pct);
+        else if (parse_len(v, vl, &px, 0) == 0 && px >= 0) { n->padding[side] = (int16_t)px; spacing_set(n, 1, side, WE_NO_PCT); }
         else diag(d, "padding refused", -1);
     } else if (w_eq(prop, "display")) {
         if (value_is(v, vl, "none")) n->display = WE_DISP_NONE;
@@ -2699,26 +2748,31 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
         else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
     }
-    else if (w_eq(prop, "margin")) { if (!margin_auto_box(n, v, vl)) box4(v, vl, n->margin); }
-    else if (w_eq(prop, "padding")) box4(v, vl, n->padding);
+    else if (w_eq(prop, "margin")) { if (!margin_auto_box(n, v, vl)) box4(n, 0, v, vl, n->margin); }
+    else if (w_eq(prop, "padding")) box4(n, 1, v, vl, n->padding);
     else if (w_eq(prop, "margin-top")) {
-        if (value_is(v, vl, "auto")) { n->margin[0] = 0; n->margin_auto |= WE_AUTO_TOP; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[0] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_TOP; }
+        if (value_is(v, vl, "auto")) { n->margin[0] = 0; n->margin_auto |= WE_AUTO_TOP; spacing_set(n, 0, 0, WE_NO_PCT); }
+        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 0, pct); n->margin_auto &= (uint8_t)~WE_AUTO_TOP; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[0] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_TOP; spacing_set(n, 0, 0, WE_NO_PCT); }
     }
     else if (w_eq(prop, "margin-right")) {
-        if (value_is(v, vl, "auto")) { n->margin[1] = 0; n->margin_auto |= WE_AUTO_RIGHT; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[1] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_RIGHT; }
+        if (value_is(v, vl, "auto")) { n->margin[1] = 0; n->margin_auto |= WE_AUTO_RIGHT; spacing_set(n, 0, 1, WE_NO_PCT); }
+        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 1, pct); n->margin_auto &= (uint8_t)~WE_AUTO_RIGHT; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[1] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_RIGHT; spacing_set(n, 0, 1, WE_NO_PCT); }
     }
     else if (w_eq(prop, "margin-bottom")) {
-        if (value_is(v, vl, "auto")) { n->margin[2] = 0; n->margin_auto |= WE_AUTO_BOTTOM; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[2] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_BOTTOM; }
+        if (value_is(v, vl, "auto")) { n->margin[2] = 0; n->margin_auto |= WE_AUTO_BOTTOM; spacing_set(n, 0, 2, WE_NO_PCT); }
+        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 2, pct); n->margin_auto &= (uint8_t)~WE_AUTO_BOTTOM; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[2] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_BOTTOM; spacing_set(n, 0, 2, WE_NO_PCT); }
     }
     else if (w_eq(prop, "margin-left")) {
-        if (value_is(v, vl, "auto")) { n->margin[3] = 0; n->margin_auto |= WE_AUTO_LEFT; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[3] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; }
+        if (value_is(v, vl, "auto")) { n->margin[3] = 0; n->margin_auto |= WE_AUTO_LEFT; spacing_set(n, 0, 3, WE_NO_PCT); }
+        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 3, pct); n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; }
+        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[3] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; spacing_set(n, 0, 3, WE_NO_PCT); }
     }
     else if (w_eq(prop, "padding-left")) {
-        if (parse_len(v, vl, &px, 0) == 0 && px >= 0) n->padding[3] = (int16_t)px;
+        if (spacing_percent(v, vl, 0, &pct) == 0) spacing_set(n, 1, 3, pct);
+        else if (parse_len(v, vl, &px, 0) == 0 && px >= 0) { n->padding[3] = (int16_t)px; spacing_set(n, 1, 3, WE_NO_PCT); }
         else diag(d, "padding refused", -1);
     }
     else if (w_eq(prop, "width")) {
@@ -2900,6 +2954,7 @@ int we_style(we_doc_t* d) {
         n->outline_style = 0; n->outline_w = 3; n->outline_offset = 0; n->outline_color_set = 0;
         n->shadow_count = 0;
         n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
+        n->spacing_pct = 0;
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
         n->text_indent = p ? p->text_indent : 0;
@@ -4211,6 +4266,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     content_x = limit_coord(bx + box_edge(n, 3) + n->padding[3]);
     content_w = bw - box_edge(n, 1) - box_edge(n, 3) - n->padding[1] - n->padding[3];
     if (content_w < WE_CHAR_W) content_w = WE_CHAR_W;
+    spacing_resolve(d, idx, content_w, 0);
     {
         int c;
         for (c = n->first; c >= 0; c = d->nodes[c].next)
@@ -7354,8 +7410,13 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
-    { uint32_t i; for (i = 0; i < d->nnodes; i++)
-        d->nodes[i].x = d->nodes[i].y = d->nodes[i].w = d->nodes[i].h = 0; }
+    { uint32_t i; int bit; for (i = 0; i < d->nnodes; i++) {
+        we_node_t *n = &d->nodes[i];
+        n->x = n->y = n->w = n->h = 0;
+        for (bit = 0; bit < 8; bit++) if (n->spacing_pct & (1u << bit)) {
+            if (bit < 4) n->margin[bit] = 0; else n->padding[bit - 4] = 0;
+        }
+    } }
     if (viewport_w > WE_LAYOUT_MAX) viewport_w = WE_LAYOUT_MAX;
     { uint32_t i; for (i = 0; i < d->nnodes; i++) {
         forced_width[i] = forced_height[i] = resolved_height[i] = containing_height[i] = -1;
@@ -7378,6 +7439,11 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     resolve_grid_areas(d);
     subgrid_bind_all(d);
     intrinsic_sizes(d);
+    { we_node_t *root = &d->nodes[0]; int bit;
+      for (bit = 0; bit < 8; bit++) if (root->spacing_pct & (1u << bit)) {
+          int t = root->spacing_value[bit], v = t < 0 ? -((-t * viewport_w) / 1000) : (t * viewport_w) / 1000;
+          if (bit < 4) root->margin[bit] = (int16_t)v; else root->padding[bit - 4] = (int16_t)v;
+      } }
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
     drop_reserved(d);
     paint_outlines(d);
