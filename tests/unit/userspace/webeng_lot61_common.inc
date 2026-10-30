@@ -44,3 +44,10 @@ static int l61_count(uint8_t kind) {
     for (i = 0; i < g_doc.nitems; i++) if (g_doc.items[i].kind == kind) count++;
     return count;
 }
+
+static int l61_diag_count(const char *fragment) {
+    uint32_t i;
+    int count = 0;
+    for (i = 0; i < g_doc.ndiag; i++) if (strstr(g_doc.diag[i], fragment)) count++;
+    return count;
+}

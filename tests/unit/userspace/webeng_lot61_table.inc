@@ -19,6 +19,15 @@ static uint32_t l61_paint(int x, int y) {
     return color;
 }
 
+static void l61_rect_at(int x, int y, int w, int h, uint32_t color) {
+    uint32_t i;
+    for (i = 0; i < g_doc.nitems; i++) {
+        const os_fb_web_item_t *it = &g_doc.items[i];
+        if (it->kind == OS_FB_WEB_RECT && it->x == x && it->y == y && it->w == w && it->h == h && it->color == color) return;
+    }
+    unity_test_fail("missing rectangle at position", __FILE__, __LINE__);
+}
+
 static void test_l61_collapse_shares_vertical_and_horizontal_edges(void) {
     lot52_render(L61_COLLAPSE, 320);
     TEST_ASSERT_EQUAL(2, lot52_node("t")->collapse_w);
@@ -34,14 +43,24 @@ static void test_l61_collapse_shares_vertical_and_horizontal_edges(void) {
 
 static void test_l61_collapse_shared_edge_paints_once(void) {
     lot52_render(L61_COLLAPSE, 320);
-    /* The shared column x 29..30 is one 2px line, owned by the later cell. */
-    TEST_ASSERT_EQUAL(0x0000FF, l61_paint(29, 6));
-    TEST_ASSERT_EQUAL(0x0000FF, l61_paint(30, 6));
-    TEST_ASSERT_TRUE(l61_paint(31, 6) != 0x0000FF);
+    /* Cells paint no BORDER item; the resolved grid edges are RECTs. */
+    TEST_ASSERT_EQUAL(0, l61_count(OS_FB_WEB_BORDER));
+    /* x 29..30: a (red 2) and b (blue 2) tie, the left cell wins; c (green 1)
+     * and d (red 2): the wider wins. One merged 2x26 line. */
+    TEST_ASSERT_EQUAL(0xFF0000, l61_paint(29, 6));
+    TEST_ASSERT_EQUAL(0xFF0000, l61_paint(30, 20));
+    TEST_ASSERT_TRUE(l61_paint(31, 6) != 0xFF0000);
+    l61_rect_at(29, 0, 2, 26, 0xFF0000);
     TEST_ASSERT_EQUAL(0xFF0000, l61_paint(0, 6));
-    /* The shared row y 12..13 under a: c paints its 1px top over a's edge. */
-    TEST_ASSERT_EQUAL(0x00FF00, l61_paint(5, 12));
+    /* y 12..13: a (red 2) beats c (green 1); b ties d, the upper cell wins. */
+    TEST_ASSERT_EQUAL(0xFF0000, l61_paint(5, 12));
     TEST_ASSERT_EQUAL(0xFF0000, l61_paint(5, 13));
+    TEST_ASSERT_EQUAL(0x0000FF, l61_paint(40, 12));
+    /* c's own 1px bottom and left edges stay 1px. */
+    TEST_ASSERT_EQUAL(0x00FF00, l61_paint(5, 24));
+    TEST_ASSERT_TRUE(l61_paint(5, 25) != 0x00FF00);
+    TEST_ASSERT_EQUAL(0x00FF00, l61_paint(0, 20));
+    TEST_ASSERT_TRUE(l61_paint(1, 20) != 0x00FF00);
 }
 
 static void test_l61_collapse_without_borders_keeps_zero_spacing(void) {

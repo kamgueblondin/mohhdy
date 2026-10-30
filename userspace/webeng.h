@@ -75,6 +75,10 @@ enum { WE_AUTO_LEFT = 1, WE_AUTO_RIGHT = 2, WE_AUTO_TOP = 4, WE_AUTO_BOTTOM = 8 
 enum { WE_CLEAR_NONE = 0, WE_CLEAR_LEFT = 1, WE_CLEAR_RIGHT = 2, WE_CLEAR_BOTH = 3 };
 enum { WE_VALIGN_TOP = 0, WE_VALIGN_MIDDLE = 1, WE_VALIGN_BOTTOM = 2, WE_VALIGN_BASELINE = 3 };
 #define WE_Z_MAX 8
+/* Lot 61 border styles; 0 = unset, painted and ranked as solid. */
+#define WE_BS_NONE 1
+#define WE_BS_HIDDEN 2
+#define WE_BS_SOLID 3
 #define WE_LINE_H_MAX 40
 #define WE_INDENT_MAX 400
 #define WE_LAYOUT_MAX 16000
@@ -185,6 +189,11 @@ typedef struct {
     uint8_t z_set, clear_side, valign;
     uint8_t fixed;             /* lot 61: position:fixed (absolute + viewport) */
     uint8_t collapse_w;        /* lot 61: shared cell border width, layout time */
+    /* Lot 61 border edges, top right bottom left. edge_w -1 and style 0
+     * mean "use border / border_style". Only collapsed tables read them. */
+    int8_t edge_w[4];
+    uint8_t edge_style[4], border_style, edge_color_set, collapse_cell;
+    uint32_t edge_color[4];
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;
     int16_t margin[4], padding[4]; /* top right bottom left */

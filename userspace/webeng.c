@@ -1817,6 +1817,86 @@ static int inset_declaration(we_node_t *n, const char *prop, const char *v, int 
     return 0;
 }
 
+/* Lot 61 border edges: style keywords, one-edge shorthands and 1..4 value
+ * lists. Codes: 1 none, 2 hidden, 3 solid, 4 double, 5 dashed, 6 dotted,
+ * 7 ridge, 8 outset, 9 groove, 10 inset. */
+static int border_style_code(const char *v, int l) {
+    static const char *const names[] = { "none", "hidden", "solid", "double", "dashed", "dotted",
+                                         "ridge", "outset", "groove", "inset" };
+    int k;
+    for (k = 0; k < 10; k++) if (w_ieq_n(v, l, names[k])) return k + 1;
+    return 0;
+}
+
+/* CSS 17.6.2.1 style precedence: double > solid > dashed > dotted > ridge >
+ * outset > groove > inset. Unset ranks as solid. */
+static int border_style_rank(int style) {
+    static const uint8_t rank[11] = { 7, 0, 0, 7, 8, 6, 5, 4, 3, 2, 1 };
+    return style >= 0 && style <= 10 ? rank[style] : 0;
+}
+
+/* tokens() stops at four; a fifth token makes a list invalid. */
+static int tokens_more(const char *v, int vl, const int *a, const int *l, int c) {
+    int i;
+    if (c < 4) return 0;
+    for (i = a[3] + l[3]; i < vl; i++) if (!w_space(v[i])) return 1;
+    return 0;
+}
+
+static int border_value_index(int count, int side) {
+    if (count == 1) return 0;
+    if (count == 2) return side & 1;
+    if (count == 3) return side == 3 ? 1 : side;
+    return side;
+}
+
+static int border_edge_decl(we_node_t *n, int side, const char *v, int vl) {
+    int a[4], l[4], c = tokens(v, vl, a, l), k, px, w = -1, style = 0, has_color = 0;
+    uint32_t col = 0;
+    if (c < 1 || c > 3 || tokens_more(v, vl, a, l, c)) return -1;
+    for (k = 0; k < c; k++) {
+        int code = border_style_code(v + a[k], l[k]);
+        if (code) { if (style) return -1; style = code; }
+        else if (parse_color(v + a[k], l[k], &col) == 0) { if (has_color) return -1; has_color = 1; }
+        else if (parse_len(v + a[k], l[k], &px, 0) == 0 && px >= 0 && px <= 64) { if (w >= 0) return -1; w = px; }
+        else return -1;
+    }
+    n->edge_w[side] = (int8_t)(w < 0 ? -1 : w > 8 ? 8 : w);
+    n->edge_style[side] = (uint8_t)style;
+    if (has_color) { n->edge_color[side] = col; n->edge_color_set = (uint8_t)(n->edge_color_set | (1u << side)); }
+    else n->edge_color_set = (uint8_t)(n->edge_color_set & ~(1u << side));
+    return 0;
+}
+
+/* kind 0 style, 1 width, 2 color; one value sets the uniform property. */
+static int border_list_decl(we_node_t *n, int kind, const char *v, int vl) {
+    int a[4], l[4], c = tokens(v, vl, a, l), k, side, vals[4];
+    uint32_t cols[4];
+    if (c < 1 || tokens_more(v, vl, a, l, c)) return -1;
+    for (k = 0; k < c; k++) {
+        if (kind == 0) { vals[k] = border_style_code(v + a[k], l[k]); if (!vals[k]) return -1; }
+        else if (kind == 1) { if (parse_len(v + a[k], l[k], &vals[k], 0) || vals[k] < 0 || vals[k] > 64) return -1; }
+        else if (parse_color(v + a[k], l[k], &cols[k])) return -1;
+    }
+    for (side = 0; side < 4; side++) {
+        k = border_value_index(c, side);
+        if (c == 1) {
+            if (kind == 0) { n->border_style = (uint8_t)vals[0]; n->edge_style[side] = 0; }
+            else if (kind == 1) { n->border = (int16_t)vals[0]; n->edge_w[side] = -1; }
+            else { n->border_color = cols[0]; n->edge_color_set = 0; }
+        } else if (kind == 0) n->edge_style[side] = (uint8_t)vals[k];
+        else if (kind == 1) n->edge_w[side] = (int8_t)(vals[k] > 8 ? 8 : vals[k]);
+        else { n->edge_color[side] = cols[k]; n->edge_color_set = (uint8_t)(n->edge_color_set | (1u << side)); }
+    }
+    return 0;
+}
+
+static void border_edges_reset(we_node_t *n) {
+    int side;
+    for (side = 0; side < 4; side++) { n->edge_w[side] = -1; n->edge_style[side] = 0; }
+    n->edge_color_set = 0;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[24];
     int px, pct, k;
@@ -2164,10 +2244,20 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "border")) {
         int a[4], l[4], c = tokens(v, vl, a, l);
         for (k = 0; k < c; k++) {
-            if (parse_color(v + a[k], l[k], &col) == 0) n->border_color = col;
+            int code = border_style_code(v + a[k], l[k]);
+            if (code) n->border_style = (uint8_t)code;
+            else if (parse_color(v + a[k], l[k], &col) == 0) n->border_color = col;
             else if (parse_len(v + a[k], l[k], &px, 0) == 0) n->border = (int16_t)px;
         }
         if (c == 1 && w_ieq_n(v, vl, "none")) n->border = 0;
+        border_edges_reset(n);
+    } else if (w_eq(prop, "border-top") || w_eq(prop, "border-right") ||
+               w_eq(prop, "border-bottom") || w_eq(prop, "border-left")) {
+        int side = w_eq(prop, "border-top") ? 0 : w_eq(prop, "border-right") ? 1 : w_eq(prop, "border-bottom") ? 2 : 3;
+        if (border_edge_decl(n, side, v, vl)) diag(d, "border edge refused", -1);
+    } else if (w_eq(prop, "border-style") || w_eq(prop, "border-width") || w_eq(prop, "border-color")) {
+        int kind = w_eq(prop, "border-style") ? 0 : w_eq(prop, "border-width") ? 1 : 2;
+        if (border_list_decl(n, kind, v, vl)) diag(d, "border edge refused", -1);
     } else if (w_eq(prop, "font-weight")) {
         n->bold = (uint8_t)(w_ieq_n(v, vl, "bold") || w_ieq_n(v, vl, "700") || w_ieq_n(v, vl, "800") || w_ieq_n(v, vl, "900"));
     } else if (w_eq(prop, "text-align")) {
@@ -2289,6 +2379,8 @@ int we_style(we_doc_t* d) {
         n->auto_col_floor = n->auto_row_floor = n->auto_col_cap = n->auto_row_cap = -1;
         n->relative = n->absolute = n->flex_reverse = n->margin_auto = n->border_collapse = 0;
         n->fixed = 0;
+        n->border_style = n->collapse_cell = 0;
+        border_edges_reset(n);
         n->item_order = 0;
         n->inset_flags = 0;
         n->offset_x = n->offset_y = n->offset_r = n->offset_b = 0;
@@ -2320,7 +2412,17 @@ int we_style(we_doc_t* d) {
     }
     for (i = 0; i < d->nnodes; i++) {
         we_node_t* n = &d->nodes[i];
+        int side;
         if (n->parent >= 0 && d->nodes[n->parent].display == WE_DISP_NONE) n->display = WE_DISP_NONE;
+        /* none and hidden draw no border in either model. */
+        if (n->border_style == WE_BS_NONE || n->border_style == WE_BS_HIDDEN) n->border = 0;
+        /* A collapsed table has no border box of its own: its edges join
+         * the outer cell edges (CSS 17.6.2). */
+        if (n->display == WE_DISP_TABLE && n->border_collapse) {
+            for (side = 0; side < 4; side++)
+                if (n->edge_w[side] < 0) n->edge_w[side] = (int8_t)(n->border > 8 ? 8 : n->border);
+            n->border = 0;
+        }
     }
     return 0;
 }
@@ -3491,7 +3593,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         os_fb_web_item_t* it = &d->items[slot];
         it->x = (int16_t)bx; it->y = (int16_t)by; it->w = (uint16_t)bw; it->h = (uint16_t)bh;
     }
-    if (n->border > 0) {
+    if (n->border > 0 && !n->collapse_cell) {
         os_fb_web_item_t* it = emit(d, idx, OS_FB_WEB_BORDER, bx, by, bw, bh, n->border_color);
         if (it) it->bold = (uint8_t)(n->border > 8 ? 8 : n->border);
         border_slot = 1;
@@ -5318,6 +5420,149 @@ static void shift_cell(we_doc_t *d, int idx, int first_item, int shift) {
     }
 }
 
+/* One resolved edge: width 0..8, style code, colour. none gives width 0;
+ * a collapsed table keeps its moved width in edge_w (border is 0). */
+static void edge_of(const we_node_t *n, int side, int *w, int *style, uint32_t *color) {
+    *w = n->edge_w[side] >= 0 ? n->edge_w[side] : (n->border > 8 ? 8 : n->border);
+    *style = n->edge_style[side] ? n->edge_style[side] : n->border_style;
+    *color = (n->edge_color_set >> side) & 1 ? n->edge_color[side] : n->border_color;
+    if (*w < 0) *w = 0;
+    if (*style == WE_BS_NONE) *w = 0;
+}
+
+static int edges_set(const we_node_t *n) {
+    int side;
+    if (n->edge_color_set) return 1;
+    for (side = 0; side < 4; side++) if (n->edge_w[side] >= 0 || n->edge_style[side]) return 1;
+    return 0;
+}
+
+static int table_group(const we_node_t *n) {
+    return w_eq(n->tag, "tbody") || w_eq(n->tag, "thead") || w_eq(n->tag, "tfoot");
+}
+
+/* Lot 61: collapsed border resolution (CSS 2.1 17.6.2.1) on the table
+ * grid. Every grid edge segment takes the winner among the cells on both
+ * sides, their rows, row groups and, on the outside, the table: hidden
+ * suppresses it, then the wider edge, then style precedence, then origin
+ * cell > row > row group > table, then the cell above or to the left. The
+ * winner paints as one solid RECT of its width centred in the shared band
+ * of width B (collapse_w); equal neighbours along a line are merged.
+ * Columns (<col>) are not supported; vertical lines paint after horizontal
+ * ones, so a corner shows the vertical winner. */
+typedef struct { int w, style, hidden; uint32_t color; } we_edge_pick_t;
+static int16_t collapse_map[WE_GRID_ROWS_MAX][WE_TRACKS_MAX];
+
+static void edge_consider(const we_doc_t *d, we_edge_pick_t *best, int node, int side) {
+    int w, style;
+    uint32_t color;
+    if (node < 0) return;
+    edge_of(&d->nodes[node], side, &w, &style, &color);
+    if (style == WE_BS_HIDDEN) { best->hidden = 1; return; }
+    if (w <= 0) return;
+    /* Candidates arrive cell, row, row group, table, upper/left cell
+     * first, so keeping the earlier one on a full tie applies origin. */
+    if (w > best->w || (w == best->w && border_style_rank(style) > border_style_rank(best->style))) {
+        best->w = w; best->style = style; best->color = color;
+    }
+}
+
+static int row_group_of(const we_doc_t *d, int row) {
+    int p = d->nodes[row].parent;
+    return p >= 0 && table_group(&d->nodes[p]) ? p : -1;
+}
+
+static void edge_emit(we_doc_t *d, int idx, const we_edge_pick_t *e, int vertical, int band, int from, int len, int b) {
+    int off = band + (b - e->w) / 2;
+    if (e->hidden || e->w <= 0 || len <= 0) return;
+    if (vertical) (void)emit(d, idx, OS_FB_WEB_RECT, off, from, e->w, len, e->color);
+    else (void)emit(d, idx, OS_FB_WEB_RECT, from, off, len, e->w, e->color);
+}
+
+static int edge_same(const we_edge_pick_t *a, const we_edge_pick_t *b) {
+    int va = !a->hidden && a->w > 0, vb = !b->hidden && b->w > 0;
+    if (va != vb) return 0;
+    return !va || (a->w == b->w && a->color == b->color);
+}
+
+static void collapse_paint(we_doc_t *d, int idx, const int *rows, int nr, const int *widths, int x, int spacing, int depth) {
+    we_table_slot_t *slot = &table_slot[depth];
+    int b = d->nodes[idx].collapse_w, cols = slot->cols, r, k;
+    if (b <= 0 || nr <= 0 || cols <= 0) return;
+    if (nr > WE_GRID_ROWS_MAX) nr = WE_GRID_ROWS_MAX;
+    for (r = 0; r < nr; r++) for (k = 0; k < cols; k++) collapse_map[r][k] = -1;
+    for (r = 0; r < nr; r++) {
+        int c;
+        for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
+            const we_node_t *cell = &d->nodes[c];
+            int span, rs, rr, kk;
+            if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
+            span = cell->colspan < 1 ? 1 : cell->colspan;
+            rs = table_rowspan_of(cell, r, nr);
+            for (rr = r; rr < r + rs && rr < nr; rr++)
+                for (kk = slot->col[c]; kk < slot->col[c] + span && kk < cols; kk++) collapse_map[rr][kk] = (int16_t)c;
+        }
+    }
+    /* Horizontal lines 0..nr, one segment per column. */
+    for (r = 0; r <= nr; r++) {
+        const we_node_t *ref = &d->nodes[rows[r < nr ? r : nr - 1]];
+        int band = r < nr ? ref->y : ref->y + ref->h - b, start = 0;
+        we_edge_pick_t run, e;
+        int gup = r > 0 ? row_group_of(d, rows[r - 1]) : -1, gdown = r < nr ? row_group_of(d, rows[r]) : -1;
+        w_zero(&run, sizeof(run));
+        for (k = 0; k <= cols; k++) {
+            w_zero(&e, sizeof(e));
+            if (k < cols) {
+                int above = r > 0 ? collapse_map[r - 1][k] : -1, below = r < nr ? collapse_map[r][k] : -1;
+                if (!(above >= 0 && above == below)) {
+                    edge_consider(d, &e, above, 2);
+                    edge_consider(d, &e, below, 0);
+                    if (r > 0) edge_consider(d, &e, rows[r - 1], 2);
+                    if (r < nr) edge_consider(d, &e, rows[r], 0);
+                    if (gup != gdown) { edge_consider(d, &e, gup, 2); edge_consider(d, &e, gdown, 0); }
+                    if (r == 0) edge_consider(d, &e, idx, 0);
+                    if (r == nr) edge_consider(d, &e, idx, 2);
+                }
+            }
+            if (k > 0 && (k == cols || !edge_same(&run, &e))) {
+                int x0 = x + table_origin(widths, start, spacing);
+                int x1 = x + table_origin(widths, k - 1, spacing) + widths[k - 1];
+                edge_emit(d, idx, &run, 0, band, x0, x1 - x0, b);
+                start = k;
+            }
+            if (k == 0 || k == start) run = e;
+        }
+    }
+    /* Vertical lines 0..cols, one segment per row. */
+    for (k = 0; k <= cols; k++) {
+        int band = k < cols ? x + table_origin(widths, k, spacing)
+                            : x + table_origin(widths, cols - 1, spacing) + widths[cols - 1] - b;
+        int start = 0;
+        we_edge_pick_t run, e;
+        w_zero(&run, sizeof(run));
+        for (r = 0; r <= nr; r++) {
+            w_zero(&e, sizeof(e));
+            if (r < nr) {
+                int left = k > 0 ? collapse_map[r][k - 1] : -1, right = k < cols ? collapse_map[r][k] : -1;
+                if (!(left >= 0 && left == right)) {
+                    int g = row_group_of(d, rows[r]);
+                    edge_consider(d, &e, left, 1);
+                    edge_consider(d, &e, right, 3);
+                    if (k == 0) { edge_consider(d, &e, rows[r], 3); edge_consider(d, &e, g, 3); edge_consider(d, &e, idx, 3); }
+                    if (k == cols) { edge_consider(d, &e, rows[r], 1); edge_consider(d, &e, g, 1); edge_consider(d, &e, idx, 1); }
+                }
+            }
+            if (r > 0 && (r == nr || !edge_same(&run, &e))) {
+                int y0 = d->nodes[rows[start]].y;
+                int y1 = d->nodes[rows[r - 1]].y + d->nodes[rows[r - 1]].h;
+                edge_emit(d, idx, &run, 1, band, y0, y1 - y0, b);
+                start = r;
+            }
+            if (r == 0 || r == start) run = e;
+        }
+    }
+}
+
 static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth) {
     int widths[WE_TRACKS_MAX], nr = table_tracks(d, idx, width, depth, widths);
     int *rows = track_work[depth].node;
@@ -5372,6 +5617,7 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
         cy = limit_coord(cy + high + (r + 1 < nr ? spacing_y : 0));
         d->perf.table_rows++;
     }
+    if (d->nodes[idx].border_collapse) collapse_paint(d, idx, rows, nr, widths, x, spacing, depth);
     return cy - y;
 }
 
@@ -5544,18 +5790,39 @@ static void clip_display_list(we_doc_t *d) {
     d->nitems = (uint32_t)count;
 }
 
+/* The collapsed table of a cell, row or row group, or -1. */
+static int collapse_table_of(const we_doc_t *d, int i) {
+    int t = i;
+    if (d->nodes[i].display == WE_DISP_CELL) t = d->nodes[i].parent;
+    if (t >= 0 && d->nodes[t].display == WE_DISP_ROW) t = d->nodes[t].parent;
+    if (t >= 0 && table_group(&d->nodes[t])) t = d->nodes[t].parent;
+    if (t < 0 || d->nodes[t].display != WE_DISP_TABLE || !d->nodes[t].border_collapse) return -1;
+    return t;
+}
+
+/* Lot 61: the shared band width B of a collapsed table is the widest
+ * visible edge of its cells, rows, row groups and the table itself.
+ * Per-edge declarations outside a collapsed table are diagnosed: the
+ * separate model paints one uniform border. */
 static void collapse_widths(we_doc_t *d) {
     uint32_t i;
-    for (i = 0; i < d->nnodes; i++) d->nodes[i].collapse_w = 0;
+    for (i = 0; i < d->nnodes; i++) { d->nodes[i].collapse_w = 0; d->nodes[i].collapse_cell = 0; }
     for (i = 0; i < d->nnodes; i++) {
-        const we_node_t *cell = &d->nodes[i];
-        int row = cell->parent, table, b = cell->border > 8 ? 8 : cell->border;
-        if (cell->display != WE_DISP_CELL || row < 0) continue;
-        for (table = row; table >= 0 && d->nodes[table].display != WE_DISP_TABLE; table = d->nodes[table].parent)
-            if (d->nodes[table].display != WE_DISP_ROW && !w_eq(d->nodes[table].tag, "tbody") &&
-                !w_eq(d->nodes[table].tag, "thead") && !w_eq(d->nodes[table].tag, "tfoot")) { table = -1; break; }
-        if (table < 0 || !d->nodes[table].border_collapse) continue;
-        if (b > d->nodes[table].collapse_w) d->nodes[table].collapse_w = (uint8_t)b;
+        we_node_t *n = &d->nodes[i];
+        int table = -1, side, w, style;
+        uint32_t color;
+        if (n->is_text || n->display == WE_DISP_NONE) continue;
+        if (n->display == WE_DISP_TABLE && n->border_collapse) table = (int)i;
+        else if (n->display == WE_DISP_CELL || n->display == WE_DISP_ROW || table_group(n)) table = collapse_table_of(d, (int)i);
+        if (table < 0) {
+            if (edges_set(n)) diag(d, "border edge refused", (int)i);
+            continue;
+        }
+        if (n->display == WE_DISP_CELL) n->collapse_cell = 1;
+        for (side = 0; side < 4; side++) {
+            edge_of(n, side, &w, &style, &color);
+            if (style != WE_BS_HIDDEN && w > d->nodes[table].collapse_w) d->nodes[table].collapse_w = (uint8_t)w;
+        }
     }
 }
 
