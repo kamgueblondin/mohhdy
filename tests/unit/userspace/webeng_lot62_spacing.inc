@@ -38,6 +38,10 @@ static void test_l62_spacing_cascade_order(void) {
     TEST_ASSERT_EQUAL(1, lot52_node("e")->padding[1]);
     TEST_ASSERT_EQUAL(10, lot52_node("f")->x);
     TEST_ASSERT_TRUE(lot52_node("f")->margin_auto & WE_AUTO_RIGHT);
+    lot52_render(L62_BODY "<div style='width:200px'><div id=g style='padding-inline:10% 2px;height:1px'></div></div></body>", 320);
+    TEST_ASSERT_EQUAL(20, lot52_node("g")->padding[3]);  /* logical pair percentages */
+    TEST_ASSERT_EQUAL(2, lot52_node("g")->padding[1]);
+    TEST_ASSERT_EQUAL(200, lot52_node("g")->w);
 }
 
 static void test_l62_spacing_follows_the_viewport(void) {
