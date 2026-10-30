@@ -2568,7 +2568,7 @@ static int tf_function(const char *v, int len, we_transform_t *t) {
  * (a, b) then two WE_TF_DATA (c, d) and (e, f). */
 static int tf_matrix(const char *v, int len, we_transform_t *t) {
     int start[6], length[6], count, k;
-    if (len < 8 || v[len - 1] != ')') return -1;              /* the caller checked "matrix(" */
+    /* the caller checked "matrix(" and the closing parenthesis */
     count = tf_args(v + 7, len - 8, start, length, 6);
     if (count != 6) return -1;
     v += 7;
@@ -2577,8 +2577,7 @@ static int tf_matrix(const char *v, int len, we_transform_t *t) {
     for (k = 0; k < 4; k++) if (tf_scale(v + start[k], length[k], k & 1 ? &t[k / 2].y : &t[k / 2].x)) return -1;
     for (k = 4; k < 6; k++) {
         int milli, percent;
-        if (v[start[k] + length[k] - 1] < '0' || v[start[k] + length[k] - 1] > '9' ||
-            color_number(v + start[k], length[k], &milli, &percent) || percent || milli < -4000000 || milli > 4000000) return -1;
+        if (color_number(v + start[k], length[k], &milli, &percent) || percent || milli < -4000000 || milli > 4000000) return -1;
         milli = (milli >= 0 ? milli + 500 : milli - 500) / 1000;
         if (k == 4) t[2].x = (int16_t)milli; else t[2].y = (int16_t)milli;
     }
@@ -4618,8 +4617,7 @@ static void add_text_word(we_inline_t *f, const char *s, int len, int node, int 
                 int need = (e - a + (next < len)) * adv + (first && f->nwords && space ? gap : 0);
                 flow_region(f, adv);
                 if ((f->nwords || f->pending_x) && f->cur_w + need > f->width) {
-                    if (first) space = 0;
-                    else { f->glue = 1; add_word_piece(f, we_hyphen, 1, node, 0); f->glue = 0; }
+                    if (!first) { f->glue = 1; add_word_piece(f, we_hyphen, 1, node, 0); f->glue = 0; }
                     soft_wrap(f);
                 }
             }
