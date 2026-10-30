@@ -11,6 +11,11 @@ table{width:120px;border-collapse:collapse}td{border:2px solid red;height:6px;pa
 #clip{width:12px;height:10px;overflow:hidden;white-space:nowrap}
 #fix{position:fixed;right:0;bottom:0;width:30px;height:10px;background:purple}
 img{display:block;width:32px;object-fit:fill}
+#t2{border:4px solid blue}#t2 td{border:2px solid red;height:6px}
+#g2{display:grid;grid-template-columns:repeat(3,40px);width:120px}
+#sub2{display:grid;grid-column:1 / -1;grid-template-columns:subgrid;column-gap:10px}
+#s2a{height:6px;background:green}#s2b{height:6px;background:orange}
+#neg{position:relative;z-index:-1;height:6px;background:#00ff00}#over{margin-top:-3px;height:6px;background:#000080}
 </style></head><body><section>
 <div id=flex><div id=fa><span>A</span></div><div id=fb><span>B</span><br><span>C</span></div></div>
 <div id=grid><div id=sub><div id=sa></div><div id=sb></div></div></div>
@@ -18,5 +23,8 @@ img{display:block;width:32px;object-fit:fill}
 <table><tr><td></td><td></td></tr></table>
 <div id=clip>WW</div>
 <img id=image src=/images/mire-g1.png alt=decode_failed>
+<table id=t2><tr><td></td><td></td></tr></table>
+<div id=g2><div id=sub2><div id=s2a></div><div id=s2b></div></div></div>
+<div id=neg></div><div id=over></div>
 <div id=fix></div>
 </section></body></html>
