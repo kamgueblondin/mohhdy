@@ -32,6 +32,12 @@ static void test_l62_transform_list_order(void) {
     l62_one_rect(5, -10, 10, 30);
 }
 
+/* 7.5 px rounds half up to 8 */
+static void test_l62_transform_rounds_half_up(void) {
+    lot52_render(L62_BODY "<div style='width:5px;height:2px;background:#ff0000;transform-origin:0 0;transform:scale(1.5)'></div></body>", 320);
+    l61_rect_at(0, 0, 8, 3, 0xFF0000);
+}
+
 static void test_l62_transform_origin(void) {
     lot52_render(L62_BODY "<div style='" L62_BOX ";transform:scale(.5);transform-origin:left top'></div></body>", 320);
     l62_one_rect(0, 0, 10, 5);
@@ -169,6 +175,7 @@ static void lot62_transform_run(void) {
     RUN_TEST(test_l62_transform_translate_moves_paint_only);
     RUN_TEST(test_l62_transform_list_order);
     RUN_TEST(test_l62_transform_origin);
+    RUN_TEST(test_l62_transform_rounds_half_up);
     RUN_TEST(test_l62_transform_quarter_turns);
     RUN_TEST(test_l62_transform_refusals_are_atomic);
     RUN_TEST(test_l62_transform_scaled_text_becomes_glyph_runs);
