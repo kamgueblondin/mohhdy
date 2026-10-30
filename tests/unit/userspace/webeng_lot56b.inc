@@ -640,7 +640,11 @@ static void test_l56_z_index_on_static_does_not_reorder_flow(void) {
     int red, blue;
     lot52_render("<body style='margin:0'>"
         "<div id=a style='z-index:5;width:10px;height:10px;background:#ff0000'></div>"
-        "<div id=b style='position:relative;z-index:-1;width:10px;height:10px;background:#0000ff'></div></body>", 320);
+        "<div id=b style='position:relative;z-index:-1.5;width:10px;height:10px;background:#0000ff'></div></body>", 320);
+    /* Lot 61: z-index:-1 on b is now a negative stacking context painted
+     * below in-flow content (CSS 2.1 appendix E), so b uses -1.5, which is
+     * not an integer; positive tests are in webeng_lot61_stack.inc. */
+    TEST_ASSERT_TRUE(lot52_has_diag("z-index refused"));
     TEST_ASSERT_EQUAL(0, lot52_node("a")->absolute);
     TEST_ASSERT_EQUAL(1, lot52_node("a")->z_set);
     TEST_ASSERT_EQUAL(10, lot52_node("b")->y);

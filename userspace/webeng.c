@@ -5908,18 +5908,29 @@ static int fixed_owner(const we_doc_t *d, int owner) {
     return 0;
 }
 
-/* Lot 61: bounded stacking contexts. A relative or absolute box with an
- * integer z-index groups its subtree. Each item gets one entry per
- * enclosing context, outermost first: in-flow content of a level is 0 and
- * a context is 20 + 2z (z in -8..8, so even a negative context paints
- * after in-flow content, as the absolute rule already does). A stable sort
- * keeps tree order on ties, so a context's own items stay before its
- * content. Only documents with a relative z-index box use it; otherwise
- * the per-containing-block absolute order is kept unchanged. Contexts
+/* Lot 61: bounded stacking contexts (CSS 2.1 appendix E, painting order
+ * per context: own background, negative z children, in-flow content, then
+ * z >= 0 children). A relative or absolute box with an integer z-index
+ * groups its subtree. Each item gets one entry per enclosing context,
+ * outermost first: z < 0 is 10 + z, z >= 0 is 22 + 2z; after the chain,
+ * the context's own items take 0 and its in-flow content 20. At the root
+ * the root element and body own the background (0). A stable sort keeps
+ * tree order on ties. Documents without a relative z-index box or a
+ * negative z-index keep the per-containing-block absolute order. Contexts
  * deeper than WE_STACK_DEPTH - 1 are flattened into their parent. */
 #define WE_STACK_DEPTH 8
 static int stack_context(const we_node_t *n) {
     return (n->relative || n->absolute) && n->z_set && !n->fixed;
+}
+
+/* The document, its root element and a body directly under it paint the
+ * root context background (body's background stands for the canvas). */
+static int root_background(const we_doc_t *d, int owner) {
+    int p;
+    if (owner <= 0) return owner == 0;
+    p = d->nodes[owner].parent;
+    if (p == 0) return 1;
+    return p > 0 && d->nodes[p].parent == 0 && w_eq(d->nodes[owner].tag, "body");
 }
 
 static int stack_key(const we_doc_t *d, int owner, int8_t *key) {
@@ -5929,9 +5940,11 @@ static int stack_key(const we_doc_t *d, int owner, int8_t *key) {
     used = count < WE_STACK_DEPTH ? count : WE_STACK_DEPTH - 1;
     for (k = 0; k < used; k++) {
         const we_node_t *c = &d->nodes[chain[count - 1 - k]];
-        key[k] = (int8_t)(20 + 2 * c->z_index);
+        key[k] = (int8_t)(c->z_index < 0 ? 10 + c->z_index : 22 + 2 * c->z_index);
     }
     for (k = used; k < WE_STACK_DEPTH; k++) key[k] = 0;
+    if (used) key[used] = (int8_t)(chain[count - used] == owner ? 0 : 20);
+    else key[0] = (int8_t)(root_background(d, owner) ? 0 : 20);
     return count > used;
 }
 
@@ -5945,7 +5958,7 @@ static void stack_items(we_doc_t *d) {
     static int8_t keys[OS_FB_WEB_ITEMS][WE_STACK_DEPTH];
     int i, j, k, any = 0, flat = 0;
     for (i = 0; i < (int)d->nnodes; i++)
-        if (stack_context(&d->nodes[i]) && !d->nodes[i].absolute) any = 1;
+        if (stack_context(&d->nodes[i]) && (!d->nodes[i].absolute || d->nodes[i].z_index < 0)) any = 1;
     if (!any) return;
     for (i = 0; i < (int)d->nitems; i++) flat |= stack_key(d, d->item_owner[i], keys[i]);
     if (flat) diag(d, "stacking depth", -1);
