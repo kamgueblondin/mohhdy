@@ -86,17 +86,18 @@ static void test_l61_collapse_with_spans_and_intrinsic_width(void) {
         "<td id=c rowspan=2 style='border:3px solid #00ff00'>C</td><td id=d>D</td><td id=e>E</td></tr><tr>"
         "<td id=f>F</td><td id=g>G</td></tr></table></div></body>", 320);
     TEST_ASSERT_EQUAL(3, lot52_node("t")->collapse_w);
-    /* Borderless cells still split the uniform 3px band (B/2 before the
-     * grid line, the odd pixel after it). */
-    l61_box("t", 0, 0, 35, 37);
+    /* lot 63: bands per grid line. Columns 3, 3, 0 (no edge between d and
+     * e), 1; rows 3, 3, 0, 3. b keeps its 20px content between its 3px and
+     * 1px lines, so columns 1-2 are 12px each. */
+    l61_box("t", 0, 0, 37, 37);
     l61_box("a", 0, 0, 16, 16);
-    l61_box("b", 13, 0, 22, 14);
+    l61_box("b", 13, 0, 24, 14);
     l61_box("c", 0, 13, 16, 24);
-    l61_box("d", 13, 13, 13, 14);
-    l61_box("e", 23, 13, 12, 14);
-    l61_box("g", 23, 24, 12, 13);
+    l61_box("d", 13, 13, 12, 12);
+    l61_box("e", 25, 13, 12, 12);
+    l61_box("g", 25, 25, 12, 12);
     l61_text_at("D", 16, 16);
-    l61_text_at("E", 24, 16);
+    l61_text_at("E", 25, 16);
 }
 
 static void test_l61_collapse_successive_layouts_are_stable(void) {

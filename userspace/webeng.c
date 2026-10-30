@@ -121,13 +121,13 @@ static int css_hex(char c) {
 /* Lot 63: character references. Numeric references and a set of named
  * ones map to printable ASCII for the kernel font (typographic quotes and
  * dashes to their ASCII forms, no-break and other spaces to a space, the
- * soft hyphen to nothing); other code points become '?'. Unknown names
+ * soft hyphen to WE_SHY); other code points become '?'. Unknown names
  * keep the '&'. Returns the bytes used, 0 for a plain '&'. */
 static int char_ref(const char *s, int n, char out[4]) {
     static const char *const names[] = { "amp", "lt", "gt", "quot", "apos", "nbsp", "shy", "mdash", "ndash", "hellip",
         "lsquo", "rsquo", "ldquo", "rdquo", "laquo", "raquo", "copy", "reg", "trade", "times", "middot", "bull",
         "ensp", "emsp", "thinsp", "euro" };
-    static const char *const text[] = { "&", "<", ">", "\"", "'", " ", "", "-", "-", "...",
+    static const char *const text[] = { "&", "<", ">", "\"", "'", " ", "\x1f", "-", "-", "...",
         "'", "'", "\"", "\"", "<<", ">>", "(c)", "(R)", "TM", "x", ".", "*", " ", " ", " ", "EUR" };
     int i = 1, k, code = 0, digits = 0, hex;
     out[0] = 0;
@@ -146,7 +146,7 @@ static int char_ref(const char *s, int n, char out[4]) {
         else if (code == 8216 || code == 8217) out[0] = '\'';
         else if (code == 8220 || code == 8221) out[0] = '"';
         else if (code == 8230) { out[0] = out[1] = out[2] = '.'; out[3] = 0; }
-        else if (code != 173) out[0] = '?';
+        else out[0] = code == 173 ? WE_SHY : '?';
         return i + 1;
     }
     for (k = 0; k < (int)(sizeof(names) / sizeof(names[0])); k++) {
@@ -173,7 +173,7 @@ static int add_text(we_doc_t* d, int parent, const char* s, int n) {
             char rep[4];
             int used = char_ref(s + i, n - i, rep), k;
             if (!used) { rep[0] = '&'; rep[1] = 0; used = 1; }
-            for (k = 0; rep[k] && o < (int)sizeof(buf) - 1; k++) { if (rep[k] != ' ') graphic = 1; buf[o++] = rep[k]; }
+            for (k = 0; rep[k] && o < (int)sizeof(buf) - 1; k++) { if (rep[k] != ' ' && rep[k] != WE_SHY) graphic = 1; buf[o++] = rep[k]; }
             i += used;
             continue;
         }
@@ -3247,6 +3247,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "pre-line")) { n->nowrap = 0; n->ws_mode = WE_WS_PRE_LINE; }
         else if (value_is(v, vl, "break-spaces")) { n->nowrap = 0; n->ws_mode = WE_WS_BREAK_SPACES; }
         else diag(d, "white space refused", -1);
+    } else if (w_eq(prop, "hyphens")) {
+        if (value_is(v, vl, "none")) n->hyphens = WE_HYPHENS_NONE;
+        else if (value_is(v, vl, "manual") || value_is(v, vl, "auto")) n->hyphens = WE_HYPHENS_MANUAL;  /* no dictionary */
+        else diag(d, "hyphens refused", -1);
     } else if (w_eq(prop, "tab-size")) {
         if (tab_size_value(n, v, vl)) diag(d, "tab size refused", -1);
     } else if (w_eq(prop, "overflow-wrap")) {
@@ -3704,6 +3708,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->text_indent = p ? p->text_indent : 0;
         n->ws_mode = p ? p->ws_mode : 0;
         n->tab_px = p ? p->tab_px : 8 * WE_CHAR_W;
+        n->hyphens = p ? p->hyphens : WE_HYPHENS_MANUAL;
         n->nowrap = p ? p->nowrap : 0;
         n->break_word = p ? p->break_word : 0;
         n->break_all = p ? p->break_all : 0;
@@ -4113,6 +4118,7 @@ typedef struct {
     int last, lay_first, lay_last, line_text, line_start, natoms, flow;
     struct { int node, base, height; } atoms[8];
     int wrapped;   /* lot 62: the line being flushed ends at a soft wrap */
+    int glue;      /* lot 63: the next piece joins the line without a break */
     int align_last, justify_none;
 } we_inline_t;
 #define WE_NO_BASELINE (-32768)
@@ -4444,7 +4450,7 @@ static void add_word_piece(we_inline_t* f, const char* s, int len, int node, int
     int ww, word = len * glyph_adv(f->d, node);
     flow_region(f, word);
     ww = word + ((f->nwords && space) ? space_adv(f->d, node) : 0);
-    if (!f->d->nodes[node].nowrap && (f->nwords || f->pending_x) && f->cur_w + ww > f->width) { f->wrapped = 1; flush_line(f, 0); flow_region(f, word); ww = word; }
+    if (!f->d->nodes[node].nowrap && !f->glue && (f->nwords || f->pending_x) && f->cur_w + ww > f->width) { f->wrapped = 1; flush_line(f, 0); flow_region(f, word); ww = word; }
     if (f->nwords >= WE_LINE_WORDS) {
         if (f->d->nodes[node].nowrap) diag(f->d, "inline word capacity", node);
         f->wrapped = 1;
@@ -4547,6 +4553,53 @@ static void add_word(we_inline_t *f, const char *s, int len, int node, int space
 static void place_float(we_inline_t *f, int idx, int depth);
 static void place_inline_block(we_inline_t *f, int idx, int depth);
 
+/* ---------- Lot 63: soft hyphens ----------
+ * A word holding soft hyphens is laid out piece by piece. When they break
+ * (hyphens manual, wrapping, not break-all), a line may end after a piece
+ * and then shows a hyphen; a piece followed by another must fit with that
+ * hyphen, else the line breaks before it (at the space for the first
+ * piece). Otherwise the soft hyphens vanish: under hyphens:none or nowrap
+ * the pieces are glued into one word; break-all and overflow-wrap words go
+ * piece by piece through add_word (they may break at a piece end, with no
+ * hyphen). */
+static const char we_hyphen[2] = "-";
+
+static int shy_breaks(const we_node_t *n) {
+    return n->hyphens != WE_HYPHENS_NONE && !n->nowrap && !n->break_all;
+}
+
+static void add_text_word(we_inline_t *f, const char *s, int len, int node, int space) {
+    const we_node_t *n = &f->d->nodes[node];
+    int adv = glyph_adv(f->d, node), gap = space_adv(f->d, node), a = 0, first = 1, k, visible = 0;
+    int hyph = shy_breaks(n), glue = !hyph && !n->break_all && !n->break_word;
+    for (k = 0; k < len; k++) visible += s[k] != WE_SHY;
+    if (visible == len) { add_word(f, s, len, node, space); return; }
+    if (glue) {
+        flow_region(f, adv);
+        if (!n->nowrap && (f->nwords || f->pending_x) && f->cur_w + visible * adv + (f->nwords && space ? gap : 0) > f->width) { soft_wrap(f); space = 0; }
+    }
+    while (a < len) {
+        int e = a, next;
+        while (e < len && s[e] != WE_SHY) e++;
+        for (next = e; next < len && s[next] == WE_SHY; next++) {}
+        if (e > a) {
+            if (hyph) {
+                int need = (e - a + (next < len)) * adv + (first && f->nwords && space ? gap : 0);
+                flow_region(f, adv);
+                if ((f->nwords || f->pending_x) && f->cur_w + need > f->width) {
+                    if (first) space = 0;
+                    else { f->glue = 1; add_word_piece(f, we_hyphen, 1, node, 0); f->glue = 0; }
+                    soft_wrap(f);
+                }
+            }
+            if (glue && !first) { f->glue = 1; add_word_piece(f, s + a, e - a, node, 0); f->glue = 0; }
+            else add_word(f, s + a, e - a, node, first ? space : 0);
+            first = 0;
+        }
+        a = next;
+    }
+}
+
 static void inline_node(we_inline_t* f, int idx, int depth) {
     we_doc_t* d = f->d;
     we_node_t* n = &d->nodes[idx];
@@ -4596,7 +4649,7 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
             if (i < len && s[i] == '\n') continue;
             a = i;
             while (i < len && s[i] != ' ' && s[i] != '\t' && s[i] != '\n') i++;
-            if (i > a) { add_word(f, s + a, i - a, idx, f->pending_space); f->pending_space = 0; }
+            if (i > a) { add_text_word(f, s + a, i - a, idx, f->pending_space); f->pending_space = 0; }
         }
         if (n->trail_space) f->pending_space = 1;
         return;
@@ -4787,6 +4840,13 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
             } else if (ch == ' ') {
                 intrinsic_word(flow);
                 flow->pending = 1;
+            } else if (ch == WE_SHY) {
+                /* a breaking soft hyphen between glyphs ends a word with a hyphen */
+                char after = i + 1 < n->text_len ? d->pool[n->text_off + i + 1] : ' ';
+                if (shy_breaks(n) && flow->word > 0 && !w_space(after) && after != WE_SHY) {
+                    if (flow->word + glyph_adv(d, idx) > flow->minimum) flow->minimum = flow->word + glyph_adv(d, idx);
+                    flow->word = 0;
+                }
             } else {
                 if (flow->pending && flow->line) flow->line += space_adv(d, idx);
                 flow->pending = 0;
@@ -6259,6 +6319,9 @@ typedef struct {
     /* Lot 61: vertical-align:baseline cells, rowspan 1 only. */
     int16_t base[WE_MAX_NODES];
     int ascent[WE_GRID_ROWS_MAX], descent[WE_GRID_ROWS_MAX];
+    /* Lot 63: gap before track k (k >= 1): border-spacing, or for a
+     * collapsed table minus the band of grid line k (lines 0..n). */
+    int8_t gap_x[WE_TRACKS_MAX + 1], gap_y[WE_GRID_ROWS_MAX + 1];   /* edges <= 127, spacing <= 64 */
 } we_table_slot_t;
 static we_table_slot_t table_slot[WE_DEPTH_MAX + 1];
 typedef char layout_workspace_is_bounded[
@@ -7551,12 +7614,12 @@ static int table_assign(we_doc_t *d, int idx, int *rows, int nr, int depth, int 
     return cols;
 }
 
-/* Lot 61: border-collapse shares cell borders. Adjacent cells overlap by
- * the band width B of the table (negative spacing); the resolved line of
- * each edge paints once inside that band (collapse_paint). */
+/* Lot 61: border-collapse shares cell borders. Lot 63: adjacent cells
+ * overlap by the band of their grid line (table_gaps); the resolved line
+ * of each edge paints once inside that band (collapse_paint). */
 static int table_spacing_axis(const we_node_t *n, int vertical) {
     int spacing;
-    if (n->border_collapse) return -(int)n->collapse_w;
+    if (n->border_collapse) return 0;
     spacing = vertical ? n->border_spacing_y : n->border_spacing;
     if (spacing < 0) return 0;
     if (spacing > WE_SPACING_MAX) return WE_SPACING_MAX;
@@ -7566,6 +7629,8 @@ static int table_spacing_axis(const we_node_t *n, int vertical) {
 static int table_spacing_of(const we_node_t *n) {
     return table_spacing_axis(n, 0);
 }
+
+static void table_gaps(const we_doc_t *d, int idx, const int *rows, int nr, int depth);
 
 static int table_spacing_y_of(const we_node_t *n) {
     return table_spacing_axis(n, 1);
@@ -7681,9 +7746,11 @@ static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maxim
         *maximum = limit_coord(*maximum + work->column_x[k]);
     }
     if (!grid && cols > 1) {
-        int spacing = table_spacing_of(n);
-        *minimum = limit_coord(*minimum + (cols - 1) * spacing);
-        *maximum = limit_coord(*maximum + (cols - 1) * spacing);
+        table_gaps(d, idx, items->node, rows, 0);
+        for (k = 1; k < cols; k++) {
+            *minimum = limit_coord(*minimum + table_slot[0].gap_x[k]);
+            *maximum = limit_coord(*maximum + table_slot[0].gap_x[k]);
+        }
     }
 }
 
@@ -7691,13 +7758,13 @@ static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maxim
  * border-spacing is removed from the distributable width; collapse forces 0. */
 static int table_tracks(we_doc_t *d, int idx, int width, int depth, int *widths) {
     int *rows = track_work[depth].node;
-    int nr = 0, c, r, cols, col, spacing, inner;
+    int nr = 0, c, r, cols, col, inner;
     int requested[WE_TRACKS_MAX], sum = 0, auto_cols = 0;
     nr = collect_table_rows(d, idx, rows, 1);
     cols = table_assign(d, idx, rows, nr, depth, 1);
     if (cols < 0) return 0;
     for (col = 0; col < WE_TRACKS_MAX; col++) requested[col] = 0;
-    spacing = table_spacing_of(&d->nodes[idx]);
+    table_gaps(d, idx, rows, nr, depth);
     for (r = 0; r < nr; r++) {
         for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
             we_node_t *cell = &d->nodes[c];
@@ -7732,7 +7799,8 @@ static int table_tracks(we_doc_t *d, int idx, int width, int depth, int *widths)
     }
     if (!cols && !nr) return 0;
     if (!cols) cols = 1;
-    inner = width - (cols > 1 ? spacing * (cols - 1) : 0);
+    inner = width;
+    for (col = 1; col < cols; col++) inner -= table_slot[depth].gap_x[col];
     if (inner < 0) inner = 0;
     for (col = 0; col < cols; col++) {
         sum += requested[col];
@@ -7763,22 +7831,22 @@ static int table_tracks(we_doc_t *d, int idx, int width, int depth, int *widths)
     return nr;
 }
 
-static int table_origin(const int *sizes, int index, int spacing) {
+static int table_origin(const int *sizes, int index, const int8_t *gaps) {
     int k, at = 0;
-    for (k = 0; k < index; k++) at = limit_coord(at + sizes[k] + spacing);
+    for (k = 0; k < index; k++) at = limit_coord(at + sizes[k] + gaps[k + 1]);
     return at;
 }
 
-static int table_span_size(const int *sizes, int index, int span, int spacing) {
+static int table_span_size(const int *sizes, int index, int span, const int8_t *gaps) {
     int k, total = 0;
     if (span < 1) span = 1;
-    for (k = 0; k < span; k++) total = limit_coord(total + sizes[index + k] + (k ? spacing : 0));
+    for (k = 0; k < span; k++) total = limit_coord(total + sizes[index + k] + (k ? gaps[index + k] : 0));
     return total;
 }
 
 /* Row heights match paint. A rowspan taller than the rows it covers grows
  * the last of those rows. Single-row cells do not stretch their own box. */
-static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths, int nr, int spacing_x, int spacing_y) {
+static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths, int nr) {
     we_table_slot_t *slot = &table_slot[depth];
     int *rows = track_work[depth].node;
     int r, c, total = 0;
@@ -7792,7 +7860,7 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
             int spanning = table_rowspan_of(cell, r, nr) != 1;
             if (spanning && cell->valign != WE_VALIGN_BASELINE) continue;
-            width = table_span_size(widths, slot->col[c], cell->colspan, spacing_x);
+            width = table_span_size(widths, slot->col[c], cell->colspan, slot->gap_x);
             h = measure_area_height(d, c, width, depth + 1);
             if (h > high && !spanning) high = h;
             /* Lot 61: a row-spanning baseline cell aligns in its first row
@@ -7815,20 +7883,20 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
             rs = table_rowspan_of(cell, r, nr);
             if (rs < 2) continue;
-            sum = table_span_size(slot->height, r, rs, spacing_y);
-            h = measure_area_height(d, c, table_span_size(widths, slot->col[c], cell->colspan, spacing_x), depth + 1);
+            sum = table_span_size(slot->height, r, rs, slot->gap_y);
+            h = measure_area_height(d, c, table_span_size(widths, slot->col[c], cell->colspan, slot->gap_x), depth + 1);
             if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX) h = limit_coord(h + slot->ascent[r] - slot->base[c]);
             if (h > sum) slot->height[r + rs - 1] = limit_coord(slot->height[r + rs - 1] + h - sum);
         }
     }
-    for (r = 0; r < nr; r++) total = limit_coord(total + slot->height[r] + (r ? spacing_y : 0));
+    for (r = 0; r < nr; r++) total = limit_coord(total + slot->height[r] + (r ? slot->gap_y[r] : 0));
     return total;
 }
 
 static int measure_table(we_doc_t *d, int idx, int width, int depth) {
     int widths[WE_TRACKS_MAX], nr = table_tracks(d, idx, width, depth, widths);
     if (!nr) return 0;
-    return table_row_heights(d, idx, depth, widths, nr, table_spacing_of(&d->nodes[idx]), table_spacing_y_of(&d->nodes[idx]));
+    return table_row_heights(d, idx, depth, widths, nr);
 }
 
 /* Shift in-flow descendants inside a cell that is taller than its content.
@@ -7902,8 +7970,8 @@ static int table_group(const we_node_t *n) {
  * sides, their rows, row groups and, on the outside, the table: hidden
  * suppresses it, then the wider edge, then style precedence, then origin
  * cell > row > row group > column > column group > table, then the cell
- * above or to the left. The winner paints at B/2 - w/2 in the shared band
- * of width B (collapse_w, uniform per table); equal neighbours along a line
+ * above or to the left. The winner paints at B/2 - w/2 in the band of
+ * width B of its grid line (lot 63, table_gaps); equal neighbours along a line
  * are merged. Vertical lines paint after horizontal ones, so a corner shows
  * the vertical winner. Cell content insets follow the same split. */
 typedef struct { int w, style, hidden; uint32_t color; } we_edge_pick_t;
@@ -8102,29 +8170,66 @@ static void edge_emit(we_doc_t *d, int idx, const we_edge_pick_t *e, int vertica
     edge_paint(d, idx, e->style, e->color, vertical, off, from, e->w, len);
 }
 
+static int pick_w(const we_edge_pick_t *e) {
+    return e->hidden ? 0 : e->w;
+}
+
+/* Lot 63: every grid line of a collapsed table has its own band, the
+ * widest resolved segment along it (0 when all are hidden or none); the
+ * tracks on both sides overlap by that band. Separate tables keep
+ * border-spacing between tracks. */
+static void table_gaps(const we_doc_t *d, int idx, const int *rows, int nr, int depth) {
+    we_table_slot_t *slot = &table_slot[depth];
+    int r, k, cols = slot->cols;
+    we_edge_pick_t e;
+    if (nr > WE_GRID_ROWS_MAX) nr = WE_GRID_ROWS_MAX;
+    if (cols > WE_TRACKS_MAX) cols = WE_TRACKS_MAX;
+    /* the spacing of a collapsed table is 0 */
+    for (k = 0; k <= WE_TRACKS_MAX; k++) slot->gap_x[k] = (int8_t)table_spacing_of(&d->nodes[idx]);
+    for (r = 0; r <= WE_GRID_ROWS_MAX; r++) slot->gap_y[r] = (int8_t)table_spacing_y_of(&d->nodes[idx]);
+    if (!d->nodes[idx].border_collapse || nr <= 0 || cols <= 0) return;
+    (void)collapse_build(d, idx, rows, nr, depth);
+    for (r = 0; r <= nr; r++)
+        for (k = 0; k < cols; k++) {
+            collapse_h(d, idx, rows, nr, r, k, &e);
+            if (pick_w(&e) > -slot->gap_y[r]) slot->gap_y[r] = (int8_t)-pick_w(&e);
+        }
+    for (k = 0; k <= cols; k++)
+        for (r = 0; r < nr; r++) {
+            collapse_v(d, idx, rows, cols, r, k, &e);
+            if (pick_w(&e) > -slot->gap_x[k]) slot->gap_x[k] = (int8_t)-pick_w(&e);
+        }
+}
+
+/* The band of grid line k of a collapsed table. */
+static int line_band(const int8_t *gaps, int k) {
+    return -gaps[k];
+}
+
 static int edge_same(const we_edge_pick_t *a, const we_edge_pick_t *b) {
     int va = !a->hidden && a->w > 0, vb = !b->hidden && b->w > 0;
     if (va != vb) return 0;
     return !va || (a->w == b->w && a->color == b->color && a->style == b->style);
 }
 
-static void collapse_paint(we_doc_t *d, int idx, const int *rows, int nr, const int *widths, int x, int spacing, int depth) {
-    int b = d->nodes[idx].collapse_w, cols, r, k;
+static void collapse_paint(we_doc_t *d, int idx, const int *rows, int nr, const int *widths, int x, int depth) {
+    we_table_slot_t *slot = &table_slot[depth];
+    int cols, r, k;
     if (nr > WE_GRID_ROWS_MAX) nr = WE_GRID_ROWS_MAX;
-    if (b <= 0 || nr <= 0 || table_slot[depth].cols <= 0) return;
+    if (d->nodes[idx].collapse_w <= 0 || nr <= 0 || slot->cols <= 0) return;
     cols = collapse_build(d, idx, rows, nr, depth);
     /* Horizontal lines 0..nr, one segment per column. */
     for (r = 0; r <= nr; r++) {
         const we_node_t *ref = &d->nodes[rows[r < nr ? r : nr - 1]];
-        int band = r < nr ? ref->y : ref->y + ref->h - b, start = 0;
+        int b = line_band(slot->gap_y, r), band = r < nr ? ref->y : ref->y + ref->h - b, start = 0;
         we_edge_pick_t run, e;
         w_zero(&run, sizeof(run));
         for (k = 0; k <= cols; k++) {
             w_zero(&e, sizeof(e));
             if (k < cols) collapse_h(d, idx, rows, nr, r, k, &e);
             if (k > 0 && (k == cols || !edge_same(&run, &e))) {
-                int x0 = x + table_origin(widths, start, spacing);
-                int x1 = x + table_origin(widths, k - 1, spacing) + widths[k - 1];
+                int x0 = x + table_origin(widths, start, slot->gap_x);
+                int x1 = x + table_origin(widths, k - 1, slot->gap_x) + widths[k - 1];
                 edge_emit(d, idx, &run, 0, band, x0, x1 - x0, b);
                 start = k;
             }
@@ -8133,8 +8238,9 @@ static void collapse_paint(we_doc_t *d, int idx, const int *rows, int nr, const 
     }
     /* Vertical lines 0..cols, one segment per row. */
     for (k = 0; k <= cols; k++) {
-        int band = k < cols ? x + table_origin(widths, k, spacing)
-                            : x + table_origin(widths, cols - 1, spacing) + widths[cols - 1] - b;
+        int b = line_band(slot->gap_x, k);
+        int band = k < cols ? x + table_origin(widths, k, slot->gap_x)
+                            : x + table_origin(widths, cols - 1, slot->gap_x) + widths[cols - 1] - b;
         int start = 0;
         we_edge_pick_t run, e;
         w_zero(&run, sizeof(run));
@@ -8152,19 +8258,16 @@ static void collapse_paint(we_doc_t *d, int idx, const int *rows, int nr, const 
     }
 }
 
-static int pick_w(const we_edge_pick_t *e) {
-    return e->hidden ? 0 : e->w;
-}
-
 /* Content insets of the cells of collapsed table idx (CSS 2.1 17.6.2.1):
  * a cell box covers the whole band on each side; its content starts past
  * its half of the widest resolved line along that side. */
 static void collapse_insets(we_doc_t *d, int idx) {
-    int *rows = track_work[0].node, nr, cols, r, b = d->nodes[idx].collapse_w;
+    int *rows = track_work[0].node, nr, cols, r;
     we_table_slot_t *slot = &table_slot[0];
     nr = collect_table_rows(d, idx, rows, 0);
     if (nr > WE_GRID_ROWS_MAX) nr = WE_GRID_ROWS_MAX;
     if (nr <= 0 || table_assign(d, idx, rows, nr, 0, 0) < 0) return;
+    table_gaps(d, idx, rows, nr, 0);
     cols = collapse_build(d, idx, rows, nr, 0);
     for (r = 0; r < nr; r++) {
         int c;
@@ -8183,10 +8286,11 @@ static void collapse_insets(we_doc_t *d, int idx) {
                 collapse_v(d, idx, rows, cols, rr, slot->col[c], &e); if (pick_w(&e) > w[3]) w[3] = pick_w(&e);
                 collapse_v(d, idx, rows, cols, rr, slot->col[c] + span, &e); if (pick_w(&e) > w[1]) w[1] = pick_w(&e);
             }
-            cell->cin[0] = (uint8_t)(edge_offset(b, w[0]) + w[0]);
-            cell->cin[3] = (uint8_t)(edge_offset(b, w[3]) + w[3]);
-            cell->cin[2] = (uint8_t)(b - edge_offset(b, w[2]));
-            cell->cin[1] = (uint8_t)(b - edge_offset(b, w[1]));
+            /* each side against the band of its own grid line */
+            cell->cin[0] = (uint8_t)(edge_offset(line_band(slot->gap_y, r), w[0]) + w[0]);
+            cell->cin[3] = (uint8_t)(edge_offset(line_band(slot->gap_x, slot->col[c]), w[3]) + w[3]);
+            cell->cin[2] = (uint8_t)(line_band(slot->gap_y, r + rs) - edge_offset(line_band(slot->gap_y, r + rs), w[2]));
+            cell->cin[1] = (uint8_t)(line_band(slot->gap_x, slot->col[c] + span) - edge_offset(line_band(slot->gap_x, slot->col[c] + span), w[1]));
         }
     }
 }
@@ -8195,11 +8299,9 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
     int widths[WE_TRACKS_MAX], nr = table_tracks(d, idx, width, depth, widths);
     int *rows = track_work[depth].node;
     we_table_slot_t *slot = &table_slot[depth];
-    int spacing = table_spacing_of(&d->nodes[idx]);
-    int spacing_y = table_spacing_y_of(&d->nodes[idx]);
     int r, c, cy = y;
     if (!nr) return 0;
-    table_row_heights(d, idx, depth, widths, nr, spacing, spacing_y);
+    table_row_heights(d, idx, depth, widths, nr);
     for (r = 0; r < nr; r++) {
         we_node_t *row = &d->nodes[rows[r]];
         int high = slot->height[r], bg_slot = -1, row_base = WE_NO_BASELINE, row_aligned = 0;
@@ -8218,13 +8320,13 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
             span = cell->colspan < 1 ? 1 : cell->colspan;
             rs = table_rowspan_of(cell, r, nr);
-            cell_w = table_span_size(widths, slot->col[c], span, spacing);
-            cx = limit_coord(x + table_origin(widths, slot->col[c], spacing));
+            cell_w = table_span_size(widths, slot->col[c], span, slot->gap_x);
+            cx = limit_coord(x + table_origin(widths, slot->col[c], slot->gap_x));
             {
                 int first_item = (int)d->nitems;
                 int stretch = rs > 1 || cell->valign != WE_VALIGN_TOP;
                 if (stretch) {
-                    cell_h = rs > 1 ? table_span_size(slot->height, r, rs, spacing_y) : high;
+                    cell_h = rs > 1 ? table_span_size(slot->height, r, rs, slot->gap_y) : high;
                     layout_area(d, c, cx, cy, cell_w, cell_h, cell_w, depth + 1);
                     if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX)
                         shift_cell(d, c, first_item, slot->ascent[r] - slot->base[c]);
@@ -8242,10 +8344,10 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
         }
         if (r == 0) layout_first[idx] = (int16_t)row_base;
         if (row_base != WE_NO_BASELINE) layout_last[idx] = (int16_t)row_base;
-        cy = limit_coord(cy + high + (r + 1 < nr ? spacing_y : 0));
+        cy = limit_coord(cy + high + (r + 1 < nr ? slot->gap_y[r + 1] : 0));
         d->perf.table_rows++;
     }
-    if (d->nodes[idx].border_collapse) collapse_paint(d, idx, rows, nr, widths, x, spacing, depth);
+    if (d->nodes[idx].border_collapse) collapse_paint(d, idx, rows, nr, widths, x, depth);
     return cy - y;
 }
 
@@ -8864,8 +8966,8 @@ static int collapse_table_of(const we_doc_t *d, int i) {
     return t;
 }
 
-/* Lot 61: the shared band width B of a collapsed table is the widest
- * visible edge of its cells, rows, row groups and the table itself.
+/* Lot 61: collapse_w of a collapsed table is its widest visible edge
+ * among cells, rows, row groups and the table (0: nothing to paint).
  * Per-edge declarations outside a collapsed table are diagnosed: the
  * separate model paints one uniform border. */
 static void collapse_widths(we_doc_t *d) {
