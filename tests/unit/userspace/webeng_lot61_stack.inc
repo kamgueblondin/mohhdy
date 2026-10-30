@@ -14,8 +14,14 @@ static void test_l61_stack_relative_z_paints_over_later_flow(void) {
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
+/* Lot 62: a positioned box with z-index auto paints after the in-flow
+ * blocks (appendix E step 8); two static blocks keep tree order. */
 static void test_l61_stack_without_z_keeps_tree_order(void) {
     lot52_render("<body style='margin:0'><div id=r style='position:relative;width:40px;height:20px;background:#ff0000'></div>"
+                 "<div id=s style='margin-top:-10px;width:40px;height:20px;background:#0000ff'></div></body>", 320);
+    TEST_ASSERT_TRUE(l61_index(0x0000FF) < l61_index(0xFF0000));
+    TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(5, 15));
+    lot52_render("<body style='margin:0'><div id=r style='width:40px;height:20px;background:#ff0000'></div>"
                  "<div id=s style='margin-top:-10px;width:40px;height:20px;background:#0000ff'></div></body>", 320);
     TEST_ASSERT_TRUE(l61_index(0xFF0000) < l61_index(0x0000FF));
     TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(5, 15));

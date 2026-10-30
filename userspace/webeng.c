@@ -7150,6 +7150,7 @@ static int fixed_owner(const we_doc_t *d, int owner) {
  * the per-containing-block absolute order. Contexts
  * deeper than WE_STACK_DEPTH - 1 are flattened into their parent. */
 #define WE_STACK_DEPTH 8
+#define WE_STACK_KEY (WE_STACK_DEPTH + 1)
 static int stack_context(const we_node_t *n) {
     return ((n->relative || n->absolute) && n->z_set && !n->fixed) || ((n->transparency || n->tf_count) && !n->fixed);
 }
@@ -7169,7 +7170,27 @@ static int root_background(const we_doc_t *d, int owner) {
     return p > 0 && d->nodes[p].parent == 0 && w_eq(d->nodes[owner].tag, "body");
 }
 
-static int stack_key(const we_doc_t *d, int owner, int outline, int8_t *key) {
+/* Lot 62: CSS 2.1 appendix E steps 4 to 8 inside the in-flow level of a
+ * context: 0 block-level backgrounds and borders, 1 floats (each whole,
+ * as an atomic group), 2 inline content (text, inline box backgrounds and
+ * inline-blocks as atomic groups), 3 positioned boxes with z-index auto.
+ * The outermost float, inline-block or positioned box under the context
+ * decides; stop is the context node (-1 at the root). */
+static int paint_class(const we_doc_t *d, int owner, int kind, int stop) {
+    int o, guard, cls = -1;
+    for (guard = 0, o = owner; o >= 0 && o != stop && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent) {
+        const we_node_t *n = &d->nodes[o];
+        int parent_display = n->parent >= 0 ? d->nodes[n->parent].display : WE_DISP_BLOCK;
+        if (n->relative || n->absolute) cls = 3;
+        else if (n->float_side && parent_display != WE_DISP_FLEX && parent_display != WE_DISP_GRID) cls = 1;
+        else if (n->display == WE_DISP_INLINE_BLOCK) cls = 2;
+    }
+    if (cls >= 0) return cls;
+    if (kind == OS_FB_WEB_TEXT || d->nodes[owner].is_text || d->nodes[owner].display == WE_DISP_INLINE) return 2;
+    return 0;
+}
+
+static int stack_key(const we_doc_t *d, int owner, int outline, int kind, int8_t *key) {
     int chain[WE_DEPTH_MAX + 2], count = 0, used, k, o, guard;
     for (guard = 0, o = owner; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent)
         if (stack_context(&d->nodes[o])) chain[count++] = o;
@@ -7178,41 +7199,79 @@ static int stack_key(const we_doc_t *d, int owner, int outline, int8_t *key) {
         const we_node_t *c = &d->nodes[chain[count - 1 - k]];
         key[k] = (int8_t)(stack_z(c) < 0 ? 10 + stack_z(c) : 22 + 2 * stack_z(c));
     }
-    for (k = used; k < WE_STACK_DEPTH; k++) key[k] = 0;
+    for (k = used; k < WE_STACK_KEY; k++) key[k] = 0;
     if (used) key[used] = (int8_t)(chain[count - used] == owner ? 0 : 20);
     else key[0] = (int8_t)(root_background(d, owner) ? 0 : 20);
+    if (key[used] == 20) key[used + 1] = (int8_t)paint_class(d, owner, kind, used ? chain[count - used] : -1);
     /* lot 62: outlines after the z >= 0 children of their context */
-    if (outline) key[used] = 60;
+    if (outline) { key[used] = 60; key[used + 1] = 0; }
     return count > used;
 }
 
 static int stack_before(const int8_t *a, const int8_t *b) {
     int k;
-    for (k = 0; k < WE_STACK_DEPTH; k++) if (a[k] != b[k]) return a[k] < b[k];
+    for (k = 0; k < WE_STACK_KEY; k++) if (a[k] != b[k]) return a[k] < b[k];
     return 0;
 }
 
+static int items_overlap(const os_fb_web_item_t *a, const os_fb_web_item_t *b) {
+    return a->x < b->x + b->w && b->x < a->x + a->w && a->y < b->y + b->h && b->y < a->y + a->h;
+}
+
+/* Lot 62: without a stacking context, keep emission order except where two
+ * overlapping items paint out of appendix E order: the smallest original
+ * index whose overlapping predecessors (in key order) are placed goes
+ * next, so pages without conflicts keep their item order. */
+static void paint_order(we_doc_t *d, int8_t keys[][WE_STACK_KEY]) {
+    static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
+    static int16_t owners[OS_FB_WEB_ITEMS];
+    static uint8_t placed[OS_FB_WEB_ITEMS];
+    int n = (int)d->nitems, i, j, out, moved = 0;
+    for (i = 0; i < n && !moved; i++)
+        for (j = 0; j < i; j++)
+            if (stack_before(keys[i], keys[j]) && items_overlap(&d->items[i], &d->items[j])) { moved = 1; break; }
+    if (!moved) return;
+    w_zero(placed, sizeof(placed));
+    for (out = 0; out < n; out++) {
+        for (i = 0; i < n; i++) {
+            if (placed[i]) continue;
+            for (j = 0; j < n; j++) {
+                int before;
+                if (j == i || placed[j] || !items_overlap(&d->items[i], &d->items[j])) continue;
+                before = stack_before(keys[j], keys[i]) || (!stack_before(keys[i], keys[j]) && j < i);
+                if (before) break;
+            }
+            if (j == n) break;
+        }
+        placed[i] = 1;
+        output[out] = d->items[i];
+        owners[out] = d->item_owner[i];
+    }
+    for (i = 0; i < n; i++) { d->items[i] = output[i]; d->item_owner[i] = owners[i]; }
+}
+
 static void stack_items(we_doc_t *d) {
-    static int8_t keys[OS_FB_WEB_ITEMS][WE_STACK_DEPTH];
+    static int8_t keys[OS_FB_WEB_ITEMS][WE_STACK_KEY];
     int i, j, k, any = 0, flat = 0;
     for (i = 0; i < (int)d->nnodes; i++)
         if (stack_context(&d->nodes[i]) && (!d->nodes[i].absolute || stack_z(&d->nodes[i]) < 0)) any = 1;
-    if (!any) return;
-    for (i = 0; i < (int)d->nitems; i++) flat |= stack_key(d, d->item_owner[i], d->items[i].pad & WE_ITEM_OUTLINE, keys[i]);
+    for (i = 0; i < (int)d->nitems; i++)
+        flat |= stack_key(d, d->item_owner[i], d->items[i].pad & WE_ITEM_OUTLINE, d->items[i].kind, keys[i]);
+    if (!any) { paint_order(d, keys); return; }
     if (flat) diag(d, "stacking depth", -1);
     for (i = 1; i < (int)d->nitems; i++) {
         os_fb_web_item_t item = d->items[i];
         int16_t owner = d->item_owner[i];
-        int8_t key[WE_STACK_DEPTH];
-        for (k = 0; k < WE_STACK_DEPTH; k++) key[k] = keys[i][k];
+        int8_t key[WE_STACK_KEY];
+        for (k = 0; k < WE_STACK_KEY; k++) key[k] = keys[i][k];
         for (j = i; j > 0 && stack_before(key, keys[j - 1]); j--) {
             d->items[j] = d->items[j - 1];
             d->item_owner[j] = d->item_owner[j - 1];
-            for (k = 0; k < WE_STACK_DEPTH; k++) keys[j][k] = keys[j - 1][k];
+            for (k = 0; k < WE_STACK_KEY; k++) keys[j][k] = keys[j - 1][k];
         }
         d->items[j] = item;
         d->item_owner[j] = owner;
-        for (k = 0; k < WE_STACK_DEPTH; k++) keys[j][k] = key[k];
+        for (k = 0; k < WE_STACK_KEY; k++) keys[j][k] = key[k];
     }
 }
 

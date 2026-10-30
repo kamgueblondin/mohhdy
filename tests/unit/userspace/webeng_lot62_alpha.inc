@@ -108,7 +108,7 @@ static void test_l62_alpha_over_text_repaints_the_glyphs(void) {
     const os_fb_web_item_t *h;
     int x, y;
     lot52_render(L62_BODY "<p style='margin:0'>HH</p>"
-                 "<div style='margin-top:-10px;width:8px;height:10px;background:rgba(0,0,255,0.5)'></div></body>", 320);
+                 "<div style='position:relative;margin-top:-10px;width:8px;height:10px;background:rgba(0,0,255,0.5)'></div></body>", 320);
     h = find_text("HH");
     TEST_ASSERT_NOT_NULL(h);
     if (!h) return;
