@@ -156,6 +156,7 @@ typedef struct {
      * tracks, gap (sub_gap - 1, 0 when none) and line names in place. */
     uint8_t subgrid[2];
     int16_t sub_gap[2];
+    uint8_t gap_set;           /* lot 61: bit 0 column, bit 1 row gap declared */
     we_grid_request_t grid_request[2];
     int16_t col_size[WE_TRACKS_MAX];
     int16_t col_floor[WE_TRACKS_MAX], col_cap[WE_TRACKS_MAX];

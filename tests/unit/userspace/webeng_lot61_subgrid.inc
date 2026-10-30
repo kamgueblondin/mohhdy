@@ -181,7 +181,106 @@ static void test_l61_subgrid_auto_fill_parent_keeps_numeric_placement(void) {
     }
 }
 
+static void test_l61_subgrid_own_column_gap_moves_item_edges(void) {
+    int pass;
+    /* Parent gap 10, subgrid gap 2: items gain (2 - 10) / 2 = -4 margin at
+     * the interior lines, so they widen by 4 per interior side. */
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:140px;grid-template-columns:40px 40px 40px;column-gap:10px'>"
+                 "<div id=s style='display:grid;grid-column:1 / 4;grid-template-columns:subgrid;column-gap:2px'>"
+                 "<div id=a style='height:5px;background:#ff0000'></div><div id=b style='height:5px'></div><div id=c style='height:5px'></div></div>"
+                 "<div id=q style='height:5px'></div></div></body>", 320);
+    for (pass = 0; pass < 2; pass++) {
+        l61_box("a", 0, 0, 44, 5);
+        l61_box("b", 46, 0, 48, 5);
+        l61_box("c", 96, 0, 44, 5);
+        l61_box("q", 0, 5, 40, 5);           /* parent tracks unchanged */
+        l61_rect_is(0xFF0000, 0, 0, 44, 5);
+        TEST_ASSERT_EQUAL(3, lot52_node("s")->sub_gap[0]);
+        TEST_ASSERT_EQUAL(0, we_layout(&g_doc, 320));
+    }
+}
+
+static void test_l61_subgrid_own_gap_feeds_parent_intrinsic_tracks(void) {
+    /* A 20px subgrid gap over a 0px parent gap adds 10px next to the
+     * interior line to each item's contribution: tracks 42 and 18. */
+    lot52_render("<body style='margin:0'><div style='display:inline-block'><div id=p style='display:grid;grid-template-columns:auto auto'>"
+                 "<div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid;column-gap:20px'>"
+                 "<div id=a>AAAA</div><div id=b>B</div></div></div></div></body>", 320);
+    l61_box("p", 0, 0, 60, 10);
+    l61_box("a", 0, 0, 32, 10);
+    l61_box("b", 52, 0, 8, 10);
+    l61_text_at("B", 52, 1);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l61_subgrid_follows_parent_content_distribution(void) {
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:150px;grid-template-columns:30px 30px 30px;justify-content:space-between'>"
+                 "<div id=s style='display:grid;grid-column:1 / 4;grid-template-columns:subgrid'>"
+                 "<div id=a style='height:5px'></div><div id=b style='grid-column:2 / 4;height:5px;background:#0000ff'></div></div>"
+                 "<div id=q style='grid-column:3;height:5px'></div></div></body>", 320);
+    l61_box("a", 0, 0, 30, 5);
+    l61_box("b", 60, 0, 90, 5);              /* spans to the distributed last line */
+    l61_box("q", 120, 5, 30, 5);
+    l61_rect_is(0x0000FF, 60, 0, 90, 5);
+    TEST_ASSERT_EQUAL(31, lot52_node("s")->sub_gap[0]);
+}
+
+static void test_l61_subgrid_rows_distribution_and_own_gap(void) {
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:100px;height:100px;grid-template-rows:20px 20px;row-gap:10px;align-content:space-between'>"
+                 "<div id=s style='display:grid;grid-row:1 / 3;grid-template-rows:subgrid;row-gap:4px'>"
+                 "<div id=a style='height:5px'></div><div id=b style='height:5px'></div></div></div></body>", 320);
+    l61_box("s", 0, 0, 100, 100);
+    l61_box("a", 0, 0, 100, 5);
+    l61_box("b", 0, 77, 100, 5);             /* 80 - (4 - 10) / 2 */
+    TEST_ASSERT_EQUAL(23, lot52_node("s")->row_size[0]);
+    TEST_ASSERT_EQUAL(23, lot52_node("s")->row_size[1]);
+}
+
+static void test_l61_subgrid_gap_on_other_axis_stays_its_own(void) {
+    /* Column subgrid with its own row-gap: rows are not subgridded, so the
+     * row gap applies normally and the column gap stays inherited. */
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:100px;grid-template-columns:50px 50px;column-gap:6px'>"
+                 "<div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid;row-gap:7px'>"
+                 "<div id=a style='height:5px'></div><div id=b style='height:5px'></div><div id=c style='height:5px'></div></div></div></body>", 320);
+    l61_box("a", 0, 0, 50, 5);
+    l61_box("b", 56, 0, 50, 5);
+    l61_box("c", 0, 12, 50, 5);
+    TEST_ASSERT_EQUAL(7, lot52_node("s")->sub_gap[0]);
+}
+
+static void test_l61_subgrid_uneven_distribution_keeps_left_lines(void) {
+    /* 61px free space: parent lines at 0, 60, 121. Subgrid items start on
+     * those lines exactly; the uniform gutter moves an interior right edge
+     * by the 1px rounding remainder. */
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:151px;grid-template-columns:30px 30px 30px;justify-content:space-between'>"
+                 "<div id=s style='display:grid;grid-column:1 / 4;grid-template-columns:subgrid'>"
+                 "<div id=a style='height:5px'></div><div id=b style='height:5px'></div><div id=c style='height:5px'></div></div>"
+                 "<div id=q style='height:5px'></div><div id=r style='height:5px'></div><div id=t style='height:5px'></div></div></body>", 320);
+    l61_box("r", 60, 5, 30, 5);
+    l61_box("t", 121, 5, 30, 5);
+    l61_box("b", 60, 0, 31, 5);
+    l61_box("c", 121, 0, 30, 5);
+}
+
+static void test_l61_subgrid_own_row_gap_feeds_parent_rows(void) {
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:100px;grid-template-rows:auto auto'>"
+                 "<div id=s style='display:grid;grid-row:1 / 3;grid-template-rows:subgrid;row-gap:10px'>"
+                 "<div id=a style='height:10px'></div><div id=b style='height:10px'></div></div>"
+                 "<div id=q style='height:2px'></div></div></body>", 320);
+    l61_box("s", 0, 0, 100, 30);             /* rows 15 + 15 */
+    l61_box("a", 0, 0, 100, 10);
+    l61_box("b", 0, 20, 100, 10);
+    l61_box("q", 0, 30, 100, 2);
+}
+
 static void lot61_subgrid_run(void) {
+    RUN_TEST(test_l61_subgrid_uneven_distribution_keeps_left_lines);
+    RUN_TEST(test_l61_subgrid_own_row_gap_feeds_parent_rows);
+    RUN_TEST(test_l61_subgrid_own_column_gap_moves_item_edges);
+    RUN_TEST(test_l61_subgrid_own_gap_feeds_parent_intrinsic_tracks);
+    RUN_TEST(test_l61_subgrid_follows_parent_content_distribution);
+    RUN_TEST(test_l61_subgrid_rows_distribution_and_own_gap);
+    RUN_TEST(test_l61_subgrid_gap_on_other_axis_stays_its_own);
     RUN_TEST(test_l61_subgrid_auto_fill_parent_keeps_numeric_placement);
     RUN_TEST(test_l61_names_lone_area_ident_spans_the_area);
     RUN_TEST(test_l61_subgrid_columns_inherit_tracks_gap_names);

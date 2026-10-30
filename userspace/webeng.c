@@ -1552,13 +1552,51 @@ static void subgrid_items(we_doc_t *d, int s, int report) {
     }
 }
 
-static void subgrid_tracks(we_node_t *n, int axis, const int *sizes, int start, int gap) {
-    int k, count = axis ? n->grid_rows : n->grid_cols;
-    for (k = 0; k < count; k++) {
-        if (axis) { n->row_size[k] = (int16_t)sizes[start + k]; n->row_floor[k] = n->row_cap[k] = -1; }
-        else { n->col_size[k] = (int16_t)sizes[start + k]; n->col_floor[k] = n->col_cap[k] = -1; }
+static int own_axis_gap(const we_node_t *n, int vertical);
+static int w_max(int a, int b) { return a > b ? a : b; }
+
+/* Gap difference of a subgrid on an axis: its own declared gap minus the
+ * parent's, split h1 (after a track) and h2 (before it). */
+static int subgrid_gap_delta(const we_node_t *s, int axis, int gap, int *h1, int *h2) {
+    int delta = (s->gap_set >> axis) & 1 ? own_axis_gap(s, axis) - gap : 0;
+    *h1 = delta / 2;
+    *h2 = delta - *h1;
+    return delta;
+}
+
+/* Extra margin of a subgrid item next to the subgrid's interior lines
+ * (CSS Grid 2, 9.3): h2 before its first track, h1 after its last. */
+static int subgrid_item_extra(const we_node_t *s, int axis, int first, int span, int gap) {
+    int h1, h2, count = axis ? s->grid_rows : s->grid_cols, extra = 0;
+    (void)subgrid_gap_delta(s, axis, gap, &h1, &h2);
+    if (first > 0) extra += h2;
+    if (first + span < count) extra += h1;
+    return extra;
+}
+
+/* Lot 61: the subgrid's tracks follow the parent's real line positions
+ * (pos), so the parent's content distribution reaches the subgrid. One
+ * uniform subgrid gutter G is the parent's average effective gutter plus
+ * the own-gap difference; track sizes then put every interior line at the
+ * parent's line shifted by h2, and every track end h1 before it. */
+static void subgrid_tracks(we_node_t *n, int axis, const int *sizes, const int *pos, int start, int gap) {
+    int k, count = axis ? n->grid_rows : n->grid_cols, h1, h2, delta, step = gap, base = pos[start];
+    delta = subgrid_gap_delta(n, axis, gap, &h1, &h2);
+    if (count > 1) {
+        int inner = pos[start + count - 1] - base;
+        for (k = 0; k < count - 1; k++) inner -= sizes[start + k];
+        step = inner / (count - 1) + delta;
+        if (step < 0) step = 0;
     }
-    n->sub_gap[axis] = (int16_t)(gap + 1);
+    for (k = 0; k < count; k++) {
+        int left = pos[start + k] - base + (k > 0 ? h2 : 0), size;
+        if (k + 1 < count) size = pos[start + k + 1] - base + h2 - step - left;
+        else size = pos[start + k] + sizes[start + k] - base - left;
+        if (size < 0) size = 0;
+        if (axis) { n->row_size[k] = (int16_t)size; n->row_floor[k] = n->row_cap[k] = -1; }
+        else { n->col_size[k] = (int16_t)size; n->col_floor[k] = n->col_cap[k] = -1; }
+    }
+    n->sub_gap[axis] = (int16_t)(step + 1);
 }
 
 /* Expand a valid margin into top,right,bottom,left and replace all auto bits. */
@@ -1648,6 +1686,7 @@ static int gap_declaration(we_node_t *n, const char *v, int len) {
     if (count == 1) { values[1] = values[0]; expr[1] = expr[0]; }
     n->length[WE_LEN_ROW_GAP] = expr[0]; n->length[WE_LEN_COL_GAP] = expr[1];
     n->gap = (int16_t)values[0];
+    n->gap_set = 3;
     n->row_gap = count == 1 && !expr[0].count ? -1 : (int16_t)values[0];
     n->col_gap = count == 1 && !expr[1].count ? -1 : (int16_t)values[1];
     return 0;
@@ -2015,8 +2054,8 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "row-gap") || w_eq(prop, "column-gap")) {
         int number, percent;
         if (parse_dimension(v, vl, &number, &percent) || percent) diag(d, "axis gap refused", -1);
-        else if (w_eq(prop, "row-gap")) n->row_gap = (int16_t)number;
-        else n->col_gap = (int16_t)number;
+        else if (w_eq(prop, "row-gap")) { n->row_gap = (int16_t)number; n->gap_set |= 2; }
+        else { n->col_gap = (int16_t)number; n->gap_set |= 1; }
     } else if (w_eq(prop, "grid-auto-flow")) {
         int a[4], lengths[4], c = tokens(v, vl, a, lengths), dense = 0, column = 0, axis = 0, ok = c >= 1 && c <= 2;
         for (k = 0; k < c && k < 2; k++) {
@@ -2360,6 +2399,7 @@ int we_style(we_doc_t* d) {
         n->min_width = n->max_width = -1;
         n->min_height = n->max_height = -1;
         n->row_gap = n->col_gap = -1;
+        n->gap_set = 0;
         n->height_percent = n->min_height_percent = n->max_height_percent = 0;
         n->height_pct = n->min_height_pct = n->max_height_pct = 0;
         n->width_kind = n->basis_content = n->border_box = n->overflow_hidden = 0;
@@ -3044,11 +3084,15 @@ typedef struct {
 } we_measure_cache_t;
 static we_measure_cache_t measure_cache[WE_MAX_NODES];
 
-static int axis_gap(const we_node_t *n, int vertical) {
+static int own_axis_gap(const we_node_t *n, int vertical) {
     int value = vertical ? n->row_gap : n->col_gap;
-    if (n->sub_gap[vertical] > 0) return n->sub_gap[vertical] - 1;
     value = math_nonnegative(n, vertical ? WE_LEN_ROW_GAP : WE_LEN_COL_GAP, 0, value);
     return value >= 0 ? value : n->gap > 0 ? n->gap : 0;
+}
+
+static int axis_gap(const we_node_t *n, int vertical) {
+    if (n->sub_gap[vertical] > 0) return n->sub_gap[vertical] - 1;
+    return own_axis_gap(n, vertical);
 }
 
 static int vertical_extra(const we_node_t *n) {
@@ -4159,11 +4203,13 @@ static void subgrid_columns(we_doc_t *d, int p, int s, int start, int cw, int ga
     grid_place(d, items, inner, count, d->nodes[s].grid_cols, 0);
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
+        int extra;
         if (inner->row[k] < 0) continue;
+        extra = subgrid_item_extra(&d->nodes[s], 0, inner->col[k], child->grid_col_span, gap);
         grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span,
-                          preferred_outer(child, cw, child->max_content), gap, cw, work->column);
+                          w_max(0, preferred_outer(child, cw, child->max_content) + extra), gap, cw, work->column);
         grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span,
-                          preferred_outer(child, cw, child->min_content), gap, cw, work->minimum);
+                          w_max(0, preferred_outer(child, cw, child->min_content) + extra), gap, cw, work->minimum);
     }
 }
 
@@ -4187,6 +4233,7 @@ static void subgrid_rows(we_doc_t *d, int p, int s, int start, int width, int fi
         span = child->grid_col_span;
         w = inner->column_x[c + span - 1] + inner->column[c + span - 1] - inner->column_x[c];
         h = measure_area_height(d, items->node[k], grid_item_width(sub, child, w), depth + 2);
+        h = w_max(0, h + subgrid_item_extra(sub, 1, inner->row[k], child->grid_row_span, gap));
         grid_span_minimum(g, 1, start + inner->row[k], child->grid_row_span, h, gap, fixed_height, work->height);
     }
 }
@@ -4250,7 +4297,7 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     }
     for (k = 0; k < count; k++)
         if (work->row[k] >= 0 && subgrid_on(items->node[k], 0))
-            subgrid_tracks(&d->nodes[items->node[k]], 0, work->column, work->col[k], gx);
+            subgrid_tracks(&d->nodes[items->node[k]], 0, work->column, work->column_x, work->col[k], gx);
     /* Lot 61: first-baseline groups share the start row and last-baseline
      * groups the end row, spanning items included. A spanning item adds the
      * shift its group imposes to its span contribution. */
@@ -4323,7 +4370,7 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     }
     for (k = 0; k < count; k++)
         if (work->row[k] >= 0 && subgrid_on(items->node[k], 1))
-            subgrid_tracks(&d->nodes[items->node[k]], 1, work->height, work->row[k], gy);
+            subgrid_tracks(&d->nodes[items->node[k]], 1, work->height, work->row_y, work->row[k], gy);
     return rows;
 }
 
@@ -5136,6 +5183,7 @@ static void subgrid_intrinsic(we_doc_t *d, const we_node_t *g, int s, int start,
             const we_node_t *child = &d->nodes[items->node[k]];
             int extra = node_border_extra(child) + child->margin[1] + child->margin[3], low, high;
             if (inner->row[k] < 0 || (child->grid_col_span == 1) != (pass == 0)) continue;
+            extra += subgrid_item_extra(&d->nodes[s], 0, inner->col[k], child->grid_col_span, gap);
             intrinsic_contribution(child, &low, &high);
             grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span, constrained_width(child, low, 0) + extra, gap, -1, work->column);
             grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span, constrained_width(child, high, 0) + extra, gap, -1, work->column_x);
