@@ -2192,9 +2192,37 @@ static int dangerous_element(const char* name, int keep_style) {
 /* Lot 7 (US-039): CSS kept by the page sanitizer is filtered too. A rule or
  * declaration that would fetch (@import, url()) or run script
  * (javascript:, expression(), behavior:) is dropped. Returns bytes out. */
+/* Lot 63: a url() whose argument is a local absolute path (the namespace of
+ * the guest image reader: no scheme, no "//", no "..", only [A-Za-z0-9._/-],
+ * optional matching quotes) fetches nothing over the network and is kept;
+ * any other url() still drops the declaration. */
+static int css_url_local(const char* s, int n) {
+    int a = 0, b, k;
+    while (a < n && w_space(s[a])) a++;
+    for (b = a; b < n && s[b] != ')'; b++) {}
+    if (b >= n) return 0;
+    while (b > a && w_space(s[b - 1])) b--;
+    if (b - a >= 2 && (s[a] == '"' || s[a] == '\'') && s[b - 1] == s[a]) { a++; b--; }
+    if (b - a < 2 || s[a] != '/' || s[a + 1] == '/') return 0;
+    for (k = a; k < b; k++) {
+        char c = s[k];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+              c == '.' || c == '_' || c == '-' || c == '/')) return 0;
+        if (c == '.' && k + 1 < b && s[k + 1] == '.') return 0;
+    }
+    return 1;
+}
+static int css_fetching_url(const char* s, int n) {
+    int at = 0, k;
+    while ((k = w_find_ci(s + at, n - at, "url(")) >= 0) {
+        at += k + 4;
+        if (!css_url_local(s + at, n - at)) return 1;
+    }
+    return 0;
+}
 static int css_unsafe(const char* s, int n) {
     return w_find_ci(s, n, "javascript:") >= 0 || w_find_ci(s, n, "expression(") >= 0 ||
-           w_find_ci(s, n, "url(") >= 0 || w_find_ci(s, n, "behavior") >= 0 ||
+           css_fetching_url(s, n) || w_find_ci(s, n, "behavior") >= 0 ||
            w_find_ci(s, n, "-moz-binding") >= 0;
 }
 static void css_filter(w_out_t* w, const char* s, int n, int* rm) {

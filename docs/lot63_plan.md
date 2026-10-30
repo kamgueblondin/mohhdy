@@ -168,6 +168,12 @@ we_doc_t stays under 1 MiB (see the PR body for the measured size).
   before its inset shadow and children. When the whole set does not fit
   in the remaining display list it is refused whole ("background image
   budget"). A later background shorthand or gradient replaces the url.
+- The guest page sanitizer (webrt_sanitize_page, US-039) used to drop
+  every declaration with url(). It now keeps a url() whose argument is a
+  local absolute path (no scheme, no "//", no "..", only [A-Za-z0-9._/-],
+  optional matching quotes): such a url names an initrd file and fetches
+  nothing. Any other url() still drops its declaration (test_webrt
+  test_sanitize_page; 12 mutants of the exception killed).
 
 ### Not done in round 2
 

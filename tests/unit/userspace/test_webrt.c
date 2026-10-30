@@ -100,6 +100,18 @@ static void test_sanitize_page(void) {
     webrt_sanitize_page("<style>\n  @import \"e.css\";\nb{color:red}</style>", out, sizeof(out), &removed);
     TEST_ASSERT_EQUAL_STRING("<style>\n  \nb{color:red}</style>", out);
     TEST_ASSERT_EQUAL(1, removed);
+    /* lot 63: a local absolute url() fetches nothing and is kept; every
+     * other url() in the same declaration still drops it */
+    webrt_sanitize_page("<style>a{background-image:url(/images/m-1.png)}b{background-image:url( \"/i/x_2.png\" )}"
+                        "c{background:url(//h/x.png)}d{background:url(/a/../x.png)}e{background:url(/a:b)}"
+                        "f{background:url(data:x)}g{background:url(x.png)}h{background:url(/a.png) url(http://h/b.png)}"
+                        "i{background:url(/a%20b)}j{background:url('/a.png\")}k{background:url(/a.png}</style>"
+                        "<p style=\"background-image:url('/images/m.png')\">l</p><p style=\"background:url(/x/../y)\">m</p>",
+                        out, sizeof(out), &removed);
+    TEST_ASSERT_EQUAL_STRING("<style>a{background-image:url(/images/m-1.png)}b{background-image:url( \"/i/x_2.png\" )}"
+                             "c{}d{}e{}f{}g{}h{}i{}j{}k{}</style>"
+                             "<p style=\"background-image:url('/images/m.png')\">l</p><p>m</p>", out);
+    TEST_ASSERT_EQUAL(10, removed);
     /* the strict mode still drops <style> */
     webrt_sanitize_html("<style>p{}</style>t", out, sizeof(out), &removed);
     TEST_ASSERT_EQUAL_STRING("t", out);
