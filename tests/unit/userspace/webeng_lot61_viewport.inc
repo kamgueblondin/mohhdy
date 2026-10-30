@@ -39,6 +39,22 @@ static void test_l61_fixed_escapes_overflow_clip_and_paints_last(void) {
     TEST_ASSERT_EQUAL(12, l61_rect(0xFF0000)->h);
 }
 
+static void test_l61_fixed_ignores_positioned_ancestors(void) {
+    /* A relative and an absolute ancestor are containing blocks for
+     * absolutes, never for a fixed box: it stays on the viewport. */
+    l61_viewport("<body style='margin:0'><div id=r style='position:relative;margin-left:50px;margin-top:40px;width:100px;height:60px'>"
+                 "<div id=a style='position:absolute;left:5px;top:5px;width:60px;height:40px'>"
+                 "<div id=f style='position:fixed;left:0;top:0;width:20px;height:10px;background:#ff0000'></div>"
+                 "<div id=b style='position:absolute;left:0;top:0;width:10px;height:10px'></div></div></div></body>", 320, 50);
+    l61_box("f", 0, 0, 20, 10);
+    l61_rect_is(0xFF0000, 0, 0, 20, 10);
+    l61_box("b", 55, 45, 10, 10);
+    TEST_ASSERT_EQUAL(10, we_scroll(&g_doc, 10));
+    l61_box("f", 0, 10, 20, 10);
+    l61_box("b", 55, 45, 10, 10);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
 static void test_l61_scroll_moves_only_fixed_boxes(void) {
     l61_viewport(L61_FIXED, 320, 480);
     TEST_ASSERT_EQUAL(100, we_scroll(&g_doc, 100));
@@ -128,6 +144,7 @@ static void lot61_viewport_run(void) {
     RUN_TEST(test_l61_fixed_uses_the_default_viewport);
     RUN_TEST(test_l61_fixed_follows_an_explicit_viewport);
     RUN_TEST(test_l61_fixed_escapes_overflow_clip_and_paints_last);
+    RUN_TEST(test_l61_fixed_ignores_positioned_ancestors);
     RUN_TEST(test_l61_scroll_moves_only_fixed_boxes);
     RUN_TEST(test_l61_scroll_is_bounded);
     RUN_TEST(test_l61_relayout_resets_the_scroll);
