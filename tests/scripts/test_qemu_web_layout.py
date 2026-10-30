@@ -137,6 +137,17 @@ def main():
                 require(serial, "web item rect " + box)
                 print("lot61 console %s box %s" % (label, box), flush=True)
             require(serial, "dropped 0 page 640x144 diag 0")
+            start = g.send_command_until(monitor, "web-render /web/lot62.html", "web-render ok", proc)
+            serial = g.normalized_log(g.log_text()[start:])
+            require(serial, "web title Lot 62 alpha transform paint order")
+            for label, box in (("alpha-composite", "0 0 60x10"), ("ridge-light", "0 10 23x1"),
+                               ("ridge-dark", "1 11 21x1"), ("transform", "25 18 20x10"),
+                               ("box-shadow", "4 44 20x2"), ("underline", "0 53 16x1"),
+                               ("percent-margin", "30 54 90x4"), ("float", "0 58 20x10"),
+                               ("gradient-band", "0 68 120x1"), ("radius-step", "3 76 14x2")):
+                require(serial, "web item rect " + box)
+                print("lot62 console %s box %s" % (label, box), flush=True)
+            require(serial, "dropped 0 page 640x108 diag 2")
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             g.send_command_until(monitor, "web /web/lot52.html", "osui web render file=/web/lot52.html", proc,
@@ -456,6 +467,47 @@ def main():
                 if line.startswith("osui web render file=/web/lot61.html"):
                     print(line, flush=True)
             print("lot61 pixels compared=%d baseline=last,inline-block subgrid=auto-fill fixed=viewport clip=glyph table=collapse,outer-edge,half-inset border=dashed,double opacity=0 subgrid-gap=own z=negative flex=wrap image=shared" % compared,
+                  flush=True)
+
+            step = len(g.log_text())
+            g.send_key(monitor, "esc")
+            g.wait_for(proc, "osui web close file=/web/lot61.html", g.CMD_TIMEOUT, step)
+            start = g.send_command_until(monitor, "web /web/lot62.html",
+                "osui web render file=/web/lot62.html", proc, mode="getc", wait_prompt=False)
+            time.sleep(0.5)
+            width, height, pixels = g.screendump_rgb(monitor, "qemu-lot62.ppm")
+            compared = 0
+            for left, top, right, bottom, color in (
+                (0, 0, 60, 10, (128, 0, 127)), (60, 0, 120, 10, (0, 0, 255)),
+                (0, 10, 23, 11, (0x75, 0xB5, 0xF5)), (1, 11, 21, 12, (0x20, 0x60, 0xA0)),
+                (25, 18, 45, 28, (0, 128, 0)), (0, 28, 24, 30, (255, 0, 255)),
+                (2, 30, 22, 36, (255, 255, 0)), (0, 38, 20, 44, (0, 0, 128)),
+                (4, 44, 24, 46, (128, 128, 128)), (0, 53, 16, 54, (255, 0, 0)),
+                (30, 54, 120, 58, (0, 255, 255)), (18, 58, 20, 68, (255, 165, 0)),
+                (0, 68, 120, 69, (16, 16, 16)), (0, 75, 120, 76, (0xEF, 0xEF, 0xEF)),
+                (3, 76, 17, 78, (128, 0, 0)), (0, 76, 3, 78, (255, 255, 255)),
+                (0, 84, 20, 86, (128, 0, 0))):
+                for y in range(top, bottom):
+                    for x in range(left, right):
+                        offset = ((oy + y) * width + ox + x) * 3
+                        if tuple(pixels[offset:offset + 3]) != color:
+                            raise RuntimeError("lot62 layout pixel mismatch at %d,%d" % (x, y))
+                        compared += 1
+            ink = 0
+            for y in range(59, 68):
+                for x in range(0, 16):
+                    offset = ((oy + y) * width + ox + x) * 3
+                    if tuple(pixels[offset:offset + 3]) == (0, 0, 0):
+                        ink += 1
+                    compared += 1
+            if ink == 0:
+                raise RuntimeError("lot62 text not painted over the later float")
+            serial = g.normalized_log(g.log_text()[start:])
+            require(serial, "dropped 0 page 640x108 diag 2")
+            for line in serial.splitlines():
+                if line.startswith("osui web render file=/web/lot62.html"):
+                    print(line, flush=True)
+            print("lot62 pixels compared=%d alpha=source-over border=ridge transform=translate,scale outline=after shadow=offset decoration=underline margin=percent order=text-over-float gradient=bands radius=steps" % compared,
                   flush=True)
 
         print("QEMU web layout contract passed.", flush=True)
