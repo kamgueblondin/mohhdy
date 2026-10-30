@@ -48,11 +48,19 @@
 #define WE_GRID_NAME_MAX 16
 #define WE_GRID_LINE_ALIASES 2
 typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME_MAX]; } we_grid_names_t;
+/* Lot 61: an edge is auto, a line number, a name with an occurrence
+ * (nth, negative counts from the end) or a span. A named span counts
+ * lines carrying edge[] from the opposite resolved edge. */
 typedef struct {
     char edge[2][WE_GRID_NAME_MAX];
     uint8_t span[2], active;
+    int8_t nth[2];
+    uint8_t named_span[2], bare[2];
+    /* Plain numeric placement kept so subgrid clamping can be undone. */
+    uint8_t plain_start, plain_span;
 } we_grid_request_t;
 #define WE_TRACK_LIMIT 2000
+enum { WE_AUTO_REPEAT_NONE, WE_AUTO_FILL, WE_AUTO_FIT };
 enum { WE_FIT_FILL, WE_FIT_CONTAIN, WE_FIT_COVER, WE_FIT_NONE, WE_FIT_SCALE_DOWN };
 typedef struct {
     char name[WE_GRID_NAME_MAX];
@@ -65,8 +73,12 @@ enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3 }
 enum { WE_INSET_LEFT = 1, WE_INSET_TOP = 2, WE_INSET_RIGHT = 4, WE_INSET_BOTTOM = 8 };
 enum { WE_AUTO_LEFT = 1, WE_AUTO_RIGHT = 2, WE_AUTO_TOP = 4, WE_AUTO_BOTTOM = 8 };
 enum { WE_CLEAR_NONE = 0, WE_CLEAR_LEFT = 1, WE_CLEAR_RIGHT = 2, WE_CLEAR_BOTH = 3 };
-enum { WE_VALIGN_TOP = 0, WE_VALIGN_MIDDLE = 1, WE_VALIGN_BOTTOM = 2 };
+enum { WE_VALIGN_TOP = 0, WE_VALIGN_MIDDLE = 1, WE_VALIGN_BOTTOM = 2, WE_VALIGN_BASELINE = 3 };
 #define WE_Z_MAX 8
+/* Lot 61 border styles; 0 = unset, painted and ranked as solid. */
+#define WE_BS_NONE 1
+#define WE_BS_HIDDEN 2
+#define WE_BS_SOLID 3
 #define WE_LINE_H_MAX 40
 #define WE_INDENT_MAX 400
 #define WE_LAYOUT_MAX 16000
@@ -86,7 +98,8 @@ enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE };
 enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4, WE_DISP_TABLE = 5, WE_DISP_ROW = 6, WE_DISP_CELL = 7, WE_DISP_INLINE_BLOCK = 8 };
 enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2 };
 enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
-       WE_PACK_STRETCH, WE_PACK_BETWEEN, WE_PACK_AROUND, WE_PACK_EVENLY, WE_PACK_BASELINE };
+       WE_PACK_STRETCH, WE_PACK_BETWEEN, WE_PACK_AROUND, WE_PACK_EVENLY, WE_PACK_BASELINE,
+       WE_PACK_LAST_BASELINE };
 enum { WE_SIZE_AUTO, WE_SIZE_MIN_CONTENT, WE_SIZE_MAX_CONTENT, WE_SIZE_FIT_CONTENT, WE_SIZE_FIT_LIMIT };
 enum { WE_WRAP_NORMAL, WE_WRAP_BREAK_WORD, WE_WRAP_ANYWHERE };
 
@@ -135,6 +148,15 @@ typedef struct {
     uint8_t nowrap, break_word, visibility, overflow_hidden;
     uint8_t grid_col_start, grid_row_start, grid_col_span, grid_row_span;
     we_grid_names_t line_names[2];
+    /* Lot 61: one repeat(auto-fill|auto-fit, track) per axis. The template
+     * keeps one repetition; layout expands it to 1..8 tracks in place. */
+    uint8_t auto_mode[2], auto_at[2], auto_count[2], tpl_count[2];
+    int16_t tpl_size[2][WE_TRACKS_MAX], tpl_floor[2][WE_TRACKS_MAX], tpl_cap[2][WE_TRACKS_MAX];
+    /* Lot 61: grid-template-*: subgrid per axis. Layout copies the parent
+     * tracks, gap (sub_gap - 1, 0 when none) and line names in place. */
+    uint8_t subgrid[2];
+    int16_t sub_gap[2];
+    uint8_t gap_set;           /* lot 61: bit 0 column, bit 1 row gap declared */
     we_grid_request_t grid_request[2];
     int16_t col_size[WE_TRACKS_MAX];
     int16_t col_floor[WE_TRACKS_MAX], col_cap[WE_TRACKS_MAX];
@@ -166,6 +188,15 @@ typedef struct {
     int16_t text_indent;       /* first line only, after float shortening */
     int8_t z_index;            /* absolute paint order, -8..8 */
     uint8_t z_set, clear_side, valign;
+    uint8_t fixed;             /* lot 61: position:fixed (absolute + viewport) */
+    uint8_t collapse_w;        /* lot 61: shared cell border width, layout time */
+    /* Lot 61 border edges, top right bottom left. edge_w -1 and style 0
+     * mean "use border / border_style". Only collapsed tables read them. */
+    int8_t edge_w[4];
+    uint8_t edge_style[4], border_style, edge_color_set, collapse_cell;
+    uint8_t transparency;       /* lot 61: 100 - opacity%, non-zero forms a stacking context */
+    uint8_t cin[4];             /* lot 61: collapsed cell content insets, layout time */
+    uint32_t edge_color[4];
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;
     int16_t margin[4], padding[4]; /* top right bottom left */
@@ -229,6 +260,8 @@ typedef struct {
     uint32_t ndiag, diag_dropped;
     we_perf_t perf;
     int16_t root;
+    /* Lot 61: explicit viewport and the scroll offset fixed boxes follow. */
+    int16_t viewport_w, viewport_h, scroll_y;
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 
@@ -244,6 +277,12 @@ void we_set_image_reader(we_image_read_fn read, void *ctx);
 int we_parse(we_doc_t* d, const char* html, int len);
 int we_style(we_doc_t* d);
 int we_layout(we_doc_t* d, int viewport_w);
+/* Lot 61: layout against a viewport of viewport_w x viewport_h (fixed boxes,
+ * scroll bound). we_layout uses WE_VIEWPORT_H_DEFAULT. */
+#define WE_VIEWPORT_H_DEFAULT 480
+int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h);
+/* Clamp y to [0, page_h - viewport_h], move fixed boxes, return the offset. */
+int we_scroll(we_doc_t* d, int y);
 int we_render(we_doc_t* d, const char* html, int len, int viewport_w);
 /* US-045 */
 int we_find_id(const we_doc_t* d, const char* id);

@@ -8,7 +8,11 @@ longer drift silently. Checks, without booting:
   3. the prod-roadmap counts and percentages expected by
      tests/integration/test_qemu_production.py are the ones computed from
      /roadmap.txt with the guest rule (done * 100 / total, integer);
-  4. the entry count line matches.
+  4. the entry count line matches;
+  5. /roadmap.txt fits the guest read cap (PROD_RM_FILE_MAX in
+     userspace/prod.h) and every guest reader of /roadmap.txt reads with
+     that cap (lot 61: the file grew past a fixed 4096-byte buffer and the
+     guest silently dropped the last entries).
 Exit 1 with the differences."""
 import os
 import re
@@ -47,8 +51,31 @@ def master_678():
     return out
 
 
+def read_cap():
+    """Return (cap, problems) for the guest /roadmap.txt readers."""
+    probs = []
+    hdr = open(os.path.join(ROOT, "userspace", "prod.h")).read()
+    m = re.search(r"#define PROD_RM_FILE_MAX (\d+)", hdr)
+    if not m:
+        return 0, ["PROD_RM_FILE_MAX missing from userspace/prod.h"]
+    cap = int(m.group(1))
+    size = os.path.getsize(os.path.join(ROOT, "initrd_content", "roadmap.txt"))
+    if size > cap:
+        probs.append("roadmap.txt is %d bytes, over the guest read cap %d (PROD_RM_FILE_MAX)" % (size, cap))
+    for name in ("prod.c", "shell_prod.c"):
+        src = open(os.path.join(ROOT, "userspace", name)).read()
+        for call in re.findall(r"sys_readfile\(\"/roadmap\.txt\",[^;]*;", src):
+            if "PROD_RM_FILE_MAX + 1" not in call:
+                probs.append("userspace/%s reads /roadmap.txt without the PROD_RM_FILE_MAX + 1 cap" % name)
+        if "/roadmap.txt" in src and "prod_roadmap_load(" not in src:
+            probs.append("userspace/%s parses /roadmap.txt without the truncation check" % name)
+    return cap, probs
+
+
 def main():
     bad = []
+    cap, probs = read_cap()
+    bad.extend(probs)
     rows = roadmap()
     g = master_g()
     t678 = master_678()

@@ -289,6 +289,8 @@ static void test_flex_and_grid(void) {
 
 #include "webeng_lot60_composition.inc"
 
+#include "webeng_lot61.inc"
+
 int main(void) {
     unity_init();
     RUN_TEST(test_parse_tree_and_title);
@@ -787,7 +789,7 @@ int main(void) {
     RUN_TEST(test_l56_absolute_percentage_width_uses_padding_edge);
     RUN_TEST(test_l56_absolute_no_insets_use_padding_origin);
     RUN_TEST(test_l56_static_clears_absolute);
-    RUN_TEST(test_l56_fixed_is_refused_and_keeps_absolute);
+    RUN_TEST(test_l56_invalid_position_is_refused_and_keeps_absolute);
     RUN_TEST(test_l56_invalid_offset_keeps_previous);
     RUN_TEST(test_l56_pre_keeps_newline_and_spaces);
     RUN_TEST(test_l56_normal_collapses_newline_to_one_space);
@@ -1828,7 +1830,7 @@ int main(void) {
     RUN_TEST(test_l60_composition_overflow_hidden_synthesizes_bottom_edge);
     RUN_TEST(test_l60_composition_wrapped_lines_have_independent_baselines);
     RUN_TEST(test_l60_composition_reversed_row_retains_baseline);
-    RUN_TEST(test_l60_composition_column_baseline_is_diagnosed);
+    RUN_TEST(test_l60_composition_column_invalid_baseline_is_refused);
     RUN_TEST(test_l60_composition_grid_row_spanning_baseline_is_diagnosed);
     RUN_TEST(test_l60_composition_unknown_line_is_diagnosed_then_auto);
     RUN_TEST(test_l60_composition_negative_line_before_start_is_diagnosed);
@@ -1840,6 +1842,7 @@ int main(void) {
     RUN_TEST(test_l60_composition_image_exports_decoded_bottom_baseline);
     RUN_TEST(test_l60_composition_flex_negative_margin_keeps_signed_baseline);
     RUN_TEST(test_l60_composition_grid_negative_margin_keeps_signed_baseline);
+    lot61_run();
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

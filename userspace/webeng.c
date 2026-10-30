@@ -1,6 +1,8 @@
 /* userspace/webeng.c - Lot 6 (US-031, US-043, US-045). See webeng.h. */
 #include "webeng.h"
 #include "imgdec.h"
+/* Lot 61: the kernel 8x8 font, shared read-only for partial glyph clipping. */
+#include "../kernel/gfx_font8.h"
 
 /* ---------- small helpers (no libc) ---------- */
 static int w_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }
@@ -65,7 +67,7 @@ static int pool_put(we_doc_t* d, const char* s, int n, uint16_t* off) {
 }
 
 /* ---------- parse ---------- */
-static const char* const k_void[] = { "br", "hr", "img", "input", "meta", "link", 0 };
+static const char* const k_void[] = { "br", "hr", "img", "input", "meta", "link", "col", 0 };
 static int is_void(const char* t) { int i; for (i = 0; k_void[i]; i++) if (w_eq(t, k_void[i])) return 1; return 0; }
 
 static int new_node(we_doc_t* d, int parent) {
@@ -250,7 +252,8 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                     else if (w_eq(an, "class")) w_cpy(n->cls, 32, av, vk);
                     else if (w_eq(an, "style")) { if (pool_put(d, av, vk, &n->style_off) == 0) n->style_len = (uint16_t)vk; }
                     else if (w_eq(an, "alt")) { if (pool_put(d, av, vk, &n->alt_off) == 0) n->alt_len = (uint16_t)vk; }
-                    else if (w_eq(an, "colspan") || w_eq(an, "rowspan")) {
+                    else if (w_eq(an, "colspan") || w_eq(an, "rowspan") ||
+                             (w_eq(an, "span") && (w_eq(name, "col") || w_eq(name, "colgroup")))) {
                         int span = 0, digit, valid = vk > 0;
                         for (digit = 0; digit < vk; digit++) {
                             if (av[digit] < '0' || av[digit] > '9' || span > WE_TRACKS_MAX) { valid = 0; break; }
@@ -259,7 +262,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                         if (!valid || span < 1 || span > WE_TRACKS_MAX) {
                             n->span_refused = 1;
                             diag(d, "table span refused", idx);
-                        } else if (w_eq(an, "colspan")) n->colspan = (uint8_t)span;
+                        } else if (!w_eq(an, "rowspan")) n->colspan = (uint8_t)span;
                         else n->rowspan = (uint8_t)span;
                     }
                     else if (w_eq(an, "src")) {
@@ -1046,7 +1049,16 @@ static int track_value(const char *v, int len, int16_t *size, int16_t *low, int1
 
 /* A list may mix bounded repeat groups and functional track tokens.
  * Parse into temporary arrays so a bad tail never changes the old list. */
-static int parse_track_list(const char *v, int len, int16_t *sizes, int16_t *floors, int16_t *caps) {
+typedef struct { int mode, at; } we_auto_repeat_t;
+
+/* A definite track: fixed, or minmax with a fixed floor and a fr or fixed cap. */
+static int definite_track(int size, int low, int cap) {
+    if (size >= 0) return 1;
+    return low >= 0 && (size != WE_TRACK_AUTO || cap >= 0);
+}
+
+static int parse_track_list(const char *v, int len, int16_t *sizes, int16_t *floors, int16_t *caps,
+                            we_auto_repeat_t *automatic) {
     int i = 0, count = 0;
     while (i < len) {
         int first, nesting = 0, end, copies = 1, group_first = count, group_count, c;
@@ -1054,9 +1066,17 @@ static int parse_track_list(const char *v, int len, int16_t *sizes, int16_t *flo
         if (i == len) break;
         first = i;
         if (w_ieq_n(v + i, len - i, "repeat(")) {
+            int mode = 0;
             i += 7; first = i;
-            while (i < len && v[i] >= '0' && v[i] <= '9') i++;
-            if (bounded_uint(v + first, i - first, WE_TRACKS_MAX, &copies) || copies < 1) return -1;
+            if (w_ieq_n(v + i, len - i, "auto-fill")) mode = WE_AUTO_FILL;
+            else if (w_ieq_n(v + i, len - i, "auto-fit")) mode = WE_AUTO_FIT;
+            if (mode) {
+                if (!automatic || automatic->mode) return -1;
+                i += mode == WE_AUTO_FILL ? 9 : 8;
+            } else {
+                while (i < len && v[i] >= '0' && v[i] <= '9') i++;
+                if (bounded_uint(v + first, i - first, WE_TRACKS_MAX, &copies) || copies < 1) return -1;
+            }
             while (i < len && w_space(v[i])) i++;
             if (i == len || v[i++] != ',') return -1;
             first = i; nesting = 1;
@@ -1082,6 +1102,15 @@ static int parse_track_list(const char *v, int len, int16_t *sizes, int16_t *flo
             }
             group_count = count - group_first;
             if (!group_count || group_count * copies > WE_TRACKS_MAX - group_first) return -1;
+            if (mode) {
+                int at = first;
+                while (at < end && w_space(v[at])) at++;
+                /* fit-content() shares minmax(0, cap) storage but is not a fixed size. */
+                if (w_ieq_n(v + at, end - at, "fit-content(")) return -1;
+                if (group_count != 1 || !definite_track(sizes[group_first], floors[group_first], caps[group_first])) return -1;
+                automatic->mode = mode;
+                automatic->at = group_first;
+            }
             for (c = 1; c < copies; c++) {
                 int k;
                 for (k = 0; k < group_count; k++, count++) {
@@ -1183,6 +1212,30 @@ static int bounded_signed(const char *v, int len, int max, int *out) {
     return 0;
 }
 
+/* Lot 61: opacity as a percentage 0..100 from a number ("0.5", ".25",
+ * "1") or a percentage ("40%"). Out-of-range values clamp (CSS Color 4);
+ * more than two decimals are truncated. */
+static int parse_opacity(const char *v, int len, int *out) {
+    int at = 0, whole = 0, frac = 0, scale = 10, digits = 0, negative = 0, pct;
+    if (len && (v[0] == '-' || v[0] == '+')) { negative = v[0] == '-'; at++; }
+    pct = len > at && v[len - 1] == '%';
+    if (pct) len--;
+    while (at < len && v[at] >= '0' && v[at] <= '9') { if (whole < 1000) whole = whole * 10 + v[at] - '0'; at++; digits++; }
+    if (at < len && v[at] == '.') {
+        at++;
+        if (at >= len) return -1;
+        while (at < len && v[at] >= '0' && v[at] <= '9') {
+            if (scale) { frac += (v[at] - '0') * scale; scale /= 10; }
+            at++; digits++;
+        }
+    }
+    if (!digits || at != len) return -1;
+    whole = pct ? whole : whole * 100 + frac;
+    if (negative) whole = 0;
+    *out = whole > 100 ? 100 : whole;
+    return 0;
+}
+
 static int line_identifier(const char *v, int len) {
     return grid_name(v, len) && !value_is(v, len, "auto") && !value_is(v, len, "span") &&
            !value_is(v, len, "none") && !value_is(v, len, "inherit") && !value_is(v, len, "initial") &&
@@ -1190,9 +1243,10 @@ static int line_identifier(const char *v, int len) {
 }
 
 static int named_track_list(const char *v, int len, int16_t *sizes, int16_t *floors,
-                            int16_t *caps, we_grid_names_t *names) {
-    int at = 0, count = 0;
+                            int16_t *caps, we_grid_names_t *names, we_auto_repeat_t *automatic) {
+    int at = 0, count = 0, k;
     w_zero(names, sizeof(*names));
+    automatic->mode = automatic->at = 0;
     while (at < len) {
         int first, depth = 0, end, added;
         while (at < len && w_space(v[at])) at++;
@@ -1227,45 +1281,64 @@ static int named_track_list(const char *v, int len, int16_t *sizes, int16_t *flo
         if (depth || end == first) return -1;
         {
             int16_t group[WE_TRACKS_MAX], low[WE_TRACKS_MAX], high[WE_TRACKS_MAX];
-            int k;
-            added = parse_track_list(v + first, end - first, group, low, high);
+            we_auto_repeat_t local;
+            local.mode = local.at = 0;
+            added = parse_track_list(v + first, end - first, group, low, high, automatic->mode ? 0 : &local);
             if (added < 1 || count + added > WE_TRACKS_MAX) return -1;
+            if (local.mode) { automatic->mode = local.mode; automatic->at = count + local.at; }
             for (k = 0; k < added; k++, count++) {
                 sizes[count] = group[k]; floors[count] = low[k]; caps[count] = high[k];
             }
         }
     }
+    /* Every other track needs a definite size so the count is defined. */
+    if (automatic->mode)
+        for (k = 0; k < count; k++)
+            if (k != automatic->at && !definite_track(sizes[k], floors[k], caps[k])) return -1;
     return count ? count : -1;
 }
 
-static int grid_edge(const char *v, int len, char out[WE_GRID_NAME_MAX], uint8_t *span) {
-    int number, end = len, first = 0;
-    while (first < end && w_space(v[first])) first++;
-    while (end > first && w_space(v[end - 1])) end--;
-    v += first; len = end - first;
-    if (!len) return -1;
-    out[0] = 0; *span = 0;
-    if (value_is(v, len, "auto")) return 0;
-    if (w_ieq_n(v, len, "span ")) {
-        first = 5;
-        while (first < len && w_space(v[first])) first++;
-        if (bounded_uint(v + first, len - first, WE_TRACKS_MAX, &number) || number < 1) return -1;
-        *span = (uint8_t)number;
+/* One edge: auto | N | name | N name | name N | span N | span name |
+ * span N name. A name may carry an occurrence; negative counts from the end. */
+static int grid_edge(const char *v, int len, we_grid_request_t *r, int side) {
+    int a[4], l[4], count = tokens(v, len, a, l), k, first = 0, number = 0, numbers = 0, name = -1;
+    char *out = r->edge[side];
+    out[0] = 0; r->span[side] = 0; r->nth[side] = 0; r->named_span[side] = 0; r->bare[side] = 0;
+    if (count < 1 || count > 3) return -1;
+    if (count == 1 && value_is(v + a[0], l[0], "auto")) return 0;
+    if (value_is(v + a[0], l[0], "span")) first = 1;
+    if (first && count == 1) return -1;
+    for (k = first; k < count; k++) {
+        const char *t = v + a[k];
+        if ((t[0] >= '0' && t[0] <= '9') || t[0] == '-' || t[0] == '+') {
+            if (numbers++ || bounded_signed(t, l[k], WE_TRACKS_MAX + 1, &number) || !number) return -1;
+        } else {
+            if (name >= 0 || !line_identifier(t, l[k])) return -1;
+            name = k;
+        }
+    }
+    if (first) {
+        if (numbers && (number < 1 || number > WE_TRACKS_MAX)) return -1;
+        r->span[side] = (uint8_t)(numbers ? number : 1);
+        if (name >= 0) { r->named_span[side] = 1; w_cpy(out, WE_GRID_NAME_MAX, v + a[name], l[name]); }
         return 0;
     }
-    if ((v[0] >= '0' && v[0] <= '9') || v[0] == '-' || v[0] == '+') {
-        if (bounded_signed(v, len, WE_TRACKS_MAX + 1, &number) || !number) return -1;
-    } else if (!line_identifier(v, len)) return -1;
-    w_cpy(out, WE_GRID_NAME_MAX, v, len);
+    if (count > 2) return -1;
+    if (name < 0) { w_cpy(out, WE_GRID_NAME_MAX, v + a[0], l[0]); return 0; }
+    w_cpy(out, WE_GRID_NAME_MAX, v + a[name], l[name]);
+    r->nth[side] = (int8_t)(numbers ? number : 1);
+    r->bare[side] = (uint8_t)!numbers;
     return 0;
 }
 
 static int grid_request(we_node_t *n, int axis, const char *v, int len) {
     we_grid_request_t request;
     uint8_t start, span;
-    int split = 0, tail;
+    int split = 0, a, b;
     if (!parse_placement(v, len, &start, &span)) {
         n->grid_request[axis].active = 0;
+        n->grid_request[axis].plain_start = start;
+        n->grid_request[axis].plain_span = span;
         if (axis) { n->grid_row_start = start; n->grid_row_span = span; }
         else { n->grid_col_start = start; n->grid_col_span = span; }
         n->grid_area[0] = 0;
@@ -1273,19 +1346,21 @@ static int grid_request(we_node_t *n, int axis, const char *v, int len) {
     }
     w_zero(&request, sizeof(request));
     while (split < len && v[split] != '/') split++;
-    if (grid_edge(v, split, request.edge[0], &request.span[0])) return -1;
-    if (split < len) {
-        tail = split + 1;
-        if (grid_edge(v + tail, len - tail, request.edge[1], &request.span[1])) return -1;
+    if (grid_edge(v, split, &request, 0)) return -1;
+    if (split < len && grid_edge(v + split + 1, len - split - 1, &request, 1)) return -1;
+    /* A lone <custom-ident> also names the end edge (CSS Grid 8.4). */
+    if (split >= len && request.bare[0]) {
+        w_cpy(request.edge[1], sizeof(request.edge[1]), request.edge[0], w_len(request.edge[0]));
+        request.nth[1] = request.nth[0];
+        request.bare[1] = 1;
     }
     if (request.span[0] && (request.span[1] || !request.edge[1][0])) return -1;
-    {
-        int a, b;
-        if (!bounded_signed(request.edge[0], w_len(request.edge[0]), WE_TRACKS_MAX + 1, &a) && a > 0) {
-            if (a > WE_TRACKS_MAX) return -1;
-            if (request.span[1] && a + request.span[1] - 1 > WE_TRACKS_MAX) return -1;
-            if (!bounded_signed(request.edge[1], w_len(request.edge[1]), WE_TRACKS_MAX + 1, &b) && b > 0 && b <= a) return -1;
-        }
+    if (!request.nth[0] && !request.span[0] &&
+        !bounded_signed(request.edge[0], w_len(request.edge[0]), WE_TRACKS_MAX + 1, &a) && a > 0) {
+        if (a > WE_TRACKS_MAX) return -1;
+        if (request.span[1] && !request.named_span[1] && a + request.span[1] - 1 > WE_TRACKS_MAX) return -1;
+        if (!request.nth[1] && !request.span[1] &&
+            !bounded_signed(request.edge[1], w_len(request.edge[1]), WE_TRACKS_MAX + 1, &b) && b > 0 && b <= a) return -1;
     }
     request.active = 1;
     n->grid_request[axis] = request;
@@ -1293,43 +1368,260 @@ static int grid_request(we_node_t *n, int axis, const char *v, int len) {
     return 0;
 }
 
-static int named_line(const we_node_t *parent, int axis, const char *edge) {
-    int line, alias, number, count = axis ? parent->grid_rows : parent->grid_cols;
-    if (!edge[0]) return 0;
-    if ((edge[0] >= '0' && edge[0] <= '9') || edge[0] == '+' || edge[0] == '-') {
+static int grid_line_count(const we_node_t *g, int axis) {
+    int tracks = axis ? g->grid_rows : g->grid_cols, areas = axis ? g->area_rows : g->area_cols;
+    if (areas > tracks) tracks = areas;
+    if (tracks > WE_TRACKS_MAX) tracks = WE_TRACKS_MAX;
+    return tracks + 1;
+}
+
+/* Explicit names and the implicit <area>-start / <area>-end aliases. */
+/* Explicit names follow the template; lines inside an expanded automatic
+ * repetition carry no names, lines after it shift by the extra copies. */
+static int template_line(const we_node_t *g, int axis, int line) {
+    int at = g->auto_at[axis], copies = g->auto_count[axis];
+    if (!g->auto_mode[axis] || copies <= 1 || line <= at + 1) return line;
+    if (line >= at + 1 + copies) return line - copies + 1;
+    return 0;
+}
+
+static int line_has_name(const we_node_t *g, int axis, int line, const char *name) {
+    int alias, k, len = w_len(name), t = template_line(g, axis, line);
+    for (alias = 0; t > 0 && alias < WE_GRID_LINE_ALIASES; alias++)
+        if (w_eq(name, g->line_names[axis].name[t - 1][alias])) return 1;
+    for (k = 0; k < g->area_count; k++) {
+        const we_grid_area_t *area = &g->areas[k];
+        int alen = w_len(area->name), first = (axis ? area->row : area->col) + 1;
+        int last = first + (axis ? area->rows : area->cols);
+        if (len <= alen || !sel_equal(name, area->name, alen, 0)) continue;
+        if (w_eq(name + alen, "-start") && line == first) return 1;
+        if (w_eq(name + alen, "-end") && line == last) return 1;
+    }
+    return 0;
+}
+
+/* nth > 0 searches forward after line `after`; nth < 0 searches backward
+ * before line `before`. Missing occurrences are not invented. */
+static int nth_named_line(const we_node_t *g, int axis, const char *name, int nth, int after, int before) {
+    int lines = grid_line_count(g, axis), line, seen = 0;
+    if (nth > 0) {
+        for (line = after + 1; line <= lines; line++)
+            if (line_has_name(g, axis, line, name) && ++seen == nth) return line;
+    } else if (nth < 0) {
+        if (before > lines + 1) before = lines + 1;
+        for (line = before - 1; line >= 1; line--)
+            if (line_has_name(g, axis, line, name) && ++seen == -nth) return line;
+    }
+    return -1;
+}
+
+static int edge_line(const we_node_t *g, int axis, const we_grid_request_t *r, int side) {
+    const char *edge = r->edge[side];
+    int number, count = axis ? g->grid_rows : g->grid_cols;
+    if (r->span[side] || !edge[0]) return 0;
+    if (!r->nth[side]) {
         if (bounded_signed(edge, w_len(edge), WE_TRACKS_MAX + 1, &number)) return -1;
         if (number < 0) number = count + 2 + number;
         return number >= 1 && number <= WE_TRACKS_MAX + 1 ? number : -1;
     }
-    for (line = 0; line <= count; line++) for (alias = 0; alias < WE_GRID_LINE_ALIASES; alias++)
-        if (w_eq(edge, parent->line_names[axis].name[line][alias])) return line + 1;
-    return -1;
+    if (r->bare[side]) {
+        char alias[WE_GRID_NAME_MAX + 8];
+        int len = w_len(edge), line;
+        w_cpy(alias, sizeof(alias), edge, len);
+        w_cpy(alias + len, sizeof(alias) - len, side ? "-end" : "-start", side ? 4 : 6);
+        line = nth_named_line(g, axis, alias, 1, 0, 0);
+        if (line > 0) return line;
+    }
+    return nth_named_line(g, axis, edge, r->nth[side], 0, WE_TRACKS_MAX + 2);
 }
 
+static void resolve_requests(we_doc_t *d, int idx, int report) {
+    we_node_t *n = &d->nodes[idx];
+    const we_node_t *g;
+    int axis;
+    if (n->parent < 0 || d->nodes[n->parent].display != WE_DISP_GRID) return;
+    g = &d->nodes[n->parent];
+    for (axis = 0; axis < 2; axis++) {
+        const we_grid_request_t *request = &n->grid_request[axis];
+        int start, end, span;
+        if (!request->active) continue;
+        start = edge_line(g, axis, request, 0);
+        end = edge_line(g, axis, request, 1);
+        if (start > 0 && request->named_span[1])
+            end = nth_named_line(g, axis, request->edge[1], request->span[1], start, 0);
+        else if (end > 0 && request->named_span[0])
+            start = nth_named_line(g, axis, request->edge[0], -request->span[0], 0, end);
+        else if (start >= 0 && end >= 0) {
+            if (!start && end) start = end - (request->span[0] ? request->span[0] : 1);
+            if (!end && start) end = start + (request->span[1] ? request->span[1] : 1);
+        }
+        if (start > 0 && end == start) end = start + 1;
+        span = start > 0 && end > 0 ? end - start : request->span[1] && !request->named_span[1] ? request->span[1] : 1;
+        if (start < 0 || end < 0 || start > WE_TRACKS_MAX || end > WE_TRACKS_MAX + 1 || span < 1 || span > WE_TRACKS_MAX) {
+            if (report) diag(d, "grid line unresolved", idx);
+            start = 0; span = 1;
+        }
+        if (axis) { n->grid_row_start = (uint8_t)start; n->grid_row_span = (uint8_t)span; }
+        else { n->grid_col_start = (uint8_t)start; n->grid_col_span = (uint8_t)span; }
+    }
+}
+
+static uint8_t subgrid_ok[WE_MAX_NODES];
+static int subgrid_on(int s, int axis) { return s >= 0 && ((subgrid_ok[s] >> axis) & 1); }
+
+/* Items of a subgrid resolve against inherited names: report later. */
 static void resolve_grid_requests(we_doc_t *d) {
     uint32_t i;
     for (i = 0; i < d->nnodes; i++) {
+        int p = d->nodes[i].parent;
+        resolve_requests(d, (int)i, !(p >= 0 && subgrid_ok[p]));
+    }
+}
+
+/* Lot 61 subgrid, bounded: one level, a grid parent, no box offsets on
+ * the subgridded axis, no line-name list. Refusals fall back to none. */
+static void subgrid_validate(we_doc_t *d) {
+    uint32_t i;
+    for (i = 0; i < d->nnodes; i++) {
         we_node_t *n = &d->nodes[i];
-        int axis;
-        if (n->parent < 0 || d->nodes[n->parent].display != WE_DISP_GRID) continue;
+        int axis, p = n->parent, k;
+        subgrid_ok[i] = 0;
         for (axis = 0; axis < 2; axis++) {
-            const we_grid_request_t *request = &n->grid_request[axis];
-            int start, end, span;
-            if (!request->active) continue;
-            start = named_line(&d->nodes[n->parent], axis, request->edge[0]);
-            end = named_line(&d->nodes[n->parent], axis, request->edge[1]);
-            if (start >= 0 && end >= 0) {
-                if (!start && end) start = end - (request->span[0] ? request->span[0] : 1);
-                if (!end && start) end = start + (request->span[1] ? request->span[1] : 1);
+            if (!n->subgrid[axis]) continue;
+            w_zero(&n->line_names[axis], sizeof(n->line_names[axis]));
+            for (k = 0; k < WE_TRACKS_MAX; k++) {
+                if (axis) { n->row_size[k] = WE_TRACK_AUTO; n->row_floor[k] = n->row_cap[k] = -1; }
+                else { n->col_size[k] = -1; n->col_floor[k] = n->col_cap[k] = -1; }
             }
-            span = start && end ? end - start : request->span[1] ? request->span[1] : 1;
-            if (start < 0 || end < 0 || start > WE_TRACKS_MAX || end > WE_TRACKS_MAX + 1 || span < 1 || span > WE_TRACKS_MAX) {
-                diag(d, "grid line unresolved", (int)i); start = 0; span = 1;
+            if (axis) n->grid_rows = 0; else n->grid_cols = 0;
+        }
+        n->sub_gap[0] = n->sub_gap[1] = 0;
+        if (!n->subgrid[0] && !n->subgrid[1]) continue;
+        if (n->display != WE_DISP_GRID || n->absolute || p < 0 || d->nodes[p].display != WE_DISP_GRID) {
+            diag(d, "subgrid requires grid parent", (int)i);
+            continue;
+        }
+        if (d->nodes[p].subgrid[0] || d->nodes[p].subgrid[1]) {
+            diag(d, "nested subgrid refused", (int)i);
+            continue;
+        }
+        for (axis = 0; axis < 2; axis++) {
+            int a = axis ? 0 : 3, b = axis ? 2 : 1;
+            if (!n->subgrid[axis]) continue;
+            if (n->border || n->padding[a] || n->padding[b] || n->margin[a] || n->margin[b] ||
+                (n->margin_auto & (axis ? (WE_AUTO_TOP | WE_AUTO_BOTTOM) : (WE_AUTO_LEFT | WE_AUTO_RIGHT)))) {
+                diag(d, "subgrid box offsets refused", (int)i);
+                continue;
             }
-            if (axis) { n->grid_row_start = (uint8_t)start; n->grid_row_span = (uint8_t)span; }
-            else { n->grid_col_start = (uint8_t)start; n->grid_col_span = (uint8_t)span; }
+            subgrid_ok[i] |= (uint8_t)(1 << axis);
         }
     }
+}
+
+static void name_copy(char *dst, const char *a, const char *b) {
+    int la = w_len(a), lb = w_len(b);
+    if (la + lb >= WE_GRID_NAME_MAX) return;
+    w_cpy(dst, WE_GRID_NAME_MAX, a, la);
+    w_cpy(dst + la, WE_GRID_NAME_MAX - la, b, lb);
+}
+
+/* The subgrid takes span tracks of the parent from `start` (0-based): track
+ * count, auto placeholders, explicit names and area aliases of its lines.
+ * Its items are re-resolved and clamped into the inherited tracks. */
+static void subgrid_bind(we_doc_t *d, int p, int s, int axis, int start, int span) {
+    const we_node_t *g = &d->nodes[p];
+    we_node_t *n = &d->nodes[s];
+    int line, k;
+    if (span < 1) span = 1;
+    if (start + span > WE_TRACKS_MAX) span = WE_TRACKS_MAX - start;
+    if (span < 1) return;
+    w_zero(&n->line_names[axis], sizeof(n->line_names[axis]));
+    for (line = 0; line <= span; line++) {
+        int at = start + line + 1, t = template_line(g, axis, at), alias = 0, a;
+        char *slot;
+        for (a = 0; t > 0 && a < WE_GRID_LINE_ALIASES; a++)
+            if (g->line_names[axis].name[t - 1][a][0] && alias < WE_GRID_LINE_ALIASES) {
+                slot = n->line_names[axis].name[line][alias++];
+                name_copy(slot, g->line_names[axis].name[t - 1][a], "");
+            }
+        for (k = 0; k < g->area_count && alias < WE_GRID_LINE_ALIASES; k++) {
+            const we_grid_area_t *area = &g->areas[k];
+            int first = (axis ? area->row : area->col) + 1, last = first + (axis ? area->rows : area->cols);
+            slot = n->line_names[axis].name[line][alias];
+            if (at == first) { name_copy(slot, area->name, "-start"); if (slot[0]) alias++; }
+            slot = n->line_names[axis].name[line][alias < WE_GRID_LINE_ALIASES ? alias : 0];
+            if (at == last && alias < WE_GRID_LINE_ALIASES) { name_copy(slot, area->name, "-end"); if (slot[0]) alias++; }
+        }
+    }
+    if (axis) n->grid_rows = (uint8_t)span; else n->grid_cols = (uint8_t)span;
+}
+
+static void subgrid_items(we_doc_t *d, int s, int report) {
+    int c, axis;
+    for (c = d->nodes[s].first; c >= 0; c = d->nodes[c].next) {
+        we_node_t *child = &d->nodes[c];
+        if (child->is_text) continue;
+        resolve_requests(d, c, report);
+        for (axis = 0; axis < 2; axis++) {
+            int span = axis ? d->nodes[s].grid_rows : d->nodes[s].grid_cols;
+            uint8_t *first = axis ? &child->grid_row_start : &child->grid_col_start;
+            uint8_t *count = axis ? &child->grid_row_span : &child->grid_col_span;
+            const we_grid_request_t *plain = &child->grid_request[axis];
+            if (!subgrid_on(s, axis) || span < 1) continue;
+            /* Rebind from the authored value: an earlier, narrower bind
+             * clamped it before auto-repeat expanded the parent. */
+            if (!plain->active && plain->plain_span) { *first = plain->plain_start; *count = plain->plain_span; }
+            if (*count > span) *count = (uint8_t)span;
+            if (*first && *first + *count - 1 > span) *first = (uint8_t)(span - *count + 1);
+        }
+    }
+}
+
+static int own_axis_gap(const we_node_t *n, int vertical);
+static int w_max(int a, int b) { return a > b ? a : b; }
+
+/* Gap difference of a subgrid on an axis: its own declared gap minus the
+ * parent's, split h1 (after a track) and h2 (before it). */
+static int subgrid_gap_delta(const we_node_t *s, int axis, int gap, int *h1, int *h2) {
+    int delta = (s->gap_set >> axis) & 1 ? own_axis_gap(s, axis) - gap : 0;
+    *h1 = delta / 2;
+    *h2 = delta - *h1;
+    return delta;
+}
+
+/* Extra margin of a subgrid item next to the subgrid's interior lines
+ * (CSS Grid 2, 9.3): h2 before its first track, h1 after its last. */
+static int subgrid_item_extra(const we_node_t *s, int axis, int first, int span, int gap) {
+    int h1, h2, count = axis ? s->grid_rows : s->grid_cols, extra = 0;
+    (void)subgrid_gap_delta(s, axis, gap, &h1, &h2);
+    if (first > 0) extra += h2;
+    if (first + span < count) extra += h1;
+    return extra;
+}
+
+/* Lot 61: the subgrid's tracks follow the parent's real line positions
+ * (pos), so the parent's content distribution reaches the subgrid. One
+ * uniform subgrid gutter G is the parent's average effective gutter plus
+ * the own-gap difference; track sizes then put every interior line at the
+ * parent's line shifted by h2, and every track end h1 before it. */
+static void subgrid_tracks(we_node_t *n, int axis, const int *sizes, const int *pos, int start, int gap) {
+    int k, count = axis ? n->grid_rows : n->grid_cols, h1, h2, delta, step = gap, base = pos[start];
+    delta = subgrid_gap_delta(n, axis, gap, &h1, &h2);
+    if (count > 1) {
+        int inner = pos[start + count - 1] - base;
+        for (k = 0; k < count - 1; k++) inner -= sizes[start + k];
+        step = inner / (count - 1) + delta;
+        if (step < 0) step = 0;
+    }
+    for (k = 0; k < count; k++) {
+        int left = pos[start + k] - base + (k > 0 ? h2 : 0), size;
+        if (k + 1 < count) size = pos[start + k + 1] - base + h2 - step - left;
+        else size = pos[start + k] + sizes[start + k] - base - left;
+        if (size < 0) size = 0;
+        if (axis) { n->row_size[k] = (int16_t)size; n->row_floor[k] = n->row_cap[k] = -1; }
+        else { n->col_size[k] = (int16_t)size; n->col_floor[k] = n->col_cap[k] = -1; }
+    }
+    n->sub_gap[axis] = (int16_t)(step + 1);
 }
 
 /* Expand a valid margin into top,right,bottom,left and replace all auto bits. */
@@ -1419,6 +1711,7 @@ static int gap_declaration(we_node_t *n, const char *v, int len) {
     if (count == 1) { values[1] = values[0]; expr[1] = expr[0]; }
     n->length[WE_LEN_ROW_GAP] = expr[0]; n->length[WE_LEN_COL_GAP] = expr[1];
     n->gap = (int16_t)values[0];
+    n->gap_set = 3;
     n->row_gap = count == 1 && !expr[0].count ? -1 : (int16_t)values[0];
     n->col_gap = count == 1 && !expr[1].count ? -1 : (int16_t)values[1];
     return 0;
@@ -1588,6 +1881,86 @@ static int inset_declaration(we_node_t *n, const char *prop, const char *v, int 
     return 0;
 }
 
+/* Lot 61 border edges: style keywords, one-edge shorthands and 1..4 value
+ * lists. Codes: 1 none, 2 hidden, 3 solid, 4 double, 5 dashed, 6 dotted,
+ * 7 ridge, 8 outset, 9 groove, 10 inset. */
+static int border_style_code(const char *v, int l) {
+    static const char *const names[] = { "none", "hidden", "solid", "double", "dashed", "dotted",
+                                         "ridge", "outset", "groove", "inset" };
+    int k;
+    for (k = 0; k < 10; k++) if (w_ieq_n(v, l, names[k])) return k + 1;
+    return 0;
+}
+
+/* CSS 17.6.2.1 style precedence: double > solid > dashed > dotted > ridge >
+ * outset > groove > inset. Unset ranks as solid. */
+static int border_style_rank(int style) {
+    static const uint8_t rank[11] = { 7, 0, 0, 7, 8, 6, 5, 4, 3, 2, 1 };
+    return style >= 0 && style <= 10 ? rank[style] : 0;
+}
+
+/* tokens() stops at four; a fifth token makes a list invalid. */
+static int tokens_more(const char *v, int vl, const int *a, const int *l, int c) {
+    int i;
+    if (c < 4) return 0;
+    for (i = a[3] + l[3]; i < vl; i++) if (!w_space(v[i])) return 1;
+    return 0;
+}
+
+static int border_value_index(int count, int side) {
+    if (count == 1) return 0;
+    if (count == 2) return side & 1;
+    if (count == 3) return side == 3 ? 1 : side;
+    return side;
+}
+
+static int border_edge_decl(we_node_t *n, int side, const char *v, int vl) {
+    int a[4], l[4], c = tokens(v, vl, a, l), k, px, w = -1, style = 0, has_color = 0;
+    uint32_t col = 0;
+    if (c < 1 || c > 3 || tokens_more(v, vl, a, l, c)) return -1;
+    for (k = 0; k < c; k++) {
+        int code = border_style_code(v + a[k], l[k]);
+        if (code) { if (style) return -1; style = code; }
+        else if (parse_color(v + a[k], l[k], &col) == 0) { if (has_color) return -1; has_color = 1; }
+        else if (parse_len(v + a[k], l[k], &px, 0) == 0 && px >= 0 && px <= 64) { if (w >= 0) return -1; w = px; }
+        else return -1;
+    }
+    n->edge_w[side] = (int8_t)(w < 0 ? -1 : w > 8 ? 8 : w);
+    n->edge_style[side] = (uint8_t)style;
+    if (has_color) { n->edge_color[side] = col; n->edge_color_set = (uint8_t)(n->edge_color_set | (1u << side)); }
+    else n->edge_color_set = (uint8_t)(n->edge_color_set & ~(1u << side));
+    return 0;
+}
+
+/* kind 0 style, 1 width, 2 color; one value sets the uniform property. */
+static int border_list_decl(we_node_t *n, int kind, const char *v, int vl) {
+    int a[4], l[4], c = tokens(v, vl, a, l), k, side, vals[4];
+    uint32_t cols[4];
+    if (c < 1 || tokens_more(v, vl, a, l, c)) return -1;
+    for (k = 0; k < c; k++) {
+        if (kind == 0) { vals[k] = border_style_code(v + a[k], l[k]); if (!vals[k]) return -1; }
+        else if (kind == 1) { if (parse_len(v + a[k], l[k], &vals[k], 0) || vals[k] < 0 || vals[k] > 64) return -1; }
+        else if (parse_color(v + a[k], l[k], &cols[k])) return -1;
+    }
+    for (side = 0; side < 4; side++) {
+        k = border_value_index(c, side);
+        if (c == 1) {
+            if (kind == 0) { n->border_style = (uint8_t)vals[0]; n->edge_style[side] = 0; }
+            else if (kind == 1) { n->border = (int16_t)vals[0]; n->edge_w[side] = -1; }
+            else { n->border_color = cols[0]; n->edge_color_set = 0; }
+        } else if (kind == 0) n->edge_style[side] = (uint8_t)vals[k];
+        else if (kind == 1) n->edge_w[side] = (int8_t)(vals[k] > 8 ? 8 : vals[k]);
+        else { n->edge_color[side] = cols[k]; n->edge_color_set = (uint8_t)(n->edge_color_set | (1u << side)); }
+    }
+    return 0;
+}
+
+static void border_edges_reset(we_node_t *n) {
+    int side;
+    for (side = 0; side < 4; side++) { n->edge_w[side] = -1; n->edge_style[side] = 0; }
+    n->edge_color_set = 0;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[24];
     int px, pct, k;
@@ -1693,6 +2066,8 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         int value = parse_pack(v, vl, distribution, !w_eq(prop, "justify-content"));
         if ((w_eq(prop, "align-items") || w_eq(prop, "align-self")) &&
             (value_is(v, vl, "baseline") || value_is(v, vl, "first baseline"))) value = WE_PACK_BASELINE;
+        if ((w_eq(prop, "align-items") || w_eq(prop, "align-self")) && value_is(v, vl, "last baseline"))
+            value = WE_PACK_LAST_BASELINE;
         if ((w_eq(prop, "align-self") || w_eq(prop, "justify-self")) && value_is(v, vl, "auto")) value = 0;
         if (value < 0) diag(d, "alignment refused", -1);
         else if (w_eq(prop, "justify-content")) n->justify_content = (uint8_t)value;
@@ -1704,8 +2079,8 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "row-gap") || w_eq(prop, "column-gap")) {
         int number, percent;
         if (parse_dimension(v, vl, &number, &percent) || percent) diag(d, "axis gap refused", -1);
-        else if (w_eq(prop, "row-gap")) n->row_gap = (int16_t)number;
-        else n->col_gap = (int16_t)number;
+        else if (w_eq(prop, "row-gap")) { n->row_gap = (int16_t)number; n->gap_set |= 2; }
+        else { n->col_gap = (int16_t)number; n->gap_set |= 1; }
     } else if (w_eq(prop, "grid-auto-flow")) {
         int a[4], lengths[4], c = tokens(v, vl, a, lengths), dense = 0, column = 0, axis = 0, ok = c >= 1 && c <= 2;
         for (k = 0; k < c && k < 2; k++) {
@@ -1773,6 +2148,9 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "right")) n->clear_side = WE_CLEAR_RIGHT;
         else if (value_is(v, vl, "both")) n->clear_side = WE_CLEAR_BOTH;
         else diag(d, "clear refused", -1);
+    } else if (w_eq(prop, "opacity")) {
+        if (parse_opacity(v, vl, &px) == 0) n->transparency = (uint8_t)(100 - px);
+        else diag(d, "opacity refused", -1);
     } else if (w_eq(prop, "z-index")) {
         if (value_is(v, vl, "auto")) { n->z_set = 0; n->z_index = 0; }
         else if (bounded_signed(v, vl, WE_Z_MAX, &px) == 0) { n->z_index = (int8_t)px; n->z_set = 1; }
@@ -1797,11 +2175,13 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (value_is(v, vl, "top")) n->valign = WE_VALIGN_TOP;
         else if (value_is(v, vl, "middle")) n->valign = WE_VALIGN_MIDDLE;
         else if (value_is(v, vl, "bottom")) n->valign = WE_VALIGN_BOTTOM;
+        else if (value_is(v, vl, "baseline")) n->valign = WE_VALIGN_BASELINE;
         else diag(d, "vertical align refused", -1);
     } else if (w_eq(prop, "position")) {
-        if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = 0; }
-        else if (value_is(v, vl, "absolute")) { n->absolute = 1; n->relative = 0; }
-        else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = 0; }
+        if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = n->fixed = 0; }
+        else if (value_is(v, vl, "absolute")) { n->absolute = 1; n->relative = n->fixed = 0; }
+        else if (value_is(v, vl, "fixed")) { n->absolute = n->fixed = 1; n->relative = 0; }
+        else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = n->fixed = 0; }
         else diag(d, "position refused", -1);
     } else if (w_eq(prop, "border-collapse")) {
         if (value_is(v, vl, "collapse")) n->border_collapse = 1;
@@ -1841,9 +2221,32 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "grid-template-columns") || w_eq(prop, "grid-template-rows")) {
         int16_t sizes[WE_TRACKS_MAX], floors[WE_TRACKS_MAX], caps[WE_TRACKS_MAX];
         we_grid_names_t names;
-        int count = named_track_list(v, vl, sizes, floors, caps, &names);
+        we_auto_repeat_t automatic;
+        int count, axis = w_eq(prop, "grid-template-rows");
+        if (value_is(v, vl, "subgrid")) {
+            n->subgrid[axis] = 1;
+            n->auto_mode[axis] = n->tpl_count[axis] = 0;
+            w_zero(&n->line_names[axis], sizeof(n->line_names[axis]));
+            if (axis) n->grid_rows = 0; else n->grid_cols = 0;
+            return;
+        }
+        if (vl > 8 && w_ieq_n(v, 7, "subgrid") && (v[7] == ' ' || v[7] == '[')) {
+            diag(d, "subgrid line names refused", -1);
+            return;
+        }
+        count = named_track_list(v, vl, sizes, floors, caps, &names, &automatic);
+        if (count >= 0) n->subgrid[axis] = 0;
+        if (count >= 0) {
+            n->auto_mode[axis] = (uint8_t)automatic.mode;
+            n->auto_at[axis] = (uint8_t)automatic.at;
+            n->auto_count[axis] = 1;
+            n->tpl_count[axis] = (uint8_t)count;
+            for (k = 0; k < count; k++) {
+                n->tpl_size[axis][k] = sizes[k]; n->tpl_floor[axis][k] = floors[k]; n->tpl_cap[axis][k] = caps[k];
+            }
+        }
         if (count < 0) diag(d, "grid tracks refused", -1);
-        else if (w_eq(prop, "grid-template-columns")) {
+        else if (!axis) {
             n->line_names[0] = names;
             n->grid_cols = (uint8_t)count;
             for (k = 0; k < count; k++) { n->col_size[k] = sizes[k]; n->col_floor[k] = floors[k]; n->col_cap[k] = caps[k]; }
@@ -1908,10 +2311,20 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "border")) {
         int a[4], l[4], c = tokens(v, vl, a, l);
         for (k = 0; k < c; k++) {
-            if (parse_color(v + a[k], l[k], &col) == 0) n->border_color = col;
+            int code = border_style_code(v + a[k], l[k]);
+            if (code) n->border_style = (uint8_t)code;
+            else if (parse_color(v + a[k], l[k], &col) == 0) n->border_color = col;
             else if (parse_len(v + a[k], l[k], &px, 0) == 0) n->border = (int16_t)px;
         }
         if (c == 1 && w_ieq_n(v, vl, "none")) n->border = 0;
+        border_edges_reset(n);
+    } else if (w_eq(prop, "border-top") || w_eq(prop, "border-right") ||
+               w_eq(prop, "border-bottom") || w_eq(prop, "border-left")) {
+        int side = w_eq(prop, "border-top") ? 0 : w_eq(prop, "border-right") ? 1 : w_eq(prop, "border-bottom") ? 2 : 3;
+        if (border_edge_decl(n, side, v, vl)) diag(d, "border edge refused", -1);
+    } else if (w_eq(prop, "border-style") || w_eq(prop, "border-width") || w_eq(prop, "border-color")) {
+        int kind = w_eq(prop, "border-style") ? 0 : w_eq(prop, "border-width") ? 1 : 2;
+        if (border_list_decl(n, kind, v, vl)) diag(d, "border edge refused", -1);
     } else if (w_eq(prop, "font-weight")) {
         n->bold = (uint8_t)(w_ieq_n(v, vl, "bold") || w_ieq_n(v, vl, "700") || w_ieq_n(v, vl, "800") || w_ieq_n(v, vl, "900"));
     } else if (w_eq(prop, "text-align")) {
@@ -2014,6 +2427,7 @@ int we_style(we_doc_t* d) {
         n->min_width = n->max_width = -1;
         n->min_height = n->max_height = -1;
         n->row_gap = n->col_gap = -1;
+        n->gap_set = 0;
         n->height_percent = n->min_height_percent = n->max_height_percent = 0;
         n->height_pct = n->min_height_pct = n->max_height_pct = 0;
         n->width_kind = n->basis_content = n->border_box = n->overflow_hidden = 0;
@@ -2021,6 +2435,9 @@ int we_style(we_doc_t* d) {
         n->justify_content = n->align_items = n->align_self = n->align_content = 0;
         n->justify_items = n->justify_self = 0;
         w_zero(n->line_names, sizeof(n->line_names));
+        n->auto_mode[0] = n->auto_mode[1] = n->tpl_count[0] = n->tpl_count[1] = 0;
+        n->subgrid[0] = n->subgrid[1] = 0;
+        n->sub_gap[0] = n->sub_gap[1] = 0;
         w_zero(n->grid_request, sizeof(n->grid_request));
         n->grid_col_start = n->grid_row_start = 0;
         n->grid_dense = n->grid_column_flow = n->area_count = n->area_rows = n->area_cols = 0;
@@ -2029,11 +2446,15 @@ int we_style(we_doc_t* d) {
         n->auto_col = -1; n->auto_row = WE_TRACK_AUTO;
         n->auto_col_floor = n->auto_row_floor = n->auto_col_cap = n->auto_row_cap = -1;
         n->relative = n->absolute = n->flex_reverse = n->margin_auto = n->border_collapse = 0;
+        n->fixed = 0;
+        n->border_style = n->collapse_cell = 0;
+        border_edges_reset(n);
         n->item_order = 0;
         n->inset_flags = 0;
         n->offset_x = n->offset_y = n->offset_r = n->offset_b = 0;
         n->border_spacing = n->border_spacing_y = 0;
         n->clear_side = n->valign = n->z_set = 0;
+        n->transparency = 0;
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
         n->text_indent = p ? p->text_indent : 0;
@@ -2060,7 +2481,17 @@ int we_style(we_doc_t* d) {
     }
     for (i = 0; i < d->nnodes; i++) {
         we_node_t* n = &d->nodes[i];
+        int side;
         if (n->parent >= 0 && d->nodes[n->parent].display == WE_DISP_NONE) n->display = WE_DISP_NONE;
+        /* none and hidden draw no border in either model. */
+        if (n->border_style == WE_BS_NONE || n->border_style == WE_BS_HIDDEN) n->border = 0;
+        /* A collapsed table has no border box of its own: its edges join
+         * the outer cell edges (CSS 17.6.2). */
+        if (n->display == WE_DISP_TABLE && n->border_collapse) {
+            for (side = 0; side < 4; side++)
+                if (n->edge_w[side] < 0) n->edge_w[side] = (int8_t)(n->border > 8 ? 8 : n->border);
+            n->border = 0;
+        }
     }
     return 0;
 }
@@ -2283,7 +2714,13 @@ typedef struct {
     int pending_space, measuring;
     int line_h, indent, indent_used, atom_h, pending_x;
     int baseline, origin_y;
+    /* Lot 61: last measured baseline, painted first/last baselines (page y),
+     * text seen on the open line and its baseline-aligned atomic boxes. */
+    int last, lay_first, lay_last, line_text, line_start, natoms, flow;
+    struct { int node, base, height; } atoms[8];
 } we_inline_t;
+#define WE_NO_BASELINE (-32768)
+#define WE_LINE_ATOMS 8
 
 static int limit_coord(int n) {
     if (n < -WE_LAYOUT_MAX) return -WE_LAYOUT_MAX;
@@ -2330,30 +2767,101 @@ static int line_step(const we_inline_t *f) {
     return step;
 }
 
+static int16_t layout_first[WE_MAX_NODES], layout_last[WE_MAX_NODES];
+/* Lot 61: static position of absolutes without insets, page pixels. */
+static int16_t static_x[WE_MAX_NODES], static_y[WE_MAX_NODES];
+static uint8_t static_set[WE_MAX_NODES];
+static void set_static(int idx, int x, int y) {
+    static_x[idx] = (int16_t)x; static_y[idx] = (int16_t)y; static_set[idx] = 1;
+}
+static int baseline_get(we_doc_t *d, int idx, int outer, int depth, int last, int *real);
+static int item_baseline(const we_doc_t *d, int c, int last);
+
+static int in_subtree(const we_doc_t *d, int node, int root) {
+    int guard;
+    for (guard = 0; node >= 0 && guard <= WE_DEPTH_MAX + 1; guard++) {
+        if (node == root) return 1;
+        node = d->nodes[node].parent;
+    }
+    return 0;
+}
+
+/* Baseline-aligned atoms and the text of one line share one ascent. Text
+ * moves by ascent - WE_TEXT_BASELINE, an atom by ascent - its baseline;
+ * top-aligned atoms stay at the line top. */
+static void shift_line(we_inline_t *f, int ascent, int has_text) {
+    we_doc_t *d = f->d;
+    int i, k, text_dy = has_text ? ascent - WE_TEXT_BASELINE : 0;
+    for (i = f->line_start; i < (int)d->nitems; i++) {
+        int owner = d->item_owner[i], dy = text_dy, up;
+        for (up = owner; up >= 0 && up != f->flow; up = d->nodes[up].parent)
+            if (d->nodes[up].float_side || d->nodes[up].absolute) { dy = 0; break; }
+        for (k = 0; k < f->natoms; k++)
+            if (in_subtree(d, owner, f->atoms[k].node)) { dy = f->atoms[k].base >= 0 ? ascent - f->atoms[k].base : 0; break; }
+        d->items[i].y = (int16_t)limit_coord(d->items[i].y + dy);
+    }
+    for (k = 0; k < f->natoms; k++) {
+        int dy = ascent - f->atoms[k].base, root = f->atoms[k].node;
+        if (f->atoms[k].base < 0 || !dy) continue;
+        for (i = root; i < (int)d->nnodes; i++)
+            if (in_subtree(d, i, root)) {
+                d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + dy);
+                if (static_set[i]) static_y[i] = (int16_t)limit_coord(static_y[i] + dy);
+            }
+        if (layout_first[root] != WE_NO_BASELINE) layout_first[root] = (int16_t)limit_coord(layout_first[root] + dy);
+        if (layout_last[root] != WE_NO_BASELINE) layout_last[root] = (int16_t)limit_coord(layout_last[root] + dy);
+    }
+}
+
+static void finish_line(we_inline_t *f, int has_text) {
+    we_doc_t *d = f->d;
+    int step = line_step(f), ascent = has_text ? WE_TEXT_BASELINE : 0, descent = 0, k, aligned = 0;
+    int line_h = f->line_h > 0 ? f->line_h : WE_LINE_H;
+    if (has_text) descent = line_h - WE_TEXT_BASELINE;
+    for (k = 0; k < f->natoms; k++) {
+        if (f->atoms[k].base < 0) continue;
+        aligned = 1;
+        if (f->atoms[k].base > ascent) ascent = f->atoms[k].base;
+        if (f->atoms[k].height - f->atoms[k].base > descent) descent = f->atoms[k].height - f->atoms[k].base;
+    }
+    if (aligned && ascent + descent > step) step = ascent + descent;
+    if (has_text || aligned) {
+        int at = f->y + ascent;
+        if (f->measuring) {
+            if (f->baseline < 0) f->baseline = at - f->origin_y;
+            f->last = at - f->origin_y;
+        } else {
+            if (f->lay_first == WE_NO_BASELINE) f->lay_first = at;
+            f->lay_last = at;
+        }
+    }
+    if (!f->measuring && aligned) shift_line(f, ascent, has_text);
+    f->y = limit_coord(f->y + step);
+    f->lines++;
+    if (!f->measuring) d->perf.lines++;
+    f->nwords = f->cur_w = f->pending_x = f->atom_h = 0;
+    f->line_text = f->natoms = 0;
+    f->line_start = (int)d->nitems;
+}
+
+static int line_aligned(const we_inline_t *f) {
+    int k;
+    for (k = 0; k < f->natoms; k++) if (f->atoms[k].base >= 0) return 1;
+    return 0;
+}
+
 /* advance=0 paints a segment and keeps the line open for an atomic box. */
 static void flush_line_mode(we_inline_t *f, int force, int advance) {
-    int i, x, total = 0, step = line_step(f), box_h;
+    int i, x, total = 0, box_h;
     we_doc_t* d = f->d;
     box_h = f->line_h > 0 ? f->line_h : WE_LINE_H;
     if (f->nwords == 0 && !force) {
-        if (advance && f->atom_h > 0) {
-            f->y = limit_coord(f->y + step);
-            f->lines++;
-            if (!f->measuring) d->perf.lines++;
-            f->atom_h = 0;
-            f->pending_x = 0;
-            f->cur_w = 0;
-        }
+        if (advance && (f->atom_h > 0 || line_aligned(f))) finish_line(f, f->line_text);
         return;
     }
     if (f->measuring) {
-        if (f->baseline < 0) f->baseline = f->y - f->origin_y + WE_TEXT_BASELINE;
-        if (advance) {
-            f->y = limit_coord(f->y + step);
-            f->lines++;
-            f->nwords = f->cur_w = f->pending_x = 0;
-            f->atom_h = 0;
-        } else f->nwords = 0;
+        if (advance) finish_line(f, 1);
+        else { f->nwords = 0; f->line_text = 1; }
         return;
     }
     for (i = 0; i < f->nwords; i++) total += (f->w[i].len + (i && f->w[i].space_before ? 1 : 0)) * WE_CHAR_W;
@@ -2411,15 +2919,10 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         if (f->pending_x < 0) f->pending_x = 0;
         f->cur_w = f->pending_x;
         f->nwords = 0;
+        f->line_text = 1;
         return;
     }
-    f->y = limit_coord(f->y + step);
-    f->lines++;
-    d->perf.lines++;
-    f->nwords = 0;
-    f->cur_w = 0;
-    f->pending_x = 0;
-    f->atom_h = 0;
+    finish_line(f, 1);
 }
 
 static void flush_line(we_inline_t *f, int force) { flush_line_mode(f, force, 1); }
@@ -2497,6 +3000,12 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
     int c;
     if (n->html_space) f->pending_space = 1;
     if (n->display == WE_DISP_NONE || depth > WE_DEPTH_MAX) return;
+    /* Lot 61: an absolute inside inline content leaves the line; its static
+     * position is the current pen. */
+    if (n->absolute && !n->is_text) {
+        if (!f->measuring) set_static(idx, f->x0 + f->cur_w, f->y);
+        return;
+    }
     if (n->float_side && !n->is_text) { place_float(f, idx, depth); return; }
     if (n->is_text) {
         const char* s = d->pool + n->text_off;
@@ -2550,14 +3059,22 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
 }
 
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth);
+static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len);
+static int style_solid_3d;
 static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth);
 static int is_box(uint8_t display) {
     return display == WE_DISP_BLOCK || display == WE_DISP_FLEX || display == WE_DISP_GRID ||
            display == WE_DISP_TABLE || display == WE_DISP_ROW || display == WE_DISP_CELL;
 }
 
+/* Border width on one side of the box. A cell of a collapsed table uses
+ * its resolved content inset (collapse_insets) instead of its border. */
+static int box_edge(const we_node_t *n, int side) {
+    return n->collapse_cell ? n->cin[side] : n->border;
+}
+
 static int node_border_extra(const we_node_t *n) {
-    return 2 * n->border + n->padding[1] + n->padding[3];
+    return box_edge(n, 1) + box_edge(n, 3) + n->padding[1] + n->padding[3];
 }
 
 static int intrinsic_value(const we_node_t *n, int slot, int containing) {
@@ -2594,24 +3111,29 @@ static int constrained_width(const we_node_t *n, int width, int containing) {
 
 static int16_t forced_width[WE_MAX_NODES], forced_height[WE_MAX_NODES];
 static int16_t resolved_height[WE_MAX_NODES], containing_height[WE_MAX_NODES];
-static int16_t flow_baseline[WE_MAX_NODES];
+static int16_t flow_baseline[WE_MAX_NODES], flow_last[WE_MAX_NODES];
 static int baseline_probe;
 static int measure_budget;
 static uint8_t measure_content[WE_MAX_NODES];
 typedef struct {
-    int width, fixed, parent, result, baseline;
+    int width, fixed, parent, result, baseline, last;
     uint8_t content, valid, probe;
 } we_measure_cache_t;
 static we_measure_cache_t measure_cache[WE_MAX_NODES];
 
-static int axis_gap(const we_node_t *n, int vertical) {
+static int own_axis_gap(const we_node_t *n, int vertical) {
     int value = vertical ? n->row_gap : n->col_gap;
     value = math_nonnegative(n, vertical ? WE_LEN_ROW_GAP : WE_LEN_COL_GAP, 0, value);
     return value >= 0 ? value : n->gap > 0 ? n->gap : 0;
 }
 
+static int axis_gap(const we_node_t *n, int vertical) {
+    if (n->sub_gap[vertical] > 0) return n->sub_gap[vertical] - 1;
+    return own_axis_gap(n, vertical);
+}
+
 static int vertical_extra(const we_node_t *n) {
-    return 2 * n->border + n->padding[0] + n->padding[2];
+    return box_edge(n, 0) + box_edge(n, 2) + n->padding[0] + n->padding[2];
 }
 
 static int content_value(int value, int extra, int border_box) {
@@ -2862,7 +3384,6 @@ static int measure_grid(we_doc_t *d, int idx, int width, int depth);
 static int measure_table(we_doc_t *d, int idx, int width, int depth);
 static int measure_flex(we_doc_t *d, int idx, int width, int depth);
 static int flow_children(we_doc_t *d, int idx, int x, int y, int width, int depth, int measuring);
-static int baseline_of(we_doc_t *d, int idx, int outer, int depth);
 
 static int measure_height(we_doc_t *d, int idx, int width, int depth) {
     const we_node_t *n = &d->nodes[idx];
@@ -2876,6 +3397,7 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
         if (cache->valid && cache->width == key_width && cache->fixed == key_fixed &&
             cache->parent == key_parent && cache->content == measure_content[idx] && cache->probe == baseline_probe) {
             flow_baseline[idx] = (int16_t)cache->baseline;
+            flow_last[idx] = (int16_t)cache->last;
             return cache->result;
         }
     }
@@ -2892,7 +3414,7 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
         cache->probe = (uint8_t)baseline_probe;
         cache->valid = 0;
     }
-    flow_baseline[idx] = -1;
+    flow_baseline[idx] = flow_last[idx] = -1;
     fixed = measure_content[idx] ? -1 : definite_height(d, idx, 0);
     if (fixed >= 0) content = fixed;
     else {
@@ -2916,6 +3438,7 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
     content = height_constraint(d, idx, content, parent);
     measure_cache[idx].result = limit_coord(content + vertical_extra(n) + n->margin[0] + n->margin[2]);
     measure_cache[idx].baseline = flow_baseline[idx];
+    measure_cache[idx].last = flow_last[idx];
     measure_cache[idx].valid = 1;
     return measure_cache[idx].result;
 }
@@ -2983,13 +3506,21 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->base_x = f->x0 = cx;
     f->base_width = f->width = cwidth;
     f->y = limit_coord(cy);
-    f->origin_y = f->y; f->baseline = -1;
+    f->origin_y = f->y; f->baseline = f->last = -1;
+    f->lay_first = f->lay_last = WE_NO_BASELINE;
+    f->line_start = (int)d->nitems;
+    f->flow = idx;
     f->align = d->nodes[idx].align;
     f->line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
     f->indent = d->nodes[idx].text_indent;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
         we_node_t *n = &d->nodes[c];
         if (n->html_space) f->pending_space = 1;
+        if (n->absolute && n->display != WE_DISP_NONE && !measuring) {
+            int open = f->nwords || f->pending_x > 0 || f->atom_h > 0;
+            if (is_box(n->display)) set_static(c, f->x0, limit_coord(f->y + (open ? line_step(f) : 0)));
+            else set_static(c, f->x0 + f->cur_w, f->y);
+        }
         if (n->display == WE_DISP_NONE || n->absolute) continue;
         if (n->float_side && !n->is_text) {
             flush_line(f, 0);
@@ -3003,10 +3534,19 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
             {
                 int height = measuring ? measure_height(d, c, f->width + f->indent_used, depth + 1) :
                     layout_block(d, c, f->x0 - f->indent_used, f->y, f->width + f->indent_used, depth + 1);
-                if (measuring && baseline_probe && f->baseline < 0) {
+                if (measuring && baseline_probe) {
                     int outer = preferred_outer(n, f->width, f->width - node_border_extra(n) - n->margin[1] - n->margin[3]);
-                    int base = baseline_of(d, c, outer, depth + 1);
-                    if (flow_baseline[c] >= 0 || w_eq(n->tag, "img")) f->baseline = f->y - f->origin_y + base;
+                    int real, base;
+                    if (f->baseline < 0) {
+                        base = baseline_get(d, c, outer, depth + 1, 0, &real);
+                        if (real) f->baseline = f->y - f->origin_y + base;
+                    }
+                    base = baseline_get(d, c, outer, depth + 1, 1, &real);
+                    if (real) f->last = f->y - f->origin_y + base;
+                }
+                if (!measuring) {
+                    if (f->lay_first == WE_NO_BASELINE) f->lay_first = layout_first[c];
+                    if (layout_last[c] != WE_NO_BASELINE) f->lay_last = layout_last[c];
                 }
                 f->y = limit_coord(f->y + height);
             }
@@ -3014,7 +3554,13 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
         } else inline_node(f, c, depth + 1);
     }
     flush_line(f, 0);
-    flow_baseline[idx] = (int16_t)f->baseline;
+    if (measuring) {
+        flow_baseline[idx] = (int16_t)f->baseline;
+        flow_last[idx] = (int16_t)f->last;
+    } else {
+        layout_first[idx] = (int16_t)f->lay_first;
+        layout_last[idx] = (int16_t)f->lay_last;
+    }
     bottom = f->y;
     for (i = 0; i < f->nfloat; i++) {
         int end = f->floats[i].y + f->floats[i].h;
@@ -3072,6 +3618,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     int first_item = (int)d->nitems;
     if (depth > WE_DEPTH_MAX) return 0;
     d->perf.boxes++;
+    layout_first[idx] = layout_last[idx] = WE_NO_BASELINE;
     bx = x + n->margin[3];
     by = y + n->margin[0];
     if (forced_width[idx] >= 0) bw = forced_width[idx] - n->margin[1] - n->margin[3];
@@ -3088,46 +3635,61 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     /* reserve the background item now so it paints under the children */
     slot = n->has_bg ? (int)d->nitems : -1;
     if (n->has_bg && !emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, n->bg)) slot = -1;
-    content_x = limit_coord(bx + n->border + n->padding[3]);
-    content_w = bw - 2 * n->border - n->padding[1] - n->padding[3];
+    content_x = limit_coord(bx + box_edge(n, 3) + n->padding[3]);
+    content_w = bw - box_edge(n, 1) - box_edge(n, 3) - n->padding[1] - n->padding[3];
     if (content_w < WE_CHAR_W) content_w = WE_CHAR_W;
+    {
+        int c;
+        for (c = n->first; c >= 0; c = d->nodes[c].next)
+            if (d->nodes[c].absolute) set_static(c, content_x, limit_coord(by + box_edge(n, 0) + n->padding[0]));
+    }
     if (w_eq(n->tag, "img")) {
-        int image_h = image_paint(d, idx, content_x, by + n->border + n->padding[0], content_w,
+        int image_h = image_paint(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w,
             modern_image(n) && forced_width[idx] >= 0 ? content_w : -1, modern_image(n) ? resolved_height[idx] : -1);
         if (image_h >= 0) {
             content_h = image_h;
             bw = n->w + node_border_extra(n);
         } else {
             os_fb_web_item_t *alt = emit(d, idx, OS_FB_WEB_TEXT, content_x,
-                by + n->border + n->padding[0] + 1, n->text_len * WE_CHAR_W, 8, n->color);
+                by + box_edge(n, 0) + n->padding[0] + 1, n->text_len * WE_CHAR_W, 8, n->color);
             if (alt) w_cpy(alt->text, OS_FB_WEB_TEXT_LEN, d->pool + n->text_off, n->text_len);
             content_h = WE_LINE_H;
         }
     } else if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID)
-        content_h = layout_flex(d, idx, content_x, by + n->border + n->padding[0], content_w, depth);
+        content_h = layout_flex(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
     else if (n->display == WE_DISP_TABLE)
-        content_h = layout_table(d, idx, content_x, by + n->border + n->padding[0], content_w, depth);
+        content_h = layout_table(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
     else
-        content_h = layout_children(d, idx, content_x, by + n->border + n->padding[0], content_w, depth);
+        content_h = layout_children(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
     if (resolved_height[idx] >= 0) content_h = resolved_height[idx];
     else if (n->aspect_num && !w_eq(n->tag, "img")) {
         int ratio = ratio_height(n, bw - node_border_extra(n));
         if (ratio > content_h) content_h = ratio;
     }
     if (forced_height[idx] < 0) content_h = height_constraint(d, idx, content_h, containing_height[idx] >= 0 ? containing_height[idx] : definite_height(d, n->parent, 0));
-    bh = limit_coord(content_h + n->padding[0] + n->padding[2] + 2 * n->border);
+    bh = limit_coord(content_h + vertical_extra(n));
     if (bh < 0) bh = 0;
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw; n->h = (int16_t)bh;
     if (slot >= 0) {
         os_fb_web_item_t* it = &d->items[slot];
         it->x = (int16_t)bx; it->y = (int16_t)by; it->w = (uint16_t)bw; it->h = (uint16_t)bh;
     }
-    if (n->border > 0) {
+    if (n->border > 0 && !n->collapse_cell && (n->border_style == 5 || n->border_style == 6 || (n->border_style == 4 && n->border >= 3))) {
+        int t = n->border > 8 ? 8 : n->border, inner_h = bh - 2 * t;
+        edge_paint(d, idx, n->border_style, n->border_color, 0, by, bx, t, bw);
+        edge_paint(d, idx, n->border_style, n->border_color, 0, by + bh - t, bx, t, bw);
+        edge_paint(d, idx, n->border_style, n->border_color, 1, bx, by + t, t, inner_h);
+        edge_paint(d, idx, n->border_style, n->border_color, 1, bx + bw - t, by + t, t, inner_h);
+        border_slot = 1;
+    } else if (n->border > 0 && !n->collapse_cell) {
         os_fb_web_item_t* it = emit(d, idx, OS_FB_WEB_BORDER, bx, by, bw, bh, n->border_color);
         if (it) it->bold = (uint8_t)(n->border > 8 ? 8 : n->border);
+        if (n->border_style >= 7 && n->border_style <= 10) style_solid_3d = 1;
         border_slot = 1;
     }
     (void)border_slot;
+    if (w_eq(n->tag, "img") || (n->overflow_hidden && layout_first[idx] != WE_NO_BASELINE))
+        layout_first[idx] = layout_last[idx] = (int16_t)limit_coord(by + bh);
     if (w_eq(n->tag, "li") && n->list_style != WE_LIST_NONE) {
         char marker[16];
         int number = 1, sibling, len;
@@ -3144,7 +3706,8 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         it = emit(d, idx, OS_FB_WEB_TEXT, bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
         if (it) w_cpy(it->text, OS_FB_WEB_TEXT_LEN, marker, len);
     }
-    place_absolutes(d, idx, bx + n->border, by + n->border, bw - 2 * n->border, bh - 2 * n->border, depth);
+    place_absolutes(d, idx, bx + box_edge(n, 3), by + box_edge(n, 0), bw - box_edge(n, 1) - box_edge(n, 3),
+                    bh - box_edge(n, 0) - box_edge(n, 2), depth);
     relative_shift(d, idx, first_item, x, cw);
     return n->margin[0] + bh + n->margin[2];
 }
@@ -3199,11 +3762,26 @@ static void place_inline_block(we_inline_t *f, int idx, int depth) {
     else height = layout_assigned(d, idx, f->x0 + f->pending_x, f->y, outer, depth);
     f->pending_x += outer;
     f->cur_w = f->pending_x;
+    /* Lot 61: vertical-align:baseline uses the last line box baseline, or
+     * the bottom margin edge without one or when overflow is hidden. */
+    if (n->valign == WE_VALIGN_BASELINE && f->natoms < WE_LINE_ATOMS) {
+        int real, base = baseline_get(d, idx, outer, depth, 1, &real);
+        if (!real || n->overflow_hidden) base = height;
+        f->atoms[f->natoms].node = idx; f->atoms[f->natoms].base = base; f->atoms[f->natoms].height = height;
+        f->natoms++;
+        return;
+    }
+    if (n->valign == WE_VALIGN_BASELINE) diag(d, "inline baseline capacity", idx);
+    if (f->natoms < WE_LINE_ATOMS) {
+        f->atoms[f->natoms].node = idx; f->atoms[f->natoms].base = -1; f->atoms[f->natoms].height = height;
+        f->natoms++;
+    }
     if (height > f->atom_h) f->atom_h = height;
 }
 
 static int abs_containing(const we_doc_t *d, int idx) {
     int p = d->nodes[idx].parent;
+    if (d->nodes[idx].fixed) return -1;
     while (p >= 0) {
         if (d->nodes[p].relative || d->nodes[p].absolute) return p;
         p = d->nodes[p].parent;
@@ -3236,7 +3814,9 @@ static int absolute_margin_width(const we_node_t *n, int pad_w, int left, int ri
 
 /* Absolutes are placed after the containing block's in-flow height is
  * known, and before its relative offset, so the offset moves them too.
- * No insets use the padding origin. That is not the CSS static position. */
+ * Lot 61: an axis without insets uses the static position recorded where
+ * the box would have been in flow (content origin for flex/grid/table).
+ * Fixed boxes use the viewport at the current scroll offset. */
 static int absolute_stack_key(const we_doc_t *d, int owner, int want) {
     int n = owner;
     while (n >= 0) {
@@ -3283,8 +3863,10 @@ static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w
         we_node_t *n = &d->nodes[i];
         int flags, left, right, top, bottom, stretch_w, stretch_h, mbw, mbh, x, y;
         int16_t saved_ch;
+        int px = pad_x, py = pad_y, pw = pad_w, ph = pad_h;
         if ((int)i == cb || !n->absolute || n->display == WE_DISP_NONE) continue;
         if (abs_containing(d, (int)i) != want) continue;
+        if (n->fixed) { pad_x = 0; pad_y = d->scroll_y; pad_w = d->viewport_w; pad_h = d->viewport_h; }
         flags = n->inset_flags;
         left = (flags & WE_INSET_LEFT) ? math_value(n, WE_LEN_LEFT, pad_w, n->offset_x) : 0;
         right = (flags & WE_INSET_RIGHT) ? math_value(n, WE_LEN_RIGHT, pad_w, n->offset_r) : 0;
@@ -3315,17 +3897,18 @@ static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w
         }
         if (flags & WE_INSET_LEFT) x = pad_x + left;
         else if ((flags & WE_INSET_RIGHT) && mbw >= 0) x = pad_x + pad_w - right - mbw;
-        else x = pad_x;
+        else x = static_set[i] ? static_x[i] : pad_x;
         if (flags & WE_INSET_TOP) y = pad_y + top;
         else if ((flags & WE_INSET_BOTTOM) && mbh >= 0) y = pad_y + pad_h - bottom - mbh;
-        else y = pad_y;
+        else y = static_set[i] ? static_y[i] : pad_y;
         layout_area(d, (int)i, limit_coord(x), limit_coord(y), mbw, mbh, pad_w, depth + 1);
         containing_height[i] = saved_ch;
+        pad_x = px; pad_y = py; pad_w = pw; pad_h = ph;
     }
     if ((int)d->nitems > item_start) order_absolute_items(d, cb, item_start);
 }
 
-typedef struct { int first, end, used, cross, ascent, descent; } we_flex_line_t;
+typedef struct { int first, end, used, cross, ascent, descent, lascent, ldescent; } we_flex_line_t;
 typedef struct {
     int node[WE_MAX_NODES];
     int cross[WE_MAX_NODES];
@@ -3362,6 +3945,9 @@ typedef struct {
     int column[WE_TRACKS_MAX], column_x[WE_TRACKS_MAX], minimum[WE_TRACKS_MAX];
     int height[WE_GRID_ROWS_MAX], row_y[WE_GRID_ROWS_MAX];
     int ascent[WE_GRID_ROWS_MAX], descent[WE_GRID_ROWS_MAX], baseline[WE_MAX_NODES];
+    int lascent[WE_GRID_ROWS_MAX], ldescent[WE_GRID_ROWS_MAX], item_h[WE_MAX_NODES];
+    int span[WE_MAX_NODES];
+    uint8_t collapsed[2][WE_TRACKS_MAX];
 } we_grid_work_t;
 static we_grid_work_t grid_work[WE_DEPTH_MAX + 1];
 /* Column assignment for rowspan. One slot per layout depth. */
@@ -3370,6 +3956,9 @@ typedef struct {
     uint8_t occ[WE_GRID_ROWS_MAX];
     int height[WE_GRID_ROWS_MAX];
     int cols;
+    /* Lot 61: vertical-align:baseline cells, rowspan 1 only. */
+    int16_t base[WE_MAX_NODES];
+    int ascent[WE_GRID_ROWS_MAX], descent[WE_GRID_ROWS_MAX];
 } we_table_slot_t;
 static we_table_slot_t table_slot[WE_DEPTH_MAX + 1];
 typedef char layout_workspace_is_bounded[
@@ -3378,6 +3967,48 @@ typedef char layout_workspace_is_bounded[
     sizeof(forced_width) + sizeof(forced_height) + sizeof(resolved_height) +
     sizeof(containing_height) + sizeof(flow_baseline) + sizeof(measure_content) + sizeof(measure_cache) + sizeof(int16_t) * OS_FB_WEB_ITEMS +
     sizeof(os_fb_web_item_t) * OS_FB_WEB_ITEMS <= WE_LAYOUT_WORKSPACE_MAX ? 1 : -1];
+
+static int track_extent(int size, int low, int cap) {
+    if (size >= 0) return size;
+    if (cap >= 0) return cap;
+    return low > 0 ? low : 0;
+}
+
+/* Rebuild the axis from its template with the largest repetition count
+ * that fits the definite size, 1 when indefinite, never above 8 tracks. */
+static void grid_expand(we_node_t *n, int axis, int available, int gap) {
+    int k, j, out = 0, copies = 1, at = n->auto_at[axis], total = n->tpl_count[axis], other = 0, repeat;
+    int16_t *size = axis ? n->row_size : n->col_size;
+    int16_t *low = axis ? n->row_floor : n->col_floor, *cap = axis ? n->row_cap : n->col_cap;
+    if (!n->auto_mode[axis] || total < 1) return;
+    repeat = track_extent(n->tpl_size[axis][at], n->tpl_floor[axis][at], n->tpl_cap[axis][at]);
+    for (k = 0; k < total; k++)
+        if (k != at) other += track_extent(n->tpl_size[axis][k], n->tpl_floor[axis][k], n->tpl_cap[axis][k]);
+    if (available >= 0)
+        while (total + copies <= WE_TRACKS_MAX &&
+               other + (copies + 1) * repeat + (total + copies - 1) * gap <= available) copies++;
+    for (k = 0; k < total; k++)
+        for (j = 0; j < (k == at ? copies : 1); j++, out++) {
+            size[out] = n->tpl_size[axis][k]; low[out] = n->tpl_floor[axis][k]; cap[out] = n->tpl_cap[axis][k];
+        }
+    for (k = out; k < WE_TRACKS_MAX; k++) { size[k] = axis ? WE_TRACK_AUTO : -1; low[k] = cap[k] = -1; }
+    if (axis) n->grid_rows = (uint8_t)out; else n->grid_cols = (uint8_t)out;
+    n->auto_count[axis] = (uint8_t)copies;
+}
+
+/* auto-fit: repeated tracks without an item collapse to 0 with their gaps. */
+static void grid_collapse(we_node_t *n, int axis, const int *starts, const int *spans, int count, uint8_t *collapsed) {
+    int k, i, at = n->auto_at[axis];
+    if (n->auto_mode[axis] != WE_AUTO_FIT) return;
+    for (k = at; k < at + n->auto_count[axis] && k < WE_TRACKS_MAX; k++) {
+        int used = 0;
+        for (i = 0; i < count; i++) if (starts[i] >= 0 && starts[i] <= k && k < starts[i] + spans[i]) used = 1;
+        if (used) continue;
+        collapsed[k] = 1;
+        if (axis) { n->row_size[k] = 0; n->row_floor[k] = n->row_cap[k] = -1; }
+        else { n->col_size[k] = 0; n->col_floor[k] = n->col_cap[k] = -1; }
+    }
+}
 
 static int grid_free(const we_grid_work_t *work, int row, int col, int rows, int cols, int count) {
     int r;
@@ -3456,11 +4087,13 @@ static int grid_cap(const we_node_t *n, int vertical, int k) {
 /* Fractions share a common unit. Freeze floors above that unit and solve
  * again, rather than adding free space on top of unequal minima. */
 static int grid_track_sizes(const we_node_t *n, int vertical, int count, int available,
-                             int gap, int *sizes) {
-    int k, pass, free = available, weight = 0, assigned = 0;
+                             int gap, int *sizes, const uint8_t *collapsed) {
+    int k, pass, free = available, weight = 0, assigned = 0, gaps = -1;
     uint8_t frozen[WE_GRID_ROWS_MAX];
     w_zero(frozen, sizeof(frozen));
-    if (free >= 0) free -= (count > 0 ? count - 1 : 0) * gap;
+    for (k = 0; k < count; k++) if (!collapsed || k >= WE_TRACKS_MAX || !collapsed[k]) gaps++;
+    if (gaps < 0) gaps = 0;
+    if (free >= 0) free -= gaps * gap;
     for (k = 0; k < count; k++) {
         int spec = grid_spec(n, vertical, k), low = grid_floor(n, vertical, k), cap = grid_cap(n, vertical, k);
         if (spec >= 0) sizes[k] = spec;
@@ -3497,7 +4130,7 @@ static int grid_track_sizes(const we_node_t *n, int vertical, int count, int ava
             if (!frozen[k] && spec < 0 && spec != WE_TRACK_AUTO) { sizes[k]++; remainder--; }
         }
     }
-    assigned = count > 0 ? (count - 1) * gap : 0;
+    assigned = gaps * gap;
     for (k = 0; k < count; k++) assigned += sizes[k];
     return assigned;
 }
@@ -3556,20 +4189,158 @@ static void fit_auto_columns(const we_node_t *n, int cols, int width, int gap,
     }
 }
 
-static int grid_item_width(const we_node_t *n, const we_node_t *child, int width) {
+static int grid_item_width(const we_node_t *n, const we_node_t *child, int width, int ci) {
     int align = child->justify_self ? child->justify_self : n->justify_items;
-    int intrinsic = align == WE_PACK_END || align == WE_PACK_CENTER || align == WE_PACK_START ||
-                    (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT));
+    int intrinsic = (align == WE_PACK_END || align == WE_PACK_CENTER || align == WE_PACK_START ||
+                    (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT))) && !subgrid_on(ci, 0);
     return preferred_outer(child, width, intrinsic ? child->max_content : width - node_border_extra(child) - child->margin[1] - child->margin[3]);
+}
+
+static void subgrid_bind_items(we_doc_t *d, int p, const we_track_work_t *items,
+                               const we_grid_work_t *work, int count, int report) {
+    int k;
+    for (k = 0; k < count; k++) {
+        int s = items->node[k];
+        if (!subgrid_ok[s] || work->row[k] < 0) continue;
+        if (subgrid_on(s, 0)) subgrid_bind(d, p, s, 0, work->col[k], d->nodes[s].grid_col_span);
+        if (subgrid_on(s, 1)) subgrid_bind(d, p, s, 1, work->row[k], d->nodes[s].grid_row_span);
+        subgrid_items(d, s, report);
+    }
+}
+
+static int grid_columns_for(const we_doc_t *d, const we_node_t *n, const we_track_work_t *items, int count) {
+    int k, cols = n->grid_cols ? n->grid_cols : 1;
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[items->node[k]];
+        int end = child->grid_col_start ? child->grid_col_start + child->grid_col_span - 1 : child->grid_col_span;
+        if (end > cols) cols = end;
+    }
+    if (cols > WE_TRACKS_MAX) cols = WE_TRACKS_MAX;
+    if (n->area_cols > cols) cols = n->area_cols;
+    return cols;
+}
+
+/* Layout entry: bind every valid subgrid once and report its items. */
+static void subgrid_bind_all(we_doc_t *d) {
+    uint32_t p;
+    for (p = 0; p < d->nnodes; p++) {
+        const we_node_t *n = &d->nodes[p];
+        we_track_work_t *items = &track_work[0];
+        we_grid_work_t *work = &grid_work[0];
+        int c, any = 0, count;
+        if (n->display != WE_DISP_GRID) continue;
+        for (c = n->first; c >= 0; c = d->nodes[c].next) if (subgrid_ok[c]) any = 1;
+        if (!any) continue;
+        count = collect_items(d, (int)p, items);
+        w_zero(work, sizeof(*work));
+        grid_place(d, items, work, count, grid_columns_for(d, n, items, count), 0);
+        subgrid_bind_items(d, (int)p, items, work, count, 1);
+    }
+}
+
+/* Column contributions of a column subgrid's items to the parent tracks. */
+static void subgrid_columns(we_doc_t *d, int p, int s, int start, int cw, int gap, we_grid_work_t *work, int depth) {
+    we_track_work_t *items = &track_work[depth + 1];
+    we_grid_work_t *inner = &grid_work[depth + 1];
+    const we_node_t *g = &d->nodes[p];
+    int count = collect_items(d, s, items), k;
+    if (depth + 1 > WE_DEPTH_MAX) return;
+    w_zero(inner, sizeof(*inner));
+    grid_place(d, items, inner, count, d->nodes[s].grid_cols, 0);
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[items->node[k]];
+        int extra;
+        if (inner->row[k] < 0) continue;
+        extra = subgrid_item_extra(&d->nodes[s], 0, inner->col[k], child->grid_col_span, gap);
+        grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span,
+                          w_max(0, preferred_outer(child, cw, child->max_content) + extra), gap, cw, work->column);
+        grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span,
+                          w_max(0, preferred_outer(child, cw, child->min_content) + extra), gap, cw, work->minimum);
+    }
+}
+
+static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth);
+
+/* Lot 61: a row subgrid's baseline-aligned items join the parent's
+ * baseline groups (CSS Grid 2, 9.6). The parent's shared ascent and
+ * last descent per spanned row are handed back to the subgrid, in its own
+ * row coordinates, before it places its items. */
+static int16_t subgrid_ascent[WE_MAX_NODES][WE_TRACKS_MAX], subgrid_ldescent[WE_MAX_NODES][WE_TRACKS_MAX];
+
+/* Offset of subgrid row k's top and bottom from the parent's lines. */
+static int subgrid_row_edge(const we_node_t *sub, int k, int gap, int bottom) {
+    int h1, h2;
+    (void)subgrid_gap_delta(sub, 1, gap, &h1, &h2);
+    return bottom ? (k + 1 < sub->grid_rows ? h1 : 0) : (k > 0 ? h2 : 0);
+}
+
+/* Row contributions of a row subgrid's items, measured at the widths the
+ * subgrid gives them (inherited or its own columns). */
+static void subgrid_rows(we_doc_t *d, int p, int s, int start, int width, int fixed_height, int gap,
+                         we_grid_work_t *work, int depth) {
+    we_track_work_t *items = &track_work[depth + 1];
+    we_grid_work_t *inner = &grid_work[depth + 1];
+    const we_node_t *g = &d->nodes[p], *sub = &d->nodes[s];
+    int count, k;
+    if (depth + 1 > WE_DEPTH_MAX) return;
+    (void)prepare_grid(d, s, 0, 0, width, depth + 1);
+    count = collect_items(d, s, items);
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[items->node[k]];
+        int c = inner->col[k], span, w, h;
+        if (inner->row[k] < 0) continue;
+        span = child->grid_col_span;
+        w = inner->column_x[c + span - 1] + inner->column[c + span - 1] - inner->column_x[c];
+        h = measure_area_height(d, items->node[k], grid_item_width(sub, child, w, items->node[k]), depth + 2);
+        {
+            int align = child->align_self ? child->align_self : sub->align_items;
+            int last = align == WE_PACK_LAST_BASELINE, real, base, row, top, bottom;
+            if ((align == WE_PACK_BASELINE || last) && !(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
+                row = last ? inner->row[k] + child->grid_row_span - 1 : inner->row[k];
+                base = baseline_get(d, items->node[k], grid_item_width(sub, child, w, items->node[k]), depth + 2, last, &real);
+                top = subgrid_row_edge(sub, inner->row[k], gap, 0);
+                bottom = subgrid_row_edge(sub, inner->row[k] + child->grid_row_span - 1, gap, 1);
+                if (start + row < WE_GRID_ROWS_MAX) {
+                    if (last) {
+                        if (h - base + bottom > work->ldescent[start + row]) work->ldescent[start + row] = h - base + bottom;
+                        if (child->grid_row_span == 1 && base + top > work->lascent[start + row]) work->lascent[start + row] = base + top;
+                    } else {
+                        if (base + top > work->ascent[start + row]) work->ascent[start + row] = base + top;
+                        if (child->grid_row_span == 1 && h - base + bottom > work->descent[start + row]) work->descent[start + row] = h - base + bottom;
+                    }
+                }
+            }
+        }
+        h = w_max(0, h + subgrid_item_extra(sub, 1, inner->row[k], child->grid_row_span, gap));
+        grid_span_minimum(g, 1, start + inner->row[k], child->grid_row_span, h, gap, fixed_height, work->height);
+    }
+}
+
+/* After the parent sized its rows: hand the shared groups to subgrid s. */
+static void subgrid_share(we_doc_t *d, int s, int start, int gap, const we_grid_work_t *work) {
+    const we_node_t *sub = &d->nodes[s];
+    int k;
+    for (k = 0; k < sub->grid_rows && k < WE_TRACKS_MAX && start + k < WE_GRID_ROWS_MAX; k++) {
+        subgrid_ascent[s][k] = (int16_t)w_max(0, work->ascent[start + k] - subgrid_row_edge(sub, k, gap, 0));
+        subgrid_ldescent[s][k] = (int16_t)w_max(0, work->ldescent[start + k] - subgrid_row_edge(sub, k, gap, 1));
+    }
 }
 
 static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) {
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[depth];
     we_grid_work_t *work = &grid_work[depth];
-    int count = collect_items(d, idx, items), cols = n->grid_cols ? n->grid_cols : 1;
+    int count, cols, seen;
     int rows, k, used_width, used_height, fixed_height = definite_height(d, idx, 0);
     int gx = axis_gap(n, 0), gy = axis_gap(n, 1), position;
+    if (n->auto_mode[0] || n->auto_mode[1]) {
+        int c;
+        grid_expand(n, 0, cw, gx);
+        grid_expand(n, 1, fixed_height, gy);
+        for (c = n->first; c >= 0; c = d->nodes[c].next) resolve_requests(d, c, 0);
+    }
+    count = collect_items(d, idx, items);
+    cols = n->grid_cols ? n->grid_cols : 1;
     w_zero(work, sizeof(*work));
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
@@ -3585,47 +4356,87 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     }
     if (n->area_rows > rows) rows = n->area_rows;
     if (n->grid_rows > rows) rows = n->grid_rows;
+    subgrid_bind_items(d, idx, items, work, count, 0);
+    for (k = 0; k < count; k++) work->span[k] = d->nodes[items->node[k]].grid_col_span;
+    grid_collapse(n, 0, work->col, work->span, count, work->collapsed[0]);
+    for (k = 0; k < count; k++) work->span[k] = d->nodes[items->node[k]].grid_row_span;
+    grid_collapse(n, 1, work->row, work->span, count, work->collapsed[1]);
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
         if (work->row[k] < 0) continue;
+        if (subgrid_on(items->node[k], 0)) {
+            subgrid_columns(d, idx, items->node[k], work->col[k], cw, gx, work, depth);
+            continue;
+        }
         grid_span_minimum(n, 0, work->col[k], child->grid_col_span,
                          preferred_outer(child, cw, child->max_content), gx, cw, work->column);
         grid_span_minimum(n, 0, work->col[k], child->grid_col_span,
                          preferred_outer(child, cw, child->min_content), gx, cw, work->minimum);
     }
     fit_auto_columns(n, cols, cw, gx, work->minimum, work->column);
-    used_width = grid_track_sizes(n, 0, cols, cw, gx, work->column);
+    used_width = grid_track_sizes(n, 0, cols, cw, gx, work->column, work->collapsed[0]);
     if (used_width > cw) diag(d, "grid width overflow", idx);
-    position = cx;
+    position = cx; seen = 0;
     for (k = 0; k < cols; k++) {
+        if (seen && !work->collapsed[0][k]) position += gx;
         work->column_x[k] = limit_coord(position + pack_distance(n->justify_content, cw - used_width, k, cols));
-        position += work->column[k] + gx;
+        position += work->column[k];
+        if (!work->collapsed[0][k]) seen = 1;
     }
+    for (k = 0; k < count; k++)
+        if (work->row[k] >= 0 && subgrid_on(items->node[k], 0))
+            subgrid_tracks(&d->nodes[items->node[k]], 0, work->column, work->column_x, work->col[k], gx);
+    /* Lot 61: first-baseline groups share the start row and last-baseline
+     * groups the end row, spanning items included. A spanning item adds the
+     * shift its group imposes to its span contribution. */
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
-        int width, height;
+        int width, height, align = child->align_self ? child->align_self : n->align_items;
         if (work->row[k] < 0) continue;
         width = work->column_x[work->col[k] + child->grid_col_span - 1] +
                 work->column[work->col[k] + child->grid_col_span - 1] - work->column_x[work->col[k]];
-        height = measure_area_height(d, items->node[k], grid_item_width(n, child, width), depth + 1);
+        if (subgrid_on(items->node[k], 1)) {
+            subgrid_rows(d, idx, items->node[k], work->row[k], grid_item_width(n, child, width, items->node[k]), fixed_height, gy, work, depth);
+            work->item_h[k] = -1;
+            continue;
+        }
+        height = measure_area_height(d, items->node[k], grid_item_width(n, child, width, items->node[k]), depth + 1);
+        work->item_h[k] = height;
         work->baseline[k] = 0;
-        if ((child->align_self ? child->align_self : n->align_items) == WE_PACK_BASELINE &&
+        if ((align == WE_PACK_BASELINE || align == WE_PACK_LAST_BASELINE) &&
             !(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
-            if (child->grid_row_span != 1) diag(d, "spanning baseline unsupported", items->node[k]);
-            else {
-                int row = work->row[k], below;
-                work->baseline[k] = baseline_of(d, items->node[k], grid_item_width(n, child, width), depth + 1);
-                below = height - work->baseline[k];
+            int real, last = align == WE_PACK_LAST_BASELINE;
+            int row = last ? work->row[k] + child->grid_row_span - 1 : work->row[k], below;
+            work->baseline[k] = baseline_get(d, items->node[k], grid_item_width(n, child, width, items->node[k]), depth + 1, last, &real);
+            below = height - work->baseline[k];
+            if (row >= WE_GRID_ROWS_MAX) continue;
+            if (last) {
+                if (below > work->ldescent[row]) work->ldescent[row] = below;
+                if (child->grid_row_span == 1 && work->baseline[k] > work->lascent[row]) work->lascent[row] = work->baseline[k];
+            } else {
                 if (work->baseline[k] > work->ascent[row]) work->ascent[row] = work->baseline[k];
-                if (below > work->descent[row]) work->descent[row] = below;
+                if (child->grid_row_span == 1 && below > work->descent[row]) work->descent[row] = below;
             }
+        }
+    }
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[items->node[k]];
+        int align = child->align_self ? child->align_self : n->align_items, height = work->item_h[k];
+        int end = work->row[k] + child->grid_row_span - 1;
+        if (work->row[k] < 0 || height < 0) continue;
+        if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) && child->grid_row_span > 1) {
+            if (align == WE_PACK_BASELINE) height += work->ascent[work->row[k]] - work->baseline[k];
+            else if (align == WE_PACK_LAST_BASELINE && end < WE_GRID_ROWS_MAX)
+                height += work->ldescent[end] - (work->item_h[k] - work->baseline[k]);
         }
         grid_span_minimum(n, 1, work->row[k], child->grid_row_span, height, gy, fixed_height, work->height);
     }
-    for (k = 0; k < rows; k++)
+    for (k = 0; k < rows && k < WE_GRID_ROWS_MAX; k++) {
         grid_span_minimum(n, 1, k, 1, work->ascent[k] + work->descent[k], gy, fixed_height, work->height);
-    used_height = grid_track_sizes(n, 1, rows, fixed_height, gy, work->height);
-    position = cy;
+        grid_span_minimum(n, 1, k, 1, work->lascent[k] + work->ldescent[k], gy, fixed_height, work->height);
+    }
+    used_height = grid_track_sizes(n, 1, rows, fixed_height, gy, work->height, work->collapsed[1]);
+    position = cy; seen = 0;
     {
         int receivers = 0, remaining = fixed_height > used_height ? fixed_height - used_height : 0;
         for (k = 0; k < rows; k++)
@@ -3637,12 +4448,24 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
                 remaining -= extra;
                 receivers--;
             }
+            if (seen && !(k < WE_TRACKS_MAX && work->collapsed[1][k])) position += gy;
             work->row_y[k] = limit_coord(position + (n->align_content == WE_PACK_STRETCH ? 0 :
                 pack_distance(n->align_content, fixed_height - used_height, k, rows)));
             work->height[k] += extra;
-            position += work->height[k] + gy;
+            position += work->height[k];
+            if (!(k < WE_TRACKS_MAX && work->collapsed[1][k])) seen = 1;
         }
     }
+    for (k = 0; k < count; k++)
+        if (work->row[k] >= 0 && subgrid_on(items->node[k], 1)) {
+            subgrid_tracks(&d->nodes[items->node[k]], 1, work->height, work->row_y, work->row[k], gy);
+            subgrid_share(d, items->node[k], work->row[k], gy, work);
+        }
+    if (subgrid_on(idx, 1))
+        for (k = 0; k < rows && k < WE_TRACKS_MAX; k++) {
+            if (subgrid_ascent[idx][k] > work->ascent[k]) work->ascent[k] = subgrid_ascent[idx][k];
+            if (subgrid_ldescent[idx][k] > work->ldescent[k]) work->ldescent[k] = subgrid_ldescent[idx][k];
+        }
     return rows;
 }
 
@@ -3652,6 +4475,31 @@ static int measure_grid(we_doc_t *d, int idx, int width, int depth) {
     return rows ? limit_coord(work->row_y[rows - 1] + work->height[rows - 1]) : 0;
 }
 
+/* Grid baseline export: the first row's first-baseline group, else its
+ * leftmost item; the last row's last-baseline group, else its rightmost. */
+typedef struct { int row[2], col[2], group[2], item[2]; } we_grid_export_t;
+static we_grid_export_t grid_exports[WE_DEPTH_MAX + 1];
+static void export_reset(we_grid_export_t *e) {
+    int i;
+    for (i = 0; i < 2; i++) {
+        e->row[i] = i ? -1 : 0x7fff; e->col[i] = i ? -1 : 0x7fff;
+        e->group[i] = e->item[i] = WE_NO_BASELINE;
+    }
+}
+static void grid_export(we_grid_export_t *e, int r, int c, int end_r, int end_c,
+                        int align, int group, int first, int last, int aligned) {
+    if (r < e->row[0]) { e->row[0] = r; e->col[0] = 0x7fff; e->group[0] = WE_NO_BASELINE; }
+    if (r == e->row[0]) {
+        if (aligned && align == WE_PACK_BASELINE && e->group[0] == WE_NO_BASELINE) e->group[0] = group;
+        if (c < e->col[0]) { e->col[0] = c; e->item[0] = first; }
+    }
+    if (end_r > e->row[1]) { e->row[1] = end_r; e->col[1] = -1; e->group[1] = WE_NO_BASELINE; }
+    if (end_r == e->row[1]) {
+        if (aligned && align == WE_PACK_LAST_BASELINE) e->group[1] = group;
+        if (end_c > e->col[1]) { e->col[1] = end_c; e->item[1] = last; }
+    }
+}
+
 static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) {
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[depth];
@@ -3659,6 +4507,8 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
     int rows = prepare_grid(d, idx, cx, cy, cw, depth);
     int count = collect_items(d, idx, items), k;
     int fixed_height = definite_height(d, idx, 0);
+    we_grid_export_t *e = &grid_exports[depth];
+    export_reset(e);
     for (k = 0; k < count; k++) {
         we_node_t *child = &d->nodes[items->node[k]];
         int r = work->row[k], c = work->col[k], width, height, child_width, child_height;
@@ -3666,9 +4516,12 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
         int vertical = child->align_self ? child->align_self : n->align_items;
         int x, y, assigned_h = -1;
         if (r < 0) continue;
+        /* A subgrid ignores self-alignment on its subgridded axes (columns:
+         * grid_item_width keeps the full track width). */
+        if (subgrid_on(items->node[k], 1)) vertical = WE_PACK_STRETCH;
         width = work->column_x[c + child->grid_col_span - 1] + work->column[c + child->grid_col_span - 1] - work->column_x[c];
         height = work->row_y[r + child->grid_row_span - 1] + work->height[r + child->grid_row_span - 1] - work->row_y[r];
-        child_width = grid_item_width(n, child, width);
+        child_width = grid_item_width(n, child, width, items->node[k]);
         {
             int child_idx = items->node[k];
             int16_t saved = containing_height[child_idx];
@@ -3686,15 +4539,29 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
             int free = height > child_height ? height - child_height : 0;
             y = work->row_y[r] + ((child->margin_auto & WE_AUTO_TOP) ?
                 (child->margin_auto & WE_AUTO_BOTTOM ? free / 2 : free) : 0);
-        } else if (vertical == WE_PACK_BASELINE && child->grid_row_span == 1)
+        } else if (vertical == WE_PACK_BASELINE)
             y = work->row_y[r] + work->ascent[r] - work->baseline[k];
-        else y = work->row_y[r] + pack_distance(vertical, height - child_height, 0, 1);
+        else if (vertical == WE_PACK_LAST_BASELINE) {
+            int end = r + child->grid_row_span - 1;
+            y = work->row_y[end] + work->height[end] - work->ldescent[end] - work->baseline[k];
+        } else y = work->row_y[r] + pack_distance(vertical, height - child_height, 0, 1);
         {
             int child_idx = items->node[k];
             int16_t saved = containing_height[child_idx];
             containing_height[child_idx] = (int16_t)height;
             layout_area(d, child_idx, limit_coord(x), limit_coord(y), child_width, assigned_h, width, depth + 1);
             containing_height[child_idx] = saved;
+        }
+        grid_export(e, r, c, r + child->grid_row_span - 1, c + child->grid_col_span - 1,
+                    vertical, limit_coord(y + work->baseline[k]), item_baseline(d, items->node[k], 0),
+                    item_baseline(d, items->node[k], 1), !(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)));
+    }
+    {
+        int i;
+        for (i = 0; i < 2; i++) {
+            int value = e->group[i] != WE_NO_BASELINE ? e->group[i] : e->item[i];
+            if (i) layout_last[idx] = (int16_t)value;
+            else layout_first[idx] = (int16_t)value;
         }
     }
     d->perf.grid_lines += (uint32_t)rows;
@@ -3844,20 +4711,92 @@ static int measure_area_height(we_doc_t *d, int idx, int outer, int depth) {
     return height;
 }
 
-static int baseline_of(we_doc_t *d, int idx, int outer, int depth) {
+/* Lot 61 container baselines: a flex, grid or table box is laid out for
+ * real at (0, 0) and its exported layout_first/layout_last is read back.
+ * Geometry, items, diagnostics, counters and baselines are restored, the
+ * nesting is capped at WE_PROBE_DEPTH and the count at WE_PROBE_MAX. */
+#define WE_PROBE_DEPTH 3
+#define WE_PROBE_MAX 64
+typedef struct {
+    int16_t x[WE_MAX_NODES], y[WE_MAX_NODES], w[WE_MAX_NODES], h[WE_MAX_NODES];
+    int16_t first[WE_MAX_NODES], last[WE_MAX_NODES], resolved[WE_MAX_NODES], containing[WE_MAX_NODES];
+    uint8_t failed[WE_MAX_NODES], set[WE_MAX_NODES];
+    int16_t sx[WE_MAX_NODES], sy[WE_MAX_NODES];
+} we_probe_save_t;
+static we_probe_save_t probe_save[WE_PROBE_DEPTH];
+static int probe_level, probe_count;
+
+static int probe_container(we_doc_t *d, int idx, int outer, int depth, int last) {
+    we_probe_save_t *save;
+    uint32_t nitems = d->nitems, ndiag = d->ndiag, dropped = d->diag_dropped;
+    we_perf_t perf = d->perf;
+    int i, value, saved_probe = baseline_probe;
+    if (probe_level >= WE_PROBE_DEPTH) return WE_NO_BASELINE;
+    if (probe_count >= WE_PROBE_MAX) {
+        if (probe_count++ == WE_PROBE_MAX) diag(d, "baseline probe budget", idx);
+        return WE_NO_BASELINE;
+    }
+    probe_count++;
+    save = &probe_save[probe_level++];
+    for (i = 0; i < (int)d->nnodes; i++) {
+        save->x[i] = d->nodes[i].x; save->y[i] = d->nodes[i].y;
+        save->w[i] = d->nodes[i].w; save->h[i] = d->nodes[i].h;
+        save->first[i] = layout_first[i]; save->last[i] = layout_last[i];
+        save->resolved[i] = resolved_height[i]; save->containing[i] = containing_height[i];
+        save->failed[i] = image_work.failed[i];
+        save->set[i] = static_set[i]; save->sx[i] = static_x[i]; save->sy[i] = static_y[i];
+    }
+    baseline_probe = 0;
+    (void)layout_assigned(d, idx, 0, 0, outer, depth);
+    value = last ? layout_last[idx] : layout_first[idx];
+    baseline_probe = saved_probe;
+    for (i = 0; i < (int)d->nnodes; i++) {
+        d->nodes[i].x = save->x[i]; d->nodes[i].y = save->y[i];
+        d->nodes[i].w = save->w[i]; d->nodes[i].h = save->h[i];
+        layout_first[i] = save->first[i]; layout_last[i] = save->last[i];
+        resolved_height[i] = save->resolved[i]; containing_height[i] = save->containing[i];
+        image_work.failed[i] = save->failed[i];
+        static_set[i] = save->set[i]; static_x[i] = save->sx[i]; static_y[i] = save->sy[i];
+    }
+    probe_level--;
+    d->nitems = nitems; d->ndiag = ndiag; d->diag_dropped = dropped; d->perf = perf;
+    return value;
+}
+
+/* First (last=0) or last baseline from the margin-box top. *real is 0 when
+ * the value is the synthesized bottom border edge. */
+static int baseline_get(we_doc_t *d, int idx, int outer, int depth, int last, int *real) {
     const we_node_t *n = &d->nodes[idx];
     int height = measure_area_height(d, idx, outer, depth), value, saved_probe = baseline_probe;
+    int bottom = limit_coord(height - n->margin[2]);
     uint8_t saved_content = measure_content[idx];
-    if (depth > WE_DEPTH_MAX || n->overflow_hidden || w_eq(n->tag, "img") ||
-        n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID || n->display == WE_DISP_TABLE)
-        return limit_coord(height - n->margin[2]);
+    *real = 0;
+    if (depth > WE_DEPTH_MAX) return bottom;
+    if (w_eq(n->tag, "img")) { *real = 1; return bottom; }
+    if (n->overflow_hidden) {
+        *real = (last ? flow_last[idx] : flow_baseline[idx]) >= 0;
+        return bottom;
+    }
+    if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID || n->display == WE_DISP_TABLE) {
+        value = probe_container(d, idx, outer, depth, last);
+        if (value == WE_NO_BASELINE) return bottom;
+        *real = 1;
+        return limit_coord(value);
+    }
     baseline_probe = 1; measure_content[idx] = 1;
     (void)measure_area_height(d, idx, outer, depth);
     measure_content[idx] = saved_content; baseline_probe = saved_probe;
-    value = flow_baseline[idx];
-    if (value >= 0) value += n->margin[0] + n->border + n->padding[0];
-    else value = height - n->margin[2];
+    value = last ? flow_last[idx] : flow_baseline[idx];
+    if (value >= 0) { *real = 1; value += n->margin[0] + n->border + n->padding[0]; }
+    else value = bottom;
     return limit_coord(value);
+}
+
+/* Baseline of a laid-out item, synthesized from its bottom border edge. */
+static int item_baseline(const we_doc_t *d, int c, int last) {
+    int value = last ? layout_last[c] : layout_first[c];
+    if (value != WE_NO_BASELINE) return value;
+    return limit_coord(d->nodes[c].y + d->nodes[c].h);
 }
 
 static void prepare_flex(we_doc_t *d, int idx, int cw,
@@ -3929,30 +4868,39 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
         }
         line->used = (k - line->first - 1) * gap;
         line->cross = 0;
-        line->ascent = line->descent = 0;
+        line->ascent = line->descent = line->lascent = line->ldescent = 0;
         for (j = line->first; j < k; j++) {
             const we_node_t *child = &d->nodes[work->node[j]];
             int align = child->align_self ? child->align_self : n->align_items;
             line->used += work->size[j];
             if (vertical) {
                 int fallback = wrap ? WE_CHAR_W : align == WE_PACK_END || align == WE_PACK_CENTER ||
+                    align == WE_PACK_BASELINE || align == WE_PACK_LAST_BASELINE ||
                     (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ? child->max_content : cw - flex_extra(child, 0);
                 work->cross[j] = preferred_outer(child, cw, fallback);
             } else work->cross[j] = measure_area_height(d, work->node[j], work->size[j], depth + 1);
             work->baseline[j] = 0;
-            if (align == WE_PACK_BASELINE) {
-                if (vertical) diag(d, "column baseline unsupported", work->node[j]);
-                else if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
-                    int below;
-                    work->baseline[j] = baseline_of(d, work->node[j], work->size[j], depth + 1);
+            if (align == WE_PACK_BASELINE || align == WE_PACK_LAST_BASELINE) {
+                /* Column flex: no baseline along the horizontal cross axis,
+                 * so first baseline falls back to start and last baseline to
+                 * end (CSS Box Alignment 9.3); nothing is diagnosed. */
+                if (!vertical && !(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
+                    int below, real, last = align == WE_PACK_LAST_BASELINE;
+                    work->baseline[j] = baseline_get(d, work->node[j], work->size[j], depth + 1, last, &real);
                     below = work->cross[j] - work->baseline[j];
-                    if (work->baseline[j] > line->ascent) line->ascent = work->baseline[j];
-                    if (below > line->descent) line->descent = below;
+                    if (last) {
+                        if (work->baseline[j] > line->lascent) line->lascent = work->baseline[j];
+                        if (below > line->ldescent) line->ldescent = below;
+                    } else {
+                        if (work->baseline[j] > line->ascent) line->ascent = work->baseline[j];
+                        if (below > line->descent) line->descent = below;
+                    }
                 }
             }
             if (work->cross[j] > line->cross) line->cross = work->cross[j];
         }
         if (line->ascent + line->descent > line->cross) line->cross = line->ascent + line->descent;
+        if (line->lascent + line->ldescent > line->cross) line->cross = line->lascent + line->ldescent;
         if (!wrap && cross_available > line->cross) line->cross = cross_available;
         cross_total = limit_coord(cross_total + line->cross + (lines ? cross_gap : 0));
         lines++;
@@ -4011,6 +4959,8 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
     we_track_work_t *work = &track_work[depth];
     int vertical = n->flex_dir != 0, main, cross_available, gap, cross_gap, lines, cross_total;
     int k, extent = 0, wrap;
+    int group_first = WE_NO_BASELINE, group_last = WE_NO_BASELINE;
+    int item_first = WE_NO_BASELINE, item_last = WE_NO_BASELINE;
     prepare_flex(d, idx, cw, depth, count, sizing, modern);
     main = work->main;
     cross_available = work->cross_available;
@@ -4071,6 +5021,8 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
                 int free = line_cross > cross ? line_cross - cross : 0;
                 off = cross_before ? (cross_after ? free / 2 : free) : 0;
             } else if (!vertical && align == WE_PACK_BASELINE) off = line->ascent - work->baseline[j];
+            else if (!vertical && align == WE_PACK_LAST_BASELINE) off = line_cross - line->ldescent - work->baseline[j];
+            else if (align == WE_PACK_LAST_BASELINE) off = line_cross > cross ? line_cross - cross : 0;
             else off = pack_distance(align, line_cross - cross, 0, 1);
             {
                 int cursor = 0, t, rem_left = auto_rem;
@@ -4100,13 +5052,33 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
                 return main >= 0 ? main : 0;
             }
             layout_area(d, work->node[j], limit_coord(x), limit_coord(y), width, height, width, depth + 1);
+            /* Export: a baseline group of the first/last line wins, else the
+             * main-start item of the first line or main-end item of the last. */
+            if (!vertical && !cross_auto && k == 0 && align == WE_PACK_BASELINE && group_first == WE_NO_BASELINE)
+                group_first = limit_coord(y + work->baseline[j]);
+            if (!vertical && !cross_auto && k == lines - 1 && align == WE_PACK_LAST_BASELINE)
+                group_last = limit_coord(y + work->baseline[j]);
+            if (k == 0 && j == line->first) item_first = item_baseline(d, work->node[j], 0);
+            if (k == lines - 1 && j == line->end - 1) item_last = item_baseline(d, work->node[j], 1);
         }
         extent = limit_coord(extent + line->cross + (k + 1 < lines ? cross_gap : 0));
         d->perf.flex_lines++;
     }
+    if (vertical) {
+        item_first = item_baseline(d, work->node[0], 0);
+        item_last = item_baseline(d, work->node[count - 1], 1);
+    }
+    layout_first[idx] = (int16_t)(group_first != WE_NO_BASELINE ? group_first : item_first);
+    layout_last[idx] = (int16_t)(group_last != WE_NO_BASELINE ? group_last : item_last);
     if (!vertical) return cross_total + (cross_available > cross_total && n->align_content == WE_PACK_STRETCH ? cross_available - cross_total : 0);
     if (main >= 0) return main;
     return work->lines[0].used;
+}
+
+static void export_items(we_doc_t *d, int idx, const we_track_work_t *work, int count) {
+    if (count <= 0) return;
+    layout_first[idx] = (int16_t)item_baseline(d, work->node[0], 0);
+    layout_last[idx] = (int16_t)item_baseline(d, work->node[count - 1], 1);
 }
 
 static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth) {
@@ -4147,6 +5119,7 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
                 col_y += actual + gap;
             }
             if (k) d->perf.flex_lines++;
+            export_items(d, idx, work, k);
             return extent;
         }
         if (n->flex_wrap) diag(d, "column wrap requires height", idx);
@@ -4168,6 +5141,7 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
             if (k + 1 < count) y += gap;
         }
         d->perf.flex_lines++;
+        export_items(d, idx, work, count);
         return y - cy;
     }
     for (k = 0; k < count; k++) if (d->nodes[work->node[k]].flex_grow >= 0) explicit_grow = 1;
@@ -4183,6 +5157,7 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
             x += each + gap;
         }
         d->perf.flex_lines++;
+        export_items(d, idx, work, count);
         return high;
     }
     return layout_flex_tracks(d, idx, cx, cy, cwidth, depth, count, sizing, modern);
@@ -4208,6 +5183,10 @@ static void intrinsic_track_request(const we_node_t *n, int cols, int start, int
     }
 }
 
+static int table_column_tag(const we_node_t *n) {
+    return w_eq(n->tag, "col") ? 1 : w_eq(n->tag, "colgroup") ? 2 : 0;
+}
+
 static int collect_table_rows(we_doc_t *d, int idx, int *rows, int report) {
     int c, count = 0;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
@@ -4218,7 +5197,7 @@ static int collect_table_rows(we_doc_t *d, int idx, int *rows, int report) {
             int r;
             for (r = n->first; r >= 0; r = d->nodes[r].next)
                 if (d->nodes[r].display == WE_DISP_ROW) rows[count++] = r;
-        } else if (report) diag(d, "table child refused", c);
+        } else if (report && !table_column_tag(n)) diag(d, "table child refused", c);
     }
     return count;
 }
@@ -4271,9 +5250,12 @@ static int table_assign(we_doc_t *d, int idx, int *rows, int nr, int depth, int 
     return cols;
 }
 
+/* Lot 61: border-collapse shares cell borders. Adjacent cells overlap by
+ * the band width B of the table (negative spacing); the resolved line of
+ * each edge paints once inside that band (collapse_paint). */
 static int table_spacing_axis(const we_node_t *n, int vertical) {
     int spacing;
-    if (n->border_collapse) return 0;
+    if (n->border_collapse) return -(int)n->collapse_w;
     spacing = vertical ? n->border_spacing_y : n->border_spacing;
     if (spacing < 0) return 0;
     if (spacing > WE_SPACING_MAX) return WE_SPACING_MAX;
@@ -4293,6 +5275,25 @@ static int table_rowspan_of(const we_node_t *cell, int row, int nr) {
     if (rs > WE_TRACKS_MAX) rs = WE_TRACKS_MAX;
     if (row + rs > nr) rs = nr - row;
     return rs < 1 ? 1 : rs;
+}
+
+/* Intrinsic pass: a column subgrid contributes its items, not itself. */
+static void subgrid_intrinsic(we_doc_t *d, const we_node_t *g, int s, int start, int gap, we_grid_work_t *work) {
+    we_track_work_t *items = &track_work[1];
+    we_grid_work_t *inner = &grid_work[1];
+    int count = collect_items(d, s, items), k, pass;
+    w_zero(inner, sizeof(*inner));
+    grid_place(d, items, inner, count, d->nodes[s].grid_cols, 0);
+    for (pass = 0; pass < 2; pass++)
+        for (k = 0; k < count; k++) {
+            const we_node_t *child = &d->nodes[items->node[k]];
+            int extra = node_border_extra(child) + child->margin[1] + child->margin[3], low, high;
+            if (inner->row[k] < 0 || (child->grid_col_span == 1) != (pass == 0)) continue;
+            extra += subgrid_item_extra(&d->nodes[s], 0, inner->col[k], child->grid_col_span, gap);
+            intrinsic_contribution(child, &low, &high);
+            grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span, constrained_width(child, low, 0) + extra, gap, -1, work->column);
+            grid_span_minimum(g, 0, start + inner->col[k], child->grid_col_span, constrained_width(child, high, 0) + extra, gap, -1, work->column_x);
+        }
 }
 
 static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maximum) {
@@ -4348,6 +5349,11 @@ static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maxim
                 const we_node_t *child = &d->nodes[c];
                 int span = grid ? child->grid_col_span : child->colspan;
                 int start = grid ? work->col[r] : (table_slot[0].col[c] >= 0 ? table_slot[0].col[c] : column);
+                if (grid && pass == 0 && start >= 0 && subgrid_on(c, 0)) {
+                    subgrid_intrinsic(d, n, c, start, gap, work);
+                    break;
+                }
+                if (grid && subgrid_on(c, 0)) break;
                 if (child->display != WE_DISP_NONE && !child->absolute && (grid || child->display == WE_DISP_CELL)) {
                     if ((span == 1) == (pass == 0) && start >= 0 && start + span <= cols) {
                         int extra = node_border_extra(child) + child->margin[1] + child->margin[3];
@@ -4478,14 +5484,27 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
     (void)idx;
     for (r = 0; r < nr; r++) {
         int high = d->nodes[rows[r]].height > 0 ? d->nodes[rows[r]].height : 0;
+        if (r < WE_GRID_ROWS_MAX) slot->ascent[r] = slot->descent[r] = 0;
         for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
             const we_node_t *cell = &d->nodes[c];
-            int h;
+            int h, width;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
-            if (table_rowspan_of(cell, r, nr) != 1) continue;
-            h = measure_area_height(d, c, table_span_size(widths, slot->col[c], cell->colspan, spacing_x), depth + 1);
-            if (h > high) high = h;
+            int spanning = table_rowspan_of(cell, r, nr) != 1;
+            if (spanning && cell->valign != WE_VALIGN_BASELINE) continue;
+            width = table_span_size(widths, slot->col[c], cell->colspan, spacing_x);
+            h = measure_area_height(d, c, width, depth + 1);
+            if (h > high && !spanning) high = h;
+            /* Lot 61: a row-spanning baseline cell aligns in its first row
+             * (CSS 2.1 17.5.3); its height is checked over the span below. */
+            if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX) {
+                int real, base = baseline_get(d, c, width, depth + 1, 0, &real);
+                if (!real) base = limit_coord(h - cell->margin[2] - box_edge(cell, 2) - cell->padding[2]);
+                slot->base[c] = (int16_t)base;
+                if (base > slot->ascent[r]) slot->ascent[r] = base;
+                if (!spanning && h - base > slot->descent[r]) slot->descent[r] = h - base;
+            }
         }
+        if (r < WE_GRID_ROWS_MAX && slot->ascent[r] + slot->descent[r] > high) high = slot->ascent[r] + slot->descent[r];
         slot->height[r] = high;
     }
     for (r = 0; r < nr; r++) {
@@ -4497,6 +5516,7 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
             if (rs < 2) continue;
             sum = table_span_size(slot->height, r, rs, spacing_y);
             h = measure_area_height(d, c, table_span_size(widths, slot->col[c], cell->colspan, spacing_x), depth + 1);
+            if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX) h = limit_coord(h + slot->ascent[r] - slot->base[c]);
             if (h > sum) slot->height[r + rs - 1] = limit_coord(slot->height[r + rs - 1] + h - sum);
         }
     }
@@ -4512,12 +5532,13 @@ static int measure_table(we_doc_t *d, int idx, int width, int depth) {
 
 /* Shift in-flow descendants inside a cell that is taller than its content.
  * The cell border box stays put. Top alignment does not move anything. */
+static void shift_cell(we_doc_t *d, int idx, int first_item, int shift);
 static void valign_cell(we_doc_t *d, int idx, int first_item) {
     we_node_t *cell = &d->nodes[idx];
     int top, inner, bottom, used, shift, i;
     if (cell->valign == WE_VALIGN_TOP || first_item < 0) return;
-    top = cell->y + cell->border + cell->padding[0];
-    inner = cell->h - 2 * cell->border - cell->padding[0] - cell->padding[2];
+    top = cell->y + box_edge(cell, 0) + cell->padding[0];
+    inner = cell->h - vertical_extra(cell);
     if (inner < 0) inner = 0;
     bottom = top;
     for (i = idx + 1; i < (int)d->nnodes; i++) {
@@ -4530,17 +5551,297 @@ static void valign_cell(we_doc_t *d, int idx, int first_item) {
     used = bottom - top;
     if (used < 0 || used >= inner) return;
     shift = cell->valign == WE_VALIGN_MIDDLE ? (inner - used) / 2 : inner - used;
+    shift_cell(d, idx, first_item, shift);
+}
+
+static void shift_cell(we_doc_t *d, int idx, int first_item, int shift) {
+    int i;
     if (shift <= 0) return;
+    if (layout_first[idx] != WE_NO_BASELINE) layout_first[idx] = (int16_t)limit_coord(layout_first[idx] + shift);
+    if (layout_last[idx] != WE_NO_BASELINE) layout_last[idx] = (int16_t)limit_coord(layout_last[idx] + shift);
     for (i = idx + 1; i < (int)d->nnodes; i++) {
         int ancestor = i;
         while (ancestor >= 0 && ancestor != idx) ancestor = d->nodes[ancestor].parent;
-        if (ancestor == idx) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + shift);
+        if (ancestor == idx) {
+            d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + shift);
+            if (static_set[i]) static_y[i] = (int16_t)limit_coord(static_y[i] + shift);
+        }
     }
     for (i = first_item; i < (int)d->nitems; i++) {
         int owner = d->item_owner[i], ancestor = owner;
         if (owner == idx) continue;
         while (ancestor >= 0 && ancestor != idx) ancestor = d->nodes[ancestor].parent;
         if (ancestor == idx) d->items[i].y = (int16_t)limit_coord(d->items[i].y + shift);
+    }
+}
+
+/* One resolved edge: width 0..8, style code, colour. none gives width 0;
+ * a collapsed table keeps its moved width in edge_w (border is 0). */
+static void edge_of(const we_node_t *n, int side, int *w, int *style, uint32_t *color) {
+    *w = n->edge_w[side] >= 0 ? n->edge_w[side] : (n->border > 8 ? 8 : n->border);
+    *style = n->edge_style[side] ? n->edge_style[side] : n->border_style;
+    *color = (n->edge_color_set >> side) & 1 ? n->edge_color[side] : n->border_color;
+    if (*w < 0) *w = 0;
+    if (*style == WE_BS_NONE) *w = 0;
+}
+
+static int edges_set(const we_node_t *n) {
+    int side;
+    if (n->edge_color_set) return 1;
+    for (side = 0; side < 4; side++) if (n->edge_w[side] >= 0 || n->edge_style[side]) return 1;
+    return 0;
+}
+
+static int table_group(const we_node_t *n) {
+    return w_eq(n->tag, "tbody") || w_eq(n->tag, "thead") || w_eq(n->tag, "tfoot");
+}
+
+/* Lot 61: collapsed border resolution (CSS 2.1 17.6.2.1) on the table
+ * grid. Every grid edge segment takes the winner among the cells on both
+ * sides, their rows, row groups and, on the outside, the table: hidden
+ * suppresses it, then the wider edge, then style precedence, then origin
+ * cell > row > row group > column > column group > table, then the cell
+ * above or to the left. The winner paints at B/2 - w/2 in the shared band
+ * of width B (collapse_w, uniform per table); equal neighbours along a line
+ * are merged. Vertical lines paint after horizontal ones, so a corner shows
+ * the vertical winner. Cell content insets follow the same split. */
+typedef struct { int w, style, hidden; uint32_t color; } we_edge_pick_t;
+static int16_t collapse_map[WE_GRID_ROWS_MAX][WE_TRACKS_MAX];
+
+static void edge_consider(const we_doc_t *d, we_edge_pick_t *best, int node, int side) {
+    int w, style;
+    uint32_t color;
+    if (node < 0) return;
+    edge_of(&d->nodes[node], side, &w, &style, &color);
+    if (style == WE_BS_HIDDEN) { best->hidden = 1; return; }
+    if (w <= 0) return;
+    /* Candidates arrive cell, row, row group, table, upper/left cell
+     * first, so keeping the earlier one on a full tie applies origin. */
+    if (w > best->w || (w == best->w && border_style_rank(style) > border_style_rank(best->style))) {
+        best->w = w; best->style = style; best->color = color;
+    }
+}
+
+static int row_group_of(const we_doc_t *d, int row) {
+    int p = d->nodes[row].parent;
+    return p >= 0 && table_group(&d->nodes[p]) ? p : -1;
+}
+
+/* One border line of width w and length len at (off, from) for a vertical
+ * line, (from, off) for a horizontal one. */
+static void edge_rect(we_doc_t *d, int idx, uint32_t color, int vertical, int off, int from, int w, int len) {
+    if (w <= 0 || len <= 0) return;
+    if (vertical) (void)emit(d, idx, OS_FB_WEB_RECT, off, from, w, len, color);
+    else (void)emit(d, idx, OS_FB_WEB_RECT, from, off, len, w, color);
+}
+
+/* Lot 61 border styles from RECT items only, bounded per line:
+ * dashed: dashes of max(2w, 3) px with equal gaps; dotted: w x w dots
+ * with w gaps; at most WE_DASH_MAX pieces, the period grows past that.
+ * double (w >= 3): two lines of (w + 1) / 3 px around the gap. The 3D
+ * styles (ridge, outset, groove, inset) paint solid and are diagnosed. */
+#define WE_DASH_MAX 8
+
+static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len) {
+    if (style == 5 || style == 6) {
+        int piece = style == 5 ? (2 * w > 3 ? 2 * w : 3) : w, period = 2 * piece, at;
+        if (len > WE_DASH_MAX * period) period = (len + WE_DASH_MAX - 1) / WE_DASH_MAX;
+        if (piece > period) piece = period;
+        for (at = 0; at < len; at += period)
+            edge_rect(d, idx, color, vertical, off, from + at, w, at + piece > len ? len - at : piece);
+        return;
+    }
+    if (style == 4 && w >= 3) {
+        int t = (w + 1) / 3;
+        edge_rect(d, idx, color, vertical, off, from, t, len);
+        edge_rect(d, idx, color, vertical, off + w - t, from, t, len);
+        return;
+    }
+    if (style >= 7 && style <= 10) style_solid_3d = 1;
+    edge_rect(d, idx, color, vertical, off, from, w, len);
+}
+
+/* <col>/<colgroup> origins per column: [0] the col, [1] its colgroup. A
+ * colgroup without col children covers span columns itself. */
+static int16_t collapse_col[2][WE_TRACKS_MAX];
+
+static void collapse_columns(const we_doc_t *d, int idx) {
+    int c, k = 0, j;
+    for (j = 0; j < WE_TRACKS_MAX; j++) collapse_col[0][j] = collapse_col[1][j] = -1;
+    for (c = d->nodes[idx].first; c >= 0 && k < WE_TRACKS_MAX; c = d->nodes[c].next) {
+        int kind = table_column_tag(&d->nodes[c]), g, any = 0;
+        if (kind == 1) {
+            for (j = 0; j < (d->nodes[c].colspan > 1 ? d->nodes[c].colspan : 1) && k < WE_TRACKS_MAX; j++) collapse_col[0][k++] = (int16_t)c;
+        } else if (kind == 2) {
+            for (g = d->nodes[c].first; g >= 0; g = d->nodes[g].next) {
+                if (table_column_tag(&d->nodes[g]) != 1) continue;
+                any = 1;
+                for (j = 0; j < (d->nodes[g].colspan > 1 ? d->nodes[g].colspan : 1) && k < WE_TRACKS_MAX; j++) {
+                    collapse_col[1][k] = (int16_t)c;
+                    collapse_col[0][k++] = (int16_t)g;
+                }
+            }
+            if (!any)
+                for (j = 0; j < (d->nodes[c].colspan > 1 ? d->nodes[c].colspan : 1) && k < WE_TRACKS_MAX; j++) collapse_col[1][k++] = (int16_t)c;
+        }
+    }
+}
+
+static int collapse_build(const we_doc_t *d, int idx, const int *rows, int nr, int depth) {
+    const we_table_slot_t *slot = &table_slot[depth];
+    int cols = slot->cols, r, k;
+    if (nr > WE_GRID_ROWS_MAX) nr = WE_GRID_ROWS_MAX;
+    for (r = 0; r < nr; r++) for (k = 0; k < WE_TRACKS_MAX; k++) collapse_map[r][k] = -1;
+    for (r = 0; r < nr; r++) {
+        int c;
+        for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
+            const we_node_t *cell = &d->nodes[c];
+            int span, rs, rr, kk;
+            if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
+            span = cell->colspan < 1 ? 1 : cell->colspan;
+            rs = table_rowspan_of(cell, r, nr);
+            for (rr = r; rr < r + rs && rr < nr; rr++)
+                for (kk = slot->col[c]; kk < slot->col[c] + span && kk < cols; kk++) collapse_map[rr][kk] = (int16_t)c;
+        }
+    }
+    collapse_columns(d, idx);
+    return cols;
+}
+
+/* Segment of horizontal line r (0..nr) over column k. Origin order:
+ * cells, rows, row groups, columns, column groups, table. */
+static void collapse_h(const we_doc_t *d, int idx, const int *rows, int nr, int r, int k, we_edge_pick_t *e) {
+    int above = r > 0 ? collapse_map[r - 1][k] : -1, below = r < nr ? collapse_map[r][k] : -1;
+    int gup = r > 0 ? row_group_of(d, rows[r - 1]) : -1, gdown = r < nr ? row_group_of(d, rows[r]) : -1;
+    w_zero(e, sizeof(*e));
+    if (above >= 0 && above == below) return;
+    edge_consider(d, e, above, 2);
+    edge_consider(d, e, below, 0);
+    if (r > 0) edge_consider(d, e, rows[r - 1], 2);
+    if (r < nr) edge_consider(d, e, rows[r], 0);
+    if (gup != gdown) { edge_consider(d, e, gup, 2); edge_consider(d, e, gdown, 0); }
+    if (r == 0 || r == nr) {
+        edge_consider(d, e, collapse_col[0][k], r ? 2 : 0);
+        edge_consider(d, e, collapse_col[1][k], r ? 2 : 0);
+        edge_consider(d, e, idx, r ? 2 : 0);
+    }
+}
+
+/* Segment of vertical line k (0..cols) over row r. */
+static void collapse_v(const we_doc_t *d, int idx, const int *rows, int cols, int r, int k, we_edge_pick_t *e) {
+    int left = k > 0 ? collapse_map[r][k - 1] : -1, right = k < cols ? collapse_map[r][k] : -1;
+    int g = row_group_of(d, rows[r]);
+    int cl = k > 0 ? collapse_col[0][k - 1] : -1, cr = k < cols ? collapse_col[0][k] : -1;
+    int gl = k > 0 ? collapse_col[1][k - 1] : -1, gr = k < cols ? collapse_col[1][k] : -1;
+    w_zero(e, sizeof(*e));
+    if (left >= 0 && left == right) return;
+    edge_consider(d, e, left, 1);
+    edge_consider(d, e, right, 3);
+    if (k == 0 || k == cols) { edge_consider(d, e, rows[r], k ? 1 : 3); edge_consider(d, e, g, k ? 1 : 3); }
+    if (cl != cr) { edge_consider(d, e, cl, 1); edge_consider(d, e, cr, 3); }
+    if (gl != gr) { edge_consider(d, e, gl, 1); edge_consider(d, e, gr, 3); }
+    if (k == 0 || k == cols) edge_consider(d, e, idx, k ? 1 : 3);
+}
+
+/* The resolved line of width w sits at B/2 - w/2 in its band of width B,
+ * so each side of the grid line (at B/2) holds half of it; an odd pixel
+ * goes to the cell after the line (right or below). */
+static int edge_offset(int b, int w) {
+    return b / 2 - w / 2;
+}
+
+static void edge_emit(we_doc_t *d, int idx, const we_edge_pick_t *e, int vertical, int band, int from, int len, int b) {
+    int off = band + edge_offset(b, e->w);
+    if (e->hidden || e->w <= 0 || len <= 0) return;
+    edge_paint(d, idx, e->style, e->color, vertical, off, from, e->w, len);
+}
+
+static int edge_same(const we_edge_pick_t *a, const we_edge_pick_t *b) {
+    int va = !a->hidden && a->w > 0, vb = !b->hidden && b->w > 0;
+    if (va != vb) return 0;
+    return !va || (a->w == b->w && a->color == b->color && a->style == b->style);
+}
+
+static void collapse_paint(we_doc_t *d, int idx, const int *rows, int nr, const int *widths, int x, int spacing, int depth) {
+    int b = d->nodes[idx].collapse_w, cols, r, k;
+    if (nr > WE_GRID_ROWS_MAX) nr = WE_GRID_ROWS_MAX;
+    if (b <= 0 || nr <= 0 || table_slot[depth].cols <= 0) return;
+    cols = collapse_build(d, idx, rows, nr, depth);
+    /* Horizontal lines 0..nr, one segment per column. */
+    for (r = 0; r <= nr; r++) {
+        const we_node_t *ref = &d->nodes[rows[r < nr ? r : nr - 1]];
+        int band = r < nr ? ref->y : ref->y + ref->h - b, start = 0;
+        we_edge_pick_t run, e;
+        w_zero(&run, sizeof(run));
+        for (k = 0; k <= cols; k++) {
+            w_zero(&e, sizeof(e));
+            if (k < cols) collapse_h(d, idx, rows, nr, r, k, &e);
+            if (k > 0 && (k == cols || !edge_same(&run, &e))) {
+                int x0 = x + table_origin(widths, start, spacing);
+                int x1 = x + table_origin(widths, k - 1, spacing) + widths[k - 1];
+                edge_emit(d, idx, &run, 0, band, x0, x1 - x0, b);
+                start = k;
+            }
+            if (k == 0 || k == start) run = e;
+        }
+    }
+    /* Vertical lines 0..cols, one segment per row. */
+    for (k = 0; k <= cols; k++) {
+        int band = k < cols ? x + table_origin(widths, k, spacing)
+                            : x + table_origin(widths, cols - 1, spacing) + widths[cols - 1] - b;
+        int start = 0;
+        we_edge_pick_t run, e;
+        w_zero(&run, sizeof(run));
+        for (r = 0; r <= nr; r++) {
+            w_zero(&e, sizeof(e));
+            if (r < nr) collapse_v(d, idx, rows, cols, r, k, &e);
+            if (r > 0 && (r == nr || !edge_same(&run, &e))) {
+                int y0 = d->nodes[rows[start]].y;
+                int y1 = d->nodes[rows[r - 1]].y + d->nodes[rows[r - 1]].h;
+                edge_emit(d, idx, &run, 1, band, y0, y1 - y0, b);
+                start = r;
+            }
+            if (r == 0 || r == start) run = e;
+        }
+    }
+}
+
+static int pick_w(const we_edge_pick_t *e) {
+    return e->hidden ? 0 : e->w;
+}
+
+/* Content insets of the cells of collapsed table idx (CSS 2.1 17.6.2.1):
+ * a cell box covers the whole band on each side; its content starts past
+ * its half of the widest resolved line along that side. */
+static void collapse_insets(we_doc_t *d, int idx) {
+    int *rows = track_work[0].node, nr, cols, r, b = d->nodes[idx].collapse_w;
+    we_table_slot_t *slot = &table_slot[0];
+    nr = collect_table_rows(d, idx, rows, 0);
+    if (nr > WE_GRID_ROWS_MAX) nr = WE_GRID_ROWS_MAX;
+    if (nr <= 0 || table_assign(d, idx, rows, nr, 0, 0) < 0) return;
+    cols = collapse_build(d, idx, rows, nr, 0);
+    for (r = 0; r < nr; r++) {
+        int c;
+        for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
+            we_node_t *cell = &d->nodes[c];
+            int span, rs, k, rr, w[4] = { 0, 0, 0, 0 };
+            we_edge_pick_t e;
+            if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
+            span = cell->colspan < 1 ? 1 : cell->colspan;
+            rs = table_rowspan_of(cell, r, nr);
+            for (k = slot->col[c]; k < slot->col[c] + span && k < cols; k++) {
+                collapse_h(d, idx, rows, nr, r, k, &e); if (pick_w(&e) > w[0]) w[0] = pick_w(&e);
+                collapse_h(d, idx, rows, nr, r + rs, k, &e); if (pick_w(&e) > w[2]) w[2] = pick_w(&e);
+            }
+            for (rr = r; rr < r + rs && rr < nr; rr++) {
+                collapse_v(d, idx, rows, cols, rr, slot->col[c], &e); if (pick_w(&e) > w[3]) w[3] = pick_w(&e);
+                collapse_v(d, idx, rows, cols, rr, slot->col[c] + span, &e); if (pick_w(&e) > w[1]) w[1] = pick_w(&e);
+            }
+            cell->cin[0] = (uint8_t)(edge_offset(b, w[0]) + w[0]);
+            cell->cin[3] = (uint8_t)(edge_offset(b, w[3]) + w[3]);
+            cell->cin[2] = (uint8_t)(b - edge_offset(b, w[2]));
+            cell->cin[1] = (uint8_t)(b - edge_offset(b, w[1]));
+        }
     }
 }
 
@@ -4555,7 +5856,7 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
     table_row_heights(d, idx, depth, widths, nr, spacing, spacing_y);
     for (r = 0; r < nr; r++) {
         we_node_t *row = &d->nodes[rows[r]];
-        int high = slot->height[r], bg_slot = -1;
+        int high = slot->height[r], bg_slot = -1, row_base = WE_NO_BASELINE, row_aligned = 0;
         row->x = (int16_t)x;
         row->y = (int16_t)cy;
         row->w = (int16_t)width;
@@ -4579,28 +5880,42 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
                 if (stretch) {
                     cell_h = rs > 1 ? table_span_size(slot->height, r, rs, spacing_y) : high;
                     layout_area(d, c, cx, cy, cell_w, cell_h, cell_w, depth + 1);
-                    if (cell->valign != WE_VALIGN_TOP) valign_cell(d, c, first_item);
+                    if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX)
+                        shift_cell(d, c, first_item, slot->ascent[r] - slot->base[c]);
+                    else if (cell->valign != WE_VALIGN_TOP && cell->valign != WE_VALIGN_BASELINE)
+                        valign_cell(d, c, first_item);
                 } else layout_assigned(d, c, cx, cy, cell_w, depth + 1);
             }
+            /* Row baseline: the shared baseline of its aligned cells, else
+             * the first cell with a line box. */
+            if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX) {
+                if (row_base == WE_NO_BASELINE || !row_aligned) row_base = limit_coord(cy + slot->ascent[r]);
+                row_aligned = 1;
+            } else if (!row_aligned && row_base == WE_NO_BASELINE && layout_first[c] != WE_NO_BASELINE)
+                row_base = layout_first[c];
         }
+        if (r == 0) layout_first[idx] = (int16_t)row_base;
+        if (row_base != WE_NO_BASELINE) layout_last[idx] = (int16_t)row_base;
         cy = limit_coord(cy + high + (r + 1 < nr ? spacing_y : 0));
         d->perf.table_rows++;
     }
+    if (d->nodes[idx].border_collapse) collapse_paint(d, idx, rows, nr, widths, x, spacing, depth);
     return cy - y;
 }
 
 static int clip_bounds(const we_doc_t *d, int owner, int *left, int *top, int *right, int *bottom) {
-    int p = owner >= 0 ? d->nodes[owner].parent : -1;
+    int p = owner >= 0 ? d->nodes[owner].parent : -1, q = owner;
     *left = *top = -WE_LAYOUT_MAX;
     *right = *bottom = WE_LAYOUT_MAX;
-    for (; p >= 0; p = d->nodes[p].parent) {
+    for (; p >= 0; q = p, p = d->nodes[p].parent) {
         const we_node_t *n = &d->nodes[p];
         int x, y, r, b;
+        if (q >= 0 && d->nodes[q].fixed) break; /* fixed boxes escape ancestor clips */
         if (!n->overflow_hidden) continue;
-        x = n->x + n->border;
-        y = n->y + n->border;
-        r = n->x + n->w - n->border;
-        b = n->y + n->h - n->border;
+        x = n->x + box_edge(n, 3);
+        y = n->y + box_edge(n, 0);
+        r = n->x + n->w - box_edge(n, 1);
+        b = n->y + n->h - box_edge(n, 2);
         if (x > *left) *left = x;
         if (y > *top) *top = y;
         if (r < *right) *right = r;
@@ -4623,18 +5938,87 @@ static int clip_rectangle(os_fb_web_item_t *item, int left, int top, int right, 
     return 1;
 }
 
-static int clip_text(os_fb_web_item_t *item, int left, int top, int right, int bottom) {
-    int first, last, len = w_len(item->text), k;
-    if (item->y < top || item->y + item->h > bottom) return 0;
-    first = left > item->x ? (left - item->x + WE_CHAR_W - 1) / WE_CHAR_W : 0;
-    last = right > item->x ? (right - item->x) / WE_CHAR_W : 0;
-    if (last > len) last = len;
-    if (first >= last) return 0;
-    for (k = first; k < last; k++) item->text[k - first] = item->text[k];
-    item->text[last - first] = 0;
-    item->x = (int16_t)(item->x + first * WE_CHAR_W);
-    item->w = (uint16_t)((last - first) * WE_CHAR_W);
+/* Lot 61: partial glyph clipping. A glyph whose lit pixels are all inside
+ * the clip stays text; whole visible glyphs are grouped into text pieces.
+ * A partly visible glyph becomes RECT runs of its visible lit pixels from
+ * the kernel font (bit k at x + k, bold also at x + k + 1, rows 0..7),
+ * merged down identical columns. Invisible glyphs and spaces emit nothing. */
+#define WE_CLIP_FRAGMENTS 64
+static unsigned glyph_mask(char ch, int row, int bold) {
+    unsigned bits;
+    if ((unsigned char)ch < 32 || (unsigned char)ch > 126) ch = '?';
+    bits = gfx_font8[(unsigned char)ch - 32u][row];
+    return bold ? bits | (bits << 1) : bits;
+}
+
+static int glyph_inside(const os_fb_web_item_t *it, int k, int left, int top, int right, int bottom) {
+    int row, bit, x = it->x + k * WE_CHAR_W;
+    for (row = 0; row < 8; row++) {
+        unsigned m = glyph_mask(it->text[k], row, it->bold);
+        if (!m) continue;
+        if (it->y + row < top || it->y + row >= bottom) return 0;
+        for (bit = 0; bit < 9; bit++)
+            if ((m >> bit) & 1u && (x + bit < left || x + bit >= right)) return 0;
+    }
     return 1;
+}
+
+/* Returns the fragments written, or -1 when out would overflow. */
+static int glyph_rects(const os_fb_web_item_t *it, int k, int left, int top, int right, int bottom,
+                       os_fb_web_item_t *out, int used, int cap) {
+    int row, bit, x = it->x + k * WE_CHAR_W, first = used;
+    for (row = 0; row < 8; row++) {
+        unsigned m = glyph_mask(it->text[k], row, it->bold);
+        int y = it->y + row;
+        if (!m || y < top || y >= bottom) continue;
+        for (bit = 0; bit < 9; bit++) {
+            int x0, x1, j, merged = 0;
+            if (!((m >> bit) & 1u) || x + bit < left || x + bit >= right) continue;
+            x0 = x + bit;
+            while (bit + 1 < 9 && ((m >> (bit + 1)) & 1u) && x + bit + 1 < right) bit++;
+            x1 = x + bit + 1;
+            for (j = first; j < used; j++)
+                if (out[j].x == x0 && out[j].w == x1 - x0 && out[j].y + out[j].h == y) { out[j].h++; merged = 1; break; }
+            if (merged) continue;
+            if (used >= cap) return -1;
+            out[used] = *it;
+            out[used].kind = OS_FB_WEB_RECT;
+            out[used].text[0] = 0;
+            out[used].bold = 0;
+            out[used].x = (int16_t)x0; out[used].y = (int16_t)y;
+            out[used].w = (uint16_t)(x1 - x0); out[used].h = 1;
+            used++;
+        }
+    }
+    return used - first;
+}
+
+static int clip_glyphs(const os_fb_web_item_t *it, int left, int top, int right, int bottom,
+                       os_fb_web_item_t *out, int cap) {
+    int len = w_len(it->text), k = 0, used = 0;
+    while (k < len) {
+        if (glyph_inside(it, k, left, top, right, bottom) && it->text[k] != ' ') {
+            int end = k, j;
+            while (end < len && glyph_inside(it, end, left, top, right, bottom)) end++;
+            while (end > k && it->text[end - 1] == ' ') end--;
+            if (used >= cap) return -1;
+            out[used] = *it;
+            for (j = k; j < end; j++) out[used].text[j - k] = it->text[j];
+            out[used].text[end - k] = 0;
+            out[used].x = (int16_t)(it->x + k * WE_CHAR_W);
+            out[used].w = (uint16_t)((end - k) * WE_CHAR_W);
+            used++;
+            k = end;
+            continue;
+        }
+        if (it->text[k] != ' ') {
+            int n = glyph_rects(it, k, left, top, right, bottom, out, used, cap);
+            if (n < 0) return -1;
+            used += n;
+        }
+        k++;
+    }
+    return used;
 }
 
 static void clip_display_list(we_doc_t *d) {
@@ -4644,13 +6028,14 @@ static void clip_display_list(we_doc_t *d) {
     for (i = 0; i < (int)d->nitems; i++) {
         os_fb_web_item_t item = d->items[i];
         int left, top, right, bottom, k, fragments = 1;
-        os_fb_web_item_t edges[4];
+        static os_fb_web_item_t edges[WE_CLIP_FRAGMENTS];
         if (!clip_bounds(d, d->item_owner[i], &left, &top, &right, &bottom)) continue;
         if (item.x >= left && item.y >= top && item.x + item.w <= right && item.y + item.h <= bottom) {
             edges[0] = item;
         } else if (item.kind == OS_FB_WEB_TEXT) {
-            if (!clip_text(&item, left, top, right, bottom)) continue;
-            edges[0] = item;
+            fragments = clip_glyphs(&item, left, top, right, bottom, edges, WE_CLIP_FRAGMENTS);
+            if (fragments < 0) fragments = OS_FB_WEB_ITEMS + 1;
+            if (!fragments) continue;
         } else if (item.kind == OS_FB_WEB_BORDER) {
             int thickness = item.bold ? item.bold : 1;
             int w = item.w, h = item.h;
@@ -4676,6 +6061,7 @@ static void clip_display_list(we_doc_t *d) {
             edges[0] = item;
         }
         if (count + fragments > OS_FB_WEB_ITEMS) {
+            if (fragments > OS_FB_WEB_ITEMS) fragments = 1;
             d->perf.items_dropped += (uint32_t)fragments;
             diag(d, "clipping display budget", d->item_owner[i]);
             continue;
@@ -4684,6 +6070,51 @@ static void clip_display_list(we_doc_t *d) {
     }
     for (i = 0; i < count; i++) { d->items[i] = output[i]; d->item_owner[i] = owners[i]; }
     d->nitems = (uint32_t)count;
+}
+
+/* The collapsed table of a cell, row or row group, or -1. */
+static int collapse_table_of(const we_doc_t *d, int i) {
+    int t = i;
+    if (d->nodes[i].display == WE_DISP_CELL) t = d->nodes[i].parent;
+    if (t >= 0 && d->nodes[t].display == WE_DISP_ROW) t = d->nodes[t].parent;
+    if (t >= 0 && w_eq(d->nodes[t].tag, "col") && d->nodes[t].parent >= 0) t = d->nodes[t].parent;
+    if (t >= 0 && w_eq(d->nodes[t].tag, "colgroup")) t = d->nodes[t].parent;
+    if (t >= 0 && table_group(&d->nodes[t])) t = d->nodes[t].parent;
+    if (t < 0 || d->nodes[t].display != WE_DISP_TABLE || !d->nodes[t].border_collapse) return -1;
+    return t;
+}
+
+/* Lot 61: the shared band width B of a collapsed table is the widest
+ * visible edge of its cells, rows, row groups and the table itself.
+ * Per-edge declarations outside a collapsed table are diagnosed: the
+ * separate model paints one uniform border. */
+static void collapse_widths(we_doc_t *d) {
+    uint32_t i;
+    for (i = 0; i < d->nnodes; i++) {
+        d->nodes[i].collapse_w = 0; d->nodes[i].collapse_cell = 0;
+        w_zero(d->nodes[i].cin, sizeof(d->nodes[i].cin));
+    }
+    for (i = 0; i < d->nnodes; i++) {
+        we_node_t *n = &d->nodes[i];
+        int table = -1, side, w, style;
+        uint32_t color;
+        if (n->is_text || n->display == WE_DISP_NONE) continue;
+        if (n->display == WE_DISP_TABLE && n->border_collapse) table = (int)i;
+        else if (n->display == WE_DISP_CELL || n->display == WE_DISP_ROW || table_group(n) || table_column_tag(n))
+            table = collapse_table_of(d, (int)i);
+        if (table < 0) {
+            if (edges_set(n)) diag(d, "border edge refused", (int)i);
+            continue;
+        }
+        if (n->display == WE_DISP_CELL) n->collapse_cell = 1;
+        for (side = 0; side < 4; side++) {
+            edge_of(n, side, &w, &style, &color);
+            if (style != WE_BS_HIDDEN && w > d->nodes[table].collapse_w) d->nodes[table].collapse_w = (uint8_t)w;
+        }
+    }
+    for (i = 0; i < d->nnodes; i++)
+        if (d->nodes[i].display == WE_DISP_TABLE && d->nodes[i].border_collapse && d->nodes[i].collapse_w)
+            collapse_insets(d, (int)i);
 }
 
 static void resolve_grid_areas(we_doc_t *d) {
@@ -4708,10 +6139,148 @@ static void resolve_grid_areas(we_doc_t *d) {
     }
 }
 
+static int fixed_owner(const we_doc_t *d, int owner) {
+    int guard;
+    for (guard = 0; owner >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, owner = d->nodes[owner].parent)
+        if (d->nodes[owner].fixed) return 1;
+    return 0;
+}
+
+/* Lot 61: bounded stacking contexts (CSS 2.1 appendix E, painting order
+ * per context: own background, negative z children, in-flow content, then
+ * z >= 0 children). A relative or absolute box with an integer z-index
+ * groups its subtree. Each item gets one entry per enclosing context,
+ * outermost first: z < 0 is 10 + z, z >= 0 is 22 + 2z; after the chain,
+ * the context's own items take 0 and its in-flow content 20. At the root
+ * the root element and body own the background (0). A stable sort keeps
+ * tree order on ties. opacity below 1 also forms a context (z 0).
+ * Documents without a non-absolute context or a negative z-index keep
+ * the per-containing-block absolute order. Contexts
+ * deeper than WE_STACK_DEPTH - 1 are flattened into their parent. */
+#define WE_STACK_DEPTH 8
+static int stack_context(const we_node_t *n) {
+    return ((n->relative || n->absolute) && n->z_set && !n->fixed) || (n->transparency && !n->fixed);
+}
+
+/* z of a context: opacity below 1 alone forms a z-index 0 context. */
+static int stack_z(const we_node_t *n) {
+    return (n->relative || n->absolute) && n->z_set ? n->z_index : 0;
+}
+
+/* The document, its root element and a body directly under it paint the
+ * root context background (body's background stands for the canvas). */
+static int root_background(const we_doc_t *d, int owner) {
+    int p;
+    if (owner <= 0) return owner == 0;
+    p = d->nodes[owner].parent;
+    if (p == 0) return 1;
+    return p > 0 && d->nodes[p].parent == 0 && w_eq(d->nodes[owner].tag, "body");
+}
+
+static int stack_key(const we_doc_t *d, int owner, int8_t *key) {
+    int chain[WE_DEPTH_MAX + 2], count = 0, used, k, o, guard;
+    for (guard = 0, o = owner; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent)
+        if (stack_context(&d->nodes[o])) chain[count++] = o;
+    used = count < WE_STACK_DEPTH ? count : WE_STACK_DEPTH - 1;
+    for (k = 0; k < used; k++) {
+        const we_node_t *c = &d->nodes[chain[count - 1 - k]];
+        key[k] = (int8_t)(stack_z(c) < 0 ? 10 + stack_z(c) : 22 + 2 * stack_z(c));
+    }
+    for (k = used; k < WE_STACK_DEPTH; k++) key[k] = 0;
+    if (used) key[used] = (int8_t)(chain[count - used] == owner ? 0 : 20);
+    else key[0] = (int8_t)(root_background(d, owner) ? 0 : 20);
+    return count > used;
+}
+
+static int stack_before(const int8_t *a, const int8_t *b) {
+    int k;
+    for (k = 0; k < WE_STACK_DEPTH; k++) if (a[k] != b[k]) return a[k] < b[k];
+    return 0;
+}
+
+static void stack_items(we_doc_t *d) {
+    static int8_t keys[OS_FB_WEB_ITEMS][WE_STACK_DEPTH];
+    int i, j, k, any = 0, flat = 0;
+    for (i = 0; i < (int)d->nnodes; i++)
+        if (stack_context(&d->nodes[i]) && (!d->nodes[i].absolute || stack_z(&d->nodes[i]) < 0)) any = 1;
+    if (!any) return;
+    for (i = 0; i < (int)d->nitems; i++) flat |= stack_key(d, d->item_owner[i], keys[i]);
+    if (flat) diag(d, "stacking depth", -1);
+    for (i = 1; i < (int)d->nitems; i++) {
+        os_fb_web_item_t item = d->items[i];
+        int16_t owner = d->item_owner[i];
+        int8_t key[WE_STACK_DEPTH];
+        for (k = 0; k < WE_STACK_DEPTH; k++) key[k] = keys[i][k];
+        for (j = i; j > 0 && stack_before(key, keys[j - 1]); j--) {
+            d->items[j] = d->items[j - 1];
+            d->item_owner[j] = d->item_owner[j - 1];
+            for (k = 0; k < WE_STACK_DEPTH; k++) keys[j][k] = keys[j - 1][k];
+        }
+        d->items[j] = item;
+        d->item_owner[j] = owner;
+        for (k = 0; k < WE_STACK_DEPTH; k++) keys[j][k] = key[k];
+    }
+}
+
+/* Lot 61: opacity 0 removes the items of its subtree (the boxes keep their
+ * layout); 0 < opacity < 1 paints opaque, since the shared item has no
+ * alpha, and is diagnosed once. */
+static void opacity_items(we_doc_t *d) {
+    int i, out = 0, partial = 0;
+    for (i = 0; i < (int)d->nnodes; i++) if (d->nodes[i].transparency && d->nodes[i].transparency < 100) partial = 1;
+    if (partial) diag(d, "opacity painted opaque", -1);
+    for (i = 0; i < (int)d->nitems; i++) {
+        int o = d->item_owner[i], guard, hidden = 0;
+        for (guard = 0; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent)
+            if (d->nodes[o].transparency == 100) { hidden = 1; break; }
+        if (hidden) continue;
+        d->items[out] = d->items[i];
+        d->item_owner[out++] = d->item_owner[i];
+    }
+    d->nitems = (uint32_t)out;
+}
+
+/* Fixed boxes paint after the rest of the page, in their own order. */
+static void raise_fixed(we_doc_t *d) {
+    static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
+    static int16_t owners[OS_FB_WEB_ITEMS];
+    int pass, i, count = 0;
+    for (pass = 0; pass < 2; pass++)
+        for (i = 0; i < (int)d->nitems; i++)
+            if (fixed_owner(d, d->item_owner[i]) == pass) { output[count] = d->items[i]; owners[count++] = d->item_owner[i]; }
+    for (i = 0; i < count; i++) { d->items[i] = output[i]; d->item_owner[i] = owners[i]; }
+}
+
+int we_scroll(we_doc_t* d, int y) {
+    int limit, dy, i;
+    if (!d) return 0;
+    limit = (int)d->perf.page_h - d->viewport_h;
+    if (limit < 0) limit = 0;
+    if (y > limit) y = limit;
+    if (y < 0) y = 0;
+    dy = y - d->scroll_y;
+    if (!dy) return y;
+    for (i = 0; i < (int)d->nitems; i++)
+        if (fixed_owner(d, d->item_owner[i])) d->items[i].y = (int16_t)limit_coord(d->items[i].y + dy);
+    for (i = 0; i < (int)d->nnodes; i++)
+        if (fixed_owner(d, i)) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + dy);
+    d->scroll_y = (int16_t)y;
+    return y;
+}
+
 int we_layout(we_doc_t* d, int viewport_w) {
+    return we_layout_viewport(d, viewport_w, WE_VIEWPORT_H_DEFAULT);
+}
+
+int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     int h;
-    if (!d || d->nnodes == 0 || viewport_w < 64) return -1;
-    d->nitems = 0; math_refused = 0; baseline_probe = 0;
+    if (!d || d->nnodes == 0 || viewport_w < 64 || viewport_h < 1) return -1;
+    if (viewport_h > WE_LAYOUT_MAX) viewport_h = WE_LAYOUT_MAX;
+    d->viewport_w = (int16_t)(viewport_w > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : viewport_w);
+    d->viewport_h = (int16_t)viewport_h;
+    d->scroll_y = 0;
+    w_zero(static_set, sizeof(static_set));
+    d->nitems = 0; math_refused = 0; style_solid_3d = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
@@ -4729,12 +6298,23 @@ int we_layout(we_doc_t* d, int viewport_w) {
     w_zero(image_work.natural_h, sizeof(image_work.natural_h));
     w_zero(measure_cache, sizeof(measure_cache));
     measure_budget = WE_MEASURE_BUDGET;
+    { uint32_t i; for (i = 0; i < d->nnodes; i++) {
+        grid_expand(&d->nodes[i], 0, -1, 0);
+        grid_expand(&d->nodes[i], 1, -1, 0);
+    } }
+    subgrid_validate(d);
+    collapse_widths(d);
     resolve_grid_requests(d);
     resolve_grid_areas(d);
+    subgrid_bind_all(d);
     intrinsic_sizes(d);
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
+    stack_items(d);
+    opacity_items(d);
+    raise_fixed(d);
     clip_display_list(d);
     if (math_refused) diag(d, "math evaluation refused", -1);
+    if (style_solid_3d) diag(d, "border style painted solid", -1);
     d->perf.items = d->nitems;
     d->perf.page_w = (uint32_t)viewport_w;
     d->perf.page_h = (uint32_t)h;

@@ -449,8 +449,9 @@ static void test_l56_static_clears_absolute(void) {
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
-static void test_l56_fixed_is_refused_and_keeps_absolute(void) {
-    lot52_render("<body style='margin:0'><div id=a style='position:absolute;left:4px;top:6px;width:10px;height:10px;position:fixed'></div></body>", 320);
+/* Lot 61: position:fixed became valid; the refusal uses an invalid keyword. */
+static void test_l56_invalid_position_is_refused_and_keeps_absolute(void) {
+    lot52_render("<body style='margin:0'><div id=a style='position:absolute;left:4px;top:6px;width:10px;height:10px;position:floating'></div></body>", 320);
     TEST_ASSERT_EQUAL(1, lot52_node("a")->absolute);
     TEST_ASSERT_EQUAL(4, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(6, lot52_node("a")->y);

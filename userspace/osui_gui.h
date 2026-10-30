@@ -36,6 +36,8 @@ void osui_gui_ide_output(const char *text);
  * web engine (userspace/webeng.c) into the web pane. Uses the IDE loader. */
 #define OSUI_WEB_SRC_MAX 4096
 #define OSUI_WEB_VIEWPORT 640
+/* Lot 61: explicit viewport height for fixed boxes and the scroll bound. */
+#define OSUI_WEB_VIEWPORT_H 480
 int osui_gui_web_load(const char *file, char *status, int max);
 int osui_gui_web_active(void);
 int osui_gui_web_sanitized(void); /* Lot 7 US-039: items removed by the page sanitizer */

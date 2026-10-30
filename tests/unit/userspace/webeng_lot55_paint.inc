@@ -124,9 +124,18 @@ static void test_l55_clip_text_left_partial_glyph_is_omitted(void) {
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
+/* Lot 61: partial glyphs are painted from the kernel font. With 8px the
+ * empty eighth glyph row is the only one cut, so lot 61 keeps the text
+ * (test_l61_clip_empty_row_cut_keeps_text); 5px really cuts lit rows: the
+ * text item is replaced by rectangles of the visible pixels only. */
 static void test_l55_clip_text_vertical_partial_is_omitted(void) {
-    lot52_render("<body style='margin:0'><div style='width:40px;height:8px;overflow:hidden'>one</div></body>", 320);
-    TEST_ASSERT_EQUAL(0, g_doc.nitems);
+    uint32_t i;
+    lot52_render("<body style='margin:0'><div style='width:40px;height:5px;overflow:hidden'>one</div></body>", 320);
+    TEST_ASSERT_EQUAL(9, g_doc.nitems);
+    for (i = 0; i < g_doc.nitems; i++) {
+        TEST_ASSERT_EQUAL(OS_FB_WEB_RECT, g_doc.items[i].kind);
+        TEST_ASSERT_TRUE(g_doc.items[i].y + g_doc.items[i].h <= 5);
+    }
     TEST_ASSERT_NULL(find_text("one"));
     TEST_ASSERT_EQUAL(1, g_doc.perf.lines);
     TEST_ASSERT_EQUAL(0, g_doc.perf.items_dropped);

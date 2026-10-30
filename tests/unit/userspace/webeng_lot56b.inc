@@ -483,9 +483,11 @@ static void test_l56_valign_middle_on_a_rowspan(void) {
     TEST_ASSERT_EQUAL(40, lot52_node("b")->x);
 }
 
-static void test_l56_valign_baseline_is_refused(void) {
+/* Lot 61: vertical-align:baseline became valid; the refusal now uses a
+ * really invalid keyword and keeps every assertion. */
+static void test_l56_valign_invalid_is_refused(void) {
     lot52_render("<body style='margin:0'><table style='width:40px'><tr style='height:40px'>"
-        "<td id=a style='vertical-align:middle;vertical-align:baseline'>M</td></tr></table></body>", 320);
+        "<td id=a style='vertical-align:middle;vertical-align:diagonal'>M</td></tr></table></body>", 320);
     TEST_ASSERT_EQUAL(WE_VALIGN_MIDDLE, lot52_node("a")->valign);
     TEST_ASSERT_EQUAL(16, find_text("M")->y);
     TEST_ASSERT_TRUE(lot52_has_diag("vertical align refused"));
@@ -638,7 +640,11 @@ static void test_l56_z_index_on_static_does_not_reorder_flow(void) {
     int red, blue;
     lot52_render("<body style='margin:0'>"
         "<div id=a style='z-index:5;width:10px;height:10px;background:#ff0000'></div>"
-        "<div id=b style='position:relative;z-index:-1;width:10px;height:10px;background:#0000ff'></div></body>", 320);
+        "<div id=b style='position:relative;z-index:-1.5;width:10px;height:10px;background:#0000ff'></div></body>", 320);
+    /* Lot 61: z-index:-1 on b is now a negative stacking context painted
+     * below in-flow content (CSS 2.1 appendix E), so b uses -1.5, which is
+     * not an integer; positive tests are in webeng_lot61_stack.inc. */
+    TEST_ASSERT_TRUE(lot52_has_diag("z-index refused"));
     TEST_ASSERT_EQUAL(0, lot52_node("a")->absolute);
     TEST_ASSERT_EQUAL(1, lot52_node("a")->z_set);
     TEST_ASSERT_EQUAL(10, lot52_node("b")->y);
@@ -711,7 +717,7 @@ static void lot56b_run(void) {
     RUN_TEST(test_l56_valign_bottom_pins_the_line_to_the_row);
     RUN_TEST(test_l56_valign_top_keeps_the_content_box);
     RUN_TEST(test_l56_valign_middle_on_a_rowspan);
-    RUN_TEST(test_l56_valign_baseline_is_refused);
+    RUN_TEST(test_l56_valign_invalid_is_refused);
     RUN_TEST(test_l56_inline_block_sits_between_words);
     RUN_TEST(test_l56_inline_block_taller_than_the_line);
     RUN_TEST(test_l56_two_inline_blocks_pack_in_order);

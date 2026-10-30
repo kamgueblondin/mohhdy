@@ -3025,7 +3025,7 @@ static void cmd_web(shell_context_t* ctx, const char* command, char args[][128],
             t = sys_ticks(); tp += t - t0; t0 = t;
             (void)we_style(d);
             t = sys_ticks(); ts += t - t0; t0 = t;
-            (void)we_layout(d, OSUI_WEB_VIEWPORT);
+            (void)we_layout_viewport(d, OSUI_WEB_VIEWPORT, OSUI_WEB_VIEWPORT_H);
             t = sys_ticks(); tl += t - t0;
         }
         print_string("web-perf runs "); print_int(runs);
