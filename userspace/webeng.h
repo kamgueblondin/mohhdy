@@ -69,7 +69,8 @@ typedef struct {
 #define WE_FLOATS_MAX 16
 #define WE_ORDER_MAX 8
 #define WE_SPACING_MAX 64
-enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3 };
+/* Lot 63: break-spaces preserves spaces and wraps them like letters. */
+enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3, WE_WS_BREAK_SPACES = 4 };
 enum { WE_INSET_LEFT = 1, WE_INSET_TOP = 2, WE_INSET_RIGHT = 4, WE_INSET_BOTTOM = 8 };
 enum { WE_AUTO_LEFT = 1, WE_AUTO_RIGHT = 2, WE_AUTO_TOP = 4, WE_AUTO_BOTTOM = 8 };
 enum { WE_CLEAR_NONE = 0, WE_CLEAR_LEFT = 1, WE_CLEAR_RIGHT = 2, WE_CLEAR_BOTH = 3 };
@@ -210,6 +211,8 @@ typedef struct {
     int16_t offset_r, offset_b; /* right / bottom, valid when inset_flags says so */
     int8_t item_order;         /* -8..8, source order when equal */
     uint8_t flex_reverse, absolute, rowspan, ws_mode, inset_flags, margin_auto, border_collapse;
+    /* Lot 63: inherited tab-size in px (0..255, default 8 spaces). */
+    uint8_t tab_px;
     int16_t border_spacing;    /* horizontal; separate borders; collapse forces 0 */
     int16_t border_spacing_y;  /* vertical; one value sets both */
     int16_t line_height;       /* 0 uses WE_LINE_H; glyphs stay at the top */

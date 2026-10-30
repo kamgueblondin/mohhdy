@@ -62,7 +62,7 @@ static void test_l56_pre_line_resets_pre(void) {
 }
 
 static void test_l56_break_spaces_is_refused(void) {
-    lot52_render("<body style='margin:0'><div id=p style='white-space:pre-line;white-space:break-spaces'>a\nb</div></body>", 320);
+    lot52_render("<body style='margin:0'><div id=p style='white-space:pre-line;white-space:break-all'>a\nb</div></body>", 320);
     TEST_ASSERT_EQUAL(WE_WS_PRE_LINE, lot52_node("p")->ws_mode);
     TEST_ASSERT_EQUAL(11, find_text("b")->y);
     TEST_ASSERT_TRUE(lot52_has_diag("white space refused"));

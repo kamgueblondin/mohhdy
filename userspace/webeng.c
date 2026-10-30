@@ -140,7 +140,7 @@ static int char_ref(const char *s, int n, char out[4]) {
         }
         if (!digits || i >= n || s[i] != ';') return 0;
         out[1] = 0;
-        if (code == 9 || code == 10 || code == 13 || code == 160 || (code >= 8192 && code <= 8202)) out[0] = code == 10 ? '\n' : ' ';
+        if (code == 9 || code == 10 || code == 13 || code == 160 || (code >= 8192 && code <= 8202)) out[0] = code == 10 ? '\n' : code == 9 ? '\t' : ' ';
         else if (code >= 32 && code < 127) out[0] = (char)code;
         else if (code == 8211 || code == 8212) out[0] = '-';
         else if (code == 8216 || code == 8217) out[0] = '\'';
@@ -178,7 +178,7 @@ static int add_text(we_doc_t* d, int parent, const char* s, int n) {
             continue;
         }
         if (w_space(c)) {
-            buf[o++] = c == '\n' ? '\n' : ' ';
+            buf[o++] = c == '\n' ? '\n' : c == '\t' ? '\t' : ' ';   /* lot 63: tabs kept for tab-size */
             if (c == '\n') newline = 1;
             i++;
             continue;
@@ -3044,13 +3044,33 @@ static int overflow_declaration(we_node_t *n, const char *prop, const char *v, i
     return 0;
 }
 
-/* Lot 63: CSS Text 4 longhands of white-space over the same four modes. */
+/* Lot 63: tab-size, a number of space advances (at most 31) or a px/em
+ * length (at most 255 px), kept in px; 0 removes tabs. */
+static int tab_size_value(we_node_t *n, const char *v, int vl) {
+    int px, pct, k;
+    for (k = 0; k < vl && v[k] >= '0' && v[k] <= '9'; k++) {}
+    if (k == vl && vl > 0 && vl <= 2) {
+        int count = 0;
+        for (k = 0; k < vl; k++) count = count * 10 + v[k] - '0';
+        if (count > 31) return -1;
+        n->tab_px = (uint8_t)(count * WE_CHAR_W);
+        return 0;
+    }
+    if (!(vl > 2 && (w_ieq_n(v + vl - 2, 2, "px") || w_ieq_n(v + vl - 2, 2, "em"))) || v[0] < '0' || v[0] > '9' ||
+        parse_len(v, vl, &px, &pct) != 0 || pct || px > 255) return -1;
+    n->tab_px = (uint8_t)px;
+    return 0;
+}
+
+/* Lot 63: CSS Text 4 longhands of white-space over the same modes;
+ * break-spaces keeps its mode across text-wrap-mode wrap. */
 static int white_space_longhand(we_node_t *n, const char *prop, const char *v, int vl) {
-    int preserve = n->ws_mode == WE_WS_PRE || n->ws_mode == WE_WS_PRE_WRAP, nowrap = n->nowrap;
+    int preserve = n->ws_mode == WE_WS_PRE || n->ws_mode == WE_WS_PRE_WRAP || n->ws_mode == WE_WS_BREAK_SPACES, nowrap = n->nowrap;
     if (w_eq(prop, "white-space-collapse")) {
         if (value_is(v, vl, "collapse")) n->ws_mode = WE_WS_NORMAL;
         else if (value_is(v, vl, "preserve")) n->ws_mode = nowrap ? WE_WS_PRE : WE_WS_PRE_WRAP;
         else if (value_is(v, vl, "preserve-breaks")) n->ws_mode = WE_WS_PRE_LINE;
+        else if (value_is(v, vl, "break-spaces")) n->ws_mode = nowrap ? WE_WS_PRE : WE_WS_BREAK_SPACES;
         else return -1;
         return 0;
     }
@@ -3058,7 +3078,7 @@ static int white_space_longhand(we_node_t *n, const char *prop, const char *v, i
     else if (value_is(v, vl, "wrap") || (w_eq(prop, "text-wrap") && (value_is(v, vl, "balance") || value_is(v, vl, "pretty") || value_is(v, vl, "stable")))) nowrap = 0;
     else return -1;
     n->nowrap = (uint8_t)nowrap;
-    if (preserve) n->ws_mode = nowrap ? WE_WS_PRE : WE_WS_PRE_WRAP;
+    if (preserve) n->ws_mode = nowrap ? WE_WS_PRE : n->ws_mode == WE_WS_BREAK_SPACES ? WE_WS_BREAK_SPACES : WE_WS_PRE_WRAP;
     return 0;
 }
 
@@ -3225,7 +3245,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "pre")) { n->nowrap = 1; n->ws_mode = WE_WS_PRE; }
         else if (value_is(v, vl, "pre-wrap")) { n->nowrap = 0; n->ws_mode = WE_WS_PRE_WRAP; }
         else if (value_is(v, vl, "pre-line")) { n->nowrap = 0; n->ws_mode = WE_WS_PRE_LINE; }
+        else if (value_is(v, vl, "break-spaces")) { n->nowrap = 0; n->ws_mode = WE_WS_BREAK_SPACES; }
         else diag(d, "white space refused", -1);
+    } else if (w_eq(prop, "tab-size")) {
+        if (tab_size_value(n, v, vl)) diag(d, "tab size refused", -1);
     } else if (w_eq(prop, "overflow-wrap")) {
         if (value_is(v, vl, "normal")) n->break_word = WE_WRAP_NORMAL;
         else if (value_is(v, vl, "break-word")) n->break_word = WE_WRAP_BREAK_WORD;
@@ -3680,6 +3703,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->line_height = p ? p->line_height : 0;
         n->text_indent = p ? p->text_indent : 0;
         n->ws_mode = p ? p->ws_mode : 0;
+        n->tab_px = p ? p->tab_px : 8 * WE_CHAR_W;
         n->nowrap = p ? p->nowrap : 0;
         n->break_word = p ? p->break_word : 0;
         n->break_all = p ? p->break_all : 0;
@@ -4438,6 +4462,41 @@ static void soft_wrap(we_inline_t *f) {
     flush_line(f, 0);
 }
 
+/* ---------- Lot 63: tabs and break-spaces ----------
+ * A preserved tab advances to the next multiple of tab-size from the line
+ * start, painted as space advances (at most 32); collapsed, it is a space.
+ * break-spaces: preserved spaces wrap like letters, filling the line and
+ * continuing on the next one instead of hanging. */
+static const char tab_blank[33] = "                                ";
+
+static int preserves_spaces(const we_node_t *n) {
+    return n->ws_mode == WE_WS_PRE || n->ws_mode == WE_WS_PRE_WRAP || n->ws_mode == WE_WS_BREAK_SPACES;
+}
+
+static int tab_spaces(const we_node_t *n, int pen, int adv) {
+    int stop = n->tab_px, count;
+    if (stop <= 0 || adv <= 0) return 0;
+    if (pen < 0) pen = 0;
+    count = ((pen / stop + 1) * stop - pen + adv - 1) / adv;
+    return count > 32 ? 32 : count;
+}
+
+static void add_word(we_inline_t *f, const char *s, int len, int node, int space);
+static void space_run(we_inline_t *f, const char *s, int len, int node) {
+    int adv = glyph_adv(f->d, node);
+    if (f->d->nodes[node].ws_mode != WE_WS_BREAK_SPACES || f->d->nodes[node].nowrap) { add_word(f, s, len, node, 0); return; }
+    while (len > 0) {
+        int take;
+        flow_region(f, adv);
+        take = (f->width - f->cur_w) / adv;
+        if (take < 1 && (f->nwords || f->pending_x)) { soft_wrap(f); continue; }
+        if (take < 1) take = 1;
+        if (take > len) take = len;
+        add_word_piece(f, s, take, node, 0);
+        s += take; len -= take;
+    }
+}
+
 static void add_word(we_inline_t *f, const char *s, int len, int node, int space) {
     const we_node_t *n = &f->d->nodes[node];
     int adv = glyph_adv(f->d, node), gap = space_adv(f->d, node);
@@ -4505,7 +4564,7 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
     if (n->is_text) {
         const char* s = d->pool + n->text_off;
         int i = 0, len = n->text_len;
-        int keep_sp = n->ws_mode == WE_WS_PRE || n->ws_mode == WE_WS_PRE_WRAP;
+        int keep_sp = preserves_spaces(n);
         int keep_nl = keep_sp || n->ws_mode == WE_WS_PRE_LINE;
         if (n->lead_space) f->pending_space = 1;
         while (i < len) {
@@ -4516,20 +4575,28 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
                 i++;
                 continue;
             }
+            if (s[i] == '\t' && keep_sp) {
+                int adv = glyph_adv(d, idx), count = tab_spaces(n, f->cur_w, adv);
+                /* a tab that does not fit starts the next line, from its start */
+                if (!n->nowrap && f->nwords && f->cur_w + count * adv > f->width) { soft_wrap(f); count = tab_spaces(n, f->cur_w, adv); }
+                if (count) add_word(f, tab_blank, count, idx, 0);
+                i++;
+                continue;
+            }
             if (s[i] == ' ' && keep_sp) {
                 a = i;
                 while (i < len && s[i] == ' ') i++;
-                add_word(f, s + a, i - a, idx, 0);
+                space_run(f, s + a, i - a, idx);
                 continue;
             }
-            while (i < len && (s[i] == ' ' || s[i] == '\n')) {
+            while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n')) {
                 if (s[i] == '\n' && keep_nl) break;
                 i++;
                 f->pending_space = 1;
             }
             if (i < len && s[i] == '\n') continue;
             a = i;
-            while (i < len && s[i] != ' ' && s[i] != '\n') i++;
+            while (i < len && s[i] != ' ' && s[i] != '\t' && s[i] != '\n') i++;
             if (i > a) { add_word(f, s + a, i - a, idx, f->pending_space); f->pending_space = 0; }
         }
         if (n->trail_space) f->pending_space = 1;
@@ -4701,19 +4768,23 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
         if (n->lead_space) { intrinsic_word(flow); flow->pending = 1; }
         for (i = 0; i < n->text_len; i++) {
             char ch = d->pool[n->text_off + i];
-            int keep_sp = n->ws_mode == WE_WS_PRE || n->ws_mode == WE_WS_PRE_WRAP;
+            int keep_sp = preserves_spaces(n), count, k;
             int keep_nl = keep_sp || n->ws_mode == WE_WS_PRE_LINE;
+            if (ch == '\t' && !keep_sp) ch = ' ';
+            count = ch == '\t' ? tab_spaces(n, flow->line, WE_CHAR_W) : 1;
             if (ch == '\n') {
                 if (keep_nl) intrinsic_line(flow);
                 else { intrinsic_word(flow); flow->pending = 1; }
-            } else if (ch == ' ' && n->ws_mode == WE_WS_PRE_WRAP) {
+            } else if ((ch == ' ' || ch == '\t') && (n->ws_mode == WE_WS_PRE_WRAP || n->ws_mode == WE_WS_BREAK_SPACES)) {
                 intrinsic_word(flow);
-                flow->line = limit_coord(flow->line + WE_CHAR_W);
-                if (WE_CHAR_W > flow->minimum) flow->minimum = WE_CHAR_W;
-            } else if (ch == ' ' && keep_sp) {
-                flow->line = limit_coord(flow->line + WE_CHAR_W);
-                flow->word = limit_coord(flow->word + WE_CHAR_W);
-                if (!n->nowrap && (n->break_all || n->break_word == WE_WRAP_ANYWHERE)) intrinsic_word(flow);
+                flow->line = limit_coord(flow->line + count * WE_CHAR_W);
+                if (count && WE_CHAR_W > flow->minimum) flow->minimum = WE_CHAR_W;
+            } else if ((ch == ' ' || ch == '\t') && keep_sp) {
+                for (k = 0; k < count; k++) {
+                    flow->line = limit_coord(flow->line + WE_CHAR_W);
+                    flow->word = limit_coord(flow->word + WE_CHAR_W);
+                    if (!n->nowrap && (n->break_all || n->break_word == WE_WRAP_ANYWHERE)) intrinsic_word(flow);
+                }
             } else if (ch == ' ') {
                 intrinsic_word(flow);
                 flow->pending = 1;
@@ -8428,8 +8499,7 @@ static int round_clip_node(const we_node_t *n, os_fb_web_item_t *frag, int count
     if (!n->overflow_hidden || (bands = round_bands(n, band)) < 0) return count;
     for (i = 0; i < count; i++) {
         if (bands_contain(band, bands, &frag[i])) {
-            if (used >= cap) return -1;
-            out[used++] = frag[i];
+            out[used++] = frag[i];                 /* used <= i < count <= cap */
             continue;
         }
         if (frag[i].kind == OS_FB_WEB_TEXT) {
@@ -8562,7 +8632,7 @@ static int tf_bands(const we_matrix_t *m, const os_fb_web_item_t *r, os_fb_web_i
             hit = 1;
         }
         left = floor_div(lo + 1, 2); right = floor_div(hi + 1, 2);
-        if (!hit || right <= left) { last = -1; continue; }
+        if (!hit || right <= left) continue;      /* convex: an empty band has no equal neighbours */
         if (last >= 0 && out[last].x == left && out[last].w == right - left) { out[last].h = (uint16_t)(out[last].h + rb - ra); continue; }
         if (used >= cap) return -1;
         out[used] = *r;

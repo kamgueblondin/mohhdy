@@ -30,7 +30,8 @@ static void test_l63_radial_extents_off_centre(void) {
     L63_BAND("ellipse farthest-corner at 10px 5px", 0, 0, 40, 20); /* 30 x 15 times sqrt 2 */
     L63_BAND("ellipse farthest-side at 50px 5px", 1, 0, 39, 10);   /* a centre outside: 50 x 15 */
     L63_BAND("circle farthest-side at 10px 5px", 0, 0, 40, 15);    /* the larger distance: 30 */
-    L63_BAND("ellipse closest-corner at 10px 15px", 3, 8, 14, 2);  /* 10 x 5 times sqrt 2: 14 x 7 */
+    L63_BAND("ellipse closest-corner at 10px 15px", 3, 8, 14, 2);
+    L63_BAND("ellipse closest-corner at -10px 50%", 0, 0, 2, 5);  /* a centre left of the box: distance 10 */  /* 10 x 5 times sqrt 2: 14 x 7 */
 }
 
 static void test_l63_radial_sizes(void) {

@@ -29,7 +29,8 @@ static void test_l63_transform_angle_units(void) {
         {"skewX(10deg)", WE_TF_SKEW, 10, 0}, {"skewY(-20deg)", WE_TF_SKEW, 0, -20}, {"skew(10deg, 20deg)", WE_TF_SKEW, 10, 20},
         {"skew(15deg)", WE_TF_SKEW, 15, 0}, {"skewX(170deg)", WE_TF_SKEW, -10, 0}, {"skewX(80deg)", WE_TF_SKEW, 80, 0},
         {"skewX(-80deg)", WE_TF_SKEW, -80, 0}, {"skewX(100deg)", WE_TF_SKEW, -80, 0}, {"skewX(-100deg)", WE_TF_SKEW, 80, 0},
-        {"skewY(-190deg)", WE_TF_SKEW, 0, -10}, {"skewX(0)", WE_TF_SKEW, 0, 0}};
+        {"skewY(-190deg)", WE_TF_SKEW, 0, -10}, {"skewX(0)", WE_TF_SKEW, 0, 0}, {"skewX(370deg)", WE_TF_SKEW, 10, 0},
+        {"skewY(-370deg)", WE_TF_SKEW, 0, -10}};
     unsigned k;
     for (k = 0; k < sizeof(ok) / sizeof(ok[0]); k++) {
         const we_transform_t *t = l63_tf(ok[k].v);
@@ -100,6 +101,23 @@ static void test_l63_transform_skew_bands(void) {
     l63_item_is(7, -9, 8, 20, 2);
 }
 
+/* the first edge met is not always the right side; a horizontal edge at
+ * a band middle is skipped (a band of half a row stays unpainted) */
+static void test_l63_transform_band_edges(void) {
+    lot52_render(L62_BODY "<div style='" L63_BOX ";transform:rotate(-45deg);transform-origin:0 0'></div></body>", 320);
+    TEST_ASSERT_EQUAL(8, (int)g_doc.nitems);
+    l63_item_is(0, 13, -14, 2, 2);                     /* y -13: x 13..15.2 */
+    l63_item_is(3, 6, -7, 14, 3);
+    l63_item_is(7, 6, 4, 3, 3);
+    lot52_render(L62_BODY "<div style='width:20px;height:5px;background:#ff0000;transform:skewX(45deg) scaleY(1.5);transform-origin:0 0'></div></body>", 320);
+    TEST_ASSERT_EQUAL(7, (int)g_doc.nitems);           /* rows 0-6; row 7 holds half a pixel */
+    l63_item_is(6, 7, 6, 20, 1);
+    /* equal neighbouring bands merge */
+    lot52_render(L62_BODY "<div style='width:60px;height:4px;background:#ff0000;transform:rotate(1deg);transform-origin:0 0'></div></body>", 320);
+    TEST_ASSERT_EQUAL(3, (int)g_doc.nitems);
+    l63_item_is(1, 0, 1, 60, 3);
+}
+
 /* nested transforms with no clip between them compose before banding */
 static void test_l63_transform_composed(void) {
     lot52_render(L62_BODY "<div style='width:30px;height:30px;transform:rotate(45deg)'>"
@@ -110,6 +128,12 @@ static void test_l63_transform_composed(void) {
                  "<div style='width:30px;height:30px;transform:skewX(-30deg);background:#ff0000'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(1, (int)g_doc.nitems);
     l63_item_is(0, 0, 0, 30, 30);
+    /* the order matters: rotate(90deg) after skewX(45deg) maps (x, y) to (-y, x + y) */
+    lot52_render(L62_BODY "<div style='width:20px;height:10px;transform:rotate(90deg);transform-origin:0 0'>"
+                 "<div style='" L63_BOX ";transform:skewX(45deg);transform-origin:0 0'></div></div></body>", 320);
+    TEST_ASSERT_EQUAL(6, (int)g_doc.nitems);
+    l63_item_is(0, -1, 0, 1, 3);                       /* y 1.5: x -1.5..0 */
+    l63_item_is(3, -10, 11, 10, 11);                   /* the full width between y 10 and 20 */
     lot52_render(L62_BODY "<div style='width:20px;transform:scale(.5);transform-origin:0 0'>"
                  "<div style='" L63_BOX ";transform:translateX(10px) scale(2);transform-origin:0 0'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(1, (int)g_doc.nitems);           /* (x/2) o (2x + 10) = x + 5 */
@@ -149,6 +173,7 @@ static void lot63_transform_run(void) {
     RUN_TEST(test_l63_transform_gradient_angles);
     RUN_TEST(test_l63_transform_rotate_bands);
     RUN_TEST(test_l63_transform_skew_bands);
+    RUN_TEST(test_l63_transform_band_edges);
     RUN_TEST(test_l63_transform_composed);
     RUN_TEST(test_l63_transform_clip_between);
     RUN_TEST(test_l63_transform_text_upright);
