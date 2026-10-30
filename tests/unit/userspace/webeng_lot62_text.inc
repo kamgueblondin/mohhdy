@@ -63,9 +63,41 @@ static void test_l62_background_clip_and_origin(void) {
     TEST_ASSERT_EQUAL(2, l61_diag_count("background box refused"));
 }
 
+#define L62_CLIP "overflow:hidden;white-space:nowrap;text-overflow:ellipsis"
+static void test_l62_text_overflow_ellipsis(void) {
+    lot52_render(L62_BODY "<div style='width:60px;" L62_CLIP "'>abcdefghij klm</div>"
+                 "<div style='width:64px;padding-right:4px;" L62_CLIP "'>abcdefgh <b>ij</b></div>"
+                 "<div style='width:20px;" L62_CLIP "'>abcdef</div>"
+                 "<div style='width:40px;" L62_CLIP "'><span>ab<i>cdefgh</i></span></div></body>", 320);
+    TEST_ASSERT_NOT_NULL(find_text("abcd..."));
+    TEST_ASSERT_EQUAL(56, find_text("abcd...")->w);
+    TEST_ASSERT_NOT_NULL(find_text("abcde..."));         /* the last fitting run */
+    TEST_ASSERT_NULL(find_text("ij"));
+    TEST_ASSERT_NOT_NULL(find_text(".."));
+    TEST_ASSERT_NOT_NULL(find_text("ab"));                /* through inline boxes */
+    TEST_ASSERT_EQUAL(16, g_doc.items[g_doc.nitems - 1].x);
+    TEST_ASSERT_EQUAL_STRING("...", g_doc.items[g_doc.nitems - 1].text);
+    TEST_ASSERT_EQUAL(5, (int)g_doc.nitems);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l62_text_overflow_needs_hidden_and_refusals(void) {
+    lot52_render(L62_BODY "<div style='width:40px;white-space:nowrap;text-overflow:ellipsis'>abcdefgh</div>"
+                 "<div style='width:40px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-overflow:clip'>ijklmnop</div>"
+                 "<div style='width:40px;" L62_CLIP ";text-overflow:\"-\";text-overflow:fade'>qrstuvwx</div></body>", 320);
+    TEST_ASSERT_NOT_NULL(find_text("abcdefgh"));          /* overflow visible: no ellipsis */
+    TEST_ASSERT_EQUAL(64, find_text("abcdefgh")->w);
+    TEST_ASSERT_NOT_NULL(find_text("ijklm"));             /* clip: cut by the clip only */
+    TEST_ASSERT_EQUAL(40, find_text("ijklm")->w);
+    TEST_ASSERT_NOT_NULL(find_text("qr..."));
+    TEST_ASSERT_EQUAL(2, l61_diag_count("text-overflow refused"));
+}
+
 static void lot62_text_run(void) {
     RUN_TEST(test_l62_text_transform_modes);
     RUN_TEST(test_l62_text_shadow_paints_under_the_run);
     RUN_TEST(test_l62_text_shadow_and_transform_refusals);
     RUN_TEST(test_l62_background_clip_and_origin);
+    RUN_TEST(test_l62_text_overflow_ellipsis);
+    RUN_TEST(test_l62_text_overflow_needs_hidden_and_refusals);
 }

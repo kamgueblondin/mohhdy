@@ -2721,6 +2721,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (parse_shadows(n->shadow, &n->shadow_count, v, vl, 0)) diag(d, "box-shadow refused", -1);
     } else if (w_eq(prop, "text-shadow")) {
         if (parse_shadows(n->tshadow, &n->tshadow_count, v, vl, 1)) diag(d, "text-shadow refused", -1);
+    } else if (w_eq(prop, "text-overflow")) {
+        if (value_is(v, vl, "clip")) n->text_overflow = 0;
+        else if (value_is(v, vl, "ellipsis")) n->text_overflow = 1;
+        else diag(d, "text-overflow refused", -1);
     } else if (w_eq(prop, "text-transform")) {
         if (value_is(v, vl, "none")) n->text_transform = WE_TT_NONE;
         else if (value_is(v, vl, "uppercase")) n->text_transform = WE_TT_UPPER;
@@ -3065,7 +3069,7 @@ int we_style(we_doc_t* d) {
         n->shadow_count = 0;
         n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
         n->spacing_pct = 0; n->grad_dir = 0;
-        n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING;
+        n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING; n->text_overflow = 0;
         n->text_transform = p ? p->text_transform : WE_TT_NONE;
         n->tshadow_count = p ? p->tshadow_count : 0;
         if (p) { int k; for (k = 0; k < WE_SHADOWS_MAX; k++) n->tshadow[k] = p->tshadow[k]; }
@@ -7114,6 +7118,59 @@ static int transform_clip_item(const we_doc_t *d, const os_fb_web_item_t *item, 
     return count;
 }
 
+/* ---------- Lot 62: text-overflow ellipsis ----------
+ * In a block container with overflow hidden and text-overflow ellipsis,
+ * a text run crossing the content box's end edge keeps the characters
+ * that fit with "..." (three ASCII dots, the 8x8 font has no U+2026).
+ * When the runs that fit end before hidden ones, the last visible run
+ * ends with the dots. Runs past the edge are left to the clip. */
+static int ellipsis_block(const we_doc_t *d, int owner, int *edge) {
+    int o = owner, guard;
+    for (guard = 0; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent) {
+        const we_node_t *n = &d->nodes[o];
+        if (n->is_text || n->display == WE_DISP_INLINE) continue;
+        if (!n->text_overflow || !n->overflow_hidden) return -1;
+        *edge = n->x + n->w - box_edge(n, 1) - n->padding[1];
+        return o;
+    }
+    return -1;
+}
+
+static void ellipsis_cut(os_fb_web_item_t *it, int keep_px) {
+    int fit = keep_px / WE_CHAR_W, len = w_len(it->text), keep, k;
+    if (fit > len) fit = len;
+    if (fit < 0) fit = 0;
+    keep = fit - 3 < 0 ? 0 : fit - 3;
+    for (k = keep; k < fit; k++) it->text[k] = '.';
+    it->text[fit] = 0;
+    it->w = (uint16_t)(fit * WE_CHAR_W);
+}
+
+static void ellipsis_items(we_doc_t *d) {
+    int i, j;
+    for (i = 0; i < (int)d->nitems; i++) {
+        os_fb_web_item_t *it = &d->items[i];
+        int edge, block, crossing = 0, hidden = 0, last = -1;
+        if (it->kind != OS_FB_WEB_TEXT || (block = ellipsis_block(d, d->item_owner[i], &edge)) < 0) continue;
+        if (it->x >= edge || it->x + it->w <= edge) {
+            if (it->x + it->w > edge) continue;
+            /* a fitting run: the last one before hidden runs takes the dots */
+            for (j = 0; j < (int)d->nitems; j++) {
+                const os_fb_web_item_t *o = &d->items[j];
+                int e2;
+                if (j == i || o->kind != OS_FB_WEB_TEXT || o->y != it->y) continue;
+                if (ellipsis_block(d, d->item_owner[j], &e2) != block) continue;
+                if (o->x < edge && o->x + o->w > edge) crossing = 1;
+                else if (o->x >= edge) hidden = 1;
+                else if (o->x + o->w > it->x + it->w || (o->x + o->w == it->x + it->w && j > i)) last = j;
+            }
+            if (hidden && !crossing && last < 0) ellipsis_cut(it, it->w);
+            continue;
+        }
+        ellipsis_cut(it, edge - it->x);
+    }
+}
+
 static void clip_display_list(we_doc_t *d) {
     static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
     static int16_t owners[OS_FB_WEB_ITEMS];
@@ -7739,6 +7796,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
       } }
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
     drop_reserved(d);
+    ellipsis_items(d);
     paint_outlines(d);
     stack_items(d);
     opacity_items(d);

@@ -248,6 +248,7 @@ typedef struct {
     uint8_t bg_clip, bg_origin;
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
+    uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
     we_shadow_t tshadow[WE_SHADOWS_MAX];
     uint16_t grad_pos[WE_GRAD_STOPS];
     uint32_t grad_color[WE_GRAD_STOPS];
