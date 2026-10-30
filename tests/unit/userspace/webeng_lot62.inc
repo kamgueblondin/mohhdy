@@ -13,6 +13,7 @@
 #include "webeng_lot62_list.inc"
 #include "webeng_lot62_cb.inc"
 #include "webeng_lot62_round.inc"
+#include "webeng_lot62_textspace.inc"
 #include "webeng_lot62_page.inc"
 
 static void lot62_run(void) {
@@ -29,5 +30,6 @@ static void lot62_run(void) {
     lot62_list_run();
     lot62_cb_run();
     lot62_round_run();
+    lot62_textspace_run();
     lot62_page_run();
 }

@@ -101,7 +101,7 @@ enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE,
        WE_LIST_LEADING_ZERO };
 
 enum { WE_DISP_NONE = 0, WE_DISP_BLOCK = 1, WE_DISP_INLINE = 2, WE_DISP_FLEX = 3, WE_DISP_GRID = 4, WE_DISP_TABLE = 5, WE_DISP_ROW = 6, WE_DISP_CELL = 7, WE_DISP_INLINE_BLOCK = 8 };
-enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2 };
+enum { WE_ALIGN_LEFT = 0, WE_ALIGN_CENTER = 1, WE_ALIGN_RIGHT = 2, WE_ALIGN_JUSTIFY = 3 };
 enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
        WE_PACK_STRETCH, WE_PACK_BETWEEN, WE_PACK_AROUND, WE_PACK_EVENLY, WE_PACK_BASELINE,
        WE_PACK_LAST_BASELINE };
@@ -252,6 +252,7 @@ typedef struct {
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
+    int8_t letter_spacing, word_spacing; /* lot 62: px added per glyph / per space, inherited */
     /* Lot 62: ol start / li value (list_value_set), ol reversed, ol type. */
     int16_t list_value;
     uint8_t list_value_set, list_reversed, list_type_attr;

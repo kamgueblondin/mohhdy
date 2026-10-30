@@ -3059,7 +3059,15 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "font-weight")) {
         n->bold = (uint8_t)(w_ieq_n(v, vl, "bold") || w_ieq_n(v, vl, "700") || w_ieq_n(v, vl, "800") || w_ieq_n(v, vl, "900"));
     } else if (w_eq(prop, "text-align")) {
-        n->align = w_ieq_n(v, vl, "center") ? WE_ALIGN_CENTER : w_ieq_n(v, vl, "right") ? WE_ALIGN_RIGHT : WE_ALIGN_LEFT;
+        n->align = w_ieq_n(v, vl, "center") ? WE_ALIGN_CENTER : w_ieq_n(v, vl, "right") ? WE_ALIGN_RIGHT :
+                   w_ieq_n(v, vl, "justify") ? WE_ALIGN_JUSTIFY : WE_ALIGN_LEFT;
+    } else if (w_eq(prop, "letter-spacing") || w_eq(prop, "word-spacing")) {
+        /* Lot 62 round 2: px (or em) added after each glyph, or to each
+         * word space; letter -4..16, word -8..32 */
+        int letter = w_eq(prop, "letter-spacing"), low = letter ? -4 : -8, high = letter ? 16 : 32;
+        if (value_is(v, vl, "normal")) px = 0;
+        else if (parse_len(v, vl, &px, 0) != 0 || px < low || px > high) { diag(d, letter ? "letter-spacing refused" : "word-spacing refused", -1); px = letter ? n->letter_spacing : n->word_spacing; }
+        if (letter) n->letter_spacing = (int8_t)px; else n->word_spacing = (int8_t)px;
     } else {
         d->perf.decls_applied--;
         d->perf.unknown_props++;
@@ -3197,6 +3205,8 @@ int we_style(we_doc_t* d) {
         n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING; n->text_overflow = 0;
         w_zero(n->rad_x, sizeof(n->rad_x)); w_zero(n->rad_y, sizeof(n->rad_y)); n->rad_pct = 0;
         n->text_transform = p ? p->text_transform : WE_TT_NONE;
+        n->letter_spacing = p ? p->letter_spacing : 0;
+        n->word_spacing = p ? p->word_spacing : 0;
         n->tshadow_count = p ? p->tshadow_count : 0;
         if (p) { int k; for (k = 0; k < WE_SHADOWS_MAX; k++) n->tshadow[k] = p->tshadow[k]; }
         n->z_index = 0;
@@ -3462,6 +3472,7 @@ typedef struct {
      * text seen on the open line and its baseline-aligned atomic boxes. */
     int last, lay_first, lay_last, line_text, line_start, natoms, flow;
     struct { int node, base, height; } atoms[8];
+    int wrapped;   /* lot 62: the line being flushed ends at a soft wrap */
 } we_inline_t;
 #define WE_NO_BASELINE (-32768)
 #define WE_LINE_ATOMS 8
@@ -3655,10 +3666,53 @@ static void text_shadows(we_doc_t *d, int node, int x, int y, const char *buf, i
     }
 }
 
+/* Lot 62 round 2: letter-spacing widens every glyph cell of a text node,
+ * word-spacing every word space (which takes the letter spacing too).
+ * The kernel font has a fixed 8 px advance, so a letter-spaced run paints
+ * one TEXT item per glyph; word-spaced or justified spaces end the merged
+ * run. Justification spreads the free width of a soft-wrapped line over
+ * its word spaces, the later spaces taking the rounding; the last line, a
+ * forced break and lines with atomic boxes keep start alignment. Letter
+ * spacing applies after every glyph, the last one included. */
+static int glyph_adv(const we_doc_t *d, int node) {
+    return WE_CHAR_W + d->nodes[node].letter_spacing;
+}
+
+static int space_adv(const we_doc_t *d, int node) {
+    int v = WE_CHAR_W + d->nodes[node].letter_spacing + d->nodes[node].word_spacing;
+    return v > 0 ? v : 0;
+}
+
+static int gap_extra(int extra, int gaps, int g) {
+    return gaps ? extra * (g + 1) / gaps - extra * g / gaps : 0;
+}
+
+static void paint_run(we_doc_t *d, int node, int xs, int y, const char *buf, int len) {
+    int adv = glyph_adv(d, node), k;
+    if (adv == WE_CHAR_W) {
+        os_fb_web_item_t *it;
+        text_shadows(d, node, xs, y, buf, len);
+        it = emit(d, node, OS_FB_WEB_TEXT, xs, y, len * WE_CHAR_W, 8, d->nodes[node].color);
+        if (it) { it->bold = d->nodes[node].bold; w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len); }
+        return;
+    }
+    for (k = 0; k < len; k++) {
+        os_fb_web_item_t *it;
+        if (buf[k] == ' ') continue;
+        text_shadows(d, node, xs + k * adv, y, buf + k, 1);
+        it = emit(d, node, OS_FB_WEB_TEXT, xs + k * adv, y, WE_CHAR_W, 8, d->nodes[node].color);
+        if (!it) return;
+        it->bold = d->nodes[node].bold;
+        it->text[0] = buf[k];
+        it->text[1] = 0;
+    }
+}
+
 /* advance=0 paints a segment and keeps the line open for an atomic box. */
 static void flush_line_mode(we_inline_t *f, int force, int advance) {
-    int i, x, total = 0, box_h;
+    int i, x, total = 0, box_h, wrapped = f->wrapped, extra = 0, gaps = 0, gap = 0;
     we_doc_t* d = f->d;
+    f->wrapped = 0;
     box_h = f->line_h > 0 ? f->line_h : WE_LINE_H;
     if (f->nwords == 0 && !force) {
         if (advance && (f->atom_h > 0 || line_aligned(f))) finish_line(f, f->line_text);
@@ -3669,23 +3723,28 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         else { f->nwords = 0; f->line_text = 1; }
         return;
     }
-    for (i = 0; i < f->nwords; i++) total += (f->w[i].len + (i && f->w[i].space_before ? 1 : 0)) * WE_CHAR_W;
+    for (i = 0; i < f->nwords; i++) {
+        total += f->w[i].len * glyph_adv(d, f->w[i].node);
+        if (i && f->w[i].space_before) { total += space_adv(d, f->w[i].node); gaps++; }
+    }
     x = f->x0 + f->pending_x;
     if (advance && f->pending_x == 0 && f->atom_h == 0) {
         if (f->align == WE_ALIGN_CENTER && total < f->width) x += (f->width - total) / 2;
         else if (f->align == WE_ALIGN_RIGHT && total < f->width) x += f->width - total;
+        else if (f->align == WE_ALIGN_JUSTIFY && wrapped && gaps && total < f->width) extra = f->width - total;
     }
     i = 0;
     while (i < f->nwords) {
         /* merge words of the same node into one TEXT item */
-        int node = f->w[i].node, j = i, len = 0, xs;
+        int node = f->w[i].node, j = i, len = 0, xs, run_w, before;
         char buf[OS_FB_WEB_TEXT_LEN];
-        os_fb_web_item_t* it;
         const we_node_t* n;
-        if (i && f->w[i].space_before) x += WE_CHAR_W;
+        if (i && f->w[i].space_before) x += space_adv(d, node) + gap_extra(extra, gaps, gap++);
         xs = x;
         while (j < f->nwords && f->w[j].node == node) {
             int k, sp = (j > i && f->w[j].space_before) ? 1 : 0;
+            if (sp && (space_adv(d, node) != WE_CHAR_W || gap_extra(extra, gaps, gap))) break;
+            gap += sp;
             if (len + sp + f->w[j].len > OS_FB_WEB_TEXT_LEN - 1) break;
             if (sp) buf[len++] = ' ';
             for (k = 0; k < f->w[j].len; k++) buf[len++] = f->w[j].s[k];
@@ -3703,15 +3762,15 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         buf[len] = 0;
         text_transform(buf, len, d->nodes[node].text_transform, i == 0 || f->w[i].space_before);
         n = &d->nodes[d->nodes[node].parent >= 0 ? d->nodes[node].parent : node];
-        if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, len * WE_CHAR_W, box_h, n->bg);
-        text_shadows(d, node, xs, f->y + 1, buf, len);
-        it = emit(d, node, OS_FB_WEB_TEXT, xs, f->y + 1, len * WE_CHAR_W, 8, d->nodes[node].color);
-        if (it) { it->bold = d->nodes[node].bold; w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len); }
-        if (it) paint_decorations(d, node, xs, f->y + 1, len * WE_CHAR_W);
+        run_w = len * glyph_adv(d, node);
+        if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, run_w, box_h, n->bg);
+        before = (int)d->nitems;
+        paint_run(d, node, xs, f->y + 1, buf, len);
+        if ((int)d->nitems > before) paint_decorations(d, node, xs, f->y + 1, run_w);
         {   /* UX4: text nodes get the bounding box of their runs, so a
              * click on a link's words finds the <a> (we_link_at) */
             we_node_t* tn = &d->nodes[node];
-            int x1 = xs + len * WE_CHAR_W, y1 = f->y + WE_LINE_H;
+            int x1 = xs + run_w, y1 = f->y + WE_LINE_H;
             if (tn->w <= 0) { tn->x = (int16_t)limit_coord(xs); tn->y = (int16_t)limit_coord(f->y); tn->w = (int16_t)(x1 - xs); tn->h = WE_LINE_H; }
             else {
                 int ax = tn->x < xs ? tn->x : xs, ay = tn->y < f->y ? tn->y : f->y;
@@ -3719,7 +3778,7 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
                 tn->x = (int16_t)limit_coord(ax); tn->y = (int16_t)limit_coord(ay); tn->w = (int16_t)(bx - ax); tn->h = (int16_t)(by - ay);
             }
         }
-        x = xs + len * WE_CHAR_W;
+        x = xs + run_w;
         i = j;
     }
     if (!advance) {
@@ -3737,14 +3796,15 @@ static void flush_line(we_inline_t *f, int force) { flush_line_mode(f, force, 1)
 static void flush_segment(we_inline_t *f) { flush_line_mode(f, 0, 0); }
 
 static void add_word_piece(we_inline_t* f, const char* s, int len, int node, int space) {
-    int ww;
-    flow_region(f, len * WE_CHAR_W);
-    ww = len * WE_CHAR_W + ((f->nwords && space) ? WE_CHAR_W : 0);
-    if (!f->d->nodes[node].nowrap && (f->nwords || f->pending_x) && f->cur_w + ww > f->width) { flush_line(f, 0); flow_region(f, len * WE_CHAR_W); ww = len * WE_CHAR_W; }
+    int ww, word = len * glyph_adv(f->d, node);
+    flow_region(f, word);
+    ww = word + ((f->nwords && space) ? space_adv(f->d, node) : 0);
+    if (!f->d->nodes[node].nowrap && (f->nwords || f->pending_x) && f->cur_w + ww > f->width) { f->wrapped = 1; flush_line(f, 0); flow_region(f, word); ww = word; }
     if (f->nwords >= WE_LINE_WORDS) {
         if (f->d->nodes[node].nowrap) diag(f->d, "inline word capacity", node);
+        f->wrapped = 1;
         flush_line(f, 0);
-        ww = len * WE_CHAR_W;
+        ww = word;
     }
     f->w[f->nwords].s = s; f->w[f->nwords].len = len; f->w[f->nwords].node = node;
     f->w[f->nwords].space_before = space;
@@ -3752,50 +3812,56 @@ static void add_word_piece(we_inline_t* f, const char* s, int len, int node, int
     f->cur_w += ww;
 }
 
+static void soft_wrap(we_inline_t *f) {
+    f->wrapped = 1;
+    flush_line(f, 0);
+}
+
 static void add_word(we_inline_t *f, const char *s, int len, int node, int space) {
     const we_node_t *n = &f->d->nodes[node];
+    int adv = glyph_adv(f->d, node), gap = space_adv(f->d, node);
     if (n->break_all && !n->nowrap) {
         while (len > 0) {
             int room, take;
-            flow_region(f, WE_CHAR_W);
-            room = f->width - f->cur_w - (f->nwords && space ? WE_CHAR_W : 0);
-            if (room < WE_CHAR_W && (f->nwords || f->pending_x)) {
-                flush_line(f, 0); space = 0;
+            flow_region(f, adv);
+            room = f->width - f->cur_w - (f->nwords && space ? gap : 0);
+            if (room < adv && (f->nwords || f->pending_x)) {
+                soft_wrap(f); space = 0;
                 continue;
             }
-            take = room / WE_CHAR_W;
+            take = room / adv;
             if (take < 1) take = 1;
             if (take > len) take = len;
             add_word_piece(f, s, take, node, space);
             s += take; len -= take; space = 0;
-            if (len) flush_line(f, 0);
+            if (len) soft_wrap(f);
         }
         return;
     }
-    flow_region(f, WE_CHAR_W);
-    if (!n->break_word || n->nowrap || len * WE_CHAR_W <= f->width) {
+    flow_region(f, adv);
+    if (!n->break_word || n->nowrap || len * adv <= f->width) {
         add_word_piece(f, s, len, node, space);
         return;
     }
-    if (f->nwords) { flush_line(f, 0); space = 0; }
+    if (f->nwords) { soft_wrap(f); space = 0; }
     while (len > 0) {
         int room, take;
-        flow_region(f, WE_CHAR_W);
-        room = f->width - f->cur_w - (f->nwords && space ? WE_CHAR_W : 0);
-        if (room < WE_CHAR_W) {
-            flush_line(f, 0);
-            flow_region(f, WE_CHAR_W);
+        flow_region(f, adv);
+        room = f->width - f->cur_w - (f->nwords && space ? gap : 0);
+        if (room < adv) {
+            soft_wrap(f);
+            flow_region(f, adv);
             room = f->width;
             space = 0;
         }
-        take = room / WE_CHAR_W;
+        take = room / adv;
         if (take < 1) take = 1;
         if (take > len) take = len;
         add_word_piece(f, s, take, node, space);
         s += take;
         len -= take;
         space = 0;
-        if (len) flush_line(f, 0);
+        if (len) soft_wrap(f);
     }
 }
 
@@ -4031,10 +4097,10 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
                 intrinsic_word(flow);
                 flow->pending = 1;
             } else {
-                if (flow->pending && flow->line) flow->line += WE_CHAR_W;
+                if (flow->pending && flow->line) flow->line += space_adv(d, idx);
                 flow->pending = 0;
-                flow->line = limit_coord(flow->line + WE_CHAR_W);
-                flow->word = limit_coord(flow->word + WE_CHAR_W);
+                flow->line = limit_coord(flow->line + glyph_adv(d, idx));
+                flow->word = limit_coord(flow->word + glyph_adv(d, idx));
                 if (!n->nowrap && (n->break_all || n->break_word == WE_WRAP_ANYWHERE)) intrinsic_word(flow);
             }
         }
@@ -8570,7 +8636,8 @@ void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx) {
     out_num(out, ctx, " ", n->padding[2]); out_num(out, ctx, " ", n->padding[3]);
     out_num(out, ctx, " border ", n->border);
     out_num(out, ctx, " bold ", n->bold);
-    out(ctx, n->align == WE_ALIGN_CENTER ? " align center" : n->align == WE_ALIGN_RIGHT ? " align right" : " align left");
+    out(ctx, n->align == WE_ALIGN_CENTER ? " align center" : n->align == WE_ALIGN_RIGHT ? " align right" :
+             n->align == WE_ALIGN_JUSTIFY ? " align justify" : " align left");
     out(ctx, "\n");
 }
 
