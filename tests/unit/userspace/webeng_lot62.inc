@@ -8,6 +8,7 @@
 #include "webeng_lot62_spacing.inc"
 #include "webeng_lot62_gradient.inc"
 #include "webeng_lot62_order.inc"
+#include "webeng_lot62_text.inc"
 
 static void lot62_run(void) {
     lot62_alpha_run();
@@ -18,4 +19,5 @@ static void lot62_run(void) {
     lot62_spacing_run();
     lot62_gradient_run();
     lot62_order_run();
+    lot62_text_run();
 }

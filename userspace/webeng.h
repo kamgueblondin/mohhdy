@@ -131,6 +131,8 @@ typedef struct { uint8_t kind, pct; int16_t x, y; } we_transform_t;
 
 /* Lot 62: linear gradients, axis-aligned, up to 4 stops, at most
  * WE_GRAD_BANDS solid bands per box. */
+enum { WE_BOX_BORDER = 0, WE_BOX_PADDING = 1, WE_BOX_CONTENT = 2 };
+enum { WE_TT_NONE = 0, WE_TT_UPPER = 1, WE_TT_LOWER = 2, WE_TT_CAPITALIZE = 3 };
 #define WE_GRAD_STOPS 4
 #define WE_GRAD_BANDS 8
 enum { WE_GRAD_BOTTOM = 1, WE_GRAD_RIGHT = 2, WE_GRAD_TOP = 3, WE_GRAD_LEFT = 4 };
@@ -241,6 +243,12 @@ typedef struct {
      * border box. grad_dir 0 none, else WE_GRAD_*; stop positions in
      * 1/10000 of the gradient line. */
     uint8_t grad_dir, grad_count;
+    /* Lot 62: background-clip and the gradient's background-origin
+     * (WE_BOX_BORDER / PADDING / CONTENT; origin defaults to padding). */
+    uint8_t bg_clip, bg_origin;
+    /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
+    uint8_t text_transform, tshadow_count;
+    we_shadow_t tshadow[WE_SHADOWS_MAX];
     uint16_t grad_pos[WE_GRAD_STOPS];
     uint32_t grad_color[WE_GRAD_STOPS];
     uint32_t edge_color[4];

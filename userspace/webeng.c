@@ -2389,7 +2389,8 @@ static int shadow_length(const char *v, int len, int low, int high, int *out) {
 /* box-shadow: none, or up to WE_SHADOWS_MAX comma-separated shadows of
  * [inset] x y [blur [spread]] [color] in any order of the colour and
  * inset keyword around the lengths. */
-static int parse_shadow(const char *v, int len, we_shadow_t *sh) {
+/* text: a text-shadow entry (no inset, no spread) */
+static int parse_shadow(const char *v, int len, we_shadow_t *sh, int text) {
     int starts[6], lengths[6], count = functional_tokens(v, len, starts, lengths, 6), k, lens = 0, value[4], closed = 0;
     w_zero(sh, sizeof(*sh));
     if (count < 2) return -1;
@@ -2398,7 +2399,7 @@ static int parse_shadow(const char *v, int len, we_shadow_t *sh) {
         int l = lengths[k];
         if ((t[0] >= '0' && t[0] <= '9') || t[0] == '-' || t[0] == '.') {
             /* the lengths are one run: no colour or inset inside it */
-            if (lens == 4 || closed) return -1;
+            if (lens == (text ? 3 : 4) || closed) return -1;
             if (shadow_length(t, l, -64, 64, &value[lens])) return -1;
             if (lens == 2 && value[2] < 0) return -1;
             if (lens == 2 && value[2] > 32) value[2] = 32;
@@ -2406,7 +2407,7 @@ static int parse_shadow(const char *v, int len, we_shadow_t *sh) {
             continue;
         }
         closed = lens > 0;
-        if (value_is(t, l, "inset")) { if (sh->inset) return -1; sh->inset = 1; continue; }
+        if (!text && value_is(t, l, "inset")) { if (sh->inset) return -1; sh->inset = 1; continue; }
         if (sh->has_color || parse_color(t, l, &sh->color)) return -1;
         sh->has_color = 1;
     }
@@ -2417,21 +2418,28 @@ static int parse_shadow(const char *v, int len, we_shadow_t *sh) {
     return 0;
 }
 
-static int parse_shadows(we_node_t *n, const char *v, int len) {
+static int parse_shadows(we_shadow_t *out, uint8_t *out_count, const char *v, int len, int text) {
     we_shadow_t list[WE_SHADOWS_MAX];
     int count = 0, at = 0, depth = 0, start = 0, k;
-    if (value_is(v, len, "none")) { n->shadow_count = 0; return 0; }
+    if (value_is(v, len, "none")) { *out_count = 0; return 0; }
     for (at = 0; at <= len; at++) {
         if (at < len && v[at] == '(') depth++;
         if (at < len && v[at] == ')') depth--;
         if (at < len && (depth || v[at] != ',')) continue;
-        if (count == WE_SHADOWS_MAX || parse_shadow(v + start, at - start, &list[count])) return -1;
+        if (count == WE_SHADOWS_MAX || parse_shadow(v + start, at - start, &list[count], text)) return -1;
         count++;
         start = at + 1;
     }
-    for (k = 0; k < count; k++) n->shadow[k] = list[k];
-    n->shadow_count = (uint8_t)count;
+    for (k = 0; k < count; k++) out[k] = list[k];
+    *out_count = (uint8_t)count;
     return 0;
+}
+
+static int box_keyword(const char *v, int len) {
+    if (value_is(v, len, "border-box")) return WE_BOX_BORDER;
+    if (value_is(v, len, "padding-box")) return WE_BOX_PADDING;
+    if (value_is(v, len, "content-box")) return WE_BOX_CONTENT;
+    return -1;
 }
 
 /* ---------- Lot 62: text-decoration parsing ----------
@@ -2710,7 +2718,20 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (tf_length(v, vl, &value, &percent) == 0 && !percent) n->outline_offset = (int8_t)(value < -32 ? -32 : value > 32 ? 32 : value);
         else diag(d, "outline refused", -1);
     } else if (w_eq(prop, "box-shadow")) {
-        if (parse_shadows(n, v, vl)) diag(d, "box-shadow refused", -1);
+        if (parse_shadows(n->shadow, &n->shadow_count, v, vl, 0)) diag(d, "box-shadow refused", -1);
+    } else if (w_eq(prop, "text-shadow")) {
+        if (parse_shadows(n->tshadow, &n->tshadow_count, v, vl, 1)) diag(d, "text-shadow refused", -1);
+    } else if (w_eq(prop, "text-transform")) {
+        if (value_is(v, vl, "none")) n->text_transform = WE_TT_NONE;
+        else if (value_is(v, vl, "uppercase")) n->text_transform = WE_TT_UPPER;
+        else if (value_is(v, vl, "lowercase")) n->text_transform = WE_TT_LOWER;
+        else if (value_is(v, vl, "capitalize")) n->text_transform = WE_TT_CAPITALIZE;
+        else diag(d, "text-transform refused", -1);
+    } else if (w_eq(prop, "background-clip") || w_eq(prop, "background-origin")) {
+        int box = box_keyword(v, vl);
+        if (box < 0) diag(d, "background box refused", -1);
+        else if (w_eq(prop, "background-clip")) n->bg_clip = (uint8_t)box;
+        else n->bg_origin = (uint8_t)box;
     } else if (w_eq(prop, "transform")) {
         if (parse_transform(n, v, vl)) diag(d, "transform refused", -1);
     } else if (w_eq(prop, "transform-origin")) {
@@ -3044,6 +3065,10 @@ int we_style(we_doc_t* d) {
         n->shadow_count = 0;
         n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
         n->spacing_pct = 0; n->grad_dir = 0;
+        n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING;
+        n->text_transform = p ? p->text_transform : WE_TT_NONE;
+        n->tshadow_count = p ? p->tshadow_count : 0;
+        if (p) { int k; for (k = 0; k < WE_SHADOWS_MAX; k++) n->tshadow[k] = p->tshadow[k]; }
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
         n->text_indent = p ? p->text_indent : 0;
@@ -3469,6 +3494,37 @@ static void paint_decorations(we_doc_t *d, int text, int x, int y, int w) {
     }
 }
 
+/* Lot 62: text-transform on a run copy (ASCII; glyph widths are fixed).
+ * capitalize upper-cases the first letter of each word; word_start says
+ * whether the run itself starts a word. */
+static void text_transform(char *buf, int len, int mode, int word_start) {
+    int k, start = word_start;
+    for (k = 0; k < len; k++) {
+        char c = buf[k];
+        if (mode == WE_TT_UPPER || (mode == WE_TT_CAPITALIZE && start)) { if (c >= 'a' && c <= 'z') c = (char)(c - 32); }
+        else if (mode == WE_TT_LOWER) { if (c >= 'A' && c <= 'Z') c = (char)(c + 32); }
+        buf[k] = c;
+        start = c == ' ';
+    }
+}
+
+/* Lot 62: text shadows paint under their run, the first one on top; the
+ * colour defaults to the text colour. Blur paints sharp (one diagnostic). */
+static int text_shadow_blur;
+static void text_shadows(we_doc_t *d, int node, int x, int y, const char *buf, int len) {
+    const we_node_t *t = &d->nodes[node];
+    int k;
+    for (k = t->tshadow_count - 1; k >= 0; k--) {
+        const we_shadow_t *sh = &t->tshadow[k];
+        os_fb_web_item_t *it = emit(d, node, OS_FB_WEB_TEXT, limit_coord(x + sh->x), limit_coord(y + sh->y), len * WE_CHAR_W, 8,
+                                    sh->has_color ? sh->color : t->color);
+        if (sh->blur) text_shadow_blur = 1;
+        if (!it) return;
+        it->bold = t->bold;
+        w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len);
+    }
+}
+
 /* advance=0 paints a segment and keeps the line open for an atomic box. */
 static void flush_line_mode(we_inline_t *f, int force, int advance) {
     int i, x, total = 0, box_h;
@@ -3515,8 +3571,10 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
             j = f->w[i].len ? i : i + 1;
         }
         buf[len] = 0;
+        text_transform(buf, len, d->nodes[node].text_transform, i == 0 || f->w[i].space_before);
         n = &d->nodes[d->nodes[node].parent >= 0 ? d->nodes[node].parent : node];
         if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, len * WE_CHAR_W, box_h, n->bg);
+        text_shadows(d, node, xs, f->y + 1, buf, len);
         it = emit(d, node, OS_FB_WEB_TEXT, xs, f->y + 1, len * WE_CHAR_W, 8, d->nodes[node].color);
         if (it) { it->bold = d->nodes[node].bold; w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len); }
         if (it) paint_decorations(d, node, xs, f->y + 1, len * WE_CHAR_W);
@@ -4305,23 +4363,47 @@ static int gradient_reserve(we_doc_t *d, int idx, int *count) {
 static int gradient_banded;
 
 /* Bands tile the border box exactly; each takes the colour at its middle. */
+/* Lot 62: border, padding or content box of a laid out box, (x, y, w, h). */
+static void background_box(const we_node_t *n, int box, int bx, int by, int bw, int bh, int out[4]) {
+    int top = 0, right = 0, bottom = 0, left = 0;
+    if (box >= WE_BOX_PADDING) { top = box_edge(n, 0); right = box_edge(n, 1); bottom = box_edge(n, 2); left = box_edge(n, 3); }
+    if (box == WE_BOX_CONTENT) { top += n->padding[0]; right += n->padding[1]; bottom += n->padding[2]; left += n->padding[3]; }
+    out[0] = bx + left; out[1] = by + top;
+    out[2] = bw - left - right; out[3] = bh - top - bottom;
+    if (out[2] < 0) out[2] = 0;
+    if (out[3] < 0) out[3] = 0;
+}
+
+/* Bands tile the origin box exactly, each taking the colour at its middle,
+ * then are cut to the clip box. The border area outside the origin box
+ * stays unpainted (no image repetition). */
 static void gradient_fill(we_doc_t *d, int idx, int slot, int count, int bx, int by, int bw, int bh) {
     const we_node_t *n = &d->nodes[idx];
     int vertical = n->grad_dir == WE_GRAD_BOTTOM || n->grad_dir == WE_GRAD_TOP;
-    int extent = vertical ? bh : bw, bands = extent < count ? extent : count, k;
-    if (!n->grad_dir || bands <= 0) return;
+    int o[4], c[4], extent, bands, k;
+    if (!n->grad_dir) return;
+    background_box(n, n->bg_origin, bx, by, bw, bh, o);
+    background_box(n, n->bg_clip, bx, by, bw, bh, c);
+    extent = vertical ? o[3] : o[2];
+    bands = extent < count ? extent : count;
+    if (bands <= 0) return;
     for (k = 1; k < n->grad_count; k++) if (n->grad_color[k] != n->grad_color[0]) gradient_banded = 1;
     for (k = 0; k < bands; k++) {
         os_fb_web_item_t *it = &d->items[slot + k];
         int a = k * extent / bands, b = (k + 1) * extent / bands;
         int p = (2 * k + 1) * 10000 / (2 * bands);
+        int x0 = vertical ? o[0] : o[0] + a, y0 = vertical ? o[1] + a : o[1];
+        int x1 = vertical ? o[0] + o[2] : o[0] + b, y1 = vertical ? o[1] + b : o[1] + o[3];
+        if (x0 < c[0]) x0 = c[0];
+        if (y0 < c[1]) y0 = c[1];
+        if (x1 > c[0] + c[2]) x1 = c[0] + c[2];
+        if (y1 > c[1] + c[3]) y1 = c[1] + c[3];
+        if (x1 <= x0 || y1 <= y0) continue;      /* stays reserved, dropped */
         if (n->grad_dir == WE_GRAD_TOP || n->grad_dir == WE_GRAD_LEFT) p = 10000 - p;
         it->kind = OS_FB_WEB_RECT;
         it->color = gradient_at(n, p);
-        it->x = (int16_t)(vertical ? bx : bx + a);
-        it->y = (int16_t)(vertical ? by + a : by);
-        it->w = (uint16_t)(vertical ? bw : b - a);
-        it->h = (uint16_t)(vertical ? b - a : bh);
+        it->x = (int16_t)x0; it->y = (int16_t)y0;
+        it->w = (uint16_t)(x1 - x0); it->h = (uint16_t)(y1 - y0);
     }
 }
 
@@ -4450,7 +4532,9 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw; n->h = (int16_t)bh;
     if (slot >= 0) {
         os_fb_web_item_t* it = &d->items[slot];
-        it->x = (int16_t)bx; it->y = (int16_t)by; it->w = (uint16_t)bw; it->h = (uint16_t)bh;
+        int box[4];
+        background_box(n, n->bg_clip, bx, by, bw, bh, box);
+        it->x = (int16_t)box[0]; it->y = (int16_t)box[1]; it->w = (uint16_t)box[2]; it->h = (uint16_t)box[3];
     }
     gradient_fill(d, idx, grad_slot, grad_slots, bx, by, bw, bh);
     shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh);
@@ -7615,7 +7699,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     d->viewport_h = (int16_t)viewport_h;
     d->scroll_y = 0;
     w_zero(static_set, sizeof(static_set));
-    d->nitems = 0; math_refused = 0; wavy_decoration = 0; gradient_banded = 0; baseline_probe = 0; probe_level = probe_count = 0;
+    d->nitems = 0; math_refused = 0; wavy_decoration = 0; gradient_banded = 0; text_shadow_blur = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
@@ -7665,6 +7749,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     if (math_refused) diag(d, "math evaluation refused", -1);
     if (wavy_decoration) diag(d, "wavy decoration painted solid", -1);
     if (gradient_banded) diag(d, "gradient painted in bands", -1);
+    if (text_shadow_blur) diag(d, "text-shadow blur painted sharp", -1);
     d->perf.items = d->nitems;
     d->perf.page_w = (uint32_t)viewport_w;
     d->perf.page_h = (uint32_t)h;
