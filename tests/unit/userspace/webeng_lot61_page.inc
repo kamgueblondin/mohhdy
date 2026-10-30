@@ -33,6 +33,8 @@ static void test_l61_page_combines_lot_behaviours(void) {
     l61_rect_at(0, 95, 4, 10, 0x0000FF);
     l61_rect_at(116, 95, 4, 10, 0x0000FF);
     l61_rect_at(59, 95, 2, 10, 0xFF0000);
+    TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(60, 96));   /* vertical over horizontal */
+    TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(2, 100));
     /* Subgrid column-gap 10px over 40px parent tracks. */
     l61_box("s2a", 0, 105, 35, 6);
     l61_box("s2b", 45, 105, 30, 6);
