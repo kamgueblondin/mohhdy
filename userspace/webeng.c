@@ -1796,6 +1796,8 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         int value = parse_pack(v, vl, distribution, !w_eq(prop, "justify-content"));
         if ((w_eq(prop, "align-items") || w_eq(prop, "align-self")) &&
             (value_is(v, vl, "baseline") || value_is(v, vl, "first baseline"))) value = WE_PACK_BASELINE;
+        if ((w_eq(prop, "align-items") || w_eq(prop, "align-self")) && value_is(v, vl, "last baseline"))
+            value = WE_PACK_LAST_BASELINE;
         if ((w_eq(prop, "align-self") || w_eq(prop, "justify-self")) && value_is(v, vl, "auto")) value = 0;
         if (value < 0) diag(d, "alignment refused", -1);
         else if (w_eq(prop, "justify-content")) n->justify_content = (uint8_t)value;
@@ -1900,6 +1902,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (value_is(v, vl, "top")) n->valign = WE_VALIGN_TOP;
         else if (value_is(v, vl, "middle")) n->valign = WE_VALIGN_MIDDLE;
         else if (value_is(v, vl, "bottom")) n->valign = WE_VALIGN_BOTTOM;
+        else if (value_is(v, vl, "baseline")) n->valign = WE_VALIGN_BASELINE;
         else diag(d, "vertical align refused", -1);
     } else if (w_eq(prop, "position")) {
         if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = 0; }
@@ -2397,7 +2400,13 @@ typedef struct {
     int pending_space, measuring;
     int line_h, indent, indent_used, atom_h, pending_x;
     int baseline, origin_y;
+    /* Lot 61: last measured baseline, painted first/last baselines (page y),
+     * text seen on the open line and its baseline-aligned atomic boxes. */
+    int last, lay_first, lay_last, line_text, line_start, natoms, flow;
+    struct { int node, base, height; } atoms[8];
 } we_inline_t;
+#define WE_NO_BASELINE (-32768)
+#define WE_LINE_ATOMS 8
 
 static int limit_coord(int n) {
     if (n < -WE_LAYOUT_MAX) return -WE_LAYOUT_MAX;
@@ -2444,30 +2453,92 @@ static int line_step(const we_inline_t *f) {
     return step;
 }
 
+static int16_t layout_first[WE_MAX_NODES], layout_last[WE_MAX_NODES];
+static int baseline_get(we_doc_t *d, int idx, int outer, int depth, int last, int *real);
+static int item_baseline(const we_doc_t *d, int c, int last);
+
+static int in_subtree(const we_doc_t *d, int node, int root) {
+    int guard;
+    for (guard = 0; node >= 0 && guard <= WE_DEPTH_MAX + 1; guard++) {
+        if (node == root) return 1;
+        node = d->nodes[node].parent;
+    }
+    return 0;
+}
+
+/* Baseline-aligned atoms and the text of one line share one ascent. Text
+ * moves by ascent - WE_TEXT_BASELINE, an atom by ascent - its baseline;
+ * top-aligned atoms stay at the line top. */
+static void shift_line(we_inline_t *f, int ascent, int has_text) {
+    we_doc_t *d = f->d;
+    int i, k, text_dy = has_text ? ascent - WE_TEXT_BASELINE : 0;
+    for (i = f->line_start; i < (int)d->nitems; i++) {
+        int owner = d->item_owner[i], dy = text_dy, up;
+        for (up = owner; up >= 0 && up != f->flow; up = d->nodes[up].parent)
+            if (d->nodes[up].float_side || d->nodes[up].absolute) { dy = 0; break; }
+        for (k = 0; k < f->natoms; k++)
+            if (in_subtree(d, owner, f->atoms[k].node)) { dy = f->atoms[k].base >= 0 ? ascent - f->atoms[k].base : 0; break; }
+        d->items[i].y = (int16_t)limit_coord(d->items[i].y + dy);
+    }
+    for (k = 0; k < f->natoms; k++) {
+        int dy = ascent - f->atoms[k].base, root = f->atoms[k].node;
+        if (f->atoms[k].base < 0 || !dy) continue;
+        for (i = root; i < (int)d->nnodes; i++)
+            if (in_subtree(d, i, root)) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + dy);
+        if (layout_first[root] != WE_NO_BASELINE) layout_first[root] = (int16_t)limit_coord(layout_first[root] + dy);
+        if (layout_last[root] != WE_NO_BASELINE) layout_last[root] = (int16_t)limit_coord(layout_last[root] + dy);
+    }
+}
+
+static void finish_line(we_inline_t *f, int has_text) {
+    we_doc_t *d = f->d;
+    int step = line_step(f), ascent = has_text ? WE_TEXT_BASELINE : 0, descent = 0, k, aligned = 0;
+    int line_h = f->line_h > 0 ? f->line_h : WE_LINE_H;
+    if (has_text) descent = line_h - WE_TEXT_BASELINE;
+    for (k = 0; k < f->natoms; k++) {
+        if (f->atoms[k].base < 0) continue;
+        aligned = 1;
+        if (f->atoms[k].base > ascent) ascent = f->atoms[k].base;
+        if (f->atoms[k].height - f->atoms[k].base > descent) descent = f->atoms[k].height - f->atoms[k].base;
+    }
+    if (aligned && ascent + descent > step) step = ascent + descent;
+    if (has_text || aligned) {
+        int at = f->y + ascent;
+        if (f->measuring) {
+            if (f->baseline < 0) f->baseline = at - f->origin_y;
+            f->last = at - f->origin_y;
+        } else {
+            if (f->lay_first == WE_NO_BASELINE) f->lay_first = at;
+            f->lay_last = at;
+        }
+    }
+    if (!f->measuring && aligned) shift_line(f, ascent, has_text);
+    f->y = limit_coord(f->y + step);
+    f->lines++;
+    if (!f->measuring) d->perf.lines++;
+    f->nwords = f->cur_w = f->pending_x = f->atom_h = 0;
+    f->line_text = f->natoms = 0;
+    f->line_start = (int)d->nitems;
+}
+
+static int line_aligned(const we_inline_t *f) {
+    int k;
+    for (k = 0; k < f->natoms; k++) if (f->atoms[k].base >= 0) return 1;
+    return 0;
+}
+
 /* advance=0 paints a segment and keeps the line open for an atomic box. */
 static void flush_line_mode(we_inline_t *f, int force, int advance) {
-    int i, x, total = 0, step = line_step(f), box_h;
+    int i, x, total = 0, box_h;
     we_doc_t* d = f->d;
     box_h = f->line_h > 0 ? f->line_h : WE_LINE_H;
     if (f->nwords == 0 && !force) {
-        if (advance && f->atom_h > 0) {
-            f->y = limit_coord(f->y + step);
-            f->lines++;
-            if (!f->measuring) d->perf.lines++;
-            f->atom_h = 0;
-            f->pending_x = 0;
-            f->cur_w = 0;
-        }
+        if (advance && (f->atom_h > 0 || line_aligned(f))) finish_line(f, f->line_text);
         return;
     }
     if (f->measuring) {
-        if (f->baseline < 0) f->baseline = f->y - f->origin_y + WE_TEXT_BASELINE;
-        if (advance) {
-            f->y = limit_coord(f->y + step);
-            f->lines++;
-            f->nwords = f->cur_w = f->pending_x = 0;
-            f->atom_h = 0;
-        } else f->nwords = 0;
+        if (advance) finish_line(f, 1);
+        else { f->nwords = 0; f->line_text = 1; }
         return;
     }
     for (i = 0; i < f->nwords; i++) total += (f->w[i].len + (i && f->w[i].space_before ? 1 : 0)) * WE_CHAR_W;
@@ -2525,15 +2596,10 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         if (f->pending_x < 0) f->pending_x = 0;
         f->cur_w = f->pending_x;
         f->nwords = 0;
+        f->line_text = 1;
         return;
     }
-    f->y = limit_coord(f->y + step);
-    f->lines++;
-    d->perf.lines++;
-    f->nwords = 0;
-    f->cur_w = 0;
-    f->pending_x = 0;
-    f->atom_h = 0;
+    finish_line(f, 1);
 }
 
 static void flush_line(we_inline_t *f, int force) { flush_line_mode(f, force, 1); }
@@ -2708,12 +2774,12 @@ static int constrained_width(const we_node_t *n, int width, int containing) {
 
 static int16_t forced_width[WE_MAX_NODES], forced_height[WE_MAX_NODES];
 static int16_t resolved_height[WE_MAX_NODES], containing_height[WE_MAX_NODES];
-static int16_t flow_baseline[WE_MAX_NODES];
+static int16_t flow_baseline[WE_MAX_NODES], flow_last[WE_MAX_NODES];
 static int baseline_probe;
 static int measure_budget;
 static uint8_t measure_content[WE_MAX_NODES];
 typedef struct {
-    int width, fixed, parent, result, baseline;
+    int width, fixed, parent, result, baseline, last;
     uint8_t content, valid, probe;
 } we_measure_cache_t;
 static we_measure_cache_t measure_cache[WE_MAX_NODES];
@@ -2976,7 +3042,6 @@ static int measure_grid(we_doc_t *d, int idx, int width, int depth);
 static int measure_table(we_doc_t *d, int idx, int width, int depth);
 static int measure_flex(we_doc_t *d, int idx, int width, int depth);
 static int flow_children(we_doc_t *d, int idx, int x, int y, int width, int depth, int measuring);
-static int baseline_of(we_doc_t *d, int idx, int outer, int depth);
 
 static int measure_height(we_doc_t *d, int idx, int width, int depth) {
     const we_node_t *n = &d->nodes[idx];
@@ -2990,6 +3055,7 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
         if (cache->valid && cache->width == key_width && cache->fixed == key_fixed &&
             cache->parent == key_parent && cache->content == measure_content[idx] && cache->probe == baseline_probe) {
             flow_baseline[idx] = (int16_t)cache->baseline;
+            flow_last[idx] = (int16_t)cache->last;
             return cache->result;
         }
     }
@@ -3006,7 +3072,7 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
         cache->probe = (uint8_t)baseline_probe;
         cache->valid = 0;
     }
-    flow_baseline[idx] = -1;
+    flow_baseline[idx] = flow_last[idx] = -1;
     fixed = measure_content[idx] ? -1 : definite_height(d, idx, 0);
     if (fixed >= 0) content = fixed;
     else {
@@ -3030,6 +3096,7 @@ static int measure_height(we_doc_t *d, int idx, int width, int depth) {
     content = height_constraint(d, idx, content, parent);
     measure_cache[idx].result = limit_coord(content + vertical_extra(n) + n->margin[0] + n->margin[2]);
     measure_cache[idx].baseline = flow_baseline[idx];
+    measure_cache[idx].last = flow_last[idx];
     measure_cache[idx].valid = 1;
     return measure_cache[idx].result;
 }
@@ -3097,7 +3164,10 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->base_x = f->x0 = cx;
     f->base_width = f->width = cwidth;
     f->y = limit_coord(cy);
-    f->origin_y = f->y; f->baseline = -1;
+    f->origin_y = f->y; f->baseline = f->last = -1;
+    f->lay_first = f->lay_last = WE_NO_BASELINE;
+    f->line_start = (int)d->nitems;
+    f->flow = idx;
     f->align = d->nodes[idx].align;
     f->line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
     f->indent = d->nodes[idx].text_indent;
@@ -3117,10 +3187,19 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
             {
                 int height = measuring ? measure_height(d, c, f->width + f->indent_used, depth + 1) :
                     layout_block(d, c, f->x0 - f->indent_used, f->y, f->width + f->indent_used, depth + 1);
-                if (measuring && baseline_probe && f->baseline < 0) {
+                if (measuring && baseline_probe) {
                     int outer = preferred_outer(n, f->width, f->width - node_border_extra(n) - n->margin[1] - n->margin[3]);
-                    int base = baseline_of(d, c, outer, depth + 1);
-                    if (flow_baseline[c] >= 0 || w_eq(n->tag, "img")) f->baseline = f->y - f->origin_y + base;
+                    int real, base;
+                    if (f->baseline < 0) {
+                        base = baseline_get(d, c, outer, depth + 1, 0, &real);
+                        if (real) f->baseline = f->y - f->origin_y + base;
+                    }
+                    base = baseline_get(d, c, outer, depth + 1, 1, &real);
+                    if (real) f->last = f->y - f->origin_y + base;
+                }
+                if (!measuring) {
+                    if (f->lay_first == WE_NO_BASELINE) f->lay_first = layout_first[c];
+                    if (layout_last[c] != WE_NO_BASELINE) f->lay_last = layout_last[c];
                 }
                 f->y = limit_coord(f->y + height);
             }
@@ -3128,7 +3207,13 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
         } else inline_node(f, c, depth + 1);
     }
     flush_line(f, 0);
-    flow_baseline[idx] = (int16_t)f->baseline;
+    if (measuring) {
+        flow_baseline[idx] = (int16_t)f->baseline;
+        flow_last[idx] = (int16_t)f->last;
+    } else {
+        layout_first[idx] = (int16_t)f->lay_first;
+        layout_last[idx] = (int16_t)f->lay_last;
+    }
     bottom = f->y;
     for (i = 0; i < f->nfloat; i++) {
         int end = f->floats[i].y + f->floats[i].h;
@@ -3186,6 +3271,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     int first_item = (int)d->nitems;
     if (depth > WE_DEPTH_MAX) return 0;
     d->perf.boxes++;
+    layout_first[idx] = layout_last[idx] = WE_NO_BASELINE;
     bx = x + n->margin[3];
     by = y + n->margin[0];
     if (forced_width[idx] >= 0) bw = forced_width[idx] - n->margin[1] - n->margin[3];
@@ -3242,6 +3328,8 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         border_slot = 1;
     }
     (void)border_slot;
+    if (w_eq(n->tag, "img") || (n->overflow_hidden && layout_first[idx] != WE_NO_BASELINE))
+        layout_first[idx] = layout_last[idx] = (int16_t)limit_coord(by + bh);
     if (w_eq(n->tag, "li") && n->list_style != WE_LIST_NONE) {
         char marker[16];
         int number = 1, sibling, len;
@@ -3313,6 +3401,20 @@ static void place_inline_block(we_inline_t *f, int idx, int depth) {
     else height = layout_assigned(d, idx, f->x0 + f->pending_x, f->y, outer, depth);
     f->pending_x += outer;
     f->cur_w = f->pending_x;
+    /* Lot 61: vertical-align:baseline uses the last line box baseline, or
+     * the bottom margin edge without one or when overflow is hidden. */
+    if (n->valign == WE_VALIGN_BASELINE && f->natoms < WE_LINE_ATOMS) {
+        int real, base = baseline_get(d, idx, outer, depth, 1, &real);
+        if (!real || n->overflow_hidden) base = height;
+        f->atoms[f->natoms].node = idx; f->atoms[f->natoms].base = base; f->atoms[f->natoms].height = height;
+        f->natoms++;
+        return;
+    }
+    if (n->valign == WE_VALIGN_BASELINE) diag(d, "inline baseline capacity", idx);
+    if (f->natoms < WE_LINE_ATOMS) {
+        f->atoms[f->natoms].node = idx; f->atoms[f->natoms].base = -1; f->atoms[f->natoms].height = height;
+        f->natoms++;
+    }
     if (height > f->atom_h) f->atom_h = height;
 }
 
@@ -3439,7 +3541,7 @@ static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w
     if ((int)d->nitems > item_start) order_absolute_items(d, cb, item_start);
 }
 
-typedef struct { int first, end, used, cross, ascent, descent; } we_flex_line_t;
+typedef struct { int first, end, used, cross, ascent, descent, lascent, ldescent; } we_flex_line_t;
 typedef struct {
     int node[WE_MAX_NODES];
     int cross[WE_MAX_NODES];
@@ -3476,6 +3578,7 @@ typedef struct {
     int column[WE_TRACKS_MAX], column_x[WE_TRACKS_MAX], minimum[WE_TRACKS_MAX];
     int height[WE_GRID_ROWS_MAX], row_y[WE_GRID_ROWS_MAX];
     int ascent[WE_GRID_ROWS_MAX], descent[WE_GRID_ROWS_MAX], baseline[WE_MAX_NODES];
+    int lascent[WE_GRID_ROWS_MAX], ldescent[WE_GRID_ROWS_MAX], item_h[WE_MAX_NODES];
     int span[WE_MAX_NODES];
     uint8_t collapsed[2][WE_TRACKS_MAX];
 } we_grid_work_t;
@@ -3486,6 +3589,9 @@ typedef struct {
     uint8_t occ[WE_GRID_ROWS_MAX];
     int height[WE_GRID_ROWS_MAX];
     int cols;
+    /* Lot 61: vertical-align:baseline cells, rowspan 1 only. */
+    int16_t base[WE_MAX_NODES];
+    int ascent[WE_GRID_ROWS_MAX], descent[WE_GRID_ROWS_MAX];
 } we_table_slot_t;
 static we_table_slot_t table_slot[WE_DEPTH_MAX + 1];
 typedef char layout_workspace_is_bounded[
@@ -3775,29 +3881,50 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         position += work->column[k];
         if (!work->collapsed[0][k]) seen = 1;
     }
+    /* Lot 61: first-baseline groups share the start row and last-baseline
+     * groups the end row, spanning items included. A spanning item adds the
+     * shift its group imposes to its span contribution. */
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
-        int width, height;
+        int width, height, align = child->align_self ? child->align_self : n->align_items;
         if (work->row[k] < 0) continue;
         width = work->column_x[work->col[k] + child->grid_col_span - 1] +
                 work->column[work->col[k] + child->grid_col_span - 1] - work->column_x[work->col[k]];
         height = measure_area_height(d, items->node[k], grid_item_width(n, child, width), depth + 1);
+        work->item_h[k] = height;
         work->baseline[k] = 0;
-        if ((child->align_self ? child->align_self : n->align_items) == WE_PACK_BASELINE &&
+        if ((align == WE_PACK_BASELINE || align == WE_PACK_LAST_BASELINE) &&
             !(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
-            if (child->grid_row_span != 1) diag(d, "spanning baseline unsupported", items->node[k]);
-            else {
-                int row = work->row[k], below;
-                work->baseline[k] = baseline_of(d, items->node[k], grid_item_width(n, child, width), depth + 1);
-                below = height - work->baseline[k];
+            int real, last = align == WE_PACK_LAST_BASELINE;
+            int row = last ? work->row[k] + child->grid_row_span - 1 : work->row[k], below;
+            work->baseline[k] = baseline_get(d, items->node[k], grid_item_width(n, child, width), depth + 1, last, &real);
+            below = height - work->baseline[k];
+            if (row >= WE_GRID_ROWS_MAX) continue;
+            if (last) {
+                if (below > work->ldescent[row]) work->ldescent[row] = below;
+                if (child->grid_row_span == 1 && work->baseline[k] > work->lascent[row]) work->lascent[row] = work->baseline[k];
+            } else {
                 if (work->baseline[k] > work->ascent[row]) work->ascent[row] = work->baseline[k];
-                if (below > work->descent[row]) work->descent[row] = below;
+                if (child->grid_row_span == 1 && below > work->descent[row]) work->descent[row] = below;
             }
+        }
+    }
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[items->node[k]];
+        int align = child->align_self ? child->align_self : n->align_items, height = work->item_h[k];
+        int end = work->row[k] + child->grid_row_span - 1;
+        if (work->row[k] < 0) continue;
+        if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) && child->grid_row_span > 1) {
+            if (align == WE_PACK_BASELINE) height += work->ascent[work->row[k]] - work->baseline[k];
+            else if (align == WE_PACK_LAST_BASELINE && end < WE_GRID_ROWS_MAX)
+                height += work->ldescent[end] - (work->item_h[k] - work->baseline[k]);
         }
         grid_span_minimum(n, 1, work->row[k], child->grid_row_span, height, gy, fixed_height, work->height);
     }
-    for (k = 0; k < rows; k++)
+    for (k = 0; k < rows && k < WE_GRID_ROWS_MAX; k++) {
         grid_span_minimum(n, 1, k, 1, work->ascent[k] + work->descent[k], gy, fixed_height, work->height);
+        grid_span_minimum(n, 1, k, 1, work->lascent[k] + work->ldescent[k], gy, fixed_height, work->height);
+    }
     used_height = grid_track_sizes(n, 1, rows, fixed_height, gy, work->height, work->collapsed[1]);
     position = cy; seen = 0;
     {
@@ -3828,6 +3955,31 @@ static int measure_grid(we_doc_t *d, int idx, int width, int depth) {
     return rows ? limit_coord(work->row_y[rows - 1] + work->height[rows - 1]) : 0;
 }
 
+/* Grid baseline export: the first row's first-baseline group, else its
+ * leftmost item; the last row's last-baseline group, else its rightmost. */
+typedef struct { int row[2], col[2], group[2], item[2]; } we_grid_export_t;
+static we_grid_export_t grid_exports[WE_DEPTH_MAX + 1];
+static void export_reset(we_grid_export_t *e) {
+    int i;
+    for (i = 0; i < 2; i++) {
+        e->row[i] = i ? -1 : 0x7fff; e->col[i] = i ? -1 : 0x7fff;
+        e->group[i] = e->item[i] = WE_NO_BASELINE;
+    }
+}
+static void grid_export(we_grid_export_t *e, int r, int c, int end_r, int end_c,
+                        int align, int group, int first, int last, int aligned) {
+    if (r < e->row[0]) { e->row[0] = r; e->col[0] = 0x7fff; e->group[0] = WE_NO_BASELINE; }
+    if (r == e->row[0]) {
+        if (aligned && align == WE_PACK_BASELINE && e->group[0] == WE_NO_BASELINE) e->group[0] = group;
+        if (c < e->col[0]) { e->col[0] = c; e->item[0] = first; }
+    }
+    if (end_r > e->row[1]) { e->row[1] = end_r; e->col[1] = -1; e->group[1] = WE_NO_BASELINE; }
+    if (end_r == e->row[1]) {
+        if (aligned && align == WE_PACK_LAST_BASELINE) e->group[1] = group;
+        if (end_c > e->col[1]) { e->col[1] = end_c; e->item[1] = last; }
+    }
+}
+
 static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) {
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[depth];
@@ -3835,6 +3987,8 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
     int rows = prepare_grid(d, idx, cx, cy, cw, depth);
     int count = collect_items(d, idx, items), k;
     int fixed_height = definite_height(d, idx, 0);
+    we_grid_export_t *e = &grid_exports[depth];
+    export_reset(e);
     for (k = 0; k < count; k++) {
         we_node_t *child = &d->nodes[items->node[k]];
         int r = work->row[k], c = work->col[k], width, height, child_width, child_height;
@@ -3862,15 +4016,29 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
             int free = height > child_height ? height - child_height : 0;
             y = work->row_y[r] + ((child->margin_auto & WE_AUTO_TOP) ?
                 (child->margin_auto & WE_AUTO_BOTTOM ? free / 2 : free) : 0);
-        } else if (vertical == WE_PACK_BASELINE && child->grid_row_span == 1)
+        } else if (vertical == WE_PACK_BASELINE)
             y = work->row_y[r] + work->ascent[r] - work->baseline[k];
-        else y = work->row_y[r] + pack_distance(vertical, height - child_height, 0, 1);
+        else if (vertical == WE_PACK_LAST_BASELINE) {
+            int end = r + child->grid_row_span - 1;
+            y = work->row_y[end] + work->height[end] - work->ldescent[end] - work->baseline[k];
+        } else y = work->row_y[r] + pack_distance(vertical, height - child_height, 0, 1);
         {
             int child_idx = items->node[k];
             int16_t saved = containing_height[child_idx];
             containing_height[child_idx] = (int16_t)height;
             layout_area(d, child_idx, limit_coord(x), limit_coord(y), child_width, assigned_h, width, depth + 1);
             containing_height[child_idx] = saved;
+        }
+        grid_export(e, r, c, r + child->grid_row_span - 1, c + child->grid_col_span - 1,
+                    vertical, limit_coord(y + work->baseline[k]), item_baseline(d, items->node[k], 0),
+                    item_baseline(d, items->node[k], 1), !(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)));
+    }
+    {
+        int i;
+        for (i = 0; i < 2; i++) {
+            int value = e->group[i] != WE_NO_BASELINE ? e->group[i] : e->item[i];
+            if (i) layout_last[idx] = (int16_t)value;
+            else layout_first[idx] = (int16_t)value;
         }
     }
     d->perf.grid_lines += (uint32_t)rows;
@@ -4020,20 +4188,89 @@ static int measure_area_height(we_doc_t *d, int idx, int outer, int depth) {
     return height;
 }
 
-static int baseline_of(we_doc_t *d, int idx, int outer, int depth) {
+/* Lot 61 container baselines: a flex, grid or table box is laid out for
+ * real at (0, 0) and its exported layout_first/layout_last is read back.
+ * Geometry, items, diagnostics, counters and baselines are restored, the
+ * nesting is capped at WE_PROBE_DEPTH and the count at WE_PROBE_MAX. */
+#define WE_PROBE_DEPTH 3
+#define WE_PROBE_MAX 64
+typedef struct {
+    int16_t x[WE_MAX_NODES], y[WE_MAX_NODES], w[WE_MAX_NODES], h[WE_MAX_NODES];
+    int16_t first[WE_MAX_NODES], last[WE_MAX_NODES], resolved[WE_MAX_NODES], containing[WE_MAX_NODES];
+    uint8_t failed[WE_MAX_NODES];
+} we_probe_save_t;
+static we_probe_save_t probe_save[WE_PROBE_DEPTH];
+static int probe_level, probe_count;
+
+static int probe_container(we_doc_t *d, int idx, int outer, int depth, int last) {
+    we_probe_save_t *save;
+    uint32_t nitems = d->nitems, ndiag = d->ndiag, dropped = d->diag_dropped;
+    we_perf_t perf = d->perf;
+    int i, value, saved_probe = baseline_probe;
+    if (probe_level >= WE_PROBE_DEPTH) return WE_NO_BASELINE;
+    if (probe_count >= WE_PROBE_MAX) {
+        if (probe_count++ == WE_PROBE_MAX) diag(d, "baseline probe budget", idx);
+        return WE_NO_BASELINE;
+    }
+    probe_count++;
+    save = &probe_save[probe_level++];
+    for (i = 0; i < (int)d->nnodes; i++) {
+        save->x[i] = d->nodes[i].x; save->y[i] = d->nodes[i].y;
+        save->w[i] = d->nodes[i].w; save->h[i] = d->nodes[i].h;
+        save->first[i] = layout_first[i]; save->last[i] = layout_last[i];
+        save->resolved[i] = resolved_height[i]; save->containing[i] = containing_height[i];
+        save->failed[i] = image_work.failed[i];
+    }
+    baseline_probe = 0;
+    (void)layout_assigned(d, idx, 0, 0, outer, depth);
+    value = last ? layout_last[idx] : layout_first[idx];
+    baseline_probe = saved_probe;
+    for (i = 0; i < (int)d->nnodes; i++) {
+        d->nodes[i].x = save->x[i]; d->nodes[i].y = save->y[i];
+        d->nodes[i].w = save->w[i]; d->nodes[i].h = save->h[i];
+        layout_first[i] = save->first[i]; layout_last[i] = save->last[i];
+        resolved_height[i] = save->resolved[i]; containing_height[i] = save->containing[i];
+        image_work.failed[i] = save->failed[i];
+    }
+    probe_level--;
+    d->nitems = nitems; d->ndiag = ndiag; d->diag_dropped = dropped; d->perf = perf;
+    return value;
+}
+
+/* First (last=0) or last baseline from the margin-box top. *real is 0 when
+ * the value is the synthesized bottom border edge. */
+static int baseline_get(we_doc_t *d, int idx, int outer, int depth, int last, int *real) {
     const we_node_t *n = &d->nodes[idx];
     int height = measure_area_height(d, idx, outer, depth), value, saved_probe = baseline_probe;
+    int bottom = limit_coord(height - n->margin[2]);
     uint8_t saved_content = measure_content[idx];
-    if (depth > WE_DEPTH_MAX || n->overflow_hidden || w_eq(n->tag, "img") ||
-        n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID || n->display == WE_DISP_TABLE)
-        return limit_coord(height - n->margin[2]);
+    *real = 0;
+    if (depth > WE_DEPTH_MAX) return bottom;
+    if (w_eq(n->tag, "img")) { *real = 1; return bottom; }
+    if (n->overflow_hidden) {
+        *real = (last ? flow_last[idx] : flow_baseline[idx]) >= 0;
+        return bottom;
+    }
+    if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID || n->display == WE_DISP_TABLE) {
+        value = probe_container(d, idx, outer, depth, last);
+        if (value == WE_NO_BASELINE) return bottom;
+        *real = 1;
+        return limit_coord(value);
+    }
     baseline_probe = 1; measure_content[idx] = 1;
     (void)measure_area_height(d, idx, outer, depth);
     measure_content[idx] = saved_content; baseline_probe = saved_probe;
-    value = flow_baseline[idx];
-    if (value >= 0) value += n->margin[0] + n->border + n->padding[0];
-    else value = height - n->margin[2];
+    value = last ? flow_last[idx] : flow_baseline[idx];
+    if (value >= 0) { *real = 1; value += n->margin[0] + n->border + n->padding[0]; }
+    else value = bottom;
     return limit_coord(value);
+}
+
+/* Baseline of a laid-out item, synthesized from its bottom border edge. */
+static int item_baseline(const we_doc_t *d, int c, int last) {
+    int value = last ? layout_last[c] : layout_first[c];
+    if (value != WE_NO_BASELINE) return value;
+    return limit_coord(d->nodes[c].y + d->nodes[c].h);
 }
 
 static void prepare_flex(we_doc_t *d, int idx, int cw,
@@ -4105,7 +4342,7 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
         }
         line->used = (k - line->first - 1) * gap;
         line->cross = 0;
-        line->ascent = line->descent = 0;
+        line->ascent = line->descent = line->lascent = line->ldescent = 0;
         for (j = line->first; j < k; j++) {
             const we_node_t *child = &d->nodes[work->node[j]];
             int align = child->align_self ? child->align_self : n->align_items;
@@ -4116,19 +4353,25 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
                 work->cross[j] = preferred_outer(child, cw, fallback);
             } else work->cross[j] = measure_area_height(d, work->node[j], work->size[j], depth + 1);
             work->baseline[j] = 0;
-            if (align == WE_PACK_BASELINE) {
+            if (align == WE_PACK_BASELINE || align == WE_PACK_LAST_BASELINE) {
                 if (vertical) diag(d, "column baseline unsupported", work->node[j]);
                 else if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
-                    int below;
-                    work->baseline[j] = baseline_of(d, work->node[j], work->size[j], depth + 1);
+                    int below, real, last = align == WE_PACK_LAST_BASELINE;
+                    work->baseline[j] = baseline_get(d, work->node[j], work->size[j], depth + 1, last, &real);
                     below = work->cross[j] - work->baseline[j];
-                    if (work->baseline[j] > line->ascent) line->ascent = work->baseline[j];
-                    if (below > line->descent) line->descent = below;
+                    if (last) {
+                        if (work->baseline[j] > line->lascent) line->lascent = work->baseline[j];
+                        if (below > line->ldescent) line->ldescent = below;
+                    } else {
+                        if (work->baseline[j] > line->ascent) line->ascent = work->baseline[j];
+                        if (below > line->descent) line->descent = below;
+                    }
                 }
             }
             if (work->cross[j] > line->cross) line->cross = work->cross[j];
         }
         if (line->ascent + line->descent > line->cross) line->cross = line->ascent + line->descent;
+        if (line->lascent + line->ldescent > line->cross) line->cross = line->lascent + line->ldescent;
         if (!wrap && cross_available > line->cross) line->cross = cross_available;
         cross_total = limit_coord(cross_total + line->cross + (lines ? cross_gap : 0));
         lines++;
@@ -4187,6 +4430,8 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
     we_track_work_t *work = &track_work[depth];
     int vertical = n->flex_dir != 0, main, cross_available, gap, cross_gap, lines, cross_total;
     int k, extent = 0, wrap;
+    int group_first = WE_NO_BASELINE, group_last = WE_NO_BASELINE;
+    int item_first = WE_NO_BASELINE, item_last = WE_NO_BASELINE;
     prepare_flex(d, idx, cw, depth, count, sizing, modern);
     main = work->main;
     cross_available = work->cross_available;
@@ -4247,6 +4492,7 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
                 int free = line_cross > cross ? line_cross - cross : 0;
                 off = cross_before ? (cross_after ? free / 2 : free) : 0;
             } else if (!vertical && align == WE_PACK_BASELINE) off = line->ascent - work->baseline[j];
+            else if (!vertical && align == WE_PACK_LAST_BASELINE) off = line_cross - line->ldescent - work->baseline[j];
             else off = pack_distance(align, line_cross - cross, 0, 1);
             {
                 int cursor = 0, t, rem_left = auto_rem;
@@ -4276,13 +4522,33 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
                 return main >= 0 ? main : 0;
             }
             layout_area(d, work->node[j], limit_coord(x), limit_coord(y), width, height, width, depth + 1);
+            /* Export: a baseline group of the first/last line wins, else the
+             * main-start item of the first line or main-end item of the last. */
+            if (!vertical && !cross_auto && k == 0 && align == WE_PACK_BASELINE && group_first == WE_NO_BASELINE)
+                group_first = limit_coord(y + work->baseline[j]);
+            if (!vertical && !cross_auto && k == lines - 1 && align == WE_PACK_LAST_BASELINE)
+                group_last = limit_coord(y + work->baseline[j]);
+            if (k == 0 && j == line->first) item_first = item_baseline(d, work->node[j], 0);
+            if (k == lines - 1 && j == line->end - 1) item_last = item_baseline(d, work->node[j], 1);
         }
         extent = limit_coord(extent + line->cross + (k + 1 < lines ? cross_gap : 0));
         d->perf.flex_lines++;
     }
+    if (vertical) {
+        item_first = item_baseline(d, work->node[0], 0);
+        item_last = item_baseline(d, work->node[count - 1], 1);
+    }
+    layout_first[idx] = (int16_t)(group_first != WE_NO_BASELINE ? group_first : item_first);
+    layout_last[idx] = (int16_t)(group_last != WE_NO_BASELINE ? group_last : item_last);
     if (!vertical) return cross_total + (cross_available > cross_total && n->align_content == WE_PACK_STRETCH ? cross_available - cross_total : 0);
     if (main >= 0) return main;
     return work->lines[0].used;
+}
+
+static void export_items(we_doc_t *d, int idx, const we_track_work_t *work, int count) {
+    if (count <= 0) return;
+    layout_first[idx] = (int16_t)item_baseline(d, work->node[0], 0);
+    layout_last[idx] = (int16_t)item_baseline(d, work->node[count - 1], 1);
 }
 
 static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth) {
@@ -4323,6 +4589,7 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
                 col_y += actual + gap;
             }
             if (k) d->perf.flex_lines++;
+            export_items(d, idx, work, k);
             return extent;
         }
         if (n->flex_wrap) diag(d, "column wrap requires height", idx);
@@ -4344,6 +4611,7 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
             if (k + 1 < count) y += gap;
         }
         d->perf.flex_lines++;
+        export_items(d, idx, work, count);
         return y - cy;
     }
     for (k = 0; k < count; k++) if (d->nodes[work->node[k]].flex_grow >= 0) explicit_grow = 1;
@@ -4359,6 +4627,7 @@ static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int dep
             x += each + gap;
         }
         d->perf.flex_lines++;
+        export_items(d, idx, work, count);
         return high;
     }
     return layout_flex_tracks(d, idx, cx, cy, cwidth, depth, count, sizing, modern);
@@ -4654,14 +4923,27 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
     (void)idx;
     for (r = 0; r < nr; r++) {
         int high = d->nodes[rows[r]].height > 0 ? d->nodes[rows[r]].height : 0;
+        if (r < WE_GRID_ROWS_MAX) slot->ascent[r] = slot->descent[r] = 0;
         for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
             const we_node_t *cell = &d->nodes[c];
-            int h;
+            int h, width;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
-            if (table_rowspan_of(cell, r, nr) != 1) continue;
-            h = measure_area_height(d, c, table_span_size(widths, slot->col[c], cell->colspan, spacing_x), depth + 1);
+            if (table_rowspan_of(cell, r, nr) != 1) {
+                if (cell->valign == WE_VALIGN_BASELINE) diag(d, "spanning baseline unsupported", c);
+                continue;
+            }
+            width = table_span_size(widths, slot->col[c], cell->colspan, spacing_x);
+            h = measure_area_height(d, c, width, depth + 1);
             if (h > high) high = h;
+            if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX) {
+                int real, base = baseline_get(d, c, width, depth + 1, 0, &real);
+                if (!real) base = limit_coord(h - cell->margin[2] - cell->border - cell->padding[2]);
+                slot->base[c] = (int16_t)base;
+                if (base > slot->ascent[r]) slot->ascent[r] = base;
+                if (h - base > slot->descent[r]) slot->descent[r] = h - base;
+            }
         }
+        if (r < WE_GRID_ROWS_MAX && slot->ascent[r] + slot->descent[r] > high) high = slot->ascent[r] + slot->descent[r];
         slot->height[r] = high;
     }
     for (r = 0; r < nr; r++) {
@@ -4688,6 +4970,7 @@ static int measure_table(we_doc_t *d, int idx, int width, int depth) {
 
 /* Shift in-flow descendants inside a cell that is taller than its content.
  * The cell border box stays put. Top alignment does not move anything. */
+static void shift_cell(we_doc_t *d, int idx, int first_item, int shift);
 static void valign_cell(we_doc_t *d, int idx, int first_item) {
     we_node_t *cell = &d->nodes[idx];
     int top, inner, bottom, used, shift, i;
@@ -4706,7 +4989,14 @@ static void valign_cell(we_doc_t *d, int idx, int first_item) {
     used = bottom - top;
     if (used < 0 || used >= inner) return;
     shift = cell->valign == WE_VALIGN_MIDDLE ? (inner - used) / 2 : inner - used;
+    shift_cell(d, idx, first_item, shift);
+}
+
+static void shift_cell(we_doc_t *d, int idx, int first_item, int shift) {
+    int i;
     if (shift <= 0) return;
+    if (layout_first[idx] != WE_NO_BASELINE) layout_first[idx] = (int16_t)limit_coord(layout_first[idx] + shift);
+    if (layout_last[idx] != WE_NO_BASELINE) layout_last[idx] = (int16_t)limit_coord(layout_last[idx] + shift);
     for (i = idx + 1; i < (int)d->nnodes; i++) {
         int ancestor = i;
         while (ancestor >= 0 && ancestor != idx) ancestor = d->nodes[ancestor].parent;
@@ -4731,7 +5021,7 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
     table_row_heights(d, idx, depth, widths, nr, spacing, spacing_y);
     for (r = 0; r < nr; r++) {
         we_node_t *row = &d->nodes[rows[r]];
-        int high = slot->height[r], bg_slot = -1;
+        int high = slot->height[r], bg_slot = -1, row_base = WE_NO_BASELINE, row_aligned = 0;
         row->x = (int16_t)x;
         row->y = (int16_t)cy;
         row->w = (int16_t)width;
@@ -4755,10 +5045,22 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
                 if (stretch) {
                     cell_h = rs > 1 ? table_span_size(slot->height, r, rs, spacing_y) : high;
                     layout_area(d, c, cx, cy, cell_w, cell_h, cell_w, depth + 1);
-                    if (cell->valign != WE_VALIGN_TOP) valign_cell(d, c, first_item);
+                    if (cell->valign == WE_VALIGN_BASELINE && rs == 1 && r < WE_GRID_ROWS_MAX)
+                        shift_cell(d, c, first_item, slot->ascent[r] - slot->base[c]);
+                    else if (cell->valign != WE_VALIGN_TOP && cell->valign != WE_VALIGN_BASELINE)
+                        valign_cell(d, c, first_item);
                 } else layout_assigned(d, c, cx, cy, cell_w, depth + 1);
             }
+            /* Row baseline: the shared baseline of its aligned cells, else
+             * the first cell with a line box. */
+            if (cell->valign == WE_VALIGN_BASELINE && rs == 1 && r < WE_GRID_ROWS_MAX) {
+                if (row_base == WE_NO_BASELINE || !row_aligned) row_base = limit_coord(cy + slot->ascent[r]);
+                row_aligned = 1;
+            } else if (!row_aligned && row_base == WE_NO_BASELINE && layout_first[c] != WE_NO_BASELINE)
+                row_base = layout_first[c];
         }
+        if (r == 0) layout_first[idx] = (int16_t)row_base;
+        if (row_base != WE_NO_BASELINE) layout_last[idx] = (int16_t)row_base;
         cy = limit_coord(cy + high + (r + 1 < nr ? spacing_y : 0));
         d->perf.table_rows++;
     }
@@ -4887,7 +5189,7 @@ static void resolve_grid_areas(we_doc_t *d) {
 int we_layout(we_doc_t* d, int viewport_w) {
     int h;
     if (!d || d->nnodes == 0 || viewport_w < 64) return -1;
-    d->nitems = 0; math_refused = 0; baseline_probe = 0;
+    d->nitems = 0; math_refused = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;

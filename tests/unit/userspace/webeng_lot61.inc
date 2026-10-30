@@ -2,8 +2,10 @@
 #include "webeng_lot61_common.inc"
 #include "webeng_lot61_names.inc"
 #include "webeng_lot61_repeat.inc"
+#include "webeng_lot61_baseline.inc"
 
 static void lot61_run(void) {
     lot61_names_run();
     lot61_repeat_run();
+    lot61_baseline_run();
 }

@@ -109,9 +109,14 @@ static void test_l60_composition_column_baseline_is_diagnosed(void) {
     TEST_ASSERT_TRUE(lot52_has_diag("column baseline unsupported"));
 }
 
+/* Lot 61: spanning grid baselines became valid (see webeng_lot61_baseline.inc
+ * for the original grid fixture as a positive test). A table cell with
+ * rowspan 2 and vertical-align:baseline stays refused with the same
+ * diagnostic and the same geometry assertions. */
 static void test_l60_composition_grid_row_spanning_baseline_is_diagnosed(void) {
-    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:80px;grid-template-columns:40px 40px;grid-template-rows:20px 20px;align-items:baseline'>"
-        "<div id=a style='grid-row:1 / span 2'>A</div><div id=b>B</div></div></body>", 320);
+    lot52_render("<body style='margin:0'><table id=p style='width:80px;border-spacing:0'><tr style='height:20px'>"
+        "<td id=a rowspan=2 style='vertical-align:baseline'>A</td><td id=b>B</td></tr>"
+        "<tr style='height:20px'><td>C</td></tr></table></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
     TEST_ASSERT_EQUAL(0, lot52_node("b")->y);
     TEST_ASSERT_EQUAL(40, lot52_node("p")->h);
