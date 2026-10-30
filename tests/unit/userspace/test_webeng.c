@@ -1830,7 +1830,7 @@ int main(void) {
     RUN_TEST(test_l60_composition_overflow_hidden_synthesizes_bottom_edge);
     RUN_TEST(test_l60_composition_wrapped_lines_have_independent_baselines);
     RUN_TEST(test_l60_composition_reversed_row_retains_baseline);
-    RUN_TEST(test_l60_composition_column_baseline_is_diagnosed);
+    RUN_TEST(test_l60_composition_column_invalid_baseline_is_refused);
     RUN_TEST(test_l60_composition_grid_row_spanning_baseline_is_diagnosed);
     RUN_TEST(test_l60_composition_unknown_line_is_diagnosed_then_auto);
     RUN_TEST(test_l60_composition_negative_line_before_start_is_diagnosed);

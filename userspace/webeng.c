@@ -4777,13 +4777,16 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
             line->used += work->size[j];
             if (vertical) {
                 int fallback = wrap ? WE_CHAR_W : align == WE_PACK_END || align == WE_PACK_CENTER ||
+                    align == WE_PACK_BASELINE || align == WE_PACK_LAST_BASELINE ||
                     (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ? child->max_content : cw - flex_extra(child, 0);
                 work->cross[j] = preferred_outer(child, cw, fallback);
             } else work->cross[j] = measure_area_height(d, work->node[j], work->size[j], depth + 1);
             work->baseline[j] = 0;
             if (align == WE_PACK_BASELINE || align == WE_PACK_LAST_BASELINE) {
-                if (vertical) diag(d, "column baseline unsupported", work->node[j]);
-                else if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
+                /* Column flex: no baseline along the horizontal cross axis,
+                 * so first baseline falls back to start and last baseline to
+                 * end (CSS Box Alignment 9.3); nothing is diagnosed. */
+                if (!vertical && !(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM))) {
                     int below, real, last = align == WE_PACK_LAST_BASELINE;
                     work->baseline[j] = baseline_get(d, work->node[j], work->size[j], depth + 1, last, &real);
                     below = work->cross[j] - work->baseline[j];
@@ -4921,6 +4924,7 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw,
                 off = cross_before ? (cross_after ? free / 2 : free) : 0;
             } else if (!vertical && align == WE_PACK_BASELINE) off = line->ascent - work->baseline[j];
             else if (!vertical && align == WE_PACK_LAST_BASELINE) off = line_cross - line->ldescent - work->baseline[j];
+            else if (align == WE_PACK_LAST_BASELINE) off = line_cross > cross ? line_cross - cross : 0;
             else off = pack_distance(align, line_cross - cross, 0, 1);
             {
                 int cursor = 0, t, rem_left = auto_rem;
@@ -5383,19 +5387,19 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
             const we_node_t *cell = &d->nodes[c];
             int h, width;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
-            if (table_rowspan_of(cell, r, nr) != 1) {
-                if (cell->valign == WE_VALIGN_BASELINE) diag(d, "spanning baseline unsupported", c);
-                continue;
-            }
+            int spanning = table_rowspan_of(cell, r, nr) != 1;
+            if (spanning && cell->valign != WE_VALIGN_BASELINE) continue;
             width = table_span_size(widths, slot->col[c], cell->colspan, spacing_x);
             h = measure_area_height(d, c, width, depth + 1);
-            if (h > high) high = h;
+            if (h > high && !spanning) high = h;
+            /* Lot 61: a row-spanning baseline cell aligns in its first row
+             * (CSS 2.1 17.5.3); its height is checked over the span below. */
             if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX) {
                 int real, base = baseline_get(d, c, width, depth + 1, 0, &real);
                 if (!real) base = limit_coord(h - cell->margin[2] - cell->border - cell->padding[2]);
                 slot->base[c] = (int16_t)base;
                 if (base > slot->ascent[r]) slot->ascent[r] = base;
-                if (h - base > slot->descent[r]) slot->descent[r] = h - base;
+                if (!spanning && h - base > slot->descent[r]) slot->descent[r] = h - base;
             }
         }
         if (r < WE_GRID_ROWS_MAX && slot->ascent[r] + slot->descent[r] > high) high = slot->ascent[r] + slot->descent[r];
@@ -5410,6 +5414,7 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
             if (rs < 2) continue;
             sum = table_span_size(slot->height, r, rs, spacing_y);
             h = measure_area_height(d, c, table_span_size(widths, slot->col[c], cell->colspan, spacing_x), depth + 1);
+            if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX) h = limit_coord(h + slot->ascent[r] - slot->base[c]);
             if (h > sum) slot->height[r + rs - 1] = limit_coord(slot->height[r + rs - 1] + h - sum);
         }
     }
@@ -5646,7 +5651,7 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
                 if (stretch) {
                     cell_h = rs > 1 ? table_span_size(slot->height, r, rs, spacing_y) : high;
                     layout_area(d, c, cx, cy, cell_w, cell_h, cell_w, depth + 1);
-                    if (cell->valign == WE_VALIGN_BASELINE && rs == 1 && r < WE_GRID_ROWS_MAX)
+                    if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX)
                         shift_cell(d, c, first_item, slot->ascent[r] - slot->base[c]);
                     else if (cell->valign != WE_VALIGN_TOP && cell->valign != WE_VALIGN_BASELINE)
                         valign_cell(d, c, first_item);
@@ -5654,7 +5659,7 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
             }
             /* Row baseline: the shared baseline of its aligned cells, else
              * the first cell with a line box. */
-            if (cell->valign == WE_VALIGN_BASELINE && rs == 1 && r < WE_GRID_ROWS_MAX) {
+            if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX) {
                 if (row_base == WE_NO_BASELINE || !row_aligned) row_base = limit_coord(cy + slot->ascent[r]);
                 row_aligned = 1;
             } else if (!row_aligned && row_base == WE_NO_BASELINE && layout_first[c] != WE_NO_BASELINE)

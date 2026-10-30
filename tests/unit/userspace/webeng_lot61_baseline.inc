@@ -35,12 +35,74 @@ static void test_l61_flex_last_baseline_per_wrapped_line(void) {
     TEST_ASSERT_EQUAL(34, lot52_node("p")->h);
 }
 
-static void test_l61_flex_last_baseline_column_is_diagnosed(void) {
+static void test_l61_flex_column_last_baseline_falls_back_to_end(void) {
+    int pass;
     lot52_render("<body style='margin:0'><div id=p style='display:flex;flex-direction:column;width:80px;align-items:last baseline'>"
-        "<div id=a style='width:40px'>A</div><div id=b style='width:40px'>B</div></div></body>", 320);
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
-    TEST_ASSERT_EQUAL(10, lot52_node("b")->y);
-    TEST_ASSERT_TRUE(lot52_has_diag("column baseline unsupported"));
+        "<div id=a>A</div><div id=b>BB</div><div id=c style='align-self:baseline'>C</div></div></body>", 320);
+    for (pass = 0; pass < 2; pass++) {
+        l61_box("a", 72, 0, 8, 10);           /* shrink to content, at the end */
+        l61_box("b", 64, 10, 16, 10);
+        l61_box("c", 0, 20, 8, 10);           /* first baseline: start */
+        l61_text_at("BB", 64, 11);
+        TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+        TEST_ASSERT_EQUAL(0, we_layout(&g_doc, 320));
+    }
+}
+
+static void test_l61_flex_column_baseline_keeps_fixed_widths_at_start(void) {
+    lot52_render("<body style='margin:0'><div id=p style='display:flex;flex-direction:column;width:80px;align-items:baseline'>"
+        "<div id=a style='width:40px'>A</div><div id=b style='width:40px;align-self:last baseline'>B</div></div></body>", 320);
+    l61_box("a", 0, 0, 40, 10);
+    l61_box("b", 40, 10, 40, 10);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l61_table_rowspan_baseline_aligns_in_first_row(void) {
+    lot52_render("<body style='margin:0'><table id=p style='width:80px;border-spacing:0'><tr>"
+        "<td id=a rowspan=2 style='vertical-align:baseline;padding-top:6px'>A</td><td id=b style='vertical-align:baseline'>B</td></tr>"
+        "<tr style='height:20px'><td id=c>C</td></tr></table></body>", 320);
+    l61_box("p", 0, 0, 80, 36);
+    l61_box("a", 0, 0, 40, 36);
+    l61_box("b", 40, 0, 40, 16);           /* first row grows to ascent 15 + 1 */
+    l61_box("c", 40, 16, 40, 10);
+    l61_text_at("A", 0, 7);
+    l61_text_at("B", 40, 7);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l61_table_rowspan_baseline_shift_grows_the_span(void) {
+    lot52_render("<body style='margin:0'><table id=p style='width:80px;border-spacing:0'><tr>"
+        "<td id=a rowspan=2 style='vertical-align:baseline;height:40px'>A</td><td id=b style='vertical-align:baseline;padding-top:6px'>B</td></tr>"
+        "<tr><td id=c>C</td></tr></table></body>", 320);
+    /* b raises the first-row ascent to 15; a moves down 6, so its 40px box
+     * needs 46px over the two rows: the last row takes the difference. */
+    l61_text_at("A", 0, 7);
+    l61_text_at("B", 40, 7);
+    l61_box("a", 0, 0, 40, 46);
+    l61_box("p", 0, 0, 80, 46);
+    l61_box("c", 40, 16, 40, 10);
+}
+
+static void test_l61_table_rowspan_baseline_exports_row_baseline(void) {
+    lot52_render("<body style='margin:0'><div style='display:flex;align-items:baseline'><div id=x>X</div>"
+        "<table id=p style='width:80px;border-spacing:0'><tr><td id=a rowspan=2 style='vertical-align:baseline;padding-top:6px'>A</td>"
+        "<td id=b>B</td></tr><tr><td id=c>C</td></tr></table></div></body>", 320);
+    l61_box("x", 0, 6, 8, 10);
+    l61_box("p", 8, 0, 80, 25);
+    l61_text_at("X", 0, 7);
+    l61_text_at("A", 8, 7);
+}
+
+static void test_l61_table_rowspan_baseline_wins_over_earlier_cell_line(void) {
+    /* b's first line (y 9) comes first in the row, but the row baseline is
+     * the aligned spanning cell's (15). */
+    lot52_render("<body style='margin:0'><div style='display:flex;align-items:baseline'><div id=x>X</div>"
+        "<table id=p style='width:80px;border-spacing:0'><tr><td id=b style='height:30px'>B</td>"
+        "<td id=a rowspan=2 style='vertical-align:baseline;padding-top:6px'>A</td></tr><tr><td id=c>C</td></tr></table></div></body>", 320);
+    l61_box("x", 0, 6, 8, 10);
+    l61_box("a", 48, 0, 40, 40);
+    l61_text_at("A", 48, 7);
+    l61_text_at("B", 8, 1);
 }
 
 static void test_l61_grid_last_baseline_with_row_span(void) {
@@ -296,7 +358,12 @@ static void test_l61_table_baseline_keeps_middle_cells(void) {
 static void lot61_baseline_run(void) {
     RUN_TEST(test_l61_flex_last_baseline_aligns_last_lines);
     RUN_TEST(test_l61_flex_last_baseline_per_wrapped_line);
-    RUN_TEST(test_l61_flex_last_baseline_column_is_diagnosed);
+    RUN_TEST(test_l61_flex_column_last_baseline_falls_back_to_end);
+    RUN_TEST(test_l61_flex_column_baseline_keeps_fixed_widths_at_start);
+    RUN_TEST(test_l61_table_rowspan_baseline_aligns_in_first_row);
+    RUN_TEST(test_l61_table_rowspan_baseline_shift_grows_the_span);
+    RUN_TEST(test_l61_table_rowspan_baseline_exports_row_baseline);
+    RUN_TEST(test_l61_table_rowspan_baseline_wins_over_earlier_cell_line);
     RUN_TEST(test_l61_grid_last_baseline_with_row_span);
     RUN_TEST(test_l61_grid_spanning_first_baseline_is_accepted);
     RUN_TEST(test_l61_grid_spanning_first_baseline_moves_to_the_group);

@@ -100,27 +100,34 @@ static void test_l60_composition_reversed_row_retains_baseline(void) {
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
-static void test_l60_composition_column_baseline_is_diagnosed(void) {
-    lot52_render("<body style='margin:0'><div id=p style='display:flex;flex-direction:column;width:80px;align-items:baseline'>"
+/* Lot 61: column flex baseline alignment is now the CSS fallback (start for
+ * first baseline, end for last baseline) without a diagnostic; positive
+ * tests are in webeng_lot61_baseline.inc. The refusal fixture now uses
+ * align-items:baseline-start, which no CSS level defines, and keeps the
+ * same geometry assertions plus a refusal diagnostic. */
+static void test_l60_composition_column_invalid_baseline_is_refused(void) {
+    lot52_render("<body style='margin:0'><div id=p style='display:flex;flex-direction:column;width:80px;align-items:baseline-start'>"
         "<div id=a style='width:40px'>A</div><div id=b style='width:40px'>B</div></div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("b")->x);
     TEST_ASSERT_EQUAL(10, lot52_node("b")->y);
-    TEST_ASSERT_TRUE(lot52_has_diag("column baseline unsupported"));
+    TEST_ASSERT_TRUE(lot52_has_diag("alignment refused"));
 }
 
 /* Lot 61: spanning grid baselines became valid (see webeng_lot61_baseline.inc
- * for the original grid fixture as a positive test). A table cell with
- * rowspan 2 and vertical-align:baseline stays refused with the same
- * diagnostic and the same geometry assertions. */
+ * for the original grid fixture as a positive test), then row-spanning
+ * baseline table cells became valid too (CSS 2.1 17.5.3: the cell aligns in
+ * its first row). The fixture keeps the table and its three geometry
+ * assertions with vertical-align:baseline-shift, which no CSS level
+ * defines for vertical-align, and asserts that refusal. */
 static void test_l60_composition_grid_row_spanning_baseline_is_diagnosed(void) {
     lot52_render("<body style='margin:0'><table id=p style='width:80px;border-spacing:0'><tr style='height:20px'>"
-        "<td id=a rowspan=2 style='vertical-align:baseline'>A</td><td id=b>B</td></tr>"
+        "<td id=a rowspan=2 style='vertical-align:baseline-shift'>A</td><td id=b>B</td></tr>"
         "<tr style='height:20px'><td>C</td></tr></table></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
     TEST_ASSERT_EQUAL(0, lot52_node("b")->y);
     TEST_ASSERT_EQUAL(40, lot52_node("p")->h);
-    TEST_ASSERT_TRUE(lot52_has_diag("spanning baseline unsupported"));
+    TEST_ASSERT_TRUE(lot52_has_diag("vertical align refused"));
 }
 
 static void test_l60_composition_unknown_line_is_diagnosed_then_auto(void) {
