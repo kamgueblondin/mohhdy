@@ -172,6 +172,7 @@ typedef struct {
     uint8_t width_kind, basis_content, border_box;
     uint8_t min_width_kind, max_width_kind, basis_kind, break_all;
     uint8_t nowrap, break_word, visibility, overflow_hidden;
+    uint8_t overflow_axes;     /* lot 63: bit 0 x, bit 1 y clip (hidden, clip, auto, scroll) */
     uint8_t grid_col_start, grid_row_start, grid_col_span, grid_row_span;
     we_grid_names_t line_names[2];
     /* Lot 61: one repeat(auto-fill|auto-fit, track) per axis. The template

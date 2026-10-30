@@ -114,6 +114,51 @@ static int ancestor_pre(const we_doc_t *d, int parent) {
     return 0;
 }
 
+static int css_hex(char c) {
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+/* Lot 63: character references. Numeric references and a set of named
+ * ones map to printable ASCII for the kernel font (typographic quotes and
+ * dashes to their ASCII forms, no-break and other spaces to a space, the
+ * soft hyphen to nothing); other code points become '?'. Unknown names
+ * keep the '&'. Returns the bytes used, 0 for a plain '&'. */
+static int char_ref(const char *s, int n, char out[4]) {
+    static const char *const names[] = { "amp", "lt", "gt", "quot", "apos", "nbsp", "shy", "mdash", "ndash", "hellip",
+        "lsquo", "rsquo", "ldquo", "rdquo", "laquo", "raquo", "copy", "reg", "trade", "times", "middot", "bull",
+        "ensp", "emsp", "thinsp", "euro" };
+    static const char *const text[] = { "&", "<", ">", "\"", "'", " ", "", "-", "-", "...",
+        "'", "'", "\"", "\"", "<<", ">>", "(c)", "(R)", "TM", "x", ".", "*", " ", " ", " ", "EUR" };
+    int i = 1, k, code = 0, digits = 0, hex;
+    out[0] = 0;
+    if (n > 1 && s[1] == '#') {
+        hex = n > 2 && (s[2] == 'x' || s[2] == 'X');
+        i = hex ? 3 : 2;
+        while (i < n && digits < 7 && (hex ? css_hex(s[i]) >= 0 : s[i] >= '0' && s[i] <= '9')) {
+            code = code * (hex ? 16 : 10) + css_hex(s[i++]);
+            digits++;
+        }
+        if (!digits || i >= n || s[i] != ';') return 0;
+        out[1] = 0;
+        if (code == 9 || code == 10 || code == 13 || code == 160 || (code >= 8192 && code <= 8202)) out[0] = code == 10 ? '\n' : ' ';
+        else if (code >= 32 && code < 127) out[0] = (char)code;
+        else if (code == 8211 || code == 8212) out[0] = '-';
+        else if (code == 8216 || code == 8217) out[0] = '\'';
+        else if (code == 8220 || code == 8221) out[0] = '"';
+        else if (code == 8230) { out[0] = out[1] = out[2] = '.'; out[3] = 0; }
+        else if (code != 173) out[0] = '?';
+        return i + 1;
+    }
+    for (k = 0; k < (int)(sizeof(names) / sizeof(names[0])); k++) {
+        int l = w_len(names[k]);
+        if (n > l + 1 && w_ieq_n(s + 1, l, names[k]) && s[l + 1] == ';') {
+            w_cpy(out, 4, text[k], w_len(text[k]));
+            return l + 2;
+        }
+    }
+    return 0;
+}
+
 /* Decode entities. Spaces stay in the buffer when the chunk has a glyph or
  * a pre ancestor needs its newlines. A whitespace-only chunk between
  * ordinary elements still collapses to one html space, as before. */
@@ -125,14 +170,11 @@ static int add_text(we_doc_t* d, int parent, const char* s, int n) {
         char c = s[i];
         if (c == '\r') { i++; continue; }
         if (c == '&') {
-            if (w_ieq_n(s + i, n - i, "&amp;")) { c = '&'; i += 5; }
-            else if (w_ieq_n(s + i, n - i, "&lt;")) { c = '<'; i += 4; }
-            else if (w_ieq_n(s + i, n - i, "&gt;")) { c = '>'; i += 4; }
-            else if (w_ieq_n(s + i, n - i, "&quot;")) { c = '"'; i += 6; }
-            else if (w_ieq_n(s + i, n - i, "&nbsp;")) { c = ' '; i += 6; }
-            else i++;
-            if (c != ' ') graphic = 1;
-            buf[o++] = c;
+            char rep[4];
+            int used = char_ref(s + i, n - i, rep), k;
+            if (!used) { rep[0] = '&'; rep[1] = 0; used = 1; }
+            for (k = 0; rep[k] && o < (int)sizeof(buf) - 1; k++) { if (rep[k] != ' ') graphic = 1; buf[o++] = rep[k]; }
+            i += used;
             continue;
         }
         if (w_space(c)) {
@@ -2074,16 +2116,16 @@ static const char *logical_property(const char *prop) {
         "inline-size", "block-size", "min-inline-size", "max-inline-size", "min-block-size", "max-block-size",
         "margin-inline-start", "margin-inline-end", "margin-block-start", "margin-block-end",
         "padding-inline-start", "padding-inline-end", "padding-block-start", "padding-block-end",
-        "inset-inline-start", "inset-inline-end", "inset-block-start", "inset-block-end"
+        "inset-inline-start", "inset-inline-end", "inset-block-start", "inset-block-end", "word-wrap"
     };
     static const char *const physical[] = {
         "width", "height", "min-width", "max-width", "min-height", "max-height",
         "margin-left", "margin-right", "margin-top", "margin-bottom",
         "padding-left", "padding-right", "padding-top", "padding-bottom",
-        "left", "right", "top", "bottom"
+        "left", "right", "top", "bottom", "overflow-wrap"
     };
     int i;
-    for (i = 0; i < 18; i++) if (w_eq(prop, logical[i])) return physical[i];
+    for (i = 0; i < 19; i++) if (w_eq(prop, logical[i])) return physical[i];
     return prop;
 }
 
@@ -2679,9 +2721,6 @@ static int parse_decoration(we_node_t *n, int kind, const char *v, int len) {
  * generated. Strings take CSS escapes; code points outside printable ASCII
  * become '?' (the kernel font), \A becomes a newline. */
 static int list_keyword(const char *v, int len);
-static int css_hex(char c) {
-    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
-}
 
 static void gen_put(char *out, int *olen, int cap, char c) {
     if (out && *olen < cap) out[*olen] = c;
@@ -2922,6 +2961,46 @@ static int content_declaration(we_doc_t *d, we_node_t *n, const char *prop, cons
     return 1;
 }
 
+/* Lot 63: overflow keywords; hidden, clip, auto and scroll clip (no
+ * scrollbars are painted). A box clips both axes once one axis does, as a
+ * visible axis computes to auto next to a non-visible one. */
+static int overflow_keyword(const char *v, int len) {
+    if (value_is(v, len, "visible")) return 0;
+    if (value_is(v, len, "hidden") || value_is(v, len, "clip") || value_is(v, len, "auto") || value_is(v, len, "scroll")) return 1;
+    return -1;
+}
+
+static int overflow_declaration(we_node_t *n, const char *prop, const char *v, int vl) {
+    int a[4], l[4], count = tokens(v, vl, a, l), x, y;
+    if (count < 1 || count > (w_eq(prop, "overflow") ? 2 : 1)) return -1;
+    x = overflow_keyword(v + a[0], l[0]);
+    y = count == 2 ? overflow_keyword(v + a[1], l[1]) : x;
+    if (x < 0 || y < 0) return -1;
+    if (w_eq(prop, "overflow-x")) n->overflow_axes = (uint8_t)((n->overflow_axes & 2) | x);
+    else if (w_eq(prop, "overflow-y")) n->overflow_axes = (uint8_t)((n->overflow_axes & 1) | (y << 1));
+    else n->overflow_axes = (uint8_t)(x | (y << 1));
+    n->overflow_hidden = (uint8_t)(n->overflow_axes != 0);
+    return 0;
+}
+
+/* Lot 63: CSS Text 4 longhands of white-space over the same four modes. */
+static int white_space_longhand(we_node_t *n, const char *prop, const char *v, int vl) {
+    int preserve = n->ws_mode == WE_WS_PRE || n->ws_mode == WE_WS_PRE_WRAP, nowrap = n->nowrap;
+    if (w_eq(prop, "white-space-collapse")) {
+        if (value_is(v, vl, "collapse")) n->ws_mode = WE_WS_NORMAL;
+        else if (value_is(v, vl, "preserve")) n->ws_mode = nowrap ? WE_WS_PRE : WE_WS_PRE_WRAP;
+        else if (value_is(v, vl, "preserve-breaks")) n->ws_mode = WE_WS_PRE_LINE;
+        else return -1;
+        return 0;
+    }
+    if (value_is(v, vl, "nowrap")) nowrap = 1;
+    else if (value_is(v, vl, "wrap") || (w_eq(prop, "text-wrap") && (value_is(v, vl, "balance") || value_is(v, vl, "pretty") || value_is(v, vl, "stable")))) nowrap = 0;
+    else return -1;
+    n->nowrap = (uint8_t)nowrap;
+    if (preserve) n->ws_mode = nowrap ? WE_WS_PRE : WE_WS_PRE_WRAP;
+    return 0;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[40];
     int px, pct, k;
@@ -3092,11 +3171,15 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "anywhere")) n->break_word = WE_WRAP_ANYWHERE;
         else diag(d, "word wrapping refused", -1);
     } else if (w_eq(prop, "word-break")) {
-        if (value_is(v, vl, "normal") || value_is(v, vl, "break-all")) n->break_all = (uint8_t)value_is(v, vl, "break-all");
+        /* keep-all only differs for CJK text; break-word is the legacy
+         * normal + overflow-wrap: anywhere */
+        if (value_is(v, vl, "normal") || value_is(v, vl, "break-all") || value_is(v, vl, "keep-all")) n->break_all = (uint8_t)value_is(v, vl, "break-all");
+        else if (value_is(v, vl, "break-word")) { n->break_all = 0; n->break_word = WE_WRAP_ANYWHERE; }
         else diag(d, "word break refused", -1);
-    } else if (w_eq(prop, "overflow")) {
-        if (value_is(v, vl, "visible") || value_is(v, vl, "hidden")) n->overflow_hidden = (uint8_t)value_is(v, vl, "hidden");
-        else diag(d, "overflow refused", -1);
+    } else if (w_eq(prop, "white-space-collapse") || w_eq(prop, "text-wrap-mode") || w_eq(prop, "text-wrap")) {
+        if (white_space_longhand(n, prop, v, vl)) diag(d, "white space refused", -1);
+    } else if (w_eq(prop, "overflow") || w_eq(prop, "overflow-x") || w_eq(prop, "overflow-y")) {
+        if (overflow_declaration(n, prop, v, vl)) diag(d, "overflow refused", -1);
     } else if (w_eq(prop, "visibility")) {
         if (value_is(v, vl, "visible") || value_is(v, vl, "hidden")) n->visibility = (uint8_t)value_is(v, vl, "hidden");
         else diag(d, "visibility refused", -1);
@@ -3493,7 +3576,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->gap_set = 0;
         n->height_percent = n->min_height_percent = n->max_height_percent = 0;
         n->height_pct = n->min_height_pct = n->max_height_pct = 0;
-        n->width_kind = n->basis_content = n->border_box = n->overflow_hidden = 0;
+        n->width_kind = n->basis_content = n->border_box = n->overflow_hidden = n->overflow_axes = 0;
         n->min_width_kind = n->max_width_kind = n->basis_kind = 0;
         n->justify_content = n->align_items = n->align_self = n->align_content = 0;
         n->justify_items = n->justify_self = 0;
