@@ -125,6 +125,15 @@ def main():
                 require(serial, "web item rect " + box)
                 print("lot60 console %s box %s" % (label, box), flush=True)
             require(serial, "dropped 0 page 640x91 diag 0")
+            start = g.send_command_until(monitor, "web-render /web/lot61.html", "web-render ok", proc)
+            serial = g.normalized_log(g.log_text()[start:])
+            require(serial, "web title Lot 61 baselines subgrid viewport")
+            for label, box in (("flex-last-baseline", "0 10 50x10"), ("subgrid-span", "40 24 80x10"),
+                               ("inline-block-baseline", "16 34 20x16"), ("glyph-fragment", "9 69 3x2"),
+                               ("fixed", "610 470 30x10")):
+                require(serial, "web item rect " + box)
+                print("lot61 console %s box %s" % (label, box), flush=True)
+            require(serial, "dropped 0 page 640x95 diag 0")
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             g.send_command_until(monitor, "web /web/lot52.html", "osui web render file=/web/lot52.html", proc,
@@ -389,6 +398,52 @@ def main():
                 if line.startswith("osui web render file=/web/lot60.html"):
                     print(line, flush=True)
             print("lot60 pixels compared=%d baseline=flex,grid names=aliases,span negative=explicit flex=wrap table=colspan image=shared" % compared,
+                  flush=True)
+
+            step = len(g.log_text())
+            g.send_key(monitor, "esc")
+            g.wait_for(proc, "osui web close file=/web/lot60.html", g.CMD_TIMEOUT, step)
+            start = g.send_command_until(monitor, "web /web/lot61.html",
+                "osui web render file=/web/lot61.html", proc, mode="getc", wait_prompt=False)
+            time.sleep(0.5)
+            width, height, pixels = g.screendump_rgb(monitor, "qemu-lot61.ppm")
+            compared = 0
+            for left, top, right, bottom, color in (
+                (0, 10, 50, 20, (255, 0, 0)), (50, 0, 100, 24, (0, 0, 255)),
+                (0, 24, 40, 34, (255, 165, 0)), (40, 24, 120, 34, (0, 128, 0)),
+                (16, 34, 36, 50, (0, 0, 255)), (0, 54, 120, 56, (255, 0, 0)),
+                (610, 470, 640, 480, (128, 0, 128))):
+                for y in range(top, bottom):
+                    for x in range(left, right):
+                        offset = ((oy + y) * width + ox + x) * 3
+                        if tuple(pixels[offset:offset + 3]) != color:
+                            raise RuntimeError("lot61 layout pixel mismatch at %d,%d" % (x, y))
+                        compared += 1
+            inside = 0
+            for y in range(65, 73):
+                for x in range(0, 24):
+                    offset = ((oy + y) * width + ox + x) * 3
+                    black = tuple(pixels[offset:offset + 3]) == (0, 0, 0)
+                    if x >= 12 and black:
+                        raise RuntimeError("lot61 glyph painted past the clip at %d,%d" % (x, y))
+                    if x >= 8 and x < 12 and black:
+                        inside += 1
+                    compared += 1
+            if inside == 0:
+                raise RuntimeError("lot61 partial glyph fragment missing")
+            for y in range(21):
+                for x in range(32):
+                    expected = (255, 255, 255) if (x * 48 // 32) & 1 else (0, 0, 0)
+                    offset = ((oy + 74 + y) * width + ox + x) * 3
+                    if tuple(pixels[offset:offset + 3]) != expected:
+                        raise RuntimeError("lot61 decoded image mismatch at %d,%d" % (x, y))
+                    compared += 1
+            serial = g.normalized_log(g.log_text()[start:])
+            require(serial, "dropped 0 page 640x95 diag 0")
+            for line in serial.splitlines():
+                if line.startswith("osui web render file=/web/lot61.html"):
+                    print(line, flush=True)
+            print("lot61 pixels compared=%d baseline=last,inline-block subgrid=auto-fill fixed=viewport clip=glyph table=collapse flex=wrap image=shared" % compared,
                   flush=True)
 
         print("QEMU web layout contract passed.", flush=True)
