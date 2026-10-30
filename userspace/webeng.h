@@ -120,6 +120,13 @@ typedef struct {
     uint8_t count, percent;
 } we_length_t;
 
+/* Lot 62: paint-time transform functions. translate keeps px or percent
+ * of the border box (pct bit 0 x, bit 1 y), scale keeps 1/1000 factors in
+ * -8..8, rotate keeps quarter turns (0..3) in x. */
+#define WE_TF_MAX 4
+enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE };
+typedef struct { uint8_t kind, pct; int16_t x, y; } we_transform_t;
+
 typedef struct {
     uint8_t is_text, attr_flags, has_text;
     we_length_t length[WE_LENGTH_PROPS];
@@ -196,6 +203,11 @@ typedef struct {
     uint8_t edge_style[4], border_style, edge_color_set, collapse_cell;
     uint8_t transparency;       /* lot 61: 100 - opacity%, non-zero forms a stacking context */
     uint8_t cin[4];             /* lot 61: collapsed cell content insets, layout time */
+    /* Lot 62: transform list and transform-origin (px, or percent when the
+     * tf_origin_pct bit of the axis is set; default 50% 50%). */
+    we_transform_t tf[WE_TF_MAX];
+    uint8_t tf_count, tf_origin_pct;
+    int16_t tf_origin[2];
     uint32_t edge_color[4];
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;

@@ -669,23 +669,23 @@ static int color_alpha(int milli, int percent) {
     return (a * 255 + 500) / 1000;
 }
 
-/* hsl() to rgb with integer arithmetic: hue in 1/1000 degrees, s and l in
- * 1/1000 percent (0..100000). */
+/* hsl() to rgb in 32-bit integer arithmetic (no 64-bit division on i386):
+ * hue in 1/1000 degrees, s and l in 1/1000 percent, reduced to 1/10
+ * degree and per-mille. */
 static uint32_t hsl_rgb(int hue, int sat, int light) {
-    int c, x, m, h6, r = 0, g = 0, b = 0, part;
-    hue %= 360000;
-    if (hue < 0) hue += 360000;
-    sat = clamp_int(sat, 0, 100000);
-    light = clamp_int(light, 0, 100000);
-    /* chroma in 1/100000 units of full scale */
-    c = (int)((100000LL - (light * 2 > 100000 ? light * 2 - 100000 : 100000 - light * 2)) * sat / 100000);
-    h6 = hue / 60000;
-    part = hue % 120000;
-    x = (int)((long long)c * (60000 - (part > 60000 ? part - 60000 : 60000 - part)) / 60000);
+    int c, x, m, h6, part, r = 0, g = 0, b = 0;
+    hue = (hue / 100) % 3600;
+    if (hue < 0) hue += 3600;
+    sat = clamp_int(sat, 0, 100000) / 100;
+    light = clamp_int(light, 0, 100000) / 100;
+    c = (1000 - (2 * light > 1000 ? 2 * light - 1000 : 1000 - 2 * light)) * sat / 1000;
+    h6 = hue / 600;
+    part = hue % 1200;
+    x = c * (600 - (part > 600 ? part - 600 : 600 - part)) / 600;
     m = light - c / 2;
     if (h6 == 0) { r = c; g = x; } else if (h6 == 1) { r = x; g = c; } else if (h6 == 2) { g = c; b = x; }
     else if (h6 == 3) { g = x; b = c; } else if (h6 == 4) { r = x; b = c; } else { r = c; b = x; }
-    r = ((r + m) * 255 + 50000) / 100000; g = ((g + m) * 255 + 50000) / 100000; b = ((b + m) * 255 + 50000) / 100000;
+    r = ((r + m) * 255 + 500) / 1000; g = ((g + m) * 255 + 500) / 1000; b = ((b + m) * 255 + 500) / 1000;
     return ((uint32_t)clamp_int(r, 0, 255) << 16) | ((uint32_t)clamp_int(g, 0, 255) << 8) | (uint32_t)clamp_int(b, 0, 255);
 }
 
@@ -2078,6 +2078,141 @@ static void border_edges_reset(we_node_t *n) {
     n->edge_color_set = 0;
 }
 
+/* ---------- Lot 62: transform parsing ----------
+ * transform: none or up to WE_TF_MAX of translate(x[, y]), translateX(),
+ * translateY(), scale(s[, t]), scaleX(), scaleY() and rotate(a) where a
+ * is a multiple of 90deg (deg or turn). Lengths are px (or em, or a bare
+ * 0) and percentages of the border box; scales are numbers or
+ * percentages in -8..8. Anything else is refused atomically. */
+static int tf_args(const char *v, int len, int *start, int *length, int cap) {
+    int at = 0, count = 0;
+    while (at <= len) {
+        int first, end;
+        while (at < len && w_space(v[at])) at++;
+        first = at;
+        while (at < len && v[at] != ',') at++;
+        end = at;
+        while (end > first && w_space(v[end - 1])) end--;
+        if (end == first || count == cap) return -1;
+        start[count] = first; length[count++] = end - first;
+        at++;
+    }
+    return count;
+}
+
+static int tf_length(const char *v, int len, int16_t *out, int *percent) {
+    int px, pct, negative = len > 0 && v[0] == '-', digits = negative, unit;
+    while (digits < len && ((v[digits] >= '0' && v[digits] <= '9') || v[digits] == '.')) digits++;
+    unit = len - digits;
+    if (digits == negative) return -1;
+    if (!(unit == 0 && len - negative == 1 && v[negative] == '0') &&
+        !(unit == 2 && (w_ieq_n(v + digits, 2, "px") || w_ieq_n(v + digits, 2, "em"))) &&
+        !(unit == 1 && v[digits] == '%')) return -1;
+    if (parse_len(v + negative, len - negative, &px, &pct) != 0) return -1;
+    *percent = v[len - 1] == '%';
+    if (*percent) px = pct > 1000 ? 1000 : pct;
+    *out = (int16_t)(negative ? -px : px);
+    return 0;
+}
+
+static int tf_scale(const char *v, int len, int16_t *out) {
+    int milli, percent;
+    if (len > 3 && w_ieq_n(v + len - 3, 3, "deg")) return -1;
+    if (color_number(v, len, &milli, &percent)) return -1;
+    if (percent) milli /= 100;
+    if (milli < -8000 || milli > 8000) return -1;
+    *out = (int16_t)milli;
+    return 0;
+}
+
+static int tf_angle(const char *v, int len, int16_t *quarter) {
+    int milli, percent, turn = len > 4 && w_ieq_n(v + len - 4, 4, "turn");
+    if (turn) len -= 4;
+    else if (!(len > 3 && w_ieq_n(v + len - 3, 3, "deg")) && !(len == 1 && v[0] == '0')) return -1;
+    if (color_number(v, len, &milli, &percent) || percent) return -1;
+    if (turn) { if (milli % 250) return -1; milli = milli / 250 * 90000; }
+    if (milli % 90000) return -1;
+    milli = (milli / 90000) % 4;
+    *quarter = (int16_t)(milli < 0 ? milli + 4 : milli);
+    return 0;
+}
+
+static int tf_function(const char *v, int len, we_transform_t *t) {
+    static const char *const names[] = { "translatex(", "translatey(", "translate(", "scalex(", "scaley(", "scale(", "rotate(", 0 };
+    int k, open = 0, start[2], length[2], count, pct = 0;
+    for (k = 0; names[k]; k++) if (w_ieq_n(v, len, names[k])) { open = w_len(names[k]); break; }
+    if (!names[k] || v[len - 1] != ')') return -1;
+    count = tf_args(v + open, len - open - 1, start, length, 2);
+    if (count < 1 || (count == 2 && k != 2 && k != 5)) return -1;
+    v += open;
+    w_zero(t, sizeof(*t));
+    if (k <= 2) {
+        int vertical = k == 1;
+        t->kind = WE_TF_TRANSLATE;
+        if (tf_length(v + start[0], length[0], vertical ? &t->y : &t->x, &pct)) return -1;
+        if (pct) t->pct |= (uint8_t)(vertical ? 2 : 1);
+        if (count == 2) {
+            if (tf_length(v + start[1], length[1], &t->y, &pct)) return -1;
+            if (pct) t->pct |= 2;
+        }
+    } else if (k <= 5) {
+        t->kind = WE_TF_SCALE;
+        t->x = t->y = 1000;
+        if (tf_scale(v + start[0], length[0], k == 4 ? &t->y : &t->x)) return -1;
+        if (k == 5 && tf_scale(v + start[count - 1], length[count - 1], &t->y)) return -1;
+    } else {
+        t->kind = WE_TF_ROTATE;
+        if (tf_angle(v + start[0], length[0], &t->x)) return -1;
+    }
+    return 0;
+}
+
+static int parse_transform(we_node_t *n, const char *v, int len) {
+    int starts[WE_TF_MAX + 1], lengths[WE_TF_MAX + 1], count, k;
+    we_transform_t list[WE_TF_MAX];
+    if (value_is(v, len, "none")) { n->tf_count = 0; return 0; }
+    count = functional_tokens(v, len, starts, lengths, WE_TF_MAX + 1);
+    if (count < 1 || count > WE_TF_MAX) return -1;
+    for (k = 0; k < count; k++) if (tf_function(v + starts[k], lengths[k], &list[k])) return -1;
+    for (k = 0; k < count; k++) n->tf[k] = list[k];
+    n->tf_count = (uint8_t)count;
+    return 0;
+}
+
+/* transform-origin: one or two of left/center/right/top/bottom, lengths
+ * and percentages; a lone vertical keyword sets y, x stays centred. */
+static int origin_value(const char *v, int len, int *axis, int16_t *value, int *percent) {
+    static const struct { const char *name; int8_t axis, pct; } keys[] = {
+        {"left", 0, 0}, {"right", 0, 100}, {"top", 1, 0}, {"bottom", 1, 100}, {"center", -1, 50}, {0, 0, 0}};
+    int k;
+    for (k = 0; keys[k].name; k++)
+        if (value_is(v, len, keys[k].name)) { *axis = keys[k].axis; *value = keys[k].pct; *percent = 1; return 0; }
+    *axis = -2;
+    return tf_length(v, len, value, percent);
+}
+
+static int parse_transform_origin(we_node_t *n, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), axis[2], pct[2], k, swap = 0;
+    int16_t value[2];
+    if (c < 1 || c > 2) return -1;
+    for (k = 0; k < c; k++) if (origin_value(v + a[k], l[k], &axis[k], &value[k], &pct[k])) return -1;
+    if (c == 1) {
+        axis[1] = -1; value[1] = 50; pct[1] = 1;
+        if (axis[0] == 1) swap = 1;
+    } else {
+        if (axis[0] == 1 || axis[1] == 0) swap = 1;
+        if ((axis[0] >= 0 && axis[0] == axis[1]) || (swap && (axis[0] == 0 || axis[1] == 1 || axis[0] == -2 || axis[1] == -2)))
+            return -1;
+    }
+    if (swap) {
+        int16_t tv = value[0]; int tp = pct[0];
+        value[0] = value[1]; pct[0] = pct[1]; value[1] = tv; pct[1] = tp;
+    }
+    n->tf_origin[0] = value[0]; n->tf_origin[1] = value[1];
+    n->tf_origin_pct = (uint8_t)((pct[0] ? 1 : 0) | (pct[1] ? 2 : 0));
+    return 0;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[24];
     int px, pct, k;
@@ -2268,6 +2403,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "opacity")) {
         if (parse_opacity(v, vl, &px) == 0) n->transparency = (uint8_t)(100 - px);
         else diag(d, "opacity refused", -1);
+    } else if (w_eq(prop, "transform")) {
+        if (parse_transform(n, v, vl)) diag(d, "transform refused", -1);
+    } else if (w_eq(prop, "transform-origin")) {
+        if (parse_transform_origin(n, v, vl)) diag(d, "transform origin refused", -1);
     } else if (w_eq(prop, "z-index")) {
         if (value_is(v, vl, "auto")) { n->z_set = 0; n->z_index = 0; }
         else if (bounded_signed(v, vl, WE_Z_MAX, &px) == 0) { n->z_index = (int8_t)px; n->z_set = 1; }
@@ -2576,6 +2715,7 @@ int we_style(we_doc_t* d) {
         n->border_spacing = n->border_spacing_y = 0;
         n->clear_side = n->valign = n->z_set = 0;
         n->transparency = 0;
+        n->tf_count = 0; n->tf_origin_pct = 3; n->tf_origin[0] = n->tf_origin[1] = 50;
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
         n->text_indent = p ? p->text_indent : 0;
@@ -3906,7 +4046,7 @@ static int abs_containing(const we_doc_t *d, int idx) {
     int p = d->nodes[idx].parent;
     if (d->nodes[idx].fixed) return -1;
     while (p >= 0) {
-        if (d->nodes[p].relative || d->nodes[p].absolute) return p;
+        if (d->nodes[p].relative || d->nodes[p].absolute || d->nodes[p].tf_count) return p;
         p = d->nodes[p].parent;
     }
     return -1;
@@ -3953,7 +4093,7 @@ static int absolute_stack_key(const we_doc_t *d, int owner, int want) {
 /* Stable order of the absolute slice. In-flow items stay where they were.
  * A negative key still paints after in-flow content of the same block. */
 static void order_absolute_items(we_doc_t *d, int cb, int start) {
-    int positioned = d->nodes[cb].relative || d->nodes[cb].absolute;
+    int positioned = d->nodes[cb].relative || d->nodes[cb].absolute || d->nodes[cb].tf_count;
     int want = positioned ? cb : (d->nodes[cb].parent < 0 ? -1 : -2);
     int i;
     if (want < -1 || start < 0) return;
@@ -3973,7 +4113,7 @@ static void order_absolute_items(we_doc_t *d, int cb, int start) {
 }
 
 static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w, int pad_h, int depth) {
-    int positioned = d->nodes[cb].relative || d->nodes[cb].absolute;
+    int positioned = d->nodes[cb].relative || d->nodes[cb].absolute || d->nodes[cb].tf_count;
     int want = positioned ? cb : (d->nodes[cb].parent < 0 ? -1 : -2);
     int item_start = (int)d->nitems;
     uint32_t i;
@@ -6209,32 +6349,189 @@ static void border_side(const os_fb_web_item_t *item, int k, os_fb_web_item_t *e
     }
 }
 
+/* Clips every fragment to (left, top, right, bottom): RECT pieces are cut,
+ * TEXT is cut at glyph level, BORDER splits into its visible sides.
+ * Returns the new count, or -1 when the fragments overflow cap. */
+static int clip_frags(os_fb_web_item_t *frag, int count, int left, int top, int right, int bottom, int cap) {
+    static os_fb_web_item_t out[WE_CLIP_FRAGMENTS], pieces[WE_CLIP_FRAGMENTS];
+    int i, k, used = 0;
+    for (i = 0; i < count; i++) {
+        os_fb_web_item_t item = frag[i];
+        int n = 0;
+        if (item.x >= left && item.y >= top && item.x + item.w <= right && item.y + item.h <= bottom) {
+            pieces[n++] = item;
+        } else if (item.kind == OS_FB_WEB_TEXT) {
+            n = clip_glyphs(&item, left, top, right, bottom, pieces, WE_CLIP_FRAGMENTS);
+            if (n < 0) return -1;
+        } else if (item.kind == OS_FB_WEB_BORDER) {
+            for (k = 0; k < 4; k++) {
+                border_side(&item, k, &pieces[n]);
+                if (clip_rectangle(&pieces[n], left, top, right, bottom)) n++;
+            }
+        } else if (clip_rectangle(&item, left, top, right, bottom)) pieces[n++] = item;
+        if (used + n > cap) return -1;
+        for (k = 0; k < n; k++) out[used++] = pieces[k];
+    }
+    for (i = 0; i < used; i++) frag[i] = out[i];
+    return used;
+}
+
+/* ---------- Lot 62: paint-time transforms ----------
+ * The layout boxes do not move (CSS Transforms 1). At paint time the items
+ * of a transformed box and of its subtree are mapped by its matrix about
+ * transform-origin, innermost box first, each ancestor clip applied in the
+ * space of that ancestor. translate keeps items as they are; scale and
+ * quarter-turn rotation map rectangles to rectangles, so TEXT becomes RECT
+ * runs of its glyph pixels (kernel/gfx_font8.h) and BORDER its four sides.
+ * Coordinates round to whole pixels; an item whose fragments pass
+ * WE_CLIP_FRAGMENTS is dropped with "transform display budget". */
+typedef struct { int a, b, c, d, e, f; } we_matrix_t;   /* a..d in 1/1000, e and f in 1/16 px */
+#define WE_TF_EDGE (WE_LAYOUT_MAX * 16)
+
+static int floor_div(int num, int den) {
+    return num >= 0 ? num / den : -((-num + den - 1) / den);
+}
+
+static int div_round(int num, int den) {
+    return floor_div(2 * num + den, 2 * den);
+}
+
+/* m = m * F with F = (a b; c d), translation (e, f) in whole px. */
+static void matrix_mul(we_matrix_t *m, int a, int b, int c, int dd, int e, int f) {
+    we_matrix_t r;
+    r.a = clamp_int(div_round(m->a * a + m->b * c, 1000), -8000, 8000);
+    r.b = clamp_int(div_round(m->a * b + m->b * dd, 1000), -8000, 8000);
+    r.c = clamp_int(div_round(m->c * a + m->d * c, 1000), -8000, 8000);
+    r.d = clamp_int(div_round(m->c * b + m->d * dd, 1000), -8000, 8000);
+    r.e = clamp_int(m->e + floor_div(2 * (m->a * e + m->b * f), 125), -WE_TF_EDGE, WE_TF_EDGE);
+    r.f = clamp_int(m->f + floor_div(2 * (m->c * e + m->d * f), 125), -WE_TF_EDGE, WE_TF_EDGE);
+    *m = r;
+}
+
+static void node_matrix(const we_node_t *n, we_matrix_t *m) {
+    int ox = n->x + ((n->tf_origin_pct & 1) ? n->w * n->tf_origin[0] / 100 : n->tf_origin[0]);
+    int oy = n->y + ((n->tf_origin_pct & 2) ? n->h * n->tf_origin[1] / 100 : n->tf_origin[1]);
+    int k;
+    m->a = m->d = 1000; m->b = m->c = 0; m->e = ox * 16; m->f = oy * 16;
+    for (k = 0; k < n->tf_count && k < WE_TF_MAX; k++) {
+        const we_transform_t *t = &n->tf[k];
+        if (t->kind == WE_TF_TRANSLATE)
+            matrix_mul(m, 1000, 0, 0, 1000, (t->pct & 1) ? n->w * t->x / 100 : t->x, (t->pct & 2) ? n->h * t->y / 100 : t->y);
+        else if (t->kind == WE_TF_SCALE) matrix_mul(m, t->x, 0, 0, t->y, 0, 0);
+        else if (t->x == 1) matrix_mul(m, 0, -1000, 1000, 0, 0, 0);    /* 90deg clockwise, y down */
+        else if (t->x == 2) matrix_mul(m, -1000, 0, 0, -1000, 0, 0);
+        else if (t->x == 3) matrix_mul(m, 0, 1000, -1000, 0, 0, 0);
+    }
+    matrix_mul(m, 1000, 0, 0, 1000, -ox, -oy);
+}
+
+/* Mapped coordinates round half up: floor(v + 1/2). */
+static int map_x(const we_matrix_t *m, int x, int y) { return floor_div(floor_div(2 * (m->a * x + m->b * y), 125) + m->e + 8, 16); }
+static int map_y(const we_matrix_t *m, int x, int y) { return floor_div(floor_div(2 * (m->c * x + m->d * y), 125) + m->f + 8, 16); }
+
+static int tf_apply(const we_matrix_t *m, os_fb_web_item_t *frag, int count, int cap) {
+    static os_fb_web_item_t rects[WE_CLIP_FRAGMENTS];
+    int i, k, used = 0, out = 0;
+    if (m->a == 1000 && m->d == 1000 && !m->b && !m->c) {
+        int dx = floor_div(m->e + 8, 16), dy = floor_div(m->f + 8, 16);
+        for (i = 0; i < count; i++) {
+            frag[i].x = (int16_t)limit_coord(frag[i].x + dx);
+            frag[i].y = (int16_t)limit_coord(frag[i].y + dy);
+        }
+        return count;
+    }
+    for (i = 0; i < count; i++) {
+        const os_fb_web_item_t *it = &frag[i];
+        if (it->kind == OS_FB_WEB_TEXT) {
+            int len = w_len(it->text);
+            for (k = 0; k < len; k++) {
+                int n;
+                if (it->text[k] == ' ') continue;
+                n = glyph_rects(it, k, -WE_LAYOUT_MAX, -WE_LAYOUT_MAX, WE_LAYOUT_MAX, WE_LAYOUT_MAX, rects, used, cap);
+                if (n < 0) return -1;
+                used += n;
+            }
+        } else if (it->kind == OS_FB_WEB_BORDER) {
+            for (k = 0; k < 4; k++) {
+                if (used >= cap) return -1;
+                border_side(it, k, &rects[used++]);
+            }
+        } else {
+            if (used >= cap) return -1;
+            rects[used++] = *it;
+        }
+    }
+    for (i = 0; i < used; i++) {
+        os_fb_web_item_t r = rects[i];
+        int x0 = map_x(m, r.x, r.y), y0 = map_y(m, r.x, r.y);
+        int x1 = map_x(m, r.x + r.w, r.y + r.h), y1 = map_y(m, r.x + r.w, r.y + r.h), t;
+        if (x1 < x0) { t = x0; x0 = x1; x1 = t; }
+        if (y1 < y0) { t = y0; y0 = y1; y1 = t; }
+        if (x1 <= x0 || y1 <= y0) continue;
+        r.x = (int16_t)limit_coord(x0); r.y = (int16_t)limit_coord(y0);
+        r.w = (uint16_t)(x1 - x0 > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : x1 - x0);
+        r.h = (uint16_t)(y1 - y0 > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : y1 - y0);
+        frag[out++] = r;
+    }
+    return out;
+}
+
+static int transformed_chain(const we_doc_t *d, int owner) {
+    int guard;
+    for (guard = 0; owner >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, owner = d->nodes[owner].parent) {
+        if (d->nodes[owner].tf_count) return 1;
+        if (d->nodes[owner].fixed) return 0;
+    }
+    return 0;
+}
+
+/* Owner transform, then for each ancestor its clip and its transform. */
+static int transform_clip_item(const we_doc_t *d, const os_fb_web_item_t *item, int owner, os_fb_web_item_t *frag, int cap) {
+    int count = 1, p, q, guard;
+    we_matrix_t m;
+    frag[0] = *item;
+    if (owner < 0) return 1;
+    if (d->nodes[owner].tf_count) {
+        node_matrix(&d->nodes[owner], &m);
+        if ((count = tf_apply(&m, frag, count, cap)) < 0) return -1;
+    }
+    for (q = owner, p = d->nodes[owner].parent, guard = 0; p >= 0 && count > 0 && guard <= WE_DEPTH_MAX + 1;
+         q = p, p = d->nodes[p].parent, guard++) {
+        const we_node_t *n = &d->nodes[p];
+        if (d->nodes[q].fixed) break;
+        if (n->overflow_hidden &&
+            (count = clip_frags(frag, count, n->x + box_edge(n, 3), n->y + box_edge(n, 0),
+                                n->x + n->w - box_edge(n, 1), n->y + n->h - box_edge(n, 2), cap)) < 0) return -1;
+        if (n->tf_count) {
+            node_matrix(n, &m);
+            if ((count = tf_apply(&m, frag, count, cap)) < 0) return -1;
+        }
+    }
+    return count;
+}
+
 static void clip_display_list(we_doc_t *d) {
     static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
     static int16_t owners[OS_FB_WEB_ITEMS];
     int i, count = 0;
     for (i = 0; i < (int)d->nitems; i++) {
         os_fb_web_item_t item = d->items[i];
-        int left, top, right, bottom, k, fragments = 1;
+        int left, top, right, bottom, k, fragments;
         static os_fb_web_item_t edges[WE_CLIP_FRAGMENTS];
-        if (!clip_bounds(d, d->item_owner[i], &left, &top, &right, &bottom)) continue;
-        if (item.x >= left && item.y >= top && item.x + item.w <= right && item.y + item.h <= bottom) {
-            edges[0] = item;
-        } else if (item.kind == OS_FB_WEB_TEXT) {
-            fragments = clip_glyphs(&item, left, top, right, bottom, edges, WE_CLIP_FRAGMENTS);
-            if (fragments < 0) fragments = OS_FB_WEB_ITEMS + 1;
-            if (!fragments) continue;
-        } else if (item.kind == OS_FB_WEB_BORDER) {
-            os_fb_web_item_t sides[4];
-            fragments = 0;
-            for (k = 0; k < 4; k++) {
-                border_side(&item, k, &sides[k]);
-                if (clip_rectangle(&sides[k], left, top, right, bottom)) edges[fragments++] = sides[k];
+        if (transformed_chain(d, d->item_owner[i])) {
+            fragments = transform_clip_item(d, &item, d->item_owner[i], edges, WE_CLIP_FRAGMENTS);
+            if (fragments < 0) {
+                d->perf.items_dropped++;
+                diag(d, "transform display budget", d->item_owner[i]);
+                continue;
             }
         } else {
-            if (!clip_rectangle(&item, left, top, right, bottom)) continue;
+            if (!clip_bounds(d, d->item_owner[i], &left, &top, &right, &bottom)) continue;
             edges[0] = item;
+            fragments = clip_frags(edges, 1, left, top, right, bottom, WE_CLIP_FRAGMENTS);
+            if (fragments < 0) fragments = OS_FB_WEB_ITEMS + 1;
         }
+        if (!fragments) continue;
         if (count + fragments > OS_FB_WEB_ITEMS) {
             if (fragments > OS_FB_WEB_ITEMS) fragments = 1;
             d->perf.items_dropped += (uint32_t)fragments;
@@ -6334,7 +6631,7 @@ static int fixed_owner(const we_doc_t *d, int owner) {
  * deeper than WE_STACK_DEPTH - 1 are flattened into their parent. */
 #define WE_STACK_DEPTH 8
 static int stack_context(const we_node_t *n) {
-    return ((n->relative || n->absolute) && n->z_set && !n->fixed) || (n->transparency && !n->fixed);
+    return ((n->relative || n->absolute) && n->z_set && !n->fixed) || ((n->transparency || n->tf_count) && !n->fixed);
 }
 
 /* z of a context: opacity below 1 alone forms a z-index 0 context. */
