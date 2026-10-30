@@ -31,7 +31,7 @@ static void test_l63_matrix_refusals(void) {
     static const char *const bad[] = { "matrix(1,0,0,1,0)", "matrix(1,0,0,1,0,0,0)", "matrix(9,0,0,1,0,0)", "matrix(1,0,0,-9,0,0)",
         "matrix(1,0,0,1,5px,0)", "matrix(1,0,0,1,0,5%)", "matrix(1,0,0,1,4001,0)", "matrix(1,0,0,1,0,-4001)", "matrix(1,0,0,1,0,0",
         "matrix(1,0,0,1,0,0) matrix(1,0,0,1,0,0)", "translate(1px) translate(1px) matrix(1,0,0,1,0,0)", "matrix(1,0,0,1,,0)",
-        "matrix(1,0,0,1,0,.)", "matrix(1deg,0,0,1,0,0)" };
+        "matrix(1,0,0,1,0,.)", "matrix(1deg,0,0,1,0,0)", "matrix(1,0,0,1,0,0) translate(1px) translate(1px)" };
     unsigned k;
     for (k = 0; k < sizeof(bad) / sizeof(bad[0]); k++) {
         char html[256];
