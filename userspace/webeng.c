@@ -632,6 +632,7 @@ static int match_rule(we_doc_t* d, int idx, const we_rule_t* r) {
  * painter masks the byte. */
 #define WE_ALPHA_SHIFT 24
 static int value_is(const char *v, int len, const char *s);
+static int color_alpha_of(uint32_t c);
 static uint32_t with_alpha(uint32_t rgb, int alpha) {
     if (alpha < 0) alpha = 0;
     if (alpha > 255) alpha = 255;
@@ -2213,6 +2214,98 @@ static int parse_transform_origin(we_node_t *n, const char *v, int len) {
     return 0;
 }
 
+/* ---------- Lot 62: outline and box-shadow parsing ---------- */
+static int outline_width_value(const char *v, int len, int *out) {
+    int px, pct;
+    if (value_is(v, len, "thin")) { *out = 1; return 0; }
+    if (value_is(v, len, "medium")) { *out = 3; return 0; }
+    if (value_is(v, len, "thick")) { *out = 5; return 0; }
+    if (len < 1 || v[0] < '0' || v[0] > '9' || parse_len(v, len, &px, &pct) != 0 || pct) return -1;
+    if (!(len == 1 && v[0] == '0') && !(len > 2 && (w_ieq_n(v + len - 2, 2, "px") || w_ieq_n(v + len - 2, 2, "em")))) return -1;
+    *out = px > 8 ? 8 : px;
+    return 0;
+}
+
+/* outline-style accepts the border styles except hidden, and auto (solid). */
+static int outline_style_value(const char *v, int len) {
+    int code = value_is(v, len, "auto") ? WE_BS_SOLID : border_style_code(v, len);
+    return code == WE_BS_HIDDEN ? 0 : code;
+}
+
+static int parse_outline(we_node_t *n, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), k, style = 0, width = -1, has_color = 0;
+    uint32_t color = 0;
+    if (c < 1 || c > 3 || tokens_more(v, len, a, l, c)) return -1;
+    for (k = 0; k < c; k++) {
+        int code = outline_style_value(v + a[k], l[k]), w;
+        if (code) { if (style) return -1; style = code; }
+        else if (outline_width_value(v + a[k], l[k], &w) == 0) { if (width >= 0) return -1; width = w; }
+        else if (parse_color(v + a[k], l[k], &color) == 0) { if (has_color) return -1; has_color = 1; }
+        else return -1;
+    }
+    n->outline_style = (uint8_t)(style == WE_BS_NONE ? 0 : style);
+    n->outline_w = (uint8_t)(width < 0 ? 3 : width);
+    n->outline_color_set = (uint8_t)has_color;
+    n->outline_color = color;
+    return 0;
+}
+
+static int shadow_length(const char *v, int len, int low, int high, int *out) {
+    int16_t value;
+    int percent;
+    if (tf_length(v, len, &value, &percent) || percent) return -1;
+    *out = value < low ? low : value > high ? high : value;
+    return 0;
+}
+
+/* box-shadow: none, or up to WE_SHADOWS_MAX comma-separated shadows of
+ * [inset] x y [blur [spread]] [color] in any order of the colour and
+ * inset keyword around the lengths. */
+static int parse_shadow(const char *v, int len, we_shadow_t *sh) {
+    int starts[6], lengths[6], count = functional_tokens(v, len, starts, lengths, 6), k, lens = 0, value[4], closed = 0;
+    w_zero(sh, sizeof(*sh));
+    if (count < 2) return -1;
+    for (k = 0; k < count; k++) {
+        const char *t = v + starts[k];
+        int l = lengths[k];
+        if ((t[0] >= '0' && t[0] <= '9') || t[0] == '-' || t[0] == '.') {
+            /* the lengths are one run: no colour or inset inside it */
+            if (lens == 4 || closed) return -1;
+            if (shadow_length(t, l, -64, 64, &value[lens])) return -1;
+            if (lens == 2 && value[2] < 0) return -1;
+            if (lens == 2 && value[2] > 32) value[2] = 32;
+            lens++;
+            continue;
+        }
+        closed = lens > 0;
+        if (value_is(t, l, "inset")) { if (sh->inset) return -1; sh->inset = 1; continue; }
+        if (sh->has_color || parse_color(t, l, &sh->color)) return -1;
+        sh->has_color = 1;
+    }
+    if (lens < 2) return -1;
+    sh->x = (int8_t)value[0]; sh->y = (int8_t)value[1];
+    sh->blur = (uint8_t)(lens > 2 ? value[2] : 0);
+    sh->spread = (int8_t)(lens > 3 ? value[3] : 0);
+    return 0;
+}
+
+static int parse_shadows(we_node_t *n, const char *v, int len) {
+    we_shadow_t list[WE_SHADOWS_MAX];
+    int count = 0, at = 0, depth = 0, start = 0, k;
+    if (value_is(v, len, "none")) { n->shadow_count = 0; return 0; }
+    for (at = 0; at <= len; at++) {
+        if (at < len && v[at] == '(') depth++;
+        if (at < len && v[at] == ')') depth--;
+        if (at < len && (depth || v[at] != ',')) continue;
+        if (count == WE_SHADOWS_MAX || parse_shadow(v + start, at - start, &list[count])) return -1;
+        count++;
+        start = at + 1;
+    }
+    for (k = 0; k < count; k++) n->shadow[k] = list[k];
+    n->shadow_count = (uint8_t)count;
+    return 0;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[24];
     int px, pct, k;
@@ -2403,6 +2496,25 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "opacity")) {
         if (parse_opacity(v, vl, &px) == 0) n->transparency = (uint8_t)(100 - px);
         else diag(d, "opacity refused", -1);
+    } else if (w_eq(prop, "outline")) {
+        if (parse_outline(n, v, vl)) diag(d, "outline refused", -1);
+    } else if (w_eq(prop, "outline-style")) {
+        int code = outline_style_value(v, vl);
+        if (code) n->outline_style = (uint8_t)(code == WE_BS_NONE ? 0 : code);
+        else diag(d, "outline refused", -1);
+    } else if (w_eq(prop, "outline-width")) {
+        if (outline_width_value(v, vl, &px) == 0) n->outline_w = (uint8_t)px;
+        else diag(d, "outline refused", -1);
+    } else if (w_eq(prop, "outline-color")) {
+        if (parse_color(v, vl, &col) == 0) { n->outline_color = col; n->outline_color_set = 1; }
+        else diag(d, "outline refused", -1);
+    } else if (w_eq(prop, "outline-offset")) {
+        int16_t value;
+        int percent;
+        if (tf_length(v, vl, &value, &percent) == 0 && !percent) n->outline_offset = (int8_t)(value < -32 ? -32 : value > 32 ? 32 : value);
+        else diag(d, "outline refused", -1);
+    } else if (w_eq(prop, "box-shadow")) {
+        if (parse_shadows(n, v, vl)) diag(d, "box-shadow refused", -1);
     } else if (w_eq(prop, "transform")) {
         if (parse_transform(n, v, vl)) diag(d, "transform refused", -1);
     } else if (w_eq(prop, "transform-origin")) {
@@ -2716,6 +2828,8 @@ int we_style(we_doc_t* d) {
         n->clear_side = n->valign = n->z_set = 0;
         n->transparency = 0;
         n->tf_count = 0; n->tf_origin_pct = 3; n->tf_origin[0] = n->tf_origin[1] = 50;
+        n->outline_style = 0; n->outline_w = 3; n->outline_offset = 0; n->outline_color_set = 0;
+        n->shadow_count = 0;
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
         n->text_indent = p ? p->text_indent : 0;
@@ -3873,10 +3987,104 @@ static void relative_shift(we_doc_t *d, int idx, int first_item, int containing_
 static int layout_area(we_doc_t *d, int idx, int x, int y, int width, int height, int containing, int depth);
 static void place_absolutes(we_doc_t *d, int idx, int pad_x, int pad_y, int pad_w, int pad_h, int depth);
 
+/* ---------- Lot 62: box-shadow paint ----------
+ * Outer shadows paint under the background, inset shadows over it and
+ * under the content (CSS Backgrounds 3, 7.1), the first shadow on top.
+ * Their items are reserved before the children and filled once the box
+ * size is known; unused reserved items are removed after layout. An outer
+ * shadow is the border box moved by the offsets and grown by the spread,
+ * minus the border box itself; an inset shadow is the padding box minus
+ * the padding box moved and shrunk. A blur radius b is two layers of half
+ * the alpha each, the shape grown and shrunk by b / 2 (composited, so the
+ * core keeps the full alpha). At most 4 items per layer. */
+#define WE_ITEM_RESERVED 1
+#define WE_ITEM_OUTLINE 2
+
+static int shadow_layers(const we_shadow_t *sh) {
+    return sh->blur ? 2 : 1;
+}
+
+static int shadow_reserve(we_doc_t *d, int idx, int inset, int *count) {
+    const we_node_t *n = &d->nodes[idx];
+    int first = (int)d->nitems, k, j;
+    *count = 0;
+    for (k = 0; k < n->shadow_count; k++) {
+        if (!n->shadow[k].inset != !inset) continue;
+        for (j = 0; j < 4 * shadow_layers(&n->shadow[k]); j++) {
+            os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
+            if (!it) return first;
+            it->kind = 0;
+            it->pad = WE_ITEM_RESERVED;
+            (*count)++;
+        }
+    }
+    return first;
+}
+
+/* a minus b, both (x, y, w, h); at most 4 pieces into out (x, y, w, h each). */
+static int rect_minus(const int *a, const int *b, int out[4][4]) {
+    int ix = a[0] > b[0] ? a[0] : b[0], iy = a[1] > b[1] ? a[1] : b[1];
+    int ir = a[0] + a[2] < b[0] + b[2] ? a[0] + a[2] : b[0] + b[2];
+    int ib = a[1] + a[3] < b[1] + b[3] ? a[1] + a[3] : b[1] + b[3];
+    int count = 0, k;
+    int piece[4][4];
+    if (a[2] <= 0 || a[3] <= 0) return 0;
+    if (ir <= ix || ib <= iy) { for (k = 0; k < 4; k++) out[0][k] = a[k]; return 1; }
+    piece[0][0] = a[0]; piece[0][1] = a[1]; piece[0][2] = a[2]; piece[0][3] = iy - a[1];
+    piece[1][0] = a[0]; piece[1][1] = ib; piece[1][2] = a[2]; piece[1][3] = a[1] + a[3] - ib;
+    piece[2][0] = a[0]; piece[2][1] = iy; piece[2][2] = ix - a[0]; piece[2][3] = ib - iy;
+    piece[3][0] = ir; piece[3][1] = iy; piece[3][2] = a[0] + a[2] - ir; piece[3][3] = ib - iy;
+    for (k = 0; k < 4; k++) {
+        if (piece[k][2] <= 0 || piece[k][3] <= 0) continue;
+        out[count][0] = piece[k][0]; out[count][1] = piece[k][1];
+        out[count][2] = piece[k][2]; out[count][3] = piece[k][3];
+        count++;
+    }
+    return count;
+}
+
+static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, int bx, int by, int bw, int bh) {
+    const we_node_t *n = &d->nodes[idx];
+    int k, used = 0;
+    int pad[4];
+    pad[0] = bx + box_edge(n, 3); pad[1] = by + box_edge(n, 0);
+    pad[2] = bw - box_edge(n, 1) - box_edge(n, 3); pad[3] = bh - box_edge(n, 0) - box_edge(n, 2);
+    for (k = n->shadow_count - 1; k >= 0; k--) {
+        const we_shadow_t *sh = &n->shadow[k];
+        uint32_t color = sh->has_color ? sh->color : n->color;
+        int alpha = color_alpha_of(color), layer, layers = shadow_layers(sh);
+        if (!sh->inset != !inset) continue;
+        for (layer = 0; layer < layers; layer++) {
+            /* blur: the wide layer first (outer: grown by b / 2 more, inset:
+             * shrunk by b / 2 more), then the narrow one */
+            int grow = sh->spread + (layers == 2 ? (layer == 0 ? sh->blur / 2 : -(sh->blur / 2)) : 0);
+            int a = layers == 1 ? alpha : layer == 0 ? alpha / 2 : alpha * 255 / (2 * 255 - alpha);
+            int shape[4], box[4], pieces[4][4], count, j;
+            if (inset) {
+                shape[0] = pad[0] + sh->x + grow; shape[1] = pad[1] + sh->y + grow;
+                shape[2] = pad[2] - 2 * grow; shape[3] = pad[3] - 2 * grow;
+                count = rect_minus(pad, shape, pieces);
+            } else {
+                shape[0] = bx + sh->x - grow; shape[1] = by + sh->y - grow;
+                shape[2] = bw + 2 * grow; shape[3] = bh + 2 * grow;
+                box[0] = bx; box[1] = by; box[2] = bw; box[3] = bh;
+                count = rect_minus(shape, box, pieces);
+            }
+            for (j = 0; j < count && used < slots; j++, used++) {
+                os_fb_web_item_t *it = &d->items[slot + used];
+                it->kind = OS_FB_WEB_RECT;
+                it->x = (int16_t)limit_coord(pieces[j][0]); it->y = (int16_t)limit_coord(pieces[j][1]);
+                it->w = (uint16_t)pieces[j][2]; it->h = (uint16_t)pieces[j][3];
+                it->color = with_alpha(color, a);
+            }
+        }
+    }
+}
+
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     we_node_t* n = &d->nodes[idx];
     int bx, by, bw, bh, content_x, content_w, content_h, slot, border_slot = -1;
-    int first_item = (int)d->nitems;
+    int first_item = (int)d->nitems, shadow_slot[2], shadow_slots[2];
     if (depth > WE_DEPTH_MAX) return 0;
     d->perf.boxes++;
     layout_first[idx] = layout_last[idx] = WE_NO_BASELINE;
@@ -3893,9 +4101,12 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     bx = limit_coord(bx);
     by = limit_coord(by);
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw;
-    /* reserve the background item now so it paints under the children */
+    /* reserve the background item now so it paints under the children;
+     * lot 62: outer shadows go under it, inset shadows over it */
+    shadow_slot[0] = shadow_reserve(d, idx, 0, &shadow_slots[0]);
     slot = n->has_bg ? (int)d->nitems : -1;
     if (n->has_bg && !emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, n->bg)) slot = -1;
+    shadow_slot[1] = shadow_reserve(d, idx, 1, &shadow_slots[1]);
     content_x = limit_coord(bx + box_edge(n, 3) + n->padding[3]);
     content_w = bw - box_edge(n, 1) - box_edge(n, 3) - n->padding[1] - n->padding[3];
     if (content_w < WE_CHAR_W) content_w = WE_CHAR_W;
@@ -3935,6 +4146,8 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         os_fb_web_item_t* it = &d->items[slot];
         it->x = (int16_t)bx; it->y = (int16_t)by; it->w = (uint16_t)bw; it->h = (uint16_t)bh;
     }
+    shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh);
+    shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh);
     if (n->border > 0 && !n->collapse_cell && n->border_style >= 7 && n->border_style <= 10) {
         frame_3d(d, idx, n->border_style, n->border_color, bx, by, bw, bh, n->border > 8 ? 8 : n->border);
         border_slot = 1;
@@ -6649,7 +6862,7 @@ static int root_background(const we_doc_t *d, int owner) {
     return p > 0 && d->nodes[p].parent == 0 && w_eq(d->nodes[owner].tag, "body");
 }
 
-static int stack_key(const we_doc_t *d, int owner, int8_t *key) {
+static int stack_key(const we_doc_t *d, int owner, int outline, int8_t *key) {
     int chain[WE_DEPTH_MAX + 2], count = 0, used, k, o, guard;
     for (guard = 0, o = owner; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent)
         if (stack_context(&d->nodes[o])) chain[count++] = o;
@@ -6661,6 +6874,8 @@ static int stack_key(const we_doc_t *d, int owner, int8_t *key) {
     for (k = used; k < WE_STACK_DEPTH; k++) key[k] = 0;
     if (used) key[used] = (int8_t)(chain[count - used] == owner ? 0 : 20);
     else key[0] = (int8_t)(root_background(d, owner) ? 0 : 20);
+    /* lot 62: outlines after the z >= 0 children of their context */
+    if (outline) key[used] = 60;
     return count > used;
 }
 
@@ -6676,7 +6891,7 @@ static void stack_items(we_doc_t *d) {
     for (i = 0; i < (int)d->nnodes; i++)
         if (stack_context(&d->nodes[i]) && (!d->nodes[i].absolute || stack_z(&d->nodes[i]) < 0)) any = 1;
     if (!any) return;
-    for (i = 0; i < (int)d->nitems; i++) flat |= stack_key(d, d->item_owner[i], keys[i]);
+    for (i = 0; i < (int)d->nitems; i++) flat |= stack_key(d, d->item_owner[i], d->items[i].pad & WE_ITEM_OUTLINE, keys[i]);
     if (flat) diag(d, "stacking depth", -1);
     for (i = 1; i < (int)d->nitems; i++) {
         os_fb_web_item_t item = d->items[i];
@@ -6954,6 +7169,46 @@ static void composite_items(we_doc_t *d) {
     d->nitems = (uint32_t)out;
 }
 
+/* Lot 62: outlines (CSS UI 4) after layout: the border box grown by the
+ * offset plus the width, with no layout effect, painted last in their
+ * stacking context (CSS 2.1 appendix E step 10). Inline boxes have no
+ * outline in this subset. */
+static void paint_outlines(we_doc_t *d) {
+    uint32_t i, k;
+    for (i = 0; i < d->nnodes; i++) {
+        const we_node_t *n = &d->nodes[i];
+        int w = n->outline_w, grow = n->outline_offset + n->outline_w, x, y, ow, oh, first = (int)d->nitems, style = n->outline_style;
+        uint32_t color = n->outline_color_set ? n->outline_color : n->color;
+        if (n->is_text || !style || !w || n->display == WE_DISP_NONE || n->display == WE_DISP_INLINE) continue;
+        if (!n->w && !n->h) continue;
+        x = n->x - grow; y = n->y - grow; ow = n->w + 2 * grow; oh = n->h + 2 * grow;
+        if (ow <= 0 || oh <= 0) continue;
+        if (style >= 7 && style <= 10) frame_3d(d, (int)i, style, color, x, y, ow, oh, w);
+        else if (style == 5 || style == 6 || (style == 4 && w >= 3)) {
+            edge_paint(d, (int)i, style, color, 0, y, x, w, ow);
+            edge_paint(d, (int)i, style, color, 0, y + oh - w, x, w, ow);
+            edge_paint(d, (int)i, style, color, 1, x, y + w, w, oh - 2 * w);
+            edge_paint(d, (int)i, style, color, 1, x + ow - w, y + w, w, oh - 2 * w);
+        } else {
+            os_fb_web_item_t *it = emit(d, (int)i, OS_FB_WEB_BORDER, x, y, ow, oh, color);
+            if (it) it->bold = (uint8_t)w;
+        }
+        for (k = (uint32_t)first; k < d->nitems; k++) d->items[k].pad |= WE_ITEM_OUTLINE;
+    }
+}
+
+/* Reserved shadow items that stayed unused are removed. */
+static void drop_reserved(we_doc_t *d) {
+    uint32_t i, out = 0;
+    for (i = 0; i < d->nitems; i++) {
+        if (!d->items[i].kind) continue;
+        d->items[out] = d->items[i];
+        d->items[out].pad = (uint16_t)(d->items[out].pad & ~WE_ITEM_RESERVED);
+        d->item_owner[out++] = d->item_owner[i];
+    }
+    d->nitems = out;
+}
+
 /* Fixed boxes paint after the rest of the page, in their own order. */
 static void raise_fixed(we_doc_t *d) {
     static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
@@ -7023,11 +7278,14 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     subgrid_bind_all(d);
     intrinsic_sizes(d);
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
+    drop_reserved(d);
+    paint_outlines(d);
     stack_items(d);
     opacity_items(d);
     raise_fixed(d);
     clip_display_list(d);
     composite_items(d);
+    { uint32_t i; for (i = 0; i < d->nitems; i++) d->items[i].pad = 0; }
     if (math_refused) diag(d, "math evaluation refused", -1);
     d->perf.items = d->nitems;
     d->perf.page_w = (uint32_t)viewport_w;

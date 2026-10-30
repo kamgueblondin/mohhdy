@@ -127,6 +127,10 @@ typedef struct {
 enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE };
 typedef struct { uint8_t kind, pct; int16_t x, y; } we_transform_t;
 
+/* Lot 62: box-shadow entries (offsets and spread in px, blur 0..32). */
+#define WE_SHADOWS_MAX 2
+typedef struct { int8_t x, y, spread; uint8_t blur, inset, has_color; uint32_t color; } we_shadow_t;
+
 typedef struct {
     uint8_t is_text, attr_flags, has_text;
     we_length_t length[WE_LENGTH_PROPS];
@@ -208,6 +212,13 @@ typedef struct {
     we_transform_t tf[WE_TF_MAX];
     uint8_t tf_count, tf_origin_pct;
     int16_t tf_origin[2];
+    /* Lot 62: outline (style 0 none, width 0..8, offset -32..32, colour
+     * currentColor unless set) and up to WE_SHADOWS_MAX box shadows. */
+    uint8_t outline_style, outline_w, outline_color_set;
+    int8_t outline_offset;
+    uint32_t outline_color;
+    we_shadow_t shadow[WE_SHADOWS_MAX];
+    uint8_t shadow_count;
     uint32_t edge_color[4];
     int16_t gap;               /* px between flex/grid items */
     uint32_t color, bg, border_color;

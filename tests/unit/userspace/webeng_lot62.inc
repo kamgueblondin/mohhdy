@@ -3,9 +3,11 @@
 #include "webeng_lot62_alpha.inc"
 #include "webeng_lot62_border.inc"
 #include "webeng_lot62_transform.inc"
+#include "webeng_lot62_decor.inc"
 
 static void lot62_run(void) {
     lot62_alpha_run();
     lot62_border_run();
     lot62_transform_run();
+    lot62_decor_run();
 }
