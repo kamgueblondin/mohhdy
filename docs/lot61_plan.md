@@ -212,16 +212,16 @@ The host test reads the same HTML file.
 Actual make test-all on the final revision:
 
 ```text
-Total Tests: 2900
-Passed: 2900
+Total Tests: 2920
+Passed: 2920
 Failed: 0
 Skipped: 0
-Execution Time: 78s
+Execution Time: 80s
 ```
 
-test_webeng: 1759 cases, also 1759/1759 under i386 ASan/UBSan
-(-fsanitize=address,undefined, no recover). The i386 document is 683460
-bytes (node 3872), under the unchanged 1 MiB ceiling; the 512 KiB layout
+test_webeng: 1779 cases, also 1779/1779 under i386 ASan/UBSan
+(-fsanitize=address,undefined, no recover). The i386 document is 684100
+bytes (node 3876), under the unchanged 1 MiB ceiling; the 512 KiB layout
 workspace assertion passes in make all.
 
 Mutation builds (each a private copy of webeng.c linked into test_webeng)
@@ -234,9 +234,18 @@ gap and distribution (9: own gap delta, half split, item extra on both
 axes and in the intrinsic pass, line positions); baselines (8: column
 fallback first/last, rowspan first row, span height, shift, row export);
 stacking (pass, z order, negative below flow, own items first, root
-background, negative trigger, depth diagnostic). Removing the fixed-box
-early return in abs_containing is an equivalent mutant;
-test_l61_fixed_ignores_positioned_ancestors covers the result.
+background, negative trigger, depth diagnostic). Final round: collapsed
+insets and columns (15: before/after inset, odd pixel side, widest line,
+box_edge users, col and colgroup origin order, col span, colgroup
+children, void col); border styles (11: dash period, dot size, piece cap
+and clamp, double thickness and gap, double minimum width, 3D diagnostic,
+separate-border split); opacity (11: parse range, percent, refusal,
+stacking trigger, z of non-positioned context, opacity 0 drop, opaque
+diagnostic); subgrid baselines (10: contribution offsets, share max,
+row subgrid stretch, column subgrid not intrinsic). Removing the
+fixed-box early return in abs_containing is an equivalent mutant;
+test_l61_fixed_ignores_positioned_ancestors covers the result. Equivalent
+mutants found in the final round were removed as dead code.
 
 make all, tree-clean-check, strict-image-check, secrets-check,
 roadmap-check, check-initrd-web-stamp and
@@ -257,24 +266,30 @@ lot61 console inline-block-baseline box 16 34 20x16
 lot61 console glyph-fragment box 9 69 3x2
 lot61 console fixed box 610 470 30x10
 lot61 console collapse-outer-edge box 0 95 120x4
-lot61 console collapse-inner-edge box 59 95 2x10
-lot61 console subgrid-own-gap box 45 105 30x6
-lot61 console negative-z box 0 111 120x6
-osui web render file=/web/lot61.html nodes 44 rules 25 boxes 28 lines 6 items 41 dropped 0 page 640x120 diag 0 components 0 media_kept 0 media_dropped 0 vars 0 sanitized 0
-lot61 pixels compared=7074 baseline=last,inline-block subgrid=auto-fill fixed=viewport clip=glyph table=collapse,outer-edge subgrid-gap=own z=negative flex=wrap image=shared
+lot61 console collapse-inner-edge box 59 95 2x14
+lot61 console subgrid-own-gap box 45 109 30x6
+lot61 console negative-z box 0 115 120x6
+lot61 console dashed-piece box 8 124 4x2
+lot61 console double-line box 0 132 10x1
+osui web render file=/web/lot61.html nodes 47 rules 28 boxes 31 lines 6 items 57 dropped 0 page 640x144 diag 0 components 0 media_kept 0 media_dropped 0 vars 0 sanitized 0
+lot61 pixels compared=7648 baseline=last,inline-block subgrid=auto-fill fixed=viewport clip=glyph table=collapse,outer-edge,half-inset border=dashed,double opacity=0 subgrid-gap=own z=negative flex=wrap image=shared
 QEMU web layout contract passed.
 ```
 
-Line counts use git diff origin/main --numstat (31 files, +3925 -193
-before this section). Useful additions: 1316 engine/header/shell code +
-1785 behavioural unit test code + 61 QEMU script = 3162. Excluded: 150
-engine comment lines, 68 engine blank lines, 78 test comment lines, 167
-test/script blank lines, about 300 doc/roadmap/HTML lines. No copied
+Line counts use git diff origin/main --numstat (32 files, +4612 -219
+before this section). Useful additions: 1552 engine/header/shell code +
+2077 behavioural unit test code + 66 QEMU script = 3695. Excluded: 187
+engine comment lines, 87 engine blank lines, 103 test comment lines, 192
+test/script blank lines, about 350 doc/roadmap/HTML lines. No copied
 function.
 
-Under the 4000 target. The first gap left is margin collapsing, excluded
-by this brief. Within the brief, the first compatible gap left is painting
-collapsed border styles (double, dashed, dotted, 3D) instead of solid, with
-half-border content insets and <col>/<colgroup> origins. After it:
-opacity/transform stacking contexts, subgrid items in parent baseline
-groups, percentage cycles and vertical writing modes.
+Under the 4000 target; the brief's final round stopped after its four
+items without padding. The first gap left is margin collapsing, excluded
+by this brief. Within the brief, the first compatible gap left is alpha
+blending for 0 < opacity < 1 (painted opaque with a diagnostic: the
+kernel painter masks item alpha, so it needs an item alpha field or a
+painter change outside this lot). After it: transform parsing and its
+stacking context, 3D border styles (painted solid with a diagnostic),
+per-line collapsed band widths (the band is uniform per table), column
+subgrid baselines, floats in the negative stacking layer, percentage
+cycles and vertical writing modes.
