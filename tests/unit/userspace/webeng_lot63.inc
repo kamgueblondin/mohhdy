@@ -5,6 +5,7 @@
 #include "webeng_lot63_transform.inc"
 #include "webeng_lot63_border.inc"
 #include "webeng_lot63_clip.inc"
+#include "webeng_lot63_page.inc"
 
 static void lot63_run(void) {
     lot63_gen_run();
@@ -13,4 +14,5 @@ static void lot63_run(void) {
     lot63_transform_run();
     lot63_border_run();
     lot63_clip_run();
+    lot63_page_run();
 }

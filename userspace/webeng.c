@@ -5606,10 +5606,12 @@ static void background_box(const we_node_t *n, int box, int bx, int by, int bw, 
 /* Bands tile the origin box exactly, each taking the colour at its middle,
  * then are cut to the clip box. The border area outside the origin box
  * stays unpainted (no image repetition). */
-/* Lot 62 round 2: radial-gradient centred in the origin box. The ending
- * shape: an ellipse through the box sides (closest/farthest-side) or
- * through its corners (sqrt 2 larger, the corner extents), a circle to
- * the nearer or farther side or to the corners. Painted as the last stop
+/* Lot 62 round 2: radial-gradient in the origin box; lot 63: centred at
+ * its "at" position (default 50% 50%), with explicit sizes winning over
+ * the extent. The ending shape: an ellipse through the nearer or farther
+ * sides (closest/farthest-side) or through the corners (sqrt 2 larger,
+ * the corner extents), a circle to the nearer or farther side distance or
+ * to the corner, the distances taken from the centre. Painted as the last stop
  * over the clip box, then WE_RADIAL_RINGS nested ellipses from the
  * outside in, each taking the colour at its band's middle radius and cut
  * to the clip box (opaque stops only). */
