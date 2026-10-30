@@ -39,9 +39,16 @@ US-G22 US-G23 US-G24). we_doc_t is 710340 bytes (lot 61: 684100), under
   values; px up to 128 or percent up to 100): corners are scaled down by
   the smallest side / radius sum, then backgrounds and solid borders are
   painted as row slices (3 rows per corner, ellipse inset at the middle
-  row, rounded half up), "border-radius painted in steps". Styled borders
-  keep the square path; a gradient with a radius paints square
-  ("gradient radius painted square").
+  row, rounded half up), "border-radius painted in steps". Round 2: double
+  borders paint two rounded rings of (t + 1) / 3, groove/ridge two nested
+  shaded rings, inset/outset shaded rings (light/dark halves split at the
+  middle row); dashed and dotted with a radius stay square ("rounded effect
+  painted square"). A gradient with a radius paints square ("gradient
+  radius painted square").
+- Round 2: overflow hidden/clip with a radius clips descendants to the
+  rounded padding box (intersected bands, at most 29 per clip): rects are
+  cut per band, glyphs fully inside one band are kept whole and other
+  glyphs dropped. Over budget the square clip stays.
 
 ## Transforms
 
@@ -60,7 +67,10 @@ US-G22 US-G23 US-G24). we_doc_t is 710340 bytes (lot 61: 684100), under
   children of its context; inline boxes get none.
 - box-shadow: 1 or 2 entries, offsets, blur (two layers, a / 2 then
   a * 255 / (510 - a)), spread, inset over the background and under the
-  content, the first shadow on top.
+  content, the first shadow on top. Round 2: with a radius, outer shadows
+  follow the spread radii and inset shadows paint the padding shape then
+  repaint the background over the inner shape; over the slot budget they
+  stay square with "rounded effect painted square".
 - text-decoration (shorthand and longhands): underline, overline,
   line-through; solid, double, dotted, dashed, wavy (painted solid, one
   diagnostic); colour and thickness 1..4 px. Lines propagate from the
@@ -89,6 +99,21 @@ US-G22 US-G23 US-G24). we_doc_t is 710340 bytes (lot 61: 684100), under
   layout time, through inline boxes and table rows; they count 0 in
   intrinsic sizes (cyclic percentage rule) and again on each relayout.
 
+- Round 2: letter-spacing (-4..16 px) and word-spacing (-8..32 px),
+  inherited, "normal" resets; a letter-spaced run paints one item per
+  glyph, advances count in wrapping and intrinsic sizes. text-align:
+  justify spreads the free width over the spaces of soft-wrapped lines
+  (lines with atoms stay start aligned); text-align-last (auto, start,
+  end, left, right, center, justify) for the last line and lines before a
+  forced break; text-justify none/auto/inter-word; start/end keywords are
+  left/right (left-to-right only).
+- Round 2: radial-gradient (circle or ellipse, the four extent keywords,
+  "at center" only, opaque stops): the last stop fills the clip box, then
+  3 nested ellipses (8 row slices each) in the colour at the ring middle.
+- Round 2: grid item percentage margins/paddings resolve against the grid
+  area width, absolute boxes against the padding box of the containing
+  block.
+
 ## Paint order and lists
 
 - CSS 2.1 appendix E inside the in-flow level of each context: block
@@ -111,21 +136,25 @@ US-G22 US-G23 US-G24). we_doc_t is 710340 bytes (lot 61: 684100), under
 - lot61_stack without z: a relative box (z auto) now paints over the later
   static block (appendix E step 8); a second render keeps the two static
   blocks in tree order.
+- Round 2: lot62_page expects page_h 192 and 67 items (the page grew);
+  no other fixture changed.
 - lot58_logical padding percent: the refused value becomes 10%px (truly
   invalid); percentages are now accepted and tested in lot62_spacing.
 
 ## Remaining gaps (first one first)
 
 1. Margin collapsing (excluded by the brief).
-2. Within the brief: border-radius does not clip overflow content and
-   styled (dashed, double, 3D) borders and shadows stay square.
-3. Transforms other than quarter turns (skew, arbitrary rotate, matrix)
+2. Within the brief: per-line collapsed band widths (collapsed tables keep
+   one uniform band width for every grid line, shared by the lot 61 track
+   geometry).
+3. Dashed/dotted rounded borders, rounded clips under a transform,
+   radial positions other than center and translucent radial stops.
+4. Background images (none decoded by the guest engine), so repeat,
+   position and size are not implemented.
+5. Transforms other than quarter turns (skew, arbitrary rotate, matrix)
    and transformed hit testing.
-4. Repeated background images in the border area, radial gradients.
-5. Grid item percentages resolve against the container content width, not
-   the grid area; absolute boxes against the parent content box.
-6. Per-line collapsed band widths, column subgrid baselines, vertical
-   writing modes, letter-spacing and justify.
+6. Column subgrid baselines, vertical writing modes, bidi (start/end are
+   left/right).
 
 ## Results
 

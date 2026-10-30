@@ -24,7 +24,11 @@ paddings against the containing block width (0 in intrinsic sizes),
 linear-gradient backgrounds as at most 8 bands, background-clip/origin,
 border-radius as row slices, CSS 2.1 appendix E order of block
 backgrounds, floats, inline content and positioned boxes, and ol
-start/reversed/value/type with alpha and roman markers. Kernel, rights and
+start/reversed/value/type with alpha and roman markers. A second round
+adds rounded overflow clipping, rounded double/3D borders and shadows,
+letter-spacing, word-spacing, text-align justify and text-align-last,
+radial-gradient rings, and grid-area / padding-box percentage containing
+blocks. Kernel, rights and
 shared ABI unchanged. No Chromium, WebKit, network loading, JavaScript VM,
 new font engine or margin collapsing. US-059/060/063/074 unchanged;
 US-G19..US-G24 remain partial. Margin collapsing remains absent.
