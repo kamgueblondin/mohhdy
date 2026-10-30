@@ -59,11 +59,22 @@ static void test_l61_bstyle_long_lines_are_bounded(void) {
     TEST_ASSERT_EQUAL(0, g_doc.perf.items_dropped);
 }
 
-static void test_l61_bstyle_3d_styles_paint_solid_with_diagnostic(void) {
+/* Lot 62: the 3D styles are shaded (dark 2/3, light 1/3 to white), no
+ * longer solid with a diagnostic. */
+static void test_l61_bstyle_3d_styles_are_shaded(void) {
     lot52_render("<body style='margin:0'><div id=x style='border:2px groove #ff0000;width:4px;height:4px'></div>"
                  "<div id=y style='border:2px outset #ff0000;width:4px;height:4px'></div></body>", 320);
-    TEST_ASSERT_EQUAL(2, l61_count(OS_FB_WEB_BORDER));
-    TEST_ASSERT_EQUAL(1, l61_diag_count("border style painted solid"));
+    TEST_ASSERT_EQUAL(0, l61_count(OS_FB_WEB_BORDER));
+    TEST_ASSERT_EQUAL(0, l61_diag_count("border style painted solid"));
+    TEST_ASSERT_EQUAL(0xAA0000, (int)l61_paint(0, 0));    /* groove: outer top-left dark */
+    TEST_ASSERT_EQUAL(0xFF5555, (int)l61_paint(1, 1));    /* inner top-left light */
+    TEST_ASSERT_EQUAL(0xFF5555, (int)l61_paint(7, 4));    /* outer right light */
+    TEST_ASSERT_EQUAL(0xAA0000, (int)l61_paint(6, 4));    /* inner right dark */
+    TEST_ASSERT_EQUAL(0xFF5555, (int)l61_paint(0, 8));    /* outset: top-left light */
+    TEST_ASSERT_EQUAL(0xFF5555, (int)l61_paint(1, 9));
+    TEST_ASSERT_EQUAL(0xAA0000, (int)l61_paint(7, 12));   /* right and bottom dark */
+    TEST_ASSERT_EQUAL(0xAA0000, (int)l61_paint(6, 12));
+    TEST_ASSERT_EQUAL(0xAA0000, (int)l61_paint(4, 15));
     lot52_render("<body style='margin:0'><div id=x style='border:2px solid #ff0000;width:4px;height:4px'></div></body>", 320);
     TEST_ASSERT_EQUAL(0, l61_diag_count("border style painted solid"));
 }
@@ -86,6 +97,6 @@ static void lot61_bstyle_run(void) {
     RUN_TEST(test_l61_bstyle_separate_dotted);
     RUN_TEST(test_l61_bstyle_separate_double);
     RUN_TEST(test_l61_bstyle_long_lines_are_bounded);
-    RUN_TEST(test_l61_bstyle_3d_styles_paint_solid_with_diagnostic);
+    RUN_TEST(test_l61_bstyle_3d_styles_are_shaded);
     RUN_TEST(test_l61_bstyle_collapsed_double_and_runs_split_by_style);
 }

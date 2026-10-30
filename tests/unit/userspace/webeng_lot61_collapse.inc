@@ -18,10 +18,11 @@ static void test_l61_resolve_style_ranks_dashed_dotted_ridge_inset(void) {
                  "<td id=d style='border:2px ridge #ffff00;height:6px'></td></tr></table></body>", 320);
     TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(20, 2));   /* dashed > dotted */
     TEST_ASSERT_TRUE(l61_paint(20, 5) == 0xFFFFFFFFu);     /* gap between 4px dashes */
-    TEST_ASSERT_EQUAL(0xFFFF00, (int)l61_paint(20, 14));  /* ridge > inset */
+    TEST_ASSERT_EQUAL(0xAAAA00, (int)l61_paint(20, 14));  /* ridge > inset: dark right half */
+    TEST_ASSERT_EQUAL(0xFFFF55, (int)l61_paint(19, 14));  /* lot 62: light left half */
     TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(5, 8));    /* dotted > inset */
     TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(30, 8));   /* dashed > ridge */
-    TEST_ASSERT_EQUAL(1, l61_diag_count("border style painted solid"));   /* ridge, inset */
+    TEST_ASSERT_EQUAL(0, l61_diag_count("border style painted solid"));   /* lot 62: shaded */
 }
 
 static void test_l61_resolve_wider_edge_wins_over_style(void) {
