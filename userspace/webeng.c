@@ -2563,15 +2563,46 @@ static int tf_function(const char *v, int len, we_transform_t *t) {
     return 0;
 }
 
+/* Lot 63: matrix(a, b, c, d, e, f): a..d numbers in -8..8 kept in 1/1000,
+ * e and f px numbers in -4000..4000. It fills three slots: WE_TF_MATRIX
+ * (a, b) then two WE_TF_DATA (c, d) and (e, f). */
+static int tf_matrix(const char *v, int len, we_transform_t *t) {
+    int start[6], length[6], count, k;
+    if (len < 8 || v[len - 1] != ')') return -1;              /* the caller checked "matrix(" */
+    count = tf_args(v + 7, len - 8, start, length, 6);
+    if (count != 6) return -1;
+    v += 7;
+    w_zero(t, 3 * sizeof(*t));
+    t[0].kind = WE_TF_MATRIX; t[1].kind = t[2].kind = WE_TF_DATA;
+    for (k = 0; k < 4; k++) if (tf_scale(v + start[k], length[k], k & 1 ? &t[k / 2].y : &t[k / 2].x)) return -1;
+    for (k = 4; k < 6; k++) {
+        int milli, percent;
+        if (v[start[k] + length[k] - 1] < '0' || v[start[k] + length[k] - 1] > '9' ||
+            color_number(v + start[k], length[k], &milli, &percent) || percent || milli < -4000000 || milli > 4000000) return -1;
+        milli = (milli >= 0 ? milli + 500 : milli - 500) / 1000;
+        if (k == 4) t[2].x = (int16_t)milli; else t[2].y = (int16_t)milli;
+    }
+    return 0;
+}
+
 static int parse_transform(we_node_t *n, const char *v, int len) {
-    int starts[WE_TF_MAX + 1], lengths[WE_TF_MAX + 1], count, k;
+    int starts[WE_TF_MAX + 1], lengths[WE_TF_MAX + 1], count, k, used = 0;
     we_transform_t list[WE_TF_MAX];
     if (value_is(v, len, "none")) { n->tf_count = 0; return 0; }
     count = functional_tokens(v, len, starts, lengths, WE_TF_MAX + 1);
     if (count < 1 || count > WE_TF_MAX) return -1;
-    for (k = 0; k < count; k++) if (tf_function(v + starts[k], lengths[k], &list[k])) return -1;
-    for (k = 0; k < count; k++) n->tf[k] = list[k];
-    n->tf_count = (uint8_t)count;
+    for (k = 0; k < count; k++) {
+        const char *f = v + starts[k];
+        if (w_ieq_n(f, lengths[k], "matrix(")) {
+            if (used + 3 > WE_TF_MAX || tf_matrix(f, lengths[k], &list[used])) return -1;
+            used += 3;
+        } else {
+            if (used == WE_TF_MAX || tf_function(f, lengths[k], &list[used])) return -1;
+            used++;
+        }
+    }
+    for (k = 0; k < used; k++) n->tf[k] = list[k];
+    n->tf_count = (uint8_t)used;
     return 0;
 }
 
@@ -4841,9 +4872,10 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
                 intrinsic_word(flow);
                 flow->pending = 1;
             } else if (ch == WE_SHY) {
-                /* a breaking soft hyphen between glyphs ends a word with a hyphen */
+                /* a breaking soft hyphen before a glyph ends a word with a hyphen
+                 * (a leading one adds a hyphen no wider than that glyph) */
                 char after = i + 1 < n->text_len ? d->pool[n->text_off + i + 1] : ' ';
-                if (shy_breaks(n) && flow->word > 0 && !w_space(after) && after != WE_SHY) {
+                if (shy_breaks(n) && !w_space(after) && after != WE_SHY) {
                     if (flow->word + glyph_adv(d, idx) > flow->minimum) flow->minimum = flow->word + glyph_adv(d, idx);
                     flow->word = 0;
                 }
@@ -8693,6 +8725,12 @@ static void node_matrix(const we_node_t *n, we_matrix_t *m) {
         if (t->kind == WE_TF_TRANSLATE)
             matrix_mul(m, 1000, 0, 0, 1000, (t->pct & 1) ? n->w * t->x / 100 : t->x, (t->pct & 2) ? n->h * t->y / 100 : t->y);
         else if (t->kind == WE_TF_SCALE) matrix_mul(m, t->x, 0, 0, t->y, 0, 0);
+        else if (t->kind == WE_TF_MATRIX) {
+            /* CSS maps x' = a x + c y + e, y' = b x + d y + f */
+            const we_transform_t *cd = &n->tf[k + 1], *ef = &n->tf[k + 2];
+            matrix_mul(m, t->x, cd->x, t->y, cd->y, ef->x, ef->y);
+            k += 2;
+        }
         else if (t->kind == WE_TF_ROTATE) {                            /* clockwise, y down */
             int sn = sin_deg(t->x), cs = sin_deg(t->x + 90);
             matrix_mul(m, cs, -sn, sn, cs, 0, 0);

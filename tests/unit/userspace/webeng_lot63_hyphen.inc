@@ -21,6 +21,15 @@ static void test_l63_hyphen_breaks_with_a_hyphen(void) {
     lot52_render("<body style='margin:0'>" L63_H_P("width:320px", "a&#173;b") "</body>", 320);
     TEST_ASSERT_EQUAL(1, (int)g_doc.nitems);
     l61_text_at("ab", 0, 1);
+    lot52_render("<body style='margin:0'>" L63_H_P("width:320px", "x ab&shy;cd") "</body>", 320);
+    l61_text_at("x abcd", 0, 1);                             /* no space between pieces */
+    /* trailing soft hyphens reserve no hyphen for the last piece */
+    lot52_render("<body style='margin:0'>" L63_H_P("width:32px", "ab&shy;cd&shy;&shy;") "</body>", 320);
+    l61_text_at("abcd", 0, 1);
+    /* a first piece wider than the line still gets its hyphen on that line */
+    lot52_render("<body style='margin:0'>" L63_H_P("width:16px", "abcd&shy;ef") "</body>", 320);
+    l61_text_at("abcd-", 0, 1);
+    l61_text_at("ef", 0, 11);
 }
 
 static void test_l63_hyphen_letter_spacing(void) {
@@ -36,6 +45,8 @@ static void test_l63_hyphen_glued_forms(void) {
     lot52_render("<body style='margin:0'>" L63_H_P("width:40px;hyphens:none", "x abc&shy;def") "</body>", 320);
     l61_text_at("x", 0, 1);
     l61_text_at("abcdef", 0, 11);                            /* moved whole, then overflowing */
+    lot52_render("<body style='margin:0'>" L63_H_P("width:56px;hyphens:none", "x abc&shy;def") "</body>", 320);
+    l61_text_at("abcdef", 0, 11);                            /* 8 + 8 + 48 > 56: the space counts */
     lot52_render("<body style='margin:0'>" L63_H_P("width:320px;hyphens:none", "x abc&shy;def") "</body>", 320);
     l61_text_at("x abcdef", 0, 1);
     lot52_render("<body style='margin:0'>" L63_H_P("width:40px;white-space:nowrap", "x abc&shy;def") "</body>", 320);
@@ -53,11 +64,12 @@ static void test_l63_hyphen_glued_forms(void) {
 static void test_l63_hyphen_min_content(void) {
     lot52_render(L63_STYLE("div{display:inline-block;width:min-content}") "<div id=a>hyph&shy;enation</div><br>"
                  "<div id=b style='hyphens:none'>hyph&shy;enation</div><br><div id=c>&shy;ab&shy;&shy;cd&shy;</div><br>"
-                 "<div id=d style='letter-spacing:2px'>abcd&shy;e</div></body>", 320);
+                 "<div id=d style='letter-spacing:2px'>abcd&shy;e</div><br><div id=e>ab&shy; cd ab&shy;&shy; c</div></body>", 320);
     TEST_ASSERT_EQUAL(56, lot52_node("a")->w);               /* "enation" */
     TEST_ASSERT_EQUAL(88, lot52_node("b")->w);
     TEST_ASSERT_EQUAL(24, lot52_node("c")->w);               /* "ab-" */
     TEST_ASSERT_EQUAL(50, lot52_node("d")->w);               /* "abcd-" at 10px */
+    TEST_ASSERT_EQUAL(16, lot52_node("e")->w);               /* no break before a space or at the end */
 }
 
 static void test_l63_hyphen_values_and_refs(void) {
@@ -71,6 +83,7 @@ static void test_l63_hyphen_values_and_refs(void) {
     TEST_ASSERT_EQUAL(WE_HYPHENS_NONE, lot52_node("e")->hyphens);
     TEST_ASSERT_EQUAL(1, l61_diag_count("hyphens refused"));
     TEST_ASSERT_EQUAL(0, lot52_node("f")->h);                        /* a soft hyphen alone is no glyph */
+    TEST_ASSERT_EQUAL(-1, lot52_node("f")->first);                   /* and makes no text node */
     TEST_ASSERT_EQUAL(2, (int)g_doc.nitems);                         /* "x" and "a" */
     l61_text_at("a", 0, 51);
     TEST_ASSERT_EQUAL(2, g_doc.nodes[lot52_node("g")->first].text_len);

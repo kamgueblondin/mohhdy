@@ -133,9 +133,10 @@ typedef struct {
 /* Lot 62: paint-time transform functions. translate keeps px or percent
  * of the border box (pct bit 0 x, bit 1 y), scale keeps 1/1000 factors in
  * -8..8. Lot 63: rotate keeps whole degrees 0..359 in x, skew keeps the x
- * and y angles in -80..80 degrees. */
+ * and y angles in -80..80 degrees; matrix() takes three slots (a b, then
+ * c d as WE_TF_DATA in 1/1000, then e f px as WE_TF_DATA). */
 #define WE_TF_MAX 4
-enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE, WE_TF_SKEW };
+enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE, WE_TF_SKEW, WE_TF_MATRIX, WE_TF_DATA };
 typedef struct { uint8_t kind, pct; int16_t x, y; } we_transform_t;
 
 /* Lot 62: linear gradients, axis-aligned, up to 4 stops, at most
