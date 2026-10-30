@@ -71,8 +71,8 @@ static void test_l62_transform_quarter_turns(void) {
 }
 
 static void test_l62_transform_refusals_are_atomic(void) {
-    lot52_render(L62_BODY "<div id=a style='" L62_BOX ";transform:translate(4px);transform:rotate(45deg)'></div>"
-                 "<div id=b style='transform:skewX(10deg)'></div><div id=c style='transform:translate(1px, 2px, 3px)'></div>"
+    lot52_render(L62_BODY "<div id=a style='" L62_BOX ";transform:translate(4px);transform:rotate(45dag)'></div>"
+                 "<div id=b style='transform:skewX(90deg)'></div><div id=c style='transform:translate(1px, 2px, 3px)'></div>"
                  "<div id=d style='transform:scale(9)'></div><div id=e style='transform:scale(1) scale(1) scale(1) scale(1) scale(1)'></div>"
                  "<div id=f style='transform:translateX(1px, 2px)'></div><div id=g style='transform:rotate(90)'></div>"
                  "<div id=h style='transform:translate(auto)'></div><div id=i style='transform:scale(2deg)'></div></body>", 320);

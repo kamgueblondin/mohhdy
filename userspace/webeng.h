@@ -127,9 +127,10 @@ typedef struct {
 
 /* Lot 62: paint-time transform functions. translate keeps px or percent
  * of the border box (pct bit 0 x, bit 1 y), scale keeps 1/1000 factors in
- * -8..8, rotate keeps quarter turns (0..3) in x. */
+ * -8..8. Lot 63: rotate keeps whole degrees 0..359 in x, skew keeps the x
+ * and y angles in -80..80 degrees. */
 #define WE_TF_MAX 4
-enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE };
+enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE, WE_TF_SKEW };
 typedef struct { uint8_t kind, pct; int16_t x, y; } we_transform_t;
 
 /* Lot 62: linear gradients, axis-aligned, up to 4 stops, at most

@@ -1901,7 +1901,7 @@ static void subgrid_tracks(we_node_t *n, int axis, const int *sizes, const int *
 }
 
 /* Expand a valid margin into top,right,bottom,left and replace all auto bits. */
-static int tf_angle(const char *v, int len, int16_t *quarter);
+static int tf_angle(const char *v, int len, int *degrees);
 static int tf_length(const char *v, int len, int16_t *out, int *percent);
 
 /* ---------- Lot 62: border-radius ----------
@@ -2054,7 +2054,7 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
     } else {
         const char *a = v + 16 + start[0];
         int l = length[0];
-        int16_t quarter;
+        int degrees;
         if (l > 3 && w_ieq_n(a, 3, "to ")) {
             int at = 3;
             while (at < l && w_space(a[at])) at++;
@@ -2064,9 +2064,10 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
             else if (value_is(a + at, l - at, "left")) dir = WE_GRAD_LEFT;
             else return -1;
             first = 1;
-        } else if (tf_angle(a, l, &quarter) == 0) {
+        } else if (tf_angle(a, l, &degrees) == 0) {
             static const uint8_t by_quarter[4] = { WE_GRAD_TOP, WE_GRAD_RIGHT, WE_GRAD_BOTTOM, WE_GRAD_LEFT };
-            dir = by_quarter[((quarter % 4) + 4) % 4];
+            if (degrees % 90) return -1;
+            dir = by_quarter[((degrees / 90 % 4) + 4) % 4];
             first = 1;
         } else if (l > 0 && ((a[0] >= '0' && a[0] <= '9') || a[0] == '-')) return -1;
     }
@@ -2446,9 +2447,11 @@ static void border_edges_reset(we_node_t *n) {
 
 /* ---------- Lot 62: transform parsing ----------
  * transform: none or up to WE_TF_MAX of translate(x[, y]), translateX(),
- * translateY(), scale(s[, t]), scaleX(), scaleY() and rotate(a) where a
- * is a multiple of 90deg (deg or turn). Lengths are px (or em, or a bare
- * 0) and percentages of the border box; scales are numbers or
+ * translateY(), scale(s[, t]), scaleX(), scaleY(), rotate(a), and (lot 63)
+ * skew(a[, b]), skewX(a) and skewY(a). Angles are deg, grad, rad or turn
+ * (or a bare 0) and round to whole degrees; a skew angle, taken modulo
+ * 180deg, stays within +-80deg (tan <= 5.7). Lengths are px (or em, or a
+ * bare 0) and percentages of the border box; scales are numbers or
  * percentages in -8..8. Anything else is refused atomically. */
 static int tf_args(const char *v, int len, int *start, int *length, int cap) {
     int at = 0, count = 0;
@@ -2491,25 +2494,45 @@ static int tf_scale(const char *v, int len, int16_t *out) {
     return 0;
 }
 
-static int tf_angle(const char *v, int len, int16_t *quarter) {
-    int milli, percent, turn = len > 4 && w_ieq_n(v + len - 4, 4, "turn");
-    if (turn) len -= 4;
-    else if (!(len > 3 && w_ieq_n(v + len - 3, 3, "deg")) && !(len == 1 && v[0] == '0')) return -1;
-    if (color_number(v, len, &milli, &percent) || percent) return -1;
-    if (turn) { if (milli % 250) return -1; milli = milli / 250 * 90000; }
-    if (milli % 90000) return -1;
-    milli = (milli / 90000) % 4;
-    *quarter = (int16_t)(milli < 0 ? milli + 4 : milli);
+/* An angle in whole degrees, rounded half away from zero. */
+static int tf_angle(const char *v, int len, int *degrees) {
+    static const struct { const char *unit; int16_t num, den; } units[] = {
+        {"turn", 360, 1}, {"grad", 9, 10}, {"rad", 573, 10}, {"deg", 1, 1}, {0, 0, 0}};
+    int milli, percent, k, u = -1;
+    for (k = 0; units[k].unit && u < 0; k++) {
+        int ul = w_len(units[k].unit);
+        if (len > ul && w_ieq_n(v + len - ul, ul, units[k].unit)) { u = k; len -= ul; }
+    }
+    if (u < 0 && !(len == 1 && v[0] == '0')) return -1;
+    if (v[len - 1] < '0' || v[len - 1] > '9' || color_number(v, len, &milli, &percent) || percent) return -1;
+    if (u >= 0) {
+        if (milli > 2000000000 / units[u].num || milli < -2000000000 / units[u].num) return -1;
+        milli = milli * units[u].num / units[u].den;
+    }
+    *degrees = (milli >= 0 ? milli + 500 : milli - 500) / 1000;
+    return 0;
+}
+
+/* A skew angle modulo 180deg in -80..80 (90deg has no tangent). */
+static int tf_skew_angle(const char *v, int len, int16_t *out) {
+    int deg;
+    if (tf_angle(v, len, &deg)) return -1;
+    deg %= 180;
+    if (deg > 90) deg -= 180;
+    if (deg < -90) deg += 180;
+    if (deg > 80 || deg < -80) return -1;
+    *out = (int16_t)deg;
     return 0;
 }
 
 static int tf_function(const char *v, int len, we_transform_t *t) {
-    static const char *const names[] = { "translatex(", "translatey(", "translate(", "scalex(", "scaley(", "scale(", "rotate(", 0 };
+    static const char *const names[] = { "translatex(", "translatey(", "translate(", "scalex(", "scaley(", "scale(", "rotate(",
+                                         "skewx(", "skewy(", "skew(", 0 };
     int k, open = 0, start[2], length[2], count, pct = 0;
     for (k = 0; names[k]; k++) if (w_ieq_n(v, len, names[k])) { open = w_len(names[k]); break; }
     if (!names[k] || v[len - 1] != ')') return -1;
     count = tf_args(v + open, len - open - 1, start, length, 2);
-    if (count < 1 || (count == 2 && k != 2 && k != 5)) return -1;
+    if (count < 1 || (count == 2 && k != 2 && k != 5 && k != 9)) return -1;
     v += open;
     w_zero(t, sizeof(*t));
     if (k <= 2) {
@@ -2526,9 +2549,16 @@ static int tf_function(const char *v, int len, we_transform_t *t) {
         t->x = t->y = 1000;
         if (tf_scale(v + start[0], length[0], k == 4 ? &t->y : &t->x)) return -1;
         if (k == 5 && tf_scale(v + start[count - 1], length[count - 1], &t->y)) return -1;
-    } else {
+    } else if (k == 6) {
+        int deg;
         t->kind = WE_TF_ROTATE;
-        if (tf_angle(v + start[0], length[0], &t->x)) return -1;
+        if (tf_angle(v + start[0], length[0], &deg)) return -1;
+        deg %= 360;
+        t->x = (int16_t)(deg < 0 ? deg + 360 : deg);
+    } else {
+        t->kind = WE_TF_SKEW;
+        if (tf_skew_angle(v + start[0], length[0], k == 8 ? &t->y : &t->x)) return -1;
+        if (count == 2 && tf_skew_angle(v + start[1], length[1], &t->y)) return -1;
     }
     return 0;
 }
@@ -8418,6 +8448,26 @@ static void matrix_mul(we_matrix_t *m, int a, int b, int c, int dd, int e, int f
     *m = r;
 }
 
+/* sin of whole degrees in 1/1000 (lot 63). */
+static int sin_deg(int deg) {
+    static const int16_t quarter[91] = {
+        0, 17, 35, 52, 70, 87, 105, 122, 139, 156, 174, 191, 208, 225, 242, 259, 276, 292, 309, 326, 342, 358, 375,
+        391, 407, 423, 438, 454, 469, 485, 500, 515, 530, 545, 559, 574, 588, 602, 616, 629, 643, 656, 669, 682, 695,
+        707, 719, 731, 743, 755, 766, 777, 788, 799, 809, 819, 829, 839, 848, 857, 866, 875, 883, 891, 899, 906, 914,
+        921, 927, 934, 940, 946, 951, 956, 961, 966, 970, 974, 978, 982, 985, 988, 990, 993, 995, 996, 998, 999, 999,
+        1000, 1000};
+    deg %= 360;
+    if (deg < 0) deg += 360;
+    if (deg <= 90) return quarter[deg];
+    if (deg <= 180) return quarter[180 - deg];
+    if (deg <= 270) return -quarter[deg - 180];
+    return -quarter[360 - deg];
+}
+
+static int tan_deg(int deg) {
+    return div_round(sin_deg(deg) * 1000, sin_deg(deg + 90));
+}
+
 static void node_matrix(const we_node_t *n, we_matrix_t *m) {
     int ox = n->x + ((n->tf_origin_pct & 1) ? n->w * n->tf_origin[0] / 100 : n->tf_origin[0]);
     int oy = n->y + ((n->tf_origin_pct & 2) ? n->h * n->tf_origin[1] / 100 : n->tf_origin[1]);
@@ -8428,9 +8478,10 @@ static void node_matrix(const we_node_t *n, we_matrix_t *m) {
         if (t->kind == WE_TF_TRANSLATE)
             matrix_mul(m, 1000, 0, 0, 1000, (t->pct & 1) ? n->w * t->x / 100 : t->x, (t->pct & 2) ? n->h * t->y / 100 : t->y);
         else if (t->kind == WE_TF_SCALE) matrix_mul(m, t->x, 0, 0, t->y, 0, 0);
-        else if (t->x == 1) matrix_mul(m, 0, -1000, 1000, 0, 0, 0);    /* 90deg clockwise, y down */
-        else if (t->x == 2) matrix_mul(m, -1000, 0, 0, -1000, 0, 0);
-        else if (t->x == 3) matrix_mul(m, 0, 1000, -1000, 0, 0, 0);
+        else if (t->kind == WE_TF_ROTATE) {                            /* clockwise, y down */
+            int sn = sin_deg(t->x), cs = sin_deg(t->x + 90);
+            matrix_mul(m, cs, -sn, sn, cs, 0, 0);
+        } else matrix_mul(m, 1000, tan_deg(t->x), tan_deg(t->y), 1000, 0, 0);
     }
     matrix_mul(m, 1000, 0, 0, 1000, -ox, -oy);
 }
@@ -8439,9 +8490,53 @@ static void node_matrix(const we_node_t *n, we_matrix_t *m) {
 static int map_x(const we_matrix_t *m, int x, int y) { return floor_div(floor_div(2 * (m->a * x + m->b * y), 125) + m->e + 8, 16); }
 static int map_y(const we_matrix_t *m, int x, int y) { return floor_div(floor_div(2 * (m->c * x + m->d * y), 125) + m->f + 8, 16); }
 
+/* Lot 63: a rectangle under a matrix that is not axis-aligned maps to a
+ * parallelogram. It is painted as at most WE_TF_BANDS row bands of equal
+ * height, each spanning the parallelogram at its middle row. Corners
+ * round to the nearest half pixel and clamp to +-WE_LAYOUT_MAX / 2 px. */
+#define WE_TF_BANDS 8
+static int tf_bands(const we_matrix_t *m, const os_fb_web_item_t *r, os_fb_web_item_t *out, int used, int cap) {
+    int px[4], py[4], k, top, bottom, rows, bands, b, last = -1;
+    for (k = 0; k < 4; k++) {
+        int x = r->x + ((k == 1 || k == 2) ? r->w : 0), y = r->y + (k >= 2 ? r->h : 0);
+        px[k] = clamp_int(floor_div(floor_div(2 * (m->a * x + m->b * y), 125) + m->e + 4, 8), -WE_LAYOUT_MAX, WE_LAYOUT_MAX);
+        py[k] = clamp_int(floor_div(floor_div(2 * (m->c * x + m->d * y), 125) + m->f + 4, 8), -WE_LAYOUT_MAX, WE_LAYOUT_MAX);
+    }
+    top = bottom = py[0];
+    for (k = 1; k < 4; k++) { if (py[k] < top) top = py[k]; if (py[k] > bottom) bottom = py[k]; }
+    top = floor_div(top + 1, 2); bottom = floor_div(bottom + 1, 2);
+    rows = bottom - top;
+    bands = rows < WE_TF_BANDS ? rows : WE_TF_BANDS;
+    for (b = 0; b < bands; b++) {
+        int ra = top + rows * b / bands, rb = top + rows * (b + 1) / bands, mid = ra + rb, lo = 0, hi = 0, hit = 0, left, right;
+        for (k = 0; k < 4; k++) {
+            int j = (k + 1) & 3, lo_k = py[k] < py[j] ? k : j, hi_k = lo_k == k ? j : k, x;
+            if (mid < py[lo_k] || mid >= py[hi_k]) continue;
+            x = px[lo_k] + floor_div((px[hi_k] - px[lo_k]) * (mid - py[lo_k]), py[hi_k] - py[lo_k]);
+            if (!hit || x < lo) lo = x;
+            if (!hit || x > hi) hi = x;
+            hit = 1;
+        }
+        left = floor_div(lo + 1, 2); right = floor_div(hi + 1, 2);
+        if (!hit || right <= left) { last = -1; continue; }
+        if (last >= 0 && out[last].x == left && out[last].w == right - left) { out[last].h = (uint16_t)(out[last].h + rb - ra); continue; }
+        if (used >= cap) return -1;
+        out[used] = *r;
+        out[used].kind = OS_FB_WEB_RECT;
+        out[used].x = (int16_t)left; out[used].y = (int16_t)ra;
+        out[used].w = (uint16_t)(right - left); out[used].h = (uint16_t)(rb - ra);
+        last = used++;
+    }
+    return used;
+}
+
+/* Text under a matrix that is not axis-aligned stays upright, its centre
+ * mapped ("transform text upright"). */
+static int tf_upright_text;
+
 static int tf_apply(const we_matrix_t *m, os_fb_web_item_t *frag, int count, int cap) {
     static os_fb_web_item_t rects[WE_CLIP_FRAGMENTS];
-    int i, k, used = 0, out = 0;
+    int i, k, used = 0, out = 0, skewed = (m->b || m->c) && (m->a || m->d);
     if (m->a == 1000 && m->d == 1000 && !m->b && !m->c) {
         int dx = floor_div(m->e + 8, 16), dy = floor_div(m->f + 8, 16);
         for (i = 0; i < count; i++) {
@@ -8452,7 +8547,15 @@ static int tf_apply(const we_matrix_t *m, os_fb_web_item_t *frag, int count, int
     }
     for (i = 0; i < count; i++) {
         const os_fb_web_item_t *it = &frag[i];
-        if (it->kind == OS_FB_WEB_TEXT) {
+        if (it->kind == OS_FB_WEB_TEXT && skewed) {
+            int cx = 2 * it->x + it->w, cy = 2 * it->y + it->h;
+            if (used >= cap) return -1;
+            rects[used] = *it;
+            rects[used].x = (int16_t)limit_coord(floor_div(floor_div(floor_div(m->a * cx + m->b * cy, 125) + m->e, 8) - it->w + 1, 2));
+            rects[used].y = (int16_t)limit_coord(floor_div(floor_div(floor_div(m->c * cx + m->d * cy, 125) + m->f, 8) - it->h + 1, 2));
+            used++;
+            tf_upright_text = 1;
+        } else if (it->kind == OS_FB_WEB_TEXT) {
             int len = w_len(it->text);
             for (k = 0; k < len; k++) {
                 int n;
@@ -8470,6 +8573,13 @@ static int tf_apply(const we_matrix_t *m, os_fb_web_item_t *frag, int count, int
             if (used >= cap) return -1;
             rects[used++] = *it;
         }
+    }
+    if (skewed) {
+        for (i = 0; i < used; i++) {
+            if (rects[i].kind == OS_FB_WEB_TEXT) { if (out >= cap) return -1; frag[out++] = rects[i]; }
+            else if ((out = tf_bands(m, &rects[i], frag, out, cap)) < 0) return -1;
+        }
+        return out;
     }
     for (i = 0; i < used; i++) {
         os_fb_web_item_t r = rects[i];
@@ -8495,28 +8605,46 @@ static int transformed_chain(const we_doc_t *d, int owner) {
     return 0;
 }
 
-/* Owner transform, then for each ancestor its clip and its transform. */
+/* Lot 63: m = l * m, so that m applies first. */
+static void matrix_compose(we_matrix_t *m, const we_matrix_t *l) {
+    we_matrix_t r;
+    r.a = clamp_int(div_round(l->a * m->a + l->b * m->c, 1000), -8000, 8000);
+    r.b = clamp_int(div_round(l->a * m->b + l->b * m->d, 1000), -8000, 8000);
+    r.c = clamp_int(div_round(l->c * m->a + l->d * m->c, 1000), -8000, 8000);
+    r.d = clamp_int(div_round(l->c * m->b + l->d * m->d, 1000), -8000, 8000);
+    r.e = clamp_int(l->e + div_round(l->a * m->e, 1000) + div_round(l->b * m->f, 1000), -WE_TF_EDGE, WE_TF_EDGE);
+    r.f = clamp_int(l->f + div_round(l->c * m->e, 1000) + div_round(l->d * m->f, 1000), -WE_TF_EDGE, WE_TF_EDGE);
+    *m = r;
+}
+
+/* Owner transform, then for each ancestor its clip and its transform.
+ * Lot 63: transforms with no clip between them compose into one matrix,
+ * applied before the next clip or at the end, so rotate(45deg) inside
+ * rotate(-45deg) paints its box upright. */
 static int transform_clip_item(const we_doc_t *d, const os_fb_web_item_t *item, int owner, os_fb_web_item_t *frag, int cap) {
-    int count = 1, p, q, guard;
-    we_matrix_t m;
+    int count = 1, p, q, guard, pending = 0;
+    we_matrix_t m, step;
     frag[0] = *item;
     if (owner < 0) return 1;
-    if (d->nodes[owner].tf_count) {
-        node_matrix(&d->nodes[owner], &m);
-        if ((count = tf_apply(&m, frag, count, cap)) < 0) return -1;
-    }
+    if (d->nodes[owner].tf_count) { node_matrix(&d->nodes[owner], &m); pending = 1; }
     for (q = owner, p = d->nodes[owner].parent, guard = 0; p >= 0 && count > 0 && guard <= WE_DEPTH_MAX + 1;
          q = p, p = d->nodes[p].parent, guard++) {
         const we_node_t *n = &d->nodes[p];
         if (d->nodes[q].fixed) break;
-        if (n->overflow_hidden &&
-            (count = clip_frags(frag, count, n->x + box_edge(n, 3), n->y + box_edge(n, 0),
-                                n->x + n->w - box_edge(n, 1), n->y + n->h - box_edge(n, 2), cap)) < 0) return -1;
+        if (n->overflow_hidden) {
+            if (pending && (count = tf_apply(&m, frag, count, cap)) < 0) return -1;
+            pending = 0;
+            if ((count = clip_frags(frag, count, n->x + box_edge(n, 3), n->y + box_edge(n, 0),
+                                    n->x + n->w - box_edge(n, 1), n->y + n->h - box_edge(n, 2), cap)) < 0) return -1;
+        }
         if (n->tf_count) {
-            node_matrix(n, &m);
-            if ((count = tf_apply(&m, frag, count, cap)) < 0) return -1;
+            node_matrix(n, &step);
+            if (pending) matrix_compose(&m, &step);
+            else m = step;
+            pending = 1;
         }
     }
+    if (pending && (count = tf_apply(&m, frag, count, cap)) < 0) return -1;
     return count;
 }
 
@@ -8582,7 +8710,9 @@ static void clip_display_list(we_doc_t *d) {
         int left, top, right, bottom, k, fragments;
         static os_fb_web_item_t edges[WE_CLIP_FRAGMENTS];
         if (transformed_chain(d, d->item_owner[i])) {
+            tf_upright_text = 0;
             fragments = transform_clip_item(d, &item, d->item_owner[i], edges, WE_CLIP_FRAGMENTS);
+            if (tf_upright_text) diag(d, "transform text upright", d->item_owner[i]);
             if (fragments < 0) {
                 d->perf.items_dropped++;
                 diag(d, "transform display budget", d->item_owner[i]);
