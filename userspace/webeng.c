@@ -881,19 +881,27 @@ static void box4(we_node_t *node, int box, const char* v, int n, int16_t out[4])
  * cw: in-flow and floated children and, through inline boxes and table
  * rows, their descendants. Absolute children also use cw (the parent
  * content box, not their positioned containing block). */
-static void spacing_resolve(we_doc_t *d, int parent, int cw, int depth) {
-    int c, bit;
-    if (depth > WE_DEPTH_MAX) return;
+static void spacing_node(we_node_t *n, int cw) {
+    int bit;
     if (cw < 0) cw = 0;
+    for (bit = 0; bit < 8; bit++) if (n->spacing_pct & (1u << bit)) {
+        int t = n->spacing_value[bit], v = t < 0 ? -((-t * cw) / 1000) : (t * cw) / 1000;
+        if (v > 2000) v = 2000;
+        if (v < -2000) v = -2000;
+        if (bit < 4) n->margin[bit] = (int16_t)v; else n->padding[bit - 4] = (int16_t)v;
+    }
+}
+
+/* Lot 62 round 2: grid items resolve against their grid area width
+ * (prepare_grid, 0 for track sizing) and absolute boxes against the
+ * padding box of their containing block (place_absolutes). */
+static void spacing_resolve(we_doc_t *d, int parent, int cw, int depth) {
+    int c, grid = d->nodes[parent].display == WE_DISP_GRID;
+    if (depth > WE_DEPTH_MAX) return;
     for (c = d->nodes[parent].first; c >= 0; c = d->nodes[c].next) {
         we_node_t *n = &d->nodes[c];
-        if (n->is_text) continue;
-        for (bit = 0; bit < 8; bit++) if (n->spacing_pct & (1u << bit)) {
-            int t = n->spacing_value[bit], v = t < 0 ? -((-t * cw) / 1000) : (t * cw) / 1000;
-            if (v > 2000) v = 2000;
-            if (v < -2000) v = -2000;
-            if (bit < 4) n->margin[bit] = (int16_t)v; else n->padding[bit - 4] = (int16_t)v;
-        }
+        if (n->is_text || n->absolute) continue;
+        spacing_node(n, grid ? 0 : cw);
         if (n->display == WE_DISP_INLINE || n->display == WE_DISP_ROW) spacing_resolve(d, c, cw, depth + 1);
     }
 }
@@ -5100,6 +5108,7 @@ static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w
         if ((int)i == cb || !n->absolute || n->display == WE_DISP_NONE) continue;
         if (abs_containing(d, (int)i) != want) continue;
         if (n->fixed) { pad_x = 0; pad_y = d->scroll_y; pad_w = d->viewport_w; pad_h = d->viewport_h; }
+        spacing_node(n, pad_w);
         flags = n->inset_flags;
         left = (flags & WE_INSET_LEFT) ? math_value(n, WE_LEN_LEFT, pad_w, n->offset_x) : 0;
         right = (flags & WE_INSET_RIGHT) ? math_value(n, WE_LEN_RIGHT, pad_w, n->offset_r) : 0;
@@ -5628,6 +5637,7 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         if (work->row[k] < 0) continue;
         width = work->column_x[work->col[k] + child->grid_col_span - 1] +
                 work->column[work->col[k] + child->grid_col_span - 1] - work->column_x[work->col[k]];
+        spacing_node(&d->nodes[items->node[k]], width);
         if (subgrid_on(items->node[k], 1)) {
             subgrid_rows(d, idx, items->node[k], work->row[k], grid_item_width(n, child, width, items->node[k]), fixed_height, gy, work, depth);
             work->item_h[k] = -1;

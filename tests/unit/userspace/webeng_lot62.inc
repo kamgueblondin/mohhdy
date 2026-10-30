@@ -11,6 +11,7 @@
 #include "webeng_lot62_text.inc"
 #include "webeng_lot62_radius.inc"
 #include "webeng_lot62_list.inc"
+#include "webeng_lot62_cb.inc"
 #include "webeng_lot62_page.inc"
 
 static void lot62_run(void) {
@@ -25,5 +26,6 @@ static void lot62_run(void) {
     lot62_text_run();
     lot62_radius_run();
     lot62_list_run();
+    lot62_cb_run();
     lot62_page_run();
 }
