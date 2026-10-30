@@ -249,6 +249,10 @@ typedef struct {
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
+    /* Lot 62: border radii, corners top-left, top-right, bottom-right,
+     * bottom-left; horizontal then vertical, px or percent of the border
+     * box width / height (rad_pct bit c for x, bit 4 + c for y). */
+    uint8_t rad_x[4], rad_y[4], rad_pct;
     we_shadow_t tshadow[WE_SHADOWS_MAX];
     uint16_t grad_pos[WE_GRAD_STOPS];
     uint32_t grad_color[WE_GRAD_STOPS];

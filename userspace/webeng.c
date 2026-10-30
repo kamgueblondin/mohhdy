@@ -1798,6 +1798,61 @@ static void subgrid_tracks(we_node_t *n, int axis, const int *sizes, const int *
 
 /* Expand a valid margin into top,right,bottom,left and replace all auto bits. */
 static int tf_angle(const char *v, int len, int16_t *quarter);
+static int tf_length(const char *v, int len, int16_t *out, int *percent);
+
+/* ---------- Lot 62: border-radius ----------
+ * border-radius: 1 to 4 radii, optionally "/" and 1 to 4 vertical radii;
+ * the longhands take one or two. px (at most 128) or percent (at most
+ * 100). Painted as a staircase of WE_RADIUS_STEPS rows per corner. */
+#define WE_RADIUS_MAX 128
+#define WE_RADIUS_STEPS 3
+#define WE_RADIUS_SLICES (4 * WE_RADIUS_STEPS + 2)
+static int radius_value(const char *v, int len, int *value, int *pct) {
+    int16_t px;
+    int percent;
+    if (tf_length(v, len, &px, &percent) || px < 0) return -1;
+    if (percent ? px > 100 : px > WE_RADIUS_MAX) return -1;
+    *value = px; *pct = percent;
+    return 0;
+}
+
+static int radius_list(const char *v, int len, int *values, int *pcts) {
+    static const int8_t from[4][4] = { {0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3} };
+    int a[4], l[4], c = tokens(v, len, a, l), k, val[4], pc[4];
+    if (c < 1 || c > 4) return -1;
+    for (k = a[c - 1] + l[c - 1]; k < len; k++) if (!w_space(v[k])) return -1;   /* a fifth value */
+    for (k = 0; k < c; k++) if (radius_value(v + a[k], l[k], &val[k], &pc[k])) return -1;
+    for (k = 0; k < 4; k++) { values[k] = val[from[c - 1][k]]; pcts[k] = pc[from[c - 1][k]]; }
+    return 0;
+}
+
+static void radius_store(we_node_t *n, int corner, int x, int xp, int y, int yp) {
+    n->rad_x[corner] = (uint8_t)x; n->rad_y[corner] = (uint8_t)y;
+    n->rad_pct = (uint8_t)(n->rad_pct & ~((1u << corner) | (1u << (corner + 4))));
+    if (xp) n->rad_pct |= (uint8_t)(1u << corner);
+    if (yp) n->rad_pct |= (uint8_t)(1u << (corner + 4));
+}
+
+static int parse_radius(we_node_t *n, const char *v, int len) {
+    int slash = -1, k, x[4], xp[4], y[4], yp[4];
+    for (k = 0; k < len; k++) if (v[k] == '/') { if (slash >= 0) return -1; slash = k; }
+    if (slash < 0) {
+        if (radius_list(v, len, x, xp)) return -1;
+        for (k = 0; k < 4; k++) { y[k] = x[k]; yp[k] = xp[k]; }
+    } else if (radius_list(v, slash, x, xp) || radius_list(v + slash + 1, len - slash - 1, y, yp)) return -1;
+    for (k = 0; k < 4; k++) radius_store(n, k, x[k], xp[k], y[k], yp[k]);
+    return 0;
+}
+
+static int parse_corner(we_node_t *n, int corner, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), x, xp, y, yp;
+    if (c < 1 || c > 2 || radius_value(v + a[0], l[0], &x, &xp)) return -1;
+    if (c == 1) { y = x; yp = xp; }
+    else if (radius_value(v + a[1], l[1], &y, &yp)) return -1;
+    radius_store(n, corner, x, xp, y, yp);
+    return 0;
+}
+
 
 /* Lot 62: split a functional value's arguments at top-level commas. */
 static int comma_args(const char *v, int len, int *start, int *length, int cap) {
@@ -2721,6 +2776,13 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (parse_shadows(n->shadow, &n->shadow_count, v, vl, 0)) diag(d, "box-shadow refused", -1);
     } else if (w_eq(prop, "text-shadow")) {
         if (parse_shadows(n->tshadow, &n->tshadow_count, v, vl, 1)) diag(d, "text-shadow refused", -1);
+    } else if (w_eq(prop, "border-radius")) {
+        if (parse_radius(n, v, vl)) diag(d, "border-radius refused", -1);
+    } else if (w_eq(prop, "border-top-left-radius") || w_eq(prop, "border-top-right-radius") ||
+               w_eq(prop, "border-bottom-right-radius") || w_eq(prop, "border-bottom-left-radius")) {
+        int corner = w_eq(prop, "border-top-left-radius") ? 0 : w_eq(prop, "border-top-right-radius") ? 1 :
+                     w_eq(prop, "border-bottom-right-radius") ? 2 : 3;
+        if (parse_corner(n, corner, v, vl)) diag(d, "border-radius refused", -1);
     } else if (w_eq(prop, "text-overflow")) {
         if (value_is(v, vl, "clip")) n->text_overflow = 0;
         else if (value_is(v, vl, "ellipsis")) n->text_overflow = 1;
@@ -3070,6 +3132,7 @@ int we_style(we_doc_t* d) {
         n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
         n->spacing_pct = 0; n->grad_dir = 0;
         n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING; n->text_overflow = 0;
+        w_zero(n->rad_x, sizeof(n->rad_x)); w_zero(n->rad_y, sizeof(n->rad_y)); n->rad_pct = 0;
         n->text_transform = p ? p->text_transform : WE_TT_NONE;
         n->tshadow_count = p ? p->tshadow_count : 0;
         if (p) { int k; for (k = 0; k < WE_SHADOWS_MAX; k++) n->tshadow[k] = p->tshadow[k]; }
@@ -4367,6 +4430,176 @@ static int gradient_reserve(we_doc_t *d, int idx, int *count) {
 static int gradient_banded;
 
 /* Bands tile the border box exactly; each takes the colour at its middle. */
+/* ---------- Lot 62: rounded shapes as row slices ----------
+ * A shape is a box (w x h) with elliptical corners; it is cut into row
+ * bands at WE_RADIUS_STEPS rows per corner, each band inset on the left
+ * and right by the corner ellipse at the band's middle row. */
+typedef struct { int rx[4], ry[4]; } we_radii_t;
+
+static uint32_t isqrt32(uint32_t v) {
+    uint32_t r = 0, bit = 1u << 30;
+    while (bit > v) bit >>= 2;
+    while (bit) {
+        if (v >= r + bit) { v -= r + bit; r = (r >> 1) + bit; } else r >>= 1;
+        bit >>= 2;
+    }
+    return r;
+}
+
+/* Used radii of a w x h border box: percentages resolved, then all radii
+ * scaled down by the smallest side / (sum of its two radii) below 1. */
+static void used_radii(const we_node_t *n, int w, int h, we_radii_t *r) {
+    static const int8_t side_corners[4][3] = { {0, 1, 0}, {1, 2, 1}, {3, 2, 0}, {0, 3, 1} };
+    int k, num = 1, den = 1;
+    for (k = 0; k < 4; k++) {
+        r->rx[k] = n->rad_pct & (1u << k) ? n->rad_x[k] * w / 100 : n->rad_x[k];
+        r->ry[k] = n->rad_pct & (1u << (k + 4)) ? n->rad_y[k] * h / 100 : n->rad_y[k];
+        if (r->rx[k] > WE_RADIUS_MAX) r->rx[k] = WE_RADIUS_MAX;
+        if (r->ry[k] > WE_RADIUS_MAX) r->ry[k] = WE_RADIUS_MAX;
+        if (!r->rx[k] || !r->ry[k]) r->rx[k] = r->ry[k] = 0;
+    }
+    for (k = 0; k < 4; k++) {
+        int a = side_corners[k][0], b = side_corners[k][1], vertical = side_corners[k][2];
+        int sum = vertical ? r->ry[a] + r->ry[b] : r->rx[a] + r->rx[b], len = vertical ? h : w;
+        if (sum > len && len * den < num * sum) { num = len; den = sum; }
+    }
+    if (num < den) for (k = 0; k < 4; k++) {
+        r->rx[k] = r->rx[k] * num / den; r->ry[k] = r->ry[k] * num / den;
+        if (!r->rx[k] || !r->ry[k]) r->rx[k] = r->ry[k] = 0;
+    }
+}
+
+static int radii_any(const we_radii_t *r) {
+    return r->rx[0] || r->rx[1] || r->rx[2] || r->rx[3];
+}
+
+/* inset of one corner at doubled row y2 counted from the corner's edge */
+static int corner_inset(int rx, int ry, int y2) {
+    int r2 = 2 * ry, t2 = r2 - y2;
+    uint32_t q;
+    if (!rx || y2 >= r2) return 0;
+    if (t2 > r2) t2 = r2;
+    q = isqrt32((uint32_t)(rx * rx) * (uint32_t)(r2 * r2 - t2 * t2));
+    return rx - (int)((q + (uint32_t)ry) / (uint32_t)r2);
+}
+
+static void shape_insets(const we_radii_t *r, int h, int y2, int *left, int *right) {
+    int tl = corner_inset(r->rx[0], r->ry[0], y2), tr = corner_inset(r->rx[1], r->ry[1], y2);
+    int bl = corner_inset(r->rx[3], r->ry[3], 2 * h - y2), br = corner_inset(r->rx[2], r->ry[2], 2 * h - y2);
+    *left = tl > bl ? tl : bl;
+    *right = tr > br ? tr : br;
+}
+
+static int add_break(int *list, int count, int cap, int v, int h) {
+    int k;
+    if (v <= 0 || v >= h) return count;
+    for (k = 0; k < count; k++) if (list[k] == v) return count;
+    if (count < cap) list[count++] = v;
+    return count;
+}
+
+static int shape_breaks(const we_radii_t *r, int h, int offset, int *list, int count, int cap) {
+    int c, s;
+    for (c = 0; c < 4; c++) for (s = 1; s <= WE_RADIUS_STEPS; s++) {
+        int at = r->ry[c] * s / WE_RADIUS_STEPS;
+        if (!r->ry[c]) continue;
+        count = add_break(list, count, cap, offset + (c < 2 ? at : h - at), offset + h + 1);
+    }
+    return count;
+}
+
+static void sort_ints(int *list, int count) {
+    int i, j;
+    for (i = 1; i < count; i++) {
+        int v = list[i];
+        for (j = i; j > 0 && list[j - 1] > v; j--) list[j] = list[j - 1];
+        list[j] = v;
+    }
+}
+
+/* Rounded background: slices into the reserved slots (unused stay reserved). */
+static int radius_fill(we_doc_t *d, int slot, int count, const we_radii_t *r, int x, int y, int w, int h, uint32_t color) {
+    int breaks[WE_RADIUS_SLICES + 2], n = 0, k, used = 0, prev_l = -1, prev_r = -1;
+    n = shape_breaks(r, h, 0, breaks + 1, 0, WE_RADIUS_SLICES - 1);
+    breaks[0] = 0;
+    sort_ints(breaks + 1, n);
+    breaks[n + 1] = h;
+    for (k = 0; k <= n; k++) {
+        int a = breaks[k], b = breaks[k + 1], left, right;
+        if (b <= a) continue;
+        shape_insets(r, h, a + b, &left, &right);
+        if (used && left == prev_l && right == prev_r) { d->items[slot + used - 1].h = (uint16_t)(d->items[slot + used - 1].h + b - a); continue; }
+        if (used == count || w - left - right <= 0) { prev_l = -1; continue; }
+        d->items[slot + used].kind = OS_FB_WEB_RECT;
+        d->items[slot + used].color = color;
+        d->items[slot + used].x = (int16_t)(x + left); d->items[slot + used].y = (int16_t)(y + a);
+        d->items[slot + used].w = (uint16_t)(w - left - right); d->items[slot + used].h = (uint16_t)(b - a);
+        used++;
+        prev_l = left; prev_r = right;
+    }
+    return used;
+}
+
+/* Rounded solid border of thickness t: outer shape minus the padding-box
+ * shape (radii reduced by t), up to two rects per band. */
+static int radius_ring(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, int w, int h, int t, uint32_t color) {
+    we_radii_t in;
+    int breaks[2 * WE_RADIUS_SLICES + 4], n, k, emitted = 0;
+    int pl = -2, pil = -2, pir = -2, pr = -2;
+    os_fb_web_item_t *last[2] = {0, 0};
+    for (k = 0; k < 4; k++) {
+        in.rx[k] = r->rx[k] > t ? r->rx[k] - t : 0;
+        in.ry[k] = r->ry[k] > t ? r->ry[k] - t : 0;
+        if (!in.rx[k] || !in.ry[k]) in.rx[k] = in.ry[k] = 0;
+    }
+    n = shape_breaks(r, h, 0, breaks + 1, 0, 2 * WE_RADIUS_SLICES);
+    n = shape_breaks(&in, h - 2 * t, t, breaks + 1, n, 2 * WE_RADIUS_SLICES);
+    n = add_break(breaks + 1, n, 2 * WE_RADIUS_SLICES + 2, t, h);
+    n = add_break(breaks + 1, n, 2 * WE_RADIUS_SLICES + 2, h - t, h);
+    breaks[0] = 0;
+    sort_ints(breaks + 1, n);
+    breaks[n + 1] = h;
+    for (k = 0; k <= n; k++) {
+        int a = breaks[k], b = breaks[k + 1], ol, orr, il = -1, ir = -1;
+        if (b <= a) continue;
+        shape_insets(r, h, a + b, &ol, &orr);
+        if (a >= t && b <= h - t && w > 2 * t) {
+            shape_insets(&in, h - 2 * t, a + b - 2 * t, &il, &ir);
+            il += t; ir += t;
+        }
+        if (ol == pl && orr == pr && il == pil && ir == pir && last[0]) {
+            last[0]->h = (uint16_t)(last[0]->h + b - a);
+            if (last[1]) last[1]->h = (uint16_t)(last[1]->h + b - a);
+            continue;
+        }
+        pl = ol; pr = orr; pil = il; pir = ir;
+        last[0] = last[1] = 0;
+        if (il < 0) {
+            if (w - ol - orr > 0) last[0] = emit(d, idx, OS_FB_WEB_RECT, x + ol, y + a, w - ol - orr, b - a, color);
+        } else {
+            if (il > ol) last[0] = emit(d, idx, OS_FB_WEB_RECT, x + ol, y + a, il - ol, b - a, color);
+            if (ir > orr) last[1] = emit(d, idx, OS_FB_WEB_RECT, x + w - ir, y + a, ir - orr, b - a, color);
+            if (!last[0]) { last[0] = last[1]; last[1] = 0; }
+        }
+        emitted += (last[0] != 0) + (last[1] != 0);
+    }
+    return emitted;
+}
+
+static int radius_stepped;
+
+/* radii of an inner box: each reduced by the adjacent insets */
+static void radii_inset(const we_radii_t *r, we_radii_t *out, int top, int right, int bottom, int left) {
+    static const int8_t xs[4] = {3, 1, 1, 3}, ys[4] = {0, 0, 2, 2};
+    int k, inset[4];
+    inset[0] = top; inset[1] = right; inset[2] = bottom; inset[3] = left;
+    for (k = 0; k < 4; k++) {
+        out->rx[k] = r->rx[k] > inset[(int)xs[k]] ? r->rx[k] - inset[(int)xs[k]] : 0;
+        out->ry[k] = r->ry[k] > inset[(int)ys[k]] ? r->ry[k] - inset[(int)ys[k]] : 0;
+        if (!out->rx[k] || !out->ry[k]) out->rx[k] = out->ry[k] = 0;
+    }
+}
+
 /* Lot 62: border, padding or content box of a laid out box, (x, y, w, h). */
 static void background_box(const we_node_t *n, int box, int bx, int by, int bw, int bh, int out[4]) {
     int top = 0, right = 0, bottom = 0, left = 0;
@@ -4474,7 +4707,8 @@ static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, in
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     we_node_t* n = &d->nodes[idx];
     int bx, by, bw, bh, content_x, content_w, content_h, slot, border_slot = -1;
-    int first_item = (int)d->nitems, shadow_slot[2], shadow_slots[2], grad_slot, grad_slots;
+    int first_item = (int)d->nitems, shadow_slot[2], shadow_slots[2], grad_slot, grad_slots, radius_slots;
+    we_radii_t radii;
     if (depth > WE_DEPTH_MAX) return 0;
     d->perf.boxes++;
     layout_first[idx] = layout_last[idx] = WE_NO_BASELINE;
@@ -4496,6 +4730,16 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     shadow_slot[0] = shadow_reserve(d, idx, 0, &shadow_slots[0]);
     slot = n->has_bg ? (int)d->nitems : -1;
     if (n->has_bg && !emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, n->bg)) slot = -1;
+    /* lot 62: a rounded background takes up to WE_RADIUS_SLICES slots */
+    radius_slots = 0;
+    if (slot >= 0 && (n->rad_x[0] | n->rad_x[1] | n->rad_x[2] | n->rad_x[3])) {
+        for (radius_slots = 1; radius_slots < WE_RADIUS_SLICES; radius_slots++) {
+            os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
+            if (!it) break;
+            it->kind = 0;
+            it->pad = WE_ITEM_RESERVED;
+        }
+    }
     grad_slot = gradient_reserve(d, idx, &grad_slots);
     shadow_slot[1] = shadow_reserve(d, idx, 1, &shadow_slots[1]);
     content_x = limit_coord(bx + box_edge(n, 3) + n->padding[3]);
@@ -4534,11 +4778,20 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     bh = limit_coord(content_h + vertical_extra(n));
     if (bh < 0) bh = 0;
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw; n->h = (int16_t)bh;
+    used_radii(n, bw, bh, &radii);
+    if (radii_any(&radii)) {
+        radius_stepped = 1;
+        if (n->grad_dir) diag(d, "gradient radius painted square", idx);
+    }
     if (slot >= 0) {
         os_fb_web_item_t* it = &d->items[slot];
         int box[4];
         background_box(n, n->bg_clip, bx, by, bw, bh, box);
-        it->x = (int16_t)box[0]; it->y = (int16_t)box[1]; it->w = (uint16_t)box[2]; it->h = (uint16_t)box[3];
+        if (radius_slots && radii_any(&radii)) {
+            we_radii_t clip;
+            radii_inset(&radii, &clip, box[1] - by, bx + bw - box[0] - box[2], by + bh - box[1] - box[3], box[0] - bx);
+            if (!radius_fill(d, slot, radius_slots, &clip, box[0], box[1], box[2], box[3], n->bg)) { it->kind = 0; it->pad = WE_ITEM_RESERVED; }
+        } else { it->x = (int16_t)box[0]; it->y = (int16_t)box[1]; it->w = (uint16_t)box[2]; it->h = (uint16_t)box[3]; }
     }
     gradient_fill(d, idx, grad_slot, grad_slots, bx, by, bw, bh);
     shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh);
@@ -4552,6 +4805,9 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         edge_paint(d, idx, n->border_style, n->border_color, 0, by + bh - t, bx, t, bw);
         edge_paint(d, idx, n->border_style, n->border_color, 1, bx, by + t, t, inner_h);
         edge_paint(d, idx, n->border_style, n->border_color, 1, bx + bw - t, by + t, t, inner_h);
+        border_slot = 1;
+    } else if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 0 || n->border_style == WE_BS_SOLID)) {
+        radius_ring(d, idx, &radii, bx, by, bw, bh, n->border > 8 ? 8 : n->border, n->border_color);
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell) {
         os_fb_web_item_t* it = emit(d, idx, OS_FB_WEB_BORDER, bx, by, bw, bh, n->border_color);
@@ -7756,7 +8012,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     d->viewport_h = (int16_t)viewport_h;
     d->scroll_y = 0;
     w_zero(static_set, sizeof(static_set));
-    d->nitems = 0; math_refused = 0; wavy_decoration = 0; gradient_banded = 0; text_shadow_blur = 0; baseline_probe = 0; probe_level = probe_count = 0;
+    d->nitems = 0; math_refused = 0; wavy_decoration = 0; gradient_banded = 0; text_shadow_blur = 0; radius_stepped = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
@@ -7808,6 +8064,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     if (wavy_decoration) diag(d, "wavy decoration painted solid", -1);
     if (gradient_banded) diag(d, "gradient painted in bands", -1);
     if (text_shadow_blur) diag(d, "text-shadow blur painted sharp", -1);
+    if (radius_stepped) diag(d, "border-radius painted in steps", -1);
     d->perf.items = d->nitems;
     d->perf.page_w = (uint32_t)viewport_w;
     d->perf.page_h = (uint32_t)h;
