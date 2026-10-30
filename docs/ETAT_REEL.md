@@ -10,6 +10,22 @@
 
 ## État courant vérifié
 
+## Etat courant du 30 October 2026 (lot 61)
+
+US-031 partial, phase3_complete=false. The same bounded guest engine adds
+last baselines (row flex, grid with row spans), nested flex/grid/table
+baseline export through a bounded probe, vertical-align:baseline for table
+cells and inline-block, grid line occurrences, named spans and area aliases,
+repeat(auto-fill/auto-fit) bounded to 1..8 tracks, a bounded subgrid on both
+axes, an explicit viewport with position:fixed, static positions and bounded
+GUI scroll, partial glyph clipping from kernel/gfx_font8.h and shared
+collapsed table borders. Kernel, rights and shared ABI unchanged. No
+Chromium, WebKit, network loading, JavaScript VM, new font engine or margin
+collapsing. US-059/060/063/074 unchanged; US-G19..US-G24 remain partial.
+Stacking contexts remain absent. Roadmap statuses and the complete non-done
+assertion stay unchanged. Subset, remaining gaps, line counts and measured
+results: docs/lot61_plan.md.
+
 ## Etat courant du 29 October 2026 (lot 60)
 
 US-031 partial, phase3_complete=false. The same bounded guest engine adds
