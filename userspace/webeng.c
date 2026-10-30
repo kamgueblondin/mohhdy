@@ -6028,7 +6028,7 @@ static int bgi_wrap(int v, int t) {
 static int bgi_fill(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh) {
     we_node_t *n = &d->nodes[idx];
     int area[4], clip[4], tw, th, ox, oy, x0, y0, x1, y1, row, col, nr = 0, room = OS_FB_WEB_ITEMS - (int)d->nitems;
-    if (!n->bgi_len || n->visibility || w_eq(n->tag, "img") || image_open(d, idx)) return 0;
+    if (!n->bgi_len || n->visibility || image_open(d, idx)) return 0;      /* an <img> never keeps a url */
     background_box(n, n->bg_origin, bx, by, bw, bh, area);
     background_box(n, n->bg_clip, bx, by, bw, bh, clip);
     bgi_tile(n, area[2], area[3], image_work.decoded.w, image_work.decoded.h, &tw, &th);

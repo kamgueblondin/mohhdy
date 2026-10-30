@@ -84,6 +84,9 @@ static void test_l63_bgi_repeat_and_position(void) {
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
     TEST_ASSERT_EQUAL((long)l63_ramp[5], l63_at(5, 7));
     TEST_ASSERT_EQUAL(-1, l63_at(6, 0));
+    l63_bgi(L63_BGI("width:12px;height:8px", "background-size:6px 4px;background-repeat:no-repeat;background-repeat:repeat"));
+    TEST_ASSERT_EQUAL(3, lot52_node("b")->bgi_repeat);
+    TEST_ASSERT_EQUAL((long)l63_ramp[5], l63_at(11, 7));
     l63_bgi(L63_BGI("width:12px;height:8px", "background-size:6px 4px;background-repeat:repeat no-repeat"));
     TEST_ASSERT_EQUAL((long)l63_ramp[5], l63_at(11, 3));
     TEST_ASSERT_EQUAL(-1, l63_at(0, 4));

@@ -114,6 +114,68 @@ we_doc_t stays under 1 MiB (see the PR body for the measured size).
   pre. The intrinsic widths treat each break-spaces space as a break
   opportunity.
 
+## Round 2
+
+### H. Collapsed band widths per grid line
+
+- A collapsed table no longer uses one band width B for every grid line.
+  Each column line and each row line takes the widest resolved edge along
+  it (hidden edges count 0); a line where no edge is drawn has a 0 band.
+  Cells are placed with those bands, paint their half-edges inside the
+  band of their own line (edge_offset), and the cell insets and the
+  intrinsic widths read the same per-line values.
+- border-spacing is ignored for a collapsed table (as before); the bands
+  live in the table slot as int8 arrays so the layout workspace stays
+  under WE_LAYOUT_WORKSPACE_MAX.
+
+### I. Soft hyphens and hyphens
+
+- &shy; and &#173; become a soft hyphen (no glyph, not a space). With
+  hyphens:manual (default) or auto (read as manual: no dictionary) a word
+  may break at a soft hyphen; the line then ends with a '-' glued to the
+  piece before the break. A piece that fits with its hyphen stays on the
+  line.
+- hyphens:none, nowrap and word-break:break-all do not break at soft
+  hyphens; they stay invisible. Inherited; anything else gives "hyphens
+  refused". The intrinsic minimum width counts a soft hyphen break with
+  its hyphen.
+
+### J. transform: matrix()
+
+- matrix(a, b, c, d, e, f) with exactly six unitless numbers; a..d in
+  -8..8 (1/1000 precision), e and f in px within +-4000, rounded half
+  away from zero. It takes three of the four transform slots and composes
+  with the other functions in list order (same row-band painting as
+  rotate/skew). A list that would need more than four slots is refused.
+- Translucent linear stops already blend since lot 62. Translucent radial
+  stops are not done: the disjoint annulus pieces over a shared cut set
+  would need about 70-119 items for one box, beyond the 96 item list.
+
+### L. Background images
+
+- background-image: url(path) (quotes optional) on any non-<img> box with
+  a block layout. The path follows the <img src> rules (absolute, no
+  "..", no scheme) and is read through the existing image reader and
+  decoder (initrd only, no network); failures give the image diagnostics.
+- background-repeat: repeat, no-repeat, repeat-x, repeat-y or one
+  repeat/no-repeat per axis (space and round refused).
+  background-position: the transform-origin grammar (keywords, px,
+  percent of the free space). background-size: auto, contain, cover, or
+  one or two px/percent values (auto keeps the ratio).
+- Tiles are positioned in background-origin and cut to background-clip
+  (lot 62 values), sampled at the tile size and merged into rectangles
+  like an <img>; the runs are inserted after the box colour and gradient,
+  before its inset shadow and children. When the whole set does not fit
+  in the remaining display list it is refused whole ("background image
+  budget"). A later background shorthand or gradient replaces the url.
+
+### Not done in round 2
+
+- K vertical writing modes: the line builder, the intrinsic sizes and the
+  block layout all assume a horizontal inline axis; a bounded subset
+  would touch every layout path, not done this round.
+- Hit testing of transformed boxes: the engine has no hit test.
+
 ## QEMU
 
 - /web/lot63.html combines A-F; tests/scripts/test_qemu_web_layout.py
@@ -142,16 +204,25 @@ we_doc_t stays under 1 MiB (see the PR body for the measured size).
   discard (white-space-collapse).
 - lot56 tabs: a pre tab now advances to the next 64 px stop ("a       b",
   width 72) instead of being one space.
+- Round 2, lot61_collapse and lot61_table: each grid line now has its own
+  band (widest edge on that line, 0 where no edge is drawn), so the
+  expected boxes move to the spec geometry: wider_edge (right band 2 px,
+  blue at 38-39), row_group_boundary, rowspan, edge_lists,
+  one_edge_shorthand, inset_odd_line and spans_and_intrinsic (table 37x37).
+  The same properties are asserted, with the new coordinates.
+- Round 2, lot62_gradient refusals: background-image:url(x.png) now
+  parses; the relative path is refused at paint ("image local path
+  refused", count 1) and nothing is painted, as before.
 
 ## Remaining gaps (first one first)
 
 1. Margin collapsing (excluded by the brief).
-2. Within the brief: per-row collapsed band widths (collapsed tables keep
-   one band width B for every grid line).
-3. Dots and dashes along the corner arcs (arcs are solid), translucent
-   radial stops, background images (repeat/position/size).
-4. matrix()/3D transforms, rotated text glyphs, transformed hit testing.
-5. Soft hyphen breaks and hyphens, vertical writing modes, bidi.
+2. Within the brief: vertical writing modes (vertical-lr/vertical-rl).
+3. Translucent radial stops (display list budget), dots and dashes along
+   the corner arcs (arcs are solid).
+4. 3D transforms, rotated text glyphs, a hit test (none exists).
+5. hyphens:auto with a dictionary, bidi; background images on inline
+   boxes, several layers, space/round repeats.
 6. Column subgrid baselines, floats inside the negative z layer.
 
 ## Results

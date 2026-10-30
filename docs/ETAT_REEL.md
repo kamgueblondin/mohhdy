@@ -22,7 +22,10 @@ break keep-all/break-word, radial-gradient explicit sizes and "at
 skew painted as at most 8 row bands per rectangle with nested matrices
 composed when no clip separates them, rounded dashed and dotted borders
 (solid arcs, patterned straight parts) rounded overflow clips under
-transforms, preserved tabs with tab-size and white-space break-spaces. Kernel, rights and shared ABI unchanged. No Chromium, WebKit,
+transforms, preserved tabs with tab-size and white-space break-spaces,
+collapsed table bands per grid line, soft hyphens with hyphens
+none/manual, transform matrix() and background-image url() of initrd
+images with bounded repeat/position/size. Kernel, rights and shared ABI unchanged. No Chromium, WebKit,
 network loading, JavaScript VM, new font engine or margin collapsing.
 US-059/060/063/074 unchanged; US-G19..US-G24 remain partial. Margin
 collapsing remains absent. Roadmap statuses and the complete non-done

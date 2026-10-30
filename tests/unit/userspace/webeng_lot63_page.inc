@@ -4,6 +4,8 @@ static void l63_load_page(void) {
     FILE *file = fopen("initrd_content/web/lot63.html", "rb");
     int count;
     if (!file) file = fopen("../initrd_content/web/lot63.html", "rb");
+    lot52_read_mode = 0;
+    we_set_image_reader(lot52_reader, 0);
     TEST_ASSERT_NOT_NULL(file);
     if (!file) return;
     count = (int)fread(html, 1, sizeof(html) - 1, file); fclose(file); html[count] = 0;
@@ -29,8 +31,17 @@ static void test_l63_page_combines_lot_behaviours(void) {
     l61_rect_at(50, 116, 20, 8, 0xFFA500);                /* rounded clip, translated */
     l61_rect_at(55, 110, 10, 3, 0xFFA500);
     l61_text_at("ab", 0, 131);                            /* overflow-x: clip */
-    TEST_ASSERT_EQUAL(66, (int)g_doc.nitems);
-    TEST_ASSERT_EQUAL(140, g_doc.perf.page_h);
+    l61_rect_at(10, 140, 4, 8, 0xFF00FF);                 /* collapsed column line band 4 */
+    l61_rect_at(10, 140, 14, 2, 0x008080);                /* row line band 2 */
+    l61_text_at("abc-", 0, 149);                          /* soft hyphen break */
+    l61_text_at("defgh", 0, 159);
+    l61_rect_at(30, 168, 10, 4, 0x00FFFF);                /* matrix(1,0,0,1,30,0) */
+    l61_rect_at(0, 172, 1, 4, 0x000000);                  /* background-image tiles */
+    l61_rect_at(5, 172, 1, 4, 0xC8C8C8);
+    l61_rect_at(6, 172, 1, 4, 0x000000);
+    l61_rect_at(11, 172, 1, 4, 0xC8C8C8);
+    TEST_ASSERT_EQUAL(83, (int)g_doc.nitems);
+    TEST_ASSERT_EQUAL(176, g_doc.perf.page_h);
     TEST_ASSERT_EQUAL(0, g_doc.perf.items_dropped);
     TEST_ASSERT_EQUAL(2, g_doc.ndiag);
     TEST_ASSERT_EQUAL(1, l61_diag_count("gradient painted in bands"));
