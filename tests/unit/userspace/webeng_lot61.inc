@@ -7,6 +7,7 @@
 #include "webeng_lot61_viewport.inc"
 #include "webeng_lot61_clip.inc"
 #include "webeng_lot61_table.inc"
+#include "webeng_lot61_stack.inc"
 #include "webeng_lot61_page.inc"
 
 static void lot61_run(void) {
@@ -17,5 +18,6 @@ static void lot61_run(void) {
     lot61_viewport_run();
     lot61_clip_run();
     lot61_table_run();
+    lot61_stack_run();
     lot61_page_run();
 }

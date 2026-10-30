@@ -5588,6 +5588,63 @@ static int fixed_owner(const we_doc_t *d, int owner) {
     return 0;
 }
 
+/* Lot 61: bounded stacking contexts. A relative or absolute box with an
+ * integer z-index groups its subtree. Each item gets one entry per
+ * enclosing context, outermost first: in-flow content of a level is 0 and
+ * a context is 20 + 2z (z in -8..8, so even a negative context paints
+ * after in-flow content, as the absolute rule already does). A stable sort
+ * keeps tree order on ties, so a context's own items stay before its
+ * content. Only documents with a relative z-index box use it; otherwise
+ * the per-containing-block absolute order is kept unchanged. Contexts
+ * deeper than WE_STACK_DEPTH - 1 are flattened into their parent. */
+#define WE_STACK_DEPTH 8
+static int stack_context(const we_node_t *n) {
+    return (n->relative || n->absolute) && n->z_set && !n->fixed;
+}
+
+static int stack_key(const we_doc_t *d, int owner, int8_t *key) {
+    int chain[WE_DEPTH_MAX + 2], count = 0, used, k, o, guard;
+    for (guard = 0, o = owner; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent)
+        if (stack_context(&d->nodes[o])) chain[count++] = o;
+    used = count < WE_STACK_DEPTH ? count : WE_STACK_DEPTH - 1;
+    for (k = 0; k < used; k++) {
+        const we_node_t *c = &d->nodes[chain[count - 1 - k]];
+        key[k] = (int8_t)(20 + 2 * c->z_index);
+    }
+    for (k = used; k < WE_STACK_DEPTH; k++) key[k] = 0;
+    return count > used;
+}
+
+static int stack_before(const int8_t *a, const int8_t *b) {
+    int k;
+    for (k = 0; k < WE_STACK_DEPTH; k++) if (a[k] != b[k]) return a[k] < b[k];
+    return 0;
+}
+
+static void stack_items(we_doc_t *d) {
+    static int8_t keys[OS_FB_WEB_ITEMS][WE_STACK_DEPTH];
+    int i, j, k, any = 0, flat = 0;
+    for (i = 0; i < (int)d->nnodes; i++)
+        if (stack_context(&d->nodes[i]) && !d->nodes[i].absolute) any = 1;
+    if (!any) return;
+    for (i = 0; i < (int)d->nitems; i++) flat |= stack_key(d, d->item_owner[i], keys[i]);
+    if (flat) diag(d, "stacking depth", -1);
+    for (i = 1; i < (int)d->nitems; i++) {
+        os_fb_web_item_t item = d->items[i];
+        int16_t owner = d->item_owner[i];
+        int8_t key[WE_STACK_DEPTH];
+        for (k = 0; k < WE_STACK_DEPTH; k++) key[k] = keys[i][k];
+        for (j = i; j > 0 && stack_before(key, keys[j - 1]); j--) {
+            d->items[j] = d->items[j - 1];
+            d->item_owner[j] = d->item_owner[j - 1];
+            for (k = 0; k < WE_STACK_DEPTH; k++) keys[j][k] = keys[j - 1][k];
+        }
+        d->items[j] = item;
+        d->item_owner[j] = owner;
+        for (k = 0; k < WE_STACK_DEPTH; k++) keys[j][k] = key[k];
+    }
+}
+
 /* Fixed boxes paint after the rest of the page, in their own order. */
 static void raise_fixed(we_doc_t *d) {
     static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
@@ -5657,6 +5714,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     subgrid_bind_all(d);
     intrinsic_sizes(d);
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
+    stack_items(d);
     raise_fixed(d);
     clip_display_list(d);
     if (math_refused) diag(d, "math evaluation refused", -1);

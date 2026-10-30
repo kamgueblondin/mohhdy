@@ -89,10 +89,21 @@ listed in "Adapted fixtures" with their new invalid value.
 - Not done: per-edge width resolution, the table/cell outer border merge
   and CSS conflict rules (style, width, then origin).
 
+## Stacking contexts (bounded)
+
+- A relative or absolute box with an integer z-index (-8..8) forms a
+  stacking context that groups its subtree, nested up to 7 levels; deeper
+  contexts are flattened with "stacking depth". Paint order per level:
+  in-flow content, then contexts by z, tree order on ties. z-index on a
+  static box still does not reorder. Fixed boxes stay last.
+- A negative z context paints after the in-flow content of its level, the
+  rule the engine already used for absolutes; CSS paints it below. The pass
+  only runs when a relative box has a z-index, so absolute-only documents
+  keep the existing per-containing-block order.
+
 ## Not done in this lot
 
-- Stacking contexts: z-index on relative or static boxes and nested
-  stacking orders. Absolute ordering stays per containing block.
+- Negative z below in-flow content, opacity/transform contexts.
 - Margin collapsing (excluded by the brief), percentage cycles, vertical
   writing modes, column flex baselines.
 
