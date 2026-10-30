@@ -139,6 +139,63 @@ static void test_l61_stack_successive_layouts_are_stable(void) {
     }
 }
 
+
+/* opacity below 1 forms a z-index 0 stacking context (CSS Color 4 and
+ * CSS 2.1 appendix E); the shared item has no alpha, so 0 < opacity < 1
+ * paints opaque with one diagnostic and opacity 0 removes the items. */
+static void test_l61_opacity_forms_a_context_over_later_flow(void) {
+    lot52_render("<body style='margin:0'><div id=o style='opacity:0.5;height:10px;background:#ff0000'></div>"
+                 "<div id=f style='margin-top:-5px;height:10px;background:#0000ff'></div></body>", 320);
+    TEST_ASSERT_EQUAL(50, lot52_node("o")->transparency);
+    TEST_ASSERT_TRUE(l61_index(0x0000FF) < l61_index(0xFF0000));
+    TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(5, 7));
+    TEST_ASSERT_EQUAL(1, l61_diag_count("opacity painted opaque"));
+    /* opacity 1 (and above, clamped) is no context: tree order stays. */
+    lot52_render("<body style='margin:0'><div id=o style='opacity:1.5;height:10px;background:#ff0000'></div>"
+                 "<div id=f style='margin-top:-5px;height:10px;background:#0000ff'></div></body>", 320);
+    TEST_ASSERT_EQUAL(0, lot52_node("o")->transparency);
+    TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(5, 7));
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l61_opacity_zero_removes_the_subtree_paint(void) {
+    lot52_render("<body style='margin:0'><div id=o style='opacity:0;height:10px;background:#ff0000'>"
+                 "<p id=c style='margin:0;background:#00ff00'>X</p></div><div id=f style='height:10px;background:#0000ff'></div></body>", 320);
+    l61_box("o", 0, 0, 320, 10);                               /* layout is kept */
+    l61_box("f", 0, 10, 320, 10);
+    TEST_ASSERT_EQUAL(-1, l61_index(0xFF0000));
+    TEST_ASSERT_EQUAL(-1, l61_index(0x00FF00));
+    TEST_ASSERT_NULL(find_text("X"));
+    TEST_ASSERT_EQUAL(1, (int)g_doc.nitems);
+    TEST_ASSERT_EQUAL(0, l61_diag_count("opacity painted opaque"));
+}
+
+static void test_l61_opacity_with_z_index_and_static_z(void) {
+    /* A positioned negative z context keeps its z with opacity. */
+    lot52_render("<body style='margin:0'><div id=o style='opacity:.4;position:relative;z-index:-1;height:10px;background:#ff0000'></div>"
+                 "<div id=f style='margin-top:-5px;height:10px;background:#0000ff'></div></body>", 320);
+    TEST_ASSERT_EQUAL(60, lot52_node("o")->transparency);
+    TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(5, 7));
+    /* z-index on a static box is ignored: the opacity context is z 0. */
+    lot52_render("<body style='margin:0'><div id=o style='opacity:40%;z-index:-1;height:10px;background:#ff0000'></div>"
+                 "<div id=f style='margin-top:-5px;height:10px;background:#0000ff'></div></body>", 320);
+    TEST_ASSERT_EQUAL(60, lot52_node("o")->transparency);
+    TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(5, 7));
+}
+
+static void test_l61_opacity_values_are_bounded(void) {
+    lot52_render("<body><div id=a style='opacity:-2'></div><div id=b style='opacity:250%'></div>"
+                 "<div id=c style='opacity:0.255'></div><div id=d style='opacity:half'></div>"
+                 "<div id=e style='opacity:0.'></div><div id=f style='opacity:5px'></div></body>", 320);
+    TEST_ASSERT_EQUAL(100, lot52_node("a")->transparency);
+    TEST_ASSERT_EQUAL(0, lot52_node("b")->transparency);
+    TEST_ASSERT_EQUAL(75, lot52_node("c")->transparency);      /* two decimals kept */
+    TEST_ASSERT_EQUAL(0, lot52_node("d")->transparency);
+    TEST_ASSERT_EQUAL(0, lot52_node("e")->transparency);
+    TEST_ASSERT_EQUAL(0, lot52_node("f")->transparency);
+    TEST_ASSERT_EQUAL(3, l61_diag_count("opacity refused"));
+}
+
 static void lot61_stack_run(void) {
     RUN_TEST(test_l61_stack_relative_z_paints_over_later_flow);
     RUN_TEST(test_l61_stack_without_z_keeps_tree_order);
@@ -148,6 +205,10 @@ static void lot61_stack_run(void) {
     RUN_TEST(test_l61_stack_negative_below_zero_sibling);
     RUN_TEST(test_l61_stack_negative_order_and_root_background);
     RUN_TEST(test_l61_stack_negative_absolute_goes_below_flow);
+    RUN_TEST(test_l61_opacity_forms_a_context_over_later_flow);
+    RUN_TEST(test_l61_opacity_zero_removes_the_subtree_paint);
+    RUN_TEST(test_l61_opacity_with_z_index_and_static_z);
+    RUN_TEST(test_l61_opacity_values_are_bounded);
     RUN_TEST(test_l61_stack_text_follows_its_context);
     RUN_TEST(test_l61_stack_fixed_stays_last);
     RUN_TEST(test_l61_stack_depth_is_bounded);

@@ -1212,6 +1212,30 @@ static int bounded_signed(const char *v, int len, int max, int *out) {
     return 0;
 }
 
+/* Lot 61: opacity as a percentage 0..100 from a number ("0.5", ".25",
+ * "1") or a percentage ("40%"). Out-of-range values clamp (CSS Color 4);
+ * more than two decimals are truncated. */
+static int parse_opacity(const char *v, int len, int *out) {
+    int at = 0, whole = 0, frac = 0, scale = 10, digits = 0, negative = 0, pct;
+    if (len && (v[0] == '-' || v[0] == '+')) { negative = v[0] == '-'; at++; }
+    pct = len > at && v[len - 1] == '%';
+    if (pct) len--;
+    while (at < len && v[at] >= '0' && v[at] <= '9') { if (whole < 1000) whole = whole * 10 + v[at] - '0'; at++; digits++; }
+    if (at < len && v[at] == '.') {
+        at++;
+        if (at >= len) return -1;
+        while (at < len && v[at] >= '0' && v[at] <= '9') {
+            if (scale) { frac += (v[at] - '0') * scale; scale /= 10; }
+            at++; digits++;
+        }
+    }
+    if (!digits || at != len) return -1;
+    whole = pct ? whole : whole * 100 + frac;
+    if (negative) whole = 0;
+    *out = whole > 100 ? 100 : whole;
+    return 0;
+}
+
 static int line_identifier(const char *v, int len) {
     return grid_name(v, len) && !value_is(v, len, "auto") && !value_is(v, len, "span") &&
            !value_is(v, len, "none") && !value_is(v, len, "inherit") && !value_is(v, len, "initial") &&
@@ -2124,6 +2148,9 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "right")) n->clear_side = WE_CLEAR_RIGHT;
         else if (value_is(v, vl, "both")) n->clear_side = WE_CLEAR_BOTH;
         else diag(d, "clear refused", -1);
+    } else if (w_eq(prop, "opacity")) {
+        if (parse_opacity(v, vl, &px) == 0) n->transparency = (uint8_t)(100 - px);
+        else diag(d, "opacity refused", -1);
     } else if (w_eq(prop, "z-index")) {
         if (value_is(v, vl, "auto")) { n->z_set = 0; n->z_index = 0; }
         else if (bounded_signed(v, vl, WE_Z_MAX, &px) == 0) { n->z_index = (int8_t)px; n->z_set = 1; }
@@ -2427,6 +2454,7 @@ int we_style(we_doc_t* d) {
         n->offset_x = n->offset_y = n->offset_r = n->offset_b = 0;
         n->border_spacing = n->border_spacing_y = 0;
         n->clear_side = n->valign = n->z_set = 0;
+        n->transparency = 0;
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
         n->text_indent = p ? p->text_indent : 0;
@@ -6073,12 +6101,18 @@ static int fixed_owner(const we_doc_t *d, int owner) {
  * outermost first: z < 0 is 10 + z, z >= 0 is 22 + 2z; after the chain,
  * the context's own items take 0 and its in-flow content 20. At the root
  * the root element and body own the background (0). A stable sort keeps
- * tree order on ties. Documents without a relative z-index box or a
- * negative z-index keep the per-containing-block absolute order. Contexts
+ * tree order on ties. opacity below 1 also forms a context (z 0).
+ * Documents without a non-absolute context or a negative z-index keep
+ * the per-containing-block absolute order. Contexts
  * deeper than WE_STACK_DEPTH - 1 are flattened into their parent. */
 #define WE_STACK_DEPTH 8
 static int stack_context(const we_node_t *n) {
-    return (n->relative || n->absolute) && n->z_set && !n->fixed;
+    return ((n->relative || n->absolute) && n->z_set && !n->fixed) || (n->transparency && !n->fixed);
+}
+
+/* z of a context: opacity below 1 alone forms a z-index 0 context. */
+static int stack_z(const we_node_t *n) {
+    return (n->relative || n->absolute) && n->z_set ? n->z_index : 0;
 }
 
 /* The document, its root element and a body directly under it paint the
@@ -6098,7 +6132,7 @@ static int stack_key(const we_doc_t *d, int owner, int8_t *key) {
     used = count < WE_STACK_DEPTH ? count : WE_STACK_DEPTH - 1;
     for (k = 0; k < used; k++) {
         const we_node_t *c = &d->nodes[chain[count - 1 - k]];
-        key[k] = (int8_t)(c->z_index < 0 ? 10 + c->z_index : 22 + 2 * c->z_index);
+        key[k] = (int8_t)(stack_z(c) < 0 ? 10 + stack_z(c) : 22 + 2 * stack_z(c));
     }
     for (k = used; k < WE_STACK_DEPTH; k++) key[k] = 0;
     if (used) key[used] = (int8_t)(chain[count - used] == owner ? 0 : 20);
@@ -6116,7 +6150,7 @@ static void stack_items(we_doc_t *d) {
     static int8_t keys[OS_FB_WEB_ITEMS][WE_STACK_DEPTH];
     int i, j, k, any = 0, flat = 0;
     for (i = 0; i < (int)d->nnodes; i++)
-        if (stack_context(&d->nodes[i]) && (!d->nodes[i].absolute || d->nodes[i].z_index < 0)) any = 1;
+        if (stack_context(&d->nodes[i]) && (!d->nodes[i].absolute || stack_z(&d->nodes[i]) < 0)) any = 1;
     if (!any) return;
     for (i = 0; i < (int)d->nitems; i++) flat |= stack_key(d, d->item_owner[i], keys[i]);
     if (flat) diag(d, "stacking depth", -1);
@@ -6134,6 +6168,24 @@ static void stack_items(we_doc_t *d) {
         d->item_owner[j] = owner;
         for (k = 0; k < WE_STACK_DEPTH; k++) keys[j][k] = key[k];
     }
+}
+
+/* Lot 61: opacity 0 removes the items of its subtree (the boxes keep their
+ * layout); 0 < opacity < 1 paints opaque, since the shared item has no
+ * alpha, and is diagnosed once. */
+static void opacity_items(we_doc_t *d) {
+    int i, out = 0, partial = 0;
+    for (i = 0; i < (int)d->nnodes; i++) if (d->nodes[i].transparency && d->nodes[i].transparency < 100) partial = 1;
+    if (partial) diag(d, "opacity painted opaque", -1);
+    for (i = 0; i < (int)d->nitems; i++) {
+        int o = d->item_owner[i], guard, hidden = 0;
+        for (guard = 0; o >= 0 && guard <= WE_DEPTH_MAX + 1; guard++, o = d->nodes[o].parent)
+            if (d->nodes[o].transparency == 100) { hidden = 1; break; }
+        if (hidden) continue;
+        d->items[out] = d->items[i];
+        d->item_owner[out++] = d->item_owner[i];
+    }
+    d->nitems = (uint32_t)out;
 }
 
 /* Fixed boxes paint after the rest of the page, in their own order. */
@@ -6206,6 +6258,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     intrinsic_sizes(d);
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
     stack_items(d);
+    opacity_items(d);
     raise_fixed(d);
     clip_display_list(d);
     if (math_refused) diag(d, "math evaluation refused", -1);
