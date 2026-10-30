@@ -7,6 +7,25 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 63 (30 October 2026)
+
+US-031 partial, phase3_complete=false. The same bounded guest engine adds
+::before/::after boxes with content strings, attr(), counter()/counters()
+(counter-reset/increment/set, CSS Lists 3 scoping) and quotes, numeric and
+named character references mapped to ASCII, overflow-x/overflow-y with
+clip/auto/scroll clipping, the white-space longhands, word-wrap and word-
+break keep-all/break-word, radial-gradient explicit sizes and "at
+<position>" centres, rotate by any whole degree (deg/grad/rad/turn) and
+skew painted as at most 8 row bands per rectangle with nested matrices
+composed when no clip separates them, rounded dashed and dotted borders
+(solid arcs, patterned straight parts) and rounded overflow clips under
+transforms. Kernel, rights and shared ABI unchanged. No Chromium, WebKit,
+network loading, JavaScript VM, new font engine or margin collapsing.
+US-059/060/063/074 unchanged; US-G19..US-G24 remain partial. Margin
+collapsing remains absent. Roadmap statuses and the complete non-done
+assertion stay unchanged. Subset, remaining gaps, line counts and measured
+results: docs/lot63_plan.md.
+
 ### Lot 62 (30 October 2026)
 
 US-031 partial, phase3_complete=false. The same bounded guest engine adds
