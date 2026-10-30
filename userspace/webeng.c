@@ -1915,14 +1915,43 @@ static int comma_args(const char *v, int len, int *start, int *length, int cap) 
  * Angles must be a multiple of 90deg (or 0.25turn); corners and length
  * positions are refused. Positions clamp up to the previous stop; missing
  * ones spread evenly between their neighbours. */
+/* Lot 62 round 2: the radial-gradient shape argument: circle or ellipse,
+ * an extent keyword, "at center"; 1 when it is one, -1 when refused. */
+static int radial_shape(const char *a, int l, int *shape) {
+    static const char *const ext[4] = { "farthest-corner", "closest-side", "farthest-side", "closest-corner" };
+    int t[4], tl[4], c = tokens(a, l, t, tl), k, j, any = 0;
+    *shape = WE_EXT_FARTHEST_CORNER << 1;
+    for (k = 0; k < c; k++) {
+        const char *w = a + t[k];
+        if (value_is(w, tl[k], "circle")) { *shape |= 1; any = 1; continue; }
+        if (value_is(w, tl[k], "ellipse")) { any = 1; continue; }
+        if (value_is(w, tl[k], "at")) {
+            if (k + 2 != c || !value_is(a + t[k + 1], tl[k + 1], "center")) return -1;
+            return 1;
+        }
+        for (j = 0; j < 4 && !value_is(w, tl[k], ext[j]); j++) {}
+        if (j == 4) return any ? -1 : 0;
+        *shape = (*shape & 1) | (j << 1);
+        any = 1;
+    }
+    return any;
+}
+
 static int parse_gradient(we_node_t *n, const char *v, int len) {
     int start[WE_GRAD_STOPS + 1], length[WE_GRAD_STOPS + 1], count, k, first = 0, dir = WE_GRAD_BOTTOM;
-    int pos[WE_GRAD_STOPS], last;
+    int pos[WE_GRAD_STOPS], last, radial, shape = 0;
     uint32_t color[WE_GRAD_STOPS];
-    if (len < 17 || !w_ieq_n(v, 16, "linear-gradient(") || v[len - 1] != ')') return -1;
+    if (len < 17 || v[len - 1] != ')') return -1;
+    radial = w_ieq_n(v, 16, "radial-gradient(");
+    if (!radial && !w_ieq_n(v, 16, "linear-gradient(")) return -1;
     count = comma_args(v + 16, len - 17, start, length, WE_GRAD_STOPS + 1);
     if (count < 2) return -1;
-    {
+    if (radial) {
+        int got = radial_shape(v + 16 + start[0], length[0], &shape);
+        if (got < 0) return -1;
+        first = got;
+        dir = WE_GRAD_RADIAL;
+    } else {
         const char *a = v + 16 + start[0];
         int l = length[0];
         int16_t quarter;
@@ -1947,6 +1976,7 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
         int l = length[first + k], t[4], tl[4], c = tokens(a, l, t, tl), tenths;
         pos[k] = -1;
         if (c < 1 || c > 2 || parse_color(a + t[0], tl[0], &color[k])) return -1;
+        if (radial && (color[k] >> WE_ALPHA_SHIFT)) return -1;   /* rings are painted over each other */
         if (c == 2) {
             if (spacing_percent(a + t[1], tl[1], 1, &tenths) || tenths > 1000) return -1;
             pos[k] = tenths < 0 ? 0 : tenths * 10;
@@ -1966,6 +1996,7 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
         last = k;
     }
     n->grad_dir = (uint8_t)dir;
+    n->grad_shape = (uint8_t)shape;
     n->grad_count = (uint8_t)count;
     for (k = 0; k < count; k++) { n->grad_pos[k] = (uint16_t)pos[k]; n->grad_color[k] = color[k]; }
     return 0;
@@ -2972,7 +3003,8 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (parse_color(v, vl, &col) == 0) n->color = col;
         else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
     }
-    else if ((w_eq(prop, "background") || w_eq(prop, "background-image")) && vl > 16 && w_ieq_n(v, 16, "linear-gradient(")) {
+    else if ((w_eq(prop, "background") || w_eq(prop, "background-image")) && vl > 16 &&
+             (w_ieq_n(v, 16, "linear-gradient(") || w_ieq_n(v, 16, "radial-gradient("))) {
         if (parse_gradient(n, v, vl)) diag(d, "gradient refused", -1);
         else if (w_eq(prop, "background")) n->has_bg = 0;
     }
@@ -4559,11 +4591,13 @@ static uint32_t gradient_at(const we_node_t *n, int p) {
     return with_alpha(out, (total + 5000) / 10000);
 }
 
+#define WE_RADIAL_RINGS 3
+#define WE_RADIAL_SLOTS (1 + WE_RADIAL_RINGS * 8)   /* 5 ellipse cuts + 2 clip cuts per ring */
 static int gradient_reserve(we_doc_t *d, int idx, int *count) {
     int first = (int)d->nitems, k;
     *count = 0;
     if (!d->nodes[idx].grad_dir) return first;
-    for (k = 0; k < WE_GRAD_BANDS; k++) {
+    for (k = 0; k < (d->nodes[idx].grad_dir == WE_GRAD_RADIAL ? WE_RADIAL_SLOTS : WE_GRAD_BANDS); k++) {
         os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
         if (!it) break;
         it->kind = 0;
@@ -4936,11 +4970,62 @@ static void background_box(const we_node_t *n, int box, int bx, int by, int bw, 
 /* Bands tile the origin box exactly, each taking the colour at its middle,
  * then are cut to the clip box. The border area outside the origin box
  * stays unpainted (no image repetition). */
+/* Lot 62 round 2: radial-gradient centred in the origin box. The ending
+ * shape: an ellipse through the box sides (closest/farthest-side) or
+ * through its corners (sqrt 2 larger, the corner extents), a circle to
+ * the nearer or farther side or to the corners. Painted as the last stop
+ * over the clip box, then WE_RADIAL_RINGS nested ellipses from the
+ * outside in, each taking the colour at its band's middle radius and cut
+ * to the clip box (opaque stops only). */
+static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o, const int *c) {
+    const we_node_t *n = &d->nodes[idx];
+    static int band[WE_ROUND_BANDS][4];
+    int extent = n->grad_shape >> 1, rx, ry, ring, used = 1, k;
+    int cx = o[0] + o[2] / 2, cy = o[1] + o[3] / 2;
+    we_shape_t clip, ring_shape;
+    we_radii_t zero, r;
+    if (o[2] <= 0 || o[3] <= 0 || c[2] <= 0 || c[3] <= 0) return;
+    if (n->grad_shape & 1) {
+        int low = o[2] < o[3] ? o[2] : o[3], high = o[2] < o[3] ? o[3] : o[2];
+        rx = extent == WE_EXT_CLOSEST_SIDE ? low / 2 : extent == WE_EXT_FARTHEST_SIDE ? high / 2 :
+             (int)isqrt32((uint32_t)(o[2] * o[2] + o[3] * o[3])) / 2;
+        ry = rx;
+    } else if (extent == WE_EXT_CLOSEST_SIDE || extent == WE_EXT_FARTHEST_SIDE) {
+        rx = o[2] / 2; ry = o[3] / 2;
+    } else {
+        rx = o[2] * 1414 / 2000; ry = o[3] * 1414 / 2000;
+    }
+    if (rx < 1) rx = 1;
+    if (ry < 1) ry = 1;
+    w_zero(&zero, sizeof(zero));
+    shape_set(&clip, c[0], c[1], c[2], c[3], &zero);
+    d->items[slot].kind = OS_FB_WEB_RECT;
+    d->items[slot].color = gradient_at(n, 10000);
+    d->items[slot].x = (int16_t)c[0]; d->items[slot].y = (int16_t)c[1];
+    d->items[slot].w = (uint16_t)c[2]; d->items[slot].h = (uint16_t)c[3];
+    for (ring = WE_RADIAL_RINGS; ring >= 1; ring--) {
+        int ex = rx * ring / WE_RADIAL_RINGS, ey = ry * ring / WE_RADIAL_RINGS, j;
+        if (!ex || !ey) continue;
+        for (j = 0; j < 4; j++) { r.rx[j] = ex; r.ry[j] = ey; }
+        shape_set(&ring_shape, cx - ex, cy - ey, 2 * ex, 2 * ey, &r);
+        k = shape_bands(&ring_shape, &clip, band, count - used);
+        bands_into(d, slot + used, band, k, gradient_at(n, (2 * ring - 1) * 10000 / (2 * WE_RADIAL_RINGS)));
+        used += k;
+    }
+}
+
 static void gradient_fill(we_doc_t *d, int idx, int slot, int count, int bx, int by, int bw, int bh) {
     const we_node_t *n = &d->nodes[idx];
     int vertical = n->grad_dir == WE_GRAD_BOTTOM || n->grad_dir == WE_GRAD_TOP;
     int o[4], c[4], extent, bands, k;
     if (!n->grad_dir) return;
+    if (n->grad_dir == WE_GRAD_RADIAL) {
+        background_box(n, n->bg_origin, bx, by, bw, bh, o);
+        background_box(n, n->bg_clip, bx, by, bw, bh, c);
+        for (k = 1; k < n->grad_count; k++) if (n->grad_color[k] != n->grad_color[0]) gradient_banded = 1;
+        if (count > 0) radial_fill(d, idx, slot, count, o, c);
+        return;
+    }
     background_box(n, n->bg_origin, bx, by, bw, bh, o);
     background_box(n, n->bg_clip, bx, by, bw, bh, c);
     extent = vertical ? o[3] : o[2];

@@ -138,7 +138,9 @@ enum { WE_BOX_BORDER = 0, WE_BOX_PADDING = 1, WE_BOX_CONTENT = 2 };
 enum { WE_TT_NONE = 0, WE_TT_UPPER = 1, WE_TT_LOWER = 2, WE_TT_CAPITALIZE = 3 };
 #define WE_GRAD_STOPS 4
 #define WE_GRAD_BANDS 8
-enum { WE_GRAD_BOTTOM = 1, WE_GRAD_RIGHT = 2, WE_GRAD_TOP = 3, WE_GRAD_LEFT = 4 };
+enum { WE_GRAD_BOTTOM = 1, WE_GRAD_RIGHT = 2, WE_GRAD_TOP = 3, WE_GRAD_LEFT = 4, WE_GRAD_RADIAL = 5 };
+/* lot 62 round 2: radial ending shape, bit 0 circle, bits 1..2 extent */
+enum { WE_EXT_FARTHEST_CORNER = 0, WE_EXT_CLOSEST_SIDE = 1, WE_EXT_FARTHEST_SIDE = 2, WE_EXT_CLOSEST_CORNER = 3 };
 
 /* Lot 62: box-shadow entries (offsets and spread in px, blur 0..32). */
 #define WE_SHADOWS_MAX 2
@@ -245,7 +247,7 @@ typedef struct {
     /* Lot 62: linear-gradient background image, painted as bands over the
      * border box. grad_dir 0 none, else WE_GRAD_*; stop positions in
      * 1/10000 of the gradient line. */
-    uint8_t grad_dir, grad_count;
+    uint8_t grad_dir, grad_count, grad_shape;
     /* Lot 62: background-clip and the gradient's background-origin
      * (WE_BOX_BORDER / PADDING / CONTENT; origin defaults to padding). */
     uint8_t bg_clip, bg_origin;
