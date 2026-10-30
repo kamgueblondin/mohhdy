@@ -76,11 +76,12 @@ static void test_l63_text_white_space_longhands(void) {
 
 static void test_l63_text_word_wrap_and_break(void) {
     lot52_render(L63_STYLE("div{width:24px}") "<div id=a style='word-wrap:break-word'>abcdefgh</div>"
-                 "<div id=b style='word-break:break-all;word-break:keep-all'>abc defgh</div><div id=c style='word-break:break-word'>abcdefgh</div></body>", 320);
+                 "<div id=b style='word-break:break-all;word-break:keep-all'>abc defgh</div><div id=c style='word-break:break-all;word-break:break-word'>abcdefgh</div></body>", 320);
     TEST_ASSERT_EQUAL(WE_WRAP_BREAK_WORD, lot52_node("a")->break_word);   /* the legacy alias */
     TEST_ASSERT_EQUAL(30, lot52_node("a")->h);
     TEST_ASSERT_EQUAL(0, lot52_node("b")->break_all);
     TEST_ASSERT_EQUAL(WE_WRAP_ANYWHERE, lot52_node("c")->break_word);
+    TEST_ASSERT_EQUAL(0, lot52_node("c")->break_all);
     TEST_ASSERT_EQUAL(8, lot52_node("c")->min_content);   /* anywhere: breaks count in min-content */
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
     lot52_render(L63_STYLE("") "<div id=a style='word-wrap:break-word;word-wrap:loose'>x</div></body>", 320);
