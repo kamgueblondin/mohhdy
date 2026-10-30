@@ -33,7 +33,19 @@ static void test_l62_page_combines_lot_behaviours(void) {
     l61_rect_at(3, 76, 14, 2, 0x800000);                  /* rounded corner */
     TEST_ASSERT_NOT_NULL(find_text("ab..."));
     TEST_ASSERT_NOT_NULL(find_text("iv."));
-    TEST_ASSERT_EQUAL(108, g_doc.perf.page_h);
+    /* round 2: rounded clip, justify, letter-spacing, radial, grid area % */
+    l61_rect_at(5, 108, 10, 3, 0xFF0000);
+    l61_rect_at(0, 114, 20, 8, 0xFF0000);
+    L62_HEX(0xFFFFFF, l62_pixel(0, 108));
+    TEST_ASSERT_NOT_NULL(find_text("bb"));
+    if (find_text("bb")) TEST_ASSERT_EQUAL(28, find_text("bb")->x);
+    TEST_ASSERT_NOT_NULL(find_text("B"));
+    if (find_text("B")) TEST_ASSERT_EQUAL(10, find_text("B")->x);
+    l61_rect_at(0, 158, 30, 30, 0x0000FF);
+    l61_rect_at(10, 171, 10, 4, 0xD5002A);
+    l61_rect_at(48, 188, 72, 4, 0x00FF00);
+    TEST_ASSERT_EQUAL(67, (int)g_doc.nitems);
+    TEST_ASSERT_EQUAL(192, g_doc.perf.page_h);
     TEST_ASSERT_EQUAL(0, g_doc.perf.items_dropped);
     TEST_ASSERT_EQUAL(2, g_doc.ndiag);
     TEST_ASSERT_EQUAL(1, l61_diag_count("gradient painted in bands"));
