@@ -961,12 +961,12 @@ int prod_support_bundle_text(const prod_metrics_t* m, const prod_alerts_t* a, co
     }
     {
         extern int sys_readfile(const char* path, char* buf, int max);
-        static char rmbuf[4096];
+        static char rmbuf[PROD_RM_FILE_MAX + 2];
         prod_roadmap_t rm;
-        int rlen = sys_readfile("/roadmap.txt", rmbuf, (int)sizeof(rmbuf) - 1);
+        int rlen = sys_readfile("/roadmap.txt", rmbuf, PROD_RM_FILE_MAX + 1);
         if (rlen > 0) {
             rmbuf[rlen] = 0;
-            if (prod_roadmap_parse(rmbuf, rlen, &rm) == 0) {
+            if (prod_roadmap_load(rmbuf, rlen, PROD_RM_FILE_MAX, &rm) >= 0) {
                 s_cat(out, "roadmap fnv ", cap);
                 cat_hex8(out, rm.checksum_fnv, cap);
                 s_cat(out, "\n", cap);
@@ -1022,6 +1022,12 @@ int prod_roadmap_parse(const char* t, int len, prod_roadmap_t* rm) {
         }
     }
     return (int)rm->entries;
+}
+
+int prod_roadmap_load(const char* t, int n, int cap, prod_roadmap_t* rm) {
+    if (!t || !rm || n < 0 || cap <= 0) return -1;
+    if (n > cap) { mzero(rm, (int)sizeof(*rm)); rm->bad = 1U; return -2; }
+    return prod_roadmap_parse(t, n, rm);
 }
 
 int prod_roadmap_eval(const prod_roadmap_t* rm, uint32_t* total_done, uint32_t* total_entries, uint32_t* pct) {

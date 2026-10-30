@@ -450,6 +450,19 @@ void test_roadmap_parse(void) {
     TEST_ASSERT_EQUAL(-1, prod_roadmap_parse(0, 0, &rm));
 }
 
+/* A /roadmap.txt longer than the read cap is reported, not counted cut. */
+static void test_roadmap_load_reports_truncation(void) {
+    static prod_roadmap_t rm;
+    const char* t = "US-076 6 partial arm\nUS-079 6 done g\nUS-G24 9 partial gui\n";
+    int n = (int)strlen(t);
+    TEST_ASSERT_EQUAL(3, prod_roadmap_load(t, n, n, &rm));
+    TEST_ASSERT_EQUAL(0, strcmp(rm.next, "US-076 US-G24"));
+    TEST_ASSERT_EQUAL(-2, prod_roadmap_load(t, n, n - 1, &rm));
+    TEST_ASSERT_TRUE(rm.entries == 0U && rm.bad == 1U && rm.next[0] == 0 && rm.partial[9] == 0U);
+    TEST_ASSERT_EQUAL(-1, prod_roadmap_load(0, 0, n, &rm));
+    TEST_ASSERT_TRUE(PROD_RM_FILE_MAX >= 8192);
+}
+
 
 /* Lot 9 (US-112): signature database parse and match. */
 void test_secdb_parse_and_match(void) {
@@ -1298,6 +1311,7 @@ static void test_lot42_prod_ai_remediation_and_thermal_scheduler(void) {
 int main(void) {
     unity_init();
     RUN_TEST(test_roadmap_parse);
+    RUN_TEST(test_roadmap_load_reports_truncation);
     RUN_TEST(test_roadmap_eval);
     RUN_TEST(test_metrics_ring_stats_and_prediction);
     RUN_TEST(test_alerts_for_n_dedupe_and_hysteresis);

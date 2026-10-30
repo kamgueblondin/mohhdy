@@ -275,6 +275,11 @@ typedef struct {
     char next[512];              /* stories not done, in file order */
 } prod_roadmap_t;
 int prod_roadmap_parse(const char* text, int len, prod_roadmap_t* rm);
+/* Bytes of /roadmap.txt the guest reads. Readers ask for one byte more, so
+ * n > PROD_RM_FILE_MAX means the file was cut: prod_roadmap_load then returns
+ * -2 (rm zeroed, bad 1) instead of counting a truncated list. */
+#define PROD_RM_FILE_MAX 8192
+int prod_roadmap_load(const char* text, int n, int cap, prod_roadmap_t* rm);
 int prod_roadmap_eval(const prod_roadmap_t* rm, uint32_t* total_done, uint32_t* total_entries, uint32_t* pct);
 
 /* US-122: AI SLA Monitor & Predictive Fault Engine */

@@ -815,12 +815,12 @@ int shell_prod_line(const char* l) {
     }
     if (s_eq(cmd, "prod-roadmap")) {
         /* US-120 (Lot 8): computed from /roadmap.txt, not printed text */
-        static char rmbuf[4096];
+        static char rmbuf[PROD_RM_FILE_MAX + 2];
         static prod_roadmap_t rm;
-        int n = sys_readfile("/roadmap.txt", rmbuf, (int)sizeof(rmbuf) - 1), ph;
+        int n = sys_readfile("/roadmap.txt", rmbuf, PROD_RM_FILE_MAX + 1), ph;
         if (n <= 0) { out("prod-roadmap error /roadmap.txt missing\n"); return 1; }
         rmbuf[n] = 0;
-        prod_roadmap_parse(rmbuf, n, &rm);
+        if (prod_roadmap_load(rmbuf, n, PROD_RM_FILE_MAX, &rm) == -2) { line("prod-roadmap error /roadmap.txt truncated cap ", PROD_RM_FILE_MAX, "\n"); return 1; }
         for (ph = 1; ph < PROD_RM_PHASES; ph++) {
             uint32_t tot = rm.done[ph] + rm.partial[ph] + rm.simule[ph] + rm.open[ph];
             if (!tot) continue;
