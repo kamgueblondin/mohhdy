@@ -14,7 +14,7 @@ production non-done equality stay intact.
 ## Lot 60 gains checked first
 
 make test-all on origin/main ffcb267: 2758/2758 in 156 s. Every lot 60
-assertion is kept; five fixtures whose refusal became valid behaviour are
+assertion is kept; the fixtures whose refusal became valid behaviour are
 listed in "Adapted fixtures" with their new invalid value.
 
 ## Grid line names
@@ -42,10 +42,14 @@ listed in "Adapted fixtures" with their new invalid value.
 - Flex export: a baseline group wins, otherwise the main-start item (first)
   or main-end item (last). Grid export uses the first or last row group.
   Tables export the first row baseline.
+- Column flex: first baseline falls back to start alignment and last
+  baseline to end alignment (the item shrinks to max-content, CSS Box
+  Alignment fallback); no diagnostic.
 - vertical-align:baseline for table cells (shared row ascent/descent, cells
   shifted with their content) and for inline-block atoms in a line box
-  (shared ascent A and descent D, step max(line_step, A+D)). Table rowspan
-  with baseline still diagnoses "spanning baseline unsupported".
+  (shared ascent A and descent D, step max(line_step, A+D)). A row-spanning
+  baseline cell aligns in its first row, its spanned height includes the
+  shift and it takes part in the row baseline the table exports.
 
 ## Subgrid
 
@@ -57,9 +61,15 @@ listed in "Adapted fixtures" with their new invalid value.
 - Bounds: the subgrid spans at most 8 parent tracks; its items are clamped
   into that span. Numeric placements are restored from the authored value
   when the parent's auto-repeat count changes between binds.
-- Not handled: the subgrid's own gap on that axis, the parent's
-  justify/align-content distribution, subgrid items in parent baseline
-  groups, overflow diagnostics for implicit rows.
+- Own gap: a column-gap/row-gap declared on the subgrid overrides the
+  parent gutter on that axis. The difference is split in half around each
+  interior line (CSS Grid 9) and added to the items' track contributions.
+- The subgrid's tracks follow the parent's real line positions, so the
+  parent's justify/align-content distribution reaches the subgrid. One
+  uniform gutter (the average effective parent gutter plus the own-gap
+  difference) is used; rounding can leave 1 px on an interior right edge.
+- Not handled: subgrid items in parent baseline groups, overflow
+  diagnostics for implicit rows.
 
 ## Viewport, fixed, static position, scroll
 
@@ -83,11 +93,19 @@ listed in "Adapted fixtures" with their new invalid value.
 ## Collapsed table borders
 
 - border-collapse:collapse shares cell edges: adjacent cells overlap by the
-  widest cell border width B (capped at 8) of the table, found through
-  thead/tbody/tfoot. The later cell paints the shared edge. Separate
-  borders are unchanged.
-- Not done: per-edge width resolution, the table/cell outer border merge
-  and CSS conflict rules (style, width, then origin).
+  band width B (widest resolved edge, capped at 8), found through
+  thead/tbody/tfoot.
+- Per-edge resolution (CSS 2.1 17.6.2.1) for every grid-edge segment:
+  hidden suppresses, then the wider width, then style rank (double, solid,
+  dashed, dotted, ridge, outset, groove, inset; none loses), then origin
+  (cell above/left, cell below/right, row, row group, table). border-top/
+  right/bottom/left and 1-4 value border-style/width/color are parsed. The
+  table's own border joins the outer segments. Winners paint as rectangles
+  centred in the band, runs merged, vertical after horizontal.
+- Per-edge declarations outside a collapsed table are refused ("border edge
+  refused"); border-style none/hidden zeroes a separate border.
+- Limits: all styles paint solid, no <col>/<colgroup> origin, content inset
+  uses the cell's uniform border, corners show the vertical line.
 
 ## Stacking contexts (bounded)
 
@@ -96,16 +114,18 @@ listed in "Adapted fixtures" with their new invalid value.
   contexts are flattened with "stacking depth". Paint order per level:
   in-flow content, then contexts by z, tree order on ties. z-index on a
   static box still does not reorder. Fixed boxes stay last.
-- A negative z context paints after the in-flow content of its level, the
-  rule the engine already used for absolutes; CSS paints it below. The pass
-  only runs when a relative box has a z-index, so absolute-only documents
-  keep the existing per-containing-block order.
+- CSS 2.1 appendix E order per context: the context's own background,
+  negative z children (most negative first), in-flow content, then z >= 0
+  children. The root context background (document, root element, body
+  under it) paints first. The pass runs when a relative box has a z-index
+  or any positioned box has a negative z-index; otherwise absolute-only
+  documents keep the per-containing-block order.
 
 ## Not done in this lot
 
-- Negative z below in-flow content, opacity/transform contexts.
+- opacity/transform stacking contexts, floats inside the negative layer.
 - Margin collapsing (excluded by the brief), percentage cycles, vertical
-  writing modes, column flex baselines.
+  writing modes, collapsed border styles other than solid when painted.
 
 ## Bounded storage
 
@@ -127,6 +147,16 @@ Every assertion is kept; only refusal inputs that became valid changed.
   positive test in lot61_baseline.
 - lot56 fixed refusal: now `position:floating`; positive tests in
   lot61_viewport.
+- lot60 column flex baseline refusal: now `align-items:baseline-start`
+  ("alignment refused"); positive fallback tests in lot61_baseline.
+- lot60 table rowspan baseline diagnostic: now `vertical-align:
+  baseline-shift` ("vertical align refused"); positive rowspan tests in
+  lot61_baseline.
+- lot56 z-index on static box: b used `z-index:-1` with position:relative,
+  now a valid negative context; it uses `z-index:-1.5` and also asserts
+  "z-index refused". Positive tests in lot61_stack.
+- lot61 internal: uniform collapse "later cell wins" now expects the CSS
+  winner; negative z stacking tests expect appendix E order.
 - lot55 vertical partial clip: the 8 px clip only cut an empty glyph row,
   so the text is now kept (new positive test). The fixture uses a 5 px clip;
   `nitems == 0` became `nitems == 9` RECT fragments ending at y <= 5.
@@ -135,7 +165,9 @@ Every assertion is kept; only refusal inputs that became valid changed.
 
 /web/lot61.html combines last baseline in a wrapping flex row, a subgrid
 over auto-fill tracks, an inline-block on the text baseline, a collapsed
-table, a partially clipped glyph, a fixed box and the shared image. The
+table, a partially clipped glyph, a fixed box, the shared image, a collapsed
+table whose 4 px outer border wins over 2 px cells, a subgrid with its own
+10 px column-gap and a negative z box under an in-flow block. The
 console web-render and GUI paths both check it; all older scenarios stay.
 The host test reads the same HTML file.
 

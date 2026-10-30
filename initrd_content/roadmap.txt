@@ -1,4 +1,4 @@
-# Lot 61: last baselines, subgrid, viewport, glyph clip; US-031 partial; statuses unchanged.
+# Lot 61: last baselines, subgrid gaps, viewport, glyph clip, collapsed edges, z-index; US-031 partial; statuses unchanged.
 # Lot 60: first baselines, named grid lines; US-031 partial; all statuses unchanged.
 # Lot 59: intrinsic widths, word breaks, logical insets; US-031 partial; statuses unchanged.
 # Lot 58: bounded math/ratio/logical sizing; US-031 partial; all statuses unchanged.
