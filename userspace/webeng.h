@@ -48,9 +48,14 @@
 #define WE_GRID_NAME_MAX 16
 #define WE_GRID_LINE_ALIASES 2
 typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME_MAX]; } we_grid_names_t;
+/* Lot 61: an edge is auto, a line number, a name with an occurrence
+ * (nth, negative counts from the end) or a span. A named span counts
+ * lines carrying edge[] from the opposite resolved edge. */
 typedef struct {
     char edge[2][WE_GRID_NAME_MAX];
     uint8_t span[2], active;
+    int8_t nth[2];
+    uint8_t named_span[2], bare[2];
 } we_grid_request_t;
 #define WE_TRACK_LIMIT 2000
 enum { WE_FIT_FILL, WE_FIT_CONTAIN, WE_FIT_COVER, WE_FIT_NONE, WE_FIT_SCALE_DOWN };

@@ -1238,32 +1238,43 @@ static int named_track_list(const char *v, int len, int16_t *sizes, int16_t *flo
     return count ? count : -1;
 }
 
-static int grid_edge(const char *v, int len, char out[WE_GRID_NAME_MAX], uint8_t *span) {
-    int number, end = len, first = 0;
-    while (first < end && w_space(v[first])) first++;
-    while (end > first && w_space(v[end - 1])) end--;
-    v += first; len = end - first;
-    if (!len) return -1;
-    out[0] = 0; *span = 0;
-    if (value_is(v, len, "auto")) return 0;
-    if (w_ieq_n(v, len, "span ")) {
-        first = 5;
-        while (first < len && w_space(v[first])) first++;
-        if (bounded_uint(v + first, len - first, WE_TRACKS_MAX, &number) || number < 1) return -1;
-        *span = (uint8_t)number;
+/* One edge: auto | N | name | N name | name N | span N | span name |
+ * span N name. A name may carry an occurrence; negative counts from the end. */
+static int grid_edge(const char *v, int len, we_grid_request_t *r, int side) {
+    int a[4], l[4], count = tokens(v, len, a, l), k, first = 0, number = 0, numbers = 0, name = -1;
+    char *out = r->edge[side];
+    out[0] = 0; r->span[side] = 0; r->nth[side] = 0; r->named_span[side] = 0; r->bare[side] = 0;
+    if (count < 1 || count > 3) return -1;
+    if (count == 1 && value_is(v + a[0], l[0], "auto")) return 0;
+    if (value_is(v + a[0], l[0], "span")) first = 1;
+    if (first && count == 1) return -1;
+    for (k = first; k < count; k++) {
+        const char *t = v + a[k];
+        if ((t[0] >= '0' && t[0] <= '9') || t[0] == '-' || t[0] == '+') {
+            if (numbers++ || bounded_signed(t, l[k], WE_TRACKS_MAX + 1, &number) || !number) return -1;
+        } else {
+            if (name >= 0 || !line_identifier(t, l[k])) return -1;
+            name = k;
+        }
+    }
+    if (first) {
+        if (numbers && (number < 1 || number > WE_TRACKS_MAX)) return -1;
+        r->span[side] = (uint8_t)(numbers ? number : 1);
+        if (name >= 0) { r->named_span[side] = 1; w_cpy(out, WE_GRID_NAME_MAX, v + a[name], l[name]); }
         return 0;
     }
-    if ((v[0] >= '0' && v[0] <= '9') || v[0] == '-' || v[0] == '+') {
-        if (bounded_signed(v, len, WE_TRACKS_MAX + 1, &number) || !number) return -1;
-    } else if (!line_identifier(v, len)) return -1;
-    w_cpy(out, WE_GRID_NAME_MAX, v, len);
+    if (count > 2) return -1;
+    if (name < 0) { w_cpy(out, WE_GRID_NAME_MAX, v + a[0], l[0]); return 0; }
+    w_cpy(out, WE_GRID_NAME_MAX, v + a[name], l[name]);
+    r->nth[side] = (int8_t)(numbers ? number : 1);
+    r->bare[side] = (uint8_t)!numbers;
     return 0;
 }
 
 static int grid_request(we_node_t *n, int axis, const char *v, int len) {
     we_grid_request_t request;
     uint8_t start, span;
-    int split = 0, tail;
+    int split = 0, a, b;
     if (!parse_placement(v, len, &start, &span)) {
         n->grid_request[axis].active = 0;
         if (axis) { n->grid_row_start = start; n->grid_row_span = span; }
@@ -1273,19 +1284,15 @@ static int grid_request(we_node_t *n, int axis, const char *v, int len) {
     }
     w_zero(&request, sizeof(request));
     while (split < len && v[split] != '/') split++;
-    if (grid_edge(v, split, request.edge[0], &request.span[0])) return -1;
-    if (split < len) {
-        tail = split + 1;
-        if (grid_edge(v + tail, len - tail, request.edge[1], &request.span[1])) return -1;
-    }
+    if (grid_edge(v, split, &request, 0)) return -1;
+    if (split < len && grid_edge(v + split + 1, len - split - 1, &request, 1)) return -1;
     if (request.span[0] && (request.span[1] || !request.edge[1][0])) return -1;
-    {
-        int a, b;
-        if (!bounded_signed(request.edge[0], w_len(request.edge[0]), WE_TRACKS_MAX + 1, &a) && a > 0) {
-            if (a > WE_TRACKS_MAX) return -1;
-            if (request.span[1] && a + request.span[1] - 1 > WE_TRACKS_MAX) return -1;
-            if (!bounded_signed(request.edge[1], w_len(request.edge[1]), WE_TRACKS_MAX + 1, &b) && b > 0 && b <= a) return -1;
-        }
+    if (!request.nth[0] && !request.span[0] &&
+        !bounded_signed(request.edge[0], w_len(request.edge[0]), WE_TRACKS_MAX + 1, &a) && a > 0) {
+        if (a > WE_TRACKS_MAX) return -1;
+        if (request.span[1] && !request.named_span[1] && a + request.span[1] - 1 > WE_TRACKS_MAX) return -1;
+        if (!request.nth[1] && !request.span[1] &&
+            !bounded_signed(request.edge[1], w_len(request.edge[1]), WE_TRACKS_MAX + 1, &b) && b > 0 && b <= a) return -1;
     }
     request.active = 1;
     n->grid_request[axis] = request;
@@ -1293,43 +1300,97 @@ static int grid_request(we_node_t *n, int axis, const char *v, int len) {
     return 0;
 }
 
-static int named_line(const we_node_t *parent, int axis, const char *edge) {
-    int line, alias, number, count = axis ? parent->grid_rows : parent->grid_cols;
-    if (!edge[0]) return 0;
-    if ((edge[0] >= '0' && edge[0] <= '9') || edge[0] == '+' || edge[0] == '-') {
+static int grid_line_count(const we_node_t *g, int axis) {
+    int tracks = axis ? g->grid_rows : g->grid_cols, areas = axis ? g->area_rows : g->area_cols;
+    if (areas > tracks) tracks = areas;
+    if (tracks > WE_TRACKS_MAX) tracks = WE_TRACKS_MAX;
+    return tracks + 1;
+}
+
+/* Explicit names and the implicit <area>-start / <area>-end aliases. */
+static int line_has_name(const we_node_t *g, int axis, int line, const char *name) {
+    int alias, k, len = w_len(name);
+    for (alias = 0; alias < WE_GRID_LINE_ALIASES; alias++)
+        if (w_eq(name, g->line_names[axis].name[line - 1][alias])) return 1;
+    for (k = 0; k < g->area_count; k++) {
+        const we_grid_area_t *area = &g->areas[k];
+        int alen = w_len(area->name), first = (axis ? area->row : area->col) + 1;
+        int last = first + (axis ? area->rows : area->cols);
+        if (len <= alen || !sel_equal(name, area->name, alen, 0)) continue;
+        if (w_eq(name + alen, "-start") && line == first) return 1;
+        if (w_eq(name + alen, "-end") && line == last) return 1;
+    }
+    return 0;
+}
+
+/* nth > 0 searches forward after line `after`; nth < 0 searches backward
+ * before line `before`. Missing occurrences are not invented. */
+static int nth_named_line(const we_node_t *g, int axis, const char *name, int nth, int after, int before) {
+    int lines = grid_line_count(g, axis), line, seen = 0;
+    if (nth > 0) {
+        for (line = after + 1; line <= lines; line++)
+            if (line_has_name(g, axis, line, name) && ++seen == nth) return line;
+    } else if (nth < 0) {
+        if (before > lines + 1) before = lines + 1;
+        for (line = before - 1; line >= 1; line--)
+            if (line_has_name(g, axis, line, name) && ++seen == -nth) return line;
+    }
+    return -1;
+}
+
+static int edge_line(const we_node_t *g, int axis, const we_grid_request_t *r, int side) {
+    const char *edge = r->edge[side];
+    int number, count = axis ? g->grid_rows : g->grid_cols;
+    if (r->span[side] || !edge[0]) return 0;
+    if (!r->nth[side]) {
         if (bounded_signed(edge, w_len(edge), WE_TRACKS_MAX + 1, &number)) return -1;
         if (number < 0) number = count + 2 + number;
         return number >= 1 && number <= WE_TRACKS_MAX + 1 ? number : -1;
     }
-    for (line = 0; line <= count; line++) for (alias = 0; alias < WE_GRID_LINE_ALIASES; alias++)
-        if (w_eq(edge, parent->line_names[axis].name[line][alias])) return line + 1;
-    return -1;
+    if (r->bare[side]) {
+        char alias[WE_GRID_NAME_MAX + 8];
+        int len = w_len(edge), line;
+        w_cpy(alias, sizeof(alias), edge, len);
+        w_cpy(alias + len, sizeof(alias) - len, side ? "-end" : "-start", side ? 4 : 6);
+        line = nth_named_line(g, axis, alias, 1, 0, 0);
+        if (line > 0) return line;
+    }
+    return nth_named_line(g, axis, edge, r->nth[side], 0, WE_TRACKS_MAX + 2);
+}
+
+static void resolve_requests(we_doc_t *d, int idx, int report) {
+    we_node_t *n = &d->nodes[idx];
+    const we_node_t *g;
+    int axis;
+    if (n->parent < 0 || d->nodes[n->parent].display != WE_DISP_GRID) return;
+    g = &d->nodes[n->parent];
+    for (axis = 0; axis < 2; axis++) {
+        const we_grid_request_t *request = &n->grid_request[axis];
+        int start, end, span;
+        if (!request->active) continue;
+        start = edge_line(g, axis, request, 0);
+        end = edge_line(g, axis, request, 1);
+        if (start > 0 && request->named_span[1])
+            end = nth_named_line(g, axis, request->edge[1], request->span[1], start, 0);
+        else if (end > 0 && request->named_span[0])
+            start = nth_named_line(g, axis, request->edge[0], -request->span[0], 0, end);
+        else if (start >= 0 && end >= 0) {
+            if (!start && end) start = end - (request->span[0] ? request->span[0] : 1);
+            if (!end && start) end = start + (request->span[1] ? request->span[1] : 1);
+        }
+        span = start > 0 && end > 0 ? end - start : request->span[1] && !request->named_span[1] ? request->span[1] : 1;
+        if (start < 0 || end < 0 || start > WE_TRACKS_MAX || end > WE_TRACKS_MAX + 1 || span < 1 || span > WE_TRACKS_MAX) {
+            if (report) diag(d, "grid line unresolved", idx);
+            start = 0; span = 1;
+        }
+        if (axis) { n->grid_row_start = (uint8_t)start; n->grid_row_span = (uint8_t)span; }
+        else { n->grid_col_start = (uint8_t)start; n->grid_col_span = (uint8_t)span; }
+    }
 }
 
 static void resolve_grid_requests(we_doc_t *d) {
     uint32_t i;
-    for (i = 0; i < d->nnodes; i++) {
-        we_node_t *n = &d->nodes[i];
-        int axis;
-        if (n->parent < 0 || d->nodes[n->parent].display != WE_DISP_GRID) continue;
-        for (axis = 0; axis < 2; axis++) {
-            const we_grid_request_t *request = &n->grid_request[axis];
-            int start, end, span;
-            if (!request->active) continue;
-            start = named_line(&d->nodes[n->parent], axis, request->edge[0]);
-            end = named_line(&d->nodes[n->parent], axis, request->edge[1]);
-            if (start >= 0 && end >= 0) {
-                if (!start && end) start = end - (request->span[0] ? request->span[0] : 1);
-                if (!end && start) end = start + (request->span[1] ? request->span[1] : 1);
-            }
-            span = start && end ? end - start : request->span[1] ? request->span[1] : 1;
-            if (start < 0 || end < 0 || start > WE_TRACKS_MAX || end > WE_TRACKS_MAX + 1 || span < 1 || span > WE_TRACKS_MAX) {
-                diag(d, "grid line unresolved", (int)i); start = 0; span = 1;
-            }
-            if (axis) { n->grid_row_start = (uint8_t)start; n->grid_row_span = (uint8_t)span; }
-            else { n->grid_col_start = (uint8_t)start; n->grid_col_span = (uint8_t)span; }
-        }
-    }
+    for (i = 0; i < d->nnodes; i++) resolve_requests(d, (int)i, 1);
 }
 
 /* Expand a valid margin into top,right,bottom,left and replace all auto bits. */

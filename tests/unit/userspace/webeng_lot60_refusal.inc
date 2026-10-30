@@ -511,7 +511,7 @@ static void test_l60_refusal_placement_10(void) {
 
 static void test_l60_refusal_placement_11(void) {
     lot52_render("<body style='margin:0'><div id=p style='display:grid;width:80px;grid-template-columns:[start] 20px [mid] 20px "
-        "[end]'><div id=a style='grid-column:mid / end;grid-column:start 2 / end;height:10px'>A</div></div><div id=b st"
+        "[end]'><div id=a style='grid-column:mid / end;grid-column:start 0 / end;height:10px'>A</div></div><div id=b st"
         "yle='height:5px'></div></body>", 320);
     TEST_ASSERT_EQUAL(20, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
