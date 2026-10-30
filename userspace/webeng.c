@@ -4489,8 +4489,7 @@ static void space_run(we_inline_t *f, const char *s, int len, int node) {
         int take;
         flow_region(f, adv);
         take = (f->width - f->cur_w) / adv;
-        if (take < 1 && (f->nwords || f->pending_x)) { soft_wrap(f); continue; }
-        if (take < 1) take = 1;
+        if (take < 1) take = 1;                    /* add_word_piece wraps a full line */
         if (take > len) take = len;
         add_word_piece(f, s, take, node, 0);
         s += take; len -= take;

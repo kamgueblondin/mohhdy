@@ -86,10 +86,16 @@ static void test_l63_text_tabs(void) {
                  "<div id=b><p style='white-space:pre'>ab\tc</p></div></body>", 320);
     TEST_ASSERT_EQUAL(32, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(72, lot52_node("b")->w);
+    /* letter-spacing -4px: a 255 px tab needs 63 advances, painted as 32 */
+    lot52_render(L63_STYLE("p{margin:0;white-space:pre;letter-spacing:-4px;tab-size:255px}") "<p>a\tb</p></body>", 320);
+    TEST_ASSERT_EQUAL(4 + 32 * 4, l63_tx("b") - l63_tx("a"));
+    /* a collapsed tab is a break opportunity in min-content too */
+    lot52_render(L63_STYLE("p{margin:0}div{display:inline-block;width:min-content}") "<div id=a><p>aa\tbb</p></div></body>", 320);
+    TEST_ASSERT_EQUAL(16, lot52_node("a")->w);
 }
 
 static void test_l63_text_tab_size_values(void) {
-    static const char *const bad[] = { "-1", "32", "2.5", "10%", "300px", "4pt", "abc", "+4px", "1 2", "100" };  /* an empty value never reaches the property */
+    static const char *const bad[] = { "-1", "32", "2.5", "10%", "300px", "4pt", "abc", "+4px", "1 2", "100", "031", "-4px", "10%px", "256px" };  /* an empty value never reaches the property */
     unsigned k;
     lot52_render(L63_STYLE("") "<div id=a style='tab-size:4'><p id=b>x</p></div><div id=c style='tab-size:1em'></div><div id=d style='tab-size:31'></div>"
                  "<div id=e style='tab-size:255px'></div><div id=f></div></body>", 320);
@@ -112,7 +118,8 @@ static void test_l63_text_tab_size_values(void) {
 static void test_l63_text_break_spaces(void) {
     lot52_render(L63_STYLE("p{margin:0;width:40px}") "<p id=a style='white-space:break-spaces'>ab      cd</p>"
                  "<p id=b style='white-space:pre-wrap'>ab      cd</p><p id=c style='white-space-collapse:break-spaces'>a  b</p>"
-                 "<p id=d style='white-space:break-spaces;text-wrap-mode:nowrap'>a</p><p id=e style='white-space:break-spaces;text-wrap:wrap'>a</p></body>", 320);
+                 "<p id=d style='white-space:break-spaces;text-wrap-mode:nowrap'>a</p><p id=e style='white-space:break-spaces;text-wrap:wrap'>a</p>"
+                 "<p id=f style='text-wrap-mode:nowrap;white-space-collapse:break-spaces'>a</p></body>", 320);
     TEST_ASSERT_EQUAL(WE_WS_BREAK_SPACES, lot52_node("a")->ws_mode);
     l61_text_at("ab   ", 0, 1);                             /* 3 spaces fill the 5 columns */
     l61_text_at("   cd", 0, 11);
@@ -123,11 +130,18 @@ static void test_l63_text_break_spaces(void) {
     l61_text_at("a  b", 0, 51);
     TEST_ASSERT_EQUAL(WE_WS_PRE, lot52_node("d")->ws_mode);
     TEST_ASSERT_EQUAL(WE_WS_BREAK_SPACES, lot52_node("e")->ws_mode);
+    TEST_ASSERT_EQUAL(WE_WS_PRE, lot52_node("f")->ws_mode);  /* the collapse longhand keeps nowrap */
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
     lot52_render(L63_STYLE("p{margin:0}div{display:inline-block}") "<div id=a><p style='white-space:break-spaces'>a   b</p></div>"
                  "<div id=b style='width:min-content'><p style='white-space:break-spaces'>ab   cd</p></div></body>", 320);
     TEST_ASSERT_EQUAL(40, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(16, lot52_node("b")->w);            /* every space is a break */
+    /* the line room is read after the float band is entered, as for words */
+    lot52_render(L63_STYLE("p{margin:0;width:40px}") "<p style='white-space:break-spaces'>"
+                 "<span style='float:left;width:16px;height:10px'></span>          x</p></body>", 320);
+    l61_text_at("   ", 16, 1);                             /* 24 px beside the float */
+    l61_text_at("     ", 0, 11);
+    l61_text_at("  x", 0, 21);
 }
 
 static void test_l63_text_white_space_longhands(void) {
