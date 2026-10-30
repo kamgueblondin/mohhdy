@@ -75,6 +75,7 @@ enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3, 
  * control byte; hyphens: manual (default; auto reads as manual) or none. */
 #define WE_SHY '\x1f'
 enum { WE_HYPHENS_MANUAL = 0, WE_HYPHENS_NONE = 1 };
+enum { WE_BGS_AUTO = 0, WE_BGS_CONTAIN = 1, WE_BGS_COVER = 2, WE_BGS_EXPLICIT = 3 };
 enum { WE_INSET_LEFT = 1, WE_INSET_TOP = 2, WE_INSET_RIGHT = 4, WE_INSET_BOTTOM = 8 };
 enum { WE_AUTO_LEFT = 1, WE_AUTO_RIGHT = 2, WE_AUTO_TOP = 4, WE_AUTO_BOTTOM = 8 };
 enum { WE_CLEAR_NONE = 0, WE_CLEAR_LEFT = 1, WE_CLEAR_RIGHT = 2, WE_CLEAR_BOTH = 3 };
@@ -266,6 +267,14 @@ typedef struct {
     /* Lot 62: background-clip and the gradient's background-origin
      * (WE_BOX_BORDER / PADDING / CONTENT; origin defaults to padding). */
     uint8_t bg_clip, bg_origin;
+    /* Lot 63: background-image url() of an image the initrd reader serves
+     * (bgi_off/bgi_len: the url in the pool, 0 length: none), bit 0/1 of
+     * bgi_repeat: tiles repeat along x/y, background-position (bit 0/1 of
+     * bgi_pos_pct: percent) and background-size (WE_BGS_*; explicit sizes
+     * -1 for auto, bit 2/3 of bgi_pos_pct: percent). */
+    uint16_t bgi_off, bgi_len;
+    uint8_t bgi_repeat, bgi_size_kind, bgi_pos_pct;
+    int16_t bgi_pos[2], bgi_size[2];
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */

@@ -2640,6 +2640,56 @@ static int position_pair(const char *v, int len, int16_t out[2], uint8_t *pct_bi
     return 0;
 }
 
+/* ---------- Lot 63: background-image url(), repeat and size ---------- */
+/* The url stays in the pool where the declaration already lives; the
+ * path rules are those of <img src> and are checked when the box paints.
+ * An <img> keeps its own source and refuses a background image. */
+static int background_url(we_doc_t *d, we_node_t *n, const char *v, int len) {
+    int a = 4, b = len - 1;
+    if (w_eq(n->tag, "img") || len < 6 || !w_ieq_n(v, 4, "url(") || v[len - 1] != ')') return -1;
+    while (a < b && w_space(v[a])) a++;
+    while (b > a && w_space(v[b - 1])) b--;
+    if (b - a >= 2 && (v[a] == '"' || v[a] == '\'') && v[b - 1] == v[a]) { a++; b--; }
+    if (b <= a || v < d->pool || v + len > d->pool + d->pool_used) return -1;
+    n->bgi_off = (uint16_t)(v + a - d->pool);
+    n->bgi_len = (uint16_t)(b - a);
+    return 0;
+}
+
+/* repeat, no-repeat, repeat-x, repeat-y, or one repeat/no-repeat per axis. */
+static int background_repeat(we_node_t *n, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), k, bits = 0;
+    if (c == 1 && value_is(v, len, "repeat-x")) bits = 1;
+    else if (c == 1 && value_is(v, len, "repeat-y")) bits = 2;
+    else if (c == 1 || c == 2) {
+        for (k = 0; k < c; k++) {
+            if (value_is(v + a[k], l[k], "repeat")) bits |= c == 1 ? 3 : 1 << k;
+            else if (!value_is(v + a[k], l[k], "no-repeat")) return -1;
+        }
+    } else return -1;
+    n->bgi_repeat = (uint8_t)bits;
+    return 0;
+}
+
+/* auto, contain, cover, or one or two lengths/percentages (auto allowed). */
+static int background_size(we_node_t *n, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), k, pct;
+    int16_t size[2] = {-1, -1};
+    uint8_t bits = 0;
+    if (c == 1 && value_is(v, len, "contain")) { n->bgi_size_kind = WE_BGS_CONTAIN; return 0; }
+    if (c == 1 && value_is(v, len, "cover")) { n->bgi_size_kind = WE_BGS_COVER; return 0; }
+    if (c < 1 || c > 2) return -1;
+    for (k = 0; k < c; k++) {
+        if (value_is(v + a[k], l[k], "auto")) continue;
+        if (tf_length(v + a[k], l[k], &size[k], &pct) || size[k] < 0) return -1;
+        if (pct) bits |= (uint8_t)(4 << k);
+    }
+    n->bgi_size_kind = size[0] < 0 && size[1] < 0 ? WE_BGS_AUTO : WE_BGS_EXPLICIT;
+    n->bgi_size[0] = size[0]; n->bgi_size[1] = size[1];
+    n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 3) | bits);
+    return 0;
+}
+
 static int parse_transform_origin(we_node_t *n, const char *v, int len) {
     return position_pair(v, len, n->tf_origin, &n->tf_origin_pct);
 }
@@ -3489,14 +3539,29 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     else if ((w_eq(prop, "background") || w_eq(prop, "background-image")) && vl > 16 &&
              (w_ieq_n(v, 16, "linear-gradient(") || w_ieq_n(v, 16, "radial-gradient("))) {
         if (parse_gradient(n, v, vl)) diag(d, "gradient refused", -1);
-        else if (w_eq(prop, "background")) n->has_bg = 0;
+        else {
+            n->bgi_len = 0;
+            if (w_eq(prop, "background")) n->has_bg = 0;
+        }
     }
     else if (w_eq(prop, "background-image")) {
-        if (value_is(v, vl, "none")) n->grad_dir = 0;
-        else diag(d, "background image refused", -1);
+        if (value_is(v, vl, "none")) n->grad_dir = 0, n->bgi_len = 0;
+        else if (background_url(d, n, v, vl)) diag(d, "background image refused", -1);
+        else n->grad_dir = 0;
+    }
+    else if (w_eq(prop, "background-repeat")) {
+        if (background_repeat(n, v, vl)) diag(d, "background repeat refused", -1);
+    }
+    else if (w_eq(prop, "background-position")) {
+        uint8_t bits;
+        if (position_pair(v, vl, n->bgi_pos, &bits)) diag(d, "background position refused", -1);
+        else n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 12) | bits);
+    }
+    else if (w_eq(prop, "background-size")) {
+        if (background_size(n, v, vl)) diag(d, "background size refused", -1);
     }
     else if (w_eq(prop, "background") || w_eq(prop, "background-color")) {
-        if (w_eq(prop, "background")) n->grad_dir = 0;
+        if (w_eq(prop, "background")) n->grad_dir = 0, n->bgi_len = 0;
         if (w_ieq_n(v, vl, "none") || w_ieq_n(v, vl, "transparent")) n->has_bg = 0;
         else if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
         else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
@@ -3725,6 +3790,8 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
         n->spacing_pct = 0; n->grad_dir = 0;
         n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING; n->text_overflow = 0;
+        n->bgi_len = 0; n->bgi_repeat = 3; n->bgi_size_kind = WE_BGS_AUTO; n->bgi_pos_pct = 3;
+        n->bgi_pos[0] = n->bgi_pos[1] = 0; n->bgi_size[0] = n->bgi_size[1] = -1;
         w_zero(n->rad_x, sizeof(n->rad_x)); w_zero(n->rad_y, sizeof(n->rad_y)); n->rad_pct = 0;
         n->text_transform = p ? p->text_transform : WE_TT_NONE;
         n->letter_spacing = p ? p->letter_spacing : 0;
@@ -3972,17 +4039,18 @@ void we_set_image_reader(we_image_read_fn read, void *ctx) {
     image_work.ready_idx = -1;
 }
 
+/* An <img> reads its src, any other box its background-image url. */
 static int image_local_path(we_doc_t *d, const we_node_t *n) {
-    int i, start = 0;
-    if (!n->src_len || n->src_len >= sizeof(image_work.path)) return -1;
-    for (i = 0; i < n->src_len; i++) {
-        char c = d->pool[n->src_off + i];
+    int i, start = 0, off = w_eq(n->tag, "img") ? n->src_off : n->bgi_off, len = w_eq(n->tag, "img") ? n->src_len : n->bgi_len;
+    if (len >= (int)sizeof(image_work.path)) return -1;
+    for (i = 0; i < len; i++) {
+        char c = d->pool[off + i];
         if (c < 33 || c > 126 || c == ':' || c == '\\' || c == '%' || c == '?' || c == '#') return -1;
         image_work.path[i] = c;
     }
     image_work.path[i] = 0;
     if (image_work.path[0] != '/' || image_work.path[1] == '/') return -1;
-    for (i = 1; i <= n->src_len; i++) {
+    for (i = 1; i <= len; i++) {
         if (image_work.path[i] == '/' || image_work.path[i] == 0) {
             if (i - start == 3 && image_work.path[start + 1] == '.' && image_work.path[start + 2] == '.') return -1;
             start = i;
@@ -4005,7 +4073,7 @@ static int image_open(we_doc_t *d, int idx) {
     if (image_work.failed[idx]) return -1;
     if (image_work.ready_idx == idx) return 0;
     image_work.ready_idx = -1;
-    if (!n->src_len) return -1;
+    if (!(w_eq(n->tag, "img") ? n->src_len : n->bgi_len)) return -1;
     if (image_local_path(d, n)) return image_fail(d, "image local path refused", idx);
     if (!image_read) return image_fail(d, "image reader unavailable", idx);
     bytes = image_read(image_ctx, image_work.path, image_work.source, WE_IMAGE_SOURCE_MAX);
@@ -5926,6 +5994,95 @@ static int shadow_round(we_doc_t *d, const we_node_t *n, const we_shadow_t *sh, 
     return count + extra;
 }
 
+/* ---------- Lot 63: background images ----------
+ * A block with a background-image url reserves WE_BGI_SLOTS items before
+ * its children paint (so they cover it), and fills them once its box is
+ * known: tiles sampled at the tile size, merged into runs like an <img>,
+ * cut to the clip box. A tile set that needs more runs than were reserved
+ * is refused whole. */
+#define WE_BGI_SLOTS 48
+static int bgi_reserve(we_doc_t *d, int idx, int *count) {
+    int first = (int)d->nitems, k;
+    *count = 0;
+    if (!d->nodes[idx].bgi_len || w_eq(d->nodes[idx].tag, "img")) return first;
+    for (k = 0; k < WE_BGI_SLOTS; k++) {
+        os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
+        if (!it) break;
+        it->kind = 0;
+        it->pad = WE_ITEM_RESERVED;
+        (*count)++;
+    }
+    return first;
+}
+
+/* auto keeps the natural size, contain/cover fit the area keeping the
+ * ratio, one explicit size and auto keep the ratio too. */
+static void bgi_tile(const we_node_t *n, int aw, int ah, int nw, int nh, int *tw, int *th) {
+    *tw = nw; *th = nh;
+    if (n->bgi_size_kind == WE_BGS_CONTAIN || n->bgi_size_kind == WE_BGS_COVER) {
+        int by_width = aw * nh <= ah * nw;
+        if (n->bgi_size_kind == WE_BGS_COVER) by_width = !by_width;
+        if (by_width) { *tw = aw; *th = aw * nh / nw; }
+        else { *th = ah; *tw = ah * nw / nh; }
+    } else if (n->bgi_size_kind == WE_BGS_EXPLICIT) {
+        int w = n->bgi_size[0], h = n->bgi_size[1];
+        if (w >= 0 && (n->bgi_pos_pct & 4)) w = aw * w / 100;
+        if (h >= 0 && (n->bgi_pos_pct & 8)) h = ah * h / 100;
+        if (w < 0) w = h * nw / nh;
+        if (h < 0) h = w * nh / nw;
+        *tw = w; *th = h;
+    }
+}
+
+static int bgi_wrap(int v, int t) {
+    v %= t;
+    return v < 0 ? v + t : v;
+}
+
+static void bgi_fill(we_doc_t *d, int idx, int slot, int slots, int bx, int by, int bw, int bh) {
+    we_node_t *n = &d->nodes[idx];
+    int area[4], clip[4], tw, th, ox, oy, x0, y0, x1, y1, row, col, nr = 0;
+    if (!slots || image_open(d, idx)) return;
+    background_box(n, n->bg_origin, bx, by, bw, bh, area);
+    background_box(n, n->bg_clip, bx, by, bw, bh, clip);
+    bgi_tile(n, area[2], area[3], image_work.decoded.w, image_work.decoded.h, &tw, &th);
+    if (tw < 1 || th < 1) return;
+    ox = area[0] + (n->bgi_pos_pct & 1 ? (area[2] - tw) * n->bgi_pos[0] / 100 : n->bgi_pos[0]);
+    oy = area[1] + (n->bgi_pos_pct & 2 ? (area[3] - th) * n->bgi_pos[1] / 100 : n->bgi_pos[1]);
+    x0 = clip[0]; x1 = clip[0] + clip[2]; y0 = clip[1]; y1 = clip[1] + clip[3];
+    if (!(n->bgi_repeat & 1)) { if (x0 < ox) x0 = ox; if (x1 > ox + tw) x1 = ox + tw; }
+    if (!(n->bgi_repeat & 2)) { if (y0 < oy) y0 = oy; if (y1 > oy + th) y1 = oy + th; }
+    for (row = y0; row < y1; row++) {
+        for (col = x0; col < x1;) {
+            int first = col, r, found = -1, sy = bgi_wrap(row - oy, th);
+            uint32_t color = image_sample(bgi_wrap(col - ox, tw), sy, tw, th);
+            for (col++; col < x1 && image_sample(bgi_wrap(col - ox, tw), sy, tw, th) == color; col++) {}
+            for (r = nr - 1; r >= 0; r--) {
+                os_fb_web_item_t *it = &image_work.rect[r];
+                if (it->x == first && it->w == col - first && it->color == color && it->y + it->h == row) { found = r; break; }
+            }
+            if (found >= 0) image_work.rect[found].h++;
+            else {
+                os_fb_web_item_t *it;
+                if (nr >= slots) { image_fail(d, "background image budget", idx); return; }
+                it = &image_work.rect[nr++];
+                w_zero(it, sizeof(*it));
+                it->kind = OS_FB_WEB_RECT;
+                it->x = (int16_t)first; it->y = (int16_t)row;
+                it->w = (uint16_t)(col - first); it->h = 1;
+                it->color = color;
+            }
+        }
+    }
+    for (row = 0; row < nr; row++) {
+        os_fb_web_item_t *it = &d->items[slot + row];
+        it->kind = OS_FB_WEB_RECT;
+        it->x = image_work.rect[row].x; it->y = image_work.rect[row].y;
+        it->w = image_work.rect[row].w; it->h = image_work.rect[row].h;
+        it->color = image_work.rect[row].color;
+    }
+}
+
 static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, int bx, int by, int bw, int bh, const we_radii_t *radii) {
     const we_node_t *n = &d->nodes[idx];
     int k, used = 0;
@@ -5970,7 +6127,7 @@ static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, in
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     we_node_t* n = &d->nodes[idx];
     int bx, by, bw, bh, content_x, content_w, content_h, slot, border_slot = -1;
-    int first_item = (int)d->nitems, shadow_slot[2], shadow_slots[2], grad_slot, grad_slots, radius_slots;
+    int first_item = (int)d->nitems, shadow_slot[2], shadow_slots[2], grad_slot, grad_slots, radius_slots, bgi_slot, bgi_slots;
     we_radii_t radii;
     if (depth > WE_DEPTH_MAX) return 0;
     d->perf.boxes++;
@@ -6004,6 +6161,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         }
     }
     grad_slot = gradient_reserve(d, idx, &grad_slots);
+    bgi_slot = bgi_reserve(d, idx, &bgi_slots);
     shadow_slot[1] = shadow_reserve(d, idx, 1, &shadow_slots[1]);
     content_x = limit_coord(bx + box_edge(n, 3) + n->padding[3]);
     content_w = bw - box_edge(n, 1) - box_edge(n, 3) - n->padding[1] - n->padding[3];
@@ -6057,6 +6215,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         } else { it->x = (int16_t)box[0]; it->y = (int16_t)box[1]; it->w = (uint16_t)box[2]; it->h = (uint16_t)box[3]; }
     }
     gradient_fill(d, idx, grad_slot, grad_slots, bx, by, bw, bh);
+    bgi_fill(d, idx, bgi_slot, bgi_slots, bx, by, bw, bh);
     shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh, &radii);
     shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh, &radii);
     if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 5 || n->border_style == 6)) {

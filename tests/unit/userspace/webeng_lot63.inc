@@ -8,6 +8,7 @@
 #include "webeng_lot63_table.inc"
 #include "webeng_lot63_hyphen.inc"
 #include "webeng_lot63_matrix.inc"
+#include "webeng_lot63_bgimage.inc"
 #include "webeng_lot63_page.inc"
 
 static void lot63_run(void) {
@@ -20,5 +21,6 @@ static void lot63_run(void) {
     lot63_table_run();
     lot63_hyphen_run();
     lot63_matrix_run();
+    lot63_bgimage_run();
     lot63_page_run();
 }
