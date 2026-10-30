@@ -3031,6 +3031,8 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
 }
 
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth);
+static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len);
+static int style_solid_3d;
 static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth);
 static int is_box(uint8_t display) {
     return display == WE_DISP_BLOCK || display == WE_DISP_FLEX || display == WE_DISP_GRID ||
@@ -3644,9 +3646,17 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         os_fb_web_item_t* it = &d->items[slot];
         it->x = (int16_t)bx; it->y = (int16_t)by; it->w = (uint16_t)bw; it->h = (uint16_t)bh;
     }
-    if (n->border > 0 && !n->collapse_cell) {
+    if (n->border > 0 && !n->collapse_cell && (n->border_style == 5 || n->border_style == 6 || (n->border_style == 4 && n->border >= 3))) {
+        int t = n->border > 8 ? 8 : n->border, inner_h = bh - 2 * t;
+        edge_paint(d, idx, n->border_style, n->border_color, 0, by, bx, t, bw);
+        edge_paint(d, idx, n->border_style, n->border_color, 0, by + bh - t, bx, t, bw);
+        edge_paint(d, idx, n->border_style, n->border_color, 1, bx, by + t, t, inner_h);
+        edge_paint(d, idx, n->border_style, n->border_color, 1, bx + bw - t, by + t, t, inner_h);
+        border_slot = 1;
+    } else if (n->border > 0 && !n->collapse_cell) {
         os_fb_web_item_t* it = emit(d, idx, OS_FB_WEB_BORDER, bx, by, bw, bh, n->border_color);
         if (it) it->bold = (uint8_t)(n->border > 8 ? 8 : n->border);
+        if (n->border_style >= 7 && n->border_style <= 10) style_solid_3d = 1;
         border_slot = 1;
     }
     (void)border_slot;
@@ -5539,10 +5549,36 @@ static int row_group_of(const we_doc_t *d, int row) {
 
 /* One border line of width w and length len at (off, from) for a vertical
  * line, (from, off) for a horizontal one. */
-static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len) {
-    (void)style;
+static void edge_rect(we_doc_t *d, int idx, uint32_t color, int vertical, int off, int from, int w, int len) {
+    if (w <= 0 || len <= 0) return;
     if (vertical) (void)emit(d, idx, OS_FB_WEB_RECT, off, from, w, len, color);
     else (void)emit(d, idx, OS_FB_WEB_RECT, from, off, len, w, color);
+}
+
+/* Lot 61 border styles from RECT items only, bounded per line:
+ * dashed: dashes of max(2w, 3) px with equal gaps; dotted: w x w dots
+ * with w gaps; at most WE_DASH_MAX pieces, the period grows past that.
+ * double (w >= 3): two lines of (w + 1) / 3 px around the gap. The 3D
+ * styles (ridge, outset, groove, inset) paint solid and are diagnosed. */
+#define WE_DASH_MAX 8
+
+static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len) {
+    if (style == 5 || style == 6) {
+        int piece = style == 5 ? (2 * w > 3 ? 2 * w : 3) : w, period = 2 * piece, at;
+        if (len > WE_DASH_MAX * period) period = (len + WE_DASH_MAX - 1) / WE_DASH_MAX;
+        if (piece > period) piece = period;
+        for (at = 0; at < len; at += period)
+            edge_rect(d, idx, color, vertical, off, from + at, w, at + piece > len ? len - at : piece);
+        return;
+    }
+    if (style == 4 && w >= 3) {
+        int t = (w + 1) / 3;
+        edge_rect(d, idx, color, vertical, off, from, t, len);
+        edge_rect(d, idx, color, vertical, off + w - t, from, t, len);
+        return;
+    }
+    if (style >= 7 && style <= 10) style_solid_3d = 1;
+    edge_rect(d, idx, color, vertical, off, from, w, len);
 }
 
 /* <col>/<colgroup> origins per column: [0] the col, [1] its colgroup. A
@@ -6140,7 +6176,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     d->viewport_h = (int16_t)viewport_h;
     d->scroll_y = 0;
     w_zero(static_set, sizeof(static_set));
-    d->nitems = 0; math_refused = 0; baseline_probe = 0; probe_level = probe_count = 0;
+    d->nitems = 0; math_refused = 0; style_solid_3d = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;
     d->perf.flex_lines = d->perf.grid_lines = d->perf.floats = 0;
     d->perf.table_rows = d->perf.images = d->perf.image_refused = 0;
@@ -6173,6 +6209,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     raise_fixed(d);
     clip_display_list(d);
     if (math_refused) diag(d, "math evaluation refused", -1);
+    if (style_solid_3d) diag(d, "border style painted solid", -1);
     d->perf.items = d->nitems;
     d->perf.page_w = (uint32_t)viewport_w;
     d->perf.page_h = (uint32_t)h;

@@ -16,17 +16,20 @@ static void test_l61_resolve_style_ranks_dashed_dotted_ridge_inset(void) {
                  "<td id=b style='border:2px dashed #0000ff;height:6px'></td></tr><tr>"
                  "<td id=c style='border:2px inset #00ff00;height:6px'></td>"
                  "<td id=d style='border:2px ridge #ffff00;height:6px'></td></tr></table></body>", 320);
-    TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(20, 4));   /* dashed > dotted */
+    TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(20, 2));   /* dashed > dotted */
+    TEST_ASSERT_TRUE(l61_paint(20, 5) == 0xFFFFFFFFu);     /* gap between 4px dashes */
     TEST_ASSERT_EQUAL(0xFFFF00, (int)l61_paint(20, 14));  /* ridge > inset */
     TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(5, 8));    /* dotted > inset */
     TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(30, 8));   /* dashed > ridge */
+    TEST_ASSERT_EQUAL(1, l61_diag_count("border style painted solid"));   /* ridge, inset */
 }
 
 static void test_l61_resolve_wider_edge_wins_over_style(void) {
     lot52_render(L61_C_OPEN "'><tr><td id=a style='border:3px dotted #ff0000;height:6px'></td>"
                  "<td id=b style='border:2px double #0000ff;height:6px'></td></tr></table></body>", 320);
     TEST_ASSERT_EQUAL(3, lot52_node("t")->collapse_w);
-    TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(20, 5));
+    TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(20, 7));      /* 3px dots every 6px */
+    TEST_ASSERT_TRUE(l61_paint(20, 4) == 0xFFFFFFFFu);
     /* b's 2px outer edge is centred in the 3px band. */
     TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(37, 5));
     TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(38, 5));
@@ -113,8 +116,9 @@ static void test_l61_resolve_edge_lists_map_four_sides(void) {
     l61_box("a", 0, 0, 40, 12);                              /* 3 + 6 + 3 */
     l61_rect_at(0, 2, 40, 1, 0xFF0000);
     l61_rect_at(0, 9, 40, 3, 0x0000FF);
-    l61_rect_at(0, 0, 4, 12, 0xFFFF00);
-    l61_rect_at(37, 0, 2, 12, 0x00FF00);
+    l61_rect_at(0, 0, 4, 8, 0xFFFF00);                       /* dashed: 8px dash, then a gap */
+    l61_rect_at(37, 0, 2, 4, 0x00FF00);
+    l61_rect_at(37, 8, 2, 4, 0x00FF00);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
