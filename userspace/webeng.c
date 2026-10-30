@@ -1,6 +1,8 @@
 /* userspace/webeng.c - Lot 6 (US-031, US-043, US-045). See webeng.h. */
 #include "webeng.h"
 #include "imgdec.h"
+/* Lot 61: the kernel 8x8 font, shared read-only for partial glyph clipping. */
+#include "../kernel/gfx_font8.h"
 
 /* ---------- small helpers (no libc) ---------- */
 static int w_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }
@@ -5399,18 +5401,87 @@ static int clip_rectangle(os_fb_web_item_t *item, int left, int top, int right, 
     return 1;
 }
 
-static int clip_text(os_fb_web_item_t *item, int left, int top, int right, int bottom) {
-    int first, last, len = w_len(item->text), k;
-    if (item->y < top || item->y + item->h > bottom) return 0;
-    first = left > item->x ? (left - item->x + WE_CHAR_W - 1) / WE_CHAR_W : 0;
-    last = right > item->x ? (right - item->x) / WE_CHAR_W : 0;
-    if (last > len) last = len;
-    if (first >= last) return 0;
-    for (k = first; k < last; k++) item->text[k - first] = item->text[k];
-    item->text[last - first] = 0;
-    item->x = (int16_t)(item->x + first * WE_CHAR_W);
-    item->w = (uint16_t)((last - first) * WE_CHAR_W);
+/* Lot 61: partial glyph clipping. A glyph whose lit pixels are all inside
+ * the clip stays text; whole visible glyphs are grouped into text pieces.
+ * A partly visible glyph becomes RECT runs of its visible lit pixels from
+ * the kernel font (bit k at x + k, bold also at x + k + 1, rows 0..7),
+ * merged down identical columns. Invisible glyphs and spaces emit nothing. */
+#define WE_CLIP_FRAGMENTS 64
+static unsigned glyph_mask(char ch, int row, int bold) {
+    unsigned bits;
+    if ((unsigned char)ch < 32 || (unsigned char)ch > 126) ch = '?';
+    bits = gfx_font8[(unsigned char)ch - 32u][row];
+    return bold ? bits | (bits << 1) : bits;
+}
+
+static int glyph_inside(const os_fb_web_item_t *it, int k, int left, int top, int right, int bottom) {
+    int row, bit, x = it->x + k * WE_CHAR_W;
+    for (row = 0; row < 8; row++) {
+        unsigned m = glyph_mask(it->text[k], row, it->bold);
+        if (!m) continue;
+        if (it->y + row < top || it->y + row >= bottom) return 0;
+        for (bit = 0; bit < 9; bit++)
+            if ((m >> bit) & 1u && (x + bit < left || x + bit >= right)) return 0;
+    }
     return 1;
+}
+
+/* Returns the fragments written, or -1 when out would overflow. */
+static int glyph_rects(const os_fb_web_item_t *it, int k, int left, int top, int right, int bottom,
+                       os_fb_web_item_t *out, int used, int cap) {
+    int row, bit, x = it->x + k * WE_CHAR_W, first = used;
+    for (row = 0; row < 8; row++) {
+        unsigned m = glyph_mask(it->text[k], row, it->bold);
+        int y = it->y + row;
+        if (!m || y < top || y >= bottom) continue;
+        for (bit = 0; bit < 9; bit++) {
+            int x0, x1, j, merged = 0;
+            if (!((m >> bit) & 1u) || x + bit < left || x + bit >= right) continue;
+            x0 = x + bit;
+            while (bit + 1 < 9 && ((m >> (bit + 1)) & 1u) && x + bit + 1 < right) bit++;
+            x1 = x + bit + 1;
+            for (j = first; j < used; j++)
+                if (out[j].x == x0 && out[j].w == x1 - x0 && out[j].y + out[j].h == y) { out[j].h++; merged = 1; break; }
+            if (merged) continue;
+            if (used >= cap) return -1;
+            out[used] = *it;
+            out[used].kind = OS_FB_WEB_RECT;
+            out[used].text[0] = 0;
+            out[used].bold = 0;
+            out[used].x = (int16_t)x0; out[used].y = (int16_t)y;
+            out[used].w = (uint16_t)(x1 - x0); out[used].h = 1;
+            used++;
+        }
+    }
+    return used - first;
+}
+
+static int clip_glyphs(const os_fb_web_item_t *it, int left, int top, int right, int bottom,
+                       os_fb_web_item_t *out, int cap) {
+    int len = w_len(it->text), k = 0, used = 0;
+    while (k < len) {
+        if (glyph_inside(it, k, left, top, right, bottom) && it->text[k] != ' ') {
+            int end = k, j;
+            while (end < len && glyph_inside(it, end, left, top, right, bottom)) end++;
+            while (end > k && it->text[end - 1] == ' ') end--;
+            if (used >= cap) return -1;
+            out[used] = *it;
+            for (j = k; j < end; j++) out[used].text[j - k] = it->text[j];
+            out[used].text[end - k] = 0;
+            out[used].x = (int16_t)(it->x + k * WE_CHAR_W);
+            out[used].w = (uint16_t)((end - k) * WE_CHAR_W);
+            used++;
+            k = end;
+            continue;
+        }
+        if (it->text[k] != ' ') {
+            int n = glyph_rects(it, k, left, top, right, bottom, out, used, cap);
+            if (n < 0) return -1;
+            used += n;
+        }
+        k++;
+    }
+    return used;
 }
 
 static void clip_display_list(we_doc_t *d) {
@@ -5420,13 +5491,14 @@ static void clip_display_list(we_doc_t *d) {
     for (i = 0; i < (int)d->nitems; i++) {
         os_fb_web_item_t item = d->items[i];
         int left, top, right, bottom, k, fragments = 1;
-        os_fb_web_item_t edges[4];
+        static os_fb_web_item_t edges[WE_CLIP_FRAGMENTS];
         if (!clip_bounds(d, d->item_owner[i], &left, &top, &right, &bottom)) continue;
         if (item.x >= left && item.y >= top && item.x + item.w <= right && item.y + item.h <= bottom) {
             edges[0] = item;
         } else if (item.kind == OS_FB_WEB_TEXT) {
-            if (!clip_text(&item, left, top, right, bottom)) continue;
-            edges[0] = item;
+            fragments = clip_glyphs(&item, left, top, right, bottom, edges, WE_CLIP_FRAGMENTS);
+            if (fragments < 0) fragments = OS_FB_WEB_ITEMS + 1;
+            if (!fragments) continue;
         } else if (item.kind == OS_FB_WEB_BORDER) {
             int thickness = item.bold ? item.bold : 1;
             int w = item.w, h = item.h;
@@ -5452,6 +5524,7 @@ static void clip_display_list(we_doc_t *d) {
             edges[0] = item;
         }
         if (count + fragments > OS_FB_WEB_ITEMS) {
+            if (fragments > OS_FB_WEB_ITEMS) fragments = 1;
             d->perf.items_dropped += (uint32_t)fragments;
             diag(d, "clipping display budget", d->item_owner[i]);
             continue;

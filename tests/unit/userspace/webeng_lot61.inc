@@ -5,6 +5,7 @@
 #include "webeng_lot61_baseline.inc"
 #include "webeng_lot61_subgrid.inc"
 #include "webeng_lot61_viewport.inc"
+#include "webeng_lot61_clip.inc"
 
 static void lot61_run(void) {
     lot61_names_run();
@@ -12,4 +13,5 @@ static void lot61_run(void) {
     lot61_baseline_run();
     lot61_subgrid_run();
     lot61_viewport_run();
+    lot61_clip_run();
 }
