@@ -249,6 +249,10 @@ typedef struct {
      * border box. grad_dir 0 none, else WE_GRAD_*; stop positions in
      * 1/10000 of the gradient line. */
     uint8_t grad_dir, grad_count, grad_shape;
+    /* Lot 63: radial centre (bit 0/1: x/y in percent) and explicit size
+     * (-1: the extent keyword; bit 2/3 of grad_at_pct: rx/ry in percent). */
+    int16_t grad_at[2], grad_size[2];
+    uint8_t grad_at_pct;
     /* Lot 62: background-clip and the gradient's background-origin
      * (WE_BOX_BORDER / PADDING / CONTENT; origin defaults to padding). */
     uint8_t bg_clip, bg_origin;

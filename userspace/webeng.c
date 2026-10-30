@@ -1982,23 +1982,49 @@ static int comma_args(const char *v, int len, int *start, int *length, int cap) 
  * ones spread evenly between their neighbours. */
 /* Lot 62 round 2: the radial-gradient shape argument: circle or ellipse,
  * an extent keyword, "at center"; 1 when it is one, -1 when refused. */
-static int radial_shape(const char *a, int l, int *shape) {
+/* Lot 62/63: [circle|ellipse] [extent keyword | 1 or 2 sizes] [at position].
+ * Returns 1 when the first argument is the shape, 0 for a colour stop. */
+static int tf_length(const char *v, int len, int16_t *out, int *percent);
+static int position_pair(const char *v, int len, int16_t out[2], uint8_t *pct_bits);
+static int radial_shape(we_node_t *n, const char *a, int l, int *shape) {
     static const char *const ext[4] = { "farthest-corner", "closest-side", "farthest-side", "closest-corner" };
-    int t[4], tl[4], c = tokens(a, l, t, tl), k, j, any = 0;
-    *shape = WE_EXT_FARTHEST_CORNER << 1;
-    for (k = 0; k < c; k++) {
-        const char *w = a + t[k];
-        if (value_is(w, tl[k], "circle")) { *shape |= 1; any = 1; continue; }
-        if (value_is(w, tl[k], "ellipse")) { any = 1; continue; }
-        if (value_is(w, tl[k], "at")) {
-            if (k + 2 != c || !value_is(a + t[k + 1], tl[k + 1], "center")) return -1;
-            return 1;
+    int i = 0, any = 0, form = -1, extent = -1, sizes = 0, j;
+    n->grad_at[0] = n->grad_at[1] = 50;
+    n->grad_at_pct = 3;
+    n->grad_size[0] = n->grad_size[1] = -1;
+    while (1) {
+        int b, pct;
+        int16_t size;
+        while (i < l && w_space(a[i])) i++;
+        if (i >= l) break;
+        b = i;
+        while (i < l && !w_space(a[i])) i++;
+        if (value_is(a + b, i - b, "at")) {
+            uint8_t bits;
+            if (position_pair(a + i, l - i, n->grad_at, &bits)) return -1;
+            n->grad_at_pct = (uint8_t)((n->grad_at_pct & 12) | bits);
+            any = 1;
+            break;
         }
-        for (j = 0; j < 4 && !value_is(w, tl[k], ext[j]); j++) {}
-        if (j == 4) return any ? -1 : 0;
-        *shape = (*shape & 1) | (j << 1);
+        if (value_is(a + b, i - b, "circle") || value_is(a + b, i - b, "ellipse")) {
+            if (form >= 0) return -1;
+            form = value_is(a + b, i - b, "circle");
+        } else {
+            for (j = 0; j < 4 && !value_is(a + b, i - b, ext[j]); j++) {}
+            if (j < 4 && extent < 0 && !sizes) extent = j;
+            else if (j == 4 && sizes < 2 && extent < 0 && tf_length(a + b, i - b, &size, &pct) == 0 && size >= 0) {
+                n->grad_size[sizes] = size;
+                if (pct) n->grad_at_pct |= (uint8_t)(4 << sizes);
+                sizes++;
+            } else return any ? -1 : 0;
+        }
         any = 1;
     }
+    if (form < 0) form = sizes == 1;
+    /* a circle takes one length, an ellipse two sizes */
+    if ((form == 1 && (sizes == 2 || (n->grad_at_pct & 4))) || (form == 0 && sizes == 1)) return -1;
+    if (sizes == 1) n->grad_size[1] = n->grad_size[0];
+    *shape = form | ((extent < 0 ? WE_EXT_FARTHEST_CORNER : extent) << 1);
     return any;
 }
 
@@ -2021,7 +2047,7 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
     count = comma_args(v + 16, len - 17, start, length, WE_GRAD_STOPS + 1);
     if (count < 2) return -1;
     if (radial) {
-        int got = radial_shape(v + 16 + start[0], length[0], &shape);
+        int got = radial_shape(n, v + 16 + start[0], length[0], &shape);
         if (got < 0) return -1;
         first = got;
         dir = WE_GRAD_RADIAL;
@@ -2531,7 +2557,8 @@ static int origin_value(const char *v, int len, int *axis, int16_t *value, int *
     return tf_length(v, len, value, percent);
 }
 
-static int parse_transform_origin(we_node_t *n, const char *v, int len) {
+/* One or two position values (keywords, lengths, percentages), x first. */
+static int position_pair(const char *v, int len, int16_t out[2], uint8_t *pct_bits) {
     int a[4], l[4], c = tokens(v, len, a, l), axis[2], pct[2], k, swap = 0;
     int16_t value[2];
     if (c < 1 || c > 2) return -1;
@@ -2548,9 +2575,13 @@ static int parse_transform_origin(we_node_t *n, const char *v, int len) {
         int16_t tv = value[0]; int tp = pct[0];
         value[0] = value[1]; pct[0] = pct[1]; value[1] = tv; pct[1] = tp;
     }
-    n->tf_origin[0] = value[0]; n->tf_origin[1] = value[1];
-    n->tf_origin_pct = (uint8_t)((pct[0] ? 1 : 0) | (pct[1] ? 2 : 0));
+    out[0] = value[0]; out[1] = value[1];
+    *pct_bits = (uint8_t)((pct[0] ? 1 : 0) | (pct[1] ? 2 : 0));
     return 0;
+}
+
+static int parse_transform_origin(we_node_t *n, const char *v, int len) {
+    return position_pair(v, len, n->tf_origin, &n->tf_origin_pct);
 }
 
 /* ---------- Lot 62: outline and box-shadow parsing ---------- */
@@ -5522,20 +5553,32 @@ static void background_box(const we_node_t *n, int box, int bx, int by, int bw, 
 static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o, const int *c) {
     const we_node_t *n = &d->nodes[idx];
     static int band[WE_ROUND_BANDS][4];
-    int extent = n->grad_shape >> 1, rx, ry, ring, used = 1, k;
-    int cx = o[0] + o[2] / 2, cy = o[1] + o[3] / 2;
+    int extent = n->grad_shape >> 1, rx, ry, ring, used = 1, k, far, sx, sy;
+    int cx = o[0] + (n->grad_at_pct & 1 ? o[2] * n->grad_at[0] / 100 : n->grad_at[0]);
+    int cy = o[1] + (n->grad_at_pct & 2 ? o[3] * n->grad_at[1] / 100 : n->grad_at[1]);
     we_shape_t clip, ring_shape;
     we_radii_t zero, r;
     if (o[2] <= 0 || o[3] <= 0 || c[2] <= 0 || c[3] <= 0) return;
-    if (n->grad_shape & 1) {
-        int low = o[2] < o[3] ? o[2] : o[3], high = o[2] < o[3] ? o[3] : o[2];
-        rx = extent == WE_EXT_CLOSEST_SIDE ? low / 2 : extent == WE_EXT_FARTHEST_SIDE ? high / 2 :
-             (int)isqrt32((uint32_t)(o[2] * o[2] + o[3] * o[3])) / 2;
+    /* side distances from the centre: the nearer (far 0) or farther pair */
+    far = extent == WE_EXT_FARTHEST_SIDE || extent == WE_EXT_FARTHEST_CORNER;
+    sx = cx - o[0]; k = o[0] + o[2] - cx;
+    if (far ? k > sx : k < sx) sx = k;
+    sy = cy - o[1]; k = o[1] + o[3] - cy;
+    if (far ? k > sy : k < sy) sy = k;
+    if (sx < 0) sx = -sx;
+    if (sy < 0) sy = -sy;
+    if (n->grad_size[0] >= 0) {
+        rx = n->grad_at_pct & 4 ? o[2] * n->grad_size[0] / 100 : n->grad_size[0];
+        ry = n->grad_at_pct & 8 ? o[3] * n->grad_size[1] / 100 : n->grad_size[1];
+    } else if (n->grad_shape & 1) {
+        int low = sx < sy ? sx : sy, high = sx < sy ? sy : sx;
+        rx = extent == WE_EXT_CLOSEST_SIDE ? low : extent == WE_EXT_FARTHEST_SIDE ? high :
+             (int)isqrt32((uint32_t)(sx * sx + sy * sy));
         ry = rx;
     } else if (extent == WE_EXT_CLOSEST_SIDE || extent == WE_EXT_FARTHEST_SIDE) {
-        rx = o[2] / 2; ry = o[3] / 2;
+        rx = sx; ry = sy;
     } else {
-        rx = o[2] * 1414 / 2000; ry = o[3] * 1414 / 2000;
+        rx = sx * 1414 / 1000; ry = sy * 1414 / 1000;
     }
     if (rx < 1) rx = 1;
     if (ry < 1) ry = 1;
