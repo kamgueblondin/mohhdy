@@ -5995,26 +5995,12 @@ static int shadow_round(we_doc_t *d, const we_node_t *n, const we_shadow_t *sh, 
 }
 
 /* ---------- Lot 63: background images ----------
- * A block with a background-image url reserves WE_BGI_SLOTS items before
- * its children paint (so they cover it), and fills them once its box is
- * known: tiles sampled at the tile size, merged into runs like an <img>,
- * cut to the clip box. A tile set that needs more runs than were reserved
- * is refused whole. */
-#define WE_BGI_SLOTS 48
-static int bgi_reserve(we_doc_t *d, int idx, int *count) {
-    int first = (int)d->nitems, k;
-    *count = 0;
-    if (!d->nodes[idx].bgi_len || w_eq(d->nodes[idx].tag, "img")) return first;
-    for (k = 0; k < WE_BGI_SLOTS; k++) {
-        os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
-        if (!it) break;
-        it->kind = 0;
-        it->pad = WE_ITEM_RESERVED;
-        (*count)++;
-    }
-    return first;
-}
-
+ * A block with a background-image url records where its image goes (after
+ * its colour and gradient, before its inset shadow and children). Once its
+ * box is known the tiles are sampled at the tile size, merged into runs
+ * like an <img>, cut to the clip box, and inserted there in one move, so
+ * the children still paint over them. A tile set that needs more runs than
+ * the display list has room for is refused whole. */
 /* auto keeps the natural size, contain/cover fit the area keeping the
  * ratio, one explicit size and auto keep the ratio too. */
 static void bgi_tile(const we_node_t *n, int aw, int ah, int nw, int nh, int *tw, int *th) {
@@ -6039,14 +6025,14 @@ static int bgi_wrap(int v, int t) {
     return v < 0 ? v + t : v;
 }
 
-static void bgi_fill(we_doc_t *d, int idx, int slot, int slots, int bx, int by, int bw, int bh) {
+static int bgi_fill(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh) {
     we_node_t *n = &d->nodes[idx];
-    int area[4], clip[4], tw, th, ox, oy, x0, y0, x1, y1, row, col, nr = 0;
-    if (!slots || image_open(d, idx)) return;
+    int area[4], clip[4], tw, th, ox, oy, x0, y0, x1, y1, row, col, nr = 0, room = OS_FB_WEB_ITEMS - (int)d->nitems;
+    if (!n->bgi_len || n->visibility || w_eq(n->tag, "img") || image_open(d, idx)) return 0;
     background_box(n, n->bg_origin, bx, by, bw, bh, area);
     background_box(n, n->bg_clip, bx, by, bw, bh, clip);
     bgi_tile(n, area[2], area[3], image_work.decoded.w, image_work.decoded.h, &tw, &th);
-    if (tw < 1 || th < 1) return;
+    if (tw < 1 || th < 1) return 0;
     ox = area[0] + (n->bgi_pos_pct & 1 ? (area[2] - tw) * n->bgi_pos[0] / 100 : n->bgi_pos[0]);
     oy = area[1] + (n->bgi_pos_pct & 2 ? (area[3] - th) * n->bgi_pos[1] / 100 : n->bgi_pos[1]);
     x0 = clip[0]; x1 = clip[0] + clip[2]; y0 = clip[1]; y1 = clip[1] + clip[3];
@@ -6064,7 +6050,7 @@ static void bgi_fill(we_doc_t *d, int idx, int slot, int slots, int bx, int by, 
             if (found >= 0) image_work.rect[found].h++;
             else {
                 os_fb_web_item_t *it;
-                if (nr >= slots) { image_fail(d, "background image budget", idx); return; }
+                if (nr >= room) return image_fail(d, "background image budget", idx) + 1;
                 it = &image_work.rect[nr++];
                 w_zero(it, sizeof(*it));
                 it->kind = OS_FB_WEB_RECT;
@@ -6074,13 +6060,16 @@ static void bgi_fill(we_doc_t *d, int idx, int slot, int slots, int bx, int by, 
             }
         }
     }
-    for (row = 0; row < nr; row++) {
-        os_fb_web_item_t *it = &d->items[slot + row];
-        it->kind = OS_FB_WEB_RECT;
-        it->x = image_work.rect[row].x; it->y = image_work.rect[row].y;
-        it->w = image_work.rect[row].w; it->h = image_work.rect[row].h;
-        it->color = image_work.rect[row].color;
+    for (row = (int)d->nitems - 1; row >= at; row--) {
+        d->items[row + nr] = d->items[row];
+        d->item_owner[row + nr] = d->item_owner[row];
     }
+    for (row = 0; row < nr; row++) {
+        d->items[at + row] = image_work.rect[row];
+        d->item_owner[at + row] = (int16_t)idx;
+    }
+    d->nitems += (uint32_t)nr;
+    return nr;
 }
 
 static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, int bx, int by, int bw, int bh, const we_radii_t *radii) {
@@ -6127,7 +6116,7 @@ static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, in
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     we_node_t* n = &d->nodes[idx];
     int bx, by, bw, bh, content_x, content_w, content_h, slot, border_slot = -1;
-    int first_item = (int)d->nitems, shadow_slot[2], shadow_slots[2], grad_slot, grad_slots, radius_slots, bgi_slot, bgi_slots;
+    int first_item = (int)d->nitems, shadow_slot[2], shadow_slots[2], grad_slot, grad_slots, radius_slots, bgi_at;
     we_radii_t radii;
     if (depth > WE_DEPTH_MAX) return 0;
     d->perf.boxes++;
@@ -6161,7 +6150,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         }
     }
     grad_slot = gradient_reserve(d, idx, &grad_slots);
-    bgi_slot = bgi_reserve(d, idx, &bgi_slots);
+    bgi_at = (int)d->nitems;
     shadow_slot[1] = shadow_reserve(d, idx, 1, &shadow_slots[1]);
     content_x = limit_coord(bx + box_edge(n, 3) + n->padding[3]);
     content_w = bw - box_edge(n, 1) - box_edge(n, 3) - n->padding[1] - n->padding[3];
@@ -6215,7 +6204,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         } else { it->x = (int16_t)box[0]; it->y = (int16_t)box[1]; it->w = (uint16_t)box[2]; it->h = (uint16_t)box[3]; }
     }
     gradient_fill(d, idx, grad_slot, grad_slots, bx, by, bw, bh);
-    bgi_fill(d, idx, bgi_slot, bgi_slots, bx, by, bw, bh);
+    shadow_slot[1] += bgi_fill(d, idx, bgi_at, bx, by, bw, bh);
     shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh, &radii);
     shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh, &radii);
     if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 5 || n->border_style == 6)) {

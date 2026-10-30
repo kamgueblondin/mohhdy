@@ -42,6 +42,13 @@ static void test_l63_bgi_tiles_repeat_both_axes(void) {
     TEST_ASSERT_EQUAL(32, g_doc.items[0].h);
     TEST_ASSERT_EQUAL(47, g_doc.items[47].x);
     TEST_ASSERT_TRUE(l63_at(0, 0) != l63_at(1, 0));
+    /* the natural 48px ramp restarts at x 48 */
+    l63_bgi(L63_BGI("width:60px;height:4px", ""));
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    TEST_ASSERT_EQUAL(60, (int)g_doc.nitems);
+    TEST_ASSERT_EQUAL(l63_at(0, 0), l63_at(48, 3));
+    TEST_ASSERT_EQUAL(l63_at(11, 0), l63_at(59, 0));
+    TEST_ASSERT_TRUE(l63_at(47, 0) != l63_at(48, 0));
 }
 
 static void test_l63_bgi_repeat_and_position(void) {
@@ -160,6 +167,24 @@ static void test_l63_bgi_boxes_and_order(void) {
     TEST_ASSERT_EQUAL(0, lot52_node("c")->bgi_len);
     TEST_ASSERT_EQUAL(1, lot52_read_calls);
     TEST_ASSERT_EQUAL(lot52_node("c") - g_doc.nodes, g_doc.item_owner[g_doc.nitems - 1]);
+    /* under the inset shadow; nested images keep each box's order */
+    l63_bgi(L63_BGI("width:8px;height:8px;box-shadow:inset 0 0 0 1px #ff0000", "background-size:4px 4px"));
+    TEST_ASSERT_EQUAL(12, (int)g_doc.nitems);
+    TEST_ASSERT_EQUAL((long)0xFF0000, l63_at(0, 0));
+    TEST_ASSERT_EQUAL((long)0xFF0000, l63_at(7, 3));
+    TEST_ASSERT_EQUAL(0, g_doc.items[4].color);
+    TEST_ASSERT_EQUAL(0xFF0000u, g_doc.items[8].color);
+    l63_bgi("<body style='margin:0'><div id=p style='width:12px;padding:2px;background-image:url(/images/mire-ga16.png);background-size:6px 4px;box-shadow:inset 0 0 0 1px #ff0000'>"
+            "<div id=c style='height:4px;background-image:url(/images/mire-ga16.png);background-size:2px 2px;background-repeat:no-repeat'></div></div></body>");
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    TEST_ASSERT_EQUAL(16 + 4 + 2, (int)g_doc.nitems);       /* 16 parent columns, its inset, 2 child columns */
+    TEST_ASSERT_EQUAL(lot52_node("p") - g_doc.nodes, g_doc.item_owner[15]);
+    TEST_ASSERT_EQUAL(0xFF0000u, g_doc.items[16].color);
+    TEST_ASSERT_EQUAL(0xFF0000u, g_doc.items[19].color);
+    TEST_ASSERT_EQUAL(lot52_node("c") - g_doc.nodes, g_doc.item_owner[20]);
+    TEST_ASSERT_EQUAL(2, g_doc.items[20].x);
+    TEST_ASSERT_EQUAL(2, g_doc.items[20].h);
+    TEST_ASSERT_EQUAL(3, g_doc.items[21].x);
     /* quotes; a later background or gradient replaces the url */
     l63_bgi("<body style='margin:0'><div id=b style=\"width:6px;height:4px;background-image:url( '/images/mire-ga16.png' );background-size:6px 4px\"></div></body>");
     TEST_ASSERT_EQUAL(6, (int)g_doc.nitems);
@@ -234,13 +259,21 @@ static void test_l63_bgi_refusals(void) {
     TEST_ASSERT_TRUE(lot52_has_diag("background image budget"));
     TEST_ASSERT_EQUAL(1, (int)g_doc.nitems);
     TEST_ASSERT_EQUAL(0x00FF00u, g_doc.items[0].color);
-    /* exactly the reservation fits: 48 one-pixel columns */
-    l63_bgi("<body style='margin:0'><div id=b style='width:48px;height:2px;background-image:url(/images/mire-g1.png)'></div></body>");
+    /* the whole display list fits: 96 one-pixel columns, not 97 */
+    l63_bgi("<body style='margin:0'><div id=b style='width:96px;height:2px;background-image:url(/images/mire-g1.png)'></div></body>");
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
-    TEST_ASSERT_EQUAL(48, (int)g_doc.nitems);
-    l63_bgi("<body style='margin:0'><div id=b style='width:49px;height:2px;background-image:url(/images/mire-g1.png)'></div></body>");
+    TEST_ASSERT_EQUAL(OS_FB_WEB_ITEMS, (int)g_doc.nitems);
+    l63_bgi("<body style='margin:0'><div id=b style='width:97px;height:2px;background-image:url(/images/mire-g1.png)'></div></body>");
     TEST_ASSERT_TRUE(lot52_has_diag("background image budget"));
     TEST_ASSERT_EQUAL(0, (int)g_doc.nitems);
+    TEST_ASSERT_EQUAL(0, g_doc.perf.items_dropped);
+    l63_bgi("<body style='margin:0'><div id=b style='width:96px;height:2px;background:#ff0000;background-image:url(/images/mire-g1.png)'></div></body>");
+    TEST_ASSERT_TRUE(lot52_has_diag("background image budget"));
+    TEST_ASSERT_EQUAL(1, (int)g_doc.nitems);
+    /* hidden boxes paint no image */
+    l63_bgi(L63_BGI("width:6px;height:4px;visibility:hidden", "background-size:6px 4px"));
+    TEST_ASSERT_EQUAL(0, (int)g_doc.nitems);
+    TEST_ASSERT_EQUAL(0, lot52_read_calls);
     we_set_image_reader(0, 0);
 }
 
