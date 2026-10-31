@@ -96,6 +96,7 @@ int net_socket_send(int id, const uint8_t* p, uint16_t l, uint8_t* s, uint16_t c
     (void)id; (void)p; (void)l; (void)s; (void)c; (void)o; return absent();
 }
 int net_socket_feed(int id, const uint8_t* s, uint16_t l) { (void)id; (void)s; (void)l; return absent(); }
+uint16_t net_socket_receive_space(int id) { (void)id; return 0U; }
 int net_socket_receive(int id, uint8_t* b, uint16_t c, uint16_t* o) {
     (void)id; (void)b; (void)c; (void)o; return absent();
 }

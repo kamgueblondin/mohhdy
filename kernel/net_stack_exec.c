@@ -99,6 +99,7 @@ static int32_t stack_socket(net_stack_t* st, const os_net_relay_request_t* req,
             c.local_port = u.local_port; c.remote_port = u.remote_port;
             stack_copy(c.local_ip, u.local_ip, 4U); stack_copy(c.remote_ip, u.remote_ip, 4U);
             c.local_sequence = u.local_sequence; c.attempts = u.attempts;
+            stack_copy(c.next_hop_ip, u.next_hop_ip, 4U);
             rc = stack_ctx(st, &ctx);
             if (rc != 0) return rc;
             return stack_run(st, &ctx, net_wire_op_connect(&ctx, &c));

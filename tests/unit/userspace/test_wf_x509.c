@@ -8,6 +8,9 @@
 #include "wf_x509_fixtures.h"
 #include "wf_real_chain.h"
 
+#ifndef WF_ROOTS_PEM
+#define WF_ROOTS_PEM "../initrd_content/etc/ca-roots.pem"
+#endif
 #define NOW "20260601120000"
 static wf_trust_t g_trust;
 static uint8_t g_der[64 * 1024];
@@ -145,7 +148,7 @@ static void test_real_chain_with_production_roots(void) {
     const int l[4] = {(int)sizeof(rc_0), (int)sizeof(rc_1), (int)sizeof(rc_2), (int)sizeof(rc_3)};
     wf_chain_info_t info;
     int len = 0, used = 0, i, n;
-    char* pem = slurp("../initrd_content/etc/ca-roots.pem", &len);
+    char* pem = slurp(WF_ROOTS_PEM, &len);
     TEST_ASSERT_TRUE(pem != 0);
     memset(&g_trust, 0, sizeof(g_trust));
     n = wf_trust_add_pem(&g_trust, pem, len, g_der, (int)sizeof(g_der), &used);

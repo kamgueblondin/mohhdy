@@ -85,8 +85,13 @@ int net_socket_feed(int socket_id, const uint8_t* segment, uint16_t length) {
         /* ACK final peut piggybacker un ClientHello : conserver le payload. */
         if (view.payload_length == 0U) return 0;
     }
-    if (net_tcp_connection_accept_data(&sockets[socket_id].connection, &view, &accepted) != 0) return NET_SOCKET_PROTOCOL;
+    /* Lot 67: the space check comes before the sequence moves. Checked
+     * after, a segment larger than the free space was refused with
+     * remote_sequence already advanced: its bytes were lost for good and
+     * the stream desynchronised (TLS stalled waiting for a record). */
     available = (uint16_t)(NET_SOCKET_RX_CAPACITY - sockets[socket_id].receive_length);
+    if (view.payload_length > available) return NET_SOCKET_BUFFER_SMALL;
+    if (net_tcp_connection_accept_data(&sockets[socket_id].connection, &view, &accepted) != 0) return NET_SOCKET_PROTOCOL;
     if (accepted > available) return NET_SOCKET_BUFFER_SMALL;
     for (uint16_t i = 0U; i < accepted; i++) sockets[socket_id].receive_buffer[sockets[socket_id].receive_length + i] = view.payload[i];
     sockets[socket_id].receive_length = (uint16_t)(sockets[socket_id].receive_length + accepted);
@@ -103,9 +108,28 @@ int net_socket_receive(int socket_id, uint8_t* buffer, uint16_t capacity, uint16
     if (sockets[socket_id].receive_offset == sockets[socket_id].receive_length) {
         sockets[socket_id].receive_offset = 0U;
         sockets[socket_id].receive_length = 0U;
+    } else if (sockets[socket_id].receive_offset > 0U) {
+        /* Lot 67: compact so the free space (the advertised window) grows
+         * as soon as the reader consumes, not only when it drains all. */
+        uint16_t rest = (uint16_t)(sockets[socket_id].receive_length - sockets[socket_id].receive_offset);
+        for (uint16_t i = 0U; i < rest; i++)
+            sockets[socket_id].receive_buffer[i] = sockets[socket_id].receive_buffer[sockets[socket_id].receive_offset + i];
+        sockets[socket_id].receive_length = rest;
+        sockets[socket_id].receive_offset = 0U;
+    }
+    /* Consumed bytes reopen the TCP receive window (it only shrank before,
+     * so a connection stopped accepting data after 64 KiB in total). */
+    if (amount > 0U) {
+        uint32_t w = (uint32_t)sockets[socket_id].connection.receive_window + amount;
+        sockets[socket_id].connection.receive_window = (uint16_t)(w > 0xffffU ? 0xffffU : w);
     }
     *out_length = amount;
     return 0;
+}
+
+uint16_t net_socket_receive_space(int socket_id) {
+    if (!valid_id(socket_id)) return 0U;
+    return (uint16_t)(NET_SOCKET_RX_CAPACITY - sockets[socket_id].receive_length);
 }
 
 int net_socket_send_tls(int socket_id, net_tls_aes_gcm_session_t* session, uint8_t content_type,

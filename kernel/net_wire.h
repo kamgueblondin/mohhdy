@@ -33,6 +33,8 @@ typedef struct {
     uint8_t remote_ip[4];
     uint16_t local_port;
     uint16_t remote_port;
+    uint8_t next_hop_ip[4];   /* Lot 67: gateway for an off-link peer, 0 = on-link */
+    uint16_t adv_window;      /* Lot 67: last receive window advertised */
 } net_wire_binding_t;
 
 /* Tranche 5 suite: frame sink. 0 = accepted for transmission. */

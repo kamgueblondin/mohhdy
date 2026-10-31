@@ -19,6 +19,7 @@ static void wire_add(os_net_wire_status_t* a, const os_net_wire_status_t* b) {
     a->arp_tx += b->arp_tx; a->sends += b->sends; a->recvs += b->recvs;
     a->closes += b->closes; a->refused += b->refused; a->demuxed += b->demuxed;
     a->dropped += b->dropped; a->arp_replies += b->arp_replies; a->peer_fins += b->peer_fins;
+    a->routed += b->routed;
 }
 
 static void owner_retire(void) {
