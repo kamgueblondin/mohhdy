@@ -80,7 +80,7 @@ def main():
             for cmd, arg, frag, mut in [
                     ("p2p-cache get", "c0", "p2p-cache miss c0", False),
                     ("p2p-cache get", "c8", "p2p-cache ok c8=v8", False),
-                    ("p2p-cache", "", " evictions 1 expired 0 ", False)]:
+                    ("p2p-cache", "", "p2p cache hits 1 misses 1 evictions 1 expired 0", False)]:
                 gp.run_entry(monitor, proc, "/mesh", "Maillage P2P", cmd, arg, frag, mut)
             for cmd, arg, frag, mut in rows[8:]:
                 gp.run_entry(monitor, proc, "/mesh", "Maillage P2P", cmd, arg, frag, mut)

@@ -2387,6 +2387,8 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         out[0] = 0;
         s_cat(out, "p2p cache hits ", cap); cat_u(out, n->cache.total_hits, cap);
         s_cat(out, " misses ", cap); cat_u(out, n->cache.total_misses, cap);
+        s_cat(out, " evictions ", cap); cat_u(out, n->cache.evictions, cap);
+        s_cat(out, " expired ", cap); cat_u(out, n->cache.expired, cap);
         s_cat(out, " invalidations ", cap); cat_u(out, n->cache.invalidations, cap);
         s_cat(out, " stale_refused ", cap); cat_u(out, n->cache.stale_refused, cap);
         s_cat(out, " inv_completed ", cap); cat_u(out, n->cache.inv_completed, cap);
@@ -2394,8 +2396,6 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " inv_resent ", cap); cat_u(out, n->cache.inv_resent, cap);
         s_cat(out, " fence_pushed ", cap); cat_u(out, n->cache.fence_pushed, cap);
         s_cat(out, " fence_raised ", cap); cat_u(out, n->cache.fence_raised, cap);
-        s_cat(out, " evictions ", cap); cat_u(out, n->cache.evictions, cap);
-        s_cat(out, " expired ", cap); cat_u(out, n->cache.expired, cap);
         s_cat(out, " relayed_multi ", cap); cat_u(out, n->relayed_multi, cap);
         s_cat(out, "\n", cap);
     }
