@@ -110,17 +110,21 @@ void test_wrong_network_key_is_kept_out(void) {
 }
 
 void test_encrypted_message_tamper_and_replay(void) {
-    int i, found = 0;
+    static uint8_t saved[2048];
+    int i, found = 0, saved_len;
     setup(2, 0);
     run(2, 300);
     TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "beta", "secret bonjour"));
     for (i = 0; i + 6 <= g_last_len; i++) if (!memcmp(g_last + i, "secret", 6)) found = 1;
     TEST_ASSERT_EQUAL(0, found); /* not in clear on the wire */
+    /* Lot 69: keep the message datagram; beta's data ack goes out after it */
+    memcpy(saved, g_last, (size_t)g_last_len);
+    saved_len = g_last_len;
     run(2, 20);
     TEST_ASSERT_NOT_NULL(strstr(g_out[1], "p2p msg from alpha: secret bonjour"));
     /* replay of the same datagram: delivered once */
     g_out[1][0] = 0;
-    inject(1, 0, g_last, g_last_len);
+    inject(1, 0, saved, saved_len);
     run(2, 20);
     TEST_ASSERT_NULL(strstr(g_out[1], "secret bonjour"));
     TEST_ASSERT_GREATER_THAN(0, (int)g_n[1].dup);
@@ -223,7 +227,9 @@ void test_failure_detection_and_relay(void) {
     TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "gamma", "via beta"));
     run(3, 30);
     TEST_ASSERT_NOT_NULL(strstr(g_out[2], "p2p msg from alpha: via beta (relayed)"));
-    TEST_ASSERT_EQUAL(1, (int)g_n[1].relayed);
+    /* the message, then gamma's data ack for it (Lot 69) */
+    TEST_ASSERT_EQUAL(2, (int)g_n[1].relayed);
+    TEST_ASSERT_EQUAL(1U, p2p_find(&g_n[0], "gamma")->flow.acked);
     p2p_report(&g_n[0], &g_h[0], "health", rep, sizeof(rep));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p health gamma down"));
     TEST_ASSERT_NOT_NULL(strstr(rep, "down_events 1"));
@@ -787,15 +793,19 @@ void test_multi_relay_chain(void) {
     TEST_ASSERT_NOT_NULL(strstr(g_out[3], "p2p msg from alpha: two relays (relayed)"));
     TEST_ASSERT_EQUAL(1, (int)g_n[1].relayed_multi);
     TEST_ASSERT_TRUE(g_n[2].relayed >= 1U);
-    TEST_ASSERT_EQUAL(0, (int)g_n[2].relayed_multi);
+    /* Lot 69: delta's data ack takes the way back, gamma first (multi) */
+    TEST_ASSERT_EQUAL(1, (int)g_n[2].relayed_multi);
+    TEST_ASSERT_EQUAL(1U, p2p_find(&g_n[0], "delta")->flow.acked);
     /* and back: delta reaches alpha the same way */
     TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[3], &g_h[3], "alpha", "back"));
     run(4, 40);
     TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p msg from delta: back (relayed)"));
-    /* on the way back gamma is the first relay, beta delivers */
-    TEST_ASSERT_EQUAL(1, (int)g_n[2].relayed_multi);
+    /* on the way back gamma is the first relay, beta delivers; alpha's
+     * data ack for it goes forward through beta first (Lot 69) */
+    TEST_ASSERT_EQUAL(2, (int)g_n[2].relayed_multi);
+    TEST_ASSERT_EQUAL(1U, p2p_find(&g_n[3], "alpha")->flow.acked);
     p2p_report(&g_n[1], &g_h[1], "cache", rep, sizeof(rep));
-    TEST_ASSERT_NOT_NULL(strstr(rep, "relayed_multi 1"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "relayed_multi 2"));
 }
 
 /* US-068/073: delay-based and loss-based window control. */
@@ -1909,10 +1919,66 @@ void test_qos_bwe_probe_train(void) {
     TEST_ASSERT_EQUAL(64U, g_n[0].qos.probe_acked);
 }
 
+/* Lot 69 (US-068/US-073): per-packet data acks feed a pacer per peer. A
+ * cut peer loses its data and backs off; the healthy peer is unaffected. */
+void test_lot69_per_peer_flow_and_data_acks(void) {
+    char out[1024], msg[16];
+    const char* av[1];
+    p2p_peer_t *pb, *pg;
+    int i;
+    setup(3, 0);
+    run(3, 300);
+    pb = p2p_find(&g_n[0], "beta");
+    pg = p2p_find(&g_n[0], "gamma");
+    TEST_ASSERT_TRUE(pb && pb->keyed && pg && pg->keyed);
+    for (i = 0; i < 6; i++) {
+        msg[0] = 'm'; msg[1] = (char)('0' + i); msg[2] = 0;
+        TEST_ASSERT_TRUE(p2p_send_text(&g_n[0], &g_h[0], "beta", msg) >= 0);
+        TEST_ASSERT_TRUE(p2p_send_text(&g_n[0], &g_h[0], "gamma", msg) >= 0);
+    }
+    run(3, 200);
+    TEST_ASSERT_EQUAL(6U, pb->flow.sent);
+    TEST_ASSERT_EQUAL(6U, pb->flow.acked);
+    TEST_ASSERT_EQUAL(0U, pb->flow.lost);
+    TEST_ASSERT_EQUAL(0U, pb->flow.inflight);
+    TEST_ASSERT_EQUAL(6U, pg->flow.acked);
+    TEST_ASSERT_TRUE(pb->flow.nsample > 0U && pb->flow.btl_bps > 0U);
+    TEST_ASSERT_TRUE(pb->flow.srtt_us >= 10000U);           /* at least one tick */
+    TEST_ASSERT_TRUE(p2p_find(&g_n[1], "alpha")->flow.acks_sent >= 6U);
+    TEST_ASSERT_TRUE(g_n[0].rx_type[P2P_I_DACK] >= 1U);
+    /* alpha -> gamma cut (both ways, so no ack comes back) */
+    g_cut[2][0] = g_cut[0][2] = 1;
+    for (i = 0; i < 20; i++) {
+        (void)p2p_send_text(&g_n[0], &g_h[0], "beta", "b");
+        (void)p2p_send_text(&g_n[0], &g_h[0], "gamma", "g");
+        run(3, 20);
+    }
+    run(3, 1500);
+    TEST_ASSERT_TRUE(pg->flow.lost >= 1U);
+    TEST_ASSERT_TRUE(pg->flow.loss_backoffs >= 1U);
+    TEST_ASSERT_EQUAL(0U, pb->flow.lost);
+    TEST_ASSERT_EQUAL(pb->flow.sent, pb->flow.acked);
+    TEST_ASSERT_TRUE(pb->flow.sent >= 26U);
+    TEST_ASSERT_EQUAL(0, p2p_flow_cmd(&g_n[0], 0, av, out, (int)sizeof(out)));
+    TEST_ASSERT_NOT_NULL(strstr(out, "p2p flow peer beta sent "));
+    TEST_ASSERT_NOT_NULL(strstr(out, "p2p flow peer gamma sent "));
+    av[0] = "beta";
+    TEST_ASSERT_EQUAL(0, p2p_flow_cmd(&g_n[0], 1, av, out, (int)sizeof(out)));
+    TEST_ASSERT_NULL(strstr(out, "gamma"));
+    TEST_ASSERT_NOT_NULL(strstr(out, " lost 0 "));
+    av[0] = "nobody";
+    TEST_ASSERT_EQUAL(1, p2p_flow_cmd(&g_n[0], 1, av, out, (int)sizeof(out)));
+    av[0] = "reset";
+    TEST_ASSERT_EQUAL(0, p2p_flow_cmd(&g_n[0], 1, av, out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(0U, pb->flow.sent);
+    g_cut[2][0] = g_cut[0][2] = 0;
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
     RUN_TEST(test_qos_bwe_probe_train);
+    RUN_TEST(test_lot69_per_peer_flow_and_data_acks);
     RUN_TEST(test_lot66_cache_lru_no_duplicate_raft_kept);
     RUN_TEST(test_lot66_heal_starts_anti_entropy);
     RUN_TEST(test_lot66_heal_with_raft_snapshot);

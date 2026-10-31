@@ -11,6 +11,7 @@
 #define MOHHDY_P2P_H
 #include "p2p_bwe.h"
 #include "p2p_pace.h"
+#include "p2p_flow.h"
 #include <stdint.h>
 
 #define P2P_PORT 7700U
@@ -44,7 +45,9 @@ enum {
     P2P_I_GRPC_REQ, P2P_I_GRPC_RESP, P2P_I_STUN_REQ, P2P_I_STUN_RESP, P2P_I_NAT_PUNCH,
     P2P_I_RAFT_APPEND, P2P_I_RAFT_APPEND_RESP,
     P2P_I_RAFT_PREVOTE_REQ, P2P_I_RAFT_PREVOTE_RESP,
-    P2P_I_RAFT_SNAPSHOT, P2P_I_RAFT_SNAPSHOT_RESP, P2P_I_CACHE_INV_ACK, P2P_I_COUNT
+    P2P_I_RAFT_SNAPSHOT, P2P_I_RAFT_SNAPSHOT_RESP, P2P_I_CACHE_INV_ACK,
+    P2P_I_DACK, /* Lot 69: per-packet data acks (p2p_flow.h) */
+    P2P_I_COUNT
 };
 
 typedef struct {
@@ -99,6 +102,7 @@ typedef struct {
     uint64_t last_seen_seq;
     uint8_t zero_trust_revoked;
     char revoke_reason[64];
+    p2p_flow_t flow;       /* Lot 69 (US-068/073): per-peer pacer and data acks */
 } p2p_peer_t;
 
 typedef struct {
@@ -323,6 +327,8 @@ int p2p_send_text(p2p_node_t* n, const p2p_host_t* h, const char* peer, const ch
 /* Lot 6: bypasses admit/shaping (flood proof only, see p2p.c) */
 int p2p_send_unshaped(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* text);
 /* Lot 68: "p2p-pace [status|on|off|auto|cap BPS|burst N]" */
+/* Lot 69: "p2p flow [PEER|reset]" per-peer flow status */
+int p2p_flow_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, int cap);
 int p2p_pace_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, int cap);
 int p2p_put(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 const p2p_item_t* p2p_get_local(const p2p_node_t* n, const char* key);

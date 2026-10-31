@@ -295,6 +295,27 @@ def main():
             raise RuntimeError("pacer counters: %s" % log(a, start_p)[-300:])
         cmd(a, "p2p-pace cap 0", "p2p pace mode auto source estimator rate_bps ")
         say("scenario 1b ok: estimator paced burst (sent %s queued %s, %s)" % (pb.group(1), pb.group(2), pd.group(0)))
+        # Lot 69 (US-068/US-073): every paced message got its own data ack
+        # (DACK, by sealed counter) back from beta; alpha's flow for beta
+        # has RTT and delivery-rate samples and a per-peer pacing rate.
+        flow_re = (r"p2p flow peer beta sent (\d+) acked (\d+) lost (\d+) inflight (\d+) "
+                   r"rate_bps (\d+) btl_bps (\d+) srtt_ms (\d+) min_rtt_ms (\d+) samples (\d+)")
+        fl = None
+        for _round in range(10):
+            start_fl = cmd(a, "p2p-flow beta", "p2p flow peer beta sent ")
+            fl = re.search(flow_re, log(a, start_fl))
+            if fl and int(fl.group(1)) >= 10 and fl.group(1) == fl.group(2):
+                break
+            cmd(a, "p2p-poll 2", "p2p-poll ok")
+            cmd(b, "p2p-poll 2", "p2p-poll ok")
+        if (not fl or int(fl.group(1)) < 10 or fl.group(1) != fl.group(2) or int(fl.group(3)) != 0
+                or int(fl.group(9)) < 1 or int(fl.group(5)) == 0):
+            raise RuntimeError("per-peer flow for beta: %s" % (fl.group(0) if fl else log(a, start_fl)[-300:]))
+        start_fb = cmd(b, "p2p-flow alpha", "p2p flow peer alpha sent ")
+        acks = re.search(r"acks_rx_sent (\d+) dack_frames (\d+)", log(b, start_fb))
+        if not acks or int(acks.group(1)) < 10 or int(acks.group(2)) < 1:
+            raise RuntimeError("beta data acks: %s" % log(b, start_fb)[-300:])
+        say("scenario 1b ok: per-peer flow %s; beta acked %s in %s DACK frames" % (fl.group(0), acks.group(1), acks.group(2)))
         # Lot 6 (US-075): a flood from gamma is attributed to gamma by
         # beta's per-peer baseline. Gamma plays a misbehaving sender that
         # ignores its own QoS controller (a well-behaved burst is shaped

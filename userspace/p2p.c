@@ -12,7 +12,7 @@ static const char* const k_names[P2P_I_COUNT] = {
     "ping", "pong", "msg", "put", "sync-req", "sync-items", "get-req", "get-resp", "propose", "vote", "commit", "app",
     "raft-req", "raft-resp", "raft-hb", "cache-inv",
     "grpc-req", "grpc-resp", "stun-req", "stun-resp", "nat-punch", "raft-append", "raft-append-resp",
-    "raft-prevote-req", "raft-prevote-resp", "raft-snapshot", "raft-snapshot-resp", "cache-inv-ack"
+    "raft-prevote-req", "raft-prevote-resp", "raft-snapshot", "raft-snapshot-resp", "cache-inv-ack", "dack"
 };
 static void cache_fence(p2p_node_t* n, const char* key, uint32_t version);
 static uint32_t cache_fence_of(const p2p_node_t* n, const char* key);
@@ -191,7 +191,7 @@ static void derive(p2p_node_t* n, p2p_peer_t* p) {
     sha256_update(&c, ids, 8);
     sha256_final(&c, d);
     mcopy(p->key, d, 16); mcopy(p->iv, d + 16, 4);
-    p->keyed = 1; p->tx_counter = 0; p->rx_counter = 0;
+    p->keyed = 1; p->tx_counter = 0; p->rx_counter = 0; p2p_flow_init(&p->flow);
     mzero(shared, 32); mzero(d, 32);
 }
 
@@ -284,6 +284,9 @@ static int seal_send(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inne
     pos += blen + 1 + 16;
     n->tx_type[inner]++;
     p->sent++;
+    /* Lot 69: user data is tracked per peer until its DACK comes back */
+    if (inner == P2P_I_MSG || inner == P2P_I_PUT)
+        (void)p2p_flow_on_send(&p->flow, p->tx_counter, (uint32_t)(blen + 1), now(h) * (1000000U / P2P_HZ));
     return emit(n, h, ip, b, pos);
 }
 
@@ -317,6 +320,12 @@ static int admit(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, uint32_t byt
     uint32_t rate;
     int limited;
     pace_ensure(n);
+    /* Lot 69: this peer's own pacer first (fed by its data acks), so a
+     * slow peer defers its own traffic without holding the others */
+    if (n->qos.pace.mode != P2P_PACE_OFF && !p2p_flow_admit(&p->flow, bytes, t * (1000000U / P2P_HZ))) {
+        p->throttled++;
+        return 0;
+    }
     rate = p2p_pace_rate(&n->qos.pace, &n->qos.bwe, (int)n->qos.bwe_ready);
     if (rate) {
         if (n->rate_limit) {
@@ -337,6 +346,30 @@ static int admit(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, uint32_t byt
     }
     n->qos.priority_low_tx++;
     return 1;
+}
+
+int p2p_flow_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, int cap) {
+    char line[320];
+    int i, shown = 0;
+    if (!n || !out || cap <= 0) return 1;
+    out[0] = 0;
+    if (argc >= 1 && s_eq(argv[0], "reset")) {
+        for (i = 0; i < P2P_PEERS; i++) if (n->peers[i].used) p2p_flow_init(&n->peers[i].flow);
+        s_cat(out, "p2p flow reset\n", cap);
+        return 0;
+    }
+    for (i = 0; i < P2P_PEERS; i++) {
+        const p2p_peer_t* p = &n->peers[i];
+        if (!p->used || (argc >= 1 && !s_eq(argv[0], p->name))) continue;
+        line[0] = 0;
+        s_cat(line, "p2p flow peer ", (int)sizeof(line)); s_cat(line, p->name, (int)sizeof(line)); s_cat(line, " ", (int)sizeof(line));
+        p2p_flow_status(&p->flow, line + s_len(line), (int)sizeof(line) - s_len(line) - 1);
+        s_cat(line, "\n", (int)sizeof(line));
+        s_cat(out, line, cap);
+        shown++;
+    }
+    if (!shown) { s_cat(out, argc >= 1 ? "p2p flow error unknown peer\n" : "p2p flow no peers\n", cap); return argc >= 1 ? 1 : 0; }
+    return 0;
 }
 
 int p2p_pace_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, int cap) {
@@ -861,6 +894,14 @@ static void grpc_fill(p2p_node_t* n, uint32_t type, const char* svc, const char*
     }
 }
 
+/* Lot 69: sends the pending data acks of one peer (control frame, not paced) */
+static void flush_dack(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
+    uint8_t body[1 + 4 * P2P_FLOW_ACK_BATCH];
+    int k = 2, len;
+    while (k-- > 0 && (len = p2p_flow_take_acks(&p->flow, body, (int)sizeof(body))) > 0)
+        (void)seal_send(n, h, p, P2P_I_DACK, body, len);
+}
+
 static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inner, const uint8_t* m, int len) {
     uint8_t b[P2P_DATAGRAM_MAX];
     char line[200];
@@ -868,7 +909,12 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
     int pos, i;
     line[0] = 0;
     n->rx_type[inner]++;
+    /* Lot 69: every accepted data datagram is acknowledged by its counter */
+    if ((inner == P2P_I_MSG || inner == P2P_I_PUT) && p2p_flow_note_rx(&p->flow, p->rx_counter)) flush_dack(n, h, p);
     switch (inner) {
+    case P2P_I_DACK:
+        if (p2p_flow_apply_acks(&p->flow, m, len, now(h) * (1000000U / P2P_HZ)) < 0) n->foreign++;
+        break;
     case P2P_I_PING:
         /* Lot 67: a probe PING (magic at 4) gets its 12-byte head echoed */
         if (len >= 12 && get32(m + 4) == P2P_PROBE_MAGIC) (void)seal_send(n, h, p, P2P_I_PONG, m, 12);
@@ -1624,6 +1670,13 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
     }
     t = now(h);
     if (t - n->last_hello >= P2P_HELLO_TICKS) { n->last_hello = t; send_hello(n, h); }
+    /* Lot 69: data acks leave at most one tick late; old datagrams are losses */
+    for (i = 0; i < P2P_PEERS; i++) {
+        p2p_peer_t* p = &n->peers[i];
+        if (!p->used || !p->keyed) continue;
+        if (p->flow.nack_pend) flush_dack(n, h, p);
+        (void)p2p_flow_expire(&p->flow, t * (1000000U / P2P_HZ));
+    }
 
     /* Raft Consensus Engine (US-064): Follower election timeout / Leader heartbeat */
     if (n->raft.active && n->raft.role == P2P_RAFT_LEADER) {

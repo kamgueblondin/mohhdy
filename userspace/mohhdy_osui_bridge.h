@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 458
+#define MOHHDY_SHELL_COMMAND_COUNT 464
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -159,6 +159,7 @@ static const char * const mohhdy_shell_commands[] = {
     "devsync-show",
     "devsync-sync",
     "dir",
+    "display-info",
     "driver-restart",
     "echo",
     "env",
@@ -262,6 +263,7 @@ static const char * const mohhdy_shell_commands[] = {
     "p2p-cache",
     "p2p-down",
     "p2p-flood",
+    "p2p-flow",
     "p2p-get",
     "p2p-grpc",
     "p2p-health",
@@ -367,6 +369,9 @@ static const char * const mohhdy_shell_commands[] = {
     "rmdir",
     "rtc-check",
     "screen-adapt",
+    "search",
+    "search-engine",
+    "search-open",
     "service-event-pull",
     "service-find",
     "service-grant",
@@ -425,6 +430,7 @@ static const char * const mohhdy_shell_commands[] = {
     "top",
     "touch",
     "ui-font",
+    "ui-layout",
     "ui-scale",
     "unalias",
     "uptime",

@@ -409,6 +409,17 @@ int shell_p2p_line(const char* line) {
         print_string(cmd); print_string(" ok "); print_string(a); print_string("\n");
         return 0;
     }
+    if (s_eq(cmd, "p2p-flow")) {
+        /* Lot 69 (US-068/US-073): per-peer pacer fed by data acks */
+        static char out[1024];
+        char w0[24];
+        const char* av[1];
+        rest = word(rest, w0, (int)sizeof(w0));
+        av[0] = w0;
+        if (p2p_flow_cmd(&g_node, w0[0] ? 1 : 0, av, out, (int)sizeof(out)) != 0) { print_string(out); return 1; }
+        print_string(out);
+        return 0;
+    }
     if (s_eq(cmd, "p2p-pace")) {
         /* Lot 68 (US-068/US-073): the estimator paces user data */
         static char out[256];
