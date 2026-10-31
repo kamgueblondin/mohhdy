@@ -204,11 +204,11 @@ def main():
             out = run(mon, proc, "prod-roadmap", ["prod-roadmap phase 6 done 11 partial 3 simule 1 open 0 progress 73%",
                                             "prod-roadmap phase 7 done 14 partial 0 simule 1 open 0 progress 93%",
                                             "prod-roadmap phase 8 done 15 partial 0 simule 0 open 0 progress 100%",
-                                            "prod-roadmap phase 9 (gui-parity) done 23 partial 1 simule 0 open 0 progress 95%",
-                                            "prod-roadmap next US-076 US-078 US-080 US-081 US-097 US-G23",
+                                            "prod-roadmap phase 9 (gui-parity) done 24 partial 0 simule 0 open 0 progress 100%",
+                                            "prod-roadmap next US-076 US-078 US-080 US-081 US-097",
                                             "prod-roadmap ok source /roadmap.txt entries 69 bad 0"], attempts=2)
             # Lot 52: require the whole next-id line, not an accepted prefix.
-            expected_next = "prod-roadmap next US-076 US-078 US-080 US-081 US-097 US-G23"
+            expected_next = "prod-roadmap next US-076 US-078 US-080 US-081 US-097"
             next_lines = [line.strip() for line in out.splitlines()
                           if line.strip().startswith("prod-roadmap next ")]
             if next_lines != [expected_next]:

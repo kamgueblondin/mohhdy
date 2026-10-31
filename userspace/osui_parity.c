@@ -294,7 +294,10 @@ static const osui_par_entry_t k_child[] = {
     { "Oublier un resultat", "child-results-forget", A | M, "PID" },
 };
 static const osui_par_entry_t k_release[] = {
-    { "Verifier un manifeste", "deploy-verify", 0, 0 },
+    /* Lot 66 (US-G23): read-only first entry (deploy-verify now needs its
+     * manifest, an empty argument is refused). */
+    { "Sauvegardes", "prod-backups", 0, 0 },
+    { "Verifier un manifeste", "deploy-verify", A, "MANIFESTE" },
     { "Appliquer un manifeste", "deploy-apply", A | M, "MANIFESTE" },
     { "Revenir au backup pre-deploy", "prod-rollback", M, 0 },
     { "Restaurer un backup nomme", "prod-restore", A | M, "NOM" },

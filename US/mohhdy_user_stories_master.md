@@ -195,6 +195,8 @@ Etat Phase 4 (28 octobre 2026, lot 49). US-055 reste partiel : `pm-cross FILE` r
 
 Etat Phase 5 (28 octobre 2026, lot 49). US-063 et US-074 inchanges. US-063 : vecteur de distances, au plus 3 sauts, reseau de laboratoire. US-074 : codec STUN RFC 5389 reel dans le lien ; le NAT et `p2p-punch` restent simules. Pas de NAT materiel.
 
+Etat Phase 5 (31 octobre 2026, lot 66). US-069 et US-070 restent fermes, deux defauts corriges : le cache pouvait garder deux lignes pour une cle et perdait les lignes Raft a chaque pair tombe (LRU, expiration sans debordement, compteurs `evictions` `expired`) ; une partition guerie lance seule l'anti-entropie dans les deux sens (`heal_syncs`), prouve par `make qemu-p2p` 2c sans `p2p-sync`. US-068/US-073 restent partiels.
+
 Etat Phase 5 (27 octobre 2026, lot 48). US-069 ferme : trois cycles crash/redemarrage (beta, gamma, beta) entre trois invites, cle ecrite pendant le crash recue a chaque fois. US-070 ferme : la cloture (fence) d'invalidation est repoussee a un pair qui revient apres une coupure ; il refuse le remplissage perime. US-075 ferme (statistique, pas d'apprentissage) : rapport automatique `p2p traffic alert peer X` par episode, deux emetteurs nommes, aucun sur les noeuds calmes. US-068/US-073 partiels : la fenetre adaptative recule sous un delai du hub (16 -> 10) et sous une perte, puis remonte a 16 ; pas de charge extreme ni de WAN. Preuve : `make qemu-p2p-phase5`.
 
 Etat Phase 5 (17 octobre 2026, lot 9). US-067 ferme : appels gRPC (trames HTTP/2, sous-ensemble HPACK, protobuf) transportes dans les enregistrements applicatifs de la session TLS 1.2 entre deux invites (`grpc-tls-serve`, `grpc-tls-call`, AES-128-GCM), aucun gRPC en clair sur le fil ; preuve `make qemu-net-peer-tls-worker`. HPACK reste un sous-ensemble. US-063, US-068/US-073, US-069, US-070, US-074, US-075 restent partiels (reseau de laboratoire).
@@ -518,7 +520,7 @@ completent le backlog ; elles n'en retirent aucune.
 | US-G20 | Process commands in a desktop panel | done (Lot 65: `/proc` runs every task-* command plus kill, kill-children and children; state changes need a second Enter; wait, wait-result and wait-any-result block until a child exits and stay on `/cmd`; QEMU runs task-summary and task-events-notify) |
 | US-G21 | P2P mesh reports in a desktop panel | done (Lot 65: `/mesh` runs every p2p-* command except the p2p-chat keyboard loop; `make qemu-gui-mesh` brings a live node up, reads stats/peers/health/qos/kv, writes and reads a key and brings it down, all from the panel) |
 | US-G22 | Child result commands in a desktop panel | done (Lot 65: `/child` runs every child-* command; children is in `/proc`; clear and forget need a second Enter) |
-| US-G23 | Deploy and rollback in a desktop panel | partial (Lot 51: `/release` runs deploy-verify with no manifest, which prints `manifest not found` and writes nothing; deploy-apply and prod-restore take an argument and a second Enter; prod-rollback needs a second Enter; no live rollout is claimed) |
+| US-G23 | Deploy and rollback in a desktop panel | done (Lot 66: `make qemu-gui-parity` drives deploy-apply, deploy-verify, a refused apply that changes nothing, prod-rollback after a healthy deploy and prod-restore of a named backup from `/release`, each mutation armed by a second Enter, the files read back in `/cmd`; deploy-verify now takes its manifest) |
 | US-G24 | Collab keys in a desktop panel | done (Lot 65: `/keys` runs every collab-* command not in `/ledger`, except the collab-forge attack hook of the tests, which stays on `/cmd`; `make qemu-gui-mesh` joins the ledger, posts and computes a task and opens an auction on a live node from the panel) |
 
 Preuves : `test_osui_parity`, `test_osui_gui`, `test_fsops`,
@@ -545,6 +547,8 @@ shell: `/pm`, `/proc` and `/mesh` are menus of commands that already
 exist. US-059, US-060, US-063 and US-074 are not advanced. US-G03 stays
 done; the parity test now expects SOF2 to decode, and the explorer
 treats `.jpg` as an image.
+Lot 66 (`docs/lot66_plan.md`): US-G23 done, phase 9 done 24 partial 0
+(100%).
 Lot 51 (`docs/lot51_plan.md`): US-G22, US-G23 and US-G24 are partial.
 Phase 9 is done 18 partial 6 (75%, 18*100/24). `/child`, `/release`
 and `/keys` are menus. `/p2p`, `/prod`, `/collab` and `/ci` are unchanged.

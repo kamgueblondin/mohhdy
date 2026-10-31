@@ -425,6 +425,10 @@ def main():
             cmd(elected, "p2p-poll 1", "p2p-poll ok")
             cmd(other, "p2p-poll 1", "p2p-poll ok")
         wait_log(other, "split=beta", 30)
+        # Lot 66 (US-069): a plain kv write on the majority side while alpha
+        # is cut; it is not a Raft entry, so only the anti-entropy started
+        # by the heal (no p2p-sync typed) can bring it to alpha.
+        cmd(b, "p2p-put hz side", "p2p-put ok hz")
         cmd(a, "p2p-poll 1", "p2p-poll ok")
         if "split=beta" in log(a, alpha_at_cut) or "commit index" in log(a, alpha_at_cut):
             raise RuntimeError("isolated alpha committed during the partition: %s" % log(a, alpha_at_cut)[-600:])
@@ -435,6 +439,25 @@ def main():
             cmd(a, "p2p-poll 2", "p2p-poll ok")
             cmd(c, "p2p-poll 2", "p2p-poll ok")
         wait_log(a, "split=beta", 40)
+        for _round in range(6):
+            if "hz=side" in log(a, alpha_at_cut):
+                break
+            cmd(b, "p2p-poll 2", "p2p-poll ok")
+            cmd(a, "p2p-poll 2", "p2p-poll ok")
+        if "hz=side" not in log(a, alpha_at_cut):
+            st = cmd(a, "p2p-kv", "p2p kv ok ")
+            raise RuntimeError("alpha lacks hz=side after the heal: %s" % log(a, st)[-1200:])
+        wait_log(a, "p2p kv synced hz=side v1 from ", 20, alpha_at_cut)
+        for node in (a, b, c):
+            if "p2p-sync " in log(node, at_cut[node["label"]]):
+                raise RuntimeError("a manual p2p-sync ran during 2c")
+        heals = []
+        for node in (a, b):
+            st = cmd(node, "p2p-stats", " heal_syncs ")
+            heals.append(int(re.search(r" heal_syncs (\d+)", log(node, st)).group(1)))
+        if max(heals) < 1:
+            raise RuntimeError("no heal anti-entropy counted: %r" % heals)
+        say("scenario 2c: heal anti-entropy brought hz=side to alpha without p2p-sync (heal_syncs %r)" % heals)
         start_a = cmd(a, "p2p-raft", "p2p raft role ")
         m = re.search(r"p2p raft role (\w+) term (\d+)", log(a, start_a))
         if not m or m.group(1) != "follower" or int(m.group(2)) != term_b:
@@ -446,16 +469,27 @@ def main():
             (term_b, "" if stale_isolated else " (its put was refused)", time.monotonic() - t0))
 
         # Scenario 3: link alpha<->gamma fails; detection, then relay via beta.
+        qos_re = r"p2p qos window (\d+) srtt_ms (\d+) min_rtt_ms (\d+) losses (\d+) ping_losses (\d+)"
+        start_q = cmd(a, "p2p-qos", "p2p qos window ")
+        ping_losses0 = int(re.search(qos_re, log(a, start_q)).group(5))
+        block_at = len(base.log_text(a["log"]))
         cmd(a, "p2p-block gamma", "p2p-block ok gamma")
         cmd(c, "p2p-block alpha", "p2p-block ok alpha")
-        wait_log(a, "p2p peer gamma down", 90)
-        # US-068/073: the unanswered PING to gamma halved the window; beta
-        # PONGs grow it back by one per round trip, so it is still below 16.
-        start_q = cmd(a, "p2p-qos", "p2p qos window ")
-        qos = re.search(r"p2p qos window (\d+) srtt_ms (\d+) min_rtt_ms (\d+) losses (\d+) ping_losses (\d+)",
-                        log(a, start_q))
-        if not qos or int(qos.group(1)) >= 16 or int(qos.group(5)) < 1 or int(qos.group(3)) < 1:
-            raise RuntimeError("alpha qos did not adapt: %s" % log(a, start_q)[-400:])
+        # US-068/073: the first unanswered PING to gamma after the block
+        # halves the window; beta PONGs grow it back by one per round trip.
+        # Lot 66: read the window right after that loss (ping_losses moved),
+        # not whatever an earlier scenario left (the heal anti-entropy of 2c
+        # gives the window time to regrow to 16 before this block).
+        qos = None
+        for _round in range(15):
+            cmd(a, "p2p-poll 1", "p2p-poll ok")
+            start_q = cmd(a, "p2p-qos", "p2p qos window ")
+            qos = re.search(qos_re, log(a, start_q))
+            if qos and int(qos.group(5)) > ping_losses0:
+                break
+        if not qos or int(qos.group(5)) <= ping_losses0 or int(qos.group(1)) >= 16 or int(qos.group(3)) < 1:
+            raise RuntimeError("alpha qos did not adapt to the ping loss: %s" % log(a, start_q)[-400:])
+        wait_log(a, "p2p peer gamma down", 90, block_at)
         say("scenario 3: adaptive window %s after ping loss, srtt %s ms" % (qos.group(1), qos.group(2)))
         cmd(a, "p2p-send gamma via-relay-msg", "p2p-send ok to gamma")
         wait_log(c, "p2p msg from alpha: via-relay-msg (relayed)", 60)

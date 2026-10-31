@@ -175,6 +175,8 @@ typedef struct {
     uint32_t expire_tick;
     uint32_t hits;
     uint32_t version;       /* version of the value cached (0: unversioned) */
+    uint8_t raft;           /* Lot 66 (US-070): committed through Raft, never expires */
+    uint32_t last_use;      /* Lot 66 (US-070): tick of the last fill or hit (LRU) */
 } p2p_cache_entry_t;
 
 /* Invalidation fence: a fill at or below this version is refused. */
@@ -198,6 +200,8 @@ typedef struct {
     uint8_t inv_retries, inv_active;
     uint32_t inv_acked, inv_resent, inv_completed;
     uint32_t fence_pushed, fence_raised;   /* Lot 48 (US-070): fences sent on reconnect / raised by an INV */
+    uint32_t evictions;      /* Lot 66 (US-070): live lines replaced by LRU */
+    uint32_t expired;        /* Lot 66 (US-070): lines dropped at their TTL */
 } p2p_cache_t;
 
 typedef struct {
@@ -258,6 +262,7 @@ typedef struct {
     uint32_t tx_bytes, rx_bytes, relayed, bad_hello, foreign, dup;
     uint32_t relayed_multi; /* forwarded to a further relay, not to the destination */
     uint32_t rejoins;       /* US-069: a known name came back under a new id after going down */
+    uint32_t heal_syncs;    /* Lot 66 (US-069): anti-entropy started by a peer coming back up */
     uint8_t last_src_ip[4]; /* source IPv4 of the datagram being handled (STUN server side) */
     /* Learned per-type receive baseline (US-075): EWMA of frames per
      * second, x16 fixed point, after P2P_ANALYZE_WARMUP windows. */

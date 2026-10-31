@@ -63,7 +63,7 @@ PANELS = [
     ("/mesh", "Maillage P2P", "p2p-stats", "p2p-stats error p2p down"),
     # Lot 51. /child /release /keys do not take pane slashes (/p2p /prod /collab).
     ("/child", "Enfants", "child-exit-count", "child-exit-count ok"),
-    ("/release", "Livraison", "deploy-verify", "deploy-verify error manifest not found"),
+    ("/release", "Livraison", "prod-backups", "prod-backups ok 0"),
     ("/keys", "Cles collab", "collab-keys", "collab-keys error p2p down"),
 ]
 
@@ -404,7 +404,8 @@ def entry_index(slash_name, cmd):
     table in userspace/osui_parity.c (the menu shows one line per entry)."""
     import re
     src = open(os.path.join(g.ROOT, "userspace", "osui_parity.c")).read()
-    table = {"/proc": "k_proc", "/mesh": "k_p2pmesh", "/keys": "k_keys", "/pm": "k_pm", "/child": "k_child"}[slash_name]
+    table = {"/proc": "k_proc", "/mesh": "k_p2pmesh", "/keys": "k_keys", "/pm": "k_pm", "/child": "k_child",
+             "/release": "k_release"}[slash_name]
     body = src[src.index("static const osui_par_entry_t %s[] = {" % table):]
     body = body[:body.index("\n};")]
     cmds = re.findall(r'\{ "[^"]*", "([^"]+)",', body)
@@ -454,6 +455,51 @@ def lot65_entries(monitor, proc):
         run_entry(monitor, proc, *row)
 
 
+def cmd_steps(monitor, proc, steps):
+    """Run shell lines from /cmd, each with a fragment of its real output."""
+    slash(monitor, proc, "/cmd", "osui tool open app=Commande")
+    for line, frag in steps:
+        start = cmd_run(monitor, proc, line)
+        if frag:
+            g.wait_for(proc, "osui panel out=", g.CMD_TIMEOUT, start)
+            out = g.normalized_log(g.log_text()[start:])
+            if frag not in out:
+                raise RuntimeError("/cmd %s: %r missing: %s" % (line, frag, out[-600:]))
+    start = len(g.log_text())
+    key(monitor, "esc")
+    g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
+
+
+REL = ("/release", "Livraison")
+
+
+def release_panel(monitor, proc):
+    """Lot 66 (US-G23): apply, verify, refused apply, rollback and named
+    restore driven from /release; files are prepared and read back in /cmd."""
+    cmd_steps(monitor, proc, [
+        ("mkdir /rel", ""), ("write /rel/a.txt one", ""),
+        ("deploy-make /rel /relapp /relman", "deploy-make ok files 1")])
+    run_entry(monitor, proc, REL[0], REL[1], "deploy-apply", "/relman", "deploy-apply ok files 1", True)
+    run_entry(monitor, proc, REL[0], REL[1], "deploy-verify", "/relman", "deploy-verify ok files 1", False)
+    cmd_steps(monitor, proc, [("cat /relapp/a.txt", "one"), ("write /rel/a.txt two", "")])
+    run_entry(monitor, proc, REL[0], REL[1], "deploy-apply", "/relman", "deploy-apply error failed 1 nothing changed", True)
+    cmd_steps(monitor, proc, [
+        ("cat /relapp/a.txt", "one"),
+        ("mkdir /rapp", ""), ("write /rapp/main v1", ""), ("write /rapp/health ok", ""),
+        ("mkdir /rstg", ""), ("write /rstg/main v2", ""), ("write /rstg/health ok", ""),
+        ("prod-manifest /rstg /rapp", "prod-manifest ok files 2"),
+        ("prod-deploy /rstg /rapp", "prod-deploy ok healthy files 2"),
+        ("cat /rapp/main", "v2")])
+    run_entry(monitor, proc, REL[0], REL[1], "prod-rollback", "", "prod-rollback ok files 2", True)
+    cmd_steps(monitor, proc, [
+        ("cat /rapp/main", "v1"),
+        ("prod-backup snap /rapp", "prod-backup ok snap files 2"),
+        ("write /rapp/main v9", ""), ("cat /rapp/main", "v9")])
+    run_entry(monitor, proc, REL[0], REL[1], "prod-restore", "snap", "prod-restore ok files 2", True)
+    cmd_steps(monitor, proc, [("cat /rapp/main", "v1")])
+    say("/release: apply, verify, refused apply, rollback and restore from the panel")
+
+
 def main():
     os.makedirs(g.LOG_DIR, exist_ok=True)
     for path in (g.LOG, g.MON_SOCK, g.QMP_SOCK):
@@ -479,6 +525,7 @@ def main():
             help_window(monitor, proc)
             families(monitor, proc)
             lot65_entries(monitor, proc)
+            release_panel(monitor, proc)
             grpc(monitor, proc)
             devsync(monitor, proc)
             ledger_form(monitor, proc)

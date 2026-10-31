@@ -1363,6 +1363,15 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
          * times since it may not have our HELLO yet; INV is idempotent. */
         p->fence_push = 4U;
         p->fence_at = now(h) - P2P_HZ;
+        /* Lot 66 (US-069): a peer that was down (cut link, partition)
+         * missed the writes of both sides meanwhile. Start the two-way
+         * digest anti-entropy at once, re-sent until the answer arrives,
+         * instead of waiting for a manual p2p-sync. */
+        if (p->down_events) {
+            p->sync_retries = 4U;
+            p->sync_at = now(h) - P2P_SYNC_RESEND_TICKS;
+            n->heal_syncs++;
+        }
         line[0] = 0;
         s_cat(line, "p2p peer ", 96); s_cat(line, p->name, 96); s_cat(line, " up id ", 96); cat_hex32(line, p->id, 96);
         s_cat(line, p->keyed ? " keyed" : " unkeyed", 96);
@@ -2065,18 +2074,26 @@ int p2p_raft_vote_import(p2p_node_t* n, const uint8_t* in, int len) {
     return 0;
 }
 
+/* Lot 66 (US-070): wrap-safe expiry; a line committed through Raft never
+ * expires (it is replaced by a later commit or an invalidation). */
+static int cache_expired(const p2p_cache_entry_t* e, uint32_t t) {
+    return !e->raft && (int32_t)(t - e->expire_tick) > 0;
+}
+
 const p2p_item_t* p2p_cache_get(p2p_node_t* n, const char* key, uint32_t current_tick) {
     int i;
     if (!n || !key) return 0;
     for (i = 0; i < P2P_CACHE_MAX; i++) {
         p2p_cache_entry_t* e = &n->cache.entries[i];
         if (e->used && s_eq(e->key, key)) {
-            if (current_tick > e->expire_tick) {
+            if (cache_expired(e, current_tick)) {
                 e->used = 0;
+                n->cache.expired++;
                 n->cache.total_misses++;
                 return 0;
             }
             e->hits++;
+            e->last_use = current_tick;
             n->cache.total_hits++;
             return (const p2p_item_t*)e;
         }
@@ -2162,8 +2179,10 @@ void p2p_cache_on_peer_down(p2p_node_t* n, uint32_t peer_id) {
     if (!n) return;
     for (i = 0; i < P2P_CACHE_MAX; i++) {
         if (n->cache.entries[i].used) {
-            /* Invalidate stale or non-Raft entries upon peer disconnect */
-            if (n->cache.entries[i].expire_tick != P2P_CACHE_RAFT_TTL) {
+            /* Invalidate non-Raft entries upon peer disconnect. Lot 66
+             * (US-070): a committed Raft line is kept (the old test compared
+             * expire_tick with the TTL itself, so it never matched). */
+            if (!n->cache.entries[i].raft) {
                 n->cache.entries[i].used = 0;
                 n->cache.invalidations++;
             }
@@ -2199,25 +2218,43 @@ int p2p_cache_raft_put(p2p_node_t* n, const p2p_host_t* h, const char* key, cons
     return p2p_raft_append(n, h, k, value);
 }
 
-int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t ttl_ticks, uint32_t current_tick) {
-    int i, slot = -1;
-    uint32_t oldest_expire = 0xffffffffU;
-    if (!n || !key || !value) return -1;
+/* Lot 66 (US-070): slot choice, in order: the line of the same key (so a
+ * key is never cached twice), a free slot, an expired line, then the least
+ * recently used live line, Raft lines last. */
+static int cache_slot(p2p_node_t* n, const char* key, uint32_t t) {
+    int i, lru = -1, lru_raft = -1;
+    for (i = 0; i < P2P_CACHE_MAX; i++)
+        if (n->cache.entries[i].used && s_eq(n->cache.entries[i].key, key)) return i;
+    for (i = 0; i < P2P_CACHE_MAX; i++)
+        if (!n->cache.entries[i].used) return i;
     for (i = 0; i < P2P_CACHE_MAX; i++) {
-        if (!n->cache.entries[i].used) { slot = i; break; }
-        if (s_eq(n->cache.entries[i].key, key)) { slot = i; break; }
-        if (n->cache.entries[i].expire_tick < oldest_expire) {
-            oldest_expire = n->cache.entries[i].expire_tick;
-            slot = i;
-        }
+        p2p_cache_entry_t* e = &n->cache.entries[i];
+        if (cache_expired(e, t)) { e->used = 0; n->cache.expired++; return i; }
     }
+    for (i = 0; i < P2P_CACHE_MAX; i++) {
+        p2p_cache_entry_t* e = &n->cache.entries[i];
+        int* best = e->raft ? &lru_raft : &lru;
+        if (*best < 0 || (int32_t)(e->last_use - n->cache.entries[*best].last_use) < 0) *best = i;
+    }
+    n->cache.evictions++;
+    return lru >= 0 ? lru : lru_raft;
+}
+
+int p2p_cache_put(p2p_node_t* n, const char* key, const char* value, uint32_t ttl_ticks, uint32_t current_tick) {
+    int slot;
+    p2p_cache_entry_t* e;
+    if (!n || !key || !value || !key[0]) return -1;
+    slot = cache_slot(n, key, current_tick);
     if (slot < 0) return -1;
-    n->cache.entries[slot].used = 1;
-    s_copy(n->cache.entries[slot].key, key, P2P_KEY_MAX);
-    s_copy(n->cache.entries[slot].value, value, P2P_VAL_MAX);
-    n->cache.entries[slot].expire_tick = current_tick + ttl_ticks;
-    n->cache.entries[slot].hits = 0;
-    n->cache.entries[slot].version = 0;
+    e = &n->cache.entries[slot];
+    e->used = 1;
+    s_copy(e->key, key, P2P_KEY_MAX);
+    s_copy(e->value, value, P2P_VAL_MAX);
+    e->expire_tick = current_tick + ttl_ticks;
+    e->hits = 0;
+    e->version = 0;
+    e->raft = (uint8_t)(ttl_ticks == P2P_CACHE_RAFT_TTL);
+    e->last_use = current_tick;
     return 0;
 }
 
@@ -2326,6 +2363,7 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " foreign ", cap); cat_u(out, n->foreign, cap);
         s_cat(out, " relayed_multi ", cap); cat_u(out, n->relayed_multi, cap);
         s_cat(out, " rejoins ", cap); cat_u(out, n->rejoins, cap);
+        s_cat(out, " heal_syncs ", cap); cat_u(out, n->heal_syncs, cap);
         s_cat(out, "\n", cap);
     }
     if (s_eq(what, "qos")) {
@@ -2349,6 +2387,8 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         out[0] = 0;
         s_cat(out, "p2p cache hits ", cap); cat_u(out, n->cache.total_hits, cap);
         s_cat(out, " misses ", cap); cat_u(out, n->cache.total_misses, cap);
+        s_cat(out, " evictions ", cap); cat_u(out, n->cache.evictions, cap);
+        s_cat(out, " expired ", cap); cat_u(out, n->cache.expired, cap);
         s_cat(out, " invalidations ", cap); cat_u(out, n->cache.invalidations, cap);
         s_cat(out, " stale_refused ", cap); cat_u(out, n->cache.stale_refused, cap);
         s_cat(out, " inv_completed ", cap); cat_u(out, n->cache.inv_completed, cap);
