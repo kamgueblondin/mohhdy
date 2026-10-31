@@ -1017,10 +1017,12 @@ static void draw_stage_body(uint32_t *fb, int w, int h, int x, int y, int rw, in
         return;
     }
     if (kind == OS_FB_KIND_TREE) {
+        /* Lot 69: rows step with the text scale */
+        int step = TS(12);
         draw_text(fb, w, h, x + 12, y + 8, "root", RGB(232, 238, 244));
-        draw_text(fb, w, h, x + 28, y + 22, "shell.c", RGB(154, 168, 181));
-        draw_text(fb, w, h, x + 28, y + 34, "osui_runtime.c", RGB(154, 168, 181));
-        draw_text(fb, w, h, x + 28, y + 46, "vfs", RGB(154, 168, 181));
+        draw_text(fb, w, h, x + 12 + TS(16), y + 8 + step + 2, "shell.c", RGB(154, 168, 181));
+        draw_text(fb, w, h, x + 12 + TS(16), y + 8 + 2 * step + 2, "osui_runtime.c", RGB(154, 168, 181));
+        draw_text(fb, w, h, x + 12 + TS(16), y + 8 + 3 * step + 2, "vfs", RGB(154, 168, 181));
         return;
     }
     if (kind == OS_FB_KIND_CLOCK) {
@@ -1033,8 +1035,9 @@ static void draw_stage_body(uint32_t *fb, int w, int h, int x, int y, int rw, in
         int i;
         int bar_w = (rw - 48) / 10;
         if (bar_w < 4) bar_w = 4;
-        pill(fb, w, h, x + 8, y + 8, 72, 28, paused ? RGB(201, 162, 39) : RGB(61, 154, 138), paused ? "PAUSED" : "PLAYING", 0);
-        draw_text(fb, w, h, x + 88, y + 16, "Media Stream Active", RGB(232, 238, 244));
+        int pw = 7 * CW + 16 > 72 ? 7 * CW + 16 : 72;
+        pill(fb, w, h, x + 8, y + 8, pw, 28, paused ? RGB(201, 162, 39) : RGB(61, 154, 138), paused ? "PAUSED" : "PLAYING", 0);
+        draw_text(fb, w, h, x + 16 + pw, y + 16, "Media Stream Active", RGB(232, 238, 244));
         for (i = 0; i < 10; i++) {
             int h_bar = paused ? 12 : (6 + ((ticks + i * 5) % 22));
             fill_rect(fb, w, h, x + 12 + i * (bar_w + 3), y + 68 - h_bar, bar_w, h_bar, RGB(122, 212, 196));
@@ -2119,7 +2122,11 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
             body_y = scene_y + 12 + 2 * lh + 4;
             if (body_y < scene_y + 48) body_y = scene_y + 48;
             if (scene_h - (body_y - scene_y) - 12 > 8)
+            {
+                g_tq = cq;
                 draw_stage_body(fb, w, h, scene_x + 12, body_y, scene_w - 24, scene_h - (body_y - scene_y) - 12, sc);
+                g_tq = OS_UI_Q1;
+            }
         }
     }
 
@@ -2202,13 +2209,19 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     if (lay.hover_dock >= 0 && lay.hover_dock < GFX_DESKTOP_DOCK) {
         /* tooltip above the hovered dock icon */
         const char *name = gfx_desktop_dock_names[lay.hover_dock];
-        int n = 0, tx;
+        /* Lot 69: the tooltip follows ui-scale (up to the chrome cap) */
+        int n = 0, tx, tw, th, uq;
+        uq = sc->version >= 8 ? os_ui_effective_q(sc->ui_scale_q, 0, w, h) : OS_UI_Q1;
+        g_tq = uq > OS_UI_Q_CHROME_MAX ? OS_UI_Q_CHROME_MAX : uq;
         while (name[n]) n++;
-        tx = dock_x + 8 + lay.hover_dock * 44 + 18 - (n * 8 + 16) / 2;
+        tw = n * CW + 16;
+        th = TS(8) + 12;
+        tx = dock_x + 8 + lay.hover_dock * 44 + 18 - tw / 2;
         if (tx < 4) tx = 4;
-        if (tx + n * 8 + 16 > w - 4) tx = w - 4 - n * 8 - 16;
-        round_rect(fb, w, h, tx, dock_y - 26, n * 8 + 16, 20, 6, RGB(232, 238, 244));
-        draw_text(fb, w, h, tx + 8, dock_y - 20, name, RGB(15, 20, 25));
+        if (tx + tw > w - 4) tx = w - 4 - tw;
+        round_rect(fb, w, h, tx, dock_y - th - 6, tw, th, 6, RGB(232, 238, 244));
+        draw_text(fb, w, h, tx + 8, dock_y - th, name, RGB(15, 20, 25));
+        g_tq = OS_UI_Q1;
     }
 
 }

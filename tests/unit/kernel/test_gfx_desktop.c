@@ -1111,6 +1111,35 @@ static void test_lot69_web_item_font_scale(void) {
     TEST_ASSERT_EQUAL(a, c);   /* out-of-range pad falls back to the 8x8 cell */
 }
 
+
+/* Lot 69: the dock tooltip grows with ui-scale and its text stays inside */
+static int tooltip_rows(int q) {
+    gfx_desktop_layout_t l;
+    int y, rows = 0, cx;
+    blank_scene();
+    g_scene.version = 8;
+    g_scene.ui_scale_q = (uint8_t)q;
+    redraw(&l);
+    cx = rect_center_x(&l.dock.icons[2]);
+    gfx_desktop_set_mouse(cx, rect_center_y(&l.dock.icons[2]), 0);
+    redraw(&l);
+    if (l.hover_dock != 2) return -1;
+    for (y = l.dock.icons[2].y - 80; y < l.dock.icons[2].y; y++)
+        if (count_near(cx - 60, y, cx + 60, y + 1, 232, 238, 244, 4) > 30) rows++;
+    gfx_desktop_set_mouse(10, H / 2, 0);
+    return rows;
+}
+
+static void test_lot69_dock_tooltip_scales(void) {
+    int r1, r2;
+    vga_desktop_set(1);
+    r1 = tooltip_rows(4);
+    r2 = tooltip_rows(8);
+    vga_desktop_set(0);
+    TEST_ASSERT_TRUE(r1 >= 14);
+    TEST_ASSERT_TRUE(r2 >= r1 + 6);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -1143,6 +1172,7 @@ int main(void) {
     RUN_TEST(test_lot69_native_fonts);
     RUN_TEST(test_lot69_status_row_scales);
     RUN_TEST(test_lot69_web_item_font_scale);
+    RUN_TEST(test_lot69_dock_tooltip_scales);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
