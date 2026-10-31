@@ -25,7 +25,19 @@ ROOT = g.ROOT
 PKI = os.path.join(ROOT, "build", "lot67", "pki")
 FETCH_TIMEOUT = float(os.environ.get("LOT67_FETCH_TIMEOUT", "120"))
 ALIASES = {" ": "spc", "-": "minus", ".": "dot", "/": "slash", "=": "equal", ":": "shift-semicolon",
-           "_": "shift-minus", "?": "shift-slash"}
+           "_": "shift-minus", "?": "shift-slash", "&": "shift-7"}
+SHOTS = os.environ.get("LOT69_SHOTS", os.path.join(g.LOG_DIR, "lot69-shots"))
+
+
+def save_png(name, w, h, rgb):
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    os.makedirs(SHOTS, exist_ok=True)
+    path = os.path.join(SHOTS, name)
+    Image.frombytes("RGB", (w, h), bytes(rgb)).save(path)
+    return path
 
 
 def say(msg):
@@ -143,6 +155,33 @@ def main():
             if os.environ.get("LOT67_REAL") == "1":
                 out = run(mon, proc, "fetch -v https://example.com/", "fetch body-end", 240, ["fetch error"])
                 say("REAL: " + [l for l in out.splitlines() if l.startswith("fetch ok")][0][:300])
+            # Lot 69: Internet search, offline: the test server plays a
+            # DuckDuckGo-html-like engine; the query is URL-encoded by the guest
+            eng = "http://%s:%d/html/?q=" % (base, hp)
+            run(mon, proc, "search-engine " + eng, "search-engine ok " + eng, 30)
+            out = run(mon, proc, "search mohhdy os & web", "search end", fail=["search error"])
+            for want in ("search ok results 3 layout ddg-html status 200", "search 1 Result for mohhdy os & web",
+                         "  https://example.org/mohhdy?a=1&b=2", "  Second result with an escaped & snippet."):
+                if want not in out:
+                    raise RuntimeError("search output missing %r:\n%s" % (want, out[-1500:]))
+            out = run(mon, proc, "search-open 1", "render ok", fail=["search-open error"])
+            if "search-open url http://%s:%d/page.html" % (base, hp) not in out:
+                raise RuntimeError("search-open did not open result 1: %r" % out[-600:])
+            run(mon, proc, "search-open 9", "search-open error no result 9", 30)
+            run(mon, proc, "search-engine http://%s:%d/block/?q=" % (base, hp), "search-engine ok", 30)
+            out = run(mon, proc, "search robots", "search end", fail=["search error"])
+            if "blocked bot-check" not in out or "the engine sent a bot check page" not in out:
+                raise RuntimeError("bot check page not reported: %r" % out[-600:])
+            run(mon, proc, "search-engine " + eng, "search-engine ok", 30)
+            srv_text = open(os.path.join(g.LOG_DIR, "lot67-web-server.log")).read()
+            if "SEARCH q='mohhdy os & web'" not in srv_text:
+                raise RuntimeError("server did not receive the encoded query")
+            say("search: console search, search-open, bot check ok")
+            if os.environ.get("LOT69_REAL") == "1":
+                run(mon, proc, "search-engine ddg", "search-engine ok ddg", 30)
+                out = run(mon, proc, "search freestanding c kernel", "search end", 240, ["search error"])
+                say("REAL search: " + [l for l in out.splitlines() if l.startswith("search ok") or l.startswith("search note")][0][:300])
+                run(mon, proc, "search-engine " + eng, "search-engine ok", 30)
             # the GUI /browser, same code path, page rendered by the engine
             g.send_command_until(mon, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
@@ -154,6 +193,18 @@ def main():
             shot = "qemu-lot67-browser.ppm"
             w, h, rgb = g.screendump_rgb(mon, shot)
             say("browser screenshot test_logs/%s %dx%d" % (shot, w, h))
+            # Lot 69: search from the desktop, the address bar and the chat shortcut
+            for line, label in (("search offline test", "search-gui"), ("web hello world", "search-address-bar"),
+                                ("/search chat shortcut", "search-chat")):
+                g.send_key(mon, "esc")
+                time.sleep(0.8)
+                start = len(g.log_text())
+                type_line(mon, proc, line, mode="getc")
+                g.wait_for(proc, "osui web search ok results 3", FETCH_TIMEOUT, start)
+                g.wait_for(proc, "render ok", 10, start)
+                time.sleep(1.5)
+                w, h, rgb = g.screendump_rgb(mon, "qemu-lot69-%s.ppm" % label)
+                say("%s: %s" % (label, save_png(label + ".png", w, h, rgb)))
             if os.environ.get("LOT67_REAL") == "1":
                 g.send_key(mon, "esc")  # the page pane takes the keys; ESC closes it
                 g.wait_for(proc, "osui web close", 10, len(g.log_text()) - 4000)

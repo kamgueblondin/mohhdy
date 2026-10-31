@@ -5,6 +5,7 @@
 #include "shell_fetch.h"
 #include "wf_guest.h"
 #include "wf_html.h"
+#include "shell_search.h"
 
 void print_string(const char* s);
 
@@ -151,6 +152,8 @@ int shell_fetch_page(const char* url, char* src, int src_max, char* final_url, i
     int i, n;
     g_verbose = 0;
     if (status && st_max > 0) status[0] = 0;
+    /* Lot 69: "search:QUERY" is the result page of a search */
+    if (s_pre(url, "search:")) return shell_search_page(url + 7, src, src_max, final_url, url_max, status, st_max);
     if (wf_guest_fetch(url, g_body, (int)sizeof(g_body) - 1, &g_res, 0) != 0) {
         if (status) {
             scat(status, st_max, "osui web fetch error=");

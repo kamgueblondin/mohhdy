@@ -47,6 +47,9 @@ int osui_gui_web_load(const char *file, char *status, int max);
 typedef int (*osui_web_fetch_t)(const char *url, char *src, int src_max, char *final_url, int url_max,
                                 char *status, int st_max);
 void osui_gui_set_web_fetch(osui_web_fetch_t fn);
+/* Lot 69: URL of result n (1-based) of the last search; 0 or -1 */
+typedef int (*osui_search_url_t)(int n, char *url, int max);
+void osui_gui_set_search_url(osui_search_url_t fn);
 int osui_gui_web_is_url(const char *s);
 int osui_gui_web_active(void);
 int osui_gui_web_sanitized(void); /* Lot 7 US-039: items removed by the page sanitizer */

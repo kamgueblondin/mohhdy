@@ -12,8 +12,11 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /redirect     302 -> /page.html
   /loop         302 -> /loop (redirect limit test)
   /big          200 KiB close-delimited body (truncation test)
+  /html/?q=Q    Lot 69: a DuckDuckGo-html-like result page (3 results, the
+                first title echoes the decoded query, redirect links uddg=)
+  /block/?q=Q   Lot 69: a bot check page (no result)
 Every request is logged on stdout ("REQ <scheme> <path>")."""
-import http.server, socketserver, ssl, sys, threading
+import html, http.server, socketserver, ssl, sys, threading, urllib.parse
 
 PAGE = (b"<!doctype html><html><head><title>Mohhdy offline test page</title></head>"
         b"<body><h1>Hello from the Lot 67 test server</h1>"
@@ -31,7 +34,27 @@ class H(http.server.BaseHTTPRequestHandler):
         scheme = "https" if isinstance(self.connection, ssl.SSLSocket) else "http"
         print(f"REQ {scheme} {self.path} host={self.headers.get('Host')}", flush=True)
         p = self.path
-        if p == "/hello":
+        if p.startswith("/html/?") or p.startswith("/block/?"):
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(p).query).get("q", [""])[0]
+            print(f"SEARCH q={q!r}", flush=True)
+            if p.startswith("/block/"):
+                body = ('<html><body><div class="anomaly-modal__title">Unfortunately, bots use DuckDuckGo too.'
+                        '</div></body></html>')
+            else:
+                host = self.headers.get("Host", "10.0.2.2")
+                items = [("Result for " + q, "http://%s/page.html" % host, "The offline Lot 67 page, opened by search-open."),
+                         ("Mohhdy & the web", "https://example.org/mohhdy?a=1&b=2", "Second result with an <b>escaped</b> &amp; snippet."),
+                         ("Third result", "https://example.net/", "Third snippet.")]
+                rows = []
+                for t, u, sn in items:
+                    href = "//duckduckgo.com/l/?uddg=" + urllib.parse.quote(u, safe="") + "&amp;rut=0123"
+                    rows.append('<div class="result results_links web-result"><h2 class="result__title">'
+                                '<a rel="nofollow" class="result__a" href="%s">%s</a></h2>'
+                                '<a class="result__snippet" href="%s">%s</a></div>' % (href, html.escape(t), href, sn))
+                body = ('<html><head><title>%s at DuckDuckGo</title></head><body><div id="links">'
+                        '<a href="/settings">Settings</a>%s</div></body></html>') % (html.escape(q), "".join(rows))
+            self._send(200, body.encode("utf-8"), "text/html; charset=utf-8")
+        elif p == "/hello":
             self._send(200, b"hello from lot67\n", "text/plain")
         elif p == "/page.html" or p == "/":
             self._send(200, PAGE, "text/html; charset=utf-8")

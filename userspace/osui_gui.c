@@ -5,6 +5,7 @@
 
 #include "osui_scale.h"
 #include "osui_gui.h"
+#include "wsearch.h"
 #include "osui_runtime.h"
 #include "osui_ide.h"
 #include "webeng.h"
@@ -242,11 +243,14 @@ int osui_gui_web_is_url(const char *s) {
     return s && ((sncmp(s, "https://", 8) == 0) || (sncmp(s, "http://", 7) == 0));
 }
 
+static int web_is_search(const char *f) { return f && sncmp(f, "search:", 7) == 0 && f[7]; }
+
 int osui_gui_web_load(const char *file, char *status, int max) {
     int n = -1, rc;
+    static char sq[WSEARCH_QUERY + 8];
     if (status && max > 0) status[0] = 0;
     g_web_final[0] = 0;
-    if (osui_gui_web_is_url(file)) {
+    if (osui_gui_web_is_url(file) || web_is_search(file)) {
         /* Lot 67: real network page (shell_fetch_page), reader view */
         static char fst[512];
         if (!g_web_fetch) {
@@ -267,6 +271,13 @@ int osui_gui_web_load(const char *file, char *status, int max) {
         return rc;
     }
     if (g_ide_load) n = g_ide_load(file, g_web_src, OSUI_WEB_SRC_MAX - 1);
+    if (n < 0 && g_web_fetch && wsearch_is_query(file) && slen(file) <= WSEARCH_QUERY) {
+        /* Lot 69: the address bar searches text that is not a URL nor a
+         * page (same path as `search`, through the fetch hook) */
+        scpy(sq, (int)sizeof(sq), "search:");
+        scpy(sq + 7, (int)sizeof(sq) - 7, file);
+        return osui_gui_web_load(sq, status, max);
+    }
     if (n < 0) { if (status) { scpy(status, max, "osui web error=not_found file="); scpy(status + slen(status), max - slen(status), file); } return -1; }
     g_web_src[n] = 0;
     rc = osui_web_pipeline(g_web_src, n);
@@ -402,6 +413,48 @@ static void web_open_line(const char *line, char *out, int out_max) {
     if (out && out_max > 0) out[0] = 0;
     if (!g_web_active) { g_web_hi = -1; g_web_hn = 0; }   /* a fresh browser session */
     (void)web_go(f, 1, out, out_max);
+}
+
+/* Lot 69: Internet search on the desktop. "search WORDS" and the chat
+ * shortcut "/search WORDS" open the result page in /browser (links are
+ * the results); "search-open N" opens result N of the last search. The
+ * shell owns the results (userspace/shell_search.c) through the hook. */
+static osui_search_url_t g_search_url;
+void osui_gui_set_search_url(osui_search_url_t fn) { g_search_url = fn; }
+static int search_line(const char *in, char *out, int out_max) {
+    static char line[WSEARCH_QUERY + 16];
+    const char *q = 0;
+    if (sncmp(in, "search-open", 11) == 0 && (in[11] == ' ' || in[11] == 0)) {
+        int n = 0;
+        const char *a = in + 11;
+        char url[WSEARCH_URL];
+        while (*a == ' ') a++;
+        while (*a >= '0' && *a <= '9' && n < 100) n = n * 10 + (*a++ - '0');
+        if (!g_search_url || g_search_url(n, url, (int)sizeof(url)) != 0) {
+            if (out) scpy(out, out_max, "osui search error=no_result usage search-open N (after search WORDS)\n");
+            return 1;
+        }
+        scpy(line, (int)sizeof(line), "web ");
+        scpy(line + 4, (int)sizeof(line) - 4, url);
+        web_open_line(line, out, out_max);
+        return 1;
+    }
+    if (sncmp(in, "search ", 7) == 0) q = in + 7;
+    else if (sncmp(in, "/search ", 8) == 0) q = in + 8;
+    else if (scmp(in, "search") == 0 || scmp(in, "/search") == 0) {
+        if (out) scpy(out, out_max, "osui search error=usage search WORDS\n");
+        return 1;
+    }
+    if (!q) return 0;
+    while (*q == ' ') q++;
+    if (!*q || slen(q) > WSEARCH_QUERY) {
+        if (out) scpy(out, out_max, "osui search error=usage search WORDS (200 bytes max)\n");
+        return 1;
+    }
+    scpy(line, (int)sizeof(line), "web search:");
+    scpy(line + 11, (int)sizeof(line) - 11, q);
+    web_open_line(line, out, out_max);
+    return 1;
 }
 
 void osui_gui_set_mobile_op(osui_mobile_op_t fn) { g_mobile_op = fn; }
@@ -984,11 +1037,12 @@ int osui_gui_route_line(const char *line, const char *pane) {
     if (!line) return OSUI_GUI_ROUTE_OSUI;
     while (*line == ' ' || *line == '\t') line++;
     if (scmp(line, "console") == 0 || scmp(line, "gui-exit") == 0 || scmp(line, "/console") == 0
-        || is_word(line, "web") || is_word(line, "pm-ide"))
+        || is_word(line, "web") || is_word(line, "pm-ide") || is_word(line, "search")
+        || is_word(line, "search-open") || is_word(line, "/search"))
         return OSUI_GUI_ROUTE_HOST;
     if (line[0] == '!' || token_ai(line)) return OSUI_GUI_ROUTE_SHELL;
     /* Lot 67: the network GET runs in the shell (same command as the console) */
-    if (is_word(line, "fetch") || is_word(line, "http-get")) return OSUI_GUI_ROUTE_SHELL;
+    if (is_word(line, "fetch") || is_word(line, "http-get") || is_word(line, "search-engine")) return OSUI_GUI_ROUTE_SHELL;
     if (pane && scmp(pane, "shell") == 0) return OSUI_GUI_ROUTE_SHELL;
     return OSUI_GUI_ROUTE_OSUI;
 }
@@ -1524,6 +1578,11 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             const char *a = g_input + 9;
             while (*a == ' ') a++;
             (void)g_mobile_op(a, out, out_max);
+            g_ilen = 0;
+            g_input[0] = 0;
+            return 0;
+        }
+        if (search_line(g_input, out, out_max)) {
             g_ilen = 0;
             g_input[0] = 0;
             return 0;
