@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 68 (text scale, estimator-driven pacing, form factors, power)
+
+- Text can grow: `ui-scale` (1x..4x, auto from the screen), `text-size WINDOW`, Ctrl+'+'/'-'/'0' on the focused window, saved in `/persist/ui.cfg`. Scaled 8x8 glyphs with Scale2x/Scale3x smoothing. Web zoom reflows the page. Proof `make qemu-gui-text-scale`.
+- US-068/US-073 partial: the estimator's pacing rate now drives user data (`p2p_pace`, `p2p-pace`), QEMU p2p scenario 1b.
+- US-080 partial: `form-factor` plan, `apply` sets the text scale. US-081 partial: `power-apply` changes the pacer cap and refresh budget; battery is simulated (`power-sim`, "simule").
+- US-076 unchanged. Details: [lot68_plan.md](lot68_plan.md).
+
 ## Lot 67 (Internet in Mohhdy, US-068/US-073 estimator)
 
 - Real HTTP/1.1 and TLS 1.2 from Ring 3 (`fetch`, `http-get`, GUI `web URL`), X.509 chain checked against 37 public roots in `/etc/ca-roots.pem`. Proof: `make qemu-lot67-web` (offline, test CA in the test initrd only). Manual: https://example.com/ opened in the guest shell and GUI.

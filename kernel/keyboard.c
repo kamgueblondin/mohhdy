@@ -35,6 +35,7 @@ static volatile int initialization_phase = 0;
 
 // Modifieurs
 static volatile int g_shift_pressed = 0;
+static volatile int g_ctrl_pressed = 0;   /* Lot 68: Ctrl+'+'/'-'/'0' zoom keys */
 static volatile int g_caps_lock = 0;
 static volatile int g_e0_prefix = 0;
 
@@ -190,6 +191,7 @@ static inline char map_scancode(uint8_t sc) {
 static int kbd_handle_extended(uint8_t scancode) {
     uint8_t key = (uint8_t)(scancode & 0x7F);
 
+    if (key == 0x1D) { g_ctrl_pressed = (scancode & 0x80) ? 0 : 1; return 1; }   /* right Ctrl */
     if (scancode & 0x80) {
         return 1;
     }
@@ -337,6 +339,14 @@ static void kbd_ring0_byte(uint8_t status, uint8_t scancode) {
     if (scancode == 0x2A || scancode == 0x36) { g_shift_pressed = 1; return; }     // LSHIFT/RSHIFT press
     if (scancode == 0xAA || scancode == 0xB6) { g_shift_pressed = 0; return; }     // LSHIFT/RSHIFT release
     if (scancode == 0x3A) { g_caps_lock = !g_caps_lock; return; }                  // CAPSLOCK toggle
+    if (scancode == 0x1D) { g_ctrl_pressed = 1; return; }                          // Lot 68: left Ctrl
+    if (scancode == 0x9D) { g_ctrl_pressed = 0; return; }
+    if (g_ctrl_pressed && !(scancode & 0x80)) {
+        uint8_t z = scancode == 0x0D || scancode == 0x4E ? OS_KEY_ZOOM_IN :
+                    scancode == 0x0C || scancode == 0x4A ? OS_KEY_ZOOM_OUT :
+                    scancode == 0x0B || scancode == 0x52 ? OS_KEY_ZOOM_RESET : 0;
+        if (z) { kbd_put_char((char)z); return; }
+    }
     
     // Traiter seulement les key press
     if (!(scancode & 0x80)) {
@@ -405,11 +415,13 @@ void keyboard_apply_event(const os_input_event_t* e) {
     } else if (e->type == OS_INPUT_EV_MODS) {
         g_shift_pressed = (e->code & OS_INPUT_MOD_SHIFT) ? 1 : 0;
         g_caps_lock = (e->code & OS_INPUT_MOD_CAPS) ? 1 : 0;
+        g_ctrl_pressed = (e->code & OS_INPUT_MOD_CTRL) ? 1 : 0;
     }
 }
 
 uint32_t keyboard_mods(void) {
-    return (g_shift_pressed ? OS_INPUT_MOD_SHIFT : 0U) | (g_caps_lock ? OS_INPUT_MOD_CAPS : 0U);
+    return (g_shift_pressed ? OS_INPUT_MOD_SHIFT : 0U) | (g_caps_lock ? OS_INPUT_MOD_CAPS : 0U) |
+           (g_ctrl_pressed ? OS_INPUT_MOD_CTRL : 0U);
 }
 
 /* Lot 6: the driver died: a half read E0 sequence or mouse packet is
@@ -706,7 +718,8 @@ int keyboard_poll_char(char* out) {
             || c == (char)OS_VGA_KEY_UP || c == (char)OS_VGA_KEY_DOWN
             || c == (char)OS_TERM_KEY_CLOSE || c == (char)OS_TERM_KEY_HOME
             || c == (char)OS_TERM_KEY_END || c == (char)OS_TERM_KEY_DEL
-            || c == (char)OS_TERM_KEY_MIN || c == (char)OS_FB_EVT) {
+            || c == (char)OS_TERM_KEY_MIN || c == (char)OS_FB_EVT
+            || c == (char)OS_KEY_ZOOM_IN || c == (char)OS_KEY_ZOOM_OUT || c == (char)OS_KEY_ZOOM_RESET) {
             *out = c;
             return 1;
         }

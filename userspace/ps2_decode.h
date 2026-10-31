@@ -8,6 +8,7 @@
 
 typedef struct {
     uint8_t shift, caps, e0;
+    uint8_t ctrl;            /* Lot 68: left or right Ctrl held */
     uint8_t mouse_cycle;
     uint8_t mouse[3];
     uint32_t bytes, ignored, mouse_packets, mouse_dropped;
@@ -23,4 +24,6 @@ int ps2_decode_byte(ps2_decoder_t* d, uint8_t byte, int aux, os_input_event_t* o
 void ps2_decoder_seed(ps2_decoder_t* d, uint32_t mods);
 /* Character of a make code with the current Shift/Caps state (0: none). */
 char ps2_map(const ps2_decoder_t* d, uint8_t make);
+/* Lot 68: zoom key of a make code while Ctrl is held (OS_KEY_ZOOM_*), 0 none. */
+uint8_t ps2_zoom_key(uint8_t make);
 #endif

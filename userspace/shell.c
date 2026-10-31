@@ -3669,7 +3669,7 @@ static int is_builtin(const char* cmd) {
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
-        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-qos", "p2p-bwe", "p2p-probe", "p2p-burst", "p2p-flood", "p2p-kv", "p2p-poll",
+        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-qos", "p2p-bwe", "p2p-probe", "p2p-pace", "ui-scale", "text-size", "form-factor", "power-apply", "power-sim", "p2p-burst", "p2p-flood", "p2p-kv", "p2p-poll",
         "p2p-send", "p2p-put", "p2p-get", "p2p-sync", "p2p-propose", "p2p-block", "p2p-unblock", "p2p-limit",
         "p2p-raft", "p2p-raft-compact", "p2p-raft-put", "p2p-grpc", "p2p-stun", "p2p-punch", "p2p-cache", "p2p-route",
         "collab-join", "collab-pay", "collab-offer", "collab-reserve", "collab-task", "collab-claim", "collab-work",
@@ -7366,6 +7366,24 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "net-if") == 0) {
         cmd_net_if(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "ui-scale") == 0 || strcmp(command, "text-size") == 0) {
+        /* Lot 68: one text scale for the console and the GUI */
+        char line[160], out[256];
+        int i, n = 0;
+        (void)ctx;
+        for (i = 0; command[i] && n < (int)sizeof(line) - 1; i++) line[n++] = command[i];
+        for (i = 0; i < arg_count; i++) {
+            int j;
+            if (n < (int)sizeof(line) - 1) line[n++] = ' ';
+            for (j = 0; args[i][j] && n < (int)sizeof(line) - 1; j++) line[n++] = args[i][j];
+        }
+        line[n] = 0;
+        out[0] = 0;
+        osui_gui_set_fs_io(&shell_fs_io);
+        (void)osui_gui_scale_command(line, out, (int)sizeof(out));
+        print_string(out);
+        print_string("\n");
         return 1;
     } else if (strcmp(command, "net-wire-status") == 0) {
         cmd_net_wire_status(ctx, args, arg_count);

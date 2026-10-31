@@ -1138,6 +1138,11 @@ qemu-gui-bigsave: $(OS_IMAGE) pack-initrd
 qemu-gui-shell: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_shell_same.py
 
+qemu-gui-text-scale: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_text_scale.py
+
+.PHONY: qemu-gui-text-scale
+
 qemu-gui-esc: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_esc_text.py
 

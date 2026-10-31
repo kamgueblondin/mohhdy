@@ -2,10 +2,14 @@
 #include "gfx_desktop.h"
 #include "gfx_fb.h"
 #include "gfx_font8.h"
+#include "os_ui_scale.h"
 #include "input/usb_tablet.h"
 #include "keyboard.h"
 #include "vga_console.h"
 #include "gfx_wm.h"
+
+/* Lot 68: text scale per app slot (quarters), set by the layout */
+static uint8_t g_app_q[OS_FB_APPS] = {4, 4, 4, 4, 4, 4};
 
 #ifdef KERNEL_TEST
 static void wm_log(const char *s) { (void)s; }
@@ -260,8 +264,8 @@ static void open_target(int i) {
 static int app_cell(const gfx_desktop_layout_t *l, int slot, int x, int y, int *row, int *col) {
     const gfx_rect_t *g = &l->app_win[slot].grid;
     if (!in_rect(x, y, g)) return 0;
-    *row = (y - g->y) / GFX_APP_ROW_H;
-    *col = (x - g->x) / 8;
+    *row = (y - g->y) / gfx_desktop_app_row_h(g_app_q[slot]);
+    *col = (x - g->x) / os_ui_char_w(g_app_q[slot]);
     if (*row >= OS_FB_APP_MAX_ROWS) *row = OS_FB_APP_MAX_ROWS - 1;
     if (*col >= OS_FB_APP_MAX_COLS - 1) *col = OS_FB_APP_MAX_COLS - 2;
     return 1;
@@ -412,8 +416,10 @@ static void gfx_desktop_handle_click(int x, int y) {
         gfx_desktop_web_origin(w, h, &ox, &oy, &pw, &ph);
         if (x >= ox && y >= oy && x < ox + pw && y < oy + ph) {
             evt_begin(); kbd_put_string("web click ");
-            put_uint((unsigned)(x - ox)); kbd_put_char(' ');
-            put_uint((unsigned)(y - oy + (int)g_last_scene.web_scroll)); evt_end();
+            /* Lot 68: page coordinates at the page zoom */
+            int q = gfx_desktop_surface_q(&g_last_scene, OS_UI_Z_WEB, w, h);
+            put_uint((unsigned)((x - ox) * 4 / q)); kbd_put_char(' ');
+            put_uint((unsigned)((y - oy) * 4 / q + (int)g_last_scene.web_scroll)); evt_end();
             return;
         }
     }
@@ -698,23 +704,86 @@ static void stroke_round(uint32_t *fb, int w, int h, int x, int y, int rw, int r
     }
 }
 
-static void draw_char_bits(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
-    int gy, gx;
+/* Lot 68: text scale of the surface being drawn, in quarters (4 = 1x).
+ * Set by gfx_desktop_draw_no_cursor() per window from the scene. */
+static int g_tq = OS_UI_Q1;
+#define CW os_ui_char_w(g_tq)
+#define TS(px) os_ui_px((px), g_tq)
+
+int gfx_desktop_text_q(void) { return g_tq; }
+void gfx_desktop_set_text_q(int q) { g_tq = os_ui_q_clamp(q); }
+
+static int glyph_bit(const uint8_t *g, int x, int y) {
+    if (x < 0 || y < 0 || x > 7 || y > 7) return 0;
+    return (g[y] >> x) & 1u;
+}
+
+/* Scale2x / Scale3x (EPX family) value of sub pixel (sx, sy) of source
+ * pixel (x, y): diagonal edges get filled corners instead of stairs. */
+static int glyph_epx(const uint8_t *g, int x, int y, int k, int sx, int sy) {
+    int e = glyph_bit(g, x, y), b = glyph_bit(g, x, y - 1), d = glyph_bit(g, x - 1, y);
+    int f = glyph_bit(g, x + 1, y), hh = glyph_bit(g, x, y + 1);
+    if (k == 2) {
+        if (b == hh || d == f) return e;
+        if (sx == 0 && sy == 0) return d == b ? d : e;
+        if (sx == 1 && sy == 0) return b == f ? f : e;
+        if (sx == 0 && sy == 1) return d == hh ? d : e;
+        return hh == f ? f : e;
+    }
+    /* k == 3: corners as in Scale3x, edges and centre keep the pixel */
+    if (b == hh || d == f) return e;
+    if (sx == 0 && sy == 0) return d == b ? d : e;
+    if (sx == 2 && sy == 0) return b == f ? f : e;
+    if (sx == 0 && sy == 2) return d == hh ? d : e;
+    if (sx == 2 && sy == 2) return hh == f ? f : e;
+    return e;
+}
+
+/* One glyph at scale q: 1x as before; 2x and 3x smoothed (EPX); 4x is 2x
+ * smoothed then doubled; other scales nearest neighbour. */
+int gfx_glyph_pixel(char ch, int q, int dx, int dy) {
     unsigned idx;
     const uint8_t *g;
+    int n = os_ui_px(8, q);
+    if (dx < 0 || dy < 0 || dx >= n || dy >= n) return 0;
     if ((unsigned char)ch < 32 || (unsigned char)ch > 126) ch = '?';
     idx = (unsigned char)ch - 32u;
     g = gfx_font8[idx];
-    for (gy = 0; gy < 8; gy++) {
-        uint8_t bits = g[gy];
-        for (gx = 0; gx < 8; gx++) {
-            if (bits & (1u << gx)) put(fb, w, h, x + gx, y + gy, c);
+    if (q == 4) return glyph_bit(g, dx, dy);
+    if (q == 8) return glyph_epx(g, dx / 2, dy / 2, 2, dx % 2, dy % 2);
+    if (q == 12) return glyph_epx(g, dx / 3, dy / 3, 3, dx % 3, dy % 3);
+    if (q == 16) return glyph_epx(g, dx / 4, dy / 4, 2, (dx % 4) / 2, (dy % 4) / 2);
+    return glyph_bit(g, dx * 8 / n, dy * 8 / n);
+}
+
+static void draw_char_bits(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
+    int gy, gx, n;
+    if (g_tq == OS_UI_Q1) {
+        unsigned idx;
+        const uint8_t *g;
+        if ((unsigned char)ch < 32 || (unsigned char)ch > 126) ch = '?';
+        idx = (unsigned char)ch - 32u;
+        g = gfx_font8[idx];
+        for (gy = 0; gy < 8; gy++) {
+            uint8_t bits = g[gy];
+            for (gx = 0; gx < 8; gx++) {
+                if (bits & (1u << gx)) put(fb, w, h, x + gx, y + gy, c);
+            }
         }
+        return;
+    }
+    if (ch == ' ') return;
+    n = os_ui_px(8, g_tq);
+    for (gy = 0; gy < n; gy++) {
+        if (y + gy < 0 || y + gy >= h) continue;
+        for (gx = 0; gx < n; gx++)
+            if (gfx_glyph_pixel(ch, g_tq, gx, gy)) put(fb, w, h, x + gx, y + gy, c);
     }
 }
 
 static void draw_char(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
-    draw_char_bits(fb, w, h, x + 1, y + 1, ch, RGB(8, 12, 16));
+    int o = g_tq >= 8 ? g_tq / 4 : 1;
+    draw_char_bits(fb, w, h, x + o, y + o, ch, RGB(8, 12, 16));
     draw_char_bits(fb, w, h, x, y, ch, c);
 }
 
@@ -723,11 +792,11 @@ static void draw_text(uint32_t *fb, int w, int h, int x, int y, const char *s, u
     if (!s) return;
     while (*s) {
         if (*s == '\n') {
-            y += 10;
+            y += os_ui_line_h(g_tq);
             cx = x;
         } else {
             draw_char(fb, w, h, cx, y, *s, c);
-            cx += 8;
+            cx += CW;
         }
         s++;
     }
@@ -738,10 +807,19 @@ static void draw_text_n(uint32_t *fb, int w, int h, int x, int y, const char *s,
     if (!s) return;
     while (*s && n < maxc) {
         draw_char(fb, w, h, cx, y, *s, c);
-        cx += 8;
+        cx += CW;
         s++;
         n++;
     }
+}
+
+/* Lot 68: text in a fixed-height bar (title bars, menu bar): scaled up to
+ * OS_UI_Q_CHROME_MAX and centred on the 1x position; maxpx bounds width. */
+static void draw_title(uint32_t *fb, int w, int h, int x, int y, const char *s, int maxpx, uint32_t c) {
+    int keep = g_tq;
+    if (g_tq > OS_UI_Q_CHROME_MAX) g_tq = OS_UI_Q_CHROME_MAX;
+    draw_text_n(fb, w, h, x, y + 4 - os_ui_px(8, g_tq) / 2, s, maxpx / CW, c);
+    g_tq = keep;
 }
 
 static void landscape(uint32_t *fb, int w, int h) {
@@ -1003,17 +1081,17 @@ static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_PANE_TITLE_H);
-    draw_text_n(fb, w, h, x + 14, y + 12, title ? title : "", (rw - 80) / 8, RGB(232, 238, 244));
-    fill_rect(fb, w, h, x + 12, y + 44, rw - 24, 40, RGB(42, 36, 16));
+    draw_title(fb, w, h, x + 14, y + 12, title ? title : "", rw - 80, RGB(232, 238, 244));
+    fill_rect(fb, w, h, x + 12, y + 44, rw - 24, TS(10) + 30, RGB(42, 36, 16));
     llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
     draw_text(fb, w, h, x + 18, y + 48, lab, RGB(243, 230, 176));
     if (sc && sc->version >= 6 && sc->pane_live && sc->nterm > 0) {
         /* live window content from guest syscalls (userspace/osui_panes.c) */
-        int i, ty = y + 96, n = sc->nterm > OS_FB_TERM_MAX ? OS_FB_TERM_MAX : sc->nterm;
-        for (i = 0; i < n && ty + 12 <= y + rh - 8; i++, ty += 14)
-            draw_text_n(fb, w, h, x + 18, ty, sc->term[i], (rw - 36) / 8,
+        int i, ty = y + 84 + TS(12), n = sc->nterm > OS_FB_TERM_MAX ? OS_FB_TERM_MAX : sc->nterm;
+        for (i = 0; i < n && ty + TS(12) <= y + rh - 8; i++, ty += TS(14))
+            draw_text_n(fb, w, h, x + 18, ty, sc->term[i], (rw - 36) / CW,
                         i == 0 ? RGB(122, 212, 196) : RGB(201, 232, 223));
-    } else if (body) draw_text_n(fb, w, h, x + 18, y + 96, body, (rw - 36) / 8, RGB(201, 232, 223));
+    } else if (body) draw_text_n(fb, w, h, x + 18, y + 84 + TS(12), body, (rw - 36) / CW, RGB(201, 232, 223));
 }
 
 /* US-050: full-screen pm-ide. term[0] title, term[1..n-2] text rows with
@@ -1039,21 +1117,21 @@ static void draw_ide_colored(uint32_t *fb, int w, int h, int x, int y, const cha
     while (k < maxc && k < OS_FB_TERM_LEN && text[k]) {
         int e = k;
         while (e < maxc && e < OS_FB_TERM_LEN && text[e] && attr[e] == attr[k]) e++;
-        draw_text_n(fb, w, h, x + k * 8, y, text + k, e - k, ide_class_rgb(attr[k]));
+        draw_text_n(fb, w, h, x + k * CW, y, text + k, e - k, ide_class_rgb(attr[k]));
         k = e;
     }
 }
 
 static void draw_ide(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
-    int n = sc ? (int)sc->nterm : 0, i, ty, maxc, row_h = 20;
+    int n = sc ? (int)sc->nterm : 0, i, ty, maxc, row_h = TS(20);
     if (n > OS_FB_TERM_MAX) n = OS_FB_TERM_MAX;
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 14, 18), 255);
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
     traffic(fb, w, h, x + 8, y + 8);
-    maxc = (rw - 40) / 8;
+    maxc = (rw - 40) / CW;
     if (maxc < 8) maxc = 8;
-    if (n > 0) draw_text_n(fb, w, h, x + 56, y + 12, sc->term[0], maxc - 6, RGB(232, 238, 244));
+    if (n > 0) draw_title(fb, w, h, x + 56, y + 12, sc->term[0], rw - 100, RGB(232, 238, 244));
     ty = y + 48;
     for (i = 1; i < n - 1; i++) {
         if (ty + row_h > y + rh - 40) break;
@@ -1065,8 +1143,8 @@ static void draw_ide(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, c
         ty += row_h;
     }
     if (n > 1) {
-        fill_rect(fb, w, h, x + 10, y + rh - 32, rw - 20, 24, RGB(42, 36, 16));
-        draw_text_n(fb, w, h, x + 18, y + rh - 26, sc->term[n - 1], maxc, RGB(243, 230, 176));
+        fill_rect(fb, w, h, x + 10, y + rh - 16 - TS(16), rw - 20, TS(16) + 8, RGB(42, 36, 16));
+        draw_text_n(fb, w, h, x + 18, y + rh - 12 - TS(14), sc->term[n - 1], maxc, RGB(243, 230, 176));
     }
 }
 
@@ -1100,15 +1178,32 @@ void gfx_desktop_web_nav(int w, int h, int which, gfx_rect_t *r) {
     r->y = bar_h + 14;
 }
 
+/* Lot 68: the page is laid out by Ring 3 for a viewport of pw * 4 / q
+ * page pixels and drawn here at q / 4 (browser zoom: boxes, text and
+ * scroll all scale together). The kernel tells Ring 3 the view size and
+ * scale when they change ("web view PW PH Q FBW FBH"). */
+static int g_web_view_sent[3];
+void gfx_desktop_web_view_reset(void) { g_web_view_sent[0] = g_web_view_sent[1] = g_web_view_sent[2] = 0; }
+
 static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
-    int ox, oy, pw, ph, i, n, cx1, cy1;
+    int ox, oy, pw, ph, i, n, cx1, cy1, q, cw, scroll;
     int bar_h = clampi(h / 22, 28, 40);
     gfx_rect_t nav;
     gfx_desktop_web_origin(w, h, &ox, &oy, &pw, &ph);
+    q = gfx_desktop_surface_q(sc, OS_UI_Z_WEB, w, h);
+    if (g_web_view_sent[0] != pw || g_web_view_sent[1] != ph || g_web_view_sent[2] != q) {
+        g_web_view_sent[0] = pw; g_web_view_sent[1] = ph; g_web_view_sent[2] = q;
+        evt_begin(); kbd_put_string("web view ");
+        put_uint((unsigned)pw); kbd_put_char(' '); put_uint((unsigned)ph); kbd_put_char(' ');
+        put_uint((unsigned)q); kbd_put_char(' '); put_uint((unsigned)w); kbd_put_char(' ');
+        put_uint((unsigned)h); evt_end();
+    }
     round_rect_a(fb, w, h, 8, bar_h + 8, w - 16, h - bar_h - 16, 10, RGB(10, 14, 18), 250);
     fill_rect(fb, w, h, 8, bar_h + 8, w - 16, 32, RGB(28, 44, 56));
     traffic(fb, w, h, 16, bar_h + 16);
-    draw_text_n(fb, w, h, 64, bar_h + 20, sc->web_title, (w - 96 - 80) / 8, RGB(232, 238, 244));
+    g_tq = q;
+    draw_title(fb, w, h, 64, bar_h + 20, sc->web_title, w - 96 - 80, RGB(232, 238, 244));
+    g_tq = OS_UI_Q1;
     for (i = 0; i < 2; i++) {
         gfx_desktop_web_nav(w, h, i, &nav);
         fill_rect(fb, w, h, nav.x, nav.y, nav.w, nav.h, RGB(44, 66, 82));
@@ -1117,30 +1212,36 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
     fill_rect(fb, w, h, ox, oy, pw, ph, RGB(255, 255, 255));
     cx1 = ox + pw;
     cy1 = oy + ph;
+    g_tq = q;
+    cw = CW;
+    scroll = (int)sc->web_scroll;
     n = sc->nweb > OS_FB_WEB_ITEMS ? OS_FB_WEB_ITEMS : (int)sc->nweb;
     for (i = 0; i < n; i++) {
         const os_fb_web_item_t *it = &sc->web[i];
-        int x = ox + it->x, y = oy + it->y - (int)sc->web_scroll;
+        int x = ox + os_ui_px(it->x, q), y = oy + os_ui_px(it->y - scroll, q);
+        int iw = os_ui_px(it->w, q), ih = os_ui_px(it->h, q);
         uint32_t c = it->color & 0xFFFFFFu;
         if (it->kind == OS_FB_WEB_RECT) {
-            web_fill_clip(fb, w, h, x, y, it->w, it->h, c, ox, oy, cx1, cy1);
+            web_fill_clip(fb, w, h, x, y, iw, ih, c, ox, oy, cx1, cy1);
         } else if (it->kind == OS_FB_WEB_BORDER) {
-            int t = it->bold ? it->bold : 1;
-            web_fill_clip(fb, w, h, x, y, it->w, t, c, ox, oy, cx1, cy1);
-            web_fill_clip(fb, w, h, x, y + it->h - t, it->w, t, c, ox, oy, cx1, cy1);
-            web_fill_clip(fb, w, h, x, y, t, it->h, c, ox, oy, cx1, cy1);
-            web_fill_clip(fb, w, h, x + it->w - t, y, t, it->h, c, ox, oy, cx1, cy1);
+            int t = os_ui_px(it->bold ? it->bold : 1, q);
+            if (t < 1) t = 1;
+            web_fill_clip(fb, w, h, x, y, iw, t, c, ox, oy, cx1, cy1);
+            web_fill_clip(fb, w, h, x, y + ih - t, iw, t, c, ox, oy, cx1, cy1);
+            web_fill_clip(fb, w, h, x, y, t, ih, c, ox, oy, cx1, cy1);
+            web_fill_clip(fb, w, h, x + iw - t, y, t, ih, c, ox, oy, cx1, cy1);
         } else if (it->kind == OS_FB_WEB_TEXT) {
-            int k;
-            if (y < oy || y + 8 > cy1) continue;
+            int k, gh = os_ui_px(8, q);
+            if (y < oy || y + gh > cy1) continue;
             for (k = 0; k < OS_FB_WEB_TEXT_LEN && it->text[k]; k++) {
-                int gx = x + k * 8;
-                if (gx < ox || gx + 9 > cx1) continue;
+                int gx = x + k * cw;
+                if (gx < ox || gx + cw + 1 > cx1) continue;
                 draw_char_bits(fb, w, h, gx, y, it->text[k], c);
-                if (it->bold) draw_char_bits(fb, w, h, gx + 1, y, it->text[k], c);
+                if (it->bold) draw_char_bits(fb, w, h, gx + (q >= 8 ? q / 4 : 1), y, it->text[k], c);
             }
         }
     }
+    g_tq = OS_UI_Q1;
 }
 
 static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
@@ -1149,36 +1250,56 @@ static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh,
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_PANE_TITLE_H);
-    draw_text(fb, w, h, x + 14, y + 12, "Shell Multiboot", RGB(232, 238, 244));
-    if (rw > 8 * 34 + 80) draw_text(fb, w, h, x + rw - 8 * 18 - 70, y + 12, "prompt=MOHHDY>", RGB(122, 212, 196));
+    draw_title(fb, w, h, x + 14, y + 12, "Shell Multiboot", rw - 100, RGB(232, 238, 244));
+    if (g_tq <= OS_UI_Q1 && rw > CW * 34 + 80) draw_text(fb, w, h, x + rw - CW * 18 - 70, y + 12, "prompt=MOHHDY>", RGB(122, 212, 196));
     term_h = rh - 44;
     if (term_h < 80) term_h = 80;
     fill_rect(fb, w, h, x + 10, y + 36, rw - 20, term_h, RGB(8, 12, 16));
-    maxc = (rw - 40) / 8;
+    maxc = (rw - 40) / CW;
     if (maxc < 8) maxc = 8;
-    prompt_y = y + rh - 22;
+    prompt_y = y + rh - 12 - TS(10);
     if (prompt_y < y + 48) prompt_y = y + 48;
     ty = y + 44;
     n = sc ? (int)sc->nterm : 0;
     if (n > OS_FB_TERM_MAX) n = OS_FB_TERM_MAX;
     if (n <= 0) {
         draw_text(fb, w, h, x + 18, ty, "Shell Multiboot live_eval=true", RGB(122, 212, 196));
-        ty += 14;
+        ty += TS(14);
         draw_text(fb, w, h, x + 18, ty, "Pas un bash Linux. help ls date whoami ai", RGB(154, 168, 181));
-        ty += 14;
+        ty += TS(14);
     } else {
         for (i = 0; i < n; i++) {
-            if (ty + 14 > prompt_y) break;
+            if (ty + TS(14) > prompt_y) break;
             draw_text_n(fb, w, h, x + 18, ty, sc->term[i], maxc, RGB(201, 232, 223));
-            ty += 12;
+            ty += TS(12);
         }
     }
     draw_text(fb, w, h, x + 18, prompt_y, "MOHHDY> ", RGB(201, 232, 223));
     if (sc && sc->input[0]) {
-        draw_text_n(fb, w, h, x + 18 + 8 * 8, prompt_y, input_tail(sc->input, maxc - 8), maxc - 8, RGB(232, 238, 244));
+        draw_text_n(fb, w, h, x + 18 + 8 * CW, prompt_y, input_tail(sc->input, maxc - 8), maxc - 8, RGB(232, 238, 244));
     } else {
-        fill_rect(fb, w, h, x + 18 + 8 * 8, prompt_y, 8, 10, RGB(61, 154, 138));
+        fill_rect(fb, w, h, x + 18 + 8 * CW, prompt_y, CW, TS(10), RGB(61, 154, 138));
     }
+}
+
+/* Lot 68: word-wrapped text, at most max_lines lines of maxc columns;
+ * returns the lines used. */
+static int draw_text_wrap(uint32_t *fb, int w, int h, int x, int y, const char *t, int maxc, int max_lines, int line_h, uint32_t c) {
+    int used = 0, pos = 0, len = 0;
+    while (t[len]) len++;
+    if (maxc < 4) maxc = 4;
+    while (pos < len && used < max_lines) {
+        int take = len - pos, k;
+        if (take > maxc) {
+            take = maxc;
+            for (k = maxc; k > maxc / 2; k--) if (t[pos + k] == ' ') { take = k; break; }
+        }
+        draw_text_n(fb, w, h, x, y + used * line_h, t + pos, take, c);
+        pos += take;
+        while (pos < len && t[pos] == ' ') pos++;
+        used++;
+    }
+    return used;
 }
 
 static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
@@ -1190,31 +1311,43 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     stroke_round(fb, w, h, x, y, rw, rh, 14, RGB(61, 154, 138), 2);
     fill_rect(fb, w, h, x + 1, y + 1, rw - 2, 36, RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_CHAT_TITLE_H);
-    draw_text(fb, w, h, x + 16, y + 14, "Mohhdy", RGB(232, 238, 244));
+    draw_title(fb, w, h, x + 16, y + 14, "Mohhdy", 8 * 16, RGB(232, 238, 244));
     llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
     {
         int ln = 0;
         while (lab[ln]) ln++;
         if (ln < 14) ln = 14;
-        if (x + 16 + 8 * 8 < x + rw - 8 * ln - 66)
-            draw_text(fb, w, h, x + rw - 8 * ln - 66, y + 14, lab, RGB(243, 230, 176));
+        if (g_tq <= OS_UI_Q1 && x + 16 + 8 * CW < x + rw - CW * ln - 66)
+            draw_text(fb, w, h, x + rw - CW * ln - 66, y + 14, lab, RGB(243, 230, 176));
     }
-    fill_rect_a(fb, w, h, x + 14, y + 46, rw - 28, 44, RGB(42, 36, 16), 230);
-    draw_text_n(fb, w, h, x + 20, y + 50, "Posez une question ou tapez /help.", (rw - 40) / 8, RGB(243, 230, 176));
-    llm_text(lab, (int)sizeof(lab), "Assistant local : ", sc, "");
-    draw_text_n(fb, w, h, x + 20, y + 62, lab, (rw - 40) / 8, RGB(243, 230, 176));
-    log_y = y + 98;
-    fill_rect(fb, w, h, x + 14, log_y, rw - 28, rh - 180, RGB(11, 16, 20));
+    fill_rect_a(fb, w, h, x + 14, y + 46, rw - 28, TS(24) + 20, RGB(42, 36, 16), 230);
+    if (g_tq <= OS_UI_Q1) {
+        draw_text_n(fb, w, h, x + 20, y + 50, "Posez une question ou tapez /help.", (rw - 40) / CW, RGB(243, 230, 176));
+        llm_text(lab, (int)sizeof(lab), "Assistant local : ", sc, "");
+    } else {
+        /* scaled: the same two lines, shorter words first, wrapped */
+        int used = draw_text_wrap(fb, w, h, x + 20, y + 50, "Question ou /help.", (rw - 40) / CW, 1, TS(12), RGB(243, 230, 176));
+        (void)used;
+        llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
+    }
+    draw_text_n(fb, w, h, x + 20, y + 50 + TS(12), lab, (rw - 40) / CW, RGB(243, 230, 176));
+    log_y = y + 74 + TS(24);
+    fill_rect(fb, w, h, x + 14, log_y, rw - 28, y + rh - 82 - log_y, RGB(11, 16, 20));
     n = sc ? (int)sc->nmsg : 0;
     if (n > OS_FB_MSG_MAX) n = OS_FB_MSG_MAX;
     if (n <= 0) {
         llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
-        draw_text_n(fb, w, h, x + 20, log_y + 8, lab, (rw - 40) / 8, RGB(154, 168, 181));
-        draw_text_n(fb, w, h, x + 20, log_y + 22, "Mohhdy OS - bureau pilote par prompts.", (rw - 40) / 8, RGB(201, 232, 223));
-        draw_text_n(fb, w, h, x + 20, log_y + 34, "Fichiers et Editeur : icones du dock.", (rw - 40) / 8, RGB(201, 232, 223));
+        draw_text_n(fb, w, h, x + 20, log_y + 8, lab, (rw - 40) / CW, RGB(154, 168, 181));
+        {
+            int room = (y + rh - 92 - (log_y + 8 + TS(14))) / TS(12) + 1, u;
+            if (room < 1) room = 1;
+            u = draw_text_wrap(fb, w, h, x + 20, log_y + 8 + TS(14), "Mohhdy OS - bureau pilote par prompts.", (rw - 40) / CW, room, TS(12), RGB(201, 232, 223));
+            if (room - u > 0)
+                (void)draw_text_wrap(fb, w, h, x + 20, log_y + 8 + TS(14) + u * TS(12), "Fichiers et Editeur : icones du dock.", (rw - 40) / CW, room - u, TS(12), RGB(201, 232, 223));
+        }
     } else {
         /* messages wrap on word boundaries; the newest stay visible */
-        int maxc = (rw - 48) / 8, lines = 0, avail = (rh - 190) / 11, first = 0, yy, need;
+        int maxc = (rw - 48) / CW, lines = 0, avail = (y + rh - 92 - log_y) / TS(11), first = 0, yy, need;
         (void)stub;
         if (maxc < 8) maxc = 8;
         for (i = n - 1; i >= 0; i--) {
@@ -1229,8 +1362,8 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
             int pos = 0, len = 0;
             msg = sc->messages[i];
             while (msg[len] && len < OS_FB_MSG_LEN) len++;
-            fill_rect(fb, w, h, x + 16, yy, 2, 9, RGB(61, 154, 138));
-            while (pos < len && yy < log_y + rh - 190) {
+            fill_rect(fb, w, h, x + 16, yy, 2, TS(9), RGB(61, 154, 138));
+            while (pos < len && yy + TS(10) < y + rh - 84) {
                 int take = len - pos, k;
                 if (take > maxc) {
                     take = maxc;
@@ -1239,27 +1372,43 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
                 draw_text_n(fb, w, h, x + 20, yy, msg + pos, take, RGB(232, 238, 244));
                 pos += take;
                 while (pos < len && msg[pos] == ' ') pos++;
-                yy += 11;
+                yy += TS(11);
             }
             yy += 4;
         }
     }
-    fill_rect(fb, w, h, x + 14, y + rh - 70, rw - 28, 28, RGB(16, 25, 32));
-    if (sc && sc->input[0]) draw_text_n(fb, w, h, x + 20, y + rh - 62, input_tail(sc->input, (rw - 48) / 8), (rw - 48) / 8, RGB(232, 238, 244));
-    else draw_text_n(fb, w, h, x + 20, y + rh - 62, "Prompt ou /help, /browser, /shell ...", (rw - 40) / 8, RGB(154, 168, 181));
-    round_rect(fb, w, h, x + 14, y + rh - 34, 88, 22, 8, RGB(61, 154, 138));
-    draw_text(fb, w, h, x + 26, y + rh - 28, "Envoyer", RGB(15, 20, 25));
-    draw_text(fb, w, h, x + 110, y + rh - 28, sc && sc->session[0] ? sc->session : "s0001", RGB(154, 168, 181));
-    draw_text_n(fb, w, h, x + 170, y + rh - 28, gfx_desktop_llm_name(scene_llm(sc)), (rw - 190) / 8, RGB(154, 168, 181));
+    fill_rect(fb, w, h, x + 14, y + rh - 42 - (TS(10) + 18), rw - 28, TS(10) + 18, RGB(16, 25, 32));
+    if (sc && sc->input[0]) draw_text_n(fb, w, h, x + 20, y + rh - 51 - TS(10), input_tail(sc->input, (rw - 48) / CW), (rw - 48) / CW, RGB(232, 238, 244));
+    else draw_text_n(fb, w, h, x + 20, y + rh - 51 - TS(10), g_tq <= OS_UI_Q1 ? "Prompt ou /help, /browser, /shell ..." : "Prompt ou /help", (rw - 40) / CW, RGB(154, 168, 181));
+    {
+        /* Lot 68: the send button and the labels follow the text scale;
+         * the bottom strip is 34 px, so they stop at 2x (chrome). */
+        int keep = g_tq, bx, sx;
+        if (g_tq > OS_UI_Q_CHROME_MAX) g_tq = OS_UI_Q_CHROME_MAX;
+        bx = 24 + 7 * CW;
+        sx = x + 14 + bx + 8;
+        round_rect(fb, w, h, x + 14, y + rh - 34, bx, 22, 8, RGB(61, 154, 138));
+        draw_text(fb, w, h, x + 26, y + rh - 23 - TS(8) / 2, "Envoyer", RGB(15, 20, 25));
+        draw_text(fb, w, h, sx, y + rh - 23 - TS(8) / 2, sc && sc->session[0] ? sc->session : "s0001", RGB(154, 168, 181));
+        draw_text_n(fb, w, h, sx + 7 * CW, y + rh - 23 - TS(8) / 2, gfx_desktop_llm_name(scene_llm(sc)), (x + rw - 20 - sx - 7 * CW) / CW,
+                    RGB(154, 168, 181));
+        g_tq = keep;
+    }
 }
 
 /* UX5: rows and columns of the content grid that fit an app window box
  * (the default window gives OS_FB_APP_ROWS x OS_FB_APP_COLS - 1). */
-void gfx_desktop_app_grid_fit(const gfx_rect_t *box, int *rows, int *cols) {
+/* Lot 68: per app slot text scale (from the scene zoom), and the grid
+ * metrics at a scale: row height, column width, first row offset. */
+int gfx_desktop_app_row_h(int q) { return os_ui_px(GFX_APP_ROW_H, q); }
+int gfx_desktop_app_grid_y(int q) { return q <= OS_UI_Q1 ? GFX_APP_GRID_Y : GFX_APP_TOOL_Y + os_ui_px(8, q) + 14; }
+
+void gfx_desktop_app_grid_fit_q(const gfx_rect_t *box, int q, int *rows, int *cols) {
     int r = 0, c = 0;
+    q = os_ui_q_clamp(q);
     if (box && box->w > 0 && box->h > 0) {
-        r = (box->h - GFX_APP_GRID_Y - 30) / GFX_APP_ROW_H;
-        c = (box->w - 24) / 8;
+        r = (box->h - gfx_desktop_app_grid_y(q) - 30) / gfx_desktop_app_row_h(q);
+        c = (box->w - 24) / os_ui_char_w(q);
     }
     if (r < 0) r = 0;
     if (c < 0) c = 0;
@@ -1269,10 +1418,14 @@ void gfx_desktop_app_grid_fit(const gfx_rect_t *box, int *rows, int *cols) {
     if (cols) *cols = c;
 }
 
+void gfx_desktop_app_grid_fit(const gfx_rect_t *box, int *rows, int *cols) {
+    gfx_desktop_app_grid_fit_q(box, OS_UI_Q1, rows, cols);
+}
+
 /* UX5: tell the app its grid when the window size changes. */
 static void app_size_event(int slot, int kind, const gfx_rect_t *box) {
     int r, c;
-    gfx_desktop_app_grid_fit(box, &r, &c);
+    gfx_desktop_app_grid_fit_q(box, g_app_q[slot], &r, &c);
     if (r <= 0 || c <= 0) return;
     if (g_app_fit[slot][0] != kind) {   /* new app: it starts on the default grid */
         g_app_fit[slot][0] = kind; g_app_fit[slot][1] = OS_FB_APP_ROWS; g_app_fit[slot][2] = OS_FB_APP_COLS - 1;
@@ -1280,6 +1433,40 @@ static void app_size_event(int slot, int kind, const gfx_rect_t *box) {
     if (g_app_fit[slot][0] == kind && g_app_fit[slot][1] == r && g_app_fit[slot][2] == c) return;
     g_app_fit[slot][0] = kind; g_app_fit[slot][1] = r; g_app_fit[slot][2] = c;
     evt_app(slot, "size", 2, r, c, 0, 0);
+}
+
+/* Lot 68: scale of a surface from the scene (version >= 8), and of the
+ * fixed-height chrome (menu bar, title bars), capped at 2x. */
+int gfx_desktop_surface_q(const os_fb_scene_t *sc, int zslot, int w, int h) {
+    if (!sc || sc->magic != OS_FB_MAGIC || sc->version < 8) return OS_UI_Q1;
+    return os_ui_effective_q(sc->ui_scale_q, zslot >= 0 && zslot < OS_UI_Z_COUNT ? sc->zoom_q[zslot] : 0, w, h);
+}
+int gfx_desktop_chrome_q(const os_fb_scene_t *sc, int w, int h) {
+    int q = gfx_desktop_surface_q(sc, -1, w, h);
+    return q > OS_UI_Q_CHROME_MAX ? OS_UI_Q_CHROME_MAX : q;
+}
+
+/* Lot 68: the menu bar at a chrome scale. At 1x: logo, menus from x=122
+ * and the AI label as before. Larger: the first of (logo + scaled label),
+ * (logo + 1x label), (no logo + 1x label), (no logo, no label) where every
+ * menu fits, so the menus never disappear first. */
+typedef struct { int mx, flag_w, flag_q, logo; } menu_plan_t;
+static const char *const g_menu_names[GFX_DESKTOP_MENUS] = { "Chat", "Browser-OS", "Shell", "Admin", "Support", "Statut", "Fichiers", "Editeur" };
+static void menu_bar_plan(int w, int cq, menu_plan_t *p) {
+    int cw = os_ui_char_w(cq), gap = w < 720 ? 8 : 14, total = 0, i, k;
+    int fl1 = (w >= 920) ? (8 * 36 + 12) : ((w >= 720) ? (8 * 16 + 12) : 8);
+    p->logo = 1;
+    if (cq <= OS_UI_Q1) { p->mx = 122; p->flag_w = fl1; p->flag_q = fl1 > 8 ? OS_UI_Q1 : 0; return; }
+    for (i = 0; i < GFX_DESKTOP_MENUS; i++) { int n = 0; while (g_menu_names[i][n]) n++; total += n * cw + gap; }
+    total -= gap;
+    for (k = 0; k < 4; k++) {
+        p->logo = k < 2;
+        p->mx = p->logo ? 30 + 9 * cw + 20 : 30;
+        if (k == 0) { p->flag_w = (w >= 920) ? (cw * 36 + 12) : ((w >= 720) ? (cw * 16 + 12) : 8); p->flag_q = p->flag_w > 8 ? cq : 0; }
+        else if (k == 3) { p->flag_w = 8; p->flag_q = 0; }
+        else { p->flag_w = fl1; p->flag_q = fl1 > 8 ? OS_UI_Q1 : 0; }
+        if (p->mx + total <= w - p->flag_w - 8) return;
+    }
 }
 
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *out) {
@@ -1310,20 +1497,26 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     bar_h = clampi(h / 22, 28, 40);
     out->bar_h = bar_h;
 
-    mx = 122;
-    ty = (bar_h - 8) / 2;
-    gap = w < 720 ? 8 : 14;  /* 8 menus still fit at 640 px */
-    flag_w = (w >= 920) ? (8 * 36 + 12) : ((w >= 720) ? (8 * 16 + 12) : 8);
-
-    for (i = 0; i < GFX_DESKTOP_MENUS; i++) {
-        int len = 0;
-        while (menus[i][len]) len++;
-        if (mx + len * 8 > w - flag_w - 8) break;
-        out->menu_items[i].x = mx;
-        out->menu_items[i].y = ty;
-        out->menu_items[i].w = len * 8;
-        out->menu_items[i].h = 8;
-        mx += len * 8 + gap;
+    {
+        /* Lot 68: menu bar text at the chrome scale (<= 2x) */
+        int cq = gfx_desktop_chrome_q(sc, w, h), cw = os_ui_char_w(cq);
+        menu_plan_t mp;
+        out->chrome_q = cq;
+        menu_bar_plan(w, cq, &mp);
+        mx = mp.mx;
+        ty = (bar_h - os_ui_px(8, cq)) / 2;
+        gap = w < 720 ? 8 : 14;  /* 8 menus still fit at 640 px */
+        flag_w = mp.flag_w;
+        for (i = 0; i < GFX_DESKTOP_MENUS; i++) {
+            int len = 0;
+            while (menus[i][len]) len++;
+            if (mx + len * cw > w - flag_w - 8) break;
+            out->menu_items[i].x = mx;
+            out->menu_items[i].y = ty;
+            out->menu_items[i].w = len * cw;
+            out->menu_items[i].h = os_ui_px(8, cq);
+            mx += len * cw + gap;
+        }
     }
     out->menu_count = i;
 
@@ -1404,6 +1597,16 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     }
 
     chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(w / 3, 220, 360) : clampi(w / 2, 240, 640);
+    {
+        /* Lot 68: a larger chat text gets a wider window (up to 4/5 of
+         * the screen) so lines keep about the same number of words. */
+        int cq = gfx_desktop_surface_q(sc, OS_UI_Z_CHAT, w, h);
+        if (cq > OS_UI_Q1) {
+            int want = chat_w * cq / OS_UI_Q1, cap = (w * 4) / 5;
+            if (want > cap) want = cap;
+            if (want > chat_w) chat_w = want;
+        }
+    }
     if (chat_w > w - 24) chat_w = w - 24;
     chat_h = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(h / 2, 180, 400) : clampi((h * 5) / 12, 160, 360);
     if (chat_h > h - bar_h - 56) chat_h = h - bar_h - 56;
@@ -1489,9 +1692,11 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         int open = sc->version >= 7 && sc->app[i].kind != 0;
         area.x = 0; area.y = bar_h + 4; area.w = w; area.h = h - bar_h - 4 - 52;
         if (area.h < 120) area.h = h - bar_h - 4;
-        base.w = (OS_FB_APP_COLS - 1) * 8 + 24;
+        g_app_q[i] = (uint8_t)os_ui_effective_q(sc->version >= 8 ? sc->ui_scale_q : OS_UI_Q1,
+                                                 sc->version >= 8 ? sc->zoom_q[OS_UI_Z_APP0 + i] : 0, w, h);
+        base.w = (OS_FB_APP_COLS - 1) * os_ui_char_w(g_app_q[i]) + 24;
         if (base.w > w - 16) base.w = w - 16;
-        base.h = GFX_APP_GRID_Y + OS_FB_APP_ROWS * GFX_APP_ROW_H + 30;
+        base.h = gfx_desktop_app_grid_y(g_app_q[i]) + OS_FB_APP_ROWS * gfx_desktop_app_row_h(g_app_q[i]) + 30;
         if (base.h > area.h) base.h = area.h;
         /* cascade: each slot a little lower and to the right */
         base.x = 24 + i * 120;
@@ -1513,14 +1718,14 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         out->app_win[i].tool.x = out->app_win[i].box.x + 12;
         out->app_win[i].tool.y = out->app_win[i].box.y + GFX_APP_TOOL_Y - 3;
         out->app_win[i].tool.w = out->app_win[i].box.w > 24 ? out->app_win[i].box.w - 24 : 0;
-        out->app_win[i].tool.h = out->app_win[i].visible ? 16 : 0;
+        out->app_win[i].tool.h = out->app_win[i].visible ? os_ui_px(8, g_app_q[i]) + 8 : 0;
         out->app_win[i].grid.x = out->app_win[i].box.x + 12;
-        out->app_win[i].grid.y = out->app_win[i].box.y + GFX_APP_GRID_Y;
+        out->app_win[i].grid.y = out->app_win[i].box.y + gfx_desktop_app_grid_y(g_app_q[i]);
         out->app_win[i].grid.w = out->app_win[i].tool.w;
         {
             int fr = 0, fc = 0;
-            gfx_desktop_app_grid_fit(&out->app_win[i].box, &fr, &fc);
-            out->app_win[i].grid.h = out->app_win[i].visible ? fr * GFX_APP_ROW_H : 0;
+            gfx_desktop_app_grid_fit_q(&out->app_win[i].box, g_app_q[i], &fr, &fc);
+            out->app_win[i].grid.h = out->app_win[i].visible ? fr * gfx_desktop_app_row_h(g_app_q[i]) : 0;
         }
     }
     for (i = 0; i < GFX_WIN_COUNT; i++) out->z[i] = g_z[i];
@@ -1596,8 +1801,10 @@ static uint32_t app_attr_rgb(uint8_t a) {
     }
 }
 
-static void draw_app(uint32_t *fb, int w, int h, const gfx_rect_t *box, const os_fb_app_t *a, int focused) {
+static void draw_app(uint32_t *fb, int w, int h, const gfx_rect_t *box, const os_fb_app_t *a, int focused, int q) {
     int x = box->x, y = box->y, rw = box->w, rh = box->h, r, c, maxc, maxr;
+    int rowh = gfx_desktop_app_row_h(q), gy0 = y + gfx_desktop_app_grid_y(q);
+    g_tq = os_ui_q_clamp(q);
     char title[80];
     int n = 0, i;
     round_rect_a(fb, w, h, x, y, rw, rh, 12, RGB(14, 20, 27), 255);
@@ -1607,30 +1814,36 @@ static void draw_app(uint32_t *fb, int w, int h, const gfx_rect_t *box, const os
     for (i = 0; a->title[i] && n < 70; i++) title[n++] = a->title[i];
     if (a->dirty && n < 76) { title[n++] = ' '; title[n++] = '*'; }
     title[n] = 0;
-    draw_text_n(fb, w, h, x + 14, y + 11, title, (rw - 110) / 8, RGB(232, 238, 244));
-    gfx_desktop_app_grid_fit(box, &maxr, &maxc);
-    fill_rect(fb, w, h, x + 8, y + GFX_APP_TOOL_Y - 5, rw - 16, 18, RGB(22, 32, 42));
+    draw_title(fb, w, h, x + 14, y + 11, title, rw - 110, RGB(232, 238, 244));
+    gfx_desktop_app_grid_fit_q(box, q, &maxr, &maxc);
+    fill_rect(fb, w, h, x + 8, y + GFX_APP_TOOL_Y - 5, rw - 16, TS(8) + 10, RGB(22, 32, 42));
     draw_text_n(fb, w, h, x + 12, y + GFX_APP_TOOL_Y, a->tool, maxc, RGB(122, 212, 196));
-    fill_rect(fb, w, h, x + 8, y + GFX_APP_GRID_Y - 2, rw - 16, maxr * GFX_APP_ROW_H + 4, RGB(9, 13, 18));
+    fill_rect(fb, w, h, x + 8, gy0 - 2, rw - 16, maxr * rowh + 4, RGB(9, 13, 18));
     for (r = 0; r < maxr && r < (int)a->nrows; r++) {
-        int gy = y + GFX_APP_GRID_Y + r * GFX_APP_ROW_H;
-        if (gy + GFX_APP_ROW_H > y + rh - 26) break;
+        int gy = gy0 + r * rowh;
+        if (gy + rowh > y + rh - 26) break;
         for (c = 0; c < maxc && a->rows[r][c]; c++) {
             uint8_t at = a->attr[r][c];
-            int gx = x + 12 + c * 8;
+            int gx = x + 12 + c * CW;
             if (at == 3) {
-                fill_rect(fb, w, h, gx, gy, 8, GFX_APP_ROW_H, RGB(46, 110, 100));
-                draw_char(fb, w, h, gx, gy + 3, a->rows[r][c], RGB(240, 248, 250));
+                fill_rect(fb, w, h, gx, gy, CW, rowh, RGB(46, 110, 100));
+                draw_char(fb, w, h, gx, gy + TS(3), a->rows[r][c], RGB(240, 248, 250));
             } else if (a->rows[r][c] != ' ')
-                draw_char(fb, w, h, gx, gy + 3, a->rows[r][c], app_attr_rgb(at));
+                draw_char(fb, w, h, gx, gy + TS(3), a->rows[r][c], app_attr_rgb(at));
         }
     }
     if (focused && a->kind == OS_FB_APP_EDIT && a->cur_row >= 0 && a->cur_row < maxr && a->cur_col < maxc) {
-        int gy = y + GFX_APP_GRID_Y + a->cur_row * GFX_APP_ROW_H;
-        fill_rect(fb, w, h, x + 12 + a->cur_col * 8, gy + 1, 2, GFX_APP_ROW_H - 2, RGB(250, 210, 90));
+        int gy = gy0 + a->cur_row * rowh;
+        fill_rect(fb, w, h, x + 12 + a->cur_col * CW, gy + 1, 2, rowh - 2, RGB(250, 210, 90));
     }
-    fill_rect(fb, w, h, x + 8, y + rh - 22, rw - 16, 16, RGB(22, 32, 42));
-    draw_text_n(fb, w, h, x + 12, y + rh - 18, a->status, maxc, RGB(201, 232, 223));
+    {
+        int keep = g_tq;
+        if (g_tq > OS_UI_Q_CHROME_MAX) g_tq = OS_UI_Q_CHROME_MAX;
+        fill_rect(fb, w, h, x + 8, y + rh - 22, rw - 16, 16, RGB(22, 32, 42));
+        draw_text_n(fb, w, h, x + 12, y + rh - 14 - TS(8) / 2, a->status, (rw - 24) / CW, RGB(201, 232, 223));
+        g_tq = keep;
+    }
+    g_tq = OS_UI_Q1;
 }
 
 /* Dock pictograms (16x16-ish vector drawings, no font letters). */
@@ -1749,36 +1962,46 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     bar_h = clampi(h / 22, 28, 40);
     fill_rect_a(fb, w, h, 0, 0, w, bar_h, RGB(12, 28, 40), 235);
     fill_rect(fb, w, h, 12, (bar_h - 12) / 2, 12, 12, RGB(61, 154, 138));
-    draw_text(fb, w, h, 30, (bar_h - 8) / 2, "Mohhdy OS", RGB(232, 238, 244));
+    g_tq = lay.chrome_q;
     {
-        int mx = 122;
-        int ty = (bar_h - 8) / 2;
+        menu_plan_t mp;
+        int mx, ty = (bar_h - TS(8)) / 2;
         int i;
         const int gap = w < 720 ? 8 : 14;
         int lens[GFX_DESKTOP_MENUS];
-        int flag_w = (w >= 920) ? (8 * 36 + 12) : ((w >= 720) ? (8 * 16 + 12) : 8);
+        int flag_w;
+        menu_bar_plan(w, g_tq, &mp);
+        mx = mp.mx; flag_w = mp.flag_w;
+        if (mp.logo) draw_text(fb, w, h, 30, ty, "Mohhdy OS", RGB(232, 238, 244));
         for (i = 0; i < GFX_DESKTOP_MENUS; i++) {
             int n = 0;
             while (menus[i][n]) n++;
             lens[i] = n;
         }
         for (i = 0; i < GFX_DESKTOP_MENUS; i++) {
-            if (mx + lens[i] * 8 > w - flag_w - 8) break;
+            if (mx + lens[i] * CW > w - flag_w - 8) break;
             if (i == lay.menu_active) {
                 /* active window: highlighted menu item */
-                round_rect(fb, w, h, mx - 6, ty - 5, lens[i] * 8 + 12, 18, 8, RGB(61, 154, 138));
+                round_rect(fb, w, h, mx - 6, ty - 5, lens[i] * CW + 12, TS(8) + 10, 8, RGB(61, 154, 138));
                 draw_text(fb, w, h, mx, ty, menus[i], RGB(15, 20, 25));
             } else
                 draw_text(fb, w, h, mx, ty, menus[i], RGB(232, 238, 244));
-            mx += lens[i] * 8 + gap;
+            mx += lens[i] * CW + gap;
         }
-        if (w >= 920) {
-            char lab[64];
-            llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
-            draw_text_n(fb, w, h, w - 8 * 36 - 12, ty, lab, 36, RGB(243, 230, 176));
-        } else if (w >= 720)
-            draw_text(fb, w, h, w - 8 * 16 - 8, ty, "Mohhdy OS", RGB(243, 230, 176));
+        if (mp.flag_q) {
+            int keep = g_tq;
+            g_tq = mp.flag_q;
+            ty = (bar_h - TS(8)) / 2;
+            if (w >= 920) {
+                char lab[64];
+                llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
+                draw_text_n(fb, w, h, w - CW * 36 - 12, ty, lab, 36, RGB(243, 230, 176));
+            } else if (w >= 720)
+                draw_text(fb, w, h, w - CW * 16 - 8, ty, "Mohhdy OS", RGB(243, 230, 176));
+            g_tq = keep;
+        }
     }
+    g_tq = OS_UI_Q1;
 
     mode_s = "en attente";
     if (sc->stage_mode == OS_FB_STAGE_ACTING) mode_s = "en action";
@@ -1826,7 +2049,9 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
 
     pane = sc->pane;
     if (pane == OS_FB_PANE_IDE) {
+        g_tq = gfx_desktop_surface_q(sc, OS_UI_Z_IDE, w, h);
         draw_ide(fb, w, h, 8, bar_h + 8, w - 16, h - bar_h - 16, sc);
+        g_tq = OS_UI_Q1;
         return;
     }
     if (pane == OS_FB_PANE_WEB && sc->version >= 4) {
@@ -1851,10 +2076,12 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         else if (pane == OS_FB_PANE_COLLAB) body = "Collab : sortie de collab-balances (aucune sortie recue)";
         else if (pane == OS_FB_PANE_PROD) body = "Production : sortie de prod-metrics (aucune sortie recue)";
 
+        g_tq = gfx_desktop_surface_q(sc, pane == OS_FB_PANE_SHELL ? OS_UI_Z_SHELL : OS_UI_Z_PANE, w, h);
         if (pane == OS_FB_PANE_SHELL)
             draw_shell(fb, w, h, wx, wy, ww, wh, sc);
         else
             draw_window(fb, w, h, wx, wy, ww, wh, ptitle, body, sc);
+        g_tq = OS_UI_Q1;
     }
 
             } else if (win == GFX_WIN_CHAT) {
@@ -1862,12 +2089,16 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     chat_y = lay.chat_win.box.y;
     chat_w = lay.chat_win.box.w;
     chat_h = lay.chat_win.box.h;
-    if (lay.chat_win.visible) draw_chat(fb, w, h, chat_x, chat_y, chat_w, chat_h, sc);
+    if (lay.chat_win.visible) {
+        g_tq = gfx_desktop_surface_q(sc, OS_UI_Z_CHAT, w, h);
+        draw_chat(fb, w, h, chat_x, chat_y, chat_w, chat_h, sc);
+        g_tq = OS_UI_Q1;
+    }
 
             } else {
                 int slot = win - GFX_WIN_APP0;
                 if (lay.app_win[slot].visible) {
-                    draw_app(fb, w, h, &lay.app_win[slot].box, &sc->app[slot], lay.focus == win);
+                    draw_app(fb, w, h, &lay.app_win[slot].box, &sc->app[slot], lay.focus == win, g_app_q[slot]);
                     app_size_event(slot, sc->app[slot].kind, &lay.app_win[slot].box);
                     if (g_img_valid && g_img.slot == slot && sc->app[slot].kind == OS_FB_APP_VIEW)
                         draw_app_image(fb, w, h, &lay.app_win[slot].box);

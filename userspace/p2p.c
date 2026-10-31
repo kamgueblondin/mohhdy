@@ -297,13 +297,37 @@ static void line_end_alert(p2p_node_t* n, const p2p_host_t* h, const p2p_peer_t*
 }
 
 /* Per-peer budget for user traffic (US-068/073). Control frames bypass it.
+ * Lot 68: once the bandwidth estimator has delivery-rate samples (a probe
+ * train ran), user data is paced at the estimator's pacing rate by a token
+ * bucket (p2p_pace.c), bounded by a floor, a ceiling and p2p-pace cap; the
+ * window budget below only applies before that (or with p2p-pace off).
+ * An explicit p2p-limit (messages per second) stays a hard cap on top.
  * The window starts at 16 (no cap beyond an explicit p2p-limit). A lost
  * raft append halves it; a successful append grows it by one. While the
  * window is below 16, data frames share that cap with the rate limit. */
-static int admit(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
+static void pace_ensure(p2p_node_t* n) {
+    if (n->qos.pace_ready) return;
+    p2p_pace_init(&n->qos.pace);
+    n->qos.pace_ready = 1U;
+}
+
+static int admit(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, uint32_t bytes) {
     uint32_t t = now(h);
     uint32_t cap = n->qos.window_size ? n->qos.window_size : 1U;
+    uint32_t rate;
     int limited;
+    pace_ensure(n);
+    rate = p2p_pace_rate(&n->qos.pace, &n->qos.bwe, (int)n->qos.bwe_ready);
+    if (rate) {
+        if (n->rate_limit) {
+            if (t - p->bucket_tick >= P2P_HZ) { p->bucket_tick = t; p->bucket_used = 0; }
+            if (p->bucket_used >= n->rate_limit) { p->throttled++; return 0; }
+        }
+        if (!p2p_pace_admit(&n->qos.pace, rate, bytes, t * (1000000U / P2P_HZ))) { p->throttled++; return 0; }
+        if (n->rate_limit) p->bucket_used++;
+        n->qos.priority_low_tx++;
+        return 1;
+    }
     if (n->rate_limit && n->rate_limit < cap) cap = n->rate_limit;
     limited = n->rate_limit != 0U || cap < P2P_QOS_WINDOW_MAX;
     if (limited) {
@@ -313,6 +337,16 @@ static int admit(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p) {
     }
     n->qos.priority_low_tx++;
     return 1;
+}
+
+int p2p_pace_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, int cap) {
+    if (!n) return 1;
+    pace_ensure(n);
+    if (p2p_pace_command(&n->qos.pace, argc, argv, out, cap) != 0) return 1;
+    /* the line shows the rate the next send would use */
+    (void)p2p_pace_rate(&n->qos.pace, &n->qos.bwe, (int)n->qos.bwe_ready);
+    p2p_pace_status(&n->qos.pace, out, cap);
+    return 0;
 }
 
 /* Lot 6 (US-068/073): a data message over budget is queued (shaping),
@@ -344,7 +378,7 @@ static void shape_drain(p2p_node_t* n, const p2p_host_t* h) {
         if (!n->shape_q[i].used) continue;
         p = by_id(n, n->shape_q[i].peer);
         if (!p || !p->keyed) { n->shape_q[i].used = 0; n->qos.shaped_dropped++; continue; }
-        if (!admit(n, h, p)) continue;
+        if (!admit(n, h, p, n->shape_q[i].len)) continue;
         if (seal_send(n, h, p, n->shape_q[i].inner, n->shape_q[i].body, n->shape_q[i].len) == 0) n->qos.shaped_sent++;
         else n->qos.shaped_dropped++;
         n->shape_q[i].used = 0;
@@ -1800,7 +1834,7 @@ int p2p_send_text(p2p_node_t* n, const p2p_host_t* h, const char* peer, const ch
     if (!n->up || !p) return -1;
     pos = put_str(b, 0, 400, text);
     if (pos < 0) return -1;
-    if (!admit(n, h, p)) return shape_enqueue(n, p, P2P_I_MSG, b, pos);
+    if (!admit(n, h, p, (uint32_t)pos)) return shape_enqueue(n, p, P2P_I_MSG, b, pos);
     return seal_send(n, h, p, P2P_I_MSG, b, pos);
 }
 
@@ -1836,7 +1870,11 @@ int p2p_put(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* val
     for (i = 0; i < P2P_PEERS; i++) {
         p2p_peer_t* p = &n->peers[i];
         if (!p->used || !p->keyed || !p->up) continue;
-        if (!admit(n, h, p)) continue;
+        if (!admit(n, h, p, (uint32_t)pos)) {
+            /* Lot 68: a paced put waits in the shaping queue like a message */
+            if (n->qos.pace.rate_bps && shape_enqueue(n, p, P2P_I_PUT, b, pos) == 1) { n->qos.paced_put_queued++; sent++; }
+            continue;
+        }
         if (seal_send(n, h, p, P2P_I_PUT, b, pos) == 0) sent++;
     }
     return sent;
@@ -2458,6 +2496,13 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " acked ", cap); cat_u(out, n->qos.probe_acked, cap);
         s_cat(out, " lost ", cap); cat_u(out, n->qos.probe_lost, cap);
         s_cat(out, " left ", cap); cat_u(out, n->qos.probe_left, cap);
+        if (n->qos.pace_ready) {
+            uint32_t r = p2p_pace_rate((p2p_pace_t*)&n->qos.pace, e, (int)n->qos.bwe_ready);
+            s_cat(out, " pace ", cap); s_cat(out, p2p_pace_source_name(n->qos.pace.source), cap);
+            s_cat(out, " pace_bps ", cap); cat_u(out, r, cap);
+            s_cat(out, " paced ", cap); cat_u(out, n->qos.pace.admitted, cap);
+            s_cat(out, " deferred ", cap); cat_u(out, n->qos.pace.deferred, cap);
+        }
         s_cat(out, "\n", cap);
     } else if (s_eq(what, "cache")) {
         out[0] = 0;

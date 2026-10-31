@@ -10,6 +10,7 @@
 #ifndef MOHHDY_P2P_H
 #define MOHHDY_P2P_H
 #include "p2p_bwe.h"
+#include "p2p_pace.h"
 #include <stdint.h>
 
 #define P2P_PORT 7700U
@@ -232,6 +233,11 @@ typedef struct {
     uint32_t probe_peer;      /* peer id of the probe train */
     uint32_t probe_seq;
     uint32_t probe_sent, probe_acked, probe_lost;
+    /* Lot 68 (US-068/US-073): data pacer driven by the estimator; it
+     * replaces the window budget once the estimator has samples. */
+    p2p_pace_t pace;
+    uint32_t pace_ready;
+    uint32_t paced_put_queued;
 } p2p_qos_t;
 #define P2P_SHAPE_Q 8
 #define P2P_SHAPE_BODY 404
@@ -316,6 +322,8 @@ p2p_peer_t* p2p_find(p2p_node_t* n, const char* name);
 int p2p_send_text(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* text);
 /* Lot 6: bypasses admit/shaping (flood proof only, see p2p.c) */
 int p2p_send_unshaped(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* text);
+/* Lot 68: "p2p-pace [status|on|off|auto|cap BPS|burst N]" */
+int p2p_pace_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, int cap);
 int p2p_put(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 const p2p_item_t* p2p_get_local(const p2p_node_t* n, const char* key);
 int p2p_get_remote(p2p_node_t* n, const p2p_host_t* h, const char* key);

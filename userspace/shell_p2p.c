@@ -409,6 +409,22 @@ int shell_p2p_line(const char* line) {
         print_string(cmd); print_string(" ok "); print_string(a); print_string("\n");
         return 0;
     }
+    if (s_eq(cmd, "p2p-pace")) {
+        /* Lot 68 (US-068/US-073): the estimator paces user data */
+        static char out[256];
+        char w[4][24];
+        const char* av[4];
+        int ac = 0;
+        while (ac < 4) {
+            rest = word(rest, w[ac], (int)sizeof(w[ac]));
+            if (!w[ac][0]) break;
+            av[ac] = w[ac];
+            ac++;
+        }
+        if (p2p_pace_cmd(&g_node, ac, av, out, (int)sizeof(out)) != 0) { print_string(out); return 1; }
+        print_string(out);
+        return 0;
+    }
     if (s_eq(cmd, "p2p-limit")) {
         rest = word(rest, a, (int)sizeof(a));
         g_node.rate_limit = (uint32_t)to_int(a);

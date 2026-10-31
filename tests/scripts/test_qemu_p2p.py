@@ -269,6 +269,32 @@ def main():
         if int(bwe.group(9)) < 20 or int(bwe.group(2)) == 0 or int(bwe.group(3)) == 0:
             raise RuntimeError("bandwidth estimator: %s" % bwe.group(0))
         say("scenario 1b ok: bwe %s" % bwe.group(0))
+        # Lot 68 (US-068/US-073): the estimator now drives the data send
+        # rate. With samples the pacer source is "estimator"; an operator
+        # cap of 2000 B/s bounds it, so a burst of 10 leaves 4 at once (the
+        # burst credit) and the rest waits in the shaping queue, drained at
+        # the paced rate, and all 10 arrive.
+        start_p = cmd(a, "p2p-pace", "p2p pace mode ")
+        if "source estimator" not in log(a, start_p):
+            raise RuntimeError("pacer not driven by the estimator: %s" % log(a, start_p)[-300:])
+        cmd(a, "p2p-pace cap 2000", "p2p pace mode auto source estimator rate_bps 2000")
+        start_pbb = len(base.log_text(b["log"]))
+        start_pb = cmd(a, "p2p-burst beta 10 paced-msg", "p2p-burst sent ")
+        pb = re.search(r"p2p-burst sent (\d+) queued (\d+)", log(a, start_pb))
+        if not pb or int(pb.group(2)) < 4:
+            raise RuntimeError("paced burst not deferred: %s" % log(a, start_pb)[-300:])
+        deadline = time.monotonic() + 60
+        while log(b, start_pbb).count("p2p msg from alpha: paced-msg") < 10:
+            if time.monotonic() > deadline:
+                raise RuntimeError("beta got %d of 10 paced messages" % log(b, start_pbb).count("p2p msg from alpha: paced-msg"))
+            cmd(a, "p2p-poll 2", "p2p-poll ok")
+            cmd(b, "p2p-poll 2", "p2p-poll ok")
+        start_p = cmd(a, "p2p-pace", "p2p pace mode ")
+        pd = re.search(r"admitted (\d+) deferred (\d+)", log(a, start_p))
+        if not pd or int(pd.group(2)) < int(pb.group(2)):
+            raise RuntimeError("pacer counters: %s" % log(a, start_p)[-300:])
+        cmd(a, "p2p-pace cap 0", "p2p pace mode auto source estimator rate_bps ")
+        say("scenario 1b ok: estimator paced burst (sent %s queued %s, %s)" % (pb.group(1), pb.group(2), pd.group(0)))
         # Lot 6 (US-075): a flood from gamma is attributed to gamma by
         # beta's per-peer baseline. Gamma plays a misbehaving sender that
         # ignores its own QoS controller (a well-behaved burst is shaped
