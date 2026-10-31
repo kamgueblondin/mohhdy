@@ -3,6 +3,7 @@
  * redirects over an in-memory transport. */
 #include "../../framework/unity.h"
 #include <string.h>
+#include <stdio.h>
 #include "wf_http.h"
 #include "wf_dns.h"
 #include "wf_tls.h"
@@ -296,6 +297,43 @@ static void test_inflate_vectors(void) {
     TEST_ASSERT_EQUAL(-1, wf_decode_body_inplace(WF_ENC_GZIP, buf, 64, (int)sizeof(buf), &tr));
 }
 
+
+/* Lot 69: real-page shapes (Wikipedia front page): 300 language links
+ * before the content, nested empty divs, UTF-8 accents, hidden blocks. The
+ * reader view must keep the content, drop the chrome and stay within the
+ * layout engine node table (160). */
+static void test_html_reduce_real_shapes(void) {
+    static char page[120000], out[16384];
+    wf_html_stats_t st;
+    wf_url_t base;
+    int n = 0, i, opens = 0, m;
+    n += sprintf(page + n, "<!DOCTYPE html><html><head><title>Wikip\xc3\xa9" "dia, l'encyclop\xc3\xa9" "die libre</title>"
+                 "<style>.x{}</style></head><body><a class=\"mw-jump-link skip-link\" href=\"#c\">Aller</a>"
+                 "<nav><ul><li>menu</li></ul></nav><div role=\"navigation\"><a href=\"/a\">Nav</a></div>"
+                 "<div hidden><p>secret</p></div><ul class=\"vector-menu-content-list\">");
+    for (i = 0; i < 300; i++)
+        n += sprintf(page + n, "<li class=\"interlanguage-link\"><a href=\"https://l%d.wikipedia.org/\" hreflang=\"l%d\" lang=\"l%d\">Lang%03d</a></li>", i, i, i, i);
+    n += sprintf(page + n, "</ul><div><div><div></div></div></div><main><h1>Bienvenue sur Wikip\xc3\xa9" "dia</h1>"
+                 "<p>L'encyclop\xc3\xa9" "die libre \xe2\x80\x94 que vous pouvez am\xc3\xa9liorer.</p>");
+    for (i = 0; i < 400; i++) n += sprintf(page + n, "<div><p>Paragraphe %d <a href=\"/wiki/P%d\">lien</a></p></div>", i, i);
+    n += sprintf(page + n, "</main></body></html>");
+    TEST_ASSERT_EQUAL(0, wf_url_parse("https://fr.wikipedia.org/", &base));
+    m = wf_html_reduce(page, n, &base, out, (int)sizeof(out), &st);
+    TEST_ASSERT_TRUE(m > 0);
+    TEST_ASSERT_NOT_NULL(strstr(st.title, "Wikipedia, l'encyclopedie libre"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "<h1>Bienvenue sur Wikipedia</h1>"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "L'encyclopedie libre - que vous pouvez ameliorer."));
+    TEST_ASSERT_NULL(strstr(out, "Lang0"));
+    TEST_ASSERT_NULL(strstr(out, "secret"));
+    TEST_ASSERT_NULL(strstr(out, "Nav<"));
+    TEST_ASSERT_NULL(strstr(out, "<p></p>"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "href=\"https://fr.wikipedia.org/wiki/P0\""));
+    TEST_ASSERT_EQUAL(1, st.truncated);
+    TEST_ASSERT_NOT_NULL(strstr(out, "[page tronquee]"));
+    for (i = 0; out[i]; i++) if (out[i] == '<' && out[i + 1] != '/') opens++;
+    TEST_ASSERT_TRUE(opens <= 150);   /* elements; with text runs the engine table (160) holds */
+}
+
 /* ---- in-memory transport: each connect replays the next canned reply ---- */
 static const char* g_replies[8];
 static int g_reply_count, g_next, g_cur_off, g_connects, g_resolves;
@@ -458,6 +496,7 @@ int main(void) {
     RUN_TEST(test_html_reduce);
     RUN_TEST(test_html_reduce_budget);
     RUN_TEST(test_html_text);
+    RUN_TEST(test_html_reduce_real_shapes);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

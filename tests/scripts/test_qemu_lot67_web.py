@@ -216,6 +216,18 @@ def main():
                 time.sleep(1.5)
                 w, h, rgb = g.screendump_rgb(mon, "qemu-lot69-%s.ppm" % label)
                 say("%s: %s" % (label, save_png(label + ".png", w, h, rgb)))
+            # Lot 69: a page that cannot open shows the reason in the window
+            # (here: TLS to the plain HTTP port) instead of staying closed
+            g.send_key(mon, "esc")
+            time.sleep(0.8)
+            start = len(g.log_text())
+            type_line(mon, proc, "web https://%s:%d/page.html" % (base, hp), mode="getc")
+            g.wait_for(proc, "osui web error-page shown", FETCH_TIMEOUT, start)
+            if "osui web fetch error=TLS" not in g.normalized_log(g.log_text()[start:]):
+                raise RuntimeError("error page without the TLS reason")
+            time.sleep(1.5)
+            w, h, rgb = g.screendump_rgb(mon, "qemu-lot69-web-error.ppm")
+            say("error page: %s" % save_png("web-error-page.png", w, h, rgb))
             if os.environ.get("LOT69_REAL") == "1":
                 try:
                     # manual only: the real engine from the desktop (not in CI)
