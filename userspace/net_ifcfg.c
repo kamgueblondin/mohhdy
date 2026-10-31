@@ -51,7 +51,7 @@ int net_ifcfg_run(int argc, const char* const* argv, net_ifcfg_call_t call,
     int p = 0, i, rc;
     out[0] = 0;
     if (!call || !r) return 1;
-    for (i = 0; i < (int)sizeof(r->data) && i < 16; i++) r->data[i] = 0U;
+    for (i = 0; i < (int)sizeof(r->data) && i < 20; i++) r->data[i] = 0U;
     r->op = (uint8_t)OS_PEER_IFCONFIG; r->slot = 0; r->attempts = 0; r->length = 0; r->port = 0; r->flags = 0;
     if (argc <= 0 || !argv[0][0]) r->data[0] = (uint8_t)OS_IFCONFIG_GET;
     else if (ifc_eq(argv[0], "dhcp") && argc == 1) r->data[0] = (uint8_t)OS_IFCONFIG_DHCP;
@@ -83,6 +83,10 @@ int net_ifcfg_run(int argc, const char* const* argv, net_ifcfg_call_t call,
     /* Lot 48: TCP connections on the old address, ended with FIN by this change */
     if (r->length >= 15U && r->data[14]) { ifc_cat(out, max, &p, " closed "); ifc_u8(out, max, &p, r->data[14]); }
     if (r->length >= 16U && r->data[15]) ifc_cat(out, max, &p, " llm-closed 1");
+    /* Lot 67: DNS server of the lease */
+    if (r->length >= 20U && (r->data[16] | r->data[17] | r->data[18] | r->data[19])) {
+        ifc_cat(out, max, &p, " dns "); ifc_ip(out, max, &p, r->data + 16);
+    }
     ifc_cat(out, max, &p, "\n");
     return 0;
 }

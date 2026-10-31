@@ -34,11 +34,20 @@ void osui_gui_ide_frame_row(int r, char *dst, int max);
 void osui_gui_ide_output(const char *text);
 /* Lot 6 (US-031): "web FILE" on the desktop renders FILE with the guest
  * web engine (userspace/webeng.c) into the web pane. Uses the IDE loader. */
-#define OSUI_WEB_SRC_MAX 4096
+/* Lot 67: 16 KiB (was 4 KiB) so the reader view of a real page fits */
+#define OSUI_WEB_SRC_MAX 16384
 #define OSUI_WEB_VIEWPORT 640
 /* Lot 61: explicit viewport height for fixed boxes and the scroll bound. */
 #define OSUI_WEB_VIEWPORT_H 480
 int osui_gui_web_load(const char *file, char *status, int max);
+/* Lot 67: "web https://..." (or http://) loads the page over the network
+ * through this hook (set by the shell: shell_fetch_page, the same code as
+ * the `fetch` command). Without a hook a URL is refused. Links of a
+ * fetched page are absolute http(s) URLs and are followed the same way. */
+typedef int (*osui_web_fetch_t)(const char *url, char *src, int src_max, char *final_url, int url_max,
+                                char *status, int st_max);
+void osui_gui_set_web_fetch(osui_web_fetch_t fn);
+int osui_gui_web_is_url(const char *s);
 int osui_gui_web_active(void);
 int osui_gui_web_sanitized(void); /* Lot 7 US-039: items removed by the page sanitizer */
 /* Lot 9 (US-077): a display list made elsewhere (the mobile shell) shown

@@ -378,12 +378,21 @@ static void op_drop_socket(int s) {
     (void)net_socket_close(s);
 }
 
+/* Lot 67: the peer FIN may have arrived during an earlier op (with the
+ * last data); once the buffer is drained, a socket past ESTABLISHED on the
+ * receive side reports end of stream (rc 0, 0 bytes), not a timeout. */
+static int peer_finished(int s) {
+    uint8_t st = 0U;
+    if (net_socket_get_state(s, &st) != 0) return 0;
+    return st == NET_TCP_STATE_CLOSE_WAIT || st == NET_TCP_STATE_LAST_ACK || st == NET_TCP_STATE_CLOSED;
+}
+
 static void op_recv_finish(void) {
     uint16_t got = 0U;
     int status = net_socket_receive(g_op.socket, g_op.recv_buffer, g_op.recv_capacity, &got);
     if (status != 0) { op_finish(map_socket_error(status)); return; }
     if (got == 0U && g_op.obs.reset) { op_finish(OS_SOCKET_PROTOCOL); return; }
-    if (got == 0U && !g_op.obs.fin) { op_finish(OS_NET_WIRE_TIMEOUT); return; }
+    if (got == 0U && !g_op.obs.fin && !peer_finished(g_op.socket)) { op_finish(OS_NET_WIRE_TIMEOUT); return; }
     if (got > 0U) g_stat.recvs++;
     *g_op.recv_length = got;
     op_finish(0);
@@ -590,6 +599,7 @@ int net_wire_op_recv(const net_wire_ctx_t* ctx, int socket_id, uint8_t* buffer,
         g_op.result = 0;
         return 0;
     }
+    if (peer_finished(socket_id)) { g_op.result = 0; return 0; }
     g_op.kind = NET_WIRE_OP_RECV;
     g_op.phase = WIRE_PHASE_WAIT;
     g_op.socket = socket_id;

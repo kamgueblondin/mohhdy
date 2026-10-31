@@ -1085,7 +1085,7 @@ static int kernel_peer_tls_app(os_peer_data_request_t* r) {
  * only for a change) is in the kernel before the relay. */
 static void ifc_report(os_peer_data_request_t* r) {
     uint32_t i;
-    for (i = 0U; i < 16U; i++) r->data[i] = 0U;
+    for (i = 0U; i < 20U; i++) r->data[i] = 0U;
     r->data[0] = !boot_llm_lease.valid && !g_ifc_static ? (uint8_t)OS_IFCONFIG_MODE_NONE :
                  g_ifc_static ? (uint8_t)OS_IFCONFIG_MODE_STATIC : (uint8_t)OS_IFCONFIG_MODE_DHCP;
     for (i = 0U; i < 4U; i++) {
@@ -1096,7 +1096,10 @@ static void ifc_report(os_peer_data_request_t* r) {
     r->data[13] = boot_llm_lease.valid ? 1U : 0U;
     r->data[14] = (uint8_t)(g_ifc_closed > 255U ? 255U : g_ifc_closed);   /* Lot 48 */
     r->data[15] = g_ifc_llm_closed;
-    r->length = 16U;
+    /* Lot 67: DNS server of the lease (0.0.0.0 if none), for the Ring 3
+     * resolver of `fetch` */
+    for (i = 0U; i < 4U; i++) r->data[16U + i] = boot_llm_lease.dns_valid ? boot_llm_lease.dns_ipv4[i] : 0U;
+    r->length = 20U;
 }
 /* Lot 48: an address change ends the TCP connections bound to the old
  * address. Each open one gets FIN+ACK sent from the old address (its peer
@@ -1153,8 +1156,9 @@ static int kernel_ifconfig(os_peer_data_request_t* r) {
         boot_llm_lease = next;
         g_ifc_static = 1U;
     } else if (r->data[0] == OS_IFCONFIG_DHCP) {
-        if (g_ifc_static) {
-            /* DHCP only (DISCOVER..ACK) into a scratch lease: the static
+        if (g_ifc_static || !boot_llm_lease.valid) {
+            /* Lot 67: also when no lease exists yet (mode none at boot).
+             * DHCP only (DISCOVER..ACK) into a scratch lease: the static
              * address stays until a lease is granted. */
             static uint32_t ifc_xid = 0x4C343700U;
             net_dhcp_lease_t next;
