@@ -1,6 +1,7 @@
 /* Lot 64 round 2: the dir attribute, background-position with edge
  * offsets (three and four values) and its -x / -y longhands, column-span
- * all and forced column breaks. */
+ * all and forced column breaks, rtl list markers, list padding and
+ * text-indent. */
 
 static void test_l64_dir_attribute(void) {
     lot52_render(L64_BODY "<p id=a dir=rtl style='width:40px;text-align:start'>ab</p><p id=b dir=RTL style='direction:ltr'>cd</p>"
@@ -129,6 +130,51 @@ static void test_l64_columns_span_widths_and_breaks(void) {
     TEST_ASSERT_EQUAL(2, lot52_node("a")->col_break);
 }
 
+/* a text item with this text at (x, y) */
+static int l64_text_xy(const char *text, int x, int y) {
+    uint32_t i;
+    for (i = 0; i < g_doc.nitems; i++)
+        if (g_doc.items[i].kind == OS_FB_WEB_TEXT && g_doc.items[i].x == x && g_doc.items[i].y == y && !strcmp(g_doc.items[i].text, text))
+            return 1;
+    return 0;
+}
+
+static void test_l64_rtl_lists_and_indent(void) {
+    lot52_render(L64_BODY "<ol dir=rtl style='width:80px;margin:0'><li id=a>ab</li><li style='text-indent:16px'>cd ef gh ij</li></ol>"
+                 "<ul style='direction:rtl;width:80px;margin:0;padding-right:4px'><li id=x>x</li></ul></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    TEST_ASSERT_EQUAL(40, lot52_node("a")->parent >= 0 ? g_doc.nodes[lot52_node("a")->parent].padding[1] : -1);
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[lot52_node("a")->parent].padding[3]);
+    l64_box("a", 0, 0, 80, 10);
+    l61_text_at("ab", 64, 1);
+    l61_text_at(".1", 88, 1);                                 /* right of the box, the stop first */
+    l61_text_at(".2", 88, 11);
+    l61_text_at("cd ef gh", 0, 11);                           /* the indent at the right */
+    l61_text_at("ij", 64, 21);
+    l64_box("x", 0, 30, 80, 10);                              /* the author padding wins */
+    l61_text_at("x", 72, 31);
+    lot52_render(L64_BODY "<ol style='margin:0'><li id=a>ab</li></ol><p style='text-indent:8px;width:40px;margin:0'>ab cd</p>"
+                 "<p dir=rtl style='text-indent:8px;width:40px;margin:0'>ab cd ef<div>g</div></p></body>", 320);
+    l64_box("a", 40, 0, 280, 10);                             /* ltr unchanged */
+    l61_text_at("1.", 16, 1);
+    TEST_ASSERT_TRUE(l64_text_xy("ab", 8, 11));
+    l61_text_at("cd", 0, 21);
+    TEST_ASSERT_TRUE(l64_text_xy("ab", 16, 31));             /* rtl: indent at the right */
+    l61_text_at("cd ef", 0, 41);
+    l61_text_at("g", 24, 51);                                 /* inherited indent, at the right */
+}
+
+static void test_l64_rtl_marker_image(void) {
+    l63_bgi("<body style='margin:0'><ul dir=rtl style='margin:0;width:80px;list-style-image:url(/images/mire-ga16.png)'><li>q</li></ul></body>");
+    TEST_ASSERT_EQUAL(1, l61_diag_count("list marker image scaled"));
+    l61_text_at("q", 72, 1);
+    TEST_ASSERT_EQUAL(0x000000, l63_at(88, 1));
+    TEST_ASSERT_EQUAL(0xDCDCDC, l63_at(99, 8));
+    TEST_ASSERT_EQUAL(-1, l63_at(87, 1));
+    TEST_ASSERT_EQUAL(-1, l63_at(100, 1));
+    TEST_ASSERT_EQUAL(-1, l63_at(8, 1));
+}
+
 static void lot64_more_run(void) {
     RUN_TEST(test_l64_dir_attribute);
     RUN_TEST(test_l64_bgpos_edge_offsets);
@@ -136,4 +182,6 @@ static void lot64_more_run(void) {
     RUN_TEST(test_l64_bgpos_refusals);
     RUN_TEST(test_l64_columns_span_all);
     RUN_TEST(test_l64_columns_span_widths_and_breaks);
+    RUN_TEST(test_l64_rtl_lists_and_indent);
+    RUN_TEST(test_l64_rtl_marker_image);
 }

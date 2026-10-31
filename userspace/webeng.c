@@ -4336,6 +4336,9 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         cascade_rules(d, match, n, pseudo, 0);
         cascade_rules(d, match, n, pseudo, 1);
         mode_pass = 0;
+        /* lot 64: the UA list indent is padding-inline-start: the right in rtl */
+        if (!pseudo && n->dir_rtl && n->wmode == WE_WM_HORIZONTAL && (w_eq(n->tag, "ul") || w_eq(n->tag, "ol")))
+            n->padding[1] = n->padding[3], n->padding[3] = 0;
         cascade_rules(d, match, n, pseudo, 0);
         cascade_rules(d, match, n, pseudo, 1);
         /* lot 64: start is left in ltr and right in rtl, end the other way */
@@ -4722,7 +4725,7 @@ typedef struct {
     struct { const char* s; int len; int node; int space_before; } w[WE_LINE_WORDS];
     int lines;
     int pending_space, measuring;
-    int line_h, indent, indent_used, atom_h, pending_x;
+    int line_h, indent, indent_used, indent_shift, atom_h, pending_x;
     int baseline, origin_y;
     /* Lot 61: last measured baseline, painted first/last baselines (page y),
      * text seen on the open line and its baseline-aligned atomic boxes. */
@@ -4760,13 +4763,14 @@ static void flow_region(we_inline_t *f, int need) {
         }
         f->x0 = left;
         f->width = right > left ? right - left : 0;
-        f->indent_used = 0;
+        f->indent_used = f->indent_shift = 0;
         if (f->lines == 0 && f->indent > 0 && f->width > 0) {
             int take = f->indent;
             if (f->width - take < WE_CHAR_W && f->width > WE_CHAR_W) take = f->width - WE_CHAR_W;
             if (take > f->width) take = f->width;
             if (take < 0) take = 0;
-            f->x0 += take;
+            /* lot 64: in rtl the indent is at the right, the line start */
+            if (f->start != WE_ALIGN_RIGHT) f->x0 += take, f->indent_shift = take;
             f->width -= take;
             f->indent_used = take;
         }
@@ -5731,7 +5735,7 @@ static void place_float(we_inline_t *f, int idx, int depth) {
     if (width > f->base_width) width = f->base_width;
     flow_region(f, width);
     /* text-indent shifts the first inline line, not the float. */
-    x = n->float_side == WE_FLOAT_RIGHT ? f->x0 + f->width - width : f->x0 - f->indent_used;
+    x = n->float_side == WE_FLOAT_RIGHT ? f->x0 + f->width - width : f->x0 - f->indent_shift;
     if (x < f->base_x) x = f->base_x;
     height = f->measuring ? measure_area_height(d, idx, width, depth) : layout_assigned(d, idx, x, f->y, width, depth);
     slot = f->nfloat++;
@@ -5803,7 +5807,7 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
             /* A block child is not the indented first line. */
             {
                 int height = measuring ? measure_height(d, c, f->width + f->indent_used, depth + 1) :
-                    layout_block(d, c, f->x0 - f->indent_used, f->y, f->width + f->indent_used, depth + 1);
+                    layout_block(d, c, f->x0 - f->indent_shift, f->y, f->width + f->indent_used, depth + 1);
                 if (measuring && baseline_probe) {
                     int outer = preferred_outer(n, f->width, f->width - node_border_extra(n) - n->margin[1] - n->margin[3]);
                     int real, base;
@@ -6801,12 +6805,12 @@ static void inline_image(we_doc_t *d, int idx, int x, int y, int w, int h) {
 /* Lot 64: list-style-image. The marker image is painted at its natural
  * size (scaled down to the 8 px glyph height when taller, keeping its
  * ratio: "list marker image scaled") outside the li, its right edge one
- * glyph before the border box and its top 1 px below the box's top, as the
+ * glyph before the border box (in rtl its left edge one glyph after it) and its top 1 px below the box's top, as the
  * text marker, through the background image painter (the
  * li's first layer is borrowed for the call). It is refused like any
  * image (path, reader, format, vertical flow, budget); the list-style-type
  * marker is then painted instead, as CSS asks for an image that fails. */
-static int marker_image(we_doc_t *d, int idx, int bx, int by) {
+static int marker_image(we_doc_t *d, int idx, int bx, int by, int bw) {
     we_node_t *n = &d->nodes[idx];
     static we_node_t saved;
     int painted = 0, mw, mh;
@@ -6825,7 +6829,7 @@ static int marker_image(we_doc_t *d, int idx, int bx, int by) {
             n->bgi_size_kind = WE_BGS_EXPLICIT; n->bgi_size[0] = (int16_t)mw; n->bgi_size[1] = (int16_t)mh;
             diag(d, "list marker image scaled", idx);
         }
-        painted = bgi_fill(d, idx, (int)d->nitems, bx - mw - WE_CHAR_W, by + 1, mw, mh) > 0;
+        painted = bgi_fill(d, idx, (int)d->nitems, n->dir_rtl ? bx + bw + WE_CHAR_W : bx - mw - WE_CHAR_W, by + 1, mw, mh) > 0;
     }
     image_work.ready_idx = -1;
     image_work.failed[idx] = failed;
@@ -7489,7 +7493,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     (void)border_slot;
     if (w_eq(n->tag, "img") || (n->overflow_hidden && layout_first[idx] != WE_NO_BASELINE))
         layout_first[idx] = layout_last[idx] = (int16_t)limit_coord(by + bh);
-    if (w_eq(n->tag, "li") && n->lsi_len && marker_image(d, idx, bx, by)) {
+    if (w_eq(n->tag, "li") && n->lsi_len && marker_image(d, idx, bx, by, bw)) {
         /* lot 64: list-style-image painted, the type marker not */
     } else if (w_eq(n->tag, "li") && n->list_style != WE_LIST_NONE) {
         char marker[24];
@@ -7498,8 +7502,14 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         (void)sibling;
         number = list_ordinal(d, idx);
         len = counter_text(n->list_style, number, marker);
-        if (n->list_style != WE_LIST_DISC && n->list_style != WE_LIST_SQUARE && n->list_style != WE_LIST_CIRCLE) { marker[len++] = '.'; marker[len] = 0; }
-        it = emit(d, idx, OS_FB_WEB_TEXT, bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
+        if (n->list_style != WE_LIST_DISC && n->list_style != WE_LIST_SQUARE && n->list_style != WE_LIST_CIRCLE) {
+            /* lot 64: in rtl the marker is right of the box and its full
+             * stop, a neutral after the number, reads first: ".1" */
+            if (n->dir_rtl) { int k; for (k = len; k > 0; k--) marker[k] = marker[k - 1]; marker[0] = '.'; }
+            else marker[len] = '.';
+            marker[++len] = 0;
+        }
+        it = emit(d, idx, OS_FB_WEB_TEXT, n->dir_rtl ? bx + bw + WE_CHAR_W : bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
         if (it) w_cpy(it->text, OS_FB_WEB_TEXT_LEN, marker, len);
     }
     place_absolutes(d, idx, bx + box_edge(n, 3), by + box_edge(n, 0), bw - box_edge(n, 1) - box_edge(n, 3),
