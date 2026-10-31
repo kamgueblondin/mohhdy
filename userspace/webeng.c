@@ -42,6 +42,7 @@ static void w_itoa(int v, char* out) {
     out[j] = 0;
 }
 
+static int value_is(const char *v, int len, const char *s);
 static void diag(we_doc_t* d, const char* msg, int pos) {
     char num[12];
     int n;
@@ -331,6 +332,13 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                         else { n->list_value = (int16_t)number; n->list_value_set = 1; }
                     }
                     else if (w_eq(an, "reversed") && w_eq(name, "ol")) n->list_reversed = 1;
+                    else if (w_eq(an, "dir")) {
+                        /* lot 64: no bidi, so auto finds no strong rtl text */
+                        if (value_is(av, vk, "rtl")) n->dir_attr = 2;
+                        else if (value_is(av, vk, "ltr") || value_is(av, vk, "auto")) n->dir_attr = 1;
+                        else diag(d, "dir attribute refused", idx);
+                        if (value_is(av, vk, "auto")) diag(d, "dir auto taken as ltr", idx);
+                    }
                     else if (w_eq(an, "type") && (w_eq(name, "ol") || w_eq(name, "ul"))) {
                         static const char types[] = "1aAiI";
                         static const uint8_t styles[] = { WE_LIST_DECIMAL, WE_LIST_LOWER_ALPHA, WE_LIST_UPPER_ALPHA,
@@ -727,7 +735,6 @@ static int match_rule(we_doc_t* d, int idx, const we_rule_t* r) {
  * pass resolves it against the backdrop and clears it, since the kernel
  * painter masks the byte. */
 #define WE_ALPHA_SHIFT 24
-static int value_is(const char *v, int len, const char *s);
 static int color_alpha_of(uint32_t c);
 static uint32_t with_alpha(uint32_t rgb, int alpha) {
     if (alpha < 0) alpha = 0;
@@ -2815,14 +2822,76 @@ static int background_size(we_node_t *n, const char *v, int len) {
     }
     n->bgi_size_kind = size[0] < 0 && size[1] < 0 ? WE_BGS_AUTO : WE_BGS_EXPLICIT;
     n->bgi_size[0] = size[0]; n->bgi_size[1] = size[1];
-    n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 3) | bits);
+    n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 0x33) | bits);
+    return 0;
+}
+
+/* Lot 64: one axis of a position: a keyword, a length or percentage, or
+ * an edge keyword with its offset (right 10px). Offsets from the far edge
+ * set *far for a length and become 100 - p for a percentage. want is the
+ * axis (0 x, 1 y); a centre or a bare length fits either. */
+static int axis_offset(const char *v, int len, int want, int16_t *value, int *pct, int *far) {
+    int a[4], l[4], c = tokens(v, len, a, l), axis, oaxis, opct;
+    int16_t off;
+    *far = 0;
+    if (c == 1) {
+        if (origin_value(v, len, &axis, value, pct)) return -1;
+        return axis >= 0 && axis != want ? -1 : 0;
+    }
+    if (c != 2 || origin_value(v + a[0], l[0], &axis, value, pct) || axis != want ||
+        origin_value(v + a[1], l[1], &oaxis, &off, &opct) || oaxis != -2) return -1;
+    if (*value == 0) { *value = off; *pct = opct; return 0; }
+    if (opct) { *value = (int16_t)(100 - off); *pct = 1; return 0; }
+    *value = off; *pct = 0; *far = 1;
+    return 0;
+}
+
+/* three or four values: two groups of an edge keyword, each with an
+ * optional offset; centre takes none and the axes are told by the keywords */
+static int position_edges(const char *v, int len, int16_t out[2], uint8_t *bits) {
+    int a[4], l[4], c = tokens(v, len, a, l), k = 0, g = 0, start[2], end[2], axis[2], dummy, pct, far, ax;
+    int16_t value;
+    if (c < 3 || c > 4) return -1;
+    for (k = a[c - 1] + l[c - 1]; k < len; k++) if (!w_space(v[k])) return -1;   /* tokens() stops at four */
+    k = 0;
+    while (k < c) {
+        if (g == 2 || origin_value(v + a[k], l[k], &axis[g], &value, &pct) || axis[g] == -2) return -1;
+        start[g] = k++;
+        if (k < c && !origin_value(v + a[k], l[k], &dummy, &value, &pct) && dummy == -2) {
+            if (axis[g] < 0) return -1;
+            k++;
+        }
+        end[g++] = k;
+    }
+    if (g != 2 || (axis[0] >= 0 && axis[0] == axis[1])) return -1;
+    if (axis[0] < 0) axis[0] = axis[1] < 0 ? 0 : 1 - axis[1];
+    if (axis[1] < 0) axis[1] = 1 - axis[0];
+    *bits = 0;
+    for (k = 0; k < 2; k++) {
+        const char *t = v + a[start[k]];
+        ax = axis[k];
+        if (axis_offset(t, (int)(v + a[end[k] - 1] + l[end[k] - 1] - t), ax, &value, &pct, &far)) return -1;
+        out[ax] = value;
+        *bits |= (uint8_t)((pct ? 1 << ax : 0) | (far ? 16 << ax : 0));
+    }
     return 0;
 }
 
 static int background_position(we_node_t *n, const char *v, int len) {
     uint8_t bits;
-    if (position_pair(v, len, n->bgi_pos, &bits)) return -1;
+    int a[4], l[4];
+    if (tokens(v, len, a, l) > 2 ? position_edges(v, len, n->bgi_pos, &bits) : position_pair(v, len, n->bgi_pos, &bits)) return -1;
     n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 12) | bits);
+    return 0;
+}
+
+/* background-position-x and -y (axis 0 or 1) */
+static int background_position_axis(we_node_t *n, const char *v, int len, int axis) {
+    int16_t value;
+    int pct, far;
+    if (axis_offset(v, len, axis, &value, &pct, &far)) return -1;
+    n->bgi_pos[axis] = value;
+    n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & ~(0x11 << axis)) | (pct ? 1 << axis : 0) | (far ? 16 << axis : 0));
     return 0;
 }
 
@@ -2856,7 +2925,8 @@ static int background_list(we_node_t *n, const char *v, int len, int kind) {
         int il = l[k % c];
         if (k) bgi_layer_swap(&layer_scratch, k);
         bad = kind == 0 ? background_repeat(&layer_scratch, item, il) :
-              kind == 1 ? background_position(&layer_scratch, item, il) : background_size(&layer_scratch, item, il);
+              kind == 1 ? background_position(&layer_scratch, item, il) :
+              kind == 2 ? background_size(&layer_scratch, item, il) : background_position_axis(&layer_scratch, item, il, kind - 3);
         if (k) bgi_layer_swap(&layer_scratch, k);
     }
     if (bad) return -1;
@@ -3960,6 +4030,9 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     else if (w_eq(prop, "background-position")) {
         if (background_list(n, v, vl, 1)) diag(d, "background position refused", -1);
     }
+    else if (w_eq(prop, "background-position-x") || w_eq(prop, "background-position-y")) {
+        if (background_list(n, v, vl, prop[20] == 'x' ? 3 : 4)) diag(d, "background position refused", -1);
+    }
     else if (w_eq(prop, "background-size")) {
         if (background_list(n, v, vl, 2)) diag(d, "background size refused", -1);
     }
@@ -4246,6 +4319,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
             n->display = WE_DISP_INLINE;
             if (w_eq(d->nodes[match].tag, "q")) n->content_kind = pseudo == WE_PSEUDO_BEFORE ? WE_CONTENT_UA_OPEN : WE_CONTENT_UA_CLOSE;
         } else ua_defaults(n);
+        if (!pseudo && n->dir_attr) n->dir_rtl = (uint8_t)(n->dir_attr == 2);
         /* lot 64: writing-mode and direction first, so that the logical
          * properties of the same element map to the right sides */
         mode_pass = 1;
@@ -6658,8 +6732,10 @@ static int bgi_fill(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh
     bgi_tile(n, area[2], area[3], image_work.decoded.w, image_work.decoded.h, &tw, &th);
     if (tw < 1 || th < 1) return 0;
     bgi_round_space(n, area, &tw, &th, gap, &repeat);
-    ox = area[0] + (n->bgi_pos_pct & 1 ? (area[2] - tw) * n->bgi_pos[0] / 100 : n->bgi_pos[0]);
-    oy = area[1] + (n->bgi_pos_pct & 2 ? (area[3] - th) * n->bgi_pos[1] / 100 : n->bgi_pos[1]);
+    ox = area[0] + (n->bgi_pos_pct & 1 ? (area[2] - tw) * n->bgi_pos[0] / 100 :
+                    n->bgi_pos_pct & 16 ? area[2] - tw - n->bgi_pos[0] : n->bgi_pos[0]);
+    oy = area[1] + (n->bgi_pos_pct & 2 ? (area[3] - th) * n->bgi_pos[1] / 100 :
+                    n->bgi_pos_pct & 32 ? area[3] - th - n->bgi_pos[1] : n->bgi_pos[1]);
     if (gap[0]) ox = area[0];                                   /* space ignores the position */
     if (gap[1]) oy = area[1];
     x0 = clip[0]; x1 = clip[0] + clip[2]; y0 = clip[1]; y1 = clip[1] + clip[3];

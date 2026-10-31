@@ -319,6 +319,7 @@ typedef struct {
     /* Lot 62: ol start / li value (list_value_set), ol reversed, ol type. */
     int16_t list_value;
     uint8_t list_value_set, list_reversed, list_type_attr;
+    uint8_t dir_attr;               /* lot 64: dir= hint, 0 none, 1 ltr, 2 rtl */
     /* Lot 62: border radii, corners top-left, top-right, bottom-right,
      * bottom-left; horizontal then vertical, px or percent of the border
      * box width / height (rad_pct bit c for x, bit 4 + c for y). */
