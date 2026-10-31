@@ -72,9 +72,14 @@ class H(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(body)
             except OSError:
                 pass   # the client may stop once its buffer is full
-        elif p.startswith("/to?"):
+        elif p.startswith("/to?") or p.startswith("/to/"):
             # Lot 69: cross-scheme / cross-port redirect (http -> https, google.com -> www style)
-            loc = urllib.parse.unquote(p[4:])
+            # /to?<url-encoded URL> or /to/<scheme>/<host>/<port>/<path> (typable in QEMU)
+            if p.startswith("/to?"):
+                loc = urllib.parse.unquote(p[4:])
+            else:
+                sch, hst, prt, rest = (p[4:].split("/", 3) + ["", "", "", ""])[:4]
+                loc = "%s://%s:%s/%s" % (sch, hst, prt, rest)
             self.send_response(301)
             self.send_header("Location", loc)
             self.send_header("Content-Length", "0")

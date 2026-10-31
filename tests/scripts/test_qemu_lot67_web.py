@@ -132,6 +132,17 @@ def main():
                 ("fetch https://%s:%d/loop" % (base, sp), "fetch error too many redirects", ["fetch ok"], None),
                 ("fetch -I https://%s:%d/big" % (base, sp), "fetch ok status 200 bytes 204800 ", ["fetch error"], None),
                 ("fetch http://%s:%d/nope" % (base, hp), "fetch ok status 404", ["fetch error"], None),
+                # Lot 69: TLS 1.3 (ECDSA and RSA-PSS), P-256 ECDHE, gzip, cross-scheme redirect, big page
+                ("fetch https://%s:%d/hello" % (base, sp + 1), "fetch ok status 200 bytes 17 ", ["fetch error"],
+                 "tls TLS13-AES128-GCM-SHA256"),
+                ("fetch -I https://%s:%d/page.html" % (base, sp + 2), "fetch ok status 200", ["fetch error"],
+                 "tls TLS13-AES128-GCM-SHA256"),
+                ("fetch -I https://%s:%d/hello" % (base, sp + 3), "fetch ok status 200", ["fetch error"],
+                 "tls ECDHE-RSA-AES128-GCM-SHA256"),
+                ("fetch http://%s:%d/gzip" % (base, hp), "fetch body-end", ["fetch error"], "fetched over the network by Mohhdy"),
+                ("fetch http://%s:%d/to/https/%s/%d/gzip" % (base, hp, base, sp + 1), "fetch body-end",
+                 ["fetch error"], "redirects 1 url https://%s:%d/gzip tls TLS13" % (base, sp + 1)),
+                ("fetch -I http://%s:%d/biggz" % (base, hp), "fetch ok status 200", ["fetch error"], "truncated 1"),
             ]
             only = os.environ.get("LOT67_ONLY")
             if only:
