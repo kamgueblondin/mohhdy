@@ -100,6 +100,8 @@ static int reduce_page(const wf_fetch_result_t* r) {
     return n;
 }
 
+static wf_cookie_jar_t g_jar;
+
 int main(int argc, char** argv) {
     wf_fetch_env_t e;
     wf_fetch_result_t r;
@@ -116,6 +118,8 @@ int main(int argc, char** argv) {
     memset(&e, 0, sizeof(e));
     e.resolve = h_resolve; e.connect = h_connect; e.send = h_send; e.recv = h_recv;
     e.close = h_close; e.rand = h_rand; e.log = h_log; e.trust = &g_trust; e.max_redirects = 5;
+    wf_cookie_jar_init(&g_jar);
+    e.jar = &g_jar;   /* Lot 71 */
     if (argc > 3 && strcmp(argv[3], "noclock") == 0) e.now = 0;
     else if (argc > 3 && strlen(argv[3]) == 14) e.now = argv[3];
     else {
@@ -152,6 +156,12 @@ int main(int argc, char** argv) {
     rc = wf_fetch(&e, argv[2], g_body, (int)sizeof(g_body) - 1, &r);
     if (rc != 0) { printf("FETCH FAIL: %s\n", r.err); return 1; }
     printf("FETCH OK status=%d bytes=%d truncated=%d redirects=%d url=%s\n", r.status, r.body_len, r.truncated, r.redirects, r.url);
+    if (r.cookies_set || r.cookies_sent || g_jar.refused) {
+        static char list[4096];
+        printf("COOKIES set=%d sent=%d refused=%u kept=%d\n", r.cookies_set, r.cookies_sent, g_jar.refused, wf_cookie_count(&g_jar));
+        wf_cookie_list(&g_jar, list, (int)sizeof(list));
+        printf("%s", list);
+    }
     if (r.encoding) printf("ENCODING %s wire=%d\n", r.encoding == 1 ? "gzip" : "deflate", r.wire_len);
     if (r.https) printf("TLS suite=%s leaf=%s anchor=%s not_after=%s time_checked=%d\n", r.suite, r.leaf_cn, r.anchor_cn, r.not_after, r.time_checked);
     g_body[r.body_len] = 0;

@@ -127,9 +127,40 @@ static void test_one_huge_paragraph(void) {
     TEST_ASSERT_EQUAL(6000, words);
 }
 
+/* Lot 71: web-find over the whole page */
+static void test_find_across_sections(void) {
+    int n = 0, i, m, k, cnt = -1, last;
+    wf_html_stats_t st;
+    n += sprintf(g_page + n, "<html><head><title>Cherche</title></head><body>");
+    for (i = 0; i < 1200; i++) n += sprintf(g_page + n, "<p>ligne %04d du texte</p>", i);
+    n += sprintf(g_page + n, "<p>Le <b>Caf&Eacute;</b> &amp; th&eacute; au bout</p><p>caf&eacute; encore</p></body></html>");
+    m = wf_html_reduce_ex(g_page, n, 0, g_red, (int)sizeof(g_red), &st, 8000, 0);
+    TEST_ASSERT_TRUE(wf_section_index(g_red, m, &g_s) > 5);
+    last = g_s.n - 1;
+    k = wf_section_find(g_red, m, &g_s, "ligne 0000", 0, &cnt);
+    TEST_ASSERT_EQUAL(0, k);
+    TEST_ASSERT_EQUAL(1, cnt);
+    k = wf_section_find(g_red, m, &g_s, "LIGNE 1199", 0, &cnt);           /* case folded */
+    TEST_ASSERT_TRUE(k > 0);
+    TEST_ASSERT_EQUAL(1, cnt);
+    k = wf_section_find(g_red, m, &g_s, "caf\xe9 & th\xe9", 0, &cnt);     /* across a tag, entity decoded, Latin-1 fold */
+    TEST_ASSERT_EQUAL(last, k);
+    TEST_ASSERT_EQUAL(1, cnt);
+    k = wf_section_find(g_red, m, &g_s, "CAF\xc9", 0, &cnt);
+    TEST_ASSERT_EQUAL(2, cnt);
+    TEST_ASSERT_EQUAL(last, k);
+    k = wf_section_find(g_red, m, &g_s, "ligne 0001", last, &cnt);        /* wraps to the start */
+    TEST_ASSERT_EQUAL(0, k);
+    TEST_ASSERT_EQUAL(-1, wf_section_find(g_red, m, &g_s, "introuvable", 0, &cnt));
+    TEST_ASSERT_EQUAL(0, cnt);
+    TEST_ASSERT_EQUAL(-1, wf_section_find(g_red, m, &g_s, "", 0, &cnt));
+    TEST_ASSERT_EQUAL(-1, wf_section_find(g_red, m, &g_s, "<p>", 0, &cnt)); /* markup is not text */
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_long_page_sections);
+    RUN_TEST(test_find_across_sections);
     RUN_TEST(test_short_page_one_section);
     RUN_TEST(test_placeholders);
     RUN_TEST(test_one_huge_paragraph);

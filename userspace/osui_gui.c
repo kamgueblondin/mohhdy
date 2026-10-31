@@ -487,6 +487,29 @@ int osui_gui_web_command(const char *line, char *out, int out_max) {
             app_out(out, out_max, "osui web section error=out_of_range", 0);
         return 1;
     }
+    if (sncmp(line, "web-find", 8) == 0 && (line[8] == ' ' || !line[8])) {
+        /* Lot 71: find text in the whole page; "web-find" alone: next match */
+        static char last[64];
+        int cnt = web_nsections(), cur = g_wops && g_wops->current ? g_wops->current() : 0, hits = 0, k, from;
+        char m[96];
+        a = line + 8;
+        while (*a == ' ') a++;
+        if (cnt <= 0 || !g_wops || !g_wops->find) { app_out(out, out_max, "osui web find error=no_page (open an http(s) page first)", 0); return 1; }
+        if (*a) { scpy(last, (int)sizeof(last), a); from = cur; }
+        else if (last[0]) from = cur + 1 < cnt ? cur + 1 : 0;
+        else { app_out(out, out_max, "osui web find error=usage web-find TEXT", 0); return 1; }
+        k = g_wops->find(last, from, &hits);
+        if (k < 0) { app_out(out, out_max, "osui web find none text=", last); return 1; }
+        if (k != cur && web_show_section(k, 0, 0, 0, 0) != 0) { app_out(out, out_max, "osui web find error=section", 0); return 1; }
+        scpy(m, (int)sizeof(m), " section ");
+        gui_cat_u(m, (int)sizeof(m), (unsigned)(k + 1));
+        scat(m, (int)sizeof(m), "/");
+        gui_cat_u(m, (int)sizeof(m), (unsigned)cnt);
+        scat(m, (int)sizeof(m), " matches ");
+        gui_cat_u(m, (int)sizeof(m), (unsigned)hits);
+        app_out(out, out_max, "osui web find ok", m);
+        return 1;
+    }
     if (sncmp(line, "web-input", 9) == 0 && (line[9] == ' ' || !line[9])) {
         a = line + 9;
         while (*a == ' ') a++;
@@ -577,6 +600,10 @@ static void web_event(const char *p, char *out, int out_max) {
                 app_out(out, out_max, "osui web form focus ", href + 12);
             } else if (t == 1) {
                 (void)web_submit(-1, out, out_max);
+            } else if (t == 2) {
+                /* Lot 71: checkbox / radio / select changed */
+                (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
+                app_out(out, out_max, "osui web form toggle ", href + 12);
             } else app_out(out, out_max, "osui web form error=unknown_field", 0);
             return;
         }

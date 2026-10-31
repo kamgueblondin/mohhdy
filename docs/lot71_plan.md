@@ -15,10 +15,32 @@ Branch `cursor/lot71`, base `origin/main` after PR #227 (Lot 70).
   focuses it, keys go to the field, Enter submits, ESC leaves the field.
   Both call `osui_gui_web_command`, one code path; the page state lives in
   `userspace/shell_fetch.c` (`osui_web_page_ops_t`).
+- Checkboxes, radios and selects are real controls: `[x] label`,
+  `(*) label`, `[ option v ]`. A click toggles the checkbox, checks the
+  radio (its group is unchecked), moves the select to the next option.
+  Console: `web-input N on|off`, `web-input N LABEL|VALUE|#K`; `web-forms`
+  lists the options. Unchecked boxes are not sent (HTML rule). Bounded:
+  24 options per select, a 4 KB option pool per page.
 - google.com: the form is found and submitted correctly (GET, `ie=ISO-8859-1`,
   `q=caf%E9`, status 200). Google then answers with a page that needs
   JavaScript (`enablejs`), so there are no results to show. Mohhdy
   reports `blocked js-required`. This is a Google limit, not a form bug.
+
+## 1b. Cookies
+- `userspace/wf_cookie.c`: a bounded jar (24 cookies, RFC 6265 subset):
+  Domain and Path matching, host-only cookies, Secure only over https,
+  Max-Age=0 or a past Expires deletes. A Domain that does not match the
+  host, or a top-level domain, is refused. Stored and sent on every hop,
+  so a login answer `302 + Set-Cookie` keeps its session after the
+  redirect. `fetch`, the browser, forms and search share one jar.
+- The jar is in memory for the shell session only, never written to
+  `/persist`. `cookies` lists domain, path, name and value length (never
+  the value); `cookies clear [DOMAIN]`, `cookies off|on`.
+- Honest limits: SameSite and HttpOnly are stored, not enforced (there
+  is no script and every request is a top-level navigation); no public
+  suffix list beyond "a dot inside"; a future Expires is a session cookie.
+- Tests: `test_wf_cookie.c`, three host checks on `/cookie/login`, and the
+  console part of `make qemu-lot71`.
 
 ## 2. Charset, entities, Latin-1 glyphs
 - Display bytes are CP1252 (`include/os_charset.h`). The fonts have
@@ -36,6 +58,10 @@ Branch `cursor/lot71`, base `origin/main` after PR #227 (Lot 70).
   that each fit the engine tables (`WE_MAX_ITEMS`, `WE_POOL`). DOWN/UP
   past the end of a section opens the next/previous one. Proof:
   `/long.html` (1500 paragraphs, 26 sections) is read to the end in QEMU.
+- `web-find TEXT` searches the whole page (tags skipped, `&amp;` and
+  friends decoded, ASCII and Latin-1 case folded, across inline tags) and
+  opens the section of the next match; `web-find` alone goes to the next
+  one, wrapping. Tests: `test_find_across_sections`, QEMU long page.
 - Honest limit: one section is laid out at a time; a CSS box that spans
   two sections is cut.
 

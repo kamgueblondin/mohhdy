@@ -782,6 +782,12 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p_flow: $(UNIT_DIR)/userspace/test_p2p
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/p2p_flow.c ../userspace/p2p_pace.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
+# Lot 71: cookie jar
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_cookie: $(UNIT_DIR)/userspace/test_wf_cookie.c ../userspace/wf_cookie.c ../userspace/wf_cookie.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/wf_cookie.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
 # Lot 71 (US-068/US-073): retransmission of lost user data
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p_rtx: $(UNIT_DIR)/userspace/test_p2p_rtx.c ../userspace/p2p_rtx.c ../userspace/p2p_rtx.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
@@ -807,7 +813,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wsearch_api: $(UNIT_DIR)/userspace/test_
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/wsearch_api.c ../userspace/wsearch.c ../userspace/wf_entity.c $(FRAMEWORK_SOURCES)
 
 # Lot 67: URL / HTTP / DNS / TLS PRF / fetch
-WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_entity.c ../userspace/wf_form.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_inflate.c ../kernel/aes_gcm.c ../kernel/x25519.c $(WF_X509_SRCS)
+WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_entity.c ../userspace/wf_form.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_cookie.c ../userspace/wf_inflate.c ../kernel/aes_gcm.c ../kernel/x25519.c $(WF_X509_SRCS)
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_http: $(UNIT_DIR)/userspace/test_wf_http.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)

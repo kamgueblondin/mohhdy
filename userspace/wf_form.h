@@ -2,8 +2,11 @@
  *
  * The reader view (wf_html.c) records each <form> and its controls here
  * while it reduces the page: text-like inputs (text, search, email, url,
- * tel, number, password, textarea), hidden inputs, checked checkboxes and
- * radios, the selected option of a <select>, and submit buttons. The
+ * tel, number, password, textarea), hidden inputs, checkboxes, radios,
+ * <select> with its options (WF_FORM_OPTIONS per select, a shared pool of
+ * WF_FORM_OPT_POOL bytes per page), and submit buttons. A click on a
+ * checkbox toggles it, on a radio checks it (and unchecks its group), on a
+ * select moves to the next option (wrapping). The
  * desktop shows an editable field as a link "[ value ]" whose href is
  * "mohhdy-form:f:N"; a click focuses field N, keys edit it, Enter submits
  * its form. Submission follows the HTML rules for the subset kept:
@@ -25,13 +28,18 @@
 #define WF_FORM_ACTION 512
 #define WF_FORM_SUBMIT_MAX (WF_URL_HOST_MAX + WF_URL_PATH_MAX + 16)
 #define WF_FORM_BODY_MAX 2048
+#define WF_FORM_OPTIONS 24      /* options kept per select */
+#define WF_FORM_OPT_POOL 4096   /* option values and labels of a page */
 
 enum {
     WF_FIELD_TEXT = 1,     /* text, search, email, url, tel, number, (no type) */
     WF_FIELD_PASSWORD = 2, /* shown as '*' */
     WF_FIELD_TEXTAREA = 3,
-    WF_FIELD_HIDDEN = 4,   /* also checked checkbox / radio, select value */
+    WF_FIELD_HIDDEN = 4,
     WF_FIELD_SUBMIT = 5,   /* input type=submit / image, button (type submit) */
+    WF_FIELD_CHECKBOX = 6, /* Lot 71: sent only when checked */
+    WF_FIELD_RADIO = 7,    /* sent only when checked; one per (form, name) */
+    WF_FIELD_SELECT = 8,   /* value = the selected option's value */
 };
 enum { WF_METHOD_GET = 0, WF_METHOD_POST = 1 };
 
@@ -39,12 +47,14 @@ typedef struct {
     uint8_t type;
     uint8_t form;          /* index of its form */
     uint8_t named;         /* has a name: sent on submit */
-    uint8_t pad;
+    uint8_t checked;       /* checkbox / radio */
     char name[WF_FORM_NAME];
     char value[WF_FORM_VALUE];   /* display bytes (CP1252) */
     char label[WF_FORM_LABEL];   /* placeholder, aria-label or button text */
     int16_t cursor;              /* edit position in value */
     int16_t maxlen;              /* maxlength or WF_FORM_VALUE - 1 */
+    int16_t opt_start;           /* select: offset of its first option in opt_pool */
+    uint8_t nopt, sel;           /* select: options kept, selected one */
 } wf_field_t;
 
 typedef struct {
@@ -65,6 +75,9 @@ typedef struct {
     int current;                 /* form being parsed, -1 outside any form */
     int latin1;                  /* page charset Latin-1 / CP1252: submitted as is (browsers
                                     encode a form in the page charset), else UTF-8 */
+    char opt_pool[WF_FORM_OPT_POOL];   /* "value\0label\0" per option */
+    int opt_used;
+    int opt_dropped;
 } wf_form_page_t;
 
 typedef struct {
@@ -86,6 +99,16 @@ void wf_form_end(wf_form_page_t *p);
  * Returns the field index, or -1 (ignored type or limits). */
 int wf_form_add(wf_form_page_t *p, const wf_url_t *base, const char *type, const char *name, const char *value,
                 const char *label, int checked, int maxlen);
+/* Lot 71: an <option> of select field `field` (the last one added).
+ * Returns the option index or -1 (not a select, limits). */
+int wf_form_add_option(wf_form_page_t *p, int field, const char *value, const char *label, int selected);
+/* option k of a select: value and label (0 when out of range) */
+const char *wf_form_option_value(const wf_form_page_t *p, int field, int k);
+const char *wf_form_option_label(const wf_form_page_t *p, int field, int k);
+/* click / Space on a checkbox, radio or select; 0 changed, -1 not one */
+int wf_form_activate(wf_form_page_t *p, int field);
+/* 1 for checkbox, radio and select (a click acts, no text to edit) */
+int wf_form_is_toggle(const wf_form_page_t *p, int field);
 /* Editing the focused field (display bytes). 0 when changed, -1 if not. */
 int wf_form_focus(wf_form_page_t *p, int field);
 int wf_form_focus_next(wf_form_page_t *p, int dir);
@@ -93,6 +116,8 @@ int wf_form_insert(wf_form_page_t *p, char c);
 int wf_form_backspace(wf_form_page_t *p);
 int wf_form_delete(wf_form_page_t *p);
 int wf_form_move(wf_form_page_t *p, int delta);   /* delta -1000 = start, 1000 = end */
+/* text fields: the new text. checkbox: on|off|1|0|yes|no. radio: on
+ * (checks it). select: an option value, an option label, or #N (1-based). */
 int wf_form_set(wf_form_page_t *p, int field, const char *value);
 /* Text shown for a field: "[ value_ ]" with the cursor when focused,
  * '*' for passwords, the label (placeholder) when empty. */

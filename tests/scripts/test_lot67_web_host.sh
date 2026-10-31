@@ -10,7 +10,7 @@ cd "$W" || exit 1
 python3 "$ROOT/scripts/lot67_gen_pki.py" "$W/pki" >/dev/null || { echo "FAIL: pki"; exit 1; }
 gcc -O1 -m32 -Wall -Werror -I"$ROOT/userspace" -I"$ROOT/kernel" -I"$ROOT/include" -o wf_fetch_host \
     "$ROOT/tests/host/wf_fetch_host.c" \
-    "$ROOT"/userspace/wf_http.c "$ROOT"/userspace/wf_dns.c "$ROOT"/userspace/wf_tls.c "$ROOT"/userspace/wf_fetch.c "$ROOT"/userspace/wf_inflate.c \
+    "$ROOT"/userspace/wf_http.c "$ROOT"/userspace/wf_dns.c "$ROOT"/userspace/wf_tls.c "$ROOT"/userspace/wf_fetch.c "$ROOT"/userspace/wf_cookie.c "$ROOT"/userspace/wf_inflate.c \
     "$ROOT"/userspace/wf_x509.c "$ROOT"/userspace/wf_bn.c "$ROOT"/userspace/wf_sha512.c "$ROOT"/userspace/wf_ec.c \
     "$ROOT"/userspace/wf_rsa.c "$ROOT"/userspace/wf_html.c "$ROOT"/userspace/wf_entity.c "$ROOT"/userspace/wf_form.c \
     "$ROOT"/userspace/wf_section.c "$ROOT"/userspace/wsearch_api.c "$ROOT"/userspace/wsearch.c "$ROOT"/kernel/sha256.c "$ROOT"/kernel/aes_gcm.c "$ROOT"/kernel/x25519.c || { echo "FAIL: build"; exit 1; }
@@ -66,5 +66,12 @@ check "long page sections"   'PAGE title=Longue page nodes=[0-9]+ bytes=[0-9]+ s
 check "long page end"        'SECTION 26 bytes=[0-9]+ tail=.*1500 de la longue page\. +FIN-DE-PAGE +\[section 26/26 - fin de la page\]'                       "$CA" "$U/long.html" now - page
 check "searx html"           'RESULT 1 title=R.sultat pour mohhdy os url=https://example.org/1' "$CA" "$U/searx" now - "search:searx:mohhdy os"
 check "searx json"           'RESULT 2 title=Second & co url=https://example.org/2\?a=1&b=2' "$CA" "$U/searx" now - "search:searx-json:mohhdy"
+check "controls defaults"    'SUBMIT method=GET url=http://127.0.0.1:[0-9]+/echo\?t=web&lr=lang_fr body=' "$CA" "$U/controls.html" now - "submit:1=on"
+check "checkbox on"          'url=http://127.0.0.1:[0-9]+/echo\?safe=on&t=web&lr=lang_fr'  "$CA" "$U/controls.html" now - "submit:0=on"
+check "radio moves"          'url=http://127.0.0.1:[0-9]+/echo\?t=img&lr=lang_fr'          "$CA" "$U/controls.html" now - "submit:2=on"
+check "select by label"      'url=http://127.0.0.1:[0-9]+/echo\?t=web&lr=lang_en'          "$CA" "$U/controls.html" now - "submit:3=anglais"
+check "cookie after redirect" 'COOKIES set=2 sent=2 refused=1 kept=2'   "$CA" "$U/cookie/login" now -
+check "cookie sent"          'cookie=sid=s3cr3t-session; theme=dark'    "$CA" "$U/cookie/login" now -
+check "cookie values hidden" '127.0.0.1 /cookie sid len=14 host-only httponly' "$CA" "$U/cookie/login" now -
 echo "[lot67-web-host] $pass passed, $fail failed"
 [ $fail -eq 0 ]

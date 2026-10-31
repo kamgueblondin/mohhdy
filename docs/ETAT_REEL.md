@@ -10,7 +10,8 @@
 
 ## Lot 71 (forms, Latin-1, long pages, full-screen window, search fallbacks, retransmission)
 
-- HTML forms in the shell and the GUI (one code path): GET and POST, page charset encoding, click/type/Enter in the GUI. The google.com form submits correctly, but Google answers with a JavaScript-only page (`blocked js-required`).
+- HTML forms in the shell and the GUI (one code path): GET and POST, page charset encoding, click/type/Enter in the GUI, checkboxes, radios and selects. The google.com form submits correctly, but Google answers with a JavaScript-only page (`blocked js-required`).
+- Cookies: bounded session jar (`wf_cookie.c`, `cookies`), sent after a login redirect, values never shown, memory only.
 - Latin-1 text: header charset wins over meta, accents drawn by the web engine and the console. Long pages are read section by section. Proof `make qemu-lot71`.
 - The full-screen web/editor window restores, moves, resizes and maximizes. The chat width no longer follows a resized pane (root cause fixed).
 - Search: `search-config` (SearXNG URL, Brave/Google keys in `/persist`), fallback chain ending with the Wikipedia API. Public engines bot-check this IP; a private engine must be configured by the user.

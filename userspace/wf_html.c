@@ -275,23 +275,20 @@ static int inner_text(const char* in, int n, int i, const char* name, char* out,
     return end;
 }
 
-/* <select>: value of the selected option, else the first one */
-static int select_value(const char* in, int n, int i, char* out, int cap) {
-    int end = skip_block(in, n, i, "select"), j, first = 1;
-    out[0] = 0;
+/* <select>: every option (value, label, selected) goes to the form; the
+ * selected one, else the first, is the value. */
+static int select_options(const char* in, int n, int i, int field) {
+    int end = skip_block(in, n, i, "select"), j;
     for (j = i; j + 7 < end; j++) {
         if (in[j] == '<' && lc(in[j + 1]) == 'o' && lc(in[j + 2]) == 'p' && lc(in[j + 3]) == 't') {
-            int e = j, q = 0;
-            static char v[WF_FORM_VALUE];
+            int e = j, q = 0, hv;
+            static char v[WF_FORM_VALUE], l[WF_FORM_LABEL];
             while (e < end && (q || in[e] != '>')) { if (in[e] == '"' || in[e] == '\'') q = (q == in[e]) ? 0 : (q ? q : in[e]); e++; }
-            if (get_attr_text(in, j + 7, e, "value", v, (int)sizeof(v)) < 0) inner_text(in, end, e + 1, "option", v, (int)sizeof(v), 1);
-            if (first || has_attr(in, j + 7, e, "selected")) {
-                int k;
-                for (k = 0; v[k] && k < cap - 1; k++) out[k] = v[k];
-                out[k] = 0;
-                if (!first) break;
-                first = 0;
-            }
+            hv = get_attr_text(in, j + 7, e, "value", v, (int)sizeof(v)) >= 0;
+            inner_text(in, end, e + 1, "option", l, (int)sizeof(l), 1);
+            if (!hv) { int k; for (k = 0; l[k] && k < (int)sizeof(v) - 1; k++) v[k] = l[k]; v[k] = 0; }
+            if (field >= 0 && !has_attr(in, j + 7, e, "disabled"))
+                (void)wf_form_add_option(g_forms, field, v, l, has_attr(in, j + 7, e, "selected"));
             j = e;
         }
     }
@@ -332,8 +329,9 @@ static int form_tag(ob_t* b, const char* in, int n, int i, int j, int e, int clo
         return next;
     }
     if (seq(name, "select")) {
-        next = select_value(in, n, next, value, (int)sizeof(value));
-        wf_form_add(g_forms, base, "select", fname, value, label, 0, 0);
+        idx = wf_form_add(g_forms, base, "select", fname, "", label, 0, 0);
+        next = select_options(in, n, next, idx);
+        if (idx >= 0) put_field(b, idx, 0);
         return next;
     }
     if (seq(name, "button")) {

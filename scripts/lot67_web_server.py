@@ -138,7 +138,36 @@ class H(http.server.BaseHTTPRequestHandler):
             self._send(404, b"not found\n", "text/plain")
 
     def _lot71(self, p, body, post=False):
-        """Lot 71 routes: forms, charsets, long page, SearXNG."""
+        """Lot 71 routes: forms, charsets, long page, SearXNG, cookies."""
+        if p == "/controls.html":
+            page = ("<html><head><meta charset=\"utf-8\"><title>Options</title></head><body>"
+                    "<form action=\"/echo\" method=\"get\">"
+                    "<p><input type=\"checkbox\" name=\"safe\" title=\"Filtre\"> filtre</p>"
+                    "<p><input type=\"radio\" name=\"t\" value=\"web\" checked> web "
+                    "<input type=\"radio\" name=\"t\" value=\"img\"> images</p>"
+                    "<p><select name=\"lr\"><option value=\"\">toutes</option>"
+                    "<option value=\"lang_fr\" selected>fran\u00e7ais</option><option value=\"lang_en\">anglais</option></select></p>"
+                    "<input type=\"submit\" value=\"Chercher\"></form></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p.startswith("/cookie/login"):
+            # a login answer: session cookie, then a redirect (as most sites do)
+            self.send_response(302)
+            self.send_header("Location", "/cookie/home")
+            self.send_header("Set-Cookie", "sid=s3cr3t-session; Path=/cookie; HttpOnly")
+            self.send_header("Set-Cookie", "theme=dark")
+            self.send_header("Set-Cookie", "evil=1; Domain=example.com")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return True
+        if p.startswith("/cookie/home"):
+            ck = self.headers.get("Cookie", "")
+            print(f"COOKIE home={ck!r}", flush=True)
+            ok = "sid=s3cr3t-session" in ck
+            page = "<html><head><title>%s</title></head><body><p>cookie=%s</p></body></html>" % (
+                "Connecte" if ok else "Anonyme", html.escape(ck))
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
         if p == "/form.html":
             page = ("<!doctype html><html><head><meta charset=\"utf-8\"><title>Formulaire \u00e9t\u00e9</title></head><body>"
                     "<h1>Recherche caf\u00e9 &amp; th\u00e9</h1>"

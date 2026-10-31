@@ -16,6 +16,7 @@ static int f_ieq(const char *a, const char *b) {
     return *a == 0 && *b == 0;
 }
 static int f_pre(const char *s, const char *p) { while (*p && *s == *p) { s++; p++; } return *p == 0; }
+static int f_seq(const char *a, const char *b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
 
 void wf_form_reset(wf_form_page_t *p) {
     int i;
@@ -82,8 +83,10 @@ int wf_form_add(wf_form_page_t *p, const wf_url_t *base, const char *type, const
         f_ieq(type, "tel") || f_ieq(type, "number")) kind = WF_FIELD_TEXT;
     else if (f_ieq(type, "password")) kind = WF_FIELD_PASSWORD;
     else if (f_ieq(type, "textarea")) kind = WF_FIELD_TEXTAREA;
-    else if (f_ieq(type, "hidden") || f_ieq(type, "select")) kind = WF_FIELD_HIDDEN;
-    else if (f_ieq(type, "checkbox") || f_ieq(type, "radio")) { if (!checked) return -1; kind = WF_FIELD_HIDDEN; }
+    else if (f_ieq(type, "hidden")) kind = WF_FIELD_HIDDEN;
+    else if (f_ieq(type, "select")) kind = WF_FIELD_SELECT;
+    else if (f_ieq(type, "checkbox")) kind = WF_FIELD_CHECKBOX;
+    else if (f_ieq(type, "radio")) kind = WF_FIELD_RADIO;
     else if (f_ieq(type, "submit") || f_ieq(type, "image") || f_ieq(type, "button-submit")) kind = WF_FIELD_SUBMIT;
     else return -1;   /* file, reset, button (no submit), color, range, date...: not kept */
     if (p->nfields >= WF_FORM_FIELDS) { p->dropped++; return -1; }
@@ -94,13 +97,97 @@ int wf_form_add(wf_form_page_t *p, const wf_url_t *base, const char *type, const
     fl->form = (uint8_t)form;
     fl->named = (name && name[0]) ? 1 : 0;
     f_cpy(fl->name, (int)sizeof(fl->name), name);
-    f_cpy(fl->value, (int)sizeof(fl->value), (kind == WF_FIELD_HIDDEN && f_ieq(type, "checkbox") && (!value || !value[0])) ? "on" : value);
+    f_cpy(fl->value, (int)sizeof(fl->value), ((kind == WF_FIELD_CHECKBOX || kind == WF_FIELD_RADIO) && (!value || !value[0])) ? "on" : value);
+    fl->checked = (uint8_t)((kind == WF_FIELD_CHECKBOX || kind == WF_FIELD_RADIO) && checked ? 1 : 0);
+    fl->opt_start = (int16_t)p->opt_used;
+    fl->nopt = 0;
+    fl->sel = 0;
+    if (kind == WF_FIELD_RADIO && fl->checked) {
+        /* a later checked radio of the same group wins, as in browsers */
+        int k;
+        for (k = 0; k < p->nfields; k++)
+            if (p->field[k].type == WF_FIELD_RADIO && p->field[k].form == (uint8_t)form && f_seq(p->field[k].name, fl->name))
+                p->field[k].checked = 0;
+    }
     f_cpy(fl->label, (int)sizeof(fl->label), label);
     if (kind == WF_FIELD_SUBMIT && !fl->label[0]) f_cpy(fl->label, (int)sizeof(fl->label), fl->value[0] ? fl->value : "Envoyer");
     fl->maxlen = (int16_t)((maxlen > 0 && maxlen < WF_FORM_VALUE) ? maxlen : WF_FORM_VALUE - 1);
     fl->cursor = (int16_t)f_len(fl->value);
     if (p->form[form].nfields < 254) p->form[form].nfields++;
     return p->nfields++;
+}
+
+int wf_form_add_option(wf_form_page_t *p, int field, const char *value, const char *label, int selected) {
+    wf_field_t *f;
+    int vl, ll, k;
+    if (field < 0 || field >= p->nfields || field != p->nfields - 1) return -1;
+    f = &p->field[field];
+    if (f->type != WF_FIELD_SELECT) return -1;
+    if (!label) label = "";
+    if (!value) value = label;
+    vl = f_len(value); ll = f_len(label);
+    if (vl >= WF_FORM_VALUE) vl = WF_FORM_VALUE - 1;
+    if (ll >= WF_FORM_LABEL) ll = WF_FORM_LABEL - 1;
+    if (f->nopt >= WF_FORM_OPTIONS || p->opt_used + vl + ll + 2 > WF_FORM_OPT_POOL) { p->opt_dropped++; return -1; }
+    for (k = 0; k < vl; k++) p->opt_pool[p->opt_used++] = value[k];
+    p->opt_pool[p->opt_used++] = 0;
+    for (k = 0; k < ll; k++) p->opt_pool[p->opt_used++] = label[k];
+    p->opt_pool[p->opt_used++] = 0;
+    if (selected || f->nopt == 0) {
+        f->sel = f->nopt;
+        f_cpy(f->value, (int)sizeof(f->value), value);
+    }
+    return f->nopt++;
+}
+
+static const char *opt_at(const wf_form_page_t *p, int field, int k, int label) {
+    const wf_field_t *f;
+    int o, i;
+    if (field < 0 || field >= p->nfields) return 0;
+    f = &p->field[field];
+    if (f->type != WF_FIELD_SELECT || k < 0 || k >= f->nopt) return 0;
+    o = f->opt_start;
+    for (i = 0; i < k * 2 + label; i++) { while (o < p->opt_used && p->opt_pool[o]) o++; o++; }
+    return o < p->opt_used ? p->opt_pool + o : 0;
+}
+const char *wf_form_option_value(const wf_form_page_t *p, int field, int k) { return opt_at(p, field, k, 0); }
+const char *wf_form_option_label(const wf_form_page_t *p, int field, int k) { return opt_at(p, field, k, 1); }
+
+int wf_form_is_toggle(const wf_form_page_t *p, int field) {
+    int t;
+    if (field < 0 || field >= p->nfields) return 0;
+    t = p->field[field].type;
+    return t == WF_FIELD_CHECKBOX || t == WF_FIELD_RADIO || t == WF_FIELD_SELECT;
+}
+
+static void radio_check(wf_form_page_t *p, int field) {
+    int k;
+    wf_field_t *f = &p->field[field];
+    for (k = 0; k < p->nfields; k++)
+        if (p->field[k].type == WF_FIELD_RADIO && p->field[k].form == f->form && f_seq(p->field[k].name, f->name))
+            p->field[k].checked = 0;
+    f->checked = 1;
+}
+
+static void select_to(wf_form_page_t *p, int field, int k) {
+    wf_field_t *f = &p->field[field];
+    const char *v = wf_form_option_value(p, field, k);
+    if (!v) return;
+    f->sel = (uint8_t)k;
+    f_cpy(f->value, (int)sizeof(f->value), v);
+}
+
+int wf_form_activate(wf_form_page_t *p, int field) {
+    wf_field_t *f;
+    if (!wf_form_is_toggle(p, field)) return -1;
+    f = &p->field[field];
+    if (f->type == WF_FIELD_CHECKBOX) f->checked = (uint8_t)!f->checked;
+    else if (f->type == WF_FIELD_RADIO) radio_check(p, field);
+    else {
+        if (!f->nopt) return -1;
+        select_to(p, field, (f->sel + 1) % f->nopt);
+    }
+    return 0;
 }
 
 static int editable(const wf_field_t *f) {
@@ -184,6 +271,26 @@ int wf_form_set(wf_form_page_t *p, int field, const char *value) {
     if (field < 0 || field >= p->nfields) return -1;
     f = &p->field[field];
     if (f->type == WF_FIELD_SUBMIT) return -1;
+    if (f->type == WF_FIELD_CHECKBOX || f->type == WF_FIELD_RADIO) {
+        int on = f_ieq(value, "on") || f_ieq(value, "1") || f_ieq(value, "yes") || f_ieq(value, "oui");
+        int off = f_ieq(value, "off") || f_ieq(value, "0") || f_ieq(value, "no") || f_ieq(value, "non");
+        if (!on && !off) return -1;
+        if (f->type == WF_FIELD_RADIO) { if (!on) return -1; radio_check(p, field); }
+        else f->checked = (uint8_t)on;
+        return 0;
+    }
+    if (f->type == WF_FIELD_SELECT) {
+        int k, n = 0;
+        if (value[0] == '#') {
+            for (k = 1; value[k] >= '0' && value[k] <= '9'; k++) n = n * 10 + (value[k] - '0');
+            if (value[k] || n < 1 || n > f->nopt) return -1;
+            select_to(p, field, n - 1);
+            return 0;
+        }
+        for (k = 0; k < f->nopt; k++) if (f_seq(wf_form_option_value(p, field, k), value)) { select_to(p, field, k); return 0; }
+        for (k = 0; k < f->nopt; k++) if (f_ieq(wf_form_option_label(p, field, k), value)) { select_to(p, field, k); return 0; }
+        return -1;
+    }
     f_cpy(f->value, f->maxlen + 1 < WF_FORM_VALUE ? f->maxlen + 1 : WF_FORM_VALUE, value);
     f->cursor = (int16_t)f_len(f->value);
     return 0;
@@ -194,6 +301,30 @@ int wf_form_display(const wf_form_page_t *p, int field, char *out, int cap) {
     int o = 0, i, n, focus, show_label, width = 24, start = 0;
     if (cap < 8 || field < 0 || field >= p->nfields) { if (cap > 0) out[0] = 0; return 0; }
     f = &p->field[field];
+    if (f->type == WF_FIELD_CHECKBOX || f->type == WF_FIELD_RADIO) {
+        const char *l = f->label[0] ? f->label : f->value;
+        int radio = f->type == WF_FIELD_RADIO;
+        out[o++] = radio ? '(' : '[';
+        out[o++] = f->checked ? (radio ? '*' : 'x') : ' ';
+        out[o++] = radio ? ')' : ']';
+        out[o++] = ' ';
+        for (i = 0; l[i] && o < cap - 1 && i < width; i++) out[o++] = (l[i] == '<' || l[i] == '>') ? ' ' : l[i];
+        out[o] = 0;
+        return o;
+    }
+    if (f->type == WF_FIELD_SELECT) {
+        const char *l = wf_form_option_label(p, field, f->sel);
+        if (!l || !l[0]) l = f->value;
+        out[o++] = '[';
+        out[o++] = ' ';
+        for (i = 0; l && l[i] && o < cap - 5 && i < width; i++) out[o++] = (l[i] == '<' || l[i] == '>') ? ' ' : l[i];
+        out[o++] = ' ';
+        out[o++] = 'v';
+        out[o++] = ' ';
+        out[o++] = ']';
+        out[o] = 0;
+        return o;
+    }
     if (f->type == WF_FIELD_SUBMIT) {
         out[o++] = '[';
         out[o++] = ' ';
@@ -277,6 +408,8 @@ int wf_form_submit(const wf_form_page_t *p, int fi, int submitter, wf_form_submi
         const wf_field_t *fl = &p->field[i];
         if (fl->form != fi || !fl->named) continue;
         if (fl->type == WF_FIELD_SUBMIT && i != submitter) continue;
+        if ((fl->type == WF_FIELD_CHECKBOX || fl->type == WF_FIELD_RADIO) && !fl->checked) continue;
+        if (fl->type == WF_FIELD_SELECT && !fl->nopt) continue;
         if (len) { if (len + 1 >= (int)sizeof(q)) return -1; q[len++] = '&'; q[len] = 0; }
         len = wf_form_urlencode_append_cs(q, (int)sizeof(q), len, fl->name, p->latin1);
         if (len < 0 || len + 1 >= (int)sizeof(q)) return -1;

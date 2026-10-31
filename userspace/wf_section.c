@@ -139,6 +139,87 @@ int wf_section_of(const wf_sections_t* s, int pos) {
     return 0;
 }
 
+/* CP1252 display bytes: fold A-Z and the Latin-1 capitals C0..DE (not D7) */
+static unsigned char fold(unsigned char c) {
+    if (c >= 'A' && c <= 'Z') return (unsigned char)(c + 32);
+    if (c >= 0xC0u && c <= 0xDEu && c != 0xD7u) return (unsigned char)(c + 32);
+    if (c == 0x8Au || c == 0x8Cu || c == 0x8Eu) return (unsigned char)(c + 16);   /* S caron, OE, Z caron */
+    if (c == 0x9Fu) return 0xFFu;
+    return c;
+}
+
+/* next text byte of the source at *i (tags skipped, a few entities
+ * decoded), its source offset in *at; -1 at the end */
+static int text_byte(const char* src, int n, int* i, int* at) {
+    while (*i < n) {
+        char c = src[*i];
+        if (c == '<') {
+            while (*i < n && src[*i] != '>') (*i)++;
+            if (*i < n) (*i)++;
+            continue;
+        }
+        if (c == '\001') {                  /* a form placeholder \001N\002 is not text */
+            while (*i < n && src[*i] != '\002') (*i)++;
+            if (*i < n) (*i)++;
+            continue;
+        }
+        *at = *i;
+        if (c == '&') {
+            static const char* const nm[4] = { "amp;", "lt;", "gt;", "quot;" };
+            static const char ch[4] = { '&', '<', '>', '"' };
+            int k;
+            for (k = 0; k < 4; k++) {
+                int l = 0;
+                while (nm[k][l] && *i + 1 + l < n && src[*i + 1 + l] == nm[k][l]) l++;
+                if (!nm[k][l]) { *i += 1 + l; return (unsigned char)ch[k]; }
+            }
+        }
+        (*i)++;
+        if (c == '\n' || c == '\t' || c == '\r') return ' ';
+        return (unsigned char)c;
+    }
+    return -1;
+}
+
+int wf_section_find(const char* src, int n, const wf_sections_t* s, const char* needle, int from, int* count) {
+    static int pos[64];
+    int i, nl = 0, first = -1, best = -1, total = 0;
+    unsigned char nd[64];
+    if (count) *count = 0;
+    if (!src || !s || s->n <= 0 || !needle) return -1;
+    while (needle[nl] && nl < (int)sizeof(nd)) { nd[nl] = fold((unsigned char)needle[nl]); nl++; }
+    if (!nl || needle[nl]) return -1;
+    if (from < 0 || from >= s->n) from = 0;
+    i = s->body_start > 0 ? s->body_start : 0;
+    {
+        /* sliding window of the last nl text bytes and their offsets */
+        static unsigned char win[64];
+        int filled = 0, at = 0, c;
+        int lim = s->body_end > i ? s->body_end : n;
+        while (i < lim && (c = text_byte(src, lim, &i, &at)) >= 0) {
+            int k, ok = 1;
+            if (filled < nl) { win[filled] = fold((unsigned char)c); pos[filled % 64] = at; filled++; }
+            else {
+                for (k = 1; k < nl; k++) win[k - 1] = win[k];
+                win[nl - 1] = fold((unsigned char)c);
+                for (k = 1; k < nl && k < 64; k++) pos[k - 1] = pos[k];
+                if (nl - 1 < 64) pos[nl - 1] = at;
+            }
+            if (filled < nl) continue;
+            for (k = 0; k < nl; k++) if (win[k] != nd[k]) { ok = 0; break; }
+            if (!ok) continue;
+            total++;
+            {
+                int sec = wf_section_of(s, pos[0]);
+                if (first < 0) first = sec;
+                if (best < 0 && sec >= from) best = sec;
+            }
+        }
+    }
+    if (count) *count = total;
+    return best >= 0 ? best : first;
+}
+
 typedef struct { char* o; int cap; int n; int full; } sb_t;
 static void sb_c(sb_t* b, char c) { if (b->n < b->cap - 1) b->o[b->n++] = c; else b->full = 1; }
 static void sb_s(sb_t* b, const char* s) { while (*s) sb_c(b, *s++); }

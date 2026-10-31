@@ -241,6 +241,12 @@ int shell_fetch_page(const char* url, char* src, int src_max, char* final_url, i
 }
 
 int shell_page_sections(void) { return g_page_ok ? g_sec.n : 0; }
+/* Lot 71: "web-find": section of the first match at or after from */
+int shell_page_find(const char* text, int from, int* count) {
+    if (count) *count = 0;
+    if (!g_page_ok) return -1;
+    return wf_section_find(g_full, g_full_n, &g_sec, text, from, count);
+}
 int shell_page_current(void) { return g_page_ok ? g_cur : 0; }
 int shell_page_section(int k, char* src, int src_max) {
     if (!g_page_ok || k < 0 || k >= g_sec.n) return -1;
@@ -256,6 +262,8 @@ int shell_page_form_link(const char* href) {
     t = wf_form_href(href, &n);
     if (t <= 0 || n < 0 || n >= g_forms.nfields) return -1;
     if (g_forms.field[n].type == WF_FIELD_SUBMIT) { g_forms.focus = n; return 1; }
+    /* Lot 71: a checkbox, radio or select acts on the click */
+    if (wf_form_is_toggle(&g_forms, n)) { g_forms.focus = -1; return wf_form_activate(&g_forms, n) == 0 ? 2 : -1; }
     (void)wf_form_focus(&g_forms, n);
     return 0;
 }
@@ -293,12 +301,22 @@ int shell_page_forms_list(char* out, int cap) {
     }
     for (i = 0; i < g_forms.nfields; i++) {
         const wf_field_t* f = &g_forms.field[i];
-        static const char* const tn[6] = { "?", "text", "password", "textarea", "hidden", "submit" };
+        static const char* const tn[9] = { "?", "text", "password", "textarea", "hidden", "submit", "checkbox", "radio", "select" };
         scat(out, cap, "field "); scat_int(out, cap, i);
         scat(out, cap, " form "); scat_int(out, cap, f->form);
-        scat(out, cap, " "); scat(out, cap, tn[f->type <= 5 ? f->type : 0]);
+        scat(out, cap, " "); scat(out, cap, tn[f->type <= 8 ? f->type : 0]);
         scat(out, cap, " name="); scat(out, cap, f->name);
         if (f->type != WF_FIELD_PASSWORD) { scat(out, cap, " value="); scat(out, cap, f->value); }
+        if (f->type == WF_FIELD_CHECKBOX || f->type == WF_FIELD_RADIO) scat(out, cap, f->checked ? " checked" : " unchecked");
+        if (f->type == WF_FIELD_SELECT) {
+            int k;
+            scat(out, cap, " options");
+            for (k = 0; k < f->nopt; k++) {
+                const char* ov = wf_form_option_value(&g_forms, i, k);
+                scat(out, cap, k == f->sel ? " *" : " ");
+                scat(out, cap, ov && ov[0] ? ov : "\"\"");
+            }
+        }
         if (g_forms.focus == i) scat(out, cap, " focus");
         scat(out, cap, "\n");
     }
@@ -309,7 +327,7 @@ int shell_page_forms_list(char* out, int cap) {
 int shell_page_form_set(int n, const char* value) {
     if (!g_page_ok || n < 0 || n >= g_forms.nfields) return -1;
     if (wf_form_set(&g_forms, n, value) != 0) return -1;
-    g_forms.focus = n;
+    g_forms.focus = wf_form_is_toggle(&g_forms, n) ? -1 : n;
     return 0;
 }
 

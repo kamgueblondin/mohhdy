@@ -23,4 +23,6 @@ int wf_guest_roots(int* test_ca);
  * RTC is unreadable or obviously unset (year < 2025): then the dates are
  * not checked and the report says so. */
 const char* wf_guest_now(void);
+/* Lot 71: the shell session cookie jar (memory only, never persisted) */
+wf_cookie_jar_t* wf_guest_cookies(void);
 #endif

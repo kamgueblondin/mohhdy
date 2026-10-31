@@ -66,8 +66,23 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, const wf_fetch_req_
     h = env->connect(env->net, ip, u->port);
     if (h < 0) { scopy(res->err, (int)sizeof(res->err), "TCP connect failed"); return -1; }
     br.env = env; br.h = h;
-    rl = wf_http_build_request(u, rq && rq->method ? rq->method : "GET", rq ? rq->ctype : 0,
-                               rq && rq->body ? rq->body_len : -1, rq ? rq->extra : 0, req, (int)sizeof(req));
+    {
+        /* Lot 71: the jar's Cookie line goes after the caller's extra lines */
+        static char ex[WF_COOKIE_HDR + 1024];
+        const char* extra = rq ? rq->extra : 0;
+        if (env->jar) {
+            int el = 0, ck;
+            uint32_t before = env->jar->sent;
+            ex[0] = 0;
+            if (extra) { while (extra[el] && el < (int)sizeof(ex) - 1) { ex[el] = extra[el]; el++; } ex[el] = 0; }
+            if (extra && extra[el]) { env->close(env->net, h); scopy(res->err, (int)sizeof(res->err), "request too long"); return -1; }
+            ck = wf_cookie_header(env->jar, u->host, u->path, u->https, ex + el, (int)sizeof(ex) - el);
+            if (ck > 0) { extra = ex; res->cookies_sent = (int)(env->jar->sent - before); }
+            else res->cookies_sent = 0;
+        }
+        rl = wf_http_build_request(u, rq && rq->method ? rq->method : "GET", rq ? rq->ctype : 0,
+                                   rq && rq->body ? rq->body_len : -1, extra, req, (int)sizeof(req));
+    }
     if (rl < 0) { env->close(env->net, h); scopy(res->err, (int)sizeof(res->err), "request too long"); return -1; }
     res->https = u->https;
     if (u->https) {
@@ -149,6 +164,11 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, const wf_fetch_req_
         if (tr) res->truncated = 1;
     }
     scopy(res->content_type, (int)sizeof(res->content_type), g_resp.content_type);
+    if (env->jar && g_resp.status) {
+        int k = wf_cookie_from_head(env->jar, u->host, u->path, u->https, g_resp.hdr, g_resp.hdr_len, env->now);
+        res->cookies_set += k;
+        if (k) logf2(env, "cookies stored for ", u->host);
+    }
     return 0;
 }
 

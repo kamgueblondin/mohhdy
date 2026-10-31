@@ -42,4 +42,10 @@ int wf_section_render(const char* src, int n, const wf_sections_t* s, int k, con
                       char* out, int cap);
 /* Section that holds byte offset pos of the source, or 0. */
 int wf_section_of(const wf_sections_t* s, int pos);
+/* Lot 71: "web-find". Searches the page text (tags skipped, &amp; &lt;
+ * &gt; &quot; decoded, case folded for ASCII and Latin-1 letters) for
+ * needle (display bytes). Returns the first section >= from that holds a
+ * match, wrapping to the start, or -1. *count gets the matches in the
+ * whole page (may be 0). */
+int wf_section_find(const char* src, int n, const wf_sections_t* s, const char* needle, int from, int* count);
 #endif

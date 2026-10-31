@@ -21,7 +21,7 @@ static void setup_google(void) {
     TEST_ASSERT_EQUAL(2, wf_form_add(&g_fp, &base, "submit", "btnG", "Recherche Google", 0, 0, 0));
     TEST_ASSERT_EQUAL(3, wf_form_add(&g_fp, &base, "submit", "btnI", "J'ai de la chance", 0, 0, 0));
     TEST_ASSERT_EQUAL(-1, wf_form_add(&g_fp, &base, "file", "f", "", 0, 0, 0));
-    TEST_ASSERT_EQUAL(-1, wf_form_add(&g_fp, &base, "checkbox", "c", "", 0, 0, 0));   /* unchecked */
+    TEST_ASSERT_EQUAL(4, wf_form_add(&g_fp, &base, "checkbox", "c", "", 0, 0, 0));   /* unchecked: kept, not sent */
     wf_form_end(&g_fp);
 }
 
@@ -254,8 +254,88 @@ static void test_fetch_post_303(void) {
     TEST_ASSERT_NULL(strstr(g_reqs[1], "X-Api"));
 }
 
+/* Lot 71: checkbox, radio and select controls */
+static void test_toggle_controls(void) {
+    wf_url_t base;
+    char d[80];
+    int cb, r1, r2, r3, sel;
+    wf_form_reset(&g_fp);
+    TEST_ASSERT_EQUAL(0, wf_url_parse("http://10.0.2.2/f", &base));
+    TEST_ASSERT_EQUAL(0, wf_form_begin(&g_fp, &base, "/echo", "get", 0));
+    cb = wf_form_add(&g_fp, &base, "checkbox", "safe", "", "Filtre", 0, 0);
+    r1 = wf_form_add(&g_fp, &base, "radio", "t", "web", 0, 1, 0);
+    r2 = wf_form_add(&g_fp, &base, "radio", "t", "img", 0, 0, 0);
+    r3 = wf_form_add(&g_fp, &base, "radio", "u", "x", 0, 0, 0);
+    sel = wf_form_add(&g_fp, &base, "select", "lr", "", 0, 0, 0);
+    TEST_ASSERT_EQUAL(0, wf_form_add_option(&g_fp, sel, "", "tout", 0));
+    TEST_ASSERT_EQUAL(1, wf_form_add_option(&g_fp, sel, "lang_fr", "fran\xe7" "ais", 1));
+    TEST_ASSERT_EQUAL(2, wf_form_add_option(&g_fp, sel, "lang_en", "anglais", 0));
+    TEST_ASSERT_EQUAL(-1, wf_form_add_option(&g_fp, cb, "a", "b", 0));       /* not a select */
+    wf_form_end(&g_fp);
+    TEST_ASSERT_EQUAL(1, wf_form_is_toggle(&g_fp, cb));
+    TEST_ASSERT_EQUAL(0, wf_form_is_toggle(&g_fp, -1));
+    TEST_ASSERT_EQUAL(0, wf_form_submit(&g_fp, 0, -1, &g_sub));
+    TEST_ASSERT_EQUAL_STRING("http://10.0.2.2/echo?t=web&lr=lang_fr", g_sub.url);
+    wf_form_display(&g_fp, cb, d, (int)sizeof(d));
+    TEST_ASSERT_EQUAL_STRING("[ ] Filtre", d);
+    TEST_ASSERT_EQUAL(0, wf_form_activate(&g_fp, cb));
+    wf_form_display(&g_fp, cb, d, (int)sizeof(d));
+    TEST_ASSERT_EQUAL_STRING("[x] Filtre", d);
+    TEST_ASSERT_EQUAL(0, wf_form_activate(&g_fp, r2));                        /* the group moves to img */
+    TEST_ASSERT_EQUAL(0, g_fp.field[r1].checked);
+    wf_form_display(&g_fp, r2, d, (int)sizeof(d));
+    TEST_ASSERT_EQUAL_STRING("(*) img", d);
+    TEST_ASSERT_EQUAL(0, g_fp.field[r3].checked);                             /* other group untouched */
+    wf_form_display(&g_fp, sel, d, (int)sizeof(d));
+    TEST_ASSERT_EQUAL_STRING("[ fran\xe7" "ais v ]", d);
+    TEST_ASSERT_EQUAL(0, wf_form_activate(&g_fp, sel));
+    TEST_ASSERT_EQUAL_STRING("lang_en", g_fp.field[sel].value);
+    TEST_ASSERT_EQUAL(0, wf_form_activate(&g_fp, sel));                       /* wraps */
+    TEST_ASSERT_EQUAL_STRING("", g_fp.field[sel].value);
+    TEST_ASSERT_EQUAL(0, wf_form_submit(&g_fp, 0, -1, &g_sub));
+    TEST_ASSERT_EQUAL_STRING("http://10.0.2.2/echo?safe=on&t=img&lr=", g_sub.url);
+    /* console values */
+    TEST_ASSERT_EQUAL(0, wf_form_set(&g_fp, cb, "off"));
+    TEST_ASSERT_EQUAL(-1, wf_form_set(&g_fp, cb, "maybe"));
+    TEST_ASSERT_EQUAL(0, wf_form_set(&g_fp, r1, "on"));
+    TEST_ASSERT_EQUAL(-1, wf_form_set(&g_fp, r1, "off"));                      /* a radio is unchecked by another */
+    TEST_ASSERT_EQUAL(0, wf_form_set(&g_fp, sel, "anglais"));                  /* by label */
+    TEST_ASSERT_EQUAL_STRING("lang_en", g_fp.field[sel].value);
+    TEST_ASSERT_EQUAL(0, wf_form_set(&g_fp, sel, "#2"));
+    TEST_ASSERT_EQUAL_STRING("lang_fr", g_fp.field[sel].value);
+    TEST_ASSERT_EQUAL(0, wf_form_set(&g_fp, sel, "lang_en"));                  /* by value */
+    TEST_ASSERT_EQUAL(-1, wf_form_set(&g_fp, sel, "#9"));
+    TEST_ASSERT_EQUAL(-1, wf_form_set(&g_fp, sel, "klingon"));
+    TEST_ASSERT_EQUAL(0, wf_form_submit(&g_fp, 0, -1, &g_sub));
+    TEST_ASSERT_EQUAL_STRING("http://10.0.2.2/echo?t=web&lr=lang_en", g_sub.url);
+    TEST_ASSERT_EQUAL_STRING("lang_en", wf_form_option_value(&g_fp, sel, 2));
+    TEST_ASSERT_EQUAL_STRING("anglais", wf_form_option_label(&g_fp, sel, 2));
+    TEST_ASSERT_NULL(wf_form_option_value(&g_fp, sel, 3));
+    TEST_ASSERT_EQUAL(-1, wf_form_activate(&g_fp, -1));
+}
+
+/* the option pool and the per-select cap are bounded */
+static void test_option_bounds(void) {
+    wf_url_t base;
+    char v[8];
+    int sel, k, kept = 0;
+    wf_form_reset(&g_fp);
+    TEST_ASSERT_EQUAL(0, wf_url_parse("http://h/", &base));
+    sel = wf_form_add(&g_fp, &base, "select", "s", "", 0, 0, 0);
+    for (k = 0; k < WF_FORM_OPTIONS + 5; k++) {
+        v[0] = 'o'; v[1] = (char)('a' + k % 26); v[2] = 0;
+        if (wf_form_add_option(&g_fp, sel, v, v, 0) >= 0) kept++;
+    }
+    TEST_ASSERT_EQUAL(WF_FORM_OPTIONS, kept);
+    TEST_ASSERT_EQUAL(5, g_fp.opt_dropped);
+    TEST_ASSERT_TRUE(g_fp.opt_used <= WF_FORM_OPT_POOL);
+    TEST_ASSERT_EQUAL(-1, wf_form_add_option(&g_fp, 99, "a", "a", 0));
+}
+
 int main(void) {
     unity_init();
+    RUN_TEST(test_toggle_controls);
+    RUN_TEST(test_option_bounds);
     RUN_TEST(test_edit_and_display);
     RUN_TEST(test_submit_get);
     RUN_TEST(test_submit_post_and_query_replaced);

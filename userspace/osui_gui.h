@@ -56,14 +56,16 @@ typedef struct {
     int (*sections)(void);
     int (*current)(void);
     int (*section)(int k, char *src, int src_max);
-    int (*form_link)(const char *href);   /* 0 focus, 1 submit button, -1 other link */
+    int (*form_link)(const char *href);   /* 0 focus, 1 submit button, 2 toggled (Lot 71), -1 other link */
     int (*form_key)(int key);             /* 0 edited, 1 Enter, 2 ESC, -1 unused */
     int (*form_set)(int n, const char *value);
     int (*submit)(int n, char *src, int src_max, char *final_url, int url_max, char *status, int st_max);
     int (*forms_list)(char *out, int cap);
+    int (*find)(const char *text, int from, int *count);   /* Lot 71: section of a match, or -1 */
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
-/* "web-open URL|FILE", "web-forms", "web-section N|next|prev", "web-input N TEXT", "web-submit [N]": the
+/* "web-open URL|FILE", "web-forms", "web-section N|next|prev", "web-input N TEXT", "web-submit [N]",
+ * "web-find TEXT" / "web-find" (next match): the
  * console and the GUI input line run the same code. 1 when handled. */
 int osui_gui_web_command(const char *line, char *out, int out_max);
 /* Lot 69: URL of result n (1-based) of the last search; 0 or -1 */

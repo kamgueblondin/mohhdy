@@ -41,6 +41,7 @@ static void s_int(char* d, int cap, int v) {
 int shell_search_is(const char* line) {
     return (s_pre(line, "search") && (line[6] == ' ' || !line[6])) ||
            (s_pre(line, "search-config") && (line[13] == ' ' || !line[13])) ||
+           (s_pre(line, "cookies") && (line[7] == ' ' || !line[7])) ||
            (s_pre(line, "search-open") && (line[11] == ' ' || !line[11])) ||
            (s_pre(line, "search-engine") && (line[13] == ' ' || !line[13]));
 }
@@ -211,9 +212,37 @@ int shell_search_url(int n, char* url, int max) {
     return 0;
 }
 
+/* Lot 71: cookies [clear [DOMAIN] | on | off]. Values are never shown. */
+static int cookies_line(const char* a) {
+    static char list[WF_COOKIE_MAX * 220 + 64];
+    char num[16];
+    wf_cookie_jar_t* j = wf_guest_cookies();
+    while (*a == ' ') a++;
+    if (s_pre(a, "clear")) {
+        const char* d = a + 5;
+        int n;
+        while (*d == ' ') d++;
+        n = wf_cookie_clear(j, d);
+        num[0] = 0; s_int(num, (int)sizeof(num), n);
+        print_string("cookies cleared "); print_string(num); print_string("\n");
+        return 0;
+    }
+    if (s_pre(a, "off") && !a[3]) { j->enabled = 0; (void)wf_cookie_clear(j, 0); print_string("cookies off\n"); return 0; }
+    if (s_pre(a, "on") && !a[2]) { j->enabled = 1; print_string("cookies on\n"); return 0; }
+    if (*a) { print_string("cookies error usage: cookies [clear [DOMAIN] | on | off]\n"); return 1; }
+    num[0] = 0; s_int(num, (int)sizeof(num), wf_cookie_count(j));
+    print_string(j->enabled ? "cookies on count " : "cookies off count ");
+    print_string(num);
+    print_string(" (memory only, values hidden)\n");
+    wf_cookie_list(j, list, (int)sizeof(list));
+    print_string(list);
+    return 0;
+}
+
 int shell_search_line(const char* line) {
     static char st[700];
     const char* a;
+    if (s_pre(line, "cookies")) return cookies_line(line + 7);
     if (s_pre(line, "search-config")) return config_line(line + 13);
     if (s_pre(line, "search-engine")) {
         cfg_load();

@@ -209,17 +209,24 @@ static void test_reduce_forms(void) {
     TEST_ASSERT_EQUAL(1, fp.nforms);
     TEST_ASSERT_EQUAL_STRING("https://www.google.com/search", fp.form[0].action);
     TEST_ASSERT_EQUAL(WF_METHOD_GET, fp.form[0].method);
-    TEST_ASSERT_EQUAL(7, fp.nfields);   /* hl, q, btnG, lr, safe, t, button */
+    TEST_ASSERT_EQUAL(8, fp.nfields);   /* hl, q, btnG, lr, safe, x, t, button */
     TEST_ASSERT_EQUAL(WF_FIELD_HIDDEN, fp.field[0].type);
     TEST_ASSERT_EQUAL(WF_FIELD_TEXT, fp.field[1].type);
     TEST_ASSERT_EQUAL_STRING("q", fp.field[1].name);
     TEST_ASSERT_EQUAL_STRING("Rechercher", fp.field[1].label);
     TEST_ASSERT_EQUAL(2048 > WF_FORM_VALUE - 1 ? WF_FORM_VALUE - 1 : 2048, fp.field[1].maxlen);
     TEST_ASSERT_EQUAL(WF_FIELD_SUBMIT, fp.field[2].type);
+    TEST_ASSERT_EQUAL(WF_FIELD_SELECT, fp.field[3].type);
     TEST_ASSERT_EQUAL_STRING("lang_fr", fp.field[3].value);
+    TEST_ASSERT_EQUAL(2, fp.field[3].nopt);
+    TEST_ASSERT_EQUAL_STRING("fran\xe7" "ais", wf_form_option_label(&fp, 3, 1));
+    TEST_ASSERT_EQUAL(WF_FIELD_CHECKBOX, fp.field[4].type);
     TEST_ASSERT_EQUAL_STRING("on", fp.field[4].value);
-    TEST_ASSERT_EQUAL_STRING("a<b", fp.field[5].value);
-    TEST_ASSERT_EQUAL_STRING("Envoyer", fp.field[6].label);
+    TEST_ASSERT_EQUAL(1, fp.field[4].checked);
+    TEST_ASSERT_EQUAL(0, fp.field[5].checked);
+    TEST_ASSERT_EQUAL_STRING("a<b", fp.field[6].value);
+    TEST_ASSERT_EQUAL_STRING("Envoyer", fp.field[7].label);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "<a href=\"mohhdy-form:f:3\">\001" "3\002</a>"));   /* the select is clickable */
     TEST_ASSERT_NOT_NULL(strstr(g_out, "<a href=\"mohhdy-form:f:1\">\001" "1\002</a>"));
     TEST_ASSERT_NOT_NULL(strstr(g_out, "<a href=\"mohhdy-form:s:2\">\001" "2\002</a>"));
     TEST_ASSERT_NULL(strstr(g_out, "chance"));
@@ -260,13 +267,13 @@ static void test_html_text_display(void) {
 static void test_header_charset_wins(void) {
     static const char page[] =
         "<html><head><meta content=\"text/html; charset=UTF-8\" http-equiv=\"Content-Type\"><title>G</title></head>"
-        "<body><p>Fran\xe7ais</p></body></html>";
+        "<body><p>Fran\xe7" "ais</p></body></html>";
     wf_html_stats_t st;
     TEST_ASSERT_EQUAL(WF_CS_LATIN1, wf_charset_header("text/html; charset=ISO-8859-1", -1));
     TEST_ASSERT_EQUAL(WF_CS_NONE, wf_charset_header("text/html", -1));
     wf_html_set_charset(wf_charset_header("text/html; charset=ISO-8859-1", -1));
     wf_html_reduce(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st);
-    TEST_ASSERT_NOT_NULL(strstr(g_out, "Fran\xe7ais"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "Fran\xe7" "ais"));
     TEST_ASSERT_EQUAL(WF_CS_LATIN1, st.charset);
     wf_html_set_charset(WF_CS_NONE);
     wf_html_reduce(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st);

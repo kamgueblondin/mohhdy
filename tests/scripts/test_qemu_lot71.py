@@ -173,7 +173,12 @@ def main():
             out = lw.run(mon, proc, "web-open %s/long.html" % u, "osui web page sections 26", fail=["error"])
             out = lw.run(mon, proc, "web-section 26", "osui web section 26/26", 30)
             lw.run(mon, proc, "web-section 99", "error=out_of_range", 30)
-            say("long page: 26 sections, the last one reached")
+            lw.run(mon, proc, "web-section 1", "osui web section 1/26", 30)
+            lw.run(mon, proc, "web-find fin-de-page", "osui web find ok section 26/26 matches 1", 30)
+            lw.run(mon, proc, "web-find paragraphe", "osui web find ok section 26/26 matches 1500", 30)   # from the current section
+            lw.run(mon, proc, "web-find", "osui web find ok section 1/26 matches 1500", 30)                # next match wraps
+            lw.run(mon, proc, "web-find introuvable", "osui web find none", 30)
+            say("long page: 26 sections, the last one reached, web-find jumps to the match")
             lw.run(mon, proc, "search-config searx %s/searx" % u, "search-config engine", 30)
             lw.run(mon, proc, "search-engine searx", "search-engine ok searx", 30)
             out = lw.run(mon, proc, "search mohhdy", "search end", fail=["search error"])
@@ -182,6 +187,27 @@ def main():
             wait_server("SEARX q='mohhdy'")
             lw.run(mon, proc, "search-config clear", "search-config engine ddg", 30)
             say("search: configured SearXNG engine used, config cleared")
+            # ---- checkbox, radio, select from the console
+            lw.run(mon, proc, "web-open %s/controls.html" % u, "osui web page sections 1", fail=["error"])
+            out = lw.run(mon, proc, "web-forms", "field 4", 30)
+            for want in ("field 0 form 0 checkbox name=safe value=on unchecked", "field 2 form 0 radio name=t value=img unchecked",
+                         'field 3 form 0 select name=lr value=lang_fr options "" *lang_fr lang_en'):
+                if want not in out:
+                    raise RuntimeError("controls web-forms missing %r: %r" % (want, out[-800:]))
+            lw.run(mon, proc, "web-input 0 on", "osui web input ok", 30)
+            lw.run(mon, proc, "web-input 2 on", "osui web input ok", 30)
+            lw.run(mon, proc, "web-input 3 anglais", "osui web input ok", 30)
+            lw.run(mon, proc, "web-submit 0", "osui web form submit", fail=["form error"])
+            wait_server("ECHO GET q='safe=on&t=img&lr=lang_en'")
+            say("console controls: checkbox, radio and select submitted")
+            # ---- cookies: a login redirect keeps its session cookie
+            lw.run(mon, proc, "web-open %s/cookie/login" % u, "osui web page sections 1", fail=["error"])
+            wait_server("COOKIE home='sid=s3cr3t-session; theme=dark'")
+            out = lw.run(mon, proc, "cookies", "values hidden", 30)
+            if "cookies on count 2" not in out or "sid len=14" not in out or "s3cr3t" in out:
+                raise RuntimeError("cookies list: %r" % out[-600:])
+            lw.run(mon, proc, "cookies clear", "cookies cleared 2", 30)
+            say("cookies: session cookie sent after the redirect, values hidden, cleared")
             # ---- GUI
             g.send_command_until(mon, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
@@ -215,6 +241,27 @@ def main():
             time.sleep(1.5)
             shot(mon, "form-answer")
             say("GUI form: click, typing and Enter submitted q=gui")
+            g.send_key(mon, "esc")
+            time.sleep(0.8)
+            start = len(g.log_text())
+            lw.type_line(mon, proc, "web %s/controls.html" % u, mode="getc")
+            g.wait_for(proc, "osui web fetch ok status 200", lw.FETCH_TIMEOUT, start)
+            time.sleep(2.0)
+            rgb = shot(mon, "controls-before")
+            fx, fy = blue_link(rgb, ox, oy, ox + 700, oy + 200)
+            start = len(g.log_text())
+            for _ in range(3):
+                g.click_tablet(qmp, fx, fy, W, H)
+                try:
+                    g.wait_for(proc, "osui web form toggle f:0", 8.0, start)
+                    break
+                except RuntimeError:
+                    continue
+            else:
+                raise RuntimeError("click on the checkbox at %d,%d did not toggle it" % (fx, fy))
+            time.sleep(1.5)
+            shot(mon, "controls-checked")
+            say("GUI form: a click toggles the checkbox")
             g.send_key(mon, "esc")
             time.sleep(0.8)
             start = len(g.log_text())

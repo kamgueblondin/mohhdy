@@ -12,6 +12,7 @@ int shell_fetch_page(const char* url, char* src, int src_max, char* final_url, i
 /* Lot 71: the last fetched page (GUI): sections of a long page, its forms
  * (focus, typing, submit with GET or POST urlencoded). */
 int shell_page_sections(void);
+int shell_page_find(const char* text, int from, int* count);
 int shell_page_current(void);
 int shell_page_section(int k, char* src, int src_max);
 int shell_page_form_link(const char* href);

@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "wf_http.h"
 #include "wf_tls.h"
+#include "wf_cookie.h"
 
 #define WF_FETCH_MAX_REDIRECTS 5
 
@@ -23,6 +24,7 @@ typedef struct {
     const wf_trust_t* trust;
     const char* now;          /* YYYYMMDDHHMMSS or 0 (clock not trusted) */
     int max_redirects;        /* clamped to WF_FETCH_MAX_REDIRECTS */
+    wf_cookie_jar_t* jar;     /* Lot 71: 0 = no cookies; else sent and stored on every hop */
 } wf_fetch_env_t;
 
 typedef struct {
@@ -34,6 +36,8 @@ typedef struct {
     int encoding;             /* Lot 69: Content-Encoding decoded (WF_ENC_*) */
     int wire_len;             /* body bytes on the wire (compressed) */
     int redirects;
+    int cookies_set;          /* Lot 71: Set-Cookie stored over all hops */
+    int cookies_sent;         /* cookies sent on the last hop */
     int https;
     uint8_t ip[4];
     /* TLS details of the final hop */
