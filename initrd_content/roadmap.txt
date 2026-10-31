@@ -1,3 +1,4 @@
+# Lot 69: CSS font-size per element, larger text in all chrome, Internet search (search/search-open, /browser bar, /search), US-080 layout applied + EDID, US-068/US-073 per-peer pacer with data acks, US-076 ARM portable self-tests (all partial); statuses unchanged.
 # Lot 68: UI text scale (ui-scale, text-size, Ctrl zoom); US-068/US-073 pacer driven by the estimator, US-080 form-factor plan, US-081 power-apply and simulated battery (all partial); statuses unchanged.
 # Lot 67: real HTTP/HTTPS (fetch, /browser) with X.509 checks; US-068/US-073 bandwidth estimator (partial); statuses unchanged.
 # Lot 66: US-G23 done (/release apply, verify, refused apply, rollback, restore in QEMU); phase 9 24/24; US-069 heal anti-entropy, US-070 LRU cache (both partial).

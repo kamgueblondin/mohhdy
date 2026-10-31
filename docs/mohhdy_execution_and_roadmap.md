@@ -549,3 +549,9 @@ Lot 47 (PR #204, `docs/lot47_plan.md`) :
 
 - Echelle globale `ui-scale` (1x a 4x, auto selon l'ecran), zoom par fenetre `text-size`, Ctrl+'+'/'-'/'0', persistance `/persist/ui.cfg`, glyphes lisses Scale2x/Scale3x, zoom web avec reflow. Preuve `make qemu-gui-text-scale`.
 - US-068/US-073 partiels : le pacer de donnees suit le debit de l'estimateur (`p2p-pace`). US-080 partiel : `form-factor`. US-081 partiel : `power-apply`, batterie simulee (`power-sim`). US-076 inchange. Voir docs/lot68_plan.md.
+
+### Lot 69 : tailles de police CSS, recherche Internet, formats appliques, cadence par pair, ARM (US-031 / US-068 / US-073 / US-076 / US-080)
+
+- `font-size` par element et `line-height` relatif (US-031 partiel), textes agrandis dans la bulle du dock, la barre d'etat, l'explorateur et la scene IA, polices carrees natives (`ui-font`). Preuve `make qemu-gui-text-scale`.
+- Recherche Internet sans JavaScript : `search`, `search-open`, `search-engine`, barre d'adresse de `/browser`, `/search` dans le chat. Preuve hors ligne `make qemu-lot67-web` ; moteur reel seulement a la main (`LOT69_REAL=1`).
+- US-080 partiel : `form-factor apply` regle dock, menus et chat (`ui-layout`), taille physique lue dans l'EDID (`display-info`). US-068/US-073 partiels : cadence par pair alimentee par des acquittements par paquet (`p2p-flow`). US-076 partiel : auto-tests ARM de `aes_gcm.c`, `edid.c`, `p2p_flow.c`. Voir docs/lot69_plan.md.

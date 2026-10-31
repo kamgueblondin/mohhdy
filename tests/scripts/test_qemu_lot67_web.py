@@ -205,6 +205,24 @@ def main():
                 time.sleep(1.5)
                 w, h, rgb = g.screendump_rgb(mon, "qemu-lot69-%s.ppm" % label)
                 say("%s: %s" % (label, save_png(label + ".png", w, h, rgb)))
+            if os.environ.get("LOT69_REAL") == "1":
+                # manual only: the real engine from the desktop (not in CI)
+                g.send_key(mon, "esc")
+                time.sleep(0.8)
+                type_line(mon, proc, "search-engine ddg", mode="getc")
+                time.sleep(2)
+                start = len(g.log_text())
+                type_line(mon, proc, "search freestanding c kernel", mode="getc")
+                deadline = time.monotonic() + 240
+                while time.monotonic() < deadline:
+                    m = re.search(r"osui web search (ok|error)[^\n]*", g.log_text()[start:])
+                    if m:
+                        break
+                    time.sleep(1)
+                say("REAL GUI search: %s" % (m.group(0)[:300] if m else "no answer in 240 s"))
+                time.sleep(2)
+                w, h, rgb = g.screendump_rgb(mon, "qemu-lot69-search-real.ppm")
+                say("search-real: %s" % save_png("search-real.png", w, h, rgb))
             if os.environ.get("LOT67_REAL") == "1":
                 g.send_key(mon, "esc")  # the page pane takes the keys; ESC closes it
                 g.wait_for(proc, "osui web close", 10, len(g.log_text()) - 4000)

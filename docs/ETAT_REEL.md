@@ -8,6 +8,15 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 69 (font sizes, Internet search, form factors applied, per-peer pacing, ARM)
+
+- US-031 partial: CSS `font-size` per element (h1-h6, px/em/rem/%/pt, keywords) and font-relative `line-height`; each text item carries its scale. Sizes under 16 px stay on the 8 px cell (single bitmap font).
+- Larger text in the dock tooltip, status row, icon labels, Scene IA, file tree; native square fonts (`ui-font native|smooth`). Proof `make qemu-gui-text-scale`.
+- Internet search without JavaScript: `search`, `search-open`, `search-engine`, `/browser` address bar, `/search` in chat; DuckDuckGo html with lite fallback, bot-check reported. Offline proof `make qemu-lot67-web`; real engine only by hand (`LOT69_REAL=1`), and the engine can change or block.
+- US-080 partial: `form-factor apply` sets dock side, compact menus, full chat (`ui-layout`); EDID read from the QEMU std VGA (`display-info`, `SYS_DISPLAY_INFO`). No DDC on real monitors.
+- US-068/US-073 partial: per-peer pacer fed by per-packet data acks (`p2p_flow`, `p2p-flow`), losses measured, no retransmission. Proof `make qemu-p2p` scenario 1b.
+- US-076 partial: ARM boot self-tests of `aes_gcm.c`, `edid.c`, `p2p_flow.c` compiled unchanged (CI `arm-port`). US-078/US-097 still simule. Details: [lot69_plan.md](lot69_plan.md).
+
 ## Lot 68 (text scale, estimator-driven pacing, form factors, power)
 
 - Text can grow: `ui-scale` (1x..4x, auto from the screen), `text-size WINDOW`, Ctrl+'+'/'-'/'0' on the focused window, saved in `/persist/ui.cfg`. Scaled 8x8 glyphs with Scale2x/Scale3x smoothing. Web zoom reflows the page. Proof `make qemu-gui-text-scale`.
