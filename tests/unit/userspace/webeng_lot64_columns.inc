@@ -98,7 +98,8 @@ static void test_l64_columns_parse(void) {
     }
     lot52_render(L64_BODY "<div id=m style='columns:auto 12px;column-rule:dotted #00ff00 thin;column-fill:auto'>a</div>"
                  "<div id=n style='columns:4;column-count:auto;column-rule-style:double;column-rule-width:thick;column-rule-color:#0000ff'>a</div>"
-                 "<div id=o style='columns:auto auto;column-span:none'>a</div><div id=p style='column-span:all'>a</div></body>", 320);
+                 "<div id=o style='columns:auto auto;column-span:none'>a</div><div id=p style='column-span:all;column-span:2'>a</div></body>", 320);
+    TEST_ASSERT_EQUAL(1, lot52_node("p")->col_span_all);
     TEST_ASSERT_EQUAL(0, lot52_node("m")->col_count);
     TEST_ASSERT_EQUAL(12, lot52_node("m")->col_width);
     TEST_ASSERT_EQUAL(1, lot52_node("m")->col_fill_auto);

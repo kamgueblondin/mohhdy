@@ -193,7 +193,10 @@ typedef struct {
      * col_gap (normal: 8 px, one glyph). */
     uint8_t col_count, col_fill_auto, rule_w, rule_style, rule_color_set;
     int16_t col_width;
-    uint32_t rule_color;  /* lot 64: inherited list-style-image url (pool), 0 length: none */
+    uint32_t rule_color;
+    /* Lot 64: column-span all (1) on a block child of a multi-column box,
+     * and the forced column breaks: bit 0 break-before, bit 1 break-after. */
+    uint8_t col_span_all, col_break;
     uint8_t justify_content, align_items, align_self, align_content;
     uint8_t justify_items, justify_self;
     uint8_t width_kind, basis_content, border_box;

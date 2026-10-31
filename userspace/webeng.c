@@ -3917,7 +3917,17 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "balance")) n->col_fill_auto = 0;
         else diag(d, "columns refused", -1);
     } else if (w_eq(prop, "column-span")) {
-        if (!value_is(v, vl, "none")) diag(d, "column span refused", -1);
+        if (value_is(v, vl, "none") || value_is(v, vl, "all")) n->col_span_all = (uint8_t)value_is(v, vl, "all");
+        else diag(d, "column span refused", -1);
+    } else if (w_eq(prop, "break-before") || w_eq(prop, "break-after")) {
+        /* a forced break is kept between columns only; avoid has nothing to
+         * do since a box is never fragmented and units break between boxes */
+        int bit = prop[6] == 'b' ? 1 : 2;
+        if (value_is(v, vl, "column")) n->col_break |= (uint8_t)bit;
+        else if (value_is(v, vl, "auto") || value_is(v, vl, "avoid") || value_is(v, vl, "avoid-column")) n->col_break &= (uint8_t)~bit;
+        else diag(d, "break refused", -1);
+    } else if (w_eq(prop, "break-inside")) {
+        if (!value_is(v, vl, "auto") && !value_is(v, vl, "avoid") && !value_is(v, vl, "avoid-column")) diag(d, "break refused", -1);
     } else if (w_eq(prop, "column-rule")) {
         if (parse_column_rule(n, v, vl)) diag(d, "column rule refused", -1);
     } else if (w_eq(prop, "column-rule-style")) {
@@ -4306,7 +4316,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         } }
         n->list_style = p ? p->list_style : WE_LIST_NONE;
         n->lsi_off = p ? p->lsi_off : 0; n->lsi_len = p ? p->lsi_len : 0;
-        n->col_count = 0; n->col_width = -1; n->col_fill_auto = 0;
+        n->col_count = 0; n->col_width = -1; n->col_fill_auto = 0; n->col_span_all = 0; n->col_break = 0;
         n->rule_w = 3; n->rule_style = 0; n->rule_color_set = 0; n->rule_color = 0;
         n->border_color = n->color;
         n->quotes_kind = p ? p->quotes_kind : WE_QUOTES_AUTO;
@@ -6921,8 +6931,8 @@ static void rtl_mirror(we_doc_t *d, int idx, int first, int x, int width) {
  * to further columns on the right (overflow columns). Each unit moves with
  * its subtree and items to its column. column-rule paints in the middle of
  * each gap between two used columns, over the column height, after the
- * content. column-span: all and vertical writing modes are refused. */
-typedef struct { int node, top, bottom, line; } we_col_unit_t;
+ * content. Vertical writing modes are refused. */
+typedef struct { int node, top, bottom, line, span, brk; } we_col_unit_t;
 static we_col_unit_t col_unit[OS_FB_WEB_ITEMS + WE_MAX_NODES];
 static int16_t col_of[OS_FB_WEB_ITEMS + WE_MAX_NODES];
 static uint8_t col_moved[OS_FB_WEB_ITEMS];
@@ -6969,11 +6979,13 @@ static int column_units(we_doc_t *d, int idx, int first) {
                     continue;
                 }
                 open = count++;
-                col_unit[open].node = c; col_unit[open].line = 1;
+                col_unit[open].node = c; col_unit[open].line = 1; col_unit[open].span = col_unit[open].brk = 0;
                 col_unit[open].top = top; col_unit[open].bottom = bottom;
             }
         } else {
             col_unit[count].node = c; col_unit[count].line = 0;
+            col_unit[count].span = k->col_span_all && k->display != WE_DISP_INLINE_BLOCK;
+            col_unit[count].brk = k->col_break;
             col_unit[count].top = k->y - k->margin[0];
             col_unit[count].bottom = k->y + k->h + k->margin[2];
             count++;
@@ -6982,15 +6994,19 @@ static int column_units(we_doc_t *d, int idx, int first) {
     return count;
 }
 
-/* columns used by packing the units at height h (col_of filled) */
-static int column_pack(int units, int h) {
+/* columns used by packing units [from, to) at height h (col_of filled,
+ * relative to the segment); a forced break opens a column */
+static int column_pack(int from, int to, int h) {
     int u, column = 0, start = 0;
-    for (u = 0; u < units; u++) {
-        if (u == 0) start = col_unit[0].top;
-        else if (col_unit[u].bottom - start > h) { column++; start = col_unit[u].top; }
+    for (u = from; u < to; u++) {
+        if (u == from) start = col_unit[u].top;
+        else if (col_unit[u].bottom - start > h || (col_unit[u].brk & 1) || (col_unit[u - 1].brk & 2)) {
+            column++;
+            start = col_unit[u].top;
+        }
         col_of[u] = (int16_t)column;
     }
-    return units ? column + 1 : 0;
+    return to > from ? column + 1 : 0;
 }
 
 static void column_shift(we_doc_t *d, int first, const we_col_unit_t *u, int dx, int dy) {
@@ -7014,42 +7030,75 @@ static void column_shift(we_doc_t *d, int first, const we_col_unit_t *u, int dx,
         }
 }
 
-static int layout_columns(we_doc_t *d, int idx, int x, int y, int width, int depth) {
+static int width_auto(const we_node_t *n);
+
+/* Lot 64: one segment of units between spanners, its first column at
+ * top; returns its height */
+static int column_segment(we_doc_t *d, int idx, int first, int from, int to, int x, int top, int cw, int gap, int count,
+                          int fixed) {
     const we_node_t *n = &d->nodes[idx];
-    int gap, cw, count = column_plan(n, width, &gap, &cw), first = (int)d->nitems, units, u, h, lo, hi, used, k;
-    int fixed = definite_height(d, idx, 0), start[WE_COLUMNS_MAX * 4];
-    (void)layout_children(d, idx, x, y, cw, depth);
-    units = column_units(d, idx, first);
-    if (!units) return fixed > 0 ? fixed : 0;
-    lo = 1; hi = col_unit[units - 1].bottom - col_unit[0].top;
-    for (u = 0; u < units; u++) if (col_unit[u].bottom - col_unit[u].top > lo) lo = col_unit[u].bottom - col_unit[u].top;
+    int lo = 1, hi = col_unit[to - 1].bottom - col_unit[from].top, h, used, u, k, start[WE_COLUMNS_MAX * 4];
+    for (u = from; u < to; u++) if (col_unit[u].bottom - col_unit[u].top > lo) lo = col_unit[u].bottom - col_unit[u].top;
     if (hi < lo) hi = lo;
     if (n->col_fill_auto && fixed > 0) h = fixed;
     else {
         while (lo < hi) {                      /* the smallest height using at most count columns */
             int mid = (lo + hi) / 2;
-            if (column_pack(units, mid) <= count) hi = mid;
+            if (column_pack(from, to, mid) <= count) hi = mid;
             else lo = mid + 1;
         }
         h = lo;
         if (fixed > 0 && h > fixed) h = fixed;
     }
-    used = column_pack(units, h);
+    used = column_pack(from, to, h);
     if (used > WE_COLUMNS_MAX * 4) { diag(d, "columns overflow dropped", idx); used = WE_COLUMNS_MAX * 4; }
     if (used > count) diag(d, "columns overflow", idx);
     for (k = 0; k < used; k++) start[k] = -1;
-    for (u = 0; u < units; u++) if (col_of[u] < used && start[col_of[u]] < 0) start[col_of[u]] = col_unit[u].top;
-    w_zero(col_moved, sizeof(col_moved));
-    for (u = 0; u < units; u++) {
+    for (u = from; u < to; u++) if (col_of[u] < used && start[col_of[u]] < 0) start[col_of[u]] = col_unit[u].top;
+    for (u = from; u < to; u++) {
         int column = col_of[u] < used ? col_of[u] : used - 1;
-        column_shift(d, first, &col_unit[u], column * (cw + gap), column ? y - start[column] : 0);
+        column_shift(d, first, &col_unit[u], column * (cw + gap), top - start[column]);
     }
     if (n->rule_style > WE_BS_HIDDEN && n->rule_w > 0)
         for (k = 1; k < used && k < count; k++) {
             int rx = x + k * (cw + gap) - gap / 2 - n->rule_w / 2;
-            edge_paint(d, idx, n->rule_style, n->rule_color_set ? n->rule_color : n->color, 1, rx, y, n->rule_w, h);
+            edge_paint(d, idx, n->rule_style, n->rule_color_set ? n->rule_color : n->color, 1, rx, top, n->rule_w, h);
         }
     return h;
+}
+
+/* A column-span: all block child (a spanner) is laid out at the full
+ * width (an auto width; a percentage resolves against the column) and
+ * cuts the content into segments: each segment is balanced on its own,
+ * the spanner goes below it and the next segment below the spanner. The
+ * fill and the definite height apply only without spanners. */
+static int layout_columns(we_doc_t *d, int idx, int x, int y, int width, int depth) {
+    const we_node_t *n = &d->nodes[idx];
+    int gap, cw, count = column_plan(n, width, &gap, &cw), first = (int)d->nitems, units, u, from = 0, top = y, spans = 0, c;
+    int fixed = definite_height(d, idx, 0);
+    for (c = n->first; c >= 0; c = d->nodes[c].next)
+        if (d->nodes[c].col_span_all && d->nodes[c].display != WE_DISP_INLINE && d->nodes[c].display != WE_DISP_INLINE_BLOCK &&
+            !d->nodes[c].is_text && !d->nodes[c].absolute && d->nodes[c].display != WE_DISP_NONE) {
+            spans++;
+            if (width_auto(&d->nodes[c])) forced_width[c] = (int16_t)width;
+            else if (d->nodes[c].width_pct > 0) diag(d, "column span width on the column", c);
+        }
+    (void)layout_children(d, idx, x, y, cw, depth);
+    for (c = n->first; c >= 0; c = d->nodes[c].next) if (d->nodes[c].col_span_all && width_auto(&d->nodes[c])) forced_width[c] = -1;
+    units = column_units(d, idx, first);
+    if (!units) return fixed > 0 ? fixed : 0;
+    if (spans) fixed = -1;
+    w_zero(col_moved, sizeof(col_moved));
+    for (u = 0; u <= units; u++) {
+        if (u < units && !col_unit[u].span) continue;
+        if (u > from) top += column_segment(d, idx, first, from, u, x, top, cw, gap, count, fixed);
+        if (u < units) {
+            column_shift(d, first, &col_unit[u], 0, top - col_unit[u].top);
+            top += col_unit[u].bottom - col_unit[u].top;
+        }
+        from = u + 1;
+    }
+    return top - y;
 }
 
 static int layout_content(we_doc_t *d, int idx, int x, int y, int width, int depth) {

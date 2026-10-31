@@ -1,5 +1,6 @@
-/* Lot 64 round 2: the dir attribute, and background-position with edge
- * offsets (three and four values) and its -x / -y longhands. */
+/* Lot 64 round 2: the dir attribute, background-position with edge
+ * offsets (three and four values) and its -x / -y longhands, column-span
+ * all and forced column breaks. */
 
 static void test_l64_dir_attribute(void) {
     lot52_render(L64_BODY "<p id=a dir=rtl style='width:40px;text-align:start'>ab</p><p id=b dir=RTL style='direction:ltr'>cd</p>"
@@ -81,9 +82,58 @@ static void test_l64_bgpos_refusals(void) {
     }
 }
 
+static void test_l64_columns_span_all(void) {
+    lot52_render(L64_BODY "<div id=m style='column-count:2;width:40px;column-rule:1px solid #ff0000'><div>a</div><div>b</div><div>c</div>"
+                 "<div id=s style='column-span:all;background:#00ff00'>long span</div><div>d</div><div style='break-before:column'>e</div>"
+                 "<div>f</div></div><p id=after style='margin:0'>z</p></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("a", 0, 1);                                   /* first segment balanced: a b | c */
+    l61_text_at("b", 0, 11);
+    l61_text_at("c", 24, 1);
+    l64_box("s", 0, 20, 40, 20);                              /* the spanner below, full width */
+    l61_rect_at(0, 20, 40, 20, 0x00FF00);
+    l61_text_at("long", 0, 21);
+    l61_text_at("d", 0, 41);                                  /* next segment below the spanner */
+    l61_text_at("e", 24, 41);                                 /* forced into the second column */
+    l61_text_at("f", 24, 51);
+    l61_rect_at(20, 0, 1, 20, 0xFF0000);                      /* one rule per segment */
+    l61_rect_at(20, 40, 1, 20, 0xFF0000);
+    TEST_ASSERT_EQUAL(0x00FF00, l63_at(20, 30));                 /* no rule across the spanner */
+    l64_box("m", 0, 0, 40, 60);
+    l61_text_at("z", 0, 61);
+}
+
+static void test_l64_columns_span_widths_and_breaks(void) {
+    lot52_render(L64_BODY "<div style='column-count:3;width:56px'><div style='break-after:column'>a</div><div>b</div><div>c</div><div>d</div>"
+                 "<div id=s style='column-span:all;width:16px;margin-top:2px'>x</div><span>p q r</span></div>"
+                 "<div id=t style='column-span:all;width:50%'>t</div></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("a", 0, 1);                                   /* alone in its column */
+    l61_text_at("b", 21, 1);
+    l61_text_at("c", 21, 11);
+    l61_text_at("d", 42, 1);
+    l64_box("s", 0, 22, 16, 10);                              /* its own width, its margin kept */
+    l61_text_at("p", 0, 33);                                  /* inline lines balanced after it */
+    l61_text_at("q", 21, 33);
+    l61_text_at("r", 42, 33);
+    l64_box("t", 0, 42, 160, 10);                             /* outside a multi-column box: a block */
+    lot52_render(L64_BODY "<div style='column-count:2;width:40px;height:50px;column-fill:auto'><div id=u style='column-span:all;width:50%'>u</div>"
+                 "<div>v</div><div>w</div></div></body>", 320);
+    TEST_ASSERT_EQUAL(1, l61_diag_count("column span width on the column"));
+    l64_box("u", 0, 0, 8, 10);                                /* 50% of the 16 px column */
+    l61_text_at("v", 0, 11);                                  /* balanced: no fill with a spanner */
+    l61_text_at("w", 24, 11);
+    lot52_render(L64_BODY "<div id=a style='break-before:page;break-after:column;break-after:left;break-inside:avoid-page;"
+                 "break-before:avoid-column;break-inside:avoid'>v</div></body>", 320);
+    TEST_ASSERT_EQUAL(3, l61_diag_count("break refused"));
+    TEST_ASSERT_EQUAL(2, lot52_node("a")->col_break);
+}
+
 static void lot64_more_run(void) {
     RUN_TEST(test_l64_dir_attribute);
     RUN_TEST(test_l64_bgpos_edge_offsets);
     RUN_TEST(test_l64_bgpos_longhands);
     RUN_TEST(test_l64_bgpos_refusals);
+    RUN_TEST(test_l64_columns_span_all);
+    RUN_TEST(test_l64_columns_span_widths_and_breaks);
 }
