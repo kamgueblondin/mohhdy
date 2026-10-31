@@ -746,3 +746,9 @@ WF_X509_SRCS = ../userspace/wf_x509.c $(WF_CRYPTO_SRCS)
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_x509: $(UNIT_DIR)/userspace/test_wf_x509.c $(UNIT_DIR)/userspace/wf_x509_fixtures.h $(UNIT_DIR)/userspace/wf_real_chain.h $(WF_X509_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_X509_SRCS) $(FRAMEWORK_SOURCES)
+
+# Lot 67: URL / HTTP / DNS / TLS PRF / fetch
+WF_NET_SRCS = ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../kernel/aes_gcm.c ../kernel/x25519.c $(WF_X509_SRCS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_http: $(UNIT_DIR)/userspace/test_wf_http.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)

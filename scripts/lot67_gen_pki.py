@@ -8,7 +8,8 @@ from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
 
-OUT = sys.argv[1] if len(sys.argv) > 1 else "build/lot67_pki"
+SERVER_ONLY = len(sys.argv) > 1
+OUT = sys.argv[1] if SERVER_ONLY else "build/lot67_pki"
 os.makedirs(OUT, exist_ok=True)
 NOW = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
 
@@ -82,6 +83,9 @@ def arr(n, b):
     s = ",".join(f"0x{x:02x}" for x in b)
     return f"static const unsigned char {n}[] = {{{s}}};\n"
 
+if SERVER_ONLY:
+    print("ok server pki in", OUT)
+    sys.exit(0)
 items = [("root", root), ("inter", inter), ("leaf", leaf), ("leaf_pss", leaf_pss), ("expired", expired),
          ("future", future), ("crit", crit), ("noca", noca), ("noca_leaf", noca_leaf), ("sub", sub),
          ("sub_leaf", sub_leaf), ("forged", forged)]
