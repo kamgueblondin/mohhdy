@@ -39,6 +39,7 @@ static char g_big[16384];
 static char g_file[1100];
 
 static int sys0(int nr) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(nr) : "memory"); return r; }
+static int sys_display(os_display_info_t* d) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(SYS_DISPLAY_INFO), "c"(d) : "memory"); return r; }
 static int sys1(int nr, const void* a) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(nr), "b"(a) : "memory"); return r; }
 
 static int s_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }
@@ -78,7 +79,7 @@ static void join(char* d, const char* dir, const char* name, int cap) {
     s_cat(d, name, cap);
 }
 
-static const char* k_cmds[] = { "form-factor", "power-apply", "power-sim",
+static const char* k_cmds[] = { "form-factor", "display-info", "power-apply", "power-sim",
     "hal-info", "hal-port", "screen-adapt", "screen-resize", "gesture", "gesture-multi", "power-profile", "power-status", "dev-list",
     "dev-rules", "dev-hotplug", "admin-nodes", "admin-node-add",
     "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
@@ -725,6 +726,15 @@ have_size:
     }
     rest = word(rest, c, (int)sizeof(c));
     if (c[0]) diag = to_int(c, &ok);
+    else if (!b[0]) {
+        /* Lot 69 (US-080): no size given: the screen's EDID diagonal */
+        os_display_info_t di;
+        char phys[160];
+        if (sys_display(&di) == 0) {
+            plat_form_physical(&di, &diag, phys, (int)sizeof(phys));
+            print_string(phys);
+        }
+    }
     if (!ok || plat_form_plan(w, h, diag, form, &pl) != 0) {
         print_string("form-factor error size WxH 160x120..8192x8192, diagonal 0..1500 tenths of an inch\n");
         return 1;
@@ -742,6 +752,23 @@ have_size:
         (void)osui_gui_scale_command(line, g_out, (int)sizeof(g_out));
         print_string("form-factor applied ");
         print_string(g_out);
+        /* Lot 69 (US-080): the rest of the plan, through ui-layout */
+        {
+            static const char *const steps[3][2] = {
+                { "ui-layout chat full", "ui-layout chat auto" },
+                { "ui-layout dock left", "ui-layout dock bottom" },
+                { "ui-layout menu compact", "ui-layout menu full" } };
+            int k, want[3];
+            want[0] = pl.chat_mode == PF_CHAT_FULL;
+            want[1] = pl.dock == PF_DOCK_LEFT;
+            want[2] = pl.compact_menu != 0;
+            for (k = 0; k < 3; k++) {
+                g_out[0] = 0;
+                (void)osui_gui_scale_command(steps[k][want[k] ? 0 : 1], g_out, (int)sizeof(g_out));
+            }
+            print_string("form-factor applied ");
+            print_string(g_out);
+        }
     }
     return 0;
 }
@@ -1005,6 +1032,13 @@ int shell_platform_line(const char* line) {
     }
     if (s_eq(cmd, "legacy-emul")) return cmd_legacy_emul(rest);
     if (s_eq(cmd, "form-factor")) return cmd_form_factor(rest);
+    if (s_eq(cmd, "display-info")) {
+        os_display_info_t di;
+        if (sys_display(&di) != 0) { print_string("display-info error syscall\n"); return 1; }
+        plat_form_physical(&di, 0, g_out, (int)sizeof(g_out));
+        print_string(g_out);
+        return 0;
+    }
     if (s_eq(cmd, "power-apply")) return cmd_power_apply(rest);
     if (s_eq(cmd, "power-sim")) return cmd_power_sim(rest);
     if (s_eq(cmd, "power-profile")) {

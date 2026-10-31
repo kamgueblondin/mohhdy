@@ -281,11 +281,14 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_user_heap.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/user_heap.c"
     fi
+    if [ "$(basename "$test_file")" = "test_edid.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/edid.c"
+    fi
     if [ "$(basename "$test_file")" = "test_out_capture.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/out_capture.c"
     fi
     if [ "$(basename "$test_file")" = "test_gfx_desktop.c" ]; then
-        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/clipboard.c $BASE_DIR/kernel/gfx_wm.c $BASE_DIR/kernel/gfx_term.c $BASE_DIR/kernel/pci_service.c $BASE_DIR/kernel/input/usb_tablet.c"
+        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/edid.c $BASE_DIR/kernel/clipboard.c $BASE_DIR/kernel/gfx_wm.c $BASE_DIR/kernel/gfx_term.c $BASE_DIR/kernel/pci_service.c $BASE_DIR/kernel/input/usb_tablet.c"
     fi
     if [ "$(basename "$test_file")" = "test_ipc.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/ipc.c"

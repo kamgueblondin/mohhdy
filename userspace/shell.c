@@ -3669,7 +3669,7 @@ static int is_builtin(const char* cmd) {
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
-        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-qos", "p2p-bwe", "p2p-probe", "p2p-pace", "ui-scale", "text-size", "ui-font", "form-factor", "power-apply", "power-sim", "p2p-burst", "p2p-flood", "p2p-kv", "p2p-poll",
+        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-qos", "p2p-bwe", "p2p-probe", "p2p-pace", "ui-scale", "text-size", "ui-font", "ui-layout", "form-factor", "display-info", "power-apply", "power-sim", "p2p-burst", "p2p-flood", "p2p-kv", "p2p-poll",
         "p2p-send", "p2p-put", "p2p-get", "p2p-sync", "p2p-propose", "p2p-block", "p2p-unblock", "p2p-limit",
         "p2p-raft", "p2p-raft-compact", "p2p-raft-put", "p2p-grpc", "p2p-stun", "p2p-punch", "p2p-cache", "p2p-route",
         "collab-join", "collab-pay", "collab-offer", "collab-reserve", "collab-task", "collab-claim", "collab-work",
@@ -7367,7 +7367,7 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
     } else if (strcmp(command, "net-if") == 0) {
         cmd_net_if(ctx, args, arg_count);
         return 1;
-    } else if (strcmp(command, "ui-scale") == 0 || strcmp(command, "text-size") == 0 || strcmp(command, "ui-font") == 0) {
+    } else if (strcmp(command, "ui-scale") == 0 || strcmp(command, "text-size") == 0 || strcmp(command, "ui-font") == 0 || strcmp(command, "ui-layout") == 0) {
         /* Lot 68: one text scale for the console and the GUI */
         char line[160], out[256];
         int i, n = 0;

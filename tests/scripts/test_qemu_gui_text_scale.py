@@ -144,6 +144,28 @@ def main():
             g.send_command_until(monitor, "power-apply saver", "pace_cap_bps 64000", proc)
             g.send_command_until(monitor, "power-sim start 50000 50", "battery simule pct 50", proc)
             g.send_command_until(monitor, "power-apply performance", "pace_cap_bps 0", proc)
+            # Lot 69 (US-080): EDID physical size from the QEMU std VGA,
+            # then a tablet plan applied on screen (dock on the left)
+            if "[GFX] edid ok RHT" not in g.log_text():
+                raise RuntimeError("no EDID read at boot")
+            g.send_command_until(monitor, "display-info", "display physical ", proc)
+            g.send_command_until(monitor, "form-factor", "form-factor ok", proc)
+            g.send_command_until(monitor, "form-factor apply tablet 1024x768", "dock left", proc)
+            g.send_command_until(monitor, "ui-layout", "ui-layout ok chat auto dock left", proc)
+            w, h, _, _ = open_desktop(monitor, proc, "tablet-dock-left")
+            w, h, rgb = g.screendump_rgb(monitor, "qemu-gui-scale-tablet.ppm")
+            left = 0
+            for y in range(h // 4, h * 3 // 4):
+                for x in range(12, 48):
+                    r, gg, b = px(rgb, w, x, y)
+                    if abs(r - 61) < 12 and abs(gg - 154) < 12 and abs(b - 138) < 12:
+                        left += 1
+            g.say("tablet plan: dock tiles on the left %d px" % left)
+            if left < 1500:
+                raise RuntimeError("dock not on the left after form-factor apply tablet: %d" % left)
+            leave_desktop(monitor, proc)
+            g.send_command_until(monitor, "ui-layout reset", "ui-layout ok chat auto dock bottom menu full", proc)
+            g.send_command_until(monitor, "ui-scale 1", "ui-scale ok global 1x", proc)
             _, _, bar1, run1 = open_desktop(monitor, proc, "1x")
             leave_desktop(monitor, proc)
             g.send_command_until(monitor, "ui-scale 2", "char 16px", proc)

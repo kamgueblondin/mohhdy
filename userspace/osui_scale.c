@@ -107,6 +107,10 @@ int osui_scale_save(const osui_scale_t *s, char *buf, int cap) {
         s_cat_u(buf, cap, s->zoom[i]);
     }
     if (s->font_mode) s_cat(buf, cap, " font=1");
+    if (s->chat_pref || s->dock_left || s->compact_menu) {
+        s_cat(buf, cap, " layout=");
+        s_cat_u(buf, cap, (unsigned)(s->chat_pref | (s->dock_left << 1) | (s->compact_menu << 2)));
+    }
     s_cat(buf, cap, "\n");
     return s_len(buf);
 }
@@ -141,6 +145,15 @@ int osui_scale_load(osui_scale_t *s, const char *b, int len) {
         pos += 6;
         if (read_u(b, len, &pos, &v) != 0 || v > 1) return -1;
         t.font_mode = (uint8_t)v;
+    }
+    t.chat_pref = t.dock_left = t.compact_menu = 0;
+    if (pos + 8 <= len && b[pos] == ' ' && b[pos + 1] == 'l' && b[pos + 2] == 'a' && b[pos + 3] == 'y' &&
+        b[pos + 4] == 'o' && b[pos + 5] == 'u' && b[pos + 6] == 't' && b[pos + 7] == '=') {
+        pos += 8;
+        if (read_u(b, len, &pos, &v) != 0 || v > 7) return -1;
+        t.chat_pref = (uint8_t)(v & 1);
+        t.dock_left = (uint8_t)((v >> 1) & 1);
+        t.compact_menu = (uint8_t)((v >> 2) & 1);
     }
     t.changes = s->changes;
     t.saved_at = s->changes;
@@ -183,13 +196,56 @@ static void report(const osui_scale_t *s, char *out, int cap) {
     s_cat(out, cap, "\n");
 }
 
+int osui_scale_form_bits(const osui_scale_t *s) {
+    return (s->dock_left ? 1 : 0) | (s->compact_menu ? 2 : 0);
+}
+
+static void layout_report(const osui_scale_t *s, char *out, int cap) {
+    s_cat(out, cap, "ui-layout ok chat ");
+    s_cat(out, cap, s->chat_pref ? "full" : "auto");
+    s_cat(out, cap, " dock ");
+    s_cat(out, cap, s->dock_left ? "left" : "bottom");
+    s_cat(out, cap, " menu ");
+    s_cat(out, cap, s->compact_menu ? "compact" : "full");
+    s_cat(out, cap, "\n");
+}
+
+/* Lot 69 (US-080): the desktop layout choices form-factor apply makes,
+ * also settable by hand. One word pair per call. */
+static int layout_command(osui_scale_t *s, const char *line, char *out, int cap) {
+    char a[16], b[16];
+    int i = 0, j;
+    uint8_t c0 = s->chat_pref, d0 = s->dock_left, m0 = s->compact_menu;
+    while (line[i] && line[i] != ' ') i++;
+    while (line[i] == ' ') i++;
+    for (j = 0; line[i] && line[i] != ' ' && j < 15; ) a[j++] = line[i++];
+    a[j] = 0;
+    while (line[i] == ' ') i++;
+    for (j = 0; line[i] && line[i] != ' ' && j < 15; ) b[j++] = line[i++];
+    b[j] = 0;
+    out[0] = 0;
+    if (!a[0] || s_eq(a, "show")) { layout_report(s, out, cap); return 0; }
+    if (s_eq(a, "reset")) { s->chat_pref = s->dock_left = s->compact_menu = 0; }
+    else if (s_eq(a, "dock") && (s_eq(b, "left") || s_eq(b, "bottom"))) s->dock_left = (uint8_t)s_eq(b, "left");
+    else if (s_eq(a, "menu") && (s_eq(b, "compact") || s_eq(b, "full"))) s->compact_menu = (uint8_t)s_eq(b, "compact");
+    else if (s_eq(a, "chat") && (s_eq(b, "full") || s_eq(b, "auto"))) s->chat_pref = (uint8_t)s_eq(b, "full");
+    else {
+        s_cat(out, cap, "ui-layout error usage: ui-layout [show|reset|dock left|bottom|menu compact|full|chat full|auto]\n");
+        return 1;
+    }
+    if (c0 != s->chat_pref || d0 != s->dock_left || m0 != s->compact_menu) s->changes++;
+    layout_report(s, out, cap);
+    return 0;
+}
+
 int osui_scale_command(osui_scale_t *s, const char *line, char *out, int cap) {
     char cmd[16], a[16], b[16];
     const char *p;
     int q, slot;
     if (!s || !line || !out || cap < 1) return -1;
     p = word(line, cmd, (int)sizeof(cmd));
-    if (!s_eq(cmd, "ui-scale") && !s_eq(cmd, "text-size") && !s_eq(cmd, "ui-font")) return -1;
+    if (!s_eq(cmd, "ui-scale") && !s_eq(cmd, "text-size") && !s_eq(cmd, "ui-font") && !s_eq(cmd, "ui-layout")) return -1;
+    if (s_eq(cmd, "ui-layout")) return layout_command(s, line, out, cap);
     p = word(p, a, (int)sizeof(a));
     p = word(p, b, (int)sizeof(b));
     if (s_eq(cmd, "ui-font")) {

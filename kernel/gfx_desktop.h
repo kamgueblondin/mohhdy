@@ -117,4 +117,8 @@ const char *gfx_desktop_llm_name(const char *llm);
 #define GFX_DESKTOP_PANE_TITLE_H 30
 #define GFX_DESKTOP_CHAT_TITLE_H 34
 
+/* Lot 69 (US-080): dock side and compact menus from the scene */
+void gfx_desktop_set_form(int dock_left, int compact_menu);
+int gfx_desktop_dock_left(void);
+int gfx_desktop_menu_compact(void);
 #endif

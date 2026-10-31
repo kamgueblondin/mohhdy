@@ -1251,8 +1251,12 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         scene->ui_scale_q = us->ui_q;
         for (z = 0; z < OS_UI_Z_COUNT; z++) scene->zoom_q[z] = us->zoom[z];
         scene->scale_pad[0] = us->font_mode;
+        scene->scale_pad[1] = (uint8_t)osui_scale_form_bits(us);
     }
     scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
+    /* Lot 69 (US-080): the phone plan keeps the chat full screen while no
+     * program window is open (an open window still floats it) */
+    if (osui_gui_scale()->chat_pref && scene->chat_mode == OS_FB_CHAT_CENTER) scene->chat_mode = OS_FB_CHAT_FULL;
     scene->pane = OS_FB_PANE_NONE;
     if (pane) {
         if (scmp(pane, "browser") == 0) scene->pane = OS_FB_PANE_BROWSER;

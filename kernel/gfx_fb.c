@@ -15,6 +15,7 @@
 #include "mem/string.h"
 #include "pci.h"
 #include "pci_service.h"
+#include "edid.h"
 #include "kernel.h"
 #endif
 
@@ -193,6 +194,61 @@ static int map_range(uint32_t phys, uint32_t bytes) {
         print_string_serial(line);
     }
     return 0;
+}
+
+/* Lot 69 (US-080): EDID of the Bochs/QEMU std VGA (1234:1111). QEMU
+ * places the 128 byte base block at offset 0 of the MMIO BAR 2. Read once
+ * at boot, before the Ring 3 pcidriver takes PCI over; afterwards only the
+ * parsed facts are kept (SYS_DISPLAY_INFO). */
+static edid_info_t g_edid;
+static int g_edid_status = 1;
+int gfx_fb_probe_edid(void) {
+    uint8_t slot, function;
+    uint8_t blk[EDID_BLOCK];
+    int i, r;
+    for (slot = 0; slot < 32; slot++) {
+        for (function = 0; function < 8; function++) {
+            uint32_t id = pci_config_read32(0, slot, function, 0), bar2;
+            if ((id & 0xffffu) != 0x1234u || (id >> 16) != 0x1111u) continue;
+            bar2 = pci_config_read32(0, slot, function, 0x18);
+            if ((bar2 & 1u) || (bar2 & 0xfffffff0u) == 0) { g_edid_status = 2; return -2; }
+            bar2 &= 0xfffffff0u;
+            if (map_range(bar2, 4096u) != 0) { g_edid_status = 2; return -2; }
+            for (i = 0; i < EDID_BLOCK; i++) blk[i] = ((volatile uint8_t *)bar2)[i];
+            r = edid_parse(blk, EDID_BLOCK, &g_edid);
+            g_edid_status = r == 0 ? 0 : r == -1 ? 3 : 4;
+            {
+                char line[96];
+                int n;
+                print_string_serial("[GFX] ");
+                n = edid_describe(&g_edid, line, (int)sizeof(line));
+                (void)n;
+                print_string_serial(line);
+                print_string_serial(g_edid_status == 0 ? "\n" : g_edid_status == 3 ? " (bad header)\n" : " (bad checksum)\n");
+            }
+            return r;
+        }
+    }
+    g_edid_status = 1;
+    print_string_serial("[GFX] edid absent (no Bochs/QEMU std VGA)\n");
+    return -1;
+}
+
+void gfx_fb_display_info(os_display_info_t *o) {
+    uint8_t *p = (uint8_t *)o;
+    unsigned i;
+    for (i = 0; i < sizeof(*o); i++) p[i] = 0;
+    if (g_on) { o->fb_w = (uint16_t)g_w; o->fb_h = (uint16_t)g_h; }
+    o->edid_status = (uint8_t)g_edid_status;
+    if (!g_edid.ok) return;
+    o->native_w = (uint16_t)g_edid.native_w;
+    o->native_h = (uint16_t)g_edid.native_h;
+    o->mm_w = (uint16_t)g_edid.size_mm_w;
+    o->mm_h = (uint16_t)g_edid.size_mm_h;
+    o->diag_tenths = (uint16_t)g_edid.diag_tenths;
+    o->source = g_edid.size_mm_w == 0 ? OS_DISPLAY_SRC_NONE
+              : (g_edid.mm_w >= 30 && g_edid.mm_h >= 30) ? OS_DISPLAY_SRC_EDID_DTD : OS_DISPLAY_SRC_EDID_CM;
+    for (i = 0; i < 4; i++) o->mfg[i] = g_edid.mfg[i];
 }
 
 static uint32_t pci_vga_bar(void) {

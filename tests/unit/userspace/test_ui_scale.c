@@ -156,6 +156,44 @@ static void test_ui_font(void) {
     TEST_ASSERT_EQUAL(-1, osui_scale_load(&b, "ui_scale=8 zoom=4,4,4,4,4,4,4,4,4,4,4,4 font=7", 47));
 }
 
+
+/* Lot 69 (US-080): ui-layout choices, saved with the scale */
+static void test_ui_layout(void) {
+    osui_scale_t s, b;
+    char out[256], buf[160];
+    int n;
+    osui_scale_init(&s);
+    TEST_ASSERT_EQUAL(0, osui_scale_command(&s, "ui-layout", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("ui-layout ok chat auto dock bottom menu full\n", out);
+    TEST_ASSERT_EQUAL(0, osui_scale_form_bits(&s));
+    TEST_ASSERT_EQUAL(0, osui_scale_command(&s, "ui-layout dock left", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(0, osui_scale_command(&s, "ui-layout menu compact", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(0, osui_scale_command(&s, "ui-layout chat full", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("ui-layout ok chat full dock left menu compact\n", out);
+    TEST_ASSERT_EQUAL(3, osui_scale_form_bits(&s));
+    TEST_ASSERT_EQUAL(1, osui_scale_command(&s, "ui-layout dock top", out, (int)sizeof(out)));
+    TEST_ASSERT_TRUE(strstr(out, "ui-layout error usage") != 0);
+    TEST_ASSERT_EQUAL(1, osui_scale_command(&s, "ui-layout banana", out, (int)sizeof(out)));
+    n = osui_scale_save(&s, buf, (int)sizeof(buf));
+    TEST_ASSERT_TRUE(strstr(buf, " layout=7") != 0);
+    osui_scale_init(&b);
+    TEST_ASSERT_EQUAL(0, osui_scale_load(&b, buf, n));
+    TEST_ASSERT_EQUAL(1, b.chat_pref); TEST_ASSERT_EQUAL(1, b.dock_left); TEST_ASSERT_EQUAL(1, b.compact_menu);
+    {
+        uint32_t c = s.changes;
+        TEST_ASSERT_EQUAL(0, osui_scale_command(&s, "ui-layout dock left", out, (int)sizeof(out)));
+        TEST_ASSERT_EQUAL(c, s.changes);      /* no change, no save */
+        TEST_ASSERT_EQUAL(0, osui_scale_command(&s, "ui-layout reset", out, (int)sizeof(out)));
+        TEST_ASSERT_TRUE(s.changes > c);
+        TEST_ASSERT_EQUAL(0, osui_scale_form_bits(&s));
+    }
+    n = osui_scale_save(&s, buf, (int)sizeof(buf));
+    TEST_ASSERT_TRUE(strstr(buf, "layout=") == 0);
+    TEST_ASSERT_EQUAL(-1, osui_scale_load(&b, "ui_scale=8 zoom=4,4,4,4,4,4,4,4,4,4,4,4 layout=9", 49));
+    TEST_ASSERT_EQUAL(0, osui_scale_load(&b, "ui_scale=8 zoom=4,4,4,4,4,4,4,4,4,4,4,4 font=1 layout=2", 56));
+    TEST_ASSERT_EQUAL(1, b.font_mode); TEST_ASSERT_EQUAL(1, b.dock_left); TEST_ASSERT_EQUAL(0, b.chat_pref);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_auto_scale_from_screen);
@@ -166,6 +204,7 @@ int main(void) {
     RUN_TEST(test_save_load_roundtrip);
     RUN_TEST(test_commands);
     RUN_TEST(test_ui_font);
+    RUN_TEST(test_ui_layout);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

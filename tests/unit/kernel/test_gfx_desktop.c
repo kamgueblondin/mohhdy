@@ -1140,6 +1140,51 @@ static void test_lot69_dock_tooltip_scales(void) {
     TEST_ASSERT_TRUE(r2 >= r1 + 6);
 }
 
+
+/* Lot 69 (US-080): dock on the left, compact menus, full screen chat */
+static void test_lot69_form_layout(void) {
+    gfx_desktop_layout_t l, m;
+    int i, ink;
+    blank_scene();
+    g_scene.version = 8;
+    g_scene.ui_scale_q = 4;
+    redraw(&l);
+    TEST_ASSERT_TRUE(l.dock.box.y > H / 2);
+    TEST_ASSERT_EQUAL(0, gfx_desktop_dock_left());
+    g_scene.scale_pad[1] = 1 | 2;
+    redraw(&m);
+    TEST_ASSERT_EQUAL(1, gfx_desktop_dock_left());
+    TEST_ASSERT_EQUAL(1, gfx_desktop_menu_compact());
+    TEST_ASSERT_EQUAL(8, m.dock.box.x);
+    TEST_ASSERT_TRUE(m.dock.box.h > m.dock.box.w);
+    for (i = 1; i < GFX_DESKTOP_DOCK; i++) {
+        TEST_ASSERT_EQUAL(m.dock.icons[0].x, m.dock.icons[i].x);
+        TEST_ASSERT_EQUAL(m.dock.icons[i - 1].y + 44, m.dock.icons[i].y);
+    }
+    /* pixels follow the hit boxes: the dock tile colour inside icon 3 */
+    ink = count_near(m.dock.icons[3].x, m.dock.icons[3].y, m.dock.icons[3].x + 36, m.dock.icons[3].y + 32, 61, 154, 138, 10);
+    TEST_ASSERT_TRUE(ink > 50);
+    /* compact menus are narrower and all eight fit */
+    TEST_ASSERT_EQUAL(GFX_DESKTOP_MENUS, m.menu_count);
+    TEST_ASSERT_TRUE(m.menu_items[1].w < l.menu_items[1].w);
+    TEST_ASSERT_TRUE(m.chat_win.box.x >= 60);
+    /* version 7 scenes ignore the bits */
+    g_scene.version = 7;
+    redraw(&m);
+    TEST_ASSERT_EQUAL(0, gfx_desktop_dock_left());
+    /* full screen chat (phone plan) */
+    g_scene.version = 8;
+    g_scene.scale_pad[1] = 0;
+    g_scene.chat_mode = OS_FB_CHAT_FULL;
+    redraw(&m);
+    TEST_ASSERT_EQUAL(8, m.chat_win.box.x);
+    TEST_ASSERT_TRUE(m.chat_win.box.w >= W - 16 - 2);
+    TEST_ASSERT_TRUE(m.chat_win.box.h > l.chat_win.box.h);
+    TEST_ASSERT_EQUAL(0, m.scene_ia.box.w);
+    g_scene.chat_mode = OS_FB_CHAT_CENTER;
+    gfx_desktop_set_form(0, 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -1173,6 +1218,7 @@ int main(void) {
     RUN_TEST(test_lot69_status_row_scales);
     RUN_TEST(test_lot69_web_item_font_scale);
     RUN_TEST(test_lot69_dock_tooltip_scales);
+    RUN_TEST(test_lot69_form_layout);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

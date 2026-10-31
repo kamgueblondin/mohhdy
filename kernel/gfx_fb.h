@@ -21,4 +21,8 @@ int gfx_fb_height(void);
 int gfx_fb_parse_fit_line(const char *s, int *w, int *h);
 void gfx_fb_update_cursor(void);
 
+#include "../include/os_syscalls.h"
+/* Lot 69 (US-080): EDID read at boot and the facts for SYS_DISPLAY_INFO */
+int gfx_fb_probe_edid(void);
+void gfx_fb_display_info(os_display_info_t *out);
 #endif
