@@ -5077,10 +5077,12 @@ static void intrinsic_sizes(we_doc_t *d) {
     }
 }
 
+static int vertical_now = -1, vertical_block;   /* lot 64: root being laid out, its logical block size */
 static int definite_height(const we_doc_t *d, int idx, int depth) {
     const we_node_t *n;
     int value, parent, low, high;
     if (idx < 0 || depth > WE_DEPTH_MAX) return -1;
+    if (idx == vertical_now) return vertical_block;
     n = &d->nodes[idx];
     if (forced_height[idx] >= 0)
         return content_value(forced_height[idx] - n->margin[0] - n->margin[2], vertical_extra(n), 1);
@@ -6180,7 +6182,7 @@ static int layout_content(we_doc_t *d, int idx, int x, int y, int width, int dep
  * glyph per item and 8 px per glyph (no rotated font: mixed orientation is
  * painted upright, "vertical text painted upright"); spaces paint nothing.
  * Descendants share the root's mode: another writing-mode inside it is
- * painted with the root's ("writing mode nested painted as container"). */
+ * painted with the root's ("nested writing mode inherited"). */
 static os_fb_web_item_t vertical_out[OS_FB_WEB_ITEMS];
 static int16_t vertical_owner[OS_FB_WEB_ITEMS];
 
@@ -6362,7 +6364,7 @@ static void vertical_styles(we_doc_t *d, int forward) {
         if (root < 0 || d->nodes[i].is_text) continue;
         if (forward && d->nodes[i].wmode != d->nodes[root].wmode) {
             d->nodes[i].wmode = d->nodes[root].wmode;
-            diag(d, "writing mode nested painted as container", i);
+            diag(d, "nested writing mode inherited", i);
         }
         vertical_style(d, i, d->nodes[root].wmode == WE_WM_VERTICAL_RL, forward);
     }
@@ -6370,11 +6372,18 @@ static void vertical_styles(we_doc_t *d, int forward) {
 
 static int layout_vertical(we_doc_t *d, int idx, int ox, int oy, int width, int *extent, int depth) {
     we_node_t *n = &d->nodes[idx];
-    int size = resolved_height[idx] >= 0 ? resolved_height[idx] : vertical_inline[idx], first = (int)d->nitems, e;
+    int size = resolved_height[idx] >= 0 ? resolved_height[idx] : definite_height(d, idx, 0), first = (int)d->nitems, e;
     (void)n;
+    if (size < 0) size = vertical_inline[idx];      /* auto: max-content along the inline axis */
     if (size < WE_CHAR_W) size = WE_CHAR_W;
     if (size > WE_LAYOUT_MAX) size = WE_LAYOUT_MAX;
-    e = layout_content(d, idx, ox, oy, size, depth);
+    {
+        int saved_now = vertical_now, saved_block = vertical_block, saved_resolved = resolved_height[idx];
+        vertical_now = idx; vertical_block = width;     /* the logical height: the physical width or indefinite */
+        resolved_height[idx] = (int16_t)width;
+        e = layout_content(d, idx, ox, oy, size, depth);
+        vertical_now = saved_now; vertical_block = saved_block; resolved_height[idx] = (int16_t)saved_resolved;
+    }
     *extent = width >= 0 ? width : e;
     vertical_remap(d, idx, first, ox, oy, *extent);
     return size;
