@@ -168,7 +168,7 @@ static void test_l63_gen_counters(void) {
     TEST_ASSERT_EQUAL_STRING("1. ", l63_gen("a", WE_PSEUDO_BEFORE));
     TEST_ASSERT_EQUAL_STRING("2. ", l63_gen("b", WE_PSEUDO_BEFORE));
     TEST_ASSERT_EQUAL_STRING("3. ", l63_gen("c", WE_PSEUDO_BEFORE));
-    TEST_ASSERT_EQUAL(11, find_text("2.")->y);
+    TEST_ASSERT_EQUAL(16, find_text("2.")->y);   /* Lot 69: h2 is 1.5em, 15 px lines */
     lot52_render(L63_STYLE("p{margin:0}#r{counter-reset:a 3 b -2}#r p::before{counter-increment:a 2 b;content:counter(a) ',' counter(b)}"
                            "#s{counter-reset:c 3;counter-increment:c 4;counter-set:c 9 d}#s::before{content:counter(c) counter(d)}"
                            "#t::before{counter-increment:z;counter-set:z 6;content:counter(z) counter(u)}")

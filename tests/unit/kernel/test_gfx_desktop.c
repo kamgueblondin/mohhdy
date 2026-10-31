@@ -1078,6 +1078,39 @@ static void test_lot69_status_row_scales(void) {
     TEST_ASSERT_TRUE(i2 > i1);
 }
 
+
+/* Lot 69: a web TEXT item with pad = 8 (CSS 32 px) paints its glyphs at
+ * twice the cell: more ink and about twice the width of pad 0. */
+static int web_text_ink(int pad, int *maxx) {
+    int ox, oy, pw, ph, x, y, n = 0;
+    blank_scene();
+    g_scene.version = 8;
+    g_scene.ui_scale_q = 4;
+    g_scene.pane = OS_FB_PANE_WEB;
+    strcpy(g_scene.web_title, "font");
+    g_scene.nweb = 1;
+    g_scene.web[0].kind = OS_FB_WEB_TEXT; g_scene.web[0].x = 10; g_scene.web[0].y = 20;
+    g_scene.web[0].w = (uint16_t)(5 * (pad ? 2 * pad : 8)); g_scene.web[0].h = (uint16_t)(pad ? 2 * pad : 8);
+    g_scene.web[0].pad = (uint16_t)pad;
+    g_scene.web[0].color = 0x00AA00; strcpy(g_scene.web[0].text, "HELLO");
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    gfx_desktop_web_origin(W, H, &ox, &oy, &pw, &ph);
+    *maxx = 0;
+    for (y = oy; y < oy + 80 && y < oy + ph; y++)
+        for (x = ox; x < ox + 200 && x < ox + pw; x++)
+            if (near_rgb(gfx_desktop_pixel(g_fb, W, H, x, y), 0x00, 0xAA, 0x00, 8)) { n++; if (x - ox > *maxx) *maxx = x - ox; }
+    return n;
+}
+
+static void test_lot69_web_item_font_scale(void) {
+    int m1, m2, m3;
+    int a = web_text_ink(0, &m1), b = web_text_ink(8, &m2), c = web_text_ink(99, &m3);
+    TEST_ASSERT_TRUE(a > 20);
+    TEST_ASSERT_TRUE(b > a * 3 / 2);   /* native 16 px strokes are thinner than doubled 8x8 ones */
+    TEST_ASSERT_TRUE(m2 > m1 + 30);
+    TEST_ASSERT_EQUAL(a, c);   /* out-of-range pad falls back to the 8x8 cell */
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -1109,6 +1142,7 @@ int main(void) {
     RUN_TEST(test_lot68_scene_scale_and_grid);
     RUN_TEST(test_lot69_native_fonts);
     RUN_TEST(test_lot69_status_row_scales);
+    RUN_TEST(test_lot69_web_item_font_scale);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

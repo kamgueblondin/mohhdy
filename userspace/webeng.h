@@ -37,6 +37,15 @@
 #define WE_DEPTH_MAX 24
 #define WE_CHAR_W 8
 #define WE_LINE_H 10
+/* Lot 69: font sizes. 16 px is the 8x10 cell (scale 4 quarters); a node
+ * renders at round(font_px / 4) quarters, clamped to 4..16 (16..64 px).
+ * The kernel has no font below the 8 px cell: smaller sizes are laid out
+ * and drawn at 16 px (documented limit). */
+#define WE_FONT_PX_DEFAULT 16
+#define WE_FONT_PX_MIN 4
+#define WE_FONT_PX_MAX 64
+int we_font_q(int font_px);
+int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px);
 #define WE_TEXT_BASELINE 9
 #define WE_TRACKS_MAX 8
 #define WE_GRID_ROWS_MAX WE_MAX_NODES
@@ -251,6 +260,10 @@ typedef struct {
     int16_t border_spacing;    /* horizontal; separate borders; collapse forces 0 */
     int16_t border_spacing_y;  /* vertical; one value sets both */
     int16_t line_height;       /* 0 uses WE_LINE_H; glyphs stay at the top */
+    /* Lot 69: computed font size in CSS px (16 = normal, 0 = unset) and the
+     * parent size em and % resolve against; lh_unitless keeps a unitless
+     * line-height relative to the font (line_height = number * WE_LINE_H). */
+    uint8_t font_px, font_parent_px, lh_unitless;
     int16_t text_indent;       /* first line only, after float shortening */
     int8_t z_index;            /* absolute paint order, -8..8 */
     uint8_t z_set, clear_side, valign;

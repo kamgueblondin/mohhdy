@@ -1274,14 +1274,23 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
             web_fill_clip(fb, w, h, x, y, t, ih, c, ox, oy, cx1, cy1);
             web_fill_clip(fb, w, h, x + iw - t, y, t, ih, c, ox, oy, cx1, cy1);
         } else if (it->kind == OS_FB_WEB_TEXT) {
-            int k, gh = os_ui_px(8, q);
-            if (y < oy || y + gh > cy1) continue;
+            /* Lot 69: pad = the item's CSS font scale (quarters); glyphs
+             * draw at web zoom * pad / 4, capped at the 4x cell. */
+            int fq = (it->pad >= 4 && it->pad <= 16) ? it->pad : OS_UI_Q1;
+            int tq = os_ui_q_clamp((q * fq + 2) / 4);
+            int k, gh, icw;
+            g_tq = tq;
+            gh = os_ui_px(8, tq);
+            icw = CW;
+            if (y < oy || y + gh > cy1) { g_tq = q; continue; }
             for (k = 0; k < OS_FB_WEB_TEXT_LEN && it->text[k]; k++) {
-                int gx = x + k * cw;
-                if (gx < ox || gx + cw + 1 > cx1) continue;
+                int gx = x + k * icw;
+                if (gx < ox || gx + icw + 1 > cx1) continue;
                 draw_char_bits(fb, w, h, gx, y, it->text[k], c);
-                if (it->bold) draw_char_bits(fb, w, h, gx + (q >= 8 ? q / 4 : 1), y, it->text[k], c);
+                if (it->bold) draw_char_bits(fb, w, h, gx + (tq >= 8 ? tq / 4 : 1), y, it->text[k], c);
             }
+            g_tq = q;
+            (void)cw;
         }
     }
     g_tq = OS_UI_Q1;
