@@ -8,6 +8,7 @@
 #include "webeng_lot64_columns.inc"
 #include "webeng_lot64_edges.inc"
 #include "webeng_lot64_more.inc"
+#include "webeng_lot64_page.inc"
 
 static void lot64_run(void) {
     lot64_vertical_run();
@@ -19,4 +20,5 @@ static void lot64_run(void) {
     lot64_columns_run();
     lot64_edges_run();
     lot64_more_run();
+    lot64_page_run();
 }
