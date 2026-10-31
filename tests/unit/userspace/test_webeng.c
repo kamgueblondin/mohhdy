@@ -140,10 +140,7 @@ static void test_percent_width_and_img_alt(void) {
 static void test_lot71_latin1_text_kept(void) {
     static const char* p = "<body><p>caf\xe9 &#233;t&#xE9; &#8364;5 &#x1F600;</p></body>";
     TEST_ASSERT_EQUAL(0, we_render(&g_doc, p, (int)strlen(p), 400));
-    TEST_ASSERT_NOT_NULL(find_text("caf\xe9"));
-    TEST_ASSERT_NOT_NULL(find_text("\xe9t\xe9"));
-    TEST_ASSERT_NOT_NULL(find_text("\x80" "5"));
-    TEST_ASSERT_NOT_NULL(find_text("?"));
+    TEST_ASSERT_NOT_NULL(find_text("caf\xe9 \xe9t\xe9 \x80" "5 ?"));   /* no glyph for the emoji */
 }
 
 static char g_out[4096];

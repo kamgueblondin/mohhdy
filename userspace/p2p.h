@@ -12,6 +12,7 @@
 #include "p2p_bwe.h"
 #include "p2p_pace.h"
 #include "p2p_flow.h"
+#include "p2p_rtx.h"
 #include <stdint.h>
 
 #define P2P_PORT 7700U
@@ -47,6 +48,7 @@ enum {
     P2P_I_RAFT_PREVOTE_REQ, P2P_I_RAFT_PREVOTE_RESP,
     P2P_I_RAFT_SNAPSHOT, P2P_I_RAFT_SNAPSHOT_RESP, P2P_I_CACHE_INV_ACK,
     P2P_I_DACK, /* Lot 69: per-packet data acks (p2p_flow.h) */
+    P2P_I_RTX,  /* Lot 71: retransmitted user data (p2p_rtx.h) */
     P2P_I_COUNT
 };
 
@@ -103,6 +105,7 @@ typedef struct {
     uint8_t zero_trust_revoked;
     char revoke_reason[64];
     p2p_flow_t flow;       /* Lot 69 (US-068/073): per-peer pacer and data acks */
+    p2p_rtx_t rtx;         /* Lot 71 (US-068/073): copies to resend, receiver dedup */
 } p2p_peer_t;
 
 typedef struct {

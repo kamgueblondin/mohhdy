@@ -3,6 +3,8 @@
 #include "aes_gcm.h"
 #include "edid.h"
 #include "p2p_flow.h"
+#include "p2p_rtx.h"
+#include "os_charset.h"
 
 static int same(const uint8_t* a, const uint8_t* b, int n) {
     int i;
@@ -71,10 +73,40 @@ int arm_port_flow(void) {
     return p2p_flow_rate(&f) == 62500U * 7U / 8U;
 }
 
+/* Lot 71: a lost copy leaves again under a new counter, the receiver
+ * delivers the original once (same sequence as test_p2p_rtx.c). */
+int arm_port_rtx(void) {
+    static p2p_rtx_t s, r;
+    uint8_t f[16];
+    uint32_t orig;
+    uint8_t inner;
+    const uint8_t* body;
+    int idx, len, blen;
+    p2p_rtx_init(&s);
+    p2p_rtx_init(&r);
+    if (p2p_rtx_keep(&s, 9, 13, (const uint8_t*)"k=v", 3) != 0) return 0;
+    if ((idx = p2p_rtx_lost(&s, 9)) < 0) return 0;
+    if ((len = p2p_rtx_frame(&s, idx, f, (int)sizeof(f))) != 8) return 0;
+    p2p_rtx_resent(&s, idx, 20);
+    if (p2p_rtx_parse(f, len, &orig, &inner, &body, &blen) != 0 || orig != 9U || inner != 13 || blen != 3 || body[2] != 'v') return 0;
+    if (p2p_rtx_accept(&r, 9) != 1 || p2p_rtx_accept(&r, 9) != 0) return 0;
+    if (p2p_rtx_accept(&r, 300) != 1 || p2p_rtx_accept(&r, 9) != 0 || r.old_rx != 1U) return 0;
+    return p2p_rtx_acked(&s, 20) == 1 && s.resent == 1U;
+}
+
+/* Lot 71: UTF-8 to the CP1252 display bytes the fonts draw */
+int arm_port_charset(void) {
+    char t[24] = { 'c','a','f',(char)0xC3,(char)0xA9,' ',(char)0xE2,(char)0x82,(char)0xAC,' ',(char)0xC5,(char)0x93,'u','v','r','e',0 };
+    int n = os_text_to_display_inplace(t, (int)sizeof(t));
+    return n == 12 && (unsigned char)t[3] == 0xE9U && (unsigned char)t[5] == 0x80U && (unsigned char)t[7] == 0x9CU && t[8] == 'u';
+}
+
 uint32_t arm_port_selftest(void) {
     uint32_t m = 0;
     if (arm_port_aes_gcm()) m |= ARM_PORT_AES_GCM;
     if (arm_port_edid()) m |= ARM_PORT_EDID;
     if (arm_port_flow()) m |= ARM_PORT_FLOW;
+    if (arm_port_rtx()) m |= ARM_PORT_RTX;
+    if (arm_port_charset()) m |= ARM_PORT_CHARSET;
     return m;
 }

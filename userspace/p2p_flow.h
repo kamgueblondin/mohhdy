@@ -60,6 +60,8 @@ int p2p_flow_on_send(p2p_flow_t* f, uint32_t ctr, uint32_t bytes, uint32_t now_u
 int p2p_flow_on_ack(p2p_flow_t* f, uint32_t ctr, uint32_t now_us);
 /* retires datagrams older than the loss timeout; returns the losses */
 int p2p_flow_expire(p2p_flow_t* f, uint32_t now_us);
+/* Lot 71: same, and writes up to cap lost counters to lost (may be 0) */
+int p2p_flow_expire_list(p2p_flow_t* f, uint32_t now_us, uint32_t* lost, int cap);
 uint32_t p2p_flow_loss_timeout_us(const p2p_flow_t* f);
 /* pacing rate, 0 while there is no sample */
 uint32_t p2p_flow_rate(const p2p_flow_t* f);

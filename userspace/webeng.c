@@ -154,7 +154,7 @@ static int char_ref(const char *s, int n, char out[4]) {
             /* Lot 71: Latin-1 and CP1252 code points have a glyph in the
              * display charset (include/os_charset.h). */
             unsigned char b = code > 0 ? os_cp1252_from_cp((uint32_t)code) : 0;
-            out[0] = b >= 0x80u && b < 0xFFu ? (char)b : '?';
+            out[0] = b >= 0x20u && b != 0x7Fu && b < 0xFFu ? (char)b : '?';
         }
         return i + 1;
     }
