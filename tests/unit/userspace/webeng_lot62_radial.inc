@@ -51,7 +51,7 @@ static void test_l62_radial_refusals(void) {
         "<div id=a style='background:radial-gradient(circle at middle, red, blue)'></div>",
         "<div id=a style='background:radial-gradient(circle red, blue)'></div>",
         "<div id=a style='background:radial-gradient(red)'></div>",
-        "<div id=a style='background:radial-gradient(#ff000080, blue)'></div>",
+        "<div id=a style='background:radial-gradient(#ff00zz80, blue)'></div>",
         "<div id=a style='background:radial-gradient(circle at center center center, red, blue)'></div>",
         "<div id=a style='background:radial-gradient(ellipse at, red, blue)'></div>" };
     char page[256];

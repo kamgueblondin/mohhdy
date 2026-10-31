@@ -2079,7 +2079,6 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
         int l = length[first + k], t[4], tl[4], c = tokens(a, l, t, tl), tenths;
         pos[k] = -1;
         if (c < 1 || c > 2 || parse_color(a + t[0], tl[0], &color[k])) return -1;
-        if (radial && (color[k] >> WE_ALPHA_SHIFT)) return -1;   /* rings are painted over each other */
         if (c == 2) {
             if (spacing_percent(a + t[1], tl[1], 1, &tenths) || tenths > 1000) return -1;
             pos[k] = tenths < 0 ? 0 : tenths * 10;
@@ -5480,11 +5479,21 @@ static uint32_t gradient_at(const we_node_t *n, int p) {
 
 #define WE_RADIAL_RINGS 3
 #define WE_RADIAL_SLOTS (1 + WE_RADIAL_RINGS * 8)   /* 5 ellipse cuts + 2 clip cuts per ring */
+/* lot 64: a translucent stop paints disjoint rings, two pieces per row */
+#define WE_RADIAL_ALPHA_SLOTS 64
+static int radial_translucent(const we_node_t *n) {
+    int k;
+    for (k = 0; k < n->grad_count; k++) if (n->grad_color[k] >> WE_ALPHA_SHIFT) return 1;
+    return 0;
+}
+
 static int gradient_reserve(we_doc_t *d, int idx, int *count) {
-    int first = (int)d->nitems, k;
+    int first = (int)d->nitems, k, want;
     *count = 0;
     if (!d->nodes[idx].grad_dir) return first;
-    for (k = 0; k < (d->nodes[idx].grad_dir == WE_GRAD_RADIAL ? WE_RADIAL_SLOTS : WE_GRAD_BANDS); k++) {
+    want = d->nodes[idx].grad_dir != WE_GRAD_RADIAL ? WE_GRAD_BANDS :
+           radial_translucent(&d->nodes[idx]) ? WE_RADIAL_ALPHA_SLOTS : WE_RADIAL_SLOTS;
+    for (k = 0; k < want; k++) {
         os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
         if (!it) break;
         it->kind = 0;
@@ -5910,11 +5919,14 @@ static void background_box(const we_node_t *n, int box, int bx, int by, int bw, 
  * to the corner, the distances taken from the centre. Painted as the last stop
  * over the clip box, then WE_RADIAL_RINGS nested ellipses from the
  * outside in, each taking the colour at its band's middle radius and cut
- * to the clip box (opaque stops only). */
+ * to the clip box. Lot 64: with a translucent stop the rings must not
+ * overlap, so radial_rings() paints each one minus the next inner one. */
+static int radial_rings(we_doc_t *d, int idx, int slot, int count, const int *c, int cx, int cy, int rx, int ry);
 static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o, const int *c) {
     const we_node_t *n = &d->nodes[idx];
     static int band[WE_ROUND_BANDS][4];
     int extent = n->grad_shape >> 1, rx, ry, ring, used = 1, k, far, sx, sy;
+    uint32_t opaque = 0xFFFFFFFFu;
     int cx = o[0] + (n->grad_at_pct & 1 ? o[2] * n->grad_at[0] / 100 : n->grad_at[0]);
     int cy = o[1] + (n->grad_at_pct & 2 ? o[3] * n->grad_at[1] / 100 : n->grad_at[1]);
     we_shape_t clip, ring_shape;
@@ -5943,10 +5955,15 @@ static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o,
     }
     if (rx < 1) rx = 1;
     if (ry < 1) ry = 1;
+    if (radial_translucent(n)) {
+        if (radial_rings(d, idx, slot, count, c, cx, cy, rx, ry)) return;
+        diag(d, "radial alpha painted opaque", idx);     /* the nested rings, without their alpha */
+        opaque = 0xFFFFFFu;
+    }
     w_zero(&zero, sizeof(zero));
     shape_set(&clip, c[0], c[1], c[2], c[3], &zero);
     d->items[slot].kind = OS_FB_WEB_RECT;
-    d->items[slot].color = gradient_at(n, 10000);
+    d->items[slot].color = gradient_at(n, 10000) & opaque;
     d->items[slot].x = (int16_t)c[0]; d->items[slot].y = (int16_t)c[1];
     d->items[slot].w = (uint16_t)c[2]; d->items[slot].h = (uint16_t)c[3];
     for (ring = WE_RADIAL_RINGS; ring >= 1; ring--) {
@@ -5955,9 +5972,59 @@ static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o,
         for (j = 0; j < 4; j++) { r.rx[j] = ex; r.ry[j] = ey; }
         shape_set(&ring_shape, cx - ex, cy - ey, 2 * ex, 2 * ey, &r);
         k = shape_bands(&ring_shape, &clip, band, count - used);
-        bands_into(d, slot + used, band, k, gradient_at(n, (2 * ring - 1) * 10000 / (2 * WE_RADIAL_RINGS)));
+        bands_into(d, slot + used, band, k, gradient_at(n, (2 * ring - 1) * 10000 / (2 * WE_RADIAL_RINGS)) & opaque);
         used += k;
     }
+}
+
+/* Lot 64: the ring between ellipse k (outer, the clip box for k = rings + 1)
+ * and ellipse k - 1, over one row partition shared by all the ellipses so
+ * that neighbouring rings meet exactly; a row gives up to two pieces, and
+ * a piece continuing the same columns of the row above is merged into it.
+ * Returns 0 (nothing painted) when the pieces need more than count slots. */
+static int radial_rings(we_doc_t *d, int idx, int slot, int count, const int *c, int cx, int cy, int rx, int ry) {
+    static int band[WE_RADIAL_ALPHA_SLOTS][4];
+    static uint32_t tone[WE_RADIAL_ALPHA_SLOTS];
+    const we_node_t *n = &d->nodes[idx];
+    int cut[WE_SHAPE_CUTS], ncut = 0, used = 0, ring, k, j, piece[2][2], np;
+    we_shape_t shape[WE_RADIAL_RINGS + 2];
+    we_radii_t zero, r;
+    w_zero(&zero, sizeof(zero));
+    shape_set(&shape[0], 0, 0, 0, 0, &zero);                          /* the innermost hole: none */
+    for (ring = 1; ring <= WE_RADIAL_RINGS; ring++) {
+        int ex = rx * ring / WE_RADIAL_RINGS, ey = ry * ring / WE_RADIAL_RINGS;
+        for (j = 0; j < 4; j++) { r.rx[j] = ex; r.ry[j] = ey; }
+        shape_set(&shape[ring], cx - ex, cy - ey, ex && ey ? 2 * ex : 0, ex && ey ? 2 * ey : 0, &r);
+        ncut = shape_cuts(&shape[ring], cut, ncut, c[1], c[1] + c[3]);
+    }
+    shape_set(&shape[WE_RADIAL_RINGS + 1], c[0], c[1], c[2], c[3], &zero);
+    sort_ints(cut, ncut);
+    for (ring = WE_RADIAL_RINGS + 1; ring >= 1; ring--) {
+        int first = used;
+        uint32_t color = gradient_at(n, ring > WE_RADIAL_RINGS ? 10000 : (2 * ring - 1) * 10000 / (2 * WE_RADIAL_RINGS));
+        for (k = 0; k <= ncut; k++) {
+            int y0 = k ? cut[k - 1] : c[1], y1 = k < ncut ? cut[k] : c[1] + c[3], x0, x1, u0, u1, p;
+            if (y1 <= y0 || !shape_span(&shape[ring], y0, y1, &x0, &x1)) continue;
+            if (x0 < c[0]) x0 = c[0];
+            if (x1 > c[0] + c[2]) x1 = c[0] + c[2];
+            np = 0;
+            if (shape[ring - 1].w > 0 && shape_span(&shape[ring - 1], y0, y1, &u0, &u1) && u1 > x0 && u0 < x1) {
+                if (u0 > x0) { piece[np][0] = x0; piece[np][1] = u0; np++; }
+                if (u1 < x1) { piece[np][0] = u1; piece[np][1] = x1; np++; }
+            } else if (x1 > x0) { piece[np][0] = x0; piece[np][1] = x1; np++; }
+            for (p = 0; p < np; p++) {
+                int merged = 0;
+                for (j = used - 1; j >= first && j >= used - 2 && !merged; j--)
+                    if (band[j][1] == y0 && band[j][2] == piece[p][0] && band[j][3] == piece[p][1]) { band[j][1] = y1; merged = 1; }
+                if (merged) continue;
+                if (used == count || used == WE_RADIAL_ALPHA_SLOTS) return 0;
+                band[used][0] = y0; band[used][1] = y1; band[used][2] = piece[p][0]; band[used][3] = piece[p][1];
+                tone[used++] = color;
+            }
+        }
+    }
+    for (k = 0; k < used; k++) bands_into(d, slot + k, band + k, 1, tone[k]);
+    return 1;
 }
 
 static void gradient_fill(we_doc_t *d, int idx, int slot, int count, int bx, int by, int bw, int bh) {
