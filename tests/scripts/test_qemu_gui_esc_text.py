@@ -64,7 +64,7 @@ def main():
     try:
         with open(os.devnull, "wb") as err:
             proc = subprocess.Popen([
-                "qemu-system-i386", "-cpu", "pentium3", "-kernel", g.KERNEL,
+                "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", "pentium3", "-kernel", g.KERNEL,
                 "-initrd", g.INITRD, "-m", "1024M", "-display", "none", "-vga", "std",
                 "-usb", "-device", "usb-tablet",
                 "-serial", "file:" + g.LOG, "-monitor", "unix:%s,server,nowait" % g.MON_SOCK,

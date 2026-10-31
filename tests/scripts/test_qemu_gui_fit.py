@@ -246,7 +246,7 @@ def main():
     try:
         with open(ERR, "wb") as err:
             qemu = subprocess.Popen([
-                "qemu-system-i386",
+                "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4",
                 "-name", "Mohhdy OS",
                 "-cpu", "pentium3",
                 "-kernel", KERNEL,

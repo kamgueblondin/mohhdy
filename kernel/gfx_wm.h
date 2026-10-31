@@ -16,6 +16,9 @@ typedef struct { int x, y, w, h; } gfx_wm_rect_t;
 #define GFX_WM_HIT_MIN 3
 #define GFX_WM_HIT_MAX 4
 #define GFX_WM_HIT_CLOSE 5
+#define GFX_WM_HIT_RESIZE 6   /* Lot 69: grip corner, right / bottom edge */
+#define GFX_WM_MIN_W 200
+#define GFX_WM_MIN_H 120
 
 #define GFX_WM_ACT_NONE 0     /* click not on this window */
 #define GFX_WM_ACT_BODY 1     /* click inside, nothing for the WM */
@@ -24,11 +27,13 @@ typedef struct { int x, y, w, h; } gfx_wm_rect_t;
 #define GFX_WM_ACT_MAXIMIZE 4 /* toggled, see maximized */
 #define GFX_WM_ACT_DRAG 5     /* title grabbed */
 #define GFX_WM_ACT_MOVED 6    /* drag released, dx/dy updated */
+#define GFX_WM_ACT_RESIZED 7  /* Lot 69: grip released, dw/dh updated */
 
 typedef struct {
     int closed, minimized, maximized;
     int dx, dy;               /* moved from the default place */
     int drag, grab_x, grab_y;
+    int dw, dh, resize;       /* Lot 69: size change from the grip */
 } gfx_wm_win_t;
 
 /* Buttons right to left: close, maximize, minimize. title_h is the title
@@ -44,6 +49,8 @@ int gfx_wm_mouse(gfx_wm_win_t *s, gfx_wm_rect_t placed, gfx_wm_rect_t base, int 
                  int x, int y, int pressed, int released);
 void gfx_wm_restore(gfx_wm_win_t *s);   /* un-minimize / reopen */
 void gfx_wm_reset(gfx_wm_win_t *s);     /* default place and state */
+int gfx_wm_btn(int title_h, int scale);   /* Lot 69: scaled button side */
+void gfx_wm_draw_grip(uint32_t *fb, int fw, int fh, int pitch, gfx_wm_rect_t win, int title_h, int scale, uint32_t ink);
 void gfx_wm_draw_buttons(uint32_t *fb, int fw, int fh, int pitch, gfx_wm_rect_t win, int title_h, int scale);
 #define GFX_WM_RGB_CLOSE 0xE0524Bu
 #define GFX_WM_RGB_MIN 0xE6B43Cu

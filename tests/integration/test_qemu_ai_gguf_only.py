@@ -79,7 +79,7 @@ def main():
                    check=True)
     disk = os.path.join(FIXTURE, "gguf_fat16.img")
     command = [
-        "qemu-system-i386", "-kernel", base.KERNEL, "-initrd", base.INITRD,
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-kernel", base.KERNEL, "-initrd", base.INITRD,
         "-m", "1024M", "-display", "none", "-vga", "none",
         "-drive", "file=%s,format=raw,if=ide,cache=writethrough" % disk,
         "-serial", "file:" + base.LOG,

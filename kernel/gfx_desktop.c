@@ -28,6 +28,13 @@ static uint8_t g_mouse_buttons = 0;
 static uint8_t g_prev_buttons = 0;
 static os_fb_scene_t g_last_scene;
 static int g_last_scene_valid = 0;
+/* Lot 69: one scale (quarters) for every window's buttons and grip */
+static int g_wm_q = 4;
+#define WM_HELD(s) ((s).drag || (s).resize)
+/* Lot 69: the full-screen web / editor window can be minimized to the
+ * dock (the scene is then drawn as the plain desktop until restored) */
+static int g_full_min = 0;
+static int g_full_pane = 0;
 /* Window manager state (kernel/gfx_wm.c): one per desktop window. */
 static gfx_wm_win_t g_wm_pane, g_wm_chat;
 static int g_wm_pane_id = -1;
@@ -164,8 +171,16 @@ static void evt_app(int slot, const char *what, int n, int a, int b, int c, int 
 
 /* A desktop command line (typed form): the desktop gets the keyboard. */
 static void desk_cmd(const char *line) {
+    int i;
     if (GFX_IS_APP_WIN(g_focus)) evt_focus(-1);
-    kbd_put_string(line);
+    /* Lot 69: the shell terminal reads typed lines; the desktop gets an
+     * event so the command never lands after a half-typed chat line (a
+     * typed "/" then a click on a pane close used to give "//center"). */
+    if (g_last_scene_valid && g_last_scene.pane == OS_FB_PANE_SHELL) { kbd_put_string(line); return; }
+    evt_begin();
+    kbd_put_string("cmd ");
+    for (i = 0; line[i] && line[i] != '\n'; i++) kbd_put_char(line[i]);
+    evt_end();
 }
 
 static gfx_wm_rect_t to_wm(const gfx_rect_t *r) {
@@ -185,10 +200,10 @@ static void wm_buttons(const gfx_rect_t *box, int title_h, gfx_rect_t out[3]) {
     int b;
     for (b = 0; b < 3; b++) {
         int x = 0, y = 0;
-        if (box->w > 0) gfx_wm_button_pos(to_wm(box), title_h, 1, GFX_WM_HIT_MIN + b, &x, &y);
+        if (box->w > 0) gfx_wm_button_pos(to_wm(box), title_h, g_wm_q, GFX_WM_HIT_MIN + b, &x, &y);
         out[b].x = x; out[b].y = y;
-        out[b].w = box->w > 0 ? GFX_WM_BTN : 0;
-        out[b].h = box->w > 0 ? GFX_WM_BTN : 0;
+        out[b].w = box->w > 0 ? gfx_wm_btn(title_h, g_wm_q) : 0;
+        out[b].h = box->w > 0 ? gfx_wm_btn(title_h, g_wm_q) : 0;
     }
 }
 
@@ -242,6 +257,12 @@ static void open_target(int i) {
         gfx_fb_redraw_desktop();
         return;
     }
+    if (g_full_min && i == 1) {
+        g_full_min = 0;
+        wm_log("gfx wm full restore\n");
+        gfx_fb_redraw_desktop();
+        return;
+    }
     if (i == 0 && !gfx_wm_visible(&g_wm_chat)) {
         gfx_wm_restore(&g_wm_chat);
         z_raise(GFX_WIN_CHAT);
@@ -272,33 +293,36 @@ static int app_cell(const gfx_desktop_layout_t *l, int slot, int x, int y, int *
     return 1;
 }
 
+/* Lot 69: serial proof of a finished move or resize */
+static void wm_done(const char *who, int act) {
+    if (act == GFX_WM_ACT_MOVED) { wm_log("gfx wm "); wm_log(who); wm_log(" moved\n"); }
+    else if (act == GFX_WM_ACT_RESIZED) { wm_log("gfx wm "); wm_log(who); wm_log(" resized\n"); }
+}
+
 /* Title drag or text selection released (the press was handled by the click). */
 static void wm_release(int x, int y) {
     gfx_desktop_layout_t layout;
     int w = gfx_fb_width(), h = gfx_fb_height(), i, any = 0;
-    for (i = 0; i < OS_FB_APPS; i++) any |= g_wm_app[i].drag;
-    if (!g_wm_chat.drag && !g_wm_pane.drag && !any && g_press_slot < 0) return;
+    for (i = 0; i < OS_FB_APPS; i++) any |= g_wm_app[i].drag | g_wm_app[i].resize;
+    if (!WM_HELD(g_wm_chat) && !WM_HELD(g_wm_pane) && !any && g_press_slot < 0) return;
     gfx_desktop_get_layout(g_last_scene_valid ? &g_last_scene : 0, w, h, &layout);
     if (g_press_slot >= 0) {
         int r, c, slot = g_press_slot;
         g_press_slot = -1;
         if (app_cell(&layout, slot, x, y, &r, &c) && (r != g_press_row || c != g_press_col))
             evt_app(slot, "drag", 4, g_press_row, g_press_col, r, c);
-        if (!g_wm_chat.drag && !g_wm_pane.drag && !any) return;
+        if (!WM_HELD(g_wm_chat) && !WM_HELD(g_wm_pane) && !any) return;
     }
-    if (g_wm_chat.drag &&
-        gfx_wm_mouse(&g_wm_chat, to_wm(&layout.chat_win.box), to_wm(&layout.chat_win.base),
-                     GFX_DESKTOP_CHAT_TITLE_H, 1, x, y, 0, 1) == GFX_WM_ACT_MOVED)
-        wm_log("gfx wm chat moved\n");
-    if (g_wm_pane.drag &&
-        gfx_wm_mouse(&g_wm_pane, to_wm(&layout.pane_win.box), to_wm(&layout.pane_win.base),
-                     GFX_DESKTOP_PANE_TITLE_H, 1, x, y, 0, 1) == GFX_WM_ACT_MOVED)
-        wm_log("gfx wm pane moved\n");
+    if (WM_HELD(g_wm_chat))
+        wm_done("chat", gfx_wm_mouse(&g_wm_chat, to_wm(&layout.chat_win.box), to_wm(&layout.chat_win.base),
+                                     GFX_DESKTOP_CHAT_TITLE_H, g_wm_q, x, y, 0, 1));
+    if (WM_HELD(g_wm_pane))
+        wm_done("pane", gfx_wm_mouse(&g_wm_pane, to_wm(&layout.pane_win.box), to_wm(&layout.pane_win.base),
+                                     GFX_DESKTOP_PANE_TITLE_H, g_wm_q, x, y, 0, 1));
     for (i = 0; i < OS_FB_APPS; i++)
-        if (g_wm_app[i].drag &&
-            gfx_wm_mouse(&g_wm_app[i], to_wm(&layout.app_win[i].box), to_wm(&layout.app_win[i].base),
-                         GFX_DESKTOP_APP_TITLE_H, 1, x, y, 0, 1) == GFX_WM_ACT_MOVED)
-            wm_log("gfx wm app moved\n");
+        if (WM_HELD(g_wm_app[i]))
+            wm_done("app", gfx_wm_mouse(&g_wm_app[i], to_wm(&layout.app_win[i].box), to_wm(&layout.app_win[i].base),
+                                        GFX_DESKTOP_APP_TITLE_H, g_wm_q, x, y, 0, 1));
     gfx_fb_redraw_desktop();
 }
 
@@ -356,7 +380,7 @@ static void gfx_desktop_handle_click(int x, int y) {
         if (layout.z[GFX_WIN_COUNT - 1] != win) z_raise(win);
         if (win == GFX_WIN_CHAT) {
             act = gfx_wm_mouse(&g_wm_chat, to_wm(&layout.chat_win.box), to_wm(&layout.chat_win.base),
-                               GFX_DESKTOP_CHAT_TITLE_H, 1, x, y, 1, 0);
+                               GFX_DESKTOP_CHAT_TITLE_H, g_wm_q, x, y, 1, 0);
             evt_focus(-1);
             if (act == GFX_WM_ACT_CLOSE || act == GFX_WM_ACT_MINIMIZE || act == GFX_WM_ACT_MAXIMIZE) {
                 wm_log(act == GFX_WM_ACT_CLOSE ? "gfx wm chat close\n"
@@ -371,13 +395,20 @@ static void gfx_desktop_handle_click(int x, int y) {
         }
         if (win == GFX_WIN_PANE) {
             act = gfx_wm_mouse(&g_wm_pane, to_wm(&layout.pane_win.box), to_wm(&layout.pane_win.base),
-                               GFX_DESKTOP_PANE_TITLE_H, 1, x, y, 1, 0);
+                               GFX_DESKTOP_PANE_TITLE_H, g_wm_q, x, y, 1, 0);
             evt_focus(-1);
             if (act == GFX_WM_ACT_CLOSE) {
                 wm_log("gfx wm pane close\n");
                 gfx_wm_reset(&g_wm_pane);
-                kbd_put_string("/center\n");
+                desk_cmd("/center\n");
                 return;
+            }
+            if (act == GFX_WM_ACT_BODY && layout.pane_win.has_addr) {
+                /* Lot 69: Browser-OS address bar */
+                if (in_rect(x, y, &layout.pane_win.addr_back)) { evt_begin(); kbd_put_string("web back"); evt_end(); return; }
+                if (in_rect(x, y, &layout.pane_win.addr_fwd)) { evt_begin(); kbd_put_string("web fwd"); evt_end(); return; }
+                if (in_rect(x, y, &layout.pane_win.addr_go)) { kbd_put_string("\n"); return; }
+                if (in_rect(x, y, &layout.pane_win.addr)) { wm_log("gfx browser address focus\n"); gfx_fb_redraw_desktop(); return; }
             }
             if (act == GFX_WM_ACT_MINIMIZE || act == GFX_WM_ACT_MAXIMIZE) {
                 wm_log(act == GFX_WM_ACT_MINIMIZE ? "gfx wm pane minimize\n"
@@ -389,17 +420,35 @@ static void gfx_desktop_handle_click(int x, int y) {
         {
             int slot = win - GFX_WIN_APP0;
             act = gfx_wm_mouse(&g_wm_app[slot], to_wm(&layout.app_win[slot].box), to_wm(&layout.app_win[slot].base),
-                               GFX_DESKTOP_APP_TITLE_H, 1, x, y, 1, 0);
+                               GFX_DESKTOP_APP_TITLE_H, g_wm_q, x, y, 1, 0);
             if (act != GFX_WM_ACT_CLOSE) evt_focus(win);
             app_click(&layout, slot, act, x, y);
             return;
         }
     }
 
-    if (g_last_scene_valid && (g_last_scene.pane == OS_FB_PANE_IDE || g_last_scene.pane == OS_FB_PANE_WEB)
-        && in_rect(x, y, &layout.pane_win.traffic)) {
-        desk_cmd("/center\n");
-        return;
+    if (g_last_scene_valid && (g_last_scene.pane == OS_FB_PANE_IDE || g_last_scene.pane == OS_FB_PANE_WEB)) {
+        /* Lot 69: the full-screen window has the shared title buttons */
+        gfx_rect_t fb_box;
+        int hit;
+        fb_box.x = 8; fb_box.y = layout.bar_h + 8; fb_box.w = w - 16; fb_box.h = h - layout.bar_h - 16;
+        hit = gfx_wm_hit(to_wm(&fb_box), GFX_DESKTOP_PANE_TITLE_H, g_wm_q, x, y);
+        if (hit == GFX_WM_HIT_CLOSE || in_rect(x, y, &layout.pane_win.traffic)) {
+            wm_log("gfx wm full close\n");
+            desk_cmd("/center\n");
+            return;
+        }
+        if (hit == GFX_WM_HIT_MIN) {
+            g_full_min = 1;
+            g_full_pane = g_last_scene.pane;
+            wm_log("gfx wm full minimize\n");
+            gfx_fb_redraw_desktop();
+            return;
+        }
+        if (hit == GFX_WM_HIT_MAX) {
+            wm_log("gfx wm full already maximized\n");
+            return;
+        }
     }
     if (g_last_scene_valid && g_last_scene.pane == OS_FB_PANE_WEB && g_last_scene.version >= 4) {
         /* UX4: browser navigation: back / forward buttons, and a click in
@@ -965,18 +1014,6 @@ static void icon_tile(uint32_t *fb, int w, int h, int x, int y, uint32_t c0, uin
     }
 }
 
-static void traffic(uint32_t *fb, int w, int h, int x, int y) {
-    int i;
-    uint32_t cols[3] = { RGB(201, 162, 39), RGB(61, 154, 138), RGB(196, 92, 92) };
-    for (i = 0; i < 3; i++) {
-        int cx = x + i * 14 + 5, cy = y + 5, dx, dy;
-        for (dy = -5; dy <= 5; dy++) {
-            for (dx = -5; dx <= 5; dx++) {
-                if (dx * dx + dy * dy <= 20) put(fb, w, h, cx + dx, cy + dy, cols[i]);
-            }
-        }
-    }
-}
 
 static void pill(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, uint32_t c, const char *label, int muted) {
     unsigned a = muted ? 90u : 230u;
@@ -1155,12 +1192,23 @@ static const char *input_tail(const char *s, int maxc) {
     return s;
 }
 
+/* Lot 69: shared title bar of the full screen web / editor windows */
+static void draw_full_chrome(uint32_t *fb, int w, int h, int x, int y, int rw, int rh) {
+    gfx_wm_rect_t r;
+    r.x = x; r.y = y; r.w = rw; r.h = rh;
+    gfx_wm_draw_buttons(fb, w, h, w, r, GFX_DESKTOP_PANE_TITLE_H, g_wm_q);
+}
+
 static void draw_wm_buttons(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, int title_h) {
     gfx_wm_rect_t r;
     r.x = x; r.y = y; r.w = rw; r.h = rh;
-    gfx_wm_draw_buttons(fb, w, h, w, r, title_h, 1);
+    gfx_wm_draw_buttons(fb, w, h, w, r, title_h, g_wm_q);
+    gfx_wm_draw_grip(fb, w, h, w, r, title_h, g_wm_q, RGB(120, 170, 160));
 }
 
+/* Lot 69: address bar rects of the last layout (drawn by draw_window) */
+static int g_addr_valid;
+static struct { gfx_rect_t addr, addr_back, addr_fwd, addr_go; } g_addr_lay;
 static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const char *title, const char *body, const os_fb_scene_t *sc) {
     char lab[64];
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(18, 28, 36), 255);  /* opaque: no bleed from windows behind */
@@ -1168,16 +1216,36 @@ static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_PANE_TITLE_H);
     draw_title(fb, w, h, x + 14, y + 12, title ? title : "", rw - 80, RGB(232, 238, 244));
-    fill_rect(fb, w, h, x + 12, y + 44, rw - 24, TS(10) + 30, RGB(42, 36, 16));
-    llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
-    draw_text(fb, w, h, x + 18, y + 48, lab, RGB(243, 230, 176));
+    int top = y + 84 + TS(12);
+    if (sc && sc->pane == OS_FB_PANE_BROWSER && g_addr_valid) {
+        /* Lot 69: visible address / search bar, clickable (see mouse) */
+        const gfx_rect_t *a = &g_addr_lay.addr;
+        const char *txt = sc->input[0] ? sc->input : "Adresse (https://...) ou mots a chercher, puis Entree";
+        int c;
+        round_rect_a(fb, w, h, g_addr_lay.addr_back.x, a->y, g_addr_lay.addr_back.w, a->h, 6, RGB(40, 70, 86), 255);
+        draw_text(fb, w, h, g_addr_lay.addr_back.x + 6, a->y + (a->h - TS(8)) / 2, "<", RGB(232, 238, 244));
+        round_rect_a(fb, w, h, g_addr_lay.addr_fwd.x, a->y, g_addr_lay.addr_fwd.w, a->h, 6, RGB(40, 70, 86), 255);
+        draw_text(fb, w, h, g_addr_lay.addr_fwd.x + 6, a->y + (a->h - TS(8)) / 2, ">", RGB(232, 238, 244));
+        round_rect_a(fb, w, h, a->x, a->y, a->w, a->h, 6, RGB(244, 247, 250), 255);
+        stroke_round(fb, w, h, a->x, a->y, a->w, a->h, 6, RGB(61, 154, 138), 2);
+        c = (a->w - 16) / CW;
+        draw_text_n(fb, w, h, a->x + 8, a->y + (a->h - TS(8)) / 2, txt, c,
+                    sc->input[0] ? RGB(16, 24, 32) : RGB(110, 120, 130));
+        round_rect_a(fb, w, h, g_addr_lay.addr_go.x, a->y, g_addr_lay.addr_go.w, a->h, 6, RGB(31, 122, 106), 255);
+        draw_text(fb, w, h, g_addr_lay.addr_go.x + 8, a->y + (a->h - TS(8)) / 2, "Aller", RGB(255, 255, 255));
+        top = a->y + a->h + 10 + TS(4);
+    } else {
+        fill_rect(fb, w, h, x + 12, y + 44, rw - 24, TS(10) + 30, RGB(42, 36, 16));
+        llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
+        draw_text(fb, w, h, x + 18, y + 48, lab, RGB(243, 230, 176));
+    }
     if (sc && sc->version >= 6 && sc->pane_live && sc->nterm > 0) {
         /* live window content from guest syscalls (userspace/osui_panes.c) */
-        int i, ty = y + 84 + TS(12), n = sc->nterm > OS_FB_TERM_MAX ? OS_FB_TERM_MAX : sc->nterm;
+        int i, ty = top, n = sc->nterm > OS_FB_TERM_MAX ? OS_FB_TERM_MAX : sc->nterm;
         for (i = 0; i < n && ty + TS(12) <= y + rh - 8; i++, ty += TS(14))
             draw_text_n(fb, w, h, x + 18, ty, sc->term[i], (rw - 36) / CW,
                         i == 0 ? RGB(122, 212, 196) : RGB(201, 232, 223));
-    } else if (body) draw_text_n(fb, w, h, x + 18, y + 84 + TS(12), body, (rw - 36) / CW, RGB(201, 232, 223));
+    } else if (body) draw_text_n(fb, w, h, x + 18, top, body, (rw - 36) / CW, RGB(201, 232, 223));
 }
 
 /* US-050: full-screen pm-ide. term[0] title, term[1..n-2] text rows with
@@ -1214,7 +1282,7 @@ static void draw_ide(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, c
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 14, 18), 255);
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
-    traffic(fb, w, h, x + 8, y + 8);
+    draw_full_chrome(fb, w, h, x, y, rw, rh);
     maxc = (rw - 40) / CW;
     if (maxc < 8) maxc = 8;
     if (n > 0) draw_title(fb, w, h, x + 56, y + 12, sc->term[0], rw - 100, RGB(232, 238, 244));
@@ -1258,9 +1326,10 @@ void gfx_desktop_web_origin(int w, int h, int *ox, int *oy, int *pw, int *ph) {
 /* UX4: back (0) / forward (1) buttons of the web pane title bar */
 void gfx_desktop_web_nav(int w, int h, int which, gfx_rect_t *r) {
     int bar_h = clampi(h / 22, 28, 40);
+    (void)w;
     r->w = 28;
     r->h = 20;
-    r->x = w - 16 - (2 - which) * 34;
+    r->x = 16 + which * 34;   /* Lot 69: left, the shared buttons are on the right */
     r->y = bar_h + 14;
 }
 
@@ -1286,9 +1355,9 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
     }
     round_rect_a(fb, w, h, 8, bar_h + 8, w - 16, h - bar_h - 16, 10, RGB(10, 14, 18), 250);
     fill_rect(fb, w, h, 8, bar_h + 8, w - 16, 32, RGB(28, 44, 56));
-    traffic(fb, w, h, 16, bar_h + 16);
+    draw_full_chrome(fb, w, h, 8, bar_h + 8, w - 16, h - bar_h - 16);
     g_tq = q;
-    draw_title(fb, w, h, 64, bar_h + 20, sc->web_title, w - 96 - 80, RGB(232, 238, 244));
+    draw_title(fb, w, h, 16 + 2 * 34 + 8, bar_h + 20, sc->web_title, w - 96 - 80 - 3 * 30, RGB(232, 238, 244));
     g_tq = OS_UI_Q1;
     for (i = 0; i < 2; i++) {
         gfx_desktop_web_nav(w, h, i, &nav);
@@ -1602,6 +1671,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         int cq = gfx_desktop_chrome_q(sc, w, h), cw = os_ui_char_w(cq);
         menu_plan_t mp;
         out->chrome_q = cq;
+        g_wm_q = cq < OS_UI_Q1 ? OS_UI_Q1 : cq;   /* Lot 69: window buttons follow the chrome scale */
         menu_bar_plan(w, cq, &mp);
         mx = mp.mx;
         ty = (bar_h - os_ui_px(8, cq)) / 2;
@@ -1683,10 +1753,29 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         }
         wm_buttons(&out->pane_win.box, GFX_DESKTOP_PANE_TITLE_H, out->pane_win.btn);
         out->pane_win.traffic = out->pane_win.btn[2];
+        out->pane_win.has_addr = 0;
+        if (pane == OS_FB_PANE_BROWSER && out->pane_win.active && !out->pane_win.minimized) {
+            /* Lot 69: address bar under the title: < > [ field ] Aller */
+            const gfx_rect_t *bx = &out->pane_win.box;
+            int q = gfx_desktop_surface_q(scene, OS_UI_Z_PANE, w, h);
+            int bh = os_ui_px(10, q) + 14, bw = os_ui_px(8, q) * 2 + 12, gw = os_ui_px(8, q) * 5 + 16;
+            gfx_rect_t r;
+            r.y = bx->y + 44; r.h = bh;
+            r.x = bx->x + 12; r.w = bw; out->pane_win.addr_back = r;
+            r.x += bw + 6; out->pane_win.addr_fwd = r;
+            r.x += bw + 6; r.w = bx->x + bx->w - 12 - gw - 6 - r.x; out->pane_win.addr = r;
+            r.x = bx->x + bx->w - 12 - gw; r.w = gw; out->pane_win.addr_go = r;
+            out->pane_win.has_addr = out->pane_win.addr.w > 40;
+        }
         if (pane == OS_FB_PANE_IDE || pane == OS_FB_PANE_WEB) {
-            /* full screen panes keep their traffic light close (and ESC) */
-            out->pane_win.traffic.x = 36 + 8; out->pane_win.traffic.y = bar_h + 28 + 8;
-            out->pane_win.traffic.w = 42; out->pane_win.traffic.h = 16;
+            /* Lot 69: full screen panes use the shared title buttons; the
+             * "traffic" rect is now their close button (and ESC) */
+            gfx_wm_rect_t fr;
+            int bx2, by2, bs = gfx_wm_btn(GFX_DESKTOP_PANE_TITLE_H, g_wm_q);
+            fr.x = 8; fr.y = bar_h + 8; fr.w = w - 16; fr.h = h - bar_h - 16;
+            gfx_wm_button_pos(fr, GFX_DESKTOP_PANE_TITLE_H, g_wm_q, GFX_WM_HIT_CLOSE, &bx2, &by2);
+            out->pane_win.traffic.x = bx2; out->pane_win.traffic.y = by2;
+            out->pane_win.traffic.w = bs; out->pane_win.traffic.h = bs;
         }
         if (out->pane_win.active || pane == OS_FB_PANE_IDE || pane == OS_FB_PANE_WEB) {
             /* A pane window covers the Scene IA: it is not drawn and its
@@ -1991,6 +2080,7 @@ static void dock_picto(uint32_t *fb, int w, int h, int x, int y, int i) {
 
 void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {
     static os_fb_scene_t def;
+    static os_fb_scene_t minsc;
     const os_fb_scene_t *sc = scene;
     int bar_h, chat_w, chat_h, chat_x, chat_y, scene_w, scene_h, scene_x, scene_y;
     int dock_w, dock_x, dock_y, i;
@@ -2033,6 +2123,13 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         def.session[5] = 0;
         sc = &def;
     } else {
+        if (sc->pane != OS_FB_PANE_IDE && sc->pane != OS_FB_PANE_WEB) g_full_min = 0;
+        else if (g_full_min) {
+            /* minimized full screen window: show the desktop under it */
+            minsc = *sc;
+            minsc.pane = OS_FB_PANE_NONE;
+            sc = &minsc;
+        }
         g_last_scene = *sc;
         g_last_scene_valid = 1;
     }
@@ -2199,7 +2296,7 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         int ww = lay.pane_win.box.w;
         int wh = lay.pane_win.box.h;
         const char *body = "Cerveau = osui_runtime.c. Pas Chromium.";
-        if (pane == OS_FB_PANE_BROWSER) body = "Browser-OS : pages locales /web, tapez web-render /web/<page>";
+        if (pane == OS_FB_PANE_BROWSER) body = "Browser-OS : barre d'adresse en haut (URL ou mots a chercher), pages locales /web";
         else if (pane == OS_FB_PANE_FS) body = "Inspection VFS Sandboxee (FS-as-web) : initrd/, overlay/, fat16/, fat32/";
         else if (pane == OS_FB_PANE_STATUS) body = "chrome=qemu_fb display_surface=vbe_lfb";
         else if (pane == OS_FB_PANE_P2P) body = "P2P : sortie de p2p-stats (aucune sortie recue)";
@@ -2209,8 +2306,13 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
         g_tq = gfx_desktop_surface_q(sc, pane == OS_FB_PANE_SHELL ? OS_UI_Z_SHELL : OS_UI_Z_PANE, w, h);
         if (pane == OS_FB_PANE_SHELL)
             draw_shell(fb, w, h, wx, wy, ww, wh, sc);
-        else
+        else {
+            g_addr_valid = lay.pane_win.has_addr;
+            g_addr_lay.addr = lay.pane_win.addr; g_addr_lay.addr_back = lay.pane_win.addr_back;
+            g_addr_lay.addr_fwd = lay.pane_win.addr_fwd; g_addr_lay.addr_go = lay.pane_win.addr_go;
             draw_window(fb, w, h, wx, wy, ww, wh, ptitle, body, sc);
+            g_addr_valid = 0;
+        }
         g_tq = OS_UI_Q1;
     }
 

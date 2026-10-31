@@ -174,7 +174,7 @@ def run_session(name, extra_qemu, steps):
 
     display_type = os.environ.get("QEMU_DISPLAY", "none")
     cmd = [
-        "qemu-system-i386", "-cpu", "pentium3",
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", "pentium3",
         "-kernel", KERNEL, "-initrd", INITRD,
         "-m", "1024M", "-vga", "std", "-display", display_type,
         "-serial", "file:" + log_path,

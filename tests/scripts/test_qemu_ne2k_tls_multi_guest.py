@@ -195,7 +195,7 @@ def start_guest(inst, hub_port):
         except OSError:
             pass
     cmd = [
-        "qemu-system-i386", "-cpu", "max",
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", "max",
         "-kernel", KERNEL, "-initrd", INITRD,
         "-m", "1024M", "-display", "none", "-vga", "none",
         "-serial", "file:" + inst["log"],

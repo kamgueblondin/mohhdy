@@ -217,7 +217,7 @@ def start_guest(inst):
         except OSError:
             pass
     cmd = [
-        "qemu-system-i386",
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4",
         "-cpu", "pentium3",
         "-kernel", KERNEL,
         "-initrd", INITRD,

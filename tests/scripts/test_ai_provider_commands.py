@@ -93,7 +93,7 @@ def main(kernel=None, strict=False):
         except OSError:
             pass
     command = [
-        "qemu-system-i386", "-kernel", kernel, "-initrd", INITRD,
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-kernel", kernel, "-initrd", INITRD,
         "-m", "1024M", "-display", "none", "-vga", "none",
         "-serial", "file:" + LOG,
         "-monitor", "unix:%s,server,nowait" % MON,

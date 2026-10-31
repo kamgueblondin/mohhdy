@@ -293,25 +293,25 @@ static void test_hit_regions_dock_menu_stage_close(void) {
     /* Dock /shell (index 2) */
     click_at(rect_center_x(&layout.dock.icons[2]), rect_center_y(&layout.dock.icons[2]));
     read_kbd(got, (int)sizeof(got));
-    TEST_ASSERT_EQUAL_STRING("/shell\n", got);
+    TEST_ASSERT_EQUAL_STRING("\x16" "cmd /shell\n", got);
 
     /* Top menu Browser-OS (index 1) */
     drain_kbd();
     click_at(rect_center_x(&layout.menu_items[1]), rect_center_y(&layout.menu_items[1]));
     read_kbd(got, (int)sizeof(got));
-    TEST_ASSERT_EQUAL_STRING("/browser\n", got);
+    TEST_ASSERT_EQUAL_STRING("\x16" "cmd /browser\n", got);
 
     /* Stage mode badge */
     drain_kbd();
     click_at(rect_center_x(&layout.stage_badge), rect_center_y(&layout.stage_badge));
     read_kbd(got, (int)sizeof(got));
-    TEST_ASSERT_EQUAL_STRING("/stage\n", got);
+    TEST_ASSERT_EQUAL_STRING("\x16" "cmd /stage\n", got);
 
     /* Scene IA first pill */
     drain_kbd();
     click_at(rect_center_x(&layout.scene_ia.pills[0]), rect_center_y(&layout.scene_ia.pills[0]));
     read_kbd(got, (int)sizeof(got));
-    TEST_ASSERT_EQUAL_STRING("/stage-prompt reflexion\n", got);
+    TEST_ASSERT_EQUAL_STRING("\x16" "cmd /stage-prompt reflexion\n", got);
 
     /* Pane close (traffic) requires an active pane in last scene */
     blank_scene();
@@ -341,12 +341,12 @@ static void test_desktop_icons_click(void) {
     drain_kbd();
     click_at(rect_center_x(&layout.desk.icons[4]), rect_center_y(&layout.desk.icons[4]));
     read_kbd(got, (int)sizeof(got));
-    TEST_ASSERT_EQUAL_STRING("/status\n", got);
+    TEST_ASSERT_EQUAL_STRING("\x16" "cmd /status\n", got);
     drain_kbd();
     click_at(rect_center_x(&layout.desk.icons[5]), rect_center_y(&layout.desk.icons[5]));
     read_kbd(got, (int)sizeof(got));
     /* the Fichiers icon opens the explorer app; the FS pane stays on /fs */
-    TEST_ASSERT_EQUAL_STRING("/files\n", got);
+    TEST_ASSERT_EQUAL_STRING("\x16" "cmd /files\n", got);
     /* the icon tile really is drawn inside the hit box (Statut grey) */
     TEST_ASSERT(count_near(layout.desk.icons[4].x, layout.desk.icons[4].y,
                            layout.desk.icons[4].x + layout.desk.icons[4].w,
@@ -374,7 +374,7 @@ static void test_desktop_icons_click(void) {
         TEST_ASSERT_EQUAL(-1, hit);
         click_at(rect_center_x(&layout.desk.icons[4]), rect_center_y(&layout.desk.icons[4]));
         read_kbd(got, (int)sizeof(got));
-        TEST_ASSERT_EQUAL_STRING("/status\n", got);
+        TEST_ASSERT_EQUAL_STRING("\x16" "cmd /status\n", got);
         drain_kbd();
     }
     /* full screen web pane: no desktop icons */
@@ -584,7 +584,8 @@ static void test_window_manager_panes_and_chat(void) {
         /* close sends the command that closes the pane */
         click_at(rect_center_x(&m.pane_win.btn[2]), rect_center_y(&m.pane_win.btn[2]));
         read_kbd(got, (int)sizeof(got));
-        TEST_ASSERT_EQUAL_STRING("/center\n", got);
+        /* Lot 69: an event for the desktop, typed text for the shell terminal */
+        TEST_ASSERT_EQUAL_STRING(panes[k] == OS_FB_PANE_SHELL ? "/center\n" : "\x16" "cmd /center\n", got);
     }
     /* chat: close hides it, the Chat menu reopens it without a command */
     gfx_desktop_wm_reset();
@@ -748,7 +749,7 @@ static void test_app_windows_events_and_z_order(void) {
     drain_kbd();
     click_at(rect_center_x(&l.dock.icons[5]), rect_center_y(&l.dock.icons[5]));
     read_kbd(got, (int)sizeof(got));
-    TEST_ASSERT_EQUAL_STRING("\x16" "focus d\n/status\n", got);
+    TEST_ASSERT_EQUAL_STRING("\x16" "focus d\n" "\x16" "cmd /status\n", got);
 
     /* dock hover: tooltip with the name, pictograms (no letters) */
     for (i = 0; i < GFX_DESKTOP_DOCK; i++) TEST_ASSERT(gfx_desktop_dock_names[i][0] != 0);
@@ -1005,7 +1006,8 @@ static void test_lot68_scene_scale_and_grid(void) {
     sc.magic = OS_FB_MAGIC; sc.version = 7;
     TEST_ASSERT_EQUAL(4, gfx_desktop_surface_q(&sc, OS_UI_Z_CHAT, 3840, 2160)); /* old scene: 1x */
     sc.version = 8;
-    TEST_ASSERT_EQUAL(4, gfx_desktop_surface_q(&sc, OS_UI_Z_CHAT, 1024, 768));
+    TEST_ASSERT_EQUAL(6, gfx_desktop_surface_q(&sc, OS_UI_Z_CHAT, 1024, 768));  /* Lot 69: auto 1.5x */
+    TEST_ASSERT_EQUAL(4, gfx_desktop_surface_q(&sc, OS_UI_Z_CHAT, 800, 600));
     TEST_ASSERT_EQUAL(12, gfx_desktop_surface_q(&sc, OS_UI_Z_CHAT, 3840, 2160)); /* auto */
     sc.ui_scale_q = 8;
     sc.zoom_q[OS_UI_Z_WEB] = 6;
@@ -1185,6 +1187,156 @@ static void test_lot69_form_layout(void) {
     gfx_desktop_set_form(0, 0);
 }
 
+/* Lot 69: Browser-OS shows a clickable address / search bar with back,
+ * forward and go buttons; typed text is drawn inside the field. */
+/* Lot 69: every window type has the same chrome: the three title buttons
+ * come from gfx_wm (same size, same place, same colours), floating windows
+ * resize by the corner grip, the full screen web / editor windows close,
+ * minimize to the dock and restore from it. */
+static int same_buttons(const gfx_rect_t *box, const gfx_rect_t btn[3], int title_h, int q) {
+    gfx_wm_rect_t r;
+    int b, x, y, n = gfx_wm_btn(title_h, q);
+    r.x = box->x; r.y = box->y; r.w = box->w; r.h = box->h;
+    for (b = 0; b < 3; b++) {
+        gfx_wm_button_pos(r, title_h, q, GFX_WM_HIT_MIN + b, &x, &y);
+        if (btn[b].x != x || btn[b].y != y || btn[b].w != n || btn[b].h != n) return 0;
+        if (g_fb[(y + n / 2) * W + x + n / 2] == 0) return 0;
+    }
+    return 1;
+}
+
+static void test_lot69_every_window_shared_chrome(void) {
+    static const uint8_t panes[6] = { OS_FB_PANE_BROWSER, OS_FB_PANE_ADMIN, OS_FB_PANE_SUPPORT,
+                                      OS_FB_PANE_STATUS, OS_FB_PANE_FS, OS_FB_PANE_SHELL };
+    static const uint8_t full[2] = { OS_FB_PANE_WEB, OS_FB_PANE_IDE };
+    gfx_desktop_layout_t l, m;
+    char got[64];
+    int k, q;
+    vga_desktop_set(1);
+    /* chat */
+    gfx_desktop_wm_reset();
+    blank_scene();
+    g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+    redraw(&l);
+    q = l.chrome_q < 4 ? 4 : l.chrome_q;
+    TEST_ASSERT(same_buttons(&l.chat_win.box, l.chat_win.btn, GFX_DESKTOP_CHAT_TITLE_H, q));
+    /* panes: same buttons, and the corner grip resizes */
+    for (k = 0; k < 6; k++) {
+        int gx, gy;
+        gfx_desktop_wm_reset();
+        blank_scene();
+        g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+        g_scene.pane = panes[k];
+        redraw(&l);
+        TEST_ASSERT(same_buttons(&l.pane_win.box, l.pane_win.btn, GFX_DESKTOP_PANE_TITLE_H, q));
+        gx = l.pane_win.box.x + l.pane_win.box.w - 3;
+        gy = l.pane_win.box.y + l.pane_win.box.h - 3;
+        drag(gx, gy, gx - 60, gy - 40);
+        redraw(&m);
+        TEST_ASSERT_EQUAL(l.pane_win.box.x, m.pane_win.box.x);
+        TEST_ASSERT_EQUAL(l.pane_win.box.w - 60, m.pane_win.box.w);
+        TEST_ASSERT_EQUAL(l.pane_win.box.h - 40, m.pane_win.box.h);
+        TEST_ASSERT(same_buttons(&m.pane_win.box, m.pane_win.btn, GFX_DESKTOP_PANE_TITLE_H, q));
+    }
+    /* app window */
+    gfx_desktop_wm_reset();
+    app_scene();
+    redraw(&l);
+    TEST_ASSERT(l.app_win[0].visible);
+    TEST_ASSERT(same_buttons(&l.app_win[0].box, l.app_win[0].btn, GFX_DESKTOP_APP_TITLE_H, q));
+    /* full screen web and editor */
+    for (k = 0; k < 2; k++) {
+        gfx_rect_t fb_box, btn[3];
+        gfx_wm_rect_t r;
+        int b, x, y, n = gfx_wm_btn(GFX_DESKTOP_PANE_TITLE_H, q);
+        gfx_desktop_wm_reset();
+        blank_scene();
+        g_scene.version = 7;
+        g_scene.app_focus = 0xFF;
+        g_scene.pane = full[k];
+        redraw(&l);
+        fb_box.x = 8; fb_box.y = l.bar_h + 8; fb_box.w = W - 16; fb_box.h = H - l.bar_h - 16;
+        r.x = fb_box.x; r.y = fb_box.y; r.w = fb_box.w; r.h = fb_box.h;
+        for (b = 0; b < 3; b++) {
+            gfx_wm_button_pos(r, GFX_DESKTOP_PANE_TITLE_H, q, GFX_WM_HIT_MIN + b, &x, &y);
+            btn[b].x = x; btn[b].y = y; btn[b].w = n; btn[b].h = n;
+        }
+        TEST_ASSERT(same_buttons(&fb_box, btn, GFX_DESKTOP_PANE_TITLE_H, q));
+        TEST_ASSERT_EQUAL(btn[2].x, l.pane_win.traffic.x);
+        TEST_ASSERT_EQUAL(GFX_WM_RGB_CLOSE, g_fb[(btn[2].y + 2) * W + btn[2].x + n / 2]);
+        /* minimize: the desktop shows, no command; the dock restores */
+        drain_kbd();
+        click_at(btn[0].x + n / 2, btn[0].y + n / 2);
+        redraw(&m);
+        TEST_ASSERT(GFX_WM_RGB_CLOSE != g_fb[(btn[2].y + 2) * W + btn[2].x + n / 2]);
+        read_kbd(got, (int)sizeof(got));
+        TEST_ASSERT_EQUAL_STRING("", got);
+        click_at(rect_center_x(&m.dock.icons[1]), rect_center_y(&m.dock.icons[1]));
+        redraw(&m);
+        TEST_ASSERT_EQUAL(GFX_WM_RGB_CLOSE, g_fb[(btn[2].y + 2) * W + btn[2].x + n / 2]);
+        read_kbd(got, (int)sizeof(got));
+        TEST_ASSERT_EQUAL_STRING("", got);
+        /* close sends the closing command */
+        click_at(btn[2].x + n / 2, btn[2].y + n / 2);
+        read_kbd(got, (int)sizeof(got));
+        TEST_ASSERT_EQUAL_STRING("\x16" "cmd /center\n", got);
+    }
+    vga_desktop_set(0);
+}
+
+static void test_lot69_browser_address_bar(void) {
+    gfx_desktop_layout_t l;
+    char got[64];
+    const gfx_rect_t *a;
+    int x, y, dark = 0;
+    vga_desktop_set(1);
+    gfx_desktop_wm_reset();
+    blank_scene();
+    g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+    g_scene.pane = OS_FB_PANE_BROWSER;
+    redraw(&l);
+    TEST_ASSERT(l.pane_win.active);
+    TEST_ASSERT_EQUAL(1, l.pane_win.has_addr);
+    a = &l.pane_win.addr;
+    TEST_ASSERT(a->w > 200 && a->h >= 24);
+    TEST_ASSERT(l.pane_win.addr_back.x < l.pane_win.addr_fwd.x && l.pane_win.addr_fwd.x < a->x);
+    TEST_ASSERT(a->x + a->w < l.pane_win.addr_go.x);
+    /* white field, right part empty with the placeholder on the left */
+    TEST_ASSERT_EQUAL(0xF4F7FAu, g_fb[(a->y + a->h / 2) * W + a->x + a->w - 6]);
+    /* typed text: dark glyph pixels inside the field */
+    strcpy(g_scene.input, "example.com");
+    redraw(&l);
+    for (y = a->y + 2; y < a->y + a->h - 2; y++)
+        for (x = a->x + 6; x < a->x + 6 + 11 * 8; x++)
+            if (g_fb[y * W + x] == 0x101820u) dark++;
+    TEST_ASSERT(dark > 40);
+    /* other panes have no bar */
+    g_scene.pane = OS_FB_PANE_FS;
+    redraw(&l);
+    TEST_ASSERT_EQUAL(0, l.pane_win.has_addr);
+    g_scene.pane = OS_FB_PANE_BROWSER;
+    redraw(&l);
+    /* buttons: back / forward are web events, Aller is Enter */
+    drain_kbd();
+    click_at(rect_center_x(&l.pane_win.addr_back), rect_center_y(&l.pane_win.addr_back));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\x16" "web back\n", got);
+    drain_kbd();
+    click_at(rect_center_x(&l.pane_win.addr_fwd), rect_center_y(&l.pane_win.addr_fwd));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\x16" "web fwd\n", got);
+    drain_kbd();
+    click_at(rect_center_x(&l.pane_win.addr_go), rect_center_y(&l.pane_win.addr_go));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("\n", got);
+    drain_kbd();
+    click_at(rect_center_x(a), rect_center_y(a));
+    read_kbd(got, (int)sizeof(got));
+    TEST_ASSERT_EQUAL_STRING("", got);
+    g_scene.input[0] = 0;
+    vga_desktop_set(0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -1219,6 +1371,8 @@ int main(void) {
     RUN_TEST(test_lot69_web_item_font_scale);
     RUN_TEST(test_lot69_dock_tooltip_scales);
     RUN_TEST(test_lot69_form_layout);
+    RUN_TEST(test_lot69_browser_address_bar);
+    RUN_TEST(test_lot69_every_window_shared_chrome);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

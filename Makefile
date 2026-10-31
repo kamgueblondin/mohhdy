@@ -9,6 +9,9 @@ LD = ld
 # -nostdlib : Ne pas lier avec la bibliothèque standard C
 # -fno-pie : Produire du code indépendant de la position
 CFLAGS = -m32 -ffreestanding -nostdlib -fno-pie -Wall -Wextra -O3 -msse2 -mfpmath=sse -mstackrealign -fomit-frame-pointer -I. -Iinclude -Ikernel -DCONFIG_UTF8_VGA=1
+# Lot 69: generated header deps (hand-written rules missed gfx_font_hd.h,
+# os_ui_scale.h...): a header edit now rebuilds every object using it
+CFLAGS += -MMD -MP
 ASFLAGS = -f elf32
 
 # Nom du fichier final de notre OS
@@ -1499,6 +1502,13 @@ gguf-kvm-benchmark:
 gguf-kvm-benchmark-check:
 	@python3 tests/scripts/test_benchmark_qemu_gguf_kvm_latency.py
 
+.PHONY: qemu-gui-lot69-windows
+qemu-gui-lot69-windows: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_lot69_windows.py
+
 .PHONY: qemu-web-layout
 qemu-web-layout: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_web_layout.py
+
+# Lot 69: compiler generated header deps (kept last: not the default goal)
+-include $(wildcard build/*.d build/*/*.d build/*/*/*.d)

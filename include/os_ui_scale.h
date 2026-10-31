@@ -26,16 +26,16 @@ static inline int os_ui_q_clamp(int q) {
     return q < OS_UI_Q_MIN ? OS_UI_Q_MIN : q > OS_UI_Q_MAX ? OS_UI_Q_MAX : q;
 }
 
-/* Default scale from the framebuffer: 8x8 glyphs are readable on
- * 1024x768, too small beyond. The shorter side decides so a tall or wide
+/* Default scale from the framebuffer. Lot 69: 1x 8x8 glyphs proved too
+ * small even on 1024x768 (owner report), so 1.5x from a 760 px side. The shorter side decides so a tall or wide
  * screen is not over scaled. */
 static inline int os_ui_auto_q(int w, int h) {
     int s = w < h ? w : h;
     (void)w;
     if (s >= 2000) return 12;   /* 4K class: 3x */
     if (s >= 1400) return 8;    /* 2560x1440: 2x */
-    if (s >= 1000) return 6;    /* 1920x1080: 1.5x */
-    return 4;
+    if (s >= 760) return 6;     /* 1024x768 .. 1920x1080: 1.5x (Lot 69: 1x was too small) */
+    return 4;                   /* 800x600 and below */
 }
 
 /* Effective scale: global (or auto) times the window zoom (4 = none). */
