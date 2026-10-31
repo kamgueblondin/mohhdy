@@ -1,6 +1,8 @@
-/* wf_tls.h - Lot 67: TLS 1.2 client for the Ring 3 web stack.
+/* wf_tls.h - Lot 67: TLS 1.2 client for the Ring 3 web stack; Lot 69:
+ * TLS 1.3 (TLS_AES_128_GCM_SHA256, X25519, RSA-PSS/ECDSA CertificateVerify)
+ * is offered first and TLS 1.2 is the fallback.
  * Suites: ECDHE-ECDSA-AES128-GCM-SHA256 (c02b), ECDHE-RSA-AES128-GCM-SHA256
- * (c02f); key exchange X25519; extended master secret (RFC 7627) required;
+ * (c02f); key exchange X25519; extended master secret (RFC 7627) preferred, RFC 5246 master secret otherwise;
  * SNI; server certificate chain checked against a wf_trust_t root store
  * with host name and (when the clock is trusted) validity dates.
  * Renegotiation, session resumption and client certificates are refused.
@@ -41,12 +43,18 @@ typedef struct {
     int chain_rc;
     wf_chain_info_t chain;
     int established;
+    int ems;               /* 1: extended master secret (RFC 7627) was negotiated */
     int peer_closed;
     /* state */
     uint8_t client_random[32], server_random[32];
     uint8_t master[48];
     uint8_t c_key[16], s_key[16], c_iv[4], s_iv[4];
     uint64_t c_seq, s_seq;
+    /* TLS 1.3 (RFC 8446): TLS_AES_128_GCM_SHA256 with X25519 */
+    int got_share;
+    int version;                  /* 0x0303 or 0x0304 once the ServerHello is read */
+    uint8_t c_iv13[12], s_iv13[12];
+    uint8_t c_secret[32], s_secret[32];   /* current traffic secrets */
     int s_encrypted;
     sha256_ctx_t hs_hash;         /* running transcript hash */
     uint8_t ecdh_priv[32];
@@ -77,4 +85,8 @@ void wf_tls_close(wf_tls_t* t);
 void wf_tls_prf(const uint8_t* secret, int slen, const char* label, const uint8_t* seed, int seedlen,
                 uint8_t* out, int outlen);
 const char* wf_tls_suite_name(uint16_t suite);
+/* TLS 1.3 HKDF helpers (exported for the RFC 8448 known-answer test). */
+void wf_hkdf_extract(const uint8_t* salt, int sl, const uint8_t* ikm, int il, uint8_t out[32]);
+void wf_hkdf_expand_label(const uint8_t secret[32], const char* label, const uint8_t* ctx, int cl,
+                          uint8_t* out, int outlen);
 #endif

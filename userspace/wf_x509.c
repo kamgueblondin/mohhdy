@@ -210,6 +210,7 @@ static int parse_ext(const wf_der_t* ext, wf_cert_t* c) {
         int sp = 0, np = 0;
         wf_der_t seq, gn;
         if (wf_der_expect(val.val, val.len, &sp, 0x30U, &seq) != 0) return -1;
+        c->san_seq = seq.val; c->san_seq_len = seq.len;
         while (np < seq.len && wf_der_next(seq.val, seq.len, &np, &gn) == 0) {
             if (gn.tag == 0x82U && c->san_count < WF_X509_MAX_SAN) {
                 c->san[c->san_count] = gn.val;
@@ -394,6 +395,15 @@ int wf_x509_host_match(const wf_cert_t* c, const char* host) {
         return -1;
     }
     hl = host_len(host);
+    if (c->san_seq) {
+        /* every dNSName, not only the first WF_X509_MAX_SAN (www.google.com
+         * style certificates carry well over a hundred names) */
+        int np = 0;
+        wf_der_t gn;
+        while (np < c->san_seq_len && wf_der_next(c->san_seq, c->san_seq_len, &np, &gn) == 0)
+            if (gn.tag == 0x82U && dns_match(gn.val, gn.len, host, hl)) return 0;
+        return -1;
+    }
     for (i = 0; i < c->san_count; i++)
         if (dns_match(c->san[i], c->san_len[i], host, hl)) return 0;
     return -1;

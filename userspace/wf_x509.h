@@ -59,7 +59,8 @@ typedef struct {
     int key_cert_sign;                          /* keyUsage bit 5 */
     int digital_signature;                      /* keyUsage bit 0 */
     int san_count;
-    const uint8_t* san[WF_X509_MAX_SAN]; int san_len[WF_X509_MAX_SAN];   /* dNSName */
+    const uint8_t* san[WF_X509_MAX_SAN]; int san_len[WF_X509_MAX_SAN];   /* first dNSNames (report) */
+    const uint8_t* san_seq; int san_seq_len;   /* whole GeneralNames: every dNSName is checked */
     int san_ip_count;
     uint8_t san_ip[4][4];
     char cn[64];                                /* subject CN (display only) */
