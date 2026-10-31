@@ -230,7 +230,14 @@ static void test_lot51_entries(void) {
     TEST_ASSERT_EQUAL(0, osui_par_build(e, "4", out, (int)sizeof(out)));
     TEST_ASSERT_EQUAL_STRING("child-result 4", out);
     TEST_ASSERT_EQUAL(OSUI_PAR_MUT, entry_of(OS_FB_APP_CHILD, "child-results-clear")->flags);
-    TEST_ASSERT_EQUAL(0, entry_of(OS_FB_APP_RELEASE, "deploy-verify")->flags);
+    /* Lot 66 (US-G23): /release deploy-verify takes its manifest, like
+     * the /ci entry since Lot 46 (without it the entry could only answer
+     * "manifest not found"). Read-only: one Enter, not armed. */
+    TEST_ASSERT_EQUAL(0, entry_of(OS_FB_APP_RELEASE, "prod-backups")->flags);
+    e = entry_of(OS_FB_APP_RELEASE, "deploy-verify");
+    TEST_ASSERT_EQUAL(OSUI_PAR_ARG, e->flags);
+    TEST_ASSERT_EQUAL(0, osui_par_build(e, "/relman", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("deploy-verify /relman", out);
     e = entry_of(OS_FB_APP_RELEASE, "deploy-apply");
     TEST_ASSERT_EQUAL(OSUI_PAR_ARG | OSUI_PAR_MUT, e->flags);
     TEST_ASSERT_EQUAL(0, osui_par_build(e, "/deploy.man", out, (int)sizeof(out)));

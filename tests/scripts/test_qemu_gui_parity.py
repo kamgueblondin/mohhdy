@@ -63,7 +63,7 @@ PANELS = [
     ("/mesh", "Maillage P2P", "p2p-stats", "p2p-stats error p2p down"),
     # Lot 51. /child /release /keys do not take pane slashes (/p2p /prod /collab).
     ("/child", "Enfants", "child-exit-count", "child-exit-count ok"),
-    ("/release", "Livraison", "deploy-verify", "deploy-verify error manifest not found"),
+    ("/release", "Livraison", "prod-backups", "prod-backups ok 0"),
     ("/keys", "Cles collab", "collab-keys", "collab-keys error p2p down"),
 ]
 

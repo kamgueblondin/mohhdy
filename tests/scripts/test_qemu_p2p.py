@@ -322,6 +322,9 @@ def main():
         hub.cut_pair(a["mac"], c["mac"])
         hub.cut_pair(b["mac"], c["mac"])
         gamma_at_cut = len(base.log_text(c["log"]))
+        # Lot 66 (US-069): a plain kv write during the long cut; after the
+        # heal it must reach gamma by the automatic anti-entropy (no p2p-sync).
+        cmd(a, "p2p-put hk heal", "p2p-put ok hk")
         cmd(a, "p2p-raft-put late yes", "p2p-raft-put ok index 2")
         cmd(a, "p2p-poll 1", "p2p-poll ok")
         cmd(b, "p2p-poll 1", "p2p-poll ok")
@@ -365,6 +368,25 @@ def main():
             if _round >= 1 and "p2p raft snapshot installed index 2" in log(c, healed_at):
                 break
         wait_log(c, "p2p raft snapshot installed index 2", 40)
+        if "p2p-sync " in log(c, healed_at) or "p2p-sync " in log(a, healed_at):
+            raise RuntimeError("a manual p2p-sync ran during the heal")
+        for _round in range(6):
+            if "hk=heal" in log(c, healed_at):
+                break
+            cmd(a, "p2p-poll 2", "p2p-poll ok")
+            cmd(c, "p2p-poll 2", "p2p-poll ok")
+        if "hk=heal" not in log(c, healed_at):
+            st = cmd(c, "p2p-kv", "p2p kv ok ")
+            raise RuntimeError("gamma lacks hk=heal after the heal: %s" % log(c, st)[-1200:])
+        wait_log(c, "p2p kv synced hk=heal v1 from ", 40, healed_at)
+        heals = []
+        for node in (a, c):
+            st = cmd(node, "p2p-stats", " heal_syncs ")
+            heals.append(int(re.search(r" heal_syncs (\d+)", log(node, st)).group(1)))
+        if max(heals) < 1:
+            raise RuntimeError("no heal anti-entropy counted: %r" % heals)
+        cmd(c, "p2p-get hk", "p2p-get ok local hk=heal v1")
+        say("scenario 2b: heal anti-entropy delivered hk=heal to gamma without p2p-sync (heal_syncs %r)" % heals)
         wait_log(b, "p2p raft commit index 3 next=ok", 30)
         wait_log(c, "p2p raft commit index 3 next=ok", 30)
         st_a = cmd(a, "p2p-raft", "p2p raft role ")

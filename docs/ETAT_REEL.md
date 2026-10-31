@@ -1639,6 +1639,14 @@ Lot 47 (`docs/lot47_plan.md`, PR #204):
 - Lot 49 (branch cursor/lot49): US-120 done, `roadmap-check` compares the
   phase 6-8 statuses with the new US master table. See docs/lot49_plan.md.
 
+## Lot 66 (/release in QEMU, P2P cache and partition heal)
+
+- US-G23 done: `make qemu-gui-parity` step release_panel (apply, verify, refused apply with nothing changed, rollback after a healthy deploy, named restore, all from /release; files read back in /cmd). The /release deploy-verify entry now takes its manifest (before it could only print `manifest not found`).
+- Phase 9: done 24, partial 0, simule 0, open 0, progress 100%. Next: US-076 US-078 US-080 US-081 US-097.
+- US-070 (done since Lot 48): fixed a duplicate cache line per key, Raft lines dropped on every peer down (guard never matched), non wrap-safe TTL; LRU eviction, counters `evictions` `expired`. Proof `test_p2p` (lot66 cache test), `make qemu-gui-mesh`.
+- US-069 (done since Lot 48): the down-to-up transition of a peer starts the two-way anti-entropy (`heal_syncs` in `p2p-stats`); before, writes made during a cut needed a manual `p2p-sync`. Proof `test_p2p` (lot66 heal test), `make qemu-p2p` scenario 2b.
+- US-001 (ATA IDENTIFY, FAT PIO fallback) and US-064: already done (Lots 2 and 46), not changed. US-068/US-073 stay partial. Simule items unchanged (US-078, US-097, US-074 NAT).
+
 ## Lot 65 (GUI panels cover whole command families)
 
 - Every registry command of the pm-, task-, child-, p2p- and collab-

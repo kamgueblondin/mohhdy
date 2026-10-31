@@ -7,6 +7,15 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 66 (31 October 2026)
+
+US-G23 done: deploy apply/verify, refused apply, rollback and named
+restore driven from /release in QEMU; phase 9 done 24 partial 0 (100%).
+Phase 5 hardening: P2P cache LRU without duplicate keys, Raft lines kept
+on peer down (US-070); a healed partition starts anti-entropy by itself,
+proved in `make qemu-p2p` 2b (US-069). US-001 (ATA) and US-064 were
+already done (Lots 2, 46). See docs/lot66_plan.md.
+
 ### Lot 65 (31 October 2026)
 
 GUI panels cover whole terminal command families (pm-, task-, child-,
