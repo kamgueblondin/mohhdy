@@ -469,16 +469,27 @@ def main():
             (term_b, "" if stale_isolated else " (its put was refused)", time.monotonic() - t0))
 
         # Scenario 3: link alpha<->gamma fails; detection, then relay via beta.
+        qos_re = r"p2p qos window (\d+) srtt_ms (\d+) min_rtt_ms (\d+) losses (\d+) ping_losses (\d+)"
+        start_q = cmd(a, "p2p-qos", "p2p qos window ")
+        ping_losses0 = int(re.search(qos_re, log(a, start_q)).group(5))
+        block_at = len(base.log_text(a["log"]))
         cmd(a, "p2p-block gamma", "p2p-block ok gamma")
         cmd(c, "p2p-block alpha", "p2p-block ok alpha")
-        wait_log(a, "p2p peer gamma down", 90)
-        # US-068/073: the unanswered PING to gamma halved the window; beta
-        # PONGs grow it back by one per round trip, so it is still below 16.
-        start_q = cmd(a, "p2p-qos", "p2p qos window ")
-        qos = re.search(r"p2p qos window (\d+) srtt_ms (\d+) min_rtt_ms (\d+) losses (\d+) ping_losses (\d+)",
-                        log(a, start_q))
-        if not qos or int(qos.group(1)) >= 16 or int(qos.group(5)) < 1 or int(qos.group(3)) < 1:
-            raise RuntimeError("alpha qos did not adapt: %s" % log(a, start_q)[-400:])
+        # US-068/073: the first unanswered PING to gamma after the block
+        # halves the window; beta PONGs grow it back by one per round trip.
+        # Lot 66: read the window right after that loss (ping_losses moved),
+        # not whatever an earlier scenario left (the heal anti-entropy of 2c
+        # gives the window time to regrow to 16 before this block).
+        qos = None
+        for _round in range(15):
+            cmd(a, "p2p-poll 1", "p2p-poll ok")
+            start_q = cmd(a, "p2p-qos", "p2p qos window ")
+            qos = re.search(qos_re, log(a, start_q))
+            if qos and int(qos.group(5)) > ping_losses0:
+                break
+        if not qos or int(qos.group(5)) <= ping_losses0 or int(qos.group(1)) >= 16 or int(qos.group(3)) < 1:
+            raise RuntimeError("alpha qos did not adapt to the ping loss: %s" % log(a, start_q)[-400:])
+        wait_log(a, "p2p peer gamma down", 90, block_at)
         say("scenario 3: adaptive window %s after ping loss, srtt %s ms" % (qos.group(1), qos.group(2)))
         cmd(a, "p2p-send gamma via-relay-msg", "p2p-send ok to gamma")
         wait_log(c, "p2p msg from alpha: via-relay-msg (relayed)", 60)
