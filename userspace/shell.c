@@ -3669,7 +3669,7 @@ static int is_builtin(const char* cmd) {
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
-        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-qos", "p2p-burst", "p2p-flood", "p2p-kv", "p2p-poll",
+        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-qos", "p2p-bwe", "p2p-probe", "p2p-burst", "p2p-flood", "p2p-kv", "p2p-poll",
         "p2p-send", "p2p-put", "p2p-get", "p2p-sync", "p2p-propose", "p2p-block", "p2p-unblock", "p2p-limit",
         "p2p-raft", "p2p-raft-compact", "p2p-raft-put", "p2p-grpc", "p2p-stun", "p2p-punch", "p2p-cache", "p2p-route",
         "collab-join", "collab-pay", "collab-offer", "collab-reserve", "collab-task", "collab-claim", "collab-work",

@@ -276,6 +276,8 @@ static const osui_par_entry_t k_p2pmesh[] = {
     { "Appel gRPC sur le maillage", "p2p-grpc", A | M, "PAIR SERVICE METHODE [CHARGE]" },
     { "Limite de debit", "p2p-limit", A | M, "N (0: aucune)" },
     { "Rafale lissee", "p2p-burst", A | M, "PAIR N [TEXTE]" },
+    { "Sonde de debit (estimateur)", "p2p-probe", A | M, "PAIR [N]" },
+    { "Estimateur de debit", "p2p-bwe", 0, 0 },
     { "Inondation (test d'analyse)", "p2p-flood", A | M, "PAIR N" },
     { "Bloquer un pair", "p2p-block", A | M, "PAIR" },
     { "Debloquer un pair", "p2p-unblock", A | M, "PAIR" },

@@ -9,6 +9,7 @@
  */
 #ifndef MOHHDY_P2P_H
 #define MOHHDY_P2P_H
+#include "p2p_bwe.h"
 #include <stdint.h>
 
 #define P2P_PORT 7700U
@@ -20,6 +21,9 @@
 #define P2P_TEXT_MAX 96
 #define P2P_SEEN 32
 #define P2P_DATAGRAM_MAX 600
+#define P2P_PROBE_BYTES 256      /* Lot 67: probe PING body (echo is 12 bytes) */
+#define P2P_PROBE_MAGIC 0x42574531U  /* "BWE1" */
+#define P2P_PROBE_MAX 256
 #define P2P_HZ 100U
 #define P2P_HELLO_TICKS (2U * P2P_HZ)
 /* Distance vector in HELLO: a destination is advertised up to this many
@@ -220,6 +224,14 @@ typedef struct {
     /* Lot 6: measured byte rates (EWMA 1/4 of 1 s windows), not a model. */
     uint32_t meas_tx_bps, meas_rx_bps;
     uint32_t meas_tick, meas_tx_last, meas_rx_last;
+    /* Lot 67 (US-068/US-073): model-based bandwidth estimator fed by probe
+     * PINGs (delivery rate of acked probes, min RTT, paced sends). */
+    p2p_bwe_t bwe;
+    uint32_t bwe_ready;       /* bwe initialised */
+    uint32_t probe_left;      /* probes still to send */
+    uint32_t probe_peer;      /* peer id of the probe train */
+    uint32_t probe_seq;
+    uint32_t probe_sent, probe_acked, probe_lost;
 } p2p_qos_t;
 #define P2P_SHAPE_Q 8
 #define P2P_SHAPE_BODY 404
@@ -344,6 +356,10 @@ int p2p_cache_raft_put(p2p_node_t* n, const p2p_host_t* h, const char* key, cons
 /* AIMD on the data window. Control frames do not pass through it. */
 void p2p_qos_note_loss(p2p_node_t* n);
 void p2p_qos_note_ack(p2p_node_t* n);
+/* Lot 67 (US-068/US-073): start a train of `count` probe PINGs to `peer`,
+ * paced by the estimator; p2p_tick sends them, PONGs feed the delivery
+ * rate. Returns 0, -1 unknown/unkeyed peer, -2 bad count. */
+int p2p_qos_probe(p2p_node_t* n, const p2p_host_t* h, const char* peer, int count);
 int p2p_route_find(const p2p_node_t* n, uint32_t dest_id, uint32_t* next_hop, uint32_t* total_cost);
 int p2p_grpc_call(p2p_node_t* n, const p2p_host_t* h, const char* peer, const char* service, const char* method, const char* payload);
 /* timeout_ticks 0 is already expired. fixed_id 0 allocates a new id. */

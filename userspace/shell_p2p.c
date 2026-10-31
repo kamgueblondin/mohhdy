@@ -202,6 +202,8 @@ int shell_p2p_line(const char* line) {
     if (s_eq(cmd, "p2p-stats")) { report("stats"); return 0; }
     if (s_eq(cmd, "p2p-analyze")) { report("analyze"); return 0; }
     if (s_eq(cmd, "p2p-qos")) { report("qos"); return 0; }
+    /* Lot 67 (US-068/US-073): bandwidth estimator */
+    if (s_eq(cmd, "p2p-bwe")) { report("bwe"); return 0; }
     if (s_eq(cmd, "p2p-kv")) { report("kv"); return 0; }
     if (s_eq(cmd, "p2p-raft-compact")) {
         rc = p2p_raft_compact(&g_node);
@@ -328,6 +330,18 @@ int shell_p2p_line(const char* line) {
         if (rc == 1) { print_string("p2p-send queued to "); print_string(a); print_string(" (shaped)\n"); return 0; }
         print_string(rc == -2 ? "p2p-send error queue full\n" : rc == -3 ? "p2p-send error no route\n" : "p2p-send error unknown peer\n");
         return 1;
+    }
+    if (s_eq(cmd, "p2p-probe")) {
+        int count;
+        rest = word(rest, a, (int)sizeof(a));
+        rest = word(rest, b, (int)sizeof(b));
+        count = b[0] ? to_int(b) : 32;
+        rc = p2p_qos_probe(&g_node, &g_host, a, count);
+        if (rc == -2 || !a[0]) { print_string("p2p-probe error usage: p2p-probe PEER [N 1..256]\n"); return 1; }
+        if (rc != 0) { print_string("p2p-probe error unknown peer\n"); return 1; }
+        print_string("p2p-probe started to "); print_string(a); print_string(" count "); print_int(count);
+        print_string(" (paced, see p2p-bwe)\n");
+        return 0;
     }
     if (s_eq(cmd, "p2p-burst")) {
         /* Lot 6: N messages at once (shaping and anomaly proofs) */
