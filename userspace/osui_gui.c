@@ -1250,6 +1250,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         int z;
         scene->ui_scale_q = us->ui_q;
         for (z = 0; z < OS_UI_Z_COUNT; z++) scene->zoom_q[z] = us->zoom[z];
+        scene->scale_pad[0] = us->font_mode;
     }
     scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
     scene->pane = OS_FB_PANE_NONE;

@@ -964,6 +964,7 @@ static int font_bit(char ch, int x, int y) { return gfx_glyph_pixel(ch, 4, x, y)
 static void test_lot68_scaled_glyphs(void) {
     static const int qs[] = {8, 12, 16};
     int c, k, x, y, on1, onq;
+    gfx_desktop_set_font_mode(1);   /* Lot 69: the smoothed upscale is mode 1 */
     for (k = 0; k < 3; k++) {
         int q = qs[k], f = q / 4;
         TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('A', q, -1, 0));
@@ -993,6 +994,7 @@ static void test_lot68_scaled_glyphs(void) {
     /* 1.5x: nearest neighbour, 12 px cell */
     TEST_ASSERT_EQUAL(font_bit('H', 0, 0), gfx_glyph_pixel('H', 6, 0, 0));
     TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('H', 6, 12, 0));
+    gfx_desktop_set_font_mode(0);
 }
 
 static void test_lot68_scene_scale_and_grid(void) {
@@ -1020,6 +1022,41 @@ static void test_lot68_scene_scale_and_grid(void) {
     TEST_ASSERT_TRUE(r1 > 0 && c1 > 0);
     TEST_ASSERT_TRUE(r2 * 2 <= r1 + 2);
     TEST_ASSERT_TRUE(c2 * 2 <= c1 + 2);
+}
+
+
+/* Lot 69: native fonts above 1x (gfx_font_hd.h): every glyph has ink
+ * inside its cell, the space is empty, shapes differ, descenders go
+ * lower than x-height letters, and in-between scales sample a source. */
+static int ink(char c, int q, int *ymax) {
+    int n = os_ui_px(8, q), x, y, k = 0;
+    *ymax = -1;
+    for (y = 0; y < n; y++) for (x = 0; x < n; x++) if (gfx_glyph_pixel(c, q, x, y)) { k++; *ymax = y; }
+    return k;
+}
+static void test_lot69_native_fonts(void) {
+    static const int qs[] = {5, 6, 7, 8, 10, 12, 14, 16};
+    int k, c, ya, yg, d, x, y;
+    TEST_ASSERT_EQUAL(0, gfx_desktop_font_mode());
+    TEST_ASSERT_EQUAL(8, gfx_glyph_source_cell(4));
+    TEST_ASSERT_EQUAL(12, gfx_glyph_source_cell(6));
+    TEST_ASSERT_EQUAL(16, gfx_glyph_source_cell(7));
+    TEST_ASSERT_EQUAL(24, gfx_glyph_source_cell(12));
+    TEST_ASSERT_EQUAL(32, gfx_glyph_source_cell(14));
+    for (k = 0; k < 8; k++) {
+        int q = qs[k], n = os_ui_px(8, q);
+        TEST_ASSERT_EQUAL(0, ink(' ', q, &ya));
+        for (c = 33; c < 127; c++) TEST_ASSERT_TRUE(ink((char)c, q, &ya) > 0);
+        TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('A', q, n, 0));
+        TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('A', q, 0, n));
+        (void)ink('a', q, &ya); (void)ink('g', q, &yg);
+        TEST_ASSERT_TRUE(yg > ya);                       /* descender */
+        for (d = 0, y = 0; y < n; y++) for (x = 0; x < n; x++)
+            d += gfx_glyph_pixel('O', q, x, y) != gfx_glyph_pixel('Q', q, x, y);
+        TEST_ASSERT_TRUE(d > 0);
+        /* ink scales with the cell area (native, not a fixed bitmap) */
+        TEST_ASSERT_TRUE(ink('M', q, &ya) * 64 >= ink('M', 4, &yg) * n * n / 4);
+    }
 }
 
 int main(void) {
@@ -1051,6 +1088,7 @@ int main(void) {
     RUN_TEST(test_llm_friendly_names);
     RUN_TEST(test_lot68_scaled_glyphs);
     RUN_TEST(test_lot68_scene_scale_and_grid);
+    RUN_TEST(test_lot69_native_fonts);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

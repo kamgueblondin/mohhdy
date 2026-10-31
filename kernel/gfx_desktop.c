@@ -2,6 +2,7 @@
 #include "gfx_desktop.h"
 #include "gfx_fb.h"
 #include "gfx_font8.h"
+#include "gfx_font_hd.h"
 #include "os_ui_scale.h"
 #include "input/usb_tablet.h"
 #include "keyboard.h"
@@ -739,21 +740,63 @@ static int glyph_epx(const uint8_t *g, int x, int y, int k, int sx, int sy) {
     return e;
 }
 
-/* One glyph at scale q: 1x as before; 2x and 3x smoothed (EPX); 4x is 2x
- * smoothed then doubled; other scales nearest neighbour. */
-int gfx_glyph_pixel(char ch, int q, int dx, int dy) {
-    unsigned idx;
-    const uint8_t *g;
+/* Lot 69: glyph source. 0 = native square fonts (gfx_font_hd.h, IBM Plex
+ * Mono raster at 12/16/24/32 px) for every scale above 1x, 1 = the Lot 68
+ * smoothed upscale of the 8x8 font (EPX). 1x always uses the 8x8 font. */
+static int g_font_mode;
+void gfx_desktop_set_font_mode(int mode) { g_font_mode = mode ? 1 : 0; }
+int gfx_desktop_font_mode(void) { return g_font_mode; }
+
+static int hd_bit(unsigned idx, int cell, int x, int y) {
+    if (x < 0 || y < 0 || x >= cell || y >= cell) return 0;
+    switch (cell) {
+    case 12: return (gfx_font_hd12[idx][y] >> x) & 1u;
+    case 16: return (gfx_font_hd16[idx][y] >> x) & 1u;
+    case 24: return (int)((gfx_font_hd24[idx][y] >> x) & 1u);
+    default: return (int)((gfx_font_hd32[idx][y] >> x) & 1u);
+    }
+}
+
+/* the native cell a scale draws from: exact for 12/16/24/32 px, else the
+ * next larger one sampled down (nearest) */
+int gfx_glyph_source_cell(int q) {
     int n = os_ui_px(8, q);
-    if (dx < 0 || dy < 0 || dx >= n || dy >= n) return 0;
-    if ((unsigned char)ch < 32 || (unsigned char)ch > 126) ch = '?';
-    idx = (unsigned char)ch - 32u;
-    g = gfx_font8[idx];
-    if (q == 4) return glyph_bit(g, dx, dy);
+    if (q <= OS_UI_Q1) return 8;
+    if (n <= 12) return 12;
+    if (n <= 16) return 16;
+    if (n <= 24) return 24;
+    return 32;
+}
+
+static int glyph_smooth(const uint8_t *g, int q, int dx, int dy, int n) {
     if (q == 8) return glyph_epx(g, dx / 2, dy / 2, 2, dx % 2, dy % 2);
     if (q == 12) return glyph_epx(g, dx / 3, dy / 3, 3, dx % 3, dy % 3);
     if (q == 16) return glyph_epx(g, dx / 4, dy / 4, 2, (dx % 4) / 2, (dy % 4) / 2);
     return glyph_bit(g, dx * 8 / n, dy * 8 / n);
+}
+
+/* One glyph at scale q: 1x the 8x8 font; above, the native font of the
+ * scale (or the smoothed upscale in font mode 1). */
+int gfx_glyph_pixel(char ch, int q, int dx, int dy) {
+    unsigned idx;
+    int n = os_ui_px(8, q), cell;
+    if (dx < 0 || dy < 0 || dx >= n || dy >= n) return 0;
+    if ((unsigned char)ch < 32 || (unsigned char)ch > 126) ch = '?';
+    idx = (unsigned char)ch - 32u;
+    if (q == 4) return glyph_bit(gfx_font8[idx], dx, dy);
+    if (g_font_mode) return glyph_smooth(gfx_font8[idx], q, dx, dy, n);
+    cell = gfx_glyph_source_cell(q);
+    if (cell == n) return hd_bit(idx, cell, dx, dy);
+    {
+        /* sampled down from the next larger cell: a pixel is set when any
+         * source pixel it covers is set, so thin strokes ('_', '.') stay */
+        int x0 = dx * cell / n, x1 = ((dx + 1) * cell + n - 1) / n;
+        int y0 = dy * cell / n, y1 = ((dy + 1) * cell + n - 1) / n, x, y;
+        for (y = y0; y < y1; y++)
+            for (x = x0; x < x1; x++)
+                if (hd_bit(idx, cell, x, y)) return 1;
+        return 0;
+    }
 }
 
 static void draw_char_bits(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
@@ -1913,6 +1956,7 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     const char *caption;
 
     if (!fb || w < 160 || h < 120) return;
+    gfx_desktop_set_font_mode(sc && sc->magic == OS_FB_MAGIC && sc->version >= 8 ? sc->scale_pad[0] : 0);
     if (!sc || sc->magic != OS_FB_MAGIC) {
         def.magic = OS_FB_MAGIC;
         def.version = 1;

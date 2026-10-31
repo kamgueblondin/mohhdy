@@ -106,6 +106,7 @@ int osui_scale_save(const osui_scale_t *s, char *buf, int cap) {
         if (i) s_cat(buf, cap, ",");
         s_cat_u(buf, cap, s->zoom[i]);
     }
+    if (s->font_mode) s_cat(buf, cap, " font=1");
     s_cat(buf, cap, "\n");
     return s_len(buf);
 }
@@ -133,6 +134,13 @@ int osui_scale_load(osui_scale_t *s, const char *b, int len) {
         if (i) { if (pos >= len || b[pos] != ',') return -1; pos++; }
         if (read_u(b, len, &pos, &v) != 0 || v < 1 || v > 64) return -1;
         t.zoom[i] = (uint8_t)v;
+    }
+    t.font_mode = 0;
+    if (pos + 6 <= len && b[pos] == ' ' && b[pos + 1] == 'f' && b[pos + 2] == 'o' && b[pos + 3] == 'n' &&
+        b[pos + 4] == 't' && b[pos + 5] == '=') {
+        pos += 6;
+        if (read_u(b, len, &pos, &v) != 0 || v > 1) return -1;
+        t.font_mode = (uint8_t)v;
     }
     t.changes = s->changes;
     t.saved_at = s->changes;
@@ -181,9 +189,26 @@ int osui_scale_command(osui_scale_t *s, const char *line, char *out, int cap) {
     int q, slot;
     if (!s || !line || !out || cap < 1) return -1;
     p = word(line, cmd, (int)sizeof(cmd));
-    if (!s_eq(cmd, "ui-scale") && !s_eq(cmd, "text-size")) return -1;
+    if (!s_eq(cmd, "ui-scale") && !s_eq(cmd, "text-size") && !s_eq(cmd, "ui-font")) return -1;
     p = word(p, a, (int)sizeof(a));
     p = word(p, b, (int)sizeof(b));
+    if (s_eq(cmd, "ui-font")) {
+        /* Lot 69: native square fonts (default) or the smoothed 8x8 */
+        if (b[0] || (a[0] && !s_eq(a, "native") && !s_eq(a, "smooth") && !s_eq(a, "show"))) {
+            out[0] = 0;
+            s_cat(out, cap, "ui-font error usage: ui-font [native|smooth]\n");
+            return 1;
+        }
+        if (s_eq(a, "native") || s_eq(a, "smooth")) {
+            uint8_t m = s_eq(a, "smooth") ? 1 : 0;
+            if (s->font_mode != m) { s->font_mode = m; s->changes++; }
+        }
+        out[0] = 0;
+        s_cat(out, cap, "ui-font ok ");
+        s_cat(out, cap, s->font_mode ? "smooth (8x8 upscaled, EPX)" : "native (IBM Plex Mono raster 12/16/24/32 px)");
+        s_cat(out, cap, "\n");
+        return 0;
+    }
     if (s_eq(cmd, "ui-scale")) {
         if (!a[0] || s_eq(a, "show")) { report(s, out, cap); return 0; }
         if (b[0]) goto usage;

@@ -283,6 +283,7 @@ static const osui_par_entry_t k_p2pmesh[] = {
     { "Bloquer un pair", "p2p-block", A | M, "PAIR" },
     { "Taille du texte (globale)", "ui-scale", A, "auto|1|1.5|2|3|+|-" },
     { "Taille du texte (fenetre)", "text-size", A, "FENETRE N|+|-|0" },
+    { "Police (native ou lissee)", "ui-font", A, "native|smooth" },
     { "Format d'ecran (plan)", "form-factor", A, "[apply] [auto|phone|tablet|desktop|tv] [WxH] [DIAG]" },
     { "Profil d'energie (applique)", "power-apply", A, "performance|balanced|saver|auto|status" },
     { "Batterie simulee", "power-sim", A, "start|tick MS [BUSY]|charge on|off|stop|status" },

@@ -94,6 +94,10 @@ int gfx_desktop_app_grid_y(int q);
 int gfx_desktop_surface_q(const os_fb_scene_t *sc, int zslot, int w, int h);
 int gfx_desktop_chrome_q(const os_fb_scene_t *sc, int w, int h);
 int gfx_glyph_pixel(char ch, int q, int dx, int dy);
+/* Lot 69: 0 native fonts (default), 1 smoothed 8x8 upscale */
+void gfx_desktop_set_font_mode(int mode);
+int gfx_desktop_font_mode(void);
+int gfx_glyph_source_cell(int q);
 int gfx_desktop_text_q(void);
 void gfx_desktop_set_text_q(int q);
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *layout);

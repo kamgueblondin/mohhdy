@@ -132,6 +132,30 @@ static void test_commands(void) {
     TEST_ASSERT_TRUE(strlen(out) < 8U);
 }
 
+
+/* Lot 69: font choice, saved with the scale, old files still load */
+static void test_ui_font(void) {
+    osui_scale_t s, b;
+    char out[256], buf[160];
+    int n;
+    osui_scale_init(&s);
+    TEST_ASSERT_EQUAL(0, osui_scale_command(&s, "ui-font", out, (int)sizeof(out)));
+    TEST_ASSERT_TRUE(strstr(out, "ui-font ok native") != 0);
+    TEST_ASSERT_EQUAL(0, osui_scale_command(&s, "ui-font smooth", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(1, s.font_mode);
+    TEST_ASSERT_EQUAL(1, osui_scale_command(&s, "ui-font comic", out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(1, s.font_mode);
+    n = osui_scale_save(&s, buf, (int)sizeof(buf));
+    TEST_ASSERT_TRUE(strstr(buf, " font=1") != 0);
+    osui_scale_init(&b);
+    TEST_ASSERT_EQUAL(0, osui_scale_load(&b, buf, n));
+    TEST_ASSERT_EQUAL(1, b.font_mode);
+    TEST_ASSERT_EQUAL(0, osui_scale_load(&b, "ui_scale=8 zoom=4,4,4,4,4,4,4,4,4,4,4,4\n", 39));
+    TEST_ASSERT_EQUAL(0, b.font_mode);
+    TEST_ASSERT_EQUAL(8, b.ui_q);
+    TEST_ASSERT_EQUAL(-1, osui_scale_load(&b, "ui_scale=8 zoom=4,4,4,4,4,4,4,4,4,4,4,4 font=7", 47));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_auto_scale_from_screen);
@@ -141,6 +165,7 @@ int main(void) {
     RUN_TEST(test_slot_names);
     RUN_TEST(test_save_load_roundtrip);
     RUN_TEST(test_commands);
+    RUN_TEST(test_ui_font);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
