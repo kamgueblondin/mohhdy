@@ -193,7 +193,7 @@ static void test_gui_scene_llm_and_newest_messages(void) {
     char line[32];
     setup();
     osui_gui_fill_scene(&g_scene);
-    TEST_ASSERT_EQUAL(7, g_scene.version);
+    TEST_ASSERT_EQUAL(8, g_scene.version); /* Lot 68: v8 text scale */
     TEST_ASSERT_EQUAL_STRING("stub_echo", g_scene.llm);
     for (i = 0; i < 5; i++) {
         snprintf(line, sizeof(line), "chat note%d", i);
@@ -357,7 +357,7 @@ static void test_gui_pm_ide_fullscreen(void) {
     TEST_ASSERT_EQUAL_STRING("  1> say 1", g_scene.term[1]); /* cursor on s: Ln/Col in the title */
     /* scene v3 carries the syntax classes: gutter, keyword, number (v4
      * keeps them and adds the web display list, Lot 6; v5 adds llm; v6 pane_live; v7 app windows) */
-    TEST_ASSERT_EQUAL(7, g_scene.version);
+    TEST_ASSERT_EQUAL(8, g_scene.version); /* Lot 68: v8 text scale */
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_GUTTER, g_scene.term_attr[1][0]);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_KEYWORD, g_scene.term_attr[1][5]);
     TEST_ASSERT_EQUAL(OSUI_IDE_TOK_NUMBER, g_scene.term_attr[1][9]);
@@ -439,7 +439,7 @@ static void test_gui_web_pane_pipeline(void) {
     TEST_ASSERT_EQUAL(1, osui_gui_web_active());
     osui_gui_fill_scene(&g_scene);
     TEST_ASSERT_EQUAL(OS_FB_PANE_WEB, g_scene.pane);
-    TEST_ASSERT_EQUAL(7, g_scene.version);
+    TEST_ASSERT_EQUAL(8, g_scene.version); /* Lot 68: v8 text scale */
     TEST_ASSERT_TRUE(g_scene.nweb > 0);
     TEST_ASSERT_NOT_NULL(strstr(g_scene.web_title, "web t.html"));
     for (i = 0; i < g_scene.nweb; i++) {
