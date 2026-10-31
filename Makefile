@@ -1507,6 +1507,10 @@ gguf-kvm-benchmark-check:
 qemu-gui-lot69-windows: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_lot69_windows.py
 
+.PHONY: qemu-lot71
+qemu-lot71: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot71.py
+
 .PHONY: qemu-web-layout
 qemu-web-layout: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_web_layout.py

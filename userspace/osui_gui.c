@@ -11,6 +11,7 @@
 #include "webeng.h"
 #include "webrt.h"
 #include "os_syscalls.h"
+#include "os_charset.h"
 #include "osui_panes.h"
 #include "osui_files.h"
 #include "osui_parity.h"
@@ -382,6 +383,134 @@ static int web_go(const char *file, int push, char *out, int out_max) {
     return 0;
 }
 
+static void gui_cat_u(char *d, int max, unsigned v);
+/* Lot 71: page ops of the shell (sections, forms) */
+static const osui_web_page_ops_t *g_wops;
+void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops) { g_wops = ops; }
+static int web_nsections(void) { return (g_wops && g_wops->sections && osui_gui_web_is_url(g_web_file)) ? g_wops->sections() : 0; }
+
+/* Shows section k of the kept page; keep: the scroll offset stays (a
+ * field edit), else top (or bottom when to_end). */
+static int web_show_section(int k, int keep, int to_end, char *out, int out_max) {
+    int n, rc, scroll = g_web_scroll;
+    char m[64];
+    if (web_nsections() <= 0 || !g_wops->section) return -1;
+    n = g_wops->section(k, g_web_src, OSUI_WEB_SRC_MAX);
+    if (n <= 0) return -1;
+    rc = osui_web_pipeline(g_web_src, n);
+    if (rc != 0) return -1;
+    g_web_scroll = keep ? we_scroll(&g_web, scroll) : to_end ? we_scroll(&g_web, 1 << 20) : 0;
+    if (!keep && out) {
+        scpy(m, (int)sizeof(m), " ");
+        gui_cat_u(m, (int)sizeof(m), (unsigned)(k + 1));
+        scat(m, (int)sizeof(m), "/");
+        gui_cat_u(m, (int)sizeof(m), (unsigned)web_nsections());
+        app_out(out, out_max, "osui web section", m);
+    }
+    return 0;
+}
+
+/* Submits the form of field n (-1: the focused one) and shows the answer. */
+static int web_submit(int n, char *out, int out_max) {
+    static char status[512];
+    int len, rc;
+    if (!g_wops || !g_wops->submit || web_nsections() <= 0) {
+        app_out(out, out_max, "osui web form error=no_form", 0);
+        return -1;
+    }
+    g_web_final[0] = 0;
+    len = g_wops->submit(n, g_web_src, OSUI_WEB_SRC_MAX, g_web_final, (int)sizeof(g_web_final), status, (int)sizeof(status));
+    if (len < 0) { app_out(out, out_max, status[0] ? status : "osui web form error=failed", 0); return -1; }
+    g_web_src[len < OSUI_WEB_SRC_MAX ? len : OSUI_WEB_SRC_MAX - 1] = 0;
+    rc = osui_web_pipeline(g_web_src, len);
+    app_out(out, out_max, "osui web form submit ", status);
+    if (rc != 0) return -1;
+    if (g_web_final[0]) scpy(g_web_file, (int)sizeof(g_web_file), g_web_final);
+    g_web_active = 1;
+    g_web_mobile = 0;
+    g_web_scroll = 0;
+    if (g_web_hi + 1 >= WEB_HIST) {
+        int k;
+        for (k = 0; k + 1 < WEB_HIST; k++) scpy(g_web_hist[k], 256, g_web_hist[k + 1]);
+        g_web_hi--;
+    }
+    g_web_hi++;
+    scpy(g_web_hist[g_web_hi], 256, g_web_file);
+    g_web_hn = g_web_hi + 1;
+    return 0;
+}
+
+static void web_open_line(const char *line, char *out, int out_max);
+int osui_gui_web_command(const char *line, char *out, int out_max) {
+    const char *a;
+    int n = 0, neg = 0;
+    if (out && out_max > 0) out[0] = 0;
+    if (sncmp(line, "web-open", 8) == 0 && (line[8] == ' ' || !line[8])) {
+        static char wl[300];
+        scpy(wl, (int)sizeof(wl), "web ");
+        scat(wl, (int)sizeof(wl), line + 8);
+        web_open_line(wl, out, out_max);
+        n = web_nsections();
+        if (n > 0) {
+            char m[48];
+            scpy(m, (int)sizeof(m), " sections ");
+            gui_cat_u(m, (int)sizeof(m), (unsigned)n);
+            app_out(out, out_max, "osui web page", m);
+        }
+        return 1;
+    }
+    if (scmp(line, "web-forms") == 0) {
+        static char fl[2048];
+        if (!g_wops || !g_wops->forms_list || web_nsections() <= 0) { app_out(out, out_max, "osui web forms none", 0); return 1; }
+        (void)g_wops->forms_list(fl, (int)sizeof(fl));
+        if (out) scat(out, out_max, fl);
+        return 1;
+    }
+    if (sncmp(line, "web-section", 11) == 0 && (line[11] == ' ' || !line[11])) {
+        int cnt = web_nsections(), cur = g_wops && g_wops->current ? g_wops->current() : 0;
+        a = line + 11;
+        while (*a == ' ') a++;
+        if (cnt <= 0) { app_out(out, out_max, "osui web section error=no_page (open an http(s) page first)", 0); return 1; }
+        if (!*a) {
+            char m[48];
+            scpy(m, (int)sizeof(m), " ");
+            gui_cat_u(m, (int)sizeof(m), (unsigned)(cur + 1));
+            scat(m, (int)sizeof(m), "/");
+            gui_cat_u(m, (int)sizeof(m), (unsigned)cnt);
+            app_out(out, out_max, "osui web section", m);
+            return 1;
+        }
+        if (sncmp(a, "next", 4) == 0) n = cur + 1;
+        else if (sncmp(a, "prev", 4) == 0) n = cur - 1;
+        else { while (*a >= '0' && *a <= '9' && n < 1000) n = n * 10 + (*a++ - '0'); n--; }
+        if (n < 0 || n >= cnt || web_show_section(n, 0, 0, out, out_max) != 0)
+            app_out(out, out_max, "osui web section error=out_of_range", 0);
+        return 1;
+    }
+    if (sncmp(line, "web-input", 9) == 0 && (line[9] == ' ' || !line[9])) {
+        a = line + 9;
+        while (*a == ' ') a++;
+        while (*a >= '0' && *a <= '9' && n < 1000) n = n * 10 + (*a++ - '0');
+        if (*a == ' ') a++;
+        if (!g_wops || !g_wops->form_set || web_nsections() <= 0 || g_wops->form_set(n, a) != 0) {
+            app_out(out, out_max, "osui web input error=no_field usage web-input N TEXT (N from the page links)", 0);
+            return 1;
+        }
+        (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
+        app_out(out, out_max, "osui web input ok", 0);
+        return 1;
+    }
+    if (sncmp(line, "web-submit", 10) == 0 && (line[10] == ' ' || !line[10])) {
+        a = line + 10;
+        while (*a == ' ') a++;
+        if (*a >= '0' && *a <= '9') { while (*a >= '0' && *a <= '9' && n < 1000) n = n * 10 + (*a++ - '0'); }
+        else neg = 1;
+        (void)web_submit(neg ? -1 : n, out, out_max);
+        return 1;
+    }
+    return 0;
+}
+
 /* href relative to the current page; only local pages: a scheme
  * (javascript:, http:, file:) or a fragment is refused */
 int osui_gui_web_resolve(const char *base, const char *href, char *dst, int max) {
@@ -440,6 +569,17 @@ static void web_event(const char *p, char *out, int out_max) {
         x = evt_int(&p);
         y = evt_int(&p);
         if (we_link_at(&g_web, x, y, href, (int)sizeof(href)) <= 0) return;
+        if (sncmp(href, "mohhdy-form:", 12) == 0) {
+            /* Lot 71: a form control: focus the field or submit */
+            int t = (g_wops && g_wops->form_link) ? g_wops->form_link(href) : -1;
+            if (t == 0) {
+                (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
+                app_out(out, out_max, "osui web form focus ", href + 12);
+            } else if (t == 1) {
+                (void)web_submit(-1, out, out_max);
+            } else app_out(out, out_max, "osui web form error=unknown_field", 0);
+            return;
+        }
         if (osui_gui_web_resolve(g_web_file, href, dst, (int)sizeof(dst)) != 0) {
             app_out(out, out_max, "osui web link refused href=", href);
             return;
@@ -651,6 +791,17 @@ int osui_gui_scale_command(const char *line, char *out, int cap) {
     rc = osui_scale_command(sc, line, out, cap);
     if (rc == 0 && sc->changes != before && scale_save() == 0) scat(out, cap, " saved " OSUI_SCALE_CFG);
     return rc;
+}
+/* Lot 71: small /persist files for other shell modules (search.cfg),
+ * through the same FS adapter and rights as ui.cfg. */
+int osui_gui_persist_read(const char *path, char *buf, int cap) {
+    int n = web_image_read(0, path, (unsigned char *)buf, cap);
+    return (n > cap) ? -1 : n;
+}
+int osui_gui_persist_write(const char *path, const char *buf, int n) {
+    if (!g_fs_io || n < 0) return -1;
+    if (g_fs_io->mkdir) (void)g_fs_io->mkdir("/persist");
+    return fsops_write(g_fs_io, path, buf, n) == 0 ? 0 : -1;
 }
 int osui_gui_focus(void) { return g_focus; }
 
@@ -1482,6 +1633,15 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         scene->nterm = (uint8_t)i;
         scene->input[0] = 0;
     }
+    /* Lot 71: the desktop fonts draw display bytes (CP1252, see
+     * include/os_charset.h): UTF-8 from the LLM, the shell and local
+     * pages is converted here, once; display text passes unchanged. */
+    for (i = 0; i < (int)scene->nmsg && i < OS_FB_MSG_MAX; i++) os_text_to_display_inplace(scene->messages[i], OS_FB_MSG_LEN);
+    if (!g_ide.active)
+        for (i = 0; i < (int)scene->nterm && i < OS_FB_TERM_MAX; i++) os_text_to_display_inplace(scene->term[i], OS_FB_TERM_LEN);
+    os_text_to_display_inplace(scene->web_title, OS_FB_TERM_LEN);
+    os_text_to_display_inplace(scene->input, OS_FB_INPUT_LEN);
+    for (i = 0; i < (int)scene->nweb && i < OS_FB_WEB_ITEMS; i++) os_text_to_display_inplace(scene->web[i].text, OS_FB_WEB_TEXT_LEN);
 }
 
 void osui_gui_render(uint16_t *cells) {
@@ -1584,7 +1744,16 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
     }
     if (g_web_active && !(g_web_mobile && key != OS_VGA_KEY_ESC && key != OS_VGA_KEY_UP && key != OS_VGA_KEY_DOWN)) {
         /* Lot 6: the web pane takes the desktop; arrows scroll, ESC closes.
-         * Lot 9: the mobile pane lets text keys reach the input line. */
+         * Lot 9: the mobile pane lets text keys reach the input line.
+         * Lot 71: a focused form field takes the keys first (Enter submits,
+         * ESC leaves the field); arrows past the end change section. */
+        int fk = (!g_web_mobile && web_nsections() > 0 && g_wops->form_key) ? g_wops->form_key(key) : -1;
+        if (fk == 0 || fk == 2) {
+            (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
+            if (fk == 2) app_out(out, out_max, "osui web form blur", 0);
+            return 0;
+        }
+        if (fk == 1) { (void)web_submit(-1, out, out_max); return 0; }
         if (key == OS_VGA_KEY_ESC) {
             g_web_active = 0;
             g_web_mobile = 0;
@@ -1596,7 +1765,13 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         } else if (key == OS_VGA_KEY_DOWN || key == OS_VGA_KEY_UP) {
             /* Lot 61: the engine bounds the offset to the viewport and keeps
              * position:fixed boxes in place; the kernel subtracts it. */
+            int before = g_web_scroll, cnt = web_nsections();
             g_web_scroll = we_scroll(&g_web, g_web_scroll + (key == OS_VGA_KEY_DOWN ? 20 : -20));
+            if (g_web_scroll == before && cnt > 1) {
+                int cur = g_wops->current ? g_wops->current() : 0;
+                if (key == OS_VGA_KEY_DOWN && cur + 1 < cnt) (void)web_show_section(cur + 1, 0, 0, out, out_max);
+                else if (key == OS_VGA_KEY_UP && cur > 0) (void)web_show_section(cur - 1, 0, 1, out, out_max);
+            }
         }
         return 0;
     }
@@ -1664,6 +1839,11 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             return 0;
         }
         if (search_line(g_input, out, out_max)) {
+            g_ilen = 0;
+            g_input[0] = 0;
+            return 0;
+        }
+        if (osui_gui_web_command(g_input, out, out_max)) {
             g_ilen = 0;
             g_input[0] = 0;
             return 0;

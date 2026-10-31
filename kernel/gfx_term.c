@@ -1,5 +1,6 @@
 /* gfx_term.c - VBE backend of the text console cell grid (see gfx_term.h). */
 #include "gfx_term.h"
+#include "../include/os_charset.h"
 #include "gfx_wm.h"
 
 static const uint32_t k_pal[16] = {
@@ -177,7 +178,7 @@ int gfx_term_sel_text(const uint16_t *cells, int cols, int rows, int a, int b, c
         if (r != a / cols && n < max - 1) out[n++] = '\n';
         for (i = from; i <= end && n < max - 1; i++) {
             char c = (char)(cells[r * cols + i] & 0xFF);
-            out[n++] = (c >= 32 && c <= 126) ? c : ' ';
+            out[n++] = (char)os_cp437_to_display((unsigned char)c);   /* Lot 71 */
         }
     }
     out[n] = 0;

@@ -85,6 +85,10 @@ typedef struct {
 /* UX4: web pane back (0) / forward (1) buttons */
 void gfx_desktop_web_nav(int w, int h, int which, gfx_rect_t *r);
 void gfx_desktop_web_origin(int w, int h, int *ox, int *oy, int *pw, int *ph);
+/* Lot 71: placed full-screen web / editor window (maximized by default,
+ * restore / move / resize through its title buttons and grip). */
+void gfx_desktop_full_rect(int w, int h, gfx_rect_t *r);
+int gfx_desktop_full_maximized(void);
 /* UX5: viewer image (copied; 0 or a bad image clears). Returns 0 / -1. */
 int gfx_desktop_set_image(const os_fb_image_t *img);
 /* Rectangle the image of slot occupies in box (0 size when none). */

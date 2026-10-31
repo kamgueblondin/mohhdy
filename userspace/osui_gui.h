@@ -40,6 +40,8 @@ void osui_gui_ide_output(const char *text);
 /* Lot 61: explicit viewport height for fixed boxes and the scroll bound. */
 #define OSUI_WEB_VIEWPORT_H 480
 int osui_gui_web_load(const char *file, char *status, int max);
+int osui_gui_persist_read(const char *path, char *buf, int cap);
+int osui_gui_persist_write(const char *path, const char *buf, int n);
 /* Lot 67: "web https://..." (or http://) loads the page over the network
  * through this hook (set by the shell: shell_fetch_page, the same code as
  * the `fetch` command). Without a hook a URL is refused. Links of a
@@ -47,6 +49,23 @@ int osui_gui_web_load(const char *file, char *status, int max);
 typedef int (*osui_web_fetch_t)(const char *url, char *src, int src_max, char *final_url, int url_max,
                                 char *status, int st_max);
 void osui_gui_set_web_fetch(osui_web_fetch_t fn);
+/* Lot 71: the fetched page kept by the shell (userspace/shell_fetch.c):
+ * a long page shown by sections, its forms focused, typed and submitted.
+ * Every member may be 0 (local pages, unit tests). */
+typedef struct {
+    int (*sections)(void);
+    int (*current)(void);
+    int (*section)(int k, char *src, int src_max);
+    int (*form_link)(const char *href);   /* 0 focus, 1 submit button, -1 other link */
+    int (*form_key)(int key);             /* 0 edited, 1 Enter, 2 ESC, -1 unused */
+    int (*form_set)(int n, const char *value);
+    int (*submit)(int n, char *src, int src_max, char *final_url, int url_max, char *status, int st_max);
+    int (*forms_list)(char *out, int cap);
+} osui_web_page_ops_t;
+void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
+/* "web-open URL|FILE", "web-forms", "web-section N|next|prev", "web-input N TEXT", "web-submit [N]": the
+ * console and the GUI input line run the same code. 1 when handled. */
+int osui_gui_web_command(const char *line, char *out, int out_max);
 /* Lot 69: URL of result n (1-based) of the last search; 0 or -1 */
 typedef int (*osui_search_url_t)(int n, char *url, int max);
 void osui_gui_set_search_url(osui_search_url_t fn);

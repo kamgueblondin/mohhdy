@@ -3656,7 +3656,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "net-if", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "fetch", "http-get", "search", "search-open", "search-engine", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "fetch", "http-get", "search", "search-open", "search-engine", "search-config", "web-open", "web-forms", "web-section", "web-input", "web-submit", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -7368,6 +7368,21 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
     } else if (strcmp(command, "net-if") == 0) {
         cmd_net_if(ctx, args, arg_count);
         return 1;
+    } else if (strcmp(command, "web-open") == 0 || strcmp(command, "web-forms") == 0 || strcmp(command, "web-section") == 0 || strcmp(command, "web-input") == 0 || strcmp(command, "web-submit") == 0) {
+        /* Lot 71: same code as the GUI input line (osui_gui_web_command) */
+        static char line[400], out[1200];
+        int i, n = 0;
+        (void)ctx;
+        for (i = 0; command[i] && n < (int)sizeof(line) - 1; i++) line[n++] = command[i];
+        for (i = 0; i < arg_count; i++) {
+            int j;
+            if (n < (int)sizeof(line) - 1) line[n++] = ' ';
+            for (j = 0; args[i][j] && n < (int)sizeof(line) - 1; j++) line[n++] = args[i][j];
+        }
+        line[n] = 0;
+        (void)osui_gui_web_command(line, out, (int)sizeof(out));
+        print_string(out);
+        return 1;
     } else if (strcmp(command, "ui-scale") == 0 || strcmp(command, "text-size") == 0 || strcmp(command, "ui-font") == 0 || strcmp(command, "ui-layout") == 0) {
         /* Lot 68: one text scale for the console and the GUI */
         char line[160], out[256];
@@ -7887,6 +7902,13 @@ void main() {
     g_live_ctx = &shell_ctx;
     osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
     osui_gui_set_web_fetch(shell_fetch_page);
+    {
+        /* Lot 71: sections and forms of the fetched page */
+        static const osui_web_page_ops_t page_ops = { shell_page_sections, shell_page_current, shell_page_section,
+                                                      shell_page_form_link, shell_page_form_key, shell_page_form_set,
+                                                      shell_page_submit, shell_page_forms_list };
+        osui_gui_set_web_page_ops(&page_ops);
+    }
     osui_gui_set_search_url(shell_search_url);   /* Lot 69: search-open on the desktop */   /* Lot 67: /browser over the network */
     { extern int shell_display_ui_hint(void); osui_gui_set_scale_hint(shell_display_ui_hint()); }   /* Lot 69: fw_cfg first-boot pin */
     osui_gui_set_fs_io(&shell_fs_io);

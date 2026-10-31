@@ -15,6 +15,11 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /html/?q=Q    Lot 69: a DuckDuckGo-html-like result page (3 results, the
                 first title echoes the decoded query, redirect links uddg=)
   /block/?q=Q   Lot 69: a bot check page (no result)
+  /form.html    Lot 71: a GET search form (text, hidden, submit) and a
+                POST form; /echo answers both (method, query, body)
+  /latin1.html  Lot 71: an ISO-8859-1 page with accents and entities
+  /long.html    Lot 71: a long page (1500 paragraphs, about 120 KiB)
+  /searx/search?q=Q[&format=json]  Lot 71: SearXNG-like results
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, socketserver, ssl, sys, threading, urllib.parse
 
@@ -34,6 +39,8 @@ class H(http.server.BaseHTTPRequestHandler):
         scheme = "https" if isinstance(self.connection, ssl.SSLSocket) else "http"
         print(f"REQ {scheme} {self.path} host={self.headers.get('Host')}", flush=True)
         p = self.path
+        if self._lot71(p, b""):
+            return
         if p.startswith("/html/?") or p.startswith("/block/?"):
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(p).query).get("q", [""])[0]
             print(f"SEARCH q={q!r}", flush=True)
@@ -115,6 +122,74 @@ class H(http.server.BaseHTTPRequestHandler):
             self.close_connection = True
         else:
             self._send(404, b"not found\n", "text/plain")
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", "0") or "0")
+        body = self.rfile.read(n) if n > 0 else b""
+        print(f"POST {self.path} ctype={self.headers.get('Content-Type')} body={body!r}", flush=True)
+        if self.path.startswith("/post-redirect"):
+            # 303 after a POST: the client follows with a GET
+            self.send_response(303)
+            self.send_header("Location", "/echo?after=post")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if not self._lot71(self.path, body, post=True):
+            self._send(404, b"not found\n", "text/plain")
+
+    def _lot71(self, p, body, post=False):
+        """Lot 71 routes: forms, charsets, long page, SearXNG."""
+        if p == "/form.html":
+            page = ("<!doctype html><html><head><meta charset=\"utf-8\"><title>Formulaire \u00e9t\u00e9</title></head><body>"
+                    "<h1>Recherche caf\u00e9 &amp; th\u00e9</h1>"
+                    "<form action=\"/echo\" method=\"get\" role=\"search\">"
+                    "<input type=\"text\" name=\"q\" placeholder=\"Rechercher\">"
+                    "<input type=\"hidden\" name=\"lang\" value=\"fr\">"
+                    "<input type=\"submit\" name=\"go\" value=\"Envoyer\"></form>"
+                    "<form action=\"/echo\" method=\"post\"><input name=\"user\" value=\"\">"
+                    "<textarea name=\"msg\">bonjour</textarea><button type=\"submit\">Poster</button></form>"
+                    "<form action=\"/post-redirect\" method=\"post\"><input name=\"x\"><input type=\"submit\"></form>"
+                    "</body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p.startswith("/echo"):
+            q = urllib.parse.urlsplit(p).query
+            ans = ("<html><head><title>Echo</title></head><body><p id=\"m\">method=%s</p><p>query=%s</p>"
+                   "<p>body=%s</p><p>decoded=%s</p></body></html>") % (
+                "POST" if post else "GET", html.escape(q), html.escape(body.decode("latin-1")),
+                html.escape(repr(urllib.parse.parse_qs(body.decode("latin-1") if post else q))))
+            print(f"ECHO {'POST' if post else 'GET'} q={q!r} body={body!r}", flush=True)
+            self._send(200, ans.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/latin1.html":
+            page = ("<html><head><title>Caf\u00e9 Latin-1</title></head><body><p>\u00e9t\u00e9 \u00e0 la "
+                    "plage, &eacute;l&egrave;ve &#233; &#x153;uvre &euro; &laquo;ok&raquo;</p></body></html>")
+            self._send(200, page.encode("latin-1", "xmlcharrefreplace"), "text/html; charset=iso-8859-1")
+            return True
+        if p == "/long.html":
+            rows = "".join("<p>Paragraphe num\u00e9ro %d de la longue page.</p>\n" % i for i in range(1, 1501))
+            page = "<html><head><title>Longue page</title></head><body><h1>D\u00e9but</h1>%s<p>FIN-DE-PAGE</p></body></html>" % rows
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p.startswith("/searx/search"):
+            qs = urllib.parse.parse_qs(urllib.parse.urlsplit(p).query)
+            q = qs.get("q", [""])[0]
+            print(f"SEARX q={q!r} format={qs.get('format', [''])[0]}", flush=True)
+            res = [("R\u00e9sultat pour " + q, "https://example.org/1", "Premier extrait."),
+                   ("Second & co", "https://example.org/2?a=1&b=2", "Deuxi\u00e8me extrait.")]
+            if qs.get("format", [""])[0] == "json":
+                import json as _js
+                body = _js.dumps({"query": q, "results": [{"title": t, "url": u, "content": c} for t, u, c in res]})
+                self._send(200, body.encode("utf-8"), "application/json")
+                return True
+            arts = "".join('<article class="result result-default"><h3><a href="%s">%s</a></h3>'
+                           '<p class="content">%s</p></article>' % (html.escape(u), html.escape(t), html.escape(c))
+                           for t, u, c in res)
+            page = "<html><head><title>%s - SearXNG</title></head><body><div id=\"urls\">%s</div></body></html>" % (
+                html.escape(q), arts)
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        return False
 
     def _send(self, code, body, ctype):
         self.send_response(code)

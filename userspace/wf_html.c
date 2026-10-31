@@ -1,5 +1,7 @@
 /* wf_html.c - Lot 67: reader-view reduction of a fetched page (see wf_html.h). */
 #include "wf_html.h"
+#include "wf_entity.h"
+#include "../include/os_charset.h"
 
 static char lc(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
 static int is_sp(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
@@ -12,6 +14,14 @@ typedef struct { char* o; int cap; int n; int full; int nodes; } ob_t;
  * says the page was cut, and empty paragraphs from nested divs are not
  * emitted at all. */
 #define WF_HTML_NODE_BUDGET 140
+
+/* Lot 71: source charset: the Content-Type charset of the server when it
+ * has one (HTML rule: the transport wins), else a <meta> of the page,
+ * else UTF-8; and the form sink of the GUI reader view. */
+static int g_cs = WF_CS_UTF8;
+static int g_cs_set = WF_CS_NONE;
+static wf_form_page_t* g_forms;
+void wf_html_set_charset(int cs) { g_cs_set = cs == WF_CS_LATIN1 ? WF_CS_LATIN1 : cs == WF_CS_UTF8 ? WF_CS_UTF8 : WF_CS_NONE; }
 
 static int ends_with(const ob_t* b, const char* s) {
     int l = 0, i;
@@ -65,7 +75,7 @@ static const char* const AS_P[] = {"div", "section", "article", "main", "header"
 static int chrome_block(const char* in, int s, int e) {
     static char v[24];
     if (get_attr(in, s, e, "role", v, (int)sizeof(v)) > 0) {
-        if (seq(v, "navigation") || seq(v, "banner") || seq(v, "contentinfo") || seq(v, "search") ||
+        if (seq(v, "navigation") || seq(v, "banner") || seq(v, "contentinfo") || (!g_forms && seq(v, "search")) ||
             seq(v, "menu") || seq(v, "menubar") || seq(v, "dialog") || seq(v, "complementary")) return 1;
     }
     if (get_attr(in, s, e, "aria-hidden", v, (int)sizeof(v)) > 0 && seq(v, "true")) return 1;
@@ -141,56 +151,30 @@ static int get_attr(const char* in, int s, int e, const char* attr, char* out, i
     return -1;
 }
 
-/* copies text, escaping < and > that would confuse the engine; collapses spaces */
-/* Lot 69: the bitmap fonts are ASCII; UTF-8 Latin-1 letters (U+00C0..U+00FF,
- * French accents) are shown as their base letter instead of '?', the
- * typographic quotes and dashes as ASCII. */
-static char latin_base(unsigned char c2) {
-    static const char map[64] = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYTsaaaaaaaceeeeiiiidnooooo/ouuuuyty";
-    if (c2 >= 0x80U && c2 <= 0xbfU) return map[c2 - 0x80U];
-    return '?';
-}
-
+/* copies text, escaping < and & that would confuse the engine; collapses spaces */
+/* Lot 71: text is decoded (UTF-8 or Latin-1, character references) to
+ * display bytes (include/os_charset.h): French accents, the oe ligature,
+ * typographic quotes and the euro sign are kept for the desktop fonts;
+ * Latin Extended-A letters become their base letter, others '?'. */
 static void put_text(ob_t* b, const char* in, int s, int e, int* last_sp, int pre) {
-    int i, any = 0;
-    for (i = s; i < e; i++) {
-        char c = in[i];
-        unsigned char u = (unsigned char)c;
-        if (u == 0xc3U && i + 1 < e) { *last_sp = 0; ob_c(b, latin_base((unsigned char)in[i + 1])); i++; any = 1; continue; }
-        if (u == 0xc2U && i + 1 < e) {        /* nbsp, guillemets, middle dot */
-            unsigned char v = (unsigned char)in[i + 1];
-            i++;
-            if (v == 0xa0U) { if (!*last_sp) { ob_c(b, ' '); *last_sp = 1; } continue; }
-            *last_sp = 0; any = 1;
-            ob_c(b, v == 0xabU || v == 0xbbU ? '"' : (v == 0xb7U ? '.' : (v == 0xa9U ? 'c' : '?')));
-            continue;
-        }
-        if (u == 0xe2U && i + 2 < e && (unsigned char)in[i + 1] == 0x80U) {
-            unsigned char v = (unsigned char)in[i + 2];
-            i += 2;
-            *last_sp = 0; any = 1;
-            if (v == 0x93U || v == 0x94U) ob_c(b, '-');
-            else if (v == 0x98U || v == 0x99U) ob_c(b, '\'');
-            else if (v == 0x9cU || v == 0x9dU) ob_c(b, '"');
-            else if (v == 0xa6U) ob_s(b, "...");
-            else if (v == 0xa2U) ob_c(b, '*');
-            else ob_c(b, ' ');
-            continue;
-        }
-        if (u >= 0x80U) {                     /* other multi-byte: one '?' per character */
-            if ((u & 0xc0U) == 0x80U) continue;
-            *last_sp = 0; any = 1;
-            ob_c(b, '?');
-            continue;
-        }
-        if (!pre && is_sp(c)) {
+    int i = s, any = 0;
+    while (i < e) {
+        uint32_t cp = wf_text_next(in, e, &i, g_cs, 1);
+        unsigned char c;
+        if (cp == 0) break;
+        if (cp == 0xA0u || (!pre && (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == '\f'))) {
             if (!*last_sp) { ob_c(b, ' '); *last_sp = 1; }
             continue;
         }
+        c = os_cp1252_from_cp(cp);
+        if (!c) continue;
+        if (pre && cp == '\r') continue;
         *last_sp = 0;
-        if ((unsigned char)c < 0x20U && c != '\n' && c != '\t') continue;
-        ob_c(b, c);
         any = 1;
+        if (c == '<') ob_s(b, "&lt;");
+        else if (c == '>') ob_s(b, "&gt;");
+        else if (c == '&') ob_s(b, "&amp;");
+        else ob_c(b, (char)c);
     }
     if (any) b->nodes++;
 }
@@ -209,27 +193,176 @@ static int href_web(const char* h) {
     return 1;
 }
 
-/* Decodes the common entities of a title in place; < and > become spaces
- * (the title is re-escaped when written). */
-static void title_decode(char* t) {
-    static const char* const ent[] = {"&amp;", "&", "&lt;", " ", "&gt;", " ", "&quot;", "\"", "&#39;", "'",
-                                      "&apos;", "'", "&nbsp;", " ", 0};
-    int r = 0, w = 0, j;
-    while (t[r]) {
-        int hit = 0;
-        if (t[r] == '&') {
-            for (j = 0; ent[j]; j += 2) {
-                int l = 0;
-                while (ent[j][l] && t[r + l] == ent[j][l]) l++;
-                if (!ent[j][l]) { t[w++] = ent[j + 1][0]; r += l; hit = 1; break; }
-            }
+/* Lot 71: decoded attribute value (entities, charset) as display bytes */
+static int get_attr_text(const char* in, int s, int e, const char* attr, char* out, int cap) {
+    static char raw[WF_FORM_VALUE * 2];
+    int n = get_attr(in, s, e, attr, raw, (int)sizeof(raw));
+    if (n < 0) { out[0] = 0; return -1; }
+    return wf_text_display(raw, n, g_cs, 0, out, cap);
+}
+
+/* href with its character references decoded (&amp; in query strings) */
+static int get_href(const char* in, int s, int e, char* out, int cap) {
+    int n = get_attr(in, s, e, "href", out, cap), r = 0, w = 0;
+    if (n <= 0) return n;
+    while (r < n) {
+        if (out[r] == '&') {
+            int used = 0;
+            uint32_t cp = wf_entity_decode(out + r, n - r, &used);
+            if (used && cp > 0 && cp < 0x80u) { out[w++] = (char)cp; r += used; continue; }
         }
-        if (!hit) t[w++] = t[r++];
+        out[w++] = out[r++];
     }
-    t[w] = 0;
+    out[w] = 0;
+    return w;
+}
+
+static int has_attr(const char* in, int s, int e, const char* name) {
+    char v[4];
+    int i, l = 0;
+    if (get_attr(in, s, e, name, v, (int)sizeof(v)) >= 0) return 1;
+    while (name[l]) l++;
+    for (i = s; i + l <= e; i++) {
+        int k;
+        if (!is_sp(in[i - 1])) continue;
+        for (k = 0; k < l && lc(in[i + k]) == name[k]; k++) {}
+        if (k == l && (i + l == e || is_sp(in[i + l]) || in[i + l] == '>' || in[i + l] == '/')) return 1;
+    }
+    return 0;
+}
+
+static void put_num(ob_t* b, int v) {
+    char t[8];
+    int k = 0;
+    do { t[k++] = (char)('0' + v % 10); v /= 10; } while (v && k < 7);
+    while (k) ob_c(b, t[--k]);
+}
+
+/* A form control becomes a link "mohhdy-form:f:N" (or s: for a submit)
+ * whose text is the placeholder \001N\002, replaced by the section
+ * builder (wf_html_section) with the current value of field N. */
+static void put_field(ob_t* b, int idx, int submit) {
+    ob_s(b, "<a href=\"mohhdy-form:");
+    ob_c(b, submit ? 's' : 'f');
+    ob_c(b, ':');
+    put_num(b, idx);
+    ob_s(b, "\">");
+    ob_c(b, '\001');
+    put_num(b, idx);
+    ob_c(b, '\002');
+    ob_s(b, "</a>");
+    b->nodes++;
+}
+
+/* Inner text of the element whose open tag ends at i (for <button>,
+ * <textarea>, <option>), decoded, up to the closing tag. */
+static int inner_text(const char* in, int n, int i, const char* name, char* out, int cap, int collapse) {
+    int end = skip_block(in, n, i, name), close = end;
+    while (close > i && in[close - 1] != '<') close--;
+    if (close > i) close--;
+    if (close < i) close = i;
+    {
+        /* drop nested tags */
+        static char tmp[WF_FORM_VALUE * 2];
+        int k = 0, j, intag = 0;
+        for (j = i; j < close && k < (int)sizeof(tmp) - 1; j++) {
+            if (in[j] == '<') { intag = 1; continue; }
+            if (in[j] == '>') { intag = 0; continue; }
+            if (!intag) tmp[k++] = in[j];
+        }
+        wf_text_display(tmp, k, g_cs, collapse, out, cap);
+    }
+    return end;
+}
+
+/* <select>: value of the selected option, else the first one */
+static int select_value(const char* in, int n, int i, char* out, int cap) {
+    int end = skip_block(in, n, i, "select"), j, first = 1;
+    out[0] = 0;
+    for (j = i; j + 7 < end; j++) {
+        if (in[j] == '<' && lc(in[j + 1]) == 'o' && lc(in[j + 2]) == 'p' && lc(in[j + 3]) == 't') {
+            int e = j, q = 0;
+            static char v[WF_FORM_VALUE];
+            while (e < end && (q || in[e] != '>')) { if (in[e] == '"' || in[e] == '\'') q = (q == in[e]) ? 0 : (q ? q : in[e]); e++; }
+            if (get_attr_text(in, j + 7, e, "value", v, (int)sizeof(v)) < 0) inner_text(in, end, e + 1, "option", v, (int)sizeof(v), 1);
+            if (first || has_attr(in, j + 7, e, "selected")) {
+                int k;
+                for (k = 0; v[k] && k < cap - 1; k++) out[k] = v[k];
+                out[k] = 0;
+                if (!first) break;
+                first = 0;
+            }
+            j = e;
+        }
+    }
+    return end;
+}
+
+/* Returns the next read position after a form element at in[i] (tag
+ * name name, attributes in[j..e)), or -1 when it is not a form element. */
+static int form_tag(ob_t* b, const char* in, int n, int i, int j, int e, int close, const char* name, const wf_url_t* base) {
+    static char type[24], fname[WF_FORM_NAME], value[WF_FORM_VALUE], label[WF_FORM_LABEL], action[WF_FORM_ACTION], method[8], enc[40], num[8];
+    int next = e < n ? e + 1 : n, idx, maxlen = 0, k;
+    (void)i;
+    if (seq(name, "form")) {
+        if (close) { wf_form_end(g_forms); return next; }
+        get_attr_text(in, j, e, "action", action, (int)sizeof(action));
+        get_attr(in, j, e, "method", method, (int)sizeof(method));
+        get_attr(in, j, e, "enctype", enc, (int)sizeof(enc));
+        { int r = 0, w = 0; while (action[r]) { if ((unsigned char)action[r] >= 0x20u) action[w++] = action[r]; r++; } action[w] = 0; }
+        wf_form_begin(g_forms, base, action, method, enc);
+        return next;
+    }
+    if (close) return seq(name, "input") || seq(name, "textarea") || seq(name, "button") || seq(name, "select") ? next : -1;
+    if (!seq(name, "input") && !seq(name, "textarea") && !seq(name, "button") && !seq(name, "select")) return -1;
+    get_attr_text(in, j, e, "name", fname, (int)sizeof(fname));
+    if (get_attr_text(in, j, e, "placeholder", label, (int)sizeof(label)) <= 0 &&
+        get_attr_text(in, j, e, "aria-label", label, (int)sizeof(label)) <= 0)
+        get_attr_text(in, j, e, "title", label, (int)sizeof(label));
+    if (get_attr(in, j, e, "maxlength", num, (int)sizeof(num)) > 0)
+        for (k = 0; num[k] >= '0' && num[k] <= '9'; k++) maxlen = maxlen * 10 + (num[k] - '0');
+    if (has_attr(in, j, e, "disabled")) {
+        if (seq(name, "input")) return next;
+        return skip_block(in, n, next, name);
+    }
+    if (seq(name, "textarea")) {
+        next = inner_text(in, n, next, "textarea", value, (int)sizeof(value), 0);
+        idx = wf_form_add(g_forms, base, "textarea", fname, value, label, 0, maxlen);
+        if (idx >= 0) put_field(b, idx, 0);
+        return next;
+    }
+    if (seq(name, "select")) {
+        next = select_value(in, n, next, value, (int)sizeof(value));
+        wf_form_add(g_forms, base, "select", fname, value, label, 0, 0);
+        return next;
+    }
+    if (seq(name, "button")) {
+        if (get_attr(in, j, e, "type", type, (int)sizeof(type)) < 0) type[0] = 0;
+        get_attr_text(in, j, e, "value", value, (int)sizeof(value));
+        next = inner_text(in, n, next, "button", label, (int)sizeof(label), 1);
+        if (type[0] && !seq(type, "submit")) return next;
+        idx = wf_form_add(g_forms, base, "button-submit", fname, value, label, 0, 0);
+        if (idx >= 0) put_field(b, idx, 1);
+        return next;
+    }
+    if (get_attr(in, j, e, "type", type, (int)sizeof(type)) < 0) type[0] = 0;
+    for (k = 0; type[k]; k++) type[k] = lc(type[k]);
+    get_attr_text(in, j, e, "value", value, (int)sizeof(value));
+    if (seq(type, "submit") || seq(type, "image")) {
+        if (seq(type, "image") && !label[0]) get_attr_text(in, j, e, "alt", label, (int)sizeof(label));
+        if (seq(type, "submit")) label[0] = 0;   /* a submit shows its value */
+    }
+    idx = wf_form_add(g_forms, base, type, fname, value, label, has_attr(in, j, e, "checked"), maxlen);
+    if (idx >= 0 && g_forms->field[idx].type != WF_FIELD_HIDDEN) put_field(b, idx, g_forms->field[idx].type == WF_FIELD_SUBMIT);
+    return next;
 }
 
 int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int cap, wf_html_stats_t* st) {
+    return wf_html_reduce_ex(in, n, base, out, cap, st, WF_HTML_NODE_BUDGET, 0);
+}
+
+int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, int cap, wf_html_stats_t* st,
+                      int node_budget, wf_form_page_t* forms) {
     static wf_url_t link;
     static char href[WF_URL_PATH_MAX], abs_url[WF_URL_HOST_MAX + WF_URL_PATH_MAX + 16];
     ob_t b;
@@ -238,6 +371,16 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
     if (!st) st = &dummy;
     for (k = 0; k < (int)sizeof(*st); k++) ((char*)st)[k] = 0;
     st->in_bytes = n;
+    g_forms = forms;
+    if (forms) wf_form_reset(forms);
+    g_cs = g_cs_set;
+    if (g_cs == WF_CS_NONE) {
+        int sn = wf_charset_sniff(in, n);
+        g_cs = sn >= 0 ? sn : WF_CS_UTF8;
+    }
+    st->charset = g_cs;
+    if (forms) forms->latin1 = g_cs == WF_CS_LATIN1;
+    if (node_budget <= 0) node_budget = WF_HTML_NODE_BUDGET;
     b.o = out; b.cap = cap; b.n = 0; b.full = 0; b.nodes = 0;
     if (cap < 64) { if (cap > 0) out[0] = 0; return 0; }
     /* the title first, from <head> */
@@ -248,16 +391,15 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
                 lc(in[t + 4]) == 'l' && lc(in[t + 5]) == 'e' && (in[t + 6] == '>' || is_sp(in[t + 6]))) {
                 while (t < n && in[t] != '>') t++;
                 t++;
-                while (t < n && in[t] != '<' && tn < (int)sizeof(st->title) - 1) {
-                    char c = in[t++];
-                    if ((unsigned char)c == 0xc3U && t < n) { st->title[tn++] = latin_base((unsigned char)in[t++]); continue; }
-                    if ((unsigned char)c >= 0x80U) { if (((unsigned char)c & 0xc0U) != 0x80U) st->title[tn++] = ' '; continue; }
-                    if (is_sp(c)) { if (tn && st->title[tn - 1] != ' ') st->title[tn++] = ' '; }
-                    else if ((unsigned char)c >= 0x20U && c != '<' && c != '>') st->title[tn++] = c;
+                {
+                    int t0 = t;
+                    while (t < n && in[t] != '<') t++;
+                    tn = wf_text_display(in + t0, t - t0, g_cs, 1, st->title, (int)sizeof(st->title));
                 }
-                while (tn && st->title[tn - 1] == ' ') tn--;
-                st->title[tn] = 0;
-                title_decode(st->title);
+                {   /* < and > of a title become spaces (it is re-escaped when written) */
+                    int q;
+                    for (q = 0; q < tn; q++) if (st->title[q] == '<' || st->title[q] == '>') st->title[q] = ' ';
+                }
                 break;
             }
             t++;
@@ -272,7 +414,7 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
     ob_s(&b, "</title></head><body>");
     (void)in_title;
     while (i < n && !b.full) {
-        if (b.nodes >= WF_HTML_NODE_BUDGET) { b.full = 1; break; }
+        if (b.nodes >= node_budget) { b.full = 1; break; }
         if (in[i] == '<') {
             char name[16];
             int close, j, e;
@@ -299,6 +441,12 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
             }
             if (!name[0]) { put_text(&b, in, i, i + 1, &last_sp, pre); i++; continue; }   /* a lone '<' */
             if (seq(name, "body")) body_seen = 1;
+            if (g_forms) {
+                int nx;
+                if (!ob_room(&b, 600)) { b.full = 1; break; }
+                nx = form_tag(&b, in, n, i, j, e, close, name, base);
+                if (nx >= 0) { last_sp = 0; i = nx; continue; }
+            }
             if (!close && in_list(name, DROP_BLOCK)) {
                 st->blocks_dropped++;
                 i = skip_block(in, n, e < n ? e + 1 : n, name);
@@ -317,7 +465,7 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
                 if (!close) b.nodes++;
                 if (seq(name, "pre")) pre = !close;
                 if (!close && seq(name, "a")) {
-                    int hl = get_attr(in, j, e, "href", href, (int)sizeof(href));
+                    int hl = get_href(in, j, e, href, (int)sizeof(href));
                     ob_s(&b, "<a");
                     if (hl > 0 && base && href_web(href) && wf_url_resolve(base, href, &link) == 0) {
                         wf_url_format(&link, abs_url, (int)sizeof(abs_url));
@@ -371,9 +519,18 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
     return b.n;
 }
 
-int wf_html_text(const char* in, int n, char* out, int cap) {
+static int html_text(const char* in, int n, char* out, int cap, int display);
+int wf_html_text(const char* in, int n, char* out, int cap) { return html_text(in, n, out, cap, 0); }
+/* Lot 71: text of a reduced page (display bytes, wf_html_reduce output):
+ * bytes >= 0x80 are CP1252 display bytes, written as UTF-8. */
+int wf_html_text_display(const char* in, int n, char* out, int cap) { return html_text(in, n, out, cap, 1); }
+static int html_text(const char* in, int n, char* out, int cap, int display) {
     ob_t b;
-    int i = 0, last_sp = 1, nl = 1;
+    int i = 0, last_sp = 1, nl = 1, cs = g_cs_set;
+    if (!display && cs == WF_CS_NONE) {
+        int sn = wf_charset_sniff(in, n);
+        cs = sn >= 0 ? sn : WF_CS_UTF8;
+    }
     b.o = out; b.cap = cap; b.n = 0; b.full = 0;
     if (cap <= 0) return 0;
     while (i < n && !b.full) {
@@ -392,16 +549,30 @@ int wf_html_text(const char* in, int n, char* out, int cap) {
             i = e < n ? e + 1 : n;
             continue;
         }
-        if (in[i] == '&') {
-            static const char* const ent[] = {"&amp;", "&", "&lt;", "<", "&gt;", ">", "&quot;", "\"", "&#39;", "'",
-                                              "&nbsp;", " ", "&#x27;", "'", 0};
-            int k, m = 0;
-            for (k = 0; ent[k]; k += 2) {
-                int l = 0;
-                while (ent[k][l] && i + l < n && lc(in[i + l]) == ent[k][l]) l++;
-                if (!ent[k][l]) { ob_s(&b, ent[k + 1]); i += l; m = 1; nl = 0; last_sp = 0; break; }
+        if (display && (unsigned char)in[i] >= 0x80U) {
+            char u[4];
+            int k, m = os_display_to_utf8((unsigned char)in[i], u, (int)sizeof(u));
+            for (k = 0; k < m; k++) ob_c(&b, u[k]);
+            i++; nl = 0; last_sp = 0;
+            continue;
+        }
+        if (in[i] == '&' || (!display && cs == WF_CS_LATIN1 && (unsigned char)in[i] >= 0x80U)) {
+            /* Lot 71: any character reference, and Latin-1 bytes, as UTF-8 */
+            int k = i;
+            uint32_t cp = wf_text_next(in, n, &k, cs, 1);
+            if (cp && (k > i + 1 || cp != '&')) {
+                if (cp == 0xA0U) cp = ' ';
+                if (cp < 0x80U) ob_c(&b, (char)cp);
+                else if (cp < 0x800U) { ob_c(&b, (char)(0xC0U | (cp >> 6))); ob_c(&b, (char)(0x80U | (cp & 0x3FU))); }
+                else if (cp < 0x10000U) {
+                    ob_c(&b, (char)(0xE0U | (cp >> 12))); ob_c(&b, (char)(0x80U | ((cp >> 6) & 0x3FU))); ob_c(&b, (char)(0x80U | (cp & 0x3FU)));
+                } else {
+                    ob_c(&b, (char)(0xF0U | (cp >> 18))); ob_c(&b, (char)(0x80U | ((cp >> 12) & 0x3FU)));
+                    ob_c(&b, (char)(0x80U | ((cp >> 6) & 0x3FU))); ob_c(&b, (char)(0x80U | (cp & 0x3FU)));
+                }
+                i = k; nl = 0; last_sp = cp == ' ';
+                continue;
             }
-            if (m) continue;
         }
         if (is_sp(in[i])) {
             if (!last_sp) { ob_c(&b, ' '); last_sp = 1; }

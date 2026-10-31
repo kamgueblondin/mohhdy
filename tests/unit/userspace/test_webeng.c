@@ -135,6 +135,17 @@ static void test_percent_width_and_img_alt(void) {
     TEST_ASSERT_NOT_NULL(find_text("u"));
 }
 
+/* Lot 71: display bytes (CP1252) and numeric references to Latin-1 keep
+ * their glyph instead of becoming '?'. */
+static void test_lot71_latin1_text_kept(void) {
+    static const char* p = "<body><p>caf\xe9 &#233;t&#xE9; &#8364;5 &#x1F600;</p></body>";
+    TEST_ASSERT_EQUAL(0, we_render(&g_doc, p, (int)strlen(p), 400));
+    TEST_ASSERT_NOT_NULL(find_text("caf\xe9"));
+    TEST_ASSERT_NOT_NULL(find_text("\xe9t\xe9"));
+    TEST_ASSERT_NOT_NULL(find_text("\x80" "5"));
+    TEST_ASSERT_NOT_NULL(find_text("?"));
+}
+
 static char g_out[4096];
 static void cap(void* ctx, const char* s) { (void)ctx; strncat(g_out, s, sizeof(g_out) - strlen(g_out) - 1); }
 
@@ -1846,6 +1857,7 @@ int main(void) {
     RUN_TEST(test_l60_composition_image_exports_decoded_bottom_baseline);
     RUN_TEST(test_l60_composition_flex_negative_margin_keeps_signed_baseline);
     RUN_TEST(test_l60_composition_grid_negative_margin_keeps_signed_baseline);
+    RUN_TEST(test_lot71_latin1_text_kept);
     lot61_run();
     lot62_run();
     lot63_run();

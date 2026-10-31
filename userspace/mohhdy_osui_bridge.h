@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 464
+#define MOHHDY_SHELL_COMMAND_COUNT 470
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -370,6 +370,7 @@ static const char * const mohhdy_shell_commands[] = {
     "rtc-check",
     "screen-adapt",
     "search",
+    "search-config",
     "search-engine",
     "search-open",
     "service-event-pull",
@@ -470,12 +471,17 @@ static const char * const mohhdy_shell_commands[] = {
     "web-console",
     "web-csp",
     "web-dom",
+    "web-forms",
+    "web-input",
     "web-inspect",
+    "web-open",
     "web-perf",
     "web-render",
     "web-responsive",
     "web-sanitize",
+    "web-section",
     "web-serve",
+    "web-submit",
     "web-theme",
     "which",
     "whoami",

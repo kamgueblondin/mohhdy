@@ -47,4 +47,20 @@ typedef struct {
 
 /* 0 when a final response was received (any status), < 0 otherwise. */
 int wf_fetch(const wf_fetch_env_t* env, const char* url, uint8_t* body, int cap, wf_fetch_result_t* res);
+
+/* Lot 71: a request other than a plain GET. method "POST" sends body
+ * (body_len bytes, content type ctype) on the first hop; a 301/302/303
+ * answer is followed with a GET without body (as browsers do), 307/308
+ * repeat the POST. extra: 0 or header lines each ending with CRLF (an
+ * API key header for a configured search API); they are sent to the
+ * first host only, never after a redirect to another host. */
+typedef struct {
+    const char* method;       /* 0 = "GET" */
+    const char* body;
+    int body_len;
+    const char* ctype;
+    const char* extra;
+} wf_fetch_req_t;
+int wf_fetch_ex(const wf_fetch_env_t* env, const char* url, const wf_fetch_req_t* req, uint8_t* body, int cap,
+                wf_fetch_result_t* res);
 #endif

@@ -3,6 +3,7 @@
 #include "imgdec.h"
 /* Lot 61: the kernel 8x8 font, shared read-only for partial glyph clipping. */
 #include "../kernel/gfx_font8.h"
+#include "../include/os_charset.h"
 #include "../include/os_ui_scale.h"
 
 /* ---------- small helpers (no libc) ---------- */
@@ -148,7 +149,13 @@ static int char_ref(const char *s, int n, char out[4]) {
         else if (code == 8216 || code == 8217) out[0] = '\'';
         else if (code == 8220 || code == 8221) out[0] = '"';
         else if (code == 8230) { out[0] = out[1] = out[2] = '.'; out[3] = 0; }
-        else out[0] = code == 173 ? WE_SHY : '?';
+        else if (code == 173) out[0] = WE_SHY;
+        else {
+            /* Lot 71: Latin-1 and CP1252 code points have a glyph in the
+             * display charset (include/os_charset.h). */
+            unsigned char b = code > 0 ? os_cp1252_from_cp((uint32_t)code) : 0;
+            out[0] = b >= 0x80u && b < 0xFFu ? (char)b : '?';
+        }
         return i + 1;
     }
     for (k = 0; k < (int)(sizeof(names) / sizeof(names[0])); k++) {
@@ -186,7 +193,9 @@ static int add_text(we_doc_t* d, int parent, const char* s, int n) {
             continue;
         }
         graphic = 1;
-        buf[o++] = (c >= 32 && c < 127) ? c : '?';
+        /* Lot 71: the source is in display bytes (CP1252); the font has
+         * glyphs for 0x80..0xFE. */
+        buf[o++] = (c >= 32 && c < 127) || ((unsigned char)c >= 0x80u && (unsigned char)c < 0xFFu) ? c : '?';
         i++;
     }
     if (i < n) diag(d, "text source exceeds limit", parent);
@@ -4631,7 +4640,7 @@ int we_style(we_doc_t* d) {
 static os_fb_web_item_t* emit(we_doc_t* d, int owner, uint8_t kind, int x, int y, int w, int h, uint32_t color) {
     os_fb_web_item_t* it;
     if (owner >= 0 && d->nodes[owner].visibility) return 0;
-    if (d->nitems >= OS_FB_WEB_ITEMS) {
+    if (d->nitems >= WE_MAX_ITEMS) {
         if (!d->perf.items_dropped) diag(d, "display budget exceeded", owner);
         d->perf.items_dropped++;
         return 0;
@@ -4659,7 +4668,7 @@ static struct {
     unsigned char source[WE_IMAGE_SOURCE_MAX];
     unsigned char scratch[WE_IMAGE_SCRATCH_MAX];
     imgdec_t decoded;
-    os_fb_web_item_t rect[OS_FB_WEB_ITEMS];
+    os_fb_web_item_t rect[WE_MAX_ITEMS];
     char path[256];
     int16_t natural_w[WE_MAX_NODES], natural_h[WE_MAX_NODES];
     uint8_t failed[WE_MAX_NODES];
@@ -4784,7 +4793,7 @@ static uint32_t image_sample(int x, int y, int rw, int rh) {
  * image and never consumes a display-list slot intended for the alt. */
 static int image_paint(we_doc_t *d, int idx, int x, int y, int available, int assigned_w, int assigned_h) {
     we_node_t *n = &d->nodes[idx];
-    int w, h, rw, rh, ox, oy, row, col, nr = 0, room = OS_FB_WEB_ITEMS - (int)d->nitems;
+    int w, h, rw, rh, ox, oy, row, col, nr = 0, room = WE_MAX_ITEMS - (int)d->nitems;
     int background = n->object_fit_set && n->has_bg && n->display == WE_DISP_INLINE;
     if (image_dimensions(d, idx, available, assigned_w, assigned_h, &w, &h) || image_open(d, idx)) return -1;
     if (background) room--;
@@ -6525,7 +6534,7 @@ static int arc_pattern(we_doc_t *d, int idx, int corner, int x0, int y0, int rx,
 
 static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len);
 static void radius_dashed(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, int w, int h, int t, int style, uint32_t color) {
-    static os_fb_web_item_t ring[OS_FB_WEB_ITEMS];
+    static os_fb_web_item_t ring[WE_MAX_ITEMS];
     int start = (int)d->nitems, count, i, k;
     int cx[4], cy[4], from[4], patterned[4];
     radius_ring(d, idx, r, x, y, w, h, t, color, color);
@@ -6859,7 +6868,7 @@ static int bgi_pixel(int col, int row, int ox, int oy, int tw, int th, const int
 
 static int bgi_fill(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh) {
     we_node_t *n = &d->nodes[idx];
-    int area[4], clip[4], tw, th, ox, oy, x0, y0, x1, y1, row, col, nr = 0, room = OS_FB_WEB_ITEMS - (int)d->nitems;
+    int area[4], clip[4], tw, th, ox, oy, x0, y0, x1, y1, row, col, nr = 0, room = WE_MAX_ITEMS - (int)d->nitems;
     int gap[2], repeat = n->bgi_repeat;
     if (!n->bgi_len || n->visibility || image_open(d, idx)) return 0;      /* an <img> never keeps a url */
     background_box(n, n->bg_origin, bx, by, bw, bh, area);
@@ -7058,9 +7067,9 @@ static void rtl_mirror(we_doc_t *d, int idx, int first, int x, int width) {
  * each gap between two used columns, over the column height, after the
  * content. Vertical writing modes are refused. */
 typedef struct { int node, top, bottom, line, span, brk; } we_col_unit_t;
-static we_col_unit_t col_unit[OS_FB_WEB_ITEMS + WE_MAX_NODES];
-static int16_t col_of[OS_FB_WEB_ITEMS + WE_MAX_NODES];
-static uint8_t col_moved[OS_FB_WEB_ITEMS];
+static we_col_unit_t col_unit[WE_MAX_ITEMS + WE_MAX_NODES];
+static int16_t col_of[WE_MAX_ITEMS + WE_MAX_NODES];
+static uint8_t col_moved[WE_MAX_ITEMS];
 
 static int multicol(const we_node_t *n) {
     return (n->col_count || n->col_width > 0) && n->display != WE_DISP_FLEX && n->display != WE_DISP_GRID &&
@@ -7261,8 +7270,8 @@ static int layout_content(we_doc_t *d, int idx, int x, int y, int width, int dep
  * painted upright, "vertical text painted upright"); spaces paint nothing.
  * Descendants share the root's mode: another writing-mode inside it is
  * painted with the root's ("nested writing mode inherited"). */
-static os_fb_web_item_t vertical_out[OS_FB_WEB_ITEMS];
-static int16_t vertical_owner[OS_FB_WEB_ITEMS];
+static os_fb_web_item_t vertical_out[WE_MAX_ITEMS];
+static int16_t vertical_owner[WE_MAX_ITEMS];
 
 static int vertical_root(const we_doc_t *d, int idx) {
     const we_node_t *n = &d->nodes[idx];
@@ -7287,7 +7296,7 @@ static void vertical_map(int rl, int ox, int oy, int extent, int *x, int *y, int
 }
 
 static void vertical_remap(we_doc_t *d, int idx, int first, int ox, int oy, int extent) {
-    int rl = d->nodes[idx].wmode == WE_WM_VERTICAL_RL, i, out = 0, room = OS_FB_WEB_ITEMS - first, dropped = 0, text = 0;
+    int rl = d->nodes[idx].wmode == WE_WM_VERTICAL_RL, i, out = 0, room = WE_MAX_ITEMS - first, dropped = 0, text = 0;
     for (i = 0; i < (int)d->nnodes; i++) {
         we_node_t *c = &d->nodes[i];
         int x = c->x, y = c->y, w = c->w, h = c->h;
@@ -7896,8 +7905,8 @@ typedef char layout_workspace_is_bounded[
     sizeof(track_work) + sizeof(grid_work) + sizeof(table_slot) +
     sizeof(we_inline_t) * (WE_DEPTH_MAX + 1) +
     sizeof(forced_width) + sizeof(forced_height) + sizeof(resolved_height) +
-    sizeof(containing_height) + sizeof(flow_baseline) + sizeof(measure_content) + sizeof(measure_cache) + sizeof(int16_t) * OS_FB_WEB_ITEMS +
-    sizeof(os_fb_web_item_t) * OS_FB_WEB_ITEMS <= WE_LAYOUT_WORKSPACE_MAX ? 1 : -1];
+    sizeof(containing_height) + sizeof(flow_baseline) + sizeof(measure_content) + sizeof(measure_cache) + sizeof(int16_t) * WE_MAX_ITEMS +
+    sizeof(os_fb_web_item_t) * WE_MAX_ITEMS <= WE_LAYOUT_WORKSPACE_MAX ? 1 : -1];
 
 static int track_extent(int size, int low, int cap) {
     if (size >= 0) return size;
@@ -9962,7 +9971,7 @@ static int clip_rectangle(os_fb_web_item_t *item, int left, int top, int right, 
 #define WE_CLIP_FRAGMENTS 64
 static unsigned glyph_mask(char ch, int row, int bold) {
     unsigned bits;
-    if ((unsigned char)ch < 32 || (unsigned char)ch > 126) ch = '?';
+    if ((unsigned char)ch < 32 || (unsigned char)ch == 127 || (unsigned char)ch > 254) ch = '?';
     bits = gfx_font8[(unsigned char)ch - 32u][row];
     return bold ? bits | (bits << 1) : bits;
 }
@@ -10509,8 +10518,8 @@ static void ellipsis_items(we_doc_t *d) {
 }
 
 static void clip_display_list(we_doc_t *d) {
-    static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
-    static int16_t owners[OS_FB_WEB_ITEMS];
+    static os_fb_web_item_t output[WE_MAX_ITEMS];
+    static int16_t owners[WE_MAX_ITEMS];
     int i, count = 0;
     for (i = 0; i < (int)d->nitems; i++) {
         os_fb_web_item_t item = d->items[i];
@@ -10530,11 +10539,11 @@ static void clip_display_list(we_doc_t *d) {
             edges[0] = item;
             fragments = clip_frags(edges, 1, left, top, right, bottom, WE_CLIP_FRAGMENTS);
             if (fragments > 0) fragments = round_clip(d, d->item_owner[i], edges, fragments, WE_CLIP_FRAGMENTS);
-            if (fragments < 0) fragments = OS_FB_WEB_ITEMS + 1;
+            if (fragments < 0) fragments = WE_MAX_ITEMS + 1;
         }
         if (!fragments) continue;
-        if (count + fragments > OS_FB_WEB_ITEMS) {
-            if (fragments > OS_FB_WEB_ITEMS) fragments = 1;
+        if (count + fragments > WE_MAX_ITEMS) {
+            if (fragments > WE_MAX_ITEMS) fragments = 1;
             d->perf.items_dropped += (uint32_t)fragments;
             diag(d, "clipping display budget", d->item_owner[i]);
             continue;
@@ -10704,9 +10713,9 @@ static int items_overlap(const os_fb_web_item_t *a, const os_fb_web_item_t *b) {
  * index whose overlapping predecessors (in key order) are placed goes
  * next, so pages without conflicts keep their item order. */
 static void paint_order(we_doc_t *d, int8_t keys[][WE_STACK_KEY]) {
-    static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
-    static int16_t owners[OS_FB_WEB_ITEMS];
-    static uint8_t placed[OS_FB_WEB_ITEMS];
+    static os_fb_web_item_t output[WE_MAX_ITEMS];
+    static int16_t owners[WE_MAX_ITEMS];
+    static uint8_t placed[WE_MAX_ITEMS];
     int n = (int)d->nitems, i, j, out, moved = 0;
     for (i = 0; i < n && !moved; i++)
         for (j = 0; j < i; j++)
@@ -10732,7 +10741,7 @@ static void paint_order(we_doc_t *d, int8_t keys[][WE_STACK_KEY]) {
 }
 
 static void stack_items(we_doc_t *d) {
-    static int8_t keys[OS_FB_WEB_ITEMS][WE_STACK_KEY];
+    static int8_t keys[WE_MAX_ITEMS][WE_STACK_KEY];
     int i, j, k, any = 0, flat = 0;
     for (i = 0; i < (int)d->nnodes; i++)
         if (stack_context(&d->nodes[i]) && (!d->nodes[i].absolute || stack_z(&d->nodes[i]) < 0)) any = 1;
@@ -10793,8 +10802,8 @@ static void opacity_items(we_doc_t *d) {
 typedef struct { int16_t x, y, w, h; uint32_t dst; int16_t item; } we_region_t;
 static we_region_t alpha_region[WE_ALPHA_REGIONS], alpha_overlay[WE_ALPHA_OVERLAYS];
 static int alpha_regions, alpha_overlays;
-static os_fb_web_item_t alpha_out[OS_FB_WEB_ITEMS], alpha_saved[OS_FB_WEB_ITEMS];
-static int16_t alpha_owner[OS_FB_WEB_ITEMS], alpha_child_of[OS_FB_WEB_ITEMS], alpha_saved_owner[OS_FB_WEB_ITEMS];
+static os_fb_web_item_t alpha_out[WE_MAX_ITEMS], alpha_saved[WE_MAX_ITEMS];
+static int16_t alpha_owner[WE_MAX_ITEMS], alpha_child_of[WE_MAX_ITEMS], alpha_saved_owner[WE_MAX_ITEMS];
 static int alpha_count;
 
 static int color_alpha_of(uint32_t c) {
@@ -10914,7 +10923,7 @@ static int alpha_query(int g, int child, int text_src, int x, int y, int w, int 
 }
 
 static int alpha_push(const os_fb_web_item_t *it, int owner, int child) {
-    if (alpha_count >= OS_FB_WEB_ITEMS) return -1;
+    if (alpha_count >= WE_MAX_ITEMS) return -1;
     alpha_out[alpha_count] = *it;
     alpha_owner[alpha_count] = (int16_t)owner;
     alpha_child_of[alpha_count++] = (int16_t)child;
@@ -11058,8 +11067,8 @@ static void drop_reserved(we_doc_t *d) {
 
 /* Fixed boxes paint after the rest of the page, in their own order. */
 static void raise_fixed(we_doc_t *d) {
-    static os_fb_web_item_t output[OS_FB_WEB_ITEMS];
-    static int16_t owners[OS_FB_WEB_ITEMS];
+    static os_fb_web_item_t output[WE_MAX_ITEMS];
+    static int16_t owners[WE_MAX_ITEMS];
     int pass, i, count = 0;
     for (pass = 0; pass < 2; pass++)
         for (i = 0; i < (int)d->nitems; i++)

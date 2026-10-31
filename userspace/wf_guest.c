@@ -285,6 +285,11 @@ static wf_guest_log_fn g_log_fn;
 static void g_log(void* net, const char* line) { (void)net; if (g_log_fn) g_log_fn(line); }
 
 int wf_guest_fetch(const char* url, uint8_t* body, int cap, wf_fetch_result_t* res, wf_guest_log_fn log) {
+    return wf_guest_fetch_ex(url, 0, body, cap, res, log);
+}
+
+int wf_guest_fetch_ex(const char* url, const wf_fetch_req_t* req, uint8_t* body, int cap, wf_fetch_result_t* res,
+                      wf_guest_log_fn log) {
     static gnet_t g;
     static wf_fetch_env_t e;
     int i;
@@ -306,5 +311,5 @@ int wf_guest_fetch(const char* url, uint8_t* body, int cap, wf_fetch_result_t* r
         res->err[i] = 0;
         return -1;
     }
-    return wf_fetch(&e, url, body, cap, res);
+    return wf_fetch_ex(&e, url, req, body, cap, res);
 }

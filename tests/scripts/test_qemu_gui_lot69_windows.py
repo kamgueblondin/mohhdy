@@ -8,8 +8,9 @@ pixel layout is fixed):
   * chat window: maximize on-off and close / Chat menu restore;
   * full screen Browser-OS web page (/browse, local site): the shared
     title buttons replace the old traffic dots: minimize shows the desktop
-    and the Browser-OS dock icon restores it, maximize is a no-op (already
-    full screen), close closes the page ("osui web close").
+    and the Browser-OS dock icon restores it, maximize restores a smaller
+    window then fills the desktop again (Lot 71), close closes the page
+    ("osui web close").
   * explorer app window (/files): maximize on-off, minimize / Fichiers
     dock restore, right edge resize (the close button follows), close;
   * full screen editor (pm-ide): minimize / Editeur dock restore, close.
@@ -125,7 +126,11 @@ def main():
             if count(rgb, W - 70, BAR_H + 8, W - 8, BAR_H + 40, RED, 4) >= 60:
                 raise RuntimeError("minimized web window still drawn")
             click(qmp, proc, docks[1][0], docks[1][1], "gfx wm full restore", "dock Browser-OS restore")
-            click(qmp, proc, *btn(full, "max", 30), marker="gfx wm full already maximized", label="web maximize")
+            # Lot 71: maximize restores a smaller window, maximize again fills
+            click(qmp, proc, *btn(full, "max", 30), marker="gfx wm full maximize off", label="web restore")
+            aw, ah = W - 16, H - BAR_H - 16
+            rest = (8 + (aw - aw * 3 // 4) // 2, BAR_H + 8 + (ah - ah * 3 // 4) // 2, aw * 3 // 4, ah * 3 // 4)
+            click(qmp, proc, *btn(rest, "max", 30), marker="gfx wm full maximize on", label="web maximize")
             click(qmp, proc, *btn(full, "close", 30), marker="gfx wm full close", label="web close")
             g.wait_for(proc, "osui web close", g.CMD_TIMEOUT, start)
             # 4. explorer app window: locate its red close button on screen
