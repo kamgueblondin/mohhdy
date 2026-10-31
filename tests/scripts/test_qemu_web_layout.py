@@ -153,6 +153,26 @@ def main():
                 require(serial, "web item " + item)
                 print("lot62 console %s %s" % (label, item), flush=True)
             require(serial, "dropped 0 page 640x192 diag 2")
+            start = g.send_command_until(monitor, "web-render /web/lot63.html", "web-render ok", proc)
+            serial = g.normalized_log(g.log_text()[start:])
+            require(serial, "web title Lot 63 generated content transforms")
+            for label, box in (("before-block", "0 0 40x4"), ("radial-at", "0 50 20x8"),
+                               ("rotate-band", "22 70 14x3"), ("skew-row", "6 95 20x1"),
+                               ("dashed-rounded", "6 98 4x2"), ("dashed-arc", "3 98 3x2"),
+                               ("round-clip-transform", "50 116 20x8"),
+                               ("collapse-line-band", "10 140 4x8"), ("collapse-top-band", "10 140 14x2"),
+                               ("matrix", "30 168 10x4"), ("bg-image-tile", "6 172 1x4"),
+                               ("bg-image-ramp", "11 172 1x4")):
+                require(serial, "web item rect " + box)
+                print("lot63 console %s box %s" % (label, box), flush=True)
+            for label, item in (("counter", 'text 0 15 24x8 #00000000 "VI."'), ("counter-step", 'text 0 25 40x8 #00000000 "VIII."'),
+                                ("quote", 'text 0 35 8x8 #00000000 "<"'), ("char-ref", 'text 0 5 16x8 #00000000 "-x"'),
+                                ("overflow-x-clip", 'text 0 131 16x8 #00000000 "ab"'),
+                                ("soft-hyphen", 'text 0 149 32x8 #00000000 "abc-"'),
+                                ("soft-hyphen-rest", 'text 0 159 40x8 #00000000 "defgh"')):
+                require(serial, "web item " + item)
+                print("lot63 console %s %s" % (label, item), flush=True)
+            require(serial, "dropped 0 page 640x176 diag 2")
             g.send_command_until(monitor, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             g.send_command_until(monitor, "web /web/lot52.html", "osui web render file=/web/lot52.html", proc,
@@ -518,6 +538,53 @@ def main():
                 if line.startswith("osui web render file=/web/lot62.html"):
                     print(line, flush=True)
             print("lot62 pixels compared=%d alpha=source-over border=ridge transform=translate,scale outline=after shadow=offset decoration=underline margin=percent order=text-over-float gradient=bands radius=steps clip=rounded justify=spaces letter-spacing=cells radial=rings grid-percent=area" % compared,
+                  flush=True)
+
+            step = len(g.log_text())
+            g.send_key(monitor, "esc")
+            g.wait_for(proc, "osui web close file=/web/lot62.html", g.CMD_TIMEOUT, step)
+            start = g.send_command_until(monitor, "web /web/lot63.html",
+                "osui web render file=/web/lot63.html", proc, mode="getc", wait_prompt=False)
+            time.sleep(0.5)
+            width, height, pixels = g.screendump_rgb(monitor, "qemu-lot63.ppm")
+            compared = 0
+            for left, top, right, bottom, color in (
+                (0, 0, 40, 4, (255, 0, 0)), (40, 0, 120, 4, (255, 255, 255)),
+                (0, 50, 4, 58, (0x2B, 0, 0xD4)), (22, 70, 36, 73, (0, 128, 0)),
+                (6, 95, 26, 96, (128, 0, 128)), (6, 98, 10, 100, (0, 0, 128)),
+                (10, 98, 14, 100, (255, 255, 255)), (0, 98, 2, 100, (255, 255, 255)),
+                (3, 98, 6, 100, (0, 0, 128)), (50, 116, 70, 124, (255, 165, 0)),
+                (50, 110, 55, 113, (255, 255, 255)), (0, 110, 20, 130, (255, 255, 255)),
+                (10, 140, 14, 148, (255, 0, 255)), (14, 140, 24, 142, (0, 128, 128)),
+                (14, 142, 24, 148, (255, 255, 255)), (0, 140, 10, 148, (255, 255, 255)),
+                (30, 168, 40, 172, (0, 255, 255)), (0, 168, 30, 172, (255, 255, 255)),
+                (0, 172, 1, 176, (0, 0, 0)), (1, 172, 2, 176, (0x28, 0x28, 0x28)),
+                (5, 172, 6, 176, (0xC8, 0xC8, 0xC8)), (6, 172, 7, 176, (0, 0, 0)),
+                (11, 172, 12, 176, (0xC8, 0xC8, 0xC8)), (12, 172, 20, 176, (255, 255, 255))):
+                for y in range(top, bottom):
+                    for x in range(left, right):
+                        offset = ((oy + y) * width + ox + x) * 3
+                        if tuple(pixels[offset:offset + 3]) != color:
+                            raise RuntimeError("lot63 layout pixel mismatch at %d,%d" % (x, y))
+                        compared += 1
+            ink = 0
+            for y in range(131, 139):
+                for x in range(0, 24):
+                    offset = ((oy + y) * width + ox + x) * 3
+                    black = tuple(pixels[offset:offset + 3]) == (0, 0, 0)
+                    if x >= 16 and black:
+                        raise RuntimeError("lot63 text painted past overflow-x clip at %d,%d" % (x, y))
+                    if black:
+                        ink += 1
+                    compared += 1
+            if ink == 0:
+                raise RuntimeError("lot63 clipped text missing")
+            serial = g.normalized_log(g.log_text()[start:])
+            require(serial, "dropped 0 page 640x176 diag 2")
+            for line in serial.splitlines():
+                if line.startswith("osui web render file=/web/lot63.html"):
+                    print(line, flush=True)
+            print("lot63 pixels compared=%d content=before-block counters=step quotes=list radial=at rotate=bands skew=bands border=dashed-rounded clip=rounded-transform overflow=x-clip collapse=line-bands hyphen=soft matrix=translate bg-image=tiles" % compared,
                   flush=True)
 
         print("QEMU web layout contract passed.", flush=True)

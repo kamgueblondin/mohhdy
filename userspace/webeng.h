@@ -69,7 +69,13 @@ typedef struct {
 #define WE_FLOATS_MAX 16
 #define WE_ORDER_MAX 8
 #define WE_SPACING_MAX 64
-enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3 };
+/* Lot 63: break-spaces preserves spaces and wraps them like letters. */
+enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3, WE_WS_BREAK_SPACES = 4 };
+/* Lot 63: a soft hyphen (&shy;, &#173;) is kept in the text pool as this
+ * control byte; hyphens: manual (default; auto reads as manual) or none. */
+#define WE_SHY '\x1f'
+enum { WE_HYPHENS_MANUAL = 0, WE_HYPHENS_NONE = 1 };
+enum { WE_BGS_AUTO = 0, WE_BGS_CONTAIN = 1, WE_BGS_COVER = 2, WE_BGS_EXPLICIT = 3 };
 enum { WE_INSET_LEFT = 1, WE_INSET_TOP = 2, WE_INSET_RIGHT = 4, WE_INSET_BOTTOM = 8 };
 enum { WE_AUTO_LEFT = 1, WE_AUTO_RIGHT = 2, WE_AUTO_TOP = 4, WE_AUTO_BOTTOM = 8 };
 enum { WE_CLEAR_NONE = 0, WE_CLEAR_LEFT = 1, WE_CLEAR_RIGHT = 2, WE_CLEAR_BOTH = 3 };
@@ -127,9 +133,11 @@ typedef struct {
 
 /* Lot 62: paint-time transform functions. translate keeps px or percent
  * of the border box (pct bit 0 x, bit 1 y), scale keeps 1/1000 factors in
- * -8..8, rotate keeps quarter turns (0..3) in x. */
+ * -8..8. Lot 63: rotate keeps whole degrees 0..359 in x, skew keeps the x
+ * and y angles in -80..80 degrees; matrix() takes three slots (a b, then
+ * c d as WE_TF_DATA in 1/1000, then e f px as WE_TF_DATA). */
 #define WE_TF_MAX 4
-enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE };
+enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE, WE_TF_SKEW, WE_TF_MATRIX, WE_TF_DATA };
 typedef struct { uint8_t kind, pct; int16_t x, y; } we_transform_t;
 
 /* Lot 62: linear gradients, axis-aligned, up to 4 stops, at most
@@ -172,6 +180,7 @@ typedef struct {
     uint8_t width_kind, basis_content, border_box;
     uint8_t min_width_kind, max_width_kind, basis_kind, break_all;
     uint8_t nowrap, break_word, visibility, overflow_hidden;
+    uint8_t overflow_axes;     /* lot 63: bit 0 x, bit 1 y clip (hidden, clip, auto, scroll) */
     uint8_t grid_col_start, grid_row_start, grid_col_span, grid_row_span;
     we_grid_names_t line_names[2];
     /* Lot 61: one repeat(auto-fill|auto-fit, track) per axis. The template
@@ -208,6 +217,9 @@ typedef struct {
     int16_t offset_r, offset_b; /* right / bottom, valid when inset_flags says so */
     int8_t item_order;         /* -8..8, source order when equal */
     uint8_t flex_reverse, absolute, rowspan, ws_mode, inset_flags, margin_auto, border_collapse;
+    /* Lot 63: inherited tab-size in px (0..255, default 8 spaces). */
+    uint8_t tab_px;
+    uint8_t hyphens;           /* lot 63: WE_HYPHENS_*, inherited */
     int16_t border_spacing;    /* horizontal; separate borders; collapse forces 0 */
     int16_t border_spacing_y;  /* vertical; one value sets both */
     int16_t line_height;       /* 0 uses WE_LINE_H; glyphs stay at the top */
@@ -248,14 +260,32 @@ typedef struct {
      * border box. grad_dir 0 none, else WE_GRAD_*; stop positions in
      * 1/10000 of the gradient line. */
     uint8_t grad_dir, grad_count, grad_shape;
+    /* Lot 63: radial centre (bit 0/1: x/y in percent) and explicit size
+     * (-1: the extent keyword; bit 2/3 of grad_at_pct: rx/ry in percent). */
+    int16_t grad_at[2], grad_size[2];
+    uint8_t grad_at_pct;
     /* Lot 62: background-clip and the gradient's background-origin
      * (WE_BOX_BORDER / PADDING / CONTENT; origin defaults to padding). */
     uint8_t bg_clip, bg_origin;
+    /* Lot 63: background-image url() of an image the initrd reader serves
+     * (bgi_off/bgi_len: the url in the pool, 0 length: none), bit 0/1 of
+     * bgi_repeat: tiles repeat along x/y, background-position (bit 0/1 of
+     * bgi_pos_pct: percent) and background-size (WE_BGS_*; explicit sizes
+     * -1 for auto, bit 2/3 of bgi_pos_pct: percent). */
+    uint16_t bgi_off, bgi_len;
+    uint8_t bgi_repeat, bgi_size_kind, bgi_pos_pct;
+    int16_t bgi_pos[2], bgi_size[2];
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
     int8_t letter_spacing, word_spacing; /* lot 62: px added per glyph / per space, inherited */
     uint8_t align_last, justify_none;    /* lot 62: text-align-last (0 auto, else 1 + WE_ALIGN_*), text-justify none */
+    /* Lot 63: generated content. pseudo_kind marks a ::before/::after box
+     * (WE_PSEUDO_BEFORE/AFTER); the content, counter and quotes values
+     * keep their source span in the pool, validated when declared. */
+    uint8_t pseudo_kind, content_kind, quotes_kind;
+    uint16_t content_off, content_len, quotes_off, quotes_len;
+    uint16_t counter_off[3], counter_len[3];  /* counter-reset, -increment, -set */
     /* Lot 62: ol start / li value (list_value_set), ol reversed, ol type. */
     int16_t list_value;
     uint8_t list_value_set, list_reversed, list_type_attr;
@@ -284,6 +314,12 @@ typedef struct {
 enum { WE_SEL_DESC, WE_SEL_CHILD, WE_SEL_ADJACENT, WE_SEL_SIBLING };
 enum { WE_PSEUDO_FIRST = 1, WE_PSEUDO_LAST, WE_PSEUDO_ONLY, WE_PSEUDO_EMPTY,
        WE_PSEUDO_ROOT, WE_PSEUDO_NTH, WE_PSEUDO_NTH_LAST, WE_PSEUDO_TYPE, WE_PSEUDO_TYPE_LAST };
+/* Lot 63: generated content */
+enum { WE_PSEUDO_BEFORE = 1, WE_PSEUDO_AFTER = 2 };
+enum { WE_CONTENT_NONE, WE_CONTENT_LIST, WE_CONTENT_UA_OPEN, WE_CONTENT_UA_CLOSE };
+enum { WE_QUOTES_AUTO, WE_QUOTES_NONE, WE_QUOTES_LIST };
+#define WE_COUNTERS_MAX 16
+#define WE_CONTENT_TEXT_MAX 96
 enum { WE_ATTR_PRESENT, WE_ATTR_EQUAL, WE_ATTR_TOKEN, WE_ATTR_PREFIX, WE_ATTR_SUFFIX, WE_ATTR_CONTAINS };
 typedef struct {
     char name[8], value[32];
@@ -301,6 +337,7 @@ typedef struct {
     uint16_t spec;
     uint16_t order;
     uint16_t decl_off, decl_len;
+    uint8_t pseudo_el;  /* lot 63: 0 element, else WE_PSEUDO_BEFORE/AFTER */
 } we_rule_t;
 
 typedef struct {
@@ -332,6 +369,9 @@ typedef struct {
     int16_t root;
     /* Lot 61: explicit viewport and the scroll offset fixed boxes follow. */
     int16_t viewport_w, viewport_h, scroll_y;
+    /* Lot 63: node and pool counts before generated content, so a second
+     * we_style drops the generated boxes first. */
+    uint16_t source_nodes, source_pool;
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 

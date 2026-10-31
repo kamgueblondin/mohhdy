@@ -31,10 +31,10 @@ static void test_l61_resolve_wider_edge_wins_over_style(void) {
     TEST_ASSERT_EQUAL(3, lot52_node("t")->collapse_w);
     TEST_ASSERT_EQUAL(0xFF0000, (int)l61_paint(20, 7));      /* 3px dots every 6px */
     TEST_ASSERT_TRUE(l61_paint(20, 4) == 0xFFFFFFFFu);
-    /* b's 2px outer edge is centred in the 3px band. */
-    TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(37, 5));
+    /* lot 63: the last grid line has its own 2px band, filled by b's edge */
     TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(38, 5));
-    TEST_ASSERT_TRUE(l61_paint(39, 5) != 0x0000FF);
+    TEST_ASSERT_EQUAL(0x0000FF, (int)l61_paint(39, 5));
+    TEST_ASSERT_TRUE(l61_paint(37, 5) != 0x0000FF);
 }
 
 static void test_l61_resolve_hidden_suppresses_the_shared_edge(void) {
@@ -87,23 +87,25 @@ static void test_l61_resolve_row_group_boundary(void) {
     lot52_render(L61_C_OPEN "'><thead style='border-bottom:3px solid #00ff00'><tr><td id=a style='border:1px solid #ff0000;height:4px'></td></tr></thead>"
                  "<tbody><tr><td id=b style='border:1px solid #ff0000;height:4px'></td></tr></tbody></table></body>", 320);
     TEST_ASSERT_EQUAL(3, lot52_node("t")->collapse_w);
-    l61_box("a", 0, 0, 40, 9);                               /* 2 + 4 + 3 */
-    l61_box("b", 0, 6, 40, 9);                               /* 3 + 4 + 2 */
-    l61_rect_at(0, 6, 40, 3, 0x00FF00);
-    l61_rect_at(0, 1, 40, 1, 0xFF0000);
-    l61_rect_at(0, 13, 40, 1, 0xFF0000);
+    /* lot 63: bands per grid line: 1px outside, 3px at the group boundary */
+    l61_box("a", 0, 0, 40, 8);                               /* 1 + 4 + 3 */
+    l61_box("b", 0, 5, 40, 8);                               /* 3 + 4 + 1 */
+    l61_rect_at(0, 5, 40, 3, 0x00FF00);
+    l61_rect_at(0, 0, 40, 1, 0xFF0000);
+    l61_rect_at(0, 12, 40, 1, 0xFF0000);
 }
 
 static void test_l61_resolve_rowspan_has_no_inner_segment(void) {
     lot52_render(L61_C_OPEN "'><tr><td id=a rowspan=2 style='border:2px solid #ff0000'></td><td id=b style='border:1px solid #0000ff;height:6px'></td></tr>"
                  "<tr><td id=c style='border:1px solid #00ff00;height:6px'></td></tr></table></body>", 320);
-    l61_box("c", 19, 7, 21, 9);
+    /* lot 63: the b/c line keeps a 1px band, the right line 1px */
+    l61_box("c", 19, 8, 21, 8);
     TEST_ASSERT_TRUE(l61_paint(5, 6) == 0xFFFFFFFFu);        /* inside a */
     TEST_ASSERT_TRUE(l61_paint(5, 7) == 0xFFFFFFFFu);
     l61_rect_at(19, 8, 21, 1, 0x0000FF);                     /* b above c: upper wins */
     l61_rect_at(19, 0, 2, 16, 0xFF0000);                     /* a's right edge spans both rows */
     l61_rect_at(39, 0, 1, 9, 0x0000FF);
-    l61_rect_at(39, 7, 1, 9, 0x00FF00);
+    l61_rect_at(39, 8, 1, 8, 0x00FF00);
 }
 
 static void test_l61_resolve_edge_lists_map_four_sides(void) {
@@ -114,12 +116,12 @@ static void test_l61_resolve_edge_lists_map_four_sides(void) {
     TEST_ASSERT_EQUAL(3, lot52_node("a")->edge_style[2]);
     TEST_ASSERT_EQUAL(5, lot52_node("a")->edge_style[3]);
     TEST_ASSERT_EQUAL(4, lot52_node("t")->collapse_w);
-    l61_box("a", 0, 0, 40, 12);                              /* 3 + 6 + 3 */
-    l61_rect_at(0, 2, 40, 1, 0xFF0000);
-    l61_rect_at(0, 9, 40, 3, 0x0000FF);
+    l61_box("a", 0, 0, 40, 10);                              /* lot 63: 1 + 6 + 3 */
+    l61_rect_at(0, 0, 40, 1, 0xFF0000);
+    l61_rect_at(0, 7, 40, 3, 0x0000FF);
     l61_rect_at(0, 0, 4, 8, 0xFFFF00);                       /* dashed: 8px dash, then a gap */
-    l61_rect_at(37, 0, 2, 4, 0x00FF00);
-    l61_rect_at(37, 8, 2, 4, 0x00FF00);
+    l61_rect_at(38, 0, 2, 4, 0x00FF00);                      /* the right band is 2px */
+    l61_rect_at(38, 8, 2, 2, 0x00FF00);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
@@ -127,9 +129,9 @@ static void test_l61_resolve_one_edge_shorthand_keeps_others(void) {
     lot52_render(L61_C_OPEN "'><tr><td id=a style='border:1px solid #ff0000;border-bottom:3px #0000ff;height:6px'></td></tr></table></body>", 320);
     TEST_ASSERT_EQUAL(3, lot52_node("a")->edge_w[2]);
     TEST_ASSERT_EQUAL(-1, lot52_node("a")->edge_w[0]);
-    l61_box("a", 0, 0, 40, 11);                              /* 2 + 6 + 3 */
-    l61_rect_at(0, 1, 40, 1, 0xFF0000);
-    l61_rect_at(0, 8, 40, 3, 0x0000FF);
+    l61_box("a", 0, 0, 40, 10);                              /* lot 63: 1 + 6 + 3 */
+    l61_rect_at(0, 0, 40, 1, 0xFF0000);
+    l61_rect_at(0, 7, 40, 3, 0x0000FF);
     /* A later border shorthand resets every edge. */
     lot52_render(L61_C_OPEN "'><tr><td id=a style='border-bottom:3px #0000ff;border:1px solid #ff0000;height:6px'></td></tr></table></body>", 320);
     TEST_ASSERT_EQUAL(-1, lot52_node("a")->edge_w[2]);
@@ -193,13 +195,15 @@ static void test_l61_inset_odd_line_goes_after_the_grid_line(void) {
     lot52_render(L61_C_OPEN "'><tr><td id=a style='border:4px solid #ff0000;border-right:1px solid #ff0000'>A</td>"
                  "<td id=b style='border:4px solid #0000ff;border-left:1px solid #00ff00'>B</td></tr></table></body>", 320);
     TEST_ASSERT_EQUAL(4, lot52_node("t")->collapse_w);
-    l61_box("a", 0, 0, 22, 18);                              /* 4 + 10 + 4 */
-    l61_box("b", 18, 0, 22, 18);
-    l61_rect_at(20, 0, 1, 18, 0xFF0000);                     /* tie: left cell, at band + 2 */
+    /* lot 63: the middle line has a 1px band of its own (the odd split
+     * inside a wider band is in webeng_lot63_table.inc) */
+    l61_box("a", 0, 0, 21, 18);                              /* 4 + 16 + 1 */
+    l61_box("b", 20, 0, 20, 18);
+    l61_rect_at(20, 0, 1, 18, 0xFF0000);                     /* tie: left cell */
     l61_text_at("A", 4, 5);
     l61_text_at("B", 21, 5);                                 /* right after the 1px line */
-    TEST_ASSERT_EQUAL(2, lot52_node("a")->cin[1]);
-    TEST_ASSERT_EQUAL(3, lot52_node("b")->cin[3]);
+    TEST_ASSERT_EQUAL(1, lot52_node("a")->cin[1]);
+    TEST_ASSERT_EQUAL(1, lot52_node("b")->cin[3]);
 }
 
 static void test_l61_inset_full_band_line_is_cleared_on_both_sides(void) {

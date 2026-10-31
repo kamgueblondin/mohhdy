@@ -260,7 +260,7 @@ static void test_l55_visibility_invalid_preserves_hidden(void) {
 }
 
 static void test_l55_clip_invalid_overflow_preserves_hidden(void) {
-    lot52_render("<body style='margin:0'><div id=p style='width:20px;height:10px;overflow:hidden;overflow:scroll'>"
+    lot52_render("<body style='margin:0'><div id=p style='width:20px;height:10px;overflow:hidden;overflow:scrolling'>"
         "<div style='width:40px;height:20px;background:red'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(1, lot52_node("p")->overflow_hidden);
     TEST_ASSERT_EQUAL(20, g_doc.items[0].w);

@@ -126,7 +126,7 @@ static void test_l59_composition_anywhere_uses_float_band(void) {
 }
 
 static void test_l59_composition_word_break_invalid_keeps_previous(void) {
-    lot52_render("<body style='margin:0'><div id=a style='width:24px;word-break:break-all;word-break:keep-all'>abcdefgh</div></body>", 320);
+    lot52_render("<body style='margin:0'><div id=a style='width:24px;word-break:break-all;word-break:keep-everything'>abcdefgh</div></body>", 320);
     TEST_ASSERT_EQUAL(30, lot52_node("a")->h);
     TEST_ASSERT_EQUAL(8, lot52_node("a")->min_content);
     TEST_ASSERT_EQUAL(1, lot52_node("a")->break_all);

@@ -44,7 +44,7 @@ static void test_l55_text_nowrap_br_still_breaks(void) {
 }
 
 static void test_l55_text_invalid_white_space_keeps_nowrap(void) {
-    lot52_render("<body style='margin:0'><div id=a style='width:24px;white-space:nowrap;white-space:break-spaces'>one two</div></body>", 320);
+    lot52_render("<body style='margin:0'><div id=a style='width:24px;white-space:nowrap;white-space:break-everything'>one two</div></body>", 320);
     TEST_ASSERT_EQUAL(1, lot52_node("a")->nowrap);
     TEST_ASSERT_EQUAL(10, lot52_node("a")->h);
     TEST_ASSERT_NOT_NULL(find_text("one two"));

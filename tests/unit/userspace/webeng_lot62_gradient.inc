@@ -86,7 +86,7 @@ static void test_l62_gradient_refusals(void) {
                  "background:linear-gradient(red, , blue);background:linear-gradient(red, blue 120%);"
                  "background-image:url(x.png)'></div></body>", 320);
     TEST_ASSERT_EQUAL(3, l61_diag_count("gradient refused"));
-    TEST_ASSERT_EQUAL(1, l61_diag_count("background image refused"));
+    TEST_ASSERT_EQUAL(1, l61_diag_count("image local path refused"));   /* lot 63: url() parses, x.png is relative */
     TEST_ASSERT_EQUAL(0, lot52_node("a")->grad_dir);
     TEST_ASSERT_EQUAL(0, (int)g_doc.nitems);
 }

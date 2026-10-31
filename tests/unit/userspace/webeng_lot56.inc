@@ -554,9 +554,10 @@ static void test_l56_normal_resets_pre(void) {
 }
 
 static void test_l56_tab_in_pre_is_one_space(void) {
+    /* lot 63: a preserved tab now reaches the next tab stop (8 spaces) */
     lot52_render("<body style='margin:0'><pre id=p>a\tb</pre></body>", 320);
-    TEST_ASSERT_NOT_NULL(find_text("a b"));
-    TEST_ASSERT_EQUAL(24, find_text("a b")->w);
+    TEST_ASSERT_NOT_NULL(find_text("a       b"));
+    TEST_ASSERT_EQUAL(72, find_text("a       b")->w);
     TEST_ASSERT_EQUAL(10, lot52_node("p")->h);
 }
 
