@@ -92,7 +92,7 @@ int osui_tool_cmd_allowed(const char *cmd) {
  * window must stay responsive, so they stay in the terminal. */
 static const char *const k_term_only[] = {
     "gui", "gui-exit", "console", "exit", "quit", "logout", "clear", "cls", "top", "edit", "nano", "vi",
-    "pm-ide", "reboot", "shutdown", "halt", "poweroff", "login", "su", "passwd", "sh", "shell", "run",
+    "pm-ide", "pm-edit", "reboot", "shutdown", "halt", "poweroff", "login", "su", "passwd", "sh", "shell", "run",
     "exec", "watch", "sleep", "read", "osui-start", "osui-run", "osui-session", "osui", "ai-chat",
     "ai-repl", "chat", "screen-mode", "kbd-test", "mouse-test", "serial-console", "p2p-chat", 0
 };

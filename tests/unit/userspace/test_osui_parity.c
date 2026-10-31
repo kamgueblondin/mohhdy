@@ -8,6 +8,7 @@
 #include "mohhdy_osui_bridge.h"
 #include "os_syscalls.h"
 #include <string.h>
+#include <stdio.h>
 
 #define K_UP 30
 #define K_DOWN 31
@@ -242,6 +243,45 @@ static void test_lot51_entries(void) {
     TEST_ASSERT_EQUAL(-1, osui_par_build(e, "", out, (int)sizeof(out)));
 }
 
+/* Lot 65 (US-G19..US-G24): every registry command of the pm-, task-,
+ * child-, p2p- and collab- families (plus kill, kill-children, children)
+ * is an entry of a desktop panel, unless it is terminal-only for the GUI
+ * rights model or in the short list below, each with its reason. */
+static int in_panel(const char *name) {
+    int i, k;
+    char n2[40];
+    for (i = 0; i < osui_par_family_count; i++)
+        for (k = 0; k < osui_par_families[i].count; k++) {
+            osui_par_cmd_name(&osui_par_families[i].entries[k], n2, (int)sizeof(n2));
+            if (!strcmp(n2, name)) return 1;
+        }
+    return 0;
+}
+static void test_lot65_families_complete(void) {
+    static const char *const prefix[] = { "pm-", "task-", "child-", "p2p-", "collab-", 0 };
+    static const char *const extra[] = { "kill", "kill-children", "children", 0 };
+    /* blocking until a child exits / attack test hook */
+    static const char *const off[] = { "wait", "wait-result", "wait-any-result", "collab-forge", 0 };
+    int i, j, checked = 0, missing = 0;
+    for (i = 0; i < MOHHDY_SHELL_COMMAND_COUNT; i++) {
+        const char *c = mohhdy_shell_commands[i];
+        int want = 0, skip = 0;
+        for (j = 0; prefix[j]; j++) if (!strncmp(c, prefix[j], strlen(prefix[j]))) want = 1;
+        for (j = 0; extra[j]; j++) if (!strcmp(c, extra[j])) want = 1;
+        for (j = 0; off[j]; j++) if (!strcmp(c, off[j])) skip = 1;
+        if (!want || skip || osui_tool_cmd_check(c, reg_known) == OSUI_CMD_TERMINAL) continue;
+        checked++;
+        if (!in_panel(c)) { printf("  not in a panel: %s\n", c); missing++; }
+    }
+    TEST_ASSERT_EQUAL(0, missing);
+    TEST_ASSERT(checked >= 100);
+    /* the line editors and the chat loop stay in the terminal */
+    TEST_ASSERT_EQUAL(OSUI_CMD_TERMINAL, osui_tool_cmd_check("pm-edit a.pm", reg_known));
+    TEST_ASSERT_EQUAL(OSUI_CMD_TERMINAL, osui_tool_cmd_check("pm-ide a.pm", reg_known));
+    TEST_ASSERT_EQUAL(OSUI_CMD_TERMINAL, osui_tool_cmd_check("p2p-chat", reg_known));
+    TEST_ASSERT(!in_panel("collab-forge"));
+}
+
 static void type(const char *s) { while (*s) osui_tool_key(&t, *s++, &k_src); }
 
 static void test_panel_menu_run_and_back(void) {
@@ -348,6 +388,7 @@ int main(void) {
     RUN_TEST(test_lot46_entries);
     RUN_TEST(test_lot50_entries);
     RUN_TEST(test_lot51_entries);
+    RUN_TEST(test_lot65_families_complete);
     RUN_TEST(test_panel_menu_run_and_back);
     RUN_TEST(test_panel_arg_and_confirm);
     RUN_TEST(test_search_and_generic_cmd);

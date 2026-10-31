@@ -188,6 +188,23 @@ static const osui_par_entry_t k_pm[] = {
     { "Traduire (C99 ou Python)", "pm-cross", A, "FICHIER [py]" },
     { "Tester", "pm-test", A, "FICHIER.pm" },
     { "Versions", "pm-versions", A, "FICHIER.pm" },
+    /* Lot 65 (US-G19): the rest of the pm-* family. pm-ide and pm-edit
+     * are the line editor (keyboard loop): terminal-only. */
+    { "Version d'un programme", "pm-version", A, "FICHIER.pm" },
+    { "Executer un programme", "pm-run", A, "FICHIER.pm" },
+    { "Tracer / point d'arret", "pm-debug", A, "FICHIER.pm [LIGNE]" },
+    { "Dire une phrase au programme charge", "pm-say", A, "PHRASE" },
+    { "Compiler en image PMC1", "pm-compile", A | M, "SOURCE SORTIE" },
+    { "Executer une image PMC1", "pm-exec", A, "IMAGE" },
+    { "Installer depuis le catalogue", "pm-install", A | M, "NOM" },
+    { "Recuperer du catalogue", "pm-catalog-fetch", A | M, "NOM" },
+    { "Certifier un programme", "pm-certify", A | M, "FICHIER.pm" },
+    { "Verifier un certificat", "pm-verify", A, "FICHIER.pm" },
+    { "Creer la CA locale", "pm-ca-init", M, 0 },
+    { "Etat du scellement de la CA", "pm-ca-seal", 0, 0 },
+    { "Signer avec la CA", "pm-ca-sign", A | M, "FICHIER.pm" },
+    { "Verifier une signature CA", "pm-ca-verify", A, "FICHIER.pm" },
+    { "Revoquer un certificat", "pm-ca-revoke", A | M, "FICHIER.pm" },
 };
 static const osui_par_entry_t k_proc[] = {
     { "Liste des processus", "ps", 0, 0 },
@@ -202,6 +219,28 @@ static const osui_par_entry_t k_proc[] = {
     { "Changer la priorite", "task-priority", A | M, "PID 1|2|3" },
     { "Suspendre un enfant", "task-suspend", A | M, "PID" },
     { "Reprendre un enfant", "task-resume", A | M, "PID" },
+    /* Lot 65 (US-G20): every other task-* command. wait, wait-result and
+     * wait-any-result block until a child exits: they stay on /cmd. */
+    { "Resume des taches", "task-summary", 0, 0 },
+    { "Metriques d'une tache", "task-metrics", A, "PID" },
+    { "Un evenement", "task-event", A, "SEQUENCE" },
+    { "Rejouer un evenement", "task-event-replay", A, "SEQUENCE" },
+    { "Observer une generation", "task-events-observe", A, "GENERATION" },
+    { "Statistiques de notification", "task-events-notify-stats", 0, 0 },
+    { "Nommer une tache", "task-name", A | M, "PID NOM" },
+    { "Deleguer un enfant", "task-delegate", A | M, "PID_ENFANT PID_SUPERVISEUR" },
+    { "Priorite d'un enfant supervise", "task-priority-child", A | M, "PID|off" },
+    { "Notifications on/off", "task-events-notify", A | M, "on|off" },
+    { "Filtre des evenements", "task-events-filter", A | M, "all|exit|suspend|resume|delegate-out|delegate-in|none" },
+    { "Budget des evenements", "task-events-budget", A | M, "N|off" },
+    { "Surveiller une tache", "task-events-watch", A | M, "PID" },
+    { "Ne plus surveiller", "task-events-unwatch", A | M, "PID" },
+    { "Vider la surveillance", "task-events-watch-clear", M, 0 },
+    { "Oublier un evenement", "task-events-forget", A | M, "SEQUENCE" },
+    { "Vider les evenements", "task-events-clear", M, 0 },
+    { "Vider les stats de notification", "task-events-notify-stats-clear", M, 0 },
+    { "Arreter une tache", "kill", A | M, "PID" },
+    { "Arreter les enfants", "kill-children", M, 0 },
 };
 static const osui_par_entry_t k_p2pmesh[] = {
     { "Statistiques du maillage", "p2p-stats", 0, 0 },
@@ -213,6 +252,33 @@ static const osui_par_entry_t k_p2pmesh[] = {
     { "Etat du cache", "p2p-cache", 0, 0 },
     { "Magasin cle-valeur", "p2p-kv", 0, 0 },
     { "Ecrire dans le cache", "p2p-cache", A | M, "put CLE VALEUR" },
+    /* Lot 65 (US-G21): the node itself and every other p2p-* command, so
+     * the mesh is live from the panel. p2p-chat is a keyboard loop:
+     * terminal-only. */
+    { "Monter le noeud", "p2p-up", A | M, "NOM IP [CLE]" },
+    { "Arreter le noeud", "p2p-down", M, 0 },
+    { "Pairs", "p2p-peers", 0, 0 },
+    { "Sante", "p2p-health", 0, 0 },
+    { "Recevoir (poll)", "p2p-poll", A, "SECONDES" },
+    { "Envoyer un message", "p2p-send", A | M, "PAIR TEXTE" },
+    { "Ecrire une cle repliquee", "p2p-put", A | M, "CLE VALEUR" },
+    { "Lire une cle", "p2p-get", A, "CLE" },
+    { "Synchroniser avec un pair", "p2p-sync", A | M, "PAIR" },
+    { "Proposer (consensus)", "p2p-propose", A | M, "CLE VALEUR" },
+    { "Ecrire par Raft", "p2p-raft-put", A | M, "CLE VALEUR" },
+    { "Compacter le journal Raft", "p2p-raft-compact", M, 0 },
+    { "Lire le cache", "p2p-cache get", A, "CLE" },
+    { "Invalider (versionne, acquitte)", "p2p-cache inv", A | M, "CLE [VERSION]" },
+    { "Remplir avec une version", "p2p-cache putv", A | M, "CLE VALEUR VERSION" },
+    { "Ecrire par le journal Raft", "p2p-cache raft", A | M, "CLE VALEUR" },
+    { "Sonde STUN vers un pair", "p2p-stun", A | M, "PAIR" },
+    { "Percage NAT (simule)", "p2p-punch", A | M, "PAIR" },
+    { "Appel gRPC sur le maillage", "p2p-grpc", A | M, "PAIR SERVICE METHODE [CHARGE]" },
+    { "Limite de debit", "p2p-limit", A | M, "N (0: aucune)" },
+    { "Rafale lissee", "p2p-burst", A | M, "PAIR N [TEXTE]" },
+    { "Inondation (test d'analyse)", "p2p-flood", A | M, "PAIR N" },
+    { "Bloquer un pair", "p2p-block", A | M, "PAIR" },
+    { "Debloquer un pair", "p2p-unblock", A | M, "PAIR" },
 };
 
 /* Lot 51: commands that were only reachable through /cmd.
@@ -236,6 +302,35 @@ static const osui_par_entry_t k_release[] = {
 static const osui_par_entry_t k_keys[] = {
     { "Cles connues du registre", "collab-keys", 0, 0 },
     { "Deployer un contrat", "collab-contract-deploy", A | M, "BENEFICIAIRE ARBITRE|none MONTANT PROGRAMME" },
+    /* Lot 65 (US-G24): every collab-* command not in /ledger. collab-forge
+     * is the forged-transfer attack hook of the tests: it stays on /cmd. */
+    { "Offres", "collab-offers", 0, 0 },
+    { "Votes", "collab-votes", 0, 0 },
+    { "Escrows et contrats", "collab-escrows", 0, 0 },
+    { "Encheres", "collab-auctions", 0, 0 },
+    { "Tickets", "collab-tickets", 0, 0 },
+    { "Exporter le registre", "collab-export", 0, 0 },
+    { "Rejoindre le registre", "collab-join", M, 0 },
+    { "Resynchroniser", "collab-sync", M, 0 },
+    { "Payer", "collab-pay", A | M, "PAIR MONTANT" },
+    { "Reserver une offre", "collab-reserve", A | M, "VENDEUR SEQ" },
+    { "Publier une tache", "collab-task", A | M, "PRIX sum N|primes N|fnv TEXTE" },
+    { "Prendre une tache", "collab-claim", A | M, "AUTEUR SEQ" },
+    { "Calculer une tache", "collab-work", A | M, "AUTEUR SEQ" },
+    { "Verifier un resultat", "collab-review", A | M, "SEQ" },
+    { "Noter un pair", "collab-rate", A | M, "PAIR NOTE" },
+    { "Proposer", "collab-propose", A | M, "TEXTE" },
+    { "Profil", "collab-profile", A | M, "show PAIR | set CLE VALEUR shared|private" },
+    { "Ouvrir un ticket", "collab-ticket", A | M, "TEXTE" },
+    { "Repondre a un ticket", "collab-answer", A | M, "AUTEUR SEQ TEXTE" },
+    { "Signer un contrat", "collab-signoff", A | M, "PAYEUR SEQ" },
+    { "Rembourser un escrow", "collab-escrow-refund", A | M, "PAYEUR SEQ" },
+    { "Ouvrir un litige", "collab-dispute-open", A | M, "PAYEUR SEQ PREUVE" },
+    { "Voter un litige", "collab-dispute-vote", A | M, "PAYEUR SEQ payer|payee" },
+    { "Ouvrir une enchere", "collab-auction", A | M, "OBJET RESERVE" },
+    { "Encherir", "collab-market-bid", A | M, "VENDEUR SEQ MONTANT" },
+    { "Clore une enchere", "collab-auction-close", A | M, "SEQ" },
+    { "Oublier mes entrees locales", "collab-forget", M, 0 },
 };
 
 const osui_par_builtin_t osui_par_builtins[] = {

@@ -399,6 +399,61 @@ def driver_respawn(monitor, proc):
     g.wait_for(proc, "osui tool close app=Commande", g.CMD_TIMEOUT, start)
 
 
+def entry_index(slash_name, cmd):
+    """Index of the first menu entry of a panel for cmd, read from the
+    table in userspace/osui_parity.c (the menu shows one line per entry)."""
+    import re
+    src = open(os.path.join(g.ROOT, "userspace", "osui_parity.c")).read()
+    table = {"/proc": "k_proc", "/mesh": "k_p2pmesh", "/keys": "k_keys", "/pm": "k_pm", "/child": "k_child"}[slash_name]
+    body = src[src.index("static const osui_par_entry_t %s[] = {" % table):]
+    body = body[:body.index("\n};")]
+    cmds = re.findall(r'\{ "[^"]*", "([^"]+)",', body)
+    return cmds.index(cmd)
+
+
+def run_entry(monitor, proc, sl, title, cmd, arg, frag, mutating=False):
+    slash(monitor, proc, sl, "osui tool open app=" + title)
+    for _ in range(entry_index(sl, cmd)):
+        key(monitor, "down")
+    if arg:
+        type_text(monitor, arg)
+    start = len(g.log_text())
+    key(monitor, "ret")
+    full = cmd + (" " + arg if arg else "")
+    if mutating:
+        g.wait_for(proc, "osui panel armed cmd=" + full, g.CMD_TIMEOUT, start)
+        if "osui panel run cmd=" + full in g.log_text()[start:]:
+            raise RuntimeError("%s ran without confirmation" % full)
+        key(monitor, "ret")
+    g.wait_for(proc, "osui panel run cmd=" + full, g.CMD_TIMEOUT, start)
+    g.wait_for(proc, "osui panel out=", g.CMD_TIMEOUT, start)
+    out = g.normalized_log(g.log_text()[start:])
+    if frag not in out:
+        raise RuntimeError("%s: real output of %s missing (%r): %s" % (sl, full, frag, out[-600:]))
+    say("%s entry %s ran through the shell (real output %r)" % (sl, full, frag))
+    close_panel(monitor, proc, title)
+
+
+LOT65 = [
+    # (slash, title, cmd, arg, fragment of the real output, mutating)
+    ("/proc", "Processus", "task-summary", "", "task-summary ok ", False),
+    ("/proc", "Processus", "task-events-notify", "on", "task-events-notify ok on", True),
+    ("/pm", "Outils PM", "pm-version", "/pm/hello.pm", "pm-version ok /pm/hello.pm.v1 checksum ", False),
+    ("/pm", "Outils PM", "pm-run", "/pm/hello.pm", "pm-run ok line ", False),
+    ("/mesh", "Maillage P2P", "p2p-peers", "", "p2p-peers error p2p down", False),
+    ("/keys", "Cles collab", "collab-offers", "", "collab-offers error p2p down", False),
+    ("/keys", "Cles collab", "collab-join", "", "collab-join error p2p down", True),
+]
+
+
+def lot65_entries(monitor, proc):
+    """Lot 65 (US-G19..US-G24): entries added to complete the families run
+    from their panel through the shell, read-only ones on one Enter,
+    state-changing ones armed first."""
+    for row in LOT65:
+        run_entry(monitor, proc, *row)
+
+
 def main():
     os.makedirs(g.LOG_DIR, exist_ok=True)
     for path in (g.LOG, g.MON_SOCK, g.QMP_SOCK):
@@ -423,6 +478,7 @@ def main():
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             help_window(monitor, proc)
             families(monitor, proc)
+            lot65_entries(monitor, proc)
             grpc(monitor, proc)
             devsync(monitor, proc)
             ledger_form(monitor, proc)

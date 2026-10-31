@@ -1638,3 +1638,14 @@ Lot 47 (`docs/lot47_plan.md`, PR #204):
   `make qemu-p2p-phase5`: US-069, US-070, US-075 done, US-068/073 partial.
 - Lot 49 (branch cursor/lot49): US-120 done, `roadmap-check` compares the
   phase 6-8 statuses with the new US master table. See docs/lot49_plan.md.
+
+## Lot 65 (GUI panels cover whole command families)
+
+- Every registry command of the pm-, task-, child-, p2p- and collab-
+  families is a desktop panel entry (unit test
+  test_lot65_families_complete), except terminal-only commands and
+  wait/wait-result/wait-any-result (blocking) and collab-forge (test
+  attack hook). pm-edit is now terminal-only like pm-ide.
+- US-G19, US-G20, US-G21, US-G22, US-G24 done; US-G23 partial.
+  `make qemu-gui-mesh`: a live P2P node and collab ledger driven from
+  /mesh and /keys only. Details: docs/lot65_plan.md.
