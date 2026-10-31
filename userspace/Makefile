@@ -4,6 +4,7 @@ LD = ld
 AS = as
 
 CFLAGS = -m32 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -I../kernel -I../include
+CFLAGS += -MMD -MP
 LDFLAGS = -nostdlib -Ttext=0x40000000
 ASFLAGS = --32
 
@@ -249,6 +250,8 @@ start.o: start.s
 
 clean:
 	@echo "Cleaning userspace..."
-	rm -f *.o $(PROGRAMS)
+	rm -f *.o *.d $(PROGRAMS)
 ipc_wait_server.o ipc_wait_poke.o pci_driver.o pci_rogue.o ps2_driver.o serial_driver.o vga_driver.o usb_driver.o dev_rogue.o: ipc_wait_common.h
 ps2_driver.o ps2_decode.o: ps2_decode.h
+
+-include $(wildcard *.d)

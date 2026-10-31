@@ -64,7 +64,7 @@ static void test_command_panes_and_browser(void) {
     /* browser: files of /web (the mock lists bin/ and readme.txt) */
     n = osui_panes_fill(OS_FB_PANE_BROWSER, &s, L, 14);
     TEST_ASSERT_EQUAL(2, n);
-    TEST_ASSERT_EQUAL_STRING("Pages locales /web : tapez web-render /web/<page>", L[0]);
+    TEST_ASSERT_EQUAL_STRING("Barre d'adresse en haut : URL ou mots. Pages /web :", L[0]);
     TEST_ASSERT_EQUAL_STRING("  /web/readme.txt  1234 o", L[1]);
 }
 

@@ -1095,6 +1095,7 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
 
     /* Lot 69 (US-080): screen EDID while Ring 0 still owns PCI */
     (void)gfx_fb_probe_edid();
+    (void)gfx_fb_probe_fwcfg();   /* Lot 69: test harness ui-scale pin */
     /* Lot 4 (US-001): PCI enumeration moves to the Ring 3 pcidriver. The
      * early boot probes above (USB tablet, NE2000) still ran in Ring 0;
      * once the worker publishes, Ring 0 config reads are refused. */

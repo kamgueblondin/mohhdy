@@ -32,7 +32,7 @@ def boot():
         except OSError:
             pass
     command = [
-        "qemu-system-i386", "-kernel", os.path.join(tw.ROOT, "build", "mohhdy.bin"),
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-kernel", os.path.join(tw.ROOT, "build", "mohhdy.bin"),
         "-initrd", os.path.join(tw.ROOT, "my_initrd_test.tar"), "-cpu", "max", "-m", "1024M",
         "-display", "none", "-vga", "none", "-serial", "file:" + tw.LOG,
         "-monitor", "unix:%s,server,nowait" % tw.MON, "-machine", "type=pc,accel=tcg",

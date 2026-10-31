@@ -57,7 +57,7 @@ def start_node(label, mac, name, ip, hub_port, with_disk=True):
         except OSError:
             pass
     command = [
-        "qemu-system-i386", "-cpu", "max",
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", "max",
         "-kernel", os.path.join(ROOT, "build", "mohhdy.bin"), "-initrd", os.path.join(ROOT, "my_initrd_test.tar"),
         "-m", "1024M", "-display", "none", "-vga", "none",
         "-serial", "file:" + node["log"],

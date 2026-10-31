@@ -99,7 +99,7 @@ def terminate(proc):
 
 def qemu_cmd():
     return [
-        "qemu-system-i386", "-cpu", "pentium3", "-kernel", KERNEL,
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", "pentium3", "-kernel", KERNEL,
         "-initrd", INITRD, "-m", "1024M", "-display", "none", "-vga", "none",
         "-serial", "file:" + LOG, "-monitor", "unix:%s,server,nowait" % MON_SOCK,
         "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",

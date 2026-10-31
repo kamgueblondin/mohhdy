@@ -141,7 +141,7 @@ def summarize(values):
 def qemu_kvm_argv(log, monitor_path):
     """Multiboot guest (-kernel/-initrd) under QEMU KVM only."""
     return [
-        "qemu-system-i386", "-cpu", "pentium3", "-kernel", KERNEL,
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", "pentium3", "-kernel", KERNEL,
         "-initrd", INITRD, "-m", "1024M", "-display", "none", "-vga", "none",
         "-serial", "file:" + log, "-monitor", "unix:%s,server,nowait" % monitor_path,
         "-machine", "type=pc,accel=kvm", "-no-reboot", "-no-shutdown",

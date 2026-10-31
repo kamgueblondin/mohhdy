@@ -112,7 +112,7 @@ def main():
         cpu = os.environ.get("LOT67_CPU", "max")
         with open(os.devnull, "wb") as err:
             proc = subprocess.Popen([
-                "qemu-system-i386", "-cpu", cpu, "-kernel", g.KERNEL, "-initrd", g.INITRD, "-m", "1024M",
+                "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", cpu, "-kernel", g.KERNEL, "-initrd", g.INITRD, "-m", "1024M",
                 "-display", "none", "-vga", "std", "-serial", "file:" + g.LOG,
                 "-monitor", "unix:%s,server,nowait" % g.MON_SOCK, "-machine", "type=pc,accel=tcg",
                 "-no-reboot", "-no-shutdown",

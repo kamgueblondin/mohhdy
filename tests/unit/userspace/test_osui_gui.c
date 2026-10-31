@@ -616,7 +616,7 @@ static void test_gui_live_panes(void) {
     osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
     osui_gui_fill_scene(&g_scene);
     TEST_ASSERT_EQUAL(1, g_scene.pane_live);
-    TEST_ASSERT_EQUAL_STRING("Pages locales /web : tapez web-render /web/<page>", g_scene.term[0]);
+    TEST_ASSERT_EQUAL_STRING("Barre d'adresse en haut : URL ou mots. Pages /web :", g_scene.term[0]);
     feed_str("/center");
     osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
     osui_gui_fill_scene(&g_scene);
@@ -994,6 +994,68 @@ static void test_gui_web_links_history(void) {
     osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
 }
 
+/* Lot 69: a desktop click arrives as an event; it runs as its own line and
+ * the half-typed chat line stays (it used to become "//center"). */
+static void test_lot69_desktop_cmd_event_keeps_typed_line(void) {
+    setup();
+    osui_gui_set_input("");
+    feed_str("/browser\n");
+    TEST_ASSERT_EQUAL_STRING("float", osui_get_chat_mode());
+    feed_str("/");
+    TEST_ASSERT_EQUAL_STRING("/", osui_gui_input());
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_feed_key(OS_FB_EVT, g_out, (int)sizeof(g_out));
+    feed_str("cmd /center\n");
+    TEST_ASSERT_EQUAL_STRING("center", osui_get_chat_mode());
+    TEST_ASSERT_EQUAL_STRING("/", osui_gui_input());
+    TEST_ASSERT_NULL(strstr(g_out, "commande inconnue"));
+    osui_gui_set_input("");
+}
+
+/* Lot 69: in Browser-OS a line that is not a command goes to the address
+ * bar: words become a search, an URL is opened. */
+/* Lot 69: the shared close button of the full screen web window sends
+ * "cmd /center": it closes the page (keys alone go to the page) and keeps
+ * nothing typed into it. */
+static void test_lot69_full_window_close_event(void) {
+    setup();
+    osui_gui_set_ide_ops(fake_load, fake_save, fake_exec);
+    strcpy(g_fake_file, "<p>hi</p>");
+    g_fake_len = (int)strlen(g_fake_file);
+    osui_gui_set_input("");
+    feed_str("web t.html");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_active());
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_feed_key(OS_FB_EVT, g_out, (int)sizeof(g_out));
+    feed_str("cmd /center\n");
+    TEST_ASSERT_EQUAL(0, osui_gui_web_active());
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web close file=t.html"));
+    osui_gui_set_input("");
+}
+
+static void test_lot69_browser_pane_address_line(void) {
+    setup();
+    osui_gui_set_input("");
+    feed_str("/browser\n");
+    TEST_ASSERT_EQUAL_STRING("browser", osui_get_pane());
+    memset(g_out, 0, sizeof(g_out));
+    feed_str("hello world\n");
+    TEST_ASSERT_NULL(strstr(g_out, "commande inconnue"));
+    /* the search goes to the network loader (none on the host), not to a
+     * local file named "hello world" as "web hello world" would */
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web error=no_network_loader"));
+    TEST_ASSERT_NULL(strstr(g_out, "not_found"));
+    TEST_ASSERT_EQUAL_STRING("", osui_gui_input());
+    memset(g_out, 0, sizeof(g_out));
+    feed_str("/web/index.html\n");      /* a slash line stays a command */
+    TEST_ASSERT_NULL(strstr(g_out, "search:"));
+    memset(g_out, 0, sizeof(g_out));
+    feed_str("https://example.com/\n");
+    TEST_ASSERT_NULL(strstr(g_out, "search:"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_lot12_vfs_and_browser_inspection_views);
@@ -1003,6 +1065,9 @@ int main(void) {
     RUN_TEST(test_snap_center_and_float);
     RUN_TEST(test_snap_stage_kind);
     RUN_TEST(test_gui_feed_slash_and_esc);
+    RUN_TEST(test_lot69_desktop_cmd_event_keeps_typed_line);
+    RUN_TEST(test_lot69_browser_pane_address_line);
+    RUN_TEST(test_lot69_full_window_close_event);
     RUN_TEST(test_gui_esc_clears_input_first);
     RUN_TEST(test_gui_term_strips_ansi);
     RUN_TEST(test_gui_scene_llm_and_newest_messages);

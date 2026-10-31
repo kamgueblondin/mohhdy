@@ -5,7 +5,9 @@
 
 static void test_auto_scale_from_screen(void) {
     TEST_ASSERT_EQUAL(4, os_ui_auto_q(640, 480));
-    TEST_ASSERT_EQUAL(4, os_ui_auto_q(1024, 768));
+    TEST_ASSERT_EQUAL(6, os_ui_auto_q(1024, 768));   /* Lot 69: readable default */
+    TEST_ASSERT_EQUAL(6, os_ui_auto_q(1280, 800));
+    TEST_ASSERT_EQUAL(4, os_ui_auto_q(800, 600));
     TEST_ASSERT_EQUAL(6, os_ui_auto_q(1920, 1080));
     TEST_ASSERT_EQUAL(8, os_ui_auto_q(2560, 1440));
     TEST_ASSERT_EQUAL(12, os_ui_auto_q(3840, 2160));
@@ -53,6 +55,8 @@ static void test_state_zoom_and_viewport(void) {
     osui_scale_init(&s);
     TEST_ASSERT_EQUAL(0, s.ui_q);
     for (i = 0; i < OS_UI_Z_COUNT; i++) TEST_ASSERT_EQUAL(4, s.zoom[i]);
+    TEST_ASSERT_EQUAL(6, osui_scale_effective(&s, OS_UI_Z_WEB));   /* Lot 69: 1024x768 auto is 1.5x */
+    s.fb_w = 800; s.fb_h = 600;                                     /* a 1x screen for the zoom math */
     TEST_ASSERT_EQUAL(4, osui_scale_effective(&s, OS_UI_Z_WEB));
     TEST_ASSERT_EQUAL(5, osui_scale_zoom(&s, OS_UI_Z_WEB, 1));
     TEST_ASSERT_EQUAL(6, osui_scale_zoom(&s, OS_UI_Z_WEB, 1));

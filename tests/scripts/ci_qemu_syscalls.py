@@ -261,7 +261,7 @@ def main():
             pass
 
     cmd = [
-        "qemu-system-i386",
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4",
         "-kernel", KERNEL,
         "-initrd", INITRD,
         "-m", QEMU_MEMORY,
