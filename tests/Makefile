@@ -740,3 +740,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_crypto: $(UNIT_DIR)/userspace/test_wf
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_CRYPTO_SRCS) $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
+
+# Lot 67: X.509 / chain / root store
+WF_X509_SRCS = ../userspace/wf_x509.c $(WF_CRYPTO_SRCS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_x509: $(UNIT_DIR)/userspace/test_wf_x509.c $(UNIT_DIR)/userspace/wf_x509_fixtures.h $(UNIT_DIR)/userspace/wf_real_chain.h $(WF_X509_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_X509_SRCS) $(FRAMEWORK_SOURCES)
