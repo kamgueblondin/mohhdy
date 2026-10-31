@@ -119,8 +119,11 @@ const char* wf_guest_now(void) {
 /* ------------------------------------------------------------ roots */
 
 static wf_trust_t g_trust;
-static uint8_t g_der[72 * 1024];
-static char g_pem[64 * 1024];
+/* Lot 69: the PEM is decoded in place (DER is always shorter than its
+ * base64 and is written behind the read position), so the whole Mozilla
+ * set (about 222 KiB of PEM) costs one buffer. The test CA has its own. */
+static char g_pem[256 * 1024];
+static char g_test_pem[16 * 1024];
 static int g_roots_loaded, g_test_ca;
 
 static void load_roots(void) {
@@ -128,9 +131,10 @@ static void load_roots(void) {
     if (g_roots_loaded) return;
     g_roots_loaded = 1;
     n = sys3(SYS_READFILE, (uint32_t)"/etc/ca-roots.pem", (uint32_t)g_pem, sizeof(g_pem) - 1);
-    if (n > 0) wf_trust_add_pem(&g_trust, g_pem, n, g_der, (int)sizeof(g_der), &used);
-    n = sys3(SYS_READFILE, (uint32_t)"/etc/ca-test.pem", (uint32_t)g_pem, sizeof(g_pem) - 1);
-    if (n > 0 && wf_trust_add_pem(&g_trust, g_pem, n, g_der, (int)sizeof(g_der), &used) > 0) g_test_ca = 1;
+    if (n > 0) wf_trust_add_pem(&g_trust, g_pem, n, (uint8_t*)g_pem, n, &used);
+    used = 0;
+    n = sys3(SYS_READFILE, (uint32_t)"/etc/ca-test.pem", (uint32_t)g_test_pem, sizeof(g_test_pem) - 1);
+    if (n > 0 && wf_trust_add_pem(&g_trust, g_test_pem, n, (uint8_t*)g_test_pem, n, &used) > 0) g_test_ca = 1;
 }
 
 int wf_guest_roots(int* test_ca) {

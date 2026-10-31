@@ -134,6 +134,7 @@ static int send_record(wf_tls_t* t, int type, const uint8_t* body, int n, int en
     if (n > 16384) return -1;
     o[0] = (uint8_t)type; o[1] = 3; o[2] = 3;
     if (!enc) {
+        if (type == CT_HS && !t->version) o[2] = 1;   /* ClientHello record: legacy 0x0301 like every browser */
         put16(o + 3, n);
         mcpy(o + 5, body, n);
         return send_all(t, o, 5 + n);

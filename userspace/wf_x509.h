@@ -90,7 +90,7 @@ int wf_x509_host_match(const wf_cert_t* c, const char* host);
 int wf_x509_name_eq(const uint8_t* a, int alen, const uint8_t* b, int blen);
 
 /* ---- trust store and chain ---- */
-#define WF_TRUST_MAX 48
+#define WF_TRUST_MAX 160   /* Lot 69: the whole Mozilla TLS root set (148) */
 typedef struct {
     int count;
     wf_cert_t roots[WF_TRUST_MAX];
@@ -100,6 +100,7 @@ typedef struct {
 /* Decodes every -----BEGIN CERTIFICATE----- block of pem into der_out
  * (bounded) and adds the roots. The store points into der_out, which must
  * outlive it. Returns the number added (>= 0). */
+/* der_out may be the pem buffer itself (decoded in place, Lot 69). */
 int wf_trust_add_pem(wf_trust_t* t, const char* pem, int pem_len, uint8_t* der_out, int der_cap, int* der_used);
 /* Base64 decode of one block (whitespace skipped). Returns bytes or -1. */
 int wf_base64_decode(const char* in, int in_len, uint8_t* out, int cap);

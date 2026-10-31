@@ -53,8 +53,8 @@ static int h_rand(void* n, uint8_t* o, int len) {
 static void h_log(void* n, const char* l) { (void)n; printf("[fetch] %s\n", l); }
 
 static wf_trust_t g_trust;
-static uint8_t g_der[96 * 1024];
-static char g_pem[160 * 1024];
+static uint8_t g_der[256 * 1024];
+static char g_pem[320 * 1024];
 static uint8_t g_body[256 * 1024];
 
 int main(int argc, char** argv) {
