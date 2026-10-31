@@ -17,6 +17,10 @@ typedef struct osui_scale_s {
     int web_pw, web_ph, web_q;        /* web view size (screen px) and scale */
     uint32_t changes;                 /* bumps on every change (persist when dirty) */
     uint32_t saved_at;                /* changes value written last */
+    uint8_t font_mode;                /* Lot 69: 0 native fonts, 1 smoothed 8x8 */
+    /* Lot 69 (US-080): applied form-factor plan. chat_pref 0 = keep the
+     * runtime mode, 1 = full screen chat (phone); dock_left; compact_menu. */
+    uint8_t chat_pref, dock_left, compact_menu;
 } osui_scale_t;
 
 void osui_scale_init(osui_scale_t *s);
@@ -40,6 +44,10 @@ int osui_scale_load(osui_scale_t *s, const char *buf, int len);
  *   ui-scale                 show
  *   ui-scale auto|1|1.5|2|3|150%|+|-|0
  *   text-size [WINDOW] N|+|-|0
+ *   ui-font [native|smooth]       (Lot 69)
+ *   ui-layout [show|reset|dock left|bottom|menu compact|full|chat full|auto]  (Lot 69)
  * returns 0 on success, 1 on a usage error, -1 if not a scale command. */
+/* scene form bits (scale_pad[1]) */
+int osui_scale_form_bits(const osui_scale_t *s);
 int osui_scale_command(osui_scale_t *s, const char *line, char *out, int cap);
 #endif

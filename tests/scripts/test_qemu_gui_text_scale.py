@@ -61,6 +61,24 @@ def ink_runs(w, h, rgb, y0, y1, dark=False):
     return runs[len(runs) * 98 // 100], len(runs)
 
 
+def run_spread(w, h, rgb, y0, y1):
+    """Median and 99th percentile height of dark vertical glyph runs."""
+    runs = []
+    for x in range(0, w, 2):
+        run = 0
+        for y in range(y0, y1):
+            r, gg, b = px(rgb, w, x, y)
+            if r + gg + b < 150:
+                run += 1
+            elif run:
+                runs.append(run)
+                run = 0
+    runs = sorted(r for r in runs if 2 <= r <= 120)
+    if not runs:
+        return 0, 0
+    return runs[len(runs) // 2], runs[len(runs) * 99 // 100]
+
+
 def save_png(name, w, h, rgb):
     try:
         from PIL import Image
@@ -126,6 +144,28 @@ def main():
             g.send_command_until(monitor, "power-apply saver", "pace_cap_bps 64000", proc)
             g.send_command_until(monitor, "power-sim start 50000 50", "battery simule pct 50", proc)
             g.send_command_until(monitor, "power-apply performance", "pace_cap_bps 0", proc)
+            # Lot 69 (US-080): EDID physical size from the QEMU std VGA,
+            # then a tablet plan applied on screen (dock on the left)
+            if "[GFX] edid ok RHT" not in g.log_text():
+                raise RuntimeError("no EDID read at boot")
+            g.send_command_until(monitor, "display-info", "display physical ", proc)
+            g.send_command_until(monitor, "form-factor", "form-factor ok", proc)
+            g.send_command_until(monitor, "form-factor apply tablet 1024x768", "dock left", proc)
+            g.send_command_until(monitor, "ui-layout", "ui-layout ok chat auto dock left", proc)
+            w, h, _, _ = open_desktop(monitor, proc, "tablet-dock-left")
+            w, h, rgb = g.screendump_rgb(monitor, "qemu-gui-scale-tablet.ppm")
+            left = 0
+            for y in range(h // 4, h * 3 // 4):
+                for x in range(12, 48):
+                    r, gg, b = px(rgb, w, x, y)
+                    if abs(r - 61) < 12 and abs(gg - 154) < 12 and abs(b - 138) < 12:
+                        left += 1
+            g.say("tablet plan: dock tiles on the left %d px" % left)
+            if left < 1500:
+                raise RuntimeError("dock not on the left after form-factor apply tablet: %d" % left)
+            leave_desktop(monitor, proc)
+            g.send_command_until(monitor, "ui-layout reset", "ui-layout ok chat auto dock bottom menu full", proc)
+            g.send_command_until(monitor, "ui-scale 1", "ui-scale ok global 1x", proc)
             _, _, bar1, run1 = open_desktop(monitor, proc, "1x")
             leave_desktop(monitor, proc)
             g.send_command_until(monitor, "ui-scale 2", "char 16px", proc)
@@ -177,7 +217,29 @@ def main():
             g.send_key(monitor, "esc")
             g.wait_for(proc, "osui web close", g.CMD_TIMEOUT, start)
             time.sleep(0.5)
+            # Lot 69: per-element font-size. The page has h1 (2em), 1.5em,
+            # 48 px and 16 px text: the tallest glyph runs must be well
+            # above the body text runs on screen.
+            g.send_command_until(monitor, "web /web/lot69.html", "osui web render file=/web/lot69.html", proc,
+                                 mode="getc", wait_prompt=False)
+            time.sleep(2.0)
+            w, h, rgb = g.screendump_rgb(monitor, "qemu-gui-scale-fonts.ppm")
+            save_png("web-font-size-2x.png", w, h, rgb)
+            small, big = run_spread(w, h, rgb, 90, h - 40)
+            g.say("web font-size runs median=%d tallest=%d" % (small, big))
+            if small == 0 or big < small * 2:
+                raise RuntimeError("CSS font-size not visible on screen: median %d tallest %d" % (small, big))
+            start = len(g.log_text())
+            g.send_key(monitor, "esc")
+            g.wait_for(proc, "osui web close", g.CMD_TIMEOUT, start)
+            time.sleep(0.5)
             leave_desktop(monitor, proc)
+            # Lot 69: native fonts vs the smoothed 8x8 upscale, saved with the scale
+            g.send_command_until(monitor, "ui-font smooth", "ui-font ok smooth", proc)
+            g.send_command_until(monitor, "cat /persist/ui.cfg", "font=1", proc)
+            _, _, _, run_smooth = open_desktop(monitor, proc, "2x-smooth")
+            leave_desktop(monitor, proc)
+            g.send_command_until(monitor, "ui-font native", "ui-font ok native", proc)
             g.send_command_until(monitor, "ui-scale 1", "ui-scale ok global 1x", proc)
             g.send_command_until(monitor, "text-size chat 0", "text-size ok chat", proc)
         g.say("QEMU GUI text scale contract passed (menu glyph %d->%d, glyph %d->%d)." % (bar1, bar2, run1, run2))

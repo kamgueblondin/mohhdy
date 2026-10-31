@@ -3,6 +3,7 @@
 #include "imgdec.h"
 /* Lot 61: the kernel 8x8 font, shared read-only for partial glyph clipping. */
 #include "../kernel/gfx_font8.h"
+#include "../include/os_ui_scale.h"
 
 /* ---------- small helpers (no libc) ---------- */
 static int w_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }
@@ -3576,6 +3577,110 @@ static int white_space_longhand(we_node_t *n, const char *prop, const char *v, i
     return 0;
 }
 
+
+/* Lot 69: font-size. Absolute keywords follow the CSS table around the
+ * 16 px medium; smaller/larger step by 1.2; em, % and unitless-free
+ * numbers resolve against the parent, rem against the 16 px root. */
+int we_font_q(int font_px) {
+    int q;
+    if (font_px <= 0) return OS_UI_Q1;
+    q = (font_px + 2) / 4;
+    if (q < 4) q = 4;
+    if (q > 16) q = 16;
+    return q;
+}
+
+static int font_clamp(int px) {
+    if (px < WE_FONT_PX_MIN) px = WE_FONT_PX_MIN;
+    if (px > WE_FONT_PX_MAX) px = WE_FONT_PX_MAX;
+    return px;
+}
+
+/* decimal "12", "1.5", ".75": value * 1000, -1 when not a number */
+static int font_milli(const char *v, int n) {
+    int i = 0, whole = 0, frac = 0, scale = 1000, digits = 0;
+    while (i < n && v[i] >= '0' && v[i] <= '9') {
+        if (whole > 10000) return -1;
+        whole = whole * 10 + (v[i] - '0'); i++; digits++;
+    }
+    if (i < n && v[i] == '.') {
+        i++;
+        while (i < n && v[i] >= '0' && v[i] <= '9') {
+            if (scale > 1) { scale /= 10; frac += (v[i] - '0') * scale; }
+            i++; digits++;
+        }
+    }
+    if (!digits || i != n) return -1;
+    return whole * 1000 + frac;
+}
+
+int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px) {
+    static const char *const kw[] = { "xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large", 0 };
+    static const uint8_t kpx[] = { 9, 10, 13, 16, 18, 24, 32, 48 };
+    char low[16];
+    int i, m, unit = 0;
+    if (parent_px <= 0) parent_px = WE_FONT_PX_DEFAULT;
+    while (vl > 0 && (v[0] == ' ' || v[0] == '\t')) { v++; vl--; }
+    while (vl > 0 && (v[vl - 1] == ' ' || v[vl - 1] == '\t')) vl--;
+    if (vl <= 0 || vl >= (int)sizeof(low)) return -1;
+    for (i = 0; i < vl; i++) low[i] = (char)((v[i] >= 'A' && v[i] <= 'Z') ? v[i] + 32 : v[i]);
+    low[vl] = 0;
+    for (i = 0; kw[i]; i++) {
+        if (w_eq(low, kw[i])) { *out_px = kpx[i]; return 0; }
+    }
+    if (w_eq(low, "smaller")) { *out_px = font_clamp((parent_px * 5 + 3) / 6); return 0; }
+    if (w_eq(low, "larger")) { *out_px = font_clamp((parent_px * 6 + 2) / 5); return 0; }
+    if (vl > 3 && low[vl - 3] == 'r' && low[vl - 2] == 'e' && low[vl - 1] == 'm') { unit = 3; vl -= 3; }
+    else if (vl > 2 && low[vl - 2] == 'p' && low[vl - 1] == 'x') { unit = 1; vl -= 2; }
+    else if (vl > 2 && low[vl - 2] == 'e' && low[vl - 1] == 'm') { unit = 2; vl -= 2; }
+    else if (vl > 2 && low[vl - 2] == 'p' && low[vl - 1] == 't') { unit = 5; vl -= 2; }
+    else if (vl > 1 && low[vl - 1] == '%') { unit = 4; vl -= 1; }
+    else if (w_eq(low, "0")) return -1;
+    if (!unit) return -1;
+    m = font_milli(low, vl);
+    if (m <= 0) return -1;
+    if (unit == 1) i = (m + 500) / 1000;
+    else if (unit == 2) i = (parent_px * m + 500) / 1000;
+    else if (unit == 3) i = (WE_FONT_PX_DEFAULT * m + 500) / 1000;
+    else if (unit == 5) i = (m * 4 / 3 + 500) / 1000;
+    else i = (parent_px * m + 50000) / 100000;
+    if (i <= 0) return -1;
+    *out_px = font_clamp(i);
+    return 0;
+}
+
+static int node_q(const we_doc_t *d, int node) {
+    return we_font_q(d->nodes[node].font_px);
+}
+static int node_cw(const we_doc_t *d, int node) { return os_ui_char_w(node_q(d, node)); }
+static int node_gh(const we_doc_t *d, int node) { return os_ui_px(8, node_q(d, node)); }
+/* used line height of a node: explicit px, unitless * font, or normal */
+static int node_lh(const we_doc_t *d, int node) {
+    const we_node_t *n = &d->nodes[node];
+    int q = node_q(d, node);
+    if (n->line_height > 0) return n->lh_unitless ? (n->line_height * q + 2) / 4 : n->line_height;
+    return os_ui_line_h(q);
+}
+/* a block's line box height: its own, raised by any larger inline text
+ * inside it (inline descendants only; boxes start their own flow) */
+static int flow_line_h(const we_doc_t *d, int idx) {
+    int best = node_lh(d, idx), stack[16], sp = 0, c;
+    c = d->nodes[idx].first;
+    while (c >= 0 || sp > 0) {
+        if (c < 0) { c = stack[--sp]; c = d->nodes[c].next; continue; }
+        {
+            const we_node_t *n = &d->nodes[c];
+            if (n->display == WE_DISP_INLINE || n->is_text) {
+                int lh = node_lh(d, c);
+                if (lh > best) best = lh;
+                if (!n->is_text && n->first >= 0 && sp < 16) { stack[sp++] = c; c = n->first; continue; }
+            }
+            c = n->next;
+        }
+    }
+    return best;
+}
+
 static int mode_pass;   /* lot 64: 1 while only writing-mode/direction apply */
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[40];
@@ -3846,15 +3951,19 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else diag(d, "z-index refused", -1);
     } else if (w_eq(prop, "line-height")) {
         int end = vl, number = 0, unitless;
-        if (value_is(v, vl, "normal")) n->line_height = 0;
+        if (value_is(v, vl, "normal")) { n->line_height = 0; n->lh_unitless = 0; }
         else {
             if (vl >= 2 && value_is(v + vl - 2, 2, "px")) end -= 2;
             unitless = end == vl;
             if (bounded_uint(v, end, unitless ? 4 : WE_LINE_H_MAX, &number) == 0 &&
                 number >= (unitless ? 1 : WE_LINE_H))
-                n->line_height = (int16_t)(unitless ? number * WE_LINE_H : number);
+                { n->line_height = (int16_t)(unitless ? number * WE_LINE_H : number); n->lh_unitless = (uint8_t)unitless; }
             else diag(d, "line height refused", -1);
         }
+    } else if (w_eq(prop, "font-size")) {
+        int fpx;
+        if (we_parse_font_size(v, vl, n->font_parent_px, &fpx) == 0) n->font_px = (uint8_t)fpx;
+        else diag(d, "font size refused", -1);
     } else if (w_eq(prop, "text-indent")) {
         int pct = 0;
         if (parse_len(v, vl, &px, &pct) == 0 && pct == 0 && px >= 0 && px <= WE_INDENT_MAX)
@@ -4199,6 +4308,21 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "body")) { for (i = 0; i < 4; i++) n->margin[i] = 8; }
     if (w_eq(t, "p") || w_eq(t, "ul") || w_eq(t, "ol")) { n->margin[0] = 8; n->margin[2] = 8; }
     if (w_eq(t, "h1") || w_eq(t, "h2") || w_eq(t, "h3") || w_eq(t, "h4")) { n->bold = 1; n->margin[0] = 8; n->margin[2] = 8; }
+    /* Lot 69: UA heading sizes (2, 1.5, 1.17, 1, .83, .67 em) */
+    {
+        static const char *const hs[] = { "h1", "h2", "h3", "h4", "h5", "h6", 0 };
+        static const uint16_t hm[] = { 2000, 1500, 1170, 1000, 830, 670 };
+        int hi;
+        for (hi = 0; hs[hi]; hi++) {
+            if (w_eq(t, hs[hi])) {
+                n->font_px = (uint8_t)font_clamp((n->font_parent_px * hm[hi] + 500) / 1000);
+                n->bold = 1; n->margin[0] = 8; n->margin[2] = 8;
+                if (n->display == WE_DISP_INLINE) n->display = WE_DISP_BLOCK;
+            }
+        }
+    }
+    if (w_eq(t, "small")) n->font_px = (uint8_t)font_clamp((n->font_parent_px * 5 + 3) / 6);
+    if (w_eq(t, "big")) n->font_px = (uint8_t)font_clamp((n->font_parent_px * 6 + 2) / 5);
     if (w_eq(t, "ul")) n->padding[3] = 16;
     if (w_eq(t, "ol")) n->padding[3] = 40;
     if (w_eq(t, "b") || w_eq(t, "strong") || w_eq(t, "th")) n->bold = 1;
@@ -4291,6 +4415,9 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         if (p) { int k; for (k = 0; k < WE_SHADOWS_MAX; k++) n->tshadow[k] = p->tshadow[k]; }
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
+        n->lh_unitless = p ? p->lh_unitless : 0;
+        n->font_parent_px = p && p->font_px ? p->font_px : WE_FONT_PX_DEFAULT;
+        n->font_px = n->font_parent_px;
         n->text_indent = p ? p->text_indent : 0;
         n->ws_mode = p ? p->ws_mode : 0;
         n->tab_px = p ? p->tab_px : 8 * WE_CHAR_W;
@@ -4915,7 +5042,7 @@ static void text_shadows(we_doc_t *d, int node, int x, int y, const char *buf, i
     int k;
     for (k = t->tshadow_count - 1; k >= 0; k--) {
         const we_shadow_t *sh = &t->tshadow[k];
-        os_fb_web_item_t *it = emit(d, node, OS_FB_WEB_TEXT, limit_coord(x + sh->x), limit_coord(y + sh->y), len * WE_CHAR_W, 8,
+        os_fb_web_item_t *it = emit(d, node, OS_FB_WEB_TEXT, limit_coord(x + sh->x), limit_coord(y + sh->y), len * node_cw(d, node), node_gh(d, node),
                                     sh->has_color ? sh->color : t->color);
         if (sh->blur) text_shadow_blur = 1;
         if (!it) return;
@@ -4933,11 +5060,11 @@ static void text_shadows(we_doc_t *d, int node, int x, int y, const char *buf, i
  * forced break and lines with atomic boxes keep start alignment. Letter
  * spacing applies after every glyph, the last one included. */
 static int glyph_adv(const we_doc_t *d, int node) {
-    return WE_CHAR_W + d->nodes[node].letter_spacing;
+    return node_cw(d, node) + d->nodes[node].letter_spacing;
 }
 
 static int space_adv(const we_doc_t *d, int node) {
-    int v = WE_CHAR_W + d->nodes[node].letter_spacing + d->nodes[node].word_spacing;
+    int v = node_cw(d, node) + d->nodes[node].letter_spacing + d->nodes[node].word_spacing;
     return v > 0 ? v : 0;
 }
 
@@ -4947,10 +5074,10 @@ static int gap_extra(int extra, int gaps, int g) {
 
 static void paint_run(we_doc_t *d, int node, int xs, int y, const char *buf, int len) {
     int adv = glyph_adv(d, node), k;
-    if (adv == WE_CHAR_W) {
+    if (adv == node_cw(d, node)) {
         os_fb_web_item_t *it;
         text_shadows(d, node, xs, y, buf, len);
-        it = emit(d, node, OS_FB_WEB_TEXT, xs, y, len * WE_CHAR_W, 8, d->nodes[node].color);
+        it = emit(d, node, OS_FB_WEB_TEXT, xs, y, len * adv, node_gh(d, node), d->nodes[node].color);
         if (it) { it->bold = d->nodes[node].bold; w_cpy(it->text, OS_FB_WEB_TEXT_LEN, buf, len); }
         return;
     }
@@ -4958,7 +5085,7 @@ static void paint_run(we_doc_t *d, int node, int xs, int y, const char *buf, int
         os_fb_web_item_t *it;
         if (buf[k] == ' ') continue;
         text_shadows(d, node, xs + k * adv, y, buf + k, 1);
-        it = emit(d, node, OS_FB_WEB_TEXT, xs + k * adv, y, WE_CHAR_W, 8, d->nodes[node].color);
+        it = emit(d, node, OS_FB_WEB_TEXT, xs + k * adv, y, node_cw(d, node), node_gh(d, node), d->nodes[node].color);
         if (!it) return;
         it->bold = d->nodes[node].bold;
         it->text[0] = buf[k];
@@ -5005,7 +5132,7 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         xs = x;
         while (j < f->nwords && f->w[j].node == node) {
             int k, sp = (j > i && f->w[j].space_before) ? 1 : 0;
-            if (sp && (space_adv(d, node) != WE_CHAR_W || gap_extra(extra, gaps, gap))) break;
+            if (sp && (space_adv(d, node) != node_cw(d, node) || gap_extra(extra, gaps, gap))) break;
             gap += sp;
             if (len + sp + f->w[j].len > OS_FB_WEB_TEXT_LEN - 1) break;
             if (sp) buf[len++] = ' ';
@@ -5034,8 +5161,8 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         {   /* UX4: text nodes get the bounding box of their runs, so a
              * click on a link's words finds the <a> (we_link_at) */
             we_node_t* tn = &d->nodes[node];
-            int x1 = xs + run_w, y1 = f->y + WE_LINE_H;
-            if (tn->w <= 0) { tn->x = (int16_t)limit_coord(xs); tn->y = (int16_t)limit_coord(f->y); tn->w = (int16_t)(x1 - xs); tn->h = WE_LINE_H; }
+            int x1 = xs + run_w, y1 = f->y + box_h;
+            if (tn->w <= 0) { tn->x = (int16_t)limit_coord(xs); tn->y = (int16_t)limit_coord(f->y); tn->w = (int16_t)(x1 - xs); tn->h = (int16_t)box_h; }
             else {
                 int ax = tn->x < xs ? tn->x : xs, ay = tn->y < f->y ? tn->y : f->y;
                 int bx = tn->x + tn->w > x1 ? tn->x + tn->w : x1, by = tn->y + tn->h > y1 ? tn->y + tn->h : y1;
@@ -5448,18 +5575,18 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
             int keep_sp = preserves_spaces(n), count, k;
             int keep_nl = keep_sp || n->ws_mode == WE_WS_PRE_LINE;
             if (ch == '\t' && !keep_sp) ch = ' ';
-            count = ch == '\t' ? tab_spaces(n, flow->line, WE_CHAR_W) : 1;
+            count = ch == '\t' ? tab_spaces(n, flow->line, node_cw(d, idx)) : 1;
             if (ch == '\n') {
                 if (keep_nl) intrinsic_line(flow);
                 else { intrinsic_word(flow); flow->pending = 1; }
             } else if ((ch == ' ' || ch == '\t') && (n->ws_mode == WE_WS_PRE_WRAP || n->ws_mode == WE_WS_BREAK_SPACES)) {
                 intrinsic_word(flow);
-                flow->line = limit_coord(flow->line + count * WE_CHAR_W);
-                if (count && WE_CHAR_W > flow->minimum) flow->minimum = WE_CHAR_W;
+                flow->line = limit_coord(flow->line + count * node_cw(d, idx));
+                if (count && node_cw(d, idx) > flow->minimum) flow->minimum = node_cw(d, idx);
             } else if ((ch == ' ' || ch == '\t') && keep_sp) {
                 for (k = 0; k < count; k++) {
-                    flow->line = limit_coord(flow->line + WE_CHAR_W);
-                    flow->word = limit_coord(flow->word + WE_CHAR_W);
+                    flow->line = limit_coord(flow->line + node_cw(d, idx));
+                    flow->word = limit_coord(flow->word + node_cw(d, idx));
                     if (!n->nowrap && (n->break_all || n->break_word == WE_WRAP_ANYWHERE)) intrinsic_word(flow);
                 }
             } else if (ch == ' ') {
@@ -5563,7 +5690,7 @@ static void intrinsic_sizes(we_doc_t *d) {
             vertical_inline[i] = (int16_t)limit_coord(flow.maximum);
             lines = size > 0 ? (flow.maximum + size - 1) / size : 1;
             if (lines < 1) lines = 1;
-            n->min_content = n->max_content = (int16_t)limit_coord(lines * (n->line_height ? n->line_height : WE_LINE_H));
+            n->min_content = n->max_content = (int16_t)limit_coord(lines * node_lh(d, i));
         }
     }
 }
@@ -5779,7 +5906,7 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->align_last = d->nodes[idx].align_last;
     f->justify_none = d->nodes[idx].justify_none;
     f->start = d->nodes[idx].dir_rtl ? WE_ALIGN_RIGHT : WE_ALIGN_LEFT;
-    f->line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
+    f->line_h = flow_line_h(d, idx);
     f->indent = d->nodes[idx].text_indent;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
         we_node_t *n = &d->nodes[c];
@@ -6958,7 +7085,7 @@ static int column_plan(const we_node_t *n, int width, int *gap, int *cw) {
 
 /* the units in order; returns their count */
 static int column_units(we_doc_t *d, int idx, int first) {
-    int c, count = 0, line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
+    int c, count = 0, line_h = flow_line_h(d, idx);
     uint32_t i;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
         const we_node_t *k = &d->nodes[c];
@@ -9840,8 +9967,18 @@ static unsigned glyph_mask(char ch, int row, int bold) {
     return bold ? bits | (bits << 1) : bits;
 }
 
+/* Lot 69: the glyph cell of a TEXT item is square, it->h px (8 at the
+ * normal size). A scaled glyph is clipped whole: it stays text when its
+ * cell is inside and is dropped when cut (no 8x8 mask applies to it). */
+static int item_cw(const os_fb_web_item_t *it) { return it->h > 8 ? it->h : WE_CHAR_W; }
+static int cell_inside(const os_fb_web_item_t *it, int k, int left, int top, int right, int bottom) {
+    int x = it->x + k * item_cw(it);
+    return x >= left && x + item_cw(it) <= right && it->y >= top && it->y + it->h <= bottom;
+}
+
 static int glyph_inside(const os_fb_web_item_t *it, int k, int left, int top, int right, int bottom) {
     int row, bit, x = it->x + k * WE_CHAR_W;
+    if (it->h > 8) return cell_inside(it, k, left, top, right, bottom);
     for (row = 0; row < 8; row++) {
         unsigned m = glyph_mask(it->text[k], row, it->bold);
         if (!m) continue;
@@ -9856,6 +9993,7 @@ static int glyph_inside(const os_fb_web_item_t *it, int k, int left, int top, in
 static int glyph_rects(const os_fb_web_item_t *it, int k, int left, int top, int right, int bottom,
                        os_fb_web_item_t *out, int used, int cap) {
     int row, bit, x = it->x + k * WE_CHAR_W, first = used;
+    if (it->h > 8) return 0;
     for (row = 0; row < 8; row++) {
         unsigned m = glyph_mask(it->text[k], row, it->bold);
         int y = it->y + row;
@@ -9894,8 +10032,8 @@ static int clip_glyphs(const os_fb_web_item_t *it, int left, int top, int right,
             out[used] = *it;
             for (j = k; j < end; j++) out[used].text[j - k] = it->text[j];
             out[used].text[end - k] = 0;
-            out[used].x = (int16_t)(it->x + k * WE_CHAR_W);
-            out[used].w = (uint16_t)((end - k) * WE_CHAR_W);
+            out[used].x = (int16_t)(it->x + k * item_cw(it));
+            out[used].w = (uint16_t)((end - k) * item_cw(it));
             used++;
             k = end;
             continue;
@@ -9993,6 +10131,11 @@ static int bands_contain(int band[][4], int count, const os_fb_web_item_t *it) {
  * glyph becomes RECT runs band by band. */
 static int glyph_in_bands(const os_fb_web_item_t *it, int k, int band[][4], int count) {
     int row, bit, b, x = it->x + k * WE_CHAR_W;
+    if (it->h > 8) {
+        for (b = 0; b < count; b++)
+            if (cell_inside(it, k, band[b][2], band[b][0], band[b][3], band[b][1])) return 1;
+        return 0;
+    }
     for (row = 0; row < 8; row++) {
         unsigned m = glyph_mask(it->text[k], row, it->bold);
         int y = it->y + row;
@@ -10016,8 +10159,8 @@ static int round_text(const os_fb_web_item_t *it, int band[][4], int count, os_f
             out[used] = *it;
             for (j = k; j < end; j++) out[used].text[j - k] = it->text[j];
             out[used].text[end - k] = 0;
-            out[used].x = (int16_t)(it->x + k * WE_CHAR_W);
-            out[used].w = (uint16_t)((end - k) * WE_CHAR_W);
+            out[used].x = (int16_t)(it->x + k * item_cw(it));
+            out[used].w = (uint16_t)((end - k) * item_cw(it));
             used++;
             k = end;
             continue;
@@ -10330,13 +10473,14 @@ static int ellipsis_block(const we_doc_t *d, int owner, int *edge) {
 }
 
 static void ellipsis_cut(os_fb_web_item_t *it, int keep_px) {
-    int fit = keep_px / WE_CHAR_W, len = w_len(it->text), keep, k;
+    int cw = it->h > 8 ? it->h : WE_CHAR_W;
+    int fit = keep_px / cw, len = w_len(it->text), keep, k;
     if (fit > len) fit = len;
     if (fit < 0) fit = 0;
     keep = fit - 3 < 0 ? 0 : fit - 3;
     for (k = keep; k < fit; k++) it->text[k] = '.';
     it->text[fit] = 0;
-    it->w = (uint16_t)(fit * WE_CHAR_W);
+    it->w = (uint16_t)(fit * cw);
 }
 
 static void ellipsis_items(we_doc_t *d) {
@@ -11002,6 +11146,16 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     clip_display_list(d);
     composite_items(d);
     { uint32_t i; for (i = 0; i < d->nitems; i++) d->items[i].pad = 0; }
+    /* Lot 69: a TEXT item carries its font scale in pad (quarters, 0 or 4
+     * = the 8x8 cell); the kernel draws its glyphs at web zoom * pad / 4. */
+    { uint32_t i;
+      for (i = 0; i < d->nitems; i++) {
+          int o = d->item_owner[i];
+          if (d->items[i].kind == OS_FB_WEB_TEXT && o >= 0 && o < (int)d->nnodes) {
+              int q = node_q(d, o);
+              if (q != OS_UI_Q1) d->items[i].pad = (uint16_t)q;
+          }
+      } }
     if (math_refused) diag(d, "math evaluation refused", -1);
     if (wavy_decoration) diag(d, "wavy decoration painted solid", -1);
     if (gradient_banded) diag(d, "gradient painted in bands", -1);
@@ -11120,7 +11274,7 @@ int we_link_at(const we_doc_t* d, int x, int y, char* href, int max) {
             for (item = 0; item < d->nitems; item++) {
                 const os_fb_web_item_t *it = &d->items[item];
                 if (d->item_owner[item] == i && it->kind == OS_FB_WEB_TEXT &&
-                    x >= it->x && x < it->x + it->w && y >= it->y - 1 && y < it->y - 1 + WE_LINE_H) {
+                    x >= it->x && x < it->x + it->w && y >= it->y - 1 && y < it->y - 1 + (it->h > 8 ? it->h + 2 : WE_LINE_H)) {
                     painted = 1;
                     break;
                 }

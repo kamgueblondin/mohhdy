@@ -964,6 +964,7 @@ static int font_bit(char ch, int x, int y) { return gfx_glyph_pixel(ch, 4, x, y)
 static void test_lot68_scaled_glyphs(void) {
     static const int qs[] = {8, 12, 16};
     int c, k, x, y, on1, onq;
+    gfx_desktop_set_font_mode(1);   /* Lot 69: the smoothed upscale is mode 1 */
     for (k = 0; k < 3; k++) {
         int q = qs[k], f = q / 4;
         TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('A', q, -1, 0));
@@ -993,6 +994,7 @@ static void test_lot68_scaled_glyphs(void) {
     /* 1.5x: nearest neighbour, 12 px cell */
     TEST_ASSERT_EQUAL(font_bit('H', 0, 0), gfx_glyph_pixel('H', 6, 0, 0));
     TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('H', 6, 12, 0));
+    gfx_desktop_set_font_mode(0);
 }
 
 static void test_lot68_scene_scale_and_grid(void) {
@@ -1020,6 +1022,167 @@ static void test_lot68_scene_scale_and_grid(void) {
     TEST_ASSERT_TRUE(r1 > 0 && c1 > 0);
     TEST_ASSERT_TRUE(r2 * 2 <= r1 + 2);
     TEST_ASSERT_TRUE(c2 * 2 <= c1 + 2);
+}
+
+
+/* Lot 69: native fonts above 1x (gfx_font_hd.h): every glyph has ink
+ * inside its cell, the space is empty, shapes differ, descenders go
+ * lower than x-height letters, and in-between scales sample a source. */
+static int ink(char c, int q, int *ymax) {
+    int n = os_ui_px(8, q), x, y, k = 0;
+    *ymax = -1;
+    for (y = 0; y < n; y++) for (x = 0; x < n; x++) if (gfx_glyph_pixel(c, q, x, y)) { k++; *ymax = y; }
+    return k;
+}
+static void test_lot69_native_fonts(void) {
+    static const int qs[] = {5, 6, 7, 8, 10, 12, 14, 16};
+    int k, c, ya, yg, d, x, y;
+    TEST_ASSERT_EQUAL(0, gfx_desktop_font_mode());
+    TEST_ASSERT_EQUAL(8, gfx_glyph_source_cell(4));
+    TEST_ASSERT_EQUAL(12, gfx_glyph_source_cell(6));
+    TEST_ASSERT_EQUAL(16, gfx_glyph_source_cell(7));
+    TEST_ASSERT_EQUAL(24, gfx_glyph_source_cell(12));
+    TEST_ASSERT_EQUAL(32, gfx_glyph_source_cell(14));
+    for (k = 0; k < 8; k++) {
+        int q = qs[k], n = os_ui_px(8, q);
+        TEST_ASSERT_EQUAL(0, ink(' ', q, &ya));
+        for (c = 33; c < 127; c++) TEST_ASSERT_TRUE(ink((char)c, q, &ya) > 0);
+        TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('A', q, n, 0));
+        TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('A', q, 0, n));
+        (void)ink('a', q, &ya); (void)ink('g', q, &yg);
+        TEST_ASSERT_TRUE(yg > ya);                       /* descender */
+        for (d = 0, y = 0; y < n; y++) for (x = 0; x < n; x++)
+            d += gfx_glyph_pixel('O', q, x, y) != gfx_glyph_pixel('Q', q, x, y);
+        TEST_ASSERT_TRUE(d > 0);
+        /* ink scales with the cell area (native, not a fixed bitmap) */
+        TEST_ASSERT_TRUE(ink('M', q, &ya) * 64 >= ink('M', 4, &yg) * n * n / 4);
+    }
+}
+
+
+/* Lot 69: status row and icon labels grow with ui-scale */
+static void test_lot69_status_row_scales(void) {
+    int s1, s2, i1, i2;
+    blank_scene();
+    g_scene.version = 8;
+    g_scene.ui_scale_q = 4;
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    s1 = count_near(12, 0, 300, 90, 122, 212, 196, 6);
+    i1 = count_near(W - 120, 40, W, H - 60, 232, 238, 244, 6);
+    g_scene.ui_scale_q = 8;
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    s2 = count_near(12, 0, 300, 90, 122, 212, 196, 6);
+    i2 = count_near(W - 120, 40, W, H - 60, 232, 238, 244, 6);
+    TEST_ASSERT_TRUE(s1 > 10);
+    TEST_ASSERT_TRUE(s2 > s1 * 2);
+    TEST_ASSERT_TRUE(i2 > i1);
+}
+
+
+/* Lot 69: a web TEXT item with pad = 8 (CSS 32 px) paints its glyphs at
+ * twice the cell: more ink and about twice the width of pad 0. */
+static int web_text_ink(int pad, int *maxx) {
+    int ox, oy, pw, ph, x, y, n = 0;
+    blank_scene();
+    g_scene.version = 8;
+    g_scene.ui_scale_q = 4;
+    g_scene.pane = OS_FB_PANE_WEB;
+    strcpy(g_scene.web_title, "font");
+    g_scene.nweb = 1;
+    g_scene.web[0].kind = OS_FB_WEB_TEXT; g_scene.web[0].x = 10; g_scene.web[0].y = 20;
+    g_scene.web[0].w = (uint16_t)(5 * (pad ? 2 * pad : 8)); g_scene.web[0].h = (uint16_t)(pad ? 2 * pad : 8);
+    g_scene.web[0].pad = (uint16_t)pad;
+    g_scene.web[0].color = 0x00AA00; strcpy(g_scene.web[0].text, "HELLO");
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    gfx_desktop_web_origin(W, H, &ox, &oy, &pw, &ph);
+    *maxx = 0;
+    for (y = oy; y < oy + 80 && y < oy + ph; y++)
+        for (x = ox; x < ox + 200 && x < ox + pw; x++)
+            if (near_rgb(gfx_desktop_pixel(g_fb, W, H, x, y), 0x00, 0xAA, 0x00, 8)) { n++; if (x - ox > *maxx) *maxx = x - ox; }
+    return n;
+}
+
+static void test_lot69_web_item_font_scale(void) {
+    int m1, m2, m3;
+    int a = web_text_ink(0, &m1), b = web_text_ink(8, &m2), c = web_text_ink(99, &m3);
+    TEST_ASSERT_TRUE(a > 20);
+    TEST_ASSERT_TRUE(b > a * 3 / 2);   /* native 16 px strokes are thinner than doubled 8x8 ones */
+    TEST_ASSERT_TRUE(m2 > m1 + 30);
+    TEST_ASSERT_EQUAL(a, c);   /* out-of-range pad falls back to the 8x8 cell */
+}
+
+
+/* Lot 69: the dock tooltip grows with ui-scale and its text stays inside */
+static int tooltip_rows(int q) {
+    gfx_desktop_layout_t l;
+    int y, rows = 0, cx;
+    blank_scene();
+    g_scene.version = 8;
+    g_scene.ui_scale_q = (uint8_t)q;
+    redraw(&l);
+    cx = rect_center_x(&l.dock.icons[2]);
+    gfx_desktop_set_mouse(cx, rect_center_y(&l.dock.icons[2]), 0);
+    redraw(&l);
+    if (l.hover_dock != 2) return -1;
+    for (y = l.dock.icons[2].y - 80; y < l.dock.icons[2].y; y++)
+        if (count_near(cx - 60, y, cx + 60, y + 1, 232, 238, 244, 4) > 30) rows++;
+    gfx_desktop_set_mouse(10, H / 2, 0);
+    return rows;
+}
+
+static void test_lot69_dock_tooltip_scales(void) {
+    int r1, r2;
+    vga_desktop_set(1);
+    r1 = tooltip_rows(4);
+    r2 = tooltip_rows(8);
+    vga_desktop_set(0);
+    TEST_ASSERT_TRUE(r1 >= 14);
+    TEST_ASSERT_TRUE(r2 >= r1 + 6);
+}
+
+
+/* Lot 69 (US-080): dock on the left, compact menus, full screen chat */
+static void test_lot69_form_layout(void) {
+    gfx_desktop_layout_t l, m;
+    int i, ink;
+    blank_scene();
+    g_scene.version = 8;
+    g_scene.ui_scale_q = 4;
+    redraw(&l);
+    TEST_ASSERT_TRUE(l.dock.box.y > H / 2);
+    TEST_ASSERT_EQUAL(0, gfx_desktop_dock_left());
+    g_scene.scale_pad[1] = 1 | 2;
+    redraw(&m);
+    TEST_ASSERT_EQUAL(1, gfx_desktop_dock_left());
+    TEST_ASSERT_EQUAL(1, gfx_desktop_menu_compact());
+    TEST_ASSERT_EQUAL(8, m.dock.box.x);
+    TEST_ASSERT_TRUE(m.dock.box.h > m.dock.box.w);
+    for (i = 1; i < GFX_DESKTOP_DOCK; i++) {
+        TEST_ASSERT_EQUAL(m.dock.icons[0].x, m.dock.icons[i].x);
+        TEST_ASSERT_EQUAL(m.dock.icons[i - 1].y + 44, m.dock.icons[i].y);
+    }
+    /* pixels follow the hit boxes: the dock tile colour inside icon 3 */
+    ink = count_near(m.dock.icons[3].x, m.dock.icons[3].y, m.dock.icons[3].x + 36, m.dock.icons[3].y + 32, 61, 154, 138, 10);
+    TEST_ASSERT_TRUE(ink > 50);
+    /* compact menus are narrower and all eight fit */
+    TEST_ASSERT_EQUAL(GFX_DESKTOP_MENUS, m.menu_count);
+    TEST_ASSERT_TRUE(m.menu_items[1].w < l.menu_items[1].w);
+    TEST_ASSERT_TRUE(m.chat_win.box.x >= 60);
+    /* version 7 scenes ignore the bits */
+    g_scene.version = 7;
+    redraw(&m);
+    TEST_ASSERT_EQUAL(0, gfx_desktop_dock_left());
+    /* full screen chat (phone plan) */
+    g_scene.version = 8;
+    g_scene.scale_pad[1] = 0;
+    g_scene.chat_mode = OS_FB_CHAT_FULL;
+    redraw(&m);
+    TEST_ASSERT_EQUAL(8, m.chat_win.box.x);
+    TEST_ASSERT_TRUE(m.chat_win.box.w >= W - 16 - 2);
+    TEST_ASSERT_TRUE(m.chat_win.box.h > l.chat_win.box.h);
+    TEST_ASSERT_EQUAL(0, m.scene_ia.box.w);
+    g_scene.chat_mode = OS_FB_CHAT_CENTER;
+    gfx_desktop_set_form(0, 0);
 }
 
 int main(void) {
@@ -1051,6 +1214,11 @@ int main(void) {
     RUN_TEST(test_llm_friendly_names);
     RUN_TEST(test_lot68_scaled_glyphs);
     RUN_TEST(test_lot68_scene_scale_and_grid);
+    RUN_TEST(test_lot69_native_fonts);
+    RUN_TEST(test_lot69_status_row_scales);
+    RUN_TEST(test_lot69_web_item_font_scale);
+    RUN_TEST(test_lot69_dock_tooltip_scales);
+    RUN_TEST(test_lot69_form_layout);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

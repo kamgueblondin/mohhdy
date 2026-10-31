@@ -27,6 +27,7 @@
 #include "nic_boot.h"
 #include "boot_storage.h"
 #include "vga_console.h"
+#include "gfx_fb.h"
 #include "ne2k.h"
 #include "net_socket.h"
 #include "net_wire.h"
@@ -1092,6 +1093,8 @@ void kmain(uint32_t multiboot_magic, uint32_t multiboot_addr) {
         }
     }
 
+    /* Lot 69 (US-080): screen EDID while Ring 0 still owns PCI */
+    (void)gfx_fb_probe_edid();
     /* Lot 4 (US-001): PCI enumeration moves to the Ring 3 pcidriver. The
      * early boot probes above (USB tablet, NE2000) still ran in Ring 0;
      * once the worker publishes, Ring 0 config reads are refused. */

@@ -2743,6 +2743,16 @@ void syscall_handler(cpu_state_t* cpu) {
                 } else cpu->eax = (uint32_t)-1;
             }
             break;
+        case SYS_DISPLAY_INFO:
+            /* Lot 69 (US-080): read-only display facts */
+            if (!current_task || current_task->type != TASK_TYPE_USER
+                || !syscall_user_range((const void*)cpu->ecx, sizeof(os_display_info_t), 1)) {
+                cpu->eax = (uint32_t)-1;
+            } else {
+                gfx_fb_display_info((os_display_info_t*)cpu->ecx);
+                cpu->eax = 0;
+            }
+            break;
         case SYS_OUT_CAPTURE:
             cpu->eax = (uint32_t)sys_out_capture(cpu->ebx, cpu->ecx, cpu->edx);
             break;

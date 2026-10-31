@@ -144,7 +144,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/stun.c"
     fi
     if [ "$(basename "$test_file")" = "test_p2p.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/stun.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+        extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/stun.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
     fi
     if [ "$(basename "$test_file")" = "test_mobile_ui.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/mobile_ui.c $BASE_DIR/userspace/platform.c"
@@ -169,7 +169,7 @@ run_test() {
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_osui_p2p_prod_perf.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
         cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
@@ -177,7 +177,7 @@ run_test() {
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_gui.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/umalloc.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/umalloc.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c"
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_files.c" ]; then
@@ -226,6 +226,7 @@ run_test() {
     case "$(basename "$test_file")" in
         test_wf_x509.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c" ;;
         test_p2p_pace.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
+        test_p2p_flow.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
         test_p2p_bwe.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
         test_wf_http.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
     esac
@@ -281,11 +282,21 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_user_heap.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/user_heap.c"
     fi
+    if [ "$(basename "$test_file")" = "test_wsearch.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/wsearch.c"
+    fi
+    if [ "$(basename "$test_file")" = "test_arm_portable.c" ]; then
+        extra_src="$extra_src $BASE_DIR/arch/arm/arm_portable.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/edid.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c"
+        cflags="$cflags -I$BASE_DIR/kernel -I$BASE_DIR/userspace"
+    fi
+    if [ "$(basename "$test_file")" = "test_edid.c" ]; then
+        extra_src="$extra_src $BASE_DIR/kernel/edid.c"
+    fi
     if [ "$(basename "$test_file")" = "test_out_capture.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/out_capture.c"
     fi
     if [ "$(basename "$test_file")" = "test_gfx_desktop.c" ]; then
-        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/clipboard.c $BASE_DIR/kernel/gfx_wm.c $BASE_DIR/kernel/gfx_term.c $BASE_DIR/kernel/pci_service.c $BASE_DIR/kernel/input/usb_tablet.c"
+        extra_src="$extra_src $BASE_DIR/kernel/gfx_desktop.c $BASE_DIR/kernel/gfx_fb.c $BASE_DIR/kernel/edid.c $BASE_DIR/kernel/clipboard.c $BASE_DIR/kernel/gfx_wm.c $BASE_DIR/kernel/gfx_term.c $BASE_DIR/kernel/pci_service.c $BASE_DIR/kernel/input/usb_tablet.c"
     fi
     if [ "$(basename "$test_file")" = "test_ipc.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/ipc.c"

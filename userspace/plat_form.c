@@ -152,3 +152,32 @@ int plat_form_report(const plat_form_plan_t* p, char* out, int cap) {
     f_cat(out, cap, "\n");
     return f_len(out);
 }
+
+/* Lot 69 (US-080): physical size from the kernel display facts. */
+int plat_form_physical(const os_display_info_t* d, int* diag_tenths, char* out, int cap) {
+    static const char* const why[] = { "edid ok", "no Bochs/QEMU std VGA", "no EDID BAR", "bad EDID header", "bad EDID checksum" };
+    if (out && cap > 0) out[0] = 0;
+    if (diag_tenths) *diag_tenths = 0;
+    if (!d) return -1;
+    if (d->source == OS_DISPLAY_SRC_NONE || d->diag_tenths == 0 || d->diag_tenths > 1500) {
+        f_cat(out, cap, "display physical unknown (");
+        f_cat(out, cap, d->edid_status < 5 ? why[d->edid_status] : "edid error");
+        if (d->edid_status == 0) f_cat(out, cap, ", no size");
+        f_cat(out, cap, ") plan from pixels only\n");
+        return 1;
+    }
+    if (diag_tenths) *diag_tenths = d->diag_tenths;
+    f_cat(out, cap, "display physical ");
+    f_cat_u(out, cap, d->mm_w); f_cat(out, cap, "x"); f_cat_u(out, cap, d->mm_h);
+    f_cat(out, cap, "mm diag ");
+    f_cat_u(out, cap, (uint32_t)(d->diag_tenths / 10)); f_cat(out, cap, ".");
+    f_cat_u(out, cap, (uint32_t)(d->diag_tenths % 10));
+    f_cat(out, cap, "in source ");
+    f_cat(out, cap, d->source == OS_DISPLAY_SRC_EDID_DTD ? "edid-dtd" : "edid-cm");
+    f_cat(out, cap, " mfg ");
+    { char m[4]; int i; for (i = 0; i < 3; i++) m[i] = (d->mfg[i] >= 'A' && d->mfg[i] <= 'Z') ? d->mfg[i] : '?'; m[3] = 0; f_cat(out, cap, m); }
+    f_cat(out, cap, " native ");
+    f_cat_u(out, cap, d->native_w); f_cat(out, cap, "x"); f_cat_u(out, cap, d->native_h);
+    f_cat(out, cap, "\n");
+    return 0;
+}

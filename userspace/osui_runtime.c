@@ -1341,7 +1341,8 @@ static int cmd_os_help(char *out, int max) {
     out_add(out, max, &p, " live_guest=true python_facade=false\n");
     out_add(out, max, &p,
         "prompt=MOHHDY>  Pas un bash Linux. Scene guest = etat C, bureau VBE QEMU.\n"
-        "slash: /help /browser /shell /admin /support /status /fs /center /close /plan /draw\n"
+        "slash: /help /browser /shell /admin /support /status /fs /center /close /plan /draw /search\n"
+        "/search MOTS (ou search MOTS) : recherche Internet sans JavaScript, resultats dans /browser ; search-open N\n"
         "gui (aliases graphics, desktop) : entre le bureau graphique QEMU. console : retour texte.\n"
         "/shell : terminal Multiboot live (help ls date whoami ai). !cmd depuis le chat.\n"
         "session-new [site]  session-use <id>  session-list  session-status  session-end\n"

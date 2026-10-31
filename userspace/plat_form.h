@@ -5,9 +5,9 @@
  * target size, chat window mode, dock side, menu style and the CSS page
  * width of the web view. `form-factor apply` sets the shared ui-scale, so
  * the console and the GUI change together. Pure integer code, host
- * testable; no heap. Honest limit: the emulated PC reports no physical
- * size (no EDID read yet), so the diagonal is an operator input and the
- * default plan uses pixels only. */
+ * testable; no heap. Lot 69: the physical size comes from the EDID of
+ * the QEMU std VGA (SYS_DISPLAY_INFO) when present; without it the plan
+ * uses pixels only, or the diagonal the operator gives. */
 #ifndef PLAT_FORM_H
 #define PLAT_FORM_H
 #include <stdint.h>
@@ -44,4 +44,8 @@ const char* plat_form_chat_name(int mode);
 int plat_form_report(const plat_form_plan_t* p, char* out, int cap);
 /* integer square root (diagonal in pixels) */
 uint32_t plat_form_isqrt(uint32_t v);
+#include "../include/os_syscalls.h"
+/* Lot 69 (US-080): "display physical ..." line from SYS_DISPLAY_INFO;
+ * sets *diag_tenths (0 when unknown). 0 known, 1 unknown, -1 args. */
+int plat_form_physical(const os_display_info_t* d, int* diag_tenths, char* out, int cap);
 #endif

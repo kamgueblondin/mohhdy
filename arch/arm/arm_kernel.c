@@ -21,6 +21,7 @@
 #include "os_syscalls.h"
 #include "ipc.h"
 #include "sha256.h"
+#include "arm_portable.h"
 
 #define UART0 0x09000000U
 #define GICD 0x08000000U
@@ -313,6 +314,13 @@ void arm_main(void) {
     kputs(")\n");
     kputs(sha256_selftest() ? "arm sha256 self-test ok (kernel/sha256.c)\n"
                             : "arm sha256 self-test FAILED\n");
+    {
+        /* Lot 69: more portable code, same results as on i386 */
+        uint32_t m = arm_port_selftest();
+        kputs((m & ARM_PORT_AES_GCM) ? "arm aes-gcm self-test ok (kernel/aes_gcm.c)\n" : "arm aes-gcm self-test FAILED\n");
+        kputs((m & ARM_PORT_EDID) ? "arm edid self-test ok 1280x800 325x203mm 15.1in (kernel/edid.c)\n" : "arm edid self-test FAILED\n");
+        kputs((m & ARM_PORT_FLOW) ? "arm p2p flow self-test ok rate 62500 backoff 54687 (userspace/p2p_flow.c)\n" : "arm p2p flow self-test FAILED\n");
+    }
     gic_init();
     timer_arm();
     kputs("arm gic + generic timer armed at 100 Hz\n");

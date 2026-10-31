@@ -151,9 +151,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_vga_console: $(UNIT_DIR)/kernel/test_vga_co
 	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/vga_console.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_gfx_desktop: $(UNIT_DIR)/kernel/test_gfx_desktop.c ../kernel/gfx_desktop.c ../kernel/gfx_fb.c ../kernel/clipboard.c ../kernel/gfx_wm.c ../kernel/gfx_term.c ../kernel/pci_service.c ../kernel/input/usb_tablet.c ../kernel/gfx_desktop.h ../kernel/gfx_fb.h ../kernel/gfx_font8.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_gfx_desktop: $(UNIT_DIR)/kernel/test_gfx_desktop.c ../kernel/gfx_desktop.c ../kernel/gfx_fb.c ../kernel/edid.c ../kernel/edid.h ../kernel/clipboard.c ../kernel/gfx_wm.c ../kernel/gfx_term.c ../kernel/pci_service.c ../kernel/input/usb_tablet.c ../kernel/gfx_desktop.h ../kernel/gfx_fb.h ../kernel/gfx_font8.h ../kernel/gfx_font_hd.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS) ../kernel/edid.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/gfx_desktop.c ../kernel/gfx_fb.c ../kernel/clipboard.c ../kernel/gfx_wm.c ../kernel/gfx_term.c ../kernel/pci_service.c ../kernel/input/usb_tablet.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_KERNEL) -o $@ $< ../kernel/gfx_desktop.c ../kernel/gfx_fb.c ../kernel/edid.c ../kernel/clipboard.c ../kernel/gfx_wm.c ../kernel/gfx_term.c ../kernel/pci_service.c ../kernel/input/usb_tablet.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled kernel test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_net_ethernet_arp: $(UNIT_DIR)/kernel/test_net_ethernet_arp.c ../kernel/net_ethernet_arp.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
@@ -383,7 +383,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ps2_decode: $(UNIT_DIR)/userspace/test_p
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/ps2_decode.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webeng: $(UNIT_DIR)/userspace/test_webeng.c $(UNIT_DIR)/userspace/webeng_lot52.inc $(UNIT_DIR)/userspace/webeng_lot53.inc $(UNIT_DIR)/userspace/webeng_lot54.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot55_*.inc) $(UNIT_DIR)/userspace/webeng_lot56.inc $(UNIT_DIR)/userspace/webeng_lot56b.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot57_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot58_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot59_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot60_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot61*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot62*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot63*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot64*.inc) ../userspace/webeng.c ../userspace/webeng.h ../userspace/imgdec.c ../userspace/imgdec.h ../userspace/imgdec_jpeg.inc ../include/os_syscalls.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webeng: $(UNIT_DIR)/userspace/test_webeng.c $(UNIT_DIR)/userspace/webeng_lot52.inc $(UNIT_DIR)/userspace/webeng_lot53.inc $(UNIT_DIR)/userspace/webeng_lot54.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot55_*.inc) $(UNIT_DIR)/userspace/webeng_lot56.inc $(UNIT_DIR)/userspace/webeng_lot56b.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot57_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot58_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot59_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot60_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot61*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot62*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot63*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot64*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot69*.inc) ../include/os_ui_scale.h ../userspace/webeng.c ../userspace/webeng.h ../userspace/imgdec.c ../userspace/imgdec.h ../userspace/imgdec_jpeg.inc ../include/os_syscalls.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
@@ -418,9 +418,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_stun: $(UNIT_DIR)/userspace/test_stun.c 
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/stun.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p: $(UNIT_DIR)/userspace/test_p2p.c ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/p2p_pace.c ../userspace/stun.c ../userspace/p2p.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p: $(UNIT_DIR)/userspace/test_p2p.c ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/p2p_pace.c ../userspace/p2p_flow.c ../userspace/stun.c ../userspace/p2p.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/p2p_pace.c ../userspace/stun.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x25519.c ../kernel/bigint.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/p2p_pace.c ../userspace/p2p_flow.c ../userspace/stun.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x25519.c ../kernel/bigint.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_collab: $(UNIT_DIR)/userspace/test_collab.c ../userspace/collab.c ../userspace/collab.h ../userspace/csig.c ../userspace/csig.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
@@ -435,6 +435,10 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_devsync: $(UNIT_DIR)/userspace/test_devs
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/devsync.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
+
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wsearch: $(UNIT_DIR)/userspace/test_wsearch.c ../userspace/wsearch.c ../userspace/wsearch.h $(wildcard fixtures/search/*.html) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/wsearch.c $(FRAMEWORK_SOURCES)
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_plat_form_energy: $(UNIT_DIR)/userspace/test_plat_form_energy.c ../userspace/plat_form.c ../userspace/plat_energy.c ../userspace/platform.c ../userspace/plat_form.h ../userspace/plat_energy.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
@@ -456,9 +460,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_prod: $(UNIT_DIR)/userspace/test_prod.c 
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/prod.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(PERFORMANCE_DIR)/test_osui_p2p_prod_perf: $(PERFORMANCE_DIR)/test_osui_p2p_prod_perf.c ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/osui_gui.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/osui_ide.h ../userspace/promptmessage.c ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/p2p_pace.c ../userspace/stun.c ../userspace/prod.c ../userspace/platform.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(PERFORMANCE_DIR)/test_osui_p2p_prod_perf: $(PERFORMANCE_DIR)/test_osui_p2p_prod_perf.c ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/osui_gui.c ../userspace/wsearch.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/osui_ide.h ../userspace/promptmessage.c ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/p2p_pace.c ../userspace/p2p_flow.c ../userspace/stun.c ../userspace/prod.c ../userspace/platform.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/osui_gui.c ../userspace/osui_scale.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/promptmessage.c ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/p2p_pace.c ../userspace/stun.c ../userspace/prod.c ../userspace/platform.c ../userspace/csig.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x25519.c ../kernel/bigint.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/osui_gui.c ../userspace/wsearch.c ../userspace/osui_scale.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/promptmessage.c ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/p2p_pace.c ../userspace/p2p_flow.c ../userspace/stun.c ../userspace/prod.c ../userspace/platform.c ../userspace/csig.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x25519.c ../kernel/bigint.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled performance test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_runtime: $(UNIT_DIR)/userspace/test_osui_runtime.c ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/promptmessage.c ../userspace/platform.c ../userspace/osui_runtime.h ../userspace/mohhdy_osui_bridge.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
@@ -511,6 +515,15 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_user_heap: $(UNIT_DIR)/kernel/test_user_hea
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -I.. -o $@ $< ../kernel/user_heap.c $(FRAMEWORK_SOURCES)
 
+# Lot 69 (US-076): portable self-tests shared with the ARM boot
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_arm_portable: $(UNIT_DIR)/kernel/test_arm_portable.c ../arch/arm/arm_portable.c ../arch/arm/arm_portable.h ../kernel/aes_gcm.c ../kernel/edid.c ../userspace/p2p_flow.c ../userspace/p2p_pace.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -I.. -I../kernel -I../userspace -o $@ $< ../arch/arm/arm_portable.c ../kernel/aes_gcm.c ../kernel/edid.c ../userspace/p2p_flow.c ../userspace/p2p_pace.c $(FRAMEWORK_SOURCES)
+
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_edid: $(UNIT_DIR)/kernel/test_edid.c ../kernel/edid.c ../kernel/edid.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_KERNEL) -I.. -o $@ $< ../kernel/edid.c $(FRAMEWORK_SOURCES)
+
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_out_capture: $(UNIT_DIR)/kernel/test_out_capture.c ../kernel/out_capture.c ../kernel/out_capture.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_KERNEL) -I.. -o $@ $< ../kernel/out_capture.c $(FRAMEWORK_SOURCES)
@@ -520,9 +533,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_ide: $(UNIT_DIR)/userspace/test_osu
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_ide.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_gui: $(UNIT_DIR)/userspace/test_osui_gui.c $(UNIT_DIR)/userspace/mockfs.h ../userspace/osui_gui.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/umalloc.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/osui_ide.h ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/promptmessage.c ../userspace/platform.c ../userspace/osui_gui.h ../userspace/osui_runtime.h ../userspace/mohhdy_osui_bridge.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_gui: $(UNIT_DIR)/userspace/test_osui_gui.c $(UNIT_DIR)/userspace/mockfs.h ../userspace/osui_gui.c ../userspace/wsearch.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/umalloc.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/osui_ide.h ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/promptmessage.c ../userspace/platform.c ../userspace/osui_gui.h ../userspace/osui_runtime.h ../userspace/mohhdy_osui_bridge.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_gui.c ../userspace/osui_scale.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/umalloc.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/promptmessage.c ../userspace/platform.c ../userspace/csig.c ../kernel/bigint.c ../kernel/sha256.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_gui.c ../userspace/wsearch.c ../userspace/osui_scale.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/umalloc.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/promptmessage.c ../userspace/platform.c ../userspace/csig.c ../kernel/bigint.c ../kernel/sha256.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_%: $(UNIT_DIR)/userspace/test_%.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
@@ -761,6 +774,12 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_x509: $(UNIT_DIR)/userspace/test_wf_x
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p_pace: $(UNIT_DIR)/userspace/test_p2p_pace.c ../userspace/p2p_pace.c ../userspace/p2p_pace.h ../userspace/p2p_bwe.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/p2p_pace.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
+# Lot 69 (US-068/US-073): per-peer flow and data acks
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p_flow: $(UNIT_DIR)/userspace/test_p2p_flow.c ../userspace/p2p_flow.c ../userspace/p2p_flow.h ../userspace/p2p_pace.c ../userspace/p2p_pace.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/p2p_flow.c ../userspace/p2p_pace.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p_bwe: $(UNIT_DIR)/userspace/test_p2p_bwe.c ../userspace/p2p_bwe.c ../userspace/p2p_pace.c ../userspace/p2p_bwe.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)

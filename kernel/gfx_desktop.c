@@ -2,6 +2,7 @@
 #include "gfx_desktop.h"
 #include "gfx_fb.h"
 #include "gfx_font8.h"
+#include "gfx_font_hd.h"
 #include "os_ui_scale.h"
 #include "input/usb_tablet.h"
 #include "keyboard.h"
@@ -468,18 +469,58 @@ static void gfx_desktop_handle_click(int x, int y) {
     if (g_focus >= 0) evt_focus(-1);
 }
 
+/* Lot 69 (US-080): form-factor plan applied on screen. The scene
+ * (version >= 8, scale_pad[1]) asks for a left dock (bit 0, tablets and
+ * phones in landscape keep the bottom free) and compact menu labels
+ * (bit 1). The pointer hover, the hit layout and the painter share one
+ * dock geometry so clicks match pixels. */
+static int g_dock_left, g_menu_compact;
+void gfx_desktop_set_form(int dock_left, int compact_menu) {
+    g_dock_left = dock_left ? 1 : 0;
+    g_menu_compact = compact_menu ? 1 : 0;
+}
+int gfx_desktop_dock_left(void) { return g_dock_left; }
+int gfx_desktop_menu_compact(void) { return g_menu_compact; }
+static void scene_form(const os_fb_scene_t *sc) {
+    if (sc && sc->version >= 8) gfx_desktop_set_form(sc->scale_pad[1] & 1, sc->scale_pad[1] & 2);
+    else gfx_desktop_set_form(0, 0);
+}
+static void dock_geom(int w, int h, gfx_rect_t *box) {
+    int bar_h = clampi_k(h / 22, 28, 40);
+    if (g_dock_left) {
+        int dh = GFX_DESKTOP_DOCK * 44 + 16;
+        if (dh > h - bar_h - 16) dh = h - bar_h - 16;
+        box->x = 8;
+        box->y = bar_h + (h - bar_h - dh) / 2;
+        box->w = 44;
+        box->h = dh;
+        return;
+    }
+    box->w = GFX_DESKTOP_DOCK * 44 + 16;
+    if (box->w > w - 16) box->w = w - 16;
+    box->x = (w - box->w) / 2;
+    box->y = h - 48;
+    if (box->y < bar_h + 8) box->y = h - 36;
+    box->h = 40;
+}
+static void dock_icon(int w, int h, int i, gfx_rect_t *r) {
+    gfx_rect_t b;
+    dock_geom(w, h, &b);
+    if (g_dock_left) { r->x = b.x + 4; r->y = b.y + 8 + i * 44; }
+    else { r->x = b.x + 8 + i * 44; r->y = b.y + 4; }
+    r->w = 36;
+    r->h = 32;
+}
+
 /* Dock icon under the pointer: a tooltip with its name (redraw on change). */
 static void hover_update(int x, int y) {
     int w = gfx_fb_width(), h = gfx_fb_height(), i, idx = -1;
-    int bar_h = clampi_k(h / 22, 28, 40);
-    int dock_w = GFX_DESKTOP_DOCK * 44 + 16, dock_x, dock_y;
+    gfx_rect_t r;
     if (!vga_desktop_active()) return;
-    if (dock_w > w - 16) dock_w = w - 16;
-    dock_x = (w - dock_w) / 2;
-    dock_y = h - 48;
-    if (dock_y < bar_h + 8) dock_y = h - 36;
-    for (i = 0; i < GFX_DESKTOP_DOCK; i++)
-        if (x >= dock_x + 8 + i * 44 && x < dock_x + 8 + i * 44 + 36 && y >= dock_y + 4 && y < dock_y + 36) idx = i;
+    for (i = 0; i < GFX_DESKTOP_DOCK; i++) {
+        dock_icon(w, h, i, &r);
+        if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) idx = i;
+    }
     if (idx != g_hover_dock) {
         g_hover_dock = idx;
         gfx_fb_redraw_desktop();
@@ -739,21 +780,63 @@ static int glyph_epx(const uint8_t *g, int x, int y, int k, int sx, int sy) {
     return e;
 }
 
-/* One glyph at scale q: 1x as before; 2x and 3x smoothed (EPX); 4x is 2x
- * smoothed then doubled; other scales nearest neighbour. */
-int gfx_glyph_pixel(char ch, int q, int dx, int dy) {
-    unsigned idx;
-    const uint8_t *g;
+/* Lot 69: glyph source. 0 = native square fonts (gfx_font_hd.h, IBM Plex
+ * Mono raster at 12/16/24/32 px) for every scale above 1x, 1 = the Lot 68
+ * smoothed upscale of the 8x8 font (EPX). 1x always uses the 8x8 font. */
+static int g_font_mode;
+void gfx_desktop_set_font_mode(int mode) { g_font_mode = mode ? 1 : 0; }
+int gfx_desktop_font_mode(void) { return g_font_mode; }
+
+static int hd_bit(unsigned idx, int cell, int x, int y) {
+    if (x < 0 || y < 0 || x >= cell || y >= cell) return 0;
+    switch (cell) {
+    case 12: return (gfx_font_hd12[idx][y] >> x) & 1u;
+    case 16: return (gfx_font_hd16[idx][y] >> x) & 1u;
+    case 24: return (int)((gfx_font_hd24[idx][y] >> x) & 1u);
+    default: return (int)((gfx_font_hd32[idx][y] >> x) & 1u);
+    }
+}
+
+/* the native cell a scale draws from: exact for 12/16/24/32 px, else the
+ * next larger one sampled down (nearest) */
+int gfx_glyph_source_cell(int q) {
     int n = os_ui_px(8, q);
-    if (dx < 0 || dy < 0 || dx >= n || dy >= n) return 0;
-    if ((unsigned char)ch < 32 || (unsigned char)ch > 126) ch = '?';
-    idx = (unsigned char)ch - 32u;
-    g = gfx_font8[idx];
-    if (q == 4) return glyph_bit(g, dx, dy);
+    if (q <= OS_UI_Q1) return 8;
+    if (n <= 12) return 12;
+    if (n <= 16) return 16;
+    if (n <= 24) return 24;
+    return 32;
+}
+
+static int glyph_smooth(const uint8_t *g, int q, int dx, int dy, int n) {
     if (q == 8) return glyph_epx(g, dx / 2, dy / 2, 2, dx % 2, dy % 2);
     if (q == 12) return glyph_epx(g, dx / 3, dy / 3, 3, dx % 3, dy % 3);
     if (q == 16) return glyph_epx(g, dx / 4, dy / 4, 2, (dx % 4) / 2, (dy % 4) / 2);
     return glyph_bit(g, dx * 8 / n, dy * 8 / n);
+}
+
+/* One glyph at scale q: 1x the 8x8 font; above, the native font of the
+ * scale (or the smoothed upscale in font mode 1). */
+int gfx_glyph_pixel(char ch, int q, int dx, int dy) {
+    unsigned idx;
+    int n = os_ui_px(8, q), cell;
+    if (dx < 0 || dy < 0 || dx >= n || dy >= n) return 0;
+    if ((unsigned char)ch < 32 || (unsigned char)ch > 126) ch = '?';
+    idx = (unsigned char)ch - 32u;
+    if (q == 4) return glyph_bit(gfx_font8[idx], dx, dy);
+    if (g_font_mode) return glyph_smooth(gfx_font8[idx], q, dx, dy, n);
+    cell = gfx_glyph_source_cell(q);
+    if (cell == n) return hd_bit(idx, cell, dx, dy);
+    {
+        /* sampled down from the next larger cell: a pixel is set when any
+         * source pixel it covers is set, so thin strokes ('_', '.') stay */
+        int x0 = dx * cell / n, x1 = ((dx + 1) * cell + n - 1) / n;
+        int y0 = dy * cell / n, y1 = ((dy + 1) * cell + n - 1) / n, x, y;
+        for (y = y0; y < y1; y++)
+            for (x = x0; x < x1; x++)
+                if (hd_bit(idx, cell, x, y)) return 1;
+        return 0;
+    }
 }
 
 static void draw_char_bits(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
@@ -878,7 +961,7 @@ static void icon_tile(uint32_t *fb, int w, int h, int x, int y, uint32_t c0, uin
     if (label) {
         int len = 0;
         while (label[len]) len++;
-        draw_text(fb, w, h, x + 21 - (len * 8) / 2, y + 46, label, RGB(232, 238, 244));
+        draw_text(fb, w, h, x + 21 - (len * CW) / 2, y + 46, label, RGB(232, 238, 244));
     }
 }
 
@@ -974,10 +1057,12 @@ static void draw_stage_body(uint32_t *fb, int w, int h, int x, int y, int rw, in
         return;
     }
     if (kind == OS_FB_KIND_TREE) {
+        /* Lot 69: rows step with the text scale */
+        int step = TS(12);
         draw_text(fb, w, h, x + 12, y + 8, "root", RGB(232, 238, 244));
-        draw_text(fb, w, h, x + 28, y + 22, "shell.c", RGB(154, 168, 181));
-        draw_text(fb, w, h, x + 28, y + 34, "osui_runtime.c", RGB(154, 168, 181));
-        draw_text(fb, w, h, x + 28, y + 46, "vfs", RGB(154, 168, 181));
+        draw_text(fb, w, h, x + 12 + TS(16), y + 8 + step + 2, "shell.c", RGB(154, 168, 181));
+        draw_text(fb, w, h, x + 12 + TS(16), y + 8 + 2 * step + 2, "osui_runtime.c", RGB(154, 168, 181));
+        draw_text(fb, w, h, x + 12 + TS(16), y + 8 + 3 * step + 2, "vfs", RGB(154, 168, 181));
         return;
     }
     if (kind == OS_FB_KIND_CLOCK) {
@@ -990,8 +1075,9 @@ static void draw_stage_body(uint32_t *fb, int w, int h, int x, int y, int rw, in
         int i;
         int bar_w = (rw - 48) / 10;
         if (bar_w < 4) bar_w = 4;
-        pill(fb, w, h, x + 8, y + 8, 72, 28, paused ? RGB(201, 162, 39) : RGB(61, 154, 138), paused ? "PAUSED" : "PLAYING", 0);
-        draw_text(fb, w, h, x + 88, y + 16, "Media Stream Active", RGB(232, 238, 244));
+        int pw = 7 * CW + 16 > 72 ? 7 * CW + 16 : 72;
+        pill(fb, w, h, x + 8, y + 8, pw, 28, paused ? RGB(201, 162, 39) : RGB(61, 154, 138), paused ? "PAUSED" : "PLAYING", 0);
+        draw_text(fb, w, h, x + 16 + pw, y + 16, "Media Stream Active", RGB(232, 238, 244));
         for (i = 0; i < 10; i++) {
             int h_bar = paused ? 12 : (6 + ((ticks + i * 5) % 22));
             fill_rect(fb, w, h, x + 12 + i * (bar_w + 3), y + 68 - h_bar, bar_w, h_bar, RGB(122, 212, 196));
@@ -1231,14 +1317,23 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
             web_fill_clip(fb, w, h, x, y, t, ih, c, ox, oy, cx1, cy1);
             web_fill_clip(fb, w, h, x + iw - t, y, t, ih, c, ox, oy, cx1, cy1);
         } else if (it->kind == OS_FB_WEB_TEXT) {
-            int k, gh = os_ui_px(8, q);
-            if (y < oy || y + gh > cy1) continue;
+            /* Lot 69: pad = the item's CSS font scale (quarters); glyphs
+             * draw at web zoom * pad / 4, capped at the 4x cell. */
+            int fq = (it->pad >= 4 && it->pad <= 16) ? it->pad : OS_UI_Q1;
+            int tq = os_ui_q_clamp((q * fq + 2) / 4);
+            int k, gh, icw;
+            g_tq = tq;
+            gh = os_ui_px(8, tq);
+            icw = CW;
+            if (y < oy || y + gh > cy1) { g_tq = q; continue; }
             for (k = 0; k < OS_FB_WEB_TEXT_LEN && it->text[k]; k++) {
-                int gx = x + k * cw;
-                if (gx < ox || gx + cw + 1 > cx1) continue;
+                int gx = x + k * icw;
+                if (gx < ox || gx + icw + 1 > cx1) continue;
                 draw_char_bits(fb, w, h, gx, y, it->text[k], c);
-                if (it->bold) draw_char_bits(fb, w, h, gx + (q >= 8 ? q / 4 : 1), y, it->text[k], c);
+                if (it->bold) draw_char_bits(fb, w, h, gx + (tq >= 8 ? tq / 4 : 1), y, it->text[k], c);
             }
+            g_tq = q;
+            (void)cw;
         }
     }
     g_tq = OS_UI_Q1;
@@ -1452,12 +1547,15 @@ int gfx_desktop_chrome_q(const os_fb_scene_t *sc, int w, int h) {
  * menu fits, so the menus never disappear first. */
 typedef struct { int mx, flag_w, flag_q, logo; } menu_plan_t;
 static const char *const g_menu_names[GFX_DESKTOP_MENUS] = { "Chat", "Browser-OS", "Shell", "Admin", "Support", "Statut", "Fichiers", "Editeur" };
+static const char *const g_menu_short[GFX_DESKTOP_MENUS] = { "Chat", "Web", "Sh", "Adm", "Aide", "Etat", "Fich", "Edit" };
+static const char *menu_name(int i) { return g_menu_compact ? g_menu_short[i] : g_menu_names[i]; }
+static void menu_names_fill(const char **m) { int i; for (i = 0; i < GFX_DESKTOP_MENUS; i++) m[i] = menu_name(i); }
 static void menu_bar_plan(int w, int cq, menu_plan_t *p) {
     int cw = os_ui_char_w(cq), gap = w < 720 ? 8 : 14, total = 0, i, k;
     int fl1 = (w >= 920) ? (8 * 36 + 12) : ((w >= 720) ? (8 * 16 + 12) : 8);
     p->logo = 1;
     if (cq <= OS_UI_Q1) { p->mx = 122; p->flag_w = fl1; p->flag_q = fl1 > 8 ? OS_UI_Q1 : 0; return; }
-    for (i = 0; i < GFX_DESKTOP_MENUS; i++) { int n = 0; while (g_menu_names[i][n]) n++; total += n * cw + gap; }
+    for (i = 0; i < GFX_DESKTOP_MENUS; i++) { int n = 0; while (menu_name(i)[n]) n++; total += n * cw + gap; }
     total -= gap;
     for (k = 0; k < 4; k++) {
         p->logo = k < 2;
@@ -1475,7 +1573,8 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     int bar_h, chat_w, chat_h, chat_x, chat_y, scene_w, scene_h, scene_x, scene_y;
     int dock_w, dock_x, dock_y, bw, i, mx, ty, gap, flag_w;
     uint8_t pane;
-    const char *menus[GFX_DESKTOP_MENUS] = { "Chat", "Browser-OS", "Shell", "Admin", "Support", "Statut", "Fichiers", "Editeur" };
+    const char *menus[GFX_DESKTOP_MENUS];
+    menu_names_fill(menus);
 
     if (!out) return;
 
@@ -1493,6 +1592,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         def.input[0] = 0;
         sc = &def;
     }
+    scene_form(sc);
 
     bar_h = clampi(h / 22, 28, 40);
     out->bar_h = bar_h;
@@ -1641,6 +1741,20 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         chat_y = bar_h + (h / 14);
         if (chat_y + chat_h > h - 52) chat_y = bar_h + 8;
     }
+    if (sc->chat_mode == OS_FB_CHAT_FULL) {
+        /* Lot 69 (US-080): phone plan, the chat takes the desktop area
+         * between the menu bar and the dock; the Scene IA card is hidden */
+        chat_x = g_dock_left ? 60 : 8;
+        chat_y = bar_h + 8;
+        chat_w = w - chat_x - 8;
+        chat_h = h - bar_h - 8 - (g_dock_left ? 8 : 56);
+        if (chat_h < 120) chat_h = 120;
+        out->scene_ia.box.w = out->scene_ia.box.h = 0;
+        for (i = 0; i < 3; i++) out->scene_ia.pills[i].w = out->scene_ia.pills[i].h = 0;
+    } else if (g_dock_left && chat_x < 60) {
+        chat_x = 60;
+        if (chat_x + chat_w > w - 8) chat_w = w - 8 - chat_x;
+    }
     if (sc->chat_mode == OS_FB_CHAT_FLOAT && out->scene_ia.box.w > 0 &&
         chat_x < out->scene_ia.box.x + out->scene_ia.box.w && chat_x + chat_w > out->scene_ia.box.x &&
         chat_y < out->scene_ia.box.y + out->scene_ia.box.h && chat_y + chat_h > out->scene_ia.box.y) {
@@ -1755,23 +1869,9 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     for (i = 0; i < OS_FB_APPS; i++)
         if (sc->version >= 7 && app_dock(sc->app[i].kind) >= 0) out->dock_state[app_dock(sc->app[i].kind)] = out->app_win[i].visible ? 1 : 2;
 
-    dock_w = GFX_DESKTOP_DOCK * 44 + 16;
-    if (dock_w > w - 16) dock_w = w - 16;
-    dock_x = (w - dock_w) / 2;
-    dock_y = h - 48;
-    if (dock_y < bar_h + 8) dock_y = h - 36;
-
-    out->dock.box.x = dock_x;
-    out->dock.box.y = dock_y;
-    out->dock.box.w = dock_w;
-    out->dock.box.h = 40;
-
-    for (i = 0; i < GFX_DESKTOP_DOCK; i++) {
-        out->dock.icons[i].x = dock_x + 8 + i * 44;
-        out->dock.icons[i].y = dock_y + 4;
-        out->dock.icons[i].w = 36;
-        out->dock.icons[i].h = 32;
-    }
+    dock_geom(w, h, &out->dock.box);
+    for (i = 0; i < GFX_DESKTOP_DOCK; i++) dock_icon(w, h, i, &out->dock.icons[i]);
+    (void)dock_w; (void)dock_x; (void)dock_y;
 
     /* Same rule as the icon tiles drawn in gfx_desktop_draw_no_cursor:
      * a 42 px tile at w - 86 and its label below. */
@@ -1897,7 +1997,8 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     uint8_t pane;
     const char *ptitle;
     gfx_desktop_layout_t lay;
-    const char *menus[GFX_DESKTOP_MENUS] = { "Chat", "Browser-OS", "Shell", "Admin", "Support", "Statut", "Fichiers", "Editeur" };
+    const char *menus[GFX_DESKTOP_MENUS];
+    menu_names_fill(menus);
     struct {
         uint32_t c0, c1;
         const char *label;
@@ -1913,6 +2014,8 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     const char *caption;
 
     if (!fb || w < 160 || h < 120) return;
+    gfx_desktop_set_font_mode(sc && sc->magic == OS_FB_MAGIC && sc->version >= 8 ? sc->scale_pad[0] : 0);
+    scene_form(sc && sc->magic == OS_FB_MAGIC ? sc : 0);
     if (!sc || sc->magic != OS_FB_MAGIC) {
         def.magic = OS_FB_MAGIC;
         def.version = 1;
@@ -2006,45 +2109,72 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     mode_s = "en attente";
     if (sc->stage_mode == OS_FB_STAGE_ACTING) mode_s = "en action";
     if (sc->stage_mode == OS_FB_STAGE_PRESENTING) mode_s = "resultats";
-    round_rect_a(fb, w, h, 12, bar_h + 8, 96, 18, 9, RGB(11, 16, 20), 160);
-    stroke_round(fb, w, h, 12, bar_h + 8, 96, 18, 9, RGB(61, 154, 138), 1);
-    draw_text(fb, w, h, 22, bar_h + 13, mode_s, RGB(122, 212, 196));
-    if (w >= 700) {
-        char lab[64];
-        int ln = 0;
-        llm_text(lab, (int)sizeof(lab), "Assistant : ", sc, "");
-        draw_text(fb, w, h, 118, bar_h + 13, lab, RGB(243, 230, 176));
-        while (lab[ln]) ln++;
-        if (ln < 13) ln = 13;
-        if (w >= 980)
-            draw_text(fb, w, h, 118 + (ln + 2) * 8, bar_h + 13, "Clic : ouvrir  Glisser : deplacer  /help", RGB(154, 168, 181));
-    }
-
-    if (w >= 780 && h >= 520) {
-        int gap = (h >= 700) ? 72 : 56;
-        for (i = 0; i < 6; i++) {
-            if (bar_h + 16 + i * gap + 58 > h - 52) break;
-            icon_tile(fb, w, h, w - 86, bar_h + 16 + i * gap, icons[i].c0, icons[i].c1, icons[i].label);
-        }
-    }
-
-    scene_x = lay.scene_ia.box.x;
-    scene_y = lay.scene_ia.box.y;
-    scene_w = lay.scene_ia.box.w;
-    scene_h = lay.scene_ia.box.h;
-    if (scene_w > 0) {
-    round_rect_a(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(11, 16, 20), 150);
-    stroke_round(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(61, 154, 138), 1);
-    draw_text(fb, w, h, scene_x + 16, scene_y + 12, "Scene IA", RGB(232, 238, 244));
-    caption = " . en attente d'un prompt";
-    if (sc->stage_mode == OS_FB_STAGE_ACTING) caption = " . action stub";
-    if (sc->stage_mode == OS_FB_STAGE_PRESENTING) caption = " . resultats";
+    /* Lot 69: the status row, icon labels and Scene IA headings follow
+     * ui-scale (bounded by OS_UI_Q_CHROME_MAX so they stay one row). */
     {
-        char lab[80];
-        llm_text(lab, (int)sizeof(lab), "", sc, caption);
-        draw_text(fb, w, h, scene_x + 16, scene_y + 28, lab, RGB(154, 168, 181));
-    }
-    draw_stage_body(fb, w, h, scene_x + 12, scene_y + 48, scene_w - 24, scene_h - 60, sc);
+        int uq = sc->version >= 8 ? os_ui_effective_q(sc->ui_scale_q, 0, w, h) : OS_UI_Q1;
+        int cq = uq > OS_UI_Q_CHROME_MAX ? OS_UI_Q_CHROME_MAX : uq;
+        int gh = os_ui_px(8, cq);
+        int ph = gh + 10, pw, ml = 0, lx;
+        while (mode_s[ml]) ml++;
+        g_tq = cq;
+        pw = ml * CW + 20;
+        if (pw < 96) pw = 96;
+        round_rect_a(fb, w, h, 12, bar_h + 8, pw, ph, ph / 2, RGB(11, 16, 20), 160);
+        stroke_round(fb, w, h, 12, bar_h + 8, pw, ph, ph / 2, RGB(61, 154, 138), 1);
+        draw_text(fb, w, h, 22, bar_h + 13, mode_s, RGB(122, 212, 196));
+        lx = 12 + pw + 10;
+        if (w >= 700) {
+            char lab[64];
+            int ln = 0;
+            llm_text(lab, (int)sizeof(lab), "Assistant : ", sc, "");
+            draw_text_n(fb, w, h, lx, bar_h + 13, lab, (w - lx - 100) / CW, RGB(243, 230, 176));
+            while (lab[ln]) ln++;
+            if (ln < 13) ln = 13;
+            if (lx + (ln + 2 + 41) * CW < w - 96)
+                draw_text(fb, w, h, lx + (ln + 2) * CW, bar_h + 13, "Clic : ouvrir  Glisser : deplacer  /help", RGB(154, 168, 181));
+        }
+        g_tq = OS_UI_Q1;
+
+        if (w >= 780 && h >= 520) {
+            int gap = (h >= 700) ? 72 : 56;
+            gap += gh - 8;
+            for (i = 0; i < 6; i++) {
+                if (bar_h + 16 + i * gap + 50 + gh > h - 52) break;
+                g_tq = cq;
+                icon_tile(fb, w, h, w - 86, bar_h + 16 + i * gap, icons[i].c0, icons[i].c1, icons[i].label);
+                g_tq = OS_UI_Q1;
+            }
+        }
+
+        scene_x = lay.scene_ia.box.x;
+        scene_y = lay.scene_ia.box.y;
+        scene_w = lay.scene_ia.box.w;
+        scene_h = lay.scene_ia.box.h;
+        if (scene_w > 0) {
+            int lh = os_ui_line_h(cq) + 6, body_y;
+            round_rect_a(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(11, 16, 20), 150);
+            stroke_round(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(61, 154, 138), 1);
+            g_tq = cq;
+            draw_text_n(fb, w, h, scene_x + 16, scene_y + 12, "Scene IA", (scene_w - 32) / CW, RGB(232, 238, 244));
+            caption = " . en attente d'un prompt";
+            if (sc->stage_mode == OS_FB_STAGE_ACTING) caption = " . action stub";
+            if (sc->stage_mode == OS_FB_STAGE_PRESENTING) caption = " . resultats";
+            {
+                char lab[80];
+                llm_text(lab, (int)sizeof(lab), "", sc, caption);
+                draw_text_n(fb, w, h, scene_x + 16, scene_y + 12 + lh, lab, (scene_w - 32) / CW, RGB(154, 168, 181));
+            }
+            g_tq = OS_UI_Q1;
+            body_y = scene_y + 12 + 2 * lh + 4;
+            if (body_y < scene_y + 48) body_y = scene_y + 48;
+            if (scene_h - (body_y - scene_y) - 12 > 8)
+            {
+                g_tq = cq;
+                draw_stage_body(fb, w, h, scene_x + 12, body_y, scene_w - 24, scene_h - (body_y - scene_y) - 12, sc);
+                g_tq = OS_UI_Q1;
+            }
+        }
     }
 
     pane = sc->pane;
@@ -2112,29 +2242,43 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     dock_x = (w - dock_w) / 2;
     dock_y = h - 48;
     if (dock_y < bar_h + 8) dock_y = h - 36;
-    round_rect_a(fb, w, h, dock_x, dock_y, dock_w, 40, 16, RGB(16, 26, 34), 220);
-    for (i = 0; i < GFX_DESKTOP_DOCK; i++) {
-        round_rect(fb, w, h, dock_x + 8 + i * 44, dock_y + 4, 36, 32, 10,
-                   i == lay.hover_dock ? RGB(122, 212, 196) : RGB(61, 154, 138));
-        dock_picto(fb, w, h, dock_x + 8 + i * 44, dock_y + 3, i);
-        if (lay.dock_state[i]) {
-            /* open (light) or minimized (amber) window mark under the icon */
-            uint32_t c = lay.dock_state[i] == 2 ? RGB(230, 180, 60) : RGB(232, 238, 244);
-            fill_rect(fb, w, h, dock_x + 8 + i * 44 + 14, dock_y + 36, 8, 3, c);
+    {
+        gfx_rect_t db, ir;
+        dock_geom(w, h, &db);
+        round_rect_a(fb, w, h, db.x, db.y, db.w, db.h, 16, RGB(16, 26, 34), 220);
+        for (i = 0; i < GFX_DESKTOP_DOCK; i++) {
+            dock_icon(w, h, i, &ir);
+            round_rect(fb, w, h, ir.x, ir.y, 36, 32, 10,
+                       i == lay.hover_dock ? RGB(122, 212, 196) : RGB(61, 154, 138));
+            dock_picto(fb, w, h, ir.x, ir.y - 1, i);
+            if (lay.dock_state[i]) {
+                /* open (light) or minimized (amber) window mark next to the icon */
+                uint32_t c = lay.dock_state[i] == 2 ? RGB(230, 180, 60) : RGB(232, 238, 244);
+                if (g_dock_left) fill_rect(fb, w, h, ir.x + 37, ir.y + 12, 3, 8, c);
+                else fill_rect(fb, w, h, ir.x + 14, ir.y + 32, 8, 3, c);
+            }
         }
+        if (lay.hover_dock >= 0 && lay.hover_dock < GFX_DESKTOP_DOCK) {
+            /* tooltip above (bottom dock) or right of (left dock) the icon;
+             * Lot 69: it follows ui-scale up to the chrome cap */
+            const char *name = gfx_desktop_dock_names[lay.hover_dock];
+            int n = 0, tx, ty, tw, th, uq;
+            uq = sc->version >= 8 ? os_ui_effective_q(sc->ui_scale_q, 0, w, h) : OS_UI_Q1;
+            g_tq = uq > OS_UI_Q_CHROME_MAX ? OS_UI_Q_CHROME_MAX : uq;
+            while (name[n]) n++;
+            tw = n * CW + 16;
+            th = TS(8) + 12;
+            dock_icon(w, h, lay.hover_dock, &ir);
+            if (g_dock_left) { tx = db.x + db.w + 8; ty = ir.y + (ir.h - th) / 2; }
+            else { tx = ir.x + 18 - tw / 2; ty = db.y - th - 6; }
+            if (tx < 4) tx = 4;
+            if (tx + tw > w - 4) tx = w - 4 - tw;
+            round_rect(fb, w, h, tx, ty, tw, th, 6, RGB(232, 238, 244));
+            draw_text(fb, w, h, tx + 8, ty + 6, name, RGB(15, 20, 25));
+            g_tq = OS_UI_Q1;
+        }
+        (void)dock_w; (void)dock_x; (void)dock_y;
     }
-    if (lay.hover_dock >= 0 && lay.hover_dock < GFX_DESKTOP_DOCK) {
-        /* tooltip above the hovered dock icon */
-        const char *name = gfx_desktop_dock_names[lay.hover_dock];
-        int n = 0, tx;
-        while (name[n]) n++;
-        tx = dock_x + 8 + lay.hover_dock * 44 + 18 - (n * 8 + 16) / 2;
-        if (tx < 4) tx = 4;
-        if (tx + n * 8 + 16 > w - 4) tx = w - 4 - n * 8 - 16;
-        round_rect(fb, w, h, tx, dock_y - 26, n * 8 + 16, 20, 6, RGB(232, 238, 244));
-        draw_text(fb, w, h, tx + 8, dock_y - 20, name, RGB(15, 20, 25));
-    }
-
 }
 
 void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h) {

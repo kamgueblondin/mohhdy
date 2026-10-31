@@ -130,6 +130,45 @@ static void test_battery_sim(void) {
     TEST_ASSERT_TRUE(strstr(out, "battery none (emulated pc, mains)") != 0);
 }
 
+
+/* Lot 69 (US-080): the physical size line from SYS_DISPLAY_INFO facts */
+static void test_physical_from_display_info(void) {
+    os_display_info_t d;
+    char out[200];
+    int diag = -1;
+    memset(&d, 0, sizeof(d));
+    d.edid_status = 1;
+    TEST_ASSERT_EQUAL(1, plat_form_physical(&d, &diag, out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(0, diag);
+    TEST_ASSERT_TRUE(strstr(out, "display physical unknown (no Bochs/QEMU std VGA) plan from pixels only") != 0);
+    d.edid_status = 0;
+    TEST_ASSERT_EQUAL(1, plat_form_physical(&d, &diag, out, (int)sizeof(out)));
+    TEST_ASSERT_TRUE(strstr(out, "(edid ok, no size)") != 0);
+    d.edid_status = 4;
+    (void)plat_form_physical(&d, &diag, out, (int)sizeof(out));
+    TEST_ASSERT_TRUE(strstr(out, "bad EDID checksum") != 0);
+    d.edid_status = 0; d.source = OS_DISPLAY_SRC_EDID_DTD;
+    d.mm_w = 260; d.mm_h = 195; d.diag_tenths = 128; d.native_w = 1024; d.native_h = 768;
+    memcpy(d.mfg, "RHT", 4);
+    TEST_ASSERT_EQUAL(0, plat_form_physical(&d, &diag, out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(128, diag);
+    TEST_ASSERT_EQUAL_STRING("display physical 260x195mm diag 12.8in source edid-dtd mfg RHT native 1024x768\n", out);
+    d.diag_tenths = 2000;                       /* out of the plan range: ignored */
+    TEST_ASSERT_EQUAL(1, plat_form_physical(&d, &diag, out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(0, diag);
+    TEST_ASSERT_EQUAL(-1, plat_form_physical(0, &diag, out, (int)sizeof(out)));
+}
+
+/* the EDID diagonal changes the plan: a 1024x768 at 7 in is a tablet */
+static void test_physical_changes_plan(void) {
+    plat_form_plan_t a, b;
+    TEST_ASSERT_EQUAL(0, plat_form_plan(1024, 768, 0, 0, &a));
+    TEST_ASSERT_EQUAL(0, plat_form_plan(1024, 768, 70, 0, &b));
+    TEST_ASSERT_TRUE(b.ppi > 0);
+    TEST_ASSERT_TRUE(b.ui_q >= a.ui_q);
+    TEST_ASSERT_TRUE(b.form != PF_DESKTOP || b.ui_q > a.ui_q);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_isqrt);
@@ -138,6 +177,8 @@ int main(void) {
     RUN_TEST(test_names_and_report);
     RUN_TEST(test_energy_apply);
     RUN_TEST(test_battery_sim);
+    RUN_TEST(test_physical_from_display_info);
+    RUN_TEST(test_physical_changes_plan);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

@@ -438,6 +438,7 @@ typedef struct {
 #define OS_FB_MAGIC 0x4F534642u /* 'OSFB' */
 #define OS_FB_CHAT_CENTER 0
 #define OS_FB_CHAT_FLOAT 1
+#define OS_FB_CHAT_FULL 2   /* Lot 69 (US-080): phone plan, version >= 8 */
 #define OS_FB_PANE_NONE 0
 #define OS_FB_PANE_BROWSER 1
 #define OS_FB_PANE_SHELL 2
@@ -619,6 +620,10 @@ typedef struct {
      * and a zoom per window (OS_UI_Z_*, 0 or 4 = none). */
     uint8_t ui_scale_q;
     uint8_t zoom_q[12];
+    /* Lot 69: scale_pad[0] font mode (0 native fonts, 1 smoothed 8x8);
+     * scale_pad[1] form-factor bits: 1 dock on the left, 2 compact menu
+     * labels (US-080, `form-factor apply`). chat_mode may be
+     * OS_FB_CHAT_FULL. */
     uint8_t scale_pad[3];
 } os_fb_scene_t;
 
@@ -2063,6 +2068,23 @@ typedef struct {
 #define OS_OUTCAP_STAT 3    /* ecx = os_outcap_stat_t* */
 #define OS_OUTCAP_MAX 16384 /* bytes kept per capture (16 KiB) */
 #define OS_OUTCAP_PIDS 16   /* tasks tracked per capture */
+/* Lot 69 (US-080): read-only display facts for the form-factor plan.
+ * ecx = os_display_info_t*. Any user task; nothing is changed. The size
+ * comes from the EDID block of the Bochs/QEMU std VGA (MMIO BAR 2, read
+ * once at boot while Ring 0 still owns PCI); source 0 = no EDID. */
+#define SYS_DISPLAY_INFO 164
+#define OS_DISPLAY_SRC_NONE 0
+#define OS_DISPLAY_SRC_EDID_DTD 1   /* detailed timing, mm */
+#define OS_DISPLAY_SRC_EDID_CM 2    /* basic size, cm */
+typedef struct {
+    uint16_t fb_w, fb_h;            /* current mode, 0 when text mode */
+    uint16_t mm_w, mm_h;            /* physical image size, 0 unknown */
+    uint16_t native_w, native_h;    /* EDID preferred timing */
+    uint16_t diag_tenths;           /* diagonal, 0.1 inch */
+    uint8_t source;                 /* OS_DISPLAY_SRC_* */
+    uint8_t edid_status;            /* 0 ok, 1 no device, 2 no BAR, 3 bad header, 4 bad checksum */
+    char mfg[4];
+} os_display_info_t;
 #define OS_OUTCAP_BAD (-1)
 #define OS_OUTCAP_BUSY (-2)
 typedef struct {
