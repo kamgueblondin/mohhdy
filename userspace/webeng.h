@@ -75,6 +75,14 @@ enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3, 
  * control byte; hyphens: manual (default; auto reads as manual) or none. */
 #define WE_SHY '\x1f'
 enum { WE_HYPHENS_MANUAL = 0, WE_HYPHENS_NONE = 1 };
+/* Lot 64: one background-image layer after the first (see we_node_t). */
+#define WE_BG_LAYERS 4
+typedef struct {
+    uint16_t off, len;
+    uint8_t repeat, size_kind, pos_pct, space;
+    int16_t pos[2], size[2];
+} we_bg_layer_t;
+enum { WE_BGR_PLAIN = 0, WE_BGR_SPACE = 1, WE_BGR_ROUND = 2 };
 enum { WE_WM_HORIZONTAL = 0, WE_WM_VERTICAL_RL = 1, WE_WM_VERTICAL_LR = 2 };
 enum { WE_BGS_AUTO = 0, WE_BGS_CONTAIN = 1, WE_BGS_COVER = 2, WE_BGS_EXPLICIT = 3 };
 enum { WE_INSET_LEFT = 1, WE_INSET_TOP = 2, WE_INSET_RIGHT = 4, WE_INSET_BOTTOM = 8 };
@@ -282,6 +290,11 @@ typedef struct {
     uint16_t bgi_off, bgi_len;
     uint8_t bgi_repeat, bgi_size_kind, bgi_pos_pct;
     int16_t bgi_pos[2], bgi_size[2];
+    /* Lot 64: repeat style per axis (bits 0-1 x, 2-3 y: WE_BGR_*), and the
+     * layers listed after the first one (painted under it, the last one
+     * lowest): bgi_layers of them in bgi_more, same fields. */
+    uint8_t bgi_space, bgi_layers;
+    we_bg_layer_t bgi_more[WE_BG_LAYERS - 1];
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */

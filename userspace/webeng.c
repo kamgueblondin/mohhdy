@@ -2674,19 +2674,37 @@ static int background_url(we_doc_t *d, we_node_t *n, const char *v, int len) {
     return 0;
 }
 
-/* repeat, no-repeat, repeat-x, repeat-y, or one repeat/no-repeat per axis. */
+/* repeat, no-repeat, repeat-x, repeat-y, or one repeat/no-repeat per axis.
+ * Lot 64: space and round repeat too, with their style in bgi_space. */
 static int background_repeat(we_node_t *n, const char *v, int len) {
-    int a[4], l[4], c = tokens(v, len, a, l), k, bits = 0;
+    int a[4], l[4], c = tokens(v, len, a, l), k, bits = 0, space = 0;
     if (c == 1 && value_is(v, len, "repeat-x")) bits = 1;
     else if (c == 1 && value_is(v, len, "repeat-y")) bits = 2;
     else if (c == 1 || c == 2) {
         for (k = 0; k < c; k++) {
-            if (value_is(v + a[k], l[k], "repeat")) bits |= c == 1 ? 3 : 1 << k;
+            int axes = c == 1 ? 3 : 1 << k, style = value_is(v + a[k], l[k], "space") ? WE_BGR_SPACE :
+                       value_is(v + a[k], l[k], "round") ? WE_BGR_ROUND : WE_BGR_PLAIN;
+            if (style || value_is(v + a[k], l[k], "repeat")) bits |= axes;
             else if (!value_is(v + a[k], l[k], "no-repeat")) return -1;
+            if (axes & 1) space |= style;
+            if (axes & 2) space |= style << 2;
         }
     } else return -1;
     n->bgi_repeat = (uint8_t)bits;
+    n->bgi_space = (uint8_t)space;
     return 0;
+}
+
+/* Lot 64: exchanges the first background layer with layer k (k >= 1), so
+ * that the one-layer parsers and painter serve every layer. */
+static void bgi_layer_swap(we_node_t *n, int k) {
+    we_bg_layer_t *l = &n->bgi_more[k - 1], t = *l;
+    l->off = n->bgi_off; l->len = n->bgi_len; l->repeat = n->bgi_repeat; l->size_kind = n->bgi_size_kind;
+    l->pos_pct = n->bgi_pos_pct; l->space = n->bgi_space;
+    l->pos[0] = n->bgi_pos[0]; l->pos[1] = n->bgi_pos[1]; l->size[0] = n->bgi_size[0]; l->size[1] = n->bgi_size[1];
+    n->bgi_off = t.off; n->bgi_len = t.len; n->bgi_repeat = t.repeat; n->bgi_size_kind = t.size_kind;
+    n->bgi_pos_pct = t.pos_pct; n->bgi_space = t.space;
+    n->bgi_pos[0] = t.pos[0]; n->bgi_pos[1] = t.pos[1]; n->bgi_size[0] = t.size[0]; n->bgi_size[1] = t.size[1];
 }
 
 /* auto, contain, cover, or one or two lengths/percentages (auto allowed). */
@@ -2705,6 +2723,170 @@ static int background_size(we_node_t *n, const char *v, int len) {
     n->bgi_size_kind = size[0] < 0 && size[1] < 0 ? WE_BGS_AUTO : WE_BGS_EXPLICIT;
     n->bgi_size[0] = size[0]; n->bgi_size[1] = size[1];
     n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 3) | bits);
+    return 0;
+}
+
+static int background_position(we_node_t *n, const char *v, int len) {
+    uint8_t bits;
+    if (position_pair(v, len, n->bgi_pos, &bits)) return -1;
+    n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 12) | bits);
+    return 0;
+}
+
+/* Lot 64: a comma list of background-repeat (kind 0), -position (1) or
+ * -size (2) values: layer k takes item k modulo the count (CSS repeats a
+ * short list). The node is changed only when every item parses. */
+static we_node_t layer_scratch;
+
+/* initial values of every background-image layer */
+static void bgi_reset(we_node_t *n) {
+    int k;
+    n->bgi_len = 0; n->bgi_repeat = 3; n->bgi_size_kind = WE_BGS_AUTO; n->bgi_pos_pct = 3;
+    n->bgi_pos[0] = n->bgi_pos[1] = 0; n->bgi_size[0] = n->bgi_size[1] = -1;
+    n->bgi_space = 0; n->bgi_layers = 0;
+    for (k = 0; k < WE_BG_LAYERS - 1; k++) {
+        we_bg_layer_t *l = &n->bgi_more[k];
+        l->off = l->len = 0; l->repeat = 3; l->size_kind = WE_BGS_AUTO; l->pos_pct = 3; l->space = 0;
+        l->pos[0] = l->pos[1] = 0; l->size[0] = l->size[1] = -1;
+    }
+}
+static int list_count(const char *v, int len) {
+    int a[WE_BG_LAYERS + 1], l[WE_BG_LAYERS + 1];
+    return comma_args(v, len, a, l, WE_BG_LAYERS + 1);
+}
+static int background_list(we_node_t *n, const char *v, int len, int kind) {
+    int a[WE_BG_LAYERS], l[WE_BG_LAYERS], c = comma_args(v, len, a, l, WE_BG_LAYERS), k, bad = 0;
+    if (c < 1) return -1;
+    layer_scratch = *n;
+    for (k = 0; k < WE_BG_LAYERS && !bad; k++) {
+        const char *item = v + a[k % c];
+        int il = l[k % c];
+        if (k) bgi_layer_swap(&layer_scratch, k);
+        bad = kind == 0 ? background_repeat(&layer_scratch, item, il) :
+              kind == 1 ? background_position(&layer_scratch, item, il) : background_size(&layer_scratch, item, il);
+        if (k) bgi_layer_swap(&layer_scratch, k);
+    }
+    if (bad) return -1;
+    *n = layer_scratch;
+    return 0;
+}
+
+/* Lot 64: the background shorthand with images: comma layers of
+ * [url() | none | gradient] [repeat style] [position [/ size]], the last one
+ * also a colour; a gradient only in the last layer. Every background
+ * property not given returns to its initial value. Box keywords
+ * (border-box ...) and attachment are refused with the declaration. */
+static int parse_color(const char* v, int n, uint32_t* out);
+static int shorthand_kind(const char *t, int l) {
+    static const char *const repeats[] = {"repeat", "no-repeat", "repeat-x", "repeat-y", "space", "round", 0};
+    static const char *const places[] = {"left", "right", "top", "bottom", "center", 0};
+    int k;
+    if (l > 4 && w_ieq_n(t, 4, "url(")) return 1;
+    if (value_is(t, l, "none")) return 1;
+    if (l > 16 && (w_ieq_n(t, 16, "linear-gradient(") || w_ieq_n(t, 16, "radial-gradient("))) return 2;
+    for (k = 0; repeats[k]; k++) if (value_is(t, l, repeats[k])) return 3;
+    for (k = 0; places[k]; k++) if (value_is(t, l, places[k])) return 4;
+    if ((t[0] >= '0' && t[0] <= '9') || t[0] == '-' || t[0] == '.') return 4;
+    if (value_is(t, l, "auto") || value_is(t, l, "contain") || value_is(t, l, "cover")) return 5;
+    return 6;                                                    /* a colour, or nothing valid */
+}
+
+/* the shorthand takes this path with a url, a list or several tokens */
+static int shorthand_layers(const char *v, int len) {
+    int k, depth = 0;
+    for (k = 0; k < len; k++) {
+        if (v[k] == '(') depth++;
+        else if (v[k] == ')') depth--;
+        else if (!depth && (w_space(v[k]) || v[k] == ',' || v[k] == '/')) return 1;
+        if (k + 4 <= len && w_ieq_n(v + k, 4, "url(")) return 1;
+    }
+    return 0;
+}
+
+static int background_shorthand(we_doc_t *d, we_node_t *n, const char *v, int len) {
+    int a[WE_BG_LAYERS], l[WE_BG_LAYERS], c = comma_args(v, len, a, l, WE_BG_LAYERS), k, urls = 0;
+    if (c < 1) return -1;
+    layer_scratch = *n;
+    layer_scratch.has_bg = 0; layer_scratch.grad_dir = 0;
+    bgi_reset(&layer_scratch);
+    for (k = 0; k < c; k++) {
+        const char *s = v + a[k];
+        int sl = l[k], at = 0, span[6][2], slash = 0, kind, bad = 0, m;
+        for (m = 0; m < 6; m++) span[m][0] = span[m][1] = -1;
+        while (at < sl && !bad) {
+            int t, depth = 0;
+            if (w_space(s[at])) { at++; continue; }
+            if (s[at] == '/') { if (slash || span[3][0] < 0) return -1; slash = 1; at++; continue; }
+            for (t = at; t < sl && (depth || (!w_space(s[t]) && s[t] != '/')); t++) {
+                if (s[t] == '(') depth++;
+                else if (s[t] == ')') depth--;
+            }
+            kind = shorthand_kind(s + at, t - at);
+            if (slash && (kind == 4 || kind == 5)) kind = 5;
+            else if (kind == 5) return -1;                      /* a size needs the slash */
+            if (kind == 1 || kind == 2 || kind == 6) {
+                if (span[kind - 1][0] >= 0 && kind != 6) return -1;   /* one image per layer */
+                if (kind == 6 && (span[5][0] >= 0 || k != c - 1)) return -1;
+            } else if (span[kind - 1][0] >= 0) {
+                /* the tokens of a group must follow each other */
+                int g;
+                for (g = span[kind - 1][1]; g < at && (w_space(s[g]) || s[g] == '/'); g++) {}
+                if (g != at) return -1;
+            }
+            if (span[kind - 1][0] < 0) span[kind - 1][0] = at;
+            span[kind - 1][1] = t;
+            at = t;
+        }
+        if (slash && span[4][0] < 0) return -1;
+        if (span[1][0] >= 0 && k != c - 1) return -1;           /* a gradient only lowest */
+        if (span[0][0] >= 0 && span[1][0] >= 0) return -1;
+        if (span[1][0] >= 0 && parse_gradient(&layer_scratch, s + span[1][0], span[1][1] - span[1][0])) return -1;
+        if (span[5][0] >= 0) {
+            uint32_t col;
+            if (parse_color(s + span[5][0], span[5][1] - span[5][0], &col)) return -1;
+            if (!w_ieq_n(s + span[5][0], span[5][1] - span[5][0], "transparent")) { layer_scratch.bg = col; layer_scratch.has_bg = 1; }
+        }
+        if (span[1][0] >= 0) continue;
+        if (urls >= WE_BG_LAYERS) return -1;
+        if (urls) bgi_layer_swap(&layer_scratch, urls);
+        if (span[0][0] >= 0 && !value_is(s + span[0][0], span[0][1] - span[0][0], "none"))
+            bad = background_url(d, &layer_scratch, s + span[0][0], span[0][1] - span[0][0]);
+        if (!bad && span[2][0] >= 0) bad = background_repeat(&layer_scratch, s + span[2][0], span[2][1] - span[2][0]);
+        if (!bad && span[3][0] >= 0) bad = background_position(&layer_scratch, s + span[3][0], span[3][1] - span[3][0]);
+        if (!bad && span[4][0] >= 0) bad = background_size(&layer_scratch, s + span[4][0], span[4][1] - span[4][0]);
+        if (urls) bgi_layer_swap(&layer_scratch, urls);
+        if (bad) return -1;
+        urls++;
+    }
+    layer_scratch.bgi_layers = (uint8_t)(urls > 1 ? urls - 1 : 0);
+    *n = layer_scratch;
+    return 0;
+}
+
+/* Lot 64: background-image as a comma list: url() or none layers, the
+ * first on top; a gradient may only be the last (lowest) one, since the
+ * gradient paints under every image. */
+static int parse_gradient(we_node_t *n, const char *v, int len);
+static int background_layers(we_doc_t *d, we_node_t *n, const char *v, int len) {
+    int a[WE_BG_LAYERS], l[WE_BG_LAYERS], c = comma_args(v, len, a, l, WE_BG_LAYERS), k, urls = 0, bad = 0;
+    if (c < 1) return -1;
+    layer_scratch = *n;
+    layer_scratch.grad_dir = 0; layer_scratch.bgi_len = 0; layer_scratch.bgi_layers = 0;
+    for (k = 0; k < c && !bad; k++) {
+        const char *item = v + a[k];
+        if (l[k] > 16 && (w_ieq_n(item, 16, "linear-gradient(") || w_ieq_n(item, 16, "radial-gradient("))) {
+            bad = k != c - 1 || parse_gradient(&layer_scratch, item, l[k]);
+            continue;
+        }
+        if (urls) bgi_layer_swap(&layer_scratch, urls);
+        if (value_is(item, l[k], "none")) layer_scratch.bgi_len = 0;
+        else bad = background_url(d, &layer_scratch, item, l[k]);
+        if (urls) bgi_layer_swap(&layer_scratch, urls);
+        urls++;
+    }
+    if (bad) return -1;
+    layer_scratch.bgi_layers = (uint8_t)(urls ? urls - 1 : 0);
+    *n = layer_scratch;
     return 0;
 }
 
@@ -3563,32 +3745,33 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (parse_color(v, vl, &col) == 0) n->color = col;
         else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
     }
+    else if (w_eq(prop, "background") && shorthand_layers(v, vl)) {
+        if (background_shorthand(d, n, v, vl)) diag(d, "background refused", -1);
+    }
     else if ((w_eq(prop, "background") || w_eq(prop, "background-image")) && vl > 16 &&
              (w_ieq_n(v, 16, "linear-gradient(") || w_ieq_n(v, 16, "radial-gradient("))) {
-        if (parse_gradient(n, v, vl)) diag(d, "gradient refused", -1);
+        if (w_eq(prop, "background-image") && list_count(v, vl) > 1) {
+            if (background_layers(d, n, v, vl)) diag(d, "background image refused", -1);
+        } else if (parse_gradient(n, v, vl)) diag(d, "gradient refused", -1);
         else {
-            n->bgi_len = 0;
+            n->bgi_len = 0; n->bgi_layers = 0;
             if (w_eq(prop, "background")) n->has_bg = 0;
         }
     }
     else if (w_eq(prop, "background-image")) {
-        if (value_is(v, vl, "none")) n->grad_dir = 0, n->bgi_len = 0;
-        else if (background_url(d, n, v, vl)) diag(d, "background image refused", -1);
-        else n->grad_dir = 0;
+        if (background_layers(d, n, v, vl)) diag(d, "background image refused", -1);
     }
     else if (w_eq(prop, "background-repeat")) {
-        if (background_repeat(n, v, vl)) diag(d, "background repeat refused", -1);
+        if (background_list(n, v, vl, 0)) diag(d, "background repeat refused", -1);
     }
     else if (w_eq(prop, "background-position")) {
-        uint8_t bits;
-        if (position_pair(v, vl, n->bgi_pos, &bits)) diag(d, "background position refused", -1);
-        else n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 12) | bits);
+        if (background_list(n, v, vl, 1)) diag(d, "background position refused", -1);
     }
     else if (w_eq(prop, "background-size")) {
-        if (background_size(n, v, vl)) diag(d, "background size refused", -1);
+        if (background_list(n, v, vl, 2)) diag(d, "background size refused", -1);
     }
     else if (w_eq(prop, "background") || w_eq(prop, "background-color")) {
-        if (w_eq(prop, "background")) n->grad_dir = 0, n->bgi_len = 0;
+        if (w_eq(prop, "background")) n->grad_dir = 0, n->bgi_len = 0, n->bgi_layers = 0;
         if (w_ieq_n(v, vl, "none") || w_ieq_n(v, vl, "transparent")) n->has_bg = 0;
         else if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
         else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
@@ -3823,8 +4006,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
         n->spacing_pct = 0; n->grad_dir = 0;
         n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING; n->text_overflow = 0;
-        n->bgi_len = 0; n->bgi_repeat = 3; n->bgi_size_kind = WE_BGS_AUTO; n->bgi_pos_pct = 3;
-        n->bgi_pos[0] = n->bgi_pos[1] = 0; n->bgi_size[0] = n->bgi_size[1] = -1;
+        bgi_reset(n);
         w_zero(n->rad_x, sizeof(n->rad_x)); w_zero(n->rad_y, sizeof(n->rad_y)); n->rad_pct = 0;
         n->text_transform = p ? p->text_transform : WE_TT_NONE;
         n->letter_spacing = p ? p->letter_spacing : 0;
@@ -6217,24 +6399,66 @@ static int bgi_wrap(int v, int t) {
     return v < 0 ? v + t : v;
 }
 
+/* Lot 64: round fits a whole number of tiles in the area (the other axis
+ * keeps the ratio when its size is auto); space fits as many whole tiles
+ * as the area holds, the first and last at its edges, the free pixels
+ * shared out as equal gaps (one tile only: placed by position, no repeat). */
+static void bgi_round_space(const we_node_t *n, const int *area, int *tw, int *th, int *gap, int *repeat) {
+    int axis, style[2], size_auto[2];
+    style[0] = n->bgi_space & 3; style[1] = n->bgi_space >> 2 & 3;
+    size_auto[0] = n->bgi_size_kind == WE_BGS_AUTO || (n->bgi_size_kind == WE_BGS_EXPLICIT && n->bgi_size[0] < 0);
+    size_auto[1] = n->bgi_size_kind == WE_BGS_AUTO || (n->bgi_size_kind == WE_BGS_EXPLICIT && n->bgi_size[1] < 0);
+    gap[0] = gap[1] = 0;
+    for (axis = 0; axis < 2; axis++) {
+        int *t = axis ? th : tw, *o = axis ? tw : th, extent = area[2 + axis], count, fit;
+        if (!(*repeat & (1 << axis)) || *t < 1) continue;
+        if (style[axis] == WE_BGR_ROUND) {
+            count = (extent + *t / 2) / *t;
+            if (count < 1) count = 1;
+            fit = extent / count;
+            if (fit < 1) fit = 1;
+            if (style[!axis] != WE_BGR_ROUND && size_auto[!axis]) *o = *o * fit / *t;
+            *t = fit;
+            if (*o < 1) *o = 1;
+        } else if (style[axis] == WE_BGR_SPACE) {
+            count = extent / *t;
+            if (count >= 2) gap[axis] = (extent - count * *t) / (count - 1);
+            else *repeat &= ~(1 << axis);
+        }
+    }
+}
+
+/* the tile pixel at (col, row), 0 in a space gap */
+static int bgi_pixel(int col, int row, int ox, int oy, int tw, int th, const int *gap, uint32_t *color) {
+    int u = bgi_wrap(col - ox, tw + gap[0]), v = bgi_wrap(row - oy, th + gap[1]);
+    if (u >= tw || v >= th) return 0;
+    *color = image_sample(u, v, tw, th);
+    return 1;
+}
+
 static int bgi_fill(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh) {
     we_node_t *n = &d->nodes[idx];
     int area[4], clip[4], tw, th, ox, oy, x0, y0, x1, y1, row, col, nr = 0, room = OS_FB_WEB_ITEMS - (int)d->nitems;
+    int gap[2], repeat = n->bgi_repeat;
     if (!n->bgi_len || n->visibility || image_open(d, idx)) return 0;      /* an <img> never keeps a url */
     background_box(n, n->bg_origin, bx, by, bw, bh, area);
     background_box(n, n->bg_clip, bx, by, bw, bh, clip);
     bgi_tile(n, area[2], area[3], image_work.decoded.w, image_work.decoded.h, &tw, &th);
     if (tw < 1 || th < 1) return 0;
+    bgi_round_space(n, area, &tw, &th, gap, &repeat);
     ox = area[0] + (n->bgi_pos_pct & 1 ? (area[2] - tw) * n->bgi_pos[0] / 100 : n->bgi_pos[0]);
     oy = area[1] + (n->bgi_pos_pct & 2 ? (area[3] - th) * n->bgi_pos[1] / 100 : n->bgi_pos[1]);
+    if (gap[0]) ox = area[0];                                   /* space ignores the position */
+    if (gap[1]) oy = area[1];
     x0 = clip[0]; x1 = clip[0] + clip[2]; y0 = clip[1]; y1 = clip[1] + clip[3];
-    if (!(n->bgi_repeat & 1)) { if (x0 < ox) x0 = ox; if (x1 > ox + tw) x1 = ox + tw; }
-    if (!(n->bgi_repeat & 2)) { if (y0 < oy) y0 = oy; if (y1 > oy + th) y1 = oy + th; }
+    if (!(repeat & 1)) { if (x0 < ox) x0 = ox; if (x1 > ox + tw) x1 = ox + tw; }
+    if (!(repeat & 2)) { if (y0 < oy) y0 = oy; if (y1 > oy + th) y1 = oy + th; }
     for (row = y0; row < y1; row++) {
         for (col = x0; col < x1;) {
-            int first = col, r, found = -1, sy = bgi_wrap(row - oy, th);
-            uint32_t color = image_sample(bgi_wrap(col - ox, tw), sy, tw, th);
-            for (col++; col < x1 && image_sample(bgi_wrap(col - ox, tw), sy, tw, th) == color; col++) {}
+            int first = col, r, found = -1;
+            uint32_t color, next;
+            if (!bgi_pixel(col, row, ox, oy, tw, th, gap, &color)) { col++; continue; }
+            for (col++; col < x1 && bgi_pixel(col, row, ox, oy, tw, th, gap, &next) && next == color; col++) {}
             for (r = nr - 1; r >= 0; r--) {
                 os_fb_web_item_t *it = &image_work.rect[r];
                 if (it->x == first && it->w == col - first && it->color == color && it->y + it->h == row) { found = r; break; }
@@ -6262,6 +6486,25 @@ static int bgi_fill(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh
     }
     d->nitems += (uint32_t)nr;
     return nr;
+}
+
+/* Lot 64: the layers from the lowest up, each inserted over the previous */
+static int bgi_paint(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh) {
+    we_node_t *n = &d->nodes[idx];
+    int k, total = 0, failed = 0;
+    if (!n->bgi_layers) return bgi_fill(d, idx, at, bx, by, bw, bh);
+    for (k = n->bgi_layers; k >= 0; k--) {
+        /* each layer decodes its own url and may fail on its own */
+        image_work.ready_idx = -1;
+        image_work.failed[idx] = 0;
+        if (k) bgi_layer_swap(n, k);
+        total += bgi_fill(d, idx, at + total, bx, by, bw, bh);
+        if (k) bgi_layer_swap(n, k);
+        failed |= image_work.failed[idx];
+    }
+    image_work.ready_idx = -1;
+    image_work.failed[idx] = (uint8_t)failed;
+    return total;
 }
 
 static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, int bx, int by, int bw, int bh, const we_radii_t *radii) {
@@ -6530,7 +6773,7 @@ static void vertical_style(we_doc_t *d, int i, int rl, int forward) {
         swap16(&n->min_width, &n->min_height);
         swap16(&n->max_width, &n->max_height);
     } else if (forward) diag(d, "vertical flow size kept physical", i);
-    if (forward && n->bgi_len) { n->bgi_len = 0; diag(d, "background image refused", i); }
+    if (forward && (n->bgi_len || n->bgi_layers)) { n->bgi_len = 0; n->bgi_layers = 0; diag(d, "background image refused", i); }
 }
 
 /* forward 1 before the layout, 0 after it. */
@@ -6659,7 +6902,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         } else { it->x = (int16_t)box[0]; it->y = (int16_t)box[1]; it->w = (uint16_t)box[2]; it->h = (uint16_t)box[3]; }
     }
     gradient_fill(d, idx, grad_slot, grad_slots, bx, by, bw, bh);
-    shadow_slot[1] += bgi_fill(d, idx, bgi_at, bx, by, bw, bh);
+    shadow_slot[1] += bgi_paint(d, idx, bgi_at, bx, by, bw, bh);
     shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh, &radii);
     shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh, &radii);
     if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 5 || n->border_style == 6)) {

@@ -213,7 +213,7 @@ static void test_l63_bgi_boxes_and_order(void) {
 static void test_l63_bgi_refusals(void) {
     static const char *const bad_image[] = {"url()", "url(\"\")", "url(/images/mire-ga16.png", "uri(/images/mire-ga16.png)",
         "url(/images/mire-ga16.png) red", "image(/images/mire-ga16.png)", 0};
-    static const char *const bad_repeat[] = {"space", "round", "repeat-x repeat", "repeat repeat repeat", "", 0};
+    static const char *const bad_repeat[] = {"spaces", "rounded", "repeat-x repeat", "repeat repeat repeat", "", 0};
     static const char *const bad_size[] = {"-1px", "contain cover", "1px 2px 3px", "auto contain", "4q", 0};
     char html[400];
     int k;
