@@ -73,7 +73,19 @@ esac
 mkdir -p test_logs
 echo "[run-gpt2] accel=$ACCEL profile=$PROFILE display=$DISPLAY_MODE"
 echo "[run-gpt2] In the guest: ai-model use gpt2.gguf, then ai <english text>, then ai-continue"
-QEMU=(qemu-system-i386 -name "Mohhdy OS GPT-2" -cpu pentium3
+# Lot 67: real Internet for `fetch` and /browser: QEMU user networking
+# (slirp, NAT, no root) + the NE2000 owned by the Ring 3 networker, and a
+# CPU with RDRAND (-cpu max) so TLS keys use hardware entropy. GPT2_NET=none
+# keeps the old offline guest; GPT2_CPU=pentium3 the old CPU (then fetch
+# reports "entropy weak-tsc").
+GPT2_CPU="${GPT2_CPU:-max}"
+case "${GPT2_NET:-user}" in
+    user) NET=(-netdev user,id=n0 -device ne2k_isa,netdev=n0) ;;
+    none) NET=() ;;
+    *) echo "[run-gpt2] GPT2_NET must be user or none" >&2; exit 2 ;;
+esac
+echo "[run-gpt2] cpu=$GPT2_CPU net=${GPT2_NET:-user} (in the guest: fetch https://example.com/, gui then web https://example.com/)"
+QEMU=(qemu-system-i386 -name "Mohhdy OS GPT-2" -cpu "$GPT2_CPU" "${NET[@]}"
     -machine "type=pc,accel=$ACCEL"
     -kernel build/mohhdy.bin -initrd my_initrd.tar -m 1024M
     "${DISP[@]}" -no-reboot -no-shutdown
