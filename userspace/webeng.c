@@ -5867,22 +5867,79 @@ static void radius_border(we_doc_t *d, int idx, const we_radii_t *r, int x, int 
 /* Lot 63: rounded dashed and dotted borders. The ring is painted, then
  * kept only inside the four corner boxes (rx x ry at each rounded corner),
  * so the arcs are solid; the straight parts between the corners take the
- * dash or dot pattern of edge_paint(), each side restarting its pattern. */
+ * dash or dot pattern of edge_paint(), each side restarting its pattern.
+ * Lot 64: an arc long enough for one period takes the pattern too (see
+ * arc_pattern()); a shorter one stays solid. */
+/* cos of k * 90 / 16 degrees, times 1024 (sin is the table read backwards) */
+static const int16_t quarter_cos[17] = {1024, 1019, 1004, 980, 946, 903, 851, 792, 724, 650, 569, 483, 392, 297, 200, 100, 0};
+
+static int quarter_trig(int at, int span, int sine) {
+    /* the angle at / span of 90 degrees, interpolated over the table */
+    int pos = span > 0 ? at * 16 * 64 / span : 0, k, f;
+    if (pos < 0) pos = 0;
+    if (pos > 16 * 64) pos = 16 * 64;
+    if (sine) pos = 16 * 64 - pos;
+    k = pos / 64; f = pos % 64;
+    if (k >= 16) return quarter_cos[16];
+    return quarter_cos[k] + (quarter_cos[k + 1] - quarter_cos[k]) * f / 64;
+}
+
+/* Lot 64: the dash or dot pattern along one corner arc. The arc's centre
+ * line (radii less t / 2) has length L ~ pi / 4 (rx + ry); it holds
+ * round(L / period) periods (at most WE_ARC_PERIODS), each painting its
+ * piece centred in it as t x t squares one t apart along the line (one
+ * square for a dot), cut to the corner box. Returns 0 when L is shorter
+ * than one period (the arc stays solid). */
+#define WE_ARC_PERIODS 4
+static int arc_pattern(we_doc_t *d, int idx, int corner, int x0, int y0, int rx, int ry, int t, int style, uint32_t color) {
+    int piece = style == 5 ? (2 * t > 3 ? 2 * t : 3) : t, period = 2 * piece;
+    int ax = rx - t / 2, ay = ry - t / 2, len, count, j, sx, sy, cx, cy;
+    if (ax < 1) ax = 1;
+    if (ay < 1) ay = 1;
+    len = 157 * (ax + ay) / 200;
+    if (len < period) return 0;
+    count = (len + period / 2) / period;
+    if (count > WE_ARC_PERIODS) count = WE_ARC_PERIODS;
+    sx = corner == 0 || corner == 3 ? -1 : 1;
+    sy = corner < 2 ? -1 : 1;
+    cx = corner == 0 || corner == 3 ? x0 + rx : x0;            /* the ellipse centre */
+    cy = corner < 2 ? y0 + ry : y0;
+    for (j = 0; j < count; j++) {
+        int mid = (2 * j + 1) * len / (2 * count), squares = style == 5 ? (piece + t - 1) / t : 1, q;
+        for (q = 0; q < squares; q++) {
+            int at = mid - (squares - 1) * t / 2 + q * t;
+            int px = cx + sx * ax * quarter_trig(at, len, 0) / 1024, py = cy + sy * ay * quarter_trig(at, len, 1) / 1024;
+            int bx = px - t / 2, by = py - t / 2, ex = bx + t, ey = by + t;
+            if (bx < x0) bx = x0;
+            if (by < y0) by = y0;
+            if (ex > x0 + rx) ex = x0 + rx;
+            if (ey > y0 + ry) ey = y0 + ry;
+            if (ex > bx && ey > by) (void)emit(d, idx, OS_FB_WEB_RECT, bx, by, ex - bx, ey - by, color);
+        }
+    }
+    return 1;
+}
+
 static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len);
 static void radius_dashed(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, int w, int h, int t, int style, uint32_t color) {
     static os_fb_web_item_t ring[OS_FB_WEB_ITEMS];
     int start = (int)d->nitems, count, i, k;
-    int cx[4], cy[4], from[4];
+    int cx[4], cy[4], from[4], patterned[4];
     radius_ring(d, idx, r, x, y, w, h, t, color, color);
     count = (int)d->nitems - start;
     for (i = 0; i < count; i++) ring[i] = d->items[start + i];
     d->nitems = (uint32_t)start;
     cx[0] = cx[3] = x; cx[1] = cx[2] = x + w;
     cy[0] = cy[1] = y; cy[2] = cy[3] = y + h;
+    for (k = 0; k < 4; k++) {
+        int x0 = k == 0 || k == 3 ? cx[k] : cx[k] - r->rx[k], y0 = k < 2 ? cy[k] : cy[k] - r->ry[k];
+        patterned[k] = r->rx[k] && r->ry[k] && arc_pattern(d, idx, k, x0, y0, r->rx[k], r->ry[k], t, style, color);
+    }
     for (i = 0; i < count; i++)
         for (k = 0; k < 4; k++) {
             int x0 = k == 0 || k == 3 ? cx[k] : cx[k] - r->rx[k], x1 = x0 + r->rx[k];
             int y0 = k < 2 ? cy[k] : cy[k] - r->ry[k], y1 = y0 + r->ry[k];
+            if (patterned[k]) continue;
             if (ring[i].x > x0) x0 = ring[i].x;
             if (ring[i].y > y0) y0 = ring[i].y;
             if (ring[i].x + ring[i].w < x1) x1 = ring[i].x + ring[i].w;
