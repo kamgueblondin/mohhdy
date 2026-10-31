@@ -7460,7 +7460,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         uint32_t color[4];
         for (side = 0; side < 4; side++) {
             edge_of(n, side, &w[side], &style[side], &color[side]);
-            if (style[side] == WE_BS_HIDDEN || !style[side]) w[side] = 0;
+            if (style[side] == WE_BS_HIDDEN) w[side] = 0;
         }
         if (radii_any(&radii)) diag(d, "edges radius painted square", idx);
         if (w[0]) edge_paint(d, idx, style[0], color[0], 0, by, bx, w[0], bw);
@@ -9398,7 +9398,7 @@ static void edge_of(const we_node_t *n, int side, int *w, int *style, uint32_t *
     *style = n->edge_style[side] ? n->edge_style[side] : n->border_style;
     *color = (n->edge_color_set >> side) & 1 ? n->edge_color[side] : n->border_color;
     if (*w < 0) *w = 0;
-    if (*style == WE_BS_NONE) *w = 0;
+    if (*style == WE_BS_NONE || !*style) *w = 0;      /* lot 64: no style is none */
 }
 
 static int edges_set(const we_node_t *n) {
