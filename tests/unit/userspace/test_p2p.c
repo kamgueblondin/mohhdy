@@ -1877,9 +1877,42 @@ static void test_lot66_heal_with_raft_snapshot(void) {
     TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[2], "hk"));
 }
 
+/* Lot 67 (US-068/US-073): paced probe train feeds the bandwidth estimator;
+ * probes on a cut link are counted lost after 2 s. */
+void test_qos_bwe_probe_train(void) {
+    char rep[1024];
+    setup(2, 0);
+    run(2, 300);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[0], "beta")->keyed);
+    TEST_ASSERT_EQUAL(-1, p2p_qos_probe(&g_n[0], &g_h[0], "nobody", 8));
+    TEST_ASSERT_EQUAL(-2, p2p_qos_probe(&g_n[0], &g_h[0], "beta", 0));
+    TEST_ASSERT_EQUAL(-2, p2p_qos_probe(&g_n[0], &g_h[0], "beta", P2P_PROBE_MAX + 1));
+    TEST_ASSERT_EQUAL(0, p2p_qos_probe(&g_n[0], &g_h[0], "beta", 64));
+    run(2, 4000);
+    TEST_ASSERT_EQUAL(64U, g_n[0].qos.probe_sent);
+    TEST_ASSERT_EQUAL(64U, g_n[0].qos.probe_acked);
+    TEST_ASSERT_EQUAL(0U, g_n[0].qos.probe_lost);
+    TEST_ASSERT_EQUAL(0U, g_n[0].qos.probe_left);
+    TEST_ASSERT_TRUE(g_n[0].qos.bwe.samples > 0U);
+    TEST_ASSERT_TRUE(p2p_bwe_btlbw(&g_n[0].qos.bwe) > 0U);
+    TEST_ASSERT_TRUE(g_n[0].qos.bwe.min_rtt_ms >= 10U);   /* one tick */
+    /* the pacer spread the train: not all 64 in the first tick */
+    TEST_ASSERT_TRUE(g_n[0].qos.bwe.paced_wait > 0U);
+    p2p_report(&g_n[0], &g_h[0], "bwe", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p bwe state "));
+    TEST_ASSERT_NOT_NULL(strstr(rep, " probes_sent 64 acked 64 lost 0 left 0"));
+    /* cut link: the probes in flight become losses */
+    g_cut[1][0] = 1;
+    TEST_ASSERT_EQUAL(0, p2p_qos_probe(&g_n[0], &g_h[0], "beta", 8));
+    run(2, 3000);
+    TEST_ASSERT_TRUE(g_n[0].qos.probe_lost >= 1U);
+    TEST_ASSERT_EQUAL(64U, g_n[0].qos.probe_acked);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
+    RUN_TEST(test_qos_bwe_probe_train);
     RUN_TEST(test_lot66_cache_lru_no_duplicate_raft_kept);
     RUN_TEST(test_lot66_heal_starts_anti_entropy);
     RUN_TEST(test_lot66_heal_with_raft_snapshot);

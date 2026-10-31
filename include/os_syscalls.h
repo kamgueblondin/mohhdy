@@ -1792,6 +1792,10 @@ typedef struct {
     uint8_t remote_ip[4];   /* on-link peer: QEMU user-net host or a guest */
     uint32_t local_sequence;
     uint16_t attempts;      /* bounded poll rounds for ARP / SYN-ACK */
+    /* Lot 67: 0.0.0.0 = remote_ip is on-link (ARP for it, the old
+     * behaviour); otherwise the gateway to ARP for when remote_ip is
+     * off-link (the Internet through QEMU user-net 10.0.2.2). */
+    uint8_t next_hop_ip[4];
 } os_net_wire_connect_t;
 typedef struct {
     int32_t socket_id;
@@ -1818,6 +1822,7 @@ typedef struct {
     uint32_t peer_fins;     /* FINs received from wire peers */
     uint32_t bound;         /* wire-bound sockets currently tracked */
     int32_t worker_pid;     /* live net-driver PID, 0 if none */
+    uint32_t routed;        /* Lot 67: off-link peers resolved through the gateway */
 } os_net_wire_status_t;
 /* Tranche 5 pile: counters the Ring 3 stack publishes after each op. */
 typedef struct {
@@ -1839,6 +1844,7 @@ typedef struct {
     uint8_t remote_ip[4];
     uint32_t local_sequence;
     uint16_t attempts;
+    uint8_t next_hop_ip[4];   /* Lot 67: gateway, 0.0.0.0 = on-link */
 } os_socket_connect_request_t;
 
 /* Lot 4 (US-001): PCI enumeration by the Ring 3 worker "pci-driver"

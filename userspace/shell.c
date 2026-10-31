@@ -23,6 +23,7 @@ void strcpy(char* dest, const char* src);
 #include "osui_runtime.h"
 #include "shell_p2p.h"
 #include "shell_grpc.h"
+#include "shell_fetch.h"
 int shell_collab_line(const char* line);
 #include "shell_platform.h"
 #include "osui_gui.h"
@@ -1270,6 +1271,7 @@ void cmd_help(shell_context_t* ctx, char args[][128], int arg_count) {
     print_string("  ai-next            - Rearmer une session LLM apres sa reponse\n");
     print_string("  ai-close           - Annuler la session LLM et purger ses secrets\n");
     print_string("  net-if [static IP MASQUE PASSERELLE | dhcp] - Configuration de l'interface\n");
+    print_string("  fetch [-v] [-I] [-raw] [-n N] URL - GET HTTP/HTTPS reel (TLS verifie, alias http-get)\n");
     print_string("  net-status         - Etat reel de la pile reseau bare-metal\n");
     
     print_colored("\nCOMMANDES UTILITAIRES :\n", COLOR_YELLOW);
@@ -3653,7 +3655,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "net-if", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "fetch", "http-get", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -3667,7 +3669,7 @@ static int is_builtin(const char* cmd) {
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
-        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-qos", "p2p-burst", "p2p-flood", "p2p-kv", "p2p-poll",
+        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-qos", "p2p-bwe", "p2p-probe", "p2p-burst", "p2p-flood", "p2p-kv", "p2p-poll",
         "p2p-send", "p2p-put", "p2p-get", "p2p-sync", "p2p-propose", "p2p-block", "p2p-unblock", "p2p-limit",
         "p2p-raft", "p2p-raft-compact", "p2p-raft-put", "p2p-grpc", "p2p-stun", "p2p-punch", "p2p-cache", "p2p-route",
         "collab-join", "collab-pay", "collab-offer", "collab-reserve", "collab-task", "collab-claim", "collab-work",
@@ -7662,6 +7664,11 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         ctx->last_rc = shell_grpc_line(input_buffer);
         return;
     }
+    /* Lot 67: real HTTP/HTTPS GET (same code as the GUI /browser) */
+    if (shell_fetch_is(input_buffer)) {
+        ctx->last_rc = shell_fetch_line(input_buffer);
+        return;
+    }
     if (shell_platform_is(input_buffer)) {
         ctx->last_rc = shell_platform_line(input_buffer);
         return;
@@ -7856,6 +7863,7 @@ void main() {
     init_shell_context(&shell_ctx);
     g_live_ctx = &shell_ctx;
     osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
+    osui_gui_set_web_fetch(shell_fetch_page);   /* Lot 67: /browser over the network */
     osui_gui_set_fs_io(&shell_fs_io);
     umalloc_init((void *)OS_USER_HEAP_BASE, shell_heap_grow);
     osui_gui_set_heap(urealloc);

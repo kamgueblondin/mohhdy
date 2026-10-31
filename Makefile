@@ -584,7 +584,7 @@ pack-initrd: userspace-all
 	@# Lot 46: the hand-kept initrd files (roadmap, samples, bigfiles) count too: an
 	@# edited /roadmap.txt left the old initrd in place. Lot 47: the file list is
 	@# compared too (a moved file keeps its old mtime and was never repacked)
-	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples $(INITRD_DIR)/images $(INITRD_DIR)/bigfiles $(INITRD_DIR)/web"; \
+	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples $(INITRD_DIR)/images $(INITRD_DIR)/bigfiles $(INITRD_DIR)/web $(INITRD_DIR)/etc"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
 	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && [ -f $(INITRD_TEST_IMAGE) ] && \
 	    [ "$$(cat build/.initrd-models 2>/dev/null)" = "$(INITRD_MODELS_KEY)" ] && \
@@ -693,6 +693,10 @@ pack-initrd-now:
 	@tar -C $(INITRD_DIR) -cf $(INITRD_IMAGE) .
 	@cp -f $(INITRD_IMAGE) $(INITRD_TEST_IMAGE)
 	@tar -C $(INITRD_TEST_DIR) -rf $(INITRD_TEST_IMAGE) $(addprefix ./bin/,$(TEST_ONLY_PROGRAMS))
+	@# Lot 67: the throw-away test CA of the offline HTTPS test, test image only
+	@if [ ! -f build/lot67/pki/test_ca.pem ]; then python3 scripts/lot67_gen_pki.py build/lot67/pki >/dev/null; fi
+	@mkdir -p $(INITRD_TEST_DIR)/etc && cp -f build/lot67/pki/test_ca.pem $(INITRD_TEST_DIR)/etc/ca-test.pem
+	@tar -C $(INITRD_TEST_DIR) -rf $(INITRD_TEST_IMAGE) ./etc/ca-test.pem
 	@echo "[mkinitrd] Test image $(INITRD_TEST_IMAGE): production + $(words $(TEST_ONLY_PROGRAMS)) proof programs"
 	@mkdir -p build
 	@touch build/.initrd-stamp
@@ -870,6 +874,7 @@ test-all:
 	@python3 tests/scripts/test_python_facade_removed.py
 	@python3 tests/scripts/check_shell_dispatch_returns.py
 	@python3 tests/scripts/check_initrd_capacity.py
+	@sh tests/scripts/test_lot67_web_host.sh
 
 # Host unit tests rebuilt with --coverage, then one gcov line percentage.
 # Not part of test-all. CI job "coverage" runs it with COVERAGE_MIN, a floor
@@ -1115,6 +1120,13 @@ qemu-gui-mesh: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_mesh.py
 
 .PHONY: qemu-gui-mesh
+
+# Lot 67: guest fetch/http-get + /browser against a local HTTP/HTTPS server
+# through QEMU slirp (offline). LOT67_REAL=1 adds https://example.com (manual).
+qemu-lot67-web: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot67_web.py
+
+.PHONY: qemu-lot67-web
 
 # Lot 46 PR B (US-G16): editor Save As of 64 KiB, v4 overlay image (LBA 0-63
 # + extension 4225-4352), byte exact on disk and after a cold reboot, FAT16

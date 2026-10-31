@@ -6,7 +6,9 @@
 #include "net_tls_record.h"
 
 #define NET_SOCKET_CAPACITY 8U
-#define NET_SOCKET_RX_CAPACITY 1024U
+/* Lot 67: 4 KiB per socket (was 1 KiB, smaller than one full TCP segment
+ * from a 1460-byte MSS peer); the advertised window is the free space. */
+#define NET_SOCKET_RX_CAPACITY 4096U
 #define NET_SOCKET_TX_CAPACITY 1500U
 
 #define NET_SOCKET_CLOSED 0
@@ -86,4 +88,6 @@ int net_socket_accept_tls_x25519_postflight(int socket_id, net_tls_handshake_t* 
                                             uint32_t prf_workspace_capacity, uint16_t* consumed);
 void net_socket_reset_all(void);
 
+/* Lot 67: free bytes in the receive buffer (the window to advertise). */
+uint16_t net_socket_receive_space(int socket_id);
 #endif

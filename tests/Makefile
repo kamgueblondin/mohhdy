@@ -413,9 +413,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_stun: $(UNIT_DIR)/userspace/test_stun.c 
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/stun.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p: $(UNIT_DIR)/userspace/test_p2p.c ../userspace/p2p.c ../userspace/stun.c ../userspace/p2p.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p: $(UNIT_DIR)/userspace/test_p2p.c ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/stun.c ../userspace/p2p.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/p2p.c ../userspace/stun.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x25519.c ../kernel/bigint.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/stun.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x25519.c ../kernel/bigint.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_collab: $(UNIT_DIR)/userspace/test_collab.c ../userspace/collab.c ../userspace/collab.h ../userspace/csig.c ../userspace/csig.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
@@ -446,9 +446,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_prod: $(UNIT_DIR)/userspace/test_prod.c 
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/prod.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(PERFORMANCE_DIR)/test_osui_p2p_prod_perf: $(PERFORMANCE_DIR)/test_osui_p2p_prod_perf.c ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/osui_gui.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/osui_ide.h ../userspace/promptmessage.c ../userspace/p2p.c ../userspace/stun.c ../userspace/prod.c ../userspace/platform.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(PERFORMANCE_DIR)/test_osui_p2p_prod_perf: $(PERFORMANCE_DIR)/test_osui_p2p_prod_perf.c ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/osui_gui.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/osui_ide.h ../userspace/promptmessage.c ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/stun.c ../userspace/prod.c ../userspace/platform.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/osui_gui.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/promptmessage.c ../userspace/p2p.c ../userspace/stun.c ../userspace/prod.c ../userspace/platform.c ../userspace/csig.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x25519.c ../kernel/bigint.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/osui_gui.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_panes.c ../userspace/osui_files.c ../userspace/osui_app.c ../userspace/fsops.c ../userspace/webeng.c ../userspace/osui_ide.c ../userspace/promptmessage.c ../userspace/p2p.c ../userspace/p2p_bwe.c ../userspace/stun.c ../userspace/prod.c ../userspace/platform.c ../userspace/csig.c ../kernel/sha256.c ../kernel/aes_gcm.c ../kernel/x25519.c ../kernel/bigint.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled performance test: $(notdir $@)"
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_runtime: $(UNIT_DIR)/userspace/test_osui_runtime.c ../userspace/osui_runtime.c ../userspace/webrt.c ../userspace/promptmessage.c ../userspace/platform.c ../userspace/osui_runtime.h ../userspace/mohhdy_osui_bridge.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
@@ -733,3 +733,27 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_net_ifcfg: $(UNIT_DIR)/userspace/test_ne
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/net_ifcfg.c ../kernel/net_dhcp.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
+
+# Lot 67: Ring 3 web stack (crypto, X.509, TLS 1.2 client, HTTP/1.1).
+WF_CRYPTO_SRCS = ../userspace/wf_bn.c ../userspace/wf_sha512.c ../userspace/wf_ec.c ../userspace/wf_rsa.c ../kernel/sha256.c
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_crypto: $(UNIT_DIR)/userspace/test_wf_crypto.c $(UNIT_DIR)/userspace/wf_vectors.h $(WF_CRYPTO_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_CRYPTO_SRCS) $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
+# Lot 67: X.509 / chain / root store
+WF_X509_SRCS = ../userspace/wf_x509.c $(WF_CRYPTO_SRCS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_x509: $(UNIT_DIR)/userspace/test_wf_x509.c $(UNIT_DIR)/userspace/wf_x509_fixtures.h $(UNIT_DIR)/userspace/wf_real_chain.h $(WF_X509_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_X509_SRCS) $(FRAMEWORK_SOURCES)
+
+# Lot 67 (US-068/US-073): bandwidth estimator against a simulated link
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p_bwe: $(UNIT_DIR)/userspace/test_p2p_bwe.c ../userspace/p2p_bwe.c ../userspace/p2p_bwe.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/p2p_bwe.c $(FRAMEWORK_SOURCES)
+
+# Lot 67: URL / HTTP / DNS / TLS PRF / fetch
+WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../kernel/aes_gcm.c ../kernel/x25519.c $(WF_X509_SRCS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_http: $(UNIT_DIR)/userspace/test_wf_http.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)

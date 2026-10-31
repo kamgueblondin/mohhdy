@@ -252,6 +252,23 @@ def main():
         if not shaped or int(shaped.group(1)) == 0 or int(shaped.group(4)) < int(burst.group(2)) or int(shaped.group(5)) != 0:
             raise RuntimeError("alpha qos shaping counters: %s" % log(a, start_q)[-400:])
         say("scenario 1b ok: burst of 6 shaped (queued %s), all delivered, meas_tx_bps %s" % (burst.group(2), shaped.group(1)))
+        # Lot 67 (US-068/US-073): a paced probe train of 24 to beta feeds the
+        # bandwidth estimator (delivery rate of acked probes, min RTT).
+        cmd(a, "p2p-probe beta 24", "p2p-probe started to beta count 24")
+        deadline = time.monotonic() + 90
+        while True:
+            cmd(a, "p2p-poll 4", "p2p-poll ok")
+            cmd(b, "p2p-poll 4", "p2p-poll ok")
+            start_q = cmd(a, "p2p-bwe", "p2p bwe state ")
+            bwe = re.search(r"p2p bwe state (\w+) btlbw_bps (\d+) min_rtt_ms (\d+) bdp (\d+) pacing_bps (\d+) cwnd (\d+) "
+                            r"samples (\d+) probes_sent (\d+) acked (\d+) lost (\d+) left (\d+)", log(a, start_q))
+            if bwe and int(bwe.group(11)) == 0 and int(bwe.group(9)) + int(bwe.group(10)) >= 24:
+                break
+            if time.monotonic() > deadline:
+                raise RuntimeError("probe train did not finish: %s" % log(a, start_q)[-400:])
+        if int(bwe.group(9)) < 20 or int(bwe.group(2)) == 0 or int(bwe.group(3)) == 0:
+            raise RuntimeError("bandwidth estimator: %s" % bwe.group(0))
+        say("scenario 1b ok: bwe %s" % bwe.group(0))
         # Lot 6 (US-075): a flood from gamma is attributed to gamma by
         # beta's per-peer baseline. Gamma plays a misbehaving sender that
         # ignores its own QoS controller (a well-behaved burst is shaped

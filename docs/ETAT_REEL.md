@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 67 (Internet in Mohhdy, US-068/US-073 estimator)
+
+- Real HTTP/1.1 and TLS 1.2 from Ring 3 (`fetch`, `http-get`, GUI `web URL`), X.509 chain checked against 37 public roots in `/etc/ca-roots.pem`. Proof: `make qemu-lot67-web` (offline, test CA in the test initrd only). Manual: https://example.com/ opened in the guest shell and GUI.
+- TCP fixes: no lost bytes on a full buffer, real advertised window, window reopens, next-hop routing, EOF after FIN, DHCP on demand.
+- US-068/US-073 partial: bandwidth estimator and pacer (`p2p_bwe`, `p2p-probe`, `p2p-bwe`), unit tests on a simulated link, QEMU p2p scenario 1b. Does not drive the data window yet.
+- US-076, US-080, US-081 unchanged (partial). Details: [lot67_plan.md](lot67_plan.md).
+
 ## État courant vérifié
 
 ## Etat courant du 31 October 2026 (lot 64)

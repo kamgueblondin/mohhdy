@@ -373,6 +373,57 @@ void p2p_qos_note_ack(p2p_node_t* n) {
  * minimum plus 20 ms means a queue is building, the window shrinks by a
  * quarter; otherwise it grows by one per round trip (additive increase).
  * Losses (unanswered PING, rejected append) halve it. */
+static void bwe_ensure(p2p_node_t* n, const p2p_host_t* h) {
+    if (n->qos.bwe_ready) return;
+    p2p_bwe_init(&n->qos.bwe, P2P_PROBE_BYTES, 20000U, now(h) * (1000U / P2P_HZ));
+    n->qos.bwe_ready = 1U;
+}
+
+int p2p_qos_probe(p2p_node_t* n, const p2p_host_t* h, const char* peer, int count) {
+    p2p_peer_t* p;
+    if (!n || !peer) return -1;
+    if (count < 1 || count > (int)P2P_PROBE_MAX) return -2;
+    p = p2p_find(n, peer);
+    if (!p || !p->keyed) return -1;
+    bwe_ensure(n, h);
+    n->qos.probe_peer = p->id;
+    n->qos.probe_left = (uint32_t)count;
+    return 0;
+}
+
+/* Lot 67: paced probe train, called from p2p_tick. A probe not acked
+ * after 2 s (or when its slot is reused) is a loss for the estimator. */
+static void probe_pump(p2p_node_t* n, const p2p_host_t* h) {
+    uint8_t body[P2P_PROBE_BYTES];
+    uint32_t ms, i;
+    p2p_peer_t* p;
+    if (!n->qos.bwe_ready) return;
+    ms = now(h) * (1000U / P2P_HZ);
+    for (i = 0; i < P2P_BWE_INFLIGHT; i++) {
+        p2p_bwe_pkt_t* k = &n->qos.bwe.pkt[i];
+        if (k->used && ms - k->sent_ms > 2000U) { p2p_bwe_on_loss(&n->qos.bwe, k->seq, ms); n->qos.probe_lost++; }
+    }
+    if (!n->qos.probe_left) return;
+    p = by_id(n, n->qos.probe_peer);
+    if (!p || !p->keyed) { n->qos.probe_left = 0; return; }
+    while (n->qos.probe_left && p2p_bwe_can_send(&n->qos.bwe, P2P_PROBE_BYTES, ms)) {
+        uint32_t seq = ++n->qos.probe_seq;
+        for (i = 0; i < P2P_PROBE_BYTES; i++) body[i] = (uint8_t)(i * 7U);
+        put32(body, now(h));
+        put32(body + 4, P2P_PROBE_MAGIC);
+        put32(body + 8, seq);
+        if (p2p_bwe_on_send(&n->qos.bwe, seq, P2P_PROBE_BYTES, ms) != 0) break;
+        if (seal_send(n, h, p, P2P_I_PING, body, P2P_PROBE_BYTES) != 0) {
+            p2p_bwe_on_loss(&n->qos.bwe, seq, ms);
+            n->qos.probe_lost++;
+            break;
+        }
+        n->qos.probe_sent++;
+        n->qos.probe_left--;
+    }
+    if (!n->qos.probe_left) p2p_bwe_on_app_limited(&n->qos.bwe);
+}
+
 void p2p_qos_note_rtt(p2p_node_t* n, uint32_t sample_ms) {
     if (!n) return;
     if (!n->qos.rtt_min_ms || sample_ms < n->qos.rtt_min_ms) n->qos.rtt_min_ms = sample_ms ? sample_ms : 1U;
@@ -785,9 +836,18 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
     n->rx_type[inner]++;
     switch (inner) {
     case P2P_I_PING:
-        if (len >= 4) (void)seal_send(n, h, p, P2P_I_PONG, m, 4);
+        /* Lot 67: a probe PING (magic at 4) gets its 12-byte head echoed */
+        if (len >= 12 && get32(m + 4) == P2P_PROBE_MAGIC) (void)seal_send(n, h, p, P2P_I_PONG, m, 12);
+        else if (len >= 4) (void)seal_send(n, h, p, P2P_I_PONG, m, 4);
         break;
     case P2P_I_PONG:
+        if (len >= 12 && get32(m + 4) == P2P_PROBE_MAGIC) {
+            if (n->qos.bwe_ready) {
+                (void)p2p_bwe_on_ack(&n->qos.bwe, get32(m + 8), now(h) * (1000U / P2P_HZ));
+                n->qos.probe_acked++;
+            }
+            break;
+        }
         if (len >= 4) {
             uint32_t sample_ticks = now(h) - get32(m);
             uint32_t sample_ms = sample_ticks * (1000U / P2P_HZ);
@@ -1507,6 +1567,7 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
     int i, got, queued = 0;
     if (!n || !n->up) return;
     grpc_expire(n, h);
+    probe_pump(n, h);
     while (budget-- > 0 && h && h->recv) {
         got = h->recv(h->ctx, ip, mac, b, (uint16_t)sizeof(b));
         if (got <= 0) { queued = 0; break; }
@@ -2382,6 +2443,21 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " queued ", cap); cat_u(out, n->qos.shaped_queued, cap);
         s_cat(out, " shaped_sent ", cap); cat_u(out, n->qos.shaped_sent, cap);
         s_cat(out, " shaped_dropped ", cap); cat_u(out, n->qos.shaped_dropped, cap);
+        s_cat(out, "\n", cap);
+    } else if (s_eq(what, "bwe")) {
+        const p2p_bwe_t* e = &n->qos.bwe;
+        out[0] = 0;
+        s_cat(out, "p2p bwe state ", cap); s_cat(out, n->qos.bwe_ready ? p2p_bwe_state_name(e->state) : "off", cap);
+        s_cat(out, " btlbw_bps ", cap); cat_u(out, p2p_bwe_btlbw(e), cap);
+        s_cat(out, " min_rtt_ms ", cap); cat_u(out, e->min_rtt_ms, cap);
+        s_cat(out, " bdp ", cap); cat_u(out, p2p_bwe_bdp(e), cap);
+        s_cat(out, " pacing_bps ", cap); cat_u(out, e->pacing_bps, cap);
+        s_cat(out, " cwnd ", cap); cat_u(out, n->qos.bwe_ready ? p2p_bwe_cwnd_pkts(e) : 0U, cap);
+        s_cat(out, " samples ", cap); cat_u(out, e->samples, cap);
+        s_cat(out, " probes_sent ", cap); cat_u(out, n->qos.probe_sent, cap);
+        s_cat(out, " acked ", cap); cat_u(out, n->qos.probe_acked, cap);
+        s_cat(out, " lost ", cap); cat_u(out, n->qos.probe_lost, cap);
+        s_cat(out, " left ", cap); cat_u(out, n->qos.probe_left, cap);
         s_cat(out, "\n", cap);
     } else if (s_eq(what, "cache")) {
         out[0] = 0;

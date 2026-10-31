@@ -538,3 +538,9 @@ Lot 47 (PR #204, `docs/lot47_plan.md`) :
 - **Web Runtime WASM SIMD LLM Attention Kernel & WebGPU Multi-Queue Submission** : Noyau d'attention MHA vectorise WASM SIMD pour projection QKV et Softmax rapide en virgule fixe 16.16, et soumissionnaire multi-files de commandes WebGPU Compute (Graphics, Compute, Transfer) sans dependances hote (userspace/webrt.c, userspace/webrt.h).
 - **P2P Cross-WAN Geo-Replicated Consensus Mesh & ZK Proof Aggregator Engine** : Maillage de consensus geo-replique Cross-WAN avec reequilibrage dynamique de topologie, agregation d'etat Merkle Tree et moteur d'agregation de preuves Zero-Knowledge (STARK/PLONK Batch Verification) (userspace/p2p.c, userspace/p2p.h).
 - **Production Multi-Region Chaos Resilience Engine & Predictive Core Scheduler** : Resilience autonome multi-regions contre l'injection de fautes chaotiques, isolement d'incidents par telemetrie en temps reel et ordonnanceur autonome de coeurs processeur (Affinite, Migration de threads, Scaling thermique et puissance) (userspace/prod.c, userspace/prod.h).
+
+### Lot 67 : Internet reel dans Mohhdy et estimateur de debit (US-068 / US-073)
+
+- Client HTTP/1.1 et TLS 1.2 en Ring 3 avec verification X.509 reelle (`fetch`, `http-get`, `web URL` dans le GUI), racines publiques dans `/etc/ca-roots.pem`. Preuve hors ligne : `make qemu-lot67-web`. Verification manuelle : https://example.com/ ouvert dans Mohhdy.
+- Corrections TCP (fenetre reelle, pas de perte d'octets, fin de flux apres FIN, passerelle).
+- US-068/US-073 partiels : estimateur de debit et pacer (`p2p-probe`, `p2p-bwe`), pas encore applique au chemin de donnees. US-076, US-080, US-081 inchanges (partiels). Voir docs/lot67_plan.md.

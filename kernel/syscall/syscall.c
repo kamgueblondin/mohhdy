@@ -1951,6 +1951,8 @@ static int sys_socket_connect(const os_socket_connect_request_t* user) {
     request.remote_ip[2] = user->remote_ip[2]; request.remote_ip[3] = user->remote_ip[3];
     request.local_sequence = user->local_sequence;
     request.attempts = user->attempts;
+    request.next_hop_ip[0] = user->next_hop_ip[0]; request.next_hop_ip[1] = user->next_hop_ip[1];
+    request.next_hop_ip[2] = user->next_hop_ip[2]; request.next_hop_ip[3] = user->next_hop_ip[3];
     return kernel_net_wire_connect(&request);
 }
 

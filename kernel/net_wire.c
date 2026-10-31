@@ -92,6 +92,7 @@ int net_wire_bind(int socket_id, const uint8_t local_ip[4], const uint8_t remote
     for (i = 0U; i < 4U; i++) {
         g_bind[socket_id].local_ip[i] = local_ip[i];
         g_bind[socket_id].remote_ip[i] = remote_ip[i];
+        g_bind[socket_id].next_hop_ip[i] = 0U;
     }
     g_bind[socket_id].local_port = local_port;
     g_bind[socket_id].remote_port = remote_port;
@@ -201,11 +202,22 @@ static int wire_emit(const net_wire_ctx_t* ctx, uint16_t length) {
     return ne2k_tx_submit(ctx->device, ctx->io, ctx->tx, length);
 }
 
-static int wire_tx_segment(const net_wire_ctx_t* ctx, int socket_id, const uint8_t* segment,
+static int wire_tx_segment(const net_wire_ctx_t* ctx, int socket_id, uint8_t* segment,
                            uint16_t length) {
-    int built = ne2k_tcp_frame(ctx->device, ctx->cache, ctx->tx, ctx->capacity,
-                               g_bind[socket_id].local_ip, g_bind[socket_id].remote_ip,
-                               segment, length);
+    int built;
+    /* Lot 67: advertise the real free receive space instead of the fixed
+     * 65535, so the peer never sends more than the socket can hold (the
+     * frames it sent beyond 1 KiB were dropped and only came back after
+     * its retransmit timer). The checksum is computed when framing. */
+    if (length >= NET_TCP_HEADER_SIZE) {
+        uint16_t w = net_socket_receive_space(socket_id);
+        segment[14] = (uint8_t)(w >> 8);
+        segment[15] = (uint8_t)w;
+        g_bind[socket_id].adv_window = w;
+    }
+    built = ne2k_tcp_frame(ctx->device, ctx->cache, ctx->tx, ctx->capacity,
+                           g_bind[socket_id].local_ip, g_bind[socket_id].remote_ip,
+                           segment, length);
     int status;
     if (built < 0) return built;
     status = wire_emit(ctx, (uint16_t)built);
@@ -263,7 +275,14 @@ static void wire_handle_tcp(const net_wire_ctx_t* ctx, int s, uint16_t offset, u
         return;
     }
     if (state == NET_TCP_STATE_ESTABLISHED) {
-        if (net_socket_feed(s, ctx->rx + offset, length) != 0) return; /* dup / out of order */
+        if (net_socket_feed(s, ctx->rx + offset, length) != 0) {
+            /* dup / out of order / no space: re-ACK what we hold so the
+             * peer retransmits from there (fast retransmit on dup ACKs). */
+            if (view.payload_length > 0U && net_socket_connection_snapshot(s, &conn) == 0)
+                (void)wire_tx_ack(ctx, s, conn.local_sequence, conn.remote_sequence);
+            g_stat.dropped++;
+            return;
+        }
         if (net_socket_connection_snapshot(s, &conn) != 0) return;
         if (mine && (view.flags & NET_TCP_FLAG_ACK) && view.acknowledgment == obs->want_ack)
             obs->acked = 1U;
@@ -359,12 +378,21 @@ static void op_drop_socket(int s) {
     (void)net_socket_close(s);
 }
 
+/* Lot 67: the peer FIN may have arrived during an earlier op (with the
+ * last data); once the buffer is drained, a socket past ESTABLISHED on the
+ * receive side reports end of stream (rc 0, 0 bytes), not a timeout. */
+static int peer_finished(int s) {
+    uint8_t st = 0U;
+    if (net_socket_get_state(s, &st) != 0) return 0;
+    return st == NET_TCP_STATE_CLOSE_WAIT || st == NET_TCP_STATE_LAST_ACK || st == NET_TCP_STATE_CLOSED;
+}
+
 static void op_recv_finish(void) {
     uint16_t got = 0U;
     int status = net_socket_receive(g_op.socket, g_op.recv_buffer, g_op.recv_capacity, &got);
     if (status != 0) { op_finish(map_socket_error(status)); return; }
     if (got == 0U && g_op.obs.reset) { op_finish(OS_SOCKET_PROTOCOL); return; }
-    if (got == 0U && !g_op.obs.fin) { op_finish(OS_NET_WIRE_TIMEOUT); return; }
+    if (got == 0U && !g_op.obs.fin && !peer_finished(g_op.socket)) { op_finish(OS_NET_WIRE_TIMEOUT); return; }
     if (got > 0U) g_stat.recvs++;
     *g_op.recv_length = got;
     op_finish(0);
@@ -378,6 +406,19 @@ static void op_pre(const net_wire_ctx_t* ctx) {
     switch (g_op.kind) {
         case NET_WIRE_OP_CONNECT:
             if (g_op.phase == WIRE_PHASE_RESOLVE) {
+                /* Lot 67: an off-link peer goes through the gateway. Once
+                 * the gateway MAC is known it is cached under the peer IP
+                 * too, so the frame builders (which look up the peer IP)
+                 * address the gateway. */
+                const uint8_t* arp_target = g_bind[s].remote_ip;
+                if (!ip_zero(g_bind[s].next_hop_ip)) {
+                    arp_target = g_bind[s].next_hop_ip;
+                    if (net_arp_cache_lookup(ctx->cache, g_bind[s].remote_ip, mac) != 0 &&
+                        net_arp_cache_lookup(ctx->cache, g_bind[s].next_hop_ip, mac) == 0) {
+                        (void)net_arp_cache_put(ctx->cache, g_bind[s].remote_ip, mac);
+                        g_stat.routed++;
+                    }
+                }
                 if (net_arp_cache_lookup(ctx->cache, g_bind[s].remote_ip, mac) == 0) {
                     int status;
                     op_observe(s, 0U);
@@ -391,7 +432,7 @@ static void op_pre(const net_wire_ctx_t* ctx) {
                 if (g_op.round >= g_op.attempts) { op_drop_socket(s); op_finish(OS_NET_WIRE_TIMEOUT); return; }
                 if ((g_op.round % 50U) == 0U) {
                     built = net_arp_build_request(ctx->tx, ctx->capacity, ctx->device->mac,
-                                                  g_bind[s].local_ip, g_bind[s].remote_ip);
+                                                  g_bind[s].local_ip, arp_target);
                     if (built > 0 && wire_emit(ctx, (uint16_t)built) == 0) {
                         g_stat.frames_tx++;
                         g_stat.arp_tx++;
@@ -476,6 +517,10 @@ int net_wire_op_connect(const net_wire_ctx_t* ctx, const os_net_wire_connect_t* 
         g_op.result = OS_SOCKET_BAD_ARGUMENT;
         return 0;
     }
+    {
+        uint32_t i;
+        for (i = 0U; i < 4U; i++) g_bind[s].next_hop_ip[i] = request->next_hop_ip[i];
+    }
     g_op.kind = NET_WIRE_OP_CONNECT;
     g_op.phase = WIRE_PHASE_RESOLVE;
     g_op.socket = s;
@@ -540,11 +585,21 @@ int net_wire_op_recv(const net_wire_ctx_t* ctx, int socket_id, uint8_t* buffer,
     status = net_socket_receive(socket_id, buffer, capacity, &got);
     if (status != 0) { g_op.result = map_socket_error(status); return 0; }
     if (got > 0U) {
+        net_tcp_connection_t conn;
+        uint8_t st = 0U;
         g_stat.recvs++;
         *out_length = got;
+        /* Lot 67: window update once a small (or zero) advertised window
+         * has reopened by at least half the buffer. */
+        if (g_bind[socket_id].adv_window < NET_SOCKET_RX_CAPACITY / 2U &&
+            net_socket_receive_space(socket_id) >= NET_SOCKET_RX_CAPACITY / 2U &&
+            net_socket_get_state(socket_id, &st) == 0 && st == NET_TCP_STATE_ESTABLISHED &&
+            net_socket_connection_snapshot(socket_id, &conn) == 0)
+            (void)wire_tx_ack(ctx, socket_id, conn.local_sequence, conn.remote_sequence);
         g_op.result = 0;
         return 0;
     }
+    if (peer_finished(socket_id)) { g_op.result = 0; return 0; }
     g_op.kind = NET_WIRE_OP_RECV;
     g_op.phase = WIRE_PHASE_WAIT;
     g_op.socket = socket_id;

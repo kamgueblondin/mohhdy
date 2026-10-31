@@ -43,7 +43,7 @@ static int g_term_n;
 static we_doc_t g_web;
 static int g_web_active;
 static int g_web_scroll;
-static char g_web_file[40];
+static char g_web_file[256];   /* Lot 67: room for a URL (was 40) */
 static int g_web_mobile;
 static osui_mobile_op_t g_mobile_op;
 static char g_web_src[OSUI_WEB_SRC_MAX];
@@ -208,9 +208,37 @@ we_doc_t *osui_gui_web_doc(void) { return &g_web; }
 int osui_gui_web_active(void) { return g_web_active; }
 int osui_gui_web_sanitized(void) { return g_web_sanitized; }
 
+static osui_web_fetch_t g_web_fetch;
+static char g_web_final[256];
+void osui_gui_set_web_fetch(osui_web_fetch_t fn) { g_web_fetch = fn; }
+int osui_gui_web_is_url(const char *s) {
+    return s && ((sncmp(s, "https://", 8) == 0) || (sncmp(s, "http://", 7) == 0));
+}
+
 int osui_gui_web_load(const char *file, char *status, int max) {
     int n = -1, rc;
     if (status && max > 0) status[0] = 0;
+    g_web_final[0] = 0;
+    if (osui_gui_web_is_url(file)) {
+        /* Lot 67: real network page (shell_fetch_page), reader view */
+        static char fst[512];
+        if (!g_web_fetch) {
+            if (status) scpy(status, max, "osui web error=no_network_loader (url refused)");
+            return -1;
+        }
+        n = g_web_fetch(file, g_web_src, OSUI_WEB_SRC_MAX, g_web_final, (int)sizeof(g_web_final), fst, (int)sizeof(fst));
+        if (n < 0) { if (status) scpy(status, max, fst); return -1; }
+        g_web_src[n < OSUI_WEB_SRC_MAX ? n : OSUI_WEB_SRC_MAX - 1] = 0;
+        rc = osui_web_pipeline(g_web_src, n);
+        if (status) {
+            scpy(status, max, fst);
+            web_num(status, max, rc == 0 ? " render ok nodes " : " render error nodes ", (int)g_web.perf.nodes);
+            web_num(status, max, " items ", (int)g_web.perf.items);
+            web_num(status, max, " dropped ", (int)g_web.perf.items_dropped);
+            web_num(status, max, " sanitized ", g_web_sanitized);
+        }
+        return rc;
+    }
     if (g_ide_load) n = g_ide_load(file, g_web_src, OSUI_WEB_SRC_MAX - 1);
     if (n < 0) { if (status) { scpy(status, max, "osui web error=not_found file="); scpy(status + slen(status), max - slen(status), file); } return -1; }
     g_web_src[n] = 0;
@@ -241,7 +269,7 @@ static int evt_int(const char **p);
 
 /* UX4: browser history (local pages) and link navigation */
 #define WEB_HIST 8
-static char g_web_hist[WEB_HIST][40];
+static char g_web_hist[WEB_HIST][256];
 static int g_web_hn, g_web_hi = -1;
 
 static int web_go(const char *file, int push, char *out, int out_max) {
@@ -251,17 +279,17 @@ static int web_go(const char *file, int push, char *out, int out_max) {
         if (out) { scat(out, out_max, status); scat(out, out_max, "\n"); }
         return -1;
     }
-    scpy(g_web_file, (int)sizeof(g_web_file), file);
+    scpy(g_web_file, (int)sizeof(g_web_file), g_web_final[0] ? g_web_final : file);
     g_web_active = 1;
     g_web_mobile = 0;
     g_web_scroll = 0;
     if (push) {
         if (g_web_hi + 1 >= WEB_HIST) {
-            for (k = 0; k + 1 < WEB_HIST; k++) scpy(g_web_hist[k], 40, g_web_hist[k + 1]);
+            for (k = 0; k + 1 < WEB_HIST; k++) scpy(g_web_hist[k], 256, g_web_hist[k + 1]);
             g_web_hi--;
         }
         g_web_hi++;
-        scpy(g_web_hist[g_web_hi], 40, file);
+        scpy(g_web_hist[g_web_hi], 256, g_web_final[0] ? g_web_final : file);
         g_web_hn = g_web_hi + 1;           /* a new page drops the forward list */
     }
     if (out) { scat(out, out_max, status); scat(out, out_max, "\n"); }
@@ -274,6 +302,14 @@ int osui_gui_web_resolve(const char *base, const char *href, char *dst, int max)
     char dir[FSOPS_PATH_MAX];
     int i;
     if (!href || !href[0] || href[0] == '#') return -1;
+    /* Lot 67: on a fetched page the reader view made every link an
+     * absolute http(s) URL; it is followed over the network. A local page
+     * still refuses any scheme. */
+    if (osui_gui_web_is_url(base)) {
+        if (!osui_gui_web_is_url(href) || slen(href) >= max) return -1;
+        scpy(dst, max, href);
+        return 0;
+    }
     for (i = 0; href[i]; i++) if (href[i] == ':' || href[i] == '?' || href[i] == '#') return -1;
     fsops_parent(base && base[0] ? base : "/web/index.html", dir, (int)sizeof(dir));
     fsops_resolve(dir, href, dst, max);
@@ -290,7 +326,7 @@ static void web_event(const char *p, char *out, int out_max) {
         return;
     }
     if (sncmp(p, "click", 5) == 0) {
-        char href[64], dst[FSOPS_PATH_MAX];
+        char href[256], dst[256];   /* Lot 67: absolute URLs of fetched pages */
         int x, y;
         p += 5;
         x = evt_int(&p);
@@ -868,6 +904,8 @@ int osui_gui_route_line(const char *line, const char *pane) {
         || is_word(line, "web") || is_word(line, "pm-ide"))
         return OSUI_GUI_ROUTE_HOST;
     if (line[0] == '!' || token_ai(line)) return OSUI_GUI_ROUTE_SHELL;
+    /* Lot 67: the network GET runs in the shell (same command as the console) */
+    if (is_word(line, "fetch") || is_word(line, "http-get")) return OSUI_GUI_ROUTE_SHELL;
     if (pane && scmp(pane, "shell") == 0) return OSUI_GUI_ROUTE_SHELL;
     return OSUI_GUI_ROUTE_OSUI;
 }

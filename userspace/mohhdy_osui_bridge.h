@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 447
+#define MOHHDY_SHELL_COMMAND_COUNT 451
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -167,6 +167,7 @@ static const char * const mohhdy_shell_commands[] = {
     "export",
     "fat16-cat",
     "fat16-list",
+    "fetch",
     "fetch-sim",
     "fs-list",
     "fs-read",
@@ -193,6 +194,7 @@ static const char * const mohhdy_shell_commands[] = {
     "head",
     "help",
     "history",
+    "http-get",
     "id-key",
     "img-info",
     "info",
@@ -255,6 +257,7 @@ static const char * const mohhdy_shell_commands[] = {
     "p2p-analyze",
     "p2p-block",
     "p2p-burst",
+    "p2p-bwe",
     "p2p-cache",
     "p2p-down",
     "p2p-flood",
@@ -265,6 +268,7 @@ static const char * const mohhdy_shell_commands[] = {
     "p2p-limit",
     "p2p-peers",
     "p2p-poll",
+    "p2p-probe",
     "p2p-propose",
     "p2p-punch",
     "p2p-put",
