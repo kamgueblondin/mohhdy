@@ -39,5 +39,17 @@ check "unknown CA"           'certificate rejected: unknown issuer'     "$ROOT/i
 check "clock after expiry"   'certificate rejected: certificate expired' "$CA" "https://mohhdy.test:$SP/hello" 20400101000000 127.0.0.1
 check "no clock is reported" 'time_checked=0'                           "$CA" "https://mohhdy.test:$SP/hello" noclock 127.0.0.1
 check "404 is a response"    'FETCH OK status=404'                      "$CA" "http://127.0.0.1:$HP/nope"
+# Lot 69: TLS 1.3, P-256 ECDHE, Content-Encoding, cross-scheme redirect
+T13=$((SP + 1)); T13R=$((SP + 2)); P256=$((SP + 3))
+check "tls13 ecdsa"          'TLS suite=TLS13-AES128-GCM-SHA256 leaf=mohhdy.test anchor=MOHHDY Test Root' "$CA" "https://mohhdy.test:$T13/hello" now 127.0.0.1
+check "tls13 rsa-pss"        'TLS suite=TLS13-AES128-GCM-SHA256 leaf=mohhdy.test'  "$CA" "https://mohhdy.test:$T13R/page.html" now 127.0.0.1
+check "tls13 host mismatch"  'certificate rejected: host name mismatch' "$CA" "https://evil.test:$T13/hello" now 127.0.0.1
+check "tls13 unknown CA"     'certificate rejected: unknown issuer'     "$ROOT/initrd_content/etc/ca-roots.pem" "https://mohhdy.test:$T13/hello" now 127.0.0.1
+check "tls12 p256 ecdhe-rsa" 'TLS suite=ECDHE-RSA-AES128-GCM-SHA256 leaf=mohhdy.test' "$CA" "https://mohhdy.test:$P256/hello" now 127.0.0.1
+check "gzip body"            'ENCODING gzip'                            "$CA" "http://127.0.0.1:$HP/gzip"
+check "gzip decoded"         'fetched over the network by Mohhdy'       "$CA" "https://mohhdy.test:$T13/gzip" now 127.0.0.1
+check "deflate decoded"      'fetched over the network by Mohhdy'       "$CA" "http://127.0.0.1:$HP/deflate"
+check "big gzip bounded"     'FETCH OK status=200 bytes=[0-9]+ truncated=1' "$CA" "http://127.0.0.1:$HP/biggz"
+check "http -> https tls13"  "redirects=1 url=https://mohhdy.test:$T13/page.html" "$CA" "http://mohhdy.test:$HP/to?https%3A%2F%2Fmohhdy.test%3A$T13%2Fpage.html" now 127.0.0.1
 echo "[lot67-web-host] $pass passed, $fail failed"
 [ $fail -eq 0 ]

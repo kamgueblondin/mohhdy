@@ -54,6 +54,31 @@ class H(http.server.BaseHTTPRequestHandler):
                 body = ('<html><head><title>%s at DuckDuckGo</title></head><body><div id="links">'
                         '<a href="/settings">Settings</a>%s</div></body></html>') % (html.escape(q), "".join(rows))
             self._send(200, body.encode("utf-8"), "text/html; charset=utf-8")
+        elif p in ("/gzip", "/deflate", "/biggz"):
+            # Lot 69: Content-Encoding the guest must decode
+            import gzip as _gz, zlib as _zl
+            raw = PAGE if p != "/biggz" else (b"<html><head><title>Big gzip page</title></head><body>" +
+                                              b"".join(b"<p>line %d of a big compressed page</p>\n" % i for i in range(20000)) +
+                                              b"</body></html>\n")
+            enc = "deflate" if p == "/deflate" else "gzip"
+            body = _zl.compress(raw) if enc == "deflate" else _gz.compress(raw, mtime=0)
+            print(f"ENC {p} raw={len(raw)} wire={len(body)}", flush=True)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Encoding", enc)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            try:
+                self.wfile.write(body)
+            except OSError:
+                pass   # the client may stop once its buffer is full
+        elif p.startswith("/to?"):
+            # Lot 69: cross-scheme / cross-port redirect (http -> https, google.com -> www style)
+            loc = urllib.parse.unquote(p[4:])
+            self.send_response(301)
+            self.send_header("Location", loc)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
         elif p == "/hello":
             self._send(200, b"hello from lot67\n", "text/plain")
         elif p == "/page.html" or p == "/":
@@ -112,7 +137,26 @@ def main():
     tls = S((bind, sp), H)
     tls.socket = ctx.wrap_socket(tls.socket, server_side=True)
     threading.Thread(target=plain.serve_forever, daemon=True).start()
-    print(f"READY http={hp} https={sp}", flush=True)
+    # Lot 69: sp+1 TLS 1.3 only (ECDSA leaf), sp+2 TLS 1.3 only (RSA leaf,
+    # RSA-PSS CertificateVerify), sp+3 TLS 1.2 ECDHE-RSA with P-256 only
+    extra = []
+    for off, ver, chain, key, curve in ((1, "1.3", "server_chain", "server_key", None),
+                                        (2, "1.3", "server_rsa_chain", "server_rsa_key", None),
+                                        (3, "1.2", "server_rsa_chain", "server_rsa_key", "prime256v1")):
+        c = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        if ver == "1.3":
+            c.minimum_version = ssl.TLSVersion.TLSv1_3
+        else:
+            c.minimum_version = c.maximum_version = ssl.TLSVersion.TLSv1_2
+            c.set_ciphers("ECDHE-RSA-AES128-GCM-SHA256")
+        if curve:
+            c.set_ecdh_curve(curve)
+        c.load_cert_chain(f"{pki}/{chain}.pem", f"{pki}/{key}.pem")
+        srv = S((bind, sp + off), H)
+        srv.socket = c.wrap_socket(srv.socket, server_side=True)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        extra.append(sp + off)
+    print(f"READY http={hp} https={sp} tls13={extra[0]} tls13rsa={extra[1]} p256={extra[2]}", flush=True)
     tls.serve_forever()
 
 
