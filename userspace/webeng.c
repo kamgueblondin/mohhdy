@@ -2149,6 +2149,14 @@ static int logical_side(const we_node_t *n, int block, int end) {
     return end ? (side + 2) & 3 : side;
 }
 
+/* Lot 64: the physical corner radius property between a block side and an
+ * inline side (perpendicular sides 0 top, 1 right, 2 bottom, 3 left). */
+static const char *corner_property(int block, int inline_side) {
+    int top = block == 0 || inline_side == 0, left = block == 3 || inline_side == 3;
+    return top ? (left ? "border-top-left-radius" : "border-top-right-radius") :
+                 (left ? "border-bottom-left-radius" : "border-bottom-right-radius");
+}
+
 static const char *logical_property(const we_node_t *n, const char *prop) {
     static const char *const sized[] = {"inline-size", "block-size", "min-inline-size", "max-inline-size",
                                         "min-block-size", "max-block-size"};
@@ -2160,8 +2168,27 @@ static const char *logical_property(const we_node_t *n, const char *prop) {
         {"top", "right", "bottom", "left"}};
     static const char *const edges[] = {"inline-start", "inline-end", "block-start", "block-end"};
     static const uint8_t swapped[6] = {1, 0, 4, 5, 2, 3};
+    /* lot 64: logical borders and corner radii */
+    static const char *const edge_props[4][4] = {
+        {"border-top", "border-top-width", "border-top-style", "border-top-color"},
+        {"border-right", "border-right-width", "border-right-style", "border-right-color"},
+        {"border-bottom", "border-bottom-width", "border-bottom-style", "border-bottom-color"},
+        {"border-left", "border-left-width", "border-left-style", "border-left-color"}};
+    static const char *const suffixes[4] = {"", "-width", "-style", "-color"};
+    static const char *const corners[] = {"border-start-start-radius", "border-start-end-radius",
+                                          "border-end-start-radius", "border-end-end-radius"};
     int i, k, vertical = n->wmode != WE_WM_HORIZONTAL;
     if (w_eq(prop, "word-wrap")) return "overflow-wrap";
+    if (w_ieq_n(prop, 7, "border-")) {
+        for (k = 0; k < 4; k++) {
+            int len = 7 + w_len(edges[k]);
+            if (!w_ieq_n(prop + 7, w_len(edges[k]), edges[k])) continue;
+            for (i = 0; i < 4; i++)
+                if (w_eq(prop + len, suffixes[i])) return edge_props[logical_side(n, k >= 2, k & 1)][i];
+        }
+        for (k = 0; k < 4; k++)
+            if (w_eq(prop, corners[k])) return corner_property(logical_side(n, 1, k >> 1), logical_side(n, 0, k & 1));
+    }
     for (i = 0; i < 6; i++)
         if (w_eq(prop, sized[i])) return width_height[vertical ? swapped[i] : i];
     for (i = 0; i < 3; i++) {
@@ -2453,6 +2480,66 @@ static int border_list_decl(we_node_t *n, int kind, const char *v, int vl) {
         } else if (kind == 0) n->edge_style[side] = (uint8_t)vals[k];
         else if (kind == 1) n->edge_w[side] = (int8_t)(vals[k] > 8 ? 8 : vals[k]);
         else { n->edge_color[side] = cols[k]; n->edge_color_set = (uint8_t)(n->edge_color_set | (1u << side)); }
+    }
+    return 0;
+}
+
+/* Lot 64: border-<side>-width / -style / -color: side * 4 + part (1 width,
+ * 2 style, 3 colour), -1 for other names. */
+static int edge_longhand(const char *prop) {
+    static const char *const sides[4] = {"top", "right", "bottom", "left"};
+    static const char *const parts[4] = {"", "width", "style", "color"};
+    int side, part, len;
+    if (!w_ieq_n(prop, 7, "border-")) return -1;
+    for (side = 0; side < 4; side++) {
+        len = w_len(sides[side]);
+        if (!w_ieq_n(prop + 7, len, sides[side]) || prop[7 + len] != '-') continue;
+        for (part = 1; part < 4; part++) if (w_eq(prop + 8 + len, parts[part])) return side * 4 + part;
+    }
+    return -1;
+}
+
+static int border_edge_part(we_node_t *n, int side, int part, const char *v, int vl) {
+    int px, code;
+    uint32_t col;
+    if (part == 1) {
+        if (parse_len(v, vl, &px, 0) || px < 0 || px > 64) return -1;
+        n->edge_w[side] = (int8_t)(px > 8 ? 8 : px);
+    } else if (part == 2) {
+        if (!(code = border_style_code(v, vl))) return -1;
+        n->edge_style[side] = (uint8_t)code;
+    } else {
+        if (parse_color(v, vl, &col)) return -1;
+        n->edge_color[side] = col;
+        n->edge_color_set = (uint8_t)(n->edge_color_set | (1u << side));
+    }
+    return 0;
+}
+
+/* Lot 64: border-inline / border-block (one edge value for both sides) and
+ * their -width / -style / -color (one value, or start and end). */
+static int logical_side(const we_node_t *n, int block, int end);
+static int border_logical_pair(we_node_t *n, const char *prop, const char *v, int vl) {
+    int block = prop[7] == 'b', len = block ? 12 : 13, part, a[4], l[4], c, k, side[2];
+    static const char *const parts[4] = {"", "-width", "-style", "-color"};
+    for (part = 0; part < 4 && !w_eq(prop + len, parts[part]); part++) {}
+    if (part == 4) return -1;
+    side[0] = logical_side(n, block, 0); side[1] = logical_side(n, block, 1);
+    if (part == 0) {
+        static we_node_t probe;
+        probe = *n;                          /* both sides or neither */
+        if (border_edge_decl(&probe, side[0], v, vl)) return -1;
+        (void)border_edge_decl(n, side[0], v, vl);
+        (void)border_edge_decl(n, side[1], v, vl);
+        return 0;
+    }
+    c = tokens(v, vl, a, l);
+    if (c < 1 || c > 2 || tokens_more(v, vl, a, l, c)) return -1;
+    {
+        static we_node_t probe;
+        probe = *n;
+        for (k = 0; k < 2; k++) if (border_edge_part(&probe, side[k], part, v + a[k % c], l[k % c])) return -1;
+        *n = probe;
     }
     return 0;
 }
@@ -3949,6 +4036,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
                w_eq(prop, "border-bottom") || w_eq(prop, "border-left")) {
         int side = w_eq(prop, "border-top") ? 0 : w_eq(prop, "border-right") ? 1 : w_eq(prop, "border-bottom") ? 2 : 3;
         if (border_edge_decl(n, side, v, vl)) diag(d, "border edge refused", -1);
+    } else if (edge_longhand(prop) >= 0) {
+        if (border_edge_part(n, edge_longhand(prop) >> 2, edge_longhand(prop) & 3, v, vl)) diag(d, "border edge refused", -1);
+    } else if (w_ieq_n(prop, 13, "border-inline") || w_ieq_n(prop, 12, "border-block")) {
+        if (border_logical_pair(n, prop, v, vl)) diag(d, "border edge refused", -1);
     } else if (w_eq(prop, "border-style") || w_eq(prop, "border-width") || w_eq(prop, "border-color")) {
         int kind = w_eq(prop, "border-style") ? 0 : w_eq(prop, "border-width") ? 1 : 2;
         if (border_list_decl(n, kind, v, vl)) diag(d, "border edge refused", -1);
@@ -5122,8 +5213,17 @@ static int is_box(uint8_t display) {
 
 /* Border width on one side of the box. A cell of a collapsed table uses
  * its resolved content inset (collapse_insets) instead of its border. */
+static void edge_of(const we_node_t *n, int side, int *w, int *style, uint32_t *color);
 static int box_edge(const we_node_t *n, int side) {
-    return n->collapse_cell ? n->cin[side] : n->border;
+    if (n->collapse_cell) return n->cin[side];
+    if (n->own_edges) {
+        /* lot 64: the side's own width (hidden is none outside tables) */
+        int w, style;
+        uint32_t color;
+        edge_of(n, side, &w, &style, &color);
+        return style == WE_BS_HIDDEN ? 0 : w;
+    }
+    return n->border;
 }
 
 static int node_border_extra(const we_node_t *n) {
@@ -7041,6 +7141,18 @@ static void vertical_style(we_doc_t *d, int i, int rl, int forward) {
     n->spacing_pct = permute_bits(n->spacing_pct, side, margin_pct, forward);
     n->spacing_pct = permute_bits(n->spacing_pct, side, padding_pct, forward);
     n->margin_auto = permute_bits(n->margin_auto, side, side_bit, forward);
+    {   /* per-side borders rotate with the sides */
+        static const uint8_t edge_bit[4] = {1, 2, 4, 8};
+        int8_t w[4];
+        uint8_t st[4];
+        uint32_t col[4];
+        for (k = 0; k < 4; k++) { w[k] = n->edge_w[k]; st[k] = n->edge_style[k]; col[k] = n->edge_color[k]; }
+        for (k = 0; k < 4; k++) {
+            int from = forward ? side[k] : k, to = forward ? k : side[k];
+            n->edge_w[to] = w[from]; n->edge_style[to] = st[from]; n->edge_color[to] = col[from];
+        }
+        n->edge_color_set = permute_bits(n->edge_color_set, side, edge_bit, forward);
+    }
     /* radii: corners rotate and the two radii of a corner swap axes */
     {
         uint8_t rx[4], ry[4];
@@ -7212,7 +7324,22 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     shadow_slot[1] += bgi_paint(d, idx, bgi_at, bx, by, bw, bh);
     shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh, &radii);
     shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh, &radii);
-    if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 5 || n->border_style == 6)) {
+    if (n->own_edges) {
+        /* lot 64: per-side borders: the top and bottom across the box,
+         * the left and right between them, each with its style and colour */
+        int w[4], style[4], side;
+        uint32_t color[4];
+        for (side = 0; side < 4; side++) {
+            edge_of(n, side, &w[side], &style[side], &color[side]);
+            if (style[side] == WE_BS_HIDDEN || !style[side]) w[side] = 0;
+        }
+        if (radii_any(&radii)) diag(d, "edges radius painted square", idx);
+        if (w[0]) edge_paint(d, idx, style[0], color[0], 0, by, bx, w[0], bw);
+        if (w[2]) edge_paint(d, idx, style[2], color[2], 0, by + bh - w[2], bx, w[2], bw);
+        if (w[3]) edge_paint(d, idx, style[3], color[3], 1, bx, by + w[0], w[3], bh - w[0] - w[2]);
+        if (w[1]) edge_paint(d, idx, style[1], color[1], 1, bx + bw - w[1], by + w[0], w[1], bh - w[0] - w[2]);
+        border_slot = 1;
+    } else if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 5 || n->border_style == 6)) {
         radius_dashed(d, idx, &radii, bx, by, bw, bh, n->border > 8 ? 8 : n->border, n->border_style, n->border_color);
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell && radii_any(&radii) &&
@@ -10164,7 +10291,7 @@ static int collapse_table_of(const we_doc_t *d, int i) {
 static void collapse_widths(we_doc_t *d) {
     uint32_t i;
     for (i = 0; i < d->nnodes; i++) {
-        d->nodes[i].collapse_w = 0; d->nodes[i].collapse_cell = 0;
+        d->nodes[i].collapse_w = 0; d->nodes[i].collapse_cell = 0; d->nodes[i].own_edges = 0;
         w_zero(d->nodes[i].cin, sizeof(d->nodes[i].cin));
     }
     for (i = 0; i < d->nnodes; i++) {
@@ -10176,7 +10303,7 @@ static void collapse_widths(we_doc_t *d) {
         else if (n->display == WE_DISP_CELL || n->display == WE_DISP_ROW || table_group(n) || table_column_tag(n))
             table = collapse_table_of(d, (int)i);
         if (table < 0) {
-            if (edges_set(n)) diag(d, "border edge refused", (int)i);
+            n->own_edges = (uint8_t)edges_set(n);     /* lot 64: painted per side */
             continue;
         }
         if (n->display == WE_DISP_CELL) n->collapse_cell = 1;

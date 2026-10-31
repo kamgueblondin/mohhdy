@@ -186,6 +186,7 @@ typedef struct {
     uint8_t flex_wrap, float_side, grid_rows, relative;
     uint8_t list_style;
     uint16_t lsi_off, lsi_len;
+    uint8_t own_edges;          /* lot 64: per-side borders painted on a box outside a collapsed table */
     /* Lot 64: multi-column layout: column-count (0 auto), column-width (-1
      * auto), column-fill auto (1) or balance, column-rule width (0: none),
      * style (WE_BS_*) and colour (set: 1; else currentColor). The gap is
