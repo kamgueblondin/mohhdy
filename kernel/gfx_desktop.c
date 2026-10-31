@@ -921,7 +921,7 @@ static void icon_tile(uint32_t *fb, int w, int h, int x, int y, uint32_t c0, uin
     if (label) {
         int len = 0;
         while (label[len]) len++;
-        draw_text(fb, w, h, x + 21 - (len * 8) / 2, y + 46, label, RGB(232, 238, 244));
+        draw_text(fb, w, h, x + 21 - (len * CW) / 2, y + 46, label, RGB(232, 238, 244));
     }
 }
 
@@ -2050,45 +2050,68 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     mode_s = "en attente";
     if (sc->stage_mode == OS_FB_STAGE_ACTING) mode_s = "en action";
     if (sc->stage_mode == OS_FB_STAGE_PRESENTING) mode_s = "resultats";
-    round_rect_a(fb, w, h, 12, bar_h + 8, 96, 18, 9, RGB(11, 16, 20), 160);
-    stroke_round(fb, w, h, 12, bar_h + 8, 96, 18, 9, RGB(61, 154, 138), 1);
-    draw_text(fb, w, h, 22, bar_h + 13, mode_s, RGB(122, 212, 196));
-    if (w >= 700) {
-        char lab[64];
-        int ln = 0;
-        llm_text(lab, (int)sizeof(lab), "Assistant : ", sc, "");
-        draw_text(fb, w, h, 118, bar_h + 13, lab, RGB(243, 230, 176));
-        while (lab[ln]) ln++;
-        if (ln < 13) ln = 13;
-        if (w >= 980)
-            draw_text(fb, w, h, 118 + (ln + 2) * 8, bar_h + 13, "Clic : ouvrir  Glisser : deplacer  /help", RGB(154, 168, 181));
-    }
-
-    if (w >= 780 && h >= 520) {
-        int gap = (h >= 700) ? 72 : 56;
-        for (i = 0; i < 6; i++) {
-            if (bar_h + 16 + i * gap + 58 > h - 52) break;
-            icon_tile(fb, w, h, w - 86, bar_h + 16 + i * gap, icons[i].c0, icons[i].c1, icons[i].label);
-        }
-    }
-
-    scene_x = lay.scene_ia.box.x;
-    scene_y = lay.scene_ia.box.y;
-    scene_w = lay.scene_ia.box.w;
-    scene_h = lay.scene_ia.box.h;
-    if (scene_w > 0) {
-    round_rect_a(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(11, 16, 20), 150);
-    stroke_round(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(61, 154, 138), 1);
-    draw_text(fb, w, h, scene_x + 16, scene_y + 12, "Scene IA", RGB(232, 238, 244));
-    caption = " . en attente d'un prompt";
-    if (sc->stage_mode == OS_FB_STAGE_ACTING) caption = " . action stub";
-    if (sc->stage_mode == OS_FB_STAGE_PRESENTING) caption = " . resultats";
+    /* Lot 69: the status row, icon labels and Scene IA headings follow
+     * ui-scale (bounded by OS_UI_Q_CHROME_MAX so they stay one row). */
     {
-        char lab[80];
-        llm_text(lab, (int)sizeof(lab), "", sc, caption);
-        draw_text(fb, w, h, scene_x + 16, scene_y + 28, lab, RGB(154, 168, 181));
-    }
-    draw_stage_body(fb, w, h, scene_x + 12, scene_y + 48, scene_w - 24, scene_h - 60, sc);
+        int uq = sc->version >= 8 ? os_ui_effective_q(sc->ui_scale_q, 0, w, h) : OS_UI_Q1;
+        int cq = uq > OS_UI_Q_CHROME_MAX ? OS_UI_Q_CHROME_MAX : uq;
+        int gh = os_ui_px(8, cq);
+        int ph = gh + 10, pw, ml = 0, lx;
+        while (mode_s[ml]) ml++;
+        g_tq = cq;
+        pw = ml * CW + 20;
+        if (pw < 96) pw = 96;
+        round_rect_a(fb, w, h, 12, bar_h + 8, pw, ph, ph / 2, RGB(11, 16, 20), 160);
+        stroke_round(fb, w, h, 12, bar_h + 8, pw, ph, ph / 2, RGB(61, 154, 138), 1);
+        draw_text(fb, w, h, 22, bar_h + 13, mode_s, RGB(122, 212, 196));
+        lx = 12 + pw + 10;
+        if (w >= 700) {
+            char lab[64];
+            int ln = 0;
+            llm_text(lab, (int)sizeof(lab), "Assistant : ", sc, "");
+            draw_text_n(fb, w, h, lx, bar_h + 13, lab, (w - lx - 100) / CW, RGB(243, 230, 176));
+            while (lab[ln]) ln++;
+            if (ln < 13) ln = 13;
+            if (lx + (ln + 2 + 41) * CW < w - 96)
+                draw_text(fb, w, h, lx + (ln + 2) * CW, bar_h + 13, "Clic : ouvrir  Glisser : deplacer  /help", RGB(154, 168, 181));
+        }
+        g_tq = OS_UI_Q1;
+
+        if (w >= 780 && h >= 520) {
+            int gap = (h >= 700) ? 72 : 56;
+            gap += gh - 8;
+            for (i = 0; i < 6; i++) {
+                if (bar_h + 16 + i * gap + 50 + gh > h - 52) break;
+                g_tq = cq;
+                icon_tile(fb, w, h, w - 86, bar_h + 16 + i * gap, icons[i].c0, icons[i].c1, icons[i].label);
+                g_tq = OS_UI_Q1;
+            }
+        }
+
+        scene_x = lay.scene_ia.box.x;
+        scene_y = lay.scene_ia.box.y;
+        scene_w = lay.scene_ia.box.w;
+        scene_h = lay.scene_ia.box.h;
+        if (scene_w > 0) {
+            int lh = os_ui_line_h(cq) + 6, body_y;
+            round_rect_a(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(11, 16, 20), 150);
+            stroke_round(fb, w, h, scene_x, scene_y, scene_w, scene_h, 16, RGB(61, 154, 138), 1);
+            g_tq = cq;
+            draw_text_n(fb, w, h, scene_x + 16, scene_y + 12, "Scene IA", (scene_w - 32) / CW, RGB(232, 238, 244));
+            caption = " . en attente d'un prompt";
+            if (sc->stage_mode == OS_FB_STAGE_ACTING) caption = " . action stub";
+            if (sc->stage_mode == OS_FB_STAGE_PRESENTING) caption = " . resultats";
+            {
+                char lab[80];
+                llm_text(lab, (int)sizeof(lab), "", sc, caption);
+                draw_text_n(fb, w, h, scene_x + 16, scene_y + 12 + lh, lab, (scene_w - 32) / CW, RGB(154, 168, 181));
+            }
+            g_tq = OS_UI_Q1;
+            body_y = scene_y + 12 + 2 * lh + 4;
+            if (body_y < scene_y + 48) body_y = scene_y + 48;
+            if (scene_h - (body_y - scene_y) - 12 > 8)
+                draw_stage_body(fb, w, h, scene_x + 12, body_y, scene_w - 24, scene_h - (body_y - scene_y) - 12, sc);
+        }
     }
 
     pane = sc->pane;

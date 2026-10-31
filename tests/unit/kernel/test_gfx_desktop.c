@@ -1059,6 +1059,25 @@ static void test_lot69_native_fonts(void) {
     }
 }
 
+
+/* Lot 69: status row and icon labels grow with ui-scale */
+static void test_lot69_status_row_scales(void) {
+    int s1, s2, i1, i2;
+    blank_scene();
+    g_scene.version = 8;
+    g_scene.ui_scale_q = 4;
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    s1 = count_near(12, 0, 300, 90, 122, 212, 196, 6);
+    i1 = count_near(W - 120, 40, W, H - 60, 232, 238, 244, 6);
+    g_scene.ui_scale_q = 8;
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    s2 = count_near(12, 0, 300, 90, 122, 212, 196, 6);
+    i2 = count_near(W - 120, 40, W, H - 60, 232, 238, 244, 6);
+    TEST_ASSERT_TRUE(s1 > 10);
+    TEST_ASSERT_TRUE(s2 > s1 * 2);
+    TEST_ASSERT_TRUE(i2 > i1);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -1089,6 +1108,7 @@ int main(void) {
     RUN_TEST(test_lot68_scaled_glyphs);
     RUN_TEST(test_lot68_scene_scale_and_grid);
     RUN_TEST(test_lot69_native_fonts);
+    RUN_TEST(test_lot69_status_row_scales);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
