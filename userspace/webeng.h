@@ -75,6 +75,7 @@ enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3, 
  * control byte; hyphens: manual (default; auto reads as manual) or none. */
 #define WE_SHY '\x1f'
 enum { WE_HYPHENS_MANUAL = 0, WE_HYPHENS_NONE = 1 };
+enum { WE_WM_HORIZONTAL = 0, WE_WM_VERTICAL_RL = 1, WE_WM_VERTICAL_LR = 2 };
 enum { WE_BGS_AUTO = 0, WE_BGS_CONTAIN = 1, WE_BGS_COVER = 2, WE_BGS_EXPLICIT = 3 };
 enum { WE_INSET_LEFT = 1, WE_INSET_TOP = 2, WE_INSET_RIGHT = 4, WE_INSET_BOTTOM = 8 };
 enum { WE_AUTO_LEFT = 1, WE_AUTO_RIGHT = 2, WE_AUTO_TOP = 4, WE_AUTO_BOTTOM = 8 };
@@ -220,6 +221,9 @@ typedef struct {
     /* Lot 63: inherited tab-size in px (0..255, default 8 spaces). */
     uint8_t tab_px;
     uint8_t hyphens;           /* lot 63: WE_HYPHENS_*, inherited */
+    /* Lot 64: inherited writing-mode (WE_WM_*), direction (1 rtl) and
+     * text-orientation (1 upright; mixed paints upright too). */
+    uint8_t wmode, dir_rtl, upright;
     int16_t border_spacing;    /* horizontal; separate borders; collapse forces 0 */
     int16_t border_spacing_y;  /* vertical; one value sets both */
     int16_t line_height;       /* 0 uses WE_LINE_H; glyphs stay at the top */

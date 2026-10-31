@@ -344,7 +344,7 @@ static void test_l58_logical_padding_math(void) {
 
 static void test_l58_logical_vertical_mode(void) {
     lot52_render("<body style='margin:0'><div id=g style='width:200px'>"
-        "<div id=a style='height:10px;background:red;width:40px;padding-inline:4px 6px;writing-mode:vertical-rl;'>"
+        "<div id=a style='height:10px;background:red;width:40px;padding-inline:4px 6px;writing-mode:vertical-up;'>"
         "A</div><div id=b style='height:5px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
@@ -356,7 +356,7 @@ static void test_l58_logical_vertical_mode(void) {
 
 static void test_l58_logical_rtl_mode(void) {
     lot52_render("<body style='margin:0'><div id=g style='width:200px'>"
-        "<div id=a style='height:10px;background:red;width:40px;padding-inline:4px 6px;direction:rtl;'>A</div>"
+        "<div id=a style='height:10px;background:red;width:40px;padding-inline:4px 6px;direction:up;'>A</div>"
         "<div id=b style='height:5px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);

@@ -2138,21 +2138,37 @@ static int margin_auto_box(we_node_t *n, const char *v, int vl) {
     return 1;
 }
 
-static const char *logical_property(const char *prop) {
-    static const char *const logical[] = {
-        "inline-size", "block-size", "min-inline-size", "max-inline-size", "min-block-size", "max-block-size",
-        "margin-inline-start", "margin-inline-end", "margin-block-start", "margin-block-end",
-        "padding-inline-start", "padding-inline-end", "padding-block-start", "padding-block-end",
-        "inset-inline-start", "inset-inline-end", "inset-block-start", "inset-block-end", "word-wrap"
-    };
-    static const char *const physical[] = {
-        "width", "height", "min-width", "max-width", "min-height", "max-height",
-        "margin-left", "margin-right", "margin-top", "margin-bottom",
-        "padding-left", "padding-right", "padding-top", "padding-bottom",
-        "left", "right", "top", "bottom", "overflow-wrap"
-    };
-    int i;
-    for (i = 0; i < 19; i++) if (w_eq(prop, logical[i])) return physical[i];
+/* Lot 64: the physical side (0 top, 1 right, 2 bottom, 3 left) of a
+ * logical edge under the element's writing-mode and direction. */
+static int logical_side(const we_node_t *n, int block, int end) {
+    int side;
+    if (block) side = n->wmode == WE_WM_VERTICAL_RL ? 1 : n->wmode == WE_WM_VERTICAL_LR ? 3 : 0;
+    else if (n->wmode != WE_WM_HORIZONTAL) side = n->dir_rtl ? 2 : 0;
+    else side = n->dir_rtl ? 1 : 3;
+    return end ? (side + 2) & 3 : side;
+}
+
+static const char *logical_property(const we_node_t *n, const char *prop) {
+    static const char *const sized[] = {"inline-size", "block-size", "min-inline-size", "max-inline-size",
+                                        "min-block-size", "max-block-size"};
+    static const char *const width_height[] = {"width", "height", "min-width", "max-width", "min-height", "max-height"};
+    static const char *const prefixes[] = {"margin-", "padding-", "inset-"};
+    static const char *const sides[3][4] = {
+        {"margin-top", "margin-right", "margin-bottom", "margin-left"},
+        {"padding-top", "padding-right", "padding-bottom", "padding-left"},
+        {"top", "right", "bottom", "left"}};
+    static const char *const edges[] = {"inline-start", "inline-end", "block-start", "block-end"};
+    static const uint8_t swapped[6] = {1, 0, 4, 5, 2, 3};
+    int i, k, vertical = n->wmode != WE_WM_HORIZONTAL;
+    if (w_eq(prop, "word-wrap")) return "overflow-wrap";
+    for (i = 0; i < 6; i++)
+        if (w_eq(prop, sized[i])) return width_height[vertical ? swapped[i] : i];
+    for (i = 0; i < 3; i++) {
+        int len = w_len(prefixes[i]);
+        if (!w_ieq_n(prop, len, prefixes[i])) continue;
+        for (k = 0; k < 4; k++)
+            if (w_eq(prop + len, edges[k])) return sides[i][logical_side(n, k >= 2, k & 1)];
+    }
     return prop;
 }
 
@@ -2202,7 +2218,7 @@ static int logical_pair(we_node_t *n, const char *prop, const char *v, int len) 
     int margin = w_eq(prop, "margin-inline") || w_eq(prop, "margin-block");
     int block = w_eq(prop, "margin-block") || w_eq(prop, "padding-block");
     int starts[4], lengths[4], count = tokens(v, len, starts, lengths), k, values[2], auto_bits[2] = {0, 0}, pcts[2];
-    int sides[2] = {block ? 0 : 3, block ? 2 : 1};
+    int sides[2] = {logical_side(n, block, 0), logical_side(n, block, 1)};
     static const uint8_t flags[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
     if (count < 1 || count > 2) return -1;
     for (k = 0; k < count; k++) {
@@ -2325,8 +2341,9 @@ static int inset_declaration(we_node_t *n, const char *prop, const char *v, int 
         slots[2] = WE_LEN_BOTTOM; slots[3] = WE_LEN_LEFT;
     } else {
         if (count > 2) return -1;
-        slots[0] = w_eq(prop, "inset-inline") ? WE_LEN_LEFT : WE_LEN_TOP;
-        slots[1] = w_eq(prop, "inset-inline") ? WE_LEN_RIGHT : WE_LEN_BOTTOM;
+        static const uint8_t side_slot[4] = {WE_LEN_TOP, WE_LEN_RIGHT, WE_LEN_BOTTOM, WE_LEN_LEFT};
+        slots[0] = side_slot[logical_side(n, w_eq(prop, "inset-block"), 0)];
+        slots[1] = side_slot[logical_side(n, w_eq(prop, "inset-block"), 1)];
     }
     w_zero(expression, sizeof(expression));
     for (k = 0; k < count; k++) {
@@ -3162,13 +3179,15 @@ static int white_space_longhand(we_node_t *n, const char *prop, const char *v, i
     return 0;
 }
 
+static int mode_pass;   /* lot 64: 1 while only writing-mode/direction apply */
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[40];
     int px, pct, k;
     uint32_t col;
     w_cpy(prop, sizeof(prop), p, pl);
     for (k = 0; prop[k]; k++) prop[k] = w_low(prop[k]);
-    { const char *mapped = logical_property(prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
+    if (mode_pass && !w_eq(prop, "writing-mode") && !w_eq(prop, "direction") && !w_eq(prop, "text-orientation")) return;
+    { const char *mapped = logical_property(n, prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
     while (vl > 0 && w_space(v[vl - 1])) vl--;
     d->perf.decls_applied++;
     if (w_eq(prop, "inset") || w_eq(prop, "inset-inline") || w_eq(prop, "inset-block") ||
@@ -3203,9 +3222,16 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "margin-inline") || w_eq(prop, "margin-block") || w_eq(prop, "padding-inline") || w_eq(prop, "padding-block")) {
         if (logical_pair(n, prop, v, vl)) diag(d, "logical spacing refused", -1);
     } else if (w_eq(prop, "writing-mode")) {
-        if (!value_is(v, vl, "horizontal-tb")) diag(d, "writing mode refused", -1);
+        if (value_is(v, vl, "horizontal-tb")) n->wmode = WE_WM_HORIZONTAL;
+        else if (value_is(v, vl, "vertical-rl")) n->wmode = WE_WM_VERTICAL_RL;
+        else if (value_is(v, vl, "vertical-lr")) n->wmode = WE_WM_VERTICAL_LR;
+        else if (!mode_pass) diag(d, "writing mode refused", -1);
     } else if (w_eq(prop, "direction")) {
-        if (!value_is(v, vl, "ltr")) diag(d, "direction refused", -1);
+        if (value_is(v, vl, "ltr") || value_is(v, vl, "rtl")) n->dir_rtl = (uint8_t)value_is(v, vl, "rtl");
+        else if (!mode_pass) diag(d, "direction refused", -1);
+    } else if (w_eq(prop, "text-orientation")) {
+        if (value_is(v, vl, "mixed") || value_is(v, vl, "upright")) n->upright = (uint8_t)value_is(v, vl, "upright");
+        else if (!mode_pass) diag(d, "text orientation refused", -1);   /* sideways needs rotated glyphs */
     } else if (w_eq(prop, "padding-top") || w_eq(prop, "padding-right") || w_eq(prop, "padding-bottom")) {
         int side = w_eq(prop, "padding-top") ? 0 : w_eq(prop, "padding-right") ? 1 : 2;
         if (spacing_percent(v, vl, 0, &pct) == 0) spacing_set(n, 1, side, pct);
@@ -3806,6 +3832,9 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->ws_mode = p ? p->ws_mode : 0;
         n->tab_px = p ? p->tab_px : 8 * WE_CHAR_W;
         n->hyphens = p ? p->hyphens : WE_HYPHENS_MANUAL;
+        n->wmode = p ? p->wmode : WE_WM_HORIZONTAL;
+        n->dir_rtl = p ? p->dir_rtl : 0;
+        n->upright = p ? p->upright : 0;
         n->nowrap = p ? p->nowrap : 0;
         n->break_word = p ? p->break_word : 0;
         n->break_all = p ? p->break_all : 0;
@@ -3828,6 +3857,12 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
             n->display = WE_DISP_INLINE;
             if (w_eq(d->nodes[match].tag, "q")) n->content_kind = pseudo == WE_PSEUDO_BEFORE ? WE_CONTENT_UA_OPEN : WE_CONTENT_UA_CLOSE;
         } else ua_defaults(n);
+        /* lot 64: writing-mode and direction first, so that the logical
+         * properties of the same element map to the right sides */
+        mode_pass = 1;
+        cascade_rules(d, match, n, pseudo, 0);
+        cascade_rules(d, match, n, pseudo, 1);
+        mode_pass = 0;
         cascade_rules(d, match, n, pseudo, 0);
         cascade_rules(d, match, n, pseudo, 1);
         if (n->border && n->border_color == (p ? p->color : 0)) n->border_color = n->color;
@@ -4074,6 +4109,8 @@ static int image_open(we_doc_t *d, int idx) {
     if (image_work.ready_idx == idx) return 0;
     image_work.ready_idx = -1;
     if (!(w_eq(n->tag, "img") ? n->src_len : n->bgi_len)) return -1;
+    if (n->parent >= 0 && d->nodes[n->parent].wmode != WE_WM_HORIZONTAL)   /* lot 64: runs would be transposed */
+        return image_fail(d, "image in vertical flow refused", idx);
     if (image_local_path(d, n)) return image_fail(d, "image local path refused", idx);
     if (!image_read) return image_fail(d, "image reader unavailable", idx);
     bytes = image_read(image_ctx, image_work.path, image_work.source, WE_IMAGE_SOURCE_MAX);
@@ -4987,6 +5024,9 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
 
 static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maximum);
 
+static int16_t vertical_inline[WE_MAX_NODES];   /* lot 64: logical max-content of an orthogonal root */
+static int vertical_root(const we_doc_t *d, int idx);
+
 static void intrinsic_sizes(we_doc_t *d) {
     int i;
     for (i = (int)d->nnodes - 1; i >= 0; i--) {
@@ -5025,6 +5065,15 @@ static void intrinsic_sizes(we_doc_t *d) {
         }
         n->min_content = (int16_t)limit_coord(n->nowrap ? flow.maximum : flow.minimum);
         n->max_content = (int16_t)limit_coord(flow.maximum);
+        if (vertical_root(d, i)) {
+            /* lot 64: an orthogonal root contributes its block extent:
+             * the lines its max-content needs at its inline size */
+            int size = n->height > 0 ? n->height : flow.maximum, lines;
+            vertical_inline[i] = (int16_t)limit_coord(flow.maximum);
+            lines = size > 0 ? (flow.maximum + size - 1) / size : 1;
+            if (lines < 1) lines = 1;
+            n->min_content = n->max_content = (int16_t)limit_coord(lines * (n->line_height ? n->line_height : WE_LINE_H));
+        }
     }
 }
 
@@ -6113,6 +6162,224 @@ static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, in
     }
 }
 
+static int layout_content(we_doc_t *d, int idx, int x, int y, int width, int depth) {
+    const we_node_t *n = &d->nodes[idx];
+    if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID) return layout_flex(d, idx, x, y, width, depth);
+    if (n->display == WE_DISP_TABLE) return layout_table(d, idx, x, y, width, depth);
+    return layout_children(d, idx, x, y, width, depth);
+}
+
+/* ---------- Lot 64: vertical writing modes ----------
+ * A block whose writing-mode is vertical-rl or vertical-lr under a
+ * horizontal container is an orthogonal root: its content is laid out in
+ * logical space (inline axis = physical down, inline size = its definite
+ * content height, else its max-content) and then mapped to physical space:
+ * vertical-rl puts the first line at the right, vertical-lr at the left.
+ * The box keeps its physical margins, borders and padding; an auto width
+ * becomes the block extent of its content. Text is stacked upright, one
+ * glyph per item and 8 px per glyph (no rotated font: mixed orientation is
+ * painted upright, "vertical text painted upright"); spaces paint nothing.
+ * Descendants share the root's mode: another writing-mode inside it is
+ * painted with the root's ("writing mode nested painted as container"). */
+static os_fb_web_item_t vertical_out[OS_FB_WEB_ITEMS];
+static int16_t vertical_owner[OS_FB_WEB_ITEMS];
+
+static int vertical_root(const we_doc_t *d, int idx) {
+    const we_node_t *n = &d->nodes[idx];
+    return n->wmode != WE_WM_HORIZONTAL && (n->parent < 0 || d->nodes[n->parent].wmode == WE_WM_HORIZONTAL);
+}
+
+static int width_auto(const we_node_t *n) {
+    return !n->width_kind && n->width < 0 && n->width_pct <= 0 && !n->length[WE_LEN_WIDTH].count;
+}
+
+static int inside(const we_doc_t *d, int node, int root) {
+    int k;
+    for (k = 0; node >= 0 && k <= WE_DEPTH_MAX; k++, node = d->nodes[node].parent) if (node == root) return 1;
+    return 0;
+}
+
+static void vertical_map(int rl, int ox, int oy, int extent, int *x, int *y, int *w, int *h) {
+    int lx = *x - ox, ly = *y - oy, lw = *w, lh = *h;
+    *x = rl ? ox + extent - ly - lh : ox + ly;
+    *y = oy + lx;
+    *w = lh; *h = lw;
+}
+
+static void vertical_remap(we_doc_t *d, int idx, int first, int ox, int oy, int extent) {
+    int rl = d->nodes[idx].wmode == WE_WM_VERTICAL_RL, i, out = 0, room = OS_FB_WEB_ITEMS - first, dropped = 0, text = 0;
+    for (i = 0; i < (int)d->nnodes; i++) {
+        we_node_t *c = &d->nodes[i];
+        int x = c->x, y = c->y, w = c->w, h = c->h;
+        if (i == idx || !inside(d, i, idx)) continue;
+        vertical_map(rl, ox, oy, extent, &x, &y, &w, &h);
+        c->x = (int16_t)limit_coord(x); c->y = (int16_t)limit_coord(y); c->w = (int16_t)w; c->h = (int16_t)h;
+    }
+    for (i = first; i < (int)d->nitems; i++) {
+        os_fb_web_item_t it = d->items[i];
+        int x = it.x, y = it.y, w = it.w, h = it.h;
+        if (it.kind == OS_FB_WEB_TEXT) {
+            int len = 0, adv, k;
+            while (len < OS_FB_WEB_TEXT_LEN && it.text[len]) len++;
+            adv = len ? w / len : WE_CHAR_W;
+            if (adv < 1) adv = 1;
+            for (k = 0; k < len; k++) {
+                os_fb_web_item_t glyph = it;
+                int gx = x + k * adv, gy = y, gw = WE_CHAR_W, gh = h;
+                if (it.text[k] == ' ') continue;
+                if (out >= room) { dropped++; continue; }
+                vertical_map(rl, ox, oy, extent, &gx, &gy, &gw, &gh);
+                glyph.x = (int16_t)limit_coord(gx); glyph.y = (int16_t)limit_coord(gy);
+                glyph.w = (uint16_t)gw; glyph.h = (uint16_t)gh;
+                w_zero(glyph.text, sizeof(glyph.text));
+                glyph.text[0] = it.text[k];
+                vertical_out[out] = glyph;
+                vertical_owner[out++] = d->item_owner[i];
+                text = 1;
+            }
+            continue;
+        }
+        if (out >= room) { dropped++; continue; }
+        if (it.kind) {
+            vertical_map(rl, ox, oy, extent, &x, &y, &w, &h);
+            it.x = (int16_t)limit_coord(x); it.y = (int16_t)limit_coord(y); it.w = (uint16_t)w; it.h = (uint16_t)h;
+        }
+        vertical_out[out] = it;
+        vertical_owner[out++] = d->item_owner[i];
+    }
+    for (i = 0; i < out; i++) { d->items[first + i] = vertical_out[i]; d->item_owner[first + i] = vertical_owner[i]; }
+    d->nitems = (uint32_t)(first + out);
+    if (dropped) {
+        if (!d->perf.items_dropped) diag(d, "display budget exceeded", idx);
+        d->perf.items_dropped += (uint32_t)dropped;
+    }
+    if (text && !d->nodes[idx].upright) diag(d, "vertical text painted upright", idx);
+}
+
+/* Physical properties of the boxes inside an orthogonal root are turned
+ * into logical ones for the layout and turned back afterwards (the later
+ * passes read physical values): sides and corners rotate (logical top is
+ * the physical right in vertical-rl, the left in vertical-lr; logical left
+ * is the physical top), px widths and heights swap, radii, shadow and
+ * gradient axes swap. Percent or keyword sizes stay as declared ("vertical
+ * flow size kept physical"); background images inside are refused, images
+ * paint their alt text (the runs would be transposed). Relative offsets
+ * and absolute insets of boxes inside follow the logical axes. */
+static const uint8_t vertical_side[2][4] = {{3, 2, 1, 0}, {1, 2, 3, 0}};      /* [rl][logical] */
+static const uint8_t vertical_corner[2][4] = {{0, 3, 2, 1}, {1, 2, 3, 0}};
+
+static void permute16(int16_t *a, const uint8_t *map, int forward) {
+    int16_t t[4];
+    int k;
+    for (k = 0; k < 4; k++) t[k] = a[k];
+    for (k = 0; k < 4; k++) { if (forward) a[k] = t[map[k]]; else a[map[k]] = t[k]; }
+}
+
+static uint8_t permute_bits(uint8_t bits, const uint8_t *map, const uint8_t *weight, int forward) {
+    uint8_t out = (uint8_t)(bits & ~(weight[0] | weight[1] | weight[2] | weight[3]));
+    int k;
+    for (k = 0; k < 4; k++) {
+        if (forward) { if (bits & weight[map[k]]) out |= weight[k]; }
+        else if (bits & weight[k]) out |= weight[map[k]];
+    }
+    return out;
+}
+
+static int simple_size(const we_node_t *n) {
+    return !n->width_kind && n->width_pct <= 0 && !n->length[WE_LEN_WIDTH].count && !n->height_percent &&
+           !n->length[WE_LEN_HEIGHT].count && !n->min_width_kind && !n->max_width_kind && !n->min_pct && !n->max_pct &&
+           !n->min_height_percent && !n->max_height_percent && !n->length[WE_LEN_MIN_W].count &&
+           !n->length[WE_LEN_MAX_W].count && !n->length[WE_LEN_MIN_H].count && !n->length[WE_LEN_MAX_H].count;
+}
+
+static void swap16(int16_t *a, int16_t *b) { int16_t t = *a; *a = *b; *b = t; }
+
+static void vertical_style(we_doc_t *d, int i, int rl, int forward) {
+    static const uint8_t side_bit[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
+    static const uint8_t margin_pct[4] = {1, 2, 4, 8}, padding_pct[4] = {16, 32, 64, 128};
+    static const uint8_t rad_x_bit[4] = {1, 2, 4, 8}, rad_y_bit[4] = {16, 32, 64, 128};
+    static const uint8_t grad_map[2][6] = {{0, WE_GRAD_RIGHT, WE_GRAD_BOTTOM, WE_GRAD_LEFT, WE_GRAD_TOP, WE_GRAD_RADIAL},
+                                          {0, WE_GRAD_RIGHT, WE_GRAD_TOP, WE_GRAD_LEFT, WE_GRAD_BOTTOM, WE_GRAD_RADIAL}};
+    we_node_t *n = &d->nodes[i];
+    const uint8_t *side = vertical_side[rl], *corner = vertical_corner[rl];
+    int k;
+    uint8_t x_bits, y_bits;
+    permute16(n->margin, side, forward);
+    permute16(n->padding, side, forward);
+    permute16(n->spacing_value, side, forward);
+    permute16(n->spacing_value + 4, side, forward);
+    n->spacing_pct = permute_bits(n->spacing_pct, side, margin_pct, forward);
+    n->spacing_pct = permute_bits(n->spacing_pct, side, padding_pct, forward);
+    n->margin_auto = permute_bits(n->margin_auto, side, side_bit, forward);
+    /* radii: corners rotate and the two radii of a corner swap axes */
+    {
+        uint8_t rx[4], ry[4];
+        for (k = 0; k < 4; k++) { rx[k] = n->rad_x[k]; ry[k] = n->rad_y[k]; }
+        for (k = 0; k < 4; k++) {
+            if (forward) { n->rad_x[k] = ry[corner[k]]; n->rad_y[k] = rx[corner[k]]; }
+            else { n->rad_y[corner[k]] = rx[k]; n->rad_x[corner[k]] = ry[k]; }
+        }
+        x_bits = permute_bits(n->rad_pct, corner, rad_x_bit, forward) & 15;
+        y_bits = permute_bits(n->rad_pct, corner, rad_y_bit, forward) & 240;
+        n->rad_pct = (uint8_t)((x_bits << 4) | (y_bits >> 4));
+    }
+    for (k = 0; k < n->shadow_count && k < WE_SHADOWS_MAX; k++) {
+        int8_t x = n->shadow[k].x, y = n->shadow[k].y;
+        if (forward) { n->shadow[k].x = y; n->shadow[k].y = (int8_t)(rl ? -x : x); }
+        else { n->shadow[k].y = x; n->shadow[k].x = (int8_t)(rl ? -y : y); }
+    }
+    for (k = 0; k < n->tshadow_count && k < WE_SHADOWS_MAX; k++) {
+        int8_t x = n->tshadow[k].x, y = n->tshadow[k].y;
+        if (forward) { n->tshadow[k].x = y; n->tshadow[k].y = (int8_t)(rl ? -x : x); }
+        else { n->tshadow[k].y = x; n->tshadow[k].x = (int8_t)(rl ? -y : y); }
+    }
+    if (n->grad_dir && n->grad_dir <= WE_GRAD_RADIAL) {
+        if (forward) n->grad_dir = grad_map[rl][n->grad_dir];
+        else for (k = 1; k <= WE_GRAD_RADIAL; k++) if (grad_map[rl][k] == n->grad_dir) { n->grad_dir = (uint8_t)k; break; }
+    }
+    if (n->grad_dir == WE_GRAD_RADIAL) {
+        swap16(&n->grad_at[0], &n->grad_at[1]);
+        swap16(&n->grad_size[0], &n->grad_size[1]);
+        n->grad_at_pct = (uint8_t)((n->grad_at_pct & ~15) | ((n->grad_at_pct & 1) << 1) | ((n->grad_at_pct & 2) >> 1) |
+                                   ((n->grad_at_pct & 4) << 1) | ((n->grad_at_pct & 8) >> 1));
+    }
+    swap16(&n->border_spacing, &n->border_spacing_y);
+    swap16(&n->aspect_num, &n->aspect_den);
+    if (simple_size(n)) {
+        swap16(&n->width, &n->height);
+        swap16(&n->min_width, &n->min_height);
+        swap16(&n->max_width, &n->max_height);
+    } else if (forward) diag(d, "vertical flow size kept physical", i);
+    if (forward && n->bgi_len) { n->bgi_len = 0; diag(d, "background image refused", i); }
+}
+
+/* forward 1 before the layout, 0 after it. */
+static void vertical_styles(we_doc_t *d, int forward) {
+    int i;
+    for (i = 0; i < (int)d->nnodes; i++) {
+        int root = d->nodes[i].parent;
+        while (root >= 0 && !vertical_root(d, root)) root = d->nodes[root].parent;
+        if (root < 0 || d->nodes[i].is_text) continue;
+        if (forward && d->nodes[i].wmode != d->nodes[root].wmode) {
+            d->nodes[i].wmode = d->nodes[root].wmode;
+            diag(d, "writing mode nested painted as container", i);
+        }
+        vertical_style(d, i, d->nodes[root].wmode == WE_WM_VERTICAL_RL, forward);
+    }
+}
+
+static int layout_vertical(we_doc_t *d, int idx, int ox, int oy, int width, int *extent, int depth) {
+    we_node_t *n = &d->nodes[idx];
+    int size = resolved_height[idx] >= 0 ? resolved_height[idx] : vertical_inline[idx], first = (int)d->nitems, e;
+    (void)n;
+    if (size < WE_CHAR_W) size = WE_CHAR_W;
+    if (size > WE_LAYOUT_MAX) size = WE_LAYOUT_MAX;
+    e = layout_content(d, idx, ox, oy, size, depth);
+    *extent = width >= 0 ? width : e;
+    vertical_remap(d, idx, first, ox, oy, *extent);
+    return size;
+}
+
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     we_node_t* n = &d->nodes[idx];
     int bx, by, bw, bh, content_x, content_w, content_h, slot, border_slot = -1;
@@ -6173,12 +6440,12 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
             if (alt) w_cpy(alt->text, OS_FB_WEB_TEXT_LEN, d->pool + n->text_off, n->text_len);
             content_h = WE_LINE_H;
         }
-    } else if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID)
-        content_h = layout_flex(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
-    else if (n->display == WE_DISP_TABLE)
-        content_h = layout_table(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
-    else
-        content_h = layout_children(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
+    } else if (vertical_root(d, idx)) {
+        int extent, automatic = forced_width[idx] < 0 && width_auto(n);
+        content_h = layout_vertical(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], automatic ? -1 : content_w, &extent, depth);
+        if (automatic) bw = limit_coord(extent + box_edge(n, 1) + box_edge(n, 3) + n->padding[1] + n->padding[3]);
+    } else
+        content_h = layout_content(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
     if (resolved_height[idx] >= 0) content_h = resolved_height[idx];
     else if (n->aspect_num && !w_eq(n->tag, "img")) {
         int ratio = ratio_height(n, bw - node_border_extra(n));
@@ -9721,6 +9988,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     resolve_grid_requests(d);
     resolve_grid_areas(d);
     subgrid_bind_all(d);
+    vertical_styles(d, 1);
     intrinsic_sizes(d);
     { we_node_t *root = &d->nodes[0]; int bit;
       for (bit = 0; bit < 8; bit++) if (root->spacing_pct & (1u << bit)) {
@@ -9728,6 +9996,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
           if (bit < 4) root->margin[bit] = (int16_t)v; else root->padding[bit - 4] = (int16_t)v;
       } }
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
+    vertical_styles(d, 0);
     drop_reserved(d);
     ellipsis_items(d);
     paint_outlines(d);
